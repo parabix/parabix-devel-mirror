@@ -30,9 +30,11 @@ public:
     CC(int lo_codepoint, int hi_codepoint);
     CC(std::string name, int codepoint);
     CC(std::string name, int lo_codepoint, int hi_codepoint);
+    CC(CC* cc1, CC* cc2);
     ~CC();
     std::vector<CharSetItem> getItems();
     std::string getName();
+    std::string getId();
     bool is_member(int codepoint);
     void insert1(int codepoint);
     void insert_range(int lo_codepoint,int hi_codepoint);
@@ -47,12 +49,15 @@ private:
 
     void gensym_name();
     bool is_member_helper(int codepoint, int idx);
+    void joinCharSets(std::vector<CharSetItem> items1);
+    void joinCharSets_helper(std::vector<CharSetItem> items1, int idx);
     void insert_range_helper(int lo_codepoint, int hi_codepoint, int idx);
     void negate_class_helper(int idx, int b);
     void remove_range_helper(int lo_codepoint, int hi_codepoint, int idx);
 
     std::vector<CharSetItem> mSparceCharSet;
     std::string mName;
+    std::string mId;
 };
 
 #endif // RE_CC_H

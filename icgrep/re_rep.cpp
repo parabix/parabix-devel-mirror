@@ -6,7 +6,7 @@
 
 #include "re_rep.h"
 
-Rep::Rep(RE* re, int lb, RepLimit* ub)
+Rep::Rep(RE* re, int lb, int ub)
 {
     mRE = re;
     mLB = lb;
@@ -16,7 +16,6 @@ Rep::Rep(RE* re, int lb, RepLimit* ub)
 Rep::~Rep()
 {
     delete mRE;
-    delete mUB;
 }
 
 RE* Rep::getRE()
@@ -34,9 +33,14 @@ void Rep::setLB(int lb)
     mLB = lb;
 }
 
-RepLimit* Rep::getUB()
+int Rep::getUB()
 {
     return mUB;
+}
+
+void Rep::setUB(int ub)
+{
+    mUB = ub;
 }
 
 

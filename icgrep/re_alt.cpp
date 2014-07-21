@@ -17,7 +17,16 @@ Alt::Alt(std::list<RE*>* lst)
     std::list<RE*>::iterator it;
     it=lst->begin();
     mList->assign(it, lst->end());
-    mList->reverse();
+    std::reverse(mList->begin(), mList->end());
+}
+
+Alt::Alt(std::list<RE*> lst)
+{
+    mList = new std::list<RE*>();
+    std::list<RE*>::iterator it;
+    it=lst.begin();
+    mList->assign(it, lst.end());
+    std::reverse(mList->begin(), mList->end());
 }
 
 Alt::~Alt()

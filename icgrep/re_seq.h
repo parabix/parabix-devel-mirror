@@ -15,6 +15,7 @@ class Seq : public RE
 public:
     Seq();
     Seq(std::list<RE*>* lst);
+    Seq(std::list<RE*> lst);
     ~Seq();
     std::list<RE*>* GetREList();
     void AddREListItem(RE *re);

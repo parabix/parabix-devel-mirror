@@ -20,6 +20,15 @@ Seq::Seq(std::list<RE*>* lst)
     mList->reverse();
 }
 
+Seq::Seq(std::list<RE*> lst)
+{
+    mList = new std::list<RE*>();
+    std::list<RE*>::iterator it;
+    it=lst.begin();
+    mList->assign(it, lst.end());
+    mList->reverse();
+}
+
 Seq::~Seq()
 {
     while(!mList->empty()) delete mList->back(), mList->pop_back();

@@ -52,8 +52,6 @@ public:
     static std::string Print_PB_PabloStmts(std::list<PabloS*> stmts, std::string strOut);
     static std::string ShowPabloE(PabloE* expr);
     static std::string ShowPabloS(PabloS* stmt);
-private:
-    StatementPrinter();
 };
 
 #endif // SHOW_H

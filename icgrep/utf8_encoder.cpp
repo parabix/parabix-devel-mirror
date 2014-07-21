@@ -6,20 +6,19 @@
 
 #include "utf8_encoder.h"
 
-UTF8_Encoder::UTF8_Encoder(){}
 
-RE* UTF8_Encoder::toUTF8(RE *re)
+RE* UTF8_Encoder::toUTF8(RE* re)
 {
     RE* retVal = 0;
 
     if (Alt* re_alt = dynamic_cast<Alt*>(re))
     {
         std::list<RE*> re_list;
-        std::list<RE*>::iterator it;
+        std::list<RE*>::reverse_iterator rit = re_alt->GetREList()->rbegin();
 
-        for (it = re_alt->GetREList()->begin(); it != re_alt->GetREList()->end(); ++it)
+        for (rit = re_alt->GetREList()->rbegin(); rit != re_alt->GetREList()->rend(); ++rit)
         {
-            re_list.push_front(toUTF8(*it));
+            re_list.push_back(toUTF8(*rit));
         }
 
         retVal = new Alt(&re_list);
@@ -38,17 +37,7 @@ RE* UTF8_Encoder::toUTF8(RE *re)
     }
     else if (Rep* re_rep = dynamic_cast<Rep*>(re))
     {
-        RepLimit* replimit;
-        if (UpperBound* unbounded = dynamic_cast<UpperBound*>(re_rep->getUB()))
-        {
-            replimit = new UpperBound(unbounded->getUB());
-        }
-        else
-        {
-            replimit = new Unbounded();
-        }
-
-        retVal = new Rep(toUTF8(re_rep->getRE()), re_rep->getLB(), replimit);
+        retVal = new Rep(toUTF8(re_rep->getRE()), re_rep->getLB(), re_rep->getUB());
     }
     else if (CC* re_cc = dynamic_cast<CC*>(re))
     {  
@@ -63,7 +52,8 @@ RE* UTF8_Encoder::toUTF8(RE *re)
             {
                 re_list.push_back(rangeToUTF8(re_cc->getItems().at(i)));
             }
-            retVal = new Alt(&re_list);
+            retVal = RE_Simplifier::mkAlt(&re_list);
+            //retVal = new Alt(&re_list);
         }
     }
     else if (Start* re_start = dynamic_cast<Start*>(re))
@@ -190,7 +180,7 @@ int UTF8_Encoder::u8byte(int codepoint, int n)
     }
     else
     {
-        retVal = 0x80 | ((codepoint >> (6 * (len - n))) & 0x3F);
+        retVal = 0x80 | (codepoint >> (6 * (len - n))) & 0x3F;
     }
 
     return retVal;

@@ -11,7 +11,10 @@ CC_Compiler::CC_Compiler(UTF_Encoding encoding)
     mEncoding = encoding;
 }
 
-std::list<PabloS*> CC_Compiler::compile(std::string basis_pattern, std::string gensym_pattern, RE* re, std::list<CC*> predefined)
+std::list<PabloS*> CC_Compiler::compile(std::string basis_pattern,
+                                        std::string gensym_pattern,
+                                        const std::map<std::string, RE*>& re_map,
+                                        std::list<CC*> predefined)
 {
     mEncoding.setBasisPattern(basis_pattern);
 
@@ -26,14 +29,23 @@ std::list<PabloS*> CC_Compiler::compile(std::string basis_pattern, std::string g
         cgo.add_predefined(b_pattern, expr);
     }
 
-    process_re(cgo, re);
+    process_re_map(cgo, re_map);
     process_predefined(cgo, predefined);
 
     return cgo.get_stmtsl();
 }
 
-void CC_Compiler::process_re(CC_CodeGenObject &cgo, RE *re)
+void CC_Compiler::process_re_map(CC_CodeGenObject &cgo,const std::map<std::string, RE*>& re_map)
 {
+    for (auto it =  re_map.rbegin(); it != re_map.rend(); ++it)
+    {
+        process_re(cgo, it->second);
+    }
+}
+
+void CC_Compiler::process_re(CC_CodeGenObject &cgo, RE* re)
+{
+
     if (Alt* re_alt = dynamic_cast<Alt*>(re))
     {
         std::list<RE*>::iterator it;

@@ -74,8 +74,6 @@ void do_process(FILE *infile, FILE *outfile, int count_only_option, int carry_co
 
 int main(int argc, char *argv[])
 {
-    double timer;
-
     char * inregex, * fileregex, * infilename, * outfilename;
     FILE *infile, *outfile, *regexfile;
 
@@ -83,14 +81,18 @@ int main(int argc, char *argv[])
     int count_only_option = 0;
     int print_version_option = 0;
     int regex_from_file_option = 0;
+    int ascii_only_option = 0;
 
     int compile_time_option = 0;
 
+    unsigned long long cycles = 0;
+    double timer = 0;
+
+    long lSize = 0;
+
     size_t result;
 
-    long lSize;
-
-    while ((opt_code = getopt(argc, argv, "cvft")) != -1)
+    while ((opt_code = getopt(argc, argv, "cvfta")) != -1)
     {
         switch (opt_code)
         {
@@ -106,11 +108,14 @@ int main(int argc, char *argv[])
         case 't':
             compile_time_option = 1;
             break;
+        case 'a':
+            ascii_only_option = 1;
+            break;
         case '?':
             break;
         default:
             printf ("Invalid option: %c\n", opt_code);
-            printf("Usage: %s [-c] [-v] [-f] <regex|regexfile> <inputfile> [<outputfile>]\n", argv[0]);
+            printf("Usage: %s [-c] [-v] [-f] [-t] [-a] <regex|regexfile> <inputfile> [<outputfile>]\n", argv[0]);
                     exit(-1);
         }
     }
@@ -118,7 +123,7 @@ int main(int argc, char *argv[])
     if (optind >= argc)
     {
         printf ("Too few arguments\n");
-        printf("Usage: %s [-c] [-v] [-f] <regex|regexfile> <inputfile> [<outputfile>]\n", argv[0]);
+        printf("Usage: %s [-c] [-v] [-f] [-t] [-a] <regex|regexfile> <inputfile> [<outputfile>]\n", argv[0]);
         exit(-1);
     }
 
@@ -165,7 +170,7 @@ int main(int argc, char *argv[])
         if (optind != argc)
         {
             printf ("Too many arguments\n");
-            printf("Usage: %s [-c] [-v] [-f] <regex|regexfile> <inputfile> [<outputfile>]\n", argv[0]);
+            printf("Usage: %s [-c] [-v] [-f] [-t] [-a] <regex|regexfile> <inputfile> [<outputfile>]\n", argv[0]);
             exit(-1);
         }
         outfile = fopen(outfilename, "wb");
@@ -187,13 +192,24 @@ int main(int argc, char *argv[])
     encoding.setMask(0xFF);
 
     RE_Compiler* re_compiler = new RE_Compiler();
-    if (compile_time_option) timer = getElapsedTime();
-    LLVM_Gen_RetVal llvm_codegen = re_compiler->compile(compile_time_option, "basis_bits.bit_", "temp", encoding ,(regex_from_file_option ? fileregex : inregex));
+    if (compile_time_option)
+    {
+        cycles = get_hrcycles();
+        timer = getElapsedTime();
+    }
+    LLVM_Gen_RetVal llvm_codegen = re_compiler->compile(compile_time_option,
+                                                        ascii_only_option,
+                                                        "basis_bits.bit_",
+                                                        "temp",
+                                                        encoding ,
+                                                        (regex_from_file_option ? fileregex : inregex));
 
     if (compile_time_option)
     {
+        cycles = get_hrcycles() - cycles;
         timer = getElapsedTime() - timer;
-        std::cout << "Total Compile Time: " << timer <<  " seconds" << std::endl;
+        std::cout << "Total compile time - cycles:       " << cycles << std::endl;
+        std::cout << "Total compile time - milliseconds: " << timer << std::endl;
     }
 
     if (llvm_codegen.process_block_fptr != 0)
@@ -276,6 +292,7 @@ void do_process(FILE *infile, FILE *outfile, int count_only_option, int carry_co
         }
 
         int copy_back_pos = 0;
+
 
         if (LF_scanner.count() > 0) {
             copy_back_pos = LF_scanner.get_final_pos() + 1;

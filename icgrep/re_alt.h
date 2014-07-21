@@ -8,13 +8,16 @@
 #define ALT_H
 
 #include "re_re.h"
+#include <algorithm>
 #include <list>
+
 
 class Alt : public RE
 {
 public:
     Alt();
     Alt(std::list<RE*>* lst);
+    Alt(std::list<RE*> lst);
     ~Alt();
     std::list<RE*>* GetREList();
     void AddREListItem(RE *re);

@@ -7,8 +7,6 @@
 #include "printer_re.h"
 
 
-Printer_RE::Printer_RE(){}
-
 std::string Printer_RE::PrintRE(RE* re)
 {
     std::string retVal = "";
@@ -44,7 +42,7 @@ std::string Printer_RE::PrintRE(RE* re)
         //std::string member = (re_cc->is_member(47) ? "True" : "False");
         //retVal += " is codepoint 47 a member: " + member;
 
-        /*
+/*
         retVal += "CC \"";
         retVal += re_cc->getName();
         retVal += "\" ";
@@ -62,7 +60,13 @@ std::string Printer_RE::PrintRE(RE* re)
             retVal += INT2STRING(r_it->hi_codepoint);
             retVal += "]";
         }
-        */
+*/
+    }
+    else if (Name* re_name = dynamic_cast<Name*>(re))
+    {
+        retVal += "Name \"";
+        retVal += re_name->getName();
+        retVal += "\" ";
     }
     else if (End* re_end = dynamic_cast<End*>(re))
     {
@@ -71,15 +75,7 @@ std::string Printer_RE::PrintRE(RE* re)
     else if (Rep* re_rep = dynamic_cast<Rep*>(re))
     {
         retVal += "Rep("  + PrintRE(re_rep->getRE()) + "," + INT2STRING(re_rep->getLB()) + ",";
-
-        if (Unbounded* unbounded = dynamic_cast<Unbounded*>(re_rep->getUB()))
-        {
-            retVal += "Unbounded)";
-        }
-        else if (UpperBound* upperbound = dynamic_cast<UpperBound*>(re_rep->getUB()))
-        {
-            retVal += "UpperBound " + INT2STRING(upperbound->getUB()) + ")";
-        }
+        retVal += (re_rep->getUB() == unboundedRep ? "Unbounded" : "UpperBound(" + INT2STRING(re_rep->getUB()) + ")");
     }
     else if (Seq* re_seq = dynamic_cast<Seq*>(re))
     {

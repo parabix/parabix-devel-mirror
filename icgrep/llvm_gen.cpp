@@ -5,6 +5,7 @@
  */
 
 #include "llvm_gen.h"
+#include "printer_pablos.h"
 
 extern "C" {
   void wrapped_print_register(BitBlock bit_block) {
@@ -17,9 +18,10 @@ void LLVM_Generator::Print_Register(char *name, BitBlock bit_block)
     print_register<BitBlock>(name, bit_block);
 }
 
-LLVM_Generator::LLVM_Generator(std::string basis_pattern, int bits)
+LLVM_Generator::LLVM_Generator(std::string basis_pattern, std::string lf_ccname, int bits)
 {
     mBasis_Pattern = basis_pattern;
+    m_lf_ccname = lf_ccname;
     mBits = bits;
     mInWhile = false;
 }
@@ -37,7 +39,8 @@ LLVM_Gen_RetVal LLVM_Generator::Generate_LLVMIR(CodeGenState cg_state, std::list
     //Create the jit execution engine.up
     InitializeNativeTarget();
     std::string ErrStr;
-    mExecutionEngine = EngineBuilder(mMod).setUseMCJIT(true).setErrorStr(&ErrStr).setOptLevel(CodeGenOpt::Default).create();
+
+    mExecutionEngine = EngineBuilder(mMod).setUseMCJIT(true).setErrorStr(&ErrStr).setOptLevel(CodeGenOpt::Level::Less).create();
     if (!mExecutionEngine)
     {
         std::cout << "\nCould not create ExecutionEngine: " + ErrStr << std::endl;
@@ -60,6 +63,7 @@ LLVM_Gen_RetVal LLVM_Generator::Generate_LLVMIR(CodeGenState cg_state, std::list
 
     //Create the carry queue.
     mCarryQueueIdx = 0;
+    mCarryQueueSize = LLVM_Generator_Helper::CarryCount_PabloStatements(cg_state.stmtsl);
 
     mBasicBlock = BasicBlock::Create(mMod->getContext(), "parabix_entry", mFunc_process_block,0);
 
@@ -80,7 +84,7 @@ LLVM_Gen_RetVal LLVM_Generator::Generate_LLVMIR(CodeGenState cg_state, std::list
     Generate_PabloStatements(cc_cgo_stmtsl);
     Generate_PabloStatements(cg_state.stmtsl);
     SetReturnMarker(cg_state.newsym, 0);
-    SetReturnMarker("lex.cclf", 1);
+    SetReturnMarker(m_lf_ccname, 1);
 
     //Terminate the block
     ReturnInst::Create(mMod->getContext(), mBasicBlock);
@@ -97,7 +101,13 @@ LLVM_Gen_RetVal LLVM_Generator::Generate_LLVMIR(CodeGenState cg_state, std::list
     // Set up the optimizer pipeline.  Start with registering info about how the target lays out data structures.
     fpm.add(new DataLayout(*mExecutionEngine->getDataLayout()));
 
-    fpm.add(createPromoteMemoryToRegisterPass());
+    fpm.add(createPromoteMemoryToRegisterPass()); //Transform to SSA form.
+
+    fpm.add(createBasicAliasAnalysisPass());      //Provide basic AliasAnalysis support for GVN. (Global Value Numbering)
+    fpm.add(createInstructionCombiningPass());    //Simple peephole optimizations and bit-twiddling.
+    fpm.add(createCFGSimplificationPass());       //Simplify the control flow graph (deleting unreachable blocks, etc).
+    fpm.add(createReassociatePass());             //Reassociate expressions.
+    fpm.add(createGVNPass());                     //Eliminate common subexpressions.
 
     fpm.doInitialization();
 
@@ -109,7 +119,7 @@ LLVM_Gen_RetVal LLVM_Generator::Generate_LLVMIR(CodeGenState cg_state, std::list
 
     LLVM_Gen_RetVal retVal;
     //Return the required size of the carry queue and a pointer to the process_block function.
-    retVal.carry_q_size = LLVM_Generator_Helper::CarryCount_PabloStatements(cg_state.stmtsl);;
+    retVal.carry_q_size = mCarryQueueSize;
     retVal.process_block_fptr = mExecutionEngine->getPointerToFunction(mFunc_process_block);
 
     return retVal;
@@ -292,40 +302,67 @@ std::string LLVM_Generator::Generate_PabloS(PabloS *stmt)
     }
     else if (While* whl = dynamic_cast<While*>(stmt))
     {
-        IRBuilder<> b(mBasicBlock);
-
-        mWhileCondBlock = BasicBlock::Create(mMod->getContext(), "while.cond", mFunc_process_block, 0);
-        mWhileBodyBlock = BasicBlock::Create(mMod->getContext(), "while.body",mFunc_process_block, 0);
-        mWhileEndBlock = BasicBlock::Create(mMod->getContext(), "while.end",mFunc_process_block, 0);
-
         int idx = mCarryQueueIdx;
 
+        //With this call to the while body we will account for all of the carry in values.
         std::string returnMarker = Generate_PabloStatements(whl->getPSList());
 
-        b.CreateBr(mWhileCondBlock);
-        mBasicBlock = mWhileCondBlock;
-        IRBuilder<> b_cond(mWhileCondBlock);
+        BasicBlock*  whileCondBlock = BasicBlock::Create(mMod->getContext(), "while.cond", mFunc_process_block, 0);
+        BasicBlock*  whileBodyBlock = BasicBlock::Create(mMod->getContext(), "while.body",mFunc_process_block, 0);
+        BasicBlock*  whileEndBlock = BasicBlock::Create(mMod->getContext(), "while.end",mFunc_process_block, 0);
+
+        IRBuilder<> b(mBasicBlock);
+        b.CreateBr(whileCondBlock);
+        mBasicBlock = whileCondBlock;
+        IRBuilder<> b_cond(whileCondBlock);
 
         Value* expression_marker_value = Generate_PabloE(whl->getExpr());
-        
         // Use an i128 compare for simplicity and speed.
         Value* cast_marker_value_1 = b_cond.CreateBitCast(expression_marker_value, IntegerType::get(mMod->getContext(), 128));
         Value* int_tobool1 = b_cond.CreateICmpEQ(cast_marker_value_1, ConstantInt::get(IntegerType::get(mMod->getContext(), 128), 0));
-        b_cond.CreateCondBr(int_tobool1, mWhileEndBlock, mWhileBodyBlock);
+        b_cond.CreateCondBr(int_tobool1, whileEndBlock, whileBodyBlock);
 
-        //Note: Everything that happens during the recursive calls for the pablo statements in the body of this while loop will
-        //happen within the basic block of the body of the while loop.  This strategy will not support kstars within
-        //kstars, a more complex stragegy for basicblocks will have to be devised for that.
-        mBasicBlock = mWhileBodyBlock;
+        mBasicBlock = whileBodyBlock;
+        mCarryQueueIdx = 0;
+        //Store the current carry queue.
+        Value* ptr_last_carry_q = mptr_carry_q;
 
-        mInWhile = true;
-        mCarryQueueIdx = idx;
+        IRBuilder<> b_wb1(mBasicBlock);
+        //Create and initialize a new carry queue.
+        Value* ptr_while_carry_q = b_wb1.CreateAlloca(m64x2Vect, b_wb1.getInt64(mCarryQueueSize - idx));
+        for (int i=0; i<(mCarryQueueSize-idx); i++)
+        {
+            Value* carryq_idx1 = b_wb1.getInt64(i);
+            Value* carryq_GEP1 = b_wb1.CreateGEP(ptr_while_carry_q, carryq_idx1);
+            Value* void_1 = b_wb1.CreateStore(mConst_Aggregate_64x2_0, carryq_GEP1);
+        }
+
+        //Point mptr_carry_q to the new local carry queue.
+        mptr_carry_q = ptr_while_carry_q;
+
         returnMarker = Generate_PabloStatements(whl->getPSList());
-        mInWhile = false;
-        IRBuilder<> b_wb(mWhileBodyBlock);
-        b_wb.CreateBr(mWhileCondBlock);
 
-        mBasicBlock = mWhileEndBlock;
+        IRBuilder<> b_wb2(mBasicBlock);
+        //Copy back to the last carry queue the carries from the execution of the while statement list.
+        for (int c=0; c<(mCarryQueueSize-idx); c++)
+        {
+            Value* carryq_idx = b_wb2.getInt64(c);
+            Value* carryq_GEP = b_wb2.CreateGEP(mptr_carry_q, carryq_idx);
+            Value* carryq_value = b_wb2.CreateLoad(carryq_GEP);
+
+            Value* last_carryq_idx = b_wb2.getInt64(idx + c);
+            Value* last_carryq_GEP = b_wb2.CreateGEP(ptr_last_carry_q, last_carryq_idx);
+            Value* last_carryq_value = b_wb2.CreateLoad(last_carryq_GEP);
+
+            Value* new_carryq_value = b_wb2.CreateOr(carryq_value, last_carryq_value);
+            Value* void_1 = b_wb2.CreateStore(new_carryq_value, last_carryq_GEP);
+        }
+
+        b_wb2.CreateBr(whileCondBlock);
+
+        mBasicBlock = whileEndBlock;
+        mptr_carry_q = ptr_last_carry_q;
+        mCarryQueueIdx += idx;
 
         retVal = returnMarker;
     }
@@ -418,18 +455,9 @@ Value* LLVM_Generator::Generate_PabloE(PabloE *expr)
         Value* srli_1_value = b.CreateLShr(strm_value, 63);
 
         Value* packed_shuffle;
-        if (mInWhile)
-        {
-            Constant* const_packed_1_elems [] = {b.getInt32(0), b.getInt32(2)};
-            Constant* const_packed_1 = ConstantVector::get(const_packed_1_elems);
-            packed_shuffle = b.CreateShuffleVector(mConst_Aggregate_64x2_0, srli_1_value, const_packed_1, "packed_shuffle iw");
-        }
-        else
-        {
-            Constant* const_packed_1_elems [] = {b.getInt32(0), b.getInt32(2)};
-            Constant* const_packed_1 = ConstantVector::get(const_packed_1_elems);
-            packed_shuffle = b.CreateShuffleVector(carryq_value, srli_1_value, const_packed_1, "packed_shuffle nw");
-        }
+        Constant* const_packed_1_elems [] = {b.getInt32(0), b.getInt32(2)};
+        Constant* const_packed_1 = ConstantVector::get(const_packed_1_elems);
+        packed_shuffle = b.CreateShuffleVector(carryq_value, srli_1_value, const_packed_1, "packed_shuffle nw");
 
         Constant* const_packed_2_elems[] = {b.getInt64(1), b.getInt64(1)};
         Constant* const_packed_2 = ConstantVector::get(const_packed_2_elems);
@@ -441,16 +469,7 @@ Value* LLVM_Generator::Generate_PabloE(PabloE *expr)
         Value* cast_marker_value_1 = b.CreateBitCast(strm_value, IntegerType::get(mMod->getContext(), 128));
         Value* srli_2_value = b.CreateLShr(cast_marker_value_1, 127);
         Value* carryout_2_carry = b.CreateBitCast(srli_2_value, m64x2Vect);
-
-        if (mInWhile)
-        {
-            Value* carryout = b.CreateOr(carryq_value, carryout_2_carry);
-            Value* void_1 = b.CreateStore(carryout, carryq_GEP);
-        }
-        else
-        {
-            Value* void_1 = b.CreateStore(carryout_2_carry, carryq_GEP);
-        }
+        Value* void_1 = b.CreateStore(carryout_2_carry, carryq_GEP);
 
         //Increment the idx for the next advance or scan through.
         mCarryQueueIdx++;

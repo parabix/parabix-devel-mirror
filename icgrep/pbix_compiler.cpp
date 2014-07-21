@@ -6,12 +6,14 @@
 
 #include "pbix_compiler.h"
 
-Pbix_Compiler::Pbix_Compiler(){
-  symgen = SymbolGenerator();
+Pbix_Compiler::Pbix_Compiler(std::string lf_ccname)
+{
+    m_lf_ccname = lf_ccname;
+    symgen = SymbolGenerator();
 }
 
 CodeGenState Pbix_Compiler::compile(RE *re)
-{
+{   
     std::string gs_retVal;
     gs_retVal = symgen.gensym("start_marker");
 
@@ -23,7 +25,7 @@ CodeGenState Pbix_Compiler::compile(RE *re)
 
     //These three lines are specifically for grep.
     gs_retVal = symgen.gensym("marker");
-    cg_state.stmtsl.push_back(new Assign(gs_retVal, new And(new MatchStar(new Var(cg_state.newsym), new Not(new Var("lex.cclf"))), new Var("lex.cclf"))));
+    cg_state.stmtsl.push_back(new Assign(gs_retVal, new And(new MatchStar(new Var(cg_state.newsym), new Not(new Var(m_lf_ccname))), new Var(m_lf_ccname))));
     cg_state.newsym = gs_retVal;
 
     return cg_state;
@@ -31,10 +33,10 @@ CodeGenState Pbix_Compiler::compile(RE *re)
 
 CodeGenState Pbix_Compiler::re2pablo_helper(RE *re, CodeGenState cg_state)
 {
-    if (CC* cc = dynamic_cast<CC*>(re))
+    if (Name* name = dynamic_cast<Name*>(re))
     {
         std::string gs_retVal = symgen.gensym("marker");
-        cg_state.stmtsl.push_back(new Assign(gs_retVal, new Advance(new And(new Var(cg_state.newsym), new CharClass(cc->getName())))));
+        cg_state.stmtsl.push_back(new Assign(gs_retVal, new Advance(new And(new Var(cg_state.newsym), new CharClass(name->getName())))));
         cg_state.newsym = gs_retVal;
 
         //cout << "\n" << "(" << StatementPrinter::PrintStmts(cg_state) << ")" << "\n" << endl;
@@ -42,13 +44,13 @@ CodeGenState Pbix_Compiler::re2pablo_helper(RE *re, CodeGenState cg_state)
     else if (Start* start = dynamic_cast<Start*>(re))
     {
         std::string gs_retVal = symgen.gensym("start_of_line_marker");
-        cg_state.stmtsl.push_back(new Assign(gs_retVal, new And(new Var(cg_state.newsym), new Not(new Advance(new Not(new CharClass("lex.cclf")))))));
+        cg_state.stmtsl.push_back(new Assign(gs_retVal, new And(new Var(cg_state.newsym), new Not(new Advance(new Not(new CharClass(m_lf_ccname)))))));
         cg_state.newsym = gs_retVal;
     }
     else if (End* end = dynamic_cast<End*>(re))
     {
         std::string gs_retVal = symgen.gensym("end_of_line_marker");
-        cg_state.stmtsl.push_back(new Assign(gs_retVal, new And(new Var(cg_state.newsym), new CharClass("lex.cclf"))));
+        cg_state.stmtsl.push_back(new Assign(gs_retVal, new And(new Var(cg_state.newsym), new CharClass(m_lf_ccname))));
         cg_state.newsym = gs_retVal;
     }
     else if (Seq* seq = dynamic_cast<Seq*>(re))
@@ -85,19 +87,20 @@ CodeGenState Pbix_Compiler::re2pablo_helper(RE *re, CodeGenState cg_state)
     }
     else if (Rep* rep = dynamic_cast<Rep*>(re))
     {
-        if ((dynamic_cast<CC*>(rep->getRE()) != 0) && (rep->getLB() == 0) && (dynamic_cast<Unbounded*>(rep->getUB())!= 0))
+        if ((dynamic_cast<Name*>(rep->getRE()) != 0) && (rep->getLB() == 0) && (rep->getUB()== unboundedRep))
         {
             //std::cout << "Matchstar!" << std::endl;
-            CC* rep_cc = dynamic_cast<CC*>(rep->getRE());
+
+            Name* rep_name = dynamic_cast<Name*>(rep->getRE());
             std::string gs_retVal = symgen.gensym("marker");
-            cg_state.stmtsl.push_back(new Assign(gs_retVal, new MatchStar(new Var(cg_state.newsym), new CharClass(rep_cc->getName()))));
+            cg_state.stmtsl.push_back(new Assign(gs_retVal, new MatchStar(new Var(cg_state.newsym), new CharClass(rep_name->getName()))));
             cg_state.newsym = gs_retVal;
         }
-        else if (dynamic_cast<Unbounded*>(rep->getUB()) != 0)
+        else if (rep->getUB() == unboundedRep)
         {
             if (rep->getLB() == 0)
             {
-                //std::cout << "While, no lb." << std::endl; //THIS IS THE ONE THAT ISN'T WORKING.
+                //std::cout << "While, no lb." << std::endl;
 
                 std::string while_test_gs_retVal = symgen.gensym("while_test");
                 std::string while_accum_gs_retVal = symgen.gensym("while_accum");
@@ -120,28 +123,27 @@ CodeGenState Pbix_Compiler::re2pablo_helper(RE *re, CodeGenState cg_state)
                 cg_state = re2pablo_helper(rep, t1_cg_state);
             }
         }
-        else if (dynamic_cast<UpperBound*>(rep->getUB()) != 0)
+        else if (rep->getUB() != unboundedRep)
         {
-            UpperBound* ub = dynamic_cast<UpperBound*>(rep->getUB());
-            if ((rep->getLB() == 0) && (ub->getUB() == 0))
+            if ((rep->getLB() == 0) && (rep->getUB() == 0))
             {
                 //Just fall through...do nothing.
             }
-            else if ((rep->getLB() == 0) && (ub->getUB() > 0))
+            else if ((rep->getLB() == 0) && (rep->getUB() > 0))
             {
                 CodeGenState t1_cg_state = re2pablo_helper(rep->getRE(), cg_state);
-                ub->setUB(ub->getUB() - 1);
+                rep->setUB(rep->getUB() - 1);
                 CodeGenState t2_cg_state = re2pablo_helper(re, t1_cg_state);
                 std::string gs_retVal = symgen.gensym("alt_marker");
                 cg_state.stmtsl = t2_cg_state.stmtsl;
                 cg_state.stmtsl.push_back(new Assign(gs_retVal, new Or(new Var(cg_state.newsym), new Var(t2_cg_state.newsym))));
                 cg_state.newsym = gs_retVal;
             }
-            else //if ((rep->getLB() > 0) && (ub->getUB() > 0))
+            else //if ((rep->getLB() > 0) && (rep->getUB() > 0))
             {
                 CodeGenState t1_cg_state = re2pablo_helper(rep->getRE(), cg_state);
                 rep->setLB(rep->getLB() - 1);
-                ub->setUB(ub->getUB() - 1);
+                rep->setUB(rep->getUB() - 1);
                 cg_state = re2pablo_helper(rep, t1_cg_state);
             }
         }

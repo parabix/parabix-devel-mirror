@@ -37,6 +37,13 @@ CC::CC(std::string name, int lo_codepoint, int hi_codepoint)
     insert_range(lo_codepoint, hi_codepoint);
 }
 
+CC::CC(CC *cc1, CC *cc2)
+{
+    gensym_name();
+    mSparceCharSet = cc2->getItems();
+    joinCharSets(cc1->getItems());
+}
+
 CC::~CC(){}
 
 std::vector<CharSetItem> CC::getItems()
@@ -46,7 +53,21 @@ std::vector<CharSetItem> CC::getItems()
 
 std::string CC::getName()
 {
-    return mName;
+    std::string name = "CC";
+
+    std::vector<CharSetItem>::iterator it;
+    for (it = mSparceCharSet.begin(); it != mSparceCharSet.end(); ++it)
+    {
+        name += INT2STRING(it->lo_codepoint);
+        name += INT2STRING(it->hi_codepoint);
+    }
+
+    return name;
+}
+
+std::string CC::getId()
+{
+    return mId;
 }
 
 bool CC::is_member(int codepoint)
@@ -77,6 +98,22 @@ bool CC::is_member_helper(int codepoint, int idx)
         {
             return true;
         }
+    }
+}
+
+void CC::joinCharSets(std::vector<CharSetItem> items1)
+{
+    joinCharSets_helper(items1, items1.size() - 1);
+}
+
+void CC::joinCharSets_helper(std::vector<CharSetItem> items1, int idx)
+{
+    if (idx > -1)
+    {
+        CharSetItem item = items1.at(idx);
+        insert_range(item.lo_codepoint, item.hi_codepoint);
+        idx--;
+        joinCharSets_helper(items1, idx);
     }
 }
 
@@ -254,7 +291,7 @@ void CC::remove_range_helper(int lo_codepoint, int hi_codepoint, int idx)
 
 void CC::gensym_name()
 {
-    mName = "lex.CC" + INT2STRING(msCSIidx);
+    mId = "lex.CC" + INT2STRING(msCSIidx);
     msCSIidx++;
 }
 

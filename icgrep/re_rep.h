@@ -8,21 +8,23 @@
 #define RE_REP_H
 
 #include "re_re.h"
-#include "rl_replimit.h"
+
+const int unboundedRep = -1;
 
 class Rep : public RE
 {
 public:
-    Rep(RE* re, int lb, RepLimit* ub);
+    Rep(RE* re, int lb, int ub);
     ~Rep();
     RE* getRE();
     int getLB();
     void setLB(int lb);
-    RepLimit* getUB();
+    int getUB();
+    void setUB(int ub);
 private:
     RE* mRE;
     int mLB;
-    RepLimit* mUB;
+    int mUB;
 };
 
 #endif

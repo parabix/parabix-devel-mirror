@@ -9,16 +9,12 @@
 
 //Regular Expressions
 #include "re_re.h"
-#include "re_cc.h"
+#include "re_name.h"
 #include "re_start.h"
 #include "re_end.h"
 #include "re_seq.h"
 #include "re_alt.h"
 #include "re_rep.h"
-
-#include "rl_replimit.h"
-#include "rl_unbounded.h"
-#include "rl_upperbound.h"
 
 //Pablo Expressions
 #include "pe_pabloe.h"
@@ -48,10 +44,6 @@
 #include <list>
 #include <vector>
 
-//***********************************
-//TODO: Just for development
-//#include "printer_pablos.h"
-//***********************************
 
 struct CodeGenState{
     std::list<PabloS*> stmtsl;
@@ -61,7 +53,7 @@ struct CodeGenState{
 class Pbix_Compiler
 {
 public:
-    Pbix_Compiler();
+    Pbix_Compiler(std::string lf_ccname);
     CodeGenState compile(RE *re);
 private:
     CodeGenState re2pablo_helper(RE *re, CodeGenState cg_state);
@@ -69,6 +61,7 @@ private:
     CodeGenState Alt_helper(std::list<RE*>* lst, std::list<RE*>::const_iterator it, CodeGenState cg_state);
 
     SymbolGenerator symgen;
+    std::string m_lf_ccname;
 };
 
 #endif // COMPILER_H

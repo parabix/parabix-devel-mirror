@@ -18,14 +18,11 @@
 #include <sstream>
 #include <string>
 #include <list>
+#include <map>
+#include <algorithm>
 
 #include <cassert>
 #include <stdlib.h>
-
-//***********************************
-//TODO: Just for development
-//#include "printer_pablos.h"
-//***********************************
 
 #define INT2STRING(i) static_cast<std::ostringstream*>(&(std::ostringstream() << i))->str()
 
@@ -33,8 +30,12 @@ class CC_Compiler
 {
 public:
     CC_Compiler(UTF_Encoding encoding);
-    std::list<PabloS*> compile(std::string basis_pattern, std::string gensym_pattern, RE* re, std::list<CC*> predefined);
+    std::list<PabloS*> compile(std::string basis_pattern,
+                               std::string gensym_pattern,
+                               const std::map<std::string, RE*>& re_map,
+                               std::list<CC*> predefined);
 private:
+    void process_re_map(CC_CodeGenObject& cgo, const std::map<std::string, RE*>& re_map);
     void process_re(CC_CodeGenObject& cgo, RE* re);
     void process_predefined(CC_CodeGenObject& cgo, std::list<CC*> predefined);
     std::string bit_var(int n);

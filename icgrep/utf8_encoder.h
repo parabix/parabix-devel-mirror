@@ -16,24 +16,21 @@
 #include "re_alt.h"
 #include "re_rep.h"
 
-#include "rl_replimit.h"
-#include "rl_unbounded.h"
-#include "rl_upperbound.h"
+#include "re_simplifier.h"
 
 class UTF8_Encoder
 {
 public:
-    UTF8_Encoder();
-    RE* toUTF8(RE* re);
+    static RE* toUTF8(RE* re);
 private:
-    RE* rangeToUTF8(CharSetItem item);
-    RE* rangeToUTF8_helper(int lo, int hi, int n, int hlen);
-    CC* makeByteClass(int byteval);
-    CC* makeByteRange(int lo, int hi);
+    static RE* rangeToUTF8(CharSetItem item);
+    static RE* rangeToUTF8_helper(int lo, int hi, int n, int hlen);
+    static CC* makeByteClass(int byteval);
+    static CC* makeByteRange(int lo, int hi);
 
-    int u8len(int cp);
-    int max_of_u8len(int lgth);
-    int u8byte(int codepoint, int n);
+    static int u8len(int cp);
+    static int max_of_u8len(int lgth);
+    static int u8byte(int codepoint, int n);
 };
 
 #endif // UTF8_ENCODER_H

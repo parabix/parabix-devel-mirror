@@ -13,14 +13,14 @@
 #include "re_re.h"
 #include "re_alt.h"
 #include "re_cc.h"
+#include "re_name.h"
 #include "re_end.h"
 #include "re_rep.h"
 #include "re_seq.h"
 #include "re_start.h"
-
-#include "rl_replimit.h"
-#include "rl_unbounded.h"
-#include "rl_upperbound.h"
+#include "re_nullable.h"
+#include "re_simplifier.h"
+#include "re_reducer.h"
 
 #include "printer_pablos.h"
 #include "printer_re.h"
@@ -40,6 +40,9 @@
 #include "symbol_generator.h"
 #include "llvm_gen.h"
 
+//FOR TESTING AND AND ANALYSIS
+//#include "pbix_counter.h"
+
 #include <fstream>
 #include <iostream>
 #include <string>
@@ -56,9 +59,12 @@ class RE_Compiler
 {
 public:
     RE_Compiler();
-    LLVM_Gen_RetVal compile(bool show_compile_time, std::string basis_pattern, std::string gensym_pattern, UTF_Encoding encoding ,std::string input_string);
-private:
-
+    LLVM_Gen_RetVal compile(bool show_compile_time,
+                            bool ascii_only,
+                            std::string basis_pattern,
+                            std::string gensym_pattern,
+                            UTF_Encoding encoding ,
+                            std::string input_string);
 };
 
 #endif // RE_COMPILER_H

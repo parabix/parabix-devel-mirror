@@ -10,15 +10,12 @@
 //Regular Expressions
 #include "re_re.h"
 #include "re_cc.h"
+#include "re_name.h"
 #include "re_start.h"
 #include "re_end.h"
 #include "re_seq.h"
 #include "re_alt.h"
 #include "re_rep.h"
-
-#include "rl_replimit.h"
-#include "rl_unbounded.h"
-#include "rl_upperbound.h"
 
 //Pablo Expressions
 #include "pe_pabloe.h"
@@ -100,9 +97,10 @@ struct LLVM_Gen_RetVal
 class LLVM_Generator
 {
 public:
-    LLVM_Generator(std::string basis_pattern, int bits);
+    LLVM_Generator(std::string basis_pattern, std::string lf_ccname, int bits);
     ~LLVM_Generator();
-    LLVM_Gen_RetVal Generate_LLVMIR(CodeGenState cg_state, std::list<PabloS*> cc_cgo);
+    LLVM_Gen_RetVal Generate_LLVMIR(CodeGenState cg_state,
+                                    std::list<PabloS*> cc_cgo);
     void Print_Register(char* name, BitBlock bit_block);
 private:
     void MakeLLVMModule();
@@ -116,13 +114,12 @@ private:
     Value* Generate_PabloE(PabloE* expr);
 
     int         mBits;
+    std::string m_lf_ccname;
     std::string mBasis_Pattern;
 
     Module*          mMod;
     BasicBlock*      mBasicBlock;
-    BasicBlock*      mWhileCondBlock;
-    BasicBlock*      mWhileBodyBlock;
-    BasicBlock*      mWhileEndBlock;
+
     ExecutionEngine* mExecutionEngine;
 
     VectorType*  m64x2Vect;
@@ -137,6 +134,8 @@ private:
 
     int         mCarryQueueIdx;
     Value*      mptr_carry_q;
+
+    int         mCarryQueueSize;
 
     ConstantInt*           mConst_int64_neg1;
     ConstantAggregateZero* mConst_Aggregate_64x2_0;

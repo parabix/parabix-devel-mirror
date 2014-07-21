@@ -6,7 +6,6 @@
 
 #include "re_parser.h"
 
-RE_Parser::RE_Parser(){}
 
 ParseResult* RE_Parser::parse_re(std::string input_string)
 {
@@ -65,14 +64,12 @@ parse_re_list_retVal RE_Parser::parse_re_alt_form_list(std::string s)
     if (ParseSuccess* re_success = dynamic_cast<ParseSuccess*>(form_result.result))
     {
         if (form_result.remaining.operator [](0) == '|')
-        {
+        {           
             parse_re_list_retVal t1_re_list_retVal =
                     parse_re_alt_form_list(form_result.remaining.substr(1, form_result.remaining.length() - 1));
-
             std::list<RE*>::iterator it;
             it=t1_re_list_retVal.re_list.begin();
             re_list_retVal.re_list.assign(it, t1_re_list_retVal.re_list.end());
-            re_list_retVal.re_list.push_back(re_success->getRE());
             re_list_retVal.remaining = t1_re_list_retVal.remaining;
         }
         else
@@ -204,15 +201,15 @@ parse_result_retVal RE_Parser::extend_item(RE *re, std::string s)
 
      if (s.operator [](0) == '*')
      {
-         return extend_item(new Rep(re, 0, new Unbounded), s.substr(1, s.length() - 1));
+         return extend_item(new Rep(re, 0, unboundedRep), s.substr(1, s.length() - 1));
      }
      else if (s.operator[](0) == '?')
      {
-         return extend_item(new Rep(re, 0, new UpperBound(1)), s.substr(1, s.length() - 1));
+         return extend_item(new Rep(re, 0, 1), s.substr(1, s.length() - 1));
      }
      else if (s.operator[](0) == '+')
      {
-         return extend_item(new Rep(re, 1, new Unbounded), s.substr(1, s.length() - 1));
+         return extend_item(new Rep(re, 1, unboundedRep), s.substr(1, s.length() - 1));
      }
      else if (s.operator[](0) == '{')
      {
@@ -221,13 +218,13 @@ parse_result_retVal RE_Parser::extend_item(RE *re, std::string s)
         if ((int_retVal.i != -1) && (int_retVal.remaining.operator [](0) == '}'))
         {
             extend_item_retVal =
-                    extend_item(new Rep(re, int_retVal.i, new UpperBound(int_retVal.i)), int_retVal.remaining.substr(1, int_retVal.remaining.length() - 1));
+                    extend_item(new Rep(re, int_retVal.i, int_retVal.i), int_retVal.remaining.substr(1, int_retVal.remaining.length() - 1));
 
         }
         else if ((int_retVal.i != -1) && ((int_retVal.remaining.operator [](0) == ',') && (int_retVal.remaining.operator [](1) == '}')))
         {
             extend_item_retVal =
-                    extend_item(new Rep(re, int_retVal.i, new Unbounded), int_retVal.remaining.substr(2, int_retVal.remaining.length() - 2));
+                    extend_item(new Rep(re, int_retVal.i, unboundedRep), int_retVal.remaining.substr(2, int_retVal.remaining.length() - 2));
 
         }
         else if ((int_retVal.i != -1) && (int_retVal.remaining.operator [](0) == ','))
@@ -237,7 +234,7 @@ parse_result_retVal RE_Parser::extend_item(RE *re, std::string s)
             if ((t1_int_retVal.i != -1) && (t1_int_retVal.remaining.operator [](0) == '}'))
             {
                 extend_item_retVal =
-                        extend_item(new Rep(re, int_retVal.i, new UpperBound(t1_int_retVal.i)), t1_int_retVal.remaining.substr(1, t1_int_retVal.remaining.length() - 1));
+                        extend_item(new Rep(re, int_retVal.i, t1_int_retVal.i), t1_int_retVal.remaining.substr(1, t1_int_retVal.remaining.length() - 1));
             }
             else
             {
