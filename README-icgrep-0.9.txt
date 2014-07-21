@@ -16,7 +16,7 @@ Using the installed LLVM, building icgrep uses the CMake build
 system generator.   
 (IC1)  open a terminal window and cd to the icgrep-build directory
 (IC2)  enter the following command to build the makefiles
-cmake -DCMAKE_CXX_FLAGS="-O3 -D__STDC_LIMIT_MACROS -D__STDC_CONSTANT_MACROS -D__STDC_FORMAT_MACROS" -DCMAKE_CXX_COMPILER:FILEPATH=/usr/bin/clang++ -DCMAKE_C_COMPILER:FILEPATH=/usr/bin/clang ../icgrep
+cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER:FILEPATH=/usr/bin/clang++ -DCMAKE_C_COMPILER:FILEPATH=/usr/bin/clang ../icgrep
 (IC3) Enter the command "make" 
 
 LLVM files are governed by the LLVM Release License in LLVM-LICENSE.txt.

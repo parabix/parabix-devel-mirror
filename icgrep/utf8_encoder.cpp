@@ -180,7 +180,7 @@ int UTF8_Encoder::u8byte(int codepoint, int n)
     }
     else
     {
-        retVal = 0x80 | (codepoint >> (6 * (len - n))) & 0x3F;
+        retVal = 0x80 | ((codepoint >> (6 * (len - n))) & 0x3F);
     }
 
     return retVal;
