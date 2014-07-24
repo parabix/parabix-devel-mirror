@@ -270,6 +270,47 @@ PabloE* CC_Compiler::charset_expr(CC* cc)
     {
         return new All(0);
     }
+
+    if (cc->getItems().size() > 1)
+    {
+        bool combine = true;
+
+        for (unsigned long i = 0; i < cc->getItems().size(); i++)
+        {
+            CharSetItem item = cc->getItems().at(i);
+            if (item.lo_codepoint != item.hi_codepoint)
+            {
+                combine = false;
+                break;
+            }
+        }
+
+        if (combine)
+        {
+            for (unsigned long i = 0; i < cc->getItems().size() - 1; i ++)
+            {
+                CharSetItem curr_item = cc->getItems().at(i);
+                CharSetItem next_item = cc->getItems().at(i + 1);
+                if (curr_item.lo_codepoint != next_item.lo_codepoint + 2)
+                {
+                    combine  = false;
+                    break;
+                }
+            }
+        }
+
+        if (combine)
+        {
+            CharSetItem first_item = cc->getItems().at(0);
+            CharSetItem last_item = cc->getItems().at(cc->getItems().size() - 1);
+            CharSetItem combined_item;
+            combined_item.lo_codepoint = (last_item.lo_codepoint & 0xFE);
+            combined_item.hi_codepoint = (first_item.hi_codepoint | 0x01);
+            std::cout << "Combined!" << std::endl;
+            return char_or_range_expr(combined_item);
+        }
+    }
+
     PabloE* e1 = char_or_range_expr(cc->getItems().at(0));
     if (cc->getItems().size() > 1)
     {
