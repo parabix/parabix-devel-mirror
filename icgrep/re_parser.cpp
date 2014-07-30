@@ -380,7 +380,64 @@ parse_result_retVal RE_Parser::parse_cc(std::string s)
         cc_retVal.remaining = s;
     }
 
+    int next_byte = (s.operator [](0) & 0xFF);
+    if ((next_byte >= 0xC0) && (next_byte <= 0xDF))
+    {       
+        cc_retVal = parse_utf8_bytes(1, s);
+    }
+    else if ((next_byte >= 0xE0) && (next_byte <= 0xEF))
+    {
+        cc_retVal = parse_utf8_bytes(2, s);
+    }
+    else if((next_byte >= 0xF0) && (next_byte <= 0xFF))
+    {
+        cc_retVal = parse_utf8_bytes(3, s);
+    }
+
     return cc_retVal;
+}
+
+parse_result_retVal RE_Parser::parse_utf8_bytes(int suffix_count, std::string s)
+{
+    CC* cc = new CC((s.operator [](0) & 0xFF));
+    Seq* seq = new Seq();
+    seq->setType(Seq::Byte);
+    seq->AddREListItem(cc);
+
+    return parse_utf8_suffix_byte(suffix_count, s.substr(1, s.length() - 1), seq);
+}
+
+parse_result_retVal RE_Parser::parse_utf8_suffix_byte(int suffix_byte_num, std::string s, Seq *seq_sofar)
+{
+    parse_result_retVal result_RetVal;
+
+    if (suffix_byte_num == 0)
+    {
+        result_RetVal.result = new ParseSuccess(seq_sofar);
+        result_RetVal.remaining = s;
+    }
+    else if (s.length() == 0)
+    {
+        result_RetVal.result = new ParseFailure("Invalid UTF-8 encoding!");
+        result_RetVal.remaining = "";
+    }
+    else
+    {
+        if ((s.operator [](0) & 0xC0) == 0x80)
+        {
+            CC* cc = new CC((s.operator [](0) & 0xFF));
+            seq_sofar->AddREListItem(cc);
+            suffix_byte_num--;
+            result_RetVal = parse_utf8_suffix_byte(suffix_byte_num, s.substr(1, s.length() - 1), seq_sofar);
+        }
+        else
+        {
+            result_RetVal.result = new ParseFailure("Invalid UTF-8 encoding!");
+            result_RetVal.remaining = s;
+        }
+    }
+
+    return result_RetVal;
 }
 
 parse_result_retVal RE_Parser::parse_cc_body(std::string s)

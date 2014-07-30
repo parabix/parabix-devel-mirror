@@ -9,6 +9,7 @@
 Seq::Seq()
 {
     mList = new std::list<RE*>();
+    mType = Seq::Normal;
 }
 
 Seq::Seq(std::list<RE*>* lst)
@@ -18,6 +19,7 @@ Seq::Seq(std::list<RE*>* lst)
     it=lst->begin();
     mList->assign(it, lst->end());
     mList->reverse();
+    mType = Seq::Normal;
 }
 
 Seq::Seq(std::list<RE*> lst)
@@ -27,6 +29,7 @@ Seq::Seq(std::list<RE*> lst)
     it=lst.begin();
     mList->assign(it, lst.end());
     mList->reverse();
+    mType = Seq::Normal;
 }
 
 Seq::~Seq()
@@ -45,3 +48,12 @@ void Seq::AddREListItem(RE *re)
     mList->push_back(re);
 }
 
+Seq::Type Seq::getType()
+{
+    return mType;
+}
+
+void Seq::setType(Seq::Type type)
+{
+    mType = type;
+}

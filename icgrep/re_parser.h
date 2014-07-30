@@ -60,6 +60,8 @@ private:
     static parse_result_retVal parse_cc_body(std::string s);
     static parse_result_retVal parse_cc_body0(std::string s, CC* cc_sofar);
     static parse_result_retVal parse_cc_body1(int chr, std::string s, CC* cc_sofar);
+    static parse_result_retVal parse_utf8_bytes(int suffix_count, std::string s);
+    static parse_result_retVal parse_utf8_suffix_byte(int suffix_byte_num, std::string s, Seq* seq_sofar);
 
     static parse_int_retVal parse_hex(std::string s);
     static parse_int_retVal parse_hex_body(int i, std::string s);

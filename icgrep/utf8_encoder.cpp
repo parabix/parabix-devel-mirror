@@ -25,15 +25,30 @@ RE* UTF8_Encoder::toUTF8(RE* re)
     }
     else if (Seq* re_seq = dynamic_cast<Seq*>(re))
     {
+
         std::list<RE*> re_list;
         std::list<RE*>::iterator it;
 
         for (it = re_seq->GetREList()->begin(); it != re_seq->GetREList()->end(); ++it)
         {
-            re_list.push_front(toUTF8(*it));
+            //If this is a previously encoded Unicode byte sequence.
+            if (re_seq->getType() == Seq::Byte)
+            {
+                if (CC* seq_cc = dynamic_cast<CC*>(*it))
+                {
+                    CharSetItem item = seq_cc->getItems().front();
+                    re_list.push_front(new CC(item.lo_codepoint));
+                }
+            }
+            else
+            {
+                re_list.push_front(toUTF8(*it));
+            }
         }
 
-        retVal = new Seq(&re_list);
+        Seq* new_seq = new Seq(&re_list);
+        new_seq->setType(re_seq->getType());
+        retVal = new_seq;
     }
     else if (Rep* re_rep = dynamic_cast<Rep*>(re))
     {

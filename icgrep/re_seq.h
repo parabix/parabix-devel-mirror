@@ -13,14 +13,18 @@
 class Seq : public RE
 {
 public:
+    typedef enum {Normal,Byte} Type;
     Seq();
     Seq(std::list<RE*>* lst);
     Seq(std::list<RE*> lst);
     ~Seq();
     std::list<RE*>* GetREList();
     void AddREListItem(RE *re);
+    Type getType();
+    void setType(Type type);
 private:
     std::list<RE*>* mList;
+    Type mType;
 };
 
 #endif // JOIN_H
