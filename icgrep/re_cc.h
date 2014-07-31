@@ -28,8 +28,6 @@ public:
     CC();
     CC(int codepoint);
     CC(int lo_codepoint, int hi_codepoint);
-    CC(std::string name, int codepoint);
-    CC(std::string name, int lo_codepoint, int hi_codepoint);
     CC(CC* cc1, CC* cc2);
     ~CC();
     std::vector<CharSetItem> getItems();
@@ -56,7 +54,6 @@ private:
     void remove_range_helper(int lo_codepoint, int hi_codepoint, int idx);
 
     std::vector<CharSetItem> mSparceCharSet;
-    std::string mName;
     std::string mId;
 };
 

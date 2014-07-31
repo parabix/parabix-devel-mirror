@@ -8,7 +8,10 @@
 #define JOIN_H
 
 #include "re_re.h"
+#include "re_cc.h"
 #include <list>
+#include <sstream>
+#include <utility>
 
 class Seq : public RE
 {
@@ -20,6 +23,7 @@ public:
     ~Seq();
     std::list<RE*>* GetREList();
     void AddREListItem(RE *re);
+    std::string getName();
     Type getType();
     void setType(Type type);
 private:

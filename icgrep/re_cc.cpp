@@ -25,18 +25,6 @@ CC::CC(int lo_codepoint, int hi_codepoint)
     insert_range(lo_codepoint, hi_codepoint);
 }
 
-CC::CC(std::string name, int codepoint)
-{
-    mName = name;
-    insert1(codepoint);
-}
-
-CC::CC(std::string name, int lo_codepoint, int hi_codepoint)
-{
-    mName = name;
-    insert_range(lo_codepoint, hi_codepoint);
-}
-
 CC::CC(CC *cc1, CC *cc2)
 {
     gensym_name();

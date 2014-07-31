@@ -63,6 +63,10 @@ private:
     static parse_result_retVal parse_utf8_bytes(int suffix_count, std::string s);
     static parse_result_retVal parse_utf8_suffix_byte(int suffix_byte_num, std::string s, Seq* seq_sofar);
 
+    static parse_result_retVal parse_unicode_category(std::string s);
+    static parse_result_retVal parse_unicode_category1(std::string character, std::string s, Name* name_sofar);
+    static bool isValidUnicodeCategoryName(Name* name);
+
     static parse_int_retVal parse_hex(std::string s);
     static parse_int_retVal parse_hex_body(int i, std::string s);
     static int parse_hex_body1(int i, std::string hex_str);

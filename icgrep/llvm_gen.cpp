@@ -23,7 +23,6 @@ LLVM_Generator::LLVM_Generator(std::string basis_pattern, std::string lf_ccname,
     mBasis_Pattern = basis_pattern;
     m_lf_ccname = lf_ccname;
     mBits = bits;
-    mInWhile = false;
 }
 
 LLVM_Generator::~LLVM_Generator()

@@ -19,15 +19,27 @@ RE* RE_Reducer::reduce(RE* re, std::map<std::string, RE*>& re_map)
     }
     else if (Seq* re_seq = dynamic_cast<Seq*>(re))
     {
-        std::list<RE*> re_list;
-        std::list<RE*>::iterator it;
-
-        for (it = re_seq->GetREList()->begin(); it != re_seq->GetREList()->end(); ++it)
+/*
+        if (re_seq->getType() == Seq::Byte)
         {
-            re_list.push_front(reduce(*it, re_map));
+            //If this is a sequence of byte classes then this is a multibyte sequence for a Unicode character class.
+            std::string seqname = re_seq->getName();
+            re_map.insert(make_pair(seqname, re_seq));
+            retVal = new Name(seqname);
         }
+        else
+        {
+*/
+            std::list<RE*> re_list;
+            std::list<RE*>::iterator it;
 
-        retVal = new Seq(&re_list);
+            for (it = re_seq->GetREList()->begin(); it != re_seq->GetREList()->end(); ++it)
+            {
+                re_list.push_front(reduce(*it, re_map));
+            }
+
+            retVal = new Seq(&re_list);
+//        }
     }
     else if (Rep* re_rep = dynamic_cast<Rep*>(re))
     {
@@ -40,6 +52,10 @@ RE* RE_Reducer::reduce(RE* re, std::map<std::string, RE*>& re_map)
         re_map.insert(make_pair(ccname, re_cc));
         //return a new name class with the name of the character class.
         retVal = new Name(ccname);
+    }
+    else if (Name* re_name = dynamic_cast<Name*>(re))
+    {
+        retVal = new Name(re_name->getName());
     }
     else if (Start* re_start = dynamic_cast<Start*>(re))
     {

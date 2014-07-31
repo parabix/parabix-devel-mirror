@@ -4,6 +4,7 @@
 //Regular Expressions
 #include "re_re.h"
 #include "re_cc.h"
+#include "re_name.h"
 #include "re_start.h"
 #include "re_end.h"
 #include "re_seq.h"
@@ -16,7 +17,7 @@
 class RE_Simplifier
 {
 public:
-    static RE* mkSeq(std::list<RE*>* re_list);
+    static RE* mkSeq(Seq::Type type, std::list<RE*>* re_list);
     static RE* mkRep(RE* re, int lb2, int ub2);
     static RE* mkAlt(std::list<RE*>* re_list);
     static RE* simplify(RE* re);

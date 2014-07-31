@@ -27,11 +27,15 @@ RE* RE_Simplifier::simplify(RE* re)
             re_list.push_front(simplify(*it));
         }
 
-        retVal = mkSeq(&re_list);
+        retVal = mkSeq(re_seq->getType(), &re_list);
     }
     else if (CC* re_cc = dynamic_cast<CC*>(re))
     {
         retVal = re_cc;
+    }
+    else if (Name* re_name = dynamic_cast<Name*>(re))
+    {
+        retVal = new Name(re_name->getName());
     }
     else if (Rep* re_rep = dynamic_cast<Rep*>(re))
     {
@@ -49,7 +53,7 @@ RE* RE_Simplifier::simplify(RE* re)
     return retVal;
 }
 
-RE* RE_Simplifier::mkSeq(std::list<RE*>* re_list)
+RE* RE_Simplifier::mkSeq(Seq::Type type, std::list<RE*>* re_list)
 {
     /*
       mkSeq - make a sequence, but flatten.  Result might not be a Seq. If
@@ -65,7 +69,9 @@ RE* RE_Simplifier::mkSeq(std::list<RE*>* re_list)
         std::list<RE*>* t2_list = mkSeqList(t1_list);
         if (t2_list->size() > 1)
         {
-            return new Seq(t2_list);
+            Seq* new_seq = new Seq(t2_list);
+            new_seq->setType(type);
+            return new_seq;
         }
         else
         {

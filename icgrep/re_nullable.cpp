@@ -17,8 +17,10 @@ RE* RE_Nullable::removeNullablePrefix(RE* re)
         std::list<RE*>* re_list = re_seq->GetREList();
         std::list<RE*>* t1_list = new std::list<RE*>();
         t1_list->assign(re_list->begin(), re_list->end());
+        Seq* new_seq = new Seq(removeNullableSeqPrefix(t1_list));
+        new_seq->setType(re_seq->getType());
 
-        return new Seq(removeNullableSeqPrefix(t1_list));
+        return new_seq;
     }
     else if (Alt* re_alt = dynamic_cast<Alt*>(re))
     {
@@ -45,7 +47,7 @@ RE* RE_Nullable::removeNullablePrefix(RE* re)
             seq_lst->push_back(new Rep(re_rep->getRE(), re_rep->getLB()-1, re_rep->getLB()-1));
             seq_lst->push_back(removeNullablePrefix(re_rep->getRE()));
 
-            return RE_Simplifier::mkSeq(seq_lst);
+            return RE_Simplifier::mkSeq(Seq::Normal, seq_lst);
         }
         else
         {
@@ -88,8 +90,9 @@ RE* RE_Nullable::removeNullableSuffix(RE* re)
         std::list<RE*>* re_list = re_seq->GetREList();
         std::list<RE*>* t1_list = new std::list<RE*>();
         t1_list->assign(re_list->begin(), re_list->end());
-
-        return new Seq(removeNullableSeqSuffix(t1_list));
+        Seq* new_seq = new Seq(removeNullableSeqSuffix(t1_list));
+        new_seq->setType(re_seq->getType());
+        return new_seq;
     }
     else if (Alt* re_alt = dynamic_cast<Alt*>(re))
     {
@@ -117,7 +120,7 @@ RE* RE_Nullable::removeNullableSuffix(RE* re)
             seq_lst->push_back(removeNullableSuffix(re_rep->getRE()));
             seq_lst->push_back(new Rep(re_rep->getRE(), re_rep->getLB()-1, re_rep->getLB()-1));
 
-            return RE_Simplifier::mkSeq(seq_lst);
+            return RE_Simplifier::mkSeq(Seq::Normal, seq_lst);
         }
         else
         {

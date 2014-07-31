@@ -38,6 +38,35 @@ Seq::~Seq()
     delete mList;
 }
 
+std::string Seq::getName()
+{
+    if (mType == Seq::Byte)
+    {
+        std::string name = "Seq";
+
+        std::list<RE*> re_list;
+        std::list<RE*>::iterator it = mList->begin();
+
+        for (it = mList->begin(); it != mList->end(); ++it)
+        {
+            if (CC* seq_cc = dynamic_cast<CC*>(*it))
+            {
+                name += seq_cc->getName();
+            }
+            else
+            {
+                return "Bad Byte Sequence!";
+            }
+        }
+
+        return name;
+    }
+    else
+    {
+        return "Unnamed Sequence";
+    }
+}
+
 std::list<RE*>* Seq::GetREList()
 {
     return mList;

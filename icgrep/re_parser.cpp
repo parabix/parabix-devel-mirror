@@ -328,6 +328,10 @@ parse_result_retVal RE_Parser::parse_cc(std::string s)
 
             return cc_retVal;
         }
+        else if (s.operator [](1) == 'p')
+        {
+            return cc_retVal = parse_unicode_category(s.substr(2, s.length() - 2));
+        }
         else
         {
             cc_retVal.result = new ParseFailure("Illegal backslash escape!");
@@ -438,6 +442,57 @@ parse_result_retVal RE_Parser::parse_utf8_suffix_byte(int suffix_byte_num, std::
     }
 
     return result_RetVal;
+}
+
+parse_result_retVal RE_Parser::parse_unicode_category(std::string s)
+{
+    parse_result_retVal result_retVal;
+
+    if (s.operator [](0) == '{')
+    {
+        Name* name = new Name();
+        result_retVal = parse_unicode_category1(s.substr(1,1), s.substr(2, s.length() - 2), name);
+    }
+    else
+    {
+        result_retVal.result = new ParseFailure("Incorrect Unicode character class format!");
+        result_retVal.remaining = "";
+    }
+
+    return result_retVal;
+}
+
+parse_result_retVal RE_Parser::parse_unicode_category1(std::string character, std::string s, Name* name_sofar)
+{
+    parse_result_retVal unicode_cat1_retVal;
+
+    if (s.length() == 0)
+    {
+        delete name_sofar;
+        unicode_cat1_retVal.result = new ParseFailure("Unclosed Unicode character class!");
+        unicode_cat1_retVal.remaining = "";
+    }
+    else if (s.operator [](0) == '}')
+    {
+        name_sofar->setName(name_sofar->getName() + character);
+        if (isValidUnicodeCategoryName(name_sofar))
+        {
+            unicode_cat1_retVal.result = new ParseSuccess(name_sofar);
+            unicode_cat1_retVal.remaining = s.substr(1, s.length() - 1);
+        }
+        else
+        {
+            unicode_cat1_retVal.result = new ParseFailure("Unknown Unicode character class!");
+            unicode_cat1_retVal.remaining = s.substr(1, s.length() - 1);
+        }
+    }
+    else
+    {
+        name_sofar->setName(name_sofar->getName() + character);
+        unicode_cat1_retVal = parse_unicode_category1(s.substr(0,1), s.substr(1, s.length() - 1), name_sofar);
+    }
+
+    return unicode_cat1_retVal;
 }
 
 parse_result_retVal RE_Parser::parse_cc_body(std::string s)
@@ -572,7 +627,6 @@ parse_int_retVal RE_Parser::parse_hex(std::string s)
     {
         int hexval_sofar = 0;
         int_retVal = parse_hex_body(hexval_sofar, s.substr(1, s.length() - 1));
-
     }
     else
     {
@@ -687,7 +741,91 @@ parse_result_retVal RE_Parser::negate_cc_result(parse_result_retVal cc_result)
     return cc_result;
 }
 
+bool RE_Parser::isValidUnicodeCategoryName(Name* name)
+{
+    std::string cat_name = name->getName();
 
+    if (cat_name == "Cc")
+        return true;
+    else if (cat_name == "Cf")
+        return true;
+    else if (cat_name == "Cn")
+        return true;
+    else if (cat_name == "Co")
+        return true;
+    else if (cat_name == "Cs")
+        return true;
+    else if (cat_name == "C")
+        return true;
+    else if (cat_name == "Ll")
+        return true;
+    else if (cat_name == "Lt")
+        return true;
+    else if (cat_name == "Lu")
+        return true;
+    else if (cat_name == "L&")
+        return true;
+    else if (cat_name == "Lc")
+        return true;
+    else if (cat_name == "Lm")
+        return true;
+    else if (cat_name == "Lo")
+        return true;
+    else if (cat_name == "L")
+        return true;
+    else if (cat_name == "Mc")
+        return true;
+    else if (cat_name == "Me")
+        return true;
+    else if (cat_name == "Mn")
+        return true;
+    else if (cat_name == "M")
+        return true;
+    else if (cat_name == "Nd")
+        return true;
+    else if (cat_name == "Nl")
+        return true;
+    else if (cat_name == "No")
+        return true;
+    else if (cat_name == "N")
+        return true;
+    else if (cat_name == "Pc")
+        return true;
+    else if (cat_name == "Pd")
+        return true;
+    else if (cat_name == "Pe")
+        return true;
+    else if (cat_name == "Pf")
+        return true;
+    else if (cat_name == "Pi")
+        return true;
+    else if (cat_name == "Po")
+        return true;
+    else if (cat_name == "Ps")
+        return true;
+    else if (cat_name == "P")
+        return true;
+    else if (cat_name == "Sc")
+        return true;
+    else if (cat_name == "Sk")
+        return true;
+    else if (cat_name == "Sm")
+        return true;
+    else if (cat_name == "So")
+        return true;
+    else if (cat_name == "S")
+        return true;
+    else if (cat_name == "Zl")
+        return true;
+    else if (cat_name == "Zp")
+        return true;
+    else if (cat_name == "Zs")
+        return true;
+    else if (cat_name == "Z")
+        return true;
+    else
+        return false;
+}
 
 
 

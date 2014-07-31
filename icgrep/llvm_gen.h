@@ -130,8 +130,6 @@ private:
 
     std::map<std::string, Value*> mMarkerMap;
 
-    bool        mInWhile;
-
     int         mCarryQueueIdx;
     Value*      mptr_carry_q;
 
