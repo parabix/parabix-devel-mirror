@@ -407,7 +407,7 @@ Value* LLVM_Generator::Generate_PabloE(PabloE *expr)
     {
         IRBuilder<> b(mBasicBlock);
 
-        //Call the callee once and then store the result in the marker map.
+        //Call the callee once and store the result in the marker map.
         if (mMarkerMap.find(call->getCallee()) == mMarkerMap.end())
         {
             Value* unicode_category = b.CreateCall(mFunc_get_unicode_category, b.CreateGlobalStringPtr(call->getCallee()));
