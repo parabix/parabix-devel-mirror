@@ -23,6 +23,7 @@
 #include "pe_all.h"
 #include "pe_and.h"
 #include "pe_charclass.h"
+#include "pe_call.h"
 #include "pe_matchstar.h"
 #include "pe_not.h"
 #include "pe_or.h"

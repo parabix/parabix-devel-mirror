@@ -13,6 +13,17 @@ extern "C" {
   }
 }
 
+extern "C" {
+    BitBlock wrapped_get_unicode_category(const char* name){
+        return Unicode_Categories::getCategory(name);
+    }
+}
+
+BitBlock LLVM_Generator::Get_UnicodeCategory(const char *name)
+{
+    return Unicode_Categories::getCategory(name);
+}
+
 void LLVM_Generator::Print_Register(char *name, BitBlock bit_block)
 {
     print_register<BitBlock>(name, bit_block);
@@ -80,6 +91,7 @@ LLVM_Gen_RetVal LLVM_Generator::Generate_LLVMIR(CodeGenState cg_state, std::list
     StoreInst* void_16 = new StoreInst(ptr_output, mPtr_output_addr, false, mBasicBlock);
 
     //Generate the IR instructions for the function.
+
     Generate_PabloStatements(cc_cgo_stmtsl);
     Generate_PabloStatements(cg_state.stmtsl);
     SetReturnMarker(cg_state.newsym, 0);
@@ -128,6 +140,7 @@ void LLVM_Generator::DefineTypes()
 {
     //The BitBlock vector.
     m64x2Vect = VectorType::get(IntegerType::get(mMod->getContext(), 64), 2);
+    m128x1Vect = VectorType::get(IntegerType::get(mMod->getContext(), 128), 1);
     //A pointer to the BitBlock vector.
     m64x2Vect_Ptr1 = PointerType::get(m64x2Vect, 0);
 
@@ -186,9 +199,14 @@ void LLVM_Generator::DefineTypes()
 
 void LLVM_Generator::DeclareFunctions()
 {
+    mFunc_get_unicode_category = mMod->getOrInsertFunction("wrapped_get_unicode_category", m64x2Vect, Type::getInt8PtrTy(mMod->getContext()), NULL);
+    mExecutionEngine->addGlobalMapping(cast<GlobalValue>(mFunc_get_unicode_category), (void *)&wrapped_get_unicode_category);
+
     //This function can be used for testing to print the contents of a register from JIT'd code to the terminal window.
-    mFunc_print_register = mMod->getOrInsertFunction("wrapped_print_register", Type::getVoidTy(getGlobalContext()), m64x2Vect, NULL);
-    mExecutionEngine->addGlobalMapping(cast<GlobalValue>(mFunc_print_register), (void *)&wrapped_print_register);
+    //mFunc_print_register = mMod->getOrInsertFunction("wrapped_print_register", Type::getVoidTy(getGlobalContext()), m64x2Vect, NULL);
+
+    //mExecutionEngine->addGlobalMapping(cast<GlobalValue>(mFunc_print_register), (void *)&wrapped_print_register);
+    // to call->  b.CreateCall(mFunc_print_register, unicode_category);
 
     SmallVector<AttributeSet, 4> Attrs;
     AttributeSet PAS;
@@ -384,6 +402,24 @@ Value* LLVM_Generator::Generate_PabloE(PabloE *expr)
         Value* all_value = b.CreateLoad(ptr_all);
 
         retVal = all_value;
+    }
+    else if (Call* call = dynamic_cast<Call*>(expr))
+    {
+        IRBuilder<> b(mBasicBlock);
+
+        //Call the callee once and then store the result in the marker map.
+        if (mMarkerMap.find(call->getCallee()) == mMarkerMap.end())
+        {
+            Value* unicode_category = b.CreateCall(mFunc_get_unicode_category, b.CreateGlobalStringPtr(call->getCallee()));
+            Value* ptr = b.CreateAlloca(m64x2Vect);
+            Value* void_1 = b.CreateStore(unicode_category, ptr);
+
+            mMarkerMap.insert(make_pair(call->getCallee(), ptr));
+        }
+        std::map<std::string, Value*>::iterator itGet = mMarkerMap.find(call->getCallee());
+        Value * var_value = b.CreateLoad(itGet->second);
+
+        retVal = var_value;
     }
     else if (Var* var = dynamic_cast<Var*>(expr))
     {

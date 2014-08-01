@@ -27,6 +27,7 @@
 #include "pe_matchstar.h"
 #include "pe_not.h"
 #include "pe_or.h"
+#include "pe_call.h"
 #include "pe_var.h"
 #include "pe_xor.h"
 
@@ -40,6 +41,8 @@
 #include "pbix_compiler.h"
 
 #include "llvm_gen_helper.h"
+
+#include "unicode_categories.h"
 
 #include <iostream>
 #include <string>
@@ -102,11 +105,13 @@ public:
     LLVM_Gen_RetVal Generate_LLVMIR(CodeGenState cg_state,
                                     std::list<PabloS*> cc_cgo);
     void Print_Register(char* name, BitBlock bit_block);
+    BitBlock Get_UnicodeCategory(const char* name);
 private:
     void MakeLLVMModule();
     void DefineTypes();
     void DeclareFunctions();
     void StoreBitBlockMarkerPtr(std::string name, int index);
+    void LoadBitBlocksFromStaticExtern();
     void SetReturnMarker(std::string marker, int output_idx);
     Value* GetMarker(std::string name);
     std::string Generate_PabloStatements(std::list<PabloS*> stmts);
@@ -124,6 +129,8 @@ private:
 
     VectorType*  m64x2Vect;
     PointerType* m64x2Vect_Ptr1;
+
+    VectorType* m128x1Vect;
 
     PointerType* mStruct_Basis_Bits_Ptr1;
     PointerType* mStruct_Output_Ptr1;
@@ -143,6 +150,8 @@ private:
     Function*     mFunc_process_block;
 
     Constant*     mFunc_print_register;
+    Constant*     mFunc_test_getCategory;
+    Constant*     mFunc_get_unicode_category;
 
     AllocaInst*  mPtr_basis_bits_addr;
     AllocaInst*  mPtr_carry_q_addr;

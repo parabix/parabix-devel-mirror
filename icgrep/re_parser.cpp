@@ -451,6 +451,7 @@ parse_result_retVal RE_Parser::parse_unicode_category(std::string s)
     if (s.operator [](0) == '{')
     {
         Name* name = new Name();
+        name->setType(Name::UnicodeCategory);
         result_retVal = parse_unicode_category1(s.substr(1,1), s.substr(2, s.length() - 2), name);
     }
     else

@@ -73,7 +73,9 @@ RE* UTF8_Encoder::toUTF8(RE* re)
     }
     else if (Name* re_name = dynamic_cast<Name*>(re))
     {
-        retVal = new Name(re_name->getName());
+        Name* name = new Name(re_name->getName());
+        name->setType(re_name->getType());
+        retVal = name;
     }
     else if (Start* re_start = dynamic_cast<Start*>(re))
     {

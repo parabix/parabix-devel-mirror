@@ -36,7 +36,14 @@ CodeGenState Pbix_Compiler::re2pablo_helper(RE *re, CodeGenState cg_state)
     if (Name* name = dynamic_cast<Name*>(re))
     {
         std::string gs_retVal = symgen.gensym("marker");
-        cg_state.stmtsl.push_back(new Assign(gs_retVal, new Advance(new And(new Var(cg_state.newsym), new CharClass(name->getName())))));
+
+        PabloE* expr;
+        if (name->getType() == Name::UnicodeCategory)
+            expr = new Call(name->getName());
+        else
+            expr =  new CharClass(name->getName());
+
+        cg_state.stmtsl.push_back(new Assign(gs_retVal, new Advance(new And(new Var(cg_state.newsym), expr))));
         cg_state.newsym = gs_retVal;
 
         //cout << "\n" << "(" << StatementPrinter::PrintStmts(cg_state) << ")" << "\n" << endl;

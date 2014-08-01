@@ -37,7 +37,7 @@ add_definitions( ${LLVM_DEFINITIONS} )
 llvm_map_components_to_libraries(REQ_LLVM_LIBRARIES mcjit native)
 
  
-add_library(PabloADT pe_advance.cpp  pe_all.cpp  pe_and.cpp  pe_charclass.cpp  pe_matchstar.cpp  pe_not.cpp  pe_or.cpp  pe_pabloe.cpp  pe_sel.cpp  pe_var.cpp  pe_xor.cpp ps_assign.cpp  ps_if.cpp  ps_pablos.cpp  ps_while.cpp printer_pablos.cpp)
+add_library(PabloADT pe_advance.cpp  pe_all.cpp  pe_and.cpp pe_call.cpp pe_charclass.cpp  pe_matchstar.cpp  pe_not.cpp  pe_or.cpp  pe_pabloe.cpp  pe_sel.cpp  pe_var.cpp  pe_xor.cpp ps_assign.cpp  ps_if.cpp  ps_pablos.cpp  ps_while.cpp printer_pablos.cpp)
 
 add_library(RegExpADT re_alt.cpp  re_cc.cpp  re_end.cpp  re_name.cpp re_parser.cpp  re_re.cpp  re_rep.cpp  re_seq.cpp  re_start.cpp parsefailure.cpp  parseresult.cpp  parsesuccess.cpp printer_re.cpp)
 
@@ -49,7 +49,7 @@ include_directories("${PROJECT_SOURCE_DIR}/include/simd-lib")
 include_directories("${PROJECT_SOURCE_DIR}/include/simd-lib/idisa_cpp")
  
 # add the executable
-add_executable(icgrep icgrep.cpp llvm_gen.cpp  llvm_gen_helper.cpp utf_encoding.cpp cc_codegenobject.cpp  cc_compiler.cpp  cc_compiler_helper.cpp re_simplifier.cpp re_reducer.cpp re_nullable.cpp re_compiler.cpp pbix_compiler.cpp  symbol_generator.cpp utf8_encoder.cpp)
+add_executable(icgrep icgrep.cpp llvm_gen.cpp  llvm_gen_helper.cpp utf_encoding.cpp unicode_categories.cpp cc_codegenobject.cpp  cc_compiler.cpp  cc_compiler_helper.cpp re_simplifier.cpp re_reducer.cpp re_nullable.cpp re_compiler.cpp pbix_compiler.cpp  symbol_generator.cpp utf8_encoder.cpp)
 
 target_link_libraries (icgrep PabloADT RegExpADT ${REQ_LLVM_LIBRARIES})
 

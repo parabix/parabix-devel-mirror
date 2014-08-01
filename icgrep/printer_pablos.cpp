@@ -75,6 +75,10 @@ std::string StatementPrinter::ShowPabloE(PabloE* expr)
     {
         retVal = "All " + INT2STRING(all->getNum()) + " ";
     }
+    else if (Call* pablo_call = dynamic_cast<Call*>(expr))
+    {
+        retVal = "Call '" + pablo_call->getCallee() + "'";
+    }
     else if (Var* pablo_var = dynamic_cast<Var*>(expr))
     {
         retVal = "Var '" + pablo_var->getVar() + "' ";

@@ -1,6 +1,5 @@
 #include "re_simplifier.h"
 
-
 RE* RE_Simplifier::simplify(RE* re)
 {
     RE* retVal = 0;
@@ -35,7 +34,9 @@ RE* RE_Simplifier::simplify(RE* re)
     }
     else if (Name* re_name = dynamic_cast<Name*>(re))
     {
-        retVal = new Name(re_name->getName());
+        Name* name = new Name(re_name->getName());
+        name->setType(re_name->getType());
+        retVal = name;
     }
     else if (Rep* re_rep = dynamic_cast<Rep*>(re))
     {

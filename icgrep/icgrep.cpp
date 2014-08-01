@@ -29,7 +29,6 @@
 #include <simd-lib/s2p.hpp>
 #include <simd-lib/buffer.hpp>
 #include <simd-lib/bitblock_iterator.hpp>
-//#include <simd-lib/perflib/perfsec.h>
 
 #define SEGMENT_BLOCKS 15
 #define SEGMENT_SIZE (BLOCK_SIZE * SEGMENT_BLOCKS)
