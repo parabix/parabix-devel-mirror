@@ -18,6 +18,7 @@ CodeGenState Pbix_Compiler::compile_subexpressions(const std::map<std::string, R
 
     for (auto it =  re_map.rbegin(); it != re_map.rend(); ++it)
     {
+        //This is specifically for the utf8 multibyte character classes.
         if (Seq* seq = dynamic_cast<Seq*>(it->second))
         {
             if (seq->getType() == Seq::Byte)
@@ -155,7 +156,7 @@ CodeGenState Pbix_Compiler::re2pablo_helper(RE *re, CodeGenState cg_state)
         }
         else //Name::Unicode
         {
-            cg_state.stmtsl.push_back(new Assign(gs_retVal, new Advance(new And(new CharClass(name->getName()), new ScanThru(new Var(cg_state.newsym), new Var(m_name_map.find("internal.nonfinal")->second))))));
+            cg_state.stmtsl.push_back(new Assign(gs_retVal, new Advance(new And(new CharClass(name->getName()), new ScanThru(new Var(cg_state.newsym), new CharClass(m_name_map.find("internal.nonfinal")->second))))));
         }
         cg_state.newsym = gs_retVal;
 
@@ -209,11 +210,35 @@ CodeGenState Pbix_Compiler::re2pablo_helper(RE *re, CodeGenState cg_state)
     {
         if ((dynamic_cast<Name*>(rep->getRE()) != 0) && (rep->getLB() == 0) && (rep->getUB()== unboundedRep))
         {
-            //std::cout << "Matchstar!" << std::endl;
+            //std::cout << "Matchstar Name!" << std::endl;
 
             Name* rep_name = dynamic_cast<Name*>(rep->getRE());
             std::string gs_retVal = symgen.gensym("marker");
-            cg_state.stmtsl.push_back(new Assign(gs_retVal, new MatchStar(new Var(cg_state.newsym), new CharClass(rep_name->getName()))));
+
+            if (rep_name->getType() == Name::FixedLength)
+            {
+                cg_state.stmtsl.push_back(new Assign(gs_retVal, new MatchStar(new Var(cg_state.newsym), new CharClass(rep_name->getName()))));
+            }
+            else if (rep_name->getType() == Name::UnicodeCategory)
+            {
+                // TODO:  ?? not too sure....
+            }
+            else //Name::unicode
+            {
+                std::string t_retVal = symgen.gensym("t");
+                std::string u_retVal = symgen.gensym("u");
+                std::string v_retVal = symgen.gensym("v");
+                std::string new_cur_retVal = symgen.gensym("new_cur");
+
+                cg_state.stmtsl.push_back(new Assign(t_retVal, new Or(new CharClass(m_name_map.find("internal.nonfinal")->second), new CharClass(rep_name->getName()))));
+                cg_state.stmtsl.push_back(new Assign(u_retVal, new MatchStar(new Var(cg_state.newsym), new Var(t_retVal))));
+                cg_state.stmtsl.push_back(new Assign(v_retVal, new And(new Var(u_retVal), new CharClass(m_name_map.find("internal.initial")->second))));
+                cg_state.stmtsl.push_back(new Assign(new_cur_retVal, new And(new Var(u_retVal), new Not(new Var(t_retVal)))));
+
+                cg_state.stmtsl.push_back(new Assign(gs_retVal, new Or(new Var(v_retVal), new Var(new_cur_retVal))));
+
+            }
+
             cg_state.newsym = gs_retVal;
         }
         else if (rep->getUB() == unboundedRep)
