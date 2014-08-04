@@ -9,6 +9,7 @@
 
 #include "re_re.h"
 #include "re_cc.h"
+#include "re_name.h"
 #include <list>
 #include <sstream>
 #include <utility>

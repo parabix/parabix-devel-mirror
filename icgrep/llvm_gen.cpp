@@ -29,10 +29,10 @@ void LLVM_Generator::Print_Register(char *name, BitBlock bit_block)
     print_register<BitBlock>(name, bit_block);
 }
 
-LLVM_Generator::LLVM_Generator(std::string basis_pattern, std::string lf_ccname, int bits)
+LLVM_Generator::LLVM_Generator(std::map<std::string, std::string> name_map, std::string basis_pattern, int bits)
 {
+    m_name_map = name_map;
     mBasis_Pattern = basis_pattern;
-    m_lf_ccname = lf_ccname;
     mBits = bits;
 }
 
@@ -41,7 +41,7 @@ LLVM_Generator::~LLVM_Generator()
     delete mMod;
 }
 
-LLVM_Gen_RetVal LLVM_Generator::Generate_LLVMIR(CodeGenState cg_state, std::list<PabloS*> cc_cgo_stmtsl)
+LLVM_Gen_RetVal LLVM_Generator::Generate_LLVMIR(CodeGenState cg_state, CodeGenState subexpression_cg_state, std::list<PabloS*> cc_cgo_stmtsl)
 {
     //Create the module.
     MakeLLVMModule();
@@ -73,7 +73,8 @@ LLVM_Gen_RetVal LLVM_Generator::Generate_LLVMIR(CodeGenState cg_state, std::list
 
     //Create the carry queue.
     mCarryQueueIdx = 0;
-    mCarryQueueSize = LLVM_Generator_Helper::CarryCount_PabloStatements(cg_state.stmtsl);
+    mCarryQueueSize = LLVM_Generator_Helper::CarryCount_PabloStatements(subexpression_cg_state.stmtsl);
+    mCarryQueueSize += LLVM_Generator_Helper::CarryCount_PabloStatements(cg_state.stmtsl);
 
     mBasicBlock = BasicBlock::Create(mMod->getContext(), "parabix_entry", mFunc_process_block,0);
 
@@ -93,9 +94,10 @@ LLVM_Gen_RetVal LLVM_Generator::Generate_LLVMIR(CodeGenState cg_state, std::list
     //Generate the IR instructions for the function.
 
     Generate_PabloStatements(cc_cgo_stmtsl);
+    Generate_PabloStatements(subexpression_cg_state.stmtsl);
     Generate_PabloStatements(cg_state.stmtsl);
     SetReturnMarker(cg_state.newsym, 0);
-    SetReturnMarker(m_lf_ccname, 1);
+    SetReturnMarker(m_name_map.find("LineFeed")->second, 1);
 
     //Terminate the block
     ReturnInst::Create(mMod->getContext(), mBasicBlock);
@@ -547,6 +549,44 @@ Value* LLVM_Generator::Generate_PabloE(PabloE *expr)
 
         //CarryQ - carry out:
         Value* cast_marker_value_3 = b.CreateBitCast(or_value_2, IntegerType::get(mMod->getContext(), 128));
+        Value* srli_2_value = b.CreateLShr(cast_marker_value_3, 127);
+        Value* carryout_2_carry = b.CreateBitCast(srli_2_value, m64x2Vect);
+
+        Value* void_1 = b.CreateStore(carryout_2_carry, carryq_GEP);
+
+        mCarryQueueIdx++;
+
+        retVal = result_value;
+    }
+    else if (ScanThru* sthru = dynamic_cast<ScanThru*>(expr))
+    {
+        IRBuilder<> b(mBasicBlock);
+
+        //CarryQ - carry in.
+        Value* carryq_idx = b.getInt64(mCarryQueueIdx);
+        Value* carryq_GEP = b.CreateGEP(mptr_carry_q, carryq_idx);
+        Value* carryq_value = b.CreateLoad(carryq_GEP);
+        //Get the input stream.
+        Value* strm_value = Generate_PabloE(sthru->getScanFrom());
+        //Get the scanthru bit stream.
+        Value* scanthru_value = Generate_PabloE(sthru->getScanThru());
+
+        Value* and_value_1 = b.CreateAnd(scanthru_value, strm_value, "scanthru_and_value_1");
+        Value* add_value_1 = b.CreateAdd(and_value_1, carryq_value, "scanthru_add_value_1");
+        Value* add_value_2 = b.CreateAdd(add_value_1, scanthru_value, "scanthru_add_value_2");
+
+        Value* srli_instr_1 = b.CreateLShr(and_value_1, 63);
+
+        Value* cast_marker_value_1 = b.CreateBitCast(srli_instr_1, IntegerType::get(mMod->getContext(), 128));
+        Value* sll_1_value = b.CreateShl(cast_marker_value_1, 64);
+        Value* cast_marker_value_2 = b.CreateBitCast(sll_1_value, m64x2Vect);
+
+        Value* add_value_3 = b.CreateAdd(cast_marker_value_2, add_value_2, "scanthru_add_value_3");
+        Value* xor_value_1  = b.CreateXor(scanthru_value, mConst_Aggregate_64x2_neg1, "scanthru_xor_value_1");
+        Value* result_value = b.CreateAnd(add_value_3, xor_value_1, "scanthru_result_value");
+
+        //CarryQ - carry out:
+        Value* cast_marker_value_3 = b.CreateBitCast(add_value_3, IntegerType::get(mMod->getContext(), 128));
         Value* srli_2_value = b.CreateLShr(cast_marker_value_3, 127);
         Value* carryout_2_carry = b.CreateBitCast(srli_2_value, m64x2Vect);
 

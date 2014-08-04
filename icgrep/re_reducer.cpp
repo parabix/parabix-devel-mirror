@@ -19,17 +19,28 @@ RE* RE_Reducer::reduce(RE* re, std::map<std::string, RE*>& re_map)
     }
     else if (Seq* re_seq = dynamic_cast<Seq*>(re))
     {
-/*
+
         if (re_seq->getType() == Seq::Byte)
         {
             //If this is a sequence of byte classes then this is a multibyte sequence for a Unicode character class.
-            std::string seqname = re_seq->getName();
-            re_map.insert(make_pair(seqname, re_seq));
-            retVal = new Name(seqname);
+            std::list<RE*> re_list;
+            std::list<RE*>::iterator it;
+
+            for (it = re_seq->GetREList()->begin(); it != re_seq->GetREList()->end(); ++it)
+            {
+                re_list.push_front(reduce(*it, re_map));
+            }
+
+            Seq* new_seq =  new Seq(&re_list);
+            new_seq->setType(Seq::Byte);
+            std::string seqname = new_seq->getName();
+            re_map.insert(make_pair(seqname, new_seq));
+            Name* name = new Name(seqname);
+            name->setType(Name::Unicode);
+            retVal = name;
         }
         else
         {
-*/
             std::list<RE*> re_list;
             std::list<RE*>::iterator it;
 
@@ -39,7 +50,7 @@ RE* RE_Reducer::reduce(RE* re, std::map<std::string, RE*>& re_map)
             }
 
             retVal = new Seq(&re_list);
-//        }
+        }
     }
     else if (Rep* re_rep = dynamic_cast<Rep*>(re))
     {

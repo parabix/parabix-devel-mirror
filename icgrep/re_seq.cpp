@@ -53,6 +53,10 @@ std::string Seq::getName()
             {
                 name += seq_cc->getName();
             }
+            else if (Name* seq_name = dynamic_cast<Name*>(*it))
+            {
+                name += seq_name->getName();
+            }
             else
             {
                 return "Bad Byte Sequence!";

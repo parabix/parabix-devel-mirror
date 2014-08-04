@@ -306,7 +306,7 @@ PabloE* CC_Compiler::charset_expr(CC* cc)
             CharSetItem combined_item;
             combined_item.lo_codepoint = (last_item.lo_codepoint & 0xFE);
             combined_item.hi_codepoint = (first_item.hi_codepoint | 0x01);
-            std::cout << "Combined!" << std::endl;
+
             return char_or_range_expr(combined_item);
         }
     }

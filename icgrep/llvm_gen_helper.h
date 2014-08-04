@@ -22,6 +22,7 @@
 #include "pe_not.h"
 #include "pe_or.h"
 #include "pe_matchstar.h"
+#include "pe_scanthru.h"
 
 //Pablo Statements
 #include "ps_pablos.h"

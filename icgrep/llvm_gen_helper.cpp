@@ -64,6 +64,10 @@ int LLVM_Generator_Helper::CarryCount_PabloE(PabloE* expr)
         //Carry queues are also needed for MatchStar.
         retVal = 1 + CarryCount_PabloE(mstar->getExpr1()) + CarryCount_PabloE(mstar->getExpr2());
     }
+    else if (ScanThru* sthru = dynamic_cast<ScanThru*>(expr))
+    {
+        retVal = 1 + CarryCount_PabloE(sthru->getScanFrom()) + CarryCount_PabloE(sthru->getScanThru());
+    }
 
     return retVal;
 }

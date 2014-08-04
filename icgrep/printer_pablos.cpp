@@ -104,6 +104,10 @@ std::string StatementPrinter::ShowPabloE(PabloE* expr)
     {
         retVal = "CharClass '" + cc->getCharClass() + "'";
     }
+    else if (Name* name = dynamic_cast<Name*>(expr))
+    {
+        retVal = "Name '" + name->getName() + "'";
+    }
     else if (Advance* adv = dynamic_cast<Advance*>(expr))
     {
         retVal = "Advance(" + ShowPabloE(adv->getExpr()) + ")";
@@ -111,6 +115,10 @@ std::string StatementPrinter::ShowPabloE(PabloE* expr)
     else if (MatchStar* mstar = dynamic_cast<MatchStar*>(expr))
     {
         retVal = "MatchStar (" + ShowPabloE(mstar->getExpr1()) + ", " + ShowPabloE(mstar->getExpr2()) + ")";
+    }
+    else if (ScanThru* sthru = dynamic_cast<ScanThru*>(expr))
+    {
+        retVal = "ScanThru (" + ShowPabloE(sthru->getScanFrom()) + ", " + ShowPabloE(sthru->getScanThru()) + ")";
     }
 
     return retVal;

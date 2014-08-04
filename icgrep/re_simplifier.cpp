@@ -66,7 +66,7 @@ RE* RE_Simplifier::mkSeq(Seq::Type type, std::list<RE*>* re_list)
     //Linear in initial and final sizes.
     t1_list->assign(re_list->begin(), re_list->end());
     if (t1_list->size() > 0)
-    {
+    {  
         std::list<RE*>* t2_list = mkSeqList(t1_list);
         if (t2_list->size() > 1)
         {
@@ -103,11 +103,20 @@ std::list<RE*>* RE_Simplifier::mkSeqList_helper(std::list<RE*>* ret_list, std::l
     }
     else if (Seq* seq = dynamic_cast<Seq*>(re_list->back()))
     {
-        re_list->pop_back();
-        seq->GetREList()->reverse();
-        re_list->insert(re_list->end(), seq->GetREList()->begin(), seq->GetREList()->end());
+        if (seq->getType() == Seq::Byte)
+        {
+            ret_list->push_front(re_list->back());
+            re_list->pop_back();
+            return mkSeqList_helper(ret_list, re_list);
+        }
+        else
+        {
+            re_list->pop_back();
+            seq->GetREList()->reverse();
+            re_list->insert(re_list->end(), seq->GetREList()->begin(), seq->GetREList()->end());
 
-        return mkSeqList_helper(ret_list, re_list);
+            return mkSeqList_helper(ret_list, re_list);
+        }
     }
     else
     {

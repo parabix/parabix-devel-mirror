@@ -25,6 +25,7 @@
 #include "pe_charclass.h"
 #include "pe_call.h"
 #include "pe_matchstar.h"
+#include "pe_scanthru.h"
 #include "pe_not.h"
 #include "pe_or.h"
 #include "pe_var.h"
@@ -44,6 +45,7 @@
 #include <sstream>
 #include <list>
 #include <vector>
+#include <map>
 
 
 struct CodeGenState{
@@ -54,15 +56,16 @@ struct CodeGenState{
 class Pbix_Compiler
 {
 public:
-    Pbix_Compiler(std::string lf_ccname);
+    Pbix_Compiler(std::map<std::string, std::string> name_map);
     CodeGenState compile(RE *re);
+    CodeGenState compile_subexpressions(const std::map<std::string, RE*>& re_map);
 private:
     CodeGenState re2pablo_helper(RE *re, CodeGenState cg_state);
     CodeGenState Seq_helper(std::list<RE*>* lst, std::list<RE*>::const_iterator it, CodeGenState cg_state);
     CodeGenState Alt_helper(std::list<RE*>* lst, std::list<RE*>::const_iterator it, CodeGenState cg_state);
 
     SymbolGenerator symgen;
-    std::string m_lf_ccname;
+    std::map<std::string, std::string> m_name_map;
 };
 
 #endif // COMPILER_H

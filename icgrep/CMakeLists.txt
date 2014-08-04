@@ -37,7 +37,7 @@ add_definitions( ${LLVM_DEFINITIONS} )
 llvm_map_components_to_libraries(REQ_LLVM_LIBRARIES mcjit native)
 
  
-add_library(PabloADT pe_advance.cpp  pe_all.cpp  pe_and.cpp pe_call.cpp pe_charclass.cpp  pe_matchstar.cpp  pe_not.cpp  pe_or.cpp  pe_pabloe.cpp  pe_sel.cpp  pe_var.cpp  pe_xor.cpp ps_assign.cpp  ps_if.cpp  ps_pablos.cpp  ps_while.cpp printer_pablos.cpp)
+add_library(PabloADT pe_advance.cpp  pe_all.cpp  pe_and.cpp pe_call.cpp pe_charclass.cpp  pe_matchstar.cpp pe_scanthru.cpp pe_not.cpp  pe_or.cpp  pe_pabloe.cpp  pe_sel.cpp  pe_var.cpp  pe_xor.cpp ps_assign.cpp  ps_if.cpp  ps_pablos.cpp  ps_while.cpp printer_pablos.cpp)
 
 add_library(RegExpADT re_alt.cpp  re_cc.cpp  re_end.cpp  re_name.cpp re_parser.cpp  re_re.cpp  re_rep.cpp  re_seq.cpp  re_start.cpp parsefailure.cpp  parseresult.cpp  parsesuccess.cpp printer_re.cpp)
 

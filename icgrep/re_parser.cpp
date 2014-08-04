@@ -385,6 +385,7 @@ parse_result_retVal RE_Parser::parse_cc(std::string s)
     }
 
     int next_byte = (s.operator [](0) & 0xFF);
+
     if ((next_byte >= 0xC0) && (next_byte <= 0xDF))
     {       
         cc_retVal = parse_utf8_bytes(1, s);

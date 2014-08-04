@@ -6,26 +6,134 @@
 
 #include "pbix_compiler.h"
 
-Pbix_Compiler::Pbix_Compiler(std::string lf_ccname)
+Pbix_Compiler::Pbix_Compiler(std::map<std::string, std::string> name_map)
 {
-    m_lf_ccname = lf_ccname;
+    m_name_map = name_map;
     symgen = SymbolGenerator();
+}
+
+CodeGenState Pbix_Compiler::compile_subexpressions(const std::map<std::string, RE*>& re_map)
+{
+    CodeGenState cg_state;
+
+    for (auto it =  re_map.rbegin(); it != re_map.rend(); ++it)
+    {
+        if (Seq* seq = dynamic_cast<Seq*>(it->second))
+        {
+            if (seq->getType() == Seq::Byte)
+            {
+                std::string gs_retVal = symgen.gensym("start_marker");
+                cg_state.stmtsl.push_back(new Assign(gs_retVal, new All(1)));
+                cg_state.newsym = gs_retVal;
+
+                std::list<RE*>::iterator endit;
+                endit = seq->GetREList()->end();
+                --endit;
+                std::list<RE*>::iterator it;
+                for (it = seq->GetREList()->begin(); it != seq->GetREList()->end(); ++it)
+                {
+                    Name* name = dynamic_cast<Name*>(*it);
+                    if (it != endit)
+                    {
+                        gs_retVal = symgen.gensym("marker");
+                        cg_state.stmtsl.push_back(new Assign(gs_retVal, new Advance(new And(new Var(cg_state.newsym), new CharClass(name->getName())))));
+                        cg_state.newsym = gs_retVal;
+                    }
+                    else
+                    {
+                        cg_state.stmtsl.push_back(new Assign(seq->getName(), new And(new Var(cg_state.newsym), new CharClass(name->getName()))));
+                    }
+                }
+            }
+        }
+    }
+
+    return cg_state;
 }
 
 CodeGenState Pbix_Compiler::compile(RE *re)
 {   
     std::string gs_retVal;
-    gs_retVal = symgen.gensym("start_marker");
-
     CodeGenState cg_state;
+
+    //Set the 'internal.initial' bit stream for the utf-8 multi-byte encoding.
+    gs_retVal = symgen.gensym("start_marker");
     cg_state.stmtsl.push_back(new Assign(gs_retVal, new All(1)));
     cg_state.newsym = gs_retVal;
 
+    std::string gs_retVal_m1 = symgen.gensym("marker");
+    cg_state.stmtsl.push_back(new Assign(gs_retVal_m1, new And(new Var(m_name_map.find("UTF8-SingleByte")->second), new Var(cg_state.newsym))));
+
+    std::string gs_retVal_m2 = symgen.gensym("marker");
+    cg_state.stmtsl.push_back(new Assign(gs_retVal_m2, new And(new Var(m_name_map.find("UTF8-Prefix2")->second), new Var(cg_state.newsym))));
+
+    std::string gs_retVal_m3 = symgen.gensym("marker");
+    cg_state.stmtsl.push_back(new Assign(gs_retVal_m3, new And(new Var(m_name_map.find("UTF8-Prefix3")->second), new Var(cg_state.newsym))));
+
+    std::string gs_retVal_m4 = symgen.gensym("marker");
+    cg_state.stmtsl.push_back(new Assign(gs_retVal_m4, new And(new Var(m_name_map.find("UTF8-Prefix4")->second), new Var(cg_state.newsym))));
+
+    std::string gs_retVal_m5 = symgen.gensym("marker");
+    cg_state.stmtsl.push_back(new Assign(gs_retVal_m5, new Or(new Var(gs_retVal_m2), new Var(gs_retVal_m1))));
+
+    std::string gs_retVal_m6 = symgen.gensym("marker");
+    cg_state.stmtsl.push_back(new Assign(gs_retVal_m6, new Or(new Var(gs_retVal_m5), new Var(gs_retVal_m3))));
+
+    gs_retVal = symgen.gensym("internal.initial");
+    m_name_map.insert(make_pair("internal.initial", gs_retVal));
+    cg_state.stmtsl.push_back(new Assign(gs_retVal, new Or(new Var(gs_retVal_m6), new Var(gs_retVal_m4))));
+    cg_state.newsym = gs_retVal;
+
+    //Set the 'internal.nonfinal' bit stream for the utf-8 multi-byte encoding.
+    gs_retVal = symgen.gensym("start_marker");
+    cg_state.stmtsl.push_back(new Assign(gs_retVal, new All(1)));
+    cg_state.newsym = gs_retVal;
+
+    gs_retVal_m1 = symgen.gensym("marker");
+    cg_state.stmtsl.push_back(new Assign(gs_retVal_m1, new And(new Var(m_name_map.find("UTF8-Prefix2")->second), new Var(cg_state.newsym))));
+
+    gs_retVal_m2 = symgen.gensym("marker");
+    cg_state.stmtsl.push_back(new Assign(gs_retVal_m2, new And(new Var(m_name_map.find("UTF8-Prefix3")->second), new Var(cg_state.newsym))));
+
+    gs_retVal_m3 = symgen.gensym("marker");
+    cg_state.stmtsl.push_back(new Assign(gs_retVal_m3, new Advance(new Var(gs_retVal_m2))));
+
+    gs_retVal_m4 = symgen.gensym("marker");
+    cg_state.stmtsl.push_back(new Assign(gs_retVal_m4, new And(new Var(m_name_map.find("UTF8-Prefix4")->second), new Var(cg_state.newsym))));
+
+    gs_retVal_m5 = symgen.gensym("marker");
+    cg_state.stmtsl.push_back(new Assign(gs_retVal_m5, new Advance(new Var(gs_retVal_m4))));
+
+    gs_retVal_m6 = symgen.gensym("marker");
+    cg_state.stmtsl.push_back(new Assign(gs_retVal_m6, new Advance(new Var(gs_retVal_m5))));
+
+    std::string gs_retVal_m7 = symgen.gensym("marker");
+    cg_state.stmtsl.push_back(new Assign(gs_retVal_m7, new Or(new Var(gs_retVal_m2), new Var(gs_retVal_m1))));
+
+    std::string gs_retVal_m8 = symgen.gensym("marker");
+    cg_state.stmtsl.push_back(new Assign(gs_retVal_m8, new Or(new Var(gs_retVal_m7), new Var(gs_retVal_m3))));
+
+    std::string gs_retVal_m9 = symgen.gensym("marker");
+    cg_state.stmtsl.push_back(new Assign(gs_retVal_m9, new Or(new Var(gs_retVal_m8), new Var(gs_retVal_m4))));
+
+    std::string gs_retVal_m10 = symgen.gensym("marker");
+    cg_state.stmtsl.push_back(new Assign(gs_retVal_m10, new Or(new Var(gs_retVal_m9), new Var(gs_retVal_m5))));
+
+    gs_retVal = symgen.gensym("internal.nonfinal");
+    m_name_map.insert(make_pair("internal.nonfinal", gs_retVal));
+    cg_state.stmtsl.push_back(new Assign(gs_retVal, new Or(new Var(gs_retVal_m10), new Var(gs_retVal_m6))));
+    cg_state.newsym = gs_retVal;
+
+
+    gs_retVal = symgen.gensym("start_marker");
+    cg_state.stmtsl.push_back(new Assign(gs_retVal, new All(1)));
+    cg_state.newsym = gs_retVal;
     cg_state = re2pablo_helper(re, cg_state);
 
     //These three lines are specifically for grep.
     gs_retVal = symgen.gensym("marker");
-    cg_state.stmtsl.push_back(new Assign(gs_retVal, new And(new MatchStar(new Var(cg_state.newsym), new Not(new Var(m_lf_ccname))), new Var(m_lf_ccname))));
+    cg_state.stmtsl.push_back(new Assign(gs_retVal, new And(new MatchStar(new Var(cg_state.newsym),
+                                new Not(new Var(m_name_map.find("LineFeed")->second))), new Var(m_name_map.find("LineFeed")->second))));
     cg_state.newsym = gs_retVal;
 
     return cg_state;
@@ -37,13 +145,18 @@ CodeGenState Pbix_Compiler::re2pablo_helper(RE *re, CodeGenState cg_state)
     {
         std::string gs_retVal = symgen.gensym("marker");
 
-        PabloE* expr;
-        if (name->getType() == Name::UnicodeCategory)
-            expr = new Call(name->getName());
-        else
-            expr =  new CharClass(name->getName());
-
-        cg_state.stmtsl.push_back(new Assign(gs_retVal, new Advance(new And(new Var(cg_state.newsym), expr))));
+        if (name->getType() == Name::FixedLength)
+        {
+            cg_state.stmtsl.push_back(new Assign(gs_retVal, new Advance(new And(new Var(cg_state.newsym), new CharClass(name->getName())))));
+        }
+        else if (name->getType() == Name::UnicodeCategory)
+        {
+            cg_state.stmtsl.push_back(new Assign(gs_retVal, new Advance(new And(new Var(cg_state.newsym), new Call(name->getName())))));
+        }
+        else //Name::Unicode
+        {
+            cg_state.stmtsl.push_back(new Assign(gs_retVal, new Advance(new And(new CharClass(name->getName()), new ScanThru(new Var(cg_state.newsym), new Var(m_name_map.find("internal.nonfinal")->second))))));
+        }
         cg_state.newsym = gs_retVal;
 
         //cout << "\n" << "(" << StatementPrinter::PrintStmts(cg_state) << ")" << "\n" << endl;
@@ -51,13 +164,13 @@ CodeGenState Pbix_Compiler::re2pablo_helper(RE *re, CodeGenState cg_state)
     else if (Start* start = dynamic_cast<Start*>(re))
     {
         std::string gs_retVal = symgen.gensym("start_of_line_marker");
-        cg_state.stmtsl.push_back(new Assign(gs_retVal, new And(new Var(cg_state.newsym), new Not(new Advance(new Not(new CharClass(m_lf_ccname)))))));
+        cg_state.stmtsl.push_back(new Assign(gs_retVal, new And(new Var(cg_state.newsym), new Not(new Advance(new Not(new CharClass(m_name_map.find("LineFeed")->second)))))));
         cg_state.newsym = gs_retVal;
     }
     else if (End* end = dynamic_cast<End*>(re))
     {
         std::string gs_retVal = symgen.gensym("end_of_line_marker");
-        cg_state.stmtsl.push_back(new Assign(gs_retVal, new And(new Var(cg_state.newsym), new CharClass(m_lf_ccname))));
+        cg_state.stmtsl.push_back(new Assign(gs_retVal, new And(new Var(cg_state.newsym), new CharClass(m_name_map.find("LineFeed")->second))));
         cg_state.newsym = gs_retVal;
     }
     else if (Seq* seq = dynamic_cast<Seq*>(re))

@@ -100,9 +100,10 @@ struct LLVM_Gen_RetVal
 class LLVM_Generator
 {
 public:
-    LLVM_Generator(std::string basis_pattern, std::string lf_ccname, int bits);
+    LLVM_Generator(std::map<std::string, std::string> name_map, std::string basis_pattern, int bits);
     ~LLVM_Generator();
     LLVM_Gen_RetVal Generate_LLVMIR(CodeGenState cg_state,
+                                    CodeGenState subexpression_cg_state,
                                     std::list<PabloS*> cc_cgo);
     void Print_Register(char* name, BitBlock bit_block);
     BitBlock Get_UnicodeCategory(const char* name);
@@ -119,7 +120,7 @@ private:
     Value* Generate_PabloE(PabloE* expr);
 
     int         mBits;
-    std::string m_lf_ccname;
+    std::map<std::string, std::string> m_name_map;
     std::string mBasis_Pattern;
 
     Module*          mMod;
