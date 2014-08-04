@@ -210,9 +210,8 @@ CodeGenState Pbix_Compiler::re2pablo_helper(RE *re, CodeGenState cg_state)
     {
         if ((dynamic_cast<Name*>(rep->getRE()) != 0) && (rep->getLB() == 0) && (rep->getUB()== unboundedRep))
         {
-            //std::cout << "Matchstar Name!" << std::endl;
-
             Name* rep_name = dynamic_cast<Name*>(rep->getRE());
+            std::string gs_retVal = symgen.gensym("marker");
 
             if (rep_name->getType() == Name::FixedLength)
             {
@@ -235,7 +234,6 @@ CodeGenState Pbix_Compiler::re2pablo_helper(RE *re, CodeGenState cg_state)
                 cg_state.stmtsl.push_back(new Assign(new_cur_retVal, new And(new Var(u_retVal), new Not(new Var(t_retVal)))));
 
                 cg_state.stmtsl.push_back(new Assign(gs_retVal, new Or(new Var(v_retVal), new Var(new_cur_retVal))));
-
             }
 
             cg_state.newsym = gs_retVal;
