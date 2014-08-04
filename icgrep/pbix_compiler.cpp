@@ -213,7 +213,6 @@ CodeGenState Pbix_Compiler::re2pablo_helper(RE *re, CodeGenState cg_state)
             //std::cout << "Matchstar Name!" << std::endl;
 
             Name* rep_name = dynamic_cast<Name*>(rep->getRE());
-            std::string gs_retVal = symgen.gensym("marker");
 
             if (rep_name->getType() == Name::FixedLength)
             {
