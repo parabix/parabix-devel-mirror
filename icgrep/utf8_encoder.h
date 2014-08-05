@@ -29,6 +29,7 @@ private:
     static CC* makeByteClass(int byteval);
     static CC* makeByteRange(int lo, int hi);
 
+    static bool u8Prefix(int cp);
     static int u8len(int cp);
     static int max_of_u8len(int lgth);
     static int u8byte(int codepoint, int n);

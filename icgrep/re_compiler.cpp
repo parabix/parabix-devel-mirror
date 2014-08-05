@@ -77,7 +77,7 @@ LLVM_Gen_RetVal RE_Compiler::compile(bool show_compile_time,
     re_map.insert(make_pair(cc_name, cc_lf));
     name_map.insert(make_pair("LineFeed", cc_name));
 
-    CC* cc_utf8_single_byte = new CC(0x80, 0xBF);
+    CC* cc_utf8_single_byte = new CC(0x00, 0x7F);
     cc_name = cc_utf8_single_byte->getName();
     re_map.insert(make_pair(cc_name, cc_utf8_single_byte));
     name_map.insert(make_pair("UTF8-SingleByte", cc_name));

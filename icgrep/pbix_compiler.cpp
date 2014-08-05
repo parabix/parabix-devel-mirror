@@ -223,17 +223,9 @@ CodeGenState Pbix_Compiler::re2pablo_helper(RE *re, CodeGenState cg_state)
             }
             else //Name::unicode
             {
-                std::string t_retVal = symgen.gensym("t");
-                std::string u_retVal = symgen.gensym("u");
-                std::string v_retVal = symgen.gensym("v");
-                std::string new_cur_retVal = symgen.gensym("new_cur");
-
-                cg_state.stmtsl.push_back(new Assign(t_retVal, new Or(new CharClass(m_name_map.find("internal.nonfinal")->second), new CharClass(rep_name->getName()))));
-                cg_state.stmtsl.push_back(new Assign(u_retVal, new MatchStar(new Var(cg_state.newsym), new Var(t_retVal))));
-                cg_state.stmtsl.push_back(new Assign(v_retVal, new And(new Var(u_retVal), new CharClass(m_name_map.find("internal.initial")->second))));
-                cg_state.stmtsl.push_back(new Assign(new_cur_retVal, new And(new Var(u_retVal), new Not(new Var(t_retVal)))));
-
-                cg_state.stmtsl.push_back(new Assign(gs_retVal, new Or(new Var(v_retVal), new Var(new_cur_retVal))));
+                cg_state.stmtsl.push_back(new Assign(gs_retVal,
+                    new And(new MatchStar(new Var(cg_state.newsym), new Or(new CharClass(m_name_map.find("internal.nonfinal")->second),
+                                                                           new CharClass(rep_name->getName()))), new CharClass(m_name_map.find("internal.initial")->second))));
             }
 
             cg_state.newsym = gs_retVal;
