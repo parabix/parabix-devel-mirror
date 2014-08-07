@@ -14,14 +14,14 @@ extern "C" {
 }
 
 extern "C" {
-    BitBlock wrapped_get_unicode_category(const char* name){
-        return Unicode_Categories::getCategory(name);
+    BitBlock wrapped_get_unicode_category(Basis_bits &basis_bits, const char* name){
+        return Unicode_Categories::getCategory(basis_bits, name);
     }
 }
 
-BitBlock LLVM_Generator::Get_UnicodeCategory(const char *name)
+BitBlock LLVM_Generator::Get_UnicodeCategory(Basis_bits &basis_bits, const char *name)
 {
-    return Unicode_Categories::getCategory(name);
+    return Unicode_Categories::getCategory(basis_bits, name);
 }
 
 void LLVM_Generator::Print_Register(char *name, BitBlock bit_block)
@@ -201,7 +201,7 @@ void LLVM_Generator::DefineTypes()
 
 void LLVM_Generator::DeclareFunctions()
 {
-    mFunc_get_unicode_category = mMod->getOrInsertFunction("wrapped_get_unicode_category", m64x2Vect, Type::getInt8PtrTy(mMod->getContext()), NULL);
+    mFunc_get_unicode_category = mMod->getOrInsertFunction("wrapped_get_unicode_category", m64x2Vect, mStruct_Basis_Bits_Ptr1, Type::getInt8PtrTy(mMod->getContext()), NULL);
     mExecutionEngine->addGlobalMapping(cast<GlobalValue>(mFunc_get_unicode_category), (void *)&wrapped_get_unicode_category);
 
     //This function can be used for testing to print the contents of a register from JIT'd code to the terminal window.
@@ -412,7 +412,8 @@ Value* LLVM_Generator::Generate_PabloE(PabloE *expr)
         //Call the callee once and store the result in the marker map.
         if (mMarkerMap.find(call->getCallee()) == mMarkerMap.end())
         {
-            Value* unicode_category = b.CreateCall(mFunc_get_unicode_category, b.CreateGlobalStringPtr(call->getCallee()));
+            Value* basis_bits_struct = b.CreateLoad(mPtr_basis_bits_addr);
+            Value* unicode_category = b.CreateCall2(mFunc_get_unicode_category, basis_bits_struct, b.CreateGlobalStringPtr(call->getCallee()));
             Value* ptr = b.CreateAlloca(m64x2Vect);
             Value* void_1 = b.CreateStore(unicode_category, ptr);
 

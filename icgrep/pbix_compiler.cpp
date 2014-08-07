@@ -170,11 +170,7 @@ CodeGenState Pbix_Compiler::re2pablo_helper(RE *re, CodeGenState cg_state)
             {
                 cg_state.stmtsl.push_back(new Assign(gs_retVal, new MatchStar(new Var(cg_state.newsym), new CharClass(rep_name->getName()))));
             }
-            else if (rep_name->getType() == Name::UnicodeCategory)
-            {
-                // TODO:  ?? not too sure....
-            }
-            else //Name::unicode
+            else //Name::Unicode and Name::UnicodeCategory
             {
                 cg_state.stmtsl.push_back(new Assign(gs_retVal,
                     new And(new MatchStar(new Var(cg_state.newsym), new Or(new CharClass(m_name_map.find("internal.nonfinal")->second),

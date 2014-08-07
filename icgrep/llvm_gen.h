@@ -106,7 +106,7 @@ public:
                                     CodeGenState subexpression_cg_state,
                                     std::list<PabloS*> cc_cgo);
     void Print_Register(char* name, BitBlock bit_block);
-    BitBlock Get_UnicodeCategory(const char* name);
+    BitBlock Get_UnicodeCategory(Basis_bits &basis_bits, const char* name);
 private:
     void MakeLLVMModule();
     void DefineTypes();

@@ -4,6 +4,8 @@
  *  icgrep is a trademark of International Characters.
  */
 
+#include "icgrep.h"
+
 #include "utf_encoding.h"
 #include "re_compiler.h"
 
@@ -52,6 +54,8 @@ struct Output {
     BitBlock LF;
 };
 
+/*
+
 struct Basis_bits {
     BitBlock bit_0;
     BitBlock bit_1;
@@ -62,6 +66,7 @@ struct Basis_bits {
     BitBlock bit_6;
     BitBlock bit_7;
 };
+*/
 
 #include <simd-lib/transpose.hpp>
 

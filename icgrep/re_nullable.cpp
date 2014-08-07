@@ -165,6 +165,10 @@ bool RE_Nullable::isNullable(RE* re)
     {
         return false;
     }
+    else if (Name* re_name = dynamic_cast<Name*>(re))
+    {
+        return false;
+    }
     else if (Start* re_start = dynamic_cast<Start*>(re))
     {
         return false;
