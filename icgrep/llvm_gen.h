@@ -38,11 +38,16 @@
 #include "ps_while.h"
 
 #include "cc_codegenobject.h"
+
 #include "pbix_compiler.h"
 
 #include "llvm_gen_helper.h"
 
-#include "unicode_categories.h"
+//TODO: Remove
+//#include "unicode_categories.h"
+
+#include "categories_Nd.h"
+
 
 #include <iostream>
 #include <string>
@@ -105,8 +110,6 @@ public:
     LLVM_Gen_RetVal Generate_LLVMIR(CodeGenState cg_state,
                                     CodeGenState subexpression_cg_state,
                                     std::list<PabloS*> cc_cgo);
-    void Print_Register(char* name, BitBlock bit_block);
-    BitBlock Get_UnicodeCategory(Basis_bits &basis_bits, const char* name);
 private:
     void MakeLLVMModule();
     void DefineTypes();
@@ -153,6 +156,7 @@ private:
     Constant*     mFunc_print_register;
     Constant*     mFunc_test_getCategory;
     Constant*     mFunc_get_unicode_category;
+    Constant*     mFunc_get_unicode_category_Nd;
 
     AllocaInst*  mPtr_basis_bits_addr;
     AllocaInst*  mPtr_carry_q_addr;

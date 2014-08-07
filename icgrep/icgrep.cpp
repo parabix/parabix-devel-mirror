@@ -49,13 +49,14 @@
 
 BitBlock EOF_mask = simd<1>::constant<1>();
 
+Nd* mNd = NULL;
+
 struct Output {
     BitBlock matches;
     BitBlock LF;
 };
 
 /*
-
 struct Basis_bits {
     BitBlock bit_0;
     BitBlock bit_1;
@@ -75,6 +76,7 @@ using namespace std;
 typedef void (*process_block_fcn)(const Basis_bits &basis_bits, BitBlock carry_q[], Output &output);
 
 void do_process(FILE *infile, FILE *outfile, int count_only_option, int carry_count, process_block_fcn process_block);
+BitBlock get_category(Basis_bits &basis_bits, const char* category);
 
 int main(int argc, char *argv[])
 {
@@ -429,7 +431,6 @@ void do_process(FILE *infile, FILE *outfile, int count_only_option, int carry_co
 
     buffer_pos += chars_avail;
 }
-
 
 
 

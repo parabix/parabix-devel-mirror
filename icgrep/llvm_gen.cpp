@@ -7,6 +7,8 @@
 #include "llvm_gen.h"
 #include "printer_pablos.h"
 
+Nd nd;
+
 extern "C" {
   void wrapped_print_register(BitBlock bit_block) {
       print_register<BitBlock>("", bit_block);
@@ -14,19 +16,13 @@ extern "C" {
 }
 
 extern "C" {
-    BitBlock wrapped_get_unicode_category(Basis_bits &basis_bits, const char* name){
-        return Unicode_Categories::getCategory(basis_bits, name);
+    BitBlock wrapped_get_category_Nd(Basis_bits &basis_bits, const char* name){
+
+        Struct_Nd nd_output;
+        nd.do_block(basis_bits, nd_output);
+
+        return nd_output.cc;
     }
-}
-
-BitBlock LLVM_Generator::Get_UnicodeCategory(Basis_bits &basis_bits, const char *name)
-{
-    return Unicode_Categories::getCategory(basis_bits, name);
-}
-
-void LLVM_Generator::Print_Register(char *name, BitBlock bit_block)
-{
-    print_register<BitBlock>(name, bit_block);
 }
 
 LLVM_Generator::LLVM_Generator(std::map<std::string, std::string> name_map, std::string basis_pattern, int bits)
@@ -201,8 +197,11 @@ void LLVM_Generator::DefineTypes()
 
 void LLVM_Generator::DeclareFunctions()
 {
-    mFunc_get_unicode_category = mMod->getOrInsertFunction("wrapped_get_unicode_category", m64x2Vect, mStruct_Basis_Bits_Ptr1, Type::getInt8PtrTy(mMod->getContext()), NULL);
-    mExecutionEngine->addGlobalMapping(cast<GlobalValue>(mFunc_get_unicode_category), (void *)&wrapped_get_unicode_category);
+    mFunc_get_unicode_category_Nd = mMod->getOrInsertFunction("wrapped_get_category_Nd", m64x2Vect, mStruct_Basis_Bits_Ptr1, Type::getInt8PtrTy(mMod->getContext()), NULL);
+    mExecutionEngine->addGlobalMapping(cast<GlobalValue>(mFunc_get_unicode_category_Nd), (void *)&wrapped_get_category_Nd);
+
+    //mFunc_get_unicode_category = mMod->getOrInsertFunction("wrapped_get_unicode_category", m64x2Vect, mStruct_Basis_Bits_Ptr1, Type::getInt8PtrTy(mMod->getContext()), NULL);
+    //mExecutionEngine->addGlobalMapping(cast<GlobalValue>(mFunc_get_unicode_category), (void *)&wrapped_get_unicode_category);
 
     //This function can be used for testing to print the contents of a register from JIT'd code to the terminal window.
     mFunc_print_register = mMod->getOrInsertFunction("wrapped_print_register", Type::getVoidTy(getGlobalContext()), m64x2Vect, NULL);
@@ -413,7 +412,8 @@ Value* LLVM_Generator::Generate_PabloE(PabloE *expr)
         if (mMarkerMap.find(call->getCallee()) == mMarkerMap.end())
         {
             Value* basis_bits_struct = b.CreateLoad(mPtr_basis_bits_addr);
-            Value* unicode_category = b.CreateCall2(mFunc_get_unicode_category, basis_bits_struct, b.CreateGlobalStringPtr(call->getCallee()));
+            Value* unicode_category = b.CreateCall2(mFunc_get_unicode_category_Nd, basis_bits_struct, b.CreateGlobalStringPtr(call->getCallee()));
+            //b.CreateCall(mFunc_print_register, unicode_category);
             Value* ptr = b.CreateAlloca(m64x2Vect);
             Value* void_1 = b.CreateStore(unicode_category, ptr);
 
@@ -421,6 +421,7 @@ Value* LLVM_Generator::Generate_PabloE(PabloE *expr)
         }
         std::map<std::string, Value*>::iterator itGet = mMarkerMap.find(call->getCallee());
         Value * var_value = b.CreateLoad(itGet->second);
+
 
         retVal = var_value;
     }
