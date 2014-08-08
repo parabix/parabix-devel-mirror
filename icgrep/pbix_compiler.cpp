@@ -58,28 +58,31 @@ CodeGenState Pbix_Compiler::compile(RE *re)
 
     std::string gs_m0 = symgen.gensym("start_marker");
     cg_state.stmtsl.push_back(new Assign(gs_m0, new All(1)));
-    cg_state.newsym = gs_m0;
 
-    //Set the 'internal.initial' bit stream for the utf-8 multi-byte encoding.
-    std::string gs_initial = symgen.gensym("internal.initial");
-    m_name_map.insert(make_pair("internal.initial", gs_initial));
-    cg_state.stmtsl.push_back(new Assign(gs_initial, new Or(new Or( new Or( new And(new Var(m_name_map.find("UTF8-Prefix2")->second),
-        new Var(cg_state.newsym)),  new And(new Var(m_name_map.find("UTF8-SingleByte")->second), new Var(cg_state.newsym))),
-        new And(new Var(m_name_map.find("UTF8-Prefix3")->second), new Var(cg_state.newsym))),
-        new And(new Var(m_name_map.find("UTF8-Prefix4")->second), new Var(cg_state.newsym)))));
-    cg_state.newsym = gs_initial;
+    if (unicode_re(re))
+    {
+        cg_state.newsym = gs_m0;
+        //Set the 'internal.initial' bit stream for the utf-8 multi-byte encoding.
+        std::string gs_initial = symgen.gensym("internal.initial");
+        m_name_map.insert(make_pair("internal.initial", gs_initial));
+        cg_state.stmtsl.push_back(new Assign(gs_initial, new Or(new Or( new Or( new And(new Var(m_name_map.find("UTF8-Prefix2")->second),
+            new Var(cg_state.newsym)),  new And(new Var(m_name_map.find("UTF8-SingleByte")->second), new Var(cg_state.newsym))),
+            new And(new Var(m_name_map.find("UTF8-Prefix3")->second), new Var(cg_state.newsym))),
+            new And(new Var(m_name_map.find("UTF8-Prefix4")->second), new Var(cg_state.newsym)))));
+        cg_state.newsym = gs_initial;
 
-    //Set the 'internal.nonfinal' bit stream for the utf-8 multi-byte encoding.
-    cg_state.newsym = gs_m0;
-    std::string gs_nonfinal = symgen.gensym("internal.nonfinal");
-    m_name_map.insert(make_pair("internal.nonfinal", gs_nonfinal));
-    cg_state.stmtsl.push_back(new Assign(gs_nonfinal, new Or(new Or(new Or(new Or(new Or( new And(new Var(m_name_map.find("UTF8-Prefix3")->second),
-        new Var(cg_state.newsym)),  new And(new Var(m_name_map.find("UTF8-Prefix2")->second), new Var(cg_state.newsym))),
-        new Advance( new And(new Var(m_name_map.find("UTF8-Prefix3")->second), new Var(cg_state.newsym)))),
-        new And(new Var(m_name_map.find("UTF8-Prefix4")->second), new Var(cg_state.newsym))), new Advance(
-        new And(new Var(m_name_map.find("UTF8-Prefix4")->second), new Var(cg_state.newsym)))), new Advance(
-        new Advance( new And(new Var(m_name_map.find("UTF8-Prefix4")->second), new Var(cg_state.newsym)))))));
-    cg_state.newsym = gs_nonfinal;
+        //Set the 'internal.nonfinal' bit stream for the utf-8 multi-byte encoding.
+        cg_state.newsym = gs_m0;
+        std::string gs_nonfinal = symgen.gensym("internal.nonfinal");
+        m_name_map.insert(make_pair("internal.nonfinal", gs_nonfinal));
+        cg_state.stmtsl.push_back(new Assign(gs_nonfinal, new Or(new Or(new Or(new Or(new Or( new And(new Var(m_name_map.find("UTF8-Prefix3")->second),
+            new Var(cg_state.newsym)),  new And(new Var(m_name_map.find("UTF8-Prefix2")->second), new Var(cg_state.newsym))),
+            new Advance( new And(new Var(m_name_map.find("UTF8-Prefix3")->second), new Var(cg_state.newsym)))),
+            new And(new Var(m_name_map.find("UTF8-Prefix4")->second), new Var(cg_state.newsym))), new Advance(
+            new And(new Var(m_name_map.find("UTF8-Prefix4")->second), new Var(cg_state.newsym)))), new Advance(
+            new Advance( new And(new Var(m_name_map.find("UTF8-Prefix4")->second), new Var(cg_state.newsym)))))));
+        cg_state.newsym = gs_nonfinal;
+    }
 
     cg_state.newsym = gs_m0;
     cg_state = re2pablo_helper(re, cg_state);
@@ -267,3 +270,47 @@ CodeGenState Pbix_Compiler::Alt_helper(std::list<RE*>* lst, std::list<RE*>::cons
     return cg_state;
 }
 
+bool Pbix_Compiler::unicode_re(RE *re)
+{
+    bool found = false;
+
+    return unicode_re_helper(re, found);
+}
+
+bool Pbix_Compiler::unicode_re_helper(RE *re, bool found)
+{
+    if (!found)
+    {
+        if (Name* name = dynamic_cast<Name*>(re))
+        {
+            if ((name->getType() == Name::UnicodeCategory) || (name->getType() == Name::Unicode))
+            {
+                found = true;
+            }
+        }
+        else if (Seq* re_seq = dynamic_cast<Seq*>(re))
+        {
+            std::list<RE*>::iterator it;
+            for (it = re_seq->GetREList()->begin(); it != re_seq->GetREList()->end(); ++it)
+            {
+                found = unicode_re_helper(*it, found);
+                if (found) break;
+            }
+        }
+        else if (Alt* re_alt = dynamic_cast<Alt*>(re))
+        {
+            std::list<RE*>::iterator it;
+            for (it = re_alt->GetREList()->begin(); it != re_alt->GetREList()->end(); ++it)
+            {
+                found = unicode_re_helper(*it, found);
+                if (found) break;
+            }
+        }
+        else if (Rep* rep = dynamic_cast<Rep*>(re))
+        {
+            found = unicode_re_helper(rep->getRE(), found);
+        }
+    }
+
+    return found;
+}

@@ -42,6 +42,7 @@ add_library(PabloADT pe_advance.cpp  pe_all.cpp  pe_and.cpp pe_call.cpp pe_charc
 add_library(RegExpADT re_alt.cpp  re_cc.cpp  re_end.cpp  re_name.cpp re_parser.cpp  re_re.cpp  re_rep.cpp  re_seq.cpp  re_start.cpp parsefailure.cpp  parseresult.cpp  parsesuccess.cpp printer_re.cpp)
 
 
+
 #include_directories("${PROJECT_BINARY_DIR}")
 include_directories("${PROJECT_SOURCE_DIR}") 
 include_directories("${PROJECT_SOURCE_DIR}/include")
@@ -49,7 +50,7 @@ include_directories("${PROJECT_SOURCE_DIR}/include/simd-lib")
 include_directories("${PROJECT_SOURCE_DIR}/include/simd-lib/idisa_cpp")
  
 # add the executable
-add_executable(icgrep icgrep.cpp llvm_gen.cpp  llvm_gen_helper.cpp utf_encoding.cpp unicode_categories.cpp cc_codegenobject.cpp  cc_compiler.cpp  cc_compiler_helper.cpp re_simplifier.cpp re_reducer.cpp re_nullable.cpp re_compiler.cpp pbix_compiler.cpp  symbol_generator.cpp utf8_encoder.cpp)
+add_executable(icgrep icgrep.cpp llvm_gen.cpp categories_Nd.h llvm_gen_helper.cpp utf_encoding.cpp unicode_categories.cpp cc_codegenobject.cpp  cc_compiler.cpp  cc_compiler_helper.cpp re_simplifier.cpp re_reducer.cpp re_nullable.cpp re_compiler.cpp pbix_compiler.cpp  symbol_generator.cpp utf8_encoder.cpp)
 
 target_link_libraries (icgrep PabloADT RegExpADT ${REQ_LLVM_LIBRARIES})
 

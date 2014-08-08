@@ -64,6 +64,9 @@ private:
     CodeGenState Seq_helper(std::list<RE*>* lst, std::list<RE*>::const_iterator it, CodeGenState cg_state);
     CodeGenState Alt_helper(std::list<RE*>* lst, std::list<RE*>::const_iterator it, CodeGenState cg_state);
 
+    bool unicode_re(RE* re);
+    bool unicode_re_helper(RE* re, bool found);
+
     SymbolGenerator symgen;
     std::map<std::string, std::string> m_name_map;
 };
