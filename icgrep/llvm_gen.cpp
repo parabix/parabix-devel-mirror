@@ -524,13 +524,10 @@ void LLVM_Generator::DefineTypes()
 
 void LLVM_Generator::DeclareFunctions()
 {
-    //mFunc_get_unicode_category = mMod->getOrInsertFunction("wrapped_get_unicode_category", m64x2Vect, mStruct_Basis_Bits_Ptr1, Type::getInt8PtrTy(mMod->getContext()), NULL);
-    //mExecutionEngine->addGlobalMapping(cast<GlobalValue>(mFunc_get_unicode_category), (void *)&wrapped_get_unicode_category);
-
     //This function can be used for testing to print the contents of a register from JIT'd code to the terminal window.
-    mFunc_print_register = mMod->getOrInsertFunction("wrapped_print_register", Type::getVoidTy(getGlobalContext()), m64x2Vect, NULL);
+    //mFunc_print_register = mMod->getOrInsertFunction("wrapped_print_register", Type::getVoidTy(getGlobalContext()), m64x2Vect, NULL);
 
-    mExecutionEngine->addGlobalMapping(cast<GlobalValue>(mFunc_print_register), (void *)&wrapped_print_register);
+    //mExecutionEngine->addGlobalMapping(cast<GlobalValue>(mFunc_print_register), (void *)&wrapped_print_register);
     // to call->  b.CreateCall(mFunc_print_register, unicode_category);
 
     SmallVector<AttributeSet, 4> Attrs;
