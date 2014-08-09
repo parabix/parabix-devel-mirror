@@ -43,11 +43,7 @@
 
 #include "llvm_gen_helper.h"
 
-//TODO: Remove
-//#include "unicode_categories.h"
-
-#include "categories_Nd.h"
-
+#include "unicode_categories.h"
 
 #include <iostream>
 #include <string>
@@ -114,6 +110,9 @@ private:
     void MakeLLVMModule();
     void DefineTypes();
     void DeclareFunctions();
+    void DeclareCallFunctions(std::list<PabloS*> stmts);
+    void DeclareCallFunctions_PabloS(PabloS* stmt);
+    void DeclareCallFunctions_PabloE(PabloE* expr);
     void StoreBitBlockMarkerPtr(std::string name, int index);
     void LoadBitBlocksFromStaticExtern();
     void SetReturnMarker(std::string marker, int output_idx);
@@ -156,7 +155,7 @@ private:
     Constant*     mFunc_print_register;
     Constant*     mFunc_test_getCategory;
     Constant*     mFunc_get_unicode_category;
-    Constant*     mFunc_get_unicode_category_Nd;
+    Value*     mFunc_get_unicode_category_Nd;
 
     AllocaInst*  mPtr_basis_bits_addr;
     AllocaInst*  mPtr_carry_q_addr;

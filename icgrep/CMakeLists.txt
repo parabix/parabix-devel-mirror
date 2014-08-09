@@ -50,7 +50,7 @@ include_directories("${PROJECT_SOURCE_DIR}/include/simd-lib")
 include_directories("${PROJECT_SOURCE_DIR}/include/simd-lib/idisa_cpp")
  
 # add the executable
-add_executable(icgrep icgrep.cpp llvm_gen.cpp categories_Nd.h llvm_gen_helper.cpp utf_encoding.cpp cc_codegenobject.cpp  cc_compiler.cpp  cc_compiler_helper.cpp re_simplifier.cpp re_reducer.cpp re_nullable.cpp re_compiler.cpp pbix_compiler.cpp  symbol_generator.cpp utf8_encoder.cpp)
+add_executable(icgrep icgrep.cpp llvm_gen.cpp llvm_gen_helper.cpp utf_encoding.cpp cc_codegenobject.cpp  cc_compiler.cpp  cc_compiler_helper.cpp re_simplifier.cpp re_reducer.cpp re_nullable.cpp re_compiler.cpp pbix_compiler.cpp  symbol_generator.cpp utf8_encoder.cpp unicode_categories.h)
 
 target_link_libraries (icgrep PabloADT RegExpADT ${REQ_LLVM_LIBRARIES})
 
