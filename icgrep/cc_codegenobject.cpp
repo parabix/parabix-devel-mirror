@@ -49,7 +49,7 @@ Expression* CC_CodeGenObject::expr_to_variable(Expression* expr)
     else
     {
         mGenSymCounter++;
-        std::string sym = mGenSym_Template + INT2STRING(mGenSymCounter);
+        std::string sym = mGenSym_Template + std::to_string(mGenSymCounter);
         return add_assignment(sym, expr);
     }
 }

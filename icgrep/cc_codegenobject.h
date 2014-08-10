@@ -32,7 +32,6 @@
 #include <list>
 #include <map>
 
-#define INT2STRING(i) static_cast<std::ostringstream*>(&(std::ostringstream() << i))->str()
 
 struct Expression{
     std::string expr_string;

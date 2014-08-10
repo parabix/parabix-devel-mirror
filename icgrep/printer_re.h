@@ -22,7 +22,6 @@
 #include <sstream>
 #include <list>
 
-#define INT2STRING(i) static_cast<std::ostringstream*>(&(std::ostringstream() << i))->str()
 
 class Printer_RE
 {

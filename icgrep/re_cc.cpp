@@ -46,8 +46,8 @@ std::string CC::getName()
     std::vector<CharSetItem>::iterator it;
     for (it = mSparceCharSet.begin(); it != mSparceCharSet.end(); ++it)
     {
-        name += INT2STRING(it->lo_codepoint);
-        name += INT2STRING(it->hi_codepoint);
+        name += std::to_string(it->lo_codepoint);
+        name += std::to_string(it->hi_codepoint);
     }
 
     return name;
@@ -279,7 +279,7 @@ void CC::remove_range_helper(int lo_codepoint, int hi_codepoint, int idx)
 
 void CC::gensym_name()
 {
-    mId = "lex.CC" + INT2STRING(msCSIidx);
+    mId = "lex.CC" + std::to_string(msCSIidx);
     msCSIidx++;
 }
 

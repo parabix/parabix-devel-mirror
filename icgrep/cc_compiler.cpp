@@ -416,7 +416,7 @@ CC_CodeGenObject CC_Compiler::cc2pablos(CC_CodeGenObject cgo, CC* cc)
 
 std::string CC_Compiler::bit_var(int n)
 {
-    return  mEncoding.getBasisPattern(0) + INT2STRING(n);
+    return  mEncoding.getBasisPattern(0) + std::to_string(n);
 }
 
 PabloE* CC_Compiler::make_bitv(int n)

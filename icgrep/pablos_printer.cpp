@@ -15,7 +15,7 @@ string StatementPrinter::PrintStmts(CodeGenState cg_state)
     //Print out the symbol environment.    
     //for (std::map<std::string, int>::iterator iter = cg_state.env->getEnv()->begin(); iter != cg_state.env->getEnv()->end(); ++iter)
     //{
-    //    strOut += "('" + iter->first + "'," + INT2STRING(iter->second) + "),";
+    //    strOut += "('" + iter->first + "'," + std::to_string(iter->second) + "),";
     //}
     strOut = strOut.substr(0, strOut.length() - 1);
     strOut += "],[";
@@ -34,7 +34,7 @@ string StatementPrinter::PrintStmts(CodeGenState cg_state)
 string StatementPrinter::Print_PB_PabloStmts(std::list<PabloS*> stmts, std::string strOut)
 {
     list<PabloS*>::iterator it;
-    //std::cout << "Total Statements: " + INT2STRING(stmts.size()) << std::endl;
+    //std::cout << "Total Statements: " + std::to_string(stmts.size()) << std::endl;
     for (it = stmts.begin(); it != stmts.end(); ++it)
     {
         strOut += ShowPabloS(*it);
@@ -48,7 +48,7 @@ string StatementPrinter::Print_CC_PabloStmts(std::list<PabloS*> stmts)
     std::string strOut;
 
     list<PabloS*>::iterator it;
-    std::cout << "Total Statements: " + INT2STRING(stmts.size()) << std::endl;
+    std::cout << "Total Statements: " + std::to_string(stmts.size()) << std::endl;
     for (it = stmts.begin(); it != stmts.end(); ++it)
     {
         strOut += ShowPabloS(*it) + "\n";
@@ -79,7 +79,7 @@ string StatementPrinter::ShowPabloE(PabloE* expr)
 
     if (All* all = dynamic_cast<All*>(expr))
     {
-        retVal = "All " + INT2STRING(all->getNum()) + " ";
+        retVal = "All " + std::to_string(all->getNum()) + " ";
     }
     else if (Var* pablo_var = dynamic_cast<Var*>(expr))
     {

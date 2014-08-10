@@ -34,8 +34,8 @@ std::string Printer_RE::PrintRE(RE* re)
         for (it = items.begin(); it != items.end(); ++it)
         {
             retVal += "[";
-            retVal += INT2STRING(it->lo_codepoint) + ",";
-            retVal += INT2STRING(it->hi_codepoint);
+            retVal += std::to_string(it->lo_codepoint) + ",";
+            retVal += std::to_string(it->hi_codepoint);
             retVal += "]";
         }
 
@@ -56,8 +56,8 @@ std::string Printer_RE::PrintRE(RE* re)
         for (r_it = r_items.begin(); r_it != r_items.end(); ++r_it)
         {
             retVal += "[";
-            retVal += INT2STRING(r_it->lo_codepoint) + ",";
-            retVal += INT2STRING(r_it->hi_codepoint);
+            retVal += std::to_string(r_it->lo_codepoint) + ",";
+            retVal += std::to_string(r_it->hi_codepoint);
             retVal += "]";
         }
 */
@@ -74,8 +74,8 @@ std::string Printer_RE::PrintRE(RE* re)
     }
     else if (Rep* re_rep = dynamic_cast<Rep*>(re))
     {
-        retVal += "Rep("  + PrintRE(re_rep->getRE()) + "," + INT2STRING(re_rep->getLB()) + ",";
-        retVal += (re_rep->getUB() == unboundedRep ? "Unbounded" : "UpperBound(" + INT2STRING(re_rep->getUB()) + ")");
+        retVal += "Rep("  + PrintRE(re_rep->getRE()) + "," + std::to_string(re_rep->getLB()) + ",";
+        retVal += (re_rep->getUB() == unboundedRep ? "Unbounded" : "UpperBound(" + std::to_string(re_rep->getUB()) + ")");
     }
     else if (Seq* re_seq = dynamic_cast<Seq*>(re))
     {

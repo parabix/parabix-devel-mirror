@@ -28,7 +28,7 @@ std::string StatementPrinter::PrintStmts(CodeGenState cg_state)
 std::string StatementPrinter::Print_PB_PabloStmts(std::list<PabloS*> stmts, std::string strOut)
 {
     std::list<PabloS*>::iterator it;
-    //std::cout << "Total Statements: " + INT2STRING(stmts.size()) << std::endl;
+    //std::cout << "Total Statements: " + std::to_string(stmts.size()) << std::endl;
     for (it = stmts.begin(); it != stmts.end(); ++it)
     {
         strOut += ShowPabloS(*it);
@@ -41,7 +41,7 @@ std::string StatementPrinter::Print_CC_PabloStmts(std::list<PabloS*> stmts)
 {
     std::string strOut;
 
-    std::cout << "Total Statements: " + INT2STRING(stmts.size()) << std::endl;
+    std::cout << "Total Statements: " + std::to_string(stmts.size()) << std::endl;
     std::list<PabloS*>::iterator it;
     for (it = stmts.begin(); it != stmts.end(); ++it)
     {
@@ -73,7 +73,7 @@ std::string StatementPrinter::ShowPabloE(PabloE* expr)
 
     if (All* all = dynamic_cast<All*>(expr))
     {
-        retVal = "All " + INT2STRING(all->getNum()) + " ";
+        retVal = "All " + std::to_string(all->getNum()) + " ";
     }
     else if (Call* pablo_call = dynamic_cast<Call*>(expr))
     {

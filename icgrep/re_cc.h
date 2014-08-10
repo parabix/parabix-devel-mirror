@@ -15,7 +15,6 @@
 #include <utility>
 #include <vector>
 
-#define INT2STRING(i) static_cast<std::ostringstream*>(&(std::ostringstream() << i))->str()
 
 struct CharSetItem{
     int lo_codepoint;

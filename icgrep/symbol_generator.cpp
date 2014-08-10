@@ -19,7 +19,7 @@ std::string SymbolGenerator::gensym(std::string prefix)
     if (ret.second)
     {
         //The insertion succeeded
-        sym = prefix + INT2STRING(0);
+        sym = prefix + std::to_string(0);
         //std::cout << sym << " created" << std::endl;
         return sym;
     }
@@ -29,7 +29,7 @@ std::string SymbolGenerator::gensym(std::string prefix)
         std::map<std::string, int>::iterator iter = pfxmap->find(prefix);
         iter->second++;
 
-        sym = prefix + INT2STRING(iter->second);
+        sym = prefix + std::to_string(iter->second);
         //std::cout << sym << " created" << std::endl;
         return sym;
 	

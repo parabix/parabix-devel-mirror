@@ -407,7 +407,7 @@ LLVM_Gen_RetVal LLVM_Generator::Generate_LLVMIR(CodeGenState cg_state, CodeGenSt
 
     for (int i = 0; i < mBits; i++)
     {
-        StoreBitBlockMarkerPtr(mBasis_Pattern + INT2STRING(i), i);
+        StoreBitBlockMarkerPtr(mBasis_Pattern + std::to_string(i), i);
     }
 
     //The output structure.

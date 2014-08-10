@@ -24,7 +24,6 @@
 #include <cassert>
 #include <stdlib.h>
 
-#define INT2STRING(i) static_cast<std::ostringstream*>(&(std::ostringstream() << i))->str()
 
 class CC_Compiler
 {
