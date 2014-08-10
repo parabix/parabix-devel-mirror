@@ -112,7 +112,7 @@ string StatementPrinter::ShowPabloE(PabloE* expr)
     }
     else if (MatchStar* mstar = dynamic_cast<MatchStar*>(expr))
     {
-        retVal = "MarchStar (" + ShowPabloE(mstar->getExpr1()) + ", " + ShowPabloE(mstar->getExpr2()) + ")";
+        retVal = "MatchStar (" + ShowPabloE(mstar->getExpr1()) + ", " + ShowPabloE(mstar->getExpr2()) + ")";
     }
 
     return retVal;
