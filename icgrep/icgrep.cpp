@@ -49,25 +49,10 @@
 
 BitBlock EOF_mask = simd<1>::constant<1>();
 
-Nd* mNd = NULL;
-
 struct Output {
     BitBlock matches;
     BitBlock LF;
 };
-
-/*
-struct Basis_bits {
-    BitBlock bit_0;
-    BitBlock bit_1;
-    BitBlock bit_2;
-    BitBlock bit_3;
-    BitBlock bit_4;
-    BitBlock bit_5;
-    BitBlock bit_6;
-    BitBlock bit_7;
-};
-*/
 
 #include <simd-lib/transpose.hpp>
 

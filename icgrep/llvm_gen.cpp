@@ -5,7 +5,6 @@
  */
 
 #include "llvm_gen.h"
-#include "printer_pablos.h"
 
 Ps* ps = NULL; Nl* nl = NULL; No* no = NULL; Lo* lo = NULL; Ll* ll = NULL; Lm* lm = NULL; Nd* nd = NULL;
 Pc* pc = NULL; Lt* lt = NULL; Lu* lu = NULL; Pf* pf = NULL; Pd* pd = NULL; Pe* pe = NULL; Pi* pi = NULL;
@@ -440,8 +439,8 @@ LLVM_Gen_RetVal LLVM_Generator::Generate_LLVMIR(CodeGenState cg_state, CodeGenSt
     fpm.add(createPromoteMemoryToRegisterPass()); //Transform to SSA form.
 
     fpm.add(createBasicAliasAnalysisPass());      //Provide basic AliasAnalysis support for GVN. (Global Value Numbering)
+    fpm.add(createCFGSimplificationPass());       //Simplify the control flow graph.
     fpm.add(createInstructionCombiningPass());    //Simple peephole optimizations and bit-twiddling.
-    fpm.add(createCFGSimplificationPass());       //Simplify the control flow graph (deleting unreachable blocks, etc).
     fpm.add(createReassociatePass());             //Reassociate expressions.
     fpm.add(createGVNPass());                     //Eliminate common subexpressions.
 
@@ -526,7 +525,6 @@ void LLVM_Generator::DeclareFunctions()
 {
     //This function can be used for testing to print the contents of a register from JIT'd code to the terminal window.
     //mFunc_print_register = mMod->getOrInsertFunction("wrapped_print_register", Type::getVoidTy(getGlobalContext()), m64x2Vect, NULL);
-
     //mExecutionEngine->addGlobalMapping(cast<GlobalValue>(mFunc_print_register), (void *)&wrapped_print_register);
     // to call->  b.CreateCall(mFunc_print_register, unicode_category);
 
