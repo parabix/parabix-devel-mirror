@@ -63,7 +63,7 @@ private:
     static parse_result_retVal parse_utf8_bytes(int suffix_count, std::string s);
     static parse_result_retVal parse_utf8_suffix_byte(int suffix_byte_num, std::string s, Seq* seq_sofar);
 
-    static parse_result_retVal parse_unicode_category(std::string s);
+    static parse_result_retVal parse_unicode_category(std::string s, bool negated);
     static parse_result_retVal parse_unicode_category1(std::string character, std::string s, Name* name_sofar);
     static bool isValidUnicodeCategoryName(Name* name);
 

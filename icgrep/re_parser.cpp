@@ -330,7 +330,11 @@ parse_result_retVal RE_Parser::parse_cc(std::string s)
         }
         else if (s.operator [](1) == 'p')
         {
-            return cc_retVal = parse_unicode_category(s.substr(2, s.length() - 2));
+            return cc_retVal = parse_unicode_category(s.substr(2, s.length() - 2), /* negated = */ false);
+        }
+        else if (s.operator [](1) == 'P')
+        {
+            return cc_retVal = parse_unicode_category(s.substr(2, s.length() - 2), /* negated = */ true);
         }
         else
         {
@@ -445,7 +449,7 @@ parse_result_retVal RE_Parser::parse_utf8_suffix_byte(int suffix_byte_num, std::
     return result_RetVal;
 }
 
-parse_result_retVal RE_Parser::parse_unicode_category(std::string s)
+parse_result_retVal RE_Parser::parse_unicode_category(std::string s, bool negated)
 {
     parse_result_retVal result_retVal;
 
@@ -453,6 +457,7 @@ parse_result_retVal RE_Parser::parse_unicode_category(std::string s)
     {
         Name* name = new Name();
         name->setType(Name::UnicodeCategory);
+        name->setNegated(negated);
         result_retVal = parse_unicode_category1(s.substr(1,1), s.substr(2, s.length() - 2), name);
     }
     else
