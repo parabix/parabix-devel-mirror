@@ -117,12 +117,13 @@ CodeGenState Pbix_Compiler::re2pablo_helper(RE *re, CodeGenState cg_state)
             ccExpr = new CharClass(name->getName());
         }
         if (name->isNegated()) {
-            ccExpr = new Not(new Or(ccExpr, new CharClass(m_name_map.find("LineFeed")->second)));
+            ccExpr = new And(new Not(new Or(ccExpr, new CharClass(m_name_map.find("LineFeed")->second))),
+                             new CharClass(m_name_map.find("internal.initial")->second));
         }
         cg_state.stmtsl.push_back(new Assign(gs_retVal, new Advance(new And(ccExpr, markerExpr))));
         cg_state.newsym = gs_retVal;
 
-        std::cout << "\n" << "(" << StatementPrinter::PrintStmts(cg_state) << ")" << "\n" << std::endl;
+        //std::cout << "\n" << "(" << StatementPrinter::PrintStmts(cg_state) << ")" << "\n" << std::endl;
     }
     else if (Start* start = dynamic_cast<Start*>(re))
     {
@@ -175,22 +176,19 @@ CodeGenState Pbix_Compiler::re2pablo_helper(RE *re, CodeGenState cg_state)
             Name* rep_name = dynamic_cast<Name*>(rep->getRE());
             std::string gs_retVal = symgen.gensym("marker");
 
-std::cout << "MatchStar pattern found!" << std::endl;
             PabloE* ccExpr;
-            if (name->getType() == Name::UnicodeCategory)
+            if (rep_name->getType() == Name::UnicodeCategory)
             {
-std::cout << "MatchStar pattern External!" << std::endl;
-                ccExpr = new Call(name->getName());
+                ccExpr = new Call(rep_name->getName());
             }
             else 
             {
-std::cout << "MatchStar pattern internal!" << std::endl;
-                ccExpr = new CharClass(name->getName());
+                ccExpr = new CharClass(rep_name->getName());
             }
 
-            if (name->isNegated()) {
-std::cout << "MatchStar pattern Negated!" << std::endl;                
-                ccExpr = new Not(new Or(ccExpr, new CharClass(m_name_map.find("LineFeed")->second)));
+            if (rep_name->isNegated()) {
+                ccExpr = new And(new Not(new Or(ccExpr, new CharClass(m_name_map.find("LineFeed")->second))),
+                                 new CharClass(m_name_map.find("internal.initial")->second));
             }
             if (rep_name->getType() == Name::FixedLength)
             {
@@ -198,7 +196,6 @@ std::cout << "MatchStar pattern Negated!" << std::endl;
             }
             else //Name::Unicode and Name::UnicodeCategory
             {
-std::cout << "MatchStar pattern Unicode!" << std::endl;                
                 cg_state.stmtsl.push_back(new Assign(gs_retVal,
                     new And(new MatchStar(new Var(cg_state.newsym), new Or(new CharClass(m_name_map.find("internal.nonfinal")->second),
                     ccExpr)), new CharClass(m_name_map.find("internal.initial")->second))));
