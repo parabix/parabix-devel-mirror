@@ -5,6 +5,7 @@
  */
 
 #include "pbix_compiler.h"
+#include "printer_pablos.h"
 
 Pbix_Compiler::Pbix_Compiler(std::map<std::string, std::string> name_map)
 {
@@ -101,22 +102,27 @@ CodeGenState Pbix_Compiler::re2pablo_helper(RE *re, CodeGenState cg_state)
     if (Name* name = dynamic_cast<Name*>(re))
     {
         std::string gs_retVal = symgen.gensym("marker");
-
-        if (name->getType() == Name::FixedLength)
+        PabloE* markerExpr = new Var(cg_state.newsym);
+        if (name->getType() != Name::FixedLength) {
+            // Move the markers forward through any nonfinal UTF-8 bytes to the final position of each character.
+            markerExpr = new ScanThru(markerExpr, new CharClass(m_name_map.find("internal.nonfinal")->second));
+        }       
+        PabloE* ccExpr;
+        if (name->getType() == Name::UnicodeCategory)
         {
-            cg_state.stmtsl.push_back(new Assign(gs_retVal, new Advance(new And(new Var(cg_state.newsym), new CharClass(name->getName())))));
+            ccExpr = new Call(name->getName());
         }
-        else if (name->getType() == Name::UnicodeCategory)
+        else 
         {
-            cg_state.stmtsl.push_back(new Assign(gs_retVal, new Advance(new And(new Var(cg_state.newsym), new Call(name->getName())))));
+            ccExpr = new CharClass(name->getName());
         }
-        else //Name::Unicode
-        {
-            cg_state.stmtsl.push_back(new Assign(gs_retVal, new Advance(new And(new CharClass(name->getName()), new ScanThru(new Var(cg_state.newsym), new CharClass(m_name_map.find("internal.nonfinal")->second))))));
+        if (name->isNegated()) {
+            ccExpr = new Not(new Or(ccExpr, new CharClass(m_name_map.find("LineFeed")->second)));
         }
+        cg_state.stmtsl.push_back(new Assign(gs_retVal, new Advance(new And(ccExpr, markerExpr))));
         cg_state.newsym = gs_retVal;
 
-        //cout << "\n" << "(" << StatementPrinter::PrintStmts(cg_state) << ")" << "\n" << endl;
+        std::cout << "\n" << "(" << StatementPrinter::PrintStmts(cg_state) << ")" << "\n" << std::endl;
     }
     else if (Start* start = dynamic_cast<Start*>(re))
     {
@@ -169,15 +175,33 @@ CodeGenState Pbix_Compiler::re2pablo_helper(RE *re, CodeGenState cg_state)
             Name* rep_name = dynamic_cast<Name*>(rep->getRE());
             std::string gs_retVal = symgen.gensym("marker");
 
+std::cout << "MatchStar pattern found!" << std::endl;
+            PabloE* ccExpr;
+            if (name->getType() == Name::UnicodeCategory)
+            {
+std::cout << "MatchStar pattern External!" << std::endl;
+                ccExpr = new Call(name->getName());
+            }
+            else 
+            {
+std::cout << "MatchStar pattern internal!" << std::endl;
+                ccExpr = new CharClass(name->getName());
+            }
+
+            if (name->isNegated()) {
+std::cout << "MatchStar pattern Negated!" << std::endl;                
+                ccExpr = new Not(new Or(ccExpr, new CharClass(m_name_map.find("LineFeed")->second)));
+            }
             if (rep_name->getType() == Name::FixedLength)
             {
-                cg_state.stmtsl.push_back(new Assign(gs_retVal, new MatchStar(new Var(cg_state.newsym), new CharClass(rep_name->getName()))));
+                cg_state.stmtsl.push_back(new Assign(gs_retVal, new MatchStar(new Var(cg_state.newsym), ccExpr)));
             }
             else //Name::Unicode and Name::UnicodeCategory
             {
+std::cout << "MatchStar pattern Unicode!" << std::endl;                
                 cg_state.stmtsl.push_back(new Assign(gs_retVal,
                     new And(new MatchStar(new Var(cg_state.newsym), new Or(new CharClass(m_name_map.find("internal.nonfinal")->second),
-                    new CharClass(rep_name->getName()))), new CharClass(m_name_map.find("internal.initial")->second))));
+                    ccExpr)), new CharClass(m_name_map.find("internal.initial")->second))));
             }
 
             cg_state.newsym = gs_retVal;
