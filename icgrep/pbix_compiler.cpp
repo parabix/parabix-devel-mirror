@@ -66,22 +66,38 @@ CodeGenState Pbix_Compiler::compile(RE *re)
         //Set the 'internal.initial' bit stream for the utf-8 multi-byte encoding.
         std::string gs_initial = symgen.gensym("internal.initial");
         m_name_map.insert(make_pair("internal.initial", gs_initial));
+        PabloE * u8single = new Var(m_name_map.find("UTF8-SingleByte")->second);
+        PabloE * u8pfx2 = new Var(m_name_map.find("UTF8-Prefix2")->second);
+        PabloE * u8pfx3 = new Var(m_name_map.find("UTF8-Prefix3")->second);
+        PabloE * u8pfx4 = new Var(m_name_map.find("UTF8-Prefix4")->second);
+        PabloE * u8pfx = new Or(new Or(u8pfx2, u8pfx3), u8pfx4);
+        cg_state.stmtsl.push_back(new Assign(gs_initial, new Or(u8pfx, u8single)));
+
+#if 0
         cg_state.stmtsl.push_back(new Assign(gs_initial, new Or(new Or( new Or( new And(new Var(m_name_map.find("UTF8-Prefix2")->second),
             new Var(cg_state.newsym)),  new And(new Var(m_name_map.find("UTF8-SingleByte")->second), new Var(cg_state.newsym))),
             new And(new Var(m_name_map.find("UTF8-Prefix3")->second), new Var(cg_state.newsym))),
             new And(new Var(m_name_map.find("UTF8-Prefix4")->second), new Var(cg_state.newsym)))));
+#endif
         cg_state.newsym = gs_initial;
 
         //Set the 'internal.nonfinal' bit stream for the utf-8 multi-byte encoding.
         cg_state.newsym = gs_m0;
         std::string gs_nonfinal = symgen.gensym("internal.nonfinal");
         m_name_map.insert(make_pair("internal.nonfinal", gs_nonfinal));
+        PabloE * u8scope32 = new Advance(u8pfx3);
+        PabloE * u8scope42 = new Advance(u8pfx4);
+        PabloE * u8scope43 = new Advance(u8scope42);
+      
+        cg_state.stmtsl.push_back(new Assign(gs_nonfinal, new Or(new Or(u8pfx, u8scope32), new Or(u8scope42, u8scope43))));
+#if 0
         cg_state.stmtsl.push_back(new Assign(gs_nonfinal, new Or(new Or(new Or(new Or(new Or( new And(new Var(m_name_map.find("UTF8-Prefix3")->second),
             new Var(cg_state.newsym)),  new And(new Var(m_name_map.find("UTF8-Prefix2")->second), new Var(cg_state.newsym))),
             new Advance( new And(new Var(m_name_map.find("UTF8-Prefix3")->second), new Var(cg_state.newsym)))),
             new And(new Var(m_name_map.find("UTF8-Prefix4")->second), new Var(cg_state.newsym))), new Advance(
             new And(new Var(m_name_map.find("UTF8-Prefix4")->second), new Var(cg_state.newsym)))), new Advance(
             new Advance( new And(new Var(m_name_map.find("UTF8-Prefix4")->second), new Var(cg_state.newsym)))))));
+#endif
         cg_state.newsym = gs_nonfinal;
     }
 
@@ -105,6 +121,7 @@ CodeGenState Pbix_Compiler::re2pablo_helper(RE *re, CodeGenState cg_state)
         PabloE* markerExpr = new Var(cg_state.newsym);
         if (name->getType() != Name::FixedLength) {
             // Move the markers forward through any nonfinal UTF-8 bytes to the final position of each character.
+            markerExpr = new And(markerExpr, new CharClass(m_name_map.find("internal.initial")->second));
             markerExpr = new ScanThru(markerExpr, new CharClass(m_name_map.find("internal.nonfinal")->second));
         }       
         PabloE* ccExpr;
@@ -117,8 +134,8 @@ CodeGenState Pbix_Compiler::re2pablo_helper(RE *re, CodeGenState cg_state)
             ccExpr = new CharClass(name->getName());
         }
         if (name->isNegated()) {
-            ccExpr = new And(new Not(new Or(ccExpr, new CharClass(m_name_map.find("LineFeed")->second))),
-                             new CharClass(m_name_map.find("internal.initial")->second));
+            ccExpr = new Not(new Or(new Or(ccExpr, new CharClass(m_name_map.find("LineFeed")->second)),
+                                    new CharClass(m_name_map.find("internal.nonfinal")->second)));
         }
         cg_state.stmtsl.push_back(new Assign(gs_retVal, new Advance(new And(ccExpr, markerExpr))));
         cg_state.newsym = gs_retVal;
@@ -187,8 +204,8 @@ CodeGenState Pbix_Compiler::re2pablo_helper(RE *re, CodeGenState cg_state)
             }
 
             if (rep_name->isNegated()) {
-                ccExpr = new And(new Not(new Or(ccExpr, new CharClass(m_name_map.find("LineFeed")->second))),
-                                 new CharClass(m_name_map.find("internal.initial")->second));
+                ccExpr = new Not(new Or(new Or(ccExpr, new CharClass(m_name_map.find("LineFeed")->second)),
+                                        new CharClass(m_name_map.find("internal.nonfinal")->second)));
             }
             if (rep_name->getType() == Name::FixedLength)
             {
