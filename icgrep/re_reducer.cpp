@@ -68,6 +68,7 @@ RE* RE_Reducer::reduce(RE* re, std::map<std::string, RE*>& re_map)
     {
         Name* name = new Name(re_name->getName());
         name->setType(re_name->getType());
+        name->setNegated(re_name->isNegated());   // TODO:  Hide this in the re_name module.
         retVal = name;
     }
     else if (Start* re_start = dynamic_cast<Start*>(re))

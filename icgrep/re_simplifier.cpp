@@ -36,6 +36,7 @@ RE* RE_Simplifier::simplify(RE* re)
     {
         Name* name = new Name(re_name->getName());
         name->setType(re_name->getType());
+        name->setNegated(re_name->isNegated());   // TODO:  Hide this in the re_name module.
         retVal = name;
     }
     else if (Rep* re_rep = dynamic_cast<Rep*>(re))
