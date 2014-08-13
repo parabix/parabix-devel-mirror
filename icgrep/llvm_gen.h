@@ -122,6 +122,12 @@ private:
     std::string Generate_PabloStatements(std::list<PabloS*> stmts);
     std::string Generate_PabloS(PabloS* stmt);
     Value* Generate_PabloE(PabloE* expr);
+    Value* genMatchStar(Value* marker_expr, Value* cc_expr);
+    Value* genScanThru(Value* marker_expr, Value* cc_expr);
+    Value* genAddWithCarry(Value* e1, Value* e2);
+    Value* genShiftRight127(Value* e, const Twine &namehint = "");
+    Value* genShiftLeft64(Value* e, const Twine &namehint = "") ;
+    Value* genNot(Value* e, const Twine &namehint = "");
 
     int         mBits;
     std::map<std::string, std::string> m_name_map;
