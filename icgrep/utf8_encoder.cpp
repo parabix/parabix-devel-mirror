@@ -159,6 +159,7 @@ RE* UTF8_Encoder::rangeToUTF8_helper(int lo, int hi, int n, int hlen)
         else
         {
             Seq* seq = new Seq();
+            seq->setType((u8Prefix(hbyte) ? Seq::Byte : Seq::Normal));
             seq->AddREListItem(makeByteRange(lbyte, hbyte));
             seq->AddREListItem(rangeToUTF8_helper(lo, hi, n + 1, hlen));
             return seq;
@@ -168,22 +169,7 @@ RE* UTF8_Encoder::rangeToUTF8_helper(int lo, int hi, int n, int hlen)
 
 bool UTF8_Encoder::u8Prefix(int cp)
 {
-    bool retVal = false;
-
-    if ((cp >= 0xC2) && (cp <= 0xDF))
-    {
-        retVal = true;
-    }
-    else if ((cp >= 0xE0) && (cp <= 0xEF))
-    {
-        retVal = true;
-    }
-    else if ((cp >= 0xF0) && (cp <= 0xF4))
-    {
-        retVal = true;
-    }
-
-    return retVal;
+    return ((cp >= 0xC2) && (cp <= 0xF4));
 }
 
 CC* UTF8_Encoder::makeByteRange(int lo, int hi)

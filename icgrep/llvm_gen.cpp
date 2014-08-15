@@ -1003,8 +1003,7 @@ Value* LLVM_Generator::Generate_PabloE(PabloE *expr)
         IRBuilder<> b(mBasicBlock);
 
         //CarryQ - carry in.
-        Value* carryq_idx = b.getInt64(mCarryQueueIdx);
-        Value* carryq_GEP = b.CreateGEP(mptr_carry_q, carryq_idx);
+        Value* carryq_GEP = genNewCarryInPtr();
         Value* carryq_value = b.CreateLoad(carryq_GEP);
 
         Value* strm_value = Generate_PabloE(adv->getExpr());
@@ -1027,56 +1026,11 @@ Value* LLVM_Generator::Generate_PabloE(PabloE *expr)
         Value* carryout_2_carry = b.CreateBitCast(srli_2_value, m64x2Vect);
         Value* void_1 = b.CreateStore(carryout_2_carry, carryq_GEP);
 
-        //Increment the idx for the next advance or scan through.
-        mCarryQueueIdx++;
-
         retVal = result_value;
     }
     else if (MatchStar* mstar = dynamic_cast<MatchStar*>(expr))
     {
         IRBuilder<> b(mBasicBlock);
-#if 0
-        //CarryQ - carry in.
-        Value* carryq_idx = b.getInt64(mCarryQueueIdx);
-        Value* carryq_GEP = b.CreateGEP(mptr_carry_q, carryq_idx);
-        Value* carryq_value = b.CreateLoad(carryq_GEP);
-        //Get the input stream.
-        Value* strm_value = Generate_PabloE(mstar->getExpr1());
-        //Get the character that is to be matched.
-        Value* cc_value = Generate_PabloE(mstar->getExpr2());
-
-        Value* and_value_1 = b.CreateAnd(cc_value, strm_value, "match_star_and_value_1");
-        Value* add_value_1 = b.CreateAdd(and_value_1, cc_value, "match_star_add_value_1");
-        Value* add_value_2 = b.CreateAdd(add_value_1, carryq_value, "match_star_add_value_2");
-        Value* xor_value_1 = b.CreateXor(add_value_2, mConst_Aggregate_64x2_neg1, "match_star_xor_value_1");
-        Value* and_value_2 = b.CreateAnd(cc_value, xor_value_1, "match_star_and_value_2");
-        Value* or_value_1 = b.CreateOr(and_value_1, and_value_2, "match_star_or_value_1");
-
-        Value* srli_instr_1 = b.CreateLShr(or_value_1, 63);
-
-        Value* cast_marker_value_1 = b.CreateBitCast(srli_instr_1, IntegerType::get(mMod->getContext(), 128));
-        Value* sll_1_value = b.CreateShl(cast_marker_value_1, 64);
-        Value* cast_marker_value_2 = b.CreateBitCast(sll_1_value, m64x2Vect);
-
-
-        Value* add_value_3 = b.CreateAdd(cast_marker_value_2, add_value_2, "match_star_add_value_3");
-        Value* xor_value_2 = b.CreateXor(add_value_3, mConst_Aggregate_64x2_neg1, "match_star_xor_value_2");
-        Value* and_value_3 = b.CreateAnd(cc_value, xor_value_2, "match_star_and_value_3");
-        Value* or_value_2  = b.CreateOr(and_value_1, and_value_3, "match_star_or_value_2 ");
-        Value* xor_value_3 = b.CreateXor(add_value_3, cc_value, "match_star_xor_value_3");
-        Value* result_value = b.CreateOr(xor_value_3, strm_value, "match_star_result_value");
-
-        //CarryQ - carry out:
-        Value* cast_marker_value_3 = b.CreateBitCast(or_value_2, IntegerType::get(mMod->getContext(), 128));
-        Value* srli_2_value = b.CreateLShr(cast_marker_value_3, 127);
-        Value* carryout_2_carry = b.CreateBitCast(srli_2_value, m64x2Vect);
-
-        Value* void_1 = b.CreateStore(carryout_2_carry, carryq_GEP);
-
-        mCarryQueueIdx++;
-
-        retVal = result_value;
-#endif
         //Get the input stream.
         Value* strm_value = Generate_PabloE(mstar->getExpr1());
         //Get the scanthru bit stream.
@@ -1086,41 +1040,6 @@ Value* LLVM_Generator::Generate_PabloE(PabloE *expr)
     else if (ScanThru* sthru = dynamic_cast<ScanThru*>(expr))
     {
         IRBuilder<> b(mBasicBlock);
-#if 0
-        //CarryQ - carry in.
-        Value* carryq_idx = b.getInt64(mCarryQueueIdx);
-        Value* carryq_GEP = b.CreateGEP(mptr_carry_q, carryq_idx);
-        Value* carryq_value = b.CreateLoad(carryq_GEP);
-        //Get the input stream.
-        Value* strm_value = Generate_PabloE(sthru->getScanFrom());
-        //Get the scanthru bit stream.
-        Value* scanthru_value = Generate_PabloE(sthru->getScanThru());
-
-        Value* and_value_1 = b.CreateAnd(scanthru_value, strm_value, "scanthru_and_value_1");
-        Value* add_value_1 = b.CreateAdd(and_value_1, carryq_value, "scanthru_add_value_1");
-        Value* add_value_2 = b.CreateAdd(add_value_1, scanthru_value, "scanthru_add_value_2");
-
-        Value* srli_instr_1 = b.CreateLShr(and_value_1, 63);
-
-        Value* cast_marker_value_1 = b.CreateBitCast(srli_instr_1, IntegerType::get(mMod->getContext(), 128));
-        Value* sll_1_value = b.CreateShl(cast_marker_value_1, 64);
-        Value* cast_marker_value_2 = b.CreateBitCast(sll_1_value, m64x2Vect);
-
-        Value* add_value_3 = b.CreateAdd(cast_marker_value_2, add_value_2, "scanthru_add_value_3");
-        Value* xor_value_1  = b.CreateXor(scanthru_value, mConst_Aggregate_64x2_neg1, "scanthru_xor_value_1");
-        Value* result_value = b.CreateAnd(add_value_3, xor_value_1, "scanthru_result_value");
-
-        //CarryQ - carry out:
-        Value* cast_marker_value_3 = b.CreateBitCast(add_value_3, IntegerType::get(mMod->getContext(), 128));
-        Value* srli_2_value = b.CreateLShr(cast_marker_value_3, 127);
-        Value* carryout_2_carry = b.CreateBitCast(srli_2_value, m64x2Vect);
-
-        Value* void_1 = b.CreateStore(carryout_2_carry, carryq_GEP);
-
-        mCarryQueueIdx++;
-
-        retVal = result_value;
-#endif
         //Get the input stream.
         Value* strm_value = Generate_PabloE(sthru->getScanFrom());
         //Get the scanthru bit stream.
@@ -1147,8 +1066,7 @@ Value* LLVM_Generator::genAddWithCarry(Value* e1, Value* e2) {
     IRBuilder<> b(mBasicBlock);
     
     //CarryQ - carry in.
-    Value* carryq_idx = b.getInt64(mCarryQueueIdx);
-    Value* carryq_GEP = b.CreateGEP(mptr_carry_q, carryq_idx);
+    Value* carryq_GEP = genNewCarryInPtr();
     Value* carryq_value = b.CreateLoad(carryq_GEP);
 
     Value* carrygen = b.CreateAnd(e1, e2, "carrygen");
@@ -1164,9 +1082,17 @@ Value* LLVM_Generator::genAddWithCarry(Value* e1, Value* e2) {
     //CarryQ - carry out:    
     Value* void_1 = b.CreateStore(carry_out, carryq_GEP);
     
-    mCarryQueueIdx++;
     return sum;
 }
+
+Value* LLVM_Generator::genNewCarryInPtr() {
+    IRBuilder<> b(mBasicBlock);
+    Value* carryq_idx = b.getInt64(mCarryQueueIdx);
+    Value* carryq_GEP = b.CreateGEP(mptr_carry_q, carryq_idx);
+    mCarryQueueIdx++;
+    return carryq_GEP;
+}
+
 
 
 

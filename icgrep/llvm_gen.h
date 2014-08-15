@@ -124,6 +124,7 @@ private:
     Value* Generate_PabloE(PabloE* expr);
     Value* genMatchStar(Value* marker_expr, Value* cc_expr);
     Value* genScanThru(Value* marker_expr, Value* cc_expr);
+    Value* genNewCarryInPtr();
     Value* genAddWithCarry(Value* e1, Value* e2);
     Value* genShiftRight127(Value* e, const Twine &namehint = "");
     Value* genShiftLeft64(Value* e, const Twine &namehint = "") ;
