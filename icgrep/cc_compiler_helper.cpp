@@ -27,7 +27,7 @@ PabloE* CC_Compiler_Helper::make_not(PabloE* expr)
         {
             return new All(0); //Set to false literal.
         }
-        else if (all->getNum() == 0) //If false literal.
+        else //if (all->getNum() == 0) //If false literal.
         {
             return new All(1); //Set to true literal.
         }
@@ -50,7 +50,7 @@ PabloE* CC_Compiler_Helper::make_and(PabloE *expr1, PabloE *expr2)
         {
             return expr2;
         }
-        else if (all->getNum() == 0)
+        else //if (all->getNum() == 0)
         {
             return new All(0);
         }
@@ -61,7 +61,7 @@ PabloE* CC_Compiler_Helper::make_and(PabloE *expr1, PabloE *expr2)
         {
             return expr1;
         }
-        else if (all->getNum() == 0)
+        else //if (all->getNum() == 0)
         {
             return new All(0);
         }
@@ -110,7 +110,7 @@ PabloE* CC_Compiler_Helper::make_or(PabloE *expr1, PabloE *expr2)
         {
             return new All(1); //Return a true literal.
         }
-        else if (all->getNum() == 0)
+        else //if (all->getNum() == 0)
         {
             return expr2;
         }
@@ -121,7 +121,7 @@ PabloE* CC_Compiler_Helper::make_or(PabloE *expr1, PabloE *expr2)
         {
             return new All(1); //Return a true literal.
         }
-        else if (all->getNum() == 0)
+        else //if (all->getNum() == 0)
         {
             return expr1;
         }
@@ -175,7 +175,7 @@ PabloE* CC_Compiler_Helper::make_sel(PabloE *if_expr, PabloE *t_expr, PabloE *f_
         {
             return t_expr;
         }
-        else if (all_if_expr->getNum() == 0)
+        else //if (all_if_expr->getNum() == 0)
         {
             return f_expr;
         }
@@ -186,7 +186,7 @@ PabloE* CC_Compiler_Helper::make_sel(PabloE *if_expr, PabloE *t_expr, PabloE *f_
         {
             return make_or(if_expr, f_expr);
         }
-        else if (all_t_expr->getNum() == 0)
+        else //if (all_t_expr->getNum() == 0)
         {
             return make_and(make_not(if_expr), f_expr);
         }
@@ -197,7 +197,7 @@ PabloE* CC_Compiler_Helper::make_sel(PabloE *if_expr, PabloE *t_expr, PabloE *f_
         {
             return make_or(make_not(if_expr), t_expr);
         }
-        else if (all_f_expr->getNum() == 0)
+        else //if (all_f_expr->getNum() == 0)
         {
             return make_and(if_expr, t_expr);
         }
@@ -220,7 +220,7 @@ PabloE* CC_Compiler_Helper::make_xor(PabloE *expr1, PabloE *expr2)
         {
             return make_not(expr2);
         }
-        else if (all_expr1->getNum() == 0)
+        else //if (all_expr1->getNum() == 0)
         {
             return expr2;
         }
@@ -231,7 +231,7 @@ PabloE* CC_Compiler_Helper::make_xor(PabloE *expr1, PabloE *expr2)
         {
             return make_not(expr1);
         }
-        else if (all_expr2->getNum() == 0)
+        else //if (all_expr2->getNum() == 0)
         {
             return expr1;
         }

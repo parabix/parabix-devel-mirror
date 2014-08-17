@@ -161,23 +161,7 @@ std::list<RE*>* RE_Nullable::removeNullableSeqSuffix(std::list<RE*>* re_list)
 
 bool RE_Nullable::isNullable(RE* re)
 {
-    if (CC* re_cc = dynamic_cast<CC*>(re))
-    {
-        return false;
-    }
-    else if (Name* re_name = dynamic_cast<Name*>(re))
-    {
-        return false;
-    }
-    else if (Start* re_start = dynamic_cast<Start*>(re))
-    {
-        return false;
-    }
-    else if (End* re_end = dynamic_cast<End*>(re))
-    {
-        return false;
-    }
-    else if (Seq* re_seq = dynamic_cast<Seq*>(re))
+    if (Seq* re_seq = dynamic_cast<Seq*>(re))
     {
         return isNullableSeq(re_seq->GetREList());
     }
@@ -188,6 +172,9 @@ bool RE_Nullable::isNullable(RE* re)
     else if (Rep* re_rep = dynamic_cast<Rep*>(re))
     {   
         return re_rep->getLB() == 0 ? true : isNullable(re_rep->getRE());
+    }
+    else {
+        return false;
     }
 }
 
