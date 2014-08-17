@@ -10,7 +10,9 @@
 
 // #define NDEBUG // if NDEBUG then disable assertions
 
+#ifndef __STDC_LIMIT_MACROS
 #define __STDC_LIMIT_MACROS
+#endif
 #include <stdint.h>
 #include <stdio.h>
 #include <assert.h>
