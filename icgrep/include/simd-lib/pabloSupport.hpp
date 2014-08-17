@@ -45,13 +45,6 @@ template <int n> IDISA_ALWAYS_INLINE carry_t pablo_blk_Advance_n_(BitBlock strm,
 	return strm;
 }
 
-template <int fw, int n> IDISA_ALWAYS_INLINE carry_t pablo_blk_Advance_n_(BitBlock strm, BitBlock pending_in, BitBlock & rslt) {
-	BitBlock shifted = mvmd<fw>::dslli<1>(strm, pending_in);
-	rslt = simd_or(simd<BLOCK_SIZE/2>::srli<fw-n>(shifted),
-		       simd<BLOCK_SIZE/2>::slli<n>(strm));
-	return strm;
-}
-
 /*  Support for pablo.Lookahead.  2 translation modes:
     (a) pablo.Lookahead(ss.strm, n) ==> pablo_blk_Lookahead_n_<n>(ss_curblock.strm, ss_nxtblock.strm);
     (b) pablo.Lookahead(ss.strm, n) ==> pablo_blk_Lookahead_n_<n>(ss[0].strm, ss[1].strm);
