@@ -353,7 +353,7 @@ parse_result_retVal RE_Parser::parse_cc(std::string s)
     {        
         CC* cc = new CC();
         cc->insert_range(0, 9);
-        cc->insert_range(11, 127);
+        cc->insert_range(11, 0x10FFFF);
         cc_retVal.result = new ParseSuccess(cc);
         cc_retVal.remaining = s.substr(1, s.length() - 1);
 
