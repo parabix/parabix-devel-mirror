@@ -108,8 +108,8 @@ public:
 
     /* Make sure that the number of bits in the mask at least equals the number of scanblocks. */
     /* Requires flag -std=gnu++0x  */
-//    static_assert(sizeof(scanblock_t) * 8 >= bitblock_count * sizeof(bitblock_t)/sizeof(scanfield_t),
-//    "Too many bitblocks for a single scanword mask");
+    static_assert(sizeof(scanblock_t) * 8 >= bitblock_count * sizeof(bitblock_t)/sizeof(scanfield_t),
+    "Too many bitblocks for a single scanword mask");
         
 	BitStreamScanner() {}
 
@@ -164,7 +164,7 @@ public:
         sum8 = simd<8>::add(sum8, simd<8>::add_hl(ct4));
     }
     if ((bitblock_count & 1) != 0) {  // Should be compiled out if bitblock_count is even.
-        sum8 = simd<8>::add(sum8, simd<8>::popcount(remaining._bitblock[bitblock_count]));
+        sum8 = simd<8>::add(sum8, simd<8>::popcount(remaining._bitblock[bitblock_count-1]));
     }
     ct = mvmd<32>::extract<0>(simd<128>::add_hl(simd<64>::add_hl(simd<32>::add_hl(simd<16>::add_hl(sum8)))));
 #endif
