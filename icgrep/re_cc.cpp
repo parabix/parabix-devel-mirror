@@ -28,7 +28,7 @@ CC::CC(int lo_codepoint, int hi_codepoint)
 CC::CC(CC *cc1, CC *cc2)
 {
     gensym_name();
-    mSparceCharSet = cc2->getItems();
+    mSparseCharSet = cc2->getItems();
     joinCharSets(cc1->getItems());
 }
 
@@ -36,7 +36,7 @@ CC::~CC(){}
 
 std::vector<CharSetItem> CC::getItems()
 {
-    return mSparceCharSet;
+    return mSparseCharSet;
 }
 
 std::string CC::getName()
@@ -44,7 +44,7 @@ std::string CC::getName()
     std::string name = "CC";
 
     std::vector<CharSetItem>::iterator it;
-    for (it = mSparceCharSet.begin(); it != mSparceCharSet.end(); ++it)
+    for (it = mSparseCharSet.begin(); it != mSparseCharSet.end(); ++it)
     {
         name += std::to_string(it->lo_codepoint);
         name += std::to_string(it->hi_codepoint);
@@ -60,7 +60,7 @@ std::string CC::getId()
 
 bool CC::is_member(int codepoint)
 {
-    return is_member_helper(codepoint, mSparceCharSet.size() - 1);
+    return is_member_helper(codepoint, mSparseCharSet.size() - 1);
 }
 
 bool CC::is_member_helper(int codepoint, int idx)
@@ -71,7 +71,7 @@ bool CC::is_member_helper(int codepoint, int idx)
     }
     else
     {
-        CharSetItem item = mSparceCharSet.at(idx);
+        CharSetItem item = mSparseCharSet.at(idx);
 
         if (codepoint < item.lo_codepoint)
         {
@@ -112,7 +112,7 @@ void CC::insert1(int codepoint)
 
 void CC::insert_range(int lo_codepoint, int hi_codepoint)
 {
-    insert_range_helper(lo_codepoint, hi_codepoint, mSparceCharSet.size() - 1);
+    insert_range_helper(lo_codepoint, hi_codepoint, mSparseCharSet.size() - 1);
 }
 
 void CC::insert_range_helper(int lo_codepoint, int hi_codepoint, int idx)
@@ -123,12 +123,12 @@ void CC::insert_range_helper(int lo_codepoint, int hi_codepoint, int idx)
         new_item.lo_codepoint = lo_codepoint;
         new_item.hi_codepoint = hi_codepoint;
         std::vector<CharSetItem>::iterator it;
-        it = mSparceCharSet.begin();
-        mSparceCharSet.insert(it, new_item);
+        it = mSparseCharSet.begin();
+        mSparseCharSet.insert(it, new_item);
     }
     else
     {
-        CharSetItem item = mSparceCharSet.at(idx);
+        CharSetItem item = mSparseCharSet.at(idx);
 
         if (hi_codepoint < item.lo_codepoint - 1)
         {
@@ -136,8 +136,8 @@ void CC::insert_range_helper(int lo_codepoint, int hi_codepoint, int idx)
             new_item.lo_codepoint = lo_codepoint;
             new_item.hi_codepoint = hi_codepoint;
             std::vector<CharSetItem>::iterator it;
-            it = mSparceCharSet.begin();
-            mSparceCharSet.insert(it + idx + 1, new_item);
+            it = mSparseCharSet.begin();
+            mSparseCharSet.insert(it + idx + 1, new_item);
         }
         else if (lo_codepoint > item.hi_codepoint + 1)
         {
@@ -149,8 +149,8 @@ void CC::insert_range_helper(int lo_codepoint, int hi_codepoint, int idx)
             int overlap_lo = item.lo_codepoint;
             int overlap_hi = item.hi_codepoint;
             std::vector<CharSetItem>::iterator it;
-            it = mSparceCharSet.begin();
-            mSparceCharSet.erase(it + idx);
+            it = mSparseCharSet.begin();
+            mSparseCharSet.erase(it + idx);
             idx--;
             insert_range_helper(std::min(overlap_lo, lo_codepoint), std::max(overlap_hi, hi_codepoint), idx);
         }
@@ -159,7 +159,7 @@ void CC::insert_range_helper(int lo_codepoint, int hi_codepoint, int idx)
 
 void CC::negate_class()
 {
-    negate_class_helper(mSparceCharSet.size() - 1, 0);
+    negate_class_helper(mSparseCharSet.size() - 1, 0);
 }
 
 void CC::negate_class_helper(int idx, int b)
@@ -173,13 +173,13 @@ void CC::negate_class_helper(int idx, int b)
             new_item.lo_codepoint = b;
             new_item.hi_codepoint = mUnicodeMax;
             std::vector<CharSetItem>::iterator it;
-            it = mSparceCharSet.begin();
-            mSparceCharSet.insert(it, new_item);
+            it = mSparseCharSet.begin();
+            mSparseCharSet.insert(it, new_item);
         }
     }
     else
     {
-        CharSetItem item = mSparceCharSet.at(idx);
+        CharSetItem item = mSparseCharSet.at(idx);
 
         if (b < item.lo_codepoint)
         {
@@ -188,17 +188,17 @@ void CC::negate_class_helper(int idx, int b)
             new_item.lo_codepoint = b;
             new_item.hi_codepoint = item.lo_codepoint - 1;
             std::vector<CharSetItem>::iterator it;
-            it = mSparceCharSet.begin();
-            mSparceCharSet.erase(it + idx);
-            mSparceCharSet.insert(it + idx, new_item);
+            it = mSparseCharSet.begin();
+            mSparseCharSet.erase(it + idx);
+            mSparseCharSet.insert(it + idx, new_item);
             idx--;
             negate_class_helper(idx, item.hi_codepoint + 1);
         }
         else
         {
             std::vector<CharSetItem>::iterator it;
-            it = mSparceCharSet.begin();
-            mSparceCharSet.erase(it + idx);
+            it = mSparseCharSet.begin();
+            mSparseCharSet.erase(it + idx);
             idx--;
             negate_class_helper(idx, item.hi_codepoint + 1);
         }
@@ -212,14 +212,14 @@ void CC::remove1(int codepoint)
 
 void CC::remove_range(int lo_codepoint, int hi_codepoint)
 {
-    remove_range_helper(lo_codepoint, hi_codepoint, mSparceCharSet.size() - 1);
+    remove_range_helper(lo_codepoint, hi_codepoint, mSparseCharSet.size() - 1);
 }
 
 void CC::remove_range_helper(int lo_codepoint, int hi_codepoint, int idx)
 {
     if (idx != -1)
     {
-        CharSetItem item = mSparceCharSet.at(idx);
+        CharSetItem item = mSparseCharSet.at(idx);
 
         if (hi_codepoint < item.lo_codepoint - 1)
         {
@@ -233,8 +233,8 @@ void CC::remove_range_helper(int lo_codepoint, int hi_codepoint, int idx)
         else if ((lo_codepoint <= item.lo_codepoint) && (hi_codepoint >= item.hi_codepoint))
         {
             std::vector<CharSetItem>::iterator it;
-            it = mSparceCharSet.begin();
-            mSparceCharSet.erase(it + idx);
+            it = mSparseCharSet.begin();
+            mSparseCharSet.erase(it + idx);
             idx--;
             remove_range_helper(lo_codepoint, hi_codepoint, idx);
         }
@@ -244,9 +244,9 @@ void CC::remove_range_helper(int lo_codepoint, int hi_codepoint, int idx)
             new_item.lo_codepoint = hi_codepoint + 1;
             new_item.hi_codepoint = item.hi_codepoint;
             std::vector<CharSetItem>::iterator it;
-            it = mSparceCharSet.begin();
-            mSparceCharSet.erase(it + idx);
-            mSparceCharSet.insert(it + idx, new_item);
+            it = mSparseCharSet.begin();
+            mSparseCharSet.erase(it + idx);
+            mSparseCharSet.insert(it + idx, new_item);
         }
         else if (hi_codepoint >= item.hi_codepoint)
         {
@@ -254,9 +254,9 @@ void CC::remove_range_helper(int lo_codepoint, int hi_codepoint, int idx)
             new_item.lo_codepoint = item.lo_codepoint;
             new_item.hi_codepoint = lo_codepoint - 1;
             std::vector<CharSetItem>::iterator it;
-            it = mSparceCharSet.begin();
-            mSparceCharSet.erase(it + idx);
-            mSparceCharSet.insert(it + idx, new_item);
+            it = mSparseCharSet.begin();
+            mSparseCharSet.erase(it + idx);
+            mSparseCharSet.insert(it + idx, new_item);
             idx--;
             remove_range_helper(lo_codepoint, hi_codepoint, idx);
         }
@@ -269,10 +269,10 @@ void CC::remove_range_helper(int lo_codepoint, int hi_codepoint, int idx)
             new_item2.lo_codepoint = item.lo_codepoint;
             new_item2.hi_codepoint = lo_codepoint - 1;
             std::vector<CharSetItem>::iterator it;
-            it = mSparceCharSet.begin();
-            mSparceCharSet.erase(it + idx);
-            mSparceCharSet.insert(it + idx, new_item1);
-            mSparceCharSet.insert(it + idx, new_item2);
+            it = mSparseCharSet.begin();
+            mSparseCharSet.erase(it + idx);
+            mSparseCharSet.insert(it + idx, new_item1);
+            mSparseCharSet.insert(it + idx, new_item2);
         }
     }
 }

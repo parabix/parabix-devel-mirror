@@ -43,9 +43,9 @@
 
 #include "llvm_gen_helper.h"
 
-//#include "unicode_categories.h"
+#include "unicode_categories.h"
 //#include "unicode_categories-flat.h"
-#include "unicode_categories-simple.h"
+//#include "unicode_categories-simple.h"
 
 #include <iostream>
 #include <string>

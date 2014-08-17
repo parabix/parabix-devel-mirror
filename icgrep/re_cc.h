@@ -52,7 +52,7 @@ private:
     void negate_class_helper(int idx, int b);
     void remove_range_helper(int lo_codepoint, int hi_codepoint, int idx);
 
-    std::vector<CharSetItem> mSparceCharSet;
+    std::vector<CharSetItem> mSparseCharSet;
     std::string mId;
 };
 
