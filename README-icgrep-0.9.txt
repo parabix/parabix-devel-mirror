@@ -1,6 +1,28 @@
-README-icgrep-0.8.txt
+README-icgrep-0.9.txt
 
-This is the open-source version of icgrep 0.9.   
+This is the open-source version of icgrep 0.9.   icgrep is a 
+very fast regular expression search program, particularly
+for complex regular expressions.   
+
+Normal usage to find lines in a file f matching a regexp r is:
+icgrep r f
+
+To produce a count of matching lines only, use the command:
+icgrep -c r f
+
+To read the regexp to be matched from file rf use the command:
+
+icgrep -f rf f
+
+icgrep supports standard egrep syntax, except for Posix character
+classes.   icgrep supports searches using ASCII or UTF-8.  
+Unicode two letter classes are supported, e.g. \p{Ll} matching
+lower case Unicode letters and \P{Lu} matching all characters
+that are not upper case letters.
+
+Full Unicode level 1 support is planned for icgrep 1.0.
+
+BUILD
 
 To build icgrep, you need an installed LLVM system providing the
 core libraries.  The distribution includes a suitable source
