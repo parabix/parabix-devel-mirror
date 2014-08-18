@@ -63,7 +63,7 @@ using namespace std;
 typedef void (*process_block_fcn)(const Basis_bits &basis_bits, BitBlock carry_q[], Output &output);
 
 
-#define USE_MMAP
+//#define USE_MMAP
 #ifndef USE_MMAP
 void do_process(FILE *infile, FILE *outfile, int count_only_option, int carry_count, process_block_fcn process_block);
 #endif
