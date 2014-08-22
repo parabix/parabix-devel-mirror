@@ -63,7 +63,7 @@ using namespace std;
 typedef void (*process_block_fcn)(const Basis_bits &basis_bits, BitBlock carry_q[], Output &output);
 
 
-//#define USE_MMAP
+#define USE_MMAP
 #ifndef USE_MMAP
 void do_process(FILE *infile, FILE *outfile, int count_only_option, int carry_count, process_block_fcn process_block);
 #endif
@@ -395,6 +395,7 @@ void do_process(char * infile_buffer, size_t infile_size, FILE *outfile, int cou
             }
             while (LF_scanner.has_next()) {
                 line_end = LF_scanner.scan_to_next();
+                line_start = line_end+1;
                 line_no++;
             }
 
@@ -525,6 +526,7 @@ void do_process(char * infile_buffer, size_t infile_size, FILE *outfile, int cou
         while(LF_scanner.has_next())
         {
             line_end = LF_scanner.scan_to_next();
+            line_start = line_end+1;
             line_no++;
         }
     }
