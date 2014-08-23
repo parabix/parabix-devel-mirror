@@ -257,6 +257,7 @@ int main(int argc, char *argv[])
     fclose(infile);
 #endif
 #ifdef USE_MMAP
+    munmap((void *) infile_buffer, infile_sb.st_size);
     close(fdSrc);
 #endif
     fclose(outfile);
