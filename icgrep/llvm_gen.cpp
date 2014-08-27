@@ -833,9 +833,9 @@ std::string LLVM_Generator::Generate_PabloS(PabloS *stmt)
     if (Assign* assign = dynamic_cast<Assign*>(stmt))
     {
         IRBuilder<> b(mBasicBlock);
-
+        
         b.CreateStore(Generate_PabloE(assign->getExpr()), GetMarker(assign->getM()));
-
+        
         retVal = assign->getM();
     }
     else if (While* whl = dynamic_cast<While*>(stmt))
@@ -870,9 +870,7 @@ std::string LLVM_Generator::Generate_PabloS(PabloS *stmt)
         Value* ptr_while_carry_q = b_wb1.CreateAlloca(m64x2Vect, b_wb1.getInt64(mCarryQueueSize - idx));
         for (int i=0; i<(mCarryQueueSize-idx); i++)
         {
-            Value* carryq_idx1 = b_wb1.getInt64(i);
-            Value* carryq_GEP1 = b_wb1.CreateGEP(ptr_while_carry_q, carryq_idx1);
-            Value* void_1 = b_wb1.CreateStore(mConst_Aggregate_64x2_0, carryq_GEP1);
+            Value* void_1 = genCarryOutStore(mConst_Aggregate_64x2_0, ptr_while_carry_q, i);
         }
 
         //Point mptr_carry_q to the new local carry queue.
@@ -884,16 +882,8 @@ std::string LLVM_Generator::Generate_PabloS(PabloS *stmt)
         //Copy back to the last carry queue the carries from the execution of the while statement list.
         for (int c=0; c<(mCarryQueueSize-idx); c++)
         {
-            Value* carryq_idx = b_wb2.getInt64(c);
-            Value* carryq_GEP = b_wb2.CreateGEP(mptr_carry_q, carryq_idx);
-            Value* carryq_value = b_wb2.CreateLoad(carryq_GEP);
-
-            Value* last_carryq_idx = b_wb2.getInt64(idx + c);
-            Value* last_carryq_GEP = b_wb2.CreateGEP(ptr_last_carry_q, last_carryq_idx);
-            Value* last_carryq_value = b_wb2.CreateLoad(last_carryq_GEP);
-
-            Value* new_carryq_value = b_wb2.CreateOr(carryq_value, last_carryq_value);
-            Value* void_1 = b_wb2.CreateStore(new_carryq_value, last_carryq_GEP);
+            Value* new_carryq_value = b_wb2.CreateOr(genCarryInLoad(mptr_carry_q, c), genCarryInLoad(ptr_last_carry_q, idx + c));
+            Value* void_1 = genCarryOutStore(new_carryq_value, ptr_last_carry_q, idx + c);
         }
 
         b_wb2.CreateBr(whileCondBlock);
@@ -1002,9 +992,10 @@ Value* LLVM_Generator::Generate_PabloE(PabloE *expr)
     {
         IRBuilder<> b(mBasicBlock);
 
-        //CarryQ - carry in.
-        Value* carryq_GEP = genNewCarryInPtr();
-        Value* carryq_value = b.CreateLoad(carryq_GEP);
+        int this_carry_idx = mCarryQueueIdx;
+        mCarryQueueIdx++;
+        
+        Value* carryq_value = genCarryInLoad(mptr_carry_q, this_carry_idx);
 
         Value* strm_value = Generate_PabloE(adv->getExpr());
         Value* srli_1_value = b.CreateLShr(strm_value, 63);
@@ -1020,29 +1011,23 @@ Value* LLVM_Generator::Generate_PabloE(PabloE *expr)
         Value* shl_value = b.CreateShl(strm_value, const_packed_2, "shl_value");
         Value* result_value = b.CreateOr(shl_value, packed_shuffle, "or.result_value");
 
-        //CarryQ - carry out.
-        Value* cast_marker_value_1 = b.CreateBitCast(strm_value, IntegerType::get(mMod->getContext(), 128));
-        Value* srli_2_value = b.CreateLShr(cast_marker_value_1, 127);
-        Value* carryout_2_carry = b.CreateBitCast(srli_2_value, m64x2Vect);
-        Value* void_1 = b.CreateStore(carryout_2_carry, carryq_GEP);
+        Value* carry_out = genShiftRight127(strm_value, "carry_out");
+        //CarryQ - carry out:
+        Value* void_1 = genCarryOutStore(carry_out, mptr_carry_q, this_carry_idx);
 
         retVal = result_value;
     }
     else if (MatchStar* mstar = dynamic_cast<MatchStar*>(expr))
     {
         IRBuilder<> b(mBasicBlock);
-        //Get the input stream.
         Value* strm_value = Generate_PabloE(mstar->getExpr1());
-        //Get the scanthru bit stream.
         Value* cc_value = Generate_PabloE(mstar->getExpr2());
         retVal = genMatchStar(strm_value, cc_value);
     }
     else if (ScanThru* sthru = dynamic_cast<ScanThru*>(expr))
     {
         IRBuilder<> b(mBasicBlock);
-        //Get the input stream.
         Value* strm_value = Generate_PabloE(sthru->getScanFrom());
-        //Get the scanthru bit stream.
         Value* scanthru_value = Generate_PabloE(sthru->getScanThru());
         retVal = genScanThru(strm_value, scanthru_value);
     }
@@ -1066,8 +1051,10 @@ Value* LLVM_Generator::genAddWithCarry(Value* e1, Value* e2) {
     IRBuilder<> b(mBasicBlock);
     
     //CarryQ - carry in.
-    Value* carryq_GEP = genNewCarryInPtr();
-    Value* carryq_value = b.CreateLoad(carryq_GEP);
+    int this_carry_idx = mCarryQueueIdx;
+    mCarryQueueIdx++;
+    
+    Value* carryq_value = genCarryInLoad(mptr_carry_q, this_carry_idx);
 
     Value* carrygen = b.CreateAnd(e1, e2, "carrygen");
     Value* carryprop = b.CreateOr(e1, e2, "carryprop");
@@ -1080,21 +1067,30 @@ Value* LLVM_Generator::genAddWithCarry(Value* e1, Value* e2) {
     Value* carry_out = genShiftRight127(b.CreateOr(carrygen, b.CreateAnd(carryprop, genNot(sum))), "carry_out");
     
     //CarryQ - carry out:    
-    Value* void_1 = b.CreateStore(carry_out, carryq_GEP);
+    Value* void_1 = genCarryOutStore(carry_out, mptr_carry_q, this_carry_idx);
     
     return sum;
 }
 
-Value* LLVM_Generator::genNewCarryInPtr() {
+Value* LLVM_Generator::genCarryInLoad(Value* ptr_carry_q, int n) {
     IRBuilder<> b(mBasicBlock);
-    Value* carryq_idx = b.getInt64(mCarryQueueIdx);
-    Value* carryq_GEP = b.CreateGEP(mptr_carry_q, carryq_idx);
-    mCarryQueueIdx++;
-    return carryq_GEP;
+    Value* carryq_idx = b.getInt64(n);
+    Value* carryq_GEP = b.CreateGEP(ptr_carry_q, carryq_idx);
+    return b.CreateLoad(carryq_GEP);
 }
 
+Value* LLVM_Generator::genCarryOutStore(Value* carryout, Value* ptr_carry_q, int n ) {
+    IRBuilder<> b(mBasicBlock);
+    Value* carryq_idx = b.getInt64(n);
+    Value* carryq_GEP = b.CreateGEP(ptr_carry_q, carryq_idx);
+    return b.CreateStore(carryout, carryq_GEP);
+}
 
-
+Value* LLVM_Generator::genBitBlockAny(Value* e) {
+    IRBuilder<> b(mBasicBlock);
+    Value* cast_marker_value_1 = b.CreateBitCast(e, IntegerType::get(mMod->getContext(), 128));
+    return b.CreateICmpEQ(cast_marker_value_1, ConstantInt::get(IntegerType::get(mMod->getContext(), 128), 0));
+}
 
 Value* LLVM_Generator::genShiftRight127(Value* e, const Twine &namehint) {
     IRBuilder<> b(mBasicBlock);

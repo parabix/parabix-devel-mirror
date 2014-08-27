@@ -124,8 +124,10 @@ private:
     Value* Generate_PabloE(PabloE* expr);
     Value* genMatchStar(Value* marker_expr, Value* cc_expr);
     Value* genScanThru(Value* marker_expr, Value* cc_expr);
-    Value* genNewCarryInPtr();
+    Value* genCarryInLoad(Value* ptr_carry_q, int carryq_idx);
+    Value* genCarryOutStore(Value* carryout, Value* ptr_carry_q, int carryq_idx);
     Value* genAddWithCarry(Value* e1, Value* e2);
+    Value* genBitBlockAny(Value* e);
     Value* genShiftRight127(Value* e, const Twine &namehint = "");
     Value* genShiftLeft64(Value* e, const Twine &namehint = "") ;
     Value* genNot(Value* e, const Twine &namehint = "");
