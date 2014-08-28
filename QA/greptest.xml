@@ -1,0 +1,118 @@
+
+<greptest>
+<datafile id="simple1">
+A few lines of input
+in this simple test file
+provide fodder for some simple
+regexp tests.
+</datafile>
+
+<grepcase regexp="in" datafile="simple1" grepcount="2"/>
+<grepcase regexp="[A-Z]" datafile="simple1" grepcount="1"/>
+<grepcase regexp="fodder|simple" datafile="simple1" grepcount="2"/>
+
+<datafile id="bounded_charclass">
+=a;
+=bb;
+=ccc;
+=dddd;
+=eeeee;
+=ffffff;
+=ggggggg;
+=hhhhhhhh;
+=iiiiiiiii;
+=jjjjjjjjjj;
+=kkkkkkkkkkk;
+=llllllllllll;
+=mmmmmmmmmmmmm;
+=nnnnnnnnnnnnnn;
+=ooooooooooooooo;
+=pppppppppppppppp;
+=qqqqqqqqqqqqqqqqq;
+=rrrrrrrrrrrrrrrrrr;
+=sssssssssssssssssss;
+=tttttttttttttttttttt;
+=uuuuuuuuuuuuuuuuuuuuu;
+=vvvvvvvvvvvvvvvvvvvvvv;
+=wwwwwwwwwwwwwwwwwwwwwww;
+=xxxxxxxxxxxxxxxxxxxxxxxx;
+=yyyyyyyyyyyyyyyyyyyyyyyyy;
+=zzzzzzzzzzzzzzzzzzzzzzzzzz;
+</datafile>
+<grepcase regexp="[cde]{3}" datafile="bounded_charclass" grepcount="3"/>
+<grepcase regexp="[f-h]{5}" datafile="bounded_charclass" grepcount="3"/>
+<grepcase regexp="[a-z]{5}" datafile="bounded_charclass" grepcount="22"/>
+<grepcase regexp="[a-z]{5,15}" datafile="bounded_charclass" grepcount="22"/>
+<grepcase regexp="=[a-z]{7,}" datafile="bounded_charclass" grepcount="20"/>
+<grepcase regexp="=[a-z]{5,15};" datafile="bounded_charclass" grepcount="11"/>
+<grepcase regexp="[wxy]{2}{3}{2}" datafile="bounded_charclass" grepcount="3"/>
+<grepcase regexp="=([a-z][c-z])*;" datafile="bounded_charclass" grepcount="12"/>
+
+<datafile id="RangeAltSeqMatchStarKplusWhileNotOptAny">
+Dogbe hat ,/R Cat dt bt bt bt bt bat MzzzzzzzzT MaT MT McT MdT MeT M0T M1T M2T M3T M4T
+Dogbe hit foffasm zza " Dog Cat 1, 4= Dog ['zxcvbnm,./R Dog MT
+Dogbe hot foffasm czzb " MazazazTDogogogogog Cat 1, 4= Dog [;'zxcvbnm,./R Dogtp
+Dogbe foffasm dooooc MazT" Dog Cat 1, 4= Dog [Sqwertyuiopasdfghjkl;'zxcvbnm,./R Dog Cat
+Dogbe foffasm ezzzzzzzzzzzzzzt "tp Dog Cat 12, ktp 4= Dog [jkl;'zxcvbnm,./R Dogtp
+Dogbe foffasm zze " Dog CatMjT , = Dog [;'zxcvbzzznm,./R Dog MazazT cat
+zzcztpDogbe fofasm zazazz4z Doggg Cat 6, azzzzz= Dog [;'zxcvbonm,.R Dog TUT Dog
+Natatatats Nats T M0T ed bazbzczdzt et
+Dfg dc fog Nt ezt
+MazazazazazazazT
+</datafile>
+
+<grepcase regexp="^D[zabcdefoy]g" datafile="RangeAltSeqMatchStarKplusWhileNotOptAny" grepcount="7"/>
+<grepcase regexp="do*c|ez*t" datafile="RangeAltSeqMatchStarKplusWhileNotOptAny" grepcount="4"/>
+<grepcase regexp="M(az)*T" datafile="RangeAltSeqMatchStarKplusWhileNotOptAny" grepcount="6"/>          
+<grepcase regexp="ez+t" datafile="RangeAltSeqMatchStarKplusWhileNotOptAny" grepcount="2" />
+<grepcase regexp="b([a-d]z)*t" datafile="RangeAltSeqMatchStarKplusWhileNotOptAny" grepcount="2"/>
+<grepcase regexp="[^D]og" datafile="RangeAltSeqMatchStarKplusWhileNotOptAny" grepcount="2"/>
+<grepcase regexp="Na?t" datafile="RangeAltSeqMatchStarKplusWhileNotOptAny" grepcount="2"/>
+<grepcase regexp="h.t" datafile="RangeAltSeqMatchStarKplusWhileNotOptAny" grepcount="3" />
+
+<datafile id="StartEndAlt">
+The ever-growing social networks and social media provide invaluable 
+sources of information for modeling the behavior of users. High-quality 
+user models enable superior services and functions for end users. In this 
+talk, I will present several examples of user modeling based on social 
+networks and social media. I will first describe our research in modeling 
+users' information preferences on Microblogs using a novel user message 
+model. I will then discuss our work on extracting users' daily activities, 
+such as dining and shopping, that inherently reflect their habits, intents and preferences. 
+I explain our novel transfer learning solution via a collaborative boosting 
+framework comprising a text-to-activity classifier for socially connected users. 
+I will also describe our research on user modeling in multiple, overlapping 
+social networks in a 'composite social network' setting. I will show the benefits of 
+modeling the dynamics of composite networks, where the evolution processes 
+of different networks are jointly considered. Finally, I will explain our
+research on finding social spammers in large social networks.
+</datafile>
+
+<grepcase regexp="^user|^I|our$" datafile="StartEndAlt" grepcount="5"/>
+
+<datafile id="special_characters">
+The ] character may appear as the first character inside character class
+expressions such as []>)].
+In this case, the ] character does not terminate the character class, but
+stands for itself.
+Similarly, the - character may appear as the first or last character
+in a character class expression, such as [-] or []-].  Occurring as the
+first or last character in a class means that it is a member of the
+class, instead of being interpreted as a range metacharacter.
+For both ] and -, occurrence as the first character could mean after
+an opening [^ mark for negated character class.   That is [^]] is the
+class that matches everything but ], while [^-] is the class that matches
+anything but -.
+----------
+The above line does not match [-].
+----------
+]]]]]]]]]]
+</datafile>
+<grepcase regexp="[]]" datafile="special_characters" grepcount="9"/>
+<grepcase regexp="[-]" datafile="special_characters" grepcount="8"/>
+<grepcase regexp="[^]]" datafile="special_characters" grepcount="15"/>
+<grepcase regexp="[^-]" datafile="special_characters" grepcount="14"/>
+<grepcase regexp="[^]-]" datafile="special_characters" grepcount="13"/>
+</greptest>
+
+
