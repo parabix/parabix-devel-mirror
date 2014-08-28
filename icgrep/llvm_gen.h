@@ -7,7 +7,7 @@
 #ifndef LLVM_GENERATOR_H
 #define LLVM_GENERATOR_H
 
-#define USE_LLVM_3_5
+#define USE_LLVM_3_4
 
 //Regular Expressions
 #include "re_re.h"
