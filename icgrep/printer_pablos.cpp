@@ -59,11 +59,15 @@ std::string StatementPrinter::ShowPabloS(PabloS* stmt)
     {
         retVal = "Assign('" + an->getM() + "', " + ShowPabloE(an->getExpr()) + "),";
     }
-    if (While* whl = dynamic_cast<While*>(stmt))
+    else if (If* ifstmt = dynamic_cast<If*>(stmt))
+    {
+        retVal = "If(" + ShowPabloE(ifstmt->getExpr()) + ", " + Print_PB_PabloStmts(ifstmt->getPSList(), retVal) + ")";
+    }
+    else if (While* whl = dynamic_cast<While*>(stmt))
     {
         retVal = "While(" + ShowPabloE(whl->getExpr()) + ", " + Print_PB_PabloStmts(whl->getPSList(), retVal) + ")";
     }
-
+    else retVal = "UNKNOWN_STATEMENT_TYPE!!!";
     return retVal;
 }
 
@@ -120,6 +124,7 @@ std::string StatementPrinter::ShowPabloE(PabloE* expr)
     {
         retVal = "ScanThru (" + ShowPabloE(sthru->getScanFrom()) + ", " + ShowPabloE(sthru->getScanThru()) + ")";
     }
+    else retVal = "UNKNOWN_Pablo_EXPRESSION_TYPE!!!";
 
     return retVal;
 }

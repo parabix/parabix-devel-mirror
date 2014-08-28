@@ -29,6 +29,14 @@ int LLVM_Generator_Helper::CarryCount_PabloS(PabloS* stmt)
     {
         retVal = CarryCount_PabloE(sm->getExpr());
     }
+    else if (If* ifstmt = dynamic_cast<If*>(stmt)) {
+        retVal = CarryCount_PabloE(ifstmt->getExpr());
+        retVal += CarryCount_PabloStatements(ifstmt->getPSList());
+        // If there is more than one internal carry, we create a stored
+        // accumulator value that Ors together all the carries, so add 1
+        // to the carry count.
+        if (retVal > 1) retVal++;
+    }
     else if (While* whl = dynamic_cast<While*>(stmt))
     {
         retVal = CarryCount_PabloE(whl->getExpr());

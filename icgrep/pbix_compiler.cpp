@@ -85,11 +85,14 @@ CodeGenState Pbix_Compiler::compile(RE *re)
         cg_state.newsym = gs_m0;
         std::string gs_nonfinal = symgen.gensym("internal.nonfinal");
         m_name_map.insert(make_pair("internal.nonfinal", gs_nonfinal));
+        cg_state.stmtsl.push_back(new Assign(gs_nonfinal, new All(0)));
         PabloE * u8scope32 = new Advance(u8pfx3);
         PabloE * u8scope42 = new Advance(u8pfx4);
         PabloE * u8scope43 = new Advance(u8scope42);
-      
-        cg_state.stmtsl.push_back(new Assign(gs_nonfinal, new Or(new Or(u8pfx, u8scope32), new Or(u8scope42, u8scope43))));
+        PabloS * assign_non_final = new Assign(gs_nonfinal, new Or(new Or(u8pfx, u8scope32), new Or(u8scope42, u8scope43)));
+        std::list<PabloS *> * if_body = new std::list<PabloS *> ();
+        if_body->push_back(assign_non_final);
+        cg_state.stmtsl.push_back(new If(u8pfx, *if_body));
 #if 0
         cg_state.stmtsl.push_back(new Assign(gs_nonfinal, new Or(new Or(new Or(new Or(new Or( new And(new Var(m_name_map.find("UTF8-Prefix3")->second),
             new Var(cg_state.newsym)),  new And(new Var(m_name_map.find("UTF8-Prefix2")->second), new Var(cg_state.newsym))),

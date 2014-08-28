@@ -838,6 +838,55 @@ std::string LLVM_Generator::Generate_PabloS(PabloS *stmt)
         
         retVal = assign->getM();
     }
+    else if (If* ifstmt = dynamic_cast<If*>(stmt))
+    {
+        BasicBlock*  ifEntryBlock = mBasicBlock;
+        BasicBlock*  ifBodyBlock = BasicBlock::Create(mMod->getContext(), "if.body",mFunc_process_block, 0);
+        BasicBlock*  ifEndBlock = BasicBlock::Create(mMod->getContext(), "if.end",mFunc_process_block, 0);
+        
+        int if_start_idx = mCarryQueueIdx;
+        
+        Value* if_test_value = Generate_PabloE(ifstmt->getExpr());
+
+        /* Generate the statements into the if body block, and also determine the
+           final carry index.  */
+        
+        IRBuilder<> b_ifbody(ifBodyBlock);
+        mBasicBlock = ifBodyBlock;
+        std::string returnMarker = Generate_PabloStatements(ifstmt->getPSList());
+        int if_end_idx = mCarryQueueIdx;
+        
+        if (if_start_idx < if_end_idx + 1) {
+            // Have at least two internal carries.   Accumulate and store.
+            int if_accum_idx = mCarryQueueIdx;
+            mCarryQueueIdx++;
+            
+            Value* if_carry_accum_value = genCarryInLoad(mptr_carry_q, if_start_idx);
+            
+            for (int c = if_start_idx+1; c < if_end_idx; c++)
+            {
+                Value* carryq_value = genCarryInLoad(mptr_carry_q, c);
+                if_carry_accum_value = b_ifbody.CreateOr(carryq_value, if_carry_accum_value);
+            }
+            Value* void_1 = genCarryOutStore(if_carry_accum_value, mptr_carry_q, if_accum_idx);
+            
+        }
+        b_ifbody.CreateBr(ifEndBlock);
+        
+        IRBuilder<> b_entry(ifEntryBlock);
+        mBasicBlock = ifEntryBlock;
+        if (if_start_idx < if_end_idx) {
+            // Have at least one internal carry.
+            int if_accum_idx = mCarryQueueIdx - 1;
+            Value* last_if_pending_carries = genCarryInLoad(mptr_carry_q, if_accum_idx);
+            if_test_value = b_entry.CreateOr(if_test_value, last_if_pending_carries);
+        }
+        b_entry.CreateCondBr(genBitBlockAny(if_test_value), ifEndBlock, ifBodyBlock);
+        
+        mBasicBlock = ifEndBlock;
+
+        retVal = returnMarker;
+    }
     else if (While* whl = dynamic_cast<While*>(stmt))
     {
         int idx = mCarryQueueIdx;
