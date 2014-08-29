@@ -1,0 +1,27 @@
+#!/bin/bash 
+#
+# Robert D. Cameron
+#
+# Usage: ./run_abc test_program
+# Example ./run_abc ../icgrep-build/icgrep
+#
+test_dir=`echo "$0" | sed "s/[^\/]*$//"`
+
+test_program=$1
+input_directory=abc/TestFiles
+output_directory=abc/TestOutput
+
+
+[ -x "$output_directory.bak" ] && rm -rf $output_directory.bak
+[ -x "$output_directory" ] && mv $output_directory $output_directory.bak
+
+mkdir $output_directory
+
+for f in $input_directory/*
+do
+   fbase=`echo $f | sed "s#$input_directory/##"`
+   $test_program 'ab*c' $input_directory/$fbase >$output_directory/$fbase 
+done
+
+echo "diff -q abc/ExpectedOutput abc/TestOutput"
+diff -q abc/ExpectedOutput abc/TestOutput
