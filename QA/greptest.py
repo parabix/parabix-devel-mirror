@@ -11,10 +11,10 @@
 # provide fodder for some simple
 # regexp tests.
 # </datafile>
-# 
+#
 # <grepcase regexp="in" datafile="simple1" grepcount="2"/>
 # <grepcase regexp="[A-Z]" datafile="simple1" grepcount="1"/>
-# 
+#
 # </greptest>
 
 
@@ -28,11 +28,11 @@ def start_element_open_file(name, attrs):
 	global in_datafile
 	if name == 'datafile':
 		idFound = False
-		for a in attrs:	
-			if a == 'id':	
+		for a in attrs:
+			if a == 'id':
 				filename = attrs[a]
 				idFound = True
-		if not idFound: 
+		if not idFound:
 			print "Expecting id attribute for datafile, but none found."
 			exit(-1)
 		outf = open(os.path.join(options.datafile_dir, filename), 'w')
@@ -63,8 +63,8 @@ def start_element_do_test(name, attrs):
 		regexp = None
 		datafile = None
 		expected_count = None
-		for a in attrs:	
-			if a == 'regexp':	
+		for a in attrs:
+			if a == 'regexp':
 				regexp = attrs[a]
 			elif a == 'datafile':
 				datafile = attrs[a]
@@ -80,6 +80,7 @@ def start_element_do_test(name, attrs):
 		m = re.search('[0-9]+', grep_out)
 		if m == None or m.group(0) != expected_count:
 			print("Test failure: regexp {%s} on datafile {%s} expecting {%s} got {%s}" % (regexp, datafile, expected_count, grep_out))
+                        exit(1)
 		else:
 			if options.verbose:
 				print("Test success: regexp {%s} on datafile {%s} expecting {%s} got {%s}" % (regexp, datafile, expected_count, grep_out))
@@ -93,16 +94,16 @@ def run_tests(greptest_xml):
 if __name__ == '__main__':
 	QA_dir = os.path.dirname(sys.argv[0])
 	option_parser = optparse.OptionParser(usage='python %prog [options] <grep_executable>', version='1.0')
-	option_parser.add_option('-d', '--datafile_dir', 
+	option_parser.add_option('-d', '--datafile_dir',
                           dest = 'datafile_dir', type='string', default='/tmp',
                           help = 'directory for test files.')
-	option_parser.add_option('-t', '--testcases', 
+	option_parser.add_option('-t', '--testcases',
                           dest = 'testcases', type='string', default='greptest.xml',
                           help = 'grep test case file (XML format).')
-	option_parser.add_option('-e', '--exec_dir', 
+	option_parser.add_option('-e', '--exec_dir',
                           dest = 'exec_dir', type='string', default='.',
                           help = 'executable directory')
-	option_parser.add_option('-v', '--verbose', 
+	option_parser.add_option('-v', '--verbose',
                           dest = 'verbose', action='store_true', default=False,
                           help = 'verbose output: show successful tests')
 	options, args = option_parser.parse_args(sys.argv[1:])
@@ -115,5 +116,5 @@ if __name__ == '__main__':
 	grep_test_file.close()
 	make_data_files(grep_test_spec)
 	run_tests(grep_test_spec)
-	
+
 

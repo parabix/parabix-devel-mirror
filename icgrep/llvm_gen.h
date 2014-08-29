@@ -7,8 +7,8 @@
 #ifndef LLVM_GENERATOR_H
 #define LLVM_GENERATOR_H
 
-#define USE_LLVM_3_4
-//#define DUMP_GENERATED_IR
+#define USE_LLVM_3_5
+#define DUMP_GENERATED_IR
 
 //Regular Expressions
 #include "re_re.h"
@@ -111,6 +111,11 @@ struct LLVM_Gen_RetVal
     void *process_block_fptr;
 };
 
+struct SumWithOverflowPack {
+  Value *sum;
+  Value *obit;
+};
+
 class LLVM_Generator
 {
 public:
@@ -143,6 +148,8 @@ private:
     Value* genShiftLeft64(Value* e, const Twine &namehint = "") ;
     Value* genNot(Value* e, const Twine &namehint = "");
 
+    SumWithOverflowPack genUaddOverflow(Value *e1, Value *e2);
+
     int         mBits;
     std::map<std::string, std::string> m_name_map;
     std::string mBasis_Pattern;
@@ -173,6 +180,7 @@ private:
 
     FunctionType* mFuncTy_0;
     Function*     mFunc_process_block;
+    Function*     mFunc_llvm_uadd_with_overflow_i128;
 
     Constant*     mFunc_print_register;
     Constant*     mFunc_test_getCategory;

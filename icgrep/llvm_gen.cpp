@@ -550,6 +550,45 @@ void LLVM_Generator::DeclareFunctions()
     //mExecutionEngine->addGlobalMapping(cast<GlobalValue>(mFunc_print_register), (void *)&wrapped_print_register);
     // to call->  b.CreateCall(mFunc_print_register, unicode_category);
 
+    // Type Definitions for llvm.uadd.with.overflow.i128
+    std::vector<Type*>StructTy_0_fields;
+    StructTy_0_fields.push_back(IntegerType::get(mMod->getContext(), 128));
+    StructTy_0_fields.push_back(IntegerType::get(mMod->getContext(), 1));
+    StructType *StructTy_0 = StructType::get(mMod->getContext(), StructTy_0_fields, /*isPacked=*/false);
+
+    std::vector<Type*>FuncTy_1_args;
+    FuncTy_1_args.push_back(IntegerType::get(mMod->getContext(), 128));
+    FuncTy_1_args.push_back(IntegerType::get(mMod->getContext(), 128));
+    FunctionType* FuncTy_1 = FunctionType::get(
+                                              /*Result=*/StructTy_0,
+                                              /*Params=*/FuncTy_1_args,
+                                              /*isVarArg=*/false);
+
+    mFunc_llvm_uadd_with_overflow_i128 = mMod->getFunction("llvm.uadd.with.overflow.i128");
+    if (!mFunc_llvm_uadd_with_overflow_i128) {
+        mFunc_llvm_uadd_with_overflow_i128 = Function::Create(
+          /*Type=*/FuncTy_1,
+          /*Linkage=*/GlobalValue::ExternalLinkage,
+          /*Name=*/"llvm.uadd.with.overflow.i128", mMod); // (external, no body)
+        mFunc_llvm_uadd_with_overflow_i128->setCallingConv(CallingConv::C);
+    }
+    AttributeSet mFunc_llvm_uadd_with_overflow_i128_PAL;
+    {
+        SmallVector<AttributeSet, 4> Attrs;
+        AttributeSet PAS;
+        {
+          AttrBuilder B;
+          B.addAttribute(Attribute::NoUnwind);
+          B.addAttribute(Attribute::ReadNone);
+          PAS = AttributeSet::get(mMod->getContext(), ~0U, B);
+        }
+
+        Attrs.push_back(PAS);
+        mFunc_llvm_uadd_with_overflow_i128_PAL = AttributeSet::get(mMod->getContext(), Attrs);
+    }
+    mFunc_llvm_uadd_with_overflow_i128->setAttributes(mFunc_llvm_uadd_with_overflow_i128_PAL);
+
+    //Starts on process_block
     SmallVector<AttributeSet, 4> Attrs;
     AttributeSet PAS;
     {
@@ -1108,6 +1147,30 @@ Value* LLVM_Generator::genScanThru(Value* marker_expr, Value* cc_expr) {
     return b.CreateAnd(genAddWithCarry(marker_expr, cc_expr), genNot(cc_expr), "scanthru_rslt");
 }
 
+SumWithOverflowPack LLVM_Generator::genUaddOverflow(Value* int128_e1, Value* int128_e2) {
+    std::vector<Value*> struct_res_params;
+    struct_res_params.push_back(int128_e1);
+    struct_res_params.push_back(int128_e2);
+    CallInst* struct_res = CallInst::Create(mFunc_llvm_uadd_with_overflow_i128, struct_res_params, "uadd_overflow_res", mBasicBlock);
+    struct_res->setCallingConv(CallingConv::C);
+    struct_res->setTailCall(false);
+    AttributeSet struct_res_PAL;
+    struct_res->setAttributes(struct_res_PAL);
+
+    SumWithOverflowPack ret;
+
+    std::vector<unsigned> int128_sum_indices;
+    int128_sum_indices.push_back(0);
+    ret.sum = ExtractValueInst::Create(struct_res, int128_sum_indices, "sum", mBasicBlock);
+
+    std::vector<unsigned> int1_obit_indices;
+    int1_obit_indices.push_back(1);
+    ret.obit = ExtractValueInst::Create(struct_res, int1_obit_indices, "obit", mBasicBlock);
+
+    return ret;
+}
+
+
 Value* LLVM_Generator::genAddWithCarry(Value* e1, Value* e2) {
     IRBuilder<> b(mBasicBlock);
 
@@ -1117,20 +1180,44 @@ Value* LLVM_Generator::genAddWithCarry(Value* e1, Value* e2) {
 
     Value* carryq_value = genCarryInLoad(mptr_carry_q, this_carry_idx);
 
-    Value* carrygen = b.CreateAnd(e1, e2, "carrygen");
-    Value* carryprop = b.CreateOr(e1, e2, "carryprop");
-    Value* digitsum = b.CreateAdd(e1, e2, "digitsum");
-    Value* partial = b.CreateAdd(digitsum, carryq_value, "partial");
-    Value* digitcarry = b.CreateOr(carrygen, b.CreateAnd(carryprop, genNot(partial)));
-    Value* mid_carry_in = genShiftLeft64(b.CreateLShr(digitcarry, 63), "mid_carry_in");
+    //new code chunk, use llvm.uadd.with.overflow.i128
+    CastInst* int128_e1 = new BitCastInst(e1, IntegerType::get(mMod->getContext(), 128), "e1_128", mBasicBlock);
+    CastInst* int128_e2 = new BitCastInst(e2, IntegerType::get(mMod->getContext(), 128), "e2_128", mBasicBlock);
+    CastInst* int128_carryq_value = new BitCastInst(carryq_value, IntegerType::get(mMod->getContext(), 128), "carryq_128", mBasicBlock);
 
-    Value* sum = b.CreateAdd(partial, mid_carry_in, "sum");
-    Value* carry_out = genShiftRight127(b.CreateOr(carrygen, b.CreateAnd(carryprop, genNot(sum))), "carry_out");
+    SumWithOverflowPack sumpack0, sumpack1;
 
-    //CarryQ - carry out:
+    sumpack0 = genUaddOverflow(int128_e1, int128_e2);
+    sumpack1 = genUaddOverflow(sumpack0.sum, int128_carryq_value);
+
+    Value* obit = b.CreateOr(sumpack0.obit, sumpack1.obit, "carry_bit");
+    Value* ret_sum = b.CreateBitCast(sumpack1.sum, m64x2Vect, "ret_sum");
+
+    /*obit is the i1 carryout, zero extend and insert it into a v2i64 vector.*/
+    ConstantAggregateZero* const_packed_5 = ConstantAggregateZero::get(m64x2Vect);
+    ConstantInt* const_int32_6 = ConstantInt::get(mMod->getContext(), APInt(32, StringRef("0"), 10));
+    CastInst* int64_o0 = new ZExtInst(obit, IntegerType::get(mMod->getContext(), 64), "o0", mBasicBlock);
+    InsertElementInst* carry_out = InsertElementInst::Create(const_packed_5, int64_o0, const_int32_6, "carry_out", mBasicBlock);
+
     Value* void_1 = genCarryOutStore(carry_out, mptr_carry_q, this_carry_idx);
 
-    return sum;
+    return ret_sum;
+    //new code chunk ends
+
+    //Old code chunk, calculate carry through logical ops
+    //Value* carrygen = b.CreateAnd(e1, e2, "carrygen");
+    //Value* carryprop = b.CreateOr(e1, e2, "carryprop");
+    //Value* digitsum = b.CreateAdd(e1, e2, "digitsum");
+    //Value* partial = b.CreateAdd(digitsum, carryq_value, "partial");
+    //Value* digitcarry = b.CreateOr(carrygen, b.CreateAnd(carryprop, genNot(partial)));
+    //Value* mid_carry_in = genShiftLeft64(b.CreateLShr(digitcarry, 63), "mid_carry_in");
+
+    //Value* sum = b.CreateAdd(partial, mid_carry_in, "sum");
+    //Value* carry_out = genShiftRight127(b.CreateOr(carrygen, b.CreateAnd(carryprop, genNot(sum))), "carry_out");
+    //Value* void_1 = genCarryOutStore(carry_out, mptr_carry_q, this_carry_idx);
+
+    //return sum;
+    //Old code chunk ends
 }
 
 Value* LLVM_Generator::genCarryInLoad(Value* ptr_carry_q, int n) {

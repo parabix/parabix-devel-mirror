@@ -2,10 +2,11 @@ cmake_minimum_required (VERSION 2.8)
 
 project (icgrep)
 
+enable_testing()
 # The version number.
 set (icgrep_VERSION_MAJOR 0)
 set (icgrep_VERSION_MINOR 8)
- 
+
 # configure a header file to pass some of the CMake settings
 # to the source code
 #configure_file (
@@ -36,7 +37,7 @@ add_definitions( ${LLVM_DEFINITIONS} )
 # binary code (no interpreter):
 llvm_map_components_to_libraries(REQ_LLVM_LIBRARIES mcjit native)
 
- 
+
 add_library(PabloADT pe_advance.cpp  pe_all.cpp  pe_and.cpp pe_call.cpp pe_charclass.cpp  pe_matchstar.cpp pe_scanthru.cpp pe_not.cpp  pe_or.cpp  pe_pabloe.cpp  pe_sel.cpp  pe_var.cpp  pe_xor.cpp ps_assign.cpp  ps_if.cpp  ps_pablos.cpp  ps_while.cpp printer_pablos.cpp)
 
 add_library(RegExpADT re_alt.cpp  re_cc.cpp  re_end.cpp  re_name.cpp re_parser.cpp  re_re.cpp  re_rep.cpp  re_seq.cpp  re_start.cpp parsefailure.cpp  parseresult.cpp  parsesuccess.cpp printer_re.cpp)
@@ -44,14 +45,23 @@ add_library(RegExpADT re_alt.cpp  re_cc.cpp  re_end.cpp  re_name.cpp re_parser.c
 
 
 #include_directories("${PROJECT_BINARY_DIR}")
-include_directories("${PROJECT_SOURCE_DIR}") 
+include_directories("${PROJECT_SOURCE_DIR}")
 include_directories("${PROJECT_SOURCE_DIR}/include")
 include_directories("${PROJECT_SOURCE_DIR}/include/simd-lib")
 include_directories("${PROJECT_SOURCE_DIR}/include/simd-lib/idisa_cpp")
- 
+
 # add the executable
 add_executable(icgrep icgrep.cpp llvm_gen.cpp llvm_gen_helper.cpp utf_encoding.cpp cc_codegenobject.cpp  cc_compiler.cpp  cc_compiler_helper.cpp re_simplifier.cpp re_reducer.cpp re_nullable.cpp re_compiler.cpp pbix_compiler.cpp  symbol_generator.cpp utf8_encoder.cpp unicode_categories.h unicode_categories-flat.h unicode_categories-simple.h)
 
 target_link_libraries (icgrep PabloADT RegExpADT ${REQ_LLVM_LIBRARIES})
 
 set(CMAKE_CXX_FLAGS_RELEASE "-std=gnu++0x -O3 -msse2")
+
+add_test(
+  NAME greptest
+  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA
+  COMMAND python greptest.py ${CMAKE_BINARY_DIR}/icgrep)
+
+add_custom_target (check
+  COMMAND ${CMAKE_CTEST_COMMAND}
+  DEPENDS icgrep)
