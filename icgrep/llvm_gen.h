@@ -8,7 +8,7 @@
 #define LLVM_GENERATOR_H
 
 #define USE_LLVM_3_4
-#define DUMP_GENERATED_IR
+//#define DUMP_GENERATED_IR
 
 //Regular Expressions
 #include "re_re.h"
@@ -62,6 +62,7 @@
 #ifdef USE_LLVM_3_4
 #include "llvm/Analysis/Verifier.h"
 #include "llvm/Assembly/PrintModulePass.h"
+#include "llvm/Linker.h"
 #endif
 
 #ifdef USE_LLVM_3_5
@@ -94,7 +95,6 @@
 #include "llvm/ExecutionEngine/ExecutionEngine.h"
 #include "llvm/ExecutionEngine/MCJIT.h"
 
-#include "llvm/Linker.h"
 #include "llvm/IRReader/IRReader.h"
 #include "llvm/Bitcode/ReaderWriter.h"
 #include "llvm/Support/MemoryBuffer.h"
