@@ -1147,6 +1147,7 @@ Value* LLVM_Generator::genScanThru(Value* marker_expr, Value* cc_expr) {
     return b.CreateAnd(genAddWithCarry(marker_expr, cc_expr), genNot(cc_expr), "scanthru_rslt");
 }
 
+#ifdef USE_UADD_OVERFLOW
 SumWithOverflowPack LLVM_Generator::genUaddOverflow(Value* int128_e1, Value* int128_e2) {
     std::vector<Value*> struct_res_params;
     struct_res_params.push_back(int128_e1);
@@ -1169,7 +1170,7 @@ SumWithOverflowPack LLVM_Generator::genUaddOverflow(Value* int128_e1, Value* int
 
     return ret;
 }
-
+#endif
 
 Value* LLVM_Generator::genAddWithCarry(Value* e1, Value* e2) {
     IRBuilder<> b(mBasicBlock);
@@ -1180,6 +1181,7 @@ Value* LLVM_Generator::genAddWithCarry(Value* e1, Value* e2) {
 
     Value* carryq_value = genCarryInLoad(mptr_carry_q, this_carry_idx);
 
+#ifdef USE_UADD_OVERFLOW
     //new code chunk, use llvm.uadd.with.overflow.i128
     CastInst* int128_e1 = new BitCastInst(e1, IntegerType::get(mMod->getContext(), 128), "e1_128", mBasicBlock);
     CastInst* int128_e2 = new BitCastInst(e2, IntegerType::get(mMod->getContext(), 128), "e2_128", mBasicBlock);
@@ -1203,21 +1205,23 @@ Value* LLVM_Generator::genAddWithCarry(Value* e1, Value* e2) {
 
     return ret_sum;
     //new code chunk ends
-
+#endif
+#ifndef USE_UADD_OVERFLOW
     //Old code chunk, calculate carry through logical ops
-    //Value* carrygen = b.CreateAnd(e1, e2, "carrygen");
-    //Value* carryprop = b.CreateOr(e1, e2, "carryprop");
-    //Value* digitsum = b.CreateAdd(e1, e2, "digitsum");
-    //Value* partial = b.CreateAdd(digitsum, carryq_value, "partial");
-    //Value* digitcarry = b.CreateOr(carrygen, b.CreateAnd(carryprop, genNot(partial)));
-    //Value* mid_carry_in = genShiftLeft64(b.CreateLShr(digitcarry, 63), "mid_carry_in");
+    Value* carrygen = b.CreateAnd(e1, e2, "carrygen");
+    Value* carryprop = b.CreateOr(e1, e2, "carryprop");
+    Value* digitsum = b.CreateAdd(e1, e2, "digitsum");
+    Value* partial = b.CreateAdd(digitsum, carryq_value, "partial");
+    Value* digitcarry = b.CreateOr(carrygen, b.CreateAnd(carryprop, genNot(partial)));
+    Value* mid_carry_in = genShiftLeft64(b.CreateLShr(digitcarry, 63), "mid_carry_in");
 
-    //Value* sum = b.CreateAdd(partial, mid_carry_in, "sum");
-    //Value* carry_out = genShiftRight127(b.CreateOr(carrygen, b.CreateAnd(carryprop, genNot(sum))), "carry_out");
-    //Value* void_1 = genCarryOutStore(carry_out, mptr_carry_q, this_carry_idx);
+    Value* sum = b.CreateAdd(partial, mid_carry_in, "sum");
+    Value* carry_out = genShiftRight127(b.CreateOr(carrygen, b.CreateAnd(carryprop, genNot(sum))), "carry_out");
+    Value* void_1 = genCarryOutStore(carry_out, mptr_carry_q, this_carry_idx);
 
-    //return sum;
+    return sum;
     //Old code chunk ends
+#endif
 }
 
 Value* LLVM_Generator::genCarryInLoad(Value* ptr_carry_q, int n) {

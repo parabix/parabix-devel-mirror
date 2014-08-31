@@ -71,16 +71,17 @@ CodeGenState Pbix_Compiler::compile(RE *re)
         PabloE * u8pfx3 = new Var(m_name_map.find("UTF8-Prefix3")->second);
         PabloE * u8pfx4 = new Var(m_name_map.find("UTF8-Prefix4")->second);
         PabloE * u8pfx = new Or(new Or(u8pfx2, u8pfx3), u8pfx4);
-#ifdef USE_IF_FOR_NONFINAL
 	cg_state.stmtsl.push_back(new Assign(gs_initial, new Or(u8pfx, u8single)));
-#endif
-      cg_state.newsym = gs_initial;
+        cg_state.newsym = gs_initial;
 
         //Set the 'internal.nonfinal' bit stream for the utf-8 multi-byte encoding.
         cg_state.newsym = gs_m0;
         std::string gs_nonfinal = symgen.gensym("internal.nonfinal");
         m_name_map.insert(make_pair("internal.nonfinal", gs_nonfinal));
+//#define USE_IF_FOR_NONFINAL
+#ifdef USE_IF_FOR_NONFINAL
         cg_state.stmtsl.push_back(new Assign(gs_nonfinal, new All(0)));
+#endif
         PabloE * u8scope32 = new Advance(u8pfx3);
         PabloE * u8scope42 = new Advance(u8pfx4);
         PabloE * u8scope43 = new Advance(u8scope42);
