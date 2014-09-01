@@ -71,6 +71,9 @@ void do_process(FILE *infile, FILE *outfile, int count_only_option, int carry_co
 void do_process(char * infile_buffer, size_t infile_size, FILE *outfile, int count_only_option, int carry_count, process_block_fcn process_block);
 #endif
 
+//define this indicates that we use llvm.uadd.with.overflow for genAddWithCarry
+#define USE_UADD_OVERFLOW
+
 BitBlock get_category(Basis_bits &basis_bits, const char* category);
 
 int main(int argc, char *argv[])
@@ -83,7 +86,7 @@ int main(int argc, char *argv[])
     struct stat infile_sb;
     char * infile_buffer;
 #endif
-    
+
     int opt_code;
     int count_only_option = 0;
     int print_version_option = 0;
@@ -295,27 +298,27 @@ void do_process(char * infile_buffer, size_t infile_size, FILE *outfile, int cou
 
     BitStreamScanner<BitBlock, uint64_t, uint64_t, SEGMENT_BLOCKS> LF_scanner;
     BitStreamScanner<BitBlock, uint64_t, uint64_t, SEGMENT_BLOCKS> match_scanner;
-        
-    
+
+
 #ifndef USE_MMAP
     ATTRIBUTE_SIMD_ALIGN char src_buffer[SEGMENT_SIZE];
-    
+
     chars_read = fread((void *)&src_buffer[0], 1, SEGMENT_SIZE, infile);
     chars_avail = chars_read;
     if (chars_avail >= SEGMENT_SIZE) chars_avail = SEGMENT_SIZE;
 #endif
-#ifdef USE_MMAP    
+#ifdef USE_MMAP
     int segment = 0;
     int segment_base = 0;
     chars_avail = infile_size;
-    
+
 #endif
 //////////////////////////////////////////////////////////////////////////////////////////
 // Full Segments
 //////////////////////////////////////////////////////////////////////////////////////////
 
-    
-    
+
+
     while (chars_avail >= SEGMENT_SIZE) {
 
 #ifdef USE_MMAP
@@ -331,7 +334,7 @@ void do_process(char * infile_buffer, size_t infile_size, FILE *outfile, int cou
 #endif
 #ifdef USE_MMAP
             block_base = blk*BLOCK_SIZE + segment_base;
-            s2p_do_block((BytePack *) &infile_buffer[block_base], basis_bits);    
+            s2p_do_block((BytePack *) &infile_buffer[block_base], basis_bits);
 #endif
             process_block(basis_bits, carry_q, output);
 
@@ -367,7 +370,7 @@ void do_process(char * infile_buffer, size_t infile_size, FILE *outfile, int cou
         int  copy_back_size = SEGMENT_SIZE - copy_back_pos;
 #endif
 #ifdef USE_MMAP
-    
+
 #endif
 
         if (!count_only_option) {
@@ -388,7 +391,7 @@ void do_process(char * infile_buffer, size_t infile_size, FILE *outfile, int cou
 #endif
 #ifdef USE_MMAP
                 fwrite(&infile_buffer[segment_base + line_start], 1, line_end - line_start + 1, outfile);
-  
+
 #endif
 
                 line_start = line_end+1;
@@ -414,7 +417,7 @@ void do_process(char * infile_buffer, size_t infile_size, FILE *outfile, int cou
 	segment++;
 	line_start -= SEGMENT_SIZE;  /* Will be negative offset for use within next segment. */
 	chars_avail -= SEGMENT_SIZE;
-    
+
 #endif
     }
 
@@ -441,7 +444,7 @@ void do_process(char * infile_buffer, size_t infile_size, FILE *outfile, int cou
 #endif
 #ifdef USE_MMAP
         block_base = block_pos + segment_base;
-        s2p_do_block((BytePack *) &infile_buffer[block_base], basis_bits);    
+        s2p_do_block((BytePack *) &infile_buffer[block_base], basis_bits);
 #endif
         process_block(basis_bits, carry_q, output);
 
@@ -478,7 +481,7 @@ void do_process(char * infile_buffer, size_t infile_size, FILE *outfile, int cou
 #endif
 #ifdef USE_MMAP
      block_base = block_pos + segment_base;
-     s2p_do_final_block((BytePack *) &infile_buffer[block_base], basis_bits, EOF_mask);    
+     s2p_do_final_block((BytePack *) &infile_buffer[block_base], basis_bits, EOF_mask);
 #endif
     process_block(basis_bits, carry_q, output);
 
@@ -519,7 +522,7 @@ void do_process(char * infile_buffer, size_t infile_size, FILE *outfile, int cou
 #endif
 #ifdef USE_MMAP
             fwrite(&infile_buffer[segment_base + line_start], 1, line_end - line_start + 1, outfile);
-  
+
 #endif
             line_start = line_end + 1;
             line_no++;

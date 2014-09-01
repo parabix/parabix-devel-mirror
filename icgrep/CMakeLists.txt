@@ -37,6 +37,7 @@ add_definitions( ${LLVM_DEFINITIONS} )
 # binary code (no interpreter):
 llvm_map_components_to_libraries(REQ_LLVM_LIBRARIES mcjit native)
 
+message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
 
 add_library(PabloADT pe_advance.cpp  pe_all.cpp  pe_and.cpp pe_call.cpp pe_charclass.cpp  pe_matchstar.cpp pe_scanthru.cpp pe_not.cpp  pe_or.cpp  pe_pabloe.cpp  pe_sel.cpp  pe_var.cpp  pe_xor.cpp ps_assign.cpp  ps_if.cpp  ps_pablos.cpp  ps_while.cpp printer_pablos.cpp)
 
@@ -56,6 +57,13 @@ add_executable(icgrep icgrep.cpp llvm_gen.cpp llvm_gen_helper.cpp utf_encoding.c
 target_link_libraries (icgrep PabloADT RegExpADT ${REQ_LLVM_LIBRARIES})
 
 set(CMAKE_CXX_FLAGS_RELEASE "-std=gnu++0x -O3 -msse2")
+
+# detect LLVM version and add compiler flags.
+if (${LLVM_PACKAGE_VERSION} MATCHES "3.4")
+  set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -DUSE_LLVM_3_4")
+elseif (${LLVM_PACKAGE_VERSION} MATCHES "3.5")
+  set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -DUSE_LLVM_3_5")
+endif(${LLVM_PACKAGE_VERSION} MATCHES "3.4")
 
 add_test(
   NAME greptest

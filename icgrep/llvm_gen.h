@@ -7,7 +7,6 @@
 #ifndef LLVM_GENERATOR_H
 #define LLVM_GENERATOR_H
 
-#define USE_LLVM_3_4
 //#define DUMP_GENERATED_IR
 
 //Regular Expressions

@@ -550,6 +550,7 @@ void LLVM_Generator::DeclareFunctions()
     //mExecutionEngine->addGlobalMapping(cast<GlobalValue>(mFunc_print_register), (void *)&wrapped_print_register);
     // to call->  b.CreateCall(mFunc_print_register, unicode_category);
 
+#ifdef USE_UADD_OVERFLOW
     // Type Definitions for llvm.uadd.with.overflow.i128
     std::vector<Type*>StructTy_0_fields;
     StructTy_0_fields.push_back(IntegerType::get(mMod->getContext(), 128));
@@ -587,6 +588,7 @@ void LLVM_Generator::DeclareFunctions()
         mFunc_llvm_uadd_with_overflow_i128_PAL = AttributeSet::get(mMod->getContext(), Attrs);
     }
     mFunc_llvm_uadd_with_overflow_i128->setAttributes(mFunc_llvm_uadd_with_overflow_i128_PAL);
+#endif
 
     //Starts on process_block
     SmallVector<AttributeSet, 4> Attrs;
@@ -1182,7 +1184,7 @@ Value* LLVM_Generator::genAddWithCarry(Value* e1, Value* e2) {
     Value* carryq_value = genCarryInLoad(mptr_carry_q, this_carry_idx);
 
 #ifdef USE_UADD_OVERFLOW
-    //new code chunk, use llvm.uadd.with.overflow.i128
+    //use llvm.uadd.with.overflow.i128
     CastInst* int128_e1 = new BitCastInst(e1, IntegerType::get(mMod->getContext(), 128), "e1_128", mBasicBlock);
     CastInst* int128_e2 = new BitCastInst(e2, IntegerType::get(mMod->getContext(), 128), "e2_128", mBasicBlock);
     CastInst* int128_carryq_value = new BitCastInst(carryq_value, IntegerType::get(mMod->getContext(), 128), "carryq_128", mBasicBlock);
@@ -1202,12 +1204,9 @@ Value* LLVM_Generator::genAddWithCarry(Value* e1, Value* e2) {
     InsertElementInst* carry_out = InsertElementInst::Create(const_packed_5, int64_o0, const_int32_6, "carry_out", mBasicBlock);
 
     Value* void_1 = genCarryOutStore(carry_out, mptr_carry_q, this_carry_idx);
-
     return ret_sum;
-    //new code chunk ends
-#endif
-#ifndef USE_UADD_OVERFLOW
-    //Old code chunk, calculate carry through logical ops
+#else
+    //calculate carry through logical ops
     Value* carrygen = b.CreateAnd(e1, e2, "carrygen");
     Value* carryprop = b.CreateOr(e1, e2, "carryprop");
     Value* digitsum = b.CreateAdd(e1, e2, "digitsum");
@@ -1220,7 +1219,6 @@ Value* LLVM_Generator::genAddWithCarry(Value* e1, Value* e2) {
     Value* void_1 = genCarryOutStore(carry_out, mptr_carry_q, this_carry_idx);
 
     return sum;
-    //Old code chunk ends
 #endif
 }
 
