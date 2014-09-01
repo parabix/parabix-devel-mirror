@@ -218,30 +218,7 @@ CodeGenState Pbix_Compiler::re2pablo_helper(RE *re, CodeGenState cg_state)
         }
         else if (rep->getUB() == unboundedRep)
         {
-            if (rep->getLB() == 0)
-            {
-                //std::cout << "While, no lb." << std::endl;
-
-                std::string while_test_gs_retVal = symgen.gensym("while_test");
-                std::string while_accum_gs_retVal = symgen.gensym("while_accum");
-                CodeGenState while_test_state;
-                while_test_state.newsym = while_test_gs_retVal;
-                CodeGenState t1_cg_state = re2pablo_helper(rep->getRE(), while_test_state);
-                cg_state.stmtsl.push_back(new Assign(while_test_gs_retVal, new Var(cg_state.newsym)));
-                cg_state.stmtsl.push_back(new Assign(while_accum_gs_retVal, new Var(cg_state.newsym)));
-                std::list<PabloS*> stmtList;
-                stmtList = t1_cg_state.stmtsl;
-                stmtList.push_back(new Assign(while_test_gs_retVal, new And(new Var(t1_cg_state.newsym), new Not(new Var(while_accum_gs_retVal)))));
-                stmtList.push_back(new Assign(while_accum_gs_retVal, new Or(new Var(while_accum_gs_retVal), new Var(t1_cg_state.newsym))));
-                cg_state.stmtsl.push_back( new While(new Var(while_test_gs_retVal), stmtList));
-                cg_state.newsym = while_accum_gs_retVal;
-            }
-            else //if (rep->getLB() > 1)
-            {
-                CodeGenState t1_cg_state = re2pablo_helper(rep->getRE(), cg_state);
-                rep->setLB(rep->getLB() - 1);
-                cg_state = re2pablo_helper(rep, t1_cg_state);
-            }
+	    cg_state = UnboundedRep_helper(rep->getRE(), rep->getLB(), cg_state);
         }
         else if (rep->getUB() != unboundedRep)
         {
@@ -285,6 +262,34 @@ CodeGenState Pbix_Compiler::Alt_helper(std::list<RE*>* lst, std::list<RE*>::cons
     return cg_state;
 }
 
+CodeGenState Pbix_Compiler::UnboundedRep_helper(RE* repeated, int lb, CodeGenState cg_state) {
+    if (lb == 0)
+    {
+         //std::cout << "While, no lb." << std::endl;
+
+         std::string while_test_gs_retVal = symgen.gensym("while_test");
+         std::string while_accum_gs_retVal = symgen.gensym("while_accum");
+         CodeGenState while_test_state;
+         while_test_state.newsym = while_test_gs_retVal;
+         CodeGenState t1_cg_state = re2pablo_helper(repeated, while_test_state);
+         cg_state.stmtsl.push_back(new Assign(while_test_gs_retVal, new Var(cg_state.newsym)));
+         cg_state.stmtsl.push_back(new Assign(while_accum_gs_retVal, new Var(cg_state.newsym)));
+         std::list<PabloS*> stmtList;
+         stmtList = t1_cg_state.stmtsl;
+         stmtList.push_back(new Assign(while_test_gs_retVal, new And(new Var(t1_cg_state.newsym), new Not(new Var(while_accum_gs_retVal)))));
+         stmtList.push_back(new Assign(while_accum_gs_retVal, new Or(new Var(while_accum_gs_retVal), new Var(t1_cg_state.newsym))));
+         cg_state.stmtsl.push_back( new While(new Var(while_test_gs_retVal), stmtList));
+         cg_state.newsym = while_accum_gs_retVal;
+    }
+    else //if (lb > 0)
+    {
+         CodeGenState t1_cg_state = re2pablo_helper(repeated, cg_state);
+         cg_state = UnboundedRep_helper(repeated, lb -1, t1_cg_state);
+    }
+    return cg_state;
+}
+
+
 CodeGenState Pbix_Compiler::BoundedRep_helper(RE* repeated, int lb, int ub, CodeGenState cg_state) {
     if ((lb == 0) && (ub == 0))
     {
@@ -305,7 +310,6 @@ CodeGenState Pbix_Compiler::BoundedRep_helper(RE* repeated, int lb, int ub, Code
          cg_state = BoundedRep_helper(repeated, lb-1, ub-1, t1_cg_state);
     }
     return cg_state;
-
 }
 
 

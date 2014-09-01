@@ -63,6 +63,7 @@ private:
     CodeGenState re2pablo_helper(RE *re, CodeGenState cg_state);
     CodeGenState Seq_helper(std::list<RE*>* lst, std::list<RE*>::const_iterator it, CodeGenState cg_state);
     CodeGenState Alt_helper(std::list<RE*>* lst, std::list<RE*>::const_iterator it, CodeGenState cg_state);
+    CodeGenState UnboundedRep_helper(RE* repeated, int lb, CodeGenState cg_state);
     CodeGenState BoundedRep_helper(RE* repeated, int lb, int ub, CodeGenState cg_state);
 
     bool unicode_re(RE* re);
