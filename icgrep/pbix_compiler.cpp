@@ -245,32 +245,13 @@ CodeGenState Pbix_Compiler::re2pablo_helper(RE *re, CodeGenState cg_state)
         }
         else if (rep->getUB() != unboundedRep)
         {
-            if ((rep->getLB() == 0) && (rep->getUB() == 0))
-            {
-                //Just fall through...do nothing.
-            }
-            else if ((rep->getLB() == 0) && (rep->getUB() > 0))
-            {
-                CodeGenState t1_cg_state = re2pablo_helper(rep->getRE(), cg_state);
-                rep->setUB(rep->getUB() - 1);
-                CodeGenState t2_cg_state = re2pablo_helper(re, t1_cg_state);
-                std::string gs_retVal = symgen.gensym("alt_marker");
-                cg_state.stmtsl = t2_cg_state.stmtsl;
-                cg_state.stmtsl.push_back(new Assign(gs_retVal, new Or(new Var(cg_state.newsym), new Var(t2_cg_state.newsym))));
-                cg_state.newsym = gs_retVal;
-            }
-            else //if ((rep->getLB() > 0) && (rep->getUB() > 0))
-            {
-                CodeGenState t1_cg_state = re2pablo_helper(rep->getRE(), cg_state);
-                rep->setLB(rep->getLB() - 1);
-                rep->setUB(rep->getUB() - 1);
-                cg_state = re2pablo_helper(rep, t1_cg_state);
-            }
+	    cg_state = BoundedRep_helper(rep->getRE(), rep->getLB(), rep->getUB(), cg_state);
         }
     }
 
     return cg_state;
 }
+
 
 CodeGenState Pbix_Compiler::Seq_helper(std::list<RE*>* lst, std::list<RE*>::const_iterator it, CodeGenState cg_state)
 {
@@ -303,6 +284,30 @@ CodeGenState Pbix_Compiler::Alt_helper(std::list<RE*>* lst, std::list<RE*>::cons
 
     return cg_state;
 }
+
+CodeGenState Pbix_Compiler::BoundedRep_helper(RE* repeated, int lb, int ub, CodeGenState cg_state) {
+    if ((lb == 0) && (ub == 0))
+    {
+    //Just fall through...do nothing.
+    }
+    else if ((lb == 0) && (ub > 0))
+    {
+         CodeGenState t1_cg_state = re2pablo_helper(repeated, cg_state);
+         CodeGenState t2_cg_state = BoundedRep_helper(repeated, 0, ub-1, t1_cg_state);
+         std::string gs_retVal = symgen.gensym("alt_marker");
+         cg_state.stmtsl = t2_cg_state.stmtsl;
+         cg_state.stmtsl.push_back(new Assign(gs_retVal, new Or(new Var(cg_state.newsym), new Var(t2_cg_state.newsym))));
+         cg_state.newsym = gs_retVal;
+    }
+    else //if ((lb > 0) && (ub > 0))
+    {
+         CodeGenState t1_cg_state = re2pablo_helper(repeated, cg_state);
+         cg_state = BoundedRep_helper(repeated, lb-1, ub-1, t1_cg_state);
+    }
+    return cg_state;
+
+}
+
 
 bool Pbix_Compiler::unicode_re(RE *re)
 {
