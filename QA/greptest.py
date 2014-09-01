@@ -18,7 +18,7 @@
 # </greptest>
 
 
-import sys, subprocess, os, optparse, re
+import sys, subprocess, os, optparse, re, codecs
 import xml.parsers.expat
 
 in_datafile = False
@@ -35,7 +35,7 @@ def start_element_open_file(name, attrs):
 		if not idFound:
 			print "Expecting id attribute for datafile, but none found."
 			exit(-1)
-		outf = open(os.path.join(options.datafile_dir, filename), 'w')
+		outf = codecs.open(os.path.join(options.datafile_dir, filename), encoding='utf-8', mode='w')
 		in_datafile = True
 
 def char_data_write_contents(data):
@@ -58,7 +58,11 @@ def make_data_files(greptest_xml):
 
 def escape_quotes(e):  return e.replace("'", "'\\''")
 
+
+failure_count = 0
+
 def start_element_do_test(name, attrs):
+        global failure_count
 	if name == 'grepcase':
 		regexp = None
 		datafile = None
@@ -75,21 +79,25 @@ def start_element_do_test(name, attrs):
 			return
 		#execute grep test
                 grep_cmd = "%s -c '%s' %s" % (grep_program_under_test, escape_quotes(regexp), os.path.join(options.datafile_dir, datafile))
-		grep_out = subprocess.check_output(grep_cmd, cwd=options.exec_dir, shell=True)
+		try: 
+                    grep_out = subprocess.check_output(grep_cmd, cwd=options.exec_dir, shell=True)
+                except subprocess.CalledProcessError, e:
+                    grep_out = e.output
 		if grep_out[-1] == '\n': grep_out = grep_out[:-1]
 		m = re.search('[0-9]+', grep_out)
 		if m == None or m.group(0) != expected_count:
 			print("Test failure: regexp {%s} on datafile {%s} expecting {%s} got {%s}" % (regexp, datafile, expected_count, grep_out))
-                        exit(1)
+                        failure_count += 1
 		else:
 			if options.verbose:
 				print("Test success: regexp {%s} on datafile {%s} expecting {%s} got {%s}" % (regexp, datafile, expected_count, grep_out))
 
 def run_tests(greptest_xml):
+        global failure_count
 	p = xml.parsers.expat.ParserCreate()
 	p.StartElementHandler = start_element_do_test
 	p.Parse(greptest_xml, 1)
-
+        if failure_count > 0: exit(1)
 
 if __name__ == '__main__':
 	QA_dir = os.path.dirname(sys.argv[0])

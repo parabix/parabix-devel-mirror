@@ -113,6 +113,22 @@ The above line does not match [-].
 <grepcase regexp="[^]]" datafile="special_characters" grepcount="15"/>
 <grepcase regexp="[^-]" datafile="special_characters" grepcount="14"/>
 <grepcase regexp="[^]-]" datafile="special_characters" grepcount="13"/>
+
+<datafile id = "CRLF">line with CRLF &#13;&#10;two lines with LFCR &#10;&#13;final line
+</datafile>
+ <grepcase regexp="^$" datafile="CRLF" grepcount="1"/>
+ <grepcase regexp="^.*$" datafile="CRLF" grepcount="4"/>
+
+ <datafile id = "LU_test">
+The following line has LATIN CAPITAL LETTER G WITH MACRON in single quotes.
+'&#x1E20;'
+</datafile>
+<!-- . should match a unique character, even if it is 3 bytes. -->
+<grepcase regexp="'.'" datafile="LU_test" grepcount="1"/>
+<grepcase regexp="'...'" datafile="LU_test" grepcount="0"/>
+<grepcase regexp="\u{1e20}" datafile="LU_test" grepcount="1"/>
+<grepcase regexp="\u{1e21}" datafile="LU_test" grepcount="0"/>
+<grepcase regexp="\p{Lu}" datafile="LU_test" grepcount="2"/>
+<grepcase regexp="'\p{Lu}'" datafile="LU_test" grepcount="1"/>
+<grepcase regexp="\p{Ll}" datafile="LU_test" grepcount="1"/>
 </greptest>
-
-
