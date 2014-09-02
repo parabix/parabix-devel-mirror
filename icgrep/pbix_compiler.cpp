@@ -13,6 +13,10 @@ Pbix_Compiler::Pbix_Compiler(std::map<std::string, std::string> name_map)
     symgen = SymbolGenerator();
 }
 
+std::string Pbix_Compiler::lookupCC(std::string ccname) {
+    return m_name_map.find(ccname)->second;
+}
+
 CodeGenState Pbix_Compiler::compile_subexpressions(const std::map<std::string, RE*>& re_map)
 {
     CodeGenState cg_state;
@@ -59,25 +63,30 @@ CodeGenState Pbix_Compiler::compile(RE *re)
 
     std::string gs_m0 = symgen.gensym("start_marker");
     cg_state.stmtsl.push_back(new Assign(gs_m0, new All(1)));
+    
+    std::string gs_linebreak = symgen.gensym("LineBreak");
+    m_name_map.insert(make_pair("LineBreak", gs_linebreak));
+	cg_state.stmtsl.push_back(new Assign(gs_linebreak, new Or(new Var(lookupCC("LF")), new Var(lookupCC("CR")))));
+    
 
     if (unicode_re(re))
     {
         cg_state.newsym = gs_m0;
-        //Set the 'internal.initial' bit stream for the utf-8 multi-byte encoding.
-        std::string gs_initial = symgen.gensym("internal.initial");
-        m_name_map.insert(make_pair("internal.initial", gs_initial));
-        PabloE * u8single = new Var(m_name_map.find("UTF8-SingleByte")->second);
-        PabloE * u8pfx2 = new Var(m_name_map.find("UTF8-Prefix2")->second);
-        PabloE * u8pfx3 = new Var(m_name_map.find("UTF8-Prefix3")->second);
-        PabloE * u8pfx4 = new Var(m_name_map.find("UTF8-Prefix4")->second);
+        //Set the 'utf8.initial' bit stream for the utf-8 multi-byte encoding.
+        std::string gs_initial = symgen.gensym("utf8.initial");
+        m_name_map.insert(make_pair("utf8.initial", gs_initial));
+        PabloE * u8single = new Var(lookupCC("UTF8-SingleByte"));
+        PabloE * u8pfx2 = new Var(lookupCC("UTF8-Prefix2"));
+        PabloE * u8pfx3 = new Var(lookupCC("UTF8-Prefix3"));
+        PabloE * u8pfx4 = new Var(lookupCC("UTF8-Prefix4"));
         PabloE * u8pfx = new Or(new Or(u8pfx2, u8pfx3), u8pfx4);
-	cg_state.stmtsl.push_back(new Assign(gs_initial, new Or(u8pfx, u8single)));
+	    cg_state.stmtsl.push_back(new Assign(gs_initial, new Or(u8pfx, u8single)));
         cg_state.newsym = gs_initial;
 
-        //Set the 'internal.nonfinal' bit stream for the utf-8 multi-byte encoding.
+        //Set the 'utf8.nonfinal' bit stream for the utf-8 multi-byte encoding.
         cg_state.newsym = gs_m0;
-        std::string gs_nonfinal = symgen.gensym("internal.nonfinal");
-        m_name_map.insert(make_pair("internal.nonfinal", gs_nonfinal));
+        std::string gs_nonfinal = symgen.gensym("utf8.nonfinal");
+        m_name_map.insert(make_pair("utf8.nonfinal", gs_nonfinal));
 //#define USE_IF_FOR_NONFINAL
 #ifdef USE_IF_FOR_NONFINAL
         cg_state.stmtsl.push_back(new Assign(gs_nonfinal, new All(0)));
@@ -103,7 +112,7 @@ CodeGenState Pbix_Compiler::compile(RE *re)
     //These three lines are specifically for grep.
     std::string gs_retVal = symgen.gensym("marker");
     cg_state.stmtsl.push_back(new Assign(gs_retVal, new And(new MatchStar(new Var(cg_state.newsym),
-        new Not(new Var(m_name_map.find("LineFeed")->second))), new Var(m_name_map.find("LineFeed")->second))));
+        new Not(new Var(lookupCC("LineBreak")))), new Var(lookupCC("LineBreak")))));
     cg_state.newsym = gs_retVal;
 
     return cg_state;
@@ -117,8 +126,8 @@ CodeGenState Pbix_Compiler::re2pablo_helper(RE *re, CodeGenState cg_state)
         PabloE* markerExpr = new Var(cg_state.newsym);
         if (name->getType() != Name::FixedLength) {
             // Move the markers forward through any nonfinal UTF-8 bytes to the final position of each character.
-            markerExpr = new And(markerExpr, new CharClass(m_name_map.find("internal.initial")->second));
-            markerExpr = new ScanThru(markerExpr, new CharClass(m_name_map.find("internal.nonfinal")->second));
+            markerExpr = new And(markerExpr, new CharClass(lookupCC("utf8.initial")));
+            markerExpr = new ScanThru(markerExpr, new CharClass(lookupCC("utf8.nonfinal")));
         }       
         PabloE* ccExpr;
         if (name->getType() == Name::UnicodeCategory)
@@ -130,8 +139,8 @@ CodeGenState Pbix_Compiler::re2pablo_helper(RE *re, CodeGenState cg_state)
             ccExpr = new CharClass(name->getName());
         }
         if (name->isNegated()) {
-            ccExpr = new Not(new Or(new Or(ccExpr, new CharClass(m_name_map.find("LineFeed")->second)),
-                                    new CharClass(m_name_map.find("internal.nonfinal")->second)));
+            ccExpr = new Not(new Or(new Or(ccExpr, new CharClass(lookupCC("LineBreak"))),
+                                    new CharClass(lookupCC("utf8.nonfinal"))));
         }
         cg_state.stmtsl.push_back(new Assign(gs_retVal, new Advance(new And(ccExpr, markerExpr))));
         cg_state.newsym = gs_retVal;
@@ -141,13 +150,15 @@ CodeGenState Pbix_Compiler::re2pablo_helper(RE *re, CodeGenState cg_state)
     else if (Start* start = dynamic_cast<Start*>(re))
     {
         std::string gs_retVal = symgen.gensym("start_of_line_marker");
-        cg_state.stmtsl.push_back(new Assign(gs_retVal, new And(new Var(cg_state.newsym), new Not(new Advance(new Not(new CharClass(m_name_map.find("LineFeed")->second)))))));
+        PabloE * CR_start = new And(new Advance(new Var(lookupCC("CR"))), new Not(new Var(lookupCC("LF"))));
+        PabloE * LF_start = new Not(new Advance(new Not(new Var(lookupCC("LF")))));
+        cg_state.stmtsl.push_back(new Assign(gs_retVal, new And(new Var(cg_state.newsym), new Or(CR_start, LF_start))));
         cg_state.newsym = gs_retVal;
     }
     else if (End* end = dynamic_cast<End*>(re))
     {
         std::string gs_retVal = symgen.gensym("end_of_line_marker");
-        cg_state.stmtsl.push_back(new Assign(gs_retVal, new And(new Var(cg_state.newsym), new CharClass(m_name_map.find("LineFeed")->second))));
+        cg_state.stmtsl.push_back(new Assign(gs_retVal, new And(new Var(cg_state.newsym), new CharClass(lookupCC("LineBreak")))));
         cg_state.newsym = gs_retVal;
     }
     else if (Seq* seq = dynamic_cast<Seq*>(re))
@@ -200,8 +211,8 @@ CodeGenState Pbix_Compiler::re2pablo_helper(RE *re, CodeGenState cg_state)
             }
 
             if (rep_name->isNegated()) {
-                ccExpr = new Not(new Or(new Or(ccExpr, new CharClass(m_name_map.find("LineFeed")->second)),
-                                        new CharClass(m_name_map.find("internal.nonfinal")->second)));
+                ccExpr = new Not(new Or(new Or(ccExpr, new CharClass(lookupCC("LineBreak"))),
+                                        new CharClass(lookupCC("utf8.nonfinal"))));
             }
             if (rep_name->getType() == Name::FixedLength)
             {
@@ -210,8 +221,8 @@ CodeGenState Pbix_Compiler::re2pablo_helper(RE *re, CodeGenState cg_state)
             else //Name::Unicode and Name::UnicodeCategory
             {
                 cg_state.stmtsl.push_back(new Assign(gs_retVal,
-                    new And(new MatchStar(new Var(cg_state.newsym), new Or(new CharClass(m_name_map.find("internal.nonfinal")->second),
-                    ccExpr)), new CharClass(m_name_map.find("internal.initial")->second))));
+                    new And(new MatchStar(new Var(cg_state.newsym), new Or(new CharClass(lookupCC("utf8.nonfinal")),
+                    ccExpr)), new CharClass(lookupCC("utf8.initial")))));
             }
 
             cg_state.newsym = gs_retVal;

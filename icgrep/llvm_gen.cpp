@@ -423,7 +423,7 @@ LLVM_Gen_RetVal LLVM_Generator::Generate_LLVMIR(CodeGenState cg_state, CodeGenSt
     Generate_PabloStatements(subexpression_cg_state.stmtsl);
     Generate_PabloStatements(cg_state.stmtsl);
     SetReturnMarker(cg_state.newsym, 0);
-    SetReturnMarker(m_name_map.find("LineFeed")->second, 1);
+    SetReturnMarker(m_name_map.find("LF")->second, 1);
 
     //Terminate the block
     ReturnInst::Create(mMod->getContext(), mBasicBlock);

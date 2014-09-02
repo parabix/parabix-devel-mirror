@@ -75,8 +75,13 @@ LLVM_Gen_RetVal RE_Compiler::compile(bool show_compile_time,
     CC* cc_lf = new CC(0x0A);
     cc_name = cc_lf->getName();
     re_map.insert(make_pair(cc_name, cc_lf));
-    name_map.insert(make_pair("LineFeed", cc_name));
-
+    name_map.insert(make_pair("LF", cc_name));
+    
+    CC* cc_cr = new CC(0x0D);
+    cc_name = cc_cr->getName();
+    re_map.insert(make_pair(cc_name, cc_cr));
+    name_map.insert(make_pair("CR", cc_name));
+    
     CC* cc_utf8_single_byte = new CC(0x00, 0x7F);
     cc_name = cc_utf8_single_byte->getName();
     re_map.insert(make_pair(cc_name, cc_utf8_single_byte));
@@ -96,6 +101,8 @@ LLVM_Gen_RetVal RE_Compiler::compile(bool show_compile_time,
     cc_name = cc_utf8_prefix4->getName();
     re_map.insert(make_pair(cc_name, cc_utf8_prefix4));
     name_map.insert(make_pair("UTF8-Prefix4", cc_name));
+    
+    
 
     CC_Compiler cc_compiler(encoding);
     std::list<PabloS*> cc_stmtsl = cc_compiler.compile(basis_pattern, gensym_pattern, re_map, predefined_characters);
