@@ -647,7 +647,12 @@ void LLVM_Generator::DeclareCallFunctions_PabloS(PabloS* stmt)
     {
         DeclareCallFunctions_PabloE(an->getExpr());
     }
-    if (While* whl = dynamic_cast<While*>(stmt))
+    else if (If* ifstmt = dynamic_cast<If*>(stmt))
+    {
+        DeclareCallFunctions_PabloE(ifstmt->getExpr());
+        DeclareCallFunctions(ifstmt->getPSList());
+    }
+    else if (While* whl = dynamic_cast<While*>(stmt))
     {
         DeclareCallFunctions_PabloE(whl->getExpr());
         DeclareCallFunctions(whl->getPSList());
