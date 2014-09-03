@@ -46,8 +46,8 @@ std::string CC::getName()
     std::vector<CharSetItem>::iterator it;
     for (it = mSparseCharSet.begin(); it != mSparseCharSet.end(); ++it)
     {
-        name += std::to_string(it->lo_codepoint);
-        name += std::to_string(it->hi_codepoint);
+        name += "_" + std::to_string(it->lo_codepoint);
+        name += "." + std::to_string(it->hi_codepoint);
     }
 
     return name;
