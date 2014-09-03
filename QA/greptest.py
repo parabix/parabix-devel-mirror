@@ -79,7 +79,9 @@ def start_element_do_test(name, attrs):
 			return
 		#execute grep test
                 grep_cmd = "%s -c '%s' %s" % (grep_program_under_test, escape_quotes(regexp), os.path.join(options.datafile_dir, datafile))
-		try: 
+                if options.verbose:
+                    print "Doing: " + grep_cmd
+		try:
                     grep_out = subprocess.check_output(grep_cmd, cwd=options.exec_dir, shell=True)
                 except subprocess.CalledProcessError, e:
                     grep_out = e.output
