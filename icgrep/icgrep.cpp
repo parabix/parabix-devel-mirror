@@ -72,7 +72,7 @@ void do_process(char * infile_buffer, size_t infile_size, FILE *outfile, int cou
 #endif
 
 //define this indicates that we use llvm.uadd.with.overflow for genAddWithCarry
-#define USE_UADD_OVERFLOW
+//#define USE_UADD_OVERFLOW
 
 BitBlock get_category(Basis_bits &basis_bits, const char* category);
 

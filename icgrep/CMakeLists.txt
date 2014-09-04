@@ -73,3 +73,13 @@ add_test(
 add_custom_target (check
   COMMAND ${CMAKE_CTEST_COMMAND}
   DEPENDS icgrep)
+
+add_custom_target (perf_icgrep
+  COMMAND python perf.py icgrep
+  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../performance
+  DEPENDS icgrep)
+
+add_custom_target (viewer
+  COMMAND python viewer.py
+  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../performance)
+
