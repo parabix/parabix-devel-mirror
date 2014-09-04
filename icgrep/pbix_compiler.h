@@ -57,7 +57,6 @@ class Pbix_Compiler
 {
 public:
     Pbix_Compiler(std::map<std::string, std::string> name_map);
-    std::string lookupCC(std::string ccname);
     CodeGenState compile(RE *re);
     CodeGenState compile_subexpressions(const std::map<std::string, RE*>& re_map);
 private:

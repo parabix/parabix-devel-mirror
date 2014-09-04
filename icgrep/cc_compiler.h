@@ -31,12 +31,10 @@ public:
     CC_Compiler(UTF_Encoding encoding);
     std::list<PabloS*> compile(std::string basis_pattern,
                                std::string gensym_pattern,
-                               const std::map<std::string, RE*>& re_map,
-                               std::list<CC*> predefined);
+                               const std::map<std::string, RE*>& re_map);
 private:
     void process_re_map(CC_CodeGenObject& cgo, const std::map<std::string, RE*>& re_map);
     void process_re(CC_CodeGenObject& cgo, RE* re);
-    void process_predefined(CC_CodeGenObject& cgo, std::list<CC*> predefined);
     std::string bit_var(int n);
     PabloE* make_bitv(int n);
     PabloE* bit_pattern_expr(int pattern, int selected_bits);

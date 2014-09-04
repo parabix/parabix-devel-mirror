@@ -13,8 +13,7 @@ CC_Compiler::CC_Compiler(UTF_Encoding encoding)
 
 std::list<PabloS*> CC_Compiler::compile(std::string basis_pattern,
                                         std::string gensym_pattern,
-                                        const std::map<std::string, RE*>& re_map,
-                                        std::list<CC*> predefined)
+                                        const std::map<std::string, RE*>& re_map)
 {
     mEncoding.setBasisPattern(basis_pattern);
 
@@ -30,7 +29,6 @@ std::list<PabloS*> CC_Compiler::compile(std::string basis_pattern,
     }
 
     process_re_map(cgo, re_map);
-    process_predefined(cgo, predefined);
 
     return cgo.get_stmtsl();
 }
@@ -69,15 +67,6 @@ void CC_Compiler::process_re(CC_CodeGenObject &cgo, RE* re)
         {
             process_re(cgo, *it);
         }
-    }
-}
-
-void CC_Compiler::process_predefined(CC_CodeGenObject &cgo, std::list<CC*> predefined)
-{
-    std::list<CC*>::iterator it;
-    for (it = predefined.begin(); it != predefined.end(); ++it)
-    {
-        cgo = cc2pablos(cgo, *it);
     }
 }
 
