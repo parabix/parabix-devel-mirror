@@ -71,7 +71,7 @@ add_test(
   COMMAND python greptest.py ${CMAKE_BINARY_DIR}/icgrep)
 
 add_custom_target (check
-  COMMAND ${CMAKE_CTEST_COMMAND}
+  COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure
   DEPENDS icgrep)
 
 add_custom_target (perf_icgrep
