@@ -34,7 +34,7 @@
 #include <fcntl.h>
 
 
-#define SEGMENT_BLOCKS 15
+#define SEGMENT_BLOCKS 7
 #define SEGMENT_SIZE (BLOCK_SIZE * SEGMENT_BLOCKS)
 
 #define BUFFER_SEGMENTS 15
@@ -296,8 +296,8 @@ void do_process(char * infile_buffer, size_t infile_size, FILE *outfile, int cou
     int match_pos = 0;
     int line_no = 0;
 
-    BitStreamScanner<BitBlock, uint64_t, uint64_t, SEGMENT_BLOCKS> LF_scanner;
-    BitStreamScanner<BitBlock, uint64_t, uint64_t, SEGMENT_BLOCKS> match_scanner;
+    BitStreamScanner<BitBlock, uint32_t, uint32_t, SEGMENT_BLOCKS> LF_scanner;
+    BitStreamScanner<BitBlock, uint32_t, uint32_t, SEGMENT_BLOCKS> match_scanner;
 
 
 #ifndef USE_MMAP
