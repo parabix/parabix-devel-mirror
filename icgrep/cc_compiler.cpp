@@ -5,43 +5,104 @@
  */
 
 #include "cc_compiler.h"
+#include "ps_pablos.h"
+#include "utf_encoding.h"
+#include "cc_compiler_helper.h"
 
-CC_Compiler::CC_Compiler(UTF_Encoding encoding)
+#include <math.h>
+#include <utility>
+#include <iostream>
+#include <sstream>
+#include <string>
+#include <list>
+#include <map>
+#include <algorithm>
+
+#include <cassert>
+#include <stdlib.h>
+
+CC_Compiler::CC_Compiler(const UTF_Encoding encoding, const std::string basis_pattern, const std::string gensym_pattern)
 {
     mEncoding = encoding;
-}
-
-std::list<PabloS*> CC_Compiler::compile(std::string basis_pattern,
-                                        std::string gensym_pattern,
-                                        const std::map<std::string, RE*>& re_map)
-{
     mEncoding.setBasisPattern(basis_pattern);
+    mGenSym_Template = gensym_pattern;
+    mGenSymCounter = 0;
 
-    CC_CodeGenObject cgo(gensym_pattern);
-
+ 
     for (int i = 0; i < mEncoding.getBits(); i++)
     {
         std::string b_pattern = bit_var((mEncoding.getBits() -1) - i);
         Expression* expr = new Expression();
         expr->expr_string  =  b_pattern;
         expr->pablo_expr = make_bitv(i);
-        cgo.add_predefined(b_pattern, expr);
+        add_predefined(b_pattern, expr);
     }
-
-    process_re_map(cgo, re_map);
-
-    return cgo.get_stmtsl();
 }
 
-void CC_Compiler::process_re_map(CC_CodeGenObject &cgo,const std::map<std::string, RE*>& re_map)
+
+void CC_Compiler::add_predefined(std::string key_value, Expression* mapped_value)
+{
+    mCommon_Expression_Map.insert(make_pair(key_value, mapped_value));
+}
+
+Expression* CC_Compiler::add_assignment(std::string varname, Expression* expr)
+{    
+    //Add the new mapping to the list of pablo statements:
+    mStmtsl.push_back(new Assign(varname, expr->pablo_expr));
+
+    //Add the new mapping to the common expression map:
+    std::string key_value = expr->expr_string;
+    Expression* mapped_value = new Expression();
+    mapped_value->expr_string = varname;
+    mapped_value->pablo_expr = new Var(varname);
+
+    std::pair<std::map<std::string, Expression*>::iterator, bool> ret = mCommon_Expression_Map.insert(make_pair(key_value, mapped_value));
+
+    return ret.first->second;
+}
+
+Expression* CC_Compiler::expr_to_variable(Expression* expr)
+{
+    if (mCommon_Expression_Map.count(expr->expr_string) > 0)
+    {
+        std::map<std::string, Expression*>::iterator itGet = mCommon_Expression_Map.find(expr->expr_string);
+        return itGet->second;
+    }
+    else
+    {
+        mGenSymCounter++;
+        std::string sym = mGenSym_Template + std::to_string(mGenSymCounter);
+        return add_assignment(sym, expr);
+    }
+}
+
+std::list<PabloS*> CC_Compiler::get_compiled()
+{
+    return mStmtsl;
+}
+
+
+
+std::string CC_Compiler::compile1(CC* cc)
+{
+  cc2pablos(cc);
+  return cc->getName();
+}
+
+void CC_Compiler::compile_from_map(const std::map<std::string, RE*>& re_map)
+{
+    process_re_map(re_map);
+}
+
+void CC_Compiler::process_re_map(const std::map<std::string, RE*>& re_map)
 {
     for (auto it =  re_map.rbegin(); it != re_map.rend(); ++it)
     {
-        process_re(cgo, it->second);
+        process_re(it->second);
     }
 }
 
-void CC_Compiler::process_re(CC_CodeGenObject &cgo, RE* re)
+void CC_Compiler::process_re(RE* re)
 {
 
     if (Alt* re_alt = dynamic_cast<Alt*>(re))
@@ -49,23 +110,23 @@ void CC_Compiler::process_re(CC_CodeGenObject &cgo, RE* re)
         std::list<RE*>::iterator it;
         for (it = re_alt->GetREList()->begin(); it != re_alt->GetREList()->end(); ++it)
         {
-            process_re(cgo, *it);
+            process_re(*it);
         }
     }
     else if (CC* re_cc = dynamic_cast<CC*>(re))
     {
-        cgo = cc2pablos(cgo, re_cc);
+        cc2pablos(re_cc);
     }
     else if (Rep* re_rep = dynamic_cast<Rep*>(re))
     {
-        process_re(cgo, re_rep->getRE());
+        process_re(re_rep->getRE());
     }
     else if (Seq* re_seq = dynamic_cast<Seq*>(re))
     {
         std::list<RE*>::iterator it;
         for (it = re_seq->GetREList()->begin(); it != re_seq->GetREList()->end(); ++it)
         {
-            process_re(cgo, *it);
+            process_re(*it);
         }
     }
 }
@@ -312,7 +373,7 @@ PabloE* CC_Compiler::charset_expr(CC* cc)
     return e1;
 }
 
-Expression* CC_Compiler::expr2pabloe(CC_CodeGenObject &cgo, PabloE* expr)
+Expression* CC_Compiler::expr2pabloe(PabloE* expr)
 {
     /*
       Translate a Pablo Expression into three-address code using
@@ -341,21 +402,21 @@ Expression* CC_Compiler::expr2pabloe(CC_CodeGenObject &cgo, PabloE* expr)
     }
     else if (Not* pe_not = dynamic_cast<Not*>(expr))
     {
-        Expression* ret = cgo.expr_to_variable(expr2pabloe(cgo, pe_not->getExpr()));
+        Expression* ret = expr_to_variable(expr2pabloe(pe_not->getExpr()));
         retExpr->expr_string =  "~" + ret->expr_string;
         retExpr->pablo_expr = new Not(ret->pablo_expr);
     }
     else if(Or* pe_or = dynamic_cast<Or*>(expr))
     {
-        Expression* ret1 = cgo.expr_to_variable(expr2pabloe(cgo, pe_or->getExpr1()));
-        Expression* ret2 = cgo.expr_to_variable(expr2pabloe(cgo, pe_or->getExpr2()));
+        Expression* ret1 = expr_to_variable(expr2pabloe(pe_or->getExpr1()));
+        Expression* ret2 = expr_to_variable(expr2pabloe(pe_or->getExpr2()));
         retExpr->expr_string = "(" + ret1->expr_string + "|" + ret2->expr_string + ")";
         retExpr->pablo_expr = new Or(ret1->pablo_expr, ret2->pablo_expr);
     }
     else if (Xor* pe_xor = dynamic_cast<Xor*>(expr))
     {
-        Expression* ret1 = cgo.expr_to_variable(expr2pabloe(cgo, pe_xor->getExpr1()));
-        Expression* ret2 = cgo.expr_to_variable(expr2pabloe(cgo, pe_xor->getExpr2()));
+        Expression* ret1 = expr_to_variable(expr2pabloe(pe_xor->getExpr1()));
+        Expression* ret2 = expr_to_variable(expr2pabloe(pe_xor->getExpr2()));
         retExpr->expr_string = "(" + ret1->expr_string + "^" + ret2->expr_string + ")";
         retExpr->pablo_expr = new Xor(ret1->pablo_expr, ret2->pablo_expr);
     }
@@ -363,31 +424,31 @@ Expression* CC_Compiler::expr2pabloe(CC_CodeGenObject &cgo, PabloE* expr)
     {
         if (Not* pe_not = dynamic_cast<Not*>(pe_and->getExpr1()))
         {
-            Expression* ret1 = cgo.expr_to_variable(expr2pabloe(cgo, pe_not->getExpr()));
-            Expression* ret2 = cgo.expr_to_variable(expr2pabloe(cgo, pe_and->getExpr2()));
+            Expression* ret1 = expr_to_variable(expr2pabloe(pe_not->getExpr()));
+            Expression* ret2 = expr_to_variable(expr2pabloe(pe_and->getExpr2()));
             retExpr->expr_string = "(" + ret2->expr_string + "&~" + ret1->expr_string + ")";
             retExpr->pablo_expr = new And(ret2->pablo_expr, new Not(ret1->pablo_expr));
         }
         else if (Not* pe_not = dynamic_cast<Not*>(pe_and->getExpr2()))
         {
-            Expression* ret1 = cgo.expr_to_variable(expr2pabloe(cgo, pe_and->getExpr1()));
-            Expression* ret2 = cgo.expr_to_variable(expr2pabloe(cgo, pe_not->getExpr()));
+            Expression* ret1 = expr_to_variable(expr2pabloe(pe_and->getExpr1()));
+            Expression* ret2 = expr_to_variable(expr2pabloe(pe_not->getExpr()));
             retExpr->expr_string = "(" + ret1->expr_string  + "&~" + ret2->expr_string + ")";
             retExpr->pablo_expr = new And(ret1->pablo_expr, new Not(ret2->pablo_expr));
         }
         else
         {
-            Expression* ret1 = cgo.expr_to_variable(expr2pabloe(cgo, pe_and->getExpr1()));
-            Expression* ret2 = cgo.expr_to_variable(expr2pabloe(cgo, pe_and->getExpr2()));
+            Expression* ret1 = expr_to_variable(expr2pabloe(pe_and->getExpr1()));
+            Expression* ret2 = expr_to_variable(expr2pabloe(pe_and->getExpr2()));
             retExpr->expr_string = "(" + ret1->expr_string + "&" + ret2->expr_string + ")";
             retExpr->pablo_expr = new And(ret1->pablo_expr, ret2->pablo_expr);
         }
     }
     else if (Sel * pe_sel = dynamic_cast<Sel*>(expr))
     {
-        Expression* ret_sel = cgo.expr_to_variable(expr2pabloe(cgo, pe_sel->getIf_expr()));
-        Expression* ret_true = cgo.expr_to_variable(expr2pabloe(cgo, pe_sel->getT_expr()));
-        Expression* ret_false = cgo.expr_to_variable(expr2pabloe(cgo, pe_sel->getF_expr()));
+        Expression* ret_sel = expr_to_variable(expr2pabloe(pe_sel->getIf_expr()));
+        Expression* ret_true = expr_to_variable(expr2pabloe(pe_sel->getT_expr()));
+        Expression* ret_false = expr_to_variable(expr2pabloe(pe_sel->getF_expr()));
         retExpr->expr_string = "((" + ret_sel->expr_string + "&" + ret_true->expr_string + ")|(~("
             + ret_sel->expr_string + ")&" + ret_false->expr_string + ")";
         retExpr->pablo_expr = new Sel(ret_sel->pablo_expr, ret_true->pablo_expr, ret_false->pablo_expr);
@@ -396,11 +457,9 @@ Expression* CC_Compiler::expr2pabloe(CC_CodeGenObject &cgo, PabloE* expr)
     return retExpr;
 }
 
-CC_CodeGenObject CC_Compiler::cc2pablos(CC_CodeGenObject cgo, CC* cc)
+void CC_Compiler::cc2pablos(CC* cc)
 {
-    cgo.add_assignment(cc->getName(), expr2pabloe(cgo, charset_expr(cc)));
-
-    return cgo;
+    add_assignment(cc->getName(), expr2pabloe(charset_expr(cc)));
 }
 
 std::string CC_Compiler::bit_var(int n)

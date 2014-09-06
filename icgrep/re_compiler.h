@@ -33,8 +33,6 @@
 #include "parsefailure.h"
 #include "re_parser.h"
 #include "cc_compiler.h"
-#include "cc_codegenobject.h"
-#include "cc_compiler.h"
 
 #include "pbix_compiler.h"
 #include "symbol_generator.h"

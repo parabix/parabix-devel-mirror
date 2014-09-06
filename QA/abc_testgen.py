@@ -6,6 +6,7 @@
 #
 from random import randint
 import os
+import shutil
 #
 #
 output_home = 'abc'

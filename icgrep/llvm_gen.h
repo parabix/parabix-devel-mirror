@@ -39,7 +39,7 @@
 #include "ps_if.h"
 #include "ps_while.h"
 
-#include "cc_codegenobject.h"
+#include "cc_compiler.h"
 
 #include "pbix_compiler.h"
 
