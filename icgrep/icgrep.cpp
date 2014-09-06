@@ -269,6 +269,46 @@ int main(int argc, char *argv[])
     return 0;
 }
 
+
+typedef BitStreamScanner<BitBlock, uint32_t, uint32_t, SEGMENT_BLOCKS> ScannerT;
+
+//
+// Write matched lines from a buffer to an output file, given segment 
+// scanners for line ends and matches (where matches are a subset of line ends).
+// The buffer pointer must point to the first byte of the segment 
+// corresponding to the scanner indexes.   The first_line_start is the
+// start position of the first line relative to the buffer start position.
+// It must be zero or negative;  if negative, the buffer must permit negative 
+// indexing so that the lineup to the buffer start position can also be printed.   
+// The start position of the final line in the processed segment is returned. 
+//
+
+ssize_t write_matches(FILE * outfile, ScannerT line_scanner, ScannerT match_scanner, char * buffer, ssize_t first_line_start) {
+
+  ssize_t line_start = first_line_start;
+  size_t match_pos;
+  size_t line_end;
+  while (match_scanner.has_next()) {
+    match_pos = match_scanner.scan_to_next();
+    // If we found a match, it must be at a line end.
+    line_end = line_scanner.scan_to_next();
+    while (line_end < match_pos) {
+      line_start = line_end + 1;
+      line_end = line_scanner.scan_to_next();
+    }
+    fwrite(&buffer[line_start], 1, line_end - line_start + 1, outfile);
+    line_start = line_end + 1;
+
+  }
+  while(line_scanner.has_next()) {
+    line_end = line_scanner.scan_to_next();
+    line_start = line_end+1;
+  }
+  return line_start;
+}
+   
+
+
 #ifndef USE_MMAP
 void do_process(FILE *infile, FILE *outfile, int count_only_option, int carry_count, process_block_fcn process_block) {
 #endif
@@ -296,13 +336,13 @@ void do_process(char * infile_buffer, size_t infile_size, FILE *outfile, int cou
     int match_pos = 0;
     int line_no = 0;
 
-    BitStreamScanner<BitBlock, uint32_t, uint32_t, SEGMENT_BLOCKS> LF_scanner;
-    BitStreamScanner<BitBlock, uint32_t, uint32_t, SEGMENT_BLOCKS> match_scanner;
+    ScannerT LF_scanner;
+    ScannerT match_scanner;
 
-
+    char * buffer_ptr;
 #ifndef USE_MMAP
     ATTRIBUTE_SIMD_ALIGN char src_buffer[SEGMENT_SIZE];
-
+    buffer_ptr = &src_buffer;
     chars_read = fread((void *)&src_buffer[0], 1, SEGMENT_SIZE, infile);
     chars_avail = chars_read;
     if (chars_avail >= SEGMENT_SIZE) chars_avail = SEGMENT_SIZE;
@@ -370,39 +410,11 @@ void do_process(char * infile_buffer, size_t infile_size, FILE *outfile, int cou
         int  copy_back_size = SEGMENT_SIZE - copy_back_pos;
 #endif
 #ifdef USE_MMAP
-
+    buffer_ptr = &infile_buffer[segment_base];
 #endif
 
         if (!count_only_option) {
-#ifndef USE_MMAP
-            line_start = 0;
-#endif
-
-            while (match_scanner.has_next()) {
-                match_pos = match_scanner.scan_to_next();
-                line_end = LF_scanner.scan_to_next();
-                while (line_end < match_pos) {
-                    line_start = line_end+1;
-                    line_no++;
-                    line_end = LF_scanner.scan_to_next();
-                }
-#ifndef USE_MMAP
-                fwrite(&src_buffer[line_start], 1, line_end - line_start + 1, outfile);
-#endif
-#ifdef USE_MMAP
-                fwrite(&infile_buffer[segment_base + line_start], 1, line_end - line_start + 1, outfile);
-
-#endif
-
-                line_start = line_end+1;
-                line_no++;
-            }
-            while (LF_scanner.has_next()) {
-                line_end = LF_scanner.scan_to_next();
-                line_start = line_end+1;
-                line_no++;
-            }
-
+          line_start = write_matches(outfile, LF_scanner, match_scanner, buffer_ptr, line_start);
         }
 #ifndef USE_MMAP
         memmove(&src_buffer[0], &src_buffer[copy_back_pos], copy_back_size);
@@ -507,32 +519,10 @@ void do_process(char * infile_buffer, size_t infile_size, FILE *outfile, int cou
 #ifndef USE_MMAP
         line_start = 0;
 #endif
-        while (match_scanner.has_next())
-        {
-            match_pos = match_scanner.scan_to_next();
-            line_end = LF_scanner.scan_to_next();
-            while(line_end < match_pos)
-            {
-                line_start = line_end + 1;
-                line_no++;
-                line_end = LF_scanner.scan_to_next();
-            }
-#ifndef USE_MMAP
-            fwrite(&src_buffer[line_start], 1, line_end - line_start + 1, outfile);
-#endif
 #ifdef USE_MMAP
-            fwrite(&infile_buffer[segment_base + line_start], 1, line_end - line_start + 1, outfile);
-
+        buffer_ptr = &infile_buffer[segment_base];
 #endif
-            line_start = line_end + 1;
-            line_no++;
-        }
-        while(LF_scanner.has_next())
-        {
-            line_end = LF_scanner.scan_to_next();
-            line_start = line_end+1;
-            line_no++;
-        }
+        line_start = write_matches(outfile, LF_scanner, match_scanner, buffer_ptr, line_start);
     }
 
     buffer_pos += chars_avail;
