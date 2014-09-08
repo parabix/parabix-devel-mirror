@@ -71,8 +71,6 @@ void do_process(FILE *infile, FILE *outfile, int count_only_option, int carry_co
 void do_process(char * infile_buffer, size_t infile_size, FILE *outfile, int count_only_option, int carry_count, process_block_fcn process_block);
 #endif
 
-//define this indicates that we use llvm.uadd.with.overflow for genAddWithCarry
-//#define USE_UADD_OVERFLOW
 
 BitBlock get_category(Basis_bits &basis_bits, const char* category);
 
@@ -273,14 +271,14 @@ int main(int argc, char *argv[])
 typedef BitStreamScanner<BitBlock, uint32_t, uint32_t, SEGMENT_BLOCKS> ScannerT;
 
 //
-// Write matched lines from a buffer to an output file, given segment 
+// Write matched lines from a buffer to an output file, given segment
 // scanners for line ends and matches (where matches are a subset of line ends).
-// The buffer pointer must point to the first byte of the segment 
+// The buffer pointer must point to the first byte of the segment
 // corresponding to the scanner indexes.   The first_line_start is the
 // start position of the first line relative to the buffer start position.
-// It must be zero or negative;  if negative, the buffer must permit negative 
-// indexing so that the lineup to the buffer start position can also be printed.   
-// The start position of the final line in the processed segment is returned. 
+// It must be zero or negative;  if negative, the buffer must permit negative
+// indexing so that the lineup to the buffer start position can also be printed.
+// The start position of the final line in the processed segment is returned.
 //
 
 ssize_t write_matches(FILE * outfile, ScannerT line_scanner, ScannerT match_scanner, char * buffer, ssize_t first_line_start) {
@@ -306,7 +304,7 @@ ssize_t write_matches(FILE * outfile, ScannerT line_scanner, ScannerT match_scan
   }
   return line_start;
 }
-   
+
 
 
 #ifndef USE_MMAP

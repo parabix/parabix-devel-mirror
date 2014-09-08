@@ -9,6 +9,9 @@
 
 //#define DUMP_GENERATED_IR
 
+//define this indicates that we use llvm.uadd.with.overflow for genAddWithCarry
+#define USE_UADD_OVERFLOW
+
 //Regular Expressions
 #include "re_re.h"
 #include "re_cc.h"

@@ -70,9 +70,18 @@ add_test(
   WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA
   COMMAND python greptest.py ${CMAKE_BINARY_DIR}/icgrep)
 
+add_test(
+  NAME abc_test
+  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA
+  COMMAND ./run_abc ../icgrep-build/icgrep)
+
+add_custom_target (abc_test
+  COMMAND python abc_testgen.py
+  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA)
+
 add_custom_target (check
   COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure
-  DEPENDS icgrep)
+  DEPENDS icgrep abc_test)
 
 add_custom_target (perf_icgrep
   COMMAND python perf.py icgrep
