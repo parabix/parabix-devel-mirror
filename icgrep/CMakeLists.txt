@@ -7,6 +7,13 @@ enable_testing()
 set (icgrep_VERSION_MAJOR 0)
 set (icgrep_VERSION_MINOR 8)
 
+option(BLOCK_SIZE_256 "Compiling with BLOCK_SIZE=256")
+if (BLOCK_SIZE_256)
+  message("-- Build with BLOCK_SIZE=256")
+else ()
+  message("-- Build with BLOCK_SIZE=128")
+endif()
+
 # configure a header file to pass some of the CMake settings
 # to the source code
 #configure_file (
@@ -56,7 +63,7 @@ add_executable(icgrep icgrep.cpp llvm_gen.cpp llvm_gen_helper.cpp utf_encoding.c
 
 target_link_libraries (icgrep PabloADT RegExpADT ${REQ_LLVM_LIBRARIES})
 
-set(CMAKE_CXX_FLAGS_RELEASE "-std=gnu++0x -O3 -msse2")
+set(CMAKE_CXX_FLAGS_RELEASE "-std=c++11 -O3 -msse2")
 
 # detect LLVM version and add compiler flags.
 if (${LLVM_PACKAGE_VERSION} MATCHES "3.4")
@@ -64,6 +71,10 @@ if (${LLVM_PACKAGE_VERSION} MATCHES "3.4")
 elseif (${LLVM_PACKAGE_VERSION} MATCHES "3.5")
   set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -DUSE_LLVM_3_5")
 endif(${LLVM_PACKAGE_VERSION} MATCHES "3.4")
+
+if (BLOCK_SIZE_256)
+  set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -DUSE_S2P_AVX2 -DBLOCK_SIZE=256 -march=core-avx2 -mavx2 -m64 -fabi-version=6")
+endif()
 
 add_test(
   NAME greptest

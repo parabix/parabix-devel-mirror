@@ -145,12 +145,13 @@ private:
     Value* genCarryInLoad(Value* ptr_carry_q, int carryq_idx);
     Value* genCarryOutStore(Value* carryout, Value* ptr_carry_q, int carryq_idx);
     Value* genAddWithCarry(Value* e1, Value* e2);
+    Value* genAdvanceWithCarry(Value* e1);
     Value* genBitBlockAny(Value* e);
-    Value* genShiftRight127(Value* e, const Twine &namehint = "");
+    Value* genShiftHighbitToLow(Value* e, const Twine &namehint = "");
     Value* genShiftLeft64(Value* e, const Twine &namehint = "") ;
     Value* genNot(Value* e, const Twine &namehint = "");
 
-    SumWithOverflowPack genUaddOverflow(Value *e1, Value *e2);
+    SumWithOverflowPack callUaddOverflow(Value *e1, Value *e2);
 
     int         mBits;
     std::map<std::string, std::string> m_name_map;
@@ -161,10 +162,10 @@ private:
 
     ExecutionEngine* mExecutionEngine;
 
-    VectorType*  m64x2Vect;
-    PointerType* m64x2Vect_Ptr1;
+    VectorType*  mXi64Vect;
+    PointerType* mXi64Vect_Ptr1;
 
-    VectorType* m128x1Vect;
+    VectorType* mXi128Vect;
 
     PointerType* mStruct_Basis_Bits_Ptr1;
     PointerType* mStruct_Output_Ptr1;
@@ -177,12 +178,12 @@ private:
     int         mCarryQueueSize;
 
     ConstantInt*           mConst_int64_neg1;
-    ConstantAggregateZero* mConst_Aggregate_64x2_0;
-    Constant*              mConst_Aggregate_64x2_neg1;
+    ConstantAggregateZero* mConst_Aggregate_Xi64_0;
+    Constant*              mConst_Aggregate_Xi64_neg1;
 
     FunctionType* mFuncTy_0;
     Function*     mFunc_process_block;
-    Function*     mFunc_llvm_uadd_with_overflow_i128;
+    Function*     mFunc_llvm_uadd_with_overflow;
 
     Constant*     mFunc_print_register;
     Constant*     mFunc_test_getCategory;

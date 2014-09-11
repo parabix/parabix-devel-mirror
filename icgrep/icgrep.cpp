@@ -33,8 +33,14 @@
 #include <sys/mman.h>
 #include <fcntl.h>
 
-
+#if (BLOCK_SIZE == 128)
 #define SEGMENT_BLOCKS 7
+#endif
+
+#if (BLOCK_SIZE == 256)
+#define SEGMENT_BLOCKS 15
+#endif
+
 #define SEGMENT_SIZE (BLOCK_SIZE * SEGMENT_BLOCKS)
 
 #define BUFFER_SEGMENTS 15
@@ -269,8 +275,13 @@ int main(int argc, char *argv[])
     return 0;
 }
 
+#if (BLOCK_SIZE == 256)
+typedef BitStreamScanner<BitBlock, uint64_t, uint64_t, SEGMENT_BLOCKS> ScannerT;
+#endif
 
+#if (BLOCK_SIZE == 128)
 typedef BitStreamScanner<BitBlock, uint32_t, uint32_t, SEGMENT_BLOCKS> ScannerT;
+#endif
 
 //
 // Write matched lines from a buffer to an output file, given segment

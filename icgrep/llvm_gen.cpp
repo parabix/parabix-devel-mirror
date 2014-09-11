@@ -480,24 +480,24 @@ LLVM_Gen_RetVal LLVM_Generator::Generate_LLVMIR(CodeGenState cg_state, CodeGenSt
     return retVal;
 }
 
-#define bitBlockExprType m64x2Vect
+#define bitBlockExprType mXi64Vect
 
 void LLVM_Generator::DefineTypes()
 {
     //The BitBlock vector.
-    m64x2Vect = VectorType::get(IntegerType::get(mMod->getContext(), 64), 2);
-    m128x1Vect = VectorType::get(IntegerType::get(mMod->getContext(), 128), 1);
+    mXi64Vect = VectorType::get(IntegerType::get(mMod->getContext(), 64), BLOCK_SIZE / 64);
+    mXi128Vect = VectorType::get(IntegerType::get(mMod->getContext(), 128), BLOCK_SIZE / 128);
     //A pointer to the BitBlock vector.
-    m64x2Vect_Ptr1 = PointerType::get(m64x2Vect, 0);
+    mXi64Vect_Ptr1 = PointerType::get(mXi64Vect, 0);
 
     //Constant definitions.
     mConst_int64_neg1 = ConstantInt::get(mMod->getContext(), APInt(64, StringRef("-1"), 10));
 
-    mConst_Aggregate_64x2_0 = ConstantAggregateZero::get(m64x2Vect);
+    mConst_Aggregate_Xi64_0 = ConstantAggregateZero::get(mXi64Vect);
     std::vector<Constant*> const_packed_27_elems;
-    const_packed_27_elems.push_back(mConst_int64_neg1);
-    const_packed_27_elems.push_back(mConst_int64_neg1);
-    mConst_Aggregate_64x2_neg1 = ConstantVector::get(const_packed_27_elems);
+    for (int i = 0; i < BLOCK_SIZE / 64; ++i)
+      const_packed_27_elems.push_back(mConst_int64_neg1);
+    mConst_Aggregate_Xi64_neg1 = ConstantVector::get(const_packed_27_elems);
 
 
     StructType *StructTy_struct_Basis_bits = mMod->getTypeByName("struct.Basis_bits");
@@ -507,7 +507,7 @@ void LLVM_Generator::DefineTypes()
     std::vector<Type*>StructTy_struct_Basis_bits_fields;
     for (int i = 0; i < mBits; i++)
     {
-        StructTy_struct_Basis_bits_fields.push_back(m64x2Vect);
+        StructTy_struct_Basis_bits_fields.push_back(mXi64Vect);
     }
     if (StructTy_struct_Basis_bits->isOpaque()) {
         StructTy_struct_Basis_bits->setBody(StructTy_struct_Basis_bits_fields, /*isPacked=*/false);
@@ -519,7 +519,7 @@ void LLVM_Generator::DefineTypes()
     FuncTy_0_args.push_back(mStruct_Basis_Bits_Ptr1);
 
     //The carry q array.
-    FuncTy_0_args.push_back(m64x2Vect_Ptr1);
+    FuncTy_0_args.push_back(mXi64Vect_Ptr1);
 
     //The output structure.
     StructType *StructTy_struct_Output = mMod->getTypeByName("struct.Output");
@@ -527,8 +527,8 @@ void LLVM_Generator::DefineTypes()
         StructTy_struct_Output = StructType::create(mMod->getContext(), "struct.Output");
     }
     std::vector<Type*>StructTy_struct_Output_fields;
-    StructTy_struct_Output_fields.push_back(m64x2Vect);
-    StructTy_struct_Output_fields.push_back(m64x2Vect);
+    StructTy_struct_Output_fields.push_back(mXi64Vect);
+    StructTy_struct_Output_fields.push_back(mXi64Vect);
     if (StructTy_struct_Output->isOpaque()) {
         StructTy_struct_Output->setBody(StructTy_struct_Output_fields, /*isPacked=*/false);
     }
@@ -546,34 +546,34 @@ void LLVM_Generator::DefineTypes()
 void LLVM_Generator::DeclareFunctions()
 {
     //This function can be used for testing to print the contents of a register from JIT'd code to the terminal window.
-    //mFunc_print_register = mMod->getOrInsertFunction("wrapped_print_register", Type::getVoidTy(getGlobalContext()), m64x2Vect, NULL);
+    //mFunc_print_register = mMod->getOrInsertFunction("wrapped_print_register", Type::getVoidTy(getGlobalContext()), mXi64Vect, NULL);
     //mExecutionEngine->addGlobalMapping(cast<GlobalValue>(mFunc_print_register), (void *)&wrapped_print_register);
     // to call->  b.CreateCall(mFunc_print_register, unicode_category);
 
 #ifdef USE_UADD_OVERFLOW
-    // Type Definitions for llvm.uadd.with.overflow.i128
+    // Type Definitions for llvm.uadd.with.overflow.i128 or .i256
     std::vector<Type*>StructTy_0_fields;
-    StructTy_0_fields.push_back(IntegerType::get(mMod->getContext(), 128));
+    StructTy_0_fields.push_back(IntegerType::get(mMod->getContext(), BLOCK_SIZE));
     StructTy_0_fields.push_back(IntegerType::get(mMod->getContext(), 1));
     StructType *StructTy_0 = StructType::get(mMod->getContext(), StructTy_0_fields, /*isPacked=*/false);
 
     std::vector<Type*>FuncTy_1_args;
-    FuncTy_1_args.push_back(IntegerType::get(mMod->getContext(), 128));
-    FuncTy_1_args.push_back(IntegerType::get(mMod->getContext(), 128));
+    FuncTy_1_args.push_back(IntegerType::get(mMod->getContext(), BLOCK_SIZE));
+    FuncTy_1_args.push_back(IntegerType::get(mMod->getContext(), BLOCK_SIZE));
     FunctionType* FuncTy_1 = FunctionType::get(
                                               /*Result=*/StructTy_0,
                                               /*Params=*/FuncTy_1_args,
                                               /*isVarArg=*/false);
 
-    mFunc_llvm_uadd_with_overflow_i128 = mMod->getFunction("llvm.uadd.with.overflow.i128");
-    if (!mFunc_llvm_uadd_with_overflow_i128) {
-        mFunc_llvm_uadd_with_overflow_i128 = Function::Create(
+    mFunc_llvm_uadd_with_overflow = mMod->getFunction("llvm.uadd.with.overflow.i" + std::to_string(BLOCK_SIZE));
+    if (!mFunc_llvm_uadd_with_overflow) {
+        mFunc_llvm_uadd_with_overflow = Function::Create(
           /*Type=*/FuncTy_1,
           /*Linkage=*/GlobalValue::ExternalLinkage,
-          /*Name=*/"llvm.uadd.with.overflow.i128", mMod); // (external, no body)
-        mFunc_llvm_uadd_with_overflow_i128->setCallingConv(CallingConv::C);
+          /*Name=*/"llvm.uadd.with.overflow.i" + std::to_string(BLOCK_SIZE), mMod); // (external, no body)
+        mFunc_llvm_uadd_with_overflow->setCallingConv(CallingConv::C);
     }
-    AttributeSet mFunc_llvm_uadd_with_overflow_i128_PAL;
+    AttributeSet mFunc_llvm_uadd_with_overflow_PAL;
     {
         SmallVector<AttributeSet, 4> Attrs;
         AttributeSet PAS;
@@ -585,9 +585,9 @@ void LLVM_Generator::DeclareFunctions()
         }
 
         Attrs.push_back(PAS);
-        mFunc_llvm_uadd_with_overflow_i128_PAL = AttributeSet::get(mMod->getContext(), Attrs);
+        mFunc_llvm_uadd_with_overflow_PAL = AttributeSet::get(mMod->getContext(), Attrs);
     }
-    mFunc_llvm_uadd_with_overflow_i128->setAttributes(mFunc_llvm_uadd_with_overflow_i128_PAL);
+    mFunc_llvm_uadd_with_overflow->setAttributes(mFunc_llvm_uadd_with_overflow_PAL);
 #endif
 
     //Starts on process_block
@@ -666,7 +666,7 @@ void LLVM_Generator::DeclareCallFunctions_PabloE(PabloE* expr)
         std::string callee = "wrapped_get_category_" + pablo_call->getCallee();
         if (mMarkerMap.find(callee) == mMarkerMap.end())
         {
-            Value* func_get_unicode_category = mMod->getOrInsertFunction(callee, m64x2Vect, mStruct_Basis_Bits_Ptr1, NULL);
+            Value* func_get_unicode_category = mMod->getOrInsertFunction(callee, mXi64Vect, mStruct_Basis_Bits_Ptr1, NULL);
             void* addr;
             if (pablo_call->getCallee() == "Ps")
             {
@@ -851,8 +851,8 @@ Value* LLVM_Generator::GetMarker(std::string name)
 
     if (mMarkerMap.find(name) == mMarkerMap.end())
     {
-        Value* ptr = b.CreateAlloca(m64x2Vect);
-        Value* void_1 = b.CreateStore(mConst_Aggregate_64x2_0, ptr);
+        Value* ptr = b.CreateAlloca(mXi64Vect);
+        Value* void_1 = b.CreateStore(mConst_Aggregate_Xi64_0, ptr);
         mMarkerMap.insert(make_pair(name, ptr));
     }
     std::map<std::string, Value*>::iterator itGet = mMarkerMap.find(name);
@@ -962,9 +962,8 @@ std::string LLVM_Generator::Generate_PabloS(PabloS *stmt)
         IRBuilder<> b_cond(whileCondBlock);
 
         Value* expression_marker_value = Generate_PabloE(whl->getExpr());
-        // Use an i128 compare for simplicity and speed.
-        Value* cast_marker_value_1 = b_cond.CreateBitCast(expression_marker_value, IntegerType::get(mMod->getContext(), 128));
-        Value* int_tobool1 = b_cond.CreateICmpEQ(cast_marker_value_1, ConstantInt::get(IntegerType::get(mMod->getContext(), 128), 0));
+        Value* int_tobool1 = genBitBlockAny(expression_marker_value);
+
         b_cond.CreateCondBr(int_tobool1, whileEndBlock, whileBodyBlock);
 
         mBasicBlock = whileBodyBlock;
@@ -974,10 +973,10 @@ std::string LLVM_Generator::Generate_PabloS(PabloS *stmt)
 
         IRBuilder<> b_wb1(mBasicBlock);
         //Create and initialize a new carry queue.
-        Value* ptr_while_carry_q = b_wb1.CreateAlloca(m64x2Vect, b_wb1.getInt64(mCarryQueueSize - idx));
+        Value* ptr_while_carry_q = b_wb1.CreateAlloca(mXi64Vect, b_wb1.getInt64(mCarryQueueSize - idx));
         for (int i=0; i<(mCarryQueueSize-idx); i++)
         {
-            Value* void_1 = genCarryOutStore(mConst_Aggregate_64x2_0, ptr_while_carry_q, i);
+            Value* void_1 = genCarryOutStore(mConst_Aggregate_Xi64_0, ptr_while_carry_q, i);
         }
 
         //Point mptr_carry_q to the new local carry queue.
@@ -1015,8 +1014,8 @@ Value* LLVM_Generator::Generate_PabloE(PabloE *expr)
 
         if ((all->getNum() != 0) && (all->getNum() != 1))
             std::cout << "\nErr: 'All' can only be set to 1 or 0.\n" << std::endl;
-        Value* ptr_all = b.CreateAlloca(m64x2Vect);
-        Value* void_1 = b.CreateStore((all->getNum() == 0 ? mConst_Aggregate_64x2_0 : mConst_Aggregate_64x2_neg1), ptr_all);
+        Value* ptr_all = b.CreateAlloca(mXi64Vect);
+        Value* void_1 = b.CreateStore((all->getNum() == 0 ? mConst_Aggregate_Xi64_0 : mConst_Aggregate_Xi64_neg1), ptr_all);
         Value* all_value = b.CreateLoad(ptr_all);
 
         retVal = all_value;
@@ -1031,7 +1030,7 @@ Value* LLVM_Generator::Generate_PabloE(PabloE *expr)
             std::map<std::string, Value*>::iterator itFuncGet = mMarkerMap.find("wrapped_get_category_" + call->getCallee());
             Value* basis_bits_struct = b.CreateLoad(mPtr_basis_bits_addr);
             Value* unicode_category = b.CreateCall(itFuncGet->second, basis_bits_struct);
-            Value* ptr = b.CreateAlloca(m64x2Vect);
+            Value* ptr = b.CreateAlloca(mXi64Vect);
             Value* void_1 = b.CreateStore(unicode_category, ptr);
 
             mMarkerMap.insert(make_pair(call->getCallee(), ptr));
@@ -1080,10 +1079,8 @@ Value* LLVM_Generator::Generate_PabloE(PabloE *expr)
     {
         IRBuilder<> b(mBasicBlock);
 
-        Constant* const_packed_elems [] = {b.getInt64(-1), b.getInt64(-1)};
-        Constant* const_packed = ConstantVector::get(const_packed_elems);
         Value* expr_value = Generate_PabloE(pablo_not->getExpr());
-        Value* xor_rslt = b.CreateXor(expr_value, const_packed, "xor_inst");
+        Value* xor_rslt = b.CreateXor(expr_value, mConst_Aggregate_Xi64_neg1, "xor_inst");
 
         retVal = xor_rslt;
     }
@@ -1098,31 +1095,8 @@ Value* LLVM_Generator::Generate_PabloE(PabloE *expr)
     else if (Advance* adv = dynamic_cast<Advance*>(expr))
     {
         IRBuilder<> b(mBasicBlock);
-
-        int this_carry_idx = mCarryQueueIdx;
-        mCarryQueueIdx++;
-
-        Value* carryq_value = genCarryInLoad(mptr_carry_q, this_carry_idx);
-
         Value* strm_value = Generate_PabloE(adv->getExpr());
-        Value* srli_1_value = b.CreateLShr(strm_value, 63);
-
-        Value* packed_shuffle;
-        Constant* const_packed_1_elems [] = {b.getInt32(0), b.getInt32(2)};
-        Constant* const_packed_1 = ConstantVector::get(const_packed_1_elems);
-        packed_shuffle = b.CreateShuffleVector(carryq_value, srli_1_value, const_packed_1, "packed_shuffle nw");
-
-        Constant* const_packed_2_elems[] = {b.getInt64(1), b.getInt64(1)};
-        Constant* const_packed_2 = ConstantVector::get(const_packed_2_elems);
-
-        Value* shl_value = b.CreateShl(strm_value, const_packed_2, "shl_value");
-        Value* result_value = b.CreateOr(shl_value, packed_shuffle, "or.result_value");
-
-        Value* carry_out = genShiftRight127(strm_value, "carry_out");
-        //CarryQ - carry out:
-        Value* void_1 = genCarryOutStore(carry_out, mptr_carry_q, this_carry_idx);
-
-        retVal = result_value;
+        retVal = genAdvanceWithCarry(strm_value);
     }
     else if (MatchStar* mstar = dynamic_cast<MatchStar*>(expr))
     {
@@ -1155,11 +1129,11 @@ Value* LLVM_Generator::genScanThru(Value* marker_expr, Value* cc_expr) {
 }
 
 #ifdef USE_UADD_OVERFLOW
-SumWithOverflowPack LLVM_Generator::genUaddOverflow(Value* int128_e1, Value* int128_e2) {
+SumWithOverflowPack LLVM_Generator::callUaddOverflow(Value* int128_e1, Value* int128_e2) {
     std::vector<Value*> struct_res_params;
     struct_res_params.push_back(int128_e1);
     struct_res_params.push_back(int128_e2);
-    CallInst* struct_res = CallInst::Create(mFunc_llvm_uadd_with_overflow_i128, struct_res_params, "uadd_overflow_res", mBasicBlock);
+    CallInst* struct_res = CallInst::Create(mFunc_llvm_uadd_with_overflow, struct_res_params, "uadd_overflow_res", mBasicBlock);
     struct_res->setCallingConv(CallingConv::C);
     struct_res->setTailCall(false);
     AttributeSet struct_res_PAL;
@@ -1189,22 +1163,22 @@ Value* LLVM_Generator::genAddWithCarry(Value* e1, Value* e2) {
     Value* carryq_value = genCarryInLoad(mptr_carry_q, this_carry_idx);
 
 #ifdef USE_UADD_OVERFLOW
-    //use llvm.uadd.with.overflow.i128
+    //use llvm.uadd.with.overflow.i128 or i256
 
-    CastInst* int128_e1 = new BitCastInst(e1, IntegerType::get(mMod->getContext(), 128), "e1_128", mBasicBlock);
-    CastInst* int128_e2 = new BitCastInst(e2, IntegerType::get(mMod->getContext(), 128), "e2_128", mBasicBlock);
-    CastInst* int128_carryq_value = new BitCastInst(carryq_value, IntegerType::get(mMod->getContext(), 128), "carryq_128", mBasicBlock);
+    CastInst* int128_e1 = new BitCastInst(e1, IntegerType::get(mMod->getContext(), BLOCK_SIZE), "e1_128", mBasicBlock);
+    CastInst* int128_e2 = new BitCastInst(e2, IntegerType::get(mMod->getContext(), BLOCK_SIZE), "e2_128", mBasicBlock);
+    CastInst* int128_carryq_value = new BitCastInst(carryq_value, IntegerType::get(mMod->getContext(), BLOCK_SIZE), "carryq_128", mBasicBlock);
 
     SumWithOverflowPack sumpack0, sumpack1;
 
-    sumpack0 = genUaddOverflow(int128_e1, int128_e2);
-    sumpack1 = genUaddOverflow(sumpack0.sum, int128_carryq_value);
+    sumpack0 = callUaddOverflow(int128_e1, int128_e2);
+    sumpack1 = callUaddOverflow(sumpack0.sum, int128_carryq_value);
 
     Value* obit = b.CreateOr(sumpack0.obit, sumpack1.obit, "carry_bit");
-    Value* ret_sum = b.CreateBitCast(sumpack1.sum, m64x2Vect, "ret_sum");
+    Value* ret_sum = b.CreateBitCast(sumpack1.sum, mXi64Vect, "ret_sum");
 
-    /*obit is the i1 carryout, zero extend and insert it into a v2i64 vector.*/
-    ConstantAggregateZero* const_packed_5 = ConstantAggregateZero::get(m64x2Vect);
+    /*obit is the i1 carryout, zero extend and insert it into a v2i64 or v4i64 vector.*/
+    ConstantAggregateZero* const_packed_5 = ConstantAggregateZero::get(mXi64Vect);
     ConstantInt* const_int32_6 = ConstantInt::get(mMod->getContext(), APInt(32, StringRef("0"), 10));
     CastInst* int64_o0 = new ZExtInst(obit, IntegerType::get(mMod->getContext(), 64), "o0", mBasicBlock);
     InsertElementInst* carry_out = InsertElementInst::Create(const_packed_5, int64_o0, const_int32_6, "carry_out", mBasicBlock);
@@ -1221,7 +1195,7 @@ Value* LLVM_Generator::genAddWithCarry(Value* e1, Value* e2) {
     Value* mid_carry_in = genShiftLeft64(b.CreateLShr(digitcarry, 63), "mid_carry_in");
 
     Value* sum = b.CreateAdd(partial, mid_carry_in, "sum");
-    Value* carry_out = genShiftRight127(b.CreateOr(carrygen, b.CreateAnd(carryprop, genNot(sum))), "carry_out");
+    Value* carry_out = genShiftHighbitToLow(b.CreateOr(carrygen, b.CreateAnd(carryprop, genNot(sum))), "carry_out");
     Value* void_1 = genCarryOutStore(carry_out, mptr_carry_q, this_carry_idx);
 
     return sum;
@@ -1244,27 +1218,59 @@ Value* LLVM_Generator::genCarryOutStore(Value* carryout, Value* ptr_carry_q, int
 
 Value* LLVM_Generator::genBitBlockAny(Value* e) {
     IRBuilder<> b(mBasicBlock);
-    Value* cast_marker_value_1 = b.CreateBitCast(e, IntegerType::get(mMod->getContext(), 128));
-    return b.CreateICmpEQ(cast_marker_value_1, ConstantInt::get(IntegerType::get(mMod->getContext(), 128), 0));
+    Value* cast_marker_value_1 = b.CreateBitCast(e, IntegerType::get(mMod->getContext(), BLOCK_SIZE));
+    return b.CreateICmpEQ(cast_marker_value_1, ConstantInt::get(IntegerType::get(mMod->getContext(), BLOCK_SIZE), 0));
 }
 
-Value* LLVM_Generator::genShiftRight127(Value* e, const Twine &namehint) {
+Value* LLVM_Generator::genShiftHighbitToLow(Value* e, const Twine &namehint) {
     IRBuilder<> b(mBasicBlock);
-    Value* i128_val = b.CreateBitCast(e, IntegerType::get(mMod->getContext(), 128));
-    return b.CreateBitCast(b.CreateLShr(i128_val, 127, namehint), bitBlockExprType);
+    Value* i128_val = b.CreateBitCast(e, IntegerType::get(mMod->getContext(), BLOCK_SIZE));
+    return b.CreateBitCast(b.CreateLShr(i128_val, BLOCK_SIZE - 1, namehint), bitBlockExprType);
 }
 
 Value* LLVM_Generator::genShiftLeft64(Value* e, const Twine &namehint) {
     IRBuilder<> b(mBasicBlock);
-    Value* i128_val = b.CreateBitCast(e, IntegerType::get(mMod->getContext(), 128));
+    Value* i128_val = b.CreateBitCast(e, IntegerType::get(mMod->getContext(), BLOCK_SIZE));
     return b.CreateBitCast(b.CreateShl(i128_val, 64, namehint), bitBlockExprType);
 }
 
 Value* LLVM_Generator::genNot(Value* e, const Twine &namehint) {
     IRBuilder<> b(mBasicBlock);
-    return b.CreateXor(e, mConst_Aggregate_64x2_neg1, namehint);
+    return b.CreateXor(e, mConst_Aggregate_Xi64_neg1, namehint);
 }
 
+Value* LLVM_Generator::genAdvanceWithCarry(Value* strm_value) {
+    IRBuilder<> b(mBasicBlock);
 
+#if (BLOCK_SIZE == 128)
+    int this_carry_idx = mCarryQueueIdx;
+    mCarryQueueIdx++;
+
+    Value* carryq_value = genCarryInLoad(mptr_carry_q, this_carry_idx);
+
+    Value* srli_1_value = b.CreateLShr(strm_value, 63);
+
+    Value* packed_shuffle;
+    Constant* const_packed_1_elems [] = {b.getInt32(0), b.getInt32(2)};
+    Constant* const_packed_1 = ConstantVector::get(const_packed_1_elems);
+    packed_shuffle = b.CreateShuffleVector(carryq_value, srli_1_value, const_packed_1, "packed_shuffle nw");
+
+    Constant* const_packed_2_elems[] = {b.getInt64(1), b.getInt64(1)};
+    Constant* const_packed_2 = ConstantVector::get(const_packed_2_elems);
+
+    Value* shl_value = b.CreateShl(strm_value, const_packed_2, "shl_value");
+    Value* result_value = b.CreateOr(shl_value, packed_shuffle, "or.result_value");
+
+    Value* carry_out = genShiftHighbitToLow(strm_value, "carry_out");
+    //CarryQ - carry out:
+    Value* void_1 = genCarryOutStore(carry_out, mptr_carry_q, this_carry_idx);
+
+    return result_value;
+#endif
+
+#if (BLOCK_SIZE == 256)
+    return genAddWithCarry(strm_value, strm_value);
+#endif
+}
 
 
