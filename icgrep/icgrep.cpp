@@ -172,30 +172,11 @@ int main(int argc, char *argv[])
         exit(-1);
     }
 #endif
-#ifdef USE_MMAP
-    fdSrc = open(infilename, O_RDONLY);
-    if (fdSrc == -1) {
-        fprintf(stderr, "Error: cannot open %s for processing.\n", infilename);
-        exit(-1);
-    }
-    if (fstat(fdSrc, &infile_sb) == -1) {
-        fprintf(stderr, "Error: cannot stat %s for processing.\n", infilename);
-        exit(-1);
-    }
-    if (infile_sb.st_size == 0) {
-        if (count_only_option) fprintf(outfile, "Matching Lines%d\n", 0);
-        exit(0);
-    }
-    infile_buffer = (char *) mmap(NULL, infile_sb.st_size, PROT_READ, MAP_PRIVATE, fdSrc, 0);
-    if (infile_buffer == MAP_FAILED) {
-        fprintf(stderr, "Error: mmap of %s failure.\n", infilename);
-        exit(-1);
-    }
-#endif
 
-    if (optind >= argc) outfile = stdout;
-    else
-    {
+    if (optind >= argc) {
+        outfile = stdout;
+    }
+    else {
         outfilename = argv[optind++];
         if (optind != argc)
         {
@@ -210,6 +191,27 @@ int main(int argc, char *argv[])
             exit(-1);
         }
     }
+
+#ifdef USE_MMAP
+    fdSrc = open(infilename, O_RDONLY);
+    if (fdSrc == -1) {
+        fprintf(stderr, "Error: cannot open %s for processing.\n", infilename);
+        exit(-1);
+    }
+    if (fstat(fdSrc, &infile_sb) == -1) {
+        fprintf(stderr, "Error: cannot stat %s for processing.\n", infilename);
+        exit(-1);
+    }
+    if (infile_sb.st_size == 0) {
+        if (count_only_option) fprintf(outfile, "Matching Lines: %d\n", 0);
+        exit(0);
+    }
+    infile_buffer = (char *) mmap(NULL, infile_sb.st_size, PROT_READ, MAP_PRIVATE, fdSrc, 0);
+    if (infile_buffer == MAP_FAILED) {
+        fprintf(stderr, "Error: mmap of %s failure.\n", infilename);
+        exit(-1);
+    }
+#endif
 
     if (print_version_option)
     {
