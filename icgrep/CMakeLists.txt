@@ -63,18 +63,156 @@ add_executable(icgrep icgrep.cpp llvm_gen.cpp llvm_gen_helper.cpp utf_encoding.c
 
 target_link_libraries (icgrep PabloADT RegExpADT ${REQ_LLVM_LIBRARIES})
 
-set(CMAKE_CXX_FLAGS_RELEASE "-std=c++11 -O3 -msse2")
+#Check compiler support for 0x / 11
+include(CheckCXXCompilerFlag)
+CHECK_CXX_COMPILER_FLAG("-std=c++11" COMPILER_SUPPORTS_CXX11)
+if(COMPILER_SUPPORTS_CXX11)
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
+else()
+  CHECK_CXX_COMPILER_FLAG("-std=c++0x" COMPILER_SUPPORTS_CXX0X)
+  if(COMPILER_SUPPORTS_CXX0X)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++0x")
+  else()
+    CHECK_CXX_COMPILER_FLAG("-std=gnu++11" COMPILER_SUPPORTS_GNU11)
+    if(COMPILER_SUPPORTS_GNU11)
+      set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=gnu++11")
+    else()  
+      CHECK_CXX_COMPILER_FLAG("-std=gnu++0x" COMPILER_SUPPORTS_GNU0X)    
+      if(COMPILER_SUPPORTS_GNU0X)
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=gnu++0x")
+      endif()
+    endif()
+  endif()
+endif()
+
+#Check compiler and system support for SSE or AVX
+include(CheckCXXSourceRuns)
+
+set(SSE1_CODE "
+#include <xmmintrin.h>
+int main()
+{
+__m128 a;
+float vals[4] = {0,0,0,0};
+a = _mm_loadu_ps(vals);
+return 0;
+}")
+
+set(SSE2_CODE "
+#include <emmintrin.h>
+int main()
+{
+__m128d a;
+double vals[2] = {0,0};
+a = _mm_loadu_pd(vals);
+return 0;
+}")
+
+set(SSE3_CODE "
+#include <pmmintrin.h>
+int main( )
+{
+const int vals[4] = {0,0,0,0};
+__m128i a;
+a = _mm_lddqu_si128( (const __m128i*)vals );
+return 0;
+}")
+
+set(SSE4_1_CODE "
+#include <smmintrin.h>
+int main ()
+{
+__m128i a, b;
+__m128i res = _mm_max_epi8(a, b);
+return 0;
+}")
+
+set(SSE4_2_CODE "
+#include <nmmintrin.h>
+int main()
+{
+__m128i a, b, c;
+c = _mm_cmpgt_epi64(a, b);
+return 0;
+}")
+
+set(AVX_1_CODE "
+#include <immintrin.h>
+int main()
+{
+__m256* a=(__m256*)_mm_malloc(4, 32);
+__m256 b = _mm256_load_ps((float*)a);
+b = _mm256_or_ps(b, b);
+_mm_free(a);
+return 0;
+}")
+
+set(AVX_2_CODE "
+#include <immintrin.h>
+int main()
+{
+__m256i* a = (__m256i*)_mm_malloc(4, 32);
+__m256i b = _mm256_load_si256(a);
+b = _mm256_or_si256(b, b);
+_mm_free(a);
+return 0;
+}")
+
+IF (MSVC) # using Visual Studio C++ 
+  SET(ENABLE_SSE1 "/arch:SSE")
+  SET(ENABLE_SSE2 "/arch:SSE2")
+  SET(ENABLE_SSE3 "/arch:SSE3")
+  SET(ENABLE_SSE4_1 "/arch:SSE4")
+  SET(ENABLE_SSE4_2 "/arch:SSE4")
+  SET(ENABLE_AVX_1 "/arch:AVX1")
+  SET(ENABLE_AVX_2 "/arch:AVX2")
+ELSE() # using Clang, GCC, Intel C++, etc
+  SET(ENABLE_SSE1 "-msse")
+  SET(ENABLE_SSE2 "-msse2")
+  SET(ENABLE_SSE3 "-msse3")
+  SET(ENABLE_SSE4_1 "-msse4.1")
+  SET(ENABLE_SSE4_2 "-msse4.2")
+  SET(ENABLE_AVX_1 "-mavx")
+  SET(ENABLE_AVX_2 "-mavx2")    
+ENDIF()
+
+set(CMAKE_REQUIRED_FLAGS)
+set(SIMD_SUPPORT_FOUND)
+
+MACRO(CHECK_SIMD_SUPPORT type)  
+  IF(NOT SIMD_SUPPORT_FOUND)  
+    set(CMAKE_REQUIRED_FLAGS_SAVE ${CMAKE_REQUIRED_FLAGS})
+    set(CMAKE_REQUIRED_FLAGS ${ENABLE_${type}})
+    check_cxx_source_runs("${${type}_CODE}" ${type})    
+    IF(${type})
+      SET(SIMD_SUPPORT_FOUND ${CMAKE_REQUIRED_FLAGS})
+    ENDIF()
+    SET(CMAKE_REQUIRED_FLAGS ${CMAKE_REQUIRED_FLAGS_SAVE})
+  ENDIF()
+ENDMACRO()
+
+CHECK_SIMD_SUPPORT("AVX_2")
+CHECK_SIMD_SUPPORT("AVX_1")
+CHECK_SIMD_SUPPORT("SSE4_2")
+CHECK_SIMD_SUPPORT("SSE4_1")
+CHECK_SIMD_SUPPORT("SSE3")
+CHECK_SIMD_SUPPORT("SSE2")
+CHECK_SIMD_SUPPORT("SSE1")
+
+SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${SIMD_SUPPORT_FOUND}")
 
 # detect LLVM version and add compiler flags.
 if (${LLVM_PACKAGE_VERSION} MATCHES "3.4")
-  set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -DUSE_LLVM_3_4")
+  SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DUSE_LLVM_3_4")
 elseif (${LLVM_PACKAGE_VERSION} MATCHES "3.5")
-  set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -DUSE_LLVM_3_5")
+  SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DUSE_LLVM_3_5")
 endif(${LLVM_PACKAGE_VERSION} MATCHES "3.4")
 
 if (BLOCK_SIZE_256)
-  set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -DUSE_S2P_AVX2 -DBLOCK_SIZE=256 -march=core-avx2 -mavx2 -m64 -fabi-version=6")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DUSE_S2P_AVX2 -DBLOCK_SIZE=256 -march=core-avx2 -mavx2 -m64 -fabi-version=6")
 endif()
+
+SET(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3 -DNDEBUG")
 
 add_test(
   NAME greptest
