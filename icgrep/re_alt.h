@@ -12,17 +12,12 @@
 #include <list>
 
 
-class Alt : public RE
-{
+class Alt : public RE, public RE::Vector {
 public:
-    Alt();
-    Alt(std::list<RE*>* lst);
-    Alt(std::list<RE*> lst);
-    ~Alt();
-    std::list<RE*>* GetREList();
-    void AddREListItem(RE *re);
-private:
-    std::list<RE*>* mList;
+    typedef RE::Vector Vector;
+    Alt();    
+    Alt(iterator begin, iterator end);
+    virtual ~Alt();
 };
 
 #endif // ALT_H

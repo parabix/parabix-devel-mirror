@@ -11,42 +11,9 @@
 
 //Regular Expressions
 #include "re_re.h"
-#include "re_alt.h"
-#include "re_cc.h"
-#include "re_name.h"
-#include "re_end.h"
-#include "re_rep.h"
-#include "re_seq.h"
-#include "re_start.h"
-#include "re_nullable.h"
-#include "re_simplifier.h"
-#include "re_reducer.h"
-
-#include "printer_pablos.h"
-#include "printer_re.h"
-
-#include "utf8_encoder.h"
 #include "utf_encoding.h"
-
-#include "parseresult.h"
-#include "parsesuccess.h"
-#include "parsefailure.h"
-#include "re_parser.h"
-#include "cc_compiler.h"
-
-#include "pbix_compiler.h"
-#include "symbol_generator.h"
 #include "llvm_gen.h"
-
-//FOR TESTING AND AND ANALYSIS
-//#include "pbix_counter.h"
-
-#include <fstream>
-#include <iostream>
 #include <string>
-#include <sstream>
-#include <vector>
-#include <ctype.h>
 
 struct processed_parsetree_results{
     RE* re;

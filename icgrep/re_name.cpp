@@ -21,12 +21,12 @@ void Name::setName(std::string name)
     mName = name;
 }
 
-std::string Name::getName()
+std::string Name::getName() const
 {
     return mName;
 }
 
-bool Name::isNegated()
+bool Name::isNegated() const
 {
     return mNegated;
 }
@@ -41,7 +41,7 @@ void Name::setType(Name::Type type)
     mType = type;
 }
 
-Name::Type Name::getType()
+Name::Type Name::getType() const
 {
     return mType;
 }

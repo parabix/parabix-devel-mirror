@@ -3,30 +3,18 @@
 
 //Regular Expressions
 #include "re_re.h"
-#include "re_cc.h"
-#include "re_name.h"
-#include "re_start.h"
-#include "re_end.h"
 #include "re_seq.h"
-#include "re_alt.h"
-#include "re_rep.h"
-
-#include <algorithm>
 #include <list>
 
-class RE_Simplifier
-{
+class RE_Simplifier {
+    typedef RE::Vector Vector;
 public:
-    static RE* mkSeq(Seq::Type type, std::list<RE*>* re_list);
-    static RE* mkRep(RE* re, int lb2, int ub2);
-    static RE* mkAlt(std::list<RE*>* re_list);
-    static RE* simplify(RE* re);
+    static RE * makeAlt(Vector & list);
+    static RE * makeSeq(const Seq::Type type, Vector & list);
+    static RE * makeRep(RE * re, const int lb2, const int ub2);
+    static RE * simplify(RE* re);
 private:
-    static std::list<RE*>* mkSeqList(std::list<RE*>* re_list);
-    static std::list<RE*>* mkSeqList_helper(std::list<RE*>* ret_list, std::list<RE*>* re_list);
-    static std::list<RE*>* mkAltList(std::list<RE*>* re_list);
-    static std::list<RE*>* mkAltList_helper(std::list<RE*>* ret_list, std::list<RE*>* re_list);
-    static int ubCombine(int h1, int h2);
+    static int ubCombine(const int h1, const int h2);
 };
 
 #endif // RE_SIMPLIFIER_H

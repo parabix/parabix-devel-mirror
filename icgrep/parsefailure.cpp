@@ -6,14 +6,14 @@
 
 #include "parsefailure.h"
 
-ParseFailure::ParseFailure(std::string msg)
+ParseFailure::ParseFailure(const std::string && msg) noexcept
+: _msg(msg)
 {
-    mErrorMsg = msg;
+
 }
 
-ParseFailure::~ParseFailure(){}
+ParseFailure::~ParseFailure() noexcept { }
 
-std::string ParseFailure::getErrorMsg()
-{
-    return mErrorMsg;
+const char* ParseFailure::what() const noexcept {
+    return _msg.c_str();
 }

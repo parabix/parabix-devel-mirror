@@ -6,87 +6,57 @@
 
 #include "re_seq.h"
 
+
 Seq::Seq()
+: mType(Seq::Normal)
 {
-    mList = new std::list<RE*>();
-    mType = Seq::Normal;
+
 }
 
-Seq::Seq(std::list<RE*>* lst)
+Seq::Seq(const Type type)
+: mType(type)
 {
-    mList = new std::list<RE*>();
-    std::list<RE*>::iterator it;
-    it=lst->begin();
-    mList->assign(it, lst->end());
-    mList->reverse();
-    mType = Seq::Normal;
+
 }
 
-Seq::Seq(std::list<RE*> lst)
+Seq::Seq(const Type type, iterator begin, iterator end)
+: std::vector<RE*>(begin, end)
+, mType(type)
 {
-    mList = new std::list<RE*>();
-    std::list<RE*>::iterator it;
-    it=lst.begin();
-    mList->assign(it, lst.end());
-    mList->reverse();
-    mType = Seq::Normal;
+
 }
 
-Seq::~Seq()
-{
-    while(!mList->empty()) delete mList->back(), mList->pop_back();
-    delete mList;
+Seq::~Seq() {
+    for (RE * re : *this) {
+        delete re;
+    }
 }
 
-std::string Seq::getName()
-{
-    if (mType == Seq::Byte)
-    {
+std::string Seq::getName() const {
+    if (mType == Seq::Byte) {
         std::string name = "Seq";
-
-        std::list<RE*> re_list;
-        std::list<RE*>::iterator it = mList->begin();
-
-        for (it = mList->begin(); it != mList->end(); ++it)
-        {
-            if (CC* seq_cc = dynamic_cast<CC*>(*it))
-            {
+        for (RE * re : *this) {
+            if (CC* seq_cc = dynamic_cast<CC*>(re)) {
                 name += seq_cc->getName();
             }
-            else if (Name* seq_name = dynamic_cast<Name*>(*it))
-            {
+            else if (Name* seq_name = dynamic_cast<Name*>(re)) {
                 name += seq_name->getName();
             }
-            else
-            {
+            else {
                 return "Bad Byte Sequence!";
             }
         }
-
         return name;
     }
-    else
-    {
+    else {
         return "Unnamed Sequence";
     }
 }
 
-std::list<RE*>* Seq::GetREList()
-{
-    return mList;
-}
-
-void Seq::AddREListItem(RE *re)
-{
-    mList->push_back(re);
-}
-
-Seq::Type Seq::getType()
-{
+Seq::Type Seq::getType() const {
     return mType;
 }
 
-void Seq::setType(Seq::Type type)
-{
+void Seq::setType(Seq::Type type) {
     mType = type;
 }

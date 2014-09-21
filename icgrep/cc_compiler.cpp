@@ -105,28 +105,20 @@ void CC_Compiler::process_re_map(const std::map<std::string, RE*>& re_map)
 void CC_Compiler::process_re(RE* re)
 {
 
-    if (Alt* re_alt = dynamic_cast<Alt*>(re))
-    {
-        std::list<RE*>::iterator it;
-        for (it = re_alt->GetREList()->begin(); it != re_alt->GetREList()->end(); ++it)
-        {
-            process_re(*it);
+    if (Alt* re_alt = dynamic_cast<Alt*>(re)) {
+        for (RE * re : *re_alt) {
+            process_re(re);
         }
     }
-    else if (CC* re_cc = dynamic_cast<CC*>(re))
-    {
+    else if (CC* re_cc = dynamic_cast<CC*>(re)) {
         cc2pablos(re_cc);
     }
-    else if (Rep* re_rep = dynamic_cast<Rep*>(re))
-    {
+    else if (Rep* re_rep = dynamic_cast<Rep*>(re)) {
         process_re(re_rep->getRE());
     }
-    else if (Seq* re_seq = dynamic_cast<Seq*>(re))
-    {
-        std::list<RE*>::iterator it;
-        for (it = re_seq->GetREList()->begin(); it != re_seq->GetREList()->end(); ++it)
-        {
-            process_re(*it);
+    else if (Seq* re_seq = dynamic_cast<Seq*>(re)) {
+        for (RE * re : *re_seq) {
+            process_re(re);
         }
     }
 }

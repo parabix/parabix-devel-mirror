@@ -28,11 +28,10 @@ CodeGenState Pbix_Compiler::compile_subexpressions(const std::map<std::string, R
                 cg_state.stmtsl.push_back(new Assign(gs_retVal, new All(1)));
                 cg_state.newsym = gs_retVal;
 
-                std::list<RE*>::iterator endit;
-                endit = seq->GetREList()->end();
+                auto endit = seq->end();
                 --endit;
-                std::list<RE*>::iterator it;
-                for (it = seq->GetREList()->begin(); it != seq->GetREList()->end(); ++it)
+
+                for (auto it = seq->begin(); it != seq->end(); ++it)
                 {
                     Name* name = dynamic_cast<Name*>(*it);
                     if (it != endit)
@@ -138,13 +137,13 @@ CodeGenState Pbix_Compiler::re2pablo_helper(RE *re, CodeGenState cg_state)
 
         //std::cout << "\n" << "(" << StatementPrinter::PrintStmts(cg_state) << ")" << "\n" << std::endl;
     }
-    else if (Start* start = dynamic_cast<Start*>(re))
+    else if (dynamic_cast<Start*>(re))
     {
         std::string gs_retVal = symgen.gensym("start_of_line_marker");
         cg_state.stmtsl.push_back(new Assign(gs_retVal, new And(new Var(cg_state.newsym), new Not(new Advance(new Not(new CharClass(m_name_map.find("LineFeed")->second)))))));
         cg_state.newsym = gs_retVal;
     }
-    else if (End* end = dynamic_cast<End*>(re))
+    else if (dynamic_cast<End*>(re))
     {
         std::string gs_retVal = symgen.gensym("end_of_line_marker");
         cg_state.stmtsl.push_back(new Assign(gs_retVal, new And(new Var(cg_state.newsym), new CharClass(m_name_map.find("LineFeed")->second))));
@@ -152,16 +151,14 @@ CodeGenState Pbix_Compiler::re2pablo_helper(RE *re, CodeGenState cg_state)
     }
     else if (Seq* seq = dynamic_cast<Seq*>(re))
     {
-        std::list<RE*>::iterator it = seq->GetREList()->begin();
-        if (it != seq->GetREList()->end())
+        if (!seq->empty())
         {
-            cg_state = Seq_helper(seq->GetREList(), it, cg_state);
+            cg_state = Seq_helper(seq, seq->begin(), cg_state);
         }
-    //cout << "\n" << "Seq => (" << StatementPrinter::PrintStmts(cg_state) << ")" << "\n" << endl;
     }
     else if (Alt* alt = dynamic_cast<Alt*>(re))
     {
-        if (alt->GetREList() == 0)
+        if (alt->empty())
         {
 
             std::string gs_retVal = symgen.gensym("always_fail_marker");
@@ -170,21 +167,20 @@ CodeGenState Pbix_Compiler::re2pablo_helper(RE *re, CodeGenState cg_state)
         }
         else
         {
-            if (alt->GetREList()->size() == 1)
+            if (alt->size() == 1)
             {
-                cg_state = re2pablo_helper(alt->GetREList()->front(), cg_state);
+                cg_state = re2pablo_helper(alt->back(), cg_state);
             }
             else
             {
-                std::list<RE*>::iterator it = alt->GetREList()->begin();
-                cg_state = Alt_helper(alt->GetREList(), it, cg_state);
+                cg_state = Alt_helper(alt, alt->begin(), cg_state);
             }
         }
-    //cout << "\n" << "Alt => (" << StatementPrinter::PrintStmts(cg_state) << ")" << "\n" << endl;
+
     }
     else if (Rep* rep = dynamic_cast<Rep*>(re))
     {
-        if ((dynamic_cast<Name*>(rep->getRE()) != 0) && (rep->getLB() == 0) && (rep->getUB()== unboundedRep))
+        if ((dynamic_cast<Name*>(rep->getRE()) != 0) && (rep->getLB() == 0) && (rep->getUB()== UNBOUNDED_REP))
         {
             Name* rep_name = dynamic_cast<Name*>(rep->getRE());
             std::string gs_retVal = symgen.gensym("marker");
@@ -216,13 +212,13 @@ CodeGenState Pbix_Compiler::re2pablo_helper(RE *re, CodeGenState cg_state)
 
             cg_state.newsym = gs_retVal;
         }
-        else if (rep->getUB() == unboundedRep)
+        else if (rep->getUB() == UNBOUNDED_REP)
         {
-	    cg_state = UnboundedRep_helper(rep->getRE(), rep->getLB(), cg_state);
+            cg_state = UnboundedRep_helper(rep->getRE(), rep->getLB(), cg_state);
         }
-        else if (rep->getUB() != unboundedRep)
+        else if (rep->getUB() != UNBOUNDED_REP)
         {
-	    cg_state = BoundedRep_helper(rep->getRE(), rep->getLB(), rep->getUB(), cg_state);
+            cg_state = BoundedRep_helper(rep->getRE(), rep->getLB(), rep->getUB(), cg_state);
         }
     }
 
@@ -230,7 +226,7 @@ CodeGenState Pbix_Compiler::re2pablo_helper(RE *re, CodeGenState cg_state)
 }
 
 
-CodeGenState Pbix_Compiler::Seq_helper(std::list<RE*>* lst, std::list<RE*>::const_iterator it, CodeGenState cg_state)
+CodeGenState Pbix_Compiler::Seq_helper(Vector *lst, const_iterator it, CodeGenState cg_state)
 {
     if (it != lst->end())
     {
@@ -241,7 +237,7 @@ CodeGenState Pbix_Compiler::Seq_helper(std::list<RE*>* lst, std::list<RE*>::cons
     return cg_state;
 }
 
-CodeGenState Pbix_Compiler::Alt_helper(std::list<RE*>* lst, std::list<RE*>::const_iterator it, CodeGenState cg_state)
+CodeGenState Pbix_Compiler::Alt_helper(Vector* lst, const_iterator it, CodeGenState cg_state)
 {
     CodeGenState t1_cg_state = re2pablo_helper(*it, cg_state);
     cg_state.stmtsl = t1_cg_state.stmtsl;
@@ -333,8 +329,7 @@ bool Pbix_Compiler::unicode_re_helper(RE *re, bool found)
         }
         else if (Seq* re_seq = dynamic_cast<Seq*>(re))
         {
-            std::list<RE*>::iterator it;
-            for (it = re_seq->GetREList()->begin(); it != re_seq->GetREList()->end(); ++it)
+            for (auto it = re_seq->begin(); it != re_seq->end(); ++it)
             {
                 found = unicode_re_helper(*it, found);
                 if (found) break;
@@ -342,8 +337,7 @@ bool Pbix_Compiler::unicode_re_helper(RE *re, bool found)
         }
         else if (Alt* re_alt = dynamic_cast<Alt*>(re))
         {
-            std::list<RE*>::iterator it;
-            for (it = re_alt->GetREList()->begin(); it != re_alt->GetREList()->end(); ++it)
+            for (auto it = re_alt->begin(); it != re_alt->end(); ++it)
             {
                 found = unicode_re_helper(*it, found);
                 if (found) break;

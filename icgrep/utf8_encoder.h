@@ -22,9 +22,9 @@
 class UTF8_Encoder
 {
 public:
-    static RE* toUTF8(RE* re);
+    static RE* toUTF8(RE * re);
 private:
-    static RE* rangeToUTF8(CharSetItem item);
+    static RE* rangeToUTF8(const CharSetItem &item);
     static RE* rangeToUTF8_helper(int lo, int hi, int n, int hlen);
     static CC* makeByteClass(int byteval);
     static CC* makeByteRange(int lo, int hi);

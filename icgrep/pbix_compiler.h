@@ -55,14 +55,17 @@ struct CodeGenState{
 
 class Pbix_Compiler
 {
+    typedef RE::Vector              Vector;
+    typedef Vector::const_iterator  const_iterator;
+
 public:
     Pbix_Compiler(std::map<std::string, std::string> name_map);
     CodeGenState compile(RE *re);
     CodeGenState compile_subexpressions(const std::map<std::string, RE*>& re_map);
 private:
     CodeGenState re2pablo_helper(RE *re, CodeGenState cg_state);
-    CodeGenState Seq_helper(std::list<RE*>* lst, std::list<RE*>::const_iterator it, CodeGenState cg_state);
-    CodeGenState Alt_helper(std::list<RE*>* lst, std::list<RE*>::const_iterator it, CodeGenState cg_state);
+    CodeGenState Seq_helper(Vector * lst, const_iterator it, CodeGenState cg_state);
+    CodeGenState Alt_helper(Vector * lst, const_iterator it, CodeGenState cg_state);
     CodeGenState UnboundedRep_helper(RE* repeated, int lb, CodeGenState cg_state);
     CodeGenState BoundedRep_helper(RE* repeated, int lb, int ub, CodeGenState cg_state);
 

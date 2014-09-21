@@ -7,47 +7,37 @@
 #include "utf8_encoder.h"
 
 
-RE* UTF8_Encoder::toUTF8(RE* re)
-{
-    RE* retVal = 0;
+RE* UTF8_Encoder::toUTF8(RE* re) {
 
-    if (Alt* re_alt = dynamic_cast<Alt*>(re))
-    {
-        std::list<RE*> re_list;
-        std::list<RE*>::reverse_iterator rit = re_alt->GetREList()->rbegin();
+    RE* retVal = nullptr;
 
-        for (rit = re_alt->GetREList()->rbegin(); rit != re_alt->GetREList()->rend(); ++rit)
-        {
-            re_list.push_back(toUTF8(*rit));
+    if (Alt* re_alt = dynamic_cast<Alt*>(re)) {
+
+        Alt * new_alt = new Alt();
+        for (RE * re : *re_alt) {
+            new_alt->push_back(toUTF8(re));
         }
-
-        retVal = new Alt(&re_list);
+        retVal = new_alt;
     }
-    else if (Seq* re_seq = dynamic_cast<Seq*>(re))
-    {
+    else if (Seq * re_seq = dynamic_cast<Seq*>(re)) {
 
-        std::list<RE*> re_list;
-        std::list<RE*>::iterator it;
-
-        for (it = re_seq->GetREList()->begin(); it != re_seq->GetREList()->end(); ++it)
-        {
-            //If this is a previously encoded Unicode byte sequence.
-            if (re_seq->getType() == Seq::Byte)
-            {
-                if (CC* seq_cc = dynamic_cast<CC*>(*it))
-                {
-                    CharSetItem item = seq_cc->getItems().front();
-                    re_list.push_front(new CC(item.lo_codepoint));
+        Seq * new_seq = new Seq(re_seq->getType());
+        //If this is a previously encoded Unicode byte sequence.
+        if (re_seq->getType() == Seq::Byte) {
+            // Should we be throwing an error here? no byte sequences should exist in the code.
+            // The parser should now convert them to UNICODE code points.
+            for (RE * re : *re_seq) {
+                if (CC * cc = dynamic_cast<CC*>(re)) {
+                    const CharSetItem & item = cc->getItems().front();
+                    new_seq->push_back(new CC(item.lo_codepoint));
                 }
             }
-            else
-            {
-                re_list.push_front(toUTF8(*it));
+        }
+        else {
+            for (RE * re : *re_seq) {
+                new_seq->push_back(toUTF8(re));
             }
         }
-
-        Seq* new_seq = new Seq(&re_list);
-        new_seq->setType(re_seq->getType());
         retVal = new_seq;
     }
     else if (Rep* re_rep = dynamic_cast<Rep*>(re))
@@ -60,15 +50,12 @@ RE* UTF8_Encoder::toUTF8(RE* re)
         {
             retVal = rangeToUTF8(re_cc->getItems().front());
         }
-        else if (re_cc->getItems().size() > 1)
-        {           
-            std::list<RE*> re_list;
-            for (int i = 0; i < re_cc->getItems().size(); i++)
-            {
-                re_list.push_back(rangeToUTF8(re_cc->getItems().at(i)));
+        else if (re_cc->getItems().size() > 1) {
+            RE::Vector re_list;
+            for (auto & item : re_cc->getItems()) {
+                re_list.push_back(rangeToUTF8(item));
             }
-            retVal = RE_Simplifier::mkAlt(&re_list);
-            //retVal = new Alt(&re_list);
+            retVal = RE_Simplifier::makeAlt(re_list);
         }
     }
     else if (Name* re_name = dynamic_cast<Name*>(re))
@@ -78,11 +65,11 @@ RE* UTF8_Encoder::toUTF8(RE* re)
         name->setNegated(re_name->isNegated());   // TODO:  Hide this in the re_name module.
         retVal = name;
     }
-    else if (Start* re_start = dynamic_cast<Start*>(re))
+    else if (dynamic_cast<Start*>(re))
     {
         retVal = new Start();
     }
-    else if (End* re_end = dynamic_cast<End*>(re))
+    else if (dynamic_cast<End*>(re))
     {
         retVal = new End();
     }
@@ -90,8 +77,7 @@ RE* UTF8_Encoder::toUTF8(RE* re)
     return retVal;
 }
 
-RE* UTF8_Encoder::rangeToUTF8(CharSetItem item)
-{
+RE * UTF8_Encoder::rangeToUTF8(const CharSetItem & item) {
     int u8len_lo = u8len(item.lo_codepoint);
     int u8len_hi = u8len(item.hi_codepoint);
 
@@ -103,11 +89,11 @@ RE* UTF8_Encoder::rangeToUTF8(CharSetItem item)
         CharSetItem lo_item;
         lo_item.lo_codepoint = item.lo_codepoint;
         lo_item.hi_codepoint = m;
-        alt->AddREListItem(rangeToUTF8(lo_item));
+        alt->push_back(rangeToUTF8(lo_item));
         CharSetItem hi_item;
         hi_item.lo_codepoint = m + 1;
         hi_item.hi_codepoint = item.hi_codepoint;
-        alt->AddREListItem(rangeToUTF8(hi_item));
+        alt->push_back(rangeToUTF8(hi_item));
 
         return alt;
     }
@@ -130,8 +116,8 @@ RE* UTF8_Encoder::rangeToUTF8_helper(int lo, int hi, int n, int hlen)
     {
         Seq* seq = new Seq();
         seq->setType((u8Prefix(hbyte) ? Seq::Byte : Seq::Normal));
-        seq->AddREListItem(makeByteClass(hbyte));
-        seq->AddREListItem(rangeToUTF8_helper(lo, hi, n+1, hlen));
+        seq->push_back(makeByteClass(hbyte));
+        seq->push_back(rangeToUTF8_helper(lo, hi, n+1, hlen));
         return seq;
     }
     else
@@ -143,8 +129,8 @@ RE* UTF8_Encoder::rangeToUTF8_helper(int lo, int hi, int n, int hlen)
             int hi_floor = (~suffix_mask) & hi;
 
             Alt* alt = new Alt();
-            alt->AddREListItem(rangeToUTF8_helper(hi_floor, hi, n, hlen));
-            alt->AddREListItem(rangeToUTF8_helper(lo, hi_floor - 1, n, hlen));
+            alt->push_back(rangeToUTF8_helper(hi_floor, hi, n, hlen));
+            alt->push_back(rangeToUTF8_helper(lo, hi_floor - 1, n, hlen));
             return alt;
         }
         else if ((lo & suffix_mask) != 0)
@@ -152,16 +138,16 @@ RE* UTF8_Encoder::rangeToUTF8_helper(int lo, int hi, int n, int hlen)
             int low_ceil = lo | suffix_mask;
 
             Alt* alt = new Alt();
-            alt->AddREListItem(rangeToUTF8_helper(low_ceil + 1, hi, n, hlen));
-            alt->AddREListItem(rangeToUTF8_helper(lo, low_ceil, n, hlen));
+            alt->push_back(rangeToUTF8_helper(low_ceil + 1, hi, n, hlen));
+            alt->push_back(rangeToUTF8_helper(lo, low_ceil, n, hlen));
             return alt;
         }
         else
         {
             Seq* seq = new Seq();
             seq->setType((u8Prefix(hbyte) ? Seq::Byte : Seq::Normal));
-            seq->AddREListItem(makeByteRange(lbyte, hbyte));
-            seq->AddREListItem(rangeToUTF8_helper(lo, hi, n + 1, hlen));
+            seq->push_back(makeByteRange(lbyte, hbyte));
+            seq->push_back(rangeToUTF8_helper(lo, hi, n + 1, hlen));
             return seq;
         }
     }

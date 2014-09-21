@@ -18,12 +18,12 @@ Rep::~Rep()
     delete mRE;
 }
 
-RE* Rep::getRE()
+RE* Rep::getRE() const
 {
     return mRE;
 }
 
-int Rep::getLB()
+int Rep::getLB() const
 {
     return mLB;
 }
@@ -33,7 +33,7 @@ void Rep::setLB(int lb)
     mLB = lb;
 }
 
-int Rep::getUB()
+int Rep::getUB() const
 {
     return mUB;
 }

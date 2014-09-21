@@ -1,37 +1,22 @@
 #include "re_reducer.h"
 
 
-RE* RE_Reducer::reduce(RE* re, std::map<std::string, RE*>& re_map)
-{
-    RE* retVal = 0;
-
-    if (Alt* re_alt = dynamic_cast<Alt*>(re))
-    {
-        std::list<RE*> re_list;
-        std::list<RE*>::reverse_iterator rit = re_alt->GetREList()->rbegin();
-
-        for (rit = re_alt->GetREList()->rbegin(); rit != re_alt->GetREList()->rend(); ++rit)
-        {
-            re_list.push_back(reduce(*rit, re_map));
+RE* RE_Reducer::reduce(RE* re, std::map<std::string, RE*>& re_map) {
+    RE* retVal = nullptr;
+    if (Alt* re_alt = dynamic_cast<Alt*>(re)) {
+        Alt * new_alt = new Alt();
+        for (RE * re : *re_alt) {
+            new_alt->push_back(reduce(re, re_map));
         }
-
-        retVal = new Alt(&re_list);
+        retVal = new_alt;
     }
-    else if (Seq* re_seq = dynamic_cast<Seq*>(re))
-    {
-
-        if (re_seq->getType() == Seq::Byte)
-        {
+    else if (Seq* re_seq = dynamic_cast<Seq*>(re)) {
+        Seq * new_seq = new Seq();
+        for (RE * re : *re_seq) {
+            new_seq->push_back(reduce(re, re_map));
+        }
+        if (re_seq->getType() == Seq::Byte) {
             //If this is a sequence of byte classes then this is a multibyte sequence for a Unicode character class.
-            std::list<RE*> re_list;
-            std::list<RE*>::iterator it;
-
-            for (it = re_seq->GetREList()->begin(); it != re_seq->GetREList()->end(); ++it)
-            {
-                re_list.push_front(reduce(*it, re_map));
-            }
-
-            Seq* new_seq =  new Seq(&re_list);
             new_seq->setType(Seq::Byte);
             std::string seqname = new_seq->getName();
             re_map.insert(make_pair(seqname, new_seq));
@@ -39,46 +24,31 @@ RE* RE_Reducer::reduce(RE* re, std::map<std::string, RE*>& re_map)
             name->setType(Name::Unicode);
             retVal = name;
         }
-        else
-        {
-            std::list<RE*> re_list;
-            std::list<RE*>::iterator it;
-
-            for (it = re_seq->GetREList()->begin(); it != re_seq->GetREList()->end(); ++it)
-            {
-                re_list.push_front(reduce(*it, re_map));
-            }
-
-            retVal = new Seq(&re_list);
+        else {
+            retVal = new_seq;
         }
     }
-    else if (Rep* re_rep = dynamic_cast<Rep*>(re))
-    {
+    else if (Rep* re_rep = dynamic_cast<Rep*>(re)) {
         retVal = new Rep(reduce(re_rep->getRE(), re_map), re_rep->getLB(), re_rep->getUB());
     }
-    else if (CC* re_cc = dynamic_cast<CC*>(re))
-    {
+    else if (CC* re_cc = dynamic_cast<CC*>(re)) {
         std::string ccname = re_cc->getName();
         //If the character class isn't in the map then add it.
         re_map.insert(make_pair(ccname, re_cc));
         //return a new name class with the name of the character class.
         retVal = new Name(ccname);
     }
-    else if (Name* re_name = dynamic_cast<Name*>(re))
-    {
+    else if (Name* re_name = dynamic_cast<Name*>(re)) {
         Name* name = new Name(re_name->getName());
         name->setType(re_name->getType());
         name->setNegated(re_name->isNegated());   // TODO:  Hide this in the re_name module.
         retVal = name;
     }
-    else if (Start* re_start = dynamic_cast<Start*>(re))
-    {
+    else if (dynamic_cast<Start*>(re)) {
         retVal = new Start();
     }
-    else if (End* re_end = dynamic_cast<End*>(re))
-    {
+    else if (dynamic_cast<End*>(re)) {
         retVal = new End();
     }
-
     return retVal;
 }

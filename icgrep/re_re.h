@@ -7,9 +7,12 @@
 #ifndef RE_H
 #define RE_H
 
+#include <vector>
+
 class RE
 {
 public:
+    typedef std::vector<RE*>            Vector;
     virtual ~RE();
 protected:
     RE();

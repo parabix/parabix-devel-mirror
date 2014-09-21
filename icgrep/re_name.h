@@ -12,11 +12,11 @@ public:
     Name();
     Name(std::string name);
     void setName(std::string name);
-    std::string getName();
+    std::string getName() const;
     void setNegated(bool is_negated);
-    bool isNegated();
+    bool isNegated() const;
     void setType(Type type);
-    Type getType();
+    Type getType() const;
     ~Name();
 private:
     std::string mName;

@@ -5,852 +5,451 @@
  */
 
 #include "re_parser.h"
+#include "re_alt.h"
+#include "re_end.h"
+#include "re_rep.h"
+#include "re_seq.h"
+#include "re_start.h"
+#include "parsefailure.h"
+#include <algorithm>
 
-
-ParseResult* RE_Parser::parse_re(std::string input_string)
-{
-    parse_result_retVal re_result = parse_re_helper(input_string);
-
-    if (re_result.remaining.length() == 0)
-    {
-        return re_result.result;
+RE * RE_Parser::parse_re(const std::string & regular_expression, const bool allow_escapes_within_charset) {
+    RE_Parser parser(regular_expression, allow_escapes_within_charset);
+    RE * re = parser.parse_alt(false);
+    if (re == nullptr) {
+        throw ParseFailure("An unexpected parsing error occurred!");
     }
-    else if (ParseSuccess* re_success = dynamic_cast<ParseSuccess*>(re_result.result))
-    {
-        ParseFailure* failure = new ParseFailure("Junk remaining!");
-
-        return failure;
-    }
-    else if (ParseFailure* re_failure = dynamic_cast<ParseFailure*>(re_result.result))
-    {
-        return re_failure;
-    }
-    else
-    {
-        return 0;
-    }
+    return re;
 }
 
-parse_result_retVal RE_Parser::parse_re_helper(std::string s)
+inline RE_Parser::RE_Parser(const std::string & regular_expression, const bool allow_escapes_within_charset)
+: _cursor(regular_expression.begin())
+, _end(regular_expression.end())
+, _allow_escapes_within_charset(allow_escapes_within_charset)
 {
-    parse_result_retVal result_retVal;
 
-    parse_re_list_retVal af_result = parse_re_alt_form_list(s);
-
-    if (af_result.re_list.size() == 0)
-    {
-        result_retVal.result = new ParseFailure("No regular expression found!");
-        result_retVal.remaining = s;
-    }
-    else if (af_result.re_list.size() == 1)
-    {
-        result_retVal.result = new ParseSuccess(af_result.re_list.front());
-        result_retVal.remaining = af_result.remaining;
-    }
-    else
-    {
-        result_retVal.result = new ParseSuccess(new Alt(&af_result.re_list));
-        result_retVal.remaining = af_result.remaining;
-    }
-
-    return result_retVal;
 }
 
-parse_re_list_retVal RE_Parser::parse_re_alt_form_list(std::string s)
-{
-    parse_re_list_retVal re_list_retVal;
-    parse_result_retVal form_result = parse_re_form(s);
-
-    if (ParseSuccess* re_success = dynamic_cast<ParseSuccess*>(form_result.result))
-    {
-        if (form_result.remaining.operator [](0) == '|')
-        {           
-            parse_re_list_retVal t1_re_list_retVal =
-                    parse_re_alt_form_list(form_result.remaining.substr(1, form_result.remaining.length() - 1));
-            std::list<RE*>::iterator it;
-            it=t1_re_list_retVal.re_list.begin();
-            re_list_retVal.re_list.assign(it, t1_re_list_retVal.re_list.end());
-            re_list_retVal.remaining = t1_re_list_retVal.remaining;
+RE * RE_Parser::parse_alt(const bool subexpression) {
+    std::unique_ptr<Alt> alt(new Alt());
+    for (;;) {
+        alt->push_back(parse_seq());
+        if (_cursor == _end || *_cursor != '|') {
+            break;
         }
-        else
-        {
-            re_list_retVal.remaining = form_result.remaining;
+        ++_cursor; // advance past the alternation character '|'
+    }
+    if (alt->empty())
+    {
+        throw NoRegularExpressionFound();
+    }
+    else if (subexpression) {
+        if (_cursor == _end || *_cursor != ')') {
+            throw ParseFailure("Parenthesization error!");
         }
-        re_list_retVal.re_list.push_back(re_success->getRE());
+        ++_cursor;
     }
-    else
-    {
-        re_list_retVal.re_list.clear();
-        re_list_retVal.remaining = s;
+    else if (_cursor != _end) { // !subexpression
+        throw ParseFailure("Cannot fully parse statement!");
     }
 
-    return re_list_retVal;
+    RE * re;
+    if (alt->size() == 1) {
+        re = alt->back();
+        alt->pop_back();
+    }
+    else {
+        re = alt.release();
+    }
+    return re;
 }
 
-parse_result_retVal RE_Parser::parse_re_form(std::string s)
-{
-    parse_result_retVal form_retVal;
-    parse_re_list_retVal item_list_result = parse_re_item_list(s);
-
-    if (item_list_result.re_list.size() == 0)
-    {
-        form_retVal.result = new ParseFailure("No Regular Expression Found!");
-        form_retVal.remaining = s;
-    }
-    else if (item_list_result.re_list.size() == 1)
-    {
-        form_retVal.result = new ParseSuccess(item_list_result.re_list.front());
-        form_retVal.remaining = item_list_result.remaining;
-    }
-    else
-    {
-        form_retVal.result = new ParseSuccess(new Seq(&item_list_result.re_list));
-        form_retVal.remaining = item_list_result.remaining;
-    }
-
-    return form_retVal;
-}
-
-parse_re_list_retVal RE_Parser::parse_re_item_list(std::string s)
-{
-    parse_re_list_retVal item_list_retVal;
-    parse_result_retVal item_result = parse_re_item(s);
-
-    if (ParseSuccess* re_success = dynamic_cast<ParseSuccess*>(item_result.result))
-    {
-        parse_re_list_retVal t1_item_list_retVal = parse_re_item_list(item_result.remaining);
-
-        std::list<RE*>::iterator it;
-        it=t1_item_list_retVal.re_list.begin();
-        item_list_retVal.re_list.assign(it, t1_item_list_retVal.re_list.end());
-        item_list_retVal.re_list.push_back(re_success->getRE());
-        item_list_retVal.remaining = t1_item_list_retVal.remaining;
-    }
-    else
-    {
-        item_list_retVal.re_list.clear();
-        item_list_retVal.remaining = s;
-    }
-
-    return item_list_retVal;
-}
-
-parse_result_retVal RE_Parser::parse_re_item(std::string s)
-{
-    parse_result_retVal item_retVal;
-    parse_result_retVal unit_result = parse_re_unit(s);
-
-    if (ParseSuccess* re_success = dynamic_cast<ParseSuccess*>(unit_result.result))
-    {
-        item_retVal = extend_item(re_success->getRE(), unit_result.remaining);
-    }
-    else
-    {
-        item_retVal.result = new ParseFailure("Parse item failure!");
-        item_retVal.remaining = s;
-    }
-
-    return item_retVal;
-}
-
-parse_result_retVal RE_Parser::parse_re_unit(std::string s)
-{
-    parse_result_retVal unit_retVal;
-
-    if (s.length() == 0)
-    {
-        unit_retVal.result = new ParseFailure("Incomplete regular expression! (parse_re_unit)");
-        unit_retVal.remaining = "";
-    }
-    else if (s.operator[](0) == '(')
-    {
-        parse_result_retVal t1_unit_retVal = parse_re_helper(s.substr(1, s.length() - 1));
-        ParseSuccess* success = dynamic_cast<ParseSuccess*>(t1_unit_retVal.result);
-        if ((success != 0) && (t1_unit_retVal.remaining.operator[](0) == ')'))
-        {
-            unit_retVal.result = success;
-            unit_retVal.remaining = t1_unit_retVal.remaining.substr(1, t1_unit_retVal.remaining.length() - 1);
+inline RE * RE_Parser::parse_seq() {
+    std::unique_ptr<Seq> seq(new Seq());
+    for (;;) {
+        RE * re = parse_next_token();
+        if (re == nullptr) {
+            break;
         }
-        else
-        {
-            unit_retVal.result = new ParseFailure("Bad parenthesized RE!");
-            unit_retVal.remaining = s.substr(1, s.length() - 1);
+        seq->push_back(extend_item(re));
+    }
+    if (seq->empty())
+    {
+        throw NoRegularExpressionFound();
+    }
+
+    RE * re;
+    if (seq->size() == 1) {
+        re = seq->back();
+        seq->pop_back();
+    }
+    else {
+        re = seq.release();
+    }
+    return re;
+}
+
+RE * RE_Parser::parse_next_token() {
+    RE * re = nullptr;
+    if (_cursor != _end) {
+        switch (*_cursor) {
+            case '(':
+                ++_cursor;
+                re = parse_alt(true);
+                break;
+            case '^':
+                ++_cursor;
+                re = new Start;
+                break;
+            case '$':
+                ++_cursor;
+                re = new End;
+                break;
+            case '|': case ')':
+                break;
+            case '*': case '+': case '?': case ']': case '{': case '}':
+                throw ParseFailure("Illegal metacharacter usage!");
+            case '[':
+                re = parse_charset();
+                break;
+            case '.': // the 'any' metacharacter
+                re = parse_any_character();
+                break;
+            default:
+                re = parse_literal();
+                break;
         }
     }
-    else if (s.operator [](0) == '^')
-    {
-        unit_retVal.result = new ParseSuccess(new Start);
-        unit_retVal.remaining = s.substr(1, s.length() - 1);
-    }
-    else if (s.operator[](0) == '$')
-    {
-        unit_retVal.result = new ParseSuccess(new End);
-        unit_retVal.remaining = s.substr(1, s.length() - 1);
-    }
-    else
-    {
-        unit_retVal = parse_cc(s);
-    }
-
-    return unit_retVal;
+    return re;
 }
 
-parse_result_retVal RE_Parser::extend_item(RE *re, std::string s)
-{
-     parse_result_retVal extend_item_retVal;
+CC * RE_Parser::parse_any_character() {
+    CC * cc = new CC();
+    cc->insert_range(0, 9);
+    cc->insert_range(11, 0x10FFFF);
+    ++_cursor;
+    return cc;
+}
 
-     if (s.operator [](0) == '*')
-     {
-         return extend_item(new Rep(re, 0, unboundedRep), s.substr(1, s.length() - 1));
-     }
-     else if (s.operator[](0) == '?')
-     {
-         return extend_item(new Rep(re, 0, 1), s.substr(1, s.length() - 1));
-     }
-     else if (s.operator[](0) == '+')
-     {
-         return extend_item(new Rep(re, 1, unboundedRep), s.substr(1, s.length() - 1));
-     }
-     else if (s.operator[](0) == '{')
-     {
-        parse_int_retVal int_retVal = parse_int(s.substr(1, s.length() - 1));
+RE * RE_Parser::extend_item(RE * re) {
+    if (_cursor == _end) {
+        return re;
+    }
+    switch (*_cursor) {
+        case '*':
+            ++_cursor; // skip past the '*'
+            re = new Rep(re, 0, UNBOUNDED_REP);
+            break;
+        case '?':
+            ++_cursor; // skip past the '?'
+            re = new Rep(re, 0, 1);
+            break;
+        case '+':
+            ++_cursor; // skip past the '+'
+            re = new Rep(re, 1, UNBOUNDED_REP);
+            break;
+        case '{':
+            re = parse_range_bound(re);
+            break;
+        default:
+            return re;
+    }
+    // this only occurs if we encountered one of the non-default cases above.
+    return extend_item(re);
+}
 
-        if ((int_retVal.i != -1) && (int_retVal.remaining.operator [](0) == '}'))
-        {
-            extend_item_retVal =
-                    extend_item(new Rep(re, int_retVal.i, int_retVal.i), int_retVal.remaining.substr(1, int_retVal.remaining.length() - 1));
-
+inline RE * RE_Parser::parse_range_bound(RE * re) {
+    ++_cursor;
+    throw_incomplete_expression_error_if_end_of_stream();
+    Rep * rep = nullptr;
+    unsigned lower_bound;
+    if (*_cursor == ',') {
+        ++_cursor;
+        lower_bound = 0;
+    }
+    else {
+        lower_bound = parse_int();
+    }
+    throw_incomplete_expression_error_if_end_of_stream();
+    if (*_cursor == '}') {
+        rep = new Rep(re, lower_bound, lower_bound);
+    }
+    else if (*_cursor != ',') {
+        throw BadLowerBound();
+    }
+    else { // [^,}]
+        ++_cursor;
+        throw_incomplete_expression_error_if_end_of_stream();
+        if (*_cursor == '}') {
+            rep = new Rep(re, lower_bound, UNBOUNDED_REP);
         }
-        else if ((int_retVal.i != -1) && ((int_retVal.remaining.operator [](0) == ',') && (int_retVal.remaining.operator [](1) == '}')))
-        {
-            extend_item_retVal =
-                    extend_item(new Rep(re, int_retVal.i, unboundedRep), int_retVal.remaining.substr(2, int_retVal.remaining.length() - 2));
-
-        }
-        else if ((int_retVal.i != -1) && (int_retVal.remaining.operator [](0) == ','))
-        {
-            parse_int_retVal t1_int_retVal = parse_int(int_retVal.remaining.substr(1, int_retVal.remaining.length() - 1));
-
-            if ((t1_int_retVal.i != -1) && (t1_int_retVal.remaining.operator [](0) == '}'))
-            {
-                extend_item_retVal =
-                        extend_item(new Rep(re, int_retVal.i, t1_int_retVal.i), t1_int_retVal.remaining.substr(1, t1_int_retVal.remaining.length() - 1));
+        else {
+            const unsigned upper_bound = parse_int();
+            if (*_cursor != '}') {
+                throw BadUpperBound();
             }
-            else
-            {
-                extend_item_retVal.result = new ParseFailure("Bad upper bound!");
-                extend_item_retVal.remaining = int_retVal.remaining.substr(1, int_retVal.remaining.length() - 1);
+            rep = new Rep(re, lower_bound, upper_bound);
+        }
+    }
+    ++_cursor;
+    return rep;
+}
+
+inline RE * RE_Parser::parse_literal() {
+    // handle the escaped metacharacter (assuming it is one)
+    if (*_cursor == '\\') {
+        return parse_escaped_metacharacter();
+    }
+    else {
+        return new CC(parse_utf8_codepoint());
+    }
+}
+
+inline RE * RE_Parser::parse_escaped_metacharacter() {
+    ++_cursor;
+    throw_incomplete_expression_error_if_end_of_stream();
+    bool negated = false;
+    switch (*_cursor) {
+        case '(': case ')': case '*': case '+':
+        case '.': case '?': case '[': case '\\':
+        case ']': case '{': case '|': case '}':
+            return new CC(*_cursor++);
+        case 'u':
+            return new CC(parse_hex());
+        case 'P':
+            negated = true;
+        case 'p':
+            return parse_unicode_category(negated);
+    }
+    throw ParseFailure("Illegal backslash escape!");
+}
+
+unsigned RE_Parser::parse_utf8_codepoint() {
+    unsigned c = static_cast<unsigned>(*_cursor++);
+    if (c > 0x80) { // if non-ascii
+        if (c < 0xC2) {
+            throw InvalidUTF8Encoding();
+        }
+        else { // [0xC2, 0xFF]
+            unsigned bytes = 0;
+            if (c < 0xE0) { // [0xC2, 0xDF]
+                c &= 0x1F;
+                bytes = 1;
+            }
+            else if (c < 0xF0) { // [0xE0, 0xEF]
+                c &= 0x0F;
+                bytes = 2;
+            }
+            else { // [0xF0, 0xFF]
+                c &= 0x0F;
+                bytes = 3;
+            }
+            while (--bytes) {
+                if (++_cursor == _end || (*_cursor & 0xC0) != 0x80) {
+                    throw InvalidUTF8Encoding();
+                }
+                c = (c << 6) | static_cast<unsigned>(*_cursor & 0x3F);
             }
         }
-        else
-        {
-            extend_item_retVal.result = new ParseFailure("Bad lower bound!");
-            extend_item_retVal.remaining = s.substr(1, s.length() - 1);
-        }
-     }
-     else
-     {
-         extend_item_retVal.result = new ParseSuccess(re);
-         extend_item_retVal.remaining = s;
-     }
-
-     return extend_item_retVal;
+    }
+    return c;
 }
 
-parse_result_retVal RE_Parser::parse_cc(std::string s)
-{
-    parse_result_retVal cc_retVal;
-
-    if (s.operator [](0) == '\\')
-    {
-        if (s.operator [](1) == '?')
-        {
-            cc_retVal.result = new ParseSuccess(new CC('?'));
-        }
-        else if (s.operator [](1) == '+')
-        {
-            cc_retVal.result = new ParseSuccess(new CC('+'));
-        }
-        else if (s.operator [](1) == '*')
-        {
-            cc_retVal.result = new ParseSuccess(new CC('*'));
-        }
-        else if (s.operator [](1) == '(')
-        {
-            cc_retVal.result = new ParseSuccess(new CC('('));
-        }
-        else if (s.operator [](1) == ')')
-        {
-            cc_retVal.result = new ParseSuccess(new CC(')'));
-        }
-        else if (s.operator [](1) == '{')
-        {
-            cc_retVal.result = new ParseSuccess(new CC('{'));
-        }
-        else if (s.operator [](1) == '}')
-        {
-            cc_retVal.result = new ParseSuccess(new CC('}'));
-        }
-        else if (s.operator [](1) == '[')
-        {
-            cc_retVal.result = new ParseSuccess(new CC('['));
-        }
-        else if (s.operator [](1) == ']')
-        {
-            cc_retVal.result = new ParseSuccess(new CC(']'));
-        }
-        else if (s.operator [](1) == '|')
-        {
-            cc_retVal.result = new ParseSuccess(new CC('|'));
-        }
-        else if (s.operator [](1) == '.')
-        {
-            cc_retVal.result = new ParseSuccess(new CC('.'));
-        }
-        else if (s.operator [](1) == '\\')
-        {
-            cc_retVal.result = new ParseSuccess(new CC('\\'));
-        }
-        else if (s.operator [](1) == 'u')
-        {
-            parse_int_retVal hex_val = parse_hex(s.substr(2, s.length() - 2));
-
-            if (hex_val.i == -1)
-            {
-                cc_retVal.result = new ParseFailure("Bad Unicode hex notation!");
-                cc_retVal.remaining = hex_val.remaining;
-            }
-            else
-            {
-                cc_retVal.result = new ParseSuccess(new CC(hex_val.i));
-                cc_retVal.remaining = hex_val.remaining;
-            }
-
-            return cc_retVal;
-        }
-        else if (s.operator [](1) == 'p')
-        {
-            return cc_retVal = parse_unicode_category(s.substr(2, s.length() - 2), /* negated = */ false);
-        }
-        else if (s.operator [](1) == 'P')
-        {
-            return cc_retVal = parse_unicode_category(s.substr(2, s.length() - 2), /* negated = */ true);
-        }
-        else
-        {
-            cc_retVal.result = new ParseFailure("Illegal backslash escape!");
-            cc_retVal.remaining = s.substr(1, s.length() - 1);
-
-            return cc_retVal;
-        }
-
-        cc_retVal.remaining = s.substr(2, s.length() - 2);
-
-        return cc_retVal;
-    }
-
-    if (s.operator [](0) == '.')
-    {        
-        CC* cc = new CC();
-        cc->insert_range(0, 9);
-        cc->insert_range(11, 0x10FFFF);
-        cc_retVal.result = new ParseSuccess(cc);
-        cc_retVal.remaining = s.substr(1, s.length() - 1);
-
-        return cc_retVal;
-    }
-
-    if (s.operator [](0) == '[')
-    {
-        if (s.operator[](1) == '^')
-        {
-            cc_retVal = negate_cc_result(parse_cc_body(s.substr(2, s.length() - 2)));
-        }
-        else
-        {
-            cc_retVal = parse_cc_body(s.substr(1, s.length() - 1));
-        }
-
-        return cc_retVal;
-    }
-
-    std::string metacharacters = "?+*(){}[]|";
-    std::string c = s.substr(0,1);
-
-    if (metacharacters.find(c) == std::string::npos)
-    {
-        cc_retVal.result = new ParseSuccess(new CC(s.operator [](0)));
-        cc_retVal.remaining = s.substr(1, s.length() - 1);
-    }
-    else
-    {
-        cc_retVal.result = new ParseFailure("Metacharacter alone!");
-        cc_retVal.remaining = s;
-    }
-
-    int next_byte = (s.operator [](0) & 0xFF);
-
-    if ((next_byte >= 0xC0) && (next_byte <= 0xDF))
-    {       
-        cc_retVal = parse_utf8_bytes(1, s);
-    }
-    else if ((next_byte >= 0xE0) && (next_byte <= 0xEF))
-    {
-        cc_retVal = parse_utf8_bytes(2, s);
-    }
-    else if((next_byte >= 0xF0) && (next_byte <= 0xFF))
-    {
-        cc_retVal = parse_utf8_bytes(3, s);
-    }
-
-    return cc_retVal;
-}
-
-parse_result_retVal RE_Parser::parse_utf8_bytes(int suffix_count, std::string s)
-{
-    CC* cc = new CC((s.operator [](0) & 0xFF));
-    Seq* seq = new Seq();
-    seq->setType(Seq::Byte);
-    seq->AddREListItem(cc);
-
-    return parse_utf8_suffix_byte(suffix_count, s.substr(1, s.length() - 1), seq);
-}
-
-parse_result_retVal RE_Parser::parse_utf8_suffix_byte(int suffix_byte_num, std::string s, Seq *seq_sofar)
-{
-    parse_result_retVal result_RetVal;
-
-    if (suffix_byte_num == 0)
-    {
-        result_RetVal.result = new ParseSuccess(seq_sofar);
-        result_RetVal.remaining = s;
-    }
-    else if (s.length() == 0)
-    {
-        result_RetVal.result = new ParseFailure("Invalid UTF-8 encoding!");
-        result_RetVal.remaining = "";
-    }
-    else
-    {
-        if ((s.operator [](0) & 0xC0) == 0x80)
-        {
-            CC* cc = new CC((s.operator [](0) & 0xFF));
-            seq_sofar->AddREListItem(cc);
-            suffix_byte_num--;
-            result_RetVal = parse_utf8_suffix_byte(suffix_byte_num, s.substr(1, s.length() - 1), seq_sofar);
-        }
-        else
-        {
-            result_RetVal.result = new ParseFailure("Invalid UTF-8 encoding!");
-            result_RetVal.remaining = s;
-        }
-    }
-
-    return result_RetVal;
-}
-
-parse_result_retVal RE_Parser::parse_unicode_category(std::string s, bool negated)
-{
-    parse_result_retVal result_retVal;
-
-    if (s.operator [](0) == '{')
-    {
-        Name* name = new Name();
+inline Name * RE_Parser::parse_unicode_category(const bool negated) {
+    if (++_cursor != _end && *_cursor == '{') {
+        std::unique_ptr<Name> name = std::unique_ptr<Name>(new Name);
         name->setType(Name::UnicodeCategory);
         name->setNegated(negated);
-        result_retVal = parse_unicode_category1(s.substr(1,1), s.substr(2, s.length() - 2), name);
-    }
-    else
-    {
-        result_retVal.result = new ParseFailure("Incorrect Unicode character class format!");
-        result_retVal.remaining = "";
-    }
-
-    return result_retVal;
-}
-
-parse_result_retVal RE_Parser::parse_unicode_category1(std::string character, std::string s, Name* name_sofar)
-{
-    parse_result_retVal unicode_cat1_retVal;
-
-    if (s.length() == 0)
-    {
-        delete name_sofar;
-        unicode_cat1_retVal.result = new ParseFailure("Unclosed Unicode character class!");
-        unicode_cat1_retVal.remaining = "";
-    }
-    else if (s.operator [](0) == '}')
-    {
-        name_sofar->setName(name_sofar->getName() + character);
-        if (isValidUnicodeCategoryName(name_sofar))
-        {
-            unicode_cat1_retVal.result = new ParseSuccess(name_sofar);
-            unicode_cat1_retVal.remaining = s.substr(1, s.length() - 1);
+        const cursor_t start = _cursor + 1;
+        for (;;) {
+            ++_cursor;
+            if (_cursor == _end) {
+                throw UnclosedUnicodeCharacterClass();
+            }
+            if (*_cursor == '}') {
+                break;
+            }
+            ++_cursor;
         }
-        else
-        {
-            unicode_cat1_retVal.result = new ParseFailure("Unknown Unicode character class!");
-            unicode_cat1_retVal.remaining = s.substr(1, s.length() - 1);
+        name->setName(std::string(start, _cursor));
+        if (isValidUnicodeCategoryName(name)) {
+            ++_cursor;
+            return name.release();
         }
     }
-    else
-    {
-        name_sofar->setName(name_sofar->getName() + character);
-        unicode_cat1_retVal = parse_unicode_category1(s.substr(0,1), s.substr(1, s.length() - 1), name_sofar);
-    }
-
-    return unicode_cat1_retVal;
+    throw ParseFailure("Incorrect Unicode character class format!");
 }
 
-parse_result_retVal RE_Parser::parse_cc_body(std::string s)
-{
-    parse_result_retVal result_retVal;
-
-    if (s.length() == 0)
-    {
-        result_retVal.result = new ParseFailure("Unclosed character class!");
-        result_retVal.remaining = "";
-    }
-    else
-    {
-        CC* cc = new CC();
-        result_retVal = parse_cc_body1(s.operator [](0), s.substr(1, s.length() - 1), cc);
-    }
-
-    return result_retVal;
-}
-
-parse_result_retVal RE_Parser::parse_cc_body0(std::string s, CC* cc_sofar)
-{
-    parse_result_retVal cc_body0_retVal;
-
-    if (s.length() == 0)
-    {
-        delete cc_sofar;
-        cc_body0_retVal.result = new ParseFailure("Unclosed character class!");
-        cc_body0_retVal.remaining = "";
-    }
-    else if (s.operator [](0) == ']')
-    {
-        cc_body0_retVal.result = new ParseSuccess(cc_sofar);
-        cc_body0_retVal.remaining = s.substr(1, s.length() - 1);
-    }
-    else if ((s.operator [](0) == '-') && (s.operator [](1) == ']'))
-    {
-        cc_sofar->insert1('-');
-        cc_body0_retVal.result = new ParseSuccess(cc_sofar);
-        cc_body0_retVal.remaining = s.substr(2, s.length() - 2);
-    }
-    else if (s.operator [](0) == '-')
-    {
-        delete cc_sofar;
-        cc_body0_retVal.result = new ParseFailure("Bad range in character class!");
-        cc_body0_retVal.remaining = s.substr(1, s.length() - 1);
-    }
-    else
-    {
-        cc_body0_retVal = parse_cc_body1(s.operator [](0), s.substr(1, s.length() - 1), cc_sofar);
-    }
-
-    return cc_body0_retVal;
-}
-
-parse_result_retVal RE_Parser::parse_cc_body1(int chr, std::string s, CC* cc_sofar)
-{
-    parse_result_retVal cc_body1_retVal;
-
-    if (s.length() == 0)
-    {
-        delete cc_sofar;
-        cc_body1_retVal.result = new ParseFailure("Unclosed character class!");
-        cc_body1_retVal.remaining = "";
-    }
-    else if (s.operator [](0) == ']')
-    {
-        cc_sofar->insert1(chr);
-        cc_body1_retVal.result = new ParseSuccess(cc_sofar);
-        cc_body1_retVal.remaining = s.substr(1, s.length() - 1);
-    }
-    else if (s.length() == 1)
-    {
-        delete cc_sofar;
-        cc_body1_retVal.result = new ParseFailure("Unclosed character class!");
-        cc_body1_retVal.remaining = "";
-    }
-    else if ((s.operator [](0) == '-') && (s.operator [](1) == ']'))
-    {
-        cc_sofar->insert1(chr);
-        cc_sofar->insert1('-');
-        cc_body1_retVal = parse_cc_body0(s, cc_sofar);
-    }
-    else if ((s.operator [](0) == '-') && (s.operator [](1) == '\\') && (s.operator [](2) == 'u'))
-    {
-        parse_int_retVal int_retVal = parse_hex(s.substr(3, s.length() - 3));
-
-        if (int_retVal.i == -1)
-        {
-            cc_body1_retVal.result = new ParseFailure("Bad Unicode hex notation!");
-            cc_body1_retVal.remaining = "";
+RE * RE_Parser::parse_charset() {
+    std::unique_ptr<CC> cc(new CC());
+    bool negated = false;
+    bool included_closing_square_bracket = false;
+    cursor_t start = ++_cursor;
+    while (_cursor != _end) {
+        bool literal = true;
+        switch (*_cursor) {
+            case '^':
+                // If the first character after the [ is a ^ (caret) then the matching character class is complemented.
+                if (start == _cursor) {
+                    negated = true;
+                    start = ++_cursor; // move the start ahead incase the next character is a [ or -
+                    literal = false;                    
+                }
+                break;
+            case ']':
+                // To include a ], put it immediately after the opening [ or [^; if it occurs later it will
+                // close the bracket expression.
+                if (start == _cursor) {
+                    cc->insert1(']');
+                    ++_cursor;
+                    included_closing_square_bracket = true;
+                    literal = false;
+                    break;
+                }
+                if (negated) {
+                    negate_cc(cc);
+                }
+                ++_cursor;
+                return cc.release();
+            // The hyphen (-) is not treated as a range separator if it appears first or last, or as the
+            // endpoint of a range.
+            case '-':
+                if (true) {
+                    literal = false;
+                    const cursor_t next = _cursor + 1;
+                    if (next == _end) {
+                        goto parse_failed;
+                    }
+                    if ((start == _cursor) ? (*next != '-') : (*next == ']')) {
+                        _cursor = next;
+                        cc->insert1('-');
+                        break;
+                    }
+                }
+                throw ParseFailure("Invalid Lower Range Bound!");
+            // case ':':
         }
-        else
-        {
-            cc_sofar->insert_range(chr, int_retVal.i);
-            cc_body1_retVal = parse_cc_body0(int_retVal.remaining, cc_sofar);
+        if (literal) {
+            unsigned low;
+            if (parse_charset_literal(low)) {
+                // the previous literal allows for a - to create a range; test for it
+                if (_cursor == _end) {
+                    break; // out of loop to failure handling
+                }
+                if (*_cursor == '-') { // in range unless the next character is a ']'
+                    if (++_cursor == _end) {
+                        break; // out of loop to failure handling
+                    }
+                    if (*_cursor != ']') {
+                        unsigned high;
+                        if (!parse_charset_literal(high)) {
+                            throw ParseFailure("Invalid Upper Range Bound!");
+                        }
+                        cc->insert_range(low, high);
+                    }
+                    continue;
+                }
+            }
+            cc->insert1(low);
         }
     }
-    else if ((s.operator [](0) == '-') && ( s.length() > 1))
-    {
-        cc_sofar->insert_range(chr, s.operator [](1));
-        cc_body1_retVal = parse_cc_body0(s.substr(2, s.length() - 2), cc_sofar);
+parse_failed:
+    if (included_closing_square_bracket) {
+        throw ParseFailure("One ']' cannot close \"[]\" or \"[^]\"; use \"[]]\" or \"[^]]\" instead.");
     }
-    else if ((s.operator [](0) == 'u') && ( s.length() > 1))
-    {
-        parse_int_retVal int_retVal = parse_hex(s.substr(1, s.length() - 1));
-
-        if (int_retVal.i == -1)
-        {
-            cc_body1_retVal.result = new ParseFailure("Bad Unicode hex notation!");
-            cc_body1_retVal.remaining = "";
-        }
-        else
-        {
-            cc_body1_retVal = parse_cc_body1(int_retVal.i, int_retVal.remaining, cc_sofar);
-        }
+    else {
+        throw UnclosedCharacterClass();
     }
-    else
-    {
-        cc_sofar->insert1(chr);
-        cc_body1_retVal = parse_cc_body1(s.operator [](0), s.substr(1, s.length() - 1), cc_sofar);
-    }
-
-    return cc_body1_retVal;
 }
 
-parse_int_retVal RE_Parser::parse_hex(std::string s)
-{
-    parse_int_retVal int_retVal;
-
-    if (s.operator [](0) == '{')
-    {
-        int hexval_sofar = 0;
-        int_retVal = parse_hex_body(hexval_sofar, s.substr(1, s.length() - 1));
-    }
-    else
-    {
-        int_retVal.i = -1;
-        int_retVal.remaining = s;
-    }
-
-    return int_retVal;
-}
-
-parse_int_retVal RE_Parser::parse_hex_body(int i, std::string s)
-{
-    parse_int_retVal int_retVal;
-
-    if (s.length() == 0)
-    {
-        int_retVal.i = i;
-        int_retVal.remaining = "";
-    }
-    else if (s.operator [](0) == '}')
-    {
-        int_retVal.i = i;
-        int_retVal.remaining = s.substr(1, s.length() - 1);
-    }
-    else if ((s.operator [](0) >= '0') && (s.operator [](0) <= '9'))
-    {
-        int_retVal = parse_hex_body(parse_hex_body1(i, s.substr(0,1)), s.substr(1, s.length() - 1));
-    }
-    else if ((s.operator [](0) >= 'a') && (s.operator [](0) <= 'f'))
-    {
-        int_retVal = parse_hex_body(parse_hex_body1(i, s.substr(0,1)), s.substr(1, s.length() - 1));
-    }
-    else if ((s.operator [](0) >= 'A') && (s.operator [](0) <= 'F'))
-    {
-        int_retVal = parse_hex_body(parse_hex_body1(i, s.substr(0,1)), s.substr(1, s.length() - 1));
-    }
-    else
-    {
-        int_retVal.i = -1;
-        int_retVal.remaining = s;
-    }
-
-    return int_retVal;
-}
-
-int RE_Parser::parse_hex_body1(int i, std::string hex_str)
-{
-    int retVal = 0;
-    int newVal = 0;
-
-    retVal = i << 4;
-
-    std::stringstream ss(hex_str);
-    ss >> std::hex >> newVal;
-
-    retVal = retVal | newVal;
-
-    return retVal;
-}
-
-parse_int_retVal RE_Parser::parse_int(std::string s)
-{
-    parse_int_retVal int_retVal;
-
-    if (isdigit(s.operator [](0)))
-    {
-        int_retVal = parse_int1(s.operator [](0) - 48, s.substr(1, s.length() - 1));
-    }
-    else
-    {
-        int_retVal.i = -1;
-        int_retVal.remaining = s;
-    }
-
-    return int_retVal;
-}
-
-parse_int_retVal RE_Parser::parse_int1(int i, std::string s)
-{
-    parse_int_retVal int1_retVal;
-
-    if (s.length() == 0)
-    {
-        int1_retVal.i = i;
-        int1_retVal.remaining = "";
-    }
-    else if (isdigit(s.operator [](0)))
-    {
-        int1_retVal = parse_int1(i * 10 + (s.operator [](0) - 48), s.substr(1, s.length() - 1));
-    }
-    else
-    {
-        int1_retVal.i = i;
-        int1_retVal.remaining = s;
-    }
-
-    return int1_retVal;
-}
-
-parse_result_retVal RE_Parser::negate_cc_result(parse_result_retVal cc_result)
-{
-    if (ParseSuccess* success = dynamic_cast<ParseSuccess*>(cc_result.result))
-    {
-        if (CC* cc = dynamic_cast<CC*>(success->getRE()))
-        {
-            cc->negate_class();
-            //Remove any new-line.
-            cc->remove1(10);
-        }
-    }
-
-    return cc_result;
-}
-
-bool RE_Parser::isValidUnicodeCategoryName(Name* name)
-{
-    std::string cat_name = name->getName();
-
-    if (cat_name == "Cc")
-        return true;
-    else if (cat_name == "Cf")
-        return true;
-    else if (cat_name == "Cn")
-        return true;
-    else if (cat_name == "Co")
-        return true;
-    else if (cat_name == "Cs")
-        return true;
-    else if (cat_name == "C")
-        return true;
-    else if (cat_name == "Ll")
-        return true;
-    else if (cat_name == "Lt")
-        return true;
-    else if (cat_name == "Lu")
-        return true;
-    else if (cat_name == "L&")
-        return true;
-    else if (cat_name == "Lc")
-        return true;
-    else if (cat_name == "Lm")
-        return true;
-    else if (cat_name == "Lo")
-        return true;
-    else if (cat_name == "L")
-        return true;
-    else if (cat_name == "Mc")
-        return true;
-    else if (cat_name == "Me")
-        return true;
-    else if (cat_name == "Mn")
-        return true;
-    else if (cat_name == "M")
-        return true;
-    else if (cat_name == "Nd")
-        return true;
-    else if (cat_name == "Nl")
-        return true;
-    else if (cat_name == "No")
-        return true;
-    else if (cat_name == "N")
-        return true;
-    else if (cat_name == "Pc")
-        return true;
-    else if (cat_name == "Pd")
-        return true;
-    else if (cat_name == "Pe")
-        return true;
-    else if (cat_name == "Pf")
-        return true;
-    else if (cat_name == "Pi")
-        return true;
-    else if (cat_name == "Po")
-        return true;
-    else if (cat_name == "Ps")
-        return true;
-    else if (cat_name == "P")
-        return true;
-    else if (cat_name == "Sc")
-        return true;
-    else if (cat_name == "Sk")
-        return true;
-    else if (cat_name == "Sm")
-        return true;
-    else if (cat_name == "So")
-        return true;
-    else if (cat_name == "S")
-        return true;
-    else if (cat_name == "Zl")
-        return true;
-    else if (cat_name == "Zp")
-        return true;
-    else if (cat_name == "Zs")
-        return true;
-    else if (cat_name == "Z")
-        return true;
-    else
+inline bool RE_Parser::parse_charset_literal(unsigned & literal) {
+    if (_cursor == _end) {
         return false;
+    }
+    if (*_cursor == '\\') {
+        if (++_cursor == _end) {
+            return false;
+        }
+        switch (*_cursor) {
+            case '(': case ')': case '*': case '+':
+            case '.': case '?': case '[': case '\\':
+            case ']': case '{': case '|': case '}':
+                if (_allow_escapes_within_charset) {
+                    literal = *_cursor++;
+                    return true;
+                }
+                break;
+            case 'u':
+                literal = parse_hex();
+                return true;
+            // probably need to pass in the CC to handle \w, \s, etc...
+        }
+        throw ParseFailure("Unknown charset escape!");
+    }
+    else {
+        literal = parse_utf8_codepoint();
+        return true;
+    }
+    return false;
 }
 
+unsigned RE_Parser::parse_int() {
+    unsigned value = 0;
+    for (; _cursor != _end; ++_cursor) {
+        if (!isdigit(*_cursor)) {
+            break;
+        }
+        value *= 10;
+        value += static_cast<int>(*_cursor) - 48;
+    }
+    return value;
+}
 
+unsigned RE_Parser::parse_hex() {
+    if (++_cursor != _end && *_cursor == '{') {
+        unsigned value = 0;
+        for (++_cursor; _cursor != _end; ++_cursor) {
+            const char t = *_cursor;
+            if (t == '}') {
+                ++_cursor;
+                return value;
+            }
+            value *= 16;
+            if (t >= '0' && t <= '9') {
+                value |= (t - '0');
+            }
+            else if ((t | 32) >= 'a' && (t | 32) <= 'f') {
+                value |= ((t | 32) - 'a') + 10;
+            }
+            else {
+                break;
+            }
+        }
+    }
+    throw ParseFailure("Bad Unicode hex notation!");
+}
 
+inline void RE_Parser::negate_cc(std::unique_ptr<CC> & cc) {
+    cc->negate_class();
+    cc->remove1(10);
+}
 
+bool RE_Parser::isValidUnicodeCategoryName(const std::unique_ptr<Name> & name) {
+    static const char * SET_OF_VALID_CATEGORIES[] = {
+        "C", "Cc", "Cf", "Cn", "Co", "Cs",
+        "L", "L&", "Lc", "Ll", "Lm", "Lo", "Lt", "Lu",
+        "M", "Mc", "Me", "Mn",
+        "N", "Nd", "Nl", "No",
+        "P", "Pc", "Pd", "Pe", "Pf", "Pi", "Po", "Ps",
+        "S", "Sc", "Sk", "Sm", "So",
+        "Z", "Zl", "Zp", "Zs"
+    };
+    // NOTE: this method isn't as friendly as using an unordered_set for VALID_CATEGORIES since it requires
+    // that the set is in ALPHABETICAL ORDER; however it ought to have less memory overhead than an
+    // unordered_set and roughly equivalent speed.
+    return std::binary_search(std::begin(SET_OF_VALID_CATEGORIES), std::end(SET_OF_VALID_CATEGORIES), name->getName());
+}
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+inline void RE_Parser::throw_incomplete_expression_error_if_end_of_stream() const {
+    if (_cursor == _end) throw IncompleteRegularExpression();
+}

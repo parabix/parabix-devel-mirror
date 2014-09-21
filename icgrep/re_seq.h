@@ -14,22 +14,22 @@
 #include <sstream>
 #include <utility>
 
-class Seq : public RE
-{
+class Seq : public RE, public RE::Vector {
 public:
-    typedef enum {Normal,Byte} Type;
+    typedef RE::Vector Vector;
+    typedef enum {
+        Normal,
+        Byte
+    } Type;
     Seq();
-    Seq(std::list<RE*>* lst);
-    Seq(std::list<RE*> lst);
-    ~Seq();
-    std::list<RE*>* GetREList();
-    void AddREListItem(RE *re);
-    std::string getName();
-    Type getType();
+    Seq(const Type type);
+    Seq(const Type type, iterator begin, iterator end);
+    virtual ~Seq();
+    std::string getName() const;
+    Type getType() const;
     void setType(Type type);
 private:
-    std::list<RE*>* mList;
-    Type mType;
+    Type    mType;
 };
 
 #endif // JOIN_H

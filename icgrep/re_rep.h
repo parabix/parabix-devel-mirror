@@ -9,17 +9,17 @@
 
 #include "re_re.h"
 
-const int unboundedRep = -1;
+const int UNBOUNDED_REP = -1;
 
 class Rep : public RE
 {
 public:
     Rep(RE* re, int lb, int ub);
     ~Rep();
-    RE* getRE();
-    int getLB();
+    RE* getRE() const;
+    int getLB() const;
     void setLB(int lb);
-    int getUB();
+    int getUB() const;
     void setUB(int ub);
 private:
     RE* mRE;

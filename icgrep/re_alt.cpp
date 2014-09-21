@@ -8,41 +8,18 @@
 
 Alt::Alt()
 {
-    mList = new std::list<RE*>();
+
 }
 
-Alt::Alt(std::list<RE*>* lst)
+Alt::Alt(iterator begin, iterator end)
+: std::vector<RE*>(begin, end)
 {
-    mList = new std::list<RE*>();
-    std::list<RE*>::iterator it;
-    it=lst->begin();
-    mList->assign(it, lst->end());
-    std::reverse(mList->begin(), mList->end());
-}
 
-Alt::Alt(std::list<RE*> lst)
-{
-    mList = new std::list<RE*>();
-    std::list<RE*>::iterator it;
-    it=lst.begin();
-    mList->assign(it, lst.end());
-    std::reverse(mList->begin(), mList->end());
 }
 
 Alt::~Alt()
 {
-    while(!mList->empty()) delete mList->back(), mList->pop_back();
-    delete mList;
+    for (RE * re : *this) {
+        delete re;
+    }
 }
-
-std::list<RE*>* Alt::GetREList()
-{
-    return mList;
-}
-
-void Alt::AddREListItem(RE* re)
-{
-    mList->push_back(re);
-}
-
-
