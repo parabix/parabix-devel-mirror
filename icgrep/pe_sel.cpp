@@ -7,10 +7,11 @@
 #include "pe_sel.h"
 
 Sel::Sel(PabloE* if_expr, PabloE* t_expr, PabloE* f_expr)
+: mIf_expr(if_expr)
+, mT_expr(t_expr)
+, mF_expr(f_expr)
 {
-    mIf_expr = if_expr;
-    mT_expr = t_expr;
-    mF_expr = f_expr;
+
 }
 
 Sel::~Sel()
@@ -20,17 +21,17 @@ Sel::~Sel()
     delete mF_expr;
 }
 
-PabloE* Sel::getIf_expr()
+PabloE* Sel::getIf_expr() const
 {
     return mIf_expr;
 }
 
-PabloE* Sel::getT_expr()
+PabloE* Sel::getT_expr() const
 {
     return mT_expr;
 }
 
-PabloE* Sel::getF_expr()
+PabloE* Sel::getF_expr() const
 {
     return mF_expr;
 }

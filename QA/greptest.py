@@ -85,7 +85,7 @@ def start_element_do_test(name, attrs):
                     grep_out = subprocess.check_output(grep_cmd, cwd=options.exec_dir, shell=True)
                 except subprocess.CalledProcessError, e:
                     grep_out = e.output
-		if grep_out[-1] == '\n': grep_out = grep_out[:-1]
+		if len(grep_out) > 0 and grep_out[-1] == '\n': grep_out = grep_out[:-1]
 		m = re.search('[0-9]+', grep_out)
 		if m == None or m.group(0) != expected_count:
 			print("Test failure: regexp {%s} on datafile {%s} expecting {%s} got {%s}" % (regexp, datafile, expected_count, grep_out))

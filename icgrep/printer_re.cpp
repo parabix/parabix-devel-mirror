@@ -6,30 +6,44 @@
 
 #include "printer_re.h"
 
+//Regular Expressions
+#include "re/re_re.h"
+#include "re/re_alt.h"
+#include "re/re_cc.h"
+#include "re/re_name.h"
+#include "re/re_end.h"
+#include "re/re_rep.h"
+#include "re/re_seq.h"
+#include "re/re_start.h"
 
-std::string Printer_RE::PrintRE(RE * re)
+
+const std::string Printer_RE::PrintRE(const RE * re)
 {
     std::string retVal = "";
 
     if (re == nullptr) {
         retVal = "--> RE NullPtr! <--";
     }
-    else if (Alt* re_alt = dynamic_cast<Alt*>(re))
+    else if (const Alt* re_alt = dynamic_cast<const Alt*>(re))
     {
         retVal += "(Alt[";
-        for (RE * re : *re_alt) {
-            retVal += PrintRE(re) + ",";
+        bool comma = false;
+        for (const RE * re : *re_alt) {
+            if (comma) {
+                retVal += ',';
+            }
+            retVal += PrintRE(re);
+            comma = true;
         }
-        retVal = retVal.substr(0, retVal.size() - 1);
         retVal += "])";
     }
-    else if (CC* re_cc = dynamic_cast<CC*>(re))
+    else if (const CC* re_cc = dynamic_cast<const CC*>(re))
     {
-        retVal += "CC \"";
+        retVal = "CC \"";
         retVal += re_cc->getName();
         retVal += "\" ";
 
-        for (const CharSetItem & item : re_cc->getItems())
+        for (const CharSetItem & item : *re_cc)
         {
             retVal += "[";
             retVal += std::to_string(item.lo_codepoint) + ",";
@@ -37,38 +51,51 @@ std::string Printer_RE::PrintRE(RE * re)
             retVal += "]";
         }
     }
-    else if (Name* re_name = dynamic_cast<Name*>(re))
+    else if (const Name* re_name = dynamic_cast<const Name*>(re))
     {
-        retVal += "Name \"";
+        retVal = "Name \"";
         retVal += re_name->getName();
         retVal += "\" ";
     }
-    else if (dynamic_cast<End*>(re))
+    else if (dynamic_cast<const End*>(re))
     {
-        retVal += "End";
+        retVal = "End";
     }
-    else if (Rep* re_rep = dynamic_cast<Rep*>(re))
+    else if (const Rep* re_rep = dynamic_cast<const Rep*>(re))
     {
-        retVal += "Rep("  + PrintRE(re_rep->getRE()) + "," + std::to_string(re_rep->getLB()) + ",";
-        retVal += (re_rep->getUB() == UNBOUNDED_REP ? "Unbounded" : "UpperBound(" + std::to_string(re_rep->getUB()) + ")");
-    }
-    else if (Seq* re_seq = dynamic_cast<Seq*>(re))
-    {
-        retVal += "(Seq[";
-        for (RE * re : *re_seq) {
-            retVal += PrintRE(re) + ",";
+        retVal = "Rep(";
+        retVal.append(PrintRE(re_rep->getRE()));
+        retVal.append(",");
+        retVal.append(std::to_string(re_rep->getLB()));
+        retVal.append(",");
+        if (re_rep->getUB() == Rep::UNBOUNDED_REP) {
+            retVal.append("Unbounded");
         }
-        retVal = retVal.substr(0, retVal.size() - 1);
-        retVal += "])";
+        else {
+            retVal.append(std::to_string(re_rep->getUB()));            
+        }
+        retVal.append(")");
     }
-    else if (dynamic_cast<Start*>(re))
+    else if (const Seq* re_seq = dynamic_cast<const Seq*>(re))
     {
-        retVal += "Start";
+        retVal = "(Seq[";
+        bool comma = false;
+        for (const RE * re : *re_seq) {
+            if (comma) {
+                retVal.append(",");
+            }
+            retVal.append(PrintRE(re));
+            comma = true;
+        }
+        retVal.append("])");
+    }
+    else if (dynamic_cast<const Start*>(re))
+    {
+        retVal = "Start";
     }
     else
     {
-        retVal += "--> RE Unknown <--";
+        retVal = "--> RE Unknown <--";
     }
-
-    return retVal;
+    return std::move(retVal);
 }

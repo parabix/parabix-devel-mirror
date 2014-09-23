@@ -14,7 +14,7 @@ class Not : public PabloE
 public:
     Not(PabloE* expr);
     ~Not();
-    PabloE* getExpr();
+    PabloE* getExpr() const;
 private:
     PabloE* mExpr;
 };

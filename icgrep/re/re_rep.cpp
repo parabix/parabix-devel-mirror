@@ -4,17 +4,4 @@
  *  icgrep is a trademark of International Characters.
  */
 
-#ifndef PRINTER_RE_H
-#define PRINTER_RE_H
-
-#include <string>
-
-class RE;
-
-class Printer_RE
-{
-public:
-    static const std::string PrintRE(const RE *re);
-};
-
-#endif // PRINTER_RE_H
+#include "re_rep.h"

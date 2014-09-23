@@ -13,45 +13,37 @@
 #include "utf_encoding.h"
 #include "ps_pablos.h"
 #include "pe_pabloe.h"
-#include "pe_sel.h"
-#include "pe_advance.h"
-#include "pe_all.h"
-#include "pe_and.h"
-#include "pe_charclass.h"
-#include "pe_matchstar.h"
-#include "pe_not.h"
-#include "pe_or.h"
-#include "pe_var.h"
-#include "pe_xor.h"
-#include "re_cc.h"
+#include "re/re_cc.h"
 
 struct Expression{
     std::string expr_string;
     PabloE* pablo_expr;
 };
 
+class CC_Compiler{
+    typedef std::map<std::string, RE*>          REMap;
+    typedef std::map<std::string, Expression*>  ExpressionMap;
+    typedef ExpressionMap::iterator             MapIterator;
 
-class CC_Compiler
-{
 public:
     CC_Compiler(const UTF_Encoding encoding, const std::string basis_pattern, const std::string gensym_pattern);
     std::string compile1(CC* cc);    
-    void compile_from_map(const std::map<std::string, RE*>& re_map);    
+    void compile_from_map(const REMap & re_map);
     std::list<PabloS*> get_compiled();
 private:
-    void process_re_map(const std::map<std::string, RE*>& re_map);
-    void process_re(RE* re);
+    void process_re_map(const REMap &re_map);
+    void process_re(const RE *re);
     std::string bit_var(int n);
     PabloE* make_bitv(int n);
     PabloE* bit_pattern_expr(int pattern, int selected_bits);
-    PabloE* char_test_expr(int ch);
-    PabloE* make_range(int n1, int n2);
+    PabloE* char_test_expr(const CodePointType ch);
+    PabloE* make_range(const CodePointType n1, const CodePointType n2);
     PabloE* GE_Range(int N, int n);
     PabloE* LE_Range(int N, int n);
-    PabloE* char_or_range_expr(CharSetItem charset_item);
-    PabloE* charset_expr(CC* cc);
+    PabloE* char_or_range_expr(const CodePointType lo, const CodePointType hi);
+    PabloE* charset_expr(const CC *cc);
     Expression* expr2pabloe(PabloE* expr);
-    void cc2pablos(CC* cc);
+    void cc2pablos(const CC *cc);
 
     UTF_Encoding mEncoding;
 
@@ -63,7 +55,7 @@ private:
     std::string mGenSym_Template;
     int mGenSymCounter;
     std::list<PabloS*> mStmtsl;
-    std::map<std::string, Expression*> mCommon_Expression_Map;
+    ExpressionMap mCommon_Expression_Map;
 };
 
 #endif // CC_COMPILER_H

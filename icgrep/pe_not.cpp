@@ -16,7 +16,7 @@ Not::~Not()
     delete mExpr;
 }
 
-PabloE* Not::getExpr()
+PabloE* Not::getExpr() const
 {
     return mExpr;
 }

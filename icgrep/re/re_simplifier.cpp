@@ -14,8 +14,7 @@ RE* RE_Simplifier::simplify(RE * re) {
     RE * retVal = re;
     if (Alt * re_alt = dynamic_cast<Alt*>(re)) {
         Vector simplified_alt;
-        for (RE * re : *re_alt)
-        {
+        for (RE * re : *re_alt) {
             simplified_alt.push_back(simplify(re));
         }
         retVal = makeAlt(simplified_alt);
@@ -32,10 +31,7 @@ RE* RE_Simplifier::simplify(RE * re) {
         retVal = re_cc;
     }
     else if (Name* re_name = dynamic_cast<Name*>(re)) {
-        Name* name = new Name(re_name->getName());
-        name->setType(re_name->getType());
-        name->setNegated(re_name->isNegated());   // TODO:  Hide this in the re_name module.
-        retVal = name;
+        retVal = new Name(re_name);
     }
     else if (Rep* re_rep = dynamic_cast<Rep*>(re)) {
         retVal = makeRep(simplify(re_rep->getRE()), re_rep->getLB(), re_rep->getUB());
@@ -86,13 +82,16 @@ RE * RE_Simplifier::makeSeq(const Seq::Type type, Vector & list) {
     return re;
 }
 
+/**
+ * @brief makeAlt
+ *
+ * Build an Alt, flattening alternative subgroups, and combining character classes and
+ * move character classes towards the end of the list to ensure that all combinations are found.
+ *
+ * @param list
+ * @return simplified RE representing the Alt
+ */
 RE * RE_Simplifier::makeAlt(Vector & list) {
-
-    /*
-      Build a list for Alt, flattening alternative subgroups, and combining character classes.  We
-      move character classes towards the end of the list to ensure that all combinations are found.
-    */
-
     RE * re = nullptr;
     if (!list.empty()) {
 
@@ -123,61 +122,67 @@ RE * RE_Simplifier::makeAlt(Vector & list) {
         }
 
         if (new_alt->size() == 1) {
+            // if only one alternation exists, discard the Alt object itself and return the internal RE.
             re = new_alt->back();
             new_alt->pop_back();
         }
         else {
-            re = new_alt.release();
+            re = cse(new_alt.release());
         }
     }
-
     return re;
 }
 
-RE * RE_Simplifier::makeRep(RE * re, const int lb2, const int ub2)
+inline RE * RE_Simplifier::cse(Alt * alt) {
+
+
+
+
+    return alt;
+}
+
+
+RE * RE_Simplifier::makeRep(RE * re, const int lb, const int ub)
 {
     if (Rep* rep = dynamic_cast<Rep*>(re)) {
-        if (((rep->getUB() == UNBOUNDED_REP) && (lb2 > 0)) ||
-                ((rep->getUB() == UNBOUNDED_REP) && (rep->getLB() <= 1))) {
-            return new Rep(rep->getRE(), rep->getLB() * lb2, UNBOUNDED_REP);
+        if (((rep->getUB() == Rep::UNBOUNDED_REP) && (lb > 0)) ||
+                ((rep->getUB() == Rep::UNBOUNDED_REP) && (rep->getLB() <= 1))) {
+            return new Rep(rep->getRE(), rep->getLB() * lb, Rep::UNBOUNDED_REP);
         }
-        else if ((rep->getUB() == UNBOUNDED_REP) && (lb2 == 0)) {
+        else if ((rep->getUB() == Rep::UNBOUNDED_REP) && (lb == 0)) {
             return new Rep(rep, 0, 1);
         }
-        else if ((rep->getUB() * lb2) >= (rep->getLB() * (lb2 + 1) - 1)) {
-            return new Rep(rep->getRE(), rep->getLB() * lb2, ubCombine(rep->getUB(), ub2));
+        else if ((rep->getUB() * lb) >= (rep->getLB() * (lb + 1) - 1)) {
+            return new Rep(rep->getRE(), rep->getLB() * lb, ubCombine(rep->getUB(), ub));
         }
         else {
-            return new Rep(rep, lb2, ub2);
+            return new Rep(rep, lb, ub);
         }
     }
     else {
-        if (Seq* seq = dynamic_cast<Seq*>(re)) {
+        if (Seq * seq = dynamic_cast<Seq*>(re)) {
             if (seq->empty()) {
                 return seq;
             }
         }
 
-        if ((lb2 == 0) && (ub2 == 0)) {
+        if ((lb == 0) && (ub == 0)) {
             return new Seq();
         }
-        else if ((lb2 == 1) && (ub2 == 1)) {
+        else if ((lb == 1) && (ub == 1)) {
             return re;
         }
         else {
-            return new Rep(re, lb2, ub2);
+            return new Rep(re, lb, ub);
         }
     }
 }
 
-inline int RE_Simplifier::ubCombine(const int h1, const int h2)
-{
-    if ((h1 == UNBOUNDED_REP) || (h2 == UNBOUNDED_REP))
-    {
-        return UNBOUNDED_REP;
+inline int RE_Simplifier::ubCombine(const int h1, const int h2) {
+    if ((h1 == Rep::UNBOUNDED_REP) || (h2 == Rep::UNBOUNDED_REP)) {
+        return Rep::UNBOUNDED_REP;
     }
-    else
-    {
+    else {
         return h1 * h2;
     }
 }

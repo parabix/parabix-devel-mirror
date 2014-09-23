@@ -12,16 +12,6 @@
 //define this indicates that we use llvm.uadd.with.overflow for genAddWithCarry
 #define USE_UADD_OVERFLOW
 
-//Regular Expressions
-#include "re_re.h"
-#include "re_cc.h"
-#include "re_name.h"
-#include "re_start.h"
-#include "re_end.h"
-#include "re_seq.h"
-#include "re_alt.h"
-#include "re_rep.h"
-
 //Pablo Expressions
 #include "pe_pabloe.h"
 #include "pe_sel.h"

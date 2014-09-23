@@ -180,7 +180,7 @@ CodeGenState Pbix_Compiler::re2pablo_helper(RE *re, CodeGenState cg_state)
     }
     else if (Rep* rep = dynamic_cast<Rep*>(re))
     {
-        if ((dynamic_cast<Name*>(rep->getRE()) != 0) && (rep->getLB() == 0) && (rep->getUB()== UNBOUNDED_REP))
+        if ((dynamic_cast<Name*>(rep->getRE()) != 0) && (rep->getLB() == 0) && (rep->getUB()== Rep::UNBOUNDED_REP))
         {
             Name* rep_name = dynamic_cast<Name*>(rep->getRE());
             std::string gs_retVal = symgen.gensym("marker");
@@ -212,11 +212,11 @@ CodeGenState Pbix_Compiler::re2pablo_helper(RE *re, CodeGenState cg_state)
 
             cg_state.newsym = gs_retVal;
         }
-        else if (rep->getUB() == UNBOUNDED_REP)
+        else if (rep->getUB() == Rep::UNBOUNDED_REP)
         {
             cg_state = UnboundedRep_helper(rep->getRE(), rep->getLB(), cg_state);
         }
-        else if (rep->getUB() != UNBOUNDED_REP)
+        else if (rep->getUB() != Rep::UNBOUNDED_REP)
         {
             cg_state = BoundedRep_helper(rep->getRE(), rep->getLB(), rep->getUB(), cg_state);
         }

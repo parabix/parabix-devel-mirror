@@ -16,7 +16,7 @@ public:
     Var(std::string var);
     ~Var();
     void setVar(std::string var);
-    std::string getVar();
+    std::string getVar() const;
 private:
     std::string mVar;
 };

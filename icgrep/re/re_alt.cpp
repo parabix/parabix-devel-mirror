@@ -4,17 +4,22 @@
  *  icgrep is a trademark of International Characters.
  */
 
-#ifndef PRINTER_RE_H
-#define PRINTER_RE_H
+#include "re_alt.h"
 
-#include <string>
-
-class RE;
-
-class Printer_RE
+Alt::Alt()
 {
-public:
-    static const std::string PrintRE(const RE *re);
-};
 
-#endif // PRINTER_RE_H
+}
+
+Alt::Alt(iterator begin, iterator end)
+: std::vector<RE*>(begin, end)
+{
+
+}
+
+Alt::~Alt()
+{
+    for (RE * re : *this) {
+        delete re;
+    }
+}

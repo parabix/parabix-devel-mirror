@@ -14,7 +14,7 @@
 
 */
 
-RE * RE_Nullable::removeNullablePrefix(RE* re) {
+RE * RE_Nullable::removeNullablePrefix(RE * re) {
     if (Seq * re_seq = dynamic_cast<Seq*>(re)) {
         re = removeNullableSeqPrefix(re_seq);
     }
@@ -41,7 +41,6 @@ RE * RE_Nullable::removeNullablePrefix(RE* re) {
     }
     return re;
 }
-
 
 inline Seq * RE_Nullable::removeNullableSeqPrefix(const Seq * seq) {
     Seq * new_seq = new Seq(seq->getType());
@@ -78,7 +77,7 @@ RE * RE_Nullable::removeNullableSuffix(RE * re) {
         }
         else if (hasNullableSuffix(re_rep->getRE())) {
             Vector seq;
-            seq.push_back(new Rep(re_rep->getRE(), re_rep->getLB() - 1, re_rep->getLB() - 1));
+            seq.push_back(RE_Simplifier::makeRep(re_rep->getRE(), re_rep->getLB() - 1, re_rep->getLB() - 1));
             seq.push_back(removeNullableSuffix(re_rep->getRE()));
             re = RE_Simplifier::makeSeq(Seq::Normal, seq);
         }
@@ -151,7 +150,7 @@ bool RE_Nullable::hasNullablePrefix(const RE * re) {
 bool RE_Nullable::hasNullableSuffix(const RE * re) {
     bool nullable = false;
     if (const Seq * seq = dynamic_cast<const Seq*>(re)) {
-        nullable = isNullable(seq->back()) ? true : hasNullablePrefix(seq->back());
+        nullable = isNullable(seq->back()) ? true : hasNullableSuffix(seq->back());
     }
     else if (const Alt * alt = dynamic_cast<const Alt*>(re)) {
         if (!alt->empty()) {

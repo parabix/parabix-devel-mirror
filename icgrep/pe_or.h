@@ -14,8 +14,8 @@ class Or : public PabloE
 public:
     Or(PabloE* expr1, PabloE* expr2);
     ~Or();
-    PabloE* getExpr1();
-    PabloE* getExpr2();
+    PabloE* getExpr1() const;
+    PabloE* getExpr2() const;
 private:
     PabloE* mExpr1;
     PabloE* mExpr2;

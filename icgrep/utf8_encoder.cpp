@@ -6,13 +6,21 @@
 
 #include "utf8_encoder.h"
 
+#include "re/re_name.h"
+#include "re/re_start.h"
+#include "re/re_end.h"
+#include "re/re_seq.h"
+#include "re/re_alt.h"
+#include "re/re_rep.h"
+#include "re/re_simplifier.h"
+
+#include <assert.h>
+#include <stdexcept>
 
 RE* UTF8_Encoder::toUTF8(RE* re) {
 
     RE* retVal = nullptr;
-
     if (Alt* re_alt = dynamic_cast<Alt*>(re)) {
-
         Alt * new_alt = new Alt();
         for (RE * re : *re_alt) {
             new_alt->push_back(toUTF8(re));
@@ -20,23 +28,13 @@ RE* UTF8_Encoder::toUTF8(RE* re) {
         retVal = new_alt;
     }
     else if (Seq * re_seq = dynamic_cast<Seq*>(re)) {
-
-        Seq * new_seq = new Seq(re_seq->getType());
         //If this is a previously encoded Unicode byte sequence.
         if (re_seq->getType() == Seq::Byte) {
-            // Should we be throwing an error here? no byte sequences should exist in the code.
-            // The parser should now convert them to UNICODE code points.
-            for (RE * re : *re_seq) {
-                if (CC * cc = dynamic_cast<CC*>(re)) {
-                    const CharSetItem & item = cc->getItems().front();
-                    new_seq->push_back(new CC(item.lo_codepoint));
-                }
-            }
+            throw std::runtime_error("Unexpected UTF Byte Sequence given to UTF8 Encoder.");
         }
-        else {
-            for (RE * re : *re_seq) {
-                new_seq->push_back(toUTF8(re));
-            }
+        Seq * new_seq = new Seq(Seq::Normal);
+        for (RE * re : *re_seq) {
+            new_seq->push_back(toUTF8(re));
         }
         retVal = new_seq;
     }
@@ -46,31 +44,25 @@ RE* UTF8_Encoder::toUTF8(RE* re) {
     }
     else if (CC* re_cc = dynamic_cast<CC*>(re))
     {  
-        if (re_cc->getItems().size() == 1)
+        if (re_cc->size() == 1)
         {
-            retVal = rangeToUTF8(re_cc->getItems().front());
+            retVal = rangeToUTF8(re_cc->front());
         }
-        else if (re_cc->getItems().size() > 1) {
+        else if (re_cc->size() > 1) {
             RE::Vector re_list;
-            for (auto & item : re_cc->getItems()) {
+            for (const CharSetItem & item : *re_cc) {
                 re_list.push_back(rangeToUTF8(item));
             }
             retVal = RE_Simplifier::makeAlt(re_list);
         }
     }
-    else if (Name* re_name = dynamic_cast<Name*>(re))
-    {
-        Name* name = new Name(re_name->getName());
-        name->setType(re_name->getType());
-        name->setNegated(re_name->isNegated());   // TODO:  Hide this in the re_name module.
-        retVal = name;
+    else if (Name* re_name = dynamic_cast<Name*>(re)) {
+        retVal = new Name(re_name);
     }
-    else if (dynamic_cast<Start*>(re))
-    {
+    else if (dynamic_cast<Start*>(re)) {
         retVal = new Start();
     }
-    else if (dynamic_cast<End*>(re))
-    {
+    else if (dynamic_cast<End*>(re)) {
         retVal = new End();
     }
 
@@ -80,7 +72,6 @@ RE* UTF8_Encoder::toUTF8(RE* re) {
 RE * UTF8_Encoder::rangeToUTF8(const CharSetItem & item) {
     int u8len_lo = u8len(item.lo_codepoint);
     int u8len_hi = u8len(item.hi_codepoint);
-
     if (u8len_lo < u8len_hi)
     {
         int m = max_of_u8len(u8len_lo);

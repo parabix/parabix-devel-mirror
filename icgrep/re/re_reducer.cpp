@@ -1,8 +1,9 @@
 #include "re_reducer.h"
-
+#include <assert.h>
 
 RE* RE_Reducer::reduce(RE* re, std::map<std::string, RE*>& re_map) {
     RE* retVal = nullptr;
+    assert (re);
     if (Alt* re_alt = dynamic_cast<Alt*>(re)) {
         Alt * new_alt = new Alt();
         for (RE * re : *re_alt) {
@@ -39,10 +40,7 @@ RE* RE_Reducer::reduce(RE* re, std::map<std::string, RE*>& re_map) {
         retVal = new Name(ccname);
     }
     else if (Name* re_name = dynamic_cast<Name*>(re)) {
-        Name* name = new Name(re_name->getName());
-        name->setType(re_name->getType());
-        name->setNegated(re_name->isNegated());   // TODO:  Hide this in the re_name module.
-        retVal = name;
+        retVal = new Name(re_name);
     }
     else if (dynamic_cast<Start*>(re)) {
         retVal = new Start();

@@ -7,13 +7,14 @@
 #include "pe_all.h"
 
 All::All(int num)
+: mNum(num)
 {
-    mNum = num;
+
 }
 
 All::~All(){}
 
-int All::getNum()
+int All::getNum() const
 {
     return mNum;
 }

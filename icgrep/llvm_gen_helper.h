@@ -7,29 +7,10 @@
 #ifndef LLVM_GENERATOR_HELPER_H
 #define LLVM_GENERATOR_HELPER_H
 
-//Regular Expressions
-#include "re_re.h"
-#include "re_cc.h"
-#include "re_start.h"
-#include "re_end.h"
-#include "re_seq.h"
+#include <list>
 
-//Pablo Expressions
-#include "pe_pabloe.h"
-#include "pe_advance.h"
-#include "pe_and.h"
-#include "pe_charclass.h"
-#include "pe_not.h"
-#include "pe_or.h"
-#include "pe_matchstar.h"
-#include "pe_scanthru.h"
-
-//Pablo Statements
-#include "ps_pablos.h"
-#include "ps_assign.h"
-#include "ps_if.h"
-#include "ps_while.h"
-
+class PabloS;
+class PabloE;
 
 class LLVM_Generator_Helper
 {

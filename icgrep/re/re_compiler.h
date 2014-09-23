@@ -7,12 +7,9 @@
 #ifndef RE_COMPILER_H
 #define RE_COMPILER_H
 
-#include "hrtime.h"
-
-//Regular Expressions
 #include "re_re.h"
-#include "utf_encoding.h"
-#include "llvm_gen.h"
+#include "../utf_encoding.h"
+#include "../llvm_gen.h"
 #include <string>
 
 struct processed_parsetree_results{

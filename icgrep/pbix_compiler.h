@@ -8,13 +8,13 @@
 #define COMPILER_H
 
 //Regular Expressions
-#include "re_re.h"
-#include "re_name.h"
-#include "re_start.h"
-#include "re_end.h"
-#include "re_seq.h"
-#include "re_alt.h"
-#include "re_rep.h"
+#include "re/re_re.h"
+#include "re/re_name.h"
+#include "re/re_start.h"
+#include "re/re_end.h"
+#include "re/re_seq.h"
+#include "re/re_alt.h"
+#include "re/re_rep.h"
 
 //Pablo Expressions
 #include "pe_pabloe.h"

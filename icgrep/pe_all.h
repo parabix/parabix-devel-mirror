@@ -14,7 +14,7 @@ class All : public PabloE
 public:
     All(int num);
     ~All();
-    int getNum();
+    int getNum() const;
     void setNum(int num);
 private:
     int mNum;

@@ -7,7 +7,7 @@
 #include "icgrep.h"
 
 #include "utf_encoding.h"
-#include "re_compiler.h"
+#include "re/re_compiler.h"
 
 #include <fstream>
 #include <sstream>
@@ -28,6 +28,8 @@
 #include <simd-lib/s2p.hpp>
 #include <simd-lib/buffer.hpp>
 #include <simd-lib/bitblock_iterator.hpp>
+
+#include "hrtime.h"
 
 // mmap system
 #include <sys/mman.h>

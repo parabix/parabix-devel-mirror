@@ -6,10 +6,11 @@
 
 #include "pe_and.h"
 
-And::And(PabloE *expr1, PabloE *expr2)
+And::And(PabloE * expr1, PabloE * expr2)
+: mExpr1(expr1)
+, mExpr2(expr2)
 {
-    mExpr1 = expr1;
-    mExpr2 = expr2;
+
 }
 
 And::~And()
@@ -18,12 +19,12 @@ And::~And()
     delete mExpr2;
 }
 
-PabloE* And::getExpr1()
+PabloE* And::getExpr1() const
 {
     return mExpr1;
 }
 
-PabloE* And::getExpr2()
+PabloE* And::getExpr2() const
 {
     return mExpr2;
 }

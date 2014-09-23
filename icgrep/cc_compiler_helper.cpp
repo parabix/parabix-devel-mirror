@@ -66,7 +66,7 @@ PabloE* CC_Compiler_Helper::make_and(PabloE *expr1, PabloE *expr2)
             return new All(0);
         }
     }
-    else if (equal_exprs(expr1, expr2 ))
+    else if (equal_exprs(expr1, expr2))
     {
         return expr1;
     }
@@ -256,67 +256,32 @@ PabloE* CC_Compiler_Helper::make_xor(PabloE *expr1, PabloE *expr2)
 
 */
 
-bool CC_Compiler_Helper::equal_exprs(PabloE *expr1, PabloE *expr2)
+bool CC_Compiler_Helper::equal_exprs(const PabloE * expr1, const PabloE * expr2)
 {
-    if (All* all_expr1 = dynamic_cast<All*>(expr1))
+    if (const All * all_expr1 = dynamic_cast<const All*>(expr1))
     {
-        if (all_expr1->getNum() == 1)
+        if (const All * all_expr2 = dynamic_cast<const All*>(expr2))
         {
-            if (All* all_expr2 = dynamic_cast<All*>(expr2))
-            {
-                if (all_expr2->getNum() == 1)
-                {
-                    return true;
-                }
-                else
-                {
-                    return false;
-                }
-            }
-            else
-            {
-                return false;
-            }
-        }
-        else if (all_expr1->getNum() == 0)
-        {
-            if (All* all_expr2 = dynamic_cast<All*>(expr2))
-            {
-                if (all_expr2->getNum() == 1)
-                {
-                    return false;
-                }
-                else
-                {
-                    return true;
-                }
-            }
-            else
-            {
-                return false;
-            }
+            return all_expr1->getNum() == all_expr2->getNum();
         }
     }
-
-    if (Var* var_expr1 = dynamic_cast<Var*>(expr1))
+    else if (const Var * var_expr1 = dynamic_cast<const Var*>(expr1))
     {
-        if (Var* var_expr2 = dynamic_cast<Var*>(expr2))
+        if (const Var * var_expr2 = dynamic_cast<const Var*>(expr2))
         {
             return (var_expr1->getVar() == var_expr2->getVar());
         }
     }
-
-    if (Not* not_expr1 = dynamic_cast<Not*>(expr1))
+    else if (const Not* not_expr1 = dynamic_cast<const Not*>(expr1))
     {
-        if (Not* not_expr2 = dynamic_cast<Not*>(expr2))
+        if (const Not* not_expr2 = dynamic_cast<const Not*>(expr2))
         {
             return equal_exprs(not_expr1->getExpr(), not_expr2->getExpr());
         }
     }
-
-    if (And* and_expr1 = dynamic_cast<And*>(expr1))
+    else if (const And* and_expr1 = dynamic_cast<const And*>(expr1))
     {
-        if (And* and_expr2 = dynamic_cast<And*>(expr2))
+        if (const And* and_expr2 = dynamic_cast<const And*>(expr2))
         {
             if (equal_exprs(and_expr1->getExpr1(), and_expr2->getExpr1()))
             {
@@ -326,14 +291,11 @@ bool CC_Compiler_Helper::equal_exprs(PabloE *expr1, PabloE *expr2)
             {
                 return equal_exprs(and_expr1->getExpr2(), and_expr2->getExpr1());
             }
-            else
-                return false;
         }
     }
-
-    if (Or* or_expr1 = dynamic_cast<Or*>(expr1))
+    else if (const Or * or_expr1 = dynamic_cast<const Or*>(expr1))
     {
-        if (Or* or_expr2 = dynamic_cast<Or*>(expr2))
+        if (const Or* or_expr2 = dynamic_cast<const Or*>(expr2))
         {
             if (equal_exprs(or_expr1->getExpr1(), or_expr2->getExpr1()))
             {
@@ -343,14 +305,11 @@ bool CC_Compiler_Helper::equal_exprs(PabloE *expr1, PabloE *expr2)
             {
                 return equal_exprs(or_expr1->getExpr2(), or_expr2->getExpr1());
             }
-            else
-                return false;
         }
     }
-
-    if (Xor* xor_expr1 = dynamic_cast<Xor*>(expr1))
+    else if (const Xor * xor_expr1 = dynamic_cast<const Xor *>(expr1))
     {
-        if (Xor* xor_expr2 = dynamic_cast<Xor*>(expr2))
+        if (const Xor * xor_expr2 = dynamic_cast<const Xor *>(expr2))
         {
             if (equal_exprs(xor_expr1->getExpr1(), xor_expr2->getExpr1()))
             {
@@ -360,14 +319,11 @@ bool CC_Compiler_Helper::equal_exprs(PabloE *expr1, PabloE *expr2)
             {
                 return equal_exprs(xor_expr1->getExpr2(), xor_expr2->getExpr1());
             }
-            else
-                return false;
         }
     }
-
-    if (Sel* sel_expr1 = dynamic_cast<Sel*>(expr1))
+    else if (const Sel* sel_expr1 = dynamic_cast<const Sel*>(expr1))
     {
-        if (Sel* sel_expr2 = dynamic_cast<Sel*>(expr2))
+        if (const Sel* sel_expr2 = dynamic_cast<const Sel*>(expr2))
         {
             if (equal_exprs(sel_expr1->getIf_expr(), sel_expr2->getIf_expr()))
             {
@@ -375,11 +331,7 @@ bool CC_Compiler_Helper::equal_exprs(PabloE *expr1, PabloE *expr2)
                 {
                     return equal_exprs(sel_expr1->getF_expr(), sel_expr2->getF_expr());
                 }
-                else
-                    return false;
             }
-            else
-                return false;
         }
     }
 

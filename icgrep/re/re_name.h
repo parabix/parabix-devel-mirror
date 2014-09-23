@@ -10,12 +10,13 @@ class Name : public RE
 public:
     typedef enum {FixedLength,Unicode,UnicodeCategory} Type;
     Name();
+    Name(const Name * name);
     Name(std::string name);
     void setName(std::string name);
     std::string getName() const;
-    void setNegated(bool is_negated);
+    void setNegated(const bool is_negated);
     bool isNegated() const;
-    void setType(Type type);
+    void setType(const Type type);
     Type getType() const;
     ~Name();
 private:

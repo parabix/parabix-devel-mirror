@@ -6,6 +6,22 @@
 
 #include "llvm_gen_helper.h"
 
+//Pablo Expressions
+#include "pe_pabloe.h"
+#include "pe_advance.h"
+#include "pe_and.h"
+#include "pe_charclass.h"
+#include "pe_not.h"
+#include "pe_or.h"
+#include "pe_matchstar.h"
+#include "pe_scanthru.h"
+
+//Pablo Statements
+#include "ps_pablos.h"
+#include "ps_assign.h"
+#include "ps_if.h"
+#include "ps_while.h"
+
 LLVM_Generator_Helper::LLVM_Generator_Helper(){}
 
 int LLVM_Generator_Helper::CarryCount_PabloStatements(std::list<PabloS*> stmts)

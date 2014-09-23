@@ -14,8 +14,8 @@ class Xor : public PabloE
 public:
     Xor(PabloE* expr1, PabloE* expr2);
     ~Xor();
-    PabloE* getExpr1();
-    PabloE* getExpr2();
+    PabloE* getExpr1() const;
+    PabloE* getExpr2() const;
 private:
     PabloE* mExpr1;
     PabloE* mExpr2;

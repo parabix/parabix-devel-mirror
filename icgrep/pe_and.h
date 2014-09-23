@@ -14,8 +14,8 @@ class And : public PabloE
 public:
     And(PabloE* expr1, PabloE* expr2);
     ~And();
-    PabloE* getExpr1();
-    PabloE* getExpr2();
+    PabloE* getExpr1() const;
+    PabloE* getExpr2() const;
 private:
     PabloE* mExpr1;
     PabloE* mExpr2;

@@ -8,11 +8,20 @@
 #include "ps_pablos.h"
 #include "utf_encoding.h"
 #include "cc_compiler_helper.h"
+#include "pe_sel.h"
+#include "pe_advance.h"
+#include "pe_all.h"
+#include "pe_and.h"
+#include "pe_charclass.h"
+#include "pe_matchstar.h"
+#include "pe_not.h"
+#include "pe_or.h"
+#include "pe_var.h"
+#include "pe_xor.h"
 
 #include <math.h>
 #include <utility>
 #include <iostream>
-#include <sstream>
 #include <string>
 #include <list>
 #include <map>
@@ -20,6 +29,7 @@
 
 #include <cassert>
 #include <stdlib.h>
+#include <stdexcept>
 
 CC_Compiler::CC_Compiler(const UTF_Encoding encoding, const std::string basis_pattern, const std::string gensym_pattern)
 {
@@ -31,7 +41,7 @@ CC_Compiler::CC_Compiler(const UTF_Encoding encoding, const std::string basis_pa
  
     for (int i = 0; i < mEncoding.getBits(); i++)
     {
-        std::string b_pattern = bit_var((mEncoding.getBits() -1) - i);
+        std::string b_pattern = bit_var((mEncoding.getBits() - 1) - i);
         Expression* expr = new Expression();
         expr->expr_string  =  b_pattern;
         expr->pablo_expr = make_bitv(i);
@@ -56,23 +66,18 @@ Expression* CC_Compiler::add_assignment(std::string varname, Expression* expr)
     mapped_value->expr_string = varname;
     mapped_value->pablo_expr = new Var(varname);
 
-    std::pair<std::map<std::string, Expression*>::iterator, bool> ret = mCommon_Expression_Map.insert(make_pair(key_value, mapped_value));
+    std::pair<MapIterator, bool> ret = mCommon_Expression_Map.insert(make_pair(key_value, mapped_value));
 
     return ret.first->second;
 }
 
-Expression* CC_Compiler::expr_to_variable(Expression* expr)
-{
-    if (mCommon_Expression_Map.count(expr->expr_string) > 0)
-    {
-        std::map<std::string, Expression*>::iterator itGet = mCommon_Expression_Map.find(expr->expr_string);
-        return itGet->second;
+Expression* CC_Compiler::expr_to_variable(Expression * expr) {
+    MapIterator itr = mCommon_Expression_Map.find(expr->expr_string);
+    if (itr != mCommon_Expression_Map.end()) {
+        return itr->second;
     }
-    else
-    {
-        mGenSymCounter++;
-        std::string sym = mGenSym_Template + std::to_string(mGenSymCounter);
-        return add_assignment(sym, expr);
+    else {
+        return add_assignment(mGenSym_Template + std::to_string(++mGenSymCounter), expr);
     }
 }
 
@@ -89,35 +94,31 @@ std::string CC_Compiler::compile1(CC* cc)
   return cc->getName();
 }
 
-void CC_Compiler::compile_from_map(const std::map<std::string, RE*>& re_map)
+void CC_Compiler::compile_from_map(const REMap &re_map)
 {
     process_re_map(re_map);
 }
 
-void CC_Compiler::process_re_map(const std::map<std::string, RE*>& re_map)
-{
-    for (auto it =  re_map.rbegin(); it != re_map.rend(); ++it)
-    {
+void CC_Compiler::process_re_map(const REMap & re_map) {
+    for (auto it =  re_map.crbegin(); it != re_map.crend(); ++it) {
         process_re(it->second);
     }
 }
 
-void CC_Compiler::process_re(RE* re)
-{
-
-    if (Alt* re_alt = dynamic_cast<Alt*>(re)) {
-        for (RE * re : *re_alt) {
+void CC_Compiler::process_re(const RE* re) {
+    if (const Alt* re_alt = dynamic_cast<const Alt*>(re)) {
+        for (const RE * re : *re_alt) {
             process_re(re);
         }
     }
-    else if (CC* re_cc = dynamic_cast<CC*>(re)) {
+    else if (const CC* re_cc = dynamic_cast<const CC*>(re)) {
         cc2pablos(re_cc);
     }
-    else if (Rep* re_rep = dynamic_cast<Rep*>(re)) {
+    else if (const Rep* re_rep = dynamic_cast<const Rep*>(re)) {
         process_re(re_rep->getRE());
     }
-    else if (Seq* re_seq = dynamic_cast<Seq*>(re)) {
-        for (RE * re : *re_seq) {
+    else if (const Seq* re_seq = dynamic_cast<const Seq*>(re)) {
+        for (const RE * re : *re_seq) {
             process_re(re);
         }
     }
@@ -151,13 +152,7 @@ PabloE* CC_Compiler::bit_pattern_expr(int pattern, int selected_bits)
         selected_bits &= ~test_bit;
         bit_no++;
     }
-/*
-    std::cout << "FIRST LOOP:" << std::endl;
-    for (int i = bit_terms.size() - 1; i >= 0; i--)
-    {
-        std::cout << StatementPrinter::ShowPabloE(bit_terms.at(i)) << std::endl;
-    }
-*/
+
     //Reduce the list so that all of the expressions are contained within a single expression.
     while (bit_terms.size() > 1)
     {
@@ -170,33 +165,21 @@ PabloE* CC_Compiler::bit_pattern_expr(int pattern, int selected_bits)
         {
             new_terms.push_back(bit_terms[bit_terms.size() -1]);
         }
-/*
-        std::cout << "\nNEW TERMS ITERATION:\n" << std::endl;
-        for (int i = new_terms.size() - 1; i >=0; i--)
-        {
-            std::cout <<  StatementPrinter::ShowPabloE(new_terms[i]) << std::endl;
-        }
-        std::cout << "\n" << std::endl;
-*/
         std::vector<PabloE*>::iterator it;
         bit_terms.assign(new_terms.begin(), new_terms.end());
     }
-/*
-    std::cout << "bit_terms.size(): " << bit_terms.size() << std::endl;
-    std::cout << StatementPrinter::ShowPabloE(bit_terms[0]) << std::endl;
-*/
     return bit_terms[0];
 }
 
-PabloE* CC_Compiler::char_test_expr(int ch)
+PabloE* CC_Compiler::char_test_expr(const CodePointType ch)
 {
     return bit_pattern_expr(ch, mEncoding.getMask());
 }
 
-PabloE* CC_Compiler::make_range(int n1, int n2)
+PabloE* CC_Compiler::make_range(const CodePointType n1, const CodePointType n2)
 {
-    unsigned char diff_bits = n1 ^ n2;
-    int diff_count = 0;
+    CodePointType diff_bits = n1 ^ n2;
+    CodePointType diff_count = 0;
 
     while (diff_bits > 0)
     {
@@ -206,25 +189,18 @@ PabloE* CC_Compiler::make_range(int n1, int n2)
 
     if ((n2 < n1) || (diff_count > mEncoding.getBits()))
     {
-        int n1i = n1;
-        int n2i = n2;
-
-        std::cout << "n1: " << n1i << std::endl;
-        std::cout << "n2: " << n2i << std::endl;
-
-        std::cout << "Exception: Bad Range!" << std::endl;
-        return 0;
+        throw std::runtime_error(std::string("Bad Range: [") + std::to_string(n1) + "," + std::to_string(n2) + "]");
     }
 
-    int mask = pow(2, diff_count) - 1;
+    const CodePointType mask0 = (static_cast<CodePointType>(1) << diff_count) - 1;
 
-    PabloE* common = bit_pattern_expr(n1 & ~mask, mEncoding.getMask() ^ mask);
+    PabloE* common = bit_pattern_expr(n1 & ~mask0, mEncoding.getMask() ^ mask0);
     if (diff_count == 0) return common;
 
-    mask = pow(2, (diff_count - 1)) - 1;
+    const CodePointType mask1 = (static_cast<CodePointType>(1) << (diff_count - 1)) - 1;
 
-    PabloE* lo_test = GE_Range(diff_count - 1, n1 & mask);
-    PabloE* hi_test = LE_Range(diff_count - 1, n2 & mask);
+    PabloE* lo_test = GE_Range(diff_count - 1, n1 & mask1);
+    PabloE* hi_test = LE_Range(diff_count - 1, n2 & mask1);
 
     return CC_Compiler_Helper::make_and(common, CC_Compiler_Helper::make_sel(make_bitv(diff_count - 1), hi_test, lo_test));
 }
@@ -278,92 +254,66 @@ PabloE* CC_Compiler::LE_Range(int N, int n)
       If an N-bit pattern is all ones, then it is always true that any n-bit value is LE this pattern.
       Handling this as a special case avoids an overflow issue with n+1 requiring more than N bits.
     */
-    if ((n+1) == pow(2, N))
-    {
+    if ((n + 1) == (1 << N)) {
         return new All(1); //True.
     }
-    else
-    {
-        return CC_Compiler_Helper::make_not(GE_Range(N, n+1));
+    else {
+        return CC_Compiler_Helper::make_not(GE_Range(N, n + 1));
     }
 }
 
-PabloE* CC_Compiler::char_or_range_expr(CharSetItem charset_item)
+PabloE* CC_Compiler::charset_expr(const CC * cc)
 {
-    if (charset_item.lo_codepoint == charset_item.hi_codepoint)
-    {
-        return char_test_expr(charset_item.lo_codepoint);
-    }
-    else
-    {
-        if (charset_item.lo_codepoint < charset_item.hi_codepoint)
-        {
-            return make_range(charset_item.lo_codepoint, charset_item.hi_codepoint);
-        }
-    }
-
-    std::cout << "Exception: Bad Character Set Item!" << std::endl;
-    return 0;
-}
-
-PabloE* CC_Compiler::charset_expr(CC* cc)
-{
-    if (cc->getItems().size() == 0)
-    {
+    if (cc->empty()) {
         return new All(0);
     }
 
-    if (cc->getItems().size() > 1)
-    {
+    if (cc->size() > 1) {
         bool combine = true;
-
-        for (unsigned long i = 0; i < cc->getItems().size(); i++)
-        {
-            CharSetItem item = cc->getItems().at(i);
-            if (item.lo_codepoint != item.hi_codepoint)
-            {
+        for (const CharSetItem & item : *cc) {
+            if (item.lo_codepoint != item.hi_codepoint) {
                 combine = false;
                 break;
             }
         }
-
-        if (combine)
-        {
-            for (unsigned long i = 0; i < cc->getItems().size() - 1; i ++)
-            {
-                CharSetItem curr_item = cc->getItems().at(i);
-                CharSetItem next_item = cc->getItems().at(i + 1);
-                if (curr_item.lo_codepoint != next_item.lo_codepoint + 2)
-                {
+        if (combine) {
+            auto i = cc->cbegin();
+            for (auto j = i; ++j != cc->cend(); i = j) {
+                const CharSetItem & curr_item = *i;
+                const CharSetItem & next_item = *j;
+                if ((curr_item.lo_codepoint + 2) != next_item.lo_codepoint) {
                     combine  = false;
                     break;
                 }
             }
-        }
-
-        if (combine)
-        {
-            CharSetItem first_item = cc->getItems().at(0);
-            CharSetItem last_item = cc->getItems().at(cc->getItems().size() - 1);
-            CharSetItem combined_item;
-            combined_item.lo_codepoint = (last_item.lo_codepoint & 0xFE);
-            combined_item.hi_codepoint = (first_item.hi_codepoint | 0x01);
-
-            return char_or_range_expr(combined_item);
+            if (combine) {
+                const CodePointType lo = cc->front().lo_codepoint;
+                const CodePointType hi = cc->back().lo_codepoint;
+                PabloE * expr = make_range(lo & 0xFE, hi | 0x01);
+                // should this be here? was in the prototype but not icgrep
+                expr = CC_Compiler_Helper::make_and(expr, new All((lo & 1) == 1 ? 0 : 1));
+                return expr;
+            }
         }
     }
-
-    PabloE* e1 = char_or_range_expr(cc->getItems().at(0));
-    if (cc->getItems().size() > 1)
-    {
-        for (unsigned long i = 1; i < cc->getItems().size(); i++)
-        {
-            e1 = CC_Compiler_Helper::make_or(e1, char_or_range_expr(cc->getItems().at(i)));
-        }
+    PabloE * expr = nullptr;
+    for (const CharSetItem & item : *cc) {
+        PabloE * temp = char_or_range_expr(item.lo_codepoint, item.hi_codepoint);
+        expr = (expr == nullptr) ? temp : CC_Compiler_Helper::make_or(expr, temp);
     }
-
-    return e1;
+    return expr;
 }
+
+inline PabloE * CC_Compiler::char_or_range_expr(const CodePointType lo, const CodePointType hi) {
+    if (lo == hi) {
+        return char_test_expr(lo);
+    }
+    else if (lo < hi) {
+        return make_range(lo, hi);
+    }
+    throw std::runtime_error(std::string("Invalid Character Set Range: [") + std::to_string(lo) + "," + std::to_string(hi) + "]");
+}
+
 
 Expression* CC_Compiler::expr2pabloe(PabloE* expr)
 {
@@ -381,7 +331,7 @@ Expression* CC_Compiler::expr2pabloe(PabloE* expr)
             retExpr->expr_string = "All(1)";
             retExpr->pablo_expr = new All(1);
         }
-        else if (all->getNum() ==0)
+        else if (all->getNum() == 0)
         {
             retExpr->expr_string = "All(0)";
             retExpr->pablo_expr = new All(0);
@@ -449,7 +399,7 @@ Expression* CC_Compiler::expr2pabloe(PabloE* expr)
     return retExpr;
 }
 
-void CC_Compiler::cc2pablos(CC* cc)
+void CC_Compiler::cc2pablos(const CC * cc)
 {
     add_assignment(cc->getName(), expr2pabloe(charset_expr(cc)));
 }

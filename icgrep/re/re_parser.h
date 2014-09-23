@@ -51,8 +51,6 @@ private:
 
     bool parse_charset_literal(unsigned & literal);
 
-    static bool isValidUnicodeCategoryName(const std::unique_ptr<Name> &name);
-
     unsigned parse_hex();
 
     unsigned parse_int();

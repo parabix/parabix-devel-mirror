@@ -7,6 +7,7 @@ provide fodder for some simple
 regexp tests.
 </datafile>
 
+<grepcase regexp="fe|si" datafile="simple1" grepcount="3"/>
 <grepcase regexp="in" datafile="simple1" grepcount="2"/>
 <grepcase regexp="[A-Z]" datafile="simple1" grepcount="1"/>
 <grepcase regexp="fodder|simple" datafile="simple1" grepcount="2"/>

@@ -30,6 +30,19 @@ inline RE_Parser::RE_Parser(const std::string & regular_expression, const bool a
 
 }
 
+template<class T>
+inline static RE * simplify_vector(T & vec) {
+    RE * re;
+    if (vec->size() == 1) {
+        re = vec->back();
+        vec->pop_back();
+    }
+    else {
+        re = vec.release();
+    }
+    return re;
+}
+
 RE * RE_Parser::parse_alt(const bool subexpression) {
     std::unique_ptr<Alt> alt(new Alt());
     for (;;) {
@@ -52,16 +65,7 @@ RE * RE_Parser::parse_alt(const bool subexpression) {
     else if (_cursor != _end) { // !subexpression
         throw ParseFailure("Cannot fully parse statement!");
     }
-
-    RE * re;
-    if (alt->size() == 1) {
-        re = alt->back();
-        alt->pop_back();
-    }
-    else {
-        re = alt.release();
-    }
-    return re;
+    return simplify_vector(alt);
 }
 
 inline RE * RE_Parser::parse_seq() {
@@ -77,16 +81,7 @@ inline RE * RE_Parser::parse_seq() {
     {
         throw NoRegularExpressionFound();
     }
-
-    RE * re;
-    if (seq->size() == 1) {
-        re = seq->back();
-        seq->pop_back();
-    }
-    else {
-        re = seq.release();
-    }
-    return re;
+    return simplify_vector(seq);
 }
 
 RE * RE_Parser::parse_next_token() {
@@ -138,7 +133,7 @@ RE * RE_Parser::extend_item(RE * re) {
     switch (*_cursor) {
         case '*':
             ++_cursor; // skip past the '*'
-            re = new Rep(re, 0, UNBOUNDED_REP);
+            re = new Rep(re, 0, Rep::UNBOUNDED_REP);
             break;
         case '?':
             ++_cursor; // skip past the '?'
@@ -146,7 +141,7 @@ RE * RE_Parser::extend_item(RE * re) {
             break;
         case '+':
             ++_cursor; // skip past the '+'
-            re = new Rep(re, 1, UNBOUNDED_REP);
+            re = new Rep(re, 1, Rep::UNBOUNDED_REP);
             break;
         case '{':
             re = parse_range_bound(re);
@@ -181,7 +176,7 @@ inline RE * RE_Parser::parse_range_bound(RE * re) {
         ++_cursor;
         throw_incomplete_expression_error_if_end_of_stream();
         if (*_cursor == '}') {
-            rep = new Rep(re, lower_bound, UNBOUNDED_REP);
+            rep = new Rep(re, lower_bound, Rep::UNBOUNDED_REP);
         }
         else {
             const unsigned upper_bound = parse_int();
@@ -272,10 +267,8 @@ inline Name * RE_Parser::parse_unicode_category(const bool negated) {
             ++_cursor;
         }
         name->setName(std::string(start, _cursor));
-        if (isValidUnicodeCategoryName(name)) {
-            ++_cursor;
-            return name.release();
-        }
+        ++_cursor;
+        return name.release();
     }
     throw ParseFailure("Incorrect Unicode character class format!");
 }
@@ -300,7 +293,7 @@ RE * RE_Parser::parse_charset() {
                 // To include a ], put it immediately after the opening [ or [^; if it occurs later it will
                 // close the bracket expression.
                 if (start == _cursor) {
-                    cc->insert1(']');
+                    cc->insert(']');
                     ++_cursor;
                     included_closing_square_bracket = true;
                     literal = false;
@@ -322,7 +315,7 @@ RE * RE_Parser::parse_charset() {
                     }
                     if ((start == _cursor) ? (*next != '-') : (*next == ']')) {
                         _cursor = next;
-                        cc->insert1('-');
+                        cc->insert('-');
                         break;
                     }
                 }
@@ -350,7 +343,7 @@ RE * RE_Parser::parse_charset() {
                     continue;
                 }
             }
-            cc->insert1(low);
+            cc->insert(low);
         }
     }
 parse_failed:
@@ -368,7 +361,7 @@ inline bool RE_Parser::parse_charset_literal(unsigned & literal) {
     }
     if (*_cursor == '\\') {
         if (++_cursor == _end) {
-            return false;
+            throw ParseFailure("Unknown charset escape!");
         }
         switch (*_cursor) {
             case '(': case ')': case '*': case '+':
@@ -430,24 +423,8 @@ unsigned RE_Parser::parse_hex() {
 }
 
 inline void RE_Parser::negate_cc(std::unique_ptr<CC> & cc) {
-    cc->negate_class();
-    cc->remove1(10);
-}
-
-bool RE_Parser::isValidUnicodeCategoryName(const std::unique_ptr<Name> & name) {
-    static const char * SET_OF_VALID_CATEGORIES[] = {
-        "C", "Cc", "Cf", "Cn", "Co", "Cs",
-        "L", "L&", "Lc", "Ll", "Lm", "Lo", "Lt", "Lu",
-        "M", "Mc", "Me", "Mn",
-        "N", "Nd", "Nl", "No",
-        "P", "Pc", "Pd", "Pe", "Pf", "Pi", "Po", "Ps",
-        "S", "Sc", "Sk", "Sm", "So",
-        "Z", "Zl", "Zp", "Zs"
-    };
-    // NOTE: this method isn't as friendly as using an unordered_set for VALID_CATEGORIES since it requires
-    // that the set is in ALPHABETICAL ORDER; however it ought to have less memory overhead than an
-    // unordered_set and roughly equivalent speed.
-    return std::binary_search(std::begin(SET_OF_VALID_CATEGORIES), std::end(SET_OF_VALID_CATEGORIES), name->getName());
+    cc->negate();
+    cc->remove(10);
 }
 
 inline void RE_Parser::throw_incomplete_expression_error_if_end_of_stream() const {

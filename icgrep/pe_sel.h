@@ -14,9 +14,9 @@ class Sel : public PabloE
 public:
     Sel(PabloE* if_expr, PabloE* t_expr, PabloE* f_expr);
     ~Sel();
-    PabloE* getIf_expr();
-    PabloE* getT_expr();
-    PabloE* getF_expr();
+    PabloE* getIf_expr() const;
+    PabloE* getT_expr() const;
+    PabloE* getF_expr() const;
 private:
     PabloE* mIf_expr;
     PabloE* mT_expr;

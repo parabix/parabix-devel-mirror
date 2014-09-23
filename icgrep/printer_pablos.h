@@ -8,11 +8,11 @@
 #define SHOW_H
 
 //Regular Expressions
-#include "re_re.h"
-#include "re_cc.h"
-#include "re_start.h"
-#include "re_end.h"
-#include "re_seq.h"
+#include "re/re_re.h"
+#include "re/re_cc.h"
+#include "re/re_start.h"
+#include "re/re_end.h"
+#include "re/re_seq.h"
 
 //Pablo Expressions
 #include "pe_pabloe.h"
