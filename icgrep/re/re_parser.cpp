@@ -244,9 +244,19 @@ unsigned RE_Parser::parse_utf8_codepoint() {
                     throw InvalidUTF8Encoding();
                 }
                 c = (c << 6) | static_cast<unsigned>(*_cursor & 0x3F);
+		// It is an error if a 3-byte sequence is used to encode a codepoint < 0x800
+		// or a 4-byte sequence is used to encode a codepoint < 0x10000.
+		// if (((bytes == 1) && (c < 0x20)) || ((bytes == 2) && (c < 0x10))) {
+		if ((c << (bytes - 1)) < 0x20) {
+                    throw InvalidUTF8Encoding();
+                }
+		  
             }
         }
     }
+    // It is an error if a 4-byte sequence is used to encode a codepoint 
+    // above the Unicode maximum.   
+    if (c > 0x10FFFF) throw InvalidUTF8Encoding();
     return c;
 }
 
@@ -285,7 +295,7 @@ RE * RE_Parser::parse_charset() {
                 // If the first character after the [ is a ^ (caret) then the matching character class is complemented.
                 if (start == _cursor) {
                     negated = true;
-                    start = ++_cursor; // move the start ahead incase the next character is a [ or -
+                    start = ++_cursor; // move the start ahead in case the next character is a ] or -
                     literal = false;                    
                 }
                 break;
