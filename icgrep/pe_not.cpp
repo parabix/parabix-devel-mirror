@@ -7,18 +7,19 @@
 #include "pe_not.h"
 
 Not::Not(PabloE* expr)
-{
-    mExpr = expr;
+: mExpr(expr) {
+
 }
 
-Not::~Not()
-{
+Not::~Not() {
     delete mExpr;
 }
 
-PabloE* Not::getExpr() const
-{
+PabloE* Not::getExpr() const {
     return mExpr;
 }
 
+void Not::setExpr(PabloE * expr) {
+    mExpr = expr;
+}
 

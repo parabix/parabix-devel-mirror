@@ -12,9 +12,10 @@
 class Not : public PabloE
 {
 public:
-    Not(PabloE* expr);
+    Not(PabloE * expr);
     ~Not();
-    PabloE* getExpr() const;
+    PabloE * getExpr() const;
+    void setExpr(PabloE * expr = nullptr);
 private:
     PabloE* mExpr;
 };

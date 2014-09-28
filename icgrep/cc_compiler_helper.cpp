@@ -35,8 +35,7 @@ CC_Compiler_Helper::CC_Compiler_Helper(){}
 
 PabloE* CC_Compiler_Helper::make_not(PabloE* expr)
 {
-    if (All* all = dynamic_cast<All*>(expr))
-    {
+    if (All* all = dynamic_cast<All*>(expr)) {
         if (all->getNum() == 1) //If true literal.
         {
             return new All(0); //Set to false literal.
@@ -46,110 +45,111 @@ PabloE* CC_Compiler_Helper::make_not(PabloE* expr)
             return new All(1); //Set to true literal.
         }
     }
-    else if (Not* pe_not = dynamic_cast<Not*>(expr))
-    {
-        return pe_not->getExpr();
+    else if (Not* pe_not = dynamic_cast<Not*>(expr)) {
+        PabloE * expr = pe_not->getExpr();
+        pe_not->setExpr(nullptr);
+        delete pe_not;
+        return expr;
     }
-    else
-    {
+    else {
         return new Not(expr);
     }
 }
 
-PabloE* CC_Compiler_Helper::make_and(PabloE *expr1, PabloE *expr2)
+PabloE* CC_Compiler_Helper::make_and(PabloE * expr1, PabloE *expr2)
 {
-    if (All* all = dynamic_cast<All*>(expr1))
-    {
-        if (all->getNum() == 1)
-        {
+    if (All* all = dynamic_cast<All*>(expr1)) {
+        if (all->getNum() == 1) {
+            delete all;
             return expr2;
         }
-        else //if (all->getNum() == 0)
-        {
+        else { //if (all->getNum() == 0)
+            delete expr1;
+            delete expr2;
             return new All(0);
         }
     }
-    else if (All* all = dynamic_cast<All*>(expr2))
-    {
-        if (all->getNum() == 1)
-        {
+    else if (All* all = dynamic_cast<All*>(expr2)) {
+        if (all->getNum() == 1) {
+            delete expr2;
             return expr1;
         }
-        else //if (all->getNum() == 0)
-        {
+        else { //if (all->getNum() == 0)
+            delete expr1;
+            delete expr2;
             return new All(0);
         }
     }
-    else if (equal_exprs(expr1, expr2))
-    {
+    else if (equal_exprs(expr1, expr2)) {
+        delete expr2;
         return expr1;
     }
-    else if (Not* pe_not_e1 = dynamic_cast<Not*>(expr1))
-    {
-        if (Not* pe_not_e2 = dynamic_cast<Not*>(expr2))
-        {
-            return make_not(make_or(pe_not_e1->getExpr(), pe_not_e2->getExpr()));
+    else if (Not* pe_not_e1 = dynamic_cast<Not*>(expr1)) {
+        if (Not* pe_not_e2 = dynamic_cast<Not*>(expr2)) {
+
+            PabloE * e1 = pe_not_e1->getExpr();
+            pe_not_e1->setExpr(nullptr);
+            delete pe_not_e1;
+
+            PabloE * e2 = pe_not_e2->getExpr();
+            pe_not_e2->setExpr(nullptr);
+            delete pe_not_e2;
+
+            return make_not(make_or(e1, e2));
         }
-        else if (equal_exprs(pe_not_e1->getExpr(), expr2))
-        {
+        else if (equal_exprs(pe_not_e1->getExpr(), expr2)) {
+            delete expr1;
+            delete expr2;
             return new All(0); //Return false literal.
         }
-        else
-        {
-            return new And(expr1, expr2);
-        }
     }
-    else if (Not* pe_not_e2 = dynamic_cast<Not*>(expr2))
-    {
-        if (equal_exprs(expr1, pe_not_e2->getExpr()))
-        {
+    else if (Not * pe_not_e2 = dynamic_cast<Not*>(expr2)) {
+        if (equal_exprs(expr1, pe_not_e2->getExpr())) {
+            delete expr1;
+            delete expr2;
             return new All(0);
         }
-        else
-        {
-            return new And(expr1, expr2);
-        }
     }
-    else
-    {
-        return new And(expr1, expr2);
-    }
+    return new And(expr1, expr2);
 }
 
-PabloE* CC_Compiler_Helper::make_or(PabloE *expr1, PabloE *expr2)
+PabloE* CC_Compiler_Helper::make_or(PabloE * expr1, PabloE * expr2)
 {
-    if (All* all = dynamic_cast<All*>(expr1))
-    {
-        if (all->getNum() == 1)
-        {
-            return new All(1); //Return a true literal.
+    if (All * all = dynamic_cast<All*>(expr1)) {
+        if (all->getNum() == 1) {
+            delete expr2;
+            return all; //Return a true literal.
         }
-        else //if (all->getNum() == 0)
-        {
+        else { //if (all->getNum() == 0)
+            delete all;
             return expr2;
         }
     }
-    else if (All* all = dynamic_cast<All*>(expr2))
-    {
-        if (all->getNum() == 1)
-        {
-            return new All(1); //Return a true literal.
+    else if (All * all = dynamic_cast<All*>(expr2)) {
+        if (all->getNum() == 1) {
+            delete expr1;
+            return all; //Return a true literal.
         }
-        else //if (all->getNum() == 0)
-        {
+        else { //if (all->getNum() == 0)
+            delete all;
             return expr1;
         }
     }
-    else if (Not* pe_not_e1 = dynamic_cast<Not*>(expr1))
-    {
-        return make_not(make_and(pe_not_e1->getExpr(), make_not(expr2)));
+    else if (Not* pe_not_e1 = dynamic_cast<Not*>(expr1)) {
+        // ¬a||b = ¬¬(¬a||b) = ¬(a ∧ ¬b)
+        PabloE * expr1 = pe_not_e1->getExpr();
+        pe_not_e1->setExpr(nullptr);
+        delete pe_not_e1;
+        return make_not(make_and(expr1, make_not(expr2)));
     }
-    else if (Not* pe_not_e2 = dynamic_cast<Not*>(expr2))
-    {
-        return make_not(make_and(make_not(expr1), pe_not_e2->getExpr()));
+    else if (Not* pe_not_e2 = dynamic_cast<Not*>(expr2)) {
+        PabloE * expr2 = pe_not_e1->getExpr();
+        pe_not_e2->setExpr(nullptr);
+        delete pe_not_e2;
+        return make_not(make_and(expr2, make_not(expr1)));
     }
-    else if (equal_exprs(expr1, expr2))
-    {
+    else if (equal_exprs(expr1, expr2)) {
+        delete expr2;
         return expr1;
     }
 
@@ -157,23 +157,28 @@ PabloE* CC_Compiler_Helper::make_or(PabloE *expr1, PabloE *expr2)
     {
         if (And* and_expr2 = dynamic_cast<And*>(expr2))
         {
+            PabloE * expr1a = and_expr1->getExpr1();
+            PabloE * expr1b = and_expr1->getExpr2();
+            PabloE * expr2a = and_expr2->getExpr1();
+            PabloE * expr2b = and_expr2->getExpr1();
+
             //These optimizations factor out common components that can occur when sets are formed by union
             //(e.g., union of [a-z] and [A-Z].
-            if (equal_exprs(and_expr1->getExpr1(), and_expr2->getExpr1()))
+            if (equal_exprs(expr1a, expr2a))
             {
-                return make_and(and_expr1->getExpr1(), make_or(and_expr1->getExpr2(), and_expr2->getExpr2()));
+                return make_and(expr1a, make_or(expr1b, expr2b));
             }
-            else if (equal_exprs(and_expr1->getExpr2(), and_expr2->getExpr2()))
+            else if (equal_exprs(expr1b, expr2b))
             {
-                return make_and(and_expr1->getExpr2(), make_or(and_expr1->getExpr1(), and_expr2->getExpr1()));
+                return make_and(expr1b, make_or(expr1a, expr2a));
             }
-            else if (equal_exprs(and_expr1->getExpr1(), and_expr2->getExpr2()))
+            else if (equal_exprs(expr1a, expr2b))
             {
-                return make_and(and_expr1->getExpr1(), make_or(and_expr1->getExpr2(), and_expr2->getExpr1()));
+                return make_and(expr1a, make_or(expr1b, expr2a));
             }
-            else if (equal_exprs(and_expr1->getExpr2(), and_expr2->getExpr1()))
+            else if (equal_exprs(expr1b, expr2a))
             {
-                return make_and(and_expr1->getExpr2(), make_or(and_expr1->getExpr1(), and_expr2->getExpr2()));
+                return make_and(expr1b, make_or(expr1a, expr2b));
             }
         }
     }

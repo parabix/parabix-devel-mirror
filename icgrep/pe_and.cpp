@@ -13,19 +13,16 @@ And::And(PabloE * expr1, PabloE * expr2)
 
 }
 
-And::~And()
-{
+And::~And() {
     delete mExpr1;
     delete mExpr2;
 }
 
-PabloE* And::getExpr1() const
-{
+PabloE * And::getExpr1() const {
     return mExpr1;
 }
 
-PabloE* And::getExpr2() const
-{
+PabloE * And::getExpr2() const {
     return mExpr2;
 }
 

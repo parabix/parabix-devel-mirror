@@ -34,13 +34,13 @@ PabloE* Compiler_Helper::make_not(PabloE* expr)
             return all; //Set to true literal.
         }
     }
-    else if (Not* pe_not = dynamic_cast<Not*>(expr))
-    {
-        return pe_not->getExpr();
+    else if (Not* pe_not = dynamic_cast<Not*>(expr)) {
+        PabloE * expr = pe_not->getExpr();
+        pe_not->setExpr(nullptr);
+        delete pe_not;
+        return expr;
     }
-    else
-        return new Not(expr);
-
+    return new Not(expr);
 }
 
 PabloE* Compiler_Helper::make_and(PabloE *expr1, PabloE *expr2)

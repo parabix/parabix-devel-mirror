@@ -274,13 +274,11 @@ PabloE* CC_Compiler::LE_Range(int N, int n)
     }
 }
 
-PabloE* CC_Compiler::charset_expr(const CC * cc)
-{
+PabloE* CC_Compiler::charset_expr(const CC * cc) {
     if (cc->empty()) {
         return new All(0);
     }
-
-    if (cc->size() > 1) {
+    if (cc->size() > 2) {
         bool combine = true;
         for (const CharSetItem & item : *cc) {
             if (item.lo_codepoint != item.hi_codepoint) {
@@ -299,12 +297,17 @@ PabloE* CC_Compiler::charset_expr(const CC * cc)
                 }
             }
             if (combine) {
-                const CodePointType lo = cc->front().lo_codepoint;
-                const CodePointType hi = cc->back().lo_codepoint;
-                PabloE * expr = make_range(lo & 0xFE, hi | 0x01);
-                // should this be here? was in the prototype but not icgrep
-                expr = CC_Compiler_Helper::make_and(expr, new All((lo & 1) == 1 ? 0 : 1));
-                return expr;
+                CodePointType lo = cc->front().lo_codepoint;
+                CodePointType hi = cc->back().lo_codepoint;
+                const CodePointType mask = mEncoding.getMask();
+                lo &= (mask - 1);
+                hi |= (mask ^ (mask - 1));
+                PabloE * expr = make_range(lo, hi);
+                PabloE * bit0 = make_bitv(0);
+                if ((lo & 1) == 0) {
+                    bit0 = CC_Compiler_Helper::make_not(bit0);
+                }
+                return CC_Compiler_Helper::make_and(expr, bit0);
             }
         }
     }
@@ -327,8 +330,7 @@ inline PabloE * CC_Compiler::char_or_range_expr(const CodePointType lo, const Co
 }
 
 
-Expression* CC_Compiler::expr2pabloe(PabloE* expr)
-{
+Expression* CC_Compiler::expr2pabloe(PabloE* expr) {
     /*
       Translate a Pablo Expression into three-address code using
       the code generator object CC_CodeGenObject.
