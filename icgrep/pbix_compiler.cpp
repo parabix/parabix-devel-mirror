@@ -35,6 +35,7 @@
 #include "ps_while.h"
 
 #include <assert.h>
+#include <stdexcept>
 
 using namespace re;
 
