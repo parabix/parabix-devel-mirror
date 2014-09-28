@@ -9,12 +9,32 @@
 
 #include "re_re.h"
 
-class Start : public RE
-{
+#include "re_re.h"
+
+namespace re {
+
+class Start : public RE {
 public:
-    Start();
-    ~Start();
+    static inline bool classof(const RE * re) {
+        return re->getClassTypeId() == ClassTypeId::Start;
+    }
+    static inline bool classof(const void *) {
+        return false;
+    }
+    virtual RE * clone() const {
+        return new Start();
+    }
+protected:
+    friend Start * makeStart();
+    Start() : RE(ClassTypeId::Start) {}
+    virtual ~Start() {}
 };
+
+inline Start * makeStart() {
+    return new Start();
+}
+
+}
 
 #endif // START_H
 

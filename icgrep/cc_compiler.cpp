@@ -8,20 +8,34 @@
 #include "ps_pablos.h"
 #include "utf_encoding.h"
 #include "cc_compiler_helper.h"
-#include "pe_sel.h"
+
+//Pablo Expressions
 #include "pe_advance.h"
 #include "pe_all.h"
 #include "pe_and.h"
+#include "pe_call.h"
 #include "pe_charclass.h"
 #include "pe_matchstar.h"
 #include "pe_not.h"
 #include "pe_or.h"
+#include "pe_pabloe.h"
+#include "pe_scanthru.h"
+#include "pe_sel.h"
 #include "pe_var.h"
 #include "pe_xor.h"
 
-#include <math.h>
+//Pablo Statements
+#include "ps_pablos.h"
+#include "ps_assign.h"
+#include "ps_if.h"
+#include "ps_while.h"
+
+#include "re/re_alt.h"
+#include "re/re_cc.h"
+#include "re/re_seq.h"
+#include "re/re_rep.h"
+
 #include <utility>
-#include <iostream>
 #include <string>
 #include <list>
 #include <map>
@@ -30,6 +44,8 @@
 #include <cassert>
 #include <stdlib.h>
 #include <stdexcept>
+
+using namespace re;
 
 CC_Compiler::CC_Compiler(const UTF_Encoding encoding, const std::string basis_pattern, const std::string gensym_pattern)
 {
@@ -106,18 +122,18 @@ void CC_Compiler::process_re_map(const REMap & re_map) {
 }
 
 void CC_Compiler::process_re(const RE* re) {
-    if (const Alt* re_alt = dynamic_cast<const Alt*>(re)) {
+    if (const Alt* re_alt = dyn_cast<const Alt>(re)) {
         for (const RE * re : *re_alt) {
             process_re(re);
         }
     }
-    else if (const CC* re_cc = dynamic_cast<const CC*>(re)) {
+    else if (const CC* re_cc = dyn_cast<const CC>(re)) {
         cc2pablos(re_cc);
     }
-    else if (const Rep* re_rep = dynamic_cast<const Rep*>(re)) {
+    else if (const Rep* re_rep = dyn_cast<const Rep>(re)) {
         process_re(re_rep->getRE());
     }
-    else if (const Seq* re_seq = dynamic_cast<const Seq*>(re)) {
+    else if (const Seq* re_seq = dyn_cast<const Seq>(re)) {
         for (const RE * re : *re_seq) {
             process_re(re);
         }
@@ -178,14 +194,9 @@ PabloE* CC_Compiler::char_test_expr(const CodePointType ch)
 
 PabloE* CC_Compiler::make_range(const CodePointType n1, const CodePointType n2)
 {
-    CodePointType diff_bits = n1 ^ n2;
     CodePointType diff_count = 0;
 
-    while (diff_bits > 0)
-    {
-        diff_count++;
-        diff_bits >>= 1;
-    }
+    for (CodePointType diff_bits = n1 ^ n2; diff_bits; diff_count++, diff_bits >>= 1);
 
     if ((n2 < n1) || (diff_count > mEncoding.getBits()))
     {
@@ -194,7 +205,8 @@ PabloE* CC_Compiler::make_range(const CodePointType n1, const CodePointType n2)
 
     const CodePointType mask0 = (static_cast<CodePointType>(1) << diff_count) - 1;
 
-    PabloE* common = bit_pattern_expr(n1 & ~mask0, mEncoding.getMask() ^ mask0);
+    PabloE * common = bit_pattern_expr(n1 & ~mask0, mEncoding.getMask() ^ mask0);
+
     if (diff_count == 0) return common;
 
     const CodePointType mask1 = (static_cast<CodePointType>(1) << (diff_count - 1)) - 1;

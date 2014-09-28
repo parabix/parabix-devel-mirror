@@ -13,6 +13,8 @@
 #include "parsefailure.h"
 #include <algorithm>
 
+namespace re {
+
 RE * RE_Parser::parse_re(const std::string & regular_expression, const bool allow_escapes_within_charset) {
     RE_Parser parser(regular_expression, allow_escapes_within_charset);
     RE * re = parser.parse_alt(false);
@@ -44,7 +46,7 @@ inline static RE * simplify_vector(T & vec) {
 }
 
 RE * RE_Parser::parse_alt(const bool subexpression) {
-    std::unique_ptr<Alt> alt(new Alt());
+    std::unique_ptr<Alt> alt(makeAlt());
     for (;;) {
         alt->push_back(parse_seq());
         if (_cursor == _end || *_cursor != '|') {
@@ -69,7 +71,7 @@ RE * RE_Parser::parse_alt(const bool subexpression) {
 }
 
 inline RE * RE_Parser::parse_seq() {
-    std::unique_ptr<Seq> seq(new Seq());
+    std::unique_ptr<Seq> seq(makeSeq());
     for (;;) {
         RE * re = parse_next_token();
         if (re == nullptr) {
@@ -94,11 +96,11 @@ RE * RE_Parser::parse_next_token() {
                 break;
             case '^':
                 ++_cursor;
-                re = new Start;
+                re = makeStart();
                 break;
             case '$':
                 ++_cursor;
-                re = new End;
+                re = makeEnd();
                 break;
             case '|': case ')':
                 break;
@@ -119,9 +121,9 @@ RE * RE_Parser::parse_next_token() {
 }
 
 CC * RE_Parser::parse_any_character() {
-    CC * cc = new CC();
+    CC * cc = makeCC();
     cc->insert_range(0, 9);
-    cc->insert_range(11, 0x10FFFF);
+    cc->insert_range(11, CC::UNICODE_MAX);
     ++_cursor;
     return cc;
 }
@@ -133,15 +135,15 @@ RE * RE_Parser::extend_item(RE * re) {
     switch (*_cursor) {
         case '*':
             ++_cursor; // skip past the '*'
-            re = new Rep(re, 0, Rep::UNBOUNDED_REP);
+            re = makeRep(re, 0, Rep::UNBOUNDED_REP);
             break;
         case '?':
             ++_cursor; // skip past the '?'
-            re = new Rep(re, 0, 1);
+            re = makeRep(re, 0, 1);
             break;
         case '+':
             ++_cursor; // skip past the '+'
-            re = new Rep(re, 1, Rep::UNBOUNDED_REP);
+            re = makeRep(re, 1, Rep::UNBOUNDED_REP);
             break;
         case '{':
             re = parse_range_bound(re);
@@ -167,7 +169,7 @@ inline RE * RE_Parser::parse_range_bound(RE * re) {
     }
     throw_incomplete_expression_error_if_end_of_stream();
     if (*_cursor == '}') {
-        rep = new Rep(re, lower_bound, lower_bound);
+        rep = makeRep(re, lower_bound, lower_bound);
     }
     else if (*_cursor != ',') {
         throw BadLowerBound();
@@ -176,14 +178,14 @@ inline RE * RE_Parser::parse_range_bound(RE * re) {
         ++_cursor;
         throw_incomplete_expression_error_if_end_of_stream();
         if (*_cursor == '}') {
-            rep = new Rep(re, lower_bound, Rep::UNBOUNDED_REP);
+            rep = makeRep(re, lower_bound, Rep::UNBOUNDED_REP);
         }
         else {
             const unsigned upper_bound = parse_int();
             if (*_cursor != '}') {
                 throw BadUpperBound();
             }
-            rep = new Rep(re, lower_bound, upper_bound);
+            rep = makeRep(re, lower_bound, upper_bound);
         }
     }
     ++_cursor;
@@ -196,7 +198,7 @@ inline RE * RE_Parser::parse_literal() {
         return parse_escaped_metacharacter();
     }
     else {
-        return new CC(parse_utf8_codepoint());
+        return makeCC(parse_utf8_codepoint());
     }
 }
 
@@ -208,9 +210,9 @@ inline RE * RE_Parser::parse_escaped_metacharacter() {
         case '(': case ')': case '*': case '+':
         case '.': case '?': case '[': case '\\':
         case ']': case '{': case '|': case '}':
-            return new CC(*_cursor++);
+            return makeCC(*_cursor++);
         case 'u':
-            return new CC(parse_hex());
+            return makeCC(parse_hex());
         case 'P':
             negated = true;
         case 'p':
@@ -244,31 +246,28 @@ unsigned RE_Parser::parse_utf8_codepoint() {
                     throw InvalidUTF8Encoding();
                 }
                 c = (c << 6) | static_cast<unsigned>(*_cursor & 0x3F);
-		// It is an error if a 3-byte sequence is used to encode a codepoint < 0x800
-		// or a 4-byte sequence is used to encode a codepoint < 0x10000.
-		// if (((bytes == 1) && (c < 0x20)) || ((bytes == 2) && (c < 0x10))) {
-		if ((c << (bytes - 1)) < 0x20) {
+                // It is an error if a 3-byte sequence is used to encode a codepoint < 0x800
+                // or a 4-byte sequence is used to encode a codepoint < 0x10000.
+                // if (((bytes == 1) && (c < 0x20)) || ((bytes == 2) && (c < 0x10))) {
+                if ((c << (bytes - 1)) < 0x20) {
                     throw InvalidUTF8Encoding();
                 }
-		  
             }
         }
     }
     // It is an error if a 4-byte sequence is used to encode a codepoint 
     // above the Unicode maximum.   
-    if (c > 0x10FFFF) throw InvalidUTF8Encoding();
+    if (c > CC::UNICODE_MAX) {
+        throw InvalidUTF8Encoding();
+    }
     return c;
 }
 
 inline Name * RE_Parser::parse_unicode_category(const bool negated) {
     if (++_cursor != _end && *_cursor == '{') {
-        std::unique_ptr<Name> name = std::unique_ptr<Name>(new Name);
-        name->setType(Name::UnicodeCategory);
-        name->setNegated(negated);
         const cursor_t start = _cursor + 1;
         for (;;) {
-            ++_cursor;
-            if (_cursor == _end) {
+            if (++_cursor == _end) {
                 throw UnclosedUnicodeCharacterClass();
             }
             if (*_cursor == '}') {
@@ -276,17 +275,14 @@ inline Name * RE_Parser::parse_unicode_category(const bool negated) {
             }
             ++_cursor;
         }
-        name->setName(std::string(start, _cursor));
-        ++_cursor;
-        return name.release();
+        return makeName(std::string(start, _cursor++), negated, Name::Type::UnicodeCategory);
     }
     throw ParseFailure("Incorrect Unicode character class format!");
 }
 
 RE * RE_Parser::parse_charset() {
-    std::unique_ptr<CC> cc(new CC());
+    std::unique_ptr<CC> cc(makeCC());
     bool negated = false;
-    bool included_closing_square_bracket = false;
     cursor_t start = ++_cursor;
     while (_cursor != _end) {
         bool literal = true;
@@ -305,7 +301,6 @@ RE * RE_Parser::parse_charset() {
                 if (start == _cursor) {
                     cc->insert(']');
                     ++_cursor;
-                    included_closing_square_bracket = true;
                     literal = false;
                     break;
                 }
@@ -321,7 +316,7 @@ RE * RE_Parser::parse_charset() {
                     literal = false;
                     const cursor_t next = _cursor + 1;
                     if (next == _end) {
-                        goto parse_failed;
+                        throw UnclosedCharacterClass();
                     }
                     if ((start == _cursor) ? (*next != '-') : (*next == ']')) {
                         _cursor = next;
@@ -356,13 +351,7 @@ RE * RE_Parser::parse_charset() {
             cc->insert(low);
         }
     }
-parse_failed:
-    if (included_closing_square_bracket) {
-        throw ParseFailure("One ']' cannot close \"[]\" or \"[^]\"; use \"[]]\" or \"[^]]\" instead.");
-    }
-    else {
-        throw UnclosedCharacterClass();
-    }
+    throw UnclosedCharacterClass();
 }
 
 inline bool RE_Parser::parse_charset_literal(unsigned & literal) {
@@ -439,4 +428,6 @@ inline void RE_Parser::negate_cc(std::unique_ptr<CC> & cc) {
 
 inline void RE_Parser::throw_incomplete_expression_error_if_end_of_stream() const {
     if (_cursor == _end) throw IncompleteRegularExpression();
+}
+
 }

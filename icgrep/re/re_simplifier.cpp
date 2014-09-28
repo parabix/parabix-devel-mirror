@@ -10,73 +10,62 @@
 #include <memory>
 #include <queue>
 
-RE* RE_Simplifier::simplify(RE * re) {
-    RE * retVal = re;
-    if (Alt * re_alt = dynamic_cast<Alt*>(re)) {
-        Vector simplified_alt;
-        for (RE * re : *re_alt) {
-            simplified_alt.push_back(simplify(re));
+namespace re {
+
+RE * RE_Simplifier::simplify(RE * re) {
+    if (Alt * alt = dyn_cast<Alt>(re)) {
+        for (auto i = alt->begin(); i != alt->end(); ++i) {
+            *i = simplify(*i);
         }
-        retVal = makeAlt(simplified_alt);
+        re = simplify(alt);
     }
-    else if (Seq * re_seq = dynamic_cast<Seq*>(re)) {
-        Vector simplified_seq;
-        for (RE * re : *re_seq)
-        {
-            simplified_seq.push_back(simplify(re));
+    else if (Seq * seq = dyn_cast<Seq>(re)) {
+        for (auto i = seq->begin(); i != seq->end(); ++i) {
+            *i = simplify(*i);
         }
-        retVal = makeSeq(re_seq->getType(), simplified_seq);
+        re = simplify(seq);
     }
-    else if (CC* re_cc = dynamic_cast<CC*>(re)) {
-        retVal = re_cc;
+    else if (Rep * rep = dyn_cast<Rep>(re)) {
+        rep->setRE(simplify(rep->getRE()));
+        simplify(rep);
     }
-    else if (Name* re_name = dynamic_cast<Name*>(re)) {
-        retVal = new Name(re_name);
-    }
-    else if (Rep* re_rep = dynamic_cast<Rep*>(re)) {
-        retVal = makeRep(simplify(re_rep->getRE()), re_rep->getLB(), re_rep->getUB());
-    }
-    else if (dynamic_cast<Start*>(re)) {
-        retVal = new Start();
-    }
-    else if (dynamic_cast<End*>(re)) {
-        retVal = new End();
-    }
-    return retVal;
+    return re;
 }
 
-RE * RE_Simplifier::makeSeq(const Seq::Type type, Vector & list) {
+RE * RE_Simplifier::simplify(Seq * seq) {
     /*
       mkSeq - make a sequence, but flatten.  Result might not be a Seq. If
       there is only one component for a sequence, simply return that.
     */
 
-    RE * re = nullptr;
-    if (!list.empty()) {
-        std::unique_ptr<Seq> seq = std::unique_ptr<Seq>(new Seq(type));
+    RE * re = seq;
+    if (!seq->empty()) {
+        std::vector<RE*> list;
+        list.reserve(seq->size());
         // Reverse the order of the input list so we can more efficiently "pull" the first
-        // character from the end. Note: this ought to be an inplace reversal.
-        std::reverse(list.begin(), list.end());
+        // character from the end. Note: this uses a linear inplace reversal.
+        std::reverse(seq->begin(), seq->end());
 
-        while (!list.empty()) {
-            RE * next = list.back();
-            list.pop_back();
-            if (Seq * re_seq = dynamic_cast<Seq*>(next)) {
-                if (re_seq->getType() != Seq::Byte) {
-                    // like above, insert the "subsequence" in reverse order
-                    list.reserve(re_seq->size());
-                    std::reverse_copy(re_seq->begin(), re_seq->end(), std::back_inserter(list));
+        while (!seq->empty()) {
+            RE * next = seq->back();
+            seq->pop_back();
+            if (Seq * re_seq = dyn_cast<Seq>(next)) {
+                if (re_seq->getType() != Seq::Type::Byte) {
+                    // like above, insert the "subsequence" to flatten in reverse order
+                    std::reverse_copy(re_seq->begin(), re_seq->end(), std::back_inserter(*seq));
+                    re_seq->clear();
+                    delete re_seq;
                     continue;
                 }
             }
-            seq->push_back(next);
+            list.push_back(next);
         }
-        if (seq->size() == 1) {
-            re = seq->back();
-            seq->pop_back();
+        if (list.size() == 1) {
+            re = list.back();
+            delete seq;
         }
         else {
-            re = seq.release();
+            seq->swap(list);
         }
     }
     return re;
@@ -91,24 +80,26 @@ RE * RE_Simplifier::makeSeq(const Seq::Type type, Vector & list) {
  * @param list
  * @return simplified RE representing the Alt
  */
-RE * RE_Simplifier::makeAlt(Vector & list) {
-    RE * re = nullptr;
-    if (!list.empty()) {
+RE * RE_Simplifier::simplify(Alt * alt) {
+    RE * re = alt;
+    if (!alt->empty()) {
 
-        std::unique_ptr<Alt> new_alt = std::unique_ptr<Alt>(new Alt());
         std::queue<CC*> ccs;
 
-        while (!list.empty()) {
-            RE * next = list.back();
-            list.pop_back();
-            if (Alt * re_alt = dynamic_cast<Alt*>(next)) {
-                list.insert(list.end(), re_alt->begin(), re_alt->end());
+        std::vector<RE *> list;
+        while (!alt->empty()) {
+            RE * next = alt->back();
+            alt->pop_back();
+            if (Alt * re_alt = dyn_cast<Alt>(next)) {
+                alt->insert(alt->end(), re_alt->begin(), re_alt->end());
+                re_alt->clear();
+                delete re_alt;
             }
-            else if (CC * cc = dynamic_cast<CC*>(next)) {
+            else if (CC * cc = dyn_cast<CC>(next)) {
                 ccs.push(cc);
             }
             else {
-                new_alt->push_back(next);
+                list.push_back(next);
             }
         }
 
@@ -116,66 +107,64 @@ RE * RE_Simplifier::makeAlt(Vector & list) {
             while (ccs.size() > 1) {
                 CC * a = ccs.front(); ccs.pop();
                 CC * b = ccs.front(); ccs.pop();
-                ccs.push(new CC(a, b));
+                ccs.push(makeCC(a, b));
             }
-            new_alt->push_back(ccs.front());
+            list.push_back(ccs.front());
         }
 
-        if (new_alt->size() == 1) {
+        if (list.size() == 1) {
             // if only one alternation exists, discard the Alt object itself and return the internal RE.
-            re = new_alt->back();
-            new_alt->pop_back();
+            re = list.back();
+            delete alt;
         }
         else {
-            re = cse(new_alt.release());
+            alt->swap(list);
         }
     }
     return re;
 }
 
-inline RE * RE_Simplifier::cse(Alt * alt) {
-
-
-
-
-    return alt;
-}
-
-
-RE * RE_Simplifier::makeRep(RE * re, const int lb, const int ub)
-{
-    if (Rep* rep = dynamic_cast<Rep*>(re)) {
-        if (((rep->getUB() == Rep::UNBOUNDED_REP) && (lb > 0)) ||
-                ((rep->getUB() == Rep::UNBOUNDED_REP) && (rep->getLB() <= 1))) {
-            return new Rep(rep->getRE(), rep->getLB() * lb, Rep::UNBOUNDED_REP);
+RE * RE_Simplifier::simplify(Rep * rep) {
+    RE * re = rep->getRE();
+    const int lb = rep->getLB();
+    const int ub = rep->getUB();
+    std::unique_ptr<Rep> janitor(rep);
+    rep->setRE(nullptr);
+    if (Rep * nrep = dyn_cast<Rep>(re)) {
+        if (nrep->getUB() == Rep::UNBOUNDED_REP) {
+            if ((lb > 0) || (nrep->getLB() <= 1)) {
+                nrep->setLB(nrep->getLB() * lb);
+                nrep->setUB(Rep::UNBOUNDED_REP);
+                return simplify(nrep);
+            }
+            else if (lb == 0) {
+                nrep->setLB(0);
+                nrep->setUB(1);
+                return simplify(nrep);
+            }
         }
-        else if ((rep->getUB() == Rep::UNBOUNDED_REP) && (lb == 0)) {
-            return new Rep(rep, 0, 1);
-        }
-        else if ((rep->getUB() * lb) >= (rep->getLB() * (lb + 1) - 1)) {
-            return new Rep(rep->getRE(), rep->getLB() * lb, ubCombine(rep->getUB(), ub));
-        }
-        else {
-            return new Rep(rep, lb, ub);
+        else if ((nrep->getUB() * lb) >= (nrep->getLB() * (lb + 1) - 1)) {
+            nrep->setLB(nrep->getUB() * lb);
+            nrep->setUB(ubCombine(nrep->getUB(), ub));
+            return simplify(nrep);
         }
     }
     else {
-        if (Seq * seq = dynamic_cast<Seq*>(re)) {
+        if (Seq * seq = dyn_cast<Seq>(re)) {
             if (seq->empty()) {
                 return seq;
             }
         }
-
         if ((lb == 0) && (ub == 0)) {
-            return new Seq();
+            delete re;
+            return makeSeq();
         }
         else if ((lb == 1) && (ub == 1)) {
             return re;
         }
-        else {
-            return new Rep(re, lb, ub);
-        }
     }
+    rep->setRE(re);
+    return janitor.release();
 }
 
 inline int RE_Simplifier::ubCombine(const int h1, const int h2) {
@@ -185,4 +174,6 @@ inline int RE_Simplifier::ubCombine(const int h1, const int h2) {
     else {
         return h1 * h2;
     }
+}
+
 }

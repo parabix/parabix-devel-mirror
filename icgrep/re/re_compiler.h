@@ -12,6 +12,8 @@
 #include "../llvm_gen.h"
 #include <string>
 
+namespace re {
+
 struct processed_parsetree_results{
     RE* re;
     std::string remaining;
@@ -28,5 +30,7 @@ public:
                             UTF_Encoding encoding ,
                             std::string input_string);
 };
+
+}
 
 #endif // RE_COMPILER_H

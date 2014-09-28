@@ -5,15 +5,3 @@
  */
 
 #include "re_end.h"
-
-End::End()
-{
-    mCC = new CC();
-}
-
-CC* End::getCC()
-{
-    return mCC;
-}
-
-End::~End(){}

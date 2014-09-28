@@ -6,10 +6,10 @@
 
 #include "re_re.h"
 
-RE::RE(){};
-RE::~RE(){};
+namespace re {
 
+RE::~RE() {
 
+}
 
-
-
+}

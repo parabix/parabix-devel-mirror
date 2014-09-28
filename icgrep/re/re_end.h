@@ -8,16 +8,30 @@
 #define END_H
 
 #include "re_re.h"
-#include "re_cc.h"
 
-class End : public RE
-{
+namespace re {
+
+class End : public RE {
 public:
-    End();
-    CC* getCC();
-    ~End();
-private:
-    CC* mCC;
+    static inline bool classof(const RE * re) {
+        return re->getClassTypeId() == ClassTypeId::End;
+    }
+    static inline bool classof(const void *) {
+        return false;
+    }
+    virtual RE * clone() const {
+        return new End();
+    }
+    virtual ~End() {}
+protected:
+    friend End * makeEnd();
+    End() : RE(ClassTypeId::End) {}
 };
+
+inline End * makeEnd() {
+    return new End();
+}
+
+}
 
 #endif // END_H

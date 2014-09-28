@@ -5,6 +5,3 @@
  */
 
 #include "re_start.h"
-
-Start::Start(){}
-Start::~Start(){}

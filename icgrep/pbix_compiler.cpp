@@ -5,7 +5,38 @@
  */
 
 #include "pbix_compiler.h"
-#include "printer_pablos.h"
+//Regular Expressions
+#include "re/re_name.h"
+#include "re/re_start.h"
+#include "re/re_end.h"
+#include "re/re_seq.h"
+#include "re/re_alt.h"
+#include "re/re_rep.h"
+
+//Pablo Expressions
+#include "pe_pabloe.h"
+#include "pe_sel.h"
+#include "pe_advance.h"
+#include "pe_all.h"
+#include "pe_and.h"
+#include "pe_charclass.h"
+#include "pe_call.h"
+#include "pe_matchstar.h"
+#include "pe_scanthru.h"
+#include "pe_not.h"
+#include "pe_or.h"
+#include "pe_var.h"
+#include "pe_xor.h"
+
+//Pablo Statements
+#include "ps_pablos.h"
+#include "ps_assign.h"
+#include "ps_if.h"
+#include "ps_while.h"
+
+#include <assert.h>
+
+using namespace re;
 
 Pbix_Compiler::Pbix_Compiler(std::map<std::string, std::string> name_map)
 {
@@ -16,39 +47,29 @@ Pbix_Compiler::Pbix_Compiler(std::map<std::string, std::string> name_map)
 CodeGenState Pbix_Compiler::compile_subexpressions(const std::map<std::string, RE*>& re_map)
 {
     CodeGenState cg_state;
-
-    for (auto it =  re_map.rbegin(); it != re_map.rend(); ++it)
-    {
+    for (auto i =  re_map.rbegin(); i != re_map.rend(); ++i) {
         //This is specifically for the utf8 multibyte character classes.
-        if (Seq* seq = dynamic_cast<Seq*>(it->second))
-        {
-            if (seq->getType() == Seq::Byte)
-            {
+        if (Seq * seq = dyn_cast<Seq>(i->second)) {
+            if (seq->getType() == Seq::Type::Byte) {
                 std::string gs_retVal = symgen.gensym("start_marker");
-                cg_state.stmtsl.push_back(new Assign(gs_retVal, new All(1)));
-                cg_state.newsym = gs_retVal;
-
-                auto endit = seq->end();
-                --endit;
-
-                for (auto it = seq->begin(); it != seq->end(); ++it)
-                {
-                    Name* name = dynamic_cast<Name*>(*it);
-                    if (it != endit)
-                    {
+                cg_state.stmtsl.push_back(new Assign(gs_retVal, new All(1)));                
+                for (auto j = seq->begin();; ) {
+                    Name * name = dyn_cast<Name>(*j);
+                    assert (name);
+                    And * cc_mask = new And(new Var(gs_retVal), new CharClass(name->getName()));
+                    if (++j != seq->end()) {
                         gs_retVal = symgen.gensym("marker");
-                        cg_state.stmtsl.push_back(new Assign(gs_retVal, new Advance(new And(new Var(cg_state.newsym), new CharClass(name->getName())))));
-                        cg_state.newsym = gs_retVal;
+                        cg_state.stmtsl.push_back(new Assign(gs_retVal, new Advance(cc_mask)));
                     }
-                    else
-                    {
-                        cg_state.stmtsl.push_back(new Assign(seq->getName(), new And(new Var(cg_state.newsym), new CharClass(name->getName()))));
+                    else {
+                        cg_state.stmtsl.push_back(new Assign(seq->getName(), cc_mask));
+                        break;
                     }
                 }
+                cg_state.newsym = gs_retVal;
             }
         }
     }
-
     return cg_state;
 }
 
@@ -59,7 +80,7 @@ CodeGenState Pbix_Compiler::compile(RE *re)
     std::string gs_m0 = symgen.gensym("start_marker");
     cg_state.stmtsl.push_back(new Assign(gs_m0, new All(1)));
 
-    if (unicode_re(re))
+    if (hasUnicode(re))
     {
         cg_state.newsym = gs_m0;
         //Set the 'internal.initial' bit stream for the utf-8 multi-byte encoding.
@@ -70,30 +91,29 @@ CodeGenState Pbix_Compiler::compile(RE *re)
         PabloE * u8pfx3 = new Var(m_name_map.find("UTF8-Prefix3")->second);
         PabloE * u8pfx4 = new Var(m_name_map.find("UTF8-Prefix4")->second);
         PabloE * u8pfx = new Or(new Or(u8pfx2, u8pfx3), u8pfx4);
-	cg_state.stmtsl.push_back(new Assign(gs_initial, new Or(u8pfx, u8single)));
+        cg_state.stmtsl.push_back(new Assign(gs_initial, new Or(u8pfx, u8single)));
         cg_state.newsym = gs_initial;
 
         //Set the 'internal.nonfinal' bit stream for the utf-8 multi-byte encoding.
         cg_state.newsym = gs_m0;
         std::string gs_nonfinal = symgen.gensym("internal.nonfinal");
         m_name_map.insert(make_pair("internal.nonfinal", gs_nonfinal));
-//#define USE_IF_FOR_NONFINAL
-#ifdef USE_IF_FOR_NONFINAL
+        //#define USE_IF_FOR_NONFINAL
+        #ifdef USE_IF_FOR_NONFINAL
         cg_state.stmtsl.push_back(new Assign(gs_nonfinal, new All(0)));
-#endif
+        #endif
         PabloE * u8scope32 = new Advance(u8pfx3);
         PabloE * u8scope42 = new Advance(u8pfx4);
         PabloE * u8scope43 = new Advance(u8scope42);
         PabloS * assign_non_final = new Assign(gs_nonfinal, new Or(new Or(u8pfx, u8scope32), new Or(u8scope42, u8scope43)));
-#ifdef USE_IF_FOR_NONFINAL
+        #ifdef USE_IF_FOR_NONFINAL
         std::list<PabloS *> * if_body = new std::list<PabloS *> ();
         if_body->push_back(assign_non_final);
         cg_state.stmtsl.push_back(new If(u8pfx, *if_body));
-#endif
-#ifndef USE_IF_FOR_NONFINAL
+        #else
         cg_state.stmtsl.push_back(assign_non_final);
-#endif
-	cg_state.newsym = gs_nonfinal;
+        #endif
+        cg_state.newsym = gs_nonfinal;
     }
 
     cg_state.newsym = gs_m0;
@@ -110,17 +130,17 @@ CodeGenState Pbix_Compiler::compile(RE *re)
 
 CodeGenState Pbix_Compiler::re2pablo_helper(RE *re, CodeGenState cg_state)
 {
-    if (Name* name = dynamic_cast<Name*>(re))
+    if (Name* name = dyn_cast<Name>(re))
     {
         std::string gs_retVal = symgen.gensym("marker");
         PabloE* markerExpr = new Var(cg_state.newsym);
-        if (name->getType() != Name::FixedLength) {
+        if (name->getType() != Name::Type::FixedLength) {
             // Move the markers forward through any nonfinal UTF-8 bytes to the final position of each character.
             markerExpr = new And(markerExpr, new CharClass(m_name_map.find("internal.initial")->second));
             markerExpr = new ScanThru(markerExpr, new CharClass(m_name_map.find("internal.nonfinal")->second));
         }       
         PabloE* ccExpr;
-        if (name->getType() == Name::UnicodeCategory)
+        if (name->getType() == Name::Type::UnicodeCategory)
         {
             ccExpr = new Call(name->getName());
         }
@@ -134,33 +154,30 @@ CodeGenState Pbix_Compiler::re2pablo_helper(RE *re, CodeGenState cg_state)
         }
         cg_state.stmtsl.push_back(new Assign(gs_retVal, new Advance(new And(ccExpr, markerExpr))));
         cg_state.newsym = gs_retVal;
-
-        //std::cout << "\n" << "(" << StatementPrinter::PrintStmts(cg_state) << ")" << "\n" << std::endl;
     }
-    else if (dynamic_cast<Start*>(re))
+    else if (isa<Start>(re))
     {
         std::string gs_retVal = symgen.gensym("start_of_line_marker");
         cg_state.stmtsl.push_back(new Assign(gs_retVal, new And(new Var(cg_state.newsym), new Not(new Advance(new Not(new CharClass(m_name_map.find("LineFeed")->second)))))));
         cg_state.newsym = gs_retVal;
     }
-    else if (dynamic_cast<End*>(re))
+    else if (isa<End>(re))
     {
         std::string gs_retVal = symgen.gensym("end_of_line_marker");
         cg_state.stmtsl.push_back(new Assign(gs_retVal, new And(new Var(cg_state.newsym), new CharClass(m_name_map.find("LineFeed")->second))));
         cg_state.newsym = gs_retVal;
     }
-    else if (Seq* seq = dynamic_cast<Seq*>(re))
+    else if (Seq* seq = dyn_cast<Seq>(re))
     {
         if (!seq->empty())
         {
             cg_state = Seq_helper(seq, seq->begin(), cg_state);
         }
     }
-    else if (Alt* alt = dynamic_cast<Alt*>(re))
+    else if (Alt* alt = dyn_cast<Alt>(re))
     {
         if (alt->empty())
         {
-
             std::string gs_retVal = symgen.gensym("always_fail_marker");
             cg_state.stmtsl.push_back(new Assign(gs_retVal, new All(0)));
             cg_state.newsym = gs_retVal;
@@ -178,15 +195,15 @@ CodeGenState Pbix_Compiler::re2pablo_helper(RE *re, CodeGenState cg_state)
         }
 
     }
-    else if (Rep* rep = dynamic_cast<Rep*>(re))
+    else if (Rep* rep = dyn_cast<Rep>(re))
     {
-        if ((dynamic_cast<Name*>(rep->getRE()) != 0) && (rep->getLB() == 0) && (rep->getUB()== Rep::UNBOUNDED_REP))
+        if (isa<Name>(rep->getRE()) && (rep->getLB() == 0) && (rep->getUB()== Rep::UNBOUNDED_REP))
         {
-            Name* rep_name = dynamic_cast<Name*>(rep->getRE());
+            Name* rep_name = dyn_cast<Name>(rep->getRE());
             std::string gs_retVal = symgen.gensym("marker");
 
             PabloE* ccExpr;
-            if (rep_name->getType() == Name::UnicodeCategory)
+            if (rep_name->getType() == Name::Type::UnicodeCategory)
             {
                 ccExpr = new Call(rep_name->getName());
             }
@@ -199,7 +216,7 @@ CodeGenState Pbix_Compiler::re2pablo_helper(RE *re, CodeGenState cg_state)
                 ccExpr = new Not(new Or(new Or(ccExpr, new CharClass(m_name_map.find("LineFeed")->second)),
                                         new CharClass(m_name_map.find("internal.nonfinal")->second)));
             }
-            if (rep_name->getType() == Name::FixedLength)
+            if (rep_name->getType() == Name::Type::FixedLength)
             {
                 cg_state.stmtsl.push_back(new Assign(gs_retVal, new MatchStar(new Var(cg_state.newsym), ccExpr)));
             }
@@ -261,8 +278,6 @@ CodeGenState Pbix_Compiler::Alt_helper(Vector* lst, const_iterator it, CodeGenSt
 CodeGenState Pbix_Compiler::UnboundedRep_helper(RE* repeated, int lb, CodeGenState cg_state) {
     if (lb == 0)
     {
-         //std::cout << "While, no lb." << std::endl;
-
          std::string while_test_gs_retVal = symgen.gensym("while_test");
          std::string while_accum_gs_retVal = symgen.gensym("while_accum");
          CodeGenState while_test_state;
@@ -309,45 +324,34 @@ CodeGenState Pbix_Compiler::BoundedRep_helper(RE* repeated, int lb, int ub, Code
 }
 
 
-bool Pbix_Compiler::unicode_re(RE *re)
-{
+bool Pbix_Compiler::hasUnicode(const RE * re) {
     bool found = false;
-
-    return unicode_re_helper(re, found);
-}
-
-bool Pbix_Compiler::unicode_re_helper(RE *re, bool found)
-{
-    if (!found)
-    {
-        if (Name* name = dynamic_cast<Name*>(re))
-        {
-            if ((name->getType() == Name::UnicodeCategory) || (name->getType() == Name::Unicode))
-            {
-                found = true;
-            }
-        }
-        else if (Seq* re_seq = dynamic_cast<Seq*>(re))
-        {
-            for (auto it = re_seq->begin(); it != re_seq->end(); ++it)
-            {
-                found = unicode_re_helper(*it, found);
-                if (found) break;
-            }
-        }
-        else if (Alt* re_alt = dynamic_cast<Alt*>(re))
-        {
-            for (auto it = re_alt->begin(); it != re_alt->end(); ++it)
-            {
-                found = unicode_re_helper(*it, found);
-                if (found) break;
-            }
-        }
-        else if (Rep* rep = dynamic_cast<Rep*>(re))
-        {
-            found = unicode_re_helper(rep->getRE(), found);
+    if (re == nullptr) {
+        throw std::runtime_error("Unexpected Null Value passed to RE Compiler!");
+    }
+    else if (const Name * name = dyn_cast<const Name>(re)) {
+        if ((name->getType() == Name::Type::UnicodeCategory) || (name->getType() == Name::Type::Unicode)) {
+            found = true;
         }
     }
-
+    else if (const Seq * re_seq = dyn_cast<const Seq>(re)) {
+        for (auto i = re_seq->cbegin(); i != re_seq->cend(); ++i) {
+            if (hasUnicode(*i)) {
+                found = true;
+                break;
+            }
+        }
+    }
+    else if (const Alt * re_alt = dyn_cast<const Alt>(re)) {
+        for (auto i = re_alt->cbegin(); i != re_alt->cend(); ++i) {
+            if (hasUnicode(*i)) {
+                found = true;
+                break;
+            }
+        }
+    }
+    else if (const Rep * rep = dyn_cast<const Rep>(re)) {
+        found = hasUnicode(rep->getRE());
+    }
     return found;
 }

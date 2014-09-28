@@ -8,17 +8,46 @@
 #define ALT_H
 
 #include "re_re.h"
-#include <algorithm>
-#include <list>
 
+namespace re {
 
-class Alt : public RE, public RE::Vector {
+class Alt : public Vector {
 public:
-    typedef RE::Vector Vector;
-    Alt();    
-    Alt(iterator begin, iterator end);
-    virtual ~Alt();
+    static inline bool classof(const RE * re) {
+        return re->getClassTypeId() == ClassTypeId::Alt;
+    }
+    static inline bool classof(const void *) {
+        return false;
+    }
+    virtual RE * clone() const {
+        return new Alt(*this);
+    }
+protected:
+    friend Alt * makeAlt();
+    friend Alt * makeAlt(Alt::iterator, Alt::iterator);
+    Alt()
+    : Vector(ClassTypeId::Alt) {
+
+    }
+    Alt(const Alt & alt)
+    : Vector(ClassTypeId::Alt, alt.cbegin(), alt.cend(), true) {
+
+    }
+    Alt(iterator begin, iterator end)
+    : Vector(ClassTypeId::Alt, begin, end) {
+
+    }
 };
+
+inline Alt * makeAlt() {
+    return new Alt();
+}
+
+inline Alt * makeAlt(Alt::iterator begin, Alt::iterator end) {
+    return new Alt(begin, end);
+}
+
+}
 
 #endif // ALT_H
 

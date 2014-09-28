@@ -15,12 +15,12 @@
 class UTF8_Encoder
 {
 public:
-    static RE* toUTF8(RE * re);
+    static re::RE* toUTF8(re::RE * re);
 private:
-    static RE* rangeToUTF8(const CharSetItem &item);
-    static RE* rangeToUTF8_helper(int lo, int hi, int n, int hlen);
-    static CC* makeByteClass(int byteval);
-    static CC* makeByteRange(int lo, int hi);
+    static re::RE* rangeToUTF8(const re::CharSetItem &item);
+    static re::RE* rangeToUTF8_helper(int lo, int hi, int n, int hlen);
+    static re::CC* makeByteClass(int byteval);
+    static re::CC* makeByteRange(int lo, int hi);
 
     static bool u8Prefix(int cp);
     static int u8len(int cp);

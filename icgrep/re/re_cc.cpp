@@ -5,27 +5,20 @@
  */
 
 #include "re_cc.h"
-#include <assert.h>
-#include <atomic>
 
-CC::CC() {
+namespace re {
 
+CC::CC(const CC * cc1, const CC * cc2)
+: RE(ClassTypeId::CC)
+, mSparseCharSet(cc1->cbegin(), cc1->cend()) {
+    for (const CharSetItem & i : cc2->mSparseCharSet) {
+        insert_range(i.lo_codepoint, i.hi_codepoint);
+    }
 }
 
-CC::CC(const CodePointType codepoint) {
-    insert(codepoint);
-}
-
-CC::CC(const CodePointType lo_codepoint, const CodePointType hi_codepoint) {
-    insert_range(lo_codepoint, hi_codepoint);
-}
-
-CC::CC(const CC * cc1, const CC * cc2) {
-    mSparseCharSet.assign(cc1->cbegin(), cc1->cend());
-    join(cc2->mSparseCharSet);
-}
-
-CC::~CC() {
+CC::CC(const CC & cc)
+: RE(ClassTypeId::CC)
+, mSparseCharSet(cc.cbegin(), cc.cend()) {
 
 }
 
@@ -36,12 +29,6 @@ std::string CC::getName() const {
         name += "." + std::to_string(i.hi_codepoint);
     }
     return name;
-}
-
-void CC::join(const CharSetVector & other) {
-    for (const CharSetItem & i : other) {
-        insert_range(i.lo_codepoint, i.hi_codepoint);
-    }
 }
 
 void CC::insert_range(const CodePointType lo_codepoint, const CodePointType hi_codepoint) {
@@ -107,4 +94,6 @@ void CC::remove_range(const CodePointType lo_codepoint, const CodePointType hi_c
             break;
         }
     }
+}
+
 }

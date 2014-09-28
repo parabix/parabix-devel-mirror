@@ -15,6 +15,8 @@
 #include <list>
 #include <memory>
 
+namespace re {
+
 class RE_Parser
 {
 public:
@@ -65,5 +67,7 @@ private:
     const cursor_t              _end;
     const bool                  _allow_escapes_within_charset;
 };
+
+}
 
 #endif // RE_PARSER_H

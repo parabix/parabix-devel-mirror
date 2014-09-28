@@ -64,7 +64,7 @@ struct Output {
     BitBlock LF;
 };
 
-#include <simd-lib/transpose.hpp>
+#include "include/simd-lib/transpose.hpp"
 
 using namespace std;
 
@@ -231,7 +231,7 @@ int main(int argc, char *argv[])
     encoding.setBits(8);
     encoding.setMask(0xFF);
 
-    RE_Compiler* re_compiler = new RE_Compiler();
+    auto * re_compiler = new re::RE_Compiler();
     if (compile_time_option)
     {
         cycles = get_hrcycles();

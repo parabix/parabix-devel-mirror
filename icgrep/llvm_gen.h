@@ -93,7 +93,7 @@
 
 #include "llvm/IR/IRBuilder.h"
 
-#include <simd-lib/bitblock.hpp>
+#include "include/simd-lib/bitblock.hpp"
 
 using namespace llvm;
 

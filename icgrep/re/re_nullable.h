@@ -6,8 +6,9 @@
 #include "re_seq.h"
 #include <vector>
 
+namespace re {
+
 class RE_Nullable {
-    typedef RE::Vector Vector;
 public:
     static RE* removeNullablePrefix(RE* re);
     static RE* removeNullableSuffix(RE* re);
@@ -19,5 +20,7 @@ private:
     static Seq * removeNullableSeqPrefix(const Seq * seq);
     static Seq * removeNullableSeqSuffix(const Seq *seq);
 };
+
+}
 
 #endif // RE_NULLABLE_H

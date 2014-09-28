@@ -5,6 +5,26 @@
  */
 
 #include "llvm_gen.h"
+//Pablo Expressions
+#include "pe_advance.h"
+#include "pe_all.h"
+#include "pe_and.h"
+#include "pe_call.h"
+#include "pe_charclass.h"
+#include "pe_matchstar.h"
+#include "pe_not.h"
+#include "pe_or.h"
+#include "pe_pabloe.h"
+#include "pe_scanthru.h"
+#include "pe_sel.h"
+#include "pe_var.h"
+#include "pe_xor.h"
+
+//Pablo Statements
+#include "ps_pablos.h"
+#include "ps_assign.h"
+#include "ps_if.h"
+#include "ps_while.h"
 
 Ps* ps = NULL; Nl* nl = NULL; No* no = NULL; Lo* lo = NULL; Ll* ll = NULL; Lm* lm = NULL; Nd* nd = NULL;
 Pc* pc = NULL; Lt* lt = NULL; Lu* lu = NULL; Pf* pf = NULL; Pd* pd = NULL; Pe* pe = NULL; Pi* pi = NULL;

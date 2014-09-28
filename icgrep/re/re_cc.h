@@ -9,11 +9,10 @@
 
 #include "re_re.h"
 
-#include <iostream>
 #include <string>
-#include <sstream>
-#include <utility>
 #include <vector>
+
+namespace re {
 
 typedef int CodePointType;
 
@@ -29,6 +28,16 @@ typedef std::vector<CharSetItem> CharSetVector;
 class CC : public RE {
 public:
 
+    static inline bool classof(const RE * re) {
+        return re->getClassTypeId() == ClassTypeId::CC;
+    }
+    static inline bool classof(const void *) {
+        return false;
+    }
+    virtual RE * clone() const {
+        return new CC(*this);
+    }
+
     typedef CharSetVector::iterator                 iterator;
     typedef CharSetVector::const_iterator           const_iterator;
     typedef CharSetVector::size_type                size_type;
@@ -36,14 +45,13 @@ public:
     typedef CharSetVector::const_reference          const_reference;
 
     static const CodePointType UNICODE_MAX = 0x10FFFF;
-    CC();
-    CC(const CodePointType codepoint);
-    CC(const CodePointType lo_codepoint, const CodePointType hi_codepoint);
-    CC(const CC * cc1, const CC * cc2);
-    ~CC();
+
     std::string getName() const;
+
     void insert_range(const CodePointType lo_codepoint, const CodePointType hi_codepoint);
+
     void negate();
+
     void remove_range(const CodePointType lo_codepoint, const CodePointType hi_codepoint);
 
     inline void insert(const CodePointType codepoint) {
@@ -70,6 +78,14 @@ public:
         return mSparseCharSet.back();
     }
 
+    inline const_iterator begin() const {
+        return mSparseCharSet.cbegin();
+    }
+
+    inline const_iterator end() const {
+        return mSparseCharSet.cend();
+    }
+
     inline const_iterator cbegin() const {
         return mSparseCharSet.cbegin();
     }
@@ -94,8 +110,32 @@ public:
         return mSparseCharSet.empty();
     }
 
+    virtual ~CC() {}
+
+protected:
+
+    inline CC()
+    : RE(ClassTypeId::CC) {
+
+    }
+    CC(const CC & cc);
+    inline CC(const CodePointType codepoint)
+    : RE(ClassTypeId::CC) {
+        insert(codepoint);
+    }
+    inline CC(const CodePointType lo_codepoint, const CodePointType hi_codepoint)
+    : RE(ClassTypeId::CC) {
+        insert_range(lo_codepoint, hi_codepoint);
+    }
+
+    CC(const CC * cc1, const CC * cc2);
+
+    friend CC * makeCC();
+    friend CC * makeCC(const CodePointType codepoint);
+    friend CC * makeCC(const CodePointType lo, const CodePointType hi);
+    friend CC * makeCC(const CC * cc1, const CC * cc2);
+
 private:    
-    void join(const CharSetVector & other);
     CharSetVector mSparseCharSet;
 };
 
@@ -115,5 +155,30 @@ inline static CC::const_iterator end(const CC & cc) {
     return cc.cend();
 }
 
+/**
+ * @brief RE::makeCC
+ *
+ * Various factory constructors for the RE CC class
+ *
+ * @return a CC object
+ */
+
+inline CC * makeCC() {
+    return new CC();
+}
+
+inline CC * makeCC(const CodePointType codepoint) {
+    return new CC(codepoint);
+}
+
+inline CC * makeCC(const CodePointType lo, const CodePointType hi) {
+    return new CC(lo, hi);
+}
+
+inline CC * makeCC(const CC * cc1, const CC * cc2) {
+    return new CC(cc1, cc2);
+}
+
+}
 
 #endif // RE_CC_H

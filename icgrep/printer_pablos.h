@@ -7,39 +7,9 @@
 #ifndef SHOW_H
 #define SHOW_H
 
-//Regular Expressions
-#include "re/re_re.h"
-#include "re/re_cc.h"
-#include "re/re_start.h"
-#include "re/re_end.h"
-#include "re/re_seq.h"
-
-//Pablo Expressions
-#include "pe_pabloe.h"
-#include "pe_sel.h"
-#include "pe_advance.h"
-#include "pe_all.h"
-#include "pe_and.h"
-#include "pe_charclass.h"
-#include "pe_not.h"
-#include "pe_or.h"
-#include "pe_var.h"
-#include "pe_xor.h"
-#include "pe_matchstar.h"
-
-//Pablo Statements
-#include "ps_pablos.h"
-#include "ps_assign.h"
-#include "ps_if.h"
-
 #include "pbix_compiler.h"
 
-//Code Generation
-#include "symbol_generator.h"
-
-#include <iostream>
 #include <string>
-#include <sstream>
 #include <list>
 
 

@@ -5,6 +5,20 @@
  */
 
 #include "cc_compiler_helper.h"
+//Pablo Expressions
+#include "pe_advance.h"
+#include "pe_all.h"
+#include "pe_and.h"
+#include "pe_call.h"
+#include "pe_charclass.h"
+#include "pe_matchstar.h"
+#include "pe_not.h"
+#include "pe_or.h"
+#include "pe_pabloe.h"
+#include "pe_scanthru.h"
+#include "pe_sel.h"
+#include "pe_var.h"
+#include "pe_xor.h"
 
 CC_Compiler_Helper::CC_Compiler_Helper(){}
 

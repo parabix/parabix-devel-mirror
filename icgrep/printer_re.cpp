@@ -16,6 +16,7 @@
 #include "re/re_seq.h"
 #include "re/re_start.h"
 
+using namespace re;
 
 const std::string Printer_RE::PrintRE(const RE * re)
 {
@@ -24,7 +25,7 @@ const std::string Printer_RE::PrintRE(const RE * re)
     if (re == nullptr) {
         retVal = "--> RE NullPtr! <--";
     }
-    else if (const Alt* re_alt = dynamic_cast<const Alt*>(re))
+    else if (const Alt* re_alt = dyn_cast<const Alt>(re))
     {
         retVal += "(Alt[";
         bool comma = false;
@@ -37,7 +38,7 @@ const std::string Printer_RE::PrintRE(const RE * re)
         }
         retVal += "])";
     }
-    else if (const CC* re_cc = dynamic_cast<const CC*>(re))
+    else if (const CC* re_cc = dyn_cast<const CC>(re))
     {
         retVal = "CC \"";
         retVal += re_cc->getName();
@@ -51,17 +52,17 @@ const std::string Printer_RE::PrintRE(const RE * re)
             retVal += "]";
         }
     }
-    else if (const Name* re_name = dynamic_cast<const Name*>(re))
+    else if (const Name* re_name = dyn_cast<const Name>(re))
     {
         retVal = "Name \"";
         retVal += re_name->getName();
         retVal += "\" ";
     }
-    else if (dynamic_cast<const End*>(re))
+    else if (isa<const End>(re))
     {
         retVal = "End";
     }
-    else if (const Rep* re_rep = dynamic_cast<const Rep*>(re))
+    else if (const Rep* re_rep = dyn_cast<const Rep>(re))
     {
         retVal = "Rep(";
         retVal.append(PrintRE(re_rep->getRE()));
@@ -76,7 +77,7 @@ const std::string Printer_RE::PrintRE(const RE * re)
         }
         retVal.append(")");
     }
-    else if (const Seq* re_seq = dynamic_cast<const Seq*>(re))
+    else if (const Seq* re_seq = dyn_cast<const Seq>(re))
     {
         retVal = "(Seq[";
         bool comma = false;
@@ -89,7 +90,7 @@ const std::string Printer_RE::PrintRE(const RE * re)
         }
         retVal.append("])");
     }
-    else if (dynamic_cast<const Start*>(re))
+    else if (isa<const Start>(re))
     {
         retVal = "Start";
     }

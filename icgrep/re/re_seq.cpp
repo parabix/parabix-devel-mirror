@@ -5,41 +5,19 @@
  */
 
 #include "re_seq.h"
+#include "re_cc.h"
+#include "re_name.h"
 
-
-Seq::Seq()
-: mType(Seq::Normal)
-{
-
-}
-
-Seq::Seq(const Type type)
-: mType(type)
-{
-
-}
-
-Seq::Seq(const Type type, iterator begin, iterator end)
-: std::vector<RE*>(begin, end)
-, mType(type)
-{
-
-}
-
-Seq::~Seq() {
-    for (RE * re : *this) {
-        delete re;
-    }
-}
+namespace re {
 
 std::string Seq::getName() const {
-    if (mType == Seq::Byte) {
+    if (mType == Seq::Type::Byte) {
         std::string name = "Seq";
-        for (RE * re : *this) {
-            if (CC* seq_cc = dynamic_cast<CC*>(re)) {
+        for (const RE * re : *this) {
+            if (const CC* seq_cc = dyn_cast<const CC>(re)) {
                 name += seq_cc->getName();
             }
-            else if (Name* seq_name = dynamic_cast<Name*>(re)) {
+            else if (const Name* seq_name = dyn_cast<const Name>(re)) {
                 name += seq_name->getName();
             }
             else {
@@ -53,10 +31,4 @@ std::string Seq::getName() const {
     }
 }
 
-Seq::Type Seq::getType() const {
-    return mType;
-}
-
-void Seq::setType(Seq::Type type) {
-    mType = type;
 }

@@ -21,29 +21,29 @@ struct Expression{
 };
 
 class CC_Compiler{
-    typedef std::map<std::string, RE*>          REMap;
+    typedef std::map<std::string, re::RE*>      REMap;
     typedef std::map<std::string, Expression*>  ExpressionMap;
     typedef ExpressionMap::iterator             MapIterator;
 
 public:
     CC_Compiler(const UTF_Encoding encoding, const std::string basis_pattern, const std::string gensym_pattern);
-    std::string compile1(CC* cc);    
+    std::string compile1(re::CC* cc);
     void compile_from_map(const REMap & re_map);
     std::list<PabloS*> get_compiled();
 private:
     void process_re_map(const REMap &re_map);
-    void process_re(const RE *re);
+    void process_re(const re::RE *re);
     std::string bit_var(int n);
     PabloE* make_bitv(int n);
     PabloE* bit_pattern_expr(int pattern, int selected_bits);
-    PabloE* char_test_expr(const CodePointType ch);
-    PabloE* make_range(const CodePointType n1, const CodePointType n2);
+    PabloE* char_test_expr(const re::CodePointType ch);
+    PabloE* make_range(const re::CodePointType n1, const re::CodePointType n2);
     PabloE* GE_Range(int N, int n);
     PabloE* LE_Range(int N, int n);
-    PabloE* char_or_range_expr(const CodePointType lo, const CodePointType hi);
-    PabloE* charset_expr(const CC *cc);
+    PabloE* char_or_range_expr(const re::CodePointType lo, const re::CodePointType hi);
+    PabloE* charset_expr(const re::CC *cc);
     Expression* expr2pabloe(PabloE* expr);
-    void cc2pablos(const CC *cc);
+    void cc2pablos(const re::CC *cc);
 
     UTF_Encoding mEncoding;
 

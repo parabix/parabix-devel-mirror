@@ -6,6 +6,35 @@
 
 #include "printer_pablos.h"
 
+//Regular Expressions
+#include "re/re_re.h"
+#include "re/re_cc.h"
+#include "re/re_start.h"
+#include "re/re_end.h"
+#include "re/re_seq.h"
+#include "re/re_name.h"
+
+//Pablo Expressions
+#include "pe_advance.h"
+#include "pe_all.h"
+#include "pe_and.h"
+#include "pe_call.h"
+#include "pe_charclass.h"
+#include "pe_matchstar.h"
+#include "pe_not.h"
+#include "pe_or.h"
+#include "pe_pabloe.h"
+#include "pe_scanthru.h"
+#include "pe_sel.h"
+#include "pe_var.h"
+#include "pe_xor.h"
+
+//Pablo Statements
+#include "ps_pablos.h"
+#include "ps_assign.h"
+#include "ps_if.h"
+#include "ps_while.h"
+
 
 std::string StatementPrinter::PrintStmts(CodeGenState cg_state)
 {
@@ -108,7 +137,7 @@ std::string StatementPrinter::ShowPabloE(PabloE* expr)
     {
         retVal = "CharClass '" + cc->getCharClass() + "'";
     }
-    else if (Name* name = dynamic_cast<Name*>(expr))
+    else if (re::Name * name = dynamic_cast<re::Name *>(expr))
     {
         retVal = "Name '" + name->getName() + "'";
     }

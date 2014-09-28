@@ -5,21 +5,3 @@
  */
 
 #include "re_alt.h"
-
-Alt::Alt()
-{
-
-}
-
-Alt::Alt(iterator begin, iterator end)
-: std::vector<RE*>(begin, end)
-{
-
-}
-
-Alt::~Alt()
-{
-    for (RE * re : *this) {
-        delete re;
-    }
-}

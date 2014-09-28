@@ -9,29 +9,51 @@
 
 #include "re_re.h"
 
+namespace re {
+
 class Rep : public RE {
 public:
-
+    static inline bool classof(const RE * re) {
+        return re->getClassTypeId() == ClassTypeId::Rep;
+    }
+    static inline bool classof(const void *) {
+        return false;
+    }
+    virtual RE * clone() const {
+        return new Rep(*this);
+    }
     enum { UNBOUNDED_REP = -1 };
-
-    Rep(RE* re, int lb, int ub);
-    ~Rep();
     RE * getRE() const;
     void setRE(RE * re = nullptr);
     int getLB() const;
-    void setLB(int lb);
+    void setLB(const int lb);
     int getUB() const;
-    void setUB(int ub);
+    void setUB(const int ub);
+    virtual ~Rep();
+protected:
+    friend Rep * makeRep(RE *, const int, const int);
+    Rep(RE * re, const int lb, const int ub);
+    Rep(const Rep & rep);
 private:
     RE* mRE;
     int mLB;
     int mUB;
 };
 
-inline Rep::Rep(RE * re, int lb, int ub)
-: mRE(re)
+inline Rep::Rep(RE * re, const int lb, const int ub)
+: RE(ClassTypeId::Rep)
+, mRE(re)
 , mLB(lb)
 , mUB(ub)
+{
+
+}
+
+inline Rep::Rep(const Rep & rep)
+: RE(ClassTypeId::Rep)
+, mRE(rep.getRE()->clone())
+, mLB(rep.getLB())
+, mUB(rep.getUB())
 {
 
 }
@@ -52,7 +74,7 @@ inline int Rep::getLB() const {
     return mLB;
 }
 
-inline void Rep::setLB(int lb) {
+inline void Rep::setLB(const int lb) {
     mLB = lb;
 }
 
@@ -60,8 +82,14 @@ inline int Rep::getUB() const {
     return mUB;
 }
 
-inline void Rep::setUB(int ub) {
+inline void Rep::setUB(const int ub) {
     mUB = ub;
+}
+
+inline Rep * makeRep(RE * re, const int lower_bound, const int upper_bound) {
+    return new Rep(re, lower_bound, upper_bound);
+}
+
 }
 
 #endif

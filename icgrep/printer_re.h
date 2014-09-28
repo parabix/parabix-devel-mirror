@@ -9,12 +9,14 @@
 
 #include <string>
 
-class RE;
+namespace re {
+    class RE;
+}
 
 class Printer_RE
 {
 public:
-    static const std::string PrintRE(const RE *re);
+    static const std::string PrintRE(const re::RE *re);
 };
 
 #endif // PRINTER_RE_H

@@ -17,79 +17,54 @@
 #include <assert.h>
 #include <stdexcept>
 
-RE* UTF8_Encoder::toUTF8(RE* re) {
+using namespace re;
 
-    RE* retVal = nullptr;
-    if (Alt* re_alt = dynamic_cast<Alt*>(re)) {
-        Alt * new_alt = new Alt();
-        for (RE * re : *re_alt) {
-            new_alt->push_back(toUTF8(re));
+RE * UTF8_Encoder::toUTF8(RE* re) {
+    if (Alt * alt = dyn_cast<Alt>(re)) {
+        for (auto i = alt->begin(); i != alt->end(); ++i) {
+            *i = toUTF8(*i);
         }
-        retVal = new_alt;
     }
-    else if (Seq * re_seq = dynamic_cast<Seq*>(re)) {
+    else if (Seq * seq = dyn_cast<Seq>(re)) {
         //If this is a previously encoded Unicode byte sequence.
-        if (re_seq->getType() == Seq::Byte) {
+        if (seq->getType() == Seq::Type::Byte) {
             throw std::runtime_error("Unexpected UTF Byte Sequence given to UTF8 Encoder.");
         }
-        Seq * new_seq = new Seq(Seq::Normal);
-        for (RE * re : *re_seq) {
-            new_seq->push_back(toUTF8(re));
+        for (auto i = seq->begin(); i != seq->end(); ++i) {
+            *i = toUTF8(*i);
         }
-        retVal = new_seq;
     }
-    else if (Rep* re_rep = dynamic_cast<Rep*>(re))
-    {
-        retVal = new Rep(toUTF8(re_rep->getRE()), re_rep->getLB(), re_rep->getUB());
-    }
-    else if (CC* re_cc = dynamic_cast<CC*>(re))
-    {  
-        if (re_cc->size() == 1)
-        {
-            retVal = rangeToUTF8(re_cc->front());
+    else if (CC * cc = dyn_cast<CC>(re)) {
+        if (cc->size() == 1) {
+            re = rangeToUTF8(cc->front());
+            delete cc;
         }
-        else if (re_cc->size() > 1) {
-            RE::Vector re_list;
-            for (const CharSetItem & item : *re_cc) {
-                re_list.push_back(rangeToUTF8(item));
+        else if (cc->size() > 1) {
+            Alt * alt = makeAlt();
+            for (const CharSetItem & item : *cc) {
+                alt->push_back(rangeToUTF8(item));
             }
-            retVal = RE_Simplifier::makeAlt(re_list);
+            re = RE_Simplifier::simplify(alt);
+            delete cc;
         }
     }
-    else if (Name* re_name = dynamic_cast<Name*>(re)) {
-        retVal = new Name(re_name);
+    else if (Rep * rep = dyn_cast<Rep>(re)) {
+        rep->setRE(toUTF8(rep->getRE()));
     }
-    else if (dynamic_cast<Start*>(re)) {
-        retVal = new Start();
-    }
-    else if (dynamic_cast<End*>(re)) {
-        retVal = new End();
-    }
-
-    return retVal;
+    return re;
 }
 
 RE * UTF8_Encoder::rangeToUTF8(const CharSetItem & item) {
     int u8len_lo = u8len(item.lo_codepoint);
     int u8len_hi = u8len(item.hi_codepoint);
-    if (u8len_lo < u8len_hi)
-    {
+    if (u8len_lo < u8len_hi) {
         int m = max_of_u8len(u8len_lo);
-        Alt* alt = new Alt();
-
-        CharSetItem lo_item;
-        lo_item.lo_codepoint = item.lo_codepoint;
-        lo_item.hi_codepoint = m;
-        alt->push_back(rangeToUTF8(lo_item));
-        CharSetItem hi_item;
-        hi_item.lo_codepoint = m + 1;
-        hi_item.hi_codepoint = item.hi_codepoint;
-        alt->push_back(rangeToUTF8(hi_item));
-
+        Alt* alt = makeAlt();
+        alt->push_back(rangeToUTF8(CharSetItem(item.lo_codepoint, m)));
+        alt->push_back(rangeToUTF8(CharSetItem(m + 1, item.hi_codepoint)));
         return alt;
     }
-    else
-    {
+    else {
         return rangeToUTF8_helper(item.lo_codepoint, item.hi_codepoint, 1, u8len_hi);
     }
 }
@@ -105,8 +80,8 @@ RE* UTF8_Encoder::rangeToUTF8_helper(int lo, int hi, int n, int hlen)
     }
     else if (hbyte == lbyte)
     {
-        Seq* seq = new Seq();
-        seq->setType((u8Prefix(hbyte) ? Seq::Byte : Seq::Normal));
+        Seq* seq = makeSeq();
+        seq->setType((u8Prefix(hbyte) ? Seq::Type::Byte : Seq::Type::Normal));
         seq->push_back(makeByteClass(hbyte));
         seq->push_back(rangeToUTF8_helper(lo, hi, n+1, hlen));
         return seq;
@@ -119,7 +94,7 @@ RE* UTF8_Encoder::rangeToUTF8_helper(int lo, int hi, int n, int hlen)
         {
             int hi_floor = (~suffix_mask) & hi;
 
-            Alt* alt = new Alt();
+            Alt* alt = makeAlt();
             alt->push_back(rangeToUTF8_helper(hi_floor, hi, n, hlen));
             alt->push_back(rangeToUTF8_helper(lo, hi_floor - 1, n, hlen));
             return alt;
@@ -128,15 +103,15 @@ RE* UTF8_Encoder::rangeToUTF8_helper(int lo, int hi, int n, int hlen)
         {
             int low_ceil = lo | suffix_mask;
 
-            Alt* alt = new Alt();
+            Alt* alt = makeAlt();
             alt->push_back(rangeToUTF8_helper(low_ceil + 1, hi, n, hlen));
             alt->push_back(rangeToUTF8_helper(lo, low_ceil, n, hlen));
             return alt;
         }
         else
         {
-            Seq* seq = new Seq();
-            seq->setType((u8Prefix(hbyte) ? Seq::Byte : Seq::Normal));
+            Seq* seq = makeSeq();
+            seq->setType((u8Prefix(hbyte) ? Seq::Type::Byte : Seq::Type::Normal));
             seq->push_back(makeByteRange(lbyte, hbyte));
             seq->push_back(rangeToUTF8_helper(lo, hi, n + 1, hlen));
             return seq;
@@ -151,12 +126,12 @@ bool UTF8_Encoder::u8Prefix(int cp)
 
 CC* UTF8_Encoder::makeByteRange(int lo, int hi)
 {
-    return new CC(lo, hi);
+    return makeCC(lo, hi);
 }
 
 CC* UTF8_Encoder::makeByteClass(int byteval)
 {
-    return new CC(byteval, byteval);
+    return makeCC(byteval, byteval);
 }
 
 int UTF8_Encoder::u8byte(int codepoint, int n)
