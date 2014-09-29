@@ -68,15 +68,10 @@ std::string StatementPrinter::Print_PB_PabloStmts(std::list<PabloS*> stmts, std:
 
 std::string StatementPrinter::Print_CC_PabloStmts(std::list<PabloS*> stmts)
 {
-    std::string strOut;
-
-    std::cout << "Total Statements: " + std::to_string(stmts.size()) << std::endl;
-    std::list<PabloS*>::iterator it;
-    for (it = stmts.begin(); it != stmts.end(); ++it)
-    {
-        strOut += ShowPabloS(*it) + "\n";
+    std::string strOut = "Total Statements: " + std::to_string(stmts.size()) + "\n";
+    for (const auto stmt : stmts) {
+        strOut += ShowPabloS(stmt) + "\n";
     }
-
     return strOut;
 }
 

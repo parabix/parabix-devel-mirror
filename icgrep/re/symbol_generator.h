@@ -7,20 +7,20 @@
 #ifndef SYMBOL_GENERATOR_H
 #define SYMBOL_GENERATOR_H
 
-#include <iostream>
 #include <string>
-#include <sstream>
-#include <utility>
 #include <map>
 
+namespace re {
 
 class SymbolGenerator
 {
 public:
     SymbolGenerator();
-    std::string gensym(std::string prefix);
+    std::string get(std::string prefix);
 private:
-    std::map<std::string, int>* pfxmap;
+    std::map<std::string, unsigned> pfxmap;
 };
+
+}
 
 #endif // SYMBOL_GENERATOR_H

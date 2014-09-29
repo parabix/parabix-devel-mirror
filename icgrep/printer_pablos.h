@@ -7,11 +7,9 @@
 #ifndef SHOW_H
 #define SHOW_H
 
-#include "pbix_compiler.h"
-
+#include "ps_pablos.h"
 #include <string>
 #include <list>
-
 
 class StatementPrinter
 {

@@ -7,22 +7,14 @@
 #ifndef COMPILER_H
 #define COMPILER_H
 
-#include "compiler.h"
-#include "re_parser.h"
-#include "pbix_compiler.h"
+#include "utf_encoding.h"
 #include "llvm_gen.h"
+#include <string>
 
-class Compiler
-{
-public:
-    Compiler();
-};
+namespace icgrep {
 
-#endif // COMPILER_H
+LLVM_Gen_RetVal compile(bool show_compile_time, bool ascii_only, std::string basis_pattern, std::string gensym_pattern, UTF_Encoding encoding, std::string input_string);
 
-/*
+}
 
-  TODO: This will become the main driver for the application.  The parser, the cc compiler, the pbix compiler
-  and the ir generator will all be called from here.
-
-*/
+#endif

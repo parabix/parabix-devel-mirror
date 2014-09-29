@@ -18,7 +18,7 @@ namespace re {
 
 RE * RE_Nullable::removeNullablePrefix(RE * re) {
     if (Seq * seq = dyn_cast<Seq>(re)) {
-        re = removeNullableSeqPrefix(seq);
+        re = removeNullablePrefix(seq);
     }
     else if (Alt * alt = dyn_cast<Alt>(re)) {
         for (auto i = alt->begin(); i != alt->end(); ++i) {
@@ -32,8 +32,10 @@ RE * RE_Nullable::removeNullablePrefix(RE * re) {
         }
         else if (hasNullablePrefix(rep->getRE())) {
             Seq * seq = makeSeq();
-            seq->push_back(removeNullablePrefix(rep->getRE()));
+            seq->push_back(removeNullablePrefix(rep->getRE()->clone()));
             seq->push_back(makeRep(rep->getRE(), rep->getLB() - 1, rep->getLB() - 1));
+            rep->setRE(nullptr);
+            delete rep;
             re = RE_Simplifier::simplify(seq);
         }
         else {
@@ -43,27 +45,28 @@ RE * RE_Nullable::removeNullablePrefix(RE * re) {
     return re;
 }
 
-inline Seq * RE_Nullable::removeNullableSeqPrefix(const Seq * seq) {
-    Seq * new_seq = makeSeq(seq->getType());
+inline Seq * RE_Nullable::removeNullablePrefix(Seq * seq) {
     if (!seq->empty()) {
+        std::vector<RE *> list;
         auto i = seq->begin();
         // find the first non-nullable prefix
         while (i != seq->end() && isNullable(*i)) {
+            delete *i;
             ++i;
         }
-        if (i == seq->end()) {
-            return new_seq;
+        if (i != seq->end()) {
+            // push the first non-nullable seq item to the front of the new_seq
+            list.push_back(removeNullablePrefix(*i));
+            std::copy(++i, seq->end(), std::back_inserter(list));
         }
-        // push the first non-nullable seq item to the front of the new_seq
-        new_seq->push_back(removeNullablePrefix(*i));
-        std::copy(++i, seq->end(), std::back_inserter(*new_seq));
+        seq->swap(list);
     }
-    return new_seq;
+    return seq;
 }
 
 RE * RE_Nullable::removeNullableSuffix(RE * re) {
     if (Seq * seq = dyn_cast<Seq>(re)) {
-        re = removeNullableSeqSuffix(seq);
+        re = removeNullableSuffix(seq);
     }
     else if (Alt* alt = dyn_cast<Alt>(re)) {
         for (auto i = alt->begin(); i != alt->end(); ++i) {
@@ -79,6 +82,7 @@ RE * RE_Nullable::removeNullableSuffix(RE * re) {
             Seq * seq = makeSeq();
             seq->push_back(RE_Simplifier::simplify(makeRep(rep->getRE()->clone(), rep->getLB() - 1, rep->getLB() - 1)));
             seq->push_back(removeNullableSuffix(rep->getRE()));
+            rep->setRE(nullptr);
             delete rep;
             re = RE_Simplifier::simplify(seq);
         }
@@ -89,27 +93,29 @@ RE * RE_Nullable::removeNullableSuffix(RE * re) {
     return re;
 }
 
-inline Seq * RE_Nullable::removeNullableSeqSuffix(const Seq * seq) {
-    Seq * new_seq = makeSeq(seq->getType());
+inline Seq * RE_Nullable::removeNullableSuffix(Seq * seq) {
     if (!seq->empty()) {
+        std::vector<RE *> list;
         auto i = seq->end();
         // find the last non-nullable suffix
-        while (i != seq->begin() && isNullable(*--i));
-
-        if (i != seq->begin()) {
-            std::copy(seq->begin(), i, std::back_inserter(*new_seq));
-            new_seq->push_back(removeNullableSuffix(*i));
+        while (i != seq->begin() && isNullable(*--i)) {
+            delete *i;
         }
+        if (i != seq->begin()) {
+            std::copy(seq->begin(), i, std::back_inserter(list));
+            list.push_back(removeNullableSuffix(*i));
+        }
+        seq->swap(list);
     }
-    return new_seq;
+    return seq;
 }
 
 bool RE_Nullable::isNullable(const RE * re) {
     if (const Seq * re_seq = dyn_cast<const Seq>(re)) {
-        return isNullableVector(re_seq);
+        return isNullable(re_seq);
     }
     else if (const Alt* re_alt = dyn_cast<const Alt>(re)) {
-        return isNullableVector(re_alt);
+        return isNullable(re_alt);
     }
     else if (const Rep* re_rep = dyn_cast<const Rep>(re)) {
         return re_rep->getLB() == 0 ? true : isNullable(re_rep->getRE());
@@ -117,7 +123,7 @@ bool RE_Nullable::isNullable(const RE * re) {
     return false;
 }
 
-inline bool RE_Nullable::isNullableVector(const Vector * vec) {
+inline bool RE_Nullable::isNullable(const Vector * vec) {
     for (const RE * re : *vec) {
         if (!isNullable(re)) {
             return false;

@@ -10,15 +10,15 @@ namespace re {
 
 class RE_Nullable {
 public:
-    static RE* removeNullablePrefix(RE* re);
-    static RE* removeNullableSuffix(RE* re);
+    static RE * removeNullablePrefix(RE * re);
+    static RE * removeNullableSuffix(RE * re);
 private:
     static bool isNullable(const RE * re);
-    static bool isNullableVector(const Vector * vec);
-    static bool hasNullablePrefix(const RE *re);
+    static bool isNullable(const Vector * vec);
+    static bool hasNullablePrefix(const RE * re);
     static bool hasNullableSuffix(const RE * re);
-    static Seq * removeNullableSeqPrefix(const Seq * seq);
-    static Seq * removeNullableSeqSuffix(const Seq *seq);
+    static Seq * removeNullablePrefix(Seq * seq);
+    static Seq * removeNullableSuffix(Seq * seq);
 };
 
 }

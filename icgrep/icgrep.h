@@ -7,9 +7,9 @@
  *  icgrep is a trademark of International Characters.
  */
 
-#include <simd-lib/bitblock.hpp>
-#include <simd-lib/carryQ.hpp>
-#include <simd-lib/pabloSupport.hpp>
+#include "include/simd-lib/bitblock.hpp"
+#include "include/simd-lib/carryQ.hpp"
+#include "include/simd-lib/pabloSupport.hpp"
 
 struct Basis_bits {
     BitBlock bit_0;

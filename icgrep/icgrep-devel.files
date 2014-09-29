@@ -17,8 +17,6 @@ cc_compiler_helper.cpp
 cc_compiler_helper.h
 compiler.cpp
 compiler.h
-compiler_helper.cpp
-compiler_helper.h
 hrtime.h
 icgrep.cpp
 icgrep.h
@@ -135,3 +133,5 @@ re/re_simplifier.cpp
 re/re_simplifier.h
 re/re_start.cpp
 re/re_start.h
+re/symbol_generator.cpp
+re/symbol_generator.h

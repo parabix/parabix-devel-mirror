@@ -5,9 +5,8 @@
  */
 
 #include "icgrep.h"
-
 #include "utf_encoding.h"
-#include "re/re_compiler.h"
+#include "compiler.h"
 
 #include <fstream>
 #include <sstream>
@@ -22,12 +21,13 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 
-#include <simd-lib/bitblock.hpp>
-#include <simd-lib/carryQ.hpp>
-#include <simd-lib/pabloSupport.hpp>
-#include <simd-lib/s2p.hpp>
-#include <simd-lib/buffer.hpp>
-#include <simd-lib/bitblock_iterator.hpp>
+#include "include/simd-lib/bitblock.hpp"
+#include "include/simd-lib/carryQ.hpp"
+#include "include/simd-lib/pabloSupport.hpp"
+#include "include/simd-lib/s2p.hpp"
+#include "include/simd-lib/buffer.hpp"
+#include "include/simd-lib/bitblock_iterator.hpp"
+#include "include/simd-lib/transpose.hpp"
 
 #include "hrtime.h"
 
@@ -63,8 +63,6 @@ struct Output {
     BitBlock matches;
     BitBlock LF;
 };
-
-#include "include/simd-lib/transpose.hpp"
 
 using namespace std;
 
@@ -231,18 +229,17 @@ int main(int argc, char *argv[])
     encoding.setBits(8);
     encoding.setMask(0xFF);
 
-    auto * re_compiler = new re::RE_Compiler();
     if (compile_time_option)
     {
         cycles = get_hrcycles();
         timer = getElapsedTime();
     }
-    LLVM_Gen_RetVal llvm_codegen = re_compiler->compile(compile_time_option,
-                                                        ascii_only_option,
-                                                        "basis_bits.bit_",
-                                                        "temp",
-                                                        encoding ,
-                                                        (regex_from_file_option ? fileregex : inregex));
+    LLVM_Gen_RetVal llvm_codegen = icgrep::compile(compile_time_option,
+                                                   ascii_only_option,
+                                                   "basis_bits.bit_",
+                                                   "temp",
+                                                   encoding ,
+                                                   (regex_from_file_option ? fileregex : inregex));
 
     if (compile_time_option)
     {
@@ -263,7 +260,6 @@ int main(int argc, char *argv[])
 #endif
     }
 
-    delete re_compiler;
 #ifndef USE_MMAP
     fclose(infile);
 #endif

@@ -54,9 +54,10 @@ include(FindBoost)
 
 add_library(PabloADT pe_advance.cpp  pe_all.cpp  pe_and.cpp pe_call.cpp pe_charclass.cpp  pe_matchstar.cpp pe_scanthru.cpp pe_not.cpp  pe_or.cpp  pe_pabloe.cpp  pe_sel.cpp  pe_var.cpp  pe_xor.cpp ps_assign.cpp  ps_if.cpp  ps_pablos.cpp  ps_while.cpp printer_pablos.cpp)
 
-add_library(RegExpADT re/re_alt.cpp  re/re_cc.cpp  re/re_end.cpp  re/re_name.cpp re/re_parser.cpp  re/re_re.cpp  re/re_rep.cpp  re/re_seq.cpp re/re_start.cpp re/parsefailure.cpp  printer_re.cpp)
+add_library(RegExpADT re/re_alt.cpp re/re_cc.cpp re/re_end.cpp re/re_name.cpp re/re_parser.cpp re/re_re.cpp re/re_rep.cpp re/re_seq.cpp re/re_start.cpp re/parsefailure.cpp re/re_reducer.cpp re/re_nullable.cpp re/re_simplifier.cpp re/re_compiler.cpp re/symbol_generator.cpp printer_re.cpp)
 
 include_directories("${PROJECT_SOURCE_DIR}")
+include_directories("${PROJECT_SOURCE_DIR}/re")
 include_directories("${PROJECT_SOURCE_DIR}/include")
 include_directories("${PROJECT_SOURCE_DIR}/include/simd-lib")
 include_directories("${PROJECT_SOURCE_DIR}/include/simd-lib/idisa_cpp")
@@ -66,7 +67,7 @@ if (Boost_FOUND)
 endif()
 
 # add the executable
-add_executable(icgrep icgrep.cpp llvm_gen.cpp llvm_gen_helper.cpp utf_encoding.cpp cc_compiler.cpp  cc_compiler_helper.cpp re/re_simplifier.cpp re/re_reducer.cpp re/re_nullable.cpp re/re_compiler.cpp pbix_compiler.cpp  symbol_generator.cpp utf8_encoder.cpp unicode_categories.h unicode_categories-flat.h unicode_categories-simple.h)
+add_executable(icgrep icgrep.cpp llvm_gen.cpp llvm_gen_helper.cpp utf_encoding.cpp cc_compiler.cpp  cc_compiler_helper.cpp compiler.cpp utf8_encoder.cpp unicode_categories.h unicode_categories-flat.h unicode_categories-simple.h)
 
 target_link_libraries (icgrep PabloADT RegExpADT ${REQ_LLVM_LIBRARIES})
 if (Boost_FOUND)

@@ -47,7 +47,6 @@ private:
 
     UTF_Encoding mEncoding;
 
-
     void add_predefined(std::string key_value, Expression *mapped_value);
     Expression* add_assignment(std::string value, Expression* expr);
     Expression* expr_to_variable(Expression* cgo);

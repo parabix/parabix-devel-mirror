@@ -7,14 +7,20 @@
 #ifndef PS_PABLOS_H
 #define PS_PABLOS_H
 
+#include <list>
+#include <string>
 #include "pe_pabloe.h"
 
-class PabloS
-{
+class PabloS {
 public:
     virtual ~PabloS();
 protected:
     PabloS();
+};
+
+struct CodeGenState{
+    std::list<PabloS*> stmtsl;
+    std::string newsym;
 };
 
 #endif // PS_PABLOS_H
