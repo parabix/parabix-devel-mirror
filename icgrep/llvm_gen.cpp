@@ -26,11 +26,11 @@
 #include "ps_if.h"
 #include "ps_while.h"
 
-Ps* ps = NULL; Nl* nl = NULL; No* no = NULL; Lo* lo = NULL; Ll* ll = NULL; Lm* lm = NULL; Nd* nd = NULL;
-Pc* pc = NULL; Lt* lt = NULL; Lu* lu = NULL; Pf* pf = NULL; Pd* pd = NULL; Pe* pe = NULL; Pi* pi = NULL;
-Po* po = NULL; Me* me = NULL; Mc* mc = NULL; Mn* mn = NULL; Sk* sk = NULL; So* so = NULL; Sm* sm = NULL;
-Sc* sc = NULL; Zl* zl = NULL; Co* co = NULL; Cn* cn = NULL; Cc* cc = NULL; Cf* cf = NULL; Cs* cs = NULL;
-Zp* zp = NULL; Zs* zs = NULL;
+Ps* fPs = NULL; Nl* fNl = NULL; No* fNo = NULL; Lo* fLo = NULL; Ll* fLl = NULL; Lm* fLm = NULL; Nd* fNd = NULL;
+Pc* fPc = NULL; Lt* fLt = NULL; Lu* fLu = NULL; Pf* fPf = NULL; Pd* fPd = NULL; Pe* fPe = NULL; Pi* fPi = NULL;
+Po* fPo = NULL; Me* fMe = NULL; Mc* fMc = NULL; Mn* fMn = NULL; Sk* fSk = NULL; So* fSo = NULL; Sm* fSm = NULL;
+Sc* fSc = NULL; Zl* fZl = NULL; Co* fCo = NULL; Cn* fCn = NULL; Cc* fCc = NULL; Cf* fCf = NULL; Cs* fCs = NULL;
+Zp* fZp = NULL; Zs* fZs = NULL;
 
 extern "C" {
   void wrapped_print_register(BitBlock bit_block) {
@@ -40,9 +40,9 @@ extern "C" {
 
 extern "C" {
     BitBlock wrapped_get_category_Ps(Basis_bits &basis_bits){
-        if (ps == NULL) ps = new Ps();
+        if (fPs == nullptr) fPs = new Ps();
         Struct_Ps ps_output;
-        ps->do_block(basis_bits, ps_output);
+        fPs->do_block(basis_bits, ps_output);
 
         return ps_output.cc;
     }
@@ -50,9 +50,9 @@ extern "C" {
 
 extern "C" {
     BitBlock wrapped_get_category_Nl(Basis_bits &basis_bits){
-        if (nl == NULL) nl = new Nl();
+        if (fNl == nullptr) fNl = new Nl();
         Struct_Nl nl_output;
-        nl->do_block(basis_bits, nl_output);
+        fNl->do_block(basis_bits, nl_output);
 
         return nl_output.cc;
     }
@@ -60,9 +60,9 @@ extern "C" {
 
 extern "C" {
     BitBlock wrapped_get_category_No(Basis_bits &basis_bits){
-        if (no == NULL) no = new No();
+        if (fNo == nullptr) fNo = new No();
         Struct_No no_output;
-        no->do_block(basis_bits, no_output);
+        fNo->do_block(basis_bits, no_output);
 
         return no_output.cc;
     }
@@ -70,9 +70,9 @@ extern "C" {
 
 extern "C" {
     BitBlock wrapped_get_category_Lo(Basis_bits &basis_bits){
-        if (lo == NULL) lo = new Lo();
+        if (fLo == nullptr) fLo = new Lo();
         Struct_Lo lo_output;
-        lo->do_block(basis_bits, lo_output);
+        fLo->do_block(basis_bits, lo_output);
 
         return lo_output.cc;
     }
@@ -80,9 +80,9 @@ extern "C" {
 
 extern "C" {
     BitBlock wrapped_get_category_Ll(Basis_bits &basis_bits){
-        if (ll == NULL) ll = new Ll();
+        if (fLl == nullptr) fLl = new Ll();
         Struct_Ll ll_output;
-        ll->do_block(basis_bits, ll_output);
+        fLl->do_block(basis_bits, ll_output);
 
         return ll_output.cc;
     }
@@ -90,9 +90,9 @@ extern "C" {
 
 extern "C" {
     BitBlock wrapped_get_category_Lm(Basis_bits &basis_bits){
-        if (lm == NULL) lm = new Lm();
+        if (fLm == nullptr) fLm = new Lm();
         Struct_Lm lm_output;
-        lm->do_block(basis_bits, lm_output);
+        fLm->do_block(basis_bits, lm_output);
 
         return lm_output.cc;
     }
@@ -100,9 +100,9 @@ extern "C" {
 
 extern "C" {
     BitBlock wrapped_get_category_Nd(Basis_bits &basis_bits){
-        if (nd == NULL) nd = new Nd();
+        if (fNd == nullptr) fNd = new Nd();
         Struct_Nd nd_output;
-        nd->do_block(basis_bits, nd_output);
+        fNd->do_block(basis_bits, nd_output);
 
         return nd_output.cc;
     }
@@ -110,9 +110,9 @@ extern "C" {
 
 extern "C" {
     BitBlock wrapped_get_category_Pc(Basis_bits &basis_bits){
-        if (pc == NULL) pc = new Pc();
+        if (fPc == nullptr) fPc = new Pc();
         Struct_Pc pc_output;
-        pc->do_block(basis_bits, pc_output);
+        fPc->do_block(basis_bits, pc_output);
 
         return pc_output.cc;
     }
@@ -120,9 +120,9 @@ extern "C" {
 
 extern "C" {
     BitBlock wrapped_get_category_Lt(Basis_bits &basis_bits){
-        if (lt == NULL) lt = new Lt();
+        if (fLt == nullptr) fLt = new Lt();
         Struct_Lt lt_output;
-        lt->do_block(basis_bits, lt_output);
+        fLt->do_block(basis_bits, lt_output);
 
         return lt_output.cc;
     }
@@ -130,9 +130,9 @@ extern "C" {
 
 extern "C" {
     BitBlock wrapped_get_category_Lu(Basis_bits &basis_bits){
-        if (lu == NULL) lu = new Lu();
+        if (fLu == nullptr) fLu = new Lu();
         Struct_Lu lu_output;
-        lu->do_block(basis_bits, lu_output);
+        fLu->do_block(basis_bits, lu_output);
 
         return lu_output.cc;
     }
@@ -140,9 +140,9 @@ extern "C" {
 
 extern "C" {
     BitBlock wrapped_get_category_Pf(Basis_bits &basis_bits){
-        if (pf == NULL) pf = new Pf();
+        if (fPf == nullptr) fPf = new Pf();
         Struct_Pf pf_output;
-        pf->do_block(basis_bits, pf_output);
+        fPf->do_block(basis_bits, pf_output);
 
         return pf_output.cc;
     }
@@ -150,9 +150,9 @@ extern "C" {
 
 extern "C" {
     BitBlock wrapped_get_category_Pd(Basis_bits &basis_bits){
-        if (pd == NULL) pd = new Pd();
+        if (fPd == nullptr) fPd = new Pd();
         Struct_Pd pd_output;
-        pd->do_block(basis_bits, pd_output);
+        fPd->do_block(basis_bits, pd_output);
 
         return pd_output.cc;
     }
@@ -160,9 +160,9 @@ extern "C" {
 
 extern "C" {
     BitBlock wrapped_get_category_Pe(Basis_bits &basis_bits){
-        if (pe == NULL) pe = new Pe();
+        if (fPe == nullptr) fPe = new Pe();
         Struct_Pe pe_output;
-        pe->do_block(basis_bits, pe_output);
+        fPe->do_block(basis_bits, pe_output);
 
         return pe_output.cc;
     }
@@ -170,9 +170,9 @@ extern "C" {
 
 extern "C" {
     BitBlock wrapped_get_category_Pi(Basis_bits &basis_bits){
-        if (pi == NULL) pi = new Pi();
+        if (fPi == nullptr) fPi = new Pi();
         Struct_Pi pi_output;
-        pi->do_block(basis_bits, pi_output);
+        fPi->do_block(basis_bits, pi_output);
 
         return pi_output.cc;
     }
@@ -180,9 +180,9 @@ extern "C" {
 
 extern "C" {
     BitBlock wrapped_get_category_Po(Basis_bits &basis_bits){
-        if (po == NULL) po = new Po();
+        if (fPo == nullptr) fPo = new Po();
         Struct_Po po_output;
-        po->do_block(basis_bits, po_output);
+        fPo->do_block(basis_bits, po_output);
 
         return po_output.cc;
     }
@@ -190,9 +190,9 @@ extern "C" {
 
 extern "C" {
     BitBlock wrapped_get_category_Me(Basis_bits &basis_bits){
-        if (me == NULL) me = new Me();
+        if (fMe == nullptr) fMe = new Me();
         Struct_Me me_output;
-        me->do_block(basis_bits, me_output);
+        fMe->do_block(basis_bits, me_output);
 
         return me_output.cc;
     }
@@ -200,9 +200,9 @@ extern "C" {
 
 extern "C" {
     BitBlock wrapped_get_category_Mc(Basis_bits &basis_bits){
-        if (mc == NULL) mc = new Mc();
+        if (fMc == nullptr) fMc = new Mc();
         Struct_Mc mc_output;
-        mc->do_block(basis_bits, mc_output);
+        fMc->do_block(basis_bits, mc_output);
 
         return mc_output.cc;
     }
@@ -210,9 +210,9 @@ extern "C" {
 
 extern "C" {
     BitBlock wrapped_get_category_Mn(Basis_bits &basis_bits){
-        if (mn == NULL) mn = new Mn();
+        if (fMn == nullptr) fMn = new Mn();
         Struct_Mn mn_output;
-        mn->do_block(basis_bits, mn_output);
+        fMn->do_block(basis_bits, mn_output);
 
         return mn_output.cc;
     }
@@ -220,9 +220,9 @@ extern "C" {
 
 extern "C" {
     BitBlock wrapped_get_category_Sk(Basis_bits &basis_bits){
-        if (sk == NULL) sk = new Sk();
+        if (fSk == nullptr) fSk = new Sk();
         Struct_Sk sk_output;
-        sk->do_block(basis_bits, sk_output);
+        fSk->do_block(basis_bits, sk_output);
 
         return sk_output.cc;
     }
@@ -230,9 +230,9 @@ extern "C" {
 
 extern "C" {
     BitBlock wrapped_get_category_So(Basis_bits &basis_bits){
-        if (so == NULL) so = new So();
+        if (fSo == nullptr) fSo = new So();
         Struct_So so_output;
-        so->do_block(basis_bits, so_output);
+        fSo->do_block(basis_bits, so_output);
 
         return so_output.cc;
     }
@@ -240,9 +240,9 @@ extern "C" {
 
 extern "C" {
     BitBlock wrapped_get_category_Sm(Basis_bits &basis_bits){
-        if (sm == NULL) sm = new Sm();
+        if (fSm == nullptr) fSm = new Sm();
         Struct_Sm sm_output;
-        sm->do_block(basis_bits, sm_output);
+        fSm->do_block(basis_bits, sm_output);
 
         return sm_output.cc;
     }
@@ -250,9 +250,9 @@ extern "C" {
 
 extern "C" {
     BitBlock wrapped_get_category_Sc(Basis_bits &basis_bits){
-        if (sc == NULL) sc = new Sc();
+        if (fSc == nullptr) fSc = new Sc();
         Struct_Sc sc_output;
-        sc->do_block(basis_bits, sc_output);
+        fSc->do_block(basis_bits, sc_output);
 
         return sc_output.cc;
     }
@@ -260,9 +260,9 @@ extern "C" {
 
 extern "C" {
     BitBlock wrapped_get_category_Zl(Basis_bits &basis_bits){
-        if (zl == NULL) zl = new Zl();
+        if (fZl == nullptr) fZl = new Zl();
         Struct_Zl zl_output;
-        zl->do_block(basis_bits, zl_output);
+        fZl->do_block(basis_bits, zl_output);
 
         return zl_output.cc;
     }
@@ -270,9 +270,9 @@ extern "C" {
 
 extern "C" {
     BitBlock wrapped_get_category_Co(Basis_bits &basis_bits){
-        if (co == NULL) co = new Co();
+        if (fCo == nullptr) fCo = new Co();
         Struct_Co co_output;
-        co->do_block(basis_bits, co_output);
+        fCo->do_block(basis_bits, co_output);
 
         return co_output.cc;
     }
@@ -280,9 +280,9 @@ extern "C" {
 
 extern "C" {
     BitBlock wrapped_get_category_Cn(Basis_bits &basis_bits){
-        if (cn == NULL) cn = new Cn();
+        if (fCn == nullptr) fCn = new Cn();
         Struct_Cn cn_output;
-        cn->do_block(basis_bits, cn_output);
+        fCn->do_block(basis_bits, cn_output);
 
         return cn_output.cc;
     }
@@ -290,9 +290,9 @@ extern "C" {
 
 extern "C" {
     BitBlock wrapped_get_category_Cc(Basis_bits &basis_bits){
-        if (cc == NULL) cc = new Cc();
+        if (fCc == nullptr) fCc = new Cc();
         Struct_Cc cc_output;
-        cc->do_block(basis_bits, cc_output);
+        fCc->do_block(basis_bits, cc_output);
 
         return cc_output.cc;
     }
@@ -300,9 +300,9 @@ extern "C" {
 
 extern "C" {
     BitBlock wrapped_get_category_Cf(Basis_bits &basis_bits){
-        if (cf == NULL) cf = new Cf();
+        if (fCf == nullptr) fCf = new Cf();
         Struct_Cf cf_output;
-        cf->do_block(basis_bits, cf_output);
+        fCf->do_block(basis_bits, cf_output);
 
         return cf_output.cc;
     }
@@ -310,9 +310,9 @@ extern "C" {
 
 extern "C" {
     BitBlock wrapped_get_category_Cs(Basis_bits &basis_bits){
-        if (cs == NULL) cs = new Cs();
+        if (fCs == nullptr) fCs = new Cs();
         Struct_Cs cs_output;
-        cs->do_block(basis_bits, cs_output);
+        fCs->do_block(basis_bits, cs_output);
 
         return cs_output.cc;
     }
@@ -320,9 +320,9 @@ extern "C" {
 
 extern "C" {
     BitBlock wrapped_get_category_Zp(Basis_bits &basis_bits){
-        if (zp == NULL) zp = new Zp();
+        if (fZp == nullptr) fZp = new Zp();
         Struct_Zp zp_output;
-        zp->do_block(basis_bits, zp_output);
+        fZp->do_block(basis_bits, zp_output);
 
         return zp_output.cc;
     }
@@ -330,9 +330,9 @@ extern "C" {
 
 extern "C" {
     BitBlock wrapped_get_category_Zs(Basis_bits &basis_bits){
-        if (zs == NULL) zs = new Zs();
+        if (fZs == nullptr) fZs = new Zs();
         Struct_Zs zs_output;
-        zs->do_block(basis_bits, zs_output);
+        fZs->do_block(basis_bits, zs_output);
 
         return zs_output.cc;
     }
@@ -349,36 +349,36 @@ LLVM_Generator::~LLVM_Generator()
 {
     delete mMod;
 
-    if (ps != NULL) delete ps;
-    if (nl != NULL) delete nl;
-    if (no != NULL) delete no;
-    if (lo != NULL) delete lo;
-    if (ll != NULL) delete ll;
-    if (lm != NULL) delete lm;
-    if (nd != NULL) delete nd;
-    if (pc != NULL) delete pc;
-    if (lt != NULL) delete lt;
-    if (lu != NULL) delete lu;
-    if (pf != NULL) delete pf;
-    if (pd != NULL) delete pd;
-    if (pe != NULL) delete pe;
-    if (pi != NULL) delete pi;
-    if (po != NULL) delete po;
-    if (me != NULL) delete me;
-    if (mc != NULL) delete mc;
-    if (mn != NULL) delete mn;
-    if (sk != NULL) delete sk;
-    if (so != NULL) delete so;
-    if (sm != NULL) delete sm;
-    if (sc != NULL) delete sc;
-    if (zl != NULL) delete zl;
-    if (co != NULL) delete co;
-    if (cn != NULL) delete cn;
-    if (cc != NULL) delete cc;
-    if (cf != NULL) delete cf;
-    if (cs != NULL) delete cs;
-    if (zp != NULL) delete zp;
-    if (zs != NULL) delete zs;
+    delete fPs;
+    delete fNl;
+    delete fNo;
+    delete fLo;
+    delete fLl;
+    delete fLm;
+    delete fNd;
+    delete fPc;
+    delete fLt;
+    delete fLu;
+    delete fPf;
+    delete fPd;
+    delete fPe;
+    delete fPi;
+    delete fPo;
+    delete fMe;
+    delete fMc;
+    delete fMn;
+    delete fSk;
+    delete fSo;
+    delete fSm;
+    delete fSc;
+    delete fZl;
+    delete fCo;
+    delete fCn;
+    delete fCc;
+    delete fCf;
+    delete fCs;
+    delete fZp;
+    delete fZs;
 
 }
 

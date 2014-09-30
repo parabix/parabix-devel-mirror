@@ -7,7 +7,7 @@
 #include "cc_compiler.h"
 #include "ps_pablos.h"
 #include "utf_encoding.h"
-#include "cc_compiler_helper.h"
+#include <pablo/pablo_routines.h>
 
 //Pablo Expressions
 #include "pe_advance.h"
@@ -46,6 +46,9 @@
 #include <stdexcept>
 
 using namespace re;
+using namespace pablo;
+
+namespace cc {
 
 CC_Compiler::CC_Compiler(const UTF_Encoding encoding, const std::string basis_pattern, const std::string gensym_pattern)
 {
@@ -154,7 +157,7 @@ PabloE* CC_Compiler::bit_pattern_expr(int pattern, int selected_bits)
         {
             if ((pattern & test_bit) == 0)
             {
-                bit_terms.push_back(CC_Compiler_Helper::make_not(make_bitv(bit_no)));
+                bit_terms.push_back(make_not(make_bitv(bit_no)));
             }
             else
             {
@@ -175,7 +178,7 @@ PabloE* CC_Compiler::bit_pattern_expr(int pattern, int selected_bits)
         std::vector<PabloE*> new_terms;
         for (unsigned long i = 0; i < (bit_terms.size()/2); i++)
         {
-            new_terms.push_back(CC_Compiler_Helper::make_and(bit_terms[(2 * i) + 1], bit_terms[2 * i]));
+            new_terms.push_back(make_and(bit_terms[(2 * i) + 1], bit_terms[2 * i]));
         }
         if (bit_terms.size() % 2 == 1)
         {
@@ -214,7 +217,7 @@ PabloE* CC_Compiler::make_range(const CodePointType n1, const CodePointType n2)
     PabloE* lo_test = GE_Range(diff_count - 1, n1 & mask1);
     PabloE* hi_test = LE_Range(diff_count - 1, n2 & mask1);
 
-    return CC_Compiler_Helper::make_and(common, CC_Compiler_Helper::make_sel(make_bitv(diff_count - 1), hi_test, lo_test));
+    return make_and(common, make_sel(make_bitv(diff_count - 1), hi_test, lo_test));
 }
 
 PabloE* CC_Compiler::GE_Range(int N, int n)
@@ -225,11 +228,11 @@ PabloE* CC_Compiler::GE_Range(int N, int n)
     }
     else if (((N % 2) == 0) && ((n >> (N - 2)) == 0))
     {
-        return CC_Compiler_Helper::make_or(CC_Compiler_Helper::make_or(make_bitv(N-1), make_bitv(N-2)), GE_Range(N-2, n));
+        return make_or(make_or(make_bitv(N-1), make_bitv(N-2)), GE_Range(N-2, n));
     }
     else if (((N % 2) == 0) && ((n >> (N - 2)) == 3))
     {
-        return CC_Compiler_Helper::make_and(CC_Compiler_Helper::make_and(make_bitv(N-1), make_bitv(N-2)), GE_Range(N-2, n-(3<<(N-2))));
+        return make_and(make_and(make_bitv(N-1), make_bitv(N-2)), GE_Range(N-2, n-(3<<(N-2))));
     }
     else if(N >= 1)
     {
@@ -243,7 +246,7 @@ PabloE* CC_Compiler::GE_Range(int N, int n)
               is set in the target, the target will certaily be >=.  Oterwise,
               the value of GE_range(N-1), lo_range) is required.
             */
-            return CC_Compiler_Helper::make_or(make_bitv(N-1), lo_range);
+            return make_or(make_bitv(N-1), lo_range);
         }
         else
         {
@@ -251,7 +254,7 @@ PabloE* CC_Compiler::GE_Range(int N, int n)
               If the hi_bit of n is set, then the corresponding bit must be set
               in the target for >= and GE_range(N-1, lo_bits) must also be true.
             */
-            return CC_Compiler_Helper::make_and(make_bitv(N-1), lo_range);
+            return make_and(make_bitv(N-1), lo_range);
         }
     }
     else
@@ -270,7 +273,7 @@ PabloE* CC_Compiler::LE_Range(int N, int n)
         return new All(1); //True.
     }
     else {
-        return CC_Compiler_Helper::make_not(GE_Range(N, n + 1));
+        return make_not(GE_Range(N, n + 1));
     }
 }
 
@@ -305,16 +308,16 @@ PabloE* CC_Compiler::charset_expr(const CC * cc) {
                 PabloE * expr = make_range(lo, hi);
                 PabloE * bit0 = make_bitv(0);
                 if ((lo & 1) == 0) {
-                    bit0 = CC_Compiler_Helper::make_not(bit0);
+                    bit0 = make_not(bit0);
                 }
-                return CC_Compiler_Helper::make_and(expr, bit0);
+                return make_and(expr, bit0);
             }
         }
     }
     PabloE * expr = nullptr;
     for (const CharSetItem & item : *cc) {
         PabloE * temp = char_or_range_expr(item.lo_codepoint, item.hi_codepoint);
-        expr = (expr == nullptr) ? temp : CC_Compiler_Helper::make_or(expr, temp);
+        expr = (expr == nullptr) ? temp : make_or(expr, temp);
     }
     return expr;
 }
@@ -427,3 +430,5 @@ PabloE* CC_Compiler::make_bitv(int n)
 {
     return new Var(bit_var((mEncoding.getBits() - 1) - n));
 }
+
+} // end of namespace cc

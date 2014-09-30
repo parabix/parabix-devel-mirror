@@ -4,7 +4,7 @@
  *  icgrep is a trademark of International Characters.
  */
 
-#include "cc_compiler_helper.h"
+#include "pablo_routines.h"
 //Pablo Expressions
 #include "pe_advance.h"
 #include "pe_all.h"
@@ -19,10 +19,8 @@
 #include "pe_sel.h"
 #include "pe_var.h"
 #include "pe_xor.h"
-// #include "pe_pabloe.h"
-// #include "cc_compiler.h"
 
-CC_Compiler_Helper::CC_Compiler_Helper(){}
+namespace pablo {
 
 /*
     Optimizing Constructors for Boolean Expressions
@@ -35,15 +33,13 @@ CC_Compiler_Helper::CC_Compiler_Helper(){}
          -at most one negation within and.
 */
 
-PabloE * CC_Compiler_Helper::make_not(PabloE* expr)
+PabloE * make_not(PabloE * expr)
 {
-    if (All* all = dynamic_cast<All*>(expr)) {
-        if (all->getNum() == 1) //If true literal.
-        {
+    if (All * all = dynamic_cast<All*>(expr)) {
+        if (all->getNum() == 1) { //If true literal.
             return new All(0); //Set to false literal.
         }
-        else //if (all->getNum() == 0) //If false literal.
-        {
+        else { //if (all->getNum() == 0) //If false literal.
             return new All(1); //Set to true literal.
         }
     }
@@ -58,7 +54,7 @@ PabloE * CC_Compiler_Helper::make_not(PabloE* expr)
     }
 }
 
-PabloE * CC_Compiler_Helper::make_and(PabloE * expr1, PabloE *expr2)
+PabloE * make_and(PabloE * expr1, PabloE *expr2)
 {
     if (All* all = dynamic_cast<All*>(expr1)) {
         if (all->getNum() == 1) {
@@ -115,7 +111,7 @@ PabloE * CC_Compiler_Helper::make_and(PabloE * expr1, PabloE *expr2)
     return new And(expr1, expr2);
 }
 
-PabloE * CC_Compiler_Helper::make_or(PabloE * expr1, PabloE * expr2)
+PabloE * make_or(PabloE * expr1, PabloE * expr2)
 {
     if (All * all = dynamic_cast<All*>(expr1)) {
         if (all->getNum() == 1) {
@@ -155,9 +151,9 @@ PabloE * CC_Compiler_Helper::make_or(PabloE * expr1, PabloE * expr2)
         return expr1;
     }
 
-    if (And* and_expr1 = dynamic_cast<And*>(expr1))
+    if (And * and_expr1 = dynamic_cast<And*>(expr1))
     {
-        if (And* and_expr2 = dynamic_cast<And*>(expr2))
+        if (And * and_expr2 = dynamic_cast<And*>(expr2))
         {
             PabloE * expr1a = and_expr1->getExpr1();
             PabloE * expr1b = and_expr1->getExpr2();
@@ -188,7 +184,7 @@ PabloE * CC_Compiler_Helper::make_or(PabloE * expr1, PabloE * expr2)
     return new Or(expr1, expr2);
 }
 
-PabloE* CC_Compiler_Helper::make_sel(PabloE *if_expr, PabloE *t_expr, PabloE *f_expr)
+PabloE* make_sel(PabloE *if_expr, PabloE *t_expr, PabloE *f_expr)
 {
     if (All* all_if_expr = dynamic_cast<All*>(if_expr))
     {
@@ -233,7 +229,7 @@ PabloE* CC_Compiler_Helper::make_sel(PabloE *if_expr, PabloE *t_expr, PabloE *f_
     }
 }
 
-PabloE* CC_Compiler_Helper::make_xor(PabloE *expr1, PabloE *expr2)
+PabloE* make_xor(PabloE *expr1, PabloE *expr2)
 {
     if (All* all_expr1 = dynamic_cast<All*>(expr1))
     {
@@ -277,7 +273,7 @@ PabloE* CC_Compiler_Helper::make_xor(PabloE *expr1, PabloE *expr2)
 
 */
 
-bool CC_Compiler_Helper::equals(const PabloE * expr1, const PabloE * expr2)
+bool equals(const PabloE * expr1, const PabloE * expr2)
 {
     if (const All * all1 = dynamic_cast<const All*>(expr1)) {
         if (const All * all2 = dynamic_cast<const All*>(expr2)) {
@@ -336,3 +332,5 @@ bool CC_Compiler_Helper::equals(const PabloE * expr1, const PabloE * expr2)
 
     return false;
 }
+
+} // end of namespace cc

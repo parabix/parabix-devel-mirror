@@ -7,12 +7,9 @@
 #ifndef RE_TO_PABLO_COMPILER_H
 #define RE_TO_PABLO_COMPILER_H
 
-//Regular Expressions
-#include "re_re.h"
-//Pablo Statements
-#include "../ps_pablos.h"
-//Code Generation
-#include "symbol_generator.h"
+#include <pablo/ps_pablos.h>
+#include <re/re_re.h>
+#include <re/symbol_generator.h>
 
 #include <string>
 #include <list>

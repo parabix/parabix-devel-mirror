@@ -11,9 +11,11 @@
 #include <list>
 #include <map>
 #include "utf_encoding.h"
-#include "ps_pablos.h"
-#include "pe_pabloe.h"
-#include "re/re_cc.h"
+#include <pablo/ps_pablos.h>
+#include <pablo/pe_pabloe.h>
+#include <re/re_cc.h>
+
+namespace cc {
 
 struct Expression{
     std::string expr_string;
@@ -56,6 +58,8 @@ private:
     std::list<PabloS*> mStmtsl;
     ExpressionMap mCommon_Expression_Map;
 };
+
+}
 
 #endif // CC_COMPILER_H
 

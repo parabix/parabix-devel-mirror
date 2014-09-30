@@ -19,7 +19,7 @@
 #include "re/re_compiler.h"
 #include "hrtime.h"
 #include "utf8_encoder.h"
-#include "cc_compiler.h"
+#include "cc/cc_compiler.h"
 
 //FOR TESTING AND AND ANALYSIS
 //#include "pbix_counter.h"
@@ -35,6 +35,7 @@
 #endif
 
 using namespace re;
+using namespace cc;
 
 namespace icgrep {
 
