@@ -5,16 +5,3 @@
  */
 
 #include "pe_charclass.h"
-
-CharClass::CharClass(std::string charClass)
-{
-    mCharClass = charClass;
-}
-
-CharClass::~CharClass(){}
-
-std::string CharClass::getCharClass()
-{
-    return mCharClass;
-}
-

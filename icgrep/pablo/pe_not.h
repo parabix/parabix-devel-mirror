@@ -9,16 +9,34 @@
 
 #include "pe_pabloe.h"
 
+namespace pablo {
+
 class Not : public PabloE
 {
 public:
-    Not(PabloE * expr);
-    ~Not();
-    PabloE * getExpr() const;
-    void setExpr(PabloE * expr = nullptr);
+    Not(PabloE* expr)
+    : PabloE(ClassTypeId::Not)
+    , mExpr(expr) {
+
+    }
+
+    ~Not() {
+        delete mExpr;
+    }
+
+    PabloE * getExpr() const {
+        return mExpr;
+    }
+
+    void setExpr(PabloE * expr) {
+        mExpr = expr;
+    }
+
 private:
     PabloE* mExpr;
 };
+
+}
 
 #endif // PE_NOT_H
 

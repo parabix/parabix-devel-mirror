@@ -7,13 +7,42 @@
 #ifndef PE_PABLOE_H
 #define PE_PABLOE_H
 
+namespace pablo {
+
 class PabloE
 {
 public:
-    virtual ~PabloE();
+    enum class ClassTypeId : unsigned {
+        Advance
+        , All
+        , And
+        , Call
+        , CharClass
+        , MatchStar
+        , Not
+        , Or
+        , ScanThru
+        , Sel
+        , Var
+        , Xor
+        , Assign
+        , If
+        , While
+    };
+    inline ClassTypeId getClassTypeId() const {
+        return mClassTypeId;
+    }
+    virtual ~PabloE() = 0;
 protected:
-    PabloE();
+    inline PabloE(const ClassTypeId id)
+    : mClassTypeId(id) {
+
+    }
+private:
+    const ClassTypeId mClassTypeId;
 };
+
+}
 
 #endif // PE_PABLOE_H
 

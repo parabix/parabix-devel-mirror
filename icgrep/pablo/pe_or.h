@@ -9,17 +9,36 @@
 
 #include "pe_pabloe.h"
 
-class Or : public PabloE
-{
+namespace pablo {
+
+class Or : public PabloE {
 public:
-    Or(PabloE* expr1, PabloE* expr2);
-    ~Or();
-    PabloE* getExpr1() const;
-    PabloE* getExpr2() const;
+    Or(PabloE * expr1, PabloE * expr2)
+    : PabloE(ClassTypeId::MatchStar)
+    , mExpr1(expr1)
+    , mExpr2(expr2)
+    {
+
+    }
+
+    virtual ~Or() {
+        delete mExpr1;
+        delete mExpr2;
+    }
+
+    inline PabloE * getExpr1() const {
+        return mExpr1;
+    }
+
+    inline PabloE* getExpr2() const {
+        return mExpr2;
+    }
 private:
     PabloE* mExpr1;
     PabloE* mExpr2;
 };
+
+}
 
 #endif // PE_OR_H
 

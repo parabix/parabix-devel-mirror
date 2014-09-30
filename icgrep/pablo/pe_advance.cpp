@@ -6,19 +6,5 @@
 
 #include "pe_advance.h"
 
-Advance::Advance(PabloE* expr)
-{
-    mExpr = expr;
-}
-
-Advance::~Advance()
-{
-    delete mExpr;
-}
-
-PabloE* Advance::getExpr()
-{
-    return mExpr;
-}
 
 

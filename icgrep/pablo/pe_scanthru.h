@@ -9,17 +9,36 @@
 
 #include "ps_pablos.h"
 
-class ScanThru :public  PabloE
-{
+namespace pablo {
+
+class ScanThru : public  PabloE {
 public:
-    ScanThru(PabloE* from , PabloE* thru);
-    ~ScanThru();
-    PabloE* getScanFrom();
-    PabloE* getScanThru();
+    ScanThru(PabloE* from, PabloE* thru)
+    : PabloE(ClassTypeId::ScanThru)
+    , mScanFrom(from)
+    , mScanThru(thru)
+    {
+
+    }
+
+    virtual ~ScanThru() {
+        delete mScanFrom;
+        delete mScanThru;
+    }
+
+    PabloE * getScanFrom() const {
+        return mScanFrom;
+    }
+
+    PabloE * getScanThru() const {
+        return mScanThru;
+    }
 private:
     PabloE* mScanFrom;
     PabloE* mScanThru;
 };
+
+}
 
 #endif // PS_SCANTHRU_H
 

@@ -9,15 +9,29 @@
 
 #include "pe_pabloe.h"
 
-class Advance : public PabloE
-{
+namespace pablo {
+
+class Advance : public PabloE {
 public:
-    Advance(PabloE* expr);
-    ~Advance();
-    PabloE* getExpr();
+    Advance(PabloE * expr)
+    : PabloE(ClassTypeId::Advance)
+    , mExpr(expr) {
+
+    }
+
+    virtual ~Advance() {
+        delete mExpr;
+    }
+
+    inline PabloE * getExpr() const {
+        return mExpr;
+    }
+
 private:
-    PabloE* mExpr;
+    PabloE * mExpr;
 };
+
+}
 
 #endif // PE_ADVANCE_H
 

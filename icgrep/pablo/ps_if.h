@@ -10,17 +10,41 @@
 #include "ps_pablos.h"
 #include <list>
 
-class If : public PabloS
-{
+namespace pablo {
+
+class If : public PabloE {
 public:
-    If(PabloE* expr, std::list<PabloS*> psl);
-    ~If();
-    PabloE* getExpr();
-    std::list<PabloS*> getPSList();
+    typedef std::list<PabloE*> List;
+
+    If(PabloE * expr, List psl)
+    : PabloE(ClassTypeId::If)
+    , mExpr(expr)
+    , mPSList(psl)
+    {
+
+    }
+
+    virtual ~If() {
+        delete mExpr;
+        for (auto statement : mPSList) {
+            delete statement;
+        }
+    }
+
+    inline PabloE * getExpr() const {
+        return mExpr;
+    }
+
+    inline const List & getPSList() const {
+        return mPSList;
+    }
+
 private:
     PabloE* mExpr;
-    std::list<PabloS*> mPSList;
+    List mPSList;
 };
+
+}
 
 #endif // PS_IF_H
 

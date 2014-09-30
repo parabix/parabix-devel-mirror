@@ -5,7 +5,3 @@
  */
 
 #include "ps_pablos.h"
-
-PabloS::PabloS(){}
-PabloS::~PabloS(){}
-

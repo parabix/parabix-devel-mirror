@@ -6,25 +6,25 @@
 
 #include "llvm_gen.h"
 //Pablo Expressions
-#include "pe_advance.h"
-#include "pe_all.h"
-#include "pe_and.h"
-#include "pe_call.h"
-#include "pe_charclass.h"
-#include "pe_matchstar.h"
-#include "pe_not.h"
-#include "pe_or.h"
-#include "pe_pabloe.h"
-#include "pe_scanthru.h"
-#include "pe_sel.h"
-#include "pe_var.h"
-#include "pe_xor.h"
+#include <pablo/pe_advance.h>
+#include <pablo/pe_all.h>
+#include <pablo/pe_and.h>
+#include <pablo/pe_call.h>
+#include <pablo/pe_charclass.h>
+#include <pablo/pe_matchstar.h>
+#include <pablo/pe_not.h>
+#include <pablo/pe_or.h>
+#include <pablo/pe_pabloe.h>
+#include <pablo/pe_scanthru.h>
+#include <pablo/pe_sel.h>
+#include <pablo/pe_var.h>
+#include <pablo/pe_xor.h>
+#include <pablo/ps_pablos.h>
+#include <pablo/ps_assign.h>
+#include <pablo/ps_if.h>
+#include <pablo/ps_while.h>
 
-//Pablo Statements
-#include "ps_pablos.h"
-#include "ps_assign.h"
-#include "ps_if.h"
-#include "ps_while.h"
+using namespace pablo;
 
 Ps* fPs = NULL; Nl* fNl = NULL; No* fNo = NULL; Lo* fLo = NULL; Ll* fLl = NULL; Lm* fLm = NULL; Nd* fNd = NULL;
 Pc* fPc = NULL; Lt* fLt = NULL; Lu* fLu = NULL; Pf* fPf = NULL; Pd* fPd = NULL; Pe* fPe = NULL; Pi* fPi = NULL;
@@ -382,7 +382,7 @@ LLVM_Generator::~LLVM_Generator()
 
 }
 
-LLVM_Gen_RetVal LLVM_Generator::Generate_LLVMIR(CodeGenState cg_state, CodeGenState subexpression_cg_state, std::list<PabloS*> cc_cgo_stmtsl)
+LLVM_Gen_RetVal LLVM_Generator::Generate_LLVMIR(CodeGenState cg_state, CodeGenState subexpression_cg_state, List cc_cgo_stmtsl)
 {
     //Create the module.
     MakeLLVMModule();
@@ -652,16 +652,13 @@ void LLVM_Generator::DeclareFunctions()
     mFunc_process_block->setAttributes(AttrSet);
 }
 
-void LLVM_Generator::DeclareCallFunctions(std::list<PabloS*> stmts)
-{
-    std::list<PabloS*>::iterator it;
-    for (it = stmts.begin(); it != stmts.end(); ++it)
-    {
+void LLVM_Generator::DeclareCallFunctions(List stmts) {
+    for (auto it = stmts.begin(); it != stmts.end(); ++it) {
         DeclareCallFunctions_PabloS(*it);
     }
 }
 
-void LLVM_Generator::DeclareCallFunctions_PabloS(PabloS* stmt)
+void LLVM_Generator::DeclareCallFunctions_PabloS(PabloE *stmt)
 {
     if (Assign* an = dynamic_cast<Assign*>(stmt))
     {
@@ -891,20 +888,15 @@ void LLVM_Generator::SetReturnMarker(std::string marker, int output_idx)
     Value* store_marker = b.CreateStore(marker_bitblock, output_struct_GEP);
 }
 
-std::string LLVM_Generator::Generate_PabloStatements(std::list<PabloS*> stmts)
-{
+std::string LLVM_Generator::Generate_PabloStatements(List stmts) {
     std::string retVal = "";
-
-    std::list<PabloS*>::iterator it;
-    for (it = stmts.begin(); it != stmts.end(); ++it)
-    {
+    for (auto it = stmts.begin(); it != stmts.end(); ++it) {
         retVal = Generate_PabloS(*it);
     }
-
     return retVal;
 }
 
-std::string LLVM_Generator::Generate_PabloS(PabloS *stmt)
+std::string LLVM_Generator::Generate_PabloS(PabloE *stmt)
 {
     std::string retVal = "";
 
@@ -1031,13 +1023,9 @@ Value* LLVM_Generator::Generate_PabloE(PabloE *expr)
     if (All* all = dynamic_cast<All*>(expr))
     {
         IRBuilder<> b(mBasicBlock);
-
-        if ((all->getNum() != 0) && (all->getNum() != 1))
-            std::cout << "\nErr: 'All' can only be set to 1 or 0.\n" << std::endl;
         Value* ptr_all = b.CreateAlloca(mXi64Vect);
-        Value* void_1 = b.CreateStore((all->getNum() == 0 ? mConst_Aggregate_Xi64_0 : mConst_Aggregate_Xi64_neg1), ptr_all);
+        Value* void_1 = b.CreateStore((all->getValue() == 0 ? mConst_Aggregate_Xi64_0 : mConst_Aggregate_Xi64_neg1), ptr_all);
         Value* all_value = b.CreateLoad(ptr_all);
-
         retVal = all_value;
     }
     else if (Call* call = dynamic_cast<Call*>(expr))

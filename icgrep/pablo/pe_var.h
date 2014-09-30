@@ -10,16 +10,29 @@
 #include "pe_pabloe.h"
 #include <string>
 
-class Var : public PabloE
-{
+namespace pablo {
+
+class Var : public PabloE {
 public:
-    Var(std::string var);
-    ~Var();
-    void setVar(std::string var);
-    std::string getVar() const;
+    Var(std::string var)
+    : PabloE(ClassTypeId::Var)
+    , mVar(var)
+    {
+
+    }
+    virtual ~Var(){
+
+    }
+    inline std::string getVar() const {
+        return mVar;
+    }
 private:
-    std::string mVar;
+    const std::string mVar;
 };
+
+}
+
+
 
 #endif // PE_VAR_H
 

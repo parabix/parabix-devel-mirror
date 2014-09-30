@@ -7,9 +7,9 @@
 #ifndef COMPILER_HELPER_H
 #define COMPILER_HELPER_H
 
-class PabloE;
-
 namespace pablo {
+
+class PabloE;
 
 PabloE * make_not(PabloE * expr);
 PabloE * make_and(PabloE * expr1, PabloE * expr2);

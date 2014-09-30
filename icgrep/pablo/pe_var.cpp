@@ -5,17 +5,3 @@
  */
 
 #include "pe_var.h"
-
-Var::Var(std::string var)
-: mVar(var)
-{
-
-}
-
-Var::~Var(){}
-
-std::string Var::getVar() const
-{
-    return mVar;
-}
-

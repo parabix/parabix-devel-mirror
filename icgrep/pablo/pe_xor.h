@@ -9,17 +9,35 @@
 
 #include "pe_pabloe.h"
 
-class Xor : public PabloE
-{
+namespace pablo {
+
+class Xor : public PabloE {
 public:
-    Xor(PabloE* expr1, PabloE* expr2);
-    ~Xor();
-    PabloE* getExpr1() const;
-    PabloE* getExpr2() const;
+    Xor(PabloE * expr1, PabloE * expr2)
+    : PabloE(ClassTypeId::MatchStar)
+    , mExpr1(expr1)
+    , mExpr2(expr2)
+    {
+
+    }
+
+    virtual ~Xor() {
+        delete mExpr1;
+        delete mExpr2;
+    }
+
+    inline PabloE * getExpr1() const {
+        return mExpr1;
+    }
+
+    inline PabloE * getExpr2() const {
+        return mExpr2;
+    }
 private:
     PabloE* mExpr1;
     PabloE* mExpr2;
 };
+}
 
 #endif // XOR_H
 

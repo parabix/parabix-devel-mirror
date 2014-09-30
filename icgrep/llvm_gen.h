@@ -13,35 +13,12 @@
 #define USE_UADD_OVERFLOW
 
 //Pablo Expressions
-#include "pe_pabloe.h"
-#include "pe_sel.h"
-#include "pe_advance.h"
-#include "pe_all.h"
-#include "pe_and.h"
-#include "pe_charclass.h"
-#include "pe_matchstar.h"
-#include "pe_not.h"
-#include "pe_or.h"
-#include "pe_call.h"
-#include "pe_var.h"
-#include "pe_xor.h"
-
-//Pablo Statements
-#include "ps_pablos.h"
-#include "ps_assign.h"
-#include "ps_if.h"
-#include "ps_while.h"
-
-#include "cc_compiler.h"
-
-// #include "pbix_compiler.h"
-
+#include <pablo/pe_pabloe.h>
+#include <pablo/ps_pablos.h>
 #include "llvm_gen_helper.h"
-
 #include "unicode_categories.h"
 //#include "unicode_categories-flat.h"
 //#include "unicode_categories-simple.h"
-
 #include <iostream>
 #include <string>
 #include <sstream>
@@ -108,27 +85,28 @@ struct SumWithOverflowPack {
   Value *obit;
 };
 
-class LLVM_Generator
-{
+class LLVM_Generator {
+    typedef pablo::PabloE       PabloE;
+    typedef std::list<PabloE *> List;
 public:
     LLVM_Generator(std::map<std::string, std::string> name_map, std::string basis_pattern, int bits);
     ~LLVM_Generator();
     LLVM_Gen_RetVal Generate_LLVMIR(CodeGenState cg_state,
                                     CodeGenState subexpression_cg_state,
-                                    std::list<PabloS*> cc_cgo);
+                                    List cc_cgo);
 private:
     void MakeLLVMModule();
     void DefineTypes();
     void DeclareFunctions();
-    void DeclareCallFunctions(std::list<PabloS*> stmts);
-    void DeclareCallFunctions_PabloS(PabloS* stmt);
+    void DeclareCallFunctions(List stmts);
+    void DeclareCallFunctions_PabloS(PabloE* stmt);
     void DeclareCallFunctions_PabloE(PabloE* expr);
     void StoreBitBlockMarkerPtr(std::string name, int index);
     void LoadBitBlocksFromStaticExtern();
     void SetReturnMarker(std::string marker, int output_idx);
     Value* GetMarker(std::string name);
-    std::string Generate_PabloStatements(std::list<PabloS*> stmts);
-    std::string Generate_PabloS(PabloS* stmt);
+    std::string Generate_PabloStatements(List stmts);
+    std::string Generate_PabloS(PabloE* stmt);
     Value* Generate_PabloE(PabloE* expr);
     Value* genMatchStar(Value* marker_expr, Value* cc_expr);
     Value* genScanThru(Value* marker_expr, Value* cc_expr);

@@ -5,27 +5,3 @@
  */
 
 #include "pe_matchstar.h"
-
-MatchStar::MatchStar(PabloE* expr1, PabloE* expr2)
-{
-    mExpr1 = expr1;
-    mExpr2 = expr2;
-}
-
-MatchStar::~MatchStar()
-{
-    delete mExpr1;
-    delete mExpr2;
-}
-
-PabloE* MatchStar::getExpr1()
-{
-    return mExpr1;
-}
-
-PabloE* MatchStar::getExpr2()
-{
-    return mExpr2;
-}
-
-

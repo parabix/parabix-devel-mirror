@@ -6,36 +6,40 @@
 
 #include "re_compiler.h"
 //Regular Expressions
-#include "re_name.h"
-#include "re_start.h"
-#include "re_end.h"
-#include "re_seq.h"
-#include "re_alt.h"
-#include "re_rep.h"
+#include <re/re_name.h>
+#include <re/re_start.h>
+#include <re/re_end.h>
+#include <re/re_alt.h>
+#include <re/re_cc.h>
+#include <re/re_seq.h>
+#include <re/re_rep.h>
+
 
 //Pablo Expressions
-#include "pablo/pe_pabloe.h"
-#include "pablo/pe_sel.h"
-#include "pablo/pe_advance.h"
-#include "pablo/pe_all.h"
-#include "pablo/pe_and.h"
-#include "pablo/pe_charclass.h"
-#include "pablo/pe_call.h"
-#include "pablo/pe_matchstar.h"
-#include "pablo/pe_scanthru.h"
-#include "pablo/pe_not.h"
-#include "pablo/pe_or.h"
-#include "pablo/pe_var.h"
-#include "pablo/pe_xor.h"
-
-//Pablo Statements
-#include "pablo/ps_pablos.h"
-#include "pablo/ps_assign.h"
-#include "pablo/ps_if.h"
-#include "pablo/ps_while.h"
+#include <pablo/pablo_routines.h>
+#include <pablo/ps_pablos.h>
+#include <pablo/pe_advance.h>
+#include <pablo/pe_all.h>
+#include <pablo/pe_and.h>
+#include <pablo/pe_call.h>
+#include <pablo/pe_charclass.h>
+#include <pablo/pe_matchstar.h>
+#include <pablo/pe_not.h>
+#include <pablo/pe_or.h>
+#include <pablo/pe_pabloe.h>
+#include <pablo/pe_scanthru.h>
+#include <pablo/pe_sel.h>
+#include <pablo/pe_var.h>
+#include <pablo/pe_xor.h>
+#include <pablo/ps_pablos.h>
+#include <pablo/ps_assign.h>
+#include <pablo/ps_if.h>
+#include <pablo/ps_while.h>
 
 #include <assert.h>
 #include <stdexcept>
+
+using namespace pablo;
 
 namespace re {
 
@@ -106,9 +110,9 @@ CodeGenState RE_Compiler::compile(RE * re)
         PabloE * u8scope32 = new Advance(u8pfx3);
         PabloE * u8scope42 = new Advance(u8pfx4);
         PabloE * u8scope43 = new Advance(u8scope42);
-        PabloS * assign_non_final = new Assign(gs_nonfinal, new Or(new Or(u8pfx, u8scope32), new Or(u8scope42, u8scope43)));
+        PabloE * assign_non_final = new Assign(gs_nonfinal, new Or(new Or(u8pfx, u8scope32), new Or(u8scope42, u8scope43)));
         #ifdef USE_IF_FOR_NONFINAL
-        std::list<PabloS *> * if_body = new std::list<PabloS *> ();
+        std::list<PabloE *> * if_body = new std::list<PabloE *> ();
         if_body->push_back(assign_non_final);
         cg_state.stmtsl.push_back(new If(u8pfx, *if_body));
         #else

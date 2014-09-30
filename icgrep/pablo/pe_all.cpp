@@ -5,21 +5,3 @@
  */
 
 #include "pe_all.h"
-
-All::All(int num)
-: mNum(num)
-{
-
-}
-
-All::~All(){}
-
-int All::getNum() const
-{
-    return mNum;
-}
-
-void All::setNum(int num)
-{
-    mNum = num;
-}

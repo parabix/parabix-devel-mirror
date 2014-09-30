@@ -5,27 +5,3 @@
  */
 
 #include "pe_scanthru.h"
-
-ScanThru::ScanThru(PabloE* from, PabloE* thru)
-{
-    mScanFrom = from;
-    mScanThru = thru;
-}
-
-ScanThru::~ScanThru()
-{
-    delete mScanFrom;
-    delete mScanThru;
-}
-
-PabloE* ScanThru::getScanFrom()
-{
-    return mScanFrom;
-}
-
-PabloE* ScanThru::getScanThru()
-{
-    return mScanThru;
-}
-
-

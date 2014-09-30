@@ -9,16 +9,35 @@
 
 #include "pe_pabloe.h"
 
-class All : public PabloE
-{
+namespace pablo {
+
+class All : public PabloE {
 public:
-    All(int num);
-    ~All();
-    int getNum() const;
-    void setNum(int num);
+
+    All(const bool value)
+    : PabloE(ClassTypeId::All)
+    , mValue(value)
+    {
+
+    }
+
+    virtual ~All() {
+
+    }
+
+    inline bool getValue() const {
+        return mValue;
+    }
+
+    inline void setValue(const bool value) {
+        mValue = value;
+    }
+
 private:
-    int mNum;
+    bool mValue;
 };
+
+}
 
 #endif // PE_ALL_H
 

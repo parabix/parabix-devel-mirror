@@ -5,26 +5,3 @@
  */
 
 #include "ps_if.h"
-
-If::If(PabloE* expr, std::list<PabloS*> psl)
-{
-    mExpr = expr;
-    mPSList = psl;
-}
-
-If::~If()
-{
-    delete mExpr;
-    while (!mPSList.empty()) delete mPSList.front(), mPSList.pop_front();
-}
-
-PabloE* If::getExpr()
-{
-    return mExpr;
-}
-
-std::list<PabloS*> If::getPSList()
-{
-    return mPSList;
-}
-

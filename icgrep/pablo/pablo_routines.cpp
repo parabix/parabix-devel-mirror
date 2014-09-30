@@ -36,7 +36,7 @@ namespace pablo {
 PabloE * make_not(PabloE * expr)
 {
     if (All * all = dynamic_cast<All*>(expr)) {
-        if (all->getNum() == 1) { //If true literal.
+        if (all->getValue() == 1) { //If true literal.
             return new All(0); //Set to false literal.
         }
         else { //if (all->getNum() == 0) //If false literal.
@@ -57,7 +57,7 @@ PabloE * make_not(PabloE * expr)
 PabloE * make_and(PabloE * expr1, PabloE *expr2)
 {
     if (All* all = dynamic_cast<All*>(expr1)) {
-        if (all->getNum() == 1) {
+        if (all->getValue() == 1) {
             delete all;
             return expr2;
         }
@@ -68,7 +68,7 @@ PabloE * make_and(PabloE * expr1, PabloE *expr2)
         }
     }
     else if (All* all = dynamic_cast<All*>(expr2)) {
-        if (all->getNum() == 1) {
+        if (all->getValue() == 1) {
             delete expr2;
             return expr1;
         }
@@ -114,7 +114,7 @@ PabloE * make_and(PabloE * expr1, PabloE *expr2)
 PabloE * make_or(PabloE * expr1, PabloE * expr2)
 {
     if (All * all = dynamic_cast<All*>(expr1)) {
-        if (all->getNum() == 1) {
+        if (all->getValue() == 1) {
             delete expr2;
             return all; //Return a true literal.
         }
@@ -124,7 +124,7 @@ PabloE * make_or(PabloE * expr1, PabloE * expr2)
         }
     }
     else if (All * all = dynamic_cast<All*>(expr2)) {
-        if (all->getNum() == 1) {
+        if (all->getValue() == 1) {
             delete expr1;
             return all; //Return a true literal.
         }
@@ -188,7 +188,7 @@ PabloE* make_sel(PabloE *if_expr, PabloE *t_expr, PabloE *f_expr)
 {
     if (All* all_if_expr = dynamic_cast<All*>(if_expr))
     {
-        if (all_if_expr->getNum() == 1)
+        if (all_if_expr->getValue() == 1)
         {
             return t_expr;
         }
@@ -199,7 +199,7 @@ PabloE* make_sel(PabloE *if_expr, PabloE *t_expr, PabloE *f_expr)
     }
     else if (All* all_t_expr = dynamic_cast<All*>(t_expr))
     {
-        if (all_t_expr->getNum() == 1)
+        if (all_t_expr->getValue() == 1)
         {
             return make_or(if_expr, f_expr);
         }
@@ -210,7 +210,7 @@ PabloE* make_sel(PabloE *if_expr, PabloE *t_expr, PabloE *f_expr)
     }
     else if (All* all_f_expr = dynamic_cast<All*>(f_expr))
     {
-        if (all_f_expr->getNum() == 1)
+        if (all_f_expr->getValue() == 1)
         {
             return make_or(make_not(if_expr), t_expr);
         }
@@ -233,7 +233,7 @@ PabloE* make_xor(PabloE *expr1, PabloE *expr2)
 {
     if (All* all_expr1 = dynamic_cast<All*>(expr1))
     {
-        if (all_expr1->getNum() == 1)
+        if (all_expr1->getValue() == 1)
         {
             return make_not(expr2);
         }
@@ -244,7 +244,7 @@ PabloE* make_xor(PabloE *expr1, PabloE *expr2)
     }
     else if (All* all_expr2 = dynamic_cast<All*>(expr2))
     {
-        if (all_expr2->getNum() == 1)
+        if (all_expr2->getValue() == 1)
         {
             return make_not(expr1);
         }
@@ -277,7 +277,7 @@ bool equals(const PabloE * expr1, const PabloE * expr2)
 {
     if (const All * all1 = dynamic_cast<const All*>(expr1)) {
         if (const All * all2 = dynamic_cast<const All*>(expr2)) {
-            return all1->getNum() == all2->getNum();
+            return all1->getValue() == all2->getValue();
         }
     }
     else if (const Var * var1 = dynamic_cast<const Var*>(expr1)) {

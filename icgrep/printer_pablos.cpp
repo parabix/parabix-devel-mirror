@@ -7,36 +7,36 @@
 #include "printer_pablos.h"
 
 //Regular Expressions
-#include "re/re_re.h"
-#include "re/re_cc.h"
-#include "re/re_start.h"
-#include "re/re_end.h"
-#include "re/re_seq.h"
-#include "re/re_name.h"
+#include <re/re_re.h>
+#include <re/re_cc.h>
+#include <re/re_start.h>
+#include <re/re_end.h>
+#include <re/re_seq.h>
+#include <re/re_name.h>
 
 //Pablo Expressions
-#include "pe_advance.h"
-#include "pe_all.h"
-#include "pe_and.h"
-#include "pe_call.h"
-#include "pe_charclass.h"
-#include "pe_matchstar.h"
-#include "pe_not.h"
-#include "pe_or.h"
-#include "pe_pabloe.h"
-#include "pe_scanthru.h"
-#include "pe_sel.h"
-#include "pe_var.h"
-#include "pe_xor.h"
+#include <pablo/pe_pabloe.h>
+#include <pablo/pe_advance.h>
+#include <pablo/pe_all.h>
+#include <pablo/pe_and.h>
+#include <pablo/pe_call.h>
+#include <pablo/pe_charclass.h>
+#include <pablo/pe_matchstar.h>
+#include <pablo/pe_not.h>
+#include <pablo/pe_or.h>
+#include <pablo/pe_scanthru.h>
+#include <pablo/pe_sel.h>
+#include <pablo/pe_var.h>
+#include <pablo/pe_xor.h>
+#include <pablo/ps_pablos.h>
+#include <pablo/ps_assign.h>
+#include <pablo/ps_if.h>
+#include <pablo/ps_while.h>
 
-//Pablo Statements
-#include "ps_pablos.h"
-#include "ps_assign.h"
-#include "ps_if.h"
-#include "ps_while.h"
+using namespace re;
+using namespace pablo;
 
-
-std::string StatementPrinter::PrintStmts(CodeGenState cg_state)
+std::string StatementPrinter::PrintStmts(const CodeGenState & cg_state)
 {
     std::string strOut = "[";
 
@@ -54,20 +54,14 @@ std::string StatementPrinter::PrintStmts(CodeGenState cg_state)
     return strOut;
 }
 
-std::string StatementPrinter::Print_PB_PabloStmts(std::list<PabloS*> stmts, std::string strOut)
-{
-    std::list<PabloS*>::iterator it;
-    //std::cout << "Total Statements: " + std::to_string(stmts.size()) << std::endl;
-    for (it = stmts.begin(); it != stmts.end(); ++it)
-    {
-        strOut += ShowPabloS(*it);
+std::string StatementPrinter::Print_PB_PabloStmts(const List &stmts, std::string strOut) {
+    for (const auto stmt : stmts) {
+        strOut += ShowPabloS(stmt);
     }
-
     return strOut;
 }
 
-std::string StatementPrinter::Print_CC_PabloStmts(std::list<PabloS*> stmts)
-{
+std::string StatementPrinter::Print_CC_PabloStmts(const List & stmts) {
     std::string strOut = "Total Statements: " + std::to_string(stmts.size()) + "\n";
     for (const auto stmt : stmts) {
         strOut += ShowPabloS(stmt) + "\n";
@@ -75,19 +69,19 @@ std::string StatementPrinter::Print_CC_PabloStmts(std::list<PabloS*> stmts)
     return strOut;
 }
 
-std::string StatementPrinter::ShowPabloS(PabloS* stmt)
+std::string StatementPrinter::ShowPabloS(const PabloE * stmt)
 {
     std::string retVal = "";
 
-    if (Assign* an = dynamic_cast<Assign*>(stmt))
+    if (const Assign * an = dynamic_cast<const Assign*>(stmt))
     {
         retVal = "Assign('" + an->getM() + "', " + ShowPabloE(an->getExpr()) + "),";
     }
-    else if (If* ifstmt = dynamic_cast<If*>(stmt))
+    else if (const If * ifstmt = dynamic_cast<const If *>(stmt))
     {
         retVal = "If(" + ShowPabloE(ifstmt->getExpr()) + ", " + Print_PB_PabloStmts(ifstmt->getPSList(), retVal) + ")";
     }
-    else if (While* whl = dynamic_cast<While*>(stmt))
+    else if (const While * whl = dynamic_cast<const While *>(stmt))
     {
         retVal = "While(" + ShowPabloE(whl->getExpr()) + ", " + Print_PB_PabloStmts(whl->getPSList(), retVal) + ")";
     }
@@ -95,56 +89,56 @@ std::string StatementPrinter::ShowPabloS(PabloS* stmt)
     return retVal;
 }
 
-std::string StatementPrinter::ShowPabloE(PabloE* expr)
+std::string StatementPrinter::ShowPabloE(const PabloE *expr)
 {
     std::string retVal = "";
 
-    if (All* all = dynamic_cast<All*>(expr))
+    if (const All * all = dynamic_cast<const All*>(expr))
     {
-        retVal = "All " + std::to_string(all->getNum()) + " ";
+        retVal = "All " + std::to_string(all->getValue()) + " ";
     }
-    else if (Call* pablo_call = dynamic_cast<Call*>(expr))
+    else if (const Call * pablo_call = dynamic_cast<const Call*>(expr))
     {
         retVal = "Call '" + pablo_call->getCallee() + "'";
     }
-    else if (Var* pablo_var = dynamic_cast<Var*>(expr))
+    else if (const Var * pablo_var = dynamic_cast<const Var*>(expr))
     {
         retVal = "Var '" + pablo_var->getVar() + "' ";
     }
-    else if (And* pablo_and = dynamic_cast<And*>(expr))
+    else if (const And * pablo_and = dynamic_cast<const And*>(expr))
     {
         retVal = "And(" + ShowPabloE(pablo_and->getExpr1()) +", " + ShowPabloE(pablo_and->getExpr2()) + ")";
     }
-    else if (Or* pablo_or = dynamic_cast<Or*>(expr))
+    else if (const Or * pablo_or = dynamic_cast<const Or*>(expr))
     {
         retVal = "Or(" + ShowPabloE(pablo_or->getExpr1()) + ", " + ShowPabloE(pablo_or->getExpr2()) + ")";
     }
-    else if (Sel* pablo_sel = dynamic_cast<Sel*>(expr))
+    else if (const Sel * pablo_sel = dynamic_cast<const Sel*>(expr))
     {
         retVal = "((" + ShowPabloE(pablo_sel->getIf_expr()) + "And " + ShowPabloE(pablo_sel->getT_expr()) +
                 ")|(Not(" + ShowPabloE(pablo_sel->getIf_expr()) + ") And " + ShowPabloE(pablo_sel->getF_expr()) + ")";
     }
-    else if (Not* pablo_not = dynamic_cast<Not*>(expr))
+    else if (const Not * pablo_not = dynamic_cast<const Not*>(expr))
     {
         retVal = "Not (" + ShowPabloE(pablo_not->getExpr()) + ")";
     }
-    else if (CharClass* cc = dynamic_cast<CharClass*>(expr))
+    else if (const CharClass * cc = dynamic_cast<const CharClass*>(expr))
     {
         retVal = "CharClass '" + cc->getCharClass() + "'";
     }
-    else if (re::Name * name = dynamic_cast<re::Name *>(expr))
+    else if (const re::Name * name = dynamic_cast<const re::Name *>(expr))
     {
         retVal = "Name '" + name->getName() + "'";
     }
-    else if (Advance* adv = dynamic_cast<Advance*>(expr))
+    else if (const Advance * adv = dynamic_cast<const Advance*>(expr))
     {
         retVal = "Advance(" + ShowPabloE(adv->getExpr()) + ")";
     }
-    else if (MatchStar* mstar = dynamic_cast<MatchStar*>(expr))
+    else if (const MatchStar * mstar = dynamic_cast<const MatchStar*>(expr))
     {
         retVal = "MatchStar (" + ShowPabloE(mstar->getExpr1()) + ", " + ShowPabloE(mstar->getExpr2()) + ")";
     }
-    else if (ScanThru* sthru = dynamic_cast<ScanThru*>(expr))
+    else if (const ScanThru * sthru = dynamic_cast<const ScanThru*>(expr))
     {
         retVal = "ScanThru (" + ShowPabloE(sthru->getScanFrom()) + ", " + ShowPabloE(sthru->getScanThru()) + ")";
     }

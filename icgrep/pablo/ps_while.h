@@ -10,17 +10,39 @@
 #include "ps_pablos.h"
 #include <list>
 
-class While : public PabloS
-{
+namespace pablo {
+
+class While : public PabloE {
+    typedef std::list<PabloE*> List;
 public:
-    While(PabloE* expr, std::list<PabloS*> psl);
-    ~While();
-    PabloE* getExpr();
-    std::list<PabloS*> getPSList();
+    While(PabloE* expr, List psl)
+    : PabloE(ClassTypeId::While)
+    , mExpr(expr)
+    , mPSList(psl)
+    {
+
+    }
+
+    virtual ~While() {
+        delete mExpr;
+        for (auto statement : mPSList) {
+            delete statement;
+        }
+    }
+
+    inline PabloE * getExpr() const {
+        return mExpr;
+    }
+
+    inline const List & getPSList() const {
+        return mPSList;
+    }
 private:
-    PabloE* mExpr;
-    std::list<PabloS*> mPSList;
+    PabloE *    mExpr;
+    List        mPSList;
 };
+
+}
 
 #endif // PS_WHILE_H
 

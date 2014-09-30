@@ -5,35 +5,32 @@
  */
 
 #include "cc_compiler.h"
-#include "ps_pablos.h"
 #include "utf_encoding.h"
-#include <pablo/pablo_routines.h>
 
 //Pablo Expressions
-#include "pe_advance.h"
-#include "pe_all.h"
-#include "pe_and.h"
-#include "pe_call.h"
-#include "pe_charclass.h"
-#include "pe_matchstar.h"
-#include "pe_not.h"
-#include "pe_or.h"
-#include "pe_pabloe.h"
-#include "pe_scanthru.h"
-#include "pe_sel.h"
-#include "pe_var.h"
-#include "pe_xor.h"
-
-//Pablo Statements
-#include "ps_pablos.h"
-#include "ps_assign.h"
-#include "ps_if.h"
-#include "ps_while.h"
-
-#include "re/re_alt.h"
-#include "re/re_cc.h"
-#include "re/re_seq.h"
-#include "re/re_rep.h"
+#include <pablo/pablo_routines.h>
+#include <pablo/ps_pablos.h>
+#include <pablo/pe_advance.h>
+#include <pablo/pe_all.h>
+#include <pablo/pe_and.h>
+#include <pablo/pe_call.h>
+#include <pablo/pe_charclass.h>
+#include <pablo/pe_matchstar.h>
+#include <pablo/pe_not.h>
+#include <pablo/pe_or.h>
+#include <pablo/pe_pabloe.h>
+#include <pablo/pe_scanthru.h>
+#include <pablo/pe_sel.h>
+#include <pablo/pe_var.h>
+#include <pablo/pe_xor.h>
+#include <pablo/ps_pablos.h>
+#include <pablo/ps_assign.h>
+#include <pablo/ps_if.h>
+#include <pablo/ps_while.h>
+#include <re/re_alt.h>
+#include <re/re_cc.h>
+#include <re/re_seq.h>
+#include <re/re_rep.h>
 
 #include <utility>
 #include <string>
@@ -100,7 +97,7 @@ Expression* CC_Compiler::expr_to_variable(Expression * expr) {
     }
 }
 
-std::list<PabloS*> CC_Compiler::get_compiled()
+CC_Compiler::List CC_Compiler::get_compiled()
 {
     return mStmtsl;
 }
@@ -343,12 +340,12 @@ Expression* CC_Compiler::expr2pabloe(PabloE* expr) {
 
     if (All* all = dynamic_cast<All*>(expr))
     {
-        if (all->getNum() == 1)
+        if (all->getValue() == 1)
         {
             retExpr->expr_string = "All(1)";
             retExpr->pablo_expr = new All(1);
         }
-        else if (all->getNum() == 0)
+        else if (all->getValue() == 0)
         {
             retExpr->expr_string = "All(0)";
             retExpr->pablo_expr = new All(0);

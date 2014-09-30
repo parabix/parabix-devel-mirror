@@ -22,14 +22,14 @@
 #include "ps_if.h"
 #include "ps_while.h"
 
+using namespace pablo;
+
 LLVM_Generator_Helper::LLVM_Generator_Helper(){}
 
-int LLVM_Generator_Helper::CarryCount_PabloStatements(std::list<PabloS*> stmts)
+int LLVM_Generator_Helper::CarryCount_PabloStatements(std::list<PabloE *> stmts)
 {
     int retVal = 0;
-
-    std::list<PabloS*>::iterator it;
-    for (it = stmts.begin(); it != stmts.end(); ++it)
+    for (auto it = stmts.begin(); it != stmts.end(); ++it)
     {
         retVal += CarryCount_PabloS(*it);
     }
@@ -37,7 +37,7 @@ int LLVM_Generator_Helper::CarryCount_PabloStatements(std::list<PabloS*> stmts)
     return retVal;
 }
 
-int LLVM_Generator_Helper::CarryCount_PabloS(PabloS* stmt)
+int LLVM_Generator_Helper::CarryCount_PabloS(PabloE *stmt)
 {
     int retVal = 0;
 

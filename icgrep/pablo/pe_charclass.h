@@ -8,17 +8,33 @@
 #define PE_CHARCLASS_H
 
 #include "pe_pabloe.h"
-#include "string"
+#include <string>
+
+namespace pablo {
 
 class CharClass : public PabloE
 {
 public:
-    CharClass(std::string charClass);
-    ~CharClass();
-    std::string getCharClass();
+    CharClass(std::string charClass)
+    : PabloE(ClassTypeId::CharClass)
+    , mCharClass(charClass)
+    {
+
+    }
+
+    virtual ~CharClass(){
+
+    }
+
+    inline const std::string & getCharClass() const {
+        return mCharClass;
+    }
+
 private:
-    std::string mCharClass;
+    const std::string mCharClass;
 };
+
+}
 
 #endif // PE_CHARCLASS_H
 

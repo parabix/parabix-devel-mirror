@@ -11,16 +11,9 @@
 #include <string>
 #include "pe_pabloe.h"
 
-class PabloS {
-public:
-    virtual ~PabloS();
-protected:
-    PabloS();
-};
-
 struct CodeGenState{
-    std::list<PabloS*> stmtsl;
-    std::string newsym;
+    std::list<pablo::PabloE *>  stmtsl;
+    std::string                 newsym;
 };
 
 #endif // PS_PABLOS_H

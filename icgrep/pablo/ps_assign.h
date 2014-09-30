@@ -7,20 +7,38 @@
 #ifndef PS_SETMARKER_H
 #define PS_SETMARKER_H
 
-#include "ps_pablos.h"
+#include "pe_pabloe.h"
 #include <string>
 
-class Assign : public PabloS
-{
+namespace pablo {
+
+class Assign : public PabloE {
 public:
-    Assign(std::string m, PabloE* expr);
-    ~Assign();
-    std::string getM();
-    PabloE* getExpr();
+    Assign(std::string m, PabloE* expr)
+    : PabloE(ClassTypeId::Assign)
+    , mM(m)
+    , mExpr(expr)
+    {
+
+    }
+
+    virtual ~Assign() {
+        delete mExpr;
+    }
+
+    inline std::string getM() const {
+        return mM;
+    }
+
+    inline PabloE* getExpr() const {
+        return mExpr;
+    }
 private:
     std::string mM;
     PabloE* mExpr;
 };
+
+}
 
 #endif // PS_SETMARKER_H
 

@@ -44,7 +44,7 @@ public:
         , SymDiff
         , Union
     };
-    ClassTypeId getClassTypeId() const {
+    inline ClassTypeId getClassTypeId() const {
         return mClassTypeId;
     }
     virtual RE * clone() const = 0;

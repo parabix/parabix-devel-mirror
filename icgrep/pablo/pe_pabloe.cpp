@@ -6,7 +6,6 @@
 
 #include "pe_pabloe.h"
 
-PabloE::PabloE(){};
-PabloE::~PabloE(){};
-
-
+namespace pablo {
+    PabloE::~PabloE(){ }
+}

@@ -4,15 +4,28 @@
 #include "pe_pabloe.h"
 #include <string>
 
-class Call : public PabloE
-{
+namespace pablo {
+
+class Call : public PabloE {
 public:
-    Call(std::string callee);
-    ~Call();
-    std::string getCallee();
+    Call(std::string callee)
+    : PabloE(ClassTypeId::Call)
+    , mCallee(callee) {
+
+    }
+
+    virtual ~Call() {
+
+    }
+
+    inline const std::string & getCallee() const {
+        return mCallee;
+    }
 private:
     std::string mCallee;
 };
+
+}
 
 #endif // PE_CALL_H
 
