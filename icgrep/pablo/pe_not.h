@@ -11,30 +11,34 @@
 
 namespace pablo {
 
-class Not : public PabloE
-{
+class Not : public PabloE {
+    friend PabloE * make_not(PabloE *);
 public:
-    Not(PabloE* expr)
-    : PabloE(ClassTypeId::Not)
-    , mExpr(expr) {
-
+    static inline bool classof(const PabloE * e) {
+        return e->getClassTypeId() == ClassTypeId::Not;
     }
+    static inline bool classof(const void *) {
+        return false;
+    }
+
 
     ~Not() {
         delete mExpr;
     }
-
     PabloE * getExpr() const {
         return mExpr;
     }
+protected:
+    Not(PabloE * expr)
+    : PabloE(ClassTypeId::Not)
+    , mExpr(expr) {
 
-    void setExpr(PabloE * expr) {
-        mExpr = expr;
     }
-
 private:
-    PabloE* mExpr;
+    PabloE * const mExpr;
 };
+
+PabloE * make_not(PabloE * expr);
 
 }
 

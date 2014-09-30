@@ -5,3 +5,18 @@
  */
 
 #include "pe_not.h"
+#include "pe_all.h"
+
+namespace pablo {
+
+PabloE * make_not(PabloE * expr) {
+    if (All * all = dyn_cast<All>(expr)) {
+        return make_all(!all->getValue());
+    }
+    else if (Not * pe_not = dyn_cast<Not>(expr)) {
+        return pe_not->getExpr();
+    }
+    return new Not(expr);
+}
+
+}

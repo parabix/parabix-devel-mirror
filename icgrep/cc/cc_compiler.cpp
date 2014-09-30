@@ -8,7 +8,6 @@
 #include "utf_encoding.h"
 
 //Pablo Expressions
-#include <pablo/pablo_routines.h>
 #include <pablo/ps_pablos.h>
 #include <pablo/pe_advance.h>
 #include <pablo/pe_all.h>
@@ -74,13 +73,13 @@ void CC_Compiler::add_predefined(std::string key_value, Expression* mapped_value
 Expression* CC_Compiler::add_assignment(std::string varname, Expression* expr)
 {    
     //Add the new mapping to the list of pablo statements:
-    mStmtsl.push_back(new Assign(varname, expr->pablo_expr));
+    mStmtsl.push_back(make_assign(varname, expr->pablo_expr));
 
     //Add the new mapping to the common expression map:
     std::string key_value = expr->expr_string;
     Expression* mapped_value = new Expression();
     mapped_value->expr_string = varname;
-    mapped_value->pablo_expr = new Var(varname);
+    mapped_value->pablo_expr = make_var(varname);
 
     std::pair<MapIterator, bool> ret = mCommon_Expression_Map.insert(make_pair(key_value, mapped_value));
 
@@ -104,7 +103,7 @@ CC_Compiler::List CC_Compiler::get_compiled()
 
 
 
-std::string CC_Compiler::compile1(CC* cc)
+std::string CC_Compiler::compile1(CC * cc)
 {
   cc2pablos(cc);
   return cc->getName();
@@ -121,7 +120,7 @@ void CC_Compiler::process_re_map(const REMap & re_map) {
     }
 }
 
-void CC_Compiler::process_re(const RE* re) {
+void CC_Compiler::process_re(const RE * re) {
     if (const Alt* re_alt = dyn_cast<const Alt>(re)) {
         for (const RE * re : *re_alt) {
             process_re(re);
@@ -142,7 +141,7 @@ void CC_Compiler::process_re(const RE* re) {
 
 PabloE* CC_Compiler::bit_pattern_expr(int pattern, int selected_bits)
 {
-    if (selected_bits == 0) return new All(1);
+    if (selected_bits == 0) return make_all(1);
 
     std::vector<PabloE*> bit_terms;
     int bit_no = 0;
@@ -163,7 +162,7 @@ PabloE* CC_Compiler::bit_pattern_expr(int pattern, int selected_bits)
         }
         else
         {
-            bit_terms.push_back(new All(1));
+            bit_terms.push_back(make_all(1));
         }
         selected_bits &= ~test_bit;
         bit_no++;
@@ -217,21 +216,20 @@ PabloE* CC_Compiler::make_range(const CodePointType n1, const CodePointType n2)
     return make_and(common, make_sel(make_bitv(diff_count - 1), hi_test, lo_test));
 }
 
-PabloE* CC_Compiler::GE_Range(int N, int n)
-{
+PabloE * CC_Compiler::GE_Range(int N, int n) {
     if (N == 0)
     {
-        return new All(1); //Return a true literal.
+        return make_all(1); //Return a true literal.
     }
     else if (((N % 2) == 0) && ((n >> (N - 2)) == 0))
     {
-        return make_or(make_or(make_bitv(N-1), make_bitv(N-2)), GE_Range(N-2, n));
+        return make_or(make_or(make_bitv(N - 1), make_bitv(N - 2)), GE_Range(N - 2, n));
     }
     else if (((N % 2) == 0) && ((n >> (N - 2)) == 3))
     {
-        return make_and(make_and(make_bitv(N-1), make_bitv(N-2)), GE_Range(N-2, n-(3<<(N-2))));
+        return make_and(make_and(make_bitv(N - 1), make_bitv(N - 2)), GE_Range(N - 2, n - (3 << (N - 2))));
     }
-    else if(N >= 1)
+    else if (N >= 1)
     {
         int hi_bit = n & (1 << (N-1));
         int lo_bits = n - hi_bit;
@@ -254,20 +252,17 @@ PabloE* CC_Compiler::GE_Range(int N, int n)
             return make_and(make_bitv(N-1), lo_range);
         }
     }
-    else
-    {
-        return 0;
-    }
+    throw std::runtime_error("Unexpected input given to ge_range: " + std::to_string(N) + ", " + std::to_string(n));
 }
 
-PabloE* CC_Compiler::LE_Range(int N, int n)
+PabloE * CC_Compiler::LE_Range(int N, int n)
 {
     /*
       If an N-bit pattern is all ones, then it is always true that any n-bit value is LE this pattern.
       Handling this as a special case avoids an overflow issue with n+1 requiring more than N bits.
     */
     if ((n + 1) == (1 << N)) {
-        return new All(1); //True.
+        return make_all(1); //True.
     }
     else {
         return make_not(GE_Range(N, n + 1));
@@ -276,7 +271,7 @@ PabloE* CC_Compiler::LE_Range(int N, int n)
 
 PabloE* CC_Compiler::charset_expr(const CC * cc) {
     if (cc->empty()) {
-        return new All(0);
+        return make_all(0);
     }
     if (cc->size() > 2) {
         bool combine = true;
@@ -338,76 +333,76 @@ Expression* CC_Compiler::expr2pabloe(PabloE* expr) {
 
     Expression* retExpr = new Expression();
 
-    if (All* all = dynamic_cast<All*>(expr))
+    if (All * all = dyn_cast<All>(expr))
     {
         if (all->getValue() == 1)
         {
             retExpr->expr_string = "All(1)";
-            retExpr->pablo_expr = new All(1);
+            retExpr->pablo_expr = make_all(1);
         }
         else if (all->getValue() == 0)
         {
             retExpr->expr_string = "All(0)";
-            retExpr->pablo_expr = new All(0);
+            retExpr->pablo_expr = make_all(0);
         }
     }
-    else if (Var * var = dynamic_cast<Var*>(expr))
+    else if (Var * var = dyn_cast<Var>(expr))
     {
             retExpr->expr_string = var->getVar();
-            retExpr->pablo_expr = new Var(var->getVar());
+            retExpr->pablo_expr = make_var(var->getVar());
     }
-    else if (Not* pe_not = dynamic_cast<Not*>(expr))
+    else if (Not * pe_not = dyn_cast<Not>(expr))
     {
         Expression* ret = expr_to_variable(expr2pabloe(pe_not->getExpr()));
         retExpr->expr_string =  "~" + ret->expr_string;
-        retExpr->pablo_expr = new Not(ret->pablo_expr);
+        retExpr->pablo_expr = make_not(ret->pablo_expr);
     }
-    else if(Or* pe_or = dynamic_cast<Or*>(expr))
+    else if(Or * pe_or = dyn_cast<Or>(expr))
     {
         Expression* ret1 = expr_to_variable(expr2pabloe(pe_or->getExpr1()));
         Expression* ret2 = expr_to_variable(expr2pabloe(pe_or->getExpr2()));
         retExpr->expr_string = "(" + ret1->expr_string + "|" + ret2->expr_string + ")";
-        retExpr->pablo_expr = new Or(ret1->pablo_expr, ret2->pablo_expr);
+        retExpr->pablo_expr = make_or(ret1->pablo_expr, ret2->pablo_expr);
     }
-    else if (Xor* pe_xor = dynamic_cast<Xor*>(expr))
+    else if (Xor * pe_xor = dyn_cast<Xor>(expr))
     {
         Expression* ret1 = expr_to_variable(expr2pabloe(pe_xor->getExpr1()));
         Expression* ret2 = expr_to_variable(expr2pabloe(pe_xor->getExpr2()));
         retExpr->expr_string = "(" + ret1->expr_string + "^" + ret2->expr_string + ")";
-        retExpr->pablo_expr = new Xor(ret1->pablo_expr, ret2->pablo_expr);
+        retExpr->pablo_expr = make_xor(ret1->pablo_expr, ret2->pablo_expr);
     }
-    else if (And* pe_and = dynamic_cast<And*>(expr))
+    else if (And * pe_and = dyn_cast<And>(expr))
     {
-        if (Not* pe_not = dynamic_cast<Not*>(pe_and->getExpr1()))
+        if (Not * pe_not = dyn_cast<Not>(pe_and->getExpr1()))
         {
             Expression* ret1 = expr_to_variable(expr2pabloe(pe_not->getExpr()));
             Expression* ret2 = expr_to_variable(expr2pabloe(pe_and->getExpr2()));
             retExpr->expr_string = "(" + ret2->expr_string + "&~" + ret1->expr_string + ")";
-            retExpr->pablo_expr = new And(ret2->pablo_expr, new Not(ret1->pablo_expr));
+            retExpr->pablo_expr = make_and(ret2->pablo_expr, make_not(ret1->pablo_expr));
         }
-        else if (Not* pe_not = dynamic_cast<Not*>(pe_and->getExpr2()))
+        else if (Not * pe_not = dyn_cast<Not>(pe_and->getExpr2()))
         {
             Expression* ret1 = expr_to_variable(expr2pabloe(pe_and->getExpr1()));
             Expression* ret2 = expr_to_variable(expr2pabloe(pe_not->getExpr()));
             retExpr->expr_string = "(" + ret1->expr_string  + "&~" + ret2->expr_string + ")";
-            retExpr->pablo_expr = new And(ret1->pablo_expr, new Not(ret2->pablo_expr));
+            retExpr->pablo_expr = make_and(ret1->pablo_expr, make_not(ret2->pablo_expr));
         }
         else
         {
             Expression* ret1 = expr_to_variable(expr2pabloe(pe_and->getExpr1()));
             Expression* ret2 = expr_to_variable(expr2pabloe(pe_and->getExpr2()));
             retExpr->expr_string = "(" + ret1->expr_string + "&" + ret2->expr_string + ")";
-            retExpr->pablo_expr = new And(ret1->pablo_expr, ret2->pablo_expr);
+            retExpr->pablo_expr = make_and(ret1->pablo_expr, ret2->pablo_expr);
         }
     }
-    else if (Sel * pe_sel = dynamic_cast<Sel*>(expr))
+    else if (Sel * pe_sel = dyn_cast<Sel>(expr))
     {
         Expression* ret_sel = expr_to_variable(expr2pabloe(pe_sel->getIf_expr()));
         Expression* ret_true = expr_to_variable(expr2pabloe(pe_sel->getT_expr()));
         Expression* ret_false = expr_to_variable(expr2pabloe(pe_sel->getF_expr()));
         retExpr->expr_string = "((" + ret_sel->expr_string + "&" + ret_true->expr_string + ")|(~("
             + ret_sel->expr_string + ")&" + ret_false->expr_string + ")";
-        retExpr->pablo_expr = new Sel(ret_sel->pablo_expr, ret_true->pablo_expr, ret_false->pablo_expr);
+        retExpr->pablo_expr = make_sel(ret_sel->pablo_expr, ret_true->pablo_expr, ret_false->pablo_expr);
     }
 
     return retExpr;
@@ -425,7 +420,7 @@ std::string CC_Compiler::bit_var(int n)
 
 PabloE* CC_Compiler::make_bitv(int n)
 {
-    return new Var(bit_var((mEncoding.getBits() - 1) - n));
+    return make_var(bit_var((mEncoding.getBits() - 1) - n));
 }
 
 } // end of namespace cc

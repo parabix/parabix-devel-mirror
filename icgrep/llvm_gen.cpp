@@ -660,16 +660,16 @@ void LLVM_Generator::DeclareCallFunctions(List stmts) {
 
 void LLVM_Generator::DeclareCallFunctions_PabloS(PabloE *stmt)
 {
-    if (Assign* an = dynamic_cast<Assign*>(stmt))
+    if (Assign * an = dyn_cast<Assign>(stmt))
     {
         DeclareCallFunctions_PabloE(an->getExpr());
     }
-    else if (If* ifstmt = dynamic_cast<If*>(stmt))
+    else if (If * ifstmt = dyn_cast<If>(stmt))
     {
         DeclareCallFunctions_PabloE(ifstmt->getExpr());
         DeclareCallFunctions(ifstmt->getPSList());
     }
-    else if (While* whl = dynamic_cast<While*>(stmt))
+    else if (While * whl = dyn_cast<While>(stmt))
     {
         DeclareCallFunctions_PabloE(whl->getExpr());
         DeclareCallFunctions(whl->getPSList());
@@ -678,7 +678,7 @@ void LLVM_Generator::DeclareCallFunctions_PabloS(PabloE *stmt)
 
 void LLVM_Generator::DeclareCallFunctions_PabloE(PabloE* expr)
 {
-    if (Call* pablo_call = dynamic_cast<Call*>(expr))
+    if (Call * pablo_call = dyn_cast<Call>(expr))
     {
         std::string callee = "wrapped_get_category_" + pablo_call->getCallee();
         if (mMarkerMap.find(callee) == mMarkerMap.end())
@@ -810,36 +810,36 @@ void LLVM_Generator::DeclareCallFunctions_PabloE(PabloE* expr)
             mMarkerMap.insert(make_pair(callee, func_get_unicode_category));
         }
     }
-    else if (And* pablo_and = dynamic_cast<And*>(expr))
+    else if (And * pablo_and = dyn_cast<And>(expr))
     {
         DeclareCallFunctions_PabloE(pablo_and->getExpr1());
         DeclareCallFunctions_PabloE(pablo_and->getExpr2());
     }
-    else if (Or* pablo_or = dynamic_cast<Or*>(expr))
+    else if (Or * pablo_or = dyn_cast<Or>(expr))
     {
         DeclareCallFunctions_PabloE(pablo_or->getExpr1());
         DeclareCallFunctions_PabloE(pablo_or->getExpr2());
     }
-    else if (Sel* pablo_sel = dynamic_cast<Sel*>(expr))
+    else if (Sel * pablo_sel = dyn_cast<Sel>(expr))
     {
         DeclareCallFunctions_PabloE(pablo_sel->getIf_expr());
         DeclareCallFunctions_PabloE(pablo_sel->getT_expr());
         DeclareCallFunctions_PabloE(pablo_sel->getF_expr());
     }
-    else if (Not* pablo_not = dynamic_cast<Not*>(expr))
+    else if (Not * pablo_not = dyn_cast<Not>(expr))
     {
         DeclareCallFunctions_PabloE(pablo_not->getExpr());
     }
-    else if (Advance* adv = dynamic_cast<Advance*>(expr))
+    else if (Advance * adv = dyn_cast<Advance>(expr))
     {
         DeclareCallFunctions_PabloE(adv->getExpr());
     }
-    else if (MatchStar* mstar = dynamic_cast<MatchStar*>(expr))
+    else if (MatchStar * mstar = dyn_cast<MatchStar>(expr))
     {
         DeclareCallFunctions_PabloE(mstar->getExpr1());
         DeclareCallFunctions_PabloE(mstar->getExpr2());
     }
-    else if (ScanThru* sthru = dynamic_cast<ScanThru*>(expr))
+    else if (ScanThru * sthru = dyn_cast<ScanThru>(expr))
     {
         DeclareCallFunctions_PabloE(sthru->getScanFrom());
         DeclareCallFunctions_PabloE(sthru->getScanThru());
@@ -900,7 +900,7 @@ std::string LLVM_Generator::Generate_PabloS(PabloE *stmt)
 {
     std::string retVal = "";
 
-    if (Assign* assign = dynamic_cast<Assign*>(stmt))
+    if (Assign * assign = dyn_cast<Assign>(stmt))
     {
         IRBuilder<> b(mBasicBlock);
 
@@ -908,7 +908,7 @@ std::string LLVM_Generator::Generate_PabloS(PabloE *stmt)
 
         retVal = assign->getM();
     }
-    else if (If* ifstmt = dynamic_cast<If*>(stmt))
+    else if (If * ifstmt = dyn_cast<If>(stmt))
     {
         BasicBlock*  ifEntryBlock = mBasicBlock;
         BasicBlock*  ifBodyBlock = BasicBlock::Create(mMod->getContext(), "if.body",mFunc_process_block, 0);
@@ -938,7 +938,7 @@ std::string LLVM_Generator::Generate_PabloS(PabloE *stmt)
                 Value* carryq_value = genCarryInLoad(mptr_carry_q, c);
                 if_carry_accum_value = b_ifbody.CreateOr(carryq_value, if_carry_accum_value);
             }
-            Value* void_1 = genCarryOutStore(if_carry_accum_value, mptr_carry_q, if_accum_idx);
+            genCarryOutStore(if_carry_accum_value, mptr_carry_q, if_accum_idx);
 
         }
         b_ifbody.CreateBr(ifEndBlock);
@@ -957,7 +957,7 @@ std::string LLVM_Generator::Generate_PabloS(PabloE *stmt)
 
         retVal = returnMarker;
     }
-    else if (While* whl = dynamic_cast<While*>(stmt))
+    else if (While* whl = dyn_cast<While>(stmt))
     {
         int idx = mCarryQueueIdx;
 
@@ -986,9 +986,9 @@ std::string LLVM_Generator::Generate_PabloS(PabloE *stmt)
         IRBuilder<> b_wb1(mBasicBlock);
         //Create and initialize a new carry queue.
         Value* ptr_while_carry_q = b_wb1.CreateAlloca(mXi64Vect, b_wb1.getInt64(mCarryQueueSize - idx));
-        for (int i=0; i<(mCarryQueueSize-idx); i++)
+        for (int i=0; i < (mCarryQueueSize - idx); i++)
         {
-            Value* void_1 = genCarryOutStore(mConst_Aggregate_Xi64_0, ptr_while_carry_q, i);
+            genCarryOutStore(mConst_Aggregate_Xi64_0, ptr_while_carry_q, i);
         }
 
         //Point mptr_carry_q to the new local carry queue.
@@ -998,10 +998,10 @@ std::string LLVM_Generator::Generate_PabloS(PabloE *stmt)
 
         IRBuilder<> b_wb2(mBasicBlock);
         //Copy back to the last carry queue the carries from the execution of the while statement list.
-        for (int c=0; c<(mCarryQueueSize-idx); c++)
+        for (int c = 0; c < (mCarryQueueSize - idx); c++)
         {
             Value* new_carryq_value = b_wb2.CreateOr(genCarryInLoad(mptr_carry_q, c), genCarryInLoad(ptr_last_carry_q, idx + c));
-            Value* void_1 = genCarryOutStore(new_carryq_value, ptr_last_carry_q, idx + c);
+            genCarryOutStore(new_carryq_value, ptr_last_carry_q, idx + c);
         }
 
         b_wb2.CreateBr(whileCondBlock);
@@ -1020,15 +1020,15 @@ Value* LLVM_Generator::Generate_PabloE(PabloE *expr)
 {
     Value* retVal = 0;
 
-    if (All* all = dynamic_cast<All*>(expr))
+    if (All* all = dyn_cast<All>(expr))
     {
         IRBuilder<> b(mBasicBlock);
         Value* ptr_all = b.CreateAlloca(mXi64Vect);
-        Value* void_1 = b.CreateStore((all->getValue() == 0 ? mConst_Aggregate_Xi64_0 : mConst_Aggregate_Xi64_neg1), ptr_all);
+        b.CreateStore((all->getValue() == 0 ? mConst_Aggregate_Xi64_0 : mConst_Aggregate_Xi64_neg1), ptr_all);
         Value* all_value = b.CreateLoad(ptr_all);
         retVal = all_value;
     }
-    else if (Call* call = dynamic_cast<Call*>(expr))
+    else if (Call* call = dyn_cast<Call>(expr))
     {
         IRBuilder<> b(mBasicBlock);
 
@@ -1049,7 +1049,7 @@ Value* LLVM_Generator::Generate_PabloE(PabloE *expr)
 
         retVal = var_value;
     }
-    else if (Var* var = dynamic_cast<Var*>(expr))
+    else if (Var * var = dyn_cast<Var>(expr))
     {
         IRBuilder<> b(mBasicBlock);
 
@@ -1057,7 +1057,7 @@ Value* LLVM_Generator::Generate_PabloE(PabloE *expr)
 
         retVal = var_value;
     }
-    else if (And* pablo_and = dynamic_cast<And*>(expr))
+    else if (And * pablo_and = dyn_cast<And>(expr))
     {
         IRBuilder<> b(mBasicBlock);
 
@@ -1065,7 +1065,7 @@ Value* LLVM_Generator::Generate_PabloE(PabloE *expr)
 
         retVal = and_result;
     }
-    else if (Or* pablo_or = dynamic_cast<Or*>(expr))
+    else if (Or * pablo_or = dyn_cast<Or>(expr))
     {
         IRBuilder<> b(mBasicBlock);
 
@@ -1073,7 +1073,7 @@ Value* LLVM_Generator::Generate_PabloE(PabloE *expr)
 
         retVal = or_result;
     }
-    else if (Sel* pablo_sel = dynamic_cast<Sel*>(expr))
+    else if (Sel * pablo_sel = dyn_cast<Sel>(expr))
     {
         IRBuilder<>b(mBasicBlock);
         Value* ifMask = Generate_PabloE(pablo_sel->getIf_expr());
@@ -1083,7 +1083,7 @@ Value* LLVM_Generator::Generate_PabloE(PabloE *expr)
 
         retVal = or_result;
     }
-    else if (Not* pablo_not = dynamic_cast<Not*>(expr))
+    else if (Not * pablo_not = dyn_cast<Not>(expr))
     {
         IRBuilder<> b(mBasicBlock);
 
@@ -1092,7 +1092,7 @@ Value* LLVM_Generator::Generate_PabloE(PabloE *expr)
 
         retVal = xor_rslt;
     }
-    else if (CharClass* cc = dynamic_cast<CharClass*>(expr))
+    else if (CharClass * cc = dyn_cast<CharClass>(expr))
     {
         IRBuilder<> b(mBasicBlock);
 
@@ -1100,20 +1100,20 @@ Value* LLVM_Generator::Generate_PabloE(PabloE *expr)
 
         retVal = character_class;
     }
-    else if (Advance* adv = dynamic_cast<Advance*>(expr))
+    else if (Advance * adv = dyn_cast<Advance>(expr))
     {
         IRBuilder<> b(mBasicBlock);
         Value* strm_value = Generate_PabloE(adv->getExpr());
         retVal = genAdvanceWithCarry(strm_value);
     }
-    else if (MatchStar* mstar = dynamic_cast<MatchStar*>(expr))
+    else if (MatchStar * mstar = dyn_cast<MatchStar>(expr))
     {
         IRBuilder<> b(mBasicBlock);
         Value* strm_value = Generate_PabloE(mstar->getExpr1());
         Value* cc_value = Generate_PabloE(mstar->getExpr2());
         retVal = genMatchStar(strm_value, cc_value);
     }
-    else if (ScanThru* sthru = dynamic_cast<ScanThru*>(expr))
+    else if (ScanThru * sthru = dyn_cast<ScanThru>(expr))
     {
         IRBuilder<> b(mBasicBlock);
         Value* strm_value = Generate_PabloE(sthru->getScanFrom());

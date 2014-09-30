@@ -12,13 +12,14 @@
 namespace pablo {
 
 class Advance : public PabloE {
+    friend Advance * make_advance(PabloE * expr);
 public:
-    Advance(PabloE * expr)
-    : PabloE(ClassTypeId::Advance)
-    , mExpr(expr) {
-
+    static inline bool classof(const PabloE * e) {
+        return e->getClassTypeId() == ClassTypeId::Advance;
     }
-
+    static inline bool classof(const void *) {
+        return false;
+    }
     virtual ~Advance() {
         delete mExpr;
     }
@@ -26,10 +27,19 @@ public:
     inline PabloE * getExpr() const {
         return mExpr;
     }
+protected:
+    Advance(PabloE * expr)
+    : PabloE(ClassTypeId::Advance)
+    , mExpr(expr) {
 
+    }
 private:
-    PabloE * mExpr;
+    PabloE * const mExpr;
 };
+
+inline Advance * make_advance(PabloE * expr) {
+    return new Advance(expr);
+}
 
 }
 

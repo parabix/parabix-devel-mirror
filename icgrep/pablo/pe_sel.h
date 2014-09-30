@@ -11,18 +11,15 @@
 
 namespace pablo {
 
-class Sel : public PabloE
-{
+class Sel : public PabloE {
+    friend PabloE * make_sel(PabloE *, PabloE *, PabloE *);
 public:
-    Sel(PabloE* if_expr, PabloE* t_expr, PabloE* f_expr)
-    : PabloE(ClassTypeId::Sel)
-    , mIf_expr(if_expr)
-    , mT_expr(t_expr)
-    , mF_expr(f_expr)
-    {
-
+    static inline bool classof(const PabloE * e) {
+        return e->getClassTypeId() == ClassTypeId::Sel;
     }
-
+    static inline bool classof(const void *) {
+        return false;
+    }
     virtual ~Sel() {
         delete mIf_expr;
         delete mT_expr;
@@ -40,12 +37,22 @@ public:
     inline PabloE * getF_expr() const {
         return mF_expr;
     }
+protected:
+    Sel(PabloE* if_expr, PabloE* t_expr, PabloE* f_expr)
+    : PabloE(ClassTypeId::Sel)
+    , mIf_expr(if_expr)
+    , mT_expr(t_expr)
+    , mF_expr(f_expr)
+    {
 
+    }
 private:
-    PabloE* mIf_expr;
-    PabloE* mT_expr;
-    PabloE* mF_expr;
+    PabloE * const mIf_expr;
+    PabloE * const mT_expr;
+    PabloE * const mF_expr;
 };
+
+PabloE * make_sel(PabloE * if_expr, PabloE * t_expr, PabloE * f_expr);
 
 }
 

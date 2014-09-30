@@ -13,6 +13,12 @@ namespace pablo {
 
 class MatchStar : public PabloE {
 public:
+    static inline bool classof(const PabloE * e) {
+        return e->getClassTypeId() == ClassTypeId::MatchStar;
+    }
+    static inline bool classof(const void *) {
+        return false;
+    }
     MatchStar(PabloE * expr1, PabloE * expr2)
     : PabloE(ClassTypeId::MatchStar)
     , mExpr1(expr1)
@@ -35,8 +41,8 @@ public:
     }
 
 private:
-    PabloE* mExpr1;
-    PabloE* mExpr2;
+    PabloE * const mExpr1;
+    PabloE * const mExpr2;
 };
 
 }

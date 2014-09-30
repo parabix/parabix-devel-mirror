@@ -13,30 +13,41 @@
 namespace pablo {
 
 class Assign : public PabloE {
+    friend Assign * make_assign(const std::string, PabloE *);
 public:
-    Assign(std::string m, PabloE* expr)
+    static inline bool classof(const PabloE * e) {
+        return e->getClassTypeId() == ClassTypeId::Assign;
+    }
+    static inline bool classof(const void *) {
+        return false;
+    }
+    virtual ~Assign() {
+        delete mExpr;
+    }
+
+    inline const std::string & getM() const {
+        return mM;
+    }
+
+    inline PabloE * getExpr() const {
+        return mExpr;
+    }
+protected:
+    Assign(const std::string m, PabloE * expr)
     : PabloE(ClassTypeId::Assign)
     , mM(m)
     , mExpr(expr)
     {
 
     }
-
-    virtual ~Assign() {
-        delete mExpr;
-    }
-
-    inline std::string getM() const {
-        return mM;
-    }
-
-    inline PabloE* getExpr() const {
-        return mExpr;
-    }
 private:
-    std::string mM;
-    PabloE* mExpr;
+    const std::string   mM;
+    PabloE * const      mExpr;
 };
+
+inline Assign * make_assign(const std::string marker, PabloE * expr) {
+    return new Assign(marker, expr);
+}
 
 }
 

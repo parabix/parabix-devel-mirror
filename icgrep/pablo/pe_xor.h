@@ -12,31 +12,39 @@
 namespace pablo {
 
 class Xor : public PabloE {
+    friend PabloE * make_xor(PabloE *, PabloE *);
 public:
+    static inline bool classof(const PabloE * e) {
+        return e->getClassTypeId() == ClassTypeId::Xor;
+    }
+    static inline bool classof(const void *) {
+        return false;
+    }
+    virtual ~Xor() {
+        delete mExpr1;
+        delete mExpr2;
+    }
+    inline PabloE * getExpr1() const {
+        return mExpr1;
+    }
+    inline PabloE * getExpr2() const {
+        return mExpr2;
+    }
+protected:
     Xor(PabloE * expr1, PabloE * expr2)
-    : PabloE(ClassTypeId::MatchStar)
+    : PabloE(ClassTypeId::Xor)
     , mExpr1(expr1)
     , mExpr2(expr2)
     {
 
     }
-
-    virtual ~Xor() {
-        delete mExpr1;
-        delete mExpr2;
-    }
-
-    inline PabloE * getExpr1() const {
-        return mExpr1;
-    }
-
-    inline PabloE * getExpr2() const {
-        return mExpr2;
-    }
 private:
-    PabloE* mExpr1;
-    PabloE* mExpr2;
+    PabloE * const mExpr1;
+    PabloE * const mExpr2;
 };
+
+PabloE * make_xor(PabloE * expr1, PabloE * expr2);
+
 }
 
 #endif // XOR_H

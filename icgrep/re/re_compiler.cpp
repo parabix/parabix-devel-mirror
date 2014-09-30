@@ -16,7 +16,6 @@
 
 
 //Pablo Expressions
-#include <pablo/pablo_routines.h>
 #include <pablo/ps_pablos.h>
 #include <pablo/pe_advance.h>
 #include <pablo/pe_all.h>
@@ -58,17 +57,17 @@ CodeGenState RE_Compiler::compile_subexpressions(const std::map<std::string, RE*
         if (Seq * seq = dyn_cast<Seq>(i->second)) {
             if (seq->getType() == Seq::Type::Byte) {
                 std::string gs_retVal = symgen.get("start_marker");
-                cg_state.stmtsl.push_back(new Assign(gs_retVal, new All(1)));
+                cg_state.stmtsl.push_back(make_assign(gs_retVal, make_all(1)));
                 for (auto j = seq->begin();; ) {
                     Name * name = dyn_cast<Name>(*j);
                     assert (name);
-                    And * cc_mask = new And(new Var(gs_retVal), new CharClass(name->getName()));
+                    auto * cc_mask = make_and(make_var(gs_retVal), make_charclass(name->getName()));
                     if (++j != seq->end()) {
                         gs_retVal = symgen.get("marker");
-                        cg_state.stmtsl.push_back(new Assign(gs_retVal, new Advance(cc_mask)));
+                        cg_state.stmtsl.push_back(make_assign(gs_retVal, make_advance(cc_mask)));
                     }
                     else {
-                        cg_state.stmtsl.push_back(new Assign(seq->getName(), cc_mask));
+                        cg_state.stmtsl.push_back(make_assign(seq->getName(), cc_mask));
                         break;
                     }
                 }
@@ -84,19 +83,19 @@ CodeGenState RE_Compiler::compile(RE * re)
     CodeGenState cg_state;
 
     std::string gs_m0 = symgen.get("start_marker");
-    cg_state.stmtsl.push_back(new Assign(gs_m0, new All(1)));
+    cg_state.stmtsl.push_back(make_assign(gs_m0, make_all(1)));
 
     if (hasUnicode(re)) {
         cg_state.newsym = gs_m0;
         //Set the 'internal.initial' bit stream for the utf-8 multi-byte encoding.
         std::string gs_initial = symgen.get("internal.initial");
         m_name_map.insert(make_pair("internal.initial", gs_initial));
-        PabloE * u8single = new Var(m_name_map.find("UTF8-SingleByte")->second);
-        PabloE * u8pfx2 = new Var(m_name_map.find("UTF8-Prefix2")->second);
-        PabloE * u8pfx3 = new Var(m_name_map.find("UTF8-Prefix3")->second);
-        PabloE * u8pfx4 = new Var(m_name_map.find("UTF8-Prefix4")->second);
-        PabloE * u8pfx = new Or(new Or(u8pfx2, u8pfx3), u8pfx4);
-        cg_state.stmtsl.push_back(new Assign(gs_initial, new Or(u8pfx, u8single)));
+        PabloE * u8single = make_var(m_name_map.find("UTF8-SingleByte")->second);
+        PabloE * u8pfx2 = make_var(m_name_map.find("UTF8-Prefix2")->second);
+        PabloE * u8pfx3 = make_var(m_name_map.find("UTF8-Prefix3")->second);
+        PabloE * u8pfx4 = make_var(m_name_map.find("UTF8-Prefix4")->second);
+        PabloE * u8pfx = make_or(make_or(u8pfx2, u8pfx3), u8pfx4);
+        cg_state.stmtsl.push_back(make_assign(gs_initial, make_or(u8pfx, u8single)));
         cg_state.newsym = gs_initial;
 
         //Set the 'internal.nonfinal' bit stream for the utf-8 multi-byte encoding.
@@ -105,12 +104,12 @@ CodeGenState RE_Compiler::compile(RE * re)
         m_name_map.insert(make_pair("internal.nonfinal", gs_nonfinal));
         //#define USE_IF_FOR_NONFINAL
         #ifdef USE_IF_FOR_NONFINAL
-        cg_state.stmtsl.push_back(new Assign(gs_nonfinal, new All(0)));
+        cg_state.stmtsl.push_back(make_assign(gs_nonfinal, make_all(0)));
         #endif
-        PabloE * u8scope32 = new Advance(u8pfx3);
-        PabloE * u8scope42 = new Advance(u8pfx4);
-        PabloE * u8scope43 = new Advance(u8scope42);
-        PabloE * assign_non_final = new Assign(gs_nonfinal, new Or(new Or(u8pfx, u8scope32), new Or(u8scope42, u8scope43)));
+        PabloE * u8scope32 = make_advance(u8pfx3);
+        PabloE * u8scope42 = make_advance(u8pfx4);
+        PabloE * u8scope43 = make_advance(u8scope42);
+        PabloE * assign_non_final = make_assign(gs_nonfinal, make_or(make_or(u8pfx, u8scope32), make_or(u8scope42, u8scope43)));
         #ifdef USE_IF_FOR_NONFINAL
         std::list<PabloE *> * if_body = new std::list<PabloE *> ();
         if_body->push_back(assign_non_final);
@@ -126,8 +125,8 @@ CodeGenState RE_Compiler::compile(RE * re)
 
     //These three lines are specifically for grep.
     std::string gs_retVal = symgen.get("marker");
-    cg_state.stmtsl.push_back(new Assign(gs_retVal, new And(new MatchStar(new Var(cg_state.newsym),
-        new Not(new Var(m_name_map.find("LineFeed")->second))), new Var(m_name_map.find("LineFeed")->second))));
+    cg_state.stmtsl.push_back(make_assign(gs_retVal, make_and(new MatchStar(make_var(cg_state.newsym),
+        make_not(make_var(m_name_map.find("LineFeed")->second))), make_var(m_name_map.find("LineFeed")->second))));
     cg_state.newsym = gs_retVal;
 
     return cg_state;
@@ -148,36 +147,36 @@ void RE_Compiler::compile(RE * re, CodeGenState & cg_state) {
     }
     else if (isa<Start>(re)) {
         std::string gs_retVal = symgen.get("sol");
-        cg_state.stmtsl.push_back(new Assign(gs_retVal, new And(new Var(cg_state.newsym), new Not(new Advance(new Not(new CharClass(m_name_map.find("LineFeed")->second)))))));
+        cg_state.stmtsl.push_back(make_assign(gs_retVal, make_and(make_var(cg_state.newsym), make_not(make_advance(make_not(make_charclass(m_name_map.find("LineFeed")->second)))))));
         cg_state.newsym = gs_retVal;
     }
     else if (isa<End>(re)) {
         std::string gs_retVal = symgen.get("eol");
-        cg_state.stmtsl.push_back(new Assign(gs_retVal, new And(new Var(cg_state.newsym), new CharClass(m_name_map.find("LineFeed")->second))));
+        cg_state.stmtsl.push_back(make_assign(gs_retVal, make_and(make_var(cg_state.newsym), make_charclass(m_name_map.find("LineFeed")->second))));
         cg_state.newsym = gs_retVal;
     }
 }
 
 inline void RE_Compiler::compile(Name * name, CodeGenState & cg_state) {
     std::string gs_retVal = symgen.get("marker");
-    PabloE * markerExpr = new Var(cg_state.newsym);
+    PabloE * markerExpr = make_var(cg_state.newsym);
     if (name->getType() != Name::Type::FixedLength) {
         // Move the markers forward through any nonfinal UTF-8 bytes to the final position of each character.
-        markerExpr = new And(markerExpr, new CharClass(m_name_map.find("internal.initial")->second));
-        markerExpr = new ScanThru(markerExpr, new CharClass(m_name_map.find("internal.nonfinal")->second));
+        markerExpr = make_and(markerExpr, make_charclass(m_name_map.find("internal.initial")->second));
+        markerExpr = new ScanThru(markerExpr, make_charclass(m_name_map.find("internal.nonfinal")->second));
     }
     PabloE * ccExpr;
     if (name->getType() == Name::Type::UnicodeCategory) {
-        ccExpr = new Call(name->getName());
+        ccExpr = make_call(name->getName());
     }
     else {
-        ccExpr = new CharClass(name->getName());
+        ccExpr = make_charclass(name->getName());
     }
     if (name->isNegated()) {
-        ccExpr = new Not(new Or(new Or(ccExpr, new CharClass(m_name_map.find("LineFeed")->second)),
-                                new CharClass(m_name_map.find("internal.nonfinal")->second)));
+        ccExpr = make_not(make_or(make_or(ccExpr, make_charclass(m_name_map.find("LineFeed")->second)),
+                                make_charclass(m_name_map.find("internal.nonfinal")->second)));
     }
-    cg_state.stmtsl.push_back(new Assign(gs_retVal, new Advance(new And(ccExpr, markerExpr))));
+    cg_state.stmtsl.push_back(make_assign(gs_retVal, make_advance(make_and(ccExpr, markerExpr))));
     cg_state.newsym = gs_retVal;
 }
 
@@ -190,7 +189,7 @@ inline void RE_Compiler::compile(Seq * seq, CodeGenState & cg_state) {
 inline void RE_Compiler::compile(Alt * alt, CodeGenState & cg_state) {
     if (alt->empty()) {
         std::string gs_retVal = symgen.get("always_fail_marker");
-        cg_state.stmtsl.push_back(new Assign(gs_retVal, new All(0)));
+        cg_state.stmtsl.push_back(make_assign(gs_retVal, make_all(0)));
         cg_state.newsym = gs_retVal;
     }
     else {
@@ -202,7 +201,7 @@ inline void RE_Compiler::compile(Alt * alt, CodeGenState & cg_state) {
             cg_state.newsym = startsym;
             compile(*i, cg_state);
             std::string altsym = symgen.get("alt");
-            cg_state.stmtsl.push_back(new Assign(altsym, new Or(new Var(oldsym), new Var(cg_state.newsym))));
+            cg_state.stmtsl.push_back(make_assign(altsym, make_or(make_var(oldsym), make_var(cg_state.newsym))));
             cg_state.newsym = altsym;
         }
     }
@@ -215,23 +214,23 @@ inline void RE_Compiler::compile(Rep * rep, CodeGenState & cg_state) {
 
         PabloE* ccExpr;
         if (rep_name->getType() == Name::Type::UnicodeCategory) {
-            ccExpr = new Call(rep_name->getName());
+            ccExpr = make_call(rep_name->getName());
         }
         else {
-            ccExpr = new CharClass(rep_name->getName());
+            ccExpr = make_charclass(rep_name->getName());
         }
 
         if (rep_name->isNegated()) {
-            ccExpr = new Not(new Or(new Or(ccExpr, new CharClass(m_name_map.find("LineFeed")->second)), new CharClass(m_name_map.find("internal.nonfinal")->second)));
+            ccExpr = make_not(make_or(make_or(ccExpr, make_charclass(m_name_map.find("LineFeed")->second)), make_charclass(m_name_map.find("internal.nonfinal")->second)));
         }
         if (rep_name->getType() == Name::Type::FixedLength) {
-            cg_state.stmtsl.push_back(new Assign(gs_retVal, new MatchStar(new Var(cg_state.newsym), ccExpr)));
+            cg_state.stmtsl.push_back(make_assign(gs_retVal, new MatchStar(make_var(cg_state.newsym), ccExpr)));
         }
         else { // Name::Unicode and Name::UnicodeCategory
-            cg_state.stmtsl.push_back(new Assign(gs_retVal,
-                new And(new MatchStar(new Var(cg_state.newsym),
-                        new Or(new CharClass(m_name_map.find("internal.nonfinal")->second), ccExpr)),
-                               new CharClass(m_name_map.find("internal.initial")->second))));
+            cg_state.stmtsl.push_back(make_assign(gs_retVal,
+                make_and(new MatchStar(make_var(cg_state.newsym),
+                        make_or(make_charclass(m_name_map.find("internal.nonfinal")->second), ccExpr)),
+                               make_charclass(m_name_map.find("internal.initial")->second))));
         }
         cg_state.newsym = gs_retVal;
     }
@@ -252,11 +251,11 @@ inline void RE_Compiler::compileUnboundedRep(RE * repeated, int lb, CodeGenState
     CodeGenState while_test_state;
     while_test_state.newsym = while_test;
     compile(repeated, while_test_state);
-    cg_state.stmtsl.push_back(new Assign(while_test, new Var(cg_state.newsym)));
-    cg_state.stmtsl.push_back(new Assign(while_accum, new Var(cg_state.newsym)));
-    while_test_state.stmtsl.push_back(new Assign(while_test, new And(new Var(while_test_state.newsym), new Not(new Var(while_accum)))));
-    while_test_state.stmtsl.push_back(new Assign(while_accum, new Or(new Var(while_accum), new Var(while_test_state.newsym))));
-    cg_state.stmtsl.push_back(new While(new Var(while_test), while_test_state.stmtsl));
+    cg_state.stmtsl.push_back(make_assign(while_test, make_var(cg_state.newsym)));
+    cg_state.stmtsl.push_back(make_assign(while_accum, make_var(cg_state.newsym)));
+    while_test_state.stmtsl.push_back(make_assign(while_test, make_and(make_var(while_test_state.newsym), make_not(make_var(while_accum)))));
+    while_test_state.stmtsl.push_back(make_assign(while_accum, make_or(make_var(while_accum), make_var(while_test_state.newsym))));
+    cg_state.stmtsl.push_back(new While(make_var(while_test), while_test_state.stmtsl));
     cg_state.newsym = while_accum;
 }
 
@@ -270,7 +269,7 @@ inline void RE_Compiler::compileBoundedRep(RE * repeated, int lb, int ub, CodeGe
          compile(repeated, cg_state);
          compileBoundedRep(repeated, 0, ub - 1, cg_state);
          std::string altsym = symgen.get("alt");
-         cg_state.stmtsl.push_back(new Assign(altsym, new Or(new Var(oldsym), new Var(cg_state.newsym))));
+         cg_state.stmtsl.push_back(make_assign(altsym, make_or(make_var(oldsym), make_var(cg_state.newsym))));
          cg_state.newsym = altsym;
     }
 }

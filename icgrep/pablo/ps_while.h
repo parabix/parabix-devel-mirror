@@ -12,9 +12,18 @@
 
 namespace pablo {
 
-class While : public PabloE {
-    typedef std::list<PabloE*> List;
+class While : public PabloE {    
 public:
+
+    static inline bool classof(const PabloE * e) {
+        return e->getClassTypeId() == ClassTypeId::While;
+    }
+    static inline bool classof(const void *) {
+        return false;
+    }
+
+    typedef std::list<PabloE*> List;
+
     While(PabloE* expr, List psl)
     : PabloE(ClassTypeId::While)
     , mExpr(expr)
@@ -38,8 +47,8 @@ public:
         return mPSList;
     }
 private:
-    PabloE *    mExpr;
-    List        mPSList;
+    PabloE * const  mExpr;
+    List            mPSList;
 };
 
 }

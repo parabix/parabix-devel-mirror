@@ -9,6 +9,9 @@
 
 #include <vector>
 #include <assert.h>
+#include <llvm/Support/Casting.h>
+
+using namespace llvm;
 
 namespace re {
 
@@ -57,18 +60,18 @@ protected:
     const ClassTypeId mClassTypeId;
 };
 
-template <typename To, typename From>
-inline static bool isa(const From * object) {
-    return To::classof(object);
-}
+//template <typename To, typename From>
+//inline static bool isa(const From * object) {
+//    return To::classof(object);
+//}
 
-template <typename To, typename From>
-inline static To * dyn_cast(From * object) {
-    if (isa<To, From>(object)) {
-        return reinterpret_cast<To *>(object);
-    }
-    return nullptr;
-}
+//template <typename To, typename From>
+//inline static To * dyn_cast(From * object) {
+//    if (isa<To, From>(object)) {
+//        return reinterpret_cast<To *>(object);
+//    }
+//    return nullptr;
+//}
 
 class Vector : public RE, public std::vector<RE*> {
 public:

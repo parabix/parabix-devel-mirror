@@ -12,8 +12,15 @@
 namespace pablo {
 
 class ScanThru : public  PabloE {
+    friend PabloE * make_scanthru(PabloE *, PabloE *);
 public:
-    ScanThru(PabloE* from, PabloE* thru)
+    static inline bool classof(const PabloE * e) {
+        return e->getClassTypeId() == ClassTypeId::ScanThru;
+    }
+    static inline bool classof(const void *) {
+        return false;
+    }
+    ScanThru(PabloE * from, PabloE * thru)
     : PabloE(ClassTypeId::ScanThru)
     , mScanFrom(from)
     , mScanThru(thru)
@@ -34,9 +41,13 @@ public:
         return mScanThru;
     }
 private:
-    PabloE* mScanFrom;
-    PabloE* mScanThru;
+    PabloE * const mScanFrom;
+    PabloE * const mScanThru;
 };
+
+inline PabloE * make_scanthru(PabloE * from, PabloE * thru) {
+    return new ScanThru(from, thru);
+}
 
 }
 

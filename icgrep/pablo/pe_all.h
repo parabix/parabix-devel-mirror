@@ -12,13 +12,13 @@
 namespace pablo {
 
 class All : public PabloE {
+    friend All * make_all(bool value);
 public:
-
-    All(const bool value)
-    : PabloE(ClassTypeId::All)
-    , mValue(value)
-    {
-
+    static inline bool classof(const PabloE * e) {
+        return e->getClassTypeId() == ClassTypeId::All;
+    }
+    static inline bool classof(const void *) {
+        return false;
     }
 
     virtual ~All() {
@@ -28,14 +28,20 @@ public:
     inline bool getValue() const {
         return mValue;
     }
+protected:
+    All(const bool value)
+    : PabloE(ClassTypeId::All)
+    , mValue(value)
+    {
 
-    inline void setValue(const bool value) {
-        mValue = value;
     }
-
 private:
-    bool mValue;
+    const bool mValue;
 };
+
+inline All * make_all(bool value) {
+    return new All(value);
+}
 
 }
 

@@ -52,7 +52,7 @@ set(Boost_USE_MULTITHREADED OFF)
 set(Boost_USE_STATIC_RUNTIME OFF) 
 include(FindBoost)
 
-add_library(PabloADT pablo/pablo_routines.cpp pablo/pe_advance.cpp pablo/pe_all.cpp pablo/pe_and.cpp pablo/pe_call.cpp pablo/pe_charclass.cpp  pablo/pe_matchstar.cpp pablo/pe_scanthru.cpp pablo/pe_not.cpp  pablo/pe_or.cpp  pablo/pe_pabloe.cpp  pablo/pe_sel.cpp  pablo/pe_var.cpp  pablo/pe_xor.cpp pablo/ps_assign.cpp  pablo/ps_if.cpp  pablo/ps_pablos.cpp  pablo/ps_while.cpp printer_pablos.cpp)
+add_library(PabloADT pablo/pe_advance.cpp pablo/pe_all.cpp pablo/pe_and.cpp pablo/pe_call.cpp pablo/pe_charclass.cpp  pablo/pe_matchstar.cpp pablo/pe_scanthru.cpp pablo/pe_not.cpp  pablo/pe_or.cpp  pablo/pe_pabloe.cpp  pablo/pe_sel.cpp  pablo/pe_var.cpp  pablo/pe_xor.cpp pablo/ps_assign.cpp  pablo/ps_if.cpp  pablo/ps_pablos.cpp  pablo/ps_while.cpp printer_pablos.cpp)
 
 add_library(RegExpADT re/re_alt.cpp re/re_cc.cpp re/re_end.cpp re/re_name.cpp re/re_parser.cpp re/re_re.cpp re/re_rep.cpp re/re_seq.cpp re/re_start.cpp re/parsefailure.cpp re/re_reducer.cpp re/re_nullable.cpp re/re_simplifier.cpp re/re_compiler.cpp re/symbol_generator.cpp printer_re.cpp)
 
@@ -102,7 +102,16 @@ else()
   endif()
 endif()
 
-#Check compiler and system support for SSE or AVX
+#Disable RunTime Type Information
+
+IF (MSVC) # using Visual Studio C++ 
+  SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /GR-")
+ELSE() # using Clang, GCC, Intel C++, etc
+  SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-rtti")
+ENDIF()
+
+
+#Check compiler and system architecture support for SSE or AVX
 include(CheckCXXSourceRuns)
 
 set(SSE1_CODE "
@@ -229,7 +238,7 @@ if (BLOCK_SIZE_256)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DUSE_S2P_AVX2 -DBLOCK_SIZE=256 -march=core-avx2 -mavx2 -m64 -fabi-version=6")
 endif()
 
-SET(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3 -DNDEBUG")
+SET(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS} -O3 -DNDEBUG")
 
 add_test(
   NAME greptest

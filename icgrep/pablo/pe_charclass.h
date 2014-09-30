@@ -12,27 +12,35 @@
 
 namespace pablo {
 
-class CharClass : public PabloE
-{
+class CharClass : public PabloE {
+    friend CharClass * make_charclass(const std::string cc);
 public:
-    CharClass(std::string charClass)
+    static inline bool classof(const PabloE * e) {
+        return e->getClassTypeId() == ClassTypeId::CharClass;
+    }
+    static inline bool classof(const void *) {
+        return false;
+    }
+    virtual ~CharClass(){
+
+    }
+    inline const std::string & getCharClass() const {
+        return mCharClass;
+    }
+protected:
+    CharClass(const std::string charClass)
     : PabloE(ClassTypeId::CharClass)
     , mCharClass(charClass)
     {
 
     }
-
-    virtual ~CharClass(){
-
-    }
-
-    inline const std::string & getCharClass() const {
-        return mCharClass;
-    }
-
 private:
     const std::string mCharClass;
 };
+
+inline CharClass * make_charclass(const std::string cc) {
+    return new CharClass(cc);
+}
 
 }
 

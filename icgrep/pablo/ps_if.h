@@ -15,14 +15,16 @@ namespace pablo {
 class If : public PabloE {
 public:
     typedef std::list<PabloE*> List;
+    friend If * make_if(PabloE * expr, List psl);
 
-    If(PabloE * expr, List psl)
-    : PabloE(ClassTypeId::If)
-    , mExpr(expr)
-    , mPSList(psl)
-    {
-
+    static inline bool classof(const PabloE * e) {
+        return e->getClassTypeId() == ClassTypeId::If;
     }
+    static inline bool classof(const void *) {
+        return false;
+    }
+
+
 
     virtual ~If() {
         delete mExpr;
@@ -38,11 +40,22 @@ public:
     inline const List & getPSList() const {
         return mPSList;
     }
+protected:
+    If(PabloE * expr, List psl)
+    : PabloE(ClassTypeId::If)
+    , mExpr(expr)
+    , mPSList(psl)
+    {
 
+    }
 private:
-    PabloE* mExpr;
-    List mPSList;
+    PabloE * const mExpr;
+    List           mPSList;
 };
+
+inline If * make_if(PabloE * expr, If::List statements) {
+    return new If(expr, statements);
+}
 
 }
 

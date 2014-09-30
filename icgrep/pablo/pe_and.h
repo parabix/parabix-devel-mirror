@@ -12,13 +12,13 @@
 namespace pablo {
 
 class And : public PabloE {
+    friend PabloE * make_and(PabloE *, PabloE *);
 public:
-    And(PabloE * expr1, PabloE * expr2)
-    : PabloE(ClassTypeId::And)
-    , mExpr1(expr1)
-    , mExpr2(expr2)
-    {
-
+    static inline bool classof(const PabloE * e) {
+        return e->getClassTypeId() == ClassTypeId::And;
+    }
+    static inline bool classof(const void *) {
+        return false;
     }
     virtual ~And() {
         delete mExpr1;
@@ -30,10 +30,20 @@ public:
     PabloE * getExpr2() const {
         return mExpr2;
     }
+protected:
+    And(PabloE * expr1, PabloE * expr2)
+    : PabloE(ClassTypeId::And)
+    , mExpr1(expr1)
+    , mExpr2(expr2)
+    {
+
+    }
 private:
-    PabloE* mExpr1;
-    PabloE* mExpr2;
+    PabloE * const mExpr1;
+    PabloE * const mExpr2;
 };
+
+PabloE * make_and(PabloE * expr1, PabloE * expr2);
 
 }
 
