@@ -7,11 +7,6 @@ provide fodder for some simple
 regexp tests.
 </datafile>
 
-<grepcase regexp="fe|si" datafile="simple1" grepcount="3"/>
-<grepcase regexp="in" datafile="simple1" grepcount="2"/>
-<grepcase regexp="[A-Z]" datafile="simple1" grepcount="1"/>
-<grepcase regexp="fodder|simple" datafile="simple1" grepcount="2"/>
-
 <datafile id="bounded_charclass">
 =a;
 =bb;
@@ -40,14 +35,6 @@ regexp tests.
 =yyyyyyyyyyyyyyyyyyyyyyyyy;
 =zzzzzzzzzzzzzzzzzzzzzzzzzz;
 </datafile>
-<grepcase regexp="[cde]{3}" datafile="bounded_charclass" grepcount="3"/>
-<grepcase regexp="[f-h]{5}" datafile="bounded_charclass" grepcount="3"/>
-<grepcase regexp="[a-z]{5}" datafile="bounded_charclass" grepcount="22"/>
-<grepcase regexp="[a-z]{5,15}" datafile="bounded_charclass" grepcount="22"/>
-<grepcase regexp="=[a-z]{7,}" datafile="bounded_charclass" grepcount="20"/>
-<grepcase regexp="=[a-z]{5,15};" datafile="bounded_charclass" grepcount="11"/>
-<grepcase regexp="[wxy]{2}{3}{2}" datafile="bounded_charclass" grepcount="3"/>
-<grepcase regexp="=([a-z][c-z])*;" datafile="bounded_charclass" grepcount="12"/>
 
 <datafile id="RangeAltSeqMatchStarKplusWhileNotOptAny">
 Dogbe hat ,/R Cat dt bt bt bt bt bat MzzzzzzzzT MaT MT McT MdT MeT M0T M1T M2T M3T M4T
@@ -61,15 +48,6 @@ Natatatats Nats T M0T ed bazbzczdzt et
 Dfg dc fog Nt ezt
 MazazazazazazazT
 </datafile>
-
-<grepcase regexp="^D[zabcdefoy]g" datafile="RangeAltSeqMatchStarKplusWhileNotOptAny" grepcount="7"/>
-<grepcase regexp="do*c|ez*t" datafile="RangeAltSeqMatchStarKplusWhileNotOptAny" grepcount="4"/>
-<grepcase regexp="M(az)*T" datafile="RangeAltSeqMatchStarKplusWhileNotOptAny" grepcount="6"/>          
-<grepcase regexp="ez+t" datafile="RangeAltSeqMatchStarKplusWhileNotOptAny" grepcount="2" />
-<grepcase regexp="b([a-d]z)*t" datafile="RangeAltSeqMatchStarKplusWhileNotOptAny" grepcount="2"/>
-<grepcase regexp="[^D]og" datafile="RangeAltSeqMatchStarKplusWhileNotOptAny" grepcount="2"/>
-<grepcase regexp="Na?t" datafile="RangeAltSeqMatchStarKplusWhileNotOptAny" grepcount="2"/>
-<grepcase regexp="h.t" datafile="RangeAltSeqMatchStarKplusWhileNotOptAny" grepcount="3" />
 
 <datafile id="StartEndAlt">
 The ever-growing social networks and social media provide invaluable 
@@ -89,8 +67,6 @@ of different networks are jointly considered. Finally, I will explain our
 research on finding social spammers in large social networks.
 </datafile>
 
-<grepcase regexp="^user|^I|our$" datafile="StartEndAlt" grepcount="5"/>
-
 <datafile id="special_characters">
 The ] character may appear as the first character inside character class
 expressions such as []>)].
@@ -109,12 +85,6 @@ The above line does not match [^-].
 ----------
 ]]]]]]]]]]
 </datafile>
-<grepcase regexp="[]]" datafile="special_characters" grepcount="9"/>
-<grepcase regexp="[-]" datafile="special_characters" grepcount="8"/>
-<grepcase regexp="[^]]" datafile="special_characters" grepcount="15"/>
-<grepcase regexp="[^-]" datafile="special_characters" grepcount="14"/>
-<grepcase regexp="[^]-]" datafile="special_characters" grepcount="13"/>
-
 
 <datafile id="ips">  
 201.250.180.213
@@ -180,8 +150,6 @@ The above line does not match [^-].
 173.233.196.71
 </datafile>
 
-<grepcase regexp="^((([2][5][0-5]|([2][0-4]|[1][0-9]|[0-9])?[0-9])[.]){3})([2][5][0-5]|([2][0-4]|[1][0-9]|[0-9])?[0-9])$" datafile="ips" grepcount="60"/>
-
 <datafile id = "CRLF">line with CRLF &#13;&#10;two lines with LFCR &#10;&#13;final line
 </datafile>
  <grepcase regexp="^$" datafile="CRLF" grepcount="1"/>
@@ -191,6 +159,43 @@ The above line does not match [^-].
 The following line has LATIN CAPITAL LETTER G WITH MACRON in single quotes.
 '&#x1E20;'
 </datafile>
+
+<grepcase regexp="ab" datafile="StartEndAlt" grepcount="4"/>
+<grepcase regexp="a*b" datafile="StartEndAlt" grepcount="10"/>
+<grepcase regexp="ab*" datafile="StartEndAlt" grepcount="15"/>
+<grepcase regexp="^user|^I|our$" datafile="StartEndAlt" grepcount="5"/>
+
+<grepcase regexp="fe|si" datafile="simple1" grepcount="3"/>
+<grepcase regexp="in" datafile="simple1" grepcount="2"/>
+<grepcase regexp="[A-Z]" datafile="simple1" grepcount="1"/>
+<grepcase regexp="fodder|simple" datafile="simple1" grepcount="2"/>
+
+<grepcase regexp="[cde]{3}" datafile="bounded_charclass" grepcount="3"/>
+<grepcase regexp="[f-h]{5}" datafile="bounded_charclass" grepcount="3"/>
+<grepcase regexp="[a-z]{5}" datafile="bounded_charclass" grepcount="22"/>
+<grepcase regexp="[a-z]{5,15}" datafile="bounded_charclass" grepcount="22"/>
+<grepcase regexp="=[a-z]{7,}" datafile="bounded_charclass" grepcount="20"/>
+<grepcase regexp="=[a-z]{5,15};" datafile="bounded_charclass" grepcount="11"/>
+<grepcase regexp="[wxy]{2}{3}{2}" datafile="bounded_charclass" grepcount="3"/>
+<grepcase regexp="=([a-z][c-z])*;" datafile="bounded_charclass" grepcount="12"/>
+
+<grepcase regexp="^D[zabcdefoy]g" datafile="RangeAltSeqMatchStarKplusWhileNotOptAny" grepcount="7"/>
+<grepcase regexp="do*c|ez*t" datafile="RangeAltSeqMatchStarKplusWhileNotOptAny" grepcount="4"/>
+<grepcase regexp="M(az)*T" datafile="RangeAltSeqMatchStarKplusWhileNotOptAny" grepcount="6"/>          
+<grepcase regexp="ez+t" datafile="RangeAltSeqMatchStarKplusWhileNotOptAny" grepcount="2" />
+<grepcase regexp="b([a-d]z)*t" datafile="RangeAltSeqMatchStarKplusWhileNotOptAny" grepcount="2"/>
+<grepcase regexp="[^D]og" datafile="RangeAltSeqMatchStarKplusWhileNotOptAny" grepcount="2"/>
+<grepcase regexp="Na?t" datafile="RangeAltSeqMatchStarKplusWhileNotOptAny" grepcount="2"/>
+<grepcase regexp="h.t" datafile="RangeAltSeqMatchStarKplusWhileNotOptAny" grepcount="3" />
+
+<grepcase regexp="[]]" datafile="special_characters" grepcount="9"/>
+<grepcase regexp="[-]" datafile="special_characters" grepcount="8"/>
+<grepcase regexp="[^]]" datafile="special_characters" grepcount="15"/>
+<grepcase regexp="[^-]" datafile="special_characters" grepcount="14"/>
+<grepcase regexp="[^]-]" datafile="special_characters" grepcount="13"/>
+
+<grepcase regexp="^((([2][5][0-5]|([2][0-4]|[1][0-9]|[0-9])?[0-9])[.]){3})([2][5][0-5]|([2][0-4]|[1][0-9]|[0-9])?[0-9])$" datafile="ips" grepcount="60"/>
+
 <!-- . should match a unique character, even if it is 3 bytes. -->
 <grepcase regexp="'.'" datafile="LU_test" grepcount="1"/>
 <grepcase regexp="'...'" datafile="LU_test" grepcount="0"/>
