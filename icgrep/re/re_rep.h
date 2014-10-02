@@ -31,7 +31,7 @@ public:
     void setUB(const int ub);
     virtual ~Rep();
 protected:
-    friend Rep * makeRep(RE *, const int, const int);
+    friend RE * makeRep(RE *, const int, const int);
     Rep(RE * re, const int lb, const int ub);
     Rep(const Rep & rep);
 private:
@@ -86,9 +86,7 @@ inline void Rep::setUB(const int ub) {
     mUB = ub;
 }
 
-inline Rep * makeRep(RE * re, const int lower_bound, const int upper_bound) {
-    return new Rep(re, lower_bound, upper_bound);
-}
+RE * makeRep(RE * re, const int lower_bound, const int upper_bound);
 
 }
 

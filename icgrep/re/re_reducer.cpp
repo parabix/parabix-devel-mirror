@@ -11,7 +11,6 @@
 namespace re {
 
 RE * RE_Reducer::reduce(RE * re, std::map<std::string, RE*>& re_map) {
-    RE * retVal = re;
     assert (re);
     if (Alt * alt = dyn_cast<Alt>(re)) {
         for (auto i = alt->begin(); i != alt->end(); ++i) {
@@ -26,7 +25,7 @@ RE * RE_Reducer::reduce(RE * re, std::map<std::string, RE*>& re_map) {
             //If this is a sequence of byte classes then this is a multibyte sequence for a Unicode character class.
             std::string seqname = seq->getName();
             re_map.insert(make_pair(seqname, seq));
-            retVal = makeName(seqname, false, Name::Type::Unicode);
+            re = makeName(seqname, false, Name::Type::Unicode);
         }
     }
     else if (Rep * rep = dyn_cast<Rep>(re)) {
@@ -37,9 +36,9 @@ RE * RE_Reducer::reduce(RE * re, std::map<std::string, RE*>& re_map) {
         //If the character class isn't in the map then add it.
         re_map.insert(make_pair(ccname, cc));
         //return a new name class with the name of the character class.
-        retVal = makeName(ccname);
+        re = makeName(ccname);
     }
-    return retVal;
+    return re;
 }
 
 }

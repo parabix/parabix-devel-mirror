@@ -17,8 +17,6 @@ private:
     static bool isNullable(const Vector * vec);
     static bool hasNullablePrefix(const RE * re);
     static bool hasNullableSuffix(const RE * re);
-    static Seq * removeNullablePrefix(Seq * seq);
-    static Seq * removeNullableSuffix(Seq * seq);
 };
 
 }

@@ -197,12 +197,12 @@ inline void RE_Compiler::compile(Alt * alt, CodeGenState & cg_state) {
         const std::string startsym = cg_state.newsym;
         compile(*i, cg_state);
         while (++i != alt->end()) {
-            std::string oldsym = cg_state.newsym;
+            std::string alt1 = cg_state.newsym;
             cg_state.newsym = startsym;
             compile(*i, cg_state);
-            std::string altsym = symgen.get("alt");
-            cg_state.stmtsl.push_back(make_assign(altsym, make_or(make_var(oldsym), make_var(cg_state.newsym))));
-            cg_state.newsym = altsym;
+            std::string newsym = symgen.get("alt");
+            cg_state.stmtsl.push_back(make_assign(newsym, make_or(make_var(alt1), make_var(cg_state.newsym))));
+            cg_state.newsym = newsym;
         }
     }
 }

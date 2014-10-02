@@ -11,12 +11,7 @@ class Alt;
 
 class RE_Simplifier {
 public:
-    static RE * simplify(Alt * alt);
-    static RE * simplify(Seq * seq);
-    static RE * simplify(Rep * rep);
     static RE * simplify(RE * re);
-private:
-    static int ubCombine(const int h1, const int h2);
 };
 
 }

@@ -50,6 +50,7 @@ public:
     inline ClassTypeId getClassTypeId() const {
         return mClassTypeId;
     }
+    typedef std::initializer_list<RE *> InitializerList;
     virtual RE * clone() const = 0;
     virtual ~RE() = 0;
 protected:

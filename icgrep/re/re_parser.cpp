@@ -32,29 +32,16 @@ inline RE_Parser::RE_Parser(const std::string & regular_expression, const bool a
 
 }
 
-template<class T>
-inline static RE * simplify_vector(T & vec) {
-    RE * re;
-    if (vec->size() == 1) {
-        re = vec->back();
-        vec->pop_back();
-    }
-    else {
-        re = vec.release();
-    }
-    return re;
-}
-
 RE * RE_Parser::parse_alt(const bool subexpression) {
-    std::unique_ptr<Alt> alt(makeAlt());
+    std::vector<RE *> alt;
     for (;;) {
-        alt->push_back(parse_seq());
+        alt.push_back(parse_seq());
         if (_cursor == _end || *_cursor != '|') {
             break;
         }
         ++_cursor; // advance past the alternation character '|'
     }
-    if (alt->empty())
+    if (alt.empty())
     {
         throw NoRegularExpressionFound();
     }
@@ -67,23 +54,23 @@ RE * RE_Parser::parse_alt(const bool subexpression) {
     else if (_cursor != _end) { // !subexpression
         throw ParseFailure("Cannot fully parse statement!");
     }
-    return simplify_vector(alt);
+    return makeAlt(alt.begin(), alt.end());
 }
 
 inline RE * RE_Parser::parse_seq() {
-    std::unique_ptr<Seq> seq(makeSeq());
+    std::vector<RE *> seq;
     for (;;) {
         RE * re = parse_next_token();
         if (re == nullptr) {
             break;
         }
-        seq->push_back(extend_item(re));
+        seq.push_back(extend_item(re));
     }
-    if (seq->empty())
+    if (seq.empty())
     {
         throw NoRegularExpressionFound();
     }
-    return simplify_vector(seq);
+    return makeSeq(Seq::Type::Normal, seq.begin(), seq.end());
 }
 
 RE * RE_Parser::parse_next_token() {
@@ -158,7 +145,7 @@ RE * RE_Parser::extend_item(RE * re) {
 inline RE * RE_Parser::parse_range_bound(RE * re) {
     ++_cursor;
     throw_incomplete_expression_error_if_end_of_stream();
-    Rep * rep = nullptr;
+    RE * rep = nullptr;
     unsigned lower_bound;
     if (*_cursor == ',') {
         ++_cursor;

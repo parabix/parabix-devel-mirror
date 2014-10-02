@@ -15,6 +15,7 @@
 #include "re/re_simplifier.h"
 
 #include <assert.h>
+#include <algorithm>
 #include <stdexcept>
 
 using namespace re;
@@ -37,15 +38,13 @@ RE * UTF8_Encoder::toUTF8(RE* re) {
     else if (CC * cc = dyn_cast<CC>(re)) {
         if (cc->size() == 1) {
             re = rangeToUTF8(cc->front());
-            delete cc;
         }
         else if (cc->size() > 1) {
-            Alt * alt = makeAlt();
+            std::vector<RE *> alt;
             for (const CharSetItem & item : *cc) {
-                alt->push_back(rangeToUTF8(item));
+                alt.push_back(rangeToUTF8(item));
             }
-            re = RE_Simplifier::simplify(alt);
-            delete cc;
+            re = makeAlt(alt.begin(), alt.end());
         }
     }
     else if (Rep * rep = dyn_cast<Rep>(re)) {
@@ -59,10 +58,7 @@ RE * UTF8_Encoder::rangeToUTF8(const CharSetItem & item) {
     int u8len_hi = u8len(item.hi_codepoint);
     if (u8len_lo < u8len_hi) {
         int m = max_of_u8len(u8len_lo);
-        Alt* alt = makeAlt();
-        alt->push_back(rangeToUTF8(CharSetItem(item.lo_codepoint, m)));
-        alt->push_back(rangeToUTF8(CharSetItem(m + 1, item.hi_codepoint)));
-        return alt;
+        return makeAlt({rangeToUTF8(CharSetItem(item.lo_codepoint, m)), rangeToUTF8(CharSetItem(m + 1, item.hi_codepoint))});
     }
     else {
         return rangeToUTF8_helper(item.lo_codepoint, item.hi_codepoint, 1, u8len_hi);
@@ -80,8 +76,7 @@ RE* UTF8_Encoder::rangeToUTF8_helper(int lo, int hi, int n, int hlen)
     }
     else if (hbyte == lbyte)
     {
-        Seq* seq = makeSeq();
-        seq->setType((u8Prefix(hbyte) ? Seq::Type::Byte : Seq::Type::Normal));
+        Seq* seq = makeSeq(u8Prefix(hbyte) ? Seq::Type::Byte : Seq::Type::Normal);
         seq->push_back(makeByteClass(hbyte));
         seq->push_back(rangeToUTF8_helper(lo, hi, n+1, hlen));
         return seq;
@@ -93,11 +88,7 @@ RE* UTF8_Encoder::rangeToUTF8_helper(int lo, int hi, int n, int hlen)
         if ((hi & suffix_mask) != suffix_mask)
         {
             int hi_floor = (~suffix_mask) & hi;
-
-            Alt* alt = makeAlt();
-            alt->push_back(rangeToUTF8_helper(hi_floor, hi, n, hlen));
-            alt->push_back(rangeToUTF8_helper(lo, hi_floor - 1, n, hlen));
-            return alt;
+            return makeAlt({rangeToUTF8_helper(hi_floor, hi, n, hlen), rangeToUTF8_helper(lo, hi_floor - 1, n, hlen)});
         }
         else if ((lo & suffix_mask) != 0)
         {

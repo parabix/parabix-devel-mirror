@@ -9,6 +9,7 @@
 
 #include "re_re.h"
 #include <string>
+#include <initializer_list>
 
 namespace re {
 
@@ -33,11 +34,11 @@ public:
     }
     inline void setType(const Type type) {
         mType = type;
-    }
+    }    
     virtual ~Seq() {}
 protected:
     friend Seq * makeSeq(const Seq::Type);
-    friend Seq * makeSeq(const Seq::Type, Seq::iterator, Seq::iterator);
+    template<typename iterator> friend RE * makeSeq(const Seq::Type, iterator, iterator);
     Seq(const Type type)
     : Vector(ClassTypeId::Seq)
     , mType(type) {
@@ -54,6 +55,7 @@ protected:
     {
 
     }
+    template<typename itr> void construct(itr begin, itr end);
 private:
     Type    mType;
 };
@@ -62,8 +64,29 @@ inline Seq * makeSeq(const Seq::Type type = Seq::Type::Normal) {
     return new Seq(type);
 }
 
-inline Seq * makeSeq(const Seq::Type type, Seq::iterator begin, Seq::iterator end) {
-    return new Seq(type, begin, end);
+template<typename itr>
+void Seq::construct(itr begin, itr end) {
+    for (auto i = begin; i != end; ++i) {
+        if (Seq * seq = dyn_cast<Seq>(*i)) {
+            construct<Seq::iterator>(seq->begin(), seq->end());
+            continue;
+        }
+        push_back(*i);
+    }
+}
+
+template<typename itr>
+inline RE * makeSeq(const Seq::Type type, itr begin, itr end) {
+    Seq * seq = makeSeq(type);
+    seq->construct(begin, end);
+    if (seq->size() == 1) {
+        return seq->back();
+    }
+    return seq;
+}
+
+inline RE * makeSeq(RE::InitializerList list) {
+    return makeSeq(Seq::Type::Normal, list.begin(), list.end());
 }
 
 }

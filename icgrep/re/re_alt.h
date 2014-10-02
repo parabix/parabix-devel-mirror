@@ -8,6 +8,8 @@
 #define ALT_H
 
 #include "re_re.h"
+#include "re_cc.h"
+#include <queue>
 
 namespace re {
 
@@ -24,27 +26,67 @@ public:
     }
 protected:
     friend Alt * makeAlt();
-    friend Alt * makeAlt(Alt::iterator, Alt::iterator);
+    template<typename iterator> friend RE * makeAlt(iterator, iterator);
     Alt()
     : Vector(ClassTypeId::Alt) {
-
-    }
-    Alt(const Alt & alt)
-    : Vector(ClassTypeId::Alt, alt.cbegin(), alt.cend(), true) {
 
     }
     Alt(iterator begin, iterator end)
     : Vector(ClassTypeId::Alt, begin, end) {
 
+    }    
+private:
+    template<typename iterator>
+    void construct(iterator begin, iterator end, std::queue<CC*> & ccQ) {
+        for (auto i = begin; i != end; ++i) {
+            if (Alt * alt = dyn_cast<Alt>(*i)) {
+                construct(alt->begin(), alt->end(), ccQ);
+                continue;
+            }
+            else if (CC * cc = dyn_cast<CC>(*i)) {
+                ccQ.push(cc);
+                continue;
+            }
+            push_back(*i);
+        }
     }
 };
+
+/**
+ * @brief makeAlt
+ *
+ * Build an Alt, flattening alternative subgroups, and combining character classes and
+ * move character classes towards the end of the list to ensure that all combinations are found.
+ *
+ * @param list
+ * @return simplified RE representing the Alt
+ */
 
 inline Alt * makeAlt() {
     return new Alt();
 }
 
-inline Alt * makeAlt(Alt::iterator begin, Alt::iterator end) {
-    return new Alt(begin, end);
+template<typename iterator>
+RE * makeAlt(iterator begin, iterator end) {
+    Alt * alt = makeAlt();
+    std::queue<CC*> ccQ;
+    alt->construct(begin, end, ccQ);
+    if (!ccQ.empty()) {
+        while (ccQ.size() > 1) {
+            CC * a = ccQ.front(); ccQ.pop();
+            CC * b = ccQ.front(); ccQ.pop();
+            ccQ.push(makeCC(a, b));
+        }
+        alt->push_back(ccQ.front());
+    }
+    if (alt->size() == 1) {
+        return alt->back();
+    }
+    return alt;
+}
+
+inline RE * makeAlt(RE::InitializerList list) {
+    return makeAlt(list.begin(), list.end());
 }
 
 }
