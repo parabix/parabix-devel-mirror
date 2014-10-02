@@ -19,18 +19,16 @@ namespace re {
 class RE_Compiler {
 public:
     RE_Compiler(std::map<std::string, std::string> name_map);
-    CodeGenState compile(RE *re);
-    CodeGenState compile_subexpressions(const std::map<std::string, RE*>& re_map);
+    pablo::CodeGenState compile(RE *re);
+    pablo::CodeGenState compile_subexpressions(const std::map<std::string, RE*>& re_map);
 private:
-    void compile(RE * re, CodeGenState & cg_state);
-    void compile(Alt * alt, CodeGenState & cg_state);
-    void compile(Seq * seq, CodeGenState & cg_state);
-    void compile(Rep * rep, CodeGenState & cg_state);
-    void compileUnboundedRep(RE * repeated, int lb, CodeGenState  & cg_state);
-    void compileBoundedRep(RE * repeated, int lb, int ub, CodeGenState &cg_state);
-    void compile(Name * name, CodeGenState & cg_state);
-
-
+    void compile(RE * re, pablo::CodeGenState & cg_state);
+    void compile(Alt * alt, pablo::CodeGenState & cg_state);
+    void compile(Seq * seq, pablo::CodeGenState & cg_state);
+    void compile(Rep * rep, pablo::CodeGenState & cg_state);
+    void compileUnboundedRep(RE * repeated, int lb, pablo::CodeGenState  & cg_state);
+    void compileBoundedRep(RE * repeated, int lb, int ub, pablo::CodeGenState &cg_state);
+    void compile(Name * name, pablo::CodeGenState & cg_state);
 
     static bool hasUnicode(const RE *re);
 

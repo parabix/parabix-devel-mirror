@@ -21,9 +21,6 @@ public:
     static inline bool classof(const void *) {
         return false;
     }
-    virtual RE * clone() const {
-        return new Seq(*this);
-    }
     enum class Type {
         Normal
         , Byte
@@ -42,11 +39,6 @@ protected:
     Seq(const Type type)
     : Vector(ClassTypeId::Seq)
     , mType(type) {
-
-    }
-    Seq(const Seq & seq)
-    : Vector(ClassTypeId::Seq, seq.cbegin(), seq.cend(), true)
-    , mType(seq.mType) {
 
     }
     Seq(const Type type, iterator begin, iterator end)

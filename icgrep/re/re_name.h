@@ -14,9 +14,6 @@ public:
     static inline bool classof(const void *) {
         return false;
     }
-    virtual RE * clone() const {
-        return new Name(*this);
-    }
     enum class Type {
         FixedLength
         ,Unicode
@@ -34,7 +31,6 @@ protected:
     friend Name * makeName(const Name *);
     friend Name * makeName(std::string, const bool, const Type);
     Name();
-    Name(const Name & name);
     Name(std::string name, const bool negated, const Type type);
 private:
     std::string mName;
@@ -55,14 +51,6 @@ inline Name::Name(std::string name, const bool negated, const Type type)
 , mName(name)
 , mNegated(negated)
 , mType(type) {
-
-}
-
-inline Name::Name(const Name &name)
-: RE(ClassTypeId::Name)
-, mName(name.getName())
-, mNegated(name.isNegated())
-, mType(name.getType()) {
 
 }
 

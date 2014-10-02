@@ -21,9 +21,6 @@ public:
     static inline bool classof(const void *) {
         return false;
     }
-    virtual RE * clone() const {
-        return new Start();
-    }
 protected:
     friend Start * makeStart();
     Start() : RE(ClassTypeId::Start) {}

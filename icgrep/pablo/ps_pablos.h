@@ -9,11 +9,16 @@
 
 #include <list>
 #include <string>
-#include "pe_pabloe.h"
+
+namespace pablo {
+
+class PabloE;
 
 struct CodeGenState{
-    std::list<pablo::PabloE *>  stmtsl;
-    std::string                 newsym;
+    std::list<PabloE *>  stmtsl;
+    std::string          newsym;
 };
+
+}
 
 #endif // PS_PABLOS_H

@@ -7,7 +7,7 @@
 #ifndef PS_SCANTHRU_H
 #define PS_SCANTHRU_H
 
-#include "ps_pablos.h"
+#include <pablo/pe_pabloe.h>
 
 namespace pablo {
 

@@ -6,6 +6,7 @@
 
 #include "printer_pablos.h"
 
+
 //Regular Expressions
 #include <re/re_re.h>
 #include <re/re_cc.h>
@@ -16,6 +17,7 @@
 
 //Pablo Expressions
 #include <pablo/pe_pabloe.h>
+#include <pablo/ps_pablos.h>
 #include <pablo/pe_advance.h>
 #include <pablo/pe_all.h>
 #include <pablo/pe_and.h>

@@ -34,9 +34,6 @@ public:
     static inline bool classof(const void *) {
         return false;
     }
-    virtual RE * clone() const {
-        return new CC(*this);
-    }
 
     typedef CharSetVector::iterator                 iterator;
     typedef CharSetVector::const_iterator           const_iterator;

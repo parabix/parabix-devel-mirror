@@ -7,7 +7,7 @@
 #ifndef PS_WHILE_H
 #define PS_WHILE_H
 
-#include "ps_pablos.h"
+#include <pablo/pe_pabloe.h>
 #include <list>
 
 namespace pablo {

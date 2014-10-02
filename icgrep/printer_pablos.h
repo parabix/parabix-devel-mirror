@@ -11,15 +11,19 @@
 #include <string>
 #include <list>
 
+namespace pablo {
+    class PabloE;
+    class CodeGenState;
+}
+
 class StatementPrinter {
-    typedef pablo::PabloE       PabloE;
-    typedef std::list<PabloE *> List;
+    typedef std::list<pablo::PabloE *> List;
 public:
-    static std::string PrintStmts(const CodeGenState  &cg_state);
+    static std::string PrintStmts(const pablo::CodeGenState & cg_state);
     static std::string Print_CC_PabloStmts(const List & stmts);
     static std::string Print_PB_PabloStmts(const List & stmts, std::string strOut);
-    static std::string ShowPabloE(const PabloE * expr);
-    static std::string ShowPabloS(const PabloE *stmt);
+    static std::string ShowPabloE(const pablo::PabloE * expr);
+    static std::string ShowPabloS(const pablo::PabloE *stmt);
 };
 
 #endif // SHOW_H

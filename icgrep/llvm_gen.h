@@ -73,6 +73,7 @@
 #include "include/simd-lib/bitblock.hpp"
 
 using namespace llvm;
+using namespace pablo;
 
 struct LLVM_Gen_RetVal
 {
@@ -86,7 +87,6 @@ struct SumWithOverflowPack {
 };
 
 class LLVM_Generator {
-    typedef pablo::PabloE       PabloE;
     typedef std::list<PabloE *> List;
 public:
     LLVM_Generator(std::map<std::string, std::string> name_map, std::string basis_pattern, int bits);

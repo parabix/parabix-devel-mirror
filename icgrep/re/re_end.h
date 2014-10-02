@@ -19,9 +19,6 @@ public:
     static inline bool classof(const void *) {
         return false;
     }
-    virtual RE * clone() const {
-        return new End();
-    }
     virtual ~End() {}
 protected:
     friend End * makeEnd();

@@ -51,7 +51,6 @@ public:
         return mClassTypeId;
     }
     typedef std::initializer_list<RE *> InitializerList;
-    virtual RE * clone() const = 0;
     virtual ~RE() = 0;
 protected:
     inline RE(const ClassTypeId id)
@@ -60,19 +59,6 @@ protected:
     }
     const ClassTypeId mClassTypeId;
 };
-
-//template <typename To, typename From>
-//inline static bool isa(const From * object) {
-//    return To::classof(object);
-//}
-
-//template <typename To, typename From>
-//inline static To * dyn_cast(From * object) {
-//    if (isa<To, From>(object)) {
-//        return reinterpret_cast<To *>(object);
-//    }
-//    return nullptr;
-//}
 
 class Vector : public RE, public std::vector<RE*> {
 public:
@@ -92,14 +78,6 @@ protected:
     : RE(id)
     , std::vector<RE*>(begin, end) {
 
-    }
-    inline Vector(const ClassTypeId id, const const_iterator begin, const const_iterator end, const bool deep_copy)
-    : RE(id) {
-        assert (deep_copy && "Not intended as a shallow copy constructor.");
-        this->resize(std::distance(begin, end));
-        for (auto i = begin; i != end; ++i) {
-            this->assign(std::distance(begin, i), (*i)->clone());
-        }
     }
 };
 

@@ -19,9 +19,6 @@ public:
     static inline bool classof(const void *) {
         return false;
     }
-    virtual RE * clone() const {
-        return new Rep(*this);
-    }
     enum { UNBOUNDED_REP = -1 };
     RE * getRE() const;
     void setRE(RE * re = nullptr);
@@ -33,7 +30,6 @@ public:
 protected:
     friend RE * makeRep(RE *, const int, const int);
     Rep(RE * re, const int lb, const int ub);
-    Rep(const Rep & rep);
 private:
     RE* mRE;
     int mLB;
@@ -45,15 +41,6 @@ inline Rep::Rep(RE * re, const int lb, const int ub)
 , mRE(re)
 , mLB(lb)
 , mUB(ub)
-{
-
-}
-
-inline Rep::Rep(const Rep & rep)
-: RE(ClassTypeId::Rep)
-, mRE(rep.getRE()->clone())
-, mLB(rep.getLB())
-, mUB(rep.getUB())
 {
 
 }
