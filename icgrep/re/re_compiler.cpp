@@ -16,7 +16,7 @@
 
 
 //Pablo Expressions
-#include <pablo/ps_pablos.h>
+#include <pablo/codegenstate.h>
 #include <pablo/pe_advance.h>
 #include <pablo/pe_all.h>
 #include <pablo/pe_and.h>
@@ -30,7 +30,6 @@
 #include <pablo/pe_sel.h>
 #include <pablo/pe_var.h>
 #include <pablo/pe_xor.h>
-#include <pablo/ps_pablos.h>
 #include <pablo/ps_assign.h>
 #include <pablo/ps_if.h>
 #include <pablo/ps_while.h>

@@ -6,23 +6,7 @@
 
 #include "llvm_gen.h"
 //Pablo Expressions
-#include <pablo/pe_advance.h>
-#include <pablo/pe_all.h>
-#include <pablo/pe_and.h>
-#include <pablo/pe_call.h>
-#include <pablo/pe_charclass.h>
-#include <pablo/pe_matchstar.h>
-#include <pablo/pe_not.h>
-#include <pablo/pe_or.h>
-#include <pablo/pe_pabloe.h>
-#include <pablo/pe_scanthru.h>
-#include <pablo/pe_sel.h>
-#include <pablo/pe_var.h>
-#include <pablo/pe_xor.h>
-#include <pablo/ps_pablos.h>
-#include <pablo/ps_assign.h>
-#include <pablo/ps_if.h>
-#include <pablo/ps_while.h>
+#include <pablo/codegenstate.h>
 
 using namespace pablo;
 

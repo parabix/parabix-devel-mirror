@@ -7,7 +7,6 @@
 #ifndef SHOW_H
 #define SHOW_H
 
-#include <pablo/ps_pablos.h>
 #include <string>
 #include <list>
 

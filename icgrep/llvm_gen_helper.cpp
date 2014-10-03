@@ -7,6 +7,7 @@
 #include "llvm_gen_helper.h"
 
 //Pablo Expressions
+#include <pablo/codegenstate.h>
 #include <pablo/pe_pabloe.h>
 #include <pablo/pe_advance.h>
 #include <pablo/pe_and.h>
@@ -17,7 +18,6 @@
 #include <pablo/pe_scanthru.h>
 
 //Pablo Statements
-#include <pablo/ps_pablos.h>
 #include <pablo/ps_assign.h>
 #include <pablo/ps_if.h>
 #include <pablo/ps_while.h>

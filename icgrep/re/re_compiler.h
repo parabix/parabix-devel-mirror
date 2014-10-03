@@ -7,7 +7,7 @@
 #ifndef RE_TO_PABLO_COMPILER_H
 #define RE_TO_PABLO_COMPILER_H
 
-#include <pablo/ps_pablos.h>
+#include <pablo/codegenstate.h>
 #include <re/re_re.h>
 #include <re/symbol_generator.h>
 

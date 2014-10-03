@@ -11,7 +11,7 @@
 #include <list>
 #include <map>
 #include "utf_encoding.h"
-#include <pablo/ps_pablos.h>
+#include <pablo/codegenstate.h>
 #include <pablo/pe_pabloe.h>
 #include <re/re_cc.h>
 

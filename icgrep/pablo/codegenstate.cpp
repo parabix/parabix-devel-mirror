@@ -4,4 +4,4 @@
  *  icgrep is a trademark of International Characters.
  */
 
-#include "ps_pablos.h"
+#include <pablo/codegenstate.h>
