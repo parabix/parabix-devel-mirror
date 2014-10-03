@@ -207,8 +207,21 @@ inline void RE_Compiler::compile(Alt * alt, CodeGenState & cg_state) {
 }
 
 inline void RE_Compiler::compile(Rep * rep, CodeGenState & cg_state) {
-    if (isa<Name>(rep->getRE()) && (rep->getLB() == 0) && (rep->getUB()== Rep::UNBOUNDED_REP)) {
-        Name * rep_name = dyn_cast<Name>(rep->getRE());
+    if (rep->getUB() == Rep::UNBOUNDED_REP) {
+        compileUnboundedRep(rep->getRE(), rep->getLB(), cg_state);
+    }
+    else { // if (rep->getUB() != Rep::UNBOUNDED_REP)
+        compileBoundedRep(rep->getRE(), rep->getLB(), rep->getUB(), cg_state);
+    }
+}
+
+inline void RE_Compiler::compileUnboundedRep(RE * repeated, int lb, CodeGenState & cg_state) {
+    while (lb > 0) {
+        compile(repeated, cg_state);
+	lb--;
+    }
+    if (isa<Name>(repeated)) {
+        Name * rep_name = dyn_cast<Name>(repeated);
         std::string gs_retVal = symgen.get("marker");
 
         PabloE* ccExpr;
@@ -232,30 +245,21 @@ inline void RE_Compiler::compile(Rep * rep, CodeGenState & cg_state) {
                                make_charclass(m_name_map.find("internal.initial")->second))));
         }
         cg_state.newsym = gs_retVal;
+     
     }
-    else if (rep->getUB() == Rep::UNBOUNDED_REP) {
-        compileUnboundedRep(rep->getRE(), rep->getLB(), cg_state);
+    else {
+      std::string while_test = symgen.get("while_test");
+      std::string while_accum = symgen.get("while_accum");
+      CodeGenState while_test_state;
+      while_test_state.newsym = while_test;
+      compile(repeated, while_test_state);
+      cg_state.stmtsl.push_back(make_assign(while_test, make_var(cg_state.newsym)));
+      cg_state.stmtsl.push_back(make_assign(while_accum, make_var(cg_state.newsym)));
+      while_test_state.stmtsl.push_back(make_assign(while_test, make_and(make_var(while_test_state.newsym), make_not(make_var(while_accum)))));
+      while_test_state.stmtsl.push_back(make_assign(while_accum, make_or(make_var(while_accum), make_var(while_test_state.newsym))));
+      cg_state.stmtsl.push_back(new While(make_var(while_test), while_test_state.stmtsl));
+      cg_state.newsym = while_accum;
     }
-    else { // if (rep->getUB() != Rep::UNBOUNDED_REP)
-        compileBoundedRep(rep->getRE(), rep->getLB(), rep->getUB(), cg_state);
-    }
-}
-
-inline void RE_Compiler::compileUnboundedRep(RE * repeated, int lb, CodeGenState & cg_state) {
-    for (; lb; --lb) {
-        compile(repeated, cg_state);
-    }
-    std::string while_test = symgen.get("while_test");
-    std::string while_accum = symgen.get("while_accum");
-    CodeGenState while_test_state;
-    while_test_state.newsym = while_test;
-    compile(repeated, while_test_state);
-    cg_state.stmtsl.push_back(make_assign(while_test, make_var(cg_state.newsym)));
-    cg_state.stmtsl.push_back(make_assign(while_accum, make_var(cg_state.newsym)));
-    while_test_state.stmtsl.push_back(make_assign(while_test, make_and(make_var(while_test_state.newsym), make_not(make_var(while_accum)))));
-    while_test_state.stmtsl.push_back(make_assign(while_accum, make_or(make_var(while_accum), make_var(while_test_state.newsym))));
-    cg_state.stmtsl.push_back(new While(make_var(while_test), while_test_state.stmtsl));
-    cg_state.newsym = while_accum;
 }
 
 inline void RE_Compiler::compileBoundedRep(RE * repeated, int lb, int ub, CodeGenState & cg_state) {

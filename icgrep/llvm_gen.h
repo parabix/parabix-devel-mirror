@@ -10,7 +10,7 @@
 //#define DUMP_GENERATED_IR
 
 //define this indicates that we use llvm.uadd.with.overflow for genAddWithCarry
-#define USE_UADD_OVERFLOW
+//#define USE_UADD_OVERFLOW
 
 //Pablo Expressions
 #include <pablo/codegenstate.h>
