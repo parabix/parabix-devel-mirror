@@ -10,7 +10,7 @@
 #include <string>
 #include <map>
 
-namespace re {
+namespace pablo {
 
 class SymbolGenerator
 {

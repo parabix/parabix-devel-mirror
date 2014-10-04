@@ -9,7 +9,6 @@
 
 #include <pablo/codegenstate.h>
 #include <re/re_re.h>
-#include <re/symbol_generator.h>
 
 #include <string>
 #include <list>
@@ -18,22 +17,24 @@
 namespace re {
 class RE_Compiler {
 public:
-    RE_Compiler(std::map<std::string, std::string> name_map);
-    pablo::CodeGenState compile(RE *re);
-    pablo::CodeGenState compile_subexpressions(const std::map<std::string, RE*>& re_map);
+
+    RE_Compiler(pablo::CodeGenState & baseCG, std::map<std::string, std::string> name_map);
+
+    void compile(RE * re);
+
 private:
-    void compile(RE * re, pablo::CodeGenState & cg_state);
-    void compile(Alt * alt, pablo::CodeGenState & cg_state);
-    void compile(Seq * seq, pablo::CodeGenState & cg_state);
-    void compile(Rep * rep, pablo::CodeGenState & cg_state);
-    void compileUnboundedRep(RE * repeated, int lb, pablo::CodeGenState  & cg_state);
-    void compileBoundedRep(RE * repeated, int lb, int ub, pablo::CodeGenState &cg_state);
-    void compile(Name * name, pablo::CodeGenState & cg_state);
+    void process(RE * re, pablo::CodeGenState & cg_state);
+    void process(Alt * alt, pablo::CodeGenState & cg_state);
+    void process(Seq * seq, pablo::CodeGenState & cg_state);
+    void process(Rep * rep, pablo::CodeGenState & cg_state);
+    void processUnboundedRep(RE * repeated, int lb, pablo::CodeGenState & cg_state);
+    void processBoundedRep(RE * repeated, int lb, int ub, pablo::CodeGenState & cg_state);
+    void process(Name * name, pablo::CodeGenState & cg_state);
 
     static bool hasUnicode(const RE *re);
 
-    SymbolGenerator symgen;
-    std::map<std::string, std::string> m_name_map;
+    pablo::CodeGenState &               mBaseCG;
+    std::map<std::string, std::string>  m_name_map;
 };
 
 }

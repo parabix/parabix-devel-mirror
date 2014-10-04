@@ -29,6 +29,7 @@
 #include <re/re_cc.h>
 #include <re/re_seq.h>
 #include <re/re_rep.h>
+#include <re/re_name.h>
 
 #include <utility>
 #include <string>
@@ -45,8 +46,9 @@ using namespace pablo;
 
 namespace cc {
 
-CC_Compiler::CC_Compiler(const Encoding encoding, const std::string basis_pattern, const std::string gensym_pattern)
-: mEncoding(encoding)
+CC_Compiler::CC_Compiler(CodeGenState & cg, const Encoding encoding, const std::string basis_pattern, const std::string gensym_pattern)
+: mCG(cg)
+, mEncoding(encoding)
 , mGenSymPattern(gensym_pattern)
 , mGenSymCounter(0)
 , mBasisPattern(basis_pattern)
@@ -61,16 +63,38 @@ CC_Compiler::CC_Compiler(const Encoding encoding, const std::string basis_patter
     }
 }
 
+void CC_Compiler::compile(const REMap & re_map) {
+    process_re_map(re_map);
+    for (auto i =  re_map.rbegin(); i != re_map.rend(); ++i) {
+        //This is specifically for the utf8 multibyte character classes.
+        if (Seq * seq = dyn_cast<Seq>(i->second)) {
+            if (seq->getType() == Seq::Type::Byte) {
+                auto j = seq->begin();
+                while (true) {
+                    Name * name = dyn_cast<Name>(*j);
+                    assert (name);
+                    CharClass * cc_mask = makeCharClass(name->getName());
+                    if (++j != seq->end()) {
+                        mCG.push_back(makeAssign(mCG.symgen("marker"), makeAdvance(cc_mask)));
+                    }
+                    else {
+                        mCG.push_back(makeAssign(seq->getName(), cc_mask));
+                        break;
+                    }
+                }
+            }
+        }
+    }
+}
 
-void CC_Compiler::add_predefined(std::string key_value, Expression* mapped_value)
-{
+inline void CC_Compiler::add_predefined(std::string key_value, Expression* mapped_value) {
     mCommon_Expression_Map.insert(make_pair(key_value, mapped_value));
 }
 
 Expression* CC_Compiler::add_assignment(std::string varname, Expression* expr)
 {    
     //Add the new mapping to the list of pablo statements:
-    mStmtsl.push_back(makeAssign(varname, expr->pablo_expr));
+    mCG.push_back(makeAssign(varname, expr->pablo_expr));
 
     //Add the new mapping to the common expression map:
     std::string key_value = expr->expr_string;
@@ -91,16 +115,6 @@ Expression* CC_Compiler::expr_to_variable(Expression * expr) {
     else {
         return add_assignment(mGenSymPattern + std::to_string(++mGenSymCounter), expr);
     }
-}
-
-CC_Compiler::List CC_Compiler::get_compiled()
-{
-    return mStmtsl;
-}
-
-void CC_Compiler::compile_from_map(const REMap &re_map)
-{
-    process_re_map(re_map);
 }
 
 void CC_Compiler::process_re_map(const REMap & re_map) {

@@ -4,9 +4,9 @@
  *  icgrep is a trademark of International Characters.
  */
 
-#include "symbol_generator.h"
+#include <pablo/symbol_generator.h>
 
-namespace re {
+namespace pablo {
 
 SymbolGenerator::SymbolGenerator()
 : pfxmap()

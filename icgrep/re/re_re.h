@@ -10,6 +10,7 @@
 #include <vector>
 #include <assert.h>
 #include <llvm/Support/Casting.h>
+//#include <boost/pool/pool_alloc.hpp>
 
 using namespace llvm;
 
@@ -52,20 +53,24 @@ public:
     }
     typedef std::initializer_list<RE *> InitializerList;
     virtual ~RE() = 0;
+
+//    static inline void InitalizeMemory() {
+//    }
+//    static inline void ReleaseMemory() {
+//        Allocator.
+//    }
 protected:
     inline RE(const ClassTypeId id)
     : mClassTypeId(id) {
 
     }
     const ClassTypeId mClassTypeId;
+//    static boost::fast_pool_allocator<RE> Allocator;
 };
 
 class Vector : public RE, public std::vector<RE*> {
 public:
     virtual ~Vector() {
-        for (RE * re : *this) {
-            delete re;
-        }
     }
 protected:
     inline Vector(const ClassTypeId id)
@@ -98,8 +103,6 @@ protected:
 
 //    }
 //    virtual ~Pair() {
-//        delete _lh;
-//        delete _rh;
 //    }
 //protected:
 //    const RE * _lh;

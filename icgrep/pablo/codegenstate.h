@@ -27,10 +27,26 @@
 #include <unordered_map>
 #include <vector>
 #include <string>
+#include <pablo/symbol_generator.h>
 
 namespace pablo {
 
 struct CodeGenState {
+
+    CodeGenState(SymbolGenerator & symgen)
+    : mSymbolGenerator(symgen)
+    , mPredecessor(nullptr)
+    {
+
+    }
+
+    CodeGenState(CodeGenState & cg)
+    : mSymbolGenerator(cg.mSymbolGenerator)
+    , mPredecessor(&cg)
+    {
+
+    }
+
 
 //    PabloE * createAll(const bool value);
 //    PabloE * createAdvance(PabloE * expr);
@@ -103,10 +119,23 @@ struct CodeGenState {
 //    };
 
 
+    inline void push_back(PabloE * expr) {
+        mExpressions.push_back(expr);
+    }
 
+    inline std::string symgen(std::string prefix) {
+        return mSymbolGenerator.get(prefix);
+    }
 
-    std::list<PabloE *>  stmtsl;
-    std::string          newsym;
+    inline const std::list<PabloE *> & expressions() const {
+        return mExpressions;
+    }
+
+    std::string newsym;
+private:
+    std::list<PabloE *>     mExpressions;
+    SymbolGenerator &       mSymbolGenerator;
+    CodeGenState * const    mPredecessor;
 };
 
 }

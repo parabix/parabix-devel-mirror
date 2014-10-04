@@ -47,15 +47,14 @@ llvm_map_components_to_libraries(REQ_LLVM_LIBRARIES mcjit native)
 message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
 
 # Check if boost has been installed on this system.
-set(Boost_USE_STATIC_LIBS ON) 
-set(Boost_USE_MULTITHREADED OFF)  
-set(Boost_USE_STATIC_RUNTIME OFF) 
-include(FindBoost)
-
-add_library(PabloADT pablo/pe_advance.cpp pablo/pe_all.cpp pablo/pe_and.cpp pablo/pe_call.cpp pablo/pe_charclass.cpp  pablo/pe_matchstar.cpp pablo/pe_scanthru.cpp pablo/pe_not.cpp  pablo/pe_or.cpp  pablo/pe_pabloe.cpp  pablo/pe_sel.cpp  pablo/pe_var.cpp  pablo/pe_xor.cpp pablo/ps_assign.cpp  pablo/ps_if.cpp  pablo/codegenstate.cpp  pablo/ps_while.cpp pablo/printer_pablos.cpp)
-
-add_library(RegExpADT re/re_alt.cpp re/re_cc.cpp re/re_end.cpp re/re_name.cpp re/re_parser.cpp re/re_re.cpp re/re_rep.cpp re/re_seq.cpp re/re_start.cpp re/parsefailure.cpp re/re_reducer.cpp re/re_nullable.cpp re/re_simplifier.cpp re/re_compiler.cpp re/symbol_generator.cpp re/printer_re.cpp)
-
+set(Boost_USE_STATIC_LIBS ON)
+set(Boost_USE_MULTITHREADED OFF)
+set(Boost_USE_STATIC_RUNTIME OFF)
+find_package(Boost 1.21 COMPONENTS system)
+include_directories("${Boost_INCLUDE_DIRS}")
+link_directories(${Boost_LIBRARY_DIR})
+add_library(PabloADT pablo/pe_advance.cpp pablo/pe_all.cpp pablo/pe_and.cpp pablo/pe_call.cpp pablo/pe_charclass.cpp  pablo/pe_matchstar.cpp pablo/pe_scanthru.cpp pablo/pe_not.cpp  pablo/pe_or.cpp  pablo/pe_pabloe.cpp  pablo/pe_sel.cpp  pablo/pe_var.cpp  pablo/pe_xor.cpp pablo/ps_assign.cpp  pablo/ps_if.cpp  pablo/codegenstate.cpp  pablo/symbol_generator.cpp pablo/ps_while.cpp pablo/printer_pablos.cpp)
+add_library(RegExpADT re/re_alt.cpp re/re_cc.cpp re/re_end.cpp re/re_name.cpp re/re_parser.cpp re/re_re.cpp re/re_rep.cpp re/re_seq.cpp re/re_start.cpp re/parsefailure.cpp re/re_reducer.cpp re/re_nullable.cpp re/re_simplifier.cpp re/re_compiler.cpp re/printer_re.cpp)
 add_library(CCADT cc/cc_compiler.cpp utf_encoding.cpp utf8_encoder.cpp unicode_categories.h unicode_categories-flat.h unicode_categories-simple.h)
 
 include_directories("${PROJECT_SOURCE_DIR}")
@@ -66,19 +65,17 @@ include_directories("${PROJECT_SOURCE_DIR}/include")
 include_directories("${PROJECT_SOURCE_DIR}/include/simd-lib")
 include_directories("${PROJECT_SOURCE_DIR}/include/simd-lib/idisa_cpp")
 
-if (Boost_FOUND)
-    include_directories(${Boost_INCLUDE_DIRS})
-endif()
-
 # add the executable
 add_executable(icgrep icgrep.cpp llvm_gen.cpp llvm_gen_helper.cpp compiler.cpp)
 
 target_link_libraries (CCADT PabloADT)
 target_link_libraries (icgrep PabloADT RegExpADT CCADT ${REQ_LLVM_LIBRARIES})
-if (Boost_FOUND)
-    target_link_libraries (icgrep ${Boost_LIBRARIES})
-endif()
-
+IF (Boost_FOUND)
+    SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DUSE_BOOST")
+    target_link_libraries (CCADT ${Boost_LIBRARIES})
+    target_link_libraries (PabloADT ${Boost_LIBRARIES})
+    target_link_libraries (RegExpADT ${Boost_LIBRARIES})
+ENDIF()
 
 #Check compiler support for 0x / 11
 include(CheckCXXCompilerFlag)
@@ -102,8 +99,8 @@ else()
   endif()
 endif()
 
-#Disable RunTime Type Information
 
+#Disable RunTime Type Information
 IF (MSVC) # using Visual Studio C++ 
   SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /GR-")
 ELSE() # using Clang, GCC, Intel C++, etc
@@ -209,26 +206,28 @@ ENDIF()
 
 set(CMAKE_REQUIRED_FLAGS)
 set(SIMD_SUPPORT_FOUND)
+set(SIMD_MAX_BLOCK_SIZE)
 
-MACRO(CHECK_SIMD_SUPPORT type)  
+MACRO(CHECK_SIMD_SUPPORT type maxBlockSize)
   IF(NOT SIMD_SUPPORT_FOUND)  
     set(CMAKE_REQUIRED_FLAGS_SAVE ${CMAKE_REQUIRED_FLAGS})
     set(CMAKE_REQUIRED_FLAGS ${ENABLE_${type}})
     check_cxx_source_runs("${${type}_CODE}" ${type})    
     IF(${type})
       SET(SIMD_SUPPORT_FOUND ${CMAKE_REQUIRED_FLAGS})
+      SET(SIMD_MAX_BLOCK_SIZE, ${maxBlockSize})
     ENDIF()
     SET(CMAKE_REQUIRED_FLAGS ${CMAKE_REQUIRED_FLAGS_SAVE})
   ENDIF()
 ENDMACRO()
 
-CHECK_SIMD_SUPPORT("AVX_2")
-CHECK_SIMD_SUPPORT("AVX_1")
-CHECK_SIMD_SUPPORT("SSE4_2")
-CHECK_SIMD_SUPPORT("SSE4_1")
-CHECK_SIMD_SUPPORT("SSE3")
-CHECK_SIMD_SUPPORT("SSE2")
-CHECK_SIMD_SUPPORT("SSE1")
+CHECK_SIMD_SUPPORT("AVX_2" 256)
+CHECK_SIMD_SUPPORT("AVX_1" 128)
+CHECK_SIMD_SUPPORT("SSE4_2" 128)
+CHECK_SIMD_SUPPORT("SSE4_1" 128)
+CHECK_SIMD_SUPPORT("SSE3" 128)
+CHECK_SIMD_SUPPORT("SSE2" 128)
+CHECK_SIMD_SUPPORT("SSE1" 128)
 
 SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${SIMD_SUPPORT_FOUND}")
 
@@ -240,10 +239,10 @@ elseif (${LLVM_PACKAGE_VERSION} MATCHES "3.5")
 endif(${LLVM_PACKAGE_VERSION} MATCHES "3.4")
 
 IF (BLOCK_SIZE_256)
-  IF("${SIMD_SUPPORT_FOUND}" STREQUAL "${ENABLE_AVX_2}")
+  IF(${SIMD_MAX_BLOCK_SIZE} >= 256)
     SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DUSE_S2P_AVX2 -DBLOCK_SIZE=256 -march=core-avx2 -m64")
   ELSE()
-    MESSAGE(FATAL_ERROR "AVX2 is required for BLOCK_SIZE=256")
+    MESSAGE(FATAL_ERROR "AVX2 or better is required for BLOCK_SIZE=256")
   ENDIF()
 ENDIF()
 

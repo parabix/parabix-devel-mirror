@@ -91,9 +91,7 @@ class LLVM_Generator {
 public:
     LLVM_Generator(std::map<std::string, std::string> name_map, std::string basis_pattern, int bits);
     ~LLVM_Generator();
-    LLVM_Gen_RetVal Generate_LLVMIR(CodeGenState cg_state,
-                                    CodeGenState subexpression_cg_state,
-                                    List cc_cgo);
+    LLVM_Gen_RetVal Generate_LLVMIR(const CodeGenState &cg_state);
 private:
     void MakeLLVMModule();
     void DefineTypes();

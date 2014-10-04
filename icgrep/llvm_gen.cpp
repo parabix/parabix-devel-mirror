@@ -366,7 +366,7 @@ LLVM_Generator::~LLVM_Generator()
 
 }
 
-LLVM_Gen_RetVal LLVM_Generator::Generate_LLVMIR(CodeGenState cg_state, CodeGenState subexpression_cg_state, List cc_cgo_stmtsl)
+LLVM_Gen_RetVal LLVM_Generator::Generate_LLVMIR(const CodeGenState & cg_state)
 {
     //Create the module.
     MakeLLVMModule();
@@ -387,7 +387,7 @@ LLVM_Gen_RetVal LLVM_Generator::Generate_LLVMIR(CodeGenState cg_state, CodeGenSt
 
     DefineTypes();
     DeclareFunctions();
-    DeclareCallFunctions(cg_state.stmtsl);
+    DeclareCallFunctions(cg_state.expressions());
 
     Function::arg_iterator args = mFunc_process_block->arg_begin();
     Value* ptr_basis_bits = args++;
@@ -399,8 +399,7 @@ LLVM_Gen_RetVal LLVM_Generator::Generate_LLVMIR(CodeGenState cg_state, CodeGenSt
 
     //Create the carry queue.
     mCarryQueueIdx = 0;
-    mCarryQueueSize = LLVM_Generator_Helper::CarryCount_PabloStatements(subexpression_cg_state.stmtsl);
-    mCarryQueueSize += LLVM_Generator_Helper::CarryCount_PabloStatements(cg_state.stmtsl);
+    mCarryQueueSize += LLVM_Generator_Helper::CarryCount_PabloStatements(cg_state.expressions());
     /* The following may be needed if carry-generating operations are ever inserted
        by the character class compiler.
     mCarryQueueSize += LLVM_Generator_Helper::CarryCount_PabloStatements(cc_cgo_stmtsl);
@@ -422,10 +421,7 @@ LLVM_Gen_RetVal LLVM_Generator::Generate_LLVMIR(CodeGenState cg_state, CodeGenSt
     StoreInst* void_16 = new StoreInst(ptr_output, mPtr_output_addr, false, mBasicBlock);
 
     //Generate the IR instructions for the function.
-
-    Generate_PabloStatements(cc_cgo_stmtsl);
-    Generate_PabloStatements(subexpression_cg_state.stmtsl);
-    Generate_PabloStatements(cg_state.stmtsl);
+    Generate_PabloStatements(cg_state.expressions());
     SetReturnMarker(cg_state.newsym, 0);
     SetReturnMarker(m_name_map.find("LineFeed")->second, 1);
 

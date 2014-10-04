@@ -44,7 +44,7 @@ std::string StatementPrinter::PrintStmts(const CodeGenState & cg_state)
     strOut = strOut.substr(0, strOut.length() - 1);
     strOut += "],[";
 
-    strOut = Print_PB_PabloStmts(cg_state.stmtsl, strOut);
+    strOut = Print_PB_PabloStmts(cg_state.expressions(), strOut);
 
     strOut = strOut.substr(0, strOut.length() - 1);
     strOut += "],";
