@@ -12,7 +12,7 @@
 
 namespace pablo {
 
-PabloE * make_sel(PabloE * if_expr, PabloE * t_expr, PabloE * f_expr) {
+PabloE * makeSel(PabloE * if_expr, PabloE * t_expr, PabloE * f_expr) {
     if (All * all_if_expr = dyn_cast<All>(if_expr)) {
         if (all_if_expr->getValue()) {
             return t_expr;
@@ -23,18 +23,18 @@ PabloE * make_sel(PabloE * if_expr, PabloE * t_expr, PabloE * f_expr) {
     }
     else if (All * all_t_expr = dyn_cast<All>(t_expr)) {
         if (all_t_expr->getValue()) {
-            return make_or(if_expr, f_expr);
+            return makeOr(if_expr, f_expr);
         }
         else {
-            return make_and(make_not(if_expr), f_expr);
+            return makeAnd(makeNot(if_expr), f_expr);
         }
     }
     else if (All * all_f_expr = dyn_cast<All>(f_expr)) {
         if (all_f_expr->getValue()) {
-            return make_or(make_not(if_expr), t_expr);
+            return makeOr(makeNot(if_expr), t_expr);
         }
         else {
-            return make_and(if_expr, t_expr);
+            return makeAnd(if_expr, t_expr);
         }
     }
     else if (equals(t_expr, f_expr)) {

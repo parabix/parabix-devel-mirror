@@ -12,7 +12,7 @@
 namespace pablo {
 
 class All : public PabloE {
-    friend All * make_all(bool value);
+    friend All * makeAll(bool value);
 public:
     static inline bool classof(const PabloE * e) {
         return e->getClassTypeId() == ClassTypeId::All;
@@ -20,13 +20,17 @@ public:
     static inline bool classof(const void *) {
         return false;
     }
-
     virtual ~All() {
 
     }
-
     inline bool getValue() const {
         return mValue;
+    }
+    inline bool operator==(const All & other) const {
+        return mValue == other.mValue;
+    }
+    virtual bool operator==(const PabloE & other) const {
+        return (isa<All>(other)) ? mValue == cast<All>(other).mValue : false;
     }
 protected:
     All(const bool value)
@@ -39,7 +43,7 @@ private:
     const bool mValue;
 };
 
-inline All * make_all(bool value) {
+inline All * makeAll(bool value) {
     return new All(value);
 }
 

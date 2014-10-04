@@ -177,3 +177,9 @@ pablo/ps_while.cpp
 pablo/ps_while.h
 pablo/pablo_routines.cpp
 pablo/pablo_routines.h
+re/printer_re.cpp
+re/printer_re.h
+pablo/pablo_compiler.cpp
+pablo/pablo_compiler.h
+pablo/codegenstate.cpp
+pablo/codegenstate.h

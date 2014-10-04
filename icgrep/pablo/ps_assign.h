@@ -13,7 +13,7 @@
 namespace pablo {
 
 class Assign : public PabloE {
-    friend Assign * make_assign(const std::string, PabloE *);
+    friend Assign * makeAssign(const std::string, PabloE *);
 public:
     static inline bool classof(const PabloE * e) {
         return e->getClassTypeId() == ClassTypeId::Assign;
@@ -45,7 +45,7 @@ private:
     PabloE * const      mExpr;
 };
 
-inline Assign * make_assign(const std::string marker, PabloE * expr) {
+inline Assign * makeAssign(const std::string marker, PabloE * expr) {
     return new Assign(marker, expr);
 }
 

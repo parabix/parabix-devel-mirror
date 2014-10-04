@@ -11,35 +11,51 @@
 #include <string>
 #include <vector>
 
-class UTF_Encoding
-{
+class Encoding{
 public:
-    UTF_Encoding();
-    //UTF_Encoding(std::string name, int bits, uint32_t mask);
-    std::string getName();
-    void setName(std::string name);
-    int getBits();
-    void setBits(int bits);
-    uint32_t getMask();
-    void setMask(uint32_t mask);
-    bool getDefault();
-    void setDefault(bool defaultEncoding);
-    bool getLocked();
-    void setLocked(bool locked);
-    bool getEncodingError();
-    void setEncodingError(bool error);
-    std::string getBasisPattern(int n);
-    void setBasisPattern(std::string pattern);
-    std::vector<std::string> getBasisPatternVector();
-    void setBasisPatternVector(std::vector<std::string> basisPattern);
+
+    enum class Type {
+        ASCII
+        , UTF_8
+    };
+
+    Encoding(Type type, unsigned bits);
+    Encoding(Type type, unsigned bits, unsigned mask);
+    Type getType() const;
+    unsigned getBits() const;
+    unsigned getMask() const;
 private:
-    std::string mName;
-    int mBits;
-    uint32_t mMask;
-    bool mDefault;
-    bool mLocked;
-    bool mEncodingError;
-    std::vector<std::string> mBasisPattern;
+    Type        mType;
+    unsigned    mBits;
+    unsigned    mMask;
 };
+
+inline Encoding::Encoding(Type type, unsigned bits)
+: mType(type)
+, mBits(bits)
+, mMask((static_cast<unsigned>(1) << bits) - static_cast<unsigned>(1))
+{
+
+}
+
+inline Encoding::Encoding(Type type, unsigned bits, unsigned mask)
+: mType(type)
+, mBits(bits)
+, mMask(mask)
+{
+
+}
+
+inline Encoding::Type Encoding::getType() const {
+    return mType;
+}
+
+inline unsigned Encoding::getBits() const {
+    return mBits;
+}
+
+inline unsigned Encoding::getMask() const {
+    return mMask;
+}
 
 #endif // UTF_ENCODING_H

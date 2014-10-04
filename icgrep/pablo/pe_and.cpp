@@ -11,13 +11,13 @@
 
 namespace pablo {
 
-PabloE * make_and(PabloE * expr1, PabloE *expr2) {
+PabloE * makeAnd(PabloE * expr1, PabloE *expr2) {
     if (All * all = dyn_cast<All>(expr1)) {
         if (all->getValue()) {
             return expr2;
         }
         else {
-            return make_all(0);
+            return makeAll(0);
         }
     }
     else if (All* all = dyn_cast<All>(expr2)) {
@@ -25,7 +25,7 @@ PabloE * make_and(PabloE * expr1, PabloE *expr2) {
             return expr1;
         }
         else {
-            return make_all(0);
+            return makeAll(0);
         }
     }
     else if (equals(expr1, expr2)) {
@@ -33,15 +33,15 @@ PabloE * make_and(PabloE * expr1, PabloE *expr2) {
     }
     else if (Not * pe_not_e1 = dyn_cast<Not>(expr1)) {
         if (Not * pe_not_e2 = dyn_cast<Not>(expr2)) {
-            return make_not(make_or(pe_not_e1->getExpr(), pe_not_e2->getExpr()));
+            return makeNot(makeOr(pe_not_e1->getExpr(), pe_not_e2->getExpr()));
         }
         else if (equals(pe_not_e1->getExpr(), expr2)) {
-            return make_all(0);
+            return makeAll(0);
         }
     }
     else if (Not * pe_not_e2 = dyn_cast<Not>(expr2)) {
         if (equals(expr1, pe_not_e2->getExpr())) {
-            return make_all(0);
+            return makeAll(0);
         }
     }
     return new And(expr1, expr2);

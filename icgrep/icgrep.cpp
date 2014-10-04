@@ -224,22 +224,13 @@ int main(int argc, char *argv[])
         fprintf(outfile, "Parabix icgrep implementation: August 2014\n");
     }
 
-    UTF_Encoding encoding;
-    encoding.setName("UTF-8");
-    encoding.setBits(8);
-    encoding.setMask(0xFF);
-
+    Encoding encoding(ascii_only_option ? Encoding::Type::ASCII : Encoding::Type::UTF_8, 8);
     if (compile_time_option)
     {
         cycles = get_hrcycles();
         timer = getElapsedTime();
     }
-    LLVM_Gen_RetVal llvm_codegen = icgrep::compile(compile_time_option,
-                                                   ascii_only_option,
-                                                   "basis_bits.bit_",
-                                                   "temp",
-                                                   encoding ,
-                                                   (regex_from_file_option ? fileregex : inregex));
+    LLVM_Gen_RetVal llvm_codegen = icgrep::compile(compile_time_option, encoding, (regex_from_file_option ? fileregex : inregex));
 
     if (compile_time_option)
     {

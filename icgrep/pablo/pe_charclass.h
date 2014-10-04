@@ -13,7 +13,7 @@
 namespace pablo {
 
 class CharClass : public PabloE {
-    friend CharClass * make_charclass(const std::string cc);
+    friend CharClass * makeCharClass(const std::string cc);
 public:
     static inline bool classof(const PabloE * e) {
         return e->getClassTypeId() == ClassTypeId::CharClass;
@@ -38,7 +38,7 @@ private:
     const std::string mCharClass;
 };
 
-inline CharClass * make_charclass(const std::string cc) {
+inline CharClass * makeCharClass(const std::string cc) {
     return new CharClass(cc);
 }
 

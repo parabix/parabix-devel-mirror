@@ -30,30 +30,47 @@
 
 namespace pablo {
 
-struct CodeGenState{
+struct CodeGenState {
+
+//    PabloE * createAll(const bool value);
+//    PabloE * createAdvance(PabloE * expr);
+//    PabloE * createNot(PabloE * expr);
+//    PabloE * createCall(const std::string name);
+//    PabloE * createVar(const std::string name);
+//    PabloE * createCharClass(const std::string name);
+//    PabloE * createAssign(const std::string name, PabloE * expr);
+//    PabloE * createAnd(PabloE * expr1, PabloE * expr2);
+//    PabloE * createOr(PabloE * expr1, PabloE * expr2);
+//    PabloE * createXor(PabloE * expr1, PabloE * expr2);
+//    PabloE * createMatchStar(PabloE * expr1, PabloE * expr2);
+//    PabloE * createScanThru(PabloE * from, PabloE * thru);
+
+
 
 //    struct ExpressionTable {
 //        inline PabloE * find(PabloE * inst) {
 //            switch(inst->getClassTypeId()) {
 //                // UNARY
-//                case All:
-//                case Advance:
-//                case Call:
-//                case Not:
-//                case Var:
-//                case Assign:
-//                case CharClass: // ***
-//                // BINARY
-//                case And:
-//                case Or:
-//                case Xor:
+//                case All:       // bool
+//                case Advance:   // pe
+//                case Not:       // pe
 
-//                case MatchStar:
-//                case ScanThru:
-//                case If:
-//                case While:
+//                case Call:      // string
+//                case Var:       // string
+//                case CharClass: // string
+//                // BINARY
+//                case Assign:    // string, pe
+
+//                case And:       // pe, pe
+//                case Or:        // pe, pe
+//                case Xor:       // pe, pe
+//                case MatchStar: // pe, pe
+//                case ScanThru:  // pe, pe
+
+//                case If:        // pe, pe list
+//                case While:     // pe, pe list
 //                // TERNARY
-//                case Sel:
+//                case Sel:       // pe, pe, pe
 //            }
 
 
@@ -78,12 +95,15 @@ struct CodeGenState{
 //                return itr->second;
 //            }
 //        private:
-//            std::map<Key, PabloE *>                                     _map;
+//            std::unordered_map<Key, PabloE *>                           _map;
 //        };
 //        ExpressionMap<const PabloE *>                                   _unary;
 //        ExpressionMap<const PabloE *, const PabloE *>                   _binary;
 //        ExpressionMap<const PabloE *, const PabloE *, const PabloE *>   _ternary;
 //    };
+
+
+
 
     std::list<PabloE *>  stmtsl;
     std::string          newsym;

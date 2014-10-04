@@ -13,7 +13,7 @@
 namespace pablo {
 
 class Var : public PabloE {
-    friend Var * make_var(const std::string);
+    friend Var * makeVar(const std::string);
 public:
     static inline bool classof(const PabloE * e) {
         return e->getClassTypeId() == ClassTypeId::Var;
@@ -38,7 +38,7 @@ private:
     const std::string mVar;
 };
 
-inline Var * make_var(const std::string var) {
+inline Var * makeVar(const std::string var) {
     return new Var(var);
 }
 

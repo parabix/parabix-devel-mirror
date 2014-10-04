@@ -12,7 +12,7 @@
 namespace pablo {
 
 class Not : public PabloE {
-    friend PabloE * make_not(PabloE *);
+    friend PabloE * makeNot(PabloE *);
 public:
     static inline bool classof(const PabloE * e) {
         return e->getClassTypeId() == ClassTypeId::Not;
@@ -38,7 +38,7 @@ private:
     PabloE * const mExpr;
 };
 
-PabloE * make_not(PabloE * expr);
+PabloE * makeNot(PabloE * expr);
 
 }
 

@@ -7,7 +7,7 @@
 namespace pablo {
 
 class Call : public PabloE {
-    friend Call * make_call(const std::string callee);
+    friend Call * makeCall(const std::string callee);
 public:
     static inline bool classof(const PabloE * e) {
         return e->getClassTypeId() == ClassTypeId::Call;
@@ -32,7 +32,7 @@ private:
     const std::string mCallee;
 };
 
-inline Call * make_call(const std::string callee) {
+inline Call * makeCall(const std::string callee) {
     return new Call(callee);
 }
 

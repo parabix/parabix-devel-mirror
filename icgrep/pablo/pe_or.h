@@ -12,7 +12,7 @@
 namespace pablo {
 
 class Or : public PabloE {
-    friend PabloE * make_or(PabloE *, PabloE *);
+    friend PabloE * makeOr(PabloE *, PabloE *);
 public:
     static inline bool classof(const PabloE * e) {
         return e->getClassTypeId() == ClassTypeId::Or;
@@ -45,7 +45,7 @@ private:
     PabloE * const mExpr2;
 };
 
-PabloE * make_or(PabloE * expr1, PabloE * expr2);
+PabloE * makeOr(PabloE * expr1, PabloE * expr2);
 
 }
 

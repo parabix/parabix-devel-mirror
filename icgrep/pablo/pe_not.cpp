@@ -9,9 +9,9 @@
 
 namespace pablo {
 
-PabloE * make_not(PabloE * expr) {
+PabloE * makeNot(PabloE * expr) {
     if (All * all = dyn_cast<All>(expr)) {
-        return make_all(!all->getValue());
+        return makeAll(!all->getValue());
     }
     else if (Not * pe_not = dyn_cast<Not>(expr)) {
         return pe_not->getExpr();

@@ -39,10 +39,8 @@ using namespace cc;
 
 namespace icgrep {
 
-LLVM_Gen_RetVal compile(bool show_compile_time, bool ascii_only, std::string basis_pattern, std::string gensym_pattern, UTF_Encoding encoding, std::string input_string)
+LLVM_Gen_RetVal compile(bool show_compile_time, Encoding encoding, std::string input_string)
 {
-    CC_Compiler cc_compiler(encoding, basis_pattern, gensym_pattern);
-
     RE * re_ast = nullptr;
     try
     {
@@ -60,17 +58,9 @@ LLVM_Gen_RetVal compile(bool show_compile_time, bool ascii_only, std::string bas
     #endif
 
     //Add the UTF encoding.
-    if (!ascii_only)
+    if (encoding.getType() == Encoding::Type::UTF_8)
     {
-        if (encoding.getName().compare("UTF-8") == 0)
-        {
-            re_ast = UTF8_Encoder::toUTF8(re_ast);
-        }
-        else
-        {
-            std::cerr << "Invalid encoding!" << std::endl;
-            exit(1);
-        }
+        re_ast = UTF8_Encoder::toUTF8(re_ast);
     }
 
     #ifdef DEBUG_PRINT_RE_AST
@@ -133,6 +123,8 @@ LLVM_Gen_RetVal compile(bool show_compile_time, bool ascii_only, std::string bas
     re_map.insert(make_pair(cc_name, cc_utf8_prefix4));
     name_map.insert(make_pair("UTF8-Prefix4", cc_name));
 
+
+    CC_Compiler cc_compiler(encoding);
     cc_compiler.compile_from_map(re_map);
     auto cc_stmtsl = cc_compiler.get_compiled();
     #ifdef DEBUG_PRINT_PBIX_AST
@@ -155,7 +147,7 @@ LLVM_Gen_RetVal compile(bool show_compile_time, bool ascii_only, std::string bas
     // std::cerr << "Pablo Statement Count: " << Pbix_Counter::Count_PabloStatements(re_cg_state.stmtsl) << std::endl;
     #endif
 
-    LLVM_Generator irgen(name_map, basis_pattern, encoding.getBits());
+    LLVM_Generator irgen(name_map, cc_compiler.getBasisPattern(), encoding.getBits());
 
     unsigned long long cycles = 0;
     double timer = 0;

@@ -12,7 +12,7 @@
 namespace pablo {
 
 class And : public PabloE {
-    friend PabloE * make_and(PabloE *, PabloE *);
+    friend PabloE * makeAnd(PabloE *, PabloE *);
 public:
     static inline bool classof(const PabloE * e) {
         return e->getClassTypeId() == ClassTypeId::And;
@@ -43,7 +43,7 @@ private:
     PabloE * const mExpr2;
 };
 
-PabloE * make_and(PabloE * expr1, PabloE * expr2);
+PabloE * makeAnd(PabloE * expr1, PabloE * expr2);
 
 }
 

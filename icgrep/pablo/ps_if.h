@@ -15,7 +15,7 @@ namespace pablo {
 class If : public PabloE {
 public:
     typedef std::list<PabloE*> List;
-    friend If * make_if(PabloE * expr, List psl);
+    friend If * makeIf(PabloE * expr, List psl);
 
     static inline bool classof(const PabloE * e) {
         return e->getClassTypeId() == ClassTypeId::If;
@@ -53,7 +53,7 @@ private:
     List           mPSList;
 };
 
-inline If * make_if(PabloE * expr, If::List statements) {
+inline If * makeIf(PabloE * expr, If::List statements) {
     return new If(expr, statements);
 }
 

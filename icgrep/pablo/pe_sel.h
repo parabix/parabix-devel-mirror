@@ -12,7 +12,7 @@
 namespace pablo {
 
 class Sel : public PabloE {
-    friend PabloE * make_sel(PabloE *, PabloE *, PabloE *);
+    friend PabloE * makeSel(PabloE *, PabloE *, PabloE *);
 public:
     static inline bool classof(const PabloE * e) {
         return e->getClassTypeId() == ClassTypeId::Sel;
@@ -52,7 +52,7 @@ private:
     PabloE * const mF_expr;
 };
 
-PabloE * make_sel(PabloE * if_expr, PabloE * t_expr, PabloE * f_expr);
+PabloE * makeSel(PabloE * if_expr, PabloE * t_expr, PabloE * f_expr);
 
 }
 

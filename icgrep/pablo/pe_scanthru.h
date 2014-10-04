@@ -12,7 +12,7 @@
 namespace pablo {
 
 class ScanThru : public  PabloE {
-    friend PabloE * make_scanthru(PabloE *, PabloE *);
+    friend PabloE * makeScanThru(PabloE *, PabloE *);
 public:
     static inline bool classof(const PabloE * e) {
         return e->getClassTypeId() == ClassTypeId::ScanThru;
@@ -45,7 +45,7 @@ private:
     PabloE * const mScanThru;
 };
 
-inline PabloE * make_scanthru(PabloE * from, PabloE * thru) {
+inline PabloE * makeScanThru(PabloE * from, PabloE * thru) {
     return new ScanThru(from, thru);
 }
 

@@ -29,10 +29,14 @@ class CC_Compiler{
     typedef ExpressionMap::iterator             MapIterator;
     typedef std::list<pablo::PabloE *>          List;
 public:
-    CC_Compiler(const UTF_Encoding encoding, const std::string basis_pattern, const std::string gensym_pattern);
-    std::string compile1(re::CC* cc);
+    CC_Compiler(const Encoding encoding, const std::string basis_pattern = "basis", const std::string gensym_pattern = "temp");
     void compile_from_map(const REMap & re_map);
     List get_compiled();
+
+    const std::string getBasisPattern() const {
+        return mBasisPattern;
+    }
+
 private:
     void process_re_map(const REMap &re_map);
     void process_re(const re::RE *re);
@@ -52,11 +56,13 @@ private:
     Expression* add_assignment(std::string value, Expression* expr);
     Expression* expr_to_variable(Expression* cgo);
 
-    UTF_Encoding mEncoding;
-    std::string mGenSym_Template;
-    int mGenSymCounter;
-    List mStmtsl;
-    ExpressionMap mCommon_Expression_Map;
+
+    Encoding                    mEncoding;
+    const std::string           mBasisPattern;
+    const std::string           mGenSymPattern;
+    int                         mGenSymCounter;
+    List                        mStmtsl;
+    ExpressionMap               mCommon_Expression_Map;
 };
 
 }

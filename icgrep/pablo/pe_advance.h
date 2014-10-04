@@ -12,7 +12,7 @@
 namespace pablo {
 
 class Advance : public PabloE {
-    friend Advance * make_advance(PabloE * expr);
+    friend Advance * makeAdvance(PabloE * expr);
 public:
     static inline bool classof(const PabloE * e) {
         return e->getClassTypeId() == ClassTypeId::Advance;
@@ -37,7 +37,7 @@ private:
     PabloE * const mExpr;
 };
 
-inline Advance * make_advance(PabloE * expr) {
+inline Advance * makeAdvance(PabloE * expr) {
     return new Advance(expr);
 }
 

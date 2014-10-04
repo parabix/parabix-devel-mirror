@@ -14,22 +14,14 @@ namespace pablo {
 
 class While : public PabloE {    
 public:
+    typedef std::list<PabloE*> List;
+    friend While * makeWhile(PabloE * expr, List psl);
 
     static inline bool classof(const PabloE * e) {
         return e->getClassTypeId() == ClassTypeId::While;
     }
     static inline bool classof(const void *) {
         return false;
-    }
-
-    typedef std::list<PabloE*> List;
-
-    While(PabloE* expr, List psl)
-    : PabloE(ClassTypeId::While)
-    , mExpr(expr)
-    , mPSList(psl)
-    {
-
     }
 
     virtual ~While() {
@@ -46,10 +38,22 @@ public:
     inline const List & getPSList() const {
         return mPSList;
     }
+protected:
+    While(PabloE * expr, List psl)
+    : PabloE(ClassTypeId::While)
+    , mExpr(expr)
+    , mPSList(psl)
+    {
+
+    }
 private:
     PabloE * const  mExpr;
     List            mPSList;
 };
+
+inline While * makeWhile(PabloE * cond, While::List statements) {
+    return new While(cond, statements);
+}
 
 }
 

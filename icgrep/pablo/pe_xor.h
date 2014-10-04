@@ -1,4 +1,4 @@
-/*
+﻿/*
  *  Copyright (c) 2014 International Characters.
  *  This software is licensed to the public under the Open Software License 3.0.
  *  icgrep is a trademark of International Characters.
@@ -12,7 +12,7 @@
 namespace pablo {
 
 class Xor : public PabloE {
-    friend PabloE * make_xor(PabloE *, PabloE *);
+    friend PabloE * makeXor(PabloE *, PabloE *);
 public:
     static inline bool classof(const PabloE * e) {
         return e->getClassTypeId() == ClassTypeId::Xor;
@@ -43,7 +43,7 @@ private:
     PabloE * const mExpr2;
 };
 
-PabloE * make_xor(PabloE * expr1, PabloE * expr2);
+PabloE * makeXor(PabloE * expr1, PabloE * expr2);
 
 }
 

@@ -11,7 +11,7 @@
 
 namespace pablo {
 
-PabloE * make_or(PabloE * expr1, PabloE * expr2) {
+PabloE * makeOr(PabloE * expr1, PabloE * expr2) {
     if (All * all = dyn_cast<All>(expr1)) {
         if (all->getValue() == 1) {
             return all; //Return a true literal.
@@ -30,11 +30,11 @@ PabloE * make_or(PabloE * expr1, PabloE * expr2) {
     }
     else if (Not * not1 = dyn_cast<Not>(expr1)) {
         // ¬a∨b = ¬¬(¬a∨b) = ¬(a ∧ ¬b)
-        return make_not(make_and(not1->getExpr(), make_not(expr2)));
+        return makeNot(makeAnd(not1->getExpr(), makeNot(expr2)));
     }
     else if (Not * not2 = dyn_cast<Not>(expr2)) {
         // a∨¬b = ¬¬(¬b∨a) = ¬(b ∧ ¬a)
-        return make_not(make_and(not2->getExpr(), make_not(expr1)));
+        return makeNot(makeAnd(not2->getExpr(), makeNot(expr1)));
     }
     else if (equals(expr1, expr2)) {
         return expr1;
@@ -48,16 +48,16 @@ PabloE * make_or(PabloE * expr1, PabloE * expr2) {
             //These optimizations factor out common components that can occur when sets are formed by union
             //(e.g., union of [a-z] and [A-Z].
             if (equals(expr1a, expr2a)) {
-                return make_and(expr1a, make_or(expr1b, expr2b));
+                return makeAnd(expr1a, makeOr(expr1b, expr2b));
             }
             else if (equals(expr1b, expr2b)) {
-                return make_and(expr1b, make_or(expr1a, expr2a));
+                return makeAnd(expr1b, makeOr(expr1a, expr2a));
             }
             else if (equals(expr1a, expr2b)) {
-                return make_and(expr1a, make_or(expr1b, expr2a));
+                return makeAnd(expr1a, makeOr(expr1b, expr2a));
             }
             else if (equals(expr1b, expr2a)) {
-                return make_and(expr1b, make_or(expr1a, expr2b));
+                return makeAnd(expr1b, makeOr(expr1a, expr2b));
             }
         }
     }
