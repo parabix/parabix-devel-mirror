@@ -54,16 +54,16 @@ void CC_Compiler::compile(const REMap & re_map) {
         //This is specifically for the utf8 multibyte character classes.
         if (Seq * seq = dyn_cast<Seq>(i->second)) {
             if (seq->getType() == Seq::Type::Byte) {
-                Assign * assignment = nullptr;
+                PabloE * marker = nullptr;
                 auto j = seq->begin();
                 while (true) {
                     Name * name = dyn_cast<Name>(*j);
                     assert (name);
                     CharClass * cc = makeCharClass(name->getName());
-                    PabloE * sym = assignment ? makeAnd(makeVar(assignment->getName()), cc) : cc;
+                    PabloE * sym = marker ? makeAnd(marker, cc) : cc;
                     if (++j != seq->end()) {
-                        assignment = makeAssign(mCG.symgen("marker"), makeAdvance(sym));
-                        mCG.push_back(assignment);
+                        marker = makeAdvance(sym);
+                        mCG.push_back(marker);
                         continue;
                     }
                     mCG.push_back(makeAssign(seq->getName(), sym));

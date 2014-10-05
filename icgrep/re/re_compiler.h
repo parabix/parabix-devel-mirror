@@ -23,13 +23,13 @@ public:
     void compile(RE * re);
 
 private:
-    pablo::Assign * process(RE * re, pablo::Assign * target, pablo::CodeGenState & cg_state);
-    pablo::Assign * process(Alt * alt, pablo::Assign * target, pablo::CodeGenState & cg_state);
-    pablo::Assign * process(Seq * seq, pablo::Assign * target, pablo::CodeGenState & cg_state);
-    pablo::Assign * process(Rep * rep, pablo::Assign * target, pablo::CodeGenState & cg_state);
-    pablo::Assign * processUnboundedRep(RE * repeated, int lb, pablo::Assign * target, pablo::CodeGenState & cg_state);
-    pablo::Assign * processBoundedRep(RE * repeated, int lb, int ub, pablo::Assign * target, pablo::CodeGenState & cg_state);
-    pablo::Assign * process(Name * name, pablo::Assign * target, pablo::CodeGenState & cg_state);
+    pablo::PabloE * process(RE * re, pablo::PabloE * target, pablo::CodeGenState & cg_state);
+    pablo::PabloE * process(Alt * alt, pablo::PabloE * target, pablo::CodeGenState & cg_state);
+    pablo::PabloE * process(Seq * seq, pablo::PabloE * target, pablo::CodeGenState & cg_state);
+    pablo::PabloE * process(Rep * rep, pablo::PabloE * target, pablo::CodeGenState & cg_state);
+    pablo::PabloE * processUnboundedRep(RE * repeated, int lb, pablo::PabloE * target, pablo::CodeGenState & cg_state);
+    pablo::PabloE * processBoundedRep(RE * repeated, int lb, int ub, pablo::PabloE * target, pablo::CodeGenState & cg_state);
+    pablo::PabloE * process(Name * name, pablo::PabloE * target, pablo::CodeGenState & cg_state);
 
     static bool hasUnicode(const RE *re);
 
