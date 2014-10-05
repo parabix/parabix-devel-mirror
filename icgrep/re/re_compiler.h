@@ -33,7 +33,7 @@ private:
 
     static bool hasUnicode(const RE *re);
 
-    pablo::CodeGenState &                      mBaseCG;
+    pablo::CodeGenState &                      mCG;
     std::map<std::string, std::string>  m_name_map;
 };
 

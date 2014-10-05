@@ -8,6 +8,7 @@
 #define PS_PABLOS_H
 
 #include <pablo/pe_pabloe.h>
+#include <pablo/pe_string.h>
 #include <pablo/pe_advance.h>
 #include <pablo/pe_all.h>
 #include <pablo/pe_and.h>
@@ -53,6 +54,19 @@ struct CodeGenState {
     inline All * createAll(const bool value) const {
         return mAll[value];
     }
+
+    Call * createCall(const std::string name);
+
+    Var * createVar(const Assign * assign);
+
+    Var * createVar(const std::string name);
+
+    inline PabloE * createVarIfAssign(PabloE * const input) {
+        return isa<Assign>(input) ? createVar(cast<const Assign>(input)) : input;
+    }
+
+    CharClass * createCharClass(const std::string name);
+    Assign * createAssign(const std::string name, PabloE * expr);
 
 //    PabloE * createAdvance(PabloE * expr);
 //    PabloE * createNot(PabloE * expr);
@@ -123,6 +137,35 @@ struct CodeGenState {
 //        ExpressionMap<const PabloE *, const PabloE *, const PabloE *>   _ternary;
 //    };
 
+//    template<typename... Args>
+//    struct ExpressionMap {
+//        typedef std::tuple<PabloE::ClassTypeId, Args...> Key;
+
+//        inline PabloE * find(const PabloE::ClassTypeId type, Args... args) {
+//            auto key = std::make_tuple(type, args...);
+//            auto itr = _map.find(key);
+//            if (itr == _map.end()) {
+//                _map.insert(std::make_pair(std::move(key), inst));
+//                return nullptr;
+//            }
+//            return itr->second;
+//        }
+
+//        inline PabloE * find(const PabloE::ClassTypeId type, Args... args) {
+//            auto key = std::make_tuple(type, args...);
+//            auto itr = _map.find(key);
+//            if (itr == _map.end()) {
+//                _map.insert(std::make_pair(std::move(key), inst));
+//                return nullptr;
+//            }
+//            return itr->second;
+//        }
+
+//    private:
+//        std::unordered_map<Key, PabloE *> _map;
+//    };
+
+
 
     inline void push_back(PabloE * expr) {
         mExpressions.push_back(expr);
@@ -136,14 +179,18 @@ struct CodeGenState {
         return mExpressions;
     }
 
+protected:
+
+    String * getString(const std::string string);
+
 private:    
-    SymbolGenerator &               mSymbolGenerator;
-    CodeGenState * const            mPredecessor;
-    const std::array<All *, 2>      mAll;
+    SymbolGenerator &                           mSymbolGenerator;
+    CodeGenState * const                        mPredecessor;
+    const std::array<All *, 2>                  mAll;
+    std::unordered_map<std::string, String *>   mStringMap;
 
 
-
-    std::list<PabloE *>             mExpressions;
+    std::list<PabloE *>                         mExpressions;
 };
 
 }

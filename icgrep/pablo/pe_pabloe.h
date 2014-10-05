@@ -32,6 +32,7 @@ public:
         , Assign
         , If
         , While
+        , String
     };
     inline ClassTypeId getClassTypeId() const {
         return mClassTypeId;

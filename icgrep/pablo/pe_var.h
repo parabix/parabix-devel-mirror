@@ -9,12 +9,12 @@
 
 #include <pablo/pe_pabloe.h>
 #include <pablo/ps_assign.h>
-#include <string>
+#include <pablo/pe_string.h>
 
 namespace pablo {
 
 class Var : public PabloE {
-    friend Var * makeVar(const std::string);
+    friend Var * makeVar(const String *);
 public:
     static inline bool classof(const PabloE * e) {
         return e->getClassTypeId() == ClassTypeId::Var;
@@ -26,25 +26,25 @@ public:
 
     }
     inline const std::string & getName() const {
-        return mVar;
+        return *mVar;
     }
 protected:
-    Var(const std::string var)
+    Var(const String * var)
     : PabloE(ClassTypeId::Var)
     , mVar(var)
     {
 
     }
 private:
-    const std::string mVar;
+    const String * const mVar;
 };
 
-inline Var * makeVar(const std::string var) {
+inline Var * makeVar(const String * var) {
     return new Var(var);
 }
 
 inline Var * makeVar(const Assign * assign) {
-    return makeVar(assign->getName());
+    return makeVar(assign->mName);
 }
 
 }

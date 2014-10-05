@@ -1,13 +1,13 @@
 #ifndef PE_CALL_H
 #define PE_CALL_H
 
-#include "pe_pabloe.h"
-#include <string>
+#include <pablo/pe_pabloe.h>
+#include <pablo/pe_string.h>
 
 namespace pablo {
 
 class Call : public PabloE {
-    friend Call * makeCall(const std::string callee);
+    friend Call * makeCall(const String *);
 public:
     static inline bool classof(const PabloE * e) {
         return e->getClassTypeId() == ClassTypeId::Call;
@@ -18,21 +18,20 @@ public:
     virtual ~Call() {
 
     }
-
     inline const std::string & getCallee() const {
-        return mCallee;
+        return *mCallee;
     }
 protected:
-    Call(const std::string callee)
+    Call(const String * callee)
     : PabloE(ClassTypeId::Call)
     , mCallee(callee) {
 
     }
 private:
-    const std::string mCallee;
+    const String * const mCallee;
 };
 
-inline Call * makeCall(const std::string callee) {
+inline Call * makeCall(const String * callee) {
     return new Call(callee);
 }
 

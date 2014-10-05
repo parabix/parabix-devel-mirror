@@ -59,14 +59,14 @@ void CC_Compiler::compile(const REMap & re_map) {
                 while (true) {
                     Name * name = dyn_cast<Name>(*j);
                     assert (name);
-                    CharClass * cc = makeCharClass(name->getName());
+                    CharClass * cc = mCG.createCharClass(name->getName());
                     PabloE * sym = marker ? makeAnd(marker, cc) : cc;
                     if (++j != seq->end()) {
                         marker = makeAdvance(sym);
                         mCG.push_back(marker);
                         continue;
                     }
-                    mCG.push_back(makeAssign(seq->getName(), sym));
+                    mCG.push_back(mCG.createAssign(seq->getName(), sym));
                     break;
                 }
             }
@@ -77,13 +77,13 @@ void CC_Compiler::compile(const REMap & re_map) {
 Expression * CC_Compiler::add_assignment(std::string varname, Expression* expr)
 {    
     //Add the new mapping to the list of pablo statements:
-    mCG.push_back(makeAssign(varname, expr->pablo_expr));
+    mCG.push_back(mCG.createAssign(varname, expr->pablo_expr));
 
     //Add the new mapping to the common expression map:
     std::string key_value = expr->expr_string;
     Expression* mapped_value = new Expression();
     mapped_value->expr_string = varname;
-    mapped_value->pablo_expr = makeVar(varname);
+    mapped_value->pablo_expr = mCG.createVar(varname);
     return mCommon_Expression_Map.insert(std::make_pair(key_value, mapped_value)).first->second;
 }
 
@@ -382,7 +382,7 @@ Expression* CC_Compiler::expr2pabloe(PabloE* expr) {
 }
 
 inline Var * CC_Compiler::getBasisVar(const int i) const {
-    return makeVar(mBasisPattern + std::to_string((mEncoding.getBits() - 1) - i));
+    return mCG.createVar(mBasisPattern + std::to_string((mEncoding.getBits() - 1) - i));
 }
 
 } // end of namespace cc
