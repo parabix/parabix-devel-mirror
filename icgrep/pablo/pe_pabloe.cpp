@@ -38,7 +38,7 @@ bool equals(const PabloE * expr1, const PabloE * expr2) {
         }
         else if (const Var * var1 = dyn_cast<const Var>(expr1)) {
             if (const Var * var2 = cast<const Var>(expr2)) {
-                return (var1->getVar() == var2->getVar());
+                return (var1->getName() == var2->getName());
             }
         }
         else if (const Not* not1 = dyn_cast<const Not>(expr1)) {

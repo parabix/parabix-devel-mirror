@@ -47,10 +47,7 @@ std::string StatementPrinter::PrintStmts(const CodeGenState & cg_state)
     strOut = Print_PB_PabloStmts(cg_state.expressions(), strOut);
 
     strOut = strOut.substr(0, strOut.length() - 1);
-    strOut += "],";
-
-    //Print the name of the variable that holds the match result for the overall expression so far.
-    strOut += "'" + cg_state.newsym + "'";
+    strOut += "]";
 
     return strOut;
 }
@@ -76,7 +73,7 @@ std::string StatementPrinter::ShowPabloS(const PabloE * stmt)
 
     if (const Assign * an = dyn_cast<const Assign>(stmt))
     {
-        retVal = "Assign('" + an->getM() + "', " + ShowPabloE(an->getExpr()) + "),";
+        retVal = "Assign('" + an->getName() + "', " + ShowPabloE(an->getExpr()) + "),";
     }
     else if (const If * ifstmt = dyn_cast<const If>(stmt))
     {
@@ -104,7 +101,7 @@ std::string StatementPrinter::ShowPabloE(const PabloE *expr)
     }
     else if (const Var * pablo_var = dyn_cast<const Var>(expr))
     {
-        retVal = "Var '" + pablo_var->getVar() + "' ";
+        retVal = "Var '" + pablo_var->getName() + "' ";
     }
     else if (const And * pablo_and = dyn_cast<const And>(expr))
     {

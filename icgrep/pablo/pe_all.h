@@ -13,6 +13,7 @@ namespace pablo {
 
 class All : public PabloE {
     friend All * makeAll(bool value);
+    friend struct CodeGenState;
 public:
     static inline bool classof(const PabloE * e) {
         return e->getClassTypeId() == ClassTypeId::All;

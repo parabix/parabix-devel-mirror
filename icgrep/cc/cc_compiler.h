@@ -15,7 +15,6 @@
 #include <pablo/pe_pabloe.h>
 #include <re/re_cc.h>
 
-
 namespace cc {
 
 struct Expression{
@@ -39,10 +38,8 @@ public:
     }
 
 private:
-    void process_re_map(const REMap &re_map);
     void process_re(const re::RE *re);
-    std::string bit_var(int n);
-    pablo::PabloE * make_bitv(int n);
+    pablo::Var * getBasisVar(const int n) const;
     pablo::PabloE * bit_pattern_expr(int pattern, int selected_bits);
     pablo::PabloE * char_test_expr(const re::CodePointType ch);
     pablo::PabloE * make_range(const re::CodePointType n1, const re::CodePointType n2);
@@ -51,17 +48,16 @@ private:
     pablo::PabloE * char_or_range_expr(const re::CodePointType lo, const re::CodePointType hi);
     pablo::PabloE * charset_expr(const re::CC *cc);
     Expression* expr2pabloe(pablo::PabloE * expr);
-    void cc2pablos(const re::CC *cc);
+    void process(const re::CC *cc);
 
-    void add_predefined(std::string key_value, Expression *mapped_value);
-    Expression* add_assignment(std::string value, Expression* expr);
+    Expression * add(std::string key_value, Expression *mapped_value);
+    Expression * add_assignment(std::string value, Expression* expr);
     Expression* expr_to_variable(Expression* cgo);
 
     pablo::CodeGenState &       mCG;
     const Encoding              mEncoding;
-    const std::string           mBasisPattern;
     const std::string           mGenSymPattern;
-    int                         mGenSymCounter;
+    const std::string           mBasisPattern;
     ExpressionMap               mCommon_Expression_Map;
 };
 

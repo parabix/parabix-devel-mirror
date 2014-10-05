@@ -7,7 +7,8 @@
 #ifndef PE_VAR_H
 #define PE_VAR_H
 
-#include "pe_pabloe.h"
+#include <pablo/pe_pabloe.h>
+#include <pablo/ps_assign.h>
 #include <string>
 
 namespace pablo {
@@ -24,7 +25,7 @@ public:
     virtual ~Var(){
 
     }
-    inline const std::string & getVar() const {
+    inline const std::string & getName() const {
         return mVar;
     }
 protected:
@@ -40,6 +41,10 @@ private:
 
 inline Var * makeVar(const std::string var) {
     return new Var(var);
+}
+
+inline Var * makeVar(const Assign * assign) {
+    return makeVar(assign->getName());
 }
 
 }

@@ -422,7 +422,11 @@ LLVM_Gen_RetVal LLVM_Generator::Generate_LLVMIR(const CodeGenState & cg_state)
 
     //Generate the IR instructions for the function.
     Generate_PabloStatements(cg_state.expressions());
-    SetReturnMarker(cg_state.newsym, 0);
+
+    Assign * final = dyn_cast<Assign>(cg_state.expressions().back());
+    assert (final);
+
+    SetReturnMarker(final->getName(), 0);
     SetReturnMarker(m_name_map.find("LineFeed")->second, 1);
 
     //Terminate the block
@@ -845,16 +849,13 @@ void LLVM_Generator::StoreBitBlockMarkerPtr(std::string name, int index)
 Value* LLVM_Generator::GetMarker(std::string name)
 {
     IRBuilder<> b(mBasicBlock);
-
-    if (mMarkerMap.find(name) == mMarkerMap.end())
-    {
+    auto itr = mMarkerMap.find(name);
+    if (itr == mMarkerMap.end()) {
         Value* ptr = b.CreateAlloca(mXi64Vect);
-        Value* void_1 = b.CreateStore(mConst_Aggregate_Xi64_0, ptr);
-        mMarkerMap.insert(make_pair(name, ptr));
+        b.CreateStore(mConst_Aggregate_Xi64_0, ptr);
+        itr = mMarkerMap.insert(make_pair(name, ptr)).first;
     }
-    std::map<std::string, Value*>::iterator itGet = mMarkerMap.find(name);
-
-    return itGet->second;
+    return itr->second;
 }
 
 void LLVM_Generator::SetReturnMarker(std::string marker, int output_idx)
@@ -884,9 +885,9 @@ std::string LLVM_Generator::Generate_PabloS(PabloE *stmt)
     {
         IRBuilder<> b(mBasicBlock);
 
-        b.CreateStore(Generate_PabloE(assign->getExpr()), GetMarker(assign->getM()));
+        b.CreateStore(Generate_PabloE(assign->getExpr()), GetMarker(assign->getName()));
 
-        retVal = assign->getM();
+        retVal = assign->getName();
     }
     else if (If * ifstmt = dyn_cast<If>(stmt))
     {
@@ -1033,7 +1034,7 @@ Value* LLVM_Generator::Generate_PabloE(PabloE *expr)
     {
         IRBuilder<> b(mBasicBlock);
 
-        Value* var_value = b.CreateLoad(GetMarker(var->getVar()), false, var->getVar());
+        Value* var_value = b.CreateLoad(GetMarker(var->getName()), false, var->getName());
 
         retVal = var_value;
     }

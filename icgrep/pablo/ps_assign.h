@@ -25,23 +25,23 @@ public:
         delete mExpr;
     }
 
-    inline const std::string & getM() const {
-        return mM;
+    inline const std::string & getName() const {
+        return mName;
     }
 
     inline PabloE * getExpr() const {
         return mExpr;
     }
 protected:
-    Assign(const std::string m, PabloE * expr)
+    Assign(const std::string name, PabloE * expr)
     : PabloE(ClassTypeId::Assign)
-    , mM(m)
+    , mName(name)
     , mExpr(expr)
     {
 
     }
 private:
-    const std::string   mM;
+    const std::string   mName;
     PabloE * const      mExpr;
 };
 

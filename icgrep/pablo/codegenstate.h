@@ -27,6 +27,7 @@
 #include <unordered_map>
 #include <vector>
 #include <string>
+#include <array>
 #include <pablo/symbol_generator.h>
 
 namespace pablo {
@@ -36,6 +37,7 @@ struct CodeGenState {
     CodeGenState(SymbolGenerator & symgen)
     : mSymbolGenerator(symgen)
     , mPredecessor(nullptr)
+    , mAll{{makeAll(0), makeAll(1)}}
     {
 
     }
@@ -43,12 +45,15 @@ struct CodeGenState {
     CodeGenState(CodeGenState & cg)
     : mSymbolGenerator(cg.mSymbolGenerator)
     , mPredecessor(&cg)
+    , mAll(cg.mAll)    // inherit the original "All" variables for simplicity
     {
 
     }
 
+    inline All * createAll(const bool value) const {
+        return mAll[value];
+    }
 
-//    PabloE * createAll(const bool value);
 //    PabloE * createAdvance(PabloE * expr);
 //    PabloE * createNot(PabloE * expr);
 //    PabloE * createCall(const std::string name);
@@ -131,11 +136,14 @@ struct CodeGenState {
         return mExpressions;
     }
 
-    std::string newsym;
-private:
-    std::list<PabloE *>     mExpressions;
-    SymbolGenerator &       mSymbolGenerator;
-    CodeGenState * const    mPredecessor;
+private:    
+    SymbolGenerator &               mSymbolGenerator;
+    CodeGenState * const            mPredecessor;
+    const std::array<All *, 2>      mAll;
+
+
+
+    std::list<PabloE *>             mExpressions;
 };
 
 }
