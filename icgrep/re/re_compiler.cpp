@@ -71,12 +71,12 @@ void RE_Compiler::compile(RE * re, CodeGenState & cg) {
         PabloE * u8scope32 = cg.createAdvance(u8pfx3);
         PabloE * u8scope42 = cg.createAdvance(u8pfx4);
         PabloE * u8scope43 = cg.createAdvance(u8scope42);
-        PabloE * assign_non_final = cg.createAssign(gs_nonfinal, cg.createOr(cg.createOr(u8pfx, u8scope32), cg.createOr(u8scope42, u8scope43)));
         #ifdef USE_IF_FOR_NONFINAL
-        If::List body;
-        body.push_back(assign_non_final);
-        mCG.push_back(cg.createIf(u8pfx, body));
+        CodeGenState it(cg);
+        it.createAssign(gs_nonfinal, it.createOr(it.createOr(u8pfx, u8scope32), it.createOr(u8scope42, u8scope43)));
+        cg.createIf(u8pfx, std::move(it));
         #else
+        PabloE * assign_non_final = cg.createAssign(gs_nonfinal, cg.createOr(cg.createOr(u8pfx, u8scope32), cg.createOr(u8scope42, u8scope43)));
         cg.push_back(assign_non_final);
         #endif
     }
@@ -223,7 +223,7 @@ inline PabloE * RE_Compiler::processUnboundedRep(RE * repeated, int lb, PabloE *
         target = cg.createAssign(while_accum->getName(), cg.createOr(var_while_test, accum));
 
         wt.push_back(target);
-        cg.push_back(cg.createWhile(cg.createVar(while_test), wt.expressions()));
+        cg.push_back(cg.createWhile(cg.createVar(while_test), std::move(wt)));
     }    
     return target;
 }

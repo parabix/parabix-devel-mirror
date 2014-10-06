@@ -48,7 +48,7 @@ struct CodeGenState {
 
     CodeGenState(CodeGenState & cg)
     : mSymbolGenerator(cg.mSymbolGenerator)
-    , mAll(cg.mAll)    // inherit the original "All" variables for simplicity
+    , mAll(cg.mAll) // inherit the original "All" variables for simplicity
     , mUnary(&(cg.mUnary), this)
     , mBinary(&(cg.mBinary), this)
     , mTernary(&(cg.mTernary), this)
@@ -90,12 +90,12 @@ struct CodeGenState {
 
     PabloE * createSel(PabloE * condition, PabloE * trueExpr, PabloE * falseExpr);
 
-    inline If * createIf(PabloE * condition, ExpressionList statements) {
-        return new If(condition, std::move(statements));
+    inline If * createIf(PabloE * condition, CodeGenState && body) {
+        return new If(condition, std::move(body.mExpressions));
     }
 
-    inline While * createWhile(PabloE * cond, ExpressionList statements) {
-        return new While(cond, std::move(statements));
+    inline While * createWhile(PabloE * cond, CodeGenState && body) {
+        return new While(cond, std::move(body.mExpressions));
     }
 
     template<typename... Args>

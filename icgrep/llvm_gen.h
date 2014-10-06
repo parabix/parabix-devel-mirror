@@ -90,24 +90,22 @@ class LLVM_Generator {
 public:
     LLVM_Generator(std::map<std::string, std::string> name_map, std::string basis_pattern, int bits);
     ~LLVM_Generator();
-    LLVM_Gen_RetVal Generate_LLVMIR(const CodeGenState &cg_state);
+    LLVM_Gen_RetVal Generate_LLVMIR(const CodeGenState & cg_state);
 private:
     void MakeLLVMModule();
     void DefineTypes();
     void DeclareFunctions();
-
     void DeclareCallFunctions(const ExpressionList & stmts);
     void DeclareCallFunctions(const PabloE * expr);
-
-    void StoreBitBlockMarkerPtr(std::string name, int index);
     void LoadBitBlocksFromStaticExtern();
-    void SetReturnMarker(std::string marker, int output_idx);
-    Value* GetMarker(std::string name);
-    std::string Generate_PabloStatements(const ExpressionList & stmts);
-    std::string Generate_PabloS(PabloE * stmt);
-    Value* Generate_PabloE(PabloE *expr);
-    Value* genMatchStar(Value* marker_expr, Value* cc_expr);
-    Value* genScanThru(Value* marker_expr, Value* cc_expr);
+    void SetReturnMarker(Value * marker, const unsigned output_idx);
+
+    Value * GetMarker(const std::string & name);
+
+    Value * Generate_PabloStatements(const ExpressionList & stmts);
+    Value * Generate_PabloS(const PabloE * stmt);
+
+    Value* Generate_PabloE(const PabloE * expr);
     Value* genCarryInLoad(Value* ptr_carry_q, int carryq_idx);
     Value* genCarryOutStore(Value* carryout, Value* ptr_carry_q, int carryq_idx);
     Value* genAddWithCarry(Value* e1, Value* e2);
@@ -121,7 +119,7 @@ private:
 
     int         mBits;
     std::map<std::string, std::string> m_name_map;
-    std::string mBasis_Pattern;
+    std::string mBasisBitPattern;
 
     Module*          mMod;
     BasicBlock*      mBasicBlock;
@@ -133,8 +131,8 @@ private:
 
     VectorType* mXi128Vect;
 
-    PointerType* mStruct_Basis_Bits_Ptr1;
-    PointerType* mStruct_Output_Ptr1;
+    PointerType* mBasisBitsInputPtr;
+    PointerType* mOutputPtr;
 
     std::map<std::string, Value*> mMarkerMap;
 
@@ -156,7 +154,7 @@ private:
     Constant*     mFunc_get_unicode_category;
     Value*     mFunc_get_unicode_category_Nd;
 
-    AllocaInst*  mPtr_basis_bits_addr;
+    AllocaInst*  mBasisBitsAddr;
     AllocaInst*  mPtr_carry_q_addr;
     AllocaInst*  mPtr_output_addr;
 };

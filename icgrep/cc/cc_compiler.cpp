@@ -101,27 +101,27 @@ inline void CC_Compiler::process(const CC * cc) {
     }
 }
 
-PabloE* CC_Compiler::bit_pattern_expr(int pattern, int selected_bits)
+PabloE * CC_Compiler::bit_pattern_expr(int pattern, int selected_bits)
 {
     if (selected_bits == 0) {
         return mCG.createAll(1);
     }
 
     std::vector<PabloE*> bit_terms;
-    int bit_no = 0;
+    unsigned i = 0;
 
     while (selected_bits)
     {
-        char test_bit = 1 << bit_no;
+        unsigned test_bit = 1 << i;
         if (selected_bits & test_bit)
         {
             if ((pattern & test_bit) == 0)
             {
-                bit_terms.push_back(mCG.createNot(getBasisVar(bit_no)));
+                bit_terms.push_back(mCG.createNot(getBasisVar(i)));
             }
             else
             {
-                bit_terms.push_back(getBasisVar(bit_no));
+                bit_terms.push_back(getBasisVar(i));
             }
         }
         else
@@ -129,7 +129,7 @@ PabloE* CC_Compiler::bit_pattern_expr(int pattern, int selected_bits)
             bit_terms.push_back(mCG.createAll(1));
         }
         selected_bits &= ~test_bit;
-        bit_no++;
+        i++;
     }
 
     //Reduce the list so that all of the expressions are contained within a single expression.
