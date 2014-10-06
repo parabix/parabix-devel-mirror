@@ -95,16 +95,17 @@ private:
     void MakeLLVMModule();
     void DefineTypes();
     void DeclareFunctions();
-    void DeclareCallFunctions(ExpressionList stmts);
-    void DeclareCallFunctions_PabloS(PabloE* stmt);
-    void DeclareCallFunctions_PabloE(PabloE* expr);
+
+    void DeclareCallFunctions(const ExpressionList & stmts);
+    void DeclareCallFunctions(const PabloE * expr);
+
     void StoreBitBlockMarkerPtr(std::string name, int index);
     void LoadBitBlocksFromStaticExtern();
     void SetReturnMarker(std::string marker, int output_idx);
     Value* GetMarker(std::string name);
-    std::string Generate_PabloStatements(ExpressionList stmts);
-    std::string Generate_PabloS(PabloE* stmt);
-    Value* Generate_PabloE(PabloE* expr);
+    std::string Generate_PabloStatements(const ExpressionList & stmts);
+    std::string Generate_PabloS(PabloE * stmt);
+    Value* Generate_PabloE(PabloE *expr);
     Value* genMatchStar(Value* marker_expr, Value* cc_expr);
     Value* genScanThru(Value* marker_expr, Value* cc_expr);
     Value* genCarryInLoad(Value* ptr_carry_q, int carryq_idx);

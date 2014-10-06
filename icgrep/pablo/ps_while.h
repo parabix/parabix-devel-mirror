@@ -8,7 +8,6 @@
 #define PS_WHILE_H
 
 #include <pablo/pe_pabloe.h>
-#include <vector>
 
 namespace pablo {
 
