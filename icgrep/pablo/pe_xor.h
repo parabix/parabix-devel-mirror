@@ -7,12 +7,15 @@
 #ifndef XOR_H
 #define XOR_H
 
-#include "pe_pabloe.h"
+#include <pablo/pe_pabloe.h>
 
 namespace pablo {
 
+struct CodeGenState;
+
 class Xor : public PabloE {
-    friend PabloE * makeXor(PabloE *, PabloE *);
+    friend struct OptimizeXor;
+    friend struct CodeGenState;
 public:
     static inline bool classof(const PabloE * e) {
         return e->getClassTypeId() == ClassTypeId::Xor;
@@ -21,8 +24,6 @@ public:
         return false;
     }
     virtual ~Xor() {
-        delete mExpr1;
-        delete mExpr2;
     }
     inline PabloE * getExpr1() const {
         return mExpr1;
@@ -43,7 +44,17 @@ private:
     PabloE * const mExpr2;
 };
 
-PabloE * makeXor(PabloE * expr1, PabloE * expr2);
+struct OptimizeXor {
+    inline OptimizeXor(CodeGenState & cg) : cg(cg) {}
+    PabloE * operator()(PabloE * expr1, PabloE * expr2);
+private:
+    CodeGenState & cg;
+};
+
+inline PabloE * makeXor(PabloE * expr1, PabloE * expr2, CodeGenState & cg) {
+    OptimizeXor run(cg);
+    return run(expr1, expr2);
+}
 
 }
 

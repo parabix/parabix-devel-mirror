@@ -14,6 +14,7 @@ namespace pablo {
 
 class CharClass : public PabloE {
     friend CharClass * makeCharClass(const String *);
+    friend struct CodeGenState;
 public:
     static inline bool classof(const PabloE * e) {
         return e->getClassTypeId() == ClassTypeId::CharClass;
@@ -22,15 +23,14 @@ public:
         return false;
     }
     virtual ~CharClass(){
-
     }
     inline const std::string & getCharClass() const {
         return *mCharClass;
     }
 protected:
-    CharClass(const String * cc)
+    CharClass(const PabloE * cc)
     : PabloE(ClassTypeId::CharClass)
-    , mCharClass(cc)
+    , mCharClass(cast<String>(cc))
     {
 
     }

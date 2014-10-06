@@ -25,11 +25,12 @@
 #include <pablo/ps_assign.h>
 #include <pablo/ps_if.h>
 #include <pablo/ps_while.h>
+#include <pablo/symbol_generator.h>
 #include <unordered_map>
 #include <vector>
 #include <string>
 #include <array>
-#include <pablo/symbol_generator.h>
+#include <tuple>
 
 namespace pablo {
 
@@ -37,160 +38,141 @@ struct CodeGenState {
 
     CodeGenState(SymbolGenerator & symgen)
     : mSymbolGenerator(symgen)
-    , mPredecessor(nullptr)
     , mAll{{makeAll(0), makeAll(1)}}
+    , mUnary(nullptr, this)
+    , mBinary(nullptr, this)
+    , mTernary(nullptr, this)
     {
 
     }
 
     CodeGenState(CodeGenState & cg)
     : mSymbolGenerator(cg.mSymbolGenerator)
-    , mPredecessor(&cg)
     , mAll(cg.mAll)    // inherit the original "All" variables for simplicity
+    , mUnary(&(cg.mUnary), this)
+    , mBinary(&(cg.mBinary), this)
+    , mTernary(&(cg.mTernary), this)
     {
 
     }
+
+    Advance * createAdvance(PabloE * expr);
 
     inline All * createAll(const bool value) const {
         return mAll[value];
     }
 
-    Call * createCall(const std::string name);
+    Assign * createAssign(const std::string name, PabloE * expr);
 
-    Var * createVar(const Assign * assign);
+    Call * createCall(const std::string name);
 
     Var * createVar(const std::string name);
 
+    Var * createVar(Assign * assign);
+
     inline PabloE * createVarIfAssign(PabloE * const input) {
-        return isa<Assign>(input) ? createVar(cast<const Assign>(input)) : input;
+        return isa<Assign>(input) ? createVar(cast<Assign>(input)) : input;
     }
 
     CharClass * createCharClass(const std::string name);
-    Assign * createAssign(const std::string name, PabloE * expr);
 
-//    PabloE * createAdvance(PabloE * expr);
-//    PabloE * createNot(PabloE * expr);
-//    PabloE * createCall(const std::string name);
-//    PabloE * createVar(const std::string name);
-//    PabloE * createCharClass(const std::string name);
-//    PabloE * createAssign(const std::string name, PabloE * expr);
-//    PabloE * createAnd(PabloE * expr1, PabloE * expr2);
-//    PabloE * createOr(PabloE * expr1, PabloE * expr2);
-//    PabloE * createXor(PabloE * expr1, PabloE * expr2);
-//    PabloE * createMatchStar(PabloE * expr1, PabloE * expr2);
-//    PabloE * createScanThru(PabloE * from, PabloE * thru);
+    PabloE * createAnd(PabloE * expr1, PabloE * expr2);
 
+    PabloE * createNot(PabloE * expr);
 
+    PabloE * createOr(PabloE * expr1, PabloE * expr2);
 
-//    struct ExpressionTable {
-//        inline PabloE * find(PabloE * inst) {
-//            switch(inst->getClassTypeId()) {
-//                // UNARY
-//                case All:       // bool
-//                case Advance:   // pe
-//                case Not:       // pe
+    PabloE * createXor(PabloE * expr1, PabloE * expr2);
 
-//                case Call:      // string
-//                case Var:       // string
-//                case CharClass: // string
-//                // BINARY
-//                case Assign:    // string, pe
+    MatchStar * createMatchStar(PabloE * expr1, PabloE * expr2);
 
-//                case And:       // pe, pe
-//                case Or:        // pe, pe
-//                case Xor:       // pe, pe
-//                case MatchStar: // pe, pe
-//                case ScanThru:  // pe, pe
+    ScanThru * createScanThru(PabloE * from, PabloE * thru);
 
-//                case If:        // pe, pe list
-//                case While:     // pe, pe list
-//                // TERNARY
-//                case Sel:       // pe, pe, pe
-//            }
+    PabloE * createSel(PabloE * condition, PabloE * trueExpr, PabloE * falseExpr);
 
+    template<typename... Args>
+    struct ExpressionMap {
+        typedef ExpressionMap<Args...> MapType;
+        typedef std::tuple<PabloE::ClassTypeId, Args...> Key;
 
-//            switch (inst.getNumOperands()) {
-//                case 1: return _unary.find(&inst, inst.getType(), inst.getOperand(0));
-//                case 2: return _binary.find(&inst, inst.getOperand(0), inst.getOperand(1));
-//                case 3: return _ternary.find(&inst, inst.getOperand(0), inst.getOperand(1), inst.getOperand(2));
-//                default: return nullptr;
-//            }
-//        }
-//    private:
-//        template<typename... Args>
-//        struct ExpressionMap {
-//            typedef std::tuple<PabloE::ClassTypeId, Args...> Key;
-//            inline Instruction * find(Instruction * inst, Args... args) {
-//                auto key = std::make_tuple(inst->getOpcode(), args...);
-//                auto itr = _map.find(key);
-//                if (itr == _map.end()) {
-//                    _map.insert(std::make_pair(std::move(key), inst));
-//                    return nullptr;
-//                }
-//                return itr->second;
-//            }
-//        private:
-//            std::unordered_map<Key, PabloE *>                           _map;
-//        };
-//        ExpressionMap<const PabloE *>                                   _unary;
-//        ExpressionMap<const PabloE *, const PabloE *>                   _binary;
-//        ExpressionMap<const PabloE *, const PabloE *, const PabloE *>   _ternary;
-//    };
+        inline ExpressionMap(MapType * predecessor, CodeGenState * parent)
+        : mPredecessor(predecessor)
+        , mCodeGenState(*parent)
+        {
 
-//    template<typename... Args>
-//    struct ExpressionMap {
-//        typedef std::tuple<PabloE::ClassTypeId, Args...> Key;
+        }
 
-//        inline PabloE * find(const PabloE::ClassTypeId type, Args... args) {
-//            auto key = std::make_tuple(type, args...);
-//            auto itr = _map.find(key);
-//            if (itr == _map.end()) {
-//                _map.insert(std::make_pair(std::move(key), inst));
-//                return nullptr;
-//            }
-//            return itr->second;
-//        }
+        template <class Type>
+        inline Type * findOrMake(const PabloE::ClassTypeId type, Args... args) {
+            auto key = std::make_tuple(type, args...);
+            PabloE * f = find(key);
+            if (f) {
+                return cast<Type>(f);
+            }
+            Type * expr = new Type(args...);
+            mMap.insert(std::make_pair(std::move(key), expr));
+            return expr;
+        }
 
-//        inline PabloE * find(const PabloE::ClassTypeId type, Args... args) {
-//            auto key = std::make_tuple(type, args...);
-//            auto itr = _map.find(key);
-//            if (itr == _map.end()) {
-//                _map.insert(std::make_pair(std::move(key), inst));
-//                return nullptr;
-//            }
-//            return itr->second;
-//        }
+        template <class Functor>
+        inline PabloE * findOrCall(const PabloE::ClassTypeId type, Args... args) {
+            auto key = std::make_tuple(type, args...);
+            PabloE * f = find(key);
+            if (f) {
+                return f;
+            }
+            Functor mf(mCodeGenState);
+            PabloE * expr = mf(args...);
+            mMap.insert(std::make_pair(std::move(key), expr));
+            return expr;
+        }
 
-//    private:
-//        std::unordered_map<Key, PabloE *> _map;
-//    };
+    private:
 
+        inline PabloE * find(const Key & key) {
+            // check this map to see if we have it
+            auto itr = mMap.find(key);
+            if (itr != mMap.end()) {
+                return itr->second;
+            }
+            // check any previous maps to see if it exists
+            auto * pred = mPredecessor;
+            while (pred) {
+                itr = pred->mMap.find(key);
+                if (itr == pred->mMap.end()) {
+                    pred = pred->mPredecessor;
+                    continue;
+                }
+                return itr->second;
+            }
+            return nullptr;
+        }
 
+    private:
+        MapType * const         mPredecessor;
+        CodeGenState &          mCodeGenState;
+        std::map<Key, PabloE *> mMap;
+    };
 
     inline void push_back(PabloE * expr) {
         mExpressions.push_back(expr);
     }
 
-    inline std::string symgen(std::string prefix) {
-        return mSymbolGenerator.get(prefix);
+    inline std::string ssa(std::string prefix) { // Static Single-Assignment
+        return mSymbolGenerator.ssa(prefix);
     }
 
     inline const std::list<PabloE *> & expressions() const {
         return mExpressions;
     }
 
-protected:
-
-    String * getString(const std::string string);
-
 private:    
-    SymbolGenerator &                           mSymbolGenerator;
-    CodeGenState * const                        mPredecessor;
-    const std::array<All *, 2>                  mAll;
-    std::unordered_map<std::string, String *>   mStringMap;
-
-
-    std::list<PabloE *>                         mExpressions;
+    SymbolGenerator &                               mSymbolGenerator;
+    const std::array<All *, 2>                      mAll;
+    ExpressionMap<PabloE *>                         mUnary;
+    ExpressionMap<PabloE *, PabloE *>               mBinary;
+    ExpressionMap<PabloE *, PabloE *, PabloE *>     mTernary;
+    std::list<PabloE *>                             mExpressions;
 };
 
 }

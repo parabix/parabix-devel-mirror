@@ -12,7 +12,8 @@
 
 namespace pablo {
 
-class While : public PabloE {    
+class While : public PabloE {
+    friend struct CodeGenState;
 public:
     typedef std::list<PabloE*> List;
     friend While * makeWhile(PabloE * expr, List psl);
@@ -23,18 +24,11 @@ public:
     static inline bool classof(const void *) {
         return false;
     }
-
     virtual ~While() {
-        delete mExpr;
-        for (auto statement : mPSList) {
-            delete statement;
-        }
     }
-
     inline PabloE * getExpr() const {
         return mExpr;
     }
-
     inline const List & getPSList() const {
         return mPSList;
     }

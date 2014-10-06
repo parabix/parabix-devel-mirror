@@ -20,9 +20,14 @@ public:
 
     RE_Compiler(pablo::CodeGenState & baseCG, std::map<std::string, std::string> name_map);
 
-    void compile(RE * re);
+    inline void compile(RE * re) {
+        compile(re, mCG);
+    }
 
 private:
+
+    void compile(RE * re, pablo::CodeGenState & cg);
+
     pablo::PabloE * process(RE * re, pablo::PabloE * target, pablo::CodeGenState & cg_state);
     pablo::PabloE * process(Alt * alt, pablo::PabloE * target, pablo::CodeGenState & cg_state);
     pablo::PabloE * process(Seq * seq, pablo::PabloE * target, pablo::CodeGenState & cg_state);

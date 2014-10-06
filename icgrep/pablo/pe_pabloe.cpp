@@ -78,9 +78,9 @@ bool equals(const PabloE * expr1, const PabloE * expr2) {
         }
         else if (const Sel* sel1 = dyn_cast<const Sel>(expr1)) {
             if (const Sel* sel2 = cast<const Sel>(expr2)) {
-                if (equals(sel1->getIf_expr(), sel2->getIf_expr())) {
-                    if (equals(sel1->getT_expr(), sel2->getT_expr())) {
-                        return equals(sel1->getF_expr(), sel2->getF_expr());
+                if (equals(sel1->getCondition(), sel2->getCondition())) {
+                    if (equals(sel1->getTrueExpr(), sel2->getTrueExpr())) {
+                        return equals(sel1->getFalseExpr(), sel2->getFalseExpr());
                     }
                 }
             }

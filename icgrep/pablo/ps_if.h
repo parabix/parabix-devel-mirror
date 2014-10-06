@@ -13,6 +13,7 @@
 namespace pablo {
 
 class If : public PabloE {
+    friend struct CodeGenState;
 public:
     typedef std::list<PabloE*> List;
     friend If * makeIf(PabloE * expr, List psl);
@@ -23,20 +24,11 @@ public:
     static inline bool classof(const void *) {
         return false;
     }
-
-
-
     virtual ~If() {
-        delete mExpr;
-        for (auto statement : mPSList) {
-            delete statement;
-        }
     }
-
     inline PabloE * getExpr() const {
         return mExpr;
     }
-
     inline const List & getPSList() const {
         return mPSList;
     }

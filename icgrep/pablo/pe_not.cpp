@@ -4,14 +4,15 @@
  *  icgrep is a trademark of International Characters.
  */
 
-#include "pe_not.h"
-#include "pe_all.h"
+#include <pablo/pe_not.h>
+#include <pablo/codegenstate.h>
+
 
 namespace pablo {
 
-PabloE * makeNot(PabloE * expr) {
+PabloE * OptimizeNot::operator ()(PabloE * expr) {
     if (All * all = dyn_cast<All>(expr)) {
-        return makeAll(!all->getValue());
+        return cg.createAll(!all->getValue());
     }
     else if (Not * pe_not = dyn_cast<Not>(expr)) {
         return pe_not->getExpr();

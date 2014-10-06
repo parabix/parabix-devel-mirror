@@ -13,6 +13,7 @@ namespace pablo {
 
 class ScanThru : public  PabloE {
     friend PabloE * makeScanThru(PabloE *, PabloE *);
+    friend struct CodeGenState;
 public:
     static inline bool classof(const PabloE * e) {
         return e->getClassTypeId() == ClassTypeId::ScanThru;
@@ -27,16 +28,11 @@ public:
     {
 
     }
-
     virtual ~ScanThru() {
-        delete mScanFrom;
-        delete mScanThru;
     }
-
     PabloE * getScanFrom() const {
         return mScanFrom;
     }
-
     PabloE * getScanThru() const {
         return mScanThru;
     }

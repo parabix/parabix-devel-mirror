@@ -7,12 +7,15 @@
 #ifndef PE_AND_H
 #define PE_AND_H
 
-#include "pe_pabloe.h"
+#include <pablo/pe_pabloe.h>
 
 namespace pablo {
 
+struct CodeGenState;
+
 class And : public PabloE {
-    friend PabloE * makeAnd(PabloE *, PabloE *);
+    friend struct OptimizeAnd;
+    friend struct CodeGenState;
 public:
     static inline bool classof(const PabloE * e) {
         return e->getClassTypeId() == ClassTypeId::And;
@@ -21,8 +24,6 @@ public:
         return false;
     }
     virtual ~And() {
-        delete mExpr1;
-        delete mExpr2;
     }
     PabloE * getExpr1() const {
         return mExpr1;
@@ -43,7 +44,17 @@ private:
     PabloE * const mExpr2;
 };
 
-PabloE * makeAnd(PabloE * expr1, PabloE * expr2);
+struct OptimizeAnd {
+    inline OptimizeAnd(CodeGenState & cg) : cg(cg) {}
+    PabloE * operator()(PabloE * expr1, PabloE * expr2);
+private:
+    CodeGenState & cg;
+};
+
+inline PabloE * makeAnd(PabloE * expr1, PabloE * expr2, CodeGenState & cg) {
+    OptimizeAnd run(cg);
+    return run(expr1, expr2);
+}
 
 }
 

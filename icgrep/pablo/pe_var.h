@@ -14,7 +14,9 @@
 namespace pablo {
 
 class Var : public PabloE {
-    friend Var * makeVar(const String *);
+    friend Var * makeVar(String *);
+    friend Var * makeVar(Assign * assign);
+    friend struct CodeGenState;
 public:
     static inline bool classof(const PabloE * e) {
         return e->getClassTypeId() == ClassTypeId::Var;
@@ -23,28 +25,26 @@ public:
         return false;
     }
     virtual ~Var(){
-
     }
     inline const std::string & getName() const {
         return *mVar;
     }
 protected:
-    Var(const String * var)
+    Var(const PabloE * var)
     : PabloE(ClassTypeId::Var)
-    , mVar(var)
-    {
+    , mVar(cast<String>(var)) {
 
     }
 private:
     const String * const mVar;
 };
 
-inline Var * makeVar(const String * var) {
+inline Var * makeVar(String * var) {
     return new Var(var);
 }
 
-inline Var * makeVar(const Assign * assign) {
-    return makeVar(assign->mName);
+inline Var * makeVar(Assign * assign) {
+    return new Var(assign->mName);
 }
 
 }

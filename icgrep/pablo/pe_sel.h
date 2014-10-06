@@ -7,12 +7,15 @@
 #ifndef PE_SEL_H
 #define PE_SEL_H
 
-#include "pe_pabloe.h"
+#include <pablo/pe_pabloe.h>
 
 namespace pablo {
 
+struct CodeGenState;
+
 class Sel : public PabloE {
-    friend PabloE * makeSel(PabloE *, PabloE *, PabloE *);
+    friend struct OptimizeSel;
+    friend struct CodeGenState;
 public:
     static inline bool classof(const PabloE * e) {
         return e->getClassTypeId() == ClassTypeId::Sel;
@@ -21,20 +24,14 @@ public:
         return false;
     }
     virtual ~Sel() {
-        delete mIf_expr;
-        delete mT_expr;
-        delete mF_expr;
     }
-
-    inline PabloE * getIf_expr() const {
+    inline PabloE * getCondition() const {
         return mIf_expr;
     }
-
-    inline PabloE * getT_expr() const {
+    inline PabloE * getTrueExpr() const {
         return mT_expr;
     }
-
-    inline PabloE * getF_expr() const {
+    inline PabloE * getFalseExpr() const {
         return mF_expr;
     }
 protected:
@@ -52,7 +49,17 @@ private:
     PabloE * const mF_expr;
 };
 
-PabloE * makeSel(PabloE * if_expr, PabloE * t_expr, PabloE * f_expr);
+struct OptimizeSel {
+    inline OptimizeSel(CodeGenState & cg) : cg(cg) {}
+    PabloE * operator()(PabloE * if_expr, PabloE * t_expr, PabloE * f_expr);
+private:
+    CodeGenState & cg;
+};
+
+inline PabloE * makeSel(PabloE * if_expr, PabloE * t_expr, PabloE * f_expr, CodeGenState & cg) {
+    OptimizeSel run(cg);
+    return run(if_expr, t_expr, f_expr);
+}
 
 }
 

@@ -113,8 +113,8 @@ std::string StatementPrinter::ShowPabloE(const PabloE *expr)
     }
     else if (const Sel * pablo_sel = dyn_cast<const Sel>(expr))
     {
-        retVal = "((" + ShowPabloE(pablo_sel->getIf_expr()) + "And " + ShowPabloE(pablo_sel->getT_expr()) +
-                ")|(Not(" + ShowPabloE(pablo_sel->getIf_expr()) + ") And " + ShowPabloE(pablo_sel->getF_expr()) + ")";
+        retVal = "((" + ShowPabloE(pablo_sel->getCondition()) + "And " + ShowPabloE(pablo_sel->getTrueExpr()) +
+                ")|(Not(" + ShowPabloE(pablo_sel->getCondition()) + ") And " + ShowPabloE(pablo_sel->getFalseExpr()) + ")";
     }
     else if (const Not * pablo_not = dyn_cast<const Not>(expr))
     {

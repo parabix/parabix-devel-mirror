@@ -806,9 +806,9 @@ void LLVM_Generator::DeclareCallFunctions_PabloE(PabloE* expr)
     }
     else if (Sel * pablo_sel = dyn_cast<Sel>(expr))
     {
-        DeclareCallFunctions_PabloE(pablo_sel->getIf_expr());
-        DeclareCallFunctions_PabloE(pablo_sel->getT_expr());
-        DeclareCallFunctions_PabloE(pablo_sel->getF_expr());
+        DeclareCallFunctions_PabloE(pablo_sel->getCondition());
+        DeclareCallFunctions_PabloE(pablo_sel->getTrueExpr());
+        DeclareCallFunctions_PabloE(pablo_sel->getFalseExpr());
     }
     else if (Not * pablo_not = dyn_cast<Not>(expr))
     {
@@ -1057,9 +1057,9 @@ Value* LLVM_Generator::Generate_PabloE(PabloE *expr)
     else if (Sel * pablo_sel = dyn_cast<Sel>(expr))
     {
         IRBuilder<>b(mBasicBlock);
-        Value* ifMask = Generate_PabloE(pablo_sel->getIf_expr());
-        Value* and_if_true_result = b.CreateAnd(ifMask, Generate_PabloE(pablo_sel->getT_expr()));
-        Value* and_if_false_result = b.CreateAnd(genNot(ifMask), Generate_PabloE(pablo_sel->getF_expr()));
+        Value* ifMask = Generate_PabloE(pablo_sel->getCondition());
+        Value* and_if_true_result = b.CreateAnd(ifMask, Generate_PabloE(pablo_sel->getTrueExpr()));
+        Value* and_if_false_result = b.CreateAnd(genNot(ifMask), Generate_PabloE(pablo_sel->getFalseExpr()));
         Value* or_result = b.CreateOr(and_if_true_result, and_if_false_result);
 
         retVal = or_result;

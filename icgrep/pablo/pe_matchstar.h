@@ -13,6 +13,7 @@ namespace pablo {
 
 class MatchStar : public PabloE {
     friend MatchStar * makeMatchStar(PabloE *, PabloE *);
+    friend struct CodeGenState;
 public:
     static inline bool classof(const PabloE * e) {
         return e->getClassTypeId() == ClassTypeId::MatchStar;
@@ -21,14 +22,10 @@ public:
         return false;
     }
     virtual ~MatchStar() {
-        delete mExpr1;
-        delete mExpr2;
     }
-
     inline PabloE * getExpr1() const {
         return mExpr1;
     }
-
     inline PabloE * getExpr2() const  {
         return mExpr2;
     }

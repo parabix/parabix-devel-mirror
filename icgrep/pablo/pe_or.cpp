@@ -4,14 +4,12 @@
  *  icgrep is a trademark of International Characters.
  */
 
-#include "pe_or.h"
-#include "pe_all.h"
-#include "pe_not.h"
-#include "pe_and.h"
+#include <pablo/pe_or.h>
+#include <pablo/codegenstate.h>
 
 namespace pablo {
 
-PabloE * makeOr(PabloE * expr1, PabloE * expr2) {
+PabloE * OptimizeOr::operator ()(PabloE * expr1, PabloE * expr2) {
     if (All * all = dyn_cast<All>(expr1)) {
         if (all->getValue() == 1) {
             return all; //Return a true literal.
@@ -30,11 +28,11 @@ PabloE * makeOr(PabloE * expr1, PabloE * expr2) {
     }
     else if (Not * not1 = dyn_cast<Not>(expr1)) {
         // ¬a∨b = ¬¬(¬a∨b) = ¬(a ∧ ¬b)
-        return makeNot(makeAnd(not1->getExpr(), makeNot(expr2)));
+        return cg.createNot(cg.createAnd(not1->getExpr(), cg.createNot(expr2)));
     }
     else if (Not * not2 = dyn_cast<Not>(expr2)) {
         // a∨¬b = ¬¬(¬b∨a) = ¬(b ∧ ¬a)
-        return makeNot(makeAnd(not2->getExpr(), makeNot(expr1)));
+        return cg.createNot(cg.createAnd(not2->getExpr(), cg.createNot(expr1)));
     }
     else if (equals(expr1, expr2)) {
         return expr1;
@@ -48,16 +46,16 @@ PabloE * makeOr(PabloE * expr1, PabloE * expr2) {
             //These optimizations factor out common components that can occur when sets are formed by union
             //(e.g., union of [a-z] and [A-Z].
             if (equals(expr1a, expr2a)) {
-                return makeAnd(expr1a, makeOr(expr1b, expr2b));
+                return cg.createAnd(expr1a, cg.createOr(expr1b, expr2b));
             }
             else if (equals(expr1b, expr2b)) {
-                return makeAnd(expr1b, makeOr(expr1a, expr2a));
+                return cg.createAnd(expr1b, cg.createOr(expr1a, expr2a));
             }
             else if (equals(expr1a, expr2b)) {
-                return makeAnd(expr1a, makeOr(expr1b, expr2a));
+                return cg.createAnd(expr1a, cg.createOr(expr1b, expr2a));
             }
             else if (equals(expr1b, expr2a)) {
-                return makeAnd(expr1b, makeOr(expr1a, expr2b));
+                return cg.createAnd(expr1b, cg.createOr(expr1a, expr2b));
             }
         }
     }

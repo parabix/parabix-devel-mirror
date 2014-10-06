@@ -7,7 +7,8 @@
 namespace pablo {
 
 class Call : public PabloE {
-    friend Call * makeCall(const String *);
+    friend Call * makeCall(PabloE *);
+    friend struct CodeGenState;
 public:
     static inline bool classof(const PabloE * e) {
         return e->getClassTypeId() == ClassTypeId::Call;
@@ -16,25 +17,22 @@ public:
         return false;
     }
     virtual ~Call() {
-
     }
     inline const std::string & getCallee() const {
         return *mCallee;
     }
-protected:
-    Call(const String * callee)
+protected:   
+    Call(const PabloE * callee)
     : PabloE(ClassTypeId::Call)
-    , mCallee(callee) {
+    , mCallee(cast<String>(callee)) {
 
     }
 private:
     const String * const mCallee;
 };
-
-inline Call * makeCall(const String * callee) {
+inline Call * makeCall(PabloE * callee) {
     return new Call(callee);
 }
-
 }
 
 #endif // PE_CALL_H

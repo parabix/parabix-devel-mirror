@@ -9,16 +9,24 @@
 
 #include <string>
 #include <map>
+#include <unordered_map>
 
 namespace pablo {
+
+class String;
 
 class SymbolGenerator
 {
 public:
     SymbolGenerator();
-    std::string get(std::string prefix);
+
+    std::string ssa(std::string prefix);
+
+    String * operator[](const std::string string);
+
 private:
-    std::map<std::string, unsigned> pfxmap;
+    std::map<std::string, unsigned>             mPrefixMap;
+    std::unordered_map<std::string, String *>   mStringMap;
 };
 
 }

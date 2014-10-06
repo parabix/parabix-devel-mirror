@@ -60,9 +60,9 @@ void CC_Compiler::compile(const REMap & re_map) {
                     Name * name = dyn_cast<Name>(*j);
                     assert (name);
                     CharClass * cc = mCG.createCharClass(name->getName());
-                    PabloE * sym = marker ? makeAnd(marker, cc) : cc;
+                    PabloE * sym = marker ? mCG.createAnd(marker, cc) : cc;
                     if (++j != seq->end()) {
-                        marker = makeAdvance(sym);
+                        marker = mCG.createAdvance(sym);
                         mCG.push_back(marker);
                         continue;
                     }
@@ -93,7 +93,7 @@ Expression * CC_Compiler::expr_to_variable(Expression * expr) {
         return itr->second;
     }
     else {
-        return add_assignment(mCG.symgen(mGenSymPattern), expr);
+        return add_assignment(mCG.ssa(mGenSymPattern), expr);
     }
 }
 
@@ -138,7 +138,7 @@ PabloE* CC_Compiler::bit_pattern_expr(int pattern, int selected_bits)
         {
             if ((pattern & test_bit) == 0)
             {
-                bit_terms.push_back(makeNot(getBasisVar(bit_no)));
+                bit_terms.push_back(mCG.createNot(getBasisVar(bit_no)));
             }
             else
             {
@@ -159,7 +159,7 @@ PabloE* CC_Compiler::bit_pattern_expr(int pattern, int selected_bits)
         std::vector<PabloE*> new_terms;
         for (unsigned long i = 0; i < (bit_terms.size()/2); i++)
         {
-            new_terms.push_back(makeAnd(bit_terms[(2 * i) + 1], bit_terms[2 * i]));
+            new_terms.push_back(mCG.createAnd(bit_terms[(2 * i) + 1], bit_terms[2 * i]));
         }
         if (bit_terms.size() % 2 == 1)
         {
@@ -197,7 +197,7 @@ PabloE* CC_Compiler::make_range(const CodePointType n1, const CodePointType n2)
     PabloE* lo_test = GE_Range(diff_count - 1, n1 & mask1);
     PabloE* hi_test = LE_Range(diff_count - 1, n2 & mask1);
 
-    return makeAnd(common, makeSel(getBasisVar(diff_count - 1), hi_test, lo_test));
+    return mCG.createAnd(common, mCG.createSel(getBasisVar(diff_count - 1), hi_test, lo_test));
 }
 
 PabloE * CC_Compiler::GE_Range(int N, int n) {
@@ -207,11 +207,11 @@ PabloE * CC_Compiler::GE_Range(int N, int n) {
     }
     else if (((N % 2) == 0) && ((n >> (N - 2)) == 0))
     {
-        return makeOr(makeOr(getBasisVar(N - 1), getBasisVar(N - 2)), GE_Range(N - 2, n));
+        return mCG.createOr(mCG.createOr(getBasisVar(N - 1), getBasisVar(N - 2)), GE_Range(N - 2, n));
     }
     else if (((N % 2) == 0) && ((n >> (N - 2)) == 3))
     {
-        return makeAnd(makeAnd(getBasisVar(N - 1), getBasisVar(N - 2)), GE_Range(N - 2, n - (3 << (N - 2))));
+        return mCG.createAnd(mCG.createAnd(getBasisVar(N - 1), getBasisVar(N - 2)), GE_Range(N - 2, n - (3 << (N - 2))));
     }
     else if (N >= 1)
     {
@@ -225,7 +225,7 @@ PabloE * CC_Compiler::GE_Range(int N, int n) {
               is set in the target, the target will certaily be >=.  Oterwise,
               the value of GE_range(N-1), lo_range) is required.
             */
-            return makeOr(getBasisVar(N - 1), lo_range);
+            return mCG.createOr(getBasisVar(N - 1), lo_range);
         }
         else
         {
@@ -233,7 +233,7 @@ PabloE * CC_Compiler::GE_Range(int N, int n) {
               If the hi_bit of n is set, then the corresponding bit must be set
               in the target for >= and GE_range(N-1, lo_bits) must also be true.
             */
-            return makeAnd(getBasisVar(N - 1), lo_range);
+            return mCG.createAnd(getBasisVar(N - 1), lo_range);
         }
     }
     throw std::runtime_error("Unexpected input given to ge_range: " + std::to_string(N) + ", " + std::to_string(n));
@@ -249,7 +249,7 @@ PabloE * CC_Compiler::LE_Range(int N, int n)
         return mCG.createAll(1); //True.
     }
     else {
-        return makeNot(GE_Range(N, n + 1));
+        return mCG.createNot(GE_Range(N, n + 1));
     }
 }
 
@@ -284,16 +284,16 @@ PabloE* CC_Compiler::charset_expr(const CC * cc) {
                 PabloE * expr = make_range(lo, hi);
                 PabloE * bit0 = getBasisVar(0);
                 if ((lo & 1) == 0) {
-                    bit0 = makeNot(bit0);
+                    bit0 = mCG.createNot(bit0);
                 }
-                return makeAnd(expr, bit0);
+                return mCG.createAnd(expr, bit0);
             }
         }
     }
     PabloE * expr = nullptr;
     for (const CharSetItem & item : *cc) {
         PabloE * temp = char_or_range_expr(item.lo_codepoint, item.hi_codepoint);
-        expr = (expr == nullptr) ? temp : makeOr(expr, temp);
+        expr = (expr == nullptr) ? temp : mCG.createOr(expr, temp);
     }
     return expr;
 }
@@ -371,9 +371,9 @@ Expression* CC_Compiler::expr2pabloe(PabloE* expr) {
     }
     else if (Sel * pe_sel = dyn_cast<Sel>(expr))
     {
-        Expression* ret_sel = expr_to_variable(expr2pabloe(pe_sel->getIf_expr()));
-        Expression* ret_true = expr_to_variable(expr2pabloe(pe_sel->getT_expr()));
-        Expression* ret_false = expr_to_variable(expr2pabloe(pe_sel->getF_expr()));
+        Expression* ret_sel = expr_to_variable(expr2pabloe(pe_sel->getCondition()));
+        Expression* ret_true = expr_to_variable(expr2pabloe(pe_sel->getTrueExpr()));
+        Expression* ret_false = expr_to_variable(expr2pabloe(pe_sel->getFalseExpr()));
         retExpr->expr_string = "((" + ret_sel->expr_string + "&" + ret_true->expr_string + ")|(~("
             + ret_sel->expr_string + ")&" + ret_false->expr_string + ")";        
     }
