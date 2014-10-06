@@ -51,11 +51,6 @@ private:
     CodeGenState & cg;
 };
 
-inline PabloE * makeXor(PabloE * expr1, PabloE * expr2, CodeGenState & cg) {
-    OptimizeXor run(cg);
-    return run(expr1, expr2);
-}
-
 }
 
 #endif // XOR_H

@@ -400,11 +400,6 @@ LLVM_Gen_RetVal LLVM_Generator::Generate_LLVMIR(const CodeGenState & cg_state)
     //Create the carry queue.
     mCarryQueueIdx = 0;
     mCarryQueueSize += LLVM_Generator_Helper::CarryCount_PabloStatements(cg_state.expressions());
-    /* The following may be needed if carry-generating operations are ever inserted
-       by the character class compiler.
-    mCarryQueueSize += LLVM_Generator_Helper::CarryCount_PabloStatements(cc_cgo_stmtsl);
-    */
-
     mBasicBlock = BasicBlock::Create(mMod->getContext(), "parabix_entry", mFunc_process_block,0);
 
     //The basis bits structure
@@ -636,7 +631,7 @@ void LLVM_Generator::DeclareFunctions()
     mFunc_process_block->setAttributes(AttrSet);
 }
 
-void LLVM_Generator::DeclareCallFunctions(List stmts) {
+void LLVM_Generator::DeclareCallFunctions(ExpressionList stmts) {
     for (auto it = stmts.begin(); it != stmts.end(); ++it) {
         DeclareCallFunctions_PabloS(*it);
     }
@@ -655,7 +650,7 @@ void LLVM_Generator::DeclareCallFunctions_PabloS(PabloE *stmt)
     }
     else if (While * whl = dyn_cast<While>(stmt))
     {
-        DeclareCallFunctions_PabloE(whl->getExpr());
+        DeclareCallFunctions_PabloE(whl->getCondition());
         DeclareCallFunctions(whl->getPSList());
     }
 }
@@ -869,7 +864,7 @@ void LLVM_Generator::SetReturnMarker(std::string marker, int output_idx)
     Value* store_marker = b.CreateStore(marker_bitblock, output_struct_GEP);
 }
 
-std::string LLVM_Generator::Generate_PabloStatements(List stmts) {
+std::string LLVM_Generator::Generate_PabloStatements(ExpressionList stmts) {
     std::string retVal = "";
     for (auto it = stmts.begin(); it != stmts.end(); ++it) {
         retVal = Generate_PabloS(*it);
@@ -954,7 +949,7 @@ std::string LLVM_Generator::Generate_PabloS(PabloE *stmt)
         mBasicBlock = whileCondBlock;
         IRBuilder<> b_cond(whileCondBlock);
 
-        Value* expression_marker_value = Generate_PabloE(whl->getExpr());
+        Value* expression_marker_value = Generate_PabloE(whl->getCondition());
         Value* int_tobool1 = genBitBlockAny(expression_marker_value);
 
         b_cond.CreateCondBr(int_tobool1, whileEndBlock, whileBodyBlock);

@@ -37,6 +37,7 @@ protected:
 private:
     PabloE * const mExpr;
 };
+
 struct OptimizeNot {
     inline OptimizeNot(CodeGenState & cg) : cg(cg) {}
     PabloE * operator()(PabloE * expr);
@@ -44,10 +45,7 @@ private:
     CodeGenState & cg;
 
 };
-inline PabloE * makeNot(PabloE * expr, CodeGenState & cg) {
-    OptimizeNot run(cg);
-    return run(expr);
-}
+
 }
 
 #endif // PE_NOT_H

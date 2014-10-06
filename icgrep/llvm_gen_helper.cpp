@@ -26,7 +26,7 @@ using namespace pablo;
 
 LLVM_Generator_Helper::LLVM_Generator_Helper(){}
 
-int LLVM_Generator_Helper::CarryCount_PabloStatements(std::list<PabloE *> stmts)
+int LLVM_Generator_Helper::CarryCount_PabloStatements(const ExpressionList & stmts)
 {
     int retVal = 0;
     for (auto it = stmts.begin(); it != stmts.end(); ++it)
@@ -55,7 +55,7 @@ int LLVM_Generator_Helper::CarryCount_PabloS(PabloE *stmt)
     }
     else if (While* whl = dyn_cast<While>(stmt))
     {
-        retVal = CarryCount_PabloE(whl->getExpr());
+        retVal = CarryCount_PabloE(whl->getCondition());
         retVal += CarryCount_PabloStatements(whl->getPSList());
     }
 

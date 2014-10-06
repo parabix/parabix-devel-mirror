@@ -51,11 +51,6 @@ private:
     CodeGenState & cg;
 };
 
-inline PabloE * makeAnd(PabloE * expr1, PabloE * expr2, CodeGenState & cg) {
-    OptimizeAnd run(cg);
-    return run(expr1, expr2);
-}
-
 }
 
 #endif // PE_AND_H

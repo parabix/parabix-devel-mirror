@@ -12,7 +12,6 @@
 namespace pablo {
 
 class All : public PabloE {
-    friend All * makeAll(bool value);
     friend struct CodeGenState;
 public:
     static inline bool classof(const PabloE * e) {
@@ -43,10 +42,6 @@ protected:
 private:
     const bool mValue;
 };
-
-inline All * makeAll(bool value) {
-    return new All(value);
-}
 
 }
 

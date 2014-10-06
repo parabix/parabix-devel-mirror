@@ -7,20 +7,18 @@
 #ifndef SHOW_H
 #define SHOW_H
 
+#include <pablo/pe_pabloe.h>
 #include <string>
-#include <list>
 
 namespace pablo {
-    class PabloE;
     class CodeGenState;
 }
 
 class StatementPrinter {
-    typedef std::list<pablo::PabloE *> List;
 public:
     static std::string PrintStmts(const pablo::CodeGenState & cg_state);
-    static std::string Print_CC_PabloStmts(const List & stmts);
-    static std::string Print_PB_PabloStmts(const List & stmts, std::string strOut);
+    static std::string Print_CC_PabloStmts(const pablo::ExpressionList & stmts);
+    static std::string Print_PB_PabloStmts(const pablo::ExpressionList & stmts, std::string strOut);
     static std::string ShowPabloE(const pablo::PabloE * expr);
     static std::string ShowPabloS(const pablo::PabloE *stmt);
 };

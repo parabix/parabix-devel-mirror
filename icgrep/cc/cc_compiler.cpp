@@ -32,18 +32,19 @@ namespace cc {
 
 CC_Compiler::CC_Compiler(CodeGenState & cg, const Encoding encoding, const std::string basis_pattern, const std::string gensym_pattern)
 : mCG(cg)
+, mBasisBit(encoding.getBits())
 , mEncoding(encoding)
 , mGenSymPattern(gensym_pattern)
 , mBasisPattern(basis_pattern)
 {
-    for (int i = 0; i < mEncoding.getBits(); i++)
-    {
-        Var * basisVar = getBasisVar(i);
-        Expression* expr = new Expression();
-        expr->expr_string  =  basisVar->getName();
-        expr->pablo_expr = basisVar;
-        mCommon_Expression_Map.insert(make_pair(basisVar->getName(), expr));
+    for (int i = 0; i < mEncoding.getBits(); i++) {
+        mBasisBit[i] = mCG.createVar(mBasisPattern + std::to_string((mEncoding.getBits() - 1) - i));
+        mCG.push_back(mBasisBit[i]);
     }
+}
+
+inline Var * CC_Compiler::getBasisVar(const int i) const {
+    return mBasisBit[i];
 }
 
 void CC_Compiler::compile(const REMap & re_map) {
@@ -74,29 +75,6 @@ void CC_Compiler::compile(const REMap & re_map) {
     }
 }
 
-Expression * CC_Compiler::add_assignment(std::string varname, Expression* expr)
-{    
-    //Add the new mapping to the list of pablo statements:
-    mCG.push_back(mCG.createAssign(varname, expr->pablo_expr));
-
-    //Add the new mapping to the common expression map:
-    std::string key_value = expr->expr_string;
-    Expression* mapped_value = new Expression();
-    mapped_value->expr_string = varname;
-    mapped_value->pablo_expr = mCG.createVar(varname);
-    return mCommon_Expression_Map.insert(std::make_pair(key_value, mapped_value)).first->second;
-}
-
-Expression * CC_Compiler::expr_to_variable(Expression * expr) {
-    MapIterator itr = mCommon_Expression_Map.find(expr->expr_string);
-    if (itr != mCommon_Expression_Map.end()) {
-        return itr->second;
-    }
-    else {
-        return add_assignment(mCG.ssa(mGenSymPattern), expr);
-    }
-}
-
 void CC_Compiler::process_re(const RE * re) {
     if (const Alt * alt = dyn_cast<const Alt>(re)) {
         for (const RE * re : *alt) {
@@ -116,11 +94,12 @@ void CC_Compiler::process_re(const RE * re) {
     }
 }
 
-void CC_Compiler::process(const CC * cc)
-{
-    add_assignment(cc->getName(), expr2pabloe(charset_expr(cc)));
+inline void CC_Compiler::process(const CC * cc) {
+    if (mComputedSet.insert(cc->getName()).second) {
+        //Add the new mapping to the list of pablo statements:
+        mCG.push_back(mCG.createAssign(cc->getName(), charset_expr(cc)));
+    }
 }
-
 
 PabloE* CC_Compiler::bit_pattern_expr(int pattern, int selected_bits)
 {
@@ -306,83 +285,6 @@ inline PabloE * CC_Compiler::char_or_range_expr(const CodePointType lo, const Co
         return make_range(lo, hi);
     }
     throw std::runtime_error(std::string("Invalid Character Set Range: [") + std::to_string(lo) + "," + std::to_string(hi) + "]");
-}
-
-Expression* CC_Compiler::expr2pabloe(PabloE* expr) {
-    /*
-      Translate a Pablo Expression into three-address code using
-      the code generator object CC_CodeGenObject.
-    */
-
-    Expression* retExpr = new Expression();
-
-    if (All * all = dyn_cast<All>(expr))
-    {
-        if (all->getValue() == 1)
-        {
-            retExpr->expr_string = "All(1)";
-        }
-        else if (all->getValue() == 0)
-        {
-            retExpr->expr_string = "All(0)";
-        }
-    }
-    else if (Var * var = dyn_cast<Var>(expr))
-    {
-            retExpr->expr_string = var->getName();
-    }
-    else if (Not * pe_not = dyn_cast<Not>(expr))
-    {
-        Expression* ret = expr_to_variable(expr2pabloe(pe_not->getExpr()));
-        retExpr->expr_string =  "~" + ret->expr_string;
-    }
-    else if(Or * pe_or = dyn_cast<Or>(expr))
-    {
-        Expression* ret1 = expr_to_variable(expr2pabloe(pe_or->getExpr1()));
-        Expression* ret2 = expr_to_variable(expr2pabloe(pe_or->getExpr2()));
-        retExpr->expr_string = "(" + ret1->expr_string + "|" + ret2->expr_string + ")";
-    }
-    else if (Xor * pe_xor = dyn_cast<Xor>(expr))
-    {
-        Expression* ret1 = expr_to_variable(expr2pabloe(pe_xor->getExpr1()));
-        Expression* ret2 = expr_to_variable(expr2pabloe(pe_xor->getExpr2()));
-        retExpr->expr_string = "(" + ret1->expr_string + "^" + ret2->expr_string + ")";
-    }
-    else if (And * pe_and = dyn_cast<And>(expr))
-    {
-        if (Not * pe_not = dyn_cast<Not>(pe_and->getExpr1()))
-        {
-            Expression* ret1 = expr_to_variable(expr2pabloe(pe_not->getExpr()));
-            Expression* ret2 = expr_to_variable(expr2pabloe(pe_and->getExpr2()));
-            retExpr->expr_string = "(" + ret2->expr_string + "&~" + ret1->expr_string + ")";
-        }
-        else if (Not * pe_not = dyn_cast<Not>(pe_and->getExpr2()))
-        {
-            Expression* ret1 = expr_to_variable(expr2pabloe(pe_and->getExpr1()));
-            Expression* ret2 = expr_to_variable(expr2pabloe(pe_not->getExpr()));
-            retExpr->expr_string = "(" + ret1->expr_string  + "&~" + ret2->expr_string + ")";
-        }
-        else
-        {
-            Expression* ret1 = expr_to_variable(expr2pabloe(pe_and->getExpr1()));
-            Expression* ret2 = expr_to_variable(expr2pabloe(pe_and->getExpr2()));
-            retExpr->expr_string = "(" + ret1->expr_string + "&" + ret2->expr_string + ")";
-        }
-    }
-    else if (Sel * pe_sel = dyn_cast<Sel>(expr))
-    {
-        Expression* ret_sel = expr_to_variable(expr2pabloe(pe_sel->getCondition()));
-        Expression* ret_true = expr_to_variable(expr2pabloe(pe_sel->getTrueExpr()));
-        Expression* ret_false = expr_to_variable(expr2pabloe(pe_sel->getFalseExpr()));
-        retExpr->expr_string = "((" + ret_sel->expr_string + "&" + ret_true->expr_string + ")|(~("
-            + ret_sel->expr_string + ")&" + ret_false->expr_string + ")";        
-    }
-    retExpr->pablo_expr = expr;
-    return retExpr;
-}
-
-inline Var * CC_Compiler::getBasisVar(const int i) const {
-    return mCG.createVar(mBasisPattern + std::to_string((mEncoding.getBits() - 1) - i));
 }
 
 } // end of namespace cc

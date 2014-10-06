@@ -56,11 +56,6 @@ private:
     CodeGenState & cg;
 };
 
-inline PabloE * makeSel(PabloE * if_expr, PabloE * t_expr, PabloE * f_expr, CodeGenState & cg) {
-    OptimizeSel run(cg);
-    return run(if_expr, t_expr, f_expr);
-}
-
 }
 
 #endif // PE_SEL_H

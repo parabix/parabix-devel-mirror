@@ -12,11 +12,7 @@
 
 namespace pablo {
 
-class Var;
-
 class Assign : public PabloE {
-    friend Assign * makeAssign(String *, PabloE *);
-    friend Var * makeVar(Assign *);
     friend struct CodeGenState;
 public:
     static inline bool classof(const PabloE * e) {
@@ -45,10 +41,6 @@ private:
     const String * const    mName;
     PabloE * const          mExpr;
 };
-
-inline Assign * makeAssign(String * marker, PabloE * expr) {
-    return new Assign(marker, expr);
-}
 
 }
 

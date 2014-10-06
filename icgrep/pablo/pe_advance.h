@@ -36,10 +36,6 @@ private:
     PabloE * const mExpr;
 };
 
-inline Advance * makeAdvance(PabloE * expr) {
-    return new Advance(expr);
-}
-
 }
 
 #endif // PE_ADVANCE_H

@@ -52,14 +52,14 @@ std::string StatementPrinter::PrintStmts(const CodeGenState & cg_state)
     return strOut;
 }
 
-std::string StatementPrinter::Print_PB_PabloStmts(const List &stmts, std::string strOut) {
+std::string StatementPrinter::Print_PB_PabloStmts(const ExpressionList & stmts, std::string strOut) {
     for (const auto stmt : stmts) {
         strOut += ShowPabloS(stmt);
     }
     return strOut;
 }
 
-std::string StatementPrinter::Print_CC_PabloStmts(const List & stmts) {
+std::string StatementPrinter::Print_CC_PabloStmts(const pablo::ExpressionList &stmts) {
     std::string strOut = "Total Statements: " + std::to_string(stmts.size()) + "\n";
     for (const auto stmt : stmts) {
         strOut += ShowPabloS(stmt) + "\n";
@@ -81,7 +81,7 @@ std::string StatementPrinter::ShowPabloS(const PabloE * stmt)
     }
     else if (const While * whl = dyn_cast<const While>(stmt))
     {
-        retVal = "While(" + ShowPabloE(whl->getExpr()) + ", " + Print_PB_PabloStmts(whl->getPSList(), retVal) + ")";
+        retVal = "While(" + ShowPabloE(whl->getCondition()) + ", " + Print_PB_PabloStmts(whl->getPSList(), retVal) + ")";
     }
     else retVal = "UNKNOWN_STATEMENT_TYPE!!!";
     return retVal;

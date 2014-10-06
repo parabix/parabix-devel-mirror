@@ -12,7 +12,6 @@
 namespace pablo {
 
 class MatchStar : public PabloE {
-    friend MatchStar * makeMatchStar(PabloE *, PabloE *);
     friend struct CodeGenState;
 public:
     static inline bool classof(const PabloE * e) {
@@ -41,10 +40,6 @@ private:
     PabloE * const mExpr1;
     PabloE * const mExpr2;
 };
-
-inline MatchStar * makeMatchStar(PabloE * expr1, PabloE * expr2) {
-    return new MatchStar(expr1, expr2);
-}
 
 }
 

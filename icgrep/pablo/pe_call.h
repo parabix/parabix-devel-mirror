@@ -7,7 +7,6 @@
 namespace pablo {
 
 class Call : public PabloE {
-    friend Call * makeCall(PabloE *);
     friend struct CodeGenState;
 public:
     static inline bool classof(const PabloE * e) {
@@ -30,9 +29,6 @@ protected:
 private:
     const String * const mCallee;
 };
-inline Call * makeCall(PabloE * callee) {
-    return new Call(callee);
-}
 }
 
 #endif // PE_CALL_H

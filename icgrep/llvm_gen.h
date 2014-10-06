@@ -87,7 +87,6 @@ struct SumWithOverflowPack {
 };
 
 class LLVM_Generator {
-    typedef std::list<PabloE *> List;
 public:
     LLVM_Generator(std::map<std::string, std::string> name_map, std::string basis_pattern, int bits);
     ~LLVM_Generator();
@@ -96,14 +95,14 @@ private:
     void MakeLLVMModule();
     void DefineTypes();
     void DeclareFunctions();
-    void DeclareCallFunctions(List stmts);
+    void DeclareCallFunctions(ExpressionList stmts);
     void DeclareCallFunctions_PabloS(PabloE* stmt);
     void DeclareCallFunctions_PabloE(PabloE* expr);
     void StoreBitBlockMarkerPtr(std::string name, int index);
     void LoadBitBlocksFromStaticExtern();
     void SetReturnMarker(std::string marker, int output_idx);
     Value* GetMarker(std::string name);
-    std::string Generate_PabloStatements(List stmts);
+    std::string Generate_PabloStatements(ExpressionList stmts);
     std::string Generate_PabloS(PabloE* stmt);
     Value* Generate_PabloE(PabloE* expr);
     Value* genMatchStar(Value* marker_expr, Value* cc_expr);

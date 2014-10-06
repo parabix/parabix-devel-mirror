@@ -38,7 +38,7 @@ struct CodeGenState {
 
     CodeGenState(SymbolGenerator & symgen)
     : mSymbolGenerator(symgen)
-    , mAll{{makeAll(0), makeAll(1)}}
+    , mAll{{new All(0), new All(1)}}
     , mUnary(nullptr, this)
     , mBinary(nullptr, this)
     , mTernary(nullptr, this)
@@ -90,6 +90,14 @@ struct CodeGenState {
 
     PabloE * createSel(PabloE * condition, PabloE * trueExpr, PabloE * falseExpr);
 
+    inline If * createIf(PabloE * condition, ExpressionList statements) {
+        return new If(condition, std::move(statements));
+    }
+
+    inline While * createWhile(PabloE * cond, ExpressionList statements) {
+        return new While(cond, std::move(statements));
+    }
+
     template<typename... Args>
     struct ExpressionMap {
         typedef ExpressionMap<Args...> MapType;
@@ -129,7 +137,7 @@ struct CodeGenState {
 
     private:
 
-        inline PabloE * find(const Key & key) {
+        inline PabloE * find(const Key & key) const {
             // check this map to see if we have it
             auto itr = mMap.find(key);
             if (itr != mMap.end()) {
@@ -162,7 +170,7 @@ struct CodeGenState {
         return mSymbolGenerator.ssa(prefix);
     }
 
-    inline const std::list<PabloE *> & expressions() const {
+    inline const ExpressionList & expressions() const {
         return mExpressions;
     }
 
@@ -172,7 +180,7 @@ private:
     ExpressionMap<PabloE *>                         mUnary;
     ExpressionMap<PabloE *, PabloE *>               mBinary;
     ExpressionMap<PabloE *, PabloE *, PabloE *>     mTernary;
-    std::list<PabloE *>                             mExpressions;
+    ExpressionList                                  mExpressions;
 };
 
 }

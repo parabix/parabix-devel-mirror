@@ -183,3 +183,5 @@ pablo/pablo_compiler.cpp
 pablo/pablo_compiler.h
 pablo/codegenstate.cpp
 pablo/codegenstate.h
+pablo/printer_pablos.cpp
+pablo/printer_pablos.h

@@ -12,7 +12,6 @@
 namespace pablo {
 
 class ScanThru : public  PabloE {
-    friend PabloE * makeScanThru(PabloE *, PabloE *);
     friend struct CodeGenState;
 public:
     static inline bool classof(const PabloE * e) {
@@ -40,10 +39,6 @@ private:
     PabloE * const mScanFrom;
     PabloE * const mScanThru;
 };
-
-inline PabloE * makeScanThru(PabloE * from, PabloE * thru) {
-    return new ScanThru(from, thru);
-}
 
 }
 

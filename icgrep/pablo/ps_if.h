@@ -8,16 +8,12 @@
 #define PS_IF_H
 
 #include <pablo/pe_pabloe.h>
-#include <list>
 
 namespace pablo {
 
 class If : public PabloE {
     friend struct CodeGenState;
 public:
-    typedef std::list<PabloE*> List;
-    friend If * makeIf(PabloE * expr, List psl);
-
     static inline bool classof(const PabloE * e) {
         return e->getClassTypeId() == ClassTypeId::If;
     }
@@ -29,11 +25,11 @@ public:
     inline PabloE * getExpr() const {
         return mExpr;
     }
-    inline const List & getPSList() const {
+    inline const ExpressionList & getPSList() const {
         return mPSList;
     }
 protected:
-    If(PabloE * expr, List psl)
+    If(PabloE * expr, ExpressionList && psl)
     : PabloE(ClassTypeId::If)
     , mExpr(expr)
     , mPSList(psl)
@@ -42,12 +38,8 @@ protected:
     }
 private:
     PabloE * const mExpr;
-    List           mPSList;
+    ExpressionList mPSList;
 };
-
-inline If * makeIf(PabloE * expr, If::List statements) {
-    return new If(expr, statements);
-}
 
 }
 

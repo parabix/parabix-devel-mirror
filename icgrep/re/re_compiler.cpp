@@ -73,9 +73,9 @@ void RE_Compiler::compile(RE * re, CodeGenState & cg) {
         PabloE * u8scope43 = cg.createAdvance(u8scope42);
         PabloE * assign_non_final = cg.createAssign(gs_nonfinal, cg.createOr(cg.createOr(u8pfx, u8scope32), cg.createOr(u8scope42, u8scope43)));
         #ifdef USE_IF_FOR_NONFINAL
-        std::list<PabloE *> * if_body = new std::list<PabloE *> ();
-        if_body->push_back(assign_non_final);
-        mCG.push_back(makeIf(u8pfx, *if_body));
+        If::List body;
+        body.push_back(assign_non_final);
+        mCG.push_back(cg.createIf(u8pfx, body));
         #else
         cg.push_back(assign_non_final);
         #endif
@@ -223,7 +223,7 @@ inline PabloE * RE_Compiler::processUnboundedRep(RE * repeated, int lb, PabloE *
         target = cg.createAssign(while_accum->getName(), cg.createOr(var_while_test, accum));
 
         wt.push_back(target);
-        cg.push_back(makeWhile(cg.createVar(while_test), wt.expressions()));
+        cg.push_back(cg.createWhile(cg.createVar(while_test), wt.expressions()));
     }    
     return target;
 }

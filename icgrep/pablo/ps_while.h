@@ -8,16 +8,13 @@
 #define PS_WHILE_H
 
 #include <pablo/pe_pabloe.h>
-#include <list>
+#include <vector>
 
 namespace pablo {
 
 class While : public PabloE {
     friend struct CodeGenState;
 public:
-    typedef std::list<PabloE*> List;
-    friend While * makeWhile(PabloE * expr, List psl);
-
     static inline bool classof(const PabloE * e) {
         return e->getClassTypeId() == ClassTypeId::While;
     }
@@ -26,14 +23,14 @@ public:
     }
     virtual ~While() {
     }
-    inline PabloE * getExpr() const {
+    inline PabloE * getCondition() const {
         return mExpr;
     }
-    inline const List & getPSList() const {
+    inline const ExpressionList & getPSList() const {
         return mPSList;
     }
 protected:
-    While(PabloE * expr, List psl)
+    While(PabloE * expr, ExpressionList && psl)
     : PabloE(ClassTypeId::While)
     , mExpr(expr)
     , mPSList(psl)
@@ -42,12 +39,8 @@ protected:
     }
 private:
     PabloE * const  mExpr;
-    List            mPSList;
+    ExpressionList  mPSList;
 };
-
-inline While * makeWhile(PabloE * cond, While::List statements) {
-    return new While(cond, statements);
-}
 
 }
 

@@ -7,26 +7,18 @@
 #ifndef CC_COMPILER_H
 #define CC_COMPILER_H
 
-#include <string>
-#include <list>
-#include <map>
 #include "utf_encoding.h"
 #include <pablo/codegenstate.h>
 #include <pablo/pe_pabloe.h>
 #include <re/re_cc.h>
+#include <string>
+#include <set>
 
 namespace cc {
 
-struct Expression{
-    std::string expr_string;
-    pablo::PabloE * pablo_expr;
-};
-
 class CC_Compiler{
-    typedef std::map<std::string, re::RE*>      REMap;
-    typedef std::map<std::string, Expression*>  ExpressionMap;
-    typedef ExpressionMap::iterator             MapIterator;
-    typedef std::list<pablo::PabloE *>          List;
+    typedef std::map<std::string, re::RE *> REMap;
+    typedef std::set<std::string>           ComputedSet;
 public:
 
     CC_Compiler(pablo::CodeGenState & cg, const Encoding encoding, const std::string basis_pattern = "basis", const std::string gensym_pattern = "temp");
@@ -47,18 +39,14 @@ private:
     pablo::PabloE * LE_Range(int N, int n);
     pablo::PabloE * char_or_range_expr(const re::CodePointType lo, const re::CodePointType hi);
     pablo::PabloE * charset_expr(const re::CC *cc);
-    Expression* expr2pabloe(pablo::PabloE * expr);
     void process(const re::CC *cc);
 
-    Expression * add(std::string key_value, Expression *mapped_value);
-    Expression * add_assignment(std::string value, Expression* expr);
-    Expression* expr_to_variable(Expression* cgo);
-
     pablo::CodeGenState &       mCG;
+    std::vector<pablo::Var *>   mBasisBit;
     const Encoding              mEncoding;
     const std::string           mGenSymPattern;
     const std::string           mBasisPattern;
-    ExpressionMap               mCommon_Expression_Map;
+    ComputedSet                 mComputedSet;
 };
 
 }

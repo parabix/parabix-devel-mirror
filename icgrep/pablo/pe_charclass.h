@@ -13,7 +13,6 @@
 namespace pablo {
 
 class CharClass : public PabloE {
-    friend CharClass * makeCharClass(const String *);
     friend struct CodeGenState;
 public:
     static inline bool classof(const PabloE * e) {
@@ -37,10 +36,6 @@ protected:
 private:
     const String * const mCharClass;
 };
-
-inline CharClass * makeCharClass(const String * cc) {
-    return new CharClass(cc);
-}
 
 }
 

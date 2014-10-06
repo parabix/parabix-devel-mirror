@@ -7,16 +7,12 @@
 #ifndef LLVM_GENERATOR_HELPER_H
 #define LLVM_GENERATOR_HELPER_H
 
-#include <list>
-
-namespace pablo {
-class PabloE;
-}
+#include <pablo/pe_pabloe.h>
 
 class LLVM_Generator_Helper
 {
 public:
-    static int CarryCount_PabloStatements(std::list<pablo::PabloE*> stmts);
+    static int CarryCount_PabloStatements(const pablo::ExpressionList &stmts);
 private:
     static int CarryCount_PabloS(pablo::PabloE* stmt);
     static int CarryCount_PabloE(pablo::PabloE* expr);
