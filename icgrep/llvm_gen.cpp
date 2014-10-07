@@ -10,329 +10,68 @@
 
 using namespace pablo;
 
-Ps* fPs = NULL; Nl* fNl = NULL; No* fNo = NULL; Lo* fLo = NULL; Ll* fLl = NULL; Lm* fLm = NULL; Nd* fNd = NULL;
-Pc* fPc = NULL; Lt* fLt = NULL; Lu* fLu = NULL; Pf* fPf = NULL; Pd* fPd = NULL; Pe* fPe = NULL; Pi* fPi = NULL;
-Po* fPo = NULL; Me* fMe = NULL; Mc* fMc = NULL; Mn* fMn = NULL; Sk* fSk = NULL; So* fSo = NULL; Sm* fSm = NULL;
-Sc* fSc = NULL; Zl* fZl = NULL; Co* fCo = NULL; Cn* fCn = NULL; Cc* fCc = NULL; Cf* fCf = NULL; Cs* fCs = NULL;
-Zp* fZp = NULL; Zs* fZs = NULL;
-
 extern "C" {
   void wrapped_print_register(BitBlock bit_block) {
       print_register<BitBlock>("", bit_block);
   }
 }
 
-extern "C" {
-    BitBlock wrapped_get_category_Ps(Basis_bits &basis_bits){
-        if (fPs == nullptr) fPs = new Ps();
-        Struct_Ps ps_output;
-        fPs->do_block(basis_bits, ps_output);
-
-        return ps_output.cc;
-    }
+#define CREATE_GENERAL_CODE_CATEGORY(SUFFIX) \
+SUFFIX * f##SUFFIX = nullptr; \
+extern "C" { \
+    BitBlock __get_category_##SUFFIX(Basis_bits &basis_bits) { \
+        if (f##SUFFIX == nullptr) f##SUFFIX = new SUFFIX(); \
+        Struct_##SUFFIX output; \
+        f##SUFFIX->do_block(basis_bits, output); \
+        return output.cc; \
+    } \
 }
 
-extern "C" {
-    BitBlock wrapped_get_category_Nl(Basis_bits &basis_bits){
-        if (fNl == nullptr) fNl = new Nl();
-        Struct_Nl nl_output;
-        fNl->do_block(basis_bits, nl_output);
+CREATE_GENERAL_CODE_CATEGORY(Cc)
+CREATE_GENERAL_CODE_CATEGORY(Cf)
+CREATE_GENERAL_CODE_CATEGORY(Cn)
+CREATE_GENERAL_CODE_CATEGORY(Co)
+CREATE_GENERAL_CODE_CATEGORY(Cs)
+CREATE_GENERAL_CODE_CATEGORY(Ll)
+CREATE_GENERAL_CODE_CATEGORY(Lm)
+CREATE_GENERAL_CODE_CATEGORY(Lo)
+CREATE_GENERAL_CODE_CATEGORY(Lt)
+CREATE_GENERAL_CODE_CATEGORY(Lu)
+CREATE_GENERAL_CODE_CATEGORY(Mc)
+CREATE_GENERAL_CODE_CATEGORY(Me)
+CREATE_GENERAL_CODE_CATEGORY(Mn)
+CREATE_GENERAL_CODE_CATEGORY(Nd)
+CREATE_GENERAL_CODE_CATEGORY(Nl)
+CREATE_GENERAL_CODE_CATEGORY(No)
+CREATE_GENERAL_CODE_CATEGORY(Pc)
+CREATE_GENERAL_CODE_CATEGORY(Pd)
+CREATE_GENERAL_CODE_CATEGORY(Pe)
+CREATE_GENERAL_CODE_CATEGORY(Pf)
+CREATE_GENERAL_CODE_CATEGORY(Pi)
+CREATE_GENERAL_CODE_CATEGORY(Po)
+CREATE_GENERAL_CODE_CATEGORY(Ps)
+CREATE_GENERAL_CODE_CATEGORY(Sc)
+CREATE_GENERAL_CODE_CATEGORY(Sk)
+CREATE_GENERAL_CODE_CATEGORY(Sm)
+CREATE_GENERAL_CODE_CATEGORY(So)
+CREATE_GENERAL_CODE_CATEGORY(Zl)
+CREATE_GENERAL_CODE_CATEGORY(Zp)
+CREATE_GENERAL_CODE_CATEGORY(Zs)
 
-        return nl_output.cc;
-    }
-}
-
-extern "C" {
-    BitBlock wrapped_get_category_No(Basis_bits &basis_bits){
-        if (fNo == nullptr) fNo = new No();
-        Struct_No no_output;
-        fNo->do_block(basis_bits, no_output);
-
-        return no_output.cc;
-    }
-}
-
-extern "C" {
-    BitBlock wrapped_get_category_Lo(Basis_bits &basis_bits){
-        if (fLo == nullptr) fLo = new Lo();
-        Struct_Lo lo_output;
-        fLo->do_block(basis_bits, lo_output);
-
-        return lo_output.cc;
-    }
-}
-
-extern "C" {
-    BitBlock wrapped_get_category_Ll(Basis_bits &basis_bits){
-        if (fLl == nullptr) fLl = new Ll();
-        Struct_Ll ll_output;
-        fLl->do_block(basis_bits, ll_output);
-
-        return ll_output.cc;
-    }
-}
-
-extern "C" {
-    BitBlock wrapped_get_category_Lm(Basis_bits &basis_bits){
-        if (fLm == nullptr) fLm = new Lm();
-        Struct_Lm lm_output;
-        fLm->do_block(basis_bits, lm_output);
-
-        return lm_output.cc;
-    }
-}
-
-extern "C" {
-    BitBlock wrapped_get_category_Nd(Basis_bits &basis_bits){
-        if (fNd == nullptr) fNd = new Nd();
-        Struct_Nd nd_output;
-        fNd->do_block(basis_bits, nd_output);
-
-        return nd_output.cc;
-    }
-}
-
-extern "C" {
-    BitBlock wrapped_get_category_Pc(Basis_bits &basis_bits){
-        if (fPc == nullptr) fPc = new Pc();
-        Struct_Pc pc_output;
-        fPc->do_block(basis_bits, pc_output);
-
-        return pc_output.cc;
-    }
-}
-
-extern "C" {
-    BitBlock wrapped_get_category_Lt(Basis_bits &basis_bits){
-        if (fLt == nullptr) fLt = new Lt();
-        Struct_Lt lt_output;
-        fLt->do_block(basis_bits, lt_output);
-
-        return lt_output.cc;
-    }
-}
-
-extern "C" {
-    BitBlock wrapped_get_category_Lu(Basis_bits &basis_bits){
-        if (fLu == nullptr) fLu = new Lu();
-        Struct_Lu lu_output;
-        fLu->do_block(basis_bits, lu_output);
-
-        return lu_output.cc;
-    }
-}
-
-extern "C" {
-    BitBlock wrapped_get_category_Pf(Basis_bits &basis_bits){
-        if (fPf == nullptr) fPf = new Pf();
-        Struct_Pf pf_output;
-        fPf->do_block(basis_bits, pf_output);
-
-        return pf_output.cc;
-    }
-}
-
-extern "C" {
-    BitBlock wrapped_get_category_Pd(Basis_bits &basis_bits){
-        if (fPd == nullptr) fPd = new Pd();
-        Struct_Pd pd_output;
-        fPd->do_block(basis_bits, pd_output);
-
-        return pd_output.cc;
-    }
-}
-
-extern "C" {
-    BitBlock wrapped_get_category_Pe(Basis_bits &basis_bits){
-        if (fPe == nullptr) fPe = new Pe();
-        Struct_Pe pe_output;
-        fPe->do_block(basis_bits, pe_output);
-
-        return pe_output.cc;
-    }
-}
-
-extern "C" {
-    BitBlock wrapped_get_category_Pi(Basis_bits &basis_bits){
-        if (fPi == nullptr) fPi = new Pi();
-        Struct_Pi pi_output;
-        fPi->do_block(basis_bits, pi_output);
-
-        return pi_output.cc;
-    }
-}
-
-extern "C" {
-    BitBlock wrapped_get_category_Po(Basis_bits &basis_bits){
-        if (fPo == nullptr) fPo = new Po();
-        Struct_Po po_output;
-        fPo->do_block(basis_bits, po_output);
-
-        return po_output.cc;
-    }
-}
-
-extern "C" {
-    BitBlock wrapped_get_category_Me(Basis_bits &basis_bits){
-        if (fMe == nullptr) fMe = new Me();
-        Struct_Me me_output;
-        fMe->do_block(basis_bits, me_output);
-
-        return me_output.cc;
-    }
-}
-
-extern "C" {
-    BitBlock wrapped_get_category_Mc(Basis_bits &basis_bits){
-        if (fMc == nullptr) fMc = new Mc();
-        Struct_Mc mc_output;
-        fMc->do_block(basis_bits, mc_output);
-
-        return mc_output.cc;
-    }
-}
-
-extern "C" {
-    BitBlock wrapped_get_category_Mn(Basis_bits &basis_bits){
-        if (fMn == nullptr) fMn = new Mn();
-        Struct_Mn mn_output;
-        fMn->do_block(basis_bits, mn_output);
-
-        return mn_output.cc;
-    }
-}
-
-extern "C" {
-    BitBlock wrapped_get_category_Sk(Basis_bits &basis_bits){
-        if (fSk == nullptr) fSk = new Sk();
-        Struct_Sk sk_output;
-        fSk->do_block(basis_bits, sk_output);
-
-        return sk_output.cc;
-    }
-}
-
-extern "C" {
-    BitBlock wrapped_get_category_So(Basis_bits &basis_bits){
-        if (fSo == nullptr) fSo = new So();
-        Struct_So so_output;
-        fSo->do_block(basis_bits, so_output);
-
-        return so_output.cc;
-    }
-}
-
-extern "C" {
-    BitBlock wrapped_get_category_Sm(Basis_bits &basis_bits){
-        if (fSm == nullptr) fSm = new Sm();
-        Struct_Sm sm_output;
-        fSm->do_block(basis_bits, sm_output);
-
-        return sm_output.cc;
-    }
-}
-
-extern "C" {
-    BitBlock wrapped_get_category_Sc(Basis_bits &basis_bits){
-        if (fSc == nullptr) fSc = new Sc();
-        Struct_Sc sc_output;
-        fSc->do_block(basis_bits, sc_output);
-
-        return sc_output.cc;
-    }
-}
-
-extern "C" {
-    BitBlock wrapped_get_category_Zl(Basis_bits &basis_bits){
-        if (fZl == nullptr) fZl = new Zl();
-        Struct_Zl zl_output;
-        fZl->do_block(basis_bits, zl_output);
-
-        return zl_output.cc;
-    }
-}
-
-extern "C" {
-    BitBlock wrapped_get_category_Co(Basis_bits &basis_bits){
-        if (fCo == nullptr) fCo = new Co();
-        Struct_Co co_output;
-        fCo->do_block(basis_bits, co_output);
-
-        return co_output.cc;
-    }
-}
-
-extern "C" {
-    BitBlock wrapped_get_category_Cn(Basis_bits &basis_bits){
-        if (fCn == nullptr) fCn = new Cn();
-        Struct_Cn cn_output;
-        fCn->do_block(basis_bits, cn_output);
-
-        return cn_output.cc;
-    }
-}
-
-extern "C" {
-    BitBlock wrapped_get_category_Cc(Basis_bits &basis_bits){
-        if (fCc == nullptr) fCc = new Cc();
-        Struct_Cc cc_output;
-        fCc->do_block(basis_bits, cc_output);
-
-        return cc_output.cc;
-    }
-}
-
-extern "C" {
-    BitBlock wrapped_get_category_Cf(Basis_bits &basis_bits){
-        if (fCf == nullptr) fCf = new Cf();
-        Struct_Cf cf_output;
-        fCf->do_block(basis_bits, cf_output);
-
-        return cf_output.cc;
-    }
-}
-
-extern "C" {
-    BitBlock wrapped_get_category_Cs(Basis_bits &basis_bits){
-        if (fCs == nullptr) fCs = new Cs();
-        Struct_Cs cs_output;
-        fCs->do_block(basis_bits, cs_output);
-
-        return cs_output.cc;
-    }
-}
-
-extern "C" {
-    BitBlock wrapped_get_category_Zp(Basis_bits &basis_bits){
-        if (fZp == nullptr) fZp = new Zp();
-        Struct_Zp zp_output;
-        fZp->do_block(basis_bits, zp_output);
-
-        return zp_output.cc;
-    }
-}
-
-extern "C" {
-    BitBlock wrapped_get_category_Zs(Basis_bits &basis_bits){
-        if (fZs == nullptr) fZs = new Zs();
-        Struct_Zs zs_output;
-        fZs->do_block(basis_bits, zs_output);
-
-        return zs_output.cc;
-    }
-}
+#undef CREATE_GENERAL_CODE_CATEGORY
 
 LLVM_Generator::LLVM_Generator(std::map<std::string, std::string> name_map, std::string basis_pattern, int bits)
+: m_name_map(name_map)
+, mCalleeMap(nullptr)
+, mBasisBitPattern(basis_pattern)
+, mBits(bits)
 {
-    m_name_map = name_map;
-    mBasisBitPattern = basis_pattern;
-    mBits = bits;
+
 }
 
 LLVM_Generator::~LLVM_Generator()
 {
     delete mMod;
-
     delete fPs;
     delete fNl;
     delete fNo;
@@ -648,132 +387,50 @@ void LLVM_Generator::DeclareCallFunctions(const PabloE * expr)
 {
     if (const Call * pablo_call = dyn_cast<const Call>(expr))
     {
-        std::string callee = "wrapped_get_category_" + pablo_call->getCallee();
+        std::string callee = "__get_category_" + pablo_call->getCallee();
         if (mMarkerMap.find(callee) == mMarkerMap.end())
         {
+            if (mCalleeMap == nullptr) {
+                mCalleeMap = new CalleeMapType();
+                #define ADD_GENERAL_CODE_CATEGORY_CALL_TO_MAP(SUFFIX) \
+                    mCalleeMap->insert(std::make_pair(#SUFFIX, (void *)&__get_category_##SUFFIX));
+                ADD_GENERAL_CODE_CATEGORY_CALL_TO_MAP(Cc)
+                ADD_GENERAL_CODE_CATEGORY_CALL_TO_MAP(Cf)
+                ADD_GENERAL_CODE_CATEGORY_CALL_TO_MAP(Cn)
+                ADD_GENERAL_CODE_CATEGORY_CALL_TO_MAP(Co)
+                ADD_GENERAL_CODE_CATEGORY_CALL_TO_MAP(Cs)
+                ADD_GENERAL_CODE_CATEGORY_CALL_TO_MAP(Ll)
+                ADD_GENERAL_CODE_CATEGORY_CALL_TO_MAP(Lm)
+                ADD_GENERAL_CODE_CATEGORY_CALL_TO_MAP(Lo)
+                ADD_GENERAL_CODE_CATEGORY_CALL_TO_MAP(Lt)
+                ADD_GENERAL_CODE_CATEGORY_CALL_TO_MAP(Lu)
+                ADD_GENERAL_CODE_CATEGORY_CALL_TO_MAP(Mc)
+                ADD_GENERAL_CODE_CATEGORY_CALL_TO_MAP(Me)
+                ADD_GENERAL_CODE_CATEGORY_CALL_TO_MAP(Mn)
+                ADD_GENERAL_CODE_CATEGORY_CALL_TO_MAP(Nd)
+                ADD_GENERAL_CODE_CATEGORY_CALL_TO_MAP(Nl)
+                ADD_GENERAL_CODE_CATEGORY_CALL_TO_MAP(No)
+                ADD_GENERAL_CODE_CATEGORY_CALL_TO_MAP(Pc)
+                ADD_GENERAL_CODE_CATEGORY_CALL_TO_MAP(Pd)
+                ADD_GENERAL_CODE_CATEGORY_CALL_TO_MAP(Pe)
+                ADD_GENERAL_CODE_CATEGORY_CALL_TO_MAP(Pf)
+                ADD_GENERAL_CODE_CATEGORY_CALL_TO_MAP(Pi)
+                ADD_GENERAL_CODE_CATEGORY_CALL_TO_MAP(Po)
+                ADD_GENERAL_CODE_CATEGORY_CALL_TO_MAP(Ps)
+                ADD_GENERAL_CODE_CATEGORY_CALL_TO_MAP(Sc)
+                ADD_GENERAL_CODE_CATEGORY_CALL_TO_MAP(Sk)
+                ADD_GENERAL_CODE_CATEGORY_CALL_TO_MAP(Sm)
+                ADD_GENERAL_CODE_CATEGORY_CALL_TO_MAP(So)
+                ADD_GENERAL_CODE_CATEGORY_CALL_TO_MAP(Zl)
+                ADD_GENERAL_CODE_CATEGORY_CALL_TO_MAP(Zp)
+                ADD_GENERAL_CODE_CATEGORY_CALL_TO_MAP(Zs)
+                #undef ADD_GENERAL_CODE_CATEGORY_CALL_TO_MAP
+            }
             Value* func_get_unicode_category = mMod->getOrInsertFunction(callee, mXi64Vect, mBasisBitsInputPtr, NULL);
-            void* addr;
-            if (pablo_call->getCallee() == "Ps")
-            {
-                addr = (void *)&wrapped_get_category_Ps;
+            void * addr = mCalleeMap->find(pablo_call->getCallee())->second;
+            if (addr == nullptr) {
+                throw std::runtime_error("Unknown Unicode Category \"" + callee + "\"");
             }
-            else if (pablo_call->getCallee() == "Nl")
-            {
-                addr = (void *)&wrapped_get_category_Nl;
-            }
-            else if (pablo_call->getCallee() == "No")
-            {
-                addr = (void *)&wrapped_get_category_No;
-            }
-            else if (pablo_call->getCallee() == "Lo")
-            {
-                addr = (void *)&wrapped_get_category_Lo;
-            }
-            else if (pablo_call->getCallee() == "Ll")
-            {
-                addr = (void *)&wrapped_get_category_Ll;
-            }
-            else if (pablo_call->getCallee() == "Lm")
-            {
-                addr = (void *)&wrapped_get_category_Lm;
-            }
-            else if (pablo_call->getCallee() == "Nd")
-            {
-                addr = (void *)&wrapped_get_category_Nd;
-            }
-            else if (pablo_call->getCallee() == "Pc")
-            {
-                addr = (void *)&wrapped_get_category_Pc;
-            }
-            else if (pablo_call->getCallee() == "Lt")
-            {
-                addr = (void *)&wrapped_get_category_Lt;
-            }
-            else if (pablo_call->getCallee() == "Lu")
-            {
-                addr = (void *)&wrapped_get_category_Lu;
-            }
-            else if (pablo_call->getCallee() == "Pf")
-            {
-                addr = (void *)&wrapped_get_category_Pf;
-            }
-            else if (pablo_call->getCallee() == "Pd")
-            {
-                addr = (void *)&wrapped_get_category_Pd;
-            }
-            else if (pablo_call->getCallee() == "Pe")
-            {
-                addr = (void *)&wrapped_get_category_Pe;
-            }
-            else if (pablo_call->getCallee() == "Pi")
-            {
-                addr = (void *)&wrapped_get_category_Pi;
-            }
-            else if (pablo_call->getCallee() == "Po")
-            {
-                addr = (void *)&wrapped_get_category_Po;
-            }
-            else if (pablo_call->getCallee() == "Me")
-            {
-                addr = (void *)&wrapped_get_category_Me;
-            }
-            else if (pablo_call->getCallee() == "Mc")
-            {
-                addr = (void *)&wrapped_get_category_Mc;
-            }
-            else if (pablo_call->getCallee() == "Mn")
-            {
-                addr = (void *)&wrapped_get_category_Mn;
-            }
-            else if (pablo_call->getCallee() == "Sk")
-            {
-                addr = (void *)&wrapped_get_category_Sk;
-            }
-            else if (pablo_call->getCallee() == "So")
-            {
-                addr = (void *)&wrapped_get_category_So;
-            }
-            else if (pablo_call->getCallee() == "Sm")
-            {
-                addr = (void *)&wrapped_get_category_Sm;
-            }
-            else if (pablo_call->getCallee() == "Sc")
-            {
-                addr = (void *)&wrapped_get_category_Sc;
-            }
-            else if (pablo_call->getCallee() == "Zl")
-            {
-                addr = (void *)&wrapped_get_category_Zl;
-            }
-            else if (pablo_call->getCallee() == "Co")
-            {
-                addr = (void *)&wrapped_get_category_Co;
-            }
-            else if (pablo_call->getCallee() == "Cn")
-            {
-                addr = (void *)&wrapped_get_category_Cn;
-            }
-            else if (pablo_call->getCallee() == "Cc")
-            {
-                addr = (void *)&wrapped_get_category_Cc;
-            }
-            else if (pablo_call->getCallee() == "Cf")
-            {
-                addr = (void *)&wrapped_get_category_Cf;
-            }
-            else if (pablo_call->getCallee() == "Cs")
-            {
-                addr = (void *)&wrapped_get_category_Cs;
-            }
-            else if (pablo_call->getCallee() == "Zp")
-            {
-                addr = (void *)&wrapped_get_category_Zp;
-            }
-            else if (pablo_call->getCallee() == "Zs")
-            {
-                addr = (void *)&wrapped_get_category_Zs;
-            }
-
             mExecutionEngine->addGlobalMapping(cast<GlobalValue>(func_get_unicode_category), addr);
             mMarkerMap.insert(make_pair(callee, func_get_unicode_category));
         }
@@ -988,7 +645,7 @@ Value* LLVM_Generator::Generate_PabloE(const PabloE * expr)
         //Call the callee once and store the result in the marker map.
         auto f = mMarkerMap.find(call->getCallee());
         if (f == mMarkerMap.end()) {
-            std::map<std::string, Value*>::iterator itFuncGet = mMarkerMap.find("wrapped_get_category_" + call->getCallee());
+            std::map<std::string, Value*>::iterator itFuncGet = mMarkerMap.find("__get_category_" + call->getCallee());
             Value* basis_bits_struct = b.CreateLoad(mBasisBitsAddr);
             Value* unicode_category = b.CreateCall(itFuncGet->second, basis_bits_struct);
             Value* ptr = b.CreateAlloca(mXi64Vect);
@@ -1159,7 +816,6 @@ Value* LLVM_Generator::genNot(Value* e, const Twine &namehint) {
 
 Value* LLVM_Generator::genAdvanceWithCarry(Value* strm_value) {
     IRBuilder<> b(mBasicBlock);
-
 #if (BLOCK_SIZE == 128)
     int this_carry_idx = mCarryQueueIdx;
     mCarryQueueIdx++;
@@ -1190,5 +846,3 @@ Value* LLVM_Generator::genAdvanceWithCarry(Value* strm_value) {
     return genAddWithCarry(strm_value, strm_value);
 #endif
 }
-
-

@@ -21,8 +21,8 @@
 //#include "unicode_categories-simple.h"
 #include <iostream>
 #include <string>
-#include <sstream>
 #include <list>
+#include <unordered_map>
 #include <map>
 #include <algorithm>
 
@@ -87,6 +87,7 @@ struct SumWithOverflowPack {
 };
 
 class LLVM_Generator {
+    typedef std::unordered_map<std::string, void *> CalleeMapType;
 public:
     LLVM_Generator(std::map<std::string, std::string> name_map, std::string basis_pattern, int bits);
     ~LLVM_Generator();
@@ -117,14 +118,13 @@ private:
 
     SumWithOverflowPack callUaddOverflow(Value *e1, Value *e2);
 
-    int         mBits;
-    std::map<std::string, std::string> m_name_map;
-    std::string mBasisBitPattern;
-
-    Module*          mMod;
-    BasicBlock*      mBasicBlock;
-
-    ExecutionEngine* mExecutionEngine;
+    int                                 mBits;
+    std::map<std::string, std::string>  m_name_map;
+    std::string                         mBasisBitPattern;
+    Module*                             mMod;
+    BasicBlock*                         mBasicBlock;
+    CalleeMapType *                     mCalleeMap;
+    ExecutionEngine*                    mExecutionEngine;
 
     VectorType*  mXi64Vect;
     PointerType* mXi64Vect_Ptr1;
