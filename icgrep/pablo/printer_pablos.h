@@ -11,12 +11,12 @@
 #include <string>
 
 namespace pablo {
-    class CodeGenState;
+    class PabloBlock;
 }
 
 class StatementPrinter {
 public:
-    static std::string PrintStmts(const pablo::CodeGenState & cg_state);
+    static std::string PrintStmts(const pablo::PabloBlock & cg_state);
     static std::string Print_CC_PabloStmts(const pablo::ExpressionList & stmts);
     static std::string Print_PB_PabloStmts(const pablo::ExpressionList & stmts, std::string strOut);
     static std::string ShowPabloE(const pablo::PabloE * expr);

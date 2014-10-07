@@ -8,14 +8,14 @@
 #define PE_PABLOE_H
 
 #include <llvm/Support/Casting.h>
+#include <llvm/IR/Value.h>
 #include <list>
 
 using namespace llvm;
 
 namespace pablo {
 
-class PabloE
-{
+class PabloE {
 public:
     enum class ClassTypeId : unsigned {
         Advance
@@ -39,13 +39,23 @@ public:
         return mClassTypeId;
     }
     virtual ~PabloE() = 0;
+
+    inline Value * getCompiledValue() const {
+        return mCompiledValue;
+    }
+
+    inline void setCompiledValue(Value * value) {
+        mCompiledValue = value;
+    }
 protected:
     inline PabloE(const ClassTypeId id)
-    : mClassTypeId(id) {
+    : mClassTypeId(id)
+    , mCompiledValue(nullptr) {
 
     }
 private:
-    const ClassTypeId mClassTypeId;
+    const ClassTypeId   mClassTypeId;
+    Value *             mCompiledValue;
 };
 
 bool equals(const PabloE * expr1, const PabloE *expr2);

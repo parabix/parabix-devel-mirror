@@ -7,7 +7,7 @@
 namespace pablo {
 
 class Call : public PabloE {
-    friend struct CodeGenState;
+    friend struct PabloBlock;
 public:
     static inline bool classof(const PabloE * e) {
         return e->getClassTypeId() == ClassTypeId::Call;

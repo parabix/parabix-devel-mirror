@@ -12,8 +12,7 @@
 namespace pablo {
 
 class Advance : public PabloE {
-    friend Advance * makeAdvance(PabloE * expr);
-    friend struct CodeGenState;
+    friend struct PabloBlock;
 public:
     static inline bool classof(const PabloE * e) {
         return e->getClassTypeId() == ClassTypeId::Advance;

@@ -15,14 +15,12 @@
 //Pablo Expressions
 #include <pablo/codegenstate.h>
 #include <pablo/pe_pabloe.h>
-#include "llvm_gen_helper.h"
 #include "unicode_categories.h"
 //#include "unicode_categories-flat.h"
 //#include "unicode_categories-simple.h"
 #include <iostream>
 #include <string>
 #include <list>
-#include <unordered_map>
 #include <map>
 #include <algorithm>
 
@@ -86,12 +84,11 @@ struct SumWithOverflowPack {
   Value *obit;
 };
 
-class LLVM_Generator {
-    typedef std::unordered_map<std::string, void *> CalleeMapType;
+class PabloCompiler {
 public:
-    LLVM_Generator(std::map<std::string, std::string> name_map, std::string basis_pattern, int bits);
-    ~LLVM_Generator();
-    LLVM_Gen_RetVal Generate_LLVMIR(const CodeGenState & cg_state);
+    PabloCompiler(std::map<std::string, std::string> name_map, std::string basis_pattern, int bits);
+    ~PabloCompiler();
+    LLVM_Gen_RetVal compile(const PabloBlock & cg_state);
 private:
     void MakeLLVMModule();
     void DefineTypes();
@@ -103,10 +100,10 @@ private:
 
     Value * GetMarker(const std::string & name);
 
-    Value * Generate_PabloStatements(const ExpressionList & stmts);
-    Value * Generate_PabloS(const PabloE * stmt);
+    Value * compileStatements(const ExpressionList & stmts);
+    Value * compileStatement(PabloE *stmt);
 
-    Value* Generate_PabloE(const PabloE * expr);
+    Value* compileExpression(PabloE * expr);
     Value* genCarryInLoad(Value* ptr_carry_q, int carryq_idx);
     Value* genCarryOutStore(Value* carryout, Value* ptr_carry_q, int carryq_idx);
     Value* genAddWithCarry(Value* e1, Value* e2);
@@ -123,40 +120,40 @@ private:
     std::string                         mBasisBitPattern;
     Module*                             mMod;
     BasicBlock*                         mBasicBlock;
-    CalleeMapType *                     mCalleeMap;
     ExecutionEngine*                    mExecutionEngine;
 
-    VectorType*  mXi64Vect;
-    PointerType* mXi64Vect_Ptr1;
+    VectorType*                         mXi64Vect;
+    PointerType*                        mXi64Vect_Ptr1;
 
-    VectorType* mXi128Vect;
+    VectorType*                         mXi128Vect;
 
-    PointerType* mBasisBitsInputPtr;
-    PointerType* mOutputPtr;
+    PointerType*                        mBasisBitsInputPtr;
+    PointerType*                        mOutputPtr;
 
-    std::map<std::string, Value*> mMarkerMap;
+    std::map<std::string, Value*>       mCalleeMap;
+    std::map<std::string, Value*>       mMarkerMap;
 
-    int         mCarryQueueIdx;
-    Value*      mptr_carry_q;
+    int                                 mCarryQueueIdx;
+    Value*                              mptr_carry_q;
 
-    int         mCarryQueueSize;
+    int                                 mCarryQueueSize;
 
-    ConstantInt*           mConst_int64_neg1;
-    ConstantAggregateZero* mConst_Aggregate_Xi64_0;
-    Constant*              mConst_Aggregate_Xi64_neg1;
+    ConstantInt*                        mConst_int64_neg1;
+    ConstantAggregateZero*              mConst_Aggregate_Xi64_0;
+    Constant*                           mConst_Aggregate_Xi64_neg1;
 
-    FunctionType* mFuncTy_0;
-    Function*     mFunc_process_block;
-    Function*     mFunc_llvm_uadd_with_overflow;
+    FunctionType*                       mFuncTy_0;
+    Function*                           mFunc_process_block;
+    Function*                           mFunc_llvm_uadd_with_overflow;
 
-    Constant*     mFunc_print_register;
-    Constant*     mFunc_test_getCategory;
-    Constant*     mFunc_get_unicode_category;
-    Value*     mFunc_get_unicode_category_Nd;
+    Constant*                           mFunc_print_register;
+    Constant*                           mFunc_test_getCategory;
+    Constant*                           mFunc_get_unicode_category;
+    Value*                              mFunc_get_unicode_category_Nd;
 
-    AllocaInst*  mBasisBitsAddr;
-    AllocaInst*  mPtr_carry_q_addr;
-    AllocaInst*  mPtr_output_addr;
+    AllocaInst*                         mBasisBitsAddr;
+    AllocaInst*                         mPtr_carry_q_addr;
+    AllocaInst*                         mPtr_output_addr;
 };
 
 

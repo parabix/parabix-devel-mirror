@@ -11,11 +11,11 @@
 
 namespace pablo {
 
-struct CodeGenState;
+struct PabloBlock;
 
 class Or : public PabloE {
     friend struct OptimizeOr;
-    friend struct CodeGenState;
+    friend struct PabloBlock;
 public:
     static inline bool classof(const PabloE * e) {
         return e->getClassTypeId() == ClassTypeId::Or;
@@ -45,10 +45,10 @@ private:
 };
 
 struct OptimizeOr {
-    inline OptimizeOr(CodeGenState & cg) : cg(cg) {}
+    inline OptimizeOr(PabloBlock & cg) : cg(cg) {}
     PabloE * operator()(PabloE * expr1, PabloE * expr2);
 private:
-    CodeGenState & cg;
+    PabloBlock & cg;
 };
 
 }

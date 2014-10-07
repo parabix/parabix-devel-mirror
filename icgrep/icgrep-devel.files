@@ -22,8 +22,6 @@ icgrep.cpp
 icgrep.h
 llvm_gen.cpp
 llvm_gen.h
-llvm_gen_helper.cpp
-llvm_gen_helper.h
 parsefailure.cpp
 parsefailure.h
 parseresult.cpp
@@ -185,3 +183,4 @@ pablo/codegenstate.cpp
 pablo/codegenstate.h
 pablo/printer_pablos.cpp
 pablo/printer_pablos.h
+CMakeLists.txt

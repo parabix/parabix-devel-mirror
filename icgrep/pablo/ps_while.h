@@ -12,7 +12,7 @@
 namespace pablo {
 
 class While : public PabloE {
-    friend struct CodeGenState;
+    friend struct PabloBlock;
 public:
     static inline bool classof(const PabloE * e) {
         return e->getClassTypeId() == ClassTypeId::While;
@@ -25,7 +25,7 @@ public:
     inline PabloE * getCondition() const {
         return mExpr;
     }
-    inline const ExpressionList & getPSList() const {
+    inline const ExpressionList & getBody() const {
         return mPSList;
     }
 protected:

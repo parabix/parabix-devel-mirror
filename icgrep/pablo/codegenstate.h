@@ -34,9 +34,9 @@
 
 namespace pablo {
 
-struct CodeGenState {
+struct PabloBlock {
 
-    CodeGenState(SymbolGenerator & symgen)
+    PabloBlock(SymbolGenerator & symgen)
     : mSymbolGenerator(symgen)
     , mAll{{new All(0), new All(1)}}
     , mUnary(nullptr, this)
@@ -46,7 +46,7 @@ struct CodeGenState {
 
     }
 
-    CodeGenState(CodeGenState & cg)
+    PabloBlock(PabloBlock & cg)
     : mSymbolGenerator(cg.mSymbolGenerator)
     , mAll(cg.mAll) // inherit the original "All" variables for simplicity
     , mUnary(&(cg.mUnary), this)
@@ -90,12 +90,16 @@ struct CodeGenState {
 
     PabloE * createSel(PabloE * condition, PabloE * trueExpr, PabloE * falseExpr);
 
-    inline If * createIf(PabloE * condition, CodeGenState && body) {
-        return new If(condition, std::move(body.mExpressions));
+    inline If * createIf(PabloE * condition, PabloBlock && body) {
+        If * statement = new If(condition, std::move(body.mStatements));
+        mStatements.push_back(statement);
+        return statement;
     }
 
-    inline While * createWhile(PabloE * cond, CodeGenState && body) {
-        return new While(cond, std::move(body.mExpressions));
+    inline While * createWhile(PabloE * cond, PabloBlock && body) {
+        While * statement = new While(cond, std::move(body.mStatements));
+        mStatements.push_back(statement);
+        return statement;
     }
 
     template<typename... Args>
@@ -103,7 +107,7 @@ struct CodeGenState {
         typedef ExpressionMap<Args...> MapType;
         typedef std::tuple<PabloE::ClassTypeId, Args...> Key;
 
-        inline ExpressionMap(MapType * predecessor, CodeGenState * parent)
+        inline ExpressionMap(MapType * predecessor, PabloBlock * parent)
         : mPredecessor(predecessor)
         , mCodeGenState(*parent)
         {
@@ -130,7 +134,7 @@ struct CodeGenState {
                 return f;
             }
             Functor mf(mCodeGenState);
-            PabloE * expr = mf(args...);
+            PabloE * expr = mf(args...);            
             mMap.insert(std::make_pair(std::move(key), expr));
             return expr;
         }
@@ -158,20 +162,16 @@ struct CodeGenState {
 
     private:
         MapType * const         mPredecessor;
-        CodeGenState &          mCodeGenState;
+        PabloBlock &            mCodeGenState;
         std::map<Key, PabloE *> mMap;
     };
-
-    inline void push_back(PabloE * expr) {
-        mExpressions.push_back(expr);
-    }
 
     inline std::string ssa(std::string prefix) { // Static Single-Assignment
         return mSymbolGenerator.ssa(prefix);
     }
 
     inline const ExpressionList & expressions() const {
-        return mExpressions;
+        return mStatements;
     }
 
 private:    
@@ -180,7 +180,7 @@ private:
     ExpressionMap<PabloE *>                         mUnary;
     ExpressionMap<PabloE *, PabloE *>               mBinary;
     ExpressionMap<PabloE *, PabloE *, PabloE *>     mTernary;
-    ExpressionList                                  mExpressions;
+    ExpressionList                                  mStatements;
 };
 
 }

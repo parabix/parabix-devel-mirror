@@ -37,7 +37,7 @@
 using namespace re;
 using namespace pablo;
 
-std::string StatementPrinter::PrintStmts(const CodeGenState & cg_state)
+std::string StatementPrinter::PrintStmts(const PabloBlock & cg_state)
 {
     std::string strOut = "[";
 
@@ -77,11 +77,11 @@ std::string StatementPrinter::ShowPabloS(const PabloE * stmt)
     }
     else if (const If * ifstmt = dyn_cast<const If>(stmt))
     {
-        retVal = "If(" + ShowPabloE(ifstmt->getExpr()) + ", " + Print_PB_PabloStmts(ifstmt->getPSList(), retVal) + ")";
+        retVal = "If(" + ShowPabloE(ifstmt->getCondition()) + ", " + Print_PB_PabloStmts(ifstmt->getBody(), retVal) + ")";
     }
     else if (const While * whl = dyn_cast<const While>(stmt))
     {
-        retVal = "While(" + ShowPabloE(whl->getCondition()) + ", " + Print_PB_PabloStmts(whl->getPSList(), retVal) + ")";
+        retVal = "While(" + ShowPabloE(whl->getCondition()) + ", " + Print_PB_PabloStmts(whl->getBody(), retVal) + ")";
     }
     else retVal = "UNKNOWN_STATEMENT_TYPE!!!";
     return retVal;

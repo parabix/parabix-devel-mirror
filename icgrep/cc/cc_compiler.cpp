@@ -30,7 +30,7 @@ using namespace pablo;
 
 namespace cc {
 
-CC_Compiler::CC_Compiler(CodeGenState & cg, const Encoding encoding, const std::string basis_pattern, const std::string gensym_pattern)
+CC_Compiler::CC_Compiler(PabloBlock & cg, const Encoding encoding, const std::string basis_pattern, const std::string gensym_pattern)
 : mCG(cg)
 , mBasisBit(encoding.getBits())
 , mEncoding(encoding)
@@ -39,7 +39,6 @@ CC_Compiler::CC_Compiler(CodeGenState & cg, const Encoding encoding, const std::
 {
     for (int i = 0; i < mEncoding.getBits(); i++) {
         mBasisBit[i] = mCG.createVar(mBasisPattern + std::to_string((mEncoding.getBits() - 1) - i));
-        mCG.push_back(mBasisBit[i]);
     }
 }
 
@@ -64,10 +63,9 @@ void CC_Compiler::compile(const REMap & re_map) {
                     PabloE * sym = marker ? mCG.createAnd(marker, cc) : cc;
                     if (++j != seq->end()) {
                         marker = mCG.createAdvance(sym);
-                        mCG.push_back(marker);
                         continue;
                     }
-                    mCG.push_back(mCG.createAssign(seq->getName(), sym));
+                    mCG.createAssign(seq->getName(), sym);
                     break;
                 }
             }
@@ -97,11 +95,11 @@ void CC_Compiler::process_re(const RE * re) {
 inline void CC_Compiler::process(const CC * cc) {
     if (mComputedSet.insert(cc->getName()).second) {
         //Add the new mapping to the list of pablo statements:
-        mCG.push_back(mCG.createAssign(cc->getName(), charset_expr(cc)));
+        mCG.createAssign(cc->getName(), charset_expr(cc));
     }
 }
 
-PabloE * CC_Compiler::bit_pattern_expr(int pattern, int selected_bits)
+PabloE * CC_Compiler::bit_pattern_expr(const unsigned pattern, unsigned selected_bits)
 {
     if (selected_bits == 0) {
         return mCG.createAll(1);
@@ -179,7 +177,7 @@ PabloE* CC_Compiler::make_range(const CodePointType n1, const CodePointType n2)
     return mCG.createAnd(common, mCG.createSel(getBasisVar(diff_count - 1), hi_test, lo_test));
 }
 
-PabloE * CC_Compiler::GE_Range(int N, int n) {
+PabloE * CC_Compiler::GE_Range(const unsigned N, const unsigned n) {
     if (N == 0)
     {
         return mCG.createAll(1); //Return a true literal.
@@ -194,9 +192,9 @@ PabloE * CC_Compiler::GE_Range(int N, int n) {
     }
     else if (N >= 1)
     {
-        int hi_bit = n & (1 << (N-1));
+        int hi_bit = n & (1 << (N - 1));
         int lo_bits = n - hi_bit;
-        PabloE* lo_range = GE_Range(N-1, lo_bits);
+        PabloE * lo_range = GE_Range(N - 1, lo_bits);
         if (hi_bit == 0)
         {
             /*
@@ -218,7 +216,7 @@ PabloE * CC_Compiler::GE_Range(int N, int n) {
     throw std::runtime_error("Unexpected input given to ge_range: " + std::to_string(N) + ", " + std::to_string(n));
 }
 
-PabloE * CC_Compiler::LE_Range(int N, int n)
+PabloE * CC_Compiler::LE_Range(const unsigned N, const unsigned n)
 {
     /*
       If an N-bit pattern is all ones, then it is always true that any n-bit value is LE this pattern.

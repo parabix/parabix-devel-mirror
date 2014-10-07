@@ -21,7 +21,7 @@ class CC_Compiler{
     typedef std::set<std::string>           ComputedSet;
 public:
 
-    CC_Compiler(pablo::CodeGenState & cg, const Encoding encoding, const std::string basis_pattern = "basis", const std::string gensym_pattern = "temp");
+    CC_Compiler(pablo::PabloBlock & cg, const Encoding encoding, const std::string basis_pattern = "basis", const std::string gensym_pattern = "temp");
 
     void compile(const REMap & re_map);
 
@@ -32,16 +32,16 @@ public:
 private:
     void process_re(const re::RE *re);
     pablo::Var * getBasisVar(const int n) const;
-    pablo::PabloE * bit_pattern_expr(int pattern, int selected_bits);
+    pablo::PabloE * bit_pattern_expr(const unsigned pattern, unsigned selected_bits);
     pablo::PabloE * char_test_expr(const re::CodePointType ch);
     pablo::PabloE * make_range(const re::CodePointType n1, const re::CodePointType n2);
-    pablo::PabloE * GE_Range(int N, int n);
-    pablo::PabloE * LE_Range(int N, int n);
+    pablo::PabloE * GE_Range(const unsigned N, const unsigned n);
+    pablo::PabloE * LE_Range(const unsigned N, const unsigned n);
     pablo::PabloE * char_or_range_expr(const re::CodePointType lo, const re::CodePointType hi);
     pablo::PabloE * charset_expr(const re::CC *cc);
     void process(const re::CC *cc);
 
-    pablo::CodeGenState &       mCG;
+    pablo::PabloBlock &         mCG;
     std::vector<pablo::Var *>   mBasisBit;
     const Encoding              mEncoding;
     const std::string           mGenSymPattern;
