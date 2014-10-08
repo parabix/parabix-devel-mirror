@@ -318,11 +318,8 @@ void do_process(char * infile_buffer, size_t infile_size, FILE *outfile, int cou
 
     struct Basis_bits basis_bits;
     struct Output output;
-
-    BitBlock carry_q[carry_count];
-    memset (carry_q, 0, sizeof(BitBlock) * carry_count);
-
     BitBlock match_vector = simd<1>::constant<0>();
+    BitBlock * carry_q = new BitBlock[carry_count];
     int match_count=0;
     int blk = 0;
     int block_base  = 0;
@@ -330,7 +327,6 @@ void do_process(char * infile_buffer, size_t infile_size, FILE *outfile, int cou
     int buffer_pos  = 0;
     int chars_avail = 0;
     int chars_read  = 0;
-
     int line_start = 0;
     int line_end = 0;
     int match_pos = 0;
@@ -338,6 +334,8 @@ void do_process(char * infile_buffer, size_t infile_size, FILE *outfile, int cou
 
     ScannerT LF_scanner;
     ScannerT match_scanner;
+
+    memset (carry_q, 0, sizeof(BitBlock) * carry_count);
 
     char * buffer_ptr;
 #ifndef USE_MMAP
@@ -429,7 +427,6 @@ void do_process(char * infile_buffer, size_t infile_size, FILE *outfile, int cou
 	segment++;
 	line_start -= SEGMENT_SIZE;  /* Will be negative offset for use within next segment. */
 	chars_avail -= SEGMENT_SIZE;
-
 #endif
     }
 
@@ -526,6 +523,7 @@ void do_process(char * infile_buffer, size_t infile_size, FILE *outfile, int cou
     }
 
     buffer_pos += chars_avail;
+    delete carry_q;
 }
 
 
