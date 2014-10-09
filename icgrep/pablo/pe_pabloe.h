@@ -39,23 +39,13 @@ public:
         return mClassTypeId;
     }
     virtual ~PabloE() = 0;
-
-    inline Value * getCompiledValue() const {
-        return mCompiledValue;
-    }
-
-    inline void setCompiledValue(Value * value) {
-        mCompiledValue = value;
-    }
 protected:
     inline PabloE(const ClassTypeId id)
-    : mClassTypeId(id)
-    , mCompiledValue(nullptr) {
+    : mClassTypeId(id) {
 
     }
 private:
     const ClassTypeId   mClassTypeId;
-    Value *             mCompiledValue;
 };
 
 bool equals(const PabloE * expr1, const PabloE *expr2);

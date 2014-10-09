@@ -26,7 +26,7 @@
 #include <pablo/ps_if.h>
 #include <pablo/ps_while.h>
 #include <pablo/symbol_generator.h>
-#include <unordered_map>
+#include <map>
 #include <vector>
 #include <string>
 #include <array>
@@ -34,7 +34,8 @@
 
 namespace pablo {
 
-struct PabloBlock {
+class PabloBlock {
+public:
 
     PabloBlock(SymbolGenerator & symgen)
     : mSymbolGenerator(symgen)

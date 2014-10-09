@@ -90,7 +90,7 @@ public:
     ~PabloCompiler();
     LLVM_Gen_RetVal compile(const PabloBlock & cg_state);
 private:
-    void MakeLLVMModule();
+    Module * MakeLLVMModule();
     void DefineTypes();
     void DeclareFunctions();
     void DeclareCallFunctions(const ExpressionList & stmts);
@@ -115,23 +115,26 @@ private:
 
     SumWithOverflowPack callUaddOverflow(Value *e1, Value *e2);
 
+    std::map<std::string, Value*>       mCalleeMap;
+    std::map<std::string, Value*>       mMarkerMap;
+
+
     int                                 mBits;
     std::map<std::string, std::string>  m_name_map;
     std::string                         mBasisBitPattern;
+
+
+
     Module*                             mMod;
     BasicBlock*                         mBasicBlock;
     ExecutionEngine*                    mExecutionEngine;
 
     VectorType*                         mXi64Vect;
-    PointerType*                        mXi64Vect_Ptr1;
 
     VectorType*                         mXi128Vect;
 
     PointerType*                        mBasisBitsInputPtr;
     PointerType*                        mOutputPtr;
-
-    std::map<std::string, Value*>       mCalleeMap;
-    std::map<std::string, Value*>       mMarkerMap;
 
     int                                 mCarryQueueIdx;
     Value*                              mptr_carry_q;
@@ -144,12 +147,7 @@ private:
 
     FunctionType*                       mFuncTy_0;
     Function*                           mFunc_process_block;
-    Function*                           mFunc_llvm_uadd_with_overflow;
 
-    Constant*                           mFunc_print_register;
-    Constant*                           mFunc_test_getCategory;
-    Constant*                           mFunc_get_unicode_category;
-    Value*                              mFunc_get_unicode_category_Nd;
 
     AllocaInst*                         mBasisBitsAddr;
     AllocaInst*                         mPtr_carry_q_addr;

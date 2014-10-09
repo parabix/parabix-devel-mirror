@@ -11,11 +11,11 @@
 
 namespace pablo {
 
-struct PabloBlock;
+class PabloBlock;
 
 class Or : public PabloE {
     friend struct OptimizeOr;
-    friend struct PabloBlock;
+    friend class PabloBlock;
 public:
     static inline bool classof(const PabloE * e) {
         return e->getClassTypeId() == ClassTypeId::Or;

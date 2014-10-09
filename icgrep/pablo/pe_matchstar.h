@@ -12,7 +12,7 @@
 namespace pablo {
 
 class MatchStar : public PabloE {
-    friend struct PabloBlock;
+    friend class PabloBlock;
 public:
     static inline bool classof(const PabloE * e) {
         return e->getClassTypeId() == ClassTypeId::MatchStar;

@@ -8,7 +8,6 @@
 #define SYMBOL_GENERATOR_H
 
 #include <string>
-#include <map>
 #include <unordered_map>
 
 namespace pablo {
@@ -25,7 +24,7 @@ public:
     String * operator[](const std::string string);
 
 private:
-    std::map<std::string, unsigned>             mPrefixMap;
+    std::unordered_map<std::string, unsigned>   mPrefixMap;
     std::unordered_map<std::string, String *>   mStringMap;
 };
 

@@ -7,6 +7,7 @@
 #include "llvm_gen.h"
 //Pablo Expressions
 #include <pablo/codegenstate.h>
+#include <stdexcept>
 
 using namespace pablo;
 
@@ -61,11 +62,42 @@ CREATE_GENERAL_CODE_CATEGORY(Zs)
 #undef CREATE_GENERAL_CODE_CATEGORY
 
 PabloCompiler::PabloCompiler(std::map<std::string, std::string> name_map, std::string basis_pattern, int bits)
-: m_name_map(name_map)
+: mBits(bits)
+, m_name_map(name_map)
 , mBasisBitPattern(basis_pattern)
-, mBits(bits)
+, mMod(new Module("icgrep", getGlobalContext()))
+, mBasicBlock(nullptr)
+, mExecutionEngine(nullptr)
+, mXi64Vect(nullptr)
+, mXi128Vect(nullptr)
+, mBasisBitsInputPtr(nullptr)
+, mOutputPtr(nullptr)
+, mCarryQueueIdx(0)
+, mptr_carry_q(nullptr)
+, mCarryQueueSize(0)
+, mConst_int64_neg1(nullptr)
+, mConst_Aggregate_Xi64_0(nullptr)
+, mConst_Aggregate_Xi64_neg1(nullptr)
+, mFuncTy_0(nullptr)
+, mFunc_process_block(nullptr)
+, mBasisBitsAddr(nullptr)
+, mPtr_carry_q_addr(nullptr)
+, mPtr_output_addr(nullptr)
 {
+    //Create the jit execution engine.up
+    InitializeNativeTarget();
+    std::string ErrStr;
 
+    mExecutionEngine = EngineBuilder(mMod).setUseMCJIT(true).setErrorStr(&ErrStr).setOptLevel(CodeGenOpt::Level::Less).create();
+    if (mExecutionEngine == nullptr) {
+        throw std::runtime_error("\nCould not create ExecutionEngine: " + ErrStr);
+    }
+
+    InitializeNativeTargetAsmPrinter();
+    InitializeNativeTargetAsmParser();
+
+    DefineTypes();
+    DeclareFunctions();
 }
 
 PabloCompiler::~PabloCompiler()
@@ -106,25 +138,7 @@ PabloCompiler::~PabloCompiler()
 
 LLVM_Gen_RetVal PabloCompiler::compile(const PabloBlock & cg_state)
 {
-    //Create the module.
-    MakeLLVMModule();
-
-    //Create the jit execution engine.up
-    InitializeNativeTarget();
-    std::string ErrStr;
-
-    mExecutionEngine = EngineBuilder(mMod).setUseMCJIT(true).setErrorStr(&ErrStr).setOptLevel(CodeGenOpt::Level::Less).create();
-    if (!mExecutionEngine)
-    {
-        std::cout << "\nCould not create ExecutionEngine: " + ErrStr << std::endl;
-        exit(1);
-    }
-
-    InitializeNativeTargetAsmPrinter();
-    InitializeNativeTargetAsmParser();
-
-    DefineTypes();
-    DeclareFunctions();
+    mCarryQueueSize = 0;
     DeclareCallFunctions(cg_state.expressions());
 
     Function::arg_iterator args = mFunc_process_block->arg_begin();
@@ -157,7 +171,7 @@ LLVM_Gen_RetVal PabloCompiler::compile(const PabloBlock & cg_state)
     SetReturnMarker(compileStatements(cg_state.expressions()), 0);
     SetReturnMarker(GetMarker(m_name_map.find("LineFeed")->second), 1);
 
-    mCarryQueueSize = mCarryQueueIdx;
+    assert (mCarryQueueIdx == mCarryQueueSize);
 
     //Terminate the block
     ReturnInst::Create(mMod->getContext(), mBasicBlock);
@@ -217,12 +231,9 @@ void PabloCompiler::DefineTypes()
     //The BitBlock vector.
     mXi64Vect = VectorType::get(IntegerType::get(mMod->getContext(), 64), BLOCK_SIZE / 64);
     mXi128Vect = VectorType::get(IntegerType::get(mMod->getContext(), 128), BLOCK_SIZE / 128);
-    //A pointer to the BitBlock vector.
-    mXi64Vect_Ptr1 = PointerType::get(mXi64Vect, 0);
 
     //Constant definitions.
-    mConst_int64_neg1 = ConstantInt::get(mMod->getContext(), APInt(64, StringRef("-1"), 10));
-
+    mConst_int64_neg1 = ConstantInt::get(mMod->getContext(), APInt(64, -1));
     mConst_Aggregate_Xi64_0 = ConstantAggregateZero::get(mXi64Vect);
 
     std::vector<Constant*> const_packed_27_elems;
@@ -232,8 +243,8 @@ void PabloCompiler::DefineTypes()
     mConst_Aggregate_Xi64_neg1 = ConstantVector::get(const_packed_27_elems);
 
 
-    StructType *StructTy_struct_Basis_bits = mMod->getTypeByName("struct.Basis_bits");
-    if (!StructTy_struct_Basis_bits) {
+    StructType * StructTy_struct_Basis_bits = mMod->getTypeByName("struct.Basis_bits");
+    if (StructTy_struct_Basis_bits == nullptr) {
         StructTy_struct_Basis_bits = StructType::create(mMod->getContext(), "struct.Basis_bits");
     }
     std::vector<Type*>StructTy_struct_Basis_bits_fields;
@@ -241,17 +252,21 @@ void PabloCompiler::DefineTypes()
     {
         StructTy_struct_Basis_bits_fields.push_back(mXi64Vect);
     }
+
+
+
+
     if (StructTy_struct_Basis_bits->isOpaque()) {
         StructTy_struct_Basis_bits->setBody(StructTy_struct_Basis_bits_fields, /*isPacked=*/false);
     }
-
     mBasisBitsInputPtr = PointerType::get(StructTy_struct_Basis_bits, 0);
 
     std::vector<Type*>FuncTy_0_args;
     FuncTy_0_args.push_back(mBasisBitsInputPtr);
 
     //The carry q array.
-    FuncTy_0_args.push_back(mXi64Vect_Ptr1);
+    //A pointer to the BitBlock vector.
+    FuncTy_0_args.push_back(PointerType::get(mXi64Vect, 0));
 
     //The output structure.
     StructType *StructTy_struct_Output = mMod->getTypeByName("struct.Output");
@@ -382,11 +397,9 @@ void PabloCompiler::DeclareCallFunctions(const ExpressionList & stmts) {
 
 void PabloCompiler::DeclareCallFunctions(const PabloE * expr)
 {
-    if (const Call * pablo_call = dyn_cast<const Call>(expr))
-    {
+    if (const Call * pablo_call = dyn_cast<const Call>(expr)) {
         const std::string callee = pablo_call->getCallee();
-        if (mCalleeMap.find(callee) == mCalleeMap.end())
-        {
+        if (mCalleeMap.find(callee) == mCalleeMap.end()) {
             void * callee_ptr = nullptr;
             #define CHECK_GENERAL_CODE_CATEGORY(SUFFIX) \
                 if (callee == #SUFFIX) { \
@@ -421,11 +434,10 @@ void PabloCompiler::DeclareCallFunctions(const PabloE * expr)
             CHECK_GENERAL_CODE_CATEGORY(So)
             CHECK_GENERAL_CODE_CATEGORY(Zl)
             CHECK_GENERAL_CODE_CATEGORY(Zp)
-            CHECK_GENERAL_CODE_CATEGORY(Zs) {};
+            CHECK_GENERAL_CODE_CATEGORY(Zs)
+            // OTHERWISE ...
+            throw std::runtime_error("Unknown unicode category \"" + callee + "\"");
             #undef CHECK_GENERAL_CODE_CATEGORY
-            if (callee_ptr == nullptr) {
-                throw std::runtime_error("Unknown unicode category \"" + callee + "\"");
-            }
             Value * get_unicode_category = mMod->getOrInsertFunction("__get_category_" + callee, mXi64Vect, mBasisBitsInputPtr, NULL);
             if (get_unicode_category == nullptr) {
                 throw std::runtime_error("Could not create static method call for unicode category \"" + callee + "\"");
@@ -471,12 +483,6 @@ void PabloCompiler::DeclareCallFunctions(const PabloE * expr)
         DeclareCallFunctions(sthru->getScanFrom());
         DeclareCallFunctions(sthru->getScanThru());
     }
-}
-
-void PabloCompiler::MakeLLVMModule()
-{
-    mMod = new Module("icgrep", getGlobalContext());
-
 }
 
 Value* PabloCompiler::GetMarker(const std::string & name)
@@ -544,8 +550,7 @@ Value * PabloCompiler::compileStatement(PabloE * stmt)
         int if_end_idx = mCarryQueueIdx;
         if (if_start_idx < if_end_idx + 1) {
             // Have at least two internal carries.   Accumulate and store.
-            int if_accum_idx = mCarryQueueIdx;
-            mCarryQueueIdx++;
+            int if_accum_idx = mCarryQueueIdx++;
 
             Value* if_carry_accum_value = genCarryInLoad(mptr_carry_q, if_start_idx);
 
@@ -602,7 +607,7 @@ Value * PabloCompiler::compileStatement(PabloE * stmt)
         IRBuilder<> b_wb1(mBasicBlock);
         //Create and initialize a new carry queue.
         Value * ptr_while_carry_q = b_wb1.CreateAlloca(mXi64Vect, b_wb1.getInt64(mCarryQueueSize - idx));
-        for (int i=0; i < (mCarryQueueSize - idx); i++) {
+        for (int i = 0; i < (mCarryQueueSize - idx); i++) {
             genCarryOutStore(mConst_Aggregate_Xi64_0, ptr_while_carry_q, i);
         }
 
@@ -703,7 +708,6 @@ Value * PabloCompiler::compileExpression(PabloE * expr)
         Value* cc_expr = compileExpression(sthru->getScanThru());
         retVal = b.CreateAnd(genAddWithCarry(marker_expr, cc_expr), genNot(cc_expr), "scanthru_rslt");
     }
-    expr->setCompiledValue(retVal);
     return retVal;
 }
 
@@ -849,4 +853,5 @@ Value* PabloCompiler::genAdvanceWithCarry(Value* strm_value) {
 #if (BLOCK_SIZE == 256)
     return genAddWithCarry(strm_value, strm_value);
 #endif
+
 }

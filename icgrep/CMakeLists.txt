@@ -109,6 +109,8 @@ ELSE() # using Clang, GCC, Intel C++, etc
   SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-rtti")
 ENDIF()
 
+#Enable all warnings
+#SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall")
 
 #Check compiler and system architecture support for SSE or AVX
 include(CheckCXXSourceRuns)
