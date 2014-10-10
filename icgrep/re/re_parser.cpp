@@ -276,7 +276,7 @@ RE * RE_Parser::parse_charset() {
         switch (*_cursor) {
             case '^':
                 // If the first character after the [ is a ^ (caret) then the matching character class is complemented.
-                if (start == _cursor) {
+                if ((start == _cursor) && !negated) {
                     negated = true;
                     start = ++_cursor; // move the start ahead in case the next character is a ] or -
                     literal = false;                    
