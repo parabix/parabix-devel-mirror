@@ -84,6 +84,7 @@ anything but -.
 The above line does not match [^-].
 ----------
 ]]]]]]]]]]
+^^^^^^^^^^
 </datafile>
 
 <datafile id="ips">  
@@ -190,9 +191,13 @@ The following line has LATIN CAPITAL LETTER G WITH MACRON in single quotes.
 
 <grepcase regexp="[]]" datafile="special_characters" grepcount="9"/>
 <grepcase regexp="[-]" datafile="special_characters" grepcount="8"/>
-<grepcase regexp="[^]]" datafile="special_characters" grepcount="15"/>
-<grepcase regexp="[^-]" datafile="special_characters" grepcount="14"/>
-<grepcase regexp="[^]-]" datafile="special_characters" grepcount="13"/>
+<grepcase regexp="[]^-]" datafile="special_characters" grepcount="14"/>
+<grepcase regexp="[\-\]\^]" datafile="special_characters" grepcount="14"/>
+<grepcase regexp="[^]]" datafile="special_characters" grepcount="16"/>
+<grepcase regexp="[^-]" datafile="special_characters" grepcount="15"/>
+<grepcase regexp="[^^]" datafile="special_characters" grepcount="16"/>
+<grepcase regexp="[^]-]" datafile="special_characters" grepcount="14"/>
+<grepcase regexp="[.]" datafile="special_characters" grepcount="7"/>
 
 <grepcase regexp="^((([2][5][0-5]|([2][0-4]|[1][0-9]|[0-9])?[0-9])[.]){3})([2][5][0-5]|([2][0-4]|[1][0-9]|[0-9])?[0-9])$" datafile="ips" grepcount="60"/>
 
