@@ -6,6 +6,7 @@
 
 #include "llvm_gen.h"
 #include <pablo/codegenstate.h>
+#include <pablo/printer_pablos.h>
 #include <stdexcept>
 
 // #define DUMP_GENERATED_IR
@@ -524,11 +525,9 @@ Value * PabloCompiler::compileStatement(PabloE * stmt)
     if (const Assign * assign = dyn_cast<const Assign>(stmt))
     {
         IRBuilder<> b(mBasicBlock);
-
         Value * marker = GetMarker(assign->getName());
-
-        b.CreateStore(compileExpression(assign->getExpr()), marker);
-
+        Value * expr = compileExpression(assign->getExpr());
+        b.CreateStore(expr, marker);
         retVal = marker;
     }
     else if (const If * ifstmt = dyn_cast<const If>(stmt))

@@ -199,8 +199,10 @@ inline Assign * RE_Compiler::processUnboundedRep(RE * repeated, int lb, Assign *
     }
     else {
 
-        Assign * while_test = cg.createAssign(cg.ssa("while_test"), target);
-        Assign * while_accum = cg.createAssign(cg.ssa("while_accum"), target);
+        Var * targetVar = cg.createVar(target);
+
+        Assign * while_test = cg.createAssign(cg.ssa("while_test"), targetVar);
+        Assign * while_accum = cg.createAssign(cg.ssa("while_accum"), targetVar);
 
         PabloBlock wt(cg);
         PabloE * accum = cg.createVarIfAssign(process(repeated, while_test, wt));
