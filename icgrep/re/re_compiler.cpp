@@ -66,21 +66,21 @@ void RE_Compiler::compile(RE * re, PabloBlock & cg) {
         m_name_map.insert(make_pair("nonfinal", gs_nonfinal));
         //#define USE_IF_FOR_NONFINAL
         #ifdef USE_IF_FOR_NONFINAL
-        cg.createAssign(gs_nonfinal, make_all(0));
+        cg.createAssign(gs_nonfinal, cg.createAll(0));
         #endif
         PabloE * u8scope32 = cg.createAdvance(u8pfx3);
         PabloE * u8scope42 = cg.createAdvance(u8pfx4);
         PabloE * u8scope43 = cg.createAdvance(u8scope42);
         #ifdef USE_IF_FOR_NONFINAL
-        CodeGenState it(cg);
+        PabloBlock it(cg);
         it.createAssign(gs_nonfinal, it.createOr(it.createOr(u8pfx, u8scope32), it.createOr(u8scope42, u8scope43)));
         cg.createIf(u8pfx, std::move(it));
-        #else
+        #else        
         cg.createAssign(gs_nonfinal, cg.createOr(cg.createOr(u8pfx, u8scope32), cg.createOr(u8scope42, u8scope43)));
         #endif
     }
 
-    PabloE * start_marker = cg.createAll(1);
+    Assign * start_marker = cg.createAssign("start", cg.createAll(1));
     PabloE * result = process(re, start_marker, cg);
 
     //These three lines are specifically for grep.
@@ -89,7 +89,7 @@ void RE_Compiler::compile(RE * re, PabloBlock & cg) {
 }
 
 
-PabloE * RE_Compiler::process(RE * re, PabloE * target, PabloBlock & cg) {
+Assign * RE_Compiler::process(RE * re, Assign * target, PabloBlock & cg) {
     if (Name * name = dyn_cast<Name>(re)) {
         target = process(name, target, cg);
     }
@@ -103,21 +103,23 @@ PabloE * RE_Compiler::process(RE * re, PabloE * target, PabloBlock & cg) {
         target = process(rep, target, cg);
     }
     else if (isa<Start>(re)) {
-        target = cg.createAnd(cg.createVarIfAssign(target), cg.createNot(cg.createAdvance(cg.createNot(cg.createCharClass(m_name_map.find("LineFeed")->second)))));
+        PabloE * sol = cg.createNot(cg.createAdvance(cg.createNot(cg.createCharClass(m_name_map.find("LineFeed")->second))));
+        target = cg.createAssign(cg.ssa("sol"), cg.createAnd(cg.createVarIfAssign(target), sol));
     }
     else if (isa<End>(re)) {
-        target = cg.createAnd(cg.createVarIfAssign(target), cg.createCharClass(m_name_map.find("LineFeed")->second));
+        PabloE * eol = cg.createCharClass(m_name_map.find("LineFeed")->second);
+        target = cg.createAssign(cg.ssa("eol"), cg.createAnd(cg.createVarIfAssign(target), eol));
     }
 
     return target;
 }
 
-inline PabloE * RE_Compiler::process(Name * name, PabloE * target, PabloBlock & cg) {
-    PabloE * markerExpr = cg.createVarIfAssign(target);
+inline Assign * RE_Compiler::process(Name * name, Assign * target, PabloBlock & cg) {
+    PabloE * marker = cg.createVar(target);
     if (name->getType() != Name::Type::FixedLength) {
         // Move the markers forward through any nonfinal UTF-8 bytes to the final position of each character.
-        markerExpr = cg.createAnd(markerExpr, cg.createCharClass(m_name_map.find("initial")->second));
-        markerExpr = cg.createScanThru(markerExpr, cg.createCharClass(m_name_map.find("nonfinal")->second));
+        marker = cg.createAnd(marker, cg.createCharClass(m_name_map.find("initial")->second));
+        marker = cg.createScanThru(marker, cg.createCharClass(m_name_map.find("nonfinal")->second));
     }
     PabloE * cc = nullptr;
     if (name->getType() == Name::Type::UnicodeCategory) {
@@ -130,33 +132,33 @@ inline PabloE * RE_Compiler::process(Name * name, PabloE * target, PabloBlock & 
         cc = cg.createNot(cg.createOr(cg.createOr(cc, cg.createCharClass(m_name_map.find("LineFeed")->second)),
                                 cg.createCharClass(m_name_map.find("nonfinal")->second)));
     }
-    return cg.createAssign(cg.ssa("marker"), cg.createAdvance(cg.createAnd(cc, markerExpr)));
+    return cg.createAssign(cg.ssa("marker"), cg.createAdvance(cg.createAnd(cc, marker)));
 }
 
-inline PabloE * RE_Compiler::process(Seq * seq, PabloE * target, PabloBlock & cg) {
+inline Assign * RE_Compiler::process(Seq * seq, Assign *target, PabloBlock & cg) {
     for (RE * re : *seq) {
         target = process(re, target, cg);
     }
     return target;
 }
 
-inline PabloE * RE_Compiler::process(Alt * alt, PabloE * target, PabloBlock & cg) {
+inline Assign * RE_Compiler::process(Alt * alt, Assign * target, PabloBlock & cg) {
     if (alt->empty()) {
-        target = cg.createAll(0); // always fail (note: I'm not sure this ever occurs. How do I create a 0-element alternation?)
+        target = cg.createAssign(cg.ssa("fail"), cg.createAll(0)); // always fail (note: I'm not sure this ever occurs. How do I create a 0-element alternation?)
     }
     else {
         auto i = alt->begin();
-        PabloE * const base = target;
-        target = cg.createVarIfAssign(process(*i, target, cg));
+        Assign * const base = target;
+        target = process(*i, base, cg);
         while (++i != alt->end()) {
-            PabloE * other = cg.createVarIfAssign(process(*i, base, cg));
-            target = cg.createOr(target, other);
+            Assign * other = process(*i, base, cg);
+            target = cg.createAssign(cg.ssa("alt"), cg.createOr(cg.createVar(target), cg.createVar(other)));
         }
     }    
     return target;
 }
 
-inline PabloE * RE_Compiler::process(Rep * rep, PabloE * target, PabloBlock & cg) {
+inline Assign * RE_Compiler::process(Rep * rep, Assign * target, PabloBlock & cg) {
     if (rep->getUB() == Rep::UNBOUNDED_REP) {
         target = processUnboundedRep(rep->getRE(), rep->getLB(), target, cg);
     }
@@ -166,12 +168,10 @@ inline PabloE * RE_Compiler::process(Rep * rep, PabloE * target, PabloBlock & cg
     return target;
 }
 
-inline PabloE * RE_Compiler::processUnboundedRep(RE * repeated, int lb, PabloE * target, PabloBlock & cg) {
+inline Assign * RE_Compiler::processUnboundedRep(RE * repeated, int lb, Assign * target, PabloBlock & cg) {
     while (lb-- != 0) {
         target = process(repeated, target, cg);
     }
-
-    target = cg.createVarIfAssign(target);
 
     if (isa<Name>(repeated)) {
         Name * rep_name = dyn_cast<Name>(repeated);
@@ -188,12 +188,14 @@ inline PabloE * RE_Compiler::processUnboundedRep(RE * repeated, int lb, PabloE *
             ccExpr = cg.createNot(cg.createOr(cg.createOr(ccExpr, cg.createCharClass(m_name_map.find("LineFeed")->second)), cg.createCharClass(m_name_map.find("nonfinal")->second)));
         }
 
+        PabloE * unbounded = cg.createVar(target);
         if (rep_name->getType() == Name::Type::FixedLength) {
-            target = cg.createMatchStar(target, ccExpr);
+            unbounded = cg.createMatchStar(unbounded, ccExpr);
         }
         else { // Name::Unicode and Name::UnicodeCategory
-            target = cg.createAnd(cg.createMatchStar(target, cg.createOr(cg.createCharClass(m_name_map.find("nonfinal")->second), ccExpr)), cg.createCharClass(m_name_map.find("initial")->second));
+            unbounded = cg.createAnd(cg.createMatchStar(unbounded, cg.createOr(cg.createCharClass(m_name_map.find("nonfinal")->second), ccExpr)), cg.createCharClass(m_name_map.find("initial")->second));
         }
+        target = cg.createAssign(cg.ssa("marker"), unbounded);
     }
     else {
 
@@ -210,14 +212,14 @@ inline PabloE * RE_Compiler::processUnboundedRep(RE * repeated, int lb, PabloE *
     return target;
 }
 
-inline PabloE * RE_Compiler::processBoundedRep(RE * repeated, int lb, int ub, PabloE * target, PabloBlock & cg) {
+inline Assign * RE_Compiler::processBoundedRep(RE * repeated, int lb, int ub, Assign * target, PabloBlock & cg) {
     ub -= lb;
     while(lb-- != 0) {
         target = process(repeated, target, cg);
     }
     while (ub-- != 0) {
-        PabloE * alt = process(repeated, target, cg);
-        target = cg.createOr(cg.createVarIfAssign(target), cg.createVarIfAssign(alt));
+        Assign * alt = process(repeated, target, cg);
+        target = cg.createAssign(cg.ssa("alt"), cg.createOr(cg.createVar(target), cg.createVar(alt)));
     }
     return target;
 }

@@ -54,15 +54,15 @@ void CC_Compiler::compile(const REMap & re_map) {
         //This is specifically for the utf8 multibyte character classes.
         if (Seq * seq = dyn_cast<Seq>(i->second)) {
             if (seq->getType() == Seq::Type::Byte) {
-                PabloE * marker = nullptr;
+                Assign * assignment = nullptr;
                 auto j = seq->begin();
                 while (true) {
                     Name * name = dyn_cast<Name>(*j);
                     assert (name);
                     CharClass * cc = mCG.createCharClass(name->getName());
-                    PabloE * sym = marker ? mCG.createAnd(marker, cc) : cc;
+                    PabloE * sym = assignment ? mCG.createAnd(mCG.createVar(assignment->getName()), cc) : cc;
                     if (++j != seq->end()) {
-                        marker = mCG.createAdvance(sym);
+                        assignment = mCG.createAssign(mCG.ssa("marker"), mCG.createAdvance(sym));
                         continue;
                     }
                     mCG.createAssign(seq->getName(), sym);
@@ -94,7 +94,7 @@ void CC_Compiler::process_re(const RE * re) {
 
 inline void CC_Compiler::process(const CC * cc) {
     if (mComputedSet.insert(cc->getName()).second) {
-        //Add the new mapping to the list of pablo statements:
+        // Add the new mapping to the list of pablo statements:
         mCG.createAssign(cc->getName(), charset_expr(cc));
     }
 }
@@ -147,12 +147,12 @@ PabloE * CC_Compiler::bit_pattern_expr(const unsigned pattern, unsigned selected
     return bit_terms[0];
 }
 
-PabloE* CC_Compiler::char_test_expr(const CodePointType ch)
+PabloE * CC_Compiler::char_test_expr(const CodePointType ch)
 {
     return bit_pattern_expr(ch, mEncoding.getMask());
 }
 
-PabloE* CC_Compiler::make_range(const CodePointType n1, const CodePointType n2)
+PabloE * CC_Compiler::make_range(const CodePointType n1, const CodePointType n2)
 {
     CodePointType diff_count = 0;
 
@@ -230,7 +230,7 @@ PabloE * CC_Compiler::LE_Range(const unsigned N, const unsigned n)
     }
 }
 
-PabloE* CC_Compiler::charset_expr(const CC * cc) {
+inline PabloE * CC_Compiler::charset_expr(const CC * cc) {
     if (cc->empty()) {
         return mCG.createAll(0);
     }

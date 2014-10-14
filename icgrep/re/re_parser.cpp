@@ -353,6 +353,7 @@ inline bool RE_Parser::parse_charset_literal(unsigned & literal) {
             case '(': case ')': case '*': case '+':
             case '.': case '?': case '[': case '\\':
             case ']': case '{': case '|': case '}':
+            case '-':
                 if (_allow_escapes_within_charset) {
                     literal = *_cursor++;
                     return true;

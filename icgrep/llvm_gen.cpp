@@ -5,9 +5,11 @@
  */
 
 #include "llvm_gen.h"
-//Pablo Expressions
 #include <pablo/codegenstate.h>
 #include <stdexcept>
+
+// #define DUMP_GENERATED_IR
+// #define DUMP_OPTIMIZED_IR
 
 using namespace pablo;
 
@@ -76,8 +78,8 @@ PabloCompiler::PabloCompiler(std::map<std::string, std::string> name_map, std::s
 , mptr_carry_q(nullptr)
 , mCarryQueueSize(0)
 , mConst_int64_neg1(nullptr)
-, mConst_Aggregate_Xi64_0(nullptr)
-, mConst_Aggregate_Xi64_neg1(nullptr)
+, mZeroInitializer(nullptr)
+, mAllOneInitializer(nullptr)
 , mFuncTy_0(nullptr)
 , mFunc_process_block(nullptr)
 , mBasisBitsAddr(nullptr)
@@ -168,8 +170,8 @@ LLVM_Gen_RetVal PabloCompiler::compile(const PabloBlock & cg_state)
     new StoreInst(ptr_output, mPtr_output_addr, false, mBasicBlock);
 
     //Generate the IR instructions for the function.
-    SetReturnMarker(compileStatements(cg_state.expressions()), 0);
-    SetReturnMarker(GetMarker(m_name_map.find("LineFeed")->second), 1);
+    SetReturnMarker(compileStatements(cg_state.expressions()), 0); // matches
+    SetReturnMarker(GetMarker(m_name_map.find("LineFeed")->second), 1); // line feeds
 
     assert (mCarryQueueIdx == mCarryQueueSize);
 
@@ -234,13 +236,13 @@ void PabloCompiler::DefineTypes()
 
     //Constant definitions.
     mConst_int64_neg1 = ConstantInt::get(mMod->getContext(), APInt(64, -1));
-    mConst_Aggregate_Xi64_0 = ConstantAggregateZero::get(mXi64Vect);
+    mZeroInitializer = ConstantAggregateZero::get(mXi64Vect);
 
     std::vector<Constant*> const_packed_27_elems;
     for (int i = 0; i < BLOCK_SIZE / 64; ++i) {
         const_packed_27_elems.push_back(mConst_int64_neg1);
     }
-    mConst_Aggregate_Xi64_neg1 = ConstantVector::get(const_packed_27_elems);
+    mAllOneInitializer = ConstantVector::get(const_packed_27_elems);
 
 
     StructType * StructTy_struct_Basis_bits = mMod->getTypeByName("struct.Basis_bits");
@@ -491,7 +493,7 @@ Value* PabloCompiler::GetMarker(const std::string & name)
     auto itr = mMarkerMap.find(name);
     if (itr == mMarkerMap.end()) {
         Value* ptr = b.CreateAlloca(mXi64Vect);
-        b.CreateStore(mConst_Aggregate_Xi64_0, ptr);
+        b.CreateStore(mZeroInitializer, ptr);
         itr = mMarkerMap.insert(make_pair(name, ptr)).first;
     }
     return itr->second;
@@ -586,8 +588,8 @@ Value * PabloCompiler::compileStatement(PabloE * stmt)
         Value * returnMarker = compileStatements(whl->getBody());
 
         BasicBlock*  whileCondBlock = BasicBlock::Create(mMod->getContext(), "while.cond", mFunc_process_block, 0);
-        BasicBlock*  whileBodyBlock = BasicBlock::Create(mMod->getContext(), "while.body",mFunc_process_block, 0);
-        BasicBlock*  whileEndBlock = BasicBlock::Create(mMod->getContext(), "while.end",mFunc_process_block, 0);
+        BasicBlock*  whileBodyBlock = BasicBlock::Create(mMod->getContext(), "while.body", mFunc_process_block, 0);
+        BasicBlock*  whileEndBlock = BasicBlock::Create(mMod->getContext(), "while.end", mFunc_process_block, 0);
 
         IRBuilder<> b(mBasicBlock);
         b.CreateBr(whileCondBlock);
@@ -608,7 +610,7 @@ Value * PabloCompiler::compileStatement(PabloE * stmt)
         //Create and initialize a new carry queue.
         Value * ptr_while_carry_q = b_wb1.CreateAlloca(mXi64Vect, b_wb1.getInt64(mCarryQueueSize - idx));
         for (int i = 0; i < (mCarryQueueSize - idx); i++) {
-            genCarryOutStore(mConst_Aggregate_Xi64_0, ptr_while_carry_q, i);
+            genCarryOutStore(mZeroInitializer, ptr_while_carry_q, i);
         }
 
         //Point mptr_carry_q to the new local carry queue.
@@ -642,7 +644,7 @@ Value * PabloCompiler::compileExpression(PabloE * expr)
     if (const All* all = dyn_cast<All>(expr))
     {
         Value* ptr_all = b.CreateAlloca(mXi64Vect);
-        b.CreateStore((all->getValue() == 0 ? mConst_Aggregate_Xi64_0 : mConst_Aggregate_Xi64_neg1), ptr_all);
+        b.CreateStore((all->getValue() == 0 ? mZeroInitializer : mAllOneInitializer), ptr_all);
         retVal = b.CreateLoad(ptr_all);
     }
     else if (const Call* call = dyn_cast<Call>(expr))
@@ -684,7 +686,7 @@ Value * PabloCompiler::compileExpression(PabloE * expr)
     else if (const Not * pablo_not = dyn_cast<Not>(expr))
     {
         Value* expr_value = compileExpression(pablo_not->getExpr());
-        retVal = b.CreateXor(expr_value, mConst_Aggregate_Xi64_neg1, "not");
+        retVal = b.CreateXor(expr_value, mAllOneInitializer, "not");
     }
     else if (const CharClass * cc = dyn_cast<CharClass>(expr))
     {
@@ -819,7 +821,7 @@ Value* PabloCompiler::genShiftLeft64(Value* e, const Twine &namehint) {
 
 Value* PabloCompiler::genNot(Value* e, const Twine &namehint) {
     IRBuilder<> b(mBasicBlock);
-    return b.CreateXor(e, mConst_Aggregate_Xi64_neg1, namehint);
+    return b.CreateXor(e, mAllOneInitializer, namehint);
 }
 
 Value* PabloCompiler::genAdvanceWithCarry(Value* strm_value) {

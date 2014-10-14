@@ -123,7 +123,7 @@ public:
                 return cast<Type>(f);
             }
             Type * expr = new Type(args...);
-            mMap.insert(std::make_pair(std::move(key), expr));
+            insert(std::move(key), expr);
             return expr;
         }
 
@@ -136,11 +136,13 @@ public:
             }
             Functor mf(mCodeGenState);
             PabloE * expr = mf(args...);            
-            mMap.insert(std::make_pair(std::move(key), expr));
+            insert(std::move(key), expr);
             return expr;
         }
 
-    private:
+        inline void insert(Key && key, PabloE * expr) {
+            mMap.insert(std::make_pair(std::move(key), expr));
+        }
 
         inline PabloE * find(const Key & key) const {
             // check this map to see if we have it

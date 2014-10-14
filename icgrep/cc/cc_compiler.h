@@ -11,6 +11,7 @@
 #include <pablo/codegenstate.h>
 #include <pablo/pe_pabloe.h>
 #include <re/re_cc.h>
+#include <unordered_map>
 #include <string>
 #include <set>
 
@@ -41,12 +42,12 @@ private:
     pablo::PabloE * charset_expr(const re::CC *cc);
     void process(const re::CC *cc);
 
-    pablo::PabloBlock &         mCG;
-    std::vector<pablo::Var *>   mBasisBit;
-    const Encoding              mEncoding;
-    const std::string           mGenSymPattern;
-    const std::string           mBasisPattern;
-    ComputedSet                 mComputedSet;
+    pablo::PabloBlock &                                 mCG;
+    std::vector<pablo::Var *>                           mBasisBit;
+    const Encoding                                      mEncoding;
+    const std::string                                   mGenSymPattern;
+    const std::string                                   mBasisPattern;
+    ComputedSet                                         mComputedSet;
 };
 
 }

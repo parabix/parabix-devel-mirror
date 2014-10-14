@@ -44,6 +44,15 @@ PabloE * PabloBlock::createAnd(PabloE * expr1, PabloE * expr2) {
 }
 
 Assign * PabloBlock::createAssign(const std::string name, PabloE * expr) {
+//    auto key = std::make_tuple(PabloE::ClassTypeId::Assign, expr);
+//    Assign * assign = cast<Assign>(mUnary.find(key));
+//    if (assign == nullptr) {
+//        assign = new Assign(mSymbolGenerator[name], expr);
+//        mUnary.insert(std::move(key), assign);
+//    }
+//    else {
+//        assign = new Assign(mSymbolGenerator[name], createVar(assign));
+//    }
     Assign * assign = mBinary.findOrMake<Assign>(PabloE::ClassTypeId::Assign, mSymbolGenerator[name], expr);
     mStatements.push_back(assign);
     return assign;

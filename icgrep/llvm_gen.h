@@ -142,8 +142,8 @@ private:
     int                                 mCarryQueueSize;
 
     ConstantInt*                        mConst_int64_neg1;
-    ConstantAggregateZero*              mConst_Aggregate_Xi64_0;
-    Constant*                           mConst_Aggregate_Xi64_neg1;
+    ConstantAggregateZero*              mZeroInitializer;
+    Constant*                           mAllOneInitializer;
 
     FunctionType*                       mFuncTy_0;
     Function*                           mFunc_process_block;
