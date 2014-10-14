@@ -230,7 +230,7 @@ int main(int argc, char *argv[])
         cycles = get_hrcycles();
         timer = getElapsedTime();
     }
-    LLVM_Gen_RetVal llvm_codegen = icgrep::compile(compile_time_option, encoding, (regex_from_file_option ? fileregex : inregex));
+    const auto llvm_codegen = icgrep::compile(compile_time_option, encoding, (regex_from_file_option ? fileregex : inregex));
 
     if (compile_time_option)
     {

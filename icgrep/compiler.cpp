@@ -10,16 +10,17 @@
  *  icgrep is a trademark of International Characters.
  */
 
-#include "compiler.h"
-#include "re/re_nullable.h"
-#include "re/re_simplifier.h"
-#include "re/re_reducer.h"
-#include "re/parsefailure.h"
-#include "re/re_parser.h"
-#include "re/re_compiler.h"
+#include <compiler.h>
+#include <re/re_nullable.h>
+#include <re/re_simplifier.h>
+#include <re/re_reducer.h>
+#include <re/parsefailure.h>
+#include <re/re_parser.h>
+#include <re/re_compiler.h>
 #include "hrtime.h"
-#include "utf8_encoder.h"
-#include "cc/cc_compiler.h"
+#include <utf8_encoder.h>
+#include <cc/cc_compiler.h>
+#include <pablo/pablo_compiler.h>
 
 //FOR TESTING AND AND ANALYSIS
 //#include "pbix_counter.h"
@@ -36,11 +37,11 @@
 
 using namespace re;
 using namespace cc;
+using namespace pablo;
 
 namespace icgrep {
 
-LLVM_Gen_RetVal compile(bool show_compile_time, Encoding encoding, std::string input_string)
-{
+LLVM_Gen_RetVal compile(bool show_compile_time, Encoding encoding, std::string input_string) {
     RE * re_ast = nullptr;
     try
     {
