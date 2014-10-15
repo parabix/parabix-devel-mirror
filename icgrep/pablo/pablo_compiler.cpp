@@ -71,10 +71,10 @@ CREATE_GENERAL_CODE_CATEGORY(Zs)
 
 namespace pablo {
 
-PabloCompiler::PabloCompiler(std::map<std::string, std::string> name_map, std::string basis_pattern, int bits)
+PabloCompiler::PabloCompiler(std::map<std::string, std::string> name_map, const BasisBitVars & basisBitVars, int bits)
 : mBits(bits)
 , m_name_map(name_map)
-, mBasisBitPattern(basis_pattern)
+, mBasisBitVars(basisBitVars)
 , mMod(new Module("icgrep", getGlobalContext()))
 , mBasicBlock(nullptr)
 , mExecutionEngine(nullptr)
@@ -96,10 +96,9 @@ PabloCompiler::PabloCompiler(std::map<std::string, std::string> name_map, std::s
     //Create the jit execution engine.up
     InitializeNativeTarget();
     std::string ErrStr;
-
     mExecutionEngine = EngineBuilder(mMod).setUseMCJIT(true).setErrorStr(&ErrStr).setOptLevel(CodeGenOpt::Level::Less).create();
     if (mExecutionEngine == nullptr) {
-        throw std::runtime_error("\nCould not create ExecutionEngine: " + ErrStr);
+        throw std::runtime_error("Could not create ExecutionEngine: " + ErrStr);
     }
 
     InitializeNativeTargetAsmPrinter();
@@ -169,7 +168,7 @@ LLVM_Gen_RetVal PabloCompiler::compile(const PabloBlock & cg_state)
         IRBuilder<> b(mBasicBlock);
         Value* basisBit = b.CreateLoad(mBasisBitsAddr);
         Value* indices[] = {b.getInt64(0), b.getInt32(i)};
-        const std::string name = mBasisBitPattern + std::to_string(i);
+        const std::string name = mBasisBitVars[i]->getName();
         Value* basis_bits_struct_GEP = b.CreateGEP(basisBit, indices, name);
         mMarkerMap.insert(make_pair(name, basis_bits_struct_GEP));
     }

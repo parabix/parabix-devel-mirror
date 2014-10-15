@@ -230,7 +230,7 @@ int main(int argc, char *argv[])
         cycles = get_hrcycles();
         timer = getElapsedTime();
     }
-    const auto llvm_codegen = icgrep::compile(compile_time_option, encoding, (regex_from_file_option ? fileregex : inregex));
+    const auto llvm_codegen = icgrep::compile(encoding, (regex_from_file_option ? fileregex : inregex), compile_time_option);
 
     if (compile_time_option)
     {
@@ -318,8 +318,8 @@ void do_process(char * infile_buffer, size_t infile_size, FILE *outfile, int cou
 
     struct Basis_bits basis_bits;
     struct Output output;
-    BitBlock match_vector = simd<1>::constant<0>();
-    BitBlock * carry_q = new BitBlock[carry_count];
+    BitBlock match_vector;
+    BitBlock carry_q[carry_count];
     int match_count=0;
     int blk = 0;
     int block_base  = 0;
@@ -335,6 +335,7 @@ void do_process(char * infile_buffer, size_t infile_size, FILE *outfile, int cou
     ScannerT LF_scanner;
     ScannerT match_scanner;
 
+    match_vector = simd<1>::constant<0>();
     memset (carry_q, 0, sizeof(BitBlock) * carry_count);
 
     char * buffer_ptr;
@@ -523,7 +524,6 @@ void do_process(char * infile_buffer, size_t infile_size, FILE *outfile, int cou
     }
 
     buffer_pos += chars_avail;
-    delete carry_q;
 }
 
 

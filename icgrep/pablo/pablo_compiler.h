@@ -13,6 +13,7 @@
 //Pablo Expressions
 #include <pablo/codegenstate.h>
 #include <pablo/pe_pabloe.h>
+#include <cc/cc_compiler.h>
 #include "unicode_categories.h"
 #include <iostream>
 #include <string>
@@ -82,7 +83,8 @@ class PabloCompiler {
     };
     #endif
 public:
-    PabloCompiler(std::map<std::string, std::string> name_map, std::string basis_pattern, int bits);
+    typedef cc::CC_Compiler::BasisBitVars BasisBitVars;
+    PabloCompiler(std::map<std::string, std::string> name_map, const BasisBitVars & basisBitVars, int bits);
     ~PabloCompiler();
     LLVM_Gen_RetVal compile(const PabloBlock & cg_state);
 private:
@@ -119,7 +121,7 @@ private:
 
     int                                 mBits;
     std::map<std::string, std::string>  m_name_map;
-    std::string                         mBasisBitPattern;
+    const BasisBitVars &                mBasisBitVars;
 
     Module* const                       mMod;
     BasicBlock*                         mBasicBlock;

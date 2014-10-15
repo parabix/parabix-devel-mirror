@@ -9,10 +9,12 @@
 
 namespace re {
 
+typedef std::map<std::string, RE*> RENameMap;
+
 class RE_Reducer
 {
 public:
-    static RE* reduce(RE* re, std::map<std::string, RE*>& re_map);
+    static RE* reduce(RE* re, RENameMap & re_map);
 };
 
 }

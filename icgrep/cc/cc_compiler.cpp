@@ -30,73 +30,88 @@ using namespace pablo;
 
 namespace cc {
 
-CC_Compiler::CC_Compiler(PabloBlock & cg, const Encoding encoding, const std::string basis_pattern, const std::string gensym_pattern)
+CC_Compiler::CC_Compiler(PabloBlock & cg, const Encoding encoding, const std::string basis_pattern)
 : mCG(cg)
 , mBasisBit(encoding.getBits())
 , mEncoding(encoding)
-, mGenSymPattern(gensym_pattern)
-, mBasisPattern(basis_pattern)
 {
     for (int i = 0; i < mEncoding.getBits(); i++) {
-        mBasisBit[i] = mCG.createVar(mBasisPattern + std::to_string((mEncoding.getBits() - 1) - i));
+        mBasisBit[i] = mCG.createVar(basis_pattern + std::to_string(i));
     }
 }
 
-inline Var * CC_Compiler::getBasisVar(const int i) const {
-    return mBasisBit[i];
-}
-
-void CC_Compiler::compile(const REMap & re_map) {
+void CC_Compiler::compile(const RENameMap & re_map) {
     for (auto i =  re_map.cbegin(); i != re_map.cend(); ++i) {
-        process_re(i->second);
-    }
-    for (auto i =  re_map.cbegin(); i != re_map.cend(); ++i) {
-        //This is specifically for the utf8 multibyte character classes.
-        if (Seq * seq = dyn_cast<Seq>(i->second)) {
-            if (seq->getType() == Seq::Type::Byte) {
-                Assign * assignment = nullptr;
-                auto j = seq->begin();
-                while (true) {
-                    Name * name = dyn_cast<Name>(*j);
-                    assert (name);
-                    CharClass * cc = mCG.createCharClass(name->getName());
-                    PabloE * sym = assignment ? mCG.createAnd(mCG.createVar(assignment->getName()), cc) : cc;
-                    if (++j != seq->end()) {
-                        assignment = mCG.createAssign(mCG.ssa("marker"), mCG.createAdvance(sym));
-                        continue;
-                    }
-                    mCG.createAssign(seq->getName(), sym);
-                    break;
+        if (const CC * cc = dyn_cast<CC>(i->second)) {
+            // If we haven't already computed this CC, map it to the (pablo) charset statements.
+            if (mComputedSet.insert(cc->getName()).second) {
+                mCG.createAssign(cc->getName(), charset_expr(cc));
+            }
+        }
+        else if (const Seq* seq = dyn_cast<Seq>(i->second)) {
+            //This is specifically for the utf8 multibyte character classes.
+            assert (seq->getType() == Seq::Type::Byte);
+            Assign * assignment = nullptr;
+            auto j = seq->begin();
+            while (true) {
+                Name * name = dyn_cast<Name>(*j);
+                assert (name);
+                CharClass * cc = mCG.createCharClass(name->getName());
+                PabloE * sym = assignment ? mCG.createAnd(mCG.createVar(assignment->getName()), cc) : cc;
+                if (++j != seq->end()) {
+                    assignment = mCG.createAssign(mCG.ssa("marker"), mCG.createAdvance(sym));
+                    continue;
                 }
+                mCG.createAssign(seq->getName(), sym);
+                break;
             }
         }
     }
 }
 
-void CC_Compiler::process_re(const RE * re) {
-    if (const Alt * alt = dyn_cast<const Alt>(re)) {
-        for (const RE * re : *alt) {
-            process_re(re);
+inline PabloE * CC_Compiler::charset_expr(const CC * cc) {
+    if (cc->empty()) {
+        return mCG.createAll(0);
+    }
+    if (cc->size() > 2) {
+        bool combine = true;
+        for (const CharSetItem & item : *cc) {
+            if (item.lo_codepoint != item.hi_codepoint) {
+                combine = false;
+                break;
+            }
+        }
+        if (combine) {
+            auto i = cc->cbegin();
+            for (auto j = i; ++j != cc->cend(); i = j) {
+                const CharSetItem & curr_item = *i;
+                const CharSetItem & next_item = *j;
+                if ((curr_item.lo_codepoint + 2) != next_item.lo_codepoint) {
+                    combine  = false;
+                    break;
+                }
+            }
+            if (combine) {
+                CodePointType lo = cc->front().lo_codepoint;
+                CodePointType hi = cc->back().lo_codepoint;
+                const CodePointType mask = mEncoding.getMask();
+                lo &= (mask - 1);
+                hi |= (mask ^ (mask - 1));
+                PabloE * expr = make_range(lo, hi);
+                PabloE * bit0 = getBasisVar(0);
+                if ((lo & 1) == 0) {
+                    bit0 = mCG.createNot(bit0);
+                }
+                return mCG.createAnd(expr, bit0);
+            }
         }
     }
-    else if (const CC * cc = dyn_cast<const CC>(re)) {
-        process(cc);
+    PabloE * expr = nullptr;
+    for (const CharSetItem & item : *cc) {
+        PabloE * temp = char_or_range_expr(item.lo_codepoint, item.hi_codepoint);
+        expr = (expr == nullptr) ? temp : mCG.createOr(expr, temp);
     }
-    else if (const Rep* re_rep = dyn_cast<const Rep>(re)) {
-        process_re(re_rep->getRE());
-    }
-    else if (const Seq* re_seq = dyn_cast<const Seq>(re)) {
-        for (const RE * re : *re_seq) {
-            process_re(re);
-        }
-    }
-}
-
-inline void CC_Compiler::process(const CC * cc) {
-    if (mComputedSet.insert(cc->getName()).second) {
-        // Add the new mapping to the list of pablo statements:
-        mCG.createAssign(cc->getName(), charset_expr(cc));
-    }
+    return expr;
 }
 
 PabloE * CC_Compiler::bit_pattern_expr(const unsigned pattern, unsigned selected_bits)
@@ -230,51 +245,6 @@ PabloE * CC_Compiler::LE_Range(const unsigned N, const unsigned n)
     }
 }
 
-inline PabloE * CC_Compiler::charset_expr(const CC * cc) {
-    if (cc->empty()) {
-        return mCG.createAll(0);
-    }
-    if (cc->size() > 2) {
-        bool combine = true;
-        for (const CharSetItem & item : *cc) {
-            if (item.lo_codepoint != item.hi_codepoint) {
-                combine = false;
-                break;
-            }
-        }
-        if (combine) {
-            auto i = cc->cbegin();
-            for (auto j = i; ++j != cc->cend(); i = j) {
-                const CharSetItem & curr_item = *i;
-                const CharSetItem & next_item = *j;
-                if ((curr_item.lo_codepoint + 2) != next_item.lo_codepoint) {
-                    combine  = false;
-                    break;
-                }
-            }
-            if (combine) {
-                CodePointType lo = cc->front().lo_codepoint;
-                CodePointType hi = cc->back().lo_codepoint;
-                const CodePointType mask = mEncoding.getMask();
-                lo &= (mask - 1);
-                hi |= (mask ^ (mask - 1));
-                PabloE * expr = make_range(lo, hi);
-                PabloE * bit0 = getBasisVar(0);
-                if ((lo & 1) == 0) {
-                    bit0 = mCG.createNot(bit0);
-                }
-                return mCG.createAnd(expr, bit0);
-            }
-        }
-    }
-    PabloE * expr = nullptr;
-    for (const CharSetItem & item : *cc) {
-        PabloE * temp = char_or_range_expr(item.lo_codepoint, item.hi_codepoint);
-        expr = (expr == nullptr) ? temp : mCG.createOr(expr, temp);
-    }
-    return expr;
-}
-
 inline PabloE * CC_Compiler::char_or_range_expr(const CodePointType lo, const CodePointType hi) {
     if (lo == hi) {
         return char_test_expr(lo);
@@ -283,6 +253,10 @@ inline PabloE * CC_Compiler::char_or_range_expr(const CodePointType lo, const Co
         return make_range(lo, hi);
     }
     throw std::runtime_error(std::string("Invalid Character Set Range: [") + std::to_string(lo) + "," + std::to_string(hi) + "]");
+}
+
+inline Var * CC_Compiler::getBasisVar(const int i) const {
+    return mBasisBit[(mEncoding.getBits() - 1) - i];
 }
 
 } // end of namespace cc

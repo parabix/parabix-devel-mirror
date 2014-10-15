@@ -10,7 +10,7 @@
 
 namespace re {
 
-RE * RE_Reducer::reduce(RE * re, std::map<std::string, RE*>& re_map) {
+RE * RE_Reducer::reduce(RE * re, RENameMap & re_map) {
     assert (re);
     if (Alt * alt = dyn_cast<Alt>(re)) {
         for (auto i = alt->begin(); i != alt->end(); ++i) {
@@ -23,8 +23,8 @@ RE * RE_Reducer::reduce(RE * re, std::map<std::string, RE*>& re_map) {
         }
         if (seq->getType() == Seq::Type::Byte) {
             //If this is a sequence of byte classes then this is a multibyte sequence for a Unicode character class.
-            std::string seqname = seq->getName();
-            re_map.insert(make_pair(seqname, seq));
+            const std::string seqname = seq->getName();
+            re_map.insert(std::make_pair(seqname, seq));
             re = makeName(seqname, false, Name::Type::Unicode);
         }
     }
@@ -32,9 +32,9 @@ RE * RE_Reducer::reduce(RE * re, std::map<std::string, RE*>& re_map) {
         rep->setRE(reduce(rep->getRE(), re_map));
     }
     else if (CC * cc = dyn_cast<CC>(re)) {
-        std::string ccname = cc->getName();
+        const std::string ccname = cc->getName();
         //If the character class isn't in the map then add it.
-        re_map.insert(make_pair(ccname, cc));
+        re_map.insert(std::make_pair(ccname, cc));
         //return a new name class with the name of the character class.
         re = makeName(ccname);
     }

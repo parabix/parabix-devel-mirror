@@ -15,7 +15,7 @@
 
 namespace re {
 
-RE * RE_Parser::parse_re(const std::string & regular_expression, const bool allow_escapes_within_charset) {
+RE * RE_Parser::parse(const std::string & regular_expression, const bool allow_escapes_within_charset) {
     RE_Parser parser(regular_expression, allow_escapes_within_charset);
     RE * re = parser.parse_alt(false);
     if (re == nullptr) {

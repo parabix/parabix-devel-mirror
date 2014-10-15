@@ -22,9 +22,9 @@ private:
     static re::CC* makeByteClass(int byteval);
     static re::CC* makeByteRange(int lo, int hi);
 
-    static bool u8Prefix(int cp);
-    static int u8len(int cp);
-    static int max_of_u8len(int lgth);
+    static bool isUTF8Prefix(const int cp);
+    static int lenUTF8(const int cp);
+    static int maxUTF8Len(int lgth);
     static int u8byte(int codepoint, int n);
 };
 

@@ -21,7 +21,7 @@ class RE_Parser
 {
 public:
 
-    static RE * parse_re(const std::string &intput_string, const bool allow_escapes_within_charset = false);
+    static RE * parse(const std::string &intput_string, const bool allow_escapes_within_charset = false);
 
 private:
 

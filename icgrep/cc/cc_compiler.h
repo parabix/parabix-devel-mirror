@@ -14,24 +14,25 @@
 #include <unordered_map>
 #include <string>
 #include <set>
+#include <re/re_reducer.h>
 
 namespace cc {
 
 class CC_Compiler{
-    typedef std::map<std::string, re::RE *> REMap;
     typedef std::set<std::string>           ComputedSet;
 public:
 
-    CC_Compiler(pablo::PabloBlock & cg, const Encoding encoding, const std::string basis_pattern = "basis", const std::string gensym_pattern = "temp");
+    typedef std::vector<pablo::Var *>       BasisBitVars;
 
-    void compile(const REMap & re_map);
+    CC_Compiler(pablo::PabloBlock & cg, const Encoding encoding, const std::string basis_pattern = "basis");
 
-    const std::string getBasisPattern() const {
-        return mBasisPattern;
+    void compile(const re::RENameMap & re_map);
+
+    const BasisBitVars & getBasisBitVars() const {
+        return mBasisBit;
     }
 
 private:
-    void process_re(const re::RE *re);
     pablo::Var * getBasisVar(const int n) const;
     pablo::PabloE * bit_pattern_expr(const unsigned pattern, unsigned selected_bits);
     pablo::PabloE * char_test_expr(const re::CodePointType ch);
@@ -40,14 +41,11 @@ private:
     pablo::PabloE * LE_Range(const unsigned N, const unsigned n);
     pablo::PabloE * char_or_range_expr(const re::CodePointType lo, const re::CodePointType hi);
     pablo::PabloE * charset_expr(const re::CC *cc);
-    void process(const re::CC *cc);
 
-    pablo::PabloBlock &                                 mCG;
-    std::vector<pablo::Var *>                           mBasisBit;
-    const Encoding                                      mEncoding;
-    const std::string                                   mGenSymPattern;
-    const std::string                                   mBasisPattern;
-    ComputedSet                                         mComputedSet;
+    pablo::PabloBlock &         mCG;
+    BasisBitVars                mBasisBit;
+    const Encoding              mEncoding;
+    ComputedSet                 mComputedSet;
 };
 
 }
