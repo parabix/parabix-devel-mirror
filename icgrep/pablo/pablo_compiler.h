@@ -7,15 +7,13 @@
 #ifndef PABLO_COMPILER_H
 #define PABLO_COMPILER_H
 
-//define this indicates that we use llvm.uadd.with.overflow for genAddWithCarry
+//indicates that we use llvm.uadd.with.overflow.carryin for genAddWithCarry
 //#define USE_UADD_OVERFLOW
 
 //Pablo Expressions
 #include <pablo/codegenstate.h>
 #include <pablo/pe_pabloe.h>
 #include "unicode_categories.h"
-//#include "unicode_categories-flat.h"
-//#include "unicode_categories-simple.h"
 #include <iostream>
 #include <string>
 #include <list>
@@ -66,8 +64,6 @@
 
 #include <llvm/IR/IRBuilder.h>
 
-#include "include/simd-lib/bitblock.hpp"
-
 using namespace llvm;
 
 namespace pablo {
@@ -78,17 +74,16 @@ struct LLVM_Gen_RetVal
     void *process_block_fptr;
 };
 
-struct SumWithOverflowPack {
-  Value *sum;
-  Value *obit;
-};
-
 class PabloCompiler {
+    #ifdef USE_UADD_OVERFLOW
+    struct SumWithOverflowPack {
+        Value * sum;
+        Value * obit;
+    };
+    #endif
 public:
     PabloCompiler(std::map<std::string, std::string> name_map, std::string basis_pattern, int bits);
     ~PabloCompiler();
-
-
     LLVM_Gen_RetVal compile(const PabloBlock & cg_state);
 private:
     Module * MakeLLVMModule();
@@ -99,12 +94,12 @@ private:
     void LoadBitBlocksFromStaticExtern();
     void SetReturnMarker(Value * marker, const unsigned output_idx);
 
-    Value * GetMarker(const std::string & name);
+    Value* GetMarker(const std::string & name);
 
-    Value * compileStatements(const ExpressionList & stmts);
-    Value * compileStatement(PabloE *stmt);
+    Value* compileStatements(const ExpressionList & stmts);
+    Value* compileStatement(const PabloE * stmt);
 
-    Value* compileExpression(PabloE * expr);
+    Value* compileExpression(const PabloE * expr);
     Value* genCarryInLoad(Value* ptr_carry_q, int carryq_idx);
     Value* genCarryOutStore(Value* carryout, Value* ptr_carry_q, int carryq_idx);
     Value* genAddWithCarry(Value* e1, Value* e2);
@@ -114,7 +109,9 @@ private:
     Value* genShiftLeft64(Value* e, const Twine &namehint = "") ;
     Value* genNot(Value* e, const Twine &namehint = "");
 
-    SumWithOverflowPack callUaddOverflow(Value *e1, Value *e2);
+    #ifdef USE_UADD_OVERFLOW
+    SumWithOverflowPack callUaddOverflow(Value *e1, Value *e2, Value *cin);
+    #endif
 
     std::map<std::string, Value*>       mCalleeMap;
     std::map<std::string, Value*>       mMarkerMap;
@@ -124,16 +121,12 @@ private:
     std::map<std::string, std::string>  m_name_map;
     std::string                         mBasisBitPattern;
 
-
-
-    Module*                             mMod;
+    Module* const                       mMod;
     BasicBlock*                         mBasicBlock;
     ExecutionEngine*                    mExecutionEngine;
 
-    VectorType*                         mXi64Vect;
-
-    VectorType*                         mXi128Vect;
-
+    VectorType* const                   mXi64Vect;
+    VectorType* const                   mXi128Vect;
     PointerType*                        mBasisBitsInputPtr;
     PointerType*                        mOutputPtr;
 
@@ -142,9 +135,8 @@ private:
 
     int                                 mCarryQueueSize;
 
-    ConstantInt*                        mConst_int64_neg1;
-    ConstantAggregateZero*              mZeroInitializer;
-    Constant*                           mAllOneInitializer;
+    ConstantAggregateZero* const        mZeroInitializer;
+    Constant* const                     mAllOneInitializer;
 
     FunctionType*                       mFuncTy_0;
     Function*                           mFunc_process_block;

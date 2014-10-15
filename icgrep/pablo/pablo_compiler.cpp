@@ -14,6 +14,7 @@
 #include <pablo/codegenstate.h>
 #include <pablo/printer_pablos.h>
 #include <stdexcept>
+#include <include/simd-lib/bitblock.hpp>
 
 // #define DUMP_GENERATED_IR
 // #define DUMP_OPTIMIZED_IR
@@ -77,16 +78,15 @@ PabloCompiler::PabloCompiler(std::map<std::string, std::string> name_map, std::s
 , mMod(new Module("icgrep", getGlobalContext()))
 , mBasicBlock(nullptr)
 , mExecutionEngine(nullptr)
-, mXi64Vect(nullptr)
-, mXi128Vect(nullptr)
+, mXi64Vect(VectorType::get(IntegerType::get(mMod->getContext(), 64), BLOCK_SIZE / 64))
+, mXi128Vect(VectorType::get(IntegerType::get(mMod->getContext(), 128), BLOCK_SIZE / 128))
 , mBasisBitsInputPtr(nullptr)
 , mOutputPtr(nullptr)
 , mCarryQueueIdx(0)
 , mptr_carry_q(nullptr)
 , mCarryQueueSize(0)
-, mConst_int64_neg1(nullptr)
-, mZeroInitializer(nullptr)
-, mAllOneInitializer(nullptr)
+, mZeroInitializer(ConstantAggregateZero::get(mXi64Vect))
+, mAllOneInitializer(ConstantVector::getAllOnesValue(mXi64Vect))
 , mFuncTy_0(nullptr)
 , mFunc_process_block(nullptr)
 , mBasisBitsAddr(nullptr)
@@ -237,21 +237,6 @@ LLVM_Gen_RetVal PabloCompiler::compile(const PabloBlock & cg_state)
 
 void PabloCompiler::DefineTypes()
 {
-    //The BitBlock vector.
-    mXi64Vect = VectorType::get(IntegerType::get(mMod->getContext(), 64), BLOCK_SIZE / 64);
-    mXi128Vect = VectorType::get(IntegerType::get(mMod->getContext(), 128), BLOCK_SIZE / 128);
-
-    //Constant definitions.
-    mConst_int64_neg1 = ConstantInt::get(mMod->getContext(), APInt(64, -1));
-    mZeroInitializer = ConstantAggregateZero::get(mXi64Vect);
-
-    std::vector<Constant*> const_packed_27_elems;
-    for (int i = 0; i < BLOCK_SIZE / 64; ++i) {
-        const_packed_27_elems.push_back(mConst_int64_neg1);
-    }
-    mAllOneInitializer = ConstantVector::get(const_packed_27_elems);
-
-
     StructType * StructTy_struct_Basis_bits = mMod->getTypeByName("struct.Basis_bits");
     if (StructTy_struct_Basis_bits == nullptr) {
         StructTy_struct_Basis_bits = StructType::create(mMod->getContext(), "struct.Basis_bits");
@@ -261,10 +246,6 @@ void PabloCompiler::DefineTypes()
     {
         StructTy_struct_Basis_bits_fields.push_back(mXi64Vect);
     }
-
-
-
-
     if (StructTy_struct_Basis_bits->isOpaque()) {
         StructTy_struct_Basis_bits->setBody(StructTy_struct_Basis_bits_fields, /*isPacked=*/false);
     }
@@ -307,7 +288,7 @@ void PabloCompiler::DeclareFunctions()
     // to call->  b.CreateCall(mFunc_print_register, unicode_category);
 
 #ifdef USE_UADD_OVERFLOW
-    // Type Definitions for llvm.uadd.with.overflow.i128 or .i256
+    // Type Definitions for llvm.uadd.with.overflow.carryin.i128 or .i256
     std::vector<Type*>StructTy_0_fields;
     StructTy_0_fields.push_back(IntegerType::get(mMod->getContext(), BLOCK_SIZE));
     StructTy_0_fields.push_back(IntegerType::get(mMod->getContext(), 1));
@@ -316,17 +297,18 @@ void PabloCompiler::DeclareFunctions()
     std::vector<Type*>FuncTy_1_args;
     FuncTy_1_args.push_back(IntegerType::get(mMod->getContext(), BLOCK_SIZE));
     FuncTy_1_args.push_back(IntegerType::get(mMod->getContext(), BLOCK_SIZE));
+    FuncTy_1_args.push_back(IntegerType::get(mMod->getContext(), 1));
     FunctionType* FuncTy_1 = FunctionType::get(
                                               /*Result=*/StructTy_0,
                                               /*Params=*/FuncTy_1_args,
                                               /*isVarArg=*/false);
 
-    mFunc_llvm_uadd_with_overflow = mMod->getFunction("llvm.uadd.with.overflow.i" + std::to_string(BLOCK_SIZE));
+    mFunc_llvm_uadd_with_overflow = mMod->getFunction("llvm.uadd.with.overflow.carryin.i##BLOCK_SIZE");
     if (!mFunc_llvm_uadd_with_overflow) {
         mFunc_llvm_uadd_with_overflow = Function::Create(
-          /*Type=*/FuncTy_1,
-          /*Linkage=*/GlobalValue::ExternalLinkage,
-          /*Name=*/"llvm.uadd.with.overflow.i" + std::to_string(BLOCK_SIZE), mMod); // (external, no body)
+          /*Type=*/ FuncTy_1,
+          /*Linkage=*/ GlobalValue::ExternalLinkage,
+          /*Name=*/ "llvm.uadd.with.overflow.carryin.i##BLOCK_SIZE", mMod); // (external, no body)
         mFunc_llvm_uadd_with_overflow->setCallingConv(CallingConv::C);
     }
     AttributeSet mFunc_llvm_uadd_with_overflow_PAL;
@@ -525,7 +507,7 @@ Value * PabloCompiler::compileStatements(const ExpressionList & stmts) {
     return retVal;
 }
 
-Value * PabloCompiler::compileStatement(PabloE * stmt)
+Value * PabloCompiler::compileStatement(const PabloE * stmt)
 {
     Value * retVal = nullptr;
     if (const Assign * assign = dyn_cast<const Assign>(stmt))
@@ -642,7 +624,7 @@ Value * PabloCompiler::compileStatement(PabloE * stmt)
     return retVal;
 }
 
-Value * PabloCompiler::compileExpression(PabloE * expr)
+Value * PabloCompiler::compileExpression(const PabloE * expr)
 {
     Value * retVal = nullptr;
     IRBuilder<> b(mBasicBlock);
@@ -719,10 +701,11 @@ Value * PabloCompiler::compileExpression(PabloE * expr)
 }
 
 #ifdef USE_UADD_OVERFLOW
-SumWithOverflowPack LLVM_Generator::callUaddOverflow(Value* int128_e1, Value* int128_e2) {
+SumWithOverflowPack PabloCompiler::callUaddOverflow(Value* int128_e1, Value* int128_e2, Value* int1_cin) {
     std::vector<Value*> struct_res_params;
     struct_res_params.push_back(int128_e1);
     struct_res_params.push_back(int128_e2);
+    struct_res_params.push_back(int1_cin);
     CallInst* struct_res = CallInst::Create(mFunc_llvm_uadd_with_overflow, struct_res_params, "uadd_overflow_res", mBasicBlock);
     struct_res->setCallingConv(CallingConv::C);
     struct_res->setTailCall(false);
@@ -747,34 +730,24 @@ Value* PabloCompiler::genAddWithCarry(Value* e1, Value* e2) {
     IRBuilder<> b(mBasicBlock);
 
     //CarryQ - carry in.
-    int this_carry_idx = mCarryQueueIdx;
-    mCarryQueueIdx++;
-
+    int this_carry_idx = mCarryQueueIdx++;
     Value* carryq_value = genCarryInLoad(mptr_carry_q, this_carry_idx);
 
 #ifdef USE_UADD_OVERFLOW
     //use llvm.uadd.with.overflow.i128 or i256
-
+    ConstantInt* const_int32_6 = ConstantInt::get(mMod->getContext(), APInt(32, StringRef("0"), 10));
     CastInst* int128_e1 = new BitCastInst(e1, IntegerType::get(mMod->getContext(), BLOCK_SIZE), "e1_128", mBasicBlock);
     CastInst* int128_e2 = new BitCastInst(e2, IntegerType::get(mMod->getContext(), BLOCK_SIZE), "e2_128", mBasicBlock);
-    CastInst* int128_carryq_value = new BitCastInst(carryq_value, IntegerType::get(mMod->getContext(), BLOCK_SIZE), "carryq_128", mBasicBlock);
-
-    SumWithOverflowPack sumpack0, sumpack1;
-
-    sumpack0 = callUaddOverflow(int128_e1, int128_e2);
-    sumpack1 = callUaddOverflow(sumpack0.sum, int128_carryq_value);
-
-    Value* obit = b.CreateOr(sumpack0.obit, sumpack1.obit, "carry_bit");
-    Value* ret_sum = b.CreateBitCast(sumpack1.sum, mXi64Vect, "ret_sum");
-
+    ExtractElementInst * int64_carryq_value = ExtractElementInst::Create(carryq_value, const_int32_6, "carryq_64", mBasicBlock);
+    CastInst* int1_carryq_value = new TruncInst(int64_carryq_value, IntegerType::get(mMod->getContext(), 1), "carryq_1", mBasicBlock);
+    SumWithOverflowPack sumpack0;
+    sumpack0 = callUaddOverflow(int128_e1, int128_e2, int1_carryq_value);
+    Value* obit = sumpack0.obit;
+    Value* sum = b.CreateBitCast(sumpack0.sum, mXi64Vect, "sum");
     /*obit is the i1 carryout, zero extend and insert it into a v2i64 or v4i64 vector.*/
     ConstantAggregateZero* const_packed_5 = ConstantAggregateZero::get(mXi64Vect);
-    ConstantInt* const_int32_6 = ConstantInt::get(mMod->getContext(), APInt(32, StringRef("0"), 10));
     CastInst* int64_o0 = new ZExtInst(obit, IntegerType::get(mMod->getContext(), 64), "o0", mBasicBlock);
     InsertElementInst* carry_out = InsertElementInst::Create(const_packed_5, int64_o0, const_int32_6, "carry_out", mBasicBlock);
-
-    Value* void_1 = genCarryOutStore(carry_out, mptr_carry_q, this_carry_idx);
-    return ret_sum;
 #else
     //calculate carry through logical ops
     Value* carrygen = b.CreateAnd(e1, e2, "carrygen");
@@ -786,10 +759,9 @@ Value* PabloCompiler::genAddWithCarry(Value* e1, Value* e2) {
 
     Value* sum = b.CreateAdd(partial, mid_carry_in, "sum");
     Value* carry_out = genShiftHighbitToLow(b.CreateOr(carrygen, b.CreateAnd(carryprop, genNot(sum))), "carry_out");
-    Value* void_1 = genCarryOutStore(carry_out, mptr_carry_q, this_carry_idx);
-
-    return sum;
 #endif
+    genCarryOutStore(carry_out, mptr_carry_q, this_carry_idx);
+    return sum;
 }
 
 Value* PabloCompiler::genCarryInLoad(Value* ptr_carry_q, int n) {
