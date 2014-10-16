@@ -370,7 +370,7 @@ void PabloCompiler::DeclareFunctions()
 }
 
 void PabloCompiler::DeclareCallFunctions(const ExpressionList & stmts) {
-    for (const PabloE * stmt : stmts) {
+    for (const PabloAST * stmt : stmts) {
         if (const Assign * an = dyn_cast<const Assign>(stmt)) {
             DeclareCallFunctions(an->getExpr());
         }
@@ -385,7 +385,7 @@ void PabloCompiler::DeclareCallFunctions(const ExpressionList & stmts) {
     }
 }
 
-void PabloCompiler::DeclareCallFunctions(const PabloE * expr)
+void PabloCompiler::DeclareCallFunctions(const PabloAST * expr)
 {
     if (const Call * pablo_call = dyn_cast<const Call>(expr)) {
         const std::string callee = pablo_call->getCallee();
@@ -500,13 +500,13 @@ void PabloCompiler::SetReturnMarker(Value * marker, const unsigned output_idx)
 
 Value * PabloCompiler::compileStatements(const ExpressionList & stmts) {
     Value * retVal = nullptr;
-    for (PabloE * statement : stmts) {
+    for (PabloAST * statement : stmts) {
         retVal = compileStatement(statement);
     }
     return retVal;
 }
 
-Value * PabloCompiler::compileStatement(const PabloE * stmt)
+Value * PabloCompiler::compileStatement(const PabloAST * stmt)
 {
     Value * retVal = nullptr;
     if (const Assign * assign = dyn_cast<const Assign>(stmt))
@@ -623,7 +623,7 @@ Value * PabloCompiler::compileStatement(const PabloE * stmt)
     return retVal;
 }
 
-Value * PabloCompiler::compileExpression(const PabloE * expr)
+Value * PabloCompiler::compileExpression(const PabloAST * expr)
 {
     Value * retVal = nullptr;
     IRBuilder<> b(mBasicBlock);

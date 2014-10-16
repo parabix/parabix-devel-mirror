@@ -16,7 +16,7 @@
 #include <re/re_name.h>
 
 //Pablo Expressions
-#include <pablo/pe_pabloe.h>
+#include <pablo/pabloAST.h>
 #include <pablo/pe_advance.h>
 #include <pablo/pe_all.h>
 #include <pablo/pe_and.h>
@@ -67,27 +67,27 @@ std::string StatementPrinter::Print_CC_PabloStmts(const pablo::ExpressionList &s
     return strOut;
 }
 
-std::string StatementPrinter::ShowPabloS(const PabloE * stmt)
+std::string StatementPrinter::ShowPabloS(const PabloAST * stmt)
 {
     std::string retVal = "";
 
     if (const Assign * an = dyn_cast<const Assign>(stmt))
     {
-        retVal = "Assign('" + an->getName() + "', " + ShowPabloE(an->getExpr()) + "),";
+        retVal = "Assign('" + an->getName() + "', " + ShowPabloAST(an->getExpr()) + "),";
     }
     else if (const If * ifstmt = dyn_cast<const If>(stmt))
     {
-        retVal = "If(" + ShowPabloE(ifstmt->getCondition()) + ", " + Print_PB_PabloStmts(ifstmt->getBody(), retVal) + ")";
+        retVal = "If(" + ShowPabloAST(ifstmt->getCondition()) + ", " + Print_PB_PabloStmts(ifstmt->getBody(), retVal) + ")";
     }
     else if (const While * whl = dyn_cast<const While>(stmt))
     {
-        retVal = "While(" + ShowPabloE(whl->getCondition()) + ", " + Print_PB_PabloStmts(whl->getBody(), retVal) + ")";
+        retVal = "While(" + ShowPabloAST(whl->getCondition()) + ", " + Print_PB_PabloStmts(whl->getBody(), retVal) + ")";
     }
     else retVal = "UNKNOWN_STATEMENT_TYPE!!!";
     return retVal;
 }
 
-std::string StatementPrinter::ShowPabloE(const PabloE *expr)
+std::string StatementPrinter::ShowPabloAST(const PabloAST *expr)
 {
     std::string retVal = "";
 
@@ -105,20 +105,20 @@ std::string StatementPrinter::ShowPabloE(const PabloE *expr)
     }
     else if (const And * pablo_and = dyn_cast<const And>(expr))
     {
-        retVal = "And(" + ShowPabloE(pablo_and->getExpr1()) +", " + ShowPabloE(pablo_and->getExpr2()) + ")";
+        retVal = "And(" + ShowPabloAST(pablo_and->getExpr1()) +", " + ShowPabloAST(pablo_and->getExpr2()) + ")";
     }
     else if (const Or * pablo_or = dyn_cast<const Or>(expr))
     {
-        retVal = "Or(" + ShowPabloE(pablo_or->getExpr1()) + ", " + ShowPabloE(pablo_or->getExpr2()) + ")";
+        retVal = "Or(" + ShowPabloAST(pablo_or->getExpr1()) + ", " + ShowPabloAST(pablo_or->getExpr2()) + ")";
     }
     else if (const Sel * pablo_sel = dyn_cast<const Sel>(expr))
     {
-        retVal = "((" + ShowPabloE(pablo_sel->getCondition()) + "And " + ShowPabloE(pablo_sel->getTrueExpr()) +
-                ")|(Not(" + ShowPabloE(pablo_sel->getCondition()) + ") And " + ShowPabloE(pablo_sel->getFalseExpr()) + ")";
+        retVal = "((" + ShowPabloAST(pablo_sel->getCondition()) + "And " + ShowPabloAST(pablo_sel->getTrueExpr()) +
+                ")|(Not(" + ShowPabloAST(pablo_sel->getCondition()) + ") And " + ShowPabloAST(pablo_sel->getFalseExpr()) + ")";
     }
     else if (const Not * pablo_not = dyn_cast<const Not>(expr))
     {
-        retVal = "Not (" + ShowPabloE(pablo_not->getExpr()) + ")";
+        retVal = "Not (" + ShowPabloAST(pablo_not->getExpr()) + ")";
     }
     else if (const CharClass * cc = dyn_cast<const CharClass>(expr))
     {
@@ -126,15 +126,15 @@ std::string StatementPrinter::ShowPabloE(const PabloE *expr)
     }
     else if (const Advance * adv = dyn_cast<const Advance>(expr))
     {
-        retVal = "Advance(" + ShowPabloE(adv->getExpr()) + ")";
+        retVal = "Advance(" + ShowPabloAST(adv->getExpr()) + ")";
     }
     else if (const MatchStar * mstar = dyn_cast<const MatchStar>(expr))
     {
-        retVal = "MatchStar (" + ShowPabloE(mstar->getExpr1()) + ", " + ShowPabloE(mstar->getExpr2()) + ")";
+        retVal = "MatchStar (" + ShowPabloAST(mstar->getExpr1()) + ", " + ShowPabloAST(mstar->getExpr2()) + ")";
     }
     else if (const ScanThru * sthru = dyn_cast<const ScanThru>(expr))
     {
-        retVal = "ScanThru (" + ShowPabloE(sthru->getScanFrom()) + ", " + ShowPabloE(sthru->getScanThru()) + ")";
+        retVal = "ScanThru (" + ShowPabloAST(sthru->getScanFrom()) + ", " + ShowPabloAST(sthru->getScanThru()) + ")";
     }
     else retVal = "UNKNOWN_Pablo_EXPRESSION_TYPE!!!";
 

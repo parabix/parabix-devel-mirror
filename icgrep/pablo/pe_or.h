@@ -7,17 +7,17 @@
 #ifndef PE_OR_H
 #define PE_OR_H
 
-#include <pablo/pe_pabloe.h>
+#include <pablo/pabloAST.h>
 
 namespace pablo {
 
 class PabloBlock;
 
-class Or : public PabloE {
+class Or : public PabloAST {
     friend struct OptimizeOr;
     friend class PabloBlock;
 public:
-    static inline bool classof(const PabloE * e) {
+    static inline bool classof(const PabloAST * e) {
         return e->getClassTypeId() == ClassTypeId::Or;
     }
     static inline bool classof(const void *) {
@@ -25,28 +25,28 @@ public:
     }
     virtual ~Or() {
     }
-    inline PabloE * getExpr1() const {
+    inline PabloAST * getExpr1() const {
         return mExpr1;
     }
-    inline PabloE* getExpr2() const {
+    inline PabloAST* getExpr2() const {
         return mExpr2;
     }
 protected:
-    Or(PabloE * expr1, PabloE * expr2)
-    : PabloE(ClassTypeId::Or)
+    Or(PabloAST * expr1, PabloAST * expr2)
+    : PabloAST(ClassTypeId::Or)
     , mExpr1(expr1)
     , mExpr2(expr2)
     {
 
     }
 private:
-    PabloE * const mExpr1;
-    PabloE * const mExpr2;
+    PabloAST * const mExpr1;
+    PabloAST * const mExpr2;
 };
 
 struct OptimizeOr {
     inline OptimizeOr(PabloBlock & cg) : cg(cg) {}
-    PabloE * operator()(PabloE * expr1, PabloE * expr2);
+    PabloAST * operator()(PabloAST * expr1, PabloAST * expr2);
 private:
     PabloBlock & cg;
 };

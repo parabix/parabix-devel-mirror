@@ -7,17 +7,17 @@
 #ifndef PE_NOT_H
 #define PE_NOT_H
 
-#include <pablo/pe_pabloe.h>
+#include <pablo/pabloAST.h>
 
 namespace pablo {
 
 class PabloBlock;
 
-class Not : public PabloE {
+class Not : public PabloAST {
     friend struct OptimizeNot;
     friend class PabloBlock;
 public:
-    static inline bool classof(const PabloE * e) {
+    static inline bool classof(const PabloAST * e) {
         return e->getClassTypeId() == ClassTypeId::Not;
     }
     static inline bool classof(const void *) {
@@ -25,22 +25,22 @@ public:
     }
     virtual ~Not() {
     }
-    PabloE * getExpr() const {
+    PabloAST * getExpr() const {
         return mExpr;
     }
 protected:
-    Not(PabloE * expr)
-    : PabloE(ClassTypeId::Not)
+    Not(PabloAST * expr)
+    : PabloAST(ClassTypeId::Not)
     , mExpr(expr) {
 
     }
 private:
-    PabloE * const mExpr;
+    PabloAST * const mExpr;
 };
 
 struct OptimizeNot {
     inline OptimizeNot(PabloBlock & cg) : cg(cg) {}
-    PabloE * operator()(PabloE * expr);
+    PabloAST * operator()(PabloAST * expr);
 private:
     PabloBlock & cg;
 

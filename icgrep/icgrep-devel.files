@@ -46,8 +46,8 @@ pe_not.cpp
 pe_not.h
 pe_or.cpp
 pe_or.h
-pe_pabloe.cpp
-pe_pabloe.h
+pabloAST.cpp
+pabloAST.h
 pe_scanthru.cpp
 pe_scanthru.h
 pe_sel.cpp
@@ -155,8 +155,8 @@ pablo/pe_not.cpp
 pablo/pe_not.h
 pablo/pe_or.cpp
 pablo/pe_or.h
-pablo/pe_pabloe.cpp
-pablo/pe_pabloe.h
+pablo/pabloAST.cpp
+pablo/pabloAST.h
 pablo/pe_scanthru.cpp
 pablo/pe_scanthru.h
 pablo/pe_sel.cpp

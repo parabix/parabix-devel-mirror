@@ -7,15 +7,15 @@
 #ifndef PE_CHARCLASS_H
 #define PE_CHARCLASS_H
 
-#include <pablo/pe_pabloe.h>
+#include <pablo/pabloAST.h>
 #include <pablo/pe_string.h>
 
 namespace pablo {
 
-class CharClass : public PabloE {
+class CharClass : public PabloAST {
     friend class PabloBlock;
 public:
-    static inline bool classof(const PabloE * e) {
+    static inline bool classof(const PabloAST * e) {
         return e->getClassTypeId() == ClassTypeId::CharClass;
     }
     static inline bool classof(const void *) {
@@ -27,8 +27,8 @@ public:
         return *mCharClass;
     }
 protected:
-    CharClass(const PabloE * cc)
-    : PabloE(ClassTypeId::CharClass)
+    CharClass(const PabloAST * cc)
+    : PabloAST(ClassTypeId::CharClass)
     , mCharClass(cast<String>(cc))
     {
 

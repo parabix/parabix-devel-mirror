@@ -7,21 +7,21 @@
 #ifndef PS_SCANTHRU_H
 #define PS_SCANTHRU_H
 
-#include <pablo/pe_pabloe.h>
+#include <pablo/pabloAST.h>
 
 namespace pablo {
 
-class ScanThru : public  PabloE {
+class ScanThru : public  PabloAST {
     friend class PabloBlock;
 public:
-    static inline bool classof(const PabloE * e) {
+    static inline bool classof(const PabloAST * e) {
         return e->getClassTypeId() == ClassTypeId::ScanThru;
     }
     static inline bool classof(const void *) {
         return false;
     }
-    ScanThru(PabloE * from, PabloE * thru)
-    : PabloE(ClassTypeId::ScanThru)
+    ScanThru(PabloAST * from, PabloAST * thru)
+    : PabloAST(ClassTypeId::ScanThru)
     , mScanFrom(from)
     , mScanThru(thru)
     {
@@ -29,15 +29,15 @@ public:
     }
     virtual ~ScanThru() {
     }
-    PabloE * getScanFrom() const {
+    PabloAST * getScanFrom() const {
         return mScanFrom;
     }
-    PabloE * getScanThru() const {
+    PabloAST * getScanThru() const {
         return mScanThru;
     }
 private:
-    PabloE * const mScanFrom;
-    PabloE * const mScanThru;
+    PabloAST * const mScanFrom;
+    PabloAST * const mScanThru;
 };
 
 }

@@ -9,7 +9,7 @@
 
 #include "utf_encoding.h"
 #include <pablo/codegenstate.h>
-#include <pablo/pe_pabloe.h>
+#include <pablo/pabloAST.h>
 #include <re/re_cc.h>
 #include <unordered_map>
 #include <string>
@@ -34,13 +34,13 @@ public:
 
 private:
     pablo::Var * getBasisVar(const int n) const;
-    pablo::PabloE * bit_pattern_expr(const unsigned pattern, unsigned selected_bits);
-    pablo::PabloE * char_test_expr(const re::CodePointType ch);
-    pablo::PabloE * make_range(const re::CodePointType n1, const re::CodePointType n2);
-    pablo::PabloE * GE_Range(const unsigned N, const unsigned n);
-    pablo::PabloE * LE_Range(const unsigned N, const unsigned n);
-    pablo::PabloE * char_or_range_expr(const re::CodePointType lo, const re::CodePointType hi);
-    pablo::PabloE * charset_expr(const re::CC *cc);
+    pablo::PabloAST * bit_pattern_expr(const unsigned pattern, unsigned selected_bits);
+    pablo::PabloAST * char_test_expr(const re::CodePointType ch);
+    pablo::PabloAST * make_range(const re::CodePointType n1, const re::CodePointType n2);
+    pablo::PabloAST * GE_Range(const unsigned N, const unsigned n);
+    pablo::PabloAST * LE_Range(const unsigned N, const unsigned n);
+    pablo::PabloAST * char_or_range_expr(const re::CodePointType lo, const re::CodePointType hi);
+    pablo::PabloAST * charset_expr(const re::CC *cc);
 
     pablo::PabloBlock &         mCG;
     BasisBitVars                mBasisBit;

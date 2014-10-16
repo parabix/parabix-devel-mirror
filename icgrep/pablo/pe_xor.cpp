@@ -9,7 +9,7 @@
 
 namespace pablo {
 
-PabloE * OptimizeXor::operator()(PabloE * expr1, PabloE * expr2) {
+PabloAST * OptimizeXor::operator()(PabloAST * expr1, PabloAST * expr2) {
     if (All * all1 = dyn_cast<All>(expr1)) {
         if (all1->getValue()) {
             return cg.createNot(expr2);

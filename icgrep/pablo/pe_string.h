@@ -1,15 +1,15 @@
 #ifndef PE_STRING_H
 #define PE_STRING_H
 
-#include <pablo/pe_pabloe.h>
+#include <pablo/pabloAST.h>
 #include <string>
 
 namespace pablo {
 
-class String : public PabloE, public std::string {
+class String : public PabloAST, public std::string {
     friend String * makeString(const std::string);
 public:
-    static inline bool classof(const PabloE * e) {
+    static inline bool classof(const PabloAST * e) {
         return e->getClassTypeId() == ClassTypeId::String;
     }
     static inline bool classof(const void *) {
@@ -23,7 +23,7 @@ public:
     }
 protected:
     String(const std::string string) noexcept
-    : PabloE(ClassTypeId::String)
+    : PabloAST(ClassTypeId::String)
     , std::string(string)
     {
 

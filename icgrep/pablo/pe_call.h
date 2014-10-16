@@ -1,15 +1,15 @@
 #ifndef PE_CALL_H
 #define PE_CALL_H
 
-#include <pablo/pe_pabloe.h>
+#include <pablo/pabloAST.h>
 #include <pablo/pe_string.h>
 
 namespace pablo {
 
-class Call : public PabloE {
+class Call : public PabloAST {
     friend class PabloBlock;
 public:
-    static inline bool classof(const PabloE * e) {
+    static inline bool classof(const PabloAST * e) {
         return e->getClassTypeId() == ClassTypeId::Call;
     }
     static inline bool classof(const void *) {
@@ -21,8 +21,8 @@ public:
         return *mCallee;
     }
 protected:   
-    Call(const PabloE * callee)
-    : PabloE(ClassTypeId::Call)
+    Call(const PabloAST * callee)
+    : PabloAST(ClassTypeId::Call)
     , mCallee(cast<String>(callee)) {
 
     }

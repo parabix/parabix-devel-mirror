@@ -7,17 +7,17 @@
 #ifndef PE_AND_H
 #define PE_AND_H
 
-#include <pablo/pe_pabloe.h>
+#include <pablo/pabloAST.h>
 
 namespace pablo {
 
 class PabloBlock;
 
-class And : public PabloE {
+class And : public PabloAST {
     friend struct OptimizeAnd;
     friend class PabloBlock;
 public:
-    static inline bool classof(const PabloE * e) {
+    static inline bool classof(const PabloAST * e) {
         return e->getClassTypeId() == ClassTypeId::And;
     }
     static inline bool classof(const void *) {
@@ -25,28 +25,28 @@ public:
     }
     virtual ~And() {
     }
-    PabloE * getExpr1() const {
+    PabloAST * getExpr1() const {
         return mExpr1;
     }
-    PabloE * getExpr2() const {
+    PabloAST * getExpr2() const {
         return mExpr2;
     }
 protected:
-    And(PabloE * expr1, PabloE * expr2)
-    : PabloE(ClassTypeId::And)
+    And(PabloAST * expr1, PabloAST * expr2)
+    : PabloAST(ClassTypeId::And)
     , mExpr1(expr1)
     , mExpr2(expr2)
     {
 
     }
 private:
-    PabloE * const mExpr1;
-    PabloE * const mExpr2;
+    PabloAST * const mExpr1;
+    PabloAST * const mExpr2;
 };
 
 struct OptimizeAnd {
     inline OptimizeAnd(PabloBlock & cg) : cg(cg) {}
-    PabloE * operator()(PabloE * expr1, PabloE * expr2);
+    PabloAST * operator()(PabloAST * expr1, PabloAST * expr2);
 private:
     PabloBlock & cg;
 };

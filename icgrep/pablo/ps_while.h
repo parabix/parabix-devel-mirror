@@ -7,14 +7,14 @@
 #ifndef PS_WHILE_H
 #define PS_WHILE_H
 
-#include <pablo/pe_pabloe.h>
+#include <pablo/pabloAST.h>
 
 namespace pablo {
 
-class While : public PabloE {
+class While : public PabloAST {
     friend class PabloBlock;
 public:
-    static inline bool classof(const PabloE * e) {
+    static inline bool classof(const PabloAST * e) {
         return e->getClassTypeId() == ClassTypeId::While;
     }
     static inline bool classof(const void *) {
@@ -22,22 +22,22 @@ public:
     }
     virtual ~While() {
     }
-    inline PabloE * getCondition() const {
+    inline PabloAST * getCondition() const {
         return mExpr;
     }
     inline const ExpressionList & getBody() const {
         return mPSList;
     }
 protected:
-    While(PabloE * expr, ExpressionList && psl)
-    : PabloE(ClassTypeId::While)
+    While(PabloAST * expr, ExpressionList && psl)
+    : PabloAST(ClassTypeId::While)
     , mExpr(expr)
     , mPSList(psl)
     {
 
     }
 private:
-    PabloE * const  mExpr;
+    PabloAST * const  mExpr;
     ExpressionList  mPSList;
 };
 

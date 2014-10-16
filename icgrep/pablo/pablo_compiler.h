@@ -12,7 +12,7 @@
 
 //Pablo Expressions
 #include <pablo/codegenstate.h>
-#include <pablo/pe_pabloe.h>
+#include <pablo/pabloAST.h>
 #include <cc/cc_compiler.h>
 #include "unicode_categories.h"
 #include <iostream>
@@ -92,16 +92,16 @@ private:
     void DefineTypes();
     void DeclareFunctions();
     void DeclareCallFunctions(const ExpressionList & stmts);
-    void DeclareCallFunctions(const PabloE * expr);
+    void DeclareCallFunctions(const PabloAST * expr);
     void LoadBitBlocksFromStaticExtern();
     void SetReturnMarker(Value * marker, const unsigned output_idx);
 
     Value* GetMarker(const std::string & name);
 
     Value* compileStatements(const ExpressionList & stmts);
-    Value* compileStatement(const PabloE * stmt);
+    Value* compileStatement(const PabloAST * stmt);
 
-    Value* compileExpression(const PabloE * expr);
+    Value* compileExpression(const PabloAST * expr);
     Value* genCarryInLoad(Value* ptr_carry_q, int carryq_idx);
     Value* genCarryOutStore(Value* carryout, Value* ptr_carry_q, int carryq_idx);
     Value* genAddWithCarry(Value* e1, Value* e2);

@@ -10,7 +10,7 @@
 
 namespace pablo {
 
-PabloE * OptimizeNot::operator ()(PabloE * expr) {
+PabloAST * OptimizeNot::operator ()(PabloAST * expr) {
     if (All * all = dyn_cast<All>(expr)) {
         return cg.createAll(!all->getValue());
     }

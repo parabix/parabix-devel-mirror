@@ -57,7 +57,7 @@ void CC_Compiler::compile(const RENameMap & re_map) {
                 Name * name = dyn_cast<Name>(*j);
                 assert (name);
                 CharClass * cc = mCG.createCharClass(name->getName());
-                PabloE * sym = assignment ? mCG.createAnd(mCG.createVar(assignment->getName()), cc) : cc;
+                PabloAST * sym = assignment ? mCG.createAnd(mCG.createVar(assignment->getName()), cc) : cc;
                 if (++j != seq->end()) {
                     assignment = mCG.createAssign(mCG.ssa("marker"), mCG.createAdvance(sym));
                     continue;
@@ -69,7 +69,7 @@ void CC_Compiler::compile(const RENameMap & re_map) {
     }
 }
 
-inline PabloE * CC_Compiler::charset_expr(const CC * cc) {
+inline PabloAST * CC_Compiler::charset_expr(const CC * cc) {
     if (cc->empty()) {
         return mCG.createAll(0);
     }
@@ -97,8 +97,8 @@ inline PabloE * CC_Compiler::charset_expr(const CC * cc) {
                 const CodePointType mask = mEncoding.getMask();
                 lo &= (mask - 1);
                 hi |= (mask ^ (mask - 1));
-                PabloE * expr = make_range(lo, hi);
-                PabloE * bit0 = getBasisVar(0);
+                PabloAST * expr = make_range(lo, hi);
+                PabloAST * bit0 = getBasisVar(0);
                 if ((lo & 1) == 0) {
                     bit0 = mCG.createNot(bit0);
                 }
@@ -106,21 +106,21 @@ inline PabloE * CC_Compiler::charset_expr(const CC * cc) {
             }
         }
     }
-    PabloE * expr = nullptr;
+    PabloAST * expr = nullptr;
     for (const CharSetItem & item : *cc) {
-        PabloE * temp = char_or_range_expr(item.lo_codepoint, item.hi_codepoint);
+        PabloAST * temp = char_or_range_expr(item.lo_codepoint, item.hi_codepoint);
         expr = (expr == nullptr) ? temp : mCG.createOr(expr, temp);
     }
     return expr;
 }
 
-PabloE * CC_Compiler::bit_pattern_expr(const unsigned pattern, unsigned selected_bits)
+PabloAST * CC_Compiler::bit_pattern_expr(const unsigned pattern, unsigned selected_bits)
 {
     if (selected_bits == 0) {
         return mCG.createAll(1);
     }
 
-    std::vector<PabloE*> bit_terms;
+    std::vector<PabloAST*> bit_terms;
     unsigned i = 0;
 
     while (selected_bits)
@@ -148,7 +148,7 @@ PabloE * CC_Compiler::bit_pattern_expr(const unsigned pattern, unsigned selected
     //Reduce the list so that all of the expressions are contained within a single expression.
     while (bit_terms.size() > 1)
     {
-        std::vector<PabloE*> new_terms;
+        std::vector<PabloAST*> new_terms;
         for (unsigned long i = 0; i < (bit_terms.size()/2); i++)
         {
             new_terms.push_back(mCG.createAnd(bit_terms[(2 * i) + 1], bit_terms[2 * i]));
@@ -162,12 +162,12 @@ PabloE * CC_Compiler::bit_pattern_expr(const unsigned pattern, unsigned selected
     return bit_terms[0];
 }
 
-PabloE * CC_Compiler::char_test_expr(const CodePointType ch)
+PabloAST * CC_Compiler::char_test_expr(const CodePointType ch)
 {
     return bit_pattern_expr(ch, mEncoding.getMask());
 }
 
-PabloE * CC_Compiler::make_range(const CodePointType n1, const CodePointType n2)
+PabloAST * CC_Compiler::make_range(const CodePointType n1, const CodePointType n2)
 {
     CodePointType diff_count = 0;
 
@@ -180,19 +180,19 @@ PabloE * CC_Compiler::make_range(const CodePointType n1, const CodePointType n2)
 
     const CodePointType mask0 = (static_cast<CodePointType>(1) << diff_count) - 1;
 
-    PabloE * common = bit_pattern_expr(n1 & ~mask0, mEncoding.getMask() ^ mask0);
+    PabloAST * common = bit_pattern_expr(n1 & ~mask0, mEncoding.getMask() ^ mask0);
 
     if (diff_count == 0) return common;
 
     const CodePointType mask1 = (static_cast<CodePointType>(1) << (diff_count - 1)) - 1;
 
-    PabloE* lo_test = GE_Range(diff_count - 1, n1 & mask1);
-    PabloE* hi_test = LE_Range(diff_count - 1, n2 & mask1);
+    PabloAST* lo_test = GE_Range(diff_count - 1, n1 & mask1);
+    PabloAST* hi_test = LE_Range(diff_count - 1, n2 & mask1);
 
     return mCG.createAnd(common, mCG.createSel(getBasisVar(diff_count - 1), hi_test, lo_test));
 }
 
-PabloE * CC_Compiler::GE_Range(const unsigned N, const unsigned n) {
+PabloAST * CC_Compiler::GE_Range(const unsigned N, const unsigned n) {
     if (N == 0)
     {
         return mCG.createAll(1); //Return a true literal.
@@ -209,7 +209,7 @@ PabloE * CC_Compiler::GE_Range(const unsigned N, const unsigned n) {
     {
         int hi_bit = n & (1 << (N - 1));
         int lo_bits = n - hi_bit;
-        PabloE * lo_range = GE_Range(N - 1, lo_bits);
+        PabloAST * lo_range = GE_Range(N - 1, lo_bits);
         if (hi_bit == 0)
         {
             /*
@@ -231,7 +231,7 @@ PabloE * CC_Compiler::GE_Range(const unsigned N, const unsigned n) {
     throw std::runtime_error("Unexpected input given to ge_range: " + std::to_string(N) + ", " + std::to_string(n));
 }
 
-PabloE * CC_Compiler::LE_Range(const unsigned N, const unsigned n)
+PabloAST * CC_Compiler::LE_Range(const unsigned N, const unsigned n)
 {
     /*
       If an N-bit pattern is all ones, then it is always true that any n-bit value is LE this pattern.
@@ -245,7 +245,7 @@ PabloE * CC_Compiler::LE_Range(const unsigned N, const unsigned n)
     }
 }
 
-inline PabloE * CC_Compiler::char_or_range_expr(const CodePointType lo, const CodePointType hi) {
+inline PabloAST * CC_Compiler::char_or_range_expr(const CodePointType lo, const CodePointType hi) {
     if (lo == hi) {
         return char_test_expr(lo);
     }

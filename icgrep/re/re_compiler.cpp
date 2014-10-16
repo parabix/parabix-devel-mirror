@@ -25,7 +25,7 @@
 #include <pablo/pe_matchstar.h>
 #include <pablo/pe_not.h>
 #include <pablo/pe_or.h>
-#include <pablo/pe_pabloe.h>
+#include <pablo/pabloAST.h>
 #include <pablo/pe_scanthru.h>
 #include <pablo/pe_sel.h>
 #include <pablo/pe_var.h>
@@ -54,11 +54,11 @@ void RE_Compiler::compile(RE * re, PabloBlock & cg) {
         //Set the 'internal.initial' bit stream for the utf-8 multi-byte encoding.
         std::string gs_initial = cg.ssa("initial");
         m_name_map.insert(make_pair("initial", gs_initial));
-        PabloE * u8single = cg.createVar(m_name_map.find("UTF8-SingleByte")->second);
-        PabloE * u8pfx2 = cg.createVar(m_name_map.find("UTF8-Prefix2")->second);
-        PabloE * u8pfx3 = cg.createVar(m_name_map.find("UTF8-Prefix3")->second);
-        PabloE * u8pfx4 = cg.createVar(m_name_map.find("UTF8-Prefix4")->second);
-        PabloE * u8pfx = cg.createOr(cg.createOr(u8pfx2, u8pfx3), u8pfx4);
+        PabloAST * u8single = cg.createVar(m_name_map.find("UTF8-SingleByte")->second);
+        PabloAST * u8pfx2 = cg.createVar(m_name_map.find("UTF8-Prefix2")->second);
+        PabloAST * u8pfx3 = cg.createVar(m_name_map.find("UTF8-Prefix3")->second);
+        PabloAST * u8pfx4 = cg.createVar(m_name_map.find("UTF8-Prefix4")->second);
+        PabloAST * u8pfx = cg.createOr(cg.createOr(u8pfx2, u8pfx3), u8pfx4);
         cg.createAssign(gs_initial, cg.createOr(u8pfx, u8single));
 
         //Set the 'internal.nonfinal' bit stream for the utf-8 multi-byte encoding.
@@ -68,9 +68,9 @@ void RE_Compiler::compile(RE * re, PabloBlock & cg) {
         #ifdef USE_IF_FOR_NONFINAL
         cg.createAssign(gs_nonfinal, cg.createAll(0));
         #endif
-        PabloE * u8scope32 = cg.createAdvance(u8pfx3);
-        PabloE * u8scope42 = cg.createAdvance(u8pfx4);
-        PabloE * u8scope43 = cg.createAdvance(u8scope42);
+        PabloAST * u8scope32 = cg.createAdvance(u8pfx3);
+        PabloAST * u8scope42 = cg.createAdvance(u8pfx4);
+        PabloAST * u8scope43 = cg.createAdvance(u8scope42);
         #ifdef USE_IF_FOR_NONFINAL
         PabloBlock it(cg);
         it.createAssign(gs_nonfinal, it.createOr(it.createOr(u8pfx, u8scope32), it.createOr(u8scope42, u8scope43)));
@@ -81,7 +81,7 @@ void RE_Compiler::compile(RE * re, PabloBlock & cg) {
     }
 
     Assign * start_marker = cg.createAssign("start", cg.createAll(1));
-    PabloE * result = process(re, start_marker, cg);
+    PabloAST * result = process(re, start_marker, cg);
 
     //These three lines are specifically for grep.
     cg.createAssign(cg.ssa("marker"), cg.createAnd(cg.createMatchStar(cg.createVarIfAssign(result),
@@ -103,11 +103,11 @@ Assign * RE_Compiler::process(RE * re, Assign * target, PabloBlock & cg) {
         target = process(rep, target, cg);
     }
     else if (isa<Start>(re)) {
-        PabloE * sol = cg.createNot(cg.createAdvance(cg.createNot(cg.createCharClass(m_name_map.find("LineFeed")->second))));
+        PabloAST * sol = cg.createNot(cg.createAdvance(cg.createNot(cg.createCharClass(m_name_map.find("LineFeed")->second))));
         target = cg.createAssign(cg.ssa("sol"), cg.createAnd(cg.createVarIfAssign(target), sol));
     }
     else if (isa<End>(re)) {
-        PabloE * eol = cg.createCharClass(m_name_map.find("LineFeed")->second);
+        PabloAST * eol = cg.createCharClass(m_name_map.find("LineFeed")->second);
         target = cg.createAssign(cg.ssa("eol"), cg.createAnd(cg.createVarIfAssign(target), eol));
     }
 
@@ -115,13 +115,13 @@ Assign * RE_Compiler::process(RE * re, Assign * target, PabloBlock & cg) {
 }
 
 inline Assign * RE_Compiler::process(Name * name, Assign * target, PabloBlock & cg) {
-    PabloE * marker = cg.createVar(target);
+    PabloAST * marker = cg.createVar(target);
     if (name->getType() != Name::Type::FixedLength) {
         // Move the markers forward through any nonfinal UTF-8 bytes to the final position of each character.
         marker = cg.createAnd(marker, cg.createCharClass(m_name_map.find("initial")->second));
         marker = cg.createScanThru(marker, cg.createCharClass(m_name_map.find("nonfinal")->second));
     }
-    PabloE * cc = nullptr;
+    PabloAST * cc = nullptr;
     if (name->getType() == Name::Type::UnicodeCategory) {
         cc = cg.createCall(name->getName());
     }
@@ -176,7 +176,7 @@ inline Assign * RE_Compiler::processUnboundedRep(RE * repeated, int lb, Assign *
     if (isa<Name>(repeated)) {
         Name * rep_name = dyn_cast<Name>(repeated);
 
-        PabloE * ccExpr;
+        PabloAST * ccExpr;
         if (rep_name->getType() == Name::Type::UnicodeCategory) {
             ccExpr = cg.createCall(rep_name->getName());
         }
@@ -188,7 +188,7 @@ inline Assign * RE_Compiler::processUnboundedRep(RE * repeated, int lb, Assign *
             ccExpr = cg.createNot(cg.createOr(cg.createOr(ccExpr, cg.createCharClass(m_name_map.find("LineFeed")->second)), cg.createCharClass(m_name_map.find("nonfinal")->second)));
         }
 
-        PabloE * unbounded = cg.createVar(target);
+        PabloAST * unbounded = cg.createVar(target);
         if (rep_name->getType() == Name::Type::FixedLength) {
             unbounded = cg.createMatchStar(unbounded, ccExpr);
         }
@@ -205,7 +205,7 @@ inline Assign * RE_Compiler::processUnboundedRep(RE * repeated, int lb, Assign *
         Assign * while_accum = cg.createAssign(cg.ssa("while_accum"), targetVar);
 
         PabloBlock wt(cg);
-        PabloE * accum = cg.createVarIfAssign(process(repeated, while_test, wt));
+        PabloAST * accum = cg.createVarIfAssign(process(repeated, while_test, wt));
         Var * var_while_test = cg.createVar(while_accum);
         wt.createAssign(while_test->getName(), wt.createAnd(accum, wt.createNot(var_while_test)));
         target = wt.createAssign(while_accum->getName(), wt.createOr(var_while_test, accum));

@@ -7,14 +7,14 @@
 #ifndef PE_MATCHSTAR_H
 #define PE_MATCHSTAR_H
 
-#include "pe_pabloe.h"
+#include "pabloAST.h"
 
 namespace pablo {
 
-class MatchStar : public PabloE {
+class MatchStar : public PabloAST {
     friend class PabloBlock;
 public:
-    static inline bool classof(const PabloE * e) {
+    static inline bool classof(const PabloAST * e) {
         return e->getClassTypeId() == ClassTypeId::MatchStar;
     }
     static inline bool classof(const void *) {
@@ -22,23 +22,23 @@ public:
     }
     virtual ~MatchStar() {
     }
-    inline PabloE * getExpr1() const {
+    inline PabloAST * getExpr1() const {
         return mExpr1;
     }
-    inline PabloE * getExpr2() const  {
+    inline PabloAST * getExpr2() const  {
         return mExpr2;
     }
 protected:
-    MatchStar(PabloE * expr1, PabloE * expr2)
-    : PabloE(ClassTypeId::MatchStar)
+    MatchStar(PabloAST * expr1, PabloAST * expr2)
+    : PabloAST(ClassTypeId::MatchStar)
     , mExpr1(expr1)
     , mExpr2(expr2)
     {
 
     }
 private:
-    PabloE * const mExpr1;
-    PabloE * const mExpr2;
+    PabloAST * const mExpr1;
+    PabloAST * const mExpr2;
 };
 
 }

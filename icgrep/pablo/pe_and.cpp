@@ -9,7 +9,7 @@
 
 namespace pablo {
 
-PabloE * OptimizeAnd::operator ()(PabloE * expr1, PabloE * expr2) {
+PabloAST * OptimizeAnd::operator ()(PabloAST * expr1, PabloAST * expr2) {
     if (All * all = dyn_cast<All>(expr1)) {
         if (all->getValue()) {
             return expr2;

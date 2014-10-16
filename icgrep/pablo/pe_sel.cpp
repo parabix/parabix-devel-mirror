@@ -9,7 +9,7 @@
 
 namespace pablo {
 
-PabloE * OptimizeSel::operator()(PabloE * if_expr, PabloE * t_expr, PabloE * f_expr) {
+PabloAST * OptimizeSel::operator()(PabloAST * if_expr, PabloAST * t_expr, PabloAST * f_expr) {
     if (All * all_if_expr = dyn_cast<All>(if_expr)) {
         if (all_if_expr->getValue()) {
             return t_expr;

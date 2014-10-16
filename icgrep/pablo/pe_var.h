@@ -7,16 +7,16 @@
 #ifndef PE_VAR_H
 #define PE_VAR_H
 
-#include <pablo/pe_pabloe.h>
+#include <pablo/pabloAST.h>
 #include <pablo/ps_assign.h>
 #include <pablo/pe_string.h>
 
 namespace pablo {
 
-class Var : public PabloE {
+class Var : public PabloAST {
     friend class PabloBlock;
 public:
-    static inline bool classof(const PabloE * e) {
+    static inline bool classof(const PabloAST * e) {
         return e->getClassTypeId() == ClassTypeId::Var;
     }
     static inline bool classof(const void *) {
@@ -28,8 +28,8 @@ public:
         return *mVar;
     }
 protected:
-    Var(const PabloE * var)
-    : PabloE(ClassTypeId::Var)
+    Var(const PabloAST * var)
+    : PabloAST(ClassTypeId::Var)
     , mVar(cast<String>(var)) {
 
     }

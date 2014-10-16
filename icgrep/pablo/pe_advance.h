@@ -7,14 +7,14 @@
 #ifndef PE_ADVANCE_H
 #define PE_ADVANCE_H
 
-#include "pe_pabloe.h"
+#include "pabloAST.h"
 
 namespace pablo {
 
-class Advance : public PabloE {
+class Advance : public PabloAST {
     friend class PabloBlock;
 public:
-    static inline bool classof(const PabloE * e) {
+    static inline bool classof(const PabloAST * e) {
         return e->getClassTypeId() == ClassTypeId::Advance;
     }
     static inline bool classof(const void *) {
@@ -22,17 +22,17 @@ public:
     }
     virtual ~Advance() {
     }
-    inline PabloE * getExpr() const {
+    inline PabloAST * getExpr() const {
         return mExpr;
     }
 protected:
-    Advance(PabloE * expr)
-    : PabloE(ClassTypeId::Advance)
+    Advance(PabloAST * expr)
+    : PabloAST(ClassTypeId::Advance)
     , mExpr(expr) {
 
     }
 private:
-    PabloE * const mExpr;
+    PabloAST * const mExpr;
 };
 
 }

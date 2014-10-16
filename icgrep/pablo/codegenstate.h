@@ -7,7 +7,7 @@
 #ifndef PS_PABLOS_H
 #define PS_PABLOS_H
 
-#include <pablo/pe_pabloe.h>
+#include <pablo/pabloAST.h>
 #include <pablo/pe_string.h>
 #include <pablo/pe_advance.h>
 #include <pablo/pe_all.h>
@@ -17,7 +17,7 @@
 #include <pablo/pe_matchstar.h>
 #include <pablo/pe_not.h>
 #include <pablo/pe_or.h>
-#include <pablo/pe_pabloe.h>
+#include <pablo/pabloAST.h>
 #include <pablo/pe_scanthru.h>
 #include <pablo/pe_sel.h>
 #include <pablo/pe_var.h>
@@ -57,13 +57,13 @@ public:
 
     }
 
-    Advance * createAdvance(PabloE * expr);
+    Advance * createAdvance(PabloAST * expr);
 
     inline All * createAll(const bool value) const {
         return mAll[value];
     }
 
-    Assign * createAssign(const std::string name, PabloE * expr);
+    Assign * createAssign(const std::string name, PabloAST * expr);
 
     Call * createCall(const std::string name);
 
@@ -71,33 +71,33 @@ public:
 
     Var * createVar(Assign * assign);
 
-    inline PabloE * createVarIfAssign(PabloE * const input) {
+    inline PabloAST * createVarIfAssign(PabloAST * const input) {
         return isa<Assign>(input) ? createVar(cast<Assign>(input)) : input;
     }
 
     CharClass * createCharClass(const std::string name);
 
-    PabloE * createAnd(PabloE * expr1, PabloE * expr2);
+    PabloAST * createAnd(PabloAST * expr1, PabloAST * expr2);
 
-    PabloE * createNot(PabloE * expr);
+    PabloAST * createNot(PabloAST * expr);
 
-    PabloE * createOr(PabloE * expr1, PabloE * expr2);
+    PabloAST * createOr(PabloAST * expr1, PabloAST * expr2);
 
-    PabloE * createXor(PabloE * expr1, PabloE * expr2);
+    PabloAST * createXor(PabloAST * expr1, PabloAST * expr2);
 
-    MatchStar * createMatchStar(PabloE * expr1, PabloE * expr2);
+    MatchStar * createMatchStar(PabloAST * expr1, PabloAST * expr2);
 
-    ScanThru * createScanThru(PabloE * from, PabloE * thru);
+    ScanThru * createScanThru(PabloAST * from, PabloAST * thru);
 
-    PabloE * createSel(PabloE * condition, PabloE * trueExpr, PabloE * falseExpr);
+    PabloAST * createSel(PabloAST * condition, PabloAST * trueExpr, PabloAST * falseExpr);
 
-    inline If * createIf(PabloE * condition, PabloBlock && body) {
+    inline If * createIf(PabloAST * condition, PabloBlock && body) {
         If * statement = new If(condition, std::move(body.mStatements));
         mStatements.push_back(statement);
         return statement;
     }
 
-    inline While * createWhile(PabloE * cond, PabloBlock && body) {
+    inline While * createWhile(PabloAST * cond, PabloBlock && body) {
         While * statement = new While(cond, std::move(body.mStatements));
         mStatements.push_back(statement);
         return statement;
@@ -106,7 +106,7 @@ public:
     template<typename... Args>
     struct ExpressionMap {
         typedef ExpressionMap<Args...> MapType;
-        typedef std::tuple<PabloE::ClassTypeId, Args...> Key;
+        typedef std::tuple<PabloAST::ClassTypeId, Args...> Key;
 
         inline ExpressionMap(MapType * predecessor, PabloBlock * parent)
         : mPredecessor(predecessor)
@@ -116,9 +116,9 @@ public:
         }
 
         template <class Type>
-        inline Type * findOrMake(const PabloE::ClassTypeId type, Args... args) {
+        inline Type * findOrMake(const PabloAST::ClassTypeId type, Args... args) {
             auto key = std::make_tuple(type, args...);
-            PabloE * f = find(key);
+            PabloAST * f = find(key);
             if (f) {
                 return cast<Type>(f);
             }
@@ -128,23 +128,23 @@ public:
         }
 
         template <class Functor>
-        inline PabloE * findOrCall(const PabloE::ClassTypeId type, Args... args) {
+        inline PabloAST * findOrCall(const PabloAST::ClassTypeId type, Args... args) {
             auto key = std::make_tuple(type, args...);
-            PabloE * f = find(key);
+            PabloAST * f = find(key);
             if (f) {
                 return f;
             }
             Functor mf(mCodeGenState);
-            PabloE * expr = mf(args...);            
+            PabloAST * expr = mf(args...);            
             insert(std::move(key), expr);
             return expr;
         }
 
-        inline void insert(Key && key, PabloE * expr) {
+        inline void insert(Key && key, PabloAST * expr) {
             mMap.insert(std::make_pair(std::move(key), expr));
         }
 
-        inline PabloE * find(const Key & key) const {
+        inline PabloAST * find(const Key & key) const {
             // check this map to see if we have it
             auto itr = mMap.find(key);
             if (itr != mMap.end()) {
@@ -166,7 +166,7 @@ public:
     private:
         MapType * const         mPredecessor;
         PabloBlock &            mCodeGenState;
-        std::map<Key, PabloE *> mMap;
+        std::map<Key, PabloAST *> mMap;
     };
 
     inline std::string ssa(std::string prefix) { // Static Single-Assignment
@@ -180,9 +180,9 @@ public:
 private:    
     SymbolGenerator &                               mSymbolGenerator;
     const std::array<All *, 2>                      mAll;
-    ExpressionMap<PabloE *>                         mUnary;
-    ExpressionMap<PabloE *, PabloE *>               mBinary;
-    ExpressionMap<PabloE *, PabloE *, PabloE *>     mTernary;
+    ExpressionMap<PabloAST *>                         mUnary;
+    ExpressionMap<PabloAST *, PabloAST *>               mBinary;
+    ExpressionMap<PabloAST *, PabloAST *, PabloAST *>     mTernary;
     ExpressionList                                  mStatements;
 };
 

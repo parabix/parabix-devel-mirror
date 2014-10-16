@@ -7,17 +7,17 @@
 #ifndef XOR_H
 #define XOR_H
 
-#include <pablo/pe_pabloe.h>
+#include <pablo/pabloAST.h>
 
 namespace pablo {
 
 class PabloBlock;
 
-class Xor : public PabloE {
+class Xor : public PabloAST {
     friend struct OptimizeXor;
     friend class PabloBlock;
 public:
-    static inline bool classof(const PabloE * e) {
+    static inline bool classof(const PabloAST * e) {
         return e->getClassTypeId() == ClassTypeId::Xor;
     }
     static inline bool classof(const void *) {
@@ -25,28 +25,28 @@ public:
     }
     virtual ~Xor() {
     }
-    inline PabloE * getExpr1() const {
+    inline PabloAST * getExpr1() const {
         return mExpr1;
     }
-    inline PabloE * getExpr2() const {
+    inline PabloAST * getExpr2() const {
         return mExpr2;
     }
 protected:
-    Xor(PabloE * expr1, PabloE * expr2)
-    : PabloE(ClassTypeId::Xor)
+    Xor(PabloAST * expr1, PabloAST * expr2)
+    : PabloAST(ClassTypeId::Xor)
     , mExpr1(expr1)
     , mExpr2(expr2)
     {
 
     }
 private:
-    PabloE * const mExpr1;
-    PabloE * const mExpr2;
+    PabloAST * const mExpr1;
+    PabloAST * const mExpr2;
 };
 
 struct OptimizeXor {
     inline OptimizeXor(PabloBlock & cg) : cg(cg) {}
-    PabloE * operator()(PabloE * expr1, PabloE * expr2);
+    PabloAST * operator()(PabloAST * expr1, PabloAST * expr2);
 private:
     PabloBlock & cg;
 };

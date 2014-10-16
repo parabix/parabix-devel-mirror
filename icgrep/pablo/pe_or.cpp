@@ -9,7 +9,7 @@
 
 namespace pablo {
 
-PabloE * OptimizeOr::operator ()(PabloE * expr1, PabloE * expr2) {
+PabloAST * OptimizeOr::operator ()(PabloAST * expr1, PabloAST * expr2) {
 
     if (All * all = dyn_cast<All>(expr1)) {
         if (all->getValue() == 1) {
@@ -40,10 +40,10 @@ PabloE * OptimizeOr::operator ()(PabloE * expr1, PabloE * expr2) {
     }
     else if (And * and_expr1 = dyn_cast<And>(expr1)) {
         if (And * and_expr2 = dyn_cast<And>(expr2)) {
-            PabloE * const expr1a = and_expr1->getExpr1();
-            PabloE * const expr1b = and_expr1->getExpr2();
-            PabloE * const expr2a = and_expr2->getExpr1();
-            PabloE * const expr2b = and_expr2->getExpr2();
+            PabloAST * const expr1a = and_expr1->getExpr1();
+            PabloAST * const expr1b = and_expr1->getExpr2();
+            PabloAST * const expr2a = and_expr2->getExpr1();
+            PabloAST * const expr2b = and_expr2->getExpr2();
             //These optimizations factor out common components that can occur when sets are formed by union
             //(e.g., union of [a-z] and [A-Z].
             if (equals(expr1a, expr2a)) {
