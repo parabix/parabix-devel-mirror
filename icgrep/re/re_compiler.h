@@ -16,6 +16,7 @@
 namespace pablo {
 
 class PabloBlock;
+class PabloAST;
 class Assign;
 class Var;
 
@@ -47,6 +48,9 @@ private:
     static bool hasUnicode(const RE *re);
 
     pablo::PabloBlock &                             mCG;
+    pablo::Var *                                    mLineFeed;
+    pablo::PabloAST *                               mInitial;
+    pablo::PabloAST *                               mNonFinal;
     std::map<std::string, std::string>              m_name_map;
 };
 

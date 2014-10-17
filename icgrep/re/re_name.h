@@ -1,10 +1,17 @@
 #ifndef RE_NAME_H
 #define RE_NAME_H
 
-#include "re_re.h"
+#include <re/re_re.h>
 #include <string>
 
+namespace pablo {
+    class Var;
+}
+
+
 namespace re {
+
+class CC;
 
 class Name : public RE {
 public:
@@ -16,49 +23,70 @@ public:
     }
     enum class Type {
         FixedLength
-        ,Unicode
-        ,UnicodeCategory
+        , Unicode
+        , UnicodeCategory
     };
-    void setName(std::string name);
-    std::string getName() const;
-    void setNegated(const bool is_negated);
+    const std::string & getName() const;
     bool isNegated() const;
-    void setType(const Type type);
     Type getType() const;
+    RE *getCC() const;
+    pablo::Var * getVar() const {
+        return mVar;
+    }
+    void setVar(pablo::Var * var) {
+        mVar = var;
+    }
+    void setCC(RE *cc);
     virtual ~Name() {}
 protected:
     friend Name * makeName();
-    friend Name * makeName(const Name *);
-    friend Name * makeName(std::string, const bool, const Type);
+    friend Name * makeName(const std::string, RE *);
+    friend Name * makeName(const std::string, const bool, const Type);
     Name();
-    Name(std::string name, const bool negated, const Type type);
+    Name(const std::string && name, const bool negated, const Type type);
+    Name(const std::string && name, RE * cc);
 private:
-    std::string mName;
-    bool mNegated;
-    Type mType;
+    const std::string   mName;
+    const bool          mNegated;
+    const Type          mType;
+    RE *                mCC;
+    pablo::Var *        mVar;
 };
 
 inline Name::Name()
 : RE(ClassTypeId::Name)
 , mName()
 , mNegated(false)
-, mType(Type::FixedLength) {
+, mType(Type::FixedLength)
+, mCC(nullptr)
+, mVar(nullptr)
+{
 
 }
 
-inline Name::Name(std::string name, const bool negated, const Type type)
+inline Name::Name(const std::string && name, const bool negated, const Type type)
 : RE(ClassTypeId::Name)
-, mName(name)
+, mName(std::move(name))
 , mNegated(negated)
-, mType(type) {
+, mType(type)
+, mCC(nullptr)
+, mVar(nullptr)
+{
 
 }
 
-inline void Name::setName(std::string name) {
-    mName = name;
+inline Name::Name(const std::string && name, RE * cc)
+: RE(ClassTypeId::Name)
+, mName(std::move(name))
+, mNegated(false)
+, mType(Type::FixedLength)
+, mCC(cc)
+, mVar(nullptr)
+{
+
 }
 
-inline std::string Name::getName() const {
+inline const std::string & Name::getName() const {
     return mName;
 }
 
@@ -66,28 +94,28 @@ inline bool Name::isNegated() const {
     return mNegated;
 }
 
-inline void Name::setNegated(const bool is_negated) {
-    mNegated = is_negated;
-}
-
-inline void Name::setType(const Type type) {
-    mType = type;
-}
-
 inline Name::Type Name::getType() const {
     return mType;
+}
+
+inline RE * Name::getCC() const {
+    return mCC;
+}
+
+inline void Name::setCC(RE * cc) {
+    mCC = cc;
 }
 
 inline Name * makeName() {
     return new Name();
 }
 
-inline Name * makeName(const Name * name) {
-    return new Name(*name);
+inline Name * makeName(const std::string name, const bool negated = false, const Name::Type type = Name::Type::FixedLength) {
+    return new Name(std::move(name), negated, type);
 }
 
-inline Name * makeName(std::string name, const bool negated = false, const Name::Type type = Name::Type::FixedLength) {
-    return new Name(name, negated, type);
+inline Name * makeName(const std::string name, RE * cc) {
+    return new Name(std::move(name), cc);
 }
 
 }
