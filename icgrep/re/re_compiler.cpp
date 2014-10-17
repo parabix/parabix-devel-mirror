@@ -7,6 +7,7 @@
 #include "re_compiler.h"
 //Regular Expressions
 #include <re/re_name.h>
+#include <re/re_any.h>
 #include <re/re_start.h>
 #include <re/re_end.h>
 #include <re/re_alt.h>
@@ -101,6 +102,14 @@ Assign * RE_Compiler::process(RE * re, Assign * target, PabloBlock & cg) {
     }
     else if (Rep * rep = dyn_cast<Rep>(re)) {
         target = process(rep, target, cg);
+    }
+    else if (isa<Any>(re)) {
+        // Move the markers forward through any nonfinal UTF-8 bytes to the final position of each character.
+		PabloAST * marker = cg.createVar(target);
+        marker = cg.createAnd(marker, cg.createCharClass(m_name_map.find("initial")->second));
+        marker = cg.createScanThru(marker, cg.createCharClass(m_name_map.find("nonfinal")->second));
+        PabloAST * dot = cg.createNot(cg.createCharClass(m_name_map.find("LineFeed")->second));
+        target = cg.createAssign(cg.ssa("dot"), cg.createAdvance(cg.createAnd(marker, dot)));
     }
     else if (isa<Start>(re)) {
         PabloAST * sol = cg.createNot(cg.createAdvance(cg.createNot(cg.createCharClass(m_name_map.find("LineFeed")->second))));
@@ -197,6 +206,13 @@ inline Assign * RE_Compiler::processUnboundedRep(RE * repeated, int lb, Assign *
         }
         target = cg.createAssign(cg.ssa("marker"), unbounded);
     }
+    else if (isa<Any>(repeated)) {
+        PabloAST * dot = cg.createNot(cg.createCharClass(m_name_map.find("LineFeed")->second));
+        PabloAST * unbounded = cg.createVar(target);
+        unbounded = cg.createAnd(cg.createMatchStar(unbounded, cg.createOr(cg.createCharClass(m_name_map.find("nonfinal")->second), dot)), cg.createCharClass(m_name_map.find("initial")->second));
+        target = cg.createAssign(cg.ssa("marker"), unbounded);
+    }
+
     else {
 
         Var * targetVar = cg.createVar(target);
@@ -232,6 +248,7 @@ bool RE_Compiler::hasUnicode(const RE * re) {
     if (re == nullptr) {
         throw std::runtime_error("Unexpected Null Value passed to RE Compiler!");
     }
+    else if (isa<Any>(re)) found = true;
     else if (const Name * name = dyn_cast<const Name>(re)) {
         if ((name->getType() == Name::Type::UnicodeCategory) || (name->getType() == Name::Type::Unicode)) {
             found = true;

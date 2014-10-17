@@ -20,6 +20,7 @@ class Vector;
 class Pair;
 
 class Alt;
+class Any;
 class CC;
 class Diff;
 class End;
@@ -36,6 +37,7 @@ class RE {
 public:
     enum class ClassTypeId : unsigned {
         Alt
+        , Any
         , CC
         , Diff
         , End

@@ -107,12 +107,9 @@ RE * RE_Parser::parse_next_token() {
     return re;
 }
 
-CC * RE_Parser::parse_any_character() {
-    CC * cc = makeCC();
-    cc->insert_range(0, 9);
-    cc->insert_range(11, CC::UNICODE_MAX);
+Any * RE_Parser::parse_any_character() {
     ++_cursor;
-    return cc;
+    return makeAny();
 }
 
 RE * RE_Parser::extend_item(RE * re) {

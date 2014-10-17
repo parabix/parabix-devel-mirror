@@ -8,7 +8,7 @@
 #define RE_PARSER_H
 
 #include "re_re.h"
-#include "re_cc.h"
+#include "re_any.h"
 #include "re_name.h"
 
 #include <string>
@@ -35,7 +35,7 @@ private:
 
     RE * parse_next_token();
 
-    CC * parse_any_character();
+    Any * parse_any_character();
 
     RE * extend_item(RE * re);
 

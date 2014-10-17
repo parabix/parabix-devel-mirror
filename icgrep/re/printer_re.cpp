@@ -9,6 +9,7 @@
 //Regular Expressions
 #include "re/re_re.h"
 #include "re/re_alt.h"
+#include "re/re_any.h"
 #include "re/re_cc.h"
 #include "re/re_name.h"
 #include "re/re_end.h"
@@ -93,6 +94,10 @@ const std::string Printer_RE::PrintRE(const RE * re)
     else if (isa<const Start>(re))
     {
         retVal = "Start";
+    }
+    else if (isa<const Any>(re))
+    {
+        retVal = "Any";
     }
     else
     {
