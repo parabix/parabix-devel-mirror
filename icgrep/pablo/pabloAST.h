@@ -19,7 +19,6 @@ class PabloAST {
 public:
     enum class ClassTypeId : unsigned {
         Advance
-        , All
         , And
         , Call
         , CharClass
@@ -34,6 +33,8 @@ public:
         , If
         , While
         , String
+        , Zeroes
+        , Ones
     };
     inline ClassTypeId getClassTypeId() const {
         return mClassTypeId;

@@ -18,7 +18,6 @@
 //Pablo Expressions
 #include <pablo/pabloAST.h>
 #include <pablo/pe_advance.h>
-#include <pablo/pe_all.h>
 #include <pablo/pe_and.h>
 #include <pablo/pe_call.h>
 #include <pablo/pe_charclass.h>
@@ -32,6 +31,8 @@
 #include <pablo/ps_assign.h>
 #include <pablo/ps_if.h>
 #include <pablo/ps_while.h>
+#include <pablo/pe_zeroes.h>
+#include <pablo/pe_ones.h>
 #include <pablo/codegenstate.h>
 
 using namespace re;
@@ -91,9 +92,13 @@ std::string StatementPrinter::ShowPabloAST(const PabloAST *expr)
 {
     std::string retVal = "";
 
-    if (const All * all = dyn_cast<const All>(expr))
+    if (isa<const Zeroes>(expr))
     {
-        retVal = "All " + std::to_string(all->getValue()) + " ";
+        retVal = "Zeroes";
+    }
+    else if (isa<const Ones>(expr))
+    {
+        retVal = "Ones";
     }
     else if (const Call * pablo_call = dyn_cast<const Call>(expr))
     {

@@ -627,10 +627,16 @@ Value * PabloCompiler::compileExpression(const PabloAST * expr)
 {
     Value * retVal = nullptr;
     IRBuilder<> b(mBasicBlock);
-    if (const All* all = dyn_cast<All>(expr))
+    if (isa<Ones>(expr))
     {
         Value* ptr_all = b.CreateAlloca(mXi64Vect);
-        b.CreateStore((all->getValue() == 0 ? mZeroInitializer : mAllOneInitializer), ptr_all);
+        b.CreateStore(mAllOneInitializer, ptr_all);
+        retVal = b.CreateLoad(ptr_all);
+    }
+    else if (isa<Zeroes>(expr))
+    {
+        Value* ptr_all = b.CreateAlloca(mXi64Vect);
+        b.CreateStore(mZeroInitializer, ptr_all);
         retVal = b.CreateLoad(ptr_all);
     }
     else if (const Call* call = dyn_cast<Call>(expr))

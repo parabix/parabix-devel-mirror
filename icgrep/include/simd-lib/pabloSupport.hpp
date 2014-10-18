@@ -122,12 +122,12 @@ IDISA_ALWAYS_INLINE uint64_t pablo_blk_IndexOf(BitBlock v, int block_base) {
     union {BitBlock bitblock; ScanWord elems[sizeof(BitBlock)/sizeof(ScanWord)];} u;
 	u.bitblock = v;    
     int pos;
-    ScanWord s, t, bit;
+    ScanWord s;
     for (unsigned int i = 0; i < sizeof(BitBlock)/sizeof(ScanWord); i++) {
         s = u.elems[i];
         if (s != 0) {
             int bitpos = scan_forward_zeroes(s);
-            int pos = block_base + (i * sizeof(ScanWord) * 8) + bitpos;
+            pos = block_base + (i * sizeof(ScanWord) * 8) + bitpos;
         }
     }
     

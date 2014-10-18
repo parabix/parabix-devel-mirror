@@ -71,7 +71,7 @@ void CC_Compiler::compile(const RENameMap & re_map) {
 
 inline PabloAST * CC_Compiler::charset_expr(const CC * cc) {
     if (cc->empty()) {
-        return mCG.createAll(0);
+        return mCG.createZeroes();
     }
     if (cc->size() > 2) {
         bool combine = true;
@@ -117,7 +117,7 @@ inline PabloAST * CC_Compiler::charset_expr(const CC * cc) {
 PabloAST * CC_Compiler::bit_pattern_expr(const unsigned pattern, unsigned selected_bits)
 {
     if (selected_bits == 0) {
-        return mCG.createAll(1);
+        return mCG.createOnes();
     }
 
     std::vector<PabloAST*> bit_terms;
@@ -139,7 +139,7 @@ PabloAST * CC_Compiler::bit_pattern_expr(const unsigned pattern, unsigned select
         }
         else
         {
-            bit_terms.push_back(mCG.createAll(1));
+            bit_terms.push_back(mCG.createOnes());
         }
         selected_bits &= ~test_bit;
         i++;
@@ -195,7 +195,7 @@ PabloAST * CC_Compiler::make_range(const CodePointType n1, const CodePointType n
 PabloAST * CC_Compiler::GE_Range(const unsigned N, const unsigned n) {
     if (N == 0)
     {
-        return mCG.createAll(1); //Return a true literal.
+        return mCG.createOnes(); //Return a true literal.
     }
     else if (((N % 2) == 0) && ((n >> (N - 2)) == 0))
     {
@@ -238,7 +238,7 @@ PabloAST * CC_Compiler::LE_Range(const unsigned N, const unsigned n)
       Handling this as a special case avoids an overflow issue with n+1 requiring more than N bits.
     */
     if ((n + 1) == (1 << N)) {
-        return mCG.createAll(1); //True.
+        return mCG.createOnes(); //True.
     }
     else {
         return mCG.createNot(GE_Range(N, n + 1));

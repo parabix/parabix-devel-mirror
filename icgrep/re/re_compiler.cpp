@@ -19,7 +19,8 @@
 //Pablo Expressions
 #include <pablo/codegenstate.h>
 #include <pablo/pe_advance.h>
-#include <pablo/pe_all.h>
+#include <pablo/pe_zeroes.h>
+#include <pablo/pe_ones.h>
 #include <pablo/pe_and.h>
 #include <pablo/pe_call.h>
 #include <pablo/pe_charclass.h>
@@ -71,7 +72,7 @@ void RE_Compiler::compile(RE * re, PabloBlock & cg) {
         PabloAST * u8pfx = cg.createOr(cg.createOr(u8pfx2, u8pfx3), u8pfx4);
         mInitial = cg.createVar(cg.createAssign(initial, cg.createOr(u8pfx, u8single)));
         #ifdef USE_IF_FOR_NONFINAL
-        mNonFinal = cg.createVar(cg.createAssign(gs_nonfinal, cg.createAll(0)));
+        mNonFinal = cg.createVar(cg.createAssign(gs_nonfinal, cg.createZeroes()));
         #endif
         PabloAST * u8scope32 = cg.createAdvance(u8pfx3);
         PabloAST * u8scope42 = cg.createAdvance(u8pfx4);
@@ -85,11 +86,11 @@ void RE_Compiler::compile(RE * re, PabloBlock & cg) {
         #endif
     }
     else {
-        mInitial = cg.createAll(0);
-        mNonFinal = cg.createAll(0);
+        mInitial = cg.createZeroes();
+        mNonFinal = cg.createZeroes();
     }
 
-    Assign * start_marker = cg.createAssign("start", cg.createAll(1));
+    Assign * start_marker = cg.createAssign("start", cg.createOnes());
     PabloAST * result = process(re, start_marker, cg);
 
     //These three lines are specifically for grep.
@@ -159,7 +160,7 @@ inline Assign * RE_Compiler::process(Seq * seq, Assign *target, PabloBlock & cg)
 
 inline Assign * RE_Compiler::process(Alt * alt, Assign * target, PabloBlock & cg) {
     if (alt->empty()) {
-        target = cg.createAssign(cg.ssa("fail"), cg.createAll(0)); // always fail (note: I'm not sure this ever occurs. How do I create a 0-element alternation?)
+        target = cg.createAssign(cg.ssa("fail"), cg.createZeroes()); // always fail (note: I'm not sure this ever occurs. How do I create a 0-element alternation?)
     }
     else {
         auto i = alt->begin();

@@ -11,8 +11,11 @@
 namespace pablo {
 
 PabloAST * OptimizeNot::operator ()(PabloAST * expr) {
-    if (All * all = dyn_cast<All>(expr)) {
-        return cg.createAll(!all->getValue());
+    if (isa<Ones>(expr)) {
+	return cg.createZeroes();
+    }
+    else if (isa<Zeroes>(expr)){
+        return cg.createOnes();        
     }
     else if (Not * pe_not = dyn_cast<Not>(expr)) {
         return pe_not->getExpr();

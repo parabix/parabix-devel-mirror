@@ -10,22 +10,20 @@
 namespace pablo {
 
 PabloAST * OptimizeOr::operator ()(PabloAST * expr1, PabloAST * expr2) {
-
-    if (All * all = dyn_cast<All>(expr1)) {
-        if (all->getValue() == 1) {
-            return all; //Return a true literal.
-        }
-        else {
-            return expr2;
-        }
+    if (isa<Ones>(expr1)) {
+	return expr1;
     }
-    else if (All * all = dyn_cast<All>(expr2)) {
-        if (all->getValue() == 1) {
-            return all; //Return a true literal.
-        }
-        else {
-            return expr1;
-        }
+    else if (isa<Zeroes>(expr1)){
+        return expr2;        
+    }
+    else if (isa<Ones>(expr2)) {
+	return expr2;
+    }
+    else if (isa<Zeroes>(expr2)){
+        return expr1;
+    }
+    else if (equals(expr1, expr2)) {
+        return expr1;
     }
     else if (Not * not1 = dyn_cast<Not>(expr1)) {
         // ¬a∨b = ¬¬(¬a∨b) = ¬(a ∧ ¬b)

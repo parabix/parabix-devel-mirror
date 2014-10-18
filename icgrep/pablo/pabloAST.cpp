@@ -6,7 +6,6 @@
 
 #include "pabloAST.h"
 #include "pe_advance.h"
-#include "pe_all.h"
 #include "pe_and.h"
 #include "pe_call.h"
 #include "pe_charclass.h"
@@ -18,6 +17,8 @@
 #include "pe_sel.h"
 #include "pe_var.h"
 #include "pe_xor.h"
+#include "pe_zeroes.h"
+#include "pe_ones.h"
 
 namespace pablo {
 
@@ -31,10 +32,8 @@ namespace pablo {
 
 bool equals(const PabloAST * expr1, const PabloAST * expr2) {
     if (expr1->getClassTypeId() == expr2->getClassTypeId()) {
-        if (const All * all1 = dyn_cast<const All>(expr1)) {
-            if (const All * all2 = cast<const All>(expr2)) {
-                return all1->getValue() == all2->getValue();
-            }
+        if ((isa<const Zeroes>(expr1)) || (isa<const Ones>(expr1))) {
+            return true;
         }
         else if (const Var * var1 = dyn_cast<const Var>(expr1)) {
             if (const Var * var2 = cast<const Var>(expr2)) {

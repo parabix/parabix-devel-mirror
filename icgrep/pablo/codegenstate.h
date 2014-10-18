@@ -10,7 +10,6 @@
 #include <pablo/pabloAST.h>
 #include <pablo/pe_string.h>
 #include <pablo/pe_advance.h>
-#include <pablo/pe_all.h>
 #include <pablo/pe_and.h>
 #include <pablo/pe_call.h>
 #include <pablo/pe_charclass.h>
@@ -25,6 +24,8 @@
 #include <pablo/ps_assign.h>
 #include <pablo/ps_if.h>
 #include <pablo/ps_while.h>
+#include <pablo/pe_zeroes.h>
+#include <pablo/pe_ones.h>
 #include <pablo/symbol_generator.h>
 #include <map>
 #include <vector>
@@ -39,7 +40,8 @@ public:
 
     PabloBlock(SymbolGenerator & symgen)
     : mSymbolGenerator(symgen)
-    , mAll{{new All(0), new All(1)}}
+    , mZeroes(new Zeroes())
+    , mOnes(new Ones())
     , mUnary(nullptr, this)
     , mBinary(nullptr, this)
     , mTernary(nullptr, this)
@@ -49,7 +51,8 @@ public:
 
     PabloBlock(PabloBlock & cg)
     : mSymbolGenerator(cg.mSymbolGenerator)
-    , mAll(cg.mAll) // inherit the original "All" variables for simplicity
+    , mZeroes(cg.mZeroes) // inherit the original "All" variables for simplicity
+    , mOnes(cg.mOnes) // inherit the original "All" variables for simplicity
     , mUnary(&(cg.mUnary), this)
     , mBinary(&(cg.mBinary), this)
     , mTernary(&(cg.mTernary), this)
@@ -59,8 +62,12 @@ public:
 
     Advance * createAdvance(PabloAST * expr);
 
-    inline All * createAll(const bool value) const {
-        return mAll[value];
+    inline Zeroes * createZeroes() const {
+        return mZeroes;
+    }
+
+    inline Ones * createOnes() const {
+        return mOnes;
     }
 
     Assign * createAssign(const std::string name, PabloAST * expr);
@@ -179,7 +186,8 @@ public:
 
 private:    
     SymbolGenerator &                               mSymbolGenerator;
-    const std::array<All *, 2>                      mAll;
+    Zeroes *                     		    mZeroes;
+    Ones *                     		    mOnes;
     ExpressionMap<PabloAST *>                         mUnary;
     ExpressionMap<PabloAST *, PabloAST *>               mBinary;
     ExpressionMap<PabloAST *, PabloAST *, PabloAST *>     mTernary;
