@@ -4,47 +4,41 @@
  *  icgrep is a trademark of International Characters.
  */
 
-#ifndef PE_ALL_H
-#define PE_ALL_H
+#ifndef PE_ONES_H
+#define PE_ONES_H
 
 #include "pabloAST.h"
 
 namespace pablo {
 
-class All : public PabloAST {
+class Ones : public PabloAST {
     friend class PabloBlock;
 public:
     static inline bool classof(const PabloAST * e) {
-        return e->getClassTypeId() == ClassTypeId::All;
+        return e->getClassTypeId() == ClassTypeId::Ones;
     }
     static inline bool classof(const void *) {
         return false;
     }
-    virtual ~All() {
+    virtual ~Ones() {
 
     }
-    inline bool getValue() const {
-        return mValue;
-    }
-    inline bool operator==(const All & other) const {
-        return mValue == other.mValue;
+    inline bool operator==(const Ones & other) const {
+        return true;
     }
     virtual bool operator==(const PabloAST & other) const {
-        return (isa<All>(other)) ? mValue == cast<All>(other).mValue : false;
+        return isa<Ones>(other);
     }
 protected:
-    All(const bool value)
-    : PabloAST(ClassTypeId::All)
-    , mValue(value)
+    Ones()
+    : PabloAST(ClassTypeId::Ones)
     {
 
     }
-private:
-    const bool mValue;
 };
 
 }
 
-#endif // PE_ALL_H
+#endif // PE_ONES_H
 
 
