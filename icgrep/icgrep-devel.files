@@ -184,3 +184,5 @@ pablo/codegenstate.h
 pablo/printer_pablos.cpp
 pablo/printer_pablos.h
 CMakeLists.txt
+cc/cc_namemap.cpp
+cc/cc_namemap.hpp

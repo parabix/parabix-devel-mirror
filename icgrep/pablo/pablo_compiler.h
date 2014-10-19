@@ -84,7 +84,7 @@ class PabloCompiler {
     #endif
 public:
     typedef cc::CC_Compiler::BasisBitVars BasisBitVars;
-    PabloCompiler(std::map<std::string, std::string> name_map, const BasisBitVars & basisBitVars, int bits);
+    PabloCompiler(const cc::CC_NameMap & nameMap, const BasisBitVars & basisBitVars, int bits);
     ~PabloCompiler();
     LLVM_Gen_RetVal compile(const PabloBlock & cg_state);
 private:
@@ -107,9 +107,9 @@ private:
     Value* genAddWithCarry(Value* e1, Value* e2);
     Value* genAdvanceWithCarry(Value* e1);
     Value* genBitBlockAny(Value* e);
-    Value* genShiftHighbitToLow(Value* e, const Twine &namehint = "");
-    Value* genShiftLeft64(Value* e, const Twine &namehint = "") ;
-    Value* genNot(Value* e, const Twine &namehint = "");
+    Value* genShiftHighbitToLow(Value* e, const Twine & namehint = "");
+    Value* genShiftLeft64(Value* e, const Twine & namehint = "") ;
+    Value* genNot(Value* e, const Twine & namehint = "");
 
     #ifdef USE_UADD_OVERFLOW
     SumWithOverflowPack callUaddOverflow(Value *e1, Value *e2, Value *cin);
@@ -119,8 +119,7 @@ private:
     std::map<std::string, Value*>       mMarkerMap;
 
 
-    int                                 mBits;
-    std::map<std::string, std::string>  m_name_map;
+    int                                 mBits;    
     const BasisBitVars &                mBasisBitVars;
 
     Module* const                       mMod;
@@ -147,6 +146,8 @@ private:
     AllocaInst*                         mBasisBitsAddr;
     AllocaInst*                         mPtr_carry_q_addr;
     AllocaInst*                         mPtr_output_addr;
+
+    const cc::CC_NameMap &              mNameMap;
 };
 
 }

@@ -13,11 +13,13 @@
 #include <pablo/pablo_compiler.h>
 #include <pablo/codegenstate.h>
 #include <pablo/printer_pablos.h>
+#include <cc/cc_namemap.hpp>
+#include <re/re_name.h>
 #include <stdexcept>
 #include <include/simd-lib/bitblock.hpp>
 
-// #define DUMP_GENERATED_IR
-// #define DUMP_OPTIMIZED_IR
+//#define DUMP_GENERATED_IR
+//#define DUMP_OPTIMIZED_IR
 
 extern "C" {
   void wrapped_print_register(BitBlock bit_block) {
@@ -71,9 +73,8 @@ CREATE_GENERAL_CODE_CATEGORY(Zs)
 
 namespace pablo {
 
-PabloCompiler::PabloCompiler(std::map<std::string, std::string> name_map, const BasisBitVars & basisBitVars, int bits)
+PabloCompiler::PabloCompiler(const cc::CC_NameMap & nameMap, const BasisBitVars & basisBitVars, int bits)
 : mBits(bits)
-, m_name_map(name_map)
 , mBasisBitVars(basisBitVars)
 , mMod(new Module("icgrep", getGlobalContext()))
 , mBasicBlock(nullptr)
@@ -92,6 +93,7 @@ PabloCompiler::PabloCompiler(std::map<std::string, std::string> name_map, const 
 , mBasisBitsAddr(nullptr)
 , mPtr_carry_q_addr(nullptr)
 , mPtr_output_addr(nullptr)
+, mNameMap(nameMap)
 {
     //Create the jit execution engine.up
     InitializeNativeTarget();
@@ -177,7 +179,7 @@ LLVM_Gen_RetVal PabloCompiler::compile(const PabloBlock & cg_state)
 
     //Generate the IR instructions for the function.
     SetReturnMarker(compileStatements(cg_state.expressions()), 0); // matches
-    SetReturnMarker(GetMarker(m_name_map.find("LineFeed")->second), 1); // line feeds
+    SetReturnMarker(GetMarker(mNameMap["LineFeed"]->getName()), 1); // line feeds
 
     assert (mCarryQueueIdx == mCarryQueueSize);
 
@@ -680,10 +682,6 @@ Value * PabloCompiler::compileExpression(const PabloAST * expr)
         Value* expr_value = compileExpression(pablo_not->getExpr());
         retVal = b.CreateXor(expr_value, mAllOneInitializer, "not");
     }
-    else if (const CharClass * cc = dyn_cast<CharClass>(expr))
-    {
-        retVal = b.CreateLoad(GetMarker(cc->getCharClass()));
-    }
     else if (const Advance * adv = dyn_cast<Advance>(expr))
     {
         Value* strm_value = compileExpression(adv->getExpr());
@@ -700,7 +698,7 @@ Value * PabloCompiler::compileExpression(const PabloAST * expr)
     {
         Value* marker_expr = compileExpression(sthru->getScanFrom());
         Value* cc_expr = compileExpression(sthru->getScanThru());
-        retVal = b.CreateAnd(genAddWithCarry(marker_expr, cc_expr), genNot(cc_expr), "scanthru_rslt");
+        retVal = b.CreateAnd(genAddWithCarry(marker_expr, cc_expr), genNot(cc_expr), "scanthru");
     }
     return retVal;
 }
@@ -819,17 +817,17 @@ Value* PabloCompiler::genAdvanceWithCarry(Value* strm_value) {
     Value* packed_shuffle;
     Constant* const_packed_1_elems [] = {b.getInt32(0), b.getInt32(2)};
     Constant* const_packed_1 = ConstantVector::get(const_packed_1_elems);
-    packed_shuffle = b.CreateShuffleVector(carryq_value, srli_1_value, const_packed_1, "packed_shuffle nw");
+    packed_shuffle = b.CreateShuffleVector(carryq_value, srli_1_value, const_packed_1);
 
     Constant* const_packed_2_elems[] = {b.getInt64(1), b.getInt64(1)};
     Constant* const_packed_2 = ConstantVector::get(const_packed_2_elems);
 
-    Value* shl_value = b.CreateShl(strm_value, const_packed_2, "shl_value");
-    Value* result_value = b.CreateOr(shl_value, packed_shuffle, "or.result_value");
+    Value* shl_value = b.CreateShl(strm_value, const_packed_2);
+    Value* result_value = b.CreateOr(shl_value, packed_shuffle, "advance");
 
     Value* carry_out = genShiftHighbitToLow(strm_value, "carry_out");
     //CarryQ - carry out:
-    Value* void_1 = genCarryOutStore(carry_out, mptr_carry_q, this_carry_idx);
+    genCarryOutStore(carry_out, mptr_carry_q, this_carry_idx);
 
     return result_value;
 #endif

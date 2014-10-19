@@ -4,200 +4,144 @@
  *  icgrep is a trademark of International Characters.
  */
 
-#include "utf8_encoder.h"
-
-#include "re/re_name.h"
-#include "re/re_start.h"
-#include "re/re_end.h"
-#include "re/re_seq.h"
-#include "re/re_alt.h"
-#include "re/re_rep.h"
-#include "re/re_simplifier.h"
-
+#include <utf8_encoder.h>
+#include <re/re_name.h>
+#include <re/re_seq.h>
+#include <re/re_alt.h>
+#include <re/re_rep.h>
+#include <cc/cc_namemap.hpp>
 #include <assert.h>
 #include <algorithm>
 #include <stdexcept>
 
 using namespace re;
 
-RE * UTF8_Encoder::toUTF8(RE* re) {
-    if (Alt * alt = dyn_cast<Alt>(re)) {
-        for (auto i = alt->begin(); i != alt->end(); ++i) {
-            *i = toUTF8(*i);
-        }
-    }
-    else if (Seq * seq = dyn_cast<Seq>(re)) {
-        //If this is a previously encoded Unicode byte sequence.
-        if (seq->getType() == Seq::Type::Byte) {
-            throw std::runtime_error("Unexpected UTF Byte Sequence given to UTF8 Encoder.");
-        }
-        for (auto i = seq->begin(); i != seq->end(); ++i) {
-            *i = toUTF8(*i);
-        }
-    }
-    else if (CC * cc = dyn_cast<CC>(re)) {
-        if (cc->size() == 1) {
-            re = rangeToUTF8(cc->front());
-        }
-        else if (cc->size() > 1) {
-            std::vector<RE *> alt;
-            for (const CharSetItem & item : *cc) {
-                alt.push_back(rangeToUTF8(item));
+namespace cc {
+
+RE * UTF8_Encoder::toUTF8(CC_NameMap & nameMap, RE * ast) {
+    for (Name * name : nameMap) {
+        if (const CC * cc = dyn_cast_or_null<CC>(name->getCC())) {
+            if (cc->size() == 1) {
+                name->setCC(rangeToUTF8(cc->front()));
             }
-            re = makeAlt(alt.begin(), alt.end());
+            else if (cc->size() > 1) {
+                std::vector<RE *> alt;
+                for (const CharSetItem & item : *cc) {
+                    alt.push_back(rangeToUTF8(item));
+                }
+                name->setCC(makeAlt(alt.begin(), alt.end()));
+            }
         }
     }
-    else if (Rep * rep = dyn_cast<Rep>(re)) {
-        rep->setRE(toUTF8(rep->getRE()));
-    }
-    return re;
+    ast = nameMap.process(ast);
+    // Build our list of predefined characters.
+    nameMap.addPredefined("UTF8-SingleByte", makeCC(0x00, 0x7F));
+    nameMap.addPredefined("UTF8-Prefix2", makeCC(0xC2, 0xDF));
+    nameMap.addPredefined("UTF8-Prefix3", makeCC(0xE0, 0xEF));
+    nameMap.addPredefined("UTF8-Prefix4", makeCC(0xF0, 0xF4));
+    return ast;
 }
 
 RE * UTF8_Encoder::rangeToUTF8(const CharSetItem & item) {
-    int u8len_lo = lenUTF8(item.lo_codepoint);
-    int u8len_hi = lenUTF8(item.hi_codepoint);
-    if (u8len_lo < u8len_hi) {
-        int m = maxUTF8Len(u8len_lo);
+    const auto min = lenUTF8(item.lo_codepoint);
+    const auto max = lenUTF8(item.hi_codepoint);
+    if (min < max) {
+        const auto m = maxCodePoint(min);
         return makeAlt({rangeToUTF8(CharSetItem(item.lo_codepoint, m)), rangeToUTF8(CharSetItem(m + 1, item.hi_codepoint))});
     }
     else {
-        return rangeToUTF8_helper(item.lo_codepoint, item.hi_codepoint, 1, u8len_hi);
+        return rangeToUTF8(item.lo_codepoint, item.hi_codepoint, 1, max);
     }
 }
 
-RE* UTF8_Encoder::rangeToUTF8_helper(int lo, int hi, int n, int hlen)
+RE * UTF8_Encoder::rangeToUTF8(const CodePointType lo, const CodePointType hi, const unsigned index, const unsigned max)
 {
-    int hbyte = u8byte(hi, n);
-    int lbyte = u8byte(lo, n);
-
-    if (n == hlen)
-    {
+    const CodePointType hbyte = u8byte(hi, index);
+    const CodePointType lbyte = u8byte(lo, index);
+    if (index == max) {
         return makeByteRange(lbyte, hbyte);
     }
-    else if (hbyte == lbyte)
-    {
-        Seq* seq = makeSeq(isUTF8Prefix(hbyte) ? Seq::Type::Byte : Seq::Type::Normal);
-        seq->push_back(makeByteClass(hbyte));
-        seq->push_back(rangeToUTF8_helper(lo, hi, n+1, hlen));
-        return seq;
+    else if (hbyte == lbyte) {
+        return makeSeq({makeByteClass(hbyte), rangeToUTF8(lo, hi, index + 1, max)});
     }
-    else
-    {
-        int suffix_mask = (1 << ((hlen - n) * 6)) - 1;
-
-        if ((hi & suffix_mask) != suffix_mask)
-        {
-            int hi_floor = (~suffix_mask) & hi;
-            return makeAlt({rangeToUTF8_helper(hi_floor, hi, n, hlen), rangeToUTF8_helper(lo, hi_floor - 1, n, hlen)});
+    else {
+        const unsigned suffix_mask = (static_cast<unsigned>(1) << ((max - index) * 6)) - 1;
+        if ((hi & suffix_mask) != suffix_mask) {
+            const unsigned hi_floor = (~suffix_mask) & hi;
+            return makeAlt({rangeToUTF8(hi_floor, hi, index, max), rangeToUTF8(lo, hi_floor - 1, index, max)});
         }
-        else if ((lo & suffix_mask) != 0)
-        {
-            int low_ceil = lo | suffix_mask;
-
-            Alt* alt = makeAlt();
-            alt->push_back(rangeToUTF8_helper(low_ceil + 1, hi, n, hlen));
-            alt->push_back(rangeToUTF8_helper(lo, low_ceil, n, hlen));
-            return alt;
+        else if ((lo & suffix_mask) != 0) {
+            const unsigned low_ceil = lo | suffix_mask;
+            return makeAlt({rangeToUTF8(low_ceil + 1, hi, index, max), rangeToUTF8(lo, low_ceil, index, max)});
         }
-        else
-        {
-            Seq* seq = makeSeq();
-            seq->setType((isUTF8Prefix(hbyte) ? Seq::Type::Byte : Seq::Type::Normal));
-            seq->push_back(makeByteRange(lbyte, hbyte));
-            seq->push_back(rangeToUTF8_helper(lo, hi, n + 1, hlen));
-            return seq;
+        else {
+            return makeSeq({makeByteRange(lbyte, hbyte), rangeToUTF8(lo, hi, index + 1, max)});
         }
     }
 }
 
-inline bool UTF8_Encoder::isUTF8Prefix(const int cp) {
-    return ((cp >= 0xC2) && (cp <= 0xF4));
+inline bool UTF8_Encoder::isUTF8Prefix(const unsigned cp) {
+    return (cp >= 0xC2) && (cp <= 0xF4);
 }
 
-CC* UTF8_Encoder::makeByteRange(int lo, int hi)
+inline CodePointType UTF8_Encoder::u8byte(const CodePointType codepoint, const unsigned n)
 {
-    return makeCC(lo, hi);
-}
+    CodePointType retVal = 0;
 
-CC* UTF8_Encoder::makeByteClass(int byteval)
-{
-    return makeCC(byteval, byteval);
-}
+    const unsigned len = lenUTF8(codepoint);
 
-inline int UTF8_Encoder::u8byte(int codepoint, int n)
-{
-    int retVal = 0;
-
-    int len = lenUTF8(codepoint);
-
-    if (n == 1)
-    {
-        if (len == 1)
-        {
-            retVal = codepoint;
-        }
-        else if (len == 2)
-        {
-            retVal = 0xC0 | (codepoint >> 6);
-        }
-        else if (len == 3)
-        {
-            retVal = 0xE0 | (codepoint >> 12);
-        }
-        else
-        {
-            retVal = 0xF0 | (codepoint >> 18);
+    if (n == 1) {
+        switch (len) {
+            case 1: retVal = codepoint; break;
+            case 2: retVal = 0xC0 | (codepoint >> 6); break;
+            case 3: retVal = 0xE0 | (codepoint >> 12); break;
+            case 4: retVal = 0xF0 | (codepoint >> 18); break;
         }
     }
-    else
-    {
+    else {
         retVal = 0x80 | ((codepoint >> (6 * (len - n))) & 0x3F);
     }
 
     return retVal;
 }
 
-inline int UTF8_Encoder::lenUTF8(const int cp)
-{
-    if (cp <= 0x7F)
-    {
+inline unsigned UTF8_Encoder::lenUTF8(const unsigned cp) {
+    if (cp <= 0x7F) {
         return 1;
     }
-    else if (cp <= 0x7FF)
-    {
+    else if (cp <= 0x7FF) {
         return 2;
     }
-    else if (cp <= 0xFFFF)
-    {
+    else if (cp <= 0xFFFF) {
         return 3;
     }
-    else
-    {
+    else {
         return 4;
     }
 }
 
-inline int UTF8_Encoder::maxUTF8Len(int lgth)
-{
-    if (lgth == 1)
-    {
+inline unsigned UTF8_Encoder::maxCodePoint(const unsigned length) {
+    if (length == 1) {
         return 0x7F;
     }
-    else if (lgth == 2)
-    {
+    else if (length == 2) {
         return 0x7FF;
     }
-    else if (lgth == 3)
-    {
+    else if (length == 3) {
         return 0xFFFF;
     }
-    else if (lgth == 4)
-    {
+    else if (length == 4) {
         return 0x10FFFF;
     }
-    else
-    {
-        return -1;
-    }
+    throw std::runtime_error("Unexpected UTF8 Length: " + std::to_string(length));
 }
 
+inline CC * UTF8_Encoder::makeByteRange(const CodePointType lo, const CodePointType hi) {
+    return makeCC(lo, hi);
+}
+
+inline CC * UTF8_Encoder::makeByteClass(const CodePointType cp) {
+    return makeCC(cp, cp);
+}
+
+}

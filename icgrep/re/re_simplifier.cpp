@@ -27,7 +27,7 @@ RE * RE_Simplifier::simplify(RE * re) {
         for (RE * re : *seq) {
             list.push_back(simplify(re));
         }
-        re = makeSeq(seq->getType(), list.begin(), list.end());
+        re = makeSeq(list.begin(), list.end());
     }
     else if (Rep * rep = dyn_cast<Rep>(re)) {
         re = makeRep(simplify(rep->getRE()), rep->getLB(), rep->getUB());

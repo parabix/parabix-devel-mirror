@@ -70,7 +70,7 @@ inline RE * RE_Parser::parse_seq() {
     {
         throw NoRegularExpressionFound();
     }
-    return makeSeq(Seq::Type::Normal, seq.begin(), seq.end());
+    return makeSeq(seq.begin(), seq.end());
 }
 
 RE * RE_Parser::parse_next_token() {

@@ -13,20 +13,22 @@
 #include <list>
 #include <map>
 
-namespace pablo {
+namespace cc {
+class CC_NameMap;
+}
 
+namespace pablo {
 class PabloBlock;
 class PabloAST;
 class Assign;
 class Var;
-
 }
 
 namespace re {
 class RE_Compiler {
 public:
 
-    RE_Compiler(pablo::PabloBlock & baseCG, std::map<std::string, std::string> name_map);
+    RE_Compiler(pablo::PabloBlock & baseCG, const cc::CC_NameMap & nameMap);
 
     inline void compile(RE * re) {
         compile(re, mCG);
@@ -48,10 +50,10 @@ private:
     static bool hasUnicode(const RE *re);
 
     pablo::PabloBlock &                             mCG;
+    const cc::CC_NameMap &                          mNameMap;
     pablo::Var *                                    mLineFeed;
     pablo::PabloAST *                               mInitial;
-    pablo::PabloAST *                               mNonFinal;
-    std::map<std::string, std::string>              m_name_map;
+    pablo::PabloAST *                               mNonFinal;    
 };
 
 }

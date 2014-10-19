@@ -20,7 +20,6 @@
 #include <pablo/pe_advance.h>
 #include <pablo/pe_and.h>
 #include <pablo/pe_call.h>
-#include <pablo/pe_charclass.h>
 #include <pablo/pe_matchstar.h>
 #include <pablo/pe_not.h>
 #include <pablo/pe_or.h>
@@ -124,10 +123,6 @@ std::string StatementPrinter::ShowPabloAST(const PabloAST *expr)
     else if (const Not * pablo_not = dyn_cast<const Not>(expr))
     {
         retVal = "Not (" + ShowPabloAST(pablo_not->getExpr()) + ")";
-    }
-    else if (const CharClass * cc = dyn_cast<const CharClass>(expr))
-    {
-        retVal = "CharClass '" + cc->getCharClass() + "'";
     }
     else if (const Advance * adv = dyn_cast<const Advance>(expr))
     {

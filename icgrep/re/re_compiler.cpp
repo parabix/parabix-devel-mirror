@@ -14,27 +14,8 @@
 #include <re/re_cc.h>
 #include <re/re_seq.h>
 #include <re/re_rep.h>
-
-
-//Pablo Expressions
+#include <cc/cc_namemap.hpp>
 #include <pablo/codegenstate.h>
-#include <pablo/pe_advance.h>
-#include <pablo/pe_zeroes.h>
-#include <pablo/pe_ones.h>
-#include <pablo/pe_and.h>
-#include <pablo/pe_call.h>
-#include <pablo/pe_charclass.h>
-#include <pablo/pe_matchstar.h>
-#include <pablo/pe_not.h>
-#include <pablo/pe_or.h>
-#include <pablo/pabloAST.h>
-#include <pablo/pe_scanthru.h>
-#include <pablo/pe_sel.h>
-#include <pablo/pe_var.h>
-#include <pablo/pe_xor.h>
-#include <pablo/ps_assign.h>
-#include <pablo/ps_if.h>
-#include <pablo/ps_while.h>
 
 #include <assert.h>
 #include <stdexcept>
@@ -46,29 +27,29 @@ using namespace pablo;
 
 namespace re {
 
-RE_Compiler::RE_Compiler(PabloBlock & baseCG, std::map<std::string, std::string> name_map)
+RE_Compiler::RE_Compiler(PabloBlock & baseCG, const cc::CC_NameMap & nameMap)
 : mCG(baseCG)
 , mLineFeed(nullptr)
 , mInitial(nullptr)
 , mNonFinal(nullptr)
-, m_name_map(name_map)
+, mNameMap(nameMap)
 {
 
 }
 
 void RE_Compiler::compile(RE * re, PabloBlock & cg) {
 
-    mLineFeed = cg.createVar(m_name_map.find("LineFeed")->second);
+    mLineFeed = mNameMap["LineFeed"]->getVar();
 
     const std::string initial = "initial";
     const std::string nonfinal = "nonfinal";
 
     if (hasUnicode(re)) {
         //Set the 'internal.initial' bit stream for the utf-8 multi-byte encoding.        
-        PabloAST * u8single = cg.createVar(m_name_map.find("UTF8-SingleByte")->second);
-        PabloAST * u8pfx2 = cg.createVar(m_name_map.find("UTF8-Prefix2")->second);
-        PabloAST * u8pfx3 = cg.createVar(m_name_map.find("UTF8-Prefix3")->second);
-        PabloAST * u8pfx4 = cg.createVar(m_name_map.find("UTF8-Prefix4")->second);
+        PabloAST * u8single = mNameMap["UTF8-SingleByte"]->getVar();
+        PabloAST * u8pfx2 = mNameMap["UTF8-Prefix2"]->getVar();
+        PabloAST * u8pfx3 = mNameMap["UTF8-Prefix3"]->getVar();
+        PabloAST * u8pfx4 = mNameMap["UTF8-Prefix4"]->getVar();
         PabloAST * u8pfx = cg.createOr(cg.createOr(u8pfx2, u8pfx3), u8pfx4);
         mInitial = cg.createVar(cg.createAssign(initial, cg.createOr(u8pfx, u8single)));
         #ifdef USE_IF_FOR_NONFINAL
@@ -94,7 +75,7 @@ void RE_Compiler::compile(RE * re, PabloBlock & cg) {
     PabloAST * result = process(re, start_marker, cg);
 
     //These three lines are specifically for grep.
-    cg.createAssign(cg.ssa("marker"), cg.createAnd(cg.createMatchStar(cg.createVarIfAssign(result), cg.createNot(mLineFeed)), mLineFeed));
+    cg.createAssign(cg.ssa("matches"), cg.createAnd(cg.createMatchStar(cg.createVarIfAssign(result), cg.createNot(mLineFeed)), mLineFeed));
 }
 
 
@@ -143,7 +124,7 @@ inline Assign * RE_Compiler::process(Name * name, Assign * target, PabloBlock & 
         cc = cg.createCall(name->getName());
     }
     else {
-        cc = cg.createCharClass(name->getName());
+        cc = cg.createVar(name->getName());
     }
     if (name->isNegated()) {
         cc = cg.createNot(cg.createOr(cg.createOr(cc, mLineFeed), mNonFinal));
@@ -197,7 +178,7 @@ inline Assign * RE_Compiler::processUnboundedRep(RE * repeated, int lb, Assign *
             cc = cg.createCall(rep_name->getName());
         }
         else {
-            cc = cg.createCharClass(rep_name->getName());
+            cc = cg.createVar(rep_name->getName());
         }
 
         if (rep_name->isNegated()) {

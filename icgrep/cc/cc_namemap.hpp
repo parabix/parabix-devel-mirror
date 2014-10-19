@@ -22,11 +22,13 @@ public:
 
     CC_NameMap() {}
 
+    void clear();
+
     re::RE * process(re::RE * re);
 
-    void addPredefined(const std::string friendlyName, const re::CC * cc);
+    void addPredefined(const std::string friendlyName, re::CC * cc);
 
-    re::Name * operator[](const std::string & name) const {
+    inline const re::Name * operator[](const std::string & name) const {
         auto f = mNameMap.find(name);
         if (f == mNameMap.end()) {
             return nullptr;
@@ -44,7 +46,7 @@ public:
 
 private:
 
-    inline re::Name * insert(const std::string && name, re::Name * re) {
+    inline re::Name * insert(std::string && name, re::Name * re) {
         mNameMap.insert(std::make_pair(std::move(name), re));
         mNameVector.push_back(re);
         return re;

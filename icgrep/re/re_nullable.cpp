@@ -27,7 +27,7 @@ RE * RE_Nullable::removeNullablePrefix(RE * re) {
                 break;
             }
         }
-        re = makeSeq(seq->getType(), list.begin(), list.end());
+        re = makeSeq(list.begin(), list.end());
     }
     else if (Alt * alt = dyn_cast<Alt>(re)) {
         std::vector<RE*> list;
@@ -60,7 +60,7 @@ RE * RE_Nullable::removeNullableSuffix(RE * re) {
                 break;
             }
         }
-        re = makeSeq(seq->getType(), list.begin(), list.end());
+        re = makeSeq(list.begin(), list.end());
     }
     else if (Alt* alt = dyn_cast<Alt>(re)) {
         std::vector<RE*> list;

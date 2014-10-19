@@ -34,10 +34,10 @@ protected:
     }    
 private:
     template<typename iterator>
-    void construct(iterator begin, iterator end, std::queue<CC*> & ccQ) {
+    void flatten(iterator begin, iterator end, std::queue<CC*> & ccQ) {
         for (auto i = begin; i != end; ++i) {
             if (Alt * alt = dyn_cast<Alt>(*i)) {
-                construct(alt->begin(), alt->end(), ccQ);
+                flatten(alt->begin(), alt->end(), ccQ);
                 continue;
             }
             else if (CC * cc = dyn_cast<CC>(*i)) {
@@ -67,7 +67,7 @@ template<typename iterator>
 RE * makeAlt(iterator begin, iterator end) {
     Alt * alt = makeAlt();
     std::queue<CC*> ccQ;
-    alt->construct(begin, end, ccQ);
+    alt->flatten(begin, end, ccQ);
     if (!ccQ.empty()) {
         while (ccQ.size() > 1) {
             CC * a = ccQ.front(); ccQ.pop();

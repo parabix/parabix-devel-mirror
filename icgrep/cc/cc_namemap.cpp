@@ -5,14 +5,26 @@
 #include <re/re_seq.h>
 #include <re/re_rep.h>
 
+#include <re/printer_re.h>
+#include <iostream>
+
 using namespace re;
 
 namespace cc {
 
-void CC_NameMap::addPredefined(const std::string friendlyName, const re::CC * cc) {
-    Name * name = makeName(friendlyName, cc);
-    mNameMap.insert(std::make_pair(friendlyName, name));
-    insert(std::move(cc->getName()), name);
+void CC_NameMap::addPredefined(const std::string friendlyName, re::CC * cc) {
+    assert (cc);
+    std::string classname = cc->getName();
+    Name * name = makeName(classname, cc);
+    assert (name->getCC() == cc);
+    mNameMap.insert(std::make_pair(friendlyName, name));    
+    insert(std::move(classname), name);
+    assert (name->getCC() == cc);
+}
+
+void CC_NameMap::clear() {
+    mNameMap.clear();
+    mNameVector.clear();
 }
 
 RE * CC_NameMap::process(RE * re) {
@@ -30,7 +42,11 @@ RE * CC_NameMap::process(RE * re) {
         rep->setRE(process(rep->getRE()));
     }
     else if (Name * name = dyn_cast<Name>(re)) {
-        const std::string classname = name->getName();
+        RE * cc = name->getCC();
+        if (cc && !isa<CC>(cc)) {
+            name->setCC(process(cc));
+        }
+        std::string classname = name->getName();
         auto f = mNameMap.find(classname);
         if (f == mNameMap.end()) {
             return insert(std::move(classname), name);
@@ -38,7 +54,7 @@ RE * CC_NameMap::process(RE * re) {
         return f->second;
     }
     else if (CC * cc = dyn_cast<CC>(re)) {
-        const std::string classname = cc->getName();
+        std::string classname = cc->getName();
         auto f = mNameMap.find(classname);
         if (f == mNameMap.end()) {
             return insert(std::move(classname), makeName(classname, cc));

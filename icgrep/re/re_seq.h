@@ -21,46 +21,30 @@ public:
     static inline bool classof(const void *) {
         return false;
     }
-    enum class Type {
-        Normal
-        , Byte
-    };
-    std::string getName() const;
-    inline Type getType() const {
-        return mType;
-    }
-    inline void setType(const Type type) {
-        mType = type;
-    }    
     virtual ~Seq() {}
 protected:
-    friend Seq * makeSeq(const Seq::Type);
-    template<typename iterator> friend RE * makeSeq(const Seq::Type, iterator, iterator);
-    Seq(const Type type)
-    : Vector(ClassTypeId::Seq)
-    , mType(type) {
+    friend Seq * makeSeq();
+    template<typename iterator> friend RE * makeSeq(iterator, iterator);
+    Seq()
+    : Vector(ClassTypeId::Seq) {
 
     }
-    Seq(const Type type, iterator begin, iterator end)
-    : Vector(ClassTypeId::Seq, begin, end)
-    , mType(type)
-    {
+    Seq(iterator begin, iterator end)
+    : Vector(ClassTypeId::Seq, begin, end) {
 
     }
-    template<typename itr> void construct(itr begin, itr end);
-private:
-    Type    mType;
+    template<typename itr> void flatten(itr begin, itr end);
 };
 
-inline Seq * makeSeq(const Seq::Type type = Seq::Type::Normal) {
-    return new Seq(type);
+inline Seq * makeSeq() {
+    return new Seq();
 }
 
 template<typename itr>
-void Seq::construct(itr begin, itr end) {
+void Seq::flatten(itr begin, itr end) {
     for (auto i = begin; i != end; ++i) {
         if (Seq * seq = dyn_cast<Seq>(*i)) {
-            construct<Seq::iterator>(seq->begin(), seq->end());
+            flatten<Seq::iterator>(seq->begin(), seq->end());
             continue;
         }
         push_back(*i);
@@ -68,9 +52,9 @@ void Seq::construct(itr begin, itr end) {
 }
 
 template<typename itr>
-inline RE * makeSeq(const Seq::Type type, itr begin, itr end) {
-    Seq * seq = makeSeq(type);
-    seq->construct(begin, end);
+inline RE * makeSeq(itr begin, itr end) {
+    Seq * seq = makeSeq();
+    seq->flatten(begin, end);
     if (seq->size() == 1) {
         return seq->back();
     }
@@ -78,7 +62,7 @@ inline RE * makeSeq(const Seq::Type type, itr begin, itr end) {
 }
 
 inline RE * makeSeq(RE::InitializerList list) {
-    return makeSeq(Seq::Type::Normal, list.begin(), list.end());
+    return makeSeq(list.begin(), list.end());
 }
 
 }

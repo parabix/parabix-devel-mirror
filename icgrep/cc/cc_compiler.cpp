@@ -14,6 +14,8 @@
 #include <re/re_seq.h>
 #include <re/re_rep.h>
 #include <re/re_name.h>
+#include <re/printer_re.h>
+#include <cc/cc_namemap.hpp>
 
 #include <utility>
 #include <string>
@@ -40,36 +42,88 @@ CC_Compiler::CC_Compiler(PabloBlock & cg, const Encoding encoding, const std::st
     }
 }
 
-void CC_Compiler::compile(const RENameMap & re_map) {
-    for (auto i =  re_map.cbegin(); i != re_map.cend(); ++i) {
-        if (const CC * cc = dyn_cast<CC>(i->second)) {
-            // If we haven't already computed this CC, map it to the (pablo) charset statements.
-            if (mComputedSet.insert(cc->getName()).second) {
-                mCG.createAssign(cc->getName(), charset_expr(cc));
-            }
-        }
-        else if (const Seq* seq = dyn_cast<Seq>(i->second)) {
-            //This is specifically for the utf8 multibyte character classes.
-            assert (seq->getType() == Seq::Type::Byte);
-            Assign * assignment = nullptr;
-            auto j = seq->begin();
-            while (true) {
-                Name * name = dyn_cast<Name>(*j);
-                assert (name);
-                CharClass * cc = mCG.createCharClass(name->getName());
-                PabloAST * sym = assignment ? mCG.createAnd(mCG.createVar(assignment->getName()), cc) : cc;
-                if (++j != seq->end()) {
-                    assignment = mCG.createAssign(mCG.ssa("marker"), mCG.createAdvance(sym));
-                    continue;
-                }
-                mCG.createAssign(seq->getName(), sym);
-                break;
-            }
-        }
+void CC_Compiler::compile(const CC_NameMap & nameMap) {
+    for (Name * name : nameMap) {
+        compile_re(name);
     }
 }
 
-inline PabloAST * CC_Compiler::charset_expr(const CC * cc) {
+PabloAST * CC_Compiler::compile_re(RE * re) {
+    if (isa<Name>(re)) {
+        return compile_re(cast<Name>(re));
+    }
+    else if (isa<Alt>(re)) {
+        return compile_re(cast<Alt>(re));
+    }
+    else if (isa<Seq>(re)) {
+        return compile_re(cast<Seq>(re));
+    }
+    else if (isa<CC>(re)) {
+
+    }
+    throw std::runtime_error("Unexpected RE node given to CC_Compiler: " + Printer_RE::PrintRE(re));
+}
+
+PabloAST * CC_Compiler::compile_re(Name * name) {
+    assert(name);
+    Var * var = name->getVar();
+    if (var == nullptr) {        
+        if (name->getType() == Name::Type::FixedLength) {
+            RE * cc = name->getCC();
+            assert (cc);
+            PabloAST * value = nullptr;
+            if (isa<CC>(cc)) {
+                value = charset_expr(cast<CC>(cc));
+            }
+            else if (isa<Seq>(cc)) {
+                value = compile_re(cast<Seq>(cc));
+            }
+            else if (isa<Alt>(cc)) {
+                value = compile_re(cast<Alt>(cc));
+            }
+            if (value == nullptr) {
+                throw std::runtime_error("Unexpected CC node given to CC_Compiler: " + Printer_RE::PrintRE(name) + " : " + Printer_RE::PrintRE(cc));
+            }
+            mCG.createAssign(name->getName(), value);
+        }
+        var = mCG.createVar(name->getName());
+        name->setVar(var);
+    }
+    return var;
+}
+
+PabloAST * CC_Compiler::compile_re(const Seq * seq) {
+    Assign * assignment = nullptr;
+    PabloAST * result = nullptr;
+    auto i = seq->begin();
+    while (true) {
+        PabloAST * cc = compile_re(*i);
+        result = assignment ? mCG.createAnd(mCG.createVar(assignment), cc) : cc;
+        if (++i == seq->end()) {
+            break;
+        }
+        assignment = mCG.createAssign(mCG.ssa("seq"), mCG.createAdvance(result));
+    }
+    return result;
+}
+
+PabloAST * CC_Compiler::compile_re(const Alt *alt) {
+    Assign * assignment = nullptr;
+    PabloAST * result = nullptr;
+    auto i = alt->begin();
+    while (true) {
+        PabloAST * cc = compile_re(*i);
+        result = assignment ? mCG.createOr(mCG.createVar(assignment), cc) : cc;
+        if (++i == alt->end()) {
+            break;
+        }
+        assignment = mCG.createAssign(mCG.ssa("alt"), result);
+    }
+    return result;
+}
+
+
+PabloAST * CC_Compiler::charset_expr(const CC * cc) {
     if (cc->empty()) {
         return mCG.createZeroes();
     }
@@ -102,14 +156,14 @@ inline PabloAST * CC_Compiler::charset_expr(const CC * cc) {
                 if ((lo & 1) == 0) {
                     bit0 = mCG.createNot(bit0);
                 }
-                return mCG.createAnd(expr, bit0);
+                return tempify(mCG.createAnd(expr, bit0));
             }
         }
     }
     PabloAST * expr = nullptr;
     for (const CharSetItem & item : *cc) {
         PabloAST * temp = char_or_range_expr(item.lo_codepoint, item.hi_codepoint);
-        expr = (expr == nullptr) ? temp : mCG.createOr(expr, temp);
+        expr = (expr == nullptr) ? temp : tempify(mCG.createOr(expr, temp));
     }
     return expr;
 }
@@ -149,20 +203,20 @@ PabloAST * CC_Compiler::bit_pattern_expr(const unsigned pattern, unsigned select
     while (bit_terms.size() > 1)
     {
         std::vector<PabloAST*> new_terms;
-        for (unsigned long i = 0; i < (bit_terms.size()/2); i++)
+        for (auto i = 0; i < (bit_terms.size()/2); i++)
         {
-            new_terms.push_back(mCG.createAnd(bit_terms[(2 * i) + 1], bit_terms[2 * i]));
+            new_terms.push_back(tempify(mCG.createAnd(bit_terms[(2 * i) + 1], bit_terms[2 * i])));
         }
         if (bit_terms.size() % 2 == 1)
         {
             new_terms.push_back(bit_terms[bit_terms.size() -1]);
         }
-        bit_terms.assign(new_terms.begin(), new_terms.end());
+        bit_terms.swap(new_terms);
     }
     return bit_terms[0];
 }
 
-PabloAST * CC_Compiler::char_test_expr(const CodePointType ch)
+inline PabloAST * CC_Compiler::char_test_expr(const CodePointType ch)
 {
     return bit_pattern_expr(ch, mEncoding.getMask());
 }
@@ -189,21 +243,18 @@ PabloAST * CC_Compiler::make_range(const CodePointType n1, const CodePointType n
     PabloAST* lo_test = GE_Range(diff_count - 1, n1 & mask1);
     PabloAST* hi_test = LE_Range(diff_count - 1, n2 & mask1);
 
-    return mCG.createAnd(common, mCG.createSel(getBasisVar(diff_count - 1), hi_test, lo_test));
+    return tempify(mCG.createAnd(common, mCG.createSel(getBasisVar(diff_count - 1), hi_test, lo_test)));
 }
 
 PabloAST * CC_Compiler::GE_Range(const unsigned N, const unsigned n) {
-    if (N == 0)
-    {
+    if (N == 0) {
         return mCG.createOnes(); //Return a true literal.
     }
-    else if (((N % 2) == 0) && ((n >> (N - 2)) == 0))
-    {
-        return mCG.createOr(mCG.createOr(getBasisVar(N - 1), getBasisVar(N - 2)), GE_Range(N - 2, n));
+    else if (((N % 2) == 0) && ((n >> (N - 2)) == 0)) {
+        return tempify(mCG.createOr(tempify(mCG.createOr(getBasisVar(N - 1), getBasisVar(N - 2))), GE_Range(N - 2, n)));
     }
-    else if (((N % 2) == 0) && ((n >> (N - 2)) == 3))
-    {
-        return mCG.createAnd(mCG.createAnd(getBasisVar(N - 1), getBasisVar(N - 2)), GE_Range(N - 2, n - (3 << (N - 2))));
+    else if (((N % 2) == 0) && ((n >> (N - 2)) == 3)) {
+        return tempify(mCG.createAnd(tempify(mCG.createAnd(getBasisVar(N - 1), getBasisVar(N - 2))), GE_Range(N - 2, n - (3 << (N - 2)))));
     }
     else if (N >= 1)
     {
@@ -217,7 +268,7 @@ PabloAST * CC_Compiler::GE_Range(const unsigned N, const unsigned n) {
               is set in the target, the target will certaily be >=.  Oterwise,
               the value of GE_range(N-1), lo_range) is required.
             */
-            return mCG.createOr(getBasisVar(N - 1), lo_range);
+            return tempify(mCG.createOr(getBasisVar(N - 1), lo_range));
         }
         else
         {
@@ -225,7 +276,7 @@ PabloAST * CC_Compiler::GE_Range(const unsigned N, const unsigned n) {
               If the hi_bit of n is set, then the corresponding bit must be set
               in the target for >= and GE_range(N-1, lo_bits) must also be true.
             */
-            return mCG.createAnd(getBasisVar(N - 1), lo_range);
+            return tempify(mCG.createAnd(getBasisVar(N - 1), lo_range));
         }
     }
     throw std::runtime_error("Unexpected input given to ge_range: " + std::to_string(N) + ", " + std::to_string(n));
@@ -241,7 +292,7 @@ PabloAST * CC_Compiler::LE_Range(const unsigned N, const unsigned n)
         return mCG.createOnes(); //True.
     }
     else {
-        return mCG.createNot(GE_Range(N, n + 1));
+        return tempify(mCG.createNot(GE_Range(N, n + 1)));
     }
 }
 
@@ -257,6 +308,14 @@ inline PabloAST * CC_Compiler::char_or_range_expr(const CodePointType lo, const 
 
 inline Var * CC_Compiler::getBasisVar(const int i) const {
     return mBasisBit[(mEncoding.getBits() - 1) - i];
+}
+
+inline PabloAST * CC_Compiler::tempify(PabloAST * value) {
+//    if (isa<Var>(value)) {
+//        return cast<Var>(value);
+//    }
+//    return mCG.createVar(mCG.createAssign(mCG.ssa("t"), value));
+    return value;
 }
 
 } // end of namespace cc

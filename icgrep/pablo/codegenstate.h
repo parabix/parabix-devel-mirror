@@ -12,7 +12,6 @@
 #include <pablo/pe_advance.h>
 #include <pablo/pe_and.h>
 #include <pablo/pe_call.h>
-#include <pablo/pe_charclass.h>
 #include <pablo/pe_matchstar.h>
 #include <pablo/pe_not.h>
 #include <pablo/pe_or.h>
@@ -81,8 +80,6 @@ public:
     inline PabloAST * createVarIfAssign(PabloAST * const input) {
         return isa<Assign>(input) ? createVar(cast<Assign>(input)) : input;
     }
-
-    CharClass * createCharClass(const std::string name);
 
     PabloAST * createAnd(PabloAST * expr1, PabloAST * expr2);
 

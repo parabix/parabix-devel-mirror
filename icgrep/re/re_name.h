@@ -3,6 +3,8 @@
 
 #include <re/re_re.h>
 #include <string>
+#include <iostream>
+#include <re/printer_re.h>
 
 namespace pablo {
     class Var;
@@ -39,12 +41,20 @@ public:
     void setCC(RE *cc);
     virtual ~Name() {}
 protected:
-    friend Name * makeName();
     friend Name * makeName(const std::string, RE *);
     friend Name * makeName(const std::string, const bool, const Type);
-    Name();
-    Name(const std::string && name, const bool negated, const Type type);
-    Name(const std::string && name, RE * cc);
+
+    Name(const std::string && name, const bool negated, const Type type, RE * cc)
+    : RE(ClassTypeId::Name)
+    , mName(std::move(name))
+    , mNegated(negated)
+    , mType(type)
+    , mCC(cc)
+    , mVar(nullptr)
+    {
+
+    }
+
 private:
     const std::string   mName;
     const bool          mNegated;
@@ -52,39 +62,6 @@ private:
     RE *                mCC;
     pablo::Var *        mVar;
 };
-
-inline Name::Name()
-: RE(ClassTypeId::Name)
-, mName()
-, mNegated(false)
-, mType(Type::FixedLength)
-, mCC(nullptr)
-, mVar(nullptr)
-{
-
-}
-
-inline Name::Name(const std::string && name, const bool negated, const Type type)
-: RE(ClassTypeId::Name)
-, mName(std::move(name))
-, mNegated(negated)
-, mType(type)
-, mCC(nullptr)
-, mVar(nullptr)
-{
-
-}
-
-inline Name::Name(const std::string && name, RE * cc)
-: RE(ClassTypeId::Name)
-, mName(std::move(name))
-, mNegated(false)
-, mType(Type::FixedLength)
-, mCC(cc)
-, mVar(nullptr)
-{
-
-}
 
 inline const std::string & Name::getName() const {
     return mName;
@@ -106,16 +83,15 @@ inline void Name::setCC(RE * cc) {
     mCC = cc;
 }
 
-inline Name * makeName() {
-    return new Name();
-}
-
 inline Name * makeName(const std::string name, const bool negated = false, const Name::Type type = Name::Type::FixedLength) {
-    return new Name(std::move(name), negated, type);
+    return new Name(std::move(name), negated, type, nullptr);
 }
 
 inline Name * makeName(const std::string name, RE * cc) {
-    return new Name(std::move(name), cc);
+    if (isa<Name>(cc)) {
+        return cast<Name>(cc);
+    }
+    return new Name(std::move(name), false, Name::Type::FixedLength, cc);
 }
 
 }

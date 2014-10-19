@@ -18,10 +18,6 @@ Call * PabloBlock::createCall(const std::string name) {
     return mUnary.findOrMake<Call>(PabloAST::ClassTypeId::Call, mSymbolGenerator[name]);
 }
 
-CharClass * PabloBlock::createCharClass(const std::string name) {
-    return mUnary.findOrMake<CharClass>(PabloAST::ClassTypeId::CharClass, mSymbolGenerator[name]);
-}
-
 PabloAST * PabloBlock::createNot(PabloAST * expr) {
     return mUnary.findOrCall<OptimizeNot>(PabloAST::ClassTypeId::Not, expr);
 }
@@ -44,16 +40,16 @@ PabloAST * PabloBlock::createAnd(PabloAST * expr1, PabloAST * expr2) {
 }
 
 Assign * PabloBlock::createAssign(const std::string name, PabloAST * expr) {
-//    auto key = std::make_tuple(PabloAST::ClassTypeId::Assign, expr);
-//    Assign * assign = cast<Assign>(mUnary.find(key));
-//    if (assign == nullptr) {
-//        assign = new Assign(mSymbolGenerator[name], expr);
-//        mUnary.insert(std::move(key), assign);
-//    }
-//    else {
-//        assign = new Assign(mSymbolGenerator[name], createVar(assign));
-//    }
-    Assign * assign = mBinary.findOrMake<Assign>(PabloAST::ClassTypeId::Assign, mSymbolGenerator[name], expr);
+    auto key = std::make_tuple(PabloAST::ClassTypeId::Assign, expr);
+    Assign * assign = cast_or_null<Assign>(mUnary.find(key));
+    if (assign == nullptr) {
+        assign = new Assign(mSymbolGenerator[name], expr);
+        mUnary.insert(std::move(key), assign);
+    }
+    else {
+        assign = new Assign(mSymbolGenerator[name], createVar(assign));
+    }
+//    Assign * assign = mBinary.findOrMake<Assign>(PabloAST::ClassTypeId::Assign, mSymbolGenerator[name], expr);
     mStatements.push_back(assign);
     return assign;
 }
