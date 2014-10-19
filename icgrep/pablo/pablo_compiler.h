@@ -88,13 +88,12 @@ public:
     ~PabloCompiler();
     LLVM_Gen_RetVal compile(const PabloBlock & cg_state);
 private:
-    Module * MakeLLVMModule();
     void DefineTypes();
     void DeclareFunctions();
     void DeclareCallFunctions(const ExpressionList & stmts);
     void DeclareCallFunctions(const PabloAST * expr);
     void LoadBitBlocksFromStaticExtern();
-    void SetReturnMarker(Value * marker, const unsigned output_idx);
+    void SetReturnMarker(Value * marker, const unsigned index);
 
     Value* GetMarker(const std::string & name);
 
@@ -137,13 +136,13 @@ private:
     int                                 mCarryQueueSize;
 
     ConstantAggregateZero* const        mZeroInitializer;
-    Constant* const                     mAllOneInitializer;
+    Constant* const                     mOneInitializer;
 
     FunctionType*                       mFuncTy_0;
     Function*                           mFunc_process_block;
 
 
-    AllocaInst*                         mBasisBitsAddr;
+    Value *                             mBasisBitsAddr;
     AllocaInst*                         mPtr_carry_q_addr;
     AllocaInst*                         mPtr_output_addr;
 

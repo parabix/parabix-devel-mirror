@@ -87,7 +87,7 @@ PabloCompiler::PabloCompiler(const cc::CC_NameMap & nameMap, const BasisBitVars 
 , mptr_carry_q(nullptr)
 , mCarryQueueSize(0)
 , mZeroInitializer(ConstantAggregateZero::get(mXi64Vect))
-, mAllOneInitializer(ConstantVector::getAllOnesValue(mXi64Vect))
+, mOneInitializer(ConstantVector::getAllOnesValue(mXi64Vect))
 , mFuncTy_0(nullptr)
 , mFunc_process_block(nullptr)
 , mBasisBitsAddr(nullptr)
@@ -152,8 +152,8 @@ LLVM_Gen_RetVal PabloCompiler::compile(const PabloBlock & cg_state)
     DeclareCallFunctions(cg_state.expressions());
 
     Function::arg_iterator args = mFunc_process_block->arg_begin();
-    Value* ptr_basis_bits = args++;
-    ptr_basis_bits->setName("basis_bits");
+    mBasisBitsAddr = args++;
+    mBasisBitsAddr->setName("basis_bits");
     mptr_carry_q = args++;
     mptr_carry_q->setName("carry_q");
     Value* ptr_output = args++;
@@ -164,15 +164,11 @@ LLVM_Gen_RetVal PabloCompiler::compile(const PabloBlock & cg_state)
     mBasicBlock = BasicBlock::Create(mMod->getContext(), "parabix_entry", mFunc_process_block,0);
 
     //The basis bits structure
-    mBasisBitsAddr = new AllocaInst(mBasisBitsInputPtr, "basis_bits.addr", mBasicBlock);
-    new StoreInst(ptr_basis_bits, mBasisBitsAddr, false, mBasicBlock);
     for (unsigned i = 0; i < mBits; ++i) {
         IRBuilder<> b(mBasicBlock);
-        Value* basisBit = b.CreateLoad(mBasisBitsAddr);
         Value* indices[] = {b.getInt64(0), b.getInt32(i)};
         const std::string name = mBasisBitVars[i]->getName();
-        Value* basis_bits_struct_GEP = b.CreateGEP(basisBit, indices, name);
-        mMarkerMap.insert(make_pair(name, basis_bits_struct_GEP));
+        mMarkerMap.insert(make_pair(name, b.CreateGEP(mBasisBitsAddr, indices, name)));
     }
     mPtr_output_addr = new AllocaInst(mOutputPtr, "output.addr", mBasicBlock);
     new StoreInst(ptr_output, mPtr_output_addr, false, mBasicBlock);
@@ -478,23 +474,21 @@ void PabloCompiler::DeclareCallFunctions(const PabloAST * expr)
 }
 
 Value* PabloCompiler::GetMarker(const std::string & name)
-{
-    IRBuilder<> b(mBasicBlock);
+{    
     auto itr = mMarkerMap.find(name);
     if (itr == mMarkerMap.end()) {
-        Value* ptr = b.CreateAlloca(mXi64Vect);
-        b.CreateStore(mZeroInitializer, ptr);
-        itr = mMarkerMap.insert(make_pair(name, ptr)).first;
+        IRBuilder<> b(mBasicBlock);
+        itr = mMarkerMap.insert(make_pair(name, b.CreateAlloca(mXi64Vect))).first;
     }
     return itr->second;
 }
 
-void PabloCompiler::SetReturnMarker(Value * marker, const unsigned output_idx)
+void PabloCompiler::SetReturnMarker(Value * marker, const unsigned index)
 {
     IRBuilder<> b(mBasicBlock);
     Value* marker_bitblock = b.CreateLoad(marker);
     Value* output_struct = b.CreateLoad(mPtr_output_addr);
-    Value* output_indices[] = {b.getInt64(0), b.getInt32(output_idx)};
+    Value* output_indices[] = {b.getInt64(0), b.getInt32(index)};
     Value* output_struct_GEP = b.CreateGEP(output_struct, output_indices);
     b.CreateStore(marker_bitblock, output_struct_GEP);
 }
@@ -631,15 +625,11 @@ Value * PabloCompiler::compileExpression(const PabloAST * expr)
     IRBuilder<> b(mBasicBlock);
     if (isa<Ones>(expr))
     {
-        Value* ptr_all = b.CreateAlloca(mXi64Vect);
-        b.CreateStore(mAllOneInitializer, ptr_all);
-        retVal = b.CreateLoad(ptr_all);
+        retVal = mOneInitializer;
     }
     else if (isa<Zeroes>(expr))
     {
-        Value* ptr_all = b.CreateAlloca(mXi64Vect);
-        b.CreateStore(mZeroInitializer, ptr_all);
-        retVal = b.CreateLoad(ptr_all);
+        retVal = mZeroInitializer;
     }
     else if (const Call* call = dyn_cast<Call>(expr))
     {
@@ -650,9 +640,8 @@ Value * PabloCompiler::compileExpression(const PabloAST * expr)
             if (ci == mCalleeMap.end()) {
                 throw std::runtime_error("Unexpected error locating static function for \"" + call->getCallee() + "\"");
             }
-            Value* basis_bits_struct = b.CreateLoad(mBasisBitsAddr);
-            Value* unicode_category = b.CreateCall(ci->second, basis_bits_struct);
-            Value* ptr = b.CreateAlloca(mXi64Vect);
+            Value * unicode_category = b.CreateCall(ci->second, mBasisBitsAddr);
+            Value * ptr = b.CreateAlloca(mXi64Vect);
             b.CreateStore(unicode_category, ptr);
             mi = mMarkerMap.insert(std::make_pair(call->getCallee(), ptr)).first;
         }
@@ -680,7 +669,7 @@ Value * PabloCompiler::compileExpression(const PabloAST * expr)
     else if (const Not * pablo_not = dyn_cast<Not>(expr))
     {
         Value* expr_value = compileExpression(pablo_not->getExpr());
-        retVal = b.CreateXor(expr_value, mAllOneInitializer, "not");
+        retVal = b.CreateXor(expr_value, mOneInitializer, "not");
     }
     else if (const Advance * adv = dyn_cast<Advance>(expr))
     {
@@ -801,7 +790,7 @@ Value* PabloCompiler::genShiftLeft64(Value* e, const Twine &namehint) {
 
 Value* PabloCompiler::genNot(Value* e, const Twine &namehint) {
     IRBuilder<> b(mBasicBlock);
-    return b.CreateXor(e, mAllOneInitializer, namehint);
+    return b.CreateXor(e, mOneInitializer, namehint);
 }
 
 Value* PabloCompiler::genAdvanceWithCarry(Value* strm_value) {
