@@ -52,8 +52,8 @@ set(Boost_USE_MULTITHREADED OFF)
 set(Boost_USE_STATIC_RUNTIME OFF)
 #find_package(Boost 1.21 COMPONENTS system)
 
-add_library(PabloADT pablo/pe_advance.cpp pablo/pe_and.cpp pablo/pe_call.cpp pablo/pe_matchstar.cpp pablo/pe_scanthru.cpp pablo/pe_not.cpp  pablo/pe_or.cpp  pablo/pabloAST.cpp  pablo/pe_sel.cpp  pablo/pe_var.cpp  pablo/pe_xor.cpp pablo/ps_assign.cpp  pablo/ps_if.cpp  pablo/codegenstate.cpp  pablo/symbol_generator.cpp pablo/ps_while.cpp pablo/printer_pablos.cpp pablo/pablo_compiler.cpp)
-add_library(RegExpADT re/re_alt.cpp re/re_cc.cpp re/re_end.cpp re/re_name.cpp re/re_parser.cpp re/re_re.cpp re/re_rep.cpp re/re_seq.cpp re/re_start.cpp re/parsefailure.cpp re/re_nullable.cpp re/re_simplifier.cpp re/re_compiler.cpp re/printer_re.cpp)
+add_library(PabloADT pablo/pe_and.cpp pablo/pe_not.cpp pablo/pe_or.cpp  pablo/pabloAST.cpp  pablo/pe_sel.cpp  pablo/pe_xor.cpp pablo/codegenstate.cpp  pablo/symbol_generator.cpp pablo/printer_pablos.cpp pablo/pablo_compiler.cpp)
+add_library(RegExpADT re/re_cc.cpp re/re_parser.cpp re/re_rep.cpp re/parsefailure.cpp re/re_nullable.cpp re/re_simplifier.cpp re/re_compiler.cpp re/printer_re.cpp)
 add_library(CCADT cc/cc_namemap.cpp cc/cc_compiler.cpp utf_encoding.cpp utf8_encoder.cpp unicode_categories.h)
 
 include_directories("${PROJECT_SOURCE_DIR}")
