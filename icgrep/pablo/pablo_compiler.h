@@ -86,13 +86,12 @@ public:
     typedef cc::CC_Compiler::BasisBitVars BasisBitVars;
     PabloCompiler(const cc::CC_NameMap & nameMap, const BasisBitVars & basisBitVars, int bits);
     ~PabloCompiler();
-    LLVM_Gen_RetVal compile(const PabloBlock & cg_state);
+    LLVM_Gen_RetVal compile(const PabloBlock & pb);
 private:
     void DefineTypes();
     void DeclareFunctions();
     void DeclareCallFunctions(const ExpressionList & stmts);
     void DeclareCallFunctions(const PabloAST * expr);
-    void LoadBitBlocksFromStaticExtern();
     void SetReturnMarker(Value * marker, const unsigned index);
 
     Value* GetMarker(const std::string & name);
@@ -101,14 +100,14 @@ private:
     Value* compileStatement(const PabloAST * stmt);
 
     Value* compileExpression(const PabloAST * expr);
-    Value* genCarryInLoad(Value* ptr_carry_q, int carryq_idx);
-    Value* genCarryOutStore(Value* carryout, Value* ptr_carry_q, int carryq_idx);
+    LoadInst* genCarryInLoad(Value* ptr_carry_q, const unsigned index);
+    StoreInst* genCarryOutStore(Value * carryout, Value * ptr_carry_q, const unsigned index);
     Value* genAddWithCarry(Value* e1, Value* e2);
     Value* genAdvanceWithCarry(Value* e1);
     Value* genBitBlockAny(Value* e);
     Value* genShiftHighbitToLow(Value* e, const Twine & namehint = "");
     Value* genShiftLeft64(Value* e, const Twine & namehint = "") ;
-    Value* genNot(Value* e, const Twine & namehint = "");
+    Value* genNot(Value* expr);
 
     #ifdef USE_UADD_OVERFLOW
     SumWithOverflowPack callUaddOverflow(Value *e1, Value *e2, Value *cin);
@@ -128,23 +127,21 @@ private:
     VectorType* const                   mXi64Vect;
     VectorType* const                   mXi128Vect;
     PointerType*                        mBasisBitsInputPtr;
-    PointerType*                        mOutputPtr;
 
     int                                 mCarryQueueIdx;
-    Value*                              mptr_carry_q;
+    Value*                              mCarryQueuePtr;
 
     int                                 mCarryQueueSize;
 
     ConstantAggregateZero* const        mZeroInitializer;
     Constant* const                     mOneInitializer;
 
-    FunctionType*                       mFuncTy_0;
+    FunctionType*                       mFunctionType;
     Function*                           mFunc_process_block;
 
 
-    Value *                             mBasisBitsAddr;
-    AllocaInst*                         mPtr_carry_q_addr;
-    AllocaInst*                         mPtr_output_addr;
+    Value*                              mBasisBitsAddr;
+    Value*                              mOutputAddrPtr;
 
     const cc::CC_NameMap &              mNameMap;
 };

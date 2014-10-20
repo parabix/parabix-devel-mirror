@@ -82,17 +82,15 @@ PabloCompiler::PabloCompiler(const cc::CC_NameMap & nameMap, const BasisBitVars 
 , mXi64Vect(VectorType::get(IntegerType::get(mMod->getContext(), 64), BLOCK_SIZE / 64))
 , mXi128Vect(VectorType::get(IntegerType::get(mMod->getContext(), 128), BLOCK_SIZE / 128))
 , mBasisBitsInputPtr(nullptr)
-, mOutputPtr(nullptr)
 , mCarryQueueIdx(0)
-, mptr_carry_q(nullptr)
+, mCarryQueuePtr(nullptr)
 , mCarryQueueSize(0)
 , mZeroInitializer(ConstantAggregateZero::get(mXi64Vect))
 , mOneInitializer(ConstantVector::getAllOnesValue(mXi64Vect))
-, mFuncTy_0(nullptr)
+, mFunctionType(nullptr)
 , mFunc_process_block(nullptr)
 , mBasisBitsAddr(nullptr)
-, mPtr_carry_q_addr(nullptr)
-, mPtr_output_addr(nullptr)
+, mOutputAddrPtr(nullptr)
 , mNameMap(nameMap)
 {
     //Create the jit execution engine.up
@@ -146,18 +144,18 @@ PabloCompiler::~PabloCompiler()
 
 }
 
-LLVM_Gen_RetVal PabloCompiler::compile(const PabloBlock & cg_state)
+LLVM_Gen_RetVal PabloCompiler::compile(const PabloBlock & pb)
 {
     mCarryQueueSize = 0;
-    DeclareCallFunctions(cg_state.expressions());
+    DeclareCallFunctions(pb.expressions());
 
     Function::arg_iterator args = mFunc_process_block->arg_begin();
     mBasisBitsAddr = args++;
     mBasisBitsAddr->setName("basis_bits");
-    mptr_carry_q = args++;
-    mptr_carry_q->setName("carry_q");
-    Value* ptr_output = args++;
-    ptr_output->setName("output");
+    mCarryQueuePtr = args++;
+    mCarryQueuePtr->setName("carry_q");
+    mOutputAddrPtr = args++;
+    mOutputAddrPtr->setName("output");
 
     //Create the carry queue.
     mCarryQueueIdx = 0;
@@ -170,11 +168,9 @@ LLVM_Gen_RetVal PabloCompiler::compile(const PabloBlock & cg_state)
         const std::string name = mBasisBitVars[i]->getName();
         mMarkerMap.insert(make_pair(name, b.CreateGEP(mBasisBitsAddr, indices, name)));
     }
-    mPtr_output_addr = new AllocaInst(mOutputPtr, "output.addr", mBasicBlock);
-    new StoreInst(ptr_output, mPtr_output_addr, false, mBasicBlock);
 
     //Generate the IR instructions for the function.
-    SetReturnMarker(compileStatements(cg_state.expressions()), 0); // matches
+    SetReturnMarker(compileStatements(pb.expressions()), 0); // matches
     SetReturnMarker(GetMarker(mNameMap["LineFeed"]->getName()), 1); // line feeds
 
     assert (mCarryQueueIdx == mCarryQueueSize);
@@ -256,22 +252,22 @@ void PabloCompiler::DefineTypes()
     FuncTy_0_args.push_back(PointerType::get(mXi64Vect, 0));
 
     //The output structure.
-    StructType *StructTy_struct_Output = mMod->getTypeByName("struct.Output");
-    if (!StructTy_struct_Output) {
-        StructTy_struct_Output = StructType::create(mMod->getContext(), "struct.Output");
+    StructType * outputStruct = mMod->getTypeByName("struct.Output");
+    if (!outputStruct) {
+        outputStruct = StructType::create(mMod->getContext(), "struct.Output");
     }
-    std::vector<Type*>StructTy_struct_Output_fields;
-    StructTy_struct_Output_fields.push_back(mXi64Vect);
-    StructTy_struct_Output_fields.push_back(mXi64Vect);
-    if (StructTy_struct_Output->isOpaque()) {
-        StructTy_struct_Output->setBody(StructTy_struct_Output_fields, /*isPacked=*/false);
+    if (outputStruct->isOpaque()) {
+        std::vector<Type*>StructTy_struct_Output_fields;
+        StructTy_struct_Output_fields.push_back(mXi64Vect);
+        StructTy_struct_Output_fields.push_back(mXi64Vect);
+        outputStruct->setBody(StructTy_struct_Output_fields, /*isPacked=*/false);
     }
-    mOutputPtr = PointerType::get(StructTy_struct_Output, 0);
+    PointerType* outputStructPtr = PointerType::get(outputStruct, 0);
 
     //The &output parameter.
-    FuncTy_0_args.push_back(mOutputPtr);
+    FuncTy_0_args.push_back(outputStructPtr);
 
-    mFuncTy_0 = FunctionType::get(
+    mFunctionType = FunctionType::get(
      /*Result=*/Type::getVoidTy(mMod->getContext()),
      /*Params=*/FuncTy_0_args,
      /*isVarArg=*/false);
@@ -359,7 +355,7 @@ void PabloCompiler::DeclareFunctions()
     mFunc_process_block = mMod->getFunction("process_block");
     if (!mFunc_process_block) {
         mFunc_process_block = Function::Create(
-            /*Type=*/mFuncTy_0,
+            /*Type=*/mFunctionType,
             /*Linkage=*/GlobalValue::ExternalLinkage,
             /*Name=*/"process_block", mMod);
         mFunc_process_block->setCallingConv(CallingConv::C);
@@ -368,15 +364,18 @@ void PabloCompiler::DeclareFunctions()
 }
 
 void PabloCompiler::DeclareCallFunctions(const ExpressionList & stmts) {
-    for (const PabloAST * stmt : stmts) {
-        if (const Assign * an = dyn_cast<const Assign>(stmt)) {
-            DeclareCallFunctions(an->getExpr());
+    for (PabloAST * stmt : stmts) {
+        if (const Assign * assign = dyn_cast<Assign>(stmt)) {
+            DeclareCallFunctions(assign->getExpr());
         }
-        else if (const If * ifstmt = dyn_cast<const If>(stmt)) {
+        if (const Next * next = dyn_cast<Next>(stmt)) {
+            DeclareCallFunctions(next->getExpr());
+        }
+        else if (If * ifstmt = dyn_cast<If>(stmt)) {
             DeclareCallFunctions(ifstmt->getCondition());
             DeclareCallFunctions(ifstmt->getBody());
         }
-        else if (const While * whl = dyn_cast<const While>(stmt)) {
+        else if (While * whl = dyn_cast<While>(stmt)) {
             DeclareCallFunctions(whl->getCondition());
             DeclareCallFunctions(whl->getBody());
         }
@@ -462,8 +461,8 @@ void PabloCompiler::DeclareCallFunctions(const PabloAST * expr)
     else if (const MatchStar * mstar = dyn_cast<const MatchStar>(expr))
     {
         ++mCarryQueueSize;
-        DeclareCallFunctions(mstar->getExpr1());
-        DeclareCallFunctions(mstar->getExpr2());
+        DeclareCallFunctions(mstar->getMarker());
+        DeclareCallFunctions(mstar->getCharClass());
     }
     else if (const ScanThru * sthru = dyn_cast<const ScanThru>(expr))
     {
@@ -473,8 +472,7 @@ void PabloCompiler::DeclareCallFunctions(const PabloAST * expr)
     }
 }
 
-Value* PabloCompiler::GetMarker(const std::string & name)
-{    
+inline Value* PabloCompiler::GetMarker(const std::string & name) {
     auto itr = mMarkerMap.find(name);
     if (itr == mMarkerMap.end()) {
         IRBuilder<> b(mBasicBlock);
@@ -483,13 +481,11 @@ Value* PabloCompiler::GetMarker(const std::string & name)
     return itr->second;
 }
 
-void PabloCompiler::SetReturnMarker(Value * marker, const unsigned index)
-{
+void PabloCompiler::SetReturnMarker(Value * marker, const unsigned index) {
     IRBuilder<> b(mBasicBlock);
     Value* marker_bitblock = b.CreateLoad(marker);
-    Value* output_struct = b.CreateLoad(mPtr_output_addr);
     Value* output_indices[] = {b.getInt64(0), b.getInt32(index)};
-    Value* output_struct_GEP = b.CreateGEP(output_struct, output_indices);
+    Value* output_struct_GEP = b.CreateGEP(mOutputAddrPtr, output_indices);
     b.CreateStore(marker_bitblock, output_struct_GEP);
 }
 
@@ -508,17 +504,9 @@ Value * PabloCompiler::compileStatement(const PabloAST * stmt)
     if (const Assign * assign = dyn_cast<const Assign>(stmt))
     {
         Value * expr = compileExpression(assign->getExpr());
-        Value * marker = nullptr;
+        Value * marker = GetMarker(assign->getName());
         IRBuilder<> b(mBasicBlock);
-        auto f = mMarkerMap.find(assign->getName());
-        if (f == mMarkerMap.end()) {
-            marker = b.CreateAlloca(mXi64Vect, 0, assign->getName());
-            mMarkerMap.insert(std::make_pair(assign->getName(), marker));
-        }
-        else {
-            marker = f->second;
-        }
-        b.CreateStore(expr, marker);
+        b.CreateStore(expr, marker)->setAlignment(BLOCK_SIZE / 8);
         retVal = marker;
     }
     if (const Next * next = dyn_cast<const Next>(stmt))
@@ -528,7 +516,7 @@ Value * PabloCompiler::compileStatement(const PabloAST * stmt)
         assert (f != mMarkerMap.end());
         Value * marker = f->second;
         Value * expr = compileExpression(next->getExpr());
-        b.CreateStore(expr, marker);
+        b.CreateStore(expr, marker, false)->setAlignment(BLOCK_SIZE / 8);
         retVal = marker;
     }
     else if (const If * ifstmt = dyn_cast<const If>(stmt))
@@ -554,14 +542,14 @@ Value * PabloCompiler::compileStatement(const PabloAST * stmt)
             // Have at least two internal carries.   Accumulate and store.
             int if_accum_idx = mCarryQueueIdx++;
 
-            Value* if_carry_accum_value = genCarryInLoad(mptr_carry_q, if_start_idx);
+            Value* if_carry_accum_value = genCarryInLoad(mCarryQueuePtr, if_start_idx);
 
             for (int c = if_start_idx+1; c < if_end_idx; c++)
             {
-                Value* carryq_value = genCarryInLoad(mptr_carry_q, c);
+                Value* carryq_value = genCarryInLoad(mCarryQueuePtr, c);
                 if_carry_accum_value = b_ifbody.CreateOr(carryq_value, if_carry_accum_value);
             }
-            genCarryOutStore(if_carry_accum_value, mptr_carry_q, if_accum_idx);
+            genCarryOutStore(if_carry_accum_value, mCarryQueuePtr, if_accum_idx);
 
         }
         b_ifbody.CreateBr(ifEndBlock);
@@ -571,7 +559,7 @@ Value * PabloCompiler::compileStatement(const PabloAST * stmt)
         if (if_start_idx < if_end_idx) {
             // Have at least one internal carry.
             int if_accum_idx = mCarryQueueIdx - 1;
-            Value* last_if_pending_carries = genCarryInLoad(mptr_carry_q, if_accum_idx);
+            Value* last_if_pending_carries = genCarryInLoad(mCarryQueuePtr, if_accum_idx);
             if_test_value = b_entry.CreateOr(if_test_value, last_if_pending_carries);
         }
         b_entry.CreateCondBr(genBitBlockAny(if_test_value), ifEndBlock, ifBodyBlock);
@@ -604,7 +592,7 @@ Value * PabloCompiler::compileStatement(const PabloAST * stmt)
         mBasicBlock = whileBodyBlock;
         mCarryQueueIdx = 0;
         //Store the current carry queue.
-        Value* ptr_last_carry_q = mptr_carry_q;
+        Value* ptr_last_carry_q = mCarryQueuePtr;
 
         IRBuilder<> b_wb1(mBasicBlock);
         //Create and initialize a new carry queue.
@@ -614,7 +602,7 @@ Value * PabloCompiler::compileStatement(const PabloAST * stmt)
         }
 
         //Point mptr_carry_q to the new local carry queue.
-        mptr_carry_q = ptr_while_carry_q;
+        mCarryQueuePtr = ptr_while_carry_q;
 
         returnMarker = compileStatements(whl->getBody());
 
@@ -622,14 +610,14 @@ Value * PabloCompiler::compileStatement(const PabloAST * stmt)
         //Copy back to the last carry queue the carries from the execution of the while statement list.
         for (int c = 0; c < (mCarryQueueSize - idx); c++)
         {
-            Value* new_carryq_value = b_wb2.CreateOr(genCarryInLoad(mptr_carry_q, c), genCarryInLoad(ptr_last_carry_q, idx + c));
+            Value* new_carryq_value = b_wb2.CreateOr(genCarryInLoad(mCarryQueuePtr, c), genCarryInLoad(ptr_last_carry_q, idx + c));
             genCarryOutStore(new_carryq_value, ptr_last_carry_q, idx + c);
         }
 
         b_wb2.CreateBr(whileCondBlock);
 
         mBasicBlock = whileEndBlock;
-        mptr_carry_q = ptr_last_carry_q;
+        mCarryQueuePtr = ptr_last_carry_q;
         mCarryQueueIdx += idx;
 
         retVal = returnMarker;
@@ -657,16 +645,20 @@ Value * PabloCompiler::compileExpression(const PabloAST * expr)
             }
             Value * unicode_category = b.CreateCall(ci->second, mBasisBitsAddr);
             Value * ptr = b.CreateAlloca(mXi64Vect);
-            b.CreateStore(unicode_category, ptr);
+            b.CreateStore(unicode_category, ptr)->setAlignment(BLOCK_SIZE / 8);
             mi = mMarkerMap.insert(std::make_pair(call->getCallee(), ptr)).first;
         }
-        retVal = b.CreateLoad(mi->second);
+        LoadInst * li = b.CreateLoad(mi->second, false, call->getCallee());
+        li->setAlignment(BLOCK_SIZE/8);
+        retVal = li;
     }
     else if (const Var * var = dyn_cast<Var>(expr))
     {
         auto f = mMarkerMap.find(var->getName());
         assert (f != mMarkerMap.end());
-        retVal = b.CreateLoad(f->second, false, var->getName());
+        LoadInst * li = b.CreateLoad(f->second, false, var->getName());
+        li->setAlignment(BLOCK_SIZE/8);
+        retVal = li;
     }
     else if (const And * pablo_and = dyn_cast<And>(expr))
     {
@@ -685,8 +677,7 @@ Value * PabloCompiler::compileExpression(const PabloAST * expr)
     }
     else if (const Not * pablo_not = dyn_cast<Not>(expr))
     {
-        Value* expr_value = compileExpression(pablo_not->getExpr());
-        retVal = b.CreateXor(expr_value, mOneInitializer, "not");
+        retVal = genNot(compileExpression(pablo_not->getExpr()));
     }
     else if (const Advance * adv = dyn_cast<Advance>(expr))
     {
@@ -695,10 +686,10 @@ Value * PabloCompiler::compileExpression(const PabloAST * expr)
     }
     else if (const MatchStar * mstar = dyn_cast<MatchStar>(expr))
     {
-        Value* marker_expr = compileExpression(mstar->getExpr1());
-        Value* cc_expr = compileExpression(mstar->getExpr2());
-        Value* marker_and_cc = b.CreateAnd(marker_expr, cc_expr);
-        retVal = b.CreateOr(b.CreateXor(genAddWithCarry(marker_and_cc, cc_expr), cc_expr), marker_expr, "matchstar");
+        Value* marker = compileExpression(mstar->getMarker());
+        Value* cc = compileExpression(mstar->getCharClass());
+        Value* marker_and_cc = b.CreateAnd(marker, cc);
+        retVal = b.CreateOr(b.CreateXor(genAddWithCarry(marker_and_cc, cc), cc), marker, "matchstar");
     }
     else if (const ScanThru * sthru = dyn_cast<ScanThru>(expr))
     {
@@ -740,7 +731,7 @@ Value* PabloCompiler::genAddWithCarry(Value* e1, Value* e2) {
 
     //CarryQ - carry in.
     int this_carry_idx = mCarryQueueIdx++;
-    Value* carryq_value = genCarryInLoad(mptr_carry_q, this_carry_idx);
+    Value* carryq_value = genCarryInLoad(mCarryQueuePtr, this_carry_idx);
 
 #ifdef USE_UADD_OVERFLOW
     //use llvm.uadd.with.overflow.i128 or i256
@@ -769,25 +760,25 @@ Value* PabloCompiler::genAddWithCarry(Value* e1, Value* e2) {
     Value* sum = b.CreateAdd(partial, mid_carry_in, "sum");
     Value* carry_out = genShiftHighbitToLow(b.CreateOr(carrygen, b.CreateAnd(carryprop, genNot(sum))), "carry_out");
 #endif
-    genCarryOutStore(carry_out, mptr_carry_q, this_carry_idx);
+    genCarryOutStore(carry_out, mCarryQueuePtr, this_carry_idx);
     return sum;
 }
 
-Value* PabloCompiler::genCarryInLoad(Value* ptr_carry_q, int n) {
+LoadInst* PabloCompiler::genCarryInLoad(Value* ptr_carry_q, const unsigned index) {
     IRBuilder<> b(mBasicBlock);
-    Value* carryq_idx = b.getInt64(n);
-    Value* carryq_GEP = b.CreateGEP(ptr_carry_q, carryq_idx);
-    return b.CreateLoad(carryq_GEP);
+    LoadInst * result = b.CreateLoad(b.CreateGEP(ptr_carry_q, b.getInt64(index)));
+    result->setAlignment(BLOCK_SIZE / 8);
+    return result;
 }
 
-Value* PabloCompiler::genCarryOutStore(Value* carryout, Value* ptr_carry_q, int n ) {
+StoreInst* PabloCompiler::genCarryOutStore(Value* carryout, Value* ptr_carry_q, const unsigned index ) {
     IRBuilder<> b(mBasicBlock);
-    Value* carryq_idx = b.getInt64(n);
-    Value* carryq_GEP = b.CreateGEP(ptr_carry_q, carryq_idx);
-    return b.CreateStore(carryout, carryq_GEP);
+    StoreInst * result = b.CreateStore(carryout, b.CreateGEP(ptr_carry_q, b.getInt64(index)));
+    result->setAlignment(BLOCK_SIZE / 8);
+    return result;
 }
 
-Value* PabloCompiler::genBitBlockAny(Value* e) {
+inline Value* PabloCompiler::genBitBlockAny(Value* e) {
     IRBuilder<> b(mBasicBlock);
     Value* cast_marker_value_1 = b.CreateBitCast(e, IntegerType::get(mMod->getContext(), BLOCK_SIZE));
     return b.CreateICmpEQ(cast_marker_value_1, ConstantInt::get(IntegerType::get(mMod->getContext(), BLOCK_SIZE), 0));
@@ -805,9 +796,9 @@ Value* PabloCompiler::genShiftLeft64(Value* e, const Twine &namehint) {
     return b.CreateBitCast(b.CreateShl(i128_val, 64, namehint), mXi64Vect);
 }
 
-Value* PabloCompiler::genNot(Value* e, const Twine &namehint) {
+inline Value* PabloCompiler::genNot(Value* expr) {
     IRBuilder<> b(mBasicBlock);
-    return b.CreateXor(e, mOneInitializer, namehint);
+    return b.CreateXor(expr, mOneInitializer, "not");
 }
 
 Value* PabloCompiler::genAdvanceWithCarry(Value* strm_value) {
@@ -816,7 +807,7 @@ Value* PabloCompiler::genAdvanceWithCarry(Value* strm_value) {
     int this_carry_idx = mCarryQueueIdx;
     mCarryQueueIdx++;
 
-    Value* carryq_value = genCarryInLoad(mptr_carry_q, this_carry_idx);
+    Value* carryq_value = genCarryInLoad(mCarryQueuePtr, this_carry_idx);
 
     Value* srli_1_value = b.CreateLShr(strm_value, 63);
 
@@ -833,7 +824,7 @@ Value* PabloCompiler::genAdvanceWithCarry(Value* strm_value) {
 
     Value* carry_out = genShiftHighbitToLow(strm_value, "carry_out");
     //CarryQ - carry out:
-    genCarryOutStore(carry_out, mptr_carry_q, this_carry_idx);
+    genCarryOutStore(carry_out, mCarryQueuePtr, this_carry_idx);
 
     return result_value;
 #endif

@@ -26,19 +26,27 @@ public:
         return mExpr;
     }
     inline const ExpressionList & getBody() const {
-        return mPSList;
+        return mBody;
+    }
+    inline void setCarryCount(const unsigned count) {
+        mCarryCount = count;
+    }
+    inline unsigned getCarryCount() const {
+        return mCarryCount;
     }
 protected:
-    While(PabloAST * expr, ExpressionList && psl)
+    While(PabloAST * expr, ExpressionList && body)
     : PabloAST(ClassTypeId::While)
     , mExpr(expr)
-    , mPSList(psl)
+    , mBody(std::move(body))
+    , mCarryCount(0)
     {
 
     }
 private:
-    PabloAST * const  mExpr;
-    ExpressionList  mPSList;
+    PabloAST * const    mExpr;
+    ExpressionList      mBody;
+    unsigned            mCarryCount;
 };
 
 }

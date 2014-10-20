@@ -22,23 +22,23 @@ public:
     }
     virtual ~MatchStar() {
     }
-    inline PabloAST * getExpr1() const {
-        return mExpr1;
+    inline PabloAST * getMarker() const {
+        return mMarker;
     }
-    inline PabloAST * getExpr2() const  {
-        return mExpr2;
+    inline PabloAST * getCharClass() const  {
+        return mCC;
     }
 protected:
-    MatchStar(PabloAST * expr1, PabloAST * expr2)
+    MatchStar(PabloAST * marker, PabloAST * cc)
     : PabloAST(ClassTypeId::MatchStar)
-    , mExpr1(expr1)
-    , mExpr2(expr2)
+    , mMarker(marker)
+    , mCC(cc)
     {
 
     }
 private:
-    PabloAST * const mExpr1;
-    PabloAST * const mExpr2;
+    PabloAST * const mMarker;
+    PabloAST * const mCC;
 };
 
 }

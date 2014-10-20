@@ -83,7 +83,7 @@ LLVM_Gen_RetVal compile(const Encoding encoding, const std::string input_string,
         #endif
     }
 
-    // note: system is clumbersome at the moment; this needs to be done AFTER toUTF8.
+    // note: system is clumbersome at the moment; this ought to be done AFTER toUTF8.
     nameMap.addPredefined("LineFeed", makeCC(0x0A));
 
     re_ast = RE_Simplifier::simplify(re_ast);

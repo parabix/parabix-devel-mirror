@@ -101,12 +101,11 @@ Assign * RE_Compiler::process(RE * re, Assign * target, PabloBlock & cg) {
         target = cg.createAssign("dot", cg.createAdvance(cg.createAnd(marker, dot)));
     }
     else if (isa<Start>(re)) {
-        PabloAST * sol = cg.createNot(cg.createAdvance(cg.createNot(mLineFeed)));
+        PabloAST * const sol = cg.createNot(cg.createAdvance(cg.createNot(mLineFeed)));
         target = cg.createAssign("sol", cg.createAnd(cg.createVar(target), sol));
     }
     else if (isa<End>(re)) {
-        PabloAST * eol = mLineFeed;
-        target = cg.createAssign("eol", cg.createAnd(cg.createVar(target), eol));
+        target = cg.createAssign("eol", cg.createAnd(cg.createVar(target), mLineFeed));
     }
 
     return target;
@@ -232,7 +231,7 @@ inline Assign * RE_Compiler::processBoundedRep(RE * repeated, int lb, int ub, As
     }
     while (ub-- != 0) {
         Assign * alt = process(repeated, target, cg);
-        target = cg.createAssign("alt", cg.createOr(cg.createVar(target), cg.createVar(alt)));
+        target = cg.createAssign("m", cg.createOr(cg.createVar(target), cg.createVar(alt)));
     }
     return target;
 }
