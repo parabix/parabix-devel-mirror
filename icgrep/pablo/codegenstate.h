@@ -8,23 +8,24 @@
 #define PS_PABLOS_H
 
 #include <pablo/pabloAST.h>
-#include <pablo/pe_string.h>
+#include <pablo/pabloAST.h>
 #include <pablo/pe_advance.h>
 #include <pablo/pe_and.h>
 #include <pablo/pe_call.h>
 #include <pablo/pe_matchstar.h>
+#include <pablo/pe_next.h>
 #include <pablo/pe_not.h>
+#include <pablo/pe_ones.h>
 #include <pablo/pe_or.h>
-#include <pablo/pabloAST.h>
 #include <pablo/pe_scanthru.h>
 #include <pablo/pe_sel.h>
+#include <pablo/pe_string.h>
 #include <pablo/pe_var.h>
 #include <pablo/pe_xor.h>
+#include <pablo/pe_zeroes.h>
 #include <pablo/ps_assign.h>
 #include <pablo/ps_if.h>
 #include <pablo/ps_while.h>
-#include <pablo/pe_zeroes.h>
-#include <pablo/pe_ones.h>
 #include <pablo/symbol_generator.h>
 #include <map>
 #include <vector>
@@ -50,8 +51,8 @@ public:
 
     PabloBlock(PabloBlock & cg)
     : mSymbolGenerator(cg.mSymbolGenerator)
-    , mZeroes(cg.mZeroes) // inherit the original "All" variables for simplicity
-    , mOnes(cg.mOnes) // inherit the original "All" variables for simplicity
+    , mZeroes(cg.mZeroes) // inherit the original "Zeroes" variable for simplicity
+    , mOnes(cg.mOnes) // inherit the original "Ones" variable for simplicity
     , mUnary(&(cg.mUnary), this)
     , mBinary(&(cg.mBinary), this)
     , mTernary(&(cg.mTernary), this)
@@ -69,17 +70,38 @@ public:
         return mOnes;
     }
 
-    Assign * createAssign(const std::string name, PabloAST * expr);
-
     Call * createCall(const std::string name);
+
+    inline Assign * createAssign(const std::string prefix, PabloAST * expr) {
+        Assign * assign = new Assign(mSymbolGenerator.get_ssa(prefix), expr);
+        mStatements.push_back(assign);
+        return assign;
+    }
 
     Var * createVar(const std::string name);
 
-    Var * createVar(Assign * assign);
+    Var * createVar(String * name);
 
-    inline PabloAST * createVarIfAssign(PabloAST * const input) {
-        return isa<Assign>(input) ? createVar(cast<Assign>(input)) : input;
+    inline Var * createVar(Assign * assign) {
+        return createVar(assign->mName);
     }
+
+    inline Var * createVar(Next * next) {
+        return createVar(next->mInitial->mName);
+    }
+
+    inline PabloAST * createVar(PabloAST * const input) {
+        switch (input->getClassTypeId()) {
+            case PabloAST::ClassTypeId::Assign:
+                return createVar(cast<Assign>(input));
+            case PabloAST::ClassTypeId::Next:
+                return createVar(cast<Next>(input));
+            default:
+                return input;
+        }
+    }
+
+    Next * createNext(Assign * assign, PabloAST * expr);
 
     PabloAST * createAnd(PabloAST * expr1, PabloAST * expr2);
 
@@ -89,7 +111,7 @@ public:
 
     PabloAST * createXor(PabloAST * expr1, PabloAST * expr2);
 
-    MatchStar * createMatchStar(PabloAST * expr1, PabloAST * expr2);
+    MatchStar * createMatchStar(PabloAST * marker, PabloAST * charclass);
 
     ScanThru * createScanThru(PabloAST * from, PabloAST * thru);
 
@@ -121,7 +143,7 @@ public:
 
         template <class Type>
         inline Type * findOrMake(const PabloAST::ClassTypeId type, Args... args) {
-            auto key = std::make_tuple(type, args...);
+            Key key = std::make_tuple(type, args...);
             PabloAST * f = find(key);
             if (f) {
                 return cast<Type>(f);
@@ -133,13 +155,13 @@ public:
 
         template <class Functor>
         inline PabloAST * findOrCall(const PabloAST::ClassTypeId type, Args... args) {
-            auto key = std::make_tuple(type, args...);
+            Key key = std::make_tuple(type, args...);
             PabloAST * f = find(key);
             if (f) {
                 return f;
             }
             Functor mf(mCodeGenState);
-            PabloAST * expr = mf(args...);            
+            PabloAST * expr = mf(args...);
             insert(std::move(key), expr);
             return expr;
         }
@@ -168,27 +190,23 @@ public:
         }
 
     private:
-        MapType * const         mPredecessor;
-        PabloBlock &            mCodeGenState;
-        std::map<Key, PabloAST *> mMap;
+        MapType * const             mPredecessor;
+        PabloBlock &                mCodeGenState;
+        std::map<Key, PabloAST *>   mMap;
     };
-
-    inline std::string ssa(std::string prefix) { // Static Single-Assignment
-        return mSymbolGenerator.ssa(prefix);
-    }
 
     inline const ExpressionList & expressions() const {
         return mStatements;
     }
 
 private:    
-    SymbolGenerator &                               mSymbolGenerator;
-    Zeroes *                     		    mZeroes;
-    Ones *                     		    mOnes;
-    ExpressionMap<PabloAST *>                         mUnary;
+    SymbolGenerator &                                   mSymbolGenerator;
+    Zeroes *                                            mZeroes;
+    Ones *                                              mOnes;
+    ExpressionMap<PabloAST *>                           mUnary;
     ExpressionMap<PabloAST *, PabloAST *>               mBinary;
-    ExpressionMap<PabloAST *, PabloAST *, PabloAST *>     mTernary;
-    ExpressionList                                  mStatements;
+    ExpressionMap<PabloAST *, PabloAST *, PabloAST *>   mTernary;
+    ExpressionList                                      mStatements;
 };
 
 }

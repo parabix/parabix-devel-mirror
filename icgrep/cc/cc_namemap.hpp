@@ -22,8 +22,6 @@ public:
 
     CC_NameMap() {}
 
-    void clear();
-
     re::RE * process(re::RE * re);
 
     void addPredefined(const std::string friendlyName, re::CC * cc);

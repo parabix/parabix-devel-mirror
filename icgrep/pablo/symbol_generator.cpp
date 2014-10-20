@@ -12,31 +12,34 @@ namespace pablo {
 SymbolGenerator::SymbolGenerator()
 : mPrefixMap()
 {
+
 }
 
-std::string SymbolGenerator::ssa(std::string prefix) {
-    auto f = mPrefixMap.find(prefix);
-    unsigned count = 0;
-    if (f == mPrefixMap.end()) {
-        mPrefixMap.insert(std::make_pair(prefix, 1));
-    }
-    else {
-        count = f->second++;
-    }
-    return prefix + std::to_string(count);
-}
-
-String * SymbolGenerator::operator[](const std::string string) {
-    auto f = mStringMap.find(string);
+String * SymbolGenerator::get(const std::string name) {
+    auto f = mStringMap.find(name);
     String * result;
     if (f == mStringMap.end()) {
-        result = makeString(string);
-        mStringMap.insert(std::make_pair(*result, result));
+        result = makeString(name);
+        mStringMap.insert(std::make_pair(name, result));
     }
     else {
         result = f->second;
     }
     return result;
 }
+
+String * SymbolGenerator::get_ssa(const std::string prefix) {
+    auto f = mPrefixMap.find(prefix);
+    unsigned count = 0;
+    if (f == mPrefixMap.end()) {
+        mPrefixMap.insert(std::make_pair(prefix, 1));
+        return get(prefix);
+    }
+    else {
+        count = f->second++;
+        return get(prefix + std::to_string(count));
+    }
+}
+
 
 }

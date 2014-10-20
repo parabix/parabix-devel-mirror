@@ -44,7 +44,7 @@ std::string StatementPrinter::PrintStmts(const PabloBlock & cg_state)
     strOut = strOut.substr(0, strOut.length() - 1);
     strOut += "],[";
 
-    strOut = Print_PB_PabloStmts(cg_state.expressions(), strOut);
+    strOut += Print_PB_PabloStmts(cg_state.expressions());
 
     strOut = strOut.substr(0, strOut.length() - 1);
     strOut += "]";
@@ -52,7 +52,8 @@ std::string StatementPrinter::PrintStmts(const PabloBlock & cg_state)
     return strOut;
 }
 
-std::string StatementPrinter::Print_PB_PabloStmts(const ExpressionList & stmts, std::string strOut) {
+std::string StatementPrinter::Print_PB_PabloStmts(const ExpressionList & stmts) {
+    std::string strOut = "";
     for (const auto stmt : stmts) {
         strOut += ShowPabloS(stmt);
     }
@@ -69,76 +70,57 @@ std::string StatementPrinter::Print_CC_PabloStmts(const pablo::ExpressionList &s
 
 std::string StatementPrinter::ShowPabloS(const PabloAST * stmt)
 {
-    std::string retVal = "";
-
-    if (const Assign * an = dyn_cast<const Assign>(stmt))
-    {
-        retVal = "Assign('" + an->getName() + "', " + ShowPabloAST(an->getExpr()) + "),";
+    if (const Assign * an = dyn_cast<const Assign>(stmt)) {
+        return "Assign('" + an->getName() + "', " + ShowPabloAST(an->getExpr()) + "),";
     }
-    else if (const If * ifstmt = dyn_cast<const If>(stmt))
-    {
-        retVal = "If(" + ShowPabloAST(ifstmt->getCondition()) + ", " + Print_PB_PabloStmts(ifstmt->getBody(), retVal) + ")";
+    else if (const Next * next = dyn_cast<const Next>(stmt)) {
+        return "Next(" + next->getName() + ", " + ShowPabloAST(next->getExpr()) + ")";
     }
-    else if (const While * whl = dyn_cast<const While>(stmt))
-    {
-        retVal = "While(" + ShowPabloAST(whl->getCondition()) + ", " + Print_PB_PabloStmts(whl->getBody(), retVal) + ")";
+    else if (const If * ifstmt = dyn_cast<const If>(stmt)) {
+        return "If(" + ShowPabloAST(ifstmt->getCondition()) + ", " + Print_PB_PabloStmts(ifstmt->getBody()) + ")";
     }
-    else retVal = "UNKNOWN_STATEMENT_TYPE!!!";
-    return retVal;
+    else if (const While * whl = dyn_cast<const While>(stmt)) {
+        return "While(" + ShowPabloAST(whl->getCondition()) + ", " + Print_PB_PabloStmts(whl->getBody()) + ")";
+    }
+    return "???";
 }
 
-std::string StatementPrinter::ShowPabloAST(const PabloAST *expr)
-{
-    std::string retVal = "";
-
-    if (isa<const Zeroes>(expr))
-    {
-        retVal = "Zeroes";
+std::string StatementPrinter::ShowPabloAST(const PabloAST *expr) {
+    if (isa<const Zeroes>(expr)) {
+        return "Zeroes";
     }
-    else if (isa<const Ones>(expr))
-    {
-        retVal = "Ones";
+    else if (isa<const Ones>(expr)) {
+        return "Ones";
     }
-    else if (const Call * pablo_call = dyn_cast<const Call>(expr))
-    {
-        retVal = "Call '" + pablo_call->getCallee() + "'";
+    else if (const Call * pablo_call = dyn_cast<const Call>(expr)) {
+        return "Call '" + pablo_call->getCallee() + "'";
     }
-    else if (const Var * pablo_var = dyn_cast<const Var>(expr))
-    {
-        retVal = "Var '" + pablo_var->getName() + "' ";
+    else if (const Var * pablo_var = dyn_cast<const Var>(expr)) {
+        return "Var '" + pablo_var->getName() + "' ";
     }
-    else if (const And * pablo_and = dyn_cast<const And>(expr))
-    {
-        retVal = "And(" + ShowPabloAST(pablo_and->getExpr1()) +", " + ShowPabloAST(pablo_and->getExpr2()) + ")";
+    else if (const And * pablo_and = dyn_cast<const And>(expr)) {
+        return "And(" + ShowPabloAST(pablo_and->getExpr1()) +", " + ShowPabloAST(pablo_and->getExpr2()) + ")";
     }
-    else if (const Or * pablo_or = dyn_cast<const Or>(expr))
-    {
-        retVal = "Or(" + ShowPabloAST(pablo_or->getExpr1()) + ", " + ShowPabloAST(pablo_or->getExpr2()) + ")";
+    else if (const Or * pablo_or = dyn_cast<const Or>(expr)) {
+        return "Or(" + ShowPabloAST(pablo_or->getExpr1()) + ", " + ShowPabloAST(pablo_or->getExpr2()) + ")";
     }
-    else if (const Sel * pablo_sel = dyn_cast<const Sel>(expr))
-    {
-        retVal = "((" + ShowPabloAST(pablo_sel->getCondition()) + "And " + ShowPabloAST(pablo_sel->getTrueExpr()) +
+    else if (const Sel * pablo_sel = dyn_cast<const Sel>(expr)) {
+        return "((" + ShowPabloAST(pablo_sel->getCondition()) + "And " + ShowPabloAST(pablo_sel->getTrueExpr()) +
                 ")|(Not(" + ShowPabloAST(pablo_sel->getCondition()) + ") And " + ShowPabloAST(pablo_sel->getFalseExpr()) + ")";
     }
-    else if (const Not * pablo_not = dyn_cast<const Not>(expr))
-    {
-        retVal = "Not (" + ShowPabloAST(pablo_not->getExpr()) + ")";
+    else if (const Not * pablo_not = dyn_cast<const Not>(expr)) {
+        return "Not (" + ShowPabloAST(pablo_not->getExpr()) + ")";
     }
-    else if (const Advance * adv = dyn_cast<const Advance>(expr))
-    {
-        retVal = "Advance(" + ShowPabloAST(adv->getExpr()) + ")";
+    else if (const Advance * adv = dyn_cast<const Advance>(expr)) {
+        return "Advance(" + ShowPabloAST(adv->getExpr()) + ")";
     }
-    else if (const MatchStar * mstar = dyn_cast<const MatchStar>(expr))
-    {
-        retVal = "MatchStar (" + ShowPabloAST(mstar->getExpr1()) + ", " + ShowPabloAST(mstar->getExpr2()) + ")";
+    else if (const MatchStar * mstar = dyn_cast<const MatchStar>(expr)) {
+        return "MatchStar (" + ShowPabloAST(mstar->getExpr1()) + ", " + ShowPabloAST(mstar->getExpr2()) + ")";
     }
-    else if (const ScanThru * sthru = dyn_cast<const ScanThru>(expr))
-    {
-        retVal = "ScanThru (" + ShowPabloAST(sthru->getScanFrom()) + ", " + ShowPabloAST(sthru->getScanThru()) + ")";
+    else if (const ScanThru * sthru = dyn_cast<const ScanThru>(expr)) {
+        return "ScanThru (" + ShowPabloAST(sthru->getScanFrom()) + ", " + ShowPabloAST(sthru->getScanThru()) + ")";
     }
-    else retVal = "UNKNOWN_Pablo_EXPRESSION_TYPE!!!";
-
-    return retVal;
+    return "???";
 }
 
 

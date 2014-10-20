@@ -19,9 +19,9 @@ class SymbolGenerator
 public:
     SymbolGenerator();
 
-    std::string ssa(std::string prefix);
+    String * get(const std::string name);
 
-    String * operator[](const std::string string);
+    String * get_ssa(const std::string prefix);
 
 private:
     std::unordered_map<std::string, unsigned>   mPrefixMap;

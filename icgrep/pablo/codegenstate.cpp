@@ -15,7 +15,7 @@ Advance * PabloBlock::createAdvance(PabloAST * expr) {
 }
 
 Call * PabloBlock::createCall(const std::string name) {
-    return mUnary.findOrMake<Call>(PabloAST::ClassTypeId::Call, mSymbolGenerator[name]);
+    return mUnary.findOrMake<Call>(PabloAST::ClassTypeId::Call, mSymbolGenerator.get(name));
 }
 
 PabloAST * PabloBlock::createNot(PabloAST * expr) {
@@ -23,14 +23,28 @@ PabloAST * PabloBlock::createNot(PabloAST * expr) {
 }
 
 Var * PabloBlock::createVar(const std::string name) {
-    return mUnary.findOrMake<Var>(PabloAST::ClassTypeId::Var, mSymbolGenerator[name]);
+    return mUnary.findOrMake<Var>(PabloAST::ClassTypeId::Var, mSymbolGenerator.get(name));
 }
 
-Var * PabloBlock::createVar(Assign * assign) {
-    return mUnary.findOrMake<Var>(PabloAST::ClassTypeId::Var, const_cast<String *>(assign->mName));
+Var * PabloBlock::createVar(String * name) {
+    return mUnary.findOrMake<Var>(PabloAST::ClassTypeId::Var, name);
 }
 
 /// BINARY CREATE FUNCTIONS
+
+Next * PabloBlock::createNext(Assign * assign, PabloAST * expr) {
+    Next * next = mBinary.findOrMake<Next>(PabloAST::ClassTypeId::Next, assign, expr);
+    mStatements.push_back(next);
+    return next;
+}
+
+MatchStar * PabloBlock::createMatchStar(PabloAST * marker, PabloAST * charclass) {
+    return mBinary.findOrMake<MatchStar>(PabloAST::ClassTypeId::MatchStar, marker, charclass);
+}
+
+ScanThru * PabloBlock::createScanThru(PabloAST * from, PabloAST * thru) {
+    return mBinary.findOrMake<ScanThru>(PabloAST::ClassTypeId::ScanThru, from, thru);
+}
 
 PabloAST * PabloBlock::createAnd(PabloAST * expr1, PabloAST * expr2) {
     if (expr1 < expr2) {
@@ -39,34 +53,11 @@ PabloAST * PabloBlock::createAnd(PabloAST * expr1, PabloAST * expr2) {
     return mBinary.findOrCall<OptimizeAnd>(PabloAST::ClassTypeId::And, expr1, expr2);
 }
 
-Assign * PabloBlock::createAssign(const std::string name, PabloAST * expr) {
-    auto key = std::make_tuple(PabloAST::ClassTypeId::Assign, expr);
-    Assign * assign = cast_or_null<Assign>(mUnary.find(key));
-    if (assign == nullptr) {
-        assign = new Assign(mSymbolGenerator[name], expr);
-        mUnary.insert(std::move(key), assign);
-    }
-    else {
-        assign = new Assign(mSymbolGenerator[name], createVar(assign));
-    }
-//    Assign * assign = mBinary.findOrMake<Assign>(PabloAST::ClassTypeId::Assign, mSymbolGenerator[name], expr);
-    mStatements.push_back(assign);
-    return assign;
-}
-
-MatchStar * PabloBlock::createMatchStar(PabloAST * expr1, PabloAST * expr2) {
-    return mBinary.findOrMake<MatchStar>(PabloAST::ClassTypeId::MatchStar, expr1, expr2);
-}
-
 PabloAST * PabloBlock::createOr(PabloAST * expr1, PabloAST * expr2) {
     if (expr1 < expr2) {
         std::swap(expr1, expr2);
     }
     return mBinary.findOrCall<OptimizeOr>(PabloAST::ClassTypeId::Or, expr1, expr2);
-}
-
-ScanThru * PabloBlock::createScanThru(PabloAST * from, PabloAST * thru) {
-    return mBinary.findOrMake<ScanThru>(PabloAST::ClassTypeId::ScanThru, from, thru);
 }
 
 PabloAST * PabloBlock::createXor(PabloAST * expr1, PabloAST * expr2) {

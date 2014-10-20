@@ -58,9 +58,6 @@ PabloAST * CC_Compiler::compile_re(RE * re) {
     else if (isa<Seq>(re)) {
         return compile_re(cast<Seq>(re));
     }
-    else if (isa<CC>(re)) {
-
-    }
     throw std::runtime_error("Unexpected RE node given to CC_Compiler: " + Printer_RE::PrintRE(re));
 }
 
@@ -102,7 +99,7 @@ PabloAST * CC_Compiler::compile_re(const Seq * seq) {
         if (++i == seq->end()) {
             break;
         }
-        assignment = mCG.createAssign(mCG.ssa("seq"), mCG.createAdvance(result));
+        assignment = mCG.createAssign("seq", mCG.createAdvance(result));
     }
     return result;
 }
@@ -117,7 +114,7 @@ PabloAST * CC_Compiler::compile_re(const Alt *alt) {
         if (++i == alt->end()) {
             break;
         }
-        assignment = mCG.createAssign(mCG.ssa("alt"), result);
+        assignment = mCG.createAssign("alt", result);
     }
     return result;
 }
@@ -314,7 +311,7 @@ inline PabloAST * CC_Compiler::tempify(PabloAST * value) {
 //    if (isa<Var>(value)) {
 //        return cast<Var>(value);
 //    }
-//    return mCG.createVar(mCG.createAssign(mCG.ssa("t"), value));
+//    return mCG.createVar(mCG.createAssign("t", value));
     return value;
 }
 

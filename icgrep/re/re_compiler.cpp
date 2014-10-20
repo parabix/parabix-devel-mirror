@@ -75,7 +75,7 @@ void RE_Compiler::compile(RE * re, PabloBlock & cg) {
     PabloAST * result = process(re, start_marker, cg);
 
     //These three lines are specifically for grep.
-    cg.createAssign(cg.ssa("matches"), cg.createAnd(cg.createMatchStar(cg.createVarIfAssign(result), cg.createNot(mLineFeed)), mLineFeed));
+    cg.createAssign("matches", cg.createAnd(cg.createMatchStar(cg.createVar(result), cg.createNot(mLineFeed)), mLineFeed));
 }
 
 
@@ -98,15 +98,15 @@ Assign * RE_Compiler::process(RE * re, Assign * target, PabloBlock & cg) {
         marker = cg.createAnd(marker, mInitial);
         marker = cg.createScanThru(marker, mNonFinal);
         PabloAST * dot = cg.createNot(mLineFeed);
-        target = cg.createAssign(cg.ssa("dot"), cg.createAdvance(cg.createAnd(marker, dot)));
+        target = cg.createAssign("dot", cg.createAdvance(cg.createAnd(marker, dot)));
     }
     else if (isa<Start>(re)) {
         PabloAST * sol = cg.createNot(cg.createAdvance(cg.createNot(mLineFeed)));
-        target = cg.createAssign(cg.ssa("sol"), cg.createAnd(cg.createVarIfAssign(target), sol));
+        target = cg.createAssign("sol", cg.createAnd(cg.createVar(target), sol));
     }
     else if (isa<End>(re)) {
         PabloAST * eol = mLineFeed;
-        target = cg.createAssign(cg.ssa("eol"), cg.createAnd(cg.createVarIfAssign(target), eol));
+        target = cg.createAssign("eol", cg.createAnd(cg.createVar(target), eol));
     }
 
     return target;
@@ -129,7 +129,7 @@ inline Assign * RE_Compiler::process(Name * name, Assign * target, PabloBlock & 
     if (name->isNegated()) {
         cc = cg.createNot(cg.createOr(cg.createOr(cc, mLineFeed), mNonFinal));
     }
-    return cg.createAssign(cg.ssa("marker"), cg.createAdvance(cg.createAnd(cc, marker)));
+    return cg.createAssign("m", cg.createAdvance(cg.createAnd(cc, marker)));
 }
 
 inline Assign * RE_Compiler::process(Seq * seq, Assign *target, PabloBlock & cg) {
@@ -141,7 +141,7 @@ inline Assign * RE_Compiler::process(Seq * seq, Assign *target, PabloBlock & cg)
 
 inline Assign * RE_Compiler::process(Alt * alt, Assign * target, PabloBlock & cg) {
     if (alt->empty()) {
-        target = cg.createAssign(cg.ssa("fail"), cg.createZeroes()); // always fail (note: I'm not sure this ever occurs. How do I create a 0-element alternation?)
+        target = cg.createAssign("fail", cg.createZeroes()); // always fail (note: I'm not sure this ever occurs. How do I create a 0-element alternation?)
     }
     else {
         auto i = alt->begin();
@@ -149,7 +149,7 @@ inline Assign * RE_Compiler::process(Alt * alt, Assign * target, PabloBlock & cg
         target = process(*i, base, cg);
         while (++i != alt->end()) {
             Assign * other = process(*i, base, cg);
-            target = cg.createAssign(cg.ssa("alt"), cg.createOr(cg.createVar(target), cg.createVar(other)));
+            target = cg.createAssign("alt", cg.createOr(cg.createVar(target), cg.createVar(other)));
         }
     }    
     return target;
@@ -166,12 +166,15 @@ inline Assign * RE_Compiler::process(Rep * rep, Assign * target, PabloBlock & cg
 }
 
 inline Assign * RE_Compiler::processUnboundedRep(RE * repeated, int lb, Assign * target, PabloBlock & cg) {
+
+    PabloAST * unbounded = nullptr;
+
     while (lb-- != 0) {
         target = process(repeated, target, cg);
     }
 
     if (isa<Name>(repeated)) {
-        Name * rep_name = dyn_cast<Name>(repeated);
+        Name * rep_name = cast<Name>(repeated);
 
         PabloAST * cc;
         if (rep_name->getType() == Name::Type::UnicodeCategory) {
@@ -182,40 +185,44 @@ inline Assign * RE_Compiler::processUnboundedRep(RE * repeated, int lb, Assign *
         }
 
         if (rep_name->isNegated()) {
-            cc = cg.createNot(cg.createOr(cg.createOr(cc, mLineFeed), mNonFinal));
+            cc = cg.createNot(cg.createOr(cc, cg.createOr(mLineFeed, mNonFinal)));
         }
 
-        PabloAST * unbounded = cg.createVar(target);
+        unbounded = cg.createVar(target);
         if (rep_name->getType() == Name::Type::FixedLength) {
             unbounded = cg.createMatchStar(unbounded, cc);
         }
         else { // Name::Unicode and Name::UnicodeCategory
             unbounded = cg.createAnd(cg.createMatchStar(unbounded, cg.createOr(mNonFinal, cc)), mInitial);
-        }
-        target = cg.createAssign(cg.ssa("marker"), unbounded);
+        }        
     }
     else if (isa<Any>(repeated)) {
         PabloAST * dot = cg.createNot(mLineFeed);
-        PabloAST * unbounded = cg.createVar(target);
+        unbounded = cg.createVar(target);
         unbounded = cg.createAnd(cg.createMatchStar(unbounded, cg.createOr(mNonFinal, dot)), mInitial);
-        target = cg.createAssign(cg.ssa("marker"), unbounded);
     }
-
     else {
 
         Var * targetVar = cg.createVar(target);
 
-        Assign * while_test = cg.createAssign(cg.ssa("while_test"), targetVar);
-        Assign * while_accum = cg.createAssign(cg.ssa("while_accum"), targetVar);
+        Assign * whileTest = cg.createAssign("test", targetVar);
+        Assign * whileAccum = cg.createAssign("accum", targetVar);
 
         PabloBlock wt(cg);
-        PabloAST * accum = cg.createVarIfAssign(process(repeated, while_test, wt));
-        Var * var_while_test = cg.createVar(while_accum);
-        wt.createAssign(while_test->getName(), wt.createAnd(accum, wt.createNot(var_while_test)));
-        target = wt.createAssign(while_accum->getName(), wt.createOr(var_while_test, accum));
-        cg.createWhile(cg.createVar(while_test), std::move(wt));
+
+        Var * loopComputation = wt.createVar(process(repeated, whileTest, wt));
+
+        Var * whileAccumVar = wt.createVar(whileAccum);
+
+        wt.createNext(whileTest, wt.createAnd(loopComputation, wt.createNot(whileAccumVar)));
+
+        wt.createNext(whileAccum, wt.createOr(loopComputation, whileAccumVar));
+
+        cg.createWhile(cg.createVar(whileTest), std::move(wt));
+
+        unbounded = whileAccumVar;
     }    
-    return target;
+    return cg.createAssign("unbounded", unbounded);
 }
 
 inline Assign * RE_Compiler::processBoundedRep(RE * repeated, int lb, int ub, Assign * target, PabloBlock & cg) {
@@ -225,7 +232,7 @@ inline Assign * RE_Compiler::processBoundedRep(RE * repeated, int lb, int ub, As
     }
     while (ub-- != 0) {
         Assign * alt = process(repeated, target, cg);
-        target = cg.createAssign(cg.ssa("alt"), cg.createOr(cg.createVar(target), cg.createVar(alt)));
+        target = cg.createAssign("alt", cg.createOr(cg.createVar(target), cg.createVar(alt)));
     }
     return target;
 }

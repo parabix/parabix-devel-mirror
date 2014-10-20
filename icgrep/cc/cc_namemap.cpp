@@ -22,11 +22,6 @@ void CC_NameMap::addPredefined(const std::string friendlyName, re::CC * cc) {
     assert (name->getCC() == cc);
 }
 
-void CC_NameMap::clear() {
-    mNameMap.clear();
-    mNameVector.clear();
-}
-
 RE * CC_NameMap::process(RE * re) {
     if (Alt * alt = dyn_cast<Alt>(re)) {
         for (auto i = alt->begin(); i != alt->end(); ++i) {

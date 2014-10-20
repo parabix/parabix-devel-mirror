@@ -87,10 +87,4 @@ bool equals(const PabloAST * expr1, const PabloAST * expr2) {
     return false;
 }
 
-
-
-PabloAST::~PabloAST(){ }
-
-
-
 }

@@ -7,13 +7,13 @@
 #ifndef PS_SETMARKER_H
 #define PS_SETMARKER_H
 
-#include <pablo/pabloAST.h>
 #include <pablo/pe_string.h>
 
 namespace pablo {
 
 class Assign : public PabloAST {
     friend class PabloBlock;
+    friend class Next;
 public:
     static inline bool classof(const PabloAST * e) {
         return e->getClassTypeId() == ClassTypeId::Assign;
@@ -38,8 +38,8 @@ protected:
 
     }
 private:
-    const String * const    mName;
-    PabloAST * const          mExpr;
+    String * const          mName;
+    PabloAST * const        mExpr;
 };
 
 }

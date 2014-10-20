@@ -9,7 +9,7 @@
 
 #include <llvm/Support/Casting.h>
 #include <llvm/IR/Value.h>
-#include <list>
+#include <vector>
 
 using namespace llvm;
 
@@ -20,26 +20,26 @@ public:
     enum class ClassTypeId : unsigned {
         Advance
         , And
+        , Assign
         , Call
         , CharClass
+        , If
         , MatchStar
+        , Next
         , Not
+        , Ones
         , Or
         , ScanThru
         , Sel
-        , Var
-        , Xor
-        , Assign
-        , If
-        , While
         , String
+        , Var
+        , While
+        , Xor
         , Zeroes
-        , Ones
     };
     inline ClassTypeId getClassTypeId() const {
         return mClassTypeId;
     }
-    virtual ~PabloAST() = 0;
 protected:
     inline PabloAST(const ClassTypeId id)
     : mClassTypeId(id) {
@@ -51,7 +51,7 @@ private:
 
 bool equals(const PabloAST * expr1, const PabloAST *expr2);
 
-typedef std::list<PabloAST *> ExpressionList;
+typedef std::vector<PabloAST *> ExpressionList;
 
 }
 
