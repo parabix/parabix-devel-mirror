@@ -22,10 +22,6 @@ PabloAST * PabloBlock::createNot(PabloAST * expr) {
     return mUnary.findOrCall<OptimizeNot>(PabloAST::ClassTypeId::Not, expr);
 }
 
-Var * PabloBlock::createVar(const std::string name) {
-    return mUnary.findOrMake<Var>(PabloAST::ClassTypeId::Var, mSymbolGenerator.get(name));
-}
-
 Var * PabloBlock::createVar(String * name) {
     return mUnary.findOrMake<Var>(PabloAST::ClassTypeId::Var, name);
 }

@@ -78,9 +78,11 @@ public:
         return assign;
     }
 
-    Var * createVar(const std::string name);
-
     Var * createVar(String * name);
+
+    inline Var * createVar(const std::string name) {
+        return createVar(mSymbolGenerator.get(name));
+    }
 
     inline Var * createVar(Assign * assign) {
         return createVar(assign->mName);

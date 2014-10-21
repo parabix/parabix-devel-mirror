@@ -230,26 +230,26 @@ LLVM_Gen_RetVal PabloCompiler::compile(const PabloBlock & pb)
 
 void PabloCompiler::DefineTypes()
 {
-    StructType * StructTy_struct_Basis_bits = mMod->getTypeByName("struct.Basis_bits");
-    if (StructTy_struct_Basis_bits == nullptr) {
-        StructTy_struct_Basis_bits = StructType::create(mMod->getContext(), "struct.Basis_bits");
+    StructType * structBasisBits = mMod->getTypeByName("struct.Basis_bits");
+    if (structBasisBits == nullptr) {
+        structBasisBits = StructType::create(mMod->getContext(), "struct.Basis_bits");
     }
     std::vector<Type*>StructTy_struct_Basis_bits_fields;
     for (int i = 0; i < mBits; i++)
     {
         StructTy_struct_Basis_bits_fields.push_back(mXi64Vect);
     }
-    if (StructTy_struct_Basis_bits->isOpaque()) {
-        StructTy_struct_Basis_bits->setBody(StructTy_struct_Basis_bits_fields, /*isPacked=*/false);
+    if (structBasisBits->isOpaque()) {
+        structBasisBits->setBody(StructTy_struct_Basis_bits_fields, /*isPacked=*/false);
     }
-    mBasisBitsInputPtr = PointerType::get(StructTy_struct_Basis_bits, 0);
+    mBasisBitsInputPtr = PointerType::get(structBasisBits, 0);
 
-    std::vector<Type*>FuncTy_0_args;
-    FuncTy_0_args.push_back(mBasisBitsInputPtr);
+    std::vector<Type*>functionTypeArgs;
+    functionTypeArgs.push_back(mBasisBitsInputPtr);
 
     //The carry q array.
     //A pointer to the BitBlock vector.
-    FuncTy_0_args.push_back(PointerType::get(mXi64Vect, 0));
+    functionTypeArgs.push_back(PointerType::get(mXi64Vect, 0));
 
     //The output structure.
     StructType * outputStruct = mMod->getTypeByName("struct.Output");
@@ -257,19 +257,19 @@ void PabloCompiler::DefineTypes()
         outputStruct = StructType::create(mMod->getContext(), "struct.Output");
     }
     if (outputStruct->isOpaque()) {
-        std::vector<Type*>StructTy_struct_Output_fields;
-        StructTy_struct_Output_fields.push_back(mXi64Vect);
-        StructTy_struct_Output_fields.push_back(mXi64Vect);
-        outputStruct->setBody(StructTy_struct_Output_fields, /*isPacked=*/false);
+        std::vector<Type*>fields;
+        fields.push_back(mXi64Vect);
+        fields.push_back(mXi64Vect);
+        outputStruct->setBody(fields, /*isPacked=*/false);
     }
     PointerType* outputStructPtr = PointerType::get(outputStruct, 0);
 
     //The &output parameter.
-    FuncTy_0_args.push_back(outputStructPtr);
+    functionTypeArgs.push_back(outputStructPtr);
 
     mFunctionType = FunctionType::get(
      /*Result=*/Type::getVoidTy(mMod->getContext()),
-     /*Params=*/FuncTy_0_args,
+     /*Params=*/functionTypeArgs,
      /*isVarArg=*/false);
 }
 
@@ -425,12 +425,12 @@ void PabloCompiler::DeclareCallFunctions(const PabloAST * expr)
             // OTHERWISE ...
             throw std::runtime_error("Unknown unicode category \"" + callee + "\"");
             #undef CHECK_GENERAL_CODE_CATEGORY
-            Value * get_unicode_category = mMod->getOrInsertFunction("__get_category_" + callee, mXi64Vect, mBasisBitsInputPtr, NULL);
-            if (get_unicode_category == nullptr) {
+            Value * unicodeCategory = mMod->getOrInsertFunction("__get_category_" + callee, mXi64Vect, mBasisBitsInputPtr, NULL);
+            if (unicodeCategory == nullptr) {
                 throw std::runtime_error("Could not create static method call for unicode category \"" + callee + "\"");
             }
-            mExecutionEngine->addGlobalMapping(cast<GlobalValue>(get_unicode_category), callee_ptr);
-            mCalleeMap.insert(std::make_pair(callee, get_unicode_category));
+            mExecutionEngine->addGlobalMapping(cast<GlobalValue>(unicodeCategory), callee_ptr);
+            mCalleeMap.insert(std::make_pair(callee, unicodeCategory));
         }
     }
     else if (const And * pablo_and = dyn_cast<const And>(expr))
