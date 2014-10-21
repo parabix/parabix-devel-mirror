@@ -47,7 +47,7 @@ private:
 
     unsigned parse_utf8_codepoint();
 
-    Name * parse_unicode_category(const bool negated);
+    Name * parse_unicode_category();
 
     RE * parse_charset();
 

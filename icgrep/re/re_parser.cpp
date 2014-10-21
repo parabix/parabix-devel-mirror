@@ -190,7 +190,6 @@ inline RE * RE_Parser::parse_literal() {
 inline RE * RE_Parser::parse_escaped_metacharacter() {
     ++_cursor;
     throw_incomplete_expression_error_if_end_of_stream();
-    bool negated = false;
     switch (*_cursor) {
         case '(': case ')': case '*': case '+':
         case '.': case '?': case '[': case '\\':
@@ -199,9 +198,9 @@ inline RE * RE_Parser::parse_escaped_metacharacter() {
         case 'u':
             return makeCC(parse_hex());
         case 'P':
-            negated = true;
+            return makeDiff(makeAny(), parse_unicode_category());
         case 'p':
-            return parse_unicode_category(negated);
+            return parse_unicode_category();
     }
     throw ParseFailure("Illegal backslash escape!");
 }
@@ -248,7 +247,7 @@ unsigned RE_Parser::parse_utf8_codepoint() {
     return c;
 }
 
-inline Name * RE_Parser::parse_unicode_category(const bool negated) {
+inline Name * RE_Parser::parse_unicode_category() {
     if (++_cursor != _end && *_cursor == '{') {
         const cursor_t start = _cursor + 1;
         for (;;) {
@@ -260,7 +259,7 @@ inline Name * RE_Parser::parse_unicode_category(const bool negated) {
             }
             ++_cursor;
         }
-        return makeName(std::string(start, _cursor++), negated, Name::Type::UnicodeCategory);
+        return makeName(std::string(start, _cursor++), Name::Type::UnicodeCategory);
     }
     throw ParseFailure("Incorrect Unicode character class format!");
 }

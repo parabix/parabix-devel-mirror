@@ -29,7 +29,6 @@ public:
         , UnicodeCategory
     };
     const std::string & getName() const;
-    bool isNegated() const;
     Type getType() const;
     RE *getCC() const;
     pablo::Var * getVar() const {
@@ -42,12 +41,11 @@ public:
     virtual ~Name() {}
 protected:
     friend Name * makeName(const std::string, RE *);
-    friend Name * makeName(const std::string, const bool, const Type);
+    friend Name * makeName(const std::string, const Type);
 
-    Name(const std::string && name, const bool negated, const Type type, RE * cc)
+    Name(const std::string && name, const Type type, RE * cc)
     : RE(ClassTypeId::Name)
     , mName(std::move(name))
-    , mNegated(negated)
     , mType(type)
     , mCC(cc)
     , mVar(nullptr)
@@ -57,7 +55,6 @@ protected:
 
 private:
     const std::string   mName;
-    const bool          mNegated;
     const Type          mType;
     RE *                mCC;
     pablo::Var *        mVar;
@@ -65,10 +62,6 @@ private:
 
 inline const std::string & Name::getName() const {
     return mName;
-}
-
-inline bool Name::isNegated() const {
-    return mNegated;
 }
 
 inline Name::Type Name::getType() const {
@@ -83,15 +76,15 @@ inline void Name::setCC(RE * cc) {
     mCC = cc;
 }
 
-inline Name * makeName(const std::string name, const bool negated = false, const Name::Type type = Name::Type::FixedLength) {
-    return new Name(std::move(name), negated, type, nullptr);
+inline Name * makeName(const std::string name, const Name::Type type = Name::Type::FixedLength) {
+    return new Name(std::move(name), type, nullptr);
 }
 
 inline Name * makeName(const std::string name, RE * cc) {
     if (isa<Name>(cc)) {
         return cast<Name>(cc);
     }
-    return new Name(std::move(name), false, Name::Type::FixedLength, cc);
+    return new Name(std::move(name), Name::Type::FixedLength, cc);
 }
 
 }

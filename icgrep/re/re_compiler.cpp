@@ -128,9 +128,6 @@ inline Assign * RE_Compiler::process(Name * name, Assign * target, PabloBlock & 
     else {
         cc = pb.createVar(name->getName());
     }
-    if (name->isNegated()) {
-        cc = pb.createNot(pb.createOr(pb.createOr(cc, mLineFeed), mNonFinal));
-    }
     return pb.createAssign("m", pb.createAdvance(pb.createAnd(cc, marker)));
 }
 
@@ -195,10 +192,6 @@ inline Assign * RE_Compiler::processUnboundedRep(RE * repeated, int lb, Assign *
         }
         else {
             cc = pb.createVar(rep_name->getName());
-        }
-
-        if (rep_name->isNegated()) {
-            cc = pb.createNot(pb.createOr(cc, pb.createOr(mLineFeed, mNonFinal)));
         }
 
         unbounded = pb.createVar(target);
