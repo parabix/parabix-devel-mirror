@@ -10,7 +10,10 @@ namespace pablo {
 
 /// UNARY CREATE FUNCTIONS
 
-Advance * PabloBlock::createAdvance(PabloAST * expr) {
+PabloAST * PabloBlock::createAdvance(PabloAST * expr) {
+//    if (isa<Zeroes>(expr)) {
+//        return createZeroes();
+//    }
     return mUnary.findOrMake<Advance>(PabloAST::ClassTypeId::Advance, expr);
 }
 
@@ -19,6 +22,12 @@ Call * PabloBlock::createCall(const std::string name) {
 }
 
 PabloAST * PabloBlock::createNot(PabloAST * expr) {
+//    if (isa<Zeroes>(expr)) {
+//        return createOnes();
+//    }
+//    else if (isa<Ones>(expr)) {
+//        return createZeroes();
+//    }
     return mUnary.findOrCall<OptimizeNot>(PabloAST::ClassTypeId::Not, expr);
 }
 
@@ -34,11 +43,23 @@ Next * PabloBlock::createNext(Assign * assign, PabloAST * expr) {
     return next;
 }
 
-MatchStar * PabloBlock::createMatchStar(PabloAST * marker, PabloAST * charclass) {
+PabloAST * PabloBlock::createMatchStar(PabloAST * marker, PabloAST * charclass) {
+//    if (isa<Zeroes>(marker)) {
+//        return createZeroes();
+//    }
+//    else if (isa<Zeroes>(charclass)) {
+//        return marker;
+//    }
     return mBinary.findOrMake<MatchStar>(PabloAST::ClassTypeId::MatchStar, marker, charclass);
 }
 
-ScanThru * PabloBlock::createScanThru(PabloAST * from, PabloAST * thru) {
+PabloAST * PabloBlock::createScanThru(PabloAST * from, PabloAST * thru) {
+//    if (isa<Zeroes>(from)) {
+//        return createZeroes();
+//    }
+//    else if (isa<Zeroes>(thru)) {
+//        return marker;
+//    }
     return mBinary.findOrMake<ScanThru>(PabloAST::ClassTypeId::ScanThru, from, thru);
 }
 

@@ -53,20 +53,6 @@ void CC::insert_range(const CodePointType lo_codepoint, const CodePointType hi_c
     mSparseCharSet.push_back(item);
 }
 
-void CC::negate() {
-    CharSetVector negated;
-    negated.reserve(mSparseCharSet.size() + 1);
-    CodePointType lo_codepoint = 0;
-    for (const CharSetItem & item : mSparseCharSet) {
-        negated.push_back(std::move(CharSetItem(lo_codepoint, item.lo_codepoint - 1)));
-        lo_codepoint = item.hi_codepoint + 1;
-    }
-    if (lo_codepoint <= UNICODE_MAX) {
-        negated.push_back(std::move(CharSetItem(lo_codepoint, UNICODE_MAX)));
-    }
-    mSparseCharSet.assign(negated.begin(), negated.end());
-}
-
 void CC::remove_range(const CodePointType lo_codepoint, const CodePointType hi_codepoint) {
     for (auto i = mSparseCharSet.begin(); i != mSparseCharSet.end(); ) {
         CharSetItem & range = *i;

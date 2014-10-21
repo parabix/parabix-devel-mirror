@@ -47,8 +47,6 @@ public:
 
     void insert_range(const CodePointType lo_codepoint, const CodePointType hi_codepoint);
 
-    void negate();
-
     void remove_range(const CodePointType lo_codepoint, const CodePointType hi_codepoint);
 
     inline void insert(const CodePointType codepoint) {

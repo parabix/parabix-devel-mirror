@@ -57,8 +57,6 @@ private:
 
     unsigned parse_int();
 
-    static void negate_cc(std::unique_ptr<CC> & cc);
-
     inline void throw_incomplete_expression_error_if_end_of_stream() const;
 
 private:

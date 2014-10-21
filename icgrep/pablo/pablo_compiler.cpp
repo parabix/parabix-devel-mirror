@@ -296,12 +296,12 @@ void PabloCompiler::DeclareFunctions()
                                               /*Params=*/FuncTy_1_args,
                                               /*isVarArg=*/false);
 
-    mFunc_llvm_uadd_with_overflow = mMod->getFunction("llvm.uadd.with.overflow.carryin.i##BLOCK_SIZE");
+    mFunc_llvm_uadd_with_overflow = mMod->getFunction("llvm.uadd.with.overflow.carryin.i"##BLOCK_SIZE);
     if (!mFunc_llvm_uadd_with_overflow) {
         mFunc_llvm_uadd_with_overflow = Function::Create(
           /*Type=*/ FuncTy_1,
           /*Linkage=*/ GlobalValue::ExternalLinkage,
-          /*Name=*/ "llvm.uadd.with.overflow.carryin.i##BLOCK_SIZE", mMod); // (external, no body)
+          /*Name=*/ "llvm.uadd.with.overflow.carryin.i"##BLOCK_SIZE, mMod); // (external, no body)
         mFunc_llvm_uadd_with_overflow->setCallingConv(CallingConv::C);
     }
     AttributeSet mFunc_llvm_uadd_with_overflow_PAL;
@@ -730,8 +730,8 @@ Value* PabloCompiler::genAddWithCarry(Value* e1, Value* e2) {
     IRBuilder<> b(mBasicBlock);
 
     //CarryQ - carry in.
-    int this_carry_idx = mCarryQueueIdx++;
-    Value* carryq_value = genCarryInLoad(mCarryQueuePtr, this_carry_idx);
+    const int carryIdx = mCarryQueueIdx++;
+    Value* carryq_value = genCarryInLoad(mCarryQueuePtr, carryIdx);
 
 #ifdef USE_UADD_OVERFLOW
     //use llvm.uadd.with.overflow.i128 or i256
@@ -760,7 +760,7 @@ Value* PabloCompiler::genAddWithCarry(Value* e1, Value* e2) {
     Value* sum = b.CreateAdd(partial, mid_carry_in, "sum");
     Value* carry_out = genShiftHighbitToLow(b.CreateOr(carrygen, b.CreateAnd(carryprop, genNot(sum))), "carry_out");
 #endif
-    genCarryOutStore(carry_out, mCarryQueuePtr, this_carry_idx);
+    genCarryOutStore(carry_out, mCarryQueuePtr, carryIdx);
     return sum;
 }
 

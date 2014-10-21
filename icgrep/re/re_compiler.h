@@ -38,13 +38,14 @@ private:
 
     void compile(RE * re, pablo::PabloBlock & cg);
 
-    pablo::Assign * process(RE * re, pablo::Assign *target, pablo::PabloBlock & cg_state);
-    pablo::Assign * process(Name * name, pablo::Assign * target, pablo::PabloBlock & cg_state);
-    pablo::Assign * process(Seq * seq, pablo::Assign * target, pablo::PabloBlock & cg_state);
-    pablo::Assign * process(Alt * alt, pablo::Assign * target, pablo::PabloBlock & cg_state);
-    pablo::Assign * process(Rep * rep, pablo::Assign *target, pablo::PabloBlock & cg_state);
-    pablo::Assign * processUnboundedRep(RE * repeated, int lb, pablo::Assign * target, pablo::PabloBlock & cg_state);
-    pablo::Assign * processBoundedRep(RE * repeated, int lb, int ub, pablo::Assign * target, pablo::PabloBlock & cg_state);
+    pablo::Assign * process(RE * re, pablo::Assign *target, pablo::PabloBlock & pb);
+    pablo::Assign * process(Name * name, pablo::Assign * target, pablo::PabloBlock & pb);
+    pablo::Assign * process(Seq * seq, pablo::Assign * target, pablo::PabloBlock & pb);
+    pablo::Assign * process(Alt * alt, pablo::Assign * target, pablo::PabloBlock & pb);
+    pablo::Assign * process(Rep * rep, pablo::Assign *target, pablo::PabloBlock & pb);
+    pablo::Assign * process(Diff * diff, pablo::Assign * target, pablo::PabloBlock & cg);
+    pablo::Assign * processUnboundedRep(RE * repeated, int lb, pablo::Assign * target, pablo::PabloBlock & pb);
+    pablo::Assign * processBoundedRep(RE * repeated, int lb, int ub, pablo::Assign * target, pablo::PabloBlock & pb);
 
 
     static bool hasUnicode(const RE *re);

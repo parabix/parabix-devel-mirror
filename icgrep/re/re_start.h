@@ -7,9 +7,7 @@
 #ifndef START_H
 #define START_H
 
-#include "re_re.h"
-
-#include "re_re.h"
+#include <re/re_re.h>
 
 namespace re {
 

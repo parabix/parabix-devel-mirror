@@ -7,15 +7,16 @@
 #include "printer_re.h"
 
 //Regular Expressions
-#include "re/re_re.h"
-#include "re/re_alt.h"
-#include "re/re_any.h"
-#include "re/re_cc.h"
-#include "re/re_name.h"
-#include "re/re_end.h"
-#include "re/re_rep.h"
-#include "re/re_seq.h"
-#include "re/re_start.h"
+#include <re/re_re.h>
+#include <re/re_alt.h>
+#include <re/re_any.h>
+#include <re/re_cc.h>
+#include <re/re_name.h>
+#include <re/re_end.h>
+#include <re/re_rep.h>
+#include <re/re_seq.h>
+#include <re/re_start.h>
+#include <re/re_diff.h>
 
 using namespace re;
 
@@ -24,7 +25,7 @@ const std::string Printer_RE::PrintRE(const RE * re)
     std::string retVal = "";
 
     if (re == nullptr) {
-        retVal = "--> RE NullPtr! <--";
+        retVal = "<NULL>";
     }
     else if (const Alt* re_alt = dyn_cast<const Alt>(re))
     {
@@ -58,6 +59,14 @@ const std::string Printer_RE::PrintRE(const RE * re)
         retVal = "Name \"";
         retVal += re_name->getName();
         retVal += "\" ";
+    }
+    else if (const Diff* diff = dyn_cast<const Diff>(re))
+    {
+        retVal = "Diff (";
+        retVal += PrintRE(diff->getLH());
+        retVal += " , ";
+        retVal += PrintRE(diff->getRH());
+        retVal += ") ";
     }
     else if (isa<const End>(re))
     {
@@ -101,7 +110,7 @@ const std::string Printer_RE::PrintRE(const RE * re)
     }
     else
     {
-        retVal = "--> RE Unknown <--";
+        retVal = "???";
     }
     return std::move(retVal);
 }

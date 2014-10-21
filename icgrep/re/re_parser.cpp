@@ -4,13 +4,14 @@
  *  icgrep is a trademark of International Characters.
  */
 
-#include "re_parser.h"
-#include "re_alt.h"
-#include "re_end.h"
-#include "re_rep.h"
-#include "re_seq.h"
-#include "re_start.h"
-#include "parsefailure.h"
+#include <re/re_parser.h>
+#include <re/re_alt.h>
+#include <re/re_end.h>
+#include <re/re_rep.h>
+#include <re/re_seq.h>
+#include <re/re_start.h>
+#include <re/re_diff.h>
+#include <re/parsefailure.h>
 #include <algorithm>
 
 namespace re {
@@ -288,10 +289,10 @@ RE * RE_Parser::parse_charset() {
                     literal = false;
                     break;
                 }
-                if (negated) {
-                    negate_cc(cc);
-                }
                 ++_cursor;
+                if (negated) {
+                    return makeDiff(makeAny(), cc.release());
+                }
                 return cc.release();
             // The hyphen (-) is not treated as a range separator if it appears first or last, or as the
             // endpoint of a range.
@@ -404,11 +405,6 @@ unsigned RE_Parser::parse_hex() {
         }
     }
     throw ParseFailure("Bad Unicode hex notation!");
-}
-
-inline void RE_Parser::negate_cc(std::unique_ptr<CC> & cc) {
-    cc->negate();
-    cc->remove(10);
 }
 
 inline void RE_Parser::throw_incomplete_expression_error_if_end_of_stream() const {

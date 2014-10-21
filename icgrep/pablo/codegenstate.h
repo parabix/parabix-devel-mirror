@@ -60,7 +60,7 @@ public:
 
     }
 
-    Advance * createAdvance(PabloAST * expr);
+    PabloAST * createAdvance(PabloAST * expr);
 
     inline Zeroes * createZeroes() const {
         return mZeroes;
@@ -113,9 +113,9 @@ public:
 
     PabloAST * createXor(PabloAST * expr1, PabloAST * expr2);
 
-    MatchStar * createMatchStar(PabloAST * marker, PabloAST * charclass);
+    PabloAST * createMatchStar(PabloAST * marker, PabloAST * charclass);
 
-    ScanThru * createScanThru(PabloAST * from, PabloAST * thru);
+    PabloAST * createScanThru(PabloAST * from, PabloAST * thru);
 
     PabloAST * createSel(PabloAST * condition, PabloAST * trueExpr, PabloAST * falseExpr);
 

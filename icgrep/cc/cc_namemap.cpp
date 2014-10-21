@@ -4,7 +4,7 @@
 #include <re/re_alt.h>
 #include <re/re_seq.h>
 #include <re/re_rep.h>
-
+#include <re/re_diff.h>
 #include <re/printer_re.h>
 #include <iostream>
 
@@ -35,6 +35,10 @@ RE * CC_NameMap::process(RE * re) {
     }
     else if (Rep * rep = dyn_cast<Rep>(re)) {
         rep->setRE(process(rep->getRE()));
+    }
+    else if (Diff * diff = dyn_cast<Diff>(re)) {
+        diff->setRH(process(diff->getRH()));
+        diff->setLH(process(diff->getLH()));
     }
     else if (Name * name = dyn_cast<Name>(re)) {
         RE * cc = name->getCC();
