@@ -515,8 +515,8 @@ Value * PabloCompiler::compileStatement(const PabloAST * stmt)
     Value * retVal = nullptr;
     if (const Assign * assign = dyn_cast<const Assign>(stmt))
     {
-        Value * expr = compileExpression(assign->getExpr());
-        Value * marker = GetMarker(assign->getName());
+        Value* expr = compileExpression(assign->getExpr());
+        Value* marker = GetMarker(assign->getName());
         IRBuilder<> b(mBasicBlock);
         b.CreateAlignedStore(expr, marker, BLOCK_SIZE/8, false);
         retVal = marker;
@@ -534,8 +534,8 @@ Value * PabloCompiler::compileStatement(const PabloAST * stmt)
     else if (const If * ifstmt = dyn_cast<const If>(stmt))
     {
         BasicBlock * ifEntryBlock = mBasicBlock;
-        BasicBlock * ifBodyBlock = BasicBlock::Create(mMod->getContext(), "if.body",mFunc_process_block, 0);
-        BasicBlock * ifEndBlock = BasicBlock::Create(mMod->getContext(), "if.end",mFunc_process_block, 0);
+        BasicBlock * ifBodyBlock = BasicBlock::Create(mMod->getContext(), "if.body", mFunc_process_block, 0);
+        BasicBlock * ifEndBlock = BasicBlock::Create(mMod->getContext(), "if.end", mFunc_process_block, 0);
 
         int if_start_idx = mCarryQueueIdx;
 
@@ -544,7 +544,7 @@ Value * PabloCompiler::compileStatement(const PabloAST * stmt)
         /* Generate the statements into the if body block, and also determine the
            final carry index.  */
 
-        IRBuilder<> b_ifbody(ifBodyBlock);
+        IRBuilder<> bIfBody(ifBodyBlock);
         mBasicBlock = ifBodyBlock;
 
         ++mNestingDepth;
@@ -561,12 +561,12 @@ Value * PabloCompiler::compileStatement(const PabloAST * stmt)
             for (int c = if_start_idx+1; c < if_end_idx; c++)
             {
                 Value* carryq_value = genCarryInLoad(c);
-                if_carry_accum_value = b_ifbody.CreateOr(carryq_value, if_carry_accum_value);
+                if_carry_accum_value = bIfBody.CreateOr(carryq_value, if_carry_accum_value);
             }
             genCarryOutStore(if_carry_accum_value, if_accum_idx);
 
         }
-        b_ifbody.CreateBr(ifEndBlock);
+        bIfBody.CreateBr(ifEndBlock);
 
         IRBuilder<> b_entry(ifEntryBlock);
         mBasicBlock = ifEntryBlock;
@@ -583,10 +583,8 @@ Value * PabloCompiler::compileStatement(const PabloAST * stmt)
 
         retVal = returnMarker;
     }
-    else if (const While* whl = dyn_cast<const While>(stmt))
+    else if (const While * whl = dyn_cast<const While>(stmt))
     {
-        BasicBlock* entryBlock = mBasicBlock;
-
         const auto baseCarryQueueIdx = mCarryQueueIdx;
         if (mNestingDepth == 0) {
             for (auto i = 0; i != whl->getInclusiveCarryCount(); ++i) {
@@ -595,18 +593,24 @@ Value * PabloCompiler::compileStatement(const PabloAST * stmt)
         }        
 
         // First compile the initial iteration statements; the calls to genCarryOutStore will update the
-        // mCarryQueueVector with the appropriate values.
+        // mCarryQueueVector with the appropriate values. Although we're not actually entering a new basic
+        // block yet, increment the nesting depth so that any calls to genCarryInLoad or genCarryOutStore
+        // will refer to the previous value.
         ++mNestingDepth;
-        Value * returnMarker = compileStatements(whl->getBody());
-
+        compileStatements(whl->getBody());
+        // Reset the carry queue index. Note: this ought to be changed in the future. Currently this assumes
+        // that compiling the while body twice will generate the equivalent IR. This is not necessarily true
+        // but works for now.
         mCarryQueueIdx = baseCarryQueueIdx;
 
         BasicBlock* whileCondBlock = BasicBlock::Create(mMod->getContext(), "while.cond", mFunc_process_block, 0);
         BasicBlock* whileBodyBlock = BasicBlock::Create(mMod->getContext(), "while.body", mFunc_process_block, 0);
         BasicBlock* whileEndBlock = BasicBlock::Create(mMod->getContext(), "while.end", mFunc_process_block, 0);
 
-        IRBuilder<> b(mBasicBlock);
-        b.CreateBr(whileCondBlock);
+        // Note: compileStatements may update the mBasicBlock pointer if the body contains nested loops. Do not
+        // assume it is the same one in which we entered the function with.
+        IRBuilder<> bEntry(mBasicBlock);
+        bEntry.CreateBr(whileCondBlock);
 
         // CONDITION BLOCK
         IRBuilder<> bCond(whileCondBlock);
@@ -615,7 +619,7 @@ Value * PabloCompiler::compileStatement(const PabloAST * stmt)
         for (auto i = 0; i != whl->getInclusiveCarryCount(); ++i) {
             PHINode * phi = bCond.CreatePHI(mXi64Vect, 2);
             phi->addIncoming(mCarryQueueVector[baseCarryQueueIdx + i], mBasicBlock);
-            mCarryQueueVector[baseCarryQueueIdx + i] = mZeroInitializer; // phi;
+            mCarryQueueVector[baseCarryQueueIdx + i] = mZeroInitializer; // phi; // (use phi for multi-carry mode.)
             carryQueuePhiNodes[i] = phi;
         }
 
@@ -624,7 +628,7 @@ Value * PabloCompiler::compileStatement(const PabloAST * stmt)
 
         // BODY BLOCK
         mBasicBlock = whileBodyBlock;
-        returnMarker = compileStatements(whl->getBody());
+        retVal = compileStatements(whl->getBody());
         // update phi nodes for any carry propogating instruction
         IRBuilder<> bWhileBody(mBasicBlock);
         for (auto i = 0; i != whl->getInclusiveCarryCount(); ++i) {
@@ -642,7 +646,6 @@ Value * PabloCompiler::compileStatement(const PabloAST * stmt)
                 genCarryOutStore(carryQueuePhiNodes[i], baseCarryQueueIdx + i);
             }
         }
-        retVal = returnMarker;
     }
     return retVal;
 }
@@ -782,32 +785,28 @@ Value* PabloCompiler::genAddWithCarry(Value* e1, Value* e2) {
     return sum;
 }
 
-Value* PabloCompiler::genCarryInLoad(const unsigned index) {
-    IRBuilder<> b(mBasicBlock);
+Value* PabloCompiler::genCarryInLoad(const unsigned index) {    
+    assert (index < mCarryQueueVector.size());
     if (mNestingDepth == 0) {
-        LoadInst * carryIn = b.CreateAlignedLoad(b.CreateGEP(mCarryQueuePtr, b.getInt64(index)), BLOCK_SIZE/8, false);
-        mCarryQueueVector[index] = carryIn;
-        return carryIn;
+        IRBuilder<> b(mBasicBlock);
+        mCarryQueueVector[index] = b.CreateAlignedLoad(b.CreateGEP(mCarryQueuePtr, b.getInt64(index)), BLOCK_SIZE/8, false);
     }
-    else { // we're in a potentially-nested while/if block
-        assert (index < mCarryQueueVector.size());
-        return mCarryQueueVector[index];
-    }
+    return mCarryQueueVector[index];
 }
 
 void PabloCompiler::genCarryOutStore(Value* carryOut, const unsigned index ) {
-    IRBuilder<> b(mBasicBlock);
     assert (carryOut);
     assert (index < mCarryQueueVector.size());
-    if (mNestingDepth == 0) {
+    if (mNestingDepth == 0) {        
+        IRBuilder<> b(mBasicBlock);
         b.CreateAlignedStore(carryOut, b.CreateGEP(mCarryQueuePtr, b.getInt64(index)), BLOCK_SIZE/8, false);
     }
     mCarryQueueVector[index] = carryOut;
 }
 
-inline Value* PabloCompiler::genBitBlockAny(Value* e) {
+inline Value* PabloCompiler::genBitBlockAny(Value* test) {
     IRBuilder<> b(mBasicBlock);
-    Value* cast_marker_value_1 = b.CreateBitCast(e, IntegerType::get(mMod->getContext(), BLOCK_SIZE));
+    Value* cast_marker_value_1 = b.CreateBitCast(test, IntegerType::get(mMod->getContext(), BLOCK_SIZE));
     return b.CreateICmpEQ(cast_marker_value_1, ConstantInt::get(IntegerType::get(mMod->getContext(), BLOCK_SIZE), 0));
 }
 

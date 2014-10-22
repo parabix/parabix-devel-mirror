@@ -26,8 +26,10 @@ PabloAST * PabloBlock::createNot(PabloAST * expr) {
     return mUnary.findOrCall<OptimizeNot>(PabloAST::ClassTypeId::Not, expr);
 }
 
-Var * PabloBlock::createVar(String * name) {
-    return mUnary.findOrMake<Var>(PabloAST::ClassTypeId::Var, name);
+Var * PabloBlock::createVar(String * name, const bool internal) {
+    // Note: this is a unary function; internal is a hidden property passed into the constructor
+    // when instantiating a new variable.
+    return mUnary.findOrMake<Var>(PabloAST::ClassTypeId::Var, name, internal);
 }
 
 /// BINARY CREATE FUNCTIONS

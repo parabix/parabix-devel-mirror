@@ -108,7 +108,7 @@ private:
     void   genCarryOutStore(Value* carryOut, const unsigned index);
     Value* genAddWithCarry(Value* e1, Value* e2);
     Value* genAdvanceWithCarry(Value* e1);
-    Value* genBitBlockAny(Value* e);
+    Value* genBitBlockAny(Value* test);
     Value* genShiftHighbitToLow(Value* e, const Twine & namehint = "");
     Value* genShiftLeft64(Value* e, const Twine & namehint = "") ;
     Value* genNot(Value* expr);

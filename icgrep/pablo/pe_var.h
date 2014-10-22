@@ -27,14 +27,22 @@ public:
     inline const String * getName() const {
         return mName;
     }
+    inline bool isInternal() const {
+        return mInternal;
+    }
+    inline bool isExternal() const {
+        return !mInternal;
+    }
 protected:
-    Var(const PabloAST * var)
+    Var(const PabloAST * var, const bool internal)
     : PabloAST(ClassTypeId::Var)
-    , mName(cast<String>(var)) {
+    , mName(cast<String>(var))
+    , mInternal(internal) {
 
     }
 private:
     const String * const mName;
+    const bool           mInternal;
 };
 
 }

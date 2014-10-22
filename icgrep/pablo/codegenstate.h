@@ -39,9 +39,9 @@ class PabloBlock {
 public:
 
     PabloBlock(SymbolGenerator & symgen)
-    : mSymbolGenerator(symgen)
-    , mZeroes(new Zeroes())
+    : mZeroes(new Zeroes())
     , mOnes(new Ones())
+    , mSymbolGenerator(symgen)
     , mUnary(nullptr, this)
     , mBinary(nullptr, this)
     , mTernary(nullptr, this)
@@ -50,9 +50,9 @@ public:
     }
 
     PabloBlock(PabloBlock & cg)
-    : mSymbolGenerator(cg.mSymbolGenerator)
-    , mZeroes(cg.mZeroes) // inherit the original "Zeroes" variable for simplicity
+    : mZeroes(cg.mZeroes) // inherit the original "Zeroes" variable for simplicity
     , mOnes(cg.mOnes) // inherit the original "Ones" variable for simplicity
+    , mSymbolGenerator(cg.mSymbolGenerator)
     , mUnary(&(cg.mUnary), this)
     , mBinary(&(cg.mBinary), this)
     , mTernary(&(cg.mTernary), this)
@@ -73,23 +73,23 @@ public:
     Call * createCall(const std::string name);
 
     inline Assign * createAssign(const std::string prefix, PabloAST * expr) {
+        // TODO: should this test whether we've somehow created a var for this prior to
+        // making the assignment?
         Assign * assign = new Assign(mSymbolGenerator.get_ssa(prefix), expr);
         mStatements.push_back(assign);
         return assign;
     }
 
-    Var * createVar(String * name);
-
     inline Var * createVar(const std::string name) {
-        return createVar(mSymbolGenerator.get(name));
+        return createVar(mSymbolGenerator.get(name), false);
     }
 
     inline Var * createVar(Assign * assign) {
-        return createVar(assign->mName);
+        return createVar(assign->mName, true);
     }
 
     inline Var * createVar(Next * next) {
-        return createVar(next->mInitial->mName);
+        return createVar(next->mInitial->mName, true);
     }
 
     inline PabloAST * createVar(PabloAST * const input) {
@@ -133,6 +133,7 @@ public:
 
     template<typename... Args>
     struct ExpressionMap {
+        enum {N = sizeof...(Args)};
         typedef ExpressionMap<Args...> MapType;
         typedef std::tuple<PabloAST::ClassTypeId, Args...> Key;
 
@@ -143,27 +144,28 @@ public:
 
         }
 
-        template <class Type>
-        inline Type * findOrMake(const PabloAST::ClassTypeId type, Args... args) {
+        template <class Type, typename... Params>
+        inline Type * findOrMake(const PabloAST::ClassTypeId type, Args... args, Params... params) {
             Key key = std::make_tuple(type, args...);
-            PabloAST * f = find(key);
+            PabloAST * const f = find(key);
             if (f) {
                 return cast<Type>(f);
             }
-            Type * expr = new Type(args...);
+            Type * const expr = new Type(std::forward<Args>(args)..., std::forward<Params>(params)...);
             insert(std::move(key), expr);
             return expr;
         }
 
-        template <class Functor>
-        inline PabloAST * findOrCall(const PabloAST::ClassTypeId type, Args... args) {
+
+        template <class Functor, typename... Params>
+        inline PabloAST * findOrCall(const PabloAST::ClassTypeId type, Args... args, Params... params) {
             Key key = std::make_tuple(type, args...);
-            PabloAST * f = find(key);
+            PabloAST * const f = find(key);
             if (f) {
                 return f;
             }
             Functor mf(mCodeGenState);
-            PabloAST * expr = mf(args...);
+            PabloAST * const expr = mf(std::forward<Args>(args)..., std::forward<Params>(params)...);
             insert(std::move(key), expr);
             return expr;
         }
@@ -201,10 +203,14 @@ public:
         return mStatements;
     }
 
-private:    
+protected:
+
+    Var * createVar(String * name, const bool internal);
+
+private:        
+    Zeroes * const                                      mZeroes;
+    Ones * const                                        mOnes;
     SymbolGenerator &                                   mSymbolGenerator;
-    Zeroes *                                            mZeroes;
-    Ones *                                              mOnes;
     ExpressionMap<PabloAST *>                           mUnary;
     ExpressionMap<PabloAST *, PabloAST *>               mBinary;
     ExpressionMap<PabloAST *, PabloAST *, PabloAST *>   mTernary;
