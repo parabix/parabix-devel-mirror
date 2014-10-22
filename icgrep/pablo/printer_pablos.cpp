@@ -71,10 +71,10 @@ std::string StatementPrinter::Print_CC_PabloStmts(const pablo::ExpressionList &s
 std::string StatementPrinter::ShowPabloS(const PabloAST * stmt)
 {
     if (const Assign * an = dyn_cast<const Assign>(stmt)) {
-        return "Assign('" + an->getName() + "', " + ShowPabloAST(an->getExpr()) + "),";
+        return "Assign('" + an->getName()->str() + "', " + ShowPabloAST(an->getExpr()) + "),";
     }
     else if (const Next * next = dyn_cast<const Next>(stmt)) {
-        return "Next(" + next->getName() + ", " + ShowPabloAST(next->getExpr()) + ")";
+        return "Next(" + next->getName()->str() + ", " + ShowPabloAST(next->getExpr()) + ")";
     }
     else if (const If * ifstmt = dyn_cast<const If>(stmt)) {
         return "If(" + ShowPabloAST(ifstmt->getCondition()) + ", " + Print_PB_PabloStmts(ifstmt->getBody()) + ")";
@@ -93,10 +93,10 @@ std::string StatementPrinter::ShowPabloAST(const PabloAST *expr) {
         return "Ones";
     }
     else if (const Call * pablo_call = dyn_cast<const Call>(expr)) {
-        return "Call '" + pablo_call->getCallee() + "'";
+        return "Call '" + pablo_call->getCallee()->str() + "'";
     }
     else if (const Var * pablo_var = dyn_cast<const Var>(expr)) {
-        return "Var '" + pablo_var->getName() + "' ";
+        return "Var '" + pablo_var->getName()->str() + "' ";
     }
     else if (const And * pablo_and = dyn_cast<const And>(expr)) {
         return "And(" + ShowPabloAST(pablo_and->getExpr1()) +", " + ShowPabloAST(pablo_and->getExpr2()) + ")";

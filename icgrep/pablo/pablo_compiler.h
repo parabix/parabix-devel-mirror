@@ -82,11 +82,15 @@ class PabloCompiler {
         Value * obit;
     };
     #endif
+
+    typedef std::unordered_map<const pablo::String *, Value*>   StringToValueMap;
+    typedef std::vector<Value*>                                 CarryQueueVector;
+
 public:
     typedef cc::CC_Compiler::BasisBitVars BasisBitVars;
     PabloCompiler(const cc::CC_NameMap & nameMap, const BasisBitVars & basisBitVars, int bits);
     ~PabloCompiler();
-    LLVM_Gen_RetVal compile(const PabloBlock & pb);
+    LLVM_Gen_RetVal compile(PabloBlock & pb);
 private:
     void DefineTypes();
     void DeclareFunctions();
@@ -94,14 +98,14 @@ private:
     void DeclareCallFunctions(const PabloAST * expr);
     void SetReturnMarker(Value * marker, const unsigned index);
 
-    Value* GetMarker(const std::string & name);
+    Value* GetMarker(const String *name);
 
     Value* compileStatements(const ExpressionList & stmts);
     Value* compileStatement(const PabloAST * stmt);
 
     Value* compileExpression(const PabloAST * expr);
-    LoadInst* genCarryInLoad(Value* ptr_carry_q, const unsigned index);
-    StoreInst* genCarryOutStore(Value * carryout, Value * ptr_carry_q, const unsigned index);
+    Value* genCarryInLoad(const unsigned index);
+    void   genCarryOutStore(Value* carryOut, const unsigned index);
     Value* genAddWithCarry(Value* e1, Value* e2);
     Value* genAdvanceWithCarry(Value* e1);
     Value* genBitBlockAny(Value* e);
@@ -113,9 +117,8 @@ private:
     SumWithOverflowPack callUaddOverflow(Value *e1, Value *e2, Value *cin);
     #endif
 
-    std::map<std::string, Value*>       mCalleeMap;
-    std::map<std::string, Value*>       mMarkerMap;
-
+    StringToValueMap                    mMarkerMap;
+    CarryQueueVector                    mCarryQueueVector;
 
     int                                 mBits;    
     const BasisBitVars &                mBasisBitVars;
@@ -128,10 +131,10 @@ private:
     VectorType* const                   mXi128Vect;
     PointerType*                        mBasisBitsInputPtr;
 
-    int                                 mCarryQueueIdx;
+    unsigned                            mCarryQueueIdx;
     Value*                              mCarryQueuePtr;
-
-    int                                 mCarryQueueSize;
+    unsigned                            mNestingDepth;
+    unsigned                            mCarryQueueSize;
 
     ConstantAggregateZero* const        mZeroInitializer;
     Constant* const                     mOneInitializer;
@@ -142,6 +145,8 @@ private:
 
     Value*                              mBasisBitsAddr;
     Value*                              mOutputAddrPtr;
+
+    StringToValueMap                    mCalleeMap;
 
     const cc::CC_NameMap &              mNameMap;
 };

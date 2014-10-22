@@ -28,10 +28,10 @@ public:
     inline const ExpressionList & getBody() const {
         return mBody;
     }
-    inline void setCarryCount(const unsigned count) {
+    inline void setInclusiveCarryCount(const unsigned count) {
         mCarryCount = count;
     }
-    inline unsigned getCarryCount() const {
+    inline unsigned getInclusiveCarryCount() const {
         return mCarryCount;
     }
 protected:

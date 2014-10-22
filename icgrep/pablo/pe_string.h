@@ -6,8 +6,8 @@
 
 namespace pablo {
 
-class String : public PabloAST, public std::string {
-    friend String * makeString(const std::string);
+class String : public PabloAST {
+    friend String * makeString(const std::string value) noexcept;
 public:
     static inline bool classof(const PabloAST * e) {
         return e->getClassTypeId() == ClassTypeId::String;
@@ -18,13 +18,16 @@ public:
     virtual ~String(){
 
     }
-    inline const std::string & getValue() const {
+    inline const std::string & str() const {
+        return mValue;
+    }
+    inline std::string str() {
         return mValue;
     }
 protected:
-    String(const std::string string) noexcept
+    String(const std::string && value) noexcept
     : PabloAST(ClassTypeId::String)
-    , std::string(string)
+    , mValue(value)
     {
 
     }
@@ -32,9 +35,10 @@ private:
     const std::string mValue;
 };
 
-inline String * makeString(const std::string string) {
-    return new String(string);
+inline String * makeString(const std::string value) noexcept {
+    return new String(std::move(value));
 }
+
 
 }
 

@@ -24,17 +24,17 @@ public:
     }
     virtual ~Var(){
     }
-    inline const std::string & getName() const {
-        return *mVar;
+    inline const String * getName() const {
+        return mName;
     }
 protected:
     Var(const PabloAST * var)
     : PabloAST(ClassTypeId::Var)
-    , mVar(cast<String>(var)) {
+    , mName(cast<String>(var)) {
 
     }
 private:
-    const String * const mVar;
+    const String * const mName;
 };
 
 }

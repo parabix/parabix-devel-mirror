@@ -20,7 +20,7 @@ public:
     inline const Assign * getInitial() const {
         return mInitial;
     }
-    inline const std::string & getName() const {
+    inline const String * getName() const {
         return mInitial->getName();
     }
     inline PabloAST * getExpr() const {

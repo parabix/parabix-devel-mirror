@@ -247,7 +247,7 @@ unsigned RE_Parser::parse_utf8_codepoint() {
     return c;
 }
 
-inline Name * RE_Parser::parse_unicode_category() {
+Name * RE_Parser::parse_unicode_category() {
     if (++_cursor != _end && *_cursor == '{') {
         const cursor_t start = _cursor + 1;
         for (;;) {

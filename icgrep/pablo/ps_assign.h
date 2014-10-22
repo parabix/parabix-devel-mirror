@@ -23,8 +23,8 @@ public:
     }
     virtual ~Assign() {
     }
-    inline const std::string & getName() const {
-        return *mName;
+    inline const String * getName() const {
+        return mName;
     }
     inline PabloAST * getExpr() const {
         return mExpr;

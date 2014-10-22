@@ -84,6 +84,7 @@ PabloCompiler::PabloCompiler(const cc::CC_NameMap & nameMap, const BasisBitVars 
 , mBasisBitsInputPtr(nullptr)
 , mCarryQueueIdx(0)
 , mCarryQueuePtr(nullptr)
+, mNestingDepth(0)
 , mCarryQueueSize(0)
 , mZeroInitializer(ConstantAggregateZero::get(mXi64Vect))
 , mOneInitializer(ConstantVector::getAllOnesValue(mXi64Vect))
@@ -144,10 +145,11 @@ PabloCompiler::~PabloCompiler()
 
 }
 
-LLVM_Gen_RetVal PabloCompiler::compile(const PabloBlock & pb)
+LLVM_Gen_RetVal PabloCompiler::compile(PabloBlock & pb)
 {
     mCarryQueueSize = 0;
     DeclareCallFunctions(pb.expressions());
+    mCarryQueueVector.resize(mCarryQueueSize);
 
     Function::arg_iterator args = mFunc_process_block->arg_begin();
     mBasisBitsAddr = args++;
@@ -159,22 +161,27 @@ LLVM_Gen_RetVal PabloCompiler::compile(const PabloBlock & pb)
 
     //Create the carry queue.
     mCarryQueueIdx = 0;
+    mNestingDepth = 0;
     mBasicBlock = BasicBlock::Create(mMod->getContext(), "parabix_entry", mFunc_process_block,0);
 
     //The basis bits structure
     for (unsigned i = 0; i < mBits; ++i) {
         IRBuilder<> b(mBasicBlock);
         Value* indices[] = {b.getInt64(0), b.getInt32(i)};
-        const std::string name = mBasisBitVars[i]->getName();
-        mMarkerMap.insert(make_pair(name, b.CreateGEP(mBasisBitsAddr, indices, name)));
+        const String * const name = mBasisBitVars[i]->getName();
+        mMarkerMap.insert(std::make_pair(name, b.CreateGEP(mBasisBitsAddr, indices, name->str())));
     }
 
     //Generate the IR instructions for the function.
-    SetReturnMarker(compileStatements(pb.expressions()), 0); // matches
-    SetReturnMarker(GetMarker(mNameMap["LineFeed"]->getName()), 1); // line feeds
+    Value * result = compileStatements(pb.expressions());
+    SetReturnMarker(result, 0); // matches
+
+    const String * lf = pb.createVar(mNameMap["LineFeed"]->getName())->getName();
+
+    SetReturnMarker(GetMarker(lf), 1); // line feeds
 
     assert (mCarryQueueIdx == mCarryQueueSize);
-
+    assert (mNestingDepth == 0);
     //Terminate the block
     ReturnInst::Create(mMod->getContext(), mBasicBlock);
 
@@ -371,25 +378,30 @@ void PabloCompiler::DeclareCallFunctions(const ExpressionList & stmts) {
         if (const Next * next = dyn_cast<Next>(stmt)) {
             DeclareCallFunctions(next->getExpr());
         }
-        else if (If * ifstmt = dyn_cast<If>(stmt)) {
-            DeclareCallFunctions(ifstmt->getCondition());
-            DeclareCallFunctions(ifstmt->getBody());
+        else if (If * ifStatement = dyn_cast<If>(stmt)) {
+            const auto preIfCarryCount = mCarryQueueSize;
+            DeclareCallFunctions(ifStatement->getCondition());
+            DeclareCallFunctions(ifStatement->getBody());
+            ifStatement->setInclusiveCarryCount(mCarryQueueSize - preIfCarryCount);
         }
-        else if (While * whl = dyn_cast<While>(stmt)) {
-            DeclareCallFunctions(whl->getCondition());
-            DeclareCallFunctions(whl->getBody());
+        else if (While * whileStatement = dyn_cast<While>(stmt)) {
+            const auto preWhileCarryCount = mCarryQueueSize;
+            DeclareCallFunctions(whileStatement->getCondition());
+            DeclareCallFunctions(whileStatement->getBody());
+            whileStatement->setInclusiveCarryCount(mCarryQueueSize - preWhileCarryCount);
         }
     }
 }
 
 void PabloCompiler::DeclareCallFunctions(const PabloAST * expr)
 {
-    if (const Call * pablo_call = dyn_cast<const Call>(expr)) {
-        const std::string callee = pablo_call->getCallee();
+    if (const Call * call = dyn_cast<const Call>(expr)) {
+        const String * const callee = call->getCallee();
+        assert (callee);
         if (mCalleeMap.find(callee) == mCalleeMap.end()) {
             void * callee_ptr = nullptr;
             #define CHECK_GENERAL_CODE_CATEGORY(SUFFIX) \
-                if (callee == #SUFFIX) { \
+                if (callee->str() == #SUFFIX) { \
                     callee_ptr = (void*)&__get_category_##SUFFIX; \
                 } else
             CHECK_GENERAL_CODE_CATEGORY(Cc)
@@ -423,11 +435,11 @@ void PabloCompiler::DeclareCallFunctions(const PabloAST * expr)
             CHECK_GENERAL_CODE_CATEGORY(Zp)
             CHECK_GENERAL_CODE_CATEGORY(Zs)
             // OTHERWISE ...
-            throw std::runtime_error("Unknown unicode category \"" + callee + "\"");
+            throw std::runtime_error("Unknown unicode category \"" + callee->str() + "\"");
             #undef CHECK_GENERAL_CODE_CATEGORY
-            Value * unicodeCategory = mMod->getOrInsertFunction("__get_category_" + callee, mXi64Vect, mBasisBitsInputPtr, NULL);
+            Value * unicodeCategory = mMod->getOrInsertFunction("__get_category_" + callee->str(), mXi64Vect, mBasisBitsInputPtr, NULL);
             if (unicodeCategory == nullptr) {
-                throw std::runtime_error("Could not create static method call for unicode category \"" + callee + "\"");
+                throw std::runtime_error("Could not create static method call for unicode category \"" + callee->str() + "\"");
             }
             mExecutionEngine->addGlobalMapping(cast<GlobalValue>(unicodeCategory), callee_ptr);
             mCalleeMap.insert(std::make_pair(callee, unicodeCategory));
@@ -472,21 +484,21 @@ void PabloCompiler::DeclareCallFunctions(const PabloAST * expr)
     }
 }
 
-inline Value* PabloCompiler::GetMarker(const std::string & name) {
+inline Value* PabloCompiler::GetMarker(const String * name) {
     auto itr = mMarkerMap.find(name);
     if (itr == mMarkerMap.end()) {
         IRBuilder<> b(mBasicBlock);
-        itr = mMarkerMap.insert(make_pair(name, b.CreateAlloca(mXi64Vect))).first;
+        itr = mMarkerMap.insert(std::make_pair(name, b.CreateAlloca(mXi64Vect))).first;
     }
     return itr->second;
 }
 
 void PabloCompiler::SetReturnMarker(Value * marker, const unsigned index) {
     IRBuilder<> b(mBasicBlock);
-    Value* marker_bitblock = b.CreateLoad(marker);
+    Value* marker_bitblock = b.CreateAlignedLoad(marker, BLOCK_SIZE/8, false);
     Value* output_indices[] = {b.getInt64(0), b.getInt32(index)};
     Value* output_struct_GEP = b.CreateGEP(mOutputAddrPtr, output_indices);
-    b.CreateStore(marker_bitblock, output_struct_GEP);
+    b.CreateAlignedStore(marker_bitblock, output_struct_GEP, BLOCK_SIZE/8, false);
 }
 
 
@@ -506,7 +518,7 @@ Value * PabloCompiler::compileStatement(const PabloAST * stmt)
         Value * expr = compileExpression(assign->getExpr());
         Value * marker = GetMarker(assign->getName());
         IRBuilder<> b(mBasicBlock);
-        b.CreateStore(expr, marker)->setAlignment(BLOCK_SIZE / 8);
+        b.CreateAlignedStore(expr, marker, BLOCK_SIZE/8, false);
         retVal = marker;
     }
     if (const Next * next = dyn_cast<const Next>(stmt))
@@ -516,7 +528,7 @@ Value * PabloCompiler::compileStatement(const PabloAST * stmt)
         assert (f != mMarkerMap.end());
         Value * marker = f->second;
         Value * expr = compileExpression(next->getExpr());
-        b.CreateStore(expr, marker, false)->setAlignment(BLOCK_SIZE / 8);
+        b.CreateAlignedStore(expr, marker, BLOCK_SIZE/8, false);
         retVal = marker;
     }
     else if (const If * ifstmt = dyn_cast<const If>(stmt))
@@ -535,6 +547,8 @@ Value * PabloCompiler::compileStatement(const PabloAST * stmt)
         IRBuilder<> b_ifbody(ifBodyBlock);
         mBasicBlock = ifBodyBlock;
 
+        ++mNestingDepth;
+
         Value *  returnMarker = compileStatements(ifstmt->getBody());
 
         int if_end_idx = mCarryQueueIdx;
@@ -542,14 +556,14 @@ Value * PabloCompiler::compileStatement(const PabloAST * stmt)
             // Have at least two internal carries.   Accumulate and store.
             int if_accum_idx = mCarryQueueIdx++;
 
-            Value* if_carry_accum_value = genCarryInLoad(mCarryQueuePtr, if_start_idx);
+            Value* if_carry_accum_value = genCarryInLoad(if_start_idx);
 
             for (int c = if_start_idx+1; c < if_end_idx; c++)
             {
-                Value* carryq_value = genCarryInLoad(mCarryQueuePtr, c);
+                Value* carryq_value = genCarryInLoad(c);
                 if_carry_accum_value = b_ifbody.CreateOr(carryq_value, if_carry_accum_value);
             }
-            genCarryOutStore(if_carry_accum_value, mCarryQueuePtr, if_accum_idx);
+            genCarryOutStore(if_carry_accum_value, if_accum_idx);
 
         }
         b_ifbody.CreateBr(ifEndBlock);
@@ -559,67 +573,75 @@ Value * PabloCompiler::compileStatement(const PabloAST * stmt)
         if (if_start_idx < if_end_idx) {
             // Have at least one internal carry.
             int if_accum_idx = mCarryQueueIdx - 1;
-            Value* last_if_pending_carries = genCarryInLoad(mCarryQueuePtr, if_accum_idx);
+            Value* last_if_pending_carries = genCarryInLoad(if_accum_idx);
             if_test_value = b_entry.CreateOr(if_test_value, last_if_pending_carries);
         }
         b_entry.CreateCondBr(genBitBlockAny(if_test_value), ifEndBlock, ifBodyBlock);
 
         mBasicBlock = ifEndBlock;
+        --mNestingDepth;
 
         retVal = returnMarker;
     }
     else if (const While* whl = dyn_cast<const While>(stmt))
     {
-        int idx = mCarryQueueIdx;
+        BasicBlock* entryBlock = mBasicBlock;
 
-        //With this call to the while body we will account for all of the carry in values.
+        const auto baseCarryQueueIdx = mCarryQueueIdx;
+        if (mNestingDepth == 0) {
+            for (auto i = 0; i != whl->getInclusiveCarryCount(); ++i) {
+                genCarryInLoad(baseCarryQueueIdx + i);
+            }
+        }        
+
+        // First compile the initial iteration statements; the calls to genCarryOutStore will update the
+        // mCarryQueueVector with the appropriate values.
+        ++mNestingDepth;
         Value * returnMarker = compileStatements(whl->getBody());
 
-        BasicBlock*  whileCondBlock = BasicBlock::Create(mMod->getContext(), "while.cond", mFunc_process_block, 0);
-        BasicBlock*  whileBodyBlock = BasicBlock::Create(mMod->getContext(), "while.body", mFunc_process_block, 0);
-        BasicBlock*  whileEndBlock = BasicBlock::Create(mMod->getContext(), "while.end", mFunc_process_block, 0);
+        mCarryQueueIdx = baseCarryQueueIdx;
+
+        BasicBlock* whileCondBlock = BasicBlock::Create(mMod->getContext(), "while.cond", mFunc_process_block, 0);
+        BasicBlock* whileBodyBlock = BasicBlock::Create(mMod->getContext(), "while.body", mFunc_process_block, 0);
+        BasicBlock* whileEndBlock = BasicBlock::Create(mMod->getContext(), "while.end", mFunc_process_block, 0);
 
         IRBuilder<> b(mBasicBlock);
         b.CreateBr(whileCondBlock);
+
+        // CONDITION BLOCK
+        IRBuilder<> bCond(whileCondBlock);
+        // generate phi nodes for any carry propogating instruction
+        std::vector<PHINode*> carryQueuePhiNodes(whl->getInclusiveCarryCount());
+        for (auto i = 0; i != whl->getInclusiveCarryCount(); ++i) {
+            PHINode * phi = bCond.CreatePHI(mXi64Vect, 2);
+            phi->addIncoming(mCarryQueueVector[baseCarryQueueIdx + i], mBasicBlock);
+            mCarryQueueVector[baseCarryQueueIdx + i] = mZeroInitializer; // phi;
+            carryQueuePhiNodes[i] = phi;
+        }
+
         mBasicBlock = whileCondBlock;
-        IRBuilder<> b_cond(whileCondBlock);
+        bCond.CreateCondBr(genBitBlockAny(compileExpression(whl->getCondition())), whileEndBlock, whileBodyBlock);
 
-        Value* expression_marker_value = compileExpression(whl->getCondition());
-        Value* int_tobool1 = genBitBlockAny(expression_marker_value);
-
-        b_cond.CreateCondBr(int_tobool1, whileEndBlock, whileBodyBlock);
-
+        // BODY BLOCK
         mBasicBlock = whileBodyBlock;
-        mCarryQueueIdx = 0;
-        //Store the current carry queue.
-        Value* ptr_last_carry_q = mCarryQueuePtr;
-
-        IRBuilder<> b_wb1(mBasicBlock);
-        //Create and initialize a new carry queue.
-        Value * ptr_while_carry_q = b_wb1.CreateAlloca(mXi64Vect, b_wb1.getInt64(mCarryQueueSize - idx));
-        for (int i = 0; i < (mCarryQueueSize - idx); i++) {
-            genCarryOutStore(mZeroInitializer, ptr_while_carry_q, i);
-        }
-
-        //Point mptr_carry_q to the new local carry queue.
-        mCarryQueuePtr = ptr_while_carry_q;
-
         returnMarker = compileStatements(whl->getBody());
-
-        IRBuilder<> b_wb2(mBasicBlock);
-        //Copy back to the last carry queue the carries from the execution of the while statement list.
-        for (int c = 0; c < (mCarryQueueSize - idx); c++)
-        {
-            Value* new_carryq_value = b_wb2.CreateOr(genCarryInLoad(mCarryQueuePtr, c), genCarryInLoad(ptr_last_carry_q, idx + c));
-            genCarryOutStore(new_carryq_value, ptr_last_carry_q, idx + c);
+        // update phi nodes for any carry propogating instruction
+        IRBuilder<> bWhileBody(mBasicBlock);
+        for (auto i = 0; i != whl->getInclusiveCarryCount(); ++i) {
+            Value * carryOut = bWhileBody.CreateOr(carryQueuePhiNodes[i], mCarryQueueVector[baseCarryQueueIdx + i]);
+            carryQueuePhiNodes[i]->addIncoming(carryOut, mBasicBlock);
+            mCarryQueueVector[baseCarryQueueIdx + i] = carryQueuePhiNodes[i];
         }
 
-        b_wb2.CreateBr(whileCondBlock);
+        bWhileBody.CreateBr(whileCondBlock);
 
-        mBasicBlock = whileEndBlock;
-        mCarryQueuePtr = ptr_last_carry_q;
-        mCarryQueueIdx += idx;
-
+        // EXIT BLOCK
+        mBasicBlock = whileEndBlock;    
+        if (--mNestingDepth == 0) {
+            for (auto i = 0; i != whl->getInclusiveCarryCount(); ++i) {
+                genCarryOutStore(carryQueuePhiNodes[i], baseCarryQueueIdx + i);
+            }
+        }
         retVal = returnMarker;
     }
     return retVal;
@@ -641,24 +663,20 @@ Value * PabloCompiler::compileExpression(const PabloAST * expr)
         if (mi == mMarkerMap.end()) {
             auto ci = mCalleeMap.find(call->getCallee());
             if (ci == mCalleeMap.end()) {
-                throw std::runtime_error("Unexpected error locating static function for \"" + call->getCallee() + "\"");
+                throw std::runtime_error("Unexpected error locating static function for \"" + call->getCallee()->str() + "\"");
             }
             Value * unicode_category = b.CreateCall(ci->second, mBasisBitsAddr);
             Value * ptr = b.CreateAlloca(mXi64Vect);
-            b.CreateStore(unicode_category, ptr)->setAlignment(BLOCK_SIZE / 8);
+            b.CreateAlignedStore(unicode_category, ptr, BLOCK_SIZE/8, false);
             mi = mMarkerMap.insert(std::make_pair(call->getCallee(), ptr)).first;
         }
-        LoadInst * li = b.CreateLoad(mi->second, false, call->getCallee());
-        li->setAlignment(BLOCK_SIZE/8);
-        retVal = li;
+        retVal = b.CreateAlignedLoad(mi->second, BLOCK_SIZE/8, false, call->getCallee()->str() );
     }
     else if (const Var * var = dyn_cast<Var>(expr))
     {
         auto f = mMarkerMap.find(var->getName());
         assert (f != mMarkerMap.end());
-        LoadInst * li = b.CreateLoad(f->second, false, var->getName());
-        li->setAlignment(BLOCK_SIZE/8);
-        retVal = li;
+        retVal = b.CreateAlignedLoad(f->second, BLOCK_SIZE/8, false, var->getName()->str() );
     }
     else if (const And * pablo_and = dyn_cast<And>(expr))
     {
@@ -731,7 +749,7 @@ Value* PabloCompiler::genAddWithCarry(Value* e1, Value* e2) {
 
     //CarryQ - carry in.
     const int carryIdx = mCarryQueueIdx++;
-    Value* carryq_value = genCarryInLoad(mCarryQueuePtr, carryIdx);
+    Value* carryq_value = genCarryInLoad(carryIdx);
 
 #ifdef USE_UADD_OVERFLOW
     //use llvm.uadd.with.overflow.i128 or i256
@@ -760,22 +778,31 @@ Value* PabloCompiler::genAddWithCarry(Value* e1, Value* e2) {
     Value* sum = b.CreateAdd(partial, mid_carry_in, "sum");
     Value* carry_out = genShiftHighbitToLow(b.CreateOr(carrygen, b.CreateAnd(carryprop, genNot(sum))), "carry_out");
 #endif
-    genCarryOutStore(carry_out, mCarryQueuePtr, carryIdx);
+    genCarryOutStore(carry_out, carryIdx);
     return sum;
 }
 
-LoadInst* PabloCompiler::genCarryInLoad(Value* ptr_carry_q, const unsigned index) {
+Value* PabloCompiler::genCarryInLoad(const unsigned index) {
     IRBuilder<> b(mBasicBlock);
-    LoadInst * result = b.CreateLoad(b.CreateGEP(ptr_carry_q, b.getInt64(index)));
-    result->setAlignment(BLOCK_SIZE / 8);
-    return result;
+    if (mNestingDepth == 0) {
+        LoadInst * carryIn = b.CreateAlignedLoad(b.CreateGEP(mCarryQueuePtr, b.getInt64(index)), BLOCK_SIZE/8, false);
+        mCarryQueueVector[index] = carryIn;
+        return carryIn;
+    }
+    else { // we're in a potentially-nested while/if block
+        assert (index < mCarryQueueVector.size());
+        return mCarryQueueVector[index];
+    }
 }
 
-StoreInst* PabloCompiler::genCarryOutStore(Value* carryout, Value* ptr_carry_q, const unsigned index ) {
+void PabloCompiler::genCarryOutStore(Value* carryOut, const unsigned index ) {
     IRBuilder<> b(mBasicBlock);
-    StoreInst * result = b.CreateStore(carryout, b.CreateGEP(ptr_carry_q, b.getInt64(index)));
-    result->setAlignment(BLOCK_SIZE / 8);
-    return result;
+    assert (carryOut);
+    assert (index < mCarryQueueVector.size());
+    if (mNestingDepth == 0) {
+        b.CreateAlignedStore(carryOut, b.CreateGEP(mCarryQueuePtr, b.getInt64(index)), BLOCK_SIZE/8, false);
+    }
+    mCarryQueueVector[index] = carryOut;
 }
 
 inline Value* PabloCompiler::genBitBlockAny(Value* e) {
@@ -804,13 +831,9 @@ inline Value* PabloCompiler::genNot(Value* expr) {
 Value* PabloCompiler::genAdvanceWithCarry(Value* strm_value) {
     IRBuilder<> b(mBasicBlock);
 #if (BLOCK_SIZE == 128)
-    int this_carry_idx = mCarryQueueIdx;
-    mCarryQueueIdx++;
-
-    Value* carryq_value = genCarryInLoad(mCarryQueuePtr, this_carry_idx);
-
+    const auto carryIdx = mCarryQueueIdx++;
+    Value* carryq_value = genCarryInLoad(carryIdx);
     Value* srli_1_value = b.CreateLShr(strm_value, 63);
-
     Value* packed_shuffle;
     Constant* const_packed_1_elems [] = {b.getInt32(0), b.getInt32(2)};
     Constant* const_packed_1 = ConstantVector::get(const_packed_1_elems);
@@ -824,7 +847,7 @@ Value* PabloCompiler::genAdvanceWithCarry(Value* strm_value) {
 
     Value* carry_out = genShiftHighbitToLow(strm_value, "carry_out");
     //CarryQ - carry out:
-    genCarryOutStore(carry_out, mCarryQueuePtr, this_carry_idx);
+    genCarryOutStore(carry_out, carryIdx);
 
     return result_value;
 #endif

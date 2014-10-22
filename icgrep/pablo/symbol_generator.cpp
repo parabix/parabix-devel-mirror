@@ -20,7 +20,7 @@ String * SymbolGenerator::get(const std::string name) {
     String * result;
     if (f == mStringMap.end()) {
         result = makeString(name);
-        mStringMap.insert(std::make_pair(name, result));
+        mStringMap.insert(std::make_pair(std::move(name), result));
     }
     else {
         result = f->second;

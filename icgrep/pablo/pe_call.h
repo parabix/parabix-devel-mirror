@@ -3,6 +3,7 @@
 
 #include <pablo/pabloAST.h>
 #include <pablo/pe_string.h>
+#include <iostream>
 
 namespace pablo {
 
@@ -17,8 +18,8 @@ public:
     }
     virtual ~Call() {
     }
-    inline const std::string & getCallee() const {
-        return *mCallee;
+    inline const String * getCallee() const {
+        return mCallee;
     }
 protected:   
     Call(const PabloAST * callee)
