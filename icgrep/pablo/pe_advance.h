@@ -25,14 +25,19 @@ public:
     inline PabloAST * getExpr() const {
         return mExpr;
     }
+    inline int getAdvanceAmount() const {
+        return mShiftAmount;
+    }
 protected:
-    Advance(PabloAST * expr)
+    Advance(PabloAST * expr, int shiftAmount)
     : PabloAST(ClassTypeId::Advance)
-    , mExpr(expr) {
+    , mExpr(expr)
+	, mShiftAmount(shiftAmount) {
 
     }
 private:
     PabloAST * const mExpr;
+	int const mShiftAmount;
 };
 
 }

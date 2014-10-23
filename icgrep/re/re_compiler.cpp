@@ -56,9 +56,9 @@ void RE_Compiler::compile(RE * re, PabloBlock & pb) {
         #ifdef USE_IF_FOR_NONFINAL
         mNonFinal = pb.createVar(pb.createAssign(gs_nonfinal, pb.createZeroes()));
         #endif
-        PabloAST * u8scope32 = pb.createAdvance(u8pfx3);
-        PabloAST * u8scope42 = pb.createAdvance(u8pfx4);
-        PabloAST * u8scope43 = pb.createAdvance(u8scope42);
+        PabloAST * u8scope32 = pb.createAdvance(u8pfx3, 1);
+        PabloAST * u8scope42 = pb.createAdvance(u8pfx4, 1);
+        PabloAST * u8scope43 = pb.createAdvance(u8scope42, 1);
         #ifdef USE_IF_FOR_NONFINAL
         PabloBlock it(pb);
         it.createAssign(gs_nonfinal, it.createOr(it.createOr(u8pfx, u8scope32), it.createOr(u8scope42, u8scope43)));
@@ -99,13 +99,13 @@ Assign * RE_Compiler::process(RE * re, Assign * target, PabloBlock & pb) {
         marker = pb.createAnd(marker, mInitial);
         marker = pb.createScanThru(marker, mNonFinal);
         PabloAST * dot = pb.createNot(mLineFeed);
-        target = pb.createAssign("dot", pb.createAdvance(pb.createAnd(marker, dot)));
+        target = pb.createAssign("dot", pb.createAdvance(pb.createAnd(marker, dot), 1));
     }
     else if (Diff * diff = dyn_cast<Diff>(re)) {
         target = process(diff, target, pb);
     }
     else if (isa<Start>(re)) {
-        PabloAST * const sol = pb.createNot(pb.createAdvance(pb.createNot(mLineFeed)));
+        PabloAST * const sol = pb.createNot(pb.createAdvance(pb.createNot(mLineFeed), 1));
         target = pb.createAssign("sol", pb.createAnd(pb.createVar(target), sol));
     }
     else if (isa<End>(re)) {
@@ -128,7 +128,7 @@ inline Assign * RE_Compiler::process(Name * name, Assign * target, PabloBlock & 
     else {
         cc = pb.createVar(name->getName());
     }
-    return pb.createAssign("m", pb.createAdvance(pb.createAnd(cc, marker)));
+    return pb.createAssign("m", pb.createAdvance(pb.createAnd(cc, marker), 1));
 }
 
 inline Assign * RE_Compiler::process(Seq * seq, Assign *target, PabloBlock & pb) {

@@ -112,7 +112,7 @@ std::string StatementPrinter::ShowPabloAST(const PabloAST *expr) {
         return "Not (" + ShowPabloAST(pablo_not->getExpr()) + ")";
     }
     else if (const Advance * adv = dyn_cast<const Advance>(expr)) {
-        return "Advance(" + ShowPabloAST(adv->getExpr()) + ")";
+        return "Advance(" + ShowPabloAST(adv->getExpr()) + ", " + std::to_string(adv->getAdvanceAmount()) + ")";
     }
     else if (const MatchStar * mstar = dyn_cast<const MatchStar>(expr)) {
         return "MatchStar (" + ShowPabloAST(mstar->getMarker()) + ", " + ShowPabloAST(mstar->getCharClass()) + ")";

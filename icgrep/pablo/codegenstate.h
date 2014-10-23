@@ -43,6 +43,7 @@ public:
     , mOnes(new Ones())
     , mSymbolGenerator(symgen)
     , mUnary(nullptr, this)
+    , mUnaryWithInt(nullptr, this)
     , mBinary(nullptr, this)
     , mTernary(nullptr, this)
     {
@@ -54,13 +55,14 @@ public:
     , mOnes(cg.mOnes) // inherit the original "Ones" variable for simplicity
     , mSymbolGenerator(cg.mSymbolGenerator)
     , mUnary(&(cg.mUnary), this)
+    , mUnaryWithInt(&(cg.mUnaryWithInt), this)
     , mBinary(&(cg.mBinary), this)
     , mTernary(&(cg.mTernary), this)
     {
 
     }
 
-    PabloAST * createAdvance(PabloAST * expr);
+    PabloAST * createAdvance(PabloAST * expr, int shiftAmount);
 
     inline Zeroes * createZeroes() const {
         return mZeroes;
@@ -212,6 +214,7 @@ private:
     Ones * const                                        mOnes;
     SymbolGenerator &                                   mSymbolGenerator;
     ExpressionMap<PabloAST *>                           mUnary;
+    ExpressionMap<PabloAST *, int>                      mUnaryWithInt;
     ExpressionMap<PabloAST *, PabloAST *>               mBinary;
     ExpressionMap<PabloAST *, PabloAST *, PabloAST *>   mTernary;
     ExpressionList                                      mStatements;

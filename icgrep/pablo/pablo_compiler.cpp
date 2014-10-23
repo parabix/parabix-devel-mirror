@@ -703,7 +703,8 @@ Value * PabloCompiler::compileExpression(const PabloAST * expr)
     else if (const Advance * adv = dyn_cast<Advance>(expr))
     {
         Value* strm_value = compileExpression(adv->getExpr());
-        retVal = genAdvanceWithCarry(strm_value);
+		int shift = adv->getAdvanceAmount();
+        retVal = genAdvanceWithCarry(strm_value, shift);
     }
     else if (const MatchStar * mstar = dyn_cast<MatchStar>(expr))
     {
@@ -827,7 +828,11 @@ inline Value* PabloCompiler::genNot(Value* expr) {
     return b.CreateXor(expr, mOneInitializer, "not");
 }
 
-Value* PabloCompiler::genAdvanceWithCarry(Value* strm_value) {
+Value* PabloCompiler::genAdvanceWithCarry(Value* strm_value, int shift_amount) {
+	if (shift_amount != 1) {
+		throw std::runtime_error("Shift amount != 1 in Advance is currently unsupported.");
+	}
+	
     IRBuilder<> b(mBasicBlock);
 #if (BLOCK_SIZE == 128)
     const auto carryIdx = mCarryQueueIdx++;

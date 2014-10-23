@@ -11,11 +11,11 @@ namespace pablo {
 
 /// UNARY CREATE FUNCTIONS
 
-PabloAST * PabloBlock::createAdvance(PabloAST * expr) {
+PabloAST * PabloBlock::createAdvance(PabloAST * expr, int shiftAmount) {
     if (isa<Zeroes>(expr)) {
         return expr;
     }
-    return mUnary.findOrMake<Advance>(PabloAST::ClassTypeId::Advance, expr);
+    return mUnaryWithInt.findOrMake<Advance>(PabloAST::ClassTypeId::Advance, expr, shiftAmount);
 }
 
 Call * PabloBlock::createCall(const std::string name) {

@@ -99,7 +99,7 @@ PabloAST * CC_Compiler::compile_re(const Seq * seq) {
         if (++i == seq->end()) {
             break;
         }
-        assignment = mCG.createAssign("seq", mCG.createAdvance(result));
+        assignment = mCG.createAssign("seq", mCG.createAdvance(result, 1));
     }
     return result;
 }
