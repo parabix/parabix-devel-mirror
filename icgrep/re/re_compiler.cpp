@@ -207,27 +207,34 @@ inline bool RE_Compiler::isFixedLength(RE * regexp) {
 }
 
 inline Assign * RE_Compiler::processLowerBound(RE * repeated, int lb, Assign * marker, PabloBlock & pb) {
-#ifndef VARIABLE_ADVANCE
-    while (lb-- != 0) {
-        marker = process(repeated, marker, pb);
-    }
-    return marker;
-#endif
-    
-#ifdef VARIABLE_ADVANCE
 	if (isFixedLength(repeated)) {
-        Name * rep_name = cast<Name>(repeated);
+		Name * rep_name = cast<Name>(repeated);
 		Assign * cc_lb = consecutive(pb.createAssign("repeated", pb.createAdvance(pb.createVar(rep_name->getName()), 1)), 1, lb, pb);
 		return pb.createAssign("lowerbound", pb.createAnd(pb.createAdvance(pb.createVar(marker), lb), pb.createVar(cc_lb)));
 	}
-	else {
-		while (lb-- != 0) {
-			marker = process(repeated, marker, pb);
-		}
-		return marker;
+	// Fall through to general case.
+	while (lb-- != 0) {
+		marker = process(repeated, marker, pb);
 	}
-#endif
+	return marker;
+}
 
+inline Assign * RE_Compiler::processBoundedRep(RE * repeated, int ub, Assign * marker, PabloBlock & pb) {
+	if (isFixedLength(repeated)) {
+		// log2 upper bound for fixed length (=1) class
+		// Mask out any positions that are more than ub positions from a current match.
+		// Use matchstar, then apply filter.
+		Assign * nonMatch = pb.createAssign("nonmatch", pb.createNot(pb.createVar(marker)));
+		PabloAST * upperLimitMask = pb.createNot(pb.createVar(consecutive(nonMatch, 1, ub + 1, pb)));
+		PabloAST * rep_class_var = pb.createVar(cast<Name>(repeated) -> getName());
+			return pb.createAssign("bounded", pb.createAnd(pb.createMatchStar(pb.createVar(marker), rep_class_var), upperLimitMask));
+	}
+	// Fall through to general case.
+	while (ub-- != 0) {
+		Assign * alt = process(repeated, marker, pb);
+		marker = pb.createAssign("m", pb.createOr(pb.createVar(marker), pb.createVar(alt)));
+	}
+	return marker;
 }
 
 inline Assign * RE_Compiler::processUnboundedRep(RE * repeated, Assign * marker, PabloBlock & pb) {
@@ -279,26 +286,6 @@ inline Assign * RE_Compiler::processUnboundedRep(RE * repeated, Assign * marker,
     }    
     return pb.createAssign("unbounded", unbounded);
 }
-
-inline Assign * RE_Compiler::processBoundedRep(RE * repeated, int ub, Assign * marker, PabloBlock & pb) {
-#ifdef VARIABLE_ADVANCE
-    if (isFixedLength(repeated)) {
-// log2 upper bound for fixed length (=1) class
-// Mask out any positions that are more than ub positions from a current match.
-// Use matchstar, then apply filter.
-        Assign * nonMatch = pb.createAssign("nonmatch", pb.createNot(pb.createVar(marker)));
-        PabloAST * upperLimitMask = pb.createNot(pb.createVar(consecutive(nonMatch, 1, ub + 1, pb)));
-        PabloAST * rep_class_var = pb.createVar(cast<Name>(repeated) -> getName());
-		return pb.createAssign("bounded", pb.createAnd(pb.createMatchStar(pb.createVar(marker), rep_class_var), upperLimitMask));
-    }
-#endif
-    while (ub-- != 0) {
-        Assign * alt = process(repeated, marker, pb);
-        marker = pb.createAssign("m", pb.createOr(pb.createVar(marker), pb.createVar(alt)));
-    }
-    return marker;
-}
-
 
 bool RE_Compiler::hasUnicode(const RE * re) {
     bool found = false;

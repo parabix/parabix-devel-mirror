@@ -848,42 +848,46 @@ inline Value* PabloCompiler::genNot(Value* expr) {
 }
 
 Value* PabloCompiler::genAdvanceWithCarry(Value* strm_value, int shift_amount) {
-#ifndef VARIABLE_ADVANCE
-	if (shift_amount != 1) {
-		throw std::runtime_error("Shift amount != 1 in Advance is currently unsupported.");
-	}
-#endif
 
     IRBuilder<> b(mBasicBlock);
 #if (BLOCK_SIZE == 128)
     const auto carryIdx = mCarryQueueIdx++;
-#ifndef VARIABLE_ADVANCE
-    Value* carryq_value = genCarryInLoad(carryIdx);
-    Value* srli_1_value = b.CreateLShr(strm_value, 63);
-    Value* packed_shuffle;
-    Constant* const_packed_1_elems [] = {b.getInt32(0), b.getInt32(2)};
-    Constant* const_packed_1 = ConstantVector::get(const_packed_1_elems);
-    packed_shuffle = b.CreateShuffleVector(carryq_value, srli_1_value, const_packed_1);
+    if (shift_amount == 1) {
+ 	Value* carryq_value = genCarryInLoad(carryIdx);
+	Value* srli_1_value = b.CreateLShr(strm_value, 63);
+	Value* packed_shuffle;
+	Constant* const_packed_1_elems [] = {b.getInt32(0), b.getInt32(2)};
+	Constant* const_packed_1 = ConstantVector::get(const_packed_1_elems);
+	packed_shuffle = b.CreateShuffleVector(carryq_value, srli_1_value, const_packed_1);
 
-    Constant* const_packed_2_elems[] = {b.getInt64(1), b.getInt64(1)};
-    Constant* const_packed_2 = ConstantVector::get(const_packed_2_elems);
+	Constant* const_packed_2_elems[] = {b.getInt64(1), b.getInt64(1)};
+	Constant* const_packed_2 = ConstantVector::get(const_packed_2_elems);
 
-    Value* shl_value = b.CreateShl(strm_value, const_packed_2);
-    Value* result_value = b.CreateOr(shl_value, packed_shuffle, "advance");
+	Value* shl_value = b.CreateShl(strm_value, const_packed_2);
+	Value* result_value = b.CreateOr(shl_value, packed_shuffle, "advance");
 
-    Value* carry_out = genShiftHighbitToLow(strm_value, "carry_out");
-#endif
-#ifdef VARIABLE_ADVANCE
-    Value* carryq_longint = b.CreateBitCast(genCarryInLoad(carryIdx), IntegerType::get(mMod->getContext(), BLOCK_SIZE));
-    Value* strm_longint = b.CreateBitCast(strm_value, IntegerType::get(mMod->getContext(), BLOCK_SIZE));
-    Value* adv_longint = b.CreateOr(b.CreateShl(strm_longint, shift_amount), carryq_longint, "advance");
-    Value* result_value = b.CreateBitCast(adv_longint, mXi64Vect);
-    Value* carry_out = b.CreateBitCast(b.CreateLShr(strm_longint, BLOCK_SIZE - shift_amount, "advance_out"), mXi64Vect);
-#endif
-    //CarryQ - carry out:
-    genCarryOutStore(carry_out, carryIdx);
-	
-    return result_value;
+	Value* carry_out = genShiftHighbitToLow(strm_value, "carry_out");
+	//CarryQ - carry out:
+	genCarryOutStore(carry_out, carryIdx);
+	    
+	return result_value;
+    }
+    else if (shift_amount < 64) {
+        // This is the preferred logic, but is too slow for the general case.   
+        // We need to speed up our custom LLVM for this code.
+	Value* carryq_longint = b.CreateBitCast(genCarryInLoad(carryIdx), IntegerType::get(mMod->getContext(), BLOCK_SIZE));
+	Value* strm_longint = b.CreateBitCast(strm_value, IntegerType::get(mMod->getContext(), BLOCK_SIZE));
+	Value* adv_longint = b.CreateOr(b.CreateShl(strm_longint, shift_amount), carryq_longint, "advance");
+	Value* result_value = b.CreateBitCast(adv_longint, mXi64Vect);
+	Value* carry_out = b.CreateBitCast(b.CreateLShr(strm_longint, BLOCK_SIZE - shift_amount, "advance_out"), mXi64Vect);
+	//CarryQ - carry out:
+	genCarryOutStore(carry_out, carryIdx);
+	    
+	return result_value;
+    }
+    else {//if (shift_amount >= 64) {
+	throw std::runtime_error("Shift amount >= 64 in Advance is currently unsupported.");
+    }
 #endif
 
 #if (BLOCK_SIZE == 256)
