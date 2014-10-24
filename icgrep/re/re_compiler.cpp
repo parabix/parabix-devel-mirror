@@ -207,7 +207,6 @@ inline bool RE_Compiler::isFixedLength(RE * regexp) {
         return isa<Name>(regexp) && ((cast<Name>(regexp) -> getType()) == Name::Type::FixedLength);
 }
 inline Assign * RE_Compiler::processLowerBound(RE * repeated, int lb, Assign * marker, PabloBlock & pb) {
-#define VARIABLE_ADVANCE
 #ifndef VARIABLE_ADVANCE
     while (lb-- != 0) {
         marker = process(repeated, marker, pb);
