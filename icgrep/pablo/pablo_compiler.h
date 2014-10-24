@@ -88,7 +88,7 @@ class PabloCompiler {
 
 public:
     typedef cc::CC_Compiler::BasisBitVars BasisBitVars;
-    PabloCompiler(const cc::CC_NameMap & nameMap, const BasisBitVars & basisBitVars, int bits);
+    PabloCompiler(const BasisBitVars & basisBitVars, int bits);
     ~PabloCompiler();
     LLVM_Gen_RetVal compile(PabloBlock & pb);
 private:
@@ -96,9 +96,7 @@ private:
     void DeclareFunctions();
     void DeclareCallFunctions(const StatementList & stmts);
     void DeclareCallFunctions(const PabloAST * expr);
-    void SetReturnMarker(Value * marker, const unsigned index);
-
-    Value* GetMarker(const String *name);
+    void SetOutputValue(Value * marker, const unsigned index);
 
     Value* compileStatements(const StatementList & stmts);
     Value* compileStatement(const PabloAST * stmt);
@@ -146,8 +144,6 @@ private:
     Value*                              mOutputAddrPtr;
 
     StringToValueMap                    mCalleeMap;
-
-    const cc::CC_NameMap &              mNameMap;
 };
 
 }

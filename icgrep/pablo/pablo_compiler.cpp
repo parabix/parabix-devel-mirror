@@ -73,7 +73,7 @@ CREATE_GENERAL_CODE_CATEGORY(Zs)
 
 namespace pablo {
 
-PabloCompiler::PabloCompiler(const cc::CC_NameMap & nameMap, const BasisBitVars & basisBitVars, int bits)
+PabloCompiler::PabloCompiler(const BasisBitVars & basisBitVars, int bits)
 : mBits(bits)
 , mBasisBitVars(basisBitVars)
 , mMod(new Module("icgrep", getGlobalContext()))
@@ -92,7 +92,6 @@ PabloCompiler::PabloCompiler(const cc::CC_NameMap & nameMap, const BasisBitVars 
 , mFunc_process_block(nullptr)
 , mBasisBitsAddr(nullptr)
 , mOutputAddrPtr(nullptr)
-, mNameMap(nameMap)
 {
     //Create the jit execution engine.up
     InitializeNativeTarget();
@@ -148,7 +147,7 @@ PabloCompiler::~PabloCompiler()
 LLVM_Gen_RetVal PabloCompiler::compile(PabloBlock & pb)
 {
     mCarryQueueSize = 0;
-    DeclareCallFunctions(pb.expressions());
+    DeclareCallFunctions(pb.statements());
     mCarryQueueVector.resize(mCarryQueueSize);
 
     Function::arg_iterator args = mFunc_process_block->arg_begin();
@@ -175,10 +174,7 @@ LLVM_Gen_RetVal PabloCompiler::compile(PabloBlock & pb)
     }
 
     //Generate the IR instructions for the function.
-    Value * result = compileStatements(pb.expressions());
-    SetReturnMarker(result, 0); // matches
-    const String * lf = mNameMap["LineFeed"]->getVar()->getName();
-    SetReturnMarker(mMarkerMap.find(lf)->second, 1); // line feeds
+    compileStatements(pb.statements());
 
     assert (mCarryQueueIdx == mCarryQueueSize);
     assert (mNestingDepth == 0);
@@ -484,26 +480,6 @@ void PabloCompiler::DeclareCallFunctions(const PabloAST * expr)
     }
 }
 
-inline Value* PabloCompiler::GetMarker(const String * name) {
-    auto itr = mMarkerMap.find(name);
-    if (itr == mMarkerMap.end()) {
-        IRBuilder<> b(mBasicBlock);
-        itr = mMarkerMap.insert(std::make_pair(name, b.CreateAlloca(mXi64Vect))).first;
-    }
-    return itr->second;
-}
-
-void PabloCompiler::SetReturnMarker(Value * marker, const unsigned index) {
-    IRBuilder<> b(mBasicBlock);
-    if (marker->getType()->isPointerTy()) {
-        marker = b.CreateAlignedLoad(marker, BLOCK_SIZE/8, false);
-    }
-    Value* indices[] = {b.getInt64(0), b.getInt32(index)};
-    Value* gep = b.CreateGEP(mOutputAddrPtr, indices);
-    b.CreateAlignedStore(marker, gep, BLOCK_SIZE/8, false);
-}
-
-
 Value * PabloCompiler::compileStatements(const StatementList & stmts) {
     Value * retVal = nullptr;
     for (PabloAST * statement : stmts) {
@@ -519,6 +495,9 @@ Value * PabloCompiler::compileStatement(const PabloAST * stmt)
     {
         Value* expr = compileExpression(assign->getExpr());
         mMarkerMap[assign->getName()] = expr;
+        if (unlikely(assign->isOutputAssignment())) {
+            SetOutputValue(expr, assign->getOutputIndex());
+        }
         retVal = expr;
     }
     if (const Next * next = dyn_cast<const Next>(stmt))
@@ -610,8 +589,8 @@ Value * PabloCompiler::compileStatement(const PabloAST * stmt)
         BasicBlock* whileBodyBlock = BasicBlock::Create(mMod->getContext(), "while.body", mFunc_process_block, 0);
         BasicBlock* whileEndBlock = BasicBlock::Create(mMod->getContext(), "while.end", mFunc_process_block, 0);
 
-        // Note: compileStatements may update the mBasicBlock pointer if the body contains nested loops. Do not
-        // assume it is the same one in which we entered the function with.
+        // Note: compileStatements may update the mBasicBlock pointer if the body contains nested loops. It
+        // may not be same one that we entered the function with.
         IRBuilder<> bEntry(mBasicBlock);
         bEntry.CreateBr(whileCondBlock);
 
@@ -894,6 +873,16 @@ Value* PabloCompiler::genAdvanceWithCarry(Value* strm_value, int shift_amount) {
     return genAddWithCarry(strm_value, strm_value);
 #endif
 
+}
+
+void PabloCompiler::SetOutputValue(Value * marker, const unsigned index) {
+    IRBuilder<> b(mBasicBlock);
+    if (marker->getType()->isPointerTy()) {
+        marker = b.CreateAlignedLoad(marker, BLOCK_SIZE/8, false);
+    }
+    Value* indices[] = {b.getInt64(0), b.getInt32(index)};
+    Value* gep = b.CreateGEP(mOutputAddrPtr, indices);
+    b.CreateAlignedStore(marker, gep, BLOCK_SIZE/8, false);
 }
 
 }

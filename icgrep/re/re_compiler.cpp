@@ -75,7 +75,8 @@ void RE_Compiler::compile(RE * re, PabloBlock & pb) {
     PabloAST * result = process(re, pb.createAssign("start", pb.createOnes()), pb);
 
     //These three lines are specifically for grep.
-    pb.createAssign("matches", pb.createAnd(pb.createMatchStar(pb.createVar(result), pb.createNot(mLineFeed)), mLineFeed), true);
+    pb.createAssign("matches", pb.createAnd(pb.createMatchStar(pb.createVar(result), pb.createNot(mLineFeed)), mLineFeed), 0);
+    pb.createAssign("lf", mLineFeed, 1);
 }
 
 

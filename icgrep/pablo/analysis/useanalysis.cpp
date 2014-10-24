@@ -4,7 +4,7 @@ namespace pablo {
 
 void UseAnalysis::optimize(PabloBlock & block) {
     UseAnalysis analyzer;
-    analyzer.traverse(analyzer.mRoot, block.expressions());
+    analyzer.traverse(analyzer.mRoot, block.statements());
 
 }
 

@@ -221,3 +221,5 @@ pablo/ps_while.h
 pablo/symbol_generator.cpp
 pablo/symbol_generator.h
 re/re_diff.h
+pablo/analysis/useanalysis.cpp
+pablo/analysis/useanalysis.h

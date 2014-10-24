@@ -74,10 +74,10 @@ public:
 
     Call * createCall(const std::string name);
 
-    inline Assign * createAssign(const std::string prefix, PabloAST * expr, const bool isOutput = false) {
+    inline Assign * createAssign(const std::string prefix, PabloAST * expr, const int outputIndex = -1) {
         // TODO: should this test whether we've somehow created a var for this prior to
         // making the assignment?
-        Assign * assign = new Assign(mSymbolGenerator.get_ssa(prefix), expr, isOutput);
+        Assign * assign = new Assign(mSymbolGenerator.get_ssa(prefix), expr, outputIndex);
         mStatements.push_back(assign);
         return assign;
     }
@@ -195,7 +195,7 @@ public:
         std::map<Key, PabloAST *>   mMap;
     };
 
-    inline const StatementList & expressions() const {
+    inline const StatementList & statements() const {
         return mStatements;
     }
 private:        
@@ -206,7 +206,7 @@ private:
     ExpressionMap<PabloAST *, int>                      mUnaryWithInt;
     ExpressionMap<PabloAST *, PabloAST *>               mBinary;
     ExpressionMap<PabloAST *, PabloAST *, PabloAST *>   mTernary;
-    StatementList                                      mStatements;
+    StatementList                                       mStatements;
 };
 
 }

@@ -44,7 +44,7 @@ std::string StatementPrinter::PrintStmts(const PabloBlock & cg_state)
     strOut = strOut.substr(0, strOut.length() - 1);
     strOut += "],[";
 
-    strOut += Print_PB_PabloStmts(cg_state.expressions());
+    strOut += Print_PB_PabloStmts(cg_state.statements());
 
     strOut = strOut.substr(0, strOut.length() - 1);
     strOut += "]";
@@ -71,7 +71,11 @@ std::string StatementPrinter::Print_CC_PabloStmts(const pablo::StatementList &st
 std::string StatementPrinter::ShowPabloS(const PabloAST * stmt)
 {
     if (const Assign * an = dyn_cast<const Assign>(stmt)) {
-        return "Assign('" + an->getName()->str() + "', " + ShowPabloAST(an->getExpr()) + "),";
+        std::string result = "Assign('" + an->getName()->str() + "', " + ShowPabloAST(an->getExpr());
+        if (an->isOutputAssignment()) {
+            result += ", Output=" + std::to_string(an->getOutputIndex());
+        }
+        return result + "),";
     }
     else if (const Next * next = dyn_cast<const Next>(stmt)) {
         return "Next(" + next->getName()->str() + ", " + ShowPabloAST(next->getExpr()) + ")";
