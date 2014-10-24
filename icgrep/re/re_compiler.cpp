@@ -207,7 +207,7 @@ inline bool RE_Compiler::isFixedLength(RE * regexp) {
         return isa<Name>(regexp) && ((cast<Name>(regexp) -> getType()) == Name::Type::FixedLength);
 }
 inline Assign * RE_Compiler::processLowerBound(RE * repeated, int lb, Assign * marker, PabloBlock & pb) {
-
+#define VARIABLE_ADVANCE
 #ifndef VARIABLE_ADVANCE
     while (lb-- != 0) {
         marker = process(repeated, marker, pb);
@@ -216,9 +216,7 @@ inline Assign * RE_Compiler::processLowerBound(RE * repeated, int lb, Assign * m
 #endif
     
 #ifdef VARIABLE_ADVANCE
-    std::cerr << "Here\n";
 	if (isFixedLength(repeated)) {
-        std::cerr << "Here next\n";
         Name * rep_name = cast<Name>(repeated);
 		Assign * cc_lb = consecutive(pb.createAssign("repeated", pb.createAdvance(pb.createVar(rep_name->getName()), 1)), 1, lb, pb);
 		return pb.createAssign("lowerbound", pb.createAnd(pb.createAdvance(pb.createVar(marker), lb), pb.createVar(cc_lb)));
