@@ -177,7 +177,7 @@ LLVM_Gen_RetVal PabloCompiler::compile(PabloBlock & pb)
     //Generate the IR instructions for the function.
     Value * result = compileStatements(pb.expressions());
     SetReturnMarker(result, 0); // matches
-    const String * lf = pb.createVar(mNameMap["LineFeed"]->getName())->getName();
+    const String * lf = mNameMap["LineFeed"]->getVar()->getName();
     SetReturnMarker(mMarkerMap.find(lf)->second, 1); // line feeds
 
     assert (mCarryQueueIdx == mCarryQueueSize);

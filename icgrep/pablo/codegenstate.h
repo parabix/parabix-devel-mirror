@@ -74,10 +74,10 @@ public:
 
     Call * createCall(const std::string name);
 
-    inline Assign * createAssign(const std::string prefix, PabloAST * expr) {
+    inline Assign * createAssign(const std::string prefix, PabloAST * expr, const bool isOutput = false) {
         // TODO: should this test whether we've somehow created a var for this prior to
         // making the assignment?
-        Assign * assign = new Assign(mSymbolGenerator.get_ssa(prefix), expr);
+        Assign * assign = new Assign(mSymbolGenerator.get_ssa(prefix), expr, isOutput);
         mStatements.push_back(assign);
         return assign;
     }

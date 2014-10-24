@@ -29,17 +29,22 @@ public:
     inline PabloAST * getExpr() const {
         return mExpr;
     }
+    inline bool isOutput() const {
+        return mIsOutput;
+    }
 protected:
-    Assign(PabloAST * name, PabloAST * expr)
+    Assign(PabloAST * name, PabloAST * expr, const bool isOutput)
     : PabloAST(ClassTypeId::Assign)
     , mName(cast<String>(name))
     , mExpr(expr)
+    , mIsOutput(isOutput)
     {
 
     }
 private:
     String * const          mName;
     PabloAST * const        mExpr;
+    const bool              mIsOutput;
 };
 
 }

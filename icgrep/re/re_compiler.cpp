@@ -72,54 +72,53 @@ void RE_Compiler::compile(RE * re, PabloBlock & pb) {
         mNonFinal = pb.createZeroes();
     }
 
-    Assign * start_marker = pb.createAssign("start", pb.createOnes());
-    PabloAST * result = process(re, start_marker, pb);
+    PabloAST * result = process(re, pb.createAssign("start", pb.createOnes()), pb);
 
     //These three lines are specifically for grep.
-    pb.createAssign("matches", pb.createAnd(pb.createMatchStar(pb.createVar(result), pb.createNot(mLineFeed)), mLineFeed));
+    pb.createAssign("matches", pb.createAnd(pb.createMatchStar(pb.createVar(result), pb.createNot(mLineFeed)), mLineFeed), true);
 }
 
 
-Assign * RE_Compiler::process(RE * re, Assign * target, PabloBlock & pb) {
+Assign * RE_Compiler::process(RE * re, Assign * marker, PabloBlock & pb) {
     if (Name * name = dyn_cast<Name>(re)) {
-        target = process(name, target, pb);
+        marker = process(name, marker, pb);
     }
     else if (Seq* seq = dyn_cast<Seq>(re)) {
-        target = process(seq, target, pb);
+        marker = process(seq, marker, pb);
     }
     else if (Alt * alt = dyn_cast<Alt>(re)) {
-        target = process(alt, target, pb);
+        marker = process(alt, marker, pb);
     }
     else if (Rep * rep = dyn_cast<Rep>(re)) {
-        target = process(rep, target, pb);
+        marker = process(rep, marker, pb);
     }
     else if (isa<Any>(re)) {
         // Move the markers forward through any nonfinal UTF-8 bytes to the final position of each character.
-        PabloAST * marker = pb.createVar(target);
-        marker = pb.createAnd(marker, mInitial);
-        marker = pb.createScanThru(marker, mNonFinal);
+        PabloAST * markerVar = pb.createVar(marker);
+        markerVar = pb.createAnd(markerVar, mInitial);
+        markerVar = pb.createScanThru(markerVar, mNonFinal);
         PabloAST * dot = pb.createNot(mLineFeed);
-        target = pb.createAssign("dot", pb.createAdvance(pb.createAnd(marker, dot), 1));
+        marker = pb.createAssign("dot", pb.createAdvance(pb.createAnd(markerVar, dot), 1));
     }
     else if (Diff * diff = dyn_cast<Diff>(re)) {
-        target = process(diff, target, pb);
+        marker = process(diff, marker, pb);
     }
     else if (isa<Start>(re)) {
         PabloAST * const sol = pb.createNot(pb.createAdvance(pb.createNot(mLineFeed), 1));
-        target = pb.createAssign("sol", pb.createAnd(pb.createVar(target), sol));
+        marker = pb.createAssign("sol", pb.createAnd(pb.createVar(marker), sol));
     }
     else if (isa<End>(re)) {
-        target = pb.createAssign("eol", pb.createAnd(pb.createVar(target), mLineFeed));
+        marker = pb.createAssign("eol", pb.createAnd(pb.createVar(marker), mLineFeed));
     }
-    return target;
+    return marker;
 }
 
-inline Assign * RE_Compiler::process(Name * name, Assign * target, PabloBlock & pb) {
-    PabloAST * marker = pb.createVar(target);
+inline Assign * RE_Compiler::process(Name * name, Assign * marker, PabloBlock & pb) {
+    PabloAST * markerVar = pb.createVar(marker);
     if (name->getType() != Name::Type::FixedLength) {
         // Move the markers forward through any nonfinal UTF-8 bytes to the final position of each character.
-        marker = pb.createAnd(marker, mInitial);
-        marker = pb.createScanThru(marker, mNonFinal);
+        markerVar = pb.createAnd(markerVar, mInitial);
+        markerVar = pb.createScanThru(markerVar, mNonFinal);
     }
     PabloAST * cc = nullptr;
     if (name->getType() == Name::Type::UnicodeCategory) {
@@ -128,56 +127,56 @@ inline Assign * RE_Compiler::process(Name * name, Assign * target, PabloBlock & 
     else {
         cc = pb.createVar(name->getName());
     }
-    return pb.createAssign("m", pb.createAdvance(pb.createAnd(cc, marker), 1));
+    return pb.createAssign("m", pb.createAdvance(pb.createAnd(cc, markerVar), 1));
 }
 
-inline Assign * RE_Compiler::process(Seq * seq, Assign *target, PabloBlock & pb) {
+inline Assign * RE_Compiler::process(Seq * seq, Assign * marker, PabloBlock & pb) {
     for (RE * re : *seq) {
-        target = process(re, target, pb);
+        marker = process(re, marker, pb);
     }
-    return target;
+    return marker;
 }
 
-inline Assign * RE_Compiler::process(Alt * alt, Assign * target, PabloBlock & pb) {
+inline Assign * RE_Compiler::process(Alt * alt, Assign * marker, PabloBlock & pb) {
     if (alt->empty()) {
-        target = pb.createAssign("fail", pb.createZeroes()); // always fail (note: I'm not sure this ever occurs. How do I create a 0-element alternation?)
+        marker = pb.createAssign("fail", pb.createZeroes()); // always fail (note: I'm not sure this ever occurs. How do I create a 0-element alternation?)
     }
     else {
         auto i = alt->begin();
-        Assign * const base = target;
-        target = process(*i, base, pb);
+        Assign * const base = marker;
+        marker = process(*i, base, pb);
         while (++i != alt->end()) {
             Assign * other = process(*i, base, pb);
-            target = pb.createAssign("alt", pb.createOr(pb.createVar(target), pb.createVar(other)));
+            marker = pb.createAssign("alt", pb.createOr(pb.createVar(marker), pb.createVar(other)));
         }
     }    
-    return target;
+    return marker;
 }
 
-inline Assign * RE_Compiler::process(Diff * diff, Assign * target, PabloBlock & pb) {
+inline Assign * RE_Compiler::process(Diff * diff, Assign * marker, PabloBlock & pb) {
     RE * lh = diff->getLH();
     RE * rh = diff->getRH();
     if ((isa<Any>(lh) || isa<Name>(lh)) && (isa<Any>(rh) || isa<Name>(rh))) {
-        Assign * t1 = process(lh, target, pb);
-        Assign * t2 = process(rh, target, pb);
+        Assign * t1 = process(lh, marker, pb);
+        Assign * t2 = process(rh, marker, pb);
         return pb.createAssign("diff", pb.createAnd(pb.createVar(t1), pb.createNot(pb.createVar(t2))));
     }
     throw std::runtime_error("Unsupported Diff operands: " + Printer_RE::PrintRE(diff));
 }
 
-inline Assign * RE_Compiler::process(Rep * rep, Assign * target, PabloBlock & pb) {
+inline Assign * RE_Compiler::process(Rep * rep, Assign * marker, PabloBlock & pb) {
     int lb = rep->getLB();
     int ub = rep->getUB();
     if (lb > 0) {
-        target = processLowerBound(rep->getRE(), lb, target, pb);
+        marker = processLowerBound(rep->getRE(), lb, marker, pb);
     }
     if (ub == Rep::UNBOUNDED_REP) {
-        target = processUnboundedRep(rep->getRE(), target, pb);
+        marker = processUnboundedRep(rep->getRE(), marker, pb);
     }
     else { // if (rep->getUB() != Rep::UNBOUNDED_REP)
-        target = processBoundedRep(rep->getRE(), ub - lb, target, pb);
+        marker = processBoundedRep(rep->getRE(), ub - lb, marker, pb);
     }    
-    return target;
+    return marker;
 }
 
 
@@ -204,8 +203,9 @@ inline Assign * RE_Compiler::consecutive(Assign * repeated, int repeated_lgth, i
 }
                 
 inline bool RE_Compiler::isFixedLength(RE * regexp) {
-        return isa<Name>(regexp) && ((cast<Name>(regexp) -> getType()) == Name::Type::FixedLength);
+    return isa<Name>(regexp) && ((cast<Name>(regexp) -> getType()) == Name::Type::FixedLength);
 }
+
 inline Assign * RE_Compiler::processLowerBound(RE * repeated, int lb, Assign * marker, PabloBlock & pb) {
 #ifndef VARIABLE_ADVANCE
     while (lb-- != 0) {
@@ -230,7 +230,7 @@ inline Assign * RE_Compiler::processLowerBound(RE * repeated, int lb, Assign * m
 
 }
 
-inline Assign * RE_Compiler::processUnboundedRep(RE * repeated, Assign * target, PabloBlock & pb) {
+inline Assign * RE_Compiler::processUnboundedRep(RE * repeated, Assign * marker, PabloBlock & pb) {
 
     PabloAST * unbounded = nullptr;
 
@@ -245,7 +245,7 @@ inline Assign * RE_Compiler::processUnboundedRep(RE * repeated, Assign * target,
             cc = pb.createVar(rep_name->getName());
         }
 
-        unbounded = pb.createVar(target);
+        unbounded = pb.createVar(marker);
         if (rep_name->getType() == Name::Type::FixedLength) {
             unbounded = pb.createMatchStar(unbounded, cc);
         }
@@ -255,13 +255,13 @@ inline Assign * RE_Compiler::processUnboundedRep(RE * repeated, Assign * target,
     }
     else if (isa<Any>(repeated)) {
         PabloAST * dot = pb.createNot(mLineFeed);
-        unbounded = pb.createVar(target);
+        unbounded = pb.createVar(marker);
         unbounded = pb.createAnd(pb.createMatchStar(unbounded, pb.createOr(mNonFinal, dot)), mInitial);
     }
     else {
-        Var * targetVar = pb.createVar(target);
-        Assign * whileTest = pb.createAssign("test", targetVar);
-        Assign * whileAccum = pb.createAssign("accum", targetVar);
+        Var * markerVar = pb.createVar(marker);
+        Assign * whileTest = pb.createAssign("test", markerVar);
+        Assign * whileAccum = pb.createAssign("accum", markerVar);
 
         PabloBlock wb(pb);
 

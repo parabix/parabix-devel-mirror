@@ -38,17 +38,17 @@ private:
 
     void compile(RE * re, pablo::PabloBlock & cg);
 
-    pablo::Assign * process(RE * re, pablo::Assign *target, pablo::PabloBlock & pb);
-    pablo::Assign * process(Name * name, pablo::Assign * target, pablo::PabloBlock & pb);
-    pablo::Assign * process(Seq * seq, pablo::Assign * target, pablo::PabloBlock & pb);
-    pablo::Assign * process(Alt * alt, pablo::Assign * target, pablo::PabloBlock & pb);
-    pablo::Assign * process(Rep * rep, pablo::Assign *target, pablo::PabloBlock & pb);
-    pablo::Assign * process(Diff * diff, pablo::Assign * target, pablo::PabloBlock & cg);
+    pablo::Assign * process(RE * re, pablo::Assign *marker, pablo::PabloBlock & pb);
+    pablo::Assign * process(Name * name, pablo::Assign * marker, pablo::PabloBlock & pb);
+    pablo::Assign * process(Seq * seq, pablo::Assign * marker, pablo::PabloBlock & pb);
+    pablo::Assign * process(Alt * alt, pablo::Assign * marker, pablo::PabloBlock & pb);
+    pablo::Assign * process(Rep * rep, pablo::Assign *marker, pablo::PabloBlock & pb);
+    pablo::Assign * process(Diff * diff, pablo::Assign * marker, pablo::PabloBlock & cg);
     pablo::Assign * consecutive(pablo::Assign * repeated,  int repeated_lgth, int repeat_count, pablo::PabloBlock & pb);
     bool isFixedLength(RE * regexp);
-    pablo::Assign * processLowerBound(RE * repeated,  int lb, pablo::Assign * target, pablo::PabloBlock & pb);
-    pablo::Assign * processUnboundedRep(RE * repeated, pablo::Assign * target, pablo::PabloBlock & pb);
-    pablo::Assign * processBoundedRep(RE * repeated, int ub, pablo::Assign * target, pablo::PabloBlock & pb);
+    pablo::Assign * processLowerBound(RE * repeated,  int lb, pablo::Assign * marker, pablo::PabloBlock & pb);
+    pablo::Assign * processUnboundedRep(RE * repeated, pablo::Assign * marker, pablo::PabloBlock & pb);
+    pablo::Assign * processBoundedRep(RE * repeated, int ub, pablo::Assign * marker, pablo::PabloBlock & pb);
 
 
     static bool hasUnicode(const RE *re);
