@@ -9,7 +9,14 @@
 
 #include <pablo/pabloAST.h>
 #include <pablo/ps_assign.h>
+#include <pablo/pe_next.h>
 #include <pablo/pe_string.h>
+#include <stdexcept>
+
+namespace llvm {
+    class Value;
+    class BasicBlock;
+}
 
 namespace pablo {
 
@@ -27,22 +34,39 @@ public:
     inline const String * getName() const {
         return mName;
     }
+    inline const PabloAST * getVar() const {
+        return mVar;
+    }
     inline bool isInternal() const {
-        return mInternal;
+        return mVar != mName;
     }
     inline bool isExternal() const {
-        return !mInternal;
+        return mVar == mName;
     }
 protected:
-    Var(const PabloAST * var, const bool internal)
+    Var(const PabloAST * var)
     : PabloAST(ClassTypeId::Var)
-    , mName(cast<String>(var))
-    , mInternal(internal) {
+    , mVar(var)
+    , mName(getNameOf(var))
+    {
 
     }
 private:
-    const String * const mName;
-    const bool           mInternal;
+    static inline const String * getNameOf(const PabloAST * var) {
+        if (isa<String>(var)) {
+            return cast<String>(var);
+        }
+        if (isa<Assign>(var)) {
+            return cast<Assign>(var)->getName();
+        }
+        if (isa<Next>(var)) {
+            return cast<Next>(var)->getName();
+        }
+        throw std::runtime_error("Pablo Var only accepts String, Assign and Next nodes.");
+    }
+private:
+    const PabloAST * const  mVar;
+    const String * const    mName;
 };
 
 }

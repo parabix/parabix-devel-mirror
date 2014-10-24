@@ -259,23 +259,21 @@ inline Assign * RE_Compiler::processUnboundedRep(RE * repeated, Assign * target,
         unbounded = pb.createAnd(pb.createMatchStar(unbounded, pb.createOr(mNonFinal, dot)), mInitial);
     }
     else {
-
         Var * targetVar = pb.createVar(target);
-
         Assign * whileTest = pb.createAssign("test", targetVar);
         Assign * whileAccum = pb.createAssign("accum", targetVar);
 
-        PabloBlock wt(pb);
+        PabloBlock wb(pb);
 
-        Var * loopComputation = wt.createVar(process(repeated, whileTest, wt));
+        Var * loopComputation = wb.createVar(process(repeated, whileTest, wb));
 
-        Var * whileAccumVar = wt.createVar(whileAccum);
+        Var * whileAccumVar = wb.createVar(whileAccum);
 
-        wt.createNext(whileTest, wt.createAnd(loopComputation, wt.createNot(whileAccumVar)));
+        Next * nextWhileTest = wb.createNext(whileTest, wb.createAnd(loopComputation, wb.createNot(whileAccumVar)));
 
-        wt.createNext(whileAccum, wt.createOr(loopComputation, whileAccumVar));
+        wb.createNext(whileAccum, wb.createOr(loopComputation, whileAccumVar));
 
-        pb.createWhile(pb.createVar(whileTest), std::move(wt));
+        pb.createWhile(wb.createVar(nextWhileTest), std::move(wb));
 
         unbounded = whileAccumVar;
     }    

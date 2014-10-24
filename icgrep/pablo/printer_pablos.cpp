@@ -52,7 +52,7 @@ std::string StatementPrinter::PrintStmts(const PabloBlock & cg_state)
     return strOut;
 }
 
-std::string StatementPrinter::Print_PB_PabloStmts(const ExpressionList & stmts) {
+std::string StatementPrinter::Print_PB_PabloStmts(const StatementList & stmts) {
     std::string strOut = "";
     for (const auto stmt : stmts) {
         strOut += ShowPabloS(stmt);
@@ -60,7 +60,7 @@ std::string StatementPrinter::Print_PB_PabloStmts(const ExpressionList & stmts) 
     return strOut;
 }
 
-std::string StatementPrinter::Print_CC_PabloStmts(const pablo::ExpressionList &stmts) {
+std::string StatementPrinter::Print_CC_PabloStmts(const pablo::StatementList &stmts) {
     std::string strOut = "Total Statements: " + std::to_string(stmts.size()) + "\n";
     for (const auto stmt : stmts) {
         strOut += ShowPabloS(stmt) + "\n";

@@ -97,7 +97,7 @@ PabloCompiler::PabloCompiler(const cc::CC_NameMap & nameMap, const BasisBitVars 
     //Create the jit execution engine.up
     InitializeNativeTarget();
     std::string ErrStr;
-    mExecutionEngine = EngineBuilder(mMod).setUseMCJIT(true).setErrorStr(&ErrStr).setOptLevel(CodeGenOpt::Level::Less).create();
+    mExecutionEngine = EngineBuilder(mMod).setUseMCJIT(true).setErrorStr(&ErrStr).setOptLevel(CodeGenOpt::Level::None).create();
     if (mExecutionEngine == nullptr) {
         throw std::runtime_error("Could not create ExecutionEngine: " + ErrStr);
     }
@@ -169,16 +169,16 @@ LLVM_Gen_RetVal PabloCompiler::compile(PabloBlock & pb)
         IRBuilder<> b(mBasicBlock);
         Value* indices[] = {b.getInt64(0), b.getInt32(i)};
         const String * const name = mBasisBitVars[i]->getName();
-        mMarkerMap.insert(std::make_pair(name, b.CreateGEP(mBasisBitsAddr, indices, name->str())));
+        Value * gep = b.CreateGEP(mBasisBitsAddr, indices);
+        LoadInst * basisBit = b.CreateAlignedLoad(gep, BLOCK_SIZE/8, false, name->str());
+        mMarkerMap.insert(std::make_pair(name, basisBit));
     }
 
     //Generate the IR instructions for the function.
     Value * result = compileStatements(pb.expressions());
     SetReturnMarker(result, 0); // matches
-
     const String * lf = pb.createVar(mNameMap["LineFeed"]->getName())->getName();
-
-    SetReturnMarker(GetMarker(lf), 1); // line feeds
+    SetReturnMarker(mMarkerMap.find(lf)->second, 1); // line feeds
 
     assert (mCarryQueueIdx == mCarryQueueSize);
     assert (mNestingDepth == 0);
@@ -211,9 +211,9 @@ LLVM_Gen_RetVal PabloCompiler::compile(PabloBlock & pb)
     fpm.add(new DataLayout(*mExecutionEngine->getDataLayout()));
 #endif
 
-    fpm.add(createPromoteMemoryToRegisterPass()); //Transform to SSA form.
-    fpm.add(createBasicAliasAnalysisPass());      //Provide basic AliasAnalysis support for GVN. (Global Value Numbering)
-    fpm.add(createCFGSimplificationPass());       //Simplify the control flow graph.
+    //fpm.add(createPromoteMemoryToRegisterPass()); //Transform to SSA form.
+    //fpm.add(createBasicAliasAnalysisPass());      //Provide basic AliasAnalysis support for GVN. (Global Value Numbering)
+    //fpm.add(createCFGSimplificationPass());       //Simplify the control flow graph.
     fpm.add(createInstructionCombiningPass());    //Simple peephole optimizations and bit-twiddling.
     fpm.add(createReassociatePass());             //Reassociate expressions.
     fpm.add(createGVNPass());                     //Eliminate common subexpressions.
@@ -370,7 +370,7 @@ void PabloCompiler::DeclareFunctions()
     mFunc_process_block->setAttributes(AttrSet);
 }
 
-void PabloCompiler::DeclareCallFunctions(const ExpressionList & stmts) {
+void PabloCompiler::DeclareCallFunctions(const StatementList & stmts) {
     for (PabloAST * stmt : stmts) {
         if (const Assign * assign = dyn_cast<Assign>(stmt)) {
             DeclareCallFunctions(assign->getExpr());
@@ -495,14 +495,16 @@ inline Value* PabloCompiler::GetMarker(const String * name) {
 
 void PabloCompiler::SetReturnMarker(Value * marker, const unsigned index) {
     IRBuilder<> b(mBasicBlock);
-    Value* marker_bitblock = b.CreateAlignedLoad(marker, BLOCK_SIZE/8, false);
-    Value* output_indices[] = {b.getInt64(0), b.getInt32(index)};
-    Value* output_struct_GEP = b.CreateGEP(mOutputAddrPtr, output_indices);
-    b.CreateAlignedStore(marker_bitblock, output_struct_GEP, BLOCK_SIZE/8, false);
+    if (marker->getType()->isPointerTy()) {
+        marker = b.CreateAlignedLoad(marker, BLOCK_SIZE/8, false);
+    }
+    Value* indices[] = {b.getInt64(0), b.getInt32(index)};
+    Value* gep = b.CreateGEP(mOutputAddrPtr, indices);
+    b.CreateAlignedStore(marker, gep, BLOCK_SIZE/8, false);
 }
 
 
-Value * PabloCompiler::compileStatements(const ExpressionList & stmts) {
+Value * PabloCompiler::compileStatements(const StatementList & stmts) {
     Value * retVal = nullptr;
     for (PabloAST * statement : stmts) {
         retVal = compileStatement(statement);
@@ -516,20 +518,14 @@ Value * PabloCompiler::compileStatement(const PabloAST * stmt)
     if (const Assign * assign = dyn_cast<const Assign>(stmt))
     {
         Value* expr = compileExpression(assign->getExpr());
-        Value* marker = GetMarker(assign->getName());
-        IRBuilder<> b(mBasicBlock);
-        b.CreateAlignedStore(expr, marker, BLOCK_SIZE/8, false);
-        retVal = marker;
+        mMarkerMap[assign->getName()] = expr;
+        retVal = expr;
     }
     if (const Next * next = dyn_cast<const Next>(stmt))
     {
-        IRBuilder<> b(mBasicBlock);
-        auto f = mMarkerMap.find(next->getName());
-        assert (f != mMarkerMap.end());
-        Value * marker = f->second;
-        Value * expr = compileExpression(next->getExpr());
-        b.CreateAlignedStore(expr, marker, BLOCK_SIZE/8, false);
-        retVal = marker;
+        Value* expr = compileExpression(next->getExpr());
+        mMarkerMap[next->getName()] = expr;
+        retVal = expr;
     }
     else if (const If * ifstmt = dyn_cast<const If>(stmt))
     {
@@ -583,21 +579,28 @@ Value * PabloCompiler::compileStatement(const PabloAST * stmt)
 
         retVal = returnMarker;
     }
-    else if (const While * whl = dyn_cast<const While>(stmt))
+    else if (const While * whileStatement = dyn_cast<const While>(stmt))
     {
         const auto baseCarryQueueIdx = mCarryQueueIdx;
         if (mNestingDepth == 0) {
-            for (auto i = 0; i != whl->getInclusiveCarryCount(); ++i) {
+            for (auto i = 0; i != whileStatement->getInclusiveCarryCount(); ++i) {
                 genCarryInLoad(baseCarryQueueIdx + i);
             }
         }        
 
-        // First compile the initial iteration statements; the calls to genCarryOutStore will update the
+        SmallVector<Next*, 4> nextNodes;
+        for (PabloAST * node : whileStatement->getBody()) {
+            if (isa<Next>(node)) {
+                nextNodes.push_back(cast<Next>(node));
+            }
+        }
+
+        // Compile the initial iteration statements; the calls to genCarryOutStore will update the
         // mCarryQueueVector with the appropriate values. Although we're not actually entering a new basic
         // block yet, increment the nesting depth so that any calls to genCarryInLoad or genCarryOutStore
         // will refer to the previous value.
         ++mNestingDepth;
-        compileStatements(whl->getBody());
+        compileStatements(whileStatement->getBody());
         // Reset the carry queue index. Note: this ought to be changed in the future. Currently this assumes
         // that compiling the while body twice will generate the equivalent IR. This is not necessarily true
         // but works for now.
@@ -615,26 +618,45 @@ Value * PabloCompiler::compileStatement(const PabloAST * stmt)
         // CONDITION BLOCK
         IRBuilder<> bCond(whileCondBlock);
         // generate phi nodes for any carry propogating instruction
-        std::vector<PHINode*> carryQueuePhiNodes(whl->getInclusiveCarryCount());
-        for (auto i = 0; i != whl->getInclusiveCarryCount(); ++i) {
+        std::vector<PHINode*> phiNodes(whileStatement->getInclusiveCarryCount() + nextNodes.size());
+        unsigned index = 0;
+        for (index = 0; index != whileStatement->getInclusiveCarryCount(); ++index) {
             PHINode * phi = bCond.CreatePHI(mXi64Vect, 2);
-            phi->addIncoming(mCarryQueueVector[baseCarryQueueIdx + i], mBasicBlock);
-            mCarryQueueVector[baseCarryQueueIdx + i] = mZeroInitializer; // phi; // (use phi for multi-carry mode.)
-            carryQueuePhiNodes[i] = phi;
+            phi->addIncoming(mCarryQueueVector[baseCarryQueueIdx + index], mBasicBlock);
+            mCarryQueueVector[baseCarryQueueIdx + index] = mZeroInitializer; // (use phi for multi-carry mode.)
+            phiNodes[index] = phi;
+        }
+        // and for any Next nodes in the loop body
+        for (Next * n : nextNodes) {
+            PHINode * phi = bCond.CreatePHI(mXi64Vect, 2, n->getName()->str());
+            auto f = mMarkerMap.find(n->getName());
+            assert (f != mMarkerMap.end());
+            phi->addIncoming(f->second, mBasicBlock);
+            mMarkerMap[n->getName()] = phi;
+            phiNodes[index++] = phi;
         }
 
         mBasicBlock = whileCondBlock;
-        bCond.CreateCondBr(genBitBlockAny(compileExpression(whl->getCondition())), whileEndBlock, whileBodyBlock);
+        bCond.CreateCondBr(genBitBlockAny(compileExpression(whileStatement->getCondition())), whileEndBlock, whileBodyBlock);
 
         // BODY BLOCK
         mBasicBlock = whileBodyBlock;
-        retVal = compileStatements(whl->getBody());
+        retVal = compileStatements(whileStatement->getBody());
         // update phi nodes for any carry propogating instruction
         IRBuilder<> bWhileBody(mBasicBlock);
-        for (auto i = 0; i != whl->getInclusiveCarryCount(); ++i) {
-            Value * carryOut = bWhileBody.CreateOr(carryQueuePhiNodes[i], mCarryQueueVector[baseCarryQueueIdx + i]);
-            carryQueuePhiNodes[i]->addIncoming(carryOut, mBasicBlock);
-            mCarryQueueVector[baseCarryQueueIdx + i] = carryQueuePhiNodes[i];
+        for (index = 0; index != whileStatement->getInclusiveCarryCount(); ++index) {
+            Value * carryOut = bWhileBody.CreateOr(phiNodes[index], mCarryQueueVector[baseCarryQueueIdx + index]);
+            PHINode * phi = phiNodes[index];
+            phi->addIncoming(carryOut, mBasicBlock);
+            mCarryQueueVector[baseCarryQueueIdx + index] = phi;
+        }
+        // and for any Next nodes in the loop body
+        for (Next * n : nextNodes) {
+            auto f = mMarkerMap.find(n->getName());
+            assert (f != mMarkerMap.end());
+            PHINode * phi = phiNodes[index++];
+            phi->addIncoming(f->second, mBasicBlock);
+            mMarkerMap[n->getName()] = phi;
         }
 
         bWhileBody.CreateBr(whileCondBlock);
@@ -642,8 +664,8 @@ Value * PabloCompiler::compileStatement(const PabloAST * stmt)
         // EXIT BLOCK
         mBasicBlock = whileEndBlock;    
         if (--mNestingDepth == 0) {
-            for (auto i = 0; i != whl->getInclusiveCarryCount(); ++i) {
-                genCarryOutStore(carryQueuePhiNodes[i], baseCarryQueueIdx + i);
+            for (index = 0; index != whileStatement->getInclusiveCarryCount(); ++index) {
+                genCarryOutStore(phiNodes[index], baseCarryQueueIdx + index);
             }
         }
     }
@@ -668,18 +690,15 @@ Value * PabloCompiler::compileExpression(const PabloAST * expr)
             if (ci == mCalleeMap.end()) {
                 throw std::runtime_error("Unexpected error locating static function for \"" + call->getCallee()->str() + "\"");
             }
-            Value * unicode_category = b.CreateCall(ci->second, mBasisBitsAddr);
-            Value * ptr = b.CreateAlloca(mXi64Vect);
-            b.CreateAlignedStore(unicode_category, ptr, BLOCK_SIZE/8, false);
-            mi = mMarkerMap.insert(std::make_pair(call->getCallee(), ptr)).first;
+            mi = mMarkerMap.insert(std::make_pair(call->getCallee(), b.CreateCall(ci->second, mBasisBitsAddr))).first;
         }
-        retVal = b.CreateAlignedLoad(mi->second, BLOCK_SIZE/8, false, call->getCallee()->str() );
+        retVal = mi->second;
     }
     else if (const Var * var = dyn_cast<Var>(expr))
-    {
+    {       
         auto f = mMarkerMap.find(var->getName());
         assert (f != mMarkerMap.end());
-        retVal = b.CreateAlignedLoad(f->second, BLOCK_SIZE/8, false, var->getName()->str() );
+        retVal = f->second;
     }
     else if (const And * pablo_and = dyn_cast<And>(expr))
     {
@@ -689,12 +708,12 @@ Value * PabloCompiler::compileExpression(const PabloAST * expr)
     {
         retVal = b.CreateOr(compileExpression(pablo_or->getExpr1()), compileExpression(pablo_or->getExpr2()), "or");
     }
-    else if (const Sel * pablo_sel = dyn_cast<Sel>(expr))
+    else if (const Sel * sel = dyn_cast<Sel>(expr))
     {
-        Value* ifMask = compileExpression(pablo_sel->getCondition());
-        Value* and_if_true_result = b.CreateAnd(ifMask, compileExpression(pablo_sel->getTrueExpr()));
-        Value* and_if_false_result = b.CreateAnd(genNot(ifMask), compileExpression(pablo_sel->getFalseExpr()));
-        retVal = b.CreateOr(and_if_true_result, and_if_false_result);
+        Value* ifMask = compileExpression(sel->getCondition());
+        Value* ifTrue = b.CreateAnd(ifMask, compileExpression(sel->getTrueExpr()));
+        Value* ifFalse = b.CreateAnd(genNot(ifMask), compileExpression(sel->getFalseExpr()));
+        retVal = b.CreateOr(ifTrue, ifFalse);
     }
     else if (const Not * pablo_not = dyn_cast<Not>(expr))
     {

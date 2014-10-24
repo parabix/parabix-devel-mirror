@@ -62,7 +62,7 @@ public:
 
     }
 
-    PabloAST * createAdvance(PabloAST * expr, int shiftAmount);
+    PabloAST * createAdvance(PabloAST * expr, const int shiftAmount);
 
     inline Zeroes * createZeroes() const {
         return mZeroes;
@@ -82,17 +82,11 @@ public:
         return assign;
     }
 
-    inline Var * createVar(const std::string name) {
-        return createVar(mSymbolGenerator.get(name), false);
-    }
+    Var * createVar(const std::string name);
 
-    inline Var * createVar(Assign * assign) {
-        return createVar(assign->mName, true);
-    }
+    Var * createVar(Assign * assign);
 
-    inline Var * createVar(Next * next) {
-        return createVar(next->mInitial->mName, true);
-    }
+    Var * createVar(Next * next);
 
     inline PabloAST * createVar(PabloAST * const input) {
         switch (input->getClassTypeId()) {
@@ -201,14 +195,9 @@ public:
         std::map<Key, PabloAST *>   mMap;
     };
 
-    inline const ExpressionList & expressions() const {
+    inline const StatementList & expressions() const {
         return mStatements;
     }
-
-protected:
-
-    Var * createVar(String * name, const bool internal);
-
 private:        
     Zeroes * const                                      mZeroes;
     Ones * const                                        mOnes;
@@ -217,7 +206,7 @@ private:
     ExpressionMap<PabloAST *, int>                      mUnaryWithInt;
     ExpressionMap<PabloAST *, PabloAST *>               mBinary;
     ExpressionMap<PabloAST *, PabloAST *, PabloAST *>   mTernary;
-    ExpressionList                                      mStatements;
+    StatementList                                      mStatements;
 };
 
 }

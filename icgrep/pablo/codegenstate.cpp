@@ -11,7 +11,7 @@ namespace pablo {
 
 /// UNARY CREATE FUNCTIONS
 
-PabloAST * PabloBlock::createAdvance(PabloAST * expr, int shiftAmount) {
+PabloAST * PabloBlock::createAdvance(PabloAST * expr, const int shiftAmount) {
     if (isa<Zeroes>(expr)) {
         return expr;
     }
@@ -26,10 +26,16 @@ PabloAST * PabloBlock::createNot(PabloAST * expr) {
     return mUnary.findOrCall<OptimizeNot>(PabloAST::ClassTypeId::Not, expr);
 }
 
-Var * PabloBlock::createVar(String * name, const bool internal) {
-    // Note: this is a unary function; internal is a hidden property passed into the constructor
-    // when instantiating a new variable.
-    return mUnary.findOrMake<Var>(PabloAST::ClassTypeId::Var, name, internal);
+Var * PabloBlock::createVar(const std::string name) {
+    return mUnary.findOrMake<Var>(PabloAST::ClassTypeId::Var, mSymbolGenerator.get(name));
+}
+
+Var * PabloBlock::createVar(Assign * assign) {
+    return mUnary.findOrMake<Var>(PabloAST::ClassTypeId::Var, assign);
+}
+
+Var * PabloBlock::createVar(Next * next) {
+    return mUnary.findOrMake<Var>(PabloAST::ClassTypeId::Var, next);
 }
 
 /// BINARY CREATE FUNCTIONS

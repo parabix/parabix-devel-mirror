@@ -94,15 +94,14 @@ public:
 private:
     void DefineTypes();
     void DeclareFunctions();
-    void DeclareCallFunctions(const ExpressionList & stmts);
+    void DeclareCallFunctions(const StatementList & stmts);
     void DeclareCallFunctions(const PabloAST * expr);
     void SetReturnMarker(Value * marker, const unsigned index);
 
     Value* GetMarker(const String *name);
 
-    Value* compileStatements(const ExpressionList & stmts);
+    Value* compileStatements(const StatementList & stmts);
     Value* compileStatement(const PabloAST * stmt);
-
     Value* compileExpression(const PabloAST * expr);
     Value* genCarryInLoad(const unsigned index);
     void   genCarryOutStore(Value* carryOut, const unsigned index);

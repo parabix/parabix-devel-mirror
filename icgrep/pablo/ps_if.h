@@ -25,7 +25,7 @@ public:
     inline PabloAST * getCondition() const {
         return mExpr;
     }
-    inline const ExpressionList & getBody() const {
+    inline const StatementList & getBody() const {
         return mBody;
     }
     inline void setInclusiveCarryCount(const unsigned count) {
@@ -35,7 +35,7 @@ public:
         return mCarryCount;
     }
 protected:
-    If(PabloAST * expr, ExpressionList && body)
+    If(PabloAST * expr, StatementList && body)
     : PabloAST(ClassTypeId::If)
     , mExpr(expr)
     , mBody(std::move(body))
@@ -45,7 +45,7 @@ protected:
     }
 private:
     PabloAST * const    mExpr;
-    ExpressionList      mBody;
+    StatementList      mBody;
     unsigned            mCarryCount;
 };
 

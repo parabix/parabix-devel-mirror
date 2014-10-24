@@ -51,7 +51,7 @@ private:
 
 bool equals(const PabloAST * expr1, const PabloAST *expr2);
 
-typedef std::vector<PabloAST *> ExpressionList;
+typedef std::vector<PabloAST *> StatementList;
 
 }
 
