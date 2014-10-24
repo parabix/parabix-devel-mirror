@@ -166,22 +166,76 @@ inline Assign * RE_Compiler::process(Diff * diff, Assign * target, PabloBlock & 
 }
 
 inline Assign * RE_Compiler::process(Rep * rep, Assign * target, PabloBlock & pb) {
-    if (rep->getUB() == Rep::UNBOUNDED_REP) {
-        target = processUnboundedRep(rep->getRE(), rep->getLB(), target, pb);
+    int lb = rep->getLB();
+    int ub = rep->getUB();
+    if (lb > 0) {
+        target = processLowerBound(rep->getRE(), lb, target, pb);
+    }
+    if (ub == Rep::UNBOUNDED_REP) {
+        target = processUnboundedRep(rep->getRE(), target, pb);
     }
     else { // if (rep->getUB() != Rep::UNBOUNDED_REP)
-        target = processBoundedRep(rep->getRE(), rep->getLB(), rep->getUB(), target, pb);
+        target = processBoundedRep(rep->getRE(), ub - lb, target, pb);
     }    
     return target;
 }
 
-inline Assign * RE_Compiler::processUnboundedRep(RE * repeated, int lb, Assign * target, PabloBlock & pb) {
+
+/*
+   Given a stream |repeated| marking positions immediately after matches to an item
+   of length |repeated_lgth|, compute a stream marking positions immediately after
+   |repeat_count| consecutive occurrences of such items.
+*/
+        
+inline Assign * RE_Compiler::consecutive(Assign * repeated, int repeated_lgth, int repeat_count, pablo::PabloBlock & pb) {
+	int i = repeated_lgth;
+	int total_lgth = repeat_count * repeated_lgth;
+	Assign * consecutive_i = repeated;
+	while (i * 2 < total_lgth) {
+        PabloAST * v = pb.createVar(consecutive_i);
+		consecutive_i = pb.createAssign("consecutive", pb.createAnd(v, pb.createAdvance(v, i)));
+		i *= 2;
+	}
+	if (i < total_lgth) {
+        PabloAST * v = pb.createVar(consecutive_i);
+		consecutive_i = pb.createAssign("consecutive", pb.createAnd(v, pb.createAdvance(v, total_lgth - i)));
+	}
+	return consecutive_i;
+}
+                
+inline bool RE_Compiler::isFixedLength(RE * regexp) {
+        return isa<Name>(regexp) && ((cast<Name>(regexp) -> getType()) == Name::Type::FixedLength);
+}
+inline Assign * RE_Compiler::processLowerBound(RE * repeated, int lb, Assign * marker, PabloBlock & pb) {
+
+#ifndef VARIABLE_ADVANCE
+    while (lb-- != 0) {
+        marker = process(repeated, marker, pb);
+    }
+    return marker;
+#endif
+    
+#ifdef VARIABLE_ADVANCE
+    std::cerr << "Here\n";
+	if (isFixedLength(repeated)) {
+        std::cerr << "Here next\n";
+        Name * rep_name = cast<Name>(repeated);
+		Assign * cc_lb = consecutive(pb.createAssign("repeated", pb.createAdvance(pb.createVar(rep_name->getName()), 1)), 1, lb, pb);
+		return pb.createAssign("lowerbound", pb.createAnd(pb.createAdvance(pb.createVar(marker), lb), pb.createVar(cc_lb)));
+	}
+	else {
+		while (lb-- != 0) {
+			marker = process(repeated, marker, pb);
+		}
+		return marker;
+	}
+#endif
+
+}
+
+inline Assign * RE_Compiler::processUnboundedRep(RE * repeated, Assign * target, PabloBlock & pb) {
 
     PabloAST * unbounded = nullptr;
-
-    while (lb-- != 0) {
-        target = process(repeated, target, pb);
-    }
 
     if (isa<Name>(repeated)) {
         Name * rep_name = cast<Name>(repeated);
@@ -231,11 +285,7 @@ inline Assign * RE_Compiler::processUnboundedRep(RE * repeated, int lb, Assign *
     return pb.createAssign("unbounded", unbounded);
 }
 
-inline Assign * RE_Compiler::processBoundedRep(RE * repeated, int lb, int ub, Assign * target, PabloBlock & pb) {
-    ub -= lb;
-    while(lb-- != 0) {
-        target = process(repeated, target, pb);
-    }
+inline Assign * RE_Compiler::processBoundedRep(RE * repeated, int ub, Assign * target, PabloBlock & pb) {
     while (ub-- != 0) {
         Assign * alt = process(repeated, target, pb);
         target = pb.createAssign("m", pb.createOr(pb.createVar(target), pb.createVar(alt)));

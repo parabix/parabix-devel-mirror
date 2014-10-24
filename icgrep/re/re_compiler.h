@@ -44,8 +44,11 @@ private:
     pablo::Assign * process(Alt * alt, pablo::Assign * target, pablo::PabloBlock & pb);
     pablo::Assign * process(Rep * rep, pablo::Assign *target, pablo::PabloBlock & pb);
     pablo::Assign * process(Diff * diff, pablo::Assign * target, pablo::PabloBlock & cg);
-    pablo::Assign * processUnboundedRep(RE * repeated, int lb, pablo::Assign * target, pablo::PabloBlock & pb);
-    pablo::Assign * processBoundedRep(RE * repeated, int lb, int ub, pablo::Assign * target, pablo::PabloBlock & pb);
+    pablo::Assign * consecutive(pablo::Assign * repeated,  int repeated_lgth, int repeat_count, pablo::PabloBlock & pb);
+    bool isFixedLength(RE * regexp);
+    pablo::Assign * processLowerBound(RE * repeated,  int lb, pablo::Assign * target, pablo::PabloBlock & pb);
+    pablo::Assign * processUnboundedRep(RE * repeated, pablo::Assign * target, pablo::PabloBlock & pb);
+    pablo::Assign * processBoundedRep(RE * repeated, int ub, pablo::Assign * target, pablo::PabloBlock & pb);
 
 
     static bool hasUnicode(const RE *re);
