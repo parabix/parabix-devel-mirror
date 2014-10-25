@@ -42,10 +42,11 @@ CC_Compiler::CC_Compiler(PabloBlock & cg, const Encoding encoding, const std::st
     }
 }
 
-void CC_Compiler::compile(const CC_NameMap & nameMap) {
+std::vector<Var *> CC_Compiler::compile(const CC_NameMap & nameMap) {
     for (Name * name : nameMap) {
         compile_re(name);
     }
+    return std::move(mBasisBit);
 }
 
 PabloAST * CC_Compiler::compile_re(RE * re) {

@@ -13,7 +13,6 @@
 //Pablo Expressions
 #include <pablo/codegenstate.h>
 #include <pablo/pabloAST.h>
-#include <cc/cc_compiler.h>
 #include "unicode_categories.h"
 #include <iostream>
 #include <string>
@@ -87,8 +86,7 @@ class PabloCompiler {
     typedef std::vector<Value*>                                 CarryQueueVector;
 
 public:
-    typedef cc::CC_Compiler::BasisBitVars BasisBitVars;
-    PabloCompiler(const BasisBitVars & basisBitVars, int bits);
+    PabloCompiler(const std::vector<Var *> & basisBitVars);
     ~PabloCompiler();
     LLVM_Gen_RetVal compile(PabloBlock & pb);
 private:
@@ -117,15 +115,13 @@ private:
     StringToValueMap                    mMarkerMap;
     CarryQueueVector                    mCarryQueueVector;
 
-    int                                 mBits;    
-    const BasisBitVars &                mBasisBitVars;
+    const std::vector<Var *> &          mBasisBits;
 
     Module* const                       mMod;
     BasicBlock*                         mBasicBlock;
     ExecutionEngine*                    mExecutionEngine;
 
-    VectorType* const                   mXi64Vect;
-    VectorType* const                   mXi128Vect;
+    VectorType* const                   mBitBlockType;
     PointerType*                        mBasisBitsInputPtr;
 
     unsigned                            mCarryQueueIdx;

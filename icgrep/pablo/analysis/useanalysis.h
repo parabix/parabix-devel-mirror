@@ -11,14 +11,18 @@ using namespace boost;
 
 class UseAnalysis
 {
-    typedef adjacency_list<hash_setS, vecS, directedS, property<vertex_name_t, PabloAST*>> UseDefGraph;
-    typedef UseDefGraph::vertex_descriptor Vertex;
+    typedef adjacency_list<hash_setS, vecS, bidirectionalS, property<vertex_name_t, PabloAST*>> UseDefGraph;
+    typedef graph_traits<UseDefGraph>::vertex_descriptor Vertex;
+    typedef graph_traits<UseDefGraph>::vertex_iterator VertexIterator;
+    typedef graph_traits<UseDefGraph>::in_edge_iterator InEdgeIterator;
     typedef std::unordered_map<PabloAST*, Vertex> UseDefMap;
 public:
     static void optimize(PabloBlock & block);
 private:
-    void traverse(const Vertex parent, StatementList & statements);
-    void traverse(const Vertex parent, PabloAST * expr);
+    void identifyDeadVariables();
+
+    void gatherUseDefInformation(const Vertex parent, StatementList & statements);
+    void gatherUseDefInformation(const Vertex parent, PabloAST * expr);
     Vertex find(const PabloAST * const node);
     UseAnalysis();
 private:

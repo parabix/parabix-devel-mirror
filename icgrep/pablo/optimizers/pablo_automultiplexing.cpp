@@ -1,4 +1,4 @@
-#include <pablo/optimizers/pablo_automultiplexing.hpp>
+#include "pablo_automultiplexing.hpp"
 
 namespace pablo {
 

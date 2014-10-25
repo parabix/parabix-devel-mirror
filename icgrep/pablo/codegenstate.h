@@ -135,7 +135,7 @@ public:
 
         inline ExpressionMap(MapType * predecessor, PabloBlock * parent)
         : mPredecessor(predecessor)
-        , mCodeGenState(*parent)
+        , mCurrentBlock(*parent)
         {
 
         }
@@ -160,7 +160,7 @@ public:
             if (f) {
                 return f;
             }
-            Functor mf(mCodeGenState);
+            Functor mf(mCurrentBlock);
             PabloAST * const expr = mf(std::forward<Args>(args)..., std::forward<Params>(params)...);
             insert(std::move(key), expr);
             return expr;
@@ -191,7 +191,7 @@ public:
 
     private:
         MapType * const             mPredecessor;
-        PabloBlock &                mCodeGenState;
+        PabloBlock &                mCurrentBlock;
         std::map<Key, PabloAST *>   mMap;
     };
 

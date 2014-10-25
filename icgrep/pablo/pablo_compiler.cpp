@@ -73,21 +73,19 @@ CREATE_GENERAL_CODE_CATEGORY(Zs)
 
 namespace pablo {
 
-PabloCompiler::PabloCompiler(const BasisBitVars & basisBitVars, int bits)
-: mBits(bits)
-, mBasisBitVars(basisBitVars)
+PabloCompiler::PabloCompiler(const std::vector<Var*> & basisBits)
+: mBasisBits(basisBits)
 , mMod(new Module("icgrep", getGlobalContext()))
 , mBasicBlock(nullptr)
 , mExecutionEngine(nullptr)
-, mXi64Vect(VectorType::get(IntegerType::get(mMod->getContext(), 64), BLOCK_SIZE / 64))
-, mXi128Vect(VectorType::get(IntegerType::get(mMod->getContext(), 128), BLOCK_SIZE / 128))
+, mBitBlockType(VectorType::get(IntegerType::get(mMod->getContext(), 64), BLOCK_SIZE / 64))
 , mBasisBitsInputPtr(nullptr)
 , mCarryQueueIdx(0)
 , mCarryQueuePtr(nullptr)
 , mNestingDepth(0)
 , mCarryQueueSize(0)
-, mZeroInitializer(ConstantAggregateZero::get(mXi64Vect))
-, mOneInitializer(ConstantVector::getAllOnesValue(mXi64Vect))
+, mZeroInitializer(ConstantAggregateZero::get(mBitBlockType))
+, mOneInitializer(ConstantVector::getAllOnesValue(mBitBlockType))
 , mFunctionType(nullptr)
 , mFunc_process_block(nullptr)
 , mBasisBitsAddr(nullptr)
@@ -164,10 +162,10 @@ LLVM_Gen_RetVal PabloCompiler::compile(PabloBlock & pb)
     mBasicBlock = BasicBlock::Create(mMod->getContext(), "parabix_entry", mFunc_process_block,0);
 
     //The basis bits structure
-    for (unsigned i = 0; i < mBits; ++i) {
+    for (unsigned i = 0; i != mBasisBits.size(); ++i) {
         IRBuilder<> b(mBasicBlock);
         Value* indices[] = {b.getInt64(0), b.getInt32(i)};
-        const String * const name = mBasisBitVars[i]->getName();
+        const String * const name = mBasisBits[i]->getName();
         Value * gep = b.CreateGEP(mBasisBitsAddr, indices);
         LoadInst * basisBit = b.CreateAlignedLoad(gep, BLOCK_SIZE/8, false, name->str());
         mMarkerMap.insert(std::make_pair(name, basisBit));
@@ -238,9 +236,9 @@ void PabloCompiler::DefineTypes()
         structBasisBits = StructType::create(mMod->getContext(), "struct.Basis_bits");
     }
     std::vector<Type*>StructTy_struct_Basis_bits_fields;
-    for (int i = 0; i < mBits; i++)
+    for (int i = 0; i != mBasisBits.size(); i++)
     {
-        StructTy_struct_Basis_bits_fields.push_back(mXi64Vect);
+        StructTy_struct_Basis_bits_fields.push_back(mBitBlockType);
     }
     if (structBasisBits->isOpaque()) {
         structBasisBits->setBody(StructTy_struct_Basis_bits_fields, /*isPacked=*/false);
@@ -252,7 +250,7 @@ void PabloCompiler::DefineTypes()
 
     //The carry q array.
     //A pointer to the BitBlock vector.
-    functionTypeArgs.push_back(PointerType::get(mXi64Vect, 0));
+    functionTypeArgs.push_back(PointerType::get(mBitBlockType, 0));
 
     //The output structure.
     StructType * outputStruct = mMod->getTypeByName("struct.Output");
@@ -261,8 +259,8 @@ void PabloCompiler::DefineTypes()
     }
     if (outputStruct->isOpaque()) {
         std::vector<Type*>fields;
-        fields.push_back(mXi64Vect);
-        fields.push_back(mXi64Vect);
+        fields.push_back(mBitBlockType);
+        fields.push_back(mBitBlockType);
         outputStruct->setBody(fields, /*isPacked=*/false);
     }
     PointerType* outputStructPtr = PointerType::get(outputStruct, 0);
@@ -433,7 +431,7 @@ void PabloCompiler::DeclareCallFunctions(const PabloAST * expr)
             // OTHERWISE ...
             throw std::runtime_error("Unknown unicode category \"" + callee->str() + "\"");
             #undef CHECK_GENERAL_CODE_CATEGORY
-            Value * unicodeCategory = mMod->getOrInsertFunction("__get_category_" + callee->str(), mXi64Vect, mBasisBitsInputPtr, NULL);
+            Value * unicodeCategory = mMod->getOrInsertFunction("__get_category_" + callee->str(), mBitBlockType, mBasisBitsInputPtr, NULL);
             if (unicodeCategory == nullptr) {
                 throw std::runtime_error("Could not create static method call for unicode category \"" + callee->str() + "\"");
             }
@@ -600,14 +598,14 @@ Value * PabloCompiler::compileStatement(const PabloAST * stmt)
         std::vector<PHINode*> phiNodes(whileStatement->getInclusiveCarryCount() + nextNodes.size());
         unsigned index = 0;
         for (index = 0; index != whileStatement->getInclusiveCarryCount(); ++index) {
-            PHINode * phi = bCond.CreatePHI(mXi64Vect, 2);
+            PHINode * phi = bCond.CreatePHI(mBitBlockType, 2);
             phi->addIncoming(mCarryQueueVector[baseCarryQueueIdx + index], mBasicBlock);
             mCarryQueueVector[baseCarryQueueIdx + index] = mZeroInitializer; // (use phi for multi-carry mode.)
             phiNodes[index] = phi;
         }
         // and for any Next nodes in the loop body
         for (Next * n : nextNodes) {
-            PHINode * phi = bCond.CreatePHI(mXi64Vect, 2, n->getName()->str());
+            PHINode * phi = bCond.CreatePHI(mBitBlockType, 2, n->getName()->str());
             auto f = mMarkerMap.find(n->getName());
             assert (f != mMarkerMap.end());
             phi->addIncoming(f->second, mBasicBlock);
@@ -674,7 +672,7 @@ Value * PabloCompiler::compileExpression(const PabloAST * expr)
         retVal = mi->second;
     }
     else if (const Var * var = dyn_cast<Var>(expr))
-    {       
+    {
         auto f = mMarkerMap.find(var->getName());
         assert (f != mMarkerMap.end());
         retVal = f->second;
@@ -701,7 +699,7 @@ Value * PabloCompiler::compileExpression(const PabloAST * expr)
     else if (const Advance * adv = dyn_cast<Advance>(expr))
     {
         Value* strm_value = compileExpression(adv->getExpr());
-		int shift = adv->getAdvanceAmount();
+        int shift = adv->getAdvanceAmount();
         retVal = genAdvanceWithCarry(strm_value, shift);
     }
     else if (const MatchStar * mstar = dyn_cast<MatchStar>(expr))
@@ -812,13 +810,13 @@ inline Value* PabloCompiler::genBitBlockAny(Value* test) {
 Value* PabloCompiler::genShiftHighbitToLow(Value* e, const Twine &namehint) {
     IRBuilder<> b(mBasicBlock);
     Value* i128_val = b.CreateBitCast(e, IntegerType::get(mMod->getContext(), BLOCK_SIZE));
-    return b.CreateBitCast(b.CreateLShr(i128_val, BLOCK_SIZE - 1, namehint), mXi64Vect);
+    return b.CreateBitCast(b.CreateLShr(i128_val, BLOCK_SIZE - 1, namehint), mBitBlockType);
 }
 
 Value* PabloCompiler::genShiftLeft64(Value* e, const Twine &namehint) {
     IRBuilder<> b(mBasicBlock);
     Value* i128_val = b.CreateBitCast(e, IntegerType::get(mMod->getContext(), BLOCK_SIZE));
-    return b.CreateBitCast(b.CreateShl(i128_val, 64, namehint), mXi64Vect);
+    return b.CreateBitCast(b.CreateShl(i128_val, 64, namehint), mBitBlockType);
 }
 
 inline Value* PabloCompiler::genNot(Value* expr) {
@@ -857,8 +855,8 @@ Value* PabloCompiler::genAdvanceWithCarry(Value* strm_value, int shift_amount) {
 	Value* carryq_longint = b.CreateBitCast(genCarryInLoad(carryIdx), IntegerType::get(mMod->getContext(), BLOCK_SIZE));
 	Value* strm_longint = b.CreateBitCast(strm_value, IntegerType::get(mMod->getContext(), BLOCK_SIZE));
 	Value* adv_longint = b.CreateOr(b.CreateShl(strm_longint, shift_amount), carryq_longint, "advance");
-	Value* result_value = b.CreateBitCast(adv_longint, mXi64Vect);
-	Value* carry_out = b.CreateBitCast(b.CreateLShr(strm_longint, BLOCK_SIZE - shift_amount, "advance_out"), mXi64Vect);
+    Value* result_value = b.CreateBitCast(adv_longint, mBitBlockType);
+    Value* carry_out = b.CreateBitCast(b.CreateLShr(strm_longint, BLOCK_SIZE - shift_amount, "advance_out"), mBitBlockType);
 	//CarryQ - carry out:
 	genCarryOutStore(carry_out, carryIdx);
 	    

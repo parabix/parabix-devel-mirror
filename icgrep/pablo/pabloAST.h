@@ -8,12 +8,13 @@
 #define PE_PabloAST_H
 
 #include <llvm/Support/Casting.h>
-#include <llvm/IR/Value.h>
 #include <vector>
 
 using namespace llvm;
 
 namespace pablo {
+
+class PabloBlock;
 
 class PabloAST {
 public:
@@ -22,7 +23,6 @@ public:
         , And
         , Assign
         , Call
-        , CharClass
         , If
         , MatchStar
         , Next
@@ -42,7 +42,8 @@ public:
     }
 protected:
     inline PabloAST(const ClassTypeId id)
-    : mClassTypeId(id) {
+    : mClassTypeId(id)
+    {
 
     }
 private:
