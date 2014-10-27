@@ -329,6 +329,10 @@ RE * RE_Parser::parse_charset() {
                         }
                         cc->insert_range(low, high);
                     }
+                    else {
+                        cc->insert(low);
+                        cc->insert('-');
+                    }
                     continue;
                 }
             }
