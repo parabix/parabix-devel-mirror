@@ -139,6 +139,8 @@ private:
     Value*                              mBasisBitsAddr;
     Value*                              mOutputAddrPtr;
 
+    int                                 mMaxPabloWhileDepth;
+
     StringToValueMap                    mCalleeMap;
 };
 

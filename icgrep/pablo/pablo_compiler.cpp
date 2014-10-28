@@ -90,14 +90,10 @@ PabloCompiler::PabloCompiler(const std::vector<Var*> & basisBits)
 , mFunc_process_block(nullptr)
 , mBasisBitsAddr(nullptr)
 , mOutputAddrPtr(nullptr)
+, mMaxPabloWhileDepth(0)
 {
     //Create the jit execution engine.up
     InitializeNativeTarget();
-    std::string ErrStr;
-    mExecutionEngine = EngineBuilder(mMod).setUseMCJIT(true).setErrorStr(&ErrStr).setOptLevel(CodeGenOpt::Level::None).create();
-    if (mExecutionEngine == nullptr) {
-        throw std::runtime_error("Could not create ExecutionEngine: " + ErrStr);
-    }
 
     InitializeNativeTargetAsmPrinter();
     InitializeNativeTargetAsmParser();
@@ -194,6 +190,18 @@ LLVM_Gen_RetVal PabloCompiler::compile(PabloBlock & pb)
 
     //Use the pass manager to run optimizations on the function.
     FunctionPassManager fpm(mMod);
+    std::string ErrStr;
+
+    if (mMaxPabloWhileDepth == 0) {
+      mExecutionEngine = EngineBuilder(mMod).setUseMCJIT(true).setErrorStr(&ErrStr).setOptLevel(CodeGenOpt::Level::None).create();
+    }
+    else {
+      mExecutionEngine = EngineBuilder(mMod).setUseMCJIT(true).setErrorStr(&ErrStr).setOptLevel(CodeGenOpt::Level::Less).create();
+    }
+    if (mExecutionEngine == nullptr) {
+        throw std::runtime_error("Could not create ExecutionEngine: " + ErrStr);
+    }
+
 
 #ifdef USE_LLVM_3_5
     mMod->setDataLayout(mExecutionEngine->getDataLayout());
@@ -577,7 +585,9 @@ Value * PabloCompiler::compileStatement(const PabloAST * stmt)
         // block yet, increment the nesting depth so that any calls to genCarryInLoad or genCarryOutStore
         // will refer to the previous value.
         ++mNestingDepth;
+	if (mMaxPabloWhileDepth < mNestingDepth) mMaxPabloWhileDepth = mNestingDepth;
         compileStatements(whileStatement->getBody());
+	
         // Reset the carry queue index. Note: this ought to be changed in the future. Currently this assumes
         // that compiling the while body twice will generate the equivalent IR. This is not necessarily true
         // but works for now.
