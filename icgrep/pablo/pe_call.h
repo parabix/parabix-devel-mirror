@@ -21,7 +21,10 @@ public:
     inline const String * getCallee() const {
         return mCallee;
     }
-protected:   
+protected:
+    void* operator new (std::size_t size) noexcept {
+        return mAllocator.allocate(size);
+    }
     Call(const PabloAST * callee)
     : PabloAST(ClassTypeId::Call)
     , mCallee(cast<String>(callee)) {

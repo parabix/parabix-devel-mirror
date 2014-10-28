@@ -32,6 +32,9 @@ public:
         return mExpr2;
     }
 protected:
+    void* operator new (std::size_t size) noexcept {
+        return mAllocator.allocate(size);
+    }
     Or(PabloAST * expr1, PabloAST * expr2)
     : PabloAST(ClassTypeId::Or)
     , mExpr1(expr1)

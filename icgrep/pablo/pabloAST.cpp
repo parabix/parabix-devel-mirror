@@ -21,6 +21,8 @@
 
 namespace pablo {
 
+PabloAST::Allocator PabloAST::mAllocator;
+
 /*
 
     Return true if expr1 and expr2 can be proven equivalent according to some rules,

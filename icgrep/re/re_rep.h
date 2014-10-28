@@ -29,6 +29,9 @@ public:
     virtual ~Rep();
 protected:
     friend RE * makeRep(RE *, const int, const int);
+    void* operator new (std::size_t size) noexcept {
+        return mAllocator.allocate(size);
+    }
     Rep(RE * re, const int lb, const int ub);
 private:
     RE* mRE;

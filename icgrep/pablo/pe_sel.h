@@ -35,6 +35,9 @@ public:
         return mF_expr;
     }
 protected:
+    void* operator new (std::size_t size) noexcept {
+        return mAllocator.allocate(size);
+    }
     Sel(PabloAST* if_expr, PabloAST* t_expr, PabloAST* f_expr)
     : PabloAST(ClassTypeId::Sel)
     , mIf_expr(if_expr)

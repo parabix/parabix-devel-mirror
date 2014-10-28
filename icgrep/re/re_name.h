@@ -42,7 +42,9 @@ public:
 protected:
     friend Name * makeName(const std::string, RE *);
     friend Name * makeName(const std::string, const Type);
-
+    void* operator new (std::size_t size) noexcept {
+        return mAllocator.allocate(size);
+    }
     Name(const std::string && name, const Type type, RE * cc)
     : RE(ClassTypeId::Name)
     , mName(std::move(name))

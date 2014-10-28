@@ -32,6 +32,9 @@ public:
         return mExpr2;
     }
 protected:
+    void* operator new (std::size_t size) noexcept {
+        return mAllocator.allocate(size);
+    }
     And(PabloAST * expr1, PabloAST * expr2)
     : PabloAST(ClassTypeId::And)
     , mExpr1(expr1)

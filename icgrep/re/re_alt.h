@@ -10,6 +10,7 @@
 #include "re_re.h"
 #include "re_cc.h"
 #include <queue>
+#include <iostream>
 
 namespace re {
 
@@ -31,7 +32,10 @@ protected:
     Alt(iterator begin, iterator end)
     : Vector(ClassTypeId::Alt, begin, end) {
 
-    }    
+    }
+    void* operator new (std::size_t size) noexcept {
+        return mAllocator.allocate(size);
+    }
 private:
     template<typename iterator>
     void flatten(iterator begin, iterator end, std::queue<CC*> & ccQ) {

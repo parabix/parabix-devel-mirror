@@ -36,6 +36,9 @@ public:
         return mOutputIndex;
     }
 protected:
+    void* operator new (std::size_t size) noexcept {
+        return mAllocator.allocate(size);
+    }
     Assign(PabloAST * name, PabloAST * expr, const int outputIndex)
     : PabloAST(ClassTypeId::Assign)
     , mName(cast<String>(name))

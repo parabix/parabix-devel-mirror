@@ -108,7 +108,13 @@ public:
     virtual ~CC() {}
 
 protected:
-
+    friend CC * makeCC();
+    friend CC * makeCC(const CodePointType codepoint);
+    friend CC * makeCC(const CodePointType lo, const CodePointType hi);
+    friend CC * makeCC(const CC * cc1, const CC * cc2);
+    void* operator new (std::size_t size) noexcept {
+        return mAllocator.allocate(size);
+    }
     inline CC()
     : RE(ClassTypeId::CC) {
 
@@ -122,14 +128,7 @@ protected:
     : RE(ClassTypeId::CC) {
         insert_range(lo_codepoint, hi_codepoint);
     }
-
     CC(const CC * cc1, const CC * cc2);
-
-    friend CC * makeCC();
-    friend CC * makeCC(const CodePointType codepoint);
-    friend CC * makeCC(const CodePointType lo, const CodePointType hi);
-    friend CC * makeCC(const CC * cc1, const CC * cc2);
-
 private:    
     CharSetVector mSparseCharSet;
 };

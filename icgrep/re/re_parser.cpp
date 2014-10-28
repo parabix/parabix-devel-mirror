@@ -265,7 +265,7 @@ Name * RE_Parser::parse_unicode_category() {
 }
 
 RE * RE_Parser::parse_charset() {
-    std::unique_ptr<CC> cc(makeCC());
+    CC * cc = makeCC();
     bool negated = false;
     cursor_t start = ++_cursor;
     while (_cursor != _end) {
@@ -290,9 +290,9 @@ RE * RE_Parser::parse_charset() {
                 }
                 ++_cursor;
                 if (negated) {
-                    return makeDiff(makeAny(), cc.release());
+                    return makeDiff(makeAny(), cc);
                 }
-                return cc.release();
+                return cc;
             // The hyphen (-) is not treated as a range separator if it appears first or last, or as the
             // endpoint of a range.
             case '-':

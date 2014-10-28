@@ -27,6 +27,9 @@ public:
         return mExpr;
     }
 protected:
+    void* operator new (std::size_t size) noexcept {
+        return mAllocator.allocate(size);
+    }
     Next(const PabloAST * initial, PabloAST * expr)
     : PabloAST(ClassTypeId::Next)
     , mInitial(cast<Assign>(initial))

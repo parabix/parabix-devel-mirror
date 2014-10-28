@@ -25,6 +25,9 @@ public:
         return mValue;
     }
 protected:
+    void* operator new (std::size_t size) noexcept {
+        return mAllocator.allocate(size);
+    }
     String(const std::string && value) noexcept
     : PabloAST(ClassTypeId::String)
     , mValue(value)

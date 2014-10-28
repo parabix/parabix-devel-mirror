@@ -22,6 +22,9 @@ public:
     virtual ~End() {}
 protected:
     friend End * makeEnd();
+    void* operator new (std::size_t size) noexcept {
+        return mAllocator.allocate(size);
+    }
     End() : RE(ClassTypeId::End) {}
 };
 

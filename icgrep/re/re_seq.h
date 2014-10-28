@@ -24,6 +24,9 @@ public:
     virtual ~Seq() {}
 protected:
     friend Seq * makeSeq();
+    void* operator new (std::size_t size) noexcept {
+        return mAllocator.allocate(size);
+    }
     template<typename iterator> friend RE * makeSeq(iterator, iterator);
     Seq()
     : Vector(ClassTypeId::Seq) {

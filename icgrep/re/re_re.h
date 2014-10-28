@@ -10,6 +10,7 @@
 #include <vector>
 #include <assert.h>
 #include <llvm/Support/Casting.h>
+#include <slab_allocator.h>
 
 using namespace llvm;
 
@@ -34,6 +35,7 @@ class Union;
 
 class RE {
 public:
+    typedef SlabAllocator<1024> Allocator;
     enum class ClassTypeId : unsigned {
         Alt
         , Any
@@ -52,6 +54,9 @@ public:
     inline ClassTypeId getClassTypeId() const {
         return mClassTypeId;
     }
+    inline static void release_memory() {
+        mAllocator.release_memory();
+    }
     typedef std::initializer_list<RE *> InitializerList;
 protected:
     inline RE(const ClassTypeId id)
@@ -59,6 +64,8 @@ protected:
 
     }
     const ClassTypeId mClassTypeId;
+
+    static Allocator mAllocator;
 };
 
 class Vector : public RE, public std::vector<RE*> {

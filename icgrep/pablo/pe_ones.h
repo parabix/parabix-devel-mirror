@@ -30,11 +30,10 @@ public:
         return isa<Ones>(other);
     }
 protected:
-    Ones()
-    : PabloAST(ClassTypeId::Ones)
-    {
-
+    void* operator new (std::size_t size) noexcept {
+        return mAllocator.allocate(size);
     }
+    Ones() : PabloAST(ClassTypeId::Ones) { }
 };
 
 }

@@ -8,6 +8,7 @@
 #define PE_PabloAST_H
 
 #include <llvm/Support/Casting.h>
+#include <slab_allocator.h>
 #include <vector>
 
 using namespace llvm;
@@ -18,6 +19,7 @@ class PabloBlock;
 
 class PabloAST {
 public:
+    typedef SlabAllocator<1024> Allocator;
     enum class ClassTypeId : unsigned {
         Advance
         , And
@@ -40,12 +42,16 @@ public:
     inline ClassTypeId getClassTypeId() const {
         return mClassTypeId;
     }
+    inline static void release_memory() {
+        mAllocator.release_memory();
+    }
 protected:
     inline PabloAST(const ClassTypeId id)
     : mClassTypeId(id)
     {
 
     }
+    static Allocator mAllocator;
 private:
     const ClassTypeId   mClassTypeId;
 };
