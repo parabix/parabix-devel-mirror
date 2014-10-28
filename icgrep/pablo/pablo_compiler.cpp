@@ -18,6 +18,45 @@
 #include <stdexcept>
 #include <include/simd-lib/bitblock.hpp>
 
+#ifdef USE_LLVM_3_4
+#include <llvm/Analysis/Verifier.h>
+#include <llvm/Assembly/PrintModulePass.h>
+#include <llvm/Linker.h>
+#endif
+#ifdef USE_LLVM_3_5
+#include <llvm/IR/Verifier.h>
+#endif
+
+#include <llvm/Pass.h>
+#include <llvm/PassManager.h>
+#include <llvm/ADT/SmallVector.h>
+#include <llvm/Analysis/Passes.h>
+#include <llvm/IR/BasicBlock.h>
+#include <llvm/IR/CallingConv.h>
+#include <llvm/IR/Constants.h>
+#include <llvm/IR/DataLayout.h>
+#include <llvm/IR/DerivedTypes.h>
+#include <llvm/IR/Function.h>
+#include <llvm/IR/GlobalVariable.h>
+#include <llvm/IR/InlineAsm.h>
+#include <llvm/IR/Instructions.h>
+#include <llvm/IR/LLVMContext.h>
+#include <llvm/IR/Module.h>
+#include <llvm/Support/FormattedStream.h>
+#include <llvm/Support/MathExtras.h>
+#include <llvm/Support/Casting.h>
+#include <llvm/Support/Debug.h>
+#include <llvm/Support/TargetSelect.h>
+#include <llvm/Support/Host.h>
+#include <llvm/Transforms/Scalar.h>
+#include <llvm/ExecutionEngine/ExecutionEngine.h>
+#include <llvm/ExecutionEngine/MCJIT.h>
+#include <llvm/IRReader/IRReader.h>
+#include <llvm/Bitcode/ReaderWriter.h>
+#include <llvm/Support/MemoryBuffer.h>
+
+#include <llvm/IR/IRBuilder.h>
+
 //#define DUMP_GENERATED_IR
 //#define DUMP_OPTIMIZED_IR
 
@@ -87,17 +126,15 @@ PabloCompiler::PabloCompiler(const std::vector<Var*> & basisBits)
 , mZeroInitializer(ConstantAggregateZero::get(mBitBlockType))
 , mOneInitializer(ConstantVector::getAllOnesValue(mBitBlockType))
 , mFunctionType(nullptr)
-, mFunc_process_block(nullptr)
+, mFunction(nullptr)
 , mBasisBitsAddr(nullptr)
 , mOutputAddrPtr(nullptr)
 , mMaxPabloWhileDepth(0)
 {
     //Create the jit execution engine.up
     InitializeNativeTarget();
-
     InitializeNativeTargetAsmPrinter();
     InitializeNativeTargetAsmParser();
-
     DefineTypes();
     DeclareFunctions();
 }
@@ -144,7 +181,7 @@ LLVM_Gen_RetVal PabloCompiler::compile(PabloBlock & pb)
     DeclareCallFunctions(pb.statements());
     mCarryQueueVector.resize(mCarryQueueSize);
 
-    Function::arg_iterator args = mFunc_process_block->arg_begin();
+    Function::arg_iterator args = mFunction->arg_begin();
     mBasisBitsAddr = args++;
     mBasisBitsAddr->setName("basis_bits");
     mCarryQueuePtr = args++;
@@ -155,7 +192,7 @@ LLVM_Gen_RetVal PabloCompiler::compile(PabloBlock & pb)
     //Create the carry queue.
     mCarryQueueIdx = 0;
     mNestingDepth = 0;
-    mBasicBlock = BasicBlock::Create(mMod->getContext(), "parabix_entry", mFunc_process_block,0);
+    mBasicBlock = BasicBlock::Create(mMod->getContext(), "parabix_entry", mFunction,0);
 
     //The basis bits structure
     for (unsigned i = 0; i != mBasisBits.size(); ++i) {
@@ -190,19 +227,18 @@ LLVM_Gen_RetVal PabloCompiler::compile(PabloBlock & pb)
 
     //Use the pass manager to run optimizations on the function.
     FunctionPassManager fpm(mMod);
-    std::string ErrStr;
-
-    if (mMaxPabloWhileDepth == 0) {
-      mExecutionEngine = EngineBuilder(mMod).setUseMCJIT(true).setErrorStr(&ErrStr).setOptLevel(CodeGenOpt::Level::None).create();
+    if (true) {
+        std::string errMessage;
+        EngineBuilder builder(mMod);
+        builder.setErrorStr(&errMessage);
+        builder.setMCPU(sys::getHostCPUName());
+        builder.setUseMCJIT(true);
+        builder.setOptLevel(mMaxPabloWhileDepth == 0 ? CodeGenOpt::Level::None : CodeGenOpt::Level::Less);
+        mExecutionEngine = builder.create();
+        if (mExecutionEngine == nullptr) {
+            throw std::runtime_error("Could not create ExecutionEngine: " + errMessage);
+        }
     }
-    else {
-      mExecutionEngine = EngineBuilder(mMod).setUseMCJIT(true).setErrorStr(&ErrStr).setOptLevel(CodeGenOpt::Level::Less).create();
-    }
-    if (mExecutionEngine == nullptr) {
-        throw std::runtime_error("Could not create ExecutionEngine: " + ErrStr);
-    }
-
-
 #ifdef USE_LLVM_3_5
     mMod->setDataLayout(mExecutionEngine->getDataLayout());
     // Set up the optimizer pipeline.  Start with registering info about how the target lays out data structures.
@@ -216,13 +252,43 @@ LLVM_Gen_RetVal PabloCompiler::compile(PabloBlock & pb)
     //fpm.add(createPromoteMemoryToRegisterPass()); //Transform to SSA form.
     //fpm.add(createBasicAliasAnalysisPass());      //Provide basic AliasAnalysis support for GVN. (Global Value Numbering)
     //fpm.add(createCFGSimplificationPass());       //Simplify the control flow graph.
+
+    fpm.add(createCorrelatedValuePropagationPass());
+    fpm.add(createEarlyCSEPass());
     fpm.add(createInstructionCombiningPass());    //Simple peephole optimizations and bit-twiddling.
     fpm.add(createReassociatePass());             //Reassociate expressions.
-    fpm.add(createGVNPass());                     //Eliminate common subexpressions.
+    fpm.add(createGVNPass());                     //Eliminate common subexpressions.    
 
+
+    // -O1 is based on -O0
+
+    // adds: -adce -always-inline -basicaa -basiccg -correlated-propagation -deadargelim -dse -early-cse -functionattrs -globalopt -indvars
+    // -inline-cost -instcombine -ipsccp -jump-threading -lazy-value-info -lcssa -licm -loop-deletion -loop-idiom -loop-rotate -loop-simplify
+    // -loop-unroll -loop-unswitch -loops -lower-expect -memcpyopt -memdep -no-aa -notti -prune-eh -reassociate -scalar-evolution -sccp
+    // -simplifycfg -sroa -strip-dead-prototypes -tailcallelim -tbaa
+
+/// no noticable impact on performance
+
+//    fpm.add(createConstantPropagationPass());
+//    fpm.add(createDeadCodeEliminationPass());
+//    fpm.add(createJumpThreadingPass());
+//    fpm.add(createLoopIdiomPass());
+//    fpm.add(createLoopRotatePass());
+//    fpm.add(createLCSSAPass());
+//    fpm.add(createLazyValueInfoPass());
+//    fpm.add(createLowerExpectIntrinsicPass());
+//    fpm.add(createLoopStrengthReducePass());
+//    fpm.add(createLoopUnswitchPass());
+//    fpm.add(createSCCPPass());
+//    fpm.add(createLICMPass());
+
+/// hurt performance significantly
+
+//    fpm.add(createLoopUnrollPass());
+//    fpm.add(createIndVarSimplifyPass());
     fpm.doInitialization();
 
-    fpm.run(*mFunc_process_block);
+    fpm.run(*mFunction);
 
 #ifdef DUMP_OPTIMIZED_IR
     mMod->dump();
@@ -232,7 +298,7 @@ LLVM_Gen_RetVal PabloCompiler::compile(PabloBlock & pb)
     LLVM_Gen_RetVal retVal;
     //Return the required size of the carry queue and a pointer to the process_block function.
     retVal.carry_q_size = mCarryQueueSize;
-    retVal.process_block_fptr = mExecutionEngine->getPointerToFunction(mFunc_process_block);
+    retVal.process_block_fptr = mExecutionEngine->getPointerToFunction(mFunction);
 
     return retVal;
 }
@@ -361,15 +427,15 @@ void PabloCompiler::DeclareFunctions()
     AttributeSet AttrSet = AttributeSet::get(mMod->getContext(), Attrs);
 
     //Create the function that will be generated.
-    mFunc_process_block = mMod->getFunction("process_block");
-    if (!mFunc_process_block) {
-        mFunc_process_block = Function::Create(
+    mFunction = mMod->getFunction("process_block");
+    if (!mFunction) {
+        mFunction = Function::Create(
             /*Type=*/mFunctionType,
             /*Linkage=*/GlobalValue::ExternalLinkage,
             /*Name=*/"process_block", mMod);
-        mFunc_process_block->setCallingConv(CallingConv::C);
+        mFunction->setCallingConv(CallingConv::C);
     }
-    mFunc_process_block->setAttributes(AttrSet);
+    mFunction->setAttributes(AttrSet);
 }
 
 void PabloCompiler::DeclareCallFunctions(const StatementList & stmts) {
@@ -515,8 +581,8 @@ Value * PabloCompiler::compileStatement(const PabloAST * stmt)
     else if (const If * ifstmt = dyn_cast<const If>(stmt))
     {
         BasicBlock * ifEntryBlock = mBasicBlock;
-        BasicBlock * ifBodyBlock = BasicBlock::Create(mMod->getContext(), "if.body", mFunc_process_block, 0);
-        BasicBlock * ifEndBlock = BasicBlock::Create(mMod->getContext(), "if.end", mFunc_process_block, 0);
+        BasicBlock * ifBodyBlock = BasicBlock::Create(mMod->getContext(), "if.body", mFunction, 0);
+        BasicBlock * ifEndBlock = BasicBlock::Create(mMod->getContext(), "if.end", mFunction, 0);
 
         int if_start_idx = mCarryQueueIdx;
 
@@ -593,9 +659,9 @@ Value * PabloCompiler::compileStatement(const PabloAST * stmt)
         // but works for now.
         mCarryQueueIdx = baseCarryQueueIdx;
 
-        BasicBlock* whileCondBlock = BasicBlock::Create(mMod->getContext(), "while.cond", mFunc_process_block, 0);
-        BasicBlock* whileBodyBlock = BasicBlock::Create(mMod->getContext(), "while.body", mFunc_process_block, 0);
-        BasicBlock* whileEndBlock = BasicBlock::Create(mMod->getContext(), "while.end", mFunc_process_block, 0);
+        BasicBlock* whileCondBlock = BasicBlock::Create(mMod->getContext(), "while.cond", mFunction, 0);
+        BasicBlock* whileBodyBlock = BasicBlock::Create(mMod->getContext(), "while.body", mFunction, 0);
+        BasicBlock* whileEndBlock = BasicBlock::Create(mMod->getContext(), "while.end", mFunction, 0);
 
         // Note: compileStatements may update the mBasicBlock pointer if the body contains nested loops. It
         // may not be same one that we entered the function with.
