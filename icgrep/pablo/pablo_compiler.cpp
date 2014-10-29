@@ -371,15 +371,16 @@ void PabloCompiler::DeclareFunctions()
                                               /*Params=*/FuncTy_1_args,
                                               /*isVarArg=*/false);
 
-    mFunc_llvm_uadd_with_overflow = mMod->getFunction("llvm.uadd.with.overflow.carryin.i"##BLOCK_SIZE);
-    if (!mFunc_llvm_uadd_with_overflow) {
-        mFunc_llvm_uadd_with_overflow = Function::Create(
+    mFunctionUaddOverflow = mMod->getFunction("llvm.uadd.with.overflow.carryin.i" + 
+                                              std::to_string(BLOCK_SIZE));
+    if (!mFunctionUaddOverflow) {
+        mFunctionUaddOverflow = Function::Create(
           /*Type=*/ FuncTy_1,
           /*Linkage=*/ GlobalValue::ExternalLinkage,
-          /*Name=*/ "llvm.uadd.with.overflow.carryin.i"##BLOCK_SIZE, mMod); // (external, no body)
-        mFunc_llvm_uadd_with_overflow->setCallingConv(CallingConv::C);
+          /*Name=*/ "llvm.uadd.with.overflow.carryin.i" + std::to_string(BLOCK_SIZE), mMod); // (external, no body)
+        mFunctionUaddOverflow->setCallingConv(CallingConv::C);
     }
-    AttributeSet mFunc_llvm_uadd_with_overflow_PAL;
+    AttributeSet mFunctionUaddOverflowPAL;
     {
         SmallVector<AttributeSet, 4> Attrs;
         AttributeSet PAS;
@@ -391,9 +392,9 @@ void PabloCompiler::DeclareFunctions()
         }
 
         Attrs.push_back(PAS);
-        mFunc_llvm_uadd_with_overflow_PAL = AttributeSet::get(mMod->getContext(), Attrs);
+        mFunctionUaddOverflowPAL = AttributeSet::get(mMod->getContext(), Attrs);
     }
-    mFunc_llvm_uadd_with_overflow->setAttributes(mFunc_llvm_uadd_with_overflow_PAL);
+    mFunctionUaddOverflow->setAttributes(mFunctionUaddOverflowPAL);
 #endif
 
     //Starts on process_block
@@ -795,12 +796,12 @@ Value * PabloCompiler::compileExpression(const PabloAST * expr)
 }
 
 #ifdef USE_UADD_OVERFLOW
-SumWithOverflowPack PabloCompiler::callUaddOverflow(Value* int128_e1, Value* int128_e2, Value* int1_cin) {
+PabloCompiler::SumWithOverflowPack PabloCompiler::callUaddOverflow(Value* int128_e1, Value* int128_e2, Value* int1_cin) {
     std::vector<Value*> struct_res_params;
     struct_res_params.push_back(int128_e1);
     struct_res_params.push_back(int128_e2);
     struct_res_params.push_back(int1_cin);
-    CallInst* struct_res = CallInst::Create(mFunc_llvm_uadd_with_overflow, struct_res_params, "uadd_overflow_res", mBasicBlock);
+    CallInst* struct_res = CallInst::Create(mFunctionUaddOverflow, struct_res_params, "uadd_overflow_res", mBasicBlock);
     struct_res->setCallingConv(CallingConv::C);
     struct_res->setTailCall(false);
     AttributeSet struct_res_PAL;
@@ -837,9 +838,9 @@ Value* PabloCompiler::genAddWithCarry(Value* e1, Value* e2) {
     SumWithOverflowPack sumpack0;
     sumpack0 = callUaddOverflow(int128_e1, int128_e2, int1_carryq_value);
     Value* obit = sumpack0.obit;
-    Value* sum = b.CreateBitCast(sumpack0.sum, mXi64Vect, "sum");
+    Value* sum = b.CreateBitCast(sumpack0.sum, mBitBlockType, "sum");
     /*obit is the i1 carryout, zero extend and insert it into a v2i64 or v4i64 vector.*/
-    ConstantAggregateZero* const_packed_5 = ConstantAggregateZero::get(mXi64Vect);
+    ConstantAggregateZero* const_packed_5 = ConstantAggregateZero::get(mBitBlockType);
     CastInst* int64_o0 = new ZExtInst(obit, IntegerType::get(mMod->getContext(), 64), "o0", mBasicBlock);
     InsertElementInst* carry_out = InsertElementInst::Create(const_packed_5, int64_o0, const_int32_6, "carry_out", mBasicBlock);
 #else

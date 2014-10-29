@@ -78,6 +78,7 @@ private:
 
     #ifdef USE_UADD_OVERFLOW
     SumWithOverflowPack callUaddOverflow(Value *e1, Value *e2, Value *cin);
+    Function* mFunctionUaddOverflow;
     #endif
 
     StringToValueMap                    mMarkerMap;

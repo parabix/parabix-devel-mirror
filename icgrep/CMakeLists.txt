@@ -280,3 +280,6 @@ add_custom_target (viewer
   COMMAND python viewer.py
   WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../performance)
 
+add_custom_target (text_viewer
+  COMMAND python viewer.py -t
+  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../performance)
