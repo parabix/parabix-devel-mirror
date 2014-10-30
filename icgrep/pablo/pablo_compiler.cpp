@@ -54,7 +54,6 @@
 #include <llvm/IRReader/IRReader.h>
 #include <llvm/Bitcode/ReaderWriter.h>
 #include <llvm/Support/MemoryBuffer.h>
-
 #include <llvm/IR/IRBuilder.h>
 
 //#define DUMP_GENERATED_IR
@@ -129,7 +128,7 @@ PabloCompiler::PabloCompiler(const std::vector<Var*> & basisBits)
 , mFunction(nullptr)
 , mBasisBitsAddr(nullptr)
 , mOutputAddrPtr(nullptr)
-, mMaxPabloWhileDepth(0)
+, mMaxNestingDepth(0)
 {
     //Create the jit execution engine.up
     InitializeNativeTarget();
@@ -177,9 +176,26 @@ PabloCompiler::~PabloCompiler()
 
 LLVM_Gen_RetVal PabloCompiler::compile(PabloBlock & pb)
 {
+    mNestingDepth = 0;
+    mMaxNestingDepth = 0;
     mCarryQueueSize = 0;
-    DeclareCallFunctions(pb.statements());
+    Examine(pb.statements());
     mCarryQueueVector.resize(mCarryQueueSize);
+
+    std::string errMessage;
+    EngineBuilder builder(mMod);
+    builder.setErrorStr(&errMessage);
+    builder.setMCPU(sys::getHostCPUName());
+    builder.setUseMCJIT(true);
+    builder.setOptLevel(mMaxNestingDepth > 1 ? CodeGenOpt::Level::Less : CodeGenOpt::Level::None);
+    mExecutionEngine = builder.create();
+    if (mExecutionEngine == nullptr) {
+        throw std::runtime_error("Could not create ExecutionEngine: " + errMessage);
+    }
+
+    if (!mCalleeMap.empty()) {
+        DeclareCallFunctions();
+    }
 
     Function::arg_iterator args = mFunction->arg_begin();
     mBasisBitsAddr = args++;
@@ -192,6 +208,7 @@ LLVM_Gen_RetVal PabloCompiler::compile(PabloBlock & pb)
     //Create the carry queue.
     mCarryQueueIdx = 0;
     mNestingDepth = 0;
+    mMaxNestingDepth = 0;
     mBasicBlock = BasicBlock::Create(mMod->getContext(), "parabix_entry", mFunction,0);
 
     //The basis bits structure
@@ -227,19 +244,7 @@ LLVM_Gen_RetVal PabloCompiler::compile(PabloBlock & pb)
 
     //Use the pass manager to run optimizations on the function.
     FunctionPassManager fpm(mMod);
-    if (true) {
-        std::string errMessage;
-        EngineBuilder builder(mMod);
-        builder.setErrorStr(&errMessage);
-        builder.setMCPU(sys::getHostCPUName());
-        builder.setUseMCJIT(true);
-        builder.setOptLevel(mMaxPabloWhileDepth == 0 ? CodeGenOpt::Level::None : CodeGenOpt::Level::Less);
-        mExecutionEngine = builder.create();
-        if (mExecutionEngine == nullptr) {
-            throw std::runtime_error("Could not create ExecutionEngine: " + errMessage);
-        }
-    }
-#ifdef USE_LLVM_3_5
+ #ifdef USE_LLVM_3_5
     mMod->setDataLayout(mExecutionEngine->getDataLayout());
     // Set up the optimizer pipeline.  Start with registering info about how the target lays out data structures.
     fpm.add(new DataLayoutPass(mMod));
@@ -249,43 +254,12 @@ LLVM_Gen_RetVal PabloCompiler::compile(PabloBlock & pb)
     fpm.add(new DataLayout(*mExecutionEngine->getDataLayout()));
 #endif
 
-    //fpm.add(createPromoteMemoryToRegisterPass()); //Transform to SSA form.
-    //fpm.add(createBasicAliasAnalysisPass());      //Provide basic AliasAnalysis support for GVN. (Global Value Numbering)
-    //fpm.add(createCFGSimplificationPass());       //Simplify the control flow graph.
-
     fpm.add(createCorrelatedValuePropagationPass());
     fpm.add(createEarlyCSEPass());
     fpm.add(createInstructionCombiningPass());    //Simple peephole optimizations and bit-twiddling.
     fpm.add(createReassociatePass());             //Reassociate expressions.
     fpm.add(createGVNPass());                     //Eliminate common subexpressions.    
 
-
-    // -O1 is based on -O0
-
-    // adds: -adce -always-inline -basicaa -basiccg -correlated-propagation -deadargelim -dse -early-cse -functionattrs -globalopt -indvars
-    // -inline-cost -instcombine -ipsccp -jump-threading -lazy-value-info -lcssa -licm -loop-deletion -loop-idiom -loop-rotate -loop-simplify
-    // -loop-unroll -loop-unswitch -loops -lower-expect -memcpyopt -memdep -no-aa -notti -prune-eh -reassociate -scalar-evolution -sccp
-    // -simplifycfg -sroa -strip-dead-prototypes -tailcallelim -tbaa
-
-/// no noticable impact on performance
-
-//    fpm.add(createConstantPropagationPass());
-//    fpm.add(createDeadCodeEliminationPass());
-//    fpm.add(createJumpThreadingPass());
-//    fpm.add(createLoopIdiomPass());
-//    fpm.add(createLoopRotatePass());
-//    fpm.add(createLCSSAPass());
-//    fpm.add(createLazyValueInfoPass());
-//    fpm.add(createLowerExpectIntrinsicPass());
-//    fpm.add(createLoopStrengthReducePass());
-//    fpm.add(createLoopUnswitchPass());
-//    fpm.add(createSCCPPass());
-//    fpm.add(createLICMPass());
-
-/// hurt performance significantly
-
-//    fpm.add(createLoopUnrollPass());
-//    fpm.add(createIndVarSimplifyPass());
     fpm.doInitialization();
 
     fpm.run(*mFunction);
@@ -439,123 +413,123 @@ void PabloCompiler::DeclareFunctions()
     mFunction->setAttributes(AttrSet);
 }
 
-void PabloCompiler::DeclareCallFunctions(const StatementList & stmts) {
-    for (PabloAST * stmt : stmts) {
-        if (const Assign * assign = dyn_cast<Assign>(stmt)) {
-            DeclareCallFunctions(assign->getExpr());
+void PabloCompiler::Examine(StatementList & stmts) {
+    for (Statement * stmt : stmts) {
+        if (Assign * assign = dyn_cast<Assign>(stmt)) {
+            Examine(assign->getExpr());
         }
-        if (const Next * next = dyn_cast<Next>(stmt)) {
-            DeclareCallFunctions(next->getExpr());
+        if (Next * next = dyn_cast<Next>(stmt)) {
+            Examine(next->getExpr());
         }
         else if (If * ifStatement = dyn_cast<If>(stmt)) {
             const auto preIfCarryCount = mCarryQueueSize;
-            DeclareCallFunctions(ifStatement->getCondition());
-            DeclareCallFunctions(ifStatement->getBody());
+            Examine(ifStatement->getCondition());
+            mMaxNestingDepth = std::max(mMaxNestingDepth, ++mNestingDepth);
+            Examine(ifStatement->getBody());
+            --mNestingDepth;
             ifStatement->setInclusiveCarryCount(mCarryQueueSize - preIfCarryCount);
         }
         else if (While * whileStatement = dyn_cast<While>(stmt)) {
             const auto preWhileCarryCount = mCarryQueueSize;
-            DeclareCallFunctions(whileStatement->getCondition());
-            DeclareCallFunctions(whileStatement->getBody());
+            Examine(whileStatement->getCondition());
+            mMaxNestingDepth = std::max(mMaxNestingDepth, ++mNestingDepth);
+            Examine(whileStatement->getBody());
+            --mNestingDepth;
             whileStatement->setInclusiveCarryCount(mCarryQueueSize - preWhileCarryCount);
         }
     }
 }
 
-void PabloCompiler::DeclareCallFunctions(const PabloAST * expr)
+void PabloCompiler::Examine(PabloAST *expr)
 {
-    if (const Call * call = dyn_cast<const Call>(expr)) {
-        const String * const callee = call->getCallee();
-        assert (callee);
-        if (mCalleeMap.find(callee) == mCalleeMap.end()) {
-            void * callee_ptr = nullptr;
-            #define CHECK_GENERAL_CODE_CATEGORY(SUFFIX) \
-                if (callee->str() == #SUFFIX) { \
-                    callee_ptr = (void*)&__get_category_##SUFFIX; \
-                } else
-            CHECK_GENERAL_CODE_CATEGORY(Cc)
-            CHECK_GENERAL_CODE_CATEGORY(Cf)
-            CHECK_GENERAL_CODE_CATEGORY(Cn)
-            CHECK_GENERAL_CODE_CATEGORY(Co)
-            CHECK_GENERAL_CODE_CATEGORY(Cs)
-            CHECK_GENERAL_CODE_CATEGORY(Ll)
-            CHECK_GENERAL_CODE_CATEGORY(Lm)
-            CHECK_GENERAL_CODE_CATEGORY(Lo)
-            CHECK_GENERAL_CODE_CATEGORY(Lt)
-            CHECK_GENERAL_CODE_CATEGORY(Lu)
-            CHECK_GENERAL_CODE_CATEGORY(Mc)
-            CHECK_GENERAL_CODE_CATEGORY(Me)
-            CHECK_GENERAL_CODE_CATEGORY(Mn)
-            CHECK_GENERAL_CODE_CATEGORY(Nd)
-            CHECK_GENERAL_CODE_CATEGORY(Nl)
-            CHECK_GENERAL_CODE_CATEGORY(No)
-            CHECK_GENERAL_CODE_CATEGORY(Pc)
-            CHECK_GENERAL_CODE_CATEGORY(Pd)
-            CHECK_GENERAL_CODE_CATEGORY(Pe)
-            CHECK_GENERAL_CODE_CATEGORY(Pf)
-            CHECK_GENERAL_CODE_CATEGORY(Pi)
-            CHECK_GENERAL_CODE_CATEGORY(Po)
-            CHECK_GENERAL_CODE_CATEGORY(Ps)
-            CHECK_GENERAL_CODE_CATEGORY(Sc)
-            CHECK_GENERAL_CODE_CATEGORY(Sk)
-            CHECK_GENERAL_CODE_CATEGORY(Sm)
-            CHECK_GENERAL_CODE_CATEGORY(So)
-            CHECK_GENERAL_CODE_CATEGORY(Zl)
-            CHECK_GENERAL_CODE_CATEGORY(Zp)
-            CHECK_GENERAL_CODE_CATEGORY(Zs)
-            // OTHERWISE ...
-            throw std::runtime_error("Unknown unicode category \"" + callee->str() + "\"");
-            #undef CHECK_GENERAL_CODE_CATEGORY
-            Value * unicodeCategory = mMod->getOrInsertFunction("__get_category_" + callee->str(), mBitBlockType, mBasisBitsInputPtr, NULL);
-            if (unicodeCategory == nullptr) {
-                throw std::runtime_error("Could not create static method call for unicode category \"" + callee->str() + "\"");
-            }
-            mExecutionEngine->addGlobalMapping(cast<GlobalValue>(unicodeCategory), callee_ptr);
-            mCalleeMap.insert(std::make_pair(callee, unicodeCategory));
+    if (Call * call = dyn_cast<Call>(expr)) {
+        mCalleeMap.insert(std::make_pair(call->getCallee(), nullptr));
+    }
+    else if (And * pablo_and = dyn_cast<And>(expr)) {
+        Examine(pablo_and->getExpr1());
+        Examine(pablo_and->getExpr2());
+    }
+    else if (Or * pablo_or = dyn_cast<Or>(expr)) {
+        Examine(pablo_or->getExpr1());
+        Examine(pablo_or->getExpr2());
+    }
+    else if (Sel * pablo_sel = dyn_cast<Sel>(expr)) {
+        Examine(pablo_sel->getCondition());
+        Examine(pablo_sel->getTrueExpr());
+        Examine(pablo_sel->getFalseExpr());
+    }
+    else if (Not * pablo_not = dyn_cast<Not>(expr)) {
+        Examine(pablo_not->getExpr());
+    }
+    else if (Advance * adv = dyn_cast<Advance>(expr)) {
+        ++mCarryQueueSize;
+        Examine(adv->getExpr());
+    }
+    else if (MatchStar * mstar = dyn_cast<MatchStar>(expr)) {
+        ++mCarryQueueSize;
+        Examine(mstar->getMarker());
+        Examine(mstar->getCharClass());
+    }
+    else if (ScanThru * sthru = dyn_cast<ScanThru>(expr)) {
+        ++mCarryQueueSize;
+        Examine(sthru->getScanFrom());
+        Examine(sthru->getScanThru());
+    }
+}
+
+void PabloCompiler::DeclareCallFunctions() {
+    for (auto mapping : mCalleeMap) {
+        const String * callee = mapping.first;
+        void * callee_ptr = nullptr;
+        #define CHECK_GENERAL_CODE_CATEGORY(SUFFIX) \
+            if (callee->str() == #SUFFIX) { \
+                callee_ptr = (void*)&__get_category_##SUFFIX; \
+            } else
+        CHECK_GENERAL_CODE_CATEGORY(Cc)
+        CHECK_GENERAL_CODE_CATEGORY(Cf)
+        CHECK_GENERAL_CODE_CATEGORY(Cn)
+        CHECK_GENERAL_CODE_CATEGORY(Co)
+        CHECK_GENERAL_CODE_CATEGORY(Cs)
+        CHECK_GENERAL_CODE_CATEGORY(Ll)
+        CHECK_GENERAL_CODE_CATEGORY(Lm)
+        CHECK_GENERAL_CODE_CATEGORY(Lo)
+        CHECK_GENERAL_CODE_CATEGORY(Lt)
+        CHECK_GENERAL_CODE_CATEGORY(Lu)
+        CHECK_GENERAL_CODE_CATEGORY(Mc)
+        CHECK_GENERAL_CODE_CATEGORY(Me)
+        CHECK_GENERAL_CODE_CATEGORY(Mn)
+        CHECK_GENERAL_CODE_CATEGORY(Nd)
+        CHECK_GENERAL_CODE_CATEGORY(Nl)
+        CHECK_GENERAL_CODE_CATEGORY(No)
+        CHECK_GENERAL_CODE_CATEGORY(Pc)
+        CHECK_GENERAL_CODE_CATEGORY(Pd)
+        CHECK_GENERAL_CODE_CATEGORY(Pe)
+        CHECK_GENERAL_CODE_CATEGORY(Pf)
+        CHECK_GENERAL_CODE_CATEGORY(Pi)
+        CHECK_GENERAL_CODE_CATEGORY(Po)
+        CHECK_GENERAL_CODE_CATEGORY(Ps)
+        CHECK_GENERAL_CODE_CATEGORY(Sc)
+        CHECK_GENERAL_CODE_CATEGORY(Sk)
+        CHECK_GENERAL_CODE_CATEGORY(Sm)
+        CHECK_GENERAL_CODE_CATEGORY(So)
+        CHECK_GENERAL_CODE_CATEGORY(Zl)
+        CHECK_GENERAL_CODE_CATEGORY(Zp)
+        CHECK_GENERAL_CODE_CATEGORY(Zs)
+        // OTHERWISE ...
+        throw std::runtime_error("Unknown unicode category \"" + callee->str() + "\"");
+        #undef CHECK_GENERAL_CODE_CATEGORY
+        Value * unicodeCategory = mMod->getOrInsertFunction("__get_category_" + callee->str(), mBitBlockType, mBasisBitsInputPtr, NULL);
+        if (unicodeCategory == nullptr) {
+            throw std::runtime_error("Could not create static method call for unicode category \"" + callee->str() + "\"");
         }
-    }
-    else if (const And * pablo_and = dyn_cast<const And>(expr))
-    {
-        DeclareCallFunctions(pablo_and->getExpr1());
-        DeclareCallFunctions(pablo_and->getExpr2());
-    }
-    else if (const Or * pablo_or = dyn_cast<const Or>(expr))
-    {
-        DeclareCallFunctions(pablo_or->getExpr1());
-        DeclareCallFunctions(pablo_or->getExpr2());
-    }
-    else if (const Sel * pablo_sel = dyn_cast<const Sel>(expr))
-    {
-        DeclareCallFunctions(pablo_sel->getCondition());
-        DeclareCallFunctions(pablo_sel->getTrueExpr());
-        DeclareCallFunctions(pablo_sel->getFalseExpr());
-    }
-    else if (const Not * pablo_not = dyn_cast<const Not>(expr))
-    {
-        DeclareCallFunctions(pablo_not->getExpr());
-    }
-    else if (const Advance * adv = dyn_cast<const Advance>(expr))
-    {
-        ++mCarryQueueSize;
-        DeclareCallFunctions(adv->getExpr());
-    }
-    else if (const MatchStar * mstar = dyn_cast<const MatchStar>(expr))
-    {
-        ++mCarryQueueSize;
-        DeclareCallFunctions(mstar->getMarker());
-        DeclareCallFunctions(mstar->getCharClass());
-    }
-    else if (const ScanThru * sthru = dyn_cast<const ScanThru>(expr))
-    {
-        ++mCarryQueueSize;
-        DeclareCallFunctions(sthru->getScanFrom());
-        DeclareCallFunctions(sthru->getScanThru());
+        mExecutionEngine->addGlobalMapping(cast<GlobalValue>(unicodeCategory), callee_ptr);
+        mCalleeMap[callee] = unicodeCategory;
     }
 }
 
 Value * PabloCompiler::compileStatements(const StatementList & stmts) {
     Value * retVal = nullptr;
-    for (PabloAST * statement : stmts) {
+    for (const PabloAST * statement : stmts) {
         retVal = compileStatement(statement);
     }
     return retVal;
@@ -640,8 +614,8 @@ Value * PabloCompiler::compileStatement(const PabloAST * stmt)
             }
         }        
 
-        SmallVector<Next*, 4> nextNodes;
-        for (PabloAST * node : whileStatement->getBody()) {
+        SmallVector<const Next*, 4> nextNodes;
+        for (const PabloAST * node : whileStatement->getBody()) {
             if (isa<Next>(node)) {
                 nextNodes.push_back(cast<Next>(node));
             }
@@ -650,9 +624,10 @@ Value * PabloCompiler::compileStatement(const PabloAST * stmt)
         // Compile the initial iteration statements; the calls to genCarryOutStore will update the
         // mCarryQueueVector with the appropriate values. Although we're not actually entering a new basic
         // block yet, increment the nesting depth so that any calls to genCarryInLoad or genCarryOutStore
-        // will refer to the previous value.
+        // will refer to the previous value.        
+
         ++mNestingDepth;
-	if (mMaxPabloWhileDepth < mNestingDepth) mMaxPabloWhileDepth = mNestingDepth;
+
         compileStatements(whileStatement->getBody());
 	
         // Reset the carry queue index. Note: this ought to be changed in the future. Currently this assumes
@@ -681,7 +656,7 @@ Value * PabloCompiler::compileStatement(const PabloAST * stmt)
             phiNodes[index] = phi;
         }
         // and for any Next nodes in the loop body
-        for (Next * n : nextNodes) {
+        for (const Next * n : nextNodes) {
             PHINode * phi = bCond.CreatePHI(mBitBlockType, 2, n->getName()->str());
             auto f = mMarkerMap.find(n->getName());
             assert (f != mMarkerMap.end());
@@ -705,7 +680,7 @@ Value * PabloCompiler::compileStatement(const PabloAST * stmt)
             mCarryQueueVector[baseCarryQueueIdx + index] = phi;
         }
         // and for any Next nodes in the loop body
-        for (Next * n : nextNodes) {
+        for (const Next * n : nextNodes) {
             auto f = mMarkerMap.find(n->getName());
             assert (f != mMarkerMap.end());
             PHINode * phi = phiNodes[index++];

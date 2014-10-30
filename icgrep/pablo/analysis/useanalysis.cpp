@@ -6,7 +6,7 @@ namespace pablo {
 void UseAnalysis::optimize(PabloBlock & block) {
     UseAnalysis analyzer;
     analyzer.gatherUseDefInformation(analyzer.mRoot, block.statements());
-
+    analyzer.identifyDeadVariables();
 }
 
 void UseAnalysis::identifyDeadVariables() {

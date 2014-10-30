@@ -18,6 +18,7 @@
 #include "pe_xor.h"
 #include "pe_zeroes.h"
 #include "pe_ones.h"
+#include <llvm/Support/Compiler.h>
 
 namespace pablo {
 
@@ -32,6 +33,7 @@ PabloAST::Allocator PabloAST::mAllocator;
 */
 
 bool equals(const PabloAST * expr1, const PabloAST * expr2) {
+    assert (expr1 && expr2);
     if (expr1->getClassTypeId() == expr2->getClassTypeId()) {
         if ((isa<const Zeroes>(expr1)) || (isa<const Ones>(expr1))) {
             return true;
@@ -87,6 +89,16 @@ bool equals(const PabloAST * expr1, const PabloAST * expr2) {
         }
     }
     return false;
+}
+
+void StatementList::push_back(Statement * const statement) {
+    if (LLVM_UNLIKELY(mLast == nullptr)) {
+        mFirst = mLast = statement;
+    }
+    else {
+        statement->insertAfter(mLast);
+        mLast = statement;
+    }
 }
 
 }

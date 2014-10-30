@@ -8,7 +8,7 @@ namespace pablo {
 
 class Assign;
 
-class Next : public PabloAST {
+class Next : public Statement {
     friend class PabloBlock;
 public:
     static inline bool classof(const PabloAST * e) {
@@ -31,7 +31,7 @@ protected:
         return mAllocator.allocate(size);
     }
     Next(const PabloAST * initial, PabloAST * expr)
-    : PabloAST(ClassTypeId::Next)
+    : Statement(ClassTypeId::Next)
     , mInitial(cast<Assign>(initial))
     , mExpr(expr)
     {

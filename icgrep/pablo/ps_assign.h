@@ -11,7 +11,7 @@
 
 namespace pablo {
 
-class Assign : public PabloAST {
+class Assign : public Statement {
     friend class PabloBlock;
     friend class Next;
 public:
@@ -40,7 +40,7 @@ protected:
         return mAllocator.allocate(size);
     }
     Assign(PabloAST * name, PabloAST * expr, const int outputIndex)
-    : PabloAST(ClassTypeId::Assign)
+    : Statement(ClassTypeId::Assign)
     , mName(cast<String>(name))
     , mExpr(expr)
     , mOutputIndex(outputIndex)

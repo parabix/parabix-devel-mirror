@@ -11,7 +11,7 @@
 
 namespace pablo {
 
-class While : public PabloAST {
+class While : public Statement {
     friend class PabloBlock;
 public:
     static inline bool classof(const PabloAST * e) {
@@ -24,6 +24,9 @@ public:
     }
     inline PabloAST * getCondition() const {
         return mExpr;
+    }
+    inline StatementList & getBody() {
+        return mBody;
     }
     inline const StatementList & getBody() const {
         return mBody;
@@ -39,7 +42,7 @@ protected:
         return mAllocator.allocate(size);
     }
     While(PabloAST * expr, StatementList && body)
-    : PabloAST(ClassTypeId::While)
+    : Statement(ClassTypeId::While)
     , mExpr(expr)
     , mBody(std::move(body))
     , mCarryCount(0)

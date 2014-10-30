@@ -60,8 +60,9 @@ public:
 private:
     void DefineTypes();
     void DeclareFunctions();
-    void DeclareCallFunctions(const StatementList & stmts);
-    void DeclareCallFunctions(const PabloAST * expr);
+    void Examine(StatementList & stmts);
+    void Examine(PabloAST * expr);
+    void DeclareCallFunctions();
     void SetOutputValue(Value * marker, const unsigned index);
 
     Value* compileStatements(const StatementList & stmts);
@@ -108,7 +109,7 @@ private:
     Value*                              mBasisBitsAddr;
     Value*                              mOutputAddrPtr;
 
-    int                                 mMaxPabloWhileDepth;
+    unsigned                            mMaxNestingDepth;
 
     StringToValueMap                    mCalleeMap;
 };

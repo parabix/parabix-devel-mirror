@@ -195,9 +195,15 @@ public:
         std::map<Key, PabloAST *>   mMap;
     };
 
+
+    inline StatementList & statements() {
+        return mStatements;
+    }
+
     inline const StatementList & statements() const {
         return mStatements;
     }
+
 private:        
     Zeroes * const                                      mZeroes;
     Ones * const                                        mOnes;
