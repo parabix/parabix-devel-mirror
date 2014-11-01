@@ -38,6 +38,7 @@ private:
 
     void compile(RE * re, pablo::PabloBlock & cg);
 
+    pablo::PabloAST * character_class_strm(Name * name, pablo::PabloBlock & pb);
     pablo::Assign * process(RE * re, pablo::Assign *marker, pablo::PabloBlock & pb);
     pablo::Assign * process(Name * name, pablo::Assign * marker, pablo::PabloBlock & pb);
     pablo::Assign * process(Seq * seq, pablo::Assign * marker, pablo::PabloBlock & pb);

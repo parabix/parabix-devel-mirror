@@ -73,6 +73,14 @@ void RE_Compiler::compile(RE * re, PabloBlock & pb) {
     pb.createAssign("lf", mLineFeed, 1);
 }
 
+PabloAST * RE_Compiler::character_class_strm(Name * name, PabloBlock & pb) {
+    if (name->getType() == Name::Type::UnicodeCategory) {
+        return pb.createCall(name->getName());
+    }
+    else {
+        return name->getVar();
+    }
+}
 
 Assign * RE_Compiler::process(RE * re, Assign * marker, PabloBlock & pb) {
     if (Name * name = dyn_cast<Name>(re)) {
@@ -115,14 +123,7 @@ inline Assign * RE_Compiler::process(Name * name, Assign * marker, PabloBlock & 
         markerVar = pb.createAnd(markerVar, mInitial);
         markerVar = pb.createScanThru(markerVar, mNonFinal);
     }
-    PabloAST * cc = nullptr;
-    if (name->getType() == Name::Type::UnicodeCategory) {
-        cc = pb.createCall(name->getName());
-    }
-    else {
-        cc = name->getVar();
-    }
-    return pb.createAssign("m", pb.createAdvance(pb.createAnd(cc, markerVar), 1));
+    return pb.createAssign("m", pb.createAdvance(pb.createAnd(character_class_strm(name, pb), markerVar), 1));
 }
 
 inline Assign * RE_Compiler::process(Seq * seq, Assign * marker, PabloBlock & pb) {
@@ -239,13 +240,7 @@ inline Assign * RE_Compiler::processUnboundedRep(RE * repeated, Assign * marker,
     if (isa<Name>(repeated)) {
         Name * name = cast<Name>(repeated);
 
-        PabloAST * cc;
-        if (name->getType() == Name::Type::UnicodeCategory) {
-            cc = pb.createCall(name->getName());
-        }
-        else {
-            cc = name->getVar();
-        }
+        PabloAST * cc = character_class_strm(name, pb);
 
         unbounded = pb.createVar(marker);
         if (name->getType() == Name::Type::FixedLength) {
@@ -259,6 +254,12 @@ inline Assign * RE_Compiler::processUnboundedRep(RE * repeated, Assign * marker,
         PabloAST * dot = pb.createNot(mLineFeed);
         unbounded = pb.createVar(marker);
         unbounded = pb.createAnd(pb.createMatchStar(unbounded, pb.createOr(mNonFinal, dot)), mInitial);
+    }
+    else if (isa<Diff>(repeated) && isa<Any>(cast<Diff>(repeated)->getLH()) && isa<Name>(cast<Diff>(repeated)->getRH())) {
+        Name * name = cast<Name>(cast<Diff>(repeated)->getRH());
+        PabloAST * cc = pb.createNot(pb.createOr(character_class_strm(name, pb), mLineFeed));
+        unbounded = pb.createVar(marker);
+        unbounded = pb.createAnd(pb.createMatchStar(unbounded, pb.createOr(mNonFinal, cc)), mInitial);
     }
     else {
         Var * markerVar = pb.createVar(marker);
