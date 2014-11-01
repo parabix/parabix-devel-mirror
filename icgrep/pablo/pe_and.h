@@ -8,6 +8,7 @@
 #define PE_AND_H
 
 #include <pablo/pabloAST.h>
+#include <array>
 
 namespace pablo {
 
@@ -25,11 +26,22 @@ public:
     }
     virtual ~And() {
     }
+    virtual PabloAST * getOperand(const unsigned index) const {
+        assert (index < 2);
+        return mExprs[index];
+    }
+    virtual unsigned getNumOperands() const {
+        return 2;
+    }
+    virtual void setOperand(const unsigned index, PabloAST * value) {
+        assert (index < 2);
+        mExprs[index] = value;
+    }
     PabloAST * getExpr1() const {
-        return mExpr1;
+        return mExprs[0];
     }
     PabloAST * getExpr2() const {
-        return mExpr2;
+        return mExprs[1];
     }
 protected:
     void* operator new (std::size_t size) noexcept {
@@ -37,14 +49,12 @@ protected:
     }
     And(PabloAST * expr1, PabloAST * expr2)
     : PabloAST(ClassTypeId::And)
-    , mExpr1(expr1)
-    , mExpr2(expr2)
+    , mExprs({expr1, expr2})
     {
 
     }
 private:
-    PabloAST * const mExpr1;
-    PabloAST * const mExpr2;
+    std::array<PabloAST*, 2> mExprs;
 };
 
 struct OptimizeAnd {

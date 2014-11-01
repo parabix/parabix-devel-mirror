@@ -8,6 +8,7 @@
 #define PE_SEL_H
 
 #include <pablo/pabloAST.h>
+#include <array>
 
 namespace pablo {
 
@@ -25,14 +26,25 @@ public:
     }
     virtual ~Sel() {
     }
+    virtual PabloAST * getOperand(const unsigned index) const {
+        assert (index < 3);
+        return mExprs[index];
+    }
+    virtual unsigned getNumOperands() const {
+        return 3;
+    }
+    virtual void setOperand(const unsigned index, PabloAST * value) {
+        assert (index < 3);
+        mExprs[index] = value;
+    }
     inline PabloAST * getCondition() const {
-        return mIf_expr;
+        return mExprs[0];
     }
     inline PabloAST * getTrueExpr() const {
-        return mT_expr;
+        return mExprs[1];
     }
     inline PabloAST * getFalseExpr() const {
-        return mF_expr;
+        return mExprs[2];
     }
 protected:
     void* operator new (std::size_t size) noexcept {
@@ -40,16 +52,12 @@ protected:
     }
     Sel(PabloAST* if_expr, PabloAST* t_expr, PabloAST* f_expr)
     : PabloAST(ClassTypeId::Sel)
-    , mIf_expr(if_expr)
-    , mT_expr(t_expr)
-    , mF_expr(f_expr)
+    , mExprs({if_expr, t_expr, f_expr})
     {
 
     }
 private:
-    PabloAST * const mIf_expr;
-    PabloAST * const mT_expr;
-    PabloAST * const mF_expr;
+    std::array<PabloAST*, 3> mExprs;
 };
 
 struct OptimizeSel {

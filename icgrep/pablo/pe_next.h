@@ -3,6 +3,7 @@
 
 #include <pablo/pabloAST.h>
 #include <pablo/ps_assign.h>
+#include <array>
 
 namespace pablo {
 
@@ -17,29 +18,39 @@ public:
     static inline bool classof(const void *) {
         return false;
     }
+    virtual PabloAST * getOperand(const unsigned index) const {
+        assert (index < 2);
+        return mExprs[index];
+    }
+    virtual unsigned getNumOperands() const {
+        return 2;
+    }
+    virtual void setOperand(const unsigned index, PabloAST * value) {
+        assert (index < 2);
+        assert (index == 0 || isa<Assign>(value));
+        mExprs[index] = value;
+    }
     inline const Assign * getInitial() const {
-        return mInitial;
+        return cast<const Assign>(mExprs[0]);
     }
     inline const String * getName() const {
-        return mInitial->getName();
+        return getInitial()->getName();
     }
     inline PabloAST * getExpr() const {
-        return mExpr;
+        return mExprs[1];
     }
 protected:
     void* operator new (std::size_t size) noexcept {
         return mAllocator.allocate(size);
     }
-    Next(const PabloAST * initial, PabloAST * expr)
-    : Statement(ClassTypeId::Next)
-    , mInitial(cast<Assign>(initial))
-    , mExpr(expr)
+    Next(PabloAST * initial, PabloAST * expr, StatementList * parent)
+    : Statement(ClassTypeId::Next, parent)
+    , mExprs({cast<Assign>(initial), expr})
     {
 
     }
 private:
-    const Assign * const      mInitial;
-    PabloAST * const          mExpr;
+    std::array<PabloAST*, 2>  mExprs;
 };
 
 }

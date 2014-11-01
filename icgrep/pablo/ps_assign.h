@@ -8,6 +8,7 @@
 #define PS_SETMARKER_H
 
 #include <pablo/pe_string.h>
+#include <array>
 
 namespace pablo {
 
@@ -23,11 +24,22 @@ public:
     }
     virtual ~Assign() {
     }
+    virtual PabloAST * getOperand(const unsigned index) const {
+        assert (index < 2);
+        return mExprs[index];
+    }
+    virtual unsigned getNumOperands() const {
+        return 2;
+    }
+    virtual void setOperand(const unsigned index, PabloAST * value) {
+        assert (index < 2);
+        mExprs[index] = value;
+    }
     inline const String * getName() const {
-        return mName;
+        return cast<String>(mExprs[0]);
     }
     inline PabloAST * getExpr() const {
-        return mExpr;
+        return mExprs[1];
     }
     inline bool isOutputAssignment() const {
         return mOutputIndex >= 0;
@@ -39,18 +51,16 @@ protected:
     void* operator new (std::size_t size) noexcept {
         return mAllocator.allocate(size);
     }
-    Assign(PabloAST * name, PabloAST * expr, const int outputIndex)
-    : Statement(ClassTypeId::Assign)
-    , mName(cast<String>(name))
-    , mExpr(expr)
+    Assign(PabloAST * name, PabloAST * expr, const int outputIndex, StatementList * parent)
+    : Statement(ClassTypeId::Assign, parent)
+    , mExprs({name, expr})
     , mOutputIndex(outputIndex)
     {
 
     }
 private:
-    String * const          mName;
-    PabloAST * const        mExpr;
-    const int               mOutputIndex;
+    std::array<PabloAST *,2>    mExprs;
+    const int                   mOutputIndex;
 };
 
 }

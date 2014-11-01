@@ -41,7 +41,7 @@ Var * PabloBlock::createVar(Next * next) {
 /// BINARY CREATE FUNCTIONS
 
 Next * PabloBlock::createNext(Assign * assign, PabloAST * expr) {
-    Next * next = mBinary.findOrMake<Next>(PabloAST::ClassTypeId::Next, assign, expr);
+    Next * next = mBinary.findOrMake<Next>(PabloAST::ClassTypeId::Next, assign, expr, &mStatements);
     mStatements.push_back(next);
     return next;
 }

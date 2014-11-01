@@ -167,7 +167,6 @@ pablo/pe_xor.cpp
 pablo/pe_xor.h
 pablo/ps_assign.cpp
 pablo/ps_assign.h
-pablo/ps_if.cpp
 pablo/ps_if.h
 pablo/ps_pablos.cpp
 pablo/ps_pablos.h
@@ -225,3 +224,4 @@ pablo/analysis/useanalysis.cpp
 pablo/analysis/useanalysis.h
 slab_allocator.h
 re/re_re.cpp
+pablo/ps_if.cpp

@@ -8,6 +8,7 @@
 #define PE_MATCHSTAR_H
 
 #include "pabloAST.h"
+#include <array>
 
 namespace pablo {
 
@@ -22,23 +23,32 @@ public:
     }
     virtual ~MatchStar() {
     }
+    virtual PabloAST * getOperand(const unsigned index) const {
+        assert (index < 2);
+        return mExprs[index];
+    }
+    virtual unsigned getNumOperands() const {
+        return 2;
+    }
+    virtual void setOperand(const unsigned index, PabloAST * value) {
+        assert (index < 2);
+        mExprs[index] = value;
+    }
     inline PabloAST * getMarker() const {
-        return mMarker;
+        return mExprs[0];
     }
     inline PabloAST * getCharClass() const  {
-        return mCC;
+        return mExprs[1];
     }
 protected:
     MatchStar(PabloAST * marker, PabloAST * cc)
     : PabloAST(ClassTypeId::MatchStar)
-    , mMarker(marker)
-    , mCC(cc)
+    , mExprs({marker, cc})
     {
 
     }
 private:
-    PabloAST * const mMarker;
-    PabloAST * const mCC;
+    std::array<PabloAST*, 2> mExprs;
 };
 
 }

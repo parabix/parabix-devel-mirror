@@ -22,6 +22,17 @@ public:
     }
     virtual ~While() {
     }
+    virtual PabloAST * getOperand(const unsigned index) const {
+        assert (index == 0);
+        return mExpr;
+    }
+    virtual unsigned getNumOperands() const {
+        return 1;
+    }
+    virtual void setOperand(const unsigned index, PabloAST * value) {
+        assert (index == 0);
+        mExpr = value;
+    }
     inline PabloAST * getCondition() const {
         return mExpr;
     }
@@ -41,16 +52,18 @@ protected:
     void* operator new (std::size_t size) noexcept {
         return mAllocator.allocate(size);
     }
-    While(PabloAST * expr, StatementList && body)
-    : Statement(ClassTypeId::While)
+    While(PabloAST * expr, StatementList && body, StatementList * parent)
+    : Statement(ClassTypeId::While, parent)
     , mExpr(expr)
     , mBody(std::move(body))
     , mCarryCount(0)
     {
-
+        for (Statement * s : mBody) {
+            s->mParent = &mBody;
+        }
     }
 private:
-    PabloAST * const    mExpr;
+    PabloAST *          mExpr;
     StatementList       mBody;
     unsigned            mCarryCount;
 };

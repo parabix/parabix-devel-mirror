@@ -91,6 +91,10 @@ bool equals(const PabloAST * expr1, const PabloAST * expr2) {
     return false;
 }
 
+Statement::~Statement() {
+
+}
+
 void StatementList::push_back(Statement * const statement) {
     if (LLVM_UNLIKELY(mLast == nullptr)) {
         mFirst = mLast = statement;

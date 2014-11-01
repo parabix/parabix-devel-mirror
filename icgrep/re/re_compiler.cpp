@@ -45,32 +45,26 @@ void RE_Compiler::compile(RE * re, PabloBlock & pb) {
     const std::string initial = "initial";
     const std::string nonfinal = "nonfinal";
 
-    if (hasUnicode(re)) {
-        //Set the 'internal.initial' bit stream for the utf-8 multi-byte encoding.        
-        PabloAST * u8single = mNameMap["UTF8-SingleByte"]->getVar();
-        PabloAST * u8pfx2 = mNameMap["UTF8-Prefix2"]->getVar();
-        PabloAST * u8pfx3 = mNameMap["UTF8-Prefix3"]->getVar();
-        PabloAST * u8pfx4 = mNameMap["UTF8-Prefix4"]->getVar();
-        PabloAST * u8pfx = pb.createOr(pb.createOr(u8pfx2, u8pfx3), u8pfx4);
-        mInitial = pb.createVar(pb.createAssign(initial, pb.createOr(u8pfx, u8single)));
-        #ifdef USE_IF_FOR_NONFINAL
-        mNonFinal = pb.createVar(pb.createAssign(gs_nonfinal, pb.createZeroes()));
-        #endif
-        PabloAST * u8scope32 = pb.createAdvance(u8pfx3, 1);
-        PabloAST * u8scope42 = pb.createAdvance(u8pfx4, 1);
-        PabloAST * u8scope43 = pb.createAdvance(u8scope42, 1);
-        #ifdef USE_IF_FOR_NONFINAL
-        PabloBlock it(pb);
-        it.createAssign(gs_nonfinal, it.createOr(it.createOr(u8pfx, u8scope32), it.createOr(u8scope42, u8scope43)));
-        pb.createIf(u8pfx, std::move(it));
-        #else        
-        mNonFinal = pb.createVar(pb.createAssign(nonfinal, pb.createOr(pb.createOr(u8pfx, u8scope32), pb.createOr(u8scope42, u8scope43))));
-        #endif
-    }
-    else {
-        mInitial = pb.createZeroes();
-        mNonFinal = pb.createZeroes();
-    }
+    //Set the 'internal.initial' bit stream for the utf-8 multi-byte encoding.
+    PabloAST * u8single = mNameMap["UTF8-SingleByte"]->getVar();
+    PabloAST * u8pfx2 = mNameMap["UTF8-Prefix2"]->getVar();
+    PabloAST * u8pfx3 = mNameMap["UTF8-Prefix3"]->getVar();
+    PabloAST * u8pfx4 = mNameMap["UTF8-Prefix4"]->getVar();
+    PabloAST * u8pfx = pb.createOr(pb.createOr(u8pfx2, u8pfx3), u8pfx4);
+    mInitial = pb.createVar(pb.createAssign(initial, pb.createOr(u8pfx, u8single)));
+    #ifdef USE_IF_FOR_NONFINAL
+    mNonFinal = pb.createVar(pb.createAssign(gs_nonfinal, pb.createZeroes()));
+    #endif
+    PabloAST * u8scope32 = pb.createAdvance(u8pfx3, 1);
+    PabloAST * u8scope42 = pb.createAdvance(u8pfx4, 1);
+    PabloAST * u8scope43 = pb.createAdvance(u8scope42, 1);
+    #ifdef USE_IF_FOR_NONFINAL
+    PabloBlock it(pb);
+    it.createAssign(gs_nonfinal, it.createOr(it.createOr(u8pfx, u8scope32), it.createOr(u8scope42, u8scope43)));
+    pb.createIf(u8pfx, std::move(it));
+    #else
+    mNonFinal = pb.createVar(pb.createAssign(nonfinal, pb.createOr(pb.createOr(u8pfx, u8scope32), pb.createOr(u8scope42, u8scope43))));
+    #endif
 
     PabloAST * result = process(re, pb.createAssign("start", pb.createOnes()), pb);
 
@@ -126,7 +120,7 @@ inline Assign * RE_Compiler::process(Name * name, Assign * marker, PabloBlock & 
         cc = pb.createCall(name->getName());
     }
     else {
-        cc = pb.createVar(name->getName());
+        cc = name->getVar();
     }
     return pb.createAssign("m", pb.createAdvance(pb.createAnd(cc, markerVar), 1));
 }
@@ -204,13 +198,13 @@ inline Assign * RE_Compiler::consecutive(Assign * repeated, int repeated_lgth, i
 }
                 
 inline bool RE_Compiler::isFixedLength(RE * regexp) {
-    return isa<Name>(regexp) && ((cast<Name>(regexp) -> getType()) == Name::Type::FixedLength);
+    return isa<Name>(regexp) && ((cast<Name>(regexp)->getType()) == Name::Type::FixedLength);
 }
 
 inline Assign * RE_Compiler::processLowerBound(RE * repeated, int lb, Assign * marker, PabloBlock & pb) {
 	if (isFixedLength(repeated)) {
-		Name * rep_name = cast<Name>(repeated);
-		Assign * cc_lb = consecutive(pb.createAssign("repeated", pb.createAdvance(pb.createVar(rep_name->getName()), 1)), 1, lb, pb);
+        Name * name = cast<Name>(repeated);
+        Assign * cc_lb = consecutive(pb.createAssign("repeated", pb.createAdvance(name->getVar(), 1)), 1, lb, pb);
 		return pb.createAssign("lowerbound", pb.createAnd(pb.createAdvance(pb.createVar(marker), lb), pb.createVar(cc_lb)));
 	}
 	// Fall through to general case.
@@ -227,8 +221,8 @@ inline Assign * RE_Compiler::processBoundedRep(RE * repeated, int ub, Assign * m
 		// Use matchstar, then apply filter.
 		Assign * nonMatch = pb.createAssign("nonmatch", pb.createNot(pb.createVar(marker)));
 		PabloAST * upperLimitMask = pb.createNot(pb.createVar(consecutive(nonMatch, 1, ub + 1, pb)));
-		PabloAST * rep_class_var = pb.createVar(cast<Name>(repeated) -> getName());
-			return pb.createAssign("bounded", pb.createAnd(pb.createMatchStar(pb.createVar(marker), rep_class_var), upperLimitMask));
+        PabloAST * rep_class_var = cast<Name>(repeated)->getVar();
+        return pb.createAssign("bounded", pb.createAnd(pb.createMatchStar(pb.createVar(marker), rep_class_var), upperLimitMask));
 	}
 	// Fall through to general case.
 	while (ub-- != 0) {
@@ -243,18 +237,18 @@ inline Assign * RE_Compiler::processUnboundedRep(RE * repeated, Assign * marker,
     PabloAST * unbounded = nullptr;
 
     if (isa<Name>(repeated)) {
-        Name * rep_name = cast<Name>(repeated);
+        Name * name = cast<Name>(repeated);
 
         PabloAST * cc;
-        if (rep_name->getType() == Name::Type::UnicodeCategory) {
-            cc = pb.createCall(rep_name->getName());
+        if (name->getType() == Name::Type::UnicodeCategory) {
+            cc = pb.createCall(name->getName());
         }
         else {
-            cc = pb.createVar(rep_name->getName());
+            cc = name->getVar();
         }
 
         unbounded = pb.createVar(marker);
-        if (rep_name->getType() == Name::Type::FixedLength) {
+        if (name->getType() == Name::Type::FixedLength) {
             unbounded = pb.createMatchStar(unbounded, cc);
         }
         else { // Name::Unicode and Name::UnicodeCategory
@@ -286,44 +280,6 @@ inline Assign * RE_Compiler::processUnboundedRep(RE * repeated, Assign * marker,
         unbounded = whileAccumVar;
     }    
     return pb.createAssign("unbounded", unbounded);
-}
-
-bool RE_Compiler::hasUnicode(const RE * re) {
-    bool found = false;
-    if (re == nullptr) {
-        throw std::runtime_error("Unexpected Null Value passed to RE Compiler!");
-    }
-    else if (isa<Any>(re)) {
-        found = true;
-    }
-    else if (isa<Diff>(re)) {
-        found = true;
-    }
-    else if (const Name * name = dyn_cast<const Name>(re)) {
-        if ((name->getType() == Name::Type::UnicodeCategory) || (name->getType() == Name::Type::Unicode)) {
-            found = true;
-        }
-    }
-    else if (const Seq * re_seq = dyn_cast<const Seq>(re)) {
-        for (auto i = re_seq->cbegin(); i != re_seq->cend(); ++i) {
-            if (hasUnicode(*i)) {
-                found = true;
-                break;
-            }
-        }
-    }
-    else if (const Alt * re_alt = dyn_cast<const Alt>(re)) {
-        for (auto i = re_alt->cbegin(); i != re_alt->cend(); ++i) {
-            if (hasUnicode(*i)) {
-                found = true;
-                break;
-            }
-        }
-    }
-    else if (const Rep * rep = dyn_cast<const Rep>(re)) {
-        found = hasUnicode(rep->getRE());
-    }
-    return found;
 }
 
 } // end of namespace re

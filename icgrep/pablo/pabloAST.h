@@ -8,6 +8,7 @@
 #define PE_PabloAST_H
 
 #include <llvm/Support/Casting.h>
+#include <llvm/Support/Compiler.h>
 #include <slab_allocator.h>
 #include <iterator>
 
@@ -42,6 +43,24 @@ public:
     inline ClassTypeId getClassTypeId() const {
         return mClassTypeId;
     }
+
+    inline void replaceUsesOfWith(PabloAST * from, PabloAST * to) {
+        if (from == to) {
+            return;
+        }
+        for (unsigned i = 0, operands = getNumOperands(); i != operands; ++i) {
+            if (getOperand(i) == from) {
+                setOperand(i, to);
+            }
+        }
+    }
+
+    virtual PabloAST * getOperand(const unsigned index) const = 0;
+
+    virtual unsigned getNumOperands() const = 0;
+
+    virtual void setOperand(const unsigned index, PabloAST * value) = 0;
+
     inline static void release_memory() {
         mAllocator.release_memory();
     }
@@ -58,35 +77,54 @@ private:
 
 bool equals(const PabloAST * expr1, const PabloAST *expr2);
 
+class StatementList;
+
 class Statement : public PabloAST {
     friend class StatementList;
+    friend class If;
+    friend class While;
 public:
-    Statement(const ClassTypeId id)
+    static inline bool classof(const PabloAST * e) {
+        switch (e->getClassTypeId()) {
+            case PabloAST::ClassTypeId::Assign:
+            case PabloAST::ClassTypeId::Next:
+            case PabloAST::ClassTypeId::If:
+            case PabloAST::ClassTypeId::While:
+                return true;
+            default:
+                return false;
+        }
+    }
+    static inline bool classof(const Statement *) {
+        return true;
+    }
+    static inline bool classof(const void *) {
+        return false;
+    }
+
+    inline void insertBefore(Statement * const statement);
+    inline void insertAfter(Statement * const statement);
+    inline void removeFromParent();
+
+protected:
+    Statement(const ClassTypeId id, StatementList * parent)
     : PabloAST(id)
     , mNext(nullptr)
     , mPrev(nullptr)
+    , mParent(parent)
     {
 
     }
-    inline void insertBefore(Statement * const statement) {
-        assert (statement);
-        mNext = statement;
-        mPrev = statement->mPrev;
-        statement->mPrev = this;
-    }
-    inline void insertAfter(Statement * const statement) {
-        assert (statement);
-        mPrev = statement;
-        mNext = statement->mNext;
-        statement->mNext = this;
-    }
-private:
+    virtual ~Statement() = 0;
+protected:
     Statement * mNext;
     Statement * mPrev;
+    StatementList * mParent;
 };
 
 class StatementList {
-
+    friend class Statement;
+public:
     class iterator: public std::iterator<std::forward_iterator_tag, Statement> {
     public:
         iterator(): mCurrent(nullptr) {}
@@ -161,6 +199,80 @@ class StatementList {
         friend class iterator;
     };
 
+    class reverse_iterator: public std::iterator<std::forward_iterator_tag, Statement> {
+    public:
+        reverse_iterator(): mCurrent(nullptr) {}
+
+        reverse_iterator(Statement* base): mCurrent(base) {}
+
+        reverse_iterator(const reverse_iterator& other): mCurrent(other.mCurrent) {}
+
+        const reverse_iterator& operator=(const reverse_iterator& other) {
+            mCurrent = other.mCurrent; return other;
+        }
+
+        inline reverse_iterator& operator++() {
+            assert (mCurrent);
+            mCurrent = mCurrent->mPrev;
+            return *this;
+        }
+
+        reverse_iterator operator++(int) {
+            reverse_iterator tmp(*this);
+            ++(*this);
+            return tmp;
+        }
+
+        bool operator==(const reverse_iterator& other) const {
+            return  mCurrent == other.mCurrent;
+        }
+
+        bool operator!=(const reverse_iterator& other) const {
+            return  mCurrent != other.mCurrent;
+        }
+
+        Statement* operator*() {return mCurrent;}
+        Statement* operator->(){return mCurrent;}
+
+    private:
+        Statement * mCurrent;
+        friend class const_reverse_iterator;
+    };
+
+    class const_reverse_iterator: public std::iterator<std::forward_iterator_tag, Statement> {
+    public:
+        const_reverse_iterator(): mCurrent(nullptr) {}
+        const_reverse_iterator(const Statement* base): mCurrent(base) {}
+        const_reverse_iterator(const const_reverse_iterator& other): mCurrent(other.mCurrent) {}
+        const const_reverse_iterator& operator=(const const_reverse_iterator& other) {mCurrent = other.mCurrent; return other;}
+
+        inline const_reverse_iterator& operator++() {
+            assert (mCurrent);
+            mCurrent = mCurrent->mPrev;
+            return *this;
+        }
+
+        const_reverse_iterator  operator++(int) {
+            const_reverse_iterator tmp(*this);
+            ++(*this);
+            return tmp;
+        }
+
+        bool operator==(const const_reverse_iterator & other) const {
+            return  mCurrent == other.mCurrent;
+        }
+        bool operator!=(const const_reverse_iterator & other) const {
+            return  mCurrent != other.mCurrent;
+        }
+
+        const Statement* operator*() {return mCurrent;}
+        const Statement* operator->(){return mCurrent;}
+
+    private:
+        const Statement * mCurrent;
+        friend class iterator;
+    };
+
 public:
 
     StatementList()
@@ -186,12 +298,28 @@ public:
         return iterator(nullptr);
     }
 
+    reverse_iterator rbegin() {
+        return reverse_iterator(mLast);
+    }
+
+    reverse_iterator rend() {
+        return reverse_iterator(nullptr);
+    }
+
     const_iterator begin() const {
         return const_iterator(mFirst);
     }
 
     const_iterator end() const {
         return const_iterator(nullptr);
+    }
+
+    const_reverse_iterator rbegin() const {
+        return const_reverse_iterator(mLast);
+    }
+
+    const_reverse_iterator rend() const {
+        return const_reverse_iterator(nullptr);
     }
 
     const_iterator cbegin() const {
@@ -202,12 +330,80 @@ public:
         return const_iterator(nullptr);
     }
 
+    const_reverse_iterator crbegin() const {
+        return const_reverse_iterator(mLast);
+    }
+
+    const_reverse_iterator crend() const {
+        return const_reverse_iterator(nullptr);
+    }
+
+    Statement * front() const {
+        return mFirst;
+    }
+
+    Statement * back() const {
+        return mLast;
+    }
+
     void push_back(Statement * const statement);
 
 private:
     Statement * mFirst;
     Statement * mLast;
 };
+
+inline void Statement::insertBefore(Statement * const statement) {
+    assert (statement);
+    assert (statement != this);
+    assert (statement->mParent);
+    removeFromParent();
+    mParent = statement->mParent;
+    if (LLVM_UNLIKELY(mParent->mFirst == statement)) {
+        mParent->mFirst = this;
+    }
+    mNext = statement;
+    mPrev = statement->mPrev;
+    statement->mPrev = this;
+    if (LLVM_LIKELY(mPrev != nullptr)) {
+        mPrev->mNext = this;
+    }
+}
+inline void Statement::insertAfter(Statement * const statement) {
+    assert (statement);
+    assert (statement != this);
+    assert (statement->mParent);
+    removeFromParent();
+    mParent = statement->mParent;
+    if (LLVM_UNLIKELY(mParent->mLast == statement)) {
+        mParent->mLast = this;
+    }
+    mPrev = statement;
+    mNext = statement->mNext;
+    statement->mNext = this;
+    if (LLVM_LIKELY(mNext != nullptr)) {
+        mNext->mPrev = this;
+    }
+}
+inline void Statement::removeFromParent() {
+    if (LLVM_LIKELY(mParent != nullptr)) {
+        if (LLVM_UNLIKELY(mParent->mFirst == this)) {
+            mParent->mFirst = mNext;
+        }
+        if (LLVM_UNLIKELY(mParent->mLast == this)) {
+            mParent->mLast = mPrev;
+        }
+        if (LLVM_LIKELY(mPrev != nullptr)) {
+            mPrev->mNext = mNext;
+        }
+        if (LLVM_LIKELY(mNext != nullptr)) {
+            mNext->mPrev = mPrev;
+        }
+    }
+    mPrev = nullptr;
+    mNext = nullptr;
+    mParent = nullptr;
+}
 
 }
 

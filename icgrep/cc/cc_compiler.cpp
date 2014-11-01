@@ -65,7 +65,7 @@ PabloAST * CC_Compiler::compile_re(RE * re) {
 PabloAST * CC_Compiler::compile_re(Name * name) {
     assert(name);
     Var * var = name->getVar();
-    if (var == nullptr) {        
+    if (var == nullptr) {
         if (name->getType() == Name::Type::FixedLength) {
             RE * cc = name->getCC();
             assert (cc);
@@ -82,9 +82,11 @@ PabloAST * CC_Compiler::compile_re(Name * name) {
             if (value == nullptr) {
                 throw std::runtime_error("Unexpected CC node given to CC_Compiler: " + Printer_RE::PrintRE(name) + " : " + Printer_RE::PrintRE(cc));
             }
-            mCG.createAssign(name->getName(), value);
+            var = mCG.createVar(mCG.createAssign(name->getName(), value));
         }
-        var = mCG.createVar(name->getName());
+        else {
+            var = mCG.createVar(name->getName());
+        }
         name->setVar(var);
     }
     return var;

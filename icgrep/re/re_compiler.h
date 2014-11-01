@@ -45,13 +45,10 @@ private:
     pablo::Assign * process(Rep * rep, pablo::Assign *marker, pablo::PabloBlock & pb);
     pablo::Assign * process(Diff * diff, pablo::Assign * marker, pablo::PabloBlock & cg);
     pablo::Assign * consecutive(pablo::Assign * repeated,  int repeated_lgth, int repeat_count, pablo::PabloBlock & pb);
-    bool isFixedLength(RE * regexp);
+    static bool isFixedLength(RE * regexp);
     pablo::Assign * processLowerBound(RE * repeated,  int lb, pablo::Assign * marker, pablo::PabloBlock & pb);
     pablo::Assign * processUnboundedRep(RE * repeated, pablo::Assign * marker, pablo::PabloBlock & pb);
     pablo::Assign * processBoundedRep(RE * repeated, int ub, pablo::Assign * marker, pablo::PabloBlock & pb);
-
-
-    static bool hasUnicode(const RE *re);
 
     pablo::PabloBlock &                             mCG;
     const cc::CC_NameMap &                          mNameMap;

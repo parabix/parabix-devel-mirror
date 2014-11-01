@@ -8,6 +8,7 @@
 #define PS_SCANTHRU_H
 
 #include <pablo/pabloAST.h>
+#include <array>
 
 namespace pablo {
 
@@ -20,24 +21,33 @@ public:
     static inline bool classof(const void *) {
         return false;
     }
+    virtual ~ScanThru() {
+    }
+    virtual PabloAST * getOperand(const unsigned index) const {
+        assert (index < 2);
+        return mExprs[index];
+    }
+    virtual unsigned getNumOperands() const {
+        return 2;
+    }
+    virtual void setOperand(const unsigned index, PabloAST * value) {
+        assert (index < 2);
+        mExprs[index] = value;
+    }
+    PabloAST * getScanFrom() const {
+        return mExprs[0];
+    }
+    PabloAST * getScanThru() const {
+        return mExprs[1];
+    }
     ScanThru(PabloAST * from, PabloAST * thru)
     : PabloAST(ClassTypeId::ScanThru)
-    , mScanFrom(from)
-    , mScanThru(thru)
+    , mExprs({from, thru})
     {
 
     }
-    virtual ~ScanThru() {
-    }
-    PabloAST * getScanFrom() const {
-        return mScanFrom;
-    }
-    PabloAST * getScanThru() const {
-        return mScanThru;
-    }
 private:
-    PabloAST * const mScanFrom;
-    PabloAST * const mScanThru;
+    std::array<PabloAST*, 2> mExprs;
 };
 
 }

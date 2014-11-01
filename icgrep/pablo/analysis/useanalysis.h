@@ -2,35 +2,53 @@
 #define USEANALYSIS_H
 
 #include <pablo/codegenstate.h>
+
+#ifdef USE_BOOST
 #include <boost/graph/adjacency_list.hpp>
 #include <unordered_map>
+#include <vector>
+#include <set>
 
 namespace pablo {
 
 using namespace boost;
 
-class UseAnalysis
-{
+class UseAnalysis {
     typedef adjacency_list<hash_setS, vecS, bidirectionalS, property<vertex_name_t, PabloAST*>> UseDefGraph;
     typedef graph_traits<UseDefGraph>::vertex_descriptor Vertex;
     typedef graph_traits<UseDefGraph>::vertex_iterator VertexIterator;
     typedef graph_traits<UseDefGraph>::in_edge_iterator InEdgeIterator;
-    typedef std::unordered_map<PabloAST*, Vertex> UseDefMap;
+    typedef graph_traits<UseDefGraph>::out_edge_iterator OutEdgeIterator;
+    typedef std::unordered_map<const PabloAST*, Vertex> UseDefMap;
+    typedef std::set<Statement *> PredecessorSet;
 public:
-    static void optimize(PabloBlock & block);
+    static bool optimize(PabloBlock & block);
 private:
-    void identifyDeadVariables();
-
-    void gatherUseDefInformation(const Vertex parent, StatementList & statements);
-    void gatherUseDefInformation(const Vertex parent, PabloAST * expr);
+    void cse(PabloBlock & block);
+    Statement * findInsertionPointFor(const Vertex v, PabloBlock & block);
+    Statement * findLastStatement(const PredecessorSet & predecessors, StatementList & statements);
+    void dce();
+    void gatherUseDefInformation(const StatementList & statements);
+    void gatherUseDefInformation(const Vertex parent, const StatementList & statements);
+    void gatherUseDefInformation(const Vertex parent, const PabloAST * expr);
     Vertex find(const PabloAST * const node);
-    UseAnalysis();
 private:
     UseDefGraph       mUseDefGraph;
     UseDefMap         mUseDefMap;
-    const Vertex      mRoot;
 };
 
 }
+#else
+
+namespace pablo {
+class UseAnalysis {
+public:
+    static bool optimize(PabloBlock &) {
+        return false;
+    }
+};
+}
+
+#endif
 
 #endif // USEANALYSIS_H

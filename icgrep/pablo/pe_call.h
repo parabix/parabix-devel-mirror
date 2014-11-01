@@ -18,6 +18,18 @@ public:
     }
     virtual ~Call() {
     }
+    virtual PabloAST * getOperand(const unsigned index) const {
+        assert (index == 0);
+        return mCallee;
+    }
+    virtual unsigned getNumOperands() const {
+        return 1;
+    }
+    virtual void setOperand(const unsigned index, PabloAST * value) {
+        assert (index == 0);
+        assert (isa<String>(value));
+        mCallee = cast<String>(value);
+    }
     inline const String * getCallee() const {
         return mCallee;
     }
@@ -25,13 +37,13 @@ protected:
     void* operator new (std::size_t size) noexcept {
         return mAllocator.allocate(size);
     }
-    Call(const PabloAST * callee)
+    Call(PabloAST * callee)
     : PabloAST(ClassTypeId::Call)
     , mCallee(cast<String>(callee)) {
 
     }
 private:
-    const String * const mCallee;
+    String * mCallee;
 };
 }
 

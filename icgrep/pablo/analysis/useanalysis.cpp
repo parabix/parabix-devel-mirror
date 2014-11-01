@@ -1,24 +1,137 @@
 #include "useanalysis.h"
 #include <queue>
+#include <pablo/printer_pablos.h>
+#include <fstream>
+
+using namespace boost;
 
 namespace pablo {
 
-void UseAnalysis::optimize(PabloBlock & block) {
+#ifdef USE_BOOST
+bool UseAnalysis::optimize(PabloBlock & block) {
     UseAnalysis analyzer;
-    analyzer.gatherUseDefInformation(analyzer.mRoot, block.statements());
-    analyzer.identifyDeadVariables();
+    analyzer.gatherUseDefInformation(block.statements());
+    analyzer.dce();
+    analyzer.cse(block);
+    return true;
 }
 
-void UseAnalysis::identifyDeadVariables() {
+
+void UseAnalysis::cse(PabloBlock & block) {
+
+    VertexIterator vi, vi_end;
+    auto mGraphMap = get(vertex_name, mUseDefGraph);
+    for (std::tie(vi, vi_end) = vertices(mUseDefGraph); vi != vi_end; ++vi) {
+        const Vertex u = *vi;
+        if (out_degree(u, mUseDefGraph) > 1) {
+            PabloAST * expr = mGraphMap[u];
+            if (isa<Statement>(expr) || isa<Var>(expr)) {
+                continue;
+            }
+            // create the new nodes
+            Assign * assign = block.createAssign("cse", expr);
+            Var * var = block.createVar(assign);
+            const Vertex s = find(assign);
+            const Vertex v = find(var);
+            // update the program and graph
+            OutEdgeIterator ei, ei_end;
+            for (std::tie(ei, ei_end) = out_edges(u, mUseDefGraph); ei != ei_end; ++ei) {
+                const Vertex t = target(*ei, mUseDefGraph);
+                add_edge(v, t, mUseDefGraph);
+                PabloAST * user = mGraphMap[t];
+                user->replaceUsesOfWith(expr, var);
+            }
+            clear_out_edges(u, mUseDefGraph);
+            add_edge(u, s, mUseDefGraph);
+            add_edge(s, v, mUseDefGraph);
+            Statement * ip = findInsertionPointFor(u, block);
+            if (ip == nullptr) {
+                assign->insertBefore(block.statements().front());
+            }
+            else {
+                assign->insertAfter(ip);
+            }
+        }
+    }
+}
+
+inline Statement * UseAnalysis::findInsertionPointFor(const Vertex v, PabloBlock & block) {
+    // We want to find a predecessor of v that is the last statement in the AST.
+    auto mGraphMap = get(vertex_name, mUseDefGraph);
+    PredecessorSet predecessors;
+    std::queue<Vertex> Q;
+    InEdgeIterator ei, ei_end;
+    for (std::tie(ei, ei_end) = in_edges(v, mUseDefGraph); ei != ei_end; ++ei) {
+        const Vertex u = source(*ei, mUseDefGraph);
+        PabloAST * n = mGraphMap[u];
+        if (isa<Statement>(n)) {
+            predecessors.insert(cast<Statement>(n));
+        }
+        else {
+            Q.push(u);
+        }
+    }
+
+    while (!Q.empty()) {
+        const Vertex u = Q.front();
+        Q.pop();
+        PabloAST * n = mGraphMap[u];
+
+        if (isa<Statement>(n)) {
+            predecessors.insert(cast<Statement>(n));
+        }
+        else {
+            InEdgeIterator ei, ei_end;
+            for (std::tie(ei, ei_end) = in_edges(u, mUseDefGraph); ei != ei_end; ++ei) {
+                Q.push(source(*ei, mUseDefGraph));
+            }
+        }
+    }
+    if (predecessors.empty()) {
+        return nullptr;
+    }
+    else if (predecessors.size() == 1) {
+        return *predecessors.begin();
+    }
+    return findLastStatement(predecessors, block.statements());
+}
+
+Statement * UseAnalysis::findLastStatement(const PredecessorSet & predecessors, StatementList & statements) {
+
+    for (auto ri = statements.rbegin(); ri != statements.rend(); ++ri) {
+        Statement * stmt = *ri;
+        if (predecessors.count(stmt)) {
+            return stmt;
+        }
+        else if (isa<If>(stmt)) {
+            stmt = findLastStatement(predecessors, cast<If>(stmt)->getBody());
+            if (stmt) {
+                return stmt;
+            }
+        }
+        else if (isa<While>(stmt)) {
+            stmt = findLastStatement(predecessors, cast<While>(stmt)->getBody());
+            if (stmt) {
+                return stmt;
+            }
+        }
+    }
+
+    return nullptr;
+
+}
+
+
+void UseAnalysis::dce() {
+    auto mGraphMap = get(vertex_name, mUseDefGraph);
     std::queue<Vertex> Q;
     // gather up all of the nodes that aren't output assignments and have no users
-    const auto vMap = get(vertex_name, mUseDefGraph);
     VertexIterator vi, vi_end;
     for (std::tie(vi, vi_end) = vertices(mUseDefGraph); vi != vi_end; ++vi) {
         const Vertex v = *vi;
-        if (out_degree(v) == 0) {
-            const PabloAST * n = vMap[v];
-            if (isa<Assign>(n) && (cast<Assign>(n)->isOutputAssignment())) {
+        if (out_degree(v, mUseDefGraph) == 0) {
+            PabloAST * n = mGraphMap[v];
+            if (!isa<Assign>(n) || (cast<Assign>(n)->isOutputAssignment())) {
                 continue;
             }
             Q.push(v);
@@ -27,6 +140,10 @@ void UseAnalysis::identifyDeadVariables() {
     while (!Q.empty()) {
         const Vertex v = Q.front();
         Q.pop();
+        PabloAST * n = mGraphMap[v];
+        if (isa<Assign>(n)) {
+            cast<Assign>(n)->removeFromParent();
+        }
         InEdgeIterator ei, ei_end;
         for (std::tie(ei, ei_end) = in_edges(v, mUseDefGraph); ei != ei_end; ++ei) {
             const Vertex u = source(*ei, mUseDefGraph);
@@ -38,31 +155,58 @@ void UseAnalysis::identifyDeadVariables() {
     }
 }
 
-void UseAnalysis::gatherUseDefInformation(const Vertex v, StatementList & statements) {
-    for (PabloAST * stmt : statements) {
+void UseAnalysis::gatherUseDefInformation(const StatementList & statements) {
+    for (const Statement * stmt : statements) {
+        const Vertex v = find(stmt);
+        if (const Assign * assign = dyn_cast<Assign>(stmt)) {
+            gatherUseDefInformation(v, assign->getExpr());
+        }
+        if (const Next * next = dyn_cast<Next>(stmt)) {
+            gatherUseDefInformation(v, next->getExpr());
+        }
+        else if (const If * ifStatement = dyn_cast<If>(stmt)) {
+            gatherUseDefInformation(v, ifStatement->getCondition());
+            gatherUseDefInformation(v, ifStatement->getBody());
+        }
+        else if (const While * whileStatement = dyn_cast<While>(stmt)) {
+            gatherUseDefInformation(v, whileStatement->getCondition());
+            gatherUseDefInformation(v, whileStatement->getBody());
+        }
+    }
+}
+
+void UseAnalysis::gatherUseDefInformation(const Vertex v, const StatementList & statements) {
+    for (const Statement * stmt : statements) {
         const Vertex u = find(stmt);
         add_edge(u, v, mUseDefGraph);
         if (const Assign * assign = dyn_cast<Assign>(stmt)) {
             gatherUseDefInformation(u, assign->getExpr());
         }
-        if (const Next * next = dyn_cast<Next>(stmt)) {
+        else if (const Next * next = dyn_cast<Next>(stmt)) {
+            add_edge(u, find(next->getInitial()), mUseDefGraph);
             gatherUseDefInformation(u, next->getExpr());
         }
-        else if (If * ifStatement = dyn_cast<If>(stmt)) {
+        else if (const If * ifStatement = dyn_cast<If>(stmt)) {
             gatherUseDefInformation(u, ifStatement->getCondition());
             gatherUseDefInformation(u, ifStatement->getBody());
         }
-        else if (While * whileStatement = dyn_cast<While>(stmt)) {
+        else if (const While * whileStatement = dyn_cast<While>(stmt)) {
             gatherUseDefInformation(u, whileStatement->getCondition());
             gatherUseDefInformation(u, whileStatement->getBody());
         }
     }
 }
 
-void UseAnalysis::gatherUseDefInformation(const Vertex v, PabloAST * expr) {
+void UseAnalysis::gatherUseDefInformation(const Vertex v, const PabloAST * expr) {
+    if (isa<Var>(expr) && cast<Var>(expr)->isExternal()) {
+        return;
+    }
     const Vertex u = find(expr);
     add_edge(u, v, mUseDefGraph);
-    if (const And * pablo_and = dyn_cast<const And>(expr)) {
+    if (const Var * var = dyn_cast<Var>(expr)) {
+        gatherUseDefInformation(u, var->getVar());
+    }
+    else if (const And * pablo_and = dyn_cast<const And>(expr)) {
         gatherUseDefInformation(u, pablo_and->getExpr1());
         gatherUseDefInformation(u, pablo_and->getExpr2());
     }
@@ -94,17 +238,13 @@ void UseAnalysis::gatherUseDefInformation(const Vertex v, PabloAST * expr) {
 inline UseAnalysis::Vertex UseAnalysis::find(const PabloAST * const node) {
     auto f = mUseDefMap.find(node);
     if (f == mUseDefMap.end()) {
-        Vertex v = add_vertex(mUseDefGraph, node);
+        const Vertex v = add_vertex(mUseDefGraph);
         mUseDefMap.insert(std::make_pair(node, v));
+        get(vertex_name, mUseDefGraph)[v] = const_cast<PabloAST*>(node);
         return v;
     }
     return f->second;
 }
-
-UseAnalysis::UseAnalysis()
-: mRoot(add_vertex(mUseDefGraph, nullptr))
-{
-
-}
+#endif
 
 }

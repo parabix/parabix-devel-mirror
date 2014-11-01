@@ -31,8 +31,23 @@ public:
     }
     virtual ~Var(){
     }
+    virtual PabloAST * getOperand(const unsigned index) const {
+        assert (index == 0);
+        return mVar;
+    }
+    virtual unsigned getNumOperands() const {
+        return 1;
+    }
+    virtual void setOperand(const unsigned index, PabloAST * value) {
+        assert (index == 0);
+        mVar = value;
+        mName = getNameOf(value);
+    }
     inline const String * getName() const {
         return mName;
+    }
+    inline PabloAST * getVar() {
+        return mVar;
     }
     inline const PabloAST * getVar() const {
         return mVar;
@@ -47,7 +62,7 @@ protected:
     void* operator new (std::size_t size) noexcept {
         return mAllocator.allocate(size);
     }
-    Var(const PabloAST * var)
+    Var(PabloAST * var)
     : PabloAST(ClassTypeId::Var)
     , mVar(var)
     , mName(getNameOf(var))
@@ -68,8 +83,8 @@ private:
         throw std::runtime_error("Pablo Var only accepts String, Assign and Next nodes.");
     }
 private:
-    const PabloAST * const  mVar;
-    const String * const    mName;
+    PabloAST *         mVar;
+    const String *     mName;
 };
 
 }

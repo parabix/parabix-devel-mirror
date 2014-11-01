@@ -18,6 +18,16 @@ public:
     virtual ~String(){
 
     }
+    virtual PabloAST * getOperand(const unsigned) const {
+        assert (false);
+        return nullptr;
+    }
+    virtual unsigned getNumOperands() const {
+        return 0;
+    }
+    virtual void setOperand(const unsigned, PabloAST *) {
+        assert (false);
+    }
     inline const std::string & str() const {
         return mValue;
     }

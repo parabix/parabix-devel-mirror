@@ -60,9 +60,11 @@ std::string PabloPrinter::print(const StatementList & stmts) {
     return strOut;
 }
 
-std::string PabloPrinter::print(const Statement * stmt)
-{
-    if (const Assign * an = dyn_cast<const Assign>(stmt)) {
+std::string PabloPrinter::print(const Statement * stmt) {
+    if (stmt == nullptr) {
+        return "<null>";
+    }
+    else if (const Assign * an = dyn_cast<const Assign>(stmt)) {
         std::string result = "Assign('" + an->getName()->str() + "'," + print(an->getExpr());
         if (an->isOutputAssignment()) {
             result += ",Output=" + std::to_string(an->getOutputIndex());
@@ -82,7 +84,10 @@ std::string PabloPrinter::print(const Statement * stmt)
 }
 
 std::string PabloPrinter::print(const PabloAST *expr) {
-    if (isa<const Zeroes>(expr)) {
+    if (expr == nullptr) {
+        return "<null>";
+    }
+    else if (isa<const Zeroes>(expr)) {
         return "Zeroes";
     }
     else if (isa<const Ones>(expr)) {
@@ -114,6 +119,9 @@ std::string PabloPrinter::print(const PabloAST *expr) {
     }
     else if (const ScanThru * sthru = dyn_cast<const ScanThru>(expr)) {
         return "ScanThru(" + print(sthru->getScanFrom()) + ", " + print(sthru->getScanThru()) + ")";
+    }
+    else if (isa<Statement>(expr)) {
+        return print(cast<Statement>(expr));
     }
     return "???";
 }

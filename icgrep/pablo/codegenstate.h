@@ -77,7 +77,7 @@ public:
     inline Assign * createAssign(const std::string prefix, PabloAST * expr, const int outputIndex = -1) {
         // TODO: should this test whether we've somehow created a var for this prior to
         // making the assignment?
-        Assign * assign = new Assign(mSymbolGenerator.get_ssa(prefix), expr, outputIndex);
+        Assign * assign = new Assign(mSymbolGenerator.get_ssa(prefix), expr, outputIndex, &mStatements);
         mStatements.push_back(assign);
         return assign;
     }
@@ -116,13 +116,13 @@ public:
     PabloAST * createSel(PabloAST * condition, PabloAST * trueExpr, PabloAST * falseExpr);
 
     inline If * createIf(PabloAST * condition, PabloBlock && body) {
-        If * statement = new If(condition, std::move(body.mStatements));
+        If * statement = new If(condition, std::move(body.statements()), &mStatements);
         mStatements.push_back(statement);
         return statement;
     }
 
     inline While * createWhile(PabloAST * cond, PabloBlock && body) {
-        While * statement = new While(cond, std::move(body.mStatements));
+        While * statement = new While(cond, std::move(body.statements()), &mStatements);
         mStatements.push_back(statement);
         return statement;
     }
