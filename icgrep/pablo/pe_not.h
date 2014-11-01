@@ -40,9 +40,6 @@ public:
         return mExpr;
     }
 protected:
-    void* operator new (std::size_t size) noexcept {
-        return mAllocator.allocate(size);
-    }
     Not(PabloAST * expr)
     : PabloAST(ClassTypeId::Not)
     , mExpr(expr) {

@@ -40,9 +40,6 @@ public:
         return mExprs[1];
     }
 protected:
-    void* operator new (std::size_t size) noexcept {
-        return mAllocator.allocate(size);
-    }
     Next(PabloAST * initial, PabloAST * expr, StatementList * parent)
     : Statement(ClassTypeId::Next, parent)
     , mExprs({cast<Assign>(initial), expr})

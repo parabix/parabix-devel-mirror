@@ -2,8 +2,6 @@
 #define USEANALYSIS_H
 
 #include <pablo/codegenstate.h>
-
-#ifdef USE_BOOST
 #include <boost/graph/adjacency_list.hpp>
 #include <unordered_map>
 #include <vector>
@@ -38,17 +36,5 @@ private:
 };
 
 }
-#else
-
-namespace pablo {
-class UseAnalysis {
-public:
-    static bool optimize(PabloBlock &) {
-        return false;
-    }
-};
-}
-
-#endif
 
 #endif // USEANALYSIS_H

@@ -59,9 +59,6 @@ public:
         return mVar == mName;
     }
 protected:
-    void* operator new (std::size_t size) noexcept {
-        return mAllocator.allocate(size);
-    }
     Var(PabloAST * var)
     : PabloAST(ClassTypeId::Var)
     , mVar(var)

@@ -48,9 +48,6 @@ public:
         return mOutputIndex;
     }
 protected:
-    void* operator new (std::size_t size) noexcept {
-        return mAllocator.allocate(size);
-    }
     Assign(PabloAST * name, PabloAST * expr, const int outputIndex, StatementList * parent)
     : Statement(ClassTypeId::Assign, parent)
     , mExprs({name, expr})

@@ -32,8 +32,9 @@ using namespace pablo;
 
 namespace cc {
 
-CC_Compiler::CC_Compiler(PabloBlock & cg, const Encoding encoding, const std::string basis_pattern)
+CC_Compiler::CC_Compiler(PabloBlock & cg, const Encoding encoding, const bool annotateVariableConstraints, const std::string basis_pattern)
 : mCG(cg)
+, mAnnotateVariableConstraints(annotateVariableConstraints)
 , mBasisBit(encoding.getBits())
 , mEncoding(encoding)
 {

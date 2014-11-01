@@ -49,9 +49,6 @@ public:
         return mCarryCount;
     }
 protected:
-    void* operator new (std::size_t size) noexcept {
-        return mAllocator.allocate(size);
-    }
     If(PabloAST * expr, StatementList && body, StatementList * parent)
     : Statement(ClassTypeId::If, parent)
     , mExpr(expr)

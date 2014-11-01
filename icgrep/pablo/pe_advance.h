@@ -40,9 +40,6 @@ public:
         return mShiftAmount;
     }
 protected:
-    void* operator new (std::size_t size) noexcept {
-        return mAllocator.allocate(size);
-    }
     Advance(PabloAST * expr, int shiftAmount)
     : PabloAST(ClassTypeId::Advance)
     , mExpr(expr)

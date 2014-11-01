@@ -49,9 +49,6 @@ public:
         return mCarryCount;
     }
 protected:
-    void* operator new (std::size_t size) noexcept {
-        return mAllocator.allocate(size);
-    }
     While(PabloAST * expr, StatementList && body, StatementList * parent)
     : Statement(ClassTypeId::While, parent)
     , mExpr(expr)

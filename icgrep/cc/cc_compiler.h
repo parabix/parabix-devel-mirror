@@ -21,7 +21,7 @@ class CC_NameMap;
 class CC_Compiler{
 public:
 
-    CC_Compiler(pablo::PabloBlock & cg, const Encoding encoding, const std::string basis_pattern = "basis");
+    CC_Compiler(pablo::PabloBlock & cg, const Encoding encoding, const bool annotateVariableConstraints = false, const std::string basis_pattern = "basis");
 
     std::vector<pablo::Var *> compile(const CC_NameMap & nameMap);
 
@@ -41,7 +41,10 @@ private:
     pablo::PabloAST * char_or_range_expr(const re::CodePointType lo, const re::CodePointType hi);
     pablo::PabloAST * charset_expr(const re::CC *cc);
     pablo::PabloAST * tempify(pablo::PabloAST * value);
+
+private:
     pablo::PabloBlock &         mCG;
+    const bool                  mAnnotateVariableConstraints;
     std::vector<pablo::Var *>   mBasisBit;
     const Encoding              mEncoding;
 };

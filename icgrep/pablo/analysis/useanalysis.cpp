@@ -1,5 +1,4 @@
 #include "useanalysis.h"
-#ifdef USE_BOOST
 #include <queue>
 
 using namespace boost;
@@ -15,12 +14,12 @@ bool UseAnalysis::optimize(PabloBlock & block) {
 }
 
 void UseAnalysis::cse(PabloBlock & block) {
-
     VertexIterator vi, vi_end;
     auto mGraphMap = get(vertex_name, mUseDefGraph);
     for (std::tie(vi, vi_end) = vertices(mUseDefGraph); vi != vi_end; ++vi) {
         const Vertex u = *vi;
-        if (out_degree(u, mUseDefGraph) > 1) {
+        const auto count = out_degree(u, mUseDefGraph) ;
+        if (count > 1) {
             PabloAST * expr = mGraphMap[u];
             if (isa<Statement>(expr) || isa<Var>(expr)) {
                 continue;
@@ -114,7 +113,6 @@ Statement * UseAnalysis::findLastStatement(const PredecessorSet & predecessors, 
     }
     return nullptr;
 }
-
 
 void UseAnalysis::dce() {
     auto mGraphMap = get(vertex_name, mUseDefGraph);
@@ -240,4 +238,3 @@ inline UseAnalysis::Vertex UseAnalysis::find(const PabloAST * const node) {
     return f->second;
 }
 }
-#endif

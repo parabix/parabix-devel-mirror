@@ -171,7 +171,6 @@ PabloCompiler::~PabloCompiler()
     delete fCs;
     delete fZp;
     delete fZs;
-
 }
 
 LLVM_Gen_RetVal PabloCompiler::compile(PabloBlock & pb)
@@ -251,16 +250,8 @@ LLVM_Gen_RetVal PabloCompiler::compile(PabloBlock & pb)
     // Set up the optimizer pipeline.  Start with registering info about how the target lays out data structures.
     fpm.add(new DataLayoutPass(mMod));
 #endif
-
 #ifdef USE_LLVM_3_4
     fpm.add(new DataLayout(*mExecutionEngine->getDataLayout()));
-#endif
-#ifndef USE_BOOST
-    fpm.add(createCorrelatedValuePropagationPass());
-    fpm.add(createEarlyCSEPass());
-    fpm.add(createInstructionCombiningPass());    //Simple peephole optimizations and bit-twiddling.
-    fpm.add(createReassociatePass());             //Reassociate expressions.
-    fpm.add(createGVNPass());                     //Eliminate common subexpressions.
 #endif
     fpm.doInitialization();
     fpm.run(*mFunction);

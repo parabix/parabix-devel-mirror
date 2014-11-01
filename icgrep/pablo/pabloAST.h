@@ -11,6 +11,7 @@
 #include <llvm/Support/Compiler.h>
 #include <slab_allocator.h>
 #include <iterator>
+#include <unordered_map>
 
 using namespace llvm;
 
@@ -18,7 +19,11 @@ namespace pablo {
 
 class PabloBlock;
 
+class PMDNode;
+
 class PabloAST {
+    friend class PMDNode;
+    typedef std::unordered_map<std::string, PMDNode *> PMDNodeMap;
 public:
     typedef SlabAllocator<1024> Allocator;
     enum class ClassTypeId : unsigned {
@@ -61,18 +66,28 @@ public:
 
     virtual void setOperand(const unsigned index, PabloAST * value) = 0;
 
+    void setMetadata(const std::string & name, PMDNode * node);
+
+    PMDNode * getMetadata(const std::string & name);
+
     inline static void release_memory() {
         mAllocator.release_memory();
+    }
+
+    void* operator new (std::size_t size) noexcept {
+        return mAllocator.allocate(size);
     }
 protected:
     inline PabloAST(const ClassTypeId id)
     : mClassTypeId(id)
+    , mMetadataMap(nullptr)
     {
 
     }
     static Allocator    mAllocator;
 private:
     const ClassTypeId   mClassTypeId;
+    PMDNodeMap *        mMetadataMap;
 };
 
 bool equals(const PabloAST * expr1, const PabloAST *expr2);
@@ -105,7 +120,15 @@ public:
     inline void insertBefore(Statement * const statement);
     inline void insertAfter(Statement * const statement);
     inline void removeFromParent();
-
+    inline Statement * getNextNode() const {
+        return mNext;
+    }
+    inline Statement * getPrevNode() const {
+        return mPrev;
+    }
+    inline StatementList * getParent() const {
+        return mParent;
+    }
 protected:
     Statement(const ClassTypeId id, StatementList * parent)
     : PabloAST(id)

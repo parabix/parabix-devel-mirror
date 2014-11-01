@@ -91,6 +91,25 @@ bool equals(const PabloAST * expr1, const PabloAST * expr2) {
     return false;
 }
 
+
+void PabloAST::setMetadata(const std::string & name, PMDNode * node) {
+    if (LLVM_UNLIKELY(mMetadataMap == nullptr)) {
+        mMetadataMap = new PMDNodeMap();
+    }
+    mMetadataMap->insert(std::make_pair(name, node));
+}
+
+PMDNode * PabloAST::getMetadata(const std::string & name) {
+    if (LLVM_UNLIKELY(mMetadataMap == nullptr)) {
+        return nullptr;
+    }
+    auto f = mMetadataMap->find(name);
+    if (f == mMetadataMap->end()) {
+        return nullptr;
+    }
+    return f->second;
+}
+
 Statement::~Statement() {
 
 }

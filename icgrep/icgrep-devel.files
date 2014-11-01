@@ -225,3 +225,4 @@ pablo/analysis/useanalysis.h
 slab_allocator.h
 re/re_re.cpp
 pablo/ps_if.cpp
+pablo/pe_metadata.h
