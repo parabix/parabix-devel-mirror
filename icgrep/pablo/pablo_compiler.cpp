@@ -187,7 +187,7 @@ LLVM_Gen_RetVal PabloCompiler::compile(PabloBlock & pb)
     builder.setErrorStr(&errMessage);
     builder.setMCPU(sys::getHostCPUName());
     builder.setUseMCJIT(true);
-    builder.setOptLevel(mMaxNestingDepth > 1 ? CodeGenOpt::Level::Less : CodeGenOpt::Level::None);
+    builder.setOptLevel(mMaxNestingDepth ? CodeGenOpt::Level::Less : CodeGenOpt::Level::None);
     mExecutionEngine = builder.create();
     if (mExecutionEngine == nullptr) {
         throw std::runtime_error("Could not create ExecutionEngine: " + errMessage);
