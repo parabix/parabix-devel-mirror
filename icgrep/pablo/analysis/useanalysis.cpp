@@ -1,13 +1,11 @@
 #include "useanalysis.h"
+#ifdef USE_BOOST
 #include <queue>
-#include <pablo/printer_pablos.h>
-#include <fstream>
 
 using namespace boost;
 
 namespace pablo {
 
-#ifdef USE_BOOST
 bool UseAnalysis::optimize(PabloBlock & block) {
     UseAnalysis analyzer;
     analyzer.gatherUseDefInformation(block.statements());
@@ -15,7 +13,6 @@ bool UseAnalysis::optimize(PabloBlock & block) {
     analyzer.cse(block);
     return true;
 }
-
 
 void UseAnalysis::cse(PabloBlock & block) {
 
@@ -97,7 +94,6 @@ inline Statement * UseAnalysis::findInsertionPointFor(const Vertex v, PabloBlock
 }
 
 Statement * UseAnalysis::findLastStatement(const PredecessorSet & predecessors, StatementList & statements) {
-
     for (auto ri = statements.rbegin(); ri != statements.rend(); ++ri) {
         Statement * stmt = *ri;
         if (predecessors.count(stmt)) {
@@ -116,9 +112,7 @@ Statement * UseAnalysis::findLastStatement(const PredecessorSet & predecessors, 
             }
         }
     }
-
     return nullptr;
-
 }
 
 
@@ -245,6 +239,5 @@ inline UseAnalysis::Vertex UseAnalysis::find(const PabloAST * const node) {
     }
     return f->second;
 }
-#endif
-
 }
+#endif

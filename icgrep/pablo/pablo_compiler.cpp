@@ -234,6 +234,8 @@ LLVM_Gen_RetVal PabloCompiler::compile(PabloBlock & pb)
     mMod->dump();
     #endif
 
+
+
     //Create a verifier.  The verifier will print an error message if our module is malformed in any way.
     #ifdef USE_LLVM_3_5
     verifyModule(*mMod, &dbgs());
@@ -252,6 +254,13 @@ LLVM_Gen_RetVal PabloCompiler::compile(PabloBlock & pb)
 
 #ifdef USE_LLVM_3_4
     fpm.add(new DataLayout(*mExecutionEngine->getDataLayout()));
+#endif
+#ifndef USE_BOOST
+    fpm.add(createCorrelatedValuePropagationPass());
+    fpm.add(createEarlyCSEPass());
+    fpm.add(createInstructionCombiningPass());    //Simple peephole optimizations and bit-twiddling.
+    fpm.add(createReassociatePass());             //Reassociate expressions.
+    fpm.add(createGVNPass());                     //Eliminate common subexpressions.
 #endif
     fpm.doInitialization();
     fpm.run(*mFunction);
