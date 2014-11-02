@@ -5,6 +5,7 @@
  */
 
 #include "re_cc.h"
+#include <llvm/Support/Compiler.h>
 
 namespace re {
 
@@ -82,17 +83,20 @@ void CC::remove_range(const CodePointType lo_codepoint, const CodePointType hi_c
     }
 }
 
-CC::Relationship CC::compare(const CC * a, const CC * b) {
+CC::Relationship CC::compare(const CC * other) const {
 
-    auto ai = a->cbegin();
-    const auto ai_end = a->cend();
-    auto bi = b->cbegin();
-    const auto bi_end = b->cend();
+    if (LLVM_UNLIKELY(other == this)) {
+        return Relationship::EQUIVALENT;
+    }
 
-    bool A_cannot_be_a_subset_of_B = false;
-    bool B_cannot_be_a_subset_of_A = false;
+    auto ai = cbegin();
+    const auto ai_end = cend();
+    auto bi = other->cbegin();
+    const auto bi_end = other->cend();
+
+    bool nonSubset = false;
+    bool nonSuperset = false;
     bool disjoint = true;
-
 
     while (ai != ai_end && bi != bi_end) {
         const CharSetItem & ra = *ai;
@@ -100,23 +104,23 @@ CC::Relationship CC::compare(const CC * a, const CC * b) {
 
         if (ra.hi_codepoint < rb.lo_codepoint) {
             ++ai;
-            B_cannot_be_a_subset_of_A = true;
+            nonSuperset = true;
             continue;
         }
         if (rb.hi_codepoint < ra.lo_codepoint) {
             ++bi;
-            A_cannot_be_a_subset_of_B = true;
+            nonSubset = true;
             continue;
         }
 
         disjoint = false;
 
         if (ra.lo_codepoint < rb.lo_codepoint) {
-            A_cannot_be_a_subset_of_B = true;
+            nonSubset = true;
         }
 
         if (rb.lo_codepoint < ra.lo_codepoint) {
-            B_cannot_be_a_subset_of_A = true;
+            nonSuperset = true;
         }
 
         if (ra.hi_codepoint <= rb.hi_codepoint) {
@@ -132,21 +136,22 @@ CC::Relationship CC::compare(const CC * a, const CC * b) {
     }
 
     if (ai == ai_end && bi != bi_end) {
-        B_cannot_be_a_subset_of_A = true;
+        nonSuperset = true;
     }
-    if (bi == bi_end && ai != ai_end) {
-        A_cannot_be_a_subset_of_B = true;
+    else if (bi == bi_end && ai != ai_end) {
+        nonSubset = true;
     }
 
-    if (A_cannot_be_a_subset_of_B && B_cannot_be_a_subset_of_A) {
+    if (nonSubset && nonSuperset) {
         return Relationship::OVERLAPPING;
     }
-    else if (A_cannot_be_a_subset_of_B) {
-        return Relationship::B_SUBSET_A;
+    else if (nonSubset) {
+        return Relationship::SUPERSET;
     }
-    else {
-        return Relationship::A_SUBSET_B;
+    else if (nonSuperset) {
+        return Relationship::SUBSET;
     }
+    return Relationship::EQUIVALENT;
 }
 
 }

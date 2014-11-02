@@ -29,7 +29,7 @@ private:
 
 class PMDVector : public PMDNode, public std::vector<PabloAST*> {
 public:
-    PMDVector * get(std::vector<PabloAST*> && vec) {
+    inline static PMDVector * get(std::vector<PabloAST*> && vec) {
         return new PMDVector(std::move(vec));
     }
 protected:

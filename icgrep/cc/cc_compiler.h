@@ -13,12 +13,14 @@
 #include <re/re_cc.h>
 #include <unordered_map>
 #include <string>
+#include <boost/graph/adjacency_list.hpp>
 
 namespace cc {
 
 class CC_NameMap;
 
 class CC_Compiler{
+    typedef std::vector<std::pair<const re::CC*, pablo::Assign*>> ConstraintVector;
 public:
 
     CC_Compiler(pablo::PabloBlock & cg, const Encoding encoding, const bool annotateVariableConstraints = false, const std::string basis_pattern = "basis");
@@ -26,6 +28,7 @@ public:
     std::vector<pablo::Var *> compile(const CC_NameMap & nameMap);
 
 private:
+
 
     pablo::PabloAST * compile_re(re::RE * re);
     pablo::PabloAST * compile_re(re::Name * name);
@@ -40,13 +43,15 @@ private:
     pablo::PabloAST * LE_Range(const unsigned N, const unsigned n);
     pablo::PabloAST * char_or_range_expr(const re::CodePointType lo, const re::CodePointType hi);
     pablo::PabloAST * charset_expr(const re::CC *cc);
-    pablo::PabloAST * tempify(pablo::PabloAST * value);
+
+    void computeVariableConstraints();
 
 private:
     pablo::PabloBlock &         mCG;
     const bool                  mAnnotateVariableConstraints;
     std::vector<pablo::Var *>   mBasisBit;
     const Encoding              mEncoding;
+    ConstraintVector            mVariableVector;
 };
 
 }

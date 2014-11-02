@@ -36,13 +36,12 @@ public:
     }
 
     enum class Relationship {
-        A_SUBSET_B
-        , B_SUBSET_A
+        SUBSET
+        , SUPERSET
         , DISJOINT
         , OVERLAPPING
+        , EQUIVALENT
     };
-
-    static Relationship compare(const CC * a, const CC * b);
 
     typedef CharSetVector::iterator                 iterator;
     typedef CharSetVector::const_iterator           const_iterator;
@@ -113,6 +112,8 @@ public:
     inline bool empty() const {
         return mSparseCharSet.empty();
     }
+
+    Relationship compare(const CC * other) const;
 
     virtual ~CC() {}
 

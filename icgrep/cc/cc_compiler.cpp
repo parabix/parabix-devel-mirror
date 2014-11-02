@@ -30,6 +30,7 @@
 
 using namespace re;
 using namespace pablo;
+using namespace boost;
 
 namespace cc {
 
@@ -47,6 +48,9 @@ CC_Compiler::CC_Compiler(PabloBlock & cg, const Encoding encoding, const bool an
 std::vector<Var *> CC_Compiler::compile(const CC_NameMap & nameMap) {
     for (Name * name : nameMap) {
         compile_re(name);
+    }
+    if (mAnnotateVariableConstraints) {
+        computeVariableConstraints();
     }
     return std::move(mBasisBit);
 }
@@ -84,7 +88,11 @@ PabloAST * CC_Compiler::compile_re(Name * name) {
             if (value == nullptr) {
                 throw std::runtime_error("Unexpected CC node given to CC_Compiler: " + Printer_RE::PrintRE(name) + " : " + Printer_RE::PrintRE(cc));
             }
-            var = mCG.createVar(mCG.createAssign(name->getName(), value));
+            Assign * assign = mCG.createAssign(name->getName(), value);
+            if (mAnnotateVariableConstraints && isa<CC>(cc)) {
+                mVariableVector.push_back(std::make_pair(cast<CC>(cc), assign));
+            }
+            var = mCG.createVar(assign);
         }
         else {
             var = mCG.createVar(name->getName());
@@ -158,14 +166,14 @@ PabloAST * CC_Compiler::charset_expr(const CC * cc) {
                 if ((lo & 1) == 0) {
                     bit0 = mCG.createNot(bit0);
                 }
-                return tempify(mCG.createAnd(expr, bit0));
+                return mCG.createAnd(expr, bit0);
             }
         }
     }
     PabloAST * expr = nullptr;
     for (const CharSetItem & item : *cc) {
         PabloAST * temp = char_or_range_expr(item.lo_codepoint, item.hi_codepoint);
-        expr = (expr == nullptr) ? temp : tempify(mCG.createOr(expr, temp));
+        expr = (expr == nullptr) ? temp : mCG.createOr(expr, temp);
     }
     return expr;
 }
@@ -207,7 +215,7 @@ PabloAST * CC_Compiler::bit_pattern_expr(const unsigned pattern, unsigned select
         std::vector<PabloAST*> new_terms;
         for (auto i = 0; i < (bit_terms.size()/2); i++)
         {
-            new_terms.push_back(tempify(mCG.createAnd(bit_terms[(2 * i) + 1], bit_terms[2 * i])));
+            new_terms.push_back(mCG.createAnd(bit_terms[(2 * i) + 1], bit_terms[2 * i]));
         }
         if (bit_terms.size() % 2 == 1)
         {
@@ -231,7 +239,7 @@ PabloAST * CC_Compiler::make_range(const CodePointType n1, const CodePointType n
 
     if ((n2 < n1) || (diff_count > mEncoding.getBits()))
     {
-        throw std::runtime_error(std::string("Bad Range: [") + std::to_string(n1) + "," + std::to_string(n2) + "]");
+        throw std::runtime_error("Bad Range: [" + std::to_string(n1) + "," + std::to_string(n2) + "]");
     }
 
     const CodePointType mask0 = (static_cast<CodePointType>(1) << diff_count) - 1;
@@ -245,7 +253,7 @@ PabloAST * CC_Compiler::make_range(const CodePointType n1, const CodePointType n
     PabloAST* lo_test = GE_Range(diff_count - 1, n1 & mask1);
     PabloAST* hi_test = LE_Range(diff_count - 1, n2 & mask1);
 
-    return tempify(mCG.createAnd(common, mCG.createSel(getBasisVar(diff_count - 1), hi_test, lo_test)));
+    return mCG.createAnd(common, mCG.createSel(getBasisVar(diff_count - 1), hi_test, lo_test));
 }
 
 PabloAST * CC_Compiler::GE_Range(const unsigned N, const unsigned n) {
@@ -253,10 +261,10 @@ PabloAST * CC_Compiler::GE_Range(const unsigned N, const unsigned n) {
         return mCG.createOnes(); //Return a true literal.
     }
     else if (((N % 2) == 0) && ((n >> (N - 2)) == 0)) {
-        return tempify(mCG.createOr(tempify(mCG.createOr(getBasisVar(N - 1), getBasisVar(N - 2))), GE_Range(N - 2, n)));
+        return mCG.createOr(mCG.createOr(getBasisVar(N - 1), getBasisVar(N - 2)), GE_Range(N - 2, n));
     }
     else if (((N % 2) == 0) && ((n >> (N - 2)) == 3)) {
-        return tempify(mCG.createAnd(tempify(mCG.createAnd(getBasisVar(N - 1), getBasisVar(N - 2))), GE_Range(N - 2, n - (3 << (N - 2)))));
+        return mCG.createAnd(mCG.createAnd(getBasisVar(N - 1), getBasisVar(N - 2)), GE_Range(N - 2, n - (3 << (N - 2))));
     }
     else if (N >= 1)
     {
@@ -270,7 +278,7 @@ PabloAST * CC_Compiler::GE_Range(const unsigned N, const unsigned n) {
               is set in the target, the target will certaily be >=.  Oterwise,
               the value of GE_range(N-1), lo_range) is required.
             */
-            return tempify(mCG.createOr(getBasisVar(N - 1), lo_range));
+            return mCG.createOr(getBasisVar(N - 1), lo_range);
         }
         else
         {
@@ -278,7 +286,7 @@ PabloAST * CC_Compiler::GE_Range(const unsigned N, const unsigned n) {
               If the hi_bit of n is set, then the corresponding bit must be set
               in the target for >= and GE_range(N-1, lo_bits) must also be true.
             */
-            return tempify(mCG.createAnd(getBasisVar(N - 1), lo_range));
+            return mCG.createAnd(getBasisVar(N - 1), lo_range);
         }
     }
     throw std::runtime_error("Unexpected input given to ge_range: " + std::to_string(N) + ", " + std::to_string(n));
@@ -294,7 +302,7 @@ PabloAST * CC_Compiler::LE_Range(const unsigned N, const unsigned n)
         return mCG.createOnes(); //True.
     }
     else {
-        return tempify(mCG.createNot(GE_Range(N, n + 1)));
+        return mCG.createNot(GE_Range(N, n + 1));
     }
 }
 
@@ -312,12 +320,72 @@ inline Var * CC_Compiler::getBasisVar(const int i) const {
     return mBasisBit[(mEncoding.getBits() - 1) - i];
 }
 
-inline PabloAST * CC_Compiler::tempify(PabloAST * value) {
-//    if (isa<Var>(value)) {
-//        return cast<Var>(value);
-//    }
-//    return mCG.createVar(mCG.createAssign("t", value));
-    return value;
+void CC_Compiler::computeVariableConstraints() {
+    typedef adjacency_list<vecS, vecS, directedS> ConstraintGraph;
+    typedef adjacency_list<vecS, vecS, directedS> SubsetGraph;
+
+    typedef graph_traits<ConstraintGraph>::out_edge_iterator ConstraintEdgeIterator;
+    typedef graph_traits<SubsetGraph>::out_edge_iterator SubsetEdgeIterator;
+
+    const auto n = mVariableVector.size();
+
+    if (n == 0) {
+        return;
+    }
+
+    // Compute the constraint and subset graphs.
+
+    ConstraintGraph C(n);
+    SubsetGraph S(n);
+
+    for (auto i = 0; i != n; ++i) {
+        const CC * const cc1 = mVariableVector[i].first;
+        for (auto j = i + 1; j != n; ++j) {
+            const CC * const cc2 = mVariableVector[i].first;
+            switch(cc1->compare(cc2)) {
+                case CC::Relationship::OVERLAPPING:
+                    add_edge(i, j, C);
+                    add_edge(j, i, C);
+                    break;
+                case CC::Relationship::SUBSET:
+                    add_edge(i, j, S);
+                    break;
+                case CC::Relationship::SUPERSET:
+                    add_edge(j, i, S);
+                    break;
+                default:
+                    /* do nothing */
+                    break;
+            }
+        }
+    }
+
+    // Write out the constraints and subset relationships as metadata
+
+    for (auto i = 0; i != n; ++i) {
+        std::vector<PabloAST *> constraints;
+        ConstraintEdgeIterator ci, ci_end;
+        for (std::tie(ci, ci_end) = out_edges(i, C); ci != ci_end; ++ci) {
+            constraints.push_back(mVariableVector[target(*ci, C)].second);
+        }
+
+        std::vector<PabloAST *> subsets;
+        SubsetEdgeIterator si, si_end;
+        for (std::tie(si, si_end) = out_edges(i, S); si != si_end; ++si) {
+            subsets.push_back(mVariableVector[target(*si, S)].second);
+        }
+
+        Assign * assign = mVariableVector[i].second;
+        if (!constraints.empty()) {
+            assign->setMetadata("constraints", PMDVector::get(std::move(constraints)));
+        }
+        if (!subsets.empty()) {
+            assign->setMetadata("subsets", PMDVector::get(std::move(subsets)));
+        }
+    }
+
+
+
 }
 
 } // end of namespace cc

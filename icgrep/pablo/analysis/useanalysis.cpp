@@ -1,5 +1,6 @@
 #include "useanalysis.h"
 #include <queue>
+#include <iostream>
 
 using namespace boost;
 
@@ -15,12 +16,12 @@ bool UseAnalysis::optimize(PabloBlock & block) {
 
 void UseAnalysis::cse(PabloBlock & block) {
     VertexIterator vi, vi_end;
-    auto mGraphMap = get(vertex_name, mUseDefGraph);
+    const auto nodeOf = get(vertex_name, mUseDefGraph);
     for (std::tie(vi, vi_end) = vertices(mUseDefGraph); vi != vi_end; ++vi) {
         const Vertex u = *vi;
-        const auto count = out_degree(u, mUseDefGraph) ;
+        const auto count = out_degree(u, mUseDefGraph);
         if (count > 1) {
-            PabloAST * expr = mGraphMap[u];
+            PabloAST * expr = nodeOf[u];
             if (isa<Statement>(expr) || isa<Var>(expr)) {
                 continue;
             }
@@ -34,7 +35,7 @@ void UseAnalysis::cse(PabloBlock & block) {
             for (std::tie(ei, ei_end) = out_edges(u, mUseDefGraph); ei != ei_end; ++ei) {
                 const Vertex t = target(*ei, mUseDefGraph);
                 add_edge(v, t, mUseDefGraph);
-                PabloAST * user = mGraphMap[t];
+                PabloAST * user = nodeOf[t];
                 user->replaceUsesOfWith(expr, var);
             }
             clear_out_edges(u, mUseDefGraph);
@@ -53,13 +54,13 @@ void UseAnalysis::cse(PabloBlock & block) {
 
 inline Statement * UseAnalysis::findInsertionPointFor(const Vertex v, PabloBlock & block) {
     // We want to find a predecessor of v that is the last statement in the AST.
-    auto mGraphMap = get(vertex_name, mUseDefGraph);
+    const auto nodeOf = get(vertex_name, mUseDefGraph);
     PredecessorSet predecessors;
     std::queue<Vertex> Q;
     InEdgeIterator ei, ei_end;
     for (std::tie(ei, ei_end) = in_edges(v, mUseDefGraph); ei != ei_end; ++ei) {
         const Vertex u = source(*ei, mUseDefGraph);
-        PabloAST * n = mGraphMap[u];
+        PabloAST * n = nodeOf[u];
         if (isa<Statement>(n)) {
             predecessors.insert(cast<Statement>(n));
         }
@@ -71,7 +72,7 @@ inline Statement * UseAnalysis::findInsertionPointFor(const Vertex v, PabloBlock
     while (!Q.empty()) {
         const Vertex u = Q.front();
         Q.pop();
-        PabloAST * n = mGraphMap[u];
+        PabloAST * n = nodeOf[u];
 
         if (isa<Statement>(n)) {
             predecessors.insert(cast<Statement>(n));
@@ -115,14 +116,14 @@ Statement * UseAnalysis::findLastStatement(const PredecessorSet & predecessors, 
 }
 
 void UseAnalysis::dce() {
-    auto mGraphMap = get(vertex_name, mUseDefGraph);
+    const auto nodeOf = get(vertex_name, mUseDefGraph);
     std::queue<Vertex> Q;
     // gather up all of the nodes that aren't output assignments and have no users
     VertexIterator vi, vi_end;
     for (std::tie(vi, vi_end) = vertices(mUseDefGraph); vi != vi_end; ++vi) {
         const Vertex v = *vi;
         if (out_degree(v, mUseDefGraph) == 0) {
-            PabloAST * n = mGraphMap[v];
+            PabloAST * n = nodeOf[v];
             if (!isa<Assign>(n) || (cast<Assign>(n)->isOutputAssignment())) {
                 continue;
             }
@@ -132,7 +133,7 @@ void UseAnalysis::dce() {
     while (!Q.empty()) {
         const Vertex v = Q.front();
         Q.pop();
-        PabloAST * n = mGraphMap[v];
+        PabloAST * n = nodeOf[v];
         if (isa<Assign>(n)) {
             cast<Assign>(n)->removeFromParent();
         }
@@ -153,9 +154,6 @@ void UseAnalysis::gatherUseDefInformation(const StatementList & statements) {
         if (const Assign * assign = dyn_cast<Assign>(stmt)) {
             gatherUseDefInformation(v, assign->getExpr());
         }
-        if (const Next * next = dyn_cast<Next>(stmt)) {
-            gatherUseDefInformation(v, next->getExpr());
-        }
         else if (const If * ifStatement = dyn_cast<If>(stmt)) {
             gatherUseDefInformation(v, ifStatement->getCondition());
             gatherUseDefInformation(v, ifStatement->getBody());
@@ -163,6 +161,9 @@ void UseAnalysis::gatherUseDefInformation(const StatementList & statements) {
         else if (const While * whileStatement = dyn_cast<While>(stmt)) {
             gatherUseDefInformation(v, whileStatement->getCondition());
             gatherUseDefInformation(v, whileStatement->getBody());
+        }
+        else if (isa<Next>(stmt)) {
+            throw std::runtime_error("Next node is illegal in main block!");
         }
     }
 }
@@ -175,7 +176,7 @@ void UseAnalysis::gatherUseDefInformation(const Vertex v, const StatementList & 
             gatherUseDefInformation(u, assign->getExpr());
         }
         else if (const Next * next = dyn_cast<Next>(stmt)) {
-            add_edge(u, find(next->getInitial()), mUseDefGraph);
+            add_edge(find(next->getInitial()), u, mUseDefGraph);
             gatherUseDefInformation(u, next->getExpr());
         }
         else if (const If * ifStatement = dyn_cast<If>(stmt)) {
