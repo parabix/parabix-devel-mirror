@@ -82,4 +82,71 @@ void CC::remove_range(const CodePointType lo_codepoint, const CodePointType hi_c
     }
 }
 
+CC::Relationship CC::compare(const CC * a, const CC * b) {
+
+    auto ai = a->cbegin();
+    const auto ai_end = a->cend();
+    auto bi = b->cbegin();
+    const auto bi_end = b->cend();
+
+    bool A_cannot_be_a_subset_of_B = false;
+    bool B_cannot_be_a_subset_of_A = false;
+    bool disjoint = true;
+
+
+    while (ai != ai_end && bi != bi_end) {
+        const CharSetItem & ra = *ai;
+        const CharSetItem & rb = *bi;
+
+        if (ra.hi_codepoint < rb.lo_codepoint) {
+            ++ai;
+            B_cannot_be_a_subset_of_A = true;
+            continue;
+        }
+        if (rb.hi_codepoint < ra.lo_codepoint) {
+            ++bi;
+            A_cannot_be_a_subset_of_B = true;
+            continue;
+        }
+
+        disjoint = false;
+
+        if (ra.lo_codepoint < rb.lo_codepoint) {
+            A_cannot_be_a_subset_of_B = true;
+        }
+
+        if (rb.lo_codepoint < ra.lo_codepoint) {
+            B_cannot_be_a_subset_of_A = true;
+        }
+
+        if (ra.hi_codepoint <= rb.hi_codepoint) {
+            ++ai;
+        }
+        if (rb.hi_codepoint <= ra.hi_codepoint) {
+            ++bi;
+        }
+
+    }
+    if (disjoint) {
+        return Relationship::DISJOINT;
+    }
+
+    if (ai == ai_end && bi != bi_end) {
+        B_cannot_be_a_subset_of_A = true;
+    }
+    if (bi == bi_end && ai != ai_end) {
+        A_cannot_be_a_subset_of_B = true;
+    }
+
+    if (A_cannot_be_a_subset_of_B && B_cannot_be_a_subset_of_A) {
+        return Relationship::OVERLAPPING;
+    }
+    else if (A_cannot_be_a_subset_of_B) {
+        return Relationship::B_SUBSET_A;
+    }
+    else {
+        return Relationship::A_SUBSET_B;
+    }
+}
+
 }

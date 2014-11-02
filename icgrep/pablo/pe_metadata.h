@@ -7,6 +7,7 @@
 namespace pablo {
 
 class PMDNode {
+public:
     enum class ClassTypeId : unsigned {
         PMDASTVector
     };
@@ -27,6 +28,10 @@ private:
 };
 
 class PMDVector : public PMDNode, public std::vector<PabloAST*> {
+public:
+    PMDVector * get(std::vector<PabloAST*> && vec) {
+        return new PMDVector(std::move(vec));
+    }
 protected:
     PMDVector(std::vector<PabloAST*> && vec)
     : PMDNode(PMDNode::ClassTypeId::PMDASTVector)
@@ -34,11 +39,6 @@ protected:
     {
     }
 };
-
-PMDVector * makeMetadataVector(std::vector<PabloAST*> && vec) {
-    return new PMDVector(vec);
-}
-
 
 }
 

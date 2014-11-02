@@ -9,6 +9,7 @@
 
 //Pablo Expressions
 #include <pablo/codegenstate.h>
+#include <pablo/pe_metadata.h>
 #include <re/re_alt.h>
 #include <re/re_cc.h>
 #include <re/re_seq.h>

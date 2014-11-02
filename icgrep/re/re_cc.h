@@ -35,6 +35,15 @@ public:
         return false;
     }
 
+    enum class Relationship {
+        A_SUBSET_B
+        , B_SUBSET_A
+        , DISJOINT
+        , OVERLAPPING
+    };
+
+    static Relationship compare(const CC * a, const CC * b);
+
     typedef CharSetVector::iterator                 iterator;
     typedef CharSetVector::const_iterator           const_iterator;
     typedef CharSetVector::size_type                size_type;
