@@ -35,11 +35,11 @@ public:
         return false;
     }
 
-    enum class Relationship {
+    enum class SetRelationship {
         SUBSET
-        , SUPERSET
-        , DISJOINT
+        , SUPERSET        
         , OVERLAPPING
+        , DISJOINT
         , EQUIVALENT
     };
 
@@ -113,7 +113,7 @@ public:
         return mSparseCharSet.empty();
     }
 
-    Relationship compare(const CC * other) const;
+    SetRelationship compare(const CC * other) const;
 
     virtual ~CC() {}
 

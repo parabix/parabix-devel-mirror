@@ -13,7 +13,7 @@
 
 namespace icgrep {
 
-pablo::LLVM_Gen_RetVal compile(const Encoding encoding, const std::string input_string, const bool show_compile_time = false);
+pablo::LLVM_Gen_RetVal compile(const Encoding encoding, const std::string input_string, const bool show_compile_time = false, const bool enable_multiplexing = false);
 
 }
 

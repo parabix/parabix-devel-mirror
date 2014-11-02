@@ -25,9 +25,16 @@ CC::CC(const CC & cc)
 
 std::string CC::getName() const {
     std::string name = "CC";
+    char seperator = '_';
     for (const CharSetItem & i : mSparseCharSet) {
-        name += "_" + std::to_string(i.lo_codepoint);
-        name += "." + std::to_string(i.hi_codepoint);
+        name += seperator;
+        if (i.lo_codepoint == i.hi_codepoint) {
+            name += std::to_string(i.lo_codepoint);
+        }
+        else {
+            name += std::to_string(i.lo_codepoint) + "-" + std::to_string(i.hi_codepoint);
+        }
+        seperator = ',';
     }
     return name;
 }
@@ -46,9 +53,9 @@ void CC::insert_range(const CodePointType lo_codepoint, const CodePointType hi_c
         else {
             // ranges overlap; expand the range to include the prior one and
             // remove the old one from the list
-            item.lo_codepoint = std::min(range.lo_codepoint, item.lo_codepoint);
-            item.hi_codepoint = std::max(range.hi_codepoint, item.hi_codepoint);
-            i = mSparseCharSet.erase(i);
+            range.lo_codepoint = std::min(range.lo_codepoint, item.lo_codepoint);
+            range.hi_codepoint = std::max(range.hi_codepoint, item.hi_codepoint);
+            return;
         }
     }
     mSparseCharSet.push_back(item);
@@ -83,10 +90,10 @@ void CC::remove_range(const CodePointType lo_codepoint, const CodePointType hi_c
     }
 }
 
-CC::Relationship CC::compare(const CC * other) const {
+CC::SetRelationship CC::compare(const CC * other) const {
 
     if (LLVM_UNLIKELY(other == this)) {
-        return Relationship::EQUIVALENT;
+        return SetRelationship::EQUIVALENT;
     }
 
     auto ai = cbegin();
@@ -102,37 +109,70 @@ CC::Relationship CC::compare(const CC * other) const {
         const CharSetItem & ra = *ai;
         const CharSetItem & rb = *bi;
 
+        // _A_| ...
+        //     |_B_
+
+        // A may be a superset of B but it cannot be a subset of B
+
         if (ra.hi_codepoint < rb.lo_codepoint) {
             ++ai;
-            nonSuperset = true;
+            nonSubset = true;
             continue;
         }
+
+        //     |_A_
+        // _B_| ...
+
+        // A may be a subset of B but it cannot be a superset of B
+
+
         if (rb.hi_codepoint < ra.lo_codepoint) {
             ++bi;
-            nonSubset = true;
+            nonSuperset = true;
             continue;
         }
 
         disjoint = false;
 
+        // |_A__
+        //   |_B__
+
+        // A may be a superset of B but it cannot be a subset of B nor can it be disjoint
+
         if (ra.lo_codepoint < rb.lo_codepoint) {
             nonSubset = true;
         }
+
+        //   |_A__
+        // |_B__
+
+        // A may be a subset of B but it cannot be a superset of B nor can it be disjoint
 
         if (rb.lo_codepoint < ra.lo_codepoint) {
             nonSuperset = true;
         }
 
+        // __A__| ...
+        // __B______|
+
+        // SUCC(A) may overlap B in some way; only increment A
+
         if (ra.hi_codepoint <= rb.hi_codepoint) {
             ++ai;
         }
+
+        // __A______|
+        // __B__| ...
+
+        // SUCC(B) may overlap A in some way; only increment B
+
         if (rb.hi_codepoint <= ra.hi_codepoint) {
             ++bi;
         }
 
     }
     if (disjoint) {
-        return Relationship::DISJOINT;
+        return SetRelationship::DISJOINT;
     }
 
     if (ai == ai_end && bi != bi_end) {
@@ -143,15 +183,15 @@ CC::Relationship CC::compare(const CC * other) const {
     }
 
     if (nonSubset && nonSuperset) {
-        return Relationship::OVERLAPPING;
+        return SetRelationship::OVERLAPPING;
     }
     else if (nonSubset) {
-        return Relationship::SUPERSET;
+        return SetRelationship::SUPERSET;
     }
     else if (nonSuperset) {
-        return Relationship::SUBSET;
+        return SetRelationship::SUBSET;
     }
-    return Relationship::EQUIVALENT;
+    return SetRelationship::EQUIVALENT;
 }
 
 }

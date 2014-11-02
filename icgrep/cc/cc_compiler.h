@@ -13,7 +13,6 @@
 #include <re/re_cc.h>
 #include <unordered_map>
 #include <string>
-#include <boost/graph/adjacency_list.hpp>
 
 namespace cc {
 

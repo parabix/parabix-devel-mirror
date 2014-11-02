@@ -92,21 +92,22 @@ int main(int argc, char *argv[])
 #endif
 
     int opt_code;
-    int count_only_option = 0;
-    int print_version_option = 0;
-    int regex_from_file_option = 0;
-    int ascii_only_option = 0;
-
-    int compile_time_option = 0;
+    bool count_only_option = 0;
+    bool print_version_option = 0;
+    bool regex_from_file_option = 0;
+    bool ascii_only_option = 0;
+    bool compile_time_option = 0;
+    bool enable_multiplexing = 0;
+    bool print_usage = 0;
 
     unsigned long long cycles = 0;
-    double timer = 0;
+
 
     long lSize = 0;
 
     size_t result;
 
-    while ((opt_code = getopt(argc, argv, "cvfta")) != -1)
+    while ((opt_code = getopt(argc, argv, "cvftam")) != -1)
     {
         switch (opt_code)
         {
@@ -125,19 +126,25 @@ int main(int argc, char *argv[])
         case 'a':
             ascii_only_option = 1;
             break;
+        case 'm':
+            enable_multiplexing = 1;
+            break;
         case '?':
             break;
         default:
             printf ("Invalid option: %c\n", opt_code);
-            printf("Usage: %s [-c] [-v] [-f] [-t] [-a] <regex|regexfile> <inputfile> [<outputfile>]\n", argv[0]);
-                    exit(-1);
+            print_usage = 1;
         }
     }
 
     if (optind >= argc)
     {
         printf ("Too few arguments\n");
-        printf("Usage: %s [-c] [-v] [-f] [-t] [-a] <regex|regexfile> <inputfile> [<outputfile>]\n", argv[0]);
+        print_usage = 1;
+    }
+
+    if (print_usage) {
+        printf("Usage: %s [-a] [-c] [-f] [-m] [-t] [-v] <regex|regexfile> <inputfile> [<outputfile>]\n", argv[0]);
         exit(-1);
     }
 
@@ -186,8 +193,8 @@ int main(int argc, char *argv[])
         outfilename = argv[optind++];
         if (optind != argc)
         {
-            printf ("Too many arguments\n");
-            printf("Usage: %s [-c] [-v] [-f] [-t] [-a] <regex|regexfile> <inputfile> [<outputfile>]\n", argv[0]);
+            printf("Too many arguments\n");
+            printf("Usage: %s [-a] [-c] [-f] [-m] [-t] [-v] <regex|regexfile> <inputfile> [<outputfile>]\n", argv[0]);
             exit(-1);
         }
         outfile = fopen(outfilename, "wb");
@@ -228,16 +235,13 @@ int main(int argc, char *argv[])
     if (compile_time_option)
     {
         cycles = get_hrcycles();
-        timer = getElapsedTime();
     }
-    const auto llvm_codegen = icgrep::compile(encoding, (regex_from_file_option ? fileregex : inregex), compile_time_option);
+    const auto llvm_codegen = icgrep::compile(encoding, (regex_from_file_option ? fileregex : inregex), compile_time_option, enable_multiplexing);
 
     if (compile_time_option)
     {
         cycles = get_hrcycles() - cycles;
-        timer = getElapsedTime() - timer;
         std::cout << "Total compile time - cycles:       " << cycles << std::endl;
-        std::cout << "Total compile time - milliseconds: " << timer << std::endl;
     }
 
     if (llvm_codegen.process_block_fptr != 0)

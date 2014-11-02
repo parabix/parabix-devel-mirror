@@ -2,14 +2,14 @@
 #define PABLO_METADATA_H
 
 #include <pablo/pabloAST.h>
-#include <vector>
+#include <llvm/ADT/DenseSet.h>
 
 namespace pablo {
 
 class PMDNode {
 public:
     enum class ClassTypeId : unsigned {
-        PMDASTVector
+        Set
     };
     inline ClassTypeId getClassTypeId() const {
         return mClassTypeId;
@@ -27,18 +27,23 @@ private:
     const ClassTypeId   mClassTypeId;
 };
 
-class PMDVector : public PMDNode, public std::vector<PabloAST*> {
+class PMDSet : public PMDNode, public llvm::DenseSet<PabloAST*> {
 public:
-    inline static PMDVector * get(std::vector<PabloAST*> && vec) {
-        return new PMDVector(std::move(vec));
+    template<typename iterator>
+    inline static PMDSet * get(iterator begin, iterator end) {
+        return new PMDSet(begin, end);
     }
 protected:
-    PMDVector(std::vector<PabloAST*> && vec)
-    : PMDNode(PMDNode::ClassTypeId::PMDASTVector)
-    , std::vector<PabloAST*>(std::move(vec))
+    template<typename iterator>
+    PMDSet(iterator begin, iterator end)
+    : PMDNode(PMDNode::ClassTypeId::Set)
+    , llvm::DenseSet<PabloAST*>()
     {
+        insert(begin, end);
     }
 };
+
+
 
 }
 

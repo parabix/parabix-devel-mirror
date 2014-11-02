@@ -17,13 +17,13 @@
 #include <re/re_name.h>
 #include <re/printer_re.h>
 #include <cc/cc_namemap.hpp>
-
+#include <pablo/printer_pablos.h>
 #include <utility>
 #include <string>
 #include <list>
 #include <map>
 #include <algorithm>
-
+#include <boost/graph/adjacency_list.hpp>
 #include <cassert>
 #include <stdlib.h>
 #include <stdexcept>
@@ -334,34 +334,33 @@ void CC_Compiler::computeVariableConstraints() {
     }
 
     // Compute the constraint and subset graphs.
-
     ConstraintGraph C(n);
     SubsetGraph S(n);
 
     for (auto i = 0; i != n; ++i) {
         const CC * const cc1 = mVariableVector[i].first;
+
         for (auto j = i + 1; j != n; ++j) {
-            const CC * const cc2 = mVariableVector[i].first;
+            const CC * const cc2 = mVariableVector[j].first;
             switch(cc1->compare(cc2)) {
-                case CC::Relationship::OVERLAPPING:
+                case CC::SetRelationship::OVERLAPPING:
                     add_edge(i, j, C);
                     add_edge(j, i, C);
                     break;
-                case CC::Relationship::SUBSET:
+                case CC::SetRelationship::SUBSET:
                     add_edge(i, j, S);
                     break;
-                case CC::Relationship::SUPERSET:
+                case CC::SetRelationship::SUPERSET:
                     add_edge(j, i, S);
                     break;
                 default:
-                    /* do nothing */
+                    /* do nothing; here just to prevent warning */
                     break;
             }
         }
     }
 
     // Write out the constraints and subset relationships as metadata
-
     for (auto i = 0; i != n; ++i) {
         std::vector<PabloAST *> constraints;
         ConstraintEdgeIterator ci, ci_end;
@@ -377,15 +376,12 @@ void CC_Compiler::computeVariableConstraints() {
 
         Assign * assign = mVariableVector[i].second;
         if (!constraints.empty()) {
-            assign->setMetadata("constraints", PMDVector::get(std::move(constraints)));
+            assign->setMetadata("constraints", PMDSet::get(constraints.begin(), constraints.end()));
         }
         if (!subsets.empty()) {
-            assign->setMetadata("subsets", PMDVector::get(std::move(subsets)));
+            assign->setMetadata("subsets", PMDSet::get(subsets.begin(), subsets.end()));
         }
     }
-
-
-
 }
 
 } // end of namespace cc
