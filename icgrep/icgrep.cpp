@@ -66,15 +66,15 @@ struct Output {
 
 using namespace std;
 
-typedef void (*process_block_fcn)(const Basis_bits &basis_bits, BitBlock carry_q[], Output &output);
+typedef void (*process_block_fcn)(const Basis_bits &basis_bits, BitBlock carry_q[], BitBlock advance_q[], Output &output);
 
 
 #define USE_MMAP
 #ifndef USE_MMAP
-void do_process(FILE *infile, FILE *outfile, int count_only_option, int carry_count, process_block_fcn process_block);
+void do_process(FILE *infile, FILE *outfile, int count_only_option, int carry_count, int advance_count, process_block_fcn process_block);
 #endif
 #ifdef USE_MMAP
-void do_process(char * infile_buffer, size_t infile_size, FILE *outfile, int count_only_option, int carry_count, process_block_fcn process_block);
+void do_process(char * infile_buffer, size_t infile_size, FILE *outfile, int count_only_option, int carry_count, int advance_count, process_block_fcn process_block);
 #endif
 
 
@@ -246,12 +246,12 @@ int main(int argc, char *argv[])
 
     if (llvm_codegen.process_block_fptr != 0)
     {
-        void (*FP)(const Basis_bits &basis_bits, BitBlock carry_q[], Output &output) = (void (*)(const Basis_bits &basis_bits, BitBlock carry_q[], Output &output))(void*)llvm_codegen.process_block_fptr;
+        void (*FP)(const Basis_bits &basis_bits, BitBlock carry_q[], BitBlock advance_q[], Output &output) = (void (*)(const Basis_bits &basis_bits, BitBlock carry_q[], BitBlock advance_q[], Output &output))(void*)llvm_codegen.process_block_fptr;
 #ifndef USE_MMAP
-        do_process(infile, outfile, count_only_option, llvm_codegen.carry_q_size, FP);
+        do_process(infile, outfile, count_only_option, llvm_codegen.carry_q_size, llvm_codegen.advance_q_size, FP);
 #endif
 #ifdef USE_MMAP
-        do_process(infile_buffer, infile_sb.st_size, outfile, count_only_option, llvm_codegen.carry_q_size, FP);
+        do_process(infile_buffer, infile_sb.st_size, outfile, count_only_option, llvm_codegen.carry_q_size, llvm_codegen.advance_q_size, FP);
 #endif
     }
 
@@ -314,16 +314,17 @@ ssize_t write_matches(FILE * outfile, ScannerT line_scanner, ScannerT match_scan
 
 
 #ifndef USE_MMAP
-void do_process(FILE *infile, FILE *outfile, int count_only_option, int carry_count, process_block_fcn process_block) {
+void do_process(FILE *infile, FILE *outfile, int count_only_option, int carry_count, int advance_count, process_block_fcn process_block) {
 #endif
 #ifdef USE_MMAP
-void do_process(char * infile_buffer, size_t infile_size, FILE *outfile, int count_only_option, int carry_count, process_block_fcn process_block) {
+void do_process(char * infile_buffer, size_t infile_size, FILE *outfile, int count_only_option, int carry_count, int advance_count, process_block_fcn process_block) {
 #endif
 
     struct Basis_bits basis_bits;
     struct Output output;
     BitBlock match_vector;
     BitBlock carry_q[carry_count];
+    BitBlock advance_q[advance_count];
     int match_count=0;
     int blk = 0;
     int block_base  = 0;
@@ -341,6 +342,7 @@ void do_process(char * infile_buffer, size_t infile_size, FILE *outfile, int cou
 
     match_vector = simd<1>::constant<0>();
     memset (carry_q, 0, sizeof(BitBlock) * carry_count);
+    memset (advance_q, 0, sizeof(BitBlock) * advance_count);
 
     char * buffer_ptr;
 #ifndef USE_MMAP
@@ -379,7 +381,7 @@ void do_process(char * infile_buffer, size_t infile_size, FILE *outfile, int cou
             block_base = blk*BLOCK_SIZE + segment_base;
             s2p_do_block((BytePack *) &infile_buffer[block_base], basis_bits);
 #endif
-            process_block(basis_bits, carry_q, output);
+            process_block(basis_bits, carry_q, advance_q, output);
 
             LF_scanner.load_block(output.LF, blk);
             match_scanner.load_block(output.matches, blk);
@@ -405,6 +407,7 @@ void do_process(char * infile_buffer, size_t infile_size, FILE *outfile, int cou
         if (LF_scanner.count() > 0) {
             copy_back_pos = LF_scanner.get_final_pos() + 1;
             memset (carry_q, 0, sizeof(BitBlock) * carry_count);
+            memset (advance_q, 0, sizeof(BitBlock) * advance_count);
         }
         else {
             copy_back_pos =  SEGMENT_SIZE;
@@ -460,7 +463,7 @@ void do_process(char * infile_buffer, size_t infile_size, FILE *outfile, int cou
         block_base = block_pos + segment_base;
         s2p_do_block((BytePack *) &infile_buffer[block_base], basis_bits);
 #endif
-        process_block(basis_bits, carry_q, output);
+        process_block(basis_bits, carry_q, advance_q, output);
 
         LF_scanner.load_block(output.LF, blk);
         match_scanner.load_block(output.matches, blk);
@@ -497,7 +500,7 @@ void do_process(char * infile_buffer, size_t infile_size, FILE *outfile, int cou
      block_base = block_pos + segment_base;
      s2p_do_final_block((BytePack *) &infile_buffer[block_base], basis_bits, EOF_mask);
 #endif
-    process_block(basis_bits, carry_q, output);
+    process_block(basis_bits, carry_q, advance_q, output);
 
     if (count_only_option)
     {

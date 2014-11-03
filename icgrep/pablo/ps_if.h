@@ -48,12 +48,19 @@ public:
     inline unsigned getInclusiveCarryCount() const {
         return mCarryCount;
     }
+    inline void setInclusiveAdvanceCount(const unsigned count) {
+        mAdvanceCount = count;
+    }
+    inline unsigned getInclusiveAdvanceCount() const {
+        return mAdvanceCount;
+    }
 protected:
     If(PabloAST * expr, StatementList && body, StatementList * parent)
     : Statement(ClassTypeId::If, parent)
     , mExpr(expr)
     , mBody(std::move(body))
     , mCarryCount(0)
+    , mAdvanceCount(0)
     {
         for (Statement * s : mBody) {
             s->mParent = &mBody;
@@ -63,6 +70,7 @@ private:
     PabloAST *          mExpr;
     StatementList       mBody;
     unsigned            mCarryCount;
+    unsigned            mAdvanceCount;
 };
 
 }

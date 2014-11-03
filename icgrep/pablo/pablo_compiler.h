@@ -39,6 +39,7 @@ namespace pablo {
 struct LLVM_Gen_RetVal
 {
     int carry_q_size;
+    int advance_q_size;
     void *process_block_fptr;
 };
 
@@ -70,6 +71,8 @@ private:
     Value* compileExpression(const PabloAST * expr);
     Value* genCarryInLoad(const unsigned index);
     void   genCarryOutStore(Value* carryOut, const unsigned index);
+    Value* genAdvanceInLoad(const unsigned index);
+    void   genAdvanceOutStore(Value* advanceOut, const unsigned index);
     Value* genAddWithCarry(Value* e1, Value* e2);
     Value* genAdvanceWithCarry(Value* e1, int shift_amount);
     Value* genBitBlockAny(Value* test);
@@ -84,6 +87,7 @@ private:
 
     StringToValueMap                    mMarkerMap;
     CarryQueueVector                    mCarryQueueVector;
+    CarryQueueVector                    mAdvanceQueueVector;
 
     const std::vector<Var *> &          mBasisBits;
 
@@ -98,6 +102,10 @@ private:
     Value*                              mCarryQueuePtr;
     unsigned                            mNestingDepth;
     unsigned                            mCarryQueueSize;
+
+    unsigned                            mAdvanceQueueIdx;
+    Value*                              mAdvanceQueuePtr;
+    unsigned                            mAdvanceQueueSize;
 
     ConstantAggregateZero* const        mZeroInitializer;
     Constant* const                     mOneInitializer;
