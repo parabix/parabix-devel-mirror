@@ -9,6 +9,7 @@
 
 //indicates that we use llvm.uadd.with.overflow.carryin for genAddWithCarry
 //#define USE_UADD_OVERFLOW
+//#define USE_LONG_INTEGER_SHIFT
 
 //Pablo Expressions
 #include <pablo/codegenstate.h>
