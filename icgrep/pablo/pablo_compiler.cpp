@@ -875,6 +875,8 @@ Value* PabloCompiler::genAddWithCarry(Value* e1, Value* e2) {
     CastInst* int64_o0 = new ZExtInst(obit, IntegerType::get(mMod->getContext(), 64), "o0", mBasicBlock);
     InsertElementInst* carry_out = InsertElementInst::Create(const_packed_5, int64_o0, const_int32_6, "carry_out", mBasicBlock);
 #else
+
+#if (BLOCK_SIZE == 128)
     //calculate carry through logical ops
     Value* carrygen = b.CreateAnd(e1, e2, "carrygen");
     Value* carryprop = b.CreateOr(e1, e2, "carryprop");
@@ -885,6 +887,11 @@ Value* PabloCompiler::genAddWithCarry(Value* e1, Value* e2) {
 
     Value* sum = b.CreateAdd(partial, mid_carry_in, "sum");
     Value* carry_out = genShiftHighbitToLow(b.CreateOr(carrygen, b.CreateAnd(carryprop, genNot(sum))), "carry_out");
+#else
+    //BLOCK_SIZE == 256, there is no other implementation
+    static_assert(false, "Add with carry for 256-bit bitblock requires USE_UADD_OVERFLOW");
+#endif
+
 #endif
     genCarryOutStore(carry_out, carryIdx);
     return sum;
@@ -954,7 +961,7 @@ inline Value* PabloCompiler::genNot(Value* expr) {
 Value* PabloCompiler::genAdvanceWithCarry(Value* strm_value, int shift_amount) {
 
     IRBuilder<> b(mBasicBlock);
-#if (BLOCK_SIZE == 128)
+
     const auto advanceIdx = mAdvanceQueueIdx++;
 #ifdef USE_LONG_INTEGER_SHIFT
     Value* advanceq_longint = b.CreateBitCast(genAdvanceInLoad(advanceIdx), IntegerType::get(mMod->getContext(), BLOCK_SIZE));
@@ -965,7 +972,7 @@ Value* PabloCompiler::genAdvanceWithCarry(Value* strm_value, int shift_amount) {
     genAdvanceOutStore(advance_out, advanceIdx);
 
     return result_value;
-#else
+#elif (BLOCK_SIZE == 128)
     if (shift_amount == 1) {
         Value* advanceq_value = genAdvanceInLoad(advanceIdx);
         Value* srli_1_value = b.CreateLShr(strm_value, 63);
@@ -1001,13 +1008,10 @@ Value* PabloCompiler::genAdvanceWithCarry(Value* strm_value, int shift_amount) {
     else {//if (shift_amount >= 64) {
         throw std::runtime_error("Shift amount >= 64 in Advance is currently unsupported.");
     }
-#endif //else USE_LONG_INTEGER_SHIFT
-#endif //BLOCK_SIZE == 128
-
-#if (BLOCK_SIZE == 256)
-    return genAddWithCarry(strm_value, strm_value);
-#endif
-
+#else 
+    //BLOCK_SIZE == 256
+    static_assert(false, "Advance with carry on 256-bit bitblock requires long integer shifts (USE_LONG_INTEGER_SHIFT).");
+#endif //USE_LONG_INTEGER_SHIFT
 }
 
 void PabloCompiler::SetOutputValue(Value * marker, const unsigned index) {
