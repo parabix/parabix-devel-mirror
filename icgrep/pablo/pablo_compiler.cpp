@@ -966,10 +966,10 @@ Value* PabloCompiler::genAdvanceWithCarry(Value* strm_value, int shift_amount) {
 #ifdef USE_LONG_INTEGER_SHIFT
     Value* advanceq_longint = b.CreateBitCast(genAdvanceInLoad(advanceIdx), IntegerType::get(mMod->getContext(), BLOCK_SIZE));
     Value* strm_longint = b.CreateBitCast(strm_value, IntegerType::get(mMod->getContext(), BLOCK_SIZE));
-    Value* adv_longint = b.CreateOr(b.CreateShl(strm_longint, shift_amount), advanceq_longint, "advance");
+    Value* adv_longint = b.CreateOr(b.CreateShl(strm_longint, shift_amount), b.CreateLShr(advanceq_longint, BLOCK_SIZE - shift_amount), "advance");
     Value* result_value = b.CreateBitCast(adv_longint, mBitBlockType);
     Value* advance_out = b.CreateBitCast(b.CreateLShr(strm_longint, BLOCK_SIZE - shift_amount, "advance_out"), mBitBlockType);
-    genAdvanceOutStore(advance_out, advanceIdx);
+    genAdvanceOutStore(strm_value, advanceIdx);
 
     return result_value;
 #elif (BLOCK_SIZE == 128)
@@ -998,10 +998,9 @@ Value* PabloCompiler::genAdvanceWithCarry(Value* strm_value, int shift_amount) {
         // We need to speed up our custom LLVM for this code.
         Value* advanceq_longint = b.CreateBitCast(genAdvanceInLoad(advanceIdx), IntegerType::get(mMod->getContext(), BLOCK_SIZE));
         Value* strm_longint = b.CreateBitCast(strm_value, IntegerType::get(mMod->getContext(), BLOCK_SIZE));
-        Value* adv_longint = b.CreateOr(b.CreateShl(strm_longint, shift_amount), advanceq_longint, "advance");
+        Value* adv_longint = b.CreateOr(b.CreateShl(strm_longint, shift_amount), b.CreateLShr(advanceq_longint, BLOCK_SIZE - shift_amount), "advance");
         Value* result_value = b.CreateBitCast(adv_longint, mBitBlockType);
-        Value* advance_out = b.CreateBitCast(b.CreateLShr(strm_longint, BLOCK_SIZE - shift_amount, "advance_out"), mBitBlockType);
-        genAdvanceOutStore(advance_out, advanceIdx);
+        genAdvanceOutStore(strm_value, advanceIdx);
 
         return result_value;
     }
