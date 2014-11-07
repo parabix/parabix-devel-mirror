@@ -973,7 +973,7 @@ Value* PabloCompiler::genAdvanceWithCarry(Value* strm_value, int shift_amount) {
     return result_value;
 #elif (BLOCK_SIZE == 128)
     if (shift_amount == 1) {
-        Value* advanceq_value = genAdvanceInLoad(advanceIdx);
+        Value* advanceq_value = genShiftHighbitToLow(genAdvanceInLoad(advanceIdx));
         Value* srli_1_value = b.CreateLShr(strm_value, 63);
         Value* packed_shuffle;
         Constant* const_packed_1_elems [] = {b.getInt32(0), b.getInt32(2)};
@@ -986,9 +986,8 @@ Value* PabloCompiler::genAdvanceWithCarry(Value* strm_value, int shift_amount) {
         Value* shl_value = b.CreateShl(strm_value, const_packed_2);
         Value* result_value = b.CreateOr(shl_value, packed_shuffle, "advance");
 
-        Value* advance_out = genShiftHighbitToLow(strm_value, "advance_out");
         //CarryQ - carry out:
-        genAdvanceOutStore(advance_out, advanceIdx);
+        genAdvanceOutStore(strm_value, advanceIdx);
 
         return result_value;
     }
