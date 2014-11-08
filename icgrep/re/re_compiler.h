@@ -45,6 +45,7 @@ private:
     pablo::Assign * process(Alt * alt, pablo::Assign * marker, pablo::PabloBlock & pb);
     pablo::Assign * process(Rep * rep, pablo::Assign *marker, pablo::PabloBlock & pb);
     pablo::Assign * process(Diff * diff, pablo::Assign * marker, pablo::PabloBlock & cg);
+    pablo::Assign * process(Intersect * x, pablo::Assign * marker, pablo::PabloBlock & cg);
     pablo::Assign * consecutive(pablo::Assign * repeated,  int repeated_lgth, int repeat_count, pablo::PabloBlock & pb);
     static bool isFixedLength(RE * regexp);
     pablo::Assign * processLowerBound(RE * repeated,  int lb, pablo::Assign * marker, pablo::PabloBlock & pb);

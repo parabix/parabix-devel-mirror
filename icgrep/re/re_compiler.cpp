@@ -15,6 +15,7 @@
 #include <re/re_seq.h>
 #include <re/re_rep.h>
 #include <re/re_diff.h>
+#include <re/re_intersect.h>
 #include <cc/cc_namemap.hpp>
 #include <pablo/codegenstate.h>
 
@@ -158,6 +159,17 @@ inline Assign * RE_Compiler::process(Diff * diff, Assign * marker, PabloBlock & 
         return pb.createAssign("diff", pb.createAnd(pb.createVar(t1), pb.createNot(pb.createVar(t2))));
     }
     throw std::runtime_error("Unsupported Diff operands: " + Printer_RE::PrintRE(diff));
+}
+
+inline Assign * RE_Compiler::process(Intersect * x, Assign * marker, PabloBlock & pb) {
+    RE * lh = x->getLH();
+    RE * rh = x->getRH();
+    if ((isa<Any>(lh) || isa<Name>(lh)) && (isa<Any>(rh) || isa<Name>(rh))) {
+        Assign * t1 = process(lh, marker, pb);
+        Assign * t2 = process(rh, marker, pb);
+        return pb.createAssign("intersect", pb.createAnd(pb.createVar(t1), pb.createVar(t2)));
+    }
+    throw std::runtime_error("Unsupported Intersect operands: " + Printer_RE::PrintRE(x));
 }
 
 inline Assign * RE_Compiler::process(Rep * rep, Assign * marker, PabloBlock & pb) {

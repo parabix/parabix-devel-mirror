@@ -11,6 +11,7 @@
 #include <re/re_seq.h>
 #include <re/re_start.h>
 #include <re/re_diff.h>
+#include <re/re_intersect.h>
 #include <re/parsefailure.h>
 #include <algorithm>
 

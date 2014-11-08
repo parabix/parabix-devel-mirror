@@ -17,6 +17,7 @@
 #include <re/re_seq.h>
 #include <re/re_start.h>
 #include <re/re_diff.h>
+#include <re/re_intersect.h>
 
 using namespace re;
 
@@ -66,6 +67,14 @@ const std::string Printer_RE::PrintRE(const RE * re)
         retVal += PrintRE(diff->getLH());
         retVal += " , ";
         retVal += PrintRE(diff->getRH());
+        retVal += ") ";
+    }
+    else if (const Intersect* x = dyn_cast<const Intersect>(re))
+    {
+        retVal = "Intersect (";
+        retVal += PrintRE(x->getLH());
+        retVal += " , ";
+        retVal += PrintRE(x->getRH());
         retVal += ") ";
     }
     else if (isa<const End>(re))
