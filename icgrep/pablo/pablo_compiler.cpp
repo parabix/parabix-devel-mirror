@@ -330,6 +330,7 @@ void PabloCompiler::DeclareFunctions()
     // to call->  b.CreateCall(mFunc_print_register, unicode_category);
 
 #ifdef USE_UADD_OVERFLOW
+#ifdef USE_TWO_UADD_OVERFLOW
     // Type Definitions for llvm.uadd.with.overflow.carryin.i128 or .i256
     std::vector<Type*>StructTy_0_fields;
     StructTy_0_fields.push_back(IntegerType::get(mMod->getContext(), BLOCK_SIZE));
@@ -339,19 +340,18 @@ void PabloCompiler::DeclareFunctions()
     std::vector<Type*>FuncTy_1_args;
     FuncTy_1_args.push_back(IntegerType::get(mMod->getContext(), BLOCK_SIZE));
     FuncTy_1_args.push_back(IntegerType::get(mMod->getContext(), BLOCK_SIZE));
-    FuncTy_1_args.push_back(IntegerType::get(mMod->getContext(), 1));
     FunctionType* FuncTy_1 = FunctionType::get(
                                               /*Result=*/StructTy_0,
                                               /*Params=*/FuncTy_1_args,
                                               /*isVarArg=*/false);
 
-    mFunctionUaddOverflow = mMod->getFunction("llvm.uadd.with.overflow.carryin.i" +
+    mFunctionUaddOverflow = mMod->getFunction("llvm.uadd.with.overflow.i" +
                                               std::to_string(BLOCK_SIZE));
     if (!mFunctionUaddOverflow) {
-        mFunctionUaddOverflow = Function::Create(
+        mFunctionUaddOverflow= Function::Create(
           /*Type=*/ FuncTy_1,
           /*Linkage=*/ GlobalValue::ExternalLinkage,
-          /*Name=*/ "llvm.uadd.with.overflow.carryin.i" + std::to_string(BLOCK_SIZE), mMod); // (external, no body)
+          /*Name=*/ "llvm.uadd.with.overflow.i" + std::to_string(BLOCK_SIZE), mMod); // (external, no body)
         mFunctionUaddOverflow->setCallingConv(CallingConv::C);
     }
     AttributeSet mFunctionUaddOverflowPAL;
@@ -369,6 +369,47 @@ void PabloCompiler::DeclareFunctions()
         mFunctionUaddOverflowPAL = AttributeSet::get(mMod->getContext(), Attrs);
     }
     mFunctionUaddOverflow->setAttributes(mFunctionUaddOverflowPAL);
+#else
+    // Type Definitions for llvm.uadd.with.overflow.carryin.i128 or .i256
+    std::vector<Type*>StructTy_0_fields;
+    StructTy_0_fields.push_back(IntegerType::get(mMod->getContext(), BLOCK_SIZE));
+    StructTy_0_fields.push_back(IntegerType::get(mMod->getContext(), 1));
+    StructType *StructTy_0 = StructType::get(mMod->getContext(), StructTy_0_fields, /*isPacked=*/false);
+
+    std::vector<Type*>FuncTy_1_args;
+    FuncTy_1_args.push_back(IntegerType::get(mMod->getContext(), BLOCK_SIZE));
+    FuncTy_1_args.push_back(IntegerType::get(mMod->getContext(), BLOCK_SIZE));
+    FuncTy_1_args.push_back(IntegerType::get(mMod->getContext(), 1));
+    FunctionType* FuncTy_1 = FunctionType::get(
+                                              /*Result=*/StructTy_0,
+                                              /*Params=*/FuncTy_1_args,
+                                              /*isVarArg=*/false);
+
+    mFunctionUaddOverflowCarryin = mMod->getFunction("llvm.uadd.with.overflow.carryin.i" +
+                                              std::to_string(BLOCK_SIZE));
+    if (!mFunctionUaddOverflowCarryin) {
+        mFunctionUaddOverflowCarryin = Function::Create(
+          /*Type=*/ FuncTy_1,
+          /*Linkage=*/ GlobalValue::ExternalLinkage,
+          /*Name=*/ "llvm.uadd.with.overflow.carryin.i" + std::to_string(BLOCK_SIZE), mMod); // (external, no body)
+        mFunctionUaddOverflowCarryin->setCallingConv(CallingConv::C);
+    }
+    AttributeSet mFunctionUaddOverflowCarryinPAL;
+    {
+        SmallVector<AttributeSet, 4> Attrs;
+        AttributeSet PAS;
+        {
+          AttrBuilder B;
+          B.addAttribute(Attribute::NoUnwind);
+          B.addAttribute(Attribute::ReadNone);
+          PAS = AttributeSet::get(mMod->getContext(), ~0U, B);
+        }
+
+        Attrs.push_back(PAS);
+        mFunctionUaddOverflowCarryinPAL = AttributeSet::get(mMod->getContext(), Attrs);
+    }
+    mFunctionUaddOverflowCarryin->setAttributes(mFunctionUaddOverflowCarryinPAL);
+#endif
 #endif
 
     //Starts on process_block
@@ -827,11 +868,11 @@ Value * PabloCompiler::compileExpression(const PabloAST * expr)
 }
 
 #ifdef USE_UADD_OVERFLOW
-PabloCompiler::SumWithOverflowPack PabloCompiler::callUaddOverflow(Value* int128_e1, Value* int128_e2, Value* int1_cin) {
+#ifdef USE_TWO_UADD_OVERFLOW
+PabloCompiler::SumWithOverflowPack PabloCompiler::callUaddOverflow(Value* int128_e1, Value* int128_e2) {
     std::vector<Value*> struct_res_params;
     struct_res_params.push_back(int128_e1);
     struct_res_params.push_back(int128_e2);
-    struct_res_params.push_back(int1_cin);
     CallInst* struct_res = CallInst::Create(mFunctionUaddOverflow, struct_res_params, "uadd_overflow_res", mBasicBlock);
     struct_res->setCallingConv(CallingConv::C);
     struct_res->setTailCall(false);
@@ -850,6 +891,31 @@ PabloCompiler::SumWithOverflowPack PabloCompiler::callUaddOverflow(Value* int128
 
     return ret;
 }
+#else
+PabloCompiler::SumWithOverflowPack PabloCompiler::callUaddOverflow(Value* int128_e1, Value* int128_e2, Value* int1_cin) {
+    std::vector<Value*> struct_res_params;
+    struct_res_params.push_back(int128_e1);
+    struct_res_params.push_back(int128_e2);
+    struct_res_params.push_back(int1_cin);
+    CallInst* struct_res = CallInst::Create(mFunctionUaddOverflowCarryin, struct_res_params, "uadd_overflow_res", mBasicBlock);
+    struct_res->setCallingConv(CallingConv::C);
+    struct_res->setTailCall(false);
+    AttributeSet struct_res_PAL;
+    struct_res->setAttributes(struct_res_PAL);
+
+    SumWithOverflowPack ret;
+
+    std::vector<unsigned> int128_sum_indices;
+    int128_sum_indices.push_back(0);
+    ret.sum = ExtractValueInst::Create(struct_res, int128_sum_indices, "sum", mBasicBlock);
+
+    std::vector<unsigned> int1_obit_indices;
+    int1_obit_indices.push_back(1);
+    ret.obit = ExtractValueInst::Create(struct_res, int1_obit_indices, "obit", mBasicBlock);
+
+    return ret;
+}
+#endif
 #endif
 
 Value* PabloCompiler::genAddWithCarry(Value* e1, Value* e2) {
@@ -858,25 +924,47 @@ Value* PabloCompiler::genAddWithCarry(Value* e1, Value* e2) {
     //CarryQ - carry in.
     const int carryIdx = mCarryQueueIdx++;
     Value* carryq_value = genCarryInLoad(carryIdx);
-
-#ifdef USE_UADD_OVERFLOW
-    //use llvm.uadd.with.overflow.i128 or i256
-    ConstantInt* const_int32_6 = ConstantInt::get(mMod->getContext(), APInt(32, StringRef("0"), 10));
+#ifdef USE_TWO_UADD_OVERFLOW
+    //This is the ideal implementation, which uses two uadd.with.overflow
+    //The back end should be able to recognize this pattern and combine it into uadd.with.overflow.carryin
     CastInst* int128_e1 = new BitCastInst(e1, IntegerType::get(mMod->getContext(), BLOCK_SIZE), "e1_128", mBasicBlock);
     CastInst* int128_e2 = new BitCastInst(e2, IntegerType::get(mMod->getContext(), BLOCK_SIZE), "e2_128", mBasicBlock);
+    CastInst* int128_carryq_value = new BitCastInst(carryq_value, IntegerType::get(mMod->getContext(), BLOCK_SIZE), "carryq_128", mBasicBlock);
+
+    SumWithOverflowPack sumpack0, sumpack1;
+
+    sumpack0 = callUaddOverflow(int128_e1, int128_e2);
+    sumpack1 = callUaddOverflow(sumpack0.sum, int128_carryq_value);
+
+    Value* obit = b.CreateOr(sumpack0.obit, sumpack1.obit, "carry_bit");
+    Value* sum = b.CreateBitCast(sumpack1.sum, mBitBlockType, "ret_sum");
+
+    /*obit is the i1 carryout, zero extend and insert it into a v2i64 or v4i64 vector.*/
+    ConstantAggregateZero* const_packed_5 = ConstantAggregateZero::get(mBitBlockType);
+    ConstantInt* const_int32_6 = ConstantInt::get(mMod->getContext(), APInt(32, StringRef("0"), 10));
+    CastInst* int64_o0 = new ZExtInst(obit, IntegerType::get(mMod->getContext(), 64), "o0", mBasicBlock);
+    InsertElementInst* carry_out = InsertElementInst::Create(const_packed_5, int64_o0, const_int32_6, "carry_out", mBasicBlock);
+
+#elif defined USE_UADD_OVERFLOW
+    //use llvm.uadd.with.overflow.i128 or i256
+    CastInst* int128_e1 = new BitCastInst(e1, IntegerType::get(mMod->getContext(), BLOCK_SIZE), "e1_128", mBasicBlock);
+    CastInst* int128_e2 = new BitCastInst(e2, IntegerType::get(mMod->getContext(), BLOCK_SIZE), "e2_128", mBasicBlock);
+
+    //get i1 carryin from iBLOCK_SIZE
+    ConstantInt* const_int32_6 = ConstantInt::get(mMod->getContext(), APInt(32, StringRef("0"), 10));
     ExtractElementInst * int64_carryq_value = ExtractElementInst::Create(carryq_value, const_int32_6, "carryq_64", mBasicBlock);
     CastInst* int1_carryq_value = new TruncInst(int64_carryq_value, IntegerType::get(mMod->getContext(), 1), "carryq_1", mBasicBlock);
+
     SumWithOverflowPack sumpack0;
     sumpack0 = callUaddOverflow(int128_e1, int128_e2, int1_carryq_value);
     Value* obit = sumpack0.obit;
     Value* sum = b.CreateBitCast(sumpack0.sum, mBitBlockType, "sum");
+
     /*obit is the i1 carryout, zero extend and insert it into a v2i64 or v4i64 vector.*/
     ConstantAggregateZero* const_packed_5 = ConstantAggregateZero::get(mBitBlockType);
     CastInst* int64_o0 = new ZExtInst(obit, IntegerType::get(mMod->getContext(), 64), "o0", mBasicBlock);
     InsertElementInst* carry_out = InsertElementInst::Create(const_packed_5, int64_o0, const_int32_6, "carry_out", mBasicBlock);
-#else
-
-#if (BLOCK_SIZE == 128)
+#elif (BLOCK_SIZE == 128)
     //calculate carry through logical ops
     Value* carrygen = b.CreateAnd(e1, e2, "carrygen");
     Value* carryprop = b.CreateOr(e1, e2, "carryprop");
@@ -890,9 +978,8 @@ Value* PabloCompiler::genAddWithCarry(Value* e1, Value* e2) {
 #else
     //BLOCK_SIZE == 256, there is no other implementation
     static_assert(false, "Add with carry for 256-bit bitblock requires USE_UADD_OVERFLOW");
-#endif
+#endif //USE_TWO_UADD_OVERFLOW
 
-#endif
     genCarryOutStore(carry_out, carryIdx);
     return sum;
 }

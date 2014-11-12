@@ -10,6 +10,11 @@
 //indicates that we use llvm.uadd.with.overflow.carryin for genAddWithCarry
 //#define USE_UADD_OVERFLOW
 //#define USE_LONG_INTEGER_SHIFT
+//#define USE_TWO_UADD_OVERFLOW
+
+#if defined(USE_TWO_UADD_OVERFLOW) && !defined(USE_UADD_OVERFLOW)
+static_assert(false, "Need to turn on them together.");
+#endif
 
 //Pablo Expressions
 #include <pablo/codegenstate.h>
@@ -82,9 +87,15 @@ private:
     Value* genNot(Value* expr);
 
     #ifdef USE_UADD_OVERFLOW
-    SumWithOverflowPack callUaddOverflow(Value *e1, Value *e2, Value *cin);
+    #ifdef USE_TWO_UADD_OVERFLOW
     Function* mFunctionUaddOverflow;
+    SumWithOverflowPack callUaddOverflow(Value *e1, Value *e2);
+    #else
+    Function* mFunctionUaddOverflowCarryin;
+    SumWithOverflowPack callUaddOverflow(Value *e1, Value *e2, Value *cin);
     #endif
+    #endif
+
 
     StringToValueMap                    mMarkerMap;
     CarryQueueVector                    mCarryQueueVector;
