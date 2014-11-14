@@ -93,7 +93,9 @@ RE * RE_Parser::parse_next_token() {
                 break;
             case '|': case ')':
                 break;
-            case '*': case '+': case '?': case ']': case '{': case '}':
+            case '*': case '+': case '?': case '{': 
+                throw NothingToRepeat();
+            case ']': case '}':
                 throw ParseFailure("Illegal metacharacter usage!");
             case '[':
                 re = parse_charset();

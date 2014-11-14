@@ -62,4 +62,10 @@ public:
     virtual ~BadUpperBound() noexcept {}
 };
 
+class NothingToRepeat : public ParseFailure {
+public:
+    NothingToRepeat() noexcept : ParseFailure("Need something to repeat before *, +, ? or {.") { }
+    virtual ~NothingToRepeat() noexcept {}
+};
+
 #endif // PARSEFAILURE_H
