@@ -21,13 +21,13 @@ class RE_Parser
 {
 public:
 
-    static RE * parse(const std::string &intput_string, const bool allow_escapes_within_charset = false);
+    static RE * parse(const std::string &input_string);
 
 private:
 
     typedef std::string::const_iterator cursor_t;
 
-    RE_Parser(const std::string & regular_expression, const bool allow_escapes_within_charset);
+    RE_Parser(const std::string & regular_expression);
 
     RE * parse_alt(const bool subexpression);
 
@@ -43,7 +43,9 @@ private:
 
     RE * parse_literal();
 
-    RE * parse_escaped_metacharacter();
+    RE * parse_escaped();
+
+    RE * parse_escaped_set();
 
     unsigned parse_utf8_codepoint();
 
@@ -67,7 +69,6 @@ private:
 
     cursor_t                    _cursor;
     const cursor_t              _end;
-    const bool                  _allow_escapes_within_charset;
 };
 
 }

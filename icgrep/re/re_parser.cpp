@@ -5,6 +5,7 @@
  */
 
 #include <re/re_parser.h>
+#include <re/re_name.h>
 #include <re/re_alt.h>
 #include <re/re_end.h>
 #include <re/re_rep.h>
@@ -17,8 +18,8 @@
 
 namespace re {
 
-RE * RE_Parser::parse(const std::string & regular_expression, const bool allow_escapes_within_charset) {
-    RE_Parser parser(regular_expression, allow_escapes_within_charset);
+RE * RE_Parser::parse(const std::string & regular_expression) {
+    RE_Parser parser(regular_expression);
     RE * re = parser.parse_alt(false);
     if (re == nullptr) {
         throw ParseFailure("An unexpected parsing error occurred!");
@@ -26,10 +27,9 @@ RE * RE_Parser::parse(const std::string & regular_expression, const bool allow_e
     return re;
 }
 
-inline RE_Parser::RE_Parser(const std::string & regular_expression, const bool allow_escapes_within_charset)
+inline RE_Parser::RE_Parser(const std::string & regular_expression)
 : _cursor(regular_expression.begin())
 , _end(regular_expression.end())
-, _allow_escapes_within_charset(allow_escapes_within_charset)
 {
 
 }
@@ -103,6 +103,10 @@ RE * RE_Parser::parse_next_token() {
             case '.': // the 'any' metacharacter
                 re = parse_any_character();
                 break;
+	    case '\\':  // escape processing
+                ++_cursor;
+                re = parse_escaped();
+		break;
             default:
                 re = parse_literal();
                 break;
@@ -194,27 +198,67 @@ inline void RE_Parser::parse_range_bound(int & lower_bound, int & upper_bound) {
 }
 
 inline RE * RE_Parser::parse_literal() {
-    // handle the escaped metacharacter (assuming it is one)
-    if (*_cursor == '\\') {
-        return parse_escaped_metacharacter();
-    }
-    else {
-        return makeCC(parse_utf8_codepoint());
-    }
+    return makeCC(parse_utf8_codepoint());
 }
 
-inline RE * RE_Parser::parse_escaped_metacharacter() {
-    ++_cursor;
+#define bit40(x) (1ULL << ((x) - 0x40))
+const uint64_t setEscapeCharacters = bit40('p') | bit40('d') | bit40('w') | bit40('s') | bit40('P') | bit40('D') | bit40('W') | bit40('S');
+
+inline bool isSetEscapeChar(char c) {
+    return c >= 0x40 && c <= 0x7F && ((setEscapeCharacters >> (c - 0x40)) & 1) == 1;
+}
+
+inline RE * RE_Parser::parse_escaped() {
     throw_incomplete_expression_error_if_end_of_stream();
+    if (isSetEscapeChar(*_cursor)) 
+      return parse_escaped_set();
+    else 
+      return makeCC(parse_escaped_codepoint());
+}
+
+RE * makeDigitSet() {
+  return makeName("Nd", Name::Type::UnicodeCategory);
+}
+
+RE * makeWhitespaceSet() {
+  throw ParseFailure("\\s not implemented.");
+}
+
+RE * makeWordSet() {
+  throw ParseFailure("\\w not implemented.");
+}
+
+RE * makeComplement(RE * s) {
+  return makeDiff(makeAny(), s);
+}
+
+inline RE * RE_Parser::parse_escaped_set() {
     switch (*_cursor) {
         case 'P':
             return makeDiff(makeAny(), parse_unicode_category());
         case 'p':
             return parse_unicode_category();
-		default:
-			return makeCC(parse_escaped_codepoint());
+	case 'd':
+	    ++_cursor;
+            return makeDigitSet();
+	case 'D':
+	    ++_cursor;
+            return makeComplement(makeDigitSet());
+	case 's':
+	    ++_cursor;
+            return makeWhitespaceSet();
+	case 'S':
+	    ++_cursor;
+            return makeComplement(makeWhitespaceSet());
+	case 'w':
+	    ++_cursor;
+            return makeWordSet();
+	case 'W':
+	    ++_cursor;
+            return makeComplement(makeWordSet());
+	default:
+	    throw ParseFailure("Internal error");
     }
-    throw ParseFailure("Illegal backslash escape!");
 }
 
 unsigned RE_Parser::parse_utf8_codepoint() {
@@ -463,6 +507,8 @@ unsigned RE_Parser::parse_escaped_codepoint() {
 		default:
 			if (((*_cursor >= 'A') && (*_cursor <= 'Z')) || ((*_cursor >= 'a') && (*_cursor <= 'z')))
 				throw ParseFailure("Undefined or unsupported escape sequence");
+			else if ((*_cursor < 0x20) || (*_cursor >= 0x7F))
+				throw ParseFailure("Illegal escape sequence");
 			else return static_cast<unsigned>(*_cursor++);
 	}
 }
