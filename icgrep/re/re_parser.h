@@ -53,7 +53,11 @@ private:
 
     bool parse_charset_literal(unsigned & literal);
 
-    unsigned parse_hex();
+    unsigned parse_escaped_codepoint();
+
+    unsigned parse_hex_codepoint(int mindigits, int maxdigits);
+
+    unsigned parse_octal_codepoint(int mindigits, int maxdigits);
 
     unsigned parse_int();
 

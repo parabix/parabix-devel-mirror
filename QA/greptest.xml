@@ -380,6 +380,9 @@ The following line has LATIN CAPITAL LETTER G WITH MACRON in single quotes.
 <grepcase regexp="=[a-z]{5,15};" datafile="bounded_charclass" grepcount="11"/>
 <grepcase regexp="[wxy]{2}{3}{2}" datafile="bounded_charclass" grepcount="3"/>
 <grepcase regexp="=([a-z][c-z])*;" datafile="bounded_charclass" grepcount="12"/>
+<grepcase regexp="[\u0061-\u007A]{6}" datafile="bounded_charclass" grepcount="21"/>
+<grepcase regexp="[\o{142}-d]{2}" datafile="bounded_charclass" grepcount="3"/>
+<grepcase regexp="[\x61-\U0000007A]{6}" datafile="bounded_charclass" grepcount="21"/>
 
 <grepcase regexp="^D[zabcdefoy]g" datafile="RangeAltSeqMatchStarKplusWhileNotOptAny" grepcount="7"/>
 <grepcase regexp="do*c|ez*t" datafile="RangeAltSeqMatchStarKplusWhileNotOptAny" grepcount="4"/>
@@ -408,7 +411,13 @@ The following line has LATIN CAPITAL LETTER G WITH MACRON in single quotes.
 <grepcase regexp="'.'" datafile="LU_test" grepcount="1"/>
 <grepcase regexp="'...'" datafile="LU_test" grepcount="0"/>
 <grepcase regexp="\u{1e20}" datafile="LU_test" grepcount="1"/>
+<grepcase regexp="\u1e20" datafile="LU_test" grepcount="1"/>
+<grepcase regexp="\U00001e20" datafile="LU_test" grepcount="1"/>
+<grepcase regexp="\o{17040}" datafile="LU_test" grepcount="1"/>
 <grepcase regexp="\u{1e21}" datafile="LU_test" grepcount="0"/>
+<grepcase regexp="\u1e21" datafile="LU_test" grepcount="0"/>
+<grepcase regexp="\U00001e21" datafile="LU_test" grepcount="0"/>
+<grepcase regexp="\o{17041}" datafile="LU_test" grepcount="0"/>
 <grepcase regexp="\p{Lu}" datafile="LU_test" grepcount="2"/>
 <grepcase regexp="'\p{Lu}'" datafile="LU_test" grepcount="1"/>
 <grepcase regexp="\p{Ll}" datafile="LU_test" grepcount="1"/>

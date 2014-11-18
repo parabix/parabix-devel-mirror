@@ -194,16 +194,12 @@ inline RE * RE_Parser::parse_escaped_metacharacter() {
     ++_cursor;
     throw_incomplete_expression_error_if_end_of_stream();
     switch (*_cursor) {
-        case '(': case ')': case '*': case '+':
-        case '.': case '?': case '[': case '\\':
-        case ']': case '{': case '|': case '}':
-            return makeCC(*_cursor++);
-        case 'u':
-            return makeCC(parse_hex());
         case 'P':
             return makeDiff(makeAny(), parse_unicode_category());
         case 'p':
             return parse_unicode_category();
+		default:
+			return makeCC(parse_escaped_codepoint());
     }
     throw ParseFailure("Illegal backslash escape!");
 }
@@ -350,25 +346,9 @@ inline bool RE_Parser::parse_charset_literal(unsigned & literal) {
         return false;
     }
     if (*_cursor == '\\') {
-        if (++_cursor == _end) {
-            throw ParseFailure("Unknown charset escape!");
-        }
-        switch (*_cursor) {
-            case '(': case ')': case '*': case '+':
-            case '.': case '?': case '[': case '\\':
-            case ']': case '{': case '|': case '}':
-            case '-':
-                if (_allow_escapes_within_charset) {
-                    literal = *_cursor++;
-                    return true;
-                }
-                break;
-            case 'u':
-                literal = parse_hex();
-                return true;
-            // probably need to pass in the CC to handle \w, \s, etc...
-        }
-        throw ParseFailure("Unknown charset escape!");
+		_cursor++;
+		literal = parse_escaped_codepoint();
+		return true;
     }
     else {
         literal = parse_utf8_codepoint();
@@ -389,29 +369,128 @@ unsigned RE_Parser::parse_int() {
     return value;
 }
 
-unsigned RE_Parser::parse_hex() {
-    if (++_cursor != _end && *_cursor == '{') {
-        unsigned value = 0;
-        for (++_cursor; _cursor != _end; ++_cursor) {
-            const char t = *_cursor;
-            if (t == '}') {
-                ++_cursor;
-                return value;
-            }
-            value *= 16;
-            if (t >= '0' && t <= '9') {
-                value |= (t - '0');
-            }
-            else if ((t | 32) >= 'a' && (t | 32) <= 'f') {
-                value |= ((t | 32) - 'a') + 10;
-            }
-            else {
-                break;
-            }
-        }
-    }
-    throw ParseFailure("Bad Unicode hex notation!");
+
+// A backslash escape was found, and various special cases (back reference,
+// quoting with \Q, \E, sets (\p, \P, \d, \D, \w, \W, \s, \S), grapheme
+// cluster \X have been ruled out.
+// It may be one of several possibilities or an error sequence.
+// 1. Special control codes (\a, \b, \e, \f, \n, \r, \t, \v)
+// 2. General control codes c[@-_a-z?]
+// 3. Restricted octal notation 0 - 0777
+// 4. General octal notation o\{[0-7]+\}
+// 5. General hex notation x\{[0-9A-Fa-f]+\}
+// 6. An error for any unrecognized alphabetic escape 
+// 7. An escaped ASCII symbol, standing for itself
+
+unsigned RE_Parser::parse_escaped_codepoint() {
+	unsigned cp_value;
+	throw_incomplete_expression_error_if_end_of_stream();
+	switch (*_cursor) {
+		case 'a': ++_cursor; return 0x07; // BEL
+		case 'b': ++_cursor; return 0x08; // BS
+		case 'e': ++_cursor; return 0x1B; // ESC
+		case 'f': ++_cursor; return 0x0C; // FF
+		case 'n': ++_cursor; return 0x0A; // LF
+		case 'r': ++_cursor; return 0x0D; // CR
+		case 't': ++_cursor; return 0x09; // HT
+		case 'v': ++_cursor; return 0x0B; // VT
+		case 'c': // Control-escape based on next char
+			++_cursor;
+			throw_incomplete_expression_error_if_end_of_stream();
+			// \c@, \cA, ... \c_, or \ca, ..., \cz
+			if (((*_cursor >= '@') && (*_cursor <= '_')) || ((*_cursor >= 'a') && (*_cursor <= 'z'))) {
+				cp_value = static_cast<unsigned>(*_cursor & 0x1F);
+				_cursor++;
+				return cp_value;
+			}
+			else if (*_cursor++ == '?') return 0x7F;  // \c? ==> DEL
+			else throw("Illegal \\c escape sequence");
+		case '0': // Octal escape:  0 - 0377
+			++_cursor;
+			return parse_octal_codepoint(0,3);
+		case 'o': 
+			++_cursor;
+			throw_incomplete_expression_error_if_end_of_stream();
+			if (*_cursor == '{') {
+				++_cursor;
+				cp_value = parse_octal_codepoint(1, 7);
+				if (_cursor == _end || *_cursor++ != '}') throw ParseFailure("Malformed octal escape sequence");
+				return cp_value;
+			}
+			else {
+				throw ParseFailure("Malformed octal escape sequence");
+			}
+		case 'x': 
+			++_cursor;
+			throw_incomplete_expression_error_if_end_of_stream();
+			if (*_cursor == '{') {
+			  ++_cursor;
+			  cp_value = parse_hex_codepoint(1, 6);
+			  if (_cursor == _end || *_cursor++ != '}') throw ParseFailure("Malformed hex escape sequence");
+			  return cp_value;
+			}
+			else {
+				return parse_hex_codepoint(1,2);  // ICU compatibility
+			}
+		case 'u':
+			++_cursor;
+			throw_incomplete_expression_error_if_end_of_stream();
+			if (*_cursor == '{') {
+				++_cursor;
+				cp_value = parse_hex_codepoint(1, 6);
+				if (_cursor == _end || *_cursor++ != '}') throw ParseFailure("Malformed hex escape sequence");
+				return cp_value;
+			}
+			else {
+				return parse_hex_codepoint(4,4);  // ICU compatibility
+			}
+		case 'U': 
+			++_cursor;
+			return parse_hex_codepoint(8,8);  // ICU compatibility
+		default:
+			if (((*_cursor >= 'A') && (*_cursor <= 'Z')) || ((*_cursor >= 'a') && (*_cursor <= 'z')))
+				throw ParseFailure("Undefined or unsupported escape sequence");
+			else return static_cast<unsigned>(*_cursor++);
+	}
 }
+
+
+unsigned RE_Parser::parse_octal_codepoint(int mindigits, int maxdigits) {
+	unsigned value = 0;
+	int count = 0;
+	while (_cursor != _end && count < maxdigits) {
+		const char t = *_cursor;
+		if (t < '0' || t > '7') {
+			break;
+		}
+		value = value * 8 | (t - '0');
+		++_cursor;
+		++count;
+	}
+	if (count < mindigits) throw ParseFailure("Octal sequence has too few digits");
+	if (value > CC::UNICODE_MAX) throw ParseFailure("Octal value too large");
+	return value;
+}
+
+unsigned RE_Parser::parse_hex_codepoint(int mindigits, int maxdigits) {
+	unsigned value = 0;
+	int count = 0;
+	while (_cursor != _end && isxdigit(*_cursor) && count < maxdigits) {
+		const char t = *_cursor;
+		if (isdigit(t)) {
+			value = (value * 16) | (t - '0');
+		}
+		else {	
+			value = (value * 16) | ((t | 32) - 'a') + 10;
+		}
+		++_cursor;
+		++count;
+	}
+	if (count < mindigits) throw ParseFailure("Hexadecimal sequence has too few digits");
+	if (value > CC::UNICODE_MAX) throw ParseFailure("Hexadecimal value too large");
+	return value;
+}
+
 
 inline void RE_Parser::throw_incomplete_expression_error_if_end_of_stream() const {
     if (_cursor == _end) throw IncompleteRegularExpression();
