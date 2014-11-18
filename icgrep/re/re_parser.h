@@ -39,7 +39,7 @@ private:
 
     RE * extend_item(RE * re);
 
-    RE * parse_range_bound(RE * re);
+    void parse_range_bound(int & lower_bound, int & upper_bound);
 
     RE * parse_literal();
 

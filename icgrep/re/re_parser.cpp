@@ -117,37 +117,53 @@ Any * RE_Parser::parse_any_character() {
 }
 
 RE * RE_Parser::extend_item(RE * re) {
+    int lower_bound, upper_bound;
     if (_cursor == _end) {
         return re;
     }
     switch (*_cursor) {
         case '*':
-            ++_cursor; // skip past the '*'
-            re = makeRep(re, 0, Rep::UNBOUNDED_REP);
+            lower_bound = 0;
+            upper_bound = Rep::UNBOUNDED_REP;
             break;
         case '?':
-            ++_cursor; // skip past the '?'
-            re = makeRep(re, 0, 1);
+            lower_bound = 0;
+            upper_bound = 1;
             break;
         case '+':
-            ++_cursor; // skip past the '+'
-            re = makeRep(re, 1, Rep::UNBOUNDED_REP);
+            lower_bound = 1;
+            upper_bound = Rep::UNBOUNDED_REP;
             break;
         case '{':
-            re = parse_range_bound(re);
+            parse_range_bound(lower_bound, upper_bound);
             break;
         default:
             return re;
     }
-    // this only occurs if we encountered one of the non-default cases above.
-    return extend_item(re);
+    ++_cursor;
+    if (*_cursor == '?') {
+        // Non-greedy qualifier
+        ++_cursor;
+        //return makeNonGreedyRep(re, lower_bound, upper_bound);
+        // Greedy vs. non-greedy makes no difference for icgrep.
+        return makeRep(re, lower_bound, upper_bound);
+    }
+    else if (*_cursor == '+') {
+        // Possessive qualifier
+        ++_cursor;
+        //return makePossessiveRep(re, lower_bound, upper_bound);
+        throw ParseFailure("Possessive repetition is not supported in icgrep 1.0");
+    }
+    else {
+        // Normal repetition operator.
+        return makeRep(re, lower_bound, upper_bound);
+    }
 }
 
-inline RE * RE_Parser::parse_range_bound(RE * re) {
+inline void RE_Parser::parse_range_bound(int & lower_bound, int & upper_bound) {
     ++_cursor;
     throw_incomplete_expression_error_if_end_of_stream();
     RE * rep = nullptr;
-    unsigned lower_bound;
     if (*_cursor == ',') {
         ++_cursor;
         lower_bound = 0;
@@ -157,7 +173,7 @@ inline RE * RE_Parser::parse_range_bound(RE * re) {
     }
     throw_incomplete_expression_error_if_end_of_stream();
     if (*_cursor == '}') {
-        rep = makeRep(re, lower_bound, lower_bound);
+        upper_bound = lower_bound;
     }
     else if (*_cursor != ',') {
         throw BadLowerBound();
@@ -166,18 +182,15 @@ inline RE * RE_Parser::parse_range_bound(RE * re) {
         ++_cursor;
         throw_incomplete_expression_error_if_end_of_stream();
         if (*_cursor == '}') {
-            rep = makeRep(re, lower_bound, Rep::UNBOUNDED_REP);
+            upper_bound = Rep::UNBOUNDED_REP;
         }
         else {
-            const unsigned upper_bound = parse_int();
+            upper_bound = parse_int();
             if (*_cursor != '}') {
                 throw BadUpperBound();
             }
-            rep = makeRep(re, lower_bound, upper_bound);
         }
     }
-    ++_cursor;
-    return rep;
 }
 
 inline RE * RE_Parser::parse_literal() {
