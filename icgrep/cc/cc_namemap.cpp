@@ -5,6 +5,7 @@
 #include <re/re_seq.h>
 #include <re/re_rep.h>
 #include <re/re_diff.h>
+#include <re/re_intersect.h>
 #include <re/printer_re.h>
 #include <iostream>
 
@@ -39,6 +40,10 @@ RE * CC_NameMap::process(RE * re) {
     else if (Diff * diff = dyn_cast<Diff>(re)) {
         diff->setRH(process(diff->getRH()));
         diff->setLH(process(diff->getLH()));
+    }
+    else if (Intersect * e = dyn_cast<Intersect>(re)) {
+        e->setRH(process(e->getRH()));
+        e->setLH(process(e->getLH()));
     }
     else if (Name * name = dyn_cast<Name>(re)) {
         RE * cc = name->getCC();

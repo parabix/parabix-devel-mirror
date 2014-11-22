@@ -6,6 +6,8 @@
 #include "re_seq.h"
 #include "re_alt.h"
 #include "re_rep.h"
+#include "re_diff.h"
+#include "re_intersect.h"
 #include <algorithm>
 #include <memory>
 #include <queue>
@@ -31,6 +33,12 @@ RE * RE_Simplifier::simplify(RE * re) {
     }
     else if (Rep * rep = dyn_cast<Rep>(re)) {
         re = makeRep(simplify(rep->getRE()), rep->getLB(), rep->getUB());
+    }
+    else if (Diff * diff = dyn_cast<Diff>(re)) {
+        re = makeDiff(simplify(diff->getLH()), diff->getRH());
+    }
+    else if (Intersect * e = dyn_cast<Intersect>(re)) {
+        re = makeIntersect(simplify(e->getLH()), e->getRH());
     }
     return re;
 }

@@ -107,6 +107,9 @@ Assign * RE_Compiler::process(RE * re, Assign * marker, PabloBlock & pb) {
     else if (Diff * diff = dyn_cast<Diff>(re)) {
         marker = process(diff, marker, pb);
     }
+    else if (Intersect * ix = dyn_cast<Intersect>(re)) {
+        marker = process(ix, marker, pb);
+    }
     else if (isa<Start>(re)) {
         PabloAST * const sol = pb.createNot(pb.createAdvance(pb.createNot(mLineFeed), 1));
         marker = pb.createAssign("sol", pb.createAnd(pb.createVar(marker), sol));
