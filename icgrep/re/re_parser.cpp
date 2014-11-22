@@ -16,6 +16,15 @@
 #include <re/parsefailure.h>
 #include <algorithm>
 
+
+// It would probably be best to enforce that {}, [], () must always
+// be balanced.   But legacy syntax allows } and ] to occur as literals
+// in certain contexts (no opening { or [, or immediately after [ or [^ ).
+// Perhaps this define should become a parameter.
+#define LEGACY_UNESCAPED_RBRAK_RBRACE_ALLOWED true
+#define LEGACY_UNESCAPED_HYPHEN_ALLOWED true
+
+
 namespace re {
 
 RE * RE_Parser::parse(const std::string & regular_expression) {
@@ -81,35 +90,32 @@ RE * RE_Parser::parse_next_token() {
         switch (*_cursor) {
             case '(':
                 ++_cursor;
-                re = parse_alt(true);
-                break;
+                return parse_alt(true);
             case '^':
                 ++_cursor;
-                re = makeStart();
-                break;
+                return makeStart();
             case '$':
                 ++_cursor;
-                re = makeEnd();
-                break;
+                return makeEnd();
             case '|': case ')':
-                break;
+                return nullptr;  // This is ugly.
             case '*': case '+': case '?': case '{': 
                 throw NothingToRepeat();
             case ']': case '}':
-                throw ParseFailure("Illegal metacharacter usage!");
+				if (LEGACY_UNESCAPED_RBRAK_RBRACE_ALLOWED) {
+					return parse_literal();
+				}
+				else throw ParseFailure("Use  \\] or \\} for literal ] or }.");
             case '[':
-                re = parse_charset();
-                break;
+	        *_cursor++;
+                return parse_charset();
             case '.': // the 'any' metacharacter
-                re = parse_any_character();
-                break;
-	    case '\\':  // escape processing
+                return parse_any_character();
+			case '\\':  // escape processing
                 ++_cursor;
-                re = parse_escaped();
-		break;
+                return parse_escaped();
             default:
-                re = parse_literal();
-                break;
+                return parse_literal();
         }
     }
     return re;
@@ -197,6 +203,18 @@ inline void RE_Parser::parse_range_bound(int & lower_bound, int & upper_bound) {
     }
 }
 
+unsigned RE_Parser::parse_int() {
+    unsigned value = 0;
+    for (; _cursor != _end; ++_cursor) {
+        if (!isdigit(*_cursor)) {
+            break;
+        }
+        value *= 10;
+        value += static_cast<int>(*_cursor) - 48;
+    }
+    return value;
+}
+
 inline RE * RE_Parser::parse_literal() {
     return makeCC(parse_utf8_codepoint());
 }
@@ -232,32 +250,41 @@ RE * makeComplement(RE * s) {
   return makeDiff(makeAny(), s);
 }
 
-inline RE * RE_Parser::parse_escaped_set() {
+RE * RE_Parser::parse_escaped_set() {
+	bool complemented = false;
+	RE * s;
     switch (*_cursor) {
+		case 'd':
+			++_cursor;
+			return makeDigitSet();
+		case 'D':
+			++_cursor;
+			return makeComplement(makeDigitSet());
+		case 's':
+			++_cursor;
+			return makeWhitespaceSet();
+		case 'S':
+			++_cursor;
+			return makeComplement(makeWhitespaceSet());
+		case 'w':
+			++_cursor;
+			return makeWordSet();
+		case 'W':
+			++_cursor;
+			return makeComplement(makeWordSet());
         case 'P':
-            return makeDiff(makeAny(), parse_unicode_category());
+            complemented = true;
         case 'p':
-            return parse_unicode_category();
-	case 'd':
-	    ++_cursor;
-            return makeDigitSet();
-	case 'D':
-	    ++_cursor;
-            return makeComplement(makeDigitSet());
-	case 's':
-	    ++_cursor;
-            return makeWhitespaceSet();
-	case 'S':
-	    ++_cursor;
-            return makeComplement(makeWhitespaceSet());
-	case 'w':
-	    ++_cursor;
-            return makeWordSet();
-	case 'W':
-	    ++_cursor;
-            return makeComplement(makeWordSet());
-	default:
-	    throw ParseFailure("Internal error");
+			++_cursor;
+			if (_cursor == _end || *_cursor != '{') throw ParseFailure("Malformed property expression");
+			++_cursor;
+			s = parse_property_expression();
+			if (_cursor == _end || *_cursor != '}') throw ParseFailure("Malformed property expression");
+			++_cursor;
+			if (complemented) return makeComplement(s);
+			else return s;
+		default:
+			throw ParseFailure("Internal error");
     }
 }
 
@@ -303,129 +330,224 @@ unsigned RE_Parser::parse_utf8_codepoint() {
     return c;
 }
 
-Name * RE_Parser::parse_unicode_category() {
-    if (++_cursor != _end && *_cursor == '{') {
-        const cursor_t start = _cursor + 1;
-        for (;;) {
-            if (++_cursor == _end) {
-                throw UnclosedUnicodeCharacterClass();
-            }
-            if (*_cursor == '}') {
-                break;
-            }
-            ++_cursor;
-        }
-        return makeName(std::string(start, _cursor++), Name::Type::UnicodeCategory);
-    }
-    throw ParseFailure("Incorrect Unicode character class format!");
-}
-
-RE * RE_Parser::parse_charset() {
-    CC * cc = makeCC();
-    bool negated = false;
-    cursor_t start = ++_cursor;
-    while (_cursor != _end) {
-        bool literal = true;
-        switch (*_cursor) {
-            case '^':
-                // If the first character after the [ is a ^ (caret) then the matching character class is complemented.
-                if ((start == _cursor) && !negated) {
-                    negated = true;
-                    start = ++_cursor; // move the start ahead in case the next character is a ] or -
-                    literal = false;                    
-                }
-                break;
-            case ']':
-                // To include a ], put it immediately after the opening [ or [^; if it occurs later it will
-                // close the bracket expression.
-                if (start == _cursor) {
-                    cc->insert(']');
-                    ++_cursor;
-                    literal = false;
-                    break;
-                }
-                ++_cursor;
-                if (negated) {
-                    return makeDiff(makeAny(), cc);
-                }
-                return cc;
-            // The hyphen (-) is not treated as a range separator if it appears first or last, or as the
-            // endpoint of a range.
-            case '-':
-                if (true) {
-                    literal = false;
-                    const cursor_t next = _cursor + 1;
-                    if (next == _end) {
-                        throw UnclosedCharacterClass();
-                    }
-                    if ((start == _cursor) ? (*next != '-') : (*next == ']')) {
-                        _cursor = next;
-                        cc->insert('-');
-                        break;
-                    }
-                }
-                throw ParseFailure("Invalid Lower Range Bound!");
-            // case ':':
-        }
-        if (literal) {
-            unsigned low;
-            if (parse_charset_literal(low)) {
-                // the previous literal allows for a - to create a range; test for it
-                if (_cursor == _end) {
-                    break; // out of loop to failure handling
-                }
-                if (*_cursor == '-') { // in range unless the next character is a ']'
-                    if (++_cursor == _end) {
-                        break; // out of loop to failure handling
-                    }
-                    if (*_cursor != ']') {
-                        unsigned high;
-                        if (!parse_charset_literal(high)) {
-                            throw ParseFailure("Invalid Upper Range Bound!");
-                        }
-                        cc->insert_range(low, high);
-                    }
-                    else {
-                        cc->insert(low);
-                        cc->insert('-');
-                    }
-                    continue;
-                }
-            }
-            cc->insert(low);
-        }
-    }
-    throw UnclosedCharacterClass();
-}
-
-inline bool RE_Parser::parse_charset_literal(unsigned & literal) {
-    if (_cursor == _end) {
-        return false;
-    }
-    if (*_cursor == '\\') {
+Name * RE_Parser::parse_property_expression() {
+    const cursor_t start = _cursor;
+	while (_cursor != _end && *_cursor != '}' and *_cursor != ':') {
 		_cursor++;
-		literal = parse_escaped_codepoint();
-		return true;
+	}
+	return makeName(std::string(start, _cursor), Name::Type::UnicodeCategory);
+}
+	
+CharsetOperatorKind RE_Parser::getCharsetOperator() {
+    throw_incomplete_expression_error_if_end_of_stream();
+	switch (*_cursor) {
+		case '&':
+			++_cursor;
+			if (_cursor != _end && *_cursor == '&') {
+				++_cursor;
+				return intersectOp;
+			}
+			else if (_cursor != _end && *_cursor == '[') {
+				// Short-hand for intersectOp when a set follows
+				return intersectOp;
+			}
+			else return ampChar;
+		case '-':
+			++_cursor;
+			if (_cursor != _end && *_cursor == '-') {
+				++_cursor;
+				return setDiffOp;
+			}
+			else if (_cursor != _end && *_cursor == '[') {
+				return setDiffOp;
+			}
+			else if (_cursor != _end && *_cursor == ']') {
+				return hyphenChar;
+			}
+			else return rangeHyphen;
+		case '[':
+			++_cursor;
+			if (_cursor != _end && *_cursor == ':') {
+				++_cursor;
+				return posixPropertyOpener;
+			}
+			else return setOpener;
+		case ']':
+			++_cursor;
+			return setCloser;
+		case '\\':
+			++_cursor;
+			return backSlash;
+		default:
+			return emptyOperator;
+	}
+}			
+	
+// Precondition: cursor is immediately after opening '[' character
+RE * RE_Parser::parse_charset() {
+	// Sets are accumulated using two variables:
+	// subexprs accumulates set expressions such as \p{Lu}, [\w && \p{Greek}]
+	// cc accumulates the literal and calculated codepoints and ranges 
+	std::vector<RE *> subexprs;
+    CC * cc = makeCC();
+	// When the last item deal with is a single literal charcacter or calculated codepoint,
+	// a following hyphen can indicate a range.   When the last item is a set subexpression,
+	// a following hyphen can indicate set subtraction.
+	enum {NoItem, CodepointItem, RangeItem, SetItem, BrackettedSetItem} lastItemKind = NoItem;
+	unsigned lastCodepointItem;
+	
+	bool havePendingOperation = false;
+	CharsetOperatorKind pendingOperationKind;
+	RE * pendingOperand;
+	
+    // If the first character after the [ is a ^ (caret) then the matching character class is complemented.
+    bool negated = false;
+    if (_cursor != _end && *_cursor == '^') {
+      negated = true;
+      ++_cursor;
+    }
+    throw_incomplete_expression_error_if_end_of_stream();
+	// Legacy rule: an unescaped ] may appear as a literal set character
+	// if and only if it appears immediately after the opening [ or [^
+    if ( *_cursor == ']' && LEGACY_UNESCAPED_RBRAK_RBRACE_ALLOWED) {
+		cc->insert(']');
+		lastItemKind = CodepointItem;
+		lastCodepointItem = static_cast<unsigned> (']');
+		++_cursor;
+    }
+    else if ( *_cursor == '-' && LEGACY_UNESCAPED_HYPHEN_ALLOWED) {
+		++_cursor;
+		cc->insert('-');
+		lastItemKind = CodepointItem;
+		lastCodepointItem = static_cast<unsigned> ('-');
+                if (*_cursor == '-') throw ParseFailure("Set operator has no left operand.");
+    }
+    while (_cursor != _end) {
+		CharsetOperatorKind op = getCharsetOperator();
+		switch (op) {
+			case intersectOp: case setDiffOp: {
+				if (lastItemKind == NoItem) throw ParseFailure("Set operator has no left operand.");
+				if (cc->begin() != cc->end()) subexprs.push_back(cc);
+				RE * newOperand = makeAlt(subexprs.begin(), subexprs.end());
+				subexprs.clear();
+				cc = makeCC();
+				if (havePendingOperation) {
+					if (pendingOperationKind == intersectOp) {
+						pendingOperand = makeIntersect(pendingOperand, newOperand);
+					}
+					else {
+						pendingOperand = makeDiff(pendingOperand, newOperand);
+					}
+				}
+				else {
+					pendingOperand = newOperand;
+				}
+				havePendingOperation = true;
+				pendingOperationKind = op;
+				lastItemKind = NoItem;
+			}
+			break;
+			case setCloser: {
+				if (lastItemKind == NoItem) throw ParseFailure("Set operator has no right operand.");
+				if (cc->begin() != cc->end()) subexprs.push_back(cc);
+				RE * newOperand = makeAlt(subexprs.begin(), subexprs.end());
+				if (havePendingOperation) {
+					if (pendingOperationKind == intersectOp) {
+						newOperand = makeIntersect(pendingOperand, newOperand);
+					}
+					else {
+						newOperand = makeDiff(pendingOperand, newOperand);
+					}
+				}
+				if (negated) return makeComplement(newOperand); 
+				else return newOperand;
+			}
+			case setOpener: case posixPropertyOpener: {
+			        if (lastItemKind != NoItem) {
+					if (cc->begin() != cc->end()) subexprs.push_back(cc);
+					RE * newOperand = makeAlt(subexprs.begin(), subexprs.end());
+					subexprs.clear();
+					cc = makeCC();
+					if (havePendingOperation) {
+						if (pendingOperationKind == intersectOp) {
+							pendingOperand = makeIntersect(pendingOperand, newOperand);
+						}
+						else {
+							pendingOperand = makeDiff(pendingOperand, newOperand);
+						}
+					}
+					else {
+						pendingOperand = newOperand;
+					}
+					subexprs.push_back(pendingOperand);
+					havePendingOperation = false;
+				}
+				if (op == setOpener) {
+					subexprs.push_back(parse_charset());
+					lastItemKind = SetItem;
+				}
+				else if (op == posixPropertyOpener) {
+					bool negated = false;
+					if (*_cursor == '^') {
+						negated = true;
+						_cursor++;
+					}
+					RE * posixSet = parse_property_expression();
+					if (negated) posixSet = makeComplement(posixSet);
+					subexprs.push_back(posixSet);
+					lastItemKind = BrackettedSetItem;
+					if (_cursor == _end || *_cursor++ != ':' || _cursor == _end || *_cursor++ != ']')
+						throw ParseFailure("Posix set expression improperly terminated.");
+				}
+			}
+			break;
+			case rangeHyphen:
+				if (lastItemKind != CodepointItem) throw ParseFailure("Range operator - has illegal left operand.");
+				cc->insert_range(lastCodepointItem, parse_codepoint());
+				lastItemKind = RangeItem;
+				break;
+			case hyphenChar:
+				cc->insert('-');  
+				lastItemKind = CodepointItem;
+				lastCodepointItem = static_cast<unsigned> ('-');
+				break;
+			case ampChar:
+				cc->insert('&'); 
+				lastItemKind = CodepointItem;
+				lastCodepointItem = static_cast<unsigned> ('&');
+				break;
+			case backSlash:
+				throw_incomplete_expression_error_if_end_of_stream();
+				if (isSetEscapeChar(*_cursor)) {
+					subexprs.push_back(parse_escaped_set());
+					lastItemKind = SetItem;
+				}
+				else {
+					lastCodepointItem = parse_escaped_codepoint();
+					cc->insert(lastCodepointItem);
+					lastItemKind = CodepointItem;
+				}
+				break;
+			case emptyOperator:
+				lastCodepointItem = parse_utf8_codepoint();
+				cc->insert(lastCodepointItem);
+				lastItemKind = CodepointItem;
+				break;
+		}
+	}
+	throw ParseFailure("Set expression not properly terminated.");
+}
+
+
+unsigned RE_Parser::parse_codepoint() {
+    if (_cursor != _end && *_cursor == '\\') {
+        _cursor++;
+        return parse_escaped_codepoint();
     }
     else {
-        literal = parse_utf8_codepoint();
-        return true;
+        return parse_utf8_codepoint();
     }
-    return false;
 }
-
-unsigned RE_Parser::parse_int() {
-    unsigned value = 0;
-    for (; _cursor != _end; ++_cursor) {
-        if (!isdigit(*_cursor)) {
-            break;
-        }
-        value *= 10;
-        value += static_cast<int>(*_cursor) - 48;
-    }
-    return value;
-}
-
 
 // A backslash escape was found, and various special cases (back reference,
 // quoting with \Q, \E, sets (\p, \P, \d, \D, \w, \W, \s, \S), grapheme
@@ -504,7 +626,12 @@ unsigned RE_Parser::parse_escaped_codepoint() {
 		case 'U': 
 			++_cursor;
 			return parse_hex_codepoint(8,8);  // ICU compatibility
+		case 'N':
+			++_cursor;
+			throw ParseFailure("\\N{...} character name syntax not yet supported.");
+
 		default:
+			// Escaped letters should be reserved for special functions.
 			if (((*_cursor >= 'A') && (*_cursor <= 'Z')) || ((*_cursor >= 'a') && (*_cursor <= 'z')))
 				throw ParseFailure("Undefined or unsupported escape sequence");
 			else if ((*_cursor < 0x20) || (*_cursor >= 0x7F))

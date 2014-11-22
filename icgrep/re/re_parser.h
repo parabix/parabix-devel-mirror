@@ -16,6 +16,10 @@
 #include <memory>
 
 namespace re {
+	
+enum CharsetOperatorKind
+	{intersectOp, setDiffOp, ampChar, hyphenChar, rangeHyphen, posixPropertyOpener, setOpener, setCloser, backSlash, emptyOperator};
+
 
 class RE_Parser
 {
@@ -49,11 +53,13 @@ private:
 
     unsigned parse_utf8_codepoint();
 
-    Name * parse_unicode_category();
+    Name * parse_property_expression();
+	
+	CharsetOperatorKind getCharsetOperator();
 
     RE * parse_charset();
 
-    bool parse_charset_literal(unsigned & literal);
+    unsigned parse_codepoint();
 
     unsigned parse_escaped_codepoint();
 
