@@ -29,7 +29,7 @@ namespace re {
 
 RE * RE_Parser::parse(const std::string & regular_expression) {
     RE_Parser parser(regular_expression);
-    RE * re = parser.parse_alt(false);
+    RE * re = parser.parse_alt();
     if (re == nullptr) {
         throw ParseFailure("An unexpected parsing error occurred!");
     }
@@ -43,7 +43,41 @@ inline RE_Parser::RE_Parser(const std::string & regular_expression)
 
 }
 
-RE * RE_Parser::parse_alt(const bool subexpression) {
+RE * makeLookAheadAssertion(RE * r) {
+    throw ParseFailure("Lookahead assertion not supported.");
+}
+
+RE * makeNegativeLookAheadAssertion(RE * r) {
+    throw ParseFailure("Lookahead assertion not supported.");
+}
+
+RE * makeLookBehindAssertion(RE * r) {
+    throw ParseFailure("Lookbehind assertion not supported.");
+}
+
+RE * makeNegativeLookBehindAssertion(RE * r) {
+    throw ParseFailure("Lookbehind assertion not supported.");
+}
+
+RE * makeAtomicGroup(RE * r) {
+    throw ParseFailure("Atomic grouping not supported.");
+}
+
+RE * makeBranchResetGroup(RE * r) {
+    // Branch reset groups only affect submatch numbering, but
+    // this has no effect in icgrep.
+    return r;
+}
+    
+RE * RE_Parser::parse_RE() {
+    RE * r = parse_alt();
+    if (_cursor != _end) { 
+        throw ParseFailure("Unrecognized junk remaining at end of regexp");
+    }
+    return r;
+}
+
+RE * RE_Parser::parse_alt() {
     std::vector<RE *> alt;
     for (;;) {
         alt.push_back(parse_seq());
@@ -56,22 +90,13 @@ RE * RE_Parser::parse_alt(const bool subexpression) {
     {
         throw NoRegularExpressionFound();
     }
-    else if (subexpression) {
-        if (_cursor == _end || *_cursor != ')') {
-            throw ParseFailure("Parenthesization error!");
-        }
-        ++_cursor;
-    }
-    else if (_cursor != _end) { // !subexpression
-        throw ParseFailure("Cannot fully parse statement!");
-    }
     return makeAlt(alt.begin(), alt.end());
 }
 
 inline RE * RE_Parser::parse_seq() {
     std::vector<RE *> seq;
     for (;;) {
-        RE * re = parse_next_token();
+        RE * re = parse_next_item();
         if (re == nullptr) {
             break;
         }
@@ -84,13 +109,13 @@ inline RE * RE_Parser::parse_seq() {
     return makeSeq(seq.begin(), seq.end());
 }
 
-RE * RE_Parser::parse_next_token() {
+RE * RE_Parser::parse_next_item() {
     RE * re = nullptr;
     if (_cursor != _end) {
         switch (*_cursor) {
             case '(':
                 ++_cursor;
-                return parse_alt(true);
+                return parse_group();
             case '^':
                 ++_cursor;
                 return makeStart();
@@ -103,29 +128,132 @@ RE * RE_Parser::parse_next_token() {
                 throw NothingToRepeat();
             case ']': case '}':
                 if (LEGACY_UNESCAPED_RBRAK_RBRACE_ALLOWED) {
-                    return parse_literal();
+                    return makeCC(parse_utf8_codepoint());
                 }
                 else throw ParseFailure("Use  \\] or \\} for literal ] or }.");
             case '[':
-                *_cursor++;
+                _cursor++;
                 return parse_charset();
             case '.': // the 'any' metacharacter
-                return parse_any_character();
+                _cursor++;
+                return makeAny();
             case '\\':  // escape processing
                 ++_cursor;
                 return parse_escaped();
             default:
-                return parse_literal();
+                return makeCC(parse_utf8_codepoint());
         }
     }
     return re;
 }
-
-Any * RE_Parser::parse_any_character() {
-    ++_cursor;
-    return makeAny();
+    
+    
+// Parse some kind of parenthesized group.  Input precondition: _cursor
+// after the (
+RE * RE_Parser::parse_group() {
+    RE * subexpr;
+    RE * group_expr;
+    throw_incomplete_expression_error_if_end_of_stream();
+    if (*_cursor == '?') {
+        ++_cursor;
+        throw_incomplete_expression_error_if_end_of_stream();
+        switch (*_cursor) {
+            case '#':  // comment
+                ++_cursor;
+                while (_cursor != _end && *_cursor != ')') {
+                    ++_cursor;
+                }
+                throw_incomplete_expression_error_if_end_of_stream();
+                ++_cursor;
+                return parse_next_item();
+            case ':':  // Non-capturing paren
+                ++_cursor;
+                group_expr = parse_alt();
+                break;
+            case '=':
+                ++_cursor;
+                subexpr = parse_alt();
+                group_expr = makeLookAheadAssertion(subexpr);
+                break;
+            case '!':
+                ++_cursor;
+                subexpr = parse_alt();
+                group_expr = makeNegativeLookAheadAssertion(subexpr);
+                break;
+            case '>':
+                ++_cursor;
+                subexpr = parse_alt();
+                group_expr = makeAtomicGroup(subexpr);
+                break;
+            case '|':
+                ++_cursor;
+                subexpr = parse_alt();
+                group_expr = makeBranchResetGroup(subexpr);
+                break;
+            case '<':
+                ++_cursor;
+                throw_incomplete_expression_error_if_end_of_stream();
+                if (*_cursor == '=') {
+                    subexpr = parse_alt();
+                    group_expr = makeLookBehindAssertion(subexpr);
+                }
+                else if (*_cursor == '!') {
+                    subexpr = parse_alt();
+                    group_expr = makeNegativeLookBehindAssertion(subexpr);
+                }
+                else {
+                    throw ParseFailure("Illegal lookbehind assertion syntax.");
+                }
+                break;
+            case '-': case 'd' : case 'i': case 'm': case 's': case 'x': {
+                bool negateMode = false;
+                unsigned modeBit;
+                unsigned newModeFlags;
+                while (_cursor != _end && *_cursor != ')' && *_cursor != ':') {
+                    if (*_cursor == '-') {
+                        negateMode = true;
+                        _cursor++;
+                        throw_incomplete_expression_error_if_end_of_stream();
+                    }
+                    switch (*_cursor++) {
+                        case 'i': modeBit = CASE_INSENSITIVE_MODE_FLAG; break;
+                        case 'm': modeBit = MULTILINE_MODE_FLAG; break;
+                        case 's': modeBit = DOTALL_MODE_FLAG; break;
+                        case 'x': modeBit = IGNORE_SPACE_MODE_FLAG; break;
+                        case 'd': modeBit = UNIX_LINES_MODE_FLAG; break;
+                        default: throw ParseFailure("Unrecognized mode flag.");
+                    }
+                    if (negateMode) {
+                        newModeFlags &= ~modeBit;
+                        negateMode = false;  // for next flag
+                    }
+                    else newModeFlags |= modeBit;
+                }
+                throw_incomplete_expression_error_if_end_of_stream();
+                std::cerr << "newModeFlags " << newModeFlags << " ignored.\n";
+                if (*_cursor == ':') {
+                    ++_cursor;
+                    group_expr = parse_alt();
+                }
+                else {  // if *_cursor == ')'
+                    ++_cursor;
+                    return parse_next_item();
+                }
+                break;
+            }
+            default:
+                throw ParseFailure("Illegal (? syntax.");
+        }
+    }
+    else {
+        // Capturing paren group, but ignore capture in icgrep.
+        group_expr = parse_alt();
+    }
+    if (_cursor == _end || *_cursor++ != ')')
+        throw ParseFailure("Closing paren required.");
+    return group_expr;
 }
-
+    
 RE * RE_Parser::extend_item(RE * re) {
     int lower_bound, upper_bound;
     if (_cursor == _end) {
@@ -215,9 +343,6 @@ unsigned RE_Parser::parse_int() {
     return value;
 }
 
-inline RE * RE_Parser::parse_literal() {
-    return makeCC(parse_utf8_codepoint());
-}
 
 #define bit40(x) (1ULL << ((x) - 0x40))
 const uint64_t setEscapeCharacters = bit40('p') | bit40('d') | bit40('w') | bit40('s') | bit40('P') | bit40('D') | bit40('W') | bit40('S');
@@ -288,8 +413,8 @@ RE * RE_Parser::parse_escaped_set() {
     }
 }
 
-unsigned RE_Parser::parse_utf8_codepoint() {
-    unsigned c = static_cast<unsigned>(*_cursor++);
+codepoint_t RE_Parser::parse_utf8_codepoint() {
+    codepoint_t c = static_cast<codepoint_t>(*_cursor++);
     if (c > 0x80) { // if non-ascii
         if (c < 0xC2) {
             throw InvalidUTF8Encoding();
@@ -312,7 +437,7 @@ unsigned RE_Parser::parse_utf8_codepoint() {
                 if (++_cursor == _end || (*_cursor & 0xC0) != 0x80) {
                     throw InvalidUTF8Encoding();
                 }
-                c = (c << 6) | static_cast<unsigned>(*_cursor & 0x3F);
+                c = (c << 6) | static_cast<codepoint_t>(*_cursor & 0x3F);
                 // It is an error if a 3-byte sequence is used to encode a codepoint < 0x800
                 // or a 4-byte sequence is used to encode a codepoint < 0x10000.
                 // if (((bytes == 1) && (c < 0x20)) || ((bytes == 2) && (c < 0x10))) {
@@ -394,7 +519,7 @@ RE * RE_Parser::parse_charset() {
     // a following hyphen can indicate a range.   When the last item is a set subexpression,
     // a following hyphen can indicate set subtraction.
     enum {NoItem, CodepointItem, RangeItem, SetItem, BrackettedSetItem} lastItemKind = NoItem;
-    unsigned lastCodepointItem;
+    codepoint_t lastCodepointItem;
     
     bool havePendingOperation = false;
     CharsetOperatorKind pendingOperationKind;
@@ -412,14 +537,14 @@ RE * RE_Parser::parse_charset() {
     if ( *_cursor == ']' && LEGACY_UNESCAPED_RBRAK_RBRACE_ALLOWED) {
         cc->insert(']');
         lastItemKind = CodepointItem;
-        lastCodepointItem = static_cast<unsigned> (']');
+        lastCodepointItem = static_cast<codepoint_t> (']');
         ++_cursor;
     }
     else if ( *_cursor == '-' && LEGACY_UNESCAPED_HYPHEN_ALLOWED) {
         ++_cursor;
         cc->insert('-');
         lastItemKind = CodepointItem;
-        lastCodepointItem = static_cast<unsigned> ('-');
+        lastCodepointItem = static_cast<codepoint_t> ('-');
                 if (*_cursor == '-') throw ParseFailure("Set operator has no left operand.");
     }
     while (_cursor != _end) {
@@ -509,12 +634,12 @@ RE * RE_Parser::parse_charset() {
             case hyphenChar:
                 cc->insert('-');  
                 lastItemKind = CodepointItem;
-                lastCodepointItem = static_cast<unsigned> ('-');
+                lastCodepointItem = static_cast<codepoint_t> ('-');
                 break;
             case ampChar:
                 cc->insert('&'); 
                 lastItemKind = CodepointItem;
-                lastCodepointItem = static_cast<unsigned> ('&');
+                lastCodepointItem = static_cast<codepoint_t> ('&');
                 break;
             case backSlash:
                 throw_incomplete_expression_error_if_end_of_stream();
@@ -539,7 +664,7 @@ RE * RE_Parser::parse_charset() {
 }
 
 
-unsigned RE_Parser::parse_codepoint() {
+codepoint_t RE_Parser::parse_codepoint() {
     if (_cursor != _end && *_cursor == '\\') {
         _cursor++;
         return parse_escaped_codepoint();
@@ -561,8 +686,8 @@ unsigned RE_Parser::parse_codepoint() {
 // 6. An error for any unrecognized alphabetic escape 
 // 7. An escaped ASCII symbol, standing for itself
 
-unsigned RE_Parser::parse_escaped_codepoint() {
-    unsigned cp_value;
+codepoint_t RE_Parser::parse_escaped_codepoint() {
+    codepoint_t cp_value;
     throw_incomplete_expression_error_if_end_of_stream();
     switch (*_cursor) {
         case 'a': ++_cursor; return 0x07; // BEL
@@ -578,7 +703,7 @@ unsigned RE_Parser::parse_escaped_codepoint() {
             throw_incomplete_expression_error_if_end_of_stream();
             // \c@, \cA, ... \c_, or \ca, ..., \cz
             if (((*_cursor >= '@') && (*_cursor <= '_')) || ((*_cursor >= 'a') && (*_cursor <= 'z'))) {
-                cp_value = static_cast<unsigned>(*_cursor & 0x1F);
+                cp_value = static_cast<codepoint_t>(*_cursor & 0x1F);
                 _cursor++;
                 return cp_value;
             }
@@ -636,13 +761,13 @@ unsigned RE_Parser::parse_escaped_codepoint() {
                 throw ParseFailure("Undefined or unsupported escape sequence");
             else if ((*_cursor < 0x20) || (*_cursor >= 0x7F))
                 throw ParseFailure("Illegal escape sequence");
-            else return static_cast<unsigned>(*_cursor++);
+            else return static_cast<codepoint_t>(*_cursor++);
     }
 }
 
 
-unsigned RE_Parser::parse_octal_codepoint(int mindigits, int maxdigits) {
-    unsigned value = 0;
+codepoint_t RE_Parser::parse_octal_codepoint(int mindigits, int maxdigits) {
+    codepoint_t value = 0;
     int count = 0;
     while (_cursor != _end && count < maxdigits) {
         const char t = *_cursor;
@@ -658,8 +783,8 @@ unsigned RE_Parser::parse_octal_codepoint(int mindigits, int maxdigits) {
     return value;
 }
 
-unsigned RE_Parser::parse_hex_codepoint(int mindigits, int maxdigits) {
-    unsigned value = 0;
+codepoint_t RE_Parser::parse_hex_codepoint(int mindigits, int maxdigits) {
+    codepoint_t value = 0;
     int count = 0;
     while (_cursor != _end && isxdigit(*_cursor) && count < maxdigits) {
         const char t = *_cursor;

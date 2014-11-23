@@ -20,7 +20,15 @@ namespace re {
 enum CharsetOperatorKind
 	{intersectOp, setDiffOp, ampChar, hyphenChar, rangeHyphen, posixPropertyOpener, setOpener, setCloser, backSlash, emptyOperator};
 
+typedef unsigned codepoint_t;
 
+enum ModeFlagType 
+    {CASE_INSENSITIVE_MODE_FLAG = 1,
+     MULTILINE_MODE_FLAG = 2,
+     DOTALL_MODE_FLAG = 4,
+     IGNORE_SPACE_MODE_FLAG = 8,
+     UNIX_LINES_MODE_FLAG = 16};
+    
 class RE_Parser
 {
 public:
@@ -33,25 +41,27 @@ private:
 
     RE_Parser(const std::string & regular_expression);
 
-    RE * parse_alt(const bool subexpression);
-
+    RE * parse_RE();
+    
+    RE * parse_alt();
+    
     RE * parse_seq();
 
-    RE * parse_next_token();
-
-    Any * parse_any_character();
-
+    RE * parse_next_item();
+    
+    RE * parse_group();
+    
     RE * extend_item(RE * re);
 
     void parse_range_bound(int & lower_bound, int & upper_bound);
 
-    RE * parse_literal();
-
+    unsigned parse_int();
+    
     RE * parse_escaped();
 
     RE * parse_escaped_set();
 
-    unsigned parse_utf8_codepoint();
+    codepoint_t parse_utf8_codepoint();
 
     Name * parse_property_expression();
 	
@@ -59,15 +69,13 @@ private:
 
     RE * parse_charset();
 
-    unsigned parse_codepoint();
+    codepoint_t parse_codepoint();
 
-    unsigned parse_escaped_codepoint();
+    codepoint_t parse_escaped_codepoint();
 
-    unsigned parse_hex_codepoint(int mindigits, int maxdigits);
+    codepoint_t parse_hex_codepoint(int mindigits, int maxdigits);
 
-    unsigned parse_octal_codepoint(int mindigits, int maxdigits);
-
-    unsigned parse_int();
+    codepoint_t parse_octal_codepoint(int mindigits, int maxdigits);
 
     inline void throw_incomplete_expression_error_if_end_of_stream() const;
 
