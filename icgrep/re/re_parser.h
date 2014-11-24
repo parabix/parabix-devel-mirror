@@ -28,6 +28,7 @@ enum ModeFlagType
      DOTALL_MODE_FLAG = 4,
      IGNORE_SPACE_MODE_FLAG = 8,
      UNIX_LINES_MODE_FLAG = 16};
+typedef unsigned ModeFlagSet;
     
 class RE_Parser
 {
@@ -83,6 +84,7 @@ private:
 
     cursor_t                    _cursor;
     const cursor_t              _end;
+    ModeFlagSet	fModeFlagSet;
 };
 
 }

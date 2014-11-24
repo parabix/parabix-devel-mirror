@@ -29,7 +29,7 @@ namespace re {
 
 RE * RE_Parser::parse(const std::string & regular_expression) {
     RE_Parser parser(regular_expression);
-    RE * re = parser.parse_alt();
+    RE * re = parser.parse_RE();
     if (re == nullptr) {
         throw ParseFailure("An unexpected parsing error occurred!");
     }
@@ -39,6 +39,7 @@ RE * RE_Parser::parse(const std::string & regular_expression) {
 inline RE_Parser::RE_Parser(const std::string & regular_expression)
 : _cursor(regular_expression.begin())
 , _end(regular_expression.end())
+, fModeFlagSet(0)
 {
 
 }
@@ -153,6 +154,7 @@ RE * RE_Parser::parse_next_item() {
 RE * RE_Parser::parse_group() {
     RE * subexpr;
     RE * group_expr;
+    ModeFlagSet savedModeFlags = fModeFlagSet;
     throw_incomplete_expression_error_if_end_of_stream();
     if (*_cursor == '?') {
         ++_cursor;
@@ -207,8 +209,7 @@ RE * RE_Parser::parse_group() {
                 break;
             case '-': case 'd' : case 'i': case 'm': case 's': case 'x': {
                 bool negateMode = false;
-                unsigned modeBit;
-                unsigned newModeFlags;
+                ModeFlagType modeBit;
                 while (_cursor != _end && *_cursor != ')' && *_cursor != ':') {
                     if (*_cursor == '-') {
                         negateMode = true;
@@ -224,19 +225,20 @@ RE * RE_Parser::parse_group() {
                         default: throw ParseFailure("Unrecognized mode flag.");
                     }
                     if (negateMode) {
-                        newModeFlags &= ~modeBit;
+                        fModeFlagSet &= ~modeBit;
                         negateMode = false;  // for next flag
                     }
-                    else newModeFlags |= modeBit;
+                    else fModeFlagSet |= modeBit;
                 }
                 throw_incomplete_expression_error_if_end_of_stream();
-                std::cerr << "newModeFlags " << newModeFlags << " ignored.\n";
+                std::cerr << "New fModeFlagSet " << fModeFlagSet << " ignored.\n";
                 if (*_cursor == ':') {
                     ++_cursor;
                     group_expr = parse_alt();
                 }
                 else {  // if *_cursor == ')'
                     ++_cursor;
+		    // return immediately without restoring mode flags
                     return parse_next_item();
                 }
                 break;
@@ -249,6 +251,8 @@ RE * RE_Parser::parse_group() {
         // Capturing paren group, but ignore capture in icgrep.
         group_expr = parse_alt();
     }
+    // Restore mode flags.
+    fModeFlagSet = savedModeFlags;
     if (_cursor == _end || *_cursor++ != ')')
         throw ParseFailure("Closing paren required.");
     return group_expr;
