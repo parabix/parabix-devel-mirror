@@ -14,6 +14,7 @@
 #include <re/re_diff.h>
 #include <re/re_intersect.h>
 #include <re/parsefailure.h>
+#include <UCD/CaseFolding_txt.h>
 #include <algorithm>
 
 
@@ -129,7 +130,7 @@ RE * RE_Parser::parse_next_item() {
                 throw NothingToRepeat();
             case ']': case '}':
                 if (LEGACY_UNESCAPED_RBRAK_RBRACE_ALLOWED) {
-                    return makeCC(parse_utf8_codepoint());
+                    return build_CC(parse_utf8_codepoint());
                 }
                 else throw ParseFailure("Use  \\] or \\} for literal ] or }.");
             case '[':
@@ -142,7 +143,7 @@ RE * RE_Parser::parse_next_item() {
                 ++_cursor;
                 return parse_escaped();
             default:
-                return makeCC(parse_utf8_codepoint());
+                return build_CC(parse_utf8_codepoint());
         }
     }
     return re;
@@ -360,7 +361,7 @@ inline RE * RE_Parser::parse_escaped() {
     if (isSetEscapeChar(*_cursor)) 
       return parse_escaped_set();
     else 
-      return makeCC(parse_escaped_codepoint());
+      return build_CC(parse_escaped_codepoint());
 }
 
 RE * makeDigitSet() {
@@ -632,7 +633,7 @@ RE * RE_Parser::parse_charset() {
             break;
             case rangeHyphen:
                 if (lastItemKind != CodepointItem) throw ParseFailure("Range operator - has illegal left operand.");
-                cc->insert_range(lastCodepointItem, parse_codepoint());
+                CC_add_range(cc, lastCodepointItem, parse_codepoint());
                 lastItemKind = RangeItem;
                 break;
             case hyphenChar:
@@ -653,13 +654,13 @@ RE * RE_Parser::parse_charset() {
                 }
                 else {
                     lastCodepointItem = parse_escaped_codepoint();
-                    cc->insert(lastCodepointItem);
+                    CC_add_codepoint(cc, lastCodepointItem);
                     lastItemKind = CodepointItem;
                 }
                 break;
             case emptyOperator:
                 lastCodepointItem = parse_utf8_codepoint();
-                cc->insert(lastCodepointItem);
+                CC_add_codepoint(cc, lastCodepointItem);
                 lastItemKind = CodepointItem;
                 break;
         }
@@ -811,4 +812,25 @@ inline void RE_Parser::throw_incomplete_expression_error_if_end_of_stream() cons
     if (_cursor == _end) throw IncompleteRegularExpression();
 }
 
+CC * RE_Parser::build_CC(codepoint_t cp) {
+    CC * cc = makeCC();
+    CC_add_codepoint(cc, cp);
+    return cc;
+}
+
+void RE_Parser::CC_add_codepoint(CC * cc, codepoint_t cp) {
+    if (fModeFlagSet & CASE_INSENSITIVE_MODE_FLAG) {
+        caseInsensitiveInsert(cc, cp);
+    }
+    else cc->insert(cp);
+}
+
+void RE_Parser::CC_add_range(CC * cc, codepoint_t lo, codepoint_t hi) {
+    if (fModeFlagSet & CASE_INSENSITIVE_MODE_FLAG) {
+        caseInsensitiveInsertRange(cc, lo, hi);
+    }
+    else cc-> insert_range(lo, hi);
+}
+    
+    
 }

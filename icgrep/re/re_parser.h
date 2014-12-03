@@ -79,6 +79,13 @@ private:
     codepoint_t parse_octal_codepoint(int mindigits, int maxdigits);
 
     inline void throw_incomplete_expression_error_if_end_of_stream() const;
+    
+    // CC insertion dependent on case-insensitive flag.
+    CC * build_CC(codepoint_t cp);
+    
+    void CC_add_codepoint(CC * cc, codepoint_t cp);
+    
+    void CC_add_range(CC * cc, codepoint_t lo, codepoint_t hi);
 
 private:
 
