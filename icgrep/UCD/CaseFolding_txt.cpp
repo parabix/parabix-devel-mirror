@@ -48,11 +48,16 @@ void caseInsensitiveInsertRange(re::CC * base_cc, codepoint_t lo, codepoint_t hi
         codepoint_t subrange_lo = lo1 - ((lo1 - fe.range_lo) % (2 * fe.fold_offset));
         codepoint_t negative_subrange_lo = subrange_lo + fe.fold_offset;
         codepoint_t negative_subrange_hi = subrange_lo + 2 * fe.fold_offset - 1;
-          base_cc -> insert_range(std::max(negative_subrange_lo,lo1) - fe.fold_offset, std::min(negative_subrange_hi, hi1) - fe.fold_offset);
+	if ((lo1 <= negative_subrange_hi) && (hi1 >= negative_subrange_lo)) {
+	   // negative offsets apply 
+           base_cc -> insert_range(std::max(negative_subrange_lo,lo1) - fe.fold_offset, std::min(negative_subrange_hi, hi1) - fe.fold_offset);
+	}
         // Now the positive offset subrange.
         codepoint_t positive_subrange_lo = hi1 - ((hi1 - fe.range_lo) % (2 * fe.fold_offset));
         codepoint_t positive_subrange_hi = positive_subrange_lo + fe.fold_offset - 1;
-        base_cc -> insert_range(std::max(positive_subrange_lo, lo1) + fe.fold_offset, std::min(positive_subrange_hi, hi1) + fe.fold_offset);
+	if ((lo1 <= positive_subrange_hi) && (hi1 >= positive_subrange_lo)) {
+           base_cc -> insert_range(std::max(positive_subrange_lo, lo1) + fe.fold_offset, std::min(positive_subrange_hi, hi1) + fe.fold_offset);
+	}
       }
       else if (fe.fold_offset != 0) {
         // We have either a positive or negative offset, and all offsets for
