@@ -804,6 +804,7 @@ codepoint_t RE_Parser::parse_hex_codepoint(int mindigits, int maxdigits) {
     }
     if (count < mindigits) throw ParseFailure("Hexadecimal sequence has too few digits");
     if (value > CC::UNICODE_MAX) throw ParseFailure("Hexadecimal value too large");
+    std::cerr << value << " parsed.\n";
     return value;
 }
 

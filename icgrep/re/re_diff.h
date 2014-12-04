@@ -2,6 +2,7 @@
 #define RE_DIFF_H
 
 #include <re/re_re.h>
+#include <re/re_cc.h>
 
 namespace re {
 
@@ -26,7 +27,7 @@ public:
         mRh = rh;
     }
 protected:
-    friend Diff * makeDiff(RE*, RE*);
+    friend RE * makeDiff(RE*, RE*);
     void* operator new (std::size_t size) noexcept {
         return mAllocator.allocate(size);
     }
@@ -43,10 +44,7 @@ private:
     RE * mRh;
 };
 
-inline Diff * makeDiff(RE * lh, RE * rh) {
-    return new Diff(lh, rh);
-}
-
+RE * makeDiff(RE * lh, RE * rh);
 }
 
 #endif // RE_DIFF_H

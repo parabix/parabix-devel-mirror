@@ -39,6 +39,8 @@ RE_Compiler::RE_Compiler(PabloBlock & baseCG, const cc::CC_NameMap & nameMap)
 
 }
 
+//#define USE_IF_FOR_NONFINAL 1
+
 void RE_Compiler::compile(RE * re, PabloBlock & pb) {
 
     mLineFeed = mNameMap["LineFeed"]->getVar();
@@ -54,14 +56,14 @@ void RE_Compiler::compile(RE * re, PabloBlock & pb) {
     PabloAST * u8pfx = pb.createOr(pb.createOr(u8pfx2, u8pfx3), u8pfx4);
     mInitial = pb.createVar(pb.createAssign(initial, pb.createOr(u8pfx, u8single)));
     #ifdef USE_IF_FOR_NONFINAL
-    mNonFinal = pb.createVar(pb.createAssign(gs_nonfinal, pb.createZeroes()));
+    mNonFinal = pb.createVar(pb.createAssign(nonfinal, pb.createZeroes()));
     #endif
     PabloAST * u8scope32 = pb.createAdvance(u8pfx3, 1);
     PabloAST * u8scope42 = pb.createAdvance(u8pfx4, 1);
     PabloAST * u8scope43 = pb.createAdvance(u8scope42, 1);
     #ifdef USE_IF_FOR_NONFINAL
     PabloBlock it(pb);
-    it.createAssign(gs_nonfinal, it.createOr(it.createOr(u8pfx, u8scope32), it.createOr(u8scope42, u8scope43)));
+    it.createAssign(nonfinal, it.createOr(it.createOr(u8pfx, u8scope32), it.createOr(u8scope42, u8scope43)));
     pb.createIf(u8pfx, std::move(it));
     #else
     mNonFinal = pb.createVar(pb.createAssign(nonfinal, pb.createOr(pb.createOr(u8pfx, u8scope32), pb.createOr(u8scope42, u8scope43))));

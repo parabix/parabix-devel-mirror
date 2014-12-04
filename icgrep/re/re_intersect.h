@@ -26,7 +26,7 @@ public:
         mRh = rh;
     }
 protected:
-    friend Intersect * makeIntersect(RE*, RE*);
+    friend RE * makeIntersect(RE*, RE*);
     void* operator new (std::size_t size) noexcept {
         return mAllocator.allocate(size);
     }
@@ -43,9 +43,7 @@ private:
     RE * mRh;
 };
 
-inline Intersect * makeIntersect(RE * lh, RE * rh) {
-    return new Intersect(lh, rh);
-}
+RE * makeIntersect(RE * lh, RE * rh);
 
 }
 

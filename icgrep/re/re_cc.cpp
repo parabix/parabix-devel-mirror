@@ -194,4 +194,39 @@ CC::SetRelationship CC::compare(const CC * other) const {
     return SetRelationship::EQUIVALENT;
 }
 
+CC * subtractCC(const CC * cc1, const CC * cc2) {
+    CC * diff = makeCC();
+    for (const CharSetItem & i : cc1->mSparseCharSet) {
+        diff->insert_range(i.lo_codepoint, i.hi_codepoint);
+    }
+    for (const CharSetItem & i : cc2->mSparseCharSet) {
+        diff->remove_range(i.lo_codepoint, i.hi_codepoint);
+    }
+    return diff;
+}
+    
+CC * intersectCC(const CC * a, const CC * b) {
+    CC * isect = makeCC();
+    auto ai = a->cbegin();
+    const auto ai_end = a->cend();
+    auto bi = b->cbegin();
+    const auto bi_end = b->cend();
+    while (ai != ai_end && bi != bi_end) {
+        const CharSetItem & ra = *ai;
+        const CharSetItem & rb = *bi;
+        if (ra.hi_codepoint < rb.lo_codepoint) {
+            ++ai;
+            continue;
+        }
+        else if (rb.hi_codepoint < ra.lo_codepoint) {
+            ++bi;
+            continue;
+        }
+        isect->insert_range(std::max(ra.lo_codepoint, rb.lo_codepoint), std::min(ra.hi_codepoint, rb.hi_codepoint));
+        if (ra.hi_codepoint < rb.hi_codepoint) ++ai; 
+        else ++bi;
+    }
+    return isect;
+}
+    
 }
