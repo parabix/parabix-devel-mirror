@@ -6,6 +6,7 @@
 
 #include "re_cc.h"
 #include <llvm/Support/Compiler.h>
+#include <UCD/CaseFolding_txt.h>
 
 namespace re {
 
@@ -227,6 +228,14 @@ CC * intersectCC(const CC * a, const CC * b) {
         else ++bi;
     }
     return isect;
+}
+    
+CC * caseInsensitize(const CC * cc) {
+    CC * cci = makeCC();
+    for (auto i = cc->cbegin(); i != cc->cend(); i++) {
+        caseInsensitiveInsertRange(cci, i->lo_codepoint, i->hi_codepoint);
+    }
+    return cci;
 }
     
 }

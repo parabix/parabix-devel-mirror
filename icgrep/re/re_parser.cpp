@@ -579,7 +579,9 @@ RE * RE_Parser::parse_charset() {
             break;
             case setCloser: {
                 if (lastItemKind == NoItem) throw ParseFailure("Set operator has no right operand.");
-                if (cc->begin() != cc->end()) subexprs.push_back(cc);
+                if (cc->begin() != cc->end()) {
+                    subexprs.push_back(cc);
+                }
                 RE * newOperand = makeAlt(subexprs.begin(), subexprs.end());
                 if (havePendingOperation) {
                     if (pendingOperationKind == intersectOp) {
@@ -587,6 +589,11 @@ RE * RE_Parser::parse_charset() {
                     }
                     else {
                         newOperand = makeDiff(pendingOperand, newOperand);
+                    }
+                }
+                if (fModeFlagSet & CASE_INSENSITIVE_MODE_FLAG) {
+                    if (CC * cc1 = dyn_cast<CC>(newOperand)) {
+                        newOperand = caseInsensitize(cc1);
                     }
                 }
                 if (negated) return makeComplement(newOperand); 
@@ -633,7 +640,7 @@ RE * RE_Parser::parse_charset() {
             break;
             case rangeHyphen:
                 if (lastItemKind != CodepointItem) throw ParseFailure("Range operator - has illegal left operand.");
-                CC_add_range(cc, lastCodepointItem, parse_codepoint());
+                cc->insert_range(lastCodepointItem, parse_codepoint());
                 lastItemKind = RangeItem;
                 break;
             case hyphenChar:
@@ -654,13 +661,13 @@ RE * RE_Parser::parse_charset() {
                 }
                 else {
                     lastCodepointItem = parse_escaped_codepoint();
-                    CC_add_codepoint(cc, lastCodepointItem);
+                    cc->insert(lastCodepointItem);
                     lastItemKind = CodepointItem;
                 }
                 break;
             case emptyOperator:
                 lastCodepointItem = parse_utf8_codepoint();
-                CC_add_codepoint(cc, lastCodepointItem);
+                cc->insert(lastCodepointItem);
                 lastItemKind = CodepointItem;
                 break;
         }
@@ -804,7 +811,6 @@ codepoint_t RE_Parser::parse_hex_codepoint(int mindigits, int maxdigits) {
     }
     if (count < mindigits) throw ParseFailure("Hexadecimal sequence has too few digits");
     if (value > CC::UNICODE_MAX) throw ParseFailure("Hexadecimal value too large");
-    std::cerr << value << " parsed.\n";
     return value;
 }
 

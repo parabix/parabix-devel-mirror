@@ -185,8 +185,10 @@ inline CC * makeCC(const CC * cc1, const CC * cc2) {
 }
 
 CC * subtractCC(const CC * cc1, const CC * cc2);
-
+    
 CC * intersectCC(const CC * cc1, const CC * cc2);
+
+CC * caseInsensitize(const CC * cc);
 }
 
 #endif // RE_CC_H
