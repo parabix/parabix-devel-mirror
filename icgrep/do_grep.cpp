@@ -24,21 +24,11 @@
 #include "include/simd-lib/pabloSupport.hpp"
 #include "include/simd-lib/s2p.hpp"
 #include "include/simd-lib/buffer.hpp"
-#include "include/simd-lib/bitblock_iterator.hpp"
 
 // mmap system
 #include <sys/mman.h>
 #include <fcntl.h>
 
-#if (BLOCK_SIZE == 128)
-#define SEGMENT_BLOCKS 7
-#endif
-
-#if (BLOCK_SIZE == 256)
-#define SEGMENT_BLOCKS 15
-#endif
-
-#define SEGMENT_SIZE (BLOCK_SIZE * SEGMENT_BLOCKS)
 
 #define BUFFER_SEGMENTS 15
 #define BUFFER_SIZE (BUFFER_SEGMENTS * SEGMENT_SIZE)
@@ -54,15 +44,6 @@
 
 BitBlock EOF_mask = simd<1>::constant<1>();
 
-
-#if (BLOCK_SIZE == 256)
-typedef BitStreamScanner<BitBlock, uint64_t, uint64_t, SEGMENT_BLOCKS> ScannerT;
-#endif
-
-#if (BLOCK_SIZE == 128)
-typedef BitStreamScanner<BitBlock, uint32_t, uint32_t, SEGMENT_BLOCKS> ScannerT;
-#endif
-
 //
 // Write matched lines from a buffer to an output file, given segment
 // scanners for line ends and matches (where matches are a subset of line ends).
@@ -74,7 +55,7 @@ typedef BitStreamScanner<BitBlock, uint32_t, uint32_t, SEGMENT_BLOCKS> ScannerT;
 // The start position of the final line in the processed segment is returned.
 //
 
-ssize_t write_matches(FILE * outfile, ScannerT line_scanner, ScannerT match_scanner, char * buffer, ssize_t first_line_start) {
+ssize_t GrepExecutor::write_matches(char * buffer, ssize_t first_line_start) {
 
   ssize_t line_start = first_line_start;
   size_t match_pos;
@@ -82,17 +63,20 @@ ssize_t write_matches(FILE * outfile, ScannerT line_scanner, ScannerT match_scan
   while (match_scanner.has_next()) {
     match_pos = match_scanner.scan_to_next();
     // If we found a match, it must be at a line end.
-    line_end = line_scanner.scan_to_next();
+    line_end = LF_scanner.scan_to_next();
     while (line_end < match_pos) {
       line_start = line_end + 1;
-      line_end = line_scanner.scan_to_next();
+      line_end = LF_scanner.scan_to_next();
+    }
+    if (mShowFileNameOption) {
+      std::cout << currentFileName;
     }
     fwrite(&buffer[line_start], 1, line_end - line_start + 1, outfile);
     line_start = line_end + 1;
 
   }
-  while(line_scanner.has_next()) {
-    line_end = line_scanner.scan_to_next();
+  while(LF_scanner.has_next()) {
+    line_end = LF_scanner.scan_to_next();
     line_start = line_end+1;
   }
   return line_start;
@@ -100,13 +84,17 @@ ssize_t write_matches(FILE * outfile, ScannerT line_scanner, ScannerT match_scan
 
 
 
-void GrepExecutor::doGrep(char * infilename) {
+void GrepExecutor::doGrep(const std::string infilename) {
 
     struct Basis_bits basis_bits;
     struct Output output;
     BitBlock match_vector;
     BitBlock carry_q[mCarries];
     BitBlock advance_q[mAdvances];
+    
+    
+    currentFileName = infilename + ":";
+    
     int match_count=0;
     int blk = 0;
     int block_base  = 0;
@@ -119,34 +107,32 @@ void GrepExecutor::doGrep(char * infilename) {
     int match_pos = 0;
     int line_no = 0;
 
-    ScannerT LF_scanner;
-    ScannerT match_scanner;
-
     match_vector = simd<1>::constant<0>();
     memset (carry_q, 0, sizeof(BitBlock) * mCarries);
     memset (advance_q, 0, sizeof(BitBlock) * mAdvances);
     
-    FILE * outfile = stdout;
-
     int fdSrc;
     struct stat infile_sb;
     char * infile_buffer;
-    fdSrc = open(infilename, O_RDONLY);
+    fdSrc = open(infilename.c_str(), O_RDONLY);
     if (fdSrc == -1) {
-        fprintf(stderr, "Error: cannot open %s for processing.\n", infilename);
+        std::cerr << "Error: cannot open " << infilename << " for processing.\n";
         exit(-1);
     }
     if (fstat(fdSrc, &infile_sb) == -1) {
-        fprintf(stderr, "Error: cannot stat %s for processing.\n", infilename);
+        std::cerr << "Error: cannot stat " << infilename << " for processing.\n";
         exit(-1);
     }
     if (infile_sb.st_size == 0) {
-        if (mCountOnlyOption) fprintf(outfile, "Matching Lines: %d\n", 0);
+        if (mShowFileNameOption) {
+            std::cout << currentFileName;
+        }
+        if (mCountOnlyOption) fprintf(outfile, "%d\n", 0);
         exit(0);
     }
     infile_buffer = (char *) mmap(NULL, infile_sb.st_size, PROT_READ, MAP_PRIVATE, fdSrc, 0);
     if (infile_buffer == MAP_FAILED) {
-        fprintf(stderr, "Error: mmap of %s failure.\n", infilename);
+        std::cerr << "Error: mmap of " << infilename << "failed.\n";
         exit(-1);
     }
     
@@ -155,12 +141,10 @@ void GrepExecutor::doGrep(char * infilename) {
     int segment = 0;
     int segment_base = 0;
     chars_avail = infile_sb.st_size;
-
+    
 //////////////////////////////////////////////////////////////////////////////////////////
 // Full Segments
 //////////////////////////////////////////////////////////////////////////////////////////
-
-
 
     while (chars_avail >= SEGMENT_SIZE) {
 
@@ -190,16 +174,15 @@ void GrepExecutor::doGrep(char * infilename) {
             }
         }
 
-    buffer_ptr = &infile_buffer[segment_base];
+        buffer_ptr = &infile_buffer[segment_base];
 
         if (!mCountOnlyOption) {
-          line_start = write_matches(outfile, LF_scanner, match_scanner, buffer_ptr, line_start);
+          line_start = write_matches(buffer_ptr, line_start);
         }
 	segment++;
 	line_start -= SEGMENT_SIZE;  /* Will be negative offset for use within next segment. */
 	chars_avail -= SEGMENT_SIZE;
     }
-
 
 //////////////////////////////////////////////////////////////////////////////////////////
 // For the Final Partial Segment.
@@ -257,7 +240,10 @@ void GrepExecutor::doGrep(char * infilename) {
         {
             match_count += bitblock::popcount(output.matches);
         }
-        fprintf(outfile, "Matching Lines:%d\n", match_count);
+        if (mShowFileNameOption) {
+            std::cout << currentFileName;
+        }
+        fprintf(outfile, "%d\n", match_count);
     }
     else
     {
@@ -270,14 +256,10 @@ void GrepExecutor::doGrep(char * infilename) {
             match_scanner.load_block(simd<1>::constant<0>(), i);
         }
         buffer_ptr = &infile_buffer[segment_base];
-        line_start = write_matches(outfile, LF_scanner, match_scanner, buffer_ptr, line_start);
+        line_start = write_matches(buffer_ptr, line_start);
     }
     
     munmap((void *) infile_buffer, infile_sb.st_size);
     close(fdSrc);
-    fclose(outfile);
     
 }
-
-
-

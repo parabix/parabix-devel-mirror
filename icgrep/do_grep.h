@@ -14,11 +14,32 @@
 
 #include "include/simd-lib/bitblock.hpp"
 #include "include/simd-lib/transpose.hpp"
+#include "include/simd-lib/bitblock_iterator.hpp"
 
 struct Output {
     BitBlock matches;
     BitBlock LF;
 };
+
+#if (BLOCK_SIZE == 128)
+#define SEGMENT_BLOCKS 7
+#endif
+
+#if (BLOCK_SIZE == 256)
+#define SEGMENT_BLOCKS 15
+#endif
+
+#define SEGMENT_SIZE (BLOCK_SIZE * SEGMENT_BLOCKS)
+
+
+#if (BLOCK_SIZE == 256)
+typedef BitStreamScanner<BitBlock, uint64_t, uint64_t, SEGMENT_BLOCKS> ScannerT;
+#endif
+
+#if (BLOCK_SIZE == 128)
+typedef BitStreamScanner<BitBlock, uint32_t, uint32_t, SEGMENT_BLOCKS> ScannerT;
+#endif
+
 
 typedef void (*process_block_fcn)(const Basis_bits &basis_bits, BitBlock carry_q[], BitBlock advance_q[], Output &output);
 
@@ -29,15 +50,17 @@ public:
     GrepExecutor(int carry_count, int advance_count, process_block_fcn process_block): 
     mCarries(carry_count), mAdvances(advance_count), 
     mCountOnlyOption(false), mShowFileNameOption(false), mShowLineNumberingOption(false),
-    mProcessBlockFcn(process_block)
+    mProcessBlockFcn(process_block), outfile(stdout)
     {}
     
     void setCountOnlyOption(bool doCount = true) {mCountOnlyOption = doCount;}
     void setShowFileNameOption(bool showF = true) {mShowFileNameOption = showF;}
     void setShowLineNumberOption(bool showN = true) {mShowLineNumberingOption = showN;}
     
-    void doGrep(char * fileName);
+    void doGrep(std::string fileName);
 private:
+    ssize_t write_matches(char * buffer, ssize_t first_line_start);
+
     bool mCountOnlyOption;
     bool mShowFileNameOption;
     bool mShowLineNumberingOption;
@@ -45,6 +68,10 @@ private:
     int mAdvances;
     process_block_fcn mProcessBlockFcn;
     
+    std::string currentFileName;
+    FILE * outfile;
+    ScannerT LF_scanner;
+    ScannerT match_scanner;
 };
 
 
