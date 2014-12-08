@@ -66,7 +66,7 @@ include_directories("${PROJECT_SOURCE_DIR}/include/simd-lib")
 include_directories("${PROJECT_SOURCE_DIR}/include/simd-lib/idisa_cpp")
 
 # add the executable
-add_executable(icgrep icgrep.cpp compiler.cpp)
+add_executable(icgrep icgrep.cpp do_grep.cpp compiler.cpp)
 
 target_link_libraries (CCADT PabloADT RegExpADT)
 target_link_libraries (PabloADT ${REQ_LLVM_LIBRARIES})
