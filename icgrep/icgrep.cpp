@@ -69,13 +69,7 @@ using namespace std;
 typedef void (*process_block_fcn)(const Basis_bits &basis_bits, BitBlock carry_q[], BitBlock advance_q[], Output &output);
 
 
-#define USE_MMAP
-#ifndef USE_MMAP
-void do_process(FILE *infile, FILE *outfile, int count_only_option, int carry_count, int advance_count, process_block_fcn process_block);
-#endif
-#ifdef USE_MMAP
 void do_process(char * infile_buffer, size_t infile_size, FILE *outfile, int count_only_option, int carry_count, int advance_count, process_block_fcn process_block);
-#endif
 
 
 BitBlock get_category(Basis_bits &basis_bits, const char* category);
@@ -85,11 +79,9 @@ int main(int argc, char *argv[])
     char * inregex, * fileregex, * infilename, * outfilename;
     FILE *infile, *outfile, *regexfile;
 
-#ifdef USE_MMAP
     int fdSrc;
     struct stat infile_sb;
     char * infile_buffer;
-#endif
 
     int opt_code;
     bool count_only_option = 0;
@@ -178,13 +170,6 @@ int main(int argc, char *argv[])
     }
 
     infilename = argv[optind++];
-#ifndef USE_MMAP
-    infile = fopen(infilename, "rb");
-    if (!infile) {
-        fprintf(stderr, "Error: cannot open %s for processing.\n", infilename);
-        exit(-1);
-    }
-#endif
 
     if (optind >= argc) {
         outfile = stdout;
@@ -205,7 +190,6 @@ int main(int argc, char *argv[])
         }
     }
 
-#ifdef USE_MMAP
     fdSrc = open(infilename, O_RDONLY);
     if (fdSrc == -1) {
         fprintf(stderr, "Error: cannot open %s for processing.\n", infilename);
@@ -224,7 +208,6 @@ int main(int argc, char *argv[])
         fprintf(stderr, "Error: mmap of %s failure.\n", infilename);
         exit(-1);
     }
-#endif
 
     if (print_version_option)
     {
@@ -247,21 +230,11 @@ int main(int argc, char *argv[])
     if (llvm_codegen.process_block_fptr != 0)
     {
         void (*FP)(const Basis_bits &basis_bits, BitBlock carry_q[], BitBlock advance_q[], Output &output) = (void (*)(const Basis_bits &basis_bits, BitBlock carry_q[], BitBlock advance_q[], Output &output))(void*)llvm_codegen.process_block_fptr;
-#ifndef USE_MMAP
-        do_process(infile, outfile, count_only_option, llvm_codegen.carry_q_size, llvm_codegen.advance_q_size, FP);
-#endif
-#ifdef USE_MMAP
         do_process(infile_buffer, infile_sb.st_size, outfile, count_only_option, llvm_codegen.carry_q_size, llvm_codegen.advance_q_size, FP);
-#endif
     }
 
-#ifndef USE_MMAP
-    fclose(infile);
-#endif
-#ifdef USE_MMAP
     munmap((void *) infile_buffer, infile_sb.st_size);
     close(fdSrc);
-#endif
     fclose(outfile);
     if (regex_from_file_option) free(fileregex);
 
@@ -313,12 +286,7 @@ ssize_t write_matches(FILE * outfile, ScannerT line_scanner, ScannerT match_scan
 
 
 
-#ifndef USE_MMAP
-void do_process(FILE *infile, FILE *outfile, int count_only_option, int carry_count, int advance_count, process_block_fcn process_block) {
-#endif
-#ifdef USE_MMAP
 void do_process(char * infile_buffer, size_t infile_size, FILE *outfile, int count_only_option, int carry_count, int advance_count, process_block_fcn process_block) {
-#endif
 
     struct Basis_bits basis_bits;
     struct Output output;
@@ -345,19 +313,10 @@ void do_process(char * infile_buffer, size_t infile_size, FILE *outfile, int cou
     memset (advance_q, 0, sizeof(BitBlock) * advance_count);
 
     char * buffer_ptr;
-#ifndef USE_MMAP
-    ATTRIBUTE_SIMD_ALIGN char src_buffer[SEGMENT_SIZE];
-    buffer_ptr = &src_buffer;
-    chars_read = fread((void *)&src_buffer[0], 1, SEGMENT_SIZE, infile);
-    chars_avail = chars_read;
-    if (chars_avail >= SEGMENT_SIZE) chars_avail = SEGMENT_SIZE;
-#endif
-#ifdef USE_MMAP
     int segment = 0;
     int segment_base = 0;
     chars_avail = infile_size;
 
-#endif
 //////////////////////////////////////////////////////////////////////////////////////////
 // Full Segments
 //////////////////////////////////////////////////////////////////////////////////////////
@@ -366,21 +325,13 @@ void do_process(char * infile_buffer, size_t infile_size, FILE *outfile, int cou
 
     while (chars_avail >= SEGMENT_SIZE) {
 
-#ifdef USE_MMAP
 	segment_base = segment * SEGMENT_SIZE;
-#endif
         LF_scanner.init();
         match_scanner.init();
 
         for (blk = 0; blk < SEGMENT_BLOCKS; blk++) {
-#ifndef USE_MMAP
-            block_base = blk*BLOCK_SIZE;
-            s2p_do_block((BytePack *) &src_buffer[block_base], basis_bits);
-#endif
-#ifdef USE_MMAP
             block_base = blk*BLOCK_SIZE + segment_base;
             s2p_do_block((BytePack *) &infile_buffer[block_base], basis_bits);
-#endif
             process_block(basis_bits, carry_q, advance_q, output);
 
             LF_scanner.load_block(output.LF, blk);
@@ -400,42 +351,14 @@ void do_process(char * infile_buffer, size_t infile_size, FILE *outfile, int cou
             }
         }
 
-#ifndef USE_MMAP
-        int copy_back_pos = 0;
-
-
-        if (LF_scanner.count() > 0) {
-            copy_back_pos = LF_scanner.get_final_pos() + 1;
-            memset (carry_q, 0, sizeof(BitBlock) * carry_count);
-            memset (advance_q, 0, sizeof(BitBlock) * advance_count);
-        }
-        else {
-            copy_back_pos =  SEGMENT_SIZE;
-        }
-
-        int  copy_back_size = SEGMENT_SIZE - copy_back_pos;
-#endif
-#ifdef USE_MMAP
     buffer_ptr = &infile_buffer[segment_base];
-#endif
 
         if (!count_only_option) {
           line_start = write_matches(outfile, LF_scanner, match_scanner, buffer_ptr, line_start);
         }
-#ifndef USE_MMAP
-        memmove(&src_buffer[0], &src_buffer[copy_back_pos], copy_back_size);
-
-	//Do another read.
-        chars_read = fread(&src_buffer[copy_back_size], 1, copy_back_pos, infile);
-        chars_avail = chars_read + copy_back_size;
-        if (chars_avail >= SEGMENT_SIZE) chars_avail = SEGMENT_SIZE;
-        buffer_pos += chars_avail;
-#endif
-#ifdef USE_MMAP
 	segment++;
 	line_start -= SEGMENT_SIZE;  /* Will be negative offset for use within next segment. */
 	chars_avail -= SEGMENT_SIZE;
-#endif
     }
 
 
@@ -443,9 +366,7 @@ void do_process(char * infile_buffer, size_t infile_size, FILE *outfile, int cou
 // For the Final Partial Segment.
 //////////////////////////////////////////////////////////////////////////////////////////
 
-#ifdef USE_MMAP
     segment_base = segment * SEGMENT_SIZE;
-#endif
     int remaining = chars_avail;
 
     LF_scanner.init();
@@ -455,14 +376,8 @@ void do_process(char * infile_buffer, size_t infile_size, FILE *outfile, int cou
     blk = 0;
     while (remaining >= BLOCK_SIZE) {
     //fprintf(outfile, "Remaining = %i\n", remaining);
-#ifndef USE_MMAP
-        block_base = block_pos;
-        s2p_do_block((BytePack *) &src_buffer[block_base], basis_bits);
-#endif
-#ifdef USE_MMAP
         block_base = block_pos + segment_base;
         s2p_do_block((BytePack *) &infile_buffer[block_base], basis_bits);
-#endif
         process_block(basis_bits, carry_q, advance_q, output);
 
         LF_scanner.load_block(output.LF, blk);
@@ -492,14 +407,8 @@ void do_process(char * infile_buffer, size_t infile_size, FILE *outfile, int cou
 
     //For the last partial block, or for any carry.
     EOF_mask = bitblock::srl(simd<1>::constant<1>(), convert(BLOCK_SIZE-remaining));
-#ifndef USE_MMAP
-     block_base = block_pos;
-     s2p_do_final_block((BytePack *) &src_buffer[block_base], basis_bits, EOF_mask);
-#endif
-#ifdef USE_MMAP
      block_base = block_pos + segment_base;
      s2p_do_final_block((BytePack *) &infile_buffer[block_base], basis_bits, EOF_mask);
-#endif
     process_block(basis_bits, carry_q, advance_q, output);
 
     if (count_only_option)
@@ -521,12 +430,7 @@ void do_process(char * infile_buffer, size_t infile_size, FILE *outfile, int cou
             LF_scanner.load_block(simd<1>::constant<0>(), i);
             match_scanner.load_block(simd<1>::constant<0>(), i);
         }
-#ifndef USE_MMAP
-        line_start = 0;
-#endif
-#ifdef USE_MMAP
         buffer_ptr = &infile_buffer[segment_base];
-#endif
         line_start = write_matches(outfile, LF_scanner, match_scanner, buffer_ptr, line_start);
     }
 
