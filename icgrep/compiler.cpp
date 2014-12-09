@@ -13,10 +13,10 @@
 #include <compiler.h>
 #include <re/re_nullable.h>
 #include <re/re_simplifier.h>
+#include <re/re_alt.h>
 #include <re/parsefailure.h>
 #include <re/re_parser.h>
 #include <re/re_compiler.h>
-#include "hrtime.h"
 #include <utf8_encoder.h>
 #include <cc/cc_compiler.h>
 #include <cc/cc_namemap.hpp>
@@ -39,17 +39,24 @@ using namespace pablo;
 
 namespace icgrep {
 
-LLVM_Gen_RetVal compile(const Encoding encoding, const std::string input_string, const bool show_compile_time, const bool enable_multiplexing) {
+LLVM_Gen_RetVal compile(const Encoding encoding, const std::vector<std::string> regexps, const bool enable_multiplexing) {
+    std::vector<RE *> REs;
     RE * re_ast = nullptr;
-    try
-    {
-        re_ast = RE_Parser::parse(input_string);
+    for (int i = 0; i < regexps.size(); i++) {
+        try
+        {
+            re_ast = RE_Parser::parse(regexps[i]);
+        }
+        catch (ParseFailure failure)
+        {
+            std::cerr << "REGEX PARSING FAILURE: " << failure.what() << std::endl;
+            std::cerr << regexps[i] << std::endl;
+            exit(1);
+        }
+        REs.push_back(re_ast);
     }
-    catch (ParseFailure failure)
-    {
-        std::cerr << "REGEX PARSING FAILURE: " << failure.what() << std::endl;
-        std::cerr << input_string << std::endl;
-        exit(1);
+    if (REs.size() > 1) {
+        re_ast = makeAlt(REs.begin(), REs.end());
     }
 
     #ifdef DEBUG_PRINT_RE_AST
@@ -121,22 +128,8 @@ LLVM_Gen_RetVal compile(const Encoding encoding, const std::string input_string,
     #endif
 
     PabloCompiler pablo_compiler(basisBits);
-    unsigned long long cycles = 0;
-    double timer = 0;
-    if (show_compile_time)
-    {
-        cycles = get_hrcycles();
-        timer = getElapsedTime();
-    }
 
     LLVM_Gen_RetVal retVal = pablo_compiler.compile(main);
-    if (show_compile_time)
-    {
-        cycles = get_hrcycles() - cycles;
-        timer = getElapsedTime() - timer;
-        std::cout << "LLVM compile time -  cycles:       " << cycles  << std::endl;
-        std::cout << "LLVM compile time -  milliseconds: " << timer << std::endl;
-    }
 
     PabloAST::release_memory();
 
