@@ -52,7 +52,7 @@ public:
     mCountOnlyOption(false), mShowFileNameOption(false), mShowLineNumberingOption(false),
     mProcessBlockFcn(process_block), outfile(stdout)
     {}
-    
+          
     void setCountOnlyOption(bool doCount = true) {mCountOnlyOption = doCount;}
     void setShowFileNameOption(bool showF = true) {mShowFileNameOption = showF;}
     void setShowLineNumberOption(bool showN = true) {mShowLineNumberingOption = showN;}
@@ -72,6 +72,7 @@ private:
     FILE * outfile;
     ScannerT LF_scanner;
     ScannerT match_scanner;
+    long line_no;
 };
 
 

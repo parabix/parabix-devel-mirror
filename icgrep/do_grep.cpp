@@ -66,18 +66,24 @@ ssize_t GrepExecutor::write_matches(char * buffer, ssize_t first_line_start) {
     line_end = LF_scanner.scan_to_next();
     while (line_end < match_pos) {
       line_start = line_end + 1;
+      line_no++;
       line_end = LF_scanner.scan_to_next();
     }
     if (mShowFileNameOption) {
       std::cout << currentFileName;
     }
+    if (mShowLineNumberingOption) {
+      std::cout << line_no << ":";
+    }
     fwrite(&buffer[line_start], 1, line_end - line_start + 1, outfile);
     line_start = line_end + 1;
+    line_no++;
 
   }
   while(LF_scanner.has_next()) {
     line_end = LF_scanner.scan_to_next();
     line_start = line_end+1;
+    line_no++;
   }
   return line_start;
 }
@@ -105,7 +111,7 @@ void GrepExecutor::doGrep(const std::string infilename) {
     int line_start = 0;
     int line_end = 0;
     int match_pos = 0;
-    int line_no = 0;
+    line_no = 1;
 
     match_vector = simd<1>::constant<0>();
     memset (carry_q, 0, sizeof(BitBlock) * mCarries);

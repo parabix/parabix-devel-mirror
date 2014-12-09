@@ -4,29 +4,16 @@
  *  icgrep is a trademark of International Characters.
  */
 
+#include <string>
+
 #include "icgrep.h"
 #include "utf_encoding.h"
 #include "compiler.h"
 #include "pablo/pablo_compiler.h"
 #include "do_grep.h"
 
-#include <fstream>
-#include <sstream>
-#include <iostream>
-#include <string>
-#include <stdint.h>
-
-#include <stdio.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <errno.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-
 #include "llvm/Support/CommandLine.h"
 
-
-    
 int main(int argc, char *argv[]) {
     static cl::opt<std::string> regexp1(cl::Positional, cl::Required, cl::desc("<regexp>"));
     static cl::list<std::string> inputFiles(cl::Positional, cl::desc("<input file ...>"), cl::OneOrMore);
@@ -52,19 +39,18 @@ int main(int argc, char *argv[]) {
 
     const auto llvm_codegen = icgrep::compile(encoding, regexp1, false, false);
 
-    if (llvm_codegen.process_block_fptr != 0)
-      
-    {
+    if (llvm_codegen.process_block_fptr != 0) {
         void (*FP)(const Basis_bits &basis_bits, BitBlock carry_q[], BitBlock advance_q[], Output &output) = 
            (void (*)(const Basis_bits &basis_bits, BitBlock carry_q[], BitBlock advance_q[], Output &output))(void*)llvm_codegen.process_block_fptr;
         GrepExecutor grepEngine = GrepExecutor(llvm_codegen.carry_q_size, llvm_codegen.advance_q_size, FP);
         grepEngine.setCountOnlyOption(CountOnly);
-	if (inputFiles.size() > 1) grepEngine.setShowFileNameOption();
+        grepEngine.setShowLineNumberOption(ShowLineNumbers);
+	if (inputFiles.size() > 1 || ShowFileNames) grepEngine.setShowFileNameOption();
         for (unsigned i = 0; i != inputFiles.size(); ++i) {
             grepEngine.doGrep(inputFiles[i].c_str());
         }
     }
-
+    
     return 0;
 }
 
