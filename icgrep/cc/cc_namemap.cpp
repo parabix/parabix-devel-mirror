@@ -15,7 +15,7 @@ namespace cc {
 
 void CC_NameMap::addPredefined(const std::string friendlyName, re::CC * cc) {
     assert (cc);
-    std::string classname = cc->getName();
+    std::string classname = cc->canonicalName();
     Name * name = makeName(classname, cc);
     assert (name->getCC() == cc);
     mNameMap.insert(std::make_pair(friendlyName, name));    
@@ -58,7 +58,7 @@ RE * CC_NameMap::process(RE * re) {
         return f->second;
     }
     else if (CC * cc = dyn_cast<CC>(re)) {
-        std::string classname = cc->getName();
+        std::string classname = cc->canonicalName();
         auto f = mNameMap.find(classname);
         if (f == mNameMap.end()) {
             return insert(std::move(classname), makeName(classname, cc));

@@ -70,7 +70,7 @@ PabloAST * CC_Compiler::compile_re(RE * re) {
 
 PabloAST * CC_Compiler::compile_re(Name * name) {
     assert(name);
-    Var * var = name->getVar();
+    Var * var = name->getCompiled();
     if (var == nullptr) {
         if (name->getType() == Name::Type::FixedLength) {
             RE * cc = name->getCC();
@@ -97,7 +97,7 @@ PabloAST * CC_Compiler::compile_re(Name * name) {
         else {
             var = mCG.createVar(name->getName());
         }
-        name->setVar(var);
+        name->setCompiled(var);
     }
     return var;
 }

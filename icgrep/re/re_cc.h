@@ -51,7 +51,7 @@ public:
 
     static const CodePointType UNICODE_MAX = 0x10FFFF;
 
-    std::string getName() const;
+    std::string canonicalName() const;
 
     void insert_range(const CodePointType lo_codepoint, const CodePointType hi_codepoint);
 

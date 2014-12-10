@@ -31,11 +31,11 @@ public:
     const std::string & getName() const;
     Type getType() const;
     RE *getCC() const;
-    pablo::Var * getVar() const {
-        return mVar;
+    pablo::Var * getCompiled() const {
+        return mCompiled;
     }
-    void setVar(pablo::Var * var) {
-        mVar = var;
+    void setCompiled(pablo::Var * var) {
+        mCompiled = var;
     }
     void setCC(RE *cc);
     virtual ~Name() {}
@@ -50,7 +50,7 @@ protected:
     , mName(std::move(name))
     , mType(type)
     , mCC(cc)
-    , mVar(nullptr)
+    , mCompiled(nullptr)
     {
 
     }
@@ -59,7 +59,7 @@ private:
     const std::string   mName;
     const Type          mType;
     RE *                mCC;
-    pablo::Var *        mVar;
+    pablo::Var *        mCompiled;
 };
 
 inline const std::string & Name::getName() const {

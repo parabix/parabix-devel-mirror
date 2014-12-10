@@ -44,7 +44,7 @@ const std::string Printer_RE::PrintRE(const RE * re)
     else if (const CC* re_cc = dyn_cast<const CC>(re))
     {
         retVal = "CC \"";
-        retVal += re_cc->getName();
+        retVal += re_cc->canonicalName();
         retVal += "\" ";
 
         for (const CharSetItem & item : *re_cc)

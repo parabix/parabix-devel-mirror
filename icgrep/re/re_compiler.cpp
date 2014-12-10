@@ -43,16 +43,16 @@ RE_Compiler::RE_Compiler(PabloBlock & baseCG, const cc::CC_NameMap & nameMap)
 
 void RE_Compiler::compile(RE * re, PabloBlock & pb) {
 
-    mLineFeed = mNameMap["LineFeed"]->getVar();
+    mLineFeed = mNameMap["LineFeed"]->getCompiled();
 
     const std::string initial = "initial";
     const std::string nonfinal = "nonfinal";
 
     //Set the 'internal.initial' bit stream for the utf-8 multi-byte encoding.
-    PabloAST * u8single = mNameMap["UTF8-SingleByte"]->getVar();
-    PabloAST * u8pfx2 = mNameMap["UTF8-Prefix2"]->getVar();
-    PabloAST * u8pfx3 = mNameMap["UTF8-Prefix3"]->getVar();
-    PabloAST * u8pfx4 = mNameMap["UTF8-Prefix4"]->getVar();
+    PabloAST * u8single = mNameMap["UTF8-SingleByte"]->getCompiled();
+    PabloAST * u8pfx2 = mNameMap["UTF8-Prefix2"]->getCompiled();
+    PabloAST * u8pfx3 = mNameMap["UTF8-Prefix3"]->getCompiled();
+    PabloAST * u8pfx4 = mNameMap["UTF8-Prefix4"]->getCompiled();
     PabloAST * u8pfx = pb.createOr(pb.createOr(u8pfx2, u8pfx3), u8pfx4);
     mInitial = pb.createVar(pb.createAssign(initial, pb.createOr(u8pfx, u8single)));
     #ifdef USE_IF_FOR_NONFINAL
@@ -81,7 +81,7 @@ PabloAST * RE_Compiler::character_class_strm(Name * name, PabloBlock & pb) {
         return pb.createCall(name->getName());
     }
     else {
-        return name->getVar();
+        return name->getCompiled();
     }
 }
 
@@ -222,7 +222,7 @@ inline bool RE_Compiler::isFixedLength(RE * regexp) {
 inline Assign * RE_Compiler::processLowerBound(RE * repeated, int lb, Assign * marker, PabloBlock & pb) {
 	if (isFixedLength(repeated)) {
         Name * name = cast<Name>(repeated);
-        Assign * cc_lb = consecutive(pb.createAssign("repeated", pb.createAdvance(name->getVar(), 1)), 1, lb, pb);
+        Assign * cc_lb = consecutive(pb.createAssign("repeated", pb.createAdvance(name->getCompiled(), 1)), 1, lb, pb);
 		return pb.createAssign("lowerbound", pb.createAnd(pb.createAdvance(pb.createVar(marker), lb), pb.createVar(cc_lb)));
 	}
 	// Fall through to general case.
@@ -239,7 +239,7 @@ inline Assign * RE_Compiler::processBoundedRep(RE * repeated, int ub, Assign * m
 		// Use matchstar, then apply filter.
 		Assign * nonMatch = pb.createAssign("nonmatch", pb.createNot(pb.createVar(marker)));
 		PabloAST * upperLimitMask = pb.createNot(pb.createVar(consecutive(nonMatch, 1, ub + 1, pb)));
-        PabloAST * rep_class_var = cast<Name>(repeated)->getVar();
+        PabloAST * rep_class_var = cast<Name>(repeated)->getCompiled();
         return pb.createAssign("bounded", pb.createAnd(pb.createMatchStar(pb.createVar(marker), rep_class_var), upperLimitMask));
 	}
 	// Fall through to general case.

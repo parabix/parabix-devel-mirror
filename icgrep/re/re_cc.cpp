@@ -24,18 +24,18 @@ CC::CC(const CC & cc)
 
 }
 
-std::string CC::getName() const {
+std::string CC::canonicalName() const {
     std::string name = "CC";
-    char seperator = '_';
+    char separator = '_';
     for (const CharSetItem & i : mSparseCharSet) {
-        name += seperator;
+        name += separator;
         if (i.lo_codepoint == i.hi_codepoint) {
             name += std::to_string(i.lo_codepoint);
         }
         else {
             name += std::to_string(i.lo_codepoint) + "-" + std::to_string(i.hi_codepoint);
         }
-        seperator = ',';
+        separator = ',';
     }
     return name;
 }
