@@ -41,7 +41,8 @@ RE_Compiler::RE_Compiler(PabloBlock & baseCG, const cc::CC_NameMap & nameMap)
 
 //#define USE_IF_FOR_NONFINAL 1
 
-void RE_Compiler::compile(RE * re, PabloBlock & pb) {
+    
+void RE_Compiler::initializeRequiredStreams() {
 
     mLineFeed = mNameMap["LineFeed"]->getCompiled();
 
@@ -53,29 +54,33 @@ void RE_Compiler::compile(RE * re, PabloBlock & pb) {
     PabloAST * u8pfx2 = mNameMap["UTF8-Prefix2"]->getCompiled();
     PabloAST * u8pfx3 = mNameMap["UTF8-Prefix3"]->getCompiled();
     PabloAST * u8pfx4 = mNameMap["UTF8-Prefix4"]->getCompiled();
-    PabloAST * u8pfx = pb.createOr(pb.createOr(u8pfx2, u8pfx3), u8pfx4);
-    mInitial = pb.createVar(pb.createAssign(initial, pb.createOr(u8pfx, u8single)));
+    PabloAST * u8pfx = mCG.createOr(mCG.createOr(u8pfx2, u8pfx3), u8pfx4);
+    mInitial = mCG.createVar(mCG.createAssign(initial, mCG.createOr(u8pfx, u8single)));
     #ifdef USE_IF_FOR_NONFINAL
-    mNonFinal = pb.createVar(pb.createAssign(nonfinal, pb.createZeroes()));
+    mNonFinal = mCG.createVar(pb.createAssign(nonfinal, mCG.createZeroes()));
     #endif
-    PabloAST * u8scope32 = pb.createAdvance(u8pfx3, 1);
-    PabloAST * u8scope42 = pb.createAdvance(u8pfx4, 1);
-    PabloAST * u8scope43 = pb.createAdvance(u8scope42, 1);
+    PabloAST * u8scope32 = mCG.createAdvance(u8pfx3, 1);
+    PabloAST * u8scope42 = mCG.createAdvance(u8pfx4, 1);
+    PabloAST * u8scope43 = mCG.createAdvance(u8scope42, 1);
     #ifdef USE_IF_FOR_NONFINAL
-    PabloBlock it(pb);
+    PabloBlock it(mCG);
     it.createAssign(nonfinal, it.createOr(it.createOr(u8pfx, u8scope32), it.createOr(u8scope42, u8scope43)));
-    pb.createIf(u8pfx, std::move(it));
+    mCG.createIf(u8pfx, std::move(it));
     #else
-    mNonFinal = pb.createVar(pb.createAssign(nonfinal, pb.createOr(pb.createOr(u8pfx, u8scope32), pb.createOr(u8scope42, u8scope43))));
+    mNonFinal = mCG.createVar(mCG.createAssign(nonfinal, mCG.createOr(mCG.createOr(u8pfx, u8scope32), mCG.createOr(u8scope42, u8scope43))));
     #endif
-
-    PabloAST * result = process(re, pb.createAssign("start", pb.createOnes()), pb);
-
-    //These three lines are specifically for grep.
-    pb.createAssign("matches", pb.createAnd(pb.createMatchStar(pb.createVar(result), pb.createNot(mLineFeed)), mLineFeed), 0);
-    pb.createAssign("lf", mLineFeed, 1);
 }
 
+void RE_Compiler::finalizeMatchResult(Assign * match_result) {
+    //These three lines are specifically for grep.
+    mCG.createAssign("matches", mCG.createAnd(mCG.createMatchStar(mCG.createVar(match_result), mCG.createNot(mLineFeed)), mLineFeed), 0);
+    mCG.createAssign("lf", mLineFeed, 1);
+}
+    
+Assign * RE_Compiler::compile(RE * re, PabloBlock & pb) {
+        return process(re, pb.createAssign("start", pb.createOnes()), pb);
+}
+        
 PabloAST * RE_Compiler::character_class_strm(Name * name, PabloBlock & pb) {
     if (name->getType() == Name::Type::UnicodeCategory) {
         return pb.createCall(name->getName());

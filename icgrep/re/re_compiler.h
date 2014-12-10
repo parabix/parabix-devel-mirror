@@ -29,14 +29,15 @@ class RE_Compiler {
 public:
 
     RE_Compiler(pablo::PabloBlock & baseCG, const cc::CC_NameMap & nameMap);
-
-    inline void compile(RE * re) {
-        compile(re, mCG);
+    void initializeRequiredStreams();
+    void finalizeMatchResult(pablo::Assign * match_result);
+    pablo::Assign * compile(RE * re) {
+        return compile(re, mCG);
     }
 
 private:
 
-    void compile(RE * re, pablo::PabloBlock & cg);
+    pablo::Assign * compile(RE * re, pablo::PabloBlock & cg);
 
     pablo::PabloAST * character_class_strm(Name * name, pablo::PabloBlock & pb);
     pablo::Assign * process(RE * re, pablo::Assign *marker, pablo::PabloBlock & pb);
