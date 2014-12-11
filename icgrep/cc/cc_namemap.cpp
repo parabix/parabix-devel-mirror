@@ -68,4 +68,12 @@ RE * CC_NameMap::process(RE * re) {
     return re;
 }
 
+std::string CC_NameMap::printMap() {
+    std::string retval = "";
+    for (Name * name : mNameVector) {
+        retval.append("mNameMap[" +  name->getName() + "] = " + Printer_RE::PrintRE(name->getCC()) + "]\n");
+    }
+    return retval;
+}
+
 }

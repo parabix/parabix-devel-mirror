@@ -42,6 +42,8 @@ public:
         return mNameVector.end();
     }
 
+    std::string printMap();
+    
 private:
 
     inline re::Name * insert(std::string && name, re::Name * re) {
