@@ -24,8 +24,6 @@ public:
 
     re::RE * process(re::RE * re);
 
-    void addPredefined(const std::string friendlyName, re::CC * cc);
-
     inline const re::Name * operator[](const std::string & name) const {
         auto f = mNameMap.find(name);
         if (f == mNameMap.end()) {

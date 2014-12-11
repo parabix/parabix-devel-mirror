@@ -34,11 +34,6 @@ RE * UTF8_Encoder::toUTF8(CC_NameMap & nameMap, RE * ast) {
         }
     }
     ast = nameMap.process(ast);
-    // Build our list of predefined characters.
-    nameMap.addPredefined("UTF8-SingleByte", makeCC(0x00, 0x7F));
-    nameMap.addPredefined("UTF8-Prefix2", makeCC(0xC2, 0xDF));
-    nameMap.addPredefined("UTF8-Prefix3", makeCC(0xE0, 0xEF));
-    nameMap.addPredefined("UTF8-Prefix4", makeCC(0xF0, 0xF4));
     return ast;
 }
 

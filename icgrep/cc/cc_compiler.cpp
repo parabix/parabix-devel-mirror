@@ -45,6 +45,10 @@ CC_Compiler::CC_Compiler(PabloBlock & cg, const Encoding encoding, const bool an
     }
 }
 
+pablo::Var * CC_Compiler::compileCC(const re::CC *cc) { 
+     return mCG.createVar(mCG.createAssign(cc->canonicalName(), charset_expr(cc))); 
+}
+
 std::vector<Var *> CC_Compiler::compile(const CC_NameMap & nameMap) {
     for (Name * name : nameMap) {
         compile_re(name);
@@ -52,7 +56,7 @@ std::vector<Var *> CC_Compiler::compile(const CC_NameMap & nameMap) {
     if (mAnnotateVariableConstraints) {
         computeVariableConstraints();
     }
-    return std::move(mBasisBit);
+    return mBasisBit;
 }
 
 PabloAST * CC_Compiler::compile_re(RE * re) {

@@ -13,6 +13,7 @@
 #include <re/re_cc.h>
 #include <unordered_map>
 #include <string>
+#include <iostream>
 
 namespace cc {
 
@@ -26,6 +27,7 @@ public:
 
     std::vector<pablo::Var *> compile(const CC_NameMap & nameMap);
 
+    pablo::Var * compileCC(const re::CC *cc);
 private:
 
 

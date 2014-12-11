@@ -42,18 +42,17 @@ RE_Compiler::RE_Compiler(PabloBlock & baseCG, const cc::CC_NameMap & nameMap)
 //#define USE_IF_FOR_NONFINAL 1
 
     
-void RE_Compiler::initializeRequiredStreams() {
+void RE_Compiler::initializeRequiredStreams(cc::CC_Compiler & ccc) {
 
-    mLineFeed = mNameMap["LineFeed"]->getCompiled();
-
+    mLineFeed = ccc.compileCC(makeCC(0x0A));
+    PabloAST * u8single = ccc.compileCC(makeCC(0x00, 0x7F));
+    PabloAST * u8pfx2 = ccc.compileCC(makeCC(0xC2, 0xDF));
+    PabloAST * u8pfx3 = ccc.compileCC(makeCC(0xE0, 0xEF));
+    PabloAST * u8pfx4 = ccc.compileCC(makeCC(0xF0, 0xF4));
+    
     const std::string initial = "initial";
     const std::string nonfinal = "nonfinal";
 
-    //Set the 'internal.initial' bit stream for the utf-8 multi-byte encoding.
-    PabloAST * u8single = mNameMap["UTF8-SingleByte"]->getCompiled();
-    PabloAST * u8pfx2 = mNameMap["UTF8-Prefix2"]->getCompiled();
-    PabloAST * u8pfx3 = mNameMap["UTF8-Prefix3"]->getCompiled();
-    PabloAST * u8pfx4 = mNameMap["UTF8-Prefix4"]->getCompiled();
     PabloAST * u8pfx = mCG.createOr(mCG.createOr(u8pfx2, u8pfx3), u8pfx4);
     mInitial = mCG.createVar(mCG.createAssign(initial, mCG.createOr(u8pfx, u8single)));
     #ifdef USE_IF_FOR_NONFINAL

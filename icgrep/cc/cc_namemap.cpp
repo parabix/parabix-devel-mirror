@@ -13,16 +13,6 @@ using namespace re;
 
 namespace cc {
 
-void CC_NameMap::addPredefined(const std::string friendlyName, re::CC * cc) {
-    assert (cc);
-    std::string classname = cc->canonicalName();
-    Name * name = makeName(classname, cc);
-    assert (name->getCC() == cc);
-    mNameMap.insert(std::make_pair(friendlyName, name));    
-    insert(std::move(classname), name);
-    assert (name->getCC() == cc);
-}
-
 RE * CC_NameMap::process(RE * re) {
     if (Alt * alt = dyn_cast<Alt>(re)) {
         for (auto i = alt->begin(); i != alt->end(); ++i) {

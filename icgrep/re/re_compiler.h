@@ -8,6 +8,7 @@
 #define RE_TO_PABLO_COMPILER_H
 
 #include <re/re_re.h>
+#include <cc/cc_compiler.h>
 
 #include <string>
 #include <list>
@@ -29,7 +30,7 @@ class RE_Compiler {
 public:
 
     RE_Compiler(pablo::PabloBlock & baseCG, const cc::CC_NameMap & nameMap);
-    void initializeRequiredStreams();
+    void initializeRequiredStreams(cc::CC_Compiler & ccc);
     void finalizeMatchResult(pablo::Assign * match_result);
     pablo::Assign * compile(RE * re) {
         return compile(re, mCG);
