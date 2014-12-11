@@ -53,6 +53,8 @@ public:
 
     std::string canonicalName() const;
 
+    CodePointType max_codepoint();
+
     void insert_range(const CodePointType lo_codepoint, const CodePointType hi_codepoint);
 
     void remove_range(const CodePointType lo_codepoint, const CodePointType hi_codepoint);

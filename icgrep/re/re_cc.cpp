@@ -40,6 +40,10 @@ std::string CC::canonicalName() const {
     return name;
 }
 
+CodePointType CC::max_codepoint() {
+    return mSparseCharSet.size() == 0 ? 0 : mSparseCharSet.back().hi_codepoint;
+}
+
 void CC::insert_range(const CodePointType lo_codepoint, const CodePointType hi_codepoint) {
     CharSetItem item(lo_codepoint, hi_codepoint);
     for (auto i = mSparseCharSet.begin(); i != mSparseCharSet.end(); ) {

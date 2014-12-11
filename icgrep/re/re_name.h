@@ -2,6 +2,7 @@
 #define RE_NAME_H
 
 #include <re/re_re.h>
+#include <re/re_cc.h>
 #include <string>
 #include <iostream>
 #include <re/printer_re.h>
@@ -13,8 +14,6 @@ namespace pablo {
 
 namespace re {
 
-class CC;
-
 class Name : public RE {
 public:
     static inline bool classof(const RE * re) {
@@ -24,9 +23,10 @@ public:
         return false;
     }
     enum class Type {
-        FixedLength
+        ASCII
         , Unicode
         , UnicodeCategory
+        , Unknown
     };
     const std::string & getName() const;
     Type getType() const;
@@ -78,7 +78,7 @@ inline void Name::setCC(RE * cc) {
     mCC = cc;
 }
 
-inline Name * makeName(const std::string name, const Name::Type type = Name::Type::FixedLength) {
+inline Name * makeName(const std::string name, const Name::Type type = Name::Type::Unicode) {
     return new Name(std::move(name), type, nullptr);
 }
 
@@ -86,7 +86,11 @@ inline Name * makeName(const std::string name, RE * cc) {
     if (isa<Name>(cc)) {
         return cast<Name>(cc);
     }
-    return new Name(std::move(name), Name::Type::FixedLength, cc);
+    else if (isa<CC>(cc)) {
+        Name::Type ccType = cast<CC>(cc)->max_codepoint() <= 0x7F ? Name::Type::ASCII : Name::Type::Unicode;
+        return new Name(std::move(name), ccType, cc);
+    }
+    else return new Name(std::move(name), Name::Type::Unknown, cc);
 }
 
 }

@@ -76,7 +76,7 @@ PabloAST * CC_Compiler::compile_re(Name * name) {
     assert(name);
     Var * var = name->getCompiled();
     if (var == nullptr) {
-        if (name->getType() == Name::Type::FixedLength) {
+        if (name->getType() != Name::Type::UnicodeCategory) {
             RE * cc = name->getCC();
             assert (cc);
             PabloAST * value = nullptr;

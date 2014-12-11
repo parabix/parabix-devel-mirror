@@ -123,8 +123,6 @@ LLVM_Gen_RetVal compile(const Encoding encoding, const std::vector<std::string> 
     std::cerr << "Initial Pablo AST:" << PabloPrinter::print(main.statements()) << ")" << std::endl;
     #endif
 
-    RE::release_memory();
-
     // Scan through the pablo code and perform DCE and CSE
     UseAnalysis::optimize(main);
 
@@ -137,6 +135,7 @@ LLVM_Gen_RetVal compile(const Encoding encoding, const std::vector<std::string> 
 
     LLVM_Gen_RetVal retVal = pablo_compiler.compile(main);
 
+    RE::release_memory();
     PabloAST::release_memory();
 
     return retVal;
