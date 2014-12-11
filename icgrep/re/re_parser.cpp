@@ -420,42 +420,39 @@ RE * RE_Parser::parse_escaped_set() {
 
 codepoint_t RE_Parser::parse_utf8_codepoint() {
     // Must cast to unsigned char to avoid sign extension.
-    unsigned char c = static_cast<unsigned char>(*_cursor++);
-    codepoint_t cp = c;
-    if (c > 0x80) { // if non-ascii
-        if (c < 0xC2) {
+    unsigned char pfx = static_cast<unsigned char>(*_cursor++);
+    codepoint_t cp = pfx;
+    if (pfx < 0x80) return cp;
+    unsigned suffix_bytes;
+    if (pfx < 0xE0) {
+        if (pfx < 0xC2) {  // bare suffix or illegal prefix 0xC0 or 0xC2
             throw InvalidUTF8Encoding();
         }
-        else { // [0xC2, 0xFF]
-            unsigned bytes = 0;
-            if (c < 0xE0) { // [0xC2, 0xDF]
-                cp &= 0x1F;
-                bytes = 1;
-            }
-            else if (c < 0xF0) { // [0xE0, 0xEF]
-                cp &= 0x0F;
-                bytes = 2;
-            }
-            else { // [0xF0, 0xFF]
-                cp &= 0x0F;
-                bytes = 3;
-            }
-            while (bytes--) {
-                if (_cursor == _end) {
-                    throw InvalidUTF8Encoding();
-                }
-                c = static_cast<unsigned char>(*_cursor++);
-                if ((c & 0xC0) != 0x80) {
-                    throw InvalidUTF8Encoding();
-                }
-                cp = (cp << 6) | (c & 0x3F);
-                // It is an error if a 3-byte sequence is used to encode a codepoint < 0x800
-                // or a 4-byte sequence is used to encode a codepoint < 0x10000.
-                if (((bytes == 1) && (cp < 0x20)) || ((bytes == 2) && (cp < 0x10))) {
-                    throw InvalidUTF8Encoding();
-                }
-            }
+        suffix_bytes = 1;
+        cp &= 0x1F;
+    }
+    else if (pfx < 0xF0) { // [0xE0, 0xEF]
+        cp &= 0x0F;
+        suffix_bytes = 2;
+    }
+    else { // [0xF0, 0xFF]
+        cp &= 0x0F;
+        suffix_bytes = 3;
+    }
+    while (suffix_bytes--) {
+        if (_cursor == _end) {
+            throw InvalidUTF8Encoding();
         }
+        unsigned char sfx = static_cast<unsigned char>(*_cursor++);
+        if ((sfx & 0xC0) != 0x80) {
+            throw InvalidUTF8Encoding();
+        }
+        cp = (cp << 6) | (sfx & 0x3F);
+    }
+    // It is an error if a 3-byte sequence is used to encode a codepoint < 0x800
+    // or a 4-byte sequence is used to encode a codepoint < 0x10000.
+    if ((pfx == 0xE0 && cp < 0x800) || (pfx == 0xF0 && cp < 0x10000)) {
+        throw InvalidUTF8Encoding();
     }
     // It is an error if a 4-byte sequence is used to encode a codepoint 
     // above the Unicode maximum.   
