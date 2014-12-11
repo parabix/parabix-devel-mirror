@@ -419,7 +419,9 @@ RE * RE_Parser::parse_escaped_set() {
 }
 
 codepoint_t RE_Parser::parse_utf8_codepoint() {
-    codepoint_t c = static_cast<codepoint_t>(*_cursor++);
+    // Must cast to unsigned char to avoid sign extension.
+    unsigned char c = static_cast<unsigned char>(*_cursor++);
+    codepoint_t cp = c;
     if (c > 0x80) { // if non-ascii
         if (c < 0xC2) {
             throw InvalidUTF8Encoding();
@@ -427,26 +429,29 @@ codepoint_t RE_Parser::parse_utf8_codepoint() {
         else { // [0xC2, 0xFF]
             unsigned bytes = 0;
             if (c < 0xE0) { // [0xC2, 0xDF]
-                c &= 0x1F;
+                cp &= 0x1F;
                 bytes = 1;
             }
             else if (c < 0xF0) { // [0xE0, 0xEF]
-                c &= 0x0F;
+                cp &= 0x0F;
                 bytes = 2;
             }
             else { // [0xF0, 0xFF]
-                c &= 0x0F;
+                cp &= 0x0F;
                 bytes = 3;
             }
-            while (--bytes) {
-                if (++_cursor == _end || (*_cursor & 0xC0) != 0x80) {
+            while (bytes--) {
+                if (_cursor == _end) {
                     throw InvalidUTF8Encoding();
                 }
-                c = (c << 6) | static_cast<codepoint_t>(*_cursor & 0x3F);
+                c = static_cast<unsigned char>(*_cursor++);
+                if ((c & 0xC0) != 0x80) {
+                    throw InvalidUTF8Encoding();
+                }
+                cp = (cp << 6) | (c & 0x3F);
                 // It is an error if a 3-byte sequence is used to encode a codepoint < 0x800
                 // or a 4-byte sequence is used to encode a codepoint < 0x10000.
-                // if (((bytes == 1) && (c < 0x20)) || ((bytes == 2) && (c < 0x10))) {
-                if ((c << (bytes - 1)) < 0x20) {
+                if (((bytes == 1) && (cp < 0x20)) || ((bytes == 2) && (cp < 0x10))) {
                     throw InvalidUTF8Encoding();
                 }
             }
@@ -454,10 +459,10 @@ codepoint_t RE_Parser::parse_utf8_codepoint() {
     }
     // It is an error if a 4-byte sequence is used to encode a codepoint 
     // above the Unicode maximum.   
-    if (c > CC::UNICODE_MAX) {
+    if (cp > CC::UNICODE_MAX) {
         throw InvalidUTF8Encoding();
     }
-    return c;
+    return cp;
 }
 
 Name * RE_Parser::parse_property_expression() {
