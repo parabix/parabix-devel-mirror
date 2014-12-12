@@ -379,6 +379,7 @@ The following line has LATIN CAPITAL LETTER G WITH MACRON in single quotes.
 <grepcase regexp="=[a-z]{7,}" datafile="bounded_charclass" grepcount="20"/>
 <grepcase regexp="=[a-z]{5,15};" datafile="bounded_charclass" grepcount="11"/>
 <grepcase regexp="(([wxy]{2}){3}){2}" datafile="bounded_charclass" grepcount="3"/>
+<grepcase regexp="(([wxy]{2}?){3}?){2}?" datafile="bounded_charclass" grepcount="3"/>
 <grepcase regexp="=([a-z][c-z])*;" datafile="bounded_charclass" grepcount="12"/>
 <grepcase regexp="[\u0061-\u007A]{6}" datafile="bounded_charclass" grepcount="21"/>
 <grepcase regexp="[\o{142}-d]{2}" datafile="bounded_charclass" grepcount="3"/>
@@ -392,6 +393,7 @@ The following line has LATIN CAPITAL LETTER G WITH MACRON in single quotes.
 <grepcase regexp="[^D]og" datafile="RangeAltSeqMatchStarKplusWhileNotOptAny" grepcount="2"/>
 <grepcase regexp="Na?t" datafile="RangeAltSeqMatchStarKplusWhileNotOptAny" grepcount="2"/>
 <grepcase regexp="h.t" datafile="RangeAltSeqMatchStarKplusWhileNotOptAny" grepcount="3" />
+<grepcase regexp="do*?c|ez*?t" datafile="RangeAltSeqMatchStarKplusWhileNotOptAny" grepcount="4"/>
 
 <grepcase regexp="[]]" datafile="special_characters" grepcount="9"/>
 <grepcase regexp="[-]" datafile="special_characters" grepcount="8"/>
@@ -421,4 +423,18 @@ The following line has LATIN CAPITAL LETTER G WITH MACRON in single quotes.
 <grepcase regexp="\p{Lu}" datafile="LU_test" grepcount="2"/>
 <grepcase regexp="'\p{Lu}'" datafile="LU_test" grepcount="1"/>
 <grepcase regexp="\p{Ll}" datafile="LU_test" grepcount="1"/>
+
+
+ <datafile id="codepoints">
+ A line with 0x89 &#x89;
+ A line with 0x1234 &#x1234;
+ A line with 0x1245 &#x1245;
+ 你
+ 好
+ A plain line.
+ </datafile>
+ <grepcase regexp="[\u{1234}-\u{1245}]" datafile="codepoints" grepcount="2"/>
+ <grepcase regexp="[\u{086}-\u{9A}]" datafile="codepoints" grepcount="1"/>
+ <grepcase regexp="[你好]" datafile="codepoints" grepcount="2"/>
+ <grepcase regexp="\u{4F60}" datafile="codepoints" grepcount="1"/>
 </greptest>

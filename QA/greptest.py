@@ -82,7 +82,7 @@ def start_element_do_test(name, attrs):
                 if options.verbose:
                     print "Doing: " + grep_cmd
 		try:
-                    grep_out = subprocess.check_output(grep_cmd, cwd=options.exec_dir, shell=True)
+                    grep_out = subprocess.check_output(grep_cmd.encode('utf-8'), cwd=options.exec_dir, shell=True)
                 except subprocess.CalledProcessError, e:
                     grep_out = e.output
 		if len(grep_out) > 0 and grep_out[-1] == '\n': grep_out = grep_out[:-1]
