@@ -77,24 +77,24 @@ PabloAST * CC_Compiler::compile_re(Name * name) {
     Var * var = name->getCompiled();
     if (var == nullptr) {
         if (name->getType() != Name::Type::UnicodeCategory) {
-            RE * cc = name->getCC();
-            assert (cc);
+            RE * def = name->getDefinition();
+            assert (def);
             PabloAST * value = nullptr;
-            if (isa<CC>(cc)) {
-                value = charset_expr(cast<CC>(cc));
+            if (isa<CC>(def)) {
+                value = charset_expr(cast<CC>(def));
             }
-            else if (isa<Seq>(cc)) {
-                value = compile_re(cast<Seq>(cc));
+            else if (isa<Seq>(def)) {
+                value = compile_re(cast<Seq>(def));
             }
-            else if (isa<Alt>(cc)) {
-                value = compile_re(cast<Alt>(cc));
+            else if (isa<Alt>(def)) {
+                value = compile_re(cast<Alt>(def));
             }
             if (value == nullptr) {
-                throw std::runtime_error("Unexpected CC node given to CC_Compiler: " + Printer_RE::PrintRE(name) + " : " + Printer_RE::PrintRE(cc));
+                throw std::runtime_error("Unexpected CC node given to CC_Compiler: " + Printer_RE::PrintRE(name) + " : " + Printer_RE::PrintRE(def));
             }
             Assign * assign = mCG.createAssign(name->getName(), value);
-            if (mAnnotateVariableConstraints && isa<CC>(cc)) {
-                mVariableVector.push_back(std::make_pair(cast<CC>(cc), assign));
+            if (mAnnotateVariableConstraints && isa<CC>(def)) {
+                mVariableVector.push_back(std::make_pair(cast<CC>(def), assign));
             }
             var = mCG.createVar(assign);
         }

@@ -35,15 +35,16 @@ RE * CC_NameMap::process(RE * re) {
         e->setRH(process(e->getRH()));
         e->setLH(process(e->getLH()));
     }
-    else if (Name * name = dyn_cast<Name>(re)) {
-        RE * cc = name->getCC();
-        if (cc && !isa<CC>(cc)) {
-            name->setCC(process(cc));
+    else if (Name * nameNode = dyn_cast<Name>(re)) {
+        RE * def = nameNode->getDefinition();
+        if (def && !isa<CC>(def)) {
+            nameNode->setDefinition(process(def));
         }
-        std::string classname = name->getName();
+        std::string classname = nameNode->getName();
         auto f = mNameMap.find(classname);
         if (f == mNameMap.end()) {
-            return insert(std::move(classname), name);
+            // Insert into the name map.
+            return insert(std::move(classname), nameNode);
         }
         return f->second;
     }
@@ -61,7 +62,7 @@ RE * CC_NameMap::process(RE * re) {
 std::string CC_NameMap::printMap() {
     std::string retval = "";
     for (Name * name : mNameVector) {
-        retval.append("mNameMap[" +  name->getName() + "] = " + Printer_RE::PrintRE(name->getCC()) + "]\n");
+        retval.append("mNameMap[" +  name->getName() + "] = " + Printer_RE::PrintRE(name->getDefinition()) + "]\n");
     }
     return retval;
 }

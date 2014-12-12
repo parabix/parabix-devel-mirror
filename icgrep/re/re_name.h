@@ -30,14 +30,14 @@ public:
     };
     const std::string & getName() const;
     Type getType() const;
-    RE *getCC() const;
+    RE *getDefinition() const;
     pablo::Var * getCompiled() const {
         return mCompiled;
     }
     void setCompiled(pablo::Var * var) {
         mCompiled = var;
     }
-    void setCC(RE *cc);
+    void setDefinition(RE * def);
     virtual ~Name() {}
 protected:
     friend Name * makeName(const std::string, RE *);
@@ -45,11 +45,11 @@ protected:
     void* operator new (std::size_t size) noexcept {
         return mAllocator.allocate(size);
     }
-    Name(const std::string && name, const Type type, RE * cc)
+    Name(const std::string && name, const Type type, RE * defn)
     : RE(ClassTypeId::Name)
     , mName(std::move(name))
     , mType(type)
-    , mCC(cc)
+    , mDefiningRE(defn)
     , mCompiled(nullptr)
     {
 
@@ -58,7 +58,7 @@ protected:
 private:
     const std::string   mName;
     const Type          mType;
-    RE *                mCC;
+    RE *                mDefiningRE;
     pablo::Var *        mCompiled;
 };
 
@@ -70,12 +70,12 @@ inline Name::Type Name::getType() const {
     return mType;
 }
 
-inline RE * Name::getCC() const {
-    return mCC;
+inline RE * Name::getDefinition() const {
+    return mDefiningRE;
 }
 
-inline void Name::setCC(RE * cc) {
-    mCC = cc;
+inline void Name::setDefinition(RE * d) {
+    mDefiningRE = d;
 }
 
 inline Name * makeName(const std::string name, const Name::Type type = Name::Type::Unicode) {
