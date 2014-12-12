@@ -15,6 +15,8 @@
 #include <re/re_seq.h>
 #include <re/re_rep.h>
 #include <re/re_name.h>
+#include <re/re_diff.h>
+#include <re/re_intersect.h>
 #include <re/printer_re.h>
 #include <cc/cc_namemap.hpp>
 #include <pablo/printer_pablos.h>
@@ -46,95 +48,50 @@ CC_Compiler::CC_Compiler(PabloBlock & cg, const Encoding encoding, const bool an
 }
 
 pablo::Var * CC_Compiler::compileCC(const re::CC *cc) { 
-     return mCG.createVar(mCG.createAssign(cc->canonicalName(), charset_expr(cc))); 
+     return mCG.createVar(mCG.createAssign(cc->canonicalName(ByteClass), charset_expr(cc))); 
 }
 
-std::vector<Var *> CC_Compiler::compile(const CC_NameMap & nameMap) {
-    for (Name * name : nameMap) {
-        compile_re(name);
-    }
-    if (mAnnotateVariableConstraints) {
-        computeVariableConstraints();
-    }
+std::vector<Var *> CC_Compiler::getBasisBits(const CC_NameMap & nameMap) {
     return mBasisBit;
 }
 
-PabloAST * CC_Compiler::compile_re(RE * re) {
-    if (isa<Name>(re)) {
-        return compile_re(cast<Name>(re));
+void CC_Compiler::compileByteClasses(RE * re) {
+    if (Alt * alt = dyn_cast<Alt>(re)) {
+        for (auto i = alt->begin(); i != alt->end(); ++i) {
+            compileByteClasses(*i);
+        }
     }
-    else if (isa<Alt>(re)) {
-        return compile_re(cast<Alt>(re));
+    else if (Seq * seq = dyn_cast<Seq>(re)) {
+        for (auto i = seq->begin(); i != seq->end(); ++i) {
+            compileByteClasses(*i);
+        }
     }
-    else if (isa<Seq>(re)) {
-        return compile_re(cast<Seq>(re));
+    else if (Rep * rep = dyn_cast<Rep>(re)) {
+        compileByteClasses(rep->getRE());
     }
-    throw std::runtime_error("Unexpected RE node given to CC_Compiler: " + Printer_RE::PrintRE(re));
+    else if (Diff * diff = dyn_cast<Diff>(re)) {
+        compileByteClasses(diff->getRH());
+        compileByteClasses(diff->getLH());
+    }
+    else if (Intersect * e = dyn_cast<Intersect>(re)) {
+        compileByteClasses(e->getRH());
+        compileByteClasses(e->getLH());
+    }
+    else if (Name * name = dyn_cast<Name>(re)) {
+        RE * d = name->getDefinition();
+        if (d && !isa<CC>(d)) {
+            compileByteClasses(d);
+        }
+        else if (d && isa<CC>(d)) {
+	    name->setCompiled(compileCC(cast<CC>(d)));
+	}
+    }
+    else if (CC * cc = dyn_cast<CC>(re)) {
+        std::cerr << "Shouldn't get here\n";
+	exit(-1);
+    }
 }
 
-PabloAST * CC_Compiler::compile_re(Name * name) {
-    assert(name);
-    Var * var = name->getCompiled();
-    if (var == nullptr) {
-        if (name->getType() != Name::Type::UnicodeCategory) {
-            RE * def = name->getDefinition();
-            assert (def);
-            PabloAST * value = nullptr;
-            if (isa<CC>(def)) {
-                value = charset_expr(cast<CC>(def));
-            }
-            else if (isa<Seq>(def)) {
-                value = compile_re(cast<Seq>(def));
-            }
-            else if (isa<Alt>(def)) {
-                value = compile_re(cast<Alt>(def));
-            }
-            if (value == nullptr) {
-                throw std::runtime_error("Unexpected CC node given to CC_Compiler: " + Printer_RE::PrintRE(name) + " : " + Printer_RE::PrintRE(def));
-            }
-            Assign * assign = mCG.createAssign(name->getName(), value);
-            if (mAnnotateVariableConstraints && isa<CC>(def)) {
-                mVariableVector.push_back(std::make_pair(cast<CC>(def), assign));
-            }
-            var = mCG.createVar(assign);
-        }
-        else {
-            var = mCG.createVar(name->getName());
-        }
-        name->setCompiled(var);
-    }
-    return var;
-}
-
-PabloAST * CC_Compiler::compile_re(const Seq * seq) {
-    Assign * assignment = nullptr;
-    PabloAST * result = nullptr;
-    auto i = seq->begin();
-    while (true) {
-        PabloAST * cc = compile_re(*i);
-        result = assignment ? mCG.createAnd(mCG.createVar(assignment), cc) : cc;
-        if (++i == seq->end()) {
-            break;
-        }
-        assignment = mCG.createAssign("seq", mCG.createAdvance(result, 1));
-    }
-    return result;
-}
-
-PabloAST * CC_Compiler::compile_re(const Alt *alt) {
-    Assign * assignment = nullptr;
-    PabloAST * result = nullptr;
-    auto i = alt->begin();
-    while (true) {
-        PabloAST * cc = compile_re(*i);
-        result = assignment ? mCG.createOr(mCG.createVar(assignment), cc) : cc;
-        if (++i == alt->end()) {
-            break;
-        }
-        assignment = mCG.createAssign("alt", result);
-    }
-    return result;
-}
 
 
 PabloAST * CC_Compiler::charset_expr(const CC * cc) {

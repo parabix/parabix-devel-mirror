@@ -85,6 +85,14 @@ PabloAST * RE_Compiler::character_class_strm(Name * name, PabloBlock & pb) {
         return pb.createCall(name->getName());
     }
     else {
+        Var * var = name->getCompiled();
+        if (var == nullptr) {
+            RE * def = name->getDefinition();
+	    assert(!isa<CC>(def));  //  Names mapping to CCs should have been compiled.
+	    assert(name->getType == Name::Type::Unicode);  // 
+	    // compile in top-level block
+	    name -> setCompiled(pb.createVar(compile(def, mCG)));
+	}
         return name->getCompiled();
     }
 }
@@ -128,7 +136,7 @@ Assign * RE_Compiler::process(RE * re, Assign * marker, PabloBlock & pb) {
 
 inline Assign * RE_Compiler::process(Name * name, Assign * marker, PabloBlock & pb) {
     PabloAST * markerVar = pb.createVar(marker);
-    if (name->getType() != Name::Type::ASCII) {
+    if (name->getType() != Name::Type::Byte) {
         // Move the markers forward through any nonfinal UTF-8 bytes to the final position of each character.
         markerVar = pb.createAnd(markerVar, mInitial);
         markerVar = pb.createScanThru(markerVar, mNonFinal);
@@ -220,7 +228,7 @@ inline Assign * RE_Compiler::consecutive(Assign * repeated, int repeated_lgth, i
 }
                 
 inline bool RE_Compiler::isFixedLength(RE * regexp) {
-    return isa<Name>(regexp) && ((cast<Name>(regexp)->getType()) == Name::Type::ASCII);
+    return isa<Name>(regexp) && ((cast<Name>(regexp)->getType()) == Name::Type::Byte);
 }
 
 inline Assign * RE_Compiler::processLowerBound(RE * repeated, int lb, Assign * marker, PabloBlock & pb) {
@@ -264,7 +272,7 @@ inline Assign * RE_Compiler::processUnboundedRep(RE * repeated, Assign * marker,
         PabloAST * cc = character_class_strm(name, pb);
 
         unbounded = pb.createVar(marker);
-        if (name->getType() == Name::Type::ASCII) {
+        if (name->getType() == Name::Type::Byte) {
             unbounded = pb.createMatchStar(unbounded, cc);
         }
         else { // Name::Unicode and Name::UnicodeCategory

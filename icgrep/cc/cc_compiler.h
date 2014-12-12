@@ -25,17 +25,13 @@ public:
 
     CC_Compiler(pablo::PabloBlock & cg, const Encoding encoding, const bool annotateVariableConstraints = false, const std::string basis_pattern = "basis");
 
-    std::vector<pablo::Var *> compile(const CC_NameMap & nameMap);
+    std::vector<pablo::Var *> getBasisBits(const CC_NameMap & nameMap);
 
     pablo::Var * compileCC(const re::CC *cc);
+
+    void compileByteClasses(re::RE * re);
+
 private:
-
-
-    pablo::PabloAST * compile_re(re::RE * re);
-    pablo::PabloAST * compile_re(re::Name * name);
-    pablo::PabloAST * compile_re(const re::Alt * alt);
-    pablo::PabloAST * compile_re(const re::Seq *seq);
-
     pablo::Var * getBasisVar(const int n) const;
     pablo::PabloAST * bit_pattern_expr(const unsigned pattern, unsigned selected_bits);
     pablo::PabloAST * char_test_expr(const re::CodePointType ch);

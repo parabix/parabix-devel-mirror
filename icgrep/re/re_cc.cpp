@@ -24,8 +24,11 @@ CC::CC(const CC & cc)
 
 }
 
-std::string CC::canonicalName() const {
+std::string CC::canonicalName(CC_type t) const {
     std::string name = "CC";
+    if ((t == ByteClass) && (mSparseCharSet.back().hi_codepoint >= 0x80)) {
+      name = "BC";
+    }
     char separator = '_';
     for (const CharSetItem & i : mSparseCharSet) {
         name += separator;

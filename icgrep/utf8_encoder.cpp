@@ -33,7 +33,7 @@ RE * UTF8_Encoder::toUTF8(CC_NameMap & nameMap, RE * ast) {
             }
         }
     }
-    ast = nameMap.process(ast);
+    ast = nameMap.process(ast, ByteClass);
     return ast;
 }
 

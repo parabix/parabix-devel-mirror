@@ -25,6 +25,8 @@ struct CharSetItem{
 
 typedef std::vector<CharSetItem> CharSetVector;
 
+enum CC_type {UnicodeClass, ByteClass};
+
 class CC : public RE {
 public:
 
@@ -51,7 +53,7 @@ public:
 
     static const CodePointType UNICODE_MAX = 0x10FFFF;
 
-    std::string canonicalName() const;
+    std::string canonicalName(CC_type t) const;
 
     CodePointType max_codepoint();
 

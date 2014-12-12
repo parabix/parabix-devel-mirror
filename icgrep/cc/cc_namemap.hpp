@@ -4,10 +4,11 @@
 #include <unordered_map>
 #include <vector>
 #include <string>
+#include "re/re_name.h"
+#include "re/re_cc.h"
 
 namespace re {
     class CC;
-    class Name;
     class RE;
 }
 
@@ -22,7 +23,7 @@ public:
 
     CC_NameMap() {}
 
-    re::RE * process(re::RE * re);
+    re::RE * process(re::RE * re, const re::CC_type t);
 
     inline const re::Name * operator[](const std::string & name) const {
         auto f = mNameMap.find(name);

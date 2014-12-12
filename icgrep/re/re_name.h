@@ -23,7 +23,7 @@ public:
         return false;
     }
     enum class Type {
-        ASCII
+        Byte
         , Unicode
         , UnicodeCategory
         , Unknown
@@ -40,7 +40,8 @@ public:
     void setDefinition(RE * def);
     virtual ~Name() {}
 protected:
-    friend Name * makeName(const std::string, RE *);
+    friend Name * makeName(const std::string, RE *);    
+    friend Name * makeByteName(const std::string, RE *);
     friend Name * makeName(const std::string, const Type);
     void* operator new (std::size_t size) noexcept {
         return mAllocator.allocate(size);
@@ -87,10 +88,19 @@ inline Name * makeName(const std::string name, RE * cc) {
         return cast<Name>(cc);
     }
     else if (isa<CC>(cc)) {
-        Name::Type ccType = cast<CC>(cc)->max_codepoint() <= 0x7F ? Name::Type::ASCII : Name::Type::Unicode;
+        Name::Type ccType = cast<CC>(cc)->max_codepoint() <= 0x7F ? Name::Type::Byte : Name::Type::Unicode;
         return new Name(std::move(name), ccType, cc);
     }
     else return new Name(std::move(name), Name::Type::Unknown, cc);
+}
+
+inline Name * makeByteName(const std::string name, RE * cc) {
+    if (isa<Name>(cc)) {
+        return cast<Name>(cc);
+    }
+    else {
+        return new Name(std::move(name), Name::Type::Byte, cc);
+    }
 }
 
 }
