@@ -7,6 +7,7 @@
 #include "re_cc.h"
 #include <llvm/Support/Compiler.h>
 #include <UCD/CaseFolding_txt.h>
+#include <sstream>
 
 namespace re {
 
@@ -25,22 +26,24 @@ CC::CC(const CC & cc)
 }
 
 std::string CC::canonicalName(CC_type t) const {
-    std::string name = "CC";
+    std::stringstream name;
+    name << std::hex;
     if ((t == ByteClass) && (mSparseCharSet.back().hi_codepoint >= 0x80)) {
-      name = "BC";
+      name << "BC";
     }
+    else name << "CC";
     char separator = '_';
     for (const CharSetItem & i : mSparseCharSet) {
-        name += separator;
+        name << separator;
         if (i.lo_codepoint == i.hi_codepoint) {
-            name += std::to_string(i.lo_codepoint);
+            name << i.lo_codepoint;
         }
         else {
-            name += std::to_string(i.lo_codepoint) + "-" + std::to_string(i.hi_codepoint);
+            name << i.lo_codepoint << "-" << i.hi_codepoint;
         }
         separator = ',';
     }
-    return name;
+    return name.str();
 }
 
 CodePointType CC::max_codepoint() {
