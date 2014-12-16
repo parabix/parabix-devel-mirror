@@ -384,6 +384,8 @@ The following line has LATIN CAPITAL LETTER G WITH MACRON in single quotes.
 <grepcase regexp="[\u0061-\u007A]{6}" datafile="bounded_charclass" grepcount="21"/>
 <grepcase regexp="[\o{142}-d]{2}" datafile="bounded_charclass" grepcount="3"/>
 <grepcase regexp="[\x61-\U0000007A]{6}" datafile="bounded_charclass" grepcount="21"/>
+<grepcase regexp="(?i)[A-T]{6}" datafile="bounded_charclass" grepcount="15"/>
+<grepcase regexp="(?i)=S[A-T]S*;" datafile="bounded_charclass" grepcount="1"/>
 
 <grepcase regexp="^D[zabcdefoy]g" datafile="RangeAltSeqMatchStarKplusWhileNotOptAny" grepcount="7"/>
 <grepcase regexp="do*c|ez*t" datafile="RangeAltSeqMatchStarKplusWhileNotOptAny" grepcount="4"/>
