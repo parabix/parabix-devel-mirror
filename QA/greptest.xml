@@ -352,7 +352,7 @@ alshat@emirates.net.ae
 -356.17279137431007E+983
 </datafile>
 
-<datafile id = "CRLF">line with CRLF &#13;&#10;two lines with LFCR &#10;&#13;final line
+<datafile id = "CRLF">line with CRLF &#13;&#10;two lines with LFCR &#10;&#13;final line 
 </datafile>
  <grepcase regexp="^$" datafile="CRLF" grepcount="1"/>
  <grepcase regexp="^.*$" datafile="CRLF" grepcount="4"/>
@@ -432,7 +432,7 @@ The following line has LATIN CAPITAL LETTER G WITH MACRON in single quotes.
  你
  好
  A plain line.
- </datafile>
+</datafile>
  <grepcase regexp="[\u{1234}-\u{1245}]" datafile="codepoints" grepcount="2"/>
  <grepcase regexp="[\u{086}-\u{9A}]" datafile="codepoints" grepcount="1"/>
  <grepcase regexp="[你好]" datafile="codepoints" grepcount="2"/>

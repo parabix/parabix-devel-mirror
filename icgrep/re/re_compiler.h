@@ -25,38 +25,77 @@ class Assign;
 class Var;
 }
 
+/*  Marker streams represent the results of matching steps.
+    Two types of marker streams are used internally.
+    FinalByte markers are used for character classes and
+    other strings by a one bit at their final position.
+    PostPosition markers are used to mark matches with
+    a 1 bit immediately after a match.   PostPosition markers
+    are generally required whenever a regular expression element
+    can match the empty string (e.g., * and ? repeated items).
+*/
+    
 namespace re {
+
+enum MarkerPosition {FinalByte, PostPosition};
+
+struct MarkerType { 
+    MarkerPosition pos;
+    pablo::Assign * stream;
+};
+
+inline bool isPostPositionMarker(MarkerType m) {
+    return m.pos == PostPosition;
+}
+
+inline bool isFinalPositionMarker(MarkerType m) {
+    return m.pos == FinalByte;
+}
+
+MarkerType makePostPositionMarker(std::string marker_name, pablo::PabloAST * s, pablo::PabloBlock & pb);
+
+MarkerType makeFinalPositionMarker(std::string marker_name, pablo::PabloAST * s, pablo::PabloBlock & pb);
+
+pablo::Assign * markerStream(MarkerType m, pablo::PabloBlock & pb);
+
+pablo::Var * markerVar(MarkerType m, pablo::PabloBlock & pb);
+
+pablo::Var * postPositionVar(MarkerType m, pablo::PabloBlock & pb);
+
 class RE_Compiler {
 public:
 
     RE_Compiler(pablo::PabloBlock & baseCG, const cc::CC_NameMap & nameMap);
     void initializeRequiredStreams(cc::CC_Compiler & ccc);
-    void finalizeMatchResult(pablo::Assign * match_result);
-    pablo::Assign * compile(RE * re) {
+    void finalizeMatchResult(MarkerType match_result);
+    MarkerType compile(RE * re) {
         return compile(re, mCG);
     }
 
 private:
 
-    pablo::Assign * compile(RE * re, pablo::PabloBlock & cg);
+    MarkerType compile(RE * re, pablo::PabloBlock & cg);
 
     pablo::PabloAST * character_class_strm(Name * name, pablo::PabloBlock & pb);
-    pablo::Assign * process(RE * re, pablo::Assign *marker, pablo::PabloBlock & pb);
-    pablo::Assign * process(Name * name, pablo::Assign * marker, pablo::PabloBlock & pb);
-    pablo::Assign * process(Seq * seq, pablo::Assign * marker, pablo::PabloBlock & pb);
-    pablo::Assign * process(Alt * alt, pablo::Assign * marker, pablo::PabloBlock & pb);
-    pablo::Assign * process(Rep * rep, pablo::Assign *marker, pablo::PabloBlock & pb);
-    pablo::Assign * process(Diff * diff, pablo::Assign * marker, pablo::PabloBlock & cg);
-    pablo::Assign * process(Intersect * x, pablo::Assign * marker, pablo::PabloBlock & cg);
+    pablo::PabloAST * nextUnicodePosition(MarkerType m, pablo::PabloBlock & pb);
+    MarkerType process(RE * re, MarkerType marker, pablo::PabloBlock & pb);
+    MarkerType process(Name * name, MarkerType marker, pablo::PabloBlock & pb);
+    MarkerType process(Seq * seq, MarkerType marker, pablo::PabloBlock & pb);
+    MarkerType process(Alt * alt, MarkerType marker, pablo::PabloBlock & pb);
+    MarkerType process(Rep * rep, MarkerType marker, pablo::PabloBlock & pb);
+    MarkerType process(Diff * diff, MarkerType marker, pablo::PabloBlock & cg);
+    MarkerType process(Intersect * x, MarkerType marker, pablo::PabloBlock & cg);
     pablo::Assign * consecutive(pablo::Assign * repeated,  int repeated_lgth, int repeat_count, pablo::PabloBlock & pb);
     static bool isFixedLength(RE * regexp);
-    pablo::Assign * processLowerBound(RE * repeated,  int lb, pablo::Assign * marker, pablo::PabloBlock & pb);
-    pablo::Assign * processUnboundedRep(RE * repeated, pablo::Assign * marker, pablo::PabloBlock & pb);
-    pablo::Assign * processBoundedRep(RE * repeated, int ub, pablo::Assign * marker, pablo::PabloBlock & pb);
+    MarkerType processLowerBound(RE * repeated,  int lb, MarkerType marker, pablo::PabloBlock & pb);
+    MarkerType processUnboundedRep(RE * repeated, MarkerType marker, pablo::PabloBlock & pb);
+    MarkerType processBoundedRep(RE * repeated, int ub, MarkerType marker, pablo::PabloBlock & pb);
 
     pablo::PabloBlock &                             mCG;
     const cc::CC_NameMap &                          mNameMap;
     pablo::Var *                                    mLineFeed;
+    pablo::PabloAST *                               mCRLF;
+    pablo::PabloAST *                               mUnicodeLineBreak;
     pablo::PabloAST *                               mInitial;
     pablo::PabloAST *                               mNonFinal;    
 };
