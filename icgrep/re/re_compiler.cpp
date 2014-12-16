@@ -67,7 +67,7 @@ RE_Compiler::RE_Compiler(PabloBlock & baseCG, const cc::CC_NameMap & nameMap)
 }
 
 //#define USE_IF_FOR_NONFINAL 1
-#define UNICODE_LINE_BREAK false
+#define UNICODE_LINE_BREAK true
 
     
 void RE_Compiler::initializeRequiredStreams(cc::CC_Compiler & ccc) {
@@ -185,9 +185,8 @@ MarkerType RE_Compiler::process(RE * re, MarkerType marker, PabloBlock & pb) {
     }
     else if (isa<End>(re)) {
         if (UNICODE_LINE_BREAK) {
-            // We would have to advance to the end of the Unicode LB category,
-            // but that violates our marker assumption (a third marker type: atNextFinal???)
-            throw std::runtime_error("Unsupported: $ with Unicode line break");
+            PabloAST * nextPos = nextUnicodePosition(marker, pb);
+            return makeFinalPositionMarker("end", pb.createAnd(nextPos, mUnicodeLineBreak), pb);
         }
         PabloAST * nextPos = postPositionVar(marker, pb);  // For LF match
         return makePostPositionMarker("eol", pb.createAnd(nextPos, mLineFeed), pb);
