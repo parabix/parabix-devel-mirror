@@ -578,17 +578,15 @@ void PabloCompiler::DeclareCallFunctions() {
     }
 }
 
-Value * PabloCompiler::compileStatements(const StatementList & stmts) {
+void PabloCompiler::compileStatements(const StatementList & stmts) {
     Value * retVal = nullptr;
     for (const PabloAST * statement : stmts) {
-        retVal = compileStatement(statement);
+        compileStatement(statement);
     }
-    return retVal;
 }
 
-Value * PabloCompiler::compileStatement(const PabloAST * stmt)
+void PabloCompiler::compileStatement(const PabloAST * stmt)
 {
-    Value * retVal = nullptr;
     if (const Assign * assign = dyn_cast<const Assign>(stmt))
     {
         Value* expr = compileExpression(assign->getExpr());
@@ -596,13 +594,11 @@ Value * PabloCompiler::compileStatement(const PabloAST * stmt)
         if (LLVM_UNLIKELY(assign->isOutputAssignment())) {
             SetOutputValue(expr, assign->getOutputIndex());
         }
-        retVal = expr;
     }
     if (const Next * next = dyn_cast<const Next>(stmt))
     {
         Value* expr = compileExpression(next->getExpr());
         mMarkerMap[next->getName()] = expr;
-        retVal = expr;
     }
     else if (const If * ifstmt = dyn_cast<const If>(stmt))
     {
@@ -623,7 +619,7 @@ Value * PabloCompiler::compileStatement(const PabloAST * stmt)
 
         ++mNestingDepth;
 
-        Value *  returnMarker = compileStatements(ifstmt->getBody());
+        compileStatements(ifstmt->getBody());
 
         int if_end_idx = mCarryQueueIdx;
         int if_end_idx_advance = mAdvanceQueueIdx;
@@ -675,8 +671,6 @@ Value * PabloCompiler::compileStatement(const PabloAST * stmt)
 
         mBasicBlock = ifEndBlock;
         --mNestingDepth;
-
-        retVal = returnMarker;
     }
     else if (const While * whileStatement = dyn_cast<const While>(stmt))
     {
@@ -756,7 +750,7 @@ Value * PabloCompiler::compileStatement(const PabloAST * stmt)
 
         // BODY BLOCK
         mBasicBlock = whileBodyBlock;
-        retVal = compileStatements(whileStatement->getBody());
+        compileStatements(whileStatement->getBody());
         // update phi nodes for any carry propogating instruction
         IRBuilder<> bWhileBody(mBasicBlock);
         for (index = 0; index != whileStatement->getInclusiveCarryCount(); ++index) {
@@ -793,7 +787,6 @@ Value * PabloCompiler::compileStatement(const PabloAST * stmt)
             }
         }
     }
-    return retVal;
 }
 
 Value * PabloCompiler::compileExpression(const PabloAST * expr)

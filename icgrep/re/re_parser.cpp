@@ -232,7 +232,6 @@ RE * RE_Parser::parse_group() {
                     else fModeFlagSet |= modeBit;
                 }
                 throw_incomplete_expression_error_if_end_of_stream();
-                std::cerr << "New fModeFlagSet " << fModeFlagSet << " ignored.\n";
                 if (*_cursor == ':') {
                     ++_cursor;
                     group_expr = parse_alt();

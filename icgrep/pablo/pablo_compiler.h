@@ -72,8 +72,8 @@ private:
     void DeclareCallFunctions();
     void SetOutputValue(Value * marker, const unsigned index);
 
-    Value* compileStatements(const StatementList & stmts);
-    Value* compileStatement(const PabloAST * stmt);
+    void compileStatements(const StatementList & stmts);
+    void compileStatement(const PabloAST * stmt);
     Value* compileExpression(const PabloAST * expr);
     Value* genCarryInLoad(const unsigned index);
     void   genCarryOutStore(Value* carryOut, const unsigned index);
