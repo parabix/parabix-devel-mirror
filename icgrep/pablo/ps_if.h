@@ -8,6 +8,7 @@
 #define PS_IF_H
 
 #include <pablo/pabloAST.h>
+#include <vector>
 
 namespace pablo {
 
