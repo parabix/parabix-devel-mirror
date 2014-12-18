@@ -81,6 +81,8 @@ IF(Boost_FOUND)
     target_link_libraries (RegExpADT ${Boost_LIBRARIES})
 ENDIF()
 
+#set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -fsanitize=address")
+
 #Check compiler support for 0x / 11
 include(CheckCXXCompilerFlag)
 CHECK_CXX_COMPILER_FLAG("-std=c++11" COMPILER_SUPPORTS_CXX11)
