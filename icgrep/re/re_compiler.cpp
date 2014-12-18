@@ -67,19 +67,29 @@ RE_Compiler::RE_Compiler(PabloBlock & baseCG, const cc::CC_NameMap & nameMap)
 }
 
 //#define USE_IF_FOR_NONFINAL 1
+//#define USE_IF_FOR_CRLF
 #define UNICODE_LINE_BREAK true
 
     
 void RE_Compiler::initializeRequiredStreams(cc::CC_Compiler & ccc) {
 
-    mLineFeed = ccc.compileCC(makeCC(0x0A));
+    Assign * LF = mCG.createAssign("LF", ccc.compileCC(makeCC(0x0A)));
+    mLineFeed = mCG.createVar(LF);
     PabloAST * CR = ccc.compileCC(makeCC(0x0D));
     PabloAST * LF_VT_FF_CR = ccc.compileCC(makeCC(0x0A, 0x0D));
     PabloAST * NEL = mCG.createAnd(mCG.createAdvance(ccc.compileCC(makeCC(0xC2)), 1), ccc.compileCC(makeCC(0x85)));
     PabloAST * E2_80 = mCG.createAnd(mCG.createAdvance(ccc.compileCC(makeCC(0xE2)), 1), ccc.compileCC(makeCC(0x80)));
     PabloAST * LS_PS = mCG.createAnd(mCG.createAdvance(E2_80, 1), ccc.compileCC(makeCC(0xA8,0xA9)));
     PabloAST * LB_chars = mCG.createOr(LF_VT_FF_CR, mCG.createOr(NEL, LS_PS));
+#ifndef USE_IF_FOR_CRLF
     mCRLF = mCG.createAnd(mCG.createAdvance(CR, 1), mLineFeed);
+#else
+    PabloBlock crb(mCG);
+    Assign * cr1 = crb.createAssign("cr1", crb.createAdvance(CR, 1));
+    Assign * acrlf = crb.createAssign("crlf", crb.createAnd(crb.createVar(cr1), crb.createVar(LF)));
+    mCG.createIf(CR, std::move(std::vector<Assign *>{acrlf}), std::move(crb));
+    mCRLF = mCG.createVar(acrlf);
+#endif
     mUnicodeLineBreak = mCG.createAnd(LB_chars, mCG.createNot(mCRLF));  // count the CR, but not CRLF
     PabloAST * u8single = ccc.compileCC(makeCC(0x00, 0x7F));
     PabloAST * u8pfx2 = ccc.compileCC(makeCC(0xC2, 0xDF));
@@ -91,30 +101,34 @@ void RE_Compiler::initializeRequiredStreams(cc::CC_Compiler & ccc) {
 
     PabloAST * u8pfx = mCG.createOr(mCG.createOr(u8pfx2, u8pfx3), u8pfx4);
     mInitial = mCG.createVar(mCG.createAssign(initial, mCG.createOr(u8pfx, u8single)));
-    #ifdef USE_IF_FOR_NONFINAL
-    mNonFinal = mCG.createVar(pb.createAssign(nonfinal, mCG.createZeroes()));
-    #endif
+    
+    #ifndef USE_IF_FOR_NONFINAL
     PabloAST * u8scope32 = mCG.createAdvance(u8pfx3, 1);
     PabloAST * u8scope42 = mCG.createAdvance(u8pfx4, 1);
     PabloAST * u8scope43 = mCG.createAdvance(u8scope42, 1);
+    mNonFinal = mCG.createVar(mCG.createAssign(nonfinal, mCG.createOr(mCG.createOr(u8pfx, u8scope32), mCG.createOr(u8scope42, u8scope43))));
+    #endif
     #ifdef USE_IF_FOR_NONFINAL
     PabloBlock it(mCG);
-    it.createAssign(nonfinal, it.createOr(it.createOr(u8pfx, u8scope32), it.createOr(u8scope42, u8scope43)));
-    mCG.createIf(u8pfx, std::move(it));
-    #else
-    mNonFinal = mCG.createVar(mCG.createAssign(nonfinal, mCG.createOr(mCG.createOr(u8pfx, u8scope32), mCG.createOr(u8scope42, u8scope43))));
+    PabloAST * u8scope32 = it.createAdvance(u8pfx3, 1);
+    PabloAST * u8scope42 = it.createVar(it.createAssign("u8scope42", it.createAdvance(u8pfx4, 1)));
+    PabloAST * u8scope43 = it.createAdvance(u8scope42, 1);
+    Assign * a = it.createAssign(nonfinal, it.createOr(it.createOr(u8pfx, u8scope32), it.createOr(u8scope42, u8scope43)));
+    mCG.createIf(u8pfx, std::move(std::vector<Assign *>{a}), std::move(it));
+    mNonFinal = mCG.createVar(a);    
     #endif
 }
 
 void RE_Compiler::finalizeMatchResult(MarkerType match_result) {
     //These three lines are specifically for grep.
     PabloAST * lb = UNICODE_LINE_BREAK ? mUnicodeLineBreak : mLineFeed;
-    mCG.createAssign("matches", mCG.createAnd(mCG.createMatchStar(markerVar(match_result, mCG), mCG.createNot(lb)), lb), 0);
-    mCG.createAssign("lf", lb, 1);//mCG.createAnd(lb, mCG.createNot(mCRLF)), 1);
+    Var * v = markerVar(match_result, mCG);
+    mCG.createAssign("matches", mCG.createAnd(mCG.createMatchStar(v, mCG.createNot(lb)), lb), 0);
+    mCG.createAssign("lf", mCG.createAnd(lb, mCG.createNot(mCRLF)), 1);
 }
     
 MarkerType RE_Compiler::compile(RE * re, PabloBlock & pb) {
-        return process(re, makePostPositionMarker("start", pb.createOnes(), pb), pb);
+    return process(re, makePostPositionMarker("start", pb.createOnes(), pb), pb);
 }
         
 PabloAST * RE_Compiler::character_class_strm(Name * name, PabloBlock & pb) {
@@ -125,14 +139,16 @@ PabloAST * RE_Compiler::character_class_strm(Name * name, PabloBlock & pb) {
         Var * var = name->getCompiled();
         if (var == nullptr) {
             RE * def = name->getDefinition();
-	        assert(!isa<CC>(def));  //  Names mapping to CCs should have been compiled.
-	        assert(name->getType == Name::Type::Unicode);  // 
-	        // compile in top-level block
-                MarkerType m = compile(def, mCG);
-                assert(isFinalPositionMarker(m));
-	        name -> setCompiled(pb.createVar(markerStream(m, mCG)));
+            assert(!isa<CC>(def));  //  Names mapping to CCs should have been compiled.
+            assert(name->getType == Name::Type::Unicode);  // 
+            // compile in top-level block
+            MarkerType m = compile(def, mCG);
+            assert(isFinalPositionMarker(m));
+            Var * v = pb.createVar(markerStream(m, mCG));
+            name -> setCompiled(v);
+            return v;
         }
-        return name->getCompiled();
+        else return var;
     }
 }
 
@@ -146,7 +162,7 @@ PabloAST * RE_Compiler::nextUnicodePosition(MarkerType m, PabloBlock & pb) {
         
     }
 }
-    
+   
 
 MarkerType RE_Compiler::process(RE * re, MarkerType marker, PabloBlock & pb) {
     if (Name * name = dyn_cast<Name>(re)) {
