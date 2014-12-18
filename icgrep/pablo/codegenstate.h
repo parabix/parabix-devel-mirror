@@ -115,8 +115,8 @@ public:
 
     PabloAST * createSel(PabloAST * condition, PabloAST * trueExpr, PabloAST * falseExpr);
 
-    inline If * createIf(PabloAST * condition, PabloBlock && body) {
-        If * statement = new If(condition, std::move(body.statements()), &mStatements);
+    inline If * createIf(PabloAST * condition, std::vector<Assign *> && definedVars, PabloBlock && body) {
+        If * statement = new If(condition, std::move(definedVars), std::move(body.statements()), &mStatements);
         mStatements.push_back(statement);
         return statement;
     }

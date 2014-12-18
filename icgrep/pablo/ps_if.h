@@ -42,6 +42,9 @@ public:
     inline const StatementList & getBody() const {
         return mBody;
     }
+    inline const std::vector<Assign *> & getDefined() const {
+        return mDefined;
+    }
     inline void setInclusiveCarryCount(const unsigned count) {
         mCarryCount = count;
     }
@@ -55,10 +58,11 @@ public:
         return mAdvanceCount;
     }
 protected:
-    If(PabloAST * expr, StatementList && body, StatementList * parent)
+    If(PabloAST * expr, std::vector<Assign *> && definedVars, StatementList && body, StatementList * parent)
     : Statement(ClassTypeId::If, parent)
     , mExpr(expr)
     , mBody(std::move(body))
+    , mDefined(std::move(definedVars))
     , mCarryCount(0)
     , mAdvanceCount(0)
     {
@@ -69,6 +73,7 @@ protected:
 private:
     PabloAST *          mExpr;
     StatementList       mBody;
+    std::vector<Assign *>    mDefined;
     unsigned            mCarryCount;
     unsigned            mAdvanceCount;
 };

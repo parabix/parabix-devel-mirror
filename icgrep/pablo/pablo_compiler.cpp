@@ -268,8 +268,8 @@ LLVM_Gen_RetVal PabloCompiler::compile(PabloBlock & pb)
 
     LLVM_Gen_RetVal retVal;
     //Return the required size of the carry queue and a pointer to the process_block function.
-    retVal.carry_q_size = mCarryQueueSize;
-    retVal.advance_q_size = mAdvanceQueueSize;
+    retVal.carry_q_size = mCarryQueueVector.size();
+    retVal.advance_q_size = mAdvanceQueueVector.size();
     retVal.process_block_fptr = mExecutionEngine->getPointerToFunction(mFunction);
 
     return retVal;
@@ -472,11 +472,15 @@ void PabloCompiler::Examine(StatementList & stmts) {
             const auto preIfCarryCount = mCarryQueueSize;
             const auto preIfAdvanceCount = mAdvanceQueueSize;
             Examine(ifStatement->getCondition());
-            mMaxNestingDepth = std::max(mMaxNestingDepth, ++mNestingDepth);
             Examine(ifStatement->getBody());
-            --mNestingDepth;
-            ifStatement->setInclusiveCarryCount(mCarryQueueSize - preIfCarryCount);
-            ifStatement->setInclusiveAdvanceCount(mAdvanceQueueSize - preIfAdvanceCount);
+            int ifCarryCount = mCarryQueueSize - preIfCarryCount;
+            int ifAdvanceCount = mAdvanceQueueSize - preIfAdvanceCount;
+            if ((ifCarryCount + ifAdvanceCount) > 1) {
+              ++mAdvanceQueueSize;
+              ++ifAdvanceCount;
+            }
+            ifStatement->setInclusiveCarryCount(ifCarryCount);
+            ifStatement->setInclusiveAdvanceCount(ifAdvanceCount);
         }
         else if (While * whileStatement = dyn_cast<While>(stmt)) {
             const auto preWhileCarryCount = mCarryQueueSize;
@@ -579,7 +583,6 @@ void PabloCompiler::DeclareCallFunctions() {
 }
 
 void PabloCompiler::compileStatements(const StatementList & stmts) {
-    Value * retVal = nullptr;
     for (const PabloAST * statement : stmts) {
         compileStatement(statement);
     }
@@ -600,77 +603,107 @@ void PabloCompiler::compileStatement(const PabloAST * stmt)
         Value* expr = compileExpression(next->getExpr());
         mMarkerMap[next->getName()] = expr;
     }
-    else if (const If * ifstmt = dyn_cast<const If>(stmt))
+    else if (const If * ifStatement = dyn_cast<const If>(stmt))
+    //
+    //  The If-ElseZero stmt:
+    //  if <predicate:expr> then <body:stmt>* elsezero <defined:var>* endif
+    //  If the value of the predicate is nonzero, then determine the values of variables
+    //  <var>* by executing the given statements.  Otherwise, the value of the
+    //  variables are all zero.  Requirements: (a) no variable that is defined within 
+    //  the body of the if may be accessed outside unless it is explicitly  
+    //  listed in the variable list, (b) every variable in the defined list receives
+    //  a value within the body, and (c) the logical consequence of executing
+    //  the statements in the event that the predicate is zero is that the
+    //  values of all defined variables indeed work out to be 0.
+    //
+    //  Simple Implementation with Phi nodes:  a phi node in the if exit block
+    //  is inserted for each variable in the defined variable list.  It receives
+    //  a zero value from the ifentry block and the defined value from the if
+    //  body.
+    //
     {
-        BasicBlock * ifEntryBlock = mBasicBlock;
+        BasicBlock * ifEntryBlock = mBasicBlock;  // The block we are in.
         BasicBlock * ifBodyBlock = BasicBlock::Create(mMod->getContext(), "if.body", mFunction, 0);
         BasicBlock * ifEndBlock = BasicBlock::Create(mMod->getContext(), "if.end", mFunction, 0);
-
-        int if_start_idx = mCarryQueueIdx;
-        int if_start_idx_advance = mAdvanceQueueIdx;
-
-        Value* if_test_value = compileExpression(ifstmt->getCondition());
-
-        /* Generate the statements into the if body block, and also determine the
-           final carry index.  */
-
-        IRBuilder<> bIfBody(ifBodyBlock);
-        mBasicBlock = ifBodyBlock;
-
-        ++mNestingDepth;
-
-        compileStatements(ifstmt->getBody());
-
-        int if_end_idx = mCarryQueueIdx;
-        int if_end_idx_advance = mAdvanceQueueIdx;
-        if (if_start_idx < if_end_idx + 1) {
-            // Have at least two internal carries.   Accumulate and store.
-            int if_accum_idx = mCarryQueueIdx++;
-
-            Value* if_carry_accum_value = genCarryInLoad(if_start_idx);
-
-            for (int c = if_start_idx+1; c < if_end_idx; c++)
-            {
-                Value* carryq_value = genCarryInLoad(c);
-                if_carry_accum_value = bIfBody.CreateOr(carryq_value, if_carry_accum_value);
-            }
-            genCarryOutStore(if_carry_accum_value, if_accum_idx);
-
-        }
-        if (if_start_idx_advance < if_end_idx_advance + 1) {
-            // Have at least two internal advances.   Accumulate and store.
-            int if_accum_idx = mAdvanceQueueIdx++;
-
-            Value* if_advance_accum_value = genAdvanceInLoad(if_start_idx_advance);
-
-            for (int c = if_start_idx_advance+1; c < if_end_idx_advance; c++)
-            {
-                Value* advance_q_value = genAdvanceInLoad(c);
-                if_advance_accum_value = bIfBody.CreateOr(advance_q_value, if_advance_accum_value);
-            }
-            genAdvanceOutStore(if_advance_accum_value, if_accum_idx);
-
-        }
-        bIfBody.CreateBr(ifEndBlock);
-
+        
+        const auto baseCarryQueueIdx = mCarryQueueIdx;
+        const auto baseAdvanceQueueIdx = mAdvanceQueueIdx;
+        
+        int ifCarryCount = ifStatement->getInclusiveCarryCount();
+        int ifAdvanceCount = ifStatement->getInclusiveAdvanceCount();
+        //  Carry/Advance queue strategy.   
+        //  If there are any carries or advances at any nesting level within the
+        //  if statement, then the statement must be executed.   A "summary" 
+        //  carryover variable is determined for this purpose, consisting of the
+        //  or of all of the carry and advance variables within the if.
+        //  This variable is determined as follows.
+        //  (a)  If the CarryCount and AdvanceCount are both 0, there is no summary variable.
+        //  (b)  If the CarryCount is 1 and the AdvanceCount is 0, then the summary
+        //       carryover variable is just the single carry queue entry.
+        //  (c)  If the CarryCount is 0 and the AdvanceCount is 1, then the summary
+        //       carryover variable is just the advance carry queue entry.
+        //  (d)  Otherwise, an additional advance queue entry is created for the
+        //       summary variable.
+        //  Note that the test for cases (c) and (d) may be combined: the summary carryover 
+        //  variable is just last advance queue entry.
+        //
+        
         IRBuilder<> b_entry(ifEntryBlock);
         mBasicBlock = ifEntryBlock;
-        if (if_start_idx < if_end_idx) {
-            // Have at least one internal carry.
-            int if_accum_idx = mCarryQueueIdx - 1;
-            Value* last_if_pending_carries = genCarryInLoad(if_accum_idx);
+        Value* if_test_value = compileExpression(ifStatement->getCondition());
+        
+        if ((ifCarryCount == 1) && (ifAdvanceCount == 0)) {
+            Value* last_if_pending_carries = genCarryInLoad(baseCarryQueueIdx);
             if_test_value = b_entry.CreateOr(if_test_value, last_if_pending_carries);
         }
-        if (if_start_idx_advance < if_end_idx_advance) {
-            // Have at least one internal carry.
-            int if_accum_idx = mAdvanceQueueIdx - 1;
-            Value* last_if_pending_advances = genAdvanceInLoad(if_accum_idx);
+        else if ((ifCarryCount > 0) || (ifAdvanceCount > 0)) {
+            Value* last_if_pending_advances = genAdvanceInLoad(baseAdvanceQueueIdx + ifAdvanceCount - 1);
             if_test_value = b_entry.CreateOr(if_test_value, last_if_pending_advances);
         }
         b_entry.CreateCondBr(genBitBlockAny(if_test_value), ifEndBlock, ifBodyBlock);
 
+        // Entry processing is complete, now handle the body of the if.
+        
+        IRBuilder<> bIfBody(ifBodyBlock);
+        mBasicBlock = ifBodyBlock;
+        
+        compileStatements(ifStatement->getBody());
+        
+        // After the recursive compile, now insert the code to compute the summary
+        // carry over variable.
+        
+        if ((ifCarryCount + ifAdvanceCount) > 1) {
+            // A summary variable is needed.
+
+            Value * carry_summary = mZeroInitializer;
+            for (int c = baseCarryQueueIdx; c < baseCarryQueueIdx + ifCarryCount; c++)
+            {
+                Value* carryq_value = genCarryInLoad(c);
+                carry_summary = bIfBody.CreateOr(carry_summary, carryq_value);
+            }
+            // Note that the limit in the following uses -1, because
+            // last entry of the advance queue is for the summary variable.
+            for (int c = baseAdvanceQueueIdx; c < baseAdvanceQueueIdx + ifAdvanceCount - 1; c++)
+            {
+                Value* advance_q_value = genAdvanceInLoad(c);
+                carry_summary = bIfBody.CreateOr(advance_q_value, carry_summary);
+            }
+            genAdvanceOutStore(carry_summary, mAdvanceQueueIdx++); //baseAdvanceQueueIdx + ifAdvanceCount - 1);
+        }
+        bIfBody.CreateBr(ifEndBlock);
+
+        //End Block
+        IRBuilder<> bEnd(ifEndBlock);
         mBasicBlock = ifEndBlock;
-        --mNestingDepth;
+        
+        for (const Assign * a : ifStatement->getDefined()) {
+            PHINode * phi = bEnd.CreatePHI(mBitBlockType, 2, a->getName()->str());
+            auto f = mMarkerMap.find(a->getName());
+            assert (f != mMarkerMap.end());
+            phi->addIncoming(mZeroInitializer, ifEntryBlock);
+            phi->addIncoming(f->second, ifBodyBlock);
+            mMarkerMap[a->getName()] = phi;
+        }
     }
     else if (const While * whileStatement = dyn_cast<const While>(stmt))
     {
