@@ -848,7 +848,7 @@ Value * PabloCompiler::compileExpression(const PabloAST * expr)
     {
         auto f = mMarkerMap.find(var->getName());
         if (LLVM_UNLIKELY(f == mMarkerMap.end())) {
-            throw std::runtime_error(PabloPrinter::print(var) + " used before creation.");
+            throw std::runtime_error((var->getName()->str()) + " used before creation.");
         }
         retVal = f->second;
     }

@@ -16,10 +16,11 @@ namespace pablo {
 
 class PabloPrinter {
 public:
-    static std::string print(const pablo::PabloBlock & block);
-    static std::string print(const pablo::StatementList & stmts);
-    static std::string print(const pablo::PabloAST * expr);
-    static std::string print(const pablo::Statement *stmt);
+    static void print(const pablo::PabloBlock & block, std::ostream & strm);
+    static void print(const pablo::StatementList & stmts, std::ostream & strm);
+    static void print(const pablo::StatementList & stmts, std::string indent, std::ostream & strm);
+    static void print(const pablo::PabloAST * expr, std::ostream & strm);
+    static void print(const pablo::Statement *stmt, std::string indent, std::ostream & strm);
 };
 
 #endif // SHOW_H

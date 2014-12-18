@@ -5,7 +5,8 @@
  */
 
 #include "printer_pablos.h"
-
+#include <iostream>
+#include <ostream>
 
 //Regular Expressions
 #include <re/re_re.h>
@@ -37,93 +38,125 @@
 using namespace re;
 using namespace pablo;
 
-std::string PabloPrinter::print(const PabloBlock & block)
+void PabloPrinter::print(const PabloBlock & block, std::ostream & strm)
 {
-    std::string strOut = "[";
-
-    strOut = strOut.substr(0, strOut.length() - 1);
-    strOut += "],[";
-
-    strOut += print(block.statements());
-
-    strOut = strOut.substr(0, strOut.length() - 1);
-    strOut += "]";
-
-    return strOut;
+    print(block.statements(), "", strm);
 }
 
-std::string PabloPrinter::print(const StatementList & stmts) {
-    std::string strOut = "";
+void PabloPrinter::print(const StatementList & stmts, std::ostream & strm) {
+    print(stmts, "", strm);
+}
+
+void PabloPrinter::print(const StatementList & stmts, std::string indent, std::ostream & strm) {
     for (const Statement * stmt : stmts) {
-        strOut += print(stmt) + "\n";
+        print(stmt, indent, strm);
     }
-    return strOut;
 }
 
-std::string PabloPrinter::print(const Statement * stmt) {
+void PabloPrinter::print(const Statement * stmt, std::string indent, std::ostream & strm) {
     if (stmt == nullptr) {
-        return "<null>";
+        strm << "<null-stmt>" << std::endl;
     }
     else if (const Assign * an = dyn_cast<const Assign>(stmt)) {
-        std::string result = "Assign('" + an->getName()->str() + "'," + print(an->getExpr());
+        strm << indent;
         if (an->isOutputAssignment()) {
-            result += ",Output=" + std::to_string(an->getOutputIndex());
+            strm << "Output[" << std::to_string(an->getOutputIndex()) << "].";
         }
-        return result + ")";
+        strm << an->getName()->str() << " = ";
+        print(an->getExpr(), strm);
+        strm << std::endl;
     }
     else if (const Next * next = dyn_cast<const Next>(stmt)) {
-        return "Next(" + next->getName()->str() + "," + print(next->getExpr()) + ")";
+        strm << indent << "Next(" << next->getName()->str() << ") = "; 
+        print(next->getExpr(), strm);
+        strm << std::endl;
     }
     else if (const If * ifstmt = dyn_cast<const If>(stmt)) {
-        return "If(" + print(ifstmt->getCondition()) + "," + print(ifstmt->getBody()) + ")";
+        strm << indent << "if ";
+        print(ifstmt->getCondition(), strm);
+        strm << ":\n";
+        print(ifstmt->getBody(), indent + "  ", strm);
     }
     else if (const While * whl = dyn_cast<const While>(stmt)) {
-        return "While(" + print(whl->getCondition()) + "," + print(whl->getBody()) + ")";
+        strm << indent << "while";
+        print(whl->getCondition(), strm);
+        strm << ":\n";
+        print(whl->getBody(), indent + "  ", strm);
     }
-    return "???";
+    else {
+        strm << indent << "**UNKNOWN Pablo Statement type **" << std::endl;
+    }
 }
 
-std::string PabloPrinter::print(const PabloAST *expr) {
+void PabloPrinter::print(const PabloAST *expr, std::ostream & strm) {
     if (expr == nullptr) {
-        return "<null>";
+        strm << "<null-expr>";
     }
     else if (isa<const Zeroes>(expr)) {
-        return "Zeroes";
+        strm << "0";
     }
     else if (isa<const Ones>(expr)) {
-        return "Ones";
+        strm << "1";
     }
     else if (const Call * pablo_call = dyn_cast<const Call>(expr)) {
-        return "Call '" + pablo_call->getCallee()->str() + "'";
+        strm << pablo_call->getCallee()->str() << "()";
     }
     else if (const Var * pablo_var = dyn_cast<const Var>(expr)) {
-        return "Var '" + pablo_var->getName()->str() + "' ";
+        strm << pablo_var->getName()->str();
     }
     else if (const And * pablo_and = dyn_cast<const And>(expr)) {
-        return "And(" + print(pablo_and->getExpr1()) +"," + print(pablo_and->getExpr2()) + ")";
+        strm << "(";
+        print(pablo_and->getExpr1(), strm);
+        strm << " & "; 
+        print(pablo_and->getExpr2(), strm);
+        strm << ")";
     }
     else if (const Or * pablo_or = dyn_cast<const Or>(expr)) {
-        return "Or(" + print(pablo_or->getExpr1()) + "," + print(pablo_or->getExpr2()) + ")";
+        strm << "(";
+        print(pablo_or->getExpr1(), strm);
+        strm << " | "; 
+        print(pablo_or->getExpr2(), strm);
+        strm << ")";
     }
     else if (const Sel * pablo_sel = dyn_cast<const Sel>(expr)) {
-        return "(" + print(pablo_sel->getCondition()) + " ? " + print(pablo_sel->getTrueExpr()) + " : " + print(pablo_sel->getFalseExpr()) + ")";
+        strm << "(";
+        print(pablo_sel->getCondition(), strm);
+        strm << " ? ";
+        print(pablo_sel->getTrueExpr(), strm);
+        strm << " : ";
+        print(pablo_sel->getFalseExpr(), strm);
+        strm << ")";
     }
     else if (const Not * pablo_not = dyn_cast<const Not>(expr)) {
-        return "Not (" + print(pablo_not->getExpr()) + ")";
+        strm << "(~";
+        print(pablo_not->getExpr(), strm);
+        strm << ")";
     }
     else if (const Advance * adv = dyn_cast<const Advance>(expr)) {
-        return "Advance(" + print(adv->getExpr()) + ", " + std::to_string(adv->getAdvanceAmount()) + ")";
+        strm << "pablo.Advance(";
+        print(adv->getExpr(), strm);
+        strm << ", " << std::to_string(adv->getAdvanceAmount()) << ")";
     }
     else if (const MatchStar * mstar = dyn_cast<const MatchStar>(expr)) {
-        return "MatchStar(" + print(mstar->getMarker()) + ", " + print(mstar->getCharClass()) + ")";
+        strm << "pablo.MatchStar(";
+        print(mstar->getMarker(), strm);
+        strm << ", ";
+        print(mstar->getCharClass(), strm);
+        strm << ")";
     }
     else if (const ScanThru * sthru = dyn_cast<const ScanThru>(expr)) {
-        return "ScanThru(" + print(sthru->getScanFrom()) + ", " + print(sthru->getScanThru()) + ")";
+        strm << "pablo.ScanThru(";
+        print(sthru->getScanFrom(), strm);
+        strm << ", ";
+        print(sthru->getScanThru(), strm);
+        strm << ")";
     }
     else if (isa<Statement>(expr)) {
-        return print(cast<Statement>(expr));
+        print(cast<Statement>(expr), strm);
     }
-    return "???";
+    else {
+        strm << "**UNKNOWN Pablo Expression type **\n" << std::endl;
+    }
 }
 
 
