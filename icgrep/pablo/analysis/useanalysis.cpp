@@ -87,9 +87,6 @@ inline Statement * UseAnalysis::findInsertionPointFor(const Vertex v, PabloBlock
     if (predecessors.empty()) {
         return nullptr;
     }
-    else if (predecessors.size() == 1) {
-        return *predecessors.begin();
-    }
     return findLastStatement(predecessors, block.statements());
 }
 
@@ -100,8 +97,8 @@ Statement * UseAnalysis::findLastStatement(const PredecessorSet & predecessors, 
             return stmt;
         }
         else if (isa<If>(stmt)) {
-            stmt = findLastStatement(predecessors, cast<If>(stmt)->getBody());
-            if (stmt) {
+            Statement * innerstmt = findLastStatement(predecessors, cast<If>(stmt)->getBody());
+            if (innerstmt) {
                 return stmt;
             }
         }
