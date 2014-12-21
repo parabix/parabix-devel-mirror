@@ -28,16 +28,23 @@
 #include <re/printer_re.h>
 #include <pablo/printer_pablos.h>
 
-static cl::opt<bool> PrintAllREs("print-REs", cl::init(false), cl::desc("print regular expression passes"));
-static cl::opt<bool> PrintParsedREs("print-parsed-REs", cl::init(false), cl::desc("print out parsed regular expressions"));
-static cl::opt<bool> PrintStrippedREs("print-stripped-REs", cl::init(false), cl::desc("print out REs with nullable prefixes/suffixes removed"));
-static cl::opt<bool> PrintNamedREs("print-named-REs", cl::init(false), cl::desc("print out named REs"));
-static cl::opt<bool> PrintUTF8REs("print-utf8-REs", cl::init(false), cl::desc("print out UTF-8 REs"));
-static cl::opt<bool> PrintSimplifiedREs("print-simplified-REs", cl::init(false), cl::desc("print out final simplified REs"));
-static cl::opt<bool> PrintAllPablo("print-pablo", cl::init(false), cl::desc("print Pablo code passes"));
-static cl::opt<bool> PrintCompiledCCcode("print-CC-pablo", cl::init(false), cl::desc("print Pablo output from character class compiler"));
-static cl::opt<bool> PrintCompiledREcode("print-RE-pablo", cl::init(false), cl::desc("print Pablo output from the regular expression compiler"));
-static cl::opt<bool> PrintOptimizedREcode("print-optimized-pablo", cl::init(false), cl::desc("print final optimized Pablo code"));
+
+cl::OptionCategory cRegexOutputOptions("Regex Dump Options",
+                                      "These options control printing of intermediate regular expression structures.");
+
+cl::OptionCategory dPabloDumpOptions("Pablo Dump Options",
+                                      "These options control printing of intermediate Pablo code.");
+
+static cl::opt<bool> PrintAllREs("print-REs", cl::init(false), cl::desc("print regular expression passes"), cl::cat(cRegexOutputOptions));
+static cl::opt<bool> PrintParsedREs("print-parsed-REs", cl::init(false), cl::desc("print out parsed regular expressions"), cl::cat(cRegexOutputOptions));
+static cl::opt<bool> PrintStrippedREs("print-stripped-REs", cl::init(false), cl::desc("print out REs with nullable prefixes/suffixes removed"), cl::cat(cRegexOutputOptions));
+static cl::opt<bool> PrintNamedREs("print-named-REs", cl::init(false), cl::desc("print out named REs"), cl::cat(cRegexOutputOptions));
+static cl::opt<bool> PrintUTF8REs("print-utf8-REs", cl::init(false), cl::desc("print out UTF-8 REs"), cl::cat(cRegexOutputOptions));
+static cl::opt<bool> PrintSimplifiedREs("print-simplified-REs", cl::init(false), cl::desc("print out final simplified REs"), cl::cat(cRegexOutputOptions));
+static cl::opt<bool> PrintAllPablo("print-pablo", cl::init(false), cl::desc("print Pablo code passes"), cl::cat(dPabloDumpOptions));
+static cl::opt<bool> PrintCompiledCCcode("print-CC-pablo", cl::init(false), cl::desc("print Pablo output from character class compiler"), cl::cat(dPabloDumpOptions));
+static cl::opt<bool> PrintCompiledREcode("print-RE-pablo", cl::init(false), cl::desc("print Pablo output from the regular expression compiler"), cl::cat(dPabloDumpOptions));
+static cl::opt<bool> PrintOptimizedREcode("print-optimized-pablo", cl::init(false), cl::desc("print final optimized Pablo code"), cl::cat(dPabloDumpOptions));
 
 
 using namespace re;
