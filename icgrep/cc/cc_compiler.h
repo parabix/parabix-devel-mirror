@@ -27,19 +27,21 @@ public:
 
     std::vector<pablo::Var *> getBasisBits(const CC_NameMap & nameMap);
 
+    pablo::Var * compileCC(const re::CC *cc, pablo::PabloBlock & pb);
+
     pablo::Var * compileCC(const re::CC *cc);
 
     void compileByteClasses(re::RE * re);
 
 private:
     pablo::Var * getBasisVar(const int n) const;
-    pablo::PabloAST * bit_pattern_expr(const unsigned pattern, unsigned selected_bits);
-    pablo::PabloAST * char_test_expr(const re::CodePointType ch);
-    pablo::PabloAST * make_range(const re::CodePointType n1, const re::CodePointType n2);
-    pablo::PabloAST * GE_Range(const unsigned N, const unsigned n);
-    pablo::PabloAST * LE_Range(const unsigned N, const unsigned n);
-    pablo::PabloAST * char_or_range_expr(const re::CodePointType lo, const re::CodePointType hi);
-    pablo::PabloAST * charset_expr(const re::CC *cc);
+    pablo::PabloAST * bit_pattern_expr(const unsigned pattern, unsigned selected_bits, pablo::PabloBlock & pb);
+    pablo::PabloAST * char_test_expr(const re::CodePointType ch, pablo::PabloBlock & pb);
+    pablo::PabloAST * make_range(const re::CodePointType n1, const re::CodePointType n2, pablo::PabloBlock & pb);
+    pablo::PabloAST * GE_Range(const unsigned N, const unsigned n, pablo::PabloBlock & pb);
+    pablo::PabloAST * LE_Range(const unsigned N, const unsigned n, pablo::PabloBlock & pb);
+    pablo::PabloAST * char_or_range_expr(const re::CodePointType lo, const re::CodePointType hi, pablo::PabloBlock & pb);
+    pablo::PabloAST * charset_expr(const re::CC *cc, pablo::PabloBlock & pb);
 
     void computeVariableConstraints();
 

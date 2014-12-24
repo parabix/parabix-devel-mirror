@@ -48,7 +48,11 @@ CC_Compiler::CC_Compiler(PabloBlock & cg, const Encoding encoding, const bool an
 }
 
 pablo::Var * CC_Compiler::compileCC(const re::CC *cc) { 
-     return mCG.createVar(mCG.createAssign(cc->canonicalName(ByteClass), charset_expr(cc))); 
+     return compileCC(cc, mCG); 
+}
+
+pablo::Var * CC_Compiler::compileCC(const re::CC *cc, pablo::PabloBlock & pb) { 
+     return pb.createVar(pb.createAssign(cc->canonicalName(ByteClass), charset_expr(cc, pb))); 
 }
 
 std::vector<Var *> CC_Compiler::getBasisBits(const CC_NameMap & nameMap) {
@@ -83,7 +87,7 @@ void CC_Compiler::compileByteClasses(RE * re) {
             compileByteClasses(d);
         }
         else if (d && isa<CC>(d)) {
-	    name->setCompiled(compileCC(cast<CC>(d)));
+	    name->setCompiled(compileCC(cast<CC>(d), mCG));
 	}
     }
     else if (CC * cc = dyn_cast<CC>(re)) {
@@ -94,9 +98,9 @@ void CC_Compiler::compileByteClasses(RE * re) {
 
 
 
-PabloAST * CC_Compiler::charset_expr(const CC * cc) {
+PabloAST * CC_Compiler::charset_expr(const CC * cc, pablo::PabloBlock & pb) {
     if (cc->empty()) {
-        return mCG.createZeroes();
+        return pb.createZeroes();
     }
     if (cc->size() > 2) {
         bool combine = true;
@@ -122,27 +126,27 @@ PabloAST * CC_Compiler::charset_expr(const CC * cc) {
                 const CodePointType mask = mEncoding.getMask();
                 lo &= (mask - 1);
                 hi |= (mask ^ (mask - 1));
-                PabloAST * expr = make_range(lo, hi);
+                PabloAST * expr = make_range(lo, hi, pb);
                 PabloAST * bit0 = getBasisVar(0);
                 if ((lo & 1) == 0) {
-                    bit0 = mCG.createNot(bit0);
+                    bit0 = pb.createNot(bit0);
                 }
-                return mCG.createAnd(expr, bit0);
+                return pb.createAnd(expr, bit0);
             }
         }
     }
     PabloAST * expr = nullptr;
     for (const CharSetItem & item : *cc) {
-        PabloAST * temp = char_or_range_expr(item.lo_codepoint, item.hi_codepoint);
-        expr = (expr == nullptr) ? temp : mCG.createOr(expr, temp);
+        PabloAST * temp = char_or_range_expr(item.lo_codepoint, item.hi_codepoint, pb);
+        expr = (expr == nullptr) ? temp : pb.createOr(expr, temp);
     }
     return expr;
 }
 
-PabloAST * CC_Compiler::bit_pattern_expr(const unsigned pattern, unsigned selected_bits)
+PabloAST * CC_Compiler::bit_pattern_expr(const unsigned pattern, unsigned selected_bits, pablo::PabloBlock & pb)
 {
     if (selected_bits == 0) {
-        return mCG.createOnes();
+        return pb.createOnes();
     }
 
     std::vector<PabloAST*> bit_terms;
@@ -164,7 +168,7 @@ PabloAST * CC_Compiler::bit_pattern_expr(const unsigned pattern, unsigned select
         }
         else
         {
-            bit_terms.push_back(mCG.createOnes());
+            bit_terms.push_back(pb.createOnes());
         }
         selected_bits &= ~test_bit;
         i++;
@@ -176,7 +180,7 @@ PabloAST * CC_Compiler::bit_pattern_expr(const unsigned pattern, unsigned select
         std::vector<PabloAST*> new_terms;
         for (auto i = 0; i < (bit_terms.size()/2); i++)
         {
-            new_terms.push_back(mCG.createAnd(bit_terms[(2 * i) + 1], bit_terms[2 * i]));
+            new_terms.push_back(pb.createAnd(bit_terms[(2 * i) + 1], bit_terms[2 * i]));
         }
         if (bit_terms.size() % 2 == 1)
         {
@@ -187,12 +191,12 @@ PabloAST * CC_Compiler::bit_pattern_expr(const unsigned pattern, unsigned select
     return bit_terms[0];
 }
 
-inline PabloAST * CC_Compiler::char_test_expr(const CodePointType ch)
+inline PabloAST * CC_Compiler::char_test_expr(const CodePointType ch, pablo::PabloBlock & pb)
 {
-    return bit_pattern_expr(ch, mEncoding.getMask());
+    return bit_pattern_expr(ch, mEncoding.getMask(), pb);
 }
 
-PabloAST * CC_Compiler::make_range(const CodePointType n1, const CodePointType n2)
+PabloAST * CC_Compiler::make_range(const CodePointType n1, const CodePointType n2, pablo::PabloBlock & pb)
 {
     CodePointType diff_count = 0;
 
@@ -205,33 +209,33 @@ PabloAST * CC_Compiler::make_range(const CodePointType n1, const CodePointType n
 
     const CodePointType mask0 = (static_cast<CodePointType>(1) << diff_count) - 1;
 
-    PabloAST * common = bit_pattern_expr(n1 & ~mask0, mEncoding.getMask() ^ mask0);
+    PabloAST * common = bit_pattern_expr(n1 & ~mask0, mEncoding.getMask() ^ mask0, pb);
 
     if (diff_count == 0) return common;
 
     const CodePointType mask1 = (static_cast<CodePointType>(1) << (diff_count - 1)) - 1;
 
-    PabloAST* lo_test = GE_Range(diff_count - 1, n1 & mask1);
-    PabloAST* hi_test = LE_Range(diff_count - 1, n2 & mask1);
+    PabloAST* lo_test = GE_Range(diff_count - 1, n1 & mask1, pb);
+    PabloAST* hi_test = LE_Range(diff_count - 1, n2 & mask1, pb);
 
-    return mCG.createAnd(common, mCG.createSel(getBasisVar(diff_count - 1), hi_test, lo_test));
+    return pb.createAnd(common, pb.createSel(getBasisVar(diff_count - 1), hi_test, lo_test));
 }
 
-PabloAST * CC_Compiler::GE_Range(const unsigned N, const unsigned n) {
+PabloAST * CC_Compiler::GE_Range(const unsigned N, const unsigned n, pablo::PabloBlock & pb) {
     if (N == 0) {
-        return mCG.createOnes(); //Return a true literal.
+        return pb.createOnes(); //Return a true literal.
     }
     else if (((N % 2) == 0) && ((n >> (N - 2)) == 0)) {
-        return mCG.createOr(mCG.createOr(getBasisVar(N - 1), getBasisVar(N - 2)), GE_Range(N - 2, n));
+        return pb.createOr(pb.createOr(getBasisVar(N - 1), getBasisVar(N - 2)), GE_Range(N - 2, n, pb));
     }
     else if (((N % 2) == 0) && ((n >> (N - 2)) == 3)) {
-        return mCG.createAnd(mCG.createAnd(getBasisVar(N - 1), getBasisVar(N - 2)), GE_Range(N - 2, n - (3 << (N - 2))));
+        return pb.createAnd(pb.createAnd(getBasisVar(N - 1), getBasisVar(N - 2)), GE_Range(N - 2, n - (3 << (N - 2)), pb));
     }
     else if (N >= 1)
     {
         int hi_bit = n & (1 << (N - 1));
         int lo_bits = n - hi_bit;
-        PabloAST * lo_range = GE_Range(N - 1, lo_bits);
+        PabloAST * lo_range = GE_Range(N - 1, lo_bits, pb);
         if (hi_bit == 0)
         {
             /*
@@ -239,7 +243,7 @@ PabloAST * CC_Compiler::GE_Range(const unsigned N, const unsigned n) {
               is set in the target, the target will certaily be >=.  Oterwise,
               the value of GE_range(N-1), lo_range) is required.
             */
-            return mCG.createOr(getBasisVar(N - 1), lo_range);
+            return pb.createOr(getBasisVar(N - 1), lo_range);
         }
         else
         {
@@ -247,32 +251,32 @@ PabloAST * CC_Compiler::GE_Range(const unsigned N, const unsigned n) {
               If the hi_bit of n is set, then the corresponding bit must be set
               in the target for >= and GE_range(N-1, lo_bits) must also be true.
             */
-            return mCG.createAnd(getBasisVar(N - 1), lo_range);
+            return pb.createAnd(getBasisVar(N - 1), lo_range);
         }
     }
     throw std::runtime_error("Unexpected input given to ge_range: " + std::to_string(N) + ", " + std::to_string(n));
 }
 
-PabloAST * CC_Compiler::LE_Range(const unsigned N, const unsigned n)
+PabloAST * CC_Compiler::LE_Range(const unsigned N, const unsigned n, pablo::PabloBlock & pb)
 {
     /*
       If an N-bit pattern is all ones, then it is always true that any n-bit value is LE this pattern.
       Handling this as a special case avoids an overflow issue with n+1 requiring more than N bits.
     */
     if ((n + 1) == (1 << N)) {
-        return mCG.createOnes(); //True.
+        return pb.createOnes(); //True.
     }
     else {
-        return mCG.createNot(GE_Range(N, n + 1));
+        return pb.createNot(GE_Range(N, n + 1, pb));
     }
 }
 
-inline PabloAST * CC_Compiler::char_or_range_expr(const CodePointType lo, const CodePointType hi) {
+inline PabloAST * CC_Compiler::char_or_range_expr(const CodePointType lo, const CodePointType hi, pablo::PabloBlock & pb) {
     if (lo == hi) {
-        return char_test_expr(lo);
+        return char_test_expr(lo, pb);
     }
     else if (lo < hi) {
-        return make_range(lo, hi);
+        return make_range(lo, hi, pb);
     }
     throw std::runtime_error(std::string("Invalid Character Set Range: [") + std::to_string(lo) + "," + std::to_string(hi) + "]");
 }

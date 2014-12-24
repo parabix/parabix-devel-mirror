@@ -79,6 +79,7 @@ void RE_Compiler::initializeRequiredStreams(cc::CC_Compiler & ccc) {
     Assign * LF = mCG.createAssign("LF", ccc.compileCC(makeCC(0x0A)));
     mLineFeed = mCG.createVar(LF);
     PabloAST * CR = ccc.compileCC(makeCC(0x0D));
+    PabloAST * LF_VT_FF_CR = ccc.compileCC(makeCC(0x0A, 0x0D));
 #ifndef USE_IF_FOR_CRLF
     mCRLF = mCG.createAnd(mCG.createAdvance(CR, 1), mLineFeed);
 #else
@@ -89,15 +90,14 @@ void RE_Compiler::initializeRequiredStreams(cc::CC_Compiler & ccc) {
     mCRLF = mCG.createVar(acrlf);
 #endif
     
-    PabloAST * LF_VT_FF_CR = ccc.compileCC(makeCC(0x0A, 0x0D));
+#ifndef USE_IF_FOR_NONFINAL
     PabloAST * u8single = ccc.compileCC(makeCC(0x00, 0x7F));
     PabloAST * u8pfx2 = ccc.compileCC(makeCC(0xC2, 0xDF));
     PabloAST * u8pfx3 = ccc.compileCC(makeCC(0xE0, 0xEF));
     PabloAST * u8pfx4 = ccc.compileCC(makeCC(0xF0, 0xF4));
     PabloAST * u8pfx = mCG.createOr(mCG.createOr(u8pfx2, u8pfx3), u8pfx4);
     mInitial = mCG.createVar(mCG.createAssign(initial, mCG.createOr(u8pfx, u8single)));
-
-    #ifndef USE_IF_FOR_NONFINAL
+    
     PabloAST * u8scope32 = mCG.createAdvance(u8pfx3, 1);
     PabloAST * u8scope42 = mCG.createAdvance(u8pfx4, 1);
     PabloAST * u8scope43 = mCG.createAdvance(u8scope42, 1);
@@ -107,20 +107,28 @@ void RE_Compiler::initializeRequiredStreams(cc::CC_Compiler & ccc) {
     PabloAST * LB_chars = mCG.createOr(LF_VT_FF_CR, mCG.createOr(NEL, LS_PS));
     mNonFinal = mCG.createVar(mCG.createAssign(nonfinal, mCG.createOr(mCG.createOr(u8pfx, u8scope32), mCG.createOr(u8scope42, u8scope43))));
     mUnicodeLineBreak = mCG.createAnd(LB_chars, mCG.createNot(mCRLF));  // count the CR, but not CRLF
-    #endif
-    #ifdef USE_IF_FOR_NONFINAL
+#endif
+
+#ifdef USE_IF_FOR_NONFINAL
+    PabloAST * u8single = ccc.compileCC(makeCC(0x00, 0x7F));
+    PabloAST * u8pfx = ccc.compileCC(makeCC(0xC0, 0xFF));
     PabloBlock it(mCG);
+    PabloAST * u8pfx2 = ccc.compileCC(makeCC(0xC2, 0xDF), it);
+    PabloAST * u8pfx3 = ccc.compileCC(makeCC(0xE0, 0xEF), it);
+    PabloAST * u8pfx4 = ccc.compileCC(makeCC(0xF0, 0xF4), it);
+    Assign * valid_pfx = it.createAssign("valid_pfx", it.createOr(it.createOr(u8pfx2, u8pfx3), u8pfx4));
     PabloAST * u8scope32 = it.createAdvance(u8pfx3, 1);
     PabloAST * u8scope42 = it.createVar(it.createAssign("u8scope42", it.createAdvance(u8pfx4, 1)));
     PabloAST * u8scope43 = it.createAdvance(u8scope42, 1);
-    Assign * a = it.createAssign(nonfinal, it.createOr(it.createOr(u8pfx, u8scope32), it.createOr(u8scope42, u8scope43)));
-    PabloAST * NEL = it.createAnd(it.createAdvance(ccc.compileCC(makeCC(0xC2)), 1), ccc.compileCC(makeCC(0x85)));
-    PabloAST * E2_80 = it.createAnd(it.createAdvance(ccc.compileCC(makeCC(0xE2)), 1), ccc.compileCC(makeCC(0x80)));
-    PabloAST * LS_PS = it.createAnd(it.createAdvance(E2_80, 1), ccc.compileCC(makeCC(0xA8,0xA9)));
+    Assign * a_nonfinal = it.createAssign(nonfinal, it.createOr(it.createOr(u8pfx, u8scope32), it.createOr(u8scope42, u8scope43)));
+    PabloAST * NEL = it.createAnd(it.createAdvance(ccc.compileCC(makeCC(0xC2), it), 1), ccc.compileCC(makeCC(0x85), it));
+    PabloAST * E2_80 = it.createAnd(it.createAdvance(ccc.compileCC(makeCC(0xE2), it), 1), ccc.compileCC(makeCC(0x80), it));
+    PabloAST * LS_PS = it.createAnd(it.createAdvance(E2_80, 1), ccc.compileCC(makeCC(0xA8,0xA9), it));
     Assign * NEL_LS_PS = it.createAssign("NEL_LS_PS", it.createOr(NEL, LS_PS));
-    mCG.createIf(u8pfx, std::move(std::vector<Assign *>{a, NEL_LS_PS}), std::move(it));
+    mCG.createIf(u8pfx, std::move(std::vector<Assign *>{valid_pfx, a_nonfinal, NEL_LS_PS}), std::move(it));
     PabloAST * LB_chars = mCG.createOr(LF_VT_FF_CR, mCG.createVar(NEL_LS_PS));
-    mNonFinal = mCG.createVar(a);    
+    mInitial = mCG.createVar(mCG.createAssign(initial, mCG.createOr(u8single, mCG.createVar(valid_pfx))));
+    mNonFinal = mCG.createVar(a_nonfinal);    
     mUnicodeLineBreak = mCG.createAnd(LB_chars, mCG.createNot(mCRLF));  // count the CR, but not CRLF
     #endif
 }
