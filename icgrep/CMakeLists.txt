@@ -114,7 +114,7 @@ ELSE() # using Clang, GCC, Intel C++, etc
 ENDIF()
 
 #Enable all warnings
-#SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall")
+SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall")
 
 #Check compiler and system architecture support for SSE or AVX
 include(CheckCXXSourceRuns)
