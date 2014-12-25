@@ -47,7 +47,7 @@ private:
 
 private:
     pablo::PabloBlock &         mCG;
-    const bool                  mAnnotateVariableConstraints;
+    //const bool                  mAnnotateVariableConstraints;
     std::vector<pablo::Var *>   mBasisBit;
     const Encoding              mEncoding;
     ConstraintVector            mVariableVector;

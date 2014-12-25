@@ -92,7 +92,6 @@ private:
     MarkerType processBoundedRep(RE * repeated, int ub, MarkerType marker, pablo::PabloBlock & pb);
 
     pablo::PabloBlock &                             mCG;
-    const cc::CC_NameMap &                          mNameMap;
     pablo::Var *                                    mLineFeed;
     pablo::PabloAST *                               mCRLF;
     pablo::PabloAST *                               mUnicodeLineBreak;

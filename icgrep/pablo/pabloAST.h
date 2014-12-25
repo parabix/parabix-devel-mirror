@@ -219,7 +219,7 @@ public:
 
     private:
         const Statement * mCurrent;
-        friend class iterator;
+        friend struct iterator;
     };
 
     class reverse_iterator: public std::iterator<std::forward_iterator_tag, Statement> {
@@ -293,7 +293,7 @@ public:
 
     private:
         const Statement * mCurrent;
-        friend class iterator;
+        friend struct iterator;
     };
 
 public:

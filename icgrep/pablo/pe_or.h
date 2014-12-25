@@ -46,7 +46,7 @@ public:
 protected:
     Or(PabloAST * expr1, PabloAST * expr2)
     : PabloAST(ClassTypeId::Or)
-    , mExprs({expr1, expr2})
+    , mExprs({{expr1, expr2}})
     {
 
     }

@@ -43,7 +43,7 @@ public:
 protected:
     MatchStar(PabloAST * marker, PabloAST * cc)
     : PabloAST(ClassTypeId::MatchStar)
-    , mExprs({marker, cc})
+    , mExprs({{marker, cc}})
     {
 
     }

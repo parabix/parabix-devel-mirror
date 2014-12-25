@@ -38,7 +38,7 @@ namespace cc {
 
 CC_Compiler::CC_Compiler(PabloBlock & cg, const Encoding encoding, const bool annotateVariableConstraints, const std::string basis_pattern)
 : mCG(cg)
-, mAnnotateVariableConstraints(annotateVariableConstraints)
+//, mAnnotateVariableConstraints(annotateVariableConstraints)
 , mBasisBit(encoding.getBits())
 , mEncoding(encoding)
 {
@@ -90,7 +90,7 @@ void CC_Compiler::compileByteClasses(RE * re) {
 	    name->setCompiled(compileCC(cast<CC>(d), mCG));
 	}
     }
-    else if (CC * cc = dyn_cast<CC>(re)) {
+    else if (isa<CC>(re)) {
         std::cerr << "Shouldn't get here\n";
 	exit(-1);
     }

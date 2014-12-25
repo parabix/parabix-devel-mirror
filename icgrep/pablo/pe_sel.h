@@ -49,7 +49,7 @@ public:
 protected:
     Sel(PabloAST* if_expr, PabloAST* t_expr, PabloAST* f_expr)
     : PabloAST(ClassTypeId::Sel)
-    , mExprs({if_expr, t_expr, f_expr})
+    , mExprs({{if_expr, t_expr, f_expr}})
     {
 
     }

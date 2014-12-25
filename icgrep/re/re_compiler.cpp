@@ -61,7 +61,6 @@ RE_Compiler::RE_Compiler(PabloBlock & baseCG, const cc::CC_NameMap & nameMap)
 , mLineFeed(nullptr)
 , mInitial(nullptr)
 , mNonFinal(nullptr)
-, mNameMap(nameMap)
 {
 
 }

@@ -46,7 +46,7 @@ public:
 protected:
     Xor(PabloAST * expr1, PabloAST * expr2)
     : PabloAST(ClassTypeId::Xor)
-    , mExprs({expr1, expr2})
+    , mExprs({{expr1, expr2}})
     {
 
     }

@@ -50,7 +50,7 @@ public:
 protected:
     Assign(PabloAST * name, PabloAST * expr, const int outputIndex, StatementList * parent)
     : Statement(ClassTypeId::Assign, parent)
-    , mExprs({name, expr})
+    , mExprs({{name, expr}})
     , mOutputIndex(outputIndex)
     {
 

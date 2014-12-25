@@ -42,7 +42,7 @@ public:
     }
     ScanThru(PabloAST * from, PabloAST * thru)
     : PabloAST(ClassTypeId::ScanThru)
-    , mExprs({from, thru})
+    , mExprs({{from, thru}})
     {
 
     }

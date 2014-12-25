@@ -48,8 +48,8 @@ typedef void (*process_block_fcn)(const Basis_bits &basis_bits, BitBlock carry_q
 class GrepExecutor {
 public:
     GrepExecutor(int carry_count, int advance_count, process_block_fcn process_block): 
-    mCarries(carry_count), mAdvances(advance_count), 
     mCountOnlyOption(false), mShowFileNameOption(false), mShowLineNumberingOption(false),
+    mCarries(carry_count), mAdvances(advance_count),
     mProcessBlockFcn(process_block), outfile(stdout)
     {}
           

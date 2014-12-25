@@ -42,7 +42,7 @@ public:
 protected:
     Next(PabloAST * initial, PabloAST * expr, StatementList * parent)
     : Statement(ClassTypeId::Next, parent)
-    , mExprs({cast<Assign>(initial), expr})
+    , mExprs({{cast<Assign>(initial), expr}})
     {
 
     }

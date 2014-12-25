@@ -305,7 +305,6 @@ RE * RE_Parser::extend_item(RE * re) {
 inline void RE_Parser::parse_range_bound(int & lower_bound, int & upper_bound) {
     ++_cursor;
     throw_incomplete_expression_error_if_end_of_stream();
-    RE * rep = nullptr;
     if (*_cursor == ',') {
         ++_cursor;
         lower_bound = 0;

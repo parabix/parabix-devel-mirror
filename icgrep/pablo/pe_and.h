@@ -46,7 +46,7 @@ public:
 protected:
     And(PabloAST * expr1, PabloAST * expr2)
     : PabloAST(ClassTypeId::And)
-    , mExprs({expr1, expr2})
+    , mExprs({{expr1, expr2}})
     {
 
     }

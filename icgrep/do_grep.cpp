@@ -105,12 +105,8 @@ void GrepExecutor::doGrep(const std::string infilename) {
     int blk = 0;
     int block_base  = 0;
     int block_pos   = 0;
-    int buffer_pos  = 0;
     int chars_avail = 0;
-    int chars_read  = 0;
     int line_start = 0;
-    int line_end = 0;
-    int match_pos = 0;
     line_no = 1;
 
     match_vector = simd<1>::constant<0>();
