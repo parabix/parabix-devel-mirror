@@ -31,6 +31,12 @@ PabloAST * OptimizeSel::operator()(PabloAST * if_expr, PabloAST * t_expr, PabloA
     else if (equals(t_expr, f_expr)) {
         return t_expr;
     }
+    else if (isa<Not>(t_expr) && equals(cast<Not>(t_expr)->getExpr(), f_expr)) {
+        return cg.createXor(if_expr, f_expr);
+    }
+    else if (isa<Not>(f_expr) && equals(t_expr, cast<Not>(f_expr)->getExpr())){
+        return cg.createXor(if_expr, f_expr);
+    }
     return new Sel(if_expr, t_expr, f_expr);
 }
 

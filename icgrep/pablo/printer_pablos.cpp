@@ -118,6 +118,13 @@ void PabloPrinter::print(const PabloAST *expr, std::ostream & strm) {
         print(pablo_or->getExpr2(), strm);
         strm << ")";
     }
+    else if (const Xor * pablo_xor = dyn_cast<const Xor>(expr)) {
+        strm << "(";
+        print(pablo_xor->getExpr1(), strm);
+        strm << " ^ "; 
+        print(pablo_xor->getExpr2(), strm);
+        strm << ")";
+    }
     else if (const Sel * pablo_sel = dyn_cast<const Sel>(expr)) {
         strm << "(";
         print(pablo_sel->getCondition(), strm);
