@@ -692,20 +692,22 @@ void PabloCompiler::compileStatement(const PabloAST * stmt)
             }
             genAdvanceOutStore(carry_summary, mAdvanceQueueIdx++); //baseAdvanceQueueIdx + ifAdvanceCount - 1);
         }
-        bIfBody.CreateBr(ifEndBlock);
-
+        // If we compiled an If or a While statement, we won't be in the same basic block as before.
+        // Create the branch from the current basic block to the end block.
+        IRBuilder<> bIfBodyEndBlock(mBasicBlock);
+        bIfBodyEndBlock.CreateBr(ifEndBlock);
         //End Block
         IRBuilder<> bEnd(ifEndBlock);
-        mBasicBlock = ifEndBlock;
-        
         for (const Assign * a : ifStatement->getDefined()) {
             PHINode * phi = bEnd.CreatePHI(mBitBlockType, 2, a->getName()->str());
             auto f = mMarkerMap.find(a->getName());
             assert (f != mMarkerMap.end());
             phi->addIncoming(mZeroInitializer, ifEntryBlock);
-            phi->addIncoming(f->second, ifBodyBlock);
+            phi->addIncoming(f->second, mBasicBlock);
             mMarkerMap[a->getName()] = phi;
         }
+        // Set the basic block to the new end block
+        mBasicBlock = ifEndBlock;
     }
     else if (const While * whileStatement = dyn_cast<const While>(stmt))
     {
