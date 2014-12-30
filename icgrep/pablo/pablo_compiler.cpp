@@ -666,11 +666,13 @@ void PabloCompiler::compileStatement(const PabloAST * stmt)
 
         // Entry processing is complete, now handle the body of the if.
         
-        IRBuilder<> bIfBody(ifBodyBlock);
         mBasicBlock = ifBodyBlock;
         
         compileStatements(ifStatement->getBody());
-        
+
+        // If we compiled an If or a While statement, we won't be in the same basic block as before.
+        // Create the branch from the current basic block to the end block.
+        IRBuilder<> bIfBody(mBasicBlock);
         // After the recursive compile, now insert the code to compute the summary
         // carry over variable.
         
@@ -692,10 +694,7 @@ void PabloCompiler::compileStatement(const PabloAST * stmt)
             }
             genAdvanceOutStore(carry_summary, mAdvanceQueueIdx++); //baseAdvanceQueueIdx + ifAdvanceCount - 1);
         }
-        // If we compiled an If or a While statement, we won't be in the same basic block as before.
-        // Create the branch from the current basic block to the end block.
-        IRBuilder<> bIfBodyEndBlock(mBasicBlock);
-        bIfBodyEndBlock.CreateBr(ifEndBlock);
+        bIfBody.CreateBr(ifEndBlock);
         //End Block
         IRBuilder<> bEnd(ifEndBlock);
         for (const Assign * a : ifStatement->getDefined()) {
