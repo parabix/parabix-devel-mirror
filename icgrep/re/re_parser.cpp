@@ -363,7 +363,7 @@ inline RE * RE_Parser::parse_escaped() {
 }
 
 RE * makeDigitSet() {
-  return makeName("Nd", Name::Type::UnicodeCategory);
+  return makeName("Nd", Name::Type::UnicodeProperty);
 }
 
 RE * makeWhitespaceSet() {
@@ -462,12 +462,22 @@ codepoint_t RE_Parser::parse_utf8_codepoint() {
 
 Name * RE_Parser::parse_property_expression() {
     const cursor_t start = _cursor;
-    while (_cursor != _end && *_cursor != '}' and *_cursor != ':') {
+    while (_cursor != _end && *_cursor != '}' and *_cursor != ':' and *_cursor != '=') {
         _cursor++;
     }
-    return makeName(std::string(start, _cursor), Name::Type::UnicodeCategory);
+    if (_cursor != _end && *_cursor == '=') {
+        const cursor_t prop_end = _cursor;
+        _cursor++;
+        const cursor_t val_start = _cursor;
+        while (_cursor != _end && *_cursor != '}' and *_cursor != ':') {
+            _cursor++;
+        }
+        // We have a property-name = value expression
+        return makeName(std::string(start, prop_end), std::string(val_start, _cursor), Name::Type::UnicodeProperty);
+    }
+    else return makeName(std::string(start, _cursor), Name::Type::UnicodeProperty);
 }
-    
+
 CharsetOperatorKind RE_Parser::getCharsetOperator() {
     throw_incomplete_expression_error_if_end_of_stream();
     switch (*_cursor) {

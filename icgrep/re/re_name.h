@@ -25,9 +25,10 @@ public:
     enum class Type {
         Byte
         , Unicode
-        , UnicodeCategory
+        , UnicodeProperty
         , Unknown
     };
+    const std::string & getNamespace() const;
     const std::string & getName() const;
     Type getType() const;
     RE *getDefinition() const;
@@ -43,11 +44,13 @@ protected:
     friend Name * makeName(const std::string, RE *);    
     friend Name * makeByteName(const std::string, RE *);
     friend Name * makeName(const std::string, const Type);
+    friend Name * makeName(const std::string, const std::string, const Type);    
     void* operator new (std::size_t size) noexcept {
         return mAllocator.allocate(size);
     }
-    Name(const std::string && name, const Type type, RE * defn)
+    Name(const std::string && nameSpace, const std::string && name, const Type type, RE * defn)
     : RE(ClassTypeId::Name)
+    , mNamespace(std::move(nameSpace))
     , mName(std::move(name))
     , mType(type)
     , mDefiningRE(defn)
@@ -57,11 +60,16 @@ protected:
     }
 
 private:
+    const std::string   mNamespace;
     const std::string   mName;
     const Type          mType;
     RE *                mDefiningRE;
     pablo::Var *        mCompiled;
 };
+
+inline const std::string & Name::getNamespace() const {
+    return mNamespace;
+}
 
 inline const std::string & Name::getName() const {
     return mName;
@@ -80,7 +88,11 @@ inline void Name::setDefinition(RE * d) {
 }
 
 inline Name * makeName(const std::string name, const Name::Type type = Name::Type::Unicode) {
-    return new Name(std::move(name), type, nullptr);
+    return new Name("", std::move(name), type, nullptr);
+}
+
+inline Name * makeName(const std::string property, const std::string value, const Name::Type type = Name::Type::Unicode) {
+    return new Name(std::move(property), std::move(value), type, nullptr);
 }
 
 inline Name * makeName(const std::string name, RE * cc) {
@@ -89,9 +101,9 @@ inline Name * makeName(const std::string name, RE * cc) {
     }
     else if (isa<CC>(cc)) {
         Name::Type ccType = cast<CC>(cc)->max_codepoint() <= 0x7F ? Name::Type::Byte : Name::Type::Unicode;
-        return new Name(std::move(name), ccType, cc);
+        return new Name("", std::move(name), ccType, cc);
     }
-    else return new Name(std::move(name), Name::Type::Unknown, cc);
+    else return new Name("", std::move(name), Name::Type::Unknown, cc);
 }
 
 inline Name * makeByteName(const std::string name, RE * cc) {
@@ -99,7 +111,7 @@ inline Name * makeByteName(const std::string name, RE * cc) {
         return cast<Name>(cc);
     }
     else {
-        return new Name(std::move(name), Name::Type::Byte, cc);
+        return new Name("", std::move(name), Name::Type::Byte, cc);
     }
 }
 

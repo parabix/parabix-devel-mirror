@@ -145,7 +145,7 @@ MarkerType RE_Compiler::compile(RE * re, PabloBlock & pb) {
 }
         
 PabloAST * RE_Compiler::character_class_strm(Name * name, PabloBlock & pb) {
-    if (name->getType() == Name::Type::UnicodeCategory) {
+    if (name->getType() == Name::Type::UnicodeProperty) {
         return pb.createCall(name->getName());
     }
     else {
@@ -374,7 +374,7 @@ MarkerType RE_Compiler::processUnboundedRep(RE * repeated, MarkerType marker, Pa
         if (name->getType() == Name::Type::Byte) {
             return makePostPositionMarker("unbounded", pb.createMatchStar(base, cc), pb);
         }
-        else { // Name::Unicode and Name::UnicodeCategory
+        else { // Name::Unicode and Name::UnicodeProperty
             return makePostPositionMarker("unbounded", pb.createAnd(pb.createMatchStar(base, pb.createOr(mNonFinal, cc)), mInitial), pb);
         }        
     }
