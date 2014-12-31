@@ -19,7 +19,6 @@ static_assert(false, "Need to turn on them together.");
 //Pablo Expressions
 #include <pablo/codegenstate.h>
 #include <pablo/pabloAST.h>
-#include "unicode_categories.h"
 #include <string>
 #include <list>
 #include <map>
