@@ -75,7 +75,7 @@ void resolveProperties(RE * re) {
                     int valcode = dynamic_cast<UCD::EnumeratedPropertyObject *> (UCD::property_object_table[UCD::gc])->GetPropertyValueEnumCode(v);
                     
                     if (valcode > 0) {
-                        name->setName(UCD::GC_ns::enum_names[valcode]);
+                        name->setName("__get_gc_" + UCD::GC_ns::enum_names[valcode]);
                     }
                 }
                 else if (theprop == UCD::sc) {
@@ -95,7 +95,7 @@ void resolveProperties(RE * re) {
                 int valcode = dynamic_cast<UCD::EnumeratedPropertyObject *> (UCD::property_object_table[UCD::gc])->GetPropertyValueEnumCode(v);
                 if (valcode > 0) {
                     theprop = UCD::gc;
-                    name->setName(UCD::GC_ns::enum_names[valcode]);
+                    name->setName("__get_gc_" + UCD::GC_ns::enum_names[valcode]);
                 }
                 else if (dynamic_cast<UCD::EnumeratedPropertyObject *> (UCD::property_object_table[UCD::sc])->GetPropertyValueEnumCode(v) > 0) {
                     theprop = UCD::sc;

@@ -24,6 +24,8 @@
 #include <pablo/pablo_compiler.h>
 #include <pablo/analysis/useanalysis.h>
 
+#include "unicode_categories.h"
+
 #include "resolve_properties.cpp"
 
 #include "llvm/Support/CommandLine.h"
@@ -149,6 +151,41 @@ LLVM_Gen_RetVal compile(const Encoding encoding, const std::vector<std::string> 
     }
 
     PabloCompiler pablo_compiler(basisBits);
+    
+#define CHECK_GENERAL_CODE_CATEGORY(SUFFIX) \
+    pablo_compiler.InstallExternalFunction(std::string("__get_gc_") + std::string(#SUFFIX), (void*)&__get_gc_##SUFFIX);
+    
+    CHECK_GENERAL_CODE_CATEGORY(Cc)
+    CHECK_GENERAL_CODE_CATEGORY(Cf)
+    CHECK_GENERAL_CODE_CATEGORY(Cn)
+    CHECK_GENERAL_CODE_CATEGORY(Co)
+    CHECK_GENERAL_CODE_CATEGORY(Cs)
+    CHECK_GENERAL_CODE_CATEGORY(Ll)
+    CHECK_GENERAL_CODE_CATEGORY(Lm)
+    CHECK_GENERAL_CODE_CATEGORY(Lo)
+    CHECK_GENERAL_CODE_CATEGORY(Lt)
+    CHECK_GENERAL_CODE_CATEGORY(Lu)
+    CHECK_GENERAL_CODE_CATEGORY(Mc)
+    CHECK_GENERAL_CODE_CATEGORY(Me)
+    CHECK_GENERAL_CODE_CATEGORY(Mn)
+    CHECK_GENERAL_CODE_CATEGORY(Nd)
+    CHECK_GENERAL_CODE_CATEGORY(Nl)
+    CHECK_GENERAL_CODE_CATEGORY(No)
+    CHECK_GENERAL_CODE_CATEGORY(Pc)
+    CHECK_GENERAL_CODE_CATEGORY(Pd)
+    CHECK_GENERAL_CODE_CATEGORY(Pe)
+    CHECK_GENERAL_CODE_CATEGORY(Pf)
+    CHECK_GENERAL_CODE_CATEGORY(Pi)
+    CHECK_GENERAL_CODE_CATEGORY(Po)
+    CHECK_GENERAL_CODE_CATEGORY(Ps)
+    CHECK_GENERAL_CODE_CATEGORY(Sc)
+    CHECK_GENERAL_CODE_CATEGORY(Sk)
+    CHECK_GENERAL_CODE_CATEGORY(Sm)
+    CHECK_GENERAL_CODE_CATEGORY(So)
+    CHECK_GENERAL_CODE_CATEGORY(Zl)
+    CHECK_GENERAL_CODE_CATEGORY(Zp)
+    CHECK_GENERAL_CODE_CATEGORY(Zs)
+    
 
     LLVM_Gen_RetVal retVal = pablo_compiler.compile(main);
 

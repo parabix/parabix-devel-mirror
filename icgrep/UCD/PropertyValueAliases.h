@@ -20,7 +20,7 @@ namespace UCD {
       "N", "Y"};
     const std::vector<std::string> value_names = {
       "No", "Yes"};
-    const std::unordered_map<std::string, int> aliases_only_map = {
+    const std::unordered_map<std::string, int> aliases_only_map = std::unordered_map<std::string, int> {
       {"n", N}, {"y", Y}, {"no", N}, {"yes", Y}, {"f", N}, {"t", Y},
       {"false", N}, {"true", Y}};
   }
@@ -42,7 +42,7 @@ namespace UCD {
       "LP", "LS", "LT", "M", "N", "NG", "NH", "NJ", "O", "OE", "P", "R",
       "S", "SS", "T", "U", "WA", "WAE", "WE", "WEO", "WI", "YA", "YAE",
       "YE", "YEO", "YI", "YO", "YU"};
-    const std::unordered_map<std::string, int> aliases_only_map = {
+    const std::unordered_map<std::string, int> aliases_only_map = std::unordered_map<std::string, int> {
       };
   }
 
@@ -58,7 +58,7 @@ namespace UCD {
       "V1_1", "V2_0", "V2_1", "V3_0", "V3_1", "V3_2", "V4_0", "V4_1",
       "V5_0", "V5_1", "V5_2", "V6_0", "V6_1", "V6_2", "V6_3", "V7_0",
       "Unassigned"};
-    const std::unordered_map<std::string, int> aliases_only_map = {
+    const std::unordered_map<std::string, int> aliases_only_map = std::unordered_map<std::string, int> {
       {"1.1", AGE_ns::V1_1}, {"2.0", AGE_ns::V2_0}, {"2.1", AGE_ns::V2_1},
       {"3.0", AGE_ns::V3_0}, {"3.1", AGE_ns::V3_1}, {"3.2", AGE_ns::V3_2},
       {"4.0", AGE_ns::V4_0}, {"4.1", AGE_ns::V4_1}, {"5.0", AGE_ns::V5_0},
@@ -266,7 +266,7 @@ namespace UCD {
       "Vedic_Extensions", "Vertical_Forms", "Variation_Selectors",
       "Variation_Selectors_Supplement", "Warang_Citi", "Yi_Radicals",
       "Yi_Syllables", "Yijing_Hexagram_Symbols"};
-    const std::unordered_map<std::string, int> aliases_only_map = {
+    const std::unordered_map<std::string, int> aliases_only_map = std::unordered_map<std::string, int> {
       {"canadiansyllabics", BLK_ns::UCAS},
       {"combiningmarksforsymbols", BLK_ns::Diacriticals_For_Symbols},
       {"cyrillicsupplementary", BLK_ns::Cyrillic_Sup},
@@ -330,7 +330,7 @@ namespace UCD {
       "Thaana", "Thai", "Tibetan", "Tirhuta", "Ugaritic", "Vai",
       "Warang_Citi", "Old_Persian", "Cuneiform", "Yi", "Inherited",
       "Common", "Unknown"};
-    const std::unordered_map<std::string, int> aliases_only_map = {
+    const std::unordered_map<std::string, int> aliases_only_map = std::unordered_map<std::string, int> {
       {"qaac", SC_ns::Copt}, {"qaai", SC_ns::Zinh}};
   }
 
@@ -351,7 +351,7 @@ namespace UCD {
       "Pop_Directional_Format", "Pop_Directional_Isolate", "Right_To_Left",
       "Right_To_Left_Embedding", "Right_To_Left_Isolate",
       "Right_To_Left_Override", "Segment_Separator", "White_Space"};
-    const std::unordered_map<std::string, int> aliases_only_map = {
+    const std::unordered_map<std::string, int> aliases_only_map = std::unordered_map<std::string, int> {
       };
   }
 
@@ -362,7 +362,7 @@ namespace UCD {
       "c", "n", "o"};
     const std::vector<std::string> value_names = {
       "Close", "None", "Open"};
-    const std::unordered_map<std::string, int> aliases_only_map = {
+    const std::unordered_map<std::string, int> aliases_only_map = std::unordered_map<std::string, int> {
       };
   }
 
@@ -399,7 +399,7 @@ namespace UCD {
       "Attached_Above", "Attached_Above_Right", "Below_Left", "Below",
       "Below_Right", "Left", "Right", "Above_Left", "Above", "Above_Right",
       "Double_Below", "Double_Above", "Iota_Subscript"};
-    const std::unordered_map<std::string, int> aliases_only_map = {
+    const std::unordered_map<std::string, int> aliases_only_map = std::unordered_map<std::string, int> {
       };
   }
 
@@ -414,7 +414,7 @@ namespace UCD {
       "Canonical", "Compat", "Circle", "Final", "Font", "Fraction",
       "Initial", "Isolated", "Medial", "Narrow", "Nobreak", "None", "Small",
       "Square", "Sub", "Super", "Vertical", "Wide"};
-    const std::unordered_map<std::string, int> aliases_only_map = {
+    const std::unordered_map<std::string, int> aliases_only_map = std::unordered_map<std::string, int> {
       };
   }
 
@@ -425,7 +425,7 @@ namespace UCD {
       "A", "F", "H", "N", "Na", "W"};
     const std::vector<std::string> value_names = {
       "Ambiguous", "Fullwidth", "Halfwidth", "Neutral", "Narrow", "Wide"};
-    const std::unordered_map<std::string, int> aliases_only_map = {
+    const std::unordered_map<std::string, int> aliases_only_map = std::unordered_map<std::string, int> {
       };
   }
 
@@ -451,7 +451,7 @@ namespace UCD {
       "Symbol", "Currency_Symbol", "Modifier_Symbol", "Math_Symbol",
       "Other_Symbol", "Separator", "Line_Separator", "Paragraph_Separator",
       "Space_Separator"};
-    const std::unordered_map<std::string, int> aliases_only_map = {
+    const std::unordered_map<std::string, int> aliases_only_map = std::unordered_map<std::string, int> {
       {"cntrl", GC_ns::Cc}, {"combiningmark", GC_ns::M},
       {"digit", GC_ns::Nd}, {"punct", GC_ns::P}};
   }
@@ -465,7 +465,7 @@ namespace UCD {
     const std::vector<std::string> value_names = {
       "Control", "CR", "Extend", "L", "LF", "LV", "LVT", "Prepend",
       "Regional_Indicator", "SpacingMark", "T", "V", "Other"};
-    const std::unordered_map<std::string, int> aliases_only_map = {
+    const std::unordered_map<std::string, int> aliases_only_map = std::unordered_map<std::string, int> {
       };
   }
 
@@ -477,7 +477,7 @@ namespace UCD {
     const std::vector<std::string> value_names = {
       "Leading_Jamo", "LV_Syllable", "LVT_Syllable", "Not_Applicable",
       "Trailing_Jamo", "Vowel_Jamo"};
-    const std::unordered_map<std::string, int> aliases_only_map = {
+    const std::unordered_map<std::string, int> aliases_only_map = std::unordered_map<std::string, int> {
       };
   }
 
@@ -496,7 +496,7 @@ namespace UCD {
       "Overstruck", "Right", "Top", "Top_And_Bottom",
       "Top_And_Bottom_And_Right", "Top_And_Left", "Top_And_Left_And_Right",
       "Top_And_Right", "Visual_Order_Left"};
-    const std::unordered_map<std::string, int> aliases_only_map = {
+    const std::unordered_map<std::string, int> aliases_only_map = std::unordered_map<std::string, int> {
       };
   }
 
@@ -530,7 +530,7 @@ namespace UCD {
       "Number_Joiner", "Other", "Pure_Killer", "Register_Shifter",
       "Tone_Letter", "Tone_Mark", "Virama", "Visarga", "Vowel",
       "Vowel_Dependent", "Vowel_Independent"};
-    const std::unordered_map<std::string, int> aliases_only_map = {
+    const std::unordered_map<std::string, int> aliases_only_map = std::unordered_map<std::string, int> {
       };
   }
 
@@ -589,7 +589,7 @@ namespace UCD {
       "Shin", "Straight_Waw", "Swash_Kaf", "Syriac_Waw", "Tah", "Taw",
       "Teh_Marbuta", "Hamza_On_Heh_Goal", "Teth", "Waw", "Yeh",
       "Yeh_Barree", "Yeh_With_Tail", "Yudh", "Yudh_He", "Zain", "Zhain"};
-    const std::unordered_map<std::string, int> aliases_only_map = {
+    const std::unordered_map<std::string, int> aliases_only_map = std::unordered_map<std::string, int> {
       };
   }
 
@@ -601,7 +601,7 @@ namespace UCD {
     const std::vector<std::string> value_names = {
       "Join_Causing", "Dual_Joining", "Left_Joining", "Right_Joining",
       "Transparent", "Non_Joining"};
-    const std::unordered_map<std::string, int> aliases_only_map = {
+    const std::unordered_map<std::string, int> aliases_only_map = std::unordered_map<std::string, int> {
       };
   }
 
@@ -626,7 +626,7 @@ namespace UCD {
       "Prefix_Numeric", "Quotation", "Regional_Indicator",
       "Complex_Context", "Surrogate", "Space", "Break_Symbols",
       "Word_Joiner", "Unknown", "ZWSpace"};
-    const std::unordered_map<std::string, int> aliases_only_map = {
+    const std::unordered_map<std::string, int> aliases_only_map = std::unordered_map<std::string, int> {
       {"inseperable", LB_ns::IN}};
   }
 
@@ -637,7 +637,7 @@ namespace UCD {
       "M", "N", "Y"};
     const std::vector<std::string> value_names = {
       "Maybe", "No", "Yes"};
-    const std::unordered_map<std::string, int> aliases_only_map = {
+    const std::unordered_map<std::string, int> aliases_only_map = std::unordered_map<std::string, int> {
       };
   }
 
@@ -648,7 +648,7 @@ namespace UCD {
       "N", "Y"};
     const std::vector<std::string> value_names = {
       "No", "Yes"};
-    const std::unordered_map<std::string, int> aliases_only_map = {
+    const std::unordered_map<std::string, int> aliases_only_map = std::unordered_map<std::string, int> {
       };
   }
 
@@ -659,7 +659,7 @@ namespace UCD {
       "M", "N", "Y"};
     const std::vector<std::string> value_names = {
       "Maybe", "No", "Yes"};
-    const std::unordered_map<std::string, int> aliases_only_map = {
+    const std::unordered_map<std::string, int> aliases_only_map = std::unordered_map<std::string, int> {
       };
   }
 
@@ -670,7 +670,7 @@ namespace UCD {
       "N", "Y"};
     const std::vector<std::string> value_names = {
       "No", "Yes"};
-    const std::unordered_map<std::string, int> aliases_only_map = {
+    const std::unordered_map<std::string, int> aliases_only_map = std::unordered_map<std::string, int> {
       };
   }
 
@@ -681,7 +681,7 @@ namespace UCD {
       "De", "Di", "None", "Nu"};
     const std::vector<std::string> value_names = {
       "Decimal", "Digit", "None", "Numeric"};
-    const std::unordered_map<std::string, int> aliases_only_map = {
+    const std::unordered_map<std::string, int> aliases_only_map = std::unordered_map<std::string, int> {
       };
   }
 
@@ -694,7 +694,7 @@ namespace UCD {
     const std::vector<std::string> value_names = {
       "ATerm", "Close", "CR", "Extend", "Format", "OLetter", "LF", "Lower",
       "Numeric", "SContinue", "Sep", "Sp", "STerm", "Upper", "Other"};
-    const std::unordered_map<std::string, int> aliases_only_map = {
+    const std::unordered_map<std::string, int> aliases_only_map = std::unordered_map<std::string, int> {
       };
   }
 
@@ -710,7 +710,7 @@ namespace UCD {
       "Hebrew_Letter", "Katakana", "ALetter", "LF", "MidNumLet",
       "MidLetter", "MidNum", "Newline", "Numeric", "Regional_Indicator",
       "Single_Quote", "Other"};
-    const std::unordered_map<std::string, int> aliases_only_map = {
+    const std::unordered_map<std::string, int> aliases_only_map = std::unordered_map<std::string, int> {
       };
   }
 }
