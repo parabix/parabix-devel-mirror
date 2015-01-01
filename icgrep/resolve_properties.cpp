@@ -13,6 +13,9 @@
 #include <re/re_name.h>
 #include <re/re_diff.h>
 #include <re/re_intersect.h>
+#include <re/re_start.h>
+#include <re/re_end.h>
+
 #include <cc/cc_namemap.hpp>
 #include "UCD/PropertyAliases.h"
 #include "UCD/PropertyObjects.h"
@@ -110,7 +113,7 @@ void resolveProperties(RE * re) {
 	        //name->setCompiled(compileCC(cast<CC>(d), mCG));
         }
     }
-    else if (!isa<CC>(re)) {
+    else if (!isa<CC>(re) && !isa<Start>(re) && !isa<End>(re) && !isa<Any>(re)) {
         throw std::runtime_error("Unknown RE type in resolveProperties.");
     }
 }
