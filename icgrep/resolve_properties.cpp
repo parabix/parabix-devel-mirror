@@ -74,16 +74,17 @@ void resolveProperties(RE * re) {
                 theprop = propit->second;
                 if (theprop == UCD::gc) {
                     // General Category
-                    
-                    int valcode = dynamic_cast<UCD::EnumeratedPropertyObject *> (UCD::property_object_table[UCD::gc])->GetPropertyValueEnumCode(v);
-                    
+                    int valcode = dynamic_cast<UCD::EnumeratedPropertyObject *> (UCD::property_object_table[UCD::gc])->GetPropertyValueEnumCode(v);                    
                     if (valcode > 0) {
                         name->setName("__get_gc_" + UCD::GC_ns::enum_names[valcode]);
                     }
                 }
                 else if (theprop == UCD::sc) {
                     // Script property identified
-                    throw std::runtime_error("Script property identified, aborting\n");
+                    int valcode = dynamic_cast<UCD::EnumeratedPropertyObject *> (UCD::property_object_table[UCD::sc])->GetPropertyValueEnumCode(v);                    
+                    if (valcode > 0) {
+                        name->setName("__get_sc_" + UCD::SC_ns::enum_names[valcode]);
+                    }
                 }
                 else if (theprop == UCD::scx) {
                     // Script extension property identified
@@ -99,12 +100,14 @@ void resolveProperties(RE * re) {
                 if (valcode > 0) {
                     theprop = UCD::gc;
                     name->setName("__get_gc_" + UCD::GC_ns::enum_names[valcode]);
+                    return;
                 }
-                else if (dynamic_cast<UCD::EnumeratedPropertyObject *> (UCD::property_object_table[UCD::sc])->GetPropertyValueEnumCode(v) > 0) {
+                valcode = dynamic_cast<UCD::EnumeratedPropertyObject *> (UCD::property_object_table[UCD::sc])->GetPropertyValueEnumCode(v);
+                if (valcode > 0) {
                     theprop = UCD::sc;
-                    throw std::runtime_error("Script property identified by value, aborting\n");
+                    name->setName("__get_sc_" + UCD::SC_ns::enum_names[valcode]);
+                    return;
                 }
-
                 else {
                     throw std::runtime_error("Unknown property, aborting\n");
                 }
