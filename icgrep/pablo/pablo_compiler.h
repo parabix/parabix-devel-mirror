@@ -62,6 +62,7 @@ class PabloCompiler {
 public:
     PabloCompiler(const std::vector<Var *> & basisBitVars);
     ~PabloCompiler();
+    void InstallExternalFunction(std::string C_fn_name, void * fn_ptr);
     LLVM_Gen_RetVal compile(PabloBlock & pb);
 private:
     void DefineTypes();
@@ -130,6 +131,7 @@ private:
 
     unsigned                            mMaxNestingDepth;
 
+    std::map<std::string, void *>       mExternalMap;
     StringToValueMap                    mCalleeMap;
 };
 
