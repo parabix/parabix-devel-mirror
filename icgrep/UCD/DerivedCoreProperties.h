@@ -13,7 +13,7 @@
 #include "PropertyAliases.h"
 
 namespace UCD {
-  namespace ALPHA {
+  namespace ALPHA_ns {
     const UnicodeSet codepoint_set 
       {{{Empty, 2}, {Mixed, 2}, {Empty, 1}, {Mixed, 3}, {Full, 14},
         {Mixed, 2}, {Empty, 2}, {Mixed, 4}, {Full, 1}, {Mixed, 1},
@@ -145,44 +145,9 @@ namespace UCD {
         0x0ffffbee, 0xffff0000, 0xffff03ff, 0xffff03ff, 0x000003ff,
         0x007fffff, 0x001fffff, 0x3fffffff, 0x3fffffff},
        34816};
-    const BinaryPropertyObject property_object{alpha, codepoint_set};
+    BinaryPropertyObject property_object{Alpha, codepoint_set};
   }
-  namespace CASED {
-    const UnicodeSet codepoint_set 
-      {{{Empty, 2}, {Mixed, 2}, {Empty, 1}, {Mixed, 3}, {Full, 5},
-        {Mixed, 2}, {Full, 5}, {Mixed, 4}, {Empty, 2}, {Mixed, 4},
-        {Full, 1}, {Mixed, 1}, {Full, 4}, {Mixed, 1}, {Full, 4}, {Mixed, 4},
-        {Empty, 88}, {Full, 1}, {Mixed, 1}, {Empty, 97}, {Full, 6},
-        {Empty, 2}, {Full, 8}, {Mixed, 1}, {Full, 1}, {Mixed, 2}, {Full, 1},
-        {Mixed, 3}, {Empty, 3}, {Mixed, 2}, {Empty, 3}, {Mixed, 3},
-        {Full, 1}, {Mixed, 1}, {Empty, 24}, {Mixed, 1}, {Full, 1},
-        {Mixed, 1}, {Empty, 56}, {Full, 1}, {Mixed, 2}, {Full, 4},
-        {Mixed, 1}, {Full, 1}, {Mixed, 1}, {Empty, 968}, {Full, 1},
-        {Mixed, 2}, {Empty, 4}, {Mixed, 1}, {Full, 2}, {Mixed, 2},
-        {Empty, 1}, {Mixed, 1}, {Empty, 25}, {Mixed, 3}, {Empty, 636},
-        {Mixed, 1}, {Empty, 32}, {Mixed, 2}, {Empty, 37}, {Full, 2},
-        {Mixed, 1}, {Empty, 162}, {Full, 2}, {Empty, 1497}, {Full, 2},
-        {Mixed, 1}, {Full, 1}, {Mixed, 3}, {Full, 1}, {Mixed, 3},
-        {Full, 10}, {Mixed, 10}, {Empty, 202}, {Mixed, 4}, {Empty, 30835}},
-       {0x07fffffe, 0x07fffffe, 0x04200400, 0xff7fffff, 0xff7fffff,
-        0xf7ffffff, 0xfffffff0, 0xffefffff, 0x01ffffff, 0x00000003,
-        0x0000001f, 0x00000020, 0xbccf0000, 0xffffd740, 0xfffffffb,
-        0xffbfffff, 0xfffffc03, 0xfffeffff, 0x007fffff, 0xfffffffe,
-        0x000000ff, 0x000020bf, 0x3f3fffff, 0xaaff3f3f, 0x3fffffff,
-        0x5fdfffff, 0x0fcf1fdc, 0x1fdc1fff, 0x80020000, 0x1fff0000,
-        0x3e2ffc84, 0xf21fbd50, 0x000043e0, 0x00000018, 0xffc00000,
-        0x000003ff, 0xffff7fff, 0x7fffffff, 0x000c781f, 0x000020bf,
-        0x00003fff, 0x3fffffff, 0xfffffffc, 0xffff78ff, 0x00033fff,
-        0x07000000, 0xffff0000, 0xf7ffffff, 0x00000030, 0x00f8007f,
-        0x07fffffe, 0x07fffffe, 0x0000ffff, 0xffdfffff, 0xdfffffff,
-        0xebffde64, 0xffffffef, 0xdfdfe7bf, 0x7bffffff, 0xfffdfc5f,
-        0xffffff3f, 0xf7fffffd, 0xf7ffffff, 0xffdfffff, 0xffdfffff,
-        0xffff7fff, 0xffff7fff, 0xfffffdff, 0xfffffdff, 0x00000ff7,
-        0xffff0000, 0xffff03ff, 0xffff03ff, 0x000003ff},
-       34816};
-    const BinaryPropertyObject property_object{cased, codepoint_set};
-  }
-  namespace CI {
+  namespace CI_ns {
     const UnicodeSet codepoint_set 
       {{{Empty, 1}, {Mixed, 3}, {Empty, 1}, {Mixed, 1}, {Empty, 15},
         {Mixed, 1}, {Full, 5}, {Mixed, 2}, {Empty, 7}, {Mixed, 1},
@@ -266,9 +231,9 @@ namespace UCD {
         0x0000000f, 0xfff80380, 0x00000fe7, 0x00003c00, 0x0000001c,
         0x007f0000, 0x00000002, 0x0000ffff},
        34816};
-    const BinaryPropertyObject property_object{ci, codepoint_set};
+    BinaryPropertyObject property_object{CI, codepoint_set};
   }
-  namespace CWCF {
+  namespace CWCF_ns {
     const UnicodeSet codepoint_set 
       {{{Empty, 2}, {Mixed, 1}, {Empty, 2}, {Mixed, 2}, {Empty, 1},
         {Mixed, 11}, {Empty, 7}, {Mixed, 6}, {Full, 1}, {Mixed, 1},
@@ -295,9 +260,9 @@ namespace UCD {
         0x55545554, 0x55555555, 0x6a005555, 0x55452855, 0x00033d55,
         0x00f8007f, 0x07fffffe, 0x000000ff},
        34816};
-    const BinaryPropertyObject property_object{cwcf, codepoint_set};
+    BinaryPropertyObject property_object{CWCF, codepoint_set};
   }
-  namespace CWCM {
+  namespace CWCM_ns {
     const UnicodeSet codepoint_set 
       {{{Empty, 2}, {Mixed, 2}, {Empty, 1}, {Mixed, 3}, {Full, 1},
         {Mixed, 1}, {Full, 2}, {Mixed, 3}, {Full, 2}, {Mixed, 4},
@@ -324,9 +289,9 @@ namespace UCD {
         0xfffcfffc, 0xfe00ffff, 0xffcf38ff, 0x00033fff, 0x00f8007f,
         0x07fffffe, 0x07fffffe, 0x0000ffff},
        34816};
-    const BinaryPropertyObject property_object{cwcm, codepoint_set};
+    BinaryPropertyObject property_object{CWCM, codepoint_set};
   }
-  namespace CWL {
+  namespace CWL_ns {
     const UnicodeSet codepoint_set 
       {{{Empty, 2}, {Mixed, 1}, {Empty, 3}, {Mixed, 1}, {Empty, 1},
         {Mixed, 11}, {Empty, 8}, {Mixed, 5}, {Full, 1}, {Mixed, 1},
@@ -350,9 +315,9 @@ namespace UCD {
         0x55555555, 0x00001555, 0x05555555, 0x55545554, 0x55555555,
         0x6a005555, 0x55452855, 0x00033d55, 0x07fffffe, 0x000000ff},
        34816};
-    const BinaryPropertyObject property_object{cwl, codepoint_set};
+    BinaryPropertyObject property_object{CWL, codepoint_set};
   }
-  namespace CWT {
+  namespace CWT_ns {
     const UnicodeSet codepoint_set 
       {{{Empty, 3}, {Mixed, 1}, {Empty, 1}, {Mixed, 16}, {Empty, 5},
         {Mixed, 6}, {Empty, 1}, {Mixed, 1}, {Full, 1}, {Mixed, 7},
@@ -378,9 +343,9 @@ namespace UCD {
         0x0aaaaaaa, 0xaaa8aaa8, 0xaaaaaaaa, 0x9400aaaa, 0xaa8a10aa,
         0x000002aa, 0x00f8007f, 0x07fffffe, 0xffffff00, 0x0000ffff},
        34816};
-    const BinaryPropertyObject property_object{cwt, codepoint_set};
+    BinaryPropertyObject property_object{CWT, codepoint_set};
   }
-  namespace CWU {
+  namespace CWU_ns {
     const UnicodeSet codepoint_set 
       {{{Empty, 3}, {Mixed, 1}, {Empty, 1}, {Mixed, 16}, {Empty, 5},
         {Mixed, 6}, {Empty, 1}, {Mixed, 1}, {Full, 1}, {Mixed, 7},
@@ -406,9 +371,44 @@ namespace UCD {
         0xaaa8aaa8, 0xaaaaaaaa, 0x9400aaaa, 0xaa8a10aa, 0x000002aa,
         0x00f8007f, 0x07fffffe, 0xffffff00, 0x0000ffff},
        34816};
-    const BinaryPropertyObject property_object{cwu, codepoint_set};
+    BinaryPropertyObject property_object{CWU, codepoint_set};
   }
-  namespace DI {
+  namespace CASED_ns {
+    const UnicodeSet codepoint_set 
+      {{{Empty, 2}, {Mixed, 2}, {Empty, 1}, {Mixed, 3}, {Full, 5},
+        {Mixed, 2}, {Full, 5}, {Mixed, 4}, {Empty, 2}, {Mixed, 4},
+        {Full, 1}, {Mixed, 1}, {Full, 4}, {Mixed, 1}, {Full, 4}, {Mixed, 4},
+        {Empty, 88}, {Full, 1}, {Mixed, 1}, {Empty, 97}, {Full, 6},
+        {Empty, 2}, {Full, 8}, {Mixed, 1}, {Full, 1}, {Mixed, 2}, {Full, 1},
+        {Mixed, 3}, {Empty, 3}, {Mixed, 2}, {Empty, 3}, {Mixed, 3},
+        {Full, 1}, {Mixed, 1}, {Empty, 24}, {Mixed, 1}, {Full, 1},
+        {Mixed, 1}, {Empty, 56}, {Full, 1}, {Mixed, 2}, {Full, 4},
+        {Mixed, 1}, {Full, 1}, {Mixed, 1}, {Empty, 968}, {Full, 1},
+        {Mixed, 2}, {Empty, 4}, {Mixed, 1}, {Full, 2}, {Mixed, 2},
+        {Empty, 1}, {Mixed, 1}, {Empty, 25}, {Mixed, 3}, {Empty, 636},
+        {Mixed, 1}, {Empty, 32}, {Mixed, 2}, {Empty, 37}, {Full, 2},
+        {Mixed, 1}, {Empty, 162}, {Full, 2}, {Empty, 1497}, {Full, 2},
+        {Mixed, 1}, {Full, 1}, {Mixed, 3}, {Full, 1}, {Mixed, 3},
+        {Full, 10}, {Mixed, 10}, {Empty, 202}, {Mixed, 4}, {Empty, 30835}},
+       {0x07fffffe, 0x07fffffe, 0x04200400, 0xff7fffff, 0xff7fffff,
+        0xf7ffffff, 0xfffffff0, 0xffefffff, 0x01ffffff, 0x00000003,
+        0x0000001f, 0x00000020, 0xbccf0000, 0xffffd740, 0xfffffffb,
+        0xffbfffff, 0xfffffc03, 0xfffeffff, 0x007fffff, 0xfffffffe,
+        0x000000ff, 0x000020bf, 0x3f3fffff, 0xaaff3f3f, 0x3fffffff,
+        0x5fdfffff, 0x0fcf1fdc, 0x1fdc1fff, 0x80020000, 0x1fff0000,
+        0x3e2ffc84, 0xf21fbd50, 0x000043e0, 0x00000018, 0xffc00000,
+        0x000003ff, 0xffff7fff, 0x7fffffff, 0x000c781f, 0x000020bf,
+        0x00003fff, 0x3fffffff, 0xfffffffc, 0xffff78ff, 0x00033fff,
+        0x07000000, 0xffff0000, 0xf7ffffff, 0x00000030, 0x00f8007f,
+        0x07fffffe, 0x07fffffe, 0x0000ffff, 0xffdfffff, 0xdfffffff,
+        0xebffde64, 0xffffffef, 0xdfdfe7bf, 0x7bffffff, 0xfffdfc5f,
+        0xffffff3f, 0xf7fffffd, 0xf7ffffff, 0xffdfffff, 0xffdfffff,
+        0xffff7fff, 0xffff7fff, 0xfffffdff, 0xfffffdff, 0x00000ff7,
+        0xffff0000, 0xffff03ff, 0xffff03ff, 0x000003ff},
+       34816};
+    BinaryPropertyObject property_object{Cased, codepoint_set};
+  }
+  namespace DI_ns {
     const UnicodeSet codepoint_set 
       {{{Empty, 5}, {Mixed, 1}, {Empty, 20}, {Mixed, 1}, {Empty, 21},
         {Mixed, 1}, {Empty, 89}, {Mixed, 2}, {Empty, 49}, {Mixed, 1},
@@ -422,9 +422,9 @@ namespace UCD {
         0x00000010, 0x0000ffff, 0x80000000, 0x00000001, 0x01ff0000,
         0x0000000f, 0x07f80000},
        34816};
-    const BinaryPropertyObject property_object{di, codepoint_set};
+    BinaryPropertyObject property_object{DI, codepoint_set};
   }
-  namespace GR_BASE {
+  namespace GR_BASE_ns {
     const UnicodeSet codepoint_set 
       {{{Empty, 1}, {Full, 2}, {Mixed, 1}, {Empty, 1}, {Mixed, 1},
         {Full, 18}, {Empty, 3}, {Mixed, 3}, {Full, 6}, {Mixed, 1},
@@ -570,9 +570,9 @@ namespace UCD {
         0x001fffff, 0xffff0fff, 0x03ff00ff, 0xffff00ff, 0x00003fff,
         0x007fffff, 0x001fffff, 0x3fffffff, 0x3fffffff},
        34816};
-    const BinaryPropertyObject property_object{gr_base, codepoint_set};
+    BinaryPropertyObject property_object{Gr_Base, codepoint_set};
   }
-  namespace GR_EXT {
+  namespace GR_EXT_ns {
     const UnicodeSet codepoint_set 
       {{{Empty, 24}, {Full, 3}, {Mixed, 1}, {Empty, 8}, {Mixed, 1},
         {Empty, 7}, {Mixed, 3}, {Empty, 1}, {Mixed, 1}, {Empty, 1},
@@ -638,9 +638,9 @@ namespace UCD {
         0x001f0000, 0x007f0000, 0x00078000, 0x60000000, 0xf807c3a0,
         0x00000fe7, 0x00003c00, 0x0000001c, 0x007f0000, 0x0000ffff},
        34816};
-    const BinaryPropertyObject property_object{gr_ext, codepoint_set};
+    BinaryPropertyObject property_object{Gr_Ext, codepoint_set};
   }
-  namespace GR_LINK {
+  namespace GR_LINK_ns {
     const UnicodeSet codepoint_set 
       {{{Empty, 74}, {Mixed, 1}, {Empty, 3}, {Mixed, 1}, {Empty, 3},
         {Mixed, 1}, {Empty, 3}, {Mixed, 1}, {Empty, 3}, {Mixed, 1},
@@ -667,9 +667,9 @@ namespace UCD {
         0x02000000, 0x00180000, 0x00000001, 0x00200000, 0x00000400,
         0x00002000, 0x00000004, 0x80000000, 0x80000000, 0x00400000},
        34816};
-    const BinaryPropertyObject property_object{gr_link, codepoint_set};
+    BinaryPropertyObject property_object{Gr_Link, codepoint_set};
   }
-  namespace IDC {
+  namespace IDC_ns {
     const UnicodeSet codepoint_set 
       {{{Empty, 1}, {Mixed, 3}, {Empty, 1}, {Mixed, 3}, {Full, 14},
         {Mixed, 2}, {Full, 3}, {Mixed, 3}, {Full, 1}, {Mixed, 1}, {Full, 4},
@@ -800,9 +800,9 @@ namespace UCD {
         0x0af7fe96, 0xaa96ea84, 0x5ef7f796, 0x0ffffbff, 0x0ffffbee,
         0x007fffff, 0x001fffff, 0x3fffffff, 0x3fffffff, 0x0000ffff},
        34816};
-    const BinaryPropertyObject property_object{idc, codepoint_set};
+    BinaryPropertyObject property_object{IDC, codepoint_set};
   }
-  namespace IDS {
+  namespace IDS_ns {
     const UnicodeSet codepoint_set 
       {{{Empty, 2}, {Mixed, 2}, {Empty, 1}, {Mixed, 3}, {Full, 14},
         {Mixed, 2}, {Empty, 3}, {Mixed, 3}, {Full, 1}, {Mixed, 1},
@@ -931,9 +931,9 @@ namespace UCD {
         0xaa96ea84, 0x5ef7f796, 0x0ffffbff, 0x0ffffbee, 0x007fffff,
         0x001fffff, 0x3fffffff, 0x3fffffff},
        34816};
-    const BinaryPropertyObject property_object{ids, codepoint_set};
+    BinaryPropertyObject property_object{IDS, codepoint_set};
   }
-  namespace LOWER {
+  namespace LOWER_ns {
     const UnicodeSet codepoint_set 
       {{{Empty, 3}, {Mixed, 1}, {Empty, 1}, {Mixed, 14}, {Full, 1},
         {Mixed, 4}, {Empty, 2}, {Mixed, 6}, {Empty, 1}, {Mixed, 1},
@@ -969,9 +969,9 @@ namespace UCD {
         0x0000003f, 0xf7fffffc, 0xf0000003, 0x0fdfffff, 0xffc00000,
         0x003f7fff, 0xffff0000, 0x0000fdff, 0xfffffc00, 0x00000bf7},
        34816};
-    const BinaryPropertyObject property_object{lower, codepoint_set};
+    BinaryPropertyObject property_object{Lower, codepoint_set};
   }
-  namespace MATH {
+  namespace MATH_ns {
     const UnicodeSet codepoint_set 
       {{{Empty, 1}, {Mixed, 3}, {Empty, 1}, {Mixed, 3}, {Empty, 22},
         {Mixed, 2}, {Empty, 16}, {Mixed, 1}, {Empty, 207}, {Mixed, 5},
@@ -997,9 +997,9 @@ namespace UCD {
         0xfffdfc5f, 0xffffff3f, 0xffffcfff, 0xffffffef, 0x0af7fe96,
         0xaa96ea84, 0x5ef7f796, 0x0ffffbff, 0x0ffffbee, 0x00030000},
        34816};
-    const BinaryPropertyObject property_object{math, codepoint_set};
+    BinaryPropertyObject property_object{Math, codepoint_set};
   }
-  namespace UPPER {
+  namespace UPPER_ns {
     const UnicodeSet codepoint_set 
       {{{Empty, 2}, {Mixed, 1}, {Empty, 3}, {Mixed, 1}, {Empty, 1},
         {Mixed, 11}, {Empty, 8}, {Mixed, 5}, {Full, 1}, {Mixed, 1},
@@ -1032,9 +1032,9 @@ namespace UCD {
         0x000001ff, 0x00000400, 0xffff0000, 0xffff03ff, 0xffff03ff,
         0x000003ff},
        34816};
-    const BinaryPropertyObject property_object{upper, codepoint_set};
+    BinaryPropertyObject property_object{Upper, codepoint_set};
   }
-  namespace XIDC {
+  namespace XIDC_ns {
     const UnicodeSet codepoint_set 
       {{{Empty, 1}, {Mixed, 3}, {Empty, 1}, {Mixed, 3}, {Full, 14},
         {Mixed, 2}, {Full, 3}, {Mixed, 3}, {Full, 1}, {Mixed, 1}, {Full, 4},
@@ -1167,9 +1167,9 @@ namespace UCD {
         0x0ffffbff, 0x0ffffbee, 0x007fffff, 0x001fffff, 0x3fffffff,
         0x3fffffff, 0x0000ffff},
        34816};
-    const BinaryPropertyObject property_object{xidc, codepoint_set};
+    BinaryPropertyObject property_object{XIDC, codepoint_set};
   }
-  namespace XIDS {
+  namespace XIDS_ns {
     const UnicodeSet codepoint_set 
       {{{Empty, 2}, {Mixed, 2}, {Empty, 1}, {Mixed, 3}, {Full, 14},
         {Mixed, 2}, {Empty, 3}, {Mixed, 3}, {Full, 1}, {Mixed, 1},
@@ -1299,7 +1299,7 @@ namespace UCD {
         0x0ffffbff, 0x0ffffbee, 0x007fffff, 0x001fffff, 0x3fffffff,
         0x3fffffff},
        34816};
-    const BinaryPropertyObject property_object{xids, codepoint_set};
+    BinaryPropertyObject property_object{XIDS, codepoint_set};
   }
 }
 

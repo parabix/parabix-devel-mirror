@@ -24,6 +24,8 @@
 #include <pablo/pablo_compiler.h>
 #include <pablo/analysis/useanalysis.h>
 
+#include "resolve_properties.cpp"
+
 #include "llvm/Support/CommandLine.h"
 #include <re/printer_re.h>
 #include <pablo/printer_pablos.h>
@@ -86,6 +88,9 @@ LLVM_Gen_RetVal compile(const Encoding encoding, const std::vector<std::string> 
     if (PrintAllREs || PrintStrippedREs) {
       std::cerr << "RemoveNullableSuffix:" << std::endl << Printer_RE::PrintRE(re_ast) << std::endl;
     }
+    
+    resolveProperties(re_ast);
+    
     
     CC_NameMap nameMap;
     re_ast = nameMap.process(re_ast, UnicodeClass);

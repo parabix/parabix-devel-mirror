@@ -14,7 +14,7 @@
 #include "PropertyValueAliases.h"
 
 namespace UCD {
-  namespace HST {
+  namespace HST_ns {
     const UnicodeSet l_Set 
       {{{Empty, 136}, {Full, 3}, {Empty, 1216}, {Mixed, 1}, {Empty, 33460}},
        {0x1fffffff},
@@ -180,10 +180,11 @@ namespace UCD {
         {Empty, 33089}},
        {0x000000ff, 0xffff0000, 0x0000007f},
        34816};
-    const EnumeratedPropertyObject property_object
+    EnumeratedPropertyObject property_object
       {hst,
-       HST::value_names,
-       HST::aliases_only_map,
+       HST_ns::enum_names,
+       HST_ns::value_names,
+       HST_ns::aliases_only_map,
        {l_Set, lv_Set, lvt_Set, na_Set, t_Set, v_Set
        }};
   }

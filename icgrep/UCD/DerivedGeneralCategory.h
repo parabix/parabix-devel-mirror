@@ -14,7 +14,7 @@
 #include "PropertyValueAliases.h"
 
 namespace UCD {
-  namespace GC {
+  namespace GC_ns {
     const UnicodeSet c_Set 
       {{{Full, 1}, {Empty, 2}, {Mixed, 1}, {Full, 1}, {Mixed, 1},
         {Empty, 21}, {Mixed, 3}, {Empty, 11}, {Mixed, 4}, {Empty, 1},
@@ -1356,10 +1356,11 @@ namespace UCD {
        {0x00000001, 0x00000001, 0x00000001, 0x000007ff, 0x00008000,
         0x80000000, 0x00000001},
        34816};
-    const EnumeratedPropertyObject property_object
+    EnumeratedPropertyObject property_object
       {gc,
-       GC::value_names,
-       GC::aliases_only_map,
+       GC_ns::enum_names,
+       GC_ns::value_names,
+       GC_ns::aliases_only_map,
        {c_Set, cc_Set, cf_Set, cn_Set, co_Set, cs_Set, l_Set, lc_Set,
         ll_Set, lm_Set, lo_Set, lt_Set, lu_Set, m_Set, mc_Set, me_Set,
         mn_Set, n_Set, nd_Set, nl_Set, no_Set, p_Set, pc_Set, pd_Set,

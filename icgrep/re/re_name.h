@@ -30,6 +30,7 @@ public:
     };
     const std::string & getNamespace() const;
     const std::string & getName() const;
+    void setName(std::string);
     Type getType() const;
     RE *getDefinition() const;
     pablo::Var * getCompiled() const {
@@ -60,8 +61,8 @@ protected:
     }
 
 private:
-    const std::string   mNamespace;
-    const std::string   mName;
+    std::string   mNamespace;
+    std::string   mName;
     const Type          mType;
     RE *                mDefiningRE;
     pablo::Var *        mCompiled;
@@ -71,10 +72,14 @@ inline const std::string & Name::getNamespace() const {
     return mNamespace;
 }
 
-inline const std::string & Name::getName() const {
-    return mName;
-}
-
+    inline const std::string & Name::getName() const {
+        return mName;
+    }
+    
+    inline void Name::setName(std::string n) {
+        mName = n;
+    }
+    
 inline Name::Type Name::getType() const {
     return mType;
 }

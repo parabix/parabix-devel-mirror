@@ -14,7 +14,7 @@
 #include "PropertyValueAliases.h"
 
 namespace UCD {
-  namespace SC {
+  namespace SC_ns {
     const UnicodeSet aghb_Set 
       {{{Empty, 2089}, {Mixed, 1}, {Full, 1}, {Mixed, 1}, {Empty, 32724}},
        {0xffff0000, 0x0000800f},
@@ -798,10 +798,11 @@ namespace UCD {
         0xff800000, 0xffe00000, 0xc0000000, 0xc0000000, 0xfffffffd,
         0xffff0000},
        34816};
-    const EnumeratedPropertyObject property_object
+    EnumeratedPropertyObject property_object
       {sc,
-       SC::value_names,
-       SC::aliases_only_map,
+       SC_ns::enum_names,
+       SC_ns::value_names,
+       SC_ns::aliases_only_map,
        {aghb_Set, arab_Set, armi_Set, armn_Set, avst_Set, bali_Set,
         bamu_Set, bass_Set, batk_Set, beng_Set, bopo_Set, brah_Set,
         brai_Set, bugi_Set, buhd_Set, cakm_Set, cans_Set, cari_Set,

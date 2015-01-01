@@ -13,9 +13,11 @@
 #include "PropertyAliases.h"
 namespace UCD {
 
-  namespace Binary {
+  namespace Binary_ns {
     enum value_t {
       N, Y};
+    const std::vector<std::string> enum_names = {
+      "N", "Y"};
     const std::vector<std::string> value_names = {
       "No", "Yes"};
     const std::unordered_map<std::string, int> aliases_only_map = {
@@ -23,11 +25,17 @@ namespace UCD {
       {"false", N}, {"true", Y}};
   }
 
-  namespace JSN {
+  namespace JSN_ns {
     enum value_t {
       A, AE, B, BB, BS, C, D, DD, E, EO, EU, G, GG, GS, H, I, J, JJ, K, L,
       LB, LG, LH, LM, LP, LS, LT, M, N, NG, NH, NJ, O, OE, P, R, S, SS, T,
       U, WA, WAE, WE, WEO, WI, YA, YAE, YE, YEO, YI, YO, YU};
+    const std::vector<std::string> enum_names = {
+      "A", "AE", "B", "BB", "BS", "C", "D", "DD", "E", "EO", "EU", "G",
+      "GG", "GS", "H", "I", "J", "JJ", "K", "L", "LB", "LG", "LH", "LM",
+      "LP", "LS", "LT", "M", "N", "NG", "NH", "NJ", "O", "OE", "P", "R",
+      "S", "SS", "T", "U", "WA", "WAE", "WE", "WEO", "WI", "YA", "YAE",
+      "YE", "YEO", "YI", "YO", "YU"};
     const std::vector<std::string> value_names = {
       "A", "AE", "B", "BB", "BS", "C", "D", "DD", "E", "EO", "EU", "G",
       "GG", "GS", "H", "I", "J", "JJ", "K", "L", "LB", "LG", "LH", "LM",
@@ -38,24 +46,28 @@ namespace UCD {
       };
   }
 
-  namespace AGE {
+  namespace AGE_ns {
     enum value_t {
       V1_1, V2_0, V2_1, V3_0, V3_1, V3_2, V4_0, V4_1, V5_0, V5_1, V5_2,
       V6_0, V6_1, V6_2, V6_3, V7_0, Unassigned};
+    const std::vector<std::string> enum_names = {
+      "V1_1", "V2_0", "V2_1", "V3_0", "V3_1", "V3_2", "V4_0", "V4_1",
+      "V5_0", "V5_1", "V5_2", "V6_0", "V6_1", "V6_2", "V6_3", "V7_0",
+      "Unassigned"};
     const std::vector<std::string> value_names = {
       "V1_1", "V2_0", "V2_1", "V3_0", "V3_1", "V3_2", "V4_0", "V4_1",
       "V5_0", "V5_1", "V5_2", "V6_0", "V6_1", "V6_2", "V6_3", "V7_0",
       "Unassigned"};
     const std::unordered_map<std::string, int> aliases_only_map = {
-      {"1.1", AGE::V1_1}, {"2.0", AGE::V2_0}, {"2.1", AGE::V2_1},
-      {"3.0", AGE::V3_0}, {"3.1", AGE::V3_1}, {"3.2", AGE::V3_2},
-      {"4.0", AGE::V4_0}, {"4.1", AGE::V4_1}, {"5.0", AGE::V5_0},
-      {"5.1", AGE::V5_1}, {"5.2", AGE::V5_2}, {"6.0", AGE::V6_0},
-      {"6.1", AGE::V6_1}, {"6.2", AGE::V6_2}, {"6.3", AGE::V6_3},
-      {"7.0", AGE::V7_0}, {"na", AGE::Unassigned}};
+      {"1.1", AGE_ns::V1_1}, {"2.0", AGE_ns::V2_0}, {"2.1", AGE_ns::V2_1},
+      {"3.0", AGE_ns::V3_0}, {"3.1", AGE_ns::V3_1}, {"3.2", AGE_ns::V3_2},
+      {"4.0", AGE_ns::V4_0}, {"4.1", AGE_ns::V4_1}, {"5.0", AGE_ns::V5_0},
+      {"5.1", AGE_ns::V5_1}, {"5.2", AGE_ns::V5_2}, {"6.0", AGE_ns::V6_0},
+      {"6.1", AGE_ns::V6_1}, {"6.2", AGE_ns::V6_2}, {"6.3", AGE_ns::V6_3},
+      {"7.0", AGE_ns::V7_0}, {"na", AGE_ns::Unassigned}};
   }
 
-  namespace BLK {
+  namespace BLK_ns {
     enum value_t {
       Aegean_Numbers, Alchemical, Alphabetic_PF, Ancient_Greek_Music,
       Ancient_Greek_Numbers, Ancient_Symbols, Arabic, Arabic_Ext_A,
@@ -108,6 +120,65 @@ namespace UCD {
       Transport_And_Map, UCAS, UCAS_Ext, Ugaritic, Vai, Vedic_Ext,
       Vertical_Forms, VS, VS_Sup, Warang_Citi, Yi_Radicals, Yi_Syllables,
       Yijing};
+    const std::vector<std::string> enum_names = {
+      "Aegean_Numbers", "Alchemical", "Alphabetic_PF",
+      "Ancient_Greek_Music", "Ancient_Greek_Numbers", "Ancient_Symbols",
+      "Arabic", "Arabic_Ext_A", "Arabic_Math", "Arabic_PF_A", "Arabic_PF_B",
+      "Arabic_Sup", "Armenian", "Arrows", "ASCII", "Avestan", "Balinese",
+      "Bamum", "Bamum_Sup", "Bassa_Vah", "Batak", "Bengali",
+      "Block_Elements", "Bopomofo", "Bopomofo_Ext", "Box_Drawing", "Brahmi",
+      "Braille", "Buginese", "Buhid", "Byzantine_Music", "Carian",
+      "Caucasian_Albanian", "Chakma", "Cham", "Cherokee", "CJK",
+      "CJK_Compat", "CJK_Compat_Forms", "CJK_Compat_Ideographs",
+      "CJK_Compat_Ideographs_Sup", "CJK_Ext_A", "CJK_Ext_B", "CJK_Ext_C",
+      "CJK_Ext_D", "CJK_Radicals_Sup", "CJK_Strokes", "CJK_Symbols",
+      "Compat_Jamo", "Control_Pictures", "Coptic", "Coptic_Epact_Numbers",
+      "Counting_Rod", "Cuneiform", "Cuneiform_Numbers", "Currency_Symbols",
+      "Cypriot_Syllabary", "Cyrillic", "Cyrillic_Ext_A", "Cyrillic_Ext_B",
+      "Cyrillic_Sup", "Deseret", "Devanagari", "Devanagari_Ext",
+      "Diacriticals", "Diacriticals_Ext", "Diacriticals_For_Symbols",
+      "Diacriticals_Sup", "Dingbats", "Domino", "Duployan",
+      "Egyptian_Hieroglyphs", "Elbasan", "Emoticons", "Enclosed_Alphanum",
+      "Enclosed_Alphanum_Sup", "Enclosed_CJK", "Enclosed_Ideographic_Sup",
+      "Ethiopic", "Ethiopic_Ext", "Ethiopic_Ext_A", "Ethiopic_Sup",
+      "Geometric_Shapes", "Geometric_Shapes_Ext", "Georgian",
+      "Georgian_Sup", "Glagolitic", "Gothic", "Grantha", "Greek",
+      "Greek_Ext", "Gujarati", "Gurmukhi", "Half_And_Full_Forms",
+      "Half_Marks", "Hangul", "Hanunoo", "Hebrew", "High_PU_Surrogates",
+      "High_Surrogates", "Hiragana", "IDC", "Imperial_Aramaic",
+      "Indic_Number_Forms", "Inscriptional_Pahlavi",
+      "Inscriptional_Parthian", "IPA_Ext", "Jamo", "Jamo_Ext_A",
+      "Jamo_Ext_B", "Javanese", "Kaithi", "Kana_Sup", "Kanbun", "Kangxi",
+      "Kannada", "Katakana", "Katakana_Ext", "Kayah_Li", "Kharoshthi",
+      "Khmer", "Khmer_Symbols", "Khojki", "Khudawadi", "Lao", "Latin_1_Sup",
+      "Latin_Ext_A", "Latin_Ext_Additional", "Latin_Ext_B", "Latin_Ext_C",
+      "Latin_Ext_D", "Latin_Ext_E", "Lepcha", "Letterlike_Symbols", "Limbu",
+      "Linear_A", "Linear_B_Ideograms", "Linear_B_Syllabary", "Lisu",
+      "Low_Surrogates", "Lycian", "Lydian", "Mahajani", "Mahjong",
+      "Malayalam", "Mandaic", "Manichaean", "Math_Alphanum",
+      "Math_Operators", "Meetei_Mayek", "Meetei_Mayek_Ext", "Mende_Kikakui",
+      "Meroitic_Cursive", "Meroitic_Hieroglyphs", "Miao", "Misc_Arrows",
+      "Misc_Math_Symbols_A", "Misc_Math_Symbols_B", "Misc_Pictographs",
+      "Misc_Symbols", "Misc_Technical", "Modi", "Modifier_Letters",
+      "Modifier_Tone_Letters", "Mongolian", "Mro", "Music", "Myanmar",
+      "Myanmar_Ext_A", "Myanmar_Ext_B", "Nabataean", "NB", "New_Tai_Lue",
+      "NKo", "Number_Forms", "OCR", "Ogham", "Ol_Chiki", "Old_Italic",
+      "Old_North_Arabian", "Old_Permic", "Old_Persian", "Old_South_Arabian",
+      "Old_Turkic", "Oriya", "Ornamental_Dingbats", "Osmanya",
+      "Pahawh_Hmong", "Palmyrene", "Pau_Cin_Hau", "Phags_Pa", "Phaistos",
+      "Phoenician", "Phonetic_Ext", "Phonetic_Ext_Sup", "Playing_Cards",
+      "Psalter_Pahlavi", "PUA", "Punctuation", "Rejang", "Rumi", "Runic",
+      "Samaritan", "Saurashtra", "Sharada", "Shavian",
+      "Shorthand_Format_Controls", "Siddham", "Sinhala",
+      "Sinhala_Archaic_Numbers", "Small_Forms", "Sora_Sompeng", "Specials",
+      "Sundanese", "Sundanese_Sup", "Sup_Arrows_A", "Sup_Arrows_B",
+      "Sup_Arrows_C", "Sup_Math_Operators", "Sup_PUA_A", "Sup_PUA_B",
+      "Sup_Punctuation", "Super_And_Sub", "Syloti_Nagri", "Syriac",
+      "Tagalog", "Tagbanwa", "Tags", "Tai_Le", "Tai_Tham", "Tai_Viet",
+      "Tai_Xuan_Jing", "Takri", "Tamil", "Telugu", "Thaana", "Thai",
+      "Tibetan", "Tifinagh", "Tirhuta", "Transport_And_Map", "UCAS",
+      "UCAS_Ext", "Ugaritic", "Vai", "Vedic_Ext", "Vertical_Forms", "VS",
+      "VS_Sup", "Warang_Citi", "Yi_Radicals", "Yi_Syllables", "Yijing"};
     const std::vector<std::string> value_names = {
       "Aegean_Numbers", "Alchemical_Symbols",
       "Alphabetic_Presentation_Forms", "Ancient_Greek_Musical_Notation",
@@ -196,87 +267,13 @@ namespace UCD {
       "Variation_Selectors_Supplement", "Warang_Citi", "Yi_Radicals",
       "Yi_Syllables", "Yijing_Hexagram_Symbols"};
     const std::unordered_map<std::string, int> aliases_only_map = {
-      {"alchemical", BLK::Alchemical}, {"alphabeticpf", BLK::Alphabetic_PF},
-      {"ancientgreekmusic", BLK::Ancient_Greek_Music},
-      {"arabicexta", BLK::Arabic_Ext_A}, {"arabicmath", BLK::Arabic_Math},
-      {"arabicpfa", BLK::Arabic_PF_A}, {"arabicpfb", BLK::Arabic_PF_B},
-      {"arabicsup", BLK::Arabic_Sup}, {"ascii", BLK::ASCII},
-      {"bamumsup", BLK::Bamum_Sup}, {"bopomofoext", BLK::Bopomofo_Ext},
-      {"braille", BLK::Braille}, {"byzantinemusic", BLK::Byzantine_Music},
-      {"canadiansyllabics", BLK::UCAS}, {"cjk", BLK::CJK},
-      {"cjkcompat", BLK::CJK_Compat},
-      {"cjkcompatforms", BLK::CJK_Compat_Forms},
-      {"cjkcompatideographs", BLK::CJK_Compat_Ideographs},
-      {"cjkcompatideographssup", BLK::CJK_Compat_Ideographs_Sup},
-      {"cjkexta", BLK::CJK_Ext_A}, {"cjkextb", BLK::CJK_Ext_B},
-      {"cjkextc", BLK::CJK_Ext_C}, {"cjkextd", BLK::CJK_Ext_D},
-      {"cjkradicalssup", BLK::CJK_Radicals_Sup},
-      {"cjksymbols", BLK::CJK_Symbols},
-      {"combiningmarksforsymbols", BLK::Diacriticals_For_Symbols},
-      {"compatjamo", BLK::Compat_Jamo}, {"countingrod", BLK::Counting_Rod},
-      {"cuneiformnumbers", BLK::Cuneiform_Numbers},
-      {"cyrillicexta", BLK::Cyrillic_Ext_A},
-      {"cyrillicextb", BLK::Cyrillic_Ext_B},
-      {"cyrillicsup", BLK::Cyrillic_Sup},
-      {"cyrillicsupplementary", BLK::Cyrillic_Sup},
-      {"devanagariext", BLK::Devanagari_Ext},
-      {"diacriticals", BLK::Diacriticals},
-      {"diacriticalsext", BLK::Diacriticals_Ext},
-      {"diacriticalsforsymbols", BLK::Diacriticals_For_Symbols},
-      {"diacriticalssup", BLK::Diacriticals_Sup}, {"domino", BLK::Domino},
-      {"enclosedalphanum", BLK::Enclosed_Alphanum},
-      {"enclosedalphanumsup", BLK::Enclosed_Alphanum_Sup},
-      {"enclosedcjk", BLK::Enclosed_CJK},
-      {"enclosedideographicsup", BLK::Enclosed_Ideographic_Sup},
-      {"ethiopicext", BLK::Ethiopic_Ext},
-      {"ethiopicexta", BLK::Ethiopic_Ext_A},
-      {"ethiopicsup", BLK::Ethiopic_Sup},
-      {"geometricshapesext", BLK::Geometric_Shapes_Ext},
-      {"georgiansup", BLK::Georgian_Sup}, {"greek", BLK::Greek},
-      {"greekext", BLK::Greek_Ext},
-      {"halfandfullforms", BLK::Half_And_Full_Forms},
-      {"halfmarks", BLK::Half_Marks}, {"hangul", BLK::Hangul},
-      {"highpusurrogates", BLK::High_PU_Surrogates}, {"idc", BLK::IDC},
-      {"indicnumberforms", BLK::Indic_Number_Forms},
-      {"ipaext", BLK::IPA_Ext}, {"jamo", BLK::Jamo},
-      {"jamoexta", BLK::Jamo_Ext_A}, {"jamoextb", BLK::Jamo_Ext_B},
-      {"kanasup", BLK::Kana_Sup}, {"kangxi", BLK::Kangxi},
-      {"katakanaext", BLK::Katakana_Ext}, {"latin1", BLK::Latin_1_Sup},
-      {"latin1sup", BLK::Latin_1_Sup}, {"latinexta", BLK::Latin_Ext_A},
-      {"latinextadditional", BLK::Latin_Ext_Additional},
-      {"latinextb", BLK::Latin_Ext_B}, {"latinextc", BLK::Latin_Ext_C},
-      {"latinextd", BLK::Latin_Ext_D}, {"latinexte", BLK::Latin_Ext_E},
-      {"mahjong", BLK::Mahjong}, {"mathalphanum", BLK::Math_Alphanum},
-      {"mathoperators", BLK::Math_Operators},
-      {"meeteimayekext", BLK::Meetei_Mayek_Ext},
-      {"miscarrows", BLK::Misc_Arrows},
-      {"miscmathsymbolsa", BLK::Misc_Math_Symbols_A},
-      {"miscmathsymbolsb", BLK::Misc_Math_Symbols_B},
-      {"miscpictographs", BLK::Misc_Pictographs},
-      {"miscsymbols", BLK::Misc_Symbols},
-      {"misctechnical", BLK::Misc_Technical},
-      {"modifierletters", BLK::Modifier_Letters}, {"music", BLK::Music},
-      {"myanmarexta", BLK::Myanmar_Ext_A},
-      {"myanmarextb", BLK::Myanmar_Ext_B}, {"nb", BLK::NB},
-      {"ocr", BLK::OCR}, {"phaistos", BLK::Phaistos},
-      {"phoneticext", BLK::Phonetic_Ext},
-      {"phoneticextsup", BLK::Phonetic_Ext_Sup}, {"privateuse", BLK::PUA},
-      {"pua", BLK::PUA}, {"punctuation", BLK::Punctuation},
-      {"rumi", BLK::Rumi}, {"smallforms", BLK::Small_Forms},
-      {"sundanesesup", BLK::Sundanese_Sup},
-      {"suparrowsa", BLK::Sup_Arrows_A}, {"suparrowsb", BLK::Sup_Arrows_B},
-      {"suparrowsc", BLK::Sup_Arrows_C},
-      {"superandsub", BLK::Super_And_Sub},
-      {"supmathoperators", BLK::Sup_Math_Operators},
-      {"suppuaa", BLK::Sup_PUA_A}, {"suppuab", BLK::Sup_PUA_B},
-      {"suppunctuation", BLK::Sup_Punctuation},
-      {"taixuanjing", BLK::Tai_Xuan_Jing},
-      {"transportandmap", BLK::Transport_And_Map}, {"ucas", BLK::UCAS},
-      {"ucasext", BLK::UCAS_Ext}, {"vedicext", BLK::Vedic_Ext},
-      {"vs", BLK::VS}, {"vssup", BLK::VS_Sup}, {"yijing", BLK::Yijing}};
+      {"canadiansyllabics", BLK_ns::UCAS},
+      {"combiningmarksforsymbols", BLK_ns::Diacriticals_For_Symbols},
+      {"cyrillicsupplementary", BLK_ns::Cyrillic_Sup},
+      {"latin1", BLK_ns::Latin_1_Sup}, {"privateuse", BLK_ns::PUA}};
   }
 
-  namespace SC {
+  namespace SC_ns {
     enum value_t {
       Aghb, Arab, Armi, Armn, Avst, Bali, Bamu, Bass, Batk, Beng, Bopo,
       Brah, Brai, Bugi, Buhd, Cakm, Cans, Cari, Cham, Cher, Copt, Cprt,
@@ -290,6 +287,23 @@ namespace UCD {
       Sind, Sinh, Sora, Sund, Sylo, Syrc, Tagb, Takr, Tale, Talu, Taml,
       Tavt, Telu, Tfng, Tglg, Thaa, Thai, Tibt, Tirh, Ugar, Vaii, Wara,
       Xpeo, Xsux, Yiii, Zinh, Zyyy, Zzzz};
+    const std::vector<std::string> enum_names = {
+      "Aghb", "Arab", "Armi", "Armn", "Avst", "Bali", "Bamu", "Bass",
+      "Batk", "Beng", "Bopo", "Brah", "Brai", "Bugi", "Buhd", "Cakm",
+      "Cans", "Cari", "Cham", "Cher", "Copt", "Cprt", "Cyrl", "Deva",
+      "Dsrt", "Dupl", "Egyp", "Elba", "Ethi", "Geor", "Glag", "Goth",
+      "Gran", "Grek", "Gujr", "Guru", "Hang", "Hani", "Hano", "Hebr",
+      "Hira", "Hmng", "Hrkt", "Ital", "Java", "Kali", "Kana", "Khar",
+      "Khmr", "Khoj", "Knda", "Kthi", "Lana", "Laoo", "Latn", "Lepc",
+      "Limb", "Lina", "Linb", "Lisu", "Lyci", "Lydi", "Mahj", "Mand",
+      "Mani", "Mend", "Merc", "Mero", "Mlym", "Modi", "Mong", "Mroo",
+      "Mtei", "Mymr", "Narb", "Nbat", "Nkoo", "Ogam", "Olck", "Orkh",
+      "Orya", "Osma", "Palm", "Pauc", "Perm", "Phag", "Phli", "Phlp",
+      "Phnx", "Plrd", "Prti", "Rjng", "Runr", "Samr", "Sarb", "Saur",
+      "Shaw", "Shrd", "Sidd", "Sind", "Sinh", "Sora", "Sund", "Sylo",
+      "Syrc", "Tagb", "Takr", "Tale", "Talu", "Taml", "Tavt", "Telu",
+      "Tfng", "Tglg", "Thaa", "Thai", "Tibt", "Tirh", "Ugar", "Vaii",
+      "Wara", "Xpeo", "Xsux", "Yiii", "Zinh", "Zyyy", "Zzzz"};
     const std::vector<std::string> value_names = {
       "Caucasian_Albanian", "Arabic", "Imperial_Aramaic", "Armenian",
       "Avestan", "Balinese", "Bamum", "Bassa_Vah", "Batak", "Bengali",
@@ -317,54 +331,17 @@ namespace UCD {
       "Warang_Citi", "Old_Persian", "Cuneiform", "Yi", "Inherited",
       "Common", "Unknown"};
     const std::unordered_map<std::string, int> aliases_only_map = {
-      {"aghb", SC::Aghb}, {"arab", SC::Arab}, {"armi", SC::Armi},
-      {"armn", SC::Armn}, {"avst", SC::Avst}, {"bali", SC::Bali},
-      {"bamu", SC::Bamu}, {"bass", SC::Bass}, {"batk", SC::Batk},
-      {"beng", SC::Beng}, {"bopo", SC::Bopo}, {"brah", SC::Brah},
-      {"brai", SC::Brai}, {"bugi", SC::Bugi}, {"buhd", SC::Buhd},
-      {"cakm", SC::Cakm}, {"cans", SC::Cans}, {"cari", SC::Cari},
-      {"cher", SC::Cher}, {"copt", SC::Copt}, {"cprt", SC::Cprt},
-      {"cyrl", SC::Cyrl}, {"deva", SC::Deva}, {"dsrt", SC::Dsrt},
-      {"dupl", SC::Dupl}, {"egyp", SC::Egyp}, {"elba", SC::Elba},
-      {"ethi", SC::Ethi}, {"geor", SC::Geor}, {"glag", SC::Glag},
-      {"goth", SC::Goth}, {"gran", SC::Gran}, {"grek", SC::Grek},
-      {"gujr", SC::Gujr}, {"guru", SC::Guru}, {"hang", SC::Hang},
-      {"hani", SC::Hani}, {"hano", SC::Hano}, {"hebr", SC::Hebr},
-      {"hira", SC::Hira}, {"hmng", SC::Hmng}, {"hrkt", SC::Hrkt},
-      {"ital", SC::Ital}, {"java", SC::Java}, {"kali", SC::Kali},
-      {"kana", SC::Kana}, {"khar", SC::Khar}, {"khmr", SC::Khmr},
-      {"khoj", SC::Khoj}, {"knda", SC::Knda}, {"kthi", SC::Kthi},
-      {"lana", SC::Lana}, {"laoo", SC::Laoo}, {"latn", SC::Latn},
-      {"lepc", SC::Lepc}, {"limb", SC::Limb}, {"lina", SC::Lina},
-      {"linb", SC::Linb}, {"lyci", SC::Lyci}, {"lydi", SC::Lydi},
-      {"mahj", SC::Mahj}, {"mand", SC::Mand}, {"mani", SC::Mani},
-      {"mend", SC::Mend}, {"merc", SC::Merc}, {"mero", SC::Mero},
-      {"mlym", SC::Mlym}, {"mong", SC::Mong}, {"mroo", SC::Mroo},
-      {"mtei", SC::Mtei}, {"mymr", SC::Mymr}, {"narb", SC::Narb},
-      {"nbat", SC::Nbat}, {"nkoo", SC::Nkoo}, {"ogam", SC::Ogam},
-      {"olck", SC::Olck}, {"orkh", SC::Orkh}, {"orya", SC::Orya},
-      {"osma", SC::Osma}, {"palm", SC::Palm}, {"pauc", SC::Pauc},
-      {"perm", SC::Perm}, {"phag", SC::Phag}, {"phli", SC::Phli},
-      {"phlp", SC::Phlp}, {"phnx", SC::Phnx}, {"plrd", SC::Plrd},
-      {"prti", SC::Prti}, {"qaac", SC::Copt}, {"qaai", SC::Zinh},
-      {"rjng", SC::Rjng}, {"runr", SC::Runr}, {"samr", SC::Samr},
-      {"sarb", SC::Sarb}, {"saur", SC::Saur}, {"shaw", SC::Shaw},
-      {"shrd", SC::Shrd}, {"sidd", SC::Sidd}, {"sind", SC::Sind},
-      {"sinh", SC::Sinh}, {"sora", SC::Sora}, {"sund", SC::Sund},
-      {"sylo", SC::Sylo}, {"syrc", SC::Syrc}, {"tagb", SC::Tagb},
-      {"takr", SC::Takr}, {"tale", SC::Tale}, {"talu", SC::Talu},
-      {"taml", SC::Taml}, {"tavt", SC::Tavt}, {"telu", SC::Telu},
-      {"tfng", SC::Tfng}, {"tglg", SC::Tglg}, {"thaa", SC::Thaa},
-      {"tibt", SC::Tibt}, {"tirh", SC::Tirh}, {"ugar", SC::Ugar},
-      {"vaii", SC::Vaii}, {"wara", SC::Wara}, {"xpeo", SC::Xpeo},
-      {"xsux", SC::Xsux}, {"yiii", SC::Yiii}, {"zinh", SC::Zinh},
-      {"zyyy", SC::Zyyy}, {"zzzz", SC::Zzzz}};
+      {"qaac", SC_ns::Copt}, {"qaai", SC_ns::Zinh}};
   }
 
-  namespace BC {
+  namespace BC_ns {
     enum value_t {
       AL, AN, B, BN, CS, EN, ES, ET, FSI, L, LRE, LRI, LRO, NSM, ON, PDF,
       PDI, R, RLE, RLI, RLO, S, WS};
+    const std::vector<std::string> enum_names = {
+      "AL", "AN", "B", "BN", "CS", "EN", "ES", "ET", "FSI", "L", "LRE",
+      "LRI", "LRO", "NSM", "ON", "PDF", "PDI", "R", "RLE", "RLI", "RLO",
+      "S", "WS"};
     const std::vector<std::string> value_names = {
       "Arabic_Letter", "Arabic_Number", "Paragraph_Separator",
       "Boundary_Neutral", "Common_Separator", "European_Number",
@@ -375,24 +352,21 @@ namespace UCD {
       "Right_To_Left_Embedding", "Right_To_Left_Isolate",
       "Right_To_Left_Override", "Segment_Separator", "White_Space"};
     const std::unordered_map<std::string, int> aliases_only_map = {
-      {"al", BC::AL}, {"an", BC::AN}, {"b", BC::B}, {"bn", BC::BN},
-      {"cs", BC::CS}, {"en", BC::EN}, {"es", BC::ES}, {"et", BC::ET},
-      {"fsi", BC::FSI}, {"l", BC::L}, {"lre", BC::LRE}, {"lri", BC::LRI},
-      {"lro", BC::LRO}, {"nsm", BC::NSM}, {"on", BC::ON}, {"pdf", BC::PDF},
-      {"pdi", BC::PDI}, {"r", BC::R}, {"rle", BC::RLE}, {"rli", BC::RLI},
-      {"rlo", BC::RLO}, {"s", BC::S}, {"ws", BC::WS}};
+      };
   }
 
-  namespace BPT {
+  namespace BPT_ns {
     enum value_t {
       c, n, o};
+    const std::vector<std::string> enum_names = {
+      "c", "n", "o"};
     const std::vector<std::string> value_names = {
       "Close", "None", "Open"};
     const std::unordered_map<std::string, int> aliases_only_map = {
-      {"c", BPT::c}, {"n", BPT::n}, {"o", BPT::o}};
+      };
   }
 
-  namespace CCC {
+  namespace CCC_ns {
     enum value_t {
       NR, OV, NK, KV, VR, CCC10, CCC11, CCC12, CCC13, CCC14, CCC15, CCC16,
       CCC17, CCC18, CCC19, CCC20, CCC21, CCC22, CCC23, CCC24, CCC25, CCC26,
@@ -405,6 +379,15 @@ namespace UCD {
       24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 84, 91, 103, 107,
       118, 122, 129, 130, 132, 133, 200, 202, 214, 216, 218, 220, 222, 224,
       226, 228, 230, 232, 233, 234, 240};
+    const std::vector<std::string> enum_names = {
+      "NR", "OV", "NK", "KV", "VR", "CCC10", "CCC11", "CCC12", "CCC13",
+      "CCC14", "CCC15", "CCC16", "CCC17", "CCC18", "CCC19", "CCC20",
+      "CCC21", "CCC22", "CCC23", "CCC24", "CCC25", "CCC26", "CCC27",
+      "CCC28", "CCC29", "CCC30", "CCC31", "CCC32", "CCC33", "CCC34",
+      "CCC35", "CCC36", "CCC84", "CCC91", "CCC103", "CCC107", "CCC118",
+      "CCC122", "CCC129", "CCC130", "CCC132", "CCC133", "ATBL", "ATB",
+      "ATA", "ATAR", "BL", "B", "BR", "L", "R", "AL", "A", "AR", "DB", "DA",
+      "IS"};
     const std::vector<std::string> value_names = {
       "Not_Reordered", "Overlay", "Nukta", "Kana_Voicing", "Virama",
       "CCC10", "CCC11", "CCC12", "CCC13", "CCC14", "CCC15", "CCC16",
@@ -417,45 +400,45 @@ namespace UCD {
       "Below_Right", "Left", "Right", "Above_Left", "Above", "Above_Right",
       "Double_Below", "Double_Above", "Iota_Subscript"};
     const std::unordered_map<std::string, int> aliases_only_map = {
-      {"a", CCC::A}, {"al", CCC::AL}, {"ar", CCC::AR}, {"ata", CCC::ATA},
-      {"atar", CCC::ATAR}, {"atb", CCC::ATB}, {"atbl", CCC::ATBL},
-      {"b", CCC::B}, {"bl", CCC::BL}, {"br", CCC::BR}, {"da", CCC::DA},
-      {"db", CCC::DB}, {"is", CCC::IS}, {"kv", CCC::KV}, {"l", CCC::L},
-      {"nk", CCC::NK}, {"nr", CCC::NR}, {"ov", CCC::OV}, {"r", CCC::R},
-      {"vr", CCC::VR}};
+      };
   }
 
-  namespace DT {
+  namespace DT_ns {
     enum value_t {
       Can, Com, Enc, Fin, Font, Fra, Init, Iso, Med, Nar, Nb, None, Sml,
       Sqr, Sub, Sup, Vert, Wide};
+    const std::vector<std::string> enum_names = {
+      "Can", "Com", "Enc", "Fin", "Font", "Fra", "Init", "Iso", "Med",
+      "Nar", "Nb", "None", "Sml", "Sqr", "Sub", "Sup", "Vert", "Wide"};
     const std::vector<std::string> value_names = {
       "Canonical", "Compat", "Circle", "Final", "Font", "Fraction",
       "Initial", "Isolated", "Medial", "Narrow", "Nobreak", "None", "Small",
       "Square", "Sub", "Super", "Vertical", "Wide"};
     const std::unordered_map<std::string, int> aliases_only_map = {
-      {"can", DT::Can}, {"com", DT::Com}, {"enc", DT::Enc},
-      {"fin", DT::Fin}, {"fra", DT::Fra}, {"init", DT::Init},
-      {"med", DT::Med}, {"nar", DT::Nar}, {"nb", DT::Nb}, {"o", DT::Iso},
-      {"sml", DT::Sml}, {"sqr", DT::Sqr}, {"sup", DT::Sup},
-      {"vert", DT::Vert}};
+      };
   }
 
-  namespace EA {
+  namespace EA_ns {
     enum value_t {
       A, F, H, N, Na, W};
+    const std::vector<std::string> enum_names = {
+      "A", "F", "H", "N", "Na", "W"};
     const std::vector<std::string> value_names = {
       "Ambiguous", "Fullwidth", "Halfwidth", "Neutral", "Narrow", "Wide"};
     const std::unordered_map<std::string, int> aliases_only_map = {
-      {"a", EA::A}, {"f", EA::F}, {"h", EA::H}, {"n", EA::N},
-      {"na", EA::Na}, {"w", EA::W}};
+      };
   }
 
-  namespace GC {
+  namespace GC_ns {
     enum value_t {
       C, Cc, Cf, Cn, Co, Cs, L, LC, Ll, Lm, Lo, Lt, Lu, M, Mc, Me, Mn, N,
       Nd, Nl, No, P, Pc, Pd, Pe, Pf, Pi, Po, Ps, S, Sc, Sk, Sm, So, Z, Zl,
       Zp, Zs};
+    const std::vector<std::string> enum_names = {
+      "C", "Cc", "Cf", "Cn", "Co", "Cs", "L", "LC", "Ll", "Lm", "Lo", "Lt",
+      "Lu", "M", "Mc", "Me", "Mn", "N", "Nd", "Nl", "No", "P", "Pc", "Pd",
+      "Pe", "Pf", "Pi", "Po", "Ps", "S", "Sc", "Sk", "Sm", "So", "Z", "Zl",
+      "Zp", "Zs"};
     const std::vector<std::string> value_names = {
       "Other", "Control", "Format", "Unassigned", "Private_Use",
       "Surrogate", "Letter", "Cased_Letter", "Lowercase_Letter",
@@ -469,46 +452,45 @@ namespace UCD {
       "Other_Symbol", "Separator", "Line_Separator", "Paragraph_Separator",
       "Space_Separator"};
     const std::unordered_map<std::string, int> aliases_only_map = {
-      {"c", GC::C}, {"cc", GC::Cc}, {"cf", GC::Cf}, {"cn", GC::Cn},
-      {"cntrl", GC::Cc}, {"co", GC::Co}, {"combiningmark", GC::M},
-      {"cs", GC::Cs}, {"digit", GC::Nd}, {"l", GC::L}, {"lc", GC::LC},
-      {"ll", GC::Ll}, {"lm", GC::Lm}, {"lo", GC::Lo}, {"lt", GC::Lt},
-      {"lu", GC::Lu}, {"m", GC::M}, {"mc", GC::Mc}, {"me", GC::Me},
-      {"mn", GC::Mn}, {"n", GC::N}, {"nd", GC::Nd}, {"nl", GC::Nl},
-      {"no", GC::No}, {"p", GC::P}, {"pc", GC::Pc}, {"pd", GC::Pd},
-      {"pe", GC::Pe}, {"pf", GC::Pf}, {"pi", GC::Pi}, {"po", GC::Po},
-      {"ps", GC::Ps}, {"punct", GC::P}, {"s", GC::S}, {"sc", GC::Sc},
-      {"sk", GC::Sk}, {"sm", GC::Sm}, {"so", GC::So}, {"z", GC::Z},
-      {"zl", GC::Zl}, {"zp", GC::Zp}, {"zs", GC::Zs}};
+      {"cntrl", GC_ns::Cc}, {"combiningmark", GC_ns::M},
+      {"digit", GC_ns::Nd}, {"punct", GC_ns::P}};
   }
 
-  namespace GCB {
+  namespace GCB_ns {
     enum value_t {
       CN, CR, EX, L, LF, LV, LVT, PP, RI, SM, T, V, XX};
+    const std::vector<std::string> enum_names = {
+      "CN", "CR", "EX", "L", "LF", "LV", "LVT", "PP", "RI", "SM", "T", "V",
+      "XX"};
     const std::vector<std::string> value_names = {
       "Control", "CR", "Extend", "L", "LF", "LV", "LVT", "Prepend",
       "Regional_Indicator", "SpacingMark", "T", "V", "Other"};
     const std::unordered_map<std::string, int> aliases_only_map = {
-      {"cn", GCB::CN}, {"ex", GCB::EX}, {"pp", GCB::PP}, {"ri", GCB::RI},
-      {"sm", GCB::SM}, {"xx", GCB::XX}};
+      };
   }
 
-  namespace HST {
+  namespace HST_ns {
     enum value_t {
       L, LV, LVT, NA, T, V};
+    const std::vector<std::string> enum_names = {
+      "L", "LV", "LVT", "NA", "T", "V"};
     const std::vector<std::string> value_names = {
       "Leading_Jamo", "LV_Syllable", "LVT_Syllable", "Not_Applicable",
       "Trailing_Jamo", "Vowel_Jamo"};
     const std::unordered_map<std::string, int> aliases_only_map = {
-      {"l", HST::L}, {"lv", HST::LV}, {"lvt", HST::LVT}, {"na", HST::NA},
-      {"t", HST::T}, {"v", HST::V}};
+      };
   }
 
-  namespace INMC {
+  namespace INMC_ns {
     enum value_t {
       Bottom, Bottom_And_Right, Left, Left_And_Right, NA, Overstruck, Right,
       Top, Top_And_Bottom, Top_And_Bottom_And_Right, Top_And_Left,
       Top_And_Left_And_Right, Top_And_Right, Visual_Order_Left};
+    const std::vector<std::string> enum_names = {
+      "Bottom", "Bottom_And_Right", "Left", "Left_And_Right", "NA",
+      "Overstruck", "Right", "Top", "Top_And_Bottom",
+      "Top_And_Bottom_And_Right", "Top_And_Left", "Top_And_Left_And_Right",
+      "Top_And_Right", "Visual_Order_Left"};
     const std::vector<std::string> value_names = {
       "Bottom", "Bottom_And_Right", "Left", "Left_And_Right", "NA",
       "Overstruck", "Right", "Top", "Top_And_Bottom",
@@ -518,7 +500,7 @@ namespace UCD {
       };
   }
 
-  namespace INSC {
+  namespace INSC_ns {
     enum value_t {
       Avagraha, Bindu, Brahmi_Joining_Number, Cantillation_Mark, Consonant,
       Consonant_Dead, Consonant_Final, Consonant_Head_Letter,
@@ -528,6 +510,16 @@ namespace UCD {
       Number, Number_Joiner, Other, Pure_Killer, Register_Shifter,
       Tone_Letter, Tone_Mark, Virama, Visarga, Vowel, Vowel_Dependent,
       Vowel_Independent};
+    const std::vector<std::string> enum_names = {
+      "Avagraha", "Bindu", "Brahmi_Joining_Number", "Cantillation_Mark",
+      "Consonant", "Consonant_Dead", "Consonant_Final",
+      "Consonant_Head_Letter", "Consonant_Medial", "Consonant_Placeholder",
+      "Consonant_Preceding_Repha", "Consonant_Subjoined",
+      "Consonant_Succeeding_Repha", "Gemination_Mark", "Invisible_Stacker",
+      "Joiner", "Modifying_Letter", "Non_Joiner", "Nukta", "Number",
+      "Number_Joiner", "Other", "Pure_Killer", "Register_Shifter",
+      "Tone_Letter", "Tone_Mark", "Virama", "Visarga", "Vowel",
+      "Vowel_Dependent", "Vowel_Independent"};
     const std::vector<std::string> value_names = {
       "Avagraha", "Bindu", "Brahmi_Joining_Number", "Cantillation_Mark",
       "Consonant", "Consonant_Dead", "Consonant_Final",
@@ -542,7 +534,7 @@ namespace UCD {
       };
   }
 
-  namespace JG {
+  namespace JG_ns {
     enum value_t {
       Ain, Alaph, Alef, Beh, Beth, Burushaski_Yeh_Barree, Dal, Dalath_Rish,
       E, Farsi_Yeh, Fe, Feh, Final_Semkath, Gaf, Gamal, Hah, He, Heh,
@@ -559,6 +551,25 @@ namespace UCD {
       Seen, Semkath, Shin, Straight_Waw, Swash_Kaf, Syriac_Waw, Tah, Taw,
       Teh_Marbuta, Teh_Marbuta_Goal, Teth, Waw, Yeh, Yeh_Barree,
       Yeh_With_Tail, Yudh, Yudh_He, Zain, Zhain};
+    const std::vector<std::string> enum_names = {
+      "Ain", "Alaph", "Alef", "Beh", "Beth", "Burushaski_Yeh_Barree", "Dal",
+      "Dalath_Rish", "E", "Farsi_Yeh", "Fe", "Feh", "Final_Semkath", "Gaf",
+      "Gamal", "Hah", "He", "Heh", "Heh_Goal", "Heth", "Kaf", "Kaph",
+      "Khaph", "Knotted_Heh", "Lam", "Lamadh", "Manichaean_Aleph",
+      "Manichaean_Ayin", "Manichaean_Beth", "Manichaean_Daleth",
+      "Manichaean_Dhamedh", "Manichaean_Five", "Manichaean_Gimel",
+      "Manichaean_Heth", "Manichaean_Hundred", "Manichaean_Kaph",
+      "Manichaean_Lamedh", "Manichaean_Mem", "Manichaean_Nun",
+      "Manichaean_One", "Manichaean_Pe", "Manichaean_Qoph",
+      "Manichaean_Resh", "Manichaean_Sadhe", "Manichaean_Samekh",
+      "Manichaean_Taw", "Manichaean_Ten", "Manichaean_Teth",
+      "Manichaean_Thamedh", "Manichaean_Twenty", "Manichaean_Waw",
+      "Manichaean_Yodh", "Manichaean_Zayin", "Meem", "Mim",
+      "No_Joining_Group", "Noon", "Nun", "Nya", "Pe", "Qaf", "Qaph", "Reh",
+      "Reversed_Pe", "Rohingya_Yeh", "Sad", "Sadhe", "Seen", "Semkath",
+      "Shin", "Straight_Waw", "Swash_Kaf", "Syriac_Waw", "Tah", "Taw",
+      "Teh_Marbuta", "Teh_Marbuta_Goal", "Teth", "Waw", "Yeh", "Yeh_Barree",
+      "Yeh_With_Tail", "Yudh", "Yudh_He", "Zain", "Zhain"};
     const std::vector<std::string> value_names = {
       "Ain", "Alaph", "Alef", "Beh", "Beth", "Burushaski_Yeh_Barree", "Dal",
       "Dalath_Rish", "E", "Farsi_Yeh", "Fe", "Feh", "Final_Semkath", "Gaf",
@@ -579,25 +590,31 @@ namespace UCD {
       "Teh_Marbuta", "Hamza_On_Heh_Goal", "Teth", "Waw", "Yeh",
       "Yeh_Barree", "Yeh_With_Tail", "Yudh", "Yudh_He", "Zain", "Zhain"};
     const std::unordered_map<std::string, int> aliases_only_map = {
-      {"tehmarbutagoal", JG::Teh_Marbuta_Goal}};
+      };
   }
 
-  namespace JT {
+  namespace JT_ns {
     enum value_t {
       C, D, L, R, T, U};
+    const std::vector<std::string> enum_names = {
+      "C", "D", "L", "R", "T", "U"};
     const std::vector<std::string> value_names = {
       "Join_Causing", "Dual_Joining", "Left_Joining", "Right_Joining",
       "Transparent", "Non_Joining"};
     const std::unordered_map<std::string, int> aliases_only_map = {
-      {"c", JT::C}, {"d", JT::D}, {"l", JT::L}, {"r", JT::R}, {"t", JT::T},
-      {"u", JT::U}};
+      };
   }
 
-  namespace LB {
+  namespace LB_ns {
     enum value_t {
       AI, AL, B2, BA, BB, BK, CB, CJ, CL, CM, CP, CR, EX, GL, H2, H3, HL,
       HY, ID, IN, IS, JL, JT, JV, LF, NL, NS, NU, OP, PO, PR, QU, RI, SA,
       SG, SP, SY, WJ, XX, ZW};
+    const std::vector<std::string> enum_names = {
+      "AI", "AL", "B2", "BA", "BB", "BK", "CB", "CJ", "CL", "CM", "CP",
+      "CR", "EX", "GL", "H2", "H3", "HL", "HY", "ID", "IN", "IS", "JL",
+      "JT", "JV", "LF", "NL", "NS", "NU", "OP", "PO", "PR", "QU", "RI",
+      "SA", "SG", "SP", "SY", "WJ", "XX", "ZW"};
     const std::vector<std::string> value_names = {
       "Ambiguous", "Alphabetic", "Break_Both", "Break_After",
       "Break_Before", "Mandatory_Break", "Contingent_Break",
@@ -610,89 +627,91 @@ namespace UCD {
       "Complex_Context", "Surrogate", "Space", "Break_Symbols",
       "Word_Joiner", "Unknown", "ZWSpace"};
     const std::unordered_map<std::string, int> aliases_only_map = {
-      {"ai", LB::AI}, {"al", LB::AL}, {"b2", LB::B2}, {"ba", LB::BA},
-      {"bb", LB::BB}, {"bk", LB::BK}, {"cb", LB::CB}, {"cj", LB::CJ},
-      {"cl", LB::CL}, {"cm", LB::CM}, {"cp", LB::CP}, {"cr", LB::CR},
-      {"ex", LB::EX}, {"gl", LB::GL}, {"hl", LB::HL}, {"hy", LB::HY},
-      {"id", LB::ID}, {"in", LB::IN}, {"inseperable", LB::IN},
-      {"is", LB::IS}, {"lf", LB::LF}, {"nl", LB::NL}, {"ns", LB::NS},
-      {"nu", LB::NU}, {"op", LB::OP}, {"po", LB::PO}, {"pr", LB::PR},
-      {"qu", LB::QU}, {"ri", LB::RI}, {"sa", LB::SA}, {"sg", LB::SG},
-      {"sp", LB::SP}, {"sy", LB::SY}, {"wj", LB::WJ}, {"xx", LB::XX},
-      {"zw", LB::ZW}};
+      {"inseperable", LB_ns::IN}};
   }
 
-  namespace NFC_QC {
+  namespace NFC_QC_ns {
     enum value_t {
       M, N, Y};
+    const std::vector<std::string> enum_names = {
+      "M", "N", "Y"};
     const std::vector<std::string> value_names = {
       "Maybe", "No", "Yes"};
     const std::unordered_map<std::string, int> aliases_only_map = {
-      {"m", NFC_QC::M}, {"n", NFC_QC::N}, {"y", NFC_QC::Y}};
+      };
   }
 
-  namespace NFD_QC {
+  namespace NFD_QC_ns {
     enum value_t {
       N, Y};
+    const std::vector<std::string> enum_names = {
+      "N", "Y"};
     const std::vector<std::string> value_names = {
       "No", "Yes"};
     const std::unordered_map<std::string, int> aliases_only_map = {
-      {"n", NFD_QC::N}, {"y", NFD_QC::Y}};
+      };
   }
 
-  namespace NFKC_QC {
+  namespace NFKC_QC_ns {
     enum value_t {
       M, N, Y};
+    const std::vector<std::string> enum_names = {
+      "M", "N", "Y"};
     const std::vector<std::string> value_names = {
       "Maybe", "No", "Yes"};
     const std::unordered_map<std::string, int> aliases_only_map = {
-      {"m", NFKC_QC::M}, {"n", NFKC_QC::N}, {"y", NFKC_QC::Y}};
+      };
   }
 
-  namespace NFKD_QC {
+  namespace NFKD_QC_ns {
     enum value_t {
       N, Y};
+    const std::vector<std::string> enum_names = {
+      "N", "Y"};
     const std::vector<std::string> value_names = {
       "No", "Yes"};
     const std::unordered_map<std::string, int> aliases_only_map = {
-      {"n", NFKD_QC::N}, {"y", NFKD_QC::Y}};
+      };
   }
 
-  namespace NT {
+  namespace NT_ns {
     enum value_t {
       De, Di, None, Nu};
+    const std::vector<std::string> enum_names = {
+      "De", "Di", "None", "Nu"};
     const std::vector<std::string> value_names = {
       "Decimal", "Digit", "None", "Numeric"};
     const std::unordered_map<std::string, int> aliases_only_map = {
-      {"de", NT::De}, {"di", NT::Di}, {"nu", NT::Nu}};
+      };
   }
 
-  namespace SB {
+  namespace SB_ns {
     enum value_t {
       AT, CL, CR, EX, FO, LE, LF, LO, NU, SC, SE, SP, ST, UP, XX};
+    const std::vector<std::string> enum_names = {
+      "AT", "CL", "CR", "EX", "FO", "LE", "LF", "LO", "NU", "SC", "SE",
+      "SP", "ST", "UP", "XX"};
     const std::vector<std::string> value_names = {
       "ATerm", "Close", "CR", "Extend", "Format", "OLetter", "LF", "Lower",
       "Numeric", "SContinue", "Sep", "Sp", "STerm", "Upper", "Other"};
     const std::unordered_map<std::string, int> aliases_only_map = {
-      {"at", SB::AT}, {"cl", SB::CL}, {"ex", SB::EX}, {"fo", SB::FO},
-      {"le", SB::LE}, {"lo", SB::LO}, {"nu", SB::NU}, {"sc", SB::SC},
-      {"se", SB::SE}, {"st", SB::ST}, {"up", SB::UP}, {"xx", SB::XX}};
+      };
   }
 
-  namespace WB {
+  namespace WB_ns {
     enum value_t {
       CR, DQ, EX, Extend, FO, HL, KA, LE, LF, MB, ML, MN, NL, NU, RI, SQ,
       XX};
+    const std::vector<std::string> enum_names = {
+      "CR", "DQ", "EX", "Extend", "FO", "HL", "KA", "LE", "LF", "MB", "ML",
+      "MN", "NL", "NU", "RI", "SQ", "XX"};
     const std::vector<std::string> value_names = {
       "CR", "Double_Quote", "ExtendNumLet", "Extend", "Format",
       "Hebrew_Letter", "Katakana", "ALetter", "LF", "MidNumLet",
       "MidLetter", "MidNum", "Newline", "Numeric", "Regional_Indicator",
       "Single_Quote", "Other"};
     const std::unordered_map<std::string, int> aliases_only_map = {
-      {"dq", WB::DQ}, {"ex", WB::EX}, {"fo", WB::FO}, {"hl", WB::HL},
-      {"ka", WB::KA}, {"le", WB::LE}, {"mb", WB::MB}, {"ml", WB::ML},
-      {"mn", WB::MN}, {"nl", WB::NL}, {"nu", WB::NU}, {"ri", WB::RI},
-      {"sq", WB::SQ}, {"xx", WB::XX}};
+      };
   }
 }
 

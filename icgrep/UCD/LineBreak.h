@@ -14,7 +14,7 @@
 #include "PropertyValueAliases.h"
 
 namespace UCD {
-  namespace LB {
+  namespace LB_ns {
     const UnicodeSet ai_Set 
       {{{Empty, 5}, {Mixed, 3}, {Empty, 14}, {Mixed, 1}, {Empty, 233},
         {Mixed, 2}, {Empty, 1}, {Mixed, 2}, {Empty, 3}, {Mixed, 5},
@@ -826,10 +826,11 @@ namespace UCD {
       {{{Empty, 256}, {Mixed, 1}, {Empty, 34559}},
        {0x00000800},
        34816};
-    const EnumeratedPropertyObject property_object
+    EnumeratedPropertyObject property_object
       {lb,
-       LB::value_names,
-       LB::aliases_only_map,
+       LB_ns::enum_names,
+       LB_ns::value_names,
+       LB_ns::aliases_only_map,
        {ai_Set, al_Set, b2_Set, ba_Set, bb_Set, bk_Set, cb_Set, cj_Set,
         cl_Set, cm_Set, cp_Set, cr_Set, ex_Set, gl_Set, h2_Set, h3_Set,
         hl_Set, hy_Set, id_Set, in_Set, is_Set, jl_Set, jt_Set, jv_Set,

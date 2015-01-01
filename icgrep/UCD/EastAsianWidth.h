@@ -14,7 +14,7 @@
 #include "PropertyValueAliases.h"
 
 namespace UCD {
-  namespace EA {
+  namespace EA_ns {
     const UnicodeSet a_Set 
       {{{Empty, 5}, {Mixed, 7}, {Empty, 2}, {Mixed, 1}, {Empty, 3},
         {Mixed, 2}, {Empty, 2}, {Mixed, 1}, {Empty, 1}, {Full, 3},
@@ -116,10 +116,11 @@ namespace UCD {
         0x00000003, 0xffff0007, 0x07ffffff, 0x000301ff, 0x3fffffff,
         0x3fffffff},
        34816};
-    const EnumeratedPropertyObject property_object
+    EnumeratedPropertyObject property_object
       {ea,
-       EA::value_names,
-       EA::aliases_only_map,
+       EA_ns::enum_names,
+       EA_ns::value_names,
+       EA_ns::aliases_only_map,
        {a_Set, f_Set, h_Set, n_Set, na_Set, w_Set
        }};
   }

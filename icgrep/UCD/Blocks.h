@@ -14,7 +14,7 @@
 #include "PropertyValueAliases.h"
 
 namespace UCD {
-  namespace BLK {
+  namespace BLK_ns {
     const UnicodeSet aegean_numbers_Set 
       {{{Empty, 2056}, {Full, 2}, {Empty, 32758}},
        {},
@@ -1048,10 +1048,11 @@ namespace UCD {
       {{{Empty, 622}, {Full, 2}, {Empty, 34192}},
        {},
        34816};
-    const EnumeratedPropertyObject property_object
+    EnumeratedPropertyObject property_object
       {blk,
-       BLK::value_names,
-       BLK::aliases_only_map,
+       BLK_ns::enum_names,
+       BLK_ns::value_names,
+       BLK_ns::aliases_only_map,
        {aegean_numbers_Set, alchemical_Set, alphabetic_pf_Set,
         ancient_greek_music_Set, ancient_greek_numbers_Set,
         ancient_symbols_Set, arabic_Set, arabic_ext_a_Set, arabic_math_Set,
