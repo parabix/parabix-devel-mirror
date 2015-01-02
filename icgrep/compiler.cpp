@@ -1,11 +1,5 @@
 /*
- *  Copyright (c) 2014 International Characters.
- *  This software is licensed to the public under the Open Software License 3.0.
- *  icgrep is a trademark of International Characters.
- */
-
-/*
- *  Copyright (c) 2014 International Characters.
+ *  Copyright (c) 2015 International Characters.
  *  This software is licensed to the public under the Open Software License 3.0.
  *  icgrep is a trademark of International Characters.
  */
@@ -28,6 +22,7 @@
 #include "UCD/precompiled_sc.h"
 #include "UCD/precompiled_scx.h"
 #include "UCD/precompiled_blk.h"
+#include "UCD/precompiled_derivedcoreproperties.h"
 
 #include "resolve_properties.cpp"
 
@@ -159,6 +154,7 @@ LLVM_Gen_RetVal compile(const Encoding encoding, const std::vector<std::string> 
     install_property_sc_fn_ptrs(pablo_compiler);
     install_property_scx_fn_ptrs(pablo_compiler);
     install_property_blk_fn_ptrs(pablo_compiler);
+    install_property_DerivedCoreProperties_fn_ptrs(pablo_compiler);
 
     LLVM_Gen_RetVal retVal = pablo_compiler.compile(main);
 

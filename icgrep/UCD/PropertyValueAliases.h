@@ -1,7 +1,7 @@
 #ifndef PROPERTYVALUEALIASES_H
 #define PROPERTYVALUEALIASES_H
 /*
- *  Copyright (c) 2014 International Characters, Inc.
+ *  Copyright (c) 2015 International Characters, Inc.
  *  This software is licensed to the public under the Open Software License 3.0.
  *  icgrep is a trademark of International Characters, Inc.
  *
@@ -44,6 +44,67 @@ namespace UCD {
       "YE", "YEO", "YI", "YO", "YU"};
     const std::unordered_map<std::string, int> aliases_only_map = std::unordered_map<std::string, int> {
       };
+  }
+
+  namespace SCX_ns {
+    enum value_t {
+      Aghb, Arab, Armi, Armn, Avst, Bali, Bamu, Bass, Batk, Beng, Bopo,
+      Brah, Brai, Bugi, Buhd, Cakm, Cans, Cari, Cham, Cher, Copt, Cprt,
+      Cyrl, Deva, Dsrt, Dupl, Egyp, Elba, Ethi, Geor, Glag, Goth, Gran,
+      Grek, Gujr, Guru, Hang, Hani, Hano, Hebr, Hira, Hmng, Hrkt, Ital,
+      Java, Kali, Kana, Khar, Khmr, Khoj, Knda, Kthi, Lana, Laoo, Latn,
+      Lepc, Limb, Lina, Linb, Lisu, Lyci, Lydi, Mahj, Mand, Mani, Mend,
+      Merc, Mero, Mlym, Modi, Mong, Mroo, Mtei, Mymr, Narb, Nbat, Nkoo,
+      Ogam, Olck, Orkh, Orya, Osma, Palm, Pauc, Perm, Phag, Phli, Phlp,
+      Phnx, Plrd, Prti, Rjng, Runr, Samr, Sarb, Saur, Shaw, Shrd, Sidd,
+      Sind, Sinh, Sora, Sund, Sylo, Syrc, Tagb, Takr, Tale, Talu, Taml,
+      Tavt, Telu, Tfng, Tglg, Thaa, Thai, Tibt, Tirh, Ugar, Vaii, Wara,
+      Xpeo, Xsux, Yiii, Zinh, Zyyy, Zzzz};
+    const std::vector<std::string> enum_names = {
+      "Aghb", "Arab", "Armi", "Armn", "Avst", "Bali", "Bamu", "Bass",
+      "Batk", "Beng", "Bopo", "Brah", "Brai", "Bugi", "Buhd", "Cakm",
+      "Cans", "Cari", "Cham", "Cher", "Copt", "Cprt", "Cyrl", "Deva",
+      "Dsrt", "Dupl", "Egyp", "Elba", "Ethi", "Geor", "Glag", "Goth",
+      "Gran", "Grek", "Gujr", "Guru", "Hang", "Hani", "Hano", "Hebr",
+      "Hira", "Hmng", "Hrkt", "Ital", "Java", "Kali", "Kana", "Khar",
+      "Khmr", "Khoj", "Knda", "Kthi", "Lana", "Laoo", "Latn", "Lepc",
+      "Limb", "Lina", "Linb", "Lisu", "Lyci", "Lydi", "Mahj", "Mand",
+      "Mani", "Mend", "Merc", "Mero", "Mlym", "Modi", "Mong", "Mroo",
+      "Mtei", "Mymr", "Narb", "Nbat", "Nkoo", "Ogam", "Olck", "Orkh",
+      "Orya", "Osma", "Palm", "Pauc", "Perm", "Phag", "Phli", "Phlp",
+      "Phnx", "Plrd", "Prti", "Rjng", "Runr", "Samr", "Sarb", "Saur",
+      "Shaw", "Shrd", "Sidd", "Sind", "Sinh", "Sora", "Sund", "Sylo",
+      "Syrc", "Tagb", "Takr", "Tale", "Talu", "Taml", "Tavt", "Telu",
+      "Tfng", "Tglg", "Thaa", "Thai", "Tibt", "Tirh", "Ugar", "Vaii",
+      "Wara", "Xpeo", "Xsux", "Yiii", "Zinh", "Zyyy", "Zzzz"};
+    const std::vector<std::string> value_names = {
+      "Caucasian_Albanian", "Arabic", "Imperial_Aramaic", "Armenian",
+      "Avestan", "Balinese", "Bamum", "Bassa_Vah", "Batak", "Bengali",
+      "Bopomofo", "Brahmi", "Braille", "Buginese", "Buhid", "Chakma",
+      "Canadian_Aboriginal", "Carian", "Cham", "Cherokee", "Coptic",
+      "Cypriot", "Cyrillic", "Devanagari", "Deseret", "Duployan",
+      "Egyptian_Hieroglyphs", "Elbasan", "Ethiopic", "Georgian",
+      "Glagolitic", "Gothic", "Grantha", "Greek", "Gujarati", "Gurmukhi",
+      "Hangul", "Han", "Hanunoo", "Hebrew", "Hiragana", "Pahawh_Hmong",
+      "Katakana_Or_Hiragana", "Old_Italic", "Javanese", "Kayah_Li",
+      "Katakana", "Kharoshthi", "Khmer", "Khojki", "Kannada", "Kaithi",
+      "Tai_Tham", "Lao", "Latin", "Lepcha", "Limbu", "Linear_A", "Linear_B",
+      "Lisu", "Lycian", "Lydian", "Mahajani", "Mandaic", "Manichaean",
+      "Mende_Kikakui", "Meroitic_Cursive", "Meroitic_Hieroglyphs",
+      "Malayalam", "Modi", "Mongolian", "Mro", "Meetei_Mayek", "Myanmar",
+      "Old_North_Arabian", "Nabataean", "Nko", "Ogham", "Ol_Chiki",
+      "Old_Turkic", "Oriya", "Osmanya", "Palmyrene", "Pau_Cin_Hau",
+      "Old_Permic", "Phags_Pa", "Inscriptional_Pahlavi", "Psalter_Pahlavi",
+      "Phoenician", "Miao", "Inscriptional_Parthian", "Rejang", "Runic",
+      "Samaritan", "Old_South_Arabian", "Saurashtra", "Shavian", "Sharada",
+      "Siddham", "Khudawadi", "Sinhala", "Sora_Sompeng", "Sundanese",
+      "Syloti_Nagri", "Syriac", "Tagbanwa", "Takri", "Tai_Le",
+      "New_Tai_Lue", "Tamil", "Tai_Viet", "Telugu", "Tifinagh", "Tagalog",
+      "Thaana", "Thai", "Tibetan", "Tirhuta", "Ugaritic", "Vai",
+      "Warang_Citi", "Old_Persian", "Cuneiform", "Yi", "Inherited",
+      "Common", "Unknown"};
+    const std::unordered_map<std::string, int> aliases_only_map = std::unordered_map<std::string, int> {
+      {"qaac", SCX_ns::Copt}, {"qaai", SCX_ns::Zinh}};
   }
 
   namespace AGE_ns {

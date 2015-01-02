@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2014 International Characters.
+ *  Copyright (c) 2015 International Characters.
  *  This software is licensed to the public under the Open Software License 3.0.
  *  icgrep is a trademark of International Characters.
  */
@@ -22,7 +22,14 @@
 #include "UCD/PropertyObjectTable.h"
 #include "UCD/PropertyValueAliases.h"
 
-
+class UnicodePropertyExpressionError : public std::exception {
+public:
+    UnicodePropertyExpressionError(const std::string && msg) noexcept : _msg(msg) {};
+    const char* what() const noexcept { return _msg.c_str();};
+private:
+    inline UnicodePropertyExpressionError() noexcept {}
+    const std::string _msg;
+};
 
 std::string canonicalize(std::string prop_or_val) {
     std::locale loc;
@@ -32,6 +39,16 @@ std::string canonicalize(std::string prop_or_val) {
         if ((c != '_') && (c != ' ') && (c != '-')) {
             s += std::tolower(c, loc);
         }
+    }
+    return s;
+}
+
+std::string lowercase(std::string prop_or_val) {
+    std::locale loc;
+    std::string s = "";
+    for (unsigned int i = 0; i < prop_or_val.length(); ++i) {
+        char c = prop_or_val.at(i);
+        s += std::tolower(c, loc);
     }
     return s;
 }
@@ -69,7 +86,7 @@ void resolveProperties(RE * re) {
                 prop = canonicalize_value_name(prop);
                 auto propit = UCD::alias_map.find(prop);
                 if (propit == UCD::alias_map.end()) {
-                    throw std::runtime_error("Unknown property value: " + prop);
+                    throw UnicodePropertyExpressionError("Expected a property name, but '" + name->getNamespace() + "' found instead");
                 }
                 theprop = propit->second;
                 if (theprop == UCD::gc) {
@@ -78,6 +95,7 @@ void resolveProperties(RE * re) {
                     if (valcode > 0) {
                         name->setName("__get_gc_" + UCD::GC_ns::enum_names[valcode]);
                     }
+                    else throw UnicodePropertyExpressionError("Erroneous property value for general_category property");
                 }
                 else if (theprop == UCD::sc) {
                     // Script property identified
@@ -85,6 +103,7 @@ void resolveProperties(RE * re) {
                     if (valcode > 0) {
                         name->setName("__get_sc_" + UCD::SC_ns::enum_names[valcode]);
                     }
+                    else throw UnicodePropertyExpressionError("Erroneous property value for script property");
                 }
                 else if (theprop == UCD::scx) {
                     // Script extension property identified
@@ -92,6 +111,7 @@ void resolveProperties(RE * re) {
                     if (valcode > 0) {
                         name->setName("__get_scx_" + UCD::SC_ns::enum_names[valcode]);
                     }
+                    else throw UnicodePropertyExpressionError("Erroneous property value for script_extension property");
                 }
                 else if (theprop == UCD::blk) {
                     // Block property identified
@@ -99,9 +119,23 @@ void resolveProperties(RE * re) {
                     if (valcode > 0) {
                         name->setName("__get_blk_" + UCD::BLK_ns::enum_names[valcode]);
                     }
+                    else throw UnicodePropertyExpressionError("Erroneous property value for block property");
+                }
+                else if (UCD::property_object_table[theprop]->the_kind == UCD::BinaryProperty){
+                    auto valit = UCD::Binary_ns::aliases_only_map.find(v);
+                    if (valit == UCD::Binary_ns::aliases_only_map.end()) {
+                        throw UnicodePropertyExpressionError("Erroneous property value for binary property " + UCD::property_full_name[theprop]);
+                    }
+                    if (valit->second == UCD::Binary_ns::Y) {
+                        name->setName("__get_" + lowercase(UCD::property_enum_name[theprop]) + "_Y");
+                        return;
+                    }
+                    else {
+                        throw UnicodePropertyExpressionError("Negated binary property " + UCD::property_full_name[theprop] + " recognized, but not supported");
+                    }
                 }
                 else {
-                    throw std::runtime_error("Property " + UCD::property_full_name[theprop] + " recognized, but not supported in icgrep 1.0");
+                    throw UnicodePropertyExpressionError("Property " + UCD::property_full_name[theprop] + " recognized, but not supported in icgrep 1.0");
                 }
             }
             else {
@@ -118,8 +152,18 @@ void resolveProperties(RE * re) {
                     name->setName("__get_sc_" + UCD::SC_ns::enum_names[valcode]);
                     return;
                 }
+                // Try as a binary property.
+                auto propit = UCD::alias_map.find(v);
+                if (propit == UCD::alias_map.end()) {
+                    throw UnicodePropertyExpressionError("Expected a general category, script or binary property name, but '" + name->getName() + "' found instead");
+                }
+                theprop = propit->second;
+                if (UCD::property_object_table[theprop]->the_kind == UCD::BinaryProperty) {
+                    name->setName("__get_" + lowercase(UCD::property_enum_name[theprop]) + "_Y");
+                    return;
+                }
                 else {
-                    throw std::runtime_error("Unknown property, aborting\n");
+                    throw UnicodePropertyExpressionError("Error: property " + UCD::property_full_name[theprop] + " specified without a value");
                 }
             }
             
@@ -127,7 +171,7 @@ void resolveProperties(RE * re) {
         }
     }
     else if (!isa<CC>(re) && !isa<Start>(re) && !isa<End>(re) && !isa<Any>(re)) {
-        throw std::runtime_error("Unknown RE type in resolveProperties.");
+        throw UnicodePropertyExpressionError("Unknown RE type in resolveProperties.");
     }
 }
 

@@ -1,7 +1,7 @@
 #ifndef PROPERTYALIASES_H
 #define PROPERTYALIASES_H
 /*
- *  Copyright (c) 2014 International Characters, Inc.
+ *  Copyright (c) 2015 International Characters, Inc.
  *  This software is licensed to the public under the Open Software License 3.0.
  *  icgrep is a trademark of International Characters, Inc.
  *
@@ -27,6 +27,25 @@ cjkAccountingNumeric, cjkOtherNumeric, cjkPrimaryNumeric, nv, cf,
     NChar, OAlpha, ODI, OGr_Ext, OIDC, OIDS, OLower, OMath, OUpper, Pat_Syn,
     Pat_WS, QMark, Radical, SD, STerm, Term, UIdeo, Upper, VS, WSpace, XIDC,
     XIDS, XO_NFC, XO_NFD, XO_NFKC, XO_NFKD
+  };
+  const std::vector<std::string> property_enum_name = {
+"cjkAccountingNumeric", "cjkOtherNumeric", "cjkPrimaryNumeric", "nv",
+    "cf", "cjkCompatibilityVariant", "dm", "FC_NFKC", "lc", "NFKC_CF",
+    "scf", "slc", "stc", "suc", "tc", "uc", "bmg", "bpb", "cjkIICore",
+    "cjkIRG_GSource", "cjkIRG_HSource", "cjkIRG_JSource", "cjkIRG_KPSource",
+    "cjkIRG_KSource", "cjkIRG_MSource", "cjkIRG_TSource", "cjkIRG_USource",
+    "cjkIRG_VSource", "cjkRSUnicode", "isc", "JSN", "na", "na1",
+    "Name_Alias", "scx", "age", "blk", "sc", "bc", "bpt", "ccc", "dt", "ea",
+    "gc", "GCB", "hst", "InMC", "InSC", "jg", "jt", "lb", "NFC_QC",
+    "NFD_QC", "NFKC_QC", "NFKD_QC", "nt", "SB", "WB", "AHex", "Alpha",
+    "Bidi_C", "Bidi_M", "Cased", "CE", "CI", "Comp_Ex", "CWCF", "CWCM",
+    "CWKCF", "CWL", "CWT", "CWU", "Dash", "Dep", "DI", "Dia", "Ext",
+    "Gr_Base", "Gr_Ext", "Gr_Link", "Hex", "Hyphen", "IDC", "Ideo", "IDS",
+    "IDSB", "IDST", "Join_C", "LOE", "Lower", "Math", "NChar", "OAlpha",
+    "ODI", "OGr_Ext", "OIDC", "OIDS", "OLower", "OMath", "OUpper",
+    "Pat_Syn", "Pat_WS", "QMark", "Radical", "SD", "STerm", "Term", "UIdeo",
+    "Upper", "VS", "WSpace", "XIDC", "XIDS", "XO_NFC", "XO_NFD", "XO_NFKC",
+    "XO_NFKD"
   };
   const std::vector<std::string> property_full_name = {
 "kAccountingNumeric", "kOtherNumeric", "kPrimaryNumeric",
