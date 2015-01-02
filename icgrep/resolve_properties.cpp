@@ -88,10 +88,20 @@ void resolveProperties(RE * re) {
                 }
                 else if (theprop == UCD::scx) {
                     // Script extension property identified
-                    throw std::runtime_error("Script extensions property identified, aborting\n");
+                    int valcode = dynamic_cast<UCD::EnumeratedPropertyObject *> (UCD::property_object_table[UCD::sc])->GetPropertyValueEnumCode(v);                    
+                    if (valcode > 0) {
+                        name->setName("__get_scx_" + UCD::SC_ns::enum_names[valcode]);
+                    }
+                }
+                else if (theprop == UCD::blk) {
+                    // Block property identified
+                    int valcode = dynamic_cast<UCD::EnumeratedPropertyObject *> (UCD::property_object_table[UCD::blk])->GetPropertyValueEnumCode(v);                    
+                    if (valcode > 0) {
+                        name->setName("__get_blk_" + UCD::BLK_ns::enum_names[valcode]);
+                    }
                 }
                 else {
-                    throw std::runtime_error("other property identified, aborting\n");
+                    throw std::runtime_error("Property " + UCD::property_full_name[theprop] + " recognized, but not supported in icgrep 1.0");
                 }
             }
             else {
