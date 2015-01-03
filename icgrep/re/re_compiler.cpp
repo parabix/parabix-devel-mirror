@@ -145,23 +145,23 @@ MarkerType RE_Compiler::compile(RE * re, PabloBlock & pb) {
 }
         
 PabloAST * RE_Compiler::character_class_strm(Name * name, PabloBlock & pb) {
-    if (name->getType() == Name::Type::UnicodeProperty) {
-        return pb.createCall(name->getName());
-    }
+    Var * var = name->getCompiled();
+    if (var != nullptr) return var;
     else {
-        Var * var = name->getCompiled();
-        if (var == nullptr) {
-            RE * def = name->getDefinition();
-            assert(!isa<CC>(def));  //  Names mapping to CCs should have been compiled.
-            assert(name->getType == Name::Type::Unicode);  // 
-            // compile in top-level block
+        RE * def = name->getDefinition();
+        if (def != nullptr) {
             MarkerType m = compile(def, mCG);
             assert(isFinalPositionMarker(m));
             Var * v = pb.createVar(markerStream(m, mCG));
             name -> setCompiled(v);
             return v;
         }
-        else return var;
+        else if (name->getType() == Name::Type::UnicodeProperty) {
+            return pb.createCall(name->getName());
+        }
+        else {
+            throw std::runtime_error("Unresolved name " + name->getName());
+        }
     }
 }
 

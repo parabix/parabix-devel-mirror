@@ -15,12 +15,12 @@
 #include <re/re_intersect.h>
 #include <re/re_start.h>
 #include <re/re_end.h>
-
 #include <cc/cc_namemap.hpp>
 #include "UCD/PropertyAliases.h"
 #include "UCD/PropertyObjects.h"
 #include "UCD/PropertyObjectTable.h"
 #include "UCD/PropertyValueAliases.h"
+
 
 class UnicodePropertyExpressionError : public std::exception {
 public:
@@ -154,16 +154,33 @@ void resolveProperties(RE * re) {
                 }
                 // Try as a binary property.
                 auto propit = UCD::alias_map.find(v);
-                if (propit == UCD::alias_map.end()) {
-                    throw UnicodePropertyExpressionError("Expected a general category, script or binary property name, but '" + name->getName() + "' found instead");
+                if (propit != UCD::alias_map.end()) {
+                    theprop = propit->second;
+                    if (UCD::property_object_table[theprop]->the_kind == UCD::BinaryProperty) {
+                        name->setName("__get_" + lowercase(UCD::property_enum_name[theprop]) + "_Y");
+                        return;
+                    }
+                    else {
+                        throw UnicodePropertyExpressionError("Error: property " + UCD::property_full_name[theprop] + " specified without a value");
+                    }
                 }
-                theprop = propit->second;
-                if (UCD::property_object_table[theprop]->the_kind == UCD::BinaryProperty) {
-                    name->setName("__get_" + lowercase(UCD::property_enum_name[theprop]) + "_Y");
+                // Now try special cases of Unicode TR #18
+                else if (v == "any") {
+                    name->setDefinition(re::makeAny());
+                    return;
+                }
+                else if (v == "assigned") {
+                    re::Name * Cn = re::makeName("Cn", Name::Type::UnicodeProperty);
+                    resolveProperties(Cn);
+                    name->setDefinition(re::makeDiff(re::makeAny(), Cn));
+                    return;
+                }
+                else if (v == "ascii") {
+                    name->setName("__get_blk_ASCII");
                     return;
                 }
                 else {
-                    throw UnicodePropertyExpressionError("Error: property " + UCD::property_full_name[theprop] + " specified without a value");
+                    throw UnicodePropertyExpressionError("Expected a general category, script or binary property name, but '" + name->getName() + "' found instead");
                 }
             }
             
