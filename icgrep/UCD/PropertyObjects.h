@@ -35,6 +35,12 @@ namespace UCD {
 	
 	class PropertyObject {
 	public:
+//        enum class ClassTypeId : unsigned {
+//            NumericProperty, CodepointProperty, StringProperty, MiscellaneousProperty, EnumeratedProperty, CatalogProperty, BinaryProperty
+//        };
+//        inline ClassTypeId getClassTypeId() const {
+//            return mClassTypeId;
+//        }
 		PropertyObject(property_t p, property_kind_t k) : the_property(p), the_kind(k) {}
 		
 		property_t the_property;

@@ -1,8 +1,16 @@
-README-icgrep-0.9.txt
+README-icgrep-0.98.txt
 
-This is the open-source version of icgrep 0.9.   icgrep is a
-very fast regular expression search program, particularly
-for complex regular expressions.
+This is the open-source version of icgrep 0.98, the alpha test
+version of icgrep 1.0.     
+
+icgrep is a very fast regular expression search program, particularly
+for complex regular expressions.  It is also a very capable engine,
+supporting most common regular expression syntax and many useful
+command line options.   
+
+icgrep 1.0 is designed to offer substantial Unicode support, meeting
+all the Unicode Level 1 requirements of UTS #18, the Unicode
+Technical Standard for regular expressions. 
 
 Normal usage to find lines in a file f matching a regexp r is:
 icgrep r f
@@ -16,17 +24,16 @@ icgrep -f rf f
 
 icgrep supports standard egrep syntax, except for Posix character
 classes.   icgrep supports searches using ASCII or UTF-8.
-Unicode two letter classes are supported, e.g. \p{Ll} matching
-lower case Unicode letters and \P{Lu} matching all characters
-that are not upper case letters.
-
-Full Unicode level 1 support is planned for icgrep 1.0.
+Unicode property classes are supported, e.g. \p{Ll} matching
+lower case Unicode letters and \P{script=Arab} matching all characters
+that are not in the Arabic script.
 
 BUILD
 
 To build icgrep, you need an installed LLVM system providing the
 core libraries.  The distribution includes a suitable source
-code version of LLVM.
+code version of LLVM.   You will also need BOOST, in particular
+the boost system library.
 
 To build LLVM,
 (L1) open a terminal window and cd to the llvm-build directory
@@ -43,11 +50,4 @@ cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER:FILEPATH=/usr/bin/clang++ 
 
 LLVM files are governed by the LLVM Release License in LLVM-LICENSE.txt.
 icgrep is governed by Open Software License 3.0 in OSL-3.0.txt.
-
-### Experimental 256-bit BLOCK_SIZE
-(IC1)  open a terminal window and cd to the icgrep-build directory
-(IC2)  enter the following command to build the makefiles
-cmake -DBLOCK_SIZE_256=on -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER:FILEPATH=/usr/bin/g++ -DCMAKE_C_COMPILER:FILEPATH=/usr/bin/gcc ../icgrep
-(IC3) Enter the command "make"
-
 
