@@ -23,6 +23,7 @@
 #include "UCD/precompiled_scx.h"
 #include "UCD/precompiled_blk.h"
 #include "UCD/precompiled_derivedcoreproperties.h"
+#include "UCD/precompiled_proplist.h"
 
 #include "resolve_properties.cpp"
 
@@ -155,6 +156,7 @@ LLVM_Gen_RetVal compile(const Encoding encoding, const std::vector<std::string> 
     install_property_scx_fn_ptrs(pablo_compiler);
     install_property_blk_fn_ptrs(pablo_compiler);
     install_property_DerivedCoreProperties_fn_ptrs(pablo_compiler);
+    install_property_PropList_fn_ptrs(pablo_compiler);
 
     LLVM_Gen_RetVal retVal = pablo_compiler.compile(main);
 
