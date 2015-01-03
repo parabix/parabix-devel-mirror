@@ -363,15 +363,15 @@ inline RE * RE_Parser::parse_escaped() {
 }
 
 RE * makeDigitSet() {
-  return makeName("Nd", Name::Type::UnicodeProperty);
+    return makeName("Nd", Name::Type::UnicodeProperty);
 }
 
 RE * makeWhitespaceSet() {
-  throw ParseFailure("\\s not implemented.");
+    return makeName("Whitespace", Name::Type::UnicodeProperty);
 }
 
 RE * makeWordSet() {
-  throw ParseFailure("\\w not implemented.");
+    return makeName("word", Name::Type::UnicodeProperty);
 }
 
 RE * makeComplement(RE * s) {
