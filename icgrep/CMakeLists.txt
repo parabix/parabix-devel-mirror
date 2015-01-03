@@ -53,7 +53,7 @@ set(Boost_USE_STATIC_RUNTIME OFF)
 find_package(Boost COMPONENTS system REQUIRED)
 
 add_library(PabloADT pablo/pe_and.cpp pablo/pe_not.cpp pablo/pe_or.cpp  pablo/pabloAST.cpp  pablo/pe_sel.cpp  pablo/pe_xor.cpp pablo/codegenstate.cpp  pablo/symbol_generator.cpp pablo/analysis/useanalysis.cpp pablo/printer_pablos.cpp pablo/pablo_compiler.cpp)
-add_library(RegExpADT re/re_re.cpp re/re_cc.cpp re/re_parser.cpp re/re_rep.cpp re/parsefailure.cpp re/re_nullable.cpp re/re_simplifier.cpp re/re_compiler.cpp re/printer_re.cpp re/re_diff.cpp re/re_intersect.cpp)
+add_library(RegExpADT re/re_re.cpp re/re_cc.cpp re/re_parser.cpp re/re_rep.cpp re/parsefailure.cpp re/re_nullable.cpp re/re_simplifier.cpp re/re_compiler.cpp re/printer_re.cpp re/re_diff.cpp re/re_intersect.cpp re/re_analysis.cpp)
 add_library(CCADT cc/cc_namemap.cpp cc/cc_compiler.cpp utf_encoding.cpp utf8_encoder.cpp UCD/CaseFolding_txt.cpp)
 add_library(UCDlib UCD/unicode_set.cpp) 
 

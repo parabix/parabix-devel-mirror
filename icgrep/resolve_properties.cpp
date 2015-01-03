@@ -181,6 +181,70 @@ void resolveProperties(RE * re) {
                     name->setName("__get_blk_ASCII");
                     return;
                 }
+                // Now compatibility properties of UTR #18 Annex C
+                else if (v == "xdigit") {
+                    re::Name * Nd = re::makeName("Nd", Name::Type::UnicodeProperty);
+                    resolveProperties(Nd);
+                    re::Name * hexdigit = re::makeName("Hex_digit", Name::Type::UnicodeProperty);
+                    resolveProperties(hexdigit);
+                    std::vector<RE *> alts = {Nd, hexdigit};
+                    name->setDefinition(re::makeAlt(alts.begin(), alts.end()));
+                    return;
+                }
+                else if (v == "alnum") {
+                    re::Name * digit = re::makeName("Nd", Name::Type::UnicodeProperty);
+                    resolveProperties(digit);
+                    re::Name * alpha = re::makeName("alphabetic", Name::Type::UnicodeProperty);
+                    resolveProperties(alpha);
+                    std::vector<RE *> alts = {digit, alpha};
+                    name->setDefinition(re::makeAlt(alts.begin(), alts.end()));
+                    return;
+                }
+                else if (v == "blank") {
+                    re::Name * space_sep = re::makeName("space_separator", Name::Type::UnicodeProperty);
+                    resolveProperties(space_sep);
+                    re::CC * tab = re::makeCC(0x09);
+                    std::vector<RE *> alts = {space_sep, tab};
+                    name->setDefinition(re::makeAlt(alts.begin(), alts.end()));
+                    return;
+                }
+                else if (v == "graph") {
+                    re::Name * space = re::makeName("space", Name::Type::UnicodeProperty);
+                    resolveProperties(space);
+                    re::Name * ctrl = re::makeName("control", Name::Type::UnicodeProperty);
+                    resolveProperties(ctrl);
+                    re::Name * surr = re::makeName("surrogate", Name::Type::UnicodeProperty);
+                    resolveProperties(surr);
+                    re::Name * unassigned = re::makeName("Cn", Name::Type::UnicodeProperty);
+                    resolveProperties(unassigned);
+                    std::vector<RE *> alts = {space, ctrl, surr, unassigned};
+                    re::Name * nongraph = re::makeName("[^graph]", Name::Type::UnicodeProperty);
+                    nongraph->setDefinition(re::makeAlt(alts.begin(), alts.end()));
+                    name->setDefinition(re::makeDiff(re::makeAny(), nongraph));
+                    return;
+                }
+                else if (v == "print") {
+                    re::Name * graph = re::makeName("graph", Name::Type::UnicodeProperty);
+                    resolveProperties(graph);
+                    re::Name * space_sep = re::makeName("space_separator", Name::Type::UnicodeProperty);
+                    resolveProperties(space_sep);
+                    std::vector<RE *> alts = {graph, space_sep};
+                    name->setDefinition(re::makeAlt(alts.begin(), alts.end()));
+                    return;
+                }
+                else if (v == "word") {
+                    re::Name * alnum = re::makeName("alnum", Name::Type::UnicodeProperty);
+                    resolveProperties(alnum);
+                    re::Name * mark = re::makeName("mark", Name::Type::UnicodeProperty);
+                    resolveProperties(mark);
+                    re::Name * conn = re::makeName("Connector_Punctuation", Name::Type::UnicodeProperty);
+                    resolveProperties(conn);
+                    re::Name * join = re::makeName("Join_Control", Name::Type::UnicodeProperty);
+                    resolveProperties(join);
+                    std::vector<RE *> alts = {alnum,mark,conn,join};
+                    name->setDefinition(re::makeAlt(alts.begin(), alts.end()));
+                    return;
+                }
                 else {
                     throw UnicodePropertyExpressionError("Expected a general category, script or binary property name, but '" + name->getName() + "' found instead");
                 }

@@ -16,6 +16,7 @@
 #include <re/re_rep.h>
 #include <re/re_diff.h>
 #include <re/re_intersect.h>
+#include <re/re_analysis.h>
 #include <cc/cc_namemap.hpp>
 #include <pablo/codegenstate.h>
 
@@ -266,7 +267,7 @@ MarkerType RE_Compiler::process(Alt * alt, MarkerType marker, PabloBlock & pb) {
 MarkerType RE_Compiler::process(Diff * diff, MarkerType marker, PabloBlock & pb) {
     RE * lh = diff->getLH();
     RE * rh = diff->getRH();
-    if ((isa<Any>(lh) || isa<Name>(lh)) && (isa<Any>(rh) || isa<Name>(rh))) {
+    if (isUnicodeUnitLength(lh) && isUnicodeUnitLength(rh)) {
         MarkerType t1 = process(lh, marker, pb);
         MarkerType t2 = process(rh, marker, pb);
         assert(isFinalPositionMarker(t1) && isFinalPositionMarker(t2));
@@ -278,7 +279,7 @@ MarkerType RE_Compiler::process(Diff * diff, MarkerType marker, PabloBlock & pb)
 MarkerType RE_Compiler::process(Intersect * x, MarkerType marker, PabloBlock & pb) {
     RE * lh = x->getLH();
     RE * rh = x->getRH();
-    if ((isa<Any>(lh) || isa<Name>(lh)) && (isa<Any>(rh) || isa<Name>(rh))) {
+    if (isUnicodeUnitLength(lh) && isUnicodeUnitLength(rh)) {
         MarkerType t1 = process(lh, marker, pb);
         MarkerType t2 = process(rh, marker, pb);
         assert(isFinalPositionMarker(t1) && isFinalPositionMarker(t2));
@@ -323,14 +324,10 @@ inline Assign * RE_Compiler::consecutive(Assign * repeated, int repeated_lgth, i
         return consecutive_i;
 }
                 
-inline bool RE_Compiler::isFixedLength(RE * regexp) {
-    return isa<Name>(regexp) && ((cast<Name>(regexp)->getType()) == Name::Type::Byte);
-}
-
 MarkerType RE_Compiler::processLowerBound(RE * repeated, int lb, MarkerType marker, PabloBlock & pb) {
-    if (isFixedLength(repeated)) {
-        Name * name = cast<Name>(repeated);
-        Assign * cc_lb = consecutive(pb.createAssign("repeated", pb.createAdvance(name->getCompiled(),1)), 1, lb, pb);
+    if (isByteLength(repeated)) {
+        PabloAST * cc = markerVar(compile(repeated, pb), pb);
+        Assign * cc_lb = consecutive(pb.createAssign("repeated", pb.createAdvance(cc,1)), 1, lb, pb);
         PabloAST * marker_fwd = pb.createAdvance(markerVar(marker, pb), isFinalPositionMarker(marker) ? lb+ 1 : lb);
         return makePostPositionMarker("lowerbound", pb.createAnd(marker_fwd, pb.createVar(cc_lb)), pb);
     }
@@ -342,13 +339,13 @@ MarkerType RE_Compiler::processLowerBound(RE * repeated, int lb, MarkerType mark
 }
 
 MarkerType RE_Compiler::processBoundedRep(RE * repeated, int ub, MarkerType marker, PabloBlock & pb) {
-    if (isFixedLength(repeated)) {
+    if (isByteLength(repeated)) {
         // log2 upper bound for fixed length (=1) class
         // Mask out any positions that are more than ub positions from a current match.
         // Use matchstar, then apply filter.
         Assign * nonMatch = pb.createAssign("nonmatch", pb.createNot(postPositionVar(marker, pb)));
         PabloAST * upperLimitMask = pb.createNot(pb.createVar(consecutive(nonMatch, 1, ub + 1, pb)));
-        PabloAST * rep_class_var = cast<Name>(repeated)->getCompiled();
+        PabloAST * rep_class_var = markerVar(compile(repeated, pb), pb);
         return makePostPositionMarker("bounded", pb.createAnd(pb.createMatchStar(postPositionVar(marker, pb), rep_class_var), upperLimitMask), pb);
     }
     // Fall through to general case.
@@ -368,23 +365,12 @@ MarkerType RE_Compiler::processUnboundedRep(RE * repeated, MarkerType marker, Pa
     // always use PostPosition markers for unbounded repetition.
     PabloAST * base = postPositionVar(marker, pb);
     
-    if (isa<Name>(repeated)) {
-        Name * name = cast<Name>(repeated);
-        PabloAST * cc = character_class_strm(name, pb);
-        if (name->getType() == Name::Type::Byte) {
-            return makePostPositionMarker("unbounded", pb.createMatchStar(base, cc), pb);
-        }
-        else { // Name::Unicode and Name::UnicodeProperty
-            return makePostPositionMarker("unbounded", pb.createAnd(pb.createMatchStar(base, pb.createOr(mNonFinal, cc)), mInitial), pb);
-        }        
+    if (isByteLength(repeated)) {
+        PabloAST * cc = markerVar(compile(repeated, pb), pb);
+        return makePostPositionMarker("unbounded", pb.createMatchStar(base, cc), pb);
     }
-    else if (isa<Any>(repeated)) {
-        PabloAST * dot = pb.createNot(UNICODE_LINE_BREAK ? mUnicodeLineBreak : mLineFeed);
-        return makePostPositionMarker("unbounded", pb.createAnd(pb.createMatchStar(base, pb.createOr(mNonFinal, dot)), mInitial), pb);
-    }
-    else if (isa<Diff>(repeated) && isa<Any>(cast<Diff>(repeated)->getLH()) && isa<Name>(cast<Diff>(repeated)->getRH())) {
-        Name * name = cast<Name>(cast<Diff>(repeated)->getRH());
-        PabloAST * cc = pb.createNot(pb.createOr(character_class_strm(name, pb), mLineFeed));
+    else if (isUnicodeUnitLength(repeated)) {
+        PabloAST * cc = markerVar(compile(repeated, pb), pb);
         return makePostPositionMarker("unbounded", pb.createAnd(pb.createMatchStar(base, pb.createOr(mNonFinal, cc)), mInitial), pb);
     }
     else {
