@@ -131,7 +131,9 @@ void resolveProperties(RE * re) {
                         return;
                     }
                     else {
-                        throw UnicodePropertyExpressionError("Negated binary property " + UCD::property_full_name[theprop] + " recognized, but not supported");
+                        re::Name * binprop = re::makeName("__get_" + lowercase(UCD::property_enum_name[theprop]) + "_Y", Name::Type::UnicodeProperty);
+                        name->setDefinition(re::makeDiff(re::makeAny(), binprop));
+                        return;
                     }
                 }
                 else {
