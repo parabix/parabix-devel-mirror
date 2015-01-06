@@ -592,8 +592,9 @@ void PabloCompiler::compileStatement(const PabloAST * stmt)
                 if (s == -1) {
                     Value* carryq_value = mCarryQueueVector[c];
                     carry_summary = bIfBody.CreateOr(carry_summary, carryq_value);
-                    mCarryQueueSummaryIdx[c] = baseCarryQueueIdx + ifCarryCount;
+                    mCarryQueueSummaryIdx[c] = mAdvanceQueueIdx;
                 }
+                
 
             }
             // Note that the limit in the following uses -1, because
@@ -604,7 +605,7 @@ void PabloCompiler::compileStatement(const PabloAST * stmt)
                 if (s == -1 ) {
                     Value* advance_q_value = mAdvanceQueueVector[c];
                     carry_summary = bIfBody.CreateOr(advance_q_value, carry_summary);
-                    mAdvanceQueueSummaryIdx[c] = baseAdvanceQueueIdx + ifAdvanceCount - 1;
+                    mAdvanceQueueSummaryIdx[c] = mAdvanceQueueIdx;
                 }
             }
             genAdvanceOutStore(carry_summary, mAdvanceQueueIdx++); //baseAdvanceQueueIdx + ifAdvanceCount - 1);
@@ -620,6 +621,21 @@ void PabloCompiler::compileStatement(const PabloAST * stmt)
             phi->addIncoming(f->second, mBasicBlock);
             mMarkerMap[a->getName()] = phi;
         }
+        // Create the phi Node for the summary variable.
+        if (ifAdvanceCount >= 1) {
+          // final AdvanceQ entry is summary variable.
+          PHINode * summary_phi = bEnd.CreatePHI(mBitBlockType, 2, "summary");
+          summary_phi->addIncoming(mZeroInitializer, ifEntryBlock);
+          summary_phi->addIncoming(mAdvanceQueueVector[mAdvanceQueueIdx-1], mBasicBlock);
+          mAdvanceQueueVector[mAdvanceQueueIdx-1] = summary_phi;
+        }
+        else if (ifCarryCount == 1) {
+          PHINode * summary_phi = bEnd.CreatePHI(mBitBlockType, 2, "summary");
+          summary_phi->addIncoming(mZeroInitializer, ifEntryBlock);
+          summary_phi->addIncoming(mCarryQueueVector[baseCarryQueueIdx], mBasicBlock);
+          mCarryQueueVector[baseCarryQueueIdx] = summary_phi;
+        }
+        
         // Set the basic block to the new end block
         mBasicBlock = ifEndBlock;
     }
