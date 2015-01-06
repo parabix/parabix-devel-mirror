@@ -49,6 +49,7 @@ Dfg dc fog Nt ezt
 MazazazazazazazT
 </datafile>
 
+
 <datafile id="StartEndAlt">
 The ever-growing social networks and social media provide invaluable 
 sources of information for modeling the behavior of users. High-quality 
@@ -396,6 +397,7 @@ The following line has LATIN CAPITAL LETTER G WITH MACRON in single quotes.
 <grepcase regexp="Na?t" datafile="RangeAltSeqMatchStarKplusWhileNotOptAny" grepcount="2"/>
 <grepcase regexp="h.t" datafile="RangeAltSeqMatchStarKplusWhileNotOptAny" grepcount="3" />
 <grepcase regexp="do*?c|ez*?t" datafile="RangeAltSeqMatchStarKplusWhileNotOptAny" grepcount="4"/>
+<grepcase regexp="^.....\b" datafile="RangeAltSeqMatchStarKplusWhileNotOptAny" grepcount="6"/>>
 
 <grepcase regexp="[]]" datafile="special_characters" grepcount="9"/>
 <grepcase regexp="[-]" datafile="special_characters" grepcount="8"/>

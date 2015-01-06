@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2014 International Characters.
+ *  Copyright (c) 2015 International Characters.
  *  This software is licensed to the public under the Open Software License 3.0.
  *  icgrep is a trademark of International Characters.
  */
@@ -348,7 +348,8 @@ unsigned RE_Parser::parse_int() {
 
 
 #define bit40(x) (1ULL << ((x) - 0x40))
-const uint64_t setEscapeCharacters = bit40('p') | bit40('d') | bit40('w') | bit40('s') | bit40('P') | bit40('D') | bit40('W') | bit40('S');
+const uint64_t setEscapeCharacters = bit40('b') | bit40('p') | bit40('d') | bit40('w') | bit40('s') | 
+                                     bit40('B') | bit40('P') | bit40('D') | bit40('W') | bit40('S');
 
 inline bool isSetEscapeChar(char c) {
     return c >= 0x40 && c <= 0x7F && ((setEscapeCharacters >> (c - 0x40)) & 1) == 1;
@@ -378,10 +379,30 @@ RE * makeComplement(RE * s) {
   return makeDiff(makeAny(), s);
 }
 
+RE * makeWordBoundary () {
+    RE * wordC = makeWordSet();
+    std::vector<RE *> alts = {makeIntersect(makeLookAheadAssertion(wordC), makeNegativeLookBehindAssertion(wordC)), 
+        makeIntersect(makeNegativeLookAheadAssertion(wordC), makeLookBehindAssertion(wordC))};
+    return makeAlt(alts.begin(), alts.end());
+}
+
+RE * makeWordNonBoundary () {
+    RE * wordC = makeWordSet();
+    std::vector<RE *> alts = {makeIntersect(makeLookAheadAssertion(wordC), makeLookBehindAssertion(wordC)), 
+        makeIntersect(makeNegativeLookAheadAssertion(wordC), makeNegativeLookBehindAssertion(wordC))};
+    return makeAlt(alts.begin(), alts.end());
+}
+
 RE * RE_Parser::parse_escaped_set() {
     bool complemented = false;
     RE * s;
     switch (*_cursor) {
+        case 'b':
+            ++_cursor;
+            return makeWordBoundary();
+        case 'B':
+            ++_cursor;
+            return makeWordNonBoundary();
         case 'd':
             ++_cursor;
             return makeDigitSet();
@@ -697,10 +718,10 @@ codepoint_t RE_Parser::parse_codepoint() {
 }
 
 // A backslash escape was found, and various special cases (back reference,
-// quoting with \Q, \E, sets (\p, \P, \d, \D, \w, \W, \s, \S), grapheme
+// quoting with \Q, \E, sets (\p, \P, \d, \D, \w, \W, \s, \S, \b, \B), grapheme
 // cluster \X have been ruled out.
 // It may be one of several possibilities or an error sequence.
-// 1. Special control codes (\a, \b, \e, \f, \n, \r, \t, \v)
+// 1. Special control codes (\a, \e, \f, \n, \r, \t, \v)
 // 2. General control codes c[@-_a-z?]
 // 3. Restricted octal notation 0 - 0777
 // 4. General octal notation o\{[0-7]+\}
@@ -713,7 +734,6 @@ codepoint_t RE_Parser::parse_escaped_codepoint() {
     throw_incomplete_expression_error_if_end_of_stream();
     switch (*_cursor) {
         case 'a': ++_cursor; return 0x07; // BEL
-        case 'b': ++_cursor; return 0x08; // BS
         case 'e': ++_cursor; return 0x1B; // ESC
         case 'f': ++_cursor; return 0x0C; // FF
         case 'n': ++_cursor; return 0x0A; // LF
