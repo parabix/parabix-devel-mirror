@@ -40,11 +40,11 @@ public:
         return mExprs[1];
     }
 protected:
-    Next(PabloAST * initial, PabloAST * expr, StatementList * parent)
+    Next(PabloAST * initial, PabloAST * expr, PabloBlock * parent)
     : Statement(ClassTypeId::Next, parent)
-    , mExprs({{cast<Assign>(initial), expr}})
-    {
-
+    , mExprs({{cast<Assign>(initial), expr}}) {
+        initial->addUser(this);
+        expr->addUser(this);
     }
 private:
     std::array<PabloAST*, 2>  mExprs;

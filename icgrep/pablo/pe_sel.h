@@ -8,6 +8,7 @@
 #define PE_SEL_H
 
 #include <pablo/pabloAST.h>
+#include <pablo/pe_var.h>
 #include <array>
 
 namespace pablo {
@@ -51,7 +52,9 @@ protected:
     : PabloAST(ClassTypeId::Sel)
     , mExprs({{if_expr, t_expr, f_expr}})
     {
-
+        if_expr->addUser(this);
+        t_expr->addUser(this);
+        f_expr->addUser(this);
     }
 private:
     std::array<PabloAST*, 3> mExprs;

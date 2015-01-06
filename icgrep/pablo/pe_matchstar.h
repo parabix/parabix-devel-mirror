@@ -45,7 +45,8 @@ protected:
     : PabloAST(ClassTypeId::MatchStar)
     , mExprs({{marker, cc}})
     {
-
+        marker->addUser(this);
+        cc->addUser(this);
     }
 private:
     std::array<PabloAST*, 2> mExprs;

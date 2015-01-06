@@ -28,6 +28,9 @@ void UseAnalysis::cse(PabloBlock & block) {
             // create the new nodes
             Assign * assign = block.createAssign("cse", expr);
             Var * var = block.createVar(assign);
+            if (expr == var) {
+                continue;
+            }
             const Vertex s = find(assign);
             const Vertex v = find(var);
             // update the program and graph

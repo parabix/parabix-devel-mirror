@@ -8,6 +8,7 @@
 #define PE_NOT_H
 
 #include <pablo/pabloAST.h>
+#include <pablo/pe_var.h>
 
 namespace pablo {
 
@@ -43,7 +44,7 @@ protected:
     Not(PabloAST * expr)
     : PabloAST(ClassTypeId::Not)
     , mExpr(expr) {
-
+        expr->addUser(this);
     }
 private:
     PabloAST * mExpr;

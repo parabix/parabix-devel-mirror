@@ -9,6 +9,7 @@
 
 #include <llvm/Support/Casting.h>
 #include <llvm/Support/Compiler.h>
+#include <llvm/ADT/SetVector.h>
 #include <slab_allocator.h>
 #include <iterator>
 #include <unordered_map>
@@ -23,9 +24,28 @@ class PMDNode;
 
 class PabloAST {
     friend class PMDNode;
+    friend class Advance;
+    friend class And;
+    friend class Assign;
+    friend class Call;
+    friend class If;
+    friend class MatchStar;
+    friend class Next;
+    friend class Not;
+    friend class Ones;
+    friend class Or;
+    friend class ScanThru;
+    friend class Sel;
+    friend class String;
+    friend class Var;
+    friend class While;
+    friend class Xor;
+    friend class Zeroes;
+    friend class PabloBlock;
+    friend class SymbolGenerator;
     typedef std::unordered_map<std::string, PMDNode *> PMDNodeMap;
 public:
-    typedef SlabAllocator<1024> Allocator;
+    typedef SlabAllocator<4096> Allocator;
     enum class ClassTypeId : unsigned {
         Advance
         , And
@@ -84,10 +104,18 @@ protected:
     {
 
     }
-    static Allocator    mAllocator;
+    inline void addUser(PabloAST * user) {
+        mUsers.insert(user);
+    }
+    inline void removeUser(PabloAST * user) {
+        mUsers.remove(user);
+    }
+    // virtual void removeUsageFromDefs() = 0;
+    static Allocator        mAllocator;
 private:
-    const ClassTypeId   mClassTypeId;
-    PMDNodeMap *        mMetadataMap;
+    const ClassTypeId       mClassTypeId;
+    SetVector<PabloAST *>   mUsers;
+    PMDNodeMap *            mMetadataMap;
 };
 
 bool equals(const PabloAST * expr1, const PabloAST *expr2);
@@ -98,6 +126,7 @@ class Statement : public PabloAST {
     friend class StatementList;
     friend class If;
     friend class While;
+    friend class PabloBlock;
 public:
     static inline bool classof(const PabloAST * e) {
         switch (e->getClassTypeId()) {
@@ -117,20 +146,22 @@ public:
         return false;
     }
 
-    inline void insertBefore(Statement * const statement);
-    inline void insertAfter(Statement * const statement);
-    inline void removeFromParent();
+    void insertBefore(Statement * const statement);
+    void insertAfter(Statement * const statement);
+    void removeFromParent();
+    void replaceWith(Statement * const statement);
+
     inline Statement * getNextNode() const {
         return mNext;
     }
     inline Statement * getPrevNode() const {
         return mPrev;
     }
-    inline StatementList * getParent() const {
+    inline PabloBlock * getParent() const {
         return mParent;
     }
 protected:
-    Statement(const ClassTypeId id, StatementList * parent)
+    Statement(const ClassTypeId id, PabloBlock * parent)
     : PabloAST(id)
     , mNext(nullptr)
     , mPrev(nullptr)
@@ -142,7 +173,7 @@ protected:
 protected:
     Statement * mNext;
     Statement * mPrev;
-    StatementList * mParent;
+    PabloBlock * mParent;
 };
 
 class StatementList {
@@ -372,61 +403,9 @@ public:
     void push_back(Statement * const statement);
 
 private:
-    Statement * mFirst;
-    Statement * mLast;
+    Statement   * mFirst;
+    Statement   * mLast;
 };
-
-inline void Statement::insertBefore(Statement * const statement) {
-    assert (statement);
-    assert (statement != this);
-    assert (statement->mParent);
-    removeFromParent();
-    mParent = statement->mParent;
-    if (LLVM_UNLIKELY(mParent->mFirst == statement)) {
-        mParent->mFirst = this;
-    }
-    mNext = statement;
-    mPrev = statement->mPrev;
-    statement->mPrev = this;
-    if (LLVM_LIKELY(mPrev != nullptr)) {
-        mPrev->mNext = this;
-    }
-}
-inline void Statement::insertAfter(Statement * const statement) {
-    assert (statement);
-    assert (statement != this);
-    assert (statement->mParent);
-    removeFromParent();
-    mParent = statement->mParent;
-    if (LLVM_UNLIKELY(mParent->mLast == statement)) {
-        mParent->mLast = this;
-    }
-    mPrev = statement;
-    mNext = statement->mNext;
-    statement->mNext = this;
-    if (LLVM_LIKELY(mNext != nullptr)) {
-        mNext->mPrev = this;
-    }
-}
-inline void Statement::removeFromParent() {
-    if (LLVM_LIKELY(mParent != nullptr)) {
-        if (LLVM_UNLIKELY(mParent->mFirst == this)) {
-            mParent->mFirst = mNext;
-        }
-        if (LLVM_UNLIKELY(mParent->mLast == this)) {
-            mParent->mLast = mPrev;
-        }
-        if (LLVM_LIKELY(mPrev != nullptr)) {
-            mPrev->mNext = mNext;
-        }
-        if (LLVM_LIKELY(mNext != nullptr)) {
-            mNext->mPrev = mPrev;
-        }
-    }
-    mPrev = nullptr;
-    mNext = nullptr;
-    mParent = nullptr;
-}
 
 }
 

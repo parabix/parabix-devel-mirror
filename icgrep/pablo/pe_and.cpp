@@ -11,13 +11,13 @@ namespace pablo {
 
 PabloAST * OptimizeAnd::operator ()(PabloAST * expr1, PabloAST * expr2) {
     if (isa<Ones>(expr1)) {
-	return expr2;
+        return expr2;
     }
     else if (isa<Zeroes>(expr1)){
         return expr1;        
     }
     else if (isa<Ones>(expr2)) {
-	return expr1;
+        return expr1;
     }
     else if (isa<Zeroes>(expr2)){
         return expr2;
@@ -37,6 +37,9 @@ PabloAST * OptimizeAnd::operator ()(PabloAST * expr1, PabloAST * expr2) {
         if (equals(expr1, pe_not_e2->getExpr())) {
             return cg.createZeroes();
         }
+    }
+    if (isa<Not>(expr1)) {
+        std::swap(expr1, expr2);
     }
     return new And(expr1, expr2);
 }

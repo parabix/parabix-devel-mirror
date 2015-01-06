@@ -12,9 +12,13 @@
 
 namespace pablo {
 
+class Assign;
+
 class If : public Statement {
     friend class PabloBlock;
 public:
+    using DefinedVars = std::vector<Assign *>;
+
     static inline bool classof(const PabloAST * e) {
         return e->getClassTypeId() == ClassTypeId::If;
     }
@@ -37,13 +41,13 @@ public:
     inline PabloAST * getCondition() const {
         return mExpr;
     }
-    inline StatementList & getBody() {
+    inline PabloBlock & getBody() {
         return mBody;
     }
-    inline const StatementList & getBody() const {
+    inline const PabloBlock & getBody() const {
         return mBody;
     }
-    inline const std::vector<Assign *> & getDefined() const {
+    inline const DefinedVars & getDefined() const {
         return mDefined;
     }
     inline void setInclusiveCarryCount(const unsigned count) {
@@ -59,24 +63,13 @@ public:
         return mAdvanceCount;
     }
 protected:
-    If(PabloAST * expr, std::vector<Assign *> && definedVars, StatementList && body, StatementList * parent)
-    : Statement(ClassTypeId::If, parent)
-    , mExpr(expr)
-    , mBody(std::move(body))
-    , mDefined(std::move(definedVars))
-    , mCarryCount(0)
-    , mAdvanceCount(0)
-    {
-        for (Statement * s : mBody) {
-            s->mParent = &mBody;
-        }
-    }
+    If(PabloAST * expr, DefinedVars && definedVars, PabloBlock & body, PabloBlock * parent);
 private:
-    PabloAST *          mExpr;
-    StatementList       mBody;
-    std::vector<Assign *>    mDefined;
-    unsigned            mCarryCount;
-    unsigned            mAdvanceCount;
+    PabloAST *      mExpr;
+    PabloBlock &    mBody;
+    DefinedVars     mDefined;
+    unsigned        mCarryCount;
+    unsigned        mAdvanceCount;
 };
 
 }

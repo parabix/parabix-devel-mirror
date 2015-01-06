@@ -8,6 +8,7 @@
 #define PE_AND_H
 
 #include <pablo/pabloAST.h>
+#include <pablo/pe_var.h>
 #include <array>
 
 namespace pablo {
@@ -48,7 +49,8 @@ protected:
     : PabloAST(ClassTypeId::And)
     , mExprs({{expr1, expr2}})
     {
-
+        expr1->addUser(this);
+        expr2->addUser(this);
     }
 private:
     std::array<PabloAST*, 2> mExprs;

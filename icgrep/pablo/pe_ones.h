@@ -8,6 +8,7 @@
 #define PE_ONES_H
 
 #include "pabloAST.h"
+#include <pablo/pe_var.h>
 
 namespace pablo {
 

@@ -22,6 +22,13 @@ namespace pablo {
 
 class Var : public PabloAST {
     friend class PabloBlock;
+    friend class And;
+    friend class Or;
+    friend class Not;
+    friend class Sel;
+    friend class Xor;
+    friend class Zeroes;
+    friend class Ones;
 public:
     static inline bool classof(const PabloAST * e) {
         return e->getClassTypeId() == ClassTypeId::Var;
@@ -64,7 +71,7 @@ protected:
     , mVar(var)
     , mName(getNameOf(var))
     {
-
+        var->addUser(this);
     }
 private:
     static inline const String * getNameOf(const PabloAST * var) {

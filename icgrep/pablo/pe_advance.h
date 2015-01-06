@@ -44,7 +44,7 @@ protected:
     : PabloAST(ClassTypeId::Advance)
     , mExpr(expr)
 	, mShiftAmount(shiftAmount) {
-
+        expr->addUser(this);
     }
 private:
     PabloAST * mExpr;

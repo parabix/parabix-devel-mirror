@@ -8,6 +8,7 @@
 #define PS_SETMARKER_H
 
 #include <pablo/pe_string.h>
+#include <pablo/symbol_generator.h>
 #include <array>
 
 namespace pablo {
@@ -15,6 +16,7 @@ namespace pablo {
 class Assign : public Statement {
     friend class PabloBlock;
     friend class Next;
+    friend class Var;
 public:
     static inline bool classof(const PabloAST * e) {
         return e->getClassTypeId() == ClassTypeId::Assign;
@@ -48,12 +50,12 @@ public:
         return mOutputIndex;
     }
 protected:
-    Assign(PabloAST * name, PabloAST * expr, const int outputIndex, StatementList * parent)
+    explicit Assign(PabloAST * name, PabloAST * expr, int outputIndex, PabloBlock * parent)
     : Statement(ClassTypeId::Assign, parent)
     , mExprs({{name, expr}})
     , mOutputIndex(outputIndex)
     {
-
+        expr->addUser(this);
     }
 private:
     std::array<PabloAST *,2>    mExprs;

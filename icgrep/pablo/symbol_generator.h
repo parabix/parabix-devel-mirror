@@ -7,6 +7,7 @@
 #ifndef SYMBOL_GENERATOR_H
 #define SYMBOL_GENERATOR_H
 
+#include <pablo/pabloAST.h>
 #include <string>
 #include <unordered_map>
 
@@ -14,15 +15,16 @@ namespace pablo {
 
 class String;
 
-class SymbolGenerator
-{
+class SymbolGenerator {
+    friend class PabloBlock;
 public:
-    SymbolGenerator();
-
     String * get(const std::string name);
-
     String * get_ssa(const std::string prefix);
-
+protected:
+    SymbolGenerator();
+    void* operator new (std::size_t size) noexcept {
+        return PabloAST::mAllocator.allocate(size);
+    }
 private:
     std::unordered_map<std::string, unsigned>   mPrefixMap;
     std::unordered_map<std::string, String *>   mStringMap;

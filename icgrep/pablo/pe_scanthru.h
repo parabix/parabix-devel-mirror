@@ -44,7 +44,8 @@ public:
     : PabloAST(ClassTypeId::ScanThru)
     , mExprs({{from, thru}})
     {
-
+        from->addUser(this);
+        thru->addUser(this);
     }
 private:
     std::array<PabloAST*, 2> mExprs;

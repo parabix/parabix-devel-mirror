@@ -18,6 +18,7 @@
 #include "pe_xor.h"
 #include "pe_zeroes.h"
 #include "pe_ones.h"
+#include <pablo/codegenstate.h>
 #include <llvm/Support/Compiler.h>
 
 namespace pablo {
@@ -91,7 +92,6 @@ bool equals(const PabloAST * expr1, const PabloAST * expr2) {
     return false;
 }
 
-
 void PabloAST::setMetadata(const std::string & name, PMDNode * node) {
     if (LLVM_UNLIKELY(mMetadataMap == nullptr)) {
         mMetadataMap = new PMDNodeMap();
@@ -108,6 +108,79 @@ PMDNode * PabloAST::getMetadata(const std::string & name) {
         return nullptr;
     }
     return f->second;
+}
+
+
+void Statement::insertBefore(Statement * const statement) {
+    assert (statement);
+    assert (statement != this);
+    assert (statement->mParent);
+    removeFromParent();
+    mParent = statement->mParent;
+    if (LLVM_UNLIKELY(mParent->mFirst == statement)) {
+        mParent->mFirst = this;
+    }
+    mNext = statement;
+    mPrev = statement->mPrev;
+    statement->mPrev = this;
+    if (LLVM_LIKELY(mPrev != nullptr)) {
+        mPrev->mNext = this;
+    }
+}
+
+void Statement::insertAfter(Statement * const statement) {
+    assert (statement);
+    assert (statement != this);
+    assert (statement->mParent);
+    removeFromParent();
+    mParent = statement->mParent;
+    if (LLVM_UNLIKELY(mParent->mLast == statement)) {
+        mParent->mLast = this;
+    }
+    mPrev = statement;
+    mNext = statement->mNext;
+    statement->mNext = this;
+    if (LLVM_LIKELY(mNext != nullptr)) {
+        mNext->mPrev = this;
+    }
+}
+
+void Statement::removeFromParent() {
+    if (LLVM_LIKELY(mParent != nullptr)) {
+        if (LLVM_UNLIKELY(mParent->mFirst == this)) {
+            mParent->mFirst = mNext;
+        }
+        if (LLVM_UNLIKELY(mParent->mLast == this)) {
+            mParent->mLast = mPrev;
+        }
+        if (LLVM_LIKELY(mPrev != nullptr)) {
+            mPrev->mNext = mNext;
+        }
+        if (LLVM_LIKELY(mNext != nullptr)) {
+            mNext->mPrev = mPrev;
+        }
+    }
+    mPrev = nullptr;
+    mNext = nullptr;
+    mParent = nullptr;
+}
+
+void Statement::replaceWith(Statement * const statement) {
+    if (LLVM_UNLIKELY(mParent != nullptr)) {
+        statement->removeFromParent();
+    }
+    statement->mParent = mParent;
+    statement->mNext = mNext;
+    statement->mPrev = mPrev;
+    if (LLVM_LIKELY(mPrev != nullptr)) {
+        mPrev->mNext = statement;
+    }
+    if (LLVM_LIKELY(mNext != nullptr)) {
+        mNext->mPrev = statement;
+    }
+    mParent=nullptr;
+    mNext=nullptr;
+    mPrev=nullptr;
 }
 
 Statement::~Statement() {

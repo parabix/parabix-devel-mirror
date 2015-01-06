@@ -35,31 +35,16 @@
 
 namespace pablo {
 
-class PabloBlock {
+class PabloBlock : public StatementList {
+    friend class pablo::PabloAST;
 public:
 
-    PabloBlock(SymbolGenerator & symgen)
-    : mZeroes(new Zeroes())
-    , mOnes(new Ones())
-    , mSymbolGenerator(symgen)
-    , mUnary(nullptr, this)
-    , mUnaryWithInt(nullptr, this)
-    , mBinary(nullptr, this)
-    , mTernary(nullptr, this)
-    {
-
+    inline static PabloBlock & Create() {
+        return *(new PabloBlock());
     }
 
-    PabloBlock(PabloBlock & cg)
-    : mZeroes(cg.mZeroes) // inherit the original "Zeroes" variable for simplicity
-    , mOnes(cg.mOnes) // inherit the original "Ones" variable for simplicity
-    , mSymbolGenerator(cg.mSymbolGenerator)
-    , mUnary(&(cg.mUnary), this)
-    , mUnaryWithInt(&(cg.mUnaryWithInt), this)
-    , mBinary(&(cg.mBinary), this)
-    , mTernary(&(cg.mTernary), this)
-    {
-
+    inline static PabloBlock & Create(PabloBlock & predecessor) {
+        return *(new PabloBlock(&predecessor));
     }
 
     PabloAST * createAdvance(PabloAST * expr, const int shiftAmount);
@@ -72,13 +57,14 @@ public:
         return mOnes;
     }
 
-    Call * createCall(const std::string name);
+    PabloAST * createCall(const std::string name);
 
-    inline Assign * createAssign(const std::string prefix, PabloAST * expr, const int outputIndex = -1) {
-        // TODO: should this test whether we've somehow created a var for this prior to
-        // making the assignment?
-        Assign * assign = new Assign(mSymbolGenerator.get_ssa(prefix), expr, outputIndex, &mStatements);
-        mStatements.push_back(assign);
+    Assign * createAssign(const std::string prefix, PabloAST * expr, const int outputIndex = -1)  {
+        // Note: we cannot just use the findOrMake method to obtain this; an Assign node cannot be considered
+        // unique until we prove it has no Next node associated with it. But the Assign node must be created
+        // before the Next node. Should we create a "Constant" flag for this?
+        Assign * assign = new Assign(mSymbolGenerator->get_ssa(prefix), expr, outputIndex, this);
+        push_back(assign);
         return assign;
     }
 
@@ -115,15 +101,15 @@ public:
 
     PabloAST * createSel(PabloAST * condition, PabloAST * trueExpr, PabloAST * falseExpr);
 
-    inline If * createIf(PabloAST * condition, std::vector<Assign *> && definedVars, PabloBlock && body) {
-        If * statement = new If(condition, std::move(definedVars), std::move(body.statements()), &mStatements);
-        mStatements.push_back(statement);
+    inline If * createIf(PabloAST * condition, std::vector<Assign *> && definedVars, PabloBlock & body) {
+        If * statement = new If(condition, std::move(definedVars), body, this);
+        push_back(statement);
         return statement;
     }
 
-    inline While * createWhile(PabloAST * cond, PabloBlock && body) {
-        While * statement = new While(cond, std::move(body.statements()), &mStatements);
-        mStatements.push_back(statement);
+    inline While * createWhile(PabloAST * cond, PabloBlock & body) {
+        While * statement = new While(cond, body, this);
+        push_back(statement);
         return statement;
     }
 
@@ -141,29 +127,29 @@ public:
         }
 
         template <class Type, typename... Params>
-        inline Type * findOrMake(const PabloAST::ClassTypeId type, Args... args, Params... params) {
+        inline std::pair<Type *, bool> findOrMake(const PabloAST::ClassTypeId type, Args... args, Params... params) {
             Key key = std::make_tuple(type, args...);
             PabloAST * const f = find(key);
             if (f) {
-                return cast<Type>(f);
+                return std::make_pair(cast<Type>(f), false);
             }
             Type * const expr = new Type(std::forward<Args>(args)..., std::forward<Params>(params)...);
             insert(std::move(key), expr);
-            return expr;
+            return std::make_pair(expr, true);
         }
 
 
         template <class Functor, typename... Params>
-        inline PabloAST * findOrCall(const PabloAST::ClassTypeId type, Args... args, Params... params) {
+        inline std::pair<PabloAST *, bool> findOrCall(const PabloAST::ClassTypeId type, Args... args, Params... params) {
             Key key = std::make_tuple(type, args...);
             PabloAST * const f = find(key);
             if (f) {
-                return f;
+                return std::make_pair(f, false);
             }
             Functor mf(mCurrentBlock);
             PabloAST * const expr = mf(std::forward<Args>(args)..., std::forward<Params>(params)...);
             insert(std::move(key), expr);
-            return expr;
+            return std::make_pair(expr, true);
         }
 
         inline void insert(Key && key, PabloAST * expr) {
@@ -195,24 +181,49 @@ public:
         std::map<Key, PabloAST *>   mMap;
     };
 
-
     inline StatementList & statements() {
-        return mStatements;
+        return *this;
     }
 
     inline const StatementList & statements() const {
-        return mStatements;
+        return *this;
+    }
+protected:
+    PabloBlock()
+    : mZeroes(new Zeroes())
+    , mOnes(new Ones())
+    , mSymbolGenerator(new SymbolGenerator())
+    , mUnary(nullptr, this)
+    , mUnaryWithInt(nullptr, this)
+    , mBinary(nullptr, this)
+    , mTernary(nullptr, this)
+    {
+
     }
 
+    PabloBlock(PabloBlock * predecessor)
+    : mZeroes(predecessor->mZeroes) // inherit the original "Zeroes" variable for simplicity
+    , mOnes(predecessor->mOnes) // inherit the original "Ones" variable for simplicity
+    , mSymbolGenerator(predecessor->mSymbolGenerator)
+    , mUnary(&(predecessor->mUnary), this)
+    , mUnaryWithInt(&(predecessor->mUnaryWithInt), this)
+    , mBinary(&(predecessor->mBinary), this)
+    , mTernary(&(predecessor->mTernary), this)
+    {
+
+    }
+
+    void* operator new (std::size_t size) noexcept {
+        return PabloAST::mAllocator.allocate(size);
+    }
 private:        
     Zeroes * const                                      mZeroes;
     Ones * const                                        mOnes;
-    SymbolGenerator &                                   mSymbolGenerator;
+    SymbolGenerator * const                             mSymbolGenerator;
     ExpressionMap<PabloAST *>                           mUnary;
     ExpressionMap<PabloAST *, int>                      mUnaryWithInt;
     ExpressionMap<PabloAST *, PabloAST *>               mBinary;
     ExpressionMap<PabloAST *, PabloAST *, PabloAST *>   mTernary;
-    StatementList                                       mStatements;
 };
 
 }

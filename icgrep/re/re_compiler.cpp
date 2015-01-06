@@ -83,10 +83,10 @@ void RE_Compiler::initializeRequiredStreams(cc::CC_Compiler & ccc) {
 #ifndef USE_IF_FOR_CRLF
     mCRLF = mCG.createAnd(mCG.createAdvance(CR, 1), mLineFeed);
 #else
-    PabloBlock crb(mCG);
+    PabloBlock & crb = PabloBlock::Create(mCG);
     Assign * cr1 = crb.createAssign("cr1", crb.createAdvance(CR, 1));
     Assign * acrlf = crb.createAssign("crlf", crb.createAnd(crb.createVar(cr1), crb.createVar(LF)));
-    mCG.createIf(CR, std::move(std::vector<Assign *>{acrlf}), std::move(crb));
+    mCG.createIf(CR, std::move(std::vector<Assign *>{acrlf}), crb);
     mCRLF = mCG.createVar(acrlf);
 #endif
     
@@ -112,7 +112,7 @@ void RE_Compiler::initializeRequiredStreams(cc::CC_Compiler & ccc) {
 #ifdef USE_IF_FOR_NONFINAL
     PabloAST * u8single = ccc.compileCC(makeCC(0x00, 0x7F));
     PabloAST * u8pfx = ccc.compileCC(makeCC(0xC0, 0xFF));
-    PabloBlock it(mCG);
+    PabloBlock & it = PabloBlock::Create(mCG);
     PabloAST * u8pfx2 = ccc.compileCC(makeCC(0xC2, 0xDF), it);
     PabloAST * u8pfx3 = ccc.compileCC(makeCC(0xE0, 0xEF), it);
     PabloAST * u8pfx4 = ccc.compileCC(makeCC(0xF0, 0xF4), it);
@@ -125,7 +125,7 @@ void RE_Compiler::initializeRequiredStreams(cc::CC_Compiler & ccc) {
     PabloAST * E2_80 = it.createAnd(it.createAdvance(ccc.compileCC(makeCC(0xE2), it), 1), ccc.compileCC(makeCC(0x80), it));
     PabloAST * LS_PS = it.createAnd(it.createAdvance(E2_80, 1), ccc.compileCC(makeCC(0xA8,0xA9), it));
     Assign * NEL_LS_PS = it.createAssign("NEL_LS_PS", it.createOr(NEL, LS_PS));
-    mCG.createIf(u8pfx, std::move(std::vector<Assign *>{valid_pfx, a_nonfinal, NEL_LS_PS}), std::move(it));
+    mCG.createIf(u8pfx, std::move(std::vector<Assign *>{valid_pfx, a_nonfinal, NEL_LS_PS}), it);
     PabloAST * LB_chars = mCG.createOr(LF_VT_FF_CR, mCG.createVar(NEL_LS_PS));
     mInitial = mCG.createVar(mCG.createAssign(initial, mCG.createOr(u8single, mCG.createVar(valid_pfx))));
     mNonFinal = mCG.createVar(a_nonfinal);    
@@ -377,7 +377,7 @@ MarkerType RE_Compiler::processUnboundedRep(RE * repeated, MarkerType marker, Pa
         Assign * whileTest = pb.createAssign("test", base);
         Assign * whileAccum = pb.createAssign("accum", base);
 
-        PabloBlock wb(pb); 
+        PabloBlock & wb = PabloBlock::Create(pb);
 
         Var * loopComputation = postPositionVar(process(repeated, wrapPostPositionMarker(whileTest), wb), wb);
 
@@ -387,7 +387,7 @@ MarkerType RE_Compiler::processUnboundedRep(RE * repeated, MarkerType marker, Pa
 
         wb.createNext(whileAccum, wb.createOr(loopComputation, whileAccumVar));
 
-        pb.createWhile(wb.createVar(nextWhileTest), std::move(wb));
+        pb.createWhile(wb.createVar(nextWhileTest), wb);
 
         return makePostPositionMarker("unbounded", whileAccumVar, pb);
     }    

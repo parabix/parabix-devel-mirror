@@ -36,10 +36,10 @@ public:
     inline PabloAST * getCondition() const {
         return mExpr;
     }
-    inline StatementList & getBody() {
+    inline PabloBlock & getBody() {
         return mBody;
     }
-    inline const StatementList & getBody() const {
+    inline const PabloBlock & getBody() const {
         return mBody;
     }
     inline void setInclusiveCarryCount(const unsigned count) {
@@ -55,20 +55,10 @@ public:
         return mAdvanceCount;
     }
 protected:
-    While(PabloAST * expr, StatementList && body, StatementList * parent)
-    : Statement(ClassTypeId::While, parent)
-    , mExpr(expr)
-    , mBody(std::move(body))
-    , mCarryCount(0)
-    , mAdvanceCount(0)
-    {
-        for (Statement * s : mBody) {
-            s->mParent = &mBody;
-        }
-    }
+    While(PabloAST * expr, PabloBlock &body, PabloBlock * parent);
 private:
     PabloAST *          mExpr;
-    StatementList       mBody;
+    PabloBlock &        mBody;
     unsigned            mCarryCount;
     unsigned            mAdvanceCount;
 };
