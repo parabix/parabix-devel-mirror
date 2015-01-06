@@ -54,13 +54,13 @@ int main(int argc, char *argv[]) {
     cl::list<std::string> inputFiles(cl::Positional, cl::desc("<regex> <input file ...>"), cl::OneOrMore);
     
     cl::opt<bool> CountOnly("c", cl::desc("Count and display the matching lines per file only."), cl::cat(bGrepOutputOptions));
-    cl::alias CountOnlyLong("-count", cl::desc("Alias for -c"), cl::aliasopt(CountOnly));
+    cl::alias CountOnlyLong("count", cl::desc("Alias for -c"), cl::aliasopt(CountOnly));
     
     cl::opt<bool> ShowFileNames("H", cl::desc("Show the file name with each matching line."), cl::cat(bGrepOutputOptions));
-    cl::alias ShowFileNamesLong("-with-filename", cl::desc("Alias for -H"), cl::aliasopt(ShowFileNames));
+    cl::alias ShowFileNamesLong("with-filename", cl::desc("Alias for -H"), cl::aliasopt(ShowFileNames));
     
     cl::opt<bool> ShowLineNumbers("n", cl::desc("Show the line number with each matching line."), cl::cat(bGrepOutputOptions));
-    cl::alias ShowLineNumbersLong("-line-number", cl::desc("Alias for -n"), cl::aliasopt(ShowLineNumbers));
+    cl::alias ShowLineNumbersLong("line-number", cl::desc("Alias for -n"), cl::aliasopt(ShowLineNumbers));
     
     cl::list<std::string> regexVector("e", cl::desc("Regular expression"), cl::ZeroOrMore, cl::cat(aRegexSourceOptions));
     

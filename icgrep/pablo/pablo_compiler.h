@@ -99,7 +99,9 @@ private:
 
     StringToValueMap                    mMarkerMap;
     CarryQueueVector                    mCarryQueueVector;
+    std::vector<int>                    mCarryQueueSummaryIdx;
     CarryQueueVector                    mAdvanceQueueVector;
+    std::vector<int>                    mAdvanceQueueSummaryIdx;
 
     const std::vector<Var *> &          mBasisBits;
 

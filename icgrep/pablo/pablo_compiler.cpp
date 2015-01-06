@@ -120,6 +120,8 @@ LLVM_Gen_RetVal PabloCompiler::compile(PabloBlock & pb)
     Examine(pb.statements());
     mCarryQueueVector.resize(mCarryQueueSize);
     mAdvanceQueueVector.resize(mAdvanceQueueSize);
+    mCarryQueueSummaryIdx.resize(mCarryQueueSize);
+    mAdvanceQueueSummaryIdx.resize(mAdvanceQueueSize);
     std::string errMessage;
     EngineBuilder builder(mMod);
     builder.setErrorStr(&errMessage);
@@ -586,15 +588,24 @@ void PabloCompiler::compileStatement(const PabloAST * stmt)
             Value * carry_summary = mZeroInitializer;
             for (int c = baseCarryQueueIdx; c < baseCarryQueueIdx + ifCarryCount; c++)
             {
-                Value* carryq_value = genCarryInLoad(c);
-                carry_summary = bIfBody.CreateOr(carry_summary, carryq_value);
+                int s = mCarryQueueSummaryIdx[c];
+                if (s == -1) {
+                    Value* carryq_value = mCarryQueueVector[c];
+                    carry_summary = bIfBody.CreateOr(carry_summary, carryq_value);
+                    mCarryQueueSummaryIdx[c] = baseCarryQueueIdx + ifCarryCount;
+                }
+
             }
             // Note that the limit in the following uses -1, because
             // last entry of the advance queue is for the summary variable.
             for (int c = baseAdvanceQueueIdx; c < baseAdvanceQueueIdx + ifAdvanceCount - 1; c++)
             {
-                Value* advance_q_value = genAdvanceInLoad(c);
-                carry_summary = bIfBody.CreateOr(advance_q_value, carry_summary);
+                int s = mAdvanceQueueSummaryIdx[c];
+                if (s == -1 ) {
+                    Value* advance_q_value = mAdvanceQueueVector[c];
+                    carry_summary = bIfBody.CreateOr(advance_q_value, carry_summary);
+                    mAdvanceQueueSummaryIdx[c] = baseAdvanceQueueIdx + ifAdvanceCount - 1;
+                }
             }
             genAdvanceOutStore(carry_summary, mAdvanceQueueIdx++); //baseAdvanceQueueIdx + ifAdvanceCount - 1);
         }
@@ -939,6 +950,7 @@ void PabloCompiler::genCarryOutStore(Value* carryOut, const unsigned index ) {
         IRBuilder<> b(mBasicBlock);
         b.CreateAlignedStore(carryOut, b.CreateGEP(mCarryQueuePtr, b.getInt64(index)), BLOCK_SIZE/8, false);
     }
+    mCarryQueueSummaryIdx[index] = -1;
     mCarryQueueVector[index] = carryOut;
 }
 
@@ -958,6 +970,7 @@ void PabloCompiler::genAdvanceOutStore(Value* advanceOut, const unsigned index )
         IRBuilder<> b(mBasicBlock);
         b.CreateAlignedStore(advanceOut, b.CreateGEP(mAdvanceQueuePtr, b.getInt64(index)), BLOCK_SIZE/8, false);
     }
+    mAdvanceQueueSummaryIdx[index] = -1;
     mAdvanceQueueVector[index] = advanceOut;
 }
 
