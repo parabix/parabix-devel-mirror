@@ -21,6 +21,7 @@ class Pair;
 
 class Alt;
 class Any;
+class Assertion;
 class CC;
 class Diff;
 class End;
@@ -39,6 +40,7 @@ public:
     enum class ClassTypeId : unsigned {
         Alt
         , Any
+        , Assertion
         , CC
         , Diff
         , End

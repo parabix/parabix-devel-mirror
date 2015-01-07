@@ -13,6 +13,7 @@
 #include <re/re_start.h>
 #include <re/re_diff.h>
 #include <re/re_intersect.h>
+#include <re/re_assertion.h>
 #include <re/parsefailure.h>
 #include <UCD/CaseFolding_txt.h>
 #include <algorithm>
@@ -46,19 +47,19 @@ inline RE_Parser::RE_Parser(const std::string & regular_expression)
 }
 
 RE * makeLookAheadAssertion(RE * r) {
-    throw ParseFailure("Lookahead assertion not supported.");
+    return makeAssertion(r, Assertion::Kind::Lookahead, Assertion::Sense::Positive);
 }
 
 RE * makeNegativeLookAheadAssertion(RE * r) {
-    throw ParseFailure("Lookahead assertion not supported.");
+    return makeAssertion(r, Assertion::Kind::Lookahead, Assertion::Sense::Negative);
 }
 
 RE * makeLookBehindAssertion(RE * r) {
-    throw ParseFailure("Lookbehind assertion not supported.");
+    return makeAssertion(r, Assertion::Kind::Lookbehind, Assertion::Sense::Positive);
 }
 
 RE * makeNegativeLookBehindAssertion(RE * r) {
-    throw ParseFailure("Lookbehind assertion not supported.");
+    return makeAssertion(r, Assertion::Kind::Lookbehind, Assertion::Sense::Negative);
 }
 
 RE * makeAtomicGroup(RE * r) {
@@ -197,10 +198,12 @@ RE * RE_Parser::parse_group() {
                 ++_cursor;
                 throw_incomplete_expression_error_if_end_of_stream();
                 if (*_cursor == '=') {
+                    ++_cursor;
                     subexpr = parse_alt();
                     group_expr = makeLookBehindAssertion(subexpr);
                 }
                 else if (*_cursor == '!') {
+                    ++_cursor;
                     subexpr = parse_alt();
                     group_expr = makeNegativeLookBehindAssertion(subexpr);
                 }

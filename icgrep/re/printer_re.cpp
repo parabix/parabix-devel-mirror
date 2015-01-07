@@ -18,6 +18,7 @@
 #include <re/re_start.h>
 #include <re/re_diff.h>
 #include <re/re_intersect.h>
+#include <re/re_assertion.h>
 
 using namespace re;
 
@@ -61,6 +62,13 @@ const std::string Printer_RE::PrintRE(const RE * re)
         retVal += re_name->getName();
         retVal += "\" ";
     }
+    else if (const Assertion * a = dyn_cast<const Assertion>(re)) {
+        retVal = (a->getSense() == Assertion::Sense::Positive) ? "" : "Negative";
+        retVal += (a->getKind() == Assertion::Kind::Lookahead) ? "Lookahead" : "Lookbehind";
+        retVal += "Assertion(";
+        retVal += PrintRE(a->getAsserted());
+        retVal += ") ";
+    }
     else if (const Diff* diff = dyn_cast<const Diff>(re))
     {
         retVal = "Diff (";
@@ -92,7 +100,7 @@ const std::string Printer_RE::PrintRE(const RE * re)
             retVal.append("Unbounded");
         }
         else {
-            retVal.append(std::to_string(re_rep->getUB()));            
+            retVal.append(std::to_string(re_rep->getUB()));
         }
         retVal.append(")");
     }

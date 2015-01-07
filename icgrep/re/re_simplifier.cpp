@@ -8,6 +8,7 @@
 #include "re_rep.h"
 #include "re_diff.h"
 #include "re_intersect.h"
+#include "re_assertion.h"
 #include <algorithm>
 #include <memory>
 #include <queue>
@@ -30,6 +31,9 @@ RE * RE_Simplifier::simplify(RE * re) {
             list.push_back(simplify(re));
         }
         re = makeSeq(list.begin(), list.end());
+    }
+    else if (Assertion * a = dyn_cast<Assertion>(re)) {
+        re = makeAssertion(simplify(a->getAsserted()), a->getKind(), a->getSense());
     }
     else if (Rep * rep = dyn_cast<Rep>(re)) {
         re = makeRep(simplify(rep->getRE()), rep->getLB(), rep->getUB());

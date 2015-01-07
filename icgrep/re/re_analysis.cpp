@@ -9,6 +9,7 @@
 #include "re_rep.h"
 #include "re_diff.h"
 #include "re_intersect.h"
+#include "re_assertion.h"
 
 namespace re {
 
@@ -25,6 +26,9 @@ bool isByteLength(RE * re) {
     }
     else if (Rep * rep = dyn_cast<Rep>(re)) {
         return (rep->getLB() == 1) && (rep->getUB() == 1) && isByteLength(rep->getRE());
+    }
+    else if (Assertion * a = dyn_cast<Assertion>(re)) {
+        return false;
     }
     else if (Diff * diff = dyn_cast<Diff>(re)) {
         return isByteLength(diff->getLH()) && isByteLength(diff->getRH());
@@ -52,6 +56,9 @@ bool isUnicodeUnitLength(RE * re) {
     }
     else if (Rep * rep = dyn_cast<Rep>(re)) {
         return (rep->getLB() == 1) && (rep->getUB() == 1) && isUnicodeUnitLength(rep->getRE());
+    }
+    else if (Assertion * a = dyn_cast<Assertion>(re)) {
+        return false;
     }
     else if (Diff * diff = dyn_cast<Diff>(re)) {
         return isUnicodeUnitLength(diff->getLH()) && isUnicodeUnitLength(diff->getRH());

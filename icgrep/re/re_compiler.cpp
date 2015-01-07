@@ -16,6 +16,7 @@
 #include <re/re_rep.h>
 #include <re/re_diff.h>
 #include <re/re_intersect.h>
+#include <re/re_assertion.h>
 #include <re/re_analysis.h>
 #include <cc/cc_namemap.hpp>
 #include <pablo/codegenstate.h>
@@ -30,11 +31,11 @@ namespace re {
 MarkerType makePostPositionMarker(std::string marker_name, PabloAST * s, PabloBlock & pb) {
     return MarkerType{PostPosition, pb.createAssign(marker_name, s)};
 }
-    
+
 MarkerType wrapPostPositionMarker(Assign * s) {
     return MarkerType{PostPosition, s};
 }
-    
+
 MarkerType makeFinalPositionMarker(std::string marker_name, PabloAST * s, PabloBlock & pb) {
     return MarkerType{FinalByte, pb.createAssign(marker_name, s)};
 }
@@ -70,12 +71,12 @@ RE_Compiler::RE_Compiler(PabloBlock & baseCG, const cc::CC_NameMap & nameMap)
 #define USE_IF_FOR_CRLF
 #define UNICODE_LINE_BREAK true
 
-    
+
 void RE_Compiler::initializeRequiredStreams(cc::CC_Compiler & ccc) {
 
     const std::string initial = "initial";
     const std::string nonfinal = "nonfinal";
-    
+
     Assign * LF = mCG.createAssign("LF", ccc.compileCC(makeCC(0x0A)));
     mLineFeed = mCG.createVar(LF);
     PabloAST * CR = ccc.compileCC(makeCC(0x0D));
@@ -89,7 +90,7 @@ void RE_Compiler::initializeRequiredStreams(cc::CC_Compiler & ccc) {
     mCG.createIf(CR, std::move(std::vector<Assign *>{acrlf}), crb);
     mCRLF = mCG.createVar(acrlf);
 #endif
-    
+
 #ifndef USE_IF_FOR_NONFINAL
     PabloAST * u8single = ccc.compileCC(makeCC(0x00, 0x7F));
     PabloAST * u8pfx2 = ccc.compileCC(makeCC(0xC2, 0xDF));
@@ -97,7 +98,7 @@ void RE_Compiler::initializeRequiredStreams(cc::CC_Compiler & ccc) {
     PabloAST * u8pfx4 = ccc.compileCC(makeCC(0xF0, 0xF4));
     PabloAST * u8pfx = mCG.createOr(mCG.createOr(u8pfx2, u8pfx3), u8pfx4);
     mInitial = mCG.createVar(mCG.createAssign(initial, mCG.createOr(u8pfx, u8single)));
-    
+
     PabloAST * u8scope32 = mCG.createAdvance(u8pfx3, 1);
     PabloAST * u8scope42 = mCG.createAdvance(u8pfx4, 1);
     PabloAST * u8scope43 = mCG.createAdvance(u8scope42, 1);
@@ -140,11 +141,11 @@ void RE_Compiler::finalizeMatchResult(MarkerType match_result) {
     mCG.createAssign("matches", mCG.createAnd(mCG.createMatchStar(v, mCG.createNot(lb)), lb), 0);
     mCG.createAssign("lf", mCG.createAnd(lb, mCG.createNot(mCRLF)), 1);
 }
-    
+
 MarkerType RE_Compiler::compile(RE * re, PabloBlock & pb) {
     return process(re, makePostPositionMarker("start", pb.createOnes(), pb), pb);
 }
-        
+
 PabloAST * RE_Compiler::character_class_strm(Name * name, PabloBlock & pb) {
     Var * var = name->getCompiled();
     if (var != nullptr) return var;
@@ -173,10 +174,8 @@ PabloAST * RE_Compiler::nextUnicodePosition(MarkerType m, PabloBlock & pb) {
     else {
         //return pb.createAdvanceThenScanThru(pb.createVar(markerVar(m), pb), mNonFinal);
         return pb.createScanThru(pb.createAnd(mInitial, pb.createAdvance(pb.createVar(markerVar(m, pb)), 1)), mNonFinal);
-        
     }
 }
-   
 
 MarkerType RE_Compiler::process(RE * re, MarkerType marker, PabloBlock & pb) {
     if (Name * name = dyn_cast<Name>(re)) {
@@ -190,6 +189,9 @@ MarkerType RE_Compiler::process(RE * re, MarkerType marker, PabloBlock & pb) {
     }
     else if (Rep * rep = dyn_cast<Rep>(re)) {
         return process(rep, marker, pb);
+    }
+    else if (Assertion * a = dyn_cast<Assertion>(re)) {
+        return process(a, marker, pb);
     }
     else if (isa<Any>(re)) {
         PabloAST * nextPos = nextUnicodePosition(marker, pb);
@@ -264,6 +266,10 @@ MarkerType RE_Compiler::process(Alt * alt, MarkerType marker, PabloBlock & pb) {
     }
 }
 
+MarkerType RE_Compiler::process(Assertion * a, MarkerType marker, PabloBlock & pb) {
+    throw std::runtime_error("Assertions not implemented.");
+}
+
 MarkerType RE_Compiler::process(Diff * diff, MarkerType marker, PabloBlock & pb) {
     RE * lh = diff->getLH();
     RE * rh = diff->getRH();
@@ -299,7 +305,7 @@ MarkerType RE_Compiler::process(Rep * rep, MarkerType marker, PabloBlock & pb) {
     }
     else { // if (rep->getUB() != Rep::UNBOUNDED_REP)
         return processBoundedRep(rep->getRE(), ub - lb, marker, pb);
-    }    
+    }
 }
 
 /*
@@ -307,7 +313,7 @@ MarkerType RE_Compiler::process(Rep * rep, MarkerType marker, PabloBlock & pb) {
    of length |repeated_lgth|, compute a stream marking positions immediately after
    |repeat_count| consecutive occurrences of such items.
 */
-        
+
 inline Assign * RE_Compiler::consecutive(Assign * repeated, int repeated_lgth, int repeat_count, pablo::PabloBlock & pb) {
         int i = repeated_lgth;
         int total_lgth = repeat_count * repeated_lgth;
@@ -323,7 +329,7 @@ inline Assign * RE_Compiler::consecutive(Assign * repeated, int repeated_lgth, i
         }
         return consecutive_i;
 }
-                
+
 MarkerType RE_Compiler::processLowerBound(RE * repeated, int lb, MarkerType marker, PabloBlock & pb) {
     if (isByteLength(repeated)) {
         PabloAST * cc = markerVar(compile(repeated, pb), pb);

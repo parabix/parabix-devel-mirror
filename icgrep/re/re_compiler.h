@@ -82,6 +82,7 @@ private:
     MarkerType process(Name * name, MarkerType marker, pablo::PabloBlock & pb);
     MarkerType process(Seq * seq, MarkerType marker, pablo::PabloBlock & pb);
     MarkerType process(Alt * alt, MarkerType marker, pablo::PabloBlock & pb);
+    MarkerType process(Assertion * a, MarkerType marker, pablo::PabloBlock & pb);
     MarkerType process(Rep * rep, MarkerType marker, pablo::PabloBlock & pb);
     MarkerType process(Diff * diff, MarkerType marker, pablo::PabloBlock & cg);
     MarkerType process(Intersect * x, MarkerType marker, pablo::PabloBlock & cg);
