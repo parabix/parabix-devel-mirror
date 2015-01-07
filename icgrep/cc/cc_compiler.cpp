@@ -17,6 +17,7 @@
 #include <re/re_name.h>
 #include <re/re_diff.h>
 #include <re/re_intersect.h>
+#include <re/re_assertion.h>
 #include <re/printer_re.h>
 #include <cc/cc_namemap.hpp>
 #include <pablo/printer_pablos.h>
@@ -72,6 +73,9 @@ void CC_Compiler::compileByteClasses(RE * re) {
     }
     else if (Rep * rep = dyn_cast<Rep>(re)) {
         compileByteClasses(rep->getRE());
+    }
+    else if (Assertion * a = dyn_cast<Assertion>(re)) {
+        compileByteClasses(a->getAsserted());
     }
     else if (Diff * diff = dyn_cast<Diff>(re)) {
         compileByteClasses(diff->getRH());

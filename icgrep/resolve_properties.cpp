@@ -13,6 +13,7 @@
 #include <re/re_name.h>
 #include <re/re_diff.h>
 #include <re/re_intersect.h>
+#include <re/re_assertion.h>
 #include <re/re_start.h>
 #include <re/re_end.h>
 #include <cc/cc_namemap.hpp>
@@ -68,6 +69,9 @@ void resolveProperties(RE * re) {
     }
     else if (Rep * rep = dyn_cast<Rep>(re)) {
         resolveProperties(rep->getRE());
+    }
+    else if (Assertion * a = dyn_cast<Assertion>(re)) {
+        resolveProperties(a->getAsserted());
     }
     else if (Diff * diff = dyn_cast<Diff>(re)) {
         resolveProperties(diff->getRH());

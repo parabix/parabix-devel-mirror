@@ -6,6 +6,7 @@
 #include <re/re_rep.h>
 #include <re/re_diff.h>
 #include <re/re_intersect.h>
+#include <re/re_assertion.h>
 #include <re/printer_re.h>
 #include <iostream>
 
@@ -26,6 +27,9 @@ RE * CC_NameMap::process(RE * re, const CC_type t) {
     }
     else if (Rep * rep = dyn_cast<Rep>(re)) {
         rep->setRE(process(rep->getRE(), t));
+    }
+    else if (Assertion * a = dyn_cast<Assertion>(re)) {
+        a->setAsserted(process(a->getAsserted(), t));
     }
     else if (Diff * diff = dyn_cast<Diff>(re)) {
         diff->setRH(process(diff->getRH(), t));
