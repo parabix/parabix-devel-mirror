@@ -8,14 +8,13 @@
 #define XOR_H
 
 #include <pablo/pabloAST.h>
-#include <pablo/pe_var.h>
 #include <array>
 
 namespace pablo {
 
 class PabloBlock;
 
-class Xor : public PabloAST {
+class Xor : public Statement {
     friend struct OptimizeXor;
     friend class PabloBlock;
 public:
@@ -45,22 +44,13 @@ public:
         return mExprs[1];
     }
 protected:
-    Xor(PabloAST * expr1, PabloAST * expr2)
-    : PabloAST(ClassTypeId::Xor)
-    , mExprs({{expr1, expr2}})
-    {
-        expr1->addUser(this);
-        expr2->addUser(this);
-    }
+    Xor(PabloAST * expr1, PabloAST * expr2, PabloBlock * parent);
 private:
     std::array<PabloAST*, 2> mExprs;
 };
 
 struct OptimizeXor {
-    inline OptimizeXor(PabloBlock & cg) : cg(cg) {}
-    PabloAST * operator()(PabloAST * expr1, PabloAST * expr2);
-private:
-    PabloBlock & cg;
+    PabloAST * operator()(PabloAST * expr1, PabloAST * expr2, PabloBlock * pb);
 };
 
 }

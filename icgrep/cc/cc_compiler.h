@@ -27,9 +27,9 @@ public:
 
     std::vector<pablo::Var *> getBasisBits(const CC_NameMap & nameMap);
 
-    pablo::Var * compileCC(const re::CC *cc, pablo::PabloBlock & pb);
+    pablo::Assign * compileCC(const re::CC *cc, pablo::PabloBlock & pb);
 
-    pablo::Var * compileCC(const re::CC *cc);
+    pablo::Assign * compileCC(const re::CC *cc);
 
     void compileByteClasses(re::RE * re);
 

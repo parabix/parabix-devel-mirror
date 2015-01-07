@@ -48,12 +48,12 @@ CC_Compiler::CC_Compiler(PabloBlock & cg, const Encoding encoding, const bool an
     }
 }
 
-pablo::Var * CC_Compiler::compileCC(const re::CC *cc) { 
+pablo::Assign * CC_Compiler::compileCC(const re::CC *cc) {
      return compileCC(cc, mCG); 
 }
 
-pablo::Var * CC_Compiler::compileCC(const re::CC *cc, pablo::PabloBlock & pb) { 
-     return pb.createVar(pb.createAssign(cc->canonicalName(ByteClass), charset_expr(cc, pb))); 
+pablo::Assign * CC_Compiler::compileCC(const re::CC *cc, pablo::PabloBlock & pb) {
+     return pb.createAssign(cc->canonicalName(ByteClass), charset_expr(cc, pb));
 }
 
 std::vector<Var *> CC_Compiler::getBasisBits(const CC_NameMap & nameMap) {

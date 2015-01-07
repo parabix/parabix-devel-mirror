@@ -69,23 +69,6 @@ public:
         return mClassTypeId;
     }
 
-    inline void replaceUsesOfWith(PabloAST * from, PabloAST * to) {
-        if (from == to) {
-            return;
-        }
-        for (unsigned i = 0, operands = getNumOperands(); i != operands; ++i) {
-            if (getOperand(i) == from) {
-                setOperand(i, to);
-            }
-        }
-    }
-
-    virtual PabloAST * getOperand(const unsigned index) const = 0;
-
-    virtual unsigned getNumOperands() const = 0;
-
-    virtual void setOperand(const unsigned index, PabloAST * value) = 0;
-
     void setMetadata(const std::string & name, PMDNode * node);
 
     PMDNode * getMetadata(const std::string & name);
@@ -122,6 +105,8 @@ bool equals(const PabloAST * expr1, const PabloAST *expr2);
 
 class StatementList;
 
+class String;
+
 class Statement : public PabloAST {
     friend class StatementList;
     friend class If;
@@ -130,13 +115,10 @@ class Statement : public PabloAST {
 public:
     static inline bool classof(const PabloAST * e) {
         switch (e->getClassTypeId()) {
-            case PabloAST::ClassTypeId::Assign:
-            case PabloAST::ClassTypeId::Next:
-            case PabloAST::ClassTypeId::If:
-            case PabloAST::ClassTypeId::While:
-                return true;
-            default:
+            case PabloAST::ClassTypeId::String:
                 return false;
+            default:
+                return true;
         }
     }
     static inline bool classof(const Statement *) {
@@ -146,11 +128,31 @@ public:
         return false;
     }
 
+    inline void replaceUsesOfWith(PabloAST * from, PabloAST * to) {
+        if (from == to) {
+            return;
+        }
+        for (unsigned i = 0, operands = getNumOperands(); i != operands; ++i) {
+            if (getOperand(i) == from) {
+                setOperand(i, to);
+            }
+        }
+    }
+
+    virtual PabloAST * getOperand(const unsigned index) const = 0;
+
+    virtual unsigned getNumOperands() const = 0;
+
+    virtual void setOperand(const unsigned index, PabloAST * value) = 0;
+
     void insertBefore(Statement * const statement);
     void insertAfter(Statement * const statement);
     void removeFromParent();
     void replaceWith(Statement * const statement);
 
+    inline const String * getName() const {
+        return mName;
+    }
     inline Statement * getNextNode() const {
         return mNext;
     }
@@ -161,8 +163,9 @@ public:
         return mParent;
     }
 protected:
-    Statement(const ClassTypeId id, PabloBlock * parent)
+    Statement(const ClassTypeId id, const String * name, PabloBlock * parent)
     : PabloAST(id)
+    , mName(name)
     , mNext(nullptr)
     , mPrev(nullptr)
     , mParent(parent)
@@ -171,6 +174,7 @@ protected:
     }
     virtual ~Statement() = 0;
 protected:
+    const String * mName;
     Statement * mNext;
     Statement * mPrev;
     PabloBlock * mParent;

@@ -8,7 +8,7 @@
 #include <re/printer_re.h>
 
 namespace pablo {
-    class Var;
+    class Assign;
 }
 
 
@@ -33,10 +33,10 @@ public:
     void setName(std::string);
     Type getType() const;
     RE *getDefinition() const;
-    pablo::Var * getCompiled() const {
+    pablo::Assign * getCompiled() const {
         return mCompiled;
     }
-    void setCompiled(pablo::Var * var) {
+    void setCompiled(pablo::Assign * var) {
         mCompiled = var;
     }
     void setDefinition(RE * def);
@@ -61,11 +61,11 @@ protected:
     }
 
 private:
-    std::string   mNamespace;
-    std::string   mName;
-    const Type          mType;
-    RE *                mDefiningRE;
-    pablo::Var *        mCompiled;
+    std::string     mNamespace;
+    std::string     mName;
+    const Type      mType;
+    RE *            mDefiningRE;
+    pablo::Assign * mCompiled;
 };
 
 inline const std::string & Name::getNamespace() const {

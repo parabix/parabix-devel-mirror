@@ -8,11 +8,12 @@
 #define PS_SCANTHRU_H
 
 #include <pablo/pabloAST.h>
+#include <pablo/symbol_generator.h>
 #include <array>
 
 namespace pablo {
 
-class ScanThru : public  PabloAST {
+class ScanThru : public Statement {
     friend class PabloBlock;
 public:
     static inline bool classof(const PabloAST * e) {
@@ -40,8 +41,8 @@ public:
     PabloAST * getScanThru() const {
         return mExprs[1];
     }
-    ScanThru(PabloAST * from, PabloAST * thru)
-    : PabloAST(ClassTypeId::ScanThru)
+    ScanThru(PabloAST * from, PabloAST * thru, SymbolGenerator * sg, PabloBlock * parent)
+    : Statement(ClassTypeId::ScanThru, sg->make("scanthru"), parent)
     , mExprs({{from, thru}})
     {
         from->addUser(this);

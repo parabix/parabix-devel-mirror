@@ -8,11 +8,12 @@
 #define PE_MATCHSTAR_H
 
 #include "pabloAST.h"
+#include <pablo/symbol_generator.h>
 #include <array>
 
 namespace pablo {
 
-class MatchStar : public PabloAST {
+class MatchStar : public Statement {
     friend class PabloBlock;
 public:
     static inline bool classof(const PabloAST * e) {
@@ -41,8 +42,8 @@ public:
         return mExprs[1];
     }
 protected:
-    MatchStar(PabloAST * marker, PabloAST * cc)
-    : PabloAST(ClassTypeId::MatchStar)
+    MatchStar(PabloAST * marker, PabloAST * cc, SymbolGenerator * sg, PabloBlock * parent)
+    : Statement(ClassTypeId::MatchStar, sg->make("matchstar"), parent)
     , mExprs({{marker, cc}})
     {
         marker->addUser(this);

@@ -32,6 +32,7 @@
 #include <string>
 #include <array>
 #include <tuple>
+#include <pablo/printer_pablos.h>
 
 namespace pablo {
 
@@ -57,32 +58,21 @@ public:
         return mOnes;
     }
 
-    PabloAST * createCall(const std::string name);
+    Call * createCall(const std::string name);
 
     Assign * createAssign(const std::string prefix, PabloAST * expr, const int outputIndex = -1)  {
         // Note: we cannot just use the findOrMake method to obtain this; an Assign node cannot be considered
         // unique until we prove it has no Next node associated with it. But the Assign node must be created
         // before the Next node. Should we create a "Constant" flag for this?
-        Assign * assign = new Assign(mSymbolGenerator->get_ssa(prefix), expr, outputIndex, this);
+        Assign * assign = new Assign(expr, outputIndex, mSymbolGenerator->make(prefix), this);
         push_back(assign);
         return assign;
     }
 
-    Var * createVar(const std::string name);
+    Var * createVar(const std::string);
 
-    Var * createVar(Assign * assign);
-
-    Var * createVar(Next * next);
-
-    inline PabloAST * createVar(PabloAST * const input) {
-        switch (input->getClassTypeId()) {
-            case PabloAST::ClassTypeId::Assign:
-                return createVar(cast<Assign>(input));
-            case PabloAST::ClassTypeId::Next:
-                return createVar(cast<Next>(input));
-            default:
-                return input;
-        }
+    PabloAST * createVar(const PabloAST * const) {
+        throw std::runtime_error("Var objects should only refer to external Vars (i.e., input basis bit streams). Use Assign object directly.");
     }
 
     Next * createNext(Assign * assign, PabloAST * expr);
@@ -100,6 +90,16 @@ public:
     PabloAST * createScanThru(PabloAST * from, PabloAST * thru);
 
     PabloAST * createSel(PabloAST * condition, PabloAST * trueExpr, PabloAST * falseExpr);
+
+    And * createAndImm(PabloAST * expr1, PabloAST * expr2);
+
+    Not * createNotImm(PabloAST * expr);
+
+    Or * createOrImm(PabloAST * expr1, PabloAST * expr2);
+
+    Xor * createXorImm(PabloAST * expr1, PabloAST * expr2);
+
+    Sel * createSelImm(PabloAST * condition, PabloAST * trueExpr, PabloAST * falseExpr);
 
     inline If * createIf(PabloAST * condition, std::vector<Assign *> && definedVars, PabloBlock & body) {
         If * statement = new If(condition, std::move(definedVars), body, this);
@@ -119,9 +119,8 @@ public:
         typedef ExpressionMap<Args...> MapType;
         typedef std::tuple<PabloAST::ClassTypeId, Args...> Key;
 
-        inline ExpressionMap(MapType * predecessor, PabloBlock * parent)
+        inline ExpressionMap(MapType * predecessor)
         : mPredecessor(predecessor)
-        , mCurrentBlock(*parent)
         {
 
         }
@@ -133,23 +132,22 @@ public:
             if (f) {
                 return std::make_pair(cast<Type>(f), false);
             }
-            Type * const expr = new Type(std::forward<Args>(args)..., std::forward<Params>(params)...);
+            PabloAST * const expr = new Type(std::forward<Args>(args)..., std::forward<Params>(params)...);
             insert(std::move(key), expr);
-            return std::make_pair(expr, true);
+            return std::make_pair(cast<Type>(expr), isa<Statement>(expr));
         }
 
-
         template <class Functor, typename... Params>
-        inline std::pair<PabloAST *, bool> findOrCall(const PabloAST::ClassTypeId type, Args... args, Params... params) {
+        inline PabloAST * findOrCall(const PabloAST::ClassTypeId type, Args... args, Params... params) {
             Key key = std::make_tuple(type, args...);
             PabloAST * const f = find(key);
             if (f) {
-                return std::make_pair(f, false);
+                return f;
             }
-            Functor mf(mCurrentBlock);
+            Functor mf;
             PabloAST * const expr = mf(std::forward<Args>(args)..., std::forward<Params>(params)...);
             insert(std::move(key), expr);
-            return std::make_pair(expr, true);
+            return expr;
         }
 
         inline void insert(Key && key, PabloAST * expr) {
@@ -177,7 +175,6 @@ public:
 
     private:
         MapType * const             mPredecessor;
-        PabloBlock &                mCurrentBlock;
         std::map<Key, PabloAST *>   mMap;
     };
 
@@ -188,15 +185,21 @@ public:
     inline const StatementList & statements() const {
         return *this;
     }
+    inline String * getName(const std::string name) const {
+        return mSymbolGenerator->get(name);
+    }
+    inline String * makeName(const std::string prefix) const {
+        return mSymbolGenerator->make(prefix);
+    }
 protected:
     PabloBlock()
     : mZeroes(new Zeroes())
     , mOnes(new Ones())
     , mSymbolGenerator(new SymbolGenerator())
-    , mUnary(nullptr, this)
-    , mUnaryWithInt(nullptr, this)
-    , mBinary(nullptr, this)
-    , mTernary(nullptr, this)
+    , mUnary(nullptr)
+    , mUnaryWithInt(nullptr)
+    , mBinary(nullptr)
+    , mTernary(nullptr)
     {
 
     }
@@ -205,10 +208,10 @@ protected:
     : mZeroes(predecessor->mZeroes) // inherit the original "Zeroes" variable for simplicity
     , mOnes(predecessor->mOnes) // inherit the original "Ones" variable for simplicity
     , mSymbolGenerator(predecessor->mSymbolGenerator)
-    , mUnary(&(predecessor->mUnary), this)
-    , mUnaryWithInt(&(predecessor->mUnaryWithInt), this)
-    , mBinary(&(predecessor->mBinary), this)
-    , mTernary(&(predecessor->mTernary), this)
+    , mUnary(&(predecessor->mUnary))
+    , mUnaryWithInt(&(predecessor->mUnaryWithInt))
+    , mBinary(&(predecessor->mBinary))
+    , mTernary(&(predecessor->mTernary))
     {
 
     }
@@ -216,6 +219,15 @@ protected:
     void* operator new (std::size_t size) noexcept {
         return PabloAST::mAllocator.allocate(size);
     }
+
+    template<typename Type>
+    inline Type appendIfNew(std::pair<Type, bool> retVal) {
+        if (std::get<1>(retVal)) {
+            push_back(cast<Statement>(std::get<0>(retVal)));
+        }
+        return std::get<0>(retVal);
+    }
+
 private:        
     Zeroes * const                                      mZeroes;
     Ones * const                                        mOnes;

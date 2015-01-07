@@ -8,13 +8,12 @@
 #define PE_NOT_H
 
 #include <pablo/pabloAST.h>
-#include <pablo/pe_var.h>
 
 namespace pablo {
 
 class PabloBlock;
 
-class Not : public PabloAST {
+class Not : public Statement {
     friend struct OptimizeNot;
     friend class PabloBlock;
 public:
@@ -41,21 +40,13 @@ public:
         return mExpr;
     }
 protected:
-    Not(PabloAST * expr)
-    : PabloAST(ClassTypeId::Not)
-    , mExpr(expr) {
-        expr->addUser(this);
-    }
+    Not(PabloAST * expr, PabloBlock * parent);
 private:
     PabloAST * mExpr;
 };
 
 struct OptimizeNot {
-    inline OptimizeNot(PabloBlock & cg) : cg(cg) {}
-    PabloAST * operator()(PabloAST * expr);
-private:
-    PabloBlock & cg;
-
+    PabloAST * operator()(PabloAST * expr, PabloBlock * pb);
 };
 
 }

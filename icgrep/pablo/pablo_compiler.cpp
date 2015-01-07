@@ -158,17 +158,16 @@ LLVM_Gen_RetVal PabloCompiler::compile(PabloBlock & pb)
     for (unsigned i = 0; i != mBasisBits.size(); ++i) {
         IRBuilder<> b(mBasicBlock);
         Value* indices[] = {b.getInt64(0), b.getInt32(i)};
-        const String * const name = mBasisBits[i]->getName();
         Value * gep = b.CreateGEP(mBasisBitsAddr, indices);
-        LoadInst * basisBit = b.CreateAlignedLoad(gep, BLOCK_SIZE/8, false, name->str());
-        mMarkerMap.insert(std::make_pair(name, basisBit));
+        LoadInst * basisBit = b.CreateAlignedLoad(gep, BLOCK_SIZE/8, false, mBasisBits[i]->getName()->str());
+        mMarkerMap.insert(std::make_pair(mBasisBits[i], basisBit));
     }
 
     //Generate the IR instructions for the function.
     compileStatements(pb.statements());
 
     assert (mCarryQueueIdx == mCarryQueueSize);
-    assert (mAdvanceQueueIdx == mAdvanceQueueSize);
+    assert (mAdvanceQueueIdx <= mAdvanceQueueSize);
     assert (mNestingDepth == 0);
     //Terminate the block
     ReturnInst::Create(mMod->getContext(), mBasicBlock);
@@ -491,45 +490,45 @@ void PabloCompiler::DeclareCallFunctions() {
 }
 
 void PabloCompiler::compileStatements(const StatementList & stmts) {
-    for (const PabloAST * statement : stmts) {
+    for (const Statement * statement : stmts) {
         compileStatement(statement);
     }
 }
 
-void PabloCompiler::compileStatement(const PabloAST * stmt)
+void PabloCompiler::compileStatement(const Statement * stmt)
 {
-    if (const Assign * assign = dyn_cast<const Assign>(stmt))
-    {
-        Value* expr = compileExpression(assign->getExpr());
-        mMarkerMap[assign->getName()] = expr;
+    IRBuilder<> b(mBasicBlock);
+    if (const Assign * assign = dyn_cast<const Assign>(stmt)) {
+        Value * expr = compileExpression(assign->getExpr());
+        mMarkerMap[assign] = expr;
         if (LLVM_UNLIKELY(assign->isOutputAssignment())) {
             SetOutputValue(expr, assign->getOutputIndex());
         }
     }
-    if (const Next * next = dyn_cast<const Next>(stmt))
-    {
-        Value* expr = compileExpression(next->getExpr());
-        mMarkerMap[next->getName()] = expr;
+    else if (const Next * next = dyn_cast<const Next>(stmt)) {
+        Value * expr = compileExpression(next->getExpr());
+        mMarkerMap[next->getInitial()] = expr;
     }
     else if (const If * ifStatement = dyn_cast<const If>(stmt))
-    //
-    //  The If-ElseZero stmt:
-    //  if <predicate:expr> then <body:stmt>* elsezero <defined:var>* endif
-    //  If the value of the predicate is nonzero, then determine the values of variables
-    //  <var>* by executing the given statements.  Otherwise, the value of the
-    //  variables are all zero.  Requirements: (a) no variable that is defined within 
-    //  the body of the if may be accessed outside unless it is explicitly  
-    //  listed in the variable list, (b) every variable in the defined list receives
-    //  a value within the body, and (c) the logical consequence of executing
-    //  the statements in the event that the predicate is zero is that the
-    //  values of all defined variables indeed work out to be 0.
-    //
-    //  Simple Implementation with Phi nodes:  a phi node in the if exit block
-    //  is inserted for each variable in the defined variable list.  It receives
-    //  a zero value from the ifentry block and the defined value from the if
-    //  body.
-    //
     {
+        //
+        //  The If-ElseZero stmt:
+        //  if <predicate:expr> then <body:stmt>* elsezero <defined:var>* endif
+        //  If the value of the predicate is nonzero, then determine the values of variables
+        //  <var>* by executing the given statements.  Otherwise, the value of the
+        //  variables are all zero.  Requirements: (a) no variable that is defined within
+        //  the body of the if may be accessed outside unless it is explicitly
+        //  listed in the variable list, (b) every variable in the defined list receives
+        //  a value within the body, and (c) the logical consequence of executing
+        //  the statements in the event that the predicate is zero is that the
+        //  values of all defined variables indeed work out to be 0.
+        //
+        //  Simple Implementation with Phi nodes:  a phi node in the if exit block
+        //  is inserted for each variable in the defined variable list.  It receives
+        //  a zero value from the ifentry block and the defined value from the if
+        //  body.
+        //
+
         BasicBlock * ifEntryBlock = mBasicBlock;  // The block we are in.
         BasicBlock * ifBodyBlock = BasicBlock::Create(mMod->getContext(), "if.body", mFunction, 0);
         BasicBlock * ifEndBlock = BasicBlock::Create(mMod->getContext(), "if.end", mFunction, 0);
@@ -571,9 +570,7 @@ void PabloCompiler::compileStatement(const PabloAST * stmt)
         b_entry.CreateCondBr(genBitBlockAny(if_test_value), ifEndBlock, ifBodyBlock);
 
         // Entry processing is complete, now handle the body of the if.
-        
         mBasicBlock = ifBodyBlock;
-        
         compileStatements(ifStatement->getBody());
 
         // If we compiled an If or a While statement, we won't be in the same basic block as before.
@@ -586,54 +583,60 @@ void PabloCompiler::compileStatement(const PabloAST * stmt)
             // A summary variable is needed.
 
             Value * carry_summary = mZeroInitializer;
-            for (int c = baseCarryQueueIdx; c < baseCarryQueueIdx + ifCarryCount; c++)
-            {
+            for (int c = baseCarryQueueIdx; c < baseCarryQueueIdx + ifCarryCount; c++) {
                 int s = mCarryQueueSummaryIdx[c];
                 if (s == -1) {
                     Value* carryq_value = mCarryQueueVector[c];
-                    carry_summary = bIfBody.CreateOr(carry_summary, carryq_value);
+                    if (carry_summary == mZeroInitializer) {
+                        carry_summary = carryq_value;
+                    }
+                    else {
+                        carry_summary = bIfBody.CreateOr(carry_summary, carryq_value);
+                    }
                     mCarryQueueSummaryIdx[c] = mAdvanceQueueIdx;
                 }
-                
-
             }
             // Note that the limit in the following uses -1, because
             // last entry of the advance queue is for the summary variable.
-            for (int c = baseAdvanceQueueIdx; c < baseAdvanceQueueIdx + ifAdvanceCount - 1; c++)
-            {
+            for (int c = baseAdvanceQueueIdx; c < baseAdvanceQueueIdx + ifAdvanceCount - 1; c++) {
                 int s = mAdvanceQueueSummaryIdx[c];
                 if (s == -1 ) {
                     Value* advance_q_value = mAdvanceQueueVector[c];
-                    carry_summary = bIfBody.CreateOr(advance_q_value, carry_summary);
+                    if (carry_summary == mZeroInitializer) {
+                        carry_summary = advance_q_value;
+                    }
+                    else {
+                        carry_summary = bIfBody.CreateOr(carry_summary, advance_q_value);
+                    }
                     mAdvanceQueueSummaryIdx[c] = mAdvanceQueueIdx;
                 }
             }
-            genAdvanceOutStore(carry_summary, mAdvanceQueueIdx++); //baseAdvanceQueueIdx + ifAdvanceCount - 1);
+            genAdvanceOutStore(carry_summary, mAdvanceQueueIdx++);
         }
         bIfBody.CreateBr(ifEndBlock);
         //End Block
         IRBuilder<> bEnd(ifEndBlock);
         for (const Assign * a : ifStatement->getDefined()) {
             PHINode * phi = bEnd.CreatePHI(mBitBlockType, 2, a->getName()->str());
-            auto f = mMarkerMap.find(a->getName());
+            auto f = mMarkerMap.find(a);
             assert (f != mMarkerMap.end());
             phi->addIncoming(mZeroInitializer, ifEntryBlock);
             phi->addIncoming(f->second, mBasicBlock);
-            mMarkerMap[a->getName()] = phi;
+            mMarkerMap[a] = phi;
         }
         // Create the phi Node for the summary variable.
         if (ifAdvanceCount >= 1) {
-          // final AdvanceQ entry is summary variable.
-          PHINode * summary_phi = bEnd.CreatePHI(mBitBlockType, 2, "summary");
-          summary_phi->addIncoming(mZeroInitializer, ifEntryBlock);
-          summary_phi->addIncoming(mAdvanceQueueVector[mAdvanceQueueIdx-1], mBasicBlock);
-          mAdvanceQueueVector[mAdvanceQueueIdx-1] = summary_phi;
+            // final AdvanceQ entry is summary variable.
+            PHINode * summary_phi = bEnd.CreatePHI(mBitBlockType, 2, "summary");
+            summary_phi->addIncoming(mZeroInitializer, ifEntryBlock);
+            summary_phi->addIncoming(mAdvanceQueueVector[mAdvanceQueueIdx-1], mBasicBlock);
+            mAdvanceQueueVector[mAdvanceQueueIdx-1] = summary_phi;
         }
         else if (ifCarryCount == 1) {
-          PHINode * summary_phi = bEnd.CreatePHI(mBitBlockType, 2, "summary");
-          summary_phi->addIncoming(mZeroInitializer, ifEntryBlock);
-          summary_phi->addIncoming(mCarryQueueVector[baseCarryQueueIdx], mBasicBlock);
-          mCarryQueueVector[baseCarryQueueIdx] = summary_phi;
+            PHINode * summary_phi = bEnd.CreatePHI(mBitBlockType, 2, "summary");
+            summary_phi->addIncoming(mZeroInitializer, ifEntryBlock);
+            summary_phi->addIncoming(mCarryQueueVector[baseCarryQueueIdx], mBasicBlock);
+            mCarryQueueVector[baseCarryQueueIdx] = summary_phi;
         }
         
         // Set the basic block to the new end block
@@ -705,10 +708,10 @@ void PabloCompiler::compileStatement(const PabloAST * stmt)
         // and for any Next nodes in the loop body
         for (const Next * n : nextNodes) {
             PHINode * phi = bCond.CreatePHI(mBitBlockType, 2, n->getName()->str());
-            auto f = mMarkerMap.find(n->getName());
+            auto f = mMarkerMap.find(n->getInitial());
             assert (f != mMarkerMap.end());
             phi->addIncoming(f->second, mBasicBlock);
-            mMarkerMap[n->getName()] = phi;
+            mMarkerMap[n->getInitial()] = phi;
             phiNodes[index++] = phi;
         }
 
@@ -734,11 +737,11 @@ void PabloCompiler::compileStatement(const PabloAST * stmt)
         }
         // and for any Next nodes in the loop body
         for (const Next * n : nextNodes) {
-            auto f = mMarkerMap.find(n->getName());
+            auto f = mMarkerMap.find(n->getInitial());
             assert (f != mMarkerMap.end());
             PHINode * phi = phiNodes[index++];
             phi->addIncoming(f->second, mBasicBlock);
-            mMarkerMap[n->getName()] = phi;
+            mMarkerMap[n->getInitial()] = phi;
         }
 
         bWhileBody.CreateBr(whileCondBlock);
@@ -754,83 +757,91 @@ void PabloCompiler::compileStatement(const PabloAST * stmt)
             }
         }
     }
+    else if (const Call* call = dyn_cast<Call>(stmt)) {
+        //Call the callee once and store the result in the marker map.
+        auto mi = mMarkerMap.find(call);
+        if (mi == mMarkerMap.end()) {
+            auto ci = mCalleeMap.find(call->getCallee());
+            if (LLVM_UNLIKELY(ci == mCalleeMap.end())) {
+                throw std::runtime_error("Unexpected error locating static function for \"" + call->getCallee()->str() + "\"");
+            }
+            mi = mMarkerMap.insert(std::make_pair(call, b.CreateCall(ci->second, mBasisBitsAddr))).first;
+        }
+        // return mi->second;
+    }
+    else if (const And * pablo_and = dyn_cast<And>(stmt)) {
+        Value * expr = b.CreateAnd(compileExpression(pablo_and->getExpr1()), compileExpression(pablo_and->getExpr2()), "and");
+        mMarkerMap[pablo_and] = expr;
+        // return expr;
+    }
+    else if (const Or * pablo_or = dyn_cast<Or>(stmt)) {
+        Value * expr = b.CreateOr(compileExpression(pablo_or->getExpr1()), compileExpression(pablo_or->getExpr2()), "or");
+        mMarkerMap[pablo_or] = expr;
+        // return expr;
+    }
+    else if (const Xor * pablo_xor = dyn_cast<Xor>(stmt)) {
+        Value * expr = b.CreateXor(compileExpression(pablo_xor->getExpr1()), compileExpression(pablo_xor->getExpr2()), "xor");
+        mMarkerMap[pablo_xor] = expr;
+        // return expr;
+    }
+    else if (const Sel * sel = dyn_cast<Sel>(stmt)) {
+        Value* ifMask = compileExpression(sel->getCondition());
+        Value* ifTrue = b.CreateAnd(ifMask, compileExpression(sel->getTrueExpr()));
+        Value* ifFalse = b.CreateAnd(genNot(ifMask), compileExpression(sel->getFalseExpr()));
+        Value * expr = b.CreateOr(ifTrue, ifFalse);
+        mMarkerMap[sel] = expr;
+        // return expr;
+    }
+    else if (const Not * pablo_not = dyn_cast<Not>(stmt)) {
+        Value * expr = genNot(compileExpression(pablo_not->getExpr()));
+        mMarkerMap[pablo_not] = expr;
+        // return expr;
+    }
+    else if (const Advance * adv = dyn_cast<Advance>(stmt)) {
+        Value* strm_value = compileExpression(adv->getExpr());
+        int shift = adv->getAdvanceAmount();
+        Value * expr = genAdvanceWithCarry(strm_value, shift);
+        mMarkerMap[adv] = expr;
+        // return expr;
+    }
+    else if (const MatchStar * mstar = dyn_cast<MatchStar>(stmt))
+    {
+        Value * marker = compileExpression(mstar->getMarker());
+        Value * cc = compileExpression(mstar->getCharClass());
+        Value * marker_and_cc = b.CreateAnd(marker, cc);
+        Value * expr = b.CreateOr(b.CreateXor(genAddWithCarry(marker_and_cc, cc), cc), marker, "matchstar");
+        mMarkerMap[mstar] = expr;
+        // return expr;
+    }
+    else if (const ScanThru * sthru = dyn_cast<ScanThru>(stmt))
+    {
+        Value * marker_expr = compileExpression(sthru->getScanFrom());
+        Value * cc_expr = compileExpression(sthru->getScanThru());
+        Value * expr = b.CreateAnd(genAddWithCarry(marker_expr, cc_expr), genNot(cc_expr), "scanthru");
+        mMarkerMap[sthru] = expr;
+        // return expr;
+    }
+    else {
+        PabloPrinter::print(stmt, std::cerr);
+        throw std::runtime_error("Unrecognized Pablo Statement! can't compile.");
+    }
 }
 
-Value * PabloCompiler::compileExpression(const PabloAST * expr)
-{
-    IRBuilder<> b(mBasicBlock);
+Value * PabloCompiler::compileExpression(const PabloAST * expr) {
     if (isa<Ones>(expr)) {
         return mOneInitializer;
     }
     else if (isa<Zeroes>(expr)) {
         return mZeroInitializer;
     }
-    else if (const Call* call = dyn_cast<Call>(expr)) {
-        //Call the callee once and store the result in the marker map.
-        auto mi = mMarkerMap.find(call->getCallee());
-        if (mi == mMarkerMap.end()) {
-            auto ci = mCalleeMap.find(call->getCallee());
-            if (LLVM_UNLIKELY(ci == mCalleeMap.end())) {
-                throw std::runtime_error("Unexpected error locating static function for \"" + call->getCallee()->str() + "\"");
-            }
-            mi = mMarkerMap.insert(std::make_pair(call->getCallee(), b.CreateCall(ci->second, mBasisBitsAddr))).first;
-        }
-        return mi->second;
+    else if (const Next * next = dyn_cast<Next>(expr)) {
+        expr = next->getInitial();
     }
-    else if (const Var * var = dyn_cast<Var>(expr))
-    {
-        auto f = mMarkerMap.find(var->getName());
-        if (LLVM_UNLIKELY(f == mMarkerMap.end())) {
-            throw std::runtime_error((var->getName()->str()) + " used before creation.");
-        }
-        return f->second;
-    }
-    else if (const And * pablo_and = dyn_cast<And>(expr))
-    {
-        return b.CreateAnd(compileExpression(pablo_and->getExpr1()), compileExpression(pablo_and->getExpr2()), "and");
-    }
-    else if (const Or * pablo_or = dyn_cast<Or>(expr))
-    {
-        return b.CreateOr(compileExpression(pablo_or->getExpr1()), compileExpression(pablo_or->getExpr2()), "or");
-    }
-    else if (const Xor * pablo_xor = dyn_cast<Xor>(expr))
-    {
-        return b.CreateXor(compileExpression(pablo_xor->getExpr1()), compileExpression(pablo_xor->getExpr2()), "xor");
-    }
-    else if (const Sel * sel = dyn_cast<Sel>(expr))
-    {
-        Value* ifMask = compileExpression(sel->getCondition());
-        Value* ifTrue = b.CreateAnd(ifMask, compileExpression(sel->getTrueExpr()));
-        Value* ifFalse = b.CreateAnd(genNot(ifMask), compileExpression(sel->getFalseExpr()));
-        return b.CreateOr(ifTrue, ifFalse);
-    }
-    else if (const Not * pablo_not = dyn_cast<Not>(expr))
-    {
-        return genNot(compileExpression(pablo_not->getExpr()));
-    }
-    else if (const Advance * adv = dyn_cast<Advance>(expr))
-    {
-        Value* strm_value = compileExpression(adv->getExpr());
-        int shift = adv->getAdvanceAmount();
-        return genAdvanceWithCarry(strm_value, shift);
-    }
-    else if (const MatchStar * mstar = dyn_cast<MatchStar>(expr))
-    {
-        Value* marker = compileExpression(mstar->getMarker());
-        Value* cc = compileExpression(mstar->getCharClass());
-        Value* marker_and_cc = b.CreateAnd(marker, cc);
-        return b.CreateOr(b.CreateXor(genAddWithCarry(marker_and_cc, cc), cc), marker, "matchstar");
-    }
-    else if (const ScanThru * sthru = dyn_cast<ScanThru>(expr))
-    {
-        Value* marker_expr = compileExpression(sthru->getScanFrom());
-        Value* cc_expr = compileExpression(sthru->getScanThru());
-        return b.CreateAnd(genAddWithCarry(marker_expr, cc_expr), genNot(cc_expr), "scanthru");
-    }
-    else {
+    auto f = mMarkerMap.find(expr);
+    if (f == mMarkerMap.end()) {
         throw std::runtime_error("Unrecognized Pablo expression type; can't compile.");
     }
-
+    return f->second;
 }
 
 #ifdef USE_UADD_OVERFLOW

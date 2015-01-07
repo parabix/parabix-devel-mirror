@@ -4,7 +4,7 @@
 namespace pablo {
 
 If::If(PabloAST * expr, DefinedVars && definedVars, PabloBlock & body, PabloBlock * parent)
-: Statement(ClassTypeId::If, parent)
+: Statement(ClassTypeId::If, nullptr, parent)
 , mExpr(expr)
 , mBody(body)
 , mDefined(std::move(definedVars))

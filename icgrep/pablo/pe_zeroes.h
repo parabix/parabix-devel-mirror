@@ -24,16 +24,16 @@ public:
     virtual ~Zeroes() {
 
     }
-    virtual PabloAST * getOperand(const unsigned) const {
-        assert (false);
-        return nullptr;
-    }
-    virtual unsigned getNumOperands() const {
-        return 0;
-    }
-    virtual void setOperand(const unsigned, PabloAST *) {
-        assert (false);
-    }
+//    virtual PabloAST * getOperand(const unsigned) const {
+//        assert (false);
+//        return nullptr;
+//    }
+//    virtual unsigned getNumOperands() const {
+//        return 0;
+//    }
+//    virtual void setOperand(const unsigned, PabloAST *) {
+//        assert (false);
+//    }
     inline bool operator==(const Zeroes & other) const {
         return true;
     }

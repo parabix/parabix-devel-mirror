@@ -56,8 +56,9 @@ class PabloCompiler {
     };
     #endif
 
-    typedef std::unordered_map<const pablo::String *, Value*>   StringToValueMap;
-    typedef std::vector<Value*>                                 CarryQueueVector;
+    typedef std::unordered_map<const pablo::PabloAST *, Value*>    ASTToValueMap;
+    typedef std::unordered_map<const pablo::String *, Value*>      StringToValueMap;
+    typedef std::vector<Value*>                                    CarryQueueVector;
 
 public:
     PabloCompiler(const std::vector<Var *> & basisBitVars);
@@ -73,7 +74,7 @@ private:
     void SetOutputValue(Value * marker, const unsigned index);
 
     void compileStatements(const StatementList & stmts);
-    void compileStatement(const PabloAST * stmt);
+    void compileStatement(const Statement * stmt);
     Value* compileExpression(const PabloAST * expr);
     Value* genCarryInLoad(const unsigned index);
     void   genCarryOutStore(Value* carryOut, const unsigned index);
@@ -97,7 +98,7 @@ private:
     #endif
 
 
-    StringToValueMap                    mMarkerMap;
+    ASTToValueMap                 mMarkerMap;
     CarryQueueVector                    mCarryQueueVector;
     std::vector<int>                    mCarryQueueSummaryIdx;
     CarryQueueVector                    mAdvanceQueueVector;

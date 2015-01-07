@@ -7,7 +7,7 @@
 
 namespace pablo {
 
-class Call : public PabloAST {
+class Call : public Statement {
     friend class PabloBlock;
 public:
     static inline bool classof(const PabloAST * e) {
@@ -34,8 +34,8 @@ public:
         return mCallee;
     }
 protected:
-    Call(PabloAST * callee)
-    : PabloAST(ClassTypeId::Call)
+    Call(PabloAST * callee, PabloBlock * parent)
+    : Statement(ClassTypeId::Call, cast<String>(callee), parent)
     , mCallee(cast<String>(callee)) {
 
     }

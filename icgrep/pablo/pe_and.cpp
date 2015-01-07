@@ -9,7 +9,15 @@
 
 namespace pablo {
 
-PabloAST * OptimizeAnd::operator ()(PabloAST * expr1, PabloAST * expr2) {
+And::And(PabloAST * expr1, PabloAST * expr2, PabloBlock * parent)
+: Statement(ClassTypeId::And, parent->makeName("and"), parent)
+, mExprs({{expr1, expr2}})
+{
+    expr1->addUser(this);
+    expr2->addUser(this);
+}
+
+PabloAST * OptimizeAnd::operator ()(PabloAST * expr1, PabloAST * expr2, PabloBlock * pb) {
     if (isa<Ones>(expr1)) {
         return expr2;
     }
@@ -27,21 +35,21 @@ PabloAST * OptimizeAnd::operator ()(PabloAST * expr1, PabloAST * expr2) {
     }
     else if (Not * pe_not_e1 = dyn_cast<Not>(expr1)) {
         if (Not * pe_not_e2 = dyn_cast<Not>(expr2)) {
-            return cg.createNot(cg.createOr(pe_not_e1->getExpr(), pe_not_e2->getExpr()));
+            return pb->createNot(pb->createOr(pe_not_e1->getExpr(), pe_not_e2->getExpr()));
         }
         else if (equals(pe_not_e1->getExpr(), expr2)) {
-            return cg.createZeroes();
+            return pb->createZeroes();
         }
     }
     else if (Not * pe_not_e2 = dyn_cast<Not>(expr2)) {
         if (equals(expr1, pe_not_e2->getExpr())) {
-            return cg.createZeroes();
+            return pb->createZeroes();
         }
     }
     if (isa<Not>(expr1)) {
         std::swap(expr1, expr2);
     }
-    return new And(expr1, expr2);
+    return pb->createAndImm(expr1, expr2);
 }
 
 }

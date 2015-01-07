@@ -19,7 +19,7 @@ class SymbolGenerator {
     friend class PabloBlock;
 public:
     String * get(const std::string name);
-    String * get_ssa(const std::string prefix);
+    String * make(const std::string prefix);
 protected:
     SymbolGenerator();
     void* operator new (std::size_t size) noexcept {

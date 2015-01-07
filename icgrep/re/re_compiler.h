@@ -56,11 +56,11 @@ MarkerType makePostPositionMarker(std::string marker_name, pablo::PabloAST * s, 
 
 MarkerType makeFinalPositionMarker(std::string marker_name, pablo::PabloAST * s, pablo::PabloBlock & pb);
 
-pablo::Assign * markerStream(MarkerType m, pablo::PabloBlock & pb);
+pablo::Assign * markerStream(MarkerType m, pablo::PabloBlock &);
 
-pablo::Var * markerVar(MarkerType m, pablo::PabloBlock & pb);
+pablo::Assign * markerVar(MarkerType m, pablo::PabloBlock & pb);
 
-pablo::Var * postPositionVar(MarkerType m, pablo::PabloBlock & pb);
+pablo::Assign * postPositionVar(MarkerType m, pablo::PabloBlock & pb);
 
 class RE_Compiler {
 public:
@@ -93,7 +93,7 @@ private:
     MarkerType processBoundedRep(RE * repeated, int ub, MarkerType marker, pablo::PabloBlock & pb);
 
     pablo::PabloBlock &                             mCG;
-    pablo::Var *                                    mLineFeed;
+    pablo::Assign *                                 mLineFeed;
     pablo::PabloAST *                               mCRLF;
     pablo::PabloAST *                               mUnicodeLineBreak;
     pablo::PabloAST *                               mInitial;

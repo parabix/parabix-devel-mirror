@@ -28,7 +28,7 @@ String * SymbolGenerator::get(const std::string name) {
     return result;
 }
 
-String * SymbolGenerator::get_ssa(const std::string prefix) {
+String * SymbolGenerator::make(const std::string prefix) {
     auto f = mPrefixMap.find(prefix);
     unsigned count = 0;
     if (f == mPrefixMap.end()) {

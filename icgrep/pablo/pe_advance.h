@@ -8,10 +8,11 @@
 #define PE_ADVANCE_H
 
 #include "pabloAST.h"
+#include <pablo/symbol_generator.h>
 
 namespace pablo {
 
-class Advance : public PabloAST {
+class Advance : public Statement {
     friend class PabloBlock;
 public:
     static inline bool classof(const PabloAST * e) {
@@ -40,8 +41,8 @@ public:
         return mShiftAmount;
     }
 protected:
-    Advance(PabloAST * expr, int shiftAmount)
-    : PabloAST(ClassTypeId::Advance)
+    Advance(PabloAST * expr, int shiftAmount, SymbolGenerator * sg, PabloBlock * parent)
+    : Statement(ClassTypeId::Advance, sg->make("advance"), parent)
     , mExpr(expr)
 	, mShiftAmount(shiftAmount) {
         expr->addUser(this);

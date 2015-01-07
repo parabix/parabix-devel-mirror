@@ -15,81 +15,89 @@ PabloAST * PabloBlock::createAdvance(PabloAST * expr, const int shiftAmount) {
     if (isa<Zeroes>(expr) || shiftAmount == 0) {
         return expr;
     }
-    return mUnaryWithInt.findOrMake<Advance>(PabloAST::ClassTypeId::Advance, expr, shiftAmount).first;
+    return appendIfNew(mUnaryWithInt.findOrMake<Advance>(PabloAST::ClassTypeId::Advance, expr, shiftAmount, mSymbolGenerator, this));
 }
 
-PabloAST * PabloBlock::createCall(const std::string name) {
-    return mUnary.findOrMake<Call>(PabloAST::ClassTypeId::Call, mSymbolGenerator->get(name)).first;
+Call * PabloBlock::createCall(const std::string name) {
+    return appendIfNew(mUnary.findOrMake<Call>(PabloAST::ClassTypeId::Call, mSymbolGenerator->get(name), this));
 }
 
 PabloAST * PabloBlock::createNot(PabloAST * expr) {
-    return mUnary.findOrCall<OptimizeNot>(PabloAST::ClassTypeId::Not, expr).first;
+    return mUnary.findOrCall<OptimizeNot>(PabloAST::ClassTypeId::Not, expr, this);
 }
+
+Not * PabloBlock::createNotImm(PabloAST * expr) {
+    return appendIfNew(mUnary.findOrMake<Not>(PabloAST::ClassTypeId::Not, expr, this));
+}
+
 
 Var * PabloBlock::createVar(const std::string name) {
-    return mUnary.findOrMake<Var>(PabloAST::ClassTypeId::Var, mSymbolGenerator->get(name)).first;
-}
-
-Var * PabloBlock::createVar(Assign * assign) {
-    return mUnary.findOrMake<Var>(PabloAST::ClassTypeId::Var, assign).first;
-}
-
-Var * PabloBlock::createVar(Next * next) {
-    return mUnary.findOrMake<Var>(PabloAST::ClassTypeId::Var, next).first;
+    return mUnary.findOrMake<Var>(PabloAST::ClassTypeId::Var, mSymbolGenerator->get(name), this).first;
 }
 
 /// BINARY CREATE FUNCTIONS
 
 Next * PabloBlock::createNext(Assign * assign, PabloAST * expr) {
-    Next * next;
-    bool added;
-    std::tie(next, added) = mBinary.findOrMake<Next>(PabloAST::ClassTypeId::Next, assign, expr, this);
-    if (LLVM_LIKELY(added)) {
-        push_back(next);
-    }
-    return next;
+    return appendIfNew(mBinary.findOrMake<Next>(PabloAST::ClassTypeId::Next, assign, expr, this));
 }
 
 PabloAST * PabloBlock::createMatchStar(PabloAST * marker, PabloAST * charclass) {
     if (isa<Zeroes>(marker) || isa<Zeroes>(charclass)) {
         return marker;
     }
-    return mBinary.findOrMake<MatchStar>(PabloAST::ClassTypeId::MatchStar, marker, charclass).first;
+    return appendIfNew(mBinary.findOrMake<MatchStar>(PabloAST::ClassTypeId::MatchStar, marker, charclass, mSymbolGenerator, this));
 }
 
 PabloAST * PabloBlock::createScanThru(PabloAST * from, PabloAST * thru) {
     if (isa<Zeroes>(from) || isa<Zeroes>(thru)) {
         return from;
     }
-    return mBinary.findOrMake<ScanThru>(PabloAST::ClassTypeId::ScanThru, from, thru).first;
+    return appendIfNew(mBinary.findOrMake<ScanThru>(PabloAST::ClassTypeId::ScanThru, from, thru, mSymbolGenerator, this));
 }
 
 PabloAST * PabloBlock::createAnd(PabloAST * expr1, PabloAST * expr2) {
     if (expr1 < expr2) {
         std::swap(expr1, expr2);
     }
-    return mBinary.findOrCall<OptimizeAnd>(PabloAST::ClassTypeId::And, expr1, expr2).first;
+    return mBinary.findOrCall<OptimizeAnd>(PabloAST::ClassTypeId::And, expr1, expr2, this);
+}
+
+And * PabloBlock::createAndImm(PabloAST * expr1, PabloAST * expr2) {
+    return appendIfNew(mBinary.findOrMake<And>(PabloAST::ClassTypeId::And, expr1, expr2, this));
 }
 
 PabloAST * PabloBlock::createOr(PabloAST * expr1, PabloAST * expr2) {
     if (expr1 < expr2) {
         std::swap(expr1, expr2);
     }
-    return mBinary.findOrCall<OptimizeOr>(PabloAST::ClassTypeId::Or, expr1, expr2).first;
+    return mBinary.findOrCall<OptimizeOr>(PabloAST::ClassTypeId::Or, expr1, expr2, this);
+}
+
+Or * PabloBlock::createOrImm(PabloAST * expr1, PabloAST * expr2) {
+    return appendIfNew(mBinary.findOrMake<Or>(PabloAST::ClassTypeId::Or, expr1, expr2, this));
 }
 
 PabloAST * PabloBlock::createXor(PabloAST * expr1, PabloAST * expr2) {
     if (expr1 < expr2) {
         std::swap(expr1, expr2);
     }
-    return mBinary.findOrCall<OptimizeXor>(PabloAST::ClassTypeId::Xor, expr1, expr2).first;
+    return mBinary.findOrCall<OptimizeXor>(PabloAST::ClassTypeId::Xor, expr1, expr2, this);
+}
+
+Xor * PabloBlock::createXorImm(PabloAST * expr1, PabloAST * expr2) {
+    return appendIfNew(mBinary.findOrMake<Xor>(PabloAST::ClassTypeId::Xor, expr1, expr2,  this));
 }
 
 /// TERNARY CREATE FUNCTION
 
 PabloAST * PabloBlock::createSel(PabloAST * condition, PabloAST * trueExpr, PabloAST * falseExpr) {
-    return mTernary.findOrCall<OptimizeSel>(PabloAST::ClassTypeId::Sel, condition, trueExpr, falseExpr).first;
+    return mTernary.findOrCall<OptimizeSel>(PabloAST::ClassTypeId::Sel, condition, trueExpr, falseExpr, this);
 }
+
+Sel * PabloBlock::createSelImm(PabloAST * condition, PabloAST * trueExpr, PabloAST * falseExpr) {
+    return appendIfNew(mTernary.findOrMake<Sel>(PabloAST::ClassTypeId::Sel, condition, trueExpr, falseExpr, this));
+}
+
 
 //PabloAST * PabloBlock::replaceUsesOfWith(PabloAST * inst, PabloAST * from, PabloAST * to) {
 //    if (from == to) {

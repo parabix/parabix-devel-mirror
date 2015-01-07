@@ -4,7 +4,7 @@
 namespace pablo {
 
 While::While(PabloAST * expr, PabloBlock & body, PabloBlock * parent)
-: Statement(ClassTypeId::While, parent)
+: Statement(ClassTypeId::While, nullptr, parent)
 , mExpr(expr)
 , mBody(body)
 , mCarryCount(0)

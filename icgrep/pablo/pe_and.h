@@ -8,14 +8,13 @@
 #define PE_AND_H
 
 #include <pablo/pabloAST.h>
-#include <pablo/pe_var.h>
 #include <array>
 
 namespace pablo {
 
 class PabloBlock;
 
-class And : public PabloAST {
+class And : public Statement {
     friend struct OptimizeAnd;
     friend class PabloBlock;
 public:
@@ -45,22 +44,13 @@ public:
         return mExprs[1];
     }
 protected:
-    And(PabloAST * expr1, PabloAST * expr2)
-    : PabloAST(ClassTypeId::And)
-    , mExprs({{expr1, expr2}})
-    {
-        expr1->addUser(this);
-        expr2->addUser(this);
-    }
+    And(PabloAST * expr1, PabloAST * expr2, PabloBlock * parent);
 private:
     std::array<PabloAST*, 2> mExprs;
 };
 
 struct OptimizeAnd {
-    inline OptimizeAnd(PabloBlock & cg) : cg(cg) {}
-    PabloAST * operator()(PabloAST * expr1, PabloAST * expr2);
-private:
-    PabloBlock & cg;
+    PabloAST * operator()(PabloAST * expr1, PabloAST * expr2, PabloBlock * pb);
 };
 
 }

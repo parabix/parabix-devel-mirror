@@ -8,14 +8,13 @@
 #define PE_SEL_H
 
 #include <pablo/pabloAST.h>
-#include <pablo/pe_var.h>
 #include <array>
 
 namespace pablo {
 
 class PabloBlock;
 
-class Sel : public PabloAST {
+class Sel : public Statement {
     friend struct OptimizeSel;
     friend class PabloBlock;
 public:
@@ -48,23 +47,13 @@ public:
         return mExprs[2];
     }
 protected:
-    Sel(PabloAST* if_expr, PabloAST* t_expr, PabloAST* f_expr)
-    : PabloAST(ClassTypeId::Sel)
-    , mExprs({{if_expr, t_expr, f_expr}})
-    {
-        if_expr->addUser(this);
-        t_expr->addUser(this);
-        f_expr->addUser(this);
-    }
+    Sel(PabloAST* if_expr, PabloAST* t_expr, PabloAST* f_expr, PabloBlock * parent);
 private:
     std::array<PabloAST*, 3> mExprs;
 };
 
 struct OptimizeSel {
-    inline OptimizeSel(PabloBlock & cg) : cg(cg) {}
-    PabloAST * operator()(PabloAST * if_expr, PabloAST * t_expr, PabloAST * f_expr);
-private:
-    PabloBlock & cg;
+    PabloAST * operator()(PabloAST * if_expr, PabloAST * t_expr, PabloAST * f_expr, PabloBlock * pb);
 };
 
 }

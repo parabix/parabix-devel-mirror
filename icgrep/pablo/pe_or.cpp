@@ -9,7 +9,15 @@
 
 namespace pablo {
 
-PabloAST * OptimizeOr::operator ()(PabloAST * expr1, PabloAST * expr2) {
+Or::Or(PabloAST * expr1, PabloAST * expr2, PabloBlock * parent)
+: Statement(ClassTypeId::Or, parent->makeName("or"), parent)
+, mExprs({{expr1, expr2}})
+{
+    expr1->addUser(this);
+    expr2->addUser(this);
+}
+
+PabloAST * OptimizeOr::operator ()(PabloAST * expr1, PabloAST * expr2, PabloBlock * pb) {
     if (isa<Ones>(expr1)) {
 	return expr1;
     }
@@ -27,11 +35,11 @@ PabloAST * OptimizeOr::operator ()(PabloAST * expr1, PabloAST * expr2) {
     }
     else if (Not * not1 = dyn_cast<Not>(expr1)) {
         // ¬a∨b = ¬¬(¬a∨b) = ¬(a ∧ ¬b)
-        return cg.createNot(cg.createAnd(not1->getExpr(), cg.createNot(expr2)));
+        return pb->createNot(pb->createAnd(not1->getExpr(), pb->createNot(expr2)));
     }
     else if (Not * not2 = dyn_cast<Not>(expr2)) {
         // a∨¬b = ¬¬(¬b∨a) = ¬(b ∧ ¬a)
-        return cg.createNot(cg.createAnd(not2->getExpr(), cg.createNot(expr1)));
+        return pb->createNot(pb->createAnd(not2->getExpr(), pb->createNot(expr1)));
     }
     else if (equals(expr1, expr2)) {
         return expr1;
@@ -45,20 +53,20 @@ PabloAST * OptimizeOr::operator ()(PabloAST * expr1, PabloAST * expr2) {
             //These optimizations factor out common components that can occur when sets are formed by union
             //(e.g., union of [a-z] and [A-Z].
             if (equals(expr1a, expr2a)) {
-                return cg.createAnd(expr1a, cg.createOr(expr1b, expr2b));
+                return pb->createAnd(expr1a, pb->createOr(expr1b, expr2b));
             }
             else if (equals(expr1b, expr2b)) {
-                return cg.createAnd(expr1b, cg.createOr(expr1a, expr2a));
+                return pb->createAnd(expr1b, pb->createOr(expr1a, expr2a));
             }
             else if (equals(expr1a, expr2b)) {
-                return cg.createAnd(expr1a, cg.createOr(expr1b, expr2a));
+                return pb->createAnd(expr1a, pb->createOr(expr1b, expr2a));
             }
             else if (equals(expr1b, expr2a)) {
-                return cg.createAnd(expr1b, cg.createOr(expr1a, expr2b));
+                return pb->createAnd(expr1b, pb->createOr(expr1a, expr2b));
             }
         }
     }
-    return new Or(expr1, expr2);
+    return pb->createOrImm(expr1, expr2);
 }
 
 }

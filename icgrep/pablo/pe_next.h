@@ -3,6 +3,7 @@
 
 #include <pablo/pabloAST.h>
 #include <pablo/ps_assign.h>
+#include <pablo/symbol_generator.h>
 #include <array>
 
 namespace pablo {
@@ -41,7 +42,7 @@ public:
     }
 protected:
     Next(PabloAST * initial, PabloAST * expr, PabloBlock * parent)
-    : Statement(ClassTypeId::Next, parent)
+    : Statement(ClassTypeId::Next, cast<Assign>(initial)->getName(), parent)
     , mExprs({{cast<Assign>(initial), expr}}) {
         initial->addUser(this);
         expr->addUser(this);
