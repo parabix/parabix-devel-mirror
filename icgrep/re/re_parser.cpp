@@ -384,16 +384,14 @@ RE * makeComplement(RE * s) {
 
 RE * makeWordBoundary () {
     RE * wordC = makeWordSet();
-    std::vector<RE *> alts = {makeIntersect(makeLookAheadAssertion(wordC), makeNegativeLookBehindAssertion(wordC)), 
-        makeIntersect(makeNegativeLookAheadAssertion(wordC), makeLookBehindAssertion(wordC))};
-    return makeAlt(alts.begin(), alts.end());
+    return makeAlt({makeSeq({makeNegativeLookBehindAssertion(wordC), makeLookAheadAssertion(wordC)}),
+                    makeSeq({makeLookBehindAssertion(wordC), makeNegativeLookAheadAssertion(wordC)})});
 }
 
 RE * makeWordNonBoundary () {
     RE * wordC = makeWordSet();
-    std::vector<RE *> alts = {makeIntersect(makeLookAheadAssertion(wordC), makeLookBehindAssertion(wordC)), 
-        makeIntersect(makeNegativeLookAheadAssertion(wordC), makeNegativeLookBehindAssertion(wordC))};
-    return makeAlt(alts.begin(), alts.end());
+    return makeAlt({makeSeq({makeNegativeLookBehindAssertion(wordC), makeNegativeLookAheadAssertion(wordC)}),
+                    makeSeq({makeLookBehindAssertion(wordC), makeLookAheadAssertion(wordC)})});
 }
 
 RE * RE_Parser::parse_escaped_set() {
