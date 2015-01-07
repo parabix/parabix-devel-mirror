@@ -267,7 +267,21 @@ MarkerType RE_Compiler::process(Alt * alt, MarkerType marker, PabloBlock & pb) {
 }
 
 MarkerType RE_Compiler::process(Assertion * a, MarkerType marker, PabloBlock & pb) {
-    throw std::runtime_error("Assertions not implemented.");
+    if (a->getKind() == Assertion::Kind::Lookbehind) {
+        MarkerType lookback = compile(a->getAsserted(), pb);
+        if (isFinalPositionMarker(marker) && isFinalPositionMarker(lookback)) {
+            PabloAST * lb = markerVar(lookback, pb);
+            if (a->getSense() == Assertion::Sense::Negative) lb = pb.createNot(lb);
+            return makeFinalPositionMarker("lookback", pb.createAnd(markerVar(marker, pb), lb), pb);
+        }
+        else {
+            Var * m1 = postPositionVar(marker, pb);
+            PabloAST * lb = postPositionVar(lookback, pb);
+            if (a->getSense() == Assertion::Sense::Negative) lb = pb.createNot(lb);
+            return makePostPositionMarker("lookback", pb.createAnd(m1, lb), pb);
+        }
+    }
+    throw std::runtime_error("Lookahead assertions not implemented.");
 }
 
 MarkerType RE_Compiler::process(Diff * diff, MarkerType marker, PabloBlock & pb) {
