@@ -25,42 +25,33 @@ class Assign;
 class Var;
 }
 
-/*  Marker streams represent the results of matching steps.
-    Two types of marker streams are used internally.
-    FinalByte markers are used for character classes and
-    other strings by a one bit at their final position.
-    PostPosition markers are used to mark matches with
-    a 1 bit immediately after a match.   PostPosition markers
-    are generally required whenever a regular expression element
-    can match the empty string (e.g., * and ? repeated items).
+/*   Marker streams represent the results of matching steps.
+     Three types of marker streams are used internally.
+     FinalMatchByte markers are used for character classes and
+     other strings identified by a one bit at their final position.
+     InitialPostPositionByte markers are used to mark matches with
+     a 1 bit immediately after a match.   InitialPostPositionByte markers
+     are generally required whenever a regular expression element
+     can match the empty string (e.g., * and ? repeated items).
+     FinalPostPositionByte markers are used for single code unit
+     lookahead assertions.  
 */
-    
+
 namespace re {
 
-enum MarkerPosition {FinalByte, PostPosition};
+enum MarkerPosition {FinalMatchByte, InitialPostPositionByte, FinalPostPositionByte};
 
 struct MarkerType { 
     MarkerPosition pos;
     pablo::Assign * stream;
 };
 
-inline bool isPostPositionMarker(MarkerType m) {
-    return m.pos == PostPosition;
-}
+inline MarkerPosition markerPos(MarkerType m) {return m.pos;}
 
-inline bool isFinalPositionMarker(MarkerType m) {
-    return m.pos == FinalByte;
-}
+inline pablo::Assign * markerVar(MarkerType m) {return m.stream;}
+    
+inline MarkerType makeMarker(MarkerPosition newpos, pablo::Assign * strm) {return {newpos, strm};}
 
-MarkerType makePostPositionMarker(std::string marker_name, pablo::PabloAST * s, pablo::PabloBlock & pb);
-
-MarkerType makeFinalPositionMarker(std::string marker_name, pablo::PabloAST * s, pablo::PabloBlock & pb);
-
-pablo::Assign * markerStream(MarkerType m, pablo::PabloBlock &);
-
-pablo::Assign * markerVar(MarkerType m, pablo::PabloBlock & pb);
-
-pablo::Assign * postPositionVar(MarkerType m, pablo::PabloBlock & pb);
 
 class RE_Compiler {
 public:
@@ -75,7 +66,10 @@ public:
 private:
 
     MarkerType compile(RE * re, pablo::PabloBlock & cg);
-
+    MarkerType AdvanceMarker(MarkerType m, MarkerPosition newpos, pablo::PabloBlock & pb);
+    
+    void AlignMarkers(MarkerType & m1, MarkerType & m2, pablo::PabloBlock & pb);
+    
     pablo::PabloAST * character_class_strm(Name * name, pablo::PabloBlock & pb);
     pablo::PabloAST * nextUnicodePosition(MarkerType m, pablo::PabloBlock & pb);
     MarkerType process(RE * re, MarkerType marker, pablo::PabloBlock & pb);
