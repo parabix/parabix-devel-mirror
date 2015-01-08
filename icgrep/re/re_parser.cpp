@@ -29,8 +29,9 @@
 
 namespace re {
 
-RE * RE_Parser::parse(const std::string & regular_expression) {
+RE * RE_Parser::parse(const std::string & regular_expression, ModeFlagSet initialFlags) {
     RE_Parser parser(regular_expression);
+    parser.fModeFlagSet = initialFlags;
     RE * re = parser.parse_RE();
     if (re == nullptr) {
         throw ParseFailure("An unexpected parsing error occurred!");
@@ -39,13 +40,13 @@ RE * RE_Parser::parse(const std::string & regular_expression) {
 }
 
 inline RE_Parser::RE_Parser(const std::string & regular_expression)
-: _cursor(regular_expression.begin())
-, _end(regular_expression.end())
-, fModeFlagSet(0)
-{
-
-}
-
+    : _cursor(regular_expression.begin())
+    , _end(regular_expression.end())
+    , fModeFlagSet(0)
+    {
+        
+    }
+    
 RE * makeLookAheadAssertion(RE * r) {
     return makeAssertion(r, Assertion::Kind::Lookahead, Assertion::Sense::Positive);
 }

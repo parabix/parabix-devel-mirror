@@ -24,23 +24,25 @@ typedef unsigned codepoint_t;
 
 enum ModeFlagType 
     {CASE_INSENSITIVE_MODE_FLAG = 1,
-     MULTILINE_MODE_FLAG = 2,
-     DOTALL_MODE_FLAG = 4,
-     IGNORE_SPACE_MODE_FLAG = 8,
-     UNIX_LINES_MODE_FLAG = 16};
+     MULTILINE_MODE_FLAG = 2,      // not currently implemented
+     DOTALL_MODE_FLAG = 4,         // not currently implemented
+     IGNORE_SPACE_MODE_FLAG = 8,   // not currently implemented
+     UNIX_LINES_MODE_FLAG = 16};   // not currently implemented
 typedef unsigned ModeFlagSet;
     
 class RE_Parser
 {
 public:
 
-    static RE * parse(const std::string &input_string);
+    static RE * parse(const std::string &input_string, ModeFlagSet initialFlags);
 
 private:
 
     typedef std::string::const_iterator cursor_t;
 
     RE_Parser(const std::string & regular_expression);
+    
+    RE_Parser(const std::string & regular_expression, ModeFlagSet initialFlags);
 
     RE * parse_RE();
     

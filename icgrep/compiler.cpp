@@ -56,13 +56,13 @@ using namespace pablo;
 
 namespace icgrep {
 
-LLVM_Gen_RetVal compile(const Encoding encoding, const std::vector<std::string> regexps, const bool enable_multiplexing) {
+LLVM_Gen_RetVal compile(const Encoding encoding, const std::vector<std::string> regexps, const ModeFlagSet initialFlags) {
     std::vector<RE *> REs;
     RE * re_ast = nullptr;
     for (int i = 0; i < regexps.size(); i++) {
         try
         {
-            re_ast = RE_Parser::parse(regexps[i]);
+            re_ast = RE_Parser::parse(regexps[i], initialFlags);
         }
         catch (ParseFailure failure)
         {
@@ -119,7 +119,7 @@ LLVM_Gen_RetVal compile(const Encoding encoding, const std::vector<std::string> 
 
     PabloBlock & main = PabloBlock::Create();
 
-    CC_Compiler cc_compiler(main, encoding, enable_multiplexing);
+    CC_Compiler cc_compiler(main, encoding);
     
     cc_compiler.compileByteClasses(re_ast);
     

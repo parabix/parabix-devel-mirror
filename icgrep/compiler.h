@@ -8,12 +8,14 @@
 #define COMPILER_H
 
 #include <utf_encoding.h>
+#include <re/re_re.h>
+#include <re/re_parser.h>
 #include <pablo/pablo_compiler.h>
 #include <string>
 
 namespace icgrep {
 
-pablo::LLVM_Gen_RetVal compile(const Encoding encoding, const std::vector<std::string> regexps, const bool enable_multiplexing = false);
+    pablo::LLVM_Gen_RetVal compile(const Encoding encoding, const std::vector<std::string> regexps, const re::ModeFlagSet initialFlags);
 
 }
 

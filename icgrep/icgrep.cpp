@@ -59,6 +59,7 @@ int main(int argc, char *argv[]) {
     cl::opt<bool> ShowFileNames("H", cl::desc("Show the file name with each matching line."), cl::cat(bGrepOutputOptions));
     cl::alias ShowFileNamesLong("with-filename", cl::desc("Alias for -H"), cl::aliasopt(ShowFileNames));
     
+    cl::opt<bool> CaseInsensitive("i", cl::desc("Ignore case distinctions in the pattern and the file."), cl::cat(aRegexSourceOptions));
     cl::opt<bool> ShowLineNumbers("n", cl::desc("Show the line number with each matching line."), cl::cat(bGrepOutputOptions));
     cl::alias ShowLineNumbersLong("line-number", cl::desc("Alias for -n"), cl::aliasopt(ShowLineNumbers));
     
@@ -97,7 +98,10 @@ int main(int argc, char *argv[]) {
         firstInputFile = 0;
     }
     
-    const auto llvm_codegen = icgrep::compile(encoding, regexVector, false);
+    re::ModeFlagSet globalFlags = 0;
+    if (CaseInsensitive) globalFlags |= re::CASE_INSENSITIVE_MODE_FLAG;
+    
+    const auto llvm_codegen = icgrep::compile(encoding, regexVector, globalFlags);
 
     if (llvm_codegen.process_block_fptr != 0) {
         void (*FP)(const Basis_bits &basis_bits, BitBlock carry_q[], BitBlock advance_q[], Output &output) = 
