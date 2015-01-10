@@ -36,7 +36,7 @@ public:
     inline const PabloBlock & getBody() const {
         return mBody;
     }
-    inline const DefinedVars & getDefined() const {
+    inline const SetVector<Assign*> & getDefined() const {
         return mDefined;
     }
     inline void setInclusiveCarryCount(const unsigned count) {
@@ -54,10 +54,10 @@ public:
 protected:
     If(PabloAST * expr, DefinedVars && definedVars, PabloBlock & body, PabloBlock * parent);
 private:
-    PabloBlock &    mBody;
-    DefinedVars     mDefined;
-    unsigned        mCarryCount;
-    unsigned        mAdvanceCount;
+    PabloBlock &        mBody;
+    SetVector<Assign*>  mDefined;
+    unsigned            mCarryCount;
+    unsigned            mAdvanceCount;
 };
 
 }

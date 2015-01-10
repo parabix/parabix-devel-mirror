@@ -19,6 +19,7 @@
 #include <pablo/pe_or.h>
 #include <pablo/pe_scanthru.h>
 #include <pablo/pe_sel.h>
+#include <pablo/pe_integer.h>
 #include <pablo/pe_string.h>
 #include <pablo/pe_var.h>
 #include <pablo/pe_xor.h>
@@ -65,16 +66,22 @@ public:
 
     Call * createCall(const std::string name);
 
+    Call * createCall(String * name);
+
     Assign * createAssign(const std::string prefix, PabloAST * expr, const int outputIndex = -1)  {
         // Note: we cannot just use the findOrMake method to obtain this; an Assign node cannot be considered
         // unique until we prove it has no Next node associated with it. But the Assign node must be created
         // before the Next node. Should we create a "Constant" flag for this?
         Assign * assign = new Assign(expr, outputIndex, mSymbolGenerator->make(prefix), this);
-        push_back(assign);
+        insert(assign);
         return assign;
     }
 
+    Assign * createImmutableAssign(const std::string prefix, PabloAST * expr, const int outputIndex = -1);
+
     Var * createVar(const std::string name);
+
+    Var * createVar(String * name);
 
     PabloAST * createVar(const PabloAST * const) {
         throw std::runtime_error("Var objects should only refer to external Vars (i.e., input basis bit streams). Use Assign objects directly.");
@@ -108,15 +115,17 @@ public:
 
     inline If * createIf(PabloAST * condition, std::vector<Assign *> && definedVars, PabloBlock & body) {
         If * statement = new If(condition, std::move(definedVars), body, this);
-        push_back(statement);
+        insert(statement);
         return statement;
     }
 
     inline While * createWhile(PabloAST * cond, PabloBlock & body) {
         While * statement = new While(cond, body, this);
-        push_back(statement);
+        insert(statement);
         return statement;
     }
+
+    PabloAST * setOperandOf(Statement * inst, const unsigned index, PabloAST * value);
 
     template<typename... Args>
     struct ExpressionMap {
@@ -151,6 +160,17 @@ public:
             }
             Functor mf;
             PabloAST * const expr = mf(std::forward<Args>(args)..., std::forward<Params>(params)...);
+            mMap.insert(std::make_pair(std::move(key), expr));
+            return expr;
+        }
+
+        template <class Functor, typename... Params>
+        inline PabloAST * findOrAdd(const PabloAST::ClassTypeId type, Args... args, PabloAST * expr) {
+            Key key = std::make_tuple(type, args...);
+            PabloAST * const f = find(key);
+            if (f) {
+                return f;
+            }
             mMap.insert(std::make_pair(std::move(key), expr));
             return expr;
         }
@@ -232,9 +252,9 @@ protected:
     }
 
     template<typename Type>
-    inline Type appendIfNew(std::pair<Type, bool> retVal) {
+    inline Type insertIfNew(std::pair<Type, bool> retVal) {
         if (std::get<1>(retVal)) {
-            push_back(cast<Statement>(std::get<0>(retVal)));
+            insert(cast<Statement>(std::get<0>(retVal)));
         }
         return std::get<0>(retVal);
     }

@@ -15,9 +15,10 @@ namespace re {
 
 bool isByteLength(RE * re) {
     if (Alt * alt = dyn_cast<Alt>(re)) {
-        std::vector<RE*> list;
         for (RE * re : *alt) {
-            if (!isByteLength(re)) return false;
+            if (!isByteLength(re)) {
+                return false;
+            }
         }
         return true;
     }
@@ -27,7 +28,7 @@ bool isByteLength(RE * re) {
     else if (Rep * rep = dyn_cast<Rep>(re)) {
         return (rep->getLB() == 1) && (rep->getUB() == 1) && isByteLength(rep->getRE());
     }
-    else if (Assertion * a = dyn_cast<Assertion>(re)) {
+    else if (isa<Assertion>(re)) {
         return false;
     }
     else if (Diff * diff = dyn_cast<Diff>(re)) {
@@ -36,7 +37,9 @@ bool isByteLength(RE * re) {
     else if (Intersect * e = dyn_cast<Intersect>(re)) {
         return isByteLength(e->getLH()) && isByteLength(e->getRH());
     }
-    else if (isa<Any>(re)) return false;
+    else if (isa<Any>(re)) {
+        return false;
+    }
     else if (Name * n = dyn_cast<Name>(re)) {
         return (n->getType() == Name::Type::Byte);
     }
@@ -45,9 +48,10 @@ bool isByteLength(RE * re) {
 
 bool isUnicodeUnitLength(RE * re) {
     if (Alt * alt = dyn_cast<Alt>(re)) {
-        std::vector<RE*> list;
         for (RE * re : *alt) {
-            if (!isUnicodeUnitLength(re)) return false;
+            if (!isUnicodeUnitLength(re)) {
+                return false;
+            }
         }
         return true;
     }
@@ -57,7 +61,7 @@ bool isUnicodeUnitLength(RE * re) {
     else if (Rep * rep = dyn_cast<Rep>(re)) {
         return (rep->getLB() == 1) && (rep->getUB() == 1) && isUnicodeUnitLength(rep->getRE());
     }
-    else if (Assertion * a = dyn_cast<Assertion>(re)) {
+    else if (isa<Assertion>(re)) {
         return false;
     }
     else if (Diff * diff = dyn_cast<Diff>(re)) {
@@ -66,7 +70,9 @@ bool isUnicodeUnitLength(RE * re) {
     else if (Intersect * e = dyn_cast<Intersect>(re)) {
         return isUnicodeUnitLength(e->getLH()) && isUnicodeUnitLength(e->getRH());
     }
-    else if (isa<Any>(re)) return true;
+    else if (isa<Any>(re)) {
+        return true;
+    }
     else if (Name * n = dyn_cast<Name>(re)) {
         // Eventually names might be set up for not unit length items.
         return (n->getType() == Name::Type::Unicode || n->getType() == Name::Type::UnicodeProperty || n->getType() == Name::Type::Byte);

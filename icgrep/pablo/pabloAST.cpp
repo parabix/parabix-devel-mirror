@@ -110,6 +110,10 @@ PMDNode * PabloAST::getMetadata(const std::string & name) {
     return f->second;
 }
 
+PabloAST * Statement::setOperand(const unsigned index, PabloAST * value) {
+    assert (index < getNumOperands());
+    return mParent->setOperandOf(this, index, value);
+}
 
 void Statement::insertBefore(Statement * const statement) {
     assert (statement);
@@ -153,48 +157,70 @@ void Statement::removeFromParent() {
         if (LLVM_UNLIKELY(mParent->mLast == this)) {
             mParent->mLast = mPrev;
         }
+        if (mParent->mInsertionPoint == this) {
+            mParent->mInsertionPoint = mParent->mInsertionPoint->mPrev;
+        }
         if (LLVM_LIKELY(mPrev != nullptr)) {
             mPrev->mNext = mNext;
         }
         if (LLVM_LIKELY(mNext != nullptr)) {
             mNext->mPrev = mPrev;
         }
-    }
+    }    
     mPrev = nullptr;
     mNext = nullptr;
     mParent = nullptr;
 }
 
 void Statement::replaceWith(Statement * const statement) {
-    if (LLVM_UNLIKELY(mParent != nullptr)) {
+    if (statement != this) {
         statement->removeFromParent();
+        statement->mParent = mParent;
+        statement->mNext = mNext;
+        statement->mPrev = mPrev;
+        if (LLVM_LIKELY(mPrev != nullptr)) {
+            mPrev->mNext = statement;
+        }
+        if (LLVM_LIKELY(mNext != nullptr)) {
+            mNext->mPrev = statement;
+        }
+        mParent=nullptr;
+        mNext=nullptr;
+        mPrev=nullptr;
     }
-    statement->mParent = mParent;
-    statement->mNext = mNext;
-    statement->mPrev = mPrev;
-    if (LLVM_LIKELY(mPrev != nullptr)) {
-        mPrev->mNext = statement;
-    }
-    if (LLVM_LIKELY(mNext != nullptr)) {
-        mNext->mPrev = statement;
-    }
-    mParent=nullptr;
-    mNext=nullptr;
-    mPrev=nullptr;
 }
 
 Statement::~Statement() {
 
 }
 
-void StatementList::push_back(Statement * const statement) {
-    if (LLVM_UNLIKELY(mLast == nullptr)) {
-        mFirst = mLast = statement;
+void StatementList::setInsertPoint(Statement * const statement) {
+    mInsertionPoint = statement;
+}
+
+void StatementList::setInsertPoint(StatementList * const list) {
+    mInsertionPoint = list->mLast;
+}
+
+void StatementList::insert(Statement * const statement) {
+    if (LLVM_UNLIKELY(mInsertionPoint == nullptr)) {
+        statement->mNext = mFirst;
+        if (mFirst) {
+            assert (mFirst->mPrev == nullptr);
+            mFirst->mPrev = statement;
+        }
+        mLast = (mLast == nullptr) ? statement : mLast;
+        mInsertionPoint = mFirst = statement;
     }
     else {
-        statement->insertAfter(mLast);
-        mLast = statement;
+        statement->insertAfter(mInsertionPoint);
+        mLast = (mLast == mInsertionPoint) ? statement : mLast;
+        mInsertionPoint = statement;
     }
+}
+
+void StatementList::insertAfterLastOperand(Statement * const statement) {
+    assert (false);
 }
 
 }

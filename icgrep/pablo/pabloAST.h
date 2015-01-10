@@ -39,6 +39,7 @@ public:
         , Assign
         , Call
         , If
+        , Integer
         , MatchStar
         , Next
         , Not
@@ -114,15 +115,16 @@ public:
         return false;
     }
 
-    inline void replaceUsesOfWith(PabloAST * from, PabloAST * to) {
-        if (LLVM_UNLIKELY(from == to)) {
-            return;
+    inline PabloAST * replaceUsesOfWith(PabloAST * from, PabloAST * to) {
+        if (from == to) {
+            return this;
         }
-        for (unsigned i = 0, operands = getNumOperands(); i != operands; ++i) {
+        for (unsigned i = 0; i != getNumOperands(); ++i) {
             if (getOperand(i) == from) {
-                setOperand(i, to);
+                return setOperand(i, to);
             }
         }
+        return this;
     }
 
     PabloAST * getOperand(const unsigned index) const {
@@ -130,13 +132,10 @@ public:
         return mOperand[index];
     }
 
+    PabloAST * setOperand(const unsigned index, PabloAST * value);
+
     unsigned getNumOperands() const {
         return mOperand.size();
-    }
-
-    void setOperand(const unsigned index, PabloAST * value) {
-        assert (index < getNumOperands());
-        mOperand[index] = value;
     }
 
     void insertBefore(Statement * const statement);
@@ -169,6 +168,7 @@ protected:
             op->addUser(this);
         }
     }
+
     virtual ~Statement() = 0;
 protected:
     const String *              mName;
@@ -333,7 +333,8 @@ public:
 public:
 
     StatementList()
-    : mFirst(nullptr)
+    : mInsertionPoint(nullptr)
+    , mFirst(nullptr)
     , mLast(nullptr)
     {
 
@@ -403,11 +404,23 @@ public:
         return mLast;
     }
 
-    void push_back(Statement * const statement);
+    void setInsertPoint(Statement * const statement);
+
+    void setInsertPoint(StatementList * const list);
+
+    Statement * getInsertPoint() const {
+        return mInsertionPoint;
+    }
+
+    void insert(Statement * const statement);
+
+    void insertAfterLastOperand(Statement * const statement);
 
 private:
+
+    Statement   * mInsertionPoint;
     Statement   * mFirst;
-    Statement   * mLast;
+    Statement   * mLast;    
 };
 
 }

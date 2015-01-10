@@ -166,7 +166,7 @@ LLVM_Gen_RetVal PabloCompiler::compile(PabloBlock & pb)
     //Generate the IR instructions for the function.
     compileStatements(pb.statements());
 
-    assert (mCarryQueueIdx == mCarryQueueSize);
+    assert (mCarryQueueIdx <= mCarryQueueSize);
     assert (mAdvanceQueueIdx <= mAdvanceQueueSize);
     assert (mNestingDepth == 0);
     //Terminate the block
