@@ -106,10 +106,7 @@ inline RE * RE_Parser::parse_seq() {
         }
         seq.push_back(extend_item(re));
     }
-    if (seq.empty())
-    {
-        throw NoRegularExpressionFound();
-    }
+    //  Note: empty sequences are legal.
     return makeSeq(seq.begin(), seq.end());
 }
 
