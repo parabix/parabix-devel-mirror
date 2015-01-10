@@ -38,6 +38,11 @@ namespace pablo {
 
 class PabloBlock : public StatementList {
     friend class pablo::PabloAST;
+    friend struct OptimizeAnd;
+    friend struct OptimizeOr;
+    friend struct OptimizeSel;
+    friend struct OptimizeXor;
+    friend struct OptimizeNot;
 public:
 
     inline static PabloBlock & Create() {
@@ -69,10 +74,10 @@ public:
         return assign;
     }
 
-    Var * createVar(const std::string);
+    Var * createVar(const std::string name);
 
     PabloAST * createVar(const PabloAST * const) {
-        throw std::runtime_error("Var objects should only refer to external Vars (i.e., input basis bit streams). Use Assign object directly.");
+        throw std::runtime_error("Var objects should only refer to external Vars (i.e., input basis bit streams). Use Assign objects directly.");
     }
 
     Next * createNext(Assign * assign, PabloAST * expr);
@@ -133,7 +138,7 @@ public:
                 return std::make_pair(cast<Type>(f), false);
             }
             PabloAST * const expr = new Type(std::forward<Args>(args)..., std::forward<Params>(params)...);
-            insert(std::move(key), expr);
+            mMap.insert(std::make_pair(std::move(key), expr));
             return std::make_pair(cast<Type>(expr), isa<Statement>(expr));
         }
 
@@ -146,12 +151,18 @@ public:
             }
             Functor mf;
             PabloAST * const expr = mf(std::forward<Args>(args)..., std::forward<Params>(params)...);
-            insert(std::move(key), expr);
+            mMap.insert(std::make_pair(std::move(key), expr));
             return expr;
         }
 
-        inline void insert(Key && key, PabloAST * expr) {
-            mMap.insert(std::make_pair(std::move(key), expr));
+        inline bool erase(const PabloAST::ClassTypeId type, Args... args) {
+            Key key = std::make_tuple(type, args...);
+            auto itr = mMap.find(key);
+            if (itr == mMap.end()) {
+                return mPredecessor ? mPredecessor->erase(type, args...) : false;
+            }
+            mMap.erase(itr);
+            return true;
         }
 
         inline PabloAST * find(const Key & key) const {

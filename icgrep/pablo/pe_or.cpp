@@ -10,25 +10,17 @@
 namespace pablo {
 
 Or::Or(PabloAST * expr1, PabloAST * expr2, PabloBlock * parent)
-: Statement(ClassTypeId::Or, parent->makeName("or"), parent)
-, mExprs({{expr1, expr2}})
+: Statement(ClassTypeId::Or, {{expr1, expr2}}, parent->makeName("or"), parent)
 {
-    expr1->addUser(this);
-    expr2->addUser(this);
+
 }
 
 PabloAST * OptimizeOr::operator ()(PabloAST * expr1, PabloAST * expr2, PabloBlock * pb) {
-    if (isa<Ones>(expr1)) {
-	return expr1;
-    }
-    else if (isa<Zeroes>(expr1)){
-        return expr2;        
-    }
-    else if (isa<Ones>(expr2)) {
-	return expr2;
-    }
-    else if (isa<Zeroes>(expr2)){
+    if (isa<Zeroes>(expr2) || isa<Ones>(expr1)) {
         return expr1;
+    }
+    else if (isa<Zeroes>(expr1) || isa<Ones>(expr2)){
+        return expr2;
     }
     else if (equals(expr1, expr2)) {
         return expr1;

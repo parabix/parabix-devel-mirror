@@ -10,39 +10,31 @@
 namespace pablo {
 
 And::And(PabloAST * expr1, PabloAST * expr2, PabloBlock * parent)
-: Statement(ClassTypeId::And, parent->makeName("and"), parent)
-, mExprs({{expr1, expr2}})
+: Statement(ClassTypeId::And, {{expr1, expr2}}, parent->makeName("and"), parent)
 {
-    expr1->addUser(this);
-    expr2->addUser(this);
+
 }
 
 PabloAST * OptimizeAnd::operator ()(PabloAST * expr1, PabloAST * expr2, PabloBlock * pb) {
-    if (isa<Ones>(expr1)) {
+    if (isa<Zeroes>(expr2) || isa<Ones>(expr1)) {
         return expr2;
     }
-    else if (isa<Zeroes>(expr1)){
-        return expr1;        
-    }
-    else if (isa<Ones>(expr2)) {
+    else if (isa<Zeroes>(expr1) || isa<Ones>(expr2)){
         return expr1;
-    }
-    else if (isa<Zeroes>(expr2)){
-        return expr2;
     }
     else if (equals(expr1, expr2)) {
         return expr1;
     }
-    else if (Not * pe_not_e1 = dyn_cast<Not>(expr1)) {
-        if (Not * pe_not_e2 = dyn_cast<Not>(expr2)) {
-            return pb->createNot(pb->createOr(pe_not_e1->getExpr(), pe_not_e2->getExpr()));
+    else if (Not * not1 = dyn_cast<Not>(expr1)) {
+        if (Not * not2 = dyn_cast<Not>(expr2)) {
+            return pb->createNot(pb->createOr(not1->getExpr(), not2->getExpr()));
         }
-        else if (equals(pe_not_e1->getExpr(), expr2)) {
+        else if (equals(not1->getExpr(), expr2)) {
             return pb->createZeroes();
         }
     }
-    else if (Not * pe_not_e2 = dyn_cast<Not>(expr2)) {
-        if (equals(expr1, pe_not_e2->getExpr())) {
+    else if (Not * not2 = dyn_cast<Not>(expr2)) {
+        if (equals(expr1, not2->getExpr())) {
             return pb->createZeroes();
         }
     }

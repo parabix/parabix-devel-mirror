@@ -24,23 +24,10 @@ class PMDNode;
 
 class PabloAST {
     friend class PMDNode;
-    friend class Advance;
-    friend class And;
-    friend class Assign;
-    friend class Call;
-    friend class If;
-    friend class MatchStar;
-    friend class Next;
-    friend class Not;
-    friend class Ones;
-    friend class Or;
-    friend class ScanThru;
-    friend class Sel;
-    friend class String;
+    friend class Statement;
     friend class Var;
+    friend class If;
     friend class While;
-    friend class Xor;
-    friend class Zeroes;
     friend class PabloBlock;
     friend class SymbolGenerator;
     typedef std::unordered_map<std::string, PMDNode *> PMDNodeMap;
@@ -93,7 +80,6 @@ protected:
     inline void removeUser(PabloAST * user) {
         mUsers.remove(user);
     }
-    // virtual void removeUsageFromDefs() = 0;
     static Allocator        mAllocator;
 private:
     const ClassTypeId       mClassTypeId;
@@ -129,7 +115,7 @@ public:
     }
 
     inline void replaceUsesOfWith(PabloAST * from, PabloAST * to) {
-        if (from == to) {
+        if (LLVM_UNLIKELY(from == to)) {
             return;
         }
         for (unsigned i = 0, operands = getNumOperands(); i != operands; ++i) {
@@ -139,11 +125,19 @@ public:
         }
     }
 
-    virtual PabloAST * getOperand(const unsigned index) const = 0;
+    PabloAST * getOperand(const unsigned index) const {
+        assert (index < getNumOperands());
+        return mOperand[index];
+    }
 
-    virtual unsigned getNumOperands() const = 0;
+    unsigned getNumOperands() const {
+        return mOperand.size();
+    }
 
-    virtual void setOperand(const unsigned index, PabloAST * value) = 0;
+    void setOperand(const unsigned index, PabloAST * value) {
+        assert (index < getNumOperands());
+        mOperand[index] = value;
+    }
 
     void insertBefore(Statement * const statement);
     void insertAfter(Statement * const statement);
@@ -163,21 +157,26 @@ public:
         return mParent;
     }
 protected:
-    Statement(const ClassTypeId id, const String * name, PabloBlock * parent)
+    Statement(const ClassTypeId id, std::vector<PabloAST *> && operands, const String * name, PabloBlock * parent)
     : PabloAST(id)
     , mName(name)
     , mNext(nullptr)
     , mPrev(nullptr)
     , mParent(parent)
+    , mOperand(std::move(operands))
     {
-
+        for (PabloAST * op : mOperand) {
+            op->addUser(this);
+        }
     }
     virtual ~Statement() = 0;
 protected:
-    const String * mName;
-    Statement * mNext;
-    Statement * mPrev;
-    PabloBlock * mParent;
+    const String *              mName;
+    Statement *                 mNext;
+    Statement *                 mPrev;
+    PabloBlock *                mParent;
+    std::vector<PabloAST *>     mOperand;
+
 };
 
 class StatementList {

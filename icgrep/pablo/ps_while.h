@@ -22,19 +22,8 @@ public:
     }
     virtual ~While() {
     }
-    virtual PabloAST * getOperand(const unsigned index) const {
-        assert (index == 0);
-        return mExpr;
-    }
-    virtual unsigned getNumOperands() const {
-        return 1;
-    }
-    virtual void setOperand(const unsigned index, PabloAST * value) {
-        assert (index == 0);
-        mExpr = value;
-    }
     inline PabloAST * getCondition() const {
-        return mExpr;
+        return mOperand[0];
     }
     inline PabloBlock & getBody() {
         return mBody;
@@ -57,7 +46,6 @@ public:
 protected:
     While(PabloAST * expr, PabloBlock &body, PabloBlock * parent);
 private:
-    PabloAST *          mExpr;
     PabloBlock &        mBody;
     unsigned            mCarryCount;
     unsigned            mAdvanceCount;

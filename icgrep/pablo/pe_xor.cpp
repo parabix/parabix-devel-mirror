@@ -10,11 +10,9 @@
 namespace pablo {
 
 Xor::Xor(PabloAST * expr1, PabloAST * expr2, PabloBlock * parent)
-: Statement(ClassTypeId::Xor, parent->makeName("xor"), parent)
-, mExprs({{expr1, expr2}})
+: Statement(ClassTypeId::Xor, {{expr1, expr2}}, parent->makeName("xor"), parent)
 {
-    expr1->addUser(this);
-    expr2->addUser(this);
+
 }
 
 PabloAST * OptimizeXor::operator()(PabloAST * expr1, PabloAST * expr2, PabloBlock * pb) {
@@ -22,7 +20,7 @@ PabloAST * OptimizeXor::operator()(PabloAST * expr1, PabloAST * expr2, PabloBloc
         return pb->createNot(expr2);
     }
     else if (isa<Zeroes>(expr1)){
-        return expr2;        
+        return expr2;
     }
     else if (isa<Ones>(expr2)) {
         return pb->createNot(expr1);

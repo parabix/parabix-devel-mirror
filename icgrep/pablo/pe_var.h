@@ -38,56 +38,17 @@ public:
     }
     virtual ~Var(){
     }
-//    virtual PabloAST * getOperand(const unsigned index) const {
-//        assert (index == 0);
-//        return mVar;
-//    }
-//    virtual unsigned getNumOperands() const {
-//        return 1;
-//    }
-//    virtual void setOperand(const unsigned index, PabloAST * value) {
-//        assert (index == 0);
-//        mVar = value;
-//        mName = getNameOf(value);
-//    }
     inline const String * getName() const {
         return mName;
     }
-//    inline PabloAST * getVar() {
-//        return mVar;
-//    }
-//    inline const PabloAST * getVar() const {
-//        return mVar;
-//    }
-//    inline bool isInternal() const {
-//        return mVar != mName;
-//    }
-//    inline bool isExternal() const {
-//        return mVar == mName;
-//    }
 protected:
     Var(PabloAST * var, PabloBlock *)
     : PabloAST(ClassTypeId::Var)
-    //, mVar(var)
-    , mName(cast<String>(var)) // getNameOf(var))
+    , mName(cast<String>(var))
     {
         var->addUser(this);
     }
 private:
-//    static inline const String * getNameOf(const PabloAST * var) {
-//        if (isa<String>(var)) {
-//            return cast<String>(var);
-//        }
-//        if (isa<Assign>(var)) {
-//            return cast<Assign>(var)->getName();
-//        }
-//        if (isa<Next>(var)) {
-//            return cast<Next>(var)->getName();
-//        }
-//        throw std::runtime_error("Pablo Var only accepts String, Assign and Next nodes.");
-//    }
-private:
-    //PabloAST *         mVar;
     const String *     mName;
 };
 

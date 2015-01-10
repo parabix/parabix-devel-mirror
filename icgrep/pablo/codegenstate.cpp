@@ -98,6 +98,12 @@ Sel * PabloBlock::createSelImm(PabloAST * condition, PabloAST * trueExpr, PabloA
     return appendIfNew(mTernary.findOrMake<Sel>(PabloAST::ClassTypeId::Sel, condition, trueExpr, falseExpr, this));
 }
 
+//PabloAST * PabloBlock::replaceUsesOfWith(PabloAST * inst, PabloAST * from, PabloAST * to) {
+
+
+
+
+//}
 
 //PabloAST * PabloBlock::replaceUsesOfWith(PabloAST * inst, PabloAST * from, PabloAST * to) {
 //    if (from == to) {

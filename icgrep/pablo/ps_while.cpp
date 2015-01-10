@@ -4,16 +4,12 @@
 namespace pablo {
 
 While::While(PabloAST * expr, PabloBlock & body, PabloBlock * parent)
-: Statement(ClassTypeId::While, nullptr, parent)
-, mExpr(expr)
+: Statement(ClassTypeId::While, {expr}, nullptr, parent)
 , mBody(body)
 , mCarryCount(0)
 , mAdvanceCount(0)
 {
-    expr->addUser(this);
-    for (Statement * s : body) {
-        addUser(s);
-    }
+
 }
 
 }

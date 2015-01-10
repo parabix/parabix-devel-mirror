@@ -19,36 +19,18 @@ public:
     static inline bool classof(const void *) {
         return false;
     }
-    virtual PabloAST * getOperand(const unsigned index) const {
-        assert (index < 2);
-        return mExprs[index];
-    }
-    virtual unsigned getNumOperands() const {
-        return 2;
-    }
-    virtual void setOperand(const unsigned index, PabloAST * value) {
-        assert (index < 2);
-        assert (index == 0 || isa<Assign>(value));
-        mExprs[index] = value;
-    }
     inline const Assign * getInitial() const {
-        return cast<const Assign>(mExprs[0]);
-    }
-    inline const String * getName() const {
-        return getInitial()->getName();
+        return cast<const Assign>(mOperand[0]);
     }
     inline PabloAST * getExpr() const {
-        return mExprs[1];
+        return mOperand[1];
     }
 protected:
     Next(PabloAST * initial, PabloAST * expr, PabloBlock * parent)
-    : Statement(ClassTypeId::Next, cast<Assign>(initial)->getName(), parent)
-    , mExprs({{cast<Assign>(initial), expr}}) {
-        initial->addUser(this);
-        expr->addUser(this);
+    : Statement(ClassTypeId::Next, {{cast<Assign>(initial), expr}}, cast<Assign>(initial)->getName(), parent)
+    {
+
     }
-private:
-    std::array<PabloAST*, 2>  mExprs;
 };
 
 }

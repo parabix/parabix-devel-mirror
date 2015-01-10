@@ -23,32 +23,19 @@ public:
     }
     virtual ~Advance() {
     }
-    virtual PabloAST * getOperand(const unsigned index) const {
-        assert (index == 0);
-        return mExpr;
-    }
-    virtual void setOperand(const unsigned index, PabloAST * value) {
-        assert (index == 0);
-        mExpr = value;
-    }
-    virtual unsigned getNumOperands() const {
-        return 1;
-    }
     inline PabloAST * getExpr() const {
-        return mExpr;
+        return mOperand[0];
     }
     inline int getAdvanceAmount() const {
         return mShiftAmount;
     }
 protected:
     Advance(PabloAST * expr, int shiftAmount, SymbolGenerator * sg, PabloBlock * parent)
-    : Statement(ClassTypeId::Advance, sg->make("advance"), parent)
-    , mExpr(expr)
+    : Statement(ClassTypeId::Advance, {expr}, sg->make("advance"), parent)
 	, mShiftAmount(shiftAmount) {
-        expr->addUser(this);
+
     }
 private:
-    PabloAST * mExpr;
 	int const mShiftAmount;
 };
 

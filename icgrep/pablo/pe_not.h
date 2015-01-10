@@ -23,26 +23,13 @@ public:
     static inline bool classof(const void *) {
         return false;
     }
-    virtual PabloAST * getOperand(const unsigned index) const {
-        assert (index == 0);
-        return mExpr;
-    }
-    virtual unsigned getNumOperands() const {
-        return 1;
-    }
-    virtual void setOperand(const unsigned index, PabloAST * value) {
-        assert (index == 0);
-        mExpr = value;
-    }
     virtual ~Not() {
     }
     PabloAST * getExpr() const {
-        return mExpr;
+        return mOperand[0];
     }
 protected:
     Not(PabloAST * expr, PabloBlock * parent);
-private:
-    PabloAST * mExpr;
 };
 
 struct OptimizeNot {

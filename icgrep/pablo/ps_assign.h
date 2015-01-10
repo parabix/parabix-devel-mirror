@@ -26,19 +26,8 @@ public:
     }
     virtual ~Assign() {
     }
-    virtual PabloAST * getOperand(const unsigned index) const {
-        assert (index == 0);
-        return mExpr;
-    }
-    virtual unsigned getNumOperands() const {
-        return 1;
-    }
-    virtual void setOperand(const unsigned index, PabloAST * value) {
-        assert (index == 0);
-        mExpr = value;
-    }
     inline PabloAST * getExpr() const {
-        return mExpr;
+        return mOperand[0];
     }
     inline bool isOutputAssignment() const {
         return mOutputIndex >= 0;
@@ -48,14 +37,12 @@ public:
     }
 protected:
     explicit Assign(PabloAST * expr, int outputIndex, String * name, PabloBlock * parent)
-    : Statement(ClassTypeId::Assign, name, parent)
-    , mExpr(expr)
+    : Statement(ClassTypeId::Assign, {expr}, name, parent)
     , mOutputIndex(outputIndex)
     {
-        expr->addUser(this);
+
     }
 private:
-    PabloAST *          mExpr;
     const int           mOutputIndex;
 };
 

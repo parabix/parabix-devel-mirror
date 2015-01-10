@@ -24,32 +24,17 @@ public:
     }
     virtual ~ScanThru() {
     }
-    virtual PabloAST * getOperand(const unsigned index) const {
-        assert (index < 2);
-        return mExprs[index];
-    }
-    virtual unsigned getNumOperands() const {
-        return 2;
-    }
-    virtual void setOperand(const unsigned index, PabloAST * value) {
-        assert (index < 2);
-        mExprs[index] = value;
-    }
     PabloAST * getScanFrom() const {
-        return mExprs[0];
+        return mOperand[0];
     }
     PabloAST * getScanThru() const {
-        return mExprs[1];
+        return mOperand[1];
     }
     ScanThru(PabloAST * from, PabloAST * thru, SymbolGenerator * sg, PabloBlock * parent)
-    : Statement(ClassTypeId::ScanThru, sg->make("scanthru"), parent)
-    , mExprs({{from, thru}})
+    : Statement(ClassTypeId::ScanThru, {{from, thru}}, sg->make("scanthru"), parent)
     {
-        from->addUser(this);
-        thru->addUser(this);
+
     }
-private:
-    std::array<PabloAST*, 2> mExprs;
 };
 
 }

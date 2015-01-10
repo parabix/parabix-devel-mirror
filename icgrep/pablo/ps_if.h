@@ -27,19 +27,8 @@ public:
     }
     virtual ~If() {
     }
-    virtual PabloAST * getOperand(const unsigned index) const {
-        assert (index == 0);
-        return mExpr;
-    }
-    virtual unsigned getNumOperands() const {
-        return 1;
-    }
-    virtual void setOperand(const unsigned index, PabloAST * value) {
-        assert (index == 0);
-        mExpr = value;
-    }
     inline PabloAST * getCondition() const {
-        return mExpr;
+        return mOperand[0];
     }
     inline PabloBlock & getBody() {
         return mBody;
@@ -65,7 +54,6 @@ public:
 protected:
     If(PabloAST * expr, DefinedVars && definedVars, PabloBlock & body, PabloBlock * parent);
 private:
-    PabloAST *      mExpr;
     PabloBlock &    mBody;
     DefinedVars     mDefined;
     unsigned        mCarryCount;

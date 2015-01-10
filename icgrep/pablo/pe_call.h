@@ -18,29 +18,14 @@ public:
     }
     virtual ~Call() {
     }
-    virtual PabloAST * getOperand(const unsigned index) const {
-        assert (index == 0);
-        return mCallee;
-    }
-    virtual unsigned getNumOperands() const {
-        return 1;
-    }
-    virtual void setOperand(const unsigned index, PabloAST * value) {
-        assert (index == 0);
-        assert (isa<String>(value));
-        mCallee = cast<String>(value);
-    }
     inline const String * getCallee() const {
-        return mCallee;
+        return cast<String>(mOperand[0]);
     }
 protected:
     Call(PabloAST * callee, PabloBlock * parent)
-    : Statement(ClassTypeId::Call, cast<String>(callee), parent)
-    , mCallee(cast<String>(callee)) {
+    : Statement(ClassTypeId::Call, {callee}, cast<String>(callee), parent) {
 
     }
-private:
-    String * mCallee;
 };
 }
 

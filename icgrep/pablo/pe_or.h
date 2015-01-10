@@ -26,27 +26,14 @@ public:
     }
     virtual ~Or() {
     }
-    virtual PabloAST * getOperand(const unsigned index) const {
-        assert (index < 2);
-        return mExprs[index];
-    }
-    virtual unsigned getNumOperands() const {
-        return 2;
-    }
-    virtual void setOperand(const unsigned index, PabloAST * value) {
-        assert (index < 2);
-        mExprs[index] = value;
-    }
     PabloAST * getExpr1() const {
-        return mExprs[0];
+        return mOperand[0];
     }
     PabloAST * getExpr2() const {
-        return mExprs[1];
+        return mOperand[1];
     }
 protected:
     Or(PabloAST * expr1, PabloAST * expr2, PabloBlock * parent);
-private:
-    std::array<PabloAST*, 2> mExprs;
 };
 
 struct OptimizeOr {

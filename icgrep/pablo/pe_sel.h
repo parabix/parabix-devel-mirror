@@ -26,30 +26,17 @@ public:
     }
     virtual ~Sel() {
     }
-    virtual PabloAST * getOperand(const unsigned index) const {
-        assert (index < 3);
-        return mExprs[index];
-    }
-    virtual unsigned getNumOperands() const {
-        return 3;
-    }
-    virtual void setOperand(const unsigned index, PabloAST * value) {
-        assert (index < 3);
-        mExprs[index] = value;
-    }
     inline PabloAST * getCondition() const {
-        return mExprs[0];
+        return mOperand[0];
     }
     inline PabloAST * getTrueExpr() const {
-        return mExprs[1];
+        return mOperand[1];
     }
     inline PabloAST * getFalseExpr() const {
-        return mExprs[2];
+        return mOperand[2];
     }
 protected:
     Sel(PabloAST* if_expr, PabloAST* t_expr, PabloAST* f_expr, PabloBlock * parent);
-private:
-    std::array<PabloAST*, 3> mExprs;
 };
 
 struct OptimizeSel {

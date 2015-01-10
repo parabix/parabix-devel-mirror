@@ -11,20 +11,20 @@
 namespace pablo {
 
 Not::Not(PabloAST * expr, PabloBlock * parent)
-: Statement(ClassTypeId::Not, parent->makeName("not"), parent)
-, mExpr(expr) {
-    expr->addUser(this);
+: Statement(ClassTypeId::Not, {expr}, parent->makeName("not"), parent)
+{
+
 }
 
 PabloAST * OptimizeNot::operator ()(PabloAST * expr, PabloBlock * pb) {
     if (isa<Ones>(expr)) {
-    return pb->createZeroes();
+        return pb->createZeroes();
     }
     else if (isa<Zeroes>(expr)){
         return pb->createOnes();
     }
-    else if (Not * pe_not = dyn_cast<Not>(expr)) {
-        return pe_not->getExpr();
+    else if (Not * not1 = dyn_cast<Not>(expr)) {
+        return not1->getExpr();
     }
     return pb->createNotImm(expr);
 }
