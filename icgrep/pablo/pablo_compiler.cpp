@@ -17,6 +17,7 @@
 #include <re/re_name.h>
 #include <stdexcept>
 #include <include/simd-lib/bitblock.hpp>
+#include <sstream>
 
 #ifdef USE_LLVM_3_4
 #include <llvm/Analysis/Verifier.h>
@@ -616,7 +617,7 @@ void PabloCompiler::compileStatement(const Statement * stmt)
         bIfBody.CreateBr(ifEndBlock);
         //End Block
         IRBuilder<> bEnd(ifEndBlock);
-        for (const Assign * a : ifStatement->getDefined()) {
+        for (const Statement * a : ifStatement->getDefined()) {
             PHINode * phi = bEnd.CreatePHI(mBitBlockType, 2, a->getName()->str());
             auto f = mMarkerMap.find(a);
             assert (f != mMarkerMap.end());
@@ -839,7 +840,11 @@ Value * PabloCompiler::compileExpression(const PabloAST * expr) {
     }
     auto f = mMarkerMap.find(expr);
     if (f == mMarkerMap.end()) {
-        throw std::runtime_error("Unrecognized Pablo expression type; can't compile.");
+        std::stringstream str;
+        str << "\"";
+        PabloPrinter::print(expr, str);
+        str << "\" was used before definition!";
+        throw std::runtime_error(str.str());
     }
     return f->second;
 }

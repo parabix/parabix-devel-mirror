@@ -6,7 +6,8 @@
 
 #include <pablo/pe_not.h>
 #include <pablo/codegenstate.h>
-
+#include <pablo/pe_ones.h>
+#include <pablo/pe_zeroes.h>
 
 namespace pablo {
 
@@ -17,6 +18,9 @@ Not::Not(PabloAST * expr, PabloBlock * parent)
 }
 
 PabloAST * OptimizeNot::operator ()(PabloAST * expr, PabloBlock * pb) {
+
+    assert (expr && pb);
+
     if (isa<Ones>(expr)) {
         return pb->createZeroes();
     }

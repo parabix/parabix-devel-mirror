@@ -6,6 +6,9 @@
 
 #include <pablo/pe_and.h>
 #include <pablo/codegenstate.h>
+#include <pablo/pe_not.h>
+#include <pablo/pe_zeroes.h>
+#include <pablo/pe_ones.h>
 
 namespace pablo {
 
@@ -16,6 +19,9 @@ And::And(PabloAST * expr1, PabloAST * expr2, PabloBlock * parent)
 }
 
 PabloAST * OptimizeAnd::operator ()(PabloAST * expr1, PabloAST * expr2, PabloBlock * pb) {
+
+    assert (expr1 && expr2 && pb);
+
     if (isa<Zeroes>(expr2) || isa<Ones>(expr1)) {
         return expr2;
     }

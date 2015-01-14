@@ -7,7 +7,7 @@
 namespace pablo {
 
 class String : public PabloAST {
-    friend String * makeString(const std::string value) noexcept;
+    friend class SymbolGenerator;
 public:
     static inline bool classof(const PabloAST * e) {
         return e->getClassTypeId() == ClassTypeId::String;
@@ -34,11 +34,6 @@ protected:
 private:
     const std::string mValue;
 };
-
-inline String * makeString(const std::string value) noexcept {
-    return new String(std::move(value));
-}
-
 
 }
 

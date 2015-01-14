@@ -50,13 +50,14 @@ void PabloPrinter::print(const StatementList & stmts, std::ostream & strm) {
 void PabloPrinter::print(const StatementList & stmts, std::string indent, std::ostream & strm) {
     for (const Statement * stmt : stmts) {
         print(stmt, indent, strm);
+        strm << std::endl;
     }
 }
 
 void PabloPrinter::print(const Statement * stmt, std::string indent, std::ostream & strm) {
     strm << indent;
     if (stmt == nullptr) {
-        strm << "<null-stmt>" << std::endl;
+        strm << "<null-stmt>";
     }
     else if (const Assign * an = dyn_cast<const Assign>(stmt)) {
         if (an->isOutputAssignment()) {
@@ -64,12 +65,10 @@ void PabloPrinter::print(const Statement * stmt, std::string indent, std::ostrea
         }
         strm << an->getName()->str() << " = ";
         print(an->getExpr(), strm);
-        strm << std::endl;
     }
     else if (const Next * next = dyn_cast<const Next>(stmt)) {        
         strm << "Next(" << next->getName()->str() << ") = ";
         print(next->getExpr(), strm);
-        strm << std::endl;
     }
     else if (const If * ifstmt = dyn_cast<const If>(stmt)) {
         strm << "if ";
@@ -85,7 +84,7 @@ void PabloPrinter::print(const Statement * stmt, std::string indent, std::ostrea
     }
     else if (const Call * pablo_call = dyn_cast<const Call>(stmt)) {
         print(pablo_call, strm);
-        strm << " = " << pablo_call->getCallee()->str() << "()" << std::endl;;
+        strm << " = " << pablo_call->getCallee()->str() << "()";
     }
     else if (const And * pablo_and = dyn_cast<const And>(stmt)) {
         print(pablo_and, strm);
@@ -93,7 +92,7 @@ void PabloPrinter::print(const Statement * stmt, std::string indent, std::ostrea
         print(pablo_and->getExpr1(), strm);
         strm << " & ";
         print(pablo_and->getExpr2(), strm);
-        strm << ")" << std::endl;;
+        strm << ")";
     }
     else if (const Or * pablo_or = dyn_cast<const Or>(stmt)) {
         print(pablo_or, strm);
@@ -101,7 +100,7 @@ void PabloPrinter::print(const Statement * stmt, std::string indent, std::ostrea
         print(pablo_or->getExpr1(), strm);
         strm << " | ";
         print(pablo_or->getExpr2(), strm);
-        strm << ")" << std::endl;;
+        strm << ")";
     }
     else if (const Xor * pablo_xor = dyn_cast<const Xor>(stmt)) {
         print(pablo_xor, strm);
@@ -109,7 +108,7 @@ void PabloPrinter::print(const Statement * stmt, std::string indent, std::ostrea
         print(pablo_xor->getExpr1(), strm);
         strm << " ^ ";
         print(pablo_xor->getExpr2(), strm);
-        strm << ")" << std::endl;;
+        strm << ")";
     }
     else if (const Sel * pablo_sel = dyn_cast<const Sel>(stmt)) {
         print(pablo_sel, strm);
@@ -119,19 +118,19 @@ void PabloPrinter::print(const Statement * stmt, std::string indent, std::ostrea
         print(pablo_sel->getTrueExpr(), strm);
         strm << " : ";
         print(pablo_sel->getFalseExpr(), strm);
-        strm << ")" << std::endl;;
+        strm << ")";
     }
     else if (const Not * pablo_not = dyn_cast<const Not>(stmt)) {
         print(pablo_not, strm);
         strm << " = (~";
         print(pablo_not->getExpr(), strm);
-        strm << ")" << std::endl;;
+        strm << ")";
     }
     else if (const Advance * adv = dyn_cast<const Advance>(stmt)) {
         print(adv, strm);
         strm << " = pablo.Advance(";
         print(adv->getExpr(), strm);
-        strm << ", " << std::to_string(adv->getAdvanceAmount()) << ")" << std::endl;;
+        strm << ", " << std::to_string(adv->getAdvanceAmount()) << ")";
     }
     else if (const MatchStar * mstar = dyn_cast<const MatchStar>(stmt)) {
         print(mstar, strm);
@@ -139,7 +138,7 @@ void PabloPrinter::print(const Statement * stmt, std::string indent, std::ostrea
         print(mstar->getMarker(), strm);
         strm << ", ";
         print(mstar->getCharClass(), strm);
-        strm << ")" << std::endl;;
+        strm << ")";
     }
     else if (const ScanThru * sthru = dyn_cast<const ScanThru>(stmt)) {
         print(sthru, strm);
@@ -147,7 +146,7 @@ void PabloPrinter::print(const Statement * stmt, std::string indent, std::ostrea
         print(sthru->getScanFrom(), strm);
         strm << ", ";
         print(sthru->getScanThru(), strm);
-        strm << ")" << std::endl;;
+        strm << ")";
     }
     else {
         strm << indent << "**UNKNOWN Pablo Statement type **" << std::endl;

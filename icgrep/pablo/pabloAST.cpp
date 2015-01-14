@@ -110,9 +110,40 @@ PMDNode * PabloAST::getMetadata(const std::string & name) {
     return f->second;
 }
 
-PabloAST * Statement::setOperand(const unsigned index, PabloAST * value) {
+void PabloAST::replaceAllUsesWith(PabloAST * expr) {
+    #ifndef NDEBUG
+    unsigned __userCount = getNumUses();
+    #endif
+    while (!mUsers.empty()) {
+        PabloAST * user = mUsers.pop_back_val();
+        assert(--__userCount == getNumUses());
+        if (isa<Statement>(user)) {
+            cast<Statement>(user)->replaceUsesOfWith(this, expr);
+        }
+        assert(__userCount == getNumUses());
+    }
+    assert (getNumUses() == 0);
+}
+
+void Statement::setOperand(const unsigned index, PabloAST * value) {
     assert (index < getNumOperands());
-    return mParent->setOperandOf(this, index, value);
+    if (LLVM_UNLIKELY(mOperand[index] == value)) {
+        return;
+    }
+    PabloAST * priorValue = mOperand[index];
+    // Test just to be sure we don't have multiple operands pointing to
+    // what we're replacing. If not, remove this from the prior value's
+    // user list.
+    unsigned count = 0;
+    for (unsigned i = 0; i != getNumOperands(); ++i) {
+        count += (mOperand[index] == priorValue) ? 1 : 0;
+    }
+    assert (count >= 1);
+    if (LLVM_LIKELY(count == 1)) {
+        priorValue->removeUser(this);
+    }
+    mOperand[index] = value;
+    value->addUser(this);
 }
 
 void Statement::insertBefore(Statement * const statement) {
@@ -149,7 +180,8 @@ void Statement::insertAfter(Statement * const statement) {
     }
 }
 
-void Statement::removeFromParent() {
+Statement * Statement::removeFromParent() {
+    Statement * next = mNext;
     if (LLVM_LIKELY(mParent != nullptr)) {
         if (LLVM_UNLIKELY(mParent->mFirst == this)) {
             mParent->mFirst = mNext;
@@ -170,36 +202,64 @@ void Statement::removeFromParent() {
     mPrev = nullptr;
     mNext = nullptr;
     mParent = nullptr;
+    return next;
 }
 
-void Statement::replaceWith(Statement * const statement) {
-    if (statement != this) {
-        statement->removeFromParent();
-        statement->mParent = mParent;
-        statement->mNext = mNext;
-        statement->mPrev = mPrev;
+Statement * Statement::eraseFromParent(const bool recursively) {
+    Statement * next = removeFromParent();
+    // remove this statement from its operands' users list
+    for (PabloAST * op : mOperand) {
+        op->removeUser(this);
+        if (recursively && isa<Statement>(op) && op->getNumUses() == 0) {
+            cast<Statement>(op)->eraseFromParent();
+        }
+    }
+    return next;
+}
+
+void Statement::replaceWith(PabloAST * const expr) {
+
+    if (LLVM_UNLIKELY(expr == this)) {
+        return;
+    }
+
+    if (isa<Statement>(expr)) {
+        Statement * stmt = cast<Statement>(expr);
+        stmt->removeFromParent();
+        stmt->mParent = mParent;
+        stmt->mNext = mNext;
+        stmt->mPrev = mPrev;
         if (LLVM_LIKELY(mPrev != nullptr)) {
-            mPrev->mNext = statement;
+            mPrev->mNext = stmt;
         }
         if (LLVM_LIKELY(mNext != nullptr)) {
-            mNext->mPrev = statement;
+            mNext->mPrev = stmt;
         }
         mParent=nullptr;
         mNext=nullptr;
         mPrev=nullptr;
     }
+    else {
+        removeFromParent();
+    }
+
+    // remove this statement from its operands' users list
+    for (PabloAST * op : mOperand) {
+        op->removeUser(this);
+    }
+
+    while (!mUsers.empty()) {
+        PabloAST * user = mUsers.pop_back_val();
+        if (isa<Statement>(user)) {
+            assert(std::count(cast<Statement>(user)->mOperand.begin(), cast<Statement>(user)->mOperand.end(), this) == 1);
+            cast<Statement>(user)->replaceUsesOfWith(this, expr);
+        }
+    }
+
 }
 
 Statement::~Statement() {
 
-}
-
-void StatementList::setInsertPoint(Statement * const statement) {
-    mInsertionPoint = statement;
-}
-
-void StatementList::setInsertPoint(StatementList * const list) {
-    mInsertionPoint = list->mLast;
 }
 
 void StatementList::insert(Statement * const statement) {
@@ -217,10 +277,6 @@ void StatementList::insert(Statement * const statement) {
         mLast = (mLast == mInsertionPoint) ? statement : mLast;
         mInsertionPoint = statement;
     }
-}
-
-void StatementList::insertAfterLastOperand(Statement * const statement) {
-    assert (false);
 }
 
 }

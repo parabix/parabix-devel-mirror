@@ -6,6 +6,10 @@
 
 #include <pablo/pe_sel.h>
 #include <pablo/codegenstate.h>
+#include <pablo/pe_ones.h>
+#include <pablo/pe_zeroes.h>
+#include <pablo/pe_not.h>
+
 
 namespace pablo {
 
@@ -16,6 +20,9 @@ Sel::Sel(PabloAST* if_expr, PabloAST* t_expr, PabloAST* f_expr, PabloBlock * par
 }
 
 PabloAST * OptimizeSel::operator()(PabloAST * if_expr, PabloAST * t_expr, PabloAST * f_expr, PabloBlock * pb) {
+
+    assert (if_expr && t_expr && f_expr && pb);
+
     if (isa<Ones>(if_expr)) {
         return t_expr;
     }

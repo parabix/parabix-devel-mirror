@@ -414,11 +414,11 @@ MarkerType RE_Compiler::processUnboundedRep(RE * repeated, MarkerType marker, Pa
 
         PabloAST * loopComputation = markerVar(AdvanceMarker(process(repeated, makeMarker(InitialPostPositionByte, whileTest), wb), InitialPostPositionByte, wb));
         Next * nextWhileTest = wb.createNext(whileTest, wb.createAnd(loopComputation, wb.createNot(whileAccum)));
-        wb.createNext(whileAccum, wb.createOr(loopComputation, whileAccum));
+        Next * nextWhileAccum = wb.createNext(whileAccum, wb.createOr(loopComputation, whileAccum));
 
         pb.createWhile(nextWhileTest, wb);
 
-        return makeMarker(InitialPostPositionByte, pb.createAssign("unbounded", whileAccum));
+        return makeMarker(InitialPostPositionByte, pb.createAssign("unbounded", nextWhileAccum));
     }    
 } // end of namespace re
 }

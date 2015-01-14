@@ -31,7 +31,12 @@ class PabloAST {
     friend class PabloBlock;
     friend class SymbolGenerator;
     typedef std::unordered_map<std::string, PMDNode *> PMDNodeMap;
+
 public:
+
+    using Users = SetVector<PabloAST *>;
+    using user_iterator = Users::iterator;
+
     typedef SlabAllocator<4096> Allocator;
     enum class ClassTypeId : unsigned {
         Advance
@@ -65,6 +70,28 @@ public:
         mAllocator.release_memory();
     }
 
+    inline user_iterator user_begin() const {
+        return mUsers.begin();
+    }
+
+    inline user_iterator user_end() const {
+        return mUsers.end();
+    }
+
+    inline Users & users() {
+        return mUsers;
+    }
+
+    inline const Users & users() const {
+        return mUsers;
+    }
+
+    void replaceAllUsesWith(PabloAST * expr);
+
+    inline Users::size_type getNumUses() const {
+        return mUsers.size();
+    }
+
     void* operator new (std::size_t size) noexcept {
         return mAllocator.allocate(size);
     }
@@ -75,7 +102,7 @@ protected:
     {
 
     }
-    inline void addUser(PabloAST * user) {
+    inline void addUser(PabloAST * user) {        
         mUsers.insert(user);
     }
     inline void removeUser(PabloAST * user) {
@@ -84,7 +111,7 @@ protected:
     static Allocator        mAllocator;
 private:
     const ClassTypeId       mClassTypeId;
-    SetVector<PabloAST *>   mUsers;
+    Users                   mUsers;
     PMDNodeMap *            mMetadataMap;
 };
 
@@ -98,11 +125,16 @@ class Statement : public PabloAST {
     friend class StatementList;
     friend class If;
     friend class While;
+    friend class Simplifier;
     friend class PabloBlock;
 public:
     static inline bool classof(const PabloAST * e) {
         switch (e->getClassTypeId()) {
             case PabloAST::ClassTypeId::String:
+            case PabloAST::ClassTypeId::Integer:
+            case PabloAST::ClassTypeId::Zeroes:
+            case PabloAST::ClassTypeId::Ones:
+            case PabloAST::ClassTypeId::Var:
                 return false;
             default:
                 return true;
@@ -115,33 +147,30 @@ public:
         return false;
     }
 
-    inline PabloAST * replaceUsesOfWith(PabloAST * from, PabloAST * to) {
-        if (from == to) {
-            return this;
-        }
+    inline void replaceUsesOfWith(PabloAST * from, PabloAST * to) {
         for (unsigned i = 0; i != getNumOperands(); ++i) {
             if (getOperand(i) == from) {
-                return setOperand(i, to);
+                setOperand(i, to);
             }
         }
-        return this;
     }
 
-    PabloAST * getOperand(const unsigned index) const {
+    inline PabloAST * getOperand(const unsigned index) const {
         assert (index < getNumOperands());
         return mOperand[index];
     }
 
-    PabloAST * setOperand(const unsigned index, PabloAST * value);
+    void setOperand(const unsigned index, PabloAST * value);
 
-    unsigned getNumOperands() const {
+    inline unsigned getNumOperands() const {
         return mOperand.size();
     }
 
     void insertBefore(Statement * const statement);
     void insertAfter(Statement * const statement);
-    void removeFromParent();
-    void replaceWith(Statement * const statement);
+    Statement * removeFromParent();
+    Statement * eraseFromParent(const bool recursively = false);
+    void replaceWith(PabloAST * const expr);
 
     inline const String * getName() const {
         return mName;
@@ -168,7 +197,9 @@ protected:
             op->addUser(this);
         }
     }
-
+    inline void setName(const String * name) {
+        mName = name;
+    }
     virtual ~Statement() = 0;
 protected:
     const String *              mName;
@@ -396,25 +427,27 @@ public:
         return const_reverse_iterator(nullptr);
     }
 
-    Statement * front() const {
+    inline Statement * front() const {
         return mFirst;
     }
 
-    Statement * back() const {
+    inline Statement * back() const {
         return mLast;
     }
 
-    void setInsertPoint(Statement * const statement);
+    inline void setInsertPoint(Statement * const statement) {
+        mInsertionPoint = statement;
+    }
 
-    void setInsertPoint(StatementList * const list);
+    inline void setInsertPoint(StatementList * const list) {
+        mInsertionPoint = list->back();
+    }
 
-    Statement * getInsertPoint() const {
+    inline Statement * getInsertPoint() const {
         return mInsertionPoint;
     }
 
     void insert(Statement * const statement);
-
-    void insertAfterLastOperand(Statement * const statement);
 
 private:
 

@@ -6,6 +6,7 @@
 
 #include <pablo/symbol_generator.h>
 #include <pablo/pe_string.h>
+#include <pablo/pe_integer.h>
 
 namespace pablo {
 
@@ -19,8 +20,21 @@ String * SymbolGenerator::get(const std::string name) {
     auto f = mStringMap.find(name);
     String * result;
     if (f == mStringMap.end()) {
-        result = makeString(name);
-        mStringMap.insert(std::make_pair(std::move(name), result));
+        result = new String(std::move(name));
+        mStringMap.insert(std::make_pair(name, result));
+    }
+    else {
+        result = f->second;
+    }
+    return result;
+}
+
+Integer * SymbolGenerator::get(const integer_t value) {
+    auto f = mIntegerMap.find(value);
+    Integer * result;
+    if (f == mIntegerMap.end()) {
+        result = new Integer(value);
+        mIntegerMap.insert(std::make_pair(value, result));
     }
     else {
         result = f->second;

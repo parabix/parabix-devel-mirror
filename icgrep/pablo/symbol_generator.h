@@ -14,20 +14,25 @@
 namespace pablo {
 
 class String;
+class Integer;
 
 class SymbolGenerator {
     friend class PabloBlock;
 public:
+    typedef u_int64_t integer_t;
+
     String * get(const std::string name);
     String * make(const std::string prefix);
+    Integer * get(const integer_t value);
 protected:
     SymbolGenerator();
     void* operator new (std::size_t size) noexcept {
         return PabloAST::mAllocator.allocate(size);
     }
 private:
-    std::unordered_map<std::string, unsigned>   mPrefixMap;
+    std::unordered_map<std::string, unsigned>   mPrefixMap;    
     std::unordered_map<std::string, String *>   mStringMap;
+    std::unordered_map<integer_t, Integer *>    mIntegerMap;
 };
 
 }

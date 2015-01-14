@@ -17,13 +17,13 @@ static_assert(false, "Need to turn on them together.");
 #endif
 
 //Pablo Expressions
-#include <pablo/codegenstate.h>
-#include <pablo/pabloAST.h>
 #include <string>
 #include <list>
 #include <map>
 #include <algorithm>
 #include <llvm/ADT/Twine.h>
+#include <unordered_map>
+#include <string>
 
 namespace llvm {
     class Value;
@@ -35,11 +35,19 @@ namespace llvm {
     class Constant;
     class FunctionType;
     class Function;
+    class BasicBlock;
 }
+
+namespace pablo {
 
 using namespace llvm;
 
-namespace pablo {
+class PabloAST;
+class PabloBlock;
+class String;
+class Var;
+class Statement;
+class StatementList;
 
 struct LLVM_Gen_RetVal
 {

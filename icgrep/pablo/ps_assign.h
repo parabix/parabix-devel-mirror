@@ -8,8 +8,6 @@
 #define PS_SETMARKER_H
 
 #include <pablo/pe_string.h>
-#include <pablo/symbol_generator.h>
-#include <array>
 
 namespace pablo {
 
@@ -35,6 +33,7 @@ public:
     inline int getOutputIndex() const {
         return mOutputIndex;
     }
+    bool isConstant() const;
 protected:
     explicit Assign(PabloAST * expr, int outputIndex, String * name, PabloBlock * parent)
     : Statement(ClassTypeId::Assign, {expr}, name, parent)

@@ -6,6 +6,9 @@
 
 #include <pablo/pe_xor.h>
 #include <pablo/codegenstate.h>
+#include <pablo/pe_ones.h>
+#include <pablo/pe_zeroes.h>
+#include <pablo/pe_not.h>
 
 namespace pablo {
 
@@ -16,6 +19,9 @@ Xor::Xor(PabloAST * expr1, PabloAST * expr2, PabloBlock * parent)
 }
 
 PabloAST * OptimizeXor::operator()(PabloAST * expr1, PabloAST * expr2, PabloBlock * pb) {
+
+    assert (expr1 && expr2 && pb);
+
     if (isa<Ones>(expr1)) {
         return pb->createNot(expr2);
     }

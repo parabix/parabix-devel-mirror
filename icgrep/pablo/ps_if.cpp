@@ -1,5 +1,6 @@
 #include <pablo/ps_if.h>
 #include <pablo/codegenstate.h>
+#include <pablo/ps_assign.h>
 
 namespace pablo {
 
@@ -19,8 +20,20 @@ If::If(PabloAST * expr, DefinedVars && definedVars, PabloBlock & body, PabloBloc
     // Since the implied 'Next' node is a user of the Assign node, and the Assign node is
     // embedded into the If, the defined var is a user of the If node.
 
-    for (Assign * x : mDefined) {
-        addUser(x);
+    for (PabloAST * assign : mDefined) {
+        assign->addUser(this);
+        addUser(assign);
+    }
+}
+
+void If::replaceCondOrDefinedVar(PabloAST * from, PabloAST * to) {
+    if (mOperand[0] == from) {
+        mOperand[0] = to;
+    }
+    if (isa<Statement>(from) && mDefined.remove(cast<Statement>(from))) {
+        if (isa<Statement>(to)) {
+            mDefined.insert(cast<Statement>(to));
+        }
     }
 }
 
