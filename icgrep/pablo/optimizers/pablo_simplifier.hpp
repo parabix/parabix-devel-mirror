@@ -13,9 +13,8 @@ public:
 protected:
     Simplifier();
 private:
-    static void eliminateRedundantCode(ExpressionTable * predecessor, PabloBlock & block);
-
-    static void foldConstantAssigns(PabloBlock & block);
+    static void eliminateRedundantCode(PabloBlock & block, ExpressionTable * predecessor = nullptr);
+    static void deadCodeElimination(PabloBlock & block);
 private:
 
 };

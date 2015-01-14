@@ -17,20 +17,4 @@ Not::Not(PabloAST * expr, PabloBlock * parent)
 
 }
 
-PabloAST * OptimizeNot::operator ()(PabloAST * expr, PabloBlock * pb) {
-
-    assert (expr && pb);
-
-    if (isa<Ones>(expr)) {
-        return pb->createZeroes();
-    }
-    else if (isa<Zeroes>(expr)){
-        return pb->createOnes();
-    }
-    else if (Not * not1 = dyn_cast<Not>(expr)) {
-        return not1->getExpr();
-    }
-    return pb->createNotImm(expr);
-}
-
 }

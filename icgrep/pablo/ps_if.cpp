@@ -7,7 +7,7 @@ namespace pablo {
 If::If(PabloAST * expr, DefinedVars && definedVars, PabloBlock & body, PabloBlock * parent)
 : Statement(ClassTypeId::If, {expr}, nullptr, parent)
 , mBody(body)
-, mDefined(definedVars.begin(), definedVars.end())
+, mDefined(std::move(definedVars))
 , mCarryCount(0)
 , mAdvanceCount(0)
 {
@@ -18,7 +18,9 @@ If::If(PabloAST * expr, DefinedVars && definedVars, PabloBlock & body, PabloBloc
     //    Next(Assign(X), ...)
     //
     // Since the implied 'Next' node is a user of the Assign node, and the Assign node is
-    // embedded into the If, the defined var is a user of the If node.
+    // embedded into the If, the defined var is a user of the If node. However, since the
+    // Assign's value is also dependant on the 'Next' value, the If node is also a user
+    // of it.
 
     for (PabloAST * assign : mDefined) {
         assign->addUser(this);
@@ -26,15 +28,6 @@ If::If(PabloAST * expr, DefinedVars && definedVars, PabloBlock & body, PabloBloc
     }
 }
 
-void If::replaceCondOrDefinedVar(PabloAST * from, PabloAST * to) {
-    if (mOperand[0] == from) {
-        mOperand[0] = to;
-    }
-    if (isa<Statement>(from) && mDefined.remove(cast<Statement>(from))) {
-        if (isa<Statement>(to)) {
-            mDefined.insert(cast<Statement>(to));
-        }
-    }
-}
+
 
 }

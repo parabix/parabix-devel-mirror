@@ -15,7 +15,6 @@ namespace pablo {
 class PabloBlock;
 
 class And : public Statement {
-    friend struct OptimizeAnd;
     friend class PabloBlock;
 public:
     static inline bool classof(const PabloAST * e) {
@@ -34,10 +33,6 @@ public:
     }
 protected:
     And(PabloAST * expr1, PabloAST * expr2, PabloBlock * parent);
-};
-
-struct OptimizeAnd {
-    PabloAST * operator()(PabloAST * expr1, PabloAST * expr2, PabloBlock * pb);
 };
 
 }

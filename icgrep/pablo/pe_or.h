@@ -15,7 +15,6 @@ namespace pablo {
 class PabloBlock;
 
 class Or : public Statement {
-    friend struct OptimizeOr;
     friend class PabloBlock;
 public:
     static inline bool classof(const PabloAST * e) {
@@ -34,10 +33,6 @@ public:
     }
 protected:
     Or(PabloAST * expr1, PabloAST * expr2, PabloBlock * parent);
-};
-
-struct OptimizeOr {
-    PabloAST * operator()(PabloAST * expr1, PabloAST * expr2, PabloBlock * pb);
 };
 
 }

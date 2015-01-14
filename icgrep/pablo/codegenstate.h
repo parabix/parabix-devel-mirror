@@ -53,11 +53,6 @@ class While;
 
 class PabloBlock : public StatementList {
     friend class pablo::PabloAST;
-    friend struct OptimizeAnd;
-    friend struct OptimizeOr;
-    friend struct OptimizeSel;
-    friend struct OptimizeXor;
-    friend struct OptimizeNot;
 public:
 
     inline static PabloBlock & Create() {
@@ -107,16 +102,6 @@ public:
     PabloAST * createScanThru(PabloAST * from, PabloAST * thru);
 
     PabloAST * createSel(PabloAST * condition, PabloAST * trueExpr, PabloAST * falseExpr);
-
-    And * createAndImm(PabloAST * expr1, PabloAST * expr2);
-
-    Not * createNotImm(PabloAST * expr);
-
-    Or * createOrImm(PabloAST * expr1, PabloAST * expr2);
-
-    Xor * createXorImm(PabloAST * expr1, PabloAST * expr2);
-
-    Sel * createSelImm(PabloAST * condition, PabloAST * trueExpr, PabloAST * falseExpr);
 
     If * createIf(PabloAST * condition, std::vector<Assign *> && definedVars, PabloBlock & body);
 

@@ -29,32 +29,6 @@ struct ExpressionMap {
         return std::make_pair(object, true);
     }
 
-
-//    template <class Type, typename... Params>
-//    inline Type * findOrMake(const PabloAST::ClassTypeId type, Args... args, Params... params) {
-//        Key key = std::make_tuple(type, args...);
-//        PabloAST * const f = find(key);
-//        if (f) {
-//            return cast<Type>(f);
-//        }
-//        PabloAST * const expr = new Type(std::forward<Args>(args)..., std::forward<Params>(params)...);
-//        mMap.insert(std::make_pair(std::move(key), expr));
-//        return cast<Type>(expr);
-//    }
-
-//    template <class Functor, typename... Params>
-//    inline PabloAST * findOrCall(const PabloAST::ClassTypeId type, Args... args, Params... params) {
-//        Key key = std::make_tuple(type, args...);
-//        PabloAST * const f = find(key);
-//        if (f) {
-//            return f;
-//        }
-//        Functor mf;
-//        PabloAST * const expr = mf(std::forward<Args>(args)..., std::forward<Params>(params)...);
-//        mMap.insert(std::make_pair(std::move(key), expr));
-//        return expr;
-//    }
-
     inline bool erase(const PabloAST::ClassTypeId type, Args... args) {
         Key key = std::make_tuple(type, args...);
         auto itr = mMap.find(key);
@@ -64,6 +38,13 @@ struct ExpressionMap {
         mMap.erase(itr);
         return true;
     }
+
+    inline PabloAST * find(const PabloAST::ClassTypeId type, Args... args) const {
+        Key key = std::make_tuple(type, args...);
+        return find(key);
+    }
+
+private:
 
     inline PabloAST * find(const Key & key) const {
         // check this map to see if we have it
@@ -121,6 +102,10 @@ struct ExpressionTable {
             case PabloAST::ClassTypeId::And:
             case PabloAST::ClassTypeId::Or:
             case PabloAST::ClassTypeId::Xor:
+                // test whether the communative version of this statement exists
+                if (PabloAST * commExpr = mBinary.find(stmt->getClassTypeId(), stmt->getOperand(1), stmt->getOperand(0))) {
+                    return std::make_pair(commExpr, false);
+                }
             case PabloAST::ClassTypeId::ScanThru:
             case PabloAST::ClassTypeId::MatchStar:
             case PabloAST::ClassTypeId::Next:

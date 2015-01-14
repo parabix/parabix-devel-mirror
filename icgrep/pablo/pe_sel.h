@@ -15,7 +15,6 @@ namespace pablo {
 class PabloBlock;
 
 class Sel : public Statement {
-    friend struct OptimizeSel;
     friend class PabloBlock;
 public:
     static inline bool classof(const PabloAST * e) {
@@ -37,10 +36,6 @@ public:
     }
 protected:
     Sel(PabloAST* if_expr, PabloAST* t_expr, PabloAST* f_expr, PabloBlock * parent);
-};
-
-struct OptimizeSel {
-    PabloAST * operator()(PabloAST * if_expr, PabloAST * t_expr, PabloAST * f_expr, PabloBlock * pb);
 };
 
 }

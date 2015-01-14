@@ -4,22 +4,11 @@
  *  icgrep is a trademark of International Characters.
  */
 
-#include "pabloAST.h"
-#include "pe_advance.h"
-#include "pe_and.h"
-#include "pe_call.h"
-#include "pe_matchstar.h"
-#include "pe_not.h"
-#include "pe_or.h"
-#include "pabloAST.h"
-#include "pe_scanthru.h"
-#include "pe_sel.h"
-#include "pe_var.h"
-#include "pe_xor.h"
-#include "pe_zeroes.h"
-#include "pe_ones.h"
+#include <pablo/pabloAST.h>
 #include <pablo/codegenstate.h>
 #include <llvm/Support/Compiler.h>
+
+#include <pablo/printer_pablos.h>
 
 namespace pablo {
 
@@ -206,56 +195,29 @@ Statement * Statement::removeFromParent() {
 }
 
 Statement * Statement::eraseFromParent(const bool recursively) {
-    Statement * next = removeFromParent();
+
     // remove this statement from its operands' users list
     for (PabloAST * op : mOperand) {
         op->removeUser(this);
-        if (recursively && isa<Statement>(op) && op->getNumUses() == 0) {
-            cast<Statement>(op)->eraseFromParent();
+    }
+
+    if (recursively) {
+        for (PabloAST * op : mOperand) {
+            if (op->getNumUses() == 0 && isa<Statement>(op)) {
+                cast<Statement>(op)->eraseFromParent(true);
+            }
         }
     }
-    return next;
+
+    return removeFromParent();
 }
 
-void Statement::replaceWith(PabloAST * const expr) {
-
+Statement * Statement::replaceWith(PabloAST * const expr) {
     if (LLVM_UNLIKELY(expr == this)) {
-        return;
+        return getNextNode();
     }
-
-    if (isa<Statement>(expr)) {
-        Statement * stmt = cast<Statement>(expr);
-        stmt->removeFromParent();
-        stmt->mParent = mParent;
-        stmt->mNext = mNext;
-        stmt->mPrev = mPrev;
-        if (LLVM_LIKELY(mPrev != nullptr)) {
-            mPrev->mNext = stmt;
-        }
-        if (LLVM_LIKELY(mNext != nullptr)) {
-            mNext->mPrev = stmt;
-        }
-        mParent=nullptr;
-        mNext=nullptr;
-        mPrev=nullptr;
-    }
-    else {
-        removeFromParent();
-    }
-
-    // remove this statement from its operands' users list
-    for (PabloAST * op : mOperand) {
-        op->removeUser(this);
-    }
-
-    while (!mUsers.empty()) {
-        PabloAST * user = mUsers.pop_back_val();
-        if (isa<Statement>(user)) {
-            assert(std::count(cast<Statement>(user)->mOperand.begin(), cast<Statement>(user)->mOperand.end(), this) == 1);
-            cast<Statement>(user)->replaceUsesOfWith(this, expr);
-        }
-    }
-
+    replaceAllUsesWith(expr);
+    return eraseFromParent();
 }
 
 Statement::~Statement() {

@@ -14,7 +14,6 @@ namespace pablo {
 class PabloBlock;
 
 class Not : public Statement {
-    friend struct OptimizeNot;
     friend class PabloBlock;
 public:
     static inline bool classof(const PabloAST * e) {
@@ -30,10 +29,6 @@ public:
     }
 protected:
     Not(PabloAST * expr, PabloBlock * parent);
-};
-
-struct OptimizeNot {
-    PabloAST * operator()(PabloAST * expr, PabloBlock * pb);
 };
 
 }

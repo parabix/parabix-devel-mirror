@@ -15,7 +15,6 @@ namespace pablo {
 class PabloBlock;
 
 class Xor : public Statement {
-    friend struct OptimizeXor;
     friend class PabloBlock;
 public:
     static inline bool classof(const PabloAST * e) {
@@ -34,10 +33,6 @@ public:
     }
 protected:
     Xor(PabloAST * expr1, PabloAST * expr2, PabloBlock * parent);
-};
-
-struct OptimizeXor {
-    PabloAST * operator()(PabloAST * expr1, PabloAST * expr2, PabloBlock * pb);
 };
 
 }

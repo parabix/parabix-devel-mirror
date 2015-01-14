@@ -170,7 +170,7 @@ public:
     void insertAfter(Statement * const statement);
     Statement * removeFromParent();
     Statement * eraseFromParent(const bool recursively = false);
-    void replaceWith(PabloAST * const expr);
+    Statement * replaceWith(PabloAST * const expr);
 
     inline const String * getName() const {
         return mName;
