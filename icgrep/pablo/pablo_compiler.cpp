@@ -134,9 +134,7 @@ LLVM_Gen_RetVal PabloCompiler::compile(PabloBlock & pb)
         throw std::runtime_error("Could not create ExecutionEngine: " + errMessage);
     }
 
-    if (!mCalleeMap.empty()) {
-        DeclareCallFunctions();
-    }
+    DeclareCallFunctions();
 
     Function::arg_iterator args = mFunction->arg_begin();
     mBasisBitsAddr = args++;
@@ -167,8 +165,8 @@ LLVM_Gen_RetVal PabloCompiler::compile(PabloBlock & pb)
     //Generate the IR instructions for the function.
     compileStatements(pb.statements());
 
-    assert (mCarryQueueIdx <= mCarryQueueSize);
-    assert (mAdvanceQueueIdx <= mAdvanceQueueSize);
+    assert (mCarryQueueIdx == mCarryQueueSize);
+    assert (mAdvanceQueueIdx == mAdvanceQueueSize);
     assert (mNestingDepth == 0);
     //Terminate the block
     ReturnInst::Create(mMod->getContext(), mBasicBlock);
@@ -444,6 +442,10 @@ void PabloCompiler::Examine(PabloAST *expr)
     else if (Or * pablo_or = dyn_cast<Or>(expr)) {
         Examine(pablo_or->getExpr1());
         Examine(pablo_or->getExpr2());
+    }
+    else if (Xor * pablo_xor = dyn_cast<Xor>(expr)) {
+        Examine(pablo_xor->getExpr1());
+        Examine(pablo_xor->getExpr2());
     }
     else if (Sel * pablo_sel = dyn_cast<Sel>(expr)) {
         Examine(pablo_sel->getCondition());

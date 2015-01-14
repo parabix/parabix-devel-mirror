@@ -19,6 +19,7 @@ static_assert(false, "Need to turn on them together.");
 //Pablo Expressions
 #include <string>
 #include <list>
+#include <vector>
 #include <map>
 #include <algorithm>
 #include <llvm/ADT/Twine.h>
