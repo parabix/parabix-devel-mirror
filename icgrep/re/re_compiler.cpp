@@ -332,39 +332,63 @@ MarkerType RE_Compiler::process(Rep * rep, MarkerType marker, PabloBlock & pb) {
     if (ub == Rep::UNBOUNDED_REP) {
         return processUnboundedRep(rep->getRE(), marker, pb);
     }
+    else if (ub == lb) { // if (rep->getUB() != Rep::UNBOUNDED_REP)
+        return marker;
+    }
     else { // if (rep->getUB() != Rep::UNBOUNDED_REP)
         return processBoundedRep(rep->getRE(), ub - lb, marker, pb);
     }
 }
 
 /*
-   Given a stream |repeated| marking positions immediately after matches to an item
-   of length |repeated_lgth|, compute a stream marking positions immediately after
-   |repeat_count| consecutive occurrences of such items.
+   Given a stream |repeated| marking positions associated with matches to an item
+   of length |repeated_lgth|, compute a stream marking |repeat_count| consecutive 
+   occurrences of such items.
 */
 
-inline Assign * RE_Compiler::consecutive(Assign * repeated, int repeated_lgth, int repeat_count, pablo::PabloBlock & pb) {
+inline Assign * RE_Compiler::consecutive1(Assign * repeated, int repeated_lgth, int repeat_count, pablo::PabloBlock & pb) {
         int i = repeated_lgth;
         int total_lgth = repeat_count * repeated_lgth;
         Assign * consecutive_i = repeated;
-        while (i * 2 < total_lgth) {
+        while (i * 2 <= total_lgth) {
             PabloAST * v = consecutive_i;
-            consecutive_i = pb.createAssign("consecutive", pb.createAnd(v, pb.createAdvance(v, i)));
+            PabloAST * v2 =  pb.createAdvance(v, i);
             i *= 2;
+            consecutive_i = pb.createAssign("at" + std::to_string(i) + "inarow" , pb.createAnd(v,v2));
         }        
         if (i < total_lgth) {
             PabloAST * v = consecutive_i;
-            consecutive_i = pb.createAssign("consecutive", pb.createAnd(v, pb.createAdvance(v, total_lgth - i)));
+            consecutive_i = pb.createAssign("at" + std::to_string(total_lgth) + "inarow" , pb.createAnd(v, pb.createAdvance(v, total_lgth - i)));
         }
         return consecutive_i;
 }
 
+inline Assign * RE_Compiler::reachable(Assign * repeated, int repeated_lgth, int repeat_count, pablo::PabloBlock & pb) {
+        int i = repeated_lgth;
+        int total_lgth = repeat_count * repeated_lgth;
+        if (repeat_count == 0) {
+            return repeated;
+        }
+        Assign * reachable_i = pb.createAssign("within1", pb.createOr(repeated, pb.createAdvance(repeated, 1)));
+        while (i * 2 < total_lgth) {
+            PabloAST * v = reachable_i;
+            PabloAST * v2 =  pb.createAdvance(v, i);
+            i *= 2;
+            reachable_i = pb.createAssign("within" + std::to_string(i), pb.createOr(v, v2));
+        }        
+        if (i < total_lgth) {
+            PabloAST * v = reachable_i;
+            reachable_i = pb.createAssign("within" + std::to_string(total_lgth), pb.createOr(v, pb.createAdvance(v, total_lgth - i)));
+        }
+        return reachable_i;
+}
+
 MarkerType RE_Compiler::processLowerBound(RE * repeated, int lb, MarkerType marker, PabloBlock & pb) {
     if (isByteLength(repeated)) {
-        PabloAST * cc = markerVar(compile(repeated, pb));
-        Assign * cc_lb = consecutive(pb.createAssign("repeated", pb.createAdvance(cc,1)), 1, lb, pb);
-        PabloAST * marker_fwd = pb.createAdvance(markerVar(marker), markerPos(marker) == FinalMatchByte ? lb + 1 : lb);
-        return makeMarker(InitialPostPositionByte, pb.createAssign("lowerbound", pb.createAnd(marker_fwd, cc_lb)));
+        Assign * cc = markerVar(compile(repeated, pb));
+        Assign * cc_lb = consecutive1(cc, 1, lb, pb);
+        PabloAST * marker_fwd = pb.createAdvance(markerVar(marker), markerPos(marker) == FinalMatchByte ? lb : lb-1);
+        return makeMarker(FinalMatchByte, pb.createAssign("lowerbound", pb.createAnd(marker_fwd, cc_lb)));
     }
     // Fall through to general case.
     while (lb-- != 0) {
@@ -374,12 +398,12 @@ MarkerType RE_Compiler::processLowerBound(RE * repeated, int lb, MarkerType mark
 }
 
 MarkerType RE_Compiler::processBoundedRep(RE * repeated, int ub, MarkerType marker, PabloBlock & pb) {
-    if (isByteLength(repeated)) {
+    if (isByteLength(repeated) && ub > 1) {
         // log2 upper bound for fixed length (=1) class
-        // Mask out any positions that are more than ub positions from a current match.
+        // Create a mask of positions reachable within ub from current marker.
         // Use matchstar, then apply filter.
-        Assign * nonMatch = pb.createAssign("nonmatch", pb.createNot(markerVar(AdvanceMarker(marker, InitialPostPositionByte, pb))));
-        PabloAST * upperLimitMask = pb.createNot(consecutive(nonMatch, 1, ub + 1, pb));
+        Assign * match = markerVar(AdvanceMarker(marker, InitialPostPositionByte, pb));
+        Assign * upperLimitMask = reachable(match, 1, ub, pb);
         PabloAST * cursor = markerVar(AdvanceMarker(marker, InitialPostPositionByte, pb));
         PabloAST * rep_class_var = markerVar(compile(repeated, pb));
         return makeMarker(InitialPostPositionByte, pb.createAssign("bounded", pb.createAnd(pb.createMatchStar(cursor, rep_class_var), upperLimitMask)));

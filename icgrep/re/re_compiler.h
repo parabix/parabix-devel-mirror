@@ -80,7 +80,8 @@ private:
     MarkerType process(Rep * rep, MarkerType marker, pablo::PabloBlock & pb);
     MarkerType process(Diff * diff, MarkerType marker, pablo::PabloBlock & cg);
     MarkerType process(Intersect * x, MarkerType marker, pablo::PabloBlock & cg);
-    pablo::Assign * consecutive(pablo::Assign * repeated,  int repeated_lgth, int repeat_count, pablo::PabloBlock & pb);
+    pablo::Assign * consecutive1(pablo::Assign * repeated,  int repeated_lgth, int repeat_count, pablo::PabloBlock & pb);
+    pablo::Assign * reachable(pablo::Assign * repeated,  int repeated_lgth, int repeat_count, pablo::PabloBlock & pb);
     static bool isFixedLength(RE * regexp);
     MarkerType processLowerBound(RE * repeated,  int lb, MarkerType marker, pablo::PabloBlock & pb);
     MarkerType processUnboundedRep(RE * repeated, MarkerType marker, pablo::PabloBlock & pb);
