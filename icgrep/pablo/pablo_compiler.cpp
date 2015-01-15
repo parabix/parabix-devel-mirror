@@ -99,7 +99,6 @@ PabloCompiler::PabloCompiler(const std::vector<Var*> & basisBits)
     InitializeNativeTargetAsmPrinter();
     InitializeNativeTargetAsmParser();
     DefineTypes();
-    DeclareFunctions();
 }
 
 PabloCompiler::~PabloCompiler()
@@ -133,6 +132,7 @@ LLVM_Gen_RetVal PabloCompiler::compile(PabloBlock & pb)
     if (mExecutionEngine == nullptr) {
         throw std::runtime_error("Could not create ExecutionEngine: " + errMessage);
     }
+    DeclareFunctions();
 
     DeclareCallFunctions();
 
@@ -260,8 +260,8 @@ void PabloCompiler::DefineTypes()
 void PabloCompiler::DeclareFunctions()
 {
     //This function can be used for testing to print the contents of a register from JIT'd code to the terminal window.
-    //mFunc_print_register = mMod->getOrInsertFunction("wrapped_print_register", Type::getVoidTy(getGlobalContext()), mXi64Vect, NULL);
-    //mExecutionEngine->addGlobalMapping(cast<GlobalValue>(mFunc_print_register), (void *)&wrapped_print_register);
+    mFunc_print_register = mMod->getOrInsertFunction("wrapped_print_register", Type::getVoidTy(getGlobalContext()), mBitBlockType, NULL);
+    mExecutionEngine->addGlobalMapping(cast<GlobalValue>(mFunc_print_register), (void *)&wrapped_print_register);
     // to call->  b.CreateCall(mFunc_print_register, unicode_category);
 
 #ifdef USE_UADD_OVERFLOW
@@ -395,6 +395,29 @@ void PabloCompiler::DeclareFunctions()
     mFunction->setAttributes(AttrSet);
 }
 
+//
+// CarryNumbering: sequential numbers associated with each
+// carry-generating operation encountered in a traversal of the
+// Pablo AST.    Carry-generating operations are MatchStar, ScanThru,
+// and so on.
+// AdvanceNumbering: sequential numbers associated with each Advance
+// operation encountered in tree traversal, with the following modifications.
+//   (a) an additional AdvanceQueue entry is created for each if-statement
+//       having more than one carry or advance opreation within it.  This
+//       additional entry is a summary entry which must be nonzero to
+//       indicate that there are carry or advance bits associated with
+//       any operation within the if-structure (at any nesting level).
+//   (b) advancing by a large amount may require multiple advance entries.
+//       the number of advance entries for an operation Adv(x, n) is
+//       (n - 1) / BLOCK_SIZE + 1
+//
+// Note that the initial carry/advance numbering is determined by the
+// Examine function.  The values determined at this stage must be consistent
+// with the later numbering calculated during actual statement compilation.
+//
+// Examine precomputes some CarryNumbering and AdvanceNumbering, as
+// well as mMaxNestingDepth of while loops.
+// 
 void PabloCompiler::Examine(StatementList & stmts) {
     for (Statement * stmt : stmts) {
         if (Assign * assign = dyn_cast<Assign>(stmt)) {
@@ -456,7 +479,9 @@ void PabloCompiler::Examine(PabloAST *expr)
         Examine(pablo_not->getExpr());
     }
     else if (Advance * adv = dyn_cast<Advance>(expr)) {
-        ++mAdvanceQueueSize;
+        int shift_amount = adv->getAdvanceAmount();
+        int advEntries = (shift_amount - 1) / BLOCK_SIZE + 1;
+        mAdvanceQueueSize += advEntries;
         Examine(adv->getExpr());
     }
     else if (MatchStar * mstar = dyn_cast<MatchStar>(expr)) {
@@ -1032,52 +1057,68 @@ inline Value* PabloCompiler::genNot(Value* expr) {
 }
 
 Value* PabloCompiler::genAdvanceWithCarry(Value* strm_value, int shift_amount) {
-
     IRBuilder<> b(mBasicBlock);
-
-    const auto advanceIdx = mAdvanceQueueIdx++;
+    int advEntries = (shift_amount - 1) / BLOCK_SIZE + 1;
+    int block_shift = shift_amount % BLOCK_SIZE;
+    const auto storeIdx = mAdvanceQueueIdx;
+    const auto loadIdx = mAdvanceQueueIdx + advEntries - 1;
+    mAdvanceQueueIdx += advEntries;
+    Value* result_value;
+    
 #ifdef USE_LONG_INTEGER_SHIFT
-    Value* advanceq_longint = b.CreateBitCast(genAdvanceInLoad(advanceIdx), IntegerType::get(mMod->getContext(), BLOCK_SIZE));
+    Value* advanceq_longint = b.CreateBitCast(genAdvanceInLoad(loadIdx), IntegerType::get(mMod->getContext(), BLOCK_SIZE));
     Value* strm_longint = b.CreateBitCast(strm_value, IntegerType::get(mMod->getContext(), BLOCK_SIZE));
-    Value* adv_longint = b.CreateOr(b.CreateShl(strm_longint, shift_amount), b.CreateLShr(advanceq_longint, BLOCK_SIZE - shift_amount), "advance");
-    Value* result_value = b.CreateBitCast(adv_longint, mBitBlockType);
-    genAdvanceOutStore(strm_value, advanceIdx);
+    Value* adv_longint = b.CreateOr(b.CreateShl(strm_longint, block_shift), b.CreateLShr(advanceq_longint, BLOCK_SIZE - block_shift), "advance");
+    result_value = b.CreateBitCast(adv_longint, mBitBlockType);
+    genAdvanceOutStore(strm_value, storeIdx);
 
     return result_value;
 #elif (BLOCK_SIZE == 128)
-    if (shift_amount == 1) {
-        Value* advanceq_value = genShiftHighbitToLow(genAdvanceInLoad(advanceIdx));
-        Value* srli_1_value = b.CreateLShr(strm_value, 63);
-        Value* packed_shuffle;
-        Constant* const_packed_1_elems [] = {b.getInt32(0), b.getInt32(2)};
-        Constant* const_packed_1 = ConstantVector::get(const_packed_1_elems);
-        packed_shuffle = b.CreateShuffleVector(advanceq_value, srli_1_value, const_packed_1);
+    if (advEntries == 1) {
+        if (block_shift == 1) {
+            Value* advanceq_value = genShiftHighbitToLow(genAdvanceInLoad(loadIdx));
+            Value* srli_1_value = b.CreateLShr(strm_value, 63);
+            Value* packed_shuffle;
+            Constant* const_packed_1_elems [] = {b.getInt32(0), b.getInt32(2)};
+            Constant* const_packed_1 = ConstantVector::get(const_packed_1_elems);
+            packed_shuffle = b.CreateShuffleVector(advanceq_value, srli_1_value, const_packed_1);
 
-        Constant* const_packed_2_elems[] = {b.getInt64(1), b.getInt64(1)};
-        Constant* const_packed_2 = ConstantVector::get(const_packed_2_elems);
+            Constant* const_packed_2_elems[] = {b.getInt64(1), b.getInt64(1)};
+            Constant* const_packed_2 = ConstantVector::get(const_packed_2_elems);
 
-        Value* shl_value = b.CreateShl(strm_value, const_packed_2);
-        Value* result_value = b.CreateOr(shl_value, packed_shuffle, "advance");
-
-        //CarryQ - carry out:
-        genAdvanceOutStore(strm_value, advanceIdx);
-
-        return result_value;
+            Value* shl_value = b.CreateShl(strm_value, const_packed_2);
+            result_value = b.CreateOr(shl_value, packed_shuffle, "advance");
+        }
+        else { //if (block_shift < BLOCK_SIZE) {
+            // This is the preferred logic, but is too slow for the general case.
+            // We need to speed up our custom LLVM for this code.
+            Value* advanceq_longint = b.CreateBitCast(genAdvanceInLoad(loadIdx), IntegerType::get(mMod->getContext(), BLOCK_SIZE));
+            Value* strm_longint = b.CreateBitCast(strm_value, IntegerType::get(mMod->getContext(), BLOCK_SIZE));
+            Value* adv_longint = b.CreateOr(b.CreateShl(strm_longint, block_shift), b.CreateLShr(advanceq_longint, BLOCK_SIZE - block_shift), "advance");
+            result_value = b.CreateBitCast(adv_longint, mBitBlockType);
+        }
     }
-    else if (shift_amount < 64) {
-        // This is the preferred logic, but is too slow for the general case.
-        // We need to speed up our custom LLVM for this code.
-        Value* advanceq_longint = b.CreateBitCast(genAdvanceInLoad(advanceIdx), IntegerType::get(mMod->getContext(), BLOCK_SIZE));
-        Value* strm_longint = b.CreateBitCast(strm_value, IntegerType::get(mMod->getContext(), BLOCK_SIZE));
-        Value* adv_longint = b.CreateOr(b.CreateShl(strm_longint, shift_amount), b.CreateLShr(advanceq_longint, BLOCK_SIZE - shift_amount), "advance");
-        Value* result_value = b.CreateBitCast(adv_longint, mBitBlockType);
-        genAdvanceOutStore(strm_value, advanceIdx);
-
-        return result_value;
+    else {
+        if (block_shift == 0) {
+            result_value = genAdvanceInLoad(loadIdx);
+        }
+        else { 
+            // The advance is based on the two oldest bit blocks in the advance queue.
+            Value* advanceq_longint = b.CreateBitCast(genAdvanceInLoad(loadIdx), IntegerType::get(mMod->getContext(), BLOCK_SIZE));
+            Value* strm_longint = b.CreateBitCast(genAdvanceInLoad(loadIdx-1), IntegerType::get(mMod->getContext(), BLOCK_SIZE));
+            Value* adv_longint = b.CreateOr(b.CreateShl(strm_longint, block_shift), b.CreateLShr(advanceq_longint, BLOCK_SIZE - block_shift), "longadvance");
+            result_value = b.CreateBitCast(adv_longint, mBitBlockType);
+            //b.CreateCall(mFunc_print_register, genAdvanceInLoad(loadIdx));
+            //b.CreateCall(mFunc_print_register, strm_value);
+            //b.CreateCall(mFunc_print_register, result_value);
+        }
+        // copy entries from previous blocks forward
+        for (int i = storeIdx; i < loadIdx; i++) {
+            genAdvanceOutStore(genAdvanceInLoad(i), i+1);
+        }
     }
-    else {//if (shift_amount >= 64) {
-        throw std::runtime_error("Shift amount >= 64 in Advance is currently unsupported.");
-    }
+    genAdvanceOutStore(strm_value, storeIdx);
+    return result_value;
 #else 
     //BLOCK_SIZE == 256
     static_assert(false, "Advance with carry on 256-bit bitblock requires long integer shifts (USE_LONG_INTEGER_SHIFT).");

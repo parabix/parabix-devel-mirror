@@ -145,6 +145,8 @@ private:
 
     std::map<std::string, void *>       mExternalMap;
     StringToValueMap                    mCalleeMap;
+
+    Constant * mFunc_print_register;
 };
 
 }
