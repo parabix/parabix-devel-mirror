@@ -1075,6 +1075,10 @@ Value* PabloCompiler::genAdvanceWithCarry(Value* strm_value, int shift_amount) {
     return result_value;
 #elif (BLOCK_SIZE == 128)
     if (advEntries == 1) {
+        if (block_shift == 0) {  
+            result_value = genAdvanceInLoad(loadIdx);
+            //b.CreateCall(mFunc_print_register, result_value);
+        }
         if (block_shift == 1) {
             Value* advanceq_value = genShiftHighbitToLow(genAdvanceInLoad(loadIdx));
             Value* srli_1_value = b.CreateLShr(strm_value, 63);
@@ -1109,12 +1113,12 @@ Value* PabloCompiler::genAdvanceWithCarry(Value* strm_value, int shift_amount) {
             Value* adv_longint = b.CreateOr(b.CreateShl(strm_longint, block_shift), b.CreateLShr(advanceq_longint, BLOCK_SIZE - block_shift), "longadvance");
             result_value = b.CreateBitCast(adv_longint, mBitBlockType);
             //b.CreateCall(mFunc_print_register, genAdvanceInLoad(loadIdx));
-            //b.CreateCall(mFunc_print_register, strm_value);
+            //b.CreateCall(mFunc_print_register, genAdvanceInLoad(loadIdx-1));
             //b.CreateCall(mFunc_print_register, result_value);
         }
         // copy entries from previous blocks forward
-        for (int i = storeIdx; i < loadIdx; i++) {
-            genAdvanceOutStore(genAdvanceInLoad(i), i+1);
+        for (int i = loadIdx; i > storeIdx; i--) {
+            genAdvanceOutStore(genAdvanceInLoad(i-1), i);
         }
     }
     genAdvanceOutStore(strm_value, storeIdx);
