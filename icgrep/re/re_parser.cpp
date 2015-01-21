@@ -220,11 +220,11 @@ RE * RE_Parser::parse_group() {
                     }
                     switch (*_cursor++) {
                         case 'i': modeBit = CASE_INSENSITIVE_MODE_FLAG; break;
-                        case 'm': modeBit = MULTILINE_MODE_FLAG; break;
-                        case 's': modeBit = DOTALL_MODE_FLAG; break;
-                        case 'x': modeBit = IGNORE_SPACE_MODE_FLAG; break;
-                        case 'd': modeBit = UNIX_LINES_MODE_FLAG; break;
-                        default: throw ParseFailure("Unrecognized mode flag.");
+                        //case 'm': modeBit = MULTILINE_MODE_FLAG; break;
+                        //case 's': modeBit = DOTALL_MODE_FLAG; break;
+                        //case 'x': modeBit = IGNORE_SPACE_MODE_FLAG; break;
+                        //case 'd': modeBit = UNIX_LINES_MODE_FLAG; break;
+                        default: throw ParseFailure("Unsupported mode flag.");
                     }
                     if (negateMode) {
                         fModeFlagSet &= ~modeBit;
@@ -282,6 +282,12 @@ RE * RE_Parser::extend_item(RE * re) {
             break;
         default:
             return re;
+    }
+    if (lower_bound > MAX_REPETITION_LOWER_BOUND || upper_bound > MAX_REPETITION_UPPER_BOUND) {
+        throw ParseFailure("Bounded repetition exceeds icgrep implementation limit");
+    }
+    if ((upper_bound != Rep::UNBOUNDED_REP) && (lower_bound > upper_bound)) {
+        throw ParseFailure("Lower bound cannot exceed upper bound in bounded repetition");
     }
     ++_cursor;
     if (*_cursor == '?') {

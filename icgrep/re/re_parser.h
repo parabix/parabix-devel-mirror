@@ -28,6 +28,10 @@ enum ModeFlagType
      DOTALL_MODE_FLAG = 4,         // not currently implemented
      IGNORE_SPACE_MODE_FLAG = 8,   // not currently implemented
      UNIX_LINES_MODE_FLAG = 16};   // not currently implemented
+    
+const int MAX_REPETITION_LOWER_BOUND = 1024;
+const int MAX_REPETITION_UPPER_BOUND = 2048;
+
 typedef unsigned ModeFlagSet;
     
 class RE_Parser
