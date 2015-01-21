@@ -95,8 +95,7 @@ void CC_Compiler::compileByteClasses(RE * re) {
 	}
     }
     else if (isa<CC>(re)) {
-        std::cerr << "Shouldn't get here\n";
-	exit(-1);
+        throw std::runtime_error("icgrep internal error: unexpected CC object found in compileByteClasses.");
     }
 }
 

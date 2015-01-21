@@ -65,7 +65,7 @@ LLVM_Gen_RetVal compile(const Encoding encoding, const std::vector<std::string> 
         }
         catch (ParseFailure failure)
         {
-            std::cerr << "REGEX PARSING FAILURE: " << failure.what() << std::endl;
+            std::cerr << "Regex parsing failure: " << failure.what() << std::endl;
             std::cerr << regexps[i] << std::endl;
             exit(1);
         }

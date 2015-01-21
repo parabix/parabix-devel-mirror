@@ -11,6 +11,7 @@
 #include <vector>
 #include <iostream>
 #include <unordered_map>
+#include <stdexcept>
 #include "unicode_set.h"
 #include "PropertyAliases.h"
 #include "PropertyValueAliases.h"
@@ -56,8 +57,7 @@ namespace UCD {
 	};
 	
 	UnicodeSet UnsupportedPropertyObject::GetCodepointSet(std::string value_spec) {
-		std::cerr << "Property " << UCD::property_full_name[the_property] << " unsupported.\n";
-		exit(-1);
+		throw std::runtime_error("Property " + UCD::property_full_name[the_property] + " unsupported.");
 	}
 	
 	class EnumeratedPropertyObject : public PropertyObject {
@@ -83,11 +83,10 @@ namespace UCD {
 	UnicodeSet EnumeratedPropertyObject::GetCodepointSet(std::string value_spec) {
 		int property_enum_val = GetPropertyValueEnumCode(value_spec);
 		if (property_enum_val == -1) {
-			std::cerr << "Enumerated Property " << UCD::property_full_name[the_property] << ": unknown value: " << value_spec << ".\n";
-			exit(-1);
+		        throw std::runtime_error("Enumerated Property " + UCD::property_full_name[the_property] +  ": unknown value: " + value_spec);
 		}
 		else {
-			std::cout << "Enumerated Property: " << UCD::property_full_name[the_property] << ", value: " << property_value_full_names[property_enum_val] << "(" << property_enum_val << ").\n";
+			//std::cout << "Enumerated Property: " << UCD::property_full_name[the_property] << ", value: " << property_value_full_names[property_enum_val] << "(" << property_enum_val << ").\n";
 			return property_value_sets[property_enum_val];
 		}
 	}
@@ -121,8 +120,7 @@ namespace UCD {
 		if (value_spec != "") {
 			auto valit = Binary_ns::aliases_only_map.find(value_spec);
 			if (valit == Binary_ns::aliases_only_map.end()) {
-				std::cerr << "Binary property " << property_full_name[the_property] << ": bad value: " << value_spec << ".\n";
-				exit(-1);
+		                throw std::runtime_error("Binary Property " + UCD::property_full_name[the_property] +  ": bad value: " + value_spec);
 			}
 			else property_enum_val = valit->second;
 			if (property_enum_val == Binary_ns::Y) return the_codepoint_set;
