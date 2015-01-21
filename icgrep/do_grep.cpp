@@ -19,6 +19,7 @@
 #include <errno.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <stdexcept>
 
 #include "include/simd-lib/carryQ.hpp"
 #include "include/simd-lib/pabloSupport.hpp"
@@ -118,26 +119,23 @@ void GrepExecutor::doGrep(const std::string infilename) {
     char * infile_buffer;
     fdSrc = open(infilename.c_str(), O_RDONLY);
     if (fdSrc == -1) {
-        std::cerr << "Error: cannot open " << infilename << " for processing.\n";
-        exit(-1);
+        std::cerr << "Error: cannot open " << infilename << " for processing. Skipped.\n";
+        return;
     }
     if (fstat(fdSrc, &infile_sb) == -1) {
-        std::cerr << "Error: cannot stat " << infilename << " for processing.\n";
-        exit(-1);
+        std::cerr << "Error: cannot stat " << infilename << " for processing. Skipped.\n";
+        return;
     }
-    if (infile_sb.st_size == 0) {
-        if (mShowFileNameOption) {
-            std::cout << currentFileName;
-        }
-        if (mCountOnlyOption) fprintf(outfile, "%d\n", 0);
-        exit(0);
+    if (S_ISDIR(infile_sb.st_mode)) {
+        // Silently ignore directories.
+        // std::cerr << "Error: " << infilename << " is a directory. Skipped.\n";
+        return;
     }
     infile_buffer = (char *) mmap(NULL, infile_sb.st_size, PROT_READ, MAP_PRIVATE, fdSrc, 0);
     if (infile_buffer == MAP_FAILED) {
-        std::cerr << "Error: mmap of " << infilename << "failed.\n";
-        exit(-1);
+        std::cerr << "Error: mmap of " << infilename << " failed. Skipped.\n";
+        return;
     }
-    
     
     char * buffer_ptr;
     int segment = 0;
