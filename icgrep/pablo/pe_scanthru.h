@@ -25,13 +25,14 @@ public:
     virtual ~ScanThru() {
     }
     PabloAST * getScanFrom() const {
-        return mOperand[0];
+        return getOperand(0);
     }
     PabloAST * getScanThru() const {
-        return mOperand[1];
+        return getOperand(1);
     }
+protected:
     ScanThru(PabloAST * from, PabloAST * thru, SymbolGenerator * sg, PabloBlock * parent)
-    : Statement(ClassTypeId::ScanThru, {{from, thru}}, sg->make("scanthru"), parent)
+    : Statement(ClassTypeId::ScanThru, {from, thru}, sg->make("scanthru"), parent)
     {
 
     }

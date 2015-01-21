@@ -74,7 +74,6 @@ struct ExpressionTable {
 
     ExpressionTable()
     : mUnary(nullptr)
-    , mUnaryWithInt(nullptr)
     , mBinary(nullptr)
     , mTernary(nullptr)
     {
@@ -83,7 +82,6 @@ struct ExpressionTable {
 
     ExpressionTable(ExpressionTable * predecessor)
     : mUnary(predecessor ? &(predecessor->mUnary) : nullptr)
-    , mUnaryWithInt(predecessor ? &(predecessor->mUnaryWithInt) : nullptr)
     , mBinary(predecessor ? &(predecessor->mBinary) : nullptr)
     , mTernary(predecessor ? &(predecessor->mTernary) : nullptr)
     {
@@ -91,9 +89,7 @@ struct ExpressionTable {
     }
 
     std::pair<PabloAST *, bool> insert(Statement * stmt) {
-        switch (stmt->getClassTypeId()) {
-            case PabloAST::ClassTypeId::Advance:
-                return mUnaryWithInt.insert(stmt, stmt->getClassTypeId(), stmt->getOperand(0), cast<Advance>(stmt)->getAdvanceAmount());
+        switch (stmt->getClassTypeId()) {            
             case PabloAST::ClassTypeId::Assign:
             case PabloAST::ClassTypeId::Call:
             case PabloAST::ClassTypeId::Var:
@@ -106,6 +102,7 @@ struct ExpressionTable {
                 if (PabloAST * commExpr = mBinary.find(stmt->getClassTypeId(), stmt->getOperand(1), stmt->getOperand(0))) {
                     return std::make_pair(commExpr, false);
                 }
+            case PabloAST::ClassTypeId::Advance:
             case PabloAST::ClassTypeId::ScanThru:
             case PabloAST::ClassTypeId::MatchStar:
             case PabloAST::ClassTypeId::Next:
@@ -120,7 +117,6 @@ struct ExpressionTable {
 
 private:
     ExpressionMap<PabloAST *>                           mUnary;
-    ExpressionMap<PabloAST *, int>                      mUnaryWithInt;
     ExpressionMap<PabloAST *, PabloAST *>               mBinary;
     ExpressionMap<PabloAST *, PabloAST *, PabloAST *>   mTernary;
 };

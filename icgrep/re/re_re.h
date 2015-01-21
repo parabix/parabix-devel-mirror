@@ -36,7 +36,7 @@ class Union;
 
 class RE {
 public:
-    typedef SlabAllocator<1024> Allocator;
+    typedef SlabAllocator<RE *> Allocator;
     enum class ClassTypeId : unsigned {
         Alt
         , Any

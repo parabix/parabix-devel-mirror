@@ -37,14 +37,6 @@ public:
         return false;
     }
 
-    enum class SetRelationship {
-        SUBSET
-        , SUPERSET        
-        , OVERLAPPING
-        , DISJOINT
-        , EQUIVALENT
-    };
-
     typedef CharSetVector::iterator                 iterator;
     typedef CharSetVector::const_iterator           const_iterator;
     typedef CharSetVector::size_type                size_type;
@@ -116,8 +108,6 @@ public:
     inline bool empty() const {
         return mSparseCharSet.empty();
     }
-
-    SetRelationship compare(const CC * other) const;
 
     virtual ~CC() {}
 

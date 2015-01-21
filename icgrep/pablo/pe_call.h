@@ -19,7 +19,7 @@ public:
     virtual ~Call() {
     }
     inline const String * getCallee() const {
-        return cast<String>(mOperand[0]);
+        return cast<String>(getOperand(0));
     }
 protected:
     Call(PabloAST * callee, PabloBlock * parent)

@@ -25,7 +25,7 @@ public:
     virtual ~Assign() {
     }
     inline PabloAST * getExpr() const {
-        return mOperand[0];
+        return getOperand(0);
     }
     inline bool isOutputAssignment() const {
         return mOutputIndex >= 0;

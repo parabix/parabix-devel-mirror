@@ -13,7 +13,7 @@
 namespace pablo {
 
 And::And(PabloAST * expr1, PabloAST * expr2, PabloBlock * parent)
-: Statement(ClassTypeId::And, {{expr1, expr2}}, parent->makeName("and"), parent)
+: Statement(ClassTypeId::And, {expr1, expr2}, parent->makeName("and"), parent)
 {
 
 }

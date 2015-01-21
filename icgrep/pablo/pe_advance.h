@@ -9,6 +9,7 @@
 
 #include "pabloAST.h"
 #include <pablo/symbol_generator.h>
+#include <pablo/pe_integer.h>
 
 namespace pablo {
 
@@ -24,19 +25,17 @@ public:
     virtual ~Advance() {
     }
     inline PabloAST * getExpr() const {
-        return mOperand[0];
+        return getOperand(0);
     }
-    inline int getAdvanceAmount() const {
-        return mShiftAmount;
+    inline Integer::integer_t getAdvanceAmount() const {
+        return cast<Integer>(getOperand(1))->value();
     }
 protected:
-    Advance(PabloAST * expr, int shiftAmount, SymbolGenerator * sg, PabloBlock * parent)
-    : Statement(ClassTypeId::Advance, {expr}, sg->make("advance"), parent)
-	, mShiftAmount(shiftAmount) {
-
+    Advance(PabloAST * expr, PabloAST * shiftAmount, SymbolGenerator * sg, PabloBlock * parent)
+    : Statement(ClassTypeId::Advance, {expr, shiftAmount}, sg->make("advance"), parent)
+    {
+        assert(isa<Integer>(shiftAmount));
     }
-private:
-	int const mShiftAmount;
 };
 
 }

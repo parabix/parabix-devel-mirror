@@ -20,14 +20,15 @@ public:
         return false;
     }
     inline const Assign * getInitial() const {
-        return cast<const Assign>(mOperand[0]);
+        return cast<const Assign>(getOperand(0));
     }
     inline PabloAST * getExpr() const {
-        return mOperand[1];
+        return getOperand(1);
     }
+    virtual ~Next() {}
 protected:
     Next(PabloAST * initial, PabloAST * expr, PabloBlock * parent)
-    : Statement(ClassTypeId::Next, {{cast<Assign>(initial), expr}}, cast<Assign>(initial)->getName(), parent) {
+    : Statement(ClassTypeId::Next, {cast<Assign>(initial), expr}, cast<Assign>(initial)->getName(), parent) {
         this->addUser(initial);
     }
 };

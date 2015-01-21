@@ -14,7 +14,7 @@
 namespace pablo {
 
 Sel::Sel(PabloAST* if_expr, PabloAST* t_expr, PabloAST* f_expr, PabloBlock * parent)
-: Statement(ClassTypeId::Sel, {{if_expr, t_expr, f_expr}}, parent->makeName("sel"), parent)
+: Statement(ClassTypeId::Sel, {if_expr, t_expr, f_expr}, parent->makeName("sel"), parent)
 {
 
 }

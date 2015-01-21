@@ -7,6 +7,7 @@ namespace pablo {
 
 class Integer : public PabloAST {
     friend class SymbolGenerator;
+public:
     typedef u_int64_t integer_t;
     static inline bool classof(const PabloAST * e) {
         return e->getClassTypeId() == ClassTypeId::Integer;

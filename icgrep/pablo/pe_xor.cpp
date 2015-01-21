@@ -13,7 +13,7 @@
 namespace pablo {
 
 Xor::Xor(PabloAST * expr1, PabloAST * expr2, PabloBlock * parent)
-: Statement(ClassTypeId::Xor, {{expr1, expr2}}, parent->makeName("xor"), parent)
+: Statement(ClassTypeId::Xor, {expr1, expr2}, parent->makeName("xor"), parent)
 {
 
 }

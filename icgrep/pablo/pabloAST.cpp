@@ -8,8 +8,6 @@
 #include <pablo/codegenstate.h>
 #include <llvm/Support/Compiler.h>
 
-#include <pablo/printer_pablos.h>
-
 namespace pablo {
 
 PabloAST::Allocator PabloAST::mAllocator;
@@ -81,51 +79,27 @@ bool equals(const PabloAST * expr1, const PabloAST * expr2) {
     return false;
 }
 
-void PabloAST::setMetadata(const std::string & name, PMDNode * node) {
-    if (LLVM_UNLIKELY(mMetadataMap == nullptr)) {
-        mMetadataMap = new PMDNodeMap();
-    }
-    mMetadataMap->insert(std::make_pair(name, node));
-}
-
-PMDNode * PabloAST::getMetadata(const std::string & name) {
-    if (LLVM_UNLIKELY(mMetadataMap == nullptr)) {
-        return nullptr;
-    }
-    auto f = mMetadataMap->find(name);
-    if (f == mMetadataMap->end()) {
-        return nullptr;
-    }
-    return f->second;
-}
-
 void PabloAST::replaceAllUsesWith(PabloAST * expr) {
-    #ifndef NDEBUG
-    unsigned __userCount = getNumUses();
-    #endif
     while (!mUsers.empty()) {
         PabloAST * user = mUsers.pop_back_val();
-        assert(--__userCount == getNumUses());
         if (isa<Statement>(user)) {
             cast<Statement>(user)->replaceUsesOfWith(this, expr);
         }
-        assert(__userCount == getNumUses());
     }
-    assert (getNumUses() == 0);
 }
 
-void Statement::setOperand(const unsigned index, PabloAST * value) {
+void Statement::setOperand(const unsigned index, PabloAST * const value) {
     assert (index < getNumOperands());
-    if (LLVM_UNLIKELY(mOperand[index] == value)) {
+    if (LLVM_UNLIKELY(getOperand(index) == value)) {
         return;
     }
-    PabloAST * priorValue = mOperand[index];
-    // Test just to be sure we don't have multiple operands pointing to
+    PabloAST * priorValue = getOperand(index);
+    // Test just to be sure that we don't have multiple operands pointing to
     // what we're replacing. If not, remove this from the prior value's
     // user list.
     unsigned count = 0;
     for (unsigned i = 0; i != getNumOperands(); ++i) {
-        count += (mOperand[index] == priorValue) ? 1 : 0;
+        count += (getOperand(index) == priorValue) ? 1 : 0;
     }
     assert (count >= 1);
     if (LLVM_LIKELY(count == 1)) {
@@ -197,18 +171,19 @@ Statement * Statement::removeFromParent() {
 Statement * Statement::eraseFromParent(const bool recursively) {
 
     // remove this statement from its operands' users list
-    for (PabloAST * op : mOperand) {
+    for (auto i = 0; i != mOperands; ++i) {
+        PabloAST * const op = mOperand[i];
         op->removeUser(this);
     }
 
     if (recursively) {
-        for (PabloAST * op : mOperand) {
+        for (auto i = 0; i != mOperands; ++i) {
+            PabloAST * const op = mOperand[i];
             if (op->getNumUses() == 0 && isa<Statement>(op)) {
                 cast<Statement>(op)->eraseFromParent(true);
             }
         }
     }
-
     return removeFromParent();
 }
 
@@ -218,10 +193,6 @@ Statement * Statement::replaceWith(PabloAST * const expr) {
     }
     replaceAllUsesWith(expr);
     return eraseFromParent();
-}
-
-Statement::~Statement() {
-
 }
 
 void StatementList::insert(Statement * const statement) {
@@ -239,6 +210,10 @@ void StatementList::insert(Statement * const statement) {
         mLast = (mLast == mInsertionPoint) ? statement : mLast;
         mInsertionPoint = statement;
     }
+}
+
+StatementList::~StatementList() {
+
 }
 
 }

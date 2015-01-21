@@ -25,7 +25,7 @@ public:
     virtual ~Not() {
     }
     PabloAST * getExpr() const {
-        return mOperand[0];
+        return getOperand(0);
     }
 protected:
     Not(PabloAST * expr, PabloBlock * parent);

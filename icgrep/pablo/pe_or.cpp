@@ -14,7 +14,7 @@
 namespace pablo {
 
 Or::Or(PabloAST * expr1, PabloAST * expr2, PabloBlock * parent)
-: Statement(ClassTypeId::Or, {{expr1, expr2}}, parent->makeName("or"), parent)
+: Statement(ClassTypeId::Or, {expr1, expr2}, parent->makeName("or"), parent)
 {
 
 }

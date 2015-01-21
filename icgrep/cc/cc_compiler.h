@@ -11,9 +11,7 @@
 #include <pablo/codegenstate.h>
 #include <pablo/pabloAST.h>
 #include <re/re_cc.h>
-#include <unordered_map>
 #include <string>
-#include <iostream>
 
 namespace cc {
 
@@ -23,7 +21,7 @@ class CC_Compiler{
     typedef std::vector<std::pair<const re::CC*, pablo::Assign*>> ConstraintVector;
 public:
 
-    CC_Compiler(pablo::PabloBlock & cg, const Encoding encoding, const bool annotateVariableConstraints = false, const std::string basis_pattern = "basis");
+    CC_Compiler(pablo::PabloBlock & cg, const Encoding encoding, const std::string basis_pattern = "basis");
 
     std::vector<pablo::Var *> getBasisBits(const CC_NameMap & nameMap);
 
@@ -42,12 +40,8 @@ private:
     pablo::PabloAST * LE_Range(const unsigned N, const unsigned n, pablo::PabloBlock & pb);
     pablo::PabloAST * char_or_range_expr(const re::CodePointType lo, const re::CodePointType hi, pablo::PabloBlock & pb);
     pablo::PabloAST * charset_expr(const re::CC *cc, pablo::PabloBlock & pb);
-
-    void computeVariableConstraints();
-
 private:
     pablo::PabloBlock &         mCG;
-    //const bool                  mAnnotateVariableConstraints;
     std::vector<pablo::Var *>   mBasisBit;
     const Encoding              mEncoding;
     ConstraintVector            mVariableVector;

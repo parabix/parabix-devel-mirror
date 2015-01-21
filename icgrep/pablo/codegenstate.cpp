@@ -14,15 +14,18 @@ Assign * PabloBlock::createAssign(const std::string prefix, PabloAST * expr, con
     return insertAtInsertionPoint(new Assign(expr, outputIndex, mSymbolGenerator->make(prefix), this));
 }
 
-PabloAST * PabloBlock::createAdvance(PabloAST * expr, const int shiftAmount) {
-    if (isa<Zeroes>(expr) || shiftAmount == 0) {
+PabloAST * PabloBlock::createAdvance(PabloAST * expr, PabloAST * shiftAmount) {
+    if (isa<Zeroes>(expr) || cast<Integer>(shiftAmount)->value() == 0) {
         return expr;
     }
     return insertAtInsertionPoint(new Advance(expr, shiftAmount, mSymbolGenerator, this));
 }
 
-Call * PabloBlock::createCall(const std::string name) {
-    return createCall(mSymbolGenerator->get(name));
+PabloAST * PabloBlock::createAdvance(PabloAST * expr, const int shiftAmount) {
+    if (isa<Zeroes>(expr) || shiftAmount == 0) {
+        return expr;
+    }    
+    return insertAtInsertionPoint(new Advance(expr, mSymbolGenerator->getInteger(shiftAmount), mSymbolGenerator, this));
 }
 
 Call * PabloBlock::createCall(String * name) {
@@ -40,10 +43,6 @@ PabloAST * PabloBlock::createNot(PabloAST * expr) {
         return not1->getExpr();
     }
     return insertAtInsertionPoint(new Not(expr, this));
-}
-
-Var * PabloBlock::createVar(const std::string name) {
-    return createVar(mSymbolGenerator->get(name));
 }
 
 Var * PabloBlock::createVar(String * name) {
@@ -213,19 +212,29 @@ While * PabloBlock::createWhile(PabloAST * cond, PabloBlock & body) {
 /// CONSTRUCTOR
 
 PabloBlock::PabloBlock()
-: mZeroes(new Zeroes())
+: PabloAST(PabloAST::ClassTypeId::Block)
+, mZeroes(new Zeroes())
 , mOnes(new Ones())
 , mSymbolGenerator(new SymbolGenerator())
+, mPredecessor(nullptr)
 {
 
 }
 
 PabloBlock::PabloBlock(PabloBlock * predecessor)
-: mZeroes(predecessor->mZeroes) // inherit the original "Zeroes" variable for simplicity
+: PabloAST(PabloAST::ClassTypeId::Block)
+, mZeroes(predecessor->mZeroes) // inherit the original "Zeroes" variable for simplicity
 , mOnes(predecessor->mOnes) // inherit the original "Ones" variable for simplicity
 , mSymbolGenerator(predecessor->mSymbolGenerator)
+, mPredecessor(predecessor)
 {
 
+}
+
+PabloBlock::~PabloBlock() {
+    if (mPredecessor == nullptr) {
+        delete mSymbolGenerator;
+    }    
 }
 
 }

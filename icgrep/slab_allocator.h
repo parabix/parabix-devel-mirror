@@ -5,27 +5,37 @@
 #include <cstdint>
 #include <new>
 #include <algorithm>
-#include <iostream>
 
-template <unsigned BasePoolSize>
+template <typename T>
 class SlabAllocator {
 public:
 
-    typedef std::size_t size_type;
-    typedef void* pointer;
-    typedef const void* const_pointer;
+    enum { BasePoolSize = 4096 };
+
+    using value_type = T;
+    using pointer = T*;
+    using const_pointer = const T*;
+    using reference = T&;
+    using const_reference = const T&;
+    using size_type = std::size_t;
+    using difference_type = std::ptrdiff_t;
+
+    template<class U>
+    struct rebind {
+        typedef SlabAllocator<U> other;
+    };
 
     inline pointer allocate(size_type n) noexcept {
         if (n > mSpaceAvail && !extend(n)) {
             exit(-1);
         }
-        pointer ptr = static_cast<pointer>(mAllocationPtr);
+        pointer ptr = reinterpret_cast<pointer>(mAllocationPtr);
         mAllocationPtr += n;
         mSpaceAvail -= n;
         return ptr;
     }
 
-    inline void deallocate(pointer p) noexcept {
+    inline void deallocate(pointer p, size_type n) noexcept {
         /* do nothing */
     }
 
@@ -48,8 +58,8 @@ private:
     Chunk           mInitialChunk;
 };
 
-template <unsigned BasePoolSize>
-SlabAllocator<BasePoolSize>::SlabAllocator()
+template <typename T>
+SlabAllocator<T>::SlabAllocator()
 : mSpaceAvail(BasePoolSize)
 , mAllocationPtr(mInitialChunk.space)
 , mCurrentChunk(&mInitialChunk)
@@ -58,13 +68,13 @@ SlabAllocator<BasePoolSize>::SlabAllocator()
     mInitialChunk.prev = nullptr;
 }
 
-template <unsigned BasePoolSize>
-SlabAllocator<BasePoolSize>::~SlabAllocator() {
+template <typename T>
+SlabAllocator<T>::~SlabAllocator() {
     release_memory();
 }
 
-template <unsigned BasePoolSize>
-void SlabAllocator<BasePoolSize>::release_memory() {
+template <typename T>
+void SlabAllocator<T>::release_memory() {
     while (mCurrentChunk != &mInitialChunk) {
         Chunk * n = mCurrentChunk;
         mCurrentChunk = n->prev;
@@ -74,8 +84,8 @@ void SlabAllocator<BasePoolSize>::release_memory() {
     mAllocationPtr = mInitialChunk.space;
 }
 
-template <unsigned BasePoolSize>
-bool SlabAllocator<BasePoolSize>::extend(const size_type n) noexcept {
+template <typename T>
+bool SlabAllocator<T>::extend(const size_type n) noexcept {
     const size_type size = std::max<size_type>(n, mTotalSize) * 2;
     Chunk * newChunk = (Chunk *)malloc(sizeof(Chunk) + size - BasePoolSize);
     if (newChunk == nullptr) {

@@ -26,9 +26,10 @@ public:
         return false;
     }
     virtual ~If() {
+        mDefined.clear();
     }
     inline PabloAST * getCondition() const {
-        return mOperand[0];
+        return getOperand(0);
     }
     inline PabloBlock & getBody() {
         return mBody;

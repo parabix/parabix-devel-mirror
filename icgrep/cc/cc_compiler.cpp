@@ -9,7 +9,6 @@
 
 //Pablo Expressions
 #include <pablo/codegenstate.h>
-#include <pablo/pe_metadata.h>
 #include <re/re_alt.h>
 #include <re/re_cc.h>
 #include <re/re_seq.h>
@@ -18,28 +17,16 @@
 #include <re/re_diff.h>
 #include <re/re_intersect.h>
 #include <re/re_assertion.h>
-#include <re/printer_re.h>
 #include <cc/cc_namemap.hpp>
-#include <pablo/printer_pablos.h>
-#include <utility>
-#include <string>
-#include <list>
-#include <map>
-#include <algorithm>
-#include <boost/graph/adjacency_list.hpp>
-#include <cassert>
-#include <stdlib.h>
 #include <stdexcept>
 
 using namespace re;
 using namespace pablo;
-using namespace boost;
 
 namespace cc {
 
-CC_Compiler::CC_Compiler(PabloBlock & cg, const Encoding encoding, const bool annotateVariableConstraints, const std::string basis_pattern)
+CC_Compiler::CC_Compiler(PabloBlock & cg, const Encoding encoding, const std::string basis_pattern)
 : mCG(cg)
-//, mAnnotateVariableConstraints(annotateVariableConstraints)
 , mBasisBit(encoding.getBits())
 , mEncoding(encoding)
 {
@@ -286,70 +273,6 @@ inline PabloAST * CC_Compiler::char_or_range_expr(const CodePointType lo, const 
 
 inline Var * CC_Compiler::getBasisVar(const int i) const {
     return mBasisBit[(mEncoding.getBits() - 1) - i];
-}
-
-void CC_Compiler::computeVariableConstraints() {
-    typedef adjacency_list<vecS, vecS, directedS> ConstraintGraph;
-    typedef adjacency_list<vecS, vecS, directedS> SubsetGraph;
-
-    typedef graph_traits<ConstraintGraph>::out_edge_iterator ConstraintEdgeIterator;
-    typedef graph_traits<SubsetGraph>::out_edge_iterator SubsetEdgeIterator;
-
-    const auto n = mVariableVector.size();
-
-    if (n == 0) {
-        return;
-    }
-
-    // Compute the constraint and subset graphs.
-    ConstraintGraph C(n);
-    SubsetGraph S(n);
-
-    for (auto i = 0; i != n; ++i) {
-        const CC * const cc1 = mVariableVector[i].first;
-
-        for (auto j = i + 1; j != n; ++j) {
-            const CC * const cc2 = mVariableVector[j].first;
-            switch(cc1->compare(cc2)) {
-                case CC::SetRelationship::OVERLAPPING:
-                    add_edge(i, j, C);
-                    add_edge(j, i, C);
-                    break;
-                case CC::SetRelationship::SUBSET:
-                    add_edge(i, j, S);
-                    break;
-                case CC::SetRelationship::SUPERSET:
-                    add_edge(j, i, S);
-                    break;
-                default:
-                    /* do nothing; here just to prevent warning */
-                    break;
-            }
-        }
-    }
-
-    // Write out the constraints and subset relationships as metadata
-    for (auto i = 0; i != n; ++i) {
-        std::vector<PabloAST *> constraints;
-        ConstraintEdgeIterator ci, ci_end;
-        for (std::tie(ci, ci_end) = out_edges(i, C); ci != ci_end; ++ci) {
-            constraints.push_back(mVariableVector[target(*ci, C)].second);
-        }
-
-        std::vector<PabloAST *> subsets;
-        SubsetEdgeIterator si, si_end;
-        for (std::tie(si, si_end) = out_edges(i, S); si != si_end; ++si) {
-            subsets.push_back(mVariableVector[target(*si, S)].second);
-        }
-
-        Assign * assign = mVariableVector[i].second;
-        if (!constraints.empty()) {
-            assign->setMetadata("constraints", PMDSet::get(constraints.begin(), constraints.end()));
-        }
-        if (!subsets.empty()) {
-            assign->setMetadata("subsets", PMDSet::get(subsets.begin(), subsets.end()));
-        }
-    }
 }
 
 } // end of namespace cc

@@ -29,11 +29,12 @@ String * SymbolGenerator::get(const std::string name) {
     return result;
 }
 
-Integer * SymbolGenerator::get(const integer_t value) {
+Integer * SymbolGenerator::getInteger(const integer_t value) {
     auto f = mIntegerMap.find(value);
     Integer * result;
     if (f == mIntegerMap.end()) {
         result = new Integer(value);
+        assert (result->value() == value);
         mIntegerMap.insert(std::make_pair(value, result));
     }
     else {
@@ -55,5 +56,13 @@ String * SymbolGenerator::make(const std::string prefix) {
     }
 }
 
+SymbolGenerator::~SymbolGenerator() {
+    for (auto itr : mStringMap) {
+        delete itr.second;
+    }
+    for (auto itr : mIntegerMap) {
+        delete itr.second;
+    }
+}
 
 }

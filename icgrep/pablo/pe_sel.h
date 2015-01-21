@@ -26,13 +26,13 @@ public:
     virtual ~Sel() {
     }
     inline PabloAST * getCondition() const {
-        return mOperand[0];
+        return getOperand(0);
     }
     inline PabloAST * getTrueExpr() const {
-        return mOperand[1];
+        return getOperand(1);
     }
     inline PabloAST * getFalseExpr() const {
-        return mOperand[2];
+        return getOperand(2);
     }
 protected:
     Sel(PabloAST* if_expr, PabloAST* t_expr, PabloAST* f_expr, PabloBlock * parent);

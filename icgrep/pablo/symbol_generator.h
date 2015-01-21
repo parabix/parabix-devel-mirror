@@ -20,15 +20,12 @@ class SymbolGenerator {
     friend class PabloBlock;
 public:
     typedef u_int64_t integer_t;
-
     String * get(const std::string name);
     String * make(const std::string prefix);
-    Integer * get(const integer_t value);
+    Integer * getInteger(const integer_t value);
+    ~SymbolGenerator();
 protected:
-    SymbolGenerator();
-    void* operator new (std::size_t size) noexcept {
-        return PabloAST::mAllocator.allocate(size);
-    }
+    SymbolGenerator();    
 private:
     std::unordered_map<std::string, unsigned>   mPrefixMap;    
     std::unordered_map<std::string, String *>   mStringMap;

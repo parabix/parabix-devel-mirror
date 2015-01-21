@@ -51,9 +51,23 @@ class If;
 class While;
 
 
-class PabloBlock : public StatementList {
+class PabloBlock : public PabloAST, public StatementList {
     friend class pablo::PabloAST;
+    friend class Builder;
 public:
+
+    static inline bool classof(const PabloBlock *) {
+        return true;
+    }
+    static inline bool classof(const Statement *) {
+        return false;
+    }
+    static inline bool classof(const PabloAST * e) {
+        return e->getClassTypeId() == ClassTypeId::Block;
+    }
+    static inline bool classof(const void *) {
+        return false;
+    }
 
     inline static PabloBlock & Create() {
         return *(new PabloBlock());
@@ -65,6 +79,8 @@ public:
 
     PabloAST * createAdvance(PabloAST * expr, const int shiftAmount);
 
+    PabloAST * createAdvance(PabloAST * expr, PabloAST * shiftAmount);
+
     inline Zeroes * createZeroes() const {
         return mZeroes;
     }
@@ -73,13 +89,17 @@ public:
         return mOnes;
     }
 
-    Call * createCall(const std::string name);
+    inline Call * createCall(const std::string name) {
+        return createCall(getName(name));
+    }
 
     Call * createCall(String * name);
 
     Assign * createAssign(const std::string prefix, PabloAST * expr, const int outputIndex = -1);
 
-    Var * createVar(const std::string name);
+    inline Var * createVar(const std::string name) {
+        return createVar(getName(name));
+    }
 
     Var * createVar(String * name);
 
@@ -123,14 +143,12 @@ public:
         return mSymbolGenerator->make(prefix);
     }
 
+    virtual ~PabloBlock();
+
 protected:
     PabloBlock();
 
     PabloBlock(PabloBlock * predecessor);
-
-    void * operator new (std::size_t size) noexcept {
-        return PabloAST::mAllocator.allocate(size);
-    }
 
     template<typename Type>
     inline Type * insertAtInsertionPoint(Type * expr) {
@@ -144,6 +162,7 @@ private:
     Zeroes * const                                      mZeroes;
     Ones * const                                        mOnes;
     SymbolGenerator * const                             mSymbolGenerator;
+    PabloBlock *                                        mPredecessor;
 };
 
 }

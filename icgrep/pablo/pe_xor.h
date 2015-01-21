@@ -26,10 +26,10 @@ public:
     virtual ~Xor() {
     }
     PabloAST * getExpr1() const {
-        return mOperand[0];
+        return getOperand(0);
     }
     PabloAST * getExpr2() const {
-        return mOperand[1];
+        return getOperand(1);
     }
 protected:
     Xor(PabloAST * expr1, PabloAST * expr2, PabloBlock * parent);

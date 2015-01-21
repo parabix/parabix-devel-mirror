@@ -23,7 +23,7 @@ public:
     virtual ~While() {
     }
     inline PabloAST * getCondition() const {
-        return mOperand[0];
+        return getOperand(0);
     }
     inline PabloBlock & getBody() {
         return mBody;

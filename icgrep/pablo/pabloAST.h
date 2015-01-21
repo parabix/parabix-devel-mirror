@@ -20,24 +20,19 @@ namespace pablo {
 
 class PabloBlock;
 
-class PMDNode;
-
 class PabloAST {
-    friend class PMDNode;
     friend class Statement;
     friend class Var;
     friend class If;
     friend class While;
     friend class PabloBlock;
     friend class SymbolGenerator;
-    typedef std::unordered_map<std::string, PMDNode *> PMDNodeMap;
-
 public:
 
     using Users = SetVector<PabloAST *>;
     using user_iterator = Users::iterator;
 
-    typedef SlabAllocator<4096> Allocator;
+    typedef SlabAllocator<PabloAST *> Allocator;
     enum class ClassTypeId : unsigned {
         Advance
         , And
@@ -57,14 +52,11 @@ public:
         , While
         , Xor
         , Zeroes
+        , Block
     };
     inline ClassTypeId getClassTypeId() const {
         return mClassTypeId;
     }
-
-    void setMetadata(const std::string & name, PMDNode * node);
-
-    PMDNode * getMetadata(const std::string & name);
 
     inline static void release_memory() {
         mAllocator.release_memory();
@@ -98,7 +90,6 @@ public:
 protected:
     inline PabloAST(const ClassTypeId id)
     : mClassTypeId(id)
-    , mMetadataMap(nullptr)
     {
 
     }
@@ -108,11 +99,13 @@ protected:
     inline void removeUser(PabloAST * user) {
         mUsers.remove(user);
     }
+    virtual ~PabloAST() {
+        mUsers.clear();
+    }
     static Allocator        mAllocator;
 private:
     const ClassTypeId       mClassTypeId;
     Users                   mUsers;
-    PMDNodeMap *            mMetadataMap;
 };
 
 bool equals(const PabloAST * expr1, const PabloAST *expr2);
@@ -147,7 +140,7 @@ public:
         return false;
     }
 
-    inline void replaceUsesOfWith(PabloAST * from, PabloAST * to) {
+    inline void replaceUsesOfWith(const PabloAST * const from, PabloAST * const to) {
         for (unsigned i = 0; i != getNumOperands(); ++i) {
             if (getOperand(i) == from) {
                 setOperand(i, to);
@@ -160,10 +153,10 @@ public:
         return mOperand[index];
     }
 
-    void setOperand(const unsigned index, PabloAST * value);
+    void setOperand(const unsigned index, PabloAST * const value);
 
     inline unsigned getNumOperands() const {
-        return mOperand.size();
+        return mOperands;
     }
 
     void insertBefore(Statement * const statement);
@@ -184,30 +177,35 @@ public:
     inline PabloBlock * getParent() const {
         return mParent;
     }
+    virtual ~Statement() {}
 protected:
-    Statement(const ClassTypeId id, std::vector<PabloAST *> && operands, const String * name, PabloBlock * parent)
+    Statement(const ClassTypeId id, std::initializer_list<PabloAST *> operands, const String * const name, PabloBlock * const parent)
     : PabloAST(id)
     , mName(name)
     , mNext(nullptr)
     , mPrev(nullptr)
     , mParent(parent)
-    , mOperand(std::move(operands))
+    , mOperands(operands.size())
+    , mOperand(mAllocator.allocate(mOperands * sizeof(PabloAST *)))
     {
-        for (PabloAST * op : mOperand) {
+        unsigned i = 0;
+        for (PabloAST * const op : operands) {
+            mOperand[i++] = op;
             op->addUser(this);
         }
     }
-    inline void setName(const String * name) {
+    inline void setName(const String * const name) {
         mName = name;
     }
-    virtual ~Statement() = 0;
-protected:
+protected:    
     const String *              mName;
     Statement *                 mNext;
     Statement *                 mPrev;
     PabloBlock *                mParent;
-    std::vector<PabloAST *>     mOperand;
-
+    const unsigned              mOperands;
+    // If we knew prior to construction how many operands were needed, we could
+    // eliminate the mOperand pointer and simply use this[1] instead.
+    PabloAST **                 mOperand;
 };
 
 class StatementList {
@@ -448,6 +446,8 @@ public:
     }
 
     void insert(Statement * const statement);
+
+    ~StatementList();
 
 private:
 

@@ -22,17 +22,16 @@ public:
     static inline bool classof(const void *) {
         return false;
     }
-    virtual ~MatchStar() {
-    }
     inline PabloAST * getMarker() const {
-        return mOperand[0];
+        return getOperand(0);
     }
     inline PabloAST * getCharClass() const  {
-        return mOperand[1];
+        return getOperand(1);
     }
+    virtual ~MatchStar() {}
 protected:
     MatchStar(PabloAST * marker, PabloAST * cc, SymbolGenerator * sg, PabloBlock * parent)
-    : Statement(ClassTypeId::MatchStar, {{marker, cc}}, sg->make("matchstar"), parent)
+    : Statement(ClassTypeId::MatchStar, {marker, cc}, sg->make("matchstar"), parent)
     {
 
     }
