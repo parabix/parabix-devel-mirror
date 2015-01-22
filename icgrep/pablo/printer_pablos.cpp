@@ -153,7 +153,7 @@ void PabloPrinter::print(const Statement * stmt, std::string indent, std::ostrea
     }
 }
 
-void PabloPrinter::print(const PabloAST *expr, std::ostream & strm) {
+void PabloPrinter::print(const PabloAST * expr, std::ostream & strm) {
     if (expr == nullptr) {
         strm << "<null-expr>";
     }
@@ -163,11 +163,11 @@ void PabloPrinter::print(const PabloAST *expr, std::ostream & strm) {
     else if (isa<const Ones>(expr)) {
         strm << "1";
     }
-    else if (const Var * pablo_var = dyn_cast<const Var>(expr)) {
-        strm << pablo_var->getName()->str();
+    else if (const Var * var = dyn_cast<const Var>(expr)) {
+        strm << var->getName()->str();
     }
-    else if (isa<Statement>(expr)) {
-        strm << cast<Statement>(expr)->getName()->str();
+    else if (const Statement * stmt = dyn_cast<Statement>(expr)) {
+        strm << stmt->getName()->str();
     }
     else {
         strm << "**UNKNOWN Pablo Expression type **\n" << std::endl;

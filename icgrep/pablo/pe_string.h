@@ -24,15 +24,23 @@ public:
     inline std::string str() {
         return mValue;
     }
+    inline bool isGenerated() const {
+        return mGenerated;
+    }
+    inline bool isUserDefined() const {
+        return !mGenerated;
+    }
 protected:
-    String(const std::string && value) noexcept
+    String(const std::string && value, const bool generated) noexcept
     : PabloAST(ClassTypeId::String)
     , mValue(value)
+    , mGenerated(generated)
     {
 
     }
 private:
-    const std::string mValue;
+    const std::string   mValue;
+    const bool          mGenerated;
 };
 
 }

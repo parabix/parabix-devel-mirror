@@ -20,8 +20,8 @@ class SymbolGenerator {
     friend class PabloBlock;
 public:
     typedef u_int64_t integer_t;
-    String * get(const std::string name);
-    String * make(const std::string prefix);
+    String * get(const std::string name, const bool generated = true);
+    String * make(const std::string prefix, const bool generated = true);
     Integer * getInteger(const integer_t value);
     ~SymbolGenerator();
 protected:

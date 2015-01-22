@@ -80,6 +80,7 @@ bool equals(const PabloAST * expr1, const PabloAST * expr2) {
 }
 
 void PabloAST::replaceAllUsesWith(PabloAST * expr) {
+    assert (expr);
     while (!mUsers.empty()) {
         PabloAST * user = mUsers.pop_back_val();
         if (isa<Statement>(user)) {
@@ -187,9 +188,16 @@ Statement * Statement::eraseFromParent(const bool recursively) {
     return removeFromParent();
 }
 
-Statement * Statement::replaceWith(PabloAST * const expr) {
+Statement * Statement::replaceWith(PabloAST * const expr, const bool rename) {
+    assert (expr);
     if (LLVM_UNLIKELY(expr == this)) {
         return getNextNode();
+    }
+    if (LLVM_LIKELY(rename && isa<Statement>(expr))) {
+        Statement * const stmt = cast<Statement>(expr);
+        if (getName()->isUserDefined() && stmt->getName()->isGenerated()) {
+            stmt->setName(getName());
+        }
     }
     replaceAllUsesWith(expr);
     return eraseFromParent();

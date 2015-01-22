@@ -93,10 +93,12 @@ protected:
     {
 
     }
-    inline void addUser(PabloAST * user) {        
+    inline void addUser(PabloAST * user) {
+        assert (user);
         mUsers.insert(user);
     }
     inline void removeUser(PabloAST * user) {
+        assert (user);
         mUsers.remove(user);
     }
     virtual ~PabloAST() {
@@ -163,7 +165,7 @@ public:
     void insertAfter(Statement * const statement);
     Statement * removeFromParent();
     Statement * eraseFromParent(const bool recursively = false);
-    Statement * replaceWith(PabloAST * const expr);
+    Statement * replaceWith(PabloAST * const expr, const bool rename = true);
 
     inline const String * getName() const {
         return mName;

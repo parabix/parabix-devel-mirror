@@ -33,7 +33,7 @@ public:
     inline int getOutputIndex() const {
         return mOutputIndex;
     }
-    bool isConstant() const;
+    bool superfluous() const;
 protected:
     explicit Assign(PabloAST * expr, int outputIndex, String * name, PabloBlock * parent)
     : Statement(ClassTypeId::Assign, {expr}, name, parent)

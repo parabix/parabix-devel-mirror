@@ -90,7 +90,7 @@ public:
     }
 
     inline Call * createCall(const std::string name) {
-        return createCall(getName(name));
+        return createCall(getName(name, false));
     }
 
     Call * createCall(String * name);
@@ -98,7 +98,7 @@ public:
     Assign * createAssign(const std::string prefix, PabloAST * expr, const int outputIndex = -1);
 
     inline Var * createVar(const std::string name) {
-        return createVar(getName(name));
+        return createVar(getName(name, false));
     }
 
     Var * createVar(String * name);
@@ -125,7 +125,7 @@ public:
 
     If * createIf(PabloAST * condition, std::vector<Assign *> && definedVars, PabloBlock & body);
 
-    While * createWhile(PabloAST * cond, PabloBlock & body);
+    While * createWhile(PabloAST * condition, PabloBlock & body);
 
     inline StatementList & statements() {
         return *this;
@@ -135,12 +135,12 @@ public:
         return *this;
     }
 
-    inline String * getName(const std::string name) const {
-        return mSymbolGenerator->get(name);
+    inline String * getName(const std::string name, const bool generated = true) const {
+        return mSymbolGenerator->get(name, generated);
     }
 
-    inline String * makeName(const std::string prefix) const {
-        return mSymbolGenerator->make(prefix);
+    inline String * makeName(const std::string prefix, const bool generated = true) const {
+        return mSymbolGenerator->make(prefix, generated);
     }
 
     virtual ~PabloBlock();

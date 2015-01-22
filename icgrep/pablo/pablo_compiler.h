@@ -78,7 +78,6 @@ private:
     void DefineTypes();
     void DeclareFunctions();
     void Examine(StatementList & stmts);
-    void Examine(PabloAST * expr);
     void DeclareCallFunctions();
     void SetOutputValue(Value * marker, const unsigned index);
 

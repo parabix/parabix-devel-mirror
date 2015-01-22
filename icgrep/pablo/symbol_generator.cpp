@@ -16,11 +16,11 @@ SymbolGenerator::SymbolGenerator()
 
 }
 
-String * SymbolGenerator::get(const std::string name) {
+String * SymbolGenerator::get(const std::string name, const bool generated) {
     auto f = mStringMap.find(name);
     String * result;
     if (f == mStringMap.end()) {
-        result = new String(std::move(name));
+        result = new String(std::move(name), generated);
         mStringMap.insert(std::make_pair(name, result));
     }
     else {
@@ -43,16 +43,16 @@ Integer * SymbolGenerator::getInteger(const integer_t value) {
     return result;
 }
 
-String * SymbolGenerator::make(const std::string prefix) {
+String * SymbolGenerator::make(const std::string prefix, const bool generated) {
     auto f = mPrefixMap.find(prefix);
     unsigned count = 0;
     if (f == mPrefixMap.end()) {
         mPrefixMap.insert(std::make_pair(prefix, 1));
-        return get(prefix);
+        return get(prefix, generated);
     }
     else {
         count = f->second++;
-        return get(prefix + std::to_string(count));
+        return get(prefix + std::to_string(count), generated);
     }
 }
 

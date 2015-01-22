@@ -11,7 +11,7 @@ namespace pablo {
 /// UNARY CREATE FUNCTIONS
 
 Assign * PabloBlock::createAssign(const std::string prefix, PabloAST * expr, const int outputIndex)  {
-    return insertAtInsertionPoint(new Assign(expr, outputIndex, mSymbolGenerator->make(prefix), this));
+    return insertAtInsertionPoint(new Assign(expr, outputIndex, makeName(prefix, false), this));
 }
 
 PabloAST * PabloBlock::createAdvance(PabloAST * expr, PabloAST * shiftAmount) {
@@ -29,10 +29,12 @@ PabloAST * PabloBlock::createAdvance(PabloAST * expr, const int shiftAmount) {
 }
 
 Call * PabloBlock::createCall(String * name) {
+    assert (name);
     return insertAtInsertionPoint(new Call(name, this));
 }
 
 PabloAST * PabloBlock::createNot(PabloAST * expr) {
+    assert (expr);
     if (isa<Ones>(expr)) {
         return createZeroes();
     }
@@ -46,16 +48,19 @@ PabloAST * PabloBlock::createNot(PabloAST * expr) {
 }
 
 Var * PabloBlock::createVar(String * name) {
+    assert (name);
     return insertAtInsertionPoint(new Var(name, this));
 }
 
 /// BINARY CREATE FUNCTIONS
 
 Next * PabloBlock::createNext(Assign * assign, PabloAST * expr) {
+    assert (assign && expr);
     return insertAtInsertionPoint(new Next(assign, expr, this));
 }
 
 PabloAST * PabloBlock::createMatchStar(PabloAST * marker, PabloAST * charclass) {
+    assert (marker && charclass);
     if (isa<Zeroes>(marker) || isa<Zeroes>(charclass)) {
         return marker;
     }
@@ -63,6 +68,7 @@ PabloAST * PabloBlock::createMatchStar(PabloAST * marker, PabloAST * charclass) 
 }
 
 PabloAST * PabloBlock::createScanThru(PabloAST * from, PabloAST * thru) {
+    assert (from && thru);
     if (isa<Zeroes>(from) || isa<Zeroes>(thru)) {
         return from;
     }
@@ -70,6 +76,7 @@ PabloAST * PabloBlock::createScanThru(PabloAST * from, PabloAST * thru) {
 }
 
 PabloAST * PabloBlock::createAnd(PabloAST * expr1, PabloAST * expr2) {
+    assert (expr1 && expr2);
     if (isa<Zeroes>(expr2) || isa<Ones>(expr1)) {
         return expr2;
     }
@@ -100,6 +107,7 @@ PabloAST * PabloBlock::createAnd(PabloAST * expr1, PabloAST * expr2) {
 
 
 PabloAST * PabloBlock::createOr(PabloAST * expr1, PabloAST * expr2) {
+    assert (expr1 && expr2);
     if (isa<Zeroes>(expr2) || isa<Ones>(expr1)) {
         return expr1;
     }
@@ -146,6 +154,7 @@ PabloAST * PabloBlock::createOr(PabloAST * expr1, PabloAST * expr2) {
 }
 
 PabloAST * PabloBlock::createXor(PabloAST * expr1, PabloAST * expr2) {
+    assert (expr1 && expr2);
     if (isa<Ones>(expr1)) {
         return createNot(expr2);
     }
@@ -169,7 +178,7 @@ PabloAST * PabloBlock::createXor(PabloAST * expr1, PabloAST * expr2) {
 /// TERNARY CREATE FUNCTION
 
 PabloAST * PabloBlock::createSel(PabloAST * condition, PabloAST * trueExpr, PabloAST * falseExpr) {
-    assert (condition && trueExpr && falseExpr && pb);
+    assert (condition && trueExpr && falseExpr);
 
     if (isa<Ones>(condition)) {
         return trueExpr;
@@ -202,11 +211,13 @@ PabloAST * PabloBlock::createSel(PabloAST * condition, PabloAST * trueExpr, Pabl
 }
 
 If * PabloBlock::createIf(PabloAST * condition, std::vector<Assign *> && definedVars, PabloBlock & body) {
+    assert (condition);
     return insertAtInsertionPoint(new If(condition, std::move(definedVars), body, this));
 }
 
-While * PabloBlock::createWhile(PabloAST * cond, PabloBlock & body) {
-    return insertAtInsertionPoint(new While(cond, body, this));
+While * PabloBlock::createWhile(PabloAST * condition, PabloBlock & body) {
+    assert (condition);
+    return insertAtInsertionPoint(new While(condition, body, this));
 }
 
 /// CONSTRUCTOR
