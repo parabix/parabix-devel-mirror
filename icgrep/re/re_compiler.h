@@ -50,7 +50,7 @@ inline MarkerPosition markerPos(MarkerType m) {return m.pos;}
 
 inline pablo::PabloAST * markerVar(MarkerType m) {return m.stream;}
     
-inline MarkerType makeMarker(MarkerPosition newpos, pablo::Assign * strm) {return {newpos, strm};}
+inline MarkerType makeMarker(MarkerPosition newpos, pablo::PabloAST * strm) {return {newpos, strm};}
 
 
 class RE_Compiler {
@@ -91,7 +91,7 @@ private:
     pablo::Assign *                                 mLineFeed;
     pablo::PabloAST *                               mCRLF;
     pablo::PabloAST *                               mUnicodeLineBreak;
-    pablo::Assign *                                 mInitial;
+    pablo::PabloAST *                               mInitial;
     pablo::Assign *                                 mNonFinal;
 };
 
