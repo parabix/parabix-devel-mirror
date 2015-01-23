@@ -109,9 +109,9 @@ endif()
 
 #Disable RunTime Type Information
 IF (MSVC) # using Visual Studio C++ 
-  #SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /GR-")
+  SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /GR-")
 ELSE() # using Clang, GCC, Intel C++, etc
-  #SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-rtti")
+  SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-rtti")
 ENDIF()
 
 #Enable all warnings
