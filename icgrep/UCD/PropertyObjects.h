@@ -30,29 +30,33 @@ std::string canonicalize_value_name(std::string prop_or_val) {
 
 
 namespace UCD {
-	enum property_kind_t {
-		NumericProperty, CodepointProperty, StringProperty, MiscellaneousProperty, EnumeratedProperty, CatalogProperty, BinaryProperty
-	};
-	
+    
 	class PropertyObject {
 	public:
-//        enum class ClassTypeId : unsigned {
-//            NumericProperty, CodepointProperty, StringProperty, MiscellaneousProperty, EnumeratedProperty, CatalogProperty, BinaryProperty
-//        };
-//        inline ClassTypeId getClassTypeId() const {
-//            return mClassTypeId;
-//        }
-		PropertyObject(property_t p, property_kind_t k) : the_property(p), the_kind(k) {}
-		
+        enum class ClassTypeId : unsigned {
+            NumericProperty, CodepointProperty, StringProperty, MiscellaneousProperty, EnumeratedProperty, CatalogProperty, BinaryProperty,  UnsupportedProperty
+        };
+        inline ClassTypeId getClassTypeId() const {
+            return the_kind;
+        }
+		PropertyObject(property_t p, ClassTypeId k) : the_property(p), the_kind(k) {}
+        
 		property_t the_property;
-		property_kind_t the_kind;
+		ClassTypeId the_kind;
 		
 		virtual UnicodeSet GetCodepointSet(std::string value_spec) = 0;
 	};
 	
 	class UnsupportedPropertyObject : public PropertyObject {
 	public:
-		UnsupportedPropertyObject(property_t p, property_kind_t k) : PropertyObject(p, k) {}
+        static inline bool classof(const PropertyObject * p) {
+            return p->getClassTypeId() == ClassTypeId::UnsupportedProperty;
+        }
+        static inline bool classof(const void *) {
+            return false;
+        }
+        
+		UnsupportedPropertyObject(property_t p, ClassTypeId k) : PropertyObject(p, k) {}
 		UnicodeSet GetCodepointSet(std::string value_spec);	
 	};
 	
@@ -62,13 +66,19 @@ namespace UCD {
 	
 	class EnumeratedPropertyObject : public PropertyObject {
 	public:
+        static inline bool classof(const PropertyObject * p) {
+            return p->getClassTypeId() == ClassTypeId::EnumeratedProperty;
+        }
+        static inline bool classof(const void *) {
+            return false;
+        }
 		
 		EnumeratedPropertyObject(UCD::property_t p, 
                                  const std::vector<std::string> enum_names,
                                  const std::vector<std::string> names,
                                          const std::unordered_map<std::string, int> aliases,
                                          const std::vector<UnicodeSet> sets) : 
-		PropertyObject(p, EnumeratedProperty), property_value_enum_names(enum_names), property_value_full_names(names), property_value_aliases(aliases), aliases_initialized(false), property_value_sets(sets) {}
+		PropertyObject(p, ClassTypeId::EnumeratedProperty), property_value_enum_names(enum_names), property_value_full_names(names), property_value_aliases(aliases), aliases_initialized(false), property_value_sets(sets) {}
 		int GetPropertyValueEnumCode(std::string s);
 		UnicodeSet GetCodepointSet(std::string value_spec);	
 		
@@ -110,9 +120,17 @@ namespace UCD {
 	
 	class BinaryPropertyObject : public PropertyObject {
 	public:
-		UnicodeSet the_codepoint_set;
-		BinaryPropertyObject(UCD::property_t p, UnicodeSet s) : PropertyObject(p, BinaryProperty), the_codepoint_set(s) {}
+        static inline bool classof(const PropertyObject * p) {
+            return p->getClassTypeId() == ClassTypeId::BinaryProperty;
+        }
+        static inline bool classof(const void *) {
+            return false;
+        }
+		
+		BinaryPropertyObject(UCD::property_t p, UnicodeSet s) : PropertyObject(p, ClassTypeId::BinaryProperty), the_codepoint_set(s) {}
 		UnicodeSet GetCodepointSet(std::string value_spec);	
+    private:
+		UnicodeSet the_codepoint_set;        
 	};
 	
 	UnicodeSet BinaryPropertyObject::GetCodepointSet(std::string value_spec) {
