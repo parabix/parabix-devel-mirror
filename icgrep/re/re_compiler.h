@@ -91,8 +91,8 @@ private:
     pablo::Assign *                                 mLineFeed;
     pablo::PabloAST *                               mCRLF;
     pablo::PabloAST *                               mUnicodeLineBreak;
-    pablo::PabloAST *                               mInitial;
-    pablo::PabloAST *                               mNonFinal;    
+    pablo::Assign *                                 mInitial;
+    pablo::Assign *                                 mNonFinal;
 };
 
 }

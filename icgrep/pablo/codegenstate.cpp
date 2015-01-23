@@ -49,7 +49,7 @@ PabloAST * PabloBlock::createNot(PabloAST * expr) {
 
 Var * PabloBlock::createVar(String * name) {
     assert (name);
-    return insertAtInsertionPoint(new Var(name, this));
+    return new Var(name, this);
 }
 
 /// BINARY CREATE FUNCTIONS

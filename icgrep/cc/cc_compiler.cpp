@@ -73,16 +73,18 @@ void CC_Compiler::compileByteClasses(RE * re) {
         compileByteClasses(e->getLH());
     }
     else if (Name * name = dyn_cast<Name>(re)) {
-        RE * d = name->getDefinition();
-        if (d && !isa<CC>(d)) {
-            compileByteClasses(d);
+        RE * def = name->getDefinition();
+        if (LLVM_LIKELY(def != nullptr)) {
+            if (!isa<CC>(def)) {
+                compileByteClasses(def);
+            }
+            else if (name->getCompiled() == nullptr) {
+                name->setCompiled(compileCC(cast<CC>(def), mCG));
+            }
         }
-        else if (d && isa<CC>(d)) {
-	    name->setCompiled(compileCC(cast<CC>(d), mCG));
-	}
     }
     else if (isa<CC>(re)) {
-        throw std::runtime_error("icgrep internal error: unexpected CC object found in compileByteClasses.");
+        throw std::runtime_error("icgrep internal error: unexpected CC object \"" + Printer_RE::PrintRE(re) + "\" found in compileByteClasses.");
     }
 }
 
@@ -149,7 +151,7 @@ PabloAST * CC_Compiler::bit_pattern_expr(const unsigned pattern, unsigned select
         {
             if ((pattern & test_bit) == 0)
             {
-                bit_terms.push_back(mCG.createNot(getBasisVar(i)));
+                bit_terms.push_back(pb.createNot(getBasisVar(i)));
             }
             else
             {
