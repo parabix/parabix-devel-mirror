@@ -4,11 +4,10 @@
 #include <re/re_re.h>
 #include <re/re_cc.h>
 #include <string>
-#include <iostream>
 #include <re/printer_re.h>
 
 namespace pablo {
-    class Assign;
+    class PabloAST;
 }
 
 
@@ -33,10 +32,10 @@ public:
     void setName(std::string);
     Type getType() const;
     RE *getDefinition() const;
-    pablo::Assign * getCompiled() const {
+    pablo::PabloAST * getCompiled() const {
         return mCompiled;
     }
-    void setCompiled(pablo::Assign * var) {
+    void setCompiled(pablo::PabloAST * var) {
         mCompiled = var;
     }
     void setDefinition(RE * def);
@@ -61,11 +60,11 @@ protected:
     }
 
 private:
-    std::string     mNamespace;
-    std::string     mName;
-    const Type      mType;
-    RE *            mDefiningRE;
-    pablo::Assign * mCompiled;
+    std::string         mNamespace;
+    std::string         mName;
+    const Type          mType;
+    RE *                mDefiningRE;
+    pablo::PabloAST *   mCompiled;
 };
 
 inline const std::string & Name::getNamespace() const {

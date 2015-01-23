@@ -7,9 +7,7 @@
 #ifndef PE_MATCHSTAR_H
 #define PE_MATCHSTAR_H
 
-#include "pabloAST.h"
-#include <pablo/symbol_generator.h>
-#include <array>
+#include <pablo/pabloAST.h>
 
 namespace pablo {
 
@@ -30,8 +28,8 @@ public:
     }
     virtual ~MatchStar() {}
 protected:
-    MatchStar(PabloAST * marker, PabloAST * cc, SymbolGenerator * sg, PabloBlock * parent)
-    : Statement(ClassTypeId::MatchStar, {marker, cc}, sg->make("matchstar"), parent)
+    MatchStar(PabloAST * marker, PabloAST * cc, String * name, PabloBlock * parent)
+    : Statement(ClassTypeId::MatchStar, {marker, cc}, name, parent)
     {
 
     }

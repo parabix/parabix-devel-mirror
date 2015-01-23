@@ -8,11 +8,8 @@
 #define PE_OR_H
 
 #include <pablo/pabloAST.h>
-#include <array>
 
 namespace pablo {
-
-class PabloBlock;
 
 class Or : public Statement {
     friend class PabloBlock;
@@ -32,7 +29,11 @@ public:
         return mOperand[1];
     }
 protected:
-    Or(PabloAST * expr1, PabloAST * expr2, PabloBlock * parent);
+    Or(PabloAST * expr1, PabloAST * expr2, String * name, PabloBlock * parent)
+    : Statement(ClassTypeId::Or, {expr1, expr2}, name, parent)
+    {
+
+    }
 };
 
 }

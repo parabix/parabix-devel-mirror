@@ -129,7 +129,7 @@ LLVM_Gen_RetVal compile(const Encoding encoding, const std::vector<std::string> 
       PabloPrinter::print(main.statements(), std::cerr);
     }
     
-    RE_Compiler re_compiler(main, nameMap);
+    RE_Compiler re_compiler(main);
     re_compiler.initializeRequiredStreams(cc_compiler);
     re_compiler.finalizeMatchResult(re_compiler.compile(re_ast));
     if (PrintAllPablo || PrintCompiledREcode) {

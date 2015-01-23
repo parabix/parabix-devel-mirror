@@ -12,8 +12,6 @@
 
 namespace pablo {
 
-class PabloBlock;
-
 class Xor : public Statement {
     friend class PabloBlock;
 public:
@@ -32,7 +30,11 @@ public:
         return getOperand(1);
     }
 protected:
-    Xor(PabloAST * expr1, PabloAST * expr2, PabloBlock * parent);
+    Xor(PabloAST * expr1, PabloAST * expr2, String * name, PabloBlock * parent)
+    : Statement(ClassTypeId::Xor, {expr1, expr2}, name, parent)
+    {
+
+    }
 };
 
 }

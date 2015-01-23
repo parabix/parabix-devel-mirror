@@ -43,12 +43,12 @@ enum MarkerPosition {FinalMatchByte, InitialPostPositionByte, FinalPostPositionB
 
 struct MarkerType { 
     MarkerPosition pos;
-    pablo::Assign * stream;
+    pablo::PabloAST * stream;
 };
 
 inline MarkerPosition markerPos(MarkerType m) {return m.pos;}
 
-inline pablo::Assign * markerVar(MarkerType m) {return m.stream;}
+inline pablo::PabloAST * markerVar(MarkerType m) {return m.stream;}
     
 inline MarkerType makeMarker(MarkerPosition newpos, pablo::Assign * strm) {return {newpos, strm};}
 
@@ -56,11 +56,11 @@ inline MarkerType makeMarker(MarkerPosition newpos, pablo::Assign * strm) {retur
 class RE_Compiler {
 public:
 
-    RE_Compiler(pablo::PabloBlock & baseCG, const cc::CC_NameMap & nameMap);
+    RE_Compiler(pablo::PabloBlock & baseCG);
     void initializeRequiredStreams(cc::CC_Compiler & ccc);
     void finalizeMatchResult(MarkerType match_result);
     MarkerType compile(RE * re) {
-        return compile(re, mCG);
+        return compile(re, mPB);
     }
 
 private:
@@ -80,14 +80,14 @@ private:
     MarkerType process(Rep * rep, MarkerType marker, pablo::PabloBlock & pb);
     MarkerType process(Diff * diff, MarkerType marker, pablo::PabloBlock & cg);
     MarkerType process(Intersect * x, MarkerType marker, pablo::PabloBlock & cg);
-    pablo::Assign * consecutive1(pablo::Assign * repeated,  int repeated_lgth, int repeat_count, pablo::PabloBlock & pb);
-    pablo::Assign * reachable(pablo::Assign * repeated,  int repeated_lgth, int repeat_count, pablo::PabloBlock & pb);
+    pablo::PabloAST *consecutive1(pablo::PabloAST *repeated,  int repeated_lgth, int repeat_count, pablo::PabloBlock & pb);
+    pablo::PabloAST * reachable(pablo::PabloAST * repeated,  int repeated_lgth, int repeat_count, pablo::PabloBlock & pb);
     static bool isFixedLength(RE * regexp);
     MarkerType processLowerBound(RE * repeated,  int lb, MarkerType marker, pablo::PabloBlock & pb);
     MarkerType processUnboundedRep(RE * repeated, MarkerType marker, pablo::PabloBlock & pb);
     MarkerType processBoundedRep(RE * repeated, int ub, MarkerType marker, pablo::PabloBlock & pb);
 
-    pablo::PabloBlock &                             mCG;
+    pablo::PabloBlock &                             mPB;
     pablo::Assign *                                 mLineFeed;
     pablo::PabloAST *                               mCRLF;
     pablo::PabloAST *                               mUnicodeLineBreak;

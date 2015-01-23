@@ -3,7 +3,6 @@
 
 #include <pablo/pabloAST.h>
 #include <pablo/pe_string.h>
-#include <iostream>
 
 namespace pablo {
 

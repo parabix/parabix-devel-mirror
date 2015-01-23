@@ -81,6 +81,10 @@ public:
 
     PabloAST * createAdvance(PabloAST * expr, PabloAST * shiftAmount);
 
+    PabloAST * createAdvance(PabloAST * expr, const int shiftAmount, const std::string prefix);
+
+    PabloAST * createAdvance(PabloAST * expr, PabloAST * shiftAmount, const std::string prefix);
+
     inline Zeroes * createZeroes() const {
         return mZeroes;
     }
@@ -111,17 +115,31 @@ public:
 
     PabloAST * createAnd(PabloAST * expr1, PabloAST * expr2);
 
+    PabloAST * createAnd(PabloAST * expr1, PabloAST * expr2, const std::string prefix);
+
     PabloAST * createNot(PabloAST * expr);
+
+    PabloAST * createNot(PabloAST * expr, const std::string prefix);
 
     PabloAST * createOr(PabloAST * expr1, PabloAST * expr2);
 
+    PabloAST * createOr(PabloAST * expr1, PabloAST * expr2, const std::string prefix);
+
     PabloAST * createXor(PabloAST * expr1, PabloAST * expr2);
+
+    PabloAST * createXor(PabloAST * expr1, PabloAST * expr2, const std::string prefix);
 
     PabloAST * createMatchStar(PabloAST * marker, PabloAST * charclass);
 
+    PabloAST * createMatchStar(PabloAST * marker, PabloAST * charclass, const std::string prefix);
+
     PabloAST * createScanThru(PabloAST * from, PabloAST * thru);
 
+    PabloAST * createScanThru(PabloAST * from, PabloAST * thru, const std::string prefix);
+
     PabloAST * createSel(PabloAST * condition, PabloAST * trueExpr, PabloAST * falseExpr);
+
+    PabloAST * createSel(PabloAST * condition, PabloAST * trueExpr, PabloAST * falseExpr, const std::string prefix);
 
     If * createIf(PabloAST * condition, std::vector<Assign *> && definedVars, PabloBlock & body);
 
@@ -149,6 +167,8 @@ protected:
     PabloBlock();
 
     PabloBlock(PabloBlock * predecessor);
+
+    PabloAST * renameNonNamedNode(PabloAST * expr, const std::string && prefix);
 
     template<typename Type>
     inline Type * insertAtInsertionPoint(Type * expr) {

@@ -8,11 +8,8 @@
 #define PE_AND_H
 
 #include <pablo/pabloAST.h>
-#include <array>
 
 namespace pablo {
-
-class PabloBlock;
 
 class And : public Statement {
     friend class PabloBlock;
@@ -32,7 +29,11 @@ public:
         return getOperand(1);
     }
 protected:
-    And(PabloAST * expr1, PabloAST * expr2, PabloBlock * parent);
+    And(PabloAST * expr1, PabloAST * expr2, String * name, PabloBlock * parent)
+    : Statement(ClassTypeId::And, {expr1, expr2}, name, parent)
+    {
+
+    }
 };
 
 }

@@ -11,8 +11,6 @@
 
 namespace pablo {
 
-class PabloBlock;
-
 class Not : public Statement {
     friend class PabloBlock;
 public:
@@ -28,7 +26,11 @@ public:
         return getOperand(0);
     }
 protected:
-    Not(PabloAST * expr, PabloBlock * parent);
+    Not(PabloAST * expr, String * name, PabloBlock * parent)
+    : Statement(ClassTypeId::Not, {expr}, name, parent)
+    {
+
+    }
 };
 
 }

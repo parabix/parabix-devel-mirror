@@ -8,8 +8,6 @@
 #define PS_SCANTHRU_H
 
 #include <pablo/pabloAST.h>
-#include <pablo/symbol_generator.h>
-#include <array>
 
 namespace pablo {
 
@@ -31,8 +29,8 @@ public:
         return getOperand(1);
     }
 protected:
-    ScanThru(PabloAST * from, PabloAST * thru, SymbolGenerator * sg, PabloBlock * parent)
-    : Statement(ClassTypeId::ScanThru, {from, thru}, sg->make("scanthru"), parent)
+    ScanThru(PabloAST * from, PabloAST * thru, String * name, PabloBlock * parent)
+    : Statement(ClassTypeId::ScanThru, {from, thru}, name, parent)
     {
 
     }

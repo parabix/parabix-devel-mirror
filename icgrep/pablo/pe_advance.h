@@ -31,8 +31,8 @@ public:
         return cast<Integer>(getOperand(1))->value();
     }
 protected:
-    Advance(PabloAST * expr, PabloAST * shiftAmount, SymbolGenerator * sg, PabloBlock * parent)
-    : Statement(ClassTypeId::Advance, {expr, shiftAmount}, sg->make("advance"), parent)
+    Advance(PabloAST * expr, PabloAST * shiftAmount, String * name, PabloBlock * parent)
+    : Statement(ClassTypeId::Advance, {expr, shiftAmount}, name, parent)
     {
         assert(isa<Integer>(shiftAmount));
     }

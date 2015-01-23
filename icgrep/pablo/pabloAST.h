@@ -19,6 +19,7 @@ using namespace llvm;
 namespace pablo {
 
 class PabloBlock;
+class String;
 
 class PabloAST {
     friend class Statement;

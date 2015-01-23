@@ -8,11 +8,8 @@
 #define PE_SEL_H
 
 #include <pablo/pabloAST.h>
-#include <array>
 
 namespace pablo {
-
-class PabloBlock;
 
 class Sel : public Statement {
     friend class PabloBlock;
@@ -35,7 +32,11 @@ public:
         return getOperand(2);
     }
 protected:
-    Sel(PabloAST* if_expr, PabloAST* t_expr, PabloAST* f_expr, PabloBlock * parent);
+    Sel(PabloAST* if_expr, PabloAST* t_expr, PabloAST* f_expr, String * name, PabloBlock * parent)
+    : Statement(ClassTypeId::Sel, {if_expr, t_expr, f_expr}, name, parent)
+    {
+
+    }
 };
 
 }
