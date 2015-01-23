@@ -107,17 +107,17 @@ void Simplifier::eliminateRedundantCode(PabloBlock & block, ExpressionTable * pr
             // the next statement could be an Assign; just restart the loop.
             continue;
         }
-
-        // When we're creating the Pablo program, it's possible to have multiple instances of an "identical"
-        // statement. By recording which statements have already been seen, we can detect the redundant statements
-        // as any having the same type and operands. If so, we can replace its users with the prior statement.
-        // and erase this statement from the AST
-        const auto f = encountered.insert(stmt);
-        if (!std::get<1>(f)) {
-            stmt = stmt->replaceWith(std::get<0>(f));
-            continue;
+        else {
+            // When we're creating the Pablo program, it's possible to have multiple instances of an "identical"
+            // statement. By recording which statements have already been seen, we can detect the redundant statements
+            // as any having the same type and operands. If so, we can replace its users with the prior statement.
+            // and erase this statement from the AST
+            const auto f = encountered.insert(stmt);
+            if (!std::get<1>(f)) {
+                stmt = stmt->replaceWith(std::get<0>(f));
+                continue;
+            }
         }
-
         assert (stmt);
         stmt = stmt->getNextNode();
     }
