@@ -76,7 +76,31 @@ ssize_t GrepExecutor::write_matches(char * buffer, ssize_t first_line_start) {
     if (mShowLineNumberingOption) {
       std::cout << line_no << ":";
     }
-    fwrite(&buffer[line_start], 1, line_end - line_start + 1, outfile);
+    if ((buffer[line_start] == 0xA) && (line_start != line_end)) {
+        // The LF of a CRLF.  Really the end of the last line.  
+        line_start++;
+    }
+    if (buffer[line_end] == 0xA) {
+        // Normal Unix line end; just write the line.
+        std::cout.write(&buffer[line_start], line_end - line_start + 1);
+    }
+    else if (buffer[line_end] <= 0xD) {
+        // Line terminated with VT, FF or CR.  
+        std::cout.write(&buffer[line_start], line_end - line_start);
+        std::cout << std::endl;
+    }
+    else if (((unsigned char) buffer[line_end]) == 0x85) {
+        // Line terminated with NEL, on the second byte.  
+        std::cout.write(&buffer[line_start], line_end - line_start - 1);
+        std::cout << std::endl;
+    }
+    else  {
+        // Line terminated with PS or LS, on the third byte.
+        std::cout.write(&buffer[line_start], line_end - line_start -2);
+        std::cout << std::endl;
+    }
+      
+
     line_start = line_end + 1;
     line_no++;
 
@@ -243,7 +267,7 @@ void GrepExecutor::doGrep(const std::string infilename) {
         if (mShowFileNameOption) {
             std::cout << currentFileName;
         }
-        fprintf(outfile, "%d\n", match_count);
+        std::cout << match_count << std::endl;
     }
     else
     {

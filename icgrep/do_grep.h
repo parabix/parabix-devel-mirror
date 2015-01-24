@@ -50,7 +50,7 @@ public:
     GrepExecutor(int carry_count, int advance_count, process_block_fcn process_block): 
     mCountOnlyOption(false), mShowFileNameOption(false), mShowLineNumberingOption(false),
     mCarries(carry_count), mAdvances(advance_count),
-    mProcessBlockFcn(process_block), outfile(stdout)
+    mProcessBlockFcn(process_block)
     {}
           
     void setCountOnlyOption(bool doCount = true) {mCountOnlyOption = doCount;}
@@ -69,7 +69,6 @@ private:
     process_block_fcn mProcessBlockFcn;
     
     std::string currentFileName;
-    FILE * outfile;
     ScannerT LF_scanner;
     ScannerT match_scanner;
     long line_no;
