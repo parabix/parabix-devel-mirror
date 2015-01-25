@@ -34,6 +34,7 @@ RE_Compiler::RE_Compiler(PabloBlock & baseCG)
 , mLineFeed(nullptr)
 , mInitial(nullptr)
 , mNonFinal(nullptr)
+, mStarDepth(0)
 {
 
 }
@@ -242,10 +243,35 @@ MarkerType RE_Compiler::process(Name * name, MarkerType marker, PabloBlock & pb)
 }
 
 MarkerType RE_Compiler::process(Seq * seq, MarkerType marker, PabloBlock & pb) {
-    for (RE * re : *seq) {
-        marker = process(re, marker, pb);
+    // if-hierarchies are not inserted within unbounded repetitions
+    if (mStarDepth > 0) {
+        for (RE * re : *seq) {
+            marker = process(re, marker, pb);
+        }
+        return marker;
     }
-    return marker;
+    else {
+        return processSeqTail(seq->begin(), seq->end(), 0, marker, pb);
+    }
+}
+
+#define matchLengthBetweenIfs 2
+    
+MarkerType RE_Compiler::processSeqTail(Seq::iterator current, Seq::iterator end, int matchLenSoFar, MarkerType marker, PabloBlock & pb) {
+    if (current == end) return marker;
+    if (matchLenSoFar < matchLengthBetweenIfs) {
+        RE * r = *current;
+        marker = process(r, marker, pb);
+        current++;
+        return processSeqTail(current, end, matchLenSoFar + minMatchLength(r), marker, pb);
+    }
+    else {
+        PabloBlock & nested = PabloBlock::Create(pb);
+        MarkerType m1 = processSeqTail(current, end, 0, marker, nested);
+        Assign * m1a = nested.createAssign("m", markerVar(m1));
+        pb.createIf(markerVar(marker), std::move(std::vector<Assign *>{m1a}), nested);
+        return makeMarker(m1.pos, m1a);
+    }
 }
 
 MarkerType RE_Compiler::process(Alt * alt, MarkerType marker, PabloBlock & pb) {
@@ -389,9 +415,11 @@ MarkerType RE_Compiler::processLowerBound(RE * repeated, int lb, MarkerType mark
         return makeMarker(FinalMatchByte, pb.createAnd(marker_fwd, cc_lb, "lowerbound"));
     }
     // Fall through to general case.
+    mStarDepth++;
     while (lb-- != 0) {
         marker = process(repeated, marker, pb);
     }
+    mStarDepth--;
     return marker;
 }
 
@@ -407,12 +435,14 @@ MarkerType RE_Compiler::processBoundedRep(RE * repeated, int ub, MarkerType mark
         return makeMarker(InitialPostPositionByte, pb.createAnd(pb.createMatchStar(cursor, rep_class_var), upperLimitMask, "bounded"));
     }
     // Fall through to general case.
+    mStarDepth++;
     while (ub-- != 0) {
         MarkerType a = process(repeated, marker, pb);
         MarkerType m = marker;
         AlignMarkers(a, m, pb);
         marker = makeMarker(markerPos(a), pb.createOr(markerVar(a), markerVar(m), "m"));
     }
+    mStarDepth--;
     return marker;
 }
 
@@ -433,12 +463,14 @@ MarkerType RE_Compiler::processUnboundedRep(RE * repeated, MarkerType marker, Pa
         Assign * whileAccum = pb.createAssign("accum", base);
 
         PabloBlock & wb = PabloBlock::Create(pb);
+        mStarDepth++;
 
         PabloAST * loopComputation = markerVar(AdvanceMarker(process(repeated, makeMarker(InitialPostPositionByte, whileTest), wb), InitialPostPositionByte, wb));
         Next * nextWhileTest = wb.createNext(whileTest, wb.createAnd(loopComputation, wb.createNot(whileAccum)));
         Next * nextWhileAccum = wb.createNext(whileAccum, wb.createOr(loopComputation, whileAccum));
 
         pb.createWhile(nextWhileTest, wb);
+        mStarDepth--;
 
         return makeMarker(InitialPostPositionByte, pb.createAssign("unbounded", nextWhileAccum));
     }    

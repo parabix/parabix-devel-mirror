@@ -8,6 +8,7 @@
 #define RE_TO_PABLO_COMPILER_H
 
 #include <re/re_re.h>
+#include <re/re_seq.h>
 #include <cc/cc_compiler.h>
 
 #include <string>
@@ -75,6 +76,7 @@ private:
     MarkerType process(RE * re, MarkerType marker, pablo::PabloBlock & pb);
     MarkerType process(Name * name, MarkerType marker, pablo::PabloBlock & pb);
     MarkerType process(Seq * seq, MarkerType marker, pablo::PabloBlock & pb);
+    MarkerType processSeqTail(Seq::iterator current, Seq::iterator end, int matchLenSoFar, MarkerType marker, pablo::PabloBlock & pb);
     MarkerType process(Alt * alt, MarkerType marker, pablo::PabloBlock & pb);
     MarkerType process(Assertion * a, MarkerType marker, pablo::PabloBlock & pb);
     MarkerType process(Rep * rep, MarkerType marker, pablo::PabloBlock & pb);
@@ -93,6 +95,7 @@ private:
     pablo::PabloAST *                               mUnicodeLineBreak;
     pablo::PabloAST *                               mInitial;
     pablo::Assign *                                 mNonFinal;
+    int                                             mStarDepth;
 };
 
 }

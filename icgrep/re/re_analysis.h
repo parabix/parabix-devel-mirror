@@ -11,6 +11,8 @@ bool isByteLength(RE * re);
     
 bool isUnicodeUnitLength(RE * re);
 
+int minMatchLength(RE * re);
+
 }
 
 #endif // RE_ANALYSIS_H
