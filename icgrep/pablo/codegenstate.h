@@ -161,6 +161,10 @@ public:
         return mSymbolGenerator->make(prefix, generated);
     }
 
+    inline Integer * getInteger(Integer::integer_t value) {
+        return mSymbolGenerator->getInteger(value);
+    }
+
     virtual ~PabloBlock();
 
 protected:

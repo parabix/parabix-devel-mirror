@@ -9,7 +9,7 @@
 
 #include <llvm/Support/Casting.h>
 #include <llvm/Support/Compiler.h>
-#include <llvm/ADT/SetVector.h>
+#include <boost/container/flat_set.hpp>
 #include <slab_allocator.h>
 #include <iterator>
 #include <unordered_map>
@@ -30,8 +30,9 @@ class PabloAST {
     friend class SymbolGenerator;
 public:
 
-    using Users = SetVector<PabloAST *>;
+    using Users = boost::container::flat_set<PabloAST *>;
     using user_iterator = Users::iterator;
+    using const_user_iterator = Users::const_iterator;
 
     typedef SlabAllocator<PabloAST *> Allocator;
     enum class ClassTypeId : unsigned {
@@ -63,12 +64,20 @@ public:
         mAllocator.release_memory();
     }
 
-    inline user_iterator user_begin() const {
+    inline user_iterator user_begin() {
         return mUsers.begin();
     }
 
-    inline user_iterator user_end() const {
+    inline user_iterator user_end() {
         return mUsers.end();
+    }
+
+    inline const_user_iterator user_begin() const {
+        return mUsers.cbegin();
+    }
+
+    inline const_user_iterator user_end() const {
+        return mUsers.cend();
     }
 
     inline Users & users() {
@@ -100,7 +109,11 @@ protected:
     }
     inline void removeUser(PabloAST * user) {
         assert (user);
-        mUsers.remove(user);
+        auto pos = mUsers.find(user);
+        if (LLVM_UNLIKELY(pos == mUsers.end())) {
+            return;
+        }
+        mUsers.erase(pos);
     }
     virtual ~PabloAST() {
         mUsers.clear();

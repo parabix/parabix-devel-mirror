@@ -6,9 +6,17 @@
 
 namespace pablo {
 
-class Builder {
+class PabloBuilder {
 public:
-    PabloAST * createAdvance(PabloAST * expr, const int shiftAmount);
+
+    inline static PabloBlock & Create() {
+        return *(new PabloBlock());
+    }
+
+    inline static PabloBlock & Create(PabloBlock & predecessor) {
+        return *(new PabloBlock(&predecessor));
+    }
+
 
     inline Zeroes * createZeroes() const {
         return mPb->createZeroes();
@@ -17,14 +25,6 @@ public:
     inline Ones * createOnes() const {
         return mPb->createOnes();
     }
-
-    inline Call * createCall(const std::string name) {
-        return createCall(mPb->getName(name));
-    }
-
-    Call * createCall(String * name);
-
-    Assign * createAssign(const std::string prefix, PabloAST * expr, const int outputIndex = -1);
 
     Var * createVar(const std::string name) {
         return createVar(mPb->getName(name));
@@ -35,6 +35,23 @@ public:
     PabloAST * createVar(const PabloAST * const) {
         throw std::runtime_error("Var objects should only refer to external Vars (i.e., input basis bit streams). Use Assign objects directly.");
     }
+
+    inline Call * createCall(const std::string name) {
+        return createCall(mPb->getName(name));
+    }
+
+    Call * createCall(String * name);
+
+    Assign * createAssign(const std::string prefix, PabloAST * expr, const int outputIndex = -1);
+
+    inline PabloAST * createAdvance(PabloAST * expr, const int shiftAmount) {
+        if (shiftAmount == 0) {
+            return expr;
+        }
+        return createAdvance(expr, mPb->getInteger(shiftAmount));
+    }
+
+    PabloAST * createAdvance(PabloAST * expr, PabloAST * shiftAmount);
 
     Next * createNext(Assign * assign, PabloAST * expr);
 
@@ -52,14 +69,18 @@ public:
 
     PabloAST * createSel(PabloAST * condition, PabloAST * trueExpr, PabloAST * falseExpr);
 
-    If * createIf(PabloAST * condition, std::vector<Assign *> && definedVars, PabloBlock & body);
+    inline If * createIf(PabloAST * condition, std::vector<Assign *> && definedVars, PabloBlock & body) {
+        mPb->createIf(condition, std::move(definedVars), body);
+    }
 
-    While * createWhile(PabloAST * cond, PabloBlock & body);
+    inline While * createWhile(PabloAST * condition, PabloBlock & body) {
+        mPb->createWhile(condition, body);
+    }
 
 private:
 
-    PabloBlock * mPb;
-
+    PabloBlock *        mPb;
+    ExpressionTable     mExprTable;
 };
 
 

@@ -81,12 +81,14 @@ bool equals(const PabloAST * expr1, const PabloAST * expr2) {
 
 void PabloAST::replaceAllUsesWith(PabloAST * expr) {
     assert (expr);
-    while (!mUsers.empty()) {
-        PabloAST * user = mUsers.pop_back_val();
+    Users Q;
+    Q.swap(mUsers);
+    for (PabloAST * user : Q) {
         if (isa<Statement>(user)) {
             cast<Statement>(user)->replaceUsesOfWith(this, expr);
         }
     }
+    Q.clear();
 }
 
 void Statement::setOperand(const unsigned index, PabloAST * const value) {

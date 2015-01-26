@@ -112,7 +112,7 @@ void Simplifier::eliminateRedundantCode(PabloBlock & block, ExpressionTable * pr
             // statement. By recording which statements have already been seen, we can detect the redundant statements
             // as any having the same type and operands. If so, we can replace its users with the prior statement.
             // and erase this statement from the AST
-            const auto f = encountered.insert(stmt);
+            const auto f = encountered.findOrAdd(stmt);
             if (!std::get<1>(f)) {
                 stmt = stmt->replaceWith(std::get<0>(f));
                 continue;

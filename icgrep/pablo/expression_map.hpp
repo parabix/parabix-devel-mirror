@@ -19,7 +19,19 @@ struct ExpressionMap {
 
     }
 
-    inline std::pair<PabloAST *, bool> insert(PabloAST * object, const PabloAST::ClassTypeId type, Args... args) {
+    template <class Functor, typename... Params>
+    inline PabloAST * findOrCall(Functor && functor, const PabloAST::ClassTypeId type, Args... args, Params... params) {
+        Key key = std::make_tuple(type, args...);
+        PabloAST * const f = find(key);
+        if (f) {
+            return f;
+        }
+        PabloAST * const object = functor(std::forward<Args>(args)..., std::forward<Params>(params)...);
+        mMap.insert(std::make_pair(std::move(key), object));
+        return object;
+    }
+
+    inline std::pair<PabloAST *, bool> findOrAdd(PabloAST * object, const PabloAST::ClassTypeId type, Args... args) {
         Key key = std::make_tuple(type, args...);
         PabloAST * const entry = find(key);
         if (entry) {
@@ -88,13 +100,28 @@ struct ExpressionTable {
 
     }
 
-    std::pair<PabloAST *, bool> insert(Statement * stmt) {
+    template <class Functor, typename... Params>
+    inline PabloAST * findUnaryOrCall(Functor && functor, const PabloAST::ClassTypeId type, PabloAST * expr, Params... params) {
+        return mUnary.findOrCall(std::move(functor), type, expr, std::forward<Params>(params)...);
+    }
+
+    template <class Functor, typename... Params>
+    inline PabloAST * findBinaryOrCall(Functor && functor, const PabloAST::ClassTypeId type, PabloAST * expr1, PabloAST * expr2, Params... params) {
+        return mBinary.findOrCall(std::move(functor), type, expr1, expr2, std::forward<Params>(params)...);
+    }
+
+    template <class Functor, typename... Params>
+    inline PabloAST * findTernaryOrCall(Functor && functor, const PabloAST::ClassTypeId type, PabloAST * expr1, PabloAST * expr2, PabloAST * expr3, Params... params) {
+        return mTernary.findOrCall(std::move(functor), type, expr1, expr2, expr3, std::forward<Params>(params)...);
+    }
+
+    std::pair<PabloAST *, bool> findOrAdd(Statement * stmt) {
         switch (stmt->getClassTypeId()) {            
             case PabloAST::ClassTypeId::Assign:
             case PabloAST::ClassTypeId::Call:
             case PabloAST::ClassTypeId::Var:
             case PabloAST::ClassTypeId::Not:
-                return mUnary.insert(stmt, stmt->getClassTypeId(), stmt->getOperand(0));
+                return mUnary.findOrAdd(stmt, stmt->getClassTypeId(), stmt->getOperand(0));
             case PabloAST::ClassTypeId::And:
             case PabloAST::ClassTypeId::Or:
             case PabloAST::ClassTypeId::Xor:
@@ -106,9 +133,9 @@ struct ExpressionTable {
             case PabloAST::ClassTypeId::ScanThru:
             case PabloAST::ClassTypeId::MatchStar:
             case PabloAST::ClassTypeId::Next:
-                return mBinary.insert(stmt, stmt->getClassTypeId(), stmt->getOperand(0), stmt->getOperand(1));
+                return mBinary.findOrAdd(stmt, stmt->getClassTypeId(), stmt->getOperand(0), stmt->getOperand(1));
             case PabloAST::ClassTypeId::Sel:
-                return mTernary.insert(stmt, stmt->getClassTypeId(), stmt->getOperand(0), stmt->getOperand(1), stmt->getOperand(2));
+                return mTernary.findOrAdd(stmt, stmt->getClassTypeId(), stmt->getOperand(0), stmt->getOperand(1), stmt->getOperand(2));
             default:
                 return std::make_pair(stmt, true);
         }

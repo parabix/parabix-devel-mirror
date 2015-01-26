@@ -41,14 +41,14 @@ PabloAST * PabloBlock::createAdvance(PabloAST * expr, const int shiftAmount) {
     if (isa<Zeroes>(expr) || shiftAmount == 0) {
         return expr;
     }
-    return insertAtInsertionPoint(new Advance(expr, mSymbolGenerator->getInteger(shiftAmount), makeName("advance"), this));
+    return insertAtInsertionPoint(new Advance(expr, getInteger(shiftAmount), makeName("advance"), this));
 }
 
 PabloAST * PabloBlock::createAdvance(PabloAST * expr, const int shiftAmount, const std::string prefix) {
     if (isa<Zeroes>(expr) || shiftAmount == 0) {
         return renameNonNamedNode(expr, std::move(prefix));
     }    
-    return insertAtInsertionPoint(new Advance(expr, mSymbolGenerator->getInteger(shiftAmount), makeName(prefix, false), this));
+    return insertAtInsertionPoint(new Advance(expr, getInteger(shiftAmount), makeName(prefix, false), this));
 }
 
 Call * PabloBlock::createCall(String * name) {
