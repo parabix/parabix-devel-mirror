@@ -9,7 +9,7 @@
 
 #include <llvm/Support/Casting.h>
 #include <llvm/Support/Compiler.h>
-#include <boost/container/flat_set.hpp>
+#include <vector>
 #include <slab_allocator.h>
 #include <iterator>
 #include <unordered_map>
@@ -30,7 +30,7 @@ class PabloAST {
     friend class SymbolGenerator;
 public:
 
-    using Users = boost::container::flat_set<PabloAST *>;
+    using Users = std::vector<PabloAST*>;
     using user_iterator = Users::iterator;
     using const_user_iterator = Users::const_iterator;
 
@@ -105,12 +105,16 @@ protected:
     }
     inline void addUser(PabloAST * user) {
         assert (user);
-        mUsers.insert(user);
+        auto pos = std::lower_bound(mUsers.begin(), mUsers.end(), user);
+        if (LLVM_UNLIKELY(pos != mUsers.end() && *pos == user)) {
+            return;
+        }
+        mUsers.insert(pos, user);
     }
     inline void removeUser(PabloAST * user) {
         assert (user);
-        auto pos = mUsers.find(user);
-        if (LLVM_UNLIKELY(pos == mUsers.end())) {
+        auto pos = std::lower_bound(mUsers.begin(), mUsers.end(), user);
+        if (LLVM_UNLIKELY(pos == mUsers.end() || *pos != user)) {
             return;
         }
         mUsers.erase(pos);
