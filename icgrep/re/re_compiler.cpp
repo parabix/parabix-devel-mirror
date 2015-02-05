@@ -24,6 +24,19 @@
 #include <assert.h>
 #include <stdexcept>
 
+#include "llvm/Support/CommandLine.h"
+cl::OptionCategory fREcompilationOptions("Regex Compilation Options",
+                                      "These options control the compilation of regular expressions to Pablo.");
+
+static cl::opt<bool> DisableLog2BoundedRepetition("disable-log2-bounded-repetition", cl::init(false), 
+                     cl::desc("disable log2 optimizations for bounded repetition of bytes"), cl::cat(fREcompilationOptions));
+static cl::opt<int> IfInsertionGap("if-insertion-gap", cl::init(3), cl::desc("minimum number of nonempty elements between inserted if short-circuit tests"), cl::cat(fREcompilationOptions));
+static cl::opt<bool> DisableMatchStar("disable-matchstar", cl::init(false), 
+                     cl::desc("disable MatchStar optimization"), cl::cat(fREcompilationOptions));
+static cl::opt<bool> DisableUnicodeMatchStar("disable-Unicode-matchstar", cl::init(false), 
+                     cl::desc("disable Unicode MatchStar optimization"), cl::cat(fREcompilationOptions));
+
+
 using namespace pablo;
 
 namespace re {
@@ -255,11 +268,9 @@ MarkerType RE_Compiler::process(Seq * seq, MarkerType marker, PabloBlock & pb) {
     }
 }
 
-#define matchLengthBetweenIfs 2
-    
 MarkerType RE_Compiler::processSeqTail(Seq::iterator current, Seq::iterator end, int matchLenSoFar, MarkerType marker, PabloBlock & pb) {
     if (current == end) return marker;
-    if (matchLenSoFar < matchLengthBetweenIfs) {
+    if (matchLenSoFar < IfInsertionGap) {
         RE * r = *current;
         marker = process(r, marker, pb);
         current++;
@@ -408,7 +419,7 @@ inline PabloAST * RE_Compiler::reachable(PabloAST *repeated, int repeated_lgth, 
 }
 
 MarkerType RE_Compiler::processLowerBound(RE * repeated, int lb, MarkerType marker, PabloBlock & pb) {
-    if (isByteLength(repeated)) {
+    if (isByteLength(repeated) && !DisableLog2BoundedRepetition) {
         PabloAST * cc = markerVar(compile(repeated, pb));
         PabloAST * cc_lb = consecutive1(cc, 1, lb, pb);
         PabloAST * marker_fwd = pb.createAdvance(markerVar(marker), markerPos(marker) == FinalMatchByte ? lb : lb-1);
@@ -424,7 +435,7 @@ MarkerType RE_Compiler::processLowerBound(RE * repeated, int lb, MarkerType mark
 }
 
 MarkerType RE_Compiler::processBoundedRep(RE * repeated, int ub, MarkerType marker, PabloBlock & pb) {
-    if (isByteLength(repeated) && ub > 1) {
+    if (isByteLength(repeated) && ub > 1 && !DisableLog2BoundedRepetition) {
         // log2 upper bound for fixed length (=1) class
         // Create a mask of positions reachable within ub from current marker.
         // Use matchstar, then apply filter.
@@ -450,11 +461,11 @@ MarkerType RE_Compiler::processUnboundedRep(RE * repeated, MarkerType marker, Pa
     // always use PostPosition markers for unbounded repetition.
     PabloAST * base = markerVar(AdvanceMarker(marker, InitialPostPositionByte, pb));
     
-    if (isByteLength(repeated)) {
+    if (isByteLength(repeated)  && !DisableMatchStar) {
         PabloAST * cc = markerVar(compile(repeated, pb));  
         return makeMarker(InitialPostPositionByte, pb.createMatchStar(base, cc, "unbounded"));
     }
-    else if (isUnicodeUnitLength(repeated)) {
+    else if (isUnicodeUnitLength(repeated) && !DisableMatchStar && !DisableUnicodeMatchStar) {
         PabloAST * cc = markerVar(compile(repeated, pb));
         return makeMarker(InitialPostPositionByte, pb.createAnd(pb.createMatchStar(base, pb.createOr(mNonFinal, cc)), mInitial, "unbounded"));
     }
