@@ -80,26 +80,28 @@ ssize_t GrepExecutor::write_matches(char * buffer, ssize_t first_line_start) {
         // The LF of a CRLF.  Really the end of the last line.  
         line_start++;
     }
-    if (buffer[line_end] == 0xA) {
-        // Normal Unix line end; just write the line.
+    unsigned char end_byte = (unsigned char) buffer[line_end];
+    if (mNormalizeLineBreaksOption) {
+        if (end_byte <= 0xD) {
+            // Line terminated with LF, VT, FF or CR.  
+            std::cout.write(&buffer[line_start], line_end - line_start);
+            std::cout << std::endl;
+        }
+        else if (end_byte == 0x85) {
+            // Line terminated with NEL, on the second byte.  
+            std::cout.write(&buffer[line_start], line_end - line_start - 1);
+            std::cout << std::endl;
+        }
+        else  {
+            // Line terminated with PS or LS, on the third byte.
+            std::cout.write(&buffer[line_start], line_end - line_start - 2);
+            std::cout << std::endl;
+        }
+    }
+    else {
+        // TODO:  Adjust for CRLF
         std::cout.write(&buffer[line_start], line_end - line_start + 1);
     }
-    else if (buffer[line_end] <= 0xD) {
-        // Line terminated with VT, FF or CR.  
-        std::cout.write(&buffer[line_start], line_end - line_start);
-        std::cout << std::endl;
-    }
-    else if (((unsigned char) buffer[line_end]) == 0x85) {
-        // Line terminated with NEL, on the second byte.  
-        std::cout.write(&buffer[line_start], line_end - line_start - 1);
-        std::cout << std::endl;
-    }
-    else  {
-        // Line terminated with PS or LS, on the third byte.
-        std::cout.write(&buffer[line_start], line_end - line_start -2);
-        std::cout << std::endl;
-    }
-      
 
     line_start = line_end + 1;
     line_no++;
@@ -160,7 +162,7 @@ void GrepExecutor::doGrep(const std::string infilename) {
         std::cerr << "Error: mmap of " << infilename << " failed. Skipped.\n";
         return;
     }
-    
+    currentFileSize = infile_sb.st_size;
     char * buffer_ptr;
     int segment = 0;
     int segment_base = 0;

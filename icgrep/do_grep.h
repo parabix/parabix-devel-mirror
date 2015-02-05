@@ -56,6 +56,7 @@ public:
     void setCountOnlyOption(bool doCount = true) {mCountOnlyOption = doCount;}
     void setShowFileNameOption(bool showF = true) {mShowFileNameOption = showF;}
     void setShowLineNumberOption(bool showN = true) {mShowLineNumberingOption = showN;}
+    void setNormalizeLineBreaksOption(bool normLB = true) {mNormalizeLineBreaksOption = normLB;}
     
     void doGrep(std::string fileName);
 private:
@@ -64,11 +65,13 @@ private:
     bool mCountOnlyOption;
     bool mShowFileNameOption;
     bool mShowLineNumberingOption;
+    bool mNormalizeLineBreaksOption;
     int mCarries;
     int mAdvances;
     process_block_fcn mProcessBlockFcn;
     
     std::string currentFileName;
+    size_t currentFileSize;
     ScannerT LF_scanner;
     ScannerT match_scanner;
     long line_no;
