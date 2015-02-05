@@ -263,6 +263,11 @@ add_test(
   COMMAND python greptest.py ${CMAKE_BINARY_DIR}/icgrep)
 
 add_test(
+  NAME proptest
+  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA
+  COMMAND python greptest.py -d ${PROJECT_SOURCE_DIR}/../QA -t ${PROJECT_SOURCE_DIR}/../QA/proptest.xml ${CMAKE_BINARY_DIR}/icgrep)
+
+add_test(
   NAME abc_test
   WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA
   COMMAND ./run_abc ../icgrep-build/icgrep)
