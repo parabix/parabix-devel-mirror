@@ -71,7 +71,7 @@ ssize_t GrepExecutor::write_matches(char * buffer, ssize_t first_line_start) {
       line_end = LF_scanner.scan_to_next();
     }
     if (mShowFileNameOption) {
-      std::cout << currentFileName;
+      std::cout << mFileName;
     }
     if (mShowLineNumberingOption) {
       std::cout << line_no << ":";
@@ -99,10 +99,16 @@ ssize_t GrepExecutor::write_matches(char * buffer, ssize_t first_line_start) {
         }
     }
     else {
-        // TODO:  Adjust for CRLF
+        // Check for line_end on first byte of CRLF;  note that to safely
+        // access past line_end, even at the end of buffer, we require the
+        // mmap_sentinel_bytes >= 1.
+        if (end_byte == 0x0D) {
+            if (buffer[line_end + 1] == 0x0A) {
+                line_end++;
+            }
+        }
         std::cout.write(&buffer[line_start], line_end - line_start + 1);
     }
-
     line_start = line_end + 1;
     line_no++;
 
@@ -126,14 +132,14 @@ void GrepExecutor::doGrep(const std::string infilename) {
     BitBlock advance_q[mAdvances];
     
     
-    currentFileName = infilename + ":";
+    mFileName = infilename + ":";
     
-    int match_count=0;
-    int blk = 0;
-    int block_base  = 0;
-    int block_pos   = 0;
-    int chars_avail = 0;
-    int line_start = 0;
+    size_t match_count = 0;
+    size_t blk = 0;
+    size_t block_base  = 0;
+    size_t block_pos   = 0;
+    size_t chars_avail = 0;
+    ssize_t line_start = 0;
     line_no = 1;
 
     match_vector = simd<1>::constant<0>();
@@ -157,16 +163,19 @@ void GrepExecutor::doGrep(const std::string infilename) {
         // std::cerr << "Error: " << infilename << " is a directory. Skipped.\n";
         return;
     }
-    infile_buffer = (char *) mmap(NULL, infile_sb.st_size, PROT_READ, MAP_PRIVATE, fdSrc, 0);
+    mFileSize = infile_sb.st_size;
+    // Set 2 sentinel bytes, 1 for possible addition of LF for unterminated last line, 
+    // 1 guard byte.
+    const size_t mmap_sentinel_bytes = 2;  
+    infile_buffer = (char *) mmap(NULL, mFileSize + mmap_sentinel_bytes, PROT_READ, MAP_PRIVATE, fdSrc, 0);
     if (infile_buffer == MAP_FAILED) {
         std::cerr << "Error: mmap of " << infilename << " failed. Skipped.\n";
         return;
     }
-    currentFileSize = infile_sb.st_size;
     char * buffer_ptr;
-    int segment = 0;
-    int segment_base = 0;
-    chars_avail = infile_sb.st_size;
+    size_t segment = 0;
+    size_t segment_base = 0;
+    chars_avail = mFileSize;
     
 //////////////////////////////////////////////////////////////////////////////////////////
 // Full Segments
@@ -174,7 +183,7 @@ void GrepExecutor::doGrep(const std::string infilename) {
 
     while (chars_avail >= SEGMENT_SIZE) {
 
-	segment_base = segment * SEGMENT_SIZE;
+        segment_base = segment * SEGMENT_SIZE;
         LF_scanner.init();
         match_scanner.init();
 
@@ -205,9 +214,9 @@ void GrepExecutor::doGrep(const std::string infilename) {
         if (!mCountOnlyOption) {
           line_start = write_matches(buffer_ptr, line_start);
         }
-	segment++;
-	line_start -= SEGMENT_SIZE;  /* Will be negative offset for use within next segment. */
-	chars_avail -= SEGMENT_SIZE;
+        segment++;
+        line_start -= SEGMENT_SIZE;  /* Will be negative offset for use within next segment. */
+        chars_avail -= SEGMENT_SIZE;
     }
 
 //////////////////////////////////////////////////////////////////////////////////////////
@@ -216,6 +225,7 @@ void GrepExecutor::doGrep(const std::string infilename) {
 
     segment_base = segment * SEGMENT_SIZE;
     int remaining = chars_avail;
+        
 
     LF_scanner.init();
     match_scanner.init();
@@ -223,7 +233,6 @@ void GrepExecutor::doGrep(const std::string infilename) {
     /* Full Blocks */
     blk = 0;
     while (remaining >= BLOCK_SIZE) {
-    //fprintf(outfile, "Remaining = %i\n", remaining);
         block_base = block_pos + segment_base;
         s2p_do_block((BytePack *) &infile_buffer[block_base], basis_bits);
         mProcessBlockFcn(basis_bits, carry_q, advance_q, output);
@@ -254,6 +263,8 @@ void GrepExecutor::doGrep(const std::string infilename) {
     //fprintf(stderr, "Remaining = %i\n", remaining);
 
     //For the last partial block, or for any carry.
+    
+    
     EOF_mask = bitblock::srl(simd<1>::constant<1>(), convert(BLOCK_SIZE-remaining));
     block_base = block_pos + segment_base;
     s2p_do_final_block((BytePack *) &infile_buffer[block_base], basis_bits, EOF_mask);
@@ -267,7 +278,7 @@ void GrepExecutor::doGrep(const std::string infilename) {
             match_count += bitblock::popcount(output.matches);
         }
         if (mShowFileNameOption) {
-            std::cout << currentFileName;
+            std::cout << mFileName;
         }
         std::cout << match_count << std::endl;
     }
@@ -285,7 +296,7 @@ void GrepExecutor::doGrep(const std::string infilename) {
         line_start = write_matches(buffer_ptr, line_start);
     }
     
-    munmap((void *) infile_buffer, infile_sb.st_size);
+    munmap((void *) infile_buffer, mFileSize + mmap_sentinel_bytes);
     close(fdSrc);
     
 }

@@ -70,11 +70,11 @@ private:
     int mAdvances;
     process_block_fcn mProcessBlockFcn;
     
-    std::string currentFileName;
-    size_t currentFileSize;
+    std::string mFileName;
+    size_t mFileSize;
     ScannerT LF_scanner;
     ScannerT match_scanner;
-    long line_no;
+    size_t line_no;
 };
 
 
