@@ -42,7 +42,7 @@ add_definitions( ${LLVM_DEFINITIONS} )
 
 # Let's suppose we want to build a JIT compiler with support for
 # binary code (no interpreter):
-llvm_map_components_to_libraries(REQ_LLVM_LIBRARIES mcjit native)
+llvm_map_components_to_libnames(REQ_LLVM_LIBRARIES mcjit native)
 
 message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
 
@@ -168,7 +168,7 @@ c = _mm_cmpgt_epi64(a, b);
 return 0;
 }")
 
-set(AVX_1_CODE "
+set(AVX1_CODE "
 #include <immintrin.h>
 int main()
 {
@@ -179,7 +179,7 @@ _mm_free(a);
 return 0;
 }")
 
-set(AVX_2_CODE "
+set(AVX2_CODE "
 #include <immintrin.h>
 int main()
 {
@@ -196,8 +196,8 @@ IF (MSVC) # using Visual Studio C++
   SET(ENABLE_SSE3 "/arch:SSE3")
   SET(ENABLE_SSE4_1 "/arch:SSE4")
   SET(ENABLE_SSE4_2 "/arch:SSE4")
-  SET(ENABLE_AVX_1 "/arch:AVX1")
-  SET(ENABLE_AVX_2 "/arch:AVX2")
+  SET(ENABLE_AVX1 "/arch:AVX1")
+  SET(ENABLE_AVX2 "/arch:AVX2")
 ELSE() # using Clang, GCC, Intel C++, etc  
   SET(ENABLE_SSE1 "-msse")
   SET(ENABLE_SSE2 "-msse2")
@@ -205,54 +205,52 @@ ELSE() # using Clang, GCC, Intel C++, etc
   SET(ENABLE_SSE4_1 "-msse4.1")
   SET(ENABLE_SSE4_2 "-msse4.2")
   IF ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
-    SET(ENABLE_AVX_1 "-mavx -fabi-version=6")
-    SET(ENABLE_AVX_2 "-mavx2 -fabi-version=6")  
+    SET(ENABLE_AVX1 "-mavx -fabi-version=6")
+    SET(ENABLE_AVX2 "-mavx2 -fabi-version=6")  
   ELSE()
-    SET(ENABLE_AVX_1 "-mavx")
-    SET(ENABLE_AVX_2 "-mavx2")
+    SET(ENABLE_AVX1 "-mavx")
+    SET(ENABLE_AVX2 "-mavx2")
   ENDIF()
 ENDIF()
 
-set(CMAKE_REQUIRED_FLAGS)
-set(SIMD_SUPPORT_FOUND)
-set(SIMD_MAX_BLOCK_SIZE)
+SET(CMAKE_REQUIRED_FLAGS)
 
-MACRO(CHECK_SIMD_SUPPORT type maxBlockSize)
-  IF(NOT SIMD_SUPPORT_FOUND)  
-    set(CMAKE_REQUIRED_FLAGS_SAVE ${CMAKE_REQUIRED_FLAGS})
-    set(CMAKE_REQUIRED_FLAGS ${ENABLE_${type}})
-    check_cxx_source_runs("${${type}_CODE}" ${type})    
-    IF(${type})
-      SET(SIMD_SUPPORT_FOUND ${CMAKE_REQUIRED_FLAGS})
-      SET(SIMD_MAX_BLOCK_SIZE ${maxBlockSize})
+MACRO(CHECK_SIMD_SUPPORT SIMD_TYPE RESULT)
+  IF(NOT RESULT)  
+    SET(CMAKE_REQUIRED_FLAGS_SAVE ${CMAKE_REQUIRED_FLAGS})
+    SET(CMAKE_REQUIRED_FLAGS ${ENABLE_${SIMD_TYPE}})
+    SET(SUCCESS "${SIMD_TYPE}")
+    check_cxx_source_runs("${${SIMD_TYPE}_CODE}" ${SUCCESS})    
+    IF(${SUCCESS})
+      SET(${RESULT} "${SIMD_TYPE}")
     ENDIF()
     SET(CMAKE_REQUIRED_FLAGS ${CMAKE_REQUIRED_FLAGS_SAVE})
   ENDIF()
 ENDMACRO()
 
-CHECK_SIMD_SUPPORT("AVX_2" 256)
-CHECK_SIMD_SUPPORT("AVX_1" 128)
-CHECK_SIMD_SUPPORT("SSE4_2" 128)
-CHECK_SIMD_SUPPORT("SSE4_1" 128)
-CHECK_SIMD_SUPPORT("SSE3" 128)
-CHECK_SIMD_SUPPORT("SSE2" 128)
-CHECK_SIMD_SUPPORT("SSE1" 128)
+IF(NOT SIMD_SUPPORT)
+SET(RESULT)
+CHECK_SIMD_SUPPORT("AVX2" RESULT)
+CHECK_SIMD_SUPPORT("AVX1" RESULT)
+CHECK_SIMD_SUPPORT("SSE4_2" RESULT)
+CHECK_SIMD_SUPPORT("SSE4_1" RESULT)
+CHECK_SIMD_SUPPORT("SSE3" RESULT)
+CHECK_SIMD_SUPPORT("SSE2" RESULT)
+CHECK_SIMD_SUPPORT("SSE1" RESULT)
+SET(SIMD_SUPPORT ${RESULT} CACHE STRING "SSE2")
+ENDIF()
 
-SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${SIMD_SUPPORT_FOUND}")
+SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${ENABLE_${SIMD_SUPPORT}}")
 
 # detect LLVM version and add compiler flags.
 if (${LLVM_PACKAGE_VERSION} MATCHES "3.4")
   SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DUSE_LLVM_3_4")
-elseif (${LLVM_PACKAGE_VERSION} MATCHES "3.5")
+ELSEIF (${LLVM_PACKAGE_VERSION} MATCHES "3.5")
   SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DUSE_LLVM_3_5")
-endif(${LLVM_PACKAGE_VERSION} MATCHES "3.4")
+ENDIF()
 
 IF (BLOCK_SIZE_256)
-  IF(${SIMD_MAX_BLOCK_SIZE} GREATER 128)
     SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DUSE_S2P_AVX2 -DBLOCK_SIZE=256 -march=core-avx2 -m64")
-  ELSE()
-    MESSAGE(FATAL_ERROR "AVX2 or better is required for BLOCK_SIZE=256")
-  ENDIF()
 ENDIF()
 
 SET(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS} -O3 -DNDEBUG")
