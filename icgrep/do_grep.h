@@ -61,19 +61,22 @@ public:
     void doGrep(std::string fileName);
 private:
     ssize_t write_matches(char * buffer, ssize_t first_line_start);
+    bool finalLineIsUnterminated();
 
     bool mCountOnlyOption;
     bool mShowFileNameOption;
     bool mShowLineNumberingOption;
     bool mNormalizeLineBreaksOption;
+
     int mCarries;
     int mAdvances;
     process_block_fcn mProcessBlockFcn;
     
     std::string mFileName;
     size_t mFileSize;
-    ScannerT LF_scanner;
-    ScannerT match_scanner;
+    char * mFileBuffer;
+    ScannerT mLineBreak_scanner;
+    ScannerT mMatch_scanner;
     size_t line_no;
 };
 

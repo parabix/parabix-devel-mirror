@@ -61,14 +61,14 @@ ssize_t GrepExecutor::write_matches(char * buffer, ssize_t first_line_start) {
   ssize_t line_start = first_line_start;
   size_t match_pos;
   size_t line_end;
-  while (match_scanner.has_next()) {
-    match_pos = match_scanner.scan_to_next();
+  while (mMatch_scanner.has_next()) {
+    match_pos = mMatch_scanner.scan_to_next();
     // If we found a match, it must be at a line end.
-    line_end = LF_scanner.scan_to_next();
+    line_end = mLineBreak_scanner.scan_to_next();
     while (line_end < match_pos) {
       line_start = line_end + 1;
       line_no++;
-      line_end = LF_scanner.scan_to_next();
+      line_end = mLineBreak_scanner.scan_to_next();
     }
     if (mShowFileNameOption) {
       std::cout << mFileName;
@@ -82,46 +82,60 @@ ssize_t GrepExecutor::write_matches(char * buffer, ssize_t first_line_start) {
     }
     unsigned char end_byte = (unsigned char) buffer[line_end];
     if (mNormalizeLineBreaksOption) {
-        if (end_byte <= 0xD) {
-            // Line terminated with LF, VT, FF or CR.  
-            std::cout.write(&buffer[line_start], line_end - line_start);
-            std::cout << std::endl;
-        }
-        else if (end_byte == 0x85) {
-            // Line terminated with NEL, on the second byte.  
-            std::cout.write(&buffer[line_start], line_end - line_start - 1);
-            std::cout << std::endl;
-        }
-        else  {
-            // Line terminated with PS or LS, on the third byte.
-            std::cout.write(&buffer[line_start], line_end - line_start - 2);
-            std::cout << std::endl;
-        }
+      if (end_byte == 0x85) {
+          // Line terminated with NEL, on the second byte.  Back up 1.
+          line_end--;
+      }
+      else if (end_byte > 0xD) {
+          // Line terminated with PS or LS, on the third byte.  Back up 2.
+          line_end -= 2;
+      }
+      std::cout.write(&buffer[line_start], line_end - line_start);
+      std::cout << std::endl;
     }
     else {
-        // Check for line_end on first byte of CRLF;  note that to safely
-        // access past line_end, even at the end of buffer, we require the
-        // mmap_sentinel_bytes >= 1.
-        if (end_byte == 0x0D) {
-            if (buffer[line_end + 1] == 0x0A) {
-                line_end++;
-            }
-        }
-        std::cout.write(&buffer[line_start], line_end - line_start + 1);
+      if (end_byte == 0x0) {
+          // This must be a sentinel byte position at the end of file.
+          // Do not write it.
+          line_end--;
+      }
+      else if (end_byte == 0x0D) {
+          // Check for line_end on first byte of CRLF;  note that to safely
+          // access past line_end, even at the end of buffer, we require the
+          // mmap_sentinel_bytes >= 1.
+          if (buffer[line_end + 1] == 0x0A) { 
+              // Found CRLF; preserve both bytes.
+              line_end++;
+          }
+      }
+      std::cout.write(&buffer[line_start], line_end - line_start + 1);
     }
     line_start = line_end + 1;
     line_no++;
-
   }
-  while(LF_scanner.has_next()) {
-    line_end = LF_scanner.scan_to_next();
+  while(mLineBreak_scanner.has_next()) {
+    line_end = mLineBreak_scanner.scan_to_next();
     line_start = line_end+1;
     line_no++;
   }
   return line_start;
 }
 
-
+bool GrepExecutor::finalLineIsUnterminated() {
+    if (mFileSize == 0) return false;
+    unsigned char end_byte = static_cast<unsigned char>(mFileBuffer[mFileSize-1]);
+    // LF through CR are line break characters
+    if ((end_byte >= 0xA) && (end_byte <= 0xD)) return false;
+    // Other line breaks require at least two bytes.
+    if (mFileSize == 1) return true;
+    // NEL  
+    unsigned char penult_byte = static_cast<unsigned char>(mFileBuffer[mFileSize-2]);
+    if ((end_byte == 0x85) && (penult_byte == 0xC2)) return false;
+    if (mFileSize == 2) return true;
+    // LS and PS
+    if ((end_byte < 0xA8) || (end_byte > 0xA9)) return true;
+    return (static_cast<unsigned char>(mFileBuffer[mFileSize-3]) != 0xE2) || (penult_byte != 0x80);
+}
 
 void GrepExecutor::doGrep(const std::string infilename) {
 
@@ -148,7 +162,6 @@ void GrepExecutor::doGrep(const std::string infilename) {
     
     int fdSrc;
     struct stat infile_sb;
-    char * infile_buffer;
     fdSrc = open(infilename.c_str(), O_RDONLY);
     if (fdSrc == -1) {
         std::cerr << "Error: cannot open " << infilename << " for processing. Skipped.\n";
@@ -165,10 +178,10 @@ void GrepExecutor::doGrep(const std::string infilename) {
     }
     mFileSize = infile_sb.st_size;
     // Set 2 sentinel bytes, 1 for possible addition of LF for unterminated last line, 
-    // 1 guard byte.
+    // 1 guard byte.  PROT_WRITE enables writing the sentinel.
     const size_t mmap_sentinel_bytes = 2;  
-    infile_buffer = (char *) mmap(NULL, mFileSize + mmap_sentinel_bytes, PROT_READ, MAP_PRIVATE, fdSrc, 0);
-    if (infile_buffer == MAP_FAILED) {
+    mFileBuffer = (char *) mmap(NULL, mFileSize + mmap_sentinel_bytes, PROT_READ|PROT_WRITE, MAP_PRIVATE, fdSrc, 0);
+    if (mFileBuffer == MAP_FAILED) {
         std::cerr << "Error: mmap of " << infilename << " failed. Skipped.\n";
         return;
     }
@@ -184,16 +197,16 @@ void GrepExecutor::doGrep(const std::string infilename) {
     while (chars_avail >= SEGMENT_SIZE) {
 
         segment_base = segment * SEGMENT_SIZE;
-        LF_scanner.init();
-        match_scanner.init();
+        mLineBreak_scanner.init();
+        mMatch_scanner.init();
 
         for (blk = 0; blk < SEGMENT_BLOCKS; blk++) {
             block_base = blk*BLOCK_SIZE + segment_base;
-            s2p_do_block((BytePack *) &infile_buffer[block_base], basis_bits);
+            s2p_do_block((BytePack *) &mFileBuffer[block_base], basis_bits);
             mProcessBlockFcn(basis_bits, carry_q, advance_q, output);
 
-            LF_scanner.load_block(output.LF, blk);
-            match_scanner.load_block(output.matches, blk);
+            mLineBreak_scanner.load_block(output.LF, blk);
+            mMatch_scanner.load_block(output.matches, blk);
             if (mCountOnlyOption){
                 if (bitblock::any(output.matches))
                 {
@@ -209,7 +222,7 @@ void GrepExecutor::doGrep(const std::string infilename) {
             }
         }
 
-        buffer_ptr = &infile_buffer[segment_base];
+        buffer_ptr = &mFileBuffer[segment_base];
 
         if (!mCountOnlyOption) {
           line_start = write_matches(buffer_ptr, line_start);
@@ -227,18 +240,18 @@ void GrepExecutor::doGrep(const std::string infilename) {
     int remaining = chars_avail;
         
 
-    LF_scanner.init();
-    match_scanner.init();
+    mLineBreak_scanner.init();
+    mMatch_scanner.init();
 
     /* Full Blocks */
     blk = 0;
     while (remaining >= BLOCK_SIZE) {
         block_base = block_pos + segment_base;
-        s2p_do_block((BytePack *) &infile_buffer[block_base], basis_bits);
+        s2p_do_block((BytePack *) &mFileBuffer[block_base], basis_bits);
         mProcessBlockFcn(basis_bits, carry_q, advance_q, output);
 
-        LF_scanner.load_block(output.LF, blk);
-        match_scanner.load_block(output.matches, blk);
+        mLineBreak_scanner.load_block(output.LF, blk);
+        mMatch_scanner.load_block(output.matches, blk);
         if (mCountOnlyOption)
         {
             if (bitblock::any(output.matches))
@@ -260,14 +273,24 @@ void GrepExecutor::doGrep(const std::string infilename) {
         blk++;
     }
     block_base = block_pos;
-    //fprintf(stderr, "Remaining = %i\n", remaining);
 
-    //For the last partial block, or for any carry.
-    
+    //Final Partial Block (may be empty, but there could be carries pending).
     
     EOF_mask = bitblock::srl(simd<1>::constant<1>(), convert(BLOCK_SIZE-remaining));
+    
     block_base = block_pos + segment_base;
-    s2p_do_final_block((BytePack *) &infile_buffer[block_base], basis_bits, EOF_mask);
+    s2p_do_final_block((BytePack *) &mFileBuffer[block_base], basis_bits, EOF_mask);
+
+    if (finalLineIsUnterminated()) {
+        // Add a LF at the EOF position
+        BitBlock EOF_pos = simd_not(simd_or(bitblock::slli<1>(simd_not(EOF_mask)), EOF_mask));
+        //  LF = 00001010  (bits 4 and 6 set).
+        basis_bits.bit_4 = simd_or(basis_bits.bit_4, EOF_pos);
+        basis_bits.bit_6 = simd_or(basis_bits.bit_6, EOF_pos);
+        // Add final sentinel byte so write_matches knows what to do.
+        mFileBuffer[mFileSize] = 0x0;
+    }
+    
     mProcessBlockFcn(basis_bits, carry_q, advance_q, output);
 
     if (mCountOnlyOption)
@@ -284,19 +307,19 @@ void GrepExecutor::doGrep(const std::string infilename) {
     }
     else
     {
-        LF_scanner.load_block(output.LF, blk);
-        match_scanner.load_block(output.matches, blk);
+        mLineBreak_scanner.load_block(output.LF, blk);
+        mMatch_scanner.load_block(output.matches, blk);
         blk++;
         for (int i = blk; i < SEGMENT_BLOCKS; i++)
         {
-            LF_scanner.load_block(simd<1>::constant<0>(), i);
-            match_scanner.load_block(simd<1>::constant<0>(), i);
+            mLineBreak_scanner.load_block(simd<1>::constant<0>(), i);
+            mMatch_scanner.load_block(simd<1>::constant<0>(), i);
         }
-        buffer_ptr = &infile_buffer[segment_base];
+        buffer_ptr = &mFileBuffer[segment_base];
         line_start = write_matches(buffer_ptr, line_start);
     }
     
-    munmap((void *) infile_buffer, mFileSize + mmap_sentinel_bytes);
+    munmap((void *) mFileBuffer, mFileSize + mmap_sentinel_bytes);
     close(fdSrc);
     
 }
