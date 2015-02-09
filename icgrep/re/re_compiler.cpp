@@ -77,8 +77,6 @@ void RE_Compiler::AlignMarkers(MarkerType & m1, MarkerType & m2, PabloBlock & pb
         m2 = AdvanceMarker(m2, m1.pos, pb); 
     }
 }
-    
-    
 
 #define USE_IF_FOR_NONFINAL 1
 #define USE_IF_FOR_CRLF
@@ -86,8 +84,6 @@ void RE_Compiler::AlignMarkers(MarkerType & m1, MarkerType & m2, PabloBlock & pb
 
 
 void RE_Compiler::initializeRequiredStreams(cc::CC_Compiler & ccc) {
-
-    const std::string nonfinal = "nonfinal";
 
     Assign * LF = mPB.createAssign("LF", ccc.compileCC(makeCC(0x0A)));
     mLineFeed = LF;
@@ -118,7 +114,7 @@ void RE_Compiler::initializeRequiredStreams(cc::CC_Compiler & ccc) {
     PabloAST * E2_80 = mPB.createAnd(mPB.createAdvance(ccc.compileCC(makeCC(0xE2)), 1), ccc.compileCC(makeCC(0x80)));
     PabloAST * LS_PS = mPB.createAnd(mPB.createAdvance(E2_80, 1), ccc.compileCC(makeCC(0xA8,0xA9)));
     PabloAST * LB_chars = mPB.createOr(LF_VT_FF_CR, mPB.createOr(NEL, LS_PS));
-    mNonFinal = mPB.createAssign(nonfinal, mPB.createOr(mPB.createOr(u8pfx, u8scope32), mPB.createOr(u8scope42, u8scope43)));
+    mNonFinal = mPB.createAssign("nonfinal", mPB.createOr(mPB.createOr(u8pfx, u8scope32), mPB.createOr(u8scope42, u8scope43)));
     mUnicodeLineBreak = mPB.createAnd(LB_chars, mPB.createNot(mCRLF));  // count the CR, but not CRLF
 #endif
 
@@ -132,7 +128,7 @@ void RE_Compiler::initializeRequiredStreams(cc::CC_Compiler & ccc) {
     PabloAST * u8scope32 = it.createAdvance(u8pfx3, 1);
     PabloAST * u8scope42 = it.createAdvance(u8pfx4, 1, "u8scope42");
     PabloAST * u8scope43 = it.createAdvance(u8scope42, 1);
-    mNonFinal = it.createAssign(nonfinal, it.createOr(it.createOr(u8pfx, u8scope32), it.createOr(u8scope42, u8scope43)));
+    mNonFinal = it.createAssign("nonfinal", it.createOr(it.createOr(u8pfx, u8scope32), it.createOr(u8scope42, u8scope43)));
     PabloAST * NEL = it.createAnd(it.createAdvance(ccc.compileCC(makeCC(0xC2), it), 1), ccc.compileCC(makeCC(0x85), it));
     PabloAST * E2_80 = it.createAnd(it.createAdvance(ccc.compileCC(makeCC(0xE2), it), 1), ccc.compileCC(makeCC(0x80), it));
     PabloAST * LS_PS = it.createAnd(it.createAdvance(E2_80, 1), ccc.compileCC(makeCC(0xA8,0xA9), it));
@@ -156,33 +152,6 @@ void RE_Compiler::finalizeMatchResult(MarkerType match_result) {
 
 MarkerType RE_Compiler::compile(RE * re, PabloBlock & pb) {
     return process(re, makeMarker(InitialPostPositionByte, pb.createOnes()), pb);
-}
-
-PabloAST * RE_Compiler::character_class_strm(Name * name, PabloBlock & pb) {
-    PabloAST * var = name->getCompiled();
-    if (var) {
-        return var;
-    }
-    else {
-        RE * def = name->getDefinition();
-        if (def != nullptr) {
-            MarkerType m = compile(def, mPB);
-            assert(markerPos(m) == FinalMatchByte);
-            PabloAST * v = markerVar(m);
-            v = mPB.createAnd(v, mPB.createNot(UNICODE_LINE_BREAK ? mUnicodeLineBreak : mLineFeed));
-            name->setCompiled(v);
-            return v;
-        }
-        else if (name->getType() == Name::Type::UnicodeProperty) {
-            PabloAST * v = mPB.createCall(name->getName());
-            v = mPB.createAnd(v, mPB.createNot(UNICODE_LINE_BREAK ? mUnicodeLineBreak : mLineFeed));
-            name->setCompiled(v);
-            return v;
-        }
-        else {
-            throw std::runtime_error("Unresolved name " + name->getName());
-        }
-    }
 }
 
 PabloAST * RE_Compiler::nextUnicodePosition(MarkerType m, PabloBlock & pb) {
@@ -256,8 +225,31 @@ MarkerType RE_Compiler::process(Name * name, MarkerType marker, PabloBlock & pb)
     else {
         nextPos = AdvanceMarker(marker, FinalPostPositionByte, pb);
     }
-    return makeMarker(FinalMatchByte, pb.createAnd(markerVar(nextPos), character_class_strm(name, pb), "m"));
+    return makeMarker(FinalMatchByte, pb.createAnd(markerVar(nextPos), getNamedCharacterClassStream(name), "m"));
 }
+
+PabloAST * RE_Compiler::getNamedCharacterClassStream(Name * name) {
+    PabloAST * var = name->getCompiled();
+    if (LLVM_LIKELY(var != nullptr)) {
+        return var;
+    }
+    else if (name->getDefinition() != nullptr) {
+        MarkerType m = compile(name->getDefinition(), mPB);
+        assert(markerPos(m) == FinalMatchByte);
+        var = markerVar(m);
+    }
+    else if (name->getType() == Name::Type::UnicodeProperty) {
+        var = mPB.createCall(name->getName());
+    }
+    else {
+        throw std::runtime_error("Unresolved name " + name->getName());
+    }
+
+    var = mPB.createAnd(var, mPB.createNot(UNICODE_LINE_BREAK ? mUnicodeLineBreak : mLineFeed));
+    name->setCompiled(var);
+    return var;
+}
+
 
 MarkerType RE_Compiler::process(Seq * seq, MarkerType marker, PabloBlock & pb) {
     // if-hierarchies are not inserted within unbounded repetitions

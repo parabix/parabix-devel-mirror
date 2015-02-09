@@ -71,7 +71,7 @@ private:
     
     void AlignMarkers(MarkerType & m1, MarkerType & m2, pablo::PabloBlock & pb);
     
-    pablo::PabloAST * character_class_strm(Name * name, pablo::PabloBlock & pb);
+    pablo::PabloAST * getNamedCharacterClassStream(Name * name);
     pablo::PabloAST * nextUnicodePosition(MarkerType m, pablo::PabloBlock & pb);
     MarkerType process(RE * re, MarkerType marker, pablo::PabloBlock & pb);
     MarkerType process(Name * name, MarkerType marker, pablo::PabloBlock & pb);

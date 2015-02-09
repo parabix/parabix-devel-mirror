@@ -73,13 +73,13 @@ void PabloPrinter::print(const Statement * stmt, std::string indent, std::ostrea
     else if (const If * ifstmt = dyn_cast<const If>(stmt)) {
         strm << "if ";
         print(ifstmt->getCondition(), strm);
-        strm << ":\n";
+        strm << ":" << std::endl;
         print(ifstmt->getBody(), indent + "  ", strm);
     }
     else if (const While * whl = dyn_cast<const While>(stmt)) {
-        strm << "while";
+        strm << "while ";
         print(whl->getCondition(), strm);
-        strm << ":\n";
+        strm << ":" << std::endl;
         print(whl->getBody(), indent + "  ", strm);
     }
     else if (const Call * pablo_call = dyn_cast<const Call>(stmt)) {
