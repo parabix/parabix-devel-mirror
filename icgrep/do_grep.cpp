@@ -182,7 +182,12 @@ void GrepExecutor::doGrep(const std::string infilename) {
     const size_t mmap_sentinel_bytes = 2;  
     mFileBuffer = (char *) mmap(NULL, mFileSize + mmap_sentinel_bytes, PROT_READ|PROT_WRITE, MAP_PRIVATE, fdSrc, 0);
     if (mFileBuffer == MAP_FAILED) {
-        std::cerr << "Error: mmap of " << infilename << " failed. Skipped.\n";
+        if (errno ==  ENOMEM) {
+            std::cerr << "Error:  mmap of " << infilename << " failed: out of memory\n";
+        }
+        else {
+            std::cerr << "Error: mmap of " << infilename << " failed with errno " << errno << ". Skipped.\n";
+        }
         return;
     }
     char * buffer_ptr;

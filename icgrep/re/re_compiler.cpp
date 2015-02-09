@@ -169,11 +169,14 @@ PabloAST * RE_Compiler::character_class_strm(Name * name, PabloBlock & pb) {
             MarkerType m = compile(def, mPB);
             assert(markerPos(m) == FinalMatchByte);
             PabloAST * v = markerVar(m);
+            v = mPB.createAnd(v, mPB.createNot(UNICODE_LINE_BREAK ? mUnicodeLineBreak : mLineFeed));
             name->setCompiled(v);
             return v;
         }
         else if (name->getType() == Name::Type::UnicodeProperty) {
-            return pb.createCall(name->getName());
+            PabloAST * v = pb.createCall(name->getName());
+            v = mPB.createAnd(v, mPB.createNot(UNICODE_LINE_BREAK ? mUnicodeLineBreak : mLineFeed));
+            return v;
         }
         else {
             throw std::runtime_error("Unresolved name " + name->getName());
