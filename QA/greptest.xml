@@ -457,4 +457,19 @@ The following line has LATIN CAPITAL LETTER G WITH MACRON in single quotes.
  <grepcase regexp="[\u{086}-\u{9A}]" datafile="codepoints" grepcount="1"/>
  <grepcase regexp="[你好]" datafile="codepoints" grepcount="2"/>
  <grepcase regexp="\u{4F60}" datafile="codepoints" grepcount="1"/>
+ 
+ 
+ 
+ 
+ <datafile id = "LineBreaking">CRLF1&#13;&#10;CRLF2&#13;&#10;CRLF3&#13;&#10;
+LS1&#x2028;LS2&#x2028;LS3&#x2028;PS1&#x2029;PS2&#x2029;PS3&#x2029;
+PS4&#x2029;CRLF4&#13;&#10;LS4&#x2028;LS5&#x2028;CRLF5&#13;&#10;LS6&#x2028;
+Unterminated</datafile>
+
+ <grepcase regexp="^.*$" datafile="LineBreaking" grepcount="19"/>
+ <grepcase regexp="Unterminated$" datafile="LineBreaking" grepcount="1"/>
+ <grepcase regexp="^CRLF.$" datafile="LineBreaking" grepcount="5"/>
+ <grepcase regexp="LS[0-9]*" datafile="LineBreaking" grepcount="6"/>
+ <grepcase regexp="PS" datafile="LineBreaking" grepcount="4"/>
+ 
 </greptest>
