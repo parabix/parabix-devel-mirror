@@ -174,8 +174,9 @@ PabloAST * RE_Compiler::character_class_strm(Name * name, PabloBlock & pb) {
             return v;
         }
         else if (name->getType() == Name::Type::UnicodeProperty) {
-            PabloAST * v = pb.createCall(name->getName());
+            PabloAST * v = mPB.createCall(name->getName());
             v = mPB.createAnd(v, mPB.createNot(UNICODE_LINE_BREAK ? mUnicodeLineBreak : mLineFeed));
+            name->setCompiled(v);
             return v;
         }
         else {
