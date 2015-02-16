@@ -102,19 +102,63 @@ void RE_Compiler::initializeRequiredStreams(cc::CC_Compiler & ccc) {
     PabloAST * u8pfx2 = ccc.compileCC(makeCC(0xC2, 0xDF), it);
     PabloAST * u8pfx3 = ccc.compileCC(makeCC(0xE0, 0xEF), it);
     PabloAST * u8pfx4 = ccc.compileCC(makeCC(0xF0, 0xF4), it);
-    Assign * valid_pfx = it.createAssign("valid_pfx", it.createOr(it.createOr(u8pfx2, u8pfx3), u8pfx4));
-    PabloAST * u8scope32 = it.createAdvance(u8pfx3, 1);
-    PabloAST * u8scope42 = it.createAdvance(u8pfx4, 1, "u8scope42");
-    PabloAST * u8scope43 = it.createAdvance(u8scope42, 1);
-    mNonFinal = it.createAssign("nonfinal", it.createOr(it.createOr(u8pfx, u8scope32), it.createOr(u8scope42, u8scope43)));
-    PabloAST * NEL = it.createAnd(it.createAdvance(ccc.compileCC(makeCC(0xC2), it), 1), ccc.compileCC(makeCC(0x85), it));
-    PabloAST * E2_80 = it.createAnd(it.createAdvance(ccc.compileCC(makeCC(0xE2), it), 1), ccc.compileCC(makeCC(0x80), it));
-    PabloAST * LS_PS = it.createAnd(it.createAdvance(E2_80, 1), ccc.compileCC(makeCC(0xA8,0xA9), it));
-    Assign * NEL_LS_PS = it.createAssign("NEL_LS_PS", it.createOr(NEL, LS_PS));
-    mPB.createIf(u8pfx, std::move(std::vector<Assign *>{valid_pfx, mNonFinal, NEL_LS_PS}), it);
-    PabloAST * LB_chars = mPB.createOr(LF_VT_FF_CR, NEL_LS_PS);
+    Assign * u8suffix = it.createAssign("u8suffix", ccc.compileCC(makeCC(0x80, 0xBF)));
+    
+    //
+    // Two-byte sequences
+    PabloBlock & it2 = PabloBlock::Create(it);
+    Assign * u8scope22 = it2.createAssign("u8scope22", it2.createAdvance(u8pfx2, 1));
+    Assign * NEL = it2.createAssign("NEL", it2.createAnd(it2.createAdvance(ccc.compileCC(makeCC(0xC2), it2), 1), ccc.compileCC(makeCC(0x85), it2)));
+    it.createIf(u8pfx2, std::move(std::vector<Assign *>{u8scope22, NEL}), it2);
+    
+    //
+    // Three-byte sequences
+    PabloBlock & it3 = PabloBlock::Create(it);
+    Assign * u8scope32 = it3.createAssign("u8scope32", it3.createAdvance(u8pfx3, 1));
+    PabloAST * u8scope33 = it3.createAdvance(u8pfx3, 2);
+    Assign * u8scope3X = it3.createAssign("u8scope3X", it3.createOr(u8scope32, u8scope33));
+    PabloAST * E2_80 = it3.createAnd(it3.createAdvance(ccc.compileCC(makeCC(0xE2), it3), 1), ccc.compileCC(makeCC(0x80), it3));
+    Assign * LS_PS = it3.createAssign("LS_PS", it3.createAnd(it3.createAdvance(E2_80, 1), ccc.compileCC(makeCC(0xA8,0xA9), it3)));
+    PabloAST * E0_invalid = it3.createAnd(it3.createAdvance(ccc.compileCC(makeCC(0xE0), it3), 1), ccc.compileCC(makeCC(0x80, 0x9F), it3));
+    PabloAST * ED_invalid = it3.createAnd(it3.createAdvance(ccc.compileCC(makeCC(0xED), it3), 1), ccc.compileCC(makeCC(0xA0, 0xBF), it3));
+    Assign * EX_invalid = it3.createAssign("EX_invalid", it3.createOr(E0_invalid, ED_invalid));
+    it.createIf(u8pfx3, std::move(std::vector<Assign *>{u8scope32, u8scope3X, LS_PS, EX_invalid}), it3);
+ 
+    //
+    // Four-byte sequences
+    PabloBlock & it4 = PabloBlock::Create(it);
+    PabloAST * u8scope42 = it4.createAdvance(u8pfx4, 1, "u8scope42");
+    PabloAST * u8scope43 = it4.createAdvance(u8scope42, 1, "u8scope43");
+    PabloAST * u8scope44 = it4.createAdvance(u8scope43, 1, "u8scope44");
+    Assign * u8scope4nonfinal = it4.createAssign("u8scope4nonfinal", it4.createOr(u8scope42, u8scope43));
+    Assign * u8scope4X = it4.createAssign("u8scope4X", it4.createOr(u8scope4nonfinal, u8scope44));
+    PabloAST * F0_invalid = it4.createAnd(it4.createAdvance(ccc.compileCC(makeCC(0xF0), it4), 1), ccc.compileCC(makeCC(0x80, 0x8F), it4));
+    PabloAST * F4_invalid = it4.createAnd(it4.createAdvance(ccc.compileCC(makeCC(0xF4), it4), 1), ccc.compileCC(makeCC(0x90, 0xBF), it4));
+    Assign * FX_invalid = it4.createAssign("FX_invalid", it4.createOr(F0_invalid, F4_invalid));
+    it.createIf(u8pfx4, std::move(std::vector<Assign *>{u8scope4nonfinal, u8scope4X, FX_invalid}), it4);
 
-    PabloAST * u8single = ccc.compileCC(makeCC(0x00, 0x7F));
+    //
+    // Invalid cases
+    PabloAST * anyscope = it.createOr(u8scope22, it.createOr(u8scope3X, u8scope4X));
+    PabloAST * legalpfx = it.createOr(it.createOr(u8pfx2, u8pfx3), u8pfx4);
+    //  Any scope that does not have a suffix byte, and any suffix byte that is not in
+    //  a scope is a mismatch, i.e., invalid UTF-8.
+    PabloAST * mismatch = it.createXor(anyscope, u8suffix);
+    //
+    PabloAST * EF_invalid = it.createOr(EX_invalid, FX_invalid);
+    PabloAST * pfx_invalid = it.createXor(u8pfx, legalpfx);
+    Assign * u8invalid = it.createAssign("u8invalid", it.createOr(pfx_invalid, it.createOr(mismatch, EF_invalid)));
+    //
+    //
+    
+    Assign * valid_pfx = it.createAssign("valid_pfx", it.createAnd(u8pfx, it.createNot(u8invalid)));
+    mNonFinal = it.createAssign("nonfinal", it.createAnd(it.createOr(it.createOr(u8pfx, u8scope32), u8scope4nonfinal), it.createNot(u8invalid)));
+    
+    Assign * NEL_LS_PS = it.createAssign("NEL_LS_PS", it.createOr(NEL, LS_PS));
+    mPB.createIf(u8pfx, std::move(std::vector<Assign *>{u8invalid, valid_pfx, mNonFinal, NEL_LS_PS}), it);
+    
+    PabloAST * LB_chars = mPB.createOr(LF_VT_FF_CR, NEL_LS_PS);
+    PabloAST * u8single = mPB.createAnd(ccc.compileCC(makeCC(0x00, 0x7F)), mPB.createNot(u8invalid));
     mInitial = mPB.createOr(u8single, valid_pfx, "initial");
     mUnicodeLineBreak = mPB.createAnd(LB_chars, mPB.createNot(mCRLF));  // count the CR, but not CRLF
 }
