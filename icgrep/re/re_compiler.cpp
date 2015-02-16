@@ -36,6 +36,9 @@ static cl::opt<bool> DisableMatchStar("disable-matchstar", cl::init(false),
 static cl::opt<bool> DisableUnicodeMatchStar("disable-Unicode-matchstar", cl::init(false), 
                      cl::desc("disable Unicode MatchStar optimization"), cl::cat(fREcompilationOptions));
 
+static cl::opt<bool> DisableUnicodeLineBreak("disable-Unicode-linebreak", cl::init(false), 
+                     cl::desc("disable Unicode line breaks - use LF only"), cl::cat(fREcompilationOptions));
+
 
 using namespace pablo;
 
@@ -51,7 +54,7 @@ RE_Compiler::RE_Compiler(PabloBlock & baseCG)
 {
 
 }
-    
+
     
 MarkerType RE_Compiler::AdvanceMarker(MarkerType m, MarkerPosition newpos, PabloBlock & pb) {
     if (m.pos == newpos) return m;
@@ -78,9 +81,7 @@ void RE_Compiler::AlignMarkers(MarkerType & m1, MarkerType & m2, PabloBlock & pb
     }
 }
 
-#define USE_IF_FOR_NONFINAL 1
-#define USE_IF_FOR_CRLF
-#define UNICODE_LINE_BREAK true
+#define UNICODE_LINE_BREAK (!DisableUnicodeLineBreak)
 
 
 void RE_Compiler::initializeRequiredStreams(cc::CC_Compiler & ccc) {
@@ -89,36 +90,13 @@ void RE_Compiler::initializeRequiredStreams(cc::CC_Compiler & ccc) {
     mLineFeed = LF;
     PabloAST * CR = ccc.compileCC(makeCC(0x0D));
     PabloAST * LF_VT_FF_CR = ccc.compileCC(makeCC(0x0A, 0x0D));
-#ifndef USE_IF_FOR_CRLF
-    mCRLF = mPB.createAnd(mPB.createAdvance(CR, 1), mLineFeed);
-#else
+
     PabloBlock & crb = PabloBlock::Create(mPB);
     PabloAST * cr1 = crb.createAdvance(CR, 1, "cr1");
     Assign * acrlf = crb.createAssign("crlf", crb.createAnd(cr1, LF));
     mPB.createIf(CR, std::move(std::vector<Assign *>{acrlf}), crb);
     mCRLF = acrlf;
-#endif
 
-#ifndef USE_IF_FOR_NONFINAL
-    PabloAST * u8pfx2 = ccc.compileCC(makeCC(0xC2, 0xDF));
-    PabloAST * u8pfx3 = ccc.compileCC(makeCC(0xE0, 0xEF));
-    PabloAST * u8pfx4 = ccc.compileCC(makeCC(0xF0, 0xF4));
-    PabloAST * u8pfx = mPB.createOr(mPB.createOr(u8pfx2, u8pfx3), u8pfx4);
-    PabloAST * u8single = ccc.compileCC(makeCC(0x00, 0x7F));
-    mInitial = mPB.createOr(u8pfx, u8single, "initial");
-
-    PabloAST * u8scope32 = mPB.createAdvance(u8pfx3, 1);
-    PabloAST * u8scope42 = mPB.createAdvance(u8pfx4, 1);
-    PabloAST * u8scope43 = mPB.createAdvance(u8scope42, 1);
-    PabloAST * NEL = mPB.createAnd(mPB.createAdvance(ccc.compileCC(makeCC(0xC2)), 1), ccc.compileCC(makeCC(0x85)));
-    PabloAST * E2_80 = mPB.createAnd(mPB.createAdvance(ccc.compileCC(makeCC(0xE2)), 1), ccc.compileCC(makeCC(0x80)));
-    PabloAST * LS_PS = mPB.createAnd(mPB.createAdvance(E2_80, 1), ccc.compileCC(makeCC(0xA8,0xA9)));
-    PabloAST * LB_chars = mPB.createOr(LF_VT_FF_CR, mPB.createOr(NEL, LS_PS));
-    mNonFinal = mPB.createAssign("nonfinal", mPB.createOr(mPB.createOr(u8pfx, u8scope32), mPB.createOr(u8scope42, u8scope43)));
-    mUnicodeLineBreak = mPB.createAnd(LB_chars, mPB.createNot(mCRLF));  // count the CR, but not CRLF
-#endif
-
-#ifdef USE_IF_FOR_NONFINAL
     PabloAST * u8pfx = ccc.compileCC(makeCC(0xC0, 0xFF));
     PabloBlock & it = PabloBlock::Create(mPB);
     PabloAST * u8pfx2 = ccc.compileCC(makeCC(0xC2, 0xDF), it);
@@ -139,7 +117,6 @@ void RE_Compiler::initializeRequiredStreams(cc::CC_Compiler & ccc) {
     PabloAST * u8single = ccc.compileCC(makeCC(0x00, 0x7F));
     mInitial = mPB.createOr(u8single, valid_pfx, "initial");
     mUnicodeLineBreak = mPB.createAnd(LB_chars, mPB.createNot(mCRLF));  // count the CR, but not CRLF
-    #endif
 }
 
 void RE_Compiler::finalizeMatchResult(MarkerType match_result) {

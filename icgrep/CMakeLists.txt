@@ -4,8 +4,8 @@ project (icgrep)
 
 enable_testing()
 # The version number.
-set (icgrep_VERSION_MAJOR 0)
-set (icgrep_VERSION_MINOR 8)
+set (icgrep_VERSION_MAJOR 1)
+set (icgrep_VERSION_MINOR 0)
 
 option(BLOCK_SIZE_256 "Compiling with BLOCK_SIZE=256")
 if (BLOCK_SIZE_256)
@@ -243,9 +243,7 @@ ENDIF()
 SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${ENABLE_${SIMD_SUPPORT}}")
 
 # detect LLVM version and add compiler flags.
-if (${LLVM_PACKAGE_VERSION} MATCHES "3.4")
-  SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DUSE_LLVM_3_4")
-ELSEIF (${LLVM_PACKAGE_VERSION} MATCHES "3.5")
+IF (${LLVM_PACKAGE_VERSION} MATCHES "3.5")
   SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DUSE_LLVM_3_5")
 ENDIF()
 
