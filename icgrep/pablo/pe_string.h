@@ -2,13 +2,21 @@
 #define PE_STRING_H
 
 #include <pablo/pabloAST.h>
+#include <llvm/ADT/StringRef.h>
+#include <llvm/ADT/Twine.h>
+#include <llvm/ADT/SmallVector.h>
 #include <string>
+#include <ostream>
 
 namespace pablo {
 
 class String : public PabloAST {
     friend class SymbolGenerator;
+    friend std::ostream & operator<< (std::ostream& stream, const String & string);
 public:
+    using StringAllocator = SlabAllocator<char>;
+    using Value = StringRef;
+
     static inline bool classof(const PabloAST * e) {
         return e->getClassTypeId() == ClassTypeId::String;
     }
@@ -18,10 +26,13 @@ public:
     virtual ~String(){
 
     }
-    inline const std::string & str() const {
+    inline const StringRef & value() const {
         return mValue;
     }
-    inline std::string str() {
+    inline std::string to_string() const {
+        return mValue.str();
+    }
+    inline StringRef value() {
         return mValue;
     }
     inline bool isGenerated() const {
@@ -31,17 +42,28 @@ public:
         return !mGenerated;
     }
 protected:
-    String(const std::string && value, const bool generated) noexcept
+    String(const std::string & value, const bool generated) noexcept
     : PabloAST(ClassTypeId::String)
-    , mValue(value)
+    , mValue(duplicate(value))
     , mGenerated(generated)
     {
 
     }
+    inline const char * duplicate(const std::string & value) {
+        char * string = reinterpret_cast<char*>(mAllocator.allocate(value.length() + 1));
+        std::memcpy(string, value.c_str(), value.length());
+        string[value.length()] = '\0';
+        return string;
+    }
 private:
-    const std::string   mValue;
-    const bool          mGenerated;
+    const StringRef         mValue;
+    const bool              mGenerated;
 };
+
+inline std::ostream & operator <<(std::ostream & stream, const String & string) {
+    stream << string.value().data();
+    return stream;
+}
 
 }
 

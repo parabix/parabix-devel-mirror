@@ -22,9 +22,9 @@ static_assert(false, "Need to turn on them together.");
 #include <vector>
 #include <map>
 #include <algorithm>
-#include <llvm/ADT/Twine.h>
 #include <unordered_map>
-#include <string>
+#include <pablo/pe_string.h>
+#include <llvm/ADT/Twine.h>
 
 namespace llvm {
     class Value;
@@ -106,7 +106,7 @@ private:
     #endif
 
 
-    ASTToValueMap                 mMarkerMap;
+    ASTToValueMap                       mMarkerMap;
     CarryQueueVector                    mCarryQueueVector;
     std::vector<int>                    mCarryQueueSummaryIdx;
     CarryQueueVector                    mAdvanceQueueVector;
@@ -145,7 +145,7 @@ private:
     std::map<std::string, void *>       mExternalMap;
     StringToValueMap                    mCalleeMap;
 
-    Constant * mFunc_print_register;
+    Constant *                          mPrintRegisterFunction;
 };
 
 }

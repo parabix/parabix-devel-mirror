@@ -69,8 +69,8 @@ public:
         return false;
     }
 
-    inline static PabloBlock & Create() {
-        return *(new PabloBlock());
+    inline static PabloBlock & Create(SymbolGenerator & symbolGenerator) {
+        return *(new PabloBlock(symbolGenerator));
     }
 
     inline static PabloBlock & Create(PabloBlock & predecessor) {
@@ -141,7 +141,7 @@ public:
 
     PabloAST * createSel(PabloAST * condition, PabloAST * trueExpr, PabloAST * falseExpr, const std::string prefix);
 
-    If * createIf(PabloAST * condition, std::vector<Assign *> && definedVars, PabloBlock & body);
+    If * createIf(PabloAST * condition, std::initializer_list<Assign *> definedVars, PabloBlock & body);
 
     While * createWhile(PabloAST * condition, PabloBlock & body);
 
@@ -154,21 +154,21 @@ public:
     }
 
     inline String * getName(const std::string name, const bool generated = true) const {
-        return mSymbolGenerator->get(name, generated);
+        return mSymbolGenerator.get(name, generated);
     }
 
     inline String * makeName(const std::string prefix, const bool generated = true) const {
-        return mSymbolGenerator->make(prefix, generated);
+        return mSymbolGenerator.make(prefix, generated);
     }
 
     inline Integer * getInteger(Integer::integer_t value) {
-        return mSymbolGenerator->getInteger(value);
+        return mSymbolGenerator.getInteger(value);
     }
 
     virtual ~PabloBlock();
 
 protected:
-    PabloBlock();
+    PabloBlock(SymbolGenerator & symbolGenerator);
 
     PabloBlock(PabloBlock * predecessor);
 
@@ -185,7 +185,7 @@ protected:
 private:        
     Zeroes * const                                      mZeroes;
     Ones * const                                        mOnes;
-    SymbolGenerator * const                             mSymbolGenerator;
+    SymbolGenerator &                                   mSymbolGenerator;
     PabloBlock *                                        mPredecessor;
 };
 

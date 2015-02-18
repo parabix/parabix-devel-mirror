@@ -11,6 +11,7 @@
 
 #include <string>
 #include <vector>
+#include <slab_allocator.h>
 
 namespace re {
 
@@ -22,8 +23,6 @@ struct CharSetItem{
     CodePointType lo_codepoint;
     CodePointType hi_codepoint;
 };
-
-typedef std::vector<CharSetItem> CharSetVector;
 
 enum CC_type {UnicodeClass, ByteClass};
 
@@ -37,6 +36,9 @@ public:
         return false;
     }
 
+    using CharSetAllocator = SlabAllocator<CharSetItem>;
+    using CharSetVector = std::vector<CharSetItem, CharSetAllocator>;
+
     typedef CharSetVector::iterator                 iterator;
     typedef CharSetVector::const_iterator           const_iterator;
     typedef CharSetVector::size_type                size_type;
@@ -45,7 +47,7 @@ public:
 
     static const CodePointType UNICODE_MAX = 0x10FFFF;
 
-    std::string canonicalName(CC_type t) const;
+    std::string canonicalName(const CC_type type) const;
 
     CodePointType max_codepoint();
 
@@ -121,21 +123,25 @@ protected:
         return mAllocator.allocate(size);
     }
     inline CC()
-    : RE(ClassTypeId::CC) {
+    : RE(ClassTypeId::CC)
+    , mSparseCharSet(mCharSetAllocator) {
 
     }
     CC(const CC & cc);
     inline CC(const CodePointType codepoint)
-    : RE(ClassTypeId::CC) {
+    : RE(ClassTypeId::CC)
+    , mSparseCharSet(mCharSetAllocator) {
         insert(codepoint);
     }
     inline CC(const CodePointType lo_codepoint, const CodePointType hi_codepoint)
-    : RE(ClassTypeId::CC) {
+    : RE(ClassTypeId::CC)
+    , mSparseCharSet(mCharSetAllocator) {
         insert_range(lo_codepoint, hi_codepoint);
     }
     CC(const CC * cc1, const CC * cc2);
 private:    
     CharSetVector mSparseCharSet;
+    static CharSetAllocator mCharSetAllocator;
 };
 
 inline static CC::iterator begin(CC & cc) {

@@ -7,10 +7,13 @@
 #include <pablo/pabloAST.h>
 #include <pablo/codegenstate.h>
 #include <llvm/Support/Compiler.h>
-
+#ifndef NDEBUG
+#include <queue>
+#endif
 namespace pablo {
 
 PabloAST::Allocator PabloAST::mAllocator;
+PabloAST::VectorAllocator PabloAST::mVectorAllocator;
 
 /*
 
@@ -23,7 +26,7 @@ PabloAST::Allocator PabloAST::mAllocator;
 bool equals(const PabloAST * expr1, const PabloAST * expr2) {
     assert (expr1 && expr2);
     if (expr1->getClassTypeId() == expr2->getClassTypeId()) {
-        if ((isa<const Zeroes>(expr1)) || (isa<const Ones>(expr1))) {
+        if ((isa<Zeroes>(expr1)) || (isa<Ones>(expr1))) {
             return true;
         }
         else if (const Var * var1 = dyn_cast<const Var>(expr1)) {
@@ -79,20 +82,26 @@ bool equals(const PabloAST * expr1, const PabloAST * expr2) {
     return false;
 }
 
-void PabloAST::replaceAllUsesWith(PabloAST * expr) {
-    assert (expr);
-    Users Q;
-    Q.swap(mUsers);
-    for (PabloAST * user : Q) {
-        if (isa<Statement>(user)) {
-            cast<Statement>(user)->replaceUsesOfWith(this, expr);
+void PabloAST::replaceAllUsesWith(PabloAST * expr) {    
+    Statement * user[mUsers.size()];
+    Users::size_type users = 0;
+    for (PabloAST * u : mUsers) {
+        if (isa<Statement>(u)) {
+            user[users++] = cast<Statement>(u);
         }
     }
-    Q.clear();
+    mUsers.clear();
+    assert (expr);
+    for (auto i = 0; i != users; ++i) {
+        user[i]->replaceUsesOfWith(this, expr);
+    }
 }
+
+
 
 void Statement::setOperand(const unsigned index, PabloAST * const value) {
     assert (index < getNumOperands());
+    assert (noRecursiveOperand(value));
     if (LLVM_UNLIKELY(getOperand(index) == value)) {
         return;
     }
@@ -204,6 +213,29 @@ Statement * Statement::replaceWith(PabloAST * const expr, const bool rename) {
     replaceAllUsesWith(expr);
     return eraseFromParent();
 }
+
+#ifndef NDEBUG
+    bool Statement::noRecursiveOperand(const PabloAST * const operand) {
+        if (operand && isa<Statement>(operand)) {
+            std::queue<const Statement *> Q;
+            Q.push(cast<Statement>(operand));
+            while (!Q.empty()) {
+                const Statement * stmt = Q.front();
+                if (stmt == this) {
+                    return false;
+                }
+                Q.pop();
+                for (auto i = 0; i != stmt->getNumOperands(); ++i) {
+                    const PabloAST * op = stmt->getOperand(i);
+                    if (isa<Statement>(op)) {
+                        Q.push(cast<Statement>(op));
+                    }
+                }
+            }
+        }
+        return true;
+    }
+#endif
 
 void StatementList::insert(Statement * const statement) {
     if (LLVM_UNLIKELY(mInsertionPoint == nullptr)) {

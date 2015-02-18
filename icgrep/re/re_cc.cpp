@@ -10,10 +10,11 @@
 #include <sstream>
 
 namespace re {
+CC::CharSetAllocator CC::mCharSetAllocator;
 
 CC::CC(const CC * cc1, const CC * cc2)
 : RE(ClassTypeId::CC)
-, mSparseCharSet(cc1->cbegin(), cc1->cend()) {
+, mSparseCharSet(cc1->cbegin(), cc1->cend(), mCharSetAllocator) {
     for (const CharSetItem & i : cc2->mSparseCharSet) {
         insert_range(i.lo_codepoint, i.hi_codepoint);
     }
@@ -21,17 +22,19 @@ CC::CC(const CC * cc1, const CC * cc2)
 
 CC::CC(const CC & cc)
 : RE(ClassTypeId::CC)
-, mSparseCharSet(cc.cbegin(), cc.cend()) {
+, mSparseCharSet(cc.cbegin(), cc.cend(), mCharSetAllocator) {
 
 }
 
-std::string CC::canonicalName(CC_type t) const {
+std::string CC::canonicalName(const CC_type type) const {
     std::stringstream name;
     name << std::hex;
-    if ((t == ByteClass) && (mSparseCharSet.back().hi_codepoint >= 0x80)) {
+    if ((type == ByteClass) && (mSparseCharSet.back().hi_codepoint >= 0x80)) {
       name << "BC";
     }
-    else name << "CC";
+    else {
+        name << "CC";
+    }
     char separator = '_';
     for (const CharSetItem & i : mSparseCharSet) {
         name << separator;
@@ -39,7 +42,7 @@ std::string CC::canonicalName(CC_type t) const {
             name << i.lo_codepoint;
         }
         else {
-            name << i.lo_codepoint << "-" << i.hi_codepoint;
+            name << i.lo_codepoint << '-' << i.hi_codepoint;
         }
         separator = ',';
     }

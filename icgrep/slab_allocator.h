@@ -1,17 +1,13 @@
 #ifndef SLAB_ALLOCATOR_H
 #define SLAB_ALLOCATOR_H
 
-#include <cstddef>
-#include <cstdint>
-#include <new>
-#include <algorithm>
+#include <llvm/Support/Allocator.h>
 
 template <typename T>
-class SlabAllocator {
+class SlabAllocator : public std::allocator<T> {
 public:
 
-    enum { BasePoolSize = 4096 };
-
+    using LLVMAllocator = llvm::BumpPtrAllocator;
     using value_type = T;
     using pointer = T*;
     using const_pointer = const T*;
@@ -26,77 +22,37 @@ public:
     };
 
     inline pointer allocate(size_type n) noexcept {
-        if (n > mSpaceAvail && !extend(n)) {
-            exit(-1);
-        }
-        pointer ptr = reinterpret_cast<pointer>(mAllocationPtr);
-        mAllocationPtr += n;
-        mSpaceAvail -= n;
-        return ptr;
+        return reinterpret_cast<pointer>(mAllocator.Allocate(n * sizeof(T), sizeof(T)));
     }
 
     inline void deallocate(pointer p, size_type n) noexcept {
-        /* do nothing */
+        mAllocator.Deallocate(p);
     }
 
-    void release_memory();
+    inline size_type max_size() const {
+        return std::numeric_limits<size_type>::max();
+    }
 
-    SlabAllocator();
-    ~SlabAllocator();
+    inline void release_memory() {
+        mAllocator.Reset();
+    }
 
-protected:
-    bool extend(const size_type n) noexcept;
+    static inline LLVMAllocator & get_allocator() {
+        return mAllocator;
+    }
+
+    inline bool operator==(SlabAllocator<T> const&) { return true; }
+    inline bool operator!=(SlabAllocator<T> const&) { return false; }
+
+    inline SlabAllocator() {}
+    inline SlabAllocator(const SlabAllocator &) {}
+    inline ~SlabAllocator() { release_memory(); }
+
 private:
-    struct Chunk {
-        Chunk *     prev;
-        uint8_t     space[BasePoolSize];
-    };
-    size_type       mSpaceAvail;
-    uint8_t *       mAllocationPtr;
-    Chunk *         mCurrentChunk;
-    size_type       mTotalSize;
-    Chunk           mInitialChunk;
+    static LLVMAllocator mAllocator;
 };
 
 template <typename T>
-SlabAllocator<T>::SlabAllocator()
-: mSpaceAvail(BasePoolSize)
-, mAllocationPtr(mInitialChunk.space)
-, mCurrentChunk(&mInitialChunk)
-, mTotalSize(BasePoolSize)
-{
-    mInitialChunk.prev = nullptr;
-}
-
-template <typename T>
-SlabAllocator<T>::~SlabAllocator() {
-    release_memory();
-}
-
-template <typename T>
-void SlabAllocator<T>::release_memory() {
-    while (mCurrentChunk != &mInitialChunk) {
-        Chunk * n = mCurrentChunk;
-        mCurrentChunk = n->prev;
-        free(n);
-    }
-    mSpaceAvail = BasePoolSize;
-    mAllocationPtr = mInitialChunk.space;
-}
-
-template <typename T>
-bool SlabAllocator<T>::extend(const size_type n) noexcept {
-    const size_type size = std::max<size_type>(n, mTotalSize) * 2;
-    Chunk * newChunk = (Chunk *)malloc(sizeof(Chunk) + size - BasePoolSize);
-    if (newChunk == nullptr) {
-        return false;
-    }
-    newChunk->prev = mCurrentChunk;
-    mTotalSize += size;
-    mCurrentChunk = newChunk;
-    mAllocationPtr = newChunk->space;
-    mSpaceAvail = size;
-    return true;
-}
+llvm::BumpPtrAllocator SlabAllocator<T>::mAllocator;
 
 #endif // SLAB_ALLOCATOR_H

@@ -57,7 +57,8 @@
 #include <llvm/Bitcode/ReaderWriter.h>
 #include <llvm/Support/MemoryBuffer.h>
 #include <llvm/IR/IRBuilder.h>
-#include "llvm/Support/CommandLine.h"
+#include <llvm/Support/CommandLine.h>
+#include <llvm/ADT/Twine.h>
 #include <iostream>
 
 cl::OptionCategory eIRDumpOptions("LLVM IR Dump Options", "These options control dumping of LLVM IR.");
@@ -92,6 +93,7 @@ PabloCompiler::PabloCompiler(const std::vector<Var*> & basisBits)
 , mBasisBitsAddr(nullptr)
 , mOutputAddrPtr(nullptr)
 , mMaxNestingDepth(0)
+, mPrintRegisterFunction(nullptr)
 {
     //Create the jit execution engine.up
     InitializeNativeTarget();
@@ -102,7 +104,7 @@ PabloCompiler::PabloCompiler(const std::vector<Var*> & basisBits)
 
 PabloCompiler::~PabloCompiler()
 {
-    delete mMod;
+    // delete mMod;
 }
     
 void PabloCompiler::InstallExternalFunction(std::string C_fn_name, void * fn_ptr) {
@@ -157,7 +159,7 @@ LLVM_Gen_RetVal PabloCompiler::compile(PabloBlock & pb)
         IRBuilder<> b(mBasicBlock);
         Value* indices[] = {b.getInt64(0), b.getInt32(i)};
         Value * gep = b.CreateGEP(mBasisBitsAddr, indices);
-        LoadInst * basisBit = b.CreateAlignedLoad(gep, BLOCK_SIZE/8, false, mBasisBits[i]->getName()->str());
+        LoadInst * basisBit = b.CreateAlignedLoad(gep, BLOCK_SIZE/8, false, mBasisBits[i]->getName()->to_string());
         mMarkerMap.insert(std::make_pair(mBasisBits[i], basisBit));
     }
 
@@ -188,19 +190,6 @@ LLVM_Gen_RetVal PabloCompiler::compile(PabloBlock & pb)
     #ifdef USE_LLVM_3_4
     verifyModule(*mMod, PrintMessageAction);
     #endif
-
-    //Use the pass manager to run optimizations on the function.
-    FunctionPassManager fpm(mMod);
- #ifdef USE_LLVM_3_5
-    mMod->setDataLayout(mExecutionEngine->getDataLayout());
-    // Set up the optimizer pipeline.  Start with registering info about how the target lays out data structures.
-    fpm.add(new DataLayoutPass(mMod));
-#endif
-#ifdef USE_LLVM_3_4
-    fpm.add(new DataLayout(*mExecutionEngine->getDataLayout()));
-#endif
-    fpm.doInitialization();
-    fpm.run(*mFunction);
 
     mExecutionEngine->finalizeObject();
 
@@ -263,8 +252,8 @@ void PabloCompiler::DefineTypes()
 void PabloCompiler::DeclareFunctions()
 {
     //This function can be used for testing to print the contents of a register from JIT'd code to the terminal window.
-    mFunc_print_register = mMod->getOrInsertFunction("wrapped_print_register", Type::getVoidTy(getGlobalContext()), mBitBlockType, NULL);
-    mExecutionEngine->addGlobalMapping(cast<GlobalValue>(mFunc_print_register), (void *)&wrapped_print_register);
+    mPrintRegisterFunction = mMod->getOrInsertFunction("wrapped_print_register", Type::getVoidTy(getGlobalContext()), mBitBlockType, NULL);
+    mExecutionEngine->addGlobalMapping(cast<GlobalValue>(mPrintRegisterFunction), (void *)&wrapped_print_register);
     // to call->  b.CreateCall(mFunc_print_register, unicode_category);
 
 #ifdef USE_UADD_OVERFLOW
@@ -462,19 +451,19 @@ void PabloCompiler::DeclareCallFunctions() {
     for (auto mapping : mCalleeMap) {
         const String * callee = mapping.first;
         //std::cerr << callee->str() << " to be declared\n";
-        auto ei = mExternalMap.find(callee->str());
+        auto ei = mExternalMap.find(callee->value());
         if (ei != mExternalMap.end()) {
             void * fn_ptr = ei->second;
             //std::cerr << "Ptr found:" <<  std::hex << ((intptr_t) fn_ptr) << std::endl;
-            Value * externalValue = mMod->getOrInsertFunction(callee->str(), mBitBlockType, mBasisBitsInputPtr, NULL);
+            Value * externalValue = mMod->getOrInsertFunction(callee->value(), mBitBlockType, mBasisBitsInputPtr, NULL);
             if (LLVM_UNLIKELY(externalValue == nullptr)) {
-                throw std::runtime_error("Could not create static method call for external function \"" + callee->str() + "\"");
+                throw std::runtime_error("Could not create static method call for external function \"" + callee->to_string() + "\"");
             }
             mExecutionEngine->addGlobalMapping(cast<GlobalValue>(externalValue), fn_ptr);
             mCalleeMap[callee] = externalValue;
         }
         else {
-            throw std::runtime_error("External function \"" + callee->str() + "\" not installed");
+            throw std::runtime_error("External function \"" + callee->to_string() + "\" not installed");
         }
     }
 }
@@ -606,13 +595,14 @@ void PabloCompiler::compileStatement(const Statement * stmt)
         bIfBody.CreateBr(ifEndBlock);
         //End Block
         IRBuilder<> bEnd(ifEndBlock);
-        for (const Statement * a : ifStatement->getDefined()) {
-            PHINode * phi = bEnd.CreatePHI(mBitBlockType, 2, a->getName()->str());
-            auto f = mMarkerMap.find(a);
+        for (const PabloAST * node : ifStatement->getDefined()) {
+            const Assign * assign = cast<Assign>(node);
+            PHINode * phi = bEnd.CreatePHI(mBitBlockType, 2, assign->getName()->value());
+            auto f = mMarkerMap.find(assign);
             assert (f != mMarkerMap.end());
             phi->addIncoming(mZeroInitializer, ifEntryBlock);
             phi->addIncoming(f->second, mBasicBlock);
-            mMarkerMap[a] = phi;
+            mMarkerMap[assign] = phi;
         }
         // Create the phi Node for the summary variable.
         if (ifAdvanceCount >= 1) {
@@ -697,7 +687,7 @@ void PabloCompiler::compileStatement(const Statement * stmt)
         }
         // and for any Next nodes in the loop body
         for (const Next * n : nextNodes) {
-            PHINode * phi = bCond.CreatePHI(mBitBlockType, 2, n->getName()->str());
+            PHINode * phi = bCond.CreatePHI(mBitBlockType, 2, n->getName()->value());
             auto f = mMarkerMap.find(n->getInitial());
             assert (f != mMarkerMap.end());
             phi->addIncoming(f->second, mBasicBlock);
@@ -753,7 +743,7 @@ void PabloCompiler::compileStatement(const Statement * stmt)
         if (mi == mMarkerMap.end()) {
             auto ci = mCalleeMap.find(call->getCallee());
             if (LLVM_UNLIKELY(ci == mCalleeMap.end())) {
-                throw std::runtime_error("Unexpected error locating static function for \"" + call->getCallee()->str() + "\"");
+                throw std::runtime_error("Unexpected error locating static function for \"" + call->getCallee()->to_string() + "\"");
             }
             mi = mMarkerMap.insert(std::make_pair(call, b.CreateCall(ci->second, mBasisBitsAddr))).first;
         }

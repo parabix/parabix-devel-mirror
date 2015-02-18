@@ -94,7 +94,7 @@ void RE_Compiler::initializeRequiredStreams(cc::CC_Compiler & ccc) {
     PabloBlock & crb = PabloBlock::Create(mPB);
     PabloAST * cr1 = crb.createAdvance(CR, 1, "cr1");
     Assign * acrlf = crb.createAssign("crlf", crb.createAnd(cr1, LF));
-    mPB.createIf(CR, std::move(std::vector<Assign *>{acrlf}), crb);
+    mPB.createIf(CR, {acrlf}, crb);
     mCRLF = acrlf;
 
     PabloAST * u8pfx = ccc.compileCC(makeCC(0xC0, 0xFF));
@@ -109,7 +109,7 @@ void RE_Compiler::initializeRequiredStreams(cc::CC_Compiler & ccc) {
     PabloBlock & it2 = PabloBlock::Create(it);
     Assign * u8scope22 = it2.createAssign("u8scope22", it2.createAdvance(u8pfx2, 1));
     Assign * NEL = it2.createAssign("NEL", it2.createAnd(it2.createAdvance(ccc.compileCC(makeCC(0xC2), it2), 1), ccc.compileCC(makeCC(0x85), it2)));
-    it.createIf(u8pfx2, std::move(std::vector<Assign *>{u8scope22, NEL}), it2);
+    it.createIf(u8pfx2, {u8scope22, NEL}, it2);
     
     //
     // Three-byte sequences
@@ -122,7 +122,7 @@ void RE_Compiler::initializeRequiredStreams(cc::CC_Compiler & ccc) {
     PabloAST * E0_invalid = it3.createAnd(it3.createAdvance(ccc.compileCC(makeCC(0xE0), it3), 1), ccc.compileCC(makeCC(0x80, 0x9F), it3));
     PabloAST * ED_invalid = it3.createAnd(it3.createAdvance(ccc.compileCC(makeCC(0xED), it3), 1), ccc.compileCC(makeCC(0xA0, 0xBF), it3));
     Assign * EX_invalid = it3.createAssign("EX_invalid", it3.createOr(E0_invalid, ED_invalid));
-    it.createIf(u8pfx3, std::move(std::vector<Assign *>{u8scope32, u8scope3X, LS_PS, EX_invalid}), it3);
+    it.createIf(u8pfx3, {u8scope32, u8scope3X, LS_PS, EX_invalid}, it3);
  
     //
     // Four-byte sequences
@@ -135,7 +135,7 @@ void RE_Compiler::initializeRequiredStreams(cc::CC_Compiler & ccc) {
     PabloAST * F0_invalid = it4.createAnd(it4.createAdvance(ccc.compileCC(makeCC(0xF0), it4), 1), ccc.compileCC(makeCC(0x80, 0x8F), it4));
     PabloAST * F4_invalid = it4.createAnd(it4.createAdvance(ccc.compileCC(makeCC(0xF4), it4), 1), ccc.compileCC(makeCC(0x90, 0xBF), it4));
     Assign * FX_invalid = it4.createAssign("FX_invalid", it4.createOr(F0_invalid, F4_invalid));
-    it.createIf(u8pfx4, std::move(std::vector<Assign *>{u8scope4nonfinal, u8scope4X, FX_invalid}), it4);
+    it.createIf(u8pfx4, {u8scope4nonfinal, u8scope4X, FX_invalid}, it4);
 
     //
     // Invalid cases
@@ -155,7 +155,7 @@ void RE_Compiler::initializeRequiredStreams(cc::CC_Compiler & ccc) {
     mNonFinal = it.createAssign("nonfinal", it.createAnd(it.createOr(it.createOr(u8pfx, u8scope32), u8scope4nonfinal), it.createNot(u8invalid)));
     
     Assign * NEL_LS_PS = it.createAssign("NEL_LS_PS", it.createOr(NEL, LS_PS));
-    mPB.createIf(u8pfx, std::move(std::vector<Assign *>{u8invalid, valid_pfx, mNonFinal, NEL_LS_PS}), it);
+    mPB.createIf(u8pfx, {u8invalid, valid_pfx, mNonFinal, NEL_LS_PS}, it);
     
     PabloAST * LB_chars = mPB.createOr(LF_VT_FF_CR, NEL_LS_PS);
     PabloAST * u8single = mPB.createAnd(ccc.compileCC(makeCC(0x00, 0x7F)), mPB.createNot(u8invalid));
@@ -297,7 +297,7 @@ MarkerType RE_Compiler::processSeqTail(Seq::iterator current, Seq::iterator end,
         PabloBlock & nested = PabloBlock::Create(pb);
         MarkerType m1 = processSeqTail(current, end, 0, marker, nested);
         Assign * m1a = nested.createAssign("m", markerVar(m1));
-        pb.createIf(markerVar(marker), std::move(std::vector<Assign *>{m1a}), nested);
+        pb.createIf(markerVar(marker), {m1a}, nested);
         return makeMarker(m1.pos, m1a);
     }
 }

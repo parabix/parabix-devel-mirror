@@ -54,7 +54,12 @@ void Simplifier::eliminateRedundantCode(PabloBlock & block, ExpressionTable * pr
             // If we have an Assign whose users do not contain an If or Next node, we can replace its users with
             // the Assign's expression directly.
             if (assign->superfluous()) {
-                stmt = (stmt->getNumUses() == 0) ? assign->eraseFromParent() : assign->replaceWith(assign->getExpr());
+                if (stmt->getNumUses() == 0) {
+                    stmt = assign->eraseFromParent();
+                }
+                else {
+                    stmt = assign->replaceWith(assign->getExpr());
+                }
                 continue;
             }
         }

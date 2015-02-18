@@ -30,11 +30,13 @@ class PabloAST {
     friend class SymbolGenerator;
 public:
 
-    using Users = std::vector<PabloAST*>;
+    using Allocator = SlabAllocator<u_int8_t>;
+    using VectorAllocator = SlabAllocator<PabloAST *>;
+    using Users = std::vector<PabloAST*, VectorAllocator>;
     using user_iterator = Users::iterator;
     using const_user_iterator = Users::const_iterator;
 
-    typedef SlabAllocator<PabloAST *> Allocator;
+
     enum class ClassTypeId : unsigned {
         Advance
         , And
@@ -100,6 +102,7 @@ public:
 protected:
     inline PabloAST(const ClassTypeId id)
     : mClassTypeId(id)
+    , mUsers(mVectorAllocator)
     {
 
     }
@@ -113,6 +116,9 @@ protected:
     }
     inline void removeUser(PabloAST * user) {
         assert (user);
+        if (mUsers.empty()) {
+            return;
+        }
         auto pos = std::lower_bound(mUsers.begin(), mUsers.end(), user);
         if (LLVM_UNLIKELY(pos == mUsers.end() || *pos != user)) {
             return;
@@ -126,6 +132,7 @@ protected:
 private:
     const ClassTypeId       mClassTypeId;
     Users                   mUsers;
+    static VectorAllocator  mVectorAllocator;
 };
 
 bool equals(const PabloAST * expr1, const PabloAST *expr2);
@@ -206,7 +213,7 @@ protected:
     , mPrev(nullptr)
     , mParent(parent)
     , mOperands(operands.size())
-    , mOperand(mAllocator.allocate(mOperands * sizeof(PabloAST *)))
+    , mOperand(reinterpret_cast<PabloAST**>(mAllocator.allocate(mOperands * sizeof(PabloAST *))))
     {
         unsigned i = 0;
         for (PabloAST * const op : operands) {
@@ -217,6 +224,9 @@ protected:
     inline void setName(const String * const name) {
         mName = name;
     }
+#ifndef NDEBUG
+    bool noRecursiveOperand(const PabloAST * const operand);
+#endif
 protected:    
     const String *              mName;
     Statement *                 mNext;

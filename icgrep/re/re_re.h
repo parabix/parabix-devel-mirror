@@ -36,7 +36,8 @@ class Union;
 
 class RE {
 public:
-    typedef SlabAllocator<RE *> Allocator;
+    using Allocator = SlabAllocator<u_int8_t>;
+    using VectorAllocator = SlabAllocator<RE *>;
     enum class ClassTypeId : unsigned {
         Alt
         , Any
@@ -57,6 +58,7 @@ public:
         return mClassTypeId;
     }
     inline static void release_memory() {
+        mVectorAllocator.release_memory();
         mAllocator.release_memory();
     }
     typedef std::initializer_list<RE *> InitializerList;
@@ -68,59 +70,27 @@ protected:
     const ClassTypeId mClassTypeId;
 
     static Allocator mAllocator;
+    static VectorAllocator mVectorAllocator;
 };
 
-class Vector : public RE, public std::vector<RE*> {
+class Vector : public RE, public std::vector<RE*, RE::VectorAllocator> {
 public:
+
     virtual ~Vector() {
     }
 protected:
     inline Vector(const ClassTypeId id)
     : RE(id)
-    , std::vector<RE*>()
+    , std::vector<RE*, RE::VectorAllocator>(RE::mVectorAllocator)
     {
 
     }
     inline Vector(const ClassTypeId id, const iterator begin, const iterator end)
     : RE(id)
-    , std::vector<RE*>(begin, end) {
+    , std::vector<RE*, RE::VectorAllocator>(begin, end, RE::mVectorAllocator) {
 
     }
 };
-
-//class Pair : public RE {
-//protected:
-//    inline Pair(const ClassTypeId id)
-//    : RE(id)
-//    , _lh(nullptr)
-//    , _rh(nullptr)
-//    {
-
-//    }
-//    inline Pair(const ClassTypeId id, const RE * lh, const RE * rh)
-//    : RE(id)
-//    , _lh(lh)
-//    , _rh(rh)
-//    {
-
-//    }
-//    virtual ~Pair() {
-//    }
-//protected:
-//    const RE * _lh;
-//    const RE * _rh;
-//};
-
-//static Diff * makeDiff(const RE * lh, const RE * rh);
-
-//static Intersect * makeIntersect(const RE * lh, const RE * rh);
-
-//static Permute * makePermute();
-//static Permute * makePermute(Vector::iterator begin, Vector::iterator end);
-
-//static SymDiff * makeSymDiff(const RE * lh, const RE * rh);
-
-//static Union * makeUnion(const RE * lh, const RE * rh);
 
 }
 

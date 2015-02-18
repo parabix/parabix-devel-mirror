@@ -10,6 +10,9 @@
 #include <pablo/pabloAST.h>
 #include <string>
 #include <unordered_map>
+#include <llvm/ADT/Twine.h>
+#include <llvm/ADT/StringMap.h>
+#include <llvm/Support/StringPool.h>
 
 namespace pablo {
 
@@ -18,16 +21,16 @@ class Integer;
 
 class SymbolGenerator {
     friend class PabloBlock;
+    using Twine = llvm::Twine;
 public:
     typedef u_int64_t integer_t;
     String * get(const std::string name, const bool generated = true);
     String * make(const std::string prefix, const bool generated = true);
     Integer * getInteger(const integer_t value);
+    SymbolGenerator();
     ~SymbolGenerator();
-protected:
-    SymbolGenerator();    
 private:
-    std::unordered_map<std::string, unsigned>   mPrefixMap;    
+    std::unordered_map<std::string, integer_t>  mPrefixMap;
     std::unordered_map<std::string, String *>   mStringMap;
     std::unordered_map<integer_t, Integer *>    mIntegerMap;
 };

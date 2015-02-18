@@ -116,7 +116,8 @@ LLVM_Gen_RetVal compile(const Encoding encoding, const std::vector<std::string> 
       std::cerr << "Simplifier:" << std::endl << Printer_RE::PrintRE(re_ast) << std::endl;
     }
 
-    PabloBlock & main = PabloBlock::Create();
+    SymbolGenerator symbolGenerator;
+    PabloBlock & main = PabloBlock::Create(symbolGenerator);
 
     CC_Compiler cc_compiler(main, encoding);
     

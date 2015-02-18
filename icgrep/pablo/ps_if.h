@@ -17,7 +17,7 @@ class Assign;
 class If : public Statement {
     friend class PabloBlock;
 public:
-    using DefinedVars = std::vector<Assign *>;
+    using DefinedVars = std::vector<PabloAST *, VectorAllocator>;
 
     static inline bool classof(const PabloAST * e) {
         return e->getClassTypeId() == ClassTypeId::If;
@@ -53,7 +53,7 @@ public:
         return mAdvanceCount;
     }
 protected:
-    If(PabloAST * expr, DefinedVars && definedVars, PabloBlock & body, PabloBlock * parent);
+    If(PabloAST * expr, std::initializer_list<Assign *> && definedVars, PabloBlock & body, PabloBlock * parent);
 private:
     PabloBlock &    mBody;
     DefinedVars     mDefined;

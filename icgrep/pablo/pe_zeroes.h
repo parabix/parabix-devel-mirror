@@ -15,8 +15,9 @@ namespace pablo {
 class Zeroes : public PabloAST {
     friend class PabloBlock;
 public:
-    static inline bool classof(const PabloAST * e) {
-        return e->getClassTypeId() == ClassTypeId::Zeroes;
+    static inline bool classof(const PabloAST * expr) {
+        assert (expr);
+        return expr->getClassTypeId() == ClassTypeId::Zeroes;
     }
     static inline bool classof(const void *) {
         return false;

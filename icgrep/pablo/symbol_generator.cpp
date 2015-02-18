@@ -20,8 +20,8 @@ String * SymbolGenerator::get(const std::string name, const bool generated) {
     auto f = mStringMap.find(name);
     String * result;
     if (f == mStringMap.end()) {
-        result = new String(std::move(name), generated);
-        mStringMap.insert(std::make_pair(name, result));
+        result = new String(name, generated);
+        mStringMap.insert(std::make_pair(std::move(name), result));
     }
     else {
         result = f->second;
@@ -57,12 +57,7 @@ String * SymbolGenerator::make(const std::string prefix, const bool generated) {
 }
 
 SymbolGenerator::~SymbolGenerator() {
-    for (auto itr : mStringMap) {
-        delete itr.second;
-    }
-    for (auto itr : mIntegerMap) {
-        delete itr.second;
-    }
+
 }
 
 }

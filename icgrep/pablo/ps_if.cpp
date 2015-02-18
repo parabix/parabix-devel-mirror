@@ -4,10 +4,10 @@
 
 namespace pablo {
 
-If::If(PabloAST * expr, DefinedVars && definedVars, PabloBlock & body, PabloBlock * parent)
+If::If(PabloAST * expr, std::initializer_list<Assign *> && definedVars, PabloBlock & body, PabloBlock * parent)
 : Statement(ClassTypeId::If, {expr}, nullptr, parent)
 , mBody(body)
-, mDefined(std::move(definedVars))
+, mDefined(definedVars.begin(), definedVars.end(), mVectorAllocator)
 , mCarryCount(0)
 , mAdvanceCount(0)
 {

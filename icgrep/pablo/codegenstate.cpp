@@ -377,7 +377,7 @@ PabloAST * PabloBlock::createSel(PabloAST * condition, PabloAST * trueExpr, Pabl
     return insertAtInsertionPoint(new Sel(condition, trueExpr, falseExpr, makeName(prefix, false), this));
 }
 
-If * PabloBlock::createIf(PabloAST * condition, std::vector<Assign *> && definedVars, PabloBlock & body) {
+If * PabloBlock::createIf(PabloAST * condition, std::initializer_list<Assign *> definedVars, PabloBlock & body) {
     assert (condition);
     return insertAtInsertionPoint(new If(condition, std::move(definedVars), body, this));
 }
@@ -389,11 +389,11 @@ While * PabloBlock::createWhile(PabloAST * condition, PabloBlock & body) {
 
 /// CONSTRUCTOR
 
-PabloBlock::PabloBlock()
+PabloBlock::PabloBlock(SymbolGenerator & symbolGenerator)
 : PabloAST(PabloAST::ClassTypeId::Block)
 , mZeroes(new Zeroes())
 , mOnes(new Ones())
-, mSymbolGenerator(new SymbolGenerator())
+, mSymbolGenerator(symbolGenerator)
 , mPredecessor(nullptr)
 {
 
@@ -410,9 +410,7 @@ PabloBlock::PabloBlock(PabloBlock * predecessor)
 }
 
 PabloBlock::~PabloBlock() {
-    if (mPredecessor == nullptr) {
-        delete mSymbolGenerator;
-    }    
+
 }
 
 }
