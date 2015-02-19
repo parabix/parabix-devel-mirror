@@ -54,6 +54,8 @@ public:
     }
 protected:
     If(PabloAST * expr, std::initializer_list<Assign *> && definedVars, PabloBlock & body, PabloBlock * parent);
+
+    If(PabloAST * expr, const std::vector<Assign *> & definedVars, PabloBlock & body, PabloBlock * parent);
 private:
     PabloBlock &    mBody;
     DefinedVars     mDefined;

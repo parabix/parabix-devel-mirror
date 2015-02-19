@@ -28,6 +28,18 @@ If::If(PabloAST * expr, std::initializer_list<Assign *> && definedVars, PabloBlo
     }
 }
 
+If::If(PabloAST * expr, const std::vector<Assign *> & definedVars, PabloBlock & body, PabloBlock * parent)
+: Statement(ClassTypeId::If, {expr}, nullptr, parent)
+, mBody(body)
+, mDefined(definedVars.begin(), definedVars.end(), mVectorAllocator)
+, mCarryCount(0)
+, mAdvanceCount(0)
+{
+    for (PabloAST * assign : mDefined) {
+        assign->addUser(this);
+        addUser(assign);
+    }
+}
 
 
 }

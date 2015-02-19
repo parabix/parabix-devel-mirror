@@ -18,7 +18,6 @@ namespace cc {
 class CC_NameMap;
 
 class CC_Compiler{
-    typedef std::vector<std::pair<const re::CC*, pablo::Assign*>> ConstraintVector;
 public:
 
     CC_Compiler(pablo::PabloBlock & cg, const Encoding encoding, const std::string basis_pattern = "basis");
@@ -44,7 +43,6 @@ private:
     pablo::PabloBlock &         mCG;
     std::vector<pablo::Var *>   mBasisBit;
     const Encoding              mEncoding;
-    ConstraintVector            mVariableVector;
 };
 
 }

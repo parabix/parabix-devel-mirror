@@ -77,11 +77,11 @@ public:
         return *(new PabloBlock(&predecessor));
     }
 
-    PabloAST * createAdvance(PabloAST * expr, const int shiftAmount);
+    PabloAST * createAdvance(PabloAST * expr, const Integer::integer_t shiftAmount);
 
     PabloAST * createAdvance(PabloAST * expr, PabloAST * shiftAmount);
 
-    PabloAST * createAdvance(PabloAST * expr, const int shiftAmount, const std::string prefix);
+    PabloAST * createAdvance(PabloAST * expr, const Integer::integer_t shiftAmount, const std::string prefix);
 
     PabloAST * createAdvance(PabloAST * expr, PabloAST * shiftAmount, const std::string prefix);
 
@@ -142,6 +142,10 @@ public:
     PabloAST * createSel(PabloAST * condition, PabloAST * trueExpr, PabloAST * falseExpr, const std::string prefix);
 
     If * createIf(PabloAST * condition, std::initializer_list<Assign *> definedVars, PabloBlock & body);
+
+    If * createIf(PabloAST * condition, const std::vector<Assign *> & definedVars, PabloBlock & body);
+
+    If * createIf(PabloAST * condition, std::vector<Assign *> && definedVars, PabloBlock & body);
 
     While * createWhile(PabloAST * condition, PabloBlock & body);
 

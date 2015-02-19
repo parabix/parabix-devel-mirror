@@ -9,14 +9,9 @@ namespace pablo {
 class PabloBuilder {
 public:
 
-    inline static PabloBlock & Create() {
-        return *(new PabloBlock());
+    inline static PabloBuilder Create(PabloBuilder & predecessor) {
+        return *(new PabloBlock(predecessor->mPb));
     }
-
-    inline static PabloBlock & Create(PabloBlock & predecessor) {
-        return *(new PabloBlock(&predecessor));
-    }
-
 
     inline Zeroes * createZeroes() const {
         return mPb->createZeroes();
@@ -44,7 +39,7 @@ public:
 
     Assign * createAssign(const std::string prefix, PabloAST * expr, const int outputIndex = -1);
 
-    inline PabloAST * createAdvance(PabloAST * expr, const int shiftAmount) {
+    inline PabloAST * createAdvance(PabloAST * expr, const Integer::integer_t shiftAmount) {
         if (shiftAmount == 0) {
             return expr;
         }
@@ -69,7 +64,7 @@ public:
 
     PabloAST * createSel(PabloAST * condition, PabloAST * trueExpr, PabloAST * falseExpr);
 
-    inline If * createIf(PabloAST * condition, std::vector<Assign *> && definedVars, PabloBlock & body) {
+    inline If * createIf(PabloAST * condition, std::initializer_list<Assign *> definedVars, PabloBlock & body) {
         mPb->createIf(condition, std::move(definedVars), body);
     }
 

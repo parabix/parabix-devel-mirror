@@ -37,14 +37,14 @@ PabloAST * PabloBlock::createAdvance(PabloAST * expr, PabloAST * shiftAmount, co
     return insertAtInsertionPoint(new Advance(expr, shiftAmount, makeName(prefix, false), this));
 }
 
-PabloAST * PabloBlock::createAdvance(PabloAST * expr, const int shiftAmount) {
+PabloAST * PabloBlock::createAdvance(PabloAST * expr, const Integer::integer_t shiftAmount) {
     if (isa<Zeroes>(expr) || shiftAmount == 0) {
         return expr;
     }
     return insertAtInsertionPoint(new Advance(expr, getInteger(shiftAmount), makeName("advance"), this));
 }
 
-PabloAST * PabloBlock::createAdvance(PabloAST * expr, const int shiftAmount, const std::string prefix) {
+PabloAST * PabloBlock::createAdvance(PabloAST * expr, const Integer::integer_t shiftAmount, const std::string prefix) {
     if (isa<Zeroes>(expr) || shiftAmount == 0) {
         return renameNonNamedNode(expr, std::move(prefix));
     }    
@@ -380,6 +380,16 @@ PabloAST * PabloBlock::createSel(PabloAST * condition, PabloAST * trueExpr, Pabl
 If * PabloBlock::createIf(PabloAST * condition, std::initializer_list<Assign *> definedVars, PabloBlock & body) {
     assert (condition);
     return insertAtInsertionPoint(new If(condition, std::move(definedVars), body, this));
+}
+
+If * PabloBlock::createIf(PabloAST * condition, const std::vector<Assign *> & definedVars, PabloBlock & body) {
+    assert (condition);
+    return insertAtInsertionPoint(new If(condition, definedVars, body, this));
+}
+
+If * PabloBlock::createIf(PabloAST * condition, std::vector<Assign *> && definedVars, PabloBlock & body) {
+    assert (condition);
+    return insertAtInsertionPoint(new If(condition, definedVars, body, this));
 }
 
 While * PabloBlock::createWhile(PabloAST * condition, PabloBlock & body) {

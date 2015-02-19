@@ -166,19 +166,21 @@ PabloAST * CC_Compiler::bit_pattern_expr(const unsigned pattern, unsigned select
         i++;
     }
 
-    //Reduce the list so that all of the expressions are contained within a single expression.
-    while (bit_terms.size() > 1)
-    {
-        std::vector<PabloAST*> new_terms;
-        for (auto i = 0; i < (bit_terms.size()/2); i++)
+    if (bit_terms.size() > 1) {
+        //Reduce the list so that all of the expressions are contained within a single expression.
+        std::vector<PabloAST*> new_terms(bit_terms.size() / 2);
+        do
         {
-            new_terms.push_back(pb.createAnd(bit_terms[(2 * i) + 1], bit_terms[2 * i]));
+            new_terms.clear();
+            for (auto i = 0; i < (bit_terms.size() / 2); i++) {
+                new_terms.push_back(pb.createAnd(bit_terms[(2 * i) + 1], bit_terms[2 * i]));
+            }
+            if (bit_terms.size() % 2 == 1) {
+                new_terms.push_back(bit_terms[bit_terms.size() - 1]);
+            }
+            bit_terms.swap(new_terms);
         }
-        if (bit_terms.size() % 2 == 1)
-        {
-            new_terms.push_back(bit_terms[bit_terms.size() -1]);
-        }
-        bit_terms.swap(new_terms);
+        while (bit_terms.size() > 1);
     }
     return bit_terms[0];
 }
