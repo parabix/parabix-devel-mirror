@@ -65,6 +65,11 @@ inline std::ostream & operator <<(std::ostream & stream, const String & string) 
     return stream;
 }
 
+inline std::ostream & operator <<(std::ostream & stream, const String * string) {
+    stream << string->value().data();
+    return stream;
+}
+
 }
 
 #endif // PE_STRING_H
