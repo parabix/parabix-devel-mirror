@@ -104,7 +104,7 @@ PabloCompiler::PabloCompiler(const std::vector<Var*> & basisBits)
 
 PabloCompiler::~PabloCompiler()
 {
-    // delete mMod;
+
 }
     
 void PabloCompiler::InstallExternalFunction(std::string C_fn_name, void * fn_ptr) {
@@ -112,7 +112,7 @@ void PabloCompiler::InstallExternalFunction(std::string C_fn_name, void * fn_ptr
 }
 
 
-LLVM_Gen_RetVal PabloCompiler::compile(PabloBlock & pb)
+CompiledPabloFunction PabloCompiler::compile(PabloBlock & pb)
 {
     mNestingDepth = 0;
     mMaxNestingDepth = 0;
@@ -193,13 +193,8 @@ LLVM_Gen_RetVal PabloCompiler::compile(PabloBlock & pb)
 
     mExecutionEngine->finalizeObject();
 
-    LLVM_Gen_RetVal retVal;
     //Return the required size of the carry queue and a pointer to the process_block function.
-    retVal.carry_q_size = mCarryQueueSize;
-    retVal.advance_q_size = mAdvanceQueueSize;
-    retVal.process_block_fptr = mExecutionEngine->getPointerToFunction(mFunction);
-
-    return retVal;
+    return CompiledPabloFunction(mCarryQueueSize, mAdvanceQueueSize, mFunction, mExecutionEngine);
 }
 
 void PabloCompiler::DefineTypes()
@@ -1089,6 +1084,25 @@ void PabloCompiler::SetOutputValue(Value * marker, const unsigned index) {
     Value* indices[] = {b.getInt64(0), b.getInt32(index)};
     Value* gep = b.CreateGEP(mOutputAddrPtr, indices);
     b.CreateAlignedStore(marker, gep, BLOCK_SIZE/8, false);
+}
+
+CompiledPabloFunction::CompiledPabloFunction(unsigned carryQSize, unsigned advanceQSize, Function * function, ExecutionEngine * executionEngine)
+: CarryQueueSize(carryQSize)
+, AdvanceQueueSize(advanceQSize)
+, FunctionPointer(executionEngine->getPointerToFunction(function))
+, mFunction(function)
+, mExecutionEngine(executionEngine)
+{
+
+}
+
+// Clean up the memory for the compiled function once we're finished using it.
+CompiledPabloFunction::~CompiledPabloFunction() {
+    if (mExecutionEngine) {
+        assert (mFunction);
+        // mExecutionEngine->freeMachineCodeForFunction(mFunction); // This function only prints a "not supported" message. Reevaluate with LLVM 3.6.
+        delete mExecutionEngine;
+    }
 }
 
 }

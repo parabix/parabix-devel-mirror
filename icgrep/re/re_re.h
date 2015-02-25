@@ -67,6 +67,9 @@ protected:
     : mClassTypeId(id) {
 
     }
+    void* operator new (std::size_t size) noexcept {
+        return mAllocator.allocate(size);
+    }
     const ClassTypeId mClassTypeId;
 
     static Allocator mAllocator;

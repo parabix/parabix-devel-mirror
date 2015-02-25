@@ -28,9 +28,6 @@ public:
     }
 protected:
     friend RE * makeDiff(RE*, RE*);
-    void* operator new (std::size_t size) noexcept {
-        return mAllocator.allocate(size);
-    }
     Diff(RE * lh, RE * rh)
     : RE(ClassTypeId::Diff)
     , mLh(lh)

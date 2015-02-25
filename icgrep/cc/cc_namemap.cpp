@@ -56,13 +56,7 @@ RE * CC_NameMap::process(RE * re, const CC_type t) {
         std::string classname = cc->canonicalName(t);
         auto f = mNameMap.find(classname);
         if (f == mNameMap.end()) {
-	    Name * n;
-	    if (t == ByteClass) {
-	      n = makeByteName(classname, cc);
-	    }
-	    else {
-	      n = makeName(classname, cc);
-	    }
+            Name * n = (t == ByteClass) ? makeByteName(classname, cc) : makeName(classname, cc);
             return insert(std::move(classname), n);
         }
         return f->second;

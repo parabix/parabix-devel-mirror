@@ -15,7 +15,7 @@
 
 namespace icgrep {
 
-    pablo::LLVM_Gen_RetVal compile(const Encoding encoding, const std::vector<std::string> regexps, const re::ModeFlagSet initialFlags);
+    pablo::CompiledPabloFunction compile(const Encoding encoding, const std::vector<std::string> regexps, const re::ModeFlagSet initialFlags);
 
 }
 

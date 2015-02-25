@@ -21,9 +21,6 @@ public:
     }
 protected:
     friend Start * makeStart();
-    void* operator new (std::size_t size) noexcept {
-        return mAllocator.allocate(size);
-    }
     Start() : RE(ClassTypeId::Start) {}
     virtual ~Start() {}
 };

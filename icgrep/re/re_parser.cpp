@@ -569,8 +569,8 @@ RE * RE_Parser::parse_charset() {
     // If the first character after the [ is a ^ (caret) then the matching character class is complemented.
     bool negated = false;
     if (_cursor != _end && *_cursor == '^') {
-      negated = true;
-      ++_cursor;
+        negated = true;
+        ++_cursor;
     }
     throw_incomplete_expression_error_if_end_of_stream();
     // Legacy rule: an unescaped ] may appear as a literal set character
@@ -586,14 +586,21 @@ RE * RE_Parser::parse_charset() {
         cc->insert('-');
         lastItemKind = CodepointItem;
         lastCodepointItem = static_cast<codepoint_t> ('-');
-                if (*_cursor == '-') throw ParseFailure("Set operator has no left operand.");
+        if (*_cursor == '-') {
+            throw ParseFailure("Set operator has no left operand.");
+        }
     }
     while (_cursor != _end) {
         CharsetOperatorKind op = getCharsetOperator();
         switch (op) {
-            case intersectOp: case setDiffOp: {
-                if (lastItemKind == NoItem) throw ParseFailure("Set operator has no left operand.");
-                if (cc->begin() != cc->end()) subexprs.push_back(cc);
+            case intersectOp:
+            case setDiffOp: {
+                if (lastItemKind == NoItem) {
+                    throw ParseFailure("Set operator has no left operand.");
+                }
+                if (cc->begin() != cc->end()) {
+                    subexprs.push_back(cc);
+                }
                 RE * newOperand = makeAlt(subexprs.begin(), subexprs.end());
                 subexprs.clear();
                 cc = makeCC();
@@ -614,7 +621,9 @@ RE * RE_Parser::parse_charset() {
             }
             break;
             case setCloser: {
-                if (lastItemKind == NoItem) throw ParseFailure("Set operator has no right operand.");
+                if (lastItemKind == NoItem) {
+                    throw ParseFailure("Set operator has no right operand.");
+                }
                 if (cc->begin() != cc->end()) {
                     subexprs.push_back(cc);
                 }
@@ -632,10 +641,10 @@ RE * RE_Parser::parse_charset() {
                         newOperand = caseInsensitize(cc1);
                     }
                 }
-                if (negated) return makeComplement(newOperand); 
-                else return newOperand;
+                return negated ? makeComplement(newOperand) : newOperand;
             }
-            case setOpener: case posixPropertyOpener: {
+            case setOpener:
+            case posixPropertyOpener: {
                 if (lastItemKind != NoItem) {
                     if (cc->begin() != cc->end()) subexprs.push_back(cc);
                     RE * newOperand = makeAlt(subexprs.begin(), subexprs.end());
@@ -675,7 +684,9 @@ RE * RE_Parser::parse_charset() {
             }
             break;
             case rangeHyphen:
-                if (lastItemKind != CodepointItem) throw ParseFailure("Range operator - has illegal left operand.");
+                if (lastItemKind != CodepointItem) {
+                    throw ParseFailure("Range operator - has illegal left operand.");
+                }
                 cc->insert_range(lastCodepointItem, parse_codepoint());
                 lastItemKind = RangeItem;
                 break;

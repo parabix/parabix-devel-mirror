@@ -27,9 +27,6 @@ public:
     }
 protected:
     friend RE * makeIntersect(RE*, RE*);
-    void* operator new (std::size_t size) noexcept {
-        return mAllocator.allocate(size);
-    }
     Intersect(RE * lh, RE * rh)
     : RE(ClassTypeId::Intersect)
     , mLh(lh)

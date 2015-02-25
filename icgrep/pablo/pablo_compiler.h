@@ -50,11 +50,29 @@ class Var;
 class Statement;
 class StatementList;
 
-struct LLVM_Gen_RetVal
-{
-    int carry_q_size;
-    int advance_q_size;
-    void *process_block_fptr;
+struct CompiledPabloFunction {
+    const unsigned      CarryQueueSize;
+    const unsigned      AdvanceQueueSize;
+    void * const        FunctionPointer;
+private:
+    Function *          mFunction;
+    ExecutionEngine *   mExecutionEngine;
+public:
+    CompiledPabloFunction(unsigned carryQSize, unsigned advanceQSize, Function * function, ExecutionEngine * executionEngine);
+
+    inline CompiledPabloFunction(CompiledPabloFunction && cpf)
+    : CarryQueueSize(cpf.CarryQueueSize)
+    , AdvanceQueueSize(cpf.AdvanceQueueSize)
+    , FunctionPointer(cpf.FunctionPointer)
+    , mFunction(cpf.mFunction)
+    , mExecutionEngine(cpf.mExecutionEngine)
+    {
+        cpf.mFunction = nullptr;
+        cpf.mExecutionEngine = nullptr;
+    }
+
+    ~CompiledPabloFunction();
+
 };
 
 class PabloCompiler {
@@ -73,7 +91,7 @@ public:
     PabloCompiler(const std::vector<Var *> & basisBitVars);
     ~PabloCompiler();
     void InstallExternalFunction(std::string C_fn_name, void * fn_ptr);
-    LLVM_Gen_RetVal compile(PabloBlock & pb);
+    CompiledPabloFunction compile(PabloBlock & pb);
 private:
     void DefineTypes();
     void DeclareFunctions();

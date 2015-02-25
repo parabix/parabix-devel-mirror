@@ -21,15 +21,16 @@ public:
     static inline bool classof(const void *) {
         return false;
     }
+    using length_t = std::string::size_type;
     enum class Type {
         Byte
         , Unicode
         , UnicodeProperty
         , Unknown
     };
-    const std::string & getNamespace() const;
-    const std::string & getName() const;
-    void setName(std::string);
+    std::string getNamespace() const;
+    std::string getName() const;
+    void setName(const std::string &);
     Type getType() const;
     RE *getDefinition() const;
     pablo::PabloAST * getCompiled() const {
@@ -41,43 +42,53 @@ public:
     void setDefinition(RE * def);
     virtual ~Name() {}
 protected:
-    friend Name * makeName(const std::string, RE *);    
-    friend Name * makeByteName(const std::string, RE *);
-    friend Name * makeName(const std::string, const Type);
-    friend Name * makeName(const std::string, const std::string, const Type);    
-    void* operator new (std::size_t size) noexcept {
-        return mAllocator.allocate(size);
-    }
-    Name(const std::string && nameSpace, const std::string && name, const Type type, RE * defn)
+    friend Name * makeName(const std::string &, RE *);
+    friend Name * makeByteName(const std::string &, RE *);
+    friend Name * makeName(const std::string &, const Type);
+    friend Name * makeName(const std::string &, const std::string &, const Type);
+    Name(const char * nameSpace, const length_t namespaceLength, const char * name, const length_t nameLength, const Type type, RE * defn)
     : RE(ClassTypeId::Name)
-    , mNamespace(std::move(nameSpace))
-    , mName(std::move(name))
+    , mNamespaceLength(namespaceLength)
+    , mNamespace(replicateString(nameSpace, namespaceLength))
+    , mNameLength(nameLength)
+    , mName(replicateString(name, nameLength))
     , mType(type)
     , mDefiningRE(defn)
     , mCompiled(nullptr)
     {
 
     }
+    inline const char * replicateString(const char * string, const length_t length) {
+        if (string) {
+            char * allocated = reinterpret_cast<char*>(mAllocator.allocate(length));
+            std::memcpy(allocated, string, length);
+            string = allocated;
+        }
+        return string;
+    }
 
 private:
-    std::string         mNamespace;
-    std::string         mName;
+    length_t            mNamespaceLength;
+    const char *        mNamespace;
+    length_t            mNameLength;
+    const char *        mName;
     const Type          mType;
     RE *                mDefiningRE;
     pablo::PabloAST *   mCompiled;
 };
 
-inline const std::string & Name::getNamespace() const {
-    return mNamespace;
+inline std::string Name::getNamespace() const {
+    return std::string(mNamespace, mNamespaceLength);
 }
 
-    inline const std::string & Name::getName() const {
-        return mName;
-    }
-    
-    inline void Name::setName(std::string n) {
-        mName = n;
-    }
+inline std::string Name::getName() const {
+    return std::string(mName, mNameLength);
+}
+
+inline void Name::setName(const std::string & n) {
+    mNameLength = n.length();
+    mName = replicateString(n.c_str(), n.length());
+}
     
 inline Name::Type Name::getType() const {
     return mType;
@@ -91,31 +102,31 @@ inline void Name::setDefinition(RE * d) {
     mDefiningRE = d;
 }
 
-inline Name * makeName(const std::string name, const Name::Type type = Name::Type::Unicode) {
-    return new Name("", std::move(name), type, nullptr);
+inline Name * makeName(const std::string & name, const Name::Type type = Name::Type::Unicode) {
+    return new Name(nullptr, 0, name.c_str(), name.length(), type, nullptr);
 }
 
-inline Name * makeName(const std::string property, const std::string value, const Name::Type type = Name::Type::Unicode) {
-    return new Name(std::move(property), std::move(value), type, nullptr);
+inline Name * makeName(const std::string & property, const std::string & value, const Name::Type type = Name::Type::Unicode) {
+    return new Name(property.c_str(), property.length(), value.c_str(), value.length(),  type, nullptr);
 }
 
-inline Name * makeName(const std::string name, RE * cc) {
+inline Name * makeName(const std::string & name, RE * cc) {
     if (isa<Name>(cc)) {
         return cast<Name>(cc);
     }
     else if (isa<CC>(cc)) {
         Name::Type ccType = cast<CC>(cc)->max_codepoint() <= 0x7F ? Name::Type::Byte : Name::Type::Unicode;
-        return new Name("", std::move(name), ccType, cc);
+        return new Name(nullptr, 0, name.c_str(), name.length(), ccType, cc);
     }
-    else return new Name("", std::move(name), Name::Type::Unknown, cc);
+    else return new Name(nullptr, 0, name.c_str(), name.length(), Name::Type::Unknown, cc);
 }
 
-inline Name * makeByteName(const std::string name, RE * cc) {
+inline Name * makeByteName(const std::string & name, RE * cc) {
     if (isa<Name>(cc)) {
         return cast<Name>(cc);
     }
     else {
-        return new Name("", std::move(name), Name::Type::Byte, cc);
+        return new Name(nullptr, 0, name.c_str(), name.length(), Name::Type::Byte, cc);
     }
 }
 

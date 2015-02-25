@@ -32,9 +32,6 @@ protected:
     : Vector(ClassTypeId::Alt, begin, end) {
 
     }
-    void* operator new (std::size_t size) noexcept {
-        return mAllocator.allocate(size);
-    }
 private:
     template<typename iterator>
     void flatten(iterator begin, iterator end, std::queue<CC*> & ccQ) {

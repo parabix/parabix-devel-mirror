@@ -54,7 +54,7 @@ using namespace pablo;
 
 namespace icgrep {
 
-LLVM_Gen_RetVal compile(const Encoding encoding, const std::vector<std::string> regexps, const ModeFlagSet initialFlags) {
+CompiledPabloFunction compile(const Encoding encoding, const std::vector<std::string> regexps, const ModeFlagSet initialFlags) {
     std::vector<RE *> REs;
     RE * re_ast = nullptr;
     for (int i = 0; i < regexps.size(); i++) {
@@ -156,7 +156,7 @@ LLVM_Gen_RetVal compile(const Encoding encoding, const std::vector<std::string> 
     install_property_DerivedCoreProperties_fn_ptrs(pablo_compiler);
     install_property_PropList_fn_ptrs(pablo_compiler);
 
-    LLVM_Gen_RetVal retVal = pablo_compiler.compile(main);
+    CompiledPabloFunction retVal = pablo_compiler.compile(main);
 
     RE::release_memory();
     PabloAST::release_memory();

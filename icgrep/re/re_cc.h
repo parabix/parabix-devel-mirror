@@ -119,9 +119,6 @@ protected:
     friend CC * makeCC(const CodePointType lo, const CodePointType hi);
     friend CC * makeCC(const CC * cc1, const CC * cc2);
     friend CC * subtractCC(const CC * cc1, const CC * cc2);
-    void* operator new (std::size_t size) noexcept {
-        return mAllocator.allocate(size);
-    }
     inline CC()
     : RE(ClassTypeId::CC)
     , mSparseCharSet(mCharSetAllocator) {

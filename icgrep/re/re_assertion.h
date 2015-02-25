@@ -30,9 +30,6 @@ public:
 
 protected:
     friend Assertion * makeAssertion(RE * asserted, Kind k, Sense s);
-    void* operator new (std::size_t size) noexcept {
-        return mAllocator.allocate(size);
-    }
     Assertion(RE * r, Kind k, Sense s) : RE(ClassTypeId::Assertion), mAsserted(r), mKind(k), mSense(s) {}
     virtual ~Assertion() {}
 
