@@ -30,12 +30,12 @@ std::string CC::canonicalName(const CC_type type) const {
     std::stringstream name;
     name << std::hex;
     if ((type == ByteClass) && (mSparseCharSet.back().hi_codepoint >= 0x80)) {
-      name << "BC";
+      name << "BC_";
     }
     else {
-        name << "CC";
+        name << "CC_";
     }
-    char separator = '__';
+    char separator = '_';
     for (const CharSetItem & i : mSparseCharSet) {
         name << separator;
         if (i.lo_codepoint == i.hi_codepoint) {
