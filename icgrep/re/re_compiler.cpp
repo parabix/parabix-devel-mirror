@@ -50,6 +50,7 @@ RE_Compiler::RE_Compiler(PabloBlock & baseCG)
 , mLineFeed(nullptr)
 , mInitial(nullptr)
 , mNonFinal(nullptr)
+, mFinal(nullptr)
 , mStarDepth(0)
 {
 
@@ -58,7 +59,6 @@ RE_Compiler::RE_Compiler(PabloBlock & baseCG)
     
 MarkerType RE_Compiler::AdvanceMarker(MarkerType m, MarkerPosition newpos, PabloBlock & pb) {
     if (m.pos == newpos) return m;
-    if (m.pos > newpos) throw std::runtime_error("icgrep internal error: attempt to AdvanceMarker backwards");
     PabloAST * a = m.stream;
     if (m.pos == FinalMatchByte) {
         // Must advance at least to InitialPostPositionByte
@@ -148,11 +148,12 @@ void RE_Compiler::initializeRequiredStreams(cc::CC_Compiler & ccc) {
     PabloAST * EF_invalid = it.createOr(EX_invalid, FX_invalid);
     PabloAST * pfx_invalid = it.createXor(u8pfx, legalpfx);
     Assign * u8invalid = it.createAssign("u8invalid", it.createOr(pfx_invalid, it.createOr(mismatch, EF_invalid)));
+    Assign * u8valid = it.createAssign("u8valid", it.createNot(u8invalid));
     //
     //
     
-    Assign * valid_pfx = it.createAssign("valid_pfx", it.createAnd(u8pfx, it.createNot(u8invalid)));
-    mNonFinal = it.createAssign("nonfinal", it.createAnd(it.createOr(it.createOr(u8pfx, u8scope32), u8scope4nonfinal), it.createNot(u8invalid)));
+    Assign * valid_pfx = it.createAssign("valid_pfx", it.createAnd(u8pfx, u8valid));
+    mNonFinal = it.createAssign("nonfinal", it.createAnd(it.createOr(it.createOr(u8pfx, u8scope32), u8scope4nonfinal), u8valid));
     
     Assign * NEL_LS_PS = it.createAssign("NEL_LS_PS", it.createOr(NEL, LS_PS));
     mPB.createIf(u8pfx, {u8invalid, valid_pfx, mNonFinal, NEL_LS_PS}, it);
@@ -160,6 +161,7 @@ void RE_Compiler::initializeRequiredStreams(cc::CC_Compiler & ccc) {
     PabloAST * LB_chars = mPB.createOr(LF_VT_FF_CR, NEL_LS_PS);
     PabloAST * u8single = mPB.createAnd(ccc.compileCC(makeCC(0x00, 0x7F)), mPB.createNot(u8invalid));
     mInitial = mPB.createOr(u8single, valid_pfx, "initial");
+    mFinal = mPB.createNot(mPB.createOr(mNonFinal, u8invalid), "final");
     mUnicodeLineBreak = mPB.createAnd(LB_chars, mPB.createNot(mCRLF));  // count the CR, but not CRLF
 }
 
@@ -172,7 +174,7 @@ void RE_Compiler::finalizeMatchResult(MarkerType match_result) {
 }
 
 MarkerType RE_Compiler::compile(RE * re, PabloBlock & pb) {
-    return process(re, makeMarker(InitialPostPositionByte, pb.createOnes()), pb);
+    return process(re, makeMarker(FinalPostPositionByte, pb.createOnes()), pb);
 }
 
 PabloAST * RE_Compiler::nextUnicodePosition(MarkerType m, PabloBlock & pb) {
@@ -223,16 +225,16 @@ MarkerType RE_Compiler::process(RE * re, MarkerType marker, PabloBlock & pb) {
         }
         else {
             PabloAST * sol = pb.createNot(pb.createAdvance(pb.createNot(mLineFeed), 1));
-            return makeMarker(InitialPostPositionByte, pb.createAnd(markerVar(m), sol, "sol"));
+            return makeMarker(FinalPostPositionByte, pb.createAnd(markerVar(m), sol, "sol"));
         }
     }
     else if (isa<End>(re)) {
         if (UNICODE_LINE_BREAK) {
-            PabloAST * nextPos = nextUnicodePosition(marker, pb);
+            PabloAST * nextPos = markerVar(AdvanceMarker(marker, FinalPostPositionByte, pb));
             return makeMarker(FinalPostPositionByte, pb.createAnd(nextPos, mUnicodeLineBreak, "end"));
         }
         PabloAST * nextPos = markerVar(AdvanceMarker(marker, InitialPostPositionByte, pb));  // For LF match
-        return makeMarker(InitialPostPositionByte, pb.createAnd(nextPos, mLineFeed, "eol"));
+        return makeMarker(FinalPostPositionByte, pb.createAnd(nextPos, mLineFeed, "eol"));
     }
     return marker;
 }
@@ -484,7 +486,7 @@ MarkerType RE_Compiler::processUnboundedRep(RE * repeated, MarkerType marker, Pa
     }
     else if (isUnicodeUnitLength(repeated) && !DisableMatchStar && !DisableUnicodeMatchStar) {
         PabloAST * cc = markerVar(compile(repeated, pb));
-        return makeMarker(InitialPostPositionByte, pb.createAnd(pb.createMatchStar(base, pb.createOr(mNonFinal, cc)), mInitial, "unbounded"));
+        return makeMarker(FinalPostPositionByte, pb.createAnd(pb.createMatchStar(base, pb.createOr(mNonFinal, cc)), mFinal, "unbounded"));
     }
     else {
         Assign * whileTest = pb.createAssign("test", base);

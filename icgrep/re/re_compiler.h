@@ -95,6 +95,7 @@ private:
     pablo::PabloAST *                               mUnicodeLineBreak;
     pablo::PabloAST *                               mInitial;
     pablo::Assign *                                 mNonFinal;
+    pablo::PabloAST *                               mFinal;
     int                                             mStarDepth;
 };
 
