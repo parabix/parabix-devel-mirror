@@ -287,3 +287,5 @@ pablo/ps_while.h
 pablo/symbol_generator.cpp
 pablo/symbol_generator.h
 pablo/builder.cpp
+pablo/optimizers/pablo_codesinking.cpp
+pablo/optimizers/pablo_codesinking.hpp

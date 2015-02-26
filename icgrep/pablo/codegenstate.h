@@ -73,8 +73,8 @@ public:
         return *(new PabloBlock(symbolGenerator));
     }
 
-    inline static PabloBlock & Create(PabloBlock & predecessor) {
-        return *(new PabloBlock(&predecessor));
+    inline static PabloBlock & Create(PabloBlock & parent) {
+        return *(new PabloBlock(&parent));
     }
 
     PabloAST * createAdvance(PabloAST * expr, const Integer::integer_t shiftAmount);
@@ -169,6 +169,10 @@ public:
         return mSymbolGenerator.getInteger(value);
     }
 
+    inline PabloBlock * getParent() const {
+        return mParent;
+    }
+
     virtual ~PabloBlock();
 
 protected:
@@ -190,7 +194,7 @@ private:
     Zeroes * const                                      mZeroes;
     Ones * const                                        mOnes;
     SymbolGenerator &                                   mSymbolGenerator;
-    PabloBlock *                                        mPredecessor;
+    PabloBlock *                                        mParent;
 };
 
 }

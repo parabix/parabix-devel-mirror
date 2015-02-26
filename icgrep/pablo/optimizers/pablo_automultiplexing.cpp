@@ -1,11 +1,8 @@
 #include "pablo_automultiplexing.hpp"
-#include <pablo/pe_metadata.h>
-#include <pablo/pe_advance.h>
-
+#include <pablo/codegenstate.h>
 #include <llvm/ADT/SmallVector.h>
 #include <llvm/ADT/DenseMap.h>
 #include <llvm/ADT/DenseSet.h>
-#include <boost/pool/object_pool.hpp>
 
 
 using namespace llvm;
@@ -22,6 +19,56 @@ static void AutoMultiplexing::optimize(PabloBlock & block) {
 
     // identifySuffixConstraints
 
+
+
+}
+
+struct AnnotatedStatement {
+    Statement * mNode;
+    PabloAST *  mOutput;
+    bool        mNegated;
+};
+
+void AutoMultiplexing::identifyInputVariables(const PabloBlock & block) {
+
+    for (const Statement * stmt : block) {
+
+
+
+        if (isa<If>(stmt) || isa<While>(stmt)) {
+            // Process any statements we found to determine their constraints. Purge the statement list afterwards.
+
+            if (isa<If>(stmt)) {
+                identifyInputVariables(cast<If>(stmt)->getBody());
+            }
+            else {
+                identifyInputVariables(cast<While>(stmt)->getBody());
+            }
+            continue;
+        }
+
+
+
+        if (isa<Advance>(stmt)) {
+            // The result of an Advance(expr,n) is the input expr advanced by n.
+
+        }
+        else if (isa<ScanThru>(stmt)) {
+            // The result of a ScanThru(from, thru) is anything starting from the "from" and cannot be something in "thru"
+
+        }
+        else if (isa<MatchStar>(stmt)) {
+            // The result of a MatchStar(marker, charclass) is anything starting from the "marker" and cannot be something in "charclass"
+
+            // Logically this is similar to ScanThru but only one "marker" can preceed each "charclass" in that case.
+            // Could we prove whether ScanThru can be used in place of MatchStar and generalize the concept?
+
+
+
+        }
+
+
+    }
 
 
 }

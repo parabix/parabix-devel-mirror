@@ -404,7 +404,7 @@ PabloBlock::PabloBlock(SymbolGenerator & symbolGenerator)
 , mZeroes(new Zeroes())
 , mOnes(new Ones())
 , mSymbolGenerator(symbolGenerator)
-, mPredecessor(nullptr)
+, mParent(nullptr)
 {
 
 }
@@ -414,7 +414,7 @@ PabloBlock::PabloBlock(PabloBlock * predecessor)
 , mZeroes(predecessor->mZeroes) // inherit the original "Zeroes" variable for simplicity
 , mOnes(predecessor->mOnes) // inherit the original "Ones" variable for simplicity
 , mSymbolGenerator(predecessor->mSymbolGenerator)
-, mPredecessor(predecessor)
+, mParent(predecessor)
 {
 
 }
