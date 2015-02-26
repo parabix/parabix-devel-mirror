@@ -8,6 +8,7 @@
 #define SHOW_H
 
 #include <pablo/pabloAST.h>
+#include <pablo/ps_if.h>
 #include <string>
 
 namespace pablo {
@@ -16,9 +17,11 @@ namespace pablo {
 
 class PabloPrinter {
 public:
+    using DefinedVars = std::vector<pablo::PabloAST *, pablo::PabloAST::VectorAllocator>;
     static void print(const pablo::PabloBlock & block, std::ostream & strm);
     static void print(const pablo::StatementList & stmts, std::ostream & strm);
     static void print(const pablo::StatementList & stmts, std::string indent, std::ostream & strm);
+    static void print_vars(const DefinedVars & vars, std::string indent, std::ostream & strm);
     static void print(const pablo::PabloAST * expr, std::ostream & strm);
     static void print(const pablo::Statement *stmt, std::string indent, std::ostream & strm);
 };

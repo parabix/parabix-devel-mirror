@@ -40,17 +40,23 @@ using namespace pablo;
 
 void PabloPrinter::print(const PabloBlock & block, std::ostream & strm)
 {
-    print(block.statements(), "", strm);
+    print(block.statements(), "  ", strm);
 }
 
 void PabloPrinter::print(const StatementList & stmts, std::ostream & strm) {
-    print(stmts, "", strm);
+    print(stmts, "  ", strm);
 }
 
 void PabloPrinter::print(const StatementList & stmts, std::string indent, std::ostream & strm) {
     for (const Statement * stmt : stmts) {
         print(stmt, indent, strm);
         strm << std::endl;
+    }
+}
+
+void PabloPrinter::print_vars(const DefinedVars & vars, std::string indent, std::ostream & strm) {
+    for (const PabloAST * v : vars) {
+        strm << indent << dyn_cast<Assign>(v)->getName() << " = 0" << std::endl;
     }
 }
 
@@ -61,7 +67,7 @@ void PabloPrinter::print(const Statement * stmt, std::string indent, std::ostrea
     }
     else if (const Assign * an = dyn_cast<const Assign>(stmt)) {
         if (an->isOutputAssignment()) {
-            strm << "Output[" << std::to_string(an->getOutputIndex()) << "].";
+            strm << "output.";
         }
         strm << an->getName() << " = ";
         print(an->getExpr(), strm);
@@ -75,6 +81,8 @@ void PabloPrinter::print(const Statement * stmt, std::string indent, std::ostrea
         print(ifstmt->getCondition(), strm);
         strm << ":" << std::endl;
         print(ifstmt->getBody(), indent + "  ", strm);
+        strm << indent << "else:" << std::endl;
+        print_vars(ifstmt->getDefined(), indent + "  ", strm);
     }
     else if (const While * whl = dyn_cast<const While>(stmt)) {
         strm << "while ";
@@ -164,7 +172,7 @@ void PabloPrinter::print(const PabloAST * expr, std::ostream & strm) {
         strm << "1";
     }
     else if (const Var * var = dyn_cast<const Var>(expr)) {
-        strm << var->getName();
+        strm  << var->getName();
     }
     else if (const Statement * stmt = dyn_cast<Statement>(expr)) {
         strm << stmt->getName();

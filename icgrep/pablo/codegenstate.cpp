@@ -67,7 +67,7 @@ PabloAST * PabloBlock::createNot(PabloAST * expr) {
     else if (Not * not1 = dyn_cast<Not>(expr)) {
         return not1->getExpr();
     }
-    return insertAtInsertionPoint(new Not(expr, makeName("not"), this));
+    return insertAtInsertionPoint(new Not(expr, makeName("not_"), this));
 }
 
 PabloAST * PabloBlock::createNot(PabloAST * expr, const std::string prefix) {
@@ -152,7 +152,7 @@ PabloAST * PabloBlock::createAnd(PabloAST * expr1, PabloAST * expr2) {
     if (isa<Not>(expr1)) {
         std::swap(expr1, expr2);
     }
-    return insertAtInsertionPoint(new And(expr1, expr2, makeName("and"), this));
+    return insertAtInsertionPoint(new And(expr1, expr2, makeName("and_"), this));
 }
 
 
@@ -224,7 +224,7 @@ PabloAST * PabloBlock::createOr(PabloAST * expr1, PabloAST * expr2) {
             }
         }
     }
-    return insertAtInsertionPoint(new Or(expr1, expr2, makeName("or"), this));
+    return insertAtInsertionPoint(new Or(expr1, expr2, makeName("or_"), this));
 }
 
 PabloAST * PabloBlock::createOr(PabloAST * expr1, PabloAST * expr2, const std::string prefix) {
@@ -287,7 +287,7 @@ PabloAST * PabloBlock::createXor(PabloAST * expr1, PabloAST * expr2) {
             return createXor(not1->getExpr(), not2->getExpr());
         }
     }
-    return insertAtInsertionPoint(new Xor(expr1, expr2, makeName("xor"), this));
+    return insertAtInsertionPoint(new Xor(expr1, expr2, makeName("xor_"), this));
 }
 
 PabloAST * PabloBlock::createXor(PabloAST * expr1, PabloAST * expr2, const std::string prefix) {

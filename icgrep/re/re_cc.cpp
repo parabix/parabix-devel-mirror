@@ -35,16 +35,15 @@ std::string CC::canonicalName(const CC_type type) const {
     else {
         name << "CC";
     }
-    char separator = '_';
+    char separator = '__';
     for (const CharSetItem & i : mSparseCharSet) {
         name << separator;
         if (i.lo_codepoint == i.hi_codepoint) {
             name << i.lo_codepoint;
         }
         else {
-            name << i.lo_codepoint << '-' << i.hi_codepoint;
+            name << i.lo_codepoint << '_' << i.hi_codepoint;
         }
-        separator = ',';
     }
     return name.str();
 }
