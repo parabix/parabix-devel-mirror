@@ -4,7 +4,7 @@
 #include <llvm/Support/Allocator.h>
 
 template <typename T>
-class SlabAllocator : public std::allocator<T> {
+class SlabAllocator {
 public:
 
     using LLVMAllocator = llvm::BumpPtrAllocator;
@@ -21,7 +21,7 @@ public:
         typedef SlabAllocator<U> other;
     };
 
-    inline pointer allocate(size_type n) noexcept {
+    inline pointer allocate(size_type n, const_pointer = nullptr) noexcept {
         return reinterpret_cast<pointer>(mAllocator.Allocate(n * sizeof(T), sizeof(T)));
     }
 
@@ -44,9 +44,10 @@ public:
     inline bool operator==(SlabAllocator<T> const&) { return true; }
     inline bool operator!=(SlabAllocator<T> const&) { return false; }
 
-    inline SlabAllocator() {}
-    inline SlabAllocator(const SlabAllocator &) {}
-    inline ~SlabAllocator() { release_memory(); }
+    inline SlabAllocator() noexcept {}
+    inline SlabAllocator(const SlabAllocator &) noexcept {}
+    template <class U> inline SlabAllocator (const std::allocator<U>&) noexcept {}
+    inline ~SlabAllocator() { }
 
 private:
     static LLVMAllocator mAllocator;
