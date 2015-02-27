@@ -141,7 +141,7 @@ public:
 
     PabloAST * createSel(PabloAST * condition, PabloAST * trueExpr, PabloAST * falseExpr, const std::string prefix);
 
-    If * createIf(PabloAST * condition, std::initializer_list<Assign *> definedVars, PabloBlock & body);
+    If * createIf(PabloAST * condition, const std::initializer_list<Assign *> definedVars, PabloBlock & body);
 
     If * createIf(PabloAST * condition, const std::vector<Assign *> & definedVars, PabloBlock & body);
 

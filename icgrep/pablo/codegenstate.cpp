@@ -377,9 +377,9 @@ PabloAST * PabloBlock::createSel(PabloAST * condition, PabloAST * trueExpr, Pabl
     return insertAtInsertionPoint(new Sel(condition, trueExpr, falseExpr, makeName(prefix, false), this));
 }
 
-If * PabloBlock::createIf(PabloAST * condition, std::initializer_list<Assign *> definedVars, PabloBlock & body) {
+If * PabloBlock::createIf(PabloAST * condition, const std::initializer_list<Assign *> definedVars, PabloBlock & body) {
     assert (condition);
-    return insertAtInsertionPoint(new If(condition, std::move(definedVars), body, this));
+    return insertAtInsertionPoint(new If(condition, definedVars, body, this));
 }
 
 If * PabloBlock::createIf(PabloAST * condition, const std::vector<Assign *> & definedVars, PabloBlock & body) {
