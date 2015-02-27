@@ -166,12 +166,18 @@ CompiledPabloFunction compile(const Encoding encoding, const std::vector<std::st
     install_property_DerivedCoreProperties_fn_ptrs(pablo_compiler);
     install_property_PropList_fn_ptrs(pablo_compiler);
 
-    CompiledPabloFunction retVal = pablo_compiler.compile(main);
-
-    RE::release_memory();
-    PabloAST::release_memory();
-
-    return retVal;
+    try {
+        CompiledPabloFunction retVal = pablo_compiler.compile(main);
+        RE::release_memory();
+        PabloAST::release_memory();
+        
+        return retVal;
+    }
+    catch (std::runtime_error e)
+    {
+        std::cerr << "Runtime error: " << e.what() << std::endl;
+        exit(1);
+    }
 }
 
 }
