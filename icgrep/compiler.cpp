@@ -50,8 +50,11 @@ static cl::opt<bool> PrintOptimizedREcode("print-pablo", cl::init(false), cl::de
 
 
 cl::OptionCategory cPabloOptimizationsOptions("Pablo Optimizations",
-                                              "These options enable optional Pablo optimization passes. (Disabled by default.)");
+                                              "These options control Pablo optimization passes.");
 
+static cl::opt<bool> DisablePabloCSE("disable-CSE", cl::init(false),
+                                      cl::desc("Disable Pablo common subexpression elimination/dead code elimination"),
+                                      cl::cat(cPabloOptimizationsOptions));
 static cl::opt<bool> PabloSinkingPass("sinking", cl::init(false),
                                       cl::desc("Moves all instructions into the innermost legal If-scope so that they are only executed when needed."),
                                       cl::cat(cPabloOptimizationsOptions));
@@ -147,7 +150,9 @@ CompiledPabloFunction compile(const Encoding encoding, const std::vector<std::st
     }
 
     // Scan through the pablo code and perform DCE and CSE
-    Simplifier::optimize(main);
+    if (!DisablePabloCSE) {
+        Simplifier::optimize(main);
+    }
     if (PabloSinkingPass) {
         CodeSinking::optimize(main);
     }
