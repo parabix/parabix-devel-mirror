@@ -3,16 +3,46 @@
 
 #include <llvm/Support/Allocator.h>
 
+namespace {
+
+using LLVMAllocator = llvm::BumpPtrAllocator;
+
+class __BumpPtrAllocatorProxy {
+public:
+    template <typename T>
+    static inline T * Allocate(const size_t n) {
+        return mAllocator.Allocate<T>(n);
+    }
+    template <typename T>
+    static inline void Deallocate(const T * pointer) {
+        mAllocator.Deallocate(pointer);
+    }
+    static inline void Reset() {
+        #ifndef NDEBUG
+        mAllocator.PrintStats();
+        #endif
+        mAllocator.Reset();
+    }
+    static LLVMAllocator & get_allocator() {
+        return mAllocator;
+    }
+private:
+    static llvm::BumpPtrAllocator mAllocator;
+};
+
+LLVMAllocator __BumpPtrAllocatorProxy::mAllocator;
+
+}
+
 template <typename T>
 class SlabAllocator {
 public:
 
-    using LLVMAllocator = llvm::BumpPtrAllocator;
     using value_type = T;
-    using pointer = T*;
-    using const_pointer = const T*;
-    using reference = T&;
-    using const_reference = const T&;
+    using pointer = value_type*;
+    using const_pointer = const value_type*;
+    using reference = value_type&;
+    using const_reference = const value_type&;
     using size_type = std::size_t;
     using difference_type = std::ptrdiff_t;
 
@@ -22,23 +52,19 @@ public:
     };
 
     inline pointer allocate(size_type n, const_pointer = nullptr) noexcept {
-        return reinterpret_cast<pointer>(mAllocator.Allocate(n * sizeof(T), sizeof(T)));
+        return mAllocator.Allocate<T>(n);
     }
 
     inline void deallocate(pointer p, size_type n) noexcept {
-        mAllocator.Deallocate(p);
+        mAllocator.Deallocate<T>(p);
     }
 
     inline size_type max_size() const {
         return std::numeric_limits<size_type>::max();
     }
 
-    inline void release_memory() {
-        mAllocator.Reset();
-    }
-
-    static inline LLVMAllocator & get_allocator() {
-        return mAllocator;
+    inline LLVMAllocator & get_allocator() {
+        return mAllocator.get_allocator();
     }
 
     inline bool operator==(SlabAllocator<T> const&) { return true; }
@@ -48,12 +74,12 @@ public:
     inline SlabAllocator(const SlabAllocator &) noexcept {}
     template <class U> inline SlabAllocator (const std::allocator<U>&) noexcept {}
     inline ~SlabAllocator() { }
-
 private:
-    static LLVMAllocator mAllocator;
+    __BumpPtrAllocatorProxy mAllocator;
 };
 
-template <typename T>
-llvm::BumpPtrAllocator SlabAllocator<T>::mAllocator;
+inline void releaseSlabAllocatorMemory() {
+    __BumpPtrAllocatorProxy::Reset();
+}
 
 #endif // SLAB_ALLOCATOR_H

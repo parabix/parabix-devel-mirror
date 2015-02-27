@@ -62,10 +62,6 @@ public:
         return mClassTypeId;
     }
 
-    inline static void release_memory() {
-        mAllocator.release_memory();
-    }
-
     inline user_iterator user_begin() {
         return mUsers.begin();
     }

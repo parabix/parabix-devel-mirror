@@ -173,13 +173,11 @@ CompiledPabloFunction compile(const Encoding encoding, const std::vector<std::st
 
     try {
         CompiledPabloFunction retVal = pablo_compiler.compile(main);
-        RE::release_memory();
-        PabloAST::release_memory();
-        
+        releaseSlabAllocatorMemory();
         return retVal;
     }
-    catch (std::runtime_error e)
-    {
+    catch (std::runtime_error e) {
+        releaseSlabAllocatorMemory();
         std::cerr << "Runtime error: " << e.what() << std::endl;
         exit(1);
     }

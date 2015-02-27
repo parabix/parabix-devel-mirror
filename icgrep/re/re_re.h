@@ -57,10 +57,6 @@ public:
     inline ClassTypeId getClassTypeId() const {
         return mClassTypeId;
     }
-    inline static void release_memory() {
-        mVectorAllocator.release_memory();
-        mAllocator.release_memory();
-    }
     typedef std::initializer_list<RE *> InitializerList;
 protected:
     inline RE(const ClassTypeId id)
