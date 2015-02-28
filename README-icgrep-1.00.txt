@@ -1,7 +1,6 @@
-README-icgrep-0.98.txt
+README-icgrep-1.00.txt
 
-This is the open-source version of icgrep 0.98, the alpha test
-version of icgrep 1.0.     
+This is the open-source version of icgrep 1.0.     
 
 icgrep is a very fast regular expression search program, particularly
 for complex regular expressions.  It is also a very capable engine,
@@ -18,22 +17,17 @@ icgrep r f
 To produce a count of matching lines only, use the command:
 icgrep -c r f
 
-To read the regexp to be matched from file rf use the command:
+To read the regexp to be matched from file regexpf use the command:
 
-icgrep -f rf f
+icgrep -f regexpf f
 
-icgrep supports standard egrep syntax, except for Posix character
-classes.   icgrep supports searches using ASCII or UTF-8.
-Unicode property classes are supported, e.g. \p{Ll} matching
-lower case Unicode letters and \P{script=Arab} matching all characters
-that are not in the Arabic script.
+See http://parabix.costar.sfu.ca/wiki/ICgrep for more information.
 
 BUILD
 
 To build icgrep, you need an installed LLVM system providing the
 core libraries.  The distribution includes a suitable source
-code version of LLVM.   You will also need BOOST, in particular
-the boost system library.
+code version of LLVM.   
 
 To build LLVM,
 (L1) open a terminal window and cd to the llvm-build directory
@@ -45,9 +39,9 @@ Using the installed LLVM, building icgrep uses the CMake build
 system generator.
 (IC1)  open a terminal window and cd to the icgrep-build directory
 (IC2.1)  enter the following command to build the makefiles
-cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER:FILEPATH=/usr/bin/clang++ -DCMAKE_C_COMPILER:FILEPATH=/usr/bin/clang ../icgrep
+cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER:FILEPATH=/usr/bin/clang++ -DCMAKE_C_COMPILER:FILEPATH=/usr/bin/clang ../icgrep-1.00
 (IC2.2)  to specify the type of supported SIMD operations rather than relying on auto detection
-cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER:FILEPATH=/usr/bin/clang++ -DCMAKE_C_COMPILER:FILEPATH=/usr/bin/clang -DSIMD_SUPPORT=XXX ../icgrep
+cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER:FILEPATH=/usr/bin/clang++ -DCMAKE_C_COMPILER:FILEPATH=/usr/bin/clang -DSIMD_SUPPORT=XXX ../icgrep-1.00
      Where XXX can be SSE2, SSE3, SSE4_1, SSE4_2, AVX1 or AVX2.
 (IC3) Enter the command "make"
 
