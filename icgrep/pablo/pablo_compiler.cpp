@@ -169,12 +169,7 @@ CompiledPabloFunction PabloCompiler::compile(PabloBlock & pb)
         mMod->dump();
     }
     //Create a verifier.  The verifier will print an error message if our module is malformed in any way.
-    #ifdef USE_LLVM_3_5
     verifyModule(*mMod, &dbgs());
-    #endif
-    #ifdef USE_LLVM_3_4
-    verifyModule(*mMod, PrintMessageAction);
-    #endif
 
     mExecutionEngine->finalizeObject();
 
