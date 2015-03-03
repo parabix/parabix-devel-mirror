@@ -1,11 +1,5 @@
 /*
- *  Copyright (c) 2014 International Characters.
- *  This software is licensed to the public under the Open Software License 3.0.
- *  icgrep is a trademark of International Characters.
- */
-
-/*
- *  Copyright (c) 2014 International Characters.
+ *  Copyright (c) 2014-15 International Characters.
  *  This software is licensed to the public under the Open Software License 3.0.
  *  icgrep is a trademark of International Characters.
  */
@@ -18,16 +12,7 @@
 #include <stdexcept>
 #include <include/simd-lib/bitblock.hpp>
 #include <sstream>
-
-#ifdef USE_LLVM_3_4
-#include <llvm/Analysis/Verifier.h>
-#include <llvm/Assembly/PrintModulePass.h>
-#include <llvm/Linker.h>
-#endif
-#ifdef USE_LLVM_3_5
 #include <llvm/IR/Verifier.h>
-#endif
-
 #include <llvm/Pass.h>
 #include <llvm/PassManager.h>
 #include <llvm/ADT/SmallVector.h>
