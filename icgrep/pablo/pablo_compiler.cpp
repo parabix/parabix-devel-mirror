@@ -449,22 +449,7 @@ void PabloCompiler::compileStatements(const StatementList & stmts) {
     }
 }
 
-void PabloCompiler::compileStatement(const Statement * stmt)
-{
-    IRBuilder<> b(mBasicBlock);
-    if (const Assign * assign = dyn_cast<const Assign>(stmt)) {
-        Value * expr = compileExpression(assign->getExpr());
-        mMarkerMap[assign] = expr;
-        if (LLVM_UNLIKELY(assign->isOutputAssignment())) {
-            SetOutputValue(expr, assign->getOutputIndex());
-        }
-    }
-    else if (const Next * next = dyn_cast<const Next>(stmt)) {
-        Value * expr = compileExpression(next->getExpr());
-        mMarkerMap[next->getInitial()] = expr;
-    }
-    else if (const If * ifStatement = dyn_cast<const If>(stmt))
-    {
+void PabloCompiler::compileIf(const If * ifStatement) {
         //
         //  The If-ElseZero stmt:
         //  if <predicate:expr> then <body:stmt>* elsezero <defined:var>* endif
@@ -482,7 +467,6 @@ void PabloCompiler::compileStatement(const Statement * stmt)
         //  a zero value from the ifentry block and the defined value from the if
         //  body.
         //
-
         BasicBlock * ifEntryBlock = mBasicBlock;  // The block we are in.
         BasicBlock * ifBodyBlock = BasicBlock::Create(mMod->getContext(), "if.body", mFunction, 0);
         BasicBlock * ifEndBlock = BasicBlock::Create(mMod->getContext(), "if.end", mFunction, 0);
@@ -596,9 +580,9 @@ void PabloCompiler::compileStatement(const Statement * stmt)
         
         // Set the basic block to the new end block
         mBasicBlock = ifEndBlock;
-    }
-    else if (const While * whileStatement = dyn_cast<const While>(stmt))
-    {
+}
+
+void PabloCompiler::compileWhile(const While * whileStatement) {
         const auto baseCarryQueueIdx = mCarryQueueIdx;
         const auto baseAdvanceQueueIdx = mAdvanceQueueIdx;
         if (mNestingDepth == 0) {
@@ -711,6 +695,30 @@ void PabloCompiler::compileStatement(const Statement * stmt)
                 genAdvanceOutStore(phiNodes[whileCarryCount + index], baseAdvanceQueueIdx + index);
             }
         }
+  
+}
+
+void PabloCompiler::compileStatement(const Statement * stmt)
+{
+    IRBuilder<> b(mBasicBlock);
+    if (const Assign * assign = dyn_cast<const Assign>(stmt)) {
+        Value * expr = compileExpression(assign->getExpr());
+        mMarkerMap[assign] = expr;
+        if (LLVM_UNLIKELY(assign->isOutputAssignment())) {
+            SetOutputValue(expr, assign->getOutputIndex());
+        }
+    }
+    else if (const Next * next = dyn_cast<const Next>(stmt)) {
+        Value * expr = compileExpression(next->getExpr());
+        mMarkerMap[next->getInitial()] = expr;
+    }
+    else if (const If * ifStatement = dyn_cast<const If>(stmt))
+    {
+        compileIf(ifStatement);
+    }
+    else if (const While * whileStatement = dyn_cast<const While>(stmt))
+    {
+        compileWhile(whileStatement);
     }
     else if (const Call* call = dyn_cast<Call>(stmt)) {
         //Call the callee once and store the result in the marker map.

@@ -49,6 +49,8 @@ class String;
 class Var;
 class Statement;
 class StatementList;
+class If;
+class While;
 
 struct CompiledPabloFunction {
     const unsigned      CarryQueueSize;
@@ -101,6 +103,8 @@ private:
 
     void compileStatements(const StatementList & stmts);
     void compileStatement(const Statement * stmt);
+    void compileIf(const If * ifStmt);
+    void compileWhile(const While * whileStmt);
     Value* compileExpression(const PabloAST * expr);
     Value* genCarryInLoad(const unsigned index);
     void   genCarryOutStore(Value* carryOut, const unsigned index);
