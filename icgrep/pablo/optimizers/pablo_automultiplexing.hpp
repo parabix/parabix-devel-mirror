@@ -3,6 +3,8 @@
 
 #include <pablo/codegenstate.h>
 
+class bdd::Engine;
+
 namespace pablo {
 
 class AutoMultiplexing
