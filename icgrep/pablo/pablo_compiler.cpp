@@ -811,6 +811,7 @@ Value * PabloCompiler::compileExpression(const PabloAST * expr) {
     return f->second;
 }
 
+
 #ifdef USE_UADD_OVERFLOW
 #ifdef USE_TWO_UADD_OVERFLOW
 PabloCompiler::SumWithOverflowPack PabloCompiler::callUaddOverflow(Value* int128_e1, Value* int128_e2) {
@@ -861,6 +862,7 @@ PabloCompiler::SumWithOverflowPack PabloCompiler::callUaddOverflow(Value* int128
 }
 #endif
 #endif
+
 
 Value* PabloCompiler::genAddWithCarry(Value* e1, Value* e2) {
     IRBuilder<> b(mBasicBlock);
@@ -990,7 +992,6 @@ inline Value* PabloCompiler::genNot(Value* expr) {
     IRBuilder<> b(mBasicBlock);
     return b.CreateXor(expr, mOneInitializer, "not");
 }
-
 Value* PabloCompiler::genAdvanceWithCarry(Value* strm_value, int shift_amount) {
     IRBuilder<> b(mBasicBlock);
     int advEntries = (shift_amount - 1) / BLOCK_SIZE + 1;
@@ -1000,20 +1001,12 @@ Value* PabloCompiler::genAdvanceWithCarry(Value* strm_value, int shift_amount) {
     mAdvanceQueueIdx += advEntries;
     Value* result_value;
     
-#ifdef USE_LONG_INTEGER_SHIFT
-    Value* advanceq_longint = b.CreateBitCast(genAdvanceInLoad(loadIdx), IntegerType::get(mMod->getContext(), BLOCK_SIZE));
-    Value* strm_longint = b.CreateBitCast(strm_value, IntegerType::get(mMod->getContext(), BLOCK_SIZE));
-    Value* adv_longint = b.CreateOr(b.CreateShl(strm_longint, block_shift), b.CreateLShr(advanceq_longint, BLOCK_SIZE - block_shift), "advance");
-    result_value = b.CreateBitCast(adv_longint, mBitBlockType);
-    genAdvanceOutStore(strm_value, storeIdx);
-
-    return result_value;
-#elif (BLOCK_SIZE == 128)
     if (advEntries == 1) {
         if (block_shift == 0) {  
             result_value = genAdvanceInLoad(loadIdx);
             //b.CreateCall(mFunc_print_register, result_value);
         }
+#if (BLOCK_SIZE == 128) && !defined(USE_LONG_INTEGER_SHIFT)
         if (block_shift == 1) {
             Value* advanceq_value = genShiftHighbitToLow(genAdvanceInLoad(loadIdx));
             Value* srli_1_value = b.CreateLShr(strm_value, 63);
@@ -1036,6 +1029,13 @@ Value* PabloCompiler::genAdvanceWithCarry(Value* strm_value, int shift_amount) {
             Value* adv_longint = b.CreateOr(b.CreateShl(strm_longint, block_shift), b.CreateLShr(advanceq_longint, BLOCK_SIZE - block_shift), "advance");
             result_value = b.CreateBitCast(adv_longint, mBitBlockType);
         }
+#else
+        Value* advanceq_longint = b.CreateBitCast(genAdvanceInLoad(loadIdx), IntegerType::get(mMod->getContext(), BLOCK_SIZE));
+        Value* strm_longint = b.CreateBitCast(strm_value, IntegerType::get(mMod->getContext(), BLOCK_SIZE));
+        Value* adv_longint = b.CreateOr(b.CreateShl(strm_longint, block_shift), b.CreateLShr(advanceq_longint, BLOCK_SIZE - block_shift), "advance");
+        result_value = b.CreateBitCast(adv_longint, mBitBlockType);
+
+#endif
     }
     else {
         if (block_shift == 0) {
@@ -1058,10 +1058,6 @@ Value* PabloCompiler::genAdvanceWithCarry(Value* strm_value, int shift_amount) {
     }
     genAdvanceOutStore(strm_value, storeIdx);
     return result_value;
-#else 
-    //BLOCK_SIZE == 256
-    static_assert(false, "Advance with carry on 256-bit bitblock requires long integer shifts (USE_LONG_INTEGER_SHIFT).");
-#endif //USE_LONG_INTEGER_SHIFT
 }
 
 void PabloCompiler::SetOutputValue(Value * marker, const unsigned index) {

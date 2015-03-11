@@ -76,6 +76,10 @@ public:
     ~CompiledPabloFunction();
 
 };
+#if (BLOCK_SIZE==256)
+#define USE_UADD_OVERFLOW
+#define USE_TWO_UADD_OVERFLOW
+#endif
 
 class PabloCompiler {
     #ifdef USE_UADD_OVERFLOW
