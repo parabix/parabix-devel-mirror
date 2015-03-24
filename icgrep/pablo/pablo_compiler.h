@@ -53,18 +53,16 @@ class If;
 class While;
 
 struct CompiledPabloFunction {
-    const unsigned      CarryQueueSize;
-    const unsigned      AdvanceQueueSize;
+    const size_t        CarryDataSize;
     void * const        FunctionPointer;
 private:
     Function *          mFunction;
     ExecutionEngine *   mExecutionEngine;
 public:
-    CompiledPabloFunction(unsigned carryQSize, unsigned advanceQSize, Function * function, ExecutionEngine * executionEngine);
+    CompiledPabloFunction(size_t carryDataSize, Function * function, ExecutionEngine * executionEngine);
 
     inline CompiledPabloFunction(CompiledPabloFunction && cpf)
-    : CarryQueueSize(cpf.CarryQueueSize)
-    , AdvanceQueueSize(cpf.AdvanceQueueSize)
+    : CarryDataSize(cpf.CarryDataSize)
     , FunctionPointer(cpf.FunctionPointer)
     , mFunction(cpf.mFunction)
     , mExecutionEngine(cpf.mExecutionEngine)
@@ -148,12 +146,11 @@ private:
     PointerType*                        mBasisBitsInputPtr;
 
     unsigned                            mCarryQueueIdx;
-    Value*                              mCarryQueuePtr;
+    Value*                              mCarryDataPtr;
     unsigned                            mNestingDepth;
     unsigned                            mCarryQueueSize;
 
     unsigned                            mAdvanceQueueIdx;
-    Value*                              mAdvanceQueuePtr;
     unsigned                            mAdvanceQueueSize;
 
     ConstantAggregateZero* const        mZeroInitializer;

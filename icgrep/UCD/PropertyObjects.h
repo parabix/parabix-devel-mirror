@@ -105,10 +105,10 @@ namespace UCD {
 		// The canonical full names are not stored in the precomputed alias map,
 		// to save space in the executable.   Add them if the property is used.
 		if (!aliases_initialized) {
-            for (int v = 0; v < property_value_full_names.size(); v++) {
+            for (auto v = 0; v < property_value_full_names.size(); v++) {
                 property_value_aliases.insert({canonicalize_value_name(property_value_full_names[v]), v});
             }
-            for (int v = 0; v < property_value_enum_names.size(); v++) {
+            for (auto v = 0; v < property_value_enum_names.size(); v++) {
                 property_value_aliases.insert({canonicalize_value_name(property_value_enum_names[v]), v});
             }
 			aliases_initialized = true;

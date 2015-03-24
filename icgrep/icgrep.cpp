@@ -105,9 +105,9 @@ int main(int argc, char *argv[]) {
     const auto llvm_codegen = icgrep::compile(encoding, regexVector, globalFlags);
 
     if (llvm_codegen.FunctionPointer) {
-        void (*FP)(const Basis_bits &basis_bits, BitBlock carry_q[], BitBlock advance_q[], Output &output) = 
-           (void (*)(const Basis_bits &basis_bits, BitBlock carry_q[], BitBlock advance_q[], Output &output))(void*)llvm_codegen.FunctionPointer;
-        GrepExecutor grepEngine = GrepExecutor(llvm_codegen.CarryQueueSize, llvm_codegen.AdvanceQueueSize, FP);
+        void (*FP)(const Basis_bits &basis_bits, BitBlock process_block_state_data[], Output &output) = 
+           (void (*)(const Basis_bits &basis_bits, BitBlock process_block_state_data[], Output &output))(void*)llvm_codegen.FunctionPointer;
+        GrepExecutor grepEngine = GrepExecutor(llvm_codegen.CarryDataSize, FP);
         grepEngine.setCountOnlyOption(CountOnly);
         grepEngine.setNormalizeLineBreaksOption(NormalizeLineBreaks);
         grepEngine.setShowLineNumberOption(ShowLineNumbers);

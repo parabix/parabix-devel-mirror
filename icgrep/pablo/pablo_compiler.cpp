@@ -65,11 +65,10 @@ PabloCompiler::PabloCompiler(const std::vector<Var*> & basisBits)
 , mBitBlockType(VectorType::get(IntegerType::get(mMod->getContext(), 64), BLOCK_SIZE / 64))
 , mBasisBitsInputPtr(nullptr)
 , mCarryQueueIdx(0)
-, mCarryQueuePtr(nullptr)
+, mCarryDataPtr(nullptr)
 , mNestingDepth(0)
 , mCarryQueueSize(0)
 , mAdvanceQueueIdx(0)
-, mAdvanceQueuePtr(nullptr)
 , mAdvanceQueueSize(0)
 , mZeroInitializer(ConstantAggregateZero::get(mBitBlockType))
 , mOneInitializer(ConstantVector::getAllOnesValue(mBitBlockType))
@@ -125,10 +124,8 @@ CompiledPabloFunction PabloCompiler::compile(PabloBlock & pb)
     Function::arg_iterator args = mFunction->arg_begin();
     mBasisBitsAddr = args++;
     mBasisBitsAddr->setName("basis_bits");
-    mCarryQueuePtr = args++;
-    mCarryQueuePtr->setName("carry_q");
-    mAdvanceQueuePtr = args++;
-    mAdvanceQueuePtr->setName("advance_q");
+    mCarryDataPtr = args++;
+    mCarryDataPtr->setName("carry_data");
     mOutputAddrPtr = args++;
     mOutputAddrPtr->setName("output");
 
@@ -173,8 +170,8 @@ CompiledPabloFunction PabloCompiler::compile(PabloBlock & pb)
 
     mExecutionEngine->finalizeObject();
 
-    //Return the required size of the carry queue and a pointer to the process_block function.
-    return CompiledPabloFunction(mCarryQueueSize, mAdvanceQueueSize, mFunction, mExecutionEngine);
+    //Return the required size of the carry data area to the process_block function.
+    return CompiledPabloFunction((mCarryQueueSize + mAdvanceQueueSize) * sizeof(BitBlock), mFunction, mExecutionEngine);
 }
 
 void PabloCompiler::DefineTypes()
@@ -196,10 +193,8 @@ void PabloCompiler::DefineTypes()
     std::vector<Type*>functionTypeArgs;
     functionTypeArgs.push_back(mBasisBitsInputPtr);
 
-    //The carry q array.
+    //The carry data array.
     //A pointer to the BitBlock vector.
-    functionTypeArgs.push_back(PointerType::get(mBitBlockType, 0));
-    // Advance q array
     functionTypeArgs.push_back(PointerType::get(mBitBlockType, 0));
 
     //The output structure.
@@ -315,7 +310,7 @@ void PabloCompiler::DeclareFunctions()
 #endif
 
     //Starts on process_block
-    SmallVector<AttributeSet, 5> Attrs;
+    SmallVector<AttributeSet, 4> Attrs;
     AttributeSet PAS;
     {
         AttrBuilder B;
@@ -334,12 +329,6 @@ void PabloCompiler::DeclareFunctions()
         AttrBuilder B;
         B.addAttribute(Attribute::NoCapture);
         PAS = AttributeSet::get(mMod->getContext(), 3U, B);
-    }
-    Attrs.push_back(PAS);
-    {
-        AttrBuilder B;
-        B.addAttribute(Attribute::NoCapture);
-        PAS = AttributeSet::get(mMod->getContext(), 4U, B);
     }
     Attrs.push_back(PAS);
     {
@@ -934,7 +923,7 @@ Value* PabloCompiler::genCarryInLoad(const unsigned index) {
     assert (index < mCarryQueueVector.size());
     if (mNestingDepth == 0) {
         IRBuilder<> b(mBasicBlock);
-        mCarryQueueVector[index] = b.CreateAlignedLoad(b.CreateGEP(mCarryQueuePtr, b.getInt64(index)), BLOCK_SIZE/8, false);
+        mCarryQueueVector[index] = b.CreateAlignedLoad(b.CreateGEP(mCarryDataPtr, b.getInt64(index)), BLOCK_SIZE/8, false);
     }
     return mCarryQueueVector[index];
 }
@@ -944,7 +933,7 @@ void PabloCompiler::genCarryOutStore(Value* carryOut, const unsigned index ) {
     assert (index < mCarryQueueVector.size());
     if (mNestingDepth == 0) {
         IRBuilder<> b(mBasicBlock);
-        b.CreateAlignedStore(carryOut, b.CreateGEP(mCarryQueuePtr, b.getInt64(index)), BLOCK_SIZE/8, false);
+        b.CreateAlignedStore(carryOut, b.CreateGEP(mCarryDataPtr, b.getInt64(index)), BLOCK_SIZE/8, false);
     }
     mCarryQueueSummaryIdx[index] = -1;
     mCarryQueueVector[index] = carryOut;
@@ -954,7 +943,7 @@ Value* PabloCompiler::genAdvanceInLoad(const unsigned index) {
     assert (index < mAdvanceQueueVector.size());
     if (mNestingDepth == 0) {
         IRBuilder<> b(mBasicBlock);
-        mAdvanceQueueVector[index] = b.CreateAlignedLoad(b.CreateGEP(mAdvanceQueuePtr, b.getInt64(index)), BLOCK_SIZE/8, false);
+        mAdvanceQueueVector[index] = b.CreateAlignedLoad(b.CreateGEP(mCarryDataPtr, b.getInt64(mCarryQueueSize + index)), BLOCK_SIZE/8, false);
     }
     return mAdvanceQueueVector[index];
 }
@@ -964,7 +953,7 @@ void PabloCompiler::genAdvanceOutStore(Value* advanceOut, const unsigned index )
     assert (index < mAdvanceQueueVector.size());
     if (mNestingDepth == 0) {
         IRBuilder<> b(mBasicBlock);
-        b.CreateAlignedStore(advanceOut, b.CreateGEP(mAdvanceQueuePtr, b.getInt64(index)), BLOCK_SIZE/8, false);
+        b.CreateAlignedStore(advanceOut, b.CreateGEP(mCarryDataPtr, b.getInt64(mCarryQueueSize + index)), BLOCK_SIZE/8, false);
     }
     mAdvanceQueueSummaryIdx[index] = -1;
     mAdvanceQueueVector[index] = advanceOut;
@@ -1070,9 +1059,8 @@ void PabloCompiler::SetOutputValue(Value * marker, const unsigned index) {
     b.CreateAlignedStore(marker, gep, BLOCK_SIZE/8, false);
 }
 
-CompiledPabloFunction::CompiledPabloFunction(unsigned carryQSize, unsigned advanceQSize, Function * function, ExecutionEngine * executionEngine)
-: CarryQueueSize(carryQSize)
-, AdvanceQueueSize(advanceQSize)
+CompiledPabloFunction::CompiledPabloFunction(size_t carryDataSize, Function * function, ExecutionEngine * executionEngine)
+: CarryDataSize(carryDataSize)
 , FunctionPointer(executionEngine->getPointerToFunction(function))
 , mFunction(function)
 , mExecutionEngine(executionEngine)
