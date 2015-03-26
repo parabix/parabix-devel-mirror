@@ -99,11 +99,11 @@ public:
 private:
     void DefineTypes();
     void DeclareFunctions();
-    void Examine(StatementList & stmts);
+    void Examine(PabloBlock & blk);
     void DeclareCallFunctions();
     void SetOutputValue(Value * marker, const unsigned index);
 
-    void compileStatements(const StatementList & stmts);
+    void compileBlock(const PabloBlock & blk);
     void compileStatement(const Statement * stmt);
     void compileIf(const If * ifStmt);
     void compileWhile(const While * whileStmt);

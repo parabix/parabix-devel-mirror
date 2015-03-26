@@ -102,7 +102,7 @@ CompiledPabloFunction PabloCompiler::compile(PabloBlock & pb)
     mMaxNestingDepth = 0;
     mCarryQueueSize = 0;
     mAdvanceQueueSize = 0;
-    Examine(pb.statements());
+    Examine(pb);
     mCarryQueueVector.resize(mCarryQueueSize);
     mAdvanceQueueVector.resize(mAdvanceQueueSize);
     mCarryQueueSummaryIdx.resize(mCarryQueueSize);
@@ -146,7 +146,7 @@ CompiledPabloFunction PabloCompiler::compile(PabloBlock & pb)
     }
 
     //Generate the IR instructions for the function.
-    compileStatements(pb.statements());
+    compileBlock(pb);
 
     if (LLVM_UNLIKELY(mCarryQueueIdx != mCarryQueueSize)) {
         throw std::runtime_error("Actual carry queue size (" + std::to_string(mCarryQueueIdx) + ") does not match expected (" + std::to_string(mCarryQueueSize) + ")");
@@ -374,15 +374,21 @@ void PabloCompiler::DeclareFunctions()
 // Examine precomputes some CarryNumbering and AdvanceNumbering, as
 // well as mMaxNestingDepth of while loops.
 // 
-void PabloCompiler::Examine(StatementList & stmts) {
-    for (Statement * stmt : stmts) {
-
+void PabloCompiler::Examine(PabloBlock & blk) {
+    // Count local carries and advances at this level.
+    unsigned localCarries = 0;
+    unsigned localAdvances = 0;
+    for (Statement * stmt : blk) {
         if (Advance * adv = dyn_cast<Advance>(stmt)) {
-            mAdvanceQueueSize += (((adv->getAdvanceAmount() - 1) / BLOCK_SIZE) + 1);
+            localAdvances += (adv->getAdvanceAmount() + BLOCK_SIZE - 1) / BLOCK_SIZE;
         }
         else if (isa<MatchStar>(stmt) || isa<ScanThru>(stmt)) {
-            ++mCarryQueueSize;
+            ++localCarries;
         }
+    }
+    mCarryQueueSize += localCarries;
+    mAdvanceQueueSize += localAdvances;
+    for (Statement * stmt : blk) {
         if (Call * call = dyn_cast<Call>(stmt)) {
             mCalleeMap.insert(std::make_pair(call->getCallee(), nullptr));
         }
@@ -393,8 +399,8 @@ void PabloCompiler::Examine(StatementList & stmts) {
             int ifCarryCount = mCarryQueueSize - preIfCarryCount;
             int ifAdvanceCount = mAdvanceQueueSize - preIfAdvanceCount;
             if ((ifCarryCount + ifAdvanceCount) > 1) {
-              ++mAdvanceQueueSize;
-              ++ifAdvanceCount;
+                ++mAdvanceQueueSize;
+                ++ifAdvanceCount;
             }
             ifStatement->setInclusiveCarryCount(ifCarryCount);
             ifStatement->setInclusiveAdvanceCount(ifAdvanceCount);
@@ -432,8 +438,8 @@ void PabloCompiler::DeclareCallFunctions() {
     }
 }
 
-void PabloCompiler::compileStatements(const StatementList & stmts) {
-    for (const Statement * statement : stmts) {
+void PabloCompiler::compileBlock(const PabloBlock & blk) {
+    for (const Statement * statement : blk) {
         compileStatement(statement);
     }
 }
@@ -498,7 +504,7 @@ void PabloCompiler::compileIf(const If * ifStatement) {
 
         // Entry processing is complete, now handle the body of the if.
         mBasicBlock = ifBodyBlock;
-        compileStatements(ifStatement->getBody());
+        compileBlock(ifStatement->getBody());
 
         // If we compiled an If or a While statement, we won't be in the same basic block as before.
         // Create the branch from the current basic block to the end block.
@@ -597,7 +603,7 @@ void PabloCompiler::compileWhile(const While * whileStatement) {
 
         ++mNestingDepth;
 
-        compileStatements(whileStatement->getBody());
+        compileBlock(whileStatement->getBody());
 
         // Reset the carry queue index. Note: this ought to be changed in the future. Currently this assumes
         // that compiling the while body twice will generate the equivalent IR. This is not necessarily true
@@ -609,7 +615,7 @@ void PabloCompiler::compileWhile(const While * whileStatement) {
         BasicBlock* whileBodyBlock = BasicBlock::Create(mMod->getContext(), "while.body", mFunction, 0);
         BasicBlock* whileEndBlock = BasicBlock::Create(mMod->getContext(), "while.end", mFunction, 0);
 
-        // Note: compileStatements may update the mBasicBlock pointer if the body contains nested loops. It
+        // Note: compileBlock may update the mBasicBlock pointer if the body contains nested loops. It
         // may not be same one that we entered the function with.
         IRBuilder<> bEntry(mBasicBlock);
         bEntry.CreateBr(whileCondBlock);
@@ -648,7 +654,7 @@ void PabloCompiler::compileWhile(const While * whileStatement) {
 
         // BODY BLOCK
         mBasicBlock = whileBodyBlock;
-        compileStatements(whileStatement->getBody());
+        compileBlock(whileStatement->getBody());
         // update phi nodes for any carry propogating instruction
         IRBuilder<> bWhileBody(mBasicBlock);
         for (index = 0; index != whileStatement->getInclusiveCarryCount(); ++index) {
