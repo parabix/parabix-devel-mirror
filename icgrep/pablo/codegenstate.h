@@ -172,7 +172,35 @@ public:
     inline PabloBlock * getParent() const {
         return mParent;
     }
-
+    
+    inline void setCarryIndexBase(const unsigned idx) {
+        mCarryIndexBase = idx;
+    }
+    inline unsigned getCarryIndexBase() const {
+        return mCarryIndexBase;
+    }
+    
+    inline void setLocalCarryCount(const unsigned c) {
+        mLocalCarryCount = c;
+    }
+    inline unsigned getLocalCarryCount() const {
+        return mLocalCarryCount;
+    }
+    
+    inline void setLocalAdvanceCount(const unsigned c) {
+        mLocalAdvanceCount = c;
+    }
+    inline unsigned getLocalAdvanceCount() const {
+        return mLocalAdvanceCount;
+    }
+    
+    inline void setTotalCarryDataSize(const unsigned sz) {
+        mTotalCarryDataSize = sz;
+    }
+    inline unsigned getTotalCarryDataSize() const {
+        return mTotalCarryDataSize;
+    }
+    
     virtual ~PabloBlock();
 
 protected:
@@ -195,6 +223,10 @@ private:
     Ones * const                                        mOnes;
     SymbolGenerator &                                   mSymbolGenerator;
     PabloBlock *                                        mParent;
+    unsigned                                            mCarryIndexBase;
+    unsigned                                            mLocalCarryCount;
+    unsigned                                            mLocalAdvanceCount;
+    unsigned                                            mTotalCarryDataSize;
 };
 
 }

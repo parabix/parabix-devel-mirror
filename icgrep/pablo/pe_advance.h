@@ -30,14 +30,22 @@ public:
     inline Integer::integer_t getAdvanceAmount() const {
         return cast<Integer>(getOperand(1))->value();
     }
+    inline void setLocalAdvanceIndex(const unsigned idx) {
+        localAdvanceIndex = idx;
+    }
+    inline unsigned getLocalAdvanceIndex() const {
+        return localAdvanceIndex;
+    }
 protected:
     Advance(PabloAST * expr, PabloAST * shiftAmount, String * name, PabloBlock * parent)
     : Statement(ClassTypeId::Advance, {expr, shiftAmount}, name, parent)
     {
         assert(isa<Integer>(shiftAmount));
     }
+private:
+    unsigned localAdvanceIndex;
 };
-
+    
 }
 
 #endif // PE_ADVANCE_H

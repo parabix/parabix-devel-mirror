@@ -26,6 +26,12 @@ public:
     inline PabloAST * getCharClass() const  {
         return getOperand(1);
     }
+    inline void setLocalCarryIndex(const unsigned idx) {
+        localCarryIndex = idx;
+    }
+    inline unsigned getLocalCarryIndex() const {
+        return localCarryIndex;
+    }
     virtual ~MatchStar() {}
 protected:
     MatchStar(PabloAST * marker, PabloAST * cc, String * name, PabloBlock * parent)
@@ -33,6 +39,8 @@ protected:
     {
 
     }
+private:
+    unsigned localCarryIndex;
 };
 
 }
