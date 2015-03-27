@@ -8,8 +8,6 @@ If::If(PabloAST * expr, const std::initializer_list<Assign *> definedVars, Pablo
 : Statement(ClassTypeId::If, {expr}, nullptr, parent)
 , mBody(body)
 , mDefined(definedVars.begin(), definedVars.end(), mVectorAllocator)
-, mCarryCount(0)
-, mAdvanceCount(0)
 {
     // Conceptually, having a defined var X is identical to having:
     //
@@ -32,8 +30,6 @@ If::If(PabloAST * expr, const std::vector<Assign *> & definedVars, PabloBlock & 
 : Statement(ClassTypeId::If, {expr}, nullptr, parent)
 , mBody(body)
 , mDefined(definedVars.begin(), definedVars.end(), mVectorAllocator)
-, mCarryCount(0)
-, mAdvanceCount(0)
 {
     for (PabloAST * assign : mDefined) {
         assign->addUser(this);

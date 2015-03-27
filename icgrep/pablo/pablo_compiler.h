@@ -99,7 +99,7 @@ public:
 private:
     void DefineTypes();
     void DeclareFunctions();
-    void Examine(PabloBlock & blk);
+    unsigned Examine(PabloBlock & blk, unsigned carryDataIndexIn);
     void DeclareCallFunctions();
     void SetOutputValue(Value * marker, const unsigned index);
 
@@ -108,12 +108,10 @@ private:
     void compileIf(const If * ifStmt);
     void compileWhile(const While * whileStmt);
     Value* compileExpression(const PabloAST * expr);
-    Value* genCarryInLoad(const unsigned index);
-    void   genCarryOutStore(Value* carryOut, const unsigned index);
-    Value* genAdvanceInLoad(const unsigned index);
-    void   genAdvanceOutStore(Value* advanceOut, const unsigned index);
-    Value* genAddWithCarry(Value* e1, Value* e2);
-    Value* genAdvanceWithCarry(Value* e1, int shift_amount);
+    Value* genCarryDataLoad(const unsigned index);
+    void   genCarryDataStore(Value* carryOut, const unsigned index);
+    Value* genAddWithCarry(Value* e1, Value* e2, unsigned localIndex, const PabloBlock * blk);
+    Value* genAdvanceWithCarry(Value* e1, int shift_amount, unsigned localIndex, const PabloBlock * blk);
     Value* genBitBlockAny(Value* test);
     Value* genShiftHighbitToLow(Value* e, const Twine & namehint = "");
     Value* genShiftLeft64(Value* e, const Twine & namehint = "") ;
@@ -131,10 +129,8 @@ private:
 
 
     ASTToValueMap                       mMarkerMap;
-    CarryQueueVector                    mCarryQueueVector;
-    std::vector<int>                    mCarryQueueSummaryIdx;
-    CarryQueueVector                    mAdvanceQueueVector;
-    std::vector<int>                    mAdvanceQueueSummaryIdx;
+    CarryQueueVector                    mCarryDataVector;
+    std::vector<int>                    mCarryDataSummaryIdx;
 
     const std::vector<Var *> &          mBasisBits;
 
@@ -145,13 +141,8 @@ private:
     VectorType* const                   mBitBlockType;
     PointerType*                        mBasisBitsInputPtr;
 
-    unsigned                            mCarryQueueIdx;
     Value*                              mCarryDataPtr;
     unsigned                            mNestingDepth;
-    unsigned                            mCarryQueueSize;
-
-    unsigned                            mAdvanceQueueIdx;
-    unsigned                            mAdvanceQueueSize;
 
     ConstantAggregateZero* const        mZeroInitializer;
     Constant* const                     mOneInitializer;

@@ -40,18 +40,6 @@ public:
     inline const DefinedVars & getDefined() const {
         return mDefined;
     }
-    inline void setInclusiveCarryCount(const unsigned count) {
-        mCarryCount = count;
-    }
-    inline unsigned getInclusiveCarryCount() const {
-        return mCarryCount;
-    }
-    inline void setInclusiveAdvanceCount(const unsigned count) {
-        mAdvanceCount = count;
-    }
-    inline unsigned getInclusiveAdvanceCount() const {
-        return mAdvanceCount;
-    }
 protected:
     If(PabloAST * expr, const std::initializer_list<Assign *> definedVars, PabloBlock & body, PabloBlock * parent);
 
@@ -59,8 +47,6 @@ protected:
 private:
     PabloBlock &    mBody;
     DefinedVars     mDefined;
-    unsigned        mCarryCount;
-    unsigned        mAdvanceCount;
 };
 
 }

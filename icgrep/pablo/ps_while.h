@@ -31,24 +31,10 @@ public:
     inline const PabloBlock & getBody() const {
         return mBody;
     }
-    inline void setInclusiveCarryCount(const unsigned count) {
-        mCarryCount = count;
-    }
-    inline unsigned getInclusiveCarryCount() const {
-        return mCarryCount;
-    }
-    inline void setInclusiveAdvanceCount(const unsigned count) {
-        mAdvanceCount = count;
-    }
-    inline unsigned getInclusiveAdvanceCount() const {
-        return mAdvanceCount;
-    }
 protected:
     While(PabloAST * expr, PabloBlock &body, PabloBlock * parent);
 private:
     PabloBlock &        mBody;
-    unsigned            mCarryCount;
-    unsigned            mAdvanceCount;
 };
 
 }
