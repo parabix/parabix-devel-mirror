@@ -103,6 +103,7 @@ private:
     void DeclareCallFunctions();
     void SetOutputValue(Value * marker, const unsigned index);
 
+    void genPrintRegister(std::string regName, Value * bitblockValue);
     void compileBlock(const PabloBlock & blk);
     void compileStatement(const Statement * stmt);
     void compileIf(const If * ifStmt);
@@ -113,7 +114,7 @@ private:
     Value* genAddWithCarry(Value* e1, Value* e2, unsigned localIndex, const PabloBlock * blk);
     Value* genAdvanceWithCarry(Value* e1, int shift_amount, unsigned localIndex, const PabloBlock * blk);
     Value* genBitBlockAny(Value* test);
-    Value* genShiftHighbitToLow(Value* e, const Twine & namehint = "");
+    Value* genShiftHighbitToLow(unsigned FieldWidth, Value * op);
     Value* genShiftLeft64(Value* e, const Twine & namehint = "") ;
     Value* genNot(Value* expr);
 
