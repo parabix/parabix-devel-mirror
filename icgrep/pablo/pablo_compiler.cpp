@@ -810,9 +810,9 @@ Value* PabloCompiler::genAddWithCarry(Value* e1, Value* e2, unsigned localIndex,
 #ifdef USE_TWO_UADD_OVERFLOW
     //This is the ideal implementation, which uses two uadd.with.overflow
     //The back end should be able to recognize this pattern and combine it into uadd.with.overflow.carryin
-    CastInst* int128_e1 = new BitCastInst(e1, IntegerType::get(mMod->getContext(), BLOCK_SIZE), "e1_128", mBasicBlock);
-    CastInst* int128_e2 = new BitCastInst(e2, IntegerType::get(mMod->getContext(), BLOCK_SIZE), "e2_128", mBasicBlock);
-    CastInst* int128_carryq_value = new BitCastInst(carryq_value, IntegerType::get(mMod->getContext(), BLOCK_SIZE), "carryq_128", mBasicBlock);
+    CastInst* int128_e1 = new BitCastInst(e1, b.getIntNTy(BLOCK_SIZE), "e1_128", mBasicBlock);
+    CastInst* int128_e2 = new BitCastInst(e2, b.getIntNTy(BLOCK_SIZE), "e2_128", mBasicBlock);
+    CastInst* int128_carryq_value = new BitCastInst(carryq_value, b.getIntNTy(BLOCK_SIZE), "carryq_128", mBasicBlock);
 
     SumWithOverflowPack sumpack0, sumpack1;
 
@@ -830,8 +830,8 @@ Value* PabloCompiler::genAddWithCarry(Value* e1, Value* e2, unsigned localIndex,
 
 #elif defined USE_UADD_OVERFLOW
     //use llvm.uadd.with.overflow.i128 or i256
-    CastInst* int128_e1 = new BitCastInst(e1, IntegerType::get(mMod->getContext(), BLOCK_SIZE), "e1_128", mBasicBlock);
-    CastInst* int128_e2 = new BitCastInst(e2, IntegerType::get(mMod->getContext(), BLOCK_SIZE), "e2_128", mBasicBlock);
+    CastInst* int128_e1 = new BitCastInst(e1, b.getIntNTy(BLOCK_SIZE), "e1_128", mBasicBlock);
+    CastInst* int128_e2 = new BitCastInst(e2, b.getIntNTy(BLOCK_SIZE), "e2_128", mBasicBlock);
 
     //get i1 carryin from iBLOCK_SIZE
     ConstantInt* const_int32_6 = ConstantInt::get(mMod->getContext(), APInt(32, StringRef("0"), 10));
@@ -866,7 +866,7 @@ Value* PabloCompiler::genAddWithCarry(Value* e1, Value* e2, unsigned localIndex,
     genCarryDataStore(carry_out, carryIdx);
     return sum;
 }
-#define CARRY_DEBUG
+//#define CARRY_DEBUG
 Value* PabloCompiler::genCarryDataLoad(const unsigned index) {
     assert (index < mCarryDataVector.size());
     if (mNestingDepth == 0) {
@@ -888,15 +888,15 @@ void PabloCompiler::genCarryDataStore(Value* carryOut, const unsigned index ) {
     }
     mCarryDataSummaryIdx[index] = -1;
 #ifdef CARRY_DEBUG
-    genPrintRegister("carry_out_" + std::to_string(index), mCarryVector[index]);
+    genPrintRegister("carry_out_" + std::to_string(index), mCarryDataVector[index]);
 #endif
     mCarryDataVector[index] = carryOut;
 }
 
 inline Value* PabloCompiler::genBitBlockAny(Value* test) {
     IRBuilder<> b(mBasicBlock);
-    Value* cast_marker_value_1 = b.CreateBitCast(test, IntegerType::get(mMod->getContext(), BLOCK_SIZE));
-    return b.CreateICmpEQ(cast_marker_value_1, ConstantInt::get(IntegerType::get(mMod->getContext(), BLOCK_SIZE), 0));
+    Value* cast_marker_value_1 = b.CreateBitCast(test, b.getIntNTy(BLOCK_SIZE));
+    return b.CreateICmpEQ(cast_marker_value_1, ConstantInt::get(b.getIntNTy(BLOCK_SIZE), 0));
 }
 
 Value * PabloCompiler::genShiftHighbitToLow(unsigned FieldWidth, Value * op) {
@@ -909,7 +909,7 @@ Value * PabloCompiler::genShiftHighbitToLow(unsigned FieldWidth, Value * op) {
 
 Value* PabloCompiler::genShiftLeft64(Value* e, const Twine &namehint) {
     IRBuilder<> b(mBasicBlock);
-    Value* i128_val = b.CreateBitCast(e, IntegerType::get(mMod->getContext(), BLOCK_SIZE));
+    Value* i128_val = b.CreateBitCast(e, b.getIntNTy(BLOCK_SIZE));
     return b.CreateBitCast(b.CreateShl(i128_val, 64, namehint), mBitBlockType);
 }
 
@@ -949,14 +949,14 @@ Value* PabloCompiler::genAdvanceWithCarry(Value* strm_value, int shift_amount, u
         else { //if (block_shift < BLOCK_SIZE) {
             // This is the preferred logic, but is too slow for the general case.
             // We need to speed up our custom LLVM for this code.
-            Value* advanceq_longint = b.CreateBitCast(genCarryDataLoad(loadIdx), IntegerType::get(mMod->getContext(), BLOCK_SIZE));
-            Value* strm_longint = b.CreateBitCast(strm_value, IntegerType::get(mMod->getContext(), BLOCK_SIZE));
+            Value* advanceq_longint = b.CreateBitCast(genCarryDataLoad(loadIdx), b.getIntNTy(BLOCK_SIZE));
+            Value* strm_longint = b.CreateBitCast(strm_value, b.getIntNTy(BLOCK_SIZE));
             Value* adv_longint = b.CreateOr(b.CreateShl(strm_longint, block_shift), b.CreateLShr(advanceq_longint, BLOCK_SIZE - block_shift), "advance");
             result_value = b.CreateBitCast(adv_longint, mBitBlockType);
         }
 #else
-        Value* advanceq_longint = b.CreateBitCast(genCarryDataLoad(loadIdx), IntegerType::get(mMod->getContext(), BLOCK_SIZE));
-        Value* strm_longint = b.CreateBitCast(strm_value, IntegerType::get(mMod->getContext(), BLOCK_SIZE));
+        Value* advanceq_longint = b.CreateBitCast(genCarryDataLoad(loadIdx), b.getIntNTy(BLOCK_SIZE));
+        Value* strm_longint = b.CreateBitCast(strm_value, b.getIntNTy(BLOCK_SIZE));
         Value* adv_longint = b.CreateOr(b.CreateShl(strm_longint, block_shift), b.CreateLShr(advanceq_longint, BLOCK_SIZE - block_shift), "advance");
         result_value = b.CreateBitCast(adv_longint, mBitBlockType);
 
@@ -968,8 +968,8 @@ Value* PabloCompiler::genAdvanceWithCarry(Value* strm_value, int shift_amount, u
         }
         else { 
             // The advance is based on the two oldest bit blocks in the advance queue.
-            Value* advanceq_longint = b.CreateBitCast(genCarryDataLoad(loadIdx), IntegerType::get(mMod->getContext(), BLOCK_SIZE));
-            Value* strm_longint = b.CreateBitCast(genCarryDataLoad(loadIdx-1), IntegerType::get(mMod->getContext(), BLOCK_SIZE));
+            Value* advanceq_longint = b.CreateBitCast(genCarryDataLoad(loadIdx), b.getIntNTy(BLOCK_SIZE));
+            Value* strm_longint = b.CreateBitCast(genCarryDataLoad(loadIdx-1), b.getIntNTy(BLOCK_SIZE));
             Value* adv_longint = b.CreateOr(b.CreateShl(strm_longint, block_shift), b.CreateLShr(advanceq_longint, BLOCK_SIZE - block_shift), "longadvance");
             result_value = b.CreateBitCast(adv_longint, mBitBlockType);
             //b.CreateCall(mFunc_print_register, genCarryDataLoad(loadIdx));
