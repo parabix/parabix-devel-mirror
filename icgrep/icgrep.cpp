@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2014 International Characters.
+ *  Copyright (c) 2015 International Characters.
  *  This software is licensed to the public under the Open Software License 3.0.
  *  icgrep is a trademark of International Characters.
  */
@@ -15,6 +15,31 @@
 #include "do_grep.h"
 
 #include "llvm/Support/CommandLine.h"
+
+static cl::OptionCategory aRegexSourceOptions("Regular Expression Options",
+                                       "These options control the regular expression source.");
+
+static cl::OptionCategory bGrepOutputOptions("Output Options",
+                                      "These options control the output.");
+
+static cl::list<std::string> inputFiles(cl::Positional, cl::desc("<regex> <input file ...>"), cl::OneOrMore);
+
+static cl::opt<bool> CountOnly("c", cl::desc("Count and display the matching lines per file only."), cl::cat(bGrepOutputOptions));
+static cl::alias CountOnlyLong("count", cl::desc("Alias for -c"), cl::aliasopt(CountOnly));
+static cl::opt<bool> NormalizeLineBreaks("normalize-line-breaks", cl::desc("Normalize line breaks to std::endl."), cl::init(false),  cl::cat(bGrepOutputOptions));
+
+static cl::opt<bool> ShowFileNames("H", cl::desc("Show the file name with each matching line."), cl::cat(bGrepOutputOptions));
+static cl::alias ShowFileNamesLong("with-filename", cl::desc("Alias for -H"), cl::aliasopt(ShowFileNames));
+
+static cl::opt<bool> CaseInsensitive("i", cl::desc("Ignore case distinctions in the pattern and the file."), cl::cat(aRegexSourceOptions));
+static cl::opt<bool> ShowLineNumbers("n", cl::desc("Show the line number with each matching line."), cl::cat(bGrepOutputOptions));
+static cl::alias ShowLineNumbersLong("line-number", cl::desc("Alias for -n"), cl::aliasopt(ShowLineNumbers));
+
+static cl::list<std::string> regexVector("e", cl::desc("Regular expression"), cl::ZeroOrMore, cl::cat(aRegexSourceOptions));
+static cl::opt<std::string> RegexFilename("f", cl::desc("Take regular expressions (one per line) from a file"), cl::value_desc("regex file"), cl::init(""), cl::cat(aRegexSourceOptions));
+
+
+
 
 int main(int argc, char *argv[]) {
     StringMap<cl::Option*> Map;
@@ -43,38 +68,13 @@ int main(int argc, char *argv[]) {
     Map["verify-regalloc"]->setHiddenFlag(cl::Hidden);
     Map["verify-scev"]->setHiddenFlag(cl::Hidden);
     
+    cl::ParseCommandLineOptions(argc, argv);
     
-    cl::OptionCategory aRegexSourceOptions("Regular Expression Options",
-                                          "These options control the regular expression source.");
-    
-    cl::OptionCategory bGrepOutputOptions("Output Options",
-                                         "These options control the output.");
     
     int firstInputFile = 1;  // Normal case when first positional arg is a regex.
-    cl::list<std::string> inputFiles(cl::Positional, cl::desc("<regex> <input file ...>"), cl::OneOrMore);
-    
-    cl::opt<bool> CountOnly("c", cl::desc("Count and display the matching lines per file only."), cl::cat(bGrepOutputOptions));
-    cl::alias CountOnlyLong("count", cl::desc("Alias for -c"), cl::aliasopt(CountOnly));
-    cl::opt<bool> NormalizeLineBreaks("normalize-line-breaks", cl::desc("Normalize line breaks to std::endl."), cl::init(false),  cl::cat(bGrepOutputOptions));
-    
-    cl::opt<bool> ShowFileNames("H", cl::desc("Show the file name with each matching line."), cl::cat(bGrepOutputOptions));
-    cl::alias ShowFileNamesLong("with-filename", cl::desc("Alias for -H"), cl::aliasopt(ShowFileNames));
-    
-    cl::opt<bool> CaseInsensitive("i", cl::desc("Ignore case distinctions in the pattern and the file."), cl::cat(aRegexSourceOptions));
-    cl::opt<bool> ShowLineNumbers("n", cl::desc("Show the line number with each matching line."), cl::cat(bGrepOutputOptions));
-    cl::alias ShowLineNumbersLong("line-number", cl::desc("Alias for -n"), cl::aliasopt(ShowLineNumbers));
-    
-    cl::list<std::string> regexVector("e", cl::desc("Regular expression"), cl::ZeroOrMore, cl::cat(aRegexSourceOptions));
-    
-    cl::opt<std::string> RegexFilename("f", cl::desc("Take regular expressions (one per line) from a file"), cl::value_desc("regex file"), cl::init(""), cl::cat(aRegexSourceOptions));
-  
-    // Does -b mean the byte offset of the line, or the byte offset of the match start within the line?
-    //static cl::opt<bool>ShowByteOffsets("b", cl::desc("Show the byte offset with each matching line."));
-    //cl::alias ShowByteOffsetsLong("-byte-offset", cl::desc("Alias for -b"), cl::aliasopt(ShowByteOffsets));
 
     Encoding encoding(Encoding::Type::UTF_8, 8);
 
-    cl::ParseCommandLineOptions(argc, argv);
     
     //std::vector<std::string> regexVector;
     if (RegexFilename != "") {

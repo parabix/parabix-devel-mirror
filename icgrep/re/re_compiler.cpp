@@ -25,7 +25,7 @@
 #include <stdexcept>
 
 #include "llvm/Support/CommandLine.h"
-cl::OptionCategory fREcompilationOptions("Regex Compilation Options",
+static cl::OptionCategory fREcompilationOptions("Regex Compilation Options",
                                       "These options control the compilation of regular expressions to Pablo.");
 
 static cl::opt<bool> DisableLog2BoundedRepetition("disable-log2-bounded-repetition", cl::init(false), 
