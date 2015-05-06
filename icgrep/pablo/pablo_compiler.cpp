@@ -69,14 +69,15 @@ PabloCompiler::PabloCompiler(const std::vector<Var*> & basisBits)
 , mBitBlockType(VectorType::get(IntegerType::get(mMod->getContext(), 64), BLOCK_SIZE / 64))
 , mBasisBitsInputPtr(nullptr)
 , mCarryDataPtr(nullptr)
-, mNestingDepth(0)
+, mWhileDepth(0)
+, mIfDepth(0)
 , mZeroInitializer(ConstantAggregateZero::get(mBitBlockType))
 , mOneInitializer(ConstantVector::getAllOnesValue(mBitBlockType))
 , mFunctionType(nullptr)
 , mFunction(nullptr)
 , mBasisBitsAddr(nullptr)
 , mOutputAddrPtr(nullptr)
-, mMaxNestingDepth(0)
+, mMaxWhileDepth(0)
 , mPrintRegisterFunction(nullptr)
 {
     //Create the jit execution engine.up
@@ -109,17 +110,19 @@ void PabloCompiler::genPrintRegister(std::string regName, Value * bitblockValue)
 
 CompiledPabloFunction PabloCompiler::compile(PabloBlock & pb)
 {
-    mNestingDepth = 0;
-    mMaxNestingDepth = 0;
+    mWhileDepth = 0;
+    mIfDepth = 0;
+    mMaxWhileDepth = 0;
     unsigned totalCarryDataSize = Examine(pb, 0); 
-    mCarryDataVector.resize(totalCarryDataSize);
+    mCarryInVector.resize(totalCarryDataSize);
+    mCarryOutVector.resize(totalCarryDataSize);
     mCarryDataSummaryIdx.resize(totalCarryDataSize);
     std::string errMessage;
     EngineBuilder builder(mMod);
     builder.setErrorStr(&errMessage);
     builder.setMCPU(sys::getHostCPUName());
     builder.setUseMCJIT(true);
-    builder.setOptLevel(mMaxNestingDepth ? CodeGenOpt::Level::Less : CodeGenOpt::Level::None);
+    builder.setOptLevel(mMaxWhileDepth ? CodeGenOpt::Level::Less : CodeGenOpt::Level::None);
     mExecutionEngine = builder.create();
     if (mExecutionEngine == nullptr) {
         throw std::runtime_error("Could not create ExecutionEngine: " + errMessage);
@@ -136,8 +139,9 @@ CompiledPabloFunction PabloCompiler::compile(PabloBlock & pb)
     mOutputAddrPtr = args++;
     mOutputAddrPtr->setName("output");
 
-    mNestingDepth = 0;
-    mMaxNestingDepth = 0;
+    mWhileDepth = 0;
+    mIfDepth = 0;
+    mMaxWhileDepth = 0;
     mBasicBlock = BasicBlock::Create(mMod->getContext(), "parabix_entry", mFunction,0);
 
     //The basis bits structure
@@ -152,8 +156,8 @@ CompiledPabloFunction PabloCompiler::compile(PabloBlock & pb)
     //Generate the IR instructions for the function.
     compileBlock(pb);
 
-    if (LLVM_UNLIKELY(mNestingDepth != 0)) {
-        throw std::runtime_error("Non-zero nesting depth error (" + std::to_string(mNestingDepth) + ")");
+    if (LLVM_UNLIKELY(mWhileDepth != 0)) {
+        throw std::runtime_error("Non-zero nesting depth error (" + std::to_string(mWhileDepth) + ")");
     }
 
     //Terminate the block
@@ -368,7 +372,7 @@ void PabloCompiler::DeclareFunctions()
 //       (n + BLOCK_SIZE - 1) / BLOCK_SIZE
 //
 // Examine precomputes some CarryNumbering and AdvanceNumbering, as
-// well as mMaxNestingDepth of while loops.
+// well as mMaxWhileDepth of while loops.
 // 
 unsigned PabloCompiler::Examine(PabloBlock & blk, unsigned carryDataIndexIn) {
     // Count local carries and advances at this level.
@@ -396,14 +400,16 @@ unsigned PabloCompiler::Examine(PabloBlock & blk, unsigned carryDataIndexIn) {
             mCalleeMap.insert(std::make_pair(call->getCallee(), nullptr));
         }
         else if (If * ifStatement = dyn_cast<If>(stmt)) {
+            ++mIfDepth;
             const auto ifCarryDataSize = Examine(ifStatement->getBody(), carryDataIndex);
+            --mIfDepth;
             nestedCarryDataSize += ifCarryDataSize;
             carryDataIndex += ifCarryDataSize;
         }
         else if (While * whileStatement = dyn_cast<While>(stmt)) {
-            mMaxNestingDepth = std::max(mMaxNestingDepth, ++mNestingDepth);
+            mMaxWhileDepth = std::max(mMaxWhileDepth, ++mWhileDepth);
             const auto whileCarryDataSize = Examine(whileStatement->getBody(), carryDataIndex);
-            --mNestingDepth;
+            --mWhileDepth;
             nestedCarryDataSize += whileCarryDataSize;
             carryDataIndex += whileCarryDataSize;
         }
@@ -412,9 +418,9 @@ unsigned PabloCompiler::Examine(PabloBlock & blk, unsigned carryDataIndexIn) {
     blk.setLocalCarryCount(localCarries);
     blk.setLocalAdvanceCount(localAdvances);
     unsigned totalCarryDataSize = localCarries + localAdvances + nestedCarryDataSize;
-    if (totalCarryDataSize > 1) {
+    if ((mIfDepth > 0) && (totalCarryDataSize > 1)) {
         // Need extra space for the summary variable, always the last
-        // entry within the block.
+        // entry within an if block.
         totalCarryDataSize += 1;
     }
     blk.setTotalCarryDataSize(totalCarryDataSize);
@@ -505,7 +511,7 @@ void PabloCompiler::compileIf(const If * ifStatement) {
             for (int c = baseCarryDataIdx; c < carrySummaryIndex; c++) {
                 int s = mCarryDataSummaryIdx[c];
                 if (s == -1) {
-                    Value* carryq_value = mCarryDataVector[c];
+                    Value* carryq_value = mCarryOutVector[c];
                     if (carry_summary == mZeroInitializer) {
                         carry_summary = carryq_value;
                     }
@@ -533,8 +539,8 @@ void PabloCompiler::compileIf(const If * ifStatement) {
         if (carryDataSize > 0) {
             PHINode * summary_phi = bEnd.CreatePHI(mBitBlockType, 2, "summary");
             summary_phi->addIncoming(mZeroInitializer, ifEntryBlock);
-            summary_phi->addIncoming(mCarryDataVector[carrySummaryIndex], mBasicBlock);
-            mCarryDataVector[carrySummaryIndex] = summary_phi;
+            summary_phi->addIncoming(mCarryOutVector[carrySummaryIndex], mBasicBlock);
+            mCarryOutVector[carrySummaryIndex] = summary_phi;
         }
         
         // Set the basic block to the new end block
@@ -545,7 +551,7 @@ void PabloCompiler::compileWhile(const While * whileStatement) {
         const unsigned baseCarryDataIdx = whileStatement->getBody().getCarryIndexBase();
         const unsigned carryDataSize = whileStatement->getBody().getTotalCarryDataSize();
     
-        if (mNestingDepth == 0) {
+        if (mWhileDepth == 0) {
             for (auto i = 0; i < carryDataSize; ++i) {
                 genCarryDataLoad(baseCarryDataIdx + i);
             }
@@ -559,11 +565,11 @@ void PabloCompiler::compileWhile(const While * whileStatement) {
         }
 
         // Compile the initial iteration statements; the calls to genCarryDataStore will update the
-        // mCarryDataVector with the appropriate values. Although we're not actually entering a new basic
+        // mCarryOutVector with the appropriate values. Although we're not actually entering a new basic
         // block yet, increment the nesting depth so that any calls to genCarryDataLoad or genCarryDataStore
         // will refer to the previous value.
 
-        ++mNestingDepth;
+        ++mWhileDepth;
 
         compileBlock(whileStatement->getBody());
 
@@ -587,8 +593,8 @@ void PabloCompiler::compileWhile(const While * whileStatement) {
         unsigned index = 0;
         for (index = 0; index < carryDataSize; ++index) {
             PHINode * phi = bCond.CreatePHI(mBitBlockType, 2);
-            phi->addIncoming(mCarryDataVector[baseCarryDataIdx + index], mBasicBlock);
-            mCarryDataVector[baseCarryDataIdx + index] = mZeroInitializer; // (use phi for multi-carry mode.)
+            phi->addIncoming(mCarryOutVector[baseCarryDataIdx + index], mBasicBlock);
+            mCarryInVector[baseCarryDataIdx + index] = mZeroInitializer; // (use phi for multi-carry mode.)
             phiNodes[index] = phi;
         }
         // and for any Next nodes in the loop body
@@ -605,16 +611,18 @@ void PabloCompiler::compileWhile(const While * whileStatement) {
         bCond.CreateCondBr(genBitBlockAny(compileExpression(whileStatement->getCondition())), whileEndBlock, whileBodyBlock);
 
         // BODY BLOCK
+        std::cerr << "Compile loop body\n";
         mBasicBlock = whileBodyBlock;
         compileBlock(whileStatement->getBody());
         // update phi nodes for any carry propogating instruction
         IRBuilder<> bWhileBody(mBasicBlock);
         for (index = 0; index < carryDataSize; ++index) {
-            Value * carryOut = bWhileBody.CreateOr(phiNodes[index], mCarryDataVector[baseCarryDataIdx + index]);
             PHINode * phi = phiNodes[index];
+            Value * carryOut = bWhileBody.CreateOr(phi, mCarryOutVector[baseCarryDataIdx + index]);
             phi->addIncoming(carryOut, mBasicBlock);
-            mCarryDataVector[baseCarryDataIdx + index] = phi;
+            mCarryOutVector[baseCarryDataIdx + index] = phi;
         }
+        
         // and for any Next nodes in the loop body
         for (const Next * n : nextNodes) {
             auto f = mMarkerMap.find(n->getInitial());
@@ -628,7 +636,7 @@ void PabloCompiler::compileWhile(const While * whileStatement) {
 
         // EXIT BLOCK
         mBasicBlock = whileEndBlock;
-        if (--mNestingDepth == 0) {
+        if (--mWhileDepth == 0) {
             for (index = 0; index < carryDataSize; ++index) {
                 genCarryDataStore(phiNodes[index], baseCarryDataIdx + index);
             }
@@ -878,29 +886,30 @@ Value* PabloCompiler::genAddWithCarry(Value* e1, Value* e2, unsigned localIndex,
 }
 //#define CARRY_DEBUG
 Value* PabloCompiler::genCarryDataLoad(const unsigned index) {
-    assert (index < mCarryDataVector.size());
-    if (mNestingDepth == 0) {
+    assert (index < mCarryInVector.size());
+    if (mWhileDepth == 0) {
         IRBuilder<> b(mBasicBlock);
-        mCarryDataVector[index] = b.CreateAlignedLoad(b.CreateGEP(mCarryDataPtr, b.getInt64(index)), BLOCK_SIZE/8, false);
+        mCarryInVector[index] = b.CreateAlignedLoad(b.CreateGEP(mCarryDataPtr, b.getInt64(index)), BLOCK_SIZE/8, false);
     }
 #ifdef CARRY_DEBUG
-    genPrintRegister("carry_in_" + std::to_string(index), mCarryDataVector[index]);
+    genPrintRegister("carry_in_" + std::to_string(index), mCarryInVector[index]);
 #endif
-    return mCarryDataVector[index];
+    return mCarryInVector[index];
 }
 
 void PabloCompiler::genCarryDataStore(Value* carryOut, const unsigned index ) {
     assert (carryOut);
-    assert (index < mCarryDataVector.size());
-    if (mNestingDepth == 0) {
+    assert (index < mCarryOutVector.size());
+    if (mWhileDepth == 0) {
         IRBuilder<> b(mBasicBlock);
         b.CreateAlignedStore(carryOut, b.CreateGEP(mCarryDataPtr, b.getInt64(index)), BLOCK_SIZE/8, false);
     }
     mCarryDataSummaryIdx[index] = -1;
 #ifdef CARRY_DEBUG
-    genPrintRegister("carry_out_" + std::to_string(index), mCarryDataVector[index]);
+    genPrintRegister("carry_out_" + std::to_string(index), mCarryOutVector[index]);
 #endif
-    mCarryDataVector[index] = carryOut;
+    mCarryOutVector[index] = carryOut;
+    std::cerr << "mCarryOutVector[" << index << "]]\n";
 }
 
 inline Value* PabloCompiler::genBitBlockAny(Value* test) {

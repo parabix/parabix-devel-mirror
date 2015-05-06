@@ -130,7 +130,8 @@ private:
 
 
     ASTToValueMap                       mMarkerMap;
-    CarryQueueVector                    mCarryDataVector;
+    CarryQueueVector                    mCarryInVector;
+    CarryQueueVector                    mCarryOutVector;
     std::vector<int>                    mCarryDataSummaryIdx;
 
     const std::vector<Var *> &          mBasisBits;
@@ -143,7 +144,8 @@ private:
     PointerType*                        mBasisBitsInputPtr;
 
     Value*                              mCarryDataPtr;
-    unsigned                            mNestingDepth;
+    unsigned                            mWhileDepth;
+    unsigned                            mIfDepth;
 
     ConstantAggregateZero* const        mZeroInitializer;
     Constant* const                     mOneInitializer;
@@ -155,7 +157,7 @@ private:
     Value*                              mBasisBitsAddr;
     Value*                              mOutputAddrPtr;
 
-    unsigned                            mMaxNestingDepth;
+    unsigned                            mMaxWhileDepth;
 
     std::map<std::string, void *>       mExternalMap;
     StringToValueMap                    mCalleeMap;
