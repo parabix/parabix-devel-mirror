@@ -611,7 +611,7 @@ void PabloCompiler::compileWhile(const While * whileStatement) {
         bCond.CreateCondBr(genBitBlockAny(compileExpression(whileStatement->getCondition())), whileEndBlock, whileBodyBlock);
 
         // BODY BLOCK
-        std::cerr << "Compile loop body\n";
+        //std::cerr << "Compile loop body\n";
         mBasicBlock = whileBodyBlock;
         compileBlock(whileStatement->getBody());
         // update phi nodes for any carry propogating instruction
@@ -686,11 +686,17 @@ void PabloCompiler::compileStatement(const Statement * stmt)
     }
     else if (const And * pablo_and = dyn_cast<And>(stmt)) {
         Value * expr = b.CreateAnd(compileExpression(pablo_and->getExpr1()), compileExpression(pablo_and->getExpr2()), "and");
+        if (DumpTrace) {
+            genPrintRegister(stmt->getName()->to_string(), expr);
+        }
         mMarkerMap[pablo_and] = expr;
         // return expr;
     }
     else if (const Or * pablo_or = dyn_cast<Or>(stmt)) {
         Value * expr = b.CreateOr(compileExpression(pablo_or->getExpr1()), compileExpression(pablo_or->getExpr2()), "or");
+        if (DumpTrace) {
+            genPrintRegister(stmt->getName()->to_string(), expr);
+        }
         mMarkerMap[pablo_or] = expr;
         // return expr;
     }
@@ -704,11 +710,17 @@ void PabloCompiler::compileStatement(const Statement * stmt)
         Value* ifTrue = b.CreateAnd(ifMask, compileExpression(sel->getTrueExpr()));
         Value* ifFalse = b.CreateAnd(genNot(ifMask), compileExpression(sel->getFalseExpr()));
         Value * expr = b.CreateOr(ifTrue, ifFalse);
+        if (DumpTrace) {
+            genPrintRegister(stmt->getName()->to_string(), expr);
+        }
         mMarkerMap[sel] = expr;
         // return expr;
     }
     else if (const Not * pablo_not = dyn_cast<Not>(stmt)) {
         Value * expr = genNot(compileExpression(pablo_not->getExpr()));
+        if (DumpTrace) {
+            genPrintRegister(stmt->getName()->to_string(), expr);
+        }
         mMarkerMap[pablo_not] = expr;
         // return expr;
     }
@@ -717,6 +729,9 @@ void PabloCompiler::compileStatement(const Statement * stmt)
         int shift = adv->getAdvanceAmount();
         unsigned advance_index = adv->getLocalAdvanceIndex();
         Value * expr = genAdvanceWithCarry(strm_value, shift, advance_index, stmt->getParent());
+        if (DumpTrace) {
+            genPrintRegister(stmt->getName()->to_string(), expr);
+        }
         mMarkerMap[adv] = expr;
         // return expr;
     }
@@ -727,6 +742,9 @@ void PabloCompiler::compileStatement(const Statement * stmt)
         Value * marker_and_cc = b.CreateAnd(marker, cc);
         unsigned carry_index = mstar->getLocalCarryIndex();
         Value * expr = b.CreateOr(b.CreateXor(genAddWithCarry(marker_and_cc, cc, carry_index, stmt->getParent()), cc), marker, "matchstar");
+        if (DumpTrace) {
+            genPrintRegister(stmt->getName()->to_string(), expr);
+        }
         mMarkerMap[mstar] = expr;
         // return expr;
     }
@@ -736,6 +754,9 @@ void PabloCompiler::compileStatement(const Statement * stmt)
         Value * cc_expr = compileExpression(sthru->getScanThru());
         unsigned carry_index = sthru->getLocalCarryIndex();
         Value * expr = b.CreateAnd(genAddWithCarry(marker_expr, cc_expr, carry_index, stmt->getParent()), genNot(cc_expr), "scanthru");
+        if (DumpTrace) {
+            genPrintRegister(stmt->getName()->to_string(), expr);
+        }
         mMarkerMap[sthru] = expr;
         // return expr;
     }
@@ -909,7 +930,7 @@ void PabloCompiler::genCarryDataStore(Value* carryOut, const unsigned index ) {
     genPrintRegister("carry_out_" + std::to_string(index), mCarryOutVector[index]);
 #endif
     mCarryOutVector[index] = carryOut;
-    std::cerr << "mCarryOutVector[" << index << "]]\n";
+    //std::cerr << "mCarryOutVector[" << index << "]]\n";
 }
 
 inline Value* PabloCompiler::genBitBlockAny(Value* test) {
