@@ -957,7 +957,59 @@ inline Value* PabloCompiler::genNot(Value* expr) {
     IRBuilder<> b(mBasicBlock);
     return b.CreateXor(expr, mOneInitializer, "not");
 }
+
+unsigned const LongAdvanceBase = 64;
+    
 Value* PabloCompiler::genAdvanceWithCarry(Value* strm_value, int shift_amount, unsigned localIndex, const PabloBlock * blk) {
+    if (shift_amount >= LongAdvanceBase) {
+        return genLongAdvanceWithCarry(strm_value, shift_amount, localIndex, blk);
+    }
+    IRBuilder<> b(mBasicBlock);
+    const auto advanceIndex = blk->getCarryIndexBase() + blk->getLocalCarryCount() + localIndex;
+    Value* result_value;
+    
+    if (shift_amount == 0) {
+        result_value = genCarryDataLoad(advanceIndex);
+        //b.CreateCall(mFunc_print_register, result_value);
+    }
+#if (BLOCK_SIZE == 128) && !defined(USE_LONG_INTEGER_SHIFT)
+    if (shift_amount == 1) {
+        Value* advanceq_value = genShiftHighbitToLow(BLOCK_SIZE, genCarryDataLoad(advanceIndex));
+        Value* srli_1_value = b.CreateLShr(strm_value, 63);
+        Value* packed_shuffle;
+        Constant* const_packed_1_elems [] = {b.getInt32(0), b.getInt32(2)};
+        Constant* const_packed_1 = ConstantVector::get(const_packed_1_elems);
+        packed_shuffle = b.CreateShuffleVector(advanceq_value, srli_1_value, const_packed_1);
+        
+        Constant* const_packed_2_elems[] = {b.getInt64(1), b.getInt64(1)};
+        Constant* const_packed_2 = ConstantVector::get(const_packed_2_elems);
+        
+        Value* shl_value = b.CreateShl(strm_value, const_packed_2);
+        result_value = b.CreateOr(shl_value, packed_shuffle, "advance");
+    }
+    else { //if (block_shift < BLOCK_SIZE) {
+        // This is the preferred logic, but is too slow for the general case.
+        // We need to speed up our custom LLVM for this code.
+        Value* advanceq_longint = b.CreateBitCast(genCarryDataLoad(advanceIndex), b.getIntNTy(BLOCK_SIZE));
+        Value* strm_longint = b.CreateBitCast(strm_value, b.getIntNTy(BLOCK_SIZE));
+        Value* adv_longint = b.CreateOr(b.CreateShl(strm_longint, shift_amount), b.CreateLShr(advanceq_longint, BLOCK_SIZE - shift_amount), "advance");
+        result_value = b.CreateBitCast(adv_longint, mBitBlockType);
+    }
+#else
+    Value* advanceq_longint = b.CreateBitCast(genCarryDataLoad(advanceIndex), b.getIntNTy(BLOCK_SIZE));
+    Value* strm_longint = b.CreateBitCast(strm_value, b.getIntNTy(BLOCK_SIZE));
+    Value* adv_longint = b.CreateOr(b.CreateShl(strm_longint, block_shift), b.CreateLShr(advanceq_longint, BLOCK_SIZE - shift_amount), "advance");
+    result_value = b.CreateBitCast(adv_longint, mBitBlockType);
+    
+#endif
+    genCarryDataStore(strm_value, advanceIndex);
+    return result_value;
+}
+
+//
+// Generate code for long advances >= LongAdvanceBase
+//
+Value* PabloCompiler::genLongAdvanceWithCarry(Value* strm_value, int shift_amount, unsigned localIndex, const PabloBlock * blk) {
     IRBuilder<> b(mBasicBlock);
     int advEntries = (shift_amount - 1) / BLOCK_SIZE + 1;
     int block_shift = shift_amount % BLOCK_SIZE;
@@ -965,66 +1017,31 @@ Value* PabloCompiler::genAdvanceWithCarry(Value* strm_value, int shift_amount, u
     const auto storeIdx = advanceIndex;
     const auto loadIdx = advanceIndex + advEntries - 1;
     Value* result_value;
-    
-    if (advEntries == 1) {
-        if (block_shift == 0) {  
-            result_value = genCarryDataLoad(loadIdx);
-            //b.CreateCall(mFunc_print_register, result_value);
-        }
-#if (BLOCK_SIZE == 128) && !defined(USE_LONG_INTEGER_SHIFT)
-        if (block_shift == 1) {
-            Value* advanceq_value = genShiftHighbitToLow(BLOCK_SIZE, genCarryDataLoad(loadIdx));
-            Value* srli_1_value = b.CreateLShr(strm_value, 63);
-            Value* packed_shuffle;
-            Constant* const_packed_1_elems [] = {b.getInt32(0), b.getInt32(2)};
-            Constant* const_packed_1 = ConstantVector::get(const_packed_1_elems);
-            packed_shuffle = b.CreateShuffleVector(advanceq_value, srli_1_value, const_packed_1);
 
-            Constant* const_packed_2_elems[] = {b.getInt64(1), b.getInt64(1)};
-            Constant* const_packed_2 = ConstantVector::get(const_packed_2_elems);
-
-            Value* shl_value = b.CreateShl(strm_value, const_packed_2);
-            result_value = b.CreateOr(shl_value, packed_shuffle, "advance");
-        }
-        else { //if (block_shift < BLOCK_SIZE) {
-            // This is the preferred logic, but is too slow for the general case.
-            // We need to speed up our custom LLVM for this code.
-            Value* advanceq_longint = b.CreateBitCast(genCarryDataLoad(loadIdx), b.getIntNTy(BLOCK_SIZE));
-            Value* strm_longint = b.CreateBitCast(strm_value, b.getIntNTy(BLOCK_SIZE));
-            Value* adv_longint = b.CreateOr(b.CreateShl(strm_longint, block_shift), b.CreateLShr(advanceq_longint, BLOCK_SIZE - block_shift), "advance");
-            result_value = b.CreateBitCast(adv_longint, mBitBlockType);
-        }
-#else
+    if (block_shift == 0) {
+        result_value = genCarryDataLoad(loadIdx);
+    }
+    else if (advEntries == 1) {
         Value* advanceq_longint = b.CreateBitCast(genCarryDataLoad(loadIdx), b.getIntNTy(BLOCK_SIZE));
         Value* strm_longint = b.CreateBitCast(strm_value, b.getIntNTy(BLOCK_SIZE));
         Value* adv_longint = b.CreateOr(b.CreateShl(strm_longint, block_shift), b.CreateLShr(advanceq_longint, BLOCK_SIZE - block_shift), "advance");
         result_value = b.CreateBitCast(adv_longint, mBitBlockType);
-
-#endif
     }
     else {
-        if (block_shift == 0) {
-            result_value = genCarryDataLoad(loadIdx);
-        }
-        else { 
-            // The advance is based on the two oldest bit blocks in the advance queue.
-            Value* advanceq_longint = b.CreateBitCast(genCarryDataLoad(loadIdx), b.getIntNTy(BLOCK_SIZE));
-            Value* strm_longint = b.CreateBitCast(genCarryDataLoad(loadIdx-1), b.getIntNTy(BLOCK_SIZE));
-            Value* adv_longint = b.CreateOr(b.CreateShl(strm_longint, block_shift), b.CreateLShr(advanceq_longint, BLOCK_SIZE - block_shift), "longadvance");
-            result_value = b.CreateBitCast(adv_longint, mBitBlockType);
-            //b.CreateCall(mFunc_print_register, genCarryDataLoad(loadIdx));
-            //b.CreateCall(mFunc_print_register, genCarryDataLoad(loadIdx-1));
-            //b.CreateCall(mFunc_print_register, result_value);
-        }
-        // copy entries from previous blocks forward
-        for (int i = loadIdx; i > storeIdx; i--) {
-            genCarryDataStore(genCarryDataLoad(i-1), i);
-        }
+        // The advance is based on the two oldest bit blocks in the advance queue.
+        Value* advanceq_longint = b.CreateBitCast(genCarryDataLoad(loadIdx), b.getIntNTy(BLOCK_SIZE));
+        Value* strm_longint = b.CreateBitCast(genCarryDataLoad(loadIdx-1), b.getIntNTy(BLOCK_SIZE));
+        Value* adv_longint = b.CreateOr(b.CreateShl(strm_longint, block_shift), b.CreateLShr(advanceq_longint, BLOCK_SIZE - block_shift), "longadvance");
+        result_value = b.CreateBitCast(adv_longint, mBitBlockType);
+    }
+    // copy entries from previous blocks forward
+    for (int i = loadIdx; i > storeIdx; i--) {
+        genCarryDataStore(genCarryDataLoad(i-1), i);
     }
     genCarryDataStore(strm_value, storeIdx);
     return result_value;
 }
-
+    
 void PabloCompiler::SetOutputValue(Value * marker, const unsigned index) {
     IRBuilder<> b(mBasicBlock);
     if (marker->getType()->isPointerTy()) {
