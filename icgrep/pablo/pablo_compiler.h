@@ -145,6 +145,7 @@ private:
     PointerType*                        mBasisBitsInputPtr;
 
     Value*                              mCarryDataPtr;
+    Value*                              mBlockNo;
     unsigned                            mWhileDepth;
     unsigned                            mIfDepth;
 

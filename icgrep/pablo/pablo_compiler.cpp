@@ -69,6 +69,7 @@ PabloCompiler::PabloCompiler(const std::vector<Var*> & basisBits)
 , mBitBlockType(VectorType::get(IntegerType::get(mMod->getContext(), 64), BLOCK_SIZE / 64))
 , mBasisBitsInputPtr(nullptr)
 , mCarryDataPtr(nullptr)
+, mBlockNo(nullptr)
 , mWhileDepth(0)
 , mIfDepth(0)
 , mZeroInitializer(ConstantAggregateZero::get(mBitBlockType))
@@ -143,19 +144,28 @@ CompiledPabloFunction PabloCompiler::compile(PabloBlock & pb)
     mIfDepth = 0;
     mMaxWhileDepth = 0;
     mBasicBlock = BasicBlock::Create(mMod->getContext(), "parabix_entry", mFunction,0);
+    IRBuilder<> b(mBasicBlock);
 
     //The basis bits structure
     for (unsigned i = 0; i != mBasisBits.size(); ++i) {
-        IRBuilder<> b(mBasicBlock);
         Value* indices[] = {b.getInt64(0), b.getInt32(i)};
         Value * gep = b.CreateGEP(mBasisBitsAddr, indices);
         LoadInst * basisBit = b.CreateAlignedLoad(gep, BLOCK_SIZE/8, false, mBasisBits[i]->getName()->to_string());
         mMarkerMap.insert(std::make_pair(mBasisBits[i], basisBit));
     }
-
+    
+    // The block number is a 64-bit integer at the end of the carry data area.
+    Value * blockNoPtr = b.CreateBitCast(b.CreateGEP(mCarryDataPtr, b.getInt64(totalCarryDataSize)), Type::getInt64PtrTy(b.getContext()));
+    mBlockNo = b.CreateLoad(blockNoPtr);
     //Generate the IR instructions for the function.
     compileBlock(pb);
+    {   IRBuilder<> b(mBasicBlock);  // may be in new basic block, set builder
+        b.CreateStore(b.CreateAdd(mBlockNo, b.getInt64(1)), blockNoPtr);
+    }
 
+    if (DumpTrace || TraceNext) {
+        genPrintRegister("blockNo", genCarryDataLoad(totalCarryDataSize));
+    }
     if (LLVM_UNLIKELY(mWhileDepth != 0)) {
         throw std::runtime_error("Non-zero nesting depth error (" + std::to_string(mWhileDepth) + ")");
     }
@@ -1012,8 +1022,12 @@ Value* PabloCompiler::genAdvanceWithCarry(Value* strm_value, int shift_amount, u
 Value* PabloCompiler::genLongAdvanceWithCarry(Value* strm_value, int shift_amount, unsigned localIndex, const PabloBlock * blk) {
     IRBuilder<> b(mBasicBlock);
     int advEntries = (shift_amount - 1) / BLOCK_SIZE + 1;
+    //int advCeil = log2ceil(advEntries);
+    //Value * indexMask = b.getInt64(advCeil - 1);
     int block_shift = shift_amount % BLOCK_SIZE;
     const auto advanceIndex = blk->getCarryIndexBase() + blk->getLocalCarryCount() + localIndex;
+    //Value * blockIndex = b.CreateAnd(mBlockNo, indexMask);
+    //Value * idx2 = b.CreateAnd(b.CreateAdd(mBlockNo - b.getInt64(advEntries - 1)), indexMask);
     const auto storeIdx = advanceIndex;
     const auto loadIdx = advanceIndex + advEntries - 1;
     Value* result_value;
