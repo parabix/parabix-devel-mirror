@@ -364,6 +364,16 @@ void PabloCompiler::DeclareFunctions()
     mFunction->setAttributes(AttrSet);
 }
     
+uint64_t log2ceil (uint64_t v) {
+    unsigned ceil = 1;
+    while (ceil < v) ceil *= 2;
+    return ceil;
+}
+
+unsigned const LongAdvanceBase = BLOCK_SIZE;
+    
+
+    
 // CarryDataNumbering
 //
 // For each PabloBlock, a contiguous CarryData area holds carry,
@@ -393,7 +403,15 @@ unsigned PabloCompiler::Examine(PabloBlock & blk, unsigned carryDataIndexIn) {
     for (Statement * stmt : blk) {
         if (Advance * adv = dyn_cast<Advance>(stmt)) {
             adv->setLocalAdvanceIndex(localAdvances);
-            localAdvances += (adv->getAdvanceAmount() + BLOCK_SIZE - 1) / BLOCK_SIZE;
+            unsigned shift_amount = adv->getAdvanceAmount();
+            if (shift_amount >= LongAdvanceBase) {
+                int advEntries = (shift_amount + BLOCK_SIZE - 1) / BLOCK_SIZE;
+                int advCeil = log2ceil(advEntries);
+                localAdvances += advCeil;
+            }
+            else {
+                localAdvances += (shift_amount + BLOCK_SIZE - 1) / BLOCK_SIZE;
+            }
         }
         else if (MatchStar * m = dyn_cast<MatchStar>(stmt)) {
             m->setLocalCarryIndex(localCarries);
@@ -968,8 +986,6 @@ inline Value* PabloCompiler::genNot(Value* expr) {
     return b.CreateXor(expr, mOneInitializer, "not");
 }
 
-unsigned const LongAdvanceBase = 64;
-    
 Value* PabloCompiler::genAdvanceWithCarry(Value* strm_value, int shift_amount, unsigned localIndex, const PabloBlock * blk) {
     if (shift_amount >= LongAdvanceBase) {
         return genLongAdvanceWithCarry(strm_value, shift_amount, localIndex, blk);
@@ -1021,38 +1037,41 @@ Value* PabloCompiler::genAdvanceWithCarry(Value* strm_value, int shift_amount, u
 //
 Value* PabloCompiler::genLongAdvanceWithCarry(Value* strm_value, int shift_amount, unsigned localIndex, const PabloBlock * blk) {
     IRBuilder<> b(mBasicBlock);
-    int advEntries = (shift_amount - 1) / BLOCK_SIZE + 1;
-    //int advCeil = log2ceil(advEntries);
-    //Value * indexMask = b.getInt64(advCeil - 1);
-    int block_shift = shift_amount % BLOCK_SIZE;
-    const auto advanceIndex = blk->getCarryIndexBase() + blk->getLocalCarryCount() + localIndex;
-    //Value * blockIndex = b.CreateAnd(mBlockNo, indexMask);
-    //Value * idx2 = b.CreateAnd(b.CreateAdd(mBlockNo - b.getInt64(advEntries - 1)), indexMask);
-    const auto storeIdx = advanceIndex;
-    const auto loadIdx = advanceIndex + advEntries - 1;
+    const unsigned advanceIndex = blk->getCarryIndexBase() + blk->getLocalCarryCount() + localIndex;
+    const unsigned advanceEntries = (shift_amount + BLOCK_SIZE - 1) / BLOCK_SIZE;
+    const unsigned block_shift = shift_amount % BLOCK_SIZE;
+    const unsigned advanceCeil = log2ceil(advanceEntries);
+    Value * indexMask = b.getInt64(advanceCeil - 1);
+    Value * advBaseIndex = b.getInt64(advanceIndex);
+    Value * storeIndex = b.CreateAdd(b.CreateAnd(mBlockNo, indexMask), advBaseIndex);
+    Value * loadIndex = b.CreateAdd(b.CreateAnd(b.CreateSub(mBlockNo, b.getInt64(advanceEntries)), indexMask), advBaseIndex);
+    Value * storePtr = b.CreateGEP(mCarryDataPtr, storeIndex);
+    Value * loadPtr = b.CreateGEP(mCarryDataPtr, loadIndex);
     Value* result_value;
 
     if (block_shift == 0) {
-        result_value = genCarryDataLoad(loadIdx);
+        result_value = b.CreateAlignedLoad(loadPtr, BLOCK_SIZE/8);
     }
-    else if (advEntries == 1) {
-        Value* advanceq_longint = b.CreateBitCast(genCarryDataLoad(loadIdx), b.getIntNTy(BLOCK_SIZE));
+    else if (advanceEntries == 1) {
+        Value* advanceq_longint = b.CreateBitCast(b.CreateAlignedLoad(loadPtr, BLOCK_SIZE/8), b.getIntNTy(BLOCK_SIZE));
         Value* strm_longint = b.CreateBitCast(strm_value, b.getIntNTy(BLOCK_SIZE));
         Value* adv_longint = b.CreateOr(b.CreateShl(strm_longint, block_shift), b.CreateLShr(advanceq_longint, BLOCK_SIZE - block_shift), "advance");
         result_value = b.CreateBitCast(adv_longint, mBitBlockType);
     }
     else {
-        // The advance is based on the two oldest bit blocks in the advance queue.
-        Value* advanceq_longint = b.CreateBitCast(genCarryDataLoad(loadIdx), b.getIntNTy(BLOCK_SIZE));
-        Value* strm_longint = b.CreateBitCast(genCarryDataLoad(loadIdx-1), b.getIntNTy(BLOCK_SIZE));
+        // The advance is based on the two oldest bit blocks in the advance buffer.
+        // The buffer is maintained as a circular buffer of size advanceCeil.
+        // Indexes within the buffer are computed by bitwise and with the indexMask.
+        Value * loadIndex2 = b.CreateAdd(b.CreateAnd(b.CreateSub(mBlockNo, b.getInt64(advanceEntries-1)), indexMask), advBaseIndex);
+        Value * loadPtr2 = b.CreateGEP(mCarryDataPtr, loadIndex2);
+        Value* advanceq_longint = b.CreateBitCast(b.CreateAlignedLoad(loadPtr, BLOCK_SIZE/8), b.getIntNTy(BLOCK_SIZE));
+        //genPrintRegister("advanceq_longint", b.CreateBitCast(advanceq_longint, mBitBlockType));
+        Value* strm_longint = b.CreateBitCast(b.CreateAlignedLoad(loadPtr2, BLOCK_SIZE/8), b.getIntNTy(BLOCK_SIZE));
+        //genPrintRegister("strm_longint", b.CreateBitCast(strm_longint, mBitBlockType));
         Value* adv_longint = b.CreateOr(b.CreateShl(strm_longint, block_shift), b.CreateLShr(advanceq_longint, BLOCK_SIZE - block_shift), "longadvance");
         result_value = b.CreateBitCast(adv_longint, mBitBlockType);
     }
-    // copy entries from previous blocks forward
-    for (int i = loadIdx; i > storeIdx; i--) {
-        genCarryDataStore(genCarryDataLoad(i-1), i);
-    }
-    genCarryDataStore(strm_value, storeIdx);
+    b.CreateAlignedStore(strm_value, storePtr, BLOCK_SIZE/8);
     return result_value;
 }
     
