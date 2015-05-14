@@ -1024,7 +1024,7 @@ Value* PabloCompiler::genAdvanceWithCarry(Value* strm_value, int shift_amount, u
 #else
     Value* advanceq_longint = b.CreateBitCast(genCarryDataLoad(advanceIndex), b.getIntNTy(BLOCK_SIZE));
     Value* strm_longint = b.CreateBitCast(strm_value, b.getIntNTy(BLOCK_SIZE));
-    Value* adv_longint = b.CreateOr(b.CreateShl(strm_longint, block_shift), b.CreateLShr(advanceq_longint, BLOCK_SIZE - shift_amount), "advance");
+    Value* adv_longint = b.CreateOr(b.CreateShl(strm_longint, shift_amount), b.CreateLShr(advanceq_longint, BLOCK_SIZE - shift_amount), "advance");
     result_value = b.CreateBitCast(adv_longint, mBitBlockType);
     
 #endif

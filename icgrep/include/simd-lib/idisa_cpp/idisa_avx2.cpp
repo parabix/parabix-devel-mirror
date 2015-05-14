@@ -609,6 +609,11 @@ template <> IDISA_ALWAYS_INLINE bitblock256_t mvmd256<32>::fill8(FieldType<32>::
 
 #define avx_general_combine256(x, y) \
     (_mm256_insertf128_si256(_mm256_castsi128_si256(y), x, 1))
+
+// Prevents erroneous clang template expansion compile errors. Should not be used unless necessary!
+#define TEMPLATE_SUBTRACT(x, y) \
+    (((x) > (y)) ? ((x) - (y)) : (y))
+
 //The total number of operations is 2.0
 IDISA_ALWAYS_INLINE bitblock256_t simd_nor(bitblock256_t arg1, bitblock256_t arg2)
 {
@@ -1108,7 +1113,7 @@ template <> template <uint16_t sh> IDISA_ALWAYS_INLINE bitblock256_t simd256<128
 //The total number of operations is 9.5
 template <> template <uint16_t sh> IDISA_ALWAYS_INLINE bitblock256_t simd256<256>::srli(bitblock256_t arg1)
 {
-	return ((sh < 128) ? simd_or(simd256<128>::srli<sh>(arg1), simd256<128>::slli<(128-sh)>(_mm256_castsi128_si256(avx_select_hi128(arg1)))) : simd256<128>::srli<(sh-128)>(avx_move_hi128_to_lo128(arg1)));
+    return ((sh < 128) ? simd_or(simd256<128>::srli<sh>(arg1), simd256<128>::slli<(128-sh)>(_mm256_castsi128_si256(avx_select_hi128(arg1)))) : simd256<128>::srli<TEMPLATE_SUBTRACT(sh,128)>(avx_move_hi128_to_lo128(arg1)));
 }
 
 //The total number of operations is 1.0
@@ -1580,9 +1585,8 @@ template <> template <uint16_t sh> IDISA_ALWAYS_INLINE bitblock256_t simd256<128
 }
 
 //The total number of operations is 9.5
-template <> template <uint16_t sh> IDISA_ALWAYS_INLINE bitblock256_t simd256<256>::slli(bitblock256_t arg1)
-{
-	return ((sh < 128) ? simd_or(simd256<128>::slli<sh>(arg1), avx_move_lo128_to_hi128(simd256<128>::srli<(128-sh)>(arg1))) : simd256<128>::slli<(sh-128)>(avx_move_lo128_to_hi128(arg1)));
+template <> template <uint16_t sh> IDISA_ALWAYS_INLINE bitblock256_t simd256<256>::slli(bitblock256_t arg1) {
+    return (sh < 128) ? simd_or(simd256<128>::slli<sh>(arg1), avx_move_lo128_to_hi128(simd256<128>::srli<(sh < 128) ? (128 - sh) : 0>(arg1))) : simd256<128>::slli<TEMPLATE_SUBTRACT(sh, 128)>(avx_move_lo128_to_hi128(arg1));
 }
 
 //The total number of operations is 3.0
@@ -2090,19 +2094,19 @@ template <> template <uint16_t sh> IDISA_ALWAYS_INLINE bitblock256_t simd256<32>
 //The total number of operations is 4.5
 template <> template <uint16_t sh> IDISA_ALWAYS_INLINE bitblock256_t simd256<64>::srai(bitblock256_t arg1)
 {
-	return simd_or(simd_and(simd256<64>::himask(), simd256<(32)>::srai<((sh < (32)) ? sh : (32))>(arg1)), ((sh <= (32)) ? simd256<64>::srli<sh>(arg1) : simd256<(32)>::srai<(sh-(32))>(simd256<64>::srli<(32)>(arg1))));
+    return simd_or(simd_and(simd256<64>::himask(), simd256<(32)>::srai<((sh < (32)) ? sh : (32))>(arg1)), ((sh <= (32)) ? simd256<64>::srli<sh>(arg1) : simd256<(32)>::srai<TEMPLATE_SUBTRACT(sh,32)>(simd256<64>::srli<(32)>(arg1))));
 }
 
 //The total number of operations is 14.0833333333
 template <> template <uint16_t sh> IDISA_ALWAYS_INLINE bitblock256_t simd256<128>::srai(bitblock256_t arg1)
 {
-	return simd_or(simd_and(simd256<128>::himask(), simd256<(64)>::srai<((sh < (64)) ? sh : (64))>(arg1)), ((sh <= (64)) ? simd256<128>::srli<sh>(arg1) : simd256<(64)>::srai<(sh-(64))>(simd256<128>::srli<(64)>(arg1))));
+    return simd_or(simd_and(simd256<128>::himask(), simd256<(64)>::srai<((sh < (64)) ? sh : (64))>(arg1)), ((sh <= (64)) ? simd256<128>::srli<sh>(arg1) : simd256<(64)>::srai<TEMPLATE_SUBTRACT(sh,64)>(simd256<128>::srli<(64)>(arg1))));
 }
 
 //The total number of operations is 32.625
 template <> template <uint16_t sh> IDISA_ALWAYS_INLINE bitblock256_t simd256<256>::srai(bitblock256_t arg1)
 {
-	return simd_or(simd_and(simd256<256>::himask(), simd256<(128)>::srai<((sh < (128)) ? sh : (128))>(arg1)), ((sh <= (128)) ? simd256<256>::srli<sh>(arg1) : simd256<(128)>::srai<(sh-(128))>(simd256<256>::srli<(128)>(arg1))));
+    return simd_or(simd_and(simd256<256>::himask(), simd256<(128)>::srai<((sh < (128)) ? sh : (128))>(arg1)), ((sh <= (128)) ? simd256<256>::srli<sh>(arg1) : simd256<(128)>::srai<TEMPLATE_SUBTRACT(sh,128)>(simd256<256>::srli<(128)>(arg1))));
 }
 
 //The total number of operations is 1.0
@@ -3671,5 +3675,7 @@ IDISA_ALWAYS_INLINE void bitblock256::store_unaligned(bitblock256_t arg1, bitblo
 {
 	_mm256_storeu_si256((bitblock256_t*)(arg2), arg1);
 }
+
+#undef TEMPLATE_SUBTRACT
 
 #endif
