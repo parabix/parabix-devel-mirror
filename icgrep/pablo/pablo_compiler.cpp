@@ -6,6 +6,7 @@
 
 #include <pablo/pablo_compiler.h>
 #include <pablo/codegenstate.h>
+#include <pablo/carry_data.h>
 #include <pablo/printer_pablos.h>
 #include <cc/cc_namemap.hpp>
 #include <re/re_name.h>
@@ -114,7 +115,9 @@ CompiledPabloFunction PabloCompiler::compile(PabloBlock & pb)
     mWhileDepth = 0;
     mIfDepth = 0;
     mMaxWhileDepth = 0;
-    unsigned totalCarryDataSize = Examine(pb, 0); 
+    // Get the total number of carry entries; add 1 extra element for the block number.
+    unsigned totalCarryDataSize = pb.carryData.enumerate(pb) + 1;
+    Examine(pb); 
     mCarryInVector.resize(totalCarryDataSize);
     mCarryOutVector.resize(totalCarryDataSize);
     mCarryDataSummaryIdx.resize(totalCarryDataSize);
@@ -183,8 +186,7 @@ CompiledPabloFunction PabloCompiler::compile(PabloBlock & pb)
     mExecutionEngine->finalizeObject();
 
     //Return the required size of the carry data area to the process_block function.
-    // Reserve 1 element in the carry data area for current block number (future). TODO
-    return CompiledPabloFunction((totalCarryDataSize + 1) * sizeof(BitBlock), mFunction, mExecutionEngine);
+    return CompiledPabloFunction(totalCarryDataSize * sizeof(BitBlock), mFunction, mExecutionEngine);
 }
 
 void PabloCompiler::DefineTypes()
@@ -364,95 +366,22 @@ void PabloCompiler::DeclareFunctions()
     mFunction->setAttributes(AttrSet);
 }
     
-uint64_t log2ceil (uint64_t v) {
-    unsigned ceil = 1;
-    while (ceil < v) ceil *= 2;
-    return ceil;
-}
-
-unsigned const LongAdvanceBase = BLOCK_SIZE;
-    
-
-    
-// CarryDataNumbering
-//
-// For each PabloBlock, a contiguous CarryData area holds carry,
-// and advance values that are generated in one block for use in the
-// next.  For a given block, the carry data area contains the
-// carries, the advances and the nested data for contained blocks,
-// if any. 
-// Notes:
-//   (a) an additional data entry is created for each if-statement
-//       having more than one carry or advance opreation within it.  This
-//       additional entry is a summary entry which must be nonzero to
-//       indicate that there are carry or advance bits associated with
-//       any operation within the if-structure (at any nesting level).
-//   (b) advancing by a large amount may require multiple advance entries.
-//       the number of advance entries for an operation Adv(x, n) is
-//       (n + BLOCK_SIZE - 1) / BLOCK_SIZE
-//
-// Examine precomputes some CarryNumbering and AdvanceNumbering, as
-// well as mMaxWhileDepth of while loops.
-// 
-unsigned PabloCompiler::Examine(PabloBlock & blk, unsigned carryDataIndexIn) {
-    // Count local carries and advances at this level.
-    unsigned carryDataIndex = carryDataIndexIn;
-    unsigned localCarries = 0;
-    unsigned localAdvances = 0;
-    unsigned nestedCarryDataSize = 0;
-    for (Statement * stmt : blk) {
-        if (Advance * adv = dyn_cast<Advance>(stmt)) {
-            adv->setLocalAdvanceIndex(localAdvances);
-            unsigned shift_amount = adv->getAdvanceAmount();
-            if (shift_amount >= LongAdvanceBase) {
-                int advEntries = (shift_amount + BLOCK_SIZE - 1) / BLOCK_SIZE;
-                int advCeil = log2ceil(advEntries);
-                localAdvances += advCeil;
-            }
-            else {
-                localAdvances += (shift_amount + BLOCK_SIZE - 1) / BLOCK_SIZE;
-            }
-        }
-        else if (MatchStar * m = dyn_cast<MatchStar>(stmt)) {
-            m->setLocalCarryIndex(localCarries);
-            ++localCarries;
-        }
-        else if (ScanThru * s = dyn_cast<ScanThru>(stmt)) {
-            s->setLocalCarryIndex(localCarries);
-            ++localCarries;
-        }
-    }
-    carryDataIndex += localCarries + localAdvances;
+void PabloCompiler::Examine(PabloBlock & blk) {
     for (Statement * stmt : blk) {
         if (Call * call = dyn_cast<Call>(stmt)) {
             mCalleeMap.insert(std::make_pair(call->getCallee(), nullptr));
         }
         else if (If * ifStatement = dyn_cast<If>(stmt)) {
             ++mIfDepth;
-            const auto ifCarryDataSize = Examine(ifStatement->getBody(), carryDataIndex);
+            Examine(ifStatement->getBody());
             --mIfDepth;
-            nestedCarryDataSize += ifCarryDataSize;
-            carryDataIndex += ifCarryDataSize;
         }
         else if (While * whileStatement = dyn_cast<While>(stmt)) {
             mMaxWhileDepth = std::max(mMaxWhileDepth, ++mWhileDepth);
-            const auto whileCarryDataSize = Examine(whileStatement->getBody(), carryDataIndex);
+            Examine(whileStatement->getBody());
             --mWhileDepth;
-            nestedCarryDataSize += whileCarryDataSize;
-            carryDataIndex += whileCarryDataSize;
         }
     }
-    blk.setCarryIndexBase(carryDataIndexIn);
-    blk.setLocalCarryCount(localCarries);
-    blk.setLocalAdvanceCount(localAdvances);
-    unsigned totalCarryDataSize = localCarries + localAdvances + nestedCarryDataSize;
-    if ((mIfDepth > 0) && (totalCarryDataSize > 1)) {
-        // Need extra space for the summary variable, always the last
-        // entry within an if block.
-        totalCarryDataSize += 1;
-    }
-    blk.setTotalCarryDataSize(totalCarryDataSize);
-    return totalCarryDataSize;
 }
 
 void PabloCompiler::DeclareCallFunctions() {
@@ -509,10 +438,11 @@ void PabloCompiler::compileIf(const If * ifStatement) {
         
         IRBuilder<> b_entry(ifEntryBlock);
         mBasicBlock = ifEntryBlock;
+        const PabloBlockCarryData & cd = ifStatement -> getBody().carryData;
     
-        const unsigned baseCarryDataIdx = ifStatement->getBody().getCarryIndexBase();
-        const unsigned carryDataSize = ifStatement->getBody().getTotalCarryDataSize();
-        const unsigned carrySummaryIndex = baseCarryDataIdx + carryDataSize - 1;
+        const unsigned baseCarryDataIdx = cd.getBlockCarryDataIndex();
+        const unsigned carryDataSize = cd.getTotalCarryDataSize();
+        const unsigned carrySummaryIndex = cd.summaryCarryDataIndex();
         
         Value* if_test_value = compileExpression(ifStatement->getCondition());
         if (carryDataSize > 0) {
@@ -576,8 +506,9 @@ void PabloCompiler::compileIf(const If * ifStatement) {
 }
 
 void PabloCompiler::compileWhile(const While * whileStatement) {
-        const unsigned baseCarryDataIdx = whileStatement->getBody().getCarryIndexBase();
-        const unsigned carryDataSize = whileStatement->getBody().getTotalCarryDataSize();
+        const PabloBlockCarryData & cd = whileStatement -> getBody().carryData;
+        const unsigned baseCarryDataIdx = cd.getBlockCarryDataIndex();
+        const unsigned carryDataSize = cd.getTotalCarryDataSize();
     
         if (mWhileDepth == 0) {
             for (auto i = 0; i < carryDataSize; ++i) {
@@ -870,9 +801,8 @@ PabloCompiler::SumWithOverflowPack PabloCompiler::callUaddOverflow(Value* int128
 
 Value* PabloCompiler::genAddWithCarry(Value* e1, Value* e2, unsigned localIndex, const PabloBlock * blk) {
     IRBuilder<> b(mBasicBlock);
-
-    //CarryQ - carry in.
-    const int carryIdx = blk->getCarryIndexBase() + localIndex;
+    const PabloBlockCarryData & cd = blk->carryData;
+    const unsigned carryIdx = cd.carryOpCarryDataOffset(localIndex);
     Value* carryq_value = genCarryDataLoad(carryIdx);
 #ifdef USE_TWO_UADD_OVERFLOW
     //This is the ideal implementation, which uses two uadd.with.overflow
@@ -941,6 +871,7 @@ Value* PabloCompiler::genCarryDataLoad(const unsigned index) {
         mCarryInVector[index] = b.CreateAlignedLoad(b.CreateGEP(mCarryDataPtr, b.getInt64(index)), BLOCK_SIZE/8, false);
     }
 #ifdef CARRY_DEBUG
+    std::cerr << "genCarryDataLoad " << index << std::endl;
     genPrintRegister("carry_in_" + std::to_string(index), mCarryInVector[index]);
 #endif
     return mCarryInVector[index];
@@ -954,10 +885,11 @@ void PabloCompiler::genCarryDataStore(Value* carryOut, const unsigned index ) {
         b.CreateAlignedStore(carryOut, b.CreateGEP(mCarryDataPtr, b.getInt64(index)), BLOCK_SIZE/8, false);
     }
     mCarryDataSummaryIdx[index] = -1;
+    mCarryOutVector[index] = carryOut;
 #ifdef CARRY_DEBUG
+    std::cerr << "genCarryDataStore " << index << std::endl;
     genPrintRegister("carry_out_" + std::to_string(index), mCarryOutVector[index]);
 #endif
-    mCarryOutVector[index] = carryOut;
     //std::cerr << "mCarryOutVector[" << index << "]]\n";
 }
 
@@ -990,59 +922,69 @@ Value* PabloCompiler::genAdvanceWithCarry(Value* strm_value, int shift_amount, u
     if (shift_amount >= LongAdvanceBase) {
         return genLongAdvanceWithCarry(strm_value, shift_amount, localIndex, blk);
     }
+    else if (shift_amount == 1) {
+        return genUnitAdvanceWithCarry(strm_value, localIndex, blk);
+    }
     IRBuilder<> b(mBasicBlock);
-    const auto advanceIndex = blk->getCarryIndexBase() + blk->getLocalCarryCount() + localIndex;
+    const PabloBlockCarryData & cd = blk->carryData;
+    const auto advanceIndex = cd.shortAdvanceCarryDataOffset(localIndex);
     Value* result_value;
     
     if (shift_amount == 0) {
         result_value = genCarryDataLoad(advanceIndex);
-        //b.CreateCall(mFunc_print_register, result_value);
     }
-#if (BLOCK_SIZE == 128) && !defined(USE_LONG_INTEGER_SHIFT)
-    if (shift_amount == 1) {
-        Value* advanceq_value = genShiftHighbitToLow(BLOCK_SIZE, genCarryDataLoad(advanceIndex));
-        Value* srli_1_value = b.CreateLShr(strm_value, 63);
-        Value* packed_shuffle;
-        Constant* const_packed_1_elems [] = {b.getInt32(0), b.getInt32(2)};
-        Constant* const_packed_1 = ConstantVector::get(const_packed_1_elems);
-        packed_shuffle = b.CreateShuffleVector(advanceq_value, srli_1_value, const_packed_1);
-        
-        Constant* const_packed_2_elems[] = {b.getInt64(1), b.getInt64(1)};
-        Constant* const_packed_2 = ConstantVector::get(const_packed_2_elems);
-        
-        Value* shl_value = b.CreateShl(strm_value, const_packed_2);
-        result_value = b.CreateOr(shl_value, packed_shuffle, "advance");
-    }
-    else { //if (block_shift < BLOCK_SIZE) {
-        // This is the preferred logic, but is too slow for the general case.
-        // We need to speed up our custom LLVM for this code.
+    else {
         Value* advanceq_longint = b.CreateBitCast(genCarryDataLoad(advanceIndex), b.getIntNTy(BLOCK_SIZE));
         Value* strm_longint = b.CreateBitCast(strm_value, b.getIntNTy(BLOCK_SIZE));
         Value* adv_longint = b.CreateOr(b.CreateShl(strm_longint, shift_amount), b.CreateLShr(advanceq_longint, BLOCK_SIZE - shift_amount), "advance");
         result_value = b.CreateBitCast(adv_longint, mBitBlockType);
     }
+    genCarryDataStore(strm_value, advanceIndex);
+    return result_value;
+}
+                    
+Value* PabloCompiler::genUnitAdvanceWithCarry(Value* strm_value, unsigned localIndex, const PabloBlock * blk) {
+    IRBuilder<> b(mBasicBlock);
+    const PabloBlockCarryData & cd = blk->carryData;
+    const auto advanceIndex = cd.unitAdvanceCarryDataOffset(localIndex);
+    Value* result_value;
+    
+#if (BLOCK_SIZE == 128) && !defined(USE_LONG_INTEGER_SHIFT)
+    Value* advanceq_value = genShiftHighbitToLow(BLOCK_SIZE, genCarryDataLoad(advanceIndex));
+    Value* srli_1_value = b.CreateLShr(strm_value, 63);
+    Value* packed_shuffle;
+    Constant* const_packed_1_elems [] = {b.getInt32(0), b.getInt32(2)};
+    Constant* const_packed_1 = ConstantVector::get(const_packed_1_elems);
+    packed_shuffle = b.CreateShuffleVector(advanceq_value, srli_1_value, const_packed_1);
+    
+    Constant* const_packed_2_elems[] = {b.getInt64(1), b.getInt64(1)};
+    Constant* const_packed_2 = ConstantVector::get(const_packed_2_elems);
+    
+    Value* shl_value = b.CreateShl(strm_value, const_packed_2);
+    result_value = b.CreateOr(shl_value, packed_shuffle, "advance");
 #else
     Value* advanceq_longint = b.CreateBitCast(genCarryDataLoad(advanceIndex), b.getIntNTy(BLOCK_SIZE));
     Value* strm_longint = b.CreateBitCast(strm_value, b.getIntNTy(BLOCK_SIZE));
-    Value* adv_longint = b.CreateOr(b.CreateShl(strm_longint, shift_amount), b.CreateLShr(advanceq_longint, BLOCK_SIZE - shift_amount), "advance");
+    Value* adv_longint = b.CreateOr(b.CreateShl(strm_longint, 1), b.CreateLShr(advanceq_longint, BLOCK_SIZE - 1), "advance");
     result_value = b.CreateBitCast(adv_longint, mBitBlockType);
     
 #endif
     genCarryDataStore(strm_value, advanceIndex);
     return result_value;
 }
-
-//
+                    
+                    //
 // Generate code for long advances >= LongAdvanceBase
 //
 Value* PabloCompiler::genLongAdvanceWithCarry(Value* strm_value, int shift_amount, unsigned localIndex, const PabloBlock * blk) {
     IRBuilder<> b(mBasicBlock);
-    const unsigned advanceIndex = blk->getCarryIndexBase() + blk->getLocalCarryCount() + localIndex;
-    const unsigned advanceEntries = (shift_amount + BLOCK_SIZE - 1) / BLOCK_SIZE;
+    const PabloBlockCarryData & cd = blk->carryData;
     const unsigned block_shift = shift_amount % BLOCK_SIZE;
-    const unsigned advanceCeil = log2ceil(advanceEntries);
-    Value * indexMask = b.getInt64(advanceCeil - 1);
-    Value * advBaseIndex = b.getInt64(advanceIndex);
+    const unsigned advanceEntries = cd.longAdvanceEntries(shift_amount);
+    const unsigned bufsize = cd.longAdvanceBufferSize(shift_amount);
+    std::cerr << "shift_amount = " << shift_amount << " bufsize = " << bufsize << std::endl;
+    Value * indexMask = b.getInt64(bufsize - 1);  // A mask to implement circular buffer indexing
+    Value * advBaseIndex = b.getInt64(cd.longAdvanceCarryDataOffset(localIndex));
     Value * storeIndex = b.CreateAdd(b.CreateAnd(mBlockNo, indexMask), advBaseIndex);
     Value * loadIndex = b.CreateAdd(b.CreateAnd(b.CreateSub(mBlockNo, b.getInt64(advanceEntries)), indexMask), advBaseIndex);
     Value * storePtr = b.CreateGEP(mCarryDataPtr, storeIndex);
@@ -1060,7 +1002,7 @@ Value* PabloCompiler::genLongAdvanceWithCarry(Value* strm_value, int shift_amoun
     }
     else {
         // The advance is based on the two oldest bit blocks in the advance buffer.
-        // The buffer is maintained as a circular buffer of size advanceCeil.
+        // The buffer is maintained as a circular buffer of size bufsize.
         // Indexes within the buffer are computed by bitwise and with the indexMask.
         Value * loadIndex2 = b.CreateAdd(b.CreateAnd(b.CreateSub(mBlockNo, b.getInt64(advanceEntries-1)), indexMask), advBaseIndex);
         Value * loadPtr2 = b.CreateGEP(mCarryDataPtr, loadIndex2);

@@ -99,7 +99,7 @@ public:
 private:
     void DefineTypes();
     void DeclareFunctions();
-    unsigned Examine(PabloBlock & blk, unsigned carryDataIndexIn);
+    void Examine(PabloBlock & blk);
     void DeclareCallFunctions();
     void SetOutputValue(Value * marker, const unsigned index);
 
@@ -113,6 +113,7 @@ private:
     void   genCarryDataStore(Value* carryOut, const unsigned index);
     Value* genAddWithCarry(Value* e1, Value* e2, unsigned localIndex, const PabloBlock * blk);
     Value* genAdvanceWithCarry(Value* e1, int shift_amount, unsigned localIndex, const PabloBlock * blk);
+    Value* genUnitAdvanceWithCarry(Value* e1, unsigned localIndex, const PabloBlock * blk);
     Value* genLongAdvanceWithCarry(Value* e1, int shift_amount, unsigned localIndex, const PabloBlock * blk);
     Value* genBitBlockAny(Value* test);
     Value* genShiftHighbitToLow(unsigned FieldWidth, Value * op);

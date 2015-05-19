@@ -7,6 +7,7 @@
 #ifndef PS_PABLOS_H
 #define PS_PABLOS_H
 
+#include <pablo/carry_data.h>
 #include <pablo/pabloAST.h>
 #include <pablo/symbol_generator.h>
 #include <pablo/pe_advance.h>
@@ -173,36 +174,11 @@ public:
         return mParent;
     }
     
-    inline void setCarryIndexBase(const unsigned idx) {
-        mCarryIndexBase = idx;
-    }
-    inline unsigned getCarryIndexBase() const {
-        return mCarryIndexBase;
-    }
-    
-    inline void setLocalCarryCount(const unsigned c) {
-        mLocalCarryCount = c;
-    }
-    inline unsigned getLocalCarryCount() const {
-        return mLocalCarryCount;
-    }
-    
-    inline void setLocalAdvanceCount(const unsigned c) {
-        mLocalAdvanceCount = c;
-    }
-    inline unsigned getLocalAdvanceCount() const {
-        return mLocalAdvanceCount;
-    }
-    
-    inline void setTotalCarryDataSize(const unsigned sz) {
-        mTotalCarryDataSize = sz;
-    }
-    inline unsigned getTotalCarryDataSize() const {
-        return mTotalCarryDataSize;
-    }
+    PabloBlockCarryData carryData;
     
     virtual ~PabloBlock();
 
+    
 protected:
     PabloBlock(SymbolGenerator & symbolGenerator);
 
@@ -223,9 +199,11 @@ private:
     Ones * const                                        mOnes;
     SymbolGenerator &                                   mSymbolGenerator;
     PabloBlock *                                        mParent;
-    unsigned                                            mCarryIndexBase;
+    unsigned                                            mCarryVectorIndex;
+    unsigned                                            mPackedCarryDataIndex;
     unsigned                                            mLocalCarryCount;
     unsigned                                            mLocalAdvanceCount;
+    unsigned                                            mTotalCarryVectorSize;
     unsigned                                            mTotalCarryDataSize;
 };
 
