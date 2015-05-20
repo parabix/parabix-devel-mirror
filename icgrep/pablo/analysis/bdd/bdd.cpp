@@ -18,7 +18,7 @@ Engine::index_type Engine::apply(const index_type l, const OpCode op) {
 
     const Node & n = mNode[l];
 
-    return makenode(n.level, n.low, n.high);
+    return makeNode(n.level, n.low, n.high);
 }
 
 Engine::index_type Engine::apply(const index_type l, const index_type r, const OpCode op) {
@@ -66,10 +66,10 @@ Engine::index_type Engine::apply(const index_type l, const index_type r, const O
         level = nr.level;
     }
 
-    return makenode(level, apply(lowl, lowr, op), apply(highl, highr, op));
+    return makeNode(level, apply(lowl, lowr, op), apply(highl, highr, op));
 }
 
-Engine::index_type Engine::makenode(const index_type level, const index_type low, const index_type high) {
+Engine::index_type Engine::makeNode(const index_type level, const index_type low, const index_type high) {
     if (low == high) {
         return low;
     }
@@ -82,15 +82,15 @@ Engine::index_type Engine::makenode(const index_type level, const index_type low
     return f->second;
 }
 
-Engine::index_type Engine::satone(const index_type root) {
+Engine::index_type Engine::satOne(const index_type root) {
     if (ISCONST(root))
        return root;
     const Node & v = mNode[root];
     if (ISZERO(v.low)) {
-        return makenode(v.level, 0, satone(v.high).mRoot);
+        return makeNode(v.level, 0, satOne(v.high).mRoot);
     }
     else {
-        return makenode(v.level, satone(v.low).mRoot, 0);
+        return makeNode(v.level, satOne(v.low).mRoot, 0);
     }
 }
 
@@ -104,21 +104,13 @@ BDD Engine::nvar(const unsigned index) {
 
 BDD Engine::addVar() {
     unsigned level = mVar.size() >> 1;
-    index_type var = makenode(level, 0, 1);
+    index_type var = makeNode(level, 0, 1);
     mVar.push_back(var);
-    mVar.push_back(makenode(level, 1, 0));
+    mVar.push_back(makeNode(level, 1, 0));
     return BDD(var);
 }
 
-void Engine::addVars(const size_t vars) {
-    unsigned level = mVar.size() >> 1;
-    for (size_t i = 0; i != vars; ++i, ++level) {
-        mVar.push_back(makenode(level, 0, 1));
-        mVar.push_back(makenode(level, 1, 0));
-    }
-}
-
-Engine::Engine(const size_t initialSize, const size_t varCount)
+Engine::Engine(const size_t initialSize)
 : mNode(LLVMAllocatorProxy(mAllocator))
 , mVar(LLVMAllocatorProxy(mAllocator))
 , mMap(LLVMAllocatorProxy(mAllocator)) {

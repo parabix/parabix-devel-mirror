@@ -416,7 +416,7 @@ PabloBlock::PabloBlock(PabloBlock * predecessor)
 , mSymbolGenerator(predecessor->mSymbolGenerator)
 , mParent(predecessor)
 {
-
+    // predecessor->addUser(this);
 }
 
 PabloBlock::~PabloBlock() {

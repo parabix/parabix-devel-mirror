@@ -11,7 +11,7 @@ namespace pablo {
 bool Simplifier::optimize(PabloBlock & block) {
     eliminateRedundantCode(block);
     deadCodeElimination(block);
-
+    eliminateRedundantComplexStatements(block);
     return true;
 }
 
@@ -148,9 +148,66 @@ void Simplifier::deadCodeElimination(PabloBlock & block) {
         }
         stmt = stmt->getNextNode();
     }
+    block.setInsertPoint(block.back());
 }
 
+void Simplifier::eliminateRedundantComplexStatements(PabloBlock & block) {
+    Statement * stmt = block.front();
+    while (stmt) {
+        if (isa<If>(stmt)) {
+            eliminateRedundantComplexStatements(cast<If>(stmt)->getBody());
+        }
+        else if (isa<While>(stmt)) {
+            eliminateRedundantComplexStatements(cast<While>(stmt)->getBody());
+        }
+        else if (stmt->getNumOperands() == 2){
+            if (isa<Advance>(stmt)) {
+                // If we're advancing an Advance and the internal Advance does not have any other user,
+                // we can merge both Advance instructions.
+                if (LLVM_UNLIKELY(isa<Advance>(stmt->getOperand(0)))) {
+                    Advance * op = cast<Advance>(stmt->getOperand(0));
+                    if (LLVM_UNLIKELY(op->getNumUses() == 1)) {
+                        Advance * adv = cast<Advance>(stmt);
+                        adv->setOperand(0, op->getOperand(0));
+                        adv->setOperand(1, block.getInteger(adv->getAdvanceAmount() + op->getAdvanceAmount()));
+                        assert(op->getNumUses() == 0);
+                        op->eraseFromParent();
+                    }
+                }
+            }
+            // If an AND, OR or XOR instruction has two Advance instructions as inputs and neither Advance
+            // has another user and both shift their input by the same amount, we can perform the AND, OR
+            // or XOR on the inputs to the Advances and remove one of the Advance statements.
+            else if (LLVM_UNLIKELY(isa<Advance>(stmt->getOperand(1)) && isa<Advance>(stmt->getOperand(0)))) {
+                Advance * const a0 = cast<Advance>(stmt->getOperand(0));
+                Advance * const a1 = cast<Advance>(stmt->getOperand(1));
+                switch (stmt->getClassTypeId()) {
+                    case PabloAST::ClassTypeId::And:
+                    case PabloAST::ClassTypeId::Or:
+                    case PabloAST::ClassTypeId::Xor:
+                        if (LLVM_UNLIKELY(a0->getNumUses() == 1 && a1->getNumUses() == 1 && a0->getOperand(1) == a1->getOperand(1))) {
+                            block.setInsertPoint(stmt);
+                            stmt->setOperand(0, a0->getOperand(0));
+                            stmt->setOperand(1, a1->getOperand(0));
+                            a0->insertAfter(stmt);
+                            a0->setOperand(0, stmt);
+                            stmt->replaceAllUsesWith(a0);
+                            assert(a1->getNumUses() == 0);
+                            a1->eraseFromParent();
+                            stmt = a0;
+                    }
+                    default: break;
+                }
+            }
+            else if (LLVM_UNLIKELY(isa<MatchStar>(stmt->getOperand(1)) && isa<MatchStar>(stmt->getOperand(0))) && isa<Or>(stmt)) {
 
+
+            }
+        }
+        stmt = stmt->getNextNode();
+    }
+    block.setInsertPoint(block.back());
+}
 
 
 Simplifier::Simplifier()

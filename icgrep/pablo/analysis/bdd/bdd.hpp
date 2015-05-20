@@ -56,40 +56,40 @@ class Engine {
         }
     };
     #ifdef USE_BOOST
-    using Map = boost::unordered_map<Key, Array::size_type, BijectionHash, std::equal_to<Key>, LLVMAllocatorProxy>;
+    using Map = boost::unordered_map<Key, Array::size_type, BijectionHash, std::equal_to<Key>, LLVMAllocatorProxy<std::pair<Key, index_type>>;
     #else
-    using Map = std::unordered_map<Key, index_type, BijectionHash, std::equal_to<Key>, LLVMAllocatorProxy>;
+    using Map = std::unordered_map<Key, index_type, BijectionHash, std::equal_to<Key>, LLVMAllocatorProxy<std::pair<Key, index_type>>;
     #endif
 
 public:
 
-    Engine(const size_t initialSize, const size_t varCount);
+    Engine(const size_t initialSize);
 
-    BDD applyAND(const BDD & r, const BDD & l);
+    BDD applyAnd(const BDD & r, const BDD & l);
 
-    BDD applyOR(const BDD & r, const BDD & l);
+    BDD applyOr(const BDD & r, const BDD & l);
 
-    BDD applyNOT(const BDD & bdd);
+    BDD applyNot(const BDD & bdd);
 
-    BDD applyXOR(const BDD & r, const BDD & l);
+    BDD applyXor(const BDD & r, const BDD & l);
 
-    BDD applySEL(const BDD & cond, const BDD & trueBDD, const BDD & falseBDD);
+    BDD applySel(const BDD & cond, const BDD & trueBDD, const BDD & falseBDD);
 
     BDD addVar();
-
-    void addVars(const size_t vars);
 
     BDD var(const unsigned index);
 
     BDD nvar(const unsigned index);
 
+    BDD satOne(const BDD & bdd);
+
 protected:
 
-    index_type satone(const index_type root);
+    index_type satOne(const index_type root);
 
     index_type apply(const index_type l, const index_type r, const OpCode op);
 
-    index_type makenode(const index_type level, const index_type low, const index_type high);
+    index_type makeNode(const index_type level, const index_type low, const index_type high);
 
 private:
 
@@ -101,22 +101,32 @@ private:
 
 struct BDD {
 
+    friend struct Engine;
+
     using OpCode = Engine::OpCode;
     using index_type = Engine::index_type;
 
-    inline int operator==(const BDD &r) const {
+    inline int operator==(const bool term) const {
+        return term ? isTrue() : isFalse();
+    }
+
+    inline int operator==(const bool term) const {
+        return term ? isFalse() : isTrue();
+    }
+
+    inline int operator==(const BDD & r) const {
         return mRoot == r.mRoot;
     }
 
-    inline int operator!=(const BDD &r) const {
+    inline int operator!=(const BDD & r) const {
         return mRoot != r.mRoot;
     }
 
-    inline bool isZero() const {
+    inline bool isFalse() const {
         return mRoot == 0;
     }
 
-    inline bool isOne() const {
+    inline bool isTrue() const {
         return mRoot == 1;
     }
 
@@ -124,10 +134,17 @@ struct BDD {
         return mRoot < 2;
     }
 
-    inline BDD() : mRoot(0) {}
+    inline BDD Contradiction() const {
+        return BDD(0);
+    }
+
+    inline BDD Tautology() const {
+        return BDD(1);
+    }
 
 protected:
 
+    inline BDD() : mRoot(0) {}
     inline BDD(const index_type index) : mRoot(index) { }
     inline BDD(const BDD & r) : mRoot(r.mRoot) {  }
     inline ~BDD() { }
@@ -138,31 +155,31 @@ private:
 
 };
 
-BDD Engine::satone(const BDD & bdd) {
+BDD Engine::satOne(const BDD & bdd) {
     if (bdd.isConstant()) {
         return bdd;
     }
-    return BDD(satone(bdd.mRoot));
+    return BDD(satOne(bdd.mRoot));
 }
 
-BDD Engine::applyAND(const BDD & r, const BDD & l) {
+BDD Engine::applyAnd(const BDD & r, const BDD & l) {
     return apply(r.mRoot, l.mRoot, BDD::OpCode::AND);
 }
 
-BDD Engine::applyOR(const BDD & r, const BDD & l) {
+BDD Engine::applyOr(const BDD & r, const BDD & l) {
     return apply(r.mRoot, l.mRoot, BDD::OpCode::OR);
 }
 
-BDD Engine::applyNOT(const BDD & bdd) {
+BDD Engine::applyNot(const BDD & bdd) {
     return apply(bdd.mRoot, BDD::OpCode::NOT);
 }
 
-BDD Engine::applyXOR(const BDD & r, const BDD & l) {
+BDD Engine::applyXor(const BDD & r, const BDD & l) {
     return apply(r.mRoot, l.mRoot, BDD::OpCode::XOR);
 }
 
-BDD Engine::applySEL(const BDD & cond, const BDD & trueBDD, const BDD & falseBDD) {
-    return applyOR(applyAND(cond, trueBDD), applyAND(applyNOT(cond), falseBDD));
+BDD Engine::applySel(const BDD & cond, const BDD & trueBDD, const BDD & falseBDD) {
+    return applyOr(applyAnd(cond, trueBDD), applyAnd(applyNot(cond), falseBDD));
 }
 
 }
