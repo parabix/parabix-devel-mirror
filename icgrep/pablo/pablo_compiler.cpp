@@ -720,7 +720,8 @@ void PabloCompiler::compileStatement(const Statement * stmt)
         // return expr;
     }
     else {
-        PabloPrinter::print(stmt, std::cerr);
+        llvm::raw_os_ostream cerr(std::cerr);
+        PabloPrinter::print(stmt, cerr);
         throw std::runtime_error("Unrecognized Pablo Statement! can't compile.");
     }
 }
@@ -737,7 +738,8 @@ Value * PabloCompiler::compileExpression(const PabloAST * expr) {
     }
     auto f = mMarkerMap.find(expr);
     if (f == mMarkerMap.end()) {
-        std::stringstream str;
+        std::string o;
+        llvm::raw_string_ostream str(o);
         str << "\"";
         PabloPrinter::print(expr, str);
         str << "\" was used before definition!";

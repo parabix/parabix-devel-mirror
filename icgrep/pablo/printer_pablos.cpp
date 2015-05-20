@@ -7,6 +7,7 @@
 #include "printer_pablos.h"
 #include <iostream>
 #include <ostream>
+#include <llvm/Support/raw_os_ostream.h>
 
 //Regular Expressions
 #include <re/re_re.h>
@@ -38,29 +39,29 @@
 using namespace re;
 using namespace pablo;
 
-void PabloPrinter::print(const PabloBlock & block, std::ostream & strm)
+void PabloPrinter::print(const PabloBlock & block, llvm::raw_ostream & strm)
 {
     print(block.statements(), "  ", strm);
 }
 
-void PabloPrinter::print(const StatementList & stmts, std::ostream & strm) {
+void PabloPrinter::print(const StatementList & stmts, llvm::raw_ostream & strm) {
     print(stmts, "  ", strm);
 }
 
-void PabloPrinter::print(const StatementList & stmts, std::string indent, std::ostream & strm) {
+void PabloPrinter::print(const StatementList & stmts, std::string indent, llvm::raw_ostream & strm) {
     for (const Statement * stmt : stmts) {
         print(stmt, indent, strm);
-        strm << std::endl;
+        strm << "\n";
     }
 }
 
-void PabloPrinter::print_vars(const DefinedVars & vars, std::string indent, std::ostream & strm) {
+void PabloPrinter::print_vars(const DefinedVars & vars, std::string indent, llvm::raw_ostream & strm) {
     for (const PabloAST * v : vars) {
-        strm << indent << dyn_cast<Assign>(v)->getName() << " = 0" << std::endl;
+        strm << indent << dyn_cast<Assign>(v)->getName() << " = 0" << "\n";
     }
 }
 
-void PabloPrinter::print(const Statement * stmt, std::string indent, std::ostream & strm) {
+void PabloPrinter::print(const Statement * stmt, std::string indent, llvm::raw_ostream & strm) {
     strm << indent;
     if (stmt == nullptr) {
         strm << "<null-stmt>";
@@ -79,15 +80,15 @@ void PabloPrinter::print(const Statement * stmt, std::string indent, std::ostrea
     else if (const If * ifstmt = dyn_cast<const If>(stmt)) {
         strm << "if ";
         print(ifstmt->getCondition(), strm);
-        strm << ":" << std::endl;
+        strm << ":" << "\n";
         print(ifstmt->getBody(), indent + "  ", strm);
-        strm << indent << "else:" << std::endl;
+        strm << indent << "else:" << "\n";
         print_vars(ifstmt->getDefined(), indent + "  ", strm);
     }
     else if (const While * whl = dyn_cast<const While>(stmt)) {
         strm << "while ";
         print(whl->getCondition(), strm);
-        strm << ":" << std::endl;
+        strm << ":" << "\n";
         print(whl->getBody(), indent + "  ", strm);
     }
     else if (const Call * pablo_call = dyn_cast<const Call>(stmt)) {
@@ -157,11 +158,11 @@ void PabloPrinter::print(const Statement * stmt, std::string indent, std::ostrea
         strm << ")";
     }
     else {
-        strm << indent << "**UNKNOWN Pablo Statement type **" << std::endl;
+        strm << indent << "**UNKNOWN Pablo Statement type **" << "\n";
     }
 }
 
-void PabloPrinter::print(const PabloAST * expr, std::ostream & strm) {
+void PabloPrinter::print(const PabloAST * expr, llvm::raw_ostream & strm) {
     if (expr == nullptr) {
         strm << "<null-expr>";
     }
@@ -178,7 +179,7 @@ void PabloPrinter::print(const PabloAST * expr, std::ostream & strm) {
         strm << stmt->getName();
     }
     else {
-        strm << "**UNKNOWN Pablo Expression type **\n" << std::endl;
+        strm << "**UNKNOWN Pablo Expression type **\n" << "\n";
     }
 }
 

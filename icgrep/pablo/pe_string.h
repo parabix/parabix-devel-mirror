@@ -7,6 +7,7 @@
 #include <llvm/ADT/SmallVector.h>
 #include <string>
 #include <ostream>
+#include <llvm/Support/raw_os_ostream.h>
 
 namespace pablo {
 
@@ -66,6 +67,16 @@ inline std::ostream & operator <<(std::ostream & stream, const String & string) 
 }
 
 inline std::ostream & operator <<(std::ostream & stream, const String * string) {
+    stream << string->value().data();
+    return stream;
+}
+
+inline llvm::raw_ostream & operator <<(llvm::raw_ostream & stream, const String & string) {
+    stream << string.value().data();
+    return stream;
+}
+
+inline llvm::raw_ostream & operator <<(llvm::raw_ostream & stream, const String * string) {
     stream << string->value().data();
     return stream;
 }
