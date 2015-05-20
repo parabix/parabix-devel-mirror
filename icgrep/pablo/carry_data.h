@@ -89,6 +89,12 @@ public:
         return blockCarryDataIndex + carryOffset + idx;
     }
     
+    bool blockHasCarries() const { return totalCarryDataSize > 0;}
+    
+    bool explicitSummaryRequired() const { return totalCarryDataSize > 1;}
+    
+    bool summaryNeededInParentBlock() const {return (ifDepth > 0) && blockHasCarries();}
+    
     unsigned summaryCarryDataIndex()  const {
         return blockCarryDataIndex + totalCarryDataSize - 1;
     }

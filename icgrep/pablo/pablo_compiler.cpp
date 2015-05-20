@@ -441,11 +441,10 @@ void PabloCompiler::compileIf(const If * ifStatement) {
         const PabloBlockCarryData & cd = ifStatement -> getBody().carryData;
     
         const unsigned baseCarryDataIdx = cd.getBlockCarryDataIndex();
-        const unsigned carryDataSize = cd.getTotalCarryDataSize();
         const unsigned carrySummaryIndex = cd.summaryCarryDataIndex();
         
         Value* if_test_value = compileExpression(ifStatement->getCondition());
-        if (carryDataSize > 0) {
+        if (cd.blockHasCarries()) {
             // load the summary variable
             Value* last_if_pending_data = genCarryDataLoad(carrySummaryIndex);
             if_test_value = b_entry.CreateOr(if_test_value, last_if_pending_data);
@@ -462,7 +461,7 @@ void PabloCompiler::compileIf(const If * ifStatement) {
         // After the recursive compile, now insert the code to compute the summary
         // carry over variable.
         
-        if (carryDataSize > 1) {
+        if (cd.explicitSummaryRequired()) {
             // If there was only one carry entry, then it also serves as the summary variable.
             // Otherwise, we need to combine entries to compute the summary.
             Value * carry_summary = mZeroInitializer;
@@ -493,8 +492,8 @@ void PabloCompiler::compileIf(const If * ifStatement) {
             phi->addIncoming(f->second, mBasicBlock);
             mMarkerMap[assign] = phi;
         }
-        // Create the phi Node for the summary variable.
-        if (carryDataSize > 0) {
+        // Create the phi Node for the summary variable, if needed.
+        if (cd.summaryNeededInParentBlock()) {
             PHINode * summary_phi = bEnd.CreatePHI(mBitBlockType, 2, "summary");
             summary_phi->addIncoming(mZeroInitializer, ifEntryBlock);
             summary_phi->addIncoming(mCarryOutVector[carrySummaryIndex], mBasicBlock);
