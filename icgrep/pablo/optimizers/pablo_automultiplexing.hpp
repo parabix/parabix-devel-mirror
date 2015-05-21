@@ -10,6 +10,7 @@
 #include <boost/graph/edge_list.hpp>
 #include <boost/container/flat_map.hpp>
 #include <boost/numeric/ublas/matrix.hpp>
+#include <random>
 #include <stdint.h>
 
 namespace pablo {
@@ -22,11 +23,22 @@ class AutoMultiplexing {
     using SubsetGraph = boost::edge_list<std::pair<unsigned, unsigned>>;
     using IndexMap = boost::container::flat_map<PabloAST *, unsigned>;
 
+    using RNG = std::mt19937;
+    using RNGDistribution = std::uniform_int_distribution<RNG::result_type>;
+
+    using Vertex = ConstraintGraph::vertex_descriptor;
+
+    using IndependentSet = boost::container::flat_set<Vector>;
+
 public:
     static void optimize(PabloBlock & block);
 protected:
-    bdd::Engine AutoMultiplexing::initialize(const std::vector<Var *> & vars, const PabloBlock & entry);
-
+    bdd::Engine initialize(const std::vector<Var *> & vars, const PabloBlock & entry);
+    void characterize(bdd::Engine & engine, const PabloBlock & entry);
+    void generateMultiplexSets(RNG & rng);
+    void addMultiplexSet(const IndependentSet & set);
+    void approxMaxWeightIndependentSet();
+    void multiplexSelectedIndependentSets();
 
 private:
     AutoMultiplexing();
@@ -35,8 +47,8 @@ private:
     PathGraph               mPathGraph;
     ConstraintGraph         mConstraintGraph;
     SubsetGraph             mSubsetGraph;
+    IndexMap                mIndexMap;
 
-    bool                    mTestForConjunctionContradictions;
 };
 
 }
