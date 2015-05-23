@@ -1,6 +1,6 @@
-README-icgrep-1.00.txt
+README-icgrep.txt
 
-This is the open-source version of icgrep 1.0.     
+This is the open-source version of icgrep 1.x.     
 
 icgrep is a very fast regular expression search program, particularly
 for complex regular expressions.  It is also a very capable engine,
@@ -32,16 +32,16 @@ code version of LLVM.
 To build LLVM,
 (L1) open a terminal window and cd to the llvm-build directory
 (L2) enter the following command to build the makefiles
-cmake -DCMAKE_INSTALL_PREFIX=../libllvm -DLLVM_TARGETS_TO_BUILD=X86 -DLLVM_BUILD_TOOLS=OFF -DLLVM_BUILD_EXAMPLES=OFF -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER:FILEPATH=/usr/bin/clang++ -DCMAKE_C_COMPILER:FILEPATH=/usr/bin/clang ../llvm-3.5.0.src
+cmake -DCMAKE_INSTALL_PREFIX=../libllvm -DLLVM_TARGETS_TO_BUILD=X86 -DLLVM_BUILD_TOOLS=OFF -DLLVM_BUILD_EXAMPLES=OFF -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER:FILEPATH=/usr/bin/clang++ -DCMAKE_C_COMPILER:FILEPATH=/usr/bin/clang ../llvm-3.6.0.src
 (L3) Still in the llvm-build directory, enter the commands "make" and then "make install"
 
 Using the installed LLVM, building icgrep uses the CMake build
 system generator.
 (IC1)  open a terminal window and cd to the icgrep-build directory
 (IC2.1)  enter the following command to build the makefiles
-cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER:FILEPATH=/usr/bin/clang++ -DCMAKE_C_COMPILER:FILEPATH=/usr/bin/clang ../icgrep-1.00
+cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER:FILEPATH=/usr/bin/clang++ -DCMAKE_C_COMPILER:FILEPATH=/usr/bin/clang ../icgrep
 (IC2.2)  to specify the type of supported SIMD operations rather than relying on auto detection
-cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER:FILEPATH=/usr/bin/clang++ -DCMAKE_C_COMPILER:FILEPATH=/usr/bin/clang -DSIMD_SUPPORT=XXX ../icgrep-1.00
+cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER:FILEPATH=/usr/bin/clang++ -DCMAKE_C_COMPILER:FILEPATH=/usr/bin/clang -DSIMD_SUPPORT=XXX ../icgrep
      Where XXX can be SSE2, SSE3, SSE4_1, SSE4_2, AVX1 or AVX2.
 (IC3) Enter the command "make"
 
