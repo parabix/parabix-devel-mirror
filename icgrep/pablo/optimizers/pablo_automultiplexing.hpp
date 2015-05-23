@@ -21,6 +21,8 @@ class AutoMultiplexing {
     using ConstraintGraph = boost::adjacency_list<boost::hash_setS, boost::vecS, boost::directedS>;
     using PathGraph = boost::adjacency_matrix<boost::undirectedS>;
     using SubsetGraph = boost::edge_list<std::pair<unsigned, unsigned>>;
+    using MappingGraph = boost::adjacency_list<boost::hash_setS, boost::vecS, boost::bidirectionalS>;
+    using IndependentSetGraph = boost::adjacency_list<boost::hash_setS, boost::vecS, boost::undirectedS, unsigned>;
     using IndexMap = boost::container::flat_map<PabloAST *, unsigned>;
 
     using RNG = std::mt19937;
@@ -28,7 +30,7 @@ class AutoMultiplexing {
 
     using Vertex = ConstraintGraph::vertex_descriptor;
 
-    using IndependentSet = boost::container::flat_set<Vector>;
+    using IndependentSet = std::vector<Vertex>;
 
 public:
     static void optimize(PabloBlock & block);
@@ -37,7 +39,8 @@ protected:
     void characterize(bdd::Engine & engine, const PabloBlock & entry);
     void generateMultiplexSets(RNG & rng);
     void addMultiplexSet(const IndependentSet & set);
-    void approxMaxWeightIndependentSet();
+    void approxMaxWeightIndependentSet(RNG & rng);
+    void applySubsetConstraints();
     void multiplexSelectedIndependentSets();
 
 private:
@@ -48,7 +51,7 @@ private:
     ConstraintGraph         mConstraintGraph;
     SubsetGraph             mSubsetGraph;
     IndexMap                mIndexMap;
-
+    MappingGraph            mMappingGraph;
 };
 
 }

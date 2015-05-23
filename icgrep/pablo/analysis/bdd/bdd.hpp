@@ -110,8 +110,9 @@ struct BDD {
         return term ? isTrue() : isFalse();
     }
 
-    inline int operator==(const bool term) const {
-        return term ? isFalse() : isTrue();
+    inline BDD & operator=(const bool term) const {
+        mRoot = term ? 0 : 1;
+        return *this;
     }
 
     inline int operator==(const BDD & r) const {

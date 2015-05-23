@@ -22,9 +22,11 @@ static void AutoMultiplexing::optimize(PabloBlock & block) {
     AutoMultiplexing am;
     Engine eng = am.initialize(vars, block);
     am.characterize(eng, block);
+    am.createMappingGraph();
     RNG rng(std::random_device()());
     am.generateMultiplexSets(rng);
     am.approxMaxWeightIndependentSet();
+    am.applySubsetConstraints();
     am.multiplexSelectedIndependentSets();
 }
 
@@ -193,13 +195,11 @@ void AutoMultiplexing::characterize(Engine & engine, const PabloBlock & entry) {
     std::vector<std::pair<Advance *, BDD>> advances;
     std::stack<const Statement *> scope;
 
-    
-    
     unsigned variables = 0;
 
     // Scan through and collect all the advances, calls, scanthrus and matchstars ...
     for (const Statement * stmt = entry.front(); ; ) {
-        for (; stmt; stmt = stmt->getNextNode()) {
+        while ( stmt ) {
 
             if (LLVM_UNLIKELY(isa<If>(stmt) || isa<While>(stmt))) {
                 // Set the next statement to be the first statement of the inner scope and push the
@@ -233,13 +233,6 @@ void AutoMultiplexing::characterize(Engine & engine, const PabloBlock & entry) {
                     break;
                 case PabloAST::ClassTypeId::And:
                     bdd = engine.applyAnd(input[0], input[1]);
-                    if (LLVM_UNLIKELY(engine.satOne(bdd).isFalse())) {
-                        bdd = BDD::Contradiction();
-                        // Look into making a "replaceAllUsesWithZero" method that can recursively apply
-                        // the implication of having a Zero output.
-                        stmt->replaceAllUsesWith(entry.createZeroes());
-                        stmt->eraseFromParent(true);
-                    }
                     break;
                 case PabloAST::ClassTypeId::Or:
                 case PabloAST::ClassTypeId::Next:
@@ -256,18 +249,27 @@ void AutoMultiplexing::characterize(Engine & engine, const PabloBlock & entry) {
                     break;
                 case PabloAST::ClassTypeId::ScanThru:
                     // It may be possible use "engine.applyNot(input[1])" for ScanThrus if we rule out the
-                    // possibility of a contradition being calculated later. An example of this would be
-                    // ¬(ScanThru(c,m) ∨ m) but are there others that would be harder to predict?
-                case PabloAST::ClassTypeId::Call:
+                    // possibility of a contradition being erroneously calculated later. An example of this
+                    // would be ¬(ScanThru(c,m) ∨ m) but are there others that would be harder to predict?
                 case PabloAST::ClassTypeId::MatchStar:
+                    if (LLVM_UNLIKELY(input[0] == false || input[1] == false)) {
+                        bdd = false;
+                        break;
+                    }
+                case PabloAST::ClassTypeId::Call:
                     bdd = engine.var(variables++);
                     break;
-                case PabloAST::ClassTypeId::Advance: {
+                case PabloAST::ClassTypeId::Advance:
+                    if (LLVM_UNLIKELY(input[0] == false)) {
+                        bdd = false;
+                    }
+                    else {
+
                         const BDD var = engine.var(variables++);
 
                         bdd = var;
 
-                        // when we built the path graph, we constructed it in the same order; hense the row/column of
+                        // When we built the path graph, we constructed it in the same order; hense the row/column of
                         // the path graph is equivalent to the index.
 
                         const unsigned k = advances.size();
@@ -312,7 +314,13 @@ void AutoMultiplexing::characterize(Engine & engine, const PabloBlock & entry) {
                     }
                     break;
             }
-            mCharacterizationMap.insert(std::make_pair(stmt, bdd));
+            if (LLVM_UNLIKELY(engine.satOne(bdd) == false)) {
+                stmt = stmt->replaceWith(entry.createZeroes());
+            }
+            else {
+                mCharacterizationMap.insert(std::make_pair(stmt, bdd));
+                stmt = stmt->getNextNode();
+            }
         }
 
         if (scope.empty()) {
@@ -321,6 +329,13 @@ void AutoMultiplexing::characterize(Engine & engine, const PabloBlock & entry) {
         stmt = scope.top();
         scope.pop();
     }
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief createMappingGraph
+ ** ------------------------------------------------------------------------------------------------------------- */
+void AutoMultiplexing::createMappingGraph() {
+    mMappingGraph = MappingGraph(num_vertices(mConstraintGraph));
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -344,15 +359,16 @@ void AutoMultiplexing::generateMultiplexSets(RNG & rng) {
         auto d = in_degree(*vi, mConstraintGraph);
         D[*vi] = d;
         if (d == 0) {
-            S.insert(*vi);
+            S.push_back(*vi);
         }
     }
 
     for ( ; remainingVerticies >= 3; --remainingVerticies) {
-        if (S.size() > 2) {
+        if (S.size() >= 3) {
             addMultiplexSet(S);
-        }
+        }        
         // Randomly choose a vertex in S and discard it.
+        assert (!S.empty());
         const auto i = S.begin() + RNGDistribution(0, S.size() - 1)(rng);
         const Vertex u = *i;
         S.erase(i);
@@ -360,26 +376,124 @@ void AutoMultiplexing::generateMultiplexSets(RNG & rng) {
         for (std::tie(ei, ei_end) = out_edges(u, mConstraintGraph); ei != ei_end; ++ei) {
             const Vertex v = target(*ei, mConstraintGraph);
             if ((--D[v]) == 0) {
-                S.insert(v);
+                S.push_back(v);
             }
         }
     }
+
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief addMultiplexSet
  * @param set an independent set
  ** ------------------------------------------------------------------------------------------------------------- */
-void AutoMultiplexing::addMultiplexSet(const IndependentSet & set) {
+inline void AutoMultiplexing::addMultiplexSet(const IndependentSet & set) {
 
+    // At this stage, the mapping graph is a directed bipartite graph that is used to show relationships between
+    // the advance vertices and a "set vertex" for each independent set we find from "generateMultiplexSets".
+
+    const auto v = add_vertex(mMappingGraph);
+    for (auto u : set) {
+        add_edge(u, v, mMappingGraph);
+    }
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief approxMaxWeightIndependentSet
+ ** ------------------------------------------------------------------------------------------------------------- */
+void AutoMultiplexing::approxMaxWeightIndependentSet(RNG & rng) {
+
+    // Compute our independent set graph from our mapping graph; effectively it's the graph resulting
+    // from contracting one advance node edge with an adjacent vertex
+
+    const unsigned m = num_vertices(mConstraintGraph);
+    const unsigned n = num_vertices(mMappingGraph) - m;
+
+    IndependentSetGraph G(n);
+
+    // Record the "weight" of this independent set vertex
+    for (IndependentSetGraph::vertex_descriptor i = 0; i != n; ++i) {
+        G[i] = in_degree(m + i, mMappingGraph);
+    }
+    // Add in any edges based on the adjacencies in the mapping graph
+    for (MappingGraph::vertex_descriptor i = 0; i != m; ++i) {
+        graph_traits<MappingGraph>::out_edge_iterator ei, ei_end;
+        std::tie(ei, ei_end) = out_edges(i, mMappingGraph);
+        for (; ei != ei_end; ++ei) {
+            for (auto ej = ei; ej != ei; ++ej) {
+                add_edge(*ei - m, *ej - m, G);
+            }
+        }
+    }
+    // Process the graph using the greedy method of "Approximation Algorithms for the Weighted Independent Set Problem" (2005)
+    std::vector<IndependentSetGraph::vertex_descriptor> S;
+    std::vector<bool> removed(n, false);
+    for (;;) {
+        // Select the miminum weight vertex
+        graph_traits<IndependentSetGraph>::vertex_iterator vi, vi_end;
+        std::tie(vi, vi_end) = vertices(G);
+        unsigned W = std::numeric_limits<unsigned>::max();
+        for (; vi != vi_end; ++vi) {
+            if (removed[*vi]) {
+                continue;
+            }
+            const unsigned w = G[*vi];
+            if (w <= W) {
+                if (w < W) {
+                    W = w;
+                    S.clear();
+                }
+                S.push_back(*vi);
+            }
+        }
+        if (S.empty()) {
+            break;
+        }
+
+        const auto u = S[S.size() == 1 ? 0 : RNGDistribution(0, S.size() - 1)(rng)];
+        // Remove it and its adjacencies from G; clear the adjacent set vertices from the mapping graph
+        graph_traits<IndependentSetGraph>::adjacency_iterator ai, ai_end;
+        std::tie(ai, ai_end) = adjacent_vertices(u, G);
+        for (; ai != ai_end; ++ai) {
+            removed[*ai] = true;
+            clear_in_edges(m + *ai, mMappingGraph);
+        }
+        removed[u] = true;
+    }
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief applySubsetConstraints
+ ** ------------------------------------------------------------------------------------------------------------- */
+void AutoMultiplexing::applySubsetConstraints() {
+
+    // The mapping graph now contains edges denoting the set relationships of our independent sets.
+    // Add in any edges from our subset constraints to the Mapping Graph that are within the same set.
+
+    graph_traits<SubsetGraph>::edge_iterator ei, ei_end;
+    for (std::tie(ei, ei_end) = edges(mSubsetGraph); ei != ei_end; ++ei) {
+        const auto u = source(*ei, mSubsetGraph);
+        const auto v = target(*ei, mSubsetGraph);
+        graph_traits<MappingGraph>::out_edge_iterator ej, ej_end;
+        for (std::tie(ej, ej_end) = out_edges(u, mMappingGraph); ej != ej_end; ++ej) {
+            // If both the source and target of ei are adjacent to the same vertex, that vertex must be the
+            // "set vertex". Add the edge between the vertices.
+            if (edge(v, target(*ej, mMappingGraph)).second) {
+                add_edge(u, v, mMappingGraph);
+            }
+        }
+    }
 
 }
 
 
-AutoMultiplexing::AutoMultiplexing()
-{
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief multiplexSelectedIndependentSets
+ ** ------------------------------------------------------------------------------------------------------------- */
+void AutoMultiplexing::multiplexSelectedIndependentSets() {
+
+
 
 }
-
 
 }
