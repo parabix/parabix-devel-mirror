@@ -137,8 +137,12 @@ private:
     std::vector<int>                    mCarryDataSummaryIdx;
 
     const std::vector<Var *> &          mBasisBits;
-
+#ifdef USE_LLVM_3_5
     Module* const                       mMod;
+#else
+    std::unique_ptr<Module>             mModOwner;
+    Module *                            mMod;
+#endif
     BasicBlock*                         mBasicBlock;
     ExecutionEngine*                    mExecutionEngine;
 

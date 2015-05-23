@@ -49,7 +49,6 @@ int main(int argc, char *argv[]) {
     Map["enable-misched"]->setHiddenFlag(cl::Hidden);
     Map["enable-tbaa"]->setHiddenFlag(cl::Hidden);
     Map["exhaustive-register-search"]->setHiddenFlag(cl::Hidden);
-    Map["fatal-assembler-warnings"]->setHiddenFlag(cl::Hidden);
     Map["join-liveintervals"]->setHiddenFlag(cl::Hidden);
     Map["limit-float-precision"]->setHiddenFlag(cl::Hidden);
     Map["mc-x86-disable-arith-relaxation"]->setHiddenFlag(cl::Hidden);
@@ -59,7 +58,6 @@ int main(int argc, char *argv[]) {
     Map["print-machineinstrs"]->setHiddenFlag(cl::Hidden);
     Map["regalloc"]->setHiddenFlag(cl::Hidden);
     Map["rng-seed"]->setHiddenFlag(cl::Hidden);
-    Map["spiller"]->setHiddenFlag(cl::Hidden);
     Map["stackmap-version"]->setHiddenFlag(cl::Hidden);
     Map["x86-asm-syntax"]->setHiddenFlag(cl::Hidden);
     Map["verify-debug-info"]->setHiddenFlag(cl::Hidden);
@@ -67,7 +65,14 @@ int main(int argc, char *argv[]) {
     Map["verify-loop-info"]->setHiddenFlag(cl::Hidden);
     Map["verify-regalloc"]->setHiddenFlag(cl::Hidden);
     Map["verify-scev"]->setHiddenFlag(cl::Hidden);
-    
+#ifdef USE_LLVM_3_5
+    Map["spiller"]->setHiddenFlag(cl::Hidden);
+    Map["fatal-assembler-warnings"]->setHiddenFlag(cl::Hidden);
+#else
+    Map["x86-recip-refinement-steps"]->setHiddenFlag(cl::Hidden);
+    Map["rewrite-map-file"]->setHiddenFlag(cl::Hidden);
+
+#endif
     cl::ParseCommandLineOptions(argc, argv);
     
     

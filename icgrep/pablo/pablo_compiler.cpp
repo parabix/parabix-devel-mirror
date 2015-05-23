@@ -64,7 +64,12 @@ namespace pablo {
 
 PabloCompiler::PabloCompiler(const std::vector<Var*> & basisBits)
 : mBasisBits(basisBits)
+#ifdef USE_LLVM_3_5
 , mMod(new Module("icgrep", getGlobalContext()))
+#else
+, mModOwner(make_unique<Module>("icgrep", getGlobalContext()))
+, mMod(mModOwner.get())
+#endif
 , mBasicBlock(nullptr)
 , mExecutionEngine(nullptr)
 , mBitBlockType(VectorType::get(IntegerType::get(mMod->getContext(), 64), BLOCK_SIZE / 64))
@@ -122,10 +127,16 @@ CompiledPabloFunction PabloCompiler::compile(PabloBlock & pb)
     mCarryOutVector.resize(totalCarryDataSize);
     mCarryDataSummaryIdx.resize(totalCarryDataSize);
     std::string errMessage;
+#ifdef USE_LLVM_3_5
     EngineBuilder builder(mMod);
+#else
+    EngineBuilder builder(std::move(mModOwner));
+#endif
     builder.setErrorStr(&errMessage);
     builder.setMCPU(sys::getHostCPUName());
+#ifdef USE_LLVM_3_5
     builder.setUseMCJIT(true);
+#endif
     builder.setOptLevel(mMaxWhileDepth ? CodeGenOpt::Level::Less : CodeGenOpt::Level::None);
     mExecutionEngine = builder.create();
     if (mExecutionEngine == nullptr) {
