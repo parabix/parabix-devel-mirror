@@ -527,6 +527,7 @@ void PabloCompiler::compileWhile(const While * whileStatement) {
         }
 
         SmallVector<const Next*, 4> nextNodes;
+        SmallVector<PHINode *, 4> nextPhis;
         for (const PabloAST * node : whileStatement->getBody()) {
             if (isa<Next>(node)) {
                 nextNodes.push_back(cast<Next>(node));
@@ -541,7 +542,6 @@ void PabloCompiler::compileWhile(const While * whileStatement) {
         ++mWhileDepth;
 
         compileBlock(whileStatement->getBody());
-
         // Reset the carry queue index. Note: this ought to be changed in the future. Currently this assumes
         // that compiling the while body twice will generate the equivalent IR. This is not necessarily true
         // but works for now.
@@ -553,12 +553,17 @@ void PabloCompiler::compileWhile(const While * whileStatement) {
         // Note: compileBlock may update the mBasicBlock pointer if the body contains nested loops. It
         // may not be same one that we entered the function with.
         IRBuilder<> bEntry(mBasicBlock);
+#ifdef WHILE_MULTI_CARRY
+        Value * secondCarryFramePtr = bEntry.CreateGEP(mCarryFramePtr, bEntry.getInt64(WHILEBODYCARRYTOTALSIZE));
+        mCarryFramePtr = secondCarryFramePtr;
+#endif        
+
         bEntry.CreateBr(whileCondBlock);
 
         // CONDITION BLOCK
         IRBuilder<> bCond(whileCondBlock);
         // generate phi nodes for any carry propogating instruction
-        std::vector<PHINode*> phiNodes(carryDataSize + nextNodes.size());
+        std::vector<PHINode*> phiNodes(carryDataSize);
         unsigned index = 0;
         for (index = 0; index < carryDataSize; ++index) {
             PHINode * phi = bCond.CreatePHI(mBitBlockType, 2);
@@ -573,9 +578,14 @@ void PabloCompiler::compileWhile(const While * whileStatement) {
             assert (f != mMarkerMap.end());
             phi->addIncoming(f->second, mBasicBlock);
             mMarkerMap[n->getInitial()] = phi;
-            phiNodes[index++] = phi;
+            nextPhis.push_back(phi);
         }
-
+#ifdef WHILE_MULTI_CARRY
+        //  CarryFramePtr
+        PHINode * carryFramePtrPhi = bCond.CreatePHI(mBitBlockType, 2, "CarryFramePtr");
+        carryFramePtrPhi->addIncoming(mCarryFramePtr, mBasicBlock);
+        mCarryFramePtr = carryFramePtrPhi;
+#endif        
         mBasicBlock = whileCondBlock;
         bCond.CreateCondBr(genBitBlockAny(compileExpression(whileStatement->getCondition())), whileEndBlock, whileBodyBlock);
 
@@ -583,6 +593,7 @@ void PabloCompiler::compileWhile(const While * whileStatement) {
         //std::cerr << "Compile loop body\n";
         mBasicBlock = whileBodyBlock;
         compileBlock(whileStatement->getBody());
+        
         // update phi nodes for any carry propogating instruction
         IRBuilder<> bWhileBody(mBasicBlock);
         for (index = 0; index < carryDataSize; ++index) {
@@ -593,14 +604,18 @@ void PabloCompiler::compileWhile(const While * whileStatement) {
         }
         
         // and for any Next nodes in the loop body
-        for (const Next * n : nextNodes) {
+        for (int i = 0; i < nextNodes.size(); i++) {
+            const Next * n = nextNodes[i];
             auto f = mMarkerMap.find(n->getInitial());
             assert (f != mMarkerMap.end());
-            PHINode * phi = phiNodes[index++];
+            PHINode * phi = nextPhis[i];
             phi->addIncoming(f->second, mBasicBlock);
             mMarkerMap[n->getInitial()] = phi;
         }
-
+#ifdef WHILE_MULTI_CARRY
+        Value * nextCarryFramePtr = bWhileBody.CreateGEP(mCarryFramePtr, bWhileBody.getInt64(WHILEBODYCARRYTOTALSIZE));
+        carryFramePtrPhi->addIncoming(nextCarryFramePtr, mBasicBlock);
+#endif        
         bWhileBody.CreateBr(whileCondBlock);
 
         // EXIT BLOCK
