@@ -23,7 +23,7 @@ class AutoMultiplexing {
     using SubsetGraph = boost::edge_list<std::pair<unsigned, unsigned>>;
     using MappingGraph = boost::adjacency_list<boost::hash_setS, boost::vecS, boost::bidirectionalS>;
     using IndependentSetGraph = boost::adjacency_list<boost::hash_setS, boost::vecS, boost::undirectedS, unsigned>;
-    using IndexMap = boost::container::flat_map<PabloAST *, unsigned>;
+    using Advances = std::vector<Advance *>;
 
     using RNG = std::mt19937;
     using RNGDistribution = std::uniform_int_distribution<RNG::result_type>;
@@ -50,7 +50,7 @@ private:
     PathGraph               mPathGraph;
     ConstraintGraph         mConstraintGraph;
     SubsetGraph             mSubsetGraph;
-    IndexMap                mIndexMap;
+    Advances                mAdvance;
     MappingGraph            mMappingGraph;
 };
 
