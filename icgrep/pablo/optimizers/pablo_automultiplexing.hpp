@@ -37,11 +37,12 @@ public:
 protected:
     bdd::Engine initialize(const std::vector<Var *> & vars, const PabloBlock & entry);
     void characterize(bdd::Engine & engine, const PabloBlock & entry);
-    void generateMultiplexSets(RNG & rng);
+    bool generateMultiplexSets(RNG & rng);
     void addMultiplexSet(const IndependentSet & set);
     void approxMaxWeightIndependentSet(RNG & rng);
     void applySubsetConstraints();
     void multiplexSelectedIndependentSets();
+    void topologicalSort();
 
 private:
     AutoMultiplexing();

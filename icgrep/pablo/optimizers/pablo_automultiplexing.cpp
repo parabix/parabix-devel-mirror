@@ -10,7 +10,8 @@
 #include <pablo/analysis/bdd/bdd.hpp>
 #include <boost/container/flat_set.hpp>
 #include <boost/numeric/ublas/matrix.hpp>
-
+#include <include/simd-lib/builtins.hpp>
+#include <expression_map.hpp>
 
 using namespace llvm;
 using namespace bdd;
@@ -26,10 +27,12 @@ static void AutoMultiplexing::optimize(PabloBlock & block) {
     am.characterize(eng, block);
     am.createMappingGraph();
     RNG rng(std::random_device()());
-    am.generateMultiplexSets(rng);
-    am.approxMaxWeightIndependentSet();
-    am.applySubsetConstraints();
-    am.multiplexSelectedIndependentSets();
+    if (am.generateMultiplexSets(rng)) {
+        am.approxMaxWeightIndependentSet();
+        am.applySubsetConstraints();
+        am.multiplexSelectedIndependentSets();
+        am.topologicalSort();
+    }
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -298,7 +301,7 @@ void AutoMultiplexing::characterize(Engine & engine, const PabloBlock & entry) {
                             if ((stmt->getOperand(1) != adv->getOperand(1)) && !edge(k, i, mPathGraph).second) {
                                 const BDD C = engine.applyAnd(A, B); // do we need to simplify this to identify subsets?
                                 // Is there any satisfying truth assignment? If not, these streams are mutually exclusive.
-                                mutuallyExclusive = (engine.satOne(C) == false);
+                                mutuallyExclusive = engine.satOne(C).isFalse();
 
                                 constrained = !mutuallyExclusive || (stmt->getParent() != adv->getParent()) ;
                             }
@@ -317,8 +320,8 @@ void AutoMultiplexing::characterize(Engine & engine, const PabloBlock & entry) {
                                 add_edge(i, k, mConstraintGraph);
                             }
                             else if (LLVM_UNLIKELY(A == C)) {
-                                // If A = C and C = A ∩ B then A (the input to the k-th advance) is a *subset* of B (the input
-                                // of the i-th advance). Record this in the subset graph with the arc (k,i).
+                                // If A = C and C = A ∩ B then A (the input to the k-th advance) is a *subset* of B (the input of the
+                                // i-th advance). Record this in the subset graph with the arc (k,i).
                                 add_edge(k, i, mSubsetGraph);
                                 continue;
                             }
@@ -364,7 +367,7 @@ void AutoMultiplexing::createMappingGraph() {
  * @brief generateMultiplexSets
  * @param RNG random number generator
  ** ------------------------------------------------------------------------------------------------------------- */
-void AutoMultiplexing::generateMultiplexSets(RNG & rng) {
+bool AutoMultiplexing::generateMultiplexSets(RNG & rng) {
 
     using Vertex = ConstraintGraph::vertex_descriptor;
     using VertexIterator = graph_traits<ConstraintGraph>::vertex_iterator;
@@ -375,6 +378,8 @@ void AutoMultiplexing::generateMultiplexSets(RNG & rng) {
     IndependentSet S;
     unsigned remainingVerticies = num_vertices(mConstraintGraph);
     std::vector<DegreeType> D(remainingVerticies);
+
+    bool canMultiplex = false;
 
     VertexIterator vi, vi_end;
     for (std::tie(vi, vi_end) = vertices(mConstraintGraph); vi != vi_end; ++vi) {
@@ -388,6 +393,7 @@ void AutoMultiplexing::generateMultiplexSets(RNG & rng) {
     for ( ; remainingVerticies >= 3; --remainingVerticies) {
         if (S.size() >= 3) {
             addMultiplexSet(S);
+            canMultiplex = true;
         }        
         // Randomly choose a vertex in S and discard it.
         assert (!S.empty());
@@ -403,6 +409,7 @@ void AutoMultiplexing::generateMultiplexSets(RNG & rng) {
         }
     }
 
+    return canMultiplex;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -616,14 +623,133 @@ void AutoMultiplexing::applySubsetConstraints() {
     }
 }
 
+//#define FAST_LOG2(x) ((sizeof(unsigned long) * 8 - 1) - ScanReverseIntrinsic((unsigned long)(x)))
+
+//#define FAST_CEIL_LOG2(x) (FAST_LOG_2(x) + ((x & (x - 1) != 0) ? 1 : 0))
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief multiplexSelectedIndependentSets
  ** ------------------------------------------------------------------------------------------------------------- */
 void AutoMultiplexing::multiplexSelectedIndependentSets() {
 
+    // When entering thus function, the mapping graph M is a bipartite DAG with edges denoting the set
+    // relationships of our independent sets.
+
+    unsigned N = 3;
+    for (unsigned s = num_vertices(mConstraintGraph), e = num_vertices(mMappingGraph); s != e; ++s) {
+        N = std::max<unsigned>(N, out_degree(s, mMappingGraph));
+    }
+    unsigned M = static_cast<unsigned>(std::ceil(std::log2(N))); // use a faster builtin function for this.
+
+    std::vector<MappingGraph::vertex_descriptor> V(N);
+    std::queue<PabloAST *> T(M);
+    std::queue<PabloAST *> F(M);
+    std::vector<SmallVector<User *, 4>> users(N);
+
+    for (unsigned s = num_vertices(mConstraintGraph), e = num_vertices(mMappingGraph); s != e; ++s) {
+        const unsigned n = out_degree(s, mMappingGraph);
+        if (n) {
+
+            const unsigned m = static_cast<unsigned>(std::ceil(std::log2(n))); // use a faster builtin function for this.
+
+            graph_traits<MappingGraph>::out_edge_iterator ei_begin, ei_end;
+            std::tie(ei_begin, ei_end) = out_edges(s, mMappingGraph);
+            for (auto ei = ei_begin; ei != ei_end; ++ei) {
+                V[std::distance(ei_begin, ei)] = target(*ei, mMappingGraph);
+            }
+            std::sort(V.begin(), V.begin() + n);
+
+            PabloBlock * const pb = mAdvance[V[0]]->getParent();
+            // Sanity test to make sure every advance is in the same scope.
+            #ifndef NDEBUG
+            for (auto i = 1; i != n; ++i) {
+                assert (mAdvance[V[i]]->getParent() == pb);
+            }
+            #endif
+
+            /// Perform n-to-m Multiplexing
+            for (unsigned j = 0; j != m; ++j) {
+                for (unsigned i = 0; i != (1 << m); ++i) {
+                    if (((i + 1) & (1 << j)) != 0) {
+                        T.push(mAdvance[V[i]]->getOperand(0));
+                    }
+                }
+                // TODO: figure out a way to determine whether we're creating a duplicate value below.
+                // The expression map findOrCall ought to work conceptually but the functors method
+                // doesn't really work anymore with the current API.
+                while (T.size() > 1) {
+                    PabloAST * a1 = T.front(); T.pop();
+                    PabloAST * a2 = T.front(); T.pop();
+                    pb->setInsertPoint(cast<Statement>(a2));
+                    T.push(pb->createOr(a1, a2));
+                }
+                mAdvance[V[j]]->setOperand(0, T.front()); T.pop();
+            }
+
+            /// Perform m-to-n Demultiplexing
+            // Store the original users of our advances; we'll be modifying these extensively shortly.
+            for (unsigned i = 0; i != n; ++i) {
+                const Advance * const adv = mAdvance[V[i]];
+                users[i].insert(users[i].begin(), adv->user_begin(), adv->user_end()) ;
+            }
+
+            // Now construct the demuxed values and replaces all the users of the original advances with them.
+            for (unsigned i = 0; i != n; ++i) {
+                for (unsigned j = 0; j != m; ++j) {
+                    if (((i + 1) & (1 << j)) != 0) {
+                        T.push(mAdvance[V[j]]);
+                    }
+                    else {
+                        F.push(mAdvance[V[j]]);
+                    }
+                }
+                while (T.size() > 1) {
+                    PabloAST * a1 = T.front(); T.pop();
+                    PabloAST * a2 = T.front(); T.pop();
+                    pb->setInsertPoint(cast<Statement>(a2));
+                    T.push(pb->createAnd(a1, a2));
+                }
+                assert (T.size() == 1);
+
+                while (F.size() > 1) {
+                    PabloAST * a1 = T.front(); T.pop();
+                    PabloAST * a2 = T.front(); T.pop();
+                    pb->setInsertPoint(cast<Statement>(a2));
+                    F.push(pb->createOr(a1, a2));
+                }
+                assert (F.size() == 1);
+
+                PabloAST * const demux = pb->createAnd(T.front(), pb->createNot(F.front()), "demux"); T.pop(); F.pop();
+                for (PabloAST * use : users[i]) {
+                    cast<Statement>(use)->replaceUsesOfWith(mAdvance[V[j]], demux);
+                }
+            }
+
+            /// Clean up the unneeded advances ...
+            for (unsigned i = m; i != n; ++i) {
+                mAdvance[V[i]]->eraseFromParent(true);
+            }
+            for (unsigned i = 0; i != n; ++i) {
+                users[i].clear();
+            }
+
+        }
+    }
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief topologicalSort
+ *
+ * After transforming the IR, we need to run this in order to always have a valid program. Each multiplex set
+ * contains vertices corresponding to an Advance in the IR. While we know each Advance within a set is independent
+ * w.r.t. the transitive closure of their dependencies in the IR, the position of each Advance's dependencies and
+ * users within the IR isn't taken into consideration. This while there must be a valid ordering for the program
+ * it is not necessarily the original ordering.
+ ** ------------------------------------------------------------------------------------------------------------- */
+void AutoMultiplexing::topologicalSort() {
 
 
 }
+
 
 }
