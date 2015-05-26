@@ -3,7 +3,7 @@
 
 #include <pablo/codegenstate.h>
 #include <slab_allocator.h>
-#include <unordered_map>
+#include <queue>
 #include <pablo/analysis/bdd/bdd.hpp>
 #include <boost/graph/adjacency_list.hpp>
 #include <boost/graph/adjacency_matrix.hpp>
@@ -21,9 +21,11 @@ class AutoMultiplexing {
     using ConstraintGraph = boost::adjacency_list<boost::hash_setS, boost::vecS, boost::directedS>;
     using PathGraph = boost::adjacency_matrix<boost::undirectedS>;
     using SubsetGraph = boost::edge_list<std::pair<unsigned, unsigned>>;
-    using MappingGraph = boost::adjacency_list<boost::hash_setS, boost::vecS, boost::bidirectionalS>;
+    using MultiplexSetGraph = boost::adjacency_list<boost::hash_setS, boost::vecS, boost::bidirectionalS>;
     using IndependentSetGraph = boost::adjacency_list<boost::hash_setS, boost::vecS, boost::undirectedS, unsigned>;
     using Advances = std::vector<Advance *>;
+    using TopologicalSortGraph = boost::adjacency_list<boost::hash_setS, boost::vecS, boost::directedS, PabloAST *>;
+    using TopologicalSortQueue = std::queue<TopologicalSortGraph::vertex_descriptor>;
 
     using RNG = std::mt19937;
     using RNGDistribution = std::uniform_int_distribution<RNG::result_type>;
@@ -37,12 +39,14 @@ public:
 protected:
     bdd::Engine initialize(const std::vector<Var *> & vars, const PabloBlock & entry);
     void characterize(bdd::Engine & engine, const PabloBlock & entry);
-    bool generateMultiplexSets(RNG & rng);
+    void createMultiplexSetGraph();
+    bool generateMultiplexSets(RNG & rng);    
     void addMultiplexSet(const IndependentSet & set);
     void approxMaxWeightIndependentSet(RNG & rng);
     void applySubsetConstraints();
     void multiplexSelectedIndependentSets();
-    void topologicalSort();
+    void topologicalSort(PabloBlock & entry) const;
+    void topologicalSort(TopologicalSortGraph & G, TopologicalSortQueue & Q) const;
 
 private:
     AutoMultiplexing();
@@ -52,7 +56,7 @@ private:
     ConstraintGraph         mConstraintGraph;
     SubsetGraph             mSubsetGraph;
     Advances                mAdvance;
-    MappingGraph            mMappingGraph;
+    MultiplexSetGraph       mMultiplexSetGraph;
 };
 
 }
