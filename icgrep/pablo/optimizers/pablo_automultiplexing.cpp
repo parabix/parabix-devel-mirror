@@ -637,12 +637,11 @@ void AutoMultiplexing::multiplexSelectedIndependentSets() {
     for (unsigned s = num_vertices(mConstraintGraph), e = num_vertices(mMultiplexSetGraph); s != e; ++s) {
         N = std::max<unsigned>(N, out_degree(s, mMultiplexSetGraph));
     }
-    unsigned M = static_cast<unsigned>(std::ceil(std::log2(N))); // use a faster builtin function for this.
 
     std::vector<MultiplexSetGraph::vertex_descriptor> V(N);
-    std::queue<PabloAST *> T(M);
-    std::queue<PabloAST *> F(M);
-    std::vector<SmallVector<User *, 4>> users(N);
+    std::queue<PabloAST *> T;
+    std::queue<PabloAST *> F;
+    std::vector<SmallVector<PabloAST *, 4>> users(N);
 
     for (unsigned s = num_vertices(mConstraintGraph), e = num_vertices(mMultiplexSetGraph); s != e; ++s) {
         const unsigned n = out_degree(s, mMultiplexSetGraph);
@@ -744,28 +743,28 @@ void AutoMultiplexing::multiplexSelectedIndependentSets() {
  * users within the IR isn't taken into consideration. Thus while there must be a valid ordering for the program,
  * it's not necessarily the original ordering.
  ** ------------------------------------------------------------------------------------------------------------- */
-void AutoMultiplexing::topologicalSort(PabloBlock & entry) {
+void AutoMultiplexing::topologicalSort(PabloBlock & entry) const {
 
     TopologicalSortGraph G;
     TopologicalSortQueue Q;
-    flat_map<Statement *, TopologicalSortGraph::vertex_descriptor> map;
+    TopologicalSortMap map;
 
-    std::stack<std::pair<Statement *, PabloBlock *>> scope;
+    std::stack<Statement *> scope;
 
+    Statement * ip = nullptr, first, stmt;
 
-    Statement * insertionPtr = nullptr;
-    PabloBlock * insertionBlock = &entry;
+    for (first = stmt = entry.front(); ; ) {
 
-    for (Statement * stmt = entry.front(); ; ) {
         while ( stmt ) {
             if (LLVM_UNLIKELY(isa<If>(stmt) || isa<While>(stmt))) {
+                // Sort the current "basic block"
+                topologicalSort(G, Q, map, ip, first);
                 // Set the next statement to be the first statement of the inner scope and push the
                 // next statement of the current statement into the scope stack.
                 const PabloBlock & nested = isa<If>(stmt) ? cast<If>(stmt)->getBody() : cast<While>(stmt)->getBody();
-                scope.push(std::make_pair(stmt, insertionBlock));
-                insertionBlock = &nested;
-                insertionPtr = nullptr;
-                stmt = nested.front();
+                scope.push(stmt);
+                ip = nullptr;
+                first = stmt = nested.front();
                 assert (stmt);
                 continue;
             }
@@ -778,31 +777,26 @@ void AutoMultiplexing::topologicalSort(PabloBlock & entry) {
                 }
                 add_edge(f->second, u);
             }
-            if (in_degree(u, G)) {
+            if (in_degree(u, G) == 0) {
                 Q.push(u);
             }
             map.emplace(stmt, u);
-
-
-
-
             stmt = stmt->getNextNode();
         }
+
+        topologicalSort(G, Q, map, ip, first);
         if (scope.empty()) {
             break;
         }
-        std::tie(insertionPtr, insertionBlock) = scope.top();
+        ip = scope.top();
         scope.pop();
-        stmt = insertionPtr->getNextNode();
+        first = stmt = ip->getNextNode();
     }
 
 }
 
-void AutoMultiplexing::topologicalSort(TopologicalSortGraph & G, TopologicalSortQueue & Q) {
-
-
-    std::vector<Statement *> L;
-    L.reserve(num_vertices(G));
+void AutoMultiplexing::topologicalSort(TopologicalSortGraph & G, TopologicalSortQueue & Q, TopologicalSortMap & M, Statement * ip, Statement * first) const {
+    Statement * stmt = first;
     while (!Q.empty()) {
         const auto u = Q.front(); Q.pop();
         graph_traits<TopologicalSortGraph>::out_edge_iterator ei, ei_end;
@@ -812,9 +806,17 @@ void AutoMultiplexing::topologicalSort(TopologicalSortGraph & G, TopologicalSort
                 Q.push(v);
             }
         }
-        clear_out_edges(u, G);
-        L.push_back(G[u]);
+        Statement * next = G[u];
+        if (stmt != next) {
+            if (LLVM_UNLIKELY(ip == nullptr)) {
+                next->insertBefore(first);
+            }
+            else {
+                next->insertAfter(ip);
+            }
+        }
+        ip = next;
     }
-
-
+    G.clear();
+    M.clear();
 }

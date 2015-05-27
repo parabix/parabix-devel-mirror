@@ -26,6 +26,7 @@ class AutoMultiplexing {
     using Advances = std::vector<Advance *>;
     using TopologicalSortGraph = boost::adjacency_list<boost::hash_setS, boost::vecS, boost::directedS, PabloAST *>;
     using TopologicalSortQueue = std::queue<TopologicalSortGraph::vertex_descriptor>;
+    using TopologicalSortMap = boost::container::flat_map<Statement *, TopologicalSortGraph::vertex_descriptor>;
 
     using RNG = std::mt19937;
     using RNGDistribution = std::uniform_int_distribution<RNG::result_type>;
@@ -46,7 +47,7 @@ protected:
     void applySubsetConstraints();
     void multiplexSelectedIndependentSets();
     void topologicalSort(PabloBlock & entry) const;
-    void topologicalSort(TopologicalSortGraph & G, TopologicalSortQueue & Q) const;
+    void topologicalSort(TopologicalSortGraph & G, TopologicalSortQueue & Q, TopologicalSortMap & M, Statement * ip, Statement * first) const;
 
 private:
     AutoMultiplexing();

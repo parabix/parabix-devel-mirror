@@ -77,7 +77,7 @@ Engine::index_type Engine::makeNode(const index_type level, const index_type low
     if (f == mMap.end()) {
         const size_t index = mNode.size();
         mNode.emplace_back(level, low, high);
-        f = mMap.insert(std::make_pair(std::make_tuple(level, low, high), index)).second;
+        f = mMap.insert(std::make_pair(std::make_tuple(level, low, high), index)).first;
     }
     return f->second;
 }
@@ -87,10 +87,10 @@ Engine::index_type Engine::satOne(const index_type root) {
        return root;
     const Node & v = mNode[root];
     if (ISZERO(v.low)) {
-        return makeNode(v.level, 0, satOne(v.high).mRoot);
+        return makeNode(v.level, 0, satOne(v.high));
     }
     else {
-        return makeNode(v.level, satOne(v.low).mRoot, 0);
+        return makeNode(v.level, satOne(v.low), 0);
     }
 }
 
@@ -110,10 +110,7 @@ BDD Engine::addVar() {
     return BDD(var);
 }
 
-Engine::Engine(const size_t initialSize)
-: mNode(LLVMAllocatorProxy(mAllocator))
-, mVar(LLVMAllocatorProxy(mAllocator))
-, mMap(LLVMAllocatorProxy(mAllocator)) {
+Engine::Engine(const size_t initialSize) {
     mNode.reserve(initialSize + 2);
     mMap.bucket_size(initialSize);
 
@@ -128,7 +125,11 @@ Engine::Engine(const size_t initialSize)
     mMap.insert(std::make_pair(std::make_tuple(0, 1, 1), 1));
 
     // and the variables
-    addVars(varCount);
+    mVar.resize(initialSize * 2);
+    for (auto i = 0; i != initialSize; ++i) {
+        mVar[i * 2] = makeNode(i, 0, 1);
+        mVar[i * 2 + 1] = makeNode(i, 1, 0);
+    }
 }
 
 }

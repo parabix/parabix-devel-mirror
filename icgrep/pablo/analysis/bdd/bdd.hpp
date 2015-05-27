@@ -25,6 +25,8 @@ class Engine {
         , NOT
     };
 
+    using index_type = unsigned;
+
     struct Node {
         friend struct BDD;
 
@@ -36,15 +38,14 @@ class Engine {
 
         }
 
-        const unsigned level;
-        const unsigned low;
-        const unsigned high;
+        const index_type level;
+        const index_type low;
+        const index_type high;
     };
 
-    using Array = std::vector<Node, LLVMAllocatorProxy>;
-    using index_type = unsigned;
-    using Vars = std::vector<index_type, LLVMAllocatorProxy>;
     using Key = std::tuple<index_type, index_type, index_type>;
+    using Array = std::vector<Node>;
+    using Vars = std::vector<index_type>;
 
     struct BijectionHash {
         template<typename X, typename Y>
@@ -56,9 +57,9 @@ class Engine {
         }
     };
     #ifdef USE_BOOST
-    using Map = boost::unordered_map<Key, Array::size_type, BijectionHash, std::equal_to<Key>, LLVMAllocatorProxy<std::pair<Key, index_type>>;
+    using Map = boost::unordered_map<Key, index_type, BijectionHash, std::equal_to<Key>>;
     #else
-    using Map = std::unordered_map<Key, index_type, BijectionHash, std::equal_to<Key>, LLVMAllocatorProxy<std::pair<Key, index_type>>;
+    using Map = std::unordered_map<Key, index_type, BijectionHash, std::equal_to<Key>>;
     #endif
 
 public:
@@ -87,6 +88,8 @@ protected:
 
     index_type satOne(const index_type root);
 
+    index_type apply(const index_type l, const OpCode op);
+
     index_type apply(const index_type l, const index_type r, const OpCode op);
 
     index_type makeNode(const index_type level, const index_type low, const index_type high);
@@ -101,18 +104,13 @@ private:
 
 struct BDD {
 
-    friend struct Engine;
+    friend class Engine;
 
     using OpCode = Engine::OpCode;
     using index_type = Engine::index_type;
 
     inline int operator==(const bool term) const {
         return term ? isTrue() : isFalse();
-    }
-
-    inline BDD & operator=(const bool term) const {
-        mRoot = term ? 0 : 1;
-        return *this;
     }
 
     inline int operator==(const BDD & r) const {
