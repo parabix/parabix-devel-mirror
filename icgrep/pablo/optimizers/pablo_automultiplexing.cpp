@@ -21,17 +21,18 @@ using namespace boost::numeric::ublas;
 
 namespace pablo {
 
-static void AutoMultiplexing::optimize(PabloBlock & block) {
+void AutoMultiplexing::optimize(const std::vector<Var *> & input, PabloBlock & entry) {
     AutoMultiplexing am;
-    Engine eng = am.initialize(vars, block);
-    am.characterize(eng, block);
+    Engine eng = am.initialize(input, entry);
+    am.characterize(eng, entry);
     am.createMultiplexSetGraph();
-    RNG rng(std::random_device()());
+    std::random_device rd;
+    RNG rng(rd());
     if (am.generateMultiplexSets(rng)) {
-        am.approxMaxWeightIndependentSet();
+        am.approxMaxWeightIndependentSet(rng);
         am.applySubsetConstraints();
         am.multiplexSelectedIndependentSets();
-        am.topologicalSort();
+        am.topologicalSort(entry);
     }
 }
 
@@ -45,7 +46,7 @@ static void AutoMultiplexing::optimize(PabloBlock & block) {
  ** ------------------------------------------------------------------------------------------------------------- */
 Engine AutoMultiplexing::initialize(const std::vector<Var *> & vars, const PabloBlock & entry) {
 
-    flat_map<PabloAST *, unsigned> map;
+    flat_map<const PabloAST *, unsigned> map;
     for (const Var * var : vars) {
         map.emplace(var, 0);
     }
@@ -68,7 +69,7 @@ Engine AutoMultiplexing::initialize(const std::vector<Var *> & vars, const Pablo
             }
             switch (stmt->getClassTypeId()) {
                 case PabloAST::ClassTypeId::Advance:
-                    mAdvance.push_back(stmt);
+                    mAdvance.push_back(const_cast<Advance*>(cast<Advance>(stmt)));
                     map.emplace(stmt, m++);
                 case PabloAST::ClassTypeId::Call:
                 case PabloAST::ClassTypeId::ScanThru:
@@ -100,7 +101,10 @@ Engine AutoMultiplexing::initialize(const std::vector<Var *> & vars, const Pablo
         G(i, i) = true;
     }
 
-    for (const Statement * stmt = entry.front(), m = 0, n = m; ; ) {
+    m = 0;
+    n = m;
+    const Statement * stmt = entry.front();
+    for (;;) {
         while ( stmt ) {
             unsigned u;
             if (isa<Advance>(stmt)) {
@@ -112,7 +116,7 @@ Engine AutoMultiplexing::initialize(const std::vector<Var *> & vars, const Pablo
                 map.emplace(stmt, u);
             }
             for (unsigned i = 0; i != stmt->getNumOperands(); ++i) {
-                PabloAST * const op = stmt->getOperand(i);
+                const PabloAST * const op = stmt->getOperand(i);
                 if (LLVM_UNLIKELY(isa<Integer>(op) || isa<String>(op))) {
                     continue;
                 }
@@ -191,17 +195,17 @@ Engine AutoMultiplexing::initialize(const std::vector<Var *> & vars, const Pablo
  *
  * Scan through the program and iteratively compute the BDDs for each statement.
  ** ------------------------------------------------------------------------------------------------------------- */
-void AutoMultiplexing::characterize(Engine & engine, const PabloBlock & entry) {
+void AutoMultiplexing::characterize(Engine & engine, PabloBlock & entry) {
 
     std::vector<std::pair<BDD, BDD>> advances; // the input BDD and the BDD variable of the i-th Advance
-    std::stack<const Statement *> scope;
+    std::stack<Statement *> scope;
 
     advances.reserve(mAdvance.size());
 
     unsigned variables = 0;
 
     // Scan through and collect all the advances, calls, scanthrus and matchstars ...
-    for (const Statement * stmt = entry.front(); ; ) {
+    for (Statement * stmt = entry.front(); ; ) {
         while ( stmt ) {
 
             if (LLVM_UNLIKELY(isa<If>(stmt) || isa<While>(stmt))) {
@@ -214,7 +218,7 @@ void AutoMultiplexing::characterize(Engine & engine, const PabloBlock & entry) {
                 continue;
             }
 
-            BDD bdd = false;
+            BDD bdd; // defaults to false
 
             // Map our operands to the computed BDDs
             std::array<BDD, 3> input;
@@ -257,7 +261,7 @@ void AutoMultiplexing::characterize(Engine & engine, const PabloBlock & entry) {
                     // possibility of a contradition being erroneously calculated later. An example of this
                     // would be ¬(ScanThru(c,m) ∨ m) but are there others that would be harder to predict?
                 case PabloAST::ClassTypeId::MatchStar:
-                    if (LLVM_UNLIKELY(input[0] == false || input[1] == false)) {
+                    if (LLVM_UNLIKELY(input[0].isFalse() || input[1].isFalse())) {
                         break;
                     }
                 case PabloAST::ClassTypeId::Call:
@@ -265,7 +269,7 @@ void AutoMultiplexing::characterize(Engine & engine, const PabloBlock & entry) {
                     bdd = engine.var(variables++);
                     break;
                 case PabloAST::ClassTypeId::Advance:
-                    if (LLVM_LIKELY(input[0] != false)) {
+                    if (LLVM_LIKELY(!input[0].isFalse())) {
 
                         // When we built the path graph, we constructed it in the same order; hense the row/column of
                         // the path graph is equivalent to the index.
@@ -298,8 +302,8 @@ void AutoMultiplexing::characterize(Engine & engine, const PabloBlock & entry) {
                                     bdd = engine.applyAnd(bdd, engine.applyNot(Vi));
                                     f->second = engine.applyAnd(f->second, engine.applyNot(Vk));
 
-                                    // If these advances are not from the same scope, we cannot safely multiplex them even if they're
-                                    // mutually exclusive.
+                                    // If these advances are not from the same scope, we cannot safely multiplex them even if
+                                    // they're mutually exclusive.
                                     constrained = (stmt->getParent() != adv->getParent());
                                 }
 
@@ -309,14 +313,13 @@ void AutoMultiplexing::characterize(Engine & engine, const PabloBlock & entry) {
                                         // If Ik = C and C = Ii ∩ Ik then Ik (the input to the k-th advance) is a *subset* of Ii (the input of the
                                         // i-th advance). Record this in the subset graph with the arc (k,i). These edges will be moved into the
                                         // multiplex set graph if Advance_i and Advance_k happen to be mutually exclusive set.
-                                        add_edge(k, i, mSubsetGraph);
+                                        mSubsetGraph.emplace_back(k, i);
                                         continue;
                                     }
                                     else if (LLVM_UNLIKELY(Ii == C)) {
-                                        add_edge(i, k, mSubsetGraph);
+                                        mSubsetGraph.emplace_back(i, k);
                                         continue;
                                     }
-
                                 }
                             }
 
@@ -331,17 +334,17 @@ void AutoMultiplexing::characterize(Engine & engine, const PabloBlock & entry) {
 
                     // Append this advance to the list of known advances in this "basic block"; add on the input's BDD to
                     // eliminate the need for looking it up again.
-                    advances.emplace_back(cast<Advance>(stmt), Ik);
+                    advances.emplace_back(input[0], bdd);
 
                     testContradiction = false;
 
                     break;
             }
-            if (LLVM_UNLIKELY(testContradiction && engine.satOne(bdd) == false)) {
+            if (LLVM_UNLIKELY(testContradiction && engine.satOne(bdd).isFalse())) {
                 stmt = stmt->replaceWith(entry.createZeroes());
             }
             else {
-                mCharacterizationMap.insert(std::make_pair(stmt, bdd));
+                mCharacterizationMap.emplace(stmt, bdd);
                 stmt = stmt->getNextNode();
             }
         }
@@ -435,21 +438,22 @@ void AutoMultiplexing::approxMaxWeightIndependentSet(RNG & rng) {
     // from contracting one advance node edge with an adjacent vertex
 
     const unsigned m = num_vertices(mConstraintGraph);
-    const unsigned n = num_vertices(mMultiplexSetGraph) - m;
+    const unsigned n = num_vertices(mMultiplexSetGraph);
 
     IndependentSetGraph G(n);
 
     // Record the "weight" of this independent set vertex
-    for (IndependentSetGraph::vertex_descriptor i = 0; i != n; ++i) {
-        G[i] = out_degree(m + i, mMultiplexSetGraph);
+    for (IndependentSetGraph::vertex_descriptor i = m; i != n; ++i) {
+        G[i] = out_degree(i, mMultiplexSetGraph);
     }
-    // Add in any edges based on the adjacencies in the multiplex set graph
-    for (MultiplexSetGraph::vertex_descriptor i = 0; i != m; ++i) {
+
+    // Make all vertices in G adjacent if they are mutually adjacent to a set vertex in S.
+    for (MultiplexSetGraph::vertex_descriptor i = m; i != n; ++i) {
         graph_traits<MultiplexSetGraph>::in_edge_iterator ei, ei_end;
         std::tie(ei, ei_end) = in_edges(i, mMultiplexSetGraph);
         for (; ei != ei_end; ++ei) {
             for (auto ej = ei; ej != ei; ++ej) {
-                add_edge(*ei - m, *ej - m, G);
+                add_edge(source(*ei, mMultiplexSetGraph), source(*ej, mMultiplexSetGraph), G);
             }
         }
     }
@@ -505,17 +509,16 @@ void AutoMultiplexing::applySubsetConstraints() {
 
     // Add in any edges from our subset constraints to M that are within the same set.
     bool hasSubsetConstraint = false;
-    graph_traits<SubsetGraph>::edge_iterator ei, ei_end;
-    for (std::tie(ei, ei_end) = edges(mSubsetGraph); ei != ei_end; ++ei) {
-        const auto u = source(*ei, mSubsetGraph);
-        const auto v = target(*ei, mSubsetGraph);
+    for (const auto & ei : mSubsetGraph) {
+        const auto u = ei.first;
+        const auto v = ei.second;
         graph_traits<MultiplexSetGraph>::in_edge_iterator ej, ej_end;
         // If both the source and target of ei are adjacent to the same vertex, that vertex must be the
         // "set vertex". Add the edge between the vertices.
         for (std::tie(ej, ej_end) = in_edges(u, mMultiplexSetGraph); ej != ej_end; ++ej) {
             auto w = target(*ej, mMultiplexSetGraph);
             // Only check (v, w) if w is a "set vertex".
-            if (w >= (n - m) && edge(v, w).second) {
+            if (w >= (n - m) && edge(v, w, mMultiplexSetGraph).second) {
                 add_edge(u, v, mMultiplexSetGraph);
                 hasSubsetConstraint = true;
             }
@@ -551,7 +554,7 @@ void AutoMultiplexing::applySubsetConstraints() {
                             }
                             D.set(v);
                             if (out_degree(v, mMultiplexSetGraph) == 0) {
-                                V.push(v);
+                                V.push_back(v);
                             }
                             else {
                                 S.push(v);
@@ -570,13 +573,15 @@ void AutoMultiplexing::applySubsetConstraints() {
                     Advance * adv = mAdvance[s];
                     PabloBlock * pb = adv->getParent();
 
+                    #define CHOOSE(A,B,C) (isa<Statement>(A) ? cast<Statement>(A) : (isa<Statement>(B) ? cast<Statement>(B) : C))
+
                     for (auto i : V) {
                         Q.push(mAdvance[i]->getOperand(0));
                     }                    
                     while (Q.size() > 1) {
                         PabloAST * a1 = Q.front(); Q.pop();
                         PabloAST * a2 = Q.front(); Q.pop();
-                        pb->setInsertPoint(a2);
+                        pb->setInsertPoint(CHOOSE(a2, a1, adv));
                         Q.push(pb->createOr(a1, a2));
                     }
                     assert (Q.size() == 1);
@@ -599,7 +604,7 @@ void AutoMultiplexing::applySubsetConstraints() {
                     while (Q.size() > 1) {
                         PabloAST * a1 = Q.front(); Q.pop();
                         PabloAST * a2 = Q.front(); Q.pop();
-                        pb->setInsertPoint(cast<Statement>(a2));
+                        pb->setInsertPoint(CHOOSE(a2, a1, adv));
                         Q.push(pb->createOr(a1, a2));
                     }
                     assert (Q.size() == 1);
@@ -671,16 +676,17 @@ void AutoMultiplexing::multiplexSelectedIndependentSets() {
                         T.push(mAdvance[V[i]]->getOperand(0));
                     }
                 }
+                Advance * const adv = mAdvance[V[j]];
                 // TODO: figure out a way to determine whether we're creating a duplicate value below.
                 // The expression map findOrCall ought to work conceptually but the functors method
                 // doesn't really work anymore with the current API.
                 while (T.size() > 1) {
                     PabloAST * a1 = T.front(); T.pop();
                     PabloAST * a2 = T.front(); T.pop();
-                    pb->setInsertPoint(cast<Statement>(a2));
+                    pb->setInsertPoint(CHOOSE(a2, a1, adv));
                     T.push(pb->createOr(a1, a2));
                 }
-                mAdvance[V[j]]->setOperand(0, T.front()); T.pop();
+                adv->setOperand(0, T.front()); T.pop();
             }
 
             /// Perform m-to-n Demultiplexing
@@ -692,6 +698,7 @@ void AutoMultiplexing::multiplexSelectedIndependentSets() {
 
             // Now construct the demuxed values and replaces all the users of the original advances with them.
             for (unsigned i = 0; i != n; ++i) {
+                Advance * adv = mAdvance[V[i]];
                 for (unsigned j = 0; j != m; ++j) {
                     if (((i + 1) & (1 << j)) != 0) {
                         T.push(mAdvance[V[j]]);
@@ -703,7 +710,7 @@ void AutoMultiplexing::multiplexSelectedIndependentSets() {
                 while (T.size() > 1) {
                     PabloAST * a1 = T.front(); T.pop();
                     PabloAST * a2 = T.front(); T.pop();
-                    pb->setInsertPoint(cast<Statement>(a2));
+                    pb->setInsertPoint(CHOOSE(a2, a1, adv));
                     T.push(pb->createAnd(a1, a2));
                 }
                 assert (T.size() == 1);
@@ -711,14 +718,14 @@ void AutoMultiplexing::multiplexSelectedIndependentSets() {
                 while (F.size() > 1) {
                     PabloAST * a1 = T.front(); T.pop();
                     PabloAST * a2 = T.front(); T.pop();
-                    pb->setInsertPoint(cast<Statement>(a2));
+                    pb->setInsertPoint(CHOOSE(a2, a1, adv));
                     F.push(pb->createOr(a1, a2));
                 }
                 assert (F.size() == 1);
 
                 PabloAST * const demux = pb->createAnd(T.front(), pb->createNot(F.front()), "demux"); T.pop(); F.pop();
                 for (PabloAST * use : users[i]) {
-                    cast<Statement>(use)->replaceUsesOfWith(mAdvance[V[j]], demux);
+                    cast<Statement>(use)->replaceUsesOfWith(adv, demux);
                 }
             }
 
@@ -751,7 +758,9 @@ void AutoMultiplexing::topologicalSort(PabloBlock & entry) const {
 
     std::stack<Statement *> scope;
 
-    Statement * ip = nullptr, first, stmt;
+    Statement * ip = nullptr;
+    Statement * first;
+    Statement * stmt;
 
     for (first = stmt = entry.front(); ; ) {
 
@@ -775,7 +784,7 @@ void AutoMultiplexing::topologicalSort(PabloBlock & entry) const {
                 if (f == map.end()) {
                     continue;
                 }
-                add_edge(f->second, u);
+                add_edge(f->second, u, G);
             }
             if (in_degree(u, G) == 0) {
                 Q.push(u);
@@ -820,3 +829,6 @@ void AutoMultiplexing::topologicalSort(TopologicalSortGraph & G, TopologicalSort
     G.clear();
     M.clear();
 }
+
+} // end of namespace pablo
+

@@ -133,20 +133,22 @@ struct BDD {
         return mRoot < 2;
     }
 
-    inline BDD Contradiction() const {
+    static inline BDD Contradiction() {
         return BDD(0);
     }
 
-    inline BDD Tautology() const {
+    static inline BDD Tautology() {
         return BDD(1);
     }
 
+    inline BDD() : mRoot(0) {}
+    inline BDD(const BDD & r) : mRoot(r.mRoot) {  }
+
+    inline ~BDD() { }
+
 protected:
 
-    inline BDD() : mRoot(0) {}
     inline BDD(const index_type index) : mRoot(index) { }
-    inline BDD(const BDD & r) : mRoot(r.mRoot) {  }
-    inline ~BDD() { }
 
 private:
 
