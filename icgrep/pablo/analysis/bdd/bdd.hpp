@@ -9,7 +9,6 @@
 #endif
 #include <slab_allocator.h>
 
-
 namespace bdd {
 
 struct BDD;
@@ -64,25 +63,27 @@ class Engine {
 
 public:
 
-    Engine(const size_t initialSize);
+    inline Engine() {}
 
-    BDD applyAnd(const BDD & r, const BDD & l);
+    void init(const size_t initialSize);
 
-    BDD applyOr(const BDD & r, const BDD & l);
+    inline BDD applyAnd(const BDD & r, const BDD & l);
 
-    BDD applyNot(const BDD & bdd);
+    inline BDD applyOr(const BDD & r, const BDD & l);
 
-    BDD applyXor(const BDD & r, const BDD & l);
+    inline BDD applyNot(const BDD & bdd);
 
-    BDD applySel(const BDD & cond, const BDD & trueBDD, const BDD & falseBDD);
+    inline BDD applyXor(const BDD & r, const BDD & l);
+
+    inline BDD applySel(const BDD & cond, const BDD & trueBDD, const BDD & falseBDD);
 
     BDD addVar();
 
-    BDD var(const unsigned index);
+    inline BDD var(const unsigned index);
 
-    BDD nvar(const unsigned index);
+    inline BDD nvar(const unsigned index);
 
-    BDD satOne(const BDD & bdd);
+    inline BDD satOne(const BDD & bdd);
 
 protected:
 
@@ -181,6 +182,14 @@ BDD Engine::applyXor(const BDD & r, const BDD & l) {
 
 BDD Engine::applySel(const BDD & cond, const BDD & trueBDD, const BDD & falseBDD) {
     return applyOr(applyAnd(cond, trueBDD), applyAnd(applyNot(cond), falseBDD));
+}
+
+BDD Engine::var(const unsigned index) {
+    return BDD(mVar[index * 2]);
+}
+
+BDD Engine::nvar(const unsigned index) {
+    return BDD(mVar[index * 2 + 1]);
 }
 
 }

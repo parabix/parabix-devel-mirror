@@ -13,6 +13,8 @@ if (BLOCK_SIZE_256)
 else ()
   message("-- Build with BLOCK_SIZE=128")
 endif()
+option(ENABLE_MULTIPLEXING "Compiling the Multiplexing Module")
+
 
 # configure a header file to pass some of the CMake settings
 # to the source code
@@ -49,13 +51,48 @@ message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
 # Check if boost has been installed on this system.
 set(Boost_USE_STATIC_LIBS ON)
 set(Boost_USE_MULTITHREADED OFF)
-set(Boost_USE_STATIC_RUNTIME OFF)
-find_package(Boost)
+set(Boost_USE_STATIC_RUNTIME ON)
 
-add_library(PabloADT pablo/pabloAST.cpp pablo/ps_assign.cpp pablo/ps_if.cpp pablo/ps_while.cpp pablo/codegenstate.cpp pablo/symbol_generator.cpp pablo/printer_pablos.cpp pablo/pablo_compiler.cpp pablo/optimizers/pablo_simplifier.cpp pablo/optimizers/pablo_codesinking.cpp pablo/carry_data.cpp)
+if(ENABLE_MULTIPLEXING)
+find_package(Boost COMPONENTS system)
+else()
+find_package(Boost)
+endif()
+
+SET(PABLO_SRC pablo/pabloAST.cpp pablo/ps_assign.cpp pablo/ps_if.cpp pablo/ps_while.cpp pablo/codegenstate.cpp pablo/symbol_generator.cpp pablo/printer_pablos.cpp pablo/pablo_compiler.cpp pablo/optimizers/pablo_simplifier.cpp pablo/optimizers/pablo_codesinking.cpp pablo/carry_data.cpp)
+IF (ENABLE_MULTIPLEXING)
+SET(PABLO_SRC ${PABLO_SRC} pablo/optimizers/pablo_automultiplexing.cpp)
+ENDIF()
+
+add_library(PabloADT ${PABLO_SRC})
 add_library(RegExpADT re/re_re.cpp re/re_cc.cpp re/re_parser.cpp re/re_rep.cpp re/parsefailure.cpp re/re_nullable.cpp re/re_simplifier.cpp re/re_compiler.cpp re/printer_re.cpp re/re_diff.cpp re/re_intersect.cpp re/re_analysis.cpp)
 add_library(CCADT cc/cc_namemap.cpp cc/cc_compiler.cpp utf8_encoder.cpp UCD/CaseFolding_txt.cpp)
 add_library(UCDlib UCD/unicode_set.cpp UCD/precompiled_gc.cpp UCD/precompiled_sc.cpp UCD/precompiled_scx.cpp UCD/precompiled_blk.cpp UCD/precompiled_derivedcoreproperties.cpp UCD/precompiled_proplist.cpp) 
+
+
+IF(Boost_FOUND)
+    include_directories("${Boost_INCLUDE_DIRS}")
+    link_directories(${Boost_LIBRARY_DIR})
+    SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DUSE_BOOST")
+ENDIF()
+
+IF (ENABLE_MULTIPLEXING)
+message(STATUS "Enabling Multiplexing")
+SET(CUDD_ROOT "${CMAKE_SOURCE_DIR}/../cudd-2.5.1")
+message(STATUS ${CUDD_ROOT})
+file(GLOB UTIL_SOURCES "${CUDD_ROOT}/util/*.c")
+file(GLOB MTR_SOURCES "${CUDD_ROOT}/mtr/*.c")
+file(GLOB CUDD_SOURCES "${CUDD_ROOT}/cudd/*.c")
+file(GLOB ST_SOURCES "${CUDD_ROOT}/st/*.c")
+file(GLOB EPD_SOURCES "${CUDD_ROOT}/epd/*.c")
+add_library(CUDD ${UTIL_SOURCES} ${MTR_SOURCES} ${CUDD_SOURCES} ${ST_SOURCES} ${EPD_SOURCES})
+
+
+
+include_directories(${CUDD_ROOT}/include)
+target_link_libraries (PabloADT CUDD)
+SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DENABLE_MULTIPLEXING")
+ENDIF()
 
 include_directories("${PROJECT_SOURCE_DIR}")
 include_directories("${PROJECT_SOURCE_DIR}/re")
@@ -72,15 +109,6 @@ add_executable(icgrep icgrep.cpp do_grep.cpp compiler.cpp)
 target_link_libraries (CCADT PabloADT RegExpADT)
 target_link_libraries (PabloADT ${REQ_LLVM_LIBRARIES})
 target_link_libraries (icgrep UCDlib PabloADT RegExpADT CCADT ${REQ_LLVM_LIBRARIES})
-# If Boost is on the system, include the headers and libraries
-IF(Boost_FOUND)
-    include_directories("${Boost_INCLUDE_DIRS}")
-    link_directories(${Boost_LIBRARY_DIR})
-    SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DUSE_BOOST")
-    # target_link_libraries (CCADT ${Boost_LIBRARIES})
-    # target_link_libraries (PabloADT ${Boost_LIBRARIES})
-    # target_link_libraries (RegExpADT ${Boost_LIBRARIES})
-ENDIF()
 
 #Check compiler support for 0x / 11
 include(CheckCXXCompilerFlag)
@@ -103,7 +131,6 @@ else()
     endif()
   endif()
 endif()
-
 
 #Disable RunTime Type Information
 IF (MSVC) # using Visual Studio C++ 

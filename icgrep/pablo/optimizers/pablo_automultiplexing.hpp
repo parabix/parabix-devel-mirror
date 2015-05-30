@@ -4,7 +4,6 @@
 #include <pablo/codegenstate.h>
 #include <slab_allocator.h>
 #include <queue>
-#include <pablo/analysis/bdd/bdd.hpp>
 #include <boost/graph/adjacency_list.hpp>
 #include <boost/graph/adjacency_matrix.hpp>
 #include <boost/graph/edge_list.hpp>
@@ -13,11 +12,14 @@
 #include <random>
 #include <stdint.h>
 
+struct DdManager; // forward declare of the CUDD manager
+struct DdNode;
+
 namespace pablo {
 
 class AutoMultiplexing {
 
-    using CharacterizationMap = boost::container::flat_map<const PabloAST *, bdd::BDD>;
+    using CharacterizationMap = boost::container::flat_map<const PabloAST *, DdNode *>;
     using ConstraintGraph = boost::adjacency_list<boost::hash_setS, boost::vecS, boost::bidirectionalS>;
     using PathGraph = boost::adjacency_matrix<boost::undirectedS>;
     using MultiplexSetGraph = boost::adjacency_list<boost::hash_setS, boost::vecS, boost::bidirectionalS>;
@@ -38,8 +40,8 @@ class AutoMultiplexing {
 public:
     static void optimize(const std::vector<Var *> & input, PabloBlock & entry);
 protected:
-    bdd::Engine initialize(const std::vector<Var *> & vars, const PabloBlock & entry);
-    void characterize(bdd::Engine & engine, PabloBlock &entry);
+    void initialize(const std::vector<Var *> & vars, const PabloBlock & entry);
+    void characterize(PabloBlock & entry);    
     void createMultiplexSetGraph();
     bool generateMultiplexSets(RNG & rng);    
     void addMultiplexSet(const IndependentSet & set);
@@ -48,10 +50,20 @@ protected:
     void multiplexSelectedIndependentSets();
     void topologicalSort(PabloBlock & entry) const;
     void topologicalSort(TopologicalSortGraph & G, TopologicalSortQueue & Q, TopologicalSortMap & M, Statement * ip, Statement * first) const;
-
+    inline AutoMultiplexing()
+    : mPathGraph(0) {
+    }
 private:
-    AutoMultiplexing();
-
+    bool isZero(DdNode * x) const;
+    DdNode * And(DdNode * x, DdNode * y);
+    DdNode * Or(DdNode * x, DdNode * y);
+    DdNode * Xor(DdNode * x, DdNode * y);
+    DdNode * Not(DdNode * x);
+    DdNode * Ite(DdNode * x, DdNode * y, DdNode * z);
+    bool noSatisfyingAssignment(DdNode * x);
+    void shutdown();
+private:
+    DdManager *             mManager;
     CharacterizationMap     mCharacterizationMap;
     PathGraph               mPathGraph;
     ConstraintGraph         mConstraintGraph;

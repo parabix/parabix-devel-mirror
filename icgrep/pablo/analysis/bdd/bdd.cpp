@@ -1,4 +1,5 @@
 #include "bdd.hpp"
+#include <iostream>
 
 namespace bdd {
 
@@ -22,6 +23,8 @@ Engine::index_type Engine::apply(const index_type l, const OpCode op) {
 }
 
 Engine::index_type Engine::apply(const index_type l, const index_type r, const OpCode op) {
+
+    std::cerr << "Engine::apply(" << l << ',' << r << ',' << (int)(op) << ")\n";
 
     switch (op) {
         case OpCode::AND:
@@ -47,19 +50,24 @@ Engine::index_type Engine::apply(const index_type l, const index_type r, const O
             throw std::runtime_error("Unsupported binary operation.");
     }
 
+    if (l >= mNode.size() || r >= mNode.size()) {
+        throw std::runtime_error("Accessing invalid BDD node!");
+    }
+
     const Node & nl = mNode[l];
-    const Node & nr = mNode[l];
+    const Node & nr = mNode[r];
 
     unsigned lowl = l;
     unsigned highl = l;
+    unsigned lowr = r;
+    unsigned highr = r;
     unsigned level = nl.level;
+
     if (nl.level <= nr.level) {
         lowl = nl.low;
         highl = nl.high;
     }
 
-    unsigned lowr = r;
-    unsigned highr = r;
     if (nr.level <= nl.level) {
         lowr = nr.low;
         highr = nr.high;
@@ -94,14 +102,6 @@ Engine::index_type Engine::satOne(const index_type root) {
     }
 }
 
-BDD Engine::var(const unsigned index) {
-    return BDD(mVar[index * 2]);
-}
-
-BDD Engine::nvar(const unsigned index) {
-    return BDD(mVar[index * 2 + 1]);
-}
-
 BDD Engine::addVar() {
     unsigned level = mVar.size() >> 1;
     index_type var = makeNode(level, 0, 1);
@@ -110,9 +110,9 @@ BDD Engine::addVar() {
     return BDD(var);
 }
 
-Engine::Engine(const size_t initialSize) {
-    mNode.reserve(initialSize + 2);
-    mMap.bucket_size(initialSize);
+void Engine::init(const size_t variables) {
+    mNode.reserve(variables + 2);
+    mMap.bucket_size(variables);
 
     // add the 0 terminal
     assert (mNode.size() == 0);
@@ -125,8 +125,8 @@ Engine::Engine(const size_t initialSize) {
     mMap.insert(std::make_pair(std::make_tuple(0, 1, 1), 1));
 
     // and the variables
-    mVar.resize(initialSize * 2);
-    for (auto i = 0; i != initialSize; ++i) {
+    mVar.resize(variables * 2);
+    for (auto i = 0; i != variables; ++i) {
         mVar[i * 2] = makeNode(i, 0, 1);
         mVar[i * 2 + 1] = makeNode(i, 1, 0);
     }
