@@ -100,6 +100,7 @@ void PabloAST::replaceAllUsesWith(PabloAST * expr) {
 
 
 void Statement::setOperand(const unsigned index, PabloAST * const value) {
+    assert (value);
     assert (index < getNumOperands());
     assert (noRecursiveOperand(value));
     if (LLVM_UNLIKELY(getOperand(index) == value)) {

@@ -47,9 +47,8 @@ protected:
     void addMultiplexSet(const IndependentSet & set);
     void approxMaxWeightIndependentSet(RNG & rng);
     void applySubsetConstraints();
-    void multiplexSelectedIndependentSets();
+    void multiplexSelectedIndependentSets() const;
     void topologicalSort(PabloBlock & entry) const;
-    void topologicalSort(TopologicalSortGraph & G, TopologicalSortQueue & Q, TopologicalSortMap & M, Statement * ip, Statement * first) const;
     inline AutoMultiplexing()
     : mPathGraph(0) {
     }

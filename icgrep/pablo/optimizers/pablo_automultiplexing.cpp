@@ -15,12 +15,13 @@
 #include <iostream>
 #include <cudd.h>
 #include <util.h>
-#include <fstream>
 
 using namespace llvm;
 using namespace boost;
 using namespace boost::container;
 using namespace boost::numeric::ublas;
+
+#define PROVIDE_ASSIGNMENT_STATEMENTS_FOR_MUX_AND_DEMUX_STATEMENTS
 
 namespace pablo {
 
@@ -452,8 +453,6 @@ bool AutoMultiplexing::generateMultiplexSets(RNG & rng) {
     unsigned remainingVerticies = num_vertices(mConstraintGraph);
     std::vector<DegreeType> D(remainingVerticies);
 
-    bool canMultiplex = false;
-
     VertexIterator vi, vi_end;
     for (std::tie(vi, vi_end) = vertices(mConstraintGraph); vi != vi_end; ++vi) {
         auto d = in_degree(*vi, mConstraintGraph);
@@ -468,7 +467,6 @@ bool AutoMultiplexing::generateMultiplexSets(RNG & rng) {
     for ( ; remainingVerticies >= 3; --remainingVerticies) {
         if (S.size() >= 3) {
             addMultiplexSet(S);
-            canMultiplex = true;
         }        
         // Randomly choose a vertex in S and discard it.
         assert (!S.empty());
@@ -484,31 +482,30 @@ bool AutoMultiplexing::generateMultiplexSets(RNG & rng) {
         }
     }
 
-    raw_os_ostream out(std::cerr);
+//    raw_os_ostream out(std::cerr);
 
-    out << "\n\ndigraph G {\n";
+//    out << "\n\ndigraph G {\n";
 
-    const unsigned m = num_vertices(mConstraintGraph);
-    const unsigned n = num_vertices(mMultiplexSetGraph);
+//    const unsigned m = num_vertices(mConstraintGraph);
+//    const unsigned n = num_vertices(mMultiplexSetGraph);
 
-    for (unsigned i = 0; i != m; ++i) {
-        out << "v" << i << " [shape=box,label=\"" << mAdvance[i]->getName()->to_string() << "\"];\n";
-    }
-    for (unsigned i = m; i != n; ++i) {
-        out << "v" << i << " [shape=circle];\n";
-    }
+//    for (unsigned i = 0; i != m; ++i) {
+//        out << "v" << i << " [shape=box,label=\"" << mAdvance[i]->getName()->to_string() << "\"];\n";
+//    }
+//    for (unsigned i = m; i != n; ++i) {
+//        out << "v" << i << " [shape=circle];\n";
+//    }
 
-    for (unsigned i = m; i != n; ++i) {
-        graph_traits<MultiplexSetGraph>::out_edge_iterator ei, ei_end;
-        for (std::tie(ei, ei_end) = out_edges(i, mMultiplexSetGraph); ei != ei_end; ++ei) {
-            out << "v" << i << " -> v" << target(*ei, mMultiplexSetGraph) << ";\n";
-        }
-    }
+//    for (unsigned i = m; i != n; ++i) {
+//        graph_traits<MultiplexSetGraph>::out_edge_iterator ei, ei_end;
+//        for (std::tie(ei, ei_end) = out_edges(i, mMultiplexSetGraph); ei != ei_end; ++ei) {
+//            out << "v" << i << " -> v" << target(*ei, mMultiplexSetGraph) << ";\n";
+//        }
+//    }
 
-    out << "}\n\n";
+//    out << "}\n\n";
 
-
-    return canMultiplex;
+    return num_vertices(mMultiplexSetGraph) > num_vertices(mConstraintGraph);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -535,47 +532,29 @@ void AutoMultiplexing::approxMaxWeightIndependentSet(RNG & rng) {
     // Compute our independent set graph from our multiplex set graph; effectively it's the graph resulting
     // from contracting one advance node edge with an adjacent vertex
 
-    using Set = flat_set<IndependentSetGraph::vertex_descriptor>;
     const unsigned m = num_vertices(mConstraintGraph);
     const unsigned n = num_vertices(mMultiplexSetGraph) - m;
 
     IndependentSetGraph G(n);
 
-    if (true) {
+    for (IndependentSetGraph::vertex_descriptor i = 0; i != n; ++i) {
+        G[i] = out_degree(i + m, mMultiplexSetGraph);
+    }
 
-        std::vector<Set> S(n);
-        // Record the "weight" of this set vertex and compute the actual set
-        for (IndependentSetGraph::vertex_descriptor i = 0; i != n; ++i) {
-            G[i] = out_degree(i + m, mMultiplexSetGraph);
-            Set & Si = S[i];
-            graph_traits<MultiplexSetGraph>::out_edge_iterator ei, ei_end;
-            // What are the members of the i-th set? (i.e., the outgoing edges of the i-th set vertex)
-            for (std::tie(ei, ei_end) = out_edges(i + m, mMultiplexSetGraph); ei != ei_end; ++ei) {
-                Si.insert(target(*ei, mMultiplexSetGraph));
-            }
-        }
+    // Let M be mMultiplexSetGraph. Each vertex in G corresponds to a set vertex in M.
+    // If an advance vertex in M (i.e., one of the first m vertices of M) is adjacent
+    // to two or more set vertices, add an edge between the corresponding vertices in G.
+    // I.e., make all vertices in G adjacent if their corresponding sets intersect.
 
-        // Make all vertices in G adjacent if their sets intersect.
-        for (unsigned i = 1; i != n; ++i) {
-            const Set & Si = S[i];
-            for (unsigned j = 0; j != i; ++j) {
-                const Set & Sj = S[j];
-                auto mi = Si.begin();
-                const auto mi_end = Si.end();
-                auto mj = Sj.begin();
-                const auto mj_end = Sj.end();
-                while (mi != mi_end && mj != mj_end) {
-                    if (*mi < *mj) {
-                        ++mi;
-                    }
-                    else if (*mj < *mi) {
-                        ++mj;
-                    }
-                    else {
-                        // they intersect; add an edge between them.
-                        add_edge(i, j, G);
-                        break;
-                    }
+    for (unsigned i = 0; i != m; ++i) {
+        if (in_degree(i, mMultiplexSetGraph) > 1) {
+            graph_traits<MultiplexSetGraph>::in_edge_iterator ei_begin, ei_end;
+            std::tie(ei_begin, ei_end) = in_edges(i, mMultiplexSetGraph);
+            for (auto ei = ei_begin; ei != ei_end; ++ei) {
+                for (auto ej = ei_begin; ej != ei; ++ej) {
+                    // Note: ei and ej are incoming edges. The source is the set vertex,
+                    // which must have a id >= m.
+                    add_edge(source(*ei, mMultiplexSetGraph) - m, source(*ej, mMultiplexSetGraph) - m, G);
                 }
             }
         }
@@ -607,11 +586,10 @@ void AutoMultiplexing::approxMaxWeightIndependentSet(RNG & rng) {
         if (S.empty()) {
             break;
         }
-        // Select u from S
+        // Select u from S       
         const auto i = S.begin() + RNGDistribution(0, S.size() - 1)(rng);
         const auto u = *i;
         S.erase(i);
-
         // Remove u and its adjacencies from G; clear the adjacent set vertices from the multiplex set graph. This will effectively
         // choose the set refered to by u as one of our chosen independent sets and discard any other sets that contain one
         // of the vertices in the chosen set.
@@ -701,15 +679,13 @@ void AutoMultiplexing::applySubsetConstraints() {
                     Advance * adv = mAdvance[s];
                     PabloBlock * pb = adv->getParent();
 
-                    #define CHOOSE(A,B,C) (isa<Statement>(A) ? cast<Statement>(A) : (isa<Statement>(B) ? cast<Statement>(B) : C))
-
                     for (auto i : V) {
                         Q.push(mAdvance[i]->getOperand(0));
                     }                    
                     while (Q.size() > 1) {
                         PabloAST * a1 = Q.front(); Q.pop();
                         PabloAST * a2 = Q.front(); Q.pop();
-                        pb->setInsertPoint(CHOOSE(a2, a1, adv));
+                        pb->setInsertPoint(cast<Statement>(a2));
                         Q.push(pb->createOr(a1, a2));
                     }
                     assert (Q.size() == 1);
@@ -732,7 +708,7 @@ void AutoMultiplexing::applySubsetConstraints() {
                     while (Q.size() > 1) {
                         PabloAST * a1 = Q.front(); Q.pop();
                         PabloAST * a2 = Q.front(); Q.pop();
-                        pb->setInsertPoint(CHOOSE(a2, a1, adv));
+                        pb->setInsertPoint(cast<Statement>(a2));
                         Q.push(pb->createOr(a1, a2));
                     }
                     assert (Q.size() == 1);
@@ -761,7 +737,7 @@ void AutoMultiplexing::applySubsetConstraints() {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief multiplexSelectedIndependentSets
  ** ------------------------------------------------------------------------------------------------------------- */
-void AutoMultiplexing::multiplexSelectedIndependentSets() {
+void AutoMultiplexing::multiplexSelectedIndependentSets() const {
 
     // When entering thus function, the multiplex set graph M is a DAG with edges denoting the set
     // relationships of our independent sets.
@@ -782,6 +758,8 @@ void AutoMultiplexing::multiplexSelectedIndependentSets() {
 
             const unsigned m = static_cast<unsigned>(std::ceil(std::log2(n))); // use a faster builtin function for this.
 
+            assert (n < (1 << m));
+
             graph_traits<MultiplexSetGraph>::out_edge_iterator ei_begin, ei_end;
             std::tie(ei_begin, ei_end) = out_edges(s, mMultiplexSetGraph);
             for (auto ei = ei_begin; ei != ei_end; ++ei) {
@@ -789,19 +767,38 @@ void AutoMultiplexing::multiplexSelectedIndependentSets() {
             }
             std::sort(V.begin(), V.begin() + n);
 
+//            raw_os_ostream out(std::cerr);
+
+//            out << "M={";
+//            for (auto i = 0; i != n; ++i) {
+//                out << ' ' << mAdvance[V[i]]->getName()->to_string() << " (" << (ptrdiff_t)(mAdvance[V[i]]->getParent()) << ")";
+//            }
+//            out << "}\n\n";
+
             PabloBlock * const pb = mAdvance[V[0]]->getParent();
+            assert (pb);
+
             // Sanity test to make sure every advance is in the same scope.
             #ifndef NDEBUG
             for (auto i = 1; i != n; ++i) {
+                assert (V[i - 1] < V[i]);
+                assert (V[i] < mAdvance.size());
                 assert (mAdvance[V[i]]->getParent() == pb);
             }
             #endif
 
+            // Store the original users of our advances; we'll be modifying these extensively shortly.
+            for (unsigned i = 0; i != n; ++i) {
+                const Advance * const adv = mAdvance[V[i]];
+                assert (users[i].empty());
+                users[i].insert(users[i].begin(), adv->user_begin(), adv->user_end()) ;
+            }
+
             /// Perform n-to-m Multiplexing
             for (unsigned j = 0; j != m; ++j) {
-                for (unsigned i = 0; i != (1 << m); ++i) {
-                    if (((i + 1) & (1 << j)) != 0) {
-                        T.push(mAdvance[V[i]]->getOperand(0));
+                for (unsigned i = 1; i != (1 << m); ++i) {
+                    if ((i & (1 << j)) != 0) {
+                        T.push(mAdvance[V[i - 1]]->getOperand(0));
                     }
                 }
                 Advance * const adv = mAdvance[V[j]];
@@ -811,48 +808,64 @@ void AutoMultiplexing::multiplexSelectedIndependentSets() {
                 while (T.size() > 1) {
                     PabloAST * a1 = T.front(); T.pop();
                     PabloAST * a2 = T.front(); T.pop();
-                    pb->setInsertPoint(CHOOSE(a2, a1, adv));
+                    pb->setInsertPoint(cast<Statement>(a2));
                     T.push(pb->createOr(a1, a2));
                 }
-                adv->setOperand(0, T.front()); T.pop();
+                assert (T.size() == 1);                                
+
+                PabloAST * mux = T.front(); T.pop();
+                #ifdef PROVIDE_ASSIGNMENT_STATEMENTS_FOR_MUX_AND_DEMUX_STATEMENTS
+                mux = pb->createAssign("mux", mux);
+                #endif
+
+                adv->setOperand(0, mux);
             }
 
             /// Perform m-to-n Demultiplexing
-            // Store the original users of our advances; we'll be modifying these extensively shortly.
-            for (unsigned i = 0; i != n; ++i) {
-                const Advance * const adv = mAdvance[V[i]];
-                users[i].insert(users[i].begin(), adv->user_begin(), adv->user_end()) ;
-            }
-
             // Now construct the demuxed values and replaces all the users of the original advances with them.
-            for (unsigned i = 0; i != n; ++i) {
-                Advance * adv = mAdvance[V[i]];
+            for (unsigned i = 1; i <= n; ++i) {
+
+                assert (T.size() == 0 && F.size() == 0);
+
                 for (unsigned j = 0; j != m; ++j) {
-                    if (((i + 1) & (1 << j)) != 0) {
+                    if ((i & (1 << j)) != 0) {
                         T.push(mAdvance[V[j]]);
                     }
                     else {
                         F.push(mAdvance[V[j]]);
                     }
                 }
+
+                assert (T.size() > 0);
+
                 while (T.size() > 1) {
                     PabloAST * a1 = T.front(); T.pop();
                     PabloAST * a2 = T.front(); T.pop();
-                    pb->setInsertPoint(CHOOSE(a2, a1, adv));
+                    pb->setInsertPoint(cast<Statement>(a2));
                     T.push(pb->createAnd(a1, a2));
                 }
+
                 assert (T.size() == 1);
 
-                while (F.size() > 1) {
-                    PabloAST * a1 = T.front(); T.pop();
-                    PabloAST * a2 = T.front(); T.pop();
-                    pb->setInsertPoint(CHOOSE(a2, a1, adv));
-                    F.push(pb->createOr(a1, a2));
-                }
-                assert (F.size() == 1);
+                PabloAST * demux = T.front(); T.pop();
 
-                PabloAST * const demux = pb->createAnd(T.front(), pb->createNot(F.front()), "demux"); T.pop(); F.pop();
-                for (PabloAST * use : users[i]) {
+                if (LLVM_LIKELY(F.size() > 0)) {
+                    while (F.size() > 1) {
+                        PabloAST * a1 = T.front(); T.pop();
+                        PabloAST * a2 = T.front(); T.pop();
+                        pb->setInsertPoint(cast<Statement>(a2));
+                        F.push(pb->createOr(a1, a2));
+                    }
+                    assert (F.size() == 1);
+                    demux = pb->createAnd(demux, pb->createNot(F.front())); F.pop();
+                }
+
+                #ifdef PROVIDE_ASSIGNMENT_STATEMENTS_FOR_MUX_AND_DEMUX_STATEMENTS
+                demux = pb->createAssign("demux", demux);
+                #endif
+
+                Advance * const adv = mAdvance[V[i - 1]];
+                for (PabloAST * use : users[i - 1]) {
                     cast<Statement>(use)->replaceUsesOfWith(adv, demux);
                 }
             }
@@ -880,83 +893,57 @@ void AutoMultiplexing::multiplexSelectedIndependentSets() {
  ** ------------------------------------------------------------------------------------------------------------- */
 void AutoMultiplexing::topologicalSort(PabloBlock & entry) const {
 
-    TopologicalSortGraph G;
-    TopologicalSortQueue Q;
-    TopologicalSortMap map;
+    // Note: not a real topological sort. I expect the original order to be very close to the resulting one.
 
+    std::unordered_set<PabloAST *> encountered;
     std::stack<Statement *> scope;
-
-    Statement * ip = nullptr;
-    Statement * first;
-    Statement * stmt;
-
-    for (first = stmt = entry.front(); ; ) {
+    for (Statement * stmt = entry.front(); ; ) {
 
         while ( stmt ) {
+
+            bool moved = false;
+
+            for (unsigned i = 0; i != stmt->getNumOperands(); ++i) {
+                PabloAST * const op = stmt->getOperand(i);
+                if (LLVM_LIKELY(isa<Statement>(op))) {
+                    if (LLVM_UNLIKELY(encountered.count(op) == 0)) {
+                        Statement * next = stmt->getNextNode();
+                        stmt->insertAfter(cast<Statement>(op));
+                        stmt = next;
+                        moved = true;
+                        break;
+                    }
+                }
+            }
+
+            if (moved) {
+                continue;
+            }
+
+            encountered.insert(stmt);
+
             if (LLVM_UNLIKELY(isa<If>(stmt) || isa<While>(stmt))) {
-                // Sort the current "basic block"
-                topologicalSort(G, Q, map, ip, first);
                 // Set the next statement to be the first statement of the inner scope and push the
                 // next statement of the current statement into the scope stack.
                 const PabloBlock & nested = isa<If>(stmt) ? cast<If>(stmt)->getBody() : cast<While>(stmt)->getBody();
-                scope.push(stmt);
-                ip = nullptr;
-                first = stmt = nested.front();
+                scope.push(stmt->getNextNode());
+                stmt = nested.front();
                 assert (stmt);
                 continue;
             }
 
-            const auto u = add_vertex(stmt, G);
-            for (unsigned i = 0; i != stmt->getNumOperands(); ++i) {
-                auto f = map.find(stmt->getOperand(i));
-                if (f == map.end()) {
-                    continue;
-                }
-                add_edge(f->second, u, G);
-            }
-            if (in_degree(u, G) == 0) {
-                Q.push(u);
-            }
-            map.emplace(stmt, u);
             stmt = stmt->getNextNode();
         }
 
-        topologicalSort(G, Q, map, ip, first);
         if (scope.empty()) {
             break;
         }
-        ip = scope.top();
+        stmt = scope.top();
         scope.pop();
-        first = stmt = ip->getNextNode();
     }
 
 }
 
-void AutoMultiplexing::topologicalSort(TopologicalSortGraph & G, TopologicalSortQueue & Q, TopologicalSortMap & M, Statement * ip, Statement * first) const {
-    Statement * stmt = first;
-    while (!Q.empty()) {
-        const auto u = Q.front(); Q.pop();
-        graph_traits<TopologicalSortGraph>::out_edge_iterator ei, ei_end;
-        for (std::tie(ei, ei_end) = out_edges(u, G); ei != ei_end; ++ei) {
-            const auto v = target(*ei, G);
-            if (in_degree(v, G) == 1) {
-                Q.push(v);
-            }
-        }
-        Statement * next = G[u];
-        if (stmt != next) {
-            if (LLVM_UNLIKELY(ip == nullptr)) {
-                next->insertBefore(first);
-            }
-            else {
-                next->insertAfter(ip);
-            }
-        }
-        ip = next;
-    }
-    G.clear();
-    M.clear();
-}
 
 } // end of namespace pablo
 

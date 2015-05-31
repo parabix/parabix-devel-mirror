@@ -54,7 +54,7 @@ class While;
 
 class PabloBlock : public PabloAST, public StatementList {
     friend class pablo::PabloAST;
-    friend class Builder;
+    friend class Builder;    
 public:
 
     static inline bool classof(const PabloBlock *) {
