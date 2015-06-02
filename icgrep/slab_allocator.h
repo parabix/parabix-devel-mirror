@@ -11,7 +11,7 @@ class __BumpPtrAllocatorProxy {
 public:
     template <typename T>
     static inline T * Allocate(const size_t n) {
-        return mAllocator.Allocate<T>(n);
+        return static_cast<T*>(mAllocator.Allocate(n * sizeof(T), sizeof(void*)));
     }
     template <typename T>
     static inline void Deallocate(const T * pointer) {
@@ -27,7 +27,7 @@ public:
         return mAllocator;
     }
 private:
-    static llvm::BumpPtrAllocator mAllocator;
+    static LLVMAllocator mAllocator;
 };
 
 LLVMAllocator __BumpPtrAllocatorProxy::mAllocator;

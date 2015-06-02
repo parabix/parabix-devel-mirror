@@ -186,7 +186,7 @@ public:
     void insertAfter(Statement * const statement);
     Statement * removeFromParent();
     Statement * eraseFromParent(const bool recursively = false);
-    Statement * replaceWith(PabloAST * const expr, const bool rename = true);
+    Statement * replaceWith(PabloAST * const expr, const bool rename = true, const bool recursively = false);
 
     inline const String * getName() const {
         return mName;

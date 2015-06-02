@@ -498,7 +498,9 @@ void PabloCompiler::compileIf(const If * ifStatement) {
             const Assign * assign = cast<Assign>(node);
             PHINode * phi = bEnd.CreatePHI(mBitBlockType, 2, assign->getName()->value());
             auto f = mMarkerMap.find(assign);
-            assert (f != mMarkerMap.end());
+            if (LLVM_UNLIKELY(f == mMarkerMap.end())) {
+                throw std::runtime_error("Fatal error during compileIf: could not find \"" + assign->getName()->to_string() + "\" in the marker map.");
+            }
             phi->addIncoming(mZeroInitializer, ifEntryBlock);
             phi->addIncoming(f->second, mBasicBlock);
             mMarkerMap[assign] = phi;

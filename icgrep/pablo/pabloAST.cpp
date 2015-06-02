@@ -200,7 +200,7 @@ Statement * Statement::eraseFromParent(const bool recursively) {
     return removeFromParent();
 }
 
-Statement * Statement::replaceWith(PabloAST * const expr, const bool rename) {
+Statement * Statement::replaceWith(PabloAST * const expr, const bool rename, const bool recursively) {
     assert (expr);
     if (LLVM_UNLIKELY(expr == this)) {
         return getNextNode();
@@ -212,7 +212,7 @@ Statement * Statement::replaceWith(PabloAST * const expr, const bool rename) {
         }
     }
     replaceAllUsesWith(expr);
-    return eraseFromParent();
+    return eraseFromParent(recursively);
 }
 
 #ifndef NDEBUG
@@ -251,6 +251,7 @@ void StatementList::insert(Statement * const statement) {
     else {
         statement->insertAfter(mInsertionPoint);
         mLast = (mLast == mInsertionPoint) ? statement : mLast;
+        assert (statement->mPrev == mInsertionPoint);
         mInsertionPoint = statement;
     }
 }

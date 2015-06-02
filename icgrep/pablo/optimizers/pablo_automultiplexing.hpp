@@ -23,7 +23,8 @@ class AutoMultiplexing {
     using ConstraintGraph = boost::adjacency_list<boost::hash_setS, boost::vecS, boost::bidirectionalS>;
     using PathGraph = boost::adjacency_matrix<boost::undirectedS>;
     using MultiplexSetGraph = boost::adjacency_list<boost::hash_setS, boost::vecS, boost::bidirectionalS>;
-    using IndependentSetGraph = boost::adjacency_list<boost::hash_setS, boost::vecS, boost::undirectedS, unsigned>;
+    using IndependentSetGraph = boost::adjacency_list<boost::hash_setS, boost::listS, boost::undirectedS, std::pair<unsigned, MultiplexSetGraph::vertex_descriptor>>;
+    using ChosenSets = std::vector<MultiplexSetGraph::vertex_descriptor>;
     using SubsetGraph = std::vector<std::pair<MultiplexSetGraph::vertex_descriptor, MultiplexSetGraph::vertex_descriptor>>;
     using Advances = std::vector<Advance *>;
     using TopologicalSortGraph = boost::adjacency_list<boost::hash_setS, boost::vecS, boost::bidirectionalS, Statement *>;

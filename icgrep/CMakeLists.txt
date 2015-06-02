@@ -278,7 +278,7 @@ ENDIF()
 
 SET(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS} -O3 -DNDEBUG")
 IF (${CMAKE_SYSTEM} MATCHES "Linux")
-    SET(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS} -g -fsanitize=address")
+    SET(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS} -g -fsanitize=address -fsanitize=undefined-trap")
 ENDIF()
 
 add_test(
