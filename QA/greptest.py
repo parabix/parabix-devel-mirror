@@ -18,13 +18,14 @@
 # </greptest>
 
 
-import sys, subprocess, os, optparse, re, codecs
+import sys, subprocess, os, optparse, re, codecs, stat
 import xml.parsers.expat
 
 in_datafile = False
 
 def start_element_open_file(name, attrs):
 	global outf
+	global outfpath
 	global in_datafile
 	if name == 'datafile':
 		idFound = False
@@ -35,7 +36,8 @@ def start_element_open_file(name, attrs):
 		if not idFound:
 			print "Expecting id attribute for datafile, but none found."
 			exit(-1)
-		outf = codecs.open(os.path.join(options.datafile_dir, filename), encoding='utf-8', mode='w')
+                outfpath = os.path.join(options.datafile_dir, filename)
+		outf = codecs.open(outfpath, encoding='utf-8', mode='w')
 		in_datafile = True
 
 def char_data_write_contents(data):
@@ -44,9 +46,11 @@ def char_data_write_contents(data):
 
 def end_element_close_file(name):
 	global outf
+	global outfpath
 	global in_datafile
 	if name == 'datafile':
 		outf.close()
+                os.chmod(outfpath, stat.S_IRUSR | stat.S_IWUSR | stat.S_IRGRP | stat.S_IWGRP | stat.S_IROTH | stat.S_IWOTH)
 		in_datafile = False
 
 def make_data_files(greptest_xml):
