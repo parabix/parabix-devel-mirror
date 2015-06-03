@@ -225,12 +225,10 @@ void AutoMultiplexing::characterize(PabloBlock & entry) {
                 const PabloBlock & nested = isa<If>(stmt) ? cast<If>(stmt)->getBody() : cast<While>(stmt)->getBody();
                 scope.push(stmt->getNextNode());
                 stmt = nested.front();
-                assert (stmt);
                 continue;
             }
 
             DdNode * bdd = nullptr;
-
             // Map our operands to the computed BDDs
             std::array<DdNode *, 3> input;
             for (unsigned i = 0; i != stmt->getNumOperands(); ++i) {
@@ -246,7 +244,7 @@ void AutoMultiplexing::characterize(PabloBlock & entry) {
             }
 
             bool testContradiction = true;
-            bool updateCharacterization = true;
+            bool updateVariable = true;
 
             switch (stmt->getClassTypeId()) {
                 case PabloAST::ClassTypeId::Assign:
@@ -282,12 +280,10 @@ void AutoMultiplexing::characterize(PabloBlock & entry) {
                     }
                 case PabloAST::ClassTypeId::Call:
                     testContradiction = false;
-                    updateCharacterization = false;
+                    updateVariable = false;
                     break;
                 case PabloAST::ClassTypeId::Advance:
-
                     assert (stmt == mAdvance[advances.size()]);
-
                     if (LLVM_UNLIKELY(isZero(input[0]))) {
                         bdd = Cudd_ReadZero(mManager);
                         // mark this advance as having an input and output of 0
@@ -312,22 +308,18 @@ void AutoMultiplexing::characterize(PabloBlock & entry) {
                             // We could probably avoid some tests by infering that if X ⊂ Y and Y ⊂ Z then X ⊂ Z too. Will need a
                             // more complex graph structure for storing subset edges. Similarly if X ∩ Y = ∅ and Z ⊂ X, Z ∩ Y = ∅
 
-                            // Only test pairs if they are in the same scope or one has a user in the same scope that is reachable
-                            // by the other?
+                            // Only test pairs if they are in the same scope or one has a user in the a scope that is reachable by
+                            // the other?
 
                             bool constrained = true;
 
                             // If these advances are "shifting" their values by the same amount and aren't transitively dependant ...
                             if ((stmt->getOperand(1) == adv->getOperand(1)) && (!edge(k, i, mPathGraph).second)) {
-
-
-                                // Test this with Cudd_bddIntersect / Cudd_bddLeq
+                                // Test this with Cudd_And, Cudd_bddIntersect (and maybe Cudd_bddLeq?) to see which is faster ...
                                 DdNode * const tmp = Cudd_bddIntersect(mManager, Ik, Ii);
                                 Cudd_Ref(tmp);
                                 // Is there any satisfying truth assignment? If not, these streams are mutually exclusive.
                                 if (noSatisfyingAssignment(tmp)) {
-                                    std::cerr << stmt->getName()->to_string() << " ∩ " << adv->getName()->to_string() << " = ∅"  << std::endl;
-
                                     assert (mCharacterizationMap.count(adv));
 
                                     DdNode *& other = mCharacterizationMap[adv];
@@ -337,7 +329,6 @@ void AutoMultiplexing::characterize(PabloBlock & entry) {
                                     constrained = false;
                                 }
                                 else if (Ik == tmp) {
-                                    std::cerr << stmt->getName()->to_string() << " ⊂ " << adv->getName()->to_string()  << std::endl;
                                     // If Ik = Ii ∩ Ik then Ik (the input to the k-th advance) is a *subset* of Ii (the input of the
                                     // i-th advance). Record this in the subset graph with the arc (k,i). These edges will be moved into the
                                     // multiplex set graph if Advance_i and Advance_k happen to be in the same mutually exclusive set.
@@ -345,7 +336,6 @@ void AutoMultiplexing::characterize(PabloBlock & entry) {
                                     constrained = false;
                                 }
                                 else if (Ii == tmp) {
-                                    std::cerr << stmt->getName()->to_string() << " ⊃ " << adv->getName()->to_string()  << std::endl;
                                     mSubsetGraph.emplace_back(i, k);
                                     constrained = false;
                                 }
@@ -360,24 +350,22 @@ void AutoMultiplexing::characterize(PabloBlock & entry) {
                             }
 
                         }
-
-                        // Append this advance to the list of known advances in this "basic block"; add on the input's BDD to
-                        // eliminate the need for looking it up again.
+                        // Append this advance to the list of known advances. Both its input BDD and the Advance variable are stored in
+                        // the list to eliminate the need for searching for it.
                         advances.emplace_back(Ik, Vk);
                         testContradiction = false;
                     }
-
-
                     break;
                 default:
                     throw std::runtime_error("Unexpected statement " + stmt->getName()->to_string());
             }
+            assert ("Failed to generate a BDD." && (bdd || !(testContradiction || updateVariable)));
             if (LLVM_UNLIKELY(testContradiction && noSatisfyingAssignment(bdd))) {
+                // std::cerr << stmt->getName()->to_string() << " = ∅"  << std::endl;
                 Cudd_RecursiveDeref(mManager, bdd);                
                 stmt = stmt->replaceWith(entry.createZeroes());
-                continue;
             }
-            else if (LLVM_LIKELY(updateCharacterization)){
+            else if (LLVM_LIKELY(updateVariable)) {
                 mCharacterizationMap[stmt] = bdd;
             }
             stmt = stmt->getNextNode();
@@ -915,56 +903,44 @@ void AutoMultiplexing::multiplexSelectedIndependentSets() const {
  * it's not necessarily the original ordering.
  ** ------------------------------------------------------------------------------------------------------------- */
 void AutoMultiplexing::topologicalSort(PabloBlock & entry) const {
-
     // Note: not a real topological sort. I expect the original order to be very close to the resulting one.
-
-    std::unordered_set<PabloAST *> encountered;
+    std::unordered_set<const PabloAST *> encountered;
     std::stack<Statement *> scope;
     for (Statement * stmt = entry.front(); ; ) {
-
-        while ( stmt ) {
-
-            bool moved = false;
-
+restart:while ( stmt ) {
             for (unsigned i = 0; i != stmt->getNumOperands(); ++i) {
                 PabloAST * const op = stmt->getOperand(i);
                 if (LLVM_LIKELY(isa<Statement>(op))) {
                     if (LLVM_UNLIKELY(encountered.count(op) == 0)) {
-                        Statement * next = stmt->getNextNode();
+                        if (LLVM_UNLIKELY(isa<While>(stmt) && isa<Next>(op))) {
+                            if (encountered.count(cast<Next>(op)->getInitial()) != 0) {
+                                continue;
+                            }
+                        }
+                        Statement * const next = stmt->getNextNode();
                         stmt->insertAfter(cast<Statement>(op));
                         stmt = next;
-                        moved = true;
-                        break;
+                        goto restart;
                     }
                 }
             }
-
-            if (moved) {
-                continue;
-            }
-
-            encountered.insert(stmt);
-
             if (LLVM_UNLIKELY(isa<If>(stmt) || isa<While>(stmt))) {
                 // Set the next statement to be the first statement of the inner scope and push the
                 // next statement of the current statement into the scope stack.
                 const PabloBlock & nested = isa<If>(stmt) ? cast<If>(stmt)->getBody() : cast<While>(stmt)->getBody();
                 scope.push(stmt->getNextNode());
                 stmt = nested.front();
-                assert (stmt);
                 continue;
             }
-
+            encountered.insert(stmt);
             stmt = stmt->getNextNode();
         }
-
         if (scope.empty()) {
             break;
         }
         stmt = scope.top();
         scope.pop();
     }
-
 }
 
 } // end of namespace pablo
