@@ -178,7 +178,7 @@ CompiledPabloFunction PabloCompiler::compile(PabloBlock & pb)
     }
 
     if (DumpTrace || TraceNext) {
-        genPrintRegister("blockNo", genCarryDataLoad(totalCarryDataSize));
+        genPrintRegister("blockNo", genCarryDataLoad(totalCarryDataSize - 1));
     }
     if (LLVM_UNLIKELY(mWhileDepth != 0)) {
         throw std::runtime_error("Non-zero nesting depth error (" + std::to_string(mWhileDepth) + ")");
