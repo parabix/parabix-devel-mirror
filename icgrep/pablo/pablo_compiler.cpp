@@ -1011,7 +1011,7 @@ Value* PabloCompiler::genLongAdvanceWithCarry(Value* strm_value, int shift_amoun
     const unsigned block_shift = shift_amount % BLOCK_SIZE;
     const unsigned advanceEntries = cd.longAdvanceEntries(shift_amount);
     const unsigned bufsize = cd.longAdvanceBufferSize(shift_amount);
-    std::cerr << "shift_amount = " << shift_amount << " bufsize = " << bufsize << std::endl;
+
     Value * indexMask = b.getInt64(bufsize - 1);  // A mask to implement circular buffer indexing
     Value * advBaseIndex = b.getInt64(cd.longAdvanceCarryDataOffset(localIndex));
     Value * storeIndex = b.CreateAdd(b.CreateAnd(mBlockNo, indexMask), advBaseIndex);

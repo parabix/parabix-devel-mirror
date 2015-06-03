@@ -10,6 +10,7 @@
 #include <boost/container/flat_set.hpp>
 #include <unordered_map>
 #include <boost/numeric/ublas/matrix.hpp>
+#include <boost/circular_buffer.hpp>
 #include <include/simd-lib/builtins.hpp>
 // #include <pablo/expression_map.hpp>
 #include <pablo/printer_pablos.h>
@@ -21,8 +22,6 @@ using namespace llvm;
 using namespace boost;
 using namespace boost::container;
 using namespace boost::numeric::ublas;
-
-#define PROVIDE_ASSIGNMENT_STATEMENTS_FOR_MUX_AND_DEMUX_STATEMENTS
 
 namespace pablo {
 
@@ -246,7 +245,6 @@ void AutoMultiplexing::characterize(PabloBlock & entry) {
                 input[i] = f->second;
             }
 
-            PabloAST * expr = stmt;
             bool testContradiction = true;
 
             switch (stmt->getClassTypeId()) {
@@ -260,7 +258,6 @@ void AutoMultiplexing::characterize(PabloBlock & entry) {
                     // The next instruction is almost identical to an OR; however, a Next cannot be
                     // an operand of a Statement. Instead it updates the Initial operand's value.
                     testContradiction = false;
-                    expr = stmt->getOperand(0);
                 case PabloAST::ClassTypeId::Or:
                     bdd = Or(input[0], input[1]);
                     break;
@@ -317,6 +314,7 @@ void AutoMultiplexing::characterize(PabloBlock & entry) {
                             // If these advances are "shifting" their values by the same amount and aren't transitively dependant ...
                             if ((stmt->getOperand(1) == adv->getOperand(1)) && (!edge(k, i, mPathGraph).second)) {
 
+                                // Test this with Cudd_bddIntersect(mManager, Ik, Ii);
                                 DdNode * const tmp = And(Ik, Ii); // do we need to simplify this to identify subsets?
 
                                 if (Ik == tmp) {
@@ -366,11 +364,11 @@ void AutoMultiplexing::characterize(PabloBlock & entry) {
                     throw std::runtime_error("Unexpected statement " + stmt->getName()->to_string());
             }
             if (LLVM_UNLIKELY(testContradiction && noSatisfyingAssignment(bdd))) {
-                Cudd_RecursiveDeref(mManager, bdd);
+                Cudd_RecursiveDeref(mManager, bdd);                
                 stmt = stmt->replaceWith(entry.createZeroes());
             }
-            else {
-                mCharacterizationMap[expr] = bdd;
+            else {                
+                mCharacterizationMap[stmt] = bdd;
                 stmt = stmt->getNextNode();
             }
         }
@@ -735,47 +733,52 @@ void AutoMultiplexing::applySubsetConstraints() {
     }
 }
 
-//#define FAST_LOG2(x) ((sizeof(unsigned long) * 8 - 1) - ScanReverseIntrinsic((unsigned long)(x)))
 
-//#define FAST_CEIL_LOG2(x) (FAST_LOG_2(x) + ((x & (x - 1) != 0) ? 1 : 0))
+static inline size_t smallest_multiplexed_set(const size_t x) {
+    return std::log2<size_t>(x) + 1; // use a faster builtin function for this?
+}
+
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief multiplexSelectedIndependentSets
  ** ------------------------------------------------------------------------------------------------------------- */
 void AutoMultiplexing::multiplexSelectedIndependentSets() const {
 
+    const unsigned f = num_vertices(mConstraintGraph);
+    const unsigned l = num_vertices(mMultiplexSetGraph);
+
+    // Preallocate the structures based on the size of the largest multiplex set
+    size_t max_n = 3;
+    for (unsigned s = f; s != l; ++s) {
+        max_n = std::max<unsigned>(max_n, out_degree(s, mMultiplexSetGraph));
+    }
+    const size_t max_m = smallest_multiplexed_set(max_n);
+
+    std::vector<MultiplexSetGraph::vertex_descriptor> I(max_n);
+    std::vector<Advance *> V(max_n);
+    std::vector<PabloAST *> muxed(max_m);
+    circular_buffer<PabloAST *> Q(max_n);
+
     // When entering thus function, the multiplex set graph M is a DAG with edges denoting the set
     // relationships of our independent sets.
 
-    for (unsigned s = num_vertices(mConstraintGraph), e = num_vertices(mMultiplexSetGraph); s != e; ++s) {
-        const unsigned n = out_degree(s, mMultiplexSetGraph);
+    for (unsigned s = f; s != l; ++s) {
+        const size_t n = out_degree(s, mMultiplexSetGraph);
         if (n) {
 
-            const unsigned m = static_cast<unsigned>(std::ceil(std::log2(n))); // use a faster builtin function for this.
-
-            std::vector<MultiplexSetGraph::vertex_descriptor> I;
-            I.reserve(n);
-
-            //raw_os_ostream out(std::cerr);
-
-            //out << "n=" << n << ",m=" << m << "\nM={";
+            const size_t m = smallest_multiplexed_set(n);
 
             graph_traits<MultiplexSetGraph>::out_edge_iterator ei, ei_end;
             std::tie(ei, ei_end) = out_edges(s, mMultiplexSetGraph);
             for (unsigned i = 0; i != n; ++ei, ++i) {
-                I.push_back(target(*ei, mMultiplexSetGraph));
+                I[i] = target(*ei, mMultiplexSetGraph);
                 assert (I[i] < mAdvance.size());
             }
             std::sort(I.begin(), I.begin() + n);
 
-            std::vector<Advance *> V;
-            V.reserve(n);
             for (unsigned i = 0; i != n; ++i) {
-                V.push_back(mAdvance[I[i]]);
-                //if (i) out << ',';
-                //out << V[i]->getName()->to_string();
+                V[i] = mAdvance[I[i]];
             }
-           // out << "}\n\n";
 
             PabloBlock * const pb = V[0]->getParent();
             assert (pb);
@@ -789,86 +792,101 @@ void AutoMultiplexing::multiplexSelectedIndependentSets() const {
             }
             #endif
 
-            std::vector<PabloAST *> O; O.reserve(m);
-
             /// Perform n-to-m Multiplexing
-            for (unsigned j = 0; j != m; ++j) {
+            for (size_t j = 0; j != m; ++j) {
 
-                std::queue<PabloAST *> D;
+                assert (Q.empty());
 
-                for (unsigned i = 1; i != n; ++i) {
-                    if ((i & (1 << j)) != 0) {
-                        D.push(V[i - 1]->getOperand(0));
+                std::stringstream name;
+
+                name << "mux";
+
+                for (size_t i = 1; i <= n; ++i) {
+                    if ((i & (static_cast<size_t>(1) << j)) != 0) {
+                        assert (!Q.full());
+                        PabloAST * tmp = V[i - 1]->getOperand(0); assert (tmp);
+                        Q.push_back(tmp);
+                        name << "_" << V[i - 1]->getName()->to_string();
                     }
                 }
+
+                assert (Q.size() >= 1);
+
                 Advance * const adv = V[j];
                 // TODO: figure out a way to determine whether we're creating a duplicate value below.
                 // The expression map findOrCall ought to work conceptually but the functors method
                 // doesn't really work anymore with the current API.
-                while (D.size() > 1) {
-                    PabloAST * a1 = D.front(); D.pop();
-                    PabloAST * a2 = D.front(); D.pop();
+                while (Q.size() > 1) {
+                    PabloAST * a1 = Q.front(); Q.pop_front(); assert (a1);
+                    PabloAST * a2 = Q.front(); Q.pop_front(); assert (a2);
+                    assert (!Q.full());
                     pb->setInsertPoint(choose(a2, a1, adv));
-                    D.push(pb->createOr(a1, a2));
+                    PabloAST * tmp = pb->createOr(a1, a2); assert (tmp);
+                    Q.push_back(tmp);
                 }
-                assert (D.size() == 1);
+                assert (Q.size() == 1);
 
-                PabloAST * mux = D.front(); D.pop();
-                #ifdef PROVIDE_ASSIGNMENT_STATEMENTS_FOR_MUX_AND_DEMUX_STATEMENTS
-                mux = pb->createAssign("mux", mux);
-                #endif
-                O.push_back(pb->createAdvance(mux, adv->getOperand(1)));
+                PabloAST * mux = Q.front(); Q.pop_front(); assert (mux);
+                muxed[j] = pb->createAdvance(mux, adv->getOperand(1), name.str());
             }
+
 
             /// Perform m-to-n Demultiplexing
             // Now construct the demuxed values and replaces all the users of the original advances with them.
-            for (unsigned i = 1; i <= n; ++i) {
-
-                std::queue<PabloAST *> T;
-                std::queue<PabloAST *> F;
+            for (size_t i = 1; i <= n; ++i) {
 
                 Advance * const adv = V[i - 1];
 
-                assert (T.size() == 0 && F.size() == 0);
-
-                for (unsigned j = 0; j != m; ++j) {
-                    if ((i & (1 << j)) != 0) {
-                        T.push(O[j]);
-                    }
-                    else {
-                        F.push(O[j]);
+                assert (Q.empty());
+                for (size_t j = 0; j != m; ++j) {
+                    if ((i & (static_cast<size_t>(1) << j)) == 0) {
+                        Q.push_back(muxed[j]);
                     }
                 }
 
-                // out << "i=" << i << ": |T|=" << T.size() << ",|F|=" << F.size() << "\n";
-
-                assert (T.size() > 0);
-
-                while (T.size() > 1) {
-                    PabloAST * a1 = T.front(); T.pop();
-                    PabloAST * a2 = T.front(); T.pop();
-                    pb->setInsertPoint(choose(a2, a1, adv));
-                    T.push(pb->createAnd(a1, a2));
-                }
-
-                assert (T.size() == 1);
-
-                PabloAST * demux = T.front(); T.pop();
-
-                if (LLVM_LIKELY(F.size() > 0)) {
-                    while (F.size() > 1) {
-                        PabloAST * a1 = F.front(); F.pop();
-                        PabloAST * a2 = F.front(); F.pop();
+                assert (Q.size() <= m);
+                PabloAST * neg = nullptr;
+                if (LLVM_LIKELY(Q.size() > 0)) {
+                    while (Q.size() > 1) {
+                        PabloAST * a1 = Q.front(); Q.pop_front(); assert (a1);
+                        PabloAST * a2 = Q.front(); Q.pop_front(); assert (a2);
                         pb->setInsertPoint(choose(a2, a1, adv));
-                        F.push(pb->createOr(a1, a2));
+                        assert (!Q.full());
+                        PabloAST * tmp = pb->createOr(a1, a2); assert (tmp);
+                        Q.push_back(tmp);
                     }
-                    assert (F.size() == 1);
-                    PabloAST * const neg = F.front(); F.pop();
-                    demux = pb->createAnd(demux, pb->createNot(neg));
+                    assert (Q.size() == 1);
+                    neg = pb->createNot(Q.front()); Q.pop_front(); assert (neg);
                 }
-                #ifdef PROVIDE_ASSIGNMENT_STATEMENTS_FOR_MUX_AND_DEMUX_STATEMENTS
-                demux = pb->createAssign("demux", demux);
-                #endif
+
+                assert (Q.empty());
+                for (unsigned j = 0; j != m; ++j) {
+                    if ((i & (static_cast<unsigned>(1) << j)) != 0) {
+                        assert (!Q.full());
+                        Q.push_back(muxed[j]);
+                    }
+                }
+
+                assert (Q.size() <= m);
+                assert (Q.size() >= 1);
+
+                while (Q.size() > (1 + ((neg == nullptr) ? 1 : 0))) {
+                    PabloAST * a1 = Q.front(); Q.pop_front(); assert (a1);
+                    PabloAST * a2 = Q.front(); Q.pop_front(); assert (a2);
+
+                    assert (!Q.full());
+                    PabloAST * tmp = pb->createAnd(a1, a2); assert (tmp);
+                    Q.push_back(tmp);
+                }
+
+                PabloAST * a1 = Q.front(); Q.pop_front(); assert (demux);
+                PabloAST * a2 = neg;
+                if (LLVM_UNLIKELY(Q.size() == 2)) {
+                    a2 = Q.front(); Q.pop_front(); assert (a2);
+                }
+                pb->setInsertPoint(choose(a2, a1, adv));
+                PabloAST * demux = pb->createAnd(a1, a2, "demux_" + V[i - 1]->getName()->to_string());
+
                 V[i - 1]->replaceWith(demux, false, true);
             }
         }

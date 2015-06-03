@@ -161,6 +161,9 @@ CompiledPabloFunction compile(const Encoding encoding, const std::vector<std::st
     if (PabloSinkingPass) {
         CodeSinking::optimize(main);
     }
+
+
+
     #ifdef ENABLE_MULTIPLEXING
         AutoMultiplexing::optimize(basisBits, main);
     #endif
