@@ -246,6 +246,7 @@ void AutoMultiplexing::characterize(PabloBlock & entry) {
             }
 
             bool testContradiction = true;
+            bool updateCharacterization = true;
 
             switch (stmt->getClassTypeId()) {
                 case PabloAST::ClassTypeId::Assign:
@@ -281,8 +282,7 @@ void AutoMultiplexing::characterize(PabloBlock & entry) {
                     }
                 case PabloAST::ClassTypeId::Call:
                     testContradiction = false;
-                    assert (mCharacterizationMap.count(stmt));
-                    bdd = mCharacterizationMap[stmt];
+                    updateCharacterization = false;
                     break;
                 case PabloAST::ClassTypeId::Advance:
 
@@ -309,27 +309,24 @@ void AutoMultiplexing::characterize(PabloBlock & entry) {
                             DdNode * Ii = std::get<0>(advances[i]);
                             DdNode * Vi = std::get<1>(advances[i]);
 
+                            // We could probably avoid some tests by infering that if X ⊂ Y and Y ⊂ Z then X ⊂ Z too. Will need a
+                            // more complex graph structure for storing subset edges. Similarly if X ∩ Y = ∅ and Z ⊂ X, Z ∩ Y = ∅
+
+                            // Only test pairs if they are in the same scope or one has a user in the same scope that is reachable
+                            // by the other?
+
                             bool constrained = true;
 
                             // If these advances are "shifting" their values by the same amount and aren't transitively dependant ...
                             if ((stmt->getOperand(1) == adv->getOperand(1)) && (!edge(k, i, mPathGraph).second)) {
 
-                                // Test this with Cudd_bddIntersect(mManager, Ik, Ii);
-                                DdNode * const tmp = And(Ik, Ii); // do we need to simplify this to identify subsets?
 
-                                if (Ik == tmp) {
-                                    // If Ik = C and C = Ii ∩ Ik then Ik (the input to the k-th advance) is a *subset* of Ii (the input of the
-                                    // i-th advance). Record this in the subset graph with the arc (k,i). These edges will be moved into the
-                                    // multiplex set graph if Advance_i and Advance_k happen to be in the same mutually exclusive set.
-                                    mSubsetGraph.emplace_back(k, i);
-                                    constrained = false;
-                                }
-                                else if (Ii == tmp) {
-                                    mSubsetGraph.emplace_back(i, k);
-                                    constrained = false;
-                                }
+                                // Test this with Cudd_bddIntersect / Cudd_bddLeq
+                                DdNode * const tmp = Cudd_bddIntersect(mManager, Ik, Ii);
+                                Cudd_Ref(tmp);
                                 // Is there any satisfying truth assignment? If not, these streams are mutually exclusive.
-                                else if (noSatisfyingAssignment(tmp)) {
+                                if (noSatisfyingAssignment(tmp)) {
+                                    std::cerr << stmt->getName()->to_string() << " ∩ " << adv->getName()->to_string() << " = ∅"  << std::endl;
 
                                     assert (mCharacterizationMap.count(adv));
 
@@ -339,11 +336,23 @@ void AutoMultiplexing::characterize(PabloBlock & entry) {
                                     other = And(other, Not(Vk));
                                     constrained = false;
                                 }
-
+                                else if (Ik == tmp) {
+                                    std::cerr << stmt->getName()->to_string() << " ⊂ " << adv->getName()->to_string()  << std::endl;
+                                    // If Ik = Ii ∩ Ik then Ik (the input to the k-th advance) is a *subset* of Ii (the input of the
+                                    // i-th advance). Record this in the subset graph with the arc (k,i). These edges will be moved into the
+                                    // multiplex set graph if Advance_i and Advance_k happen to be in the same mutually exclusive set.
+                                    mSubsetGraph.emplace_back(k, i);
+                                    constrained = false;
+                                }
+                                else if (Ii == tmp) {
+                                    std::cerr << stmt->getName()->to_string() << " ⊃ " << adv->getName()->to_string()  << std::endl;
+                                    mSubsetGraph.emplace_back(i, k);
+                                    constrained = false;
+                                }
                                 Cudd_RecursiveDeref(mManager, tmp);
                             }
 
-                            // Advances must be in the same scope or they cannot be safely multiplexed unless one is moved.
+                            // Even if these Advances are mutually exclusive, they must be in the same scope or they cannot be safely multiplexed.
                             if (constrained || (stmt->getParent() != adv->getParent())) {
                                 // We want the constraint graph to be acyclic; since the dependencies are already in topological order,
                                 // adding an arc from a lesser to greater numbered vertex won't induce a cycle.
@@ -366,11 +375,12 @@ void AutoMultiplexing::characterize(PabloBlock & entry) {
             if (LLVM_UNLIKELY(testContradiction && noSatisfyingAssignment(bdd))) {
                 Cudd_RecursiveDeref(mManager, bdd);                
                 stmt = stmt->replaceWith(entry.createZeroes());
+                continue;
             }
-            else {                
+            else if (LLVM_LIKELY(updateCharacterization)){
                 mCharacterizationMap[stmt] = bdd;
-                stmt = stmt->getNextNode();
             }
+            stmt = stmt->getNextNode();
         }
 
         if (scope.empty()) {
@@ -798,9 +808,7 @@ void AutoMultiplexing::multiplexSelectedIndependentSets() const {
                 assert (Q.empty());
 
                 std::stringstream name;
-
                 name << "mux";
-
                 for (size_t i = 1; i <= n; ++i) {
                     if ((i & (static_cast<size_t>(1) << j)) != 0) {
                         assert (!Q.full());
@@ -879,15 +887,19 @@ void AutoMultiplexing::multiplexSelectedIndependentSets() const {
                     Q.push_back(tmp);
                 }
 
-                PabloAST * a1 = Q.front(); Q.pop_front(); assert (demux);
+                assert (Q.size() >= 0 && Q.size() <= 2);
+
+                PabloAST * a1 = Q.front(); Q.pop_front(); assert (a1);
                 PabloAST * a2 = neg;
-                if (LLVM_UNLIKELY(Q.size() == 2)) {
+                if (LLVM_UNLIKELY(neg == nullptr)) {
                     a2 = Q.front(); Q.pop_front(); assert (a2);
                 }
+                assert (Q.empty());
+
                 pb->setInsertPoint(choose(a2, a1, adv));
                 PabloAST * demux = pb->createAnd(a1, a2, "demux_" + V[i - 1]->getName()->to_string());
 
-                V[i - 1]->replaceWith(demux, false, true);
+                V[i - 1]->replaceWith(demux, false);
             }
         }
     }

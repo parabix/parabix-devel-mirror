@@ -18,9 +18,6 @@ public:
         mAllocator.Deallocate(pointer);
     }
     static inline void Reset() {
-        #ifndef NDEBUG
-        mAllocator.PrintStats();
-        #endif
         mAllocator.Reset();
     }
     static LLVMAllocator & get_allocator() {
