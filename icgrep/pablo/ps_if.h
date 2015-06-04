@@ -16,6 +16,8 @@ class Assign;
 
 class If : public Statement {
     friend class PabloBlock;
+    friend class Statement;
+    friend class Simplifier;
 public:
     using DefinedVars = std::vector<PabloAST *, VectorAllocator>;
 
@@ -41,6 +43,9 @@ public:
         return mDefined;
     }
 protected:
+    inline DefinedVars & getDefined() {
+        return mDefined;
+    }
     If(PabloAST * expr, const std::initializer_list<Assign *> definedVars, PabloBlock & body, PabloBlock * parent);
 
     If(PabloAST * expr, const std::vector<Assign *> & definedVars, PabloBlock & body, PabloBlock * parent);

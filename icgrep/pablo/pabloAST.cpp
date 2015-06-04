@@ -184,6 +184,24 @@ Statement * Statement::eraseFromParent(const bool recursively) {
     for (auto i = 0; i != mOperands; ++i) {
         mOperand[i]->removeUser(this);
     }
+    // If this is an If or While statement, we'll have to remove the statements within the
+    // body or we'll lose track of them.
+    if (LLVM_UNLIKELY(isa<If>(this) || isa<While>(this))) {
+        if (isa<If>(this)) {
+            // Eliminate the relationship between the If node and its defined vars ...
+            for (PabloAST * var : cast<If>(this)->getDefined()) {
+                var->removeUser(this);
+                this->removeUser(var);
+                var->replaceAllUsesWith(mParent->createZeroes());
+            }
+        }
+        PabloBlock & body = isa<If>(this) ? cast<If>(this)->getBody() : cast<While>(this)->getBody();
+        Statement * stmt = body.front();
+        while (stmt) {
+            stmt = stmt->eraseFromParent(recursively);
+        }
+    }
+
     if (recursively) {
         for (auto i = 0; i != mOperands; ++i) {
             PabloAST * const op = mOperand[i];

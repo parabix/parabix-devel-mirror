@@ -25,11 +25,8 @@ class AutoMultiplexing {
     using MultiplexSetGraph = boost::adjacency_list<boost::hash_setS, boost::vecS, boost::bidirectionalS>;
     using IndependentSetGraph = boost::adjacency_list<boost::hash_setS, boost::listS, boost::undirectedS, std::pair<unsigned, MultiplexSetGraph::vertex_descriptor>>;
     using ChosenSets = std::vector<MultiplexSetGraph::vertex_descriptor>;
-    using SubsetGraph = std::vector<std::pair<MultiplexSetGraph::vertex_descriptor, MultiplexSetGraph::vertex_descriptor>>;
+    using SubsetGraph = boost::adjacency_list<boost::hash_setS, boost::vecS, boost::bidirectionalS>;
     using Advances = std::vector<Advance *>;
-    using TopologicalSortGraph = boost::adjacency_list<boost::hash_setS, boost::vecS, boost::bidirectionalS, Statement *>;
-    using TopologicalSortQueue = std::queue<TopologicalSortGraph::vertex_descriptor>;
-    using TopologicalSortMap = boost::container::flat_map<PabloAST *, TopologicalSortGraph::vertex_descriptor>;
 
     using RNG = std::mt19937;
     using RNGDistribution = std::uniform_int_distribution<RNG::result_type>;
@@ -39,10 +36,11 @@ class AutoMultiplexing {
     using IndependentSet = std::vector<Vertex>;
 
 public:
-    static void optimize(const std::vector<Var *> & input, PabloBlock & entry);
+    static bool optimize(const std::vector<Var *> & input, PabloBlock & entry);
 protected:
     void initialize(const std::vector<Var *> & vars, const PabloBlock & entry);
-    void characterize(PabloBlock & entry);    
+    void characterize(PabloBlock & entry);
+    bool notTransitivelyDependant(const PathGraph::vertex_descriptor i, const PathGraph::vertex_descriptor j) const;
     void createMultiplexSetGraph();
     bool generateMultiplexSets(RNG & rng);    
     void addMultiplexSet(const IndependentSet & set);
@@ -56,13 +54,13 @@ protected:
 private:
     DdNode * Zero() const;
     DdNode * One() const;
-    bool isZero(DdNode * x) const;
-    DdNode * And(DdNode * x, DdNode * y);
-    DdNode * Or(DdNode * x, DdNode * y);
-    DdNode * Xor(DdNode * x, DdNode * y);
-    DdNode * Not(DdNode * x);
-    DdNode * Ite(DdNode * x, DdNode * y, DdNode * z);
-    bool noSatisfyingAssignment(DdNode * x);
+    bool isZero(DdNode * const x) const;
+    DdNode * And(DdNode * const x, DdNode * const y);
+    DdNode * Or(DdNode * const x, DdNode * const y);
+    DdNode * Xor(DdNode * const x, DdNode * const y);
+    DdNode * Not(DdNode * x) const;
+    DdNode * Ite(DdNode * const x, DdNode * const y, DdNode * const z);
+    bool noSatisfyingAssignment(DdNode * const x);
     void shutdown();
 private:
     DdManager *             mManager;

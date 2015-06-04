@@ -62,7 +62,7 @@ static cl::opt<bool> PabloSinkingPass("sinking", cl::init(false),
                                       cl::desc("Moves all instructions into the innermost legal If-scope so that they are only executed when needed."),
                                       cl::cat(cPabloOptimizationsOptions));
 #ifdef ENABLE_MULTIPLEXING
-static cl::opt<bool> PabloMutualExclusionPass("mutual-exclusion", cl::init(false),
+static cl::opt<bool> PabloMutualExclusionPass("csme", cl::init(true),
                                       cl::desc("Multiplex Advances whose inputs are mutual exclusive and replace any contradictory stream with Zero."),
                                       cl::cat(cPabloOptimizationsOptions));
 #endif
@@ -167,10 +167,11 @@ CompiledPabloFunction compile(const Encoding encoding, const std::vector<std::st
     if (PabloSinkingPass) {
         CodeSinking::optimize(main);
     }
-
     #ifdef ENABLE_MULTIPLEXING
     if (PabloMutualExclusionPass) {
-        AutoMultiplexing::optimize(basisBits, main);
+        if (AutoMultiplexing::optimize(basisBits, main) && !DisablePabloCSE) {
+            Simplifier::optimize(main);
+        }
     }
     #endif
     if (PrintOptimizedREcode) {

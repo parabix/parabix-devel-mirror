@@ -63,8 +63,34 @@ void Simplifier::eliminateRedundantCode(PabloBlock & block, ExpressionTable * pr
                 continue;
             }
         }
-        else if (isa<If>(stmt)) {
+        else if (If * ifNode = dyn_cast<If>(stmt)) {
+            // Check to see if the Cond is Zero and delete the loop.
+            if (LLVM_UNLIKELY(isa<Zeroes>(ifNode->getCondition()))) {
+                for (PabloAST * defVar : ifNode->getDefined()) {
+                    cast<Assign>(defVar)->replaceWith(block.createZeroes(), false, true);
+                }
+                stmt = stmt->eraseFromParent(true);
+                continue;
+            }
+            // Process the If body
             eliminateRedundantCode(cast<If>(stmt)->getBody(), &encountered);
+            // Scan through and replace any defined variable that is assigned Zero with a Zero object
+            // and remove it from the defined variable list.
+            If::DefinedVars & defVars = ifNode->getDefined();
+            for (auto i = defVars.begin(); i != defVars.end(); ) {
+                Assign * defVar = cast<Assign>(*i);
+                if (LLVM_UNLIKELY(isa<Zeroes>(defVar->getExpr()))) {
+                    i = defVars.erase(i);
+                    defVar->replaceWith(block.createZeroes(), false, true);
+                    continue;
+                }
+                ++i;
+            }
+            // If we ended up Zero-ing out all of the defined variables, delete the If node.
+            if (LLVM_UNLIKELY(defVars.empty())) {
+                stmt = stmt->eraseFromParent(true);
+                continue;
+            }
         }
         else if (isa<While>(stmt)) {
             eliminateRedundantCode(cast<While>(stmt)->getBody(), &encountered);
