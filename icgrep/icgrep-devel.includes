@@ -4,5 +4,6 @@ cc
 pablo
 pablo/analysis
 pablo/optimizers
-../cudd-2.5.1
+../cudd-2.5.1/cudd
+../cudd-2.5.1/util
 UCD

@@ -97,8 +97,6 @@ void PabloAST::replaceAllUsesWith(PabloAST * expr) {
     }
 }
 
-
-
 void Statement::setOperand(const unsigned index, PabloAST * const value) {
     assert (value);
     assert (index < getNumOperands());
@@ -112,7 +110,7 @@ void Statement::setOperand(const unsigned index, PabloAST * const value) {
     // user list.
     unsigned count = 0;
     for (unsigned i = 0; i != getNumOperands(); ++i) {
-        count += (getOperand(index) == priorValue) ? 1 : 0;
+        count += (getOperand(i) == priorValue) ? 1 : 0;
     }
     assert (count >= 1);
     if (LLVM_LIKELY(count == 1)) {
@@ -174,7 +172,7 @@ Statement * Statement::removeFromParent() {
         if (LLVM_LIKELY(mNext != nullptr)) {
             mNext->mPrev = mPrev;
         }
-    }    
+    }
     mPrev = nullptr;
     mNext = nullptr;
     mParent = nullptr;
@@ -182,13 +180,10 @@ Statement * Statement::removeFromParent() {
 }
 
 Statement * Statement::eraseFromParent(const bool recursively) {
-
     // remove this statement from its operands' users list
     for (auto i = 0; i != mOperands; ++i) {
-        PabloAST * const op = mOperand[i];
-        op->removeUser(this);
+        mOperand[i]->removeUser(this);
     }
-
     if (recursively) {
         for (auto i = 0; i != mOperands; ++i) {
             PabloAST * const op = mOperand[i];
@@ -211,7 +206,7 @@ Statement * Statement::replaceWith(PabloAST * const expr, const bool rename, con
             stmt->setName(getName());
         }
     }
-    replaceAllUsesWith(expr);
+    replaceAllUsesWith(expr);    
     return eraseFromParent(recursively);
 }
 

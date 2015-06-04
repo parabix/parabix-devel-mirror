@@ -54,6 +54,8 @@ protected:
     : mPathGraph(0) {
     }
 private:
+    DdNode * Zero() const;
+    DdNode * One() const;
     bool isZero(DdNode * x) const;
     DdNode * And(DdNode * x, DdNode * y);
     DdNode * Or(DdNode * x, DdNode * y);

@@ -1,8 +1,5 @@
 #include "pablo_automultiplexing.hpp"
 #include <pablo/codegenstate.h>
-#include <llvm/ADT/SmallVector.h>
-#include <llvm/ADT/DenseMap.h>
-#include <llvm/ADT/DenseSet.h>
 #include <llvm/ADT/BitVector.h>
 #include <stack>
 #include <queue>
@@ -12,7 +9,7 @@
 #include <boost/numeric/ublas/matrix.hpp>
 #include <boost/circular_buffer.hpp>
 #include <include/simd-lib/builtins.hpp>
-// #include <pablo/expression_map.hpp>
+#include <pablo/expression_map.hpp>
 #include <pablo/printer_pablos.h>
 #include <iostream>
 #include <cudd.h>
@@ -39,7 +36,6 @@ void AutoMultiplexing::optimize(const std::vector<Var *> & input, PabloBlock & e
         am.multiplexSelectedIndependentSets();
         am.topologicalSort(entry);
     }
-
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -190,8 +186,8 @@ void AutoMultiplexing::initialize(const std::vector<Var *> & vars, const PabloBl
     mManager = Cudd_Init((complex.size() + vars.size()), 0, CUDD_UNIQUE_SLOTS, CUDD_CACHE_SLOTS, 0);
 
     // Map the predefined 0/1 entries
-    mCharacterizationMap.emplace(entry.createZeroes(), Cudd_ReadZero(mManager));
-    mCharacterizationMap.emplace(entry.createOnes(), Cudd_ReadOne(mManager));
+    mCharacterizationMap.emplace(entry.createZeroes(), Zero());
+    mCharacterizationMap.emplace(entry.createOnes(), One());
 
     // Order the variables so the input Vars are pushed to the end; they ought to
     // be the most complex to resolve.
@@ -257,7 +253,7 @@ void AutoMultiplexing::characterize(PabloBlock & entry) {
                     // The next instruction is almost identical to an OR; however, a Next cannot be
                     // an operand of a Statement. Instead it updates the Initial operand's value.
                     testContradiction = false;
-                case PabloAST::ClassTypeId::Or:
+                case PabloAST::ClassTypeId::Or:            
                     bdd = Or(input[0], input[1]);
                     break;
                 case PabloAST::ClassTypeId::Xor:
@@ -275,7 +271,7 @@ void AutoMultiplexing::characterize(PabloBlock & entry) {
                     // would be ¬(ScanThru(c,m) ∨ m) but are there others that would be harder to predict?
                 case PabloAST::ClassTypeId::MatchStar:
                     if (LLVM_UNLIKELY(isZero(input[0]) || isZero(input[1]))) {
-                        bdd = Cudd_ReadZero(mManager);
+                        bdd = Zero();
                         break;
                     }
                 case PabloAST::ClassTypeId::Call:
@@ -285,8 +281,7 @@ void AutoMultiplexing::characterize(PabloBlock & entry) {
                 case PabloAST::ClassTypeId::Advance:
                     assert (stmt == mAdvance[advances.size()]);
                     if (LLVM_UNLIKELY(isZero(input[0]))) {
-                        bdd = Cudd_ReadZero(mManager);
-                        // mark this advance as having an input and output of 0
+                        bdd = input[0];
                         advances.emplace_back(bdd, bdd);
                     }
                     else {
@@ -357,16 +352,18 @@ void AutoMultiplexing::characterize(PabloBlock & entry) {
                     }
                     break;
                 default:
-                    throw std::runtime_error("Unexpected statement " + stmt->getName()->to_string());
+                    throw std::runtime_error("Unexpected statement type " + stmt->getName()->to_string());
             }
             assert ("Failed to generate a BDD." && (bdd || !(testContradiction || updateVariable)));
-            if (LLVM_UNLIKELY(testContradiction && noSatisfyingAssignment(bdd))) {
-                // std::cerr << stmt->getName()->to_string() << " = ∅"  << std::endl;
-                Cudd_RecursiveDeref(mManager, bdd);                
-                stmt = stmt->replaceWith(entry.createZeroes());
-            }
-            else if (LLVM_LIKELY(updateVariable)) {
+            if (LLVM_LIKELY(updateVariable)) {
                 mCharacterizationMap[stmt] = bdd;
+            }
+            if (LLVM_UNLIKELY(testContradiction && noSatisfyingAssignment(bdd))) {                
+                if (!isa<Assign>(stmt) || cast<Assign>(stmt)->superfluous()) {
+                    Cudd_RecursiveDeref(mManager, bdd);
+                    stmt = stmt->replaceWith(entry.createZeroes());
+                    continue;
+                }
             }
             stmt = stmt->getNextNode();
         }
@@ -383,8 +380,20 @@ void AutoMultiplexing::characterize(PabloBlock & entry) {
  * @brief CUDD wrappers
  ** ------------------------------------------------------------------------------------------------------------- */
 
+inline DdNode * AutoMultiplexing::Zero() const {
+    DdNode * r = Cudd_ReadLogicZero(mManager);
+    Cudd_Ref(r);
+    return r;
+}
+
+inline DdNode * AutoMultiplexing::One() const {
+    DdNode * r = Cudd_ReadOne(mManager);
+    Cudd_Ref(r);
+    return r;
+}
+
 inline bool AutoMultiplexing::isZero(DdNode * x) const {
-    return x == Cudd_ReadZero(mManager);
+    return x == Cudd_ReadLogicZero(mManager);
 }
 
 inline DdNode * AutoMultiplexing::And(DdNode * x, DdNode * y) {
@@ -416,14 +425,7 @@ inline DdNode * AutoMultiplexing::Ite(DdNode * x, DdNode * y, DdNode * z) {
 }
 
 inline bool AutoMultiplexing::noSatisfyingAssignment(DdNode * x) {
-    // TODO: since we're only interested in knowing whether there is no such cube,
-    // write an optimized function for that if one does not exist.
-    int* cube;
-    CUDD_VALUE_TYPE dummy;
-    auto gen = Cudd_FirstCube(mManager, x, &cube, &dummy);
-    bool r = Cudd_IsGenEmpty(gen);
-    Cudd_GenFree(gen);
-    return r;
+    return Cudd_bddLeq(mManager, x, Cudd_ReadLogicZero(mManager));
 }
 
 inline void AutoMultiplexing::shutdown() {
@@ -431,7 +433,7 @@ inline void AutoMultiplexing::shutdown() {
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief createMappingGraph
+ * @brief createMultiplexSetGraph
  ** ------------------------------------------------------------------------------------------------------------- */
 void AutoMultiplexing::createMultiplexSetGraph() {
     mMultiplexSetGraph = MultiplexSetGraph(num_vertices(mConstraintGraph));
@@ -494,7 +496,8 @@ inline void AutoMultiplexing::addMultiplexSet(const IndependentSet & S) {
     // At this stage, the multiplex set graph is a directed bipartite graph that is used to show relationships
     // between the "set vertex" and its members. We obtain these from "generateMultiplexSets".
 
-    // Question: should we enumerate the power set of S?
+    // TODO: Instead of building a graph, construct a trie of all members in the powerset of S that are of size
+    // >= 3 and not 2^n for any n.
 
     const auto v = add_vertex(mMultiplexSetGraph);
     for (auto u : S) {
@@ -731,11 +734,24 @@ void AutoMultiplexing::applySubsetConstraints() {
     }
 }
 
-
-static inline size_t smallest_multiplexed_set(const size_t x) {
-    return std::log2<size_t>(x) + 1; // use a faster builtin function for this?
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief compute_m
+ ** ------------------------------------------------------------------------------------------------------------- */
+static inline size_t compute_m(const size_t n) {
+    return std::log2<size_t>(n) + 1; // use a faster builtin function for this?
 }
 
+struct CreateOr {
+    CreateOr(PabloBlock * pb) : mPb(pb) {}
+    PabloAST * operator() (PabloAST * x, PabloAST * y) { return mPb->createOr(x, y); }
+    PabloBlock * mPb;
+};
+
+struct CreateAnd {
+    CreateAnd(PabloBlock * pb) : mPb(pb) {}
+    PabloAST * operator() (PabloAST * x, PabloAST * y) { return mPb->createAnd(x, y); }
+    PabloBlock * mPb;
+};
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief multiplexSelectedIndependentSets
@@ -750,7 +766,7 @@ void AutoMultiplexing::multiplexSelectedIndependentSets() const {
     for (unsigned s = f; s != l; ++s) {
         max_n = std::max<unsigned>(max_n, out_degree(s, mMultiplexSetGraph));
     }
-    const size_t max_m = smallest_multiplexed_set(max_n);
+    const size_t max_m = compute_m(max_n);
 
     std::vector<MultiplexSetGraph::vertex_descriptor> I(max_n);
     std::vector<Advance *> V(max_n);
@@ -764,7 +780,7 @@ void AutoMultiplexing::multiplexSelectedIndependentSets() const {
         const size_t n = out_degree(s, mMultiplexSetGraph);
         if (n) {
 
-            const size_t m = smallest_multiplexed_set(n);
+            const size_t m = compute_m(n);
 
             graph_traits<MultiplexSetGraph>::out_edge_iterator ei, ei_end;
             std::tie(ei, ei_end) = out_edges(s, mMultiplexSetGraph);
@@ -790,19 +806,22 @@ void AutoMultiplexing::multiplexSelectedIndependentSets() const {
             }
             #endif
 
+            ExpressionMap<PabloAST *, PabloAST *> expMap(nullptr);
+
             /// Perform n-to-m Multiplexing
             for (size_t j = 0; j != m; ++j) {
 
                 assert (Q.empty());
 
-                std::stringstream name;
-                name << "mux";
+                std::ostringstream prefix;
+
+                prefix << "mux";
                 for (size_t i = 1; i <= n; ++i) {
                     if ((i & (static_cast<size_t>(1) << j)) != 0) {
                         assert (!Q.full());
                         PabloAST * tmp = V[i - 1]->getOperand(0); assert (tmp);
+                        prefix << '_' << V[i - 1]->getName()->to_string();
                         Q.push_back(tmp);
-                        name << "_" << V[i - 1]->getName()->to_string();
                     }
                 }
 
@@ -817,13 +836,14 @@ void AutoMultiplexing::multiplexSelectedIndependentSets() const {
                     PabloAST * a2 = Q.front(); Q.pop_front(); assert (a2);
                     assert (!Q.full());
                     pb->setInsertPoint(choose(a2, a1, adv));
-                    PabloAST * tmp = pb->createOr(a1, a2); assert (tmp);
+                    CreateOr createOr(pb);
+                    PabloAST * tmp = expMap.findOrCall(createOr, PabloAST::ClassTypeId::Or, a1, a2); assert (tmp);
                     Q.push_back(tmp);
                 }
                 assert (Q.size() == 1);
 
                 PabloAST * mux = Q.front(); Q.pop_front(); assert (mux);
-                muxed[j] = pb->createAdvance(mux, adv->getOperand(1), name.str());
+                muxed[j] = pb->createAdvance(mux, adv->getOperand(1), prefix.str());
             }
 
 
@@ -832,6 +852,8 @@ void AutoMultiplexing::multiplexSelectedIndependentSets() const {
             for (size_t i = 1; i <= n; ++i) {
 
                 Advance * const adv = V[i - 1];
+
+                pb->setInsertPoint(adv);
 
                 assert (Q.empty());
                 for (size_t j = 0; j != m; ++j) {
@@ -846,9 +868,9 @@ void AutoMultiplexing::multiplexSelectedIndependentSets() const {
                     while (Q.size() > 1) {
                         PabloAST * a1 = Q.front(); Q.pop_front(); assert (a1);
                         PabloAST * a2 = Q.front(); Q.pop_front(); assert (a2);
-                        pb->setInsertPoint(choose(a2, a1, adv));
                         assert (!Q.full());
-                        PabloAST * tmp = pb->createOr(a1, a2); assert (tmp);
+                        CreateOr createOr(pb);
+                        PabloAST * tmp = expMap.findOrCall(createOr, PabloAST::ClassTypeId::Or, a1, a2); assert (tmp);
                         Q.push_back(tmp);
                     }
                     assert (Q.size() == 1);
@@ -866,28 +888,23 @@ void AutoMultiplexing::multiplexSelectedIndependentSets() const {
                 assert (Q.size() <= m);
                 assert (Q.size() >= 1);
 
-                while (Q.size() > (1 + ((neg == nullptr) ? 1 : 0))) {
+                while (Q.size() > 1) {
                     PabloAST * a1 = Q.front(); Q.pop_front(); assert (a1);
                     PabloAST * a2 = Q.front(); Q.pop_front(); assert (a2);
-
                     assert (!Q.full());
-                    PabloAST * tmp = pb->createAnd(a1, a2); assert (tmp);
+                    CreateAnd createAnd(pb);
+                    PabloAST * tmp = expMap.findOrCall(createAnd, PabloAST::ClassTypeId::And, a1, a2); assert (tmp);
                     Q.push_back(tmp);
                 }
 
-                assert (Q.size() >= 0 && Q.size() <= 2);
+                assert (Q.size() == 1);
 
-                PabloAST * a1 = Q.front(); Q.pop_front(); assert (a1);
-                PabloAST * a2 = neg;
-                if (LLVM_UNLIKELY(neg == nullptr)) {
-                    a2 = Q.front(); Q.pop_front(); assert (a2);
+                PabloAST * demux = Q.front(); Q.pop_front(); assert (demux);
+                if (LLVM_LIKELY(neg != nullptr)) {
+                    CreateAnd createAnd(pb);
+                    demux = expMap.findOrCall(createAnd, PabloAST::ClassTypeId::And, demux, neg); assert (demux);
                 }
-                assert (Q.empty());
-
-                pb->setInsertPoint(choose(a2, a1, adv));
-                PabloAST * demux = pb->createAnd(a1, a2, "demux_" + V[i - 1]->getName()->to_string());
-
-                V[i - 1]->replaceWith(demux, false);
+                V[i - 1]->replaceWith(demux, true, true);
             }
         }
     }
@@ -906,8 +923,8 @@ void AutoMultiplexing::topologicalSort(PabloBlock & entry) const {
     // Note: not a real topological sort. I expect the original order to be very close to the resulting one.
     std::unordered_set<const PabloAST *> encountered;
     std::stack<Statement *> scope;
-    for (Statement * stmt = entry.front(); ; ) {
-restart:while ( stmt ) {
+    for (Statement * stmt = entry.front(); ; ) { restart:
+        while ( stmt ) {
             for (unsigned i = 0; i != stmt->getNumOperands(); ++i) {
                 PabloAST * const op = stmt->getOperand(i);
                 if (LLVM_LIKELY(isa<Statement>(op))) {
