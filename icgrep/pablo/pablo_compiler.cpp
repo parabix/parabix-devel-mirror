@@ -169,7 +169,7 @@ CompiledPabloFunction PabloCompiler::compile(PabloBlock & pb)
     }
     
     // The block number is a 64-bit integer at the end of the carry data area.
-    Value * blockNoPtr = b.CreateBitCast(b.CreateGEP(mCarryDataPtr, b.getInt64(totalCarryDataSize)), Type::getInt64PtrTy(b.getContext()));
+    Value * blockNoPtr = b.CreateBitCast(b.CreateGEP(mCarryDataPtr, b.getInt64(totalCarryDataSize - 1)), Type::getInt64PtrTy(b.getContext()));
     mBlockNo = b.CreateLoad(blockNoPtr);
     //Generate the IR instructions for the function.
     compileBlock(pb);
