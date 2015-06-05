@@ -44,6 +44,7 @@ unsigned PabloBlockCarryData::enumerate(PabloBlock & blk) {
         }
     }
     unsigned localCarryDataIndex = localCarries + unitAdvances + shortAdvances + longAdvanceTotalBlocks;
+    localCarryDataSize = localCarryDataIndex;
     /*
     totalCarryDataSize = longAdvanceTotalBlocks * BLOCK_SIZE; 
     totalCarryDataSize += shortAdvanceTotal;

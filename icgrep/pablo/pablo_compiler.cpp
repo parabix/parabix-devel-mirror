@@ -498,9 +498,7 @@ void PabloCompiler::compileIf(const If * ifStatement) {
             const Assign * assign = cast<Assign>(node);
             PHINode * phi = bEnd.CreatePHI(mBitBlockType, 2, assign->getName()->value());
             auto f = mMarkerMap.find(assign);
-            if (LLVM_UNLIKELY(f == mMarkerMap.end())) {
-                throw std::runtime_error("Fatal error during compileIf: could not find \"" + assign->getName()->to_string() + "\" in the marker map.");
-            }
+            assert (f != mMarkerMap.end());
             phi->addIncoming(mZeroInitializer, ifEntryBlock);
             phi->addIncoming(f->second, mBasicBlock);
             mMarkerMap[assign] = phi;
@@ -517,17 +515,33 @@ void PabloCompiler::compileIf(const If * ifStatement) {
         mBasicBlock = ifEndBlock;
 }
 
+// If the following preload is turned off, we have incorrect results with the
+// ./icgrep -c '[A-Z]((([a-zA-Z]*a[a-zA-Z]*[ ])*[a-zA-Z]*e[a-zA-Z]*[ ])*[a-zA-Z]*s[a-zA-Z]*[ ])*[.?!]' ../performance/data/howto
+    
+#define PRELOAD_WHILE_CARRIES_AT_TOP_LEVEL 1
+//#define SET_WHILE_CARRY_IN_TO_ZERO_AFTER_FIRST_ITERATION
+
 void PabloCompiler::compileWhile(const While * whileStatement) {
+        BasicBlock* whileEntryBlock = mBasicBlock;
+        BasicBlock* whileBodyBlock = BasicBlock::Create(mMod->getContext(), "while.body", mFunction, 0);
+        BasicBlock* whileEndBlock = BasicBlock::Create(mMod->getContext(), "while.end", mFunction, 0);
+    
+    
         const PabloBlockCarryData & cd = whileStatement -> getBody().carryData;
         const unsigned baseCarryDataIdx = cd.getBlockCarryDataIndex();
+
+#ifdef PRELOAD_WHILE_CARRIES_AT_TOP_LEVEL
         const unsigned carryDataSize = cd.getTotalCarryDataSize();
-    
-        if (mWhileDepth == 0) {
-            for (auto i = 0; i < carryDataSize; ++i) {
-                genCarryDataLoad(baseCarryDataIdx + i);
+        if (mWhileDepth == 0)
+#else
+        const unsigned carryDataSize = cd.getLocalCarryDataSize();
+#endif
+        {
+            for (auto i = baseCarryDataIdx; i < baseCarryDataIdx + carryDataSize; ++i) {
+                IRBuilder<> b(mBasicBlock);
+                mCarryInVector[i] = b.CreateAlignedLoad(b.CreateGEP(mCarryDataPtr, b.getInt64(i)), BLOCK_SIZE/8, false);
             }
         }
-
         SmallVector<const Next*, 4> nextNodes;
         SmallVector<PHINode *, 4> nextPhis;
         for (const PabloAST * node : whileStatement->getBody()) {
@@ -535,99 +549,103 @@ void PabloCompiler::compileWhile(const While * whileStatement) {
                 nextNodes.push_back(cast<Next>(node));
             }
         }
+    
+        // On entry to the while structure, proceed to execute the first iteration
+        // of the loop body unconditionally.   The while condition is tested at the end of
+        // the loop.
 
-        // Compile the initial iteration statements; the calls to genCarryDataStore will update the
-        // mCarryOutVector with the appropriate values. Although we're not actually entering a new basic
-        // block yet, increment the nesting depth so that any calls to genCarryDataLoad or genCarryDataStore
-        // will refer to the previous value.
-
-        ++mWhileDepth;
-
-        compileBlock(whileStatement->getBody());
-        // Reset the carry queue index. Note: this ought to be changed in the future. Currently this assumes
-        // that compiling the while body twice will generate the equivalent IR. This is not necessarily true
-        // but works for now.
-
-        BasicBlock* whileCondBlock = BasicBlock::Create(mMod->getContext(), "while.cond", mFunction, 0);
-        BasicBlock* whileBodyBlock = BasicBlock::Create(mMod->getContext(), "while.body", mFunction, 0);
-        BasicBlock* whileEndBlock = BasicBlock::Create(mMod->getContext(), "while.end", mFunction, 0);
-
-        // Note: compileBlock may update the mBasicBlock pointer if the body contains nested loops. It
-        // may not be same one that we entered the function with.
         IRBuilder<> bEntry(mBasicBlock);
-#ifdef WHILE_MULTI_CARRY
-        Value * secondCarryFramePtr = bEntry.CreateGEP(mCarryFramePtr, bEntry.getInt64(WHILEBODYCARRYTOTALSIZE));
-        mCarryFramePtr = secondCarryFramePtr;
-#endif        
+        // Jump to the while body block immediately.
+        bEntry.CreateBr(whileBodyBlock);
+        mBasicBlock = whileBodyBlock;
+        IRBuilder<> bBody(whileBodyBlock);
+    
+        //
+        // There are 3 sets of Phi nodes for the while loop.
+        // (1) Carry-ins: (a) incoming carry data first iterations, (b) zero thereafter
+        // (2) Carry-out accumulators: (a) zero first iteration, (b) |= carry-out of each iteration
+        // (3) Next nodes: (a) values set up before loop, (b) modified values calculated in loop.
 
-        bEntry.CreateBr(whileCondBlock);
-
-        // CONDITION BLOCK
-        IRBuilder<> bCond(whileCondBlock);
-        // generate phi nodes for any carry propogating instruction
-        std::vector<PHINode*> phiNodes(carryDataSize);
-        unsigned index = 0;
-        for (index = 0; index < carryDataSize; ++index) {
-            PHINode * phi = bCond.CreatePHI(mBitBlockType, 2);
-            phi->addIncoming(mCarryOutVector[baseCarryDataIdx + index], mBasicBlock);
-            mCarryInVector[baseCarryDataIdx + index] = mZeroInitializer; // (use phi for multi-carry mode.)
-            phiNodes[index] = phi;
+#ifdef SET_WHILE_CARRY_IN_TO_ZERO_AFTER_FIRST_ITERATION
+        std::vector<PHINode *> carryInPhis(carryDataSize);
+#endif
+        std::vector<PHINode *> carryOutAccumPhis(carryDataSize);
+    
+        // Set initial values of phi nodes for loop body using values at while entry.
+        for (unsigned index = 0; index < carryDataSize; ++index) {
+#ifdef SET_WHILE_CARRY_IN_TO_ZERO_AFTER_FIRST_ITERATION
+            PHINode * phi_in = bBody.CreatePHI(mBitBlockType, 2);
+            phi_in->addIncoming(mCarryInVector[baseCarryDataIdx + index], whileEntryBlock);
+            carryInPhis[index] = phi_in;
+            mCarryInVector[baseCarryDataIdx + index] = phi_in;
+#endif
+            PHINode * phi_out = bBody.CreatePHI(mBitBlockType, 2);
+            phi_out->addIncoming(mZeroInitializer, whileEntryBlock);
+            carryOutAccumPhis[index] = phi_out;
+            mCarryOutVector[baseCarryDataIdx + index] = mZeroInitializer;
         }
-        // and for any Next nodes in the loop body
+    
+        // for any Next nodes in the loop body, initialize to (a) pre-loop value.
         for (const Next * n : nextNodes) {
-            PHINode * phi = bCond.CreatePHI(mBitBlockType, 2, n->getName()->value());
+            PHINode * phi = bBody.CreatePHI(mBitBlockType, 2, n->getName()->value());
             auto f = mMarkerMap.find(n->getInitial());
             assert (f != mMarkerMap.end());
-            phi->addIncoming(f->second, mBasicBlock);
+            phi->addIncoming(f->second, whileEntryBlock);
             mMarkerMap[n->getInitial()] = phi;
             nextPhis.push_back(phi);
         }
-#ifdef WHILE_MULTI_CARRY
-        //  CarryFramePtr
-        PHINode * carryFramePtrPhi = bCond.CreatePHI(mBitBlockType, 2, "CarryFramePtr");
-        carryFramePtrPhi->addIncoming(mCarryFramePtr, mBasicBlock);
-        mCarryFramePtr = carryFramePtrPhi;
-#endif        
-        mBasicBlock = whileCondBlock;
-        bCond.CreateCondBr(genBitBlockAny(compileExpression(whileStatement->getCondition())), whileEndBlock, whileBodyBlock);
 
-        // BODY BLOCK
-        //std::cerr << "Compile loop body\n";
-        mBasicBlock = whileBodyBlock;
+        //
+        // Now compile the loop body proper.  Carry-out accumulated values
+        // and iterated values of Next nodes will be computed.
+        ++mWhileDepth;
         compileBlock(whileStatement->getBody());
-        
-        // update phi nodes for any carry propogating instruction
-        IRBuilder<> bWhileBody(mBasicBlock);
-        for (index = 0; index < carryDataSize; ++index) {
-            PHINode * phi = phiNodes[index];
-            Value * carryOut = bWhileBody.CreateOr(phi, mCarryOutVector[baseCarryDataIdx + index]);
-            phi->addIncoming(carryOut, mBasicBlock);
-            mCarryOutVector[baseCarryDataIdx + index] = phi;
+    
+        //  The while body might involve separate blocks depending on compile;
+        //  identify the final block generated.
+        BasicBlock * whileBodyFinalBlock = mBasicBlock;
+        IRBuilder<> bBodyFinal(mBasicBlock);
+    
+        // Add the phiNode branches for carry in, carry out nodes.
+        for (unsigned index = 0; index < carryDataSize; ++index) {
+#ifdef SET_WHILE_CARRY_IN_TO_ZERO_AFTER_FIRST_ITERATION
+            carryInPhis[index]->addIncoming(mZeroInitializer, whileBodyFinalBlock);
+#endif
+            PHINode * phi = carryOutAccumPhis[index];
+            Value * carryOut = bBodyFinal.CreateOr(phi, mCarryOutVector[baseCarryDataIdx + index]);
+            phi->addIncoming(carryOut, whileBodyFinalBlock);
+            mCarryOutVector[baseCarryDataIdx + index] = carryOut;
         }
-        
+
+        // Terminate the while loop body with a conditional branch back.
+        bBodyFinal.CreateCondBr(genBitBlockAny(compileExpression(whileStatement->getCondition())), whileEndBlock, whileBodyBlock);
+
         // and for any Next nodes in the loop body
-        for (int i = 0; i < nextNodes.size(); i++) {
+        for (unsigned i = 0; i < nextNodes.size(); i++) {
             const Next * n = nextNodes[i];
             auto f = mMarkerMap.find(n->getInitial());
             assert (f != mMarkerMap.end());
             PHINode * phi = nextPhis[i];
-            phi->addIncoming(f->second, mBasicBlock);
-            mMarkerMap[n->getInitial()] = phi;
+            if (LLVM_UNLIKELY(f->second == phi)) {
+                throw std::runtime_error("Unexpected Phi node for Next node.");
+            }
+            phi->addIncoming(f->second, whileBodyFinalBlock);
+            //mMarkerMap[n->getInitial()] = f->second;
         }
-#ifdef WHILE_MULTI_CARRY
-        Value * nextCarryFramePtr = bWhileBody.CreateGEP(mCarryFramePtr, bWhileBody.getInt64(WHILEBODYCARRYTOTALSIZE));
-        carryFramePtrPhi->addIncoming(nextCarryFramePtr, mBasicBlock);
-#endif        
-        bWhileBody.CreateBr(whileCondBlock);
 
         // EXIT BLOCK
         mBasicBlock = whileEndBlock;
-        if (--mWhileDepth == 0) {
-            for (index = 0; index < carryDataSize; ++index) {
-                genCarryDataStore(phiNodes[index], baseCarryDataIdx + index);
+        IRBuilder<> bEnd(whileEndBlock);
+        --mWhileDepth;
+
+#ifdef PRELOAD_WHILE_CARRIES_AT_TOP_LEVEL
+        if (mWhileDepth == 0)
+#endif
+        {
+            for (unsigned index = baseCarryDataIdx; index < baseCarryDataIdx + carryDataSize; ++index) {
+                bEnd.CreateAlignedStore(mCarryOutVector[index], bEnd.CreateGEP(mCarryDataPtr, bEnd.getInt64(index)), BLOCK_SIZE/8, false);
             }
         }
-  
 }
 
 void PabloCompiler::compileStatement(const Statement * stmt)
@@ -1002,7 +1020,7 @@ Value* PabloCompiler::genUnitAdvanceWithCarry(Value* strm_value, unsigned localI
     return result_value;
 }
                     
-                    //
+//
 // Generate code for long advances >= LongAdvanceBase
 //
 Value* PabloCompiler::genLongAdvanceWithCarry(Value* strm_value, int shift_amount, unsigned localIndex, const PabloBlock * blk) {
@@ -1011,7 +1029,7 @@ Value* PabloCompiler::genLongAdvanceWithCarry(Value* strm_value, int shift_amoun
     const unsigned block_shift = shift_amount % BLOCK_SIZE;
     const unsigned advanceEntries = cd.longAdvanceEntries(shift_amount);
     const unsigned bufsize = cd.longAdvanceBufferSize(shift_amount);
-
+    //std::cerr << "shift_amount = " << shift_amount << " bufsize = " << bufsize << std::endl;
     Value * indexMask = b.getInt64(bufsize - 1);  // A mask to implement circular buffer indexing
     Value * advBaseIndex = b.getInt64(cd.longAdvanceCarryDataOffset(localIndex));
     Value * storeIndex = b.CreateAdd(b.CreateAnd(mBlockNo, indexMask), advBaseIndex);

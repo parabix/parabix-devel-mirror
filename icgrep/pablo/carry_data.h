@@ -39,7 +39,7 @@ public:
                            shortAdvances(0), shortAdvanceTotal(0),
                            longAdvances(0), longAdvanceTotalBlocks(0),
                            nestedBlockCount(0), nestedCarryDataSize(0),
-                           totalCarryDataSize(0), 
+                           localCarryDataSize(0), totalCarryDataSize(0), 
                            carryOffset(0), unitAdvanceOffset(0),
                            shortAdvanceOffset(0), longAdvanceOffset(0)
                            {}
@@ -99,6 +99,10 @@ public:
         return blockCarryDataIndex + totalCarryDataSize - 1;
     }
     
+    unsigned getLocalCarryDataSize()  const {
+        return localCarryDataSize;
+    }
+    
     unsigned getTotalCarryDataSize()  const {
         return totalCarryDataSize;
     }
@@ -115,6 +119,7 @@ private:
     unsigned longAdvanceTotalBlocks;
     unsigned nestedBlockCount;
     unsigned nestedCarryDataSize;
+    unsigned localCarryDataSize;
     unsigned totalCarryDataSize;
     unsigned carryOffset;
     unsigned unitAdvanceOffset;
