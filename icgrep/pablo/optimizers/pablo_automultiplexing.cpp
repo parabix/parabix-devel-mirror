@@ -20,24 +20,73 @@ using namespace boost;
 using namespace boost::container;
 using namespace boost::numeric::ublas;
 
+#define USE_WEIGHTED_SELECTION
+
 namespace pablo {
 
+typedef uint64_t timestamp_t;
+
+static inline timestamp_t read_cycle_counter() {
+#ifdef __GNUC__
+timestamp_t ts;
+#ifdef __x86_64__
+  unsigned int eax, edx;
+  asm volatile("rdtsc" : "=a" (eax), "=d" (edx));
+  ts = ((timestamp_t) eax) | (((timestamp_t) edx) << 32);
+#else
+  asm volatile("rdtsc\n" : "=A" (ts));
+#endif
+  return(ts);
+#endif
+#ifdef _MSC_VER
+  return __rdtsc();
+#endif
+}
+
+
 bool AutoMultiplexing::optimize(const std::vector<Var *> & input, PabloBlock & entry) {
+    bool modified = false;
     AutoMultiplexing am;
+    const timestamp_t start = read_cycle_counter();
     am.initialize(input, entry);
+    const timestamp_t end_initialize = read_cycle_counter();
     am.characterize(entry);
+    const timestamp_t end_characterize = read_cycle_counter();
     am.shutdown();
+    const timestamp_t end_shutdown = read_cycle_counter();
     am.createMultiplexSetGraph();
     std::random_device rd;
     RNG rng(rd());
-    if (am.generateMultiplexSets(rng)) {
+    const bool multiplex = am.generateMultiplexSets(rng);
+    const timestamp_t end_create_multiplex_graph = read_cycle_counter();
+    timestamp_t end_mwis = end_create_multiplex_graph,
+            end_subset_constraints = end_create_multiplex_graph,
+            end_select_independent_sets = end_create_multiplex_graph,
+            end_topological_sort = end_create_multiplex_graph;
+
+    if (multiplex) {
         am.approxMaxWeightIndependentSet(rng);
+        end_mwis = read_cycle_counter();
         am.applySubsetConstraints();
+        end_subset_constraints = read_cycle_counter();
         am.multiplexSelectedIndependentSets();
+        end_select_independent_sets = read_cycle_counter();
         am.topologicalSort(entry);
-        return true;
+        end_topological_sort = read_cycle_counter();
+        modified = true;
     }
-    return false;
+
+    std::cerr << "Initialize:              " << (end_initialize - start) << std::endl;
+    std::cerr << "Characterize:            " << (end_characterize - end_initialize) << std::endl;
+    std::cerr << "Shutdown:                " << (end_shutdown - end_characterize) << std::endl;
+    std::cerr << "GenerateMultiplexSets:   " << (end_create_multiplex_graph - end_shutdown) << std::endl;
+    std::cerr << "MaxWeightIndependentSet: " << (end_mwis - end_create_multiplex_graph) << std::endl;
+    std::cerr << "ApplySubsetConstraints:  " << (end_subset_constraints - end_mwis) << std::endl;
+    std::cerr << "MultiplexSelectedSets:   " << (end_select_independent_sets - end_subset_constraints) << std::endl;
+    std::cerr << "TopologicalSort:         " << (end_topological_sort - end_select_independent_sets) << std::endl;
+
+
+    return modified;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -51,7 +100,7 @@ bool AutoMultiplexing::optimize(const std::vector<Var *> & input, PabloBlock & e
 void AutoMultiplexing::initialize(const std::vector<Var *> & vars, const PabloBlock & entry) {
 
     flat_map<const PabloAST *, unsigned> map;
-    std::vector<const Statement *> complex;
+    std::vector<const Statement *> complexStatements;
     std::stack<const Statement *> scope;
 
     // Scan through and collect all the advances, calls, scanthrus and matchstars ...
@@ -78,7 +127,7 @@ void AutoMultiplexing::initialize(const std::vector<Var *> & vars, const PabloBl
                 case PabloAST::ClassTypeId::Call:
                 case PabloAST::ClassTypeId::ScanThru:
                 case PabloAST::ClassTypeId::MatchStar:
-                    complex.push_back(stmt);
+                    complexStatements.push_back(stmt);
                     break;
                 default:
                     break;
@@ -186,7 +235,7 @@ void AutoMultiplexing::initialize(const std::vector<Var *> & vars, const PabloBl
     }
 
     // Initialize the BDD engine ...
-    mManager = Cudd_Init((complex.size() + vars.size()), 0, CUDD_UNIQUE_SLOTS, CUDD_CACHE_SLOTS, 0);
+    mManager = Cudd_Init((complexStatements.size() + vars.size()), 0, CUDD_UNIQUE_SLOTS, CUDD_CACHE_SLOTS, 0);
     Cudd_AutodynDisable(mManager);
 
     // Map the predefined 0/1 entries
@@ -196,7 +245,7 @@ void AutoMultiplexing::initialize(const std::vector<Var *> & vars, const PabloBl
     // Order the variables so the input Vars are pushed to the end; they ought to
     // be the most complex to resolve.
     unsigned i = 0;
-    for (const Statement * stmt : complex) {
+    for (const Statement * stmt : complexStatements) {
         mCharacterizationMap.emplace(stmt, Cudd_bddIthVar(mManager, i++));
     }
     for (const Var * var : vars) {
@@ -218,6 +267,9 @@ void AutoMultiplexing::characterize(PabloBlock & entry) {
     advances.reserve(mAdvance.size());
 
     // TODO: What if we did some minterm analysis in here? We'd need to be careful to keep the Advances properly indexed.
+
+    unsigned comparisons = 0;
+    unsigned avoided = 0;
 
     // Scan through and collect all the advances, calls, scanthrus and matchstars ...
     for (Statement * stmt = entry.front(); ; ) {
@@ -319,6 +371,7 @@ void AutoMultiplexing::characterize(PabloBlock & entry) {
 
                             // If these advances are "shifting" their values by the same amount and aren't transitively dependant ...
                             if (constrained && (stmt->getOperand(1) == adv->getOperand(1)) && (notTransitivelyDependant(k, i))) {
+                                ++comparisons;
                                 DdNode * Ii = std::get<0>(advances[i]);
                                 DdNode * Ni = std::get<1>(advances[i]);
                                 // TODO: test both Cudd_And and Cudd_bddIntersect to see which is faster
@@ -335,13 +388,15 @@ void AutoMultiplexing::characterize(PabloBlock & entry) {
                                     for (std::tie(ei, ei_end) = in_edges(i, mSubsetGraph); ei != ei_end; ++ei) {
                                         const auto j = source(*ei, mSubsetGraph);
                                         if (j > i && notTransitivelyDependant(k, j)) {
-                                            assert (mCharacterizationMap.count(mAdvance[j]));
-                                            DdNode *& Cj = mCharacterizationMap[mAdvance[j]];
+                                            Advance * adv = mAdvance[j];
+                                            assert (mCharacterizationMap.count(adv));
+                                            DdNode *& Cj = mCharacterizationMap[adv];
                                             DdNode * Nj = std::get<1>(advances[j]);
                                             // Mark the i-th and j-th Advances as being mutually exclusive
                                             Ck = And(Ck, Nj);
                                             Cj = And(Cj, Nk);
                                             unconstrained[j] = true;
+                                            ++avoided;
                                         }
                                     }
                                     constrained = false;
@@ -358,6 +413,7 @@ void AutoMultiplexing::characterize(PabloBlock & entry) {
                                         if (j > i) {
                                             add_edge(k, j, mSubsetGraph);
                                             unconstrained[j] = true;
+                                            ++avoided;
                                         }
                                     }
                                     constrained = false;
@@ -372,6 +428,7 @@ void AutoMultiplexing::characterize(PabloBlock & entry) {
                                         if (j > i) {
                                             add_edge(j, k, mSubsetGraph);
                                             unconstrained[j] = true;
+                                            ++avoided;
                                         }
                                     }
                                     constrained = false;
@@ -417,6 +474,8 @@ void AutoMultiplexing::characterize(PabloBlock & entry) {
         stmt = scope.top();
         scope.pop();
     }
+
+    std::cerr << "comparisons: " << comparisons << ", avoided: " << avoided << std::endl;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -571,7 +630,7 @@ void AutoMultiplexing::approxMaxWeightIndependentSet(RNG & rng) {
     graph_traits<IndependentSetGraph>::vertex_iterator vi, vi_end;
     for (std::tie(vi, vi_end) = vertices(G); vi != vi_end; ++vi, ++i) {
         M.emplace(i, *vi);
-        G[*vi] = std::make_pair(out_degree(i, mMultiplexSetGraph), i);
+        G[*vi] = std::make_tuple(out_degree(i, mMultiplexSetGraph), 0, i);
     }
 
     // Let M be mMultiplexSetGraph. Each vertex in G corresponds to a set vertex in M.
@@ -600,39 +659,56 @@ void AutoMultiplexing::approxMaxWeightIndependentSet(RNG & rng) {
     while (num_vertices(G) > 0) {
 
         // Select a vertex vi whose weight as greater than the average weight of its neighbours ...
-
-        auto i = RNGDistribution(0, num_vertices(G) - 1)(rng);
-        for (std::tie(vi, vi_end) = vertices(G); i && vi != vi_end; ++vi, --i);
-
-        const unsigned Vw = G[*vi].first * (degree(*vi, G) + 1);
-
-        unsigned Nw = 0;
-        graph_traits<IndependentSetGraph>::adjacency_iterator ai, ai_end;
-        std::tie(ai, ai_end) = adjacent_vertices(*vi, G);
-        for (; ai != ai_end; ++ai) {
-            Nw += G[*ai].first;
+        #ifdef USE_WEIGHTED_SELECTION
+        int Tw = 0;
+        for (std::tie(vi, vi_end) = vertices(G); vi != vi_end; ++vi) {
+            int Vw = std::get<0>(G[*vi]) * (degree(*vi, G) + 1);
+            int Nw = 0;
+            graph_traits<IndependentSetGraph>::adjacency_iterator ai, ai_end;
+            std::tie(ai, ai_end) = adjacent_vertices(*vi, G);
+            for (; ai != ai_end; ++ai) {
+                Nw += std::get<0>(G[*ai]);
+            }
+            Vw = std::max<int>(Vw - Nw, 0);
+            // Vw *= Vw;
+            std::get<1>(G[*vi]) = Vw;
+            Tw += Vw;
         }
+
+        int w = RNGDistribution(0, Tw - 1)(rng);
+        for (std::tie(vi, vi_end) = vertices(G); vi != vi_end; ++vi) {
+            w -= std::get<1>(G[*vi]);
+            if (w < 0) {
+                break;
+            }
+        }
+        #else
+        auto i = RNGDistribution(1, num_vertices(G))(rng);
+        for (std::tie(vi, vi_end) = vertices(G); --i != 0; ++vi);
+        #endif
+        assert (vi != vi_end);
 
         // Then add it to our set and remove it and its neighbourhood from G
-
-        if (Nw <= Vw) {
-            A.reserve(degree(*vi, G) + 1);
-            // Note: by clearing the adjacent set vertices from the multiplex set graph, this will effectively
-            // choose the set refered to by vi as one of our chosen independent sets.
-            graph_traits<IndependentSetGraph>::adjacency_iterator ai, ai_end;
-            A.push_back(*vi);
-            for (std::tie(ai, ai_end) = adjacent_vertices(*vi, G); ai != ai_end; ++ai) {
-                clear_out_edges(G[*ai].second, mMultiplexSetGraph);
-                A.push_back(*ai);
-            }
-            for (auto u : A) {
-                clear_vertex(u, G);
-                remove_vertex(u, G);
-            }
-            A.clear();
+        A.reserve(degree(*vi, G) + 1);
+        // Note: by clearing the adjacent set vertices from the multiplex set graph, this will effectively
+        // choose the set refered to by vi as one of our chosen independent sets.
+        graph_traits<IndependentSetGraph>::adjacency_iterator ai, ai_end;
+        A.push_back(*vi);
+        for (std::tie(ai, ai_end) = adjacent_vertices(*vi, G); ai != ai_end; ++ai) {
+            clear_out_edges(std::get<2>(G[*ai]), mMultiplexSetGraph);
+            A.push_back(*ai);
         }
+        for (auto u : A) {
+            clear_vertex(u, G);
+            remove_vertex(u, G);
+        }
+        A.clear();
+    }
 
-
+    for (unsigned i = m; i != (m + n); ++i) {
+        if (out_degree(i, mMultiplexSetGraph) > 0) {
+            std::cerr << out_degree(i, mMultiplexSetGraph) << std::endl;
+        }
     }
 
     #ifndef NDEBUG
