@@ -24,7 +24,7 @@ class AutoMultiplexing {
     using PathGraph = boost::adjacency_matrix<boost::undirectedS>;
     using MultiplexSetGraph = boost::adjacency_list<boost::hash_setS, boost::vecS, boost::bidirectionalS>;
     using IndependentSetGraph = boost::adjacency_list<boost::hash_setS, boost::listS, boost::undirectedS, std::tuple<int, int, MultiplexSetGraph::vertex_descriptor>>;
-    using ChosenSets = std::vector<MultiplexSetGraph::vertex_descriptor>;
+    using ChosenSet = std::vector<MultiplexSetGraph::vertex_descriptor>;
     using SubsetGraph = boost::adjacency_list<boost::hash_setS, boost::vecS, boost::bidirectionalS>;
     using Advances = std::vector<Advance *>;
 
@@ -43,7 +43,8 @@ protected:
     bool notTransitivelyDependant(const PathGraph::vertex_descriptor i, const PathGraph::vertex_descriptor j) const;
     void createMultiplexSetGraph();
     bool generateMultiplexSets(RNG & rng);    
-    void addMultiplexSet(const IndependentSet & set);
+    void addMultiplexSet(const IndependentSet & N, const IndependentSet & S);
+    void addMultiplexSet(const IndependentSet & N, const int i, const IndependentSet & S, const int j);
     void approxMaxWeightIndependentSet(RNG & rng);
     void applySubsetConstraints();
     void multiplexSelectedIndependentSets() const;
@@ -56,6 +57,7 @@ private:
     DdNode * One() const;
     bool isZero(DdNode * const x) const;
     DdNode * And(DdNode * const x, DdNode * const y);
+    DdNode * Intersect(DdNode * const x, DdNode * const y);
     DdNode * Or(DdNode * const x, DdNode * const y);
     DdNode * Xor(DdNode * const x, DdNode * const y);
     DdNode * Not(DdNode * x) const;
@@ -68,8 +70,9 @@ private:
     PathGraph               mPathGraph;
     ConstraintGraph         mConstraintGraph;
     SubsetGraph             mSubsetGraph;
-    Advances                mAdvance;
+    Advances                mAdvance;    
     MultiplexSetGraph       mMultiplexSetGraph;
+    ChosenSet               mCurrentCombination;
 };
 
 }

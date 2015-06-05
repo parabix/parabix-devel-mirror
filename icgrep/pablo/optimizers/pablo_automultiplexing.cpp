@@ -375,12 +375,12 @@ void AutoMultiplexing::characterize(PabloBlock & entry) {
                                 DdNode * Ii = std::get<0>(advances[i]);
                                 DdNode * Ni = std::get<1>(advances[i]);
                                 // TODO: test both Cudd_And and Cudd_bddIntersect to see which is faster
-                                DdNode * const IiIk = Cudd_bddIntersect(mManager, Ik, Ii); Cudd_Ref(IiIk);
+                                DdNode * const IiIk = Intersect(Ik, Ii);
                                 // Is there any satisfying truth assignment? If not, these streams are mutually exclusive.
                                 if (noSatisfyingAssignment(IiIk)) {
                                     assert (mCharacterizationMap.count(adv));
                                     DdNode *& Ci = mCharacterizationMap[adv];
-                                    // mark the i-th and k-th Advances as being mutually exclusive
+                                    // Mark the i-th and k-th Advances as being mutually exclusive
                                     Ck = And(Ck, Ni);
                                     Ci = And(Ci, Nk);
                                     // If Ai ∩ Ak = ∅ and Aj ⊂ Ai, Aj ∩ Ak = ∅.
@@ -507,6 +507,11 @@ inline DdNode * AutoMultiplexing::And(DdNode * const x, DdNode * const y) {
     return r;
 }
 
+inline DdNode * AutoMultiplexing::Intersect(DdNode * const x, DdNode * const y) {
+    DdNode * r = Cudd_bddIntersect(mManager, x, y); Cudd_Ref(r);
+    return r;
+}
+
 inline DdNode * AutoMultiplexing::Or(DdNode * const x, DdNode * const y) {
     DdNode * r = Cudd_bddOr(mManager, x, y);
     Cudd_Ref(r);
@@ -555,58 +560,123 @@ bool AutoMultiplexing::generateMultiplexSets(RNG & rng) {
     using EdgeIterator = graph_traits<ConstraintGraph>::out_edge_iterator;
     using DegreeType = graph_traits<ConstraintGraph>::degree_size_type;
 
-    // push all source nodes into the active independent set S
-    IndependentSet S;
-    unsigned remainingVerticies = num_vertices(mConstraintGraph);
+    IndependentSet S, N;
+    auto remainingVerticies = num_vertices(mConstraintGraph);
     std::vector<DegreeType> D(remainingVerticies);
+    S.reserve(15);
+    N.reserve(15);
 
+    // Push all source nodes into the new independent set N
     VertexIterator vi, vi_end;
     for (std::tie(vi, vi_end) = vertices(mConstraintGraph); vi != vi_end; ++vi) {
-        auto d = in_degree(*vi, mConstraintGraph);
+        const auto d = in_degree(*vi, mConstraintGraph);
         D[*vi] = d;
         if (d == 0) {
-            S.push_back(*vi);
+            N.push_back(*vi);
         }
     }
 
-    assert (!S.empty());
+    while ( remainingVerticies >= 3 ) {
 
-    for ( ; remainingVerticies >= 3; --remainingVerticies) {
-        if (S.size() >= 3) {
-            addMultiplexSet(S);
+
+        // If we have at least 3 vertices in our two sets, try adding them to our
+        // multiplexing set.
+        if ((N.size() + S.size()) >= 3) {
+            addMultiplexSet(N, S);
         }        
-        // Randomly choose a vertex in S and discard it.
-        assert (!S.empty());
-        const auto i = S.begin() + RNGDistribution(0, S.size() - 1)(rng);
-        const Vertex u = *i;
-        S.erase(i);
-        EdgeIterator ei, ei_end;
-        for (std::tie(ei, ei_end) = out_edges(u, mConstraintGraph); ei != ei_end; ++ei) {
-            const Vertex v = target(*ei, mConstraintGraph);
-            if ((--D[v]) == 0) {
-                S.push_back(v);
+
+        // Move all of our "newly" uncovered vertices into the "known" set. By always
+        // choosing at least one element from N, this will prevent us from adding the
+        // same multiplexing set again.
+        S.insert(S.end(), N.begin(), N.end()); N.clear();
+
+        do {
+            // Randomly choose a vertex in S and discard it.
+            assert (!S.empty());
+            const auto i = S.begin() + RNGDistribution(0, S.size() - 1)(rng);
+            const Vertex u = *i;
+            S.erase(i);
+            --remainingVerticies;
+            EdgeIterator ei, ei_end;
+            for (std::tie(ei, ei_end) = out_edges(u, mConstraintGraph); ei != ei_end; ++ei) {
+                const Vertex v = target(*ei, mConstraintGraph);
+                if ((--D[v]) == 0) {
+                    N.push_back(v);
+                }
             }
         }
+        while (N.empty() && remainingVerticies >= 3);
     }
 
     return num_vertices(mMultiplexSetGraph) > num_vertices(mConstraintGraph);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
+ * @brief is_power_of_2
+ * @param n an integer
+ ** ------------------------------------------------------------------------------------------------------------- */
+static inline bool is_power_of_2(const size_t n) {
+    return ((n & (n - 1)) == 0) ;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
  * @brief addMultiplexSet
+ * @param N an independent set
  * @param S an independent set
  ** ------------------------------------------------------------------------------------------------------------- */
-inline void AutoMultiplexing::addMultiplexSet(const IndependentSet & S) {
+inline void AutoMultiplexing::addMultiplexSet(const IndependentSet & N, const IndependentSet & S) {
 
     // At this stage, the multiplex set graph is a directed bipartite graph that is used to show relationships
     // between the "set vertex" and its members. We obtain these from "generateMultiplexSets".
 
-    // TODO: Instead of building a graph, construct a trie of all members in the powerset of S that are of size
+    // TODO: Instead of building a graph, construct a trie of all members of all combinations of S that are of size
     // >= 3 and not 2^n for any n.
 
-    const auto v = add_vertex(mMultiplexSetGraph);
-    for (auto u : S) {
-        add_edge(v, u, mMultiplexSetGraph);
+    // This will give us <= (∑i=1 to |N| C(|N|,i)) * [1 + (∑i=1 to |M| C(|M|,i))] combinations. It seems to improve
+    // the potential result but make the MaxWeightIndependentSet far more costly. Look into a method without explicit
+    // vertex deletion.
+
+    for (int i = 0; i < N.size(); ++i) {
+        mCurrentCombination.push_back(N[i]);
+        addMultiplexSet(N, i + 1, S, 0);
+        assert (mCurrentCombination.back() == N[i]);
+        mCurrentCombination.pop_back();
+    }
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief addMultiplexSet
+ * @param N an independent set
+ * @param S an independent set
+ ** ------------------------------------------------------------------------------------------------------------- */
+void AutoMultiplexing::addMultiplexSet(const IndependentSet & N, const int i,
+                                       const IndependentSet & S, const int j) {
+
+    // At this stage, the multiplex set graph is a directed bipartite graph that is used to show relationships
+    // between the "set vertex" and its members. We obtain these from "generateMultiplexSets".
+
+    // TODO: Instead of building a graph, construct a trie of all members of all combinations of S that are of size
+    // >= 3 and not 2^n for any n.
+
+    if (mCurrentCombination.size() >= 3 && !is_power_of_2(mCurrentCombination.size())) {
+        const auto v = add_vertex(mMultiplexSetGraph);
+        for (auto u : mCurrentCombination) {
+            add_edge(v, u, mMultiplexSetGraph);
+        }
+    }
+
+    for (int ii = i; ii < N.size(); ++ii) {
+        mCurrentCombination.push_back(N[ii]);
+        addMultiplexSet(N, ii + 1, S, j);
+        assert (mCurrentCombination.back() == N[ii]);
+        mCurrentCombination.pop_back();
+    }
+
+    for (int jj = j; jj < S.size(); ++jj) {
+        mCurrentCombination.push_back(S[jj]);
+        addMultiplexSet(N, i + 1, S, jj + 1);
+        assert (mCurrentCombination.back() == S[jj]);
+        mCurrentCombination.pop_back();
     }
 
 }
@@ -670,7 +740,7 @@ void AutoMultiplexing::approxMaxWeightIndependentSet(RNG & rng) {
                 Nw += std::get<0>(G[*ai]);
             }
             Vw = std::max<int>(Vw - Nw, 0);
-            // Vw *= Vw;
+            Vw *= Vw;
             std::get<1>(G[*vi]) = Vw;
             Tw += Vw;
         }
@@ -859,9 +929,9 @@ void AutoMultiplexing::applySubsetConstraints() {
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief compute_m
+ * @brief log2_plus_one
  ** ------------------------------------------------------------------------------------------------------------- */
-static inline size_t compute_m(const size_t n) {
+static inline size_t log2_plus_one(const size_t n) {
     return std::log2<size_t>(n) + 1; // use a faster builtin function for this?
 }
 
@@ -878,7 +948,7 @@ void AutoMultiplexing::multiplexSelectedIndependentSets() const {
     for (unsigned s = f; s != l; ++s) {
         max_n = std::max<unsigned>(max_n, out_degree(s, mMultiplexSetGraph));
     }
-    const size_t max_m = compute_m(max_n);
+    const size_t max_m = log2_plus_one(max_n);
 
     std::vector<MultiplexSetGraph::vertex_descriptor> I(max_n);
     std::vector<Advance *> V(max_n);
@@ -892,7 +962,7 @@ void AutoMultiplexing::multiplexSelectedIndependentSets() const {
         const size_t n = out_degree(s, mMultiplexSetGraph);
         if (n) {
 
-            const size_t m = compute_m(n);
+            const size_t m = log2_plus_one(n);
 
             graph_traits<MultiplexSetGraph>::out_edge_iterator ei, ei_end;
             std::tie(ei, ei_end) = out_edges(s, mMultiplexSetGraph);
@@ -925,7 +995,7 @@ void AutoMultiplexing::multiplexSelectedIndependentSets() const {
 
                 std::ostringstream prefix;
 
-                prefix << "mux";
+                prefix << "mux" << n << "to" << m;
                 for (size_t i = 1; i <= n; ++i) {
                     if ((i & (static_cast<size_t>(1) << j)) != 0) {
                         assert (!Q.full());
