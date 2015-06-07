@@ -8,6 +8,7 @@
 #include <boost/graph/adjacency_matrix.hpp>
 #include <boost/graph/edge_list.hpp>
 #include <boost/container/flat_map.hpp>
+#include <boost/container/flat_set.hpp>
 #include <boost/numeric/ublas/matrix.hpp>
 #include <random>
 #include <stdint.h>
@@ -23,8 +24,8 @@ class AutoMultiplexing {
     using ConstraintGraph = boost::adjacency_list<boost::hash_setS, boost::vecS, boost::bidirectionalS>;
     using PathGraph = boost::adjacency_matrix<boost::undirectedS>;
     using MultiplexSetGraph = boost::adjacency_list<boost::hash_setS, boost::vecS, boost::bidirectionalS>;
-    using IndependentSetGraph = boost::adjacency_list<boost::hash_setS, boost::listS, boost::undirectedS, std::tuple<int, int, MultiplexSetGraph::vertex_descriptor>>;
-    using ChosenSet = std::vector<MultiplexSetGraph::vertex_descriptor>;
+    using IndependentSetGraph = boost::adjacency_matrix<boost::undirectedS, std::pair<int, int>>;
+    using ChosenSet = boost::container::flat_set<MultiplexSetGraph::vertex_descriptor>;
     using SubsetGraph = boost::adjacency_list<boost::hash_setS, boost::vecS, boost::bidirectionalS>;
     using Advances = std::vector<Advance *>;
 
@@ -43,14 +44,15 @@ protected:
     bool notTransitivelyDependant(const PathGraph::vertex_descriptor i, const PathGraph::vertex_descriptor j) const;
     void createMultiplexSetGraph();
     bool generateMultiplexSets(RNG & rng);    
-    void addMultiplexSet(const IndependentSet & N, const IndependentSet & S);
-    void addMultiplexSet(const IndependentSet & N, const int i, const IndependentSet & S, const int j);
+    void addMultiplexSet(const IndependentSet & N, const IndependentSet & M);
+    void addMultiplexSet(const IndependentSet & N, int i, const IndependentSet & M, int j, ChosenSet & S);
     void approxMaxWeightIndependentSet(RNG & rng);
     void applySubsetConstraints();
     void multiplexSelectedIndependentSets() const;
     void topologicalSort(PabloBlock & entry) const;
     inline AutoMultiplexing()
-    : mPathGraph(0) {
+    : mPathGraph(0)
+    {
     }
 private:
     DdNode * Zero() const;
@@ -72,7 +74,6 @@ private:
     SubsetGraph             mSubsetGraph;
     Advances                mAdvance;    
     MultiplexSetGraph       mMultiplexSetGraph;
-    ChosenSet               mCurrentCombination;
 };
 
 }
