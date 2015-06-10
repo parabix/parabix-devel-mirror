@@ -28,13 +28,9 @@ class AutoMultiplexing {
     using ChosenSet = boost::container::flat_set<MultiplexSetGraph::vertex_descriptor>;
     using SubsetGraph = boost::adjacency_list<boost::hash_setS, boost::vecS, boost::bidirectionalS>;
     using Advances = std::vector<Advance *>;
-
     using RNG = std::mt19937;
     using RNGDistribution = std::uniform_int_distribution<RNG::result_type>;
-
-    using Vertex = ConstraintGraph::vertex_descriptor;
-
-    using IndependentSet = std::vector<Vertex>;
+    using IndependentSet = std::vector<ConstraintGraph::vertex_descriptor>;
 
 public:
     static bool optimize(const std::vector<Var *> & input, PabloBlock & entry);
@@ -51,7 +47,8 @@ protected:
     void multiplexSelectedIndependentSets() const;
     void topologicalSort(PabloBlock & entry) const;
     inline AutoMultiplexing()
-    : mPathGraph(0)
+    : mVariables(0)
+    , mPathGraph(0)
     {
     }
 private:
@@ -68,6 +65,7 @@ private:
     void shutdown();
 private:
     DdManager *             mManager;
+    unsigned                mVariables;
     CharacterizationMap     mCharacterizationMap;
     PathGraph               mPathGraph;
     ConstraintGraph         mConstraintGraph;
