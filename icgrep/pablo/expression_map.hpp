@@ -82,6 +82,7 @@ private:
     std::map<Key, PabloAST *>   mMap;
 };
 
+
 struct ExpressionTable {
 
     ExpressionTable()

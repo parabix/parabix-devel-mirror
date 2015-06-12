@@ -7,11 +7,17 @@
 #ifndef CC_COMPILER_H
 #define CC_COMPILER_H
 
-#include "utf_encoding.h"
-#include <pablo/codegenstate.h>
-#include <pablo/pabloAST.h>
 #include <re/re_cc.h>
+#include "utf_encoding.h"
 #include <string>
+
+namespace pablo {
+    class PabloAST;
+    class PabloBuilder;
+    class PabloBlock;
+    class Var;
+    class Assign;
+}
 
 namespace cc {
 
@@ -24,7 +30,9 @@ public:
 
     std::vector<pablo::Var *> getBasisBits(const CC_NameMap & nameMap);
 
-    pablo::Assign * compileCC(const re::CC *cc, pablo::PabloBlock & pb);
+    pablo::Assign * compileCC(const re::CC *cc, pablo::PabloBlock & block);
+
+    pablo::Assign * compileCC(const re::CC *cc, pablo::PabloBuilder & pb);
 
     pablo::Assign * compileCC(const re::CC *cc);
 
@@ -32,14 +40,14 @@ public:
 
 private:
     pablo::Var * getBasisVar(const int n) const;
-    pablo::PabloAST * bit_pattern_expr(const unsigned pattern, unsigned selected_bits, pablo::PabloBlock & pb);
-    pablo::PabloAST * char_test_expr(const re::CodePointType ch, pablo::PabloBlock & pb);
-    pablo::PabloAST * make_range(const re::CodePointType n1, const re::CodePointType n2, pablo::PabloBlock & pb);
-    pablo::PabloAST * GE_Range(const unsigned N, const unsigned n, pablo::PabloBlock & pb);
-    pablo::PabloAST * LE_Range(const unsigned N, const unsigned n, pablo::PabloBlock & pb);
-    pablo::PabloAST * char_or_range_expr(const re::CodePointType lo, const re::CodePointType hi, pablo::PabloBlock & pb);
-    pablo::PabloAST * charset_expr(const re::CC *cc, pablo::PabloBlock & pb);
-private:
+    pablo::PabloAST * bit_pattern_expr(const unsigned pattern, unsigned selected_bits, pablo::PabloBuilder & pb);
+    pablo::PabloAST * char_test_expr(const re::CodePointType ch, pablo::PabloBuilder & pb);
+    pablo::PabloAST * make_range(const re::CodePointType n1, const re::CodePointType n2, pablo::PabloBuilder & pb);
+    pablo::PabloAST * GE_Range(const unsigned N, const unsigned n, pablo::PabloBuilder & pb);
+    pablo::PabloAST * LE_Range(const unsigned N, const unsigned n, pablo::PabloBuilder & pb);
+    pablo::PabloAST * char_or_range_expr(const re::CodePointType lo, const re::CodePointType hi, pablo::PabloBuilder & pb);
+    pablo::PabloAST * charset_expr(const re::CC *cc, pablo::PabloBuilder & pb);
+private:    
     pablo::PabloBlock &         mCG;
     std::vector<pablo::Var *>   mBasisBit;
     const Encoding              mEncoding;

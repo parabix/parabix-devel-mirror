@@ -8,7 +8,6 @@
 #include "utf_encoding.h"
 
 //Pablo Expressions
-#include <pablo/codegenstate.h>
 #include <re/re_alt.h>
 #include <re/re_cc.h>
 #include <re/re_seq.h>
@@ -18,6 +17,8 @@
 #include <re/re_intersect.h>
 #include <re/re_assertion.h>
 #include <cc/cc_namemap.hpp>
+#include <pablo/codegenstate.h>
+#include <pablo/builder.hpp>
 #include <stdexcept>
 
 using namespace re;
@@ -35,12 +36,17 @@ CC_Compiler::CC_Compiler(PabloBlock & cg, const Encoding encoding, const std::st
     }
 }
 
-pablo::Assign * CC_Compiler::compileCC(const re::CC *cc) {
-     return compileCC(cc, mCG); 
+Assign * CC_Compiler::compileCC(const CC *cc) {
+    return compileCC(cc, mCG);
 }
 
-pablo::Assign * CC_Compiler::compileCC(const re::CC *cc, pablo::PabloBlock & pb) {
-     return pb.createAssign(cc->canonicalName(ByteClass), charset_expr(cc, pb));
+Assign * CC_Compiler::compileCC(const CC *cc, PabloBlock & block) {
+    PabloBuilder pb(block);
+    return compileCC(cc, pb);
+}
+
+Assign * CC_Compiler::compileCC(const CC *cc, PabloBuilder & pb) {
+    return pb.createAssign(cc->canonicalName(ByteClass), charset_expr(cc, pb));
 }
 
 std::vector<Var *> CC_Compiler::getBasisBits(const CC_NameMap & nameMap) {
@@ -90,7 +96,7 @@ void CC_Compiler::compileByteClasses(RE * re) {
 
 
 
-PabloAST * CC_Compiler::charset_expr(const CC * cc, pablo::PabloBlock & pb) {
+PabloAST * CC_Compiler::charset_expr(const CC * cc, PabloBuilder & pb) {
     if (cc->empty()) {
         return pb.createZeroes();
     }
@@ -135,7 +141,7 @@ PabloAST * CC_Compiler::charset_expr(const CC * cc, pablo::PabloBlock & pb) {
     return expr;
 }
 
-PabloAST * CC_Compiler::bit_pattern_expr(const unsigned pattern, unsigned selected_bits, pablo::PabloBlock & pb)
+PabloAST * CC_Compiler::bit_pattern_expr(const unsigned pattern, unsigned selected_bits, PabloBuilder &pb)
 {
     if (selected_bits == 0) {
         return pb.createOnes();
@@ -185,13 +191,11 @@ PabloAST * CC_Compiler::bit_pattern_expr(const unsigned pattern, unsigned select
     return bit_terms[0];
 }
 
-inline PabloAST * CC_Compiler::char_test_expr(const CodePointType ch, pablo::PabloBlock & pb)
-{
+inline PabloAST * CC_Compiler::char_test_expr(const CodePointType ch, PabloBuilder &pb) {
     return bit_pattern_expr(ch, mEncoding.getMask(), pb);
 }
 
-PabloAST * CC_Compiler::make_range(const CodePointType n1, const CodePointType n2, pablo::PabloBlock & pb)
-{
+PabloAST * CC_Compiler::make_range(const CodePointType n1, const CodePointType n2, PabloBuilder & pb) {
     CodePointType diff_count = 0;
 
     for (CodePointType diff_bits = n1 ^ n2; diff_bits; diff_count++, diff_bits >>= 1);
@@ -215,7 +219,7 @@ PabloAST * CC_Compiler::make_range(const CodePointType n1, const CodePointType n
     return pb.createAnd(common, pb.createSel(getBasisVar(diff_count - 1), hi_test, lo_test));
 }
 
-PabloAST * CC_Compiler::GE_Range(const unsigned N, const unsigned n, pablo::PabloBlock & pb) {
+PabloAST * CC_Compiler::GE_Range(const unsigned N, const unsigned n, PabloBuilder &pb) {
     if (N == 0) {
         return pb.createOnes(); //Return a true literal.
     }
@@ -251,7 +255,7 @@ PabloAST * CC_Compiler::GE_Range(const unsigned N, const unsigned n, pablo::Pabl
     throw std::runtime_error("Unexpected input given to ge_range: " + std::to_string(N) + ", " + std::to_string(n));
 }
 
-PabloAST * CC_Compiler::LE_Range(const unsigned N, const unsigned n, pablo::PabloBlock & pb)
+PabloAST * CC_Compiler::LE_Range(const unsigned N, const unsigned n, PabloBuilder &pb)
 {
     /*
       If an N-bit pattern is all ones, then it is always true that any n-bit value is LE this pattern.
@@ -265,7 +269,7 @@ PabloAST * CC_Compiler::LE_Range(const unsigned N, const unsigned n, pablo::Pabl
     }
 }
 
-inline PabloAST * CC_Compiler::char_or_range_expr(const CodePointType lo, const CodePointType hi, pablo::PabloBlock & pb) {
+inline PabloAST * CC_Compiler::char_or_range_expr(const CodePointType lo, const CodePointType hi, PabloBuilder &pb) {
     if (lo == hi) {
         return char_test_expr(lo, pb);
     }

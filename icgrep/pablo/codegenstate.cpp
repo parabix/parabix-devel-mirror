@@ -51,7 +51,7 @@ PabloAST * PabloBlock::createAdvance(PabloAST * expr, const Integer::integer_t s
     return insertAtInsertionPoint(new Advance(expr, getInteger(shiftAmount), makeName(prefix, false), this));
 }
 
-Call * PabloBlock::createCall(String * name) {
+Call * PabloBlock::createCall(PabloAST * name) {
     assert (name);
     return insertAtInsertionPoint(new Call(name, this));
 }
@@ -84,7 +84,7 @@ PabloAST * PabloBlock::createNot(PabloAST * expr, const std::string prefix) {
     return insertAtInsertionPoint(new Not(expr, makeName(prefix, false), this));
 }
 
-Var * PabloBlock::createVar(String * name) {
+Var * PabloBlock::createVar(PabloAST * name) {
     assert (name);
     return new Var(name, this);
 }

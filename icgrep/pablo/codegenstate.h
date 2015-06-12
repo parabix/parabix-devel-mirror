@@ -32,29 +32,9 @@
 
 namespace pablo {
 
-class Assign;
-class Advance;
-class And;
-class Call;
-class MatchStar;
-class Next;
-class Not;
-class Or;
-class Ones;
-class ScanThru;
-class Sel;
-class String;
-class Integer;
-class Var;
-class Xor;
-class Zeroes;
-class If;
-class While;
-
-
 class PabloBlock : public PabloAST, public StatementList {
-    friend class pablo::PabloAST;
-    friend class Builder;    
+    friend class PabloAST;
+    friend class PabloBuilder;
 public:
 
     static inline bool classof(const PabloBlock *) {
@@ -98,7 +78,9 @@ public:
         return createCall(getName(name, false));
     }
 
-    Call * createCall(String * name);
+    inline Call * createCall(String * name) {
+        return createCall(cast<PabloAST>(name));
+    }
 
     Assign * createAssign(const std::string prefix, PabloAST * expr, const int outputIndex = -1);
 
@@ -106,10 +88,8 @@ public:
         return createVar(getName(name, false));
     }
 
-    Var * createVar(String * name);
-
-    PabloAST * createVar(const PabloAST * const) {
-        throw std::runtime_error("Var objects should only refer to external Vars (i.e., input basis bit streams). Use Assign objects directly.");
+    inline Var * createVar(String * name) {
+        return createVar(cast<PabloAST>(name));
     }
 
     Next * createNext(Assign * assign, PabloAST * expr);
@@ -193,6 +173,11 @@ protected:
         }
         return expr;
     }
+private:
+
+    Call * createCall(PabloAST * name);
+
+    Var * createVar(PabloAST * name);
 
 private:        
     Zeroes * const                                      mZeroes;
