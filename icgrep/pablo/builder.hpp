@@ -48,6 +48,8 @@ public:
 
     PabloAST * createAdvance(PabloAST * expr, PabloAST * shiftAmount);
 
+    PabloAST * createAdvance(PabloAST * expr, PabloAST * shiftAmount, const std::string prefix);
+
     Next * createNext(Assign * assign, PabloAST * expr);
 
     PabloAST * createAnd(PabloAST * expr1, PabloAST * expr2);
@@ -74,6 +76,26 @@ public:
 
     inline While * createWhile(PabloAST * condition, PabloBlock & body) {
         return mPb.createWhile(condition, body);
+    }
+
+    inline Statement * front() const {
+        return mPb.front();
+    }
+
+    inline Statement * back() const {
+        return mPb.back();
+    }
+
+    inline void setInsertPoint(Statement * const statement) {
+        mPb.setInsertPoint(statement);
+    }
+
+    inline void setInsertPoint(StatementList * const list) {
+        mPb.setInsertPoint(list);
+    }
+
+    inline Statement * getInsertPoint() const {
+        return mPb.getInsertPoint();
     }
 
 private:

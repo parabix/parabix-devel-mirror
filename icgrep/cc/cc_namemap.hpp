@@ -6,7 +6,6 @@
 #include <string>
 #include "re/re_name.h"
 #include "re/re_cc.h"
-#include <pablo/expression_map.hpp>
 
 namespace re {
     class CC;

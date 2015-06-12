@@ -5,14 +5,10 @@
 #include <queue>
 #include <unordered_set>
 #include <boost/container/flat_set.hpp>
-#include <unordered_map>
 #include <boost/numeric/ublas/matrix.hpp>
 #include <boost/circular_buffer.hpp>
 #include <include/simd-lib/builtins.hpp>
-#include <pablo/expression_map.hpp>
-//#include <boost/function.hpp>
-//#include <boost/graph/connected_components.hpp>
-//#include <boost/graph/filtered_graph.hpp>
+#include <pablo/builder.hpp>
 #include <boost/range/iterator_range.hpp>
 #include <cudd.h>
 #include <util.h>
@@ -1010,17 +1006,19 @@ void AutoMultiplexing::multiplexSelectedIndependentSets() const {
                 V[i] = mAdvance[I[i]];
             }
 
-            PabloBlock * const pb = V[0]->getParent();
-            assert (pb);
+            PabloBlock * const block = V[0]->getParent();
+            assert (block);
 
             // Sanity test to make sure every advance is in the same scope.
             #ifndef NDEBUG
             for (unsigned i = 1; i != n; ++i) {
                 assert (I[i - 1] < I[i]);
                 assert (V[i - 1] != V[i]);
-                assert (V[i]->getParent() == pb);
+                assert (V[i]->getParent() == block);
             }
             #endif
+
+            PabloBuilder pb(*block);
 
             /// Perform n-to-m Multiplexing
             for (size_t j = 0; j != m; ++j) {
@@ -1028,7 +1026,6 @@ void AutoMultiplexing::multiplexSelectedIndependentSets() const {
                 assert (Q.empty());
 
                 std::ostringstream prefix;
-
                 prefix << "mux" << n << "to" << m;
                 for (size_t i = 1; i <= n; ++i) {
                     if ((i & (static_cast<size_t>(1) << j)) != 0) {
@@ -1049,13 +1046,13 @@ void AutoMultiplexing::multiplexSelectedIndependentSets() const {
                     PabloAST * a1 = Q.front(); Q.pop_front(); assert (a1);
                     PabloAST * a2 = Q.front(); Q.pop_front(); assert (a2);
                     assert (!Q.full());
-                    pb->setInsertPoint(choose(a2, a1, adv));
-                    Q.push_back(pb->createOr(a1, a2));
+                    pb.setInsertPoint(choose(a2, a1, adv));
+                    Q.push_back(pb.createOr(a1, a2));
                 }
                 assert (Q.size() == 1);
 
                 PabloAST * mux = Q.front(); Q.pop_front(); assert (mux);
-                muxed[j] = pb->createAdvance(mux, adv->getOperand(1), prefix.str());
+                muxed[j] = pb.createAdvance(mux, adv->getOperand(1), prefix.str());
             }
 
 
@@ -1065,8 +1062,7 @@ void AutoMultiplexing::multiplexSelectedIndependentSets() const {
 
                 Advance * const adv = V[i - 1];
 
-                pb->setInsertPoint(adv);
-
+                pb.setInsertPoint(adv);
                 assert (Q.empty());
                 for (size_t j = 0; j != m; ++j) {
                     if ((i & (static_cast<size_t>(1) << j)) == 0) {
@@ -1081,10 +1077,10 @@ void AutoMultiplexing::multiplexSelectedIndependentSets() const {
                         PabloAST * a1 = Q.front(); Q.pop_front(); assert (a1);
                         PabloAST * a2 = Q.front(); Q.pop_front(); assert (a2);
                         assert (!Q.full());
-                        Q.push_back(pb->createOr(a1, a2));
+                        Q.push_back(pb.createOr(a1, a2));
                     }
                     assert (Q.size() == 1);
-                    neg = pb->createNot(Q.front()); Q.pop_front(); assert (neg);
+                    neg = pb.createNot(Q.front()); Q.pop_front(); assert (neg);
                 }
 
                 assert (Q.empty());
@@ -1102,14 +1098,14 @@ void AutoMultiplexing::multiplexSelectedIndependentSets() const {
                     PabloAST * a1 = Q.front(); Q.pop_front(); assert (a1);
                     PabloAST * a2 = Q.front(); Q.pop_front(); assert (a2);
                     assert (!Q.full());
-                    Q.push_back(pb->createAnd(a1, a2));
+                    Q.push_back(pb.createAnd(a1, a2));
                 }
 
                 assert (Q.size() == 1);
 
                 PabloAST * demux = Q.front(); Q.pop_front(); assert (demux);
                 if (LLVM_LIKELY(neg != nullptr)) {
-                    demux = pb->createAnd(demux, neg);
+                    demux = pb.createAnd(demux, neg);
                 }
                 V[i - 1]->replaceWith(demux, true, true);
             }

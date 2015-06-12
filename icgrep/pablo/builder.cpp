@@ -27,6 +27,18 @@ private: \
 __##NAME functor(mPb); \
 PabloAST * result = mExprTable.findBinaryOrCall(std::move(functor), TYPE, ARGS)
 
+#define MAKE_NAMED_BINARY(NAME, TYPE, ARGS...) \
+struct __##NAME { \
+    inline PabloAST * operator()(PabloAST * arg1, PabloAST * arg2, const std::string name) { \
+        return mPb.NAME(arg1, arg2, name); \
+    } \
+    inline __##NAME(PabloBlock & pb) : mPb(pb) {} \
+private: \
+    PabloBlock & mPb; \
+}; \
+__##NAME functor(mPb); \
+PabloAST * result = mExprTable.findBinaryOrCall(std::move(functor), TYPE, ARGS)
+
 #define MAKE_TERNARY(NAME, TYPE, ARGS...) \
 struct __##NAME { \
     inline PabloAST * operator()(PabloAST * arg1, PabloAST * arg2, PabloAST * arg3) { \
@@ -47,6 +59,11 @@ Call * PabloBuilder::createCall(String * name) {
 
 PabloAST * PabloBuilder::createAdvance(PabloAST * expr, PabloAST * shiftAmount) {
     MAKE_BINARY(createAdvance, PabloAST::ClassTypeId::Advance, expr, shiftAmount);
+    return result;
+}
+
+PabloAST * PabloBuilder::createAdvance(PabloAST * expr, PabloAST * shiftAmount, const std::string prefix) {
+    MAKE_NAMED_BINARY(createAdvance, PabloAST::ClassTypeId::Advance, expr, shiftAmount, prefix);
     return result;
 }
 
