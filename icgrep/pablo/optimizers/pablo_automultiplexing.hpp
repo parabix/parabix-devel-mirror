@@ -21,7 +21,7 @@ namespace pablo {
 class AutoMultiplexing {
 
     using CharacterizationMap = boost::container::flat_map<const PabloAST *, DdNode *>;
-    using ConstraintGraph = boost::adjacency_list<boost::hash_setS, boost::vecS, boost::bidirectionalS>;
+    using ConstraintGraph = boost::adjacency_matrix<boost::directedS>;
     using PathGraph = boost::adjacency_matrix<boost::undirectedS>;
     using MultiplexSetGraph = boost::adjacency_list<boost::hash_setS, boost::vecS, boost::bidirectionalS>;
     using IndependentSetGraph = boost::adjacency_matrix<boost::undirectedS, std::pair<int, int>>;
@@ -48,7 +48,7 @@ protected:
     void topologicalSort(PabloBlock & entry) const;
     inline AutoMultiplexing()
     : mVariables(0)
-    , mPathGraph(0)
+    , mConstraintGraph(0)
     {
     }
 private:
@@ -67,7 +67,6 @@ private:
     DdManager *             mManager;
     unsigned                mVariables;
     CharacterizationMap     mCharacterizationMap;
-    PathGraph               mPathGraph;
     ConstraintGraph         mConstraintGraph;
     SubsetGraph             mSubsetGraph;
     Advances                mAdvance;    
