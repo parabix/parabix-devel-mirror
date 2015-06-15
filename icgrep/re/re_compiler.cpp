@@ -445,11 +445,9 @@ MarkerType RE_Compiler::processLowerBound(RE * repeated, int lb, MarkerType mark
         return makeMarker(FinalMatchByte, pb.createAnd(marker_fwd, cc_lb, "lowerbound"));
     }
     // Fall through to general case.
-    mStarDepth++;
     while (lb-- != 0) {
         marker = process(repeated, marker, pb);
     }
-    mStarDepth--;
     return marker;
 }
 
@@ -465,14 +463,12 @@ MarkerType RE_Compiler::processBoundedRep(RE * repeated, int ub, MarkerType mark
         return makeMarker(InitialPostPositionByte, pb.createAnd(pb.createMatchStar(cursor, rep_class_var), upperLimitMask, "bounded"));
     }
     // Fall through to general case.
-    mStarDepth++;
     while (ub-- != 0) {
         MarkerType a = process(repeated, marker, pb);
         MarkerType m = marker;
         AlignMarkers(a, m, pb);
         marker = makeMarker(markerPos(a), pb.createOr(markerVar(a), markerVar(m), "m"));
     }
-    mStarDepth--;
     return marker;
 }
 
