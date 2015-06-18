@@ -23,13 +23,14 @@ class AutoMultiplexing {
     using CharacterizationMap = boost::container::flat_map<const PabloAST *, DdNode *>;
     using ConstraintGraph = boost::adjacency_matrix<boost::directedS>;
     using PathGraph = boost::adjacency_matrix<boost::undirectedS>;
-    using MultiplexSetGraph = boost::adjacency_list<boost::hash_setS, boost::vecS, boost::bidirectionalS>;
+    using RNG = std::mt19937;
+    using IntDistribution = std::uniform_int_distribution<RNG::result_type>;
+    using RealDistribution = std::uniform_real_distribution<double>;
+    using MultiplexSetGraph = boost::adjacency_list<boost::hash_setS, boost::vecS, boost::bidirectionalS, boost::no_property, double>;
     using IndependentSetGraph = boost::adjacency_matrix<boost::undirectedS, std::pair<int, int>>;
     using ChosenSet = boost::container::flat_set<MultiplexSetGraph::vertex_descriptor>;
     using SubsetGraph = boost::adjacency_list<boost::hash_setS, boost::vecS, boost::bidirectionalS>;
     using Advances = std::vector<Advance *>;
-    using RNG = std::mt19937;
-    using RNGDistribution = std::uniform_int_distribution<RNG::result_type>;
     using IndependentSet = std::vector<ConstraintGraph::vertex_descriptor>;
 
 public:
@@ -39,10 +40,9 @@ protected:
     void characterize(PabloBlock & entry);
     bool notTransitivelyDependant(const PathGraph::vertex_descriptor i, const PathGraph::vertex_descriptor j) const;
     void createMultiplexSetGraph();
-    bool generateMultiplexSets(RNG & rng);    
+    bool generateMultiplexSets(RNG & rng, unsigned k = 1);
     void addMultiplexSet(const IndependentSet & N, const IndependentSet & M);
-    void addMultiplexSet(const IndependentSet & N, int i, const IndependentSet & M, int j, ChosenSet & S);
-    void approxMaxWeightIndependentSet(RNG & rng);
+    void selectMultiplexSets(RNG &);
     void applySubsetConstraints();
     void multiplexSelectedIndependentSets() const;
     void topologicalSort(PabloBlock & entry) const;
