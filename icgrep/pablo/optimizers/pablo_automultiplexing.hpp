@@ -22,24 +22,21 @@ class AutoMultiplexing {
 
     using CharacterizationMap = boost::container::flat_map<const PabloAST *, DdNode *>;
     using ConstraintGraph = boost::adjacency_matrix<boost::directedS>;
-    using PathGraph = boost::adjacency_matrix<boost::undirectedS>;
+    using ConstraintVertex = ConstraintGraph::vertex_descriptor;
     using RNG = std::mt19937;
     using IntDistribution = std::uniform_int_distribution<RNG::result_type>;
-    using RealDistribution = std::uniform_real_distribution<double>;
-    using MultiplexSetGraph = boost::adjacency_list<boost::hash_setS, boost::vecS, boost::bidirectionalS, boost::no_property, double>;
+    using MultiplexSetGraph = boost::adjacency_list<boost::hash_setS, boost::vecS, boost::bidirectionalS>;
     using IndependentSetGraph = boost::adjacency_matrix<boost::undirectedS, std::pair<int, int>>;
-    using ChosenSet = boost::container::flat_set<MultiplexSetGraph::vertex_descriptor>;
     using SubsetGraph = boost::adjacency_list<boost::hash_setS, boost::vecS, boost::bidirectionalS>;
     using Advances = std::vector<Advance *>;
-    using IndependentSet = std::vector<ConstraintGraph::vertex_descriptor>;
+    using IndependentSet = std::vector<ConstraintVertex>;
 
 public:
     static bool optimize(const std::vector<Var *> & input, PabloBlock & entry);
 protected:
     void initialize(const std::vector<Var *> & vars, const PabloBlock & entry);
     void characterize(PabloBlock & entry);
-    bool notTransitivelyDependant(const PathGraph::vertex_descriptor i, const PathGraph::vertex_descriptor j) const;
-    void createMultiplexSetGraph();
+    bool notTransitivelyDependant(const ConstraintVertex i, const ConstraintVertex j) const;
     bool generateMultiplexSets(RNG & rng, unsigned k = 1);
     void addMultiplexSet(const IndependentSet & N, const IndependentSet & M);
     void selectMultiplexSets(RNG &);
@@ -61,6 +58,7 @@ private:
     DdNode * Xor(DdNode * const x, DdNode * const y);
     DdNode * Not(DdNode * x) const;
     DdNode * Ite(DdNode * const x, DdNode * const y, DdNode * const z);
+    DdNode * NewVar();
     bool noSatisfyingAssignment(DdNode * const x);
     void shutdown();
 private:

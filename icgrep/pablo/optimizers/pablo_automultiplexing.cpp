@@ -121,17 +121,16 @@ bool AutoMultiplexing::optimize(const std::vector<Var *> & input, PabloBlock & e
     LOG("Shutdown:                " << (end_shutdown - start_shutdown));
 
     RECORD_TIMESTAMP(start_create_multiplex_graph);
-    am.createMultiplexSetGraph();
     const bool multiplex = am.generateMultiplexSets(rng, 1);
     RECORD_TIMESTAMP(end_create_multiplex_graph);
     LOG("GenerateMultiplexSets:   " << (end_create_multiplex_graph - start_create_multiplex_graph));
 
     if (multiplex) {
 
-        RECORD_TIMESTAMP(start_mwis);
+        RECORD_TIMESTAMP(start_select_multiplex_sets);
         am.selectMultiplexSets(rng);
-        RECORD_TIMESTAMP(end_mwis);
-        LOG("SelectMultiplexSets:     " << (end_mwis - start_mwis));
+        RECORD_TIMESTAMP(end_select_multiplex_sets);
+        LOG("SelectMultiplexSets:     " << (end_select_multiplex_sets - start_select_multiplex_sets));
 
         RECORD_TIMESTAMP(start_subset_constraints);
         am.applySubsetConstraints();
@@ -369,7 +368,7 @@ void AutoMultiplexing::characterize(PabloBlock & entry) {
                         break;
                     }
                 case PabloAST::ClassTypeId::Call:
-                    bdd = Cudd_bddIthVar(mManager, mVariables++);
+                    bdd = NewVar();
                     break;
                 case PabloAST::ClassTypeId::Advance:
                     assert (stmt == mAdvance[advances.size()]);
@@ -388,7 +387,7 @@ void AutoMultiplexing::characterize(PabloBlock & entry) {
                         // Can we use a transposed copy of the subset graph to determine an ordering of variables?
 
                         DdNode * const Ik = input[0];
-                        DdNode * Ck = Cudd_bddIthVar(mManager, mVariables++);
+                        DdNode * Ck = NewVar();
                         DdNode * const Nk = Not(Ck);
 
                         const unsigned k = advances.size();
@@ -502,7 +501,7 @@ void AutoMultiplexing::characterize(PabloBlock & entry) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief notTransitivelyDependant
  ** ------------------------------------------------------------------------------------------------------------- */
-inline bool AutoMultiplexing::notTransitivelyDependant(const PathGraph::vertex_descriptor i, const PathGraph::vertex_descriptor j) const {
+inline bool AutoMultiplexing::notTransitivelyDependant(const ConstraintVertex i, const ConstraintVertex j) const {
     return (mConstraintGraph.get_edge(i, j) == 0);
 }
 
@@ -516,6 +515,10 @@ inline DdNode * AutoMultiplexing::Zero() const {
 
 inline DdNode * AutoMultiplexing::One() const {
     return Cudd_ReadOne(mManager);
+}
+
+inline DdNode * AutoMultiplexing::NewVar() {
+    return Cudd_bddIthVar(mManager, mVariables++);
 }
 
 inline bool AutoMultiplexing::isZero(DdNode * const x) const {
@@ -564,20 +567,13 @@ inline void AutoMultiplexing::shutdown() {
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief createMultiplexSetGraph
- ** ------------------------------------------------------------------------------------------------------------- */
-void AutoMultiplexing::createMultiplexSetGraph() {
-    mMultiplexSetGraph = MultiplexSetGraph(num_vertices(mConstraintGraph));
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
  * @brief generateMultiplexSets
  * @param RNG random number generator
  ** ------------------------------------------------------------------------------------------------------------- */
 bool AutoMultiplexing::generateMultiplexSets(RNG & rng, unsigned k) {
 
-    using Vertex = ConstraintGraph::vertex_descriptor;
-    using DegreeType = graph_traits<ConstraintGraph>::degree_size_type;
+    using vertex_t = ConstraintGraph::vertex_descriptor;
+    using degree_t = graph_traits<ConstraintGraph>::degree_size_type;
 
     // What if we generated a "constraint free" graph instead? By taking each connected component of it
     // and computing the complement of it (with the same lesser to greater index ordering), we should
@@ -585,9 +581,11 @@ bool AutoMultiplexing::generateMultiplexSets(RNG & rng, unsigned k) {
 
     IndependentSet M, N;
     auto remainingVerticies = num_vertices(mConstraintGraph);
-    std::vector<DegreeType> D(remainingVerticies);
+    std::vector<degree_t> D(remainingVerticies);
     M.reserve(15);
     N.reserve(15);
+
+    mMultiplexSetGraph = MultiplexSetGraph(remainingVerticies);
 
     while (k) {
 
@@ -618,11 +616,11 @@ bool AutoMultiplexing::generateMultiplexSets(RNG & rng, unsigned k) {
                 // Randomly choose a vertex in S and discard it.
                 assert (!M.empty());
                 const auto i = M.begin() + IntDistribution(0, M.size() - 1)(rng);
-                const Vertex u = *i;
+                const vertex_t u = *i;
                 M.erase(i);
                 --remainingVerticies;
                 for (auto e : make_iterator_range(out_edges(u, mConstraintGraph))) {
-                    const Vertex v = target(e, mConstraintGraph);
+                    const vertex_t v = target(e, mConstraintGraph);
                     if ((--D[v]) == 0) {
                         N.push_back(v);
                     }
@@ -645,7 +643,7 @@ bool AutoMultiplexing::generateMultiplexSets(RNG & rng, unsigned k) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief addMultiplexSet
  * @param N an independent set
- * @param S an independent set
+ * @param M an independent set
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void AutoMultiplexing::addMultiplexSet(const IndependentSet & N, const IndependentSet & M) {
 
@@ -679,10 +677,15 @@ static inline size_t log2_plus_one(const size_t n) {
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief approxMinWeightExactSubsetCover
+ * @brief selectMultiplexSets
  * @param RNG random number generator
+ *
+ * This algorithm is simply computes a greedy set cover. We want an exact max-weight set cover but can generate new
+ * sets by taking a subset of any existing set. With a few modifications, the greedy approach seems to work well
+ * enough but more analysis is needed.
  ** ------------------------------------------------------------------------------------------------------------- */
 void AutoMultiplexing::selectMultiplexSets(RNG &) {
+
 
     using OutEdgeIterator = graph_traits<MultiplexSetGraph>::out_edge_iterator;
     using InEdgeIterator = graph_traits<MultiplexSetGraph>::in_edge_iterator;
@@ -701,6 +704,7 @@ void AutoMultiplexing::selectMultiplexSets(RNG &) {
 
     for (;;) {
 
+        // Choose the set with the greatest number of vertices not already included in some other set.
         vertex_t k = 0;
         degree_t w = 0;
         for (vertex_t i = 0; i != n; ++i) {
@@ -711,11 +715,11 @@ void AutoMultiplexing::selectMultiplexSets(RNG &) {
             }
         }
 
+        // Multiplexing requires at least 3 elements; if the best set contains fewer than 3, abort.
         if (w < 3) {
             break;
         }
 
-        degree_t count = 0;
         OutEdgeIterator ei, ei_end;
         for (std::tie(ei, ei_end) = out_edges(k + m, mMultiplexSetGraph); ei != ei_end; ++ei) {
             const vertex_t j = target(*ei, mMultiplexSetGraph);
@@ -724,13 +728,15 @@ void AutoMultiplexing::selectMultiplexSets(RNG &) {
                 InEdgeIterator ej, ej_end;
                 for (std::tie(ej, ej_end) = in_edges(j, mMultiplexSetGraph); ej != ej_end; ++ej) {
                     remaining[source(*ej, mMultiplexSetGraph) - m]--;
-                    ++count;
                 }
             }
         }
 
-        // If this contains 2^n elements for any n, return the one with the greatest number of unvisited sets.
-        if (is_power_of_2(count)) {
+        assert (remaining[k] == 0);
+
+        // If this contains 2^n elements for any n, discard the member that is most likely to be added
+        // to some future set.
+        if (is_power_of_2(w)) {
             vertex_t j = 0;
             degree_t w = 0;
             for (vertex_t i = 0; i != m; ++i) {
@@ -738,7 +744,8 @@ void AutoMultiplexing::selectMultiplexSets(RNG &) {
                     InEdgeIterator ej, ej_end;
                     degree_t r = 1;
                     for (std::tie(ej, ej_end) = in_edges(i, mMultiplexSetGraph); ej != ej_end; ++ej) {
-                        r += remaining[source(*ej, mMultiplexSetGraph) - m];
+                        // strongly prefer adding weight to unvisited sets that have more remaining vertices
+                        r += std::pow(remaining[source(*ej, mMultiplexSetGraph) - m], 2);
                     }
                     if (w < r) {
                         j = i;
