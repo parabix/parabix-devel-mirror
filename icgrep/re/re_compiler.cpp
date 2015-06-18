@@ -484,17 +484,37 @@ MarkerType RE_Compiler::processUnboundedRep(RE * repeated, MarkerType marker, Pa
         PabloAST * cc = markerVar(compile(repeated, pb));
         return makeMarker(FinalPostPositionByte, pb.createAnd(pb.createMatchStar(base, pb.createOr(mNonFinal, cc)), mFinal, "unbounded"));
     }
+    else if (mStarDepth > 0){
+        
+        PabloBlock * outerb = pb.getParent();
+        
+        Assign * starPending = outerb->createAssign("pending", outerb->createZeroes());
+        Assign * starAccum = outerb->createAssign("accum", outerb->createZeroes());
+        
+        mStarDepth++;
+        PabloAST * m1 = pb.createOr(base, starPending);
+        PabloAST * m2 = pb.createOr(base, starAccum);
+        PabloAST * loopComputation = markerVar(AdvanceMarker(process(repeated, makeMarker(InitialPostPositionByte, m1), pb), InitialPostPositionByte, pb));
+        Next * nextPending = pb.createNext(starPending, pb.createAnd(loopComputation, pb.createNot(m2)));
+        Next * nextStarAccum = pb.createNext(starAccum, pb.createOr(loopComputation, m2));
+        mWhileTest = pb.createOr(mWhileTest, nextPending);
+        mStarDepth--;
+        
+        return makeMarker(InitialPostPositionByte, pb.createAssign("unbounded", pb.createOr(base, nextStarAccum)));
+    }    
     else {
         Assign * whileTest = pb.createAssign("test", base);
+        Assign * whilePending = pb.createAssign("pending", base);
         Assign * whileAccum = pb.createAssign("accum", base);
+        mWhileTest = pb.createZeroes();
 
         PabloBlock & wb = PabloBlock::Create(pb);
         mStarDepth++;
 
-        PabloAST * loopComputation = markerVar(AdvanceMarker(process(repeated, makeMarker(InitialPostPositionByte, whileTest), wb), InitialPostPositionByte, wb));
-        Next * nextWhileTest = wb.createNext(whileTest, wb.createAnd(loopComputation, wb.createNot(whileAccum)));
+        PabloAST * loopComputation = markerVar(AdvanceMarker(process(repeated, makeMarker(InitialPostPositionByte, whilePending), wb), InitialPostPositionByte, wb));
+        Next * nextWhilePending = wb.createNext(whilePending, wb.createAnd(loopComputation, wb.createNot(whileAccum)));
         Next * nextWhileAccum = wb.createNext(whileAccum, wb.createOr(loopComputation, whileAccum));
-
+        Next * nextWhileTest = wb.createNext(whileTest, wb.createOr(mWhileTest, nextWhilePending));
         pb.createWhile(nextWhileTest, wb);
         mStarDepth--;
 

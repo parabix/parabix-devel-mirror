@@ -96,6 +96,7 @@ private:
     pablo::PabloAST *                               mInitial;
     pablo::Assign *                                 mNonFinal;
     pablo::PabloAST *                               mFinal;
+    pablo::PabloAST *                               mWhileTest;
     int                                             mStarDepth;
 };
 
