@@ -12,6 +12,7 @@
 #include <boost/numeric/ublas/matrix.hpp>
 #include <random>
 #include <stdint.h>
+#include <llvm/ADT/DenseMap.h>
 
 struct DdManager; // forward declare of the CUDD manager
 struct DdNode;
@@ -20,7 +21,7 @@ namespace pablo {
 
 class AutoMultiplexing {
 
-    using CharacterizationMap = boost::container::flat_map<const PabloAST *, DdNode *>;
+    using CharacterizationMap = llvm::DenseMap<const PabloAST *, DdNode *>;
     using ConstraintGraph = boost::adjacency_matrix<boost::directedS>;
     using ConstraintVertex = ConstraintGraph::vertex_descriptor;
     using RNG = std::mt19937;
@@ -28,14 +29,50 @@ class AutoMultiplexing {
     using MultiplexSetGraph = boost::adjacency_list<boost::hash_setS, boost::vecS, boost::bidirectionalS>;
     using IndependentSetGraph = boost::adjacency_matrix<boost::undirectedS, std::pair<int, int>>;
     using SubsetGraph = boost::adjacency_list<boost::hash_setS, boost::vecS, boost::bidirectionalS>;
-    using Advances = std::vector<Advance *>;
+    // the Advance pointer, input BDD and the BDD variable of the i-th Advance
+    using AdvanceMap = boost::container::flat_map<const Statement *, unsigned>;
+    using AdvanceVector = std::vector<std::tuple<Advance *, DdNode *, DdNode *>>;
     using IndependentSet = std::vector<ConstraintVertex>;
+
+    struct SubsitutionMap {
+        SubsitutionMap(SubsitutionMap * parent = nullptr) : mParent(parent) {}
+        PabloAST * test(const DdNode * node, PabloAST * stmt) {
+            PabloAST * replacement = find(node);
+            if (LLVM_LIKELY(replacement == nullptr)) {
+                mMap.insert(std::make_pair(node, stmt));
+            }
+            return replacement;
+        }
+        PabloAST * find(const DdNode * node) const {
+            auto f = mMap.find(node);
+            if (LLVM_LIKELY(f == mMap.end())) {
+                PabloAST * replacement = nullptr;
+                if (mParent == nullptr) {
+                    replacement = mParent->find(node);
+                }
+                return replacement;
+            }
+            return f->second;
+        }
+        void insert(const DdNode * node, PabloAST * stmt) {
+            mMap.insert(std::make_pair(node, stmt));
+        }
+    private:
+        const SubsitutionMap * const mParent;
+        llvm::DenseMap<const DdNode *, PabloAST *> mMap;
+    };
 
 public:
     static bool optimize(const std::vector<Var *> & input, PabloBlock & entry);
 protected:
-    void initialize(const std::vector<Var *> & vars, const PabloBlock & entry);
-    void characterize(PabloBlock & entry);
+    void initialize(const std::vector<Var *> & vars, PabloBlock & entry);
+    void characterize(PabloBlock & block);
+    DdNode * characterize(Statement * const stmt, const bool throwUncharacterizedOperandError);
+    DdNode * characterize(Advance * adv, DdNode * input);
+    void reevaluate(Next * next, DdNode * value);
+    void minimize(PabloBlock & entry);
+    void minimize(PabloBlock & block, SubsitutionMap & parent);
+
     bool notTransitivelyDependant(const ConstraintVertex i, const ConstraintVertex j) const;
     bool generateMultiplexSets(RNG & rng, unsigned k = 1);
     void addMultiplexSet(const IndependentSet & N, const IndependentSet & M);
@@ -67,7 +104,8 @@ private:
     CharacterizationMap     mCharacterizationMap;
     ConstraintGraph         mConstraintGraph;
     SubsetGraph             mSubsetGraph;
-    Advances                mAdvance;    
+    AdvanceMap              mAdvanceMap;
+    AdvanceVector           mAdvance;
     MultiplexSetGraph       mMultiplexSetGraph;
 };
 

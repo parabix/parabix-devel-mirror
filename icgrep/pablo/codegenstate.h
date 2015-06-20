@@ -169,6 +169,10 @@ protected:
     template<typename Type>
     inline Type * insertAtInsertionPoint(Type * expr) {
         if (isa<Statement>(expr)) {
+            if (LLVM_UNLIKELY(isa<If>(expr) || isa<While>(expr))) {
+                PabloBlock & body = isa<If>(expr) ? cast<If>(expr)->getBody() : cast<While>(expr)->getBody();
+                this->addUser(&body);
+            }
             insert(cast<Statement>(expr));
         }
         return expr;

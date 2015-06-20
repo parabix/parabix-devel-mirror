@@ -22,67 +22,61 @@
 #include <string>
 #include <iostream>
 
-class Uset_Iterator {
-public:
-    Uset_Iterator(UnicodeSet s) : uSet(s), run_no(0), offset(0), quad_no(0) {};
-    bool at_end();
-    RunStructure current_run();
-    bitquad_t get_quad();
-    void advance(int n);
-private:
-    UnicodeSet uSet;
-    int run_no;
-    int offset;
-    int quad_no;
-};
-
 bool Uset_Iterator::at_end() {
-  return run_no == uSet.runs.size();
+    return run_no == uSet.runs.size();
 }
 
 RunStructure Uset_Iterator::current_run() {
-  RunStructure this_run = uSet.runs[run_no];
-  return RunStructure(this_run.run_type, this_run.run_length - offset);
+    RunStructure this_run = uSet.runs[run_no];
+    return RunStructure(this_run.run_type, this_run.run_length - offset);
 }
 
 bitquad_t Uset_Iterator::get_quad() {
-  RunStructure this_run = uSet.runs[run_no];
-  if (this_run.run_type == Empty) return 0;
-  else if (this_run.run_type == Full) return FullQuadMask;
-  else return uSet.quads[quad_no];
+    RunStructure this_run = uSet.runs[run_no];
+    if (this_run.run_type == Empty) return 0;
+    else if (this_run.run_type == Full) return FullQuadMask;
+    else return uSet.quads[quad_no];
 }
 
 void Uset_Iterator::advance(int n) {
-  while (n > 0) {
-    RunStructure this_run = uSet.runs[run_no];
-    int remain = this_run.run_length - offset;
-    if (remain > n) {
-      offset += n;
-      if (this_run.run_type == Mixed) quad_no += n;
-      n = 0;
+    while (n > 0) {
+        RunStructure this_run = uSet.runs[run_no];
+        int remain = this_run.run_length - offset;
+        if (remain > n) {
+            offset += n;
+            if (this_run.run_type == Mixed) quad_no += n;
+            n = 0;
+        }
+        else if (remain == n) {
+            run_no += 1;
+            offset = 0;
+            if (this_run.run_type == Mixed) quad_no += n;
+            n = 0;
+        }
+        else {
+            run_no += 1;
+            offset = 0;
+            if (this_run.run_type == Mixed) quad_no += remain;
+            n -= remain;
+        }
     }
-    else if (remain == n) {
-      run_no += 1;
-      offset = 0;
-      if (this_run.run_type == Mixed) quad_no += n;
-      n = 0;
-    }
-    else {
-      run_no += 1;
-      offset = 0;
-      if (this_run.run_type == Mixed) quad_no += remain;
-      n -= remain;
-    }
-  }
 }
 
 void UnicodeSet::append_run(run_type_t run_type, int run_length) {
-    if (run_length == 0) return;
-    if (runs.size() == 0) runs.push_back(RunStructure(run_type, run_length));
+    if (run_length == 0) {
+        return;
+    }
+    else if (runs.size() == 0) {
+        runs.emplace_back(run_type, run_length);
+    }
     else {
-      RunStructure last_run = runs[runs.size()-1];
-      if (last_run.run_type == run_type) runs[runs.size()-1].run_length += run_length;
-      else runs.push_back(RunStructure(run_type, run_length));
+        RunStructure last_run = runs[runs.size()-1];
+        if (last_run.run_type == run_type) {
+            runs[runs.size()-1].run_length += run_length;
+        }
+        else {
+            runs.emplace_back(run_type, run_length);
+        }
     }
     quad_count += run_length;
 }
@@ -100,33 +94,30 @@ void UnicodeSet::append_quad(bitquad_t q) {
     }
 }
 
-void Dump_uset(UnicodeSet s) {
-    UnicodeSet iset;
+void Dump_uset(const UnicodeSet & s) {
     Uset_Iterator it(s);
     while (!it.at_end()) {
-      RunStructure this_run = it.current_run();
-      if (this_run.run_type == Empty) {
-	std::cout << "Empty(" << this_run.run_length << ")\n";
-	it.advance(this_run.run_length);
-      }
-      else if (this_run.run_type == Full) {
-	std::cout << "Full(" << this_run.run_length << ")\n";
-	it.advance(this_run.run_length);
-      }
-      else {
-	for (int i = 0; i < this_run.run_length; i++) {
-	  std::cout << "Mixed(" << std::hex << it.get_quad() << std::dec << ")\n";
-          it.advance(1);
-	}
-      }
+        RunStructure this_run = it.current_run();
+        if (this_run.run_type == Empty) {
+            std::cout << "Empty(" << this_run.run_length << ")\n";
+            it.advance(this_run.run_length);
+        }
+        else if (this_run.run_type == Full) {
+            std::cout << "Full(" << this_run.run_length << ")\n";
+            it.advance(this_run.run_length);
+        }
+        else {
+            for (int i = 0; i < this_run.run_length; i++) {
+                std::cout << "Mixed(" << std::hex << it.get_quad() << std::dec << ")\n";
+                it.advance(1);
+            }
+        }
     }
 }
 
-
-
 UnicodeSet empty_uset() {
     UnicodeSet iset;
-    iset.runs.push_back(RunStructure(Empty, UnicodeQuadCount));
+    iset.runs.emplace_back(Empty, UnicodeQuadCount);
     iset.quad_count = UnicodeQuadCount;
     return iset;
 }
@@ -165,225 +156,225 @@ UnicodeSet range_uset(int lo_codepoint, int hi_codepoint) {
     return iset;
 }
 
-UnicodeSet uset_complement (UnicodeSet s) {
+UnicodeSet uset_complement (const UnicodeSet & s) {
     assert(s.quad_count == UnicodeQuadCount);
     UnicodeSet iset;
     Uset_Iterator it(s);
     while (!it.at_end()) {
-      RunStructure this_run = it.current_run();
-      if (this_run.run_type == Empty) {
-        iset.append_run(Full, this_run.run_length);
-	it.advance(this_run.run_length);
-      }
-      else if (this_run.run_type == Full) {
-        iset.append_run(Empty, this_run.run_length);
-	it.advance(this_run.run_length);
-      }
-      else {
-	for (int i = 0; i < this_run.run_length; i++) {
-	  iset.append_quad(FullQuadMask ^ it.get_quad());
-          it.advance(1);
-	}
-      }
+        RunStructure this_run = it.current_run();
+        if (this_run.run_type == Empty) {
+            iset.append_run(Full, this_run.run_length);
+            it.advance(this_run.run_length);
+        }
+        else if (this_run.run_type == Full) {
+            iset.append_run(Empty, this_run.run_length);
+            it.advance(this_run.run_length);
+        }
+        else {
+            for (int i = 0; i < this_run.run_length; i++) {
+                iset.append_quad(FullQuadMask ^ it.get_quad());
+                it.advance(1);
+            }
+        }
     }
     return iset;
 }
 
-UnicodeSet uset_intersection (UnicodeSet s1, UnicodeSet s2) {
+UnicodeSet uset_intersection (const UnicodeSet & s1, const UnicodeSet & s2) {
     assert(s1.quad_count == UnicodeQuadCount);
     assert(s2.quad_count == UnicodeQuadCount);
     UnicodeSet iset;
     Uset_Iterator i1(s1);
     Uset_Iterator i2(s2);
     while (!i1.at_end()) {
-      RunStructure run1 = i1.current_run();
-      RunStructure run2 = i2.current_run();
-      int n = std::min(run1.run_length, run2.run_length);
-      if ((run1.run_type == Empty) || (run2.run_type == Empty)) {
-        iset.append_run(Empty, n);
-	i1.advance(n);
-	i2.advance(n);
-      }
-      else if ((run1.run_type == Full) && (run2.run_type == Full)) {
-        iset.append_run(Full, n);
-	i1.advance(n);
-	i2.advance(n);
-      }
-      else if (run1.run_type == Full) {
-	for (int i = 0; i < n; i++) {
-	  iset.append_quad(i2.get_quad());
-          i2.advance(1);
-	}
-	i1.advance(n);	
-      }
-      else if (run2.run_type == Full) {
-	for (int i = 0; i < n; i++) {
-	  iset.append_quad(i1.get_quad());
-          i1.advance(1);
-	}
-	i2.advance(n);	
-      }
-      else {
-	for (int i = 0; i < n; i++) {
-	  iset.append_quad(i1.get_quad() & i2.get_quad());
-          i1.advance(1);
-          i2.advance(1);
-	}
-      }
+        RunStructure run1 = i1.current_run();
+        RunStructure run2 = i2.current_run();
+        int n = std::min(run1.run_length, run2.run_length);
+        if ((run1.run_type == Empty) || (run2.run_type == Empty)) {
+            iset.append_run(Empty, n);
+            i1.advance(n);
+            i2.advance(n);
+        }
+        else if ((run1.run_type == Full) && (run2.run_type == Full)) {
+            iset.append_run(Full, n);
+            i1.advance(n);
+            i2.advance(n);
+        }
+        else if (run1.run_type == Full) {
+            for (int i = 0; i < n; i++) {
+                iset.append_quad(i2.get_quad());
+                i2.advance(1);
+            }
+            i1.advance(n);
+        }
+        else if (run2.run_type == Full) {
+            for (int i = 0; i < n; i++) {
+                iset.append_quad(i1.get_quad());
+                i1.advance(1);
+            }
+            i2.advance(n);
+        }
+        else {
+            for (int i = 0; i < n; i++) {
+                iset.append_quad(i1.get_quad() & i2.get_quad());
+                i1.advance(1);
+                i2.advance(1);
+            }
+        }
     }
     return iset;
 }
 
-UnicodeSet uset_union (UnicodeSet s1, UnicodeSet s2) {
+UnicodeSet uset_union (const UnicodeSet & s1, const UnicodeSet & s2) {
     assert(s1.quad_count == UnicodeQuadCount);
     assert(s2.quad_count == UnicodeQuadCount);
     UnicodeSet iset;
     Uset_Iterator i1(s1);
     Uset_Iterator i2(s2);
     while (!i1.at_end()) {
-      RunStructure run1 = i1.current_run();
-      RunStructure run2 = i2.current_run();
-      int n = std::min(run1.run_length, run2.run_length);
-      if ((run1.run_type == Empty) && (run2.run_type == Empty)) {
-        iset.append_run(Empty, n);
-	i1.advance(n);
-	i2.advance(n);
-      }
-      else if ((run1.run_type == Full) || (run2.run_type == Full)) {
-        iset.append_run(Full, n);
-	i1.advance(n);
-	i2.advance(n);
-      }
-      else if (run1.run_type == Empty) {
-	for (int i = 0; i < n; i++) {
-	  iset.append_quad(i2.get_quad());
-          i2.advance(1);
-	}
-	i1.advance(n);	
-      }
-      else if (run2.run_type == Empty) {
-	for (int i = 0; i < n; i++) {
-	  iset.append_quad(i1.get_quad());
-          i1.advance(1);
-	}
-	i2.advance(n);	
-      }
-      else {
-	for (int i = 0; i < n; i++) {
-	  iset.append_quad(i1.get_quad() | i2.get_quad());
-          i1.advance(1);
-          i2.advance(1);
-	}
-      }
+        RunStructure run1 = i1.current_run();
+        RunStructure run2 = i2.current_run();
+        int n = std::min(run1.run_length, run2.run_length);
+        if ((run1.run_type == Empty) && (run2.run_type == Empty)) {
+            iset.append_run(Empty, n);
+            i1.advance(n);
+            i2.advance(n);
+        }
+        else if ((run1.run_type == Full) || (run2.run_type == Full)) {
+            iset.append_run(Full, n);
+            i1.advance(n);
+            i2.advance(n);
+        }
+        else if (run1.run_type == Empty) {
+            for (int i = 0; i < n; i++) {
+                iset.append_quad(i2.get_quad());
+                i2.advance(1);
+            }
+            i1.advance(n);
+        }
+        else if (run2.run_type == Empty) {
+            for (int i = 0; i < n; i++) {
+                iset.append_quad(i1.get_quad());
+                i1.advance(1);
+            }
+            i2.advance(n);
+        }
+        else {
+            for (int i = 0; i < n; i++) {
+                iset.append_quad(i1.get_quad() | i2.get_quad());
+                i1.advance(1);
+                i2.advance(1);
+            }
+        }
     }
     return iset;
 }
 
-UnicodeSet uset_difference (UnicodeSet s1, UnicodeSet s2) {
+UnicodeSet uset_difference (const UnicodeSet & s1, const UnicodeSet & s2) {
     assert(s1.quad_count == UnicodeQuadCount);
     assert(s2.quad_count == UnicodeQuadCount);
     UnicodeSet iset;
     Uset_Iterator i1(s1);
     Uset_Iterator i2(s2);
     while (!i1.at_end()) {
-      RunStructure run1 = i1.current_run();
-      RunStructure run2 = i2.current_run();
-      int n = std::min(run1.run_length, run2.run_length);
-      if ((run1.run_type == Empty) || (run2.run_type == Full)) {
-        iset.append_run(Empty, n);
-	i1.advance(n);
-	i2.advance(n);
-      }
-      else if ((run1.run_type == Full) && (run2.run_type == Empty)) {
-        iset.append_run(Full, n);
-	i1.advance(n);
-	i2.advance(n);
-      }
-      else if (run1.run_type == Full) {
-	for (int i = 0; i < n; i++) {
-	  iset.append_quad(FullQuadMask ^ i2.get_quad());
-          i2.advance(1);
-	}
-	i1.advance(n);	
-      }
-      else if (run2.run_type == Empty) {
-	for (int i = 0; i < n; i++) {
-	  iset.append_quad(i1.get_quad());
-          i1.advance(1);
-	}
-	i2.advance(n);	
-      }
-      else {
-	for (int i = 0; i < n; i++) {
-	  iset.append_quad(i1.get_quad() & ~i2.get_quad());
-          i1.advance(1);
-          i2.advance(1);
-	}
-      }
+        RunStructure run1 = i1.current_run();
+        RunStructure run2 = i2.current_run();
+        int n = std::min(run1.run_length, run2.run_length);
+        if ((run1.run_type == Empty) || (run2.run_type == Full)) {
+            iset.append_run(Empty, n);
+            i1.advance(n);
+            i2.advance(n);
+        }
+        else if ((run1.run_type == Full) && (run2.run_type == Empty)) {
+            iset.append_run(Full, n);
+            i1.advance(n);
+            i2.advance(n);
+        }
+        else if (run1.run_type == Full) {
+            for (int i = 0; i < n; i++) {
+                iset.append_quad(FullQuadMask ^ i2.get_quad());
+                i2.advance(1);
+            }
+            i1.advance(n);
+        }
+        else if (run2.run_type == Empty) {
+            for (int i = 0; i < n; i++) {
+                iset.append_quad(i1.get_quad());
+                i1.advance(1);
+            }
+            i2.advance(n);
+        }
+        else {
+            for (int i = 0; i < n; i++) {
+                iset.append_quad(i1.get_quad() & ~i2.get_quad());
+                i1.advance(1);
+                i2.advance(1);
+            }
+        }
     }
     return iset;
 }
 
-UnicodeSet uset_symmetric_difference (UnicodeSet s1, UnicodeSet s2) {
+UnicodeSet uset_symmetric_difference (const UnicodeSet & s1, const UnicodeSet & s2) {
     assert(s1.quad_count == UnicodeQuadCount);
     assert(s2.quad_count == UnicodeQuadCount);
     UnicodeSet iset;
     Uset_Iterator i1(s1);
     Uset_Iterator i2(s2);
     while (!i1.at_end()) {
-      RunStructure run1 = i1.current_run();
-      RunStructure run2 = i2.current_run();
-      int n = std::min(run1.run_length, run2.run_length);
-      if (((run1.run_type == Empty) && (run2.run_type == Full)) || ((run1.run_type == Full) && (run2.run_type == Empty))) {
-        iset.append_run(Full, n);
-	i1.advance(n);
-	i2.advance(n);
-      }
-      else if (((run1.run_type == Full) && (run2.run_type == Full)) || ((run1.run_type == Empty) && (run2.run_type == Empty))) {
-        iset.append_run(Empty, n);
-	i1.advance(n);
-	i2.advance(n);
-      }
-      else if (run1.run_type == Empty) {
-	for (int i = 0; i < n; i++) {
-	  iset.append_quad(i2.get_quad());
-          i2.advance(1);
-	}
-	i1.advance(n);	
-      }
-      else if (run2.run_type == Empty) {
-	for (int i = 0; i < n; i++) {
-	  iset.append_quad(i1.get_quad());
-          i1.advance(1);
-	}
-	i2.advance(n);	
-      }
-      else if (run1.run_type == Full) {
-	for (int i = 0; i < n; i++) {
-	  iset.append_quad(FullQuadMask ^ i2.get_quad());
-          i2.advance(1);
-	}
-	i1.advance(n);	
-      }
-      else if (run2.run_type == Empty) {
-	for (int i = 0; i < n; i++) {
-	  iset.append_quad(FullQuadMask ^ i1.get_quad());
-          i1.advance(1);
-	}
-	i2.advance(n);	
-      }
-      else {
-	for (int i = 0; i < n; i++) {
-	  iset.append_quad(i1.get_quad() ^ i2.get_quad());
-          i1.advance(1);
-          i2.advance(1);
-	}
-      }
+        RunStructure run1 = i1.current_run();
+        RunStructure run2 = i2.current_run();
+        int n = std::min(run1.run_length, run2.run_length);
+        if (((run1.run_type == Empty) && (run2.run_type == Full)) || ((run1.run_type == Full) && (run2.run_type == Empty))) {
+            iset.append_run(Full, n);
+            i1.advance(n);
+            i2.advance(n);
+        }
+        else if (((run1.run_type == Full) && (run2.run_type == Full)) || ((run1.run_type == Empty) && (run2.run_type == Empty))) {
+            iset.append_run(Empty, n);
+            i1.advance(n);
+            i2.advance(n);
+        }
+        else if (run1.run_type == Empty) {
+            for (int i = 0; i < n; i++) {
+                iset.append_quad(i2.get_quad());
+                i2.advance(1);
+            }
+            i1.advance(n);
+        }
+        else if (run2.run_type == Empty) {
+            for (int i = 0; i < n; i++) {
+                iset.append_quad(i1.get_quad());
+                i1.advance(1);
+            }
+            i2.advance(n);
+        }
+        else if (run1.run_type == Full) {
+            for (int i = 0; i < n; i++) {
+                iset.append_quad(FullQuadMask ^ i2.get_quad());
+                i2.advance(1);
+            }
+            i1.advance(n);
+        }
+        else if (run2.run_type == Empty) {
+            for (int i = 0; i < n; i++) {
+                iset.append_quad(FullQuadMask ^ i1.get_quad());
+                i1.advance(1);
+            }
+            i2.advance(n);
+        }
+        else {
+            for (int i = 0; i < n; i++) {
+                iset.append_quad(i1.get_quad() ^ i2.get_quad());
+                i1.advance(1);
+                i2.advance(1);
+            }
+        }
     }
     return iset;
 }
 
-bool uset_member(UnicodeSet s, int codepoint){
+bool uset_member(const UnicodeSet & s, int codepoint){
     int quad_no = codepoint / quad_bits;
     bitquad_t quad_val = 1 << (codepoint & mod_quad_bit_mask);
     Uset_Iterator it(s);

@@ -131,8 +131,15 @@ void Simplifier::eliminateRedundantCode(PabloBlock & block, ExpressionTable * pr
                 case PabloAST::ClassTypeId::MatchStar:
                     expr = block.createMatchStar(stmt->getOperand(0), stmt->getOperand(1));
                     break;
-                default:
-                    throw std::runtime_error("Unhandled trivial folding optimization!");
+                case PabloAST::ClassTypeId::Next:
+                    expr = stmt;
+                    break;
+                default: {
+                    std::string tmp;
+                    llvm::raw_string_ostream msg(tmp);
+                    PabloPrinter::print(stmt, "Unhandled trivial folding optimization! ", msg);
+                    throw std::runtime_error(msg.str());
+                }
             }
             stmt = stmt->replaceWith(expr);
             // the next statement could be an Assign; just restart the loop.

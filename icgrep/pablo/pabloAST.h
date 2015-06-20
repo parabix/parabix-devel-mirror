@@ -219,7 +219,7 @@ protected:
     }
     inline void setName(const String * const name) {
         mName = name;
-    }
+    }    
 #ifndef NDEBUG
     bool noRecursiveOperand(const PabloAST * const operand);
 #endif

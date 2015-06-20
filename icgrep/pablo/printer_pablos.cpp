@@ -175,6 +175,9 @@ void PabloPrinter::print(const PabloAST * expr, llvm::raw_ostream & strm) {
     else if (const Var * var = dyn_cast<const Var>(expr)) {
         strm  << var->getName();
     }
+    else if (const Next * next = dyn_cast<const Next>(expr)) {
+        strm << "Next(" << next->getName() << ")";
+    }
     else if (const Statement * stmt = dyn_cast<Statement>(expr)) {
         strm << stmt->getName();
     }

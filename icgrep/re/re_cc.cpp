@@ -145,5 +145,88 @@ CC * caseInsensitize(const CC * cc) {
     }
     return cci;
 }
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief rangeIntersect
+ * @param cc
+ * @param lo
+ * @param hi
+ ** ------------------------------------------------------------------------------------------------------------- */
+CC * rangeIntersect(const CC * cc, const CodePointType lo, const CodePointType hi) {
+    assert ("cc cannot be null" && cc);
+    CC * intersect = makeCC();
+    for (const auto & p : *cc) {
+        if ((p.lo_codepoint <= hi) && (p.hi_codepoint >= lo)) {
+            intersect->insert_range(std::max(lo, p.lo_codepoint), std::min(hi, p.hi_codepoint));
+        }
+    }
+    return intersect;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief rangeGaps
+ * @param cc
+ * @param lo
+ * @param hi
+ ** ------------------------------------------------------------------------------------------------------------- */
+CC * rangeGaps(const CC * cc, const CodePointType lo, const CodePointType hi) {
+    assert ("cc cannot be null" && cc);
+    CC * gaps = makeCC();
+    CodePointType cp = lo;
+    if (cp < hi) {
+        auto i = cc->cbegin(), end = cc->cend();
+        for (; i != end && cp < hi; ++i) {
+            if (i->hi_codepoint < cp) {
+                continue;
+            }
+            else if (i->lo_codepoint > cp) {
+                gaps->insert_range(cp, i->lo_codepoint - 1);
+            }
+            cp = i->hi_codepoint + 1;
+        }
+        if (cp < hi) {
+            gaps->insert_range(cp, hi);
+        }
+    }
+    return gaps;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief outerRanges
+ * @param cc
+ ** ------------------------------------------------------------------------------------------------------------- */
+CC * outerRanges(const CC * cc) {
+    assert ("cc cannot be null" && cc);
+    CC * ranges = makeCC();
+    auto i = cc->cbegin();
+    const auto end = cc->cend();
+    for (auto j = i; ++j != end; ) {
+        if (j->hi_codepoint > i->hi_codepoint) {
+            ranges->insert_range(i->lo_codepoint, i->hi_codepoint);
+            i = j;
+        }
+    }
+    return ranges;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief innerRanges
+ * @param cc
+ ** ------------------------------------------------------------------------------------------------------------- */
+CC * innerRanges(const CC * cc) {
+    assert ("cc cannot be null" && cc);
+    CC * ranges = makeCC();
+    auto i = cc->cbegin();
+    const auto end = cc->cend();
+    for (auto j = i; ++j != end; ) {
+        if (j->hi_codepoint <= i->hi_codepoint) {
+            ranges->insert_range(j->lo_codepoint, j->hi_codepoint);
+        }
+        else {
+            i = j;
+        }
+    }
+    return ranges;
+}
     
 }

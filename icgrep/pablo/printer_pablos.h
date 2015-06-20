@@ -18,7 +18,7 @@ namespace pablo {
 
 class PabloPrinter {
 public:
-    using DefinedVars = std::vector<pablo::PabloAST *, pablo::PabloAST::VectorAllocator>;
+    using DefinedVars = pablo::If::DefinedVars;
     static void print(const pablo::PabloBlock & block, llvm::raw_ostream & strm);
     static void print(const pablo::StatementList & stmts, llvm::raw_ostream & strm);
     static void print(const pablo::StatementList & stmts, std::string indent, llvm::raw_ostream & strm);

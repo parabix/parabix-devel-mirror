@@ -414,9 +414,8 @@ PabloBlock::PabloBlock(PabloBlock * predecessor)
 , mZeroes(predecessor->mZeroes) // inherit the original "Zeroes" variable for simplicity
 , mOnes(predecessor->mOnes) // inherit the original "Ones" variable for simplicity
 , mSymbolGenerator(predecessor->mSymbolGenerator)
-, mParent(predecessor)
-{
-    // predecessor->addUser(this);
+, mParent(predecessor) {
+
 }
 
 PabloBlock::~PabloBlock() {

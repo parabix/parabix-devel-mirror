@@ -135,6 +135,10 @@ void Statement::insertBefore(Statement * const statement) {
     if (LLVM_LIKELY(mPrev != nullptr)) {
         mPrev->mNext = this;
     }
+    if (LLVM_UNLIKELY(isa<If>(this) || isa<While>(this))) {
+        PabloBlock & body = isa<If>(this) ? cast<If>(this)->getBody() : cast<While>(this)->getBody();
+        mParent->addUser(&body);
+    }
 }
 
 void Statement::insertAfter(Statement * const statement) {
@@ -151,6 +155,10 @@ void Statement::insertAfter(Statement * const statement) {
     statement->mNext = this;
     if (LLVM_LIKELY(mNext != nullptr)) {
         mNext->mPrev = this;
+    }
+    if (LLVM_UNLIKELY(isa<If>(this) || isa<While>(this))) {
+        PabloBlock & body = isa<If>(this) ? cast<If>(this)->getBody() : cast<While>(this)->getBody();
+        mParent->addUser(&body);
     }
 }
 
@@ -171,6 +179,10 @@ Statement * Statement::removeFromParent() {
         }
         if (LLVM_LIKELY(mNext != nullptr)) {
             mNext->mPrev = mPrev;
+        }
+        if (LLVM_UNLIKELY(isa<If>(this) || isa<While>(this))) {
+            PabloBlock & body = isa<If>(this) ? cast<If>(this)->getBody() : cast<While>(this)->getBody();
+            mParent->removeUser(&body);
         }
     }
     mPrev = nullptr;
@@ -199,7 +211,7 @@ Statement * Statement::eraseFromParent(const bool recursively) {
         Statement * stmt = body.front();
         while (stmt) {
             stmt = stmt->eraseFromParent(recursively);
-        }
+        }        
     }
 
     if (recursively) {
@@ -229,26 +241,26 @@ Statement * Statement::replaceWith(PabloAST * const expr, const bool rename, con
 }
 
 #ifndef NDEBUG
-    bool Statement::noRecursiveOperand(const PabloAST * const operand) {
-        if (operand && isa<Statement>(operand)) {
-            std::queue<const Statement *> Q;
-            Q.push(cast<Statement>(operand));
-            while (!Q.empty()) {
-                const Statement * stmt = Q.front();
-                if (stmt == this) {
-                    return false;
-                }
-                Q.pop();
-                for (auto i = 0; i != stmt->getNumOperands(); ++i) {
-                    const PabloAST * op = stmt->getOperand(i);
-                    if (isa<Statement>(op)) {
-                        Q.push(cast<Statement>(op));
-                    }
+bool Statement::noRecursiveOperand(const PabloAST * const operand) {
+    if (operand && isa<Statement>(operand)) {
+        std::queue<const Statement *> Q;
+        Q.push(cast<Statement>(operand));
+        while (!Q.empty()) {
+            const Statement * stmt = Q.front();
+            if (stmt == this) {
+                return false;
+            }
+            Q.pop();
+            for (auto i = 0; i != stmt->getNumOperands(); ++i) {
+                const PabloAST * op = stmt->getOperand(i);
+                if (isa<Statement>(op)) {
+                    Q.push(cast<Statement>(op));
                 }
             }
         }
-        return true;
     }
+    return true;
+}
 #endif
 
 void StatementList::insert(Statement * const statement) {

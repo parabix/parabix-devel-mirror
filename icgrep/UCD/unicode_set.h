@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include <vector>
 #include <ostream>
+
 //
 // unicode_set.h - representing and manipulating sets of Unicode
 // characters, based on data from UCD - the Unicode Character Database
@@ -37,7 +38,7 @@ const bitquad_t FullQuadMask = -1;
 enum run_type_t : uint16_t {Empty, Mixed, Full};
 
 struct RunStructure {
-  RunStructure(run_type_t r, uint16_t lgth) : run_type(r), run_length(lgth) {};
+  RunStructure(run_type_t r, uint16_t lgth) : run_type(r), run_length(lgth) {}
   run_type_t run_type;
   uint16_t run_length;
 };
@@ -57,22 +58,36 @@ public:
     void append_quad(bitquad_t q);
 //
 //  Nullary constructor for incremental building.
-    UnicodeSet() : runs(std::vector<RunStructure>()), quads(std::vector<bitquad_t>()), quad_count(0) {};
+    UnicodeSet() : runs(std::vector<RunStructure>()), quads(std::vector<bitquad_t>()), quad_count(0) {}
 //
 //  Ternary constructor for constant construction using precomputed data.
-    UnicodeSet(std::vector<RunStructure> r, std::vector<bitquad_t> q, int c) : runs(r), quads(q), quad_count(c) {};
+    UnicodeSet(std::initializer_list<RunStructure> r, std::initializer_list<bitquad_t> q, int c) : runs(r), quads(q), quad_count(c) {}
 };
 
-    void Dump_uset(UnicodeSet s);
-    UnicodeSet empty_uset();
-    UnicodeSet singleton_uset(int codepoint);
-    UnicodeSet range_uset(int lo_codepoint, int hi_codepoint);
-    UnicodeSet uset_complement (UnicodeSet s);
-    UnicodeSet uset_union(UnicodeSet s1, UnicodeSet s2);
-    UnicodeSet uset_intersection(UnicodeSet s1, UnicodeSet s2);
-    UnicodeSet uset_difference(UnicodeSet s1, UnicodeSet s2);
-    UnicodeSet uset_symmetric_difference(UnicodeSet s1, UnicodeSet s2);
-    bool uset_member(UnicodeSet s, int codepoint);
+void Dump_uset(UnicodeSet s);
+UnicodeSet empty_uset();
+UnicodeSet singleton_uset(int codepoint);
+UnicodeSet range_uset(int lo_codepoint, int hi_codepoint);
+UnicodeSet uset_complement (const UnicodeSet &s);
+UnicodeSet uset_union(const UnicodeSet & s1, const UnicodeSet & s2);
+UnicodeSet uset_intersection(const UnicodeSet &s1, const UnicodeSet &s2);
+UnicodeSet uset_difference(const UnicodeSet &s1, const UnicodeSet &s2);
+UnicodeSet uset_symmetric_difference(const UnicodeSet & s1, const UnicodeSet & s2);
+bool uset_member(const UnicodeSet & s, int codepoint);
+
+class Uset_Iterator {
+public:
+    Uset_Iterator(const UnicodeSet & s) : uSet(s), run_no(0), offset(0), quad_no(0) {}
+    bool at_end();
+    RunStructure current_run();
+    bitquad_t get_quad();
+    void advance(int n);
+private:
+    const UnicodeSet & uSet;
+    int run_no;
+    int offset;
+    int quad_no;
+};
 
 #endif
 

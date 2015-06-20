@@ -186,6 +186,15 @@ CC * subtractCC(const CC * cc1, const CC * cc2);
 CC * intersectCC(const CC * cc1, const CC * cc2);
 
 CC * caseInsensitize(const CC * cc);
+
+CC * rangeIntersect(const CC * cc, const CodePointType lo, const CodePointType hi);
+
+CC * rangeGaps(const CC * cc, const CodePointType lo, const CodePointType hi);
+
+CC * outerRanges(const CC * cc);
+
+CC * innerRanges(const CC * cc);
+
 }
 
 #endif // RE_CC_H
