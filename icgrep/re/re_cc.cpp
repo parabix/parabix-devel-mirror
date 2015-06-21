@@ -30,10 +30,10 @@ std::string CC::canonicalName(const CC_type type) const {
     std::stringstream name;
     name << std::hex;
     if ((type == ByteClass) && (mSparseCharSet.back().hi_codepoint >= 0x80)) {
-      name << "BC_";
+      name << "BC";
     }
     else {
-        name << "CC_";
+        name << "CC";
     }
     char separator = '_';
     for (const CharSetItem & i : mSparseCharSet) {
@@ -44,15 +44,12 @@ std::string CC::canonicalName(const CC_type type) const {
         else {
             name << i.lo_codepoint << '_' << i.hi_codepoint;
         }
+        separator = ',';
     }
     return name.str();
 }
 
-CodePointType CC::max_codepoint() {
-    return mSparseCharSet.size() == 0 ? 0 : mSparseCharSet.back().hi_codepoint;
-}
-
-void CC::insert_range(const CodePointType lo_codepoint, const CodePointType hi_codepoint) {
+void CC::insert_range(const codepoint_t lo_codepoint, const codepoint_t hi_codepoint) {
     CharSetItem item(lo_codepoint, hi_codepoint);
     for (auto i = mSparseCharSet.begin(); i != mSparseCharSet.end(); ) {
         CharSetItem & range = *i;
@@ -74,7 +71,7 @@ void CC::insert_range(const CodePointType lo_codepoint, const CodePointType hi_c
     mSparseCharSet.push_back(item);
 }
 
-void CC::remove_range(const CodePointType lo_codepoint, const CodePointType hi_codepoint) {
+void CC::remove_range(const codepoint_t lo_codepoint, const codepoint_t hi_codepoint) {
     for (auto i = mSparseCharSet.begin(); i != mSparseCharSet.end(); ) {
         CharSetItem & range = *i;
         if (lo_codepoint > range.hi_codepoint + 1) {
@@ -132,7 +129,7 @@ CC * intersectCC(const CC * a, const CC * b) {
             continue;
         }
         isect->insert_range(std::max(ra.lo_codepoint, rb.lo_codepoint), std::min(ra.hi_codepoint, rb.hi_codepoint));
-        if (ra.hi_codepoint < rb.hi_codepoint) ++ai; 
+        if (ra.hi_codepoint < rb.hi_codepoint) ++ai;
         else ++bi;
     }
     return isect;
@@ -140,8 +137,8 @@ CC * intersectCC(const CC * a, const CC * b) {
     
 CC * caseInsensitize(const CC * cc) {
     CC * cci = makeCC();
-    for (auto i = cc->cbegin(); i != cc->cend(); i++) {
-        caseInsensitiveInsertRange(cci, i->lo_codepoint, i->hi_codepoint);
+    for (const CharSetItem & i : *cc) {
+        caseInsensitiveInsertRange(cci, i.lo_codepoint, i.hi_codepoint);
     }
     return cci;
 }
@@ -152,7 +149,7 @@ CC * caseInsensitize(const CC * cc) {
  * @param lo
  * @param hi
  ** ------------------------------------------------------------------------------------------------------------- */
-CC * rangeIntersect(const CC * cc, const CodePointType lo, const CodePointType hi) {
+CC * rangeIntersect(const CC * cc, const codepoint_t lo, const codepoint_t hi) {
     assert ("cc cannot be null" && cc);
     CC * intersect = makeCC();
     for (const auto & p : *cc) {
@@ -169,10 +166,10 @@ CC * rangeIntersect(const CC * cc, const CodePointType lo, const CodePointType h
  * @param lo
  * @param hi
  ** ------------------------------------------------------------------------------------------------------------- */
-CC * rangeGaps(const CC * cc, const CodePointType lo, const CodePointType hi) {
+CC * rangeGaps(const CC * cc, const codepoint_t lo, const codepoint_t hi) {
     assert ("cc cannot be null" && cc);
     CC * gaps = makeCC();
-    CodePointType cp = lo;
+    codepoint_t cp = lo;
     if (cp < hi) {
         auto i = cc->cbegin(), end = cc->cend();
         for (; i != end && cp < hi; ++i) {

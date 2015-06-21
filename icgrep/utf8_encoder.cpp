@@ -49,10 +49,10 @@ RE * UTF8_Encoder::rangeToUTF8(const CharSetItem & item) {
     }
 }
 
-RE * UTF8_Encoder::rangeToUTF8(const CodePointType lo, const CodePointType hi, const unsigned index, const unsigned max)
+RE * UTF8_Encoder::rangeToUTF8(const codepoint_t lo, const codepoint_t hi, const unsigned index, const unsigned max)
 {
-    const CodePointType hbyte = u8byte(hi, index);
-    const CodePointType lbyte = u8byte(lo, index);
+    const codepoint_t hbyte = u8byte(hi, index);
+    const codepoint_t lbyte = u8byte(lo, index);
     if (index == max) {
         return makeByteRange(lbyte, hbyte);
     }
@@ -79,9 +79,9 @@ inline bool UTF8_Encoder::isUTF8Prefix(const unsigned cp) {
     return (cp >= 0xC2) && (cp <= 0xF4);
 }
 
-inline CodePointType UTF8_Encoder::u8byte(const CodePointType codepoint, const unsigned n)
+inline codepoint_t UTF8_Encoder::u8byte(const codepoint_t codepoint, const unsigned n)
 {
-    CodePointType retVal = 0;
+    codepoint_t retVal = 0;
 
     const unsigned len = lenUTF8(codepoint);
 
@@ -131,11 +131,11 @@ inline unsigned UTF8_Encoder::maxCodePoint(const unsigned length) {
     throw std::runtime_error("Unexpected UTF8 Length: " + std::to_string(length));
 }
 
-inline CC * UTF8_Encoder::makeByteRange(const CodePointType lo, const CodePointType hi) {
+inline CC * UTF8_Encoder::makeByteRange(const codepoint_t lo, const codepoint_t hi) {
     return makeCC(lo, hi);
 }
 
-inline CC * UTF8_Encoder::makeByteClass(const CodePointType cp) {
+inline CC * UTF8_Encoder::makeByteClass(const codepoint_t cp) {
     return makeCC(cp, cp);
 }
 

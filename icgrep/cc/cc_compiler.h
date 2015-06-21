@@ -8,16 +8,9 @@
 #define CC_COMPILER_H
 
 #include <re/re_cc.h>
+#include <pablo/builder.hpp>
 #include "utf_encoding.h"
 #include <string>
-
-namespace pablo {
-    class PabloAST;
-    class PabloBuilder;
-    class PabloBlock;
-    class Var;
-    class Assign;
-}
 
 namespace cc {
 
@@ -26,32 +19,62 @@ class CC_NameMap;
 class CC_Compiler{
 public:
 
-    CC_Compiler(pablo::PabloBlock & cg, const Encoding encoding, const std::string basis_pattern = "basis");
+    using Vars = std::vector<pablo::Var *>;
 
-    std::vector<pablo::Var *> getBasisBits(const CC_NameMap & nameMap);
+    CC_Compiler(pablo::PabloBlock & entry, const Encoding encoding, const std::string basis_pattern = "basis");
+
+    const Vars & getBasisBits(const CC_NameMap & nameMap) const;
+
+    pablo::Assign * compileCC(const re::CC *cc);
 
     pablo::Assign * compileCC(const re::CC *cc, pablo::PabloBlock & block);
 
-    pablo::Assign * compileCC(const re::CC *cc, pablo::PabloBuilder & pb);
+    pablo::Assign * compileCC(const re::CC *cc, pablo::PabloBuilder & builder);
 
-    pablo::Assign * compileCC(const re::CC *cc);
+    pablo::Assign * compileCC(const std::string && canonicalName, const re::CC *cc, pablo::PabloBlock & block);
+
+    pablo::Assign * compileCC(const std::string &&canonicalName, const re::CC *cc, pablo::PabloBuilder & builder);
 
     void compileByteClasses(re::RE * re);
 
 private:
     pablo::Var * getBasisVar(const int n) const;
-    pablo::PabloAST * bit_pattern_expr(const unsigned pattern, unsigned selected_bits, pablo::PabloBuilder & pb);
-    pablo::PabloAST * char_test_expr(const re::CodePointType ch, pablo::PabloBuilder & pb);
-    pablo::PabloAST * make_range(const re::CodePointType n1, const re::CodePointType n2, pablo::PabloBuilder & pb);
-    pablo::PabloAST * GE_Range(const unsigned N, const unsigned n, pablo::PabloBuilder & pb);
-    pablo::PabloAST * LE_Range(const unsigned N, const unsigned n, pablo::PabloBuilder & pb);
-    pablo::PabloAST * char_or_range_expr(const re::CodePointType lo, const re::CodePointType hi, pablo::PabloBuilder & pb);
-    pablo::PabloAST * charset_expr(const re::CC *cc, pablo::PabloBuilder & pb);
+    template<typename PabloBlockOrBuilder>
+    pablo::PabloAST * bit_pattern_expr(const unsigned pattern, unsigned selected_bits, PabloBlockOrBuilder & pb);
+    template<typename PabloBlockOrBuilder>
+    pablo::PabloAST * char_test_expr(const re::codepoint_t ch, PabloBlockOrBuilder & pb);
+    template<typename PabloBlockOrBuilder>
+    pablo::PabloAST * make_range(const re::codepoint_t n1, const re::codepoint_t n2, PabloBlockOrBuilder & pb);
+    template<typename PabloBlockOrBuilder>
+    pablo::PabloAST * GE_Range(const unsigned N, const unsigned n, PabloBlockOrBuilder & pb);
+    template<typename PabloBlockOrBuilder>
+    pablo::PabloAST * LE_Range(const unsigned N, const unsigned n, PabloBlockOrBuilder & pb);
+    template<typename PabloBlockOrBuilder>
+    pablo::PabloAST * char_or_range_expr(const re::codepoint_t lo, const re::codepoint_t hi, PabloBlockOrBuilder & pb);
+    template<typename PabloBlockOrBuilder>
+    pablo::PabloAST * charset_expr(const re::CC *cc, PabloBlockOrBuilder & pb);
 private:    
-    pablo::PabloBlock &         mCG;
+    pablo::PabloBuilder         mBuilder;
     std::vector<pablo::Var *>   mBasisBit;
     const Encoding              mEncoding;
 };
+
+inline pablo::Assign * CC_Compiler::compileCC(const re::CC *cc) {
+    return compileCC(cc, mBuilder);
+}
+
+inline pablo::Assign * CC_Compiler::compileCC(const re::CC *cc, pablo::PabloBlock & block) {
+    return compileCC(std::move(cc->canonicalName(re::ByteClass)), cc, block);
+}
+
+inline pablo::Assign * CC_Compiler::compileCC(const re::CC *cc, pablo::PabloBuilder & builder) {
+    return compileCC(std::move(cc->canonicalName(re::ByteClass)), cc, builder);
+}
+
+inline const CC_Compiler::Vars & CC_Compiler::getBasisBits(const CC_NameMap &) const {
+    return mBasisBit;
+}
+
 
 }
 

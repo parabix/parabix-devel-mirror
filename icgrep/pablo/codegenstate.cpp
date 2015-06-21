@@ -19,7 +19,7 @@ inline PabloAST * PabloBlock::renameNonNamedNode(PabloAST * expr, const std::str
 
 /// UNARY CREATE FUNCTIONS
 
-Assign * PabloBlock::createAssign(const std::string prefix, PabloAST * expr, const int outputIndex)  {
+Assign * PabloBlock::createAssign(const std::string && prefix, PabloAST * expr, const int outputIndex)  {
     return insertAtInsertionPoint(new Assign(expr, outputIndex, makeName(prefix, false), this));
 }
 

@@ -21,13 +21,13 @@ public:
     static re::RE * toUTF8(CC_NameMap & nameMap, re::RE * ast);
 private:
     static re::RE * rangeToUTF8(const re::CharSetItem & item);
-    static re::RE * rangeToUTF8(const re::CodePointType lo, const re::CodePointType hi, const unsigned index, const unsigned max);
-    static re::CC * makeByteClass(const re::CodePointType cp);
-    static re::CC * makeByteRange(const re::CodePointType lo, const re::CodePointType hi);
+    static re::RE * rangeToUTF8(const re::codepoint_t lo, const re::codepoint_t hi, const unsigned index, const unsigned max);
+    static re::CC * makeByteClass(const re::codepoint_t cp);
+    static re::CC * makeByteRange(const re::codepoint_t lo, const re::codepoint_t hi);
     static bool isUTF8Prefix(const unsigned cp);
     static unsigned lenUTF8(const unsigned cp);
     static unsigned maxCodePoint(const unsigned length);
-    static re::CodePointType u8byte(const re::CodePointType codepoint, const unsigned n);
+    static re::codepoint_t u8byte(const re::codepoint_t codepoint, const unsigned n);
 };
 
 }

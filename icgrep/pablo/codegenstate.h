@@ -82,7 +82,7 @@ public:
         return createCall(cast<PabloAST>(name));
     }
 
-    Assign * createAssign(const std::string prefix, PabloAST * expr, const int outputIndex = -1);
+    Assign * createAssign(const std::string && prefix, PabloAST * expr, const int outputIndex = -1);
 
     inline Var * createVar(const std::string name) {
         return createVar(getName(name, false));

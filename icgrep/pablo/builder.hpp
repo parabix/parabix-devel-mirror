@@ -19,14 +19,16 @@ public:
         return mPb.createOnes();
     }
 
-    Var * createVar(const std::string name) {
-        return createVar(mPb.getName(name));
+    inline Var * createVar(const std::string name) {
+        return mPb.createVar(name);
     }
 
-    Var * createVar(String * name);
+    inline Var * createVar(String * const name) {
+        return mPb.createVar(name);
+    }
 
-    PabloAST * createVar(const PabloAST * const) {
-        throw std::runtime_error("Var objects should only refer to external Vars (i.e., input basis bit streams). Use Assign objects directly.");
+    inline Var * createVar(PabloAST * const name) {
+        return mPb.createVar(name);
     }
 
     inline Call * createCall(const std::string name) {
@@ -35,8 +37,8 @@ public:
 
     Call * createCall(String * name);
 
-    Assign * createAssign(const std::string prefix, PabloAST * expr, const int outputIndex = -1) {
-        return mPb.createAssign(prefix, expr, outputIndex);
+    Assign * createAssign(const std::string && prefix, PabloAST * expr, const int outputIndex = -1) {
+        return mPb.createAssign(std::move(prefix), expr, outputIndex);
     }
 
     inline PabloAST * createAdvance(PabloAST * expr, const Integer::integer_t shiftAmount) {

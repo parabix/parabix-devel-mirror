@@ -26,31 +26,22 @@ using namespace pablo;
 
 namespace cc {
 
-CC_Compiler::CC_Compiler(PabloBlock & cg, const Encoding encoding, const std::string basis_pattern)
-: mCG(cg)
+CC_Compiler::CC_Compiler(PabloBlock & entry, const Encoding encoding, const std::string basis_pattern)
+: mBuilder(entry)
 , mBasisBit(encoding.getBits())
 , mEncoding(encoding)
 {
     for (int i = 0; i < mEncoding.getBits(); i++) {
-        mBasisBit[i] = mCG.createVar(basis_pattern + std::to_string(i));
+        mBasisBit[i] = mBuilder.createVar(basis_pattern + std::to_string(i));
     }
 }
 
-Assign * CC_Compiler::compileCC(const CC *cc) {
-    return compileCC(cc, mCG);
+Assign * CC_Compiler::compileCC(const std::string && canonicalName, const CC *cc, PabloBlock & block) {
+    return block.createAssign(std::move(canonicalName), charset_expr(cc, block));
 }
 
-Assign * CC_Compiler::compileCC(const CC *cc, PabloBlock & block) {
-    PabloBuilder pb(block);
-    return compileCC(cc, pb);
-}
-
-Assign * CC_Compiler::compileCC(const CC *cc, PabloBuilder & pb) {
-    return pb.createAssign(cc->canonicalName(ByteClass), charset_expr(cc, pb));
-}
-
-std::vector<Var *> CC_Compiler::getBasisBits(const CC_NameMap & nameMap) {
-    return mBasisBit;
+Assign * CC_Compiler::compileCC(const std::string && canonicalName, const CC *cc, PabloBuilder & builder) {
+    return builder.createAssign(std::move(canonicalName), charset_expr(cc, builder));
 }
 
 void CC_Compiler::compileByteClasses(RE * re) {
@@ -85,7 +76,7 @@ void CC_Compiler::compileByteClasses(RE * re) {
                 compileByteClasses(def);
             }
             else if (name->getCompiled() == nullptr) {
-                name->setCompiled(compileCC(cast<CC>(def), mCG));
+                name->setCompiled(compileCC(cast<CC>(def)));
             }
         }
     }
@@ -94,9 +85,8 @@ void CC_Compiler::compileByteClasses(RE * re) {
     }
 }
 
-
-
-PabloAST * CC_Compiler::charset_expr(const CC * cc, PabloBuilder & pb) {
+template<typename PabloBlockOrBuilder>
+PabloAST * CC_Compiler::charset_expr(const CC * cc, PabloBlockOrBuilder & pb) {
     if (cc->empty()) {
         return pb.createZeroes();
     }
@@ -119,9 +109,9 @@ PabloAST * CC_Compiler::charset_expr(const CC * cc, PabloBuilder & pb) {
                 }
             }
             if (combine) {
-                CodePointType lo = cc->front().lo_codepoint;
-                CodePointType hi = cc->back().lo_codepoint;
-                const CodePointType mask = mEncoding.getMask();
+                codepoint_t lo = cc->front().lo_codepoint;
+                codepoint_t hi = cc->back().lo_codepoint;
+                const codepoint_t mask = mEncoding.getMask();
                 lo &= (mask - 1);
                 hi |= (mask ^ (mask - 1));
                 PabloAST * expr = make_range(lo, hi, pb);
@@ -141,7 +131,8 @@ PabloAST * CC_Compiler::charset_expr(const CC * cc, PabloBuilder & pb) {
     return expr;
 }
 
-PabloAST * CC_Compiler::bit_pattern_expr(const unsigned pattern, unsigned selected_bits, PabloBuilder &pb)
+template<typename PabloBlockOrBuilder>
+PabloAST * CC_Compiler::bit_pattern_expr(const unsigned pattern, unsigned selected_bits, PabloBlockOrBuilder &pb)
 {
     if (selected_bits == 0) {
         return pb.createOnes();
@@ -191,27 +182,29 @@ PabloAST * CC_Compiler::bit_pattern_expr(const unsigned pattern, unsigned select
     return bit_terms[0];
 }
 
-inline PabloAST * CC_Compiler::char_test_expr(const CodePointType ch, PabloBuilder &pb) {
+template<typename PabloBlockOrBuilder>
+inline PabloAST * CC_Compiler::char_test_expr(const codepoint_t ch, PabloBlockOrBuilder &pb) {
     return bit_pattern_expr(ch, mEncoding.getMask(), pb);
 }
 
-PabloAST * CC_Compiler::make_range(const CodePointType n1, const CodePointType n2, PabloBuilder & pb) {
-    CodePointType diff_count = 0;
+template<typename PabloBlockOrBuilder>
+PabloAST * CC_Compiler::make_range(const codepoint_t n1, const codepoint_t n2, PabloBlockOrBuilder & pb) {
+    codepoint_t diff_count = 0;
 
-    for (CodePointType diff_bits = n1 ^ n2; diff_bits; diff_count++, diff_bits >>= 1);
+    for (codepoint_t diff_bits = n1 ^ n2; diff_bits; diff_count++, diff_bits >>= 1);
 
     if ((n2 < n1) || (diff_count > mEncoding.getBits()))
     {
         throw std::runtime_error("Bad Range: [" + std::to_string(n1) + "," + std::to_string(n2) + "]");
     }
 
-    const CodePointType mask0 = (static_cast<CodePointType>(1) << diff_count) - 1;
+    const codepoint_t mask0 = (static_cast<codepoint_t>(1) << diff_count) - 1;
 
     PabloAST * common = bit_pattern_expr(n1 & ~mask0, mEncoding.getMask() ^ mask0, pb);
 
     if (diff_count == 0) return common;
 
-    const CodePointType mask1 = (static_cast<CodePointType>(1) << (diff_count - 1)) - 1;
+    const codepoint_t mask1 = (static_cast<codepoint_t>(1) << (diff_count - 1)) - 1;
 
     PabloAST* lo_test = GE_Range(diff_count - 1, n1 & mask1, pb);
     PabloAST* hi_test = LE_Range(diff_count - 1, n2 & mask1, pb);
@@ -219,7 +212,8 @@ PabloAST * CC_Compiler::make_range(const CodePointType n1, const CodePointType n
     return pb.createAnd(common, pb.createSel(getBasisVar(diff_count - 1), hi_test, lo_test));
 }
 
-PabloAST * CC_Compiler::GE_Range(const unsigned N, const unsigned n, PabloBuilder &pb) {
+template<typename PabloBlockOrBuilder>
+PabloAST * CC_Compiler::GE_Range(const unsigned N, const unsigned n, PabloBlockOrBuilder &pb) {
     if (N == 0) {
         return pb.createOnes(); //Return a true literal.
     }
@@ -255,7 +249,8 @@ PabloAST * CC_Compiler::GE_Range(const unsigned N, const unsigned n, PabloBuilde
     throw std::runtime_error("Unexpected input given to ge_range: " + std::to_string(N) + ", " + std::to_string(n));
 }
 
-PabloAST * CC_Compiler::LE_Range(const unsigned N, const unsigned n, PabloBuilder &pb)
+template<typename PabloBlockOrBuilder>
+PabloAST * CC_Compiler::LE_Range(const unsigned N, const unsigned n, PabloBlockOrBuilder &pb)
 {
     /*
       If an N-bit pattern is all ones, then it is always true that any n-bit value is LE this pattern.
@@ -269,7 +264,8 @@ PabloAST * CC_Compiler::LE_Range(const unsigned N, const unsigned n, PabloBuilde
     }
 }
 
-inline PabloAST * CC_Compiler::char_or_range_expr(const CodePointType lo, const CodePointType hi, PabloBuilder &pb) {
+template<typename PabloBlockOrBuilder>
+inline PabloAST * CC_Compiler::char_or_range_expr(const codepoint_t lo, const codepoint_t hi, PabloBlockOrBuilder &pb) {
     if (lo == hi) {
         return char_test_expr(lo, pb);
     }

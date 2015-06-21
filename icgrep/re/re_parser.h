@@ -20,8 +20,6 @@ namespace re {
 enum CharsetOperatorKind
 	{intersectOp, setDiffOp, ampChar, hyphenChar, rangeHyphen, posixPropertyOpener, setOpener, setCloser, backSlash, emptyOperator};
 
-typedef unsigned codepoint_t;
-
 enum ModeFlagType 
     {CASE_INSENSITIVE_MODE_FLAG = 1,
      MULTILINE_MODE_FLAG = 2,      // not currently implemented

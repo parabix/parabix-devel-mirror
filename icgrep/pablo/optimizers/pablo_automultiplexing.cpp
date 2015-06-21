@@ -346,21 +346,17 @@ DdNode * AutoMultiplexing::characterize(Statement * const stmt, const bool throw
 
     switch (stmt->getClassTypeId()) {
         case PabloAST::ClassTypeId::Assign:
-            bdd = input[0];
-            break;
+            return input[0];
         case PabloAST::ClassTypeId::And:
             bdd = And(input[0], input[1]);
             break;
         case PabloAST::ClassTypeId::Next:
         case PabloAST::ClassTypeId::Or:
-            bdd = Or(input[0], input[1]);
-            break;
+            return Or(input[0], input[1]);
         case PabloAST::ClassTypeId::Xor:
-            bdd = Xor(input[0], input[1]);
-            break;
+            return Xor(input[0], input[1]);
         case PabloAST::ClassTypeId::Not:
-            bdd = Not(input[0]);
-            break;
+            return Not(input[0]);
         case PabloAST::ClassTypeId::Sel:
             bdd = Ite(input[0], input[1], input[2]);
             break;
@@ -370,20 +366,15 @@ DdNode * AutoMultiplexing::characterize(Statement * const stmt, const bool throw
             // would be ¬(ScanThru(c,m) ∨ m)
         case PabloAST::ClassTypeId::MatchStar:
             if (LLVM_UNLIKELY(isZero(input[0]) || isZero(input[1]))) {
-                bdd = Zero();
-                break;
+                return Zero();
             }
         case PabloAST::ClassTypeId::Call:
-            bdd = NewVar();
-            break;
+            return NewVar();
         case PabloAST::ClassTypeId::Advance:
-            bdd = characterize(cast<Advance>(stmt), input[0]);
-            break;
+            return characterize(cast<Advance>(stmt), input[0]);
         default:
             throw std::runtime_error("Unexpected statement type " + stmt->getName()->to_string());
     }
-
-    assert ("Failed to generate a BDD." && (bdd));
 
     if (LLVM_UNLIKELY(noSatisfyingAssignment(bdd))) {
         Cudd_RecursiveDeref(mManager, bdd);
@@ -563,6 +554,26 @@ inline void AutoMultiplexing::minimize(PabloBlock & entry) {
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
+ * @brief prohibited
+ *
+ * If this statement is an Assign or Next node or any of its operands is a non-superfluous Assign or Next node,
+ * then we're prohibited from minimizing this statement.
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline bool prohibited(const Statement * const stmt) {
+    if (isa<Assign>(stmt) || isa<Next>(stmt)) {
+        return true;
+    }
+    for (unsigned i = 0; i != stmt->getNumOperands(); ++i) {
+        const PabloAST * const  op = stmt->getOperand(i);
+        const Assign * const assign = dyn_cast<Assign>(op);
+        if (LLVM_UNLIKELY((assign && !assign->superfluous()) || isa<Next>(op))) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
  * @brief minimize
  ** ------------------------------------------------------------------------------------------------------------- */
 void AutoMultiplexing::minimize(PabloBlock & block, SubsitutionMap & parent) {
@@ -575,7 +586,7 @@ void AutoMultiplexing::minimize(PabloBlock & block, SubsitutionMap & parent) {
             continue;
         }
 
-        if (isa<Assign>(stmt) || isa<Next>(stmt)) {
+        if (LLVM_UNLIKELY(prohibited(stmt))) {
             continue;
         }
 
