@@ -8,6 +8,7 @@
 #include <llvm/Support/Compiler.h>
 #include <UCD/CaseFolding_txt.h>
 #include <sstream>
+#include <iostream>
 
 namespace re {
 CC::CharSetAllocator CC::mCharSetAllocator;
@@ -28,9 +29,9 @@ CC::CC(const CC & cc)
 
 std::string CC::canonicalName(const CC_type type) const {
     std::stringstream name;
-    name << std::hex;
-    if ((type == ByteClass) && (mSparseCharSet.back().hi_codepoint >= 0x80)) {
-      name << "BC";
+    // name << std::hex;
+    if ((type == ByteClass) && (max_codepoint() >= 0x80)) {
+        name << "BC";
     }
     else {
         name << "CC";
@@ -50,25 +51,24 @@ std::string CC::canonicalName(const CC_type type) const {
 }
 
 void CC::insert_range(const codepoint_t lo_codepoint, const codepoint_t hi_codepoint) {
-    CharSetItem item(lo_codepoint, hi_codepoint);
     for (auto i = mSparseCharSet.begin(); i != mSparseCharSet.end(); ) {
         CharSetItem & range = *i;
-        if (item.hi_codepoint < range.lo_codepoint - 1) {
-            mSparseCharSet.insert(i, item);
+        if (hi_codepoint < range.lo_codepoint - 1) {
+            mSparseCharSet.emplace(i, lo_codepoint, hi_codepoint);
             return;
         }
-        else if (item.lo_codepoint > range.hi_codepoint + 1) {
+        else if (lo_codepoint > range.hi_codepoint + 1) {
             ++i;
         }
         else {
             // ranges overlap; expand the range to include the prior one and
             // remove the old one from the list
-            range.lo_codepoint = std::min(range.lo_codepoint, item.lo_codepoint);
-            range.hi_codepoint = std::max(range.hi_codepoint, item.hi_codepoint);
+            range.lo_codepoint = std::min(range.lo_codepoint, lo_codepoint);
+            range.hi_codepoint = std::max(range.hi_codepoint, hi_codepoint);
             return;
         }
     }
-    mSparseCharSet.push_back(item);
+    mSparseCharSet.emplace_back(lo_codepoint, hi_codepoint);
 }
 
 void CC::remove_range(const codepoint_t lo_codepoint, const codepoint_t hi_codepoint) {
@@ -102,11 +102,29 @@ void CC::remove_range(const codepoint_t lo_codepoint, const codepoint_t hi_codep
 
 CC * subtractCC(const CC * cc1, const CC * cc2) {
     CC * diff = makeCC();
-    for (const CharSetItem & i : cc1->mSparseCharSet) {
-        diff->insert_range(i.lo_codepoint, i.hi_codepoint);
+    auto ai = cc1->cbegin();
+    const auto ai_end = cc1->cend();
+    auto bi = cc2->cbegin();
+    const auto bi_end = cc2->cend();
+    while (ai != ai_end && bi != bi_end) {
+        const CharSetItem & ra = *ai;
+        const CharSetItem & rb = *bi;
+        if (rb.hi_codepoint < ra.lo_codepoint) {
+            ++bi;
+        }
+        else { // test whether the intervals overlap
+            if (ra.lo_codepoint < rb.lo_codepoint) {
+                diff->insert_range(ra.lo_codepoint, std::min(rb.lo_codepoint - 1, ra.hi_codepoint));
+            }
+            if (ra.hi_codepoint > rb.hi_codepoint) {
+                diff->insert_range(std::max(rb.hi_codepoint + 1, ra.lo_codepoint), ra.hi_codepoint);
+            }
+            ++ai;
+        }
     }
-    for (const CharSetItem & i : cc2->mSparseCharSet) {
-        diff->remove_range(i.lo_codepoint, i.hi_codepoint);
+    for (; ai != ai_end; ++ai) {
+        const CharSetItem & ra = *ai;
+        diff->insert_range(ra.lo_codepoint, ra.hi_codepoint);
     }
     return diff;
 }
@@ -122,15 +140,19 @@ CC * intersectCC(const CC * a, const CC * b) {
         const CharSetItem & rb = *bi;
         if (ra.hi_codepoint < rb.lo_codepoint) {
             ++ai;
-            continue;
         }
         else if (rb.hi_codepoint < ra.lo_codepoint) {
             ++bi;
-            continue;
         }
-        isect->insert_range(std::max(ra.lo_codepoint, rb.lo_codepoint), std::min(ra.hi_codepoint, rb.hi_codepoint));
-        if (ra.hi_codepoint < rb.hi_codepoint) ++ai;
-        else ++bi;
+        else {
+            isect->insert_range(std::max(ra.lo_codepoint, rb.lo_codepoint), std::min(ra.hi_codepoint, rb.hi_codepoint));
+            if (ra.hi_codepoint < rb.hi_codepoint) {
+                ++ai;
+            }
+            else {
+                ++bi;
+            }
+        }
     }
     return isect;
 }
