@@ -26,8 +26,8 @@ RE * UTF8_Encoder::toUTF8(CC_NameMap & nameMap, RE * ast) {
             }
             else if (cc->size() > 1) {
                 std::vector<RE *> alt;
-                for (const CharSetItem & item : *cc) {
-                    alt.push_back(rangeToUTF8(item));
+                for (const interval_t & i : *cc) {
+                    alt.push_back(rangeToUTF8(i));
                 }
                 name->setDefinition(makeAlt(alt.begin(), alt.end()));
             }
@@ -37,15 +37,15 @@ RE * UTF8_Encoder::toUTF8(CC_NameMap & nameMap, RE * ast) {
     return ast;
 }
 
-RE * UTF8_Encoder::rangeToUTF8(const CharSetItem & item) {
-    const auto min = lenUTF8(item.lo_codepoint);
-    const auto max = lenUTF8(item.hi_codepoint);
+RE * UTF8_Encoder::rangeToUTF8(const interval_t & item) {
+    const auto min = lenUTF8(lo_codepoint(item));
+    const auto max = lenUTF8(hi_codepoint(item));
     if (min < max) {
         const auto m = maxCodePoint(min);
-        return makeAlt({rangeToUTF8(CharSetItem(item.lo_codepoint, m)), rangeToUTF8(CharSetItem(m + 1, item.hi_codepoint))});
+        return makeAlt({rangeToUTF8(interval_t(lo_codepoint(item), m)), rangeToUTF8(interval_t(m + 1, hi_codepoint(item)))});
     }
     else {
-        return rangeToUTF8(item.lo_codepoint, item.hi_codepoint, 1, max);
+        return rangeToUTF8(lo_codepoint(item), hi_codepoint(item), 1, max);
     }
 }
 
@@ -75,32 +75,28 @@ RE * UTF8_Encoder::rangeToUTF8(const codepoint_t lo, const codepoint_t hi, const
     }
 }
 
-inline bool UTF8_Encoder::isUTF8Prefix(const unsigned cp) {
+inline bool UTF8_Encoder::isUTF8Prefix(const codepoint_t cp) {
     return (cp >= 0xC2) && (cp <= 0xF4);
 }
 
-inline codepoint_t UTF8_Encoder::u8byte(const codepoint_t codepoint, const unsigned n)
-{
+inline codepoint_t UTF8_Encoder::u8byte(const codepoint_t cp, const unsigned n) {
     codepoint_t retVal = 0;
-
-    const unsigned len = lenUTF8(codepoint);
-
+    const unsigned len = lenUTF8(cp);
     if (n == 1) {
         switch (len) {
-            case 1: retVal = codepoint; break;
-            case 2: retVal = 0xC0 | (codepoint >> 6); break;
-            case 3: retVal = 0xE0 | (codepoint >> 12); break;
-            case 4: retVal = 0xF0 | (codepoint >> 18); break;
+            case 1: retVal = cp; break;
+            case 2: retVal = 0xC0 | (cp >> 6); break;
+            case 3: retVal = 0xE0 | (cp >> 12); break;
+            case 4: retVal = 0xF0 | (cp >> 18); break;
         }
     }
     else {
-        retVal = 0x80 | ((codepoint >> (6 * (len - n))) & 0x3F);
+        retVal = 0x80 | ((cp >> (6 * (len - n))) & 0x3F);
     }
-
     return retVal;
 }
 
-inline unsigned UTF8_Encoder::lenUTF8(const unsigned cp) {
+inline unsigned UTF8_Encoder::lenUTF8(const codepoint_t cp) {
     if (cp <= 0x7F) {
         return 1;
     }
@@ -115,7 +111,7 @@ inline unsigned UTF8_Encoder::lenUTF8(const unsigned cp) {
     }
 }
 
-inline unsigned UTF8_Encoder::maxCodePoint(const unsigned length) {
+inline codepoint_t UTF8_Encoder::maxCodePoint(const unsigned length) {
     if (length == 1) {
         return 0x7F;
     }
@@ -130,6 +126,27 @@ inline unsigned UTF8_Encoder::maxCodePoint(const unsigned length) {
     }
     throw std::runtime_error("Unexpected UTF8 Length: " + std::to_string(length));
 }
+
+inline bool UTF8_Encoder::isLowCodePointAfterByte(const codepoint_t cp, const unsigned index) {
+    const auto l = lenUTF8(cp);
+    for (auto i = index; i != l; ++i) {
+        if (u8byte(cp, i + 1) != 0x80) {
+            return false;
+        }
+    }
+    return true;
+}
+
+inline bool UTF8_Encoder::isHighCodePointAfterByte(const codepoint_t cp, const unsigned index) {
+    const auto l = lenUTF8(cp);
+    for (auto i = index; i != l; ++i) {
+        if (u8byte(cp, i + 1) != 0xBF) {
+            return false;
+        }
+    }
+    return true;
+}
+
 
 inline CC * UTF8_Encoder::makeByteRange(const codepoint_t lo, const codepoint_t hi) {
     return makeCC(lo, hi);

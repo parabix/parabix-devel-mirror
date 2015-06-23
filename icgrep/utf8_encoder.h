@@ -15,19 +15,21 @@ namespace cc {
 
 class CC_NameMap;
 
-class UTF8_Encoder
-{
+class UTF8_Encoder {
 public:
     static re::RE * toUTF8(CC_NameMap & nameMap, re::RE * ast);
+
+    static bool isUTF8Prefix(const re::codepoint_t cp);
+    static unsigned lenUTF8(const re::codepoint_t cp);
+    static re::codepoint_t maxCodePoint(const unsigned length);
+    static re::codepoint_t u8byte(const re::codepoint_t cp, const unsigned n);
+    static bool isLowCodePointAfterByte(const re::codepoint_t cp, const unsigned index);
+    static bool isHighCodePointAfterByte(const re::codepoint_t cp, const unsigned index);
 private:
-    static re::RE * rangeToUTF8(const re::CharSetItem & item);
+    static re::RE * rangeToUTF8(const re::interval_t & item);
     static re::RE * rangeToUTF8(const re::codepoint_t lo, const re::codepoint_t hi, const unsigned index, const unsigned max);
     static re::CC * makeByteClass(const re::codepoint_t cp);
     static re::CC * makeByteRange(const re::codepoint_t lo, const re::codepoint_t hi);
-    static bool isUTF8Prefix(const unsigned cp);
-    static unsigned lenUTF8(const unsigned cp);
-    static unsigned maxCodePoint(const unsigned length);
-    static re::codepoint_t u8byte(const re::codepoint_t codepoint, const unsigned n);
 };
 
 }

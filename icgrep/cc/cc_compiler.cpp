@@ -92,8 +92,8 @@ PabloAST * CC_Compiler::charset_expr(const CC * cc, PabloBlockOrBuilder & pb) {
     }
     if (cc->size() > 2) {
         bool combine = true;
-        for (const CharSetItem & item : *cc) {
-            if (item.lo_codepoint != item.hi_codepoint) {
+        for (const interval_t & i : *cc) {
+            if (lo_codepoint(i) != hi_codepoint(i)) {
                 combine = false;
                 break;
             }
@@ -101,16 +101,14 @@ PabloAST * CC_Compiler::charset_expr(const CC * cc, PabloBlockOrBuilder & pb) {
         if (combine) {
             auto i = cc->cbegin();
             for (auto j = i; ++j != cc->cend(); i = j) {
-                const CharSetItem & curr_item = *i;
-                const CharSetItem & next_item = *j;
-                if ((curr_item.lo_codepoint + 2) != next_item.lo_codepoint) {
+                if ((lo_codepoint(i) + 2) != lo_codepoint(j)) {
                     combine  = false;
                     break;
                 }
             }
             if (combine) {
-                codepoint_t lo = cc->front().lo_codepoint;
-                codepoint_t hi = cc->back().lo_codepoint;
+                codepoint_t lo = lo_codepoint(cc->front());
+                codepoint_t hi = lo_codepoint(cc->back());
                 const codepoint_t mask = mEncoding.getMask();
                 lo &= (mask - 1);
                 hi |= (mask ^ (mask - 1));
@@ -124,8 +122,8 @@ PabloAST * CC_Compiler::charset_expr(const CC * cc, PabloBlockOrBuilder & pb) {
         }
     }
     PabloAST * expr = nullptr;
-    for (const CharSetItem & item : *cc) {
-        PabloAST * temp = char_or_range_expr(item.lo_codepoint, item.hi_codepoint, pb);
+    for (const interval_t & i : *cc) {
+        PabloAST * temp = char_or_range_expr(lo_codepoint(i), hi_codepoint(i), pb);
         expr = (expr == nullptr) ? temp : pb.createOr(expr, temp);
     }
     return expr;
@@ -139,28 +137,20 @@ PabloAST * CC_Compiler::bit_pattern_expr(const unsigned pattern, unsigned select
     }
 
     std::vector<PabloAST*> bit_terms;
-    unsigned i = 0;
-
-    while (selected_bits)
-    {
-        unsigned test_bit = 1 << i;
-        if (selected_bits & test_bit)
-        {
-            if ((pattern & test_bit) == 0)
-            {
+    for (unsigned i = 0; selected_bits; ++i) {
+        unsigned test_bit = static_cast<unsigned>(1) << i;
+        if ((selected_bits & test_bit) != 0) {
+            if ((pattern & test_bit) == 0) {
                 bit_terms.push_back(pb.createNot(getBasisVar(i)));
             }
-            else
-            {
+            else {
                 bit_terms.push_back(getBasisVar(i));
             }
         }
-        else
-        {
+        else {
             bit_terms.push_back(pb.createOnes());
         }
         selected_bits &= ~test_bit;
-        i++;
     }
 
     if (bit_terms.size() > 1) {

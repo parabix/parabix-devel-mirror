@@ -15,17 +15,8 @@
 
 namespace re {
 
-typedef unsigned codepoint_t;
-
-struct CharSetItem {
-    constexpr CharSetItem() : lo_codepoint(0), hi_codepoint(0) {}
-    constexpr CharSetItem(const codepoint_t lo, const codepoint_t hi) : lo_codepoint(lo), hi_codepoint(hi) {}
-    constexpr codepoint_t operator [](const unsigned i) const {
-        return (i == 0) ? lo_codepoint : (i == 1) ? hi_codepoint : throw std::runtime_error("CharSetItem[] can only accept 0 or 1.");
-    }
-    codepoint_t lo_codepoint;
-    codepoint_t hi_codepoint;
-};
+using codepoint_t = unsigned;
+using interval_t = std::pair<codepoint_t, codepoint_t>;
 
 enum CC_type {UnicodeClass, ByteClass};
 
@@ -39,38 +30,38 @@ public:
         return false;
     }
 
-    using CharSetAllocator = SlabAllocator<CharSetItem>;
-    using CharSetVector = std::vector<CharSetItem, CharSetAllocator>;
+    using IntervalAllocator = SlabAllocator<interval_t>;
+    using IntervalVector = std::vector<interval_t, IntervalAllocator>;
 
-    typedef CharSetVector::iterator                 iterator;
-    typedef CharSetVector::const_iterator           const_iterator;
-    typedef CharSetVector::size_type                size_type;
-    typedef CharSetVector::reference                reference;
-    typedef CharSetVector::const_reference          const_reference;
+    using iterator = IntervalVector::iterator;
+    using const_iterator = IntervalVector::const_iterator;
+    using size_type = IntervalVector::size_type;
+    using reference = IntervalVector::reference;
+    using const_reference = IntervalVector::const_reference;
 
     static const codepoint_t UNICODE_MAX = 0x10FFFF;
 
     std::string canonicalName(const CC_type type) const;
 
-    CharSetItem & operator [](unsigned i) {
+    interval_t & operator [](unsigned i) {
         return mSparseCharSet[i];
     }
 
-    const CharSetItem & operator [](unsigned i) const {
+    const interval_t & operator [](unsigned i) const {
         return mSparseCharSet[i];
     }
 
     inline codepoint_t min_codepoint() const {
-        return mSparseCharSet.size() == 0 ? 0 : mSparseCharSet.front().lo_codepoint;
+        return empty() ? 0 : std::get<0>(front());
     }
 
     inline codepoint_t max_codepoint() const {
-        return mSparseCharSet.size() == 0 ? 0 : mSparseCharSet.back().hi_codepoint;
+        return empty() ? 0 : std::get<1>(back());
     }
 
-    void insert_range(const codepoint_t lo_codepoint, const codepoint_t hi_codepoint);
+    void insert_range(const codepoint_t lo, const codepoint_t hi);
 
-    void remove_range(const codepoint_t lo_codepoint, const codepoint_t hi_codepoint);
+    void remove_range(const codepoint_t lo, const codepoint_t hi);
 
     inline void insert(const codepoint_t codepoint) {
         insert_range(codepoint, codepoint);
@@ -153,9 +144,10 @@ protected:
         insert_range(lo_codepoint, hi_codepoint);
     }
     CC(const CC * cc1, const CC * cc2);
+
 private:    
-    CharSetVector mSparseCharSet;
-    static CharSetAllocator mCharSetAllocator;
+    IntervalVector mSparseCharSet;
+    static IntervalAllocator mCharSetAllocator;
 };
 
 inline static CC::iterator begin(CC & cc) {
@@ -174,6 +166,31 @@ inline static CC::const_iterator end(const CC & cc) {
     return cc.cend();
 }
 
+inline codepoint_t & lo_codepoint(CC::reference i) {
+    return std::get<0>(i);
+}
+inline codepoint_t lo_codepoint(CC::const_reference i) {
+    return std::get<0>(i);
+}
+inline codepoint_t & lo_codepoint(const CC::iterator i) {
+    return lo_codepoint(*i);
+}
+inline codepoint_t lo_codepoint(const CC::const_iterator i) {
+    return lo_codepoint(*i);
+}
+
+inline codepoint_t & hi_codepoint(CC::reference i) {
+    return std::get<1>(i);
+}
+inline codepoint_t hi_codepoint(CC::const_reference i) {
+    return std::get<1>(i);
+}
+inline codepoint_t & hi_codepoint(const CC::iterator i) {
+    return hi_codepoint(*i);
+}
+inline codepoint_t hi_codepoint(const CC::const_iterator i) {
+    return hi_codepoint(*i);
+}
 
 
 /**
@@ -200,7 +217,7 @@ inline CC * makeCC(const CC * cc1, const CC * cc2) {
     return new CC(cc1, cc2);
 }
 
-CC * subtractCC(const CC * cc1, const CC * cc2);
+CC * subtractCC(const CC * a, const CC * b);
     
 CC * intersectCC(const CC * cc1, const CC * cc2);
 

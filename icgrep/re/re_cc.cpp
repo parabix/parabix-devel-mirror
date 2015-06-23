@@ -8,16 +8,15 @@
 #include <llvm/Support/Compiler.h>
 #include <UCD/CaseFolding_txt.h>
 #include <sstream>
-#include <iostream>
 
 namespace re {
-CC::CharSetAllocator CC::mCharSetAllocator;
+CC::IntervalAllocator CC::mCharSetAllocator;
 
 CC::CC(const CC * cc1, const CC * cc2)
 : RE(ClassTypeId::CC)
 , mSparseCharSet(cc1->cbegin(), cc1->cend(), mCharSetAllocator) {
-    for (const CharSetItem & i : cc2->mSparseCharSet) {
-        insert_range(i.lo_codepoint, i.hi_codepoint);
+    for (const interval_t & i : cc2->mSparseCharSet) {
+        insert_range(lo_codepoint(i), hi_codepoint(i));
     }
 }
 
@@ -29,7 +28,7 @@ CC::CC(const CC & cc)
 
 std::string CC::canonicalName(const CC_type type) const {
     std::stringstream name;
-    // name << std::hex;
+    name << std::hex;
     if ((type == ByteClass) && (max_codepoint() >= 0x80)) {
         name << "BC";
     }
@@ -37,94 +36,88 @@ std::string CC::canonicalName(const CC_type type) const {
         name << "CC";
     }
     char separator = '_';
-    for (const CharSetItem & i : mSparseCharSet) {
+    for (const interval_t & i : mSparseCharSet) {
         name << separator;
-        if (i.lo_codepoint == i.hi_codepoint) {
-            name << i.lo_codepoint;
+        if (lo_codepoint(i) == hi_codepoint(i)) {
+            name << lo_codepoint(i);
         }
         else {
-            name << i.lo_codepoint << '_' << i.hi_codepoint;
+            name << lo_codepoint(i) << '_' << hi_codepoint(i);
         }
         separator = ',';
     }
     return name.str();
 }
 
-void CC::insert_range(const codepoint_t lo_codepoint, const codepoint_t hi_codepoint) {
+void CC::insert_range(const codepoint_t lo, const codepoint_t hi) {
     for (auto i = mSparseCharSet.begin(); i != mSparseCharSet.end(); ) {
-        CharSetItem & range = *i;
-        if (hi_codepoint < range.lo_codepoint - 1) {
-            mSparseCharSet.emplace(i, lo_codepoint, hi_codepoint);
+        if (hi < lo_codepoint(i) - 1) {
+            mSparseCharSet.emplace(i, lo, hi);
             return;
         }
-        else if (lo_codepoint > range.hi_codepoint + 1) {
+        else if (lo > hi_codepoint(i) + 1) {
             ++i;
         }
         else {
             // ranges overlap; expand the range to include the prior one and
             // remove the old one from the list
-            range.lo_codepoint = std::min(range.lo_codepoint, lo_codepoint);
-            range.hi_codepoint = std::max(range.hi_codepoint, hi_codepoint);
+            lo_codepoint(i) = std::min(lo_codepoint(i), lo);
+            hi_codepoint(i) = std::max(hi_codepoint(i), hi);
             return;
         }
     }
-    mSparseCharSet.emplace_back(lo_codepoint, hi_codepoint);
+    mSparseCharSet.emplace_back(lo, hi);
 }
 
-void CC::remove_range(const codepoint_t lo_codepoint, const codepoint_t hi_codepoint) {
+void CC::remove_range(const codepoint_t lo, const codepoint_t hi) {
     for (auto i = mSparseCharSet.begin(); i != mSparseCharSet.end(); ) {
-        CharSetItem & range = *i;
-        if (lo_codepoint > range.hi_codepoint + 1) {
+        if (lo > hi_codepoint(i) + 1) {
             ++i;
         }
-        else if (hi_codepoint < range.lo_codepoint - 1) {
+        else if (hi < lo_codepoint(i) - 1) {
             break;
         }
-        else if (lo_codepoint <= range.lo_codepoint && hi_codepoint >= range.hi_codepoint) {
+        else if (lo <= lo_codepoint(i) && hi >= hi_codepoint(i)) {
             i = mSparseCharSet.erase(i);
         }
-        else if (lo_codepoint <= range.lo_codepoint) {
-            range.lo_codepoint = hi_codepoint + 1;
+        else if (lo <= lo_codepoint(i)) {
+            lo_codepoint(i) = hi + 1;
             break;
         }
-        else if (hi_codepoint >= range.hi_codepoint) {
-            range.hi_codepoint = lo_codepoint - 1;
+        else if (hi >= hi_codepoint(i)) {
+            hi_codepoint(i) = lo - 1;
             ++i;
         }
-        else {
-            CharSetItem item(hi_codepoint + 1, range.hi_codepoint);
-            range.hi_codepoint = lo_codepoint - 1;
-            mSparseCharSet.insert(++i, std::move(item));
+        else {         
+            mSparseCharSet.emplace(++i, hi + 1, hi_codepoint(i));
+            hi_codepoint(i) = lo - 1;
             break;
         }
     }
 }
 
-CC * subtractCC(const CC * cc1, const CC * cc2) {
+CC * subtractCC(const CC * a, const CC * b) {
     CC * diff = makeCC();
-    auto ai = cc1->cbegin();
-    const auto ai_end = cc1->cend();
-    auto bi = cc2->cbegin();
-    const auto bi_end = cc2->cend();
-    while (ai != ai_end && bi != bi_end) {
-        const CharSetItem & ra = *ai;
-        const CharSetItem & rb = *bi;
-        if (rb.hi_codepoint < ra.lo_codepoint) {
-            ++bi;
+    auto i = a->cbegin();
+    const auto i_end = a->cend();
+    auto j = b->cbegin();
+    const auto j_end = b->cend();
+    while (i != i_end && j != j_end) {
+        if (hi_codepoint(j) < lo_codepoint(i)) {
+            ++j;
         }
         else { // test whether the intervals overlap
-            if (ra.lo_codepoint < rb.lo_codepoint) {
-                diff->insert_range(ra.lo_codepoint, std::min(rb.lo_codepoint - 1, ra.hi_codepoint));
+            if (lo_codepoint(i) < lo_codepoint(j)) {
+                diff->insert_range(lo_codepoint(i), std::min(lo_codepoint(j) - 1, hi_codepoint(i)));
             }
-            if (ra.hi_codepoint > rb.hi_codepoint) {
-                diff->insert_range(std::max(rb.hi_codepoint + 1, ra.lo_codepoint), ra.hi_codepoint);
+            if (hi_codepoint(i) > hi_codepoint(j)) {
+                diff->insert_range(std::max(hi_codepoint(j) + 1, lo_codepoint(i)), hi_codepoint(i));
             }
-            ++ai;
+            ++i;
         }
     }
-    for (; ai != ai_end; ++ai) {
-        const CharSetItem & ra = *ai;
-        diff->insert_range(ra.lo_codepoint, ra.hi_codepoint);
+    for (; i != i_end; ++i) {
+        diff->insert_range(lo_codepoint(i), hi_codepoint(i));
     }
     return diff;
 }
@@ -136,17 +129,15 @@ CC * intersectCC(const CC * a, const CC * b) {
     auto bi = b->cbegin();
     const auto bi_end = b->cend();
     while (ai != ai_end && bi != bi_end) {
-        const CharSetItem & ra = *ai;
-        const CharSetItem & rb = *bi;
-        if (ra.hi_codepoint < rb.lo_codepoint) {
+        if (hi_codepoint(ai) < lo_codepoint(bi)) {
             ++ai;
         }
-        else if (rb.hi_codepoint < ra.lo_codepoint) {
+        else if (hi_codepoint(bi) < lo_codepoint(ai)) {
             ++bi;
         }
         else {
-            isect->insert_range(std::max(ra.lo_codepoint, rb.lo_codepoint), std::min(ra.hi_codepoint, rb.hi_codepoint));
-            if (ra.hi_codepoint < rb.hi_codepoint) {
+            isect->insert_range(std::max(lo_codepoint(ai), lo_codepoint(bi)), std::min(hi_codepoint(ai), hi_codepoint(bi)));
+            if (hi_codepoint(ai) < hi_codepoint(bi)) {
                 ++ai;
             }
             else {
@@ -159,8 +150,8 @@ CC * intersectCC(const CC * a, const CC * b) {
     
 CC * caseInsensitize(const CC * cc) {
     CC * cci = makeCC();
-    for (const CharSetItem & i : *cc) {
-        caseInsensitiveInsertRange(cci, i.lo_codepoint, i.hi_codepoint);
+    for (const interval_t & i : *cc) {
+        caseInsensitiveInsertRange(cci, lo_codepoint(i), hi_codepoint(i));
     }
     return cci;
 }
@@ -174,9 +165,9 @@ CC * caseInsensitize(const CC * cc) {
 CC * rangeIntersect(const CC * cc, const codepoint_t lo, const codepoint_t hi) {
     assert ("cc cannot be null" && cc);
     CC * intersect = makeCC();
-    for (const auto & p : *cc) {
-        if ((p.lo_codepoint <= hi) && (p.hi_codepoint >= lo)) {
-            intersect->insert_range(std::max(lo, p.lo_codepoint), std::min(hi, p.hi_codepoint));
+    for (const auto & i : *cc) {
+        if ((lo_codepoint(i) <= hi) && (hi_codepoint(i) >= lo)) {
+            intersect->insert_range(std::max(lo, lo_codepoint(i)), std::min(hi, hi_codepoint(i)));
         }
     }
     return intersect;
@@ -195,13 +186,13 @@ CC * rangeGaps(const CC * cc, const codepoint_t lo, const codepoint_t hi) {
     if (cp < hi) {
         auto i = cc->cbegin(), end = cc->cend();
         for (; i != end && cp < hi; ++i) {
-            if (i->hi_codepoint < cp) {
+            if (hi_codepoint(i) < cp) {
                 continue;
             }
-            else if (i->lo_codepoint > cp) {
-                gaps->insert_range(cp, i->lo_codepoint - 1);
+            else if (lo_codepoint(i) > cp) {
+                gaps->insert_range(cp, lo_codepoint(i) - 1);
             }
-            cp = i->hi_codepoint + 1;
+            cp = hi_codepoint(i) + 1;
         }
         if (cp < hi) {
             gaps->insert_range(cp, hi);
@@ -220,8 +211,8 @@ CC * outerRanges(const CC * cc) {
     auto i = cc->cbegin();
     const auto end = cc->cend();
     for (auto j = i; ++j != end; ) {
-        if (j->hi_codepoint > i->hi_codepoint) {
-            ranges->insert_range(i->lo_codepoint, i->hi_codepoint);
+        if (hi_codepoint(j) > hi_codepoint(i)) {
+            ranges->insert_range(lo_codepoint(i), hi_codepoint(i));
             i = j;
         }
     }
@@ -238,8 +229,8 @@ CC * innerRanges(const CC * cc) {
     auto i = cc->cbegin();
     const auto end = cc->cend();
     for (auto j = i; ++j != end; ) {
-        if (j->hi_codepoint <= i->hi_codepoint) {
-            ranges->insert_range(j->lo_codepoint, j->hi_codepoint);
+        if (hi_codepoint(j) <= hi_codepoint(i)) {
+            ranges->insert_range(lo_codepoint(j), hi_codepoint(j));
         }
         else {
             i = j;

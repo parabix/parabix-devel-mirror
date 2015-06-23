@@ -320,4 +320,3 @@ UCD/unicode_set.cpp
 UCD/unicode_set.h
 ../ucd/ucdcompiler.cpp
 ../ucd/ucdcompiler.hpp
-../ucd/utf8-util.hpp

@@ -58,7 +58,7 @@ private:
     
     RE * extend_item(RE * re);
 
-    void parse_range_bound(int & lower_bound, int & upper_bound);
+    void parse_range_bound(int & lo_codepoint, int & hi_codepoint);
 
     unsigned parse_int();
     

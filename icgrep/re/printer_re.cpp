@@ -48,11 +48,10 @@ const std::string Printer_RE::PrintRE(const RE * re)
         retVal += re_cc->canonicalName(UnicodeClass);
         retVal += "\" ";
 
-        for (const CharSetItem & item : *re_cc)
-        {
+        for (const auto & i : *re_cc) {
             retVal += "[";
-            retVal += std::to_string(item.lo_codepoint) + ",";
-            retVal += std::to_string(item.hi_codepoint);
+            retVal += std::to_string(lo_codepoint(i)) + ",";
+            retVal += std::to_string(hi_codepoint(i));
             retVal += "]";
         }
     }
