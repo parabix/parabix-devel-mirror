@@ -8,7 +8,9 @@
 #include "CaseFolding_txt.h"
 #include <algorithm>
 
-int findFoldEntry(codepoint_t cp) {
+using namespace re;
+
+int findFoldEntry(const codepoint_t cp) {
     int lo = 0;
     int hi = foldTableSize;
     while (hi - lo > 1) {
@@ -23,11 +25,7 @@ int findFoldEntry(codepoint_t cp) {
     return lo;
 }
 
-void caseInsensitiveInsert(re::CC * cc, codepoint_t cp) {
-    caseInsensitiveInsertRange(cc, cp, cp);
-}
-
-void caseInsensitiveInsertRange(re::CC * cc, codepoint_t lo, codepoint_t hi) {
+void caseInsensitiveInsertRange(CC * cc, const codepoint_t lo, const codepoint_t hi) {
     cc->insert_range(lo, hi);
     // Find the first foldTable entry overlapping the (lo, hi) range.
     int e = findFoldEntry(lo);

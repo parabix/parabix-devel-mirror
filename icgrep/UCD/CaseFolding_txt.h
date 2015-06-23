@@ -13,18 +13,17 @@
 #include "re/re_re.h"
 #include "re/re_cc.h"
 
-typedef unsigned codepoint_t;
-
 struct FoldEntry {
-    codepoint_t range_lo;
+    re::codepoint_t range_lo;
     int fold_offset;
-    std::vector<std::pair<codepoint_t, codepoint_t> > fold_pairs;
+    std::vector<std::pair<re::codepoint_t, re::codepoint_t> > fold_pairs;
 };
 
-void caseInsensitiveInsert(re::CC * cc, codepoint_t cp);
+void caseInsensitiveInsertRange(re::CC * cc, const re::codepoint_t lo, const re::codepoint_t hi);
 
-void caseInsensitiveInsertRange(re::CC * cc, codepoint_t lo, codepoint_t hi);
-    
+inline void caseInsensitiveInsert(re::CC * cc, const re::codepoint_t cp) {
+    caseInsensitiveInsertRange(cc, cp, cp);
+}
 
 const int foldTableSize = 216;
 

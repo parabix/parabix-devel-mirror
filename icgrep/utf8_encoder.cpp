@@ -38,11 +38,11 @@ RE * UTF8_Encoder::toUTF8(CC_NameMap & nameMap, RE * ast) {
 }
 
 RE * UTF8_Encoder::rangeToUTF8(const interval_t & item) {
-    const auto min = lenUTF8(lo_codepoint(item));
-    const auto max = lenUTF8(hi_codepoint(item));
+    const auto min = length(lo_codepoint(item));
+    const auto max = length(hi_codepoint(item));
     if (min < max) {
         const auto m = maxCodePoint(min);
-        return makeAlt({rangeToUTF8(interval_t(lo_codepoint(item), m)), rangeToUTF8(interval_t(m + 1, hi_codepoint(item)))});
+        return makeAlt({rangeToUTF8(std::make_pair(lo_codepoint(item), m)), rangeToUTF8(std::make_pair(m + 1, hi_codepoint(item)))});
     }
     else {
         return rangeToUTF8(lo_codepoint(item), hi_codepoint(item), 1, max);
@@ -51,8 +51,8 @@ RE * UTF8_Encoder::rangeToUTF8(const interval_t & item) {
 
 RE * UTF8_Encoder::rangeToUTF8(const codepoint_t lo, const codepoint_t hi, const unsigned index, const unsigned max)
 {
-    const codepoint_t hbyte = u8byte(hi, index);
-    const codepoint_t lbyte = u8byte(lo, index);
+    const codepoint_t hbyte = encodingByte(hi, index);
+    const codepoint_t lbyte = encodingByte(lo, index);
     if (index == max) {
         return makeByteRange(lbyte, hbyte);
     }
@@ -75,13 +75,13 @@ RE * UTF8_Encoder::rangeToUTF8(const codepoint_t lo, const codepoint_t hi, const
     }
 }
 
-inline bool UTF8_Encoder::isUTF8Prefix(const codepoint_t cp) {
+bool UTF8_Encoder::isPrefix(const codepoint_t cp) {
     return (cp >= 0xC2) && (cp <= 0xF4);
 }
 
-inline codepoint_t UTF8_Encoder::u8byte(const codepoint_t cp, const unsigned n) {
+codepoint_t UTF8_Encoder::encodingByte(const codepoint_t cp, const unsigned n) {
     codepoint_t retVal = 0;
-    const unsigned len = lenUTF8(cp);
+    const unsigned len = length(cp);
     if (n == 1) {
         switch (len) {
             case 1: retVal = cp; break;
@@ -96,7 +96,7 @@ inline codepoint_t UTF8_Encoder::u8byte(const codepoint_t cp, const unsigned n) 
     return retVal;
 }
 
-inline unsigned UTF8_Encoder::lenUTF8(const codepoint_t cp) {
+unsigned UTF8_Encoder::length(const codepoint_t cp) {
     if (cp <= 0x7F) {
         return 1;
     }
@@ -111,7 +111,7 @@ inline unsigned UTF8_Encoder::lenUTF8(const codepoint_t cp) {
     }
 }
 
-inline codepoint_t UTF8_Encoder::maxCodePoint(const unsigned length) {
+codepoint_t UTF8_Encoder::maxCodePoint(const unsigned length) {
     if (length == 1) {
         return 0x7F;
     }
@@ -127,26 +127,38 @@ inline codepoint_t UTF8_Encoder::maxCodePoint(const unsigned length) {
     throw std::runtime_error("Unexpected UTF8 Length: " + std::to_string(length));
 }
 
-inline bool UTF8_Encoder::isLowCodePointAfterByte(const codepoint_t cp, const unsigned index) {
-    const auto l = lenUTF8(cp);
-    for (auto i = index; i != l; ++i) {
-        if (u8byte(cp, i + 1) != 0x80) {
+bool UTF8_Encoder::isLowCodePointAfterByte(const codepoint_t cp, const unsigned n) {
+    const auto l = length(cp);
+    for (auto i = n; i != l; ++i) {
+        if (encodingByte(cp, i + 1) != 0x80) {
             return false;
         }
     }
     return true;
 }
 
-inline bool UTF8_Encoder::isHighCodePointAfterByte(const codepoint_t cp, const unsigned index) {
-    const auto l = lenUTF8(cp);
-    for (auto i = index; i != l; ++i) {
-        if (u8byte(cp, i + 1) != 0xBF) {
+bool UTF8_Encoder::isHighCodePointAfterByte(const codepoint_t cp, const unsigned n) {
+    const auto l = length(cp);
+    for (auto i = n; i != l; ++i) {
+        if (encodingByte(cp, i + 1) != 0xBF) {
             return false;
         }
     }
     return true;
 }
 
+codepoint_t UTF8_Encoder::minCodePointWithCommonBytes(const re::codepoint_t cp, const unsigned n) {
+    const auto len = length(cp);
+    const auto mask = (static_cast<codepoint_t>(1) << (len - n) * 6) - 1;
+    const auto lo_cp = cp &~ mask;
+    return (lo_cp == 0) ? mask + 1 : lo_cp;
+}
+
+codepoint_t UTF8_Encoder::maxCodePointWithCommonBytes(const re::codepoint_t cp, const unsigned n) {
+    const auto len = length(cp);
+    const auto mask = (static_cast<codepoint_t>(1) << (len - n) * 6) - 1;
+    return cp | mask;
+}
 
 inline CC * UTF8_Encoder::makeByteRange(const codepoint_t lo, const codepoint_t hi) {
     return makeCC(lo, hi);
