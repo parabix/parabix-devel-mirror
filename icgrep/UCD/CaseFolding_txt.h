@@ -16,7 +16,7 @@
 struct FoldEntry {
     re::codepoint_t range_lo;
     int fold_offset;
-    std::vector<std::pair<re::codepoint_t, re::codepoint_t> > fold_pairs;
+    std::vector<re::interval_t> fold_pairs;
 };
 
 void caseInsensitiveInsertRange(re::CC * cc, const re::codepoint_t lo, const re::codepoint_t hi);

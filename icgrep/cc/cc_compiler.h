@@ -21,7 +21,7 @@ public:
 
     using Vars = std::vector<pablo::Var *>;
 
-    CC_Compiler(pablo::PabloBlock & entry, const Encoding encoding, const std::string basis_pattern = "basis");
+    CC_Compiler(pablo::PabloBlock & entry, const Encoding & encoding, const std::string basis_pattern = "basis");
 
     const Vars & getBasisBits(const CC_NameMap & nameMap) const;
 
@@ -56,7 +56,7 @@ private:
 private:    
     pablo::PabloBuilder         mBuilder;
     std::vector<pablo::Var *>   mBasisBit;
-    const Encoding              mEncoding;
+    const Encoding &            mEncoding;
 };
 
 inline pablo::Assign * CC_Compiler::compileCC(const re::CC *cc) {

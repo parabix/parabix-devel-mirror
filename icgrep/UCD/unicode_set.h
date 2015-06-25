@@ -2,6 +2,7 @@
 #define UNICODE_SET_H
 #include <stdint.h>
 #include <vector>
+#include <re/re_cc.h>
 #include <boost/iterator/iterator_facade.hpp>
 
 //
@@ -44,19 +45,23 @@ class UnicodeSet;
 class UnicodeSet {
 public:
 
-    class iterator : public boost::iterator_facade<iterator, const UnicodeSet &, boost::forward_traversal_tag, std::pair<RunStructure, bitquad_t>> {
+    class quad_iterator : public boost::iterator_facade<quad_iterator, const std::pair<RunStructure, bitquad_t>, boost::forward_traversal_tag> {
         friend class UnicodeSet;
-    public:
-        iterator(const UnicodeSet & set, unsigned runIndex) : mUnicodeSet(set), mRunIndex(runIndex), mOffset(0), mQuadIndex(0) {}
-    protected:
         friend class boost::iterator_core_access;
+    protected:
+        quad_iterator(const UnicodeSet & set, unsigned runIndex) : mUnicodeSet(set), mRunIndex(runIndex), mOffset(0), mQuadIndex(0) {}
+
         void advance(unsigned n);
+
         const std::pair<RunStructure, bitquad_t> dereference() const;
+
         inline void increment() {
             advance(1);
         }
-        inline bool equal(iterator const& other) const {
-            return (mRunIndex == other.mRunIndex) && (&(mUnicodeSet) == &(other.mUnicodeSet)) && (mQuadIndex == other.mQuadIndex) && (mOffset == other.mOffset);
+
+        inline bool equal(quad_iterator const& other) const {
+            assert (&(mUnicodeSet) == &(other.mUnicodeSet));
+            return (mRunIndex == other.mRunIndex) && (mQuadIndex == other.mQuadIndex) && (mOffset == other.mOffset);
         }
     private:
         const UnicodeSet &          mUnicodeSet;
@@ -65,12 +70,57 @@ public:
         unsigned                    mQuadIndex;
     };
 
+    class iterator : public boost::iterator_facade<iterator, re::interval_t, boost::forward_traversal_tag, re::interval_t> {
+        friend class UnicodeSet;
+        friend class boost::iterator_core_access;
+    protected:
+        iterator(const UnicodeSet & set, unsigned runIndex, unsigned quadIndex)
+        : mUnicodeSet(set), mRunIndex(runIndex), mQuadIndex(quadIndex), mQuadOffset(0)
+        , mQuadRunIndex(0), mBaseCodePoint(0), mLeft(0), mRight(0)
+        {
+
+        }
+
+        void advance(unsigned n);
+
+        re::interval_t dereference() const {
+            return std::make_pair(mLeft, mRight);
+        }
+
+        inline void increment() {
+            advance(1);
+        }
+
+        inline bool equal(iterator const & other) const {
+            assert (&(mUnicodeSet) == &(other.mUnicodeSet));
+            return (mRunIndex == other.mRunIndex) && (mQuadIndex == other.mQuadIndex) &&
+                   (mQuadOffset == other.mQuadOffset) && (mQuadRunIndex == other.mQuadRunIndex);
+        }
+    private:
+        const UnicodeSet &      mUnicodeSet;
+        unsigned                mRunIndex;
+        unsigned                mQuadIndex;
+        bitquad_t               mQuadOffset;
+        unsigned                mQuadRunIndex;
+        unsigned                mBaseCodePoint;
+        re::codepoint_t         mLeft;
+        re::codepoint_t         mRight;
+    };
+
+    inline quad_iterator quad_begin() const {
+        return quad_iterator(*this, 0);
+    }
+
+    inline quad_iterator quad_end() const {
+        return quad_iterator(*this, runs.size());
+    }
+
     inline iterator begin() const {
-        return iterator(*this, 0);
+        return iterator(*this, 0,0);
     }
 
     inline iterator end() const {
-        return iterator(*this, runs.size());
+        return iterator(*this, runs.size(), quads.size());
     }
 
 //

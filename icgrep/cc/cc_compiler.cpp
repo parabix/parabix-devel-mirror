@@ -26,7 +26,7 @@ using namespace pablo;
 
 namespace cc {
 
-CC_Compiler::CC_Compiler(PabloBlock & entry, const Encoding encoding, const std::string basis_pattern)
+CC_Compiler::CC_Compiler(PabloBlock & entry, const Encoding & encoding, const std::string basis_pattern)
 : mBuilder(entry)
 , mBasisBit(encoding.getBits())
 , mEncoding(encoding)

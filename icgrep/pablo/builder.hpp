@@ -11,6 +11,10 @@ public:
 
     PabloBuilder(PabloBlock & pb) : mPb(pb) {}
 
+    inline static PabloBuilder Create(PabloBuilder & parent) {
+        return PabloBuilder(parent.getPabloBlock().Create(parent.getPabloBlock()), parent);
+    }
+
     inline Zeroes * createZeroes() const {
         return mPb.createZeroes();
     }
@@ -99,6 +103,14 @@ public:
     inline Statement * getInsertPoint() const {
         return mPb.getInsertPoint();
     }
+
+    inline PabloBlock & getPabloBlock() {
+        return mPb;
+    }
+
+protected:
+
+    PabloBuilder(PabloBlock & pb, PabloBuilder & parent) : mPb(pb), mExprTable(&(parent.mExprTable)) {}
 
 private:
 

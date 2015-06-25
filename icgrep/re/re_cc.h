@@ -126,7 +126,10 @@ protected:
     friend CC * makeCC(const codepoint_t codepoint);
     friend CC * makeCC(const codepoint_t lo, const codepoint_t hi);
     friend CC * makeCC(const CC * cc1, const CC * cc2);
+    friend CC * makeCC(const std::initializer_list<interval_t> list);
+    friend CC * makeCC(const std::vector<interval_t> & list);
     friend CC * subtractCC(const CC * cc1, const CC * cc2);
+
     inline CC()
     : RE(ClassTypeId::CC)
     , mSparseCharSet(mCharSetAllocator) {
@@ -145,6 +148,8 @@ protected:
     }
     CC(const CC * cc1, const CC * cc2);
 
+    template <typename itr>
+    CC * initialize(itr begin, itr end);
 private:    
     IntervalVector mSparseCharSet;
     static IntervalAllocator mCharSetAllocator;
@@ -166,10 +171,10 @@ inline static CC::const_iterator end(const CC & cc) {
     return cc.cend();
 }
 
-inline codepoint_t & lo_codepoint(CC::reference i) {
+inline codepoint_t & lo_codepoint(interval_t & i) {
     return std::get<0>(i);
 }
-inline codepoint_t lo_codepoint(CC::const_reference i) {
+inline codepoint_t lo_codepoint(const interval_t & i) {
     return std::get<0>(i);
 }
 inline codepoint_t & lo_codepoint(const CC::iterator i) {
@@ -179,10 +184,10 @@ inline codepoint_t lo_codepoint(const CC::const_iterator i) {
     return lo_codepoint(*i);
 }
 
-inline codepoint_t & hi_codepoint(CC::reference i) {
+inline codepoint_t & hi_codepoint(interval_t & i) {
     return std::get<1>(i);
 }
-inline codepoint_t hi_codepoint(CC::const_reference i) {
+inline codepoint_t hi_codepoint(const interval_t & i) {
     return std::get<1>(i);
 }
 inline codepoint_t & hi_codepoint(const CC::iterator i) {
@@ -190,6 +195,16 @@ inline codepoint_t & hi_codepoint(const CC::iterator i) {
 }
 inline codepoint_t hi_codepoint(const CC::const_iterator i) {
     return hi_codepoint(*i);
+}
+
+template<typename itr>
+CC * CC::initialize(itr begin, itr end) {
+    mSparseCharSet.resize(std::distance(begin, end));
+    for (auto i = begin; i != end; ++i) {
+        assert (i == begin || lo_codepoint(i) > max_codepoint());
+        mSparseCharSet[std::distance(begin, i)] = *i;
+    }
+    return this;
 }
 
 
@@ -217,19 +232,19 @@ inline CC * makeCC(const CC * cc1, const CC * cc2) {
     return new CC(cc1, cc2);
 }
 
+inline CC * makeCC(const std::initializer_list<interval_t> list) {
+    return makeCC()->initialize(list.begin(), list.end());
+}
+
+inline CC * makeCC(const std::vector<interval_t> & list) {
+    return makeCC()->initialize(list.begin(), list.end());
+}
+
 CC * subtractCC(const CC * a, const CC * b);
     
 CC * intersectCC(const CC * cc1, const CC * cc2);
 
 CC * caseInsensitize(const CC * cc);
-
-CC * rangeIntersect(const CC * cc, const codepoint_t lo, const codepoint_t hi);
-
-CC * rangeGaps(const CC * cc, const codepoint_t lo, const codepoint_t hi);
-
-CC * outerRanges(const CC * cc);
-
-CC * innerRanges(const CC * cc);
 
 }
 
