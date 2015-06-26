@@ -8,3 +8,4 @@ pablo/optimizers
 ../cudd-2.5.1/util
 UCD
 ../ucd
+../QA/unit-tests

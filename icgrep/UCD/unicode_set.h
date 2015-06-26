@@ -29,6 +29,10 @@
 // Default: 64 codepoints (k=6).
 //
 
+namespace llvm {
+class raw_ostream;
+}
+
 typedef uint32_t bitquad_t;
 
 // The representation for runs
@@ -41,42 +45,20 @@ struct RunStructure {
 };
 
 class UnicodeSet;
-
+    using codepoint_t = re::codepoint_t;
+    using interval_t = re::interval_t;
+    using RunVector = std::vector<RunStructure>;
+    using QuadVector = std::vector<bitquad_t>;
 class UnicodeSet {
 public:
-
-    class quad_iterator : public boost::iterator_facade<quad_iterator, const std::pair<RunStructure, bitquad_t>, boost::forward_traversal_tag> {
-        friend class UnicodeSet;
-        friend class boost::iterator_core_access;
-    protected:
-        quad_iterator(const UnicodeSet & set, unsigned runIndex) : mUnicodeSet(set), mRunIndex(runIndex), mOffset(0), mQuadIndex(0) {}
-
-        void advance(unsigned n);
-
-        const std::pair<RunStructure, bitquad_t> dereference() const;
-
-        inline void increment() {
-            advance(1);
-        }
-
-        inline bool equal(quad_iterator const& other) const {
-            assert (&(mUnicodeSet) == &(other.mUnicodeSet));
-            return (mRunIndex == other.mRunIndex) && (mQuadIndex == other.mQuadIndex) && (mOffset == other.mOffset);
-        }
-    private:
-        const UnicodeSet &          mUnicodeSet;
-        unsigned                    mRunIndex;
-        unsigned                    mOffset;
-        unsigned                    mQuadIndex;
-    };
 
     class iterator : public boost::iterator_facade<iterator, re::interval_t, boost::forward_traversal_tag, re::interval_t> {
         friend class UnicodeSet;
         friend class boost::iterator_core_access;
     protected:
-        iterator(const UnicodeSet & set, unsigned runIndex, unsigned quadIndex)
-        : mUnicodeSet(set), mRunIndex(runIndex), mQuadIndex(quadIndex), mQuadOffset(0)
-        , mQuadRunIndex(0), mBaseCodePoint(0), mLeft(0), mRight(0)
+        iterator(RunVector::const_iterator runIterator, QuadVector::const_iterator quadIterator)
+        : mRunIterator(runIterator), mQuadIterator(quadIterator), mQuadOffset(0)
+        , mQuadPosition(0), mBaseCodePoint(0), mMinCodePoint(0), mMaxCodePoint(0)
         {
 
         }
@@ -84,7 +66,7 @@ public:
         void advance(unsigned n);
 
         re::interval_t dereference() const {
-            return std::make_pair(mLeft, mRight);
+            return std::make_pair(mMinCodePoint, mMaxCodePoint);
         }
 
         inline void increment() {
@@ -93,18 +75,78 @@ public:
 
         inline bool equal(iterator const & other) const {
             assert (&(mUnicodeSet) == &(other.mUnicodeSet));
-            return (mRunIndex == other.mRunIndex) && (mQuadIndex == other.mQuadIndex) &&
-                   (mQuadOffset == other.mQuadOffset) && (mQuadRunIndex == other.mQuadRunIndex);
+            return (mRunIterator == other.mRunIterator) && (mQuadIterator == other.mQuadIterator);
         }
     private:
-        const UnicodeSet &      mUnicodeSet;
-        unsigned                mRunIndex;
-        unsigned                mQuadIndex;
-        bitquad_t               mQuadOffset;
-        unsigned                mQuadRunIndex;
-        unsigned                mBaseCodePoint;
-        re::codepoint_t         mLeft;
-        re::codepoint_t         mRight;
+        RunVector::const_iterator   mRunIterator;
+        QuadVector::const_iterator  mQuadIterator;
+        bitquad_t                   mQuadOffset;
+        unsigned                    mQuadPosition;
+        unsigned                    mBaseCodePoint;
+        re::codepoint_t             mMinCodePoint;
+        re::codepoint_t             mMaxCodePoint;
+    };
+
+    inline iterator begin() const {
+        return iterator(runs.cbegin(), quads.cbegin());
+    }
+
+    inline iterator end() const {
+        return iterator(runs.cend(), quads.cend());
+    }
+
+    bool contains(const codepoint_t codepoint) const;
+
+    void dump(llvm::raw_ostream & out) const;
+
+    UnicodeSet complement() const;
+    UnicodeSet operator & (const UnicodeSet & other) const;
+    UnicodeSet operator + (const UnicodeSet & other) const;
+    UnicodeSet operator - (const UnicodeSet & other) const;
+    UnicodeSet operator ^ (const UnicodeSet & other) const;
+
+    UnicodeSet();
+    UnicodeSet(const codepoint_t codepoint);
+    UnicodeSet(const codepoint_t lo_codepoint, const codepoint_t hi_codepoint);
+    UnicodeSet(std::initializer_list<RunStructure> r, std::initializer_list<bitquad_t> q) : runs(r), quads(q) {}
+
+protected:
+
+    class quad_iterator : public boost::iterator_facade<quad_iterator, std::pair<RunStructure, bitquad_t>, boost::random_access_traversal_tag> {
+        friend class UnicodeSet;
+        friend class boost::iterator_core_access;
+    public:
+        quad_iterator(const UnicodeSet & set, unsigned runIndex) : mUnicodeSet(set), mRunIndex(runIndex), mOffset(0), mQuadIndex(0) {}
+
+        void advance(unsigned n);
+
+        inline const std::pair<RunStructure, bitquad_t> dereference() const {
+            return std::make_pair(getRun(), getQuad());
+        }
+
+        inline void increment() {
+            advance(1);
+        }
+
+        inline RunStructure getRun() const {
+            const auto & t = mUnicodeSet.runs[mRunIndex];
+            return RunStructure(t.mType, t.mRunLength - mOffset);
+        }
+
+        inline bitquad_t getQuad() const {
+            return mUnicodeSet.quads[mQuadIndex];
+        }
+
+        inline bool equal(const quad_iterator & other) const {
+            assert (&(mUnicodeSet) == &(other.mUnicodeSet));
+            return (mRunIndex == other.mRunIndex);
+        }
+
+    private:
+        const UnicodeSet &          mUnicodeSet;
+        unsigned                    mRunIndex;
+        unsigned                    mOffset;
+        unsigned                    mQuadIndex;
     };
 
     inline quad_iterator quad_begin() const {
@@ -115,42 +157,40 @@ public:
         return quad_iterator(*this, runs.size());
     }
 
-    inline iterator begin() const {
-        return iterator(*this, 0,0);
-    }
+    friend class UnicodeSet::quad_iterator;
 
-    inline iterator end() const {
-        return iterator(*this, runs.size(), quads.size());
-    }
+    // Internal helper functions
+    void append_run(const run_type_t type, const unsigned length);
+    void append_quad(const bitquad_t quad);
 
-//
-//  The internal fields for a UnicodeSet.
+private:
+
+    // The internal fields for a UnicodeSet.
     std::vector<RunStructure>   runs;
     std::vector<bitquad_t>      quads;
-    unsigned quad_count;
     
-//  
-//  Internal helper functions
-    void append_run(run_type_t run_type, int run_length);
-    void append_quad(bitquad_t q);
-//
-//  Nullary constructor for incremental building.
-    UnicodeSet() : quad_count(0) {}
-//
-//  Ternary constructor for constant construction using precomputed data.
-    UnicodeSet(std::initializer_list<RunStructure> r, std::initializer_list<bitquad_t> q, unsigned c) : runs(r), quads(q), quad_count(c) {}
+
 };
 
-void Dump_uset(UnicodeSet s);
-UnicodeSet empty_uset();
-UnicodeSet singleton_uset(int codepoint);
-UnicodeSet range_uset(int lo_codepoint, int hi_codepoint);
-UnicodeSet uset_complement (const UnicodeSet &s);
-UnicodeSet uset_union(const UnicodeSet & s1, const UnicodeSet & s2);
-UnicodeSet uset_intersection(const UnicodeSet &s1, const UnicodeSet &s2);
-UnicodeSet uset_difference(const UnicodeSet &s1, const UnicodeSet &s2);
-UnicodeSet uset_symmetric_difference(const UnicodeSet & s1, const UnicodeSet & s2);
-bool uset_member(const UnicodeSet & s, int codepoint);
+inline UnicodeSet uset_complement(const UnicodeSet & s) {
+    return s.complement();
+}
+
+inline UnicodeSet uset_intersection(const UnicodeSet & s1, const UnicodeSet & s2) {
+    return s1 & s2;
+}
+
+inline UnicodeSet uset_union(const UnicodeSet & s1, const UnicodeSet & s2) {
+    return s1 + s2;
+}
+
+inline UnicodeSet uset_difference(const UnicodeSet & s1, const UnicodeSet & s2) {
+    return s1 - s2;
+}
+
+inline UnicodeSet uset_symmetric_difference(const UnicodeSet & s1, const UnicodeSet & s2) {
+    return s1 ^ s2;
+}
 
 #endif
 

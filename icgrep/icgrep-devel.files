@@ -320,3 +320,7 @@ UCD/unicode_set.cpp
 UCD/unicode_set.h
 ../ucd/ucdcompiler.cpp
 ../ucd/ucdcompiler.hpp
+UCD/ucd_compiler.cpp
+UCD/ucd_compiler.hpp
+UCD/PropertyObjects.cpp
+../QA/unit-tests/unicode_set_tests.hpp

@@ -22,11 +22,12 @@
 #include "UCD/PropertyObjectTable.h"
 #include "UCD/PropertyValueAliases.h"
 
+using namespace UCD;
 
 class UnicodePropertyExpressionError : public std::exception {
 public:
-    UnicodePropertyExpressionError(const std::string && msg) noexcept : _msg(msg) {};
-    const char* what() const noexcept { return _msg.c_str();};
+    UnicodePropertyExpressionError(const std::string && msg) noexcept : _msg(msg) {}
+    const char* what() const noexcept { return _msg.c_str();}
 private:
     inline UnicodePropertyExpressionError() noexcept {}
     const std::string _msg;

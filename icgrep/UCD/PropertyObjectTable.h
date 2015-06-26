@@ -10,6 +10,7 @@
 
 #include "PropertyObjects.h"
 #include "PropertyAliases.h"
+#include <array>
 #include "Blocks.h"
 #include "Scripts.h"
 #include "ScriptExtensions.h"
@@ -22,8 +23,8 @@
 
 namespace UCD {
 
-  PropertyObject* property_object_table[] = {
-      new UnsupportedPropertyObject(cjkAccountingNumeric, PropertyObject::ClassTypeId::NumericProperty),
+  const std::array<PropertyObject *, 117> property_object_table = {{
+    new UnsupportedPropertyObject(cjkAccountingNumeric, PropertyObject::ClassTypeId::NumericProperty),
     new UnsupportedPropertyObject(cjkOtherNumeric, PropertyObject::ClassTypeId::NumericProperty),
     new UnsupportedPropertyObject(cjkPrimaryNumeric, PropertyObject::ClassTypeId::NumericProperty),
     new UnsupportedPropertyObject(nv, PropertyObject::ClassTypeId::NumericProperty),
@@ -139,7 +140,7 @@ namespace UCD {
     new UnsupportedPropertyObject(XO_NFC, PropertyObject::ClassTypeId::BinaryProperty),
     new UnsupportedPropertyObject(XO_NFD, PropertyObject::ClassTypeId::BinaryProperty),
     new UnsupportedPropertyObject(XO_NFKC, PropertyObject::ClassTypeId::BinaryProperty),
-    new UnsupportedPropertyObject(XO_NFKD, PropertyObject::ClassTypeId::BinaryProperty)  };
+    new UnsupportedPropertyObject(XO_NFKD, PropertyObject::ClassTypeId::BinaryProperty)  }};
 }
 
 #endif
