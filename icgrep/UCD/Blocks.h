@@ -16,688 +16,517 @@ namespace UCD {
   namespace BLK_ns {
     const UnicodeSet aegean_numbers_Set 
       {{{Empty, 2056}, {Full, 2}, {Empty, 32758}},
-       {}}
-;
+       {}};
     const UnicodeSet alchemical_Set 
       {{{Empty, 4024}, {Full, 4}, {Empty, 30788}},
-       {}}
-;
+       {}};
     const UnicodeSet alphabetic_pf_Set 
       {{{Empty, 2008}, {Full, 2}, {Mixed, 1}, {Empty, 32805}},
-       {0x0000ffff}}
-;
+       {0x0000ffff}};
     const UnicodeSet ancient_greek_music_Set 
       {{{Empty, 3728}, {Full, 2}, {Mixed, 1}, {Empty, 31085}},
-       {0x0000ffff}}
-;
+       {0x0000ffff}};
     const UnicodeSet ancient_greek_numbers_Set 
       {{{Empty, 2058}, {Full, 2}, {Mixed, 1}, {Empty, 32755}},
-       {0x0000ffff}}
-;
+       {0x0000ffff}};
     const UnicodeSet ancient_symbols_Set 
       {{{Empty, 2060}, {Mixed, 1}, {Full, 1}, {Mixed, 1}, {Empty, 32753}},
-       {0xffff0000, 0x0000ffff}}
-;
+       {0xffff0000, 0x0000ffff}};
     const UnicodeSet arabic_Set 
       {{{Empty, 48}, {Full, 8}, {Empty, 34760}},
-       {}}
-;
+       {}};
     const UnicodeSet arabic_ext_a_Set 
       {{{Empty, 69}, {Full, 3}, {Empty, 34744}},
-       {}}
-;
+       {}};
     const UnicodeSet arabic_math_Set 
       {{{Empty, 3952}, {Full, 8}, {Empty, 30856}},
-       {}}
-;
+       {}};
     const UnicodeSet arabic_pf_a_Set 
       {{{Empty, 2010}, {Mixed, 1}, {Full, 21}, {Empty, 32784}},
-       {0xffff0000}}
-;
+       {0xffff0000}};
     const UnicodeSet arabic_pf_b_Set 
       {{{Empty, 2035}, {Mixed, 1}, {Full, 4}, {Empty, 32776}},
-       {0xffff0000}}
-;
+       {0xffff0000}};
     const UnicodeSet arabic_sup_Set 
       {{{Empty, 58}, {Mixed, 1}, {Full, 1}, {Empty, 34756}},
-       {0xffff0000}}
-;
+       {0xffff0000}};
     const UnicodeSet armenian_Set 
       {{{Empty, 41}, {Mixed, 1}, {Full, 2}, {Mixed, 1}, {Empty, 34771}},
-       {0xffff0000, 0x0000ffff}}
-;
+       {0xffff0000, 0x0000ffff}};
     const UnicodeSet arrows_Set 
       {{{Empty, 268}, {Mixed, 1}, {Full, 3}, {Empty, 34544}},
-       {0xffff0000}}
-;
+       {0xffff0000}};
     const UnicodeSet ascii_Set 
       {{{Full, 4}, {Empty, 34812}},
-       {}}
-;
+       {}};
     const UnicodeSet avestan_Set 
       {{{Empty, 2136}, {Full, 2}, {Empty, 32678}},
-       {}}
-;
+       {}};
     const UnicodeSet balinese_Set 
       {{{Empty, 216}, {Full, 4}, {Empty, 34596}},
-       {}}
-;
+       {}};
     const UnicodeSet bamum_Set 
       {{{Empty, 1333}, {Full, 3}, {Empty, 33480}},
-       {}}
-;
+       {}};
     const UnicodeSet bamum_sup_Set 
       {{{Empty, 2880}, {Full, 18}, {Empty, 31918}},
-       {}}
-;
+       {}};
     const UnicodeSet bassa_vah_Set 
       {{{Empty, 2902}, {Mixed, 1}, {Full, 1}, {Empty, 31912}},
-       {0xffff0000}}
-;
+       {0xffff0000}};
     const UnicodeSet batak_Set 
       {{{Empty, 222}, {Full, 2}, {Empty, 34592}},
-       {}}
-;
+       {}};
     const UnicodeSet bengali_Set 
       {{{Empty, 76}, {Full, 4}, {Empty, 34736}},
-       {}}
-;
+       {}};
     const UnicodeSet block_elements_Set 
       {{{Empty, 300}, {Full, 1}, {Empty, 34515}},
-       {}}
-;
+       {}};
     const UnicodeSet bopomofo_Set 
       {{{Empty, 392}, {Full, 1}, {Mixed, 1}, {Empty, 34422}},
-       {0x0000ffff}}
-;
+       {0x0000ffff}};
     const UnicodeSet bopomofo_ext_Set 
       {{{Empty, 397}, {Full, 1}, {Empty, 34418}},
-       {}}
-;
+       {}};
     const UnicodeSet box_drawing_Set 
       {{{Empty, 296}, {Full, 4}, {Empty, 34516}},
-       {}}
-;
+       {}};
     const UnicodeSet brahmi_Set 
       {{{Empty, 2176}, {Full, 4}, {Empty, 32636}},
-       {}}
-;
+       {}};
     const UnicodeSet braille_Set 
       {{{Empty, 320}, {Full, 8}, {Empty, 34488}},
-       {}}
-;
+       {}};
     const UnicodeSet buginese_Set 
       {{{Empty, 208}, {Full, 1}, {Empty, 34607}},
-       {}}
-;
+       {}};
     const UnicodeSet buhid_Set 
       {{{Empty, 186}, {Full, 1}, {Empty, 34629}},
-       {}}
-;
+       {}};
     const UnicodeSet byzantine_music_Set 
       {{{Empty, 3712}, {Full, 8}, {Empty, 31096}},
-       {}}
-;
+       {}};
     const UnicodeSet carian_Set 
       {{{Empty, 2069}, {Full, 2}, {Empty, 32745}},
-       {}}
-;
+       {}};
     const UnicodeSet caucasian_albanian_Set 
       {{{Empty, 2089}, {Mixed, 1}, {Full, 1}, {Mixed, 1}, {Empty, 32724}},
-       {0xffff0000, 0x0000ffff}}
-;
+       {0xffff0000, 0x0000ffff}};
     const UnicodeSet chakma_Set 
       {{{Empty, 2184}, {Full, 2}, {Mixed, 1}, {Empty, 32629}},
-       {0x0000ffff}}
-;
+       {0x0000ffff}};
     const UnicodeSet cham_Set 
       {{{Empty, 1360}, {Full, 3}, {Empty, 33453}},
-       {}}
-;
+       {}};
     const UnicodeSet cherokee_Set 
       {{{Empty, 157}, {Full, 3}, {Empty, 34656}},
-       {}}
-;
+       {}};
     const UnicodeSet cjk_Set 
       {{{Empty, 624}, {Full, 656}, {Empty, 33536}},
-       {}}
-;
+       {}};
     const UnicodeSet cjk_compat_Set 
       {{{Empty, 408}, {Full, 8}, {Empty, 34400}},
-       {}}
-;
+       {}};
     const UnicodeSet cjk_compat_forms_Set 
       {{{Empty, 2033}, {Mixed, 2}, {Empty, 32781}},
-       {0xffff0000, 0x0000ffff}}
-;
+       {0xffff0000, 0x0000ffff}};
     const UnicodeSet cjk_compat_ideographs_Set 
       {{{Empty, 1992}, {Full, 16}, {Empty, 32808}},
-       {}}
-;
+       {}};
     const UnicodeSet cjk_compat_ideographs_sup_Set 
       {{{Empty, 6080}, {Full, 17}, {Empty, 28719}},
-       {}}
-;
+       {}};
     const UnicodeSet cjk_ext_a_Set 
       {{{Empty, 416}, {Full, 206}, {Empty, 34194}},
-       {}}
-;
+       {}};
     const UnicodeSet cjk_ext_b_Set 
       {{{Empty, 4096}, {Full, 1335}, {Empty, 29385}},
-       {}}
-;
+       {}};
     const UnicodeSet cjk_ext_c_Set 
       {{{Empty, 5432}, {Full, 130}, {Empty, 29254}},
-       {}}
-;
+       {}};
     const UnicodeSet cjk_ext_d_Set 
       {{{Empty, 5562}, {Full, 7}, {Empty, 29247}},
-       {}}
-;
+       {}};
     const UnicodeSet cjk_radicals_sup_Set 
       {{{Empty, 372}, {Full, 4}, {Empty, 34440}},
-       {}}
-;
+       {}};
     const UnicodeSet cjk_strokes_Set 
       {{{Empty, 398}, {Full, 1}, {Mixed, 1}, {Empty, 34416}},
-       {0x0000ffff}}
-;
+       {0x0000ffff}};
     const UnicodeSet cjk_symbols_Set 
       {{{Empty, 384}, {Full, 2}, {Empty, 34430}},
-       {}}
-;
+       {}};
     const UnicodeSet compat_jamo_Set 
       {{{Empty, 393}, {Mixed, 1}, {Full, 2}, {Mixed, 1}, {Empty, 34419}},
-       {0xffff0000, 0x0000ffff}}
-;
+       {0xffff0000, 0x0000ffff}};
     const UnicodeSet control_pictures_Set 
       {{{Empty, 288}, {Full, 2}, {Empty, 34526}},
-       {}}
-;
+       {}};
     const UnicodeSet coptic_Set 
       {{{Empty, 356}, {Full, 4}, {Empty, 34456}},
-       {}}
-;
+       {}};
     const UnicodeSet coptic_epact_numbers_Set 
       {{{Empty, 2071}, {Full, 1}, {Empty, 32744}},
-       {}}
-;
+       {}};
     const UnicodeSet counting_rod_Set 
       {{{Empty, 3739}, {Full, 1}, {Empty, 31076}},
-       {}}
-;
+       {}};
     const UnicodeSet cuneiform_Set 
       {{{Empty, 2304}, {Full, 32}, {Empty, 32480}},
-       {}}
-;
+       {}};
     const UnicodeSet cuneiform_numbers_Set 
       {{{Empty, 2336}, {Full, 4}, {Empty, 32476}},
-       {}}
-;
+       {}};
     const UnicodeSet currency_symbols_Set 
       {{{Empty, 261}, {Full, 1}, {Mixed, 1}, {Empty, 34553}},
-       {0x0000ffff}}
-;
+       {0x0000ffff}};
     const UnicodeSet cypriot_syllabary_Set 
       {{{Empty, 2112}, {Full, 2}, {Empty, 32702}},
-       {}}
-;
+       {}};
     const UnicodeSet cyrillic_Set 
       {{{Empty, 32}, {Full, 8}, {Empty, 34776}},
-       {}}
-;
+       {}};
     const UnicodeSet cyrillic_ext_a_Set 
       {{{Empty, 367}, {Full, 1}, {Empty, 34448}},
-       {}}
-;
+       {}};
     const UnicodeSet cyrillic_ext_b_Set 
       {{{Empty, 1330}, {Full, 3}, {Empty, 33483}},
-       {}}
-;
+       {}};
     const UnicodeSet cyrillic_sup_Set 
       {{{Empty, 40}, {Full, 1}, {Mixed, 1}, {Empty, 34774}},
-       {0x0000ffff}}
-;
+       {0x0000ffff}};
     const UnicodeSet deseret_Set 
       {{{Empty, 2080}, {Full, 2}, {Mixed, 1}, {Empty, 32733}},
-       {0x0000ffff}}
-;
+       {0x0000ffff}};
     const UnicodeSet devanagari_Set 
       {{{Empty, 72}, {Full, 4}, {Empty, 34740}},
-       {}}
-;
+       {}};
     const UnicodeSet devanagari_ext_Set 
       {{{Empty, 1351}, {Full, 1}, {Empty, 33464}},
-       {}}
-;
+       {}};
     const UnicodeSet diacriticals_Set 
       {{{Empty, 24}, {Full, 3}, {Mixed, 1}, {Empty, 34788}},
-       {0x0000ffff}}
-;
+       {0x0000ffff}};
     const UnicodeSet diacriticals_ext_Set 
       {{{Empty, 213}, {Mixed, 1}, {Full, 2}, {Empty, 34600}},
-       {0xffff0000}}
-;
+       {0xffff0000}};
     const UnicodeSet diacriticals_for_symbols_Set 
       {{{Empty, 262}, {Mixed, 1}, {Full, 1}, {Empty, 34552}},
-       {0xffff0000}}
-;
+       {0xffff0000}};
     const UnicodeSet diacriticals_sup_Set 
       {{{Empty, 238}, {Full, 2}, {Empty, 34576}},
-       {}}
-;
+       {}};
     const UnicodeSet dingbats_Set 
       {{{Empty, 312}, {Full, 6}, {Empty, 34498}},
-       {}}
-;
+       {}};
     const UnicodeSet domino_Set 
       {{{Empty, 3969}, {Mixed, 1}, {Full, 3}, {Empty, 30843}},
-       {0xffff0000}}
-;
+       {0xffff0000}};
     const UnicodeSet duployan_Set 
       {{{Empty, 3552}, {Full, 5}, {Empty, 31259}},
-       {}}
-;
+       {}};
     const UnicodeSet egyptian_hieroglyphs_Set 
       {{{Empty, 2432}, {Full, 33}, {Mixed, 1}, {Empty, 32350}},
-       {0x0000ffff}}
-;
+       {0x0000ffff}};
     const UnicodeSet elbasan_Set 
       {{{Empty, 2088}, {Full, 1}, {Mixed, 1}, {Empty, 32726}},
-       {0x0000ffff}}
-;
+       {0x0000ffff}};
     const UnicodeSet emoticons_Set 
       {{{Empty, 4016}, {Full, 2}, {Mixed, 1}, {Empty, 30797}},
-       {0x0000ffff}}
-;
+       {0x0000ffff}};
     const UnicodeSet enclosed_alphanum_Set 
       {{{Empty, 291}, {Full, 5}, {Empty, 34520}},
-       {}}
-;
+       {}};
     const UnicodeSet enclosed_alphanum_sup_Set 
       {{{Empty, 3976}, {Full, 8}, {Empty, 30832}},
-       {}}
-;
+       {}};
     const UnicodeSet enclosed_cjk_Set 
       {{{Empty, 400}, {Full, 8}, {Empty, 34408}},
-       {}}
-;
+       {}};
     const UnicodeSet enclosed_ideographic_sup_Set 
       {{{Empty, 3984}, {Full, 8}, {Empty, 30824}},
-       {}}
-;
+       {}};
     const UnicodeSet ethiopic_Set 
       {{{Empty, 144}, {Full, 12}, {Empty, 34660}},
-       {}}
-;
+       {}};
     const UnicodeSet ethiopic_ext_Set 
       {{{Empty, 364}, {Full, 3}, {Empty, 34449}},
-       {}}
-;
+       {}};
     const UnicodeSet ethiopic_ext_a_Set 
       {{{Empty, 1368}, {Full, 1}, {Mixed, 1}, {Empty, 33446}},
-       {0x0000ffff}}
-;
+       {0x0000ffff}};
     const UnicodeSet ethiopic_sup_Set 
       {{{Empty, 156}, {Full, 1}, {Empty, 34659}},
-       {}}
-;
+       {}};
     const UnicodeSet geometric_shapes_Set 
       {{{Empty, 301}, {Full, 3}, {Empty, 34512}},
-       {}}
-;
+       {}};
     const UnicodeSet geometric_shapes_ext_Set 
       {{{Empty, 4028}, {Full, 4}, {Empty, 30784}},
-       {}}
-;
+       {}};
     const UnicodeSet georgian_Set 
       {{{Empty, 133}, {Full, 3}, {Empty, 34680}},
-       {}}
-;
+       {}};
     const UnicodeSet georgian_sup_Set 
       {{{Empty, 360}, {Full, 1}, {Mixed, 1}, {Empty, 34454}},
-       {0x0000ffff}}
-;
+       {0x0000ffff}};
     const UnicodeSet glagolitic_Set 
       {{{Empty, 352}, {Full, 3}, {Empty, 34461}},
-       {}}
-;
+       {}};
     const UnicodeSet gothic_Set 
       {{{Empty, 2073}, {Mixed, 2}, {Empty, 32741}},
-       {0xffff0000, 0x0000ffff}}
-;
+       {0xffff0000, 0x0000ffff}};
     const UnicodeSet grantha_Set 
       {{{Empty, 2200}, {Full, 4}, {Empty, 32612}},
-       {}}
-;
+       {}};
     const UnicodeSet greek_Set 
       {{{Empty, 27}, {Mixed, 1}, {Full, 4}, {Empty, 34784}},
-       {0xffff0000}}
-;
+       {0xffff0000}};
     const UnicodeSet greek_ext_Set 
       {{{Empty, 248}, {Full, 8}, {Empty, 34560}},
-       {}}
-;
+       {}};
     const UnicodeSet gujarati_Set 
       {{{Empty, 84}, {Full, 4}, {Empty, 34728}},
-       {}}
-;
+       {}};
     const UnicodeSet gurmukhi_Set 
       {{{Empty, 80}, {Full, 4}, {Empty, 34732}},
-       {}}
-;
+       {}};
     const UnicodeSet half_and_full_forms_Set 
       {{{Empty, 2040}, {Full, 7}, {Mixed, 1}, {Empty, 32768}},
-       {0x0000ffff}}
-;
+       {0x0000ffff}};
     const UnicodeSet half_marks_Set 
       {{{Empty, 2033}, {Mixed, 1}, {Empty, 32782}},
-       {0x0000ffff}}
-;
+       {0x0000ffff}};
     const UnicodeSet hangul_Set 
       {{{Empty, 1376}, {Full, 349}, {Mixed, 1}, {Empty, 33090}},
-       {0x0000ffff}}
-;
+       {0x0000ffff}};
     const UnicodeSet hanunoo_Set 
       {{{Empty, 185}, {Full, 1}, {Empty, 34630}},
-       {}}
-;
+       {}};
     const UnicodeSet hebrew_Set 
       {{{Empty, 44}, {Mixed, 1}, {Full, 3}, {Empty, 34768}},
-       {0xffff0000}}
-;
+       {0xffff0000}};
     const UnicodeSet high_pu_surrogates_Set 
       {{{Empty, 1756}, {Full, 4}, {Empty, 33056}},
-       {}}
-;
+       {}};
     const UnicodeSet high_surrogates_Set 
       {{{Empty, 1728}, {Full, 28}, {Empty, 33060}},
-       {}}
-;
+       {}};
     const UnicodeSet hiragana_Set 
       {{{Empty, 386}, {Full, 3}, {Empty, 34427}},
-       {}}
-;
+       {}};
     const UnicodeSet idc_Set 
       {{{Empty, 383}, {Mixed, 1}, {Empty, 34432}},
-       {0xffff0000}}
-;
+       {0xffff0000}};
     const UnicodeSet imperial_aramaic_Set 
       {{{Empty, 2114}, {Full, 1}, {Empty, 32701}},
-       {}}
-;
+       {}};
     const UnicodeSet indic_number_forms_Set 
       {{{Empty, 1345}, {Mixed, 1}, {Empty, 33470}},
-       {0xffff0000}}
-;
+       {0xffff0000}};
     const UnicodeSet inscriptional_pahlavi_Set 
       {{{Empty, 2139}, {Full, 1}, {Empty, 32676}},
-       {}}
-;
+       {}};
     const UnicodeSet inscriptional_parthian_Set 
       {{{Empty, 2138}, {Full, 1}, {Empty, 32677}},
-       {}}
-;
+       {}};
     const UnicodeSet ipa_ext_Set 
       {{{Empty, 18}, {Mixed, 1}, {Full, 2}, {Mixed, 1}, {Empty, 34794}},
-       {0xffff0000, 0x0000ffff}}
-;
+       {0xffff0000, 0x0000ffff}};
     const UnicodeSet jamo_Set 
       {{{Empty, 136}, {Full, 8}, {Empty, 34672}},
-       {}}
-;
+       {}};
     const UnicodeSet jamo_ext_a_Set 
       {{{Empty, 1355}, {Full, 1}, {Empty, 33460}},
-       {}}
-;
+       {}};
     const UnicodeSet jamo_ext_b_Set 
       {{{Empty, 1725}, {Mixed, 1}, {Full, 2}, {Empty, 33088}},
-       {0xffff0000}}
-;
+       {0xffff0000}};
     const UnicodeSet javanese_Set 
       {{{Empty, 1356}, {Full, 3}, {Empty, 33457}},
-       {}}
-;
+       {}};
     const UnicodeSet kaithi_Set 
       {{{Empty, 2180}, {Full, 2}, {Mixed, 1}, {Empty, 32633}},
-       {0x0000ffff}}
-;
+       {0x0000ffff}};
     const UnicodeSet kana_sup_Set 
       {{{Empty, 3456}, {Full, 8}, {Empty, 31352}},
-       {}}
-;
+       {}};
     const UnicodeSet kanbun_Set 
       {{{Empty, 396}, {Mixed, 1}, {Empty, 34419}},
-       {0xffff0000}}
-;
+       {0xffff0000}};
     const UnicodeSet kangxi_Set 
       {{{Empty, 376}, {Full, 7}, {Empty, 34433}},
-       {}}
-;
+       {}};
     const UnicodeSet kannada_Set 
       {{{Empty, 100}, {Full, 4}, {Empty, 34712}},
-       {}}
-;
+       {}};
     const UnicodeSet katakana_Set 
       {{{Empty, 389}, {Full, 3}, {Empty, 34424}},
-       {}}
-;
+       {}};
     const UnicodeSet katakana_ext_Set 
       {{{Empty, 399}, {Mixed, 1}, {Empty, 34416}},
-       {0xffff0000}}
-;
+       {0xffff0000}};
     const UnicodeSet kayah_li_Set 
       {{{Empty, 1352}, {Full, 1}, {Mixed, 1}, {Empty, 33462}},
-       {0x0000ffff}}
-;
+       {0x0000ffff}};
     const UnicodeSet kharoshthi_Set 
       {{{Empty, 2128}, {Full, 3}, {Empty, 32685}},
-       {}}
-;
+       {}};
     const UnicodeSet khmer_Set 
       {{{Empty, 188}, {Full, 4}, {Empty, 34624}},
-       {}}
-;
+       {}};
     const UnicodeSet khmer_symbols_Set 
       {{{Empty, 207}, {Full, 1}, {Empty, 34608}},
-       {}}
-;
+       {}};
     const UnicodeSet khojki_Set 
       {{{Empty, 2192}, {Full, 2}, {Mixed, 1}, {Empty, 32621}},
-       {0x0000ffff}}
-;
+       {0x0000ffff}};
     const UnicodeSet khudawadi_Set 
       {{{Empty, 2197}, {Mixed, 1}, {Full, 2}, {Empty, 32616}},
-       {0xffff0000}}
-;
+       {0xffff0000}};
     const UnicodeSet lao_Set 
       {{{Empty, 116}, {Full, 4}, {Empty, 34696}},
-       {}}
-;
+       {}};
     const UnicodeSet latin_1_sup_Set 
       {{{Empty, 4}, {Full, 4}, {Empty, 34808}},
-       {}}
-;
+       {}};
     const UnicodeSet latin_ext_a_Set 
       {{{Empty, 8}, {Full, 4}, {Empty, 34804}},
-       {}}
-;
+       {}};
     const UnicodeSet latin_ext_additional_Set 
       {{{Empty, 240}, {Full, 8}, {Empty, 34568}},
-       {}}
-;
+       {}};
     const UnicodeSet latin_ext_b_Set 
       {{{Empty, 12}, {Full, 6}, {Mixed, 1}, {Empty, 34797}},
-       {0x0000ffff}}
-;
+       {0x0000ffff}};
     const UnicodeSet latin_ext_c_Set 
       {{{Empty, 355}, {Full, 1}, {Empty, 34460}},
-       {}}
-;
+       {}};
     const UnicodeSet latin_ext_d_Set 
       {{{Empty, 1337}, {Full, 7}, {Empty, 33472}},
-       {}}
-;
+       {}};
     const UnicodeSet latin_ext_e_Set 
       {{{Empty, 1369}, {Mixed, 1}, {Full, 1}, {Mixed, 1}, {Empty, 33444}},
-       {0xffff0000, 0x0000ffff}}
-;
+       {0xffff0000, 0x0000ffff}};
     const UnicodeSet lepcha_Set 
       {{{Empty, 224}, {Full, 2}, {Mixed, 1}, {Empty, 34589}},
-       {0x0000ffff}}
-;
+       {0x0000ffff}};
     const UnicodeSet letterlike_symbols_Set 
       {{{Empty, 264}, {Full, 2}, {Mixed, 1}, {Empty, 34549}},
-       {0x0000ffff}}
-;
+       {0x0000ffff}};
     const UnicodeSet limbu_Set 
       {{{Empty, 200}, {Full, 2}, {Mixed, 1}, {Empty, 34613}},
-       {0x0000ffff}}
-;
+       {0x0000ffff}};
     const UnicodeSet linear_a_Set 
       {{{Empty, 2096}, {Full, 12}, {Empty, 32708}},
-       {}}
-;
+       {}};
     const UnicodeSet linear_b_ideograms_Set 
       {{{Empty, 2052}, {Full, 4}, {Empty, 32760}},
-       {}}
-;
+       {}};
     const UnicodeSet linear_b_syllabary_Set 
       {{{Empty, 2048}, {Full, 4}, {Empty, 32764}},
-       {}}
-;
+       {}};
     const UnicodeSet lisu_Set 
       {{{Empty, 1318}, {Mixed, 1}, {Full, 1}, {Empty, 33496}},
-       {0xffff0000}}
-;
+       {0xffff0000}};
     const UnicodeSet low_surrogates_Set 
       {{{Empty, 1760}, {Full, 32}, {Empty, 33024}},
-       {}}
-;
+       {}};
     const UnicodeSet lycian_Set 
       {{{Empty, 2068}, {Full, 1}, {Empty, 32747}},
-       {}}
-;
+       {}};
     const UnicodeSet lydian_Set 
       {{{Empty, 2121}, {Full, 1}, {Empty, 32694}},
-       {}}
-;
+       {}};
     const UnicodeSet mahajani_Set 
       {{{Empty, 2186}, {Mixed, 1}, {Full, 1}, {Empty, 32628}},
-       {0xffff0000}}
-;
+       {0xffff0000}};
     const UnicodeSet mahjong_Set 
       {{{Empty, 3968}, {Full, 1}, {Mixed, 1}, {Empty, 30846}},
-       {0x0000ffff}}
-;
+       {0x0000ffff}};
     const UnicodeSet malayalam_Set 
       {{{Empty, 104}, {Full, 4}, {Empty, 34708}},
-       {}}
-;
+       {}};
     const UnicodeSet mandaic_Set 
       {{{Empty, 66}, {Full, 1}, {Empty, 34749}},
-       {}}
-;
+       {}};
     const UnicodeSet manichaean_Set 
       {{{Empty, 2134}, {Full, 2}, {Empty, 32680}},
-       {}}
-;
+       {}};
     const UnicodeSet math_alphanum_Set 
       {{{Empty, 3744}, {Full, 32}, {Empty, 31040}},
-       {}}
-;
+       {}};
     const UnicodeSet math_operators_Set 
       {{{Empty, 272}, {Full, 8}, {Empty, 34536}},
-       {}}
-;
+       {}};
     const UnicodeSet meetei_mayek_Set 
       {{{Empty, 1374}, {Full, 2}, {Empty, 33440}},
-       {}}
-;
+       {}};
     const UnicodeSet meetei_mayek_ext_Set 
       {{{Empty, 1367}, {Full, 1}, {Empty, 33448}},
-       {}}
-;
+       {}};
     const UnicodeSet mende_kikakui_Set 
       {{{Empty, 3904}, {Full, 7}, {Empty, 30905}},
-       {}}
-;
+       {}};
     const UnicodeSet meroitic_cursive_Set 
       {{{Empty, 2125}, {Full, 3}, {Empty, 32688}},
-       {}}
-;
+       {}};
     const UnicodeSet meroitic_hieroglyphs_Set 
       {{{Empty, 2124}, {Full, 1}, {Empty, 32691}},
-       {}}
-;
+       {}};
     const UnicodeSet miao_Set 
       {{{Empty, 2936}, {Full, 5}, {Empty, 31875}},
-       {}}
-;
+       {}};
     const UnicodeSet misc_arrows_Set 
       {{{Empty, 344}, {Full, 8}, {Empty, 34464}},
-       {}}
-;
+       {}};
     const UnicodeSet misc_math_symbols_a_Set 
       {{{Empty, 318}, {Full, 1}, {Mixed, 1}, {Empty, 34496}},
-       {0x0000ffff}}
-;
+       {0x0000ffff}};
     const UnicodeSet misc_math_symbols_b_Set 
       {{{Empty, 332}, {Full, 4}, {Empty, 34480}},
-       {}}
-;
+       {}};
     const UnicodeSet misc_pictographs_Set 
       {{{Empty, 3992}, {Full, 24}, {Empty, 30800}},
-       {}}
-;
+       {}};
     const UnicodeSet misc_symbols_Set 
       {{{Empty, 304}, {Full, 8}, {Empty, 34504}},
-       {}}
-;
+       {}};
     const UnicodeSet misc_technical_Set 
       {{{Empty, 280}, {Full, 8}, {Empty, 34528}},
-       {}}
-;
+       {}};
     const UnicodeSet modi_Set 
       {{{Empty, 2224}, {Full, 3}, {Empty, 32589}},
-       {}}
-;
+       {}};
     const UnicodeSet modifier_letters_Set 
       {{{Empty, 21}, {Mixed, 1}, {Full, 2}, {Empty, 34792}},
-       {0xffff0000}}
-;
+       {0xffff0000}};
     const UnicodeSet modifier_tone_letters_Set 
       {{{Empty, 1336}, {Full, 1}, {Empty, 33479}},
-       {}}
-;
+       {}};
     const UnicodeSet mongolian_Set 
       {{{Empty, 192}, {Full, 5}, {Mixed, 1}, {Empty, 34618}},
-       {0x0000ffff}}
-;
+       {0x0000ffff}};
     const UnicodeSet mro_Set 
       {{{Empty, 2898}, {Full, 1}, {Mixed, 1}, {Empty, 31916}},
-       {0x0000ffff}}
-;
+       {0x0000ffff}};
     const UnicodeSet music_Set 
       {{{Empty, 3720}, {Full, 8}, {Empty, 31088}},
-       {}}
-;
+       {}};
     const UnicodeSet myanmar_Set 
       {{{Empty, 128}, {Full, 5}, {Empty, 34683}},
-       {}}
-;
+       {}};
     const UnicodeSet myanmar_ext_a_Set 
       {{{Empty, 1363}, {Full, 1}, {Empty, 33452}},
-       {}}
-;
+       {}};
     const UnicodeSet myanmar_ext_b_Set 
       {{{Empty, 1359}, {Full, 1}, {Empty, 33456}},
-       {}}
-;
+       {}};
     const UnicodeSet nabataean_Set 
       {{{Empty, 2116}, {Full, 1}, {Mixed, 1}, {Empty, 32698}},
-       {0x0000ffff}}
-;
+       {0x0000ffff}};
     const UnicodeSet nb_Set 
       {{{Empty, 67}, {Full, 2}, {Empty, 159}, {Full, 2}, {Empty, 153},
         {Mixed, 1}, {Empty, 987}, {Mixed, 1}, {Full, 2}, {Empty, 690},
@@ -721,332 +550,250 @@ namespace UCD {
        {0x0000ffff, 0xffff0000, 0xffff0000, 0xffff0000, 0xffff0000,
         0xffff0000, 0xffff0000, 0xffff0000, 0x0000ffff, 0xffff0000,
         0xffff0000, 0xffff0000, 0x0000ffff, 0xffff0000, 0xffff0000,
-        0xffff0000, 0xffff0000}}
-;
+        0xffff0000, 0xffff0000}};
     const UnicodeSet new_tai_lue_Set 
       {{{Empty, 204}, {Full, 3}, {Empty, 34609}},
-       {}}
-;
+       {}};
     const UnicodeSet nko_Set 
       {{{Empty, 62}, {Full, 2}, {Empty, 34752}},
-       {}}
-;
+       {}};
     const UnicodeSet number_forms_Set 
       {{{Empty, 266}, {Mixed, 1}, {Full, 1}, {Mixed, 1}, {Empty, 34547}},
-       {0xffff0000, 0x0000ffff}}
-;
+       {0xffff0000, 0x0000ffff}};
     const UnicodeSet ocr_Set 
       {{{Empty, 290}, {Full, 1}, {Empty, 34525}},
-       {}}
-;
+       {}};
     const UnicodeSet ogham_Set 
       {{{Empty, 180}, {Full, 1}, {Empty, 34635}},
-       {}}
-;
+       {}};
     const UnicodeSet ol_chiki_Set 
       {{{Empty, 226}, {Mixed, 1}, {Full, 1}, {Empty, 34588}},
-       {0xffff0000}}
-;
+       {0xffff0000}};
     const UnicodeSet old_italic_Set 
       {{{Empty, 2072}, {Full, 1}, {Mixed, 1}, {Empty, 32742}},
-       {0x0000ffff}}
-;
+       {0x0000ffff}};
     const UnicodeSet old_north_arabian_Set 
       {{{Empty, 2132}, {Full, 1}, {Empty, 32683}},
-       {}}
-;
+       {}};
     const UnicodeSet old_permic_Set 
       {{{Empty, 2074}, {Mixed, 1}, {Full, 1}, {Empty, 32740}},
-       {0xffff0000}}
-;
+       {0xffff0000}};
     const UnicodeSet old_persian_Set 
       {{{Empty, 2077}, {Full, 2}, {Empty, 32737}},
-       {}}
-;
+       {}};
     const UnicodeSet old_south_arabian_Set 
       {{{Empty, 2131}, {Full, 1}, {Empty, 32684}},
-       {}}
-;
+       {}};
     const UnicodeSet old_turkic_Set 
       {{{Empty, 2144}, {Full, 2}, {Mixed, 1}, {Empty, 32669}},
-       {0x0000ffff}}
-;
+       {0x0000ffff}};
     const UnicodeSet oriya_Set 
       {{{Empty, 88}, {Full, 4}, {Empty, 34724}},
-       {}}
-;
+       {}};
     const UnicodeSet ornamental_dingbats_Set 
       {{{Empty, 4018}, {Mixed, 1}, {Full, 1}, {Empty, 30796}},
-       {0xffff0000}}
-;
+       {0xffff0000}};
     const UnicodeSet osmanya_Set 
       {{{Empty, 2084}, {Full, 1}, {Mixed, 1}, {Empty, 32730}},
-       {0x0000ffff}}
-;
+       {0x0000ffff}};
     const UnicodeSet pahawh_hmong_Set 
       {{{Empty, 2904}, {Full, 4}, {Mixed, 1}, {Empty, 31907}},
-       {0x0000ffff}}
-;
+       {0x0000ffff}};
     const UnicodeSet palmyrene_Set 
       {{{Empty, 2115}, {Full, 1}, {Empty, 32700}},
-       {}}
-;
+       {}};
     const UnicodeSet pau_cin_hau_Set 
       {{{Empty, 2262}, {Full, 2}, {Empty, 32552}},
-       {}}
-;
+       {}};
     const UnicodeSet phags_pa_Set 
       {{{Empty, 1346}, {Full, 2}, {Empty, 33468}},
-       {}}
-;
+       {}};
     const UnicodeSet phaistos_Set 
       {{{Empty, 2062}, {Mixed, 1}, {Full, 1}, {Empty, 32752}},
-       {0xffff0000}}
-;
+       {0xffff0000}};
     const UnicodeSet phoenician_Set 
       {{{Empty, 2120}, {Full, 1}, {Empty, 32695}},
-       {}}
-;
+       {}};
     const UnicodeSet phonetic_ext_Set 
       {{{Empty, 232}, {Full, 4}, {Empty, 34580}},
-       {}}
-;
+       {}};
     const UnicodeSet phonetic_ext_sup_Set 
       {{{Empty, 236}, {Full, 2}, {Empty, 34578}},
-       {}}
-;
+       {}};
     const UnicodeSet playing_cards_Set 
       {{{Empty, 3973}, {Full, 3}, {Empty, 30840}},
-       {}}
-;
+       {}};
     const UnicodeSet psalter_pahlavi_Set 
       {{{Empty, 2140}, {Full, 1}, {Mixed, 1}, {Empty, 32674}},
-       {0x0000ffff}}
-;
+       {0x0000ffff}};
     const UnicodeSet pua_Set 
       {{{Empty, 1792}, {Full, 200}, {Empty, 32824}},
-       {}}
-;
+       {}};
     const UnicodeSet punctuation_Set 
       {{{Empty, 256}, {Full, 3}, {Mixed, 1}, {Empty, 34556}},
-       {0x0000ffff}}
-;
+       {0x0000ffff}};
     const UnicodeSet rejang_Set 
       {{{Empty, 1353}, {Mixed, 1}, {Full, 1}, {Empty, 33461}},
-       {0xffff0000}}
-;
+       {0xffff0000}};
     const UnicodeSet rumi_Set 
       {{{Empty, 2163}, {Full, 1}, {Empty, 32652}},
-       {}}
-;
+       {}};
     const UnicodeSet runic_Set 
       {{{Empty, 181}, {Full, 3}, {Empty, 34632}},
-       {}}
-;
+       {}};
     const UnicodeSet samaritan_Set 
       {{{Empty, 64}, {Full, 2}, {Empty, 34750}},
-       {}}
-;
+       {}};
     const UnicodeSet saurashtra_Set 
       {{{Empty, 1348}, {Full, 3}, {Empty, 33465}},
-       {}}
-;
+       {}};
     const UnicodeSet sharada_Set 
       {{{Empty, 2188}, {Full, 3}, {Empty, 32625}},
-       {}}
-;
+       {}};
     const UnicodeSet shavian_Set 
       {{{Empty, 2082}, {Mixed, 1}, {Full, 1}, {Empty, 32732}},
-       {0xffff0000}}
-;
+       {0xffff0000}};
     const UnicodeSet shorthand_format_controls_Set 
       {{{Empty, 3557}, {Mixed, 1}, {Empty, 31258}},
-       {0x0000ffff}}
-;
+       {0x0000ffff}};
     const UnicodeSet siddham_Set 
       {{{Empty, 2220}, {Full, 4}, {Empty, 32592}},
-       {}}
-;
+       {}};
     const UnicodeSet sinhala_Set 
       {{{Empty, 108}, {Full, 4}, {Empty, 34704}},
-       {}}
-;
+       {}};
     const UnicodeSet sinhala_archaic_numbers_Set 
       {{{Empty, 2191}, {Full, 1}, {Empty, 32624}},
-       {}}
-;
+       {}};
     const UnicodeSet small_forms_Set 
       {{{Empty, 2034}, {Mixed, 2}, {Empty, 32780}},
-       {0xffff0000, 0x0000ffff}}
-;
+       {0xffff0000, 0x0000ffff}};
     const UnicodeSet sora_sompeng_Set 
       {{{Empty, 2182}, {Mixed, 1}, {Full, 1}, {Empty, 32632}},
-       {0xffff0000}}
-;
+       {0xffff0000}};
     const UnicodeSet specials_Set 
       {{{Empty, 2047}, {Mixed, 1}, {Empty, 32768}},
-       {0xffff0000}}
-;
+       {0xffff0000}};
     const UnicodeSet sundanese_Set 
       {{{Empty, 220}, {Full, 2}, {Empty, 34594}},
-       {}}
-;
+       {}};
     const UnicodeSet sundanese_sup_Set 
       {{{Empty, 230}, {Mixed, 1}, {Empty, 34585}},
-       {0x0000ffff}}
-;
+       {0x0000ffff}};
     const UnicodeSet sup_arrows_a_Set 
       {{{Empty, 319}, {Mixed, 1}, {Empty, 34496}},
-       {0xffff0000}}
-;
+       {0xffff0000}};
     const UnicodeSet sup_arrows_b_Set 
       {{{Empty, 328}, {Full, 4}, {Empty, 34484}},
-       {}}
-;
+       {}};
     const UnicodeSet sup_arrows_c_Set 
       {{{Empty, 4032}, {Full, 8}, {Empty, 30776}},
-       {}}
-;
+       {}};
     const UnicodeSet sup_math_operators_Set 
       {{{Empty, 336}, {Full, 8}, {Empty, 34472}},
-       {}}
-;
+       {}};
     const UnicodeSet sup_pua_a_Set 
       {{{Empty, 30720}, {Full, 2048}, {Empty, 2048}},
-       {}}
-;
+       {}};
     const UnicodeSet sup_pua_b_Set 
       {{{Empty, 32768}, {Full, 2048}},
-       {}}
-;
+       {}};
     const UnicodeSet sup_punctuation_Set 
       {{{Empty, 368}, {Full, 4}, {Empty, 34444}},
-       {}}
-;
+       {}};
     const UnicodeSet super_and_sub_Set 
       {{{Empty, 259}, {Mixed, 1}, {Full, 1}, {Empty, 34555}},
-       {0xffff0000}}
-;
+       {0xffff0000}};
     const UnicodeSet syloti_nagri_Set 
       {{{Empty, 1344}, {Full, 1}, {Mixed, 1}, {Empty, 33470}},
-       {0x0000ffff}}
-;
+       {0x0000ffff}};
     const UnicodeSet syriac_Set 
       {{{Empty, 56}, {Full, 2}, {Mixed, 1}, {Empty, 34757}},
-       {0x0000ffff}}
-;
+       {0x0000ffff}};
     const UnicodeSet tagalog_Set 
       {{{Empty, 184}, {Full, 1}, {Empty, 34631}},
-       {}}
-;
+       {}};
     const UnicodeSet tagbanwa_Set 
       {{{Empty, 187}, {Full, 1}, {Empty, 34628}},
-       {}}
-;
+       {}};
     const UnicodeSet tags_Set 
       {{{Empty, 28672}, {Full, 4}, {Empty, 6140}},
-       {}}
-;
+       {}};
     const UnicodeSet tai_le_Set 
       {{{Empty, 202}, {Mixed, 1}, {Full, 1}, {Empty, 34612}},
-       {0xffff0000}}
-;
+       {0xffff0000}};
     const UnicodeSet tai_tham_Set 
       {{{Empty, 209}, {Full, 4}, {Mixed, 1}, {Empty, 34602}},
-       {0x0000ffff}}
-;
+       {0x0000ffff}};
     const UnicodeSet tai_viet_Set 
       {{{Empty, 1364}, {Full, 3}, {Empty, 33449}},
-       {}}
-;
+       {}};
     const UnicodeSet tai_xuan_jing_Set 
       {{{Empty, 3736}, {Full, 3}, {Empty, 31077}},
-       {}}
-;
+       {}};
     const UnicodeSet takri_Set 
       {{{Empty, 2228}, {Full, 2}, {Mixed, 1}, {Empty, 32585}},
-       {0x0000ffff}}
-;
+       {0x0000ffff}};
     const UnicodeSet tamil_Set 
       {{{Empty, 92}, {Full, 4}, {Empty, 34720}},
-       {}}
-;
+       {}};
     const UnicodeSet telugu_Set 
       {{{Empty, 96}, {Full, 4}, {Empty, 34716}},
-       {}}
-;
+       {}};
     const UnicodeSet thaana_Set 
       {{{Empty, 60}, {Full, 2}, {Empty, 34754}},
-       {}}
-;
+       {}};
     const UnicodeSet thai_Set 
       {{{Empty, 112}, {Full, 4}, {Empty, 34700}},
-       {}}
-;
+       {}};
     const UnicodeSet tibetan_Set 
       {{{Empty, 120}, {Full, 8}, {Empty, 34688}},
-       {}}
-;
+       {}};
     const UnicodeSet tifinagh_Set 
       {{{Empty, 361}, {Mixed, 1}, {Full, 2}, {Empty, 34452}},
-       {0xffff0000}}
-;
+       {0xffff0000}};
     const UnicodeSet tirhuta_Set 
       {{{Empty, 2212}, {Full, 3}, {Empty, 32601}},
-       {}}
-;
+       {}};
     const UnicodeSet transport_and_map_Set 
       {{{Empty, 4020}, {Full, 4}, {Empty, 30792}},
-       {}}
-;
+       {}};
     const UnicodeSet ucas_Set 
       {{{Empty, 160}, {Full, 20}, {Empty, 34636}},
-       {}}
-;
+       {}};
     const UnicodeSet ucas_ext_Set 
       {{{Empty, 197}, {Mixed, 1}, {Full, 2}, {Empty, 34616}},
-       {0xffff0000}}
-;
+       {0xffff0000}};
     const UnicodeSet ugaritic_Set 
       {{{Empty, 2076}, {Full, 1}, {Empty, 32739}},
-       {}}
-;
+       {}};
     const UnicodeSet vai_Set 
       {{{Empty, 1320}, {Full, 10}, {Empty, 33486}},
-       {}}
-;
+       {}};
     const UnicodeSet vedic_ext_Set 
       {{{Empty, 230}, {Mixed, 1}, {Full, 1}, {Empty, 34584}},
-       {0xffff0000}}
-;
+       {0xffff0000}};
     const UnicodeSet vertical_forms_Set 
       {{{Empty, 2032}, {Mixed, 1}, {Empty, 32783}},
-       {0xffff0000}}
-;
+       {0xffff0000}};
     const UnicodeSet vs_Set 
       {{{Empty, 2032}, {Mixed, 1}, {Empty, 32783}},
-       {0x0000ffff}}
-;
+       {0x0000ffff}};
     const UnicodeSet vs_sup_Set 
       {{{Empty, 28680}, {Full, 7}, {Mixed, 1}, {Empty, 6128}},
-       {0x0000ffff}}
-;
+       {0x0000ffff}};
     const UnicodeSet warang_citi_Set 
       {{{Empty, 2245}, {Full, 3}, {Empty, 32568}},
-       {}}
-;
+       {}};
     const UnicodeSet yi_radicals_Set 
       {{{Empty, 1316}, {Mixed, 1}, {Full, 1}, {Mixed, 1}, {Empty, 33497}},
-       {0xffff0000, 0x0000ffff}}
-;
+       {0xffff0000, 0x0000ffff}};
     const UnicodeSet yi_syllables_Set 
       {{{Empty, 1280}, {Full, 36}, {Mixed, 1}, {Empty, 33499}},
-       {0x0000ffff}}
-;
+       {0x0000ffff}};
     const UnicodeSet yijing_Set 
       {{{Empty, 622}, {Full, 2}, {Empty, 34192}},
-       {}}
-;
+       {}};
     static EnumeratedPropertyObject property_object
       {blk,
        BLK_ns::enum_names,

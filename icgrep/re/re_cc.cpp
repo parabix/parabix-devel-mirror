@@ -59,10 +59,18 @@ void CC::insert_range(const codepoint_t lo, const codepoint_t hi) {
             ++i;
         }
         else {
-            // ranges overlap; expand the range to include the prior one and
-            // remove the old one from the list
+            // ranges overlap; expand the range to include the overlapp
             lo_codepoint(i) = std::min(lo_codepoint(i), lo);
             hi_codepoint(i) = std::max(hi_codepoint(i), hi);
+            // Test whether the new hi code point of this range touches the subsequent
+            // interval. If so extend it over that one and remove it from the list.
+            for (auto j = i + 1; j != mSparseCharSet.end(); ) {
+                if (LLVM_LIKELY(hi_codepoint(i) + 1 < lo_codepoint(j))) {
+                    break;
+                }
+                hi_codepoint(i) = std::max(hi_codepoint(i), hi_codepoint(j));
+                j = mSparseCharSet.erase(j);
+            }
             return;
         }
     }

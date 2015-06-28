@@ -201,7 +201,7 @@ template<typename itr>
 CC * CC::initialize(itr begin, itr end) {
     mSparseCharSet.resize(std::distance(begin, end));
     for (auto i = begin; i != end; ++i) {
-        assert (i == begin || lo_codepoint(i) > max_codepoint());
+        assert (i == begin || lo_codepoint(*i) > max_codepoint());
         mSparseCharSet[std::distance(begin, i)] = *i;
     }
     return this;

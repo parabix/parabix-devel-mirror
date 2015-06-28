@@ -31,8 +31,7 @@ namespace UCD {
         0x30cc03fb, 0x0003c9c3, 0x0000803c, 0x00c0c260, 0x00000005,
         0x0000b6bb, 0xc0000000, 0x6ce41e00, 0x1841fb08, 0x00800000,
         0xffc00000, 0x000fffff, 0x03e00000, 0x0000ff00, 0x20000000,
-        0xffff1fff, 0xffff3fff, 0xffff03ff, 0x07ffffff}}
-;
+        0xffff1fff, 0xffff3fff, 0xffff03ff, 0x07ffffff}};
     const UnicodeSet al_Set 
       {{{Empty, 1}, {Mixed, 3}, {Empty, 1}, {Mixed, 3}, {Full, 14},
         {Mixed, 1}, {Full, 1}, {Empty, 3}, {Mixed, 3}, {Full, 6},
@@ -170,12 +169,10 @@ namespace UCD {
         0x00004000, 0x00000c00, 0x30000000, 0x10600000, 0x00068015,
         0xff80007f, 0xfffc001f, 0x000003ff, 0x0ff00000, 0x03f00000,
         0xffff0000, 0xf03fffff, 0x000fffff, 0x001fffff, 0xffff0fff,
-        0x03ff00ff, 0xffff00ff, 0x00003fff}}
-;
+        0x03ff00ff, 0xffff00ff, 0x00003fff}};
     const UnicodeSet b2_Set 
       {{{Empty, 256}, {Mixed, 1}, {Empty, 112}, {Mixed, 1}, {Empty, 34446}},
-       {0x00100000, 0x0c000000}}
-;
+       {0x00100000, 0x0c000000}};
     const UnicodeSet ba_Set 
       {{{Mixed, 1}, {Empty, 2}, {Mixed, 1}, {Empty, 1}, {Mixed, 1},
         {Empty, 38}, {Mixed, 2}, {Empty, 29}, {Mixed, 1}, {Empty, 38},
@@ -211,30 +208,25 @@ namespace UCD {
         0x00010000, 0x00800000, 0x80000000, 0x00ff0000, 0x003f0000,
         0xfe000000, 0x00000180, 0xc0000000, 0x00000003, 0x0000000f,
         0x00000160, 0x1b000000, 0x0000020c, 0x00000006, 0x001f0000,
-        0x0000c000, 0x00200000, 0x03800000, 0x00000010, 0x80000000}}
-;
+        0x0000c000, 0x00200000, 0x03800000, 0x00000010, 0x80000000}};
     const UnicodeSet bb_Set 
       {{{Empty, 5}, {Mixed, 1}, {Empty, 16}, {Mixed, 1}, {Empty, 97},
         {Mixed, 1}, {Empty, 5}, {Mixed, 1}, {Empty, 65}, {Mixed, 1},
         {Empty, 62}, {Mixed, 1}, {Empty, 1091}, {Mixed, 1}, {Empty, 839},
         {Mixed, 1}, {Empty, 34}, {Mixed, 1}, {Empty, 32593}},
        {0x00100000, 0x80001100, 0x000006de, 0x000b0000, 0x00000040,
-        0x20000000, 0x00300000, 0x00200000, 0x00000002}}
-;
+        0x20000000, 0x00300000, 0x00200000, 0x00000002}};
     const UnicodeSet bk_Set 
       {{{Mixed, 1}, {Empty, 256}, {Mixed, 1}, {Empty, 34558}},
-       {0x00001800, 0x00000300}}
-;
+       {0x00001800, 0x00000300}};
     const UnicodeSet cb_Set 
       {{{Empty, 2047}, {Mixed, 1}, {Empty, 32768}},
-       {0x10000000}}
-;
+       {0x10000000}};
     const UnicodeSet cj_Set 
       {{{Empty, 386}, {Mixed, 6}, {Empty, 7}, {Mixed, 1}, {Empty, 1643},
         {Mixed, 1}, {Empty, 32772}},
        {0x000002aa, 0x00000008, 0x006040a8, 0x000002aa, 0x00000008,
-        0x106040a8, 0xffff0000, 0x0001ff80}}
-;
+        0x106040a8, 0xffff0000, 0x0001ff80}};
     const UnicodeSet cl_Set 
       {{{Empty, 3}, {Mixed, 1}, {Empty, 117}, {Mixed, 1}, {Empty, 58},
         {Mixed, 1}, {Empty, 77}, {Mixed, 3}, {Empty, 19}, {Mixed, 2},
@@ -248,8 +240,7 @@ namespace UCD {
         0x0000aa80, 0x01555550, 0x0a000000, 0x20000000, 0x000002a8,
         0xcaa2aa06, 0x40000000, 0x01060000, 0x55400000, 0x54050115,
         0x00005200, 0x20000000, 0x20000000, 0x0000001b, 0x38000000,
-        0x00000284, 0x0c000000}}
-;
+        0x00000284, 0x0c000000}};
     const UnicodeSet cm_Set 
       {{{Mixed, 1}, {Empty, 2}, {Mixed, 2}, {Empty, 19}, {Full, 2},
         {Mixed, 2}, {Empty, 8}, {Mixed, 1}, {Empty, 7}, {Mixed, 3},
@@ -314,16 +305,13 @@ namespace UCD {
         0x00000001, 0x00fff800, 0x001f0000, 0x007f0000, 0xfffe0000,
         0x7fffffff, 0x00078000, 0x60000000, 0x0000000f, 0xffffe3e0,
         0x00000fe7, 0x00003c00, 0x0000001c, 0x007f0000, 0x00000002,
-        0x0000ffff}}
-;
+        0x0000ffff}};
     const UnicodeSet cp_Set 
       {{{Empty, 1}, {Mixed, 2}, {Empty, 34813}},
-       {0x00000200, 0x20000000}}
-;
+       {0x00000200, 0x20000000}};
     const UnicodeSet cr_Set 
       {{{Mixed, 1}, {Empty, 34815}},
-       {0x00002000}}
-;
+       {0x00002000}};
     const UnicodeSet ex_Set 
       {{{Empty, 1}, {Mixed, 1}, {Empty, 44}, {Mixed, 1}, {Empty, 1},
         {Mixed, 1}, {Empty, 5}, {Mixed, 1}, {Empty, 8}, {Mixed, 1},
@@ -335,15 +323,13 @@ namespace UCD {
        {0x80000002, 0x00000040, 0xc8000000, 0x00100000, 0x02000000,
         0x0013e000, 0x0000030c, 0x00000030, 0x0000000c, 0x42000000,
         0x00004000, 0x00004000, 0x00c00000, 0x00600000, 0x00c00000,
-        0x80000002, 0x00000030}}
-;
+        0x80000002, 0x00000030}};
     const UnicodeSet gl_Set 
       {{{Empty, 5}, {Mixed, 1}, {Empty, 20}, {Mixed, 2}, {Empty, 92},
         {Mixed, 1}, {Empty, 5}, {Mixed, 1}, {Empty, 65}, {Mixed, 1},
         {Empty, 63}, {Mixed, 2}, {Empty, 34558}},
        {0x00000001, 0xf0008000, 0x00000007, 0x00041100, 0x06000000,
-        0x00004000, 0x00020080, 0x00008000}}
-;
+        0x00004000, 0x00020080, 0x00008000}};
     const UnicodeSet h2_Set 
       {{{Empty, 1376}, {Mixed, 349}, {Empty, 33091}},
        {0x10000001, 0x01000000, 0x00100000, 0x00010000, 0x00001000,
@@ -415,8 +401,7 @@ namespace UCD {
         0x01000000, 0x00100000, 0x00010000, 0x00001000, 0x00000100,
         0x00000010, 0x10000001, 0x01000000, 0x00100000, 0x00010000,
         0x00001000, 0x00000100, 0x00000010, 0x10000001, 0x01000000,
-        0x00100000, 0x00010000, 0x00001000, 0x00000100}}
-;
+        0x00100000, 0x00010000, 0x00001000, 0x00000100}};
     const UnicodeSet h3_Set 
       {{{Empty, 1376}, {Mixed, 350}, {Empty, 33090}},
        {0xeffffffe, 0xfeffffff, 0xffefffff, 0xfffeffff, 0xffffefff,
@@ -488,16 +473,13 @@ namespace UCD {
         0xfeffffff, 0xffefffff, 0xfffeffff, 0xffffefff, 0xfffffeff,
         0xffffffef, 0xeffffffe, 0xfeffffff, 0xffefffff, 0xfffeffff,
         0xffffefff, 0xfffffeff, 0xffffffef, 0xeffffffe, 0xfeffffff,
-        0xffefffff, 0xfffeffff, 0xffffefff, 0xfffffeff, 0x0000000f}}
-;
+        0xffefffff, 0xfffeffff, 0xffffefff, 0xfffffeff, 0x0000000f}};
     const UnicodeSet hl_Set 
       {{{Empty, 46}, {Mixed, 2}, {Empty, 1960}, {Mixed, 3}, {Empty, 32805}},
-       {0xffff0000, 0x000707ff, 0xa0000000, 0x5f7ffdff, 0x0000ffdb}}
-;
+       {0xffff0000, 0x000707ff, 0xa0000000, 0x5f7ffdff, 0x0000ffdb}};
     const UnicodeSet hy_Set 
       {{{Empty, 1}, {Mixed, 1}, {Empty, 34814}},
-       {0x00002000}}
-;
+       {0x00002000}};
     const UnicodeSet id_Set 
       {{{Empty, 280}, {Mixed, 1}, {Empty, 6}, {Mixed, 1}, {Empty, 16},
         {Mixed, 2}, {Empty, 1}, {Mixed, 1}, {Empty, 1}, {Mixed, 4},
@@ -526,42 +508,34 @@ namespace UCD {
         0xcfffffff, 0xef9fffff, 0xfff07fff, 0x00ffffff, 0xfff97fea,
         0x7fffffff, 0x007fff80, 0x0003ffe0, 0xffff0400, 0xfbffffff,
         0xffffffef, 0xf00fffff, 0xfc0fffff, 0x0000ffe7, 0x0000ffff,
-        0x000f1fff, 0x3fffffff, 0x3fffffff}}
-;
+        0x000f1fff, 0x3fffffff, 0x3fffffff}};
     const UnicodeSet in_Set 
       {{{Empty, 257}, {Mixed, 1}, {Empty, 1774}, {Mixed, 1}, {Empty, 102},
         {Mixed, 1}, {Empty, 32680}},
-       {0x00000070, 0x02000000, 0x00400000}}
-;
+       {0x00000070, 0x02000000, 0x00400000}};
     const UnicodeSet is_Set 
       {{{Empty, 1}, {Mixed, 1}, {Empty, 25}, {Mixed, 1}, {Empty, 16},
         {Mixed, 1}, {Empty, 3}, {Mixed, 1}, {Empty, 14}, {Mixed, 1},
         {Empty, 194}, {Mixed, 1}, {Empty, 1773}, {Mixed, 1}, {Empty, 32783}},
        {0x0c005000, 0x40000000, 0x00000200, 0x00003000, 0x01000000,
-        0x00000010, 0x00190000}}
-;
+        0x00000010, 0x00190000}};
     const UnicodeSet jl_Set 
       {{{Empty, 136}, {Full, 3}, {Empty, 1216}, {Mixed, 1}, {Empty, 33460}},
-       {0x1fffffff}}
-;
+       {0x1fffffff}};
     const UnicodeSet jt_Set 
       {{{Empty, 141}, {Mixed, 1}, {Full, 2}, {Empty, 1582}, {Mixed, 2},
         {Empty, 33088}},
-       {0xffffff00, 0xfffff800, 0x0fffffff}}
-;
+       {0xffffff00, 0xfffff800, 0x0fffffff}};
     const UnicodeSet jv_Set 
       {{{Empty, 139}, {Full, 2}, {Mixed, 1}, {Empty, 1583}, {Mixed, 2},
         {Empty, 33089}},
-       {0x000000ff, 0xffff0000, 0x0000007f}}
-;
+       {0x000000ff, 0xffff0000, 0x0000007f}};
     const UnicodeSet lf_Set 
       {{{Mixed, 1}, {Empty, 34815}},
-       {0x00000400}}
-;
+       {0x00000400}};
     const UnicodeSet nl_Set 
       {{{Empty, 4}, {Mixed, 1}, {Empty, 34811}},
-       {0x00000020}}
-;
+       {0x00000020}};
     const UnicodeSet ns_Set 
       {{{Empty, 190}, {Mixed, 1}, {Empty, 66}, {Mixed, 2}, {Empty, 125},
         {Mixed, 2}, {Empty, 2}, {Mixed, 2}, {Empty, 1}, {Mixed, 1},
@@ -570,8 +544,7 @@ namespace UCD {
         {Empty, 30796}},
        {0x00400000, 0x30000000, 0x00000380, 0x10000020, 0x18000000,
         0x78000000, 0x00000001, 0x68000000, 0x00200000, 0x00300000,
-        0x0c000000, 0x00000020, 0xc0000000, 0x0e000000}}
-;
+        0x0c000000, 0x00000020, 0xc0000000, 0x0e000000}};
     const UnicodeSet nu_Set 
       {{{Empty, 1}, {Mixed, 1}, {Empty, 49}, {Mixed, 1}, {Empty, 3},
         {Mixed, 1}, {Empty, 6}, {Mixed, 1}, {Empty, 12}, {Mixed, 1},
@@ -601,8 +574,7 @@ namespace UCD {
         0x03ff0000, 0x03ff0000, 0x03ff0000, 0x03ff0000, 0x000003ff,
         0x0000ffc0, 0x03ff0000, 0xffc00000, 0x03ff0000, 0x03ff0000,
         0x03ff0000, 0x03ff0000, 0x000003ff, 0x000003ff, 0x000003ff,
-        0x03ff0000, 0xffffc000}}
-;
+        0x03ff0000, 0xffffc000}};
     const UnicodeSet op_Set 
       {{{Empty, 1}, {Mixed, 3}, {Empty, 1}, {Mixed, 1}, {Empty, 115},
         {Mixed, 1}, {Empty, 58}, {Mixed, 1}, {Empty, 75}, {Mixed, 1},
@@ -618,8 +590,7 @@ namespace UCD {
         0x00aaaaa8, 0x05000000, 0x10000000, 0x01000000, 0x00000154,
         0x00000004, 0x25515500, 0x80000000, 0x00800000, 0xaaa00000,
         0x2a00008a, 0x00000100, 0x08000000, 0x88000000, 0x00000004,
-        0x07000000, 0x00000140, 0x02000000}}
-;
+        0x07000000, 0x00000140, 0x02000000}};
     const UnicodeSet po_Set 
       {{{Empty, 1}, {Mixed, 1}, {Empty, 3}, {Mixed, 1}, {Empty, 42},
         {Mixed, 1}, {Empty, 2}, {Mixed, 1}, {Empty, 27}, {Mixed, 1},
@@ -629,8 +600,7 @@ namespace UCD {
         {Mixed, 1}, {Empty, 6}, {Mixed, 1}, {Empty, 32768}},
        {0x00000020, 0x00010004, 0x00000e00, 0x00000400, 0x020c0000,
         0x02000000, 0x00ff0000, 0x08400080, 0x00000208, 0x01000000,
-        0x10000000, 0x00000400, 0x00000020, 0x00000001}}
-;
+        0x10000000, 0x00000400, 0x00000020, 0x00000001}};
     const UnicodeSet pr_Set 
       {{{Empty, 1}, {Mixed, 2}, {Empty, 2}, {Mixed, 1}, {Empty, 38},
         {Mixed, 1}, {Empty, 34}, {Mixed, 1}, {Empty, 7}, {Mixed, 1},
@@ -641,19 +611,16 @@ namespace UCD {
        {0x00000810, 0x10000000, 0x00020038, 0x00008000, 0x08000000,
         0x00020000, 0x02000000, 0x80000000, 0x08000000, 0xf7bfff7f,
         0x0000ffff, 0x00400000, 0x000c0000, 0x00000200, 0x00000010,
-        0x00000062}}
-;
+        0x00000062}};
     const UnicodeSet qu_Set 
       {{{Empty, 1}, {Mixed, 1}, {Empty, 3}, {Mixed, 1}, {Empty, 250},
         {Mixed, 2}, {Empty, 56}, {Mixed, 2}, {Empty, 52}, {Mixed, 2},
         {Empty, 3649}, {Mixed, 1}, {Empty, 30796}},
        {0x00000084, 0x08000800, 0xbb000000, 0x06000000, 0xf8000000,
-        0x00000001, 0x30003fff, 0x00000003, 0x01c00000}}
-;
+        0x00000001, 0x30003fff, 0x00000003, 0x01c00000}};
     const UnicodeSet ri_Set 
       {{{Empty, 3983}, {Mixed, 1}, {Empty, 30832}},
-       {0xffffffc0}}
-;
+       {0xffffffc0}};
     const UnicodeSet sa_Set 
       {{{Empty, 112}, {Mixed, 3}, {Empty, 1}, {Mixed, 3}, {Empty, 9},
         {Full, 2}, {Mixed, 1}, {Full, 1}, {Mixed, 1}, {Empty, 55},
@@ -664,24 +631,19 @@ namespace UCD {
        {0xfffffffe, 0x07ffffff, 0x00007fff, 0xfef02596, 0x3bffecae,
         0xf0003f5f, 0xffff0000, 0xfc00ffff, 0x308fffff, 0xffff0000,
         0x001f3fff, 0xffff0fff, 0xc40003ff, 0x7fffffff, 0x1fffffff,
-        0x00003fff, 0x7c00ffff, 0xf8000007}}
-;
+        0x00003fff, 0x7c00ffff, 0xf8000007}};
     const UnicodeSet sg_Set 
       {{{Empty, 1728}, {Full, 64}, {Empty, 33024}},
-       {}}
-;
+       {}};
     const UnicodeSet sp_Set 
       {{{Empty, 1}, {Mixed, 1}, {Empty, 34814}},
-       {0x00000001}}
-;
+       {0x00000001}};
     const UnicodeSet sy_Set 
       {{{Empty, 1}, {Mixed, 1}, {Empty, 34814}},
-       {0x00008000}}
-;
+       {0x00008000}};
     const UnicodeSet wj_Set 
       {{{Empty, 259}, {Mixed, 1}, {Empty, 1779}, {Mixed, 1}, {Empty, 32776}},
-       {0x00000001, 0x80000000}}
-;
+       {0x00000001, 0x80000000}};
     const UnicodeSet xx_Set 
       {{{Empty, 27}, {Mixed, 3}, {Empty, 11}, {Mixed, 4}, {Empty, 1},
         {Mixed, 3}, {Empty, 7}, {Mixed, 1}, {Empty, 1}, {Mixed, 1},
@@ -819,12 +781,10 @@ namespace UCD {
         0xff000000, 0x80000000, 0x0000f800, 0x04000000, 0x00000010,
         0x00000018, 0xffff0000, 0xfff0e000, 0xfff00000, 0xffe00000,
         0x0000f000, 0xfc00ff00, 0x0000ff00, 0xffffc000, 0xc0000000,
-        0xc0000000, 0xfffffffd, 0xffff0000}}
-;
+        0xc0000000, 0xfffffffd, 0xffff0000}};
     const UnicodeSet zw_Set 
       {{{Empty, 256}, {Mixed, 1}, {Empty, 34559}},
-       {0x00000800}}
-;
+       {0x00000800}};
     static EnumeratedPropertyObject property_object
       {lb,
        LB_ns::enum_names,

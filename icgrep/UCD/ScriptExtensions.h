@@ -16,8 +16,7 @@ namespace UCD {
   namespace SCX_ns {
     const UnicodeSet aghb_Ext 
       {{{Empty, 2089}, {Mixed, 1}, {Full, 1}, {Mixed, 1}, {Empty, 32724}},
-       {0xffff0000, 0x0000800f}}
-;
+       {0xffff0000, 0x0000800f}};
     const UnicodeSet arab_Ext 
       {{{Empty, 48}, {Mixed, 1}, {Full, 5}, {Mixed, 1}, {Full, 1},
         {Empty, 2}, {Mixed, 1}, {Full, 1}, {Empty, 9}, {Mixed, 1},
@@ -30,41 +29,32 @@ namespace UCD {
         0xffff0000, 0xfff80003, 0x3fffffff, 0xffff0000, 0xfffcffff,
         0x000000ff, 0x3fff0000, 0xffdf0000, 0x1fffffff, 0x0fffffff,
         0x7fffffff, 0xffffffef, 0x0af7fe96, 0xaa96ea84, 0x5ef7f796,
-        0x0ffffbff, 0x0ffffbee, 0x00030000}}
-;
+        0x0ffffbff, 0x0ffffbee, 0x00030000}};
     const UnicodeSet armi_Ext 
       {{{Empty, 2114}, {Mixed, 1}, {Empty, 32701}},
-       {0xffbfffff}}
-;
+       {0xffbfffff}};
     const UnicodeSet armn_Ext 
       {{{Empty, 41}, {Mixed, 4}, {Empty, 1963}, {Mixed, 1}, {Empty, 32807}},
-       {0xfffe0000, 0xfe7fffff, 0xfffffffe, 0x0000e6ff, 0x00f80000}}
-;
+       {0xfffe0000, 0xfe7fffff, 0xfffffffe, 0x0000e6ff, 0x00f80000}};
     const UnicodeSet avst_Ext 
       {{{Empty, 2136}, {Full, 1}, {Mixed, 1}, {Empty, 32678}},
-       {0xfe3fffff}}
-;
+       {0xfe3fffff}};
     const UnicodeSet bali_Ext 
       {{{Empty, 216}, {Full, 2}, {Mixed, 2}, {Empty, 34596}},
-       {0xffff0fff, 0x1fffffff}}
-;
+       {0xffff0fff, 0x1fffffff}};
     const UnicodeSet bamu_Ext 
       {{{Empty, 1333}, {Full, 2}, {Mixed, 1}, {Empty, 1544}, {Full, 17},
         {Mixed, 1}, {Empty, 31918}},
-       {0x00ffffff, 0x01ffffff}}
-;
+       {0x00ffffff, 0x01ffffff}};
     const UnicodeSet bass_Ext 
       {{{Empty, 2902}, {Mixed, 2}, {Empty, 31912}},
-       {0xffff0000, 0x003f3fff}}
-;
+       {0xffff0000, 0x003f3fff}};
     const UnicodeSet batk_Ext 
       {{{Empty, 222}, {Full, 1}, {Mixed, 1}, {Empty, 34592}},
-       {0xf00fffff}}
-;
+       {0xf00fffff}};
     const UnicodeSet beng_Ext 
       {{{Empty, 75}, {Mixed, 5}, {Empty, 34736}},
-       {0x00000030, 0xfff99fef, 0xf3c5fdff, 0xb080799f, 0x0fffffcf}}
-;
+       {0x00000030, 0xfff99fef, 0xf3c5fdff, 0xb080799f, 0x0fffffcf}};
     const UnicodeSet bopo_Ext 
       {{{Empty, 23}, {Mixed, 1}, {Empty, 360}, {Mixed, 2}, {Empty, 5},
         {Mixed, 3}, {Empty, 3}, {Mixed, 1}, {Full, 1}, {Mixed, 1},
@@ -74,107 +64,84 @@ namespace UCD {
        {0x00000c00, 0xfffbff0e, 0xc0813c00, 0x08000000, 0xffffffe0,
         0x00003fff, 0x07ffffff, 0x0000000f, 0x0000000f, 0x0001ffff,
         0x00000fff, 0xff000000, 0xf801ffff, 0x7fffffff, 0x00000060,
-        0x0000003e}}
-;
+        0x0000003e}};
     const UnicodeSet brah_Ext 
       {{{Empty, 2176}, {Full, 2}, {Mixed, 2}, {Empty, 32636}},
-       {0xfffc3fff, 0x8000ffff}}
-;
+       {0xfffc3fff, 0x8000ffff}};
     const UnicodeSet brai_Ext 
       {{{Empty, 320}, {Full, 8}, {Empty, 34488}},
-       {}}
-;
+       {}};
     const UnicodeSet bugi_Ext 
       {{{Empty, 208}, {Mixed, 1}, {Empty, 1149}, {Mixed, 1}, {Empty, 33457}},
-       {0xcfffffff, 0x00008000}}
-;
+       {0xcfffffff, 0x00008000}};
     const UnicodeSet buhd_Ext 
       {{{Empty, 185}, {Mixed, 2}, {Empty, 34629}},
-       {0x00600000, 0x000fffff}}
-;
+       {0x00600000, 0x000fffff}};
     const UnicodeSet cakm_Ext 
       {{{Empty, 79}, {Mixed, 1}, {Empty, 50}, {Mixed, 1}, {Empty, 2053},
         {Full, 1}, {Mixed, 2}, {Empty, 32629}},
-       {0x0000ffc0, 0x000003ff, 0xffdfffff, 0x0000000f}}
-;
+       {0x0000ffc0, 0x000003ff, 0xffdfffff, 0x0000000f}};
     const UnicodeSet cans_Ext 
       {{{Empty, 160}, {Full, 20}, {Empty, 17}, {Mixed, 1}, {Full, 1},
         {Mixed, 1}, {Empty, 34616}},
-       {0xffff0000, 0x003fffff}}
-;
+       {0xffff0000, 0x003fffff}};
     const UnicodeSet cari_Ext 
       {{{Empty, 2069}, {Full, 1}, {Mixed, 1}, {Empty, 32745}},
-       {0x0001ffff}}
-;
+       {0x0001ffff}};
     const UnicodeSet cham_Ext 
       {{{Empty, 1360}, {Full, 1}, {Mixed, 2}, {Empty, 33453}},
-       {0x007fffff, 0xf3ff3fff}}
-;
+       {0x007fffff, 0xf3ff3fff}};
     const UnicodeSet cher_Ext 
       {{{Empty, 157}, {Full, 2}, {Mixed, 1}, {Empty, 34656}},
-       {0x001fffff}}
-;
+       {0x001fffff}};
     const UnicodeSet copt_Ext 
       {{{Empty, 31}, {Mixed, 1}, {Empty, 324}, {Full, 3}, {Mixed, 1},
         {Empty, 1711}, {Mixed, 1}, {Empty, 32744}},
-       {0x0000fffc, 0xfe0fffff, 0x0fffffff}}
-;
+       {0x0000fffc, 0xfe0fffff, 0x0fffffff}};
     const UnicodeSet cprt_Ext 
       {{{Empty, 2056}, {Mixed, 2}, {Empty, 54}, {Mixed, 2}, {Empty, 32702}},
-       {0xffffff87, 0xff8fffff, 0xfffffd3f, 0x91bfffff}}
-;
+       {0xffffff87, 0xff8fffff, 0xfffffd3f, 0x91bfffff}};
     const UnicodeSet cyrl_Ext 
       {{{Empty, 32}, {Full, 9}, {Mixed, 1}, {Empty, 191}, {Mixed, 1},
         {Empty, 1}, {Mixed, 1}, {Empty, 131}, {Full, 1}, {Empty, 962},
         {Full, 2}, {Mixed, 1}, {Empty, 33483}},
-       {0x0000ffff, 0x00000800, 0x01000000, 0xbfffffff}}
-;
+       {0x0000ffff, 0x00000800, 0x01000000, 0xbfffffff}};
     const UnicodeSet deva_Ext 
       {{{Empty, 72}, {Full, 4}, {Empty, 154}, {Mixed, 2}, {Empty, 1113},
         {Mixed, 1}, {Empty, 5}, {Mixed, 1}, {Empty, 33464}},
-       {0xfff70000, 0x031c21ff, 0x03ff0000, 0x0fffffff}}
-;
+       {0xfff70000, 0x031c21ff, 0x03ff0000, 0x0fffffff}};
     const UnicodeSet dsrt_Ext 
       {{{Empty, 2080}, {Full, 2}, {Mixed, 1}, {Empty, 32733}},
-       {0x0000ffff}}
-;
+       {0x0000ffff}};
     const UnicodeSet dupl_Ext 
       {{{Empty, 3552}, {Full, 3}, {Mixed, 3}, {Empty, 31258}},
-       {0x1fff07ff, 0xf3ff01ff, 0x0000000f}}
-;
+       {0x1fff07ff, 0xf3ff01ff, 0x0000000f}};
     const UnicodeSet egyp_Ext 
       {{{Empty, 2432}, {Full, 33}, {Mixed, 1}, {Empty, 32350}},
-       {0x00007fff}}
-;
+       {0x00007fff}};
     const UnicodeSet elba_Ext 
       {{{Empty, 2088}, {Full, 1}, {Mixed, 1}, {Empty, 32726}},
-       {0x000000ff}}
-;
+       {0x000000ff}};
     const UnicodeSet ethi_Ext 
       {{{Empty, 144}, {Full, 2}, {Mixed, 1}, {Full, 1}, {Mixed, 3},
         {Full, 1}, {Mixed, 1}, {Full, 1}, {Mixed, 3}, {Empty, 207},
         {Mixed, 3}, {Empty, 1001}, {Mixed, 2}, {Empty, 33446}},
        {0x3d7f3dff, 0xffff3dff, 0x7f3dffff, 0xff7fff3d, 0xff3dffff,
         0xe7ffffff, 0x1fffffff, 0x03ffffff, 0x007fffff, 0x7f7f7f7f,
-        0x7f7f7f7f, 0x007e7e7e, 0x00007f7f}}
-;
+        0x7f7f7f7f, 0x007e7e7e, 0x00007f7f}};
     const UnicodeSet geor_Ext 
       {{{Empty, 44}, {Mixed, 1}, {Empty, 88}, {Full, 1}, {Mixed, 2},
         {Empty, 224}, {Full, 1}, {Mixed, 1}, {Empty, 34454}},
-       {0x00000200, 0xffff20bf, 0xf7ffffff, 0x000020bf}}
-;
+       {0x00000200, 0xffff20bf, 0xf7ffffff, 0x000020bf}};
     const UnicodeSet glag_Ext 
       {{{Empty, 352}, {Full, 1}, {Mixed, 2}, {Empty, 34461}},
-       {0xffff7fff, 0x7fffffff}}
-;
+       {0xffff7fff, 0x7fffffff}};
     const UnicodeSet goth_Ext 
       {{{Empty, 2073}, {Mixed, 2}, {Empty, 32741}},
-       {0xffff0000, 0x000007ff}}
-;
+       {0xffff0000, 0x000007ff}};
     const UnicodeSet gran_Ext 
       {{{Empty, 75}, {Mixed, 1}, {Empty, 2124}, {Mixed, 4}, {Empty, 32612}},
-       {0x00000030, 0xfff99fee, 0xf3edfdff, 0xe080399f, 0x001f1fcf}}
-;
+       {0x00000030, 0xfff99fee, 0xf3edfdff, 0xe080399f, 0x001f1fcf}};
     const UnicodeSet grek_Ext 
       {{{Empty, 26}, {Mixed, 4}, {Full, 1}, {Mixed, 1}, {Empty, 201},
         {Mixed, 3}, {Empty, 1}, {Mixed, 2}, {Empty, 9}, {Mixed, 1},
@@ -185,20 +152,17 @@ namespace UCD {
         0x000007c0, 0xe0000000, 0x000007c3, 0x80000000, 0x00000003,
         0x3f3fffff, 0xaaff3f3f, 0x3fffffff, 0xffdfffff, 0xefcfffdf,
         0x7fdcffff, 0x00000040, 0x00000020, 0x00001fff, 0x00000001,
-        0x0000003f}}
-;
+        0x0000003f}};
     const UnicodeSet gujr_Ext 
       {{{Empty, 75}, {Mixed, 1}, {Empty, 8}, {Mixed, 4}, {Empty, 1257},
         {Mixed, 1}, {Empty, 33470}},
        {0x00000030, 0xfffbbfee, 0xf3edfdff, 0x00013bbf, 0x0003ffcf,
-        0x03ff0000}}
-;
+        0x03ff0000}};
     const UnicodeSet guru_Ext 
       {{{Empty, 75}, {Mixed, 1}, {Empty, 4}, {Mixed, 4}, {Empty, 1261},
         {Mixed, 1}, {Empty, 33470}},
        {0x00000030, 0xfff987ee, 0xd36dfdff, 0x5e023987, 0x003fffc0,
-        0x03ff0000}}
-;
+        0x03ff0000}};
     const UnicodeSet hang_Ext 
       {{{Empty, 136}, {Full, 8}, {Empty, 240}, {Mixed, 2}, {Empty, 5},
         {Mixed, 1}, {Empty, 1}, {Mixed, 1}, {Full, 2}, {Mixed, 1},
@@ -211,8 +175,7 @@ namespace UCD {
         0x0000000f, 0x7fffffff, 0x0000000f, 0x7fffffff, 0x0001ffff,
         0x00000fff, 0xff000000, 0xf801ffff, 0x7fffffff, 0x1fffffff,
         0xffff000f, 0xfffff87f, 0x0fffffff, 0x00000060, 0x0000003e,
-        0x7fffffff, 0x1cfcfcfc}}
-;
+        0x7fffffff, 0x1cfcfcfc}};
     const UnicodeSet hani_Ext 
       {{{Empty, 372}, {Mixed, 1}, {Full, 2}, {Mixed, 1}, {Full, 6},
         {Mixed, 1}, {Empty, 1}, {Mixed, 2}, {Empty, 5}, {Mixed, 1},
@@ -229,18 +192,15 @@ namespace UCD {
         0x08000000, 0xffff0000, 0x0000000f, 0x0000000f, 0x0001ffff,
         0x00000fff, 0xff000000, 0xf801ffff, 0x7fffffff, 0x003fffff,
         0x00001fff, 0xffff3fff, 0x03ffffff, 0x00000060, 0x0000003e,
-        0x007fffff, 0x001fffff, 0x3fffffff, 0x3fffffff}}
-;
+        0x007fffff, 0x001fffff, 0x3fffffff, 0x3fffffff}};
     const UnicodeSet hano_Ext 
       {{{Empty, 185}, {Mixed, 1}, {Empty, 34630}},
-       {0x007fffff}}
-;
+       {0x007fffff}};
     const UnicodeSet hebr_Ext 
       {{{Empty, 44}, {Mixed, 1}, {Full, 1}, {Mixed, 2}, {Empty, 1960},
         {Mixed, 3}, {Empty, 32805}},
        {0xfffe0000, 0xffff00ff, 0x001f07ff, 0xe0000000, 0x5f7fffff,
-        0x0000ffdb}}
-;
+        0x0000ffdb}};
     const UnicodeSet hira_Ext 
       {{{Empty, 384}, {Mixed, 3}, {Full, 1}, {Mixed, 2}, {Empty, 1},
         {Mixed, 1}, {Empty, 4}, {Mixed, 1}, {Empty, 1}, {Full, 1},
@@ -251,28 +211,22 @@ namespace UCD {
        {0xfffbff4e, 0xf0bf0000, 0xfffffffe, 0xfe7fffff, 0x00000001,
         0x18000000, 0xffff0000, 0x0000000f, 0x0000000f, 0x0001ffff,
         0x00000fff, 0xff000000, 0xf801ffff, 0x7fffffff, 0x00000060,
-        0x0001003e, 0xc0000000, 0x00000002, 0x00000001}}
-;
+        0x0001003e, 0xc0000000, 0x00000002, 0x00000001}};
     const UnicodeSet hmng_Ext 
       {{{Empty, 2904}, {Full, 2}, {Mixed, 3}, {Empty, 31907}},
-       {0xfbff003f, 0xe0fffffb, 0x0000ffff}}
-;
+       {0xfbff003f, 0xe0fffffb, 0x0000ffff}};
     const UnicodeSet hrkt_Ext 
       {{{Empty, 34816}},
-       {}}
-;
+       {}};
     const UnicodeSet ital_Ext 
       {{{Empty, 2072}, {Full, 1}, {Mixed, 1}, {Empty, 32742}},
-       {0x0000000f}}
-;
+       {0x0000000f}};
     const UnicodeSet java_Ext 
       {{{Empty, 1356}, {Full, 2}, {Mixed, 1}, {Empty, 33457}},
-       {0xc3ffbfff}}
-;
+       {0xc3ffbfff}};
     const UnicodeSet kali_Ext 
       {{{Empty, 1352}, {Full, 1}, {Mixed, 1}, {Empty, 33462}},
-       {0x0000ffff}}
-;
+       {0x0000ffff}};
     const UnicodeSet kana_Ext 
       {{{Empty, 384}, {Mixed, 2}, {Empty, 2}, {Mixed, 1}, {Full, 3},
         {Empty, 4}, {Mixed, 1}, {Empty, 1}, {Full, 1}, {Mixed, 1},
@@ -282,38 +236,30 @@ namespace UCD {
         {Empty, 1411}, {Mixed, 1}, {Empty, 31359}},
        {0xfffbff4e, 0xf0bf0000, 0x1e000000, 0xffff0000, 0xffff000f,
         0x0000000f, 0x0001ffff, 0xffff0fff, 0x7fffffff, 0xf801ffff,
-        0x7fffffff, 0x00000060, 0xfffffffe, 0x00000001}}
-;
+        0x7fffffff, 0x00000060, 0xfffffffe, 0x00000001}};
     const UnicodeSet khar_Ext 
       {{{Empty, 2128}, {Mixed, 3}, {Empty, 32685}},
-       {0xfeeff06f, 0x870fffff, 0x01ff00ff}}
-;
+       {0xfeeff06f, 0x870fffff, 0x01ff00ff}};
     const UnicodeSet khmr_Ext 
       {{{Empty, 188}, {Full, 2}, {Mixed, 2}, {Empty, 15}, {Full, 1},
         {Empty, 34608}},
-       {0x3fffffff, 0x03ff03ff}}
-;
+       {0x3fffffff, 0x03ff03ff}};
     const UnicodeSet khoj_Ext 
       {{{Empty, 87}, {Mixed, 1}, {Empty, 2104}, {Mixed, 2}, {Empty, 32622}},
-       {0x0000ffc0, 0xfffbffff, 0x3fffffff}}
-;
+       {0x0000ffc0, 0xfffbffff, 0x3fffffff}};
     const UnicodeSet knda_Ext 
       {{{Empty, 75}, {Mixed, 1}, {Empty, 24}, {Mixed, 4}, {Empty, 34712}},
-       {0x00000030, 0xfffddfee, 0xf3effdff, 0x40603ddf, 0x0006ffcf}}
-;
+       {0x00000030, 0xfffddfee, 0xf3effdff, 0x40603ddf, 0x0006ffcf}};
     const UnicodeSet kthi_Ext 
       {{{Empty, 75}, {Mixed, 1}, {Empty, 1269}, {Mixed, 1}, {Empty, 834},
         {Full, 2}, {Mixed, 1}, {Empty, 32633}},
-       {0x0000ffc0, 0x03ff0000, 0x00000003}}
-;
+       {0x0000ffc0, 0x03ff0000, 0x00000003}};
     const UnicodeSet lana_Ext 
       {{{Empty, 209}, {Full, 1}, {Mixed, 4}, {Empty, 34602}},
-       {0x7fffffff, 0x9fffffff, 0x03ff03ff, 0x00003fff}}
-;
+       {0x7fffffff, 0x9fffffff, 0x03ff03ff, 0x00003fff}};
     const UnicodeSet laoo_Ext 
       {{{Empty, 116}, {Mixed, 3}, {Empty, 34697}},
-       {0xfef02596, 0x3bffecae, 0xf3ff3f5f}}
-;
+       {0xfef02596, 0x3bffecae, 0xf3ff3f5f}};
     const UnicodeSet latn_Ext 
       {{{Empty, 2}, {Mixed, 2}, {Empty, 1}, {Mixed, 3}, {Full, 13},
         {Mixed, 1}, {Empty, 1}, {Mixed, 1}, {Empty, 3}, {Mixed, 1},
@@ -329,304 +275,234 @@ namespace UCD {
         0xfffff03f, 0x1fffffff, 0xfefff83c, 0x7fffffff, 0x80020000,
         0x1fff0000, 0x00040c00, 0x00004000, 0x000001ff, 0xfffffffc,
         0xffff78ff, 0x00033fff, 0xff800000, 0x00004000, 0xffff0000,
-        0xf7ffffff, 0x00000010, 0x0000007f, 0x07fffffe, 0x07fffffe}}
-;
+        0xf7ffffff, 0x00000010, 0x0000007f, 0x07fffffe, 0x07fffffe}};
     const UnicodeSet lepc_Ext 
       {{{Empty, 224}, {Full, 1}, {Mixed, 2}, {Empty, 34589}},
-       {0xf8ffffff, 0x0000e3ff}}
-;
+       {0xf8ffffff, 0x0000e3ff}};
     const UnicodeSet limb_Ext 
       {{{Empty, 75}, {Mixed, 1}, {Empty, 124}, {Mixed, 3}, {Empty, 34613}},
-       {0x00000020, 0x7fffffff, 0x0fff0fff, 0x0000fff1}}
-;
+       {0x00000020, 0x7fffffff, 0x0fff0fff, 0x0000fff1}};
     const UnicodeSet lina_Ext 
       {{{Empty, 2096}, {Full, 9}, {Mixed, 3}, {Empty, 32708}},
-       {0x007fffff, 0x003fffff, 0x000000ff}}
-;
+       {0x007fffff, 0x003fffff, 0x000000ff}};
     const UnicodeSet linb_Ext 
       {{{Empty, 2048}, {Mixed, 3}, {Empty, 1}, {Full, 3}, {Mixed, 3},
         {Empty, 32758}},
        {0xffffefff, 0xb7ffff7f, 0x3fff3fff, 0x07ffffff, 0xffffff87,
-        0xff8fffff}}
-;
+        0xff8fffff}};
     const UnicodeSet lisu_Ext 
       {{{Empty, 1318}, {Mixed, 1}, {Full, 1}, {Empty, 33496}},
-       {0xffff0000}}
-;
+       {0xffff0000}};
     const UnicodeSet lyci_Ext 
       {{{Empty, 2068}, {Mixed, 1}, {Empty, 32747}},
-       {0x1fffffff}}
-;
+       {0x1fffffff}};
     const UnicodeSet lydi_Ext 
       {{{Empty, 2121}, {Mixed, 1}, {Empty, 32694}},
-       {0x83ffffff}}
-;
+       {0x83ffffff}};
     const UnicodeSet mahj_Ext 
       {{{Empty, 75}, {Mixed, 1}, {Empty, 1269}, {Mixed, 1}, {Empty, 840},
         {Mixed, 2}, {Empty, 32628}},
-       {0x0000fff0, 0x03ff0000, 0xffff0000, 0x007fffff}}
-;
+       {0x0000fff0, 0x03ff0000, 0xffff0000, 0x007fffff}};
     const UnicodeSet mand_Ext 
       {{{Empty, 50}, {Mixed, 1}, {Empty, 15}, {Mixed, 1}, {Empty, 34749}},
-       {0x00000001, 0x4fffffff}}
-;
+       {0x00000001, 0x4fffffff}};
     const UnicodeSet mani_Ext 
       {{{Empty, 50}, {Mixed, 1}, {Empty, 2083}, {Full, 1}, {Mixed, 1},
         {Empty, 32680}},
-       {0x00000001, 0x007ff87f}}
-;
+       {0x00000001, 0x007ff87f}};
     const UnicodeSet mend_Ext 
       {{{Empty, 3904}, {Full, 6}, {Mixed, 1}, {Empty, 30905}},
-       {0x007fff9f}}
-;
+       {0x007fff9f}};
     const UnicodeSet merc_Ext 
       {{{Empty, 2125}, {Mixed, 1}, {Empty, 32690}},
-       {0xc0ffffff}}
-;
+       {0xc0ffffff}};
     const UnicodeSet mero_Ext 
       {{{Empty, 2124}, {Full, 1}, {Empty, 32691}},
-       {}}
-;
+       {}};
     const UnicodeSet mlym_Ext 
       {{{Empty, 75}, {Mixed, 1}, {Empty, 28}, {Mixed, 4}, {Empty, 34708}},
-       {0x00000030, 0xfffddfee, 0xe7ffffff, 0x00807ddf, 0xfe3fffcf}}
-;
+       {0x00000030, 0xfffddfee, 0xe7ffffff, 0x00807ddf, 0xfe3fffcf}};
     const UnicodeSet modi_Ext 
       {{{Empty, 1345}, {Mixed, 1}, {Empty, 878}, {Full, 2}, {Mixed, 1},
         {Empty, 32589}},
-       {0x03ff0000, 0x03ff001f}}
-;
+       {0x03ff0000, 0x03ff001f}};
     const UnicodeSet mong_Ext 
       {{{Empty, 192}, {Mixed, 1}, {Full, 2}, {Mixed, 1}, {Full, 1},
         {Mixed, 1}, {Empty, 34618}},
-       {0x03ff7fff, 0x00ffffff, 0x000007ff}}
-;
+       {0x03ff7fff, 0x00ffffff, 0x000007ff}};
     const UnicodeSet mroo_Ext 
       {{{Empty, 2898}, {Mixed, 2}, {Empty, 31916}},
-       {0x7fffffff, 0x0000c3ff}}
-;
+       {0x7fffffff, 0x0000c3ff}};
     const UnicodeSet mtei_Ext 
       {{{Empty, 1367}, {Mixed, 1}, {Empty, 6}, {Full, 1}, {Mixed, 1},
         {Empty, 33440}},
-       {0x007fffff, 0x03ff3fff}}
-;
+       {0x007fffff, 0x03ff3fff}};
     const UnicodeSet mymr_Ext 
       {{{Empty, 128}, {Full, 5}, {Empty, 1220}, {Mixed, 1}, {Empty, 5},
         {Mixed, 1}, {Empty, 3}, {Full, 1}, {Empty, 33452}},
-       {0x00004000, 0x7fffffff}}
-;
+       {0x00004000, 0x7fffffff}};
     const UnicodeSet narb_Ext 
       {{{Empty, 2132}, {Full, 1}, {Empty, 32683}},
-       {}}
-;
+       {}};
     const UnicodeSet nbat_Ext 
       {{{Empty, 2116}, {Mixed, 2}, {Empty, 32698}},
-       {0x7fffffff, 0x0000ff80}}
-;
+       {0x7fffffff, 0x0000ff80}};
     const UnicodeSet nkoo_Ext 
       {{{Empty, 62}, {Full, 1}, {Mixed, 1}, {Empty, 34752}},
-       {0x07ffffff}}
-;
+       {0x07ffffff}};
     const UnicodeSet ogam_Ext 
       {{{Empty, 180}, {Mixed, 1}, {Empty, 34635}},
-       {0x1fffffff}}
-;
+       {0x1fffffff}};
     const UnicodeSet olck_Ext 
       {{{Empty, 226}, {Mixed, 1}, {Full, 1}, {Empty, 34588}},
-       {0xffff0000}}
-;
+       {0xffff0000}};
     const UnicodeSet orkh_Ext 
       {{{Empty, 2144}, {Full, 2}, {Mixed, 1}, {Empty, 32669}},
-       {0x000001ff}}
-;
+       {0x000001ff}};
     const UnicodeSet orya_Ext 
       {{{Empty, 75}, {Mixed, 1}, {Empty, 12}, {Mixed, 4}, {Empty, 34724}},
-       {0x00000030, 0xfff99fee, 0xf3edfdff, 0xb0c0399f, 0x00ffffcf}}
-;
+       {0x00000030, 0xfff99fee, 0xf3edfdff, 0xb0c0399f, 0x00ffffcf}};
     const UnicodeSet osma_Ext 
       {{{Empty, 2084}, {Mixed, 2}, {Empty, 32730}},
-       {0x3fffffff, 0x000003ff}}
-;
+       {0x3fffffff, 0x000003ff}};
     const UnicodeSet palm_Ext 
       {{{Empty, 2115}, {Full, 1}, {Empty, 32700}},
-       {}}
-;
+       {}};
     const UnicodeSet pauc_Ext 
       {{{Empty, 2262}, {Full, 1}, {Mixed, 1}, {Empty, 32552}},
-       {0x01ffffff}}
-;
+       {0x01ffffff}};
     const UnicodeSet perm_Ext 
       {{{Empty, 2074}, {Mixed, 2}, {Empty, 32740}},
-       {0xffff0000, 0x07ffffff}}
-;
+       {0xffff0000, 0x07ffffff}};
     const UnicodeSet phag_Ext 
       {{{Empty, 192}, {Mixed, 1}, {Empty, 1153}, {Full, 1}, {Mixed, 1},
         {Empty, 33468}},
-       {0x0000002c, 0x00ffffff}}
-;
+       {0x0000002c, 0x00ffffff}};
     const UnicodeSet phli_Ext 
       {{{Empty, 2139}, {Mixed, 1}, {Empty, 32676}},
-       {0xff07ffff}}
-;
+       {0xff07ffff}};
     const UnicodeSet phlp_Ext 
       {{{Empty, 50}, {Mixed, 1}, {Empty, 2089}, {Mixed, 2}, {Empty, 32674}},
-       {0x00000001, 0x1e03ffff, 0x0000fe00}}
-;
+       {0x00000001, 0x1e03ffff, 0x0000fe00}};
     const UnicodeSet phnx_Ext 
       {{{Empty, 2120}, {Mixed, 1}, {Empty, 32695}},
-       {0x8fffffff}}
-;
+       {0x8fffffff}};
     const UnicodeSet plrd_Ext 
       {{{Empty, 2936}, {Full, 2}, {Mixed, 3}, {Empty, 31875}},
-       {0xffff001f, 0x7fffffff, 0xffff8000}}
-;
+       {0xffff001f, 0x7fffffff, 0xffff8000}};
     const UnicodeSet prti_Ext 
       {{{Empty, 2138}, {Mixed, 1}, {Empty, 32677}},
-       {0xff3fffff}}
-;
+       {0xff3fffff}};
     const UnicodeSet rjng_Ext 
       {{{Empty, 1353}, {Mixed, 2}, {Empty, 33461}},
-       {0xffff0000, 0x800fffff}}
-;
+       {0xffff0000, 0x800fffff}};
     const UnicodeSet runr_Ext 
       {{{Empty, 181}, {Full, 2}, {Mixed, 1}, {Empty, 34632}},
-       {0x01ffc7ff}}
-;
+       {0x01ffc7ff}};
     const UnicodeSet samr_Ext 
       {{{Empty, 64}, {Full, 1}, {Mixed, 1}, {Empty, 34750}},
-       {0x7fff3fff}}
-;
+       {0x7fff3fff}};
     const UnicodeSet sarb_Ext 
       {{{Empty, 2131}, {Full, 1}, {Empty, 32684}},
-       {}}
-;
+       {}};
     const UnicodeSet saur_Ext 
       {{{Empty, 1348}, {Full, 2}, {Mixed, 1}, {Empty, 33465}},
-       {0x03ffc01f}}
-;
+       {0x03ffc01f}};
     const UnicodeSet shaw_Ext 
       {{{Empty, 2082}, {Mixed, 1}, {Full, 1}, {Empty, 32732}},
-       {0xffff0000}}
-;
+       {0xffff0000}};
     const UnicodeSet shrd_Ext 
       {{{Empty, 2188}, {Full, 2}, {Mixed, 1}, {Empty, 32625}},
-       {0x07ff21ff}}
-;
+       {0x07ff21ff}};
     const UnicodeSet sidd_Ext 
       {{{Empty, 2220}, {Full, 1}, {Mixed, 2}, {Empty, 32593}},
-       {0xff3fffff, 0x000003ff}}
-;
+       {0xff3fffff, 0x000003ff}};
     const UnicodeSet sind_Ext 
       {{{Empty, 75}, {Mixed, 1}, {Empty, 1269}, {Mixed, 1}, {Empty, 851},
         {Mixed, 1}, {Full, 1}, {Mixed, 1}, {Empty, 32616}},
-       {0x00000030, 0x03ff0000, 0xffff0000, 0x03ff07ff}}
-;
+       {0x00000030, 0x03ff0000, 0xffff0000, 0x03ff07ff}};
     const UnicodeSet sinh_Ext 
       {{{Empty, 75}, {Mixed, 1}, {Empty, 32}, {Mixed, 4}, {Empty, 2079},
         {Mixed, 1}, {Empty, 32624}},
        {0x00000030, 0xfc7fffec, 0x2ffbffff, 0xff5f847f, 0x001cffc0,
-        0x001ffffe}}
-;
+        0x001ffffe}};
     const UnicodeSet sora_Ext 
       {{{Empty, 2182}, {Mixed, 2}, {Empty, 32632}},
-       {0xffff0000, 0x03ff01ff}}
-;
+       {0xffff0000, 0x03ff01ff}};
     const UnicodeSet sund_Ext 
       {{{Empty, 220}, {Full, 2}, {Empty, 8}, {Mixed, 1}, {Empty, 34585}},
-       {0x000000ff}}
-;
+       {0x000000ff}};
     const UnicodeSet sylo_Ext 
       {{{Empty, 75}, {Mixed, 1}, {Empty, 3}, {Mixed, 1}, {Empty, 1264},
         {Full, 1}, {Mixed, 1}, {Empty, 33470}},
-       {0x00000030, 0x0000ffc0, 0x00000fff}}
-;
+       {0x00000030, 0x0000ffc0, 0x00000fff}};
     const UnicodeSet syrc_Ext 
       {{{Empty, 48}, {Mixed, 1}, {Empty, 1}, {Mixed, 2}, {Empty, 4},
         {Mixed, 1}, {Full, 1}, {Mixed, 1}, {Empty, 34757}},
-       {0x88001000, 0x003ff801, 0x00010000, 0xffffbfff, 0x0000e7ff}}
-;
+       {0x88001000, 0x003ff801, 0x00010000, 0xffffbfff, 0x0000e7ff}};
     const UnicodeSet tagb_Ext 
       {{{Empty, 185}, {Mixed, 1}, {Empty, 1}, {Mixed, 1}, {Empty, 34628}},
-       {0x00600000, 0x000ddfff}}
-;
+       {0x00600000, 0x000ddfff}};
     const UnicodeSet takr_Ext 
       {{{Empty, 75}, {Mixed, 1}, {Empty, 1269}, {Mixed, 1}, {Empty, 882},
         {Full, 1}, {Mixed, 2}, {Empty, 32585}},
-       {0x00000030, 0x03ff0000, 0x00ffffff, 0x000003ff}}
-;
+       {0x00000030, 0x03ff0000, 0x00ffffff, 0x000003ff}};
     const UnicodeSet tale_Ext 
       {{{Empty, 130}, {Mixed, 1}, {Empty, 71}, {Mixed, 2}, {Empty, 34612}},
-       {0x000003ff, 0xffff0000, 0x001f3fff}}
-;
+       {0x000003ff, 0xffff0000, 0x001f3fff}};
     const UnicodeSet talu_Ext 
       {{{Empty, 204}, {Full, 1}, {Mixed, 2}, {Empty, 34609}},
-       {0xffff0fff, 0xc7ff03ff}}
-;
+       {0xffff0fff, 0xc7ff03ff}};
     const UnicodeSet taml_Ext 
       {{{Empty, 75}, {Mixed, 1}, {Empty, 16}, {Mixed, 4}, {Empty, 34720}},
-       {0x00000030, 0xd63dc7ec, 0xc3ffc718, 0x00813dc7, 0x07ffffc0}}
-;
+       {0x00000030, 0xd63dc7ec, 0xc3ffc718, 0x00813dc7, 0x07ffffc0}};
     const UnicodeSet tavt_Ext 
       {{{Empty, 1364}, {Full, 2}, {Mixed, 1}, {Empty, 33449}},
-       {0xf8000007}}
-;
+       {0xf8000007}};
     const UnicodeSet telu_Ext 
       {{{Empty, 75}, {Mixed, 1}, {Empty, 20}, {Mixed, 4}, {Empty, 34716}},
-       {0x00000030, 0xfffddfef, 0xe3fffdff, 0x03603ddf, 0xff00ffcf}}
-;
+       {0x00000030, 0xfffddfef, 0xe3fffdff, 0x03603ddf, 0xff00ffcf}};
     const UnicodeSet tfng_Ext 
       {{{Empty, 361}, {Mixed, 1}, {Full, 1}, {Mixed, 1}, {Empty, 34452}},
-       {0xffff0000, 0x800180ff}}
-;
+       {0xffff0000, 0x800180ff}};
     const UnicodeSet tglg_Ext 
       {{{Empty, 184}, {Mixed, 2}, {Empty, 34630}},
-       {0x001fdfff, 0x00600000}}
-;
+       {0x001fdfff, 0x00600000}};
     const UnicodeSet thaa_Ext 
       {{{Empty, 48}, {Mixed, 1}, {Empty, 2}, {Mixed, 1}, {Empty, 8},
         {Full, 1}, {Mixed, 1}, {Empty, 1969}, {Mixed, 1}, {Empty, 32784}},
-       {0x88001000, 0x000003ff, 0x0003ffff, 0x20040000}}
-;
+       {0x88001000, 0x000003ff, 0x0003ffff, 0x20040000}};
     const UnicodeSet thai_Ext 
       {{{Empty, 112}, {Mixed, 3}, {Empty, 34701}},
-       {0xfffffffe, 0x07ffffff, 0x0fffffff}}
-;
+       {0xfffffffe, 0x07ffffff, 0x0fffffff}};
     const UnicodeSet tibt_Ext 
       {{{Empty, 120}, {Full, 2}, {Mixed, 5}, {Empty, 34689}},
-       {0xfffffeff, 0xfffe1fff, 0xfeffffff, 0xdfffffff, 0x061fdfff}}
-;
+       {0xfffffeff, 0xfffe1fff, 0xfeffffff, 0xdfffffff, 0x061fdfff}};
     const UnicodeSet tirh_Ext 
       {{{Empty, 75}, {Mixed, 1}, {Empty, 1269}, {Mixed, 1}, {Empty, 866},
         {Full, 2}, {Mixed, 1}, {Empty, 32601}},
-       {0x00000030, 0x03ff0000, 0x03ff00ff}}
-;
+       {0x00000030, 0x03ff0000, 0x03ff00ff}};
     const UnicodeSet ugar_Ext 
       {{{Empty, 2076}, {Mixed, 1}, {Empty, 32739}},
-       {0xbfffffff}}
-;
+       {0xbfffffff}};
     const UnicodeSet vaii_Ext 
       {{{Empty, 1320}, {Full, 9}, {Mixed, 1}, {Empty, 33486}},
-       {0x00000fff}}
-;
+       {0x00000fff}};
     const UnicodeSet wara_Ext 
       {{{Empty, 2245}, {Full, 2}, {Mixed, 1}, {Empty, 32568}},
-       {0x8007ffff}}
-;
+       {0x8007ffff}};
     const UnicodeSet xpeo_Ext 
       {{{Empty, 2077}, {Full, 1}, {Mixed, 1}, {Empty, 32737}},
-       {0x003fff0f}}
-;
+       {0x003fff0f}};
     const UnicodeSet xsux_Ext 
       {{{Empty, 2304}, {Full, 28}, {Mixed, 1}, {Empty, 3}, {Full, 3},
         {Mixed, 1}, {Empty, 32476}},
-       {0x01ffffff, 0x001f7fff}}
-;
+       {0x01ffffff, 0x001f7fff}};
     const UnicodeSet yiii_Ext 
       {{{Empty, 384}, {Mixed, 1}, {Empty, 6}, {Mixed, 1}, {Empty, 888},
         {Full, 36}, {Mixed, 1}, {Full, 1}, {Mixed, 1}, {Empty, 724},
         {Mixed, 1}, {Empty, 32772}},
-       {0x0ff3ff06, 0x08000000, 0xffff1fff, 0x0000007f, 0x0000003e}}
-;
+       {0x0ff3ff06, 0x08000000, 0xffff1fff, 0x0000007f, 0x0000003e}};
     const UnicodeSet zinh_Ext 
       {{{Empty, 24}, {Full, 3}, {Mixed, 1}, {Empty, 8}, {Mixed, 1},
         {Empty, 13}, {Mixed, 2}, {Empty, 22}, {Mixed, 1}, {Empty, 138},
@@ -640,8 +516,7 @@ namespace UCD {
         0x7fff0000, 0xfff70000, 0x031021fd, 0xf03fffff, 0x00003000,
         0xffff0000, 0x0001ffff, 0x00003c00, 0x06000000, 0x0000ffff,
         0x00003fff, 0x20000000, 0x00000001, 0xf8000380, 0x00000fe7,
-        0x00003c00, 0x0000ffff}}
-;
+        0x00003c00, 0x0000ffff}};
     const UnicodeSet zyyy_Ext 
       {{{Full, 2}, {Mixed, 2}, {Full, 1}, {Mixed, 3}, {Empty, 13},
         {Mixed, 1}, {Full, 1}, {Mixed, 1}, {Empty, 3}, {Mixed, 2},
@@ -700,8 +575,7 @@ namespace UCD {
         0x3fffffff, 0xfff07fff, 0x00ffffff, 0x7fffffff, 0xffff07ff,
         0xfbffffff, 0xffffffef, 0xffffffe7, 0x0000ffff, 0x000f1fff,
         0x000fffff, 0x001fffff, 0xffff0fff, 0x03ff00ff, 0xffff00ff,
-        0x00003fff, 0x00000002}}
-;
+        0x00003fff, 0x00000002}};
     const UnicodeSet zzzz_Ext 
       {{{Empty, 27}, {Mixed, 3}, {Empty, 11}, {Mixed, 4}, {Empty, 1},
         {Mixed, 3}, {Empty, 7}, {Mixed, 1}, {Empty, 1}, {Mixed, 1},
@@ -844,8 +718,7 @@ namespace UCD {
         0x00000010, 0x00000018, 0xffff0000, 0xfff0e000, 0xfff00000,
         0xffe00000, 0x0000f000, 0xfc00ff00, 0x0000ff00, 0xffffc000,
         0xff800000, 0xffe00000, 0xc0000000, 0xc0000000, 0xfffffffd,
-        0xffff0000}}
-;
+        0xffff0000}};
     static EnumeratedPropertyObject property_object
       {scx,
        SC_ns::enum_names,

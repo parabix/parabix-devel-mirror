@@ -143,8 +143,7 @@ namespace UCD {
         0xffff7fff, 0xfffffdff, 0xfffffdff, 0x00000ff7, 0x0000001f,
         0xffffffef, 0x0af7fe96, 0xaa96ea84, 0x5ef7f796, 0x0ffffbff,
         0x0ffffbee, 0xffff0000, 0xffff03ff, 0xffff03ff, 0x000003ff,
-        0x007fffff, 0x001fffff, 0x3fffffff, 0x3fffffff}}
-;
+        0x007fffff, 0x001fffff, 0x3fffffff, 0x3fffffff}};
     static BinaryPropertyObject property_object{Alpha, codepoint_set};
   }
   namespace CI_ns {
@@ -229,8 +228,7 @@ namespace UCD {
         0xb03c0000, 0x00000001, 0xa7f80000, 0x00000001, 0x00bf2800,
         0x001f0000, 0x007f0000, 0x0000000f, 0xffff8000, 0x60000000,
         0x0000000f, 0xfff80380, 0x00000fe7, 0x00003c00, 0x0000001c,
-        0x007f0000, 0x00000002, 0x0000ffff}}
-;
+        0x007f0000, 0x00000002, 0x0000ffff}};
     static BinaryPropertyObject property_object{CI, codepoint_set};
   }
   namespace CWCF_ns {
@@ -258,8 +256,7 @@ namespace UCD {
         0x0000ffff, 0x00007fff, 0xc025ea9d, 0x55555555, 0x55555555,
         0x55555555, 0x00042805, 0x55555555, 0x00001555, 0x05555555,
         0x55545554, 0x55555555, 0x6a005555, 0x55452855, 0x00033d55,
-        0x00f8007f, 0x07fffffe, 0x000000ff}}
-;
+        0x00f8007f, 0x07fffffe, 0x000000ff}};
     static BinaryPropertyObject property_object{CWCF, codepoint_set};
   }
   namespace CWCM_ns {
@@ -287,8 +284,7 @@ namespace UCD {
         0x00000018, 0xffc00000, 0x000003ff, 0xffff7fff, 0x7fffffff,
         0xc06dffff, 0x000c780f, 0x000020bf, 0x00003fff, 0x0fffffff,
         0xfffcfffc, 0xfe00ffff, 0xffcf38ff, 0x00033fff, 0x00f8007f,
-        0x07fffffe, 0x07fffffe, 0x0000ffff}}
-;
+        0x07fffffe, 0x07fffffe, 0x0000ffff}};
     static BinaryPropertyObject property_object{CWCM, codepoint_set};
   }
   namespace CWL_ns {
@@ -313,8 +309,7 @@ namespace UCD {
         0x0000ffff, 0x00000008, 0xffc00000, 0x0000ffff, 0x00007fff,
         0xc025ea9d, 0x55555555, 0x55555555, 0x55555555, 0x00042805,
         0x55555555, 0x00001555, 0x05555555, 0x55545554, 0x55555555,
-        0x6a005555, 0x55452855, 0x00033d55, 0x07fffffe, 0x000000ff}}
-;
+        0x6a005555, 0x55452855, 0x00033d55, 0x07fffffe, 0x000000ff}};
     static BinaryPropertyObject property_object{CWL, codepoint_set};
   }
   namespace CWT_ns {
@@ -341,8 +336,7 @@ namespace UCD {
         0xffff0000, 0x7fffffff, 0x00481562, 0xaaaaaaaa, 0xaaaaaaaa,
         0xaaaaaaaa, 0x0008500a, 0x000020bf, 0xaaaaaaaa, 0x00002aaa,
         0x0aaaaaaa, 0xaaa8aaa8, 0xaaaaaaaa, 0x9400aaaa, 0xaa8a10aa,
-        0x000002aa, 0x00f8007f, 0x07fffffe, 0xffffff00, 0x0000ffff}}
-;
+        0x000002aa, 0x00f8007f, 0x07fffffe, 0xffffff00, 0x0000ffff}};
     static BinaryPropertyObject property_object{CWT, codepoint_set};
   }
   namespace CWU_ns {
@@ -369,8 +363,7 @@ namespace UCD {
         0x7fffffff, 0x00481562, 0xaaaaaaaa, 0xaaaaaaaa, 0xaaaaaaaa,
         0x0008500a, 0x000020bf, 0xaaaaaaaa, 0x00002aaa, 0x0aaaaaaa,
         0xaaa8aaa8, 0xaaaaaaaa, 0x9400aaaa, 0xaa8a10aa, 0x000002aa,
-        0x00f8007f, 0x07fffffe, 0xffffff00, 0x0000ffff}}
-;
+        0x00f8007f, 0x07fffffe, 0xffffff00, 0x0000ffff}};
     static BinaryPropertyObject property_object{CWU, codepoint_set};
   }
   namespace CASED_ns {
@@ -404,8 +397,7 @@ namespace UCD {
         0xebffde64, 0xffffffef, 0xdfdfe7bf, 0x7bffffff, 0xfffdfc5f,
         0xffffff3f, 0xf7fffffd, 0xf7ffffff, 0xffdfffff, 0xffdfffff,
         0xffff7fff, 0xffff7fff, 0xfffffdff, 0xfffffdff, 0x00000ff7,
-        0xffff0000, 0xffff03ff, 0xffff03ff, 0x000003ff}}
-;
+        0xffff0000, 0xffff03ff, 0xffff03ff, 0x000003ff}};
     static BinaryPropertyObject property_object{Cased, codepoint_set};
   }
   namespace DI_ns {
@@ -420,8 +412,7 @@ namespace UCD {
        {0x00002000, 0x00008000, 0x10000000, 0x80000000, 0x00000001,
         0x00300000, 0x00007800, 0x0000f800, 0x00007c00, 0x0000ffff,
         0x00000010, 0x0000ffff, 0x80000000, 0x00000001, 0x01ff0000,
-        0x0000000f, 0x07f80000}}
-;
+        0x0000000f, 0x07f80000}};
     static BinaryPropertyObject property_object{DI, codepoint_set};
   }
   namespace GR_BASE_ns {
@@ -568,8 +559,7 @@ namespace UCD {
         0xfff07fff, 0x00ffffff, 0x7fffffff, 0xffff07ff, 0xfbffffff,
         0xffffffef, 0xffffffe7, 0x0000ffff, 0x000f1fff, 0x000fffff,
         0x001fffff, 0xffff0fff, 0x03ff00ff, 0xffff00ff, 0x00003fff,
-        0x007fffff, 0x001fffff, 0x3fffffff, 0x3fffffff}}
-;
+        0x007fffff, 0x001fffff, 0x3fffffff, 0x3fffffff}};
     static BinaryPropertyObject property_object{Gr_Base, codepoint_set};
   }
   namespace GR_EXT_ns {
@@ -636,8 +626,7 @@ namespace UCD {
         0x50000000, 0x00800001, 0x001f1fc0, 0xa5f90000, 0x0000000d,
         0xb03c8000, 0x00000001, 0xa7f80000, 0x00000001, 0x00bf2800,
         0x001f0000, 0x007f0000, 0x00078000, 0x60000000, 0xf807c3a0,
-        0x00000fe7, 0x00003c00, 0x0000001c, 0x007f0000, 0x0000ffff}}
-;
+        0x00000fe7, 0x00003c00, 0x0000001c, 0x007f0000, 0x0000ffff}};
     static BinaryPropertyObject property_object{Gr_Ext, codepoint_set};
   }
   namespace GR_LINK_ns {
@@ -665,8 +654,7 @@ namespace UCD {
         0x80000000, 0x00000040, 0x00000010, 0x00080000, 0x00000001,
         0x00400000, 0x00002000, 0x80000000, 0x00000040, 0x80000000,
         0x02000000, 0x00180000, 0x00000001, 0x00200000, 0x00000400,
-        0x00002000, 0x00000004, 0x80000000, 0x80000000, 0x00400000}}
-;
+        0x00002000, 0x00000004, 0x80000000, 0x80000000, 0x00400000}};
     static BinaryPropertyObject property_object{Gr_Link, codepoint_set};
   }
   namespace IDC_ns {
@@ -798,8 +786,7 @@ namespace UCD {
         0xf7ffffff, 0xffdfffff, 0xffdfffff, 0xffff7fff, 0xffff7fff,
         0xfffffdff, 0xfffffdff, 0xffffcff7, 0x007f001f, 0xffffffef,
         0x0af7fe96, 0xaa96ea84, 0x5ef7f796, 0x0ffffbff, 0x0ffffbee,
-        0x007fffff, 0x001fffff, 0x3fffffff, 0x3fffffff, 0x0000ffff}}
-;
+        0x007fffff, 0x001fffff, 0x3fffffff, 0x3fffffff, 0x0000ffff}};
     static BinaryPropertyObject property_object{IDC, codepoint_set};
   }
   namespace IDS_ns {
@@ -929,8 +916,7 @@ namespace UCD {
         0xffdfffff, 0xffdfffff, 0xffff7fff, 0xffff7fff, 0xfffffdff,
         0xfffffdff, 0x00000ff7, 0x0000001f, 0xffffffef, 0x0af7fe96,
         0xaa96ea84, 0x5ef7f796, 0x0ffffbff, 0x0ffffbee, 0x007fffff,
-        0x001fffff, 0x3fffffff, 0x3fffffff}}
-;
+        0x001fffff, 0x3fffffff, 0x3fffffff}};
     static BinaryPropertyObject property_object{IDS, codepoint_set};
   }
   namespace LOWER_ns {
@@ -967,8 +953,7 @@ namespace UCD {
         0x00000fff, 0xffffffc0, 0xfc000000, 0x000fffff, 0xffffc000,
         0x000000ff, 0x0ffffffc, 0xffc00000, 0x0000ffff, 0xfffffc00,
         0x0000003f, 0xf7fffffc, 0xf0000003, 0x0fdfffff, 0xffc00000,
-        0x003f7fff, 0xffff0000, 0x0000fdff, 0xfffffc00, 0x00000bf7}}
-;
+        0x003f7fff, 0xffff0000, 0x0000fdff, 0xfffffc00, 0x00000bf7}};
     static BinaryPropertyObject property_object{Lower, codepoint_set};
   }
   namespace MATH_ns {
@@ -995,8 +980,7 @@ namespace UCD {
         0x70000800, 0x50000000, 0x50000000, 0x00001e04, 0xffdfffff,
         0xdfffffff, 0xebffde64, 0xffffffef, 0xdfdfe7bf, 0x7bffffff,
         0xfffdfc5f, 0xffffff3f, 0xffffcfff, 0xffffffef, 0x0af7fe96,
-        0xaa96ea84, 0x5ef7f796, 0x0ffffbff, 0x0ffffbee, 0x00030000}}
-;
+        0xaa96ea84, 0x5ef7f796, 0x0ffffbff, 0x0ffffbee, 0x00030000}};
     static BinaryPropertyObject property_object{Math, codepoint_set};
   }
   namespace UPPER_ns {
@@ -1030,8 +1014,7 @@ namespace UCD {
         0xffff0000, 0x000003ff, 0xffffff00, 0x00000001, 0x07fffffc,
         0xf0000000, 0x001fffff, 0xffc00000, 0x00007fff, 0xffff0000,
         0x000001ff, 0x00000400, 0xffff0000, 0xffff03ff, 0xffff03ff,
-        0x000003ff}}
-;
+        0x000003ff}};
     static BinaryPropertyObject property_object{Upper, codepoint_set};
   }
   namespace XIDC_ns {
@@ -1165,8 +1148,7 @@ namespace UCD {
         0xffff7fff, 0xffff7fff, 0xfffffdff, 0xfffffdff, 0xffffcff7,
         0x007f001f, 0xffffffef, 0x0af7fe96, 0xaa96ea84, 0x5ef7f796,
         0x0ffffbff, 0x0ffffbee, 0x007fffff, 0x001fffff, 0x3fffffff,
-        0x3fffffff, 0x0000ffff}}
-;
+        0x3fffffff, 0x0000ffff}};
     static BinaryPropertyObject property_object{XIDC, codepoint_set};
   }
   namespace XIDS_ns {
@@ -1297,8 +1279,7 @@ namespace UCD {
         0xffff7fff, 0xffff7fff, 0xfffffdff, 0xfffffdff, 0x00000ff7,
         0x0000001f, 0xffffffef, 0x0af7fe96, 0xaa96ea84, 0x5ef7f796,
         0x0ffffbff, 0x0ffffbee, 0x007fffff, 0x001fffff, 0x3fffffff,
-        0x3fffffff}}
-;
+        0x3fffffff}};
     static BinaryPropertyObject property_object{XIDS, codepoint_set};
   }
 }
