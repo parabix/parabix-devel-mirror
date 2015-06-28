@@ -21,100 +21,118 @@
 #include "assert.h"
 #include <string>
 #include <llvm/Support/raw_ostream.h>
+#include <llvm/Support/Format.h>
 #include <include/simd-lib/builtins.hpp>
 #include <iostream>
+#include <iomanip>
 
 const size_t QUAD_BITS = (8 * sizeof(bitquad_t));
 const size_t MOD_QUAD_BIT_MASK = QUAD_BITS - 1;
 const size_t UNICODE_QUAD_COUNT = 0x110000 / QUAD_BITS;
 const bitquad_t FULL_QUAD_MASK = -1;
 
+std::string run_type_name(const run_type_t type) {
+    if (type == Empty) {
+        return "Empty";
+    }
+    if (type == Full) {
+        return "Full";
+    }
+    if (type == Mixed) {
+        return "Mixed";
+    }
+    return "???";
+}
+
+using RunVector = UnicodeSet::RunVector;
+using QuadVector = UnicodeSet::QuadVector;
+
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief append_run
  ** ------------------------------------------------------------------------------------------------------------- */
-inline void UnicodeSet::append_run(const run_type_t type, const unsigned length) {
-    if (length == 0) {
+inline void append_run(const run_type_t type, const unsigned length, RunVector & runs) {
+    if (LLVM_UNLIKELY(length == 0)) {
         return;
     }
-    else if (runs.size() == 0) {
-        runs.emplace_back(type, length);
+    else if (!runs.empty() && runs.back().mType == type) {
+        runs.back().mRunLength += length;
+        return;
     }
-    else {
-        RunStructure last_run = runs[runs.size()-1];
-        if (last_run.mType == type) {
-            runs.back().mRunLength += length;
-        }
-        else {
-            runs.emplace_back(type, length);
-        }
-    }
+    runs.emplace_back(type, length);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief append_quad
  ** ------------------------------------------------------------------------------------------------------------- */
-inline void UnicodeSet::append_quad(const bitquad_t quad) {
-    if (quad == 0) {
-        append_run(Empty, 1);
+inline void append_quad(const bitquad_t quad, QuadVector & quads, RunVector & runs) {
+    run_type_t type = Empty;
+    if (LLVM_UNLIKELY(quad == 0)) {
+        type = Empty;
     }
-    else if (quad == FULL_QUAD_MASK) {
-        append_run(Full, 1);
+    else if (LLVM_UNLIKELY(quad == FULL_QUAD_MASK)) {
+        type = Full;
     }
     else {
-        quads.push_back(quad);
-        append_run(Mixed, 1);
+        quads.emplace_back(quad);
+        type = Mixed;
     }
+    append_run(type, 1, runs);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief dump
  ** ------------------------------------------------------------------------------------------------------------- */
 void UnicodeSet::dump(llvm::raw_ostream & out) const {
-    auto quad_itr = quads.cbegin();
-    for (const RunStructure & run : runs) {
+    auto qi = mQuads.cbegin();
+    for (const RunStructure & run : mRuns) {
         if (run.mType == Empty) {
             out << "Empty(" << run.mRunLength << ")\n";
         }
-        else if (run.mType == Empty) {
+        else if (run.mType == Full) {
             out << "Full(" << run.mRunLength << ")\n";
         }
         else {
-            for (unsigned i = 0; i != run.mRunLength; ++i, ++quad_itr) {
-                assert (quad_itr != quads.cend());
-                out << "Mixed("; out.write_hex(*quad_itr) << ")\n";
+            for (const auto qi_end = qi + run.mRunLength; qi != qi_end; ++qi) {
+                assert (qi != mQuads.cend());
+                out << "Mixed(" << llvm::format("%08x", *qi) << ")\n";
             }
         }
     }
+    out.flush();
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief complement
  ** ------------------------------------------------------------------------------------------------------------- */
 UnicodeSet UnicodeSet::complement() const {
-    UnicodeSet set;
-    auto quad_itr = quads.cbegin();
-    for (const RunStructure & run : runs) {
+    RunVector runs;
+    QuadVector quads;
+    runs.reserve(mRuns.size());
+    quads.reserve(mQuads.size());
+    auto qi = quads.cbegin();
+    for (const RunStructure & run : mRuns) {
         if (run.mType == Empty) {
-            set.append_run(Full, run.mRunLength);
+            append_run(Full, run.mRunLength, runs);
         }
-        else if (run.mType == Empty) {
-            set.append_run(Empty, run.mRunLength);
+        else if (run.mType == Full) {
+            append_run(Empty, run.mRunLength, runs);
         }
         else {
-            for (unsigned i = 0; i != run.mRunLength; ++i, ++quad_itr) {
-                assert (quad_itr != quads.cend());
-                set.append_quad(FULL_QUAD_MASK ^ *quad_itr);
+            for (const auto qi_end = qi + run.mRunLength; qi != qi_end; ++qi) {
+                assert (qi != quads.cend());
+                append_quad(FULL_QUAD_MASK ^ *qi, quads, runs);
             }
         }
     }
-    return set;
+    return UnicodeSet(std::move(runs), std::move(quads));
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief intersection
  ** ------------------------------------------------------------------------------------------------------------- */
 UnicodeSet UnicodeSet::operator&(const UnicodeSet & other) const {
-    UnicodeSet iset;
+    RunVector runs;
+    QuadVector quads;
     const auto e1 = quad_end();
     const auto e2 = other.quad_end();
     for (auto i1 = quad_begin(), i2 = other.quad_begin(); i1 != e1 && i2 != e2; ) {
@@ -122,73 +140,81 @@ UnicodeSet UnicodeSet::operator&(const UnicodeSet & other) const {
         const auto run2 = i2.getRun();
         const auto n = std::min(run1.mRunLength, run2.mRunLength);
         if (run1.mType == run2.mType && run1.mType != Mixed) {
-            iset.append_run(run1.mType, n);
+            append_run(run1.mType, n, runs);
             i1 += n;
             i2 += n;
         }
         else if (run1.mType == Full) {
             for (unsigned i = 0; i != n; ++i, ++i2) {
-                iset.append_quad(i2.getQuad());
+                append_quad(i2.getQuad(), quads, runs);
             }
             i1 += n;
         }
         else if (run2.mType == Full) {
             for (unsigned i = 0; i != n; ++i, ++i1) {
-                iset.append_quad(i1.getQuad());
+                append_quad(i1.getQuad(), quads, runs);
             }
             i2 += n;
         }
         else {
-            for (unsigned i = 0; i < n; ++i, ++i1, ++i2) {
-                iset.append_quad(i1.getQuad() & i2.getQuad());
+            for (unsigned i = 0; i != n; ++i, ++i1, ++i2) {
+                append_quad(i1.getQuad() & i2.getQuad(), quads, runs);
             }
         }
     }
-    return iset;
+    return UnicodeSet(std::move(runs), std::move(quads));
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief union
  ** ------------------------------------------------------------------------------------------------------------- */
 UnicodeSet UnicodeSet::operator+(const UnicodeSet & other) const {
-    UnicodeSet iset;
+    RunVector runs;
+    QuadVector quads;
     const auto e1 = quad_end();
     const auto e2 = other.quad_end();
     for (auto i1 = quad_begin(), i2 = other.quad_begin(); i1 != e1 && i2 != e2; ) {
         const auto run1 = i1.getRun();
         const auto run2 = i2.getRun();
+
         const auto n = std::min(run1.mRunLength, run2.mRunLength);
-        if (run1.mType == run2.mType && run1.mType != Mixed) {
-            iset.append_run(run1.mType, n);
+        if ((run1.mType == Empty) && (run2.mType == Empty)) {
+            append_run(Empty, n, runs);
+            i1 += n;
+            i2 += n;
+        }
+        else if ((run1.mType == Full) || (run2.mType == Full)) {
+            append_run(Full, n, runs);
             i1 += n;
             i2 += n;
         }
         else if (run1.mType == Empty) {
             for (unsigned i = 0; i != n; ++i, ++i2) {
-                iset.append_quad(i2.getQuad());
+                append_quad(i2.getQuad(), quads, runs);
             }
             i1 += n;
         }
         else if (run2.mType == Empty) {
             for (unsigned i = 0; i != n; ++i, ++i1) {
-                iset.append_quad(i1.getQuad());
+                append_quad(i1.getQuad(), quads, runs);
             }
             i2 += n;
         }
         else {
             for (unsigned i = 0; i < n; ++i, ++i1, ++i2) {
-                iset.append_quad(i1.getQuad() | i2.getQuad());
+                append_quad(i1.getQuad() | i2.getQuad(), quads, runs);
             }
         }
     }
-    return iset;
+    return UnicodeSet(std::move(runs), std::move(quads));
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief difference
  ** ------------------------------------------------------------------------------------------------------------- */
 UnicodeSet UnicodeSet::operator-(const UnicodeSet & other) const {
-    UnicodeSet iset;
+    RunVector runs;
+    QuadVector quads;
     const auto e1 = quad_end();
     const auto e2 = other.quad_end();
     for (auto i1 = quad_begin(), i2 = other.quad_begin(); i1 != e1 && i2 != e2; ) {
@@ -196,36 +222,37 @@ UnicodeSet UnicodeSet::operator-(const UnicodeSet & other) const {
         const auto run2 = i2.getRun();
         unsigned n = std::min(run1.mRunLength, run2.mRunLength);
         if ((run1.mType == Empty) || (run2.mType == Full) || (run1.mType == Full && run2.mType == Empty)) {
-            iset.append_run(run1.mType, n);
+            append_run(run1.mType, n, runs);
             i1 += n;
             i2 += n;
         }
         else if (run1.mType == Full) {
             for (unsigned i = 0; i != n; ++i, ++i2) {
-                iset.append_quad(FULL_QUAD_MASK ^ i2.getQuad());
+                append_quad(FULL_QUAD_MASK ^ i2.getQuad(), quads, runs);
             }
             i1 += n;
         }
         else if (run2.mType == Empty) {
             for (unsigned i = 0; i != n; ++i, ++i1) {
-                iset.append_quad(i1.getQuad());
+                append_quad(i1.getQuad(), quads, runs);
             }
             i2 += n;
         }
         else {
             for (unsigned i = 0; i != n; ++i, ++i1, ++i2) {
-                iset.append_quad(i1.getQuad() &~ i2.getQuad());
+                append_quad(i1.getQuad() &~ i2.getQuad(), quads, runs);
             }
         }
     }
-    return iset;
+    return UnicodeSet(std::move(runs), std::move(quads));
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief symmetric difference
  ** ------------------------------------------------------------------------------------------------------------- */
 UnicodeSet UnicodeSet::operator^(const UnicodeSet & other) const {
-    UnicodeSet iset;
+    RunVector runs;
+    QuadVector quads;
     const auto e1 = quad_end();
     const auto e2 = other.quad_end();
     for (auto i1 = quad_begin(), i2 = other.quad_begin(); i1 != e1 && i2 != e2; ) {
@@ -233,41 +260,41 @@ UnicodeSet UnicodeSet::operator^(const UnicodeSet & other) const {
         const auto run2 = i2.getRun();
         unsigned n = std::min(run1.mRunLength, run2.mRunLength);
         if (run1.mType != Mixed && run2.mType != Mixed) {
-            iset.append_run(run1.mType == run2.mType ? Empty : Full, n);
+            append_run(run1.mType == run2.mType ? Empty : Full, n, runs);
             i1 += n;
             i2 += n;
         }
         else if (run1.mType == Empty) {
-            for (int i = 0; i < n; ++i, ++i2) {
-                iset.append_quad(i2.getQuad());
-            }
-            i1 += n;
-        }
-        else if (run2.mType == Empty) {
-            for (int i = 0; i < n; ++i, ++i1) {
-                iset.append_quad(i1.getQuad());
-            }
-            i2 += n;
-        }
-        else if (run1.mType == Full) {
-            for (int i = 0; i < n; ++i, ++i2) {
-                iset.append_quad(FULL_QUAD_MASK ^ i2.getQuad());
+            for (unsigned i = 0; i < n; ++i, ++i2) {
+                append_quad(i2.getQuad(), quads, runs);
             }
             i1 += n;
         }
         else if (run2.mType == Empty) {
             for (unsigned i = 0; i < n; ++i, ++i1) {
-                iset.append_quad(FULL_QUAD_MASK ^ i1.getQuad());
+                append_quad(i1.getQuad(), quads, runs);
+            }
+            i2 += n;
+        }
+        else if (run1.mType == Full) {
+            for (unsigned i = 0; i < n; ++i, ++i2) {
+                append_quad(FULL_QUAD_MASK ^ i2.getQuad(), quads, runs);
+            }
+            i1 += n;
+        }
+        else if (run2.mType == Empty) {
+            for (unsigned i = 0; i < n; ++i, ++i1) {
+                append_quad(FULL_QUAD_MASK ^ i1.getQuad(), quads, runs);
             }
             i2 += n;
         }
         else {
             for (unsigned i = 0; i != n; ++i, ++i1, ++i2) {
-                iset.append_quad(i1.getQuad() ^ i2.getQuad());
+                append_quad(i1.getQuad() ^ i2.getQuad(), quads, runs);
             }
         }
     }
-    return iset;
+    return UnicodeSet(std::move(runs), std::move(quads));
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -283,10 +310,10 @@ bool UnicodeSet::contains(const codepoint_t codepoint) const {
     unsigned quadIndex = 0;
 
     for (;;) {
-        const RunStructure & t = runs[runIndex];
+        const RunStructure & t = mRuns[runIndex];
         if (t.mRunLength >= n) {
             if (t.mType == Mixed) {
-                return (quads[quadIndex + n - 1] & (static_cast<bitquad_t>(1) << (codepoint & MOD_QUAD_BIT_MASK))) != 0;
+                return (mQuads[quadIndex + n - 1] & (static_cast<bitquad_t>(1) << (codepoint & MOD_QUAD_BIT_MASK))) != 0;
             }
             return (t.mType == Full);
         }
@@ -304,162 +331,146 @@ bool UnicodeSet::contains(const codepoint_t codepoint) const {
  ** ------------------------------------------------------------------------------------------------------------- */
 void UnicodeSet::quad_iterator::advance(unsigned n) {
     while (n > 0) {
-        const RunStructure & t = mUnicodeSet.runs[mRunIndex];
-        const unsigned remain = t.mRunLength - mOffset;
+        const unsigned remain = mRunIterator->mRunLength - mOffset;
         if (remain > n) {
+            if (mRunIterator->mType == Mixed) {
+                mQuadIterator += n;
+            }
             mOffset += n;
-            if (t.mType == Mixed) {
-                mQuadIndex += n;
-            }
             break;
         }
-        else if (remain == n) {
-            ++mRunIndex;
-            mOffset = 0;
-            if (t.mType == Mixed) {
-                mQuadIndex += n;
-            }
-            break;
+        if (mRunIterator->mType == Mixed) {
+            mQuadIterator += remain;
         }
-        else {
-            ++mRunIndex;
-            mOffset = 0;
-            if (t.mType == Mixed) {
-                mQuadIndex += remain;
-            }
-            n -= remain;
-        }
+        ++mRunIterator;
+        mOffset = 0;
+        n -= remain;
     }
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief UnicodeSet::iterator::advance
  ** ------------------------------------------------------------------------------------------------------------- */
-void UnicodeSet::iterator::advance(unsigned n) {
+void UnicodeSet::iterator::advance(const unsigned n) {
 
-    std::cerr << "advance(" << n << ")\n";
+    assert (n == 1);
 
-    mMinCodePoint = mBaseCodePoint;
-
-    for  ( ;n; ++mRunIterator) {
-
-        const RunStructure & t = *mRunIterator;
-
-        std::cerr << "Type:";
-        switch (t.mType) {
-            case Empty: std::cerr << "Empty"; break;
-            case Full: std::cerr << "Full"; break;
-            case Mixed: std::cerr << "Mixed"; break;
-        }
-        std::cerr << " Length:" << t.mRunLength;
-        std::cerr << " BaseCodePoint:" << mBaseCodePoint;
-
-
-        std::cerr << std::endl;
-
-        if (t.mType != Mixed) {
-            mMaxCodePoint = mBaseCodePoint + t.mRunLength * QUAD_BITS;
-            mBaseCodePoint = mMaxCodePoint;
+    // Find the start of our interval
+    for ( ; mBaseCodePoint <= re::CC::UNICODE_MAX; ++mRunIterator) {
+        // Find the first non-empty block
+        const RunStructure & run = *mRunIterator;
+        if (run.mType != Mixed) {
+            mMinCodePoint = mBaseCodePoint;
+            mBaseCodePoint += run.mRunLength * QUAD_BITS;
             mQuadOffset = 0;
             mQuadPosition = 0;
-            if (t.mType == Full) {
-                --n;
+            if (run.mType == Full) {
+                break;
             }
+        }
+        else { // if (left.mType == Mixed)
+            while (mQuadPosition != run.mRunLength) {
+                const bitquad_t q = *mQuadIterator;
+                const bitquad_t M = (FULL_QUAD_MASK << mQuadOffset);
+                const bitquad_t m = q & M;
+                // Nothing left in this quad to add; skip to the next one.
+                if (m == 0) {
+                    mBaseCodePoint += QUAD_BITS;
+                    ++mQuadPosition;
+                    ++mQuadIterator;
+                    continue;
+                }
+                mQuadOffset = scan_forward_zeroes(m);
+                mMinCodePoint = mBaseCodePoint + mQuadOffset;
+                break;
+            }
+            // If we found nothing in the quad, restart the loop.
+            if (mQuadPosition != run.mRunLength) {
+                break;
+            }
+        }
+    }
+
+    // Find the end of our interval
+    for ( ; mBaseCodePoint <= re::CC::UNICODE_MAX; ++mRunIterator) {
+        const RunStructure & run = *mRunIterator;
+        // If the next run is empty, we already know the max code point.
+        if (run.mType == Empty) {
+            mMaxCodePoint = mBaseCodePoint;
+            break;
+        }
+        // If the next run is Full, increment the base code point.
+        else if (run.mType == Full) {
+            mBaseCodePoint += run.mRunLength * QUAD_BITS;
+            mMaxCodePoint = mBaseCodePoint;
+            mQuadOffset = 0;
+            mQuadPosition = 0;
             continue;
         }
+        else { // if (left.mType == Mixed)
+            while (mQuadPosition != run.mRunLength) {
 
-        while (mQuadPosition != t.mRunLength) {
+                const bitquad_t q = *mQuadIterator;
+                const bitquad_t M = (FULL_QUAD_MASK << mQuadOffset);
+                const bitquad_t m = ~q & M;
 
-            const bitquad_t q = *mQuadIterator;
+                // Nothing left in this quad to add; skip to the next one.
+                if (m == 0) {
+                    mBaseCodePoint += QUAD_BITS;
+                    mMaxCodePoint = mBaseCodePoint;
+                    ++mQuadPosition;
+                    ++mQuadIterator;
+                    continue;
+                }
 
-            const bitquad_t m = q & ((-1) >> mQuadOffset);
-
-            std::cerr << "  q:" << std::hex << q << std::endl;
-            std::cerr << " +m:" << std::hex << m << std::dec << "   (" << mQuadOffset << ")" << std::endl;
-
-            // Nothing left in this quad to add; skip to the next one.
-            if (m == 0) {
-                mBaseCodePoint += QUAD_BITS;
-                mMinCodePoint = mBaseCodePoint;
-                ++mQuadIterator;
-                continue;
+                mQuadOffset = scan_forward_zeroes(m);
+                mMaxCodePoint = mBaseCodePoint + mQuadOffset - 1;
+                break;
             }
-
-            mQuadOffset = scan_forward_zeroes(m);
-            mMinCodePoint = mBaseCodePoint + mQuadOffset;
-
-
-
-            break;
-        }
-
-        while (mQuadPosition != t.mRunLength) {
-
-            // Although the initial position was in this quad, the final position isn't
-            // unless this is the last quad of this mixed run and the subsequent quad is
-            // Empty.
-
-            const bitquad_t q = *mQuadIterator;
-            const bitquad_t m = ~q & ((-1) >> mQuadOffset);
-
-            std::cerr << "  q:" << std::hex << q << std::endl;
-            std::cerr << " -m:" << std::hex << m << std::dec << "   (" << mQuadOffset << ")" << std::endl;
-
-            // Nothing left in this quad to add; skip to the next one.
-            if (m == 0) {
-                mBaseCodePoint += QUAD_BITS;
-                mMaxCodePoint = mBaseCodePoint;
-                ++mQuadIterator;
-                continue;
+            // If we found nothing in the quad, restart the loop.
+            if (mQuadPosition != run.mRunLength) {
+                break;
             }
-
-            mQuadOffset = scan_forward_zeroes(m);
-            mMaxCodePoint = mBaseCodePoint + mQuadOffset;
-            --n;
-            break;
         }
     }
-}
 
-UnicodeSet::UnicodeSet()
-: runs({{{Empty, UNICODE_QUAD_COUNT}}})
-{
 
 }
 
-// singleton set constructor
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief Empty Set Constructor
+ ** ------------------------------------------------------------------------------------------------------------- */
+UnicodeSet::UnicodeSet() : mRuns({{{Empty, UNICODE_QUAD_COUNT}}}) { }
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief Singleton Set Constructor
+ ** ------------------------------------------------------------------------------------------------------------- */
 UnicodeSet::UnicodeSet(const codepoint_t codepoint) {
-    codepoint_t quad_no = codepoint / QUAD_BITS;
-    if (quad_no > 0) {
-        append_run(Empty, quad_no);
-    }
-    append_run(Mixed, 1);
-    quads.push_back(static_cast<bitquad_t>(1) << (codepoint & MOD_QUAD_BIT_MASK));
-    if (quad_no < UNICODE_QUAD_COUNT - 1) {
-        append_run(Empty, UNICODE_QUAD_COUNT - (quad_no + 1));
-    }
+    const codepoint_t quad_no = codepoint / QUAD_BITS;
+    append_run(Empty, quad_no, mRuns);
+    append_quad(static_cast<bitquad_t>(1) << (codepoint & MOD_QUAD_BIT_MASK), mQuads, mRuns);
+    append_run(Empty, UNICODE_QUAD_COUNT - (quad_no + 1), mRuns);
 }
 
-// range set constructor
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief Range Set Constructor
+ ** ------------------------------------------------------------------------------------------------------------- */
 UnicodeSet::UnicodeSet(const codepoint_t lo_codepoint, const codepoint_t hi_codepoint) {
-    codepoint_t lo_quad_no = lo_codepoint / QUAD_BITS;
-    codepoint_t hi_quad_no = hi_codepoint / QUAD_BITS;
-    codepoint_t lo_offset = lo_codepoint & MOD_QUAD_BIT_MASK;
-    codepoint_t hi_offset = hi_codepoint & MOD_QUAD_BIT_MASK;
-    if (lo_quad_no > 0) {
-        append_run(Empty, lo_quad_no);
-    }
-    if (lo_quad_no == hi_quad_no) {
-        bitquad_t quad = (FULL_QUAD_MASK << lo_offset) & (FULL_QUAD_MASK >> (QUAD_BITS - 1 - hi_offset));
-        append_quad(quad);
+    const codepoint_t lo_quad_no = lo_codepoint / QUAD_BITS;
+    const codepoint_t hi_quad_no = hi_codepoint / QUAD_BITS;
+    const codepoint_t lo_offset = lo_codepoint & MOD_QUAD_BIT_MASK;
+    const codepoint_t hi_offset = hi_codepoint & MOD_QUAD_BIT_MASK;
+    const bitquad_t lo_quad = (FULL_QUAD_MASK << lo_offset);
+    const bitquad_t hi_quad = (FULL_QUAD_MASK >> (QUAD_BITS - 1 - hi_offset));
+    append_run(Empty, lo_quad_no, mRuns);
+    if (lo_quad_no == hi_quad_no) {        
+        append_quad(lo_quad & hi_quad, mQuads, mRuns);
     }
     else {
-        append_quad((FULL_QUAD_MASK << lo_offset) & FULL_QUAD_MASK);
-        append_run(Full, hi_quad_no - (lo_quad_no + 1));
-        append_quad((FULL_QUAD_MASK >> (QUAD_BITS - 1 - hi_offset)) & FULL_QUAD_MASK);
+        append_quad(lo_quad, mQuads, mRuns);
+        append_run(Full, hi_quad_no - (lo_quad_no + 1), mRuns);
+        append_quad(hi_quad, mQuads, mRuns);
     }
-    if (hi_quad_no < UNICODE_QUAD_COUNT - 1) {
-        append_run(Empty, UNICODE_QUAD_COUNT - (hi_quad_no + 1));
-    }
+    append_run(Empty, UNICODE_QUAD_COUNT - (hi_quad_no + 1), mRuns);
 }
 

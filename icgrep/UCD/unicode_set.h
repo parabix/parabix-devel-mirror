@@ -44,26 +44,26 @@ struct RunStructure {
   uint16_t mRunLength;
 };
 
-class UnicodeSet;
+class UnicodeSet {
+public:
+
     using codepoint_t = re::codepoint_t;
     using interval_t = re::interval_t;
     using RunVector = std::vector<RunStructure>;
     using QuadVector = std::vector<bitquad_t>;
-class UnicodeSet {
-public:
 
-    class iterator : public boost::iterator_facade<iterator, re::interval_t, boost::forward_traversal_tag, re::interval_t> {
+    class iterator : public boost::iterator_facade<iterator, interval_t, boost::forward_traversal_tag, interval_t> {
         friend class UnicodeSet;
         friend class boost::iterator_core_access;
     protected:
         iterator(RunVector::const_iterator runIterator, QuadVector::const_iterator quadIterator)
-        : mRunIterator(runIterator), mQuadIterator(quadIterator), mQuadOffset(0)
-        , mQuadPosition(0), mBaseCodePoint(0), mMinCodePoint(0), mMaxCodePoint(0)
+        : mRunIterator(runIterator), mQuadIterator(quadIterator)
+        , mQuadOffset(0), mQuadPosition(0), mBaseCodePoint(0), mMinCodePoint(0), mMaxCodePoint(0)
         {
 
         }
 
-        void advance(unsigned n);
+        void advance(const unsigned n);
 
         re::interval_t dereference() const {
             return std::make_pair(mMinCodePoint, mMaxCodePoint);
@@ -74,12 +74,14 @@ public:
         }
 
         inline bool equal(iterator const & other) const {
-            assert (&(mUnicodeSet) == &(other.mUnicodeSet));
             return (mRunIterator == other.mRunIterator) && (mQuadIterator == other.mQuadIterator);
         }
     private:
-        RunVector::const_iterator   mRunIterator;
-        QuadVector::const_iterator  mQuadIterator;
+        RunVector::const_iterator           mRunIterator;
+        const RunVector::const_iterator     mRunEnd;
+        QuadVector::const_iterator          mQuadIterator;
+
+
         bitquad_t                   mQuadOffset;
         unsigned                    mQuadPosition;
         unsigned                    mBaseCodePoint;
@@ -88,11 +90,56 @@ public:
     };
 
     inline iterator begin() const {
-        return iterator(runs.cbegin(), quads.cbegin());
+        // note: pre-increment is intentional to move the iterator onto the first non-Empty interval.
+        return ++iterator(mRuns.cbegin(), mQuads.cbegin());
     }
 
     inline iterator end() const {
-        return iterator(runs.cend(), quads.cend());
+        return iterator(mRuns.cend(), mQuads.cend());
+    }
+
+    class quad_iterator : public boost::iterator_facade<quad_iterator, std::pair<RunStructure, bitquad_t>, boost::random_access_traversal_tag> {
+        friend class UnicodeSet;
+        friend class boost::iterator_core_access;
+    public:
+        quad_iterator(RunVector::const_iterator runIterator, QuadVector::const_iterator quadIterator)
+            : mRunIterator(runIterator), mQuadIterator(quadIterator), mOffset(0) {}
+
+        void advance(unsigned n);
+
+        inline const std::pair<RunStructure, bitquad_t> dereference() const {
+            return std::make_pair(getRun(), getQuad());
+        }
+
+        inline void increment() {
+            advance(1);
+        }
+
+        inline RunStructure getRun() const {
+            const auto & t = *mRunIterator;
+            return RunStructure(t.mType, t.mRunLength - mOffset);
+        }
+
+        inline bitquad_t getQuad() const {
+            return *mQuadIterator;
+        }
+
+        inline bool equal(const quad_iterator & other) const {
+            return (mRunIterator == other.mRunIterator) && (mQuadIterator == other.mQuadIterator);
+        }
+
+    private:
+        RunVector::const_iterator   mRunIterator;
+        QuadVector::const_iterator  mQuadIterator;
+        unsigned                    mOffset;
+    };
+
+    inline quad_iterator quad_begin() const {
+        return quad_iterator(mRuns.cbegin(), mQuads.cbegin());
+    }
+
+    inline quad_iterator quad_end() const {
+        return quad_iterator(mRuns.cend(), mQuads.cend());
     }
 
     bool contains(const codepoint_t codepoint) const;
@@ -108,68 +155,13 @@ public:
     UnicodeSet();
     UnicodeSet(const codepoint_t codepoint);
     UnicodeSet(const codepoint_t lo_codepoint, const codepoint_t hi_codepoint);
-    UnicodeSet(std::initializer_list<RunStructure> r, std::initializer_list<bitquad_t> q) : runs(r), quads(q) {}
-
-protected:
-
-    class quad_iterator : public boost::iterator_facade<quad_iterator, std::pair<RunStructure, bitquad_t>, boost::random_access_traversal_tag> {
-        friend class UnicodeSet;
-        friend class boost::iterator_core_access;
-    public:
-        quad_iterator(const UnicodeSet & set, unsigned runIndex) : mUnicodeSet(set), mRunIndex(runIndex), mOffset(0), mQuadIndex(0) {}
-
-        void advance(unsigned n);
-
-        inline const std::pair<RunStructure, bitquad_t> dereference() const {
-            return std::make_pair(getRun(), getQuad());
-        }
-
-        inline void increment() {
-            advance(1);
-        }
-
-        inline RunStructure getRun() const {
-            const auto & t = mUnicodeSet.runs[mRunIndex];
-            return RunStructure(t.mType, t.mRunLength - mOffset);
-        }
-
-        inline bitquad_t getQuad() const {
-            return mUnicodeSet.quads[mQuadIndex];
-        }
-
-        inline bool equal(const quad_iterator & other) const {
-            assert (&(mUnicodeSet) == &(other.mUnicodeSet));
-            return (mRunIndex == other.mRunIndex);
-        }
-
-    private:
-        const UnicodeSet &          mUnicodeSet;
-        unsigned                    mRunIndex;
-        unsigned                    mOffset;
-        unsigned                    mQuadIndex;
-    };
-
-    inline quad_iterator quad_begin() const {
-        return quad_iterator(*this, 0);
-    }
-
-    inline quad_iterator quad_end() const {
-        return quad_iterator(*this, runs.size());
-    }
-
-    friend class UnicodeSet::quad_iterator;
-
-    // Internal helper functions
-    void append_run(const run_type_t type, const unsigned length);
-    void append_quad(const bitquad_t quad);
+    UnicodeSet(std::initializer_list<RunStructure> r, std::initializer_list<bitquad_t> q) : mRuns(r), mQuads(q) {}
+    UnicodeSet(std::vector<RunStructure> && r, std::vector<bitquad_t> && q) : mRuns(r), mQuads(q) {}
 
 private:
 
-    // The internal fields for a UnicodeSet.
-    std::vector<RunStructure>   runs;
-    std::vector<bitquad_t>      quads;
-    
-
+    std::vector<RunStructure>   mRuns;
+    std::vector<bitquad_t>      mQuads;
 };
 
 inline UnicodeSet uset_complement(const UnicodeSet & s) {
