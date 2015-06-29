@@ -33,9 +33,11 @@ public:
 
     pablo::Assign * compileCC(const std::string && canonicalName, const re::CC *cc, pablo::PabloBlock & block);
 
-    pablo::Assign * compileCC(const std::string &&canonicalName, const re::CC *cc, pablo::PabloBuilder & builder);
+    pablo::Assign * compileCC(const std::string && canonicalName, const re::CC *cc, pablo::PabloBuilder & builder);
 
     void compileByteClasses(re::RE * re);
+
+    pablo::PabloBuilder & getBuilder();
 
 private:
     pablo::Var * getBasisVar(const int n) const;
@@ -73,6 +75,10 @@ inline pablo::Assign * CC_Compiler::compileCC(const re::CC *cc, pablo::PabloBuil
 
 inline const CC_Compiler::Vars & CC_Compiler::getBasisBits(const CC_NameMap &) const {
     return mBasisBit;
+}
+
+inline pablo::PabloBuilder & CC_Compiler::getBuilder() {
+    return mBuilder;
 }
 
 

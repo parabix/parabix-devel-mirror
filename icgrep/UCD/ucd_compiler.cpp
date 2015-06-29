@@ -422,8 +422,8 @@ inline PabloAST * UCDCompiler::generateWithDefaultIfHierarchy(const UnicodeSet &
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief constructor
  ** ------------------------------------------------------------------------------------------------------------- */
-UCDCompiler::UCDCompiler(PabloBlock & entry, const Encoding & encoding)
-: mCharacterClassCompiler(entry, encoding)
+UCDCompiler::UCDCompiler(cc::CC_Compiler & ccCompiler)
+: mCharacterClassCompiler(ccCompiler)
 , mSuffix(makeCC(0x80, 0xBF)) { }
 
 }

@@ -111,7 +111,6 @@ void UnicodeSet::dump(llvm::raw_ostream & out) const {
             }
         }
     }
-    out.flush();
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -150,8 +149,8 @@ UnicodeSet UnicodeSet::operator&(const UnicodeSet & other) const {
     const auto e1 = quad_end();
     const auto e2 = other.quad_end();
     for (auto i1 = quad_begin(), i2 = other.quad_begin(); i1 != e1 && i2 != e2; ) {
-        const auto run1 = i1.getRun();
-        const auto run2 = i2.getRun();
+        const auto run1 = i1.run();
+        const auto run2 = i2.run();
         const auto n = std::min(lengthOf(run1), lengthOf(run2));
         if (typeOf(run1) == typeOf(run2) && typeOf(run1) != Mixed) {
             append_run(typeOf(run1), n, runs);
@@ -160,19 +159,19 @@ UnicodeSet UnicodeSet::operator&(const UnicodeSet & other) const {
         }
         else if (typeOf(run1) == Full) {
             for (unsigned i = 0; i != n; ++i, ++i2) {
-                append_quad(i2.getQuad(), quads, runs);
+                append_quad(i2.quad(), quads, runs);
             }
             i1 += n;
         }
         else if (typeOf(run2) == Full) {
             for (unsigned i = 0; i != n; ++i, ++i1) {
-                append_quad(i1.getQuad(), quads, runs);
+                append_quad(i1.quad(), quads, runs);
             }
             i2 += n;
         }
         else {
             for (unsigned i = 0; i != n; ++i, ++i1, ++i2) {
-                append_quad(i1.getQuad() & i2.getQuad(), quads, runs);
+                append_quad(i1.quad() & i2.quad(), quads, runs);
             }
         }
     }
@@ -190,8 +189,8 @@ UnicodeSet UnicodeSet::operator+(const UnicodeSet & other) const {
     const auto e2 = other.quad_end();
     auto i1 = quad_begin(), i2 = other.quad_begin();
     for (; i1 != e1 && i2 != e2; ) {
-        const auto run1 = i1.getRun();
-        const auto run2 = i2.getRun();
+        const auto run1 = i1.run();
+        const auto run2 = i2.run();
         const auto n = std::min(lengthOf(run1), lengthOf(run2));
         if ((typeOf(run1) == Empty) && (typeOf(run2) == Empty)) {
             append_run(Empty, n, runs);
@@ -205,19 +204,19 @@ UnicodeSet UnicodeSet::operator+(const UnicodeSet & other) const {
         }
         else if (typeOf(run1) == Empty) {
             for (unsigned i = 0; i != n; ++i, ++i2) {
-                append_quad(i2.getQuad(), quads, runs);
+                append_quad(i2.quad(), quads, runs);
             }
             i1 += n;
         }
         else if (typeOf(run2) == Empty) {
             for (unsigned i = 0; i != n; ++i, ++i1) {
-                append_quad(i1.getQuad(), quads, runs);
+                append_quad(i1.quad(), quads, runs);
             }
             i2 += n;
         }
         else {
             for (unsigned i = 0; i < n; ++i, ++i1, ++i2) {
-                append_quad(i1.getQuad() | i2.getQuad(), quads, runs);
+                append_quad(i1.quad() | i2.quad(), quads, runs);
             }
         }
     }
@@ -234,8 +233,8 @@ UnicodeSet UnicodeSet::operator-(const UnicodeSet & other) const {
     const auto e1 = quad_end();
     const auto e2 = other.quad_end();
     for (auto i1 = quad_begin(), i2 = other.quad_begin(); i1 != e1 && i2 != e2; ) {
-        const auto run1 = i1.getRun();
-        const auto run2 = i2.getRun();
+        const auto run1 = i1.run();
+        const auto run2 = i2.run();
         unsigned n = std::min(lengthOf(run1), lengthOf(run2));
         if ((typeOf(run1) == Empty) || (typeOf(run2) == Full) || (typeOf(run1) == Full && typeOf(run2) == Empty)) {
             append_run(typeOf(run1), n, runs);
@@ -244,19 +243,19 @@ UnicodeSet UnicodeSet::operator-(const UnicodeSet & other) const {
         }
         else if (typeOf(run1) == Full) {
             for (unsigned i = 0; i != n; ++i, ++i2) {
-                append_quad(FULL_QUAD_MASK ^ i2.getQuad(), quads, runs);
+                append_quad(FULL_QUAD_MASK ^ i2.quad(), quads, runs);
             }
             i1 += n;
         }
         else if (typeOf(run2) == Empty) {
             for (unsigned i = 0; i != n; ++i, ++i1) {
-                append_quad(i1.getQuad(), quads, runs);
+                append_quad(i1.quad(), quads, runs);
             }
             i2 += n;
         }
         else {
             for (unsigned i = 0; i != n; ++i, ++i1, ++i2) {
-                append_quad(i1.getQuad() &~ i2.getQuad(), quads, runs);
+                append_quad(i1.quad() &~ i2.quad(), quads, runs);
             }
         }
     }
@@ -273,8 +272,8 @@ UnicodeSet UnicodeSet::operator^(const UnicodeSet & other) const {
     const auto e1 = quad_end();
     const auto e2 = other.quad_end();
     for (auto i1 = quad_begin(), i2 = other.quad_begin(); i1 != e1 && i2 != e2; ) {
-        const auto run1 = i1.getRun();
-        const auto run2 = i2.getRun();
+        const auto run1 = i1.run();
+        const auto run2 = i2.run();
         unsigned n = std::min(lengthOf(run1), lengthOf(run2));
         if (typeOf(run1) != Mixed && typeOf(run2) != Mixed) {
             append_run(typeOf(run1) == typeOf(run2) ? Empty : Full, n, runs);
@@ -283,31 +282,31 @@ UnicodeSet UnicodeSet::operator^(const UnicodeSet & other) const {
         }
         else if (typeOf(run1) == Empty) {
             for (unsigned i = 0; i < n; ++i, ++i2) {
-                append_quad(i2.getQuad(), quads, runs);
+                append_quad(i2.quad(), quads, runs);
             }
             i1 += n;
         }
         else if (typeOf(run2) == Empty) {
             for (unsigned i = 0; i < n; ++i, ++i1) {
-                append_quad(i1.getQuad(), quads, runs);
+                append_quad(i1.quad(), quads, runs);
             }
             i2 += n;
         }
         else if (typeOf(run1) == Full) {
             for (unsigned i = 0; i < n; ++i, ++i2) {
-                append_quad(FULL_QUAD_MASK ^ i2.getQuad(), quads, runs);
+                append_quad(FULL_QUAD_MASK ^ i2.quad(), quads, runs);
             }
             i1 += n;
         }
         else if (typeOf(run2) == Empty) {
             for (unsigned i = 0; i < n; ++i, ++i1) {
-                append_quad(FULL_QUAD_MASK ^ i1.getQuad(), quads, runs);
+                append_quad(FULL_QUAD_MASK ^ i1.quad(), quads, runs);
             }
             i2 += n;
         }
         else {
             for (unsigned i = 0; i != n; ++i, ++i1, ++i2) {
-                append_quad(i1.getQuad() ^ i2.getQuad(), quads, runs);
+                append_quad(i1.quad() ^ i2.quad(), quads, runs);
             }
         }
     }
@@ -330,7 +329,6 @@ UnicodeSet UnicodeSet::operator==(const UnicodeSet & other) const {
     }
     return true;
 }
-
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief contains
@@ -419,7 +417,6 @@ void UnicodeSet::iterator::advance(const unsigned n) {
             }
             // If we found nothing in the quad, restart the loop.
             if (found) {
-                // std::cerr << "Min: " << mMinCodePoint << " = " << mBaseCodePoint << " + " << mQuadOffset << std::endl;
                 break;
             }
         }
@@ -460,7 +457,6 @@ void UnicodeSet::iterator::advance(const unsigned n) {
             }
             // If we found nothing in the quad, restart the loop.
             if (found) {
-                // std::cerr << "Max: " << mMinCodePoint << " = " << mBaseCodePoint << " + " << mQuadOffset << std::endl;
                 break;
             }
         }

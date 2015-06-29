@@ -43,6 +43,7 @@ public:
     using bitquad_t = uint32_t;
     using length_t = uint16_t;
     using run_t = std::pair<run_type_t, length_t>;
+    using quad_iterator_return_t = std::pair<run_t, bitquad_t>;
 
     using codepoint_t = re::codepoint_t;
     using interval_t = re::interval_t;
@@ -62,7 +63,7 @@ public:
 
         void advance(const unsigned n);
 
-        re::interval_t dereference() const {
+        inline interval_t dereference() const {
             return std::make_pair(mMinCodePoint, mMaxCodePoint);
         }
 
@@ -70,7 +71,7 @@ public:
             advance(1);
         }
 
-        inline bool equal(iterator const & other) const {
+        inline bool equal(const iterator & other) const {
             return (mRunIterator == other.mRunIterator) && (mQuadIterator == other.mQuadIterator) &&
                    (mMixedRunIndex == other.mMixedRunIndex) && (mQuadOffset == other.mQuadOffset);
         }
@@ -93,7 +94,7 @@ public:
         return iterator(mRuns.cend(), mQuads.cend());
     }
 
-    class quad_iterator : public boost::iterator_facade<quad_iterator, std::pair<run_t, bitquad_t>, boost::random_access_traversal_tag> {
+    class quad_iterator : public boost::iterator_facade<quad_iterator, quad_iterator_return_t, boost::random_access_traversal_tag, quad_iterator_return_t> {
         friend class UnicodeSet;
         friend class boost::iterator_core_access;
     public:
@@ -102,20 +103,20 @@ public:
 
         void advance(unsigned n);
 
-        inline const std::pair<run_t, bitquad_t> dereference() const {
-            return std::make_pair(getRun(), getQuad());
+        inline quad_iterator_return_t dereference() const {
+            return std::make_pair(run(), quad());
         }
 
         inline void increment() {
             advance(1);
         }
 
-        inline run_t getRun() const {
+        inline run_t run() const {
             const auto & t = *mRunIterator;
             return std::make_pair(std::get<0>(t), std::get<1>(t) - mOffset);
         }
 
-        inline bitquad_t getQuad() const {
+        inline bitquad_t quad() const {
             return *mQuadIterator;
         }
 
@@ -146,11 +147,14 @@ public:
     UnicodeSet operator+(const UnicodeSet & other) const;
     UnicodeSet operator-(const UnicodeSet & other) const;
     UnicodeSet operator^(const UnicodeSet & other) const;
+    inline UnicodeSet & operator=(const UnicodeSet & other) = default;
+    inline UnicodeSet & operator=(UnicodeSet && other) = default;
     UnicodeSet operator==(const UnicodeSet & other) const;
 
     UnicodeSet();
     UnicodeSet(const codepoint_t codepoint);
     UnicodeSet(const codepoint_t lo_codepoint, const codepoint_t hi_codepoint);
+    inline UnicodeSet(const UnicodeSet & other) = default;
     UnicodeSet(std::initializer_list<run_t> r, std::initializer_list<bitquad_t> q) : mRuns(r), mQuads(q) {}
     UnicodeSet(std::vector<run_t> && r, std::vector<bitquad_t> && q) : mRuns(r), mQuads(q) {}
 
@@ -159,18 +163,16 @@ public:
 
 private:
 
-    std::vector<run_t>   mRuns;
-    std::vector<bitquad_t>      mQuads;
+    RunVector       mRuns;
+    QuadVector      mQuads;
 };
 
 inline void UnicodeSet::swap(UnicodeSet & other) {
-    mRuns.swap(other.mRuns);
-    mQuads.swap(other.mQuads);
+    mRuns.swap(other.mRuns); mQuads.swap(other.mQuads);
 }
 
 inline void UnicodeSet::swap(UnicodeSet && other) {
-    mRuns.swap(other.mRuns);
-    mQuads.swap(other.mQuads);
+    mRuns.swap(other.mRuns); mQuads.swap(other.mQuads);
 }
 
 inline UnicodeSet uset_complement(const UnicodeSet & s) {

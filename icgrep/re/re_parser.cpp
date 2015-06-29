@@ -591,7 +591,7 @@ RE * RE_Parser::parse_charset() {
         }
     }
     while (_cursor != _end) {
-        CharsetOperatorKind op = getCharsetOperator();
+        const CharsetOperatorKind op = getCharsetOperator();
         switch (op) {
             case intersectOp:
             case setDiffOp: {
@@ -882,7 +882,7 @@ void RE_Parser::CC_add_range(CC * cc, codepoint_t lo, codepoint_t hi) {
     if (fModeFlagSet & CASE_INSENSITIVE_MODE_FLAG) {
         caseInsensitiveInsertRange(cc, lo, hi);
     }
-    else cc-> insert_range(lo, hi);
+    else cc->insert_range(lo, hi);
 }
     
     

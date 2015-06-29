@@ -14,6 +14,17 @@ private: \
 __##NAME functor(mPb); \
 PabloAST * result = mExprTable.findUnaryOrCall(std::move(functor), TYPE, ARGS)
 
+#define MAKE_NAMED_UNARY(NAME, TYPE, ARGS...) \
+struct __##NAME { \
+    inline PabloAST * operator()(PabloAST * arg, const std::string name) { \
+        return mPb.NAME(arg, name); \
+    } \
+    inline __##NAME(PabloBlock & pb) : mPb(pb) {} \
+private: \
+    PabloBlock & mPb; \
+}; \
+__##NAME functor(mPb); \
+PabloAST * result = mExprTable.findUnaryOrCall(std::move(functor), TYPE, ARGS)
 
 #define MAKE_BINARY(NAME, TYPE, ARGS...) \
 struct __##NAME { \
@@ -51,6 +62,18 @@ private: \
 __##NAME functor(mPb); \
 PabloAST * result = mExprTable.findTernaryOrCall(std::move(functor), TYPE, ARGS)
 
+#define MAKE_NAMED_TERNARY(NAME, TYPE, ARGS...) \
+struct __##NAME { \
+    inline PabloAST * operator()(PabloAST * arg1, PabloAST * arg2, PabloAST * arg3, const std::string name) { \
+        return mPb.NAME(arg1, arg2, arg3, name); \
+    } \
+    inline __##NAME(PabloBlock & pb) : mPb(pb) {} \
+private: \
+    PabloBlock & mPb; \
+}; \
+__##NAME functor(mPb); \
+PabloAST * result = mExprTable.findTernaryOrCall(std::move(functor), TYPE, ARGS)
+
 
 Call * PabloBuilder::createCall(String * name) {
     MAKE_UNARY(createCall, PabloAST::ClassTypeId::Call, name);
@@ -72,11 +95,24 @@ PabloAST * PabloBuilder::createNot(PabloAST * expr) {
     return result;
 }
 
+PabloAST * PabloBuilder::createNot(PabloAST * expr, const std::string prefix) {
+    MAKE_NAMED_UNARY(createNot, PabloAST::ClassTypeId::Not, expr, prefix);
+    return result;
+}
+
 PabloAST * PabloBuilder::createAnd(PabloAST * expr1, PabloAST * expr2) {
     if (expr1 < expr2) {
         std::swap(expr1, expr2);
     }
     MAKE_BINARY(createAnd, PabloAST::ClassTypeId::And, expr1, expr2);
+    return result;
+}
+
+PabloAST * PabloBuilder::createAnd(PabloAST * expr1, PabloAST * expr2, const std::string prefix) {
+    if (expr1 < expr2) {
+        std::swap(expr1, expr2);
+    }
+    MAKE_NAMED_BINARY(createAnd, PabloAST::ClassTypeId::And, expr1, expr2, prefix);
     return result;
 }
 
@@ -88,6 +124,14 @@ PabloAST * PabloBuilder::createOr(PabloAST * expr1, PabloAST * expr2) {
     return result;
 }
 
+PabloAST * PabloBuilder::createOr(PabloAST * expr1, PabloAST * expr2, const std::string prefix) {
+    if (expr1 < expr2) {
+        std::swap(expr1, expr2);
+    }
+    MAKE_NAMED_BINARY(createOr, PabloAST::ClassTypeId::Or, expr1, expr2, prefix);
+    return result;
+}
+
 PabloAST * PabloBuilder::createXor(PabloAST * expr1, PabloAST * expr2) {
     if (expr1 < expr2) {
         std::swap(expr1, expr2);
@@ -96,8 +140,21 @@ PabloAST * PabloBuilder::createXor(PabloAST * expr1, PabloAST * expr2) {
     return result;
 }
 
+PabloAST * PabloBuilder::createXor(PabloAST * expr1, PabloAST * expr2, const std::string prefix) {
+    if (expr1 < expr2) {
+        std::swap(expr1, expr2);
+    }
+    MAKE_NAMED_BINARY(createXor, PabloAST::ClassTypeId::Xor, expr1, expr2, prefix);
+    return result;
+}
+
 PabloAST * PabloBuilder::createMatchStar(PabloAST * marker, PabloAST * charclass) {
     MAKE_BINARY(createMatchStar, PabloAST::ClassTypeId::MatchStar, marker, charclass);
+    return result;
+}
+
+PabloAST * PabloBuilder::createMatchStar(PabloAST * marker, PabloAST * charclass, const std::string prefix) {
+    MAKE_NAMED_BINARY(createMatchStar, PabloAST::ClassTypeId::MatchStar, marker, charclass, prefix);
     return result;
 }
 
@@ -106,9 +163,21 @@ PabloAST * PabloBuilder::createScanThru(PabloAST * from, PabloAST * thru) {
     return result;
 }
 
+PabloAST * PabloBuilder::createScanThru(PabloAST * from, PabloAST * thru, const std::string prefix) {
+    MAKE_NAMED_BINARY(createScanThru, PabloAST::ClassTypeId::ScanThru, from, thru, prefix);
+    return result;
+}
+
+
 PabloAST * PabloBuilder::createSel(PabloAST * condition, PabloAST * trueExpr, PabloAST * falseExpr) {
     MAKE_TERNARY(createSel, PabloAST::ClassTypeId::Sel, condition, trueExpr, falseExpr);
     return result;
 }
+
+PabloAST * PabloBuilder::createSel(PabloAST * condition, PabloAST * trueExpr, PabloAST * falseExpr, const std::string prefix) {
+    MAKE_NAMED_TERNARY(createSel, PabloAST::ClassTypeId::Sel, condition, trueExpr, falseExpr, prefix);
+    return result;
+}
+
 
 }

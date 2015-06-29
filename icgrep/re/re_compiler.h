@@ -10,20 +10,13 @@
 #include <re/re_re.h>
 #include <re/re_seq.h>
 #include <cc/cc_compiler.h>
-
+#include <pablo/builder.hpp>
 #include <string>
 #include <list>
 #include <map>
 
 namespace cc {
 class CC_NameMap;
-}
-
-namespace pablo {
-class PabloBlock;
-class PabloAST;
-class Assign;
-class Var;
 }
 
 /*   Marker streams represent the results of matching steps.
@@ -57,8 +50,8 @@ inline MarkerType makeMarker(MarkerPosition newpos, pablo::PabloAST * strm) {ret
 class RE_Compiler {
 public:
 
-    RE_Compiler(pablo::PabloBlock & baseCG);
-    void initializeRequiredStreams(cc::CC_Compiler & ccc);
+    RE_Compiler(cc::CC_Compiler & ccCompiler);
+    void initializeRequiredStreams();
     void finalizeMatchResult(MarkerType match_result);
     MarkerType compile(RE * re) {
         return compile(re, mPB);
@@ -66,30 +59,33 @@ public:
 
 private:
 
-    MarkerType compile(RE * re, pablo::PabloBlock & cg);
-    MarkerType AdvanceMarker(MarkerType m, MarkerPosition newpos, pablo::PabloBlock & pb);
+    MarkerType compile(RE * re, pablo::PabloBuilder & cg);
+    MarkerType AdvanceMarker(MarkerType m, MarkerPosition newpos, pablo::PabloBuilder & pb);
     
-    void AlignMarkers(MarkerType & m1, MarkerType & m2, pablo::PabloBlock & pb);
+    void AlignMarkers(MarkerType & m1, MarkerType & m2, pablo::PabloBuilder & pb);
     
-    pablo::PabloAST * getNamedCharacterClassStream(Name * name);
-    pablo::PabloAST * nextUnicodePosition(MarkerType m, pablo::PabloBlock & pb);
-    MarkerType process(RE * re, MarkerType marker, pablo::PabloBlock & pb);
-    MarkerType process(Name * name, MarkerType marker, pablo::PabloBlock & pb);
-    MarkerType process(Seq * seq, MarkerType marker, pablo::PabloBlock & pb);
-    MarkerType processSeqTail(Seq::iterator current, Seq::iterator end, int matchLenSoFar, MarkerType marker, pablo::PabloBlock & pb);
-    MarkerType process(Alt * alt, MarkerType marker, pablo::PabloBlock & pb);
-    MarkerType process(Assertion * a, MarkerType marker, pablo::PabloBlock & pb);
-    MarkerType process(Rep * rep, MarkerType marker, pablo::PabloBlock & pb);
-    MarkerType process(Diff * diff, MarkerType marker, pablo::PabloBlock & cg);
-    MarkerType process(Intersect * x, MarkerType marker, pablo::PabloBlock & cg);
-    pablo::PabloAST *consecutive1(pablo::PabloAST *repeated,  int repeated_lgth, int repeat_count, pablo::PabloBlock & pb);
-    pablo::PabloAST * reachable(pablo::PabloAST * repeated,  int repeated_lgth, int repeat_count, pablo::PabloBlock & pb);
+    pablo::PabloAST * getNamedCharacterClassStream(Name * name, pablo::PabloBuilder & pb);
+    pablo::PabloAST * nextUnicodePosition(MarkerType m, pablo::PabloBuilder & pb);
+    MarkerType process(RE * re, MarkerType marker, pablo::PabloBuilder & pb);
+    MarkerType process(Name * name, MarkerType marker, pablo::PabloBuilder & pb);
+    MarkerType process(Seq * seq, MarkerType marker, pablo::PabloBuilder & pb);
+    MarkerType processSeqTail(Seq::iterator current, Seq::iterator end, int matchLenSoFar, MarkerType marker, pablo::PabloBuilder & pb);
+    MarkerType process(Alt * alt, MarkerType marker, pablo::PabloBuilder & pb);
+    MarkerType process(Assertion * a, MarkerType marker, pablo::PabloBuilder & pb);
+    MarkerType process(Rep * rep, MarkerType marker, pablo::PabloBuilder & pb);
+    MarkerType process(Diff * diff, MarkerType marker, pablo::PabloBuilder & cg);
+    MarkerType process(Intersect * x, MarkerType marker, pablo::PabloBuilder & cg);
+    pablo::PabloAST *consecutive1(pablo::PabloAST *repeated,  int repeated_lgth, int repeat_count, pablo::PabloBuilder & pb);
+    pablo::PabloAST * reachable(pablo::PabloAST * repeated,  int repeated_lgth, int repeat_count, pablo::PabloBuilder & pb);
     static bool isFixedLength(RE * regexp);
-    MarkerType processLowerBound(RE * repeated,  int lb, MarkerType marker, pablo::PabloBlock & pb);
-    MarkerType processUnboundedRep(RE * repeated, MarkerType marker, pablo::PabloBlock & pb);
-    MarkerType processBoundedRep(RE * repeated, int ub, MarkerType marker, pablo::PabloBlock & pb);
+    MarkerType processLowerBound(RE * repeated,  int lb, MarkerType marker, pablo::PabloBuilder & pb);
+    MarkerType processUnboundedRep(RE * repeated, MarkerType marker, pablo::PabloBuilder & pb);
+    MarkerType processBoundedRep(RE * repeated, int ub, MarkerType marker, pablo::PabloBuilder & pb);
 
-    pablo::PabloBlock &                             mPB;
+private:
+
+    cc::CC_Compiler &                               mCCCompiler;
+    pablo::PabloBuilder                             mPB;
     pablo::Assign *                                 mLineFeed;
     pablo::PabloAST *                               mCRLF;
     pablo::PabloAST *                               mUnicodeLineBreak;

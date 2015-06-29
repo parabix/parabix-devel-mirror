@@ -9,10 +9,12 @@ namespace pablo {
 class PabloBuilder {
 public:
 
-    PabloBuilder(PabloBlock & pb) : mPb(pb) {}
+    PabloBuilder(PabloBlock & block) : mPb(block), mParent(nullptr) {}
 
-    inline static PabloBuilder Create(PabloBuilder & parent) {
-        return PabloBuilder(parent.getPabloBlock().Create(parent.getPabloBlock()), parent);
+    PabloBuilder(PabloBlock & block, PabloBuilder & parent) : mPb(block), mParent(&parent), mExprTable(&(parent.mExprTable)) {}
+
+    inline static PabloBuilder && Create(PabloBuilder & parent) {
+        return std::move(PabloBuilder(parent.mPb.Create(parent.mPb), parent));
     }
 
     inline Zeroes * createZeroes() const {
@@ -54,30 +56,65 @@ public:
 
     PabloAST * createAdvance(PabloAST * expr, PabloAST * shiftAmount);
 
+    inline PabloAST * createAdvance(PabloAST * expr, const Integer::integer_t shiftAmount, const std::string prefix) {
+        if (shiftAmount == 0) {
+            return expr;
+        }
+        return createAdvance(expr, mPb.getInteger(shiftAmount), prefix);
+    }
+
     PabloAST * createAdvance(PabloAST * expr, PabloAST * shiftAmount, const std::string prefix);
 
-    Next * createNext(Assign * assign, PabloAST * expr);
+    inline Next * createNext(Assign * assign, PabloAST * expr) {
+        return mPb.createNext(assign, expr);
+    }
 
     PabloAST * createAnd(PabloAST * expr1, PabloAST * expr2);
 
+    PabloAST * createAnd(PabloAST * expr1, PabloAST * expr2, const std::string prefix);
+
     PabloAST * createNot(PabloAST * expr);
+
+    PabloAST * createNot(PabloAST * expr, const std::string prefix);
 
     PabloAST * createOr(PabloAST * expr1, PabloAST * expr2);
 
+    PabloAST * createOr(PabloAST * expr1, PabloAST * expr2, const std::string prefix);
+
     PabloAST * createXor(PabloAST * expr1, PabloAST * expr2);
+
+    PabloAST * createXor(PabloAST * expr1, PabloAST * expr2, const std::string prefix);
 
     PabloAST * createMatchStar(PabloAST * marker, PabloAST * charclass);
 
+    PabloAST * createMatchStar(PabloAST * marker, PabloAST * charclass, const std::string prefix);
+
     PabloAST * createScanThru(PabloAST * from, PabloAST * thru);
 
+    PabloAST * createScanThru(PabloAST * from, PabloAST * thru, const std::string prefix);
+
     PabloAST * createSel(PabloAST * condition, PabloAST * trueExpr, PabloAST * falseExpr);
+
+    PabloAST * createSel(PabloAST * condition, PabloAST * trueExpr, PabloAST * falseExpr, const std::string prefix);
+
+    inline If * createIf(PabloAST * condition, std::initializer_list<Assign *> definedVars, PabloBuilder & body) {
+        return mPb.createIf(condition, std::move(definedVars), body.mPb);
+    }
 
     inline If * createIf(PabloAST * condition, std::initializer_list<Assign *> definedVars, PabloBlock & body) {
         return mPb.createIf(condition, std::move(definedVars), body);
     }
 
+    inline If * createIf(PabloAST * condition, std::vector<Assign *> definedVars, PabloBuilder & body) {
+        return mPb.createIf(condition, std::move(definedVars), body.mPb);
+    }
+
     inline If * createIf(PabloAST * condition, std::vector<Assign *> definedVars, PabloBlock & body) {
         return mPb.createIf(condition, std::move(definedVars), body);
+    }
+
+    inline While * createWhile(PabloAST * condition, PabloBuilder & body) {
+        return mPb.createWhile(condition, body.mPb);
     }
 
     inline While * createWhile(PabloAST * condition, PabloBlock & body) {
@@ -108,13 +145,14 @@ public:
         return mPb;
     }
 
-protected:
-
-    PabloBuilder(PabloBlock & pb, PabloBuilder & parent) : mPb(pb), mExprTable(&(parent.mExprTable)) {}
+    inline PabloBuilder * getParent() {
+        return mParent;
+    }
 
 private:
 
     PabloBlock &        mPb;
+    PabloBuilder *      mParent;
     ExpressionTable     mExprTable;
 };
 

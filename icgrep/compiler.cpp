@@ -149,8 +149,8 @@ CompiledPabloFunction compile(const Encoding encoding, const std::vector<std::st
       PabloPrinter::print(main.statements(), cerr);
     }
     
-    RE_Compiler re_compiler(main);
-    re_compiler.initializeRequiredStreams(cc_compiler);
+    RE_Compiler re_compiler(cc_compiler);
+    re_compiler.initializeRequiredStreams();
     re_compiler.finalizeMatchResult(re_compiler.compile(re_ast));
 
     if (PrintCompiledREcode) {

@@ -20,7 +20,7 @@ class UCDCompiler {
     using RangeList = std::vector<re::interval_t>;
 
 public:
-    UCDCompiler(pablo::PabloBlock & entry, const Encoding & encoding);
+    UCDCompiler(cc::CC_Compiler & ccCompiler);
 
     PabloAST * generateWithDefaultIfHierarchy(const UnicodeSet & set, PabloBuilder & entry);
 
@@ -53,7 +53,7 @@ protected:
     static RangeList innerRanges(const RangeList & list);
 
 private:
-    cc::CC_Compiler         mCharacterClassCompiler;
+    cc::CC_Compiler &       mCharacterClassCompiler;
     CC * const              mSuffix;
 };
 
