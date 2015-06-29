@@ -20,8 +20,7 @@
 #include <re/re_analysis.h>
 #include <cc/cc_namemap.hpp>
 #include <pablo/codegenstate.h>
-#include <UCD/ucd_compiler.hpp>
-
+#include <UCD/DerivedGeneralCategory.h>
 #include <assert.h>
 #include <stdexcept>
 
@@ -34,11 +33,12 @@ static cl::opt<bool> DisableLog2BoundedRepetition("disable-log2-bounded-repetiti
 static cl::opt<int> IfInsertionGap("if-insertion-gap", cl::init(3), cl::desc("minimum number of nonempty elements between inserted if short-circuit tests"), cl::cat(fREcompilationOptions));
 static cl::opt<bool> DisableMatchStar("disable-matchstar", cl::init(false), 
                      cl::desc("disable MatchStar optimization"), cl::cat(fREcompilationOptions));
-static cl::opt<bool> DisableUnicodeMatchStar("disable-Unicode-matchstar", cl::init(false), 
+static cl::opt<bool> DisableUnicodeMatchStar("disable-unicode-matchstar", cl::init(false),
                      cl::desc("disable Unicode MatchStar optimization"), cl::cat(fREcompilationOptions));
-
-static cl::opt<bool> DisableUnicodeLineBreak("disable-Unicode-linebreak", cl::init(false), 
+static cl::opt<bool> DisableUnicodeLineBreak("disable-unicode-linebreak", cl::init(false),
                      cl::desc("disable Unicode line breaks - use LF only"), cl::cat(fREcompilationOptions));
+static cl::opt<bool> DisablePregeneratedUnicode("disable-pregenerated-unicode", cl::init(false),
+                     cl::desc("disable use of pregenerated Unicode character class sets"), cl::cat(fREcompilationOptions));
 
 
 using namespace pablo;
@@ -48,12 +48,16 @@ namespace re {
 
 RE_Compiler::RE_Compiler(cc::CC_Compiler & ccCompiler)
 : mCCCompiler(ccCompiler)
-, mPB(ccCompiler.getBuilder().getPabloBlock(), ccCompiler.getBuilder())
 , mLineFeed(nullptr)
+, mCRLF(nullptr)
+, mUnicodeLineBreak(nullptr)
 , mInitial(nullptr)
 , mNonFinal(nullptr)
 , mFinal(nullptr)
+, mWhileTest(nullptr)
 , mStarDepth(0)
+, mPB(ccCompiler.getBuilder().getPabloBlock(), ccCompiler.getBuilder())
+, mUCDCompiler(ccCompiler)
 {
 
 }
@@ -264,13 +268,17 @@ PabloAST * RE_Compiler::getNamedCharacterClassStream(Name * name, PabloBuilder &
         var = markerVar(m);
     }
     else if (name->getType() == Name::Type::UnicodeProperty) {
-        var = mPB.createCall(name->getName());
-        // UCD::UCDCompiler ucdCompiler(mCCCompiler);
+        if (DisablePregeneratedUnicode) {
+            // Note: using a fixed set while testing whether the UCD compiler works.
+            var = mUCDCompiler.generateWithDefaultIfHierarchy(UCD::GC_ns::z_Set, pb);
+        }
+        else {
+            var = mPB.createCall(name->getName());
+        }
     }
     else {
         throw std::runtime_error("Unresolved name " + name->getName());
     }
-
     var = pb.createAnd(var, pb.createNot(UNICODE_LINE_BREAK ? mUnicodeLineBreak : mLineFeed));
     name->setCompiled(var);
     return var;

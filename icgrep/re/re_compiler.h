@@ -11,6 +11,7 @@
 #include <re/re_seq.h>
 #include <cc/cc_compiler.h>
 #include <pablo/builder.hpp>
+#include <UCD/ucd_compiler.hpp>
 #include <string>
 #include <list>
 #include <map>
@@ -85,7 +86,6 @@ private:
 private:
 
     cc::CC_Compiler &                               mCCCompiler;
-    pablo::PabloBuilder                             mPB;
     pablo::Assign *                                 mLineFeed;
     pablo::PabloAST *                               mCRLF;
     pablo::PabloAST *                               mUnicodeLineBreak;
@@ -94,6 +94,8 @@ private:
     pablo::PabloAST *                               mFinal;
     pablo::PabloAST *                               mWhileTest;
     int                                             mStarDepth;
+    pablo::PabloBuilder                             mPB;
+    UCD::UCDCompiler                                mUCDCompiler;
 };
 
 }

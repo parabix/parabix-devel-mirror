@@ -2,14 +2,20 @@
 #define UCDCOMPILER_HPP
 
 #include <vector>
-#include <cc/cc_compiler.h>
 #include <re/re_cc.h>
-#include <UCD/unicode_set.h>
-#include <unordered_map>
 
-class Encoding;
+namespace cc {
+    class CC_Compiler;
+}
+
+namespace pablo {
+    class PabloBuilder;
+    class PabloAST;
+}
 
 namespace UCD {
+
+class UnicodeSet;
 
 class UCDCompiler {
 
@@ -37,6 +43,7 @@ protected:
     PabloAST * sequenceGenerator(const codepoint_t lo, const codepoint_t hi, const unsigned byte_no, PabloBuilder & block, PabloAST * target, PabloAST * prefix);
 
     PabloAST * ifTestCompiler(const codepoint_t lo, const codepoint_t hi, PabloBuilder & block);
+
     PabloAST * ifTestCompiler(const codepoint_t lo, const codepoint_t hi, const unsigned byte_no, PabloBuilder & block, PabloAST * target);
 
     PabloAST * makePrefix(const codepoint_t cp, const unsigned byte_no, PabloBuilder & pb);

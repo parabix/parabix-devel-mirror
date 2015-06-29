@@ -107,8 +107,10 @@ include_directories("${PROJECT_SOURCE_DIR}/include/simd-lib/idisa_cpp")
 # add the executable
 add_executable(icgrep icgrep.cpp do_grep.cpp compiler.cpp)
 
-target_link_libraries (CCADT PabloADT RegExpADT)
 target_link_libraries (PabloADT ${REQ_LLVM_LIBRARIES})
+target_link_libraries (CCADT PabloADT RegExpADT)
+target_link_libraries (UCDlib PabloADT CCADT)
+target_link_libraries (RegExpADT PabloADT CCADT UCDlib)
 target_link_libraries (icgrep UCDlib PabloADT RegExpADT CCADT ${REQ_LLVM_LIBRARIES})
 
 #Check compiler support for 0x / 11

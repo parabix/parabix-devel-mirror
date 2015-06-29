@@ -1,4 +1,6 @@
 #include "ucd_compiler.hpp"
+#include <cc/cc_compiler.h>
+#include <UCD/unicode_set.h>
 #include <utf8_encoder.h>
 
 using namespace cc;
@@ -13,7 +15,7 @@ namespace UCD {
  * @param the entry block to the function we're filling
  * @return the output stream with a 1-bit in any position of a character in the unicode set
  ** ------------------------------------------------------------------------------------------------------------- */
-inline PabloAST * UCDCompiler::generateWithIfHierarchy(const RangeList & ifRanges, const UnicodeSet & set, PabloBuilder & entry) {
+PabloAST * UCDCompiler::generateWithIfHierarchy(const RangeList & ifRanges, const UnicodeSet & set, PabloBuilder & entry) {
     return generateWithIfHierarchy(ifRanges, set, 0, CC::UNICODE_MAX, entry);
 }
 
@@ -327,9 +329,9 @@ UCDCompiler::RangeList UCDCompiler::innerRanges(const RangeList & list) {
  * @param the entry block to the function we're filling
  * @return the output stream with a 1-bit in any position of a character in the unicode set
  ** ------------------------------------------------------------------------------------------------------------- */
-inline PabloAST * UCDCompiler::generateWithDefaultIfHierarchy(const UnicodeSet & set, PabloBuilder & entry) {
+PabloAST * UCDCompiler::generateWithDefaultIfHierarchy(const UnicodeSet & set, PabloBuilder & entry) {
 
-    const RangeList ifRanges = {
+    const RangeList defaultIfHierachy = {
         // Non-ASCII
         {0x80, 0x10FFFF},
         // Two-byte sequences
@@ -416,7 +418,7 @@ inline PabloAST * UCDCompiler::generateWithDefaultIfHierarchy(const UnicodeSet &
 
         {0x10000, 0x10FFFF}};
 
-    return generateWithIfHierarchy(ifRanges, set, entry);
+    return generateWithIfHierarchy(defaultIfHierachy, set, entry);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
