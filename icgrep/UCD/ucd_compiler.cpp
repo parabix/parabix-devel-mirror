@@ -45,14 +45,14 @@ PabloAST * UCDCompiler::generateWithIfHierarchy(const RangeList & ifRanges, cons
         if (rangeIntersect(set, lo, hi).empty()) {
             continue;
         }
-        PabloBuilder inner_block(block);
+        PabloBuilder inner_block = PabloBuilder::Create(block);
         PabloAST * inner_target = generateWithIfHierarchy(inner, set, lo, hi, inner_block);
         // If this range is empty, just skip creating the if block
         if (LLVM_UNLIKELY(isa<Zeroes>(inner_target))) {
             continue;
         }
         Assign * matches = inner_block.createAssign("m", inner_target);
-        block.createIf(ifTestCompiler(lo, hi, block), {matches}, inner_block.getPabloBlock());
+        block.createIf(ifTestCompiler(lo, hi, block), {matches}, inner_block);
         target = block.createOr(target, matches);
     }
 
@@ -100,12 +100,12 @@ PabloAST * UCDCompiler::sequenceGenerator(const RangeList && ranges, const unsig
             target = sequenceGenerator(std::move(rangeIntersect(ranges, mid + 1, hi)), byte_no, block, target, prefix);
         }
         else if (min == byte_no) {
-            // We have a single byte remaining to marangetch for all codepoints in this cc.
+            // We have a single byte remaining to match for all code points in this CC.
             // Use the byte class compiler to generate matches for these codepoints.
             const auto bytes = byteDefinitions(ranges, byte_no);
             PabloAST * testVar = mCharacterClassCompiler.compileCC(makeCC(bytes), block);
             if (byte_no > 1) {
-                testVar = block.createAnd(testVar, block.createAdvance(makePrefix(lo, byte_no, block), 1));
+                testVar = block.createAnd(testVar, block.createAdvance(makePrefix(lo, byte_no, block, prefix), 1));
             }
             target = block.createOr(target, testVar);
         }
@@ -214,17 +214,18 @@ PabloAST * UCDCompiler::ifTestCompiler(const codepoint_t lo, const codepoint_t h
  *
  * Ensure the sequence of preceding bytes is defined, up to, but not including the given byte_no
  ** ------------------------------------------------------------------------------------------------------------- */
-PabloAST * UCDCompiler::makePrefix(const codepoint_t cp, const unsigned byte_no, pablo::PabloBuilder & pb) {
-    std::array<PabloAST *, 4> prefixes;
+PabloAST * UCDCompiler::makePrefix(const codepoint_t cp, const unsigned byte_no, PabloBuilder & pb, PabloAST * prefix) {
     assert (byte_no >= 1 && byte_no <= 4);
+    assert (byte_no == 1 || prefix != nullptr);
     for (unsigned i = 1; i != byte_no; ++i) {
         const CC * const cc = makeCC(UTF8_Encoder::encodingByte(cp, i));
-        prefixes[i - 1] = mCharacterClassCompiler.compileCC(cc, pb);
+        PabloAST * var = mCharacterClassCompiler.compileCC(cc, pb);
         if (i > 1) {
-            prefixes[i - 1] = pb.createAnd(prefixes[i - 1], pb.createAdvance(prefixes[i - 2], 1));
+            var = pb.createAnd(var, pb.createAdvance(prefix, 1));
         }
+        prefix = var;
     }
-    return prefixes[byte_no - 1];
+    return prefix;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -292,32 +293,40 @@ UCDCompiler::RangeList UCDCompiler::rangeGaps(const RangeList & list, const code
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief rangeOuter
+ * @brief outerRanges
  * @param list
  ** ------------------------------------------------------------------------------------------------------------- */
 UCDCompiler::RangeList UCDCompiler::outerRanges(const RangeList & list) {
     RangeList ranges;
-    for (auto i = list.cbegin(), j = i; ++j != list.cend(); ) {
-        if (hi_codepoint(*j) > hi_codepoint(*i)) {
+    if (LLVM_LIKELY(list.size() > 0)) {
+        auto i = list.cbegin();
+        for (auto j = i + 1; j != list.cend(); ++j) {
+            if (hi_codepoint(*j) > hi_codepoint(*i)) {
+                ranges.emplace_back(lo_codepoint(*i), hi_codepoint(*i));
+                i = j;
+            }
+        }
+        if (LLVM_LIKELY(i != list.end())) {
             ranges.emplace_back(lo_codepoint(*i), hi_codepoint(*i));
-            i = j;
         }
     }
     return ranges;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief rangeInner
+ * @brief innerRanges
  * @param list
  ** ------------------------------------------------------------------------------------------------------------- */
 UCDCompiler::RangeList UCDCompiler::innerRanges(const RangeList & list) {
     RangeList ranges;
-    for (auto i = list.cbegin(), j = i; ++j != list.cend(); ) {
-        if (hi_codepoint(*j) <= hi_codepoint(*i)) {
-            ranges.emplace_back(lo_codepoint(*j), hi_codepoint(*j));
-        }
-        else {
-            i = j;
+    if (LLVM_LIKELY(list.size() > 0)) {
+        for (auto i = list.cbegin(), j = i + 1; j != list.cend(); ++j) {
+            if (hi_codepoint(*j) <= hi_codepoint(*i)) {
+                ranges.emplace_back(lo_codepoint(*j), hi_codepoint(*j));
+            }
+            else {
+                i = j;
+            }
         }
     }
     return ranges;

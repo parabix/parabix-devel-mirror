@@ -46,7 +46,7 @@ protected:
 
     PabloAST * ifTestCompiler(const codepoint_t lo, const codepoint_t hi, const unsigned byte_no, PabloBuilder & block, PabloAST * target);
 
-    PabloAST * makePrefix(const codepoint_t cp, const unsigned byte_no, PabloBuilder & pb);
+    PabloAST * makePrefix(const codepoint_t cp, const unsigned byte_no, PabloBuilder & pb, PabloAST * prefix);
 
     static RangeList byteDefinitions(const RangeList & list, const unsigned byte_no);
 
