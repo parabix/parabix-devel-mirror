@@ -270,7 +270,7 @@ PabloAST * RE_Compiler::getNamedCharacterClassStream(Name * name, PabloBuilder &
     else if (name->getType() == Name::Type::UnicodeProperty) {
         if (DisablePregeneratedUnicode) {
             // Note: using a fixed set while testing whether the UCD compiler works.
-            var = mUCDCompiler.generateWithDefaultIfHierarchy(UCD::GC_ns::z_Set, pb);
+            var = mUCDCompiler.generateWithDefaultIfHierarchy(UCD::GC_ns::ll_Set, pb);
         }
         else {
             var = mPB.createCall(name->getName());

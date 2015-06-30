@@ -174,10 +174,12 @@ inline PabloAST * UCDCompiler::ifTestCompiler(const codepoint_t lo, const codepo
  * @brief ifTestCompiler
  ** ------------------------------------------------------------------------------------------------------------- */
 PabloAST * UCDCompiler::ifTestCompiler(const codepoint_t lo, const codepoint_t hi, const unsigned byte_no, PabloBuilder & block, PabloAST * target) {
+
     codepoint_t lo_byte = UTF8_Encoder::encodingByte(lo, byte_no);
     codepoint_t hi_byte = UTF8_Encoder::encodingByte(hi, byte_no);
     const bool at_lo_boundary = (lo == 0 || UTF8_Encoder::encodingByte(lo - 1, byte_no) != lo_byte);
     const bool at_hi_boundary = (hi == 0x10FFFF || UTF8_Encoder::encodingByte(hi + 1, byte_no) != hi_byte);
+
     if (at_lo_boundary && at_hi_boundary) {
         if (lo_byte != hi_byte) {
             if (lo == 0x80) lo_byte = 0xC0;
@@ -192,16 +194,16 @@ PabloAST * UCDCompiler::ifTestCompiler(const codepoint_t lo, const codepoint_t h
         target = block.createAdvance(target, 1);
         target = ifTestCompiler(lo, hi, byte_no + 1, block, target);
     }
-    else if (at_hi_boundary) {
-        const auto mid = UTF8_Encoder::maxCodePointWithCommonBytes(hi, byte_no);
-        PabloAST * e1 = ifTestCompiler(lo, mid, byte_no, block, target);
-        PabloAST * e2 = ifTestCompiler(mid + 1, hi, byte_no, block, target);
-        target = block.createOr(e1, e2);
-    }
-    else {
+    else if (!at_hi_boundary) {
         const auto mid = UTF8_Encoder::minCodePointWithCommonBytes(hi, byte_no);
         PabloAST * e1 = ifTestCompiler(lo, mid - 1, byte_no, block, target);
         PabloAST * e2 = ifTestCompiler(mid, hi, byte_no, block, target);
+        target = block.createOr(e1, e2);
+    }
+    else {
+        const auto mid = UTF8_Encoder::maxCodePointWithCommonBytes(lo, byte_no);
+        PabloAST * e1 = ifTestCompiler(lo, mid, byte_no, block, target);
+        PabloAST * e2 = ifTestCompiler(mid + 1, hi, byte_no, block, target);
         target = block.createOr(e1, e2);
     }
     return target;
@@ -252,13 +254,13 @@ UCDCompiler::RangeList UCDCompiler::byteDefinitions(const RangeList & list, cons
  ** ------------------------------------------------------------------------------------------------------------- */
 template <typename RangeListOrUnicodeSet>
 UCDCompiler::RangeList UCDCompiler::rangeIntersect(const RangeListOrUnicodeSet & list, const codepoint_t lo, const codepoint_t hi) {
-    RangeList intersection;
+    RangeList result;
     for (const auto i : list) {
         if ((lo_codepoint(i) <= hi) && (hi_codepoint(i) >= lo)) {
-            intersection.emplace_back(std::max(lo, lo_codepoint(i)), std::min(hi, hi_codepoint(i)));
+            result.emplace_back(std::max(lo, lo_codepoint(i)), std::min(hi, hi_codepoint(i)));
         }
     }
-    return intersection;
+    return result;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
