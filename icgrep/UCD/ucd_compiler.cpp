@@ -2,6 +2,7 @@
 #include <cc/cc_compiler.h>
 #include <UCD/unicode_set.h>
 #include <utf8_encoder.h>
+#include <iostream>
 
 using namespace cc;
 using namespace re;

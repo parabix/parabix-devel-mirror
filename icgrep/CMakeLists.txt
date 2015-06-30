@@ -65,7 +65,7 @@ SET(PABLO_SRC ${PABLO_SRC} pablo/optimizers/pablo_automultiplexing.cpp)
 ENDIF()
 
 add_library(PabloADT ${PABLO_SRC})
-add_library(RegExpADT re/re_re.cpp re/re_cc.cpp re/re_parser.cpp re/re_rep.cpp re/parsefailure.cpp re/re_nullable.cpp re/re_simplifier.cpp re/re_compiler.cpp re/printer_re.cpp re/re_diff.cpp re/re_intersect.cpp re/re_analysis.cpp)
+add_library(RegExpADT re/re_re.cpp re/re_cc.cpp re/re_parser.cpp re/re_rep.cpp re/parsefailure.cpp re/re_nullable.cpp re/re_simplifier.cpp re/re_compiler.cpp re/printer_re.cpp re/re_diff.cpp re/re_intersect.cpp re/re_analysis.cpp resolve_properties.cpp)
 add_library(CCADT cc/cc_namemap.cpp cc/cc_compiler.cpp utf8_encoder.cpp UCD/CaseFolding_txt.cpp)
 add_library(UCDlib UCD/unicode_set.cpp UCD/ucd_compiler.cpp UCD/PropertyObjects.cpp UCD/precompiled_gc.cpp UCD/precompiled_sc.cpp UCD/precompiled_scx.cpp UCD/precompiled_blk.cpp UCD/precompiled_derivedcoreproperties.cpp UCD/precompiled_proplist.cpp)
 

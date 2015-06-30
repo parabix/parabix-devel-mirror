@@ -39,8 +39,6 @@ static cl::list<std::string> regexVector("e", cl::desc("Regular expression"), cl
 static cl::opt<std::string> RegexFilename("f", cl::desc("Take regular expressions (one per line) from a file"), cl::value_desc("regex file"), cl::init(""), cl::cat(aRegexSourceOptions));
 
 
-
-
 int main(int argc, char *argv[]) {
     StringMap<cl::Option*> Map;
     cl::getRegisteredOptions(Map);

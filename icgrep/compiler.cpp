@@ -27,18 +27,16 @@
 #include "UCD/precompiled_blk.h"
 #include "UCD/precompiled_derivedcoreproperties.h"
 #include "UCD/precompiled_proplist.h"
-
-#include "resolve_properties.cpp"
-
-#include "llvm/Support/CommandLine.h"
+#include "resolve_properties.h"
+#include <llvm/Support/CommandLine.h>
 #include <re/printer_re.h>
 #include <pablo/printer_pablos.h>
+#include <iostream>
 
-
-cl::OptionCategory cRegexOutputOptions("Regex Dump Options",
+static cl::OptionCategory cRegexOutputOptions("Regex Dump Options",
                                       "These options control printing of intermediate regular expression structures.");
 
-cl::OptionCategory dPabloDumpOptions("Pablo Dump Options",
+static cl::OptionCategory dPabloDumpOptions("Pablo Dump Options",
                                       "These options control printing of intermediate Pablo code.");
 
 static cl::opt<bool> PrintAllREs("print-REs", cl::init(false), cl::desc("print regular expression passes"), cl::cat(cRegexOutputOptions));
@@ -52,7 +50,7 @@ static cl::opt<bool> PrintCompiledREcode("print-RE-pablo", cl::init(false), cl::
 static cl::opt<bool> PrintOptimizedREcode("print-pablo", cl::init(false), cl::desc("print final optimized Pablo code"), cl::cat(dPabloDumpOptions));
 
 
-cl::OptionCategory cPabloOptimizationsOptions("Pablo Optimizations",
+static cl::OptionCategory cPabloOptimizationsOptions("Pablo Optimizations",
                                               "These options control Pablo optimization passes.");
 
 static cl::opt<bool> DisablePabloCSE("disable-CSE", cl::init(false),
@@ -106,9 +104,10 @@ CompiledPabloFunction compile(const Encoding encoding, const std::vector<std::st
     if (PrintAllREs || PrintStrippedREs) {
         std::cerr << "RemoveNullableSuffix:" << std::endl << Printer_RE::PrintRE(re_ast) << std::endl;
     }
-    
-    resolveProperties(re_ast);
-    
+
+    if (IsPregeneratedUnicodeEnabled()) {
+        resolveProperties(re_ast);
+    }
     
     CC_NameMap nameMap;
     re_ast = nameMap.process(re_ast, UnicodeClass);
@@ -182,14 +181,14 @@ CompiledPabloFunction compile(const Encoding encoding, const std::vector<std::st
     }
 
     PabloCompiler pablo_compiler(basisBits);
-    
-    install_property_gc_fn_ptrs(pablo_compiler);
-    install_property_sc_fn_ptrs(pablo_compiler);
-    install_property_scx_fn_ptrs(pablo_compiler);
-    install_property_blk_fn_ptrs(pablo_compiler);
-    install_property_DerivedCoreProperties_fn_ptrs(pablo_compiler);
-    install_property_PropList_fn_ptrs(pablo_compiler);
-
+    if (IsPregeneratedUnicodeEnabled()) {
+        install_property_gc_fn_ptrs(pablo_compiler);
+        install_property_sc_fn_ptrs(pablo_compiler);
+        install_property_scx_fn_ptrs(pablo_compiler);
+        install_property_blk_fn_ptrs(pablo_compiler);
+        install_property_DerivedCoreProperties_fn_ptrs(pablo_compiler);
+        install_property_PropList_fn_ptrs(pablo_compiler);
+    }
     try {
         CompiledPabloFunction retVal = pablo_compiler.compile(main);
         releaseSlabAllocatorMemory();

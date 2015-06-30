@@ -54,9 +54,11 @@ public:
         friend class UnicodeSet;
         friend class boost::iterator_core_access;
     protected:
-        iterator(RunVector::const_iterator runIterator, QuadVector::const_iterator quadIterator)
+        iterator(RunVector::const_iterator runIterator, QuadVector::const_iterator quadIterator,
+                 RunVector::const_iterator runEnd, QuadVector::const_iterator quadEnd)
         : mRunIterator(runIterator), mQuadIterator(quadIterator)
         , mMixedRunIndex(0), mQuadOffset(0), mBaseCodePoint(0), mMinCodePoint(0), mMaxCodePoint(0)
+        , mRunEnd(runEnd), mQuadEnd(quadEnd)
         {
 
         }
@@ -76,22 +78,24 @@ public:
                    (mMixedRunIndex == other.mMixedRunIndex) && (mQuadOffset == other.mQuadOffset);
         }
     private:
-        RunVector::const_iterator   mRunIterator;
-        QuadVector::const_iterator  mQuadIterator;
-        unsigned                    mMixedRunIndex;
-        bitquad_t                   mQuadOffset;        
-        codepoint_t                 mBaseCodePoint;
-        codepoint_t                 mMinCodePoint;
-        codepoint_t                 mMaxCodePoint;
+        RunVector::const_iterator           mRunIterator;
+        QuadVector::const_iterator          mQuadIterator;
+        unsigned                            mMixedRunIndex;
+        bitquad_t                           mQuadOffset;
+        codepoint_t                         mBaseCodePoint;
+        codepoint_t                         mMinCodePoint;
+        codepoint_t                         mMaxCodePoint;
+        const RunVector::const_iterator     mRunEnd;
+        const QuadVector::const_iterator    mQuadEnd;
     };
 
     inline iterator begin() const {
         // note: pre-increment is intentional to move the iterator onto the first non-Empty interval.
-        return ++iterator(mRuns.cbegin(), mQuads.cbegin());
+        return ++iterator(mRuns.cbegin(), mQuads.cbegin(), mRuns.cend(), mQuads.cend());
     }
 
     inline iterator end() const {
-        return iterator(mRuns.cend(), mQuads.cend());
+        return iterator(mRuns.cend(), mQuads.cend(), mRuns.cend(), mQuads.cend());
     }
 
     class quad_iterator : public boost::iterator_facade<quad_iterator, quad_iterator_return_t, boost::random_access_traversal_tag, quad_iterator_return_t> {
@@ -112,8 +116,7 @@ public:
         }
 
         inline run_t run() const {
-            const auto & t = *mRunIterator;
-            return std::make_pair(std::get<0>(t), std::get<1>(t) - mOffset);
+            return std::make_pair(std::get<0>(*mRunIterator), std::get<1>(*mRunIterator) - mOffset);
         }
 
         inline bitquad_t quad() const {

@@ -384,6 +384,14 @@ void UnicodeSet::iterator::advance(const unsigned n) {
 
     assert (n == 1);    
 
+    if (LLVM_UNLIKELY(mBaseCodePoint >= CC::UNICODE_MAX)) {
+        mRunIterator = mRunEnd;
+        mQuadIterator = mQuadEnd;
+        mMixedRunIndex = 0;
+        mQuadOffset = 0;
+        return;
+    }
+
     // Find the start of our interval
     for ( ; mBaseCodePoint < CC::UNICODE_MAX; ++mRunIterator) {
         // Find the first non-empty block
@@ -398,7 +406,7 @@ void UnicodeSet::iterator::advance(const unsigned n) {
                 break;
             }
         }
-        else { // if (leftypeOf(t) == Mixed)
+        else { // if (typeOf(t) == Mixed)
             bool found = false;
             while (mMixedRunIndex != lengthOf(*mRunIterator)) {
                 const bitquad_t m = (*mQuadIterator) & (FULL_QUAD_MASK << mQuadOffset);
@@ -438,7 +446,7 @@ void UnicodeSet::iterator::advance(const unsigned n) {
             mMixedRunIndex = 0;
             continue;
         }
-        else { // if (leftypeOf(t) == Mixed)
+        else { // if (typeOf(t) == Mixed)
             bool found = false;
             while (mMixedRunIndex != lengthOf(*mRunIterator)) {
                 const bitquad_t m = (~(*mQuadIterator)) & (FULL_QUAD_MASK << mQuadOffset);
@@ -461,7 +469,6 @@ void UnicodeSet::iterator::advance(const unsigned n) {
             }
         }
     }
-
 
 }
 

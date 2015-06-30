@@ -34,6 +34,8 @@ class CC_NameMap;
 
 namespace re {
 
+bool IsPregeneratedUnicodeEnabled();
+
 enum MarkerPosition {FinalMatchByte, InitialPostPositionByte, FinalPostPositionByte};
 
 struct MarkerType { 

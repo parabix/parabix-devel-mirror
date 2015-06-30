@@ -7,6 +7,7 @@
 #include <string>
 #include <re/re_re.h>
 #include <re/re_alt.h>
+#include <re/re_any.h>
 #include <re/re_cc.h>
 #include <re/re_seq.h>
 #include <re/re_rep.h>
@@ -21,8 +22,11 @@
 #include "UCD/PropertyObjects.h"
 #include "UCD/PropertyObjectTable.h"
 #include "UCD/PropertyValueAliases.h"
+#include <boost/algorithm/string/case_conv.hpp>
+#include "resolve_properties.h"
 
 using namespace UCD;
+using namespace re;
 
 class UnicodePropertyExpressionError : public std::exception {
 public:
@@ -33,39 +37,20 @@ private:
     const std::string _msg;
 };
 
-std::string canonicalize(std::string prop_or_val) {
+inline std::string lowercase(const std::string & name) {
     std::locale loc;
-    std::string s = "";
-    for (unsigned int i = 0; i < prop_or_val.length(); ++i) {
-        char c = prop_or_val.at(i);
-        if ((c != '_') && (c != ' ') && (c != '-')) {
-            s += std::tolower(c, loc);
-        }
-    }
-    return s;
+    return boost::algorithm::to_lower_copy(name, loc);
 }
-
-std::string lowercase(std::string prop_or_val) {
-    std::locale loc;
-    std::string s = "";
-    for (unsigned int i = 0; i < prop_or_val.length(); ++i) {
-        char c = prop_or_val.at(i);
-        s += std::tolower(c, loc);
-    }
-    return s;
-}
-
-using namespace re;
 
 void resolveProperties(RE * re) {
     if (Alt * alt = dyn_cast<Alt>(re)) {
-        for (auto i = alt->begin(); i != alt->end(); ++i) {
-            resolveProperties(*i);
+        for (auto item : *alt) {
+            resolveProperties(item);
         }
     }
     else if (Seq * seq = dyn_cast<Seq>(re)) {
-        for (auto i = seq->begin(); i != seq->end(); ++i) {
-            resolveProperties(*i);
+        for (auto item : *seq) {
+            resolveProperties(item);
         }
     }
     else if (Rep * rep = dyn_cast<Rep>(re)) {
@@ -84,178 +69,172 @@ void resolveProperties(RE * re) {
     }
     else if (Name * name = dyn_cast<Name>(re)) {
         if (name->getType() == Name::Type::UnicodeProperty) {
-            std::string prop = name->getNamespace();
-            std::string v = canonicalize_value_name(name->getName());
-            UCD::property_t theprop;
-            if (prop != "") {
-                prop = canonicalize_value_name(prop);
-                auto propit = UCD::alias_map.find(prop);
-                if (propit == UCD::alias_map.end()) {
+            const std::string prop = canonicalize_value_name(name->getNamespace());
+            const std::string value = canonicalize_value_name(name->getName());
+            property_t theprop;
+            if (prop.length() != 0) {
+                auto propit = alias_map.find(prop);
+                if (propit == alias_map.end()) {
                     throw UnicodePropertyExpressionError("Expected a property name, but '" + name->getNamespace() + "' found instead");
                 }
                 theprop = propit->second;
-                if (theprop == UCD::gc) {
+                if (theprop == gc) {
                     // General Category
-                    int valcode = dyn_cast<UCD::EnumeratedPropertyObject> (UCD::property_object_table[UCD::gc])->GetPropertyValueEnumCode(v);                    
-                    if (valcode >= 0) {
-                        name->setName("__get_gc_" + UCD::GC_ns::enum_names[valcode]);
-                    }
-                    else throw UnicodePropertyExpressionError("Erroneous property value for general_category property");
+                    int valcode = dyn_cast<EnumeratedPropertyObject> (property_object_table[gc])->GetPropertyValueEnumCode(value);
+                    if (valcode < 0) {
+                        throw UnicodePropertyExpressionError("Erroneous property value for general_category property");
+                    }                    
+                    name->setName("__get_gc_" + GC_ns::enum_names[valcode]);
                 }
-                else if (theprop == UCD::sc) {
+                else if (theprop == sc) {
                     // Script property identified
-                    int valcode = dyn_cast<UCD::EnumeratedPropertyObject> (UCD::property_object_table[UCD::sc])->GetPropertyValueEnumCode(v);                    
-                    if (valcode >= 0) {
-                        name->setName("__get_sc_" + UCD::SC_ns::enum_names[valcode]);
+                    int valcode = dyn_cast<EnumeratedPropertyObject> (property_object_table[sc])->GetPropertyValueEnumCode(value);
+                    if (valcode < 0) {
+                        throw UnicodePropertyExpressionError("Erroneous property value for script property");
                     }
-                    else throw UnicodePropertyExpressionError("Erroneous property value for script property");
+                    name->setName("__get_sc_" + SC_ns::enum_names[valcode]);
                 }
-                else if (theprop == UCD::scx) {
+                else if (theprop == scx) {
                     // Script extension property identified
-                    int valcode = dyn_cast<UCD::EnumeratedPropertyObject> (UCD::property_object_table[UCD::sc])->GetPropertyValueEnumCode(v);                    
+                    int valcode = dyn_cast<EnumeratedPropertyObject> (property_object_table[sc])->GetPropertyValueEnumCode(value);
                     if (valcode >= 0) {
-                        name->setName("__get_scx_" + UCD::SC_ns::enum_names[valcode]);
+                        throw UnicodePropertyExpressionError("Erroneous property value for script_extension property");
                     }
-                    else throw UnicodePropertyExpressionError("Erroneous property value for script_extension property");
+                    name->setName("__get_scx_" + SC_ns::enum_names[valcode]);
                 }
-                else if (theprop == UCD::blk) {
+                else if (theprop == blk) {
                     // Block property identified
-                    int valcode = dyn_cast<UCD::EnumeratedPropertyObject> (UCD::property_object_table[UCD::blk])->GetPropertyValueEnumCode(v);                    
+                    int valcode = dyn_cast<EnumeratedPropertyObject> (property_object_table[blk])->GetPropertyValueEnumCode(value);
                     if (valcode >= 0) {
-                        name->setName("__get_blk_" + UCD::BLK_ns::enum_names[valcode]);
+                         throw UnicodePropertyExpressionError("Erroneous property value for block property");
                     }
-                    else throw UnicodePropertyExpressionError("Erroneous property value for block property");
+                    name->setName("__get_blk_" + BLK_ns::enum_names[valcode]);
                 }
-                else if (UCD::property_object_table[theprop]->the_kind == UCD::PropertyObject::ClassTypeId::BinaryProperty){
-                    auto valit = UCD::Binary_ns::aliases_only_map.find(v);
-                    if (valit == UCD::Binary_ns::aliases_only_map.end()) {
-                        throw UnicodePropertyExpressionError("Erroneous property value for binary property " + UCD::property_full_name[theprop]);
+                else if (property_object_table[theprop]->the_kind == PropertyObject::ClassTypeId::BinaryProperty){
+                    auto valit = Binary_ns::aliases_only_map.find(value);
+                    if (valit == Binary_ns::aliases_only_map.end()) {
+                        throw UnicodePropertyExpressionError("Erroneous property value for binary property " + property_full_name[theprop]);
                     }
-                    if (valit->second == UCD::Binary_ns::Y) {
-                        name->setName("__get_" + lowercase(UCD::property_enum_name[theprop]) + "_Y");
+                    if (valit->second == Binary_ns::Y) {
+                        name->setName("__get_" + lowercase(property_enum_name[theprop]) + "_Y");
                         return;
                     }
                     else {
-                        re::Name * binprop = re::makeName("__get_" + lowercase(UCD::property_enum_name[theprop]) + "_Y", Name::Type::UnicodeProperty);
-                        name->setDefinition(re::makeDiff(re::makeAny(), binprop));
+                        Name * binprop = makeName("__get_" + lowercase(property_enum_name[theprop]) + "_Y", Name::Type::UnicodeProperty);
+                        name->setDefinition(makeDiff(makeAny(), binprop));
                         return;
                     }
                 }
                 else {
-                    throw UnicodePropertyExpressionError("Property " + UCD::property_full_name[theprop] + " recognized, but not supported in icgrep 1.0");
+                    throw UnicodePropertyExpressionError("Property " + property_full_name[theprop] + " recognized, but not supported in icgrep 1.0");
                 }
             }
             else {
                 // No namespace (property) name.   Try as a general category.
-                int valcode = dyn_cast<UCD::EnumeratedPropertyObject> (UCD::property_object_table[UCD::gc])->GetPropertyValueEnumCode(v);
+                int valcode = dyn_cast<EnumeratedPropertyObject> (property_object_table[gc])->GetPropertyValueEnumCode(value);
                 if (valcode >= 0) {
-                    theprop = UCD::gc;
-                    name->setName("__get_gc_" + UCD::GC_ns::enum_names[valcode]);
+                    theprop = gc;
+                    name->setName("__get_gc_" + GC_ns::enum_names[valcode]);
                     return;
                 }
-                valcode = dyn_cast<UCD::EnumeratedPropertyObject> (UCD::property_object_table[UCD::sc])->GetPropertyValueEnumCode(v);
+                valcode = dyn_cast<EnumeratedPropertyObject> (property_object_table[sc])->GetPropertyValueEnumCode(value);
                 if (valcode >= 0) {
-                    theprop = UCD::sc;
-                    name->setName("__get_sc_" + UCD::SC_ns::enum_names[valcode]);
+                    theprop = sc;
+                    name->setName("__get_sc_" + SC_ns::enum_names[valcode]);
                     return;
                 }
                 // Try as a binary property.
-                auto propit = UCD::alias_map.find(v);
-                if (propit != UCD::alias_map.end()) {
+                auto propit = alias_map.find(value);
+                if (propit != alias_map.end()) {
                     theprop = propit->second;
-                    if (UCD::property_object_table[theprop]->the_kind == UCD::PropertyObject::ClassTypeId::BinaryProperty) {
-                        name->setName("__get_" + lowercase(UCD::property_enum_name[theprop]) + "_Y");
+                    if (property_object_table[theprop]->the_kind == PropertyObject::ClassTypeId::BinaryProperty) {
+                        name->setName("__get_" + lowercase(property_enum_name[theprop]) + "_Y");
                         return;
                     }
                     else {
-                        throw UnicodePropertyExpressionError("Error: property " + UCD::property_full_name[theprop] + " specified without a value");
+                        throw UnicodePropertyExpressionError("Error: property " + property_full_name[theprop] + " specified without a value");
                     }
                 }
                 // Now try special cases of Unicode TR #18
-                else if (v == "any") {
-                    name->setDefinition(re::makeAny());
+                else if (value == "any") {
+                    name->setDefinition(makeAny());
                     return;
                 }
-                else if (v == "assigned") {
-                    re::Name * Cn = re::makeName("Cn", Name::Type::UnicodeProperty);
+                else if (value == "assigned") {
+                    Name * Cn = makeName("Cn", Name::Type::UnicodeProperty);
                     resolveProperties(Cn);
-                    name->setDefinition(re::makeDiff(re::makeAny(), Cn));
+                    name->setDefinition(makeDiff(makeAny(), Cn));
                     return;
                 }
-                else if (v == "ascii") {
+                else if (value == "ascii") {
                     name->setName("__get_blk_ASCII");
                     return;
                 }
                 // Now compatibility properties of UTR #18 Annex C
-                else if (v == "xdigit") {
-                    re::Name * Nd = re::makeName("Nd", Name::Type::UnicodeProperty);
+                else if (value == "xdigit") {
+                    Name * Nd = makeName("Nd", Name::Type::UnicodeProperty);
                     resolveProperties(Nd);
-                    re::Name * hexdigit = re::makeName("Hex_digit", Name::Type::UnicodeProperty);
+                    Name * hexdigit = makeName("Hex_digit", Name::Type::UnicodeProperty);
                     resolveProperties(hexdigit);
-                    std::vector<RE *> alts = {Nd, hexdigit};
-                    name->setDefinition(re::makeAlt(alts.begin(), alts.end()));
+                    name->setDefinition(makeAlt({Nd, hexdigit}));
                     return;
                 }
-                else if (v == "alnum") {
-                    re::Name * digit = re::makeName("Nd", Name::Type::UnicodeProperty);
+                else if (value == "alnum") {
+                    Name * digit = makeName("Nd", Name::Type::UnicodeProperty);
                     resolveProperties(digit);
-                    re::Name * alpha = re::makeName("alphabetic", Name::Type::UnicodeProperty);
+                    Name * alpha = makeName("alphabetic", Name::Type::UnicodeProperty);
                     resolveProperties(alpha);
-                    std::vector<RE *> alts = {digit, alpha};
-                    name->setDefinition(re::makeAlt(alts.begin(), alts.end()));
+                    name->setDefinition(makeAlt({digit, alpha}));
                     return;
                 }
-                else if (v == "blank") {
-                    re::Name * space_sep = re::makeName("space_separator", Name::Type::UnicodeProperty);
+                else if (value == "blank") {
+                    Name * space_sep = makeName("space_separator", Name::Type::UnicodeProperty);
                     resolveProperties(space_sep);
-                    re::CC * tab = re::makeCC(0x09);
-                    std::vector<RE *> alts = {space_sep, tab};
-                    name->setDefinition(re::makeAlt(alts.begin(), alts.end()));
+                    CC * tab = makeCC(0x09);
+                    name->setDefinition(makeAlt({space_sep, tab}));
                     return;
                 }
-                else if (v == "graph") {
-                    re::Name * space = re::makeName("space", Name::Type::UnicodeProperty);
+                else if (value == "graph") {
+                    Name * space = makeName("space", Name::Type::UnicodeProperty);
                     resolveProperties(space);
-                    re::Name * ctrl = re::makeName("control", Name::Type::UnicodeProperty);
+                    Name * ctrl = makeName("control", Name::Type::UnicodeProperty);
                     resolveProperties(ctrl);
-                    re::Name * surr = re::makeName("surrogate", Name::Type::UnicodeProperty);
+                    Name * surr = makeName("surrogate", Name::Type::UnicodeProperty);
                     resolveProperties(surr);
-                    re::Name * unassigned = re::makeName("Cn", Name::Type::UnicodeProperty);
+                    Name * unassigned = makeName("Cn", Name::Type::UnicodeProperty);
                     resolveProperties(unassigned);
-                    std::vector<RE *> alts = {space, ctrl, surr, unassigned};
-                    re::Name * nongraph = re::makeName("[^graph]", Name::Type::UnicodeProperty);
-                    nongraph->setDefinition(re::makeAlt(alts.begin(), alts.end()));
-                    name->setDefinition(re::makeDiff(re::makeAny(), nongraph));
+                    Name * nongraph = makeName("[^graph]", Name::Type::UnicodeProperty);
+                    nongraph->setDefinition(makeAlt({space, ctrl, surr, unassigned}));
+                    name->setDefinition(makeDiff(makeAny(), nongraph));
                     return;
                 }
-                else if (v == "print") {
-                    re::Name * graph = re::makeName("graph", Name::Type::UnicodeProperty);
+                else if (value == "print") {
+                    Name * graph = makeName("graph", Name::Type::UnicodeProperty);
                     resolveProperties(graph);
-                    re::Name * space_sep = re::makeName("space_separator", Name::Type::UnicodeProperty);
+                    Name * space_sep = makeName("space_separator", Name::Type::UnicodeProperty);
                     resolveProperties(space_sep);
                     std::vector<RE *> alts = {graph, space_sep};
-                    name->setDefinition(re::makeAlt(alts.begin(), alts.end()));
+                    name->setDefinition(makeAlt(alts.begin(), alts.end()));
                     return;
                 }
-                else if (v == "word") {
-                    re::Name * alnum = re::makeName("alnum", Name::Type::UnicodeProperty);
+                else if (value == "word") {
+                    Name * alnum = makeName("alnum", Name::Type::UnicodeProperty);
                     resolveProperties(alnum);
-                    re::Name * mark = re::makeName("mark", Name::Type::UnicodeProperty);
+                    Name * mark = makeName("mark", Name::Type::UnicodeProperty);
                     resolveProperties(mark);
-                    re::Name * conn = re::makeName("Connector_Punctuation", Name::Type::UnicodeProperty);
+                    Name * conn = makeName("Connector_Punctuation", Name::Type::UnicodeProperty);
                     resolveProperties(conn);
-                    re::Name * join = re::makeName("Join_Control", Name::Type::UnicodeProperty);
+                    Name * join = makeName("Join_Control", Name::Type::UnicodeProperty);
                     resolveProperties(join);
-                    std::vector<RE *> alts = {alnum,mark,conn,join};
-                    name->setDefinition(re::makeAlt(alts.begin(), alts.end()));
+                    name->setDefinition(makeAlt({alnum, mark, conn, join}));
                     return;
                 }
                 else {
                     throw UnicodePropertyExpressionError("Expected a general category, script or binary property name, but '" + name->getName() + "' found instead");
                 }
             }
-            
-	        //name->setCompiled(compileCC(cast<CC>(d), mCG));
+
+            //name->setCompiled(compileCC(cast<CC>(d), mCG));
         }
     }
     else if (!isa<CC>(re) && !isa<Start>(re) && !isa<End>(re) && !isa<Any>(re)) {
@@ -263,3 +242,66 @@ void resolveProperties(RE * re) {
     }
 }
 
+UnicodeSet resolveUnicodeSet(Name * const name) {
+
+    if (name->getType() == Name::Type::UnicodeProperty) {
+        std::string prop = name->getNamespace();
+        std::string value = canonicalize_value_name(name->getName());
+        property_t theprop;
+        if (prop.length() > 0) {
+            prop = canonicalize_value_name(prop);
+            auto propit = alias_map.find(prop);
+            if (propit == alias_map.end()) {
+                throw UnicodePropertyExpressionError("Expected a property name, but '" + name->getNamespace() + "' found instead");
+            }
+            theprop = propit->second;
+            if (theprop == gc) {
+                // General Category
+                return cast<EnumeratedPropertyObject>(property_object_table[gc])->GetCodepointSet(value);
+            }
+            else if (theprop == sc) {
+                // Script property identified
+                return cast<EnumeratedPropertyObject>(property_object_table[sc])->GetCodepointSet(value);
+            }
+            else if (theprop == scx) {
+                // Script extension property identified
+                return cast<EnumeratedPropertyObject>(property_object_table[sc])->GetCodepointSet(value);
+            }
+            else if (theprop == blk) {
+                // Block property identified
+                return cast<EnumeratedPropertyObject>(property_object_table[blk])->GetCodepointSet(value);
+            }
+            else if (property_object_table[theprop]->the_kind == PropertyObject::ClassTypeId::BinaryProperty){
+                auto valit = Binary_ns::aliases_only_map.find(value);
+                if (valit == Binary_ns::aliases_only_map.end()) {
+                    throw UnicodePropertyExpressionError("Erroneous property value for binary property " + property_full_name[theprop]);
+                }
+                return cast<BinaryPropertyObject>(property_object_table[theprop])->GetCodepointSet(value);
+            }
+            throw UnicodePropertyExpressionError("Property " + property_full_name[theprop] + " recognized but not supported in icgrep 1.0");
+        }
+        else {
+            // No namespace (property) name.   Try as a general category.
+            int valcode = cast<EnumeratedPropertyObject>(property_object_table[gc])->GetPropertyValueEnumCode(value);
+            if (valcode >= 0) {
+                return cast<EnumeratedPropertyObject>(property_object_table[gc])->GetCodepointSet(valcode);
+            }
+            valcode = cast<EnumeratedPropertyObject> (property_object_table[sc])->GetPropertyValueEnumCode(value);
+            if (valcode >= 0) {
+                return cast<EnumeratedPropertyObject>(property_object_table[sc])->GetCodepointSet(valcode);
+            }
+            // Try as a binary property.
+            auto propit = alias_map.find(value);
+            if (propit != alias_map.end()) {
+                theprop = propit->second;
+                if (property_object_table[theprop]->the_kind == PropertyObject::ClassTypeId::BinaryProperty) {
+                    return cast<BinaryPropertyObject>(property_object_table[theprop])->GetCodepointSet(valcode);
+                }
+                else {
+                    throw UnicodePropertyExpressionError("Error: property " + property_full_name[theprop] + " specified without a value");
+                }
+            }
+        }
+    }
+    throw UnicodePropertyExpressionError("Expected a general category, script or binary property name, but '" + name->getName() + "' found instead");
+}

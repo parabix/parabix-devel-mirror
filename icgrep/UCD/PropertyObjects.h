@@ -16,7 +16,7 @@
 
 namespace UCD {
 
-    std::string canonicalize_value_name(const std::string prop_or_val);
+    std::string canonicalize_value_name(const std::string & prop_or_val);
 
 	class PropertyObject {
 	public:
@@ -30,8 +30,6 @@ namespace UCD {
         
 		property_t the_property;
 		ClassTypeId the_kind;
-		
-        virtual UnicodeSet GetCodepointSet(const std::string value_spec) = 0;
 	};
 	
 	class UnsupportedPropertyObject : public PropertyObject {
@@ -44,7 +42,8 @@ namespace UCD {
         }
         
 		UnsupportedPropertyObject(property_t p, ClassTypeId k) : PropertyObject(p, k) {}
-        UnicodeSet GetCodepointSet(const std::string value_spec);
+        UnicodeSet GetCodepointSet(const std::string &);
+        UnicodeSet GetCodepointSet(const int);
 	};
 	
 	class EnumeratedPropertyObject : public PropertyObject {
@@ -62,8 +61,9 @@ namespace UCD {
                                          const std::unordered_map<std::string, int> aliases,
                                          const std::vector<UnicodeSet> sets) : 
 		PropertyObject(p, ClassTypeId::EnumeratedProperty), property_value_enum_names(enum_names), property_value_full_names(names), property_value_aliases(aliases), aliases_initialized(false), property_value_sets(sets) {}
-        int GetPropertyValueEnumCode(const std::string s);
-        UnicodeSet GetCodepointSet(const std::string value_spec);
+        int GetPropertyValueEnumCode(const std::string & value_spec);
+        UnicodeSet GetCodepointSet(const std::string & value_spec);
+        UnicodeSet GetCodepointSet(const int property_enum_val) const;
 		
 	private:
         const std::vector<std::string> property_value_enum_names;  // never changes
@@ -83,7 +83,8 @@ namespace UCD {
         }
 		
 		BinaryPropertyObject(UCD::property_t p, UnicodeSet s) : PropertyObject(p, ClassTypeId::BinaryProperty), the_codepoint_set(s) {}
-        UnicodeSet GetCodepointSet(const std::string value_spec);
+        UnicodeSet GetCodepointSet(const std::string & value_spec) const;
+        UnicodeSet GetCodepointSet(const int property_enum_val) const;
     private:
 		UnicodeSet the_codepoint_set;        
 	};

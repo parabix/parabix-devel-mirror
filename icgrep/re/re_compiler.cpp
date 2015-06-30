@@ -20,7 +20,7 @@
 #include <re/re_analysis.h>
 #include <cc/cc_namemap.hpp>
 #include <pablo/codegenstate.h>
-#include <UCD/DerivedGeneralCategory.h>
+#include <resolve_properties.h>
 #include <assert.h>
 #include <stdexcept>
 
@@ -28,10 +28,10 @@
 static cl::OptionCategory fREcompilationOptions("Regex Compilation Options",
                                       "These options control the compilation of regular expressions to Pablo.");
 
-static cl::opt<bool> DisableLog2BoundedRepetition("disable-log2-bounded-repetition", cl::init(false), 
+static cl::opt<bool> DisableLog2BoundedRepetition("disable-log2-bounded-repetition", cl::init(false),
                      cl::desc("disable log2 optimizations for bounded repetition of bytes"), cl::cat(fREcompilationOptions));
 static cl::opt<int> IfInsertionGap("if-insertion-gap", cl::init(3), cl::desc("minimum number of nonempty elements between inserted if short-circuit tests"), cl::cat(fREcompilationOptions));
-static cl::opt<bool> DisableMatchStar("disable-matchstar", cl::init(false), 
+static cl::opt<bool> DisableMatchStar("disable-matchstar", cl::init(false),
                      cl::desc("disable MatchStar optimization"), cl::cat(fREcompilationOptions));
 static cl::opt<bool> DisableUnicodeMatchStar("disable-unicode-matchstar", cl::init(false),
                      cl::desc("disable Unicode MatchStar optimization"), cl::cat(fREcompilationOptions));
@@ -40,11 +40,13 @@ static cl::opt<bool> DisableUnicodeLineBreak("disable-unicode-linebreak", cl::in
 static cl::opt<bool> DisablePregeneratedUnicode("disable-pregenerated-unicode", cl::init(false),
                      cl::desc("disable use of pregenerated Unicode character class sets"), cl::cat(fREcompilationOptions));
 
-
 using namespace pablo;
 
 namespace re {
 
+bool IsPregeneratedUnicodeEnabled() {
+    return !DisablePregeneratedUnicode;
+}
 
 RE_Compiler::RE_Compiler(cc::CC_Compiler & ccCompiler)
 : mCCCompiler(ccCompiler)
@@ -268,12 +270,11 @@ PabloAST * RE_Compiler::getNamedCharacterClassStream(Name * name, PabloBuilder &
         var = markerVar(m);
     }
     else if (name->getType() == Name::Type::UnicodeProperty) {
-        if (DisablePregeneratedUnicode) {
-            // Note: using a fixed set while testing whether the UCD compiler works.
-            var = mUCDCompiler.generateWithDefaultIfHierarchy(UCD::GC_ns::ll_Set, pb);
+        if (IsPregeneratedUnicodeEnabled()) {
+            var = mPB.createCall(name->getName());
         }
         else {
-            var = mPB.createCall(name->getName());
+            var = mUCDCompiler.generateWithDefaultIfHierarchy(resolveUnicodeSet(name), pb);
         }
     }
     else {
