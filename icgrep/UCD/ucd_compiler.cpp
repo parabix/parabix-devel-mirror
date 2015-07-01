@@ -430,6 +430,14 @@ PabloAST * UCDCompiler::generateWithDefaultIfHierarchy(const UnicodeSet & set, P
 
         {0x10000, 0x10FFFF}};
 
+//    llvm::raw_os_ostream out(std::cerr);
+
+//    for (auto range : set) {
+//        out << range.first << ',' << range.second << "\n";
+//    }
+
+//    out.flush();
+
     return generateWithIfHierarchy(defaultIfHierachy, set, entry);
 }
 

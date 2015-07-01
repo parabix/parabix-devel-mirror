@@ -21,6 +21,10 @@ std::string canonicalize_value_name(const std::string & prop_or_val) {
     return s.str();
 }
 
+int PropertyObject::GetPropertyValueEnumCode(const std::string & value_spec) {
+    throw std::runtime_error("Property " + value_spec + " unsupported.");
+}
+
 UnicodeSet UnsupportedPropertyObject::GetCodepointSet(const std::string &) {
     throw std::runtime_error("Property " + UCD::property_full_name[the_property] + " unsupported.");
 }

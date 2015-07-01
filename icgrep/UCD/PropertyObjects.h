@@ -27,7 +27,7 @@ namespace UCD {
             return the_kind;
         }
 		PropertyObject(property_t p, ClassTypeId k) : the_property(p), the_kind(k) {}
-        
+        virtual int GetPropertyValueEnumCode(const std::string & value_spec);
 		property_t the_property;
 		ClassTypeId the_kind;
 	};
@@ -61,7 +61,7 @@ namespace UCD {
                                          const std::unordered_map<std::string, int> aliases,
                                          const std::vector<UnicodeSet> sets) : 
 		PropertyObject(p, ClassTypeId::EnumeratedProperty), property_value_enum_names(enum_names), property_value_full_names(names), property_value_aliases(aliases), aliases_initialized(false), property_value_sets(sets) {}
-        int GetPropertyValueEnumCode(const std::string & value_spec);
+        virtual int GetPropertyValueEnumCode(const std::string & value_spec);
         UnicodeSet GetCodepointSet(const std::string & value_spec);
         UnicodeSet GetCodepointSet(const int property_enum_val) const;
 		

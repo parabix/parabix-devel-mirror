@@ -23,7 +23,6 @@
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/Support/Format.h>
 #include <include/simd-lib/builtins.hpp>
-#include <iostream>
 
 using namespace re;
 
@@ -384,30 +383,26 @@ void UnicodeSet::iterator::advance(const unsigned n) {
 
     assert (n == 1);    
 
-    if (LLVM_UNLIKELY(mBaseCodePoint >= CC::UNICODE_MAX)) {
-        mRunIterator = mRunEnd;
-        mQuadIterator = mQuadEnd;
-        mMixedRunIndex = 0;
-        mQuadOffset = 0;
-        return;
+    if (LLVM_UNLIKELY(mMinCodePoint >= 0x110000)) {
+        throw std::runtime_error("UnicodeSet iterator exceeded maximum code point.");
     }
 
+    bool found = false;
     // Find the start of our interval
-    for ( ; mBaseCodePoint < CC::UNICODE_MAX; ++mRunIterator) {
+    while ( mBaseCodePoint < 0x110000 ) {
         // Find the first non-empty block
-        if (typeOf(*mRunIterator) != Mixed) {
-            mBaseCodePoint += lengthOf(*mRunIterator) * QUAD_BITS;
-            mQuadOffset = 0;
-            mMixedRunIndex = 0;
+        if (typeOf(*mRunIterator) != Mixed) {            
             // If we found a full run, this must be the start of our interval.
-            // Otherwise it must be empty.
-            if (typeOf(*mRunIterator) == Full) {
-                mMinCodePoint = mBaseCodePoint;
+            const auto baseCodePoint = mBaseCodePoint;
+            const auto type = typeOf(*mRunIterator);
+            mBaseCodePoint += lengthOf(*mRunIterator++) * QUAD_BITS;
+            if (type == Full) {
+                mMinCodePoint = baseCodePoint;
+                found = true;
                 break;
             }
         }
         else { // if (typeOf(t) == Mixed)
-            bool found = false;
             while (mMixedRunIndex != lengthOf(*mRunIterator)) {
                 const bitquad_t m = (*mQuadIterator) & (FULL_QUAD_MASK << mQuadOffset);
                 // If we found a marker in m, it marks the beginning of our current interval.
@@ -419,37 +414,45 @@ void UnicodeSet::iterator::advance(const unsigned n) {
                     break;
                 }
                 mBaseCodePoint += QUAD_BITS;
-                ++mMixedRunIndex;
                 ++mQuadIterator;
+                ++mMixedRunIndex;
                 mQuadOffset = 0;
             }
-            // If we found nothing in the quad, restart the loop.
-            if (found) {
-                break;
-            }
+            if (found) break;
+            ++mRunIterator;
+            mQuadOffset = 0;
+            mMixedRunIndex = 0;
         }
     }
 
+    if (!found) {
+        assert (mBaseCodePoint == 0x110000);
+        mMinCodePoint = 0x110000;
+        return;
+    }
+
+    // at this stage, the max code point is the previous max code point (initially 0)
+    assert (mMaxCodePoint <= mMinCodePoint);
+    found = false;
     // Find the end of our interval
-    for ( ; mBaseCodePoint < CC::UNICODE_MAX; ++mRunIterator) {
-        // If this run is Empty, the max code point is the last computed base code point - 1.
-        if (typeOf(*mRunIterator) == Empty) {
-            mMaxCodePoint = mBaseCodePoint - 1;
-            break;
-        }
-        // If this run is Full, increment the base code point; we need to check whether
-        // the next run is Empty or Mixed to know if we've found the max code point of
-        // the current interval.
-        else if (typeOf(*mRunIterator) == Full) {
-            mBaseCodePoint += lengthOf(*mRunIterator) * QUAD_BITS;
-            mQuadOffset = 0;
-            mMixedRunIndex = 0;
-            continue;
+    while ( mBaseCodePoint < 0x110000 ) {
+
+        // Find the first non-Full block
+        if (typeOf(*mRunIterator) != Mixed) {
+            // If this run is Empty, the max code point is the last computed base code point - 1.
+            const auto baseCodePoint = mBaseCodePoint;
+            const auto type = typeOf(*mRunIterator);
+            mBaseCodePoint += lengthOf(*mRunIterator++) * QUAD_BITS;
+            if (type == Empty) {
+                mMaxCodePoint = baseCodePoint - 1;
+                found = true;
+                break;
+            }
         }
         else { // if (typeOf(t) == Mixed)
-            bool found = false;
             while (mMixedRunIndex != lengthOf(*mRunIterator)) {
-                const bitquad_t m = (~(*mQuadIterator)) & (FULL_QUAD_MASK << mQuadOffset);
+                const bitquad_t m = ((~(*mQuadIterator)) & FULL_QUAD_MASK) & (FULL_QUAD_MASK << mQuadOffset);
+
                 // If we found a marker in m, it marks the end of our current interval.
                 // Find it and break out of the loop.
                 if (m) {
@@ -459,17 +462,23 @@ void UnicodeSet::iterator::advance(const unsigned n) {
                     break;
                 }
                 mBaseCodePoint += QUAD_BITS;
-                ++mMixedRunIndex;
                 ++mQuadIterator;
+                ++mMixedRunIndex;
                 mQuadOffset = 0;
             }
-            // If we found nothing in the quad, restart the loop.
-            if (found) {
-                break;
-            }
+            if (found) break;
+            ++mRunIterator;
+            mQuadOffset = 0;
+            mMixedRunIndex = 0;
         }
     }
+    // if the very last block is a mixed block and we go past it, the last code point of the range is 0x10FFFF
+    if (!found) {
+        assert (mBaseCodePoint == 0x110000);
+        mMaxCodePoint = 0x10FFFF;
+    }
 
+    assert (mMinCodePoint <= mMaxCodePoint);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

@@ -54,12 +54,10 @@ public:
         friend class UnicodeSet;
         friend class boost::iterator_core_access;
     protected:
-        iterator(RunVector::const_iterator runIterator, QuadVector::const_iterator quadIterator,
-                 RunVector::const_iterator runEnd, QuadVector::const_iterator quadEnd)
+
+        iterator(const RunVector::const_iterator runIterator, const QuadVector::const_iterator quadIterator, const codepoint_t baseCodePoint)
         : mRunIterator(runIterator), mQuadIterator(quadIterator)
-        , mMixedRunIndex(0), mQuadOffset(0), mBaseCodePoint(0), mMinCodePoint(0), mMaxCodePoint(0)
-        , mRunEnd(runEnd), mQuadEnd(quadEnd)
-        {
+        , mMixedRunIndex(0), mQuadOffset(0), mBaseCodePoint(baseCodePoint), mMinCodePoint(baseCodePoint), mMaxCodePoint(baseCodePoint) {
 
         }
 
@@ -74,8 +72,7 @@ public:
         }
 
         inline bool equal(const iterator & other) const {
-            return (mRunIterator == other.mRunIterator) && (mQuadIterator == other.mQuadIterator) &&
-                   (mMixedRunIndex == other.mMixedRunIndex) && (mQuadOffset == other.mQuadOffset);
+            return (mMinCodePoint == other.mMinCodePoint);
         }
     private:
         RunVector::const_iterator           mRunIterator;
@@ -85,17 +82,15 @@ public:
         codepoint_t                         mBaseCodePoint;
         codepoint_t                         mMinCodePoint;
         codepoint_t                         mMaxCodePoint;
-        const RunVector::const_iterator     mRunEnd;
-        const QuadVector::const_iterator    mQuadEnd;
     };
 
     inline iterator begin() const {
-        // note: pre-increment is intentional to move the iterator onto the first non-Empty interval.
-        return ++iterator(mRuns.cbegin(), mQuads.cbegin(), mRuns.cend(), mQuads.cend());
+        // note: preincrement forces the iterator to advance onto and capture the first interval.
+        return ++iterator(mRuns.cbegin(), mQuads.cbegin(), 0);
     }
 
     inline iterator end() const {
-        return iterator(mRuns.cend(), mQuads.cend(), mRuns.cend(), mQuads.cend());
+        return iterator(mRuns.cend(), mQuads.cend(), 0x110000);
     }
 
     class quad_iterator : public boost::iterator_facade<quad_iterator, quad_iterator_return_t, boost::random_access_traversal_tag, quad_iterator_return_t> {

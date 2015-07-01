@@ -42,6 +42,10 @@ inline std::string lowercase(const std::string & name) {
     return boost::algorithm::to_lower_copy(name, loc);
 }
 
+inline int GetPropertyValueEnumCode(const UCD::property_t type, const std::string & value) {
+    return property_object_table[type]->GetPropertyValueEnumCode(value);
+}
+
 void resolveProperties(RE * re) {
     if (Alt * alt = dyn_cast<Alt>(re)) {
         for (auto item : *alt) {
@@ -80,7 +84,7 @@ void resolveProperties(RE * re) {
                 theprop = propit->second;
                 if (theprop == gc) {
                     // General Category
-                    int valcode = dyn_cast<EnumeratedPropertyObject> (property_object_table[gc])->GetPropertyValueEnumCode(value);
+                    int valcode = GetPropertyValueEnumCode(gc, value);
                     if (valcode < 0) {
                         throw UnicodePropertyExpressionError("Erroneous property value for general_category property");
                     }                    
@@ -88,7 +92,7 @@ void resolveProperties(RE * re) {
                 }
                 else if (theprop == sc) {
                     // Script property identified
-                    int valcode = dyn_cast<EnumeratedPropertyObject> (property_object_table[sc])->GetPropertyValueEnumCode(value);
+                    int valcode = GetPropertyValueEnumCode(sc, value);
                     if (valcode < 0) {
                         throw UnicodePropertyExpressionError("Erroneous property value for script property");
                     }
@@ -96,7 +100,7 @@ void resolveProperties(RE * re) {
                 }
                 else if (theprop == scx) {
                     // Script extension property identified
-                    int valcode = dyn_cast<EnumeratedPropertyObject> (property_object_table[sc])->GetPropertyValueEnumCode(value);
+                    int valcode = GetPropertyValueEnumCode(sc, value);
                     if (valcode >= 0) {
                         throw UnicodePropertyExpressionError("Erroneous property value for script_extension property");
                     }
@@ -104,7 +108,7 @@ void resolveProperties(RE * re) {
                 }
                 else if (theprop == blk) {
                     // Block property identified
-                    int valcode = dyn_cast<EnumeratedPropertyObject> (property_object_table[blk])->GetPropertyValueEnumCode(value);
+                    int valcode = GetPropertyValueEnumCode(blk, value);
                     if (valcode >= 0) {
                          throw UnicodePropertyExpressionError("Erroneous property value for block property");
                     }
@@ -131,13 +135,13 @@ void resolveProperties(RE * re) {
             }
             else {
                 // No namespace (property) name.   Try as a general category.
-                int valcode = dyn_cast<EnumeratedPropertyObject> (property_object_table[gc])->GetPropertyValueEnumCode(value);
+                int valcode = GetPropertyValueEnumCode(gc, value);
                 if (valcode >= 0) {
                     theprop = gc;
                     name->setName("__get_gc_" + GC_ns::enum_names[valcode]);
                     return;
                 }
-                valcode = dyn_cast<EnumeratedPropertyObject> (property_object_table[sc])->GetPropertyValueEnumCode(value);
+                valcode = GetPropertyValueEnumCode(sc, value);
                 if (valcode >= 0) {
                     theprop = sc;
                     name->setName("__get_sc_" + SC_ns::enum_names[valcode]);
@@ -282,7 +286,7 @@ UnicodeSet resolveUnicodeSet(Name * const name) {
         }
         else {
             // No namespace (property) name.   Try as a general category.
-            int valcode = cast<EnumeratedPropertyObject>(property_object_table[gc])->GetPropertyValueEnumCode(value);
+            int valcode = GetPropertyValueEnumCode(gc, value);
             if (valcode >= 0) {
                 return cast<EnumeratedPropertyObject>(property_object_table[gc])->GetCodepointSet(valcode);
             }
