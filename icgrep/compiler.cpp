@@ -60,8 +60,8 @@ static cl::opt<bool> PabloSinkingPass("sinking", cl::init(false),
                                       cl::desc("Moves all instructions into the innermost legal If-scope so that they are only executed when needed."),
                                       cl::cat(cPabloOptimizationsOptions));
 #ifdef ENABLE_MULTIPLEXING
-static cl::opt<bool> PabloMutualExclusionPass("csme", cl::init(true),
-                                      cl::desc("Multiplex Advances whose inputs are mutual exclusive and replace any contradictory stream with Zero."),
+static cl::opt<bool> PabloMutualExclusionPass("disable-multiplexing", cl::init(true),
+                                      cl::desc("Disable combining Advances whose inputs are mutual exclusive."),
                                       cl::cat(cPabloOptimizationsOptions));
 #endif
 

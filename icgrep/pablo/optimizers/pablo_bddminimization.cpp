@@ -1,4 +1,4 @@
-#include "pablo_automultiplexing.hpp"
+#include "pablo_bddminimization.h"
 #include <pablo/codegenstate.h>
 #include <llvm/ADT/BitVector.h>
 #include <stack>
@@ -93,7 +93,7 @@ unsigned __count_advances(const PabloBlock & entry) {
 
 namespace pablo {
 
-bool AutoMultiplexing::optimize(const std::vector<Var *> & input, PabloBlock & entry) {
+bool BDDMinimizationPass::optimize(const std::vector<Var *> & input, PabloBlock & entry) {
 
     std::random_device rd;
     const auto seed = rd();
@@ -101,7 +101,7 @@ bool AutoMultiplexing::optimize(const std::vector<Var *> & input, PabloBlock & e
 
     LOG("Seed:                    " << seed);
 
-    AutoMultiplexing am;
+    BDDMinimizationPass am;
     RECORD_TIMESTAMP(start_initialize);
     am.initialize(input, entry);
     RECORD_TIMESTAMP(end_initialize);
@@ -115,6 +115,11 @@ bool AutoMultiplexing::optimize(const std::vector<Var *> & input, PabloBlock & e
     RECORD_TIMESTAMP(end_characterize);
 
     LOG("Characterize:            " << (end_characterize - start_characterize));
+
+    RECORD_TIMESTAMP(start_minimization);
+    am.minimize(entry);
+    RECORD_TIMESTAMP(end_minimization);
+    LOG("Minimize:                " << (end_minimization - start_minimization));
 
     RECORD_TIMESTAMP(start_shutdown);
     am.shutdown();
@@ -162,9 +167,9 @@ bool AutoMultiplexing::optimize(const std::vector<Var *> & input, PabloBlock & e
  * Scan through the program to identify any advances and calls then initialize the BDD engine with
  * the proper variable ordering.
  ** ------------------------------------------------------------------------------------------------------------- */
-void AutoMultiplexing::initialize(const std::vector<Var *> & vars, PabloBlock & entry) {
+void BDDMinimizationPass::initialize(const std::vector<Var *> & vars, PabloBlock & entry) {
 
-    flat_map<const PabloAST *, unsigned> map;    
+    flat_map<const PabloAST *, unsigned> map;
     std::stack<Statement *> scope;
     unsigned complexStatements = 0; // number of statements that cannot always be categorized without generating a new variable
 
@@ -275,7 +280,7 @@ void AutoMultiplexing::initialize(const std::vector<Var *> & vars, PabloBlock & 
             if (G(i, j)) {
                 add_edge(j, i, mConstraintGraph);
             }
-        }        
+        }
     }
 
     // Initialize the BDD engine ...
@@ -300,7 +305,7 @@ void AutoMultiplexing::initialize(const std::vector<Var *> & vars, PabloBlock & 
  *
  * Scan through the program and iteratively compute the BDDs for each statement.
  ** ------------------------------------------------------------------------------------------------------------- */
-void AutoMultiplexing::characterize(PabloBlock & block) {
+void BDDMinimizationPass::characterize(PabloBlock & block) {
     for (Statement * stmt : block) {
         if (LLVM_UNLIKELY(isa<If>(stmt) || isa<While>(stmt))) {
             // Set the next statement to be the first statement of the inner scope and push the
@@ -308,14 +313,14 @@ void AutoMultiplexing::characterize(PabloBlock & block) {
             characterize(isa<If>(stmt) ? cast<If>(stmt)->getBody() : cast<While>(stmt)->getBody());
             continue;
         }
-        mCharacterizationMap[stmt] = characterize(stmt);
+        mCharacterizationMap[stmt] = characterize(stmt, true);
     }
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief characterize
  ** ------------------------------------------------------------------------------------------------------------- */
-inline DdNode * AutoMultiplexing::characterize(Statement * const stmt) {
+DdNode * BDDMinimizationPass::characterize(Statement * const stmt, const bool throwUncharacterizedOperandError) {
 
     DdNode * bdd = nullptr;
     // Map our operands to the computed BDDs
@@ -327,11 +332,14 @@ inline DdNode * AutoMultiplexing::characterize(Statement * const stmt) {
         }
         auto f = mCharacterizationMap.find(op);
         if (LLVM_UNLIKELY(f == mCharacterizationMap.end())) {
-            std::string tmp;
-            llvm::raw_string_ostream msg(tmp);
-            msg << "Uncharacterized operand " << std::to_string(i);
-            PabloPrinter::print(stmt, " of ", msg);
-            throw std::runtime_error(msg.str());
+            if (throwUncharacterizedOperandError) {
+                std::string tmp;
+                llvm::raw_string_ostream msg(tmp);
+                msg << "Uncharacterized operand " << std::to_string(i);
+                PabloPrinter::print(stmt, " of ", msg);
+                throw std::runtime_error(msg.str());
+            }
+            return nullptr;
         }
         input[i] = f->second;
     }
@@ -368,13 +376,19 @@ inline DdNode * AutoMultiplexing::characterize(Statement * const stmt) {
             throw std::runtime_error("Unexpected statement type " + stmt->getName()->to_string());
     }
 
+    if (LLVM_UNLIKELY(noSatisfyingAssignment(bdd))) {
+        Cudd_RecursiveDeref(mManager, bdd);
+        bdd = Zero();
+    }
+
     return bdd;
+
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief characterize
  ** ------------------------------------------------------------------------------------------------------------- */
-inline DdNode * AutoMultiplexing::characterize(Advance * adv, DdNode * input) {
+inline DdNode * BDDMinimizationPass::characterize(Advance * adv, DdNode * input) {
     DdNode * Ik, * Ck, * Nk;
     if (LLVM_UNLIKELY(isZero(input))) {
         Ik = Ck = Nk = Zero();
@@ -473,9 +487,130 @@ inline DdNode * AutoMultiplexing::characterize(Advance * adv, DdNode * input) {
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
+ * @brief reevaluate
+ ** ------------------------------------------------------------------------------------------------------------- */
+void BDDMinimizationPass::reevaluate(Next * next, DdNode * value) {
+
+    Assign * const initial = cast<Assign>(next->getOperand(0));
+
+    if (LLVM_UNLIKELY(mCharacterizationMap[initial] == value)) {
+        return;
+    }
+    mCharacterizationMap[initial] = value;
+
+
+    std::queue<PabloAST *> Q;
+    flat_set<PabloBlock *> within_scope;
+
+    for (PabloBlock * block = next->getParent(); ;) {
+        within_scope.insert(block);
+        for (PabloAST * user : block->users()) {
+            if (within_scope.insert(cast<PabloBlock>(user)).second) {
+                Q.push(user);
+            }
+        }
+        if (Q.empty()) {
+            break;
+        }
+        block = cast<PabloBlock>(Q.front());
+        Q.pop();
+    }
+
+    std::unordered_set<PabloAST *> visited;
+
+    for (Statement * current = initial; ; ) {
+        for (PabloAST * user : current->users()) {
+            if (Statement * stmt = dyn_cast<Statement>(user)) {
+                if (visited.insert(user).second && within_scope.count(stmt->getParent())) {
+                    DdNode * bdd = characterize(stmt, false);
+                    if (bdd && mCharacterizationMap[user] != bdd) {
+                        mCharacterizationMap[user] = bdd;
+                        Q.push(stmt);
+                    }
+                }
+            }
+        }
+        if (Q.empty()) {
+            break;
+        }
+        current = cast<Statement>(Q.front());
+        Q.pop();
+    }
+
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief minimize
+ * @param entry the entry block of the program
+ *
+ * Scan through the program using the precomputed BDDs and replace any statements with equivalent BDDs with the
+ * earlier one (assuming its in scope) and replace any contradictions with Zero.
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline void BDDMinimizationPass::minimize(PabloBlock & entry) {
+    SubsitutionMap baseMap;
+    baseMap.insert(Zero(), entry.createZeroes());
+    baseMap.insert(One(), entry.createOnes());
+    minimize(entry, baseMap);
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief prohibited
+ *
+ * If this statement is an Assign or Next node or any of its operands is a non-superfluous Assign or Next node,
+ * then we're prohibited from minimizing this statement.
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline bool prohibited(const Statement * const stmt) {
+    if (isa<Assign>(stmt) || isa<Next>(stmt)) {
+        return true;
+    }
+    for (unsigned i = 0; i != stmt->getNumOperands(); ++i) {
+        const PabloAST * const  op = stmt->getOperand(i);
+        const Assign * const assign = dyn_cast<Assign>(op);
+        if (LLVM_UNLIKELY((assign && !assign->superfluous()) || isa<Next>(op))) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief minimize
+ ** ------------------------------------------------------------------------------------------------------------- */
+void BDDMinimizationPass::minimize(PabloBlock & block, SubsitutionMap & parent) {
+    SubsitutionMap subsitutionMap(&parent);
+    for (Statement * stmt : block) {
+        if (LLVM_UNLIKELY(isa<If>(stmt) || isa<While>(stmt))) {
+            // Set the next statement to be the first statement of the inner scope and push the
+            // next statement of the current statement into the scope stack.
+            minimize(isa<If>(stmt) ? cast<If>(stmt)->getBody() : cast<While>(stmt)->getBody(), subsitutionMap);
+            continue;
+        }
+
+        if (LLVM_UNLIKELY(prohibited(stmt))) {
+            continue;
+        }
+
+        DdNode * bdd = mCharacterizationMap[stmt];
+        PabloAST * replacement = subsitutionMap.test(bdd, stmt);
+        if (LLVM_UNLIKELY(replacement != nullptr)) {
+            if (LLVM_UNLIKELY(isa<Advance>(stmt))) {
+                assert (mAdvanceMap.count(stmt));
+                const auto k = mAdvanceMap[stmt];
+                const auto m = num_vertices(mConstraintGraph);
+                for (unsigned i = 0; i != m; ++i) {
+                    add_edge(k, m, mConstraintGraph);
+                }
+            }
+            Cudd_RecursiveDeref(mManager, bdd);
+            stmt->replaceWith(replacement);
+        }
+    }
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
  * @brief notTransitivelyDependant
  ** ------------------------------------------------------------------------------------------------------------- */
-inline bool AutoMultiplexing::notTransitivelyDependant(const ConstraintVertex i, const ConstraintVertex j) const {
+inline bool BDDMinimizationPass::notTransitivelyDependant(const ConstraintVertex i, const ConstraintVertex j) const {
     assert (i < num_vertices(mConstraintGraph) && j < num_vertices(mConstraintGraph));
     return (mConstraintGraph.get_edge(i, j) == 0);
 }
@@ -484,60 +619,60 @@ inline bool AutoMultiplexing::notTransitivelyDependant(const ConstraintVertex i,
  * @brief CUDD wrappers
  ** ------------------------------------------------------------------------------------------------------------- */
 
-inline DdNode * AutoMultiplexing::Zero() const {
+inline DdNode * BDDMinimizationPass::Zero() const {
     return Cudd_ReadLogicZero(mManager);
 }
 
-inline DdNode * AutoMultiplexing::One() const {
+inline DdNode * BDDMinimizationPass::One() const {
     return Cudd_ReadOne(mManager);
 }
 
-inline DdNode * AutoMultiplexing::NewVar() {
+inline DdNode * BDDMinimizationPass::NewVar() {
     return Cudd_bddIthVar(mManager, mVariables++);
 }
 
-inline bool AutoMultiplexing::isZero(DdNode * const x) const {
+inline bool BDDMinimizationPass::isZero(DdNode * const x) const {
     return x == Zero();
 }
 
-inline DdNode * AutoMultiplexing::And(DdNode * const x, DdNode * const y) {
+inline DdNode * BDDMinimizationPass::And(DdNode * const x, DdNode * const y) {
     DdNode * r = Cudd_bddAnd(mManager, x, y);
     Cudd_Ref(r);
     return r;
 }
 
-inline DdNode * AutoMultiplexing::Intersect(DdNode * const x, DdNode * const y) {
+inline DdNode * BDDMinimizationPass::Intersect(DdNode * const x, DdNode * const y) {
     DdNode * r = Cudd_bddIntersect(mManager, x, y); Cudd_Ref(r);
     return r;
 }
 
-inline DdNode * AutoMultiplexing::Or(DdNode * const x, DdNode * const y) {
+inline DdNode * BDDMinimizationPass::Or(DdNode * const x, DdNode * const y) {
     DdNode * r = Cudd_bddOr(mManager, x, y);
     Cudd_Ref(r);
     return r;
 }
 
-inline DdNode * AutoMultiplexing::Xor(DdNode * const x, DdNode * const y) {
+inline DdNode * BDDMinimizationPass::Xor(DdNode * const x, DdNode * const y) {
     DdNode * r = Cudd_bddXor(mManager, x, y);
     Cudd_Ref(r);
     return r;
 }
 
-inline DdNode * AutoMultiplexing::Not(DdNode * const x) const {
+inline DdNode * BDDMinimizationPass::Not(DdNode * const x) const {
     return Cudd_Not(x);
 }
 
-inline DdNode * AutoMultiplexing::Ite(DdNode * const x, DdNode * const y, DdNode * const z) {
+inline DdNode * BDDMinimizationPass::Ite(DdNode * const x, DdNode * const y, DdNode * const z) {
     DdNode * r = Cudd_bddIte(mManager, x, y, z);
     Cudd_Ref(r);
     return r;
 }
 
-inline bool AutoMultiplexing::noSatisfyingAssignment(DdNode * const x) {
+inline bool BDDMinimizationPass::noSatisfyingAssignment(DdNode * const x) {
     return Cudd_bddLeq(mManager, x, Zero());
 }
 
-inline void AutoMultiplexing::shutdown() {
+inline void BDDMinimizationPass::shutdown() {
     Cudd_Quit(mManager);
 }
 
@@ -545,7 +680,7 @@ inline void AutoMultiplexing::shutdown() {
  * @brief generateMultiplexSets
  * @param RNG random number generator
  ** ------------------------------------------------------------------------------------------------------------- */
-bool AutoMultiplexing::generateMultiplexSets(RNG & rng, unsigned k) {
+bool BDDMinimizationPass::generateMultiplexSets(RNG & rng, unsigned k) {
 
     using vertex_t = ConstraintGraph::vertex_descriptor;
     using degree_t = graph_traits<ConstraintGraph>::degree_size_type;
@@ -620,7 +755,7 @@ bool AutoMultiplexing::generateMultiplexSets(RNG & rng, unsigned k) {
  * @param N an independent set
  * @param M an independent set
  ** ------------------------------------------------------------------------------------------------------------- */
-inline void AutoMultiplexing::addMultiplexSet(const IndependentSet & N, const IndependentSet & M) {
+inline void BDDMinimizationPass::addMultiplexSet(const IndependentSet & N, const IndependentSet & M) {
 
     // At this stage, the multiplex set graph is a directed bipartite graph that is used to show relationships
     // between the "set vertex" and its members. We obtain these from "generateMultiplexSets".
@@ -659,7 +794,7 @@ static inline size_t log2_plus_one(const size_t n) {
  * sets by taking a subset of any existing set. With a few modifications, the greedy approach seems to work well
  * enough but more analysis is needed.
  ** ------------------------------------------------------------------------------------------------------------- */
-void AutoMultiplexing::selectMultiplexSets(RNG &) {
+void BDDMinimizationPass::selectMultiplexSets(RNG &) {
 
 
     using OutEdgeIterator = graph_traits<MultiplexSetGraph>::out_edge_iterator;
@@ -769,7 +904,7 @@ inline Statement * choose(PabloAST * x, PabloAST * y, Statement * z) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief applySubsetConstraints
  ** ------------------------------------------------------------------------------------------------------------- */
-void AutoMultiplexing::applySubsetConstraints() {
+void BDDMinimizationPass::applySubsetConstraints() {
 
     // When entering thus function, the multiplex set graph M is a bipartite DAG with edges denoting the set
     // relationships of our independent sets.
@@ -846,7 +981,7 @@ void AutoMultiplexing::applySubsetConstraints() {
 
                     for (auto i : V) {
                         Q.push(std::get<0>(mAdvance[i])->getOperand(0));
-                    }                    
+                    }
                     while (Q.size() > 1) {
                         PabloAST * a1 = Q.front(); Q.pop();
                         PabloAST * a2 = Q.front(); Q.pop();
@@ -898,7 +1033,7 @@ void AutoMultiplexing::applySubsetConstraints() {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief multiplexSelectedIndependentSets
  ** ------------------------------------------------------------------------------------------------------------- */
-void AutoMultiplexing::multiplexSelectedIndependentSets() const {
+void BDDMinimizationPass::multiplexSelectedIndependentSets() const {
 
     const unsigned f = num_vertices(mConstraintGraph);
     const unsigned l = num_vertices(mMultiplexSetGraph);
@@ -1052,7 +1187,7 @@ void AutoMultiplexing::multiplexSelectedIndependentSets() const {
  * users within the IR isn't taken into consideration. Thus while there must be a valid ordering for the program,
  * it's not necessarily the original ordering.
  ** ------------------------------------------------------------------------------------------------------------- */
-void AutoMultiplexing::topologicalSort(PabloBlock & entry) const {
+void BDDMinimizationPass::topologicalSort(PabloBlock & entry) const {
     // Note: not a real topological sort. I expect the original order to be very close to the resulting one.
     std::unordered_set<const PabloAST *> encountered;
     std::stack<Statement *> scope;

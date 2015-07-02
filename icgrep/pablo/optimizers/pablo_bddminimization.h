@@ -1,5 +1,5 @@
-#ifndef PABLO_AUTOMULTIPLEXING_HPP
-#define PABLO_AUTOMULTIPLEXING_HPP
+#ifndef PABLO_BDDMINIMIZATION_H
+#define PABLO_BDDMINIMIZATION_H
 
 #include <pablo/codegenstate.h>
 #include <slab_allocator.h>
@@ -19,7 +19,7 @@ struct DdNode;
 
 namespace pablo {
 
-class AutoMultiplexing {
+class BDDMinimizationPass {
 
     using CharacterizationMap = llvm::DenseMap<const PabloAST *, DdNode *>;
     using ConstraintGraph = boost::adjacency_matrix<boost::directedS>;
@@ -34,13 +34,45 @@ class AutoMultiplexing {
     using AdvanceVector = std::vector<std::tuple<Advance *, DdNode *, DdNode *>>;
     using IndependentSet = std::vector<ConstraintVertex>;
 
+    struct SubsitutionMap {
+        SubsitutionMap(SubsitutionMap * parent = nullptr) : mParent(parent) {}
+        PabloAST * test(const DdNode * node, PabloAST * stmt) {
+            PabloAST * replacement = find(node);
+            if (LLVM_LIKELY(replacement == nullptr)) {
+                mMap.insert(std::make_pair(node, stmt));
+            }
+            return replacement;
+        }
+        PabloAST * find(const DdNode * node) const {
+            auto f = mMap.find(node);
+            if (LLVM_LIKELY(f == mMap.end())) {
+                PabloAST * replacement = nullptr;
+                if (mParent == nullptr) {
+                    replacement = mParent->find(node);
+                }
+                return replacement;
+            }
+            return f->second;
+        }
+        void insert(const DdNode * node, PabloAST * stmt) {
+            mMap.insert(std::make_pair(node, stmt));
+        }
+    private:
+        const SubsitutionMap * const mParent;
+        llvm::DenseMap<const DdNode *, PabloAST *> mMap;
+    };
+
 public:
     static bool optimize(const std::vector<Var *> & input, PabloBlock & entry);
 protected:
     void initialize(const std::vector<Var *> & vars, PabloBlock & entry);
     void characterize(PabloBlock & block);
-    DdNode * characterize(Statement * const stmt);
+    DdNode * characterize(Statement * const stmt, const bool throwUncharacterizedOperandError);
     DdNode * characterize(Advance * adv, DdNode * input);
+    void reevaluate(Next * next, DdNode * value);
+    void minimize(PabloBlock & entry);
+    void minimize(PabloBlock & block, SubsitutionMap & parent);
+
     bool notTransitivelyDependant(const ConstraintVertex i, const ConstraintVertex j) const;
     bool generateMultiplexSets(RNG & rng, unsigned k = 1);
     void addMultiplexSet(const IndependentSet & N, const IndependentSet & M);
@@ -77,6 +109,5 @@ private:
     MultiplexSetGraph       mMultiplexSetGraph;
 };
 
-}
 
-#endif // PABLO_AUTOMULTIPLEXING_HPP
+#endif // PABLO_BDDMINIMIZATION_H

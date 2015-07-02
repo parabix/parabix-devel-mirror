@@ -148,21 +148,19 @@ UnicodeSet UnicodeSet::operator&(const UnicodeSet & other) const {
     const auto e1 = quad_end();
     const auto e2 = other.quad_end();
     for (auto i1 = quad_begin(), i2 = other.quad_begin(); i1 != e1 && i2 != e2; ) {
-        const auto run1 = i1.run();
-        const auto run2 = i2.run();
-        const auto n = std::min(lengthOf(run1), lengthOf(run2));
-        if (typeOf(run1) == typeOf(run2) && typeOf(run1) != Mixed) {
-            append_run(typeOf(run1), n, runs);
+        const auto n = std::min(i1.length(), i2.length());
+        if (i1.type() == i2.type() && i1.type() != Mixed) {
+            append_run(i1.type(), n, runs);
             i1 += n;
             i2 += n;
         }
-        else if (typeOf(run1) == Full) {
+        else if (i1.type() == Full) {
             for (unsigned i = 0; i != n; ++i, ++i2) {
                 append_quad(i2.quad(), quads, runs);
             }
             i1 += n;
         }
-        else if (typeOf(run2) == Full) {
+        else if (i2.type() == Full) {
             for (unsigned i = 0; i != n; ++i, ++i1) {
                 append_quad(i1.quad(), quads, runs);
             }
@@ -188,26 +186,24 @@ UnicodeSet UnicodeSet::operator+(const UnicodeSet & other) const {
     const auto e2 = other.quad_end();
     auto i1 = quad_begin(), i2 = other.quad_begin();
     for (; i1 != e1 && i2 != e2; ) {
-        const auto run1 = i1.run();
-        const auto run2 = i2.run();
-        const auto n = std::min(lengthOf(run1), lengthOf(run2));
-        if ((typeOf(run1) == Empty) && (typeOf(run2) == Empty)) {
+        const auto n = std::min(i1.length(), i2.length());
+        if ((i1.type() == Empty) && (i2.type() == Empty)) {
             append_run(Empty, n, runs);
             i1 += n;
             i2 += n;
         }
-        else if ((typeOf(run1) == Full) || (typeOf(run2) == Full)) {
+        else if ((i1.type() == Full) || (i2.type() == Full)) {
             append_run(Full, n, runs);
             i1 += n;
             i2 += n;
         }
-        else if (typeOf(run1) == Empty) {
+        else if (i1.type() == Empty) {
             for (unsigned i = 0; i != n; ++i, ++i2) {
                 append_quad(i2.quad(), quads, runs);
             }
             i1 += n;
         }
-        else if (typeOf(run2) == Empty) {
+        else if (i2.type() == Empty) {
             for (unsigned i = 0; i != n; ++i, ++i1) {
                 append_quad(i1.quad(), quads, runs);
             }
@@ -232,21 +228,19 @@ UnicodeSet UnicodeSet::operator-(const UnicodeSet & other) const {
     const auto e1 = quad_end();
     const auto e2 = other.quad_end();
     for (auto i1 = quad_begin(), i2 = other.quad_begin(); i1 != e1 && i2 != e2; ) {
-        const auto run1 = i1.run();
-        const auto run2 = i2.run();
-        unsigned n = std::min(lengthOf(run1), lengthOf(run2));
-        if ((typeOf(run1) == Empty) || (typeOf(run2) == Full) || (typeOf(run1) == Full && typeOf(run2) == Empty)) {
-            append_run(typeOf(run1), n, runs);
+        unsigned n = std::min(i1.length(), i2.length());
+        if ((i1.type() == Empty) || (i2.type() == Full) || (i1.type() == Full && i2.type() == Empty)) {
+            append_run(i1.type(), n, runs);
             i1 += n;
             i2 += n;
         }
-        else if (typeOf(run1) == Full) {
+        else if (i1.type() == Full) {
             for (unsigned i = 0; i != n; ++i, ++i2) {
                 append_quad(FULL_QUAD_MASK ^ i2.quad(), quads, runs);
             }
             i1 += n;
         }
-        else if (typeOf(run2) == Empty) {
+        else if (i2.type() == Empty) {
             for (unsigned i = 0; i != n; ++i, ++i1) {
                 append_quad(i1.quad(), quads, runs);
             }
@@ -271,33 +265,31 @@ UnicodeSet UnicodeSet::operator^(const UnicodeSet & other) const {
     const auto e1 = quad_end();
     const auto e2 = other.quad_end();
     for (auto i1 = quad_begin(), i2 = other.quad_begin(); i1 != e1 && i2 != e2; ) {
-        const auto run1 = i1.run();
-        const auto run2 = i2.run();
-        unsigned n = std::min(lengthOf(run1), lengthOf(run2));
-        if (typeOf(run1) != Mixed && typeOf(run2) != Mixed) {
-            append_run(typeOf(run1) == typeOf(run2) ? Empty : Full, n, runs);
+        unsigned n = std::min(i1.length(), i2.length());
+        if (i1.type() != Mixed && i2.type() != Mixed) {
+            append_run(i1.type() == i2.type() ? Empty : Full, n, runs);
             i1 += n;
             i2 += n;
         }
-        else if (typeOf(run1) == Empty) {
+        else if (i1.type() == Empty) {
             for (unsigned i = 0; i < n; ++i, ++i2) {
                 append_quad(i2.quad(), quads, runs);
             }
             i1 += n;
         }
-        else if (typeOf(run2) == Empty) {
+        else if (i2.type() == Empty) {
             for (unsigned i = 0; i < n; ++i, ++i1) {
                 append_quad(i1.quad(), quads, runs);
             }
             i2 += n;
         }
-        else if (typeOf(run1) == Full) {
+        else if (i1.type() == Full) {
             for (unsigned i = 0; i < n; ++i, ++i2) {
                 append_quad(FULL_QUAD_MASK ^ i2.quad(), quads, runs);
             }
             i1 += n;
         }
-        else if (typeOf(run2) == Empty) {
+        else if (i2.type() == Empty) {
             for (unsigned i = 0; i < n; ++i, ++i1) {
                 append_quad(FULL_QUAD_MASK ^ i1.quad(), quads, runs);
             }
@@ -337,7 +329,7 @@ UnicodeSet UnicodeSet::operator==(const UnicodeSet & other) const {
  ** ------------------------------------------------------------------------------------------------------------- */
 bool UnicodeSet::contains(const codepoint_t codepoint) const {
     auto n = codepoint / QUAD_BITS;
-    QuadVector::const_iterator qi = mQuads.cbegin();
+    auto qi = mQuads.cbegin();
     for (const auto & r : mRuns) {
         if (lengthOf(r) >= n) {
             if (typeOf(r) == Mixed) {
@@ -347,11 +339,40 @@ bool UnicodeSet::contains(const codepoint_t codepoint) const {
             return (typeOf(r) == Full);
         }
         if (typeOf(r) == Mixed) {
-            qi += n;
+            qi += lengthOf(r);
         }        
         n -= lengthOf(r);
     }
     return false;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief intersects
+ * @param lo_codepoint
+ * @param hi_codepoint
+ *
+ * Return true if this UnicodeSet contains any code point(s) between lo_codepoint and hi_codepoint
+ ** ------------------------------------------------------------------------------------------------------------- */
+bool UnicodeSet::intersects(const codepoint_t lo_codepoint, const codepoint_t hi_codepoint) const {
+    quad_iterator qi = quad_begin() + lo_codepoint / QUAD_BITS;
+    unsigned n = (hi_codepoint - lo_codepoint) / QUAD_BITS;
+    while (n) {
+        if (qi.type() != Empty) {
+            return true;
+        }
+        const auto l = std::min<unsigned>(qi.length(), n);
+        qi += l;
+        n -= l;
+    }
+    // check the remaining portion of this quad
+    unsigned r = (hi_codepoint - lo_codepoint) % QUAD_BITS;
+    if (r == 0 || (++qi).type() == Empty) {
+        return false;
+    }
+    if (qi.type() == Full) {
+        return true;
+    }
+    return (qi.quad() & (FULL_QUAD_MASK << r)) != 0;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

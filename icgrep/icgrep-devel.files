@@ -324,3 +324,5 @@ UCD/ucd_compiler.cpp
 UCD/ucd_compiler.hpp
 UCD/PropertyObjects.cpp
 ../QA/unit-tests/unicode_set_tests.hpp
+pablo/optimizers/pablo_bddminimization.h
+pablo/optimizers/pablo_bddminimization.cpp

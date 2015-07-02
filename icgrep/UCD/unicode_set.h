@@ -103,15 +103,19 @@ public:
         void advance(unsigned n);
 
         inline quad_iterator_return_t dereference() const {
-            return std::make_pair(run(), quad());
+            return std::make_pair(std::make_pair(type(), length()), quad());
         }
 
         inline void increment() {
             advance(1);
         }
 
-        inline run_t run() const {
-            return std::make_pair(std::get<0>(*mRunIterator), std::get<1>(*mRunIterator) - mOffset);
+        inline run_type_t type() const {
+            return std::get<0>(*mRunIterator);
+        }
+
+        inline length_t length() const {
+            return std::get<1>(*mRunIterator) - mOffset;
         }
 
         inline bitquad_t quad() const {
@@ -137,6 +141,8 @@ public:
     }
 
     bool contains(const codepoint_t codepoint) const;
+
+    bool intersects(const codepoint_t lo_codepoint, const codepoint_t hi_codepoint) const;
 
     void dump(llvm::raw_ostream & out) const;
 

@@ -43,18 +43,17 @@ PabloAST * UCDCompiler::generateWithIfHierarchy(const RangeList & ifRanges, cons
     for (const auto range : outer) {
         codepoint_t lo, hi;
         std::tie(lo, hi) = range;
-        if (rangeIntersect(set, lo, hi).empty()) {
-            continue;
+        if (set.intersects(lo, hi)) {
+            PabloBuilder inner_block = PabloBuilder::Create(block);
+            PabloAST * inner_target = generateWithIfHierarchy(inner, set, lo, hi, inner_block);
+            // If this range is empty, just skip creating the if block
+            if (LLVM_UNLIKELY(isa<Zeroes>(inner_target))) {
+                continue;
+            }
+            Assign * matches = inner_block.createAssign("m", inner_target);
+            block.createIf(ifTestCompiler(lo, hi, block), {matches}, inner_block);
+            target = block.createOr(target, matches);
         }
-        PabloBuilder inner_block = PabloBuilder::Create(block);
-        PabloAST * inner_target = generateWithIfHierarchy(inner, set, lo, hi, inner_block);
-        // If this range is empty, just skip creating the if block
-        if (LLVM_UNLIKELY(isa<Zeroes>(inner_target))) {
-            continue;
-        }
-        Assign * matches = inner_block.createAssign("m", inner_target);
-        block.createIf(ifTestCompiler(lo, hi, block), {matches}, inner_block);
-        target = block.createOr(target, matches);
     }
 
     return target;
@@ -128,16 +127,15 @@ PabloAST * UCDCompiler::sequenceGenerator(const RangeList && ranges, const unsig
                         target = sequenceGenerator(mid, hi, byte_no, block, target, prefix);
                     }
                     else { // we have a prefix group of type (a)
-                        PabloAST * byteVar = mCharacterClassCompiler.compileCC(makeCC(lo_byte, hi_byte), block);
-                        PabloAST * infix = byteVar;
+                        PabloAST * var = mCharacterClassCompiler.compileCC(makeCC(lo_byte, hi_byte), block);
                         if (byte_no > 1) {
-                            infix = block.createAnd(block.createAdvance(prefix, 1), byteVar);
+                            var = block.createAnd(block.createAdvance(prefix, 1), var);
                         }
                         PabloAST * suffixVar = mCharacterClassCompiler.compileCC(mSuffix, block);
                         for (auto i = byte_no; i < UTF8_Encoder::length(lo); ++i) {
-                            infix = block.createAnd(suffixVar, block.createAdvance(infix, 1));
+                            var = block.createAnd(suffixVar, block.createAdvance(var, 1));
                         }
-                        target = block.createOr(target, infix);
+                        target = block.createOr(target, var);
                     }
                 }
                 else { // lbyte == hbyte
