@@ -25,6 +25,7 @@ static_assert(false, "Need to turn on them together.");
 #include <unordered_map>
 #include <pablo/pe_string.h>
 #include <llvm/ADT/Twine.h>
+#include <llvm/IR/IRBuilder.h>
 
 namespace llvm {
     class Value;
@@ -51,6 +52,8 @@ class Statement;
 class StatementList;
 class If;
 class While;
+
+static IRBuilder<> LLVM_Builder(getGlobalContext());
 
 struct CompiledPabloFunction {
     const size_t        CarryDataSize;
@@ -143,7 +146,7 @@ private:
     std::unique_ptr<Module>             mModOwner;
     Module *                            mMod;
 #endif
-    BasicBlock*                         mBasicBlock;
+    IRBuilder <> *                      mBuilder;
     ExecutionEngine*                    mExecutionEngine;
 
     VectorType* const                   mBitBlockType;
