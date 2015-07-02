@@ -7,6 +7,7 @@
 
 #include "PropertyObjects.h"
 #include <sstream>
+#include <algorithm>
 
 namespace UCD {
 
@@ -33,7 +34,7 @@ UnicodeSet UnsupportedPropertyObject::GetCodepointSet(const int) {
     throw std::runtime_error("Property " + UCD::property_full_name[the_property] + " unsupported.");
 }
 
-UnicodeSet EnumeratedPropertyObject::GetCodepointSet(const std::string & value_spec) {
+const UnicodeSet & EnumeratedPropertyObject::GetCodepointSet(const std::string & value_spec) {
     int property_enum_val = GetPropertyValueEnumCode(value_spec);
     if (property_enum_val == -1) {
         throw std::runtime_error("Enumerated Property " + UCD::property_full_name[the_property] +  ": unknown value: " + value_spec);
@@ -41,22 +42,22 @@ UnicodeSet EnumeratedPropertyObject::GetCodepointSet(const std::string & value_s
     return GetCodepointSet(property_enum_val);
 }
 
-UnicodeSet EnumeratedPropertyObject::GetCodepointSet(const int property_enum_val) const {
+const UnicodeSet & EnumeratedPropertyObject::GetCodepointSet(const int property_enum_val) const {
     assert (property_enum_val >= 0);
-    return property_value_sets[property_enum_val];
+    return *(property_value_sets[property_enum_val]);
 }
 
 int EnumeratedPropertyObject::GetPropertyValueEnumCode(const std::string & value_spec) {
     // The canonical full names are not stored in the precomputed alias map,
     // to save space in the executable.   Add them if the property is used.
-    if (!aliases_initialized) {
+    if (uninitialized) {
         for (unsigned i = 0; i != property_value_full_names.size(); i++) {
             property_value_aliases.insert({canonicalize_value_name(property_value_full_names[i]), i});
         }
         for (unsigned i = 0; i != property_value_enum_names.size(); i++) {
             property_value_aliases.insert({canonicalize_value_name(property_value_enum_names[i]), i});
         }
-        aliases_initialized = true;
+        uninitialized = false;
     }
     const auto valit = property_value_aliases.find(value_spec);
     if (valit == property_value_aliases.end())

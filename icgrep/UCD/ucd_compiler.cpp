@@ -17,6 +17,9 @@ namespace UCD {
  * @return the output stream with a 1-bit in any position of a character in the unicode set
  ** ------------------------------------------------------------------------------------------------------------- */
 PabloAST * UCDCompiler::generateWithIfHierarchy(const RangeList & ifRanges, const UnicodeSet & set, PabloBuilder & entry) {
+    // Pregenerate the suffix var outside of the if ranges. The DCE pass will either eliminate it if it's not used or the
+    // code sinking pass will move appropriately into an inner if block.
+    mSuffixVar = mCharacterClassCompiler.compileCC(makeCC(0x80, 0xBF), entry);
     return generateWithIfHierarchy(ifRanges, set, 0, CC::UNICODE_MAX, entry);
 }
 
@@ -39,7 +42,6 @@ PabloAST * UCDCompiler::generateWithIfHierarchy(const RangeList & ifRanges, cons
 
     const auto outer = outerRanges(enclosed);
     const auto inner = innerRanges(enclosed);
-
     for (const auto range : outer) {
         codepoint_t lo, hi;
         std::tie(lo, hi) = range;
@@ -103,11 +105,11 @@ PabloAST * UCDCompiler::sequenceGenerator(const RangeList && ranges, const unsig
             // We have a single byte remaining to match for all code points in this CC.
             // Use the byte class compiler to generate matches for these codepoints.
             const auto bytes = byteDefinitions(ranges, byte_no);
-            PabloAST * testVar = mCharacterClassCompiler.compileCC(makeCC(bytes), block);
+            PabloAST * var = mCharacterClassCompiler.compileCC(makeCC(bytes), block);
             if (byte_no > 1) {
-                testVar = block.createAnd(testVar, block.createAdvance(makePrefix(lo, byte_no, block, prefix), 1));
+                var = block.createAnd(var, block.createAdvance(makePrefix(lo, byte_no, block, prefix), 1));
             }
-            target = block.createOr(target, testVar);
+            target = block.createOr(target, var);
         }
         else {
             for (auto rg : ranges) {
@@ -131,27 +133,24 @@ PabloAST * UCDCompiler::sequenceGenerator(const RangeList && ranges, const unsig
                         if (byte_no > 1) {
                             var = block.createAnd(block.createAdvance(prefix, 1), var);
                         }
-                        PabloAST * suffixVar = mCharacterClassCompiler.compileCC(mSuffix, block);
-                        for (auto i = byte_no; i < UTF8_Encoder::length(lo); ++i) {
-                            var = block.createAnd(suffixVar, block.createAdvance(var, 1));
+                        for (unsigned i = byte_no; i != UTF8_Encoder::length(lo); ++i) {
+                            var = block.createAnd(mSuffixVar, block.createAdvance(var, 1));
                         }
                         target = block.createOr(target, var);
                     }
                 }
                 else { // lbyte == hbyte
-                    PabloAST * byteVar = mCharacterClassCompiler.compileCC(makeCC(lo_byte, hi_byte), block);
-                    PabloAST * infix = byteVar;
+                    PabloAST * var = mCharacterClassCompiler.compileCC(makeCC(lo_byte, hi_byte), block);
                     if (byte_no > 1) {
-                        infix = block.createAnd(block.createAdvance(prefix ? prefix : byteVar, 1), byteVar);
+                        var = block.createAnd(block.createAdvance(prefix ? prefix : var, 1), var);
                     }
                     if (byte_no < UTF8_Encoder::length(lo)) {
-                        target = sequenceGenerator(lo, hi, byte_no + 1, block, target, infix);
+                        target = sequenceGenerator(lo, hi, byte_no + 1, block, target, var);
                     }
                 }
             }
         }
     }
-
     return target;
 }
 
@@ -430,6 +429,8 @@ PabloAST * UCDCompiler::generateWithDefaultIfHierarchy(const UnicodeSet & set, P
 
 //    llvm::raw_os_ostream out(std::cerr);
 
+//    set.dump(out);
+
 //    for (auto range : set) {
 //        out << range.first << ',' << range.second << "\n";
 //    }
@@ -444,6 +445,6 @@ PabloAST * UCDCompiler::generateWithDefaultIfHierarchy(const UnicodeSet & set, P
  ** ------------------------------------------------------------------------------------------------------------- */
 UCDCompiler::UCDCompiler(cc::CC_Compiler & ccCompiler)
 : mCharacterClassCompiler(ccCompiler)
-, mSuffix(makeCC(0x80, 0xBF)) { }
+, mSuffixVar(nullptr) { }
 
 }

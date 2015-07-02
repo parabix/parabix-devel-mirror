@@ -55,22 +55,32 @@ namespace UCD {
             return false;
         }
 		
+
 		EnumeratedPropertyObject(UCD::property_t p, 
-                                 const std::vector<std::string> enum_names,
-                                 const std::vector<std::string> names,
-                                         const std::unordered_map<std::string, int> aliases,
-                                         const std::vector<UnicodeSet> sets) : 
-		PropertyObject(p, ClassTypeId::EnumeratedProperty), property_value_enum_names(enum_names), property_value_full_names(names), property_value_aliases(aliases), aliases_initialized(false), property_value_sets(sets) {}
+                                 const std::vector<std::string> & enum_names,
+                                 const std::vector<std::string> & names,
+                                 std::unordered_map<std::string, int> & aliases,
+                                 std::vector<const UnicodeSet *> && sets)
+        : PropertyObject(p, ClassTypeId::EnumeratedProperty)
+        , property_value_enum_names(enum_names)
+        , property_value_full_names(names)
+        , property_value_aliases(aliases)
+        , uninitialized(true)
+        , property_value_sets(sets) {
+
+
+        }
+
         virtual int GetPropertyValueEnumCode(const std::string & value_spec);
-        UnicodeSet GetCodepointSet(const std::string & value_spec);
-        UnicodeSet GetCodepointSet(const int property_enum_val) const;
+        const UnicodeSet & GetCodepointSet(const std::string & value_spec);
+        const UnicodeSet & GetCodepointSet(const int property_enum_val) const;
 		
 	private:
-        const std::vector<std::string> property_value_enum_names;  // never changes
-        const std::vector<std::string> property_value_full_names;  // never changes
-		std::unordered_map<std::string, int> property_value_aliases;
-		bool aliases_initialized; // full names must be added dynamically.
-		std::vector<UnicodeSet> property_value_sets;                 
+        const std::vector<std::string> & property_value_enum_names;  // never changes
+        const std::vector<std::string> & property_value_full_names;  // never changes
+        std::unordered_map<std::string, int> & property_value_aliases;
+        bool uninitialized; // full names must be added dynamically.
+        const std::vector<const UnicodeSet *> property_value_sets;
 	};
 	
 	class BinaryPropertyObject : public PropertyObject {
@@ -82,7 +92,11 @@ namespace UCD {
             return false;
         }
 		
-		BinaryPropertyObject(UCD::property_t p, UnicodeSet s) : PropertyObject(p, ClassTypeId::BinaryProperty), the_codepoint_set(s) {}
+        BinaryPropertyObject(UCD::property_t p, UnicodeSet s)
+        : PropertyObject(p, ClassTypeId::BinaryProperty)
+        , the_codepoint_set(s) {
+
+        }
         UnicodeSet GetCodepointSet(const std::string & value_spec) const;
         UnicodeSet GetCodepointSet(const int property_enum_val) const;
     private:

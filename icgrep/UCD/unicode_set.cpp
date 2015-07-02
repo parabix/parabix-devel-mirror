@@ -351,28 +351,19 @@ bool UnicodeSet::contains(const codepoint_t codepoint) const {
  * @param lo_codepoint
  * @param hi_codepoint
  *
- * Return true if this UnicodeSet contains any code point(s) between lo_codepoint and hi_codepoint
+ * Return true if this UnicodeSet contains any code point(s) between lo and hi (inclusive)
  ** ------------------------------------------------------------------------------------------------------------- */
-bool UnicodeSet::intersects(const codepoint_t lo_codepoint, const codepoint_t hi_codepoint) const {
-    quad_iterator qi = quad_begin() + lo_codepoint / QUAD_BITS;
-    unsigned n = (hi_codepoint - lo_codepoint) / QUAD_BITS;
-    while (n) {
-        if (qi.type() != Empty) {
-            return true;
+bool UnicodeSet::intersects(const codepoint_t lo, const codepoint_t hi) const {
+    for (auto range : *this) {
+        if (hi_codepoint(range) < lo) {
+            continue;
         }
-        const auto l = std::min<unsigned>(qi.length(), n);
-        qi += l;
-        n -= l;
-    }
-    // check the remaining portion of this quad
-    unsigned r = (hi_codepoint - lo_codepoint) % QUAD_BITS;
-    if (r == 0 || (++qi).type() == Empty) {
-        return false;
-    }
-    if (qi.type() == Full) {
+        if (lo_codepoint(range) > hi) {
+            break;
+        }
         return true;
     }
-    return (qi.quad() & (FULL_QUAD_MASK << r)) != 0;
+    return false;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

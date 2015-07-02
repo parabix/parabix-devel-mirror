@@ -142,7 +142,7 @@ public:
 
     bool contains(const codepoint_t codepoint) const;
 
-    bool intersects(const codepoint_t lo_codepoint, const codepoint_t hi_codepoint) const;
+    bool intersects(const codepoint_t lo, const codepoint_t hi) const;
 
     void dump(llvm::raw_ostream & out) const;
 

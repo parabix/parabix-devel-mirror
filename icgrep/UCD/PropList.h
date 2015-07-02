@@ -13,489 +13,768 @@
 #include <vector>
 
 namespace UCD {
-  namespace AHEX_ns {
-    const UnicodeSet codepoint_set 
-      {{{Empty, 1}, {Mixed, 3}, {Empty, 34812}},
-       {0x03ff0000, 0x0000007e, 0x0000007e}};
-    static BinaryPropertyObject property_object{AHex, codepoint_set};
-  }
-  namespace BIDI_C_ns {
-    const UnicodeSet codepoint_set 
-      {{{Empty, 48}, {Mixed, 1}, {Empty, 207}, {Mixed, 2}, {Empty, 1},
-        {Mixed, 1}, {Empty, 34556}},
-       {0x10000000, 0x0000c000, 0x00007c00, 0x000003c0}};
-    static BinaryPropertyObject property_object{Bidi_C, codepoint_set};
-  }
-  namespace DASH_ns {
-    const UnicodeSet codepoint_set 
-      {{{Empty, 1}, {Mixed, 1}, {Empty, 42}, {Mixed, 2}, {Empty, 114},
-        {Mixed, 1}, {Empty, 31}, {Mixed, 1}, {Empty, 63}, {Mixed, 1},
-        {Empty, 1}, {Mixed, 3}, {Empty, 11}, {Mixed, 1}, {Empty, 95},
-        {Mixed, 3}, {Empty, 13}, {Mixed, 2}, {Empty, 3}, {Mixed, 1},
-        {Empty, 1643}, {Mixed, 3}, {Empty, 4}, {Mixed, 1}, {Empty, 32775}},
-       {0x00002000, 0x00000400, 0x40000000, 0x00000001, 0x00000040,
-        0x003f0000, 0x00080000, 0x08000000, 0x00000800, 0x00040000,
-        0x04800000, 0x0c000000, 0x00000001, 0x10000000, 0x00010000,
-        0x00000001, 0x00060000, 0x01000000, 0x00000008, 0x00002000}};
-    static BinaryPropertyObject property_object{Dash, codepoint_set};
-  }
-  namespace DEP_ns {
-    const UnicodeSet codepoint_set 
-      {{{Empty, 10}, {Mixed, 1}, {Empty, 40}, {Mixed, 1}, {Empty, 71},
-        {Mixed, 1}, {Empty, 65}, {Mixed, 1}, {Empty, 69}, {Mixed, 1},
-        {Empty, 21}, {Mixed, 1}, {Empty, 28390}, {Mixed, 1}, {Full, 3},
-        {Empty, 6140}},
-       {0x00000200, 0x00080000, 0x02800000, 0x00000018, 0x0000fc00,
-        0x00000600, 0x00000002}};
-    static BinaryPropertyObject property_object{Dep, codepoint_set};
-  }
-  namespace DIA_ns {
-    const UnicodeSet codepoint_set 
-      {{{Empty, 2}, {Mixed, 2}, {Empty, 1}, {Mixed, 1}, {Empty, 15},
-        {Mixed, 1}, {Full, 4}, {Mixed, 3}, {Empty, 7}, {Mixed, 1},
-        {Empty, 5}, {Mixed, 1}, {Empty, 1}, {Mixed, 3}, {Empty, 3},
-        {Mixed, 1}, {Empty, 3}, {Mixed, 2}, {Empty, 1}, {Mixed, 2},
-        {Empty, 2}, {Mixed, 1}, {Empty, 1}, {Mixed, 2}, {Empty, 6},
-        {Mixed, 1}, {Empty, 1}, {Mixed, 3}, {Empty, 1}, {Mixed, 2},
-        {Empty, 2}, {Mixed, 2}, {Empty, 2}, {Mixed, 2}, {Empty, 2},
-        {Mixed, 2}, {Empty, 3}, {Mixed, 1}, {Empty, 3}, {Mixed, 1},
-        {Empty, 2}, {Mixed, 2}, {Empty, 3}, {Mixed, 1}, {Empty, 3},
-        {Mixed, 1}, {Empty, 3}, {Mixed, 1}, {Empty, 3}, {Mixed, 1},
-        {Empty, 1}, {Mixed, 2}, {Empty, 2}, {Mixed, 1}, {Empty, 1},
-        {Mixed, 1}, {Empty, 2}, {Mixed, 1}, {Empty, 2}, {Mixed, 1},
-        {Empty, 57}, {Mixed, 1}, {Empty, 10}, {Mixed, 1}, {Empty, 9},
-        {Mixed, 1}, {Empty, 1}, {Mixed, 1}, {Empty, 3}, {Mixed, 3},
-        {Empty, 1}, {Mixed, 1}, {Empty, 3}, {Mixed, 1}, {Empty, 1},
-        {Mixed, 1}, {Empty, 2}, {Mixed, 2}, {Empty, 1}, {Mixed, 1},
-        {Full, 1}, {Mixed, 1}, {Empty, 2}, {Mixed, 2}, {Empty, 13},
-        {Mixed, 3}, {Empty, 103}, {Mixed, 1}, {Empty, 9}, {Mixed, 1},
-        {Empty, 15}, {Mixed, 1}, {Empty, 2}, {Mixed, 1}, {Empty, 2},
-        {Mixed, 1}, {Empty, 939}, {Mixed, 2}, {Empty, 2}, {Mixed, 3},
-        {Empty, 2}, {Mixed, 1}, {Empty, 2}, {Mixed, 1}, {Empty, 6},
-        {Mixed, 2}, {Empty, 1}, {Mixed, 2}, {Empty, 2}, {Mixed, 3},
-        {Empty, 3}, {Mixed, 1}, {Empty, 1}, {Mixed, 3}, {Empty, 2},
-        {Mixed, 1}, {Empty, 4}, {Mixed, 1}, {Empty, 632}, {Mixed, 1},
-        {Empty, 24}, {Mixed, 1}, {Empty, 7}, {Mixed, 4}, {Empty, 2},
-        {Mixed, 1}, {Empty, 23}, {Mixed, 1}, {Empty, 63}, {Mixed, 1},
-        {Empty, 45}, {Mixed, 1}, {Empty, 3}, {Mixed, 1}, {Empty, 1},
-        {Mixed, 1}, {Empty, 2}, {Mixed, 1}, {Empty, 2}, {Mixed, 1},
-        {Empty, 5}, {Mixed, 1}, {Empty, 1}, {Mixed, 3}, {Empty, 10},
-        {Mixed, 1}, {Empty, 6}, {Mixed, 2}, {Empty, 2}, {Mixed, 1},
-        {Empty, 3}, {Mixed, 1}, {Empty, 673}, {Mixed, 1}, {Empty, 36},
-        {Mixed, 1}, {Empty, 782}, {Mixed, 3}, {Empty, 184}, {Mixed, 1},
-        {Empty, 30905}},
-       {0x40000000, 0x00000001, 0x01908100, 0xffff0000, 0xe0ff7fff,
-        0x04300007, 0x00000030, 0x000000f8, 0x02000000, 0xfffe0000,
-        0xbffffffb, 0x00000016, 0x0187f800, 0x80000000, 0x00001c61,
-        0xffff0000, 0x000007ff, 0x0001ffc0, 0x003ff800, 0x03000000,
-        0x7ffffff0, 0x10000000, 0x001e2000, 0x00020000, 0x10000000,
-        0x00002000, 0x10000000, 0x00002000, 0x10000000, 0x00002000,
-        0x10000000, 0x00002000, 0x00002000, 0x00002000, 0x10000000,
-        0x00002000, 0x00002000, 0x00000400, 0x00005f80, 0x00001f00,
-        0x03000000, 0xc2a00000, 0x000000dc, 0x00000040, 0x06800000,
-        0x0c00bf80, 0x200ffe00, 0x0e000000, 0x9fe00000, 0x3fff0000,
-        0x00100000, 0x00000010, 0x000ff800, 0x00000c00, 0x00c00000,
-        0x3f000000, 0xffff0000, 0x031021ff, 0xfffff000, 0x000007ff,
-        0x0000fff0, 0xe0200000, 0xa0000000, 0xe000e003, 0x6000e000,
-        0x00038000, 0x00008000, 0x0000fc00, 0x1e000000, 0x10000000,
-        0xb0008000, 0x30000000, 0x00030000, 0xff800000, 0x00000003,
-        0x00000100, 0x03000000, 0x00000010, 0x0003ffff, 0x00007800,
-        0x00080000, 0x00080000, 0x00000001, 0x00000020, 0x38000000,
-        0x80000000, 0x00000007, 0x00400000, 0xf8000000, 0x00003000,
-        0x40000000, 0x00003fff, 0x40000000, 0x00000001, 0x00010000,
-        0xc0000000, 0x00000008, 0x00000001, 0x00000060, 0x06000000,
-        0x00180000, 0x00080000, 0x00000001, 0x00600000, 0x00000600,
-        0x10000000, 0x00002000, 0x001f1fc0, 0x0000000c, 0x80000000,
-        0x00000001, 0x80000000, 0x00c00000, 0x001f0000, 0xffff8000,
-        0xf807e380, 0x00000fe7, 0x00003c00, 0x007f0000}};
-    static BinaryPropertyObject property_object{Dia, codepoint_set};
-  }
-  namespace EXT_ns {
-    const UnicodeSet codepoint_set 
-      {{{Empty, 5}, {Mixed, 1}, {Empty, 16}, {Mixed, 1}, {Empty, 27},
-        {Mixed, 1}, {Empty, 12}, {Mixed, 1}, {Empty, 50}, {Mixed, 1},
-        {Empty, 3}, {Mixed, 1}, {Empty, 73}, {Mixed, 1}, {Empty, 1},
-        {Mixed, 1}, {Empty, 18}, {Mixed, 1}, {Empty, 11}, {Mixed, 1},
-        {Empty, 1}, {Mixed, 1}, {Empty, 156}, {Mixed, 2}, {Empty, 2},
-        {Mixed, 1}, {Empty, 2}, {Mixed, 1}, {Empty, 888}, {Mixed, 1},
-        {Empty, 47}, {Mixed, 1}, {Empty, 29}, {Mixed, 2}, {Empty, 3},
-        {Mixed, 1}, {Empty, 2}, {Mixed, 2}, {Empty, 675}, {Mixed, 1},
-        {Empty, 158}, {Mixed, 1}, {Empty, 19}, {Mixed, 1}, {Empty, 683},
-        {Mixed, 1}, {Empty, 31909}},
-       {0x00800000, 0x00030000, 0x00000001, 0x04000000, 0x00000040,
-        0x00000040, 0x00000400, 0x00000008, 0x00000080, 0x00400000,
-        0x08000000, 0x00000020, 0x003e0000, 0x60000000, 0x70000000,
-        0x00200000, 0x00001000, 0x00008000, 0x00000040, 0x00010000,
-        0x20000000, 0x00180000, 0x00010000, 0x20000000, 0x000001c0,
-        0x0000000c}};
-    static BinaryPropertyObject property_object{Ext, codepoint_set};
-  }
-  namespace HEX_ns {
-    const UnicodeSet codepoint_set 
-      {{{Empty, 1}, {Mixed, 3}, {Empty, 2036}, {Mixed, 3}, {Empty, 32773}},
-       {0x03ff0000, 0x0000007e, 0x0000007e, 0x03ff0000, 0x0000007e,
-        0x0000007e}};
-    static BinaryPropertyObject property_object{Hex, codepoint_set};
-  }
-  namespace HYPHEN_ns {
-    const UnicodeSet codepoint_set 
-      {{{Empty, 1}, {Mixed, 1}, {Empty, 3}, {Mixed, 1}, {Empty, 38},
-        {Mixed, 1}, {Empty, 147}, {Mixed, 1}, {Empty, 63}, {Mixed, 1},
-        {Empty, 111}, {Mixed, 1}, {Empty, 22}, {Mixed, 1}, {Empty, 1643},
-        {Mixed, 1}, {Empty, 4}, {Mixed, 1}, {Empty, 2}, {Mixed, 1},
-        {Empty, 32772}},
-       {0x00002000, 0x00002000, 0x00000400, 0x00000040, 0x00030000,
-        0x00800000, 0x08000000, 0x00000008, 0x00002000, 0x00000020}};
-    static BinaryPropertyObject property_object{Hyphen, codepoint_set};
-  }
-  namespace IDSB_ns {
-    const UnicodeSet codepoint_set 
-      {{{Empty, 383}, {Mixed, 1}, {Empty, 34432}},
-       {0x0ff30000}};
-    static BinaryPropertyObject property_object{IDSB, codepoint_set};
-  }
-  namespace IDST_ns {
-    const UnicodeSet codepoint_set 
-      {{{Empty, 383}, {Mixed, 1}, {Empty, 34432}},
-       {0x000c0000}};
-    static BinaryPropertyObject property_object{IDST, codepoint_set};
-  }
-  namespace IDEO_ns {
-    const UnicodeSet codepoint_set 
-      {{{Empty, 384}, {Mixed, 2}, {Empty, 30}, {Full, 205}, {Mixed, 1},
-        {Empty, 2}, {Full, 654}, {Mixed, 1}, {Empty, 713}, {Full, 11},
-        {Mixed, 1}, {Full, 2}, {Mixed, 1}, {Empty, 2089}, {Full, 1334},
-        {Mixed, 1}, {Empty, 1}, {Full, 129}, {Mixed, 1}, {Full, 6},
-        {Mixed, 1}, {Empty, 511}, {Full, 16}, {Mixed, 1}, {Empty, 28719}},
-       {0x000000c0, 0x070003fe, 0x003fffff, 0x00001fff, 0xffff3fff,
-        0x03ffffff, 0x007fffff, 0x001fffff, 0x3fffffff, 0x3fffffff}};
-    static BinaryPropertyObject property_object{Ideo, codepoint_set};
-  }
-  namespace JOIN_C_ns {
-    const UnicodeSet codepoint_set 
-      {{{Empty, 256}, {Mixed, 1}, {Empty, 34559}},
-       {0x00003000}};
-    static BinaryPropertyObject property_object{Join_C, codepoint_set};
-  }
-  namespace LOE_ns {
-    const UnicodeSet codepoint_set 
-      {{{Empty, 114}, {Mixed, 1}, {Empty, 3}, {Mixed, 1}, {Empty, 1246},
-        {Mixed, 1}, {Empty, 33450}},
-       {0x0000001f, 0x0000001f, 0x1a600000}};
-    static BinaryPropertyObject property_object{LOE, codepoint_set};
-  }
-  namespace NCHAR_ns {
-    const UnicodeSet codepoint_set 
-      {{{Empty, 2030}, {Mixed, 2}, {Empty, 15}, {Mixed, 1}, {Empty, 2047},
-        {Mixed, 1}, {Empty, 2047}, {Mixed, 1}, {Empty, 2047}, {Mixed, 1},
-        {Empty, 2047}, {Mixed, 1}, {Empty, 2047}, {Mixed, 1}, {Empty, 2047},
-        {Mixed, 1}, {Empty, 2047}, {Mixed, 1}, {Empty, 2047}, {Mixed, 1},
-        {Empty, 2047}, {Mixed, 1}, {Empty, 2047}, {Mixed, 1}, {Empty, 2047},
-        {Mixed, 1}, {Empty, 2047}, {Mixed, 1}, {Empty, 2047}, {Mixed, 1},
-        {Empty, 2047}, {Mixed, 1}, {Empty, 2047}, {Mixed, 1}, {Empty, 2047},
-        {Mixed, 1}},
-       {0xffff0000, 0x0000ffff, 0xc0000000, 0xc0000000, 0xc0000000,
-        0xc0000000, 0xc0000000, 0xc0000000, 0xc0000000, 0xc0000000,
-        0xc0000000, 0xc0000000, 0xc0000000, 0xc0000000, 0xc0000000,
-        0xc0000000, 0xc0000000, 0xc0000000, 0xc0000000}};
-    static BinaryPropertyObject property_object{NChar, codepoint_set};
-  }
-  namespace OALPHA_ns {
-    const UnicodeSet codepoint_set 
-      {{{Empty, 26}, {Mixed, 1}, {Empty, 18}, {Mixed, 2}, {Empty, 1},
-        {Mixed, 1}, {Empty, 1}, {Mixed, 2}, {Empty, 2}, {Mixed, 4},
-        {Empty, 3}, {Mixed, 1}, {Empty, 2}, {Mixed, 2}, {Empty, 5},
-        {Mixed, 24}, {Empty, 1}, {Mixed, 13}, {Empty, 1}, {Mixed, 2},
-        {Empty, 1}, {Mixed, 2}, {Empty, 2}, {Mixed, 2}, {Empty, 4},
-        {Mixed, 3}, {Empty, 3}, {Mixed, 4}, {Empty, 21}, {Mixed, 1},
-        {Empty, 29}, {Mixed, 4}, {Empty, 1}, {Mixed, 2}, {Empty, 6},
-        {Mixed, 1}, {Empty, 3}, {Mixed, 1}, {Empty, 3}, {Mixed, 2},
-        {Empty, 1}, {Mixed, 1}, {Empty, 1}, {Mixed, 2}, {Empty, 4},
-        {Mixed, 3}, {Empty, 1}, {Mixed, 2}, {Empty, 1}, {Mixed, 1},
-        {Empty, 1}, {Mixed, 1}, {Empty, 5}, {Mixed, 1}, {Empty, 7},
-        {Mixed, 1}, {Empty, 53}, {Mixed, 1}, {Full, 1}, {Mixed, 1},
-        {Empty, 71}, {Full, 1}, {Empty, 963}, {Mixed, 2}, {Empty, 12},
-        {Mixed, 1}, {Empty, 2}, {Mixed, 3}, {Empty, 2}, {Mixed, 2},
-        {Empty, 1}, {Mixed, 2}, {Empty, 3}, {Mixed, 2}, {Empty, 2},
-        {Mixed, 1}, {Empty, 1}, {Mixed, 1}, {Empty, 7}, {Mixed, 1},
-        {Empty, 632}, {Mixed, 1}, {Empty, 66}, {Mixed, 1}, {Empty, 52},
-        {Mixed, 1}, {Empty, 47}, {Mixed, 3}, {Empty, 1}, {Mixed, 2},
-        {Empty, 2}, {Mixed, 2}, {Empty, 2}, {Mixed, 2}, {Empty, 3},
-        {Mixed, 1}, {Empty, 4}, {Mixed, 6}, {Empty, 9}, {Mixed, 2},
-        {Empty, 6}, {Mixed, 1}, {Empty, 3}, {Mixed, 2}, {Empty, 2},
-        {Mixed, 1}, {Empty, 675}, {Mixed, 1}, {Empty, 32}, {Mixed, 2},
-        {Empty, 616}, {Mixed, 1}, {Empty, 420}, {Mixed, 4}, {Empty, 30835}},
-       {0x00000020, 0xbfff0000, 0x000000b6, 0x07ff0000, 0xfefff800,
-        0x00010000, 0x1fc00000, 0x0000219e, 0x00020000, 0xffff0000,
-        0x0001ffc0, 0xf8c00000, 0x00001eef, 0xffff03f0, 0x0000000f,
-        0xcc000000, 0x00e0dfff, 0x0000000c, 0x0000000e, 0xc0000000,
-        0x0080199f, 0x0000000c, 0x0000000e, 0xc0000000, 0x00021987,
-        0x00230000, 0x0000000e, 0xc0000000, 0x00001bbf, 0x0000000c,
-        0x0000000e, 0xc0000000, 0x00c0199f, 0x0000000c, 0x00000004,
-        0xc0000000, 0x00801dc7, 0x0000000f, 0xc0000000, 0x00601ddf,
-        0x0000000c, 0x0000000e, 0xc0000000, 0x00601ddf, 0x0000000c,
-        0x0000000e, 0xc0000000, 0x00801ddf, 0x0000000c, 0x0000000c,
-        0xff5f8000, 0x000c0000, 0x07f20000, 0x00002000, 0x1bf20000,
-        0x00002000, 0xfffe0000, 0xfeffe003, 0x1fffffff, 0x797ff800,
-        0xc3c00000, 0x001e0185, 0x3000007c, 0x80000000, 0x000c0000,
-        0x000c0000, 0x000c0000, 0x000c0000, 0xffc00000, 0x000001ff,
-        0x00000200, 0x01ff0fff, 0xffff0000, 0x00000301, 0x0f800000,
-        0x7fe00000, 0x001ffffe, 0x0000001f, 0xffe00000, 0x0000000f,
-        0x00000007, 0x000033fe, 0x0003ff80, 0x003ffff0, 0x000c0000,
-        0x001fff80, 0xffc00000, 0x000003ff, 0x0ff00000, 0x80000000,
-        0x000000f8, 0x00000003, 0xfff00000, 0x0000000f, 0x000007c0,
-        0x0007ff80, 0x0000000f, 0xfff00000, 0x007ffe00, 0x00003008,
-        0x419d0000, 0x0020f800, 0x000007f8, 0x40000000, 0x07c00000,
-        0x0000f06e, 0x00000007, 0xff000000, 0x0000003f, 0x00000004,
-        0x01ff0000, 0x00000007, 0x0007ff80, 0x00000007, 0xfff80000,
-        0x009ff000, 0x80000000, 0x000001ff, 0x0000000e, 0xc0000000,
-        0x0080199f, 0x0000000c, 0xffff0000, 0x00000003, 0x7f3f8000,
-        0x7fff0000, 0x00000001, 0x003ff800, 0x007f0000, 0xfffe0000,
-        0x7fffffff, 0x40000000, 0xffff0000, 0xffff03ff, 0xffff03ff,
-        0x000003ff}};
-    static BinaryPropertyObject property_object{OAlpha, codepoint_set};
-  }
-  namespace ODI_ns {
-    const UnicodeSet codepoint_set 
-      {{{Empty, 26}, {Mixed, 1}, {Empty, 111}, {Mixed, 2}, {Empty, 49},
-        {Mixed, 1}, {Empty, 69}, {Mixed, 1}, {Empty, 135}, {Mixed, 1},
-        {Empty, 1649}, {Mixed, 1}, {Empty, 1}, {Mixed, 1}, {Empty, 26624},
-        {Mixed, 1}, {Empty, 3}, {Full, 4}, {Empty, 7}, {Mixed, 1},
-        {Full, 112}, {Empty, 6016}},
-       {0x00008000, 0x80000000, 0x00000001, 0x00300000, 0x00000020,
-        0x00000010, 0x00000001, 0x01ff0000, 0xfffffffd, 0xffff0000}};
-    static BinaryPropertyObject property_object{ODI, codepoint_set};
-  }
-  namespace OGR_EXT_ns {
-    const UnicodeSet codepoint_set 
-      {{{Empty, 77}, {Mixed, 2}, {Empty, 10}, {Mixed, 2}, {Empty, 2},
-        {Mixed, 2}, {Empty, 7}, {Mixed, 1}, {Empty, 2}, {Mixed, 2},
-        {Empty, 3}, {Mixed, 1}, {Empty, 145}, {Mixed, 1}, {Empty, 128},
-        {Mixed, 1}, {Empty, 1658}, {Mixed, 1}, {Empty, 156}, {Mixed, 2},
-        {Empty, 10}, {Mixed, 1}, {Empty, 7}, {Mixed, 1}, {Empty, 1501},
-        {Mixed, 1}, {Empty, 31092}},
-       {0x40000000, 0x00800000, 0x40000000, 0x00800000, 0x40000000,
-        0x00800000, 0x00600004, 0x40000000, 0x00800000, 0x80008000,
-        0x00003000, 0x0000c000, 0xc0000000, 0x40000000, 0x00800000,
-        0x20010000, 0x00008000, 0x0007c020}};
-    static BinaryPropertyObject property_object{OGr_Ext, codepoint_set};
-  }
-  namespace OIDC_ns {
-    const UnicodeSet codepoint_set 
-      {{{Empty, 5}, {Mixed, 1}, {Empty, 22}, {Mixed, 1}, {Empty, 126},
-        {Mixed, 1}, {Empty, 50}, {Mixed, 1}, {Empty, 34609}},
-       {0x00800000, 0x00000080, 0x0003fe00, 0x04000000}};
-    static BinaryPropertyObject property_object{OIDC, codepoint_set};
-  }
-  namespace OIDS_ns {
-    const UnicodeSet codepoint_set 
-      {{{Empty, 264}, {Mixed, 2}, {Empty, 122}, {Mixed, 1}, {Empty, 34427}},
-       {0x01000000, 0x00004000, 0x18000000}};
-    static BinaryPropertyObject property_object{OIDS, codepoint_set};
-  }
-  namespace OLOWER_ns {
-    const UnicodeSet codepoint_set 
-      {{{Empty, 5}, {Mixed, 1}, {Empty, 15}, {Mixed, 3}, {Empty, 2},
-        {Mixed, 2}, {Empty, 205}, {Mixed, 1}, {Full, 1}, {Mixed, 2},
-        {Full, 1}, {Empty, 21}, {Mixed, 2}, {Empty, 6}, {Mixed, 1},
-        {Empty, 26}, {Mixed, 2}, {Empty, 59}, {Mixed, 1}, {Empty, 976},
-        {Mixed, 1}, {Empty, 6}, {Mixed, 1}, {Empty, 3}, {Mixed, 1},
-        {Empty, 26}, {Mixed, 1}, {Empty, 33445}},
-       {0x04000400, 0x01ff0000, 0x00000003, 0x0000001f, 0x00000020,
-        0x04000000, 0xfffff000, 0x010007ff, 0xf8000000, 0x80020000,
-        0x1fff0000, 0xffff0000, 0xffff0000, 0x000003ff, 0x30000000,
-        0x30000000, 0x00010000, 0x03000000, 0xf0000000}};
-    static BinaryPropertyObject property_object{OLower, codepoint_set};
-  }
-  namespace OMATH_ns {
-    const UnicodeSet codepoint_set 
-      {{{Empty, 2}, {Mixed, 1}, {Empty, 27}, {Mixed, 2}, {Empty, 224},
-        {Mixed, 5}, {Empty, 1}, {Mixed, 5}, {Empty, 1}, {Mixed, 4},
-        {Empty, 8}, {Mixed, 1}, {Empty, 4}, {Mixed, 3}, {Empty, 13},
-        {Mixed, 4}, {Empty, 1}, {Mixed, 2}, {Empty, 10}, {Mixed, 2},
-        {Empty, 12}, {Mixed, 1}, {Empty, 1}, {Mixed, 2}, {Empty, 1699},
-        {Mixed, 1}, {Empty, 5}, {Mixed, 1}, {Empty, 1702}, {Full, 2},
-        {Mixed, 1}, {Full, 1}, {Mixed, 3}, {Full, 1}, {Mixed, 3},
-        {Full, 10}, {Mixed, 10}, {Full, 1}, {Empty, 176}, {Mixed, 6},
-        {Empty, 30858}},
-       {0x40000000, 0x00270000, 0x00330000, 0x00400000, 0x001c0000,
-        0x00000001, 0x6000001e, 0x00006000, 0x1fff0000, 0x0000f862,
-        0x3e2ffc84, 0xf1fbb310, 0x000003e0, 0xf3e00000, 0xf0c33eb6,
-        0x2feb3fff, 0x00000030, 0x00000f00, 0x00b00000, 0x00010000,
-        0x00000004, 0xf07fc003, 0x000f8cc1, 0x00001f94, 0x00000060,
-        0x00000005, 0x0000600f, 0x00000060, 0x0000ffc0, 0x01fffff8,
-        0x0f000000, 0x30000000, 0x0000010a, 0x50000000, 0xffdfffff,
-        0xdfffffff, 0xebffde64, 0xffffffef, 0xdfdfe7bf, 0x7bffffff,
-        0xfffdfc5f, 0xffffff3f, 0xf7fffffd, 0xf7ffffff, 0xffdfffff,
-        0xffdfffff, 0xffff7fff, 0xffff7fff, 0xfffffdff, 0xfffffdff,
-        0xffffcff7, 0xffffffef, 0x0af7fe96, 0xaa96ea84, 0x5ef7f796,
-        0x0ffffbff, 0x0ffffbee}};
-    static BinaryPropertyObject property_object{OMath, codepoint_set};
-  }
-  namespace OUPPER_ns {
-    const UnicodeSet codepoint_set 
-      {{{Empty, 267}, {Mixed, 1}, {Empty, 25}, {Mixed, 2}, {Empty, 3682},
-        {Mixed, 4}, {Empty, 30835}},
-       {0x0000ffff, 0xffc00000, 0x0000ffff, 0xffff0000, 0xffff03ff,
-        0xffff03ff, 0x000003ff}};
-    static BinaryPropertyObject property_object{OUpper, codepoint_set};
-  }
-  namespace PAT_SYN_ns {
-    const UnicodeSet codepoint_set 
-      {{{Empty, 1}, {Mixed, 3}, {Empty, 1}, {Mixed, 3}, {Empty, 248},
-        {Mixed, 3}, {Empty, 9}, {Mixed, 1}, {Full, 22}, {Empty, 5},
-        {Full, 19}, {Mixed, 2}, {Full, 35}, {Empty, 16}, {Full, 4},
-        {Empty, 12}, {Mixed, 2}, {Empty, 1639}, {Mixed, 1}, {Empty, 8},
-        {Mixed, 1}, {Empty, 32781}},
-       {0xfc00fffe, 0x78000001, 0x78000001, 0x88435afe, 0x00800000,
-        0x00800000, 0xffff0000, 0x7fff00ff, 0x7feffffe, 0xffff0000,
-        0x003fffff, 0xfff00000, 0xffffff0e, 0x00010001, 0xc0000000,
-        0x00000060}};
-    static BinaryPropertyObject property_object{Pat_Syn, codepoint_set};
-  }
-  namespace PAT_WS_ns {
-    const UnicodeSet codepoint_set 
-      {{{Mixed, 2}, {Empty, 2}, {Mixed, 1}, {Empty, 251}, {Mixed, 2},
-        {Empty, 34558}},
-       {0x00003e00, 0x00000001, 0x00000020, 0x0000c000, 0x00000300}};
-    static BinaryPropertyObject property_object{Pat_WS, codepoint_set};
-  }
-  namespace QMARK_ns {
-    const UnicodeSet codepoint_set 
-      {{{Empty, 1}, {Mixed, 1}, {Empty, 3}, {Mixed, 1}, {Empty, 250},
-        {Mixed, 2}, {Empty, 112}, {Mixed, 1}, {Empty, 13}, {Mixed, 1},
-        {Empty, 1649}, {Mixed, 1}, {Empty, 5}, {Mixed, 1}, {Empty, 2},
-        {Mixed, 1}, {Empty, 32772}},
-       {0x00000084, 0x08000800, 0xff000000, 0x06000000, 0x00000004,
-        0xe000f000, 0x0000001e, 0x00000084, 0x0000000c}};
-    static BinaryPropertyObject property_object{QMark, codepoint_set};
-  }
-  namespace RADICAL_ns {
-    const UnicodeSet codepoint_set 
-      {{{Empty, 372}, {Mixed, 1}, {Full, 2}, {Mixed, 1}, {Full, 6},
-        {Mixed, 1}, {Empty, 34433}},
-       {0xfbffffff, 0x000fffff, 0x003fffff}};
-    static BinaryPropertyObject property_object{Radical, codepoint_set};
-  }
-  namespace SD_ns {
-    const UnicodeSet codepoint_set 
-      {{{Empty, 3}, {Mixed, 1}, {Empty, 5}, {Mixed, 1}, {Empty, 8},
-        {Mixed, 4}, {Empty, 9}, {Mixed, 1}, {Empty, 2}, {Mixed, 1},
-        {Empty, 200}, {Mixed, 3}, {Empty, 3}, {Mixed, 1}, {Empty, 4},
-        {Mixed, 1}, {Empty, 12}, {Mixed, 1}, {Empty, 6}, {Mixed, 1},
-        {Empty, 88}, {Mixed, 1}, {Empty, 3389}, {Mixed, 2}, {Empty, 1},
-        {Mixed, 2}, {Empty, 1}, {Mixed, 1}, {Empty, 1}, {Mixed, 2},
-        {Empty, 1}, {Mixed, 1}, {Empty, 1}, {Mixed, 2}, {Empty, 1},
-        {Mixed, 2}, {Empty, 1}, {Mixed, 1}, {Empty, 31051}},
-       {0x00000600, 0x00008000, 0x00000200, 0x00000100, 0x20000000,
-        0x00040000, 0x00080000, 0x01400000, 0x00000004, 0x00400000,
-        0x00000110, 0x00002000, 0x00000800, 0x00020000, 0x00000300,
-        0x10000000, 0x0000000c, 0x00c00000, 0x00000c00, 0xc0000000,
-        0x000c0000, 0x000000c0, 0x0c000000, 0x0000c000, 0x0000000c,
-        0x00c00000, 0x00000c00, 0xc0000000, 0x000c0000}};
-    static BinaryPropertyObject property_object{SD, codepoint_set};
-  }
-  namespace STERM_ns {
-    const UnicodeSet codepoint_set 
-      {{{Empty, 1}, {Mixed, 1}, {Empty, 42}, {Mixed, 1}, {Empty, 3},
-        {Mixed, 1}, {Empty, 5}, {Mixed, 1}, {Empty, 1}, {Mixed, 1},
-        {Empty, 6}, {Mixed, 1}, {Empty, 11}, {Mixed, 1}, {Empty, 54},
-        {Mixed, 1}, {Empty, 24}, {Mixed, 1}, {Empty, 23}, {Mixed, 1},
-        {Empty, 5}, {Mixed, 1}, {Empty, 6}, {Mixed, 1}, {Empty, 9},
-        {Mixed, 1}, {Empty, 10}, {Mixed, 1}, {Empty, 4}, {Mixed, 1},
-        {Empty, 6}, {Mixed, 1}, {Empty, 1}, {Mixed, 1}, {Empty, 29},
-        {Mixed, 2}, {Empty, 110}, {Mixed, 1}, {Empty, 14}, {Mixed, 1},
-        {Empty, 934}, {Mixed, 1}, {Empty, 8}, {Mixed, 1}, {Empty, 6},
-        {Mixed, 1}, {Empty, 11}, {Mixed, 1}, {Empty, 2}, {Mixed, 1},
-        {Empty, 2}, {Mixed, 1}, {Empty, 4}, {Mixed, 1}, {Empty, 3},
-        {Mixed, 1}, {Empty, 4}, {Mixed, 1}, {Empty, 7}, {Mixed, 1},
-        {Empty, 658}, {Mixed, 1}, {Empty, 5}, {Mixed, 1}, {Empty, 2},
-        {Mixed, 1}, {Empty, 86}, {Mixed, 1}, {Empty, 47}, {Mixed, 1},
-        {Empty, 2}, {Mixed, 2}, {Empty, 3}, {Mixed, 1}, {Empty, 3},
-        {Mixed, 1}, {Empty, 2}, {Mixed, 1}, {Empty, 28}, {Mixed, 1},
-        {Empty, 3}, {Mixed, 1}, {Empty, 672}, {Mixed, 1}, {Empty, 3},
-        {Mixed, 1}, {Empty, 1}, {Mixed, 2}, {Empty, 649}, {Mixed, 1},
-        {Empty, 31259}},
-       {0x80004002, 0x00000200, 0x80000000, 0x00100000, 0x00000007,
-        0x02000000, 0x00000030, 0x00000c00, 0x00000184, 0x00004000,
-        0x00600000, 0x00000208, 0x00000030, 0x00000f00, 0xcc000000,
-        0x18000000, 0xc0000000, 0x30000000, 0x00000380, 0x10004000,
-        0x00000004, 0x80000000, 0x0000c000, 0x00880000, 0x00c00000,
-        0x0000c000, 0x00008000, 0x00000300, 0xe0000000, 0x00030000,
-        0x00000800, 0x00c40000, 0x80004002, 0x00000002, 0x00c00000,
-        0x00000180, 0xc0000000, 0x00000003, 0x0000000e, 0x00002060,
-        0x1b000000, 0x0000020c, 0x00000006, 0x0000c000, 0x00200000,
-        0x01800000, 0x00000010, 0x80000000}};
-    static BinaryPropertyObject property_object{STerm, codepoint_set};
-  }
-  namespace TERM_ns {
-    const UnicodeSet codepoint_set 
-      {{{Empty, 1}, {Mixed, 1}, {Empty, 25}, {Mixed, 2}, {Empty, 15},
-        {Mixed, 1}, {Empty, 1}, {Mixed, 1}, {Empty, 1}, {Mixed, 1},
-        {Empty, 5}, {Mixed, 1}, {Empty, 1}, {Mixed, 1}, {Empty, 6},
-        {Mixed, 1}, {Empty, 1}, {Mixed, 2}, {Empty, 8}, {Mixed, 1},
-        {Empty, 38}, {Mixed, 1}, {Empty, 5}, {Mixed, 1}, {Empty, 9},
-        {Mixed, 1}, {Empty, 24}, {Mixed, 1}, {Empty, 23}, {Mixed, 1},
-        {Empty, 3}, {Mixed, 1}, {Empty, 1}, {Mixed, 1}, {Empty, 4},
-        {Mixed, 1}, {Empty, 1}, {Mixed, 1}, {Empty, 9}, {Mixed, 1},
-        {Empty, 10}, {Mixed, 1}, {Empty, 4}, {Mixed, 1}, {Empty, 6},
-        {Mixed, 1}, {Empty, 1}, {Mixed, 1}, {Empty, 29}, {Mixed, 2},
-        {Empty, 110}, {Mixed, 2}, {Empty, 13}, {Mixed, 1}, {Empty, 934},
-        {Mixed, 1}, {Empty, 8}, {Mixed, 1}, {Empty, 6}, {Mixed, 1},
-        {Empty, 11}, {Mixed, 1}, {Empty, 2}, {Mixed, 1}, {Empty, 2},
-        {Mixed, 1}, {Empty, 4}, {Mixed, 1}, {Empty, 3}, {Mixed, 1},
-        {Empty, 3}, {Mixed, 2}, {Empty, 7}, {Mixed, 1}, {Empty, 658},
-        {Mixed, 1}, {Empty, 5}, {Mixed, 1}, {Empty, 2}, {Mixed, 1},
-        {Empty, 32}, {Mixed, 1}, {Empty, 1}, {Mixed, 1}, {Empty, 35},
-        {Mixed, 1}, {Empty, 5}, {Mixed, 1}, {Empty, 9}, {Mixed, 1},
-        {Empty, 4}, {Mixed, 1}, {Empty, 1}, {Mixed, 1}, {Empty, 2},
-        {Mixed, 1}, {Empty, 37}, {Mixed, 1}, {Empty, 2}, {Mixed, 2},
-        {Empty, 3}, {Mixed, 1}, {Empty, 3}, {Mixed, 1}, {Empty, 2},
-        {Mixed, 1}, {Empty, 28}, {Mixed, 1}, {Empty, 3}, {Mixed, 1},
-        {Empty, 112}, {Mixed, 1}, {Empty, 559}, {Mixed, 1}, {Empty, 3},
-        {Mixed, 1}, {Empty, 1}, {Mixed, 2}, {Empty, 649}, {Mixed, 1},
-        {Empty, 31259}},
-       {0x8c005002, 0x40000000, 0x00000080, 0x00000200, 0x00000008,
-        0x88001000, 0x00100000, 0x000017ff, 0x03000000, 0x7fff0000,
-        0x40000000, 0x00000030, 0x0c000000, 0x0007e100, 0x00000c00,
-        0x000001fe, 0x00006000, 0x00003800, 0x00600000, 0x04700000,
-        0x0000033c, 0x00000030, 0x00000f00, 0xec000000, 0xf8000000,
-        0xc0000000, 0x30000000, 0x00000380, 0x10004000, 0x00000002,
-        0x00000006, 0xc0000000, 0x0000e000, 0x00f80000, 0x00c00000,
-        0x0000c000, 0x00008000, 0x00000380, 0xe0000000, 0x80000000,
-        0x00030000, 0x00000800, 0x00f70000, 0x8c005002, 0x00000012,
-        0x80000000, 0x00010000, 0x00800000, 0x80000000, 0x00c00000,
-        0x003f0000, 0xfc000000, 0x1e000000, 0x00003f80, 0xc0000000,
-        0x00000003, 0x0000000e, 0x00002060, 0x1f000000, 0x0000023c,
-        0x00000006, 0x001f0000, 0x0000c000, 0x00200000, 0x03800000,
-        0x00000010, 0x80000000}};
-    static BinaryPropertyObject property_object{Term, codepoint_set};
-  }
-  namespace UIDEO_ns {
-    const UnicodeSet codepoint_set 
-      {{{Empty, 416}, {Full, 205}, {Mixed, 1}, {Empty, 2}, {Full, 654},
-        {Mixed, 1}, {Empty, 721}, {Mixed, 2}, {Empty, 2094}, {Full, 1334},
-        {Mixed, 1}, {Empty, 1}, {Full, 129}, {Mixed, 1}, {Full, 6},
-        {Mixed, 1}, {Empty, 29247}},
-       {0x003fffff, 0x00001fff, 0x801ac000, 0x0000039a, 0x007fffff,
-        0x001fffff, 0x3fffffff}};
-    static BinaryPropertyObject property_object{UIdeo, codepoint_set};
-  }
-  namespace VS_ns {
-    const UnicodeSet codepoint_set 
-      {{{Empty, 192}, {Mixed, 1}, {Empty, 1839}, {Mixed, 1}, {Empty, 26647},
-        {Full, 7}, {Mixed, 1}, {Empty, 6128}},
-       {0x00003800, 0x0000ffff, 0x0000ffff}};
-    static BinaryPropertyObject property_object{VS, codepoint_set};
-  }
-  namespace WSPACE_ns {
-    const UnicodeSet codepoint_set 
-      {{{Mixed, 2}, {Empty, 2}, {Mixed, 2}, {Empty, 174}, {Mixed, 1},
-        {Empty, 75}, {Mixed, 3}, {Empty, 125}, {Mixed, 1}, {Empty, 34431}},
-       {0x00003e00, 0x00000001, 0x00000020, 0x00000001, 0x00000001,
-        0x000007ff, 0x00008300, 0x80000000, 0x00000001}};
-    static BinaryPropertyObject property_object{WSpace, codepoint_set};
-  }
+    namespace AHEX_ns {
+        /** Code Point Ranges for AHex
+        [48, 57], [65, 70], [97, 102]**/
+        const UnicodeSet codepoint_set 
+            {{{Empty, 1}, {Mixed, 3}, {Empty, 34812}},
+             {0x03ff0000, 0x0000007e, 0x0000007e}};
+        static BinaryPropertyObject property_object{AHex, codepoint_set};
+    }
+    namespace BIDI_C_ns {
+        /** Code Point Ranges for Bidi_C
+        [1564, 1564], [8206, 8207], [8234, 8238], [8294, 8297]**/
+        const UnicodeSet codepoint_set 
+            {{{Empty, 48}, {Mixed, 1}, {Empty, 207}, {Mixed, 2}, {Empty, 1},
+              {Mixed, 1}, {Empty, 34556}},
+             {0x10000000, 0x0000c000, 0x00007c00, 0x000003c0}};
+        static BinaryPropertyObject property_object{Bidi_C, codepoint_set};
+    }
+    namespace DASH_ns {
+        /** Code Point Ranges for Dash
+        [45, 45], [1418, 1418], [1470, 1470], [5120, 5120], [6150, 6150],
+        [8208, 8213], [8275, 8275], [8315, 8315], [8331, 8331],
+        [8722, 8722], [11799, 11799], [11802, 11802], [11834, 11835],
+        [11840, 11840], [12316, 12316], [12336, 12336], [12448, 12448],
+        [65073, 65074], [65112, 65112], [65123, 65123], [65293, 65293]**/
+        const UnicodeSet codepoint_set 
+            {{{Empty, 1}, {Mixed, 1}, {Empty, 42}, {Mixed, 2}, {Empty, 114},
+              {Mixed, 1}, {Empty, 31}, {Mixed, 1}, {Empty, 63}, {Mixed, 1},
+              {Empty, 1}, {Mixed, 3}, {Empty, 11}, {Mixed, 1}, {Empty, 95},
+              {Mixed, 3}, {Empty, 13}, {Mixed, 2}, {Empty, 3}, {Mixed, 1},
+              {Empty, 1643}, {Mixed, 3}, {Empty, 4}, {Mixed, 1},
+              {Empty, 32775}},
+             {0x00002000, 0x00000400, 0x40000000, 0x00000001, 0x00000040,
+              0x003f0000, 0x00080000, 0x08000000, 0x00000800, 0x00040000,
+              0x04800000, 0x0c000000, 0x00000001, 0x10000000, 0x00010000,
+              0x00000001, 0x00060000, 0x01000000, 0x00000008, 0x00002000}};
+        static BinaryPropertyObject property_object{Dash, codepoint_set};
+    }
+    namespace DEP_ns {
+        /** Code Point Ranges for Dep
+        [329, 329], [1651, 1651], [3959, 3959], [3961, 3961], [6051, 6052],
+        [8298, 8303], [9001, 9002], [917505, 917505], [917536, 917631]**/
+        const UnicodeSet codepoint_set 
+            {{{Empty, 10}, {Mixed, 1}, {Empty, 40}, {Mixed, 1}, {Empty, 71},
+              {Mixed, 1}, {Empty, 65}, {Mixed, 1}, {Empty, 69}, {Mixed, 1},
+              {Empty, 21}, {Mixed, 1}, {Empty, 28390}, {Mixed, 1},
+              {Full, 3}, {Empty, 6140}},
+             {0x00000200, 0x00080000, 0x02800000, 0x00000018, 0x0000fc00,
+              0x00000600, 0x00000002}};
+        static BinaryPropertyObject property_object{Dep, codepoint_set};
+    }
+    namespace DIA_ns {
+        /** Code Point Ranges for Dia
+        [94, 94], [96, 96], [168, 168], [175, 175], [180, 180], [183, 184],
+        [688, 846], [848, 855], [861, 866], [884, 885], [890, 890],
+        [900, 901], [1155, 1159], [1369, 1369], [1425, 1441], [1443, 1469],
+        [1471, 1471], [1473, 1474], [1476, 1476], [1611, 1618],
+        [1623, 1624], [1759, 1760], [1765, 1766], [1770, 1772],
+        [1840, 1866], [1958, 1968], [2027, 2037], [2072, 2073],
+        [2276, 2302], [2364, 2364], [2381, 2381], [2385, 2388],
+        [2417, 2417], [2492, 2492], [2509, 2509], [2620, 2620],
+        [2637, 2637], [2748, 2748], [2765, 2765], [2876, 2876],
+        [2893, 2893], [3021, 3021], [3149, 3149], [3260, 3260],
+        [3277, 3277], [3405, 3405], [3530, 3530], [3655, 3660],
+        [3662, 3662], [3784, 3788], [3864, 3865], [3893, 3893],
+        [3895, 3895], [3897, 3897], [3902, 3903], [3970, 3972],
+        [3974, 3975], [4038, 4038], [4151, 4151], [4153, 4154],
+        [4231, 4237], [4239, 4239], [4250, 4251], [6089, 6099],
+        [6109, 6109], [6457, 6459], [6773, 6780], [6783, 6783],
+        [6832, 6845], [6964, 6964], [6980, 6980], [7019, 7027],
+        [7082, 7083], [7222, 7223], [7288, 7293], [7376, 7400],
+        [7405, 7405], [7412, 7412], [7416, 7417], [7468, 7530],
+        [7620, 7631], [7669, 7669], [7677, 7679], [8125, 8125],
+        [8127, 8129], [8141, 8143], [8157, 8159], [8173, 8175],
+        [8189, 8190], [11503, 11505], [11823, 11823], [12330, 12335],
+        [12441, 12444], [12540, 12540], [42607, 42607], [42620, 42621],
+        [42623, 42623], [42652, 42653], [42736, 42737], [42775, 42785],
+        [42888, 42888], [43000, 43001], [43204, 43204], [43232, 43249],
+        [43307, 43310], [43347, 43347], [43443, 43443], [43456, 43456],
+        [43493, 43493], [43643, 43645], [43711, 43714], [43766, 43766],
+        [43867, 43871], [44012, 44013], [64286, 64286], [65056, 65069],
+        [65342, 65342], [65344, 65344], [65392, 65392], [65438, 65439],
+        [65507, 65507], [66272, 66272], [68325, 68326], [69817, 69818],
+        [69939, 69940], [70003, 70003], [70080, 70080], [70197, 70198],
+        [70377, 70378], [70460, 70460], [70477, 70477], [70502, 70508],
+        [70512, 70516], [70850, 70851], [71103, 71104], [71231, 71231],
+        [71350, 71351], [92912, 92916], [94095, 94111], [119143, 119145],
+        [119149, 119154], [119163, 119170], [119173, 119179],
+        [119210, 119213], [125136, 125142]**/
+        const UnicodeSet codepoint_set 
+            {{{Empty, 2}, {Mixed, 2}, {Empty, 1}, {Mixed, 1}, {Empty, 15},
+              {Mixed, 1}, {Full, 4}, {Mixed, 3}, {Empty, 7}, {Mixed, 1},
+              {Empty, 5}, {Mixed, 1}, {Empty, 1}, {Mixed, 3}, {Empty, 3},
+              {Mixed, 1}, {Empty, 3}, {Mixed, 2}, {Empty, 1}, {Mixed, 2},
+              {Empty, 2}, {Mixed, 1}, {Empty, 1}, {Mixed, 2}, {Empty, 6},
+              {Mixed, 1}, {Empty, 1}, {Mixed, 3}, {Empty, 1}, {Mixed, 2},
+              {Empty, 2}, {Mixed, 2}, {Empty, 2}, {Mixed, 2}, {Empty, 2},
+              {Mixed, 2}, {Empty, 3}, {Mixed, 1}, {Empty, 3}, {Mixed, 1},
+              {Empty, 2}, {Mixed, 2}, {Empty, 3}, {Mixed, 1}, {Empty, 3},
+              {Mixed, 1}, {Empty, 3}, {Mixed, 1}, {Empty, 3}, {Mixed, 1},
+              {Empty, 1}, {Mixed, 2}, {Empty, 2}, {Mixed, 1}, {Empty, 1},
+              {Mixed, 1}, {Empty, 2}, {Mixed, 1}, {Empty, 2}, {Mixed, 1},
+              {Empty, 57}, {Mixed, 1}, {Empty, 10}, {Mixed, 1}, {Empty, 9},
+              {Mixed, 1}, {Empty, 1}, {Mixed, 1}, {Empty, 3}, {Mixed, 3},
+              {Empty, 1}, {Mixed, 1}, {Empty, 3}, {Mixed, 1}, {Empty, 1},
+              {Mixed, 1}, {Empty, 2}, {Mixed, 2}, {Empty, 1}, {Mixed, 1},
+              {Full, 1}, {Mixed, 1}, {Empty, 2}, {Mixed, 2}, {Empty, 13},
+              {Mixed, 3}, {Empty, 103}, {Mixed, 1}, {Empty, 9}, {Mixed, 1},
+              {Empty, 15}, {Mixed, 1}, {Empty, 2}, {Mixed, 1}, {Empty, 2},
+              {Mixed, 1}, {Empty, 939}, {Mixed, 2}, {Empty, 2}, {Mixed, 3},
+              {Empty, 2}, {Mixed, 1}, {Empty, 2}, {Mixed, 1}, {Empty, 6},
+              {Mixed, 2}, {Empty, 1}, {Mixed, 2}, {Empty, 2}, {Mixed, 3},
+              {Empty, 3}, {Mixed, 1}, {Empty, 1}, {Mixed, 3}, {Empty, 2},
+              {Mixed, 1}, {Empty, 4}, {Mixed, 1}, {Empty, 632}, {Mixed, 1},
+              {Empty, 24}, {Mixed, 1}, {Empty, 7}, {Mixed, 4}, {Empty, 2},
+              {Mixed, 1}, {Empty, 23}, {Mixed, 1}, {Empty, 63}, {Mixed, 1},
+              {Empty, 45}, {Mixed, 1}, {Empty, 3}, {Mixed, 1}, {Empty, 1},
+              {Mixed, 1}, {Empty, 2}, {Mixed, 1}, {Empty, 2}, {Mixed, 1},
+              {Empty, 5}, {Mixed, 1}, {Empty, 1}, {Mixed, 3}, {Empty, 10},
+              {Mixed, 1}, {Empty, 6}, {Mixed, 2}, {Empty, 2}, {Mixed, 1},
+              {Empty, 3}, {Mixed, 1}, {Empty, 673}, {Mixed, 1}, {Empty, 36},
+              {Mixed, 1}, {Empty, 782}, {Mixed, 3}, {Empty, 184},
+              {Mixed, 1}, {Empty, 30905}},
+             {0x40000000, 0x00000001, 0x01908100, 0xffff0000, 0xe0ff7fff,
+              0x04300007, 0x00000030, 0x000000f8, 0x02000000, 0xfffe0000,
+              0xbffffffb, 0x00000016, 0x0187f800, 0x80000000, 0x00001c61,
+              0xffff0000, 0x000007ff, 0x0001ffc0, 0x003ff800, 0x03000000,
+              0x7ffffff0, 0x10000000, 0x001e2000, 0x00020000, 0x10000000,
+              0x00002000, 0x10000000, 0x00002000, 0x10000000, 0x00002000,
+              0x10000000, 0x00002000, 0x00002000, 0x00002000, 0x10000000,
+              0x00002000, 0x00002000, 0x00000400, 0x00005f80, 0x00001f00,
+              0x03000000, 0xc2a00000, 0x000000dc, 0x00000040, 0x06800000,
+              0x0c00bf80, 0x200ffe00, 0x0e000000, 0x9fe00000, 0x3fff0000,
+              0x00100000, 0x00000010, 0x000ff800, 0x00000c00, 0x00c00000,
+              0x3f000000, 0xffff0000, 0x031021ff, 0xfffff000, 0x000007ff,
+              0x0000fff0, 0xe0200000, 0xa0000000, 0xe000e003, 0x6000e000,
+              0x00038000, 0x00008000, 0x0000fc00, 0x1e000000, 0x10000000,
+              0xb0008000, 0x30000000, 0x00030000, 0xff800000, 0x00000003,
+              0x00000100, 0x03000000, 0x00000010, 0x0003ffff, 0x00007800,
+              0x00080000, 0x00080000, 0x00000001, 0x00000020, 0x38000000,
+              0x80000000, 0x00000007, 0x00400000, 0xf8000000, 0x00003000,
+              0x40000000, 0x00003fff, 0x40000000, 0x00000001, 0x00010000,
+              0xc0000000, 0x00000008, 0x00000001, 0x00000060, 0x06000000,
+              0x00180000, 0x00080000, 0x00000001, 0x00600000, 0x00000600,
+              0x10000000, 0x00002000, 0x001f1fc0, 0x0000000c, 0x80000000,
+              0x00000001, 0x80000000, 0x00c00000, 0x001f0000, 0xffff8000,
+              0xf807e380, 0x00000fe7, 0x00003c00, 0x007f0000}};
+        static BinaryPropertyObject property_object{Dia, codepoint_set};
+    }
+    namespace EXT_ns {
+        /** Code Point Ranges for Ext
+        [183, 183], [720, 721], [1600, 1600], [2042, 2042], [3654, 3654],
+        [3782, 3782], [6154, 6154], [6211, 6211], [6823, 6823],
+        [7222, 7222], [7291, 7291], [12293, 12293], [12337, 12341],
+        [12445, 12446], [12540, 12542], [40981, 40981], [42508, 42508],
+        [43471, 43471], [43494, 43494], [43632, 43632], [43741, 43741],
+        [43763, 43764], [65392, 65392], [70493, 70493], [71110, 71112],
+        [92994, 92995]**/
+        const UnicodeSet codepoint_set 
+            {{{Empty, 5}, {Mixed, 1}, {Empty, 16}, {Mixed, 1}, {Empty, 27},
+              {Mixed, 1}, {Empty, 12}, {Mixed, 1}, {Empty, 50}, {Mixed, 1},
+              {Empty, 3}, {Mixed, 1}, {Empty, 73}, {Mixed, 1}, {Empty, 1},
+              {Mixed, 1}, {Empty, 18}, {Mixed, 1}, {Empty, 11}, {Mixed, 1},
+              {Empty, 1}, {Mixed, 1}, {Empty, 156}, {Mixed, 2}, {Empty, 2},
+              {Mixed, 1}, {Empty, 2}, {Mixed, 1}, {Empty, 888}, {Mixed, 1},
+              {Empty, 47}, {Mixed, 1}, {Empty, 29}, {Mixed, 2}, {Empty, 3},
+              {Mixed, 1}, {Empty, 2}, {Mixed, 2}, {Empty, 675}, {Mixed, 1},
+              {Empty, 158}, {Mixed, 1}, {Empty, 19}, {Mixed, 1},
+              {Empty, 683}, {Mixed, 1}, {Empty, 31909}},
+             {0x00800000, 0x00030000, 0x00000001, 0x04000000, 0x00000040,
+              0x00000040, 0x00000400, 0x00000008, 0x00000080, 0x00400000,
+              0x08000000, 0x00000020, 0x003e0000, 0x60000000, 0x70000000,
+              0x00200000, 0x00001000, 0x00008000, 0x00000040, 0x00010000,
+              0x20000000, 0x00180000, 0x00010000, 0x20000000, 0x000001c0,
+              0x0000000c}};
+        static BinaryPropertyObject property_object{Ext, codepoint_set};
+    }
+    namespace HEX_ns {
+        /** Code Point Ranges for Hex
+        [48, 57], [65, 70], [97, 102], [65296, 65305], [65313, 65318],
+        [65345, 65350]**/
+        const UnicodeSet codepoint_set 
+            {{{Empty, 1}, {Mixed, 3}, {Empty, 2036}, {Mixed, 3},
+              {Empty, 32773}},
+             {0x03ff0000, 0x0000007e, 0x0000007e, 0x03ff0000, 0x0000007e,
+              0x0000007e}};
+        static BinaryPropertyObject property_object{Hex, codepoint_set};
+    }
+    namespace HYPHEN_ns {
+        /** Code Point Ranges for Hyphen
+        [45, 45], [173, 173], [1418, 1418], [6150, 6150], [8208, 8209],
+        [11799, 11799], [12539, 12539], [65123, 65123], [65293, 65293],
+        [65381, 65381]**/
+        const UnicodeSet codepoint_set 
+            {{{Empty, 1}, {Mixed, 1}, {Empty, 3}, {Mixed, 1}, {Empty, 38},
+              {Mixed, 1}, {Empty, 147}, {Mixed, 1}, {Empty, 63}, {Mixed, 1},
+              {Empty, 111}, {Mixed, 1}, {Empty, 22}, {Mixed, 1},
+              {Empty, 1643}, {Mixed, 1}, {Empty, 4}, {Mixed, 1}, {Empty, 2},
+              {Mixed, 1}, {Empty, 32772}},
+             {0x00002000, 0x00002000, 0x00000400, 0x00000040, 0x00030000,
+              0x00800000, 0x08000000, 0x00000008, 0x00002000, 0x00000020}};
+        static BinaryPropertyObject property_object{Hyphen, codepoint_set};
+    }
+    namespace IDSB_ns {
+        /** Code Point Ranges for IDSB
+        [12272, 12273], [12276, 12283]**/
+        const UnicodeSet codepoint_set 
+            {{{Empty, 383}, {Mixed, 1}, {Empty, 34432}},
+             {0x0ff30000}};
+        static BinaryPropertyObject property_object{IDSB, codepoint_set};
+    }
+    namespace IDST_ns {
+        /** Code Point Ranges for IDST
+        [12274, 12275]**/
+        const UnicodeSet codepoint_set 
+            {{{Empty, 383}, {Mixed, 1}, {Empty, 34432}},
+             {0x000c0000}};
+        static BinaryPropertyObject property_object{IDST, codepoint_set};
+    }
+    namespace IDEO_ns {
+        /** Code Point Ranges for Ideo
+        [12294, 12295], [12321, 12329], [12344, 12346], [13312, 19893],
+        [19968, 40908], [63744, 64109], [64112, 64217], [131072, 173782],
+        [173824, 177972], [177984, 178205], [194560, 195101]**/
+        const UnicodeSet codepoint_set 
+            {{{Empty, 384}, {Mixed, 2}, {Empty, 30}, {Full, 205},
+              {Mixed, 1}, {Empty, 2}, {Full, 654}, {Mixed, 1}, {Empty, 713},
+              {Full, 11}, {Mixed, 1}, {Full, 2}, {Mixed, 1}, {Empty, 2089},
+              {Full, 1334}, {Mixed, 1}, {Empty, 1}, {Full, 129}, {Mixed, 1},
+              {Full, 6}, {Mixed, 1}, {Empty, 511}, {Full, 16}, {Mixed, 1},
+              {Empty, 28719}},
+             {0x000000c0, 0x070003fe, 0x003fffff, 0x00001fff, 0xffff3fff,
+              0x03ffffff, 0x007fffff, 0x001fffff, 0x3fffffff, 0x3fffffff}};
+        static BinaryPropertyObject property_object{Ideo, codepoint_set};
+    }
+    namespace JOIN_C_ns {
+        /** Code Point Ranges for Join_C
+        [8204, 8205]**/
+        const UnicodeSet codepoint_set 
+            {{{Empty, 256}, {Mixed, 1}, {Empty, 34559}},
+             {0x00003000}};
+        static BinaryPropertyObject property_object{Join_C, codepoint_set};
+    }
+    namespace LOE_ns {
+        /** Code Point Ranges for LOE
+        [3648, 3652], [3776, 3780], [43701, 43702], [43705, 43705],
+        [43707, 43708]**/
+        const UnicodeSet codepoint_set 
+            {{{Empty, 114}, {Mixed, 1}, {Empty, 3}, {Mixed, 1},
+              {Empty, 1246}, {Mixed, 1}, {Empty, 33450}},
+             {0x0000001f, 0x0000001f, 0x1a600000}};
+        static BinaryPropertyObject property_object{LOE, codepoint_set};
+    }
+    namespace NCHAR_ns {
+        /** Code Point Ranges for NChar
+        [64976, 65007], [65534, 65535], [131070, 131071], [196606, 196607],
+        [262142, 262143], [327678, 327679], [393214, 393215],
+        [458750, 458751], [524286, 524287], [589822, 589823],
+        [655358, 655359], [720894, 720895], [786430, 786431],
+        [851966, 851967], [917502, 917503], [983038, 983039],
+        [1048574, 1048575], [1114110, 1114111]**/
+        const UnicodeSet codepoint_set 
+            {{{Empty, 2030}, {Mixed, 2}, {Empty, 15}, {Mixed, 1},
+              {Empty, 2047}, {Mixed, 1}, {Empty, 2047}, {Mixed, 1},
+              {Empty, 2047}, {Mixed, 1}, {Empty, 2047}, {Mixed, 1},
+              {Empty, 2047}, {Mixed, 1}, {Empty, 2047}, {Mixed, 1},
+              {Empty, 2047}, {Mixed, 1}, {Empty, 2047}, {Mixed, 1},
+              {Empty, 2047}, {Mixed, 1}, {Empty, 2047}, {Mixed, 1},
+              {Empty, 2047}, {Mixed, 1}, {Empty, 2047}, {Mixed, 1},
+              {Empty, 2047}, {Mixed, 1}, {Empty, 2047}, {Mixed, 1},
+              {Empty, 2047}, {Mixed, 1}, {Empty, 2047}, {Mixed, 1}},
+             {0xffff0000, 0x0000ffff, 0xc0000000, 0xc0000000, 0xc0000000,
+              0xc0000000, 0xc0000000, 0xc0000000, 0xc0000000, 0xc0000000,
+              0xc0000000, 0xc0000000, 0xc0000000, 0xc0000000, 0xc0000000,
+              0xc0000000, 0xc0000000, 0xc0000000, 0xc0000000}};
+        static BinaryPropertyObject property_object{NChar, codepoint_set};
+    }
+    namespace OALPHA_ns {
+        /** Code Point Ranges for OAlpha
+        [837, 837], [1456, 1469], [1471, 1471], [1473, 1474], [1476, 1477],
+        [1479, 1479], [1552, 1562], [1611, 1623], [1625, 1631],
+        [1648, 1648], [1750, 1756], [1761, 1764], [1767, 1768],
+        [1773, 1773], [1809, 1809], [1840, 1855], [1958, 1968],
+        [2070, 2071], [2075, 2083], [2085, 2087], [2089, 2092],
+        [2276, 2281], [2288, 2307], [2362, 2363], [2366, 2380],
+        [2382, 2383], [2389, 2391], [2402, 2403], [2433, 2435],
+        [2494, 2500], [2503, 2504], [2507, 2508], [2519, 2519],
+        [2530, 2531], [2561, 2563], [2622, 2626], [2631, 2632],
+        [2635, 2636], [2641, 2641], [2672, 2673], [2677, 2677],
+        [2689, 2691], [2750, 2757], [2759, 2761], [2763, 2764],
+        [2786, 2787], [2817, 2819], [2878, 2884], [2887, 2888],
+        [2891, 2892], [2902, 2903], [2914, 2915], [2946, 2946],
+        [3006, 3010], [3014, 3016], [3018, 3020], [3031, 3031],
+        [3072, 3075], [3134, 3140], [3142, 3144], [3146, 3148],
+        [3157, 3158], [3170, 3171], [3201, 3203], [3262, 3268],
+        [3270, 3272], [3274, 3276], [3285, 3286], [3298, 3299],
+        [3329, 3331], [3390, 3396], [3398, 3400], [3402, 3404],
+        [3415, 3415], [3426, 3427], [3458, 3459], [3535, 3540],
+        [3542, 3542], [3544, 3551], [3570, 3571], [3633, 3633],
+        [3636, 3642], [3661, 3661], [3761, 3761], [3764, 3769],
+        [3771, 3772], [3789, 3789], [3953, 3969], [3981, 3991],
+        [3993, 4028], [4139, 4150], [4152, 4152], [4155, 4158],
+        [4182, 4185], [4190, 4192], [4194, 4194], [4199, 4200],
+        [4209, 4212], [4226, 4230], [4252, 4253], [4959, 4959],
+        [5906, 5907], [5938, 5939], [5970, 5971], [6002, 6003],
+        [6070, 6088], [6313, 6313], [6432, 6443], [6448, 6456],
+        [6576, 6592], [6600, 6601], [6679, 6683], [6741, 6750],
+        [6753, 6772], [6912, 6916], [6965, 6979], [7040, 7042],
+        [7073, 7081], [7084, 7085], [7143, 7153], [7204, 7221],
+        [7410, 7411], [7655, 7668], [9398, 9449], [11744, 11775],
+        [42612, 42619], [42655, 42655], [43043, 43047], [43136, 43137],
+        [43188, 43203], [43302, 43306], [43335, 43346], [43392, 43395],
+        [43444, 43455], [43561, 43574], [43587, 43587], [43596, 43597],
+        [43696, 43696], [43698, 43700], [43703, 43704], [43710, 43710],
+        [43755, 43759], [43765, 43765], [44003, 44010], [64286, 64286],
+        [66422, 66426], [68097, 68099], [68101, 68102], [68108, 68111],
+        [69632, 69634], [69688, 69701], [69762, 69762], [69808, 69816],
+        [69888, 69890], [69927, 69938], [70016, 70018], [70067, 70079],
+        [70188, 70196], [70199, 70199], [70367, 70376], [70401, 70403],
+        [70462, 70468], [70471, 70472], [70475, 70476], [70487, 70487],
+        [70498, 70499], [70832, 70849], [71087, 71093], [71096, 71102],
+        [71216, 71230], [71232, 71232], [71339, 71349], [92976, 92982],
+        [94033, 94078], [113822, 113822], [127280, 127305],
+        [127312, 127337], [127344, 127369]**/
+        const UnicodeSet codepoint_set 
+            {{{Empty, 26}, {Mixed, 1}, {Empty, 18}, {Mixed, 2}, {Empty, 1},
+              {Mixed, 1}, {Empty, 1}, {Mixed, 2}, {Empty, 2}, {Mixed, 4},
+              {Empty, 3}, {Mixed, 1}, {Empty, 2}, {Mixed, 2}, {Empty, 5},
+              {Mixed, 24}, {Empty, 1}, {Mixed, 13}, {Empty, 1}, {Mixed, 2},
+              {Empty, 1}, {Mixed, 2}, {Empty, 2}, {Mixed, 2}, {Empty, 4},
+              {Mixed, 3}, {Empty, 3}, {Mixed, 4}, {Empty, 21}, {Mixed, 1},
+              {Empty, 29}, {Mixed, 4}, {Empty, 1}, {Mixed, 2}, {Empty, 6},
+              {Mixed, 1}, {Empty, 3}, {Mixed, 1}, {Empty, 3}, {Mixed, 2},
+              {Empty, 1}, {Mixed, 1}, {Empty, 1}, {Mixed, 2}, {Empty, 4},
+              {Mixed, 3}, {Empty, 1}, {Mixed, 2}, {Empty, 1}, {Mixed, 1},
+              {Empty, 1}, {Mixed, 1}, {Empty, 5}, {Mixed, 1}, {Empty, 7},
+              {Mixed, 1}, {Empty, 53}, {Mixed, 1}, {Full, 1}, {Mixed, 1},
+              {Empty, 71}, {Full, 1}, {Empty, 963}, {Mixed, 2}, {Empty, 12},
+              {Mixed, 1}, {Empty, 2}, {Mixed, 3}, {Empty, 2}, {Mixed, 2},
+              {Empty, 1}, {Mixed, 2}, {Empty, 3}, {Mixed, 2}, {Empty, 2},
+              {Mixed, 1}, {Empty, 1}, {Mixed, 1}, {Empty, 7}, {Mixed, 1},
+              {Empty, 632}, {Mixed, 1}, {Empty, 66}, {Mixed, 1},
+              {Empty, 52}, {Mixed, 1}, {Empty, 47}, {Mixed, 3}, {Empty, 1},
+              {Mixed, 2}, {Empty, 2}, {Mixed, 2}, {Empty, 2}, {Mixed, 2},
+              {Empty, 3}, {Mixed, 1}, {Empty, 4}, {Mixed, 6}, {Empty, 9},
+              {Mixed, 2}, {Empty, 6}, {Mixed, 1}, {Empty, 3}, {Mixed, 2},
+              {Empty, 2}, {Mixed, 1}, {Empty, 675}, {Mixed, 1}, {Empty, 32},
+              {Mixed, 2}, {Empty, 616}, {Mixed, 1}, {Empty, 420},
+              {Mixed, 4}, {Empty, 30835}},
+             {0x00000020, 0xbfff0000, 0x000000b6, 0x07ff0000, 0xfefff800,
+              0x00010000, 0x1fc00000, 0x0000219e, 0x00020000, 0xffff0000,
+              0x0001ffc0, 0xf8c00000, 0x00001eef, 0xffff03f0, 0x0000000f,
+              0xcc000000, 0x00e0dfff, 0x0000000c, 0x0000000e, 0xc0000000,
+              0x0080199f, 0x0000000c, 0x0000000e, 0xc0000000, 0x00021987,
+              0x00230000, 0x0000000e, 0xc0000000, 0x00001bbf, 0x0000000c,
+              0x0000000e, 0xc0000000, 0x00c0199f, 0x0000000c, 0x00000004,
+              0xc0000000, 0x00801dc7, 0x0000000f, 0xc0000000, 0x00601ddf,
+              0x0000000c, 0x0000000e, 0xc0000000, 0x00601ddf, 0x0000000c,
+              0x0000000e, 0xc0000000, 0x00801ddf, 0x0000000c, 0x0000000c,
+              0xff5f8000, 0x000c0000, 0x07f20000, 0x00002000, 0x1bf20000,
+              0x00002000, 0xfffe0000, 0xfeffe003, 0x1fffffff, 0x797ff800,
+              0xc3c00000, 0x001e0185, 0x3000007c, 0x80000000, 0x000c0000,
+              0x000c0000, 0x000c0000, 0x000c0000, 0xffc00000, 0x000001ff,
+              0x00000200, 0x01ff0fff, 0xffff0000, 0x00000301, 0x0f800000,
+              0x7fe00000, 0x001ffffe, 0x0000001f, 0xffe00000, 0x0000000f,
+              0x00000007, 0x000033fe, 0x0003ff80, 0x003ffff0, 0x000c0000,
+              0x001fff80, 0xffc00000, 0x000003ff, 0x0ff00000, 0x80000000,
+              0x000000f8, 0x00000003, 0xfff00000, 0x0000000f, 0x000007c0,
+              0x0007ff80, 0x0000000f, 0xfff00000, 0x007ffe00, 0x00003008,
+              0x419d0000, 0x0020f800, 0x000007f8, 0x40000000, 0x07c00000,
+              0x0000f06e, 0x00000007, 0xff000000, 0x0000003f, 0x00000004,
+              0x01ff0000, 0x00000007, 0x0007ff80, 0x00000007, 0xfff80000,
+              0x009ff000, 0x80000000, 0x000001ff, 0x0000000e, 0xc0000000,
+              0x0080199f, 0x0000000c, 0xffff0000, 0x00000003, 0x7f3f8000,
+              0x7fff0000, 0x00000001, 0x003ff800, 0x007f0000, 0xfffe0000,
+              0x7fffffff, 0x40000000, 0xffff0000, 0xffff03ff, 0xffff03ff,
+              0x000003ff}};
+        static BinaryPropertyObject property_object{OAlpha, codepoint_set};
+    }
+    namespace ODI_ns {
+        /** Code Point Ranges for ODI
+        [847, 847], [4447, 4448], [6068, 6069], [8293, 8293],
+        [12644, 12644], [65440, 65440], [65520, 65528], [917504, 917504],
+        [917506, 917535], [917632, 917759], [918000, 921599]**/
+        const UnicodeSet codepoint_set 
+            {{{Empty, 26}, {Mixed, 1}, {Empty, 111}, {Mixed, 2},
+              {Empty, 49}, {Mixed, 1}, {Empty, 69}, {Mixed, 1},
+              {Empty, 135}, {Mixed, 1}, {Empty, 1649}, {Mixed, 1},
+              {Empty, 1}, {Mixed, 1}, {Empty, 26624}, {Mixed, 1},
+              {Empty, 3}, {Full, 4}, {Empty, 7}, {Mixed, 1}, {Full, 112},
+              {Empty, 6016}},
+             {0x00008000, 0x80000000, 0x00000001, 0x00300000, 0x00000020,
+              0x00000010, 0x00000001, 0x01ff0000, 0xfffffffd, 0xffff0000}};
+        static BinaryPropertyObject property_object{ODI, codepoint_set};
+    }
+    namespace OGR_EXT_ns {
+        /** Code Point Ranges for OGr_Ext
+        [2494, 2494], [2519, 2519], [2878, 2878], [2903, 2903],
+        [3006, 3006], [3031, 3031], [3266, 3266], [3285, 3286],
+        [3390, 3390], [3415, 3415], [3535, 3535], [3551, 3551],
+        [8204, 8205], [12334, 12335], [65438, 65439], [70462, 70462],
+        [70487, 70487], [70832, 70832], [70845, 70845], [71087, 71087],
+        [119141, 119141], [119150, 119154]**/
+        const UnicodeSet codepoint_set 
+            {{{Empty, 77}, {Mixed, 2}, {Empty, 10}, {Mixed, 2}, {Empty, 2},
+              {Mixed, 2}, {Empty, 7}, {Mixed, 1}, {Empty, 2}, {Mixed, 2},
+              {Empty, 3}, {Mixed, 1}, {Empty, 145}, {Mixed, 1},
+              {Empty, 128}, {Mixed, 1}, {Empty, 1658}, {Mixed, 1},
+              {Empty, 156}, {Mixed, 2}, {Empty, 10}, {Mixed, 1}, {Empty, 7},
+              {Mixed, 1}, {Empty, 1501}, {Mixed, 1}, {Empty, 31092}},
+             {0x40000000, 0x00800000, 0x40000000, 0x00800000, 0x40000000,
+              0x00800000, 0x00600004, 0x40000000, 0x00800000, 0x80008000,
+              0x00003000, 0x0000c000, 0xc0000000, 0x40000000, 0x00800000,
+              0x20010000, 0x00008000, 0x0007c020}};
+        static BinaryPropertyObject property_object{OGr_Ext, codepoint_set};
+    }
+    namespace OIDC_ns {
+        /** Code Point Ranges for OIDC
+        [183, 183], [903, 903], [4969, 4977], [6618, 6618]**/
+        const UnicodeSet codepoint_set 
+            {{{Empty, 5}, {Mixed, 1}, {Empty, 22}, {Mixed, 1}, {Empty, 126},
+              {Mixed, 1}, {Empty, 50}, {Mixed, 1}, {Empty, 34609}},
+             {0x00800000, 0x00000080, 0x0003fe00, 0x04000000}};
+        static BinaryPropertyObject property_object{OIDC, codepoint_set};
+    }
+    namespace OIDS_ns {
+        /** Code Point Ranges for OIDS
+        [8472, 8472], [8494, 8494], [12443, 12444]**/
+        const UnicodeSet codepoint_set 
+            {{{Empty, 264}, {Mixed, 2}, {Empty, 122}, {Mixed, 1},
+              {Empty, 34427}},
+             {0x01000000, 0x00004000, 0x18000000}};
+        static BinaryPropertyObject property_object{OIDS, codepoint_set};
+    }
+    namespace OLOWER_ns {
+        /** Code Point Ranges for OLower
+        [170, 170], [186, 186], [688, 696], [704, 705], [736, 740],
+        [837, 837], [890, 890], [7468, 7530], [7544, 7544], [7579, 7615],
+        [8305, 8305], [8319, 8319], [8336, 8348], [8560, 8575],
+        [9424, 9449], [11388, 11389], [42652, 42653], [42864, 42864],
+        [43000, 43001], [43868, 43871]**/
+        const UnicodeSet codepoint_set 
+            {{{Empty, 5}, {Mixed, 1}, {Empty, 15}, {Mixed, 3}, {Empty, 2},
+              {Mixed, 2}, {Empty, 205}, {Mixed, 1}, {Full, 1}, {Mixed, 2},
+              {Full, 1}, {Empty, 21}, {Mixed, 2}, {Empty, 6}, {Mixed, 1},
+              {Empty, 26}, {Mixed, 2}, {Empty, 59}, {Mixed, 1},
+              {Empty, 976}, {Mixed, 1}, {Empty, 6}, {Mixed, 1}, {Empty, 3},
+              {Mixed, 1}, {Empty, 26}, {Mixed, 1}, {Empty, 33445}},
+             {0x04000400, 0x01ff0000, 0x00000003, 0x0000001f, 0x00000020,
+              0x04000000, 0xfffff000, 0x010007ff, 0xf8000000, 0x80020000,
+              0x1fff0000, 0xffff0000, 0xffff0000, 0x000003ff, 0x30000000,
+              0x30000000, 0x00010000, 0x03000000, 0xf0000000}};
+        static BinaryPropertyObject property_object{OLower, codepoint_set};
+    }
+    namespace OMATH_ns {
+        /** Code Point Ranges for OMath
+        [94, 94], [976, 978], [981, 981], [1008, 1009], [1012, 1013],
+        [8214, 8214], [8242, 8244], [8256, 8256], [8289, 8292],
+        [8317, 8318], [8333, 8334], [8400, 8412], [8417, 8417],
+        [8421, 8422], [8427, 8431], [8450, 8450], [8455, 8455],
+        [8458, 8467], [8469, 8469], [8473, 8477], [8484, 8484],
+        [8488, 8489], [8492, 8493], [8495, 8497], [8499, 8504],
+        [8508, 8511], [8517, 8521], [8597, 8601], [8604, 8607],
+        [8609, 8610], [8612, 8613], [8615, 8615], [8617, 8621],
+        [8624, 8625], [8630, 8631], [8636, 8653], [8656, 8657],
+        [8659, 8659], [8661, 8667], [8669, 8669], [8676, 8677],
+        [8968, 8971], [9140, 9141], [9143, 9143], [9168, 9168],
+        [9186, 9186], [9632, 9633], [9646, 9654], [9660, 9664],
+        [9670, 9671], [9674, 9675], [9679, 9683], [9698, 9698],
+        [9700, 9700], [9703, 9708], [9733, 9734], [9792, 9792],
+        [9794, 9794], [9824, 9827], [9837, 9838], [10181, 10182],
+        [10214, 10223], [10627, 10648], [10712, 10715], [10748, 10749],
+        [65121, 65121], [65123, 65123], [65128, 65128], [65340, 65340],
+        [65342, 65342], [119808, 119892], [119894, 119964],
+        [119966, 119967], [119970, 119970], [119973, 119974],
+        [119977, 119980], [119982, 119993], [119995, 119995],
+        [119997, 120003], [120005, 120069], [120071, 120074],
+        [120077, 120084], [120086, 120092], [120094, 120121],
+        [120123, 120126], [120128, 120132], [120134, 120134],
+        [120138, 120144], [120146, 120485], [120488, 120512],
+        [120514, 120538], [120540, 120570], [120572, 120596],
+        [120598, 120628], [120630, 120654], [120656, 120686],
+        [120688, 120712], [120714, 120744], [120746, 120770],
+        [120772, 120779], [120782, 120831], [126464, 126467],
+        [126469, 126495], [126497, 126498], [126500, 126500],
+        [126503, 126503], [126505, 126514], [126516, 126519],
+        [126521, 126521], [126523, 126523], [126530, 126530],
+        [126535, 126535], [126537, 126537], [126539, 126539],
+        [126541, 126543], [126545, 126546], [126548, 126548],
+        [126551, 126551], [126553, 126553], [126555, 126555],
+        [126557, 126557], [126559, 126559], [126561, 126562],
+        [126564, 126564], [126567, 126570], [126572, 126578],
+        [126580, 126583], [126585, 126588], [126590, 126590],
+        [126592, 126601], [126603, 126619], [126625, 126627],
+        [126629, 126633], [126635, 126651]**/
+        const UnicodeSet codepoint_set 
+            {{{Empty, 2}, {Mixed, 1}, {Empty, 27}, {Mixed, 2}, {Empty, 224},
+              {Mixed, 5}, {Empty, 1}, {Mixed, 5}, {Empty, 1}, {Mixed, 4},
+              {Empty, 8}, {Mixed, 1}, {Empty, 4}, {Mixed, 3}, {Empty, 13},
+              {Mixed, 4}, {Empty, 1}, {Mixed, 2}, {Empty, 10}, {Mixed, 2},
+              {Empty, 12}, {Mixed, 1}, {Empty, 1}, {Mixed, 2},
+              {Empty, 1699}, {Mixed, 1}, {Empty, 5}, {Mixed, 1},
+              {Empty, 1702}, {Full, 2}, {Mixed, 1}, {Full, 1}, {Mixed, 3},
+              {Full, 1}, {Mixed, 3}, {Full, 10}, {Mixed, 10}, {Full, 1},
+              {Empty, 176}, {Mixed, 6}, {Empty, 30858}},
+             {0x40000000, 0x00270000, 0x00330000, 0x00400000, 0x001c0000,
+              0x00000001, 0x6000001e, 0x00006000, 0x1fff0000, 0x0000f862,
+              0x3e2ffc84, 0xf1fbb310, 0x000003e0, 0xf3e00000, 0xf0c33eb6,
+              0x2feb3fff, 0x00000030, 0x00000f00, 0x00b00000, 0x00010000,
+              0x00000004, 0xf07fc003, 0x000f8cc1, 0x00001f94, 0x00000060,
+              0x00000005, 0x0000600f, 0x00000060, 0x0000ffc0, 0x01fffff8,
+              0x0f000000, 0x30000000, 0x0000010a, 0x50000000, 0xffdfffff,
+              0xdfffffff, 0xebffde64, 0xffffffef, 0xdfdfe7bf, 0x7bffffff,
+              0xfffdfc5f, 0xffffff3f, 0xf7fffffd, 0xf7ffffff, 0xffdfffff,
+              0xffdfffff, 0xffff7fff, 0xffff7fff, 0xfffffdff, 0xfffffdff,
+              0xffffcff7, 0xffffffef, 0x0af7fe96, 0xaa96ea84, 0x5ef7f796,
+              0x0ffffbff, 0x0ffffbee}};
+        static BinaryPropertyObject property_object{OMath, codepoint_set};
+    }
+    namespace OUPPER_ns {
+        /** Code Point Ranges for OUpper
+        [8544, 8559], [9398, 9423], [127280, 127305], [127312, 127337],
+        [127344, 127369]**/
+        const UnicodeSet codepoint_set 
+            {{{Empty, 267}, {Mixed, 1}, {Empty, 25}, {Mixed, 2},
+              {Empty, 3682}, {Mixed, 4}, {Empty, 30835}},
+             {0x0000ffff, 0xffc00000, 0x0000ffff, 0xffff0000, 0xffff03ff,
+              0xffff03ff, 0x000003ff}};
+        static BinaryPropertyObject property_object{OUpper, codepoint_set};
+    }
+    namespace PAT_SYN_ns {
+        /** Code Point Ranges for Pat_Syn
+        [33, 47], [58, 64], [91, 94], [96, 96], [123, 126], [161, 167],
+        [169, 169], [171, 172], [174, 174], [176, 177], [182, 182],
+        [187, 187], [191, 191], [215, 215], [247, 247], [8208, 8231],
+        [8240, 8254], [8257, 8275], [8277, 8286], [8592, 9311],
+        [9472, 10101], [10132, 11263], [11776, 11903], [12289, 12291],
+        [12296, 12320], [12336, 12336], [64830, 64831], [65093, 65094]**/
+        const UnicodeSet codepoint_set 
+            {{{Empty, 1}, {Mixed, 3}, {Empty, 1}, {Mixed, 3}, {Empty, 248},
+              {Mixed, 3}, {Empty, 9}, {Mixed, 1}, {Full, 22}, {Empty, 5},
+              {Full, 19}, {Mixed, 2}, {Full, 35}, {Empty, 16}, {Full, 4},
+              {Empty, 12}, {Mixed, 2}, {Empty, 1639}, {Mixed, 1},
+              {Empty, 8}, {Mixed, 1}, {Empty, 32781}},
+             {0xfc00fffe, 0x78000001, 0x78000001, 0x88435afe, 0x00800000,
+              0x00800000, 0xffff0000, 0x7fff00ff, 0x7feffffe, 0xffff0000,
+              0x003fffff, 0xfff00000, 0xffffff0e, 0x00010001, 0xc0000000,
+              0x00000060}};
+        static BinaryPropertyObject property_object{Pat_Syn, codepoint_set};
+    }
+    namespace PAT_WS_ns {
+        /** Code Point Ranges for Pat_WS
+        [9, 13], [32, 32], [133, 133], [8206, 8207], [8232, 8233]**/
+        const UnicodeSet codepoint_set 
+            {{{Mixed, 2}, {Empty, 2}, {Mixed, 1}, {Empty, 251}, {Mixed, 2},
+              {Empty, 34558}},
+             {0x00003e00, 0x00000001, 0x00000020, 0x0000c000, 0x00000300}};
+        static BinaryPropertyObject property_object{Pat_WS, codepoint_set};
+    }
+    namespace QMARK_ns {
+        /** Code Point Ranges for QMark
+        [34, 34], [39, 39], [171, 171], [187, 187], [8216, 8223],
+        [8249, 8250], [11842, 11842], [12300, 12303], [12317, 12319],
+        [65089, 65092], [65282, 65282], [65287, 65287], [65378, 65379]**/
+        const UnicodeSet codepoint_set 
+            {{{Empty, 1}, {Mixed, 1}, {Empty, 3}, {Mixed, 1}, {Empty, 250},
+              {Mixed, 2}, {Empty, 112}, {Mixed, 1}, {Empty, 13}, {Mixed, 1},
+              {Empty, 1649}, {Mixed, 1}, {Empty, 5}, {Mixed, 1}, {Empty, 2},
+              {Mixed, 1}, {Empty, 32772}},
+             {0x00000084, 0x08000800, 0xff000000, 0x06000000, 0x00000004,
+              0xe000f000, 0x0000001e, 0x00000084, 0x0000000c}};
+        static BinaryPropertyObject property_object{QMark, codepoint_set};
+    }
+    namespace RADICAL_ns {
+        /** Code Point Ranges for Radical
+        [11904, 11929], [11931, 12019], [12032, 12245]**/
+        const UnicodeSet codepoint_set 
+            {{{Empty, 372}, {Mixed, 1}, {Full, 2}, {Mixed, 1}, {Full, 6},
+              {Mixed, 1}, {Empty, 34433}},
+             {0xfbffffff, 0x000fffff, 0x003fffff}};
+        static BinaryPropertyObject property_object{Radical, codepoint_set};
+    }
+    namespace SD_ns {
+        /** Code Point Ranges for SD
+        [105, 106], [303, 303], [585, 585], [616, 616], [669, 669],
+        [690, 690], [1011, 1011], [1110, 1110], [1112, 1112], [7522, 7522],
+        [7574, 7574], [7588, 7588], [7592, 7592], [7725, 7725],
+        [7883, 7883], [8305, 8305], [8520, 8521], [11388, 11388],
+        [119842, 119843], [119894, 119895], [119946, 119947],
+        [119998, 119999], [120050, 120051], [120102, 120103],
+        [120154, 120155], [120206, 120207], [120258, 120259],
+        [120310, 120311], [120362, 120363], [120414, 120415],
+        [120466, 120467]**/
+        const UnicodeSet codepoint_set 
+            {{{Empty, 3}, {Mixed, 1}, {Empty, 5}, {Mixed, 1}, {Empty, 8},
+              {Mixed, 4}, {Empty, 9}, {Mixed, 1}, {Empty, 2}, {Mixed, 1},
+              {Empty, 200}, {Mixed, 3}, {Empty, 3}, {Mixed, 1}, {Empty, 4},
+              {Mixed, 1}, {Empty, 12}, {Mixed, 1}, {Empty, 6}, {Mixed, 1},
+              {Empty, 88}, {Mixed, 1}, {Empty, 3389}, {Mixed, 2},
+              {Empty, 1}, {Mixed, 2}, {Empty, 1}, {Mixed, 1}, {Empty, 1},
+              {Mixed, 2}, {Empty, 1}, {Mixed, 1}, {Empty, 1}, {Mixed, 2},
+              {Empty, 1}, {Mixed, 2}, {Empty, 1}, {Mixed, 1},
+              {Empty, 31051}},
+             {0x00000600, 0x00008000, 0x00000200, 0x00000100, 0x20000000,
+              0x00040000, 0x00080000, 0x01400000, 0x00000004, 0x00400000,
+              0x00000110, 0x00002000, 0x00000800, 0x00020000, 0x00000300,
+              0x10000000, 0x0000000c, 0x00c00000, 0x00000c00, 0xc0000000,
+              0x000c0000, 0x000000c0, 0x0c000000, 0x0000c000, 0x0000000c,
+              0x00c00000, 0x00000c00, 0xc0000000, 0x000c0000}};
+        static BinaryPropertyObject property_object{SD, codepoint_set};
+    }
+    namespace STERM_ns {
+        /** Code Point Ranges for STerm
+        [33, 33], [46, 46], [63, 63], [1417, 1417], [1567, 1567],
+        [1748, 1748], [1792, 1794], [2041, 2041], [2404, 2405],
+        [4170, 4171], [4962, 4962], [4967, 4968], [5742, 5742],
+        [5941, 5942], [6147, 6147], [6153, 6153], [6468, 6469],
+        [6824, 6827], [7002, 7003], [7006, 7007], [7227, 7228],
+        [7294, 7295], [8252, 8253], [8263, 8265], [11822, 11822],
+        [11836, 11836], [12290, 12290], [42239, 42239], [42510, 42511],
+        [42739, 42739], [42743, 42743], [43126, 43127], [43214, 43215],
+        [43311, 43311], [43464, 43465], [43613, 43615], [43760, 43761],
+        [44011, 44011], [65106, 65106], [65110, 65111], [65281, 65281],
+        [65294, 65294], [65311, 65311], [65377, 65377], [68182, 68183],
+        [69703, 69704], [69822, 69825], [69953, 69955], [70085, 70086],
+        [70093, 70093], [70200, 70201], [70203, 70204], [71106, 71107],
+        [71113, 71113], [71233, 71234], [92782, 92783], [92917, 92917],
+        [92983, 92984], [92996, 92996], [113823, 113823]**/
+        const UnicodeSet codepoint_set 
+            {{{Empty, 1}, {Mixed, 1}, {Empty, 42}, {Mixed, 1}, {Empty, 3},
+              {Mixed, 1}, {Empty, 5}, {Mixed, 1}, {Empty, 1}, {Mixed, 1},
+              {Empty, 6}, {Mixed, 1}, {Empty, 11}, {Mixed, 1}, {Empty, 54},
+              {Mixed, 1}, {Empty, 24}, {Mixed, 1}, {Empty, 23}, {Mixed, 1},
+              {Empty, 5}, {Mixed, 1}, {Empty, 6}, {Mixed, 1}, {Empty, 9},
+              {Mixed, 1}, {Empty, 10}, {Mixed, 1}, {Empty, 4}, {Mixed, 1},
+              {Empty, 6}, {Mixed, 1}, {Empty, 1}, {Mixed, 1}, {Empty, 29},
+              {Mixed, 2}, {Empty, 110}, {Mixed, 1}, {Empty, 14}, {Mixed, 1},
+              {Empty, 934}, {Mixed, 1}, {Empty, 8}, {Mixed, 1}, {Empty, 6},
+              {Mixed, 1}, {Empty, 11}, {Mixed, 1}, {Empty, 2}, {Mixed, 1},
+              {Empty, 2}, {Mixed, 1}, {Empty, 4}, {Mixed, 1}, {Empty, 3},
+              {Mixed, 1}, {Empty, 4}, {Mixed, 1}, {Empty, 7}, {Mixed, 1},
+              {Empty, 658}, {Mixed, 1}, {Empty, 5}, {Mixed, 1}, {Empty, 2},
+              {Mixed, 1}, {Empty, 86}, {Mixed, 1}, {Empty, 47}, {Mixed, 1},
+              {Empty, 2}, {Mixed, 2}, {Empty, 3}, {Mixed, 1}, {Empty, 3},
+              {Mixed, 1}, {Empty, 2}, {Mixed, 1}, {Empty, 28}, {Mixed, 1},
+              {Empty, 3}, {Mixed, 1}, {Empty, 672}, {Mixed, 1}, {Empty, 3},
+              {Mixed, 1}, {Empty, 1}, {Mixed, 2}, {Empty, 649}, {Mixed, 1},
+              {Empty, 31259}},
+             {0x80004002, 0x00000200, 0x80000000, 0x00100000, 0x00000007,
+              0x02000000, 0x00000030, 0x00000c00, 0x00000184, 0x00004000,
+              0x00600000, 0x00000208, 0x00000030, 0x00000f00, 0xcc000000,
+              0x18000000, 0xc0000000, 0x30000000, 0x00000380, 0x10004000,
+              0x00000004, 0x80000000, 0x0000c000, 0x00880000, 0x00c00000,
+              0x0000c000, 0x00008000, 0x00000300, 0xe0000000, 0x00030000,
+              0x00000800, 0x00c40000, 0x80004002, 0x00000002, 0x00c00000,
+              0x00000180, 0xc0000000, 0x00000003, 0x0000000e, 0x00002060,
+              0x1b000000, 0x0000020c, 0x00000006, 0x0000c000, 0x00200000,
+              0x01800000, 0x00000010, 0x80000000}};
+        static BinaryPropertyObject property_object{STerm, codepoint_set};
+    }
+    namespace TERM_ns {
+        /** Code Point Ranges for Term
+        [33, 33], [44, 44], [46, 46], [58, 59], [63, 63], [894, 894],
+        [903, 903], [1417, 1417], [1475, 1475], [1548, 1548], [1563, 1563],
+        [1567, 1567], [1748, 1748], [1792, 1802], [1804, 1804],
+        [2040, 2041], [2096, 2110], [2142, 2142], [2404, 2405],
+        [3674, 3675], [3848, 3848], [3853, 3858], [4170, 4171],
+        [4961, 4968], [5741, 5742], [5867, 5869], [5941, 5942],
+        [6100, 6102], [6106, 6106], [6146, 6149], [6152, 6153],
+        [6468, 6469], [6824, 6827], [7002, 7003], [7005, 7007],
+        [7227, 7231], [7294, 7295], [8252, 8253], [8263, 8265],
+        [11822, 11822], [11836, 11836], [11841, 11841], [12289, 12290],
+        [42238, 42239], [42509, 42511], [42739, 42743], [43126, 43127],
+        [43214, 43215], [43311, 43311], [43463, 43465], [43613, 43615],
+        [43743, 43743], [43760, 43761], [44011, 44011], [65104, 65106],
+        [65108, 65111], [65281, 65281], [65292, 65292], [65294, 65294],
+        [65306, 65307], [65311, 65311], [65377, 65377], [65380, 65380],
+        [66463, 66463], [66512, 66512], [67671, 67671], [67871, 67871],
+        [68182, 68183], [68336, 68341], [68410, 68415], [68505, 68508],
+        [69703, 69709], [69822, 69825], [69953, 69955], [70085, 70086],
+        [70093, 70093], [70200, 70204], [71106, 71109], [71113, 71113],
+        [71233, 71234], [74864, 74868], [92782, 92783], [92917, 92917],
+        [92983, 92985], [92996, 92996], [113823, 113823]**/
+        const UnicodeSet codepoint_set 
+            {{{Empty, 1}, {Mixed, 1}, {Empty, 25}, {Mixed, 2}, {Empty, 15},
+              {Mixed, 1}, {Empty, 1}, {Mixed, 1}, {Empty, 1}, {Mixed, 1},
+              {Empty, 5}, {Mixed, 1}, {Empty, 1}, {Mixed, 1}, {Empty, 6},
+              {Mixed, 1}, {Empty, 1}, {Mixed, 2}, {Empty, 8}, {Mixed, 1},
+              {Empty, 38}, {Mixed, 1}, {Empty, 5}, {Mixed, 1}, {Empty, 9},
+              {Mixed, 1}, {Empty, 24}, {Mixed, 1}, {Empty, 23}, {Mixed, 1},
+              {Empty, 3}, {Mixed, 1}, {Empty, 1}, {Mixed, 1}, {Empty, 4},
+              {Mixed, 1}, {Empty, 1}, {Mixed, 1}, {Empty, 9}, {Mixed, 1},
+              {Empty, 10}, {Mixed, 1}, {Empty, 4}, {Mixed, 1}, {Empty, 6},
+              {Mixed, 1}, {Empty, 1}, {Mixed, 1}, {Empty, 29}, {Mixed, 2},
+              {Empty, 110}, {Mixed, 2}, {Empty, 13}, {Mixed, 1},
+              {Empty, 934}, {Mixed, 1}, {Empty, 8}, {Mixed, 1}, {Empty, 6},
+              {Mixed, 1}, {Empty, 11}, {Mixed, 1}, {Empty, 2}, {Mixed, 1},
+              {Empty, 2}, {Mixed, 1}, {Empty, 4}, {Mixed, 1}, {Empty, 3},
+              {Mixed, 1}, {Empty, 3}, {Mixed, 2}, {Empty, 7}, {Mixed, 1},
+              {Empty, 658}, {Mixed, 1}, {Empty, 5}, {Mixed, 1}, {Empty, 2},
+              {Mixed, 1}, {Empty, 32}, {Mixed, 1}, {Empty, 1}, {Mixed, 1},
+              {Empty, 35}, {Mixed, 1}, {Empty, 5}, {Mixed, 1}, {Empty, 9},
+              {Mixed, 1}, {Empty, 4}, {Mixed, 1}, {Empty, 1}, {Mixed, 1},
+              {Empty, 2}, {Mixed, 1}, {Empty, 37}, {Mixed, 1}, {Empty, 2},
+              {Mixed, 2}, {Empty, 3}, {Mixed, 1}, {Empty, 3}, {Mixed, 1},
+              {Empty, 2}, {Mixed, 1}, {Empty, 28}, {Mixed, 1}, {Empty, 3},
+              {Mixed, 1}, {Empty, 112}, {Mixed, 1}, {Empty, 559},
+              {Mixed, 1}, {Empty, 3}, {Mixed, 1}, {Empty, 1}, {Mixed, 2},
+              {Empty, 649}, {Mixed, 1}, {Empty, 31259}},
+             {0x8c005002, 0x40000000, 0x00000080, 0x00000200, 0x00000008,
+              0x88001000, 0x00100000, 0x000017ff, 0x03000000, 0x7fff0000,
+              0x40000000, 0x00000030, 0x0c000000, 0x0007e100, 0x00000c00,
+              0x000001fe, 0x00006000, 0x00003800, 0x00600000, 0x04700000,
+              0x0000033c, 0x00000030, 0x00000f00, 0xec000000, 0xf8000000,
+              0xc0000000, 0x30000000, 0x00000380, 0x10004000, 0x00000002,
+              0x00000006, 0xc0000000, 0x0000e000, 0x00f80000, 0x00c00000,
+              0x0000c000, 0x00008000, 0x00000380, 0xe0000000, 0x80000000,
+              0x00030000, 0x00000800, 0x00f70000, 0x8c005002, 0x00000012,
+              0x80000000, 0x00010000, 0x00800000, 0x80000000, 0x00c00000,
+              0x003f0000, 0xfc000000, 0x1e000000, 0x00003f80, 0xc0000000,
+              0x00000003, 0x0000000e, 0x00002060, 0x1f000000, 0x0000023c,
+              0x00000006, 0x001f0000, 0x0000c000, 0x00200000, 0x03800000,
+              0x00000010, 0x80000000}};
+        static BinaryPropertyObject property_object{Term, codepoint_set};
+    }
+    namespace UIDEO_ns {
+        /** Code Point Ranges for UIdeo
+        [13312, 19893], [19968, 40908], [64014, 64015], [64017, 64017],
+        [64019, 64020], [64031, 64031], [64033, 64033], [64035, 64036],
+        [64039, 64041], [131072, 173782], [173824, 177972],
+        [177984, 178205]**/
+        const UnicodeSet codepoint_set 
+            {{{Empty, 416}, {Full, 205}, {Mixed, 1}, {Empty, 2},
+              {Full, 654}, {Mixed, 1}, {Empty, 721}, {Mixed, 2},
+              {Empty, 2094}, {Full, 1334}, {Mixed, 1}, {Empty, 1},
+              {Full, 129}, {Mixed, 1}, {Full, 6}, {Mixed, 1},
+              {Empty, 29247}},
+             {0x003fffff, 0x00001fff, 0x801ac000, 0x0000039a, 0x007fffff,
+              0x001fffff, 0x3fffffff}};
+        static BinaryPropertyObject property_object{UIdeo, codepoint_set};
+    }
+    namespace VS_ns {
+        /** Code Point Ranges for VS
+        [6155, 6157], [65024, 65039], [917760, 917999]**/
+        const UnicodeSet codepoint_set 
+            {{{Empty, 192}, {Mixed, 1}, {Empty, 1839}, {Mixed, 1},
+              {Empty, 26647}, {Full, 7}, {Mixed, 1}, {Empty, 6128}},
+             {0x00003800, 0x0000ffff, 0x0000ffff}};
+        static BinaryPropertyObject property_object{VS, codepoint_set};
+    }
+    namespace WSPACE_ns {
+        /** Code Point Ranges for WSpace
+        [9, 13], [32, 32], [133, 133], [160, 160], [5760, 5760],
+        [8192, 8202], [8232, 8233], [8239, 8239], [8287, 8287],
+        [12288, 12288]**/
+        const UnicodeSet codepoint_set 
+            {{{Mixed, 2}, {Empty, 2}, {Mixed, 2}, {Empty, 174}, {Mixed, 1},
+              {Empty, 75}, {Mixed, 3}, {Empty, 125}, {Mixed, 1},
+              {Empty, 34431}},
+             {0x00003e00, 0x00000001, 0x00000020, 0x00000001, 0x00000001,
+              0x000007ff, 0x00008300, 0x80000000, 0x00000001}};
+        static BinaryPropertyObject property_object{WSpace, codepoint_set};
+    }
 }
 
 

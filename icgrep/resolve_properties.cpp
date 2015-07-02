@@ -75,13 +75,12 @@ void resolveProperties(RE * re) {
         if (name->getType() == Name::Type::UnicodeProperty) {
             const std::string prop = canonicalize_value_name(name->getNamespace());
             const std::string value = canonicalize_value_name(name->getName());
-            property_t theprop;
             if (prop.length() != 0) {
                 auto propit = alias_map.find(prop);
                 if (propit == alias_map.end()) {
                     throw UnicodePropertyExpressionError("Expected a property name, but '" + name->getNamespace() + "' found instead");
                 }
-                theprop = propit->second;
+                auto theprop = propit->second;
                 if (theprop == gc) {
                     // General Category
                     int valcode = GetPropertyValueEnumCode(gc, value);
@@ -101,7 +100,7 @@ void resolveProperties(RE * re) {
                 else if (theprop == scx) {
                     // Script extension property identified
                     int valcode = GetPropertyValueEnumCode(sc, value);
-                    if (valcode >= 0) {
+                    if (valcode < 0) {
                         throw UnicodePropertyExpressionError("Erroneous property value for script_extension property");
                     }
                     name->setName("__get_scx_" + SC_ns::enum_names[valcode]);
@@ -109,12 +108,12 @@ void resolveProperties(RE * re) {
                 else if (theprop == blk) {
                     // Block property identified
                     int valcode = GetPropertyValueEnumCode(blk, value);
-                    if (valcode >= 0) {
+                    if (valcode < 0) {
                          throw UnicodePropertyExpressionError("Erroneous property value for block property");
                     }
                     name->setName("__get_blk_" + BLK_ns::enum_names[valcode]);
                 }
-                else if (property_object_table[theprop]->the_kind == PropertyObject::ClassTypeId::BinaryProperty){
+                else if (isa<BinaryPropertyObject>(property_object_table[theprop])){
                     auto valit = Binary_ns::aliases_only_map.find(value);
                     if (valit == Binary_ns::aliases_only_map.end()) {
                         throw UnicodePropertyExpressionError("Erroneous property value for binary property " + property_full_name[theprop]);
@@ -137,21 +136,19 @@ void resolveProperties(RE * re) {
                 // No namespace (property) name.   Try as a general category.
                 int valcode = GetPropertyValueEnumCode(gc, value);
                 if (valcode >= 0) {
-                    theprop = gc;
                     name->setName("__get_gc_" + GC_ns::enum_names[valcode]);
                     return;
                 }
                 valcode = GetPropertyValueEnumCode(sc, value);
                 if (valcode >= 0) {
-                    theprop = sc;
                     name->setName("__get_sc_" + SC_ns::enum_names[valcode]);
                     return;
                 }
                 // Try as a binary property.
                 auto propit = alias_map.find(value);
                 if (propit != alias_map.end()) {
-                    theprop = propit->second;
-                    if (property_object_table[theprop]->the_kind == PropertyObject::ClassTypeId::BinaryProperty) {
+                    auto theprop = propit->second;
+                    if (isa<BinaryPropertyObject>(property_object_table[theprop])) {
                         name->setName("__get_" + lowercase(property_enum_name[theprop]) + "_Y");
                         return;
                     }
@@ -251,14 +248,13 @@ UnicodeSet resolveUnicodeSet(Name * const name) {
     if (name->getType() == Name::Type::UnicodeProperty) {
         std::string prop = name->getNamespace();
         std::string value = canonicalize_value_name(name->getName());
-        property_t theprop;
         if (prop.length() > 0) {
             prop = canonicalize_value_name(prop);
             auto propit = alias_map.find(prop);
             if (propit == alias_map.end()) {
                 throw UnicodePropertyExpressionError("Expected a property name, but '" + name->getNamespace() + "' found instead");
             }
-            theprop = propit->second;
+            auto theprop = propit->second;
             if (theprop == gc) {
                 // General Category
                 return cast<EnumeratedPropertyObject>(property_object_table[gc])->GetCodepointSet(value);
@@ -269,19 +265,19 @@ UnicodeSet resolveUnicodeSet(Name * const name) {
             }
             else if (theprop == scx) {
                 // Script extension property identified
-                return cast<EnumeratedPropertyObject>(property_object_table[sc])->GetCodepointSet(value);
+                return cast<EnumeratedPropertyObject>(property_object_table[scx])->GetCodepointSet(value);
             }
             else if (theprop == blk) {
                 // Block property identified
                 return cast<EnumeratedPropertyObject>(property_object_table[blk])->GetCodepointSet(value);
             }
-            else if (property_object_table[theprop]->the_kind == PropertyObject::ClassTypeId::BinaryProperty){
+            else if (BinaryPropertyObject * p = dyn_cast<BinaryPropertyObject>(property_object_table[theprop])){
                 auto valit = Binary_ns::aliases_only_map.find(value);
                 if (valit == Binary_ns::aliases_only_map.end()) {
                     throw UnicodePropertyExpressionError("Erroneous property value for binary property " + property_full_name[theprop]);
                 }
-                return cast<BinaryPropertyObject>(property_object_table[theprop])->GetCodepointSet(value);
-            }
+                return p->GetCodepointSet(value);
+            }           
             throw UnicodePropertyExpressionError("Property " + property_full_name[theprop] + " recognized but not supported in icgrep 1.0");
         }
         else {
@@ -290,16 +286,16 @@ UnicodeSet resolveUnicodeSet(Name * const name) {
             if (valcode >= 0) {
                 return cast<EnumeratedPropertyObject>(property_object_table[gc])->GetCodepointSet(valcode);
             }
-            valcode = cast<EnumeratedPropertyObject> (property_object_table[sc])->GetPropertyValueEnumCode(value);
+            valcode = GetPropertyValueEnumCode(sc, value);
             if (valcode >= 0) {
                 return cast<EnumeratedPropertyObject>(property_object_table[sc])->GetCodepointSet(valcode);
             }
             // Try as a binary property.
             auto propit = alias_map.find(value);
             if (propit != alias_map.end()) {
-                theprop = propit->second;
-                if (property_object_table[theprop]->the_kind == PropertyObject::ClassTypeId::BinaryProperty) {
-                    return cast<BinaryPropertyObject>(property_object_table[theprop])->GetCodepointSet(valcode);
+                auto theprop = propit->second;
+                if (BinaryPropertyObject * p = dyn_cast<BinaryPropertyObject>(property_object_table[theprop])) {
+                    return p->GetCodepointSet(Binary_ns::Y);
                 }
                 else {
                     throw UnicodePropertyExpressionError("Error: property " + property_full_name[theprop] + " specified without a value");

@@ -61,7 +61,7 @@ protected:
 
 private:
     cc::CC_Compiler &       mCharacterClassCompiler;
-    CC * const              mSuffix;
+    PabloAST *              mSuffixVar;
 };
 
 }
