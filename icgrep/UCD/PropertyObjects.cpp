@@ -6,6 +6,7 @@
  */
 
 #include "PropertyObjects.h"
+#include "PropertyObjectTable.h"
 #include <sstream>
 #include <algorithm>
 
@@ -63,6 +64,24 @@ int EnumeratedPropertyObject::GetPropertyValueEnumCode(const std::string & value
     if (valit == property_value_aliases.end())
         return -1;
     return valit->second;
+}
+
+const UnicodeSet & ExtensionPropertyObject::GetCodepointSet(const std::string & value_spec) {
+    int property_enum_val = GetPropertyValueEnumCode(value_spec);
+    if (property_enum_val == -1) {
+        throw std::runtime_error("Extension Property " + UCD::property_full_name[the_property] +  ": unknown value: " + value_spec);
+    }
+    return GetCodepointSet(property_enum_val);
+}
+
+const UnicodeSet & ExtensionPropertyObject::GetCodepointSet(const int property_enum_val) const {
+    assert (property_enum_val >= 0);
+    return *(property_value_sets[property_enum_val]);
+}
+
+int ExtensionPropertyObject::GetPropertyValueEnumCode(const std::string & value_spec) {
+    int c = property_object_table[base_property]->GetPropertyValueEnumCode(value_spec);
+    return c;
 }
 
 UnicodeSet BinaryPropertyObject::GetCodepointSet(const std::string & value_spec) const {

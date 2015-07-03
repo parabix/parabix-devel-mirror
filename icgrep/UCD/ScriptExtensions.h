@@ -1330,11 +1330,9 @@ namespace UCD {
               0xffe00000, 0x0000f000, 0xfc00ff00, 0x0000ff00, 0xffffc000,
               0xff800000, 0xffe00000, 0xc0000000, 0xc0000000, 0xfffffffd,
               0xffff0000}};
-        static EnumeratedPropertyObject property_object
+        static ExtensionPropertyObject property_object
        {scx,
-        SCX_ns::enum_names,
-        SCX_ns::value_names,
-        SCX_ns::aliases_only_map,
+        UCD::sc,
        {&aghb_Ext, &arab_Ext, &armi_Ext, &armn_Ext, &avst_Ext, &bali_Ext,
         &bamu_Ext, &bass_Ext, &batk_Ext, &beng_Ext, &bopo_Ext, &brah_Ext,
         &brai_Ext, &bugi_Ext, &buhd_Ext, &cakm_Ext, &cans_Ext, &cari_Ext,

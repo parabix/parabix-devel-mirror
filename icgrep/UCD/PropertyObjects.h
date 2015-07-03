@@ -21,7 +21,7 @@ namespace UCD {
 	class PropertyObject {
 	public:
         enum class ClassTypeId : unsigned {
-            NumericProperty, CodepointProperty, StringProperty, MiscellaneousProperty, EnumeratedProperty, CatalogProperty, BinaryProperty,  UnsupportedProperty
+            NumericProperty, CodepointProperty, StringProperty, MiscellaneousProperty, EnumeratedProperty, ExtensionProperty, CatalogProperty, BinaryProperty,  UnsupportedProperty
         };
         inline ClassTypeId getClassTypeId() const {
             return the_kind;
@@ -46,17 +46,17 @@ namespace UCD {
         UnicodeSet GetCodepointSet(const int);
 	};
 	
-	class EnumeratedPropertyObject : public PropertyObject {
-	public:
+        class EnumeratedPropertyObject : public PropertyObject {
+        public:
         static inline bool classof(const PropertyObject * p) {
             return p->getClassTypeId() == ClassTypeId::EnumeratedProperty;
         }
         static inline bool classof(const void *) {
             return false;
         }
-		
+                
 
-		EnumeratedPropertyObject(UCD::property_t p, 
+                EnumeratedPropertyObject(UCD::property_t p, 
                                  const std::vector<std::string> & enum_names,
                                  const std::vector<std::string> & names,
                                  std::unordered_map<std::string, int> & aliases,
@@ -74,15 +74,44 @@ namespace UCD {
         virtual int GetPropertyValueEnumCode(const std::string & value_spec);
         const UnicodeSet & GetCodepointSet(const std::string & value_spec);
         const UnicodeSet & GetCodepointSet(const int property_enum_val) const;
-		
-	private:
+                
+        private:
         const std::vector<std::string> & property_value_enum_names;  // never changes
         const std::vector<std::string> & property_value_full_names;  // never changes
         std::unordered_map<std::string, int> & property_value_aliases;
         bool uninitialized; // full names must be added dynamically.
         const std::vector<const UnicodeSet *> property_value_sets;
-	};
-	
+        };
+        
+        class ExtensionPropertyObject : public PropertyObject {
+        public:
+        static inline bool classof(const PropertyObject * p) {
+            return p->getClassTypeId() == ClassTypeId::ExtensionProperty;
+        }
+        static inline bool classof(const void *) {
+            return false;
+        }
+                
+
+                ExtensionPropertyObject(UCD::property_t p, 
+                                 UCD::property_t base,
+                                 std::vector<const UnicodeSet *> && sets)
+        : PropertyObject(p, ClassTypeId::ExtensionProperty)
+        , base_property(base)
+        , property_value_sets(sets) {
+
+
+        }
+
+        virtual int GetPropertyValueEnumCode(const std::string & value_spec);
+        const UnicodeSet & GetCodepointSet(const std::string & value_spec);
+        const UnicodeSet & GetCodepointSet(const int property_enum_val) const;
+                
+        private:
+        const property_t base_property;
+        const std::vector<const UnicodeSet *> property_value_sets;
+        };
+        
 	class BinaryPropertyObject : public PropertyObject {
 	public:
         static inline bool classof(const PropertyObject * p) {
