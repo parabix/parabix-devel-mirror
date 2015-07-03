@@ -70,7 +70,7 @@ namespace UCD {
     &GC_ns::property_object,
     new UnsupportedPropertyObject(GCB, PropertyObject::ClassTypeId::EnumeratedProperty),
     &HST_ns::property_object,
-    new UnsupportedPropertyObject(InMC, PropertyObject::ClassTypeId::EnumeratedProperty),
+    new UnsupportedPropertyObject(InPC, PropertyObject::ClassTypeId::EnumeratedProperty),
     new UnsupportedPropertyObject(InSC, PropertyObject::ClassTypeId::EnumeratedProperty),
     new UnsupportedPropertyObject(jg, PropertyObject::ClassTypeId::EnumeratedProperty),
     new UnsupportedPropertyObject(jt, PropertyObject::ClassTypeId::EnumeratedProperty),

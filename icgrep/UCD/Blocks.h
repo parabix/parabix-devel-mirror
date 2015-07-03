@@ -19,6 +19,11 @@ namespace UCD {
     const UnicodeSet aegean_numbers_Set 
         {{{Empty, 2056}, {Full, 2}, {Empty, 32758}},
          {}};
+    /** Code Point Ranges for Ahom
+    [71424, 71487]**/
+    const UnicodeSet ahom_Set 
+        {{{Empty, 2232}, {Full, 2}, {Empty, 32582}},
+         {}};
     /** Code Point Ranges for Alchemical
     [128768, 128895]**/
     const UnicodeSet alchemical_Set 
@@ -29,6 +34,11 @@ namespace UCD {
     const UnicodeSet alphabetic_pf_Set 
         {{{Empty, 2008}, {Full, 2}, {Mixed, 1}, {Empty, 32805}},
          {0x0000ffff}};
+    /** Code Point Ranges for Anatolian_Hieroglyphs
+    [82944, 83583]**/
+    const UnicodeSet anatolian_hieroglyphs_Set 
+        {{{Empty, 2592}, {Full, 20}, {Empty, 32204}},
+         {}};
     /** Code Point Ranges for Ancient_Greek_Music
     [119296, 119375]**/
     const UnicodeSet ancient_greek_music_Set 
@@ -194,6 +204,11 @@ namespace UCD {
     const UnicodeSet cherokee_Set 
         {{{Empty, 157}, {Full, 3}, {Empty, 34656}},
          {}};
+    /** Code Point Ranges for Cherokee_Sup
+    [43888, 43967]**/
+    const UnicodeSet cherokee_sup_Set 
+        {{{Empty, 1371}, {Mixed, 1}, {Full, 2}, {Empty, 33442}},
+         {0xffff0000}};
     /** Code Point Ranges for CJK
     [19968, 40959]**/
     const UnicodeSet cjk_Set 
@@ -239,6 +254,11 @@ namespace UCD {
     const UnicodeSet cjk_ext_d_Set 
         {{{Empty, 5562}, {Full, 7}, {Empty, 29247}},
          {}};
+    /** Code Point Ranges for CJK_Ext_E
+    [178208, 183983]**/
+    const UnicodeSet cjk_ext_e_Set 
+        {{{Empty, 5569}, {Full, 180}, {Mixed, 1}, {Empty, 29066}},
+         {0x0000ffff}};
     /** Code Point Ranges for CJK_Radicals_Sup
     [11904, 12031]**/
     const UnicodeSet cjk_radicals_sup_Set 
@@ -369,6 +389,11 @@ namespace UCD {
     const UnicodeSet duployan_Set 
         {{{Empty, 3552}, {Full, 5}, {Empty, 31259}},
          {}};
+    /** Code Point Ranges for Early_Dynastic_Cuneiform
+    [74880, 75087]**/
+    const UnicodeSet early_dynastic_cuneiform_Set 
+        {{{Empty, 2340}, {Full, 6}, {Mixed, 1}, {Empty, 32469}},
+         {0x0000ffff}};
     /** Code Point Ranges for Egyptian_Hieroglyphs
     [77824, 78895]**/
     const UnicodeSet egyptian_hieroglyphs_Set 
@@ -498,6 +523,11 @@ namespace UCD {
     [5920, 5951]**/
     const UnicodeSet hanunoo_Set 
         {{{Empty, 185}, {Full, 1}, {Empty, 34630}},
+         {}};
+    /** Code Point Ranges for Hatran
+    [67808, 67839]**/
+    const UnicodeSet hatran_Set 
+        {{{Empty, 2119}, {Full, 1}, {Empty, 32696}},
          {}};
     /** Code Point Ranges for Hebrew
     [1424, 1535]**/
@@ -844,6 +874,11 @@ namespace UCD {
     const UnicodeSet mro_Set 
         {{{Empty, 2898}, {Full, 1}, {Mixed, 1}, {Empty, 31916}},
          {0x0000ffff}};
+    /** Code Point Ranges for Multani
+    [70272, 70319]**/
+    const UnicodeSet multani_Set 
+        {{{Empty, 2196}, {Full, 1}, {Mixed, 1}, {Empty, 32618}},
+         {0x0000ffff}};
     /** Code Point Ranges for Music
     [119040, 119295]**/
     const UnicodeSet music_Set 
@@ -870,41 +905,43 @@ namespace UCD {
         {{{Empty, 2116}, {Full, 1}, {Mixed, 1}, {Empty, 32698}},
          {0x0000ffff}};
     /** Code Point Ranges for NB
-    [2144, 2207], [7296, 7359], [12256, 12271], [43888, 43967],
-    [66048, 66175], [66528, 66559], [66736, 66815], [66928, 67071],
-    [67456, 67583], [67760, 67839], [67904, 67967], [68256, 68287],
-    [68528, 68607], [68688, 69215], [69248, 69631], [70224, 70319],
-    [70528, 70783], [70880, 71039], [71264, 71295], [71376, 71839],
-    [71936, 72383], [72448, 73727], [74880, 77823], [78896, 92159],
-    [92784, 92879], [93072, 93951], [94112, 110591], [110848, 113663],
-    [113840, 118783], [119376, 119551], [119680, 119807], [120832, 124927],
-    [125152, 126463], [126720, 126975], [129280, 131071], [173792, 173823],
-    [178208, 194559], [195104, 917503], [917632, 917759], [918000, 983039]**/
+    [2144, 2207], [7296, 7359], [12256, 12271], [66048, 66175],
+    [66528, 66559], [66736, 66815], [66928, 67071], [67456, 67583],
+    [67760, 67807], [67904, 67967], [68256, 68287], [68528, 68607],
+    [68688, 68735], [68864, 69215], [69248, 69631], [70224, 70271],
+    [70528, 70783], [70880, 71039], [71264, 71295], [71376, 71423],
+    [71488, 71839], [71936, 72383], [72448, 73727], [75088, 77823],
+    [78896, 82943], [83584, 92159], [92784, 92879], [93072, 93951],
+    [94112, 110591], [110848, 113663], [113840, 118783], [119376, 119551],
+    [119680, 119807], [121520, 124927], [125152, 126463], [126720, 126975],
+    [129536, 131071], [173792, 173823], [183984, 194559], [195104, 917503],
+    [917632, 917759], [918000, 983039]**/
     const UnicodeSet nb_Set 
         {{{Empty, 67}, {Full, 2}, {Empty, 159}, {Full, 2}, {Empty, 153},
-          {Mixed, 1}, {Empty, 987}, {Mixed, 1}, {Full, 2}, {Empty, 690},
-          {Full, 4}, {Empty, 11}, {Full, 1}, {Empty, 5}, {Mixed, 1},
-          {Full, 2}, {Empty, 3}, {Mixed, 1}, {Full, 4}, {Empty, 12},
-          {Full, 4}, {Empty, 5}, {Mixed, 1}, {Full, 2}, {Empty, 2},
-          {Full, 2}, {Empty, 9}, {Full, 1}, {Empty, 7}, {Mixed, 1},
-          {Full, 2}, {Empty, 2}, {Mixed, 1}, {Full, 16}, {Empty, 1},
-          {Full, 12}, {Empty, 18}, {Mixed, 1}, {Full, 2}, {Mixed, 1},
-          {Empty, 6}, {Full, 8}, {Empty, 3}, {Full, 5}, {Empty, 7},
-          {Full, 1}, {Empty, 2}, {Mixed, 1}, {Full, 14}, {Empty, 3},
-          {Full, 14}, {Empty, 2}, {Full, 40}, {Empty, 36}, {Full, 92},
-          {Empty, 33}, {Mixed, 1}, {Full, 414}, {Empty, 19}, {Mixed, 1},
-          {Full, 2}, {Mixed, 1}, {Empty, 5}, {Mixed, 1}, {Full, 27},
-          {Empty, 5}, {Full, 515}, {Empty, 8}, {Full, 88}, {Empty, 5},
-          {Mixed, 1}, {Full, 154}, {Empty, 18}, {Mixed, 1}, {Full, 5},
-          {Empty, 4}, {Full, 4}, {Empty, 32}, {Full, 128}, {Empty, 7},
-          {Full, 41}, {Empty, 8}, {Full, 8}, {Empty, 72}, {Full, 56},
-          {Empty, 1335}, {Full, 1}, {Empty, 137}, {Full, 511}, {Empty, 17},
+          {Mixed, 1}, {Empty, 1680}, {Full, 4}, {Empty, 11}, {Full, 1},
+          {Empty, 5}, {Mixed, 1}, {Full, 2}, {Empty, 3}, {Mixed, 1},
+          {Full, 4}, {Empty, 12}, {Full, 4}, {Empty, 5}, {Mixed, 1},
+          {Full, 1}, {Empty, 3}, {Full, 2}, {Empty, 9}, {Full, 1},
+          {Empty, 7}, {Mixed, 1}, {Full, 2}, {Empty, 2}, {Mixed, 1},
+          {Full, 1}, {Empty, 4}, {Full, 11}, {Empty, 1}, {Full, 12},
+          {Empty, 18}, {Mixed, 1}, {Full, 1}, {Empty, 8}, {Full, 8},
+          {Empty, 3}, {Full, 5}, {Empty, 7}, {Full, 1}, {Empty, 2},
+          {Mixed, 1}, {Full, 1}, {Empty, 2}, {Full, 11}, {Empty, 3},
+          {Full, 14}, {Empty, 2}, {Full, 40}, {Empty, 42}, {Mixed, 1},
+          {Full, 85}, {Empty, 33}, {Mixed, 1}, {Full, 126}, {Empty, 20},
+          {Full, 268}, {Empty, 19}, {Mixed, 1}, {Full, 2}, {Mixed, 1},
+          {Empty, 5}, {Mixed, 1}, {Full, 27}, {Empty, 5}, {Full, 515},
+          {Empty, 8}, {Full, 88}, {Empty, 5}, {Mixed, 1}, {Full, 154},
+          {Empty, 18}, {Mixed, 1}, {Full, 5}, {Empty, 4}, {Full, 4},
+          {Empty, 53}, {Mixed, 1}, {Full, 106}, {Empty, 7}, {Full, 41},
+          {Empty, 8}, {Full, 8}, {Empty, 80}, {Full, 48}, {Empty, 1335},
+          {Full, 1}, {Empty, 317}, {Mixed, 1}, {Full, 330}, {Empty, 17},
           {Full, 22575}, {Empty, 4}, {Full, 4}, {Empty, 7}, {Mixed, 1},
           {Full, 2032}, {Empty, 4096}},
          {0x0000ffff, 0xffff0000, 0xffff0000, 0xffff0000, 0xffff0000,
-          0xffff0000, 0xffff0000, 0xffff0000, 0x0000ffff, 0xffff0000,
-          0xffff0000, 0xffff0000, 0x0000ffff, 0xffff0000, 0xffff0000,
-          0xffff0000, 0xffff0000}};
+          0xffff0000, 0xffff0000, 0xffff0000, 0xffff0000, 0xffff0000,
+          0xffff0000, 0x0000ffff, 0xffff0000, 0xffff0000, 0xffff0000,
+          0xffff0000, 0xffff0000, 0xffff0000}};
     /** Code Point Ranges for New_Tai_Lue
     [6528, 6623]**/
     const UnicodeSet new_tai_lue_Set 
@@ -935,6 +972,11 @@ namespace UCD {
     const UnicodeSet ol_chiki_Set 
         {{{Empty, 226}, {Mixed, 1}, {Full, 1}, {Empty, 34588}},
          {0xffff0000}};
+    /** Code Point Ranges for Old_Hungarian
+    [68736, 68863]**/
+    const UnicodeSet old_hungarian_Set 
+        {{{Empty, 2148}, {Full, 4}, {Empty, 32664}},
+         {}};
     /** Code Point Ranges for Old_Italic
     [66304, 66351]**/
     const UnicodeSet old_italic_Set 
@@ -1155,11 +1197,21 @@ namespace UCD {
     const UnicodeSet sup_punctuation_Set 
         {{{Empty, 368}, {Full, 4}, {Empty, 34444}},
          {}};
+    /** Code Point Ranges for Sup_Symbols_And_Pictographs
+    [129280, 129535]**/
+    const UnicodeSet sup_symbols_and_pictographs_Set 
+        {{{Empty, 4040}, {Full, 8}, {Empty, 30768}},
+         {}};
     /** Code Point Ranges for Super_And_Sub
     [8304, 8351]**/
     const UnicodeSet super_and_sub_Set 
         {{{Empty, 259}, {Mixed, 1}, {Full, 1}, {Empty, 34555}},
          {0xffff0000}};
+    /** Code Point Ranges for Sutton_SignWriting
+    [120832, 121519]**/
+    const UnicodeSet sutton_signwriting_Set 
+        {{{Empty, 3776}, {Full, 21}, {Mixed, 1}, {Empty, 31018}},
+         {0x0000ffff}};
     /** Code Point Ranges for Syloti_Nagri
     [43008, 43055]**/
     const UnicodeSet syloti_nagri_Set 
@@ -1315,19 +1367,20 @@ namespace UCD {
          BLK_ns::enum_names,
          BLK_ns::value_names,
          BLK_ns::aliases_only_map,
-         {&aegean_numbers_Set, &alchemical_Set, &alphabetic_pf_Set,
-        &ancient_greek_music_Set, &ancient_greek_numbers_Set,
-        &ancient_symbols_Set, &arabic_Set, &arabic_ext_a_Set,
-        &arabic_math_Set, &arabic_pf_a_Set, &arabic_pf_b_Set,
-        &arabic_sup_Set, &armenian_Set, &arrows_Set, &ascii_Set,
-        &avestan_Set, &balinese_Set, &bamum_Set, &bamum_sup_Set,
+         {&aegean_numbers_Set, &ahom_Set, &alchemical_Set, &alphabetic_pf_Set,
+        &anatolian_hieroglyphs_Set, &ancient_greek_music_Set,
+        &ancient_greek_numbers_Set, &ancient_symbols_Set, &arabic_Set,
+        &arabic_ext_a_Set, &arabic_math_Set, &arabic_pf_a_Set,
+        &arabic_pf_b_Set, &arabic_sup_Set, &armenian_Set, &arrows_Set,
+        &ascii_Set, &avestan_Set, &balinese_Set, &bamum_Set, &bamum_sup_Set,
         &bassa_vah_Set, &batak_Set, &bengali_Set, &block_elements_Set,
         &bopomofo_Set, &bopomofo_ext_Set, &box_drawing_Set, &brahmi_Set,
         &braille_Set, &buginese_Set, &buhid_Set, &byzantine_music_Set,
         &carian_Set, &caucasian_albanian_Set, &chakma_Set, &cham_Set,
-        &cherokee_Set, &cjk_Set, &cjk_compat_Set, &cjk_compat_forms_Set,
-        &cjk_compat_ideographs_Set, &cjk_compat_ideographs_sup_Set,
-        &cjk_ext_a_Set, &cjk_ext_b_Set, &cjk_ext_c_Set, &cjk_ext_d_Set,
+        &cherokee_Set, &cherokee_sup_Set, &cjk_Set, &cjk_compat_Set,
+        &cjk_compat_forms_Set, &cjk_compat_ideographs_Set,
+        &cjk_compat_ideographs_sup_Set, &cjk_ext_a_Set, &cjk_ext_b_Set,
+        &cjk_ext_c_Set, &cjk_ext_d_Set, &cjk_ext_e_Set,
         &cjk_radicals_sup_Set, &cjk_strokes_Set, &cjk_symbols_Set,
         &compat_jamo_Set, &control_pictures_Set, &coptic_Set,
         &coptic_epact_numbers_Set, &counting_rod_Set, &cuneiform_Set,
@@ -1337,15 +1390,16 @@ namespace UCD {
         &devanagari_Set, &devanagari_ext_Set, &diacriticals_Set,
         &diacriticals_ext_Set, &diacriticals_for_symbols_Set,
         &diacriticals_sup_Set, &dingbats_Set, &domino_Set, &duployan_Set,
-        &egyptian_hieroglyphs_Set, &elbasan_Set, &emoticons_Set,
-        &enclosed_alphanum_Set, &enclosed_alphanum_sup_Set,
-        &enclosed_cjk_Set, &enclosed_ideographic_sup_Set, &ethiopic_Set,
-        &ethiopic_ext_Set, &ethiopic_ext_a_Set, &ethiopic_sup_Set,
-        &geometric_shapes_Set, &geometric_shapes_ext_Set, &georgian_Set,
-        &georgian_sup_Set, &glagolitic_Set, &gothic_Set, &grantha_Set,
-        &greek_Set, &greek_ext_Set, &gujarati_Set, &gurmukhi_Set,
+        &early_dynastic_cuneiform_Set, &egyptian_hieroglyphs_Set,
+        &elbasan_Set, &emoticons_Set, &enclosed_alphanum_Set,
+        &enclosed_alphanum_sup_Set, &enclosed_cjk_Set,
+        &enclosed_ideographic_sup_Set, &ethiopic_Set, &ethiopic_ext_Set,
+        &ethiopic_ext_a_Set, &ethiopic_sup_Set, &geometric_shapes_Set,
+        &geometric_shapes_ext_Set, &georgian_Set, &georgian_sup_Set,
+        &glagolitic_Set, &gothic_Set, &grantha_Set, &greek_Set,
+        &greek_ext_Set, &gujarati_Set, &gurmukhi_Set,
         &half_and_full_forms_Set, &half_marks_Set, &hangul_Set,
-        &hanunoo_Set, &hebrew_Set, &high_pu_surrogates_Set,
+        &hanunoo_Set, &hatran_Set, &hebrew_Set, &high_pu_surrogates_Set,
         &high_surrogates_Set, &hiragana_Set, &idc_Set,
         &imperial_aramaic_Set, &indic_number_forms_Set,
         &inscriptional_pahlavi_Set, &inscriptional_parthian_Set,
@@ -1366,23 +1420,25 @@ namespace UCD {
         &misc_math_symbols_a_Set, &misc_math_symbols_b_Set,
         &misc_pictographs_Set, &misc_symbols_Set, &misc_technical_Set,
         &modi_Set, &modifier_letters_Set, &modifier_tone_letters_Set,
-        &mongolian_Set, &mro_Set, &music_Set, &myanmar_Set,
+        &mongolian_Set, &mro_Set, &multani_Set, &music_Set, &myanmar_Set,
         &myanmar_ext_a_Set, &myanmar_ext_b_Set, &nabataean_Set, &nb_Set,
         &new_tai_lue_Set, &nko_Set, &number_forms_Set, &ocr_Set, &ogham_Set,
-        &ol_chiki_Set, &old_italic_Set, &old_north_arabian_Set,
-        &old_permic_Set, &old_persian_Set, &old_south_arabian_Set,
-        &old_turkic_Set, &oriya_Set, &ornamental_dingbats_Set, &osmanya_Set,
-        &pahawh_hmong_Set, &palmyrene_Set, &pau_cin_hau_Set, &phags_pa_Set,
-        &phaistos_Set, &phoenician_Set, &phonetic_ext_Set,
-        &phonetic_ext_sup_Set, &playing_cards_Set, &psalter_pahlavi_Set,
-        &pua_Set, &punctuation_Set, &rejang_Set, &rumi_Set, &runic_Set,
+        &ol_chiki_Set, &old_hungarian_Set, &old_italic_Set,
+        &old_north_arabian_Set, &old_permic_Set, &old_persian_Set,
+        &old_south_arabian_Set, &old_turkic_Set, &oriya_Set,
+        &ornamental_dingbats_Set, &osmanya_Set, &pahawh_hmong_Set,
+        &palmyrene_Set, &pau_cin_hau_Set, &phags_pa_Set, &phaistos_Set,
+        &phoenician_Set, &phonetic_ext_Set, &phonetic_ext_sup_Set,
+        &playing_cards_Set, &psalter_pahlavi_Set, &pua_Set,
+        &punctuation_Set, &rejang_Set, &rumi_Set, &runic_Set,
         &samaritan_Set, &saurashtra_Set, &sharada_Set, &shavian_Set,
         &shorthand_format_controls_Set, &siddham_Set, &sinhala_Set,
         &sinhala_archaic_numbers_Set, &small_forms_Set, &sora_sompeng_Set,
         &specials_Set, &sundanese_Set, &sundanese_sup_Set,
         &sup_arrows_a_Set, &sup_arrows_b_Set, &sup_arrows_c_Set,
         &sup_math_operators_Set, &sup_pua_a_Set, &sup_pua_b_Set,
-        &sup_punctuation_Set, &super_and_sub_Set, &syloti_nagri_Set,
+        &sup_punctuation_Set, &sup_symbols_and_pictographs_Set,
+        &super_and_sub_Set, &sutton_signwriting_Set, &syloti_nagri_Set,
         &syriac_Set, &tagalog_Set, &tagbanwa_Set, &tags_Set, &tai_le_Set,
         &tai_tham_Set, &tai_viet_Set, &tai_xuan_jing_Set, &takri_Set,
         &tamil_Set, &telugu_Set, &thaana_Set, &thai_Set, &tibetan_Set,
