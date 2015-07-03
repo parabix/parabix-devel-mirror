@@ -265,7 +265,7 @@ UnicodeSet resolveUnicodeSet(Name * const name) {
             }
             else if (theprop == scx) {
                 // Script extension property identified
-                return cast<EnumeratedPropertyObject>(property_object_table[scx])->GetCodepointSet(value);
+                return cast<ExtensionPropertyObject>(property_object_table[scx])->GetCodepointSet(value);
             }
             else if (theprop == blk) {
                 // Block property identified
