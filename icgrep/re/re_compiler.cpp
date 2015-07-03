@@ -37,14 +37,14 @@ static cl::opt<bool> DisableUnicodeMatchStar("disable-unicode-matchstar", cl::in
                      cl::desc("disable Unicode MatchStar optimization"), cl::cat(fREcompilationOptions));
 static cl::opt<bool> DisableUnicodeLineBreak("disable-unicode-linebreak", cl::init(false),
                      cl::desc("disable Unicode line breaks - use LF only"), cl::cat(fREcompilationOptions));
-static cl::opt<bool> DisablePregeneratedUnicode("disable-pregenerated-unicode", cl::init(false),
+static cl::opt<bool> DisablePregeneratedUnicode("disable-pregenerated-unicode", cl::init(true),
                      cl::desc("disable use of pregenerated Unicode character class sets"), cl::cat(fREcompilationOptions));
 
 using namespace pablo;
 
 namespace re {
 
-bool IsPregeneratedUnicodeEnabled() {
+bool UsePregeneratedUnicode() {
     return !DisablePregeneratedUnicode;
 }
 
@@ -270,7 +270,7 @@ PabloAST * RE_Compiler::getNamedCharacterClassStream(Name * name, PabloBuilder &
         var = markerVar(m);
     }
     else if (name->getType() == Name::Type::UnicodeProperty) {
-        if (IsPregeneratedUnicodeEnabled()) {
+        if (UsePregeneratedUnicode()) {
             var = mPB.createCall(name->getName());
         }
         else {

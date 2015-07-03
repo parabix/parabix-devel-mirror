@@ -19,9 +19,14 @@ using namespace boost;
 using namespace boost::container;
 using namespace boost::numeric::ublas;
 
-// #define PRINT_DEBUG_OUTPUT
+#define PRINT_DEBUG_OUTPUT
 
-#if !defined(NDEBUG) || defined(PRINT_DEBUG_OUTPUT)
+#if !defined(NDEBUG) && !defined(PRINT_DEBUG_OUTPUT)
+#define PRINT_DEBUG_OUTPUT
+#endif
+
+#ifdef PRINT_DEBUG_OUTPUT
+
 #include <iostream>
 
 using namespace pablo;
@@ -95,8 +100,8 @@ namespace pablo {
 
 bool AutoMultiplexing::optimize(const std::vector<Var *> & input, PabloBlock & entry) {
 
-    std::random_device rd;
-    const auto seed = rd();
+    // std::random_device rd;
+    const auto seed = 2938639837; // rd();
     RNG rng(seed);
 
     LOG("Seed:                    " << seed);
@@ -115,11 +120,6 @@ bool AutoMultiplexing::optimize(const std::vector<Var *> & input, PabloBlock & e
     RECORD_TIMESTAMP(end_characterize);
 
     LOG("Characterize:            " << (end_characterize - start_characterize));
-
-    RECORD_TIMESTAMP(start_shutdown);
-    am.shutdown();
-    RECORD_TIMESTAMP(end_shutdown);
-    LOG("Shutdown:                " << (end_shutdown - start_shutdown));
 
     RECORD_TIMESTAMP(start_create_multiplex_graph);
     const bool multiplex = am.generateMultiplexSets(rng, 1);
@@ -148,6 +148,11 @@ bool AutoMultiplexing::optimize(const std::vector<Var *> & input, PabloBlock & e
         RECORD_TIMESTAMP(end_topological_sort);
         LOG("TopologicalSort:         " << (end_topological_sort - start_topological_sort));
     }
+
+    RECORD_TIMESTAMP(start_shutdown);
+    am.shutdown();
+    RECORD_TIMESTAMP(end_shutdown);
+    LOG("Shutdown:                " << (end_shutdown - start_shutdown));
 
     LOG_NUMBER_OF_ADVANCES(entry);
 
@@ -400,8 +405,7 @@ inline DdNode * AutoMultiplexing::characterize(Advance * adv, DdNode * input) {
             if ((adv->getOperand(1) == tmp->getOperand(1)) && (notTransitivelyDependant(i, k))) {
                 DdNode * Ii = std::get<1>(mAdvance[i]);
                 DdNode * Ni = std::get<2>(mAdvance[i]);
-                // TODO: test both Cudd_And and Cudd_bddIntersect to see which is faster
-                DdNode * const IiIk = Intersect(Ik, Ii);
+                DdNode * const IiIk = And(Ik, Ii);
                 // Is there any satisfying truth assignment? If not, these streams are mutually exclusive.
                 if (noSatisfyingAssignment(IiIk)) {
                     assert (mCharacterizationMap.count(tmp));
@@ -506,11 +510,6 @@ inline DdNode * AutoMultiplexing::And(DdNode * const x, DdNode * const y) {
     return r;
 }
 
-inline DdNode * AutoMultiplexing::Intersect(DdNode * const x, DdNode * const y) {
-    DdNode * r = Cudd_bddIntersect(mManager, x, y); Cudd_Ref(r);
-    return r;
-}
-
 inline DdNode * AutoMultiplexing::Or(DdNode * const x, DdNode * const y) {
     DdNode * r = Cudd_bddOr(mManager, x, y);
     Cudd_Ref(r);
@@ -538,6 +537,9 @@ inline bool AutoMultiplexing::noSatisfyingAssignment(DdNode * const x) {
 }
 
 inline void AutoMultiplexing::shutdown() {
+    #ifdef PRINT_DEBUG_OUTPUT
+    Cudd_PrintInfo(mManager, stderr);
+    #endif
     Cudd_Quit(mManager);
 }
 
@@ -759,14 +761,6 @@ void AutoMultiplexing::selectMultiplexSets(RNG &) {
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief choose
- ** ------------------------------------------------------------------------------------------------------------- */
-
-inline Statement * choose(PabloAST * x, PabloAST * y, Statement * z) {
-    return isa<Statement>(x) ? cast<Statement>(x) : (isa<Statement>(y) ? cast<Statement>(y) : z);
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
  * @brief applySubsetConstraints
  ** ------------------------------------------------------------------------------------------------------------- */
 void AutoMultiplexing::applySubsetConstraints() {
@@ -847,16 +841,16 @@ void AutoMultiplexing::applySubsetConstraints() {
                     for (auto i : V) {
                         Q.push(std::get<0>(mAdvance[i])->getOperand(0));
                     }                    
+                    pb->setInsertPoint(adv);
                     while (Q.size() > 1) {
                         PabloAST * a1 = Q.front(); Q.pop();
-                        PabloAST * a2 = Q.front(); Q.pop();
-                        pb->setInsertPoint(cast<Statement>(a2));
-                        Q.push(pb->createOr(a1, a2));
+                        PabloAST * a2 = Q.front(); Q.pop();                        
+                        Q.push(pb->createOr(a1, a2, "subset"));
                     }
                     assert (Q.size() == 1);
 
                     PabloAST * const mask = pb->createNot(Q.front()); Q.pop();
-                    adv->setOperand(0, pb->createAnd(adv->getOperand(0), mask, "subset_in"));
+                    adv->setOperand(0, pb->createAnd(adv->getOperand(0), mask, "subset"));
 
                     // Similar to the above, we're going to OR together the result of each advance,
                     // including s. This will restore the advanced variable back to its original state.
@@ -870,11 +864,11 @@ void AutoMultiplexing::applySubsetConstraints() {
                     for (auto i : V) {
                         Q.push(std::get<0>(mAdvance[i]));
                     }
+                    pb->setInsertPoint(adv);
                     while (Q.size() > 1) {
                         PabloAST * a1 = Q.front(); Q.pop();
-                        PabloAST * a2 = Q.front(); Q.pop();
-                        pb->setInsertPoint(choose(a2, a1, adv));
-                        Q.push(pb->createOr(a1, a2));
+                        PabloAST * a2 = Q.front(); Q.pop();                        
+                        Q.push(pb->createOr(a1, a2, "subset"));
                     }
                     assert (Q.size() == 1);
 
@@ -911,7 +905,7 @@ void AutoMultiplexing::multiplexSelectedIndependentSets() const {
     const size_t max_m = log2_plus_one(max_n);
 
     std::vector<MultiplexSetGraph::vertex_descriptor> I(max_n);
-    std::vector<Advance *> V(max_n);
+    std::vector<Advance *> input(max_n);
     std::vector<PabloAST *> muxed(max_m);
     circular_buffer<PabloAST *> Q(max_n);
 
@@ -928,61 +922,38 @@ void AutoMultiplexing::multiplexSelectedIndependentSets() const {
             std::tie(ei, ei_end) = out_edges(s, mMultiplexSetGraph);
             for (unsigned i = 0; i != n; ++ei, ++i) {
                 I[i] = target(*ei, mMultiplexSetGraph);
-                assert (I[i] < mAdvance.size());
             }
             std::sort(I.begin(), I.begin() + n);
 
             for (unsigned i = 0; i != n; ++i) {
-                V[i] = std::get<0>(mAdvance[I[i]]);
+                input[i] = std::get<0>(mAdvance[I[i]]);
             }
 
-            PabloBlock * const block = V[0]->getParent();
-            assert (block);
-
-            // Sanity test to make sure every advance is in the same scope.
-            #ifndef NDEBUG
-            for (unsigned i = 1; i != n; ++i) {
-                assert (I[i - 1] < I[i]);
-                assert (V[i - 1] != V[i]);
-                assert (V[i]->getParent() == block);
-            }
-            #endif
-
-            PabloBuilder pb(*block);
+            PabloBlock * const block = input[0]->getParent();
+            block->setInsertPoint(block->back());
+            PabloBuilder builder(*block);
+            Advance * const adv = input[0];
 
             /// Perform n-to-m Multiplexing
             for (size_t j = 0; j != m; ++j) {
-
-                assert (Q.empty());
 
                 std::ostringstream prefix;
                 prefix << "mux" << n << "to" << m << '_';
                 for (size_t i = 1; i <= n; ++i) {
                     if ((i & (static_cast<size_t>(1) << j)) != 0) {
-                        assert (!Q.full());
-                        PabloAST * tmp = V[i - 1]->getOperand(0); assert (tmp);
-                        // prefix << '_' << V[i - 1]->getName()->to_string();
-                        Q.push_back(tmp);
+                        Q.push_back(input[i - 1]->getOperand(0));
                     }
                 }
 
-                assert (Q.size() >= 1);
-
-                Advance * const adv = V[j];
-                // TODO: figure out a way to determine whether we're creating a duplicate value below.
-                // The expression map findOrCall ought to work conceptually but the functors method
-                // doesn't really work anymore with the current API.
                 while (Q.size() > 1) {
                     PabloAST * a1 = Q.front(); Q.pop_front(); assert (a1);
                     PabloAST * a2 = Q.front(); Q.pop_front(); assert (a2);
-                    assert (!Q.full());
-                    pb.setInsertPoint(choose(a2, a1, adv));
-                    Q.push_back(pb.createOr(a1, a2));
+                    assert (!Q.full());                                        
+                    Q.push_back(builder.createOr(a2, a1, "muxing"));
                 }
-                assert (Q.size() == 1);
 
                 PabloAST * mux = Q.front(); Q.pop_front(); assert (mux);
-                muxed[j] = pb.createAdvance(mux, adv->getOperand(1), prefix.str());
+                muxed[j] = builder.createAdvance(mux, adv->getOperand(1), prefix.str());
             }
 
 
@@ -990,30 +961,24 @@ void AutoMultiplexing::multiplexSelectedIndependentSets() const {
             // Now construct the demuxed values and replaces all the users of the original advances with them.
             for (size_t i = 1; i <= n; ++i) {
 
-                Advance * const adv = V[i - 1];
-
-                pb.setInsertPoint(adv);
-                assert (Q.empty());
                 for (size_t j = 0; j != m; ++j) {
                     if ((i & (static_cast<size_t>(1) << j)) == 0) {
                         Q.push_back(muxed[j]);
                     }
                 }
 
-                assert (Q.size() <= m);
-                PabloAST * neg = nullptr;
                 if (LLVM_LIKELY(Q.size() > 0)) {
                     while (Q.size() > 1) {
                         PabloAST * a1 = Q.front(); Q.pop_front(); assert (a1);
                         PabloAST * a2 = Q.front(); Q.pop_front(); assert (a2);
                         assert (!Q.full());
-                        Q.push_back(pb.createOr(a1, a2));
+                        Q.push_back(builder.createOr(a2, a1, "demuxing"));
                     }
                     assert (Q.size() == 1);
-                    neg = pb.createNot(Q.front()); Q.pop_front(); assert (neg);
+                    PabloAST * neg = Q.front(); Q.pop_front();
+                    Q.push_back(builder.createNot(neg, "demuxing")); assert (neg);
                 }
 
-                assert (Q.empty());
                 for (unsigned j = 0; j != m; ++j) {
                     if ((i & (static_cast<unsigned>(1) << j)) != 0) {
                         assert (!Q.full());
@@ -1021,27 +986,35 @@ void AutoMultiplexing::multiplexSelectedIndependentSets() const {
                     }
                 }
 
-                assert (Q.size() <= m);
-                assert (Q.size() >= 1);
-
                 while (Q.size() > 1) {
                     PabloAST * a1 = Q.front(); Q.pop_front(); assert (a1);
                     PabloAST * a2 = Q.front(); Q.pop_front(); assert (a2);
                     assert (!Q.full());
-                    Q.push_back(pb.createAnd(a1, a2));
+                    Q.push_back(builder.createAnd(a1, a2, "demuxing"));
                 }
 
-                assert (Q.size() == 1);
-
-                PabloAST * demux = Q.front(); Q.pop_front(); assert (demux);
-                if (LLVM_LIKELY(neg != nullptr)) {
-                    demux = pb.createAnd(demux, neg);
-                }
-                V[i - 1]->replaceWith(demux, true, true);
+                PabloAST * demuxed = Q.front(); Q.pop_front(); assert (demux);
+                input[i - 1]->replaceWith(demuxed, true, true);
             }
+
+            simplify(muxed, m, builder);
         }
     }
 }
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief simplify
+ ** ------------------------------------------------------------------------------------------------------------- */
+void AutoMultiplexing::simplify(const std::vector<PabloAST *> & variables, const unsigned n, PabloBuilder & builder) const {
+
+
+
+
+
+
+}
+
+
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief topologicalSort

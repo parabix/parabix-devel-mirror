@@ -6,9 +6,7 @@
 #include <queue>
 #include <boost/graph/adjacency_list.hpp>
 #include <boost/graph/adjacency_matrix.hpp>
-#include <boost/graph/edge_list.hpp>
 #include <boost/container/flat_map.hpp>
-#include <boost/container/flat_set.hpp>
 #include <boost/numeric/ublas/matrix.hpp>
 #include <random>
 #include <stdint.h>
@@ -18,6 +16,8 @@ struct DdManager; // forward declare of the CUDD manager
 struct DdNode;
 
 namespace pablo {
+
+class PabloBuilder;
 
 class AutoMultiplexing {
 
@@ -47,6 +47,7 @@ protected:
     void selectMultiplexSets(RNG &);
     void applySubsetConstraints();
     void multiplexSelectedIndependentSets() const;
+    void simplify(const std::vector<PabloAST *> & variables, const unsigned m, PabloBuilder & block) const;
     void topologicalSort(PabloBlock & entry) const;
     inline AutoMultiplexing()
     : mVariables(0)
@@ -58,7 +59,6 @@ private:
     DdNode * One() const;
     bool isZero(DdNode * const x) const;
     DdNode * And(DdNode * const x, DdNode * const y);
-    DdNode * Intersect(DdNode * const x, DdNode * const y);
     DdNode * Or(DdNode * const x, DdNode * const y);
     DdNode * Xor(DdNode * const x, DdNode * const y);
     DdNode * Not(DdNode * x) const;

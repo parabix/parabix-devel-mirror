@@ -60,8 +60,8 @@ static cl::opt<bool> PabloSinkingPass("sinking", cl::init(false),
                                       cl::desc("Moves all instructions into the innermost legal If-scope so that they are only executed when needed."),
                                       cl::cat(cPabloOptimizationsOptions));
 #ifdef ENABLE_MULTIPLEXING
-static cl::opt<bool> PabloMutualExclusionPass("disable-multiplexing", cl::init(true),
-                                      cl::desc("Disable combining Advances whose inputs are mutual exclusive."),
+static cl::opt<bool> EnableMultiplexing("enable-multiplexing", cl::init(false),
+                                      cl::desc("combine Advances whose inputs are mutual exclusive into the fewest number of advances possible (expensive)."),
                                       cl::cat(cPabloOptimizationsOptions));
 #endif
 
@@ -105,7 +105,7 @@ CompiledPabloFunction compile(const Encoding encoding, const std::vector<std::st
         std::cerr << "RemoveNullableSuffix:" << std::endl << Printer_RE::PrintRE(re_ast) << std::endl;
     }
 
-    if (IsPregeneratedUnicodeEnabled()) {
+    if (UsePregeneratedUnicode()) {
         resolveProperties(re_ast);
     }
     
@@ -167,10 +167,8 @@ CompiledPabloFunction compile(const Encoding encoding, const std::vector<std::st
         CodeSinking::optimize(main);
     }
     #ifdef ENABLE_MULTIPLEXING
-    if (PabloMutualExclusionPass) {
-        if (AutoMultiplexing::optimize(basisBits, main) && !DisablePabloCSE) {
-            Simplifier::optimize(main);
-        }
+    if (EnableMultiplexing) {
+        AutoMultiplexing::optimize(basisBits, main);
     }
     #endif
     if (PrintOptimizedREcode) {
@@ -181,7 +179,7 @@ CompiledPabloFunction compile(const Encoding encoding, const std::vector<std::st
     }
 
     PabloCompiler pablo_compiler(basisBits);
-    if (IsPregeneratedUnicodeEnabled()) {
+    if (UsePregeneratedUnicode()) {
         install_property_gc_fn_ptrs(pablo_compiler);
         install_property_sc_fn_ptrs(pablo_compiler);
         install_property_scx_fn_ptrs(pablo_compiler);

@@ -34,7 +34,7 @@ class CC_NameMap;
 
 namespace re {
 
-bool IsPregeneratedUnicodeEnabled();
+bool UsePregeneratedUnicode();
 
 enum MarkerPosition {FinalMatchByte, InitialPostPositionByte, FinalPostPositionByte};
 
