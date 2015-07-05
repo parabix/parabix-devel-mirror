@@ -107,17 +107,17 @@ private:
     void SetOutputValue(Value * marker, const unsigned index);
 
     void genPrintRegister(std::string regName, Value * bitblockValue);
-    void compileBlock(const PabloBlock & blk);
+    void compileBlock(PabloBlock & blk);
     void compileStatement(const Statement * stmt);
     void compileIf(const If * ifStmt);
     void compileWhile(const While * whileStmt);
     Value* compileExpression(const PabloAST * expr);
     Value* genCarryDataLoad(const unsigned index);
     void   genCarryDataStore(Value* carryOut, const unsigned index);
-    Value* genAddWithCarry(Value* e1, Value* e2, unsigned localIndex, const PabloBlock * blk);
-    Value* genAdvanceWithCarry(Value* e1, int shift_amount, unsigned localIndex, const PabloBlock * blk);
-    Value* genUnitAdvanceWithCarry(Value* e1, unsigned localIndex, const PabloBlock * blk);
-    Value* genLongAdvanceWithCarry(Value* e1, int shift_amount, unsigned localIndex, const PabloBlock * blk);
+    Value* genAddWithCarry(Value* e1, Value* e2, unsigned localIndex);
+    Value* genAdvanceWithCarry(Value* e1, int shift_amount, unsigned localIndex);
+    Value* genUnitAdvanceWithCarry(Value* e1, unsigned localIndex);
+    Value* genLongAdvanceWithCarry(Value* e1, int shift_amount, unsigned localIndex);
     Value* genBitBlockAny(Value* test);
     Value* genShiftHighbitToLow(unsigned FieldWidth, Value * op);
     Value* genShiftLeft64(Value* e, const Twine & namehint = "") ;
@@ -152,6 +152,8 @@ private:
     VectorType* const                   mBitBlockType;
     PointerType*                        mBasisBitsInputPtr;
 
+    PabloBlock *                        mPabloBlock;
+    
     Value*                              mCarryDataPtr;
     Value*                              mBlockNo;
     unsigned                            mWhileDepth;

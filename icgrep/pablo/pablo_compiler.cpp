@@ -414,13 +414,13 @@ void PabloCompiler::DeclareCallFunctions() {
     }
 }
 
-void PabloCompiler::compileBlock(const PabloBlock & blk) {
+void PabloCompiler::compileBlock(PabloBlock & blk) {
+    mPabloBlock = & blk;
     for (const Statement * statement : blk) {
         compileStatement(statement);
     }
+    mPabloBlock = blk.getParent();
 }
-
-
 
 
 void PabloCompiler::compileIf(const If * ifStatement) {        
@@ -504,11 +504,52 @@ void PabloCompiler::compileIf(const If * ifStatement) {
         
 }
 
-// If the following preload is turned off, we have incorrect results with the
-// ./icgrep -c '[A-Z]((([a-zA-Z]*a[a-zA-Z]*[ ])*[a-zA-Z]*e[a-zA-Z]*[ ])*[a-zA-Z]*s[a-zA-Z]*[ ])*[.?!]' ../performance/data/howto
-    
-#define PRELOAD_WHILE_CARRIES_AT_TOP_LEVEL 1
 //#define SET_WHILE_CARRY_IN_TO_ZERO_AFTER_FIRST_ITERATION
+
+#define LOAD_WHILE_CARRIES \
+        if (mWhileDepth == 0) { \
+            for (auto i = baseCarryDataIdx; i < baseCarryDataIdx + carryDataSize; ++i) { \
+                mCarryInVector[i] = mBuilder->CreateAlignedLoad(mBuilder->CreateGEP(mCarryDataPtr, mBuilder->getInt64(i)), BLOCK_SIZE/8, false); \
+            } \
+        }
+
+#define INITIALIZE_CARRY_IN_PHIS  \
+        std::vector<PHINode *> carryInPhis(carryDataSize);  \
+        for (unsigned index = 0; index < carryDataSize; ++index) {  \
+            PHINode * phi_in = mBuilder->CreatePHI(mBitBlockType, 2); \
+            phi_in->addIncoming(mCarryInVector[baseCarryDataIdx + index], whileEntryBlock); \
+            carryInPhis[index] = phi_in; \
+        }
+
+#define INITIALIZE_CARRY_OUT_ACCUMULATOR_PHIS \
+        std::vector<PHINode *> carryOutAccumPhis(carryDataSize); \
+        for (unsigned index = 0; index < carryDataSize; ++index) { \
+            PHINode * phi_out = mBuilder->CreatePHI(mBitBlockType, 2); \
+            phi_out->addIncoming(mZeroInitializer, whileEntryBlock); \
+            carryOutAccumPhis[index] = phi_out; \
+            mCarryOutVector[baseCarryDataIdx + index] = mZeroInitializer; \
+        }
+
+#define EXTEND_CARRY_IN_PHIS_TO_ZERO_FROM_WHILE_BODY_FINAL_BLOCK \
+        for (unsigned index = 0; index < carryDataSize; ++index) { \
+            carryInPhis[index]->addIncoming(mZeroInitializer, whileBodyFinalBlock); \
+        }
+
+#define EXTEND_CARRY_OUT_ACCUMULATOR_PHIS_TO_OR_COMBINE_CARRY_OUT \
+        for (unsigned index = 0; index < carryDataSize; ++index) { \
+            PHINode * phi = carryOutAccumPhis[index]; \
+            Value * carryOut = mBuilder->CreateOr(phi, mCarryOutVector[baseCarryDataIdx + index]); \
+            phi->addIncoming(carryOut, whileBodyFinalBlock); \
+            mCarryOutVector[baseCarryDataIdx + index] = carryOut; \
+        }
+
+#define STORE_WHILE_CARRY_DATA \
+        if (mWhileDepth == 0) { \
+            for (unsigned index = baseCarryDataIdx; index < baseCarryDataIdx + carryDataSize; ++index) { \
+                mBuilder->CreateAlignedStore(mCarryOutVector[index], mBuilder->CreateGEP(mCarryDataPtr, mBuilder->getInt64(index)), BLOCK_SIZE/8, false); \
+            } \
+        }
+
 
 void PabloCompiler::compileWhile(const While * whileStatement) {
         //BasicBlock* whileEntryBlock = mBasicBlock;
@@ -519,18 +560,11 @@ void PabloCompiler::compileWhile(const While * whileStatement) {
     
         const PabloBlockCarryData & cd = whileStatement -> getBody().carryData;
         const unsigned baseCarryDataIdx = cd.getBlockCarryDataIndex();
-
-#ifdef PRELOAD_WHILE_CARRIES_AT_TOP_LEVEL
         const unsigned carryDataSize = cd.getTotalCarryDataSize();
-        if (mWhileDepth == 0)
-#else
-        const unsigned carryDataSize = cd.getLocalCarryDataSize();
-#endif
-        {
-            for (auto i = baseCarryDataIdx; i < baseCarryDataIdx + carryDataSize; ++i) {
-                mCarryInVector[i] = mBuilder->CreateAlignedLoad(mBuilder->CreateGEP(mCarryDataPtr, mBuilder->getInt64(i)), BLOCK_SIZE/8, false);
-            }
-        }
+
+
+        LOAD_WHILE_CARRIES
+
         SmallVector<const Next*, 4> nextNodes;
         SmallVector<PHINode *, 4> nextPhis;
         for (const PabloAST * node : whileStatement->getBody()) {
@@ -553,23 +587,10 @@ void PabloCompiler::compileWhile(const While * whileStatement) {
         // (3) Next nodes: (a) values set up before loop, (b) modified values calculated in loop.
 
 #ifdef SET_WHILE_CARRY_IN_TO_ZERO_AFTER_FIRST_ITERATION
-        std::vector<PHINode *> carryInPhis(carryDataSize);
+        INITIALIZE_CARRY_IN_PHIS
 #endif
-        std::vector<PHINode *> carryOutAccumPhis(carryDataSize);
-    
-        // Set initial values of phi nodes for loop body using values at while entry.
-        for (unsigned index = 0; index < carryDataSize; ++index) {
-#ifdef SET_WHILE_CARRY_IN_TO_ZERO_AFTER_FIRST_ITERATION
-            PHINode * phi_in = mBuilder->CreatePHI(mBitBlockType, 2);
-            phi_in->addIncoming(mCarryInVector[baseCarryDataIdx + index], whileEntryBlock);
-            carryInPhis[index] = phi_in;
-            mCarryInVector[baseCarryDataIdx + index] = phi_in;
-#endif
-            PHINode * phi_out = mBuilder->CreatePHI(mBitBlockType, 2);
-            phi_out->addIncoming(mZeroInitializer, whileEntryBlock);
-            carryOutAccumPhis[index] = phi_out;
-            mCarryOutVector[baseCarryDataIdx + index] = mZeroInitializer;
-        }
+
+        INITIALIZE_CARRY_OUT_ACCUMULATOR_PHIS
     
         // for any Next nodes in the loop body, initialize to (a) pre-loop value.
         for (const Next * n : nextNodes) {
@@ -588,16 +609,12 @@ void PabloCompiler::compileWhile(const While * whileStatement) {
         compileBlock(whileStatement->getBody());
     
         BasicBlock * whileBodyFinalBlock = mBuilder->GetInsertBlock();
-        // Add the phiNode branches for carry in, carry out nodes.
-        for (unsigned index = 0; index < carryDataSize; ++index) {
+
 #ifdef SET_WHILE_CARRY_IN_TO_ZERO_AFTER_FIRST_ITERATION
-            carryInPhis[index]->addIncoming(mZeroInitializer, whileBodyFinalBlock);
+        EXTEND_CARRY_IN_PHIS_TO_ZERO_FROM_WHILE_BODY_FINAL_BLOCK
 #endif
-            PHINode * phi = carryOutAccumPhis[index];
-            Value * carryOut = mBuilder->CreateOr(phi, mCarryOutVector[baseCarryDataIdx + index]);
-            phi->addIncoming(carryOut, whileBodyFinalBlock);
-            mCarryOutVector[baseCarryDataIdx + index] = carryOut;
-        }
+
+        EXTEND_CARRY_OUT_ACCUMULATOR_PHIS_TO_OR_COMBINE_CARRY_OUT
 
         // Terminate the while loop body with a conditional branch back.
         mBuilder->CreateCondBr(genBitBlockAny(compileExpression(whileStatement->getCondition())), whileEndBlock, whileBodyBlock);
@@ -619,15 +636,9 @@ void PabloCompiler::compileWhile(const While * whileStatement) {
         mBuilder->SetInsertPoint(whileEndBlock);
         --mWhileDepth;
 
-#ifdef PRELOAD_WHILE_CARRIES_AT_TOP_LEVEL
-        if (mWhileDepth == 0)
-#endif
-        {
-            for (unsigned index = baseCarryDataIdx; index < baseCarryDataIdx + carryDataSize; ++index) {
-                mBuilder->CreateAlignedStore(mCarryOutVector[index], mBuilder->CreateGEP(mCarryDataPtr, mBuilder->getInt64(index)), BLOCK_SIZE/8, false);
-            }
-        }
+        STORE_WHILE_CARRY_DATA
 }
+
 
 void PabloCompiler::compileStatement(const Statement * stmt)
 {
@@ -712,7 +723,7 @@ void PabloCompiler::compileStatement(const Statement * stmt)
         Value* strm_value = compileExpression(adv->getExpr());
         int shift = adv->getAdvanceAmount();
         unsigned advance_index = adv->getLocalAdvanceIndex();
-        Value * expr = genAdvanceWithCarry(strm_value, shift, advance_index, stmt->getParent());
+        Value * expr = genAdvanceWithCarry(strm_value, shift, advance_index);
         if (DumpTrace) {
             genPrintRegister(stmt->getName()->to_string(), expr);
         }
@@ -725,7 +736,7 @@ void PabloCompiler::compileStatement(const Statement * stmt)
         Value * cc = compileExpression(mstar->getCharClass());
         Value * marker_and_cc = mBuilder->CreateAnd(marker, cc);
         unsigned carry_index = mstar->getLocalCarryIndex();
-        Value * expr = mBuilder->CreateOr(mBuilder->CreateXor(genAddWithCarry(marker_and_cc, cc, carry_index, stmt->getParent()), cc), marker, "matchstar");
+        Value * expr = mBuilder->CreateOr(mBuilder->CreateXor(genAddWithCarry(marker_and_cc, cc, carry_index), cc), marker, "matchstar");
         if (DumpTrace) {
             genPrintRegister(stmt->getName()->to_string(), expr);
         }
@@ -737,7 +748,7 @@ void PabloCompiler::compileStatement(const Statement * stmt)
         Value * marker_expr = compileExpression(sthru->getScanFrom());
         Value * cc_expr = compileExpression(sthru->getScanThru());
         unsigned carry_index = sthru->getLocalCarryIndex();
-        Value * expr = mBuilder->CreateAnd(genAddWithCarry(marker_expr, cc_expr, carry_index, stmt->getParent()), genNot(cc_expr), "scanthru");
+        Value * expr = mBuilder->CreateAnd(genAddWithCarry(marker_expr, cc_expr, carry_index), genNot(cc_expr), "scanthru");
         if (DumpTrace) {
             genPrintRegister(stmt->getName()->to_string(), expr);
         }
@@ -826,8 +837,8 @@ PabloCompiler::SumWithOverflowPack PabloCompiler::callUaddOverflow(Value* int128
 #endif
 
 
-Value* PabloCompiler::genAddWithCarry(Value* e1, Value* e2, unsigned localIndex, const PabloBlock * blk) {
-    const PabloBlockCarryData & cd = blk->carryData;
+Value* PabloCompiler::genAddWithCarry(Value* e1, Value* e2, unsigned localIndex) {
+    const PabloBlockCarryData & cd = mPabloBlock->carryData;
     const unsigned carryIdx = cd.carryOpCarryDataOffset(localIndex);
     Value* carryq_value = genCarryDataLoad(carryIdx);
 #ifdef USE_TWO_UADD_OVERFLOW
@@ -938,14 +949,14 @@ inline Value* PabloCompiler::genNot(Value* expr) {
     return mBuilder->CreateXor(expr, mOneInitializer, "not");
 }
 
-Value* PabloCompiler::genAdvanceWithCarry(Value* strm_value, int shift_amount, unsigned localIndex, const PabloBlock * blk) {
+Value* PabloCompiler::genAdvanceWithCarry(Value* strm_value, int shift_amount, unsigned localIndex) {
     if (shift_amount >= LongAdvanceBase) {
-        return genLongAdvanceWithCarry(strm_value, shift_amount, localIndex, blk);
+        return genLongAdvanceWithCarry(strm_value, shift_amount, localIndex);
     }
     else if (shift_amount == 1) {
-        return genUnitAdvanceWithCarry(strm_value, localIndex, blk);
+        return genUnitAdvanceWithCarry(strm_value, localIndex);
     }
-    const PabloBlockCarryData & cd = blk->carryData;
+    const PabloBlockCarryData & cd = mPabloBlock->carryData;
     const auto advanceIndex = cd.shortAdvanceCarryDataOffset(localIndex);
     Value* result_value;
     
@@ -962,8 +973,8 @@ Value* PabloCompiler::genAdvanceWithCarry(Value* strm_value, int shift_amount, u
     return result_value;
 }
                     
-Value* PabloCompiler::genUnitAdvanceWithCarry(Value* strm_value, unsigned localIndex, const PabloBlock * blk) {
-    const PabloBlockCarryData & cd = blk->carryData;
+Value* PabloCompiler::genUnitAdvanceWithCarry(Value* strm_value, unsigned localIndex) {
+    const PabloBlockCarryData & cd = mPabloBlock->carryData;
     const auto advanceIndex = cd.unitAdvanceCarryDataOffset(localIndex);
     Value* result_value;
     
@@ -994,8 +1005,8 @@ Value* PabloCompiler::genUnitAdvanceWithCarry(Value* strm_value, unsigned localI
 //
 // Generate code for long advances >= LongAdvanceBase
 //
-Value* PabloCompiler::genLongAdvanceWithCarry(Value* strm_value, int shift_amount, unsigned localIndex, const PabloBlock * blk) {
-    const PabloBlockCarryData & cd = blk->carryData;
+Value* PabloCompiler::genLongAdvanceWithCarry(Value* strm_value, int shift_amount, unsigned localIndex) {
+    const PabloBlockCarryData & cd = mPabloBlock->carryData;
     const unsigned block_shift = shift_amount % BLOCK_SIZE;
     const unsigned advanceEntries = cd.longAdvanceEntries(shift_amount);
     const unsigned bufsize = cd.longAdvanceBufferSize(shift_amount);

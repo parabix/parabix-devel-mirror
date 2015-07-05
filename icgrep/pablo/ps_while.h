@@ -28,7 +28,7 @@ public:
     inline PabloBlock & getBody() {
         return mBody;
     }
-    inline const PabloBlock & getBody() const {
+    inline PabloBlock & getBody() const {
         return mBody;
     }
 protected:
