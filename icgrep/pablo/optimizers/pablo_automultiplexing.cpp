@@ -19,7 +19,7 @@ using namespace boost;
 using namespace boost::container;
 using namespace boost::numeric::ublas;
 
-#define PRINT_DEBUG_OUTPUT
+// #define PRINT_DEBUG_OUTPUT
 
 #if !defined(NDEBUG) && !defined(PRINT_DEBUG_OUTPUT)
 #define PRINT_DEBUG_OUTPUT
@@ -106,9 +106,9 @@ bool AutoMultiplexing::optimize(const std::vector<Var *> & input, PabloBlock & e
 
     LOG("Seed:                    " << seed);
 
-    AutoMultiplexing am;
+    AutoMultiplexing am(input);
     RECORD_TIMESTAMP(start_initialize);
-    am.initialize(input, entry);
+    am.initialize(entry);
     RECORD_TIMESTAMP(end_initialize);
 
     LOG("Initialize:              " << (end_initialize - start_initialize));
@@ -150,7 +150,7 @@ bool AutoMultiplexing::optimize(const std::vector<Var *> & input, PabloBlock & e
     }
 
     RECORD_TIMESTAMP(start_shutdown);
-    am.shutdown();
+    am.Shutdown();
     RECORD_TIMESTAMP(end_shutdown);
     LOG("Shutdown:                " << (end_shutdown - start_shutdown));
 
@@ -167,7 +167,7 @@ bool AutoMultiplexing::optimize(const std::vector<Var *> & input, PabloBlock & e
  * Scan through the program to identify any advances and calls then initialize the BDD engine with
  * the proper variable ordering.
  ** ------------------------------------------------------------------------------------------------------------- */
-void AutoMultiplexing::initialize(const std::vector<Var *> & vars, PabloBlock & entry) {
+void AutoMultiplexing::initialize(PabloBlock & entry) {
 
     flat_map<const PabloAST *, unsigned> map;    
     std::stack<Statement *> scope;
@@ -284,7 +284,7 @@ void AutoMultiplexing::initialize(const std::vector<Var *> & vars, PabloBlock & 
     }
 
     // Initialize the BDD engine ...
-    mManager = Cudd_Init((complexStatements + vars.size()), 0, CUDD_UNIQUE_SLOTS, CUDD_CACHE_SLOTS, 0);
+    mManager = Cudd_Init((complexStatements + mBaseVariables.size()), 0, CUDD_UNIQUE_SLOTS, CUDD_CACHE_SLOTS, 0);
     Cudd_AutodynDisable(mManager);
 
     // Map the predefined 0/1 entries
@@ -294,7 +294,7 @@ void AutoMultiplexing::initialize(const std::vector<Var *> & vars, PabloBlock & 
     // Order the variables so the input Vars are pushed to the end; they ought to
     // be the most complex to resolve.
     unsigned i = complexStatements;
-    for (const Var * var : vars) {
+    for (const Var * var : mBaseVariables) {
         mCharacterizationMap[var] = Cudd_bddIthVar(mManager, i++);
     }
 }
@@ -407,7 +407,7 @@ inline DdNode * AutoMultiplexing::characterize(Advance * adv, DdNode * input) {
                 DdNode * Ni = std::get<2>(mAdvance[i]);
                 DdNode * const IiIk = And(Ik, Ii);
                 // Is there any satisfying truth assignment? If not, these streams are mutually exclusive.
-                if (noSatisfyingAssignment(IiIk)) {
+                if (NoSatisfyingAssignment(IiIk)) {
                     assert (mCharacterizationMap.count(tmp));
                     DdNode *& Ci = mCharacterizationMap[tmp];
                     // Mark the i-th and k-th Advances as being mutually exclusive
@@ -532,11 +532,11 @@ inline DdNode * AutoMultiplexing::Ite(DdNode * const x, DdNode * const y, DdNode
     return r;
 }
 
-inline bool AutoMultiplexing::noSatisfyingAssignment(DdNode * const x) {
+inline bool AutoMultiplexing::NoSatisfyingAssignment(DdNode * const x) {
     return Cudd_bddLeq(mManager, x, Zero());
 }
 
-inline void AutoMultiplexing::shutdown() {
+inline void AutoMultiplexing::Shutdown() {
     #ifdef PRINT_DEBUG_OUTPUT
     Cudd_PrintInfo(mManager, stderr);
     #endif
@@ -997,19 +997,165 @@ void AutoMultiplexing::multiplexSelectedIndependentSets() const {
                 input[i - 1]->replaceWith(demuxed, true, true);
             }
 
-            simplify(muxed, m, builder);
+            // simplify(muxed, m, builder);
         }
     }
 }
+
+
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief simplify
  ** ------------------------------------------------------------------------------------------------------------- */
 void AutoMultiplexing::simplify(const std::vector<PabloAST *> & variables, const unsigned n, PabloBuilder & builder) const {
 
+    std::queue<PabloAST *> Q;
+    llvm::DenseMap<PabloAST *, DdNode *> characterization;
+    boost::container::flat_set<PabloAST *> uncharacterized;
 
+    DdManager * manager = Cudd_Init(n + mBaseVariables.size(), 0, CUDD_UNIQUE_SLOTS, CUDD_CACHE_SLOTS, 0);
+    Cudd_AutodynDisable(manager);
 
+    unsigned i = 0;
+    for (; i != n; ++i) {
+        PabloAST * const var = variables[i];
+        Q.push(var);
+        characterization[var] = Cudd_bddIthVar(manager, i);
+    }
 
+    for (Var * var : mBaseVariables) {
+        characterization[var] = Cudd_bddIthVar(manager, i++);
+    }
+
+    std::array<DdNode *, 3> input;
+
+    while (!Q.empty()) {
+        PabloAST * const var = Q.front(); Q.pop();
+        for (PabloAST * user : var->users()) {
+            Statement * stmt = nullptr;
+            // If this user is a boolean operation ...
+            switch (user->getClassTypeId()) {
+                case PabloAST::ClassTypeId::And:
+                case PabloAST::ClassTypeId::Or:
+                case PabloAST::ClassTypeId::Not:
+                case PabloAST::ClassTypeId::Xor:
+                case PabloAST::ClassTypeId::Sel:
+                    // And it is within the same scope ...
+                    if ((stmt = cast<Statement>(user))->getParent() == &builder.getPabloBlock()) {
+                        bool characterized = true;
+                        for (unsigned i = 0; i != stmt->getNumOperands(); ++i) {
+                            auto f = characterization.find(stmt->getOperand(i));
+                            if (f == characterization.end()) {
+                                characterized = false;
+                                break;
+                            }
+                            input[i] = f->second;
+                        }
+                        // And every input operand is characterizied ...
+                        if (characterized) {
+                            DdNode * bdd = nullptr;
+                            switch (user->getClassTypeId()) {
+                                case PabloAST::ClassTypeId::And:
+                                    bdd = Cudd_bddAnd(manager, input[0], input[1]);
+                                    break;
+                                case PabloAST::ClassTypeId::Or:
+                                    bdd = Cudd_bddOr(manager, input[0], input[1]);
+                                    break;
+                                case PabloAST::ClassTypeId::Not:
+                                    bdd = Cudd_Not(input[0]);
+                                    break;
+                                case PabloAST::ClassTypeId::Xor:
+                                    bdd = Cudd_bddXor(manager, input[0], input[1]);
+                                    break;
+                                case PabloAST::ClassTypeId::Sel:
+                                    bdd = Cudd_bddIte(manager, input[0], input[1], input[2]);
+                                    break;
+                                default: __builtin_unreachable();
+                            }
+                            characterization[stmt] = bdd;
+                            uncharacterized.erase(stmt);
+                            for (PabloAST * next : stmt->users()) {
+                                if (characterization.count(next) == 0) {
+                                    Q.push(next);
+                                }
+                            }
+                            break;
+                        }
+                    }
+                default:
+                    // Otherwise we probably apply Quine McCluskey to one of this statements operands
+                    // presuming they aren't characterized properly later.
+                    uncharacterized.insert(user);
+                    break;
+            }
+        }
+    }
+    // Gether up the output statements from the characterized inputs of the uncharacterized statements
+    llvm::DenseMap<PabloAST *, DdNode *> outputs;
+    for (PabloAST * var : uncharacterized) {
+        Statement * stmt = cast<Statement>(var);
+        for (unsigned i = 0; i != stmt->getNumOperands(); ++i) {
+            auto f = characterization.find(stmt->getOperand(i));
+            if (f != characterization.end()) {
+                outputs.insert(std::make_pair(f->first, f->second));
+            }
+        }
+    }
+
+    circular_buffer<PabloAST *> S(n);
+
+    CUDD_VALUE_TYPE value;
+    int * cube = nullptr;
+    for (auto itr : outputs) {
+        // Look into doing some more analysis here to see if a Xor or Sel operation is possible.
+        DdGen * gen = Cudd_FirstCube(manager, itr.second, &cube, &value);
+        while (!Cudd_IsGenEmpty(gen)) {
+            // cube[0 ... n - 1] = { 0 : false, 1: true, 2: don't care }
+            for (unsigned i = n - 1; i; --i) {
+                if (cube[i] == 0) {
+                    S.push_back(variables[i]);
+                }
+            }
+
+            if (S.size() > 0) {
+                while(S.size() > 1) {
+                    PabloAST * A = S.front(); S.pop_front();
+                    PabloAST * B = S.front(); S.pop_front();
+                    S.push_back(builder.createOr(A, B));
+                }
+                PabloAST * C = S.front(); S.pop_front();
+                S.push_back(builder.createNot(C));
+            }
+
+            for (unsigned i = n - 1; i; --i) {
+                if (cube[i] == 1) {
+                    S.push_back(variables[i]);
+                }
+            }
+
+            while(S.size() > 1) {
+                PabloAST * A = S.front(); S.pop_front();
+                PabloAST * B = S.front(); S.pop_front();
+                S.push_back(builder.createAnd(A, B));
+            }
+
+            Q.push(S.front()); S.pop_front();
+
+            Cudd_NextCube(gen, &cube, &value);
+        }
+        Cudd_GenFree(gen);
+
+        while (Q.size() > 1) {
+            PabloAST * A = Q.front(); Q.pop();
+            PabloAST * B = Q.front(); Q.pop();
+            Q.push(builder.createOr(A, B));
+        }
+
+        Statement * stmt = cast<Statement>(itr.first);
+        stmt->replaceWith(Q.front(), true, true);
+        Q.pop();
+    }
+    Cudd_Quit(manager);
 
 
 }

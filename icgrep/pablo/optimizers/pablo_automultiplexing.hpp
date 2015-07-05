@@ -37,7 +37,7 @@ class AutoMultiplexing {
 public:
     static bool optimize(const std::vector<Var *> & input, PabloBlock & entry);
 protected:
-    void initialize(const std::vector<Var *> & vars, PabloBlock & entry);
+    void initialize(PabloBlock & entry);
     void characterize(PabloBlock & block);
     DdNode * characterize(Statement * const stmt);
     DdNode * characterize(Advance * adv, DdNode * input);
@@ -47,14 +47,16 @@ protected:
     void selectMultiplexSets(RNG &);
     void applySubsetConstraints();
     void multiplexSelectedIndependentSets() const;
-    void simplify(const std::vector<PabloAST *> & variables, const unsigned m, PabloBuilder & block) const;
+    void simplify(const std::vector<PabloAST *> & variables, const unsigned n, PabloBuilder & block) const;
     void topologicalSort(PabloBlock & entry) const;
-    inline AutoMultiplexing()
+    inline AutoMultiplexing(const std::vector<Var *> & vars)
     : mVariables(0)
     , mConstraintGraph(0)
+    , mBaseVariables(vars)
     {
     }
 private:
+
     DdNode * Zero() const;
     DdNode * One() const;
     bool isZero(DdNode * const x) const;
@@ -64,17 +66,19 @@ private:
     DdNode * Not(DdNode * x) const;
     DdNode * Ite(DdNode * const x, DdNode * const y, DdNode * const z);
     DdNode * NewVar();
-    bool noSatisfyingAssignment(DdNode * const x);
-    void shutdown();
+    bool NoSatisfyingAssignment(DdNode * const x);
+    void Shutdown();
+
 private:
-    DdManager *             mManager;
-    unsigned                mVariables;
-    CharacterizationMap     mCharacterizationMap;
-    ConstraintGraph         mConstraintGraph;
-    SubsetGraph             mSubsetGraph;
-    AdvanceMap              mAdvanceMap;
-    AdvanceVector           mAdvance;
-    MultiplexSetGraph       mMultiplexSetGraph;
+    DdManager *                 mManager;
+    unsigned                    mVariables;
+    CharacterizationMap         mCharacterizationMap;
+    ConstraintGraph             mConstraintGraph;
+    SubsetGraph                 mSubsetGraph;
+    AdvanceMap                  mAdvanceMap;
+    AdvanceVector               mAdvance;
+    MultiplexSetGraph           mMultiplexSetGraph;
+    const std::vector<Var *> &  mBaseVariables;
 };
 
 }
