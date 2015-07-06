@@ -37,7 +37,7 @@ static cl::opt<bool> DisableUnicodeMatchStar("disable-unicode-matchstar", cl::in
                      cl::desc("disable Unicode MatchStar optimization"), cl::cat(fREcompilationOptions));
 static cl::opt<bool> DisableUnicodeLineBreak("disable-unicode-linebreak", cl::init(false),
                      cl::desc("disable Unicode line breaks - use LF only"), cl::cat(fREcompilationOptions));
-static cl::opt<bool> DisablePregeneratedUnicode("disable-pregenerated-unicode", cl::init(true),
+static cl::opt<bool> DisablePregeneratedUnicode("disable-pregenerated-unicode", cl::init(false),
                      cl::desc("disable use of pregenerated Unicode character class sets"), cl::cat(fREcompilationOptions));
 
 using namespace pablo;
@@ -58,7 +58,8 @@ RE_Compiler::RE_Compiler(cc::CC_Compiler & ccCompiler)
 , mFinal(nullptr)
 , mWhileTest(nullptr)
 , mStarDepth(0)
-, mPB(ccCompiler.getBuilder().getPabloBlock(), ccCompiler.getBuilder())
+, mLoopVariants()
+, mPB(*ccCompiler.getBuilder().getPabloBlock(), ccCompiler.getBuilder())
 , mUCDCompiler(ccCompiler)
 {
 
@@ -509,6 +510,8 @@ MarkerType RE_Compiler::processUnboundedRep(RE * repeated, MarkerType marker, Pa
         PabloAST * loopComputation = markerVar(AdvanceMarker(process(repeated, makeMarker(InitialPostPositionByte, m1), pb), InitialPostPositionByte, pb));
         Next * nextPending = pb.createNext(starPending, pb.createAnd(loopComputation, pb.createNot(m2)));
         Next * nextStarAccum = pb.createNext(starAccum, pb.createOr(loopComputation, m2));
+        mLoopVariants.push_back(nextPending);
+        mLoopVariants.push_back(nextStarAccum);
         mWhileTest = pb.createOr(mWhileTest, nextPending);
         mStarDepth--;
         
@@ -527,9 +530,12 @@ MarkerType RE_Compiler::processUnboundedRep(RE * repeated, MarkerType marker, Pa
         Next * nextWhilePending = wb.createNext(whilePending, wb.createAnd(loopComputation, wb.createNot(whileAccum)));
         Next * nextWhileAccum = wb.createNext(whileAccum, wb.createOr(loopComputation, whileAccum));
         Next * nextWhileTest = wb.createNext(whileTest, wb.createOr(mWhileTest, nextWhilePending));
-        pb.createWhile(nextWhileTest, wb);
+        mLoopVariants.push_back(nextWhilePending);
+        mLoopVariants.push_back(nextWhileAccum);
+        mLoopVariants.push_back(nextWhileTest);
+        pb.createWhile(nextWhileTest, mLoopVariants, wb);
         mStarDepth--;
-
+        mLoopVariants.clear();
         return makeMarker(InitialPostPositionByte, pb.createAssign("unbounded", nextWhileAccum));
     }    
 } // end of namespace re

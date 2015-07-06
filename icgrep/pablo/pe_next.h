@@ -28,7 +28,7 @@ public:
     virtual ~Next() {}
 protected:
     Next(PabloAST * initial, PabloAST * expr, PabloBlock * parent)
-    : Statement(ClassTypeId::Next, {cast<Assign>(initial), expr}, cast<Assign>(initial)->getName(), parent) {
+    : Statement(ClassTypeId::Next, {cast<Assign>(initial), cast<Assign>(expr)}, cast<Assign>(initial)->getName(), parent) {
         this->addUser(initial);
     }
 };

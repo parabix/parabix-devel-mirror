@@ -128,7 +128,12 @@ public:
 
     If * createIf(PabloAST * condition, std::vector<Assign *> && definedVars, PabloBlock & body);
 
-    While * createWhile(PabloAST * condition, PabloBlock & body);
+    While * createWhile(PabloAST * condition, const std::initializer_list<Next *> nextVars, PabloBlock & body);
+
+    While * createWhile(PabloAST * condition, const std::vector<Next *> & nextVars, PabloBlock & body);
+
+    While * createWhile(PabloAST * condition, std::vector<Next *> && nextVars, PabloBlock & body);
+
 
     inline StatementList & statements() {
         return *this;

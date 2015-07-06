@@ -96,6 +96,7 @@ private:
     pablo::PabloAST *                               mFinal;
     pablo::PabloAST *                               mWhileTest;
     int                                             mStarDepth;
+    std::vector<pablo::Next *>                      mLoopVariants; // <- rethink name
     pablo::PabloBuilder                             mPB;
     UCD::UCDCompiler                                mUCDCompiler;
 };

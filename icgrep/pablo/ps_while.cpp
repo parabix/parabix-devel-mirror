@@ -3,9 +3,18 @@
 
 namespace pablo {
 
-While::While(PabloAST * expr, PabloBlock & body, PabloBlock * parent)
+While::While(PabloAST * expr, const std::initializer_list<Next *> nextVars, PabloBlock & body, PabloBlock * parent)
 : Statement(ClassTypeId::While, {expr}, nullptr, parent)
 , mBody(body)
+, mNext(nextVars.begin(), nextVars.end(), reinterpret_cast<NextAllocator &>(mVectorAllocator))
+{
+
+}
+
+While::While(PabloAST * expr, const std::vector<Next *> & nextVars, PabloBlock & body, PabloBlock * parent)
+: Statement(ClassTypeId::While, {expr}, nullptr, parent)
+, mBody(body)
+, mNext(nextVars.begin(), nextVars.end(), reinterpret_cast<NextAllocator &>(mVectorAllocator))
 {
 
 }

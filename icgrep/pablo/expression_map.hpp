@@ -10,14 +10,14 @@ namespace pablo {
 template<typename... Args>
 struct ExpressionMap {
     enum {N = sizeof...(Args)};
-    typedef ExpressionMap<Args...> MapType;
+    typedef ExpressionMap<Args...> Type;
     typedef std::tuple<PabloAST::ClassTypeId, Args...> Key;
 
-    inline ExpressionMap(MapType * predecessor)
-    : mPredecessor(predecessor)
-    {
+    inline explicit ExpressionMap(Type * predecessor) : mPredecessor(predecessor) { }
 
-    }
+    ExpressionMap(const Type &) = default;
+
+    ExpressionMap(Type &&) = default;
 
     template <class Functor, typename... Params>
     inline PabloAST * findOrCall(Functor && functor, const PabloAST::ClassTypeId type, Args... args, Params... params) {
@@ -78,28 +78,30 @@ private:
     }
 
 private:
-    MapType * const             mPredecessor;
+    Type *                      mPredecessor;
     std::map<Key, PabloAST *>   mMap;
 };
 
 
 struct ExpressionTable {
 
-    ExpressionTable()
+    ExpressionTable() noexcept
     : mUnary(nullptr)
     , mBinary(nullptr)
-    , mTernary(nullptr)
-    {
+    , mTernary(nullptr) {
 
     }
 
-    ExpressionTable(ExpressionTable * predecessor)
+    explicit ExpressionTable(ExpressionTable * predecessor) noexcept
     : mUnary(predecessor ? &(predecessor->mUnary) : nullptr)
     , mBinary(predecessor ? &(predecessor->mBinary) : nullptr)
-    , mTernary(predecessor ? &(predecessor->mTernary) : nullptr)
-    {
+    , mTernary(predecessor ? &(predecessor->mTernary) : nullptr) {
 
     }
+
+    ExpressionTable(const ExpressionTable &) = default;
+
+    ExpressionTable(ExpressionTable &&) = default;
 
     template <class Functor, typename... Params>
     inline PabloAST * findUnaryOrCall(Functor && functor, const PabloAST::ClassTypeId type, PabloAST * expr, Params... params) {

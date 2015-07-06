@@ -11,9 +11,15 @@
 
 namespace pablo {
 
+class Next;
+
 class While : public Statement {
     friend class PabloBlock;
 public:
+
+    using NextAllocator = VectorAllocator::rebind<Next*>::other;
+    using NextVars = std::vector<Next *, NextAllocator>;
+
     static inline bool classof(const PabloAST * e) {
         return e->getClassTypeId() == ClassTypeId::While;
     }
@@ -25,6 +31,9 @@ public:
     inline PabloAST * getCondition() const {
         return getOperand(0);
     }
+    inline const NextVars & getVariants() const {
+        return mNext;
+    }
     inline PabloBlock & getBody() {
         return mBody;
     }
@@ -32,9 +41,12 @@ public:
         return mBody;
     }
 protected:
-    While(PabloAST * expr, PabloBlock &body, PabloBlock * parent);
+    While(PabloAST * expr, const std::initializer_list<Next *> nextVars, PabloBlock &body, PabloBlock * parent);
+    While(PabloAST * expr, const std::vector<Next *> & nextVars, PabloBlock &body, PabloBlock * parent);
+
 private:
-    PabloBlock &        mBody;
+    PabloBlock &    mBody;
+    NextVars        mNext;
 };
 
 }

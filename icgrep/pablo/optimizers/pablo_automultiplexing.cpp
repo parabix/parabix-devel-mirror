@@ -993,11 +993,11 @@ void AutoMultiplexing::multiplexSelectedIndependentSets() const {
                     Q.push_back(builder.createAnd(a1, a2, "demuxing"));
                 }
 
-                PabloAST * demuxed = Q.front(); Q.pop_front(); assert (demux);
+                PabloAST * demuxed = Q.front(); Q.pop_front(); assert (demuxed);
                 input[i - 1]->replaceWith(demuxed, true, true);
             }
 
-            // simplify(muxed, m, builder);
+            simplify(muxed, m, builder);
         }
     }
 }
@@ -1011,7 +1011,7 @@ void AutoMultiplexing::simplify(const std::vector<PabloAST *> & variables, const
 
     std::queue<PabloAST *> Q;
     llvm::DenseMap<PabloAST *, DdNode *> characterization;
-    boost::container::flat_set<PabloAST *> uncharacterized;
+    flat_set<PabloAST *> uncharacterized;
 
     DdManager * manager = Cudd_Init(n + mBaseVariables.size(), 0, CUDD_UNIQUE_SLOTS, CUDD_CACHE_SLOTS, 0);
     Cudd_AutodynDisable(manager);
@@ -1041,7 +1041,7 @@ void AutoMultiplexing::simplify(const std::vector<PabloAST *> & variables, const
                 case PabloAST::ClassTypeId::Xor:
                 case PabloAST::ClassTypeId::Sel:
                     // And it is within the same scope ...
-                    if ((stmt = cast<Statement>(user))->getParent() == &builder.getPabloBlock()) {
+                    if ((stmt = cast<Statement>(user))->getParent() == builder.getPabloBlock()) {
                         bool characterized = true;
                         for (unsigned i = 0; i != stmt->getNumOperands(); ++i) {
                             auto f = characterization.find(stmt->getOperand(i));
@@ -1107,11 +1107,12 @@ void AutoMultiplexing::simplify(const std::vector<PabloAST *> & variables, const
     CUDD_VALUE_TYPE value;
     int * cube = nullptr;
     for (auto itr : outputs) {
+
         // Look into doing some more analysis here to see if a Xor or Sel operation is possible.
         DdGen * gen = Cudd_FirstCube(manager, itr.second, &cube, &value);
         while (!Cudd_IsGenEmpty(gen)) {
-            // cube[0 ... n - 1] = { 0 : false, 1: true, 2: don't care }
-            for (unsigned i = n - 1; i; --i) {
+            // cube[0 ... n - 1] = {{ 0 : false, 1: true, 2: don't care }}
+            for (unsigned i = 0; i != n; ++i) {
                 if (cube[i] == 0) {
                     S.push_back(variables[i]);
                 }
@@ -1127,7 +1128,7 @@ void AutoMultiplexing::simplify(const std::vector<PabloAST *> & variables, const
                 S.push_back(builder.createNot(C));
             }
 
-            for (unsigned i = n - 1; i; --i) {
+            for (unsigned i = 0; i != n; ++i) {
                 if (cube[i] == 1) {
                     S.push_back(variables[i]);
                 }

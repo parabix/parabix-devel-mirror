@@ -5,11 +5,11 @@ namespace pablo {
 #define MAKE_UNARY(NAME, TYPE, ARGS...) \
 struct __##NAME { \
     inline PabloAST * operator()(PabloAST * arg) { \
-        return mPb.NAME(arg); \
+        return mPb->NAME(arg); \
     } \
-    inline __##NAME(PabloBlock & pb) : mPb(pb) {} \
+    inline __##NAME(PabloBlock * pb) : mPb(pb) {} \
 private: \
-    PabloBlock & mPb; \
+    PabloBlock * mPb; \
 }; \
 __##NAME functor(mPb); \
 PabloAST * result = mExprTable.findUnaryOrCall(std::move(functor), TYPE, ARGS)
@@ -17,11 +17,11 @@ PabloAST * result = mExprTable.findUnaryOrCall(std::move(functor), TYPE, ARGS)
 #define MAKE_NAMED_UNARY(NAME, TYPE, ARGS...) \
 struct __##NAME { \
     inline PabloAST * operator()(PabloAST * arg, const std::string name) { \
-        return mPb.NAME(arg, name); \
+        return mPb->NAME(arg, name); \
     } \
-    inline __##NAME(PabloBlock & pb) : mPb(pb) {} \
+    inline __##NAME(PabloBlock * pb) : mPb(pb) {} \
 private: \
-    PabloBlock & mPb; \
+    PabloBlock * mPb; \
 }; \
 __##NAME functor(mPb); \
 PabloAST * result = mExprTable.findUnaryOrCall(std::move(functor), TYPE, ARGS)
@@ -29,11 +29,11 @@ PabloAST * result = mExprTable.findUnaryOrCall(std::move(functor), TYPE, ARGS)
 #define MAKE_BINARY(NAME, TYPE, ARGS...) \
 struct __##NAME { \
     inline PabloAST * operator()(PabloAST * arg1, PabloAST * arg2) { \
-        return mPb.NAME(arg1, arg2); \
+        return mPb->NAME(arg1, arg2); \
     } \
-    inline __##NAME(PabloBlock & pb) : mPb(pb) {} \
+    inline __##NAME(PabloBlock * pb) : mPb(pb) {} \
 private: \
-    PabloBlock & mPb; \
+    PabloBlock * mPb; \
 }; \
 __##NAME functor(mPb); \
 PabloAST * result = mExprTable.findBinaryOrCall(std::move(functor), TYPE, ARGS)
@@ -41,11 +41,11 @@ PabloAST * result = mExprTable.findBinaryOrCall(std::move(functor), TYPE, ARGS)
 #define MAKE_NAMED_BINARY(NAME, TYPE, ARGS...) \
 struct __##NAME { \
     inline PabloAST * operator()(PabloAST * arg1, PabloAST * arg2, const std::string name) { \
-        return mPb.NAME(arg1, arg2, name); \
+        return mPb->NAME(arg1, arg2, name); \
     } \
-    inline __##NAME(PabloBlock & pb) : mPb(pb) {} \
+    inline __##NAME(PabloBlock * pb) : mPb(pb) {} \
 private: \
-    PabloBlock & mPb; \
+    PabloBlock * mPb; \
 }; \
 __##NAME functor(mPb); \
 PabloAST * result = mExprTable.findBinaryOrCall(std::move(functor), TYPE, ARGS)
@@ -53,11 +53,11 @@ PabloAST * result = mExprTable.findBinaryOrCall(std::move(functor), TYPE, ARGS)
 #define MAKE_TERNARY(NAME, TYPE, ARGS...) \
 struct __##NAME { \
     inline PabloAST * operator()(PabloAST * arg1, PabloAST * arg2, PabloAST * arg3) { \
-        return mPb.NAME(arg1, arg2, arg3); \
+        return mPb->NAME(arg1, arg2, arg3); \
     } \
-    inline __##NAME(PabloBlock & pb) : mPb(pb) {} \
+    inline __##NAME(PabloBlock * pb) : mPb(pb) {} \
 private: \
-    PabloBlock & mPb; \
+    PabloBlock * mPb; \
 }; \
 __##NAME functor(mPb); \
 PabloAST * result = mExprTable.findTernaryOrCall(std::move(functor), TYPE, ARGS)
@@ -65,11 +65,11 @@ PabloAST * result = mExprTable.findTernaryOrCall(std::move(functor), TYPE, ARGS)
 #define MAKE_NAMED_TERNARY(NAME, TYPE, ARGS...) \
 struct __##NAME { \
     inline PabloAST * operator()(PabloAST * arg1, PabloAST * arg2, PabloAST * arg3, const std::string name) { \
-        return mPb.NAME(arg1, arg2, arg3, name); \
+        return mPb->NAME(arg1, arg2, arg3, name); \
     } \
-    inline __##NAME(PabloBlock & pb) : mPb(pb) {} \
+    inline __##NAME(PabloBlock * pb) : mPb(pb) {} \
 private: \
-    PabloBlock & mPb; \
+    PabloBlock * mPb; \
 }; \
 __##NAME functor(mPb); \
 PabloAST * result = mExprTable.findTernaryOrCall(std::move(functor), TYPE, ARGS)

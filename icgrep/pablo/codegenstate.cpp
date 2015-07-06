@@ -93,7 +93,9 @@ Var * PabloBlock::createVar(PabloAST * name) {
 
 Next * PabloBlock::createNext(Assign * assign, PabloAST * expr) {
     assert (assign && expr);
-    return insertAtInsertionPoint(new Next(assign, expr, this));
+    assert (assign->getName());
+    std::string name = assign->getName()->to_string() + "'";
+    return new Next(assign, createAssign(std::move(name), expr), this);
 }
 
 PabloAST * PabloBlock::createMatchStar(PabloAST * marker, PabloAST * charclass) {
@@ -392,9 +394,19 @@ If * PabloBlock::createIf(PabloAST * condition, std::vector<Assign *> && defined
     return insertAtInsertionPoint(new If(condition, definedVars, body, this));
 }
 
-While * PabloBlock::createWhile(PabloAST * condition, PabloBlock & body) {
+While * PabloBlock::createWhile(PabloAST * condition, const std::initializer_list<Next *> nextVars, PabloBlock & body) {
     assert (condition);
-    return insertAtInsertionPoint(new While(condition, body, this));
+    return insertAtInsertionPoint(new While(condition, nextVars, body, this));
+}
+
+While * PabloBlock::createWhile(PabloAST * condition, const std::vector<Next *> & nextVars, PabloBlock & body) {
+    assert (condition);
+    return insertAtInsertionPoint(new While(condition, nextVars, body, this));
+}
+
+While * PabloBlock::createWhile(PabloAST * condition, std::vector<Next *> && nextVars, PabloBlock & body) {
+    assert (condition);
+    return insertAtInsertionPoint(new While(condition, nextVars, body, this));
 }
 
 /// CONSTRUCTOR

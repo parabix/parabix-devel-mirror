@@ -565,13 +565,9 @@ void PabloCompiler::compileWhile(const While * whileStatement) {
 
         LOAD_WHILE_CARRIES
 
-        SmallVector<const Next*, 4> nextNodes;
-        SmallVector<PHINode *, 4> nextPhis;
-        for (const PabloAST * node : whileStatement->getBody()) {
-            if (isa<Next>(node)) {
-                nextNodes.push_back(cast<Next>(node));
-            }
-        }
+        const auto & nextNodes = whileStatement->getVariants();
+        std::vector<PHINode *> nextPhis;
+        nextPhis.reserve(nextNodes.size());
     
         // On entry to the while structure, proceed to execute the first iteration
         // of the loop body unconditionally.   The while condition is tested at the end of
@@ -622,14 +618,11 @@ void PabloCompiler::compileWhile(const While * whileStatement) {
         // and for any Next nodes in the loop body
         for (unsigned i = 0; i < nextNodes.size(); i++) {
             const Next * n = nextNodes[i];
-            auto f = mMarkerMap.find(n->getInitial());
-            assert (f != mMarkerMap.end());
-            PHINode * phi = nextPhis[i];
-            if (LLVM_UNLIKELY(f->second == phi)) {
-                throw std::runtime_error("Unexpected Phi node for Next node.");
+            auto f = mMarkerMap.find(n->getExpr());
+            if (LLVM_UNLIKELY(f == mMarkerMap.end())) {
+                throw std::runtime_error("Next node expression was not compiled!");
             }
-            phi->addIncoming(f->second, whileBodyFinalBlock);
-            //mMarkerMap[n->getInitial()] = f->second;
+            nextPhis[i]->addIncoming(f->second, whileBodyFinalBlock);
         }
 
         // EXIT BLOCK

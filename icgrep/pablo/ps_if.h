@@ -19,7 +19,8 @@ class If : public Statement {
     friend class Statement;
     friend class Simplifier;
 public:
-    using DefinedVars = std::vector<PabloAST *, VectorAllocator>;
+    using DefinedAllocator = VectorAllocator::rebind<Assign *>::other;
+    using DefinedVars = std::vector<Assign *, DefinedAllocator>;
 
     static inline bool classof(const PabloAST * e) {
         return e->getClassTypeId() == ClassTypeId::If;

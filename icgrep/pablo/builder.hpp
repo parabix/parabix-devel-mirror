@@ -9,49 +9,55 @@ namespace pablo {
 class PabloBuilder {
 public:
 
-    PabloBuilder(PabloBlock & block) : mPb(block), mParent(nullptr) {}
+    explicit PabloBuilder(PabloBlock & block) : mPb(&block), mParent(nullptr) {}
 
-    PabloBuilder(PabloBlock & block, PabloBuilder & parent) : mPb(block), mParent(&parent), mExprTable(&(parent.mExprTable)) {}
+    explicit PabloBuilder(PabloBlock & block, PabloBuilder & parent) : mPb(&block), mParent(&parent), mExprTable(&(parent.mExprTable)) {}
 
-    inline static PabloBuilder && Create(PabloBuilder & parent) {
-        return std::move(PabloBuilder(parent.mPb.Create(parent.mPb), parent));
+    PabloBuilder(const PabloBuilder &) = default;
+
+    PabloBuilder & operator=(PabloBuilder &) = delete;
+
+    PabloBuilder & operator=(PabloBuilder &&) = default;
+
+    inline static PabloBuilder && Create(PabloBuilder & parent) noexcept {
+        return std::move(PabloBuilder(PabloBlock::Create(*(parent.mPb)), parent));
     }
 
     inline Zeroes * createZeroes() const {
-        return mPb.createZeroes();
+        return mPb->createZeroes();
     }
 
     inline Ones * createOnes() const {
-        return mPb.createOnes();
+        return mPb->createOnes();
     }
 
     inline Var * createVar(const std::string name) {
-        return mPb.createVar(name);
+        return mPb->createVar(name);
     }
 
     inline Var * createVar(String * const name) {
-        return mPb.createVar(name);
+        return mPb->createVar(name);
     }
 
     inline Var * createVar(PabloAST * const name) {
-        return mPb.createVar(name);
+        return mPb->createVar(name);
     }
 
     inline Call * createCall(const std::string name) {
-        return createCall(mPb.getName(name));
+        return createCall(mPb->getName(name));
     }
 
     Call * createCall(String * name);
 
     Assign * createAssign(const std::string && prefix, PabloAST * expr, const int outputIndex = -1) {
-        return mPb.createAssign(std::move(prefix), expr, outputIndex);
+        return mPb->createAssign(std::move(prefix), expr, outputIndex);
     }
 
     inline PabloAST * createAdvance(PabloAST * expr, const Integer::integer_t shiftAmount) {
         if (shiftAmount == 0) {
             return expr;
         }
-        return createAdvance(expr, mPb.getInteger(shiftAmount));
+        return createAdvance(expr, mPb->getInteger(shiftAmount));
     }
 
     PabloAST * createAdvance(PabloAST * expr, PabloAST * shiftAmount);
@@ -60,13 +66,13 @@ public:
         if (shiftAmount == 0) {
             return expr;
         }
-        return createAdvance(expr, mPb.getInteger(shiftAmount), prefix);
+        return createAdvance(expr, mPb->getInteger(shiftAmount), prefix);
     }
 
     PabloAST * createAdvance(PabloAST * expr, PabloAST * shiftAmount, const std::string prefix);
 
     inline Next * createNext(Assign * assign, PabloAST * expr) {
-        return mPb.createNext(assign, expr);
+        return mPb->createNext(assign, expr);
     }
 
     PabloAST * createAnd(PabloAST * expr1, PabloAST * expr2);
@@ -97,51 +103,71 @@ public:
 
     PabloAST * createSel(PabloAST * condition, PabloAST * trueExpr, PabloAST * falseExpr, const std::string prefix);
 
-    inline If * createIf(PabloAST * condition, std::initializer_list<Assign *> definedVars, PabloBuilder & body) {
-        return mPb.createIf(condition, std::move(definedVars), body.mPb);
-    }
+    /// CreateIf Wrappers
 
     inline If * createIf(PabloAST * condition, std::initializer_list<Assign *> definedVars, PabloBlock & body) {
-        return mPb.createIf(condition, std::move(definedVars), body);
+        return mPb->createIf(condition, std::move(definedVars), body);
     }
 
-    inline If * createIf(PabloAST * condition, std::vector<Assign *> definedVars, PabloBuilder & body) {
-        return mPb.createIf(condition, std::move(definedVars), body.mPb);
+    inline If * createIf(PabloAST * condition, const std::vector<Assign *> & definedVars, PabloBlock & body) {
+        return mPb->createIf(condition, definedVars, body);
     }
 
-    inline If * createIf(PabloAST * condition, std::vector<Assign *> definedVars, PabloBlock & body) {
-        return mPb.createIf(condition, std::move(definedVars), body);
+    inline If * createIf(PabloAST * condition, std::vector<Assign *> && definedVars, PabloBlock & body) {
+        return mPb->createIf(condition, std::move(definedVars), body);
     }
 
-    inline While * createWhile(PabloAST * condition, PabloBuilder & body) {
-        return mPb.createWhile(condition, body.mPb);
+    inline If * createIf(PabloAST * condition, std::initializer_list<Assign *> definedVars, PabloBuilder & builder) {
+        return mPb->createIf(condition, std::move(definedVars), *builder.mPb);
     }
 
-    inline While * createWhile(PabloAST * condition, PabloBlock & body) {
-        return mPb.createWhile(condition, body);
+    inline If * createIf(PabloAST * condition, const std::vector<Assign *> & definedVars, PabloBuilder & builder) {
+        return mPb->createIf(condition, definedVars, *builder.mPb);
+    }
+
+    inline If * createIf(PabloAST * condition, std::vector<Assign *> && definedVars, PabloBuilder & builder) {
+        return mPb->createIf(condition, std::move(definedVars), *builder.mPb);
+    }
+
+    /// CreateWhile Wrappers
+
+    inline While * createWhile(PabloAST * condition, const std::initializer_list<Next *> nextVars, PabloBlock & body) {
+        return mPb->createWhile(condition, nextVars, body);
+    }
+
+    inline While * createWhile(PabloAST * condition, const std::vector<Next *> & nextVars, PabloBlock & body) {
+        return mPb->createWhile(condition, nextVars, body);
+    }
+
+    inline While * createWhile(PabloAST * condition, std::vector<Next *> && nextVars, PabloBlock & body) {
+        return mPb->createWhile(condition, std::move(nextVars), body);
+    }
+
+    inline While * createWhile(PabloAST * condition, const std::initializer_list<Next *> nextVars, PabloBuilder & builder) {
+        return mPb->createWhile(condition, nextVars, *builder.mPb);
+    }
+
+    inline While * createWhile(PabloAST * condition, const std::vector<Next *> & nextVars, PabloBuilder & builder) {
+        return mPb->createWhile(condition, nextVars, *builder.mPb);
+    }
+
+    inline While * createWhile(PabloAST * condition, std::vector<Next *> && nextVars, PabloBuilder & builder) {
+        return mPb->createWhile(condition, std::move(nextVars), *builder.mPb);
     }
 
     inline Statement * front() const {
-        return mPb.front();
+        return mPb->front();
     }
 
     inline Statement * back() const {
-        return mPb.back();
-    }
-
-    inline void setInsertPoint(Statement * const statement) {
-        mPb.setInsertPoint(statement);
-    }
-
-    inline void setInsertPoint(StatementList * const list) {
-        mPb.setInsertPoint(list);
+        return mPb->back();
     }
 
     inline Statement * getInsertPoint() const {
-        return mPb.getInsertPoint();
+        return mPb->getInsertPoint();
     }
 
-    inline PabloBlock & getPabloBlock() {
+    inline PabloBlock * getPabloBlock() {
         return mPb;
     }
 
@@ -151,7 +177,7 @@ public:
 
 private:
 
-    PabloBlock &        mPb;
+    PabloBlock *        mPb;
     PabloBuilder *      mParent;
     ExpressionTable     mExprTable;
 };
