@@ -512,10 +512,10 @@ MarkerType RE_Compiler::processUnboundedRep(RE * repeated, MarkerType marker, Pa
         Next * nextStarAccum = pb.createNext(starAccum, pb.createOr(loopComputation, m2));
         mLoopVariants.push_back(nextPending);
         mLoopVariants.push_back(nextStarAccum);
-        mWhileTest = pb.createOr(mWhileTest, nextPending);
+        mWhileTest = pb.createOr(mWhileTest, nextPending->getExpr());
         mStarDepth--;
         
-        return makeMarker(InitialPostPositionByte, pb.createAssign("unbounded", pb.createOr(base, nextStarAccum)));
+        return makeMarker(InitialPostPositionByte, pb.createAssign("unbounded", pb.createOr(base, nextStarAccum->getExpr())));
     }    
     else {
         Assign * whileTest = pb.createAssign("test", base);
@@ -529,14 +529,14 @@ MarkerType RE_Compiler::processUnboundedRep(RE * repeated, MarkerType marker, Pa
         PabloAST * loopComputation = markerVar(AdvanceMarker(process(repeated, makeMarker(InitialPostPositionByte, whilePending), wb), InitialPostPositionByte, wb));
         Next * nextWhilePending = wb.createNext(whilePending, wb.createAnd(loopComputation, wb.createNot(whileAccum)));
         Next * nextWhileAccum = wb.createNext(whileAccum, wb.createOr(loopComputation, whileAccum));
-        Next * nextWhileTest = wb.createNext(whileTest, wb.createOr(mWhileTest, nextWhilePending));
+        Next * nextWhileTest = wb.createNext(whileTest, wb.createOr(mWhileTest, nextWhilePending->getExpr()));
         mLoopVariants.push_back(nextWhilePending);
         mLoopVariants.push_back(nextWhileAccum);
         mLoopVariants.push_back(nextWhileTest);
-        pb.createWhile(nextWhileTest, mLoopVariants, wb);
+        pb.createWhile(whileTest, mLoopVariants, wb);
         mStarDepth--;
         mLoopVariants.clear();
-        return makeMarker(InitialPostPositionByte, pb.createAssign("unbounded", nextWhileAccum));
+        return makeMarker(InitialPostPositionByte, pb.createAssign("unbounded", nextWhileAccum->getExpr()));
     }    
 } // end of namespace re
 }
