@@ -72,6 +72,7 @@
 #include <math.h>
 #include "cudd.h"
 #include "st.h"
+#include <stdint.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -242,13 +243,8 @@ typedef struct DdHook {		/* hook list element */
     struct DdHook *next;	/* next element in the list */
 } DdHook;
 
-#if SIZEOF_VOID_P == 8 && SIZEOF_INT == 4
-typedef long ptrint;
-typedef unsigned long ptruint;
-#else
-typedef int ptrint;
-typedef unsigned int ptruint;
-#endif
+typedef ssize_t ptrint;
+typedef size_t ptruint;
 
 typedef DdNode *DdNodePtr;
 
