@@ -59,7 +59,7 @@ else()
 find_package(Boost)
 endif()
 
-SET(PABLO_SRC pablo/pabloAST.cpp pablo/ps_assign.cpp pablo/ps_if.cpp pablo/ps_while.cpp pablo/codegenstate.cpp pablo/builder.cpp pablo/symbol_generator.cpp pablo/printer_pablos.cpp pablo/pablo_compiler.cpp pablo/optimizers/pablo_simplifier.cpp pablo/optimizers/pablo_codesinking.cpp pablo/carry_data.cpp)
+SET(PABLO_SRC pablo/pabloAST.cpp pablo/ps_assign.cpp pablo/ps_if.cpp pablo/ps_while.cpp pablo/codegenstate.cpp pablo/builder.cpp pablo/symbol_generator.cpp pablo/printer_pablos.cpp pablo/pablo_compiler.cpp pablo/optimizers/pablo_simplifier.cpp pablo/optimizers/pablo_codesinking.cpp pablo/carry_data.cpp pablo/carry_manager.cpp)
 IF (ENABLE_MULTIPLEXING)
 SET(PABLO_SRC ${PABLO_SRC} pablo/optimizers/pablo_automultiplexing.cpp)
 ENDIF()

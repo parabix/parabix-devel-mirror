@@ -7,7 +7,6 @@
 #ifndef CARRY_DATA_H
 #define CARRY_DATA_H
 #include <include/simd-lib/bitblock.hpp>
-#include <pablo/codegenstate.h>
 #include <stdexcept>
 /* 
  * Carry Data system.
@@ -76,6 +75,8 @@ public:
     unsigned longAdvanceBufferSize(unsigned shift_amount)  const {
         return power2ceil(longAdvanceEntries(shift_amount));
     }
+    
+    bool blockHasLongAdvances() const { return longAdvances > 0;}
     
     unsigned shortAdvanceCarryDataOffset(unsigned advanceIndex)  const {
         return blockCarryDataIndex + shortAdvanceOffset + advanceIndex;
