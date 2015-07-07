@@ -93,9 +93,7 @@ Var * PabloBlock::createVar(PabloAST * name) {
 
 Next * PabloBlock::createNext(Assign * assign, PabloAST * expr) {
     assert (assign && expr);
-    assert (assign->getName());
-    std::string name = assign->getName()->to_string() + "'";
-    return new Next(assign, createAssign(std::move(name), expr), this);
+    return insertAtInsertionPoint(new Next(assign, expr, this));
 }
 
 PabloAST * PabloBlock::createMatchStar(PabloAST * marker, PabloAST * charclass) {

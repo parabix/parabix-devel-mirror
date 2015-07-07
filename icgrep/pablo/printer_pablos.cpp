@@ -74,7 +74,7 @@ void PabloPrinter::print(const Statement * stmt, std::string indent, llvm::raw_o
         print(an->getExpr(), strm);
     }
     else if (const Next * next = dyn_cast<const Next>(stmt)) {        
-        strm << "Next(" << next->getName() << ") = ";
+        strm << next->getName() << "' = ";
         print(next->getExpr(), strm);
     }
     else if (const If * ifstmt = dyn_cast<const If>(stmt)) {

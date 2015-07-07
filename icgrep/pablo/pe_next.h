@@ -8,8 +8,6 @@
 
 namespace pablo {
 
-class Assign;
-
 class Next : public Statement {
     friend class PabloBlock;
 public:
@@ -20,15 +18,15 @@ public:
         return false;
     }
     inline const Assign * getInitial() const {
-        return cast<const Assign>(getOperand(0));
+        return cast<const Assign>(getOperand(1));
     }
     inline PabloAST * getExpr() const {
-        return getOperand(1);
+        return getOperand(0);
     }
     virtual ~Next() {}
 protected:
-    Next(PabloAST * initial, PabloAST * expr, PabloBlock * parent)
-    : Statement(ClassTypeId::Next, {cast<Assign>(initial), cast<Assign>(expr)}, cast<Assign>(initial)->getName(), parent) {
+    explicit Next(PabloAST * initial, PabloAST * expr, PabloBlock * parent)
+    : Statement(ClassTypeId::Next, {expr, cast<Assign>(initial)}, cast<Assign>(initial)->getName(), parent) {
         this->addUser(initial);
     }
 };

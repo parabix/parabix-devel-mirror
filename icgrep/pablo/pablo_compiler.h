@@ -107,7 +107,7 @@ private:
     void SetOutputValue(Value * marker, const unsigned index);
 
     void genPrintRegister(std::string regName, Value * bitblockValue);
-    void compileBlock(PabloBlock & blk);
+    void compileBlock(PabloBlock & block);
     void compileStatement(const Statement * stmt);
     void compileIf(const If * ifStmt);
     void compileWhile(const While * whileStmt);

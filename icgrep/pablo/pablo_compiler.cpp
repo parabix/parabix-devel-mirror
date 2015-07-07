@@ -414,12 +414,12 @@ void PabloCompiler::DeclareCallFunctions() {
     }
 }
 
-void PabloCompiler::compileBlock(PabloBlock & blk) {
-    mPabloBlock = & blk;
-    for (const Statement * statement : blk) {
+void PabloCompiler::compileBlock(PabloBlock & block) {
+    mPabloBlock = &block;
+    for (const Statement * statement : block) {
         compileStatement(statement);
     }
-    mPabloBlock = blk.getParent();
+    mPabloBlock = block.getParent();
 }
 
 
@@ -633,126 +633,106 @@ void PabloCompiler::compileWhile(const While * whileStatement) {
 }
 
 
-void PabloCompiler::compileStatement(const Statement * stmt)
-{
+void PabloCompiler::compileStatement(const Statement * stmt) {
+    Value * expr = nullptr;
     if (const Assign * assign = dyn_cast<const Assign>(stmt)) {
-        Value * expr = compileExpression(assign->getExpr());
+        expr = compileExpression(assign->getExpr());
         if (DumpTrace) {
             genPrintRegister(assign->getName()->to_string(), expr);
         }
-        mMarkerMap[assign] = expr;
         if (LLVM_UNLIKELY(assign->isOutputAssignment())) {
             SetOutputValue(expr, assign->getOutputIndex());
         }
     }
     else if (const Next * next = dyn_cast<const Next>(stmt)) {
-        Value * expr = compileExpression(next->getExpr());
+        expr = compileExpression(next->getExpr());
         if (TraceNext) {
-            genPrintRegister(next->getInitial()->getName()->to_string(), expr);
+            genPrintRegister(next->getName()->to_string(), expr);
         }
-        mMarkerMap[next->getInitial()] = expr;
     }
-    else if (const If * ifStatement = dyn_cast<const If>(stmt))
-    {
+    else if (const If * ifStatement = dyn_cast<const If>(stmt)) {
         compileIf(ifStatement);
+        return;
     }
-    else if (const While * whileStatement = dyn_cast<const While>(stmt))
-    {
+    else if (const While * whileStatement = dyn_cast<const While>(stmt)) {
         compileWhile(whileStatement);
+        return;
     }
     else if (const Call* call = dyn_cast<Call>(stmt)) {
         //Call the callee once and store the result in the marker map.
-        auto mi = mMarkerMap.find(call);
-        if (mi == mMarkerMap.end()) {
-            auto ci = mCalleeMap.find(call->getCallee());
-            if (LLVM_UNLIKELY(ci == mCalleeMap.end())) {
-                throw std::runtime_error("Unexpected error locating static function for \"" + call->getCallee()->to_string() + "\"");
-            }
-            mi = mMarkerMap.insert(std::make_pair(call, mBuilder->CreateCall(ci->second, mBasisBitsAddr))).first;
+        if (mMarkerMap.count(call) != 0) {
+            return;
         }
-        // return mi->second;
+        auto ci = mCalleeMap.find(call->getCallee());
+        if (LLVM_UNLIKELY(ci == mCalleeMap.end())) {
+            throw std::runtime_error("Unexpected error locating static function for \"" + call->getCallee()->to_string() + "\"");
+        }
+        expr = mBuilder->CreateCall(ci->second, mBasisBitsAddr);
     }
     else if (const And * pablo_and = dyn_cast<And>(stmt)) {
-        Value * expr = mBuilder->CreateAnd(compileExpression(pablo_and->getExpr1()), compileExpression(pablo_and->getExpr2()), "and");
+        expr = mBuilder->CreateAnd(compileExpression(pablo_and->getExpr1()), compileExpression(pablo_and->getExpr2()), "and");
         if (DumpTrace) {
             genPrintRegister(stmt->getName()->to_string(), expr);
         }
-        mMarkerMap[pablo_and] = expr;
-        // return expr;
     }
     else if (const Or * pablo_or = dyn_cast<Or>(stmt)) {
-        Value * expr = mBuilder->CreateOr(compileExpression(pablo_or->getExpr1()), compileExpression(pablo_or->getExpr2()), "or");
+        expr = mBuilder->CreateOr(compileExpression(pablo_or->getExpr1()), compileExpression(pablo_or->getExpr2()), "or");
         if (DumpTrace) {
             genPrintRegister(stmt->getName()->to_string(), expr);
         }
-        mMarkerMap[pablo_or] = expr;
-        // return expr;
     }
     else if (const Xor * pablo_xor = dyn_cast<Xor>(stmt)) {
-        Value * expr = mBuilder->CreateXor(compileExpression(pablo_xor->getExpr1()), compileExpression(pablo_xor->getExpr2()), "xor");
-        mMarkerMap[pablo_xor] = expr;
-        // return expr;
+        expr = mBuilder->CreateXor(compileExpression(pablo_xor->getExpr1()), compileExpression(pablo_xor->getExpr2()), "xor");
     }
     else if (const Sel * sel = dyn_cast<Sel>(stmt)) {
         Value* ifMask = compileExpression(sel->getCondition());
         Value* ifTrue = mBuilder->CreateAnd(ifMask, compileExpression(sel->getTrueExpr()));
         Value* ifFalse = mBuilder->CreateAnd(genNot(ifMask), compileExpression(sel->getFalseExpr()));
-        Value * expr = mBuilder->CreateOr(ifTrue, ifFalse);
+        expr = mBuilder->CreateOr(ifTrue, ifFalse);
         if (DumpTrace) {
             genPrintRegister(stmt->getName()->to_string(), expr);
         }
-        mMarkerMap[sel] = expr;
-        // return expr;
     }
     else if (const Not * pablo_not = dyn_cast<Not>(stmt)) {
-        Value * expr = genNot(compileExpression(pablo_not->getExpr()));
+        expr = genNot(compileExpression(pablo_not->getExpr()));
         if (DumpTrace) {
             genPrintRegister(stmt->getName()->to_string(), expr);
         }
-        mMarkerMap[pablo_not] = expr;
-        // return expr;
     }
     else if (const Advance * adv = dyn_cast<Advance>(stmt)) {
-        Value* strm_value = compileExpression(adv->getExpr());
+        Value* value = compileExpression(adv->getExpr());
         int shift = adv->getAdvanceAmount();
         unsigned advance_index = adv->getLocalAdvanceIndex();
-        Value * expr = genAdvanceWithCarry(strm_value, shift, advance_index);
+        expr = genAdvanceWithCarry(value, shift, advance_index);
         if (DumpTrace) {
             genPrintRegister(stmt->getName()->to_string(), expr);
         }
-        mMarkerMap[adv] = expr;
-        // return expr;
     }
-    else if (const MatchStar * mstar = dyn_cast<MatchStar>(stmt))
-    {
+    else if (const MatchStar * mstar = dyn_cast<MatchStar>(stmt)) {
         Value * marker = compileExpression(mstar->getMarker());
         Value * cc = compileExpression(mstar->getCharClass());
         Value * marker_and_cc = mBuilder->CreateAnd(marker, cc);
         unsigned carry_index = mstar->getLocalCarryIndex();
-        Value * expr = mBuilder->CreateOr(mBuilder->CreateXor(genAddWithCarry(marker_and_cc, cc, carry_index), cc), marker, "matchstar");
+        expr = mBuilder->CreateOr(mBuilder->CreateXor(genAddWithCarry(marker_and_cc, cc, carry_index), cc), marker, "matchstar");
         if (DumpTrace) {
             genPrintRegister(stmt->getName()->to_string(), expr);
         }
-        mMarkerMap[mstar] = expr;
-        // return expr;
     }
-    else if (const ScanThru * sthru = dyn_cast<ScanThru>(stmt))
-    {
+    else if (const ScanThru * sthru = dyn_cast<ScanThru>(stmt)) {
         Value * marker_expr = compileExpression(sthru->getScanFrom());
         Value * cc_expr = compileExpression(sthru->getScanThru());
         unsigned carry_index = sthru->getLocalCarryIndex();
-        Value * expr = mBuilder->CreateAnd(genAddWithCarry(marker_expr, cc_expr, carry_index), genNot(cc_expr), "scanthru");
+        expr = mBuilder->CreateAnd(genAddWithCarry(marker_expr, cc_expr, carry_index), genNot(cc_expr), "scanthru");
         if (DumpTrace) {
             genPrintRegister(stmt->getName()->to_string(), expr);
         }
-        mMarkerMap[sthru] = expr;
-        // return expr;
     }
     else {
         llvm::raw_os_ostream cerr(std::cerr);
         PabloPrinter::print(stmt, cerr);
         throw std::runtime_error("Unrecognized Pablo Statement! can't compile.");
     }
+    mMarkerMap[stmt] = expr;
 }
 
 Value * PabloCompiler::compileExpression(const PabloAST * expr) {
@@ -762,11 +742,8 @@ Value * PabloCompiler::compileExpression(const PabloAST * expr) {
     else if (isa<Zeroes>(expr)) {
         return mZeroInitializer;
     }
-    else if (const Next * next = dyn_cast<Next>(expr)) {
-        expr = next->getInitial();
-    }
     auto f = mMarkerMap.find(expr);
-    if (f == mMarkerMap.end()) {
+    if (LLVM_UNLIKELY(f == mMarkerMap.end())) {
         std::string o;
         llvm::raw_string_ostream str(o);
         str << "\"";
