@@ -305,15 +305,61 @@ void AutoMultiplexing::initialize(PabloBlock & entry) {
  *
  * Scan through the program and iteratively compute the BDDs for each statement.
  ** ------------------------------------------------------------------------------------------------------------- */
-void AutoMultiplexing::characterize(PabloBlock & block) {
+void AutoMultiplexing::characterize(PabloBlock &block) {
     for (Statement * stmt : block) {
         if (LLVM_UNLIKELY(isa<If>(stmt) || isa<While>(stmt))) {
-            // Set the next statement to be the first statement of the inner scope and push the
-            // next statement of the current statement into the scope stack.
+            const auto start = mRecentCharacterizations.size();
             characterize(isa<If>(stmt) ? cast<If>(stmt)->getBody() : cast<While>(stmt)->getBody());
+            assert (mRecentCharacterizations.size() >= start);
+            if (isa<If>(stmt)) {
+                const auto & defined = cast<const If>(stmt)->getDefined();
+                for (auto pair = mRecentCharacterizations.begin() + start; pair != mRecentCharacterizations.end(); ++pair) {
+                    const PabloAST * expr = nullptr;
+                    DdNode * bdd = nullptr;
+                    std::tie(expr, bdd) = *pair;
+                    if (LLVM_UNLIKELY(isa<Assign>(expr))) {
+                        if (LLVM_LIKELY(std::find(defined.begin(), defined.end(), expr) != defined.end())) {
+                            continue;
+                        }
+                    }
+                    mCharacterizationMap.erase(mCharacterizationMap.find(expr));
+                    if (LLVM_UNLIKELY(Cudd_IsConstant(bdd))) {
+                        continue;
+                    }
+                    Deref(bdd);
+                }
+            }
+            else { // if isa<While>(stmt)
+                const auto & variants = cast<const While>(stmt)->getVariants();
+                for (auto pair = mRecentCharacterizations.begin() + start; pair != mRecentCharacterizations.end(); ++pair) {
+                    const PabloAST * expr = nullptr;
+                    DdNode * bdd = nullptr;
+                    std::tie(expr, bdd) = *pair;
+                    if (LLVM_UNLIKELY(isa<Next>(expr))) {
+                        if (LLVM_LIKELY(std::find(variants.begin(), variants.end(), expr) != variants.end())) {
+                            DdNode *& next = mCharacterizationMap[expr];
+                            next = Or(next, bdd);
+                            Ref(next);
+                            continue;
+                        }
+                    }
+                    mCharacterizationMap.erase(mCharacterizationMap.find(expr));
+                    if (LLVM_UNLIKELY(Cudd_IsConstant(bdd))) {
+                        continue;
+                    }
+                    Deref(bdd);
+                }
+            }
+
+            assert (Cudd_DebugCheck(mManager) == 0);
+
+            mRecentCharacterizations.erase(mRecentCharacterizations.begin() + start, mRecentCharacterizations.end());
             continue;
         }
-        mCharacterizationMap[stmt] = characterize(stmt);
+
+        DdNode * var = characterize(stmt);
+        mCharacterizationMap[stmt] = var;
+        assert (Cudd_DebugCheck(mManager) == 0);
     }
 }
 
@@ -325,8 +371,9 @@ inline DdNode * AutoMultiplexing::characterize(Statement * const stmt) {
     DdNode * bdd = nullptr;
     // Map our operands to the computed BDDs
     std::array<DdNode *, 3> input;
-    for (unsigned i = 0; i != stmt->getNumOperands(); ++i) {
-        PabloAST * const op = stmt->getOperand(i);
+    unsigned count = 0;
+    for (; count != stmt->getNumOperands(); ++count) {
+        PabloAST * const op = stmt->getOperand(count);
         if (LLVM_UNLIKELY(isa<Integer>(op) || isa<String>(op))) {
             continue;
         }
@@ -334,26 +381,30 @@ inline DdNode * AutoMultiplexing::characterize(Statement * const stmt) {
         if (LLVM_UNLIKELY(f == mCharacterizationMap.end())) {
             std::string tmp;
             llvm::raw_string_ostream msg(tmp);
-            msg << "Uncharacterized operand " << std::to_string(i);
+            msg << "Uncharacterized operand " << std::to_string(count);
             PabloPrinter::print(stmt, " of ", msg);
             throw std::runtime_error(msg.str());
         }
-        input[i] = f->second;
+        input[count] = f->second;
     }
 
     switch (stmt->getClassTypeId()) {
         case PabloAST::ClassTypeId::Assign:
-            return input[0];
+        case PabloAST::ClassTypeId::Next:
+            bdd = input[0];
+            break;
         case PabloAST::ClassTypeId::And:
             bdd = And(input[0], input[1]);
-            break;
-        case PabloAST::ClassTypeId::Next:
+            break;        
         case PabloAST::ClassTypeId::Or:
-            return Or(input[0], input[1]);
+            bdd = Or(input[0], input[1]);
+            break;
         case PabloAST::ClassTypeId::Xor:
-            return Xor(input[0], input[1]);
+            bdd = Xor(input[0], input[1]);
+            break;
         case PabloAST::ClassTypeId::Not:
-            return Not(input[0]);
+            bdd = Not(input[0]);
+            break;
         case PabloAST::ClassTypeId::Sel:
             bdd = Ite(input[0], input[1], input[2]);
             break;
@@ -366,20 +417,42 @@ inline DdNode * AutoMultiplexing::characterize(Statement * const stmt) {
                 return Zero();
             }
         case PabloAST::ClassTypeId::Call:
-            return NewVar();
+            bdd = NewVar();
+            mRecentCharacterizations.emplace_back(stmt, bdd);
+            return bdd;
         case PabloAST::ClassTypeId::Advance:
+            // This returns so that it doesn't mistakeningly replace the Advance with 0 or add it
+            // to the list of recent characterizations.
             return characterize(cast<Advance>(stmt), input[0]);
         default:
             throw std::runtime_error("Unexpected statement type " + stmt->getName()->to_string());
     }
 
+
+    Ref(bdd);
+
+    if (LLVM_UNLIKELY(NoSatisfyingAssignment(bdd))) {
+        Deref(bdd);
+        // If there is no satisfing assignment for this bdd, the statement will always produce
+        // 0. If this is an Assign or Next node, replace the value with 0. Otherwise replace
+        // the statement with 0.
+        if (LLVM_UNLIKELY(isa<Assign>(stmt) || isa<Next>(stmt))) {
+            stmt->setOperand(0, stmt->getParent()->createZeroes());
+        }
+        else {
+            stmt->replaceWith(stmt->getParent()->createZeroes());
+        }
+        return Zero();
+    }
+
+    mRecentCharacterizations.emplace_back(stmt, bdd);
     return bdd;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief characterize
  ** ------------------------------------------------------------------------------------------------------------- */
-inline DdNode * AutoMultiplexing::characterize(Advance * adv, DdNode * input) {
+inline DdNode * AutoMultiplexing::characterize(Advance *adv, DdNode * input) {
     DdNode * Ik, * Ck, * Nk;
     if (LLVM_UNLIKELY(isZero(input))) {
         Ik = Ck = Nk = Zero();
@@ -387,6 +460,7 @@ inline DdNode * AutoMultiplexing::characterize(Advance * adv, DdNode * input) {
     else {
 
         Ik = input;
+        Ref(input);
         Ck = NewVar();
         Nk = Not(Ck);
 
@@ -404,15 +478,16 @@ inline DdNode * AutoMultiplexing::characterize(Advance * adv, DdNode * input) {
             // If these advances are "shifting" their values by the same amount and aren't transitively dependant ...
             if ((adv->getOperand(1) == tmp->getOperand(1)) && (notTransitivelyDependant(i, k))) {
                 DdNode * Ii = std::get<1>(mAdvance[i]);
-                DdNode * Ni = std::get<2>(mAdvance[i]);
                 DdNode * const IiIk = And(Ik, Ii);
+                Ref(IiIk);
                 // Is there any satisfying truth assignment? If not, these streams are mutually exclusive.
                 if (NoSatisfyingAssignment(IiIk)) {
                     assert (mCharacterizationMap.count(tmp));
                     DdNode *& Ci = mCharacterizationMap[tmp];
                     // Mark the i-th and k-th Advances as being mutually exclusive
-                    Ck = And(Ck, Ni);
-                    Ci = And(Ci, Nk);
+                    DdNode * Ni = std::get<2>(mAdvance[i]);
+                    Ck = And(Ck, Ni); Ref(Ck);
+                    Ci = And(Ci, Nk); Ref(Ci);
                     // If Ai ∩ Ak = ∅ and Aj ⊂ Ai, Aj ∩ Ak = ∅.
                     graph_traits<SubsetGraph>::in_edge_iterator ei, ei_end;
                     for (std::tie(ei, ei_end) = in_edges(i, mSubsetGraph); ei != ei_end; ++ei) {
@@ -423,8 +498,8 @@ inline DdNode * AutoMultiplexing::characterize(Advance * adv, DdNode * input) {
                             DdNode *& Cj = mCharacterizationMap[adv];
                             DdNode * Nj = std::get<2>(mAdvance[j]);
                             // Mark the i-th and j-th Advances as being mutually exclusive
-                            Ck = And(Ck, Nj);
-                            Cj = And(Cj, Nk);
+                            Ck = And(Ck, Nj); Ref(Ck);
+                            Cj = And(Cj, Nk); Ref(Cj);
                             unconstrained[j] = true;
                         }
                     }
@@ -456,7 +531,7 @@ inline DdNode * AutoMultiplexing::characterize(Advance * adv, DdNode * input) {
                     }
                     unconstrained[i] = true;
                 }
-                Cudd_RecursiveDeref(mManager, IiIk);
+                Deref(IiIk);
             }
         }
 
@@ -472,7 +547,7 @@ inline DdNode * AutoMultiplexing::characterize(Advance * adv, DdNode * input) {
     }
 
     mAdvance.emplace_back(adv, Ik, Nk);
-
+    Ref(Ck);
     return Ck;
 }
 
@@ -497,7 +572,8 @@ inline DdNode * AutoMultiplexing::One() const {
 }
 
 inline DdNode * AutoMultiplexing::NewVar() {
-    return Cudd_bddIthVar(mManager, mVariables++);
+    DdNode * var = Cudd_bddIthVar(mManager, mVariables++);
+    return var;
 }
 
 inline bool AutoMultiplexing::isZero(DdNode * const x) const {
@@ -505,35 +581,42 @@ inline bool AutoMultiplexing::isZero(DdNode * const x) const {
 }
 
 inline DdNode * AutoMultiplexing::And(DdNode * const x, DdNode * const y) {
-    DdNode * r = Cudd_bddAnd(mManager, x, y);
-    Cudd_Ref(r);
-    return r;
+    DdNode * var = Cudd_bddAnd(mManager, x, y);
+    return var;
 }
 
 inline DdNode * AutoMultiplexing::Or(DdNode * const x, DdNode * const y) {
-    DdNode * r = Cudd_bddOr(mManager, x, y);
-    Cudd_Ref(r);
-    return r;
+    DdNode * var = Cudd_bddOr(mManager, x, y);
+    return var;
 }
 
 inline DdNode * AutoMultiplexing::Xor(DdNode * const x, DdNode * const y) {
-    DdNode * r = Cudd_bddXor(mManager, x, y);
-    Cudd_Ref(r);
-    return r;
+    DdNode * var = Cudd_bddXor(mManager, x, y);
+    return var;
 }
 
 inline DdNode * AutoMultiplexing::Not(DdNode * const x) const {
-    return Cudd_Not(x);
+    DdNode * var = Cudd_Not(x);
+    return var;
 }
 
 inline DdNode * AutoMultiplexing::Ite(DdNode * const x, DdNode * const y, DdNode * const z) {
-    DdNode * r = Cudd_bddIte(mManager, x, y, z);
-    Cudd_Ref(r);
-    return r;
+    DdNode * var = Cudd_bddIte(mManager, x, y, z);
+    return var;
 }
 
 inline bool AutoMultiplexing::NoSatisfyingAssignment(DdNode * const x) {
     return Cudd_bddLeq(mManager, x, Zero());
+}
+
+inline void AutoMultiplexing::Ref(DdNode * const x) {
+    assert (x);
+    Cudd_Ref(x);
+}
+
+inline void AutoMultiplexing::Deref(DdNode * const x) {
+    assert (x);
+    Cudd_RecursiveDeref(mManager, x);
 }
 
 inline void AutoMultiplexing::Shutdown() {
@@ -856,7 +939,7 @@ void AutoMultiplexing::applySubsetConstraints() {
                     // including s. This will restore the advanced variable back to its original state.
 
                     // Gather the original users to this advance. We'll be manipulating it shortly.
-                    Statement::Users U(adv->users());
+                    std::vector<PabloAST *> U(adv->users().begin(), adv->users().end());
 
                     // Add s to V and sort the list; it'll be closer to being in topological order.
                     V.push_back(s);
@@ -996,172 +1079,9 @@ void AutoMultiplexing::multiplexSelectedIndependentSets() const {
                 PabloAST * demuxed = Q.front(); Q.pop_front(); assert (demuxed);
                 input[i - 1]->replaceWith(demuxed, true, true);
             }
-
-            simplify(muxed, m, builder);
         }
     }
 }
-
-
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief simplify
- ** ------------------------------------------------------------------------------------------------------------- */
-void AutoMultiplexing::simplify(const std::vector<PabloAST *> & variables, const unsigned n, PabloBuilder & builder) const {
-
-    std::queue<PabloAST *> Q;
-    llvm::DenseMap<PabloAST *, DdNode *> characterization;
-    flat_set<PabloAST *> uncharacterized;
-
-    DdManager * manager = Cudd_Init(n + mBaseVariables.size(), 0, CUDD_UNIQUE_SLOTS, CUDD_CACHE_SLOTS, 0);
-    Cudd_AutodynDisable(manager);
-
-    unsigned i = 0;
-    for (; i != n; ++i) {
-        PabloAST * const var = variables[i];
-        Q.push(var);
-        characterization[var] = Cudd_bddIthVar(manager, i);
-    }
-
-    for (Var * var : mBaseVariables) {
-        characterization[var] = Cudd_bddIthVar(manager, i++);
-    }
-
-    std::array<DdNode *, 3> input;
-
-    while (!Q.empty()) {
-        PabloAST * const var = Q.front(); Q.pop();
-        for (PabloAST * user : var->users()) {
-            Statement * stmt = nullptr;
-            // If this user is a boolean operation ...
-            switch (user->getClassTypeId()) {
-                case PabloAST::ClassTypeId::And:
-                case PabloAST::ClassTypeId::Or:
-                case PabloAST::ClassTypeId::Not:
-                case PabloAST::ClassTypeId::Xor:
-                case PabloAST::ClassTypeId::Sel:
-                    // And it is within the same scope ...
-                    if ((stmt = cast<Statement>(user))->getParent() == builder.getPabloBlock()) {
-                        bool characterized = true;
-                        for (unsigned i = 0; i != stmt->getNumOperands(); ++i) {
-                            auto f = characterization.find(stmt->getOperand(i));
-                            if (f == characterization.end()) {
-                                characterized = false;
-                                break;
-                            }
-                            input[i] = f->second;
-                        }
-                        // And every input operand is characterizied ...
-                        if (characterized) {
-                            DdNode * bdd = nullptr;
-                            switch (user->getClassTypeId()) {
-                                case PabloAST::ClassTypeId::And:
-                                    bdd = Cudd_bddAnd(manager, input[0], input[1]);
-                                    break;
-                                case PabloAST::ClassTypeId::Or:
-                                    bdd = Cudd_bddOr(manager, input[0], input[1]);
-                                    break;
-                                case PabloAST::ClassTypeId::Not:
-                                    bdd = Cudd_Not(input[0]);
-                                    break;
-                                case PabloAST::ClassTypeId::Xor:
-                                    bdd = Cudd_bddXor(manager, input[0], input[1]);
-                                    break;
-                                case PabloAST::ClassTypeId::Sel:
-                                    bdd = Cudd_bddIte(manager, input[0], input[1], input[2]);
-                                    break;
-                                default: __builtin_unreachable();
-                            }
-                            characterization[stmt] = bdd;
-                            uncharacterized.erase(stmt);
-                            for (PabloAST * next : stmt->users()) {
-                                if (characterization.count(next) == 0) {
-                                    Q.push(next);
-                                }
-                            }
-                            break;
-                        }
-                    }
-                default:
-                    // Otherwise we probably apply Quine McCluskey to one of this statements operands
-                    // presuming they aren't characterized properly later.
-                    uncharacterized.insert(user);
-                    break;
-            }
-        }
-    }
-    // Gether up the output statements from the characterized inputs of the uncharacterized statements
-    llvm::DenseMap<PabloAST *, DdNode *> outputs;
-    for (PabloAST * var : uncharacterized) {
-        Statement * stmt = cast<Statement>(var);
-        for (unsigned i = 0; i != stmt->getNumOperands(); ++i) {
-            auto f = characterization.find(stmt->getOperand(i));
-            if (f != characterization.end()) {
-                outputs.insert(std::make_pair(f->first, f->second));
-            }
-        }
-    }
-
-    circular_buffer<PabloAST *> S(n);
-
-    CUDD_VALUE_TYPE value;
-    int * cube = nullptr;
-    for (auto itr : outputs) {
-
-        // Look into doing some more analysis here to see if a Xor or Sel operation is possible.
-        DdGen * gen = Cudd_FirstCube(manager, itr.second, &cube, &value);
-        while (!Cudd_IsGenEmpty(gen)) {
-            // cube[0 ... n - 1] = {{ 0 : false, 1: true, 2: don't care }}
-            for (unsigned i = 0; i != n; ++i) {
-                if (cube[i] == 0) {
-                    S.push_back(variables[i]);
-                }
-            }
-
-            if (S.size() > 0) {
-                while(S.size() > 1) {
-                    PabloAST * A = S.front(); S.pop_front();
-                    PabloAST * B = S.front(); S.pop_front();
-                    S.push_back(builder.createOr(A, B));
-                }
-                PabloAST * C = S.front(); S.pop_front();
-                S.push_back(builder.createNot(C));
-            }
-
-            for (unsigned i = 0; i != n; ++i) {
-                if (cube[i] == 1) {
-                    S.push_back(variables[i]);
-                }
-            }
-
-            while(S.size() > 1) {
-                PabloAST * A = S.front(); S.pop_front();
-                PabloAST * B = S.front(); S.pop_front();
-                S.push_back(builder.createAnd(A, B));
-            }
-
-            Q.push(S.front()); S.pop_front();
-
-            Cudd_NextCube(gen, &cube, &value);
-        }
-        Cudd_GenFree(gen);
-
-        while (Q.size() > 1) {
-            PabloAST * A = Q.front(); Q.pop();
-            PabloAST * B = Q.front(); Q.pop();
-            Q.push(builder.createOr(A, B));
-        }
-
-        Statement * stmt = cast<Statement>(itr.first);
-        stmt->replaceWith(Q.front(), true, true);
-        Q.pop();
-    }
-    Cudd_Quit(manager);
-
-
-}
-
-
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief topologicalSort

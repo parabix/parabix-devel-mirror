@@ -33,12 +33,13 @@ class AutoMultiplexing {
     using AdvanceMap = boost::container::flat_map<const Statement *, unsigned>;
     using AdvanceVector = std::vector<std::tuple<Advance *, DdNode *, DdNode *>>;
     using IndependentSet = std::vector<ConstraintVertex>;
+    using RecentCharacterizations = std::vector<std::pair<const PabloAST *, DdNode *>>;
 
 public:
     static bool optimize(const std::vector<Var *> & input, PabloBlock & entry);
 protected:
     void initialize(PabloBlock & entry);
-    void characterize(PabloBlock & block);
+    void characterize(PabloBlock &block);
     DdNode * characterize(Statement * const stmt);
     DdNode * characterize(Advance * adv, DdNode * input);
     bool notTransitivelyDependant(const ConstraintVertex i, const ConstraintVertex j) const;
@@ -47,7 +48,6 @@ protected:
     void selectMultiplexSets(RNG &);
     void applySubsetConstraints();
     void multiplexSelectedIndependentSets() const;
-    void simplify(const std::vector<PabloAST *> & variables, const unsigned n, PabloBuilder & block) const;
     void topologicalSort(PabloBlock & entry) const;
     inline AutoMultiplexing(const std::vector<Var *> & vars)
     : mVariables(0)
@@ -66,6 +66,8 @@ private:
     DdNode * Not(DdNode * x) const;
     DdNode * Ite(DdNode * const x, DdNode * const y, DdNode * const z);
     DdNode * NewVar();
+    void Ref(DdNode * const x);
+    void Deref(DdNode * const x);
     bool NoSatisfyingAssignment(DdNode * const x);
     void Shutdown();
 
@@ -79,6 +81,7 @@ private:
     AdvanceVector               mAdvance;
     MultiplexSetGraph           mMultiplexSetGraph;
     const std::vector<Var *> &  mBaseVariables;
+    RecentCharacterizations     mRecentCharacterizations;
 };
 
 }

@@ -9,17 +9,24 @@ namespace pablo {
 class PabloBuilder {
 public:
 
-    explicit PabloBuilder(PabloBlock & block) : mPb(&block), mParent(nullptr) {}
+    explicit PabloBuilder(PabloBlock & block) : mPb(&block), mParent(nullptr), mExprTable(nullptr) {}
 
     explicit PabloBuilder(PabloBlock & block, PabloBuilder & parent) : mPb(&block), mParent(&parent), mExprTable(&(parent.mExprTable)) {}
 
-    PabloBuilder(const PabloBuilder &) = default;
+    PabloBuilder(PabloBuilder && builder) : mPb(builder.mPb), mParent(builder.mParent), mExprTable(std::move(builder.mExprTable)) {}
+
+    PabloBuilder & operator=(PabloBuilder) = delete;
 
     PabloBuilder & operator=(PabloBuilder &) = delete;
 
-    PabloBuilder & operator=(PabloBuilder &&) = default;
+    PabloBuilder & operator=(PabloBuilder && builder) {
+        mPb = builder.mPb;
+        mParent = builder.mParent;
+        mExprTable = std::move(builder.mExprTable);
+        return *this;
+    }
 
-    inline static PabloBuilder && Create(PabloBuilder & parent) noexcept {
+    inline static PabloBuilder Create(PabloBuilder & parent) noexcept {
         return std::move(PabloBuilder(PabloBlock::Create(*(parent.mPb)), parent));
     }
 

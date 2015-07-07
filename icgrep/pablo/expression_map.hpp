@@ -12,12 +12,21 @@ struct ExpressionMap {
     enum {N = sizeof...(Args)};
     typedef ExpressionMap<Args...> Type;
     typedef std::tuple<PabloAST::ClassTypeId, Args...> Key;
+    friend struct ExpressionTable;
 
-    inline explicit ExpressionMap(Type * predecessor) : mPredecessor(predecessor) { }
+    explicit ExpressionMap(Type * predecessor = nullptr) : mPredecessor(predecessor) { }
 
-    ExpressionMap(const Type &) = default;
+    explicit ExpressionMap(Type && other) noexcept
+    : mPredecessor(other.mPredecessor)
+    , mMap(std::move(other.mMap)) {
 
-    ExpressionMap(Type &&) = default;
+    }
+
+    ExpressionMap & operator=(Type && other) {
+        mPredecessor = other.mPredecessor;
+        mMap = std::move(other.mMap);
+        return *this;
+    }
 
     template <class Functor, typename... Params>
     inline PabloAST * findOrCall(Functor && functor, const PabloAST::ClassTypeId type, Args... args, Params... params) {
@@ -78,30 +87,37 @@ private:
     }
 
 private:
-    Type *                      mPredecessor;
+    const Type *                mPredecessor;
     std::map<Key, PabloAST *>   mMap;
 };
 
 
 struct ExpressionTable {
 
-    ExpressionTable() noexcept
-    : mUnary(nullptr)
-    , mBinary(nullptr)
-    , mTernary(nullptr) {
+    explicit ExpressionTable(const ExpressionTable * predecessor = nullptr) noexcept {
+        if (predecessor) {
+            mUnary.mPredecessor = &(predecessor->mUnary);
+            mBinary.mPredecessor = &(predecessor->mBinary);
+            mTernary.mPredecessor = &(predecessor->mTernary);
+        }
+    }
+
+    explicit ExpressionTable(ExpressionTable & other) = delete;
+
+    explicit ExpressionTable(ExpressionTable && other) noexcept
+    : mUnary(std::move(other.mUnary))
+    , mBinary(std::move(other.mBinary))
+    , mTernary(std::move(other.mTernary)) {
 
     }
 
-    explicit ExpressionTable(ExpressionTable * predecessor) noexcept
-    : mUnary(predecessor ? &(predecessor->mUnary) : nullptr)
-    , mBinary(predecessor ? &(predecessor->mBinary) : nullptr)
-    , mTernary(predecessor ? &(predecessor->mTernary) : nullptr) {
-
+    ExpressionTable & operator=(ExpressionTable && other) {
+        mUnary = std::move(other.mUnary);
+        mBinary = std::move(other.mBinary);
+        mTernary = std::move(other.mTernary);
+        return *this;
     }
 
-    ExpressionTable(const ExpressionTable &) = default;
-
-    ExpressionTable(ExpressionTable &&) = default;
 
     template <class Functor, typename... Params>
     inline PabloAST * findUnaryOrCall(Functor && functor, const PabloAST::ClassTypeId type, PabloAST * expr, Params... params) {

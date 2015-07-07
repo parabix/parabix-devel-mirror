@@ -60,7 +60,7 @@ static cl::opt<bool> PabloSinkingPass("sinking", cl::init(false),
                                       cl::desc("Moves all instructions into the innermost legal If-scope so that they are only executed when needed."),
                                       cl::cat(cPabloOptimizationsOptions));
 #ifdef ENABLE_MULTIPLEXING
-static cl::opt<bool> EnableMultiplexing("enable-multiplexing", cl::init(false),
+static cl::opt<bool> EnableMultiplexing("enable-multiplexing", cl::init(true),
                                       cl::desc("combine Advances whose inputs are mutual exclusive into the fewest number of advances possible (expensive)."),
                                       cl::cat(cPabloOptimizationsOptions));
 #endif
