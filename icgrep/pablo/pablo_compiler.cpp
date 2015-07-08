@@ -7,6 +7,7 @@
 #include <pablo/pablo_compiler.h>
 #include <pablo/codegenstate.h>
 #include <pablo/carry_data.h>
+#include <pablo/carry_manager.h>
 #include <pablo/printer_pablos.h>
 #include <cc/cc_namemap.hpp>
 #include <re/re_name.h>
@@ -71,11 +72,11 @@ PabloCompiler::PabloCompiler(const std::vector<Var*> & basisBits)
 , mMod(mModOwner.get())
 #endif
 , mBuilder(&LLVM_Builder)
+, mCarryManager(nullptr)
 , mExecutionEngine(nullptr)
 , mBitBlockType(VectorType::get(IntegerType::get(mMod->getContext(), 64), BLOCK_SIZE / 64))
 , mBasisBitsInputPtr(nullptr)
 , mCarryDataPtr(nullptr)
-, mBlockNo(nullptr)
 , mWhileDepth(0)
 , mIfDepth(0)
 , mZeroInitializer(ConstantAggregateZero::get(mBitBlockType))
@@ -119,12 +120,8 @@ CompiledPabloFunction PabloCompiler::compile(PabloBlock & pb)
     mWhileDepth = 0;
     mIfDepth = 0;
     mMaxWhileDepth = 0;
-    // Get the total number of carry entries; add 1 extra element for the block number.
-    unsigned totalCarryDataSize = pb.carryData.enumerate(pb) + 1;
-    Examine(pb); 
-    mCarryInVector.resize(totalCarryDataSize);
-    mCarryOutVector.resize(totalCarryDataSize);
-    mCarryDataSummaryIdx.resize(totalCarryDataSize);
+    mCarryManager = new CarryManager(mBuilder, mBitBlockType, mZeroInitializer, mOneInitializer);
+    
     std::string errMessage;
 #ifdef USE_LLVM_3_5
     EngineBuilder builder(mMod);
@@ -143,6 +140,7 @@ CompiledPabloFunction PabloCompiler::compile(PabloBlock & pb)
     }
     DeclareFunctions();
 
+    Examine(pb);
     DeclareCallFunctions();
 
     Function::arg_iterator args = mFunction->arg_begin();
@@ -166,18 +164,18 @@ CompiledPabloFunction PabloCompiler::compile(PabloBlock & pb)
         LoadInst * basisBit = mBuilder->CreateAlignedLoad(gep, BLOCK_SIZE/8, false, mBasisBits[i]->getName()->to_string());
         mMarkerMap.insert(std::make_pair(mBasisBits[i], basisBit));
     }
+        
+    unsigned totalCarryDataSize = mCarryManager->initialize(&pb, mCarryDataPtr);
     
-    // The block number is a 64-bit integer at the end of the carry data area.
-    Value * blockNoPtr = mBuilder->CreateBitCast(mBuilder->CreateGEP(mCarryDataPtr, mBuilder->getInt64(totalCarryDataSize - 1)), Type::getInt64PtrTy(mBuilder->getContext()));
-    mBlockNo = mBuilder->CreateLoad(blockNoPtr);
     //Generate the IR instructions for the function.
     compileBlock(pb);
     
-    mBuilder->CreateStore(mBuilder->CreateAdd(mBlockNo, mBuilder->getInt64(1)), blockNoPtr);
+    mCarryManager->generateBlockNoIncrement();
 
     if (DumpTrace || TraceNext) {
-        genPrintRegister("blockNo", genCarryDataLoad(totalCarryDataSize - 1));
+        genPrintRegister("mBlockNo", mBuilder->CreateAlignedLoad(mBuilder->CreateBitCast(mCarryManager->getBlockNoPtr(), PointerType::get(mBitBlockType, 0)), BLOCK_SIZE/8, false));
     }
+    
     if (LLVM_UNLIKELY(mWhileDepth != 0)) {
         throw std::runtime_error("Non-zero nesting depth error (" + std::to_string(mWhileDepth) + ")");
     }
@@ -415,221 +413,141 @@ void PabloCompiler::DeclareCallFunctions() {
 }
 
 void PabloCompiler::compileBlock(PabloBlock & block) {
-    mPabloBlock = &block;
+    mCarryManager->ensureCarriesLoadedLocal(block);
+    mPabloBlock = & block;
     for (const Statement * statement : block) {
         compileStatement(statement);
     }
     mPabloBlock = block.getParent();
+    mCarryManager->ensureCarriesStoredLocal(block);
 }
 
 
 void PabloCompiler::compileIf(const If * ifStatement) {        
-        //
-        //  The If-ElseZero stmt:
-        //  if <predicate:expr> then <body:stmt>* elsezero <defined:var>* endif
-        //  If the value of the predicate is nonzero, then determine the values of variables
-        //  <var>* by executing the given statements.  Otherwise, the value of the
-        //  variables are all zero.  Requirements: (a) no variable that is defined within
-        //  the body of the if may be accessed outside unless it is explicitly
-        //  listed in the variable list, (b) every variable in the defined list receives
-        //  a value within the body, and (c) the logical consequence of executing
-        //  the statements in the event that the predicate is zero is that the
-        //  values of all defined variables indeed work out to be 0.
-        //
-        //  Simple Implementation with Phi nodes:  a phi node in the if exit block
-        //  is inserted for each variable in the defined variable list.  It receives
-        //  a zero value from the ifentry block and the defined value from the if
-        //  body.
-        //
-        BasicBlock * ifEntryBlock = mBuilder->GetInsertBlock();
-        BasicBlock * ifBodyBlock = BasicBlock::Create(mMod->getContext(), "if.body", mFunction, 0);
-        BasicBlock * ifEndBlock = BasicBlock::Create(mMod->getContext(), "if.end", mFunction, 0);
-        
-        const PabloBlockCarryData & cd = ifStatement -> getBody().carryData;
+    //
+    //  The If-ElseZero stmt:
+    //  if <predicate:expr> then <body:stmt>* elsezero <defined:var>* endif
+    //  If the value of the predicate is nonzero, then determine the values of variables
+    //  <var>* by executing the given statements.  Otherwise, the value of the
+    //  variables are all zero.  Requirements: (a) no variable that is defined within
+    //  the body of the if may be accessed outside unless it is explicitly
+    //  listed in the variable list, (b) every variable in the defined list receives
+    //  a value within the body, and (c) the logical consequence of executing
+    //  the statements in the event that the predicate is zero is that the
+    //  values of all defined variables indeed work out to be 0.
+    //
+    //  Simple Implementation with Phi nodes:  a phi node in the if exit block
+    //  is inserted for each variable in the defined variable list.  It receives
+    //  a zero value from the ifentry block and the defined value from the if
+    //  body.
+    //
+    BasicBlock * ifEntryBlock = mBuilder->GetInsertBlock();
+    BasicBlock * ifBodyBlock = BasicBlock::Create(mMod->getContext(), "if.body", mFunction, 0);
+    BasicBlock * ifEndBlock = BasicBlock::Create(mMod->getContext(), "if.end", mFunction, 0);
     
-        const unsigned baseCarryDataIdx = cd.getBlockCarryDataIndex();
-        const unsigned carrySummaryIndex = cd.summaryCarryDataIndex();
-        
-        Value* if_test_value = compileExpression(ifStatement->getCondition());
-        if (cd.blockHasCarries()) {
-            // load the summary variable
-            Value* last_if_pending_data = genCarryDataLoad(carrySummaryIndex);
-            if_test_value = mBuilder->CreateOr(if_test_value, last_if_pending_data);
-        }
-        mBuilder->CreateCondBr(genBitBlockAny(if_test_value), ifEndBlock, ifBodyBlock);
-
-        // Entry processing is complete, now handle the body of the if.
-        mBuilder->SetInsertPoint(ifBodyBlock);
-        compileBlock(ifStatement -> getBody());
+    PabloBlock & ifBody = ifStatement -> getBody();
     
-        if (cd.explicitSummaryRequired()) {
-            // If there was only one carry entry, then it also serves as the summary variable.
-            // Otherwise, we need to combine entries to compute the summary.
-            Value * carry_summary = mZeroInitializer;
-            for (int c = baseCarryDataIdx; c < carrySummaryIndex; c++) {
-                int s = mCarryDataSummaryIdx[c];
-                if (s == -1) {
-                    Value* carryq_value = mCarryOutVector[c];
-                    if (carry_summary == mZeroInitializer) {
-                        carry_summary = carryq_value;
-                    }
-                    else {
-                        carry_summary = mBuilder->CreateOr(carry_summary, carryq_value);
-                    }
-                    mCarryDataSummaryIdx[c] = carrySummaryIndex;
-                }
-            }
-            genCarryDataStore(carry_summary, carrySummaryIndex);
-        }
-        BasicBlock * ifBodyFinalBlock = mBuilder->GetInsertBlock();
-        mBuilder->CreateBr(ifEndBlock);
-        //End Block
-        mBuilder->SetInsertPoint(ifEndBlock);
-        for (const PabloAST * node : ifStatement->getDefined()) {
-            const Assign * assign = cast<Assign>(node);
-            PHINode * phi = mBuilder->CreatePHI(mBitBlockType, 2, assign->getName()->value());
-            auto f = mMarkerMap.find(assign);
-            assert (f != mMarkerMap.end());
-            phi->addIncoming(mZeroInitializer, ifEntryBlock);
-            phi->addIncoming(f->second, ifBodyFinalBlock);
-            mMarkerMap[assign] = phi;
-        }
-        // Create the phi Node for the summary variable, if needed.
-        if (cd.summaryNeededInParentBlock()) {
-            PHINode * summary_phi = mBuilder->CreatePHI(mBitBlockType, 2, "summary");
-            summary_phi->addIncoming(mZeroInitializer, ifEntryBlock);
-            summary_phi->addIncoming(mCarryOutVector[carrySummaryIndex], ifBodyFinalBlock);
-            mCarryOutVector[carrySummaryIndex] = summary_phi;
-        }
-        
+    Value* if_test_value = compileExpression(ifStatement->getCondition());
+    if (mCarryManager->blockHasCarries(ifBody)) {
+        // load the summary variable
+        Value* last_if_pending_data = mCarryManager->getCarrySummaryExpr(ifBody);
+        if_test_value = mBuilder->CreateOr(if_test_value, last_if_pending_data);
+    }
+    mBuilder->CreateCondBr(genBitBlockAny(if_test_value), ifEndBlock, ifBodyBlock);
+    // Entry processing is complete, now handle the body of the if.
+    mBuilder->SetInsertPoint(ifBodyBlock);
+    
+    ++mIfDepth;
+    compileBlock(ifBody);
+    --mIfDepth;
+    if (mCarryManager->blockHasCarries(ifBody)) {
+        mCarryManager->generateCarryOutSummaryCode(ifBody);
+    }
+    BasicBlock * ifBodyFinalBlock = mBuilder->GetInsertBlock();
+    mBuilder->CreateBr(ifEndBlock);
+    //End Block
+    mBuilder->SetInsertPoint(ifEndBlock);
+    for (const PabloAST * node : ifStatement->getDefined()) {
+        const Assign * assign = cast<Assign>(node);
+        PHINode * phi = mBuilder->CreatePHI(mBitBlockType, 2, assign->getName()->value());
+        auto f = mMarkerMap.find(assign);
+        assert (f != mMarkerMap.end());
+        phi->addIncoming(mZeroInitializer, ifEntryBlock);
+        phi->addIncoming(f->second, ifBodyFinalBlock);
+        mMarkerMap[assign] = phi;
+    }
+    // Create the phi Node for the summary variable, if needed.
+    if (mCarryManager->summaryNeededInParentBlock(ifBody)) {
+        mCarryManager->addSummaryPhi(ifBody, ifEntryBlock, ifBodyFinalBlock);
+    }
 }
 
-//#define SET_WHILE_CARRY_IN_TO_ZERO_AFTER_FIRST_ITERATION
-
-#define LOAD_WHILE_CARRIES \
-        if (mWhileDepth == 0) { \
-            for (auto i = baseCarryDataIdx; i < baseCarryDataIdx + carryDataSize; ++i) { \
-                mCarryInVector[i] = mBuilder->CreateAlignedLoad(mBuilder->CreateGEP(mCarryDataPtr, mBuilder->getInt64(i)), BLOCK_SIZE/8, false); \
-            } \
-        }
-
-#define INITIALIZE_CARRY_IN_PHIS  \
-        std::vector<PHINode *> carryInPhis(carryDataSize);  \
-        for (unsigned index = 0; index < carryDataSize; ++index) {  \
-            PHINode * phi_in = mBuilder->CreatePHI(mBitBlockType, 2); \
-            phi_in->addIncoming(mCarryInVector[baseCarryDataIdx + index], whileEntryBlock); \
-            carryInPhis[index] = phi_in; \
-        }
-
-#define INITIALIZE_CARRY_OUT_ACCUMULATOR_PHIS \
-        std::vector<PHINode *> carryOutAccumPhis(carryDataSize); \
-        for (unsigned index = 0; index < carryDataSize; ++index) { \
-            PHINode * phi_out = mBuilder->CreatePHI(mBitBlockType, 2); \
-            phi_out->addIncoming(mZeroInitializer, whileEntryBlock); \
-            carryOutAccumPhis[index] = phi_out; \
-            mCarryOutVector[baseCarryDataIdx + index] = mZeroInitializer; \
-        }
-
-#define EXTEND_CARRY_IN_PHIS_TO_ZERO_FROM_WHILE_BODY_FINAL_BLOCK \
-        for (unsigned index = 0; index < carryDataSize; ++index) { \
-            carryInPhis[index]->addIncoming(mZeroInitializer, whileBodyFinalBlock); \
-        }
-
-#define EXTEND_CARRY_OUT_ACCUMULATOR_PHIS_TO_OR_COMBINE_CARRY_OUT \
-        for (unsigned index = 0; index < carryDataSize; ++index) { \
-            PHINode * phi = carryOutAccumPhis[index]; \
-            Value * carryOut = mBuilder->CreateOr(phi, mCarryOutVector[baseCarryDataIdx + index]); \
-            phi->addIncoming(carryOut, whileBodyFinalBlock); \
-            mCarryOutVector[baseCarryDataIdx + index] = carryOut; \
-        }
-
-#define STORE_WHILE_CARRY_DATA \
-        if (mWhileDepth == 0) { \
-            for (unsigned index = baseCarryDataIdx; index < baseCarryDataIdx + carryDataSize; ++index) { \
-                mBuilder->CreateAlignedStore(mCarryOutVector[index], mBuilder->CreateGEP(mCarryDataPtr, mBuilder->getInt64(index)), BLOCK_SIZE/8, false); \
-            } \
-        }
-
-
 void PabloCompiler::compileWhile(const While * whileStatement) {
-        //BasicBlock* whileEntryBlock = mBasicBlock;
-        BasicBlock * whileEntryBlock = mBuilder->GetInsertBlock();
-        BasicBlock * whileBodyBlock = BasicBlock::Create(mMod->getContext(), "while.body", mFunction, 0);
-        BasicBlock * whileEndBlock = BasicBlock::Create(mMod->getContext(), "while.end", mFunction, 0);
+
+    PabloBlock & whileBody = whileStatement -> getBody();
     
-    
-        const PabloBlockCarryData & cd = whileStatement -> getBody().carryData;
-        const unsigned baseCarryDataIdx = cd.getBlockCarryDataIndex();
-        const unsigned carryDataSize = cd.getTotalCarryDataSize();
+    BasicBlock * whileEntryBlock = mBuilder->GetInsertBlock();
+    BasicBlock * whileBodyBlock = BasicBlock::Create(mMod->getContext(), "while.body", mFunction, 0);
+    BasicBlock * whileEndBlock = BasicBlock::Create(mMod->getContext(), "while.end", mFunction, 0);
 
+    mCarryManager->ensureCarriesLoadedRecursive(whileBody);
 
-        LOAD_WHILE_CARRIES
+    const auto & nextNodes = whileStatement->getVariants();
+    std::vector<PHINode *> nextPhis;
+    nextPhis.reserve(nextNodes.size());
 
-        const auto & nextNodes = whileStatement->getVariants();
-        std::vector<PHINode *> nextPhis;
-        nextPhis.reserve(nextNodes.size());
-    
-        // On entry to the while structure, proceed to execute the first iteration
-        // of the loop body unconditionally.   The while condition is tested at the end of
-        // the loop.
+    // On entry to the while structure, proceed to execute the first iteration
+    // of the loop body unconditionally.   The while condition is tested at the end of
+    // the loop.
 
-        mBuilder->CreateBr(whileBodyBlock);
-        mBuilder->SetInsertPoint(whileBodyBlock);
-    
-        //
-        // There are 3 sets of Phi nodes for the while loop.
-        // (1) Carry-ins: (a) incoming carry data first iterations, (b) zero thereafter
-        // (2) Carry-out accumulators: (a) zero first iteration, (b) |= carry-out of each iteration
-        // (3) Next nodes: (a) values set up before loop, (b) modified values calculated in loop.
+    mBuilder->CreateBr(whileBodyBlock);
+    mBuilder->SetInsertPoint(whileBodyBlock);
 
-#ifdef SET_WHILE_CARRY_IN_TO_ZERO_AFTER_FIRST_ITERATION
-        INITIALIZE_CARRY_IN_PHIS
-#endif
+    //
+    // There are 3 sets of Phi nodes for the while loop.
+    // (1) Carry-ins: (a) incoming carry data first iterations, (b) zero thereafter
+    // (2) Carry-out accumulators: (a) zero first iteration, (b) |= carry-out of each iteration
+    // (3) Next nodes: (a) values set up before loop, (b) modified values calculated in loop.
 
-        INITIALIZE_CARRY_OUT_ACCUMULATOR_PHIS
-    
-        // for any Next nodes in the loop body, initialize to (a) pre-loop value.
-        for (const Next * n : nextNodes) {
-            PHINode * phi = mBuilder->CreatePHI(mBitBlockType, 2, n->getName()->value());
-            auto f = mMarkerMap.find(n->getInitial());
-            assert (f != mMarkerMap.end());
-            phi->addIncoming(f->second, whileEntryBlock);
-            mMarkerMap[n->getInitial()] = phi;
-            nextPhis.push_back(phi);
+    mCarryManager->initializeCarryDataPhisAtWhileEntry(whileBody, whileEntryBlock);
+
+    // for any Next nodes in the loop body, initialize to (a) pre-loop value.
+    for (const Next * n : nextNodes) {
+        PHINode * phi = mBuilder->CreatePHI(mBitBlockType, 2, n->getName()->value());
+        auto f = mMarkerMap.find(n->getInitial());
+        assert (f != mMarkerMap.end());
+        phi->addIncoming(f->second, whileEntryBlock);
+        mMarkerMap[n->getInitial()] = phi;
+        nextPhis.push_back(phi);
+    }
+
+    //
+    // Now compile the loop body proper.  Carry-out accumulated values
+    // and iterated values of Next nodes will be computed.
+    ++mWhileDepth;
+    compileBlock(whileBody);
+
+    BasicBlock * whileBodyFinalBlock = mBuilder->GetInsertBlock();
+
+    mCarryManager->extendCarryDataPhisAtWhileBodyFinalBlock(whileBody, whileBodyFinalBlock);
+
+    // Terminate the while loop body with a conditional branch back.
+    mBuilder->CreateCondBr(genBitBlockAny(compileExpression(whileStatement->getCondition())), whileEndBlock, whileBodyBlock);
+
+    // and for any Next nodes in the loop body
+    for (unsigned i = 0; i < nextNodes.size(); i++) {
+        const Next * n = nextNodes[i];
+        auto f = mMarkerMap.find(n->getExpr());
+        if (LLVM_UNLIKELY(f == mMarkerMap.end())) {
+            throw std::runtime_error("Next node expression was not compiled!");
         }
+        nextPhis[i]->addIncoming(f->second, whileBodyFinalBlock);
+    }
 
-        //
-        // Now compile the loop body proper.  Carry-out accumulated values
-        // and iterated values of Next nodes will be computed.
-        ++mWhileDepth;
-        compileBlock(whileStatement->getBody());
-    
-        BasicBlock * whileBodyFinalBlock = mBuilder->GetInsertBlock();
+    mBuilder->SetInsertPoint(whileEndBlock);
+    --mWhileDepth;
 
-#ifdef SET_WHILE_CARRY_IN_TO_ZERO_AFTER_FIRST_ITERATION
-        EXTEND_CARRY_IN_PHIS_TO_ZERO_FROM_WHILE_BODY_FINAL_BLOCK
-#endif
-
-        EXTEND_CARRY_OUT_ACCUMULATOR_PHIS_TO_OR_COMBINE_CARRY_OUT
-
-        // Terminate the while loop body with a conditional branch back.
-        mBuilder->CreateCondBr(genBitBlockAny(compileExpression(whileStatement->getCondition())), whileEndBlock, whileBodyBlock);
-
-        // and for any Next nodes in the loop body
-        for (unsigned i = 0; i < nextNodes.size(); i++) {
-            const Next * n = nextNodes[i];
-            auto f = mMarkerMap.find(n->getExpr());
-            if (LLVM_UNLIKELY(f == mMarkerMap.end())) {
-                throw std::runtime_error("Next node expression was not compiled!");
-            }
-            nextPhis[i]->addIncoming(f->second, whileBodyFinalBlock);
-        }
-
-        // EXIT BLOCK
-        mBuilder->SetInsertPoint(whileEndBlock);
-        --mWhileDepth;
-
-        STORE_WHILE_CARRY_DATA
+    mCarryManager->ensureCarriesStoredRecursive(whileBody);
 }
 
 
@@ -637,9 +555,6 @@ void PabloCompiler::compileStatement(const Statement * stmt) {
     Value * expr = nullptr;
     if (const Assign * assign = dyn_cast<const Assign>(stmt)) {
         expr = compileExpression(assign->getExpr());
-        if (DumpTrace) {
-            genPrintRegister(assign->getName()->to_string(), expr);
-        }
         if (LLVM_UNLIKELY(assign->isOutputAssignment())) {
             SetOutputValue(expr, assign->getOutputIndex());
         }
@@ -671,15 +586,9 @@ void PabloCompiler::compileStatement(const Statement * stmt) {
     }
     else if (const And * pablo_and = dyn_cast<And>(stmt)) {
         expr = mBuilder->CreateAnd(compileExpression(pablo_and->getExpr1()), compileExpression(pablo_and->getExpr2()), "and");
-        if (DumpTrace) {
-            genPrintRegister(stmt->getName()->to_string(), expr);
-        }
     }
     else if (const Or * pablo_or = dyn_cast<Or>(stmt)) {
         expr = mBuilder->CreateOr(compileExpression(pablo_or->getExpr1()), compileExpression(pablo_or->getExpr2()), "or");
-        if (DumpTrace) {
-            genPrintRegister(stmt->getName()->to_string(), expr);
-        }
     }
     else if (const Xor * pablo_xor = dyn_cast<Xor>(stmt)) {
         expr = mBuilder->CreateXor(compileExpression(pablo_xor->getExpr1()), compileExpression(pablo_xor->getExpr2()), "xor");
@@ -689,23 +598,22 @@ void PabloCompiler::compileStatement(const Statement * stmt) {
         Value* ifTrue = mBuilder->CreateAnd(ifMask, compileExpression(sel->getTrueExpr()));
         Value* ifFalse = mBuilder->CreateAnd(genNot(ifMask), compileExpression(sel->getFalseExpr()));
         expr = mBuilder->CreateOr(ifTrue, ifFalse);
-        if (DumpTrace) {
-            genPrintRegister(stmt->getName()->to_string(), expr);
-        }
     }
     else if (const Not * pablo_not = dyn_cast<Not>(stmt)) {
         expr = genNot(compileExpression(pablo_not->getExpr()));
-        if (DumpTrace) {
-            genPrintRegister(stmt->getName()->to_string(), expr);
-        }
     }
     else if (const Advance * adv = dyn_cast<Advance>(stmt)) {
-        Value* value = compileExpression(adv->getExpr());
+        Value* strm_value = compileExpression(adv->getExpr());
         int shift = adv->getAdvanceAmount();
         unsigned advance_index = adv->getLocalAdvanceIndex();
-        expr = genAdvanceWithCarry(value, shift, advance_index);
-        if (DumpTrace) {
-            genPrintRegister(stmt->getName()->to_string(), expr);
+        if (shift == 1) {
+            expr = genUnitAdvanceWithCarry(strm_value, advance_index);
+        }
+        else if (shift < LongAdvanceBase) {
+            expr = genShortAdvanceWithCarry(strm_value, advance_index, shift);
+        }
+        else {
+            expr = genLongAdvanceWithCarry(strm_value, advance_index, shift);
         }
     }
     else if (const MatchStar * mstar = dyn_cast<MatchStar>(stmt)) {
@@ -714,18 +622,12 @@ void PabloCompiler::compileStatement(const Statement * stmt) {
         Value * marker_and_cc = mBuilder->CreateAnd(marker, cc);
         unsigned carry_index = mstar->getLocalCarryIndex();
         expr = mBuilder->CreateOr(mBuilder->CreateXor(genAddWithCarry(marker_and_cc, cc, carry_index), cc), marker, "matchstar");
-        if (DumpTrace) {
-            genPrintRegister(stmt->getName()->to_string(), expr);
-        }
     }
     else if (const ScanThru * sthru = dyn_cast<ScanThru>(stmt)) {
         Value * marker_expr = compileExpression(sthru->getScanFrom());
         Value * cc_expr = compileExpression(sthru->getScanThru());
         unsigned carry_index = sthru->getLocalCarryIndex();
         expr = mBuilder->CreateAnd(genAddWithCarry(marker_expr, cc_expr, carry_index), genNot(cc_expr), "scanthru");
-        if (DumpTrace) {
-            genPrintRegister(stmt->getName()->to_string(), expr);
-        }
     }
     else {
         llvm::raw_os_ostream cerr(std::cerr);
@@ -733,6 +635,10 @@ void PabloCompiler::compileStatement(const Statement * stmt) {
         throw std::runtime_error("Unrecognized Pablo Statement! can't compile.");
     }
     mMarkerMap[stmt] = expr;
+    if (DumpTrace) {
+        genPrintRegister(stmt->getName()->to_string(), expr);
+    }
+    
 }
 
 Value * PabloCompiler::compileExpression(const PabloAST * expr) {
@@ -808,9 +714,7 @@ PabloCompiler::SumWithOverflowPack PabloCompiler::callUaddOverflow(Value* int128
 
 
 Value* PabloCompiler::genAddWithCarry(Value* e1, Value* e2, unsigned localIndex) {
-    const PabloBlockCarryData & cd = mPabloBlock->carryData;
-    const unsigned carryIdx = cd.carryOpCarryDataOffset(localIndex);
-    Value* carryq_value = genCarryDataLoad(carryIdx);
+    Value * carryq_value = mCarryManager->getCarryOpCarryIn(mPabloBlock, localIndex);
 #ifdef USE_TWO_UADD_OVERFLOW
     //This is the ideal implementation, which uses two uadd.with.overflow
     //The back end should be able to recognize this pattern and combine it into uadd.with.overflow.carryin
@@ -867,35 +771,8 @@ Value* PabloCompiler::genAddWithCarry(Value* e1, Value* e2, unsigned localIndex)
     static_assert(false, "Add with carry for 256-bit bitblock requires USE_UADD_OVERFLOW");
 #endif //USE_TWO_UADD_OVERFLOW
 
-    genCarryDataStore(carry_out, carryIdx);
+    mCarryManager->setCarryOpCarryOut(mPabloBlock, localIndex, carry_out);
     return sum;
-}
-//#define CARRY_DEBUG
-Value* PabloCompiler::genCarryDataLoad(const unsigned index) {
-    assert (index < mCarryInVector.size());
-    if (mWhileDepth == 0) {
-        mCarryInVector[index] = mBuilder->CreateAlignedLoad(mBuilder->CreateGEP(mCarryDataPtr, mBuilder->getInt64(index)), BLOCK_SIZE/8, false);
-    }
-#ifdef CARRY_DEBUG
-    std::cerr << "genCarryDataLoad " << index << std::endl;
-    genPrintRegister("carry_in_" + std::to_string(index), mCarryInVector[index]);
-#endif
-    return mCarryInVector[index];
-}
-
-void PabloCompiler::genCarryDataStore(Value* carryOut, const unsigned index ) {
-    assert (carryOut);
-    assert (index < mCarryOutVector.size());
-    if (mWhileDepth == 0) {
-        mBuilder->CreateAlignedStore(carryOut, mBuilder->CreateGEP(mCarryDataPtr, mBuilder->getInt64(index)), BLOCK_SIZE/8, false);
-    }
-    mCarryDataSummaryIdx[index] = -1;
-    mCarryOutVector[index] = carryOut;
-#ifdef CARRY_DEBUG
-    std::cerr << "genCarryDataStore " << index << std::endl;
-    genPrintRegister("carry_out_" + std::to_string(index), mCarryOutVector[index]);
-#endif
-    //std::cerr << "mCarryOutVector[" << index << "]]\n";
 }
 
 inline Value* PabloCompiler::genBitBlockAny(Value* test) {
@@ -919,37 +796,12 @@ inline Value* PabloCompiler::genNot(Value* expr) {
     return mBuilder->CreateXor(expr, mOneInitializer, "not");
 }
 
-Value* PabloCompiler::genAdvanceWithCarry(Value* strm_value, int shift_amount, unsigned localIndex) {
-    if (shift_amount >= LongAdvanceBase) {
-        return genLongAdvanceWithCarry(strm_value, shift_amount, localIndex);
-    }
-    else if (shift_amount == 1) {
-        return genUnitAdvanceWithCarry(strm_value, localIndex);
-    }
-    const PabloBlockCarryData & cd = mPabloBlock->carryData;
-    const auto advanceIndex = cd.shortAdvanceCarryDataOffset(localIndex);
-    Value* result_value;
-    
-    if (shift_amount == 0) {
-        result_value = genCarryDataLoad(advanceIndex);
-    }
-    else {
-        Value* advanceq_longint = mBuilder->CreateBitCast(genCarryDataLoad(advanceIndex), mBuilder->getIntNTy(BLOCK_SIZE));
-        Value* strm_longint = mBuilder->CreateBitCast(strm_value, mBuilder->getIntNTy(BLOCK_SIZE));
-        Value* adv_longint = mBuilder->CreateOr(mBuilder->CreateShl(strm_longint, shift_amount), mBuilder->CreateLShr(advanceq_longint, BLOCK_SIZE - shift_amount), "advance");
-        result_value = mBuilder->CreateBitCast(adv_longint, mBitBlockType);
-    }
-    genCarryDataStore(strm_value, advanceIndex);
-    return result_value;
-}
-                    
 Value* PabloCompiler::genUnitAdvanceWithCarry(Value* strm_value, unsigned localIndex) {
-    const PabloBlockCarryData & cd = mPabloBlock->carryData;
-    const auto advanceIndex = cd.unitAdvanceCarryDataOffset(localIndex);
+    Value * carry_in = mCarryManager->getUnitAdvanceCarryIn(mPabloBlock, localIndex);
     Value* result_value;
     
 #if (BLOCK_SIZE == 128) && !defined(USE_LONG_INTEGER_SHIFT)
-    Value* advanceq_value = genShiftHighbitToLow(BLOCK_SIZE, genCarryDataLoad(advanceIndex));
+    Value* advanceq_value = genShiftHighbitToLow(BLOCK_SIZE, carry_in);
     Value* srli_1_value = mBuilder->CreateLShr(strm_value, 63);
     Value* packed_shuffle;
     Constant* const_packed_1_elems [] = {mBuilder->getInt32(0), mBuilder->getInt32(2)};
@@ -962,57 +814,28 @@ Value* PabloCompiler::genUnitAdvanceWithCarry(Value* strm_value, unsigned localI
     Value* shl_value = mBuilder->CreateShl(strm_value, const_packed_2);
     result_value = mBuilder->CreateOr(shl_value, packed_shuffle, "advance");
 #else
-    Value* advanceq_longint = mBuilder->CreateBitCast(genCarryDataLoad(advanceIndex), mBuilder->getIntNTy(BLOCK_SIZE));
+    Value* advanceq_longint = mBuilder->CreateBitCast(carry_in, mBuilder->getIntNTy(BLOCK_SIZE));
     Value* strm_longint = mBuilder->CreateBitCast(strm_value, mBuilder->getIntNTy(BLOCK_SIZE));
     Value* adv_longint = mBuilder->CreateOr(mBuilder->CreateShl(strm_longint, 1), mBuilder->CreateLShr(advanceq_longint, BLOCK_SIZE - 1), "advance");
     result_value = mBuilder->CreateBitCast(adv_longint, mBitBlockType);
     
 #endif
-    genCarryDataStore(strm_value, advanceIndex);
+    mCarryManager->setUnitAdvanceCarryOut(mPabloBlock, localIndex, strm_value);
     return result_value;
 }
                     
-//
-// Generate code for long advances >= LongAdvanceBase
-//
-Value* PabloCompiler::genLongAdvanceWithCarry(Value* strm_value, int shift_amount, unsigned localIndex) {
-    const PabloBlockCarryData & cd = mPabloBlock->carryData;
-    const unsigned block_shift = shift_amount % BLOCK_SIZE;
-    const unsigned advanceEntries = cd.longAdvanceEntries(shift_amount);
-    const unsigned bufsize = cd.longAdvanceBufferSize(shift_amount);
-    //std::cerr << "shift_amount = " << shift_amount << " bufsize = " << bufsize << std::endl;
-    Value * indexMask = mBuilder->getInt64(bufsize - 1);  // A mask to implement circular buffer indexing
-    Value * advBaseIndex = mBuilder->getInt64(cd.longAdvanceCarryDataOffset(localIndex));
-    Value * storeIndex = mBuilder->CreateAdd(mBuilder->CreateAnd(mBlockNo, indexMask), advBaseIndex);
-    Value * loadIndex = mBuilder->CreateAdd(mBuilder->CreateAnd(mBuilder->CreateSub(mBlockNo, mBuilder->getInt64(advanceEntries)), indexMask), advBaseIndex);
-    Value * storePtr = mBuilder->CreateGEP(mCarryDataPtr, storeIndex);
-    Value * loadPtr = mBuilder->CreateGEP(mCarryDataPtr, loadIndex);
-    Value* result_value;
-
-    if (block_shift == 0) {
-        result_value = mBuilder->CreateAlignedLoad(loadPtr, BLOCK_SIZE/8);
-    }
-    else if (advanceEntries == 1) {
-        Value* advanceq_longint = mBuilder->CreateBitCast(mBuilder->CreateAlignedLoad(loadPtr, BLOCK_SIZE/8), mBuilder->getIntNTy(BLOCK_SIZE));
-        Value* strm_longint = mBuilder->CreateBitCast(strm_value, mBuilder->getIntNTy(BLOCK_SIZE));
-        Value* adv_longint = mBuilder->CreateOr(mBuilder->CreateShl(strm_longint, block_shift), mBuilder->CreateLShr(advanceq_longint, BLOCK_SIZE - block_shift), "advance");
-        result_value = mBuilder->CreateBitCast(adv_longint, mBitBlockType);
-    }
-    else {
-        // The advance is based on the two oldest bit blocks in the advance buffer.
-        // The buffer is maintained as a circular buffer of size bufsize.
-        // Indexes within the buffer are computed by bitwise and with the indexMask.
-        Value * loadIndex2 = mBuilder->CreateAdd(mBuilder->CreateAnd(mBuilder->CreateSub(mBlockNo, mBuilder->getInt64(advanceEntries-1)), indexMask), advBaseIndex);
-        Value * loadPtr2 = mBuilder->CreateGEP(mCarryDataPtr, loadIndex2);
-        Value* advanceq_longint = mBuilder->CreateBitCast(mBuilder->CreateAlignedLoad(loadPtr, BLOCK_SIZE/8), mBuilder->getIntNTy(BLOCK_SIZE));
-        //genPrintRegister("advanceq_longint", mBuilder->CreateBitCast(advanceq_longint, mBitBlockType));
-        Value* strm_longint = mBuilder->CreateBitCast(mBuilder->CreateAlignedLoad(loadPtr2, BLOCK_SIZE/8), mBuilder->getIntNTy(BLOCK_SIZE));
-        //genPrintRegister("strm_longint", mBuilder->CreateBitCast(strm_longint, mBitBlockType));
-        Value* adv_longint = mBuilder->CreateOr(mBuilder->CreateShl(strm_longint, block_shift), mBuilder->CreateLShr(advanceq_longint, BLOCK_SIZE - block_shift), "longadvance");
-        result_value = mBuilder->CreateBitCast(adv_longint, mBitBlockType);
-    }
-    mBuilder->CreateAlignedStore(strm_value, storePtr, BLOCK_SIZE/8);
+Value* PabloCompiler::genShortAdvanceWithCarry(Value* strm_value, unsigned localIndex, int shift_amount) {
+    Value * carry_in = mCarryManager->getShortAdvanceCarryIn(mPabloBlock, localIndex, shift_amount);
+    Value* advanceq_longint = mBuilder->CreateBitCast(carry_in, mBuilder->getIntNTy(BLOCK_SIZE));
+    Value* strm_longint = mBuilder->CreateBitCast(strm_value, mBuilder->getIntNTy(BLOCK_SIZE));
+    Value* adv_longint = mBuilder->CreateOr(mBuilder->CreateShl(strm_longint, shift_amount), mBuilder->CreateLShr(advanceq_longint, BLOCK_SIZE - shift_amount), "advance");
+    Value* result_value = mBuilder->CreateBitCast(adv_longint, mBitBlockType);
+    mCarryManager->setShortAdvanceCarryOut(mPabloBlock, localIndex, shift_amount, strm_value);
     return result_value;
+}
+                    
+Value* PabloCompiler::genLongAdvanceWithCarry(Value* strm_value, unsigned localIndex, int shift_amount) {
+    return mCarryManager->longAdvanceCarryInCarryOut(mPabloBlock, localIndex, shift_amount, strm_value);
 }
     
 void PabloCompiler::SetOutputValue(Value * marker, const unsigned index) {

@@ -24,6 +24,7 @@ static_assert(false, "Need to turn on them together.");
 #include <algorithm>
 #include <unordered_map>
 #include <pablo/pe_string.h>
+#include <pablo/carry_manager.h>
 #include <llvm/ADT/Twine.h>
 #include <llvm/IR/IRBuilder.h>
 
@@ -112,12 +113,10 @@ private:
     void compileIf(const If * ifStmt);
     void compileWhile(const While * whileStmt);
     Value* compileExpression(const PabloAST * expr);
-    Value* genCarryDataLoad(const unsigned index);
-    void   genCarryDataStore(Value* carryOut, const unsigned index);
     Value* genAddWithCarry(Value* e1, Value* e2, unsigned localIndex);
-    Value* genAdvanceWithCarry(Value* e1, int shift_amount, unsigned localIndex);
     Value* genUnitAdvanceWithCarry(Value* e1, unsigned localIndex);
-    Value* genLongAdvanceWithCarry(Value* e1, int shift_amount, unsigned localIndex);
+    Value* genShortAdvanceWithCarry(Value* e1, unsigned localIndex, int shift_amount);
+    Value* genLongAdvanceWithCarry(Value* e1, unsigned localIndex, int shift_amount);
     Value* genBitBlockAny(Value* test);
     Value* genShiftHighbitToLow(unsigned FieldWidth, Value * op);
     Value* genShiftLeft64(Value* e, const Twine & namehint = "") ;
@@ -137,7 +136,6 @@ private:
     ASTToValueMap                       mMarkerMap;
     CarryQueueVector                    mCarryInVector;
     CarryQueueVector                    mCarryOutVector;
-    std::vector<int>                    mCarryDataSummaryIdx;
 
     const std::vector<Var *> &          mBasisBits;
 #ifdef USE_LLVM_3_5
@@ -147,6 +145,7 @@ private:
     Module *                            mMod;
 #endif
     IRBuilder <> *                      mBuilder;
+    CarryManager *                      mCarryManager;
     ExecutionEngine*                    mExecutionEngine;
 
     VectorType* const                   mBitBlockType;
@@ -155,7 +154,6 @@ private:
     PabloBlock *                        mPabloBlock;
     
     Value*                              mCarryDataPtr;
-    Value*                              mBlockNo;
     unsigned                            mWhileDepth;
     unsigned                            mIfDepth;
 

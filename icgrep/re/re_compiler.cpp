@@ -37,7 +37,7 @@ static cl::opt<bool> DisableUnicodeMatchStar("disable-unicode-matchstar", cl::in
                      cl::desc("disable Unicode MatchStar optimization"), cl::cat(fREcompilationOptions));
 static cl::opt<bool> DisableUnicodeLineBreak("disable-unicode-linebreak", cl::init(false),
                      cl::desc("disable Unicode line breaks - use LF only"), cl::cat(fREcompilationOptions));
-static cl::opt<bool> DisablePregeneratedUnicode("disable-pregenerated-unicode", cl::init(true),
+static cl::opt<bool> DisablePregeneratedUnicode("disable-pregenerated-unicode", cl::init(false),
                      cl::desc("disable use of pregenerated Unicode character class sets"), cl::cat(fREcompilationOptions));
 
 using namespace pablo;

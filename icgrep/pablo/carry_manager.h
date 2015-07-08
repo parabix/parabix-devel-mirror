@@ -44,16 +44,14 @@ public:
     Value * getUnitAdvanceCarryIn(PabloBlock * blk, int localIndex);
 
     Value * getShortAdvanceCarryIn(PabloBlock * blk, int localIndex, int shift_amount);
-  
-    Value * getLongAdvanceCarryIn(PabloBlock * blk, int localIndex, int shift_amount);
-    
+      
     void setCarryOpCarryOut(PabloBlock * blk, unsigned idx, Value * carry_out);
 
     void setUnitAdvanceCarryOut(PabloBlock * blk, unsigned idx, Value * carry_out);
 
     void setShortAdvanceCarryOut(PabloBlock * blk, unsigned idx, int shift_amount, Value * carry_out); 
     
-    void setLongAdvanceCarryOut(PabloBlock * blk, unsigned idx, int shift_amount, Value * carry_out);
+    Value * longAdvanceCarryInCarryOut(PabloBlock * blk, int localIndex, int shift_amount, Value * carry_out);
  
     /* Methods for getting and setting carry summary values for If statements */
    
