@@ -159,6 +159,8 @@ public:
         return mParent;
     }
     
+    void insert(Statement * const statement);
+
     PabloBlockCarryData carryData;
     
     virtual ~PabloBlock();

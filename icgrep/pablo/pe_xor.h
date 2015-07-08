@@ -30,8 +30,8 @@ public:
         return getOperand(1);
     }
 protected:
-    Xor(PabloAST * expr1, PabloAST * expr2, String * name, PabloBlock * parent)
-    : Statement(ClassTypeId::Xor, {expr1, expr2}, name, parent)
+    Xor(PabloAST * expr1, PabloAST * expr2, String * name)
+    : Statement(ClassTypeId::Xor, {expr1, expr2}, name)
     {
 
     }

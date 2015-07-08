@@ -43,9 +43,8 @@ protected:
     DdNode * characterize(Statement * const stmt);
     DdNode * characterize(Advance * adv, DdNode * input);
     bool notTransitivelyDependant(const ConstraintVertex i, const ConstraintVertex j) const;
-    bool generateMultiplexSets(RNG & rng, unsigned k = 1);
-    void addCandidateSet(const VertexVector & M, Trie & T, VertexVector & roots) const;
-    void writeCandidateSet(const Trie::vertex_descriptor t, const Trie & T, VertexVector & S);
+    bool generateCandidateSets(RNG & rng);
+    void addCandidateSet(const VertexVector & S);
     void selectMultiplexSets(RNG &);
     void applySubsetConstraints();
     void multiplexSelectedIndependentSets() const;

@@ -42,10 +42,9 @@ public:
         return mName;
     }
 protected:
-    Var(PabloAST * var, PabloBlock *)
+    Var(PabloAST * var)
     : PabloAST(ClassTypeId::Var)
-    , mName(cast<String>(var))
-    {
+    , mName(cast<String>(var)) {
         var->addUser(this);
     }
 private:

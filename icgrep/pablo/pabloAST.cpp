@@ -7,6 +7,8 @@
 #include <pablo/pabloAST.h>
 #include <pablo/codegenstate.h>
 #include <llvm/Support/Compiler.h>
+#include <pablo/printer_pablos.h>
+
 #ifndef NDEBUG
 #include <queue>
 #endif
@@ -121,9 +123,15 @@ void Statement::setOperand(const unsigned index, PabloAST * const value) {
 }
 
 void Statement::insertBefore(Statement * const statement) {
-    assert (statement);
-    assert (statement != this);
-    assert (statement->mParent);
+    if (LLVM_UNLIKELY(statement == this)) {
+        return;
+    }
+    else if (LLVM_UNLIKELY(statement == nullptr)) {
+        throw std::runtime_error("Cannot insert before Null statement!");
+    }
+    else if (LLVM_UNLIKELY(statement->mParent == nullptr)) {
+        throw std::runtime_error("Cannot insert before before statement in Null AST!");
+    }
     removeFromParent();
     mParent = statement->mParent;
     if (LLVM_UNLIKELY(mParent->mFirst == statement)) {
@@ -142,9 +150,15 @@ void Statement::insertBefore(Statement * const statement) {
 }
 
 void Statement::insertAfter(Statement * const statement) {
-    assert (statement);
-    assert (statement != this);
-    assert (statement->mParent);
+    if (LLVM_UNLIKELY(statement == this)) {
+        return;
+    }
+    else if (LLVM_UNLIKELY(statement == nullptr)) {
+        throw std::runtime_error("Cannot insert before Null statement!");
+    }
+    else if (LLVM_UNLIKELY(statement->mParent == nullptr)) {
+        throw std::runtime_error("Cannot insert before before statement in Null AST!");
+    }
     removeFromParent();
     mParent = statement->mParent;
     if (LLVM_UNLIKELY(mParent->mLast == statement)) {
@@ -171,8 +185,8 @@ Statement * Statement::removeFromParent() {
         if (LLVM_UNLIKELY(mParent->mLast == this)) {
             mParent->mLast = mPrev;
         }
-        if (mParent->mInsertionPoint == this) {
-            mParent->mInsertionPoint = mParent->mInsertionPoint->mPrev;
+        if (LLVM_UNLIKELY(mParent->mInsertionPoint == this)) {
+            mParent->mInsertionPoint = mPrev;
         }
         if (LLVM_LIKELY(mPrev != nullptr)) {
             mPrev->mNext = mNext;
@@ -262,24 +276,6 @@ bool Statement::noRecursiveOperand(const PabloAST * const operand) {
     return true;
 }
 #endif
-
-void StatementList::insert(Statement * const statement) {
-    if (LLVM_UNLIKELY(mInsertionPoint == nullptr)) {
-        statement->mNext = mFirst;
-        if (mFirst) {
-            assert (mFirst->mPrev == nullptr);
-            mFirst->mPrev = statement;
-        }
-        mLast = (mLast == nullptr) ? statement : mLast;
-        mInsertionPoint = mFirst = statement;
-    }
-    else {
-        statement->insertAfter(mInsertionPoint);
-        mLast = (mLast == mInsertionPoint) ? statement : mLast;
-        assert (statement->mPrev == mInsertionPoint);
-        mInsertionPoint = statement;
-    }
-}
 
 StatementList::~StatementList() {
 

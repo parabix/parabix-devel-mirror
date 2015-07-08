@@ -29,8 +29,8 @@ public:
         return getOperand(1);
     }
 protected:
-    And(PabloAST * expr1, PabloAST * expr2, String * name, PabloBlock * parent)
-    : Statement(ClassTypeId::And, {expr1, expr2}, name, parent)
+    And(PabloAST * expr1, PabloAST * expr2, String * name)
+    : Statement(ClassTypeId::And, {expr1, expr2}, name)
     {
 
     }

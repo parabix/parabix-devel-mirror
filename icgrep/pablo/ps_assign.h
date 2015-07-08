@@ -35,8 +35,8 @@ public:
     }
     bool superfluous() const;
 protected:
-    explicit Assign(PabloAST * expr, int outputIndex, String * name, PabloBlock * parent)
-    : Statement(ClassTypeId::Assign, {expr}, name, parent)
+    explicit Assign(PabloAST * expr, int outputIndex, String * name)
+    : Statement(ClassTypeId::Assign, {expr}, name)
     , mOutputIndex(outputIndex)
     {
 

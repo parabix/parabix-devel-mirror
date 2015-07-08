@@ -29,8 +29,8 @@ public:
         return mOperand[1];
     }
 protected:
-    Or(PabloAST * expr1, PabloAST * expr2, String * name, PabloBlock * parent)
-    : Statement(ClassTypeId::Or, {expr1, expr2}, name, parent)
+    Or(PabloAST * expr1, PabloAST * expr2, String * name)
+    : Statement(ClassTypeId::Or, {expr1, expr2}, name)
     {
 
     }

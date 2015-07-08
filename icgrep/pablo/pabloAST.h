@@ -202,15 +202,14 @@ public:
     }
     virtual ~Statement() {}
 protected:
-    Statement(const ClassTypeId id, std::initializer_list<PabloAST *> operands, const String * const name, PabloBlock * const parent)
+    Statement(const ClassTypeId id, std::initializer_list<PabloAST *> operands, const String * const name)
     : PabloAST(id)
     , mName(name)
     , mNext(nullptr)
     , mPrev(nullptr)
-    , mParent(parent)
+    , mParent(nullptr)
     , mOperands(operands.size())
-    , mOperand(reinterpret_cast<PabloAST**>(mAllocator.allocate(mOperands * sizeof(PabloAST *))))
-    {
+    , mOperand(reinterpret_cast<PabloAST**>(mAllocator.allocate(mOperands * sizeof(PabloAST *)))) {
         unsigned i = 0;
         for (PabloAST * const op : operands) {
             mOperand[i++] = op;
@@ -236,6 +235,7 @@ protected:
 
 class StatementList {
     friend class Statement;
+    friend class PabloBlock;
 public:
     class iterator: public std::iterator<std::forward_iterator_tag, Statement> {
     public:
@@ -463,15 +463,9 @@ public:
         mInsertionPoint = statement;
     }
 
-    inline void setInsertPoint(StatementList * const list) {
-        mInsertionPoint = list->back();
-    }
-
     inline Statement * getInsertPoint() const {
         return mInsertionPoint;
     }
-
-    void insert(Statement * const statement);
 
     ~StatementList();
 

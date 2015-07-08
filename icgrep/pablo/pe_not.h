@@ -26,8 +26,8 @@ public:
         return getOperand(0);
     }
 protected:
-    Not(PabloAST * expr, String * name, PabloBlock * parent)
-    : Statement(ClassTypeId::Not, {expr}, name, parent)
+    Not(PabloAST * expr, String * name)
+    : Statement(ClassTypeId::Not, {expr}, name)
     {
 
     }

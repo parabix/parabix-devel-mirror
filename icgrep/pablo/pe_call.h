@@ -21,8 +21,8 @@ public:
         return cast<String>(getOperand(0));
     }
 protected:
-    Call(PabloAST * callee, PabloBlock * parent)
-    : Statement(ClassTypeId::Call, {callee}, cast<String>(callee), parent) {
+    Call(PabloAST * callee)
+    : Statement(ClassTypeId::Call, {callee}, cast<String>(callee)) {
 
     }
 };

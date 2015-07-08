@@ -1,25 +1,24 @@
 #include "pablo_automultiplexing.hpp"
-#include <pablo/codegenstate.h>
-#include <llvm/ADT/BitVector.h>
-#include <stack>
-#include <queue>
-#include <unordered_set>
+#include <include/simd-lib/builtins.hpp>
+#include <pablo/builder.hpp>
+#include <pablo/printer_pablos.h>
 #include <boost/container/flat_set.hpp>
 #include <boost/numeric/ublas/matrix.hpp>
 #include <boost/circular_buffer.hpp>
-#include <include/simd-lib/builtins.hpp>
-#include <pablo/builder.hpp>
 #include <boost/range/iterator_range.hpp>
-#include <pablo/printer_pablos.h>
+#include <llvm/ADT/BitVector.h>
 #include <cudd.h>
 #include <util.h>
+#include <stack>
+#include <queue>
+#include <unordered_set>
 
 using namespace llvm;
 using namespace boost;
 using namespace boost::container;
 using namespace boost::numeric::ublas;
 
-#define PRINT_DEBUG_OUTPUT
+// #define PRINT_DEBUG_OUTPUT
 
 #if !defined(NDEBUG) && !defined(PRINT_DEBUG_OUTPUT)
 #define PRINT_DEBUG_OUTPUT
@@ -100,8 +99,8 @@ namespace pablo {
 
 bool AutoMultiplexing::optimize(const std::vector<Var *> & input, PabloBlock & entry) {
 
-    // std::random_device rd;
-    const auto seed = 2938639837; // rd();
+    std::random_device rd;
+    const auto seed = rd();
     RNG rng(seed);
 
     LOG("Seed:                    " << seed);
@@ -122,7 +121,7 @@ bool AutoMultiplexing::optimize(const std::vector<Var *> & input, PabloBlock & e
     LOG("Characterize:            " << (end_characterize - start_characterize));
 
     RECORD_TIMESTAMP(start_create_multiplex_graph);
-    const bool multiplex = am.generateMultiplexSets(rng, 1);
+    const bool multiplex = am.generateCandidateSets(rng);
     RECORD_TIMESTAMP(end_create_multiplex_graph);
     LOG("GenerateMultiplexSets:   " << (end_create_multiplex_graph - start_create_multiplex_graph));
 
@@ -144,7 +143,7 @@ bool AutoMultiplexing::optimize(const std::vector<Var *> & input, PabloBlock & e
         LOG("MultiplexSelectedSets:   " << (end_select_independent_sets - start_select_independent_sets));
 
         RECORD_TIMESTAMP(start_topological_sort);
-        // am.topologicalSort(entry);
+        am.topologicalSort(entry);
         RECORD_TIMESTAMP(end_topological_sort);
         LOG("TopologicalSort:         " << (end_topological_sort - start_topological_sort));
     }
@@ -613,9 +612,9 @@ inline void AutoMultiplexing::Deref(DdNode * const x) {
 }
 
 inline void AutoMultiplexing::Shutdown() {
-    #ifdef PRINT_DEBUG_OUTPUT
-    Cudd_PrintInfo(mManager, stderr);
-    #endif
+//    #ifdef PRINT_DEBUG_OUTPUT
+//    Cudd_PrintInfo(mManager, stderr);
+//    #endif
     Cudd_Quit(mManager);
 }
 
@@ -623,7 +622,7 @@ inline void AutoMultiplexing::Shutdown() {
  * @brief generateMultiplexSets
  * @param RNG random number generator
  ** ------------------------------------------------------------------------------------------------------------- */
-bool AutoMultiplexing::generateMultiplexSets(RNG & rng, unsigned k) {
+bool AutoMultiplexing::generateCandidateSets(RNG & rng) {
 
     using degree_t = graph_traits<ConstraintGraph>::degree_size_type;
 
@@ -631,147 +630,64 @@ bool AutoMultiplexing::generateMultiplexSets(RNG & rng, unsigned k) {
     // and computing the complement of it (with the same lesser to greater index ordering), we should
     // have the same problem here but decomposed into subgraphs.
 
-    VertexVector M;
+    VertexVector S;
     std::vector<degree_t> D(num_vertices(mConstraintGraph));
-    M.reserve(15);
-
-    Trie T;
-    std::vector<ConstraintVertex> roots;
-
-    while (k) {
-
-        // Push all source nodes into the new independent set N
-        for (auto v : make_iterator_range(vertices(mConstraintGraph))) {
-            const auto d = in_degree(v, mConstraintGraph);
-            D[v] = d;
-            if (d == 0) {
-                M.push_back(v);
-            }
-        }
-
-        std::sort(M.begin(), M.end());
-
-        auto remainingVerticies = num_vertices(mConstraintGraph) - M.size();
-
-        for (;;) {
-
-            addCandidateSet(M, T, roots);
-
-            if (remainingVerticies == 0) {
-                break;
-            }
-
-            auto entries = M.size();
-
-            do {
-                // Randomly choose a vertex in S and discard it.
-                assert (!M.empty());
-                const auto i = M.begin() + IntDistribution(0, entries - 1)(rng);
-                const ConstraintVertex u = *i;
-                M.erase(i);
-                --remainingVerticies;
-                --entries;
-                for (auto e : make_iterator_range(out_edges(u, mConstraintGraph))) {
-                    const ConstraintVertex v = target(e, mConstraintGraph);
-                    if ((--D[v]) == 0) {
-                        M.push_back(v);
-                    }
-                }
-            }
-            while ((M.size() == entries) && remainingVerticies != 0);
-            // sort our new entries then merge the sorted lists
-            std::sort(M.begin() + entries, M.end());
-            std::inplace_merge(M.begin(), M.begin() + entries, M.end());
-            assert (std::is_sorted(M.begin(), M.end()));
-        }
-        M.clear();
-
-        std::cerr << "T" << k << "=" << num_vertices(T) << std::endl;
-
-        if (--k == 0) {
-            break;
-        }        
-    }
-
-    // At this point T is a forest in which the set of any vertices from a source to a sink represents a
-    // unique candidate set. Add all of them to the multiplex set graph.
-
-    if (num_vertices(T) == 0) {
-        return false;
-    }
+    S.reserve(15);
 
     mMultiplexSetGraph = MultiplexSetGraph(num_vertices(mConstraintGraph));
-    for (auto t : roots) {
-        writeCandidateSet(t, T, M);
+
+    // Push all source nodes into the new independent set N
+    for (auto v : make_iterator_range(vertices(mConstraintGraph))) {
+        const auto d = in_degree(v, mConstraintGraph);
+        D[v] = d;
+        if (d == 0) {
+            S.push_back(v);
+        }
     }
-    return true;
+
+    auto remainingVerticies = num_vertices(mConstraintGraph) - S.size();
+
+    do {
+
+        addCandidateSet(S);
+
+        bool noNewElements = true;
+        do {
+            // Randomly choose a vertex in S and discard it.
+            const auto i = S.begin() + IntDistribution(0, S.size() - 1)(rng);
+            const ConstraintVertex u = *i;
+            S.erase(i);
+            --remainingVerticies;
+
+            for (auto e : make_iterator_range(out_edges(u, mConstraintGraph))) {
+                const ConstraintVertex v = target(e, mConstraintGraph);
+                if ((--D[v]) == 0) {
+                    S.push_back(v);
+                    noNewElements = false;
+                }
+            }
+        }
+        while (noNewElements && remainingVerticies);
+    }
+    while (remainingVerticies);
+
+    return num_vertices(mMultiplexSetGraph) > num_vertices(mConstraintGraph);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief addCandidateSet
- * @param M an independent set
+ * @param S an independent set
  * @param T the trie in which to encode this new set into
  * @param roots the roots (source nodes) for each tree in T
  ** ------------------------------------------------------------------------------------------------------------- */
-inline void AutoMultiplexing::addCandidateSet(const VertexVector & M, Trie & T, VertexVector & roots) const {
-    if (M.size() >= 3) {
-        auto mi = M.cbegin();
-        ConstraintVertex u = 0;
-        for (ConstraintVertex s : roots) {
-            if (T[s] == *mi) {
-                u = s;
-                while (++mi != M.cend()) {
-                    bool not_found = true;
-                    for (const auto e : make_iterator_range(out_edges(u, T))) {
-                        const auto v = target(e, T);
-                        if (T[v] == *mi) {
-                            u = v;
-                            not_found = false;
-                            break;
-                        }
-                    }
-                    if (not_found) {
-                        break;
-                    }
-                }
-                break;
-            }
-        }
-        if (mi == M.cbegin()) {
-            u = add_vertex(*mi++, T);
-            roots.push_back(u);
-        }
-        for (; mi != M.cend(); ++mi) {
-            const auto v = add_vertex(*mi, T);
-            add_edge(u, v, T);
-            u = v;
-        }
-    }
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief writeCandidateSet
- * @param M an independent set
- * @param T the trie in which to encode this new set into
- * @param roots the roots (source nodes) for each tree in T
- ** ------------------------------------------------------------------------------------------------------------- */
-void AutoMultiplexing::writeCandidateSet(const Trie::vertex_descriptor t, const Trie & T, VertexVector & S) {
-    S.push_back(T[t]);
-    if (out_degree(t, T) == 0) {
+inline void AutoMultiplexing::addCandidateSet(const VertexVector & S) {
+    if (S.size() >= 3) {
         const auto u = add_vertex(mMultiplexSetGraph);
         for (const auto v : S) {
             add_edge(u, v, mMultiplexSetGraph);
         }
     }
-    else {
-        for (const auto e : make_iterator_range(out_edges(t, T))) {
-            writeCandidateSet(target(e, T), T, S);
-        }
-    }
-    assert (S.back() == T[t]);
-    S.pop_back();
 }
-
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief is_power_of_2
@@ -794,7 +710,8 @@ static inline size_t log2_plus_one(const size_t n) {
  *
  * This algorithm is simply computes a greedy set cover. We want an exact max-weight set cover but can generate new
  * sets by taking a subset of any existing set. With a few modifications, the greedy approach seems to work well
- * enough but more analysis is needed.
+ * enough but can be trivially shown to produce a suboptimal solution if there are three (or more) sets in which
+ * two, labelled A and B, are disjoint and the third larger set, C, that consists of elements of A and B.
  ** ------------------------------------------------------------------------------------------------------------- */
 void AutoMultiplexing::selectMultiplexSets(RNG &) {
 
@@ -1091,7 +1008,6 @@ void AutoMultiplexing::multiplexSelectedIndependentSets() const {
                 muxed[j] = builder.createAdvance(mux, adv->getOperand(1), prefix.str());
             }
 
-
             /// Perform m-to-n Demultiplexing
             // Now construct the demuxed values and replaces all the users of the original advances with them.
             for (size_t i = 1; i <= n; ++i) {
@@ -1145,7 +1061,9 @@ void AutoMultiplexing::multiplexSelectedIndependentSets() const {
  * it's not necessarily the original ordering.
  ** ------------------------------------------------------------------------------------------------------------- */
 void AutoMultiplexing::topologicalSort(PabloBlock & entry) const {
-    // Note: not a real topological sort. I expect the original order to be very close to the resulting one.
+    // Note: not a real topological sort. I expect the original graph to be close to the resulting one. Thus cost
+    // of constructing a graph in which to perform the sort takes longer than potentially moving an instruction
+    // multiple times.
     std::unordered_set<const PabloAST *> encountered;
     std::stack<Statement *> scope;
     for (Statement * stmt = entry.front(); ; ) { restart:

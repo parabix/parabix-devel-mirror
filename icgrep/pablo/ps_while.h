@@ -41,8 +41,8 @@ public:
         return mBody;
     }
 protected:
-    While(PabloAST * expr, const std::initializer_list<Next *> nextVars, PabloBlock &body, PabloBlock * parent);
-    While(PabloAST * expr, const std::vector<Next *> & nextVars, PabloBlock &body, PabloBlock * parent);
+    While(PabloAST * expr, const std::initializer_list<Next *> nextVars, PabloBlock &body);
+    While(PabloAST * expr, const std::vector<Next *> & nextVars, PabloBlock &body);
 
 private:
     PabloBlock &    mBody;
