@@ -27,12 +27,12 @@ class AutoMultiplexing {
     using RNG = std::mt19937;
     using IntDistribution = std::uniform_int_distribution<RNG::result_type>;
     using MultiplexSetGraph = boost::adjacency_list<boost::hash_setS, boost::vecS, boost::bidirectionalS>;
-    using IndependentSetGraph = boost::adjacency_matrix<boost::undirectedS, std::pair<int, int>>;
+    using Trie = boost::adjacency_list<boost::hash_setS, boost::vecS, boost::directedS, ConstraintVertex, boost::no_property>;
     using SubsetGraph = boost::adjacency_list<boost::hash_setS, boost::vecS, boost::bidirectionalS>;
     // the Advance pointer, input BDD and the BDD variable of the i-th Advance
     using AdvanceMap = boost::container::flat_map<const Statement *, unsigned>;
     using AdvanceVector = std::vector<std::tuple<Advance *, DdNode *, DdNode *>>;
-    using IndependentSet = std::vector<ConstraintVertex>;
+    using VertexVector = std::vector<ConstraintVertex>;
     using RecentCharacterizations = std::vector<std::pair<const PabloAST *, DdNode *>>;
 
 public:
@@ -44,7 +44,8 @@ protected:
     DdNode * characterize(Advance * adv, DdNode * input);
     bool notTransitivelyDependant(const ConstraintVertex i, const ConstraintVertex j) const;
     bool generateMultiplexSets(RNG & rng, unsigned k = 1);
-    void addMultiplexSet(const IndependentSet & N, const IndependentSet & M);
+    void addCandidateSet(const VertexVector & M, Trie & T, VertexVector & roots) const;
+    void writeCandidateSet(const Trie::vertex_descriptor t, const Trie & T, VertexVector & S);
     void selectMultiplexSets(RNG &);
     void applySubsetConstraints();
     void multiplexSelectedIndependentSets() const;
