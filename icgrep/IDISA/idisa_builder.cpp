@@ -100,3 +100,29 @@ Value * IDISA_Builder::simd_cttz(unsigned fw, Value * a) {
     return bitBlockCast(rslt);
 }
 
+Value * IDISA_Builder::esimd_mergeh(unsigned fw, Value * a, Value * b) {
+    unsigned field_count = mBitBlockSize/fw;
+    Value * aVec = fwCast(fw, a);
+    Value * bVec = fwCast(fw, b);
+    std::vector<Constant*> Idxs;
+    for (unsigned i = field_count/2; i < field_count; i++) {
+        Idxs.push_back(llvm_builder->getInt32(i));    // selects elements 1, 3, ... from first reg.
+        Idxs.push_back(llvm_builder->getInt32(i + field_count)); // selects elements 1, 3, ... from second reg.
+    }
+    return bitBlockCast(llvm_builder->CreateShuffleVector(aVec, bVec, ConstantVector::get(Idxs)));
+}
+
+Value * IDISA_Builder::esimd_mergel(unsigned fw, Value * a, Value * b) {
+    unsigned field_count = mBitBlockSize/fw;
+    Value * aVec = fwCast(fw, a);
+    Value * bVec = fwCast(fw, b);
+    std::vector<Constant*> Idxs;
+    for (unsigned i = 0; i < field_count/2; i++) {
+        Idxs.push_back(llvm_builder->getInt32(i));    // selects elements 1, 3, ... from first reg.
+        Idxs.push_back(llvm_builder->getInt32(i + field_count)); // selects elements 1, 3, ... from second reg.
+    }
+    return bitBlockCast(llvm_builder->CreateShuffleVector(aVec, bVec, ConstantVector::get(Idxs)));
+}
+
+
+

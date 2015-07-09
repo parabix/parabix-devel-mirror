@@ -41,6 +41,9 @@ public:
     
     Value * simd_cttz(unsigned fw, Value * a);
     
+    Value * esimd_mergeh(unsigned fw, Value * a, Value * b);
+    Value * esimd_mergel(unsigned fw, Value * a, Value * b);
+
 private:
     Module * mMod;
     IRBuilder <> * llvm_builder;
