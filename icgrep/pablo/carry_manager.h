@@ -7,6 +7,8 @@
 #ifndef CARRY_MANAGER_H
 #define CARRY_MANAGER_H
 #include <llvm/IR/IRBuilder.h>
+#include <llvm/IR/Module.h>
+#include <IDISA/idisa_builder.h>
 
 /* 
  * Carry Data Manager.
@@ -28,8 +30,8 @@ class PabloBlock;
 class CarryManager {
 public:
   
-    CarryManager(IRBuilder <> * b, VectorType * bitBlockType, ConstantAggregateZero * zero, Constant * one) :
-        mBuilder(b), mBitBlockType(bitBlockType), mZeroInitializer(zero), mOneInitializer(one) {}
+    CarryManager(Module * m, IRBuilder <> * b, VectorType * bitBlockType, ConstantAggregateZero * zero, Constant * one) :
+        mMod(m), mBuilder(b), mBitBlockType(bitBlockType), mZeroInitializer(zero), mOneInitializer(one) {}
     
     unsigned initialize(PabloBlock * blk, Value * carryDataPtr);  
     
@@ -37,21 +39,13 @@ public:
     
     Value * getBlockNoPtr();
     
-    /* Methods for getting and setting individual carry values. */
+    /* Methods for processing individual carry-generating operations. */
     
     Value * getCarryOpCarryIn(PabloBlock * blk, int localIndex);
 
-    Value * getUnitAdvanceCarryIn(PabloBlock * blk, int localIndex);
-
-    Value * getShortAdvanceCarryIn(PabloBlock * blk, int localIndex, int shift_amount);
-      
     void setCarryOpCarryOut(PabloBlock * blk, unsigned idx, Value * carry_out);
 
-    void setUnitAdvanceCarryOut(PabloBlock * blk, unsigned idx, Value * carry_out);
-
-    void setShortAdvanceCarryOut(PabloBlock * blk, unsigned idx, int shift_amount, Value * carry_out); 
-    
-    Value * longAdvanceCarryInCarryOut(PabloBlock * blk, int localIndex, int shift_amount, Value * carry_out);
+    Value * advanceCarryInCarryOut(PabloBlock * blk, int localIndex, int shift_amount, Value * strm);
  
     /* Methods for getting and setting carry summary values for If statements */
    
@@ -83,20 +77,27 @@ public:
 
     
 private:
-  IRBuilder <> * mBuilder;
-  VectorType * mBitBlockType;
-  ConstantAggregateZero * mZeroInitializer;
-  Constant * mOneInitializer;
-  PabloBlock * mPabloRoot;
-  Value * mCarryDataPtr;
-  Value * mBlockNoPtr;
-  Value * mBlockNo;
-  unsigned mTotalCarryDataSize;
-  
-  std::vector<Value *> mCarryInVector;
-  std::vector<PHINode *> mCarryInPhis;  
-  std::vector<PHINode *> mCarryOutAccumPhis;  
-  std::vector<Value *> mCarryOutVector;
+    Module * mMod;
+    IRBuilder <> * mBuilder;
+    VectorType * mBitBlockType;
+    ConstantAggregateZero * mZeroInitializer;
+    Constant * mOneInitializer;
+    IDISA::IDISA_Builder * iBuilder;
+    PabloBlock * mPabloRoot;
+    Value * mCarryDataPtr;
+    Value * mBlockNoPtr;
+    Value * mBlockNo;
+    unsigned mTotalCarryDataSize;
+
+    std::vector<Value *> mCarryInVector;
+    std::vector<PHINode *> mCarryInPhis;  
+    std::vector<PHINode *> mCarryOutAccumPhis;  
+    std::vector<Value *> mCarryOutVector;
+
+    Value * unitAdvanceCarryInCarryOut(PabloBlock * blk, int localIndex, Value * strm);
+    Value * shortAdvanceCarryInCarryOut(PabloBlock * blk, int localIndex, int shift_amount, Value * strm);
+    Value * longAdvanceCarryInCarryOut(PabloBlock * blk, int localIndex, int shift_amount, Value * strm);
+    
 };
 
 }

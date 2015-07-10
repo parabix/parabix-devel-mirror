@@ -20,6 +20,7 @@ unsigned CarryManager::initialize(PabloBlock * pb, Value * carryPtr) {
   
     mPabloRoot = pb;
     mCarryDataPtr = carryPtr;
+    iBuilder = new IDISA::IDISA_Builder(mMod, mBuilder, mBitBlockType);
     
     PabloBlockCarryData & cd = pb->carryData;
     mTotalCarryDataSize = cd.enumerate(*pb) + 1;   // One extra element for the block no.
@@ -53,24 +54,6 @@ Value * CarryManager::getCarryOpCarryIn(PabloBlock * blk, int localIndex) {
     return mCarryInVector[cd.carryOpCarryDataOffset(localIndex)];
 }
 
-Value * CarryManager::getUnitAdvanceCarryIn(PabloBlock * blk, int localIndex) {
-    PabloBlockCarryData & cd = blk->carryData;
-    if (cd.getWhileDepth() == 0) {
-       Value * packPtr = mBuilder->CreateGEP(mCarryDataPtr, mBuilder->getInt64(cd.unitAdvanceCarryDataOffset(localIndex)));
-       mCarryInVector[cd.unitAdvanceCarryDataOffset(localIndex)] = mBuilder->CreateAlignedLoad(packPtr, BLOCK_SIZE/8);
-    }
-    return mCarryInVector[cd.unitAdvanceCarryDataOffset(localIndex)];
-}
-
-Value * CarryManager::getShortAdvanceCarryIn(PabloBlock * blk, int localIndex, int shift_amount) {
-    PabloBlockCarryData & cd = blk->carryData;
-    if (cd.getWhileDepth() == 0) {
-       Value * packPtr = mBuilder->CreateGEP(mCarryDataPtr, mBuilder->getInt64(cd.shortAdvanceCarryDataOffset(localIndex)));
-       mCarryInVector[cd.shortAdvanceCarryDataOffset(localIndex)] = mBuilder->CreateAlignedLoad(packPtr, BLOCK_SIZE/8);
-    }
-    return mCarryInVector[cd.shortAdvanceCarryDataOffset(localIndex)];
-}
-
 void CarryManager::setCarryOpCarryOut(PabloBlock * blk, unsigned idx, Value * carry_out) {
     PabloBlockCarryData & cd = blk->carryData;
     mCarryOutVector[cd.carryOpCarryDataOffset(idx)] = carry_out;
@@ -80,25 +63,76 @@ void CarryManager::setCarryOpCarryOut(PabloBlock * blk, unsigned idx, Value * ca
     }
 }
 
-void CarryManager::setUnitAdvanceCarryOut(PabloBlock * blk, unsigned idx, Value * carry_out) {
-    PabloBlockCarryData & cd = blk->carryData;
-    mCarryOutVector[cd.unitAdvanceCarryDataOffset(idx)] = carry_out; 
-    if (cd.getWhileDepth() == 0) {
-       Value * packPtr = mBuilder->CreateGEP(mCarryDataPtr, mBuilder->getInt64(cd.unitAdvanceCarryDataOffset(idx)));
-       mBuilder->CreateAlignedStore(carry_out, packPtr, BLOCK_SIZE/8);
+    
+Value * CarryManager::advanceCarryInCarryOut(PabloBlock * blk, int localIndex, int shift_amount, Value * strm) {
+    if (shift_amount == 1) {
+        return unitAdvanceCarryInCarryOut(blk, localIndex, strm);
+    }
+    else if (shift_amount < LongAdvanceBase) {
+        return shortAdvanceCarryInCarryOut(blk, localIndex, shift_amount, strm);
+    }
+    else {
+        return longAdvanceCarryInCarryOut(blk, localIndex, shift_amount, strm);
     }
 }
 
-void CarryManager::setShortAdvanceCarryOut(PabloBlock * blk, unsigned idx, int shift_amount, Value * carry_out) {
+Value * CarryManager::unitAdvanceCarryInCarryOut(PabloBlock * blk, int localIndex, Value * strm) {
     PabloBlockCarryData & cd = blk->carryData;
-    mCarryOutVector[cd.shortAdvanceCarryDataOffset(idx)] = carry_out; 
+    unsigned carryDataIndex = cd.unitAdvanceCarryDataOffset(localIndex);
+    mCarryOutVector[carryDataIndex] = strm; 
     if (cd.getWhileDepth() == 0) {
-       Value * packPtr = mBuilder->CreateGEP(mCarryDataPtr, mBuilder->getInt64(cd.shortAdvanceCarryDataOffset(idx)));
-       mBuilder->CreateAlignedStore(carry_out, packPtr, BLOCK_SIZE/8);
+        Value * packPtr = mBuilder->CreateGEP(mCarryDataPtr, mBuilder->getInt64(carryDataIndex));
+        mCarryInVector[carryDataIndex] = mBuilder->CreateAlignedLoad(packPtr, BLOCK_SIZE/8);
+        mBuilder->CreateAlignedStore(strm, packPtr, BLOCK_SIZE/8);
+        
     }
-} 
+    Value * carry_in = mCarryInVector[carryDataIndex];
+    Value* result_value;
     
-/*
+#if (BLOCK_SIZE == 128) && !defined(USE_LONG_INTEGER_SHIFT)
+    Value* advanceq_longint = mBuilder->CreateBitCast(carry_in, mBuilder->getIntNTy(BLOCK_SIZE));
+    Value* advanceq_value = mBuilder->CreateBitCast(mBuilder->CreateLShr(advanceq_longint, BLOCK_SIZE - 1), mBitBlockType);
+    Value* srli_1_value = mBuilder->CreateLShr(strm, 63);
+    Value* packed_shuffle;
+    Constant* const_packed_1_elems [] = {mBuilder->getInt32(0), mBuilder->getInt32(2)};
+    Constant* const_packed_1 = ConstantVector::get(const_packed_1_elems);
+    packed_shuffle = mBuilder->CreateShuffleVector(advanceq_value, srli_1_value, const_packed_1);
+    
+    Constant* const_packed_2_elems[] = {mBuilder->getInt64(1), mBuilder->getInt64(1)};
+    Constant* const_packed_2 = ConstantVector::get(const_packed_2_elems);
+    
+    Value* shl_value = mBuilder->CreateShl(strm, const_packed_2);
+    result_value = mBuilder->CreateOr(shl_value, packed_shuffle, "advance");
+#else
+    Value* advanceq_longint = mBuilder->CreateBitCast(carry_in, mBuilder->getIntNTy(BLOCK_SIZE));
+    Value* strm_longint = mBuilder->CreateBitCast(strm, mBuilder->getIntNTy(BLOCK_SIZE));
+    Value* adv_longint = mBuilder->CreateOr(mBuilder->CreateShl(strm_longint, 1), mBuilder->CreateLShr(advanceq_longint, BLOCK_SIZE - 1), "advance");
+    result_value = mBuilder->CreateBitCast(adv_longint, mBitBlockType);
+    
+#endif
+    return result_value;
+}
+
+Value * CarryManager::shortAdvanceCarryInCarryOut(PabloBlock * blk, int localIndex, int shift_amount, Value * strm) {
+    PabloBlockCarryData & cd = blk->carryData;
+    unsigned carryDataIndex = cd.shortAdvanceCarryDataOffset(localIndex);
+    mCarryOutVector[carryDataIndex] = strm; 
+    if (cd.getWhileDepth() == 0) {
+        Value * packPtr = mBuilder->CreateGEP(mCarryDataPtr, mBuilder->getInt64(carryDataIndex));
+        mCarryInVector[carryDataIndex] = mBuilder->CreateAlignedLoad(packPtr, BLOCK_SIZE/8);
+        mBuilder->CreateAlignedStore(strm, packPtr, BLOCK_SIZE/8);
+        
+    }
+    Value * carry_in = mCarryInVector[carryDataIndex];
+    Value* advanceq_longint = mBuilder->CreateBitCast(carry_in, mBuilder->getIntNTy(BLOCK_SIZE));
+    Value* strm_longint = mBuilder->CreateBitCast(strm, mBuilder->getIntNTy(BLOCK_SIZE));
+    Value* adv_longint = mBuilder->CreateOr(mBuilder->CreateShl(strm_longint, shift_amount), mBuilder->CreateLShr(advanceq_longint, BLOCK_SIZE - shift_amount), "advance");
+    return mBuilder->CreateBitCast(adv_longint, mBitBlockType);
+}
+    
+
+/*  currently defined in carry_data.h 
+ 
  static unsigned power2ceil (unsigned v) {
  unsigned ceil = 1;
  while (ceil < v) ceil *= 2;
@@ -114,6 +148,7 @@ void CarryManager::setShortAdvanceCarryOut(PabloBlock * blk, unsigned idx, int s
  }
  */
 
+    
 Value * CarryManager::longAdvanceCarryInCarryOut(PabloBlock * blk, int localIndex, int shift_amount, Value * carry_out) {
     PabloBlockCarryData & cd = blk->carryData;
     Value * advBaseIndex = mBuilder->getInt64(cd.longAdvanceCarryDataOffset(localIndex));

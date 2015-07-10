@@ -120,7 +120,7 @@ CompiledPabloFunction PabloCompiler::compile(PabloBlock & pb)
     mWhileDepth = 0;
     mIfDepth = 0;
     mMaxWhileDepth = 0;
-    mCarryManager = new CarryManager(mBuilder, mBitBlockType, mZeroInitializer, mOneInitializer);
+    mCarryManager = new CarryManager(mMod, mBuilder, mBitBlockType, mZeroInitializer, mOneInitializer);
     
     std::string errMessage;
 #ifdef USE_LLVM_3_5
@@ -606,15 +606,7 @@ void PabloCompiler::compileStatement(const Statement * stmt) {
         Value* strm_value = compileExpression(adv->getExpr());
         int shift = adv->getAdvanceAmount();
         unsigned advance_index = adv->getLocalAdvanceIndex();
-        if (shift == 1) {
-            expr = genUnitAdvanceWithCarry(strm_value, advance_index);
-        }
-        else if (shift < LongAdvanceBase) {
-            expr = genShortAdvanceWithCarry(strm_value, advance_index, shift);
-        }
-        else {
-            expr = genLongAdvanceWithCarry(strm_value, advance_index, shift);
-        }
+        expr = mCarryManager->advanceCarryInCarryOut(mPabloBlock, advance_index, shift, strm_value);
     }
     else if (const MatchStar * mstar = dyn_cast<MatchStar>(stmt)) {
         Value * marker = compileExpression(mstar->getMarker());
@@ -796,47 +788,6 @@ inline Value* PabloCompiler::genNot(Value* expr) {
     return mBuilder->CreateXor(expr, mOneInitializer, "not");
 }
 
-Value* PabloCompiler::genUnitAdvanceWithCarry(Value* strm_value, unsigned localIndex) {
-    Value * carry_in = mCarryManager->getUnitAdvanceCarryIn(mPabloBlock, localIndex);
-    Value* result_value;
-    
-#if (BLOCK_SIZE == 128) && !defined(USE_LONG_INTEGER_SHIFT)
-    Value* advanceq_value = genShiftHighbitToLow(BLOCK_SIZE, carry_in);
-    Value* srli_1_value = mBuilder->CreateLShr(strm_value, 63);
-    Value* packed_shuffle;
-    Constant* const_packed_1_elems [] = {mBuilder->getInt32(0), mBuilder->getInt32(2)};
-    Constant* const_packed_1 = ConstantVector::get(const_packed_1_elems);
-    packed_shuffle = mBuilder->CreateShuffleVector(advanceq_value, srli_1_value, const_packed_1);
-    
-    Constant* const_packed_2_elems[] = {mBuilder->getInt64(1), mBuilder->getInt64(1)};
-    Constant* const_packed_2 = ConstantVector::get(const_packed_2_elems);
-    
-    Value* shl_value = mBuilder->CreateShl(strm_value, const_packed_2);
-    result_value = mBuilder->CreateOr(shl_value, packed_shuffle, "advance");
-#else
-    Value* advanceq_longint = mBuilder->CreateBitCast(carry_in, mBuilder->getIntNTy(BLOCK_SIZE));
-    Value* strm_longint = mBuilder->CreateBitCast(strm_value, mBuilder->getIntNTy(BLOCK_SIZE));
-    Value* adv_longint = mBuilder->CreateOr(mBuilder->CreateShl(strm_longint, 1), mBuilder->CreateLShr(advanceq_longint, BLOCK_SIZE - 1), "advance");
-    result_value = mBuilder->CreateBitCast(adv_longint, mBitBlockType);
-    
-#endif
-    mCarryManager->setUnitAdvanceCarryOut(mPabloBlock, localIndex, strm_value);
-    return result_value;
-}
-                    
-Value* PabloCompiler::genShortAdvanceWithCarry(Value* strm_value, unsigned localIndex, int shift_amount) {
-    Value * carry_in = mCarryManager->getShortAdvanceCarryIn(mPabloBlock, localIndex, shift_amount);
-    Value* advanceq_longint = mBuilder->CreateBitCast(carry_in, mBuilder->getIntNTy(BLOCK_SIZE));
-    Value* strm_longint = mBuilder->CreateBitCast(strm_value, mBuilder->getIntNTy(BLOCK_SIZE));
-    Value* adv_longint = mBuilder->CreateOr(mBuilder->CreateShl(strm_longint, shift_amount), mBuilder->CreateLShr(advanceq_longint, BLOCK_SIZE - shift_amount), "advance");
-    Value* result_value = mBuilder->CreateBitCast(adv_longint, mBitBlockType);
-    mCarryManager->setShortAdvanceCarryOut(mPabloBlock, localIndex, shift_amount, strm_value);
-    return result_value;
-}
-                    
-Value* PabloCompiler::genLongAdvanceWithCarry(Value* strm_value, unsigned localIndex, int shift_amount) {
-    return mCarryManager->longAdvanceCarryInCarryOut(mPabloBlock, localIndex, shift_amount, strm_value);
-}
     
 void PabloCompiler::SetOutputValue(Value * marker, const unsigned index) {
     if (marker->getType()->isPointerTy()) {
