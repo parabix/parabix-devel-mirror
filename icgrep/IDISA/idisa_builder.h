@@ -48,6 +48,8 @@ public:
     Value * hsimd_packl(unsigned fw, Value * a, Value * b);
     Value * hsimd_signmask(unsigned fw, Value * a);
 
+    Value * mvmd_dslli(unsigned fw, Value * a, Value * b, unsigned shift);
+
 private:
     Module * mMod;
     IRBuilder <> * llvm_builder;

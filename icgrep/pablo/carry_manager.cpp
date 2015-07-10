@@ -90,19 +90,8 @@ Value * CarryManager::unitAdvanceCarryInCarryOut(PabloBlock * blk, int localInde
     Value* result_value;
     
 #if (BLOCK_SIZE == 128) && !defined(USE_LONG_INTEGER_SHIFT)
-    Value* advanceq_longint = mBuilder->CreateBitCast(carry_in, mBuilder->getIntNTy(BLOCK_SIZE));
-    Value* advanceq_value = mBuilder->CreateBitCast(mBuilder->CreateLShr(advanceq_longint, BLOCK_SIZE - 1), mBitBlockType);
-    Value* srli_1_value = mBuilder->CreateLShr(strm, 63);
-    Value* packed_shuffle;
-    Constant* const_packed_1_elems [] = {mBuilder->getInt32(0), mBuilder->getInt32(2)};
-    Constant* const_packed_1 = ConstantVector::get(const_packed_1_elems);
-    packed_shuffle = mBuilder->CreateShuffleVector(advanceq_value, srli_1_value, const_packed_1);
-    
-    Constant* const_packed_2_elems[] = {mBuilder->getInt64(1), mBuilder->getInt64(1)};
-    Constant* const_packed_2 = ConstantVector::get(const_packed_2_elems);
-    
-    Value* shl_value = mBuilder->CreateShl(strm, const_packed_2);
-    result_value = mBuilder->CreateOr(shl_value, packed_shuffle, "advance");
+    Value * ahead64 = iBuilder->mvmd_dslli(64, carry_in, strm, 1);
+    result_value = mBuilder->CreateOr(iBuilder->simd_srli(64, ahead64, 63), iBuilder->simd_slli(64, strm, 1));
 #else
     Value* advanceq_longint = mBuilder->CreateBitCast(carry_in, mBuilder->getIntNTy(BLOCK_SIZE));
     Value* strm_longint = mBuilder->CreateBitCast(strm, mBuilder->getIntNTy(BLOCK_SIZE));

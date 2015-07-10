@@ -151,5 +151,15 @@ Value * IDISA_Builder::hsimd_signmask(unsigned fw, Value * a) {
     return mask;
 }
 
+Value * IDISA_Builder::mvmd_dslli(unsigned fw, Value * a, Value * b, unsigned shift) {
+    unsigned field_count = mBitBlockSize/fw;
+    Value * aVec = fwCast(fw, a);
+    Value * bVec = fwCast(fw, b);
+    std::vector<Constant*> Idxs;
+    for (unsigned i = shift; i < field_count + shift; i++) {
+        Idxs.push_back(llvm_builder->getInt32(i));
+    }
+    return bitBlockCast(llvm_builder->CreateShuffleVector(aVec, bVec, ConstantVector::get(Idxs)));
+}
 
 
