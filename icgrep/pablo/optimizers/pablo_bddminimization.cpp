@@ -997,7 +997,7 @@ void BDDMinimizationPass::applySubsetConstraints() {
                     // including s. This will restore the advanced variable back to its original state.
 
                     // Gather the original users to this advance. We'll be manipulating it shortly.
-                    Statement::Users U(adv->users());
+                    Statement::Vector U(adv->users());
 
                     // Add s to V and sort the list; it'll be closer to being in topological order.
                     V.push_back(s);

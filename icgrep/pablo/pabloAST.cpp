@@ -86,7 +86,7 @@ bool equals(const PabloAST * expr1, const PabloAST * expr2) {
 
 void PabloAST::replaceAllUsesWith(PabloAST * expr) {    
     Statement * user[mUsers.size()];
-    Users::size_type users = 0;
+    Vector::size_type users = 0;
     for (PabloAST * u : mUsers) {
         if (isa<Statement>(u)) {
             user[users++] = cast<Statement>(u);

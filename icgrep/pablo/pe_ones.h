@@ -23,7 +23,7 @@ public:
     }
     virtual ~Ones() {
     }
-    inline bool operator==(const Ones & other) const {
+    inline bool operator==(const Ones &) const {
         return true;
     }
     virtual bool operator==(const PabloAST & other) const {

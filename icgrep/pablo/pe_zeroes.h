@@ -23,19 +23,8 @@ public:
         return false;
     }
     virtual ~Zeroes() {
-
     }
-//    virtual PabloAST * getOperand(const unsigned) const {
-//        assert (false);
-//        return nullptr;
-//    }
-//    virtual unsigned getNumOperands() const {
-//        return 0;
-//    }
-//    virtual void setOperand(const unsigned, PabloAST *) {
-//        assert (false);
-//    }
-    inline bool operator==(const Zeroes & other) const {
+    inline bool operator==(const Zeroes &) const {
         return true;
     }
     virtual bool operator==(const PabloAST & other) const {

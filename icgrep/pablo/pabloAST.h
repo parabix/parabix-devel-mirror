@@ -24,39 +24,46 @@ class String;
 class PabloAST {
     friend class Statement;
     friend class Var;
-    friend class If;
+    friend class If;    
     friend class While;
     friend class PabloBlock;
+    friend class Function;
     friend class SymbolGenerator;
 public:
 
     using Allocator = SlabAllocator<u_int8_t>;
     using VectorAllocator = SlabAllocator<PabloAST *>;
-    using Users = std::vector<PabloAST*, VectorAllocator>;
-    using user_iterator = Users::iterator;
-    using const_user_iterator = Users::const_iterator;
-
+    using Vector = std::vector<PabloAST*, VectorAllocator>;
+    using user_iterator = Vector::iterator;
+    using const_user_iterator = Vector::const_iterator;
 
     enum class ClassTypeId : unsigned {
-        Advance
-        , And
-        , Assign
-        , Call
-        , If
-        , Integer
-        , MatchStar
-        , Next
-        , Not
+        // Constants
+        Zeroes
         , Ones
+        // Boolean operations
+        , And
         , Or
-        , ScanThru
-        , Sel
-        , String
-        , Var
-        , While
+        , Not
         , Xor
-        , Zeroes
+        , Sel
+        // Stream operations
+        , Advance
+        , ScanThru
+        , MatchStar
+        // Variable assignments
+        , Assign
+        , Next
+        , Call
+        , Var
+        // Scope blocks
+        , If
+        , While
         , Block
+        , Function
+        // Internal variables
+        , Integer
+        , String
     };
     inline ClassTypeId getClassTypeId() const {
         return mClassTypeId;
@@ -78,17 +85,17 @@ public:
         return mUsers.cend();
     }
 
-    inline Users & users() {
+    inline Vector & users() {
         return mUsers;
     }
 
-    inline const Users & users() const {
+    inline const Vector & users() const {
         return mUsers;
     }
 
     void replaceAllUsesWith(PabloAST * expr);
 
-    inline Users::size_type getNumUses() const {
+    inline Vector::size_type getNumUses() const {
         return mUsers.size();
     }
 
@@ -127,7 +134,7 @@ protected:
     static Allocator        mAllocator;
 private:
     const ClassTypeId       mClassTypeId;
-    Users                   mUsers;
+    Vector                   mUsers;
     static VectorAllocator  mVectorAllocator;
 };
 
