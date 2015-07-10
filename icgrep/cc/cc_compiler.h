@@ -12,6 +12,11 @@
 #include "utf_encoding.h"
 #include <string>
 
+
+namespace pablo {
+    class PabloFunction;
+}
+
 namespace cc {
 
 class CC_NameMap;
@@ -21,9 +26,7 @@ public:
 
     using Vars = std::vector<pablo::Var *>;
 
-    CC_Compiler(pablo::PabloBlock & entry, const Encoding & encoding, const std::string basis_pattern = "basis");
-
-    const Vars & getBasisBits(const CC_NameMap & nameMap) const;
+    CC_Compiler(pablo::PabloFunction & function, const Encoding & encoding, const std::string prefix = "basis");
 
     pablo::Assign * compileCC(const re::CC *cc);
 
@@ -71,10 +74,6 @@ inline pablo::Assign * CC_Compiler::compileCC(const re::CC *cc, pablo::PabloBloc
 
 inline pablo::Assign * CC_Compiler::compileCC(const re::CC *cc, pablo::PabloBuilder & builder) {
     return compileCC(std::move(cc->canonicalName(re::ByteClass)), cc, builder);
-}
-
-inline const CC_Compiler::Vars & CC_Compiler::getBasisBits(const CC_NameMap &) const {
-    return mBasisBit;
 }
 
 inline pablo::PabloBuilder & CC_Compiler::getBuilder() {

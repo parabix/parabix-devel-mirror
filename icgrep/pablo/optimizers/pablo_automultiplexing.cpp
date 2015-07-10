@@ -1,6 +1,7 @@
 #include "pablo_automultiplexing.hpp"
 #include <include/simd-lib/builtins.hpp>
 #include <pablo/builder.hpp>
+#include <pablo/function.h>
 #include <pablo/printer_pablos.h>
 #include <boost/container/flat_set.hpp>
 #include <boost/numeric/ublas/matrix.hpp>
@@ -97,7 +98,7 @@ unsigned __count_advances(const PabloBlock & entry) {
 
 namespace pablo {
 
-bool AutoMultiplexing::optimize(const std::vector<Var *> & input, PabloBlock & entry) {
+bool AutoMultiplexing::optimize(PabloFunction & function) {
 
     std::random_device rd;
     const auto seed = rd();
@@ -105,17 +106,17 @@ bool AutoMultiplexing::optimize(const std::vector<Var *> & input, PabloBlock & e
 
     LOG("Seed:                    " << seed);
 
-    AutoMultiplexing am(input);
+    AutoMultiplexing am;
     RECORD_TIMESTAMP(start_initialize);
-    am.initialize(entry);
+    am.initialize(function);
     RECORD_TIMESTAMP(end_initialize);
 
     LOG("Initialize:              " << (end_initialize - start_initialize));
 
-    LOG_NUMBER_OF_ADVANCES(entry);
+    LOG_NUMBER_OF_ADVANCES(function.getEntryBlock());
 
     RECORD_TIMESTAMP(start_characterize);
-    am.characterize(entry);
+    am.characterize(function.getEntryBlock());
     RECORD_TIMESTAMP(end_characterize);
 
     LOG("Characterize:            " << (end_characterize - start_characterize));
@@ -143,7 +144,7 @@ bool AutoMultiplexing::optimize(const std::vector<Var *> & input, PabloBlock & e
         LOG("MultiplexSelectedSets:   " << (end_select_independent_sets - start_select_independent_sets));
 
         RECORD_TIMESTAMP(start_topological_sort);
-        am.topologicalSort(entry);
+        am.topologicalSort(function.getEntryBlock());
         RECORD_TIMESTAMP(end_topological_sort);
         LOG("TopologicalSort:         " << (end_topological_sort - start_topological_sort));
     }
@@ -166,7 +167,7 @@ bool AutoMultiplexing::optimize(const std::vector<Var *> & input, PabloBlock & e
  * Scan through the program to identify any advances and calls then initialize the BDD engine with
  * the proper variable ordering.
  ** ------------------------------------------------------------------------------------------------------------- */
-void AutoMultiplexing::initialize(PabloBlock & entry) {
+void AutoMultiplexing::initialize(PabloFunction & function) {
 
     flat_map<const PabloAST *, unsigned> map;    
     std::stack<Statement *> scope;
@@ -174,7 +175,7 @@ void AutoMultiplexing::initialize(PabloBlock & entry) {
 
     // Scan through and collect all the advances, calls, scanthrus and matchstars ...
     unsigned n = 0, m = 0;
-    for (Statement * stmt = entry.front(); ; ) {
+    for (Statement * stmt = function.getEntryBlock().front(); ; ) {
         while ( stmt ) {
             ++n;
             if (LLVM_UNLIKELY(isa<If>(stmt) || isa<While>(stmt))) {
@@ -226,7 +227,7 @@ void AutoMultiplexing::initialize(PabloBlock & entry) {
     n = m;
     m = 0;
 
-    const Statement * stmt = entry.front();
+    const Statement * stmt = function.getEntryBlock().front();
     for (;;) {
         while ( stmt ) {
 
@@ -283,17 +284,17 @@ void AutoMultiplexing::initialize(PabloBlock & entry) {
     }
 
     // Initialize the BDD engine ...
-    mManager = Cudd_Init((complexStatements + mBaseVariables.size()), 0, CUDD_UNIQUE_SLOTS, CUDD_CACHE_SLOTS, 0);
+    mManager = Cudd_Init((complexStatements + function.getParameters().size()), 0, CUDD_UNIQUE_SLOTS, CUDD_CACHE_SLOTS, 0);
     Cudd_AutodynDisable(mManager);
 
     // Map the predefined 0/1 entries
-    mCharacterizationMap[entry.createZeroes()] = Zero();
-    mCharacterizationMap[entry.createOnes()] = One();
+    mCharacterizationMap[function.getEntryBlock().createZeroes()] = Zero();
+    mCharacterizationMap[function.getEntryBlock().createOnes()] = One();
 
     // Order the variables so the input Vars are pushed to the end; they ought to
     // be the most complex to resolve.
     unsigned i = complexStatements;
-    for (const Var * var : mBaseVariables) {
+    for (const Var * var : function.getParameters()) {
         mCharacterizationMap[var] = Cudd_bddIthVar(mManager, i++);
     }
 }

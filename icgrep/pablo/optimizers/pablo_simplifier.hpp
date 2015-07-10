@@ -6,10 +6,11 @@
 namespace pablo {
 
 struct ExpressionTable;
+class PabloFunction;
 
 class Simplifier {
 public:
-    static bool optimize(PabloBlock & block);
+    static bool optimize(PabloFunction & function);
 protected:
     Simplifier();
 private:

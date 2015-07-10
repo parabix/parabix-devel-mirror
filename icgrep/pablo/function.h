@@ -2,42 +2,100 @@
 #define FUNCTION_H
 
 #include <pablo/pabloAST.h>
+#include <pablo/pe_var.h>
+#include <pablo/ps_assign.h>
+#include <pablo/symbol_generator.h>
 
 namespace pablo {
 
 class Var;
 class Assign;
+class PabloBlock;
 
-enum class ArgumentType {
-    In = 0
-    , Out = 1
-    , InOut = 2
-};
-
-using Argument = std::pair<ArgumentType, PabloAST *>;
-
-class Function : public PabloAST {
-    using ArgumentListAllocator = VectorAllocator::rebind<Argument>::other;
-    using ArgumentListType = std::vector<Argument, ArgumentListAllocator>;
+class PabloFunction : public PabloAST {
     friend class PabloBlock;
+    using ParamAllocator = VectorAllocator::rebind<Var *>::other;
+    using Parameters = std::vector<Var *, ParamAllocator>;
+    using ResultAllocator = VectorAllocator::rebind<Assign *>::other;
+    using Results = std::vector<Assign *, ResultAllocator>;
 public:
+
     static inline bool classof(const PabloAST * e) {
         return e->getClassTypeId() == ClassTypeId::Function;
     }
+
     static inline bool classof(const void *) {
         return false;
     }
-    virtual ~Function() { }
+
+    static PabloFunction Create();
+
     virtual bool operator==(const PabloAST & other) const {
         return &other == this;
     }
+
+    PabloBlock & getEntryBlock() {
+        return mEntryBlock;
+    }
+
+    const PabloBlock & getEntryBlock() const {
+        return mEntryBlock;
+    }
+
+    const Parameters & getParameters() const {
+        return mParameters;
+    }
+
+    const Results & getResults() const {
+        return mResults;
+    }
+
+    Var * getParameter(const unsigned index) {
+        return mParameters[index];
+    }
+
+    const Var * getParameter(const unsigned index) const {
+        return mParameters[index];
+    }
+
+    void addParameter(Var * value) {
+        mParameters.push_back(value); value->addUser(this);
+    }
+
+    Assign * getResult(const unsigned index) {
+        return mResults[index];
+    }
+
+    const Assign * getResult(const unsigned index) const {
+        return mResults[index];
+    }
+
+    void addResult(Assign * value) {
+        mResults.push_back(value); value->addUser(this);
+    }
+
+    void setResult(const unsigned index, PabloAST * value) {
+        getResult(index)->setExpression(value);
+    }
+
+    SymbolGenerator & getSymbolTable() {
+        return mSymbolTable;
+    }
+
+    virtual ~PabloFunction() { }
+
 protected:
-    Function();
-    Function(std::initializer_list<Argument *> args);
-    Function(const std::vector<Argument *> & args);
+    PabloFunction();
 private:
-    ArgumentListType        mArgumentList;
+    PabloBlock &        mEntryBlock;
+    Parameters          mParameters;
+    Results             mResults;
+    SymbolGenerator     mSymbolTable;
 };
+
+inline PabloFunction PabloFunction::Create() {
+    return PabloFunction();
+}
 
 }
 

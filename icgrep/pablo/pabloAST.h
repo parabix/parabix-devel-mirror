@@ -27,7 +27,7 @@ class PabloAST {
     friend class If;    
     friend class While;
     friend class PabloBlock;
-    friend class Function;
+    friend class PabloFunction;
     friend class SymbolGenerator;
 public:
 
@@ -220,7 +220,9 @@ protected:
         unsigned i = 0;
         for (PabloAST * const op : operands) {
             mOperand[i++] = op;
-            op->addUser(this);
+            if (LLVM_LIKELY(op != nullptr)) {
+                op->addUser(this);
+            }
         }
     }
     inline void setName(const String * const name) {

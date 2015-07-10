@@ -107,16 +107,18 @@ void Statement::setOperand(const unsigned index, PabloAST * const value) {
         return;
     }
     PabloAST * priorValue = getOperand(index);
-    // Test just to be sure that we don't have multiple operands pointing to
-    // what we're replacing. If not, remove this from the prior value's
-    // user list.
-    unsigned count = 0;
-    for (unsigned i = 0; i != getNumOperands(); ++i) {
-        count += (getOperand(i) == priorValue) ? 1 : 0;
-    }
-    assert (count >= 1);
-    if (LLVM_LIKELY(count == 1)) {
-        priorValue->removeUser(this);
+    if (LLVM_LIKELY(priorValue != nullptr)) {
+        // Test just to be sure that we don't have multiple operands pointing to
+        // what we're replacing. If not, remove this from the prior value's
+        // user list.
+        unsigned count = 0;
+        for (unsigned i = 0; i != getNumOperands(); ++i) {
+            count += (getOperand(i) == priorValue) ? 1 : 0;
+        }
+        assert (count >= 1);
+        if (LLVM_LIKELY(count == 1)) {
+            priorValue->removeUser(this);
+        }
     }
     mOperand[index] = value;
     value->addUser(this);

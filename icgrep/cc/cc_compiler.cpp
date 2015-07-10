@@ -19,6 +19,7 @@
 #include <cc/cc_namemap.hpp>
 #include <pablo/codegenstate.h>
 #include <pablo/builder.hpp>
+#include <pablo/function.h>
 #include <stdexcept>
 
 using namespace re;
@@ -26,13 +27,14 @@ using namespace pablo;
 
 namespace cc {
 
-CC_Compiler::CC_Compiler(PabloBlock & entry, const Encoding & encoding, const std::string basis_pattern)
-: mBuilder(entry)
+CC_Compiler::CC_Compiler(PabloFunction & function, const Encoding & encoding, const std::string prefix)
+: mBuilder(function.getEntryBlock())
 , mBasisBit(encoding.getBits())
-, mEncoding(encoding)
-{
-    for (int i = 0; i < mEncoding.getBits(); i++) {
-        mBasisBit[i] = mBuilder.createVar(basis_pattern + std::to_string(i));
+, mEncoding(encoding) {
+    for (unsigned i = 0; i != encoding.getBits(); i++) {
+        Var * var = mBuilder.createVar(prefix + std::to_string(i));
+        function.addParameter(var);
+        mBasisBit[encoding.getBits() - i - 1] = var;
     }
 }
 
@@ -266,7 +268,7 @@ inline PabloAST * CC_Compiler::char_or_range_expr(const codepoint_t lo, const co
 }
 
 inline Var * CC_Compiler::getBasisVar(const int i) const {
-    return mBasisBit[(mEncoding.getBits() - 1) - i];
+    return mBasisBit[i];
 }
 
 } // end of namespace cc

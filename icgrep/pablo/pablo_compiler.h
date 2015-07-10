@@ -47,6 +47,7 @@ using namespace llvm;
 
 class PabloAST;
 class PabloBlock;
+class PabloFunction;
 class String;
 class Var;
 class Statement;
@@ -96,12 +97,12 @@ class PabloCompiler {
     typedef std::vector<Value*>                                    CarryQueueVector;
 
 public:
-    PabloCompiler(const std::vector<Var *> & basisBitVars);
+    PabloCompiler();
     ~PabloCompiler();
     void InstallExternalFunction(std::string C_fn_name, void * fn_ptr);
-    CompiledPabloFunction compile(PabloBlock & pb);
+    CompiledPabloFunction compile(pablo::PabloFunction &function);
 private:
-    void DefineTypes();
+    void DefineTypes(PabloFunction & function);
     void DeclareFunctions();
     void Examine(PabloBlock & blk);
     void DeclareCallFunctions();
@@ -137,7 +138,6 @@ private:
     CarryQueueVector                    mCarryInVector;
     CarryQueueVector                    mCarryOutVector;
 
-    const std::vector<Var *> &          mBasisBits;
 #ifdef USE_LLVM_3_5
     Module* const                       mMod;
 #else
@@ -164,7 +164,7 @@ private:
     Function*                           mFunction;
 
 
-    Value*                              mBasisBitsAddr;
+    Value*                              mParameterAddr;
     Value*                              mOutputAddrPtr;
 
     unsigned                            mMaxWhileDepth;

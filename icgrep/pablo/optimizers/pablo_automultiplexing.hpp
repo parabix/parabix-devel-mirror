@@ -18,6 +18,7 @@ struct DdNode;
 namespace pablo {
 
 class PabloBuilder;
+class PabloFunction;
 
 class AutoMultiplexing {
 
@@ -36,9 +37,9 @@ class AutoMultiplexing {
     using RecentCharacterizations = std::vector<std::pair<const PabloAST *, DdNode *>>;
 
 public:
-    static bool optimize(const std::vector<Var *> & input, PabloBlock & entry);
+    static bool optimize(PabloFunction & function);
 protected:
-    void initialize(PabloBlock & entry);
+    void initialize(PabloFunction & function);
     void characterize(PabloBlock &block);
     DdNode * characterize(Statement * const stmt);
     DdNode * characterize(Advance * adv, DdNode * input);
@@ -49,10 +50,9 @@ protected:
     void applySubsetConstraints();
     void multiplexSelectedIndependentSets() const;
     void topologicalSort(PabloBlock & entry) const;
-    inline AutoMultiplexing(const std::vector<Var *> & vars)
+    inline AutoMultiplexing()
     : mVariables(0)
     , mConstraintGraph(0)
-    , mBaseVariables(vars)
     {
     }
 private:
@@ -80,7 +80,6 @@ private:
     AdvanceMap                  mAdvanceMap;
     AdvanceVector               mAdvance;
     MultiplexSetGraph           mMultiplexSetGraph;
-    const std::vector<Var *> &  mBaseVariables;
     RecentCharacterizations     mRecentCharacterizations;
 };
 

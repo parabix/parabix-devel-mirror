@@ -56,8 +56,8 @@ public:
 
     Call * createCall(String * name);
 
-    Assign * createAssign(const std::string && prefix, PabloAST * expr, const int outputIndex = -1) {
-        return mPb->createAssign(std::move(prefix), expr, outputIndex);
+    Assign * createAssign(const std::string && prefix, PabloAST * expr) {
+        return mPb->createAssign(std::move(prefix), expr);
     }
 
     inline PabloAST * createAdvance(PabloAST * expr, const Integer::integer_t shiftAmount) {

@@ -39,8 +39,8 @@ void PabloBlock::insert(Statement * const statement) {
 
 /// UNARY CREATE FUNCTIONS
 
-Assign * PabloBlock::createAssign(const std::string && prefix, PabloAST * expr, const int outputIndex)  {
-    return insertAtInsertionPoint(new Assign(expr, outputIndex, makeName(prefix, false)));
+Assign * PabloBlock::createAssign(const std::string && prefix, PabloAST * expr)  {
+    return insertAtInsertionPoint(new Assign(expr, makeName(prefix, false)));
 }
 
 PabloAST * PabloBlock::createAdvance(PabloAST * expr, PabloAST * shiftAmount) {

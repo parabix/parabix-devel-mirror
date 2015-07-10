@@ -1,11 +1,12 @@
 #include "pablo_codesinking.hpp"
+#include <pablo/function.h>
 
 namespace pablo {
 
-bool CodeSinking::optimize(PabloBlock & block)
+bool CodeSinking::optimize(PabloFunction & function)
 {
     CodeSinking lcf;
-    lcf.sink(block);
+    lcf.sink(function.getEntryBlock());
     return true;
 }
 

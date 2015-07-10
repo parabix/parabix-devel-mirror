@@ -45,7 +45,7 @@ protected:
     Var(PabloAST * var)
     : PabloAST(ClassTypeId::Var)
     , mName(cast<String>(var)) {
-        var->addUser(this);
+
     }
 private:
     const String *     mName;

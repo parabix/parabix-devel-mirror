@@ -9,6 +9,7 @@
 #include <pablo/carry_data.h>
 #include <pablo/carry_manager.h>
 #include <pablo/printer_pablos.h>
+#include <pablo/function.h>
 #include <cc/cc_namemap.hpp>
 #include <re/re_name.h>
 #include <stdexcept>
@@ -63,12 +64,11 @@ extern "C" {
 
 namespace pablo {
 
-PabloCompiler::PabloCompiler(const std::vector<Var*> & basisBits)
-: mBasisBits(basisBits)
+PabloCompiler::PabloCompiler()
 #ifdef USE_LLVM_3_5
-, mMod(new Module("icgrep", getGlobalContext()))
+: mMod(new Module("icgrep", getGlobalContext()))
 #else
-, mModOwner(make_unique<Module>("icgrep", getGlobalContext()))
+: mModOwner(make_unique<Module>("icgrep", getGlobalContext()))
 , mMod(mModOwner.get())
 #endif
 , mBuilder(&LLVM_Builder)
@@ -83,7 +83,7 @@ PabloCompiler::PabloCompiler(const std::vector<Var*> & basisBits)
 , mOneInitializer(ConstantVector::getAllOnesValue(mBitBlockType))
 , mFunctionType(nullptr)
 , mFunction(nullptr)
-, mBasisBitsAddr(nullptr)
+, mParameterAddr(nullptr)
 , mOutputAddrPtr(nullptr)
 , mMaxWhileDepth(0)
 , mPrintRegisterFunction(nullptr)
@@ -92,7 +92,6 @@ PabloCompiler::PabloCompiler(const std::vector<Var*> & basisBits)
     InitializeNativeTarget();
     InitializeNativeTargetAsmPrinter();
     InitializeNativeTargetAsmParser();
-    DefineTypes();
 }
 
 PabloCompiler::~PabloCompiler()
@@ -115,7 +114,7 @@ void PabloCompiler::genPrintRegister(std::string regName, Value * bitblockValue)
     mBuilder->CreateCall(mPrintRegisterFunction, {regStrPtr, bitblockValue});
 }
 
-CompiledPabloFunction PabloCompiler::compile(PabloBlock & pb)
+CompiledPabloFunction PabloCompiler::compile(PabloFunction & function)
 {
     mWhileDepth = 0;
     mIfDepth = 0;
@@ -138,14 +137,16 @@ CompiledPabloFunction PabloCompiler::compile(PabloBlock & pb)
     if (mExecutionEngine == nullptr) {
         throw std::runtime_error("Could not create ExecutionEngine: " + errMessage);
     }
+
+    DefineTypes(function);
     DeclareFunctions();
 
-    Examine(pb);
+    Examine(function.getEntryBlock());
     DeclareCallFunctions();
 
     Function::arg_iterator args = mFunction->arg_begin();
-    mBasisBitsAddr = args++;
-    mBasisBitsAddr->setName("basis_bits");
+    mParameterAddr = args++;
+    mParameterAddr->setName("basis_bits");
     mCarryDataPtr = args++;
     mCarryDataPtr->setName("carry_data");
     mOutputAddrPtr = args++;
@@ -158,17 +159,18 @@ CompiledPabloFunction PabloCompiler::compile(PabloBlock & pb)
     mBuilder->SetInsertPoint(b);
 
     //The basis bits structure
-    for (unsigned i = 0; i != mBasisBits.size(); ++i) {
+
+    for (unsigned i = 0; i != function.getParameters().size(); ++i) {
         Value* indices[] = {mBuilder->getInt64(0), mBuilder->getInt32(i)};
-        Value * gep = mBuilder->CreateGEP(mBasisBitsAddr, indices);
-        LoadInst * basisBit = mBuilder->CreateAlignedLoad(gep, BLOCK_SIZE/8, false, mBasisBits[i]->getName()->to_string());
-        mMarkerMap.insert(std::make_pair(mBasisBits[i], basisBit));
+        Value * gep = mBuilder->CreateGEP(mParameterAddr, indices);
+        LoadInst * basisBit = mBuilder->CreateAlignedLoad(gep, BLOCK_SIZE/8, false, function.getParameter(i)->getName()->to_string());
+        mMarkerMap.insert(std::make_pair(function.getParameter(i), basisBit));
     }
         
-    unsigned totalCarryDataSize = mCarryManager->initialize(&pb, mCarryDataPtr);
+    unsigned totalCarryDataSize = mCarryManager->initialize(&(function.getEntryBlock()), mCarryDataPtr);
     
     //Generate the IR instructions for the function.
-    compileBlock(pb);
+    compileBlock(function.getEntryBlock());
     
     mCarryManager->generateBlockNoIncrement();
 
@@ -178,6 +180,11 @@ CompiledPabloFunction PabloCompiler::compile(PabloBlock & pb)
     
     if (LLVM_UNLIKELY(mWhileDepth != 0)) {
         throw std::runtime_error("Non-zero nesting depth error (" + std::to_string(mWhileDepth) + ")");
+    }
+
+    // Write the output values out
+    for (unsigned i = 0; i != function.getResults().size(); ++i) {
+        SetOutputValue(mMarkerMap[function.getResult(i)], i);
     }
 
     //Terminate the block
@@ -192,19 +199,21 @@ CompiledPabloFunction PabloCompiler::compile(PabloBlock & pb)
 
     mExecutionEngine->finalizeObject();
 
+    delete mCarryManager;
+    mCarryManager = nullptr;
+
     //Return the required size of the carry data area to the process_block function.
     return CompiledPabloFunction(totalCarryDataSize * sizeof(BitBlock), mFunction, mExecutionEngine);
 }
 
-void PabloCompiler::DefineTypes()
-{
+void PabloCompiler::DefineTypes(PabloFunction & function) {
+
     StructType * structBasisBits = mMod->getTypeByName("struct.Basis_bits");
     if (structBasisBits == nullptr) {
         structBasisBits = StructType::create(mMod->getContext(), "struct.Basis_bits");
     }
-    std::vector<Type*>StructTy_struct_Basis_bits_fields;
-    for (int i = 0; i != mBasisBits.size(); i++)
-    {
+    std::vector<Type*> StructTy_struct_Basis_bits_fields;
+    for (int i = 0; i != function.getParameters().size(); i++) {
         StructTy_struct_Basis_bits_fields.push_back(mBitBlockType);
     }
     if (structBasisBits->isOpaque()) {
@@ -226,11 +235,12 @@ void PabloCompiler::DefineTypes()
     }
     if (outputStruct->isOpaque()) {
         std::vector<Type*>fields;
-        fields.push_back(mBitBlockType);
-        fields.push_back(mBitBlockType);
+        for (int i = 0; i != function.getResults().size(); i++) {
+            fields.push_back(mBitBlockType);
+        }
         outputStruct->setBody(fields, /*isPacked=*/false);
     }
-    PointerType* outputStructPtr = PointerType::get(outputStruct, 0);
+    PointerType * outputStructPtr = PointerType::get(outputStruct, 0);
 
     //The &output parameter.
     functionTypeArgs.push_back(outputStructPtr);
@@ -554,10 +564,7 @@ void PabloCompiler::compileWhile(const While * whileStatement) {
 void PabloCompiler::compileStatement(const Statement * stmt) {
     Value * expr = nullptr;
     if (const Assign * assign = dyn_cast<const Assign>(stmt)) {
-        expr = compileExpression(assign->getExpr());
-        if (LLVM_UNLIKELY(assign->isOutputAssignment())) {
-            SetOutputValue(expr, assign->getOutputIndex());
-        }
+        expr = compileExpression(assign->getExpression());
     }
     else if (const Next * next = dyn_cast<const Next>(stmt)) {
         expr = compileExpression(next->getExpr());
@@ -582,7 +589,7 @@ void PabloCompiler::compileStatement(const Statement * stmt) {
         if (LLVM_UNLIKELY(ci == mCalleeMap.end())) {
             throw std::runtime_error("Unexpected error locating static function for \"" + call->getCallee()->to_string() + "\"");
         }
-        expr = mBuilder->CreateCall(ci->second, mBasisBitsAddr);
+        expr = mBuilder->CreateCall(ci->second, mParameterAddr);
     }
     else if (const And * pablo_and = dyn_cast<And>(stmt)) {
         expr = mBuilder->CreateAnd(compileExpression(pablo_and->getExpr1()), compileExpression(pablo_and->getExpr2()), "and");

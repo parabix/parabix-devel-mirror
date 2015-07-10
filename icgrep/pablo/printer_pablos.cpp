@@ -67,11 +67,11 @@ void PabloPrinter::print(const Statement * stmt, std::string indent, llvm::raw_o
         strm << "<null-stmt>";
     }
     else if (const Assign * an = dyn_cast<const Assign>(stmt)) {
-        if (an->isOutputAssignment()) {
-            strm << "output.";
-        }
+//        if (an->isOutputAssignment()) {
+//            strm << "output.";
+//        }
         strm << an->getName() << " = ";
-        print(an->getExpr(), strm);
+        print(an->getExpression(), strm);
     }
     else if (const Next * next = dyn_cast<const Next>(stmt)) {        
         strm << next->getName() << "' = ";

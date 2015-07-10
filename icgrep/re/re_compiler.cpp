@@ -20,6 +20,7 @@
 #include <re/re_analysis.h>
 #include <cc/cc_namemap.hpp>
 #include <pablo/codegenstate.h>
+#include <pablo/function.h>
 #include <resolve_properties.h>
 #include <assert.h>
 #include <stdexcept>
@@ -174,12 +175,12 @@ void RE_Compiler::initializeRequiredStreams() {
     mUnicodeLineBreak = mPB.createAnd(LB_chars, mPB.createNot(mCRLF));  // count the CR, but not CRLF
 }
 
-void RE_Compiler::finalizeMatchResult(MarkerType match_result) {
+void RE_Compiler::finalizeMatchResult(PabloFunction & function, MarkerType match_result) {
     //These three lines are specifically for grep.
     PabloAST * lb = UNICODE_LINE_BREAK ? mUnicodeLineBreak : mLineFeed;
-    PabloAST * v = markerVar(match_result);
-    mPB.createAssign("matches", mPB.createAnd(mPB.createMatchStar(v, mPB.createNot(lb)), lb), 0);
-    mPB.createAssign("lf", mPB.createAnd(lb, mPB.createNot(mCRLF)), 1);
+    PabloAST * v = markerVar(match_result);    
+    function.addResult(mPB.createAssign("matches", mPB.createAnd(mPB.createMatchStar(v, mPB.createNot(lb)), lb)));
+    function.addResult(mPB.createAssign("lf", mPB.createAnd(lb, mPB.createNot(mCRLF))));
 }
 
 MarkerType RE_Compiler::compile(RE * re, PabloBuilder & pb) {

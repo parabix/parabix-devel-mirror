@@ -20,6 +20,11 @@ namespace cc {
 class CC_NameMap;
 }
 
+namespace pablo {
+class PabloFunction;
+}
+
+
 /*   Marker streams represent the results of matching steps.
      Three types of marker streams are used internally.
      FinalMatchByte markers are used for character classes and
@@ -55,7 +60,7 @@ public:
 
     RE_Compiler(cc::CC_Compiler & ccCompiler);
     void initializeRequiredStreams();
-    void finalizeMatchResult(MarkerType match_result);
+    void finalizeMatchResult(pablo::PabloFunction & function, MarkerType match_result);
     MarkerType compile(RE * re) {
         return compile(re, mPB);
     }

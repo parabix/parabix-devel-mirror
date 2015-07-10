@@ -7,6 +7,8 @@
 
 namespace pablo {
 
+class PabloFunction;
+
 class CodeSinking {
 
     struct BlockSetVector : public std::vector<PabloBlock *> {
@@ -26,7 +28,7 @@ class CodeSinking {
     };
 
 public:
-    static bool optimize(PabloBlock & block);
+    static bool optimize(PabloFunction & function);
 protected:
     void sink(PabloBlock & block);
     CodeSinking() { }

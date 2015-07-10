@@ -1,17 +1,17 @@
 #include <pablo/optimizers/pablo_simplifier.hpp>
 #include <pablo/codegenstate.h>
 #include <pablo/expression_map.hpp>
-
+#include <pablo/function.h>
 #include <pablo/printer_pablos.h>
 
 
 
 namespace pablo {
 
-bool Simplifier::optimize(PabloBlock & block) {
-    eliminateRedundantCode(block);
-    deadCodeElimination(block);
-    eliminateRedundantComplexStatements(block);
+bool Simplifier::optimize(PabloFunction & function) {
+    eliminateRedundantCode(function.getEntryBlock());
+    deadCodeElimination(function.getEntryBlock());
+    eliminateRedundantComplexStatements(function.getEntryBlock());
     return true;
 }
 
@@ -58,7 +58,7 @@ void Simplifier::eliminateRedundantCode(PabloBlock & block, ExpressionTable * pr
                     stmt = assign->eraseFromParent();
                 }
                 else {
-                    stmt = assign->replaceWith(assign->getExpr());
+                    stmt = assign->replaceWith(assign->getExpression());
                 }
                 continue;
             }
@@ -79,7 +79,7 @@ void Simplifier::eliminateRedundantCode(PabloBlock & block, ExpressionTable * pr
             If::DefinedVars & defVars = ifNode->getDefined();
             for (auto i = defVars.begin(); i != defVars.end(); ) {
                 Assign * defVar = cast<Assign>(*i);
-                if (LLVM_UNLIKELY(isa<Zeroes>(defVar->getExpr()))) {
+                if (LLVM_UNLIKELY(isa<Zeroes>(defVar->getExpression()))) {
                     i = defVars.erase(i);
                     defVar->replaceWith(block.createZeroes(), false, true);
                     continue;
