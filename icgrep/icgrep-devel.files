@@ -165,7 +165,6 @@ pablo/pe_var.cpp
 pablo/pe_var.h
 pablo/pe_xor.cpp
 pablo/pe_xor.h
-pablo/ps_assign.cpp
 pablo/ps_assign.h
 pablo/ps_if.h
 pablo/ps_pablos.cpp

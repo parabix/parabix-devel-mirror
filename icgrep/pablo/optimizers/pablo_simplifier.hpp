@@ -17,6 +17,7 @@ private:
     static void eliminateRedundantCode(PabloBlock & block, ExpressionTable * predecessor = nullptr);
     static void deadCodeElimination(PabloBlock & block);
     static void eliminateRedundantComplexStatements(PabloBlock & block);
+    static bool isSuperfluous(const Assign * const assign);
 private:
 
 };

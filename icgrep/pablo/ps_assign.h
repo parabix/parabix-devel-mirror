@@ -30,7 +30,6 @@ public:
     inline void setExpression(PabloAST * value) {
         return setOperand(0, value);
     }
-    bool superfluous() const;
 protected:
     explicit Assign(PabloAST * expr, String * name)
     : Statement(ClassTypeId::Assign, {expr}, name)

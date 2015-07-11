@@ -40,6 +40,15 @@ static bool verifyStatementIsInSameBlock(const Statement * const stmt, const Pab
 }
 #endif
 
+inline bool Simplifier::isSuperfluous(const Assign * const assign) {
+    for (const PabloAST * inst : assign->users()) {
+        if (isa<Next>(inst) || isa<PabloFunction>(inst) || isa<If>(inst)) {
+            return false;
+        }
+    }
+    return true;
+}
+
 void Simplifier::eliminateRedundantCode(PabloBlock & block, ExpressionTable * predecessor) {
     ExpressionTable encountered(predecessor);
 
@@ -53,8 +62,8 @@ void Simplifier::eliminateRedundantCode(PabloBlock & block, ExpressionTable * pr
         if (Assign * assign = dyn_cast<Assign>(stmt)) {
             // If we have an Assign whose users do not contain an If or Next node, we can replace its users with
             // the Assign's expression directly.
-            if (assign->superfluous()) {
-                if (stmt->getNumUses() == 0) {
+            if (isSuperfluous(assign)) {
+                if (assign->getNumUses() == 0) {
                     stmt = assign->eraseFromParent();
                 }
                 else {
@@ -66,8 +75,8 @@ void Simplifier::eliminateRedundantCode(PabloBlock & block, ExpressionTable * pr
         else if (If * ifNode = dyn_cast<If>(stmt)) {
             // Check to see if the Cond is Zero and delete the loop.
             if (LLVM_UNLIKELY(isa<Zeroes>(ifNode->getCondition()))) {
-                for (PabloAST * defVar : ifNode->getDefined()) {
-                    cast<Assign>(defVar)->replaceWith(block.createZeroes(), false, true);
+                for (Assign * defVar : ifNode->getDefined()) {
+                    defVar->replaceWith(block.createZeroes(), false, true);
                 }
                 stmt = stmt->eraseFromParent(true);
                 continue;
@@ -173,15 +182,11 @@ void Simplifier::deadCodeElimination(PabloBlock & block) {
             deadCodeElimination(cast<While>(stmt)->getBody());
         }
         else if (stmt->getNumUses() == 0){
-            assert ("Any Assign passed to this function ought to have users or be an output var!" && (!isa<Assign>(stmt) || cast<Assign>(stmt)->isOutputAssignment()));
-            if (!isa<Assign>(stmt)) {
-                stmt = stmt->eraseFromParent(true);
-                continue;
-            }
+            stmt = stmt->eraseFromParent(true);
+            continue;
         }
         stmt = stmt->getNextNode();
     }
-    block.setInsertPoint(block.back());
 }
 
 void Simplifier::eliminateRedundantComplexStatements(PabloBlock & block) {
