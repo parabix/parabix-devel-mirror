@@ -21,7 +21,7 @@
 #include <cc/cc_namemap.hpp>
 #include <pablo/codegenstate.h>
 #include <pablo/function.h>
-#include <resolve_properties.h>
+#include <UCD/resolve_properties.h>
 #include <assert.h>
 #include <stdexcept>
 
@@ -251,7 +251,9 @@ MarkerType RE_Compiler::process(RE * re, MarkerType marker, PabloBuilder & pb) {
 
 MarkerType RE_Compiler::process(Name * name, MarkerType marker, PabloBuilder & pb) {
     MarkerType nextPos;
-    if (markerPos(marker) == FinalPostPositionByte) nextPos = marker;
+    if (markerPos(marker) == FinalPostPositionByte) {
+        nextPos = marker;
+    }
     else if (name->getType() == Name::Type::Byte) {
         nextPos = AdvanceMarker(marker, InitialPostPositionByte, pb);
     }
@@ -273,7 +275,7 @@ PabloAST * RE_Compiler::getNamedCharacterClassStream(Name * name, PabloBuilder &
     }
     else if (name->getType() == Name::Type::UnicodeProperty) {
         if (UsePregeneratedUnicode()) {
-            var = mPB.createCall(name->getName());
+            var = mPB.createCall(name->getFunctionName());
         }
         else {
             var = mUCDCompiler.generateWithDefaultIfHierarchy(resolveUnicodeSet(name), pb);
@@ -286,7 +288,6 @@ PabloAST * RE_Compiler::getNamedCharacterClassStream(Name * name, PabloBuilder &
     name->setCompiled(var);
     return var;
 }
-
 
 MarkerType RE_Compiler::process(Seq * seq, MarkerType marker, PabloBuilder & pb) {
     // if-hierarchies are not inserted within unbounded repetitions

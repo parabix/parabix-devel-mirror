@@ -6,12 +6,8 @@
  *  icgrep is a trademark of International Characters.
  */
 
-#include <fstream>
-#include <sstream>
-#include <iostream>
 #include <string>
 #include <stdint.h>
-#include <array>
 
 #include "include/simd-lib/bitblock.hpp"
 #include "include/simd-lib/transpose.hpp"

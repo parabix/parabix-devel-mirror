@@ -331,3 +331,5 @@ pablo/carry_manager.h
 pablo/carry_data.cpp
 pablo/function.h
 pablo/function.cpp
+UCD/resolve_properties.cpp
+UCD/resolve_properties.h

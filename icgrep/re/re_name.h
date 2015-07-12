@@ -30,7 +30,9 @@ public:
     };
     std::string getNamespace() const;
     std::string getName() const;
-    void setName(const std::string &);
+    void setFunctionName(const std::string &);
+    std::string getFunctionName() const;
+
     Type getType() const;
     RE *getDefinition() const;
     pablo::PabloAST * getCompiled() const {
@@ -52,6 +54,8 @@ protected:
     , mNamespace(replicateString(nameSpace, namespaceLength))
     , mNameLength(nameLength)
     , mName(replicateString(name, nameLength))
+    , mFunctionNameLength(0)
+    , mFunctionName(nullptr)
     , mType(type)
     , mDefiningRE(defn)
     , mCompiled(nullptr)
@@ -68,10 +72,12 @@ protected:
     }
 
 private:
-    length_t            mNamespaceLength;
-    const char *        mNamespace;
-    length_t            mNameLength;
-    const char *        mName;
+    const length_t      mNamespaceLength;
+    const char * const  mNamespace;
+    const length_t      mNameLength;
+    const char * const  mName;
+    length_t            mFunctionNameLength;
+    const char *        mFunctionName;
     const Type          mType;
     RE *                mDefiningRE;
     pablo::PabloAST *   mCompiled;
@@ -85,9 +91,13 @@ inline std::string Name::getName() const {
     return std::string(mName, mNameLength);
 }
 
-inline void Name::setName(const std::string & n) {
-    mNameLength = n.length();
-    mName = replicateString(n.c_str(), n.length());
+inline std::string Name::getFunctionName() const {
+    return std::string(mFunctionName, mFunctionNameLength);
+}
+
+inline void Name::setFunctionName(const std::string & n) {
+    mFunctionNameLength = n.length();
+    mFunctionName = replicateString(n.c_str(), n.length());
 }
     
 inline Name::Type Name::getType() const {
@@ -102,11 +112,11 @@ inline void Name::setDefinition(RE * d) {
     mDefiningRE = d;
 }
 
-inline Name * makeName(const std::string & name, const Name::Type type = Name::Type::Unicode) {
+inline Name * makeName(const std::string & name, const Name::Type type) {
     return new Name(nullptr, 0, name.c_str(), name.length(), type, nullptr);
 }
 
-inline Name * makeName(const std::string & property, const std::string & value, const Name::Type type = Name::Type::Unicode) {
+inline Name * makeName(const std::string & property, const std::string & value, const Name::Type type) {
     return new Name(property.c_str(), property.length(), value.c_str(), value.length(),  type, nullptr);
 }
 

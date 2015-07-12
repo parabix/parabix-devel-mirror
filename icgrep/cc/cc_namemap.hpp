@@ -7,10 +7,6 @@
 #include "re/re_name.h"
 #include "re/re_cc.h"
 
-namespace re {
-    class CC;
-    class RE;
-}
 
 namespace cc {
 
@@ -25,12 +21,9 @@ public:
 
     re::RE * process(re::RE * re, const re::CC_type t);
 
-    inline const re::Name * operator[](const std::string & name) const {
-        auto f = mNameMap.find(name);
-        if (f == mNameMap.end()) {
-            return nullptr;
-        }
-        return f->second;
+    inline void clear() {
+        mNameMap.clear();
+        mNameVector.clear();
     }
 
     inline iterator begin() const {
@@ -45,7 +38,7 @@ public:
     
 private:
 
-    inline re::Name * insert(std::string && name, re::Name * re) {
+    inline re::Name * insert(NameMap::key_type && name, re::Name * re) {
         mNameMap.insert(std::make_pair(std::move(name), re));
         mNameVector.push_back(re);
         return re;

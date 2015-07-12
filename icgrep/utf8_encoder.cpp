@@ -22,19 +22,21 @@ RE * UTF8_Encoder::toUTF8(CC_NameMap & nameMap, RE * ast) {
     for (Name * name : nameMap) {
         if (const CC * cc = dyn_cast_or_null<CC>(name->getDefinition())) {
             if (cc->size() == 1) {
-                name->setDefinition(rangeToUTF8(cc->front()));
+                RE * def = rangeToUTF8(cc->front());
+                name->setDefinition(def);
             }
             else if (cc->size() > 1) {
                 std::vector<RE *> alt;
                 for (const interval_t & i : *cc) {
                     alt.push_back(rangeToUTF8(i));
                 }
-                name->setDefinition(makeAlt(alt.begin(), alt.end()));
+                RE * def = makeAlt(alt.begin(), alt.end());
+                name->setDefinition(def);
             }
         }
     }
-    ast = nameMap.process(ast, ByteClass);
-    return ast;
+    nameMap.clear();
+    return nameMap.process(ast, ByteClass);
 }
 
 RE * UTF8_Encoder::rangeToUTF8(const interval_t & item) {

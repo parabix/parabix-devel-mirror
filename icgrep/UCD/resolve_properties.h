@@ -4,11 +4,10 @@
 #include <UCD/unicode_set.h>
 
 namespace re {
-    class RE;
     class Name;
 }
 
-void resolveProperties(re::RE * re);
+void resolveProperty(re::Name * const name);
 UCD::UnicodeSet resolveUnicodeSet(re::Name * const name);
 
 #endif // RESOLVE_PROPERTIES_H

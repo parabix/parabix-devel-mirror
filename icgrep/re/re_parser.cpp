@@ -501,7 +501,7 @@ Name * RE_Parser::parse_property_expression() {
         // We have a property-name = value expression
         return makeName(std::string(start, prop_end), std::string(val_start, _cursor), Name::Type::UnicodeProperty);
     }
-    else return makeName(std::string(start, _cursor), Name::Type::UnicodeProperty);
+    return makeName(std::string(start, _cursor), Name::Type::UnicodeProperty);
 }
 
 CharsetOperatorKind RE_Parser::getCharsetOperator() {

@@ -27,7 +27,6 @@
 #include "UCD/precompiled_blk.h"
 #include "UCD/precompiled_derivedcoreproperties.h"
 #include "UCD/precompiled_proplist.h"
-#include "resolve_properties.h"
 #include <llvm/Support/CommandLine.h>
 #include <pablo/function.h>
 #include <re/printer_re.h>
@@ -106,12 +105,10 @@ CompiledPabloFunction compile(const Encoding encoding, const std::vector<std::st
         std::cerr << "RemoveNullableSuffix:" << std::endl << Printer_RE::PrintRE(re_ast) << std::endl;
     }
 
-    if (UsePregeneratedUnicode()) {
-        resolveProperties(re_ast);
-    }
-    
     CC_NameMap nameMap;
     re_ast = nameMap.process(re_ast, UnicodeClass);
+
+    // std::cerr << "-----------------------------" << std::endl;
 
     if (PrintAllREs || PrintNamedREs) {
         std::cerr << "Namer:" << std::endl << Printer_RE::PrintRE(re_ast) << std::endl;
