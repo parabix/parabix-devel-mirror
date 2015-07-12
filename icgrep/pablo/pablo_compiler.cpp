@@ -73,7 +73,6 @@ PabloCompiler::PabloCompiler()
 #endif
 , mBuilder(&LLVM_Builder)
 , mCarryManager(nullptr)
-, mExecutionEngine(nullptr)
 , mBitBlockType(VectorType::get(IntegerType::get(mMod->getContext(), 64), BLOCK_SIZE / 64))
 , mInputPtr(nullptr)
 , mCarryDataPtr(nullptr)
@@ -85,12 +84,8 @@ PabloCompiler::PabloCompiler()
 , mInputAddressPtr(nullptr)
 , mOutputAddressPtr(nullptr)
 , mMaxWhileDepth(0)
-, mPrintRegisterFunction(nullptr)
-{
-    //Create the jit execution engine.up
-    InitializeNativeTarget();
-    InitializeNativeTargetAsmPrinter();
-    InitializeNativeTargetAsmParser();
+, mPrintRegisterFunction(nullptr) {
+
 }
 
 PabloCompiler::~PabloCompiler()
@@ -113,13 +108,18 @@ void PabloCompiler::genPrintRegister(std::string regName, Value * bitblockValue)
     mBuilder->CreateCall(mPrintRegisterFunction, {regStrPtr, bitblockValue});
 }
 
-CompiledPabloFunction PabloCompiler::compile(PabloFunction & function)
-{
+CompiledPabloFunction PabloCompiler::compile(PabloFunction & function) {
     mWhileDepth = 0;
     mIfDepth = 0;
     mMaxWhileDepth = 0;
     mCarryManager = new CarryManager(mMod, mBuilder, mBitBlockType, mZeroInitializer, mOneInitializer);
+
+    Examine(function.getEntryBlock());
     
+    InitializeNativeTarget();
+    InitializeNativeTargetAsmPrinter();
+    InitializeNativeTargetAsmParser();
+
     std::string errMessage;
 #ifdef USE_LLVM_3_5
     EngineBuilder builder(mMod);
@@ -132,16 +132,14 @@ CompiledPabloFunction PabloCompiler::compile(PabloFunction & function)
     builder.setUseMCJIT(true);
 #endif
     builder.setOptLevel(mMaxWhileDepth ? CodeGenOpt::Level::Less : CodeGenOpt::Level::None);
-    mExecutionEngine = builder.create();
-    if (mExecutionEngine == nullptr) {
+    ExecutionEngine * ee = builder.create();
+    if (ee == nullptr) {
         throw std::runtime_error("Could not create ExecutionEngine: " + errMessage);
     }
 
     GenerateFunction(function);
-    DeclareFunctions();
-
-    Examine(function.getEntryBlock());
-    DeclareCallFunctions();
+    DeclareFunctions(ee);
+    DeclareCallFunctions(ee);
 
     mWhileDepth = 0;
     mIfDepth = 0;
@@ -190,13 +188,13 @@ CompiledPabloFunction PabloCompiler::compile(PabloFunction & function)
     //Create a verifier.  The verifier will print an error message if our module is malformed in any way.
     verifyModule(*mMod, &dbgs());
 
-    mExecutionEngine->finalizeObject();
+    ee->finalizeObject();
 
     delete mCarryManager;
     mCarryManager = nullptr;
 
     //Return the required size of the carry data area to the process_block function.
-    return CompiledPabloFunction(totalCarryDataSize * sizeof(BitBlock), mFunction, mExecutionEngine);
+    return CompiledPabloFunction(totalCarryDataSize * sizeof(BitBlock), mFunction, ee);
 }
 
 inline void PabloCompiler::GenerateFunction(PabloFunction & function) {
@@ -313,11 +311,11 @@ inline void PabloCompiler::GenerateFunction(PabloFunction & function) {
     mOutputAddressPtr->setName("output");
 }
 
-inline void PabloCompiler::DeclareFunctions() {
+inline void PabloCompiler::DeclareFunctions(ExecutionEngine * ee) {
     if (DumpTrace || TraceNext) {
         //This function can be used for testing to print the contents of a register from JIT'd code to the terminal window.
         mPrintRegisterFunction = mMod->getOrInsertFunction("wrapped_print_register", Type::getVoidTy(getGlobalContext()), Type::getInt8PtrTy(getGlobalContext()), mBitBlockType, NULL);
-        mExecutionEngine->addGlobalMapping(cast<GlobalValue>(mPrintRegisterFunction), (void *)&wrapped_print_register);
+        ee->addGlobalMapping(cast<GlobalValue>(mPrintRegisterFunction), (void *)&wrapped_print_register);
     }
 }
     
@@ -339,7 +337,7 @@ void PabloCompiler::Examine(PabloBlock & blk) {
     }
 }
 
-void PabloCompiler::DeclareCallFunctions() {
+void PabloCompiler::DeclareCallFunctions(ExecutionEngine * ee) {
     for (auto mapping : mCalleeMap) {
         const String * callee = mapping.first;
         //std::cerr << callee->str() << " to be declared\n";
@@ -350,7 +348,7 @@ void PabloCompiler::DeclareCallFunctions() {
             if (LLVM_UNLIKELY(externalValue == nullptr)) {
                 throw std::runtime_error("Could not create static method call for external function \"" + callee->to_string() + "\"");
             }
-            mExecutionEngine->addGlobalMapping(cast<GlobalValue>(externalValue), fn_ptr);
+            ee->addGlobalMapping(cast<GlobalValue>(externalValue), fn_ptr);
             mCalleeMap[callee] = externalValue;
         }
         else {

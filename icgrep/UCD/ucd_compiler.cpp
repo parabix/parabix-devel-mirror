@@ -26,9 +26,9 @@ PabloAST * UCDCompiler::generateWithIfHierarchy(const RangeList & ifRanges, cons
  * @brief generateCharClassDefsInIfHierarchy
  * @param ifRangeList
  ** ------------------------------------------------------------------------------------------------------------- */
-PabloAST * UCDCompiler::generateWithIfHierarchy(const RangeList & ifRanges, const UnicodeSet & set, const codepoint_t lo, const codepoint_t hi, PabloBuilder & block) {
+PabloAST * UCDCompiler::generateWithIfHierarchy(const RangeList & ifRanges, const UnicodeSet & set, const codepoint_t lo, const codepoint_t hi, PabloBuilder & builder) {
 
-    PabloAST * target = block.createZeroes();
+    PabloAST * target = builder.createZeroes();
     // Codepoints in unenclosed ranges will be computed unconditionally.
     // Generate them first so that computed subexpressions may be shared
     // with calculations within the if hierarchy.
@@ -36,7 +36,7 @@ PabloAST * UCDCompiler::generateWithIfHierarchy(const RangeList & ifRanges, cons
     const auto enclosed = rangeIntersect(ifRanges, lo, hi);
 
     for (const auto rg : rangeGaps(enclosed, lo, hi)) {
-        target = generateSubRanges(set, lo_codepoint(rg), hi_codepoint(rg), block, target);
+        target = generateSubRanges(set, lo_codepoint(rg), hi_codepoint(rg), builder, target);
     }
 
     const auto outer = outerRanges(enclosed);
@@ -45,15 +45,15 @@ PabloAST * UCDCompiler::generateWithIfHierarchy(const RangeList & ifRanges, cons
         codepoint_t lo, hi;
         std::tie(lo, hi) = range;
         if (set.intersects(lo, hi)) {
-            PabloBuilder inner_block = PabloBuilder::Create(block);
+            PabloBuilder inner_block = PabloBuilder::Create(builder);
             PabloAST * inner_target = generateWithIfHierarchy(inner, set, lo, hi, inner_block);
             // If this range is empty, just skip creating the if block
             if (LLVM_UNLIKELY(isa<Zeroes>(inner_target))) {
                 continue;
             }
             Assign * matches = inner_block.createAssign("m", inner_target);
-            block.createIf(ifTestCompiler(lo, hi, block), {matches}, inner_block);
-            target = block.createOr(target, matches);
+            builder.createIf(ifTestCompiler(lo, hi, builder), {matches}, inner_block);
+            target = builder.createOr(target, matches);
         }
     }
 
@@ -64,7 +64,7 @@ PabloAST * UCDCompiler::generateWithIfHierarchy(const RangeList & ifRanges, cons
  * @brief generateCharClassSubDefs
  * @param ifRangeList
  ** ------------------------------------------------------------------------------------------------------------- */
-PabloAST * UCDCompiler::generateSubRanges(const UnicodeSet & set, const codepoint_t lo, const codepoint_t hi, PabloBuilder & block, PabloAST * target) {
+PabloAST * UCDCompiler::generateSubRanges(const UnicodeSet & set, const codepoint_t lo, const codepoint_t hi, PabloBuilder & builder, PabloAST * target) {
     const auto range = rangeIntersect(set, lo, hi);
     // Divide by UTF-8 length, separating out E0, ED, F0 and F4 ranges
     const std::array<interval_t, 9> ranges =
@@ -72,7 +72,7 @@ PabloAST * UCDCompiler::generateSubRanges(const UnicodeSet & set, const codepoin
          {0xE000, 0xFFFF}, {0x10000, 0x3FFFF}, {0x40000, 0xFFFFF}, {0x100000, 0x10FFFF}}};
     for (auto r : ranges) {
         const auto subrange = rangeIntersect(range, lo_codepoint(r), hi_codepoint(r));
-        target = sequenceGenerator(std::move(subrange), 1, block, target, nullptr);
+        target = sequenceGenerator(std::move(subrange), 1, builder, target, nullptr);
     }
     return target;
 }
@@ -85,7 +85,7 @@ PabloAST * UCDCompiler::generateSubRanges(const UnicodeSet & set, const codepoin
  * Generate remaining code to match UTF-8 code sequences within the codepoint set cpset, assuming that the code
  * matching the sequences up to byte number byte_no have been generated.
  ** ------------------------------------------------------------------------------------------------------------- */
-PabloAST * UCDCompiler::sequenceGenerator(const RangeList && ranges, const unsigned byte_no, PabloBuilder & block, PabloAST * target, PabloAST * prefix) {
+PabloAST * UCDCompiler::sequenceGenerator(const RangeList && ranges, const unsigned byte_no, PabloBuilder & builder, PabloAST * target, PabloAST * prefix) {
 
     if (LLVM_LIKELY(!ranges.empty())) {
 
@@ -97,18 +97,18 @@ PabloAST * UCDCompiler::sequenceGenerator(const RangeList && ranges, const unsig
 
         if (min != max) {
             const auto mid = UTF8_Encoder::maxCodePoint(min);
-            target = sequenceGenerator(std::move(rangeIntersect(ranges, lo, mid)), byte_no, block, target, prefix);
-            target = sequenceGenerator(std::move(rangeIntersect(ranges, mid + 1, hi)), byte_no, block, target, prefix);
+            target = sequenceGenerator(std::move(rangeIntersect(ranges, lo, mid)), byte_no, builder, target, prefix);
+            target = sequenceGenerator(std::move(rangeIntersect(ranges, mid + 1, hi)), byte_no, builder, target, prefix);
         }
         else if (min == byte_no) {
             // We have a single byte remaining to match for all code points in this CC.
             // Use the byte class compiler to generate matches for these codepoints.
             const auto bytes = byteDefinitions(ranges, byte_no);
-            PabloAST * var = mCharacterClassCompiler.compileCC(makeCC(bytes), block);
+            PabloAST * var = mCharacterClassCompiler.compileCC(makeCC(bytes), builder);
             if (byte_no > 1) {
-                var = block.createAnd(var, block.createAdvance(makePrefix(lo, byte_no, block, prefix), 1));
+                var = builder.createAnd(var, builder.createAdvance(makePrefix(lo, byte_no, builder, prefix), 1));
             }
-            target = block.createOr(target, var);
+            target = builder.createOr(target, var);
         }
         else {
             for (auto rg : ranges) {
@@ -119,32 +119,32 @@ PabloAST * UCDCompiler::sequenceGenerator(const RangeList && ranges, const unsig
                 if (lo_byte != hi_byte) {
                     if (!UTF8_Encoder::isLowCodePointAfterByte(lo, byte_no)) {
                         const codepoint_t mid = lo | ((1 << (6 * (min - byte_no))) - 1);
-                        target = sequenceGenerator(lo, mid, byte_no, block, target, prefix);
-                        target = sequenceGenerator(mid + 1, hi, byte_no, block, target, prefix);
+                        target = sequenceGenerator(lo, mid, byte_no, builder, target, prefix);
+                        target = sequenceGenerator(mid + 1, hi, byte_no, builder, target, prefix);
                     }
                     else if (!UTF8_Encoder::isHighCodePointAfterByte(hi, byte_no)) {
                         const codepoint_t mid = hi & ~((1 << (6 * (min - byte_no))) - 1);
-                        target = sequenceGenerator(lo, mid - 1, byte_no, block, target, prefix);
-                        target = sequenceGenerator(mid, hi, byte_no, block, target, prefix);
+                        target = sequenceGenerator(lo, mid - 1, byte_no, builder, target, prefix);
+                        target = sequenceGenerator(mid, hi, byte_no, builder, target, prefix);
                     }
                     else { // we have a prefix group of type (a)
-                        PabloAST * var = mCharacterClassCompiler.compileCC(makeCC(lo_byte, hi_byte), block);
+                        PabloAST * var = mCharacterClassCompiler.compileCC(makeCC(lo_byte, hi_byte), builder);
                         if (byte_no > 1) {
-                            var = block.createAnd(block.createAdvance(prefix, 1), var);
+                            var = builder.createAnd(builder.createAdvance(prefix, 1), var);
                         }
                         for (unsigned i = byte_no; i != UTF8_Encoder::length(lo); ++i) {
-                            var = block.createAnd(mSuffixVar, block.createAdvance(var, 1));
+                            var = builder.createAnd(mSuffixVar, builder.createAdvance(var, 1));
                         }
-                        target = block.createOr(target, var);
+                        target = builder.createOr(target, var);
                     }
                 }
                 else { // lbyte == hbyte
-                    PabloAST * var = mCharacterClassCompiler.compileCC(makeCC(lo_byte, hi_byte), block);
+                    PabloAST * var = mCharacterClassCompiler.compileCC(makeCC(lo_byte, hi_byte), builder);
                     if (byte_no > 1) {
-                        var = block.createAnd(block.createAdvance(prefix ? prefix : var, 1), var);
+                        var = builder.createAnd(builder.createAdvance(prefix ? prefix : var, 1), var);
                     }
                     if (byte_no < UTF8_Encoder::length(lo)) {
-                        target = sequenceGenerator(lo, hi, byte_no + 1, block, target, var);
+                        target = sequenceGenerator(lo, hi, byte_no + 1, builder, target, var);
                     }
                 }
             }
@@ -156,21 +156,21 @@ PabloAST * UCDCompiler::sequenceGenerator(const RangeList && ranges, const unsig
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief sequenceGenerator
  ** ------------------------------------------------------------------------------------------------------------- */
-inline PabloAST * UCDCompiler::sequenceGenerator(const codepoint_t lo, const codepoint_t hi, const unsigned byte_no, PabloBuilder & block, PabloAST * target, PabloAST * prefix) {
-    return sequenceGenerator({{ lo, hi }}, byte_no, block, target, prefix);
+inline PabloAST * UCDCompiler::sequenceGenerator(const codepoint_t lo, const codepoint_t hi, const unsigned byte_no, PabloBuilder & builder, PabloAST * target, PabloAST * prefix) {
+    return sequenceGenerator({{ lo, hi }}, byte_no, builder, target, prefix);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief ifTestCompiler
  ** ------------------------------------------------------------------------------------------------------------- */
-inline PabloAST * UCDCompiler::ifTestCompiler(const codepoint_t lo, const codepoint_t hi, PabloBuilder & block) {
-    return ifTestCompiler(lo, hi, 1, block, block.createOnes());
+inline PabloAST * UCDCompiler::ifTestCompiler(const codepoint_t lo, const codepoint_t hi, PabloBuilder & builder) {
+    return ifTestCompiler(lo, hi, 1, builder, builder.createOnes());
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief ifTestCompiler
  ** ------------------------------------------------------------------------------------------------------------- */
-PabloAST * UCDCompiler::ifTestCompiler(const codepoint_t lo, const codepoint_t hi, const unsigned byte_no, PabloBuilder & block, PabloAST * target) {
+PabloAST * UCDCompiler::ifTestCompiler(const codepoint_t lo, const codepoint_t hi, const unsigned byte_no, PabloBuilder & builder, PabloAST * target) {
 
     codepoint_t lo_byte = UTF8_Encoder::encodingByte(lo, byte_no);
     codepoint_t hi_byte = UTF8_Encoder::encodingByte(hi, byte_no);
@@ -182,26 +182,26 @@ PabloAST * UCDCompiler::ifTestCompiler(const codepoint_t lo, const codepoint_t h
             if (lo == 0x80) lo_byte = 0xC0;
             if (hi == 0x10FFFF) hi_byte = 0xFF;
         }
-        PabloAST * cc = mCharacterClassCompiler.compileCC(makeCC(lo_byte, hi_byte), block);
-        target = block.createAnd(cc, target);
+        PabloAST * cc = mCharacterClassCompiler.compileCC(makeCC(lo_byte, hi_byte), builder);
+        target = builder.createAnd(cc, target);
     }
     else if (lo_byte == hi_byte) {
-        PabloAST * cc = mCharacterClassCompiler.compileCC(makeCC(lo_byte, hi_byte), block);
-        target = block.createAnd(cc, target);
-        target = block.createAdvance(target, 1);
-        target = ifTestCompiler(lo, hi, byte_no + 1, block, target);
+        PabloAST * cc = mCharacterClassCompiler.compileCC(makeCC(lo_byte, hi_byte), builder);
+        target = builder.createAnd(cc, target);
+        target = builder.createAdvance(target, 1);
+        target = ifTestCompiler(lo, hi, byte_no + 1, builder, target);
     }
     else if (!at_hi_boundary) {
         const auto mid = UTF8_Encoder::minCodePointWithCommonBytes(hi, byte_no);
-        PabloAST * e1 = ifTestCompiler(lo, mid - 1, byte_no, block, target);
-        PabloAST * e2 = ifTestCompiler(mid, hi, byte_no, block, target);
-        target = block.createOr(e1, e2);
+        PabloAST * e1 = ifTestCompiler(lo, mid - 1, byte_no, builder, target);
+        PabloAST * e2 = ifTestCompiler(mid, hi, byte_no, builder, target);
+        target = builder.createOr(e1, e2);
     }
     else {
         const auto mid = UTF8_Encoder::maxCodePointWithCommonBytes(lo, byte_no);
-        PabloAST * e1 = ifTestCompiler(lo, mid, byte_no, block, target);
-        PabloAST * e2 = ifTestCompiler(mid + 1, hi, byte_no, block, target);
-        target = block.createOr(e1, e2);
+        PabloAST * e1 = ifTestCompiler(lo, mid, byte_no, builder, target);
+        PabloAST * e2 = ifTestCompiler(mid + 1, hi, byte_no, builder, target);
+        target = builder.createOr(e1, e2);
     }
     return target;
 }
@@ -213,14 +213,14 @@ PabloAST * UCDCompiler::ifTestCompiler(const codepoint_t lo, const codepoint_t h
  *
  * Ensure the sequence of preceding bytes is defined, up to, but not including the given byte_no
  ** ------------------------------------------------------------------------------------------------------------- */
-PabloAST * UCDCompiler::makePrefix(const codepoint_t cp, const unsigned byte_no, PabloBuilder & pb, PabloAST * prefix) {
+PabloAST * UCDCompiler::makePrefix(const codepoint_t cp, const unsigned byte_no, PabloBuilder & builder, PabloAST * prefix) {
     assert (byte_no >= 1 && byte_no <= 4);
     assert (byte_no == 1 || prefix != nullptr);
     for (unsigned i = 1; i != byte_no; ++i) {
         const CC * const cc = makeCC(UTF8_Encoder::encodingByte(cp, i));
-        PabloAST * var = mCharacterClassCompiler.compileCC(cc, pb);
+        PabloAST * var = mCharacterClassCompiler.compileCC(cc, builder);
         if (i > 1) {
-            var = pb.createAnd(var, pb.createAdvance(prefix, 1));
+            var = builder.createAnd(var, builder.createAdvance(prefix, 1));
         }
         prefix = var;
     }
@@ -425,16 +425,6 @@ PabloAST * UCDCompiler::generateWithDefaultIfHierarchy(const UnicodeSet & set, P
         {0xA000, 0xFFFF},
 
         {0x10000, 0x10FFFF}};
-
-//    llvm::raw_os_ostream out(std::cerr);
-
-//    set.dump(out);
-
-//    for (auto range : set) {
-//        out << range.first << ',' << range.second << "\n";
-//    }
-
-//    out.flush();
 
     return generateWithIfHierarchy(defaultIfHierachy, set, entry);
 }

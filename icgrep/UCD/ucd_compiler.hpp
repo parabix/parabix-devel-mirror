@@ -34,19 +34,19 @@ public:
 
 protected:
 
-    PabloAST * generateWithIfHierarchy(const RangeList & ifRanges, const UnicodeSet & set, const codepoint_t lo, const codepoint_t hi, PabloBuilder & block);
+    PabloAST * generateWithIfHierarchy(const RangeList & ifRanges, const UnicodeSet & set, const codepoint_t lo, const codepoint_t hi, PabloBuilder & builder);
 
-    PabloAST * generateSubRanges(const UnicodeSet & set, const codepoint_t lo, const codepoint_t hi, PabloBuilder & block, PabloAST * target);
+    PabloAST * generateSubRanges(const UnicodeSet & set, const codepoint_t lo, const codepoint_t hi, PabloBuilder & builder, PabloAST * target);
 
-    PabloAST * sequenceGenerator(const RangeList && ranges, const unsigned byte_no, PabloBuilder & block, PabloAST * target, PabloAST * prefix);
+    PabloAST * sequenceGenerator(const RangeList && ranges, const unsigned byte_no, PabloBuilder & builder, PabloAST * target, PabloAST * prefix);
 
-    PabloAST * sequenceGenerator(const codepoint_t lo, const codepoint_t hi, const unsigned byte_no, PabloBuilder & block, PabloAST * target, PabloAST * prefix);
+    PabloAST * sequenceGenerator(const codepoint_t lo, const codepoint_t hi, const unsigned byte_no, PabloBuilder & builder, PabloAST * target, PabloAST * prefix);
 
-    PabloAST * ifTestCompiler(const codepoint_t lo, const codepoint_t hi, PabloBuilder & block);
+    PabloAST * ifTestCompiler(const codepoint_t lo, const codepoint_t hi, PabloBuilder & builder);
 
-    PabloAST * ifTestCompiler(const codepoint_t lo, const codepoint_t hi, const unsigned byte_no, PabloBuilder & block, PabloAST * target);
+    PabloAST * ifTestCompiler(const codepoint_t lo, const codepoint_t hi, const unsigned byte_no, PabloBuilder & builder, PabloAST * target);
 
-    PabloAST * makePrefix(const codepoint_t cp, const unsigned byte_no, PabloBuilder & pb, PabloAST * prefix);
+    PabloAST * makePrefix(const codepoint_t cp, const unsigned byte_no, PabloBuilder & builder, PabloAST * prefix);
 
     static RangeList byteDefinitions(const RangeList & list, const unsigned byte_no);
 

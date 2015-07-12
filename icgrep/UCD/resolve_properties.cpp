@@ -94,12 +94,10 @@ void resolveProperty(Name * name) {
             }
             if (valit->second == Binary_ns::Y) {
                 name->setFunctionName("__get_" + lowercase(property_enum_name[theprop]) + "_Y");
-                return;
             }
             else {
                 Name * binprop = makeName("__get_" + lowercase(property_enum_name[theprop]) + "_Y", Name::Type::UnicodeProperty);
                 name->setDefinition(makeDiff(makeAny(), binprop));
-                return;
             }
         }
         else {
@@ -109,23 +107,25 @@ void resolveProperty(Name * name) {
     else {
 
         // No namespace (property) name.   Try as a general category.
-        int valcode = GetPropertyValueEnumCode(gc, value);
-        if (valcode >= 0) {
+
+        int valcode;
+
+        if ((valcode = GetPropertyValueEnumCode(gc, value)) >= 0) {
             name->setFunctionName("__get_gc_" + GC_ns::enum_names[valcode]);
             return;
         }
-        valcode = GetPropertyValueEnumCode(sc, value);
-        if (valcode >= 0) {
+
+        if ((valcode = GetPropertyValueEnumCode(sc, value)) >= 0) {
             name->setFunctionName("__get_sc_" + SC_ns::enum_names[valcode]);
             return;
         }
+
         // Try as a binary property.
         auto propit = alias_map.find(value);
         if (propit != alias_map.end()) {
             auto theprop = propit->second;
             if (isa<BinaryPropertyObject>(property_object_table[theprop])) {
                 name->setFunctionName("__get_" + lowercase(property_enum_name[theprop]) + "_Y");
-                return;
             }
             else {
                 throw UnicodePropertyExpressionError("Error: property " + property_full_name[theprop] + " specified without a value");
@@ -134,35 +134,29 @@ void resolveProperty(Name * name) {
         // Now try special cases of Unicode TR #18
         else if (value == "any") {
             name->setDefinition(makeAny());
-            return;
         }
         else if (value == "assigned") {
             Name * Cn = makeName("Cn", Name::Type::UnicodeProperty);
             name->setDefinition(makeDiff(makeAny(), Cn));
-            return;
         }
         else if (value == "ascii") {
             name->setFunctionName("__get_blk_ASCII");
-            return;
         }
         // Now compatibility properties of UTR #18 Annex C
         else if (value == "xdigit") {
             Name * Nd = makeName("Nd", Name::Type::UnicodeProperty);
             Name * hexdigit = makeName("Hex_digit", Name::Type::UnicodeProperty);
             name->setDefinition(makeAlt({Nd, hexdigit}));
-            return;
         }
         else if (value == "alnum") {
             Name * digit = makeName("Nd", Name::Type::UnicodeProperty);
             Name * alpha = makeName("alphabetic", Name::Type::UnicodeProperty);
             name->setDefinition(makeAlt({digit, alpha}));
-            return;
         }
         else if (value == "blank") {
             Name * space_sep = makeName("space_separator", Name::Type::UnicodeProperty);
             CC * tab = makeCC(0x09);
             name->setDefinition(makeAlt({space_sep, tab}));
-            return;
         }
         else if (value == "graph") {
             Name * space = makeName("space", Name::Type::UnicodeProperty);
@@ -172,13 +166,11 @@ void resolveProperty(Name * name) {
             Name * nongraph = makeName("[^graph]", Name::Type::UnicodeProperty);
             nongraph->setDefinition(makeAlt({space, ctrl, surr, unassigned}));
             name->setDefinition(makeDiff(makeAny(), nongraph));
-            return;
         }
         else if (value == "print") {
             Name * graph = makeName("graph", Name::Type::UnicodeProperty);
             Name * space_sep = makeName("space_separator", Name::Type::UnicodeProperty);
             name->setDefinition(makeAlt({graph, space_sep}));
-            return;
         }
         else if (value == "word") {
             Name * alnum = makeName("alnum", Name::Type::UnicodeProperty);
@@ -186,7 +178,6 @@ void resolveProperty(Name * name) {
             Name * conn = makeName("Connector_Punctuation", Name::Type::UnicodeProperty);
             Name * join = makeName("Join_Control", Name::Type::UnicodeProperty);
             name->setDefinition(makeAlt({alnum, mark, conn, join}));
-            return;
         }
         else {
             throw UnicodePropertyExpressionError("Expected a general category, script or binary property name, but '" + name->getName() + "' found instead");

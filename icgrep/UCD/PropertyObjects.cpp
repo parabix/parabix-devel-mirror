@@ -66,6 +66,20 @@ int EnumeratedPropertyObject::GetPropertyValueEnumCode(const std::string & value
     return valit->second;
 }
 
+PropertyObject::iterator ExtensionPropertyObject::begin() const {
+    if (const auto * obj = dyn_cast<EnumeratedPropertyObject>(property_object_table[base_property])) {
+        return obj->begin();
+    }
+    throw std::runtime_error("Iterators unsupported for this type of PropertyObject.");
+}
+
+PropertyObject::iterator ExtensionPropertyObject::end() const {
+    if (const auto * obj = dyn_cast<EnumeratedPropertyObject>(property_object_table[base_property])) {
+        return obj->end();
+    }
+    throw std::runtime_error("Iterators unsupported for this type of PropertyObject.");
+}
+
 const UnicodeSet & ExtensionPropertyObject::GetCodepointSet(const std::string & value_spec) {
     int property_enum_val = GetPropertyValueEnumCode(value_spec);
     if (property_enum_val == -1) {
@@ -80,8 +94,7 @@ const UnicodeSet & ExtensionPropertyObject::GetCodepointSet(const int property_e
 }
 
 int ExtensionPropertyObject::GetPropertyValueEnumCode(const std::string & value_spec) {
-    int c = property_object_table[base_property]->GetPropertyValueEnumCode(value_spec);
-    return c;
+    return property_object_table[base_property]->GetPropertyValueEnumCode(value_spec);
 }
 
 UnicodeSet BinaryPropertyObject::GetCodepointSet(const std::string & value_spec) const {

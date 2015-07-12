@@ -66,6 +66,14 @@ private:
 public:
     CompiledPabloFunction(size_t carryDataSize, Function * function, ExecutionEngine * executionEngine);
 
+    inline Function * getLLVMFunction() const {
+        return mFunction;
+    }
+
+    inline ExecutionEngine * getExecutionEngine() const {
+        return mExecutionEngine;
+    }
+
     inline CompiledPabloFunction(CompiledPabloFunction && cpf)
     : CarryDataSize(cpf.CarryDataSize)
     , FunctionPointer(cpf.FunctionPointer)
@@ -100,12 +108,13 @@ public:
     PabloCompiler();
     ~PabloCompiler();
     void InstallExternalFunction(std::string C_fn_name, void * fn_ptr);
-    CompiledPabloFunction compile(pablo::PabloFunction &function);
+    CompiledPabloFunction compile(pablo::PabloFunction & function);
+    Module * getModule();
 private:
     void GenerateFunction(PabloFunction & function);
-    void DeclareFunctions();
+    void DeclareFunctions(ExecutionEngine * ee);
     void Examine(PabloBlock & blk);
-    void DeclareCallFunctions();
+    void DeclareCallFunctions(ExecutionEngine * ee);
     void SetOutputValue(Value * marker, const unsigned index);
 
     void genPrintRegister(std::string regName, Value * bitblockValue);
@@ -146,7 +155,6 @@ private:
 #endif
     IRBuilder <> *                      mBuilder;
     CarryManager *                      mCarryManager;
-    ExecutionEngine*                    mExecutionEngine;
 
     VectorType* const                   mBitBlockType;
     PointerType*                        mInputPtr;
@@ -171,6 +179,10 @@ private:
 
     Constant *                          mPrintRegisterFunction;
 };
+
+inline Module * PabloCompiler::getModule() {
+    return mMod;
+}
 
 }
 
