@@ -1,7 +1,7 @@
 #ifndef DO_GREP_H
 #define DO_GREP_H
 /*
- *  Copyright (c) 2014 International Characters.
+ *  Copyright (c) 2015 International Characters.
  *  This software is licensed to the public under the Open Software License 3.0.
  *  icgrep is a trademark of International Characters.
  */
@@ -11,6 +11,7 @@
 #include <iostream>
 #include <string>
 #include <stdint.h>
+#include <array>
 
 #include "include/simd-lib/bitblock.hpp"
 #include "include/simd-lib/transpose.hpp"
@@ -41,17 +42,19 @@ typedef BitStreamScanner<BitBlock, uint32_t, uint32_t, SEGMENT_BLOCKS> ScannerT;
 #endif
 
 
-typedef void (*process_block_fcn)(const Basis_bits &basis_bits, BitBlock process_block_state_data[], Output &output);
-
-
+typedef void (*process_block_fcn)(const Basis_bits & basis_bits, BitBlock process_block_state_data[], Output & output);
 
 class GrepExecutor {
 public:
-    GrepExecutor(size_t process_block_state_size, process_block_fcn process_block): 
-    mCountOnlyOption(false), mShowFileNameOption(false), mShowLineNumberingOption(false),
-    mProcessBlockStateSize(process_block_state_size),
-    mProcessBlockFcn(process_block)
-    {}
+
+    GrepExecutor(size_t process_block_state_size, void * process_block)
+    : mCountOnlyOption(false)
+    , mShowFileNameOption(false)
+    , mShowLineNumberingOption(false)
+    , mProcessBlockStateSize(process_block_state_size)
+    , mProcessBlockFcn(reinterpret_cast<process_block_fcn>(process_block)) {
+
+    }
           
     void setCountOnlyOption(bool doCount = true) {mCountOnlyOption = doCount;}
     void setShowFileNameOption(bool showF = true) {mShowFileNameOption = showF;}

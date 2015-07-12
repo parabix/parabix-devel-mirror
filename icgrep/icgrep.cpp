@@ -106,11 +106,8 @@ int main(int argc, char *argv[]) {
     if (CaseInsensitive) globalFlags |= re::CASE_INSENSITIVE_MODE_FLAG;
     
     const auto llvm_codegen = icgrep::compile(encoding, regexVector, globalFlags);
-
     if (llvm_codegen.FunctionPointer) {
-        void (*FP)(const Basis_bits &basis_bits, BitBlock process_block_state_data[], Output &output) = 
-           (void (*)(const Basis_bits &basis_bits, BitBlock process_block_state_data[], Output &output))(void*)llvm_codegen.FunctionPointer;
-        GrepExecutor grepEngine = GrepExecutor(llvm_codegen.CarryDataSize, FP);
+        GrepExecutor grepEngine = GrepExecutor(llvm_codegen.CarryDataSize, llvm_codegen.FunctionPointer);
         grepEngine.setCountOnlyOption(CountOnly);
         grepEngine.setNormalizeLineBreaksOption(NormalizeLineBreaks);
         grepEngine.setShowLineNumberOption(ShowLineNumbers);

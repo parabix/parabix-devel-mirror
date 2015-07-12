@@ -134,7 +134,7 @@ CompiledPabloFunction compile(const Encoding encoding, const std::vector<std::st
       std::cerr << "Simplifier:" << std::endl << Printer_RE::PrintRE(re_ast) << std::endl;
     }
 
-    PabloFunction function = PabloFunction::Create();
+    PabloFunction function = PabloFunction::Create("process_block");
 
     CC_Compiler cc_compiler(function, encoding);
     

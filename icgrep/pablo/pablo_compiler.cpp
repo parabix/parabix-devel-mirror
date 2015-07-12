@@ -75,16 +75,15 @@ PabloCompiler::PabloCompiler()
 , mCarryManager(nullptr)
 , mExecutionEngine(nullptr)
 , mBitBlockType(VectorType::get(IntegerType::get(mMod->getContext(), 64), BLOCK_SIZE / 64))
-, mBasisBitsInputPtr(nullptr)
+, mInputPtr(nullptr)
 , mCarryDataPtr(nullptr)
 , mWhileDepth(0)
 , mIfDepth(0)
 , mZeroInitializer(ConstantAggregateZero::get(mBitBlockType))
 , mOneInitializer(ConstantVector::getAllOnesValue(mBitBlockType))
-, mFunctionType(nullptr)
 , mFunction(nullptr)
-, mParameterAddr(nullptr)
-, mOutputAddrPtr(nullptr)
+, mInputAddressPtr(nullptr)
+, mOutputAddressPtr(nullptr)
 , mMaxWhileDepth(0)
 , mPrintRegisterFunction(nullptr)
 {
@@ -138,33 +137,27 @@ CompiledPabloFunction PabloCompiler::compile(PabloFunction & function)
         throw std::runtime_error("Could not create ExecutionEngine: " + errMessage);
     }
 
-    DefineTypes(function);
+    GenerateFunction(function);
     DeclareFunctions();
 
     Examine(function.getEntryBlock());
     DeclareCallFunctions();
 
-    Function::arg_iterator args = mFunction->arg_begin();
-    mParameterAddr = args++;
-    mParameterAddr->setName("basis_bits");
-    mCarryDataPtr = args++;
-    mCarryDataPtr->setName("carry_data");
-    mOutputAddrPtr = args++;
-    mOutputAddrPtr->setName("output");
-
     mWhileDepth = 0;
     mIfDepth = 0;
     mMaxWhileDepth = 0;
-    BasicBlock * b = BasicBlock::Create(mMod->getContext(), "parabix_entry", mFunction,0);
+    BasicBlock * b = BasicBlock::Create(mMod->getContext(), "entry", mFunction,0);
     mBuilder->SetInsertPoint(b);
 
     //The basis bits structure
-
     for (unsigned i = 0; i != function.getParameters().size(); ++i) {
         Value* indices[] = {mBuilder->getInt64(0), mBuilder->getInt32(i)};
-        Value * gep = mBuilder->CreateGEP(mParameterAddr, indices);
+        Value * gep = mBuilder->CreateGEP(mInputAddressPtr, indices);
         LoadInst * basisBit = mBuilder->CreateAlignedLoad(gep, BLOCK_SIZE/8, false, function.getParameter(i)->getName()->to_string());
         mMarkerMap.insert(std::make_pair(function.getParameter(i), basisBit));
+        if (DumpTrace) {
+            genPrintRegister(function.getParameter(i)->getName()->to_string(), basisBit);
+        }
     }
         
     unsigned totalCarryDataSize = mCarryManager->initialize(&(function.getEntryBlock()), mCarryDataPtr);
@@ -206,57 +199,14 @@ CompiledPabloFunction PabloCompiler::compile(PabloFunction & function)
     return CompiledPabloFunction(totalCarryDataSize * sizeof(BitBlock), mFunction, mExecutionEngine);
 }
 
-void PabloCompiler::DefineTypes(PabloFunction & function) {
+inline void PabloCompiler::GenerateFunction(PabloFunction & function) {
+    std::vector<Type *> inputType(function.getParameters().size(), mBitBlockType);
+    std::vector<Type *> outputType(function.getResults().size(), mBitBlockType);
+    mInputPtr = PointerType::get(StructType::get(mMod->getContext(), inputType), 0);
+    Type * carryPtr = PointerType::get(mBitBlockType, 0);
+    Type * outputPtr = PointerType::get(StructType::get(mMod->getContext(), outputType), 0);
+    FunctionType * functionType = FunctionType::get(Type::getVoidTy(mMod->getContext()), {{mInputPtr, carryPtr, outputPtr}}, false);
 
-    StructType * structBasisBits = mMod->getTypeByName("struct.Basis_bits");
-    if (structBasisBits == nullptr) {
-        structBasisBits = StructType::create(mMod->getContext(), "struct.Basis_bits");
-    }
-    std::vector<Type*> StructTy_struct_Basis_bits_fields;
-    for (int i = 0; i != function.getParameters().size(); i++) {
-        StructTy_struct_Basis_bits_fields.push_back(mBitBlockType);
-    }
-    if (structBasisBits->isOpaque()) {
-        structBasisBits->setBody(StructTy_struct_Basis_bits_fields, /*isPacked=*/false);
-    }
-    mBasisBitsInputPtr = PointerType::get(structBasisBits, 0);
-
-    std::vector<Type*>functionTypeArgs;
-    functionTypeArgs.push_back(mBasisBitsInputPtr);
-
-    //The carry data array.
-    //A pointer to the BitBlock vector.
-    functionTypeArgs.push_back(PointerType::get(mBitBlockType, 0));
-
-    //The output structure.
-    StructType * outputStruct = mMod->getTypeByName("struct.Output");
-    if (!outputStruct) {
-        outputStruct = StructType::create(mMod->getContext(), "struct.Output");
-    }
-    if (outputStruct->isOpaque()) {
-        std::vector<Type*>fields;
-        for (int i = 0; i != function.getResults().size(); i++) {
-            fields.push_back(mBitBlockType);
-        }
-        outputStruct->setBody(fields, /*isPacked=*/false);
-    }
-    PointerType * outputStructPtr = PointerType::get(outputStruct, 0);
-
-    //The &output parameter.
-    functionTypeArgs.push_back(outputStructPtr);
-
-    mFunctionType = FunctionType::get(
-     /*Result=*/Type::getVoidTy(mMod->getContext()),
-     /*Params=*/functionTypeArgs,
-     /*isVarArg=*/false);
-}
-
-void PabloCompiler::DeclareFunctions()
-{
-    //This function can be used for testing to print the contents of a register from JIT'd code to the terminal window.
-    mPrintRegisterFunction = mMod->getOrInsertFunction("wrapped_print_register", Type::getVoidTy(getGlobalContext()), Type::getInt8PtrTy(getGlobalContext()), mBitBlockType, NULL);
-    mExecutionEngine->addGlobalMapping(cast<GlobalValue>(mPrintRegisterFunction), (void *)&wrapped_print_register);
-    // to call->  mBuilder->CreateCall(mFunc_print_register, unicode_category);
 
 #ifdef USE_UADD_OVERFLOW
 #ifdef USE_TWO_UADD_OVERFLOW
@@ -343,44 +293,32 @@ void PabloCompiler::DeclareFunctions()
 
     //Starts on process_block
     SmallVector<AttributeSet, 4> Attrs;
-    AttributeSet PAS;
-    {
-        AttrBuilder B;
-        B.addAttribute(Attribute::ReadOnly);
-        B.addAttribute(Attribute::NoCapture);
-        PAS = AttributeSet::get(mMod->getContext(), 1U, B);
-    }
-    Attrs.push_back(PAS);
-    {
-        AttrBuilder B;
-        B.addAttribute(Attribute::NoCapture);
-        PAS = AttributeSet::get(mMod->getContext(), 2U, B);
-    }
-    Attrs.push_back(PAS);
-    {
-        AttrBuilder B;
-        B.addAttribute(Attribute::NoCapture);
-        PAS = AttributeSet::get(mMod->getContext(), 3U, B);
-    }
-    Attrs.push_back(PAS);
-    {
-        AttrBuilder B;
-        B.addAttribute(Attribute::NoUnwind);
-        B.addAttribute(Attribute::UWTable);
-        PAS = AttributeSet::get(mMod->getContext(), ~0U, B);
-    }
+    Attrs.push_back(AttributeSet::get(mMod->getContext(), ~0U, { Attribute::NoUnwind, Attribute::UWTable }));
+    Attrs.push_back(AttributeSet::get(mMod->getContext(), 1U, { Attribute::ReadOnly, Attribute::NoCapture }));
+    Attrs.push_back(AttributeSet::get(mMod->getContext(), 2U, { Attribute::NoCapture }));
+    Attrs.push_back(AttributeSet::get(mMod->getContext(), 3U, { Attribute::ReadNone, Attribute::NoCapture }));
     AttributeSet AttrSet = AttributeSet::get(mMod->getContext(), Attrs);
 
-    //Create the function that will be generated.
-    mFunction = mMod->getFunction("process_block");
-    if (!mFunction) {
-        mFunction = Function::Create(
-            /*Type=*/mFunctionType,
-            /*Linkage=*/GlobalValue::ExternalLinkage,
-            /*Name=*/"process_block", mMod);
-        mFunction->setCallingConv(CallingConv::C);
-    }
+    // Create the function that will be generated.
+    mFunction = Function::Create(functionType, GlobalValue::ExternalLinkage, function.getName()->value(), mMod);
+    mFunction->setCallingConv(CallingConv::C);
     mFunction->setAttributes(AttrSet);
+
+    Function::arg_iterator args = mFunction->arg_begin();
+    mInputAddressPtr = args++;
+    mInputAddressPtr->setName("input");
+    mCarryDataPtr = args++;
+    mCarryDataPtr->setName("carry");
+    mOutputAddressPtr = args++;
+    mOutputAddressPtr->setName("output");
+}
+
+inline void PabloCompiler::DeclareFunctions() {
+    if (DumpTrace || TraceNext) {
+        //This function can be used for testing to print the contents of a register from JIT'd code to the terminal window.
+        mPrintRegisterFunction = mMod->getOrInsertFunction("wrapped_print_register", Type::getVoidTy(getGlobalContext()), Type::getInt8PtrTy(getGlobalContext()), mBitBlockType, NULL);
+        mExecutionEngine->addGlobalMapping(cast<GlobalValue>(mPrintRegisterFunction), (void *)&wrapped_print_register);
+    }
 }
     
 void PabloCompiler::Examine(PabloBlock & blk) {
@@ -408,8 +346,7 @@ void PabloCompiler::DeclareCallFunctions() {
         auto ei = mExternalMap.find(callee->value());
         if (ei != mExternalMap.end()) {
             void * fn_ptr = ei->second;
-            //std::cerr << "Ptr found:" <<  std::hex << ((intptr_t) fn_ptr) << std::endl;
-            Value * externalValue = mMod->getOrInsertFunction(callee->value(), mBitBlockType, mBasisBitsInputPtr, NULL);
+            Value * externalValue = mMod->getOrInsertFunction(callee->value(), mBitBlockType, mInputPtr, NULL);
             if (LLVM_UNLIKELY(externalValue == nullptr)) {
                 throw std::runtime_error("Could not create static method call for external function \"" + callee->to_string() + "\"");
             }
@@ -589,7 +526,7 @@ void PabloCompiler::compileStatement(const Statement * stmt) {
         if (LLVM_UNLIKELY(ci == mCalleeMap.end())) {
             throw std::runtime_error("Unexpected error locating static function for \"" + call->getCallee()->to_string() + "\"");
         }
-        expr = mBuilder->CreateCall(ci->second, mParameterAddr);
+        expr = mBuilder->CreateCall(ci->second, mInputAddressPtr);
     }
     else if (const And * pablo_and = dyn_cast<And>(stmt)) {
         expr = mBuilder->CreateAnd(compileExpression(pablo_and->getExpr1()), compileExpression(pablo_and->getExpr2()), "and");
@@ -794,14 +731,13 @@ Value* PabloCompiler::genShiftLeft64(Value* e, const Twine &namehint) {
 inline Value* PabloCompiler::genNot(Value* expr) {
     return mBuilder->CreateXor(expr, mOneInitializer, "not");
 }
-
     
 void PabloCompiler::SetOutputValue(Value * marker, const unsigned index) {
     if (marker->getType()->isPointerTy()) {
         marker = mBuilder->CreateAlignedLoad(marker, BLOCK_SIZE/8, false);
     }
     Value* indices[] = {mBuilder->getInt64(0), mBuilder->getInt32(index)};
-    Value* gep = mBuilder->CreateGEP(mOutputAddrPtr, indices);
+    Value* gep = mBuilder->CreateGEP(mOutputAddressPtr, indices);
     mBuilder->CreateAlignedStore(marker, gep, BLOCK_SIZE/8, false);
 }
 

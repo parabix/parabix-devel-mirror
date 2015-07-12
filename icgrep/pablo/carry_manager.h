@@ -30,8 +30,15 @@ class PabloBlock;
 class CarryManager {
 public:
   
-    CarryManager(Module * m, IRBuilder <> * b, VectorType * bitBlockType, ConstantAggregateZero * zero, Constant * one) :
-        mMod(m), mBuilder(b), mBitBlockType(bitBlockType), mZeroInitializer(zero), mOneInitializer(one) {}
+    CarryManager(Module * m, IRBuilder <> * b, VectorType * bitBlockType, ConstantAggregateZero * zero, Constant * one)
+    : mMod(m)
+    , mBuilder(b)
+    , mBitBlockType(bitBlockType)
+    , mZeroInitializer(zero)
+    , mOneInitializer(one)
+    , iBuilder(mMod, mBuilder, mBitBlockType) {
+
+    }
     
     unsigned initialize(PabloBlock * blk, Value * carryDataPtr);  
     
@@ -82,7 +89,7 @@ private:
     VectorType * mBitBlockType;
     ConstantAggregateZero * mZeroInitializer;
     Constant * mOneInitializer;
-    IDISA::IDISA_Builder * iBuilder;
+    IDISA::IDISA_Builder iBuilder;
     PabloBlock * mPabloRoot;
     Value * mCarryDataPtr;
     Value * mBlockNoPtr;

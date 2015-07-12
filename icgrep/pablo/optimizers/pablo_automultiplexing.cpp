@@ -154,7 +154,7 @@ bool AutoMultiplexing::optimize(PabloFunction & function) {
     RECORD_TIMESTAMP(end_shutdown);
     LOG("Shutdown:                " << (end_shutdown - start_shutdown));
 
-    LOG_NUMBER_OF_ADVANCES(entry);
+    LOG_NUMBER_OF_ADVANCES(function.getEntryBlock());
 
     return multiplex;
 }
@@ -188,7 +188,7 @@ void AutoMultiplexing::initialize(PabloFunction & function) {
                 continue;
             }
 
-            assert ("Run the Simplifer pass prior to this!" && (stmt->getNumUses() != 0 || (isa<Assign>(stmt) ? !cast<Assign>(stmt)->superfluous() : false)));
+            assert ("Run the Simplifer pass prior to this!" && (stmt->getNumUses() > 0));
 
             switch (stmt->getClassTypeId()) {
                 case PabloAST::ClassTypeId::Advance:

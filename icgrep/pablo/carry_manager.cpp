@@ -20,7 +20,6 @@ unsigned CarryManager::initialize(PabloBlock * pb, Value * carryPtr) {
   
     mPabloRoot = pb;
     mCarryDataPtr = carryPtr;
-    iBuilder = new IDISA::IDISA_Builder(mMod, mBuilder, mBitBlockType);
     
     PabloBlockCarryData & cd = pb->carryData;
     mTotalCarryDataSize = cd.enumerate(*pb) + 1;   // One extra element for the block no.
@@ -90,8 +89,8 @@ Value * CarryManager::unitAdvanceCarryInCarryOut(PabloBlock * blk, int localInde
     Value* result_value;
     
 #if (BLOCK_SIZE == 128) && !defined(USE_LONG_INTEGER_SHIFT)
-    Value * ahead64 = iBuilder->mvmd_dslli(64, carry_in, strm, 1);
-    result_value = mBuilder->CreateOr(iBuilder->simd_srli(64, ahead64, 63), iBuilder->simd_slli(64, strm, 1));
+    Value * ahead64 = iBuilder.mvmd_dslli(64, carry_in, strm, 1);
+    result_value = mBuilder->CreateOr(iBuilder.simd_srli(64, ahead64, 63), iBuilder.simd_slli(64, strm, 1));
 #else
     Value* advanceq_longint = mBuilder->CreateBitCast(carry_in, mBuilder->getIntNTy(BLOCK_SIZE));
     Value* strm_longint = mBuilder->CreateBitCast(strm, mBuilder->getIntNTy(BLOCK_SIZE));

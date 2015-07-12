@@ -11,6 +11,7 @@ namespace pablo {
 class Var;
 class Assign;
 class PabloBlock;
+class String;
 
 class PabloFunction : public PabloAST {
     friend class PabloBlock;
@@ -28,7 +29,7 @@ public:
         return false;
     }
 
-    static PabloFunction Create();
+    static PabloFunction Create(std::string && name);
 
     virtual bool operator==(const PabloAST & other) const {
         return &other == this;
@@ -36,6 +37,10 @@ public:
 
     PabloBlock & getEntryBlock() {
         return mEntryBlock;
+    }
+
+    const String * getName() const {
+        return mName;
     }
 
     const PabloBlock & getEntryBlock() const {
@@ -85,16 +90,17 @@ public:
     virtual ~PabloFunction() { }
 
 protected:
-    PabloFunction();
+    PabloFunction(std::string && name);
 private:
     PabloBlock &        mEntryBlock;
     Parameters          mParameters;
     Results             mResults;
     SymbolGenerator     mSymbolTable;
+    String *            mName;
 };
 
-inline PabloFunction PabloFunction::Create() {
-    return PabloFunction();
+inline PabloFunction PabloFunction::Create(std::string && name) {
+    return PabloFunction(std::move(name));
 }
 
 }

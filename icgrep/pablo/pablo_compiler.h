@@ -102,7 +102,7 @@ public:
     void InstallExternalFunction(std::string C_fn_name, void * fn_ptr);
     CompiledPabloFunction compile(pablo::PabloFunction &function);
 private:
-    void DefineTypes(PabloFunction & function);
+    void GenerateFunction(PabloFunction & function);
     void DeclareFunctions();
     void Examine(PabloBlock & blk);
     void DeclareCallFunctions();
@@ -149,7 +149,7 @@ private:
     ExecutionEngine*                    mExecutionEngine;
 
     VectorType* const                   mBitBlockType;
-    PointerType*                        mBasisBitsInputPtr;
+    PointerType*                        mInputPtr;
 
     PabloBlock *                        mPabloBlock;
     
@@ -160,12 +160,9 @@ private:
     ConstantAggregateZero* const        mZeroInitializer;
     Constant* const                     mOneInitializer;
 
-    FunctionType*                       mFunctionType;
-    Function*                           mFunction;
-
-
-    Value*                              mParameterAddr;
-    Value*                              mOutputAddrPtr;
+    Function *                          mFunction;
+    Value *                             mInputAddressPtr;
+    Value *                             mOutputAddressPtr;
 
     unsigned                            mMaxWhileDepth;
 
