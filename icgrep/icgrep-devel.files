@@ -333,3 +333,4 @@ pablo/function.h
 pablo/function.cpp
 UCD/resolve_properties.cpp
 UCD/resolve_properties.h
+generate_predefined_ucd_functions.cpp

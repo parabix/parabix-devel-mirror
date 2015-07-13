@@ -21,11 +21,6 @@ public:
 
     re::RE * process(re::RE * re, const re::CC_type t);
 
-    inline void clear() {
-        mNameMap.clear();
-        mNameVector.clear();
-    }
-
     inline iterator begin() const {
         return mNameVector.begin();
     }

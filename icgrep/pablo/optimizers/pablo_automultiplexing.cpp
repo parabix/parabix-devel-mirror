@@ -108,12 +108,16 @@ bool AutoMultiplexing::optimize(PabloFunction & function) {
 
     AutoMultiplexing am;
     RECORD_TIMESTAMP(start_initialize);
-    am.initialize(function);
+    const bool fewerThanThreeAdvances = am.initialize(function);
     RECORD_TIMESTAMP(end_initialize);
 
     LOG("Initialize:              " << (end_initialize - start_initialize));
 
     LOG_NUMBER_OF_ADVANCES(function.getEntryBlock());
+
+    if (fewerThanThreeAdvances) {
+        return false;
+    }
 
     RECORD_TIMESTAMP(start_characterize);
     am.characterize(function.getEntryBlock());
@@ -161,13 +165,13 @@ bool AutoMultiplexing::optimize(PabloFunction & function) {
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief initialize
- * @param vars the input vars for this program
- * @param entry the entry block
+ * @param function the function to optimize
+ * @returns true if there are fewer than three advances in this function
  *
  * Scan through the program to identify any advances and calls then initialize the BDD engine with
  * the proper variable ordering.
  ** ------------------------------------------------------------------------------------------------------------- */
-void AutoMultiplexing::initialize(PabloFunction & function) {
+bool AutoMultiplexing::initialize(PabloFunction & function) {
 
     flat_map<const PabloAST *, unsigned> map;    
     std::stack<Statement *> scope;
@@ -209,6 +213,11 @@ void AutoMultiplexing::initialize(PabloFunction & function) {
         }
         stmt = scope.top();
         scope.pop();
+    }
+
+    // If there are fewer than three Advances in this program, just abort. We cannot reduce it.
+    if (mAdvanceMap.size() < 3) {
+        return true;
     }
 
     // Create the transitive closure matrix of graph. From this we'll construct
@@ -297,6 +306,8 @@ void AutoMultiplexing::initialize(PabloFunction & function) {
     for (const Var * var : function.getParameters()) {
         mCharacterizationMap[var] = Cudd_bddIthVar(mManager, i++);
     }
+
+    return false;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

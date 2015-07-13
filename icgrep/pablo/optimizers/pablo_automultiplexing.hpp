@@ -39,7 +39,7 @@ class AutoMultiplexing {
 public:
     static bool optimize(PabloFunction & function);
 protected:
-    void initialize(PabloFunction & function);
+    bool initialize(PabloFunction & function);
     void characterize(PabloBlock &block);
     DdNode * characterize(Statement * const stmt);
     DdNode * characterize(Advance * adv, DdNode * input);

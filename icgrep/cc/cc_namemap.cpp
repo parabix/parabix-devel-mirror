@@ -14,7 +14,6 @@ using namespace re;
 namespace cc {
 
 RE * CC_NameMap::process(RE * re, const CC_type type) {
-
     if (Alt * alt = dyn_cast<Alt>(re)) {
         for (auto i = alt->begin(); i != alt->end(); ++i) {
             *i = process(*i, type);
@@ -40,15 +39,19 @@ RE * CC_NameMap::process(RE * re, const CC_type type) {
         e->setLH(process(e->getLH(), type));
     }
     else if (Name * name = dyn_cast<Name>(re)) {
+        RE * def = name->getDefinition();
+        if (def && !isa<CC>(def)) {
+            name->setDefinition(process(def, type));
+        }
         std::string classname = name->getName();
         auto f = mNameMap.find(classname);
         if (f == mNameMap.end()) {
             if (name->getType() == Name::Type::UnicodeProperty) {
                 resolveProperty(name);
-            }
-            RE * def = name->getDefinition();
-            if (def) {
-                name->setDefinition(process(def, type));
+                RE * def = name->getDefinition();
+                if (def) {
+                    name->setDefinition(process(def, type));
+                }
             }
             return insert(std::move(classname), name);
         }

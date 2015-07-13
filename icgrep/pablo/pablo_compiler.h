@@ -56,8 +56,6 @@ class StatementList;
 class If;
 class While;
 
-static IRBuilder<> LLVM_Builder(getGlobalContext());
-
 struct CompiledPabloFunction {
     const size_t        CarryDataSize;
     void * const        FunctionPointer;
@@ -110,12 +108,14 @@ public:
     ~PabloCompiler();
     void InstallExternalFunction(std::string C_fn_name, void * fn_ptr);
     CompiledPabloFunction compile(pablo::PabloFunction & function);
-    Module * getModule();
+    std::pair<Function *, size_t> compile(pablo::PabloFunction & function, Module *module);
+    Module *getModule();
 private:
     void GenerateFunction(PabloFunction & function);
-    void DeclareFunctions(ExecutionEngine * ee);
-    void Examine(PabloBlock & blk);
-    void DeclareCallFunctions(ExecutionEngine * ee);
+    void DeclareFunctions(ExecutionEngine * engine);
+    void Examine(PabloFunction & function);
+    void Examine(PabloBlock & block);
+    void DeclareCallFunctions(PabloFunction & function, ExecutionEngine * engine);
     void SetOutputValue(Value * marker, const unsigned index);
 
     void genPrintRegister(std::string regName, Value * bitblockValue);
@@ -143,24 +143,19 @@ private:
     #endif
     #endif
 
-
     ASTToValueMap                       mMarkerMap;
     CarryQueueVector                    mCarryInVector;
     CarryQueueVector                    mCarryOutVector;
 
-#ifdef USE_LLVM_3_5
-    Module* const                       mMod;
-#else
-    std::unique_ptr<Module>             mModOwner;
+
     Module *                            mMod;
-#endif
     IRBuilder <> *                      mBuilder;
 
     CarryManager *                      mCarryManager;
 
     VectorType* const                   mBitBlockType;
     IDISA::IDISA_Builder                iBuilder;
-    PointerType*                        mInputPtr;
+    PointerType*                        mInputType;
 
     PabloBlock *                        mPabloBlock;
     

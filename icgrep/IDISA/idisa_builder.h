@@ -17,9 +17,18 @@ namespace IDISA {
 
 class IDISA_Builder {
 public:
-    IDISA_Builder(Module * m, IRBuilder <> * b, Type * bitBlockType): mMod(m), llvm_builder(b), mBitBlockType(bitBlockType) {
-        if (bitBlockType->isIntegerTy()) mBitBlockSize = dyn_cast<IntegerType>(bitBlockType)-> getIntegerBitWidth();
-        else mBitBlockSize = dyn_cast<VectorType>(bitBlockType)-> getBitWidth();
+
+    IDISA_Builder(Type * bitBlockType)
+    : mMod(nullptr)
+    , mLLVMBuilder(nullptr)
+    , mBitBlockType(bitBlockType)
+    , mBitBlockSize(bitBlockType->isIntegerTy() ? cast<IntegerType>(bitBlockType)->getIntegerBitWidth() : cast<VectorType>(bitBlockType)->getBitWidth()) {
+
+    }
+
+    void initialize(Module * m, IRBuilder <> * b) {
+        mMod = m;
+        mLLVMBuilder = b;
     }
         
     Value * simd_add(unsigned fw, Value * a, Value * b);
@@ -55,7 +64,7 @@ public:
 
 private:
     Module * mMod;
-    IRBuilder <> * llvm_builder;
+    IRBuilder <> * mLLVMBuilder;
     Type * mBitBlockType;
     unsigned mBitBlockSize;
     
