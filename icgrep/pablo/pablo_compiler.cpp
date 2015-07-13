@@ -15,6 +15,7 @@
 #include <stdexcept>
 #include <include/simd-lib/bitblock.hpp>
 #include <sstream>
+#include <IDISA/idisa_builder.h>
 #include <llvm/IR/Verifier.h>
 #include <llvm/Pass.h>
 #include <llvm/PassManager.h>
@@ -74,6 +75,7 @@ PabloCompiler::PabloCompiler()
 , mBuilder(&LLVM_Builder)
 , mCarryManager(nullptr)
 , mBitBlockType(VectorType::get(IntegerType::get(mMod->getContext(), 64), BLOCK_SIZE / 64))
+, iBuilder(mMod, mBuilder, mBitBlockType)
 , mInputPtr(nullptr)
 , mCarryDataPtr(nullptr)
 , mWhileDepth(0)
@@ -112,7 +114,7 @@ CompiledPabloFunction PabloCompiler::compile(PabloFunction & function) {
     mWhileDepth = 0;
     mIfDepth = 0;
     mMaxWhileDepth = 0;
-    mCarryManager = new CarryManager(mMod, mBuilder, mBitBlockType, mZeroInitializer, mOneInitializer);
+    mCarryManager = new CarryManager(mBuilder, mBitBlockType, mZeroInitializer, mOneInitializer, &iBuilder);
 
     Examine(function.getEntryBlock());
     
@@ -367,6 +369,26 @@ void PabloCompiler::compileBlock(PabloBlock & block) {
     mCarryManager->ensureCarriesStoredLocal(block);
 }
 
+Value * PabloCompiler::genBitTest2(Value * e1, Value * e2) {
+    Type * t1 = e1->getType();
+    Type * t2 = e2->getType();
+    if (t1 == mBitBlockType) {
+        if (t2 == mBitBlockType) {
+            return iBuilder.bitblock_any(mBuilder->CreateOr(e1, e2));
+        }
+        else {
+            Value * m1 = mBuilder->CreateZExt(iBuilder.hsimd_signmask(16, e1), t2);
+            return mBuilder->CreateICmpNE(mBuilder->CreateOr(m1, e2), ConstantInt::get(t2, 0));
+        }
+    }
+    else if (t2 == mBitBlockType) {
+        Value * m2 = mBuilder->CreateZExt(iBuilder.hsimd_signmask(16, e2), t1);
+        return mBuilder->CreateICmpNE(mBuilder->CreateOr(e1, m2), ConstantInt::get(t1, 0));
+    }
+    else {
+        return mBuilder->CreateICmpNE(mBuilder->CreateOr(e1, e2), ConstantInt::get(t1, 0));
+    }
+}
 
 void PabloCompiler::compileIf(const If * ifStatement) {        
     //
@@ -392,13 +414,16 @@ void PabloCompiler::compileIf(const If * ifStatement) {
     
     PabloBlock & ifBody = ifStatement -> getBody();
     
-    Value* if_test_value = compileExpression(ifStatement->getCondition());
+    Value * if_test_value = compileExpression(ifStatement->getCondition());
     if (mCarryManager->blockHasCarries(ifBody)) {
         // load the summary variable
         Value* last_if_pending_data = mCarryManager->getCarrySummaryExpr(ifBody);
-        if_test_value = mBuilder->CreateOr(if_test_value, last_if_pending_data);
+        mBuilder->CreateCondBr(genBitTest2(if_test_value, last_if_pending_data), ifBodyBlock, ifEndBlock);
+
     }
-    mBuilder->CreateCondBr(genBitBlockAny(if_test_value), ifEndBlock, ifBodyBlock);
+    else {
+        mBuilder->CreateCondBr(iBuilder.bitblock_any(if_test_value), ifBodyBlock, ifEndBlock);
+    }
     // Entry processing is complete, now handle the body of the if.
     mBuilder->SetInsertPoint(ifBodyBlock);
     
@@ -477,7 +502,7 @@ void PabloCompiler::compileWhile(const While * whileStatement) {
     mCarryManager->extendCarryDataPhisAtWhileBodyFinalBlock(whileBody, whileBodyFinalBlock);
 
     // Terminate the while loop body with a conditional branch back.
-    mBuilder->CreateCondBr(genBitBlockAny(compileExpression(whileStatement->getCondition())), whileEndBlock, whileBodyBlock);
+    mBuilder->CreateCondBr(iBuilder.bitblock_any(compileExpression(whileStatement->getCondition())), whileBodyBlock, whileEndBlock);
 
     // and for any Next nodes in the loop body
     for (unsigned i = 0; i < nextNodes.size(); i++) {
@@ -707,11 +732,6 @@ Value* PabloCompiler::genAddWithCarry(Value* e1, Value* e2, unsigned localIndex)
 
     mCarryManager->setCarryOpCarryOut(mPabloBlock, localIndex, carry_out);
     return sum;
-}
-
-inline Value* PabloCompiler::genBitBlockAny(Value* test) {
-    Value* cast_marker_value_1 = mBuilder->CreateBitCast(test, mBuilder->getIntNTy(BLOCK_SIZE));
-    return mBuilder->CreateICmpEQ(cast_marker_value_1, ConstantInt::get(mBuilder->getIntNTy(BLOCK_SIZE), 0));
 }
 
 Value * PabloCompiler::genShiftHighbitToLow(unsigned FieldWidth, Value * op) {

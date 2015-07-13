@@ -27,6 +27,7 @@ static_assert(false, "Need to turn on them together.");
 #include <pablo/carry_manager.h>
 #include <llvm/ADT/Twine.h>
 #include <llvm/IR/IRBuilder.h>
+#include <IDISA/idisa_builder.h>
 
 namespace llvm {
     class Value;
@@ -120,6 +121,7 @@ private:
     void genPrintRegister(std::string regName, Value * bitblockValue);
     void compileBlock(PabloBlock & block);
     void compileStatement(const Statement * stmt);
+    Value * genBitTest2(Value * e1, Value * e2);
     void compileIf(const If * ifStmt);
     void compileWhile(const While * whileStmt);
     Value* compileExpression(const PabloAST * expr);
@@ -127,7 +129,6 @@ private:
     Value* genUnitAdvanceWithCarry(Value* e1, unsigned localIndex);
     Value* genShortAdvanceWithCarry(Value* e1, unsigned localIndex, int shift_amount);
     Value* genLongAdvanceWithCarry(Value* e1, unsigned localIndex, int shift_amount);
-    Value* genBitBlockAny(Value* test);
     Value* genShiftHighbitToLow(unsigned FieldWidth, Value * op);
     Value* genShiftLeft64(Value* e, const Twine & namehint = "") ;
     Value* genNot(Value* expr);
@@ -154,9 +155,11 @@ private:
     Module *                            mMod;
 #endif
     IRBuilder <> *                      mBuilder;
+
     CarryManager *                      mCarryManager;
 
     VectorType* const                   mBitBlockType;
+    IDISA::IDISA_Builder                iBuilder;
     PointerType*                        mInputPtr;
 
     PabloBlock *                        mPabloBlock;
