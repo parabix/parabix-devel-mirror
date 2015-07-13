@@ -148,7 +148,7 @@ Value * IDISA_Builder::hsimd_packl(unsigned fw, Value * a, Value * b) {
 
 Value * IDISA_Builder::hsimd_signmask(unsigned fw, Value * a) {
     Value * mask = llvm_builder->CreateICmpSLT(fwCast(fw, a), ConstantAggregateZero::get(fwVectorType(fw)));
-    return mask;
+    return llvm_builder->CreateBitCast(mask, llvm_builder->getIntNTy(mBitBlockSize/fw));
 }
 
 Value * IDISA_Builder::mvmd_dslli(unsigned fw, Value * a, Value * b, unsigned shift) {
@@ -162,4 +162,7 @@ Value * IDISA_Builder::mvmd_dslli(unsigned fw, Value * a, Value * b, unsigned sh
     return bitBlockCast(llvm_builder->CreateShuffleVector(aVec, bVec, ConstantVector::get(Idxs)));
 }
 
-
+Value * IDISA_Builder::bitblock_any(Value * a) {
+    Type * iBitBlock = llvm_builder->getIntNTy(mBitBlockSize);
+    return llvm_builder->CreateICmpNE(llvm_builder->CreateBitCast(a, iBitBlock),  ConstantInt::get(iBitBlock, 0));
+}

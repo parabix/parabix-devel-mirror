@@ -49,6 +49,9 @@ public:
     Value * hsimd_signmask(unsigned fw, Value * a);
 
     Value * mvmd_dslli(unsigned fw, Value * a, Value * b, unsigned shift);
+    
+    Value * bitblock_any(Value * a);
+
 
 private:
     Module * mMod;
