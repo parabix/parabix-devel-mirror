@@ -32,8 +32,9 @@
 #include <llvm/ADT/STLExtras.h>
 #include <llvm/Target/TargetSubtargetInfo.h>
 #include <llvm/Support/FormattedStream.h>
-
 #include "llvm/Support/FileSystem.h"
+#include <llvm/Transforms/Scalar.h>
+
 
 #include <boost/algorithm/string/case_conv.hpp>
 #include <iostream>
@@ -117,9 +118,14 @@ Module * generateUCDModule() {
 void compileUCDModule(Module * module) {
     Triple TheTriple;
 
-    if (TheTriple.getTriple().empty()) {
-        TheTriple.setTriple(sys::getDefaultTargetTriple());
-    }
+    // Initialize targets first, so that --version shows registered targets.
+    InitializeAllTargets();
+    InitializeAllTargetMCs();
+    InitializeAllAsmPrinters();
+    InitializeAllAsmParsers();
+
+
+    TheTriple.setTriple(sys::getDefaultTargetTriple());
 
     // Get the target specific parser.
     std::string msg;
@@ -139,6 +145,10 @@ void compileUCDModule(Module * module) {
 
     if (Target == nullptr) {
         throw std::runtime_error("Could not allocate target machine!");
+    }
+
+    if (OutputFilename.empty()) {
+        OutputFilename = "ucd.o";
     }
 
     #ifdef USE_LLVM_3_5
@@ -173,6 +183,9 @@ void compileUCDModule(Module * module) {
         module->setDataLayout(DL);
     }
     PM.add(new DataLayoutPass());
+    PM.add(createReassociatePass());
+    PM.add(createInstructionCombiningPass());
+    PM.add(createSinkingPass());
 
     formatted_raw_ostream FOS(Out->os());
     // Ask the target to add backend passes as necessary.
