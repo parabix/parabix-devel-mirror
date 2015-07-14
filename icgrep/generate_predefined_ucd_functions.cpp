@@ -156,7 +156,6 @@ void compileUCDModule(Module * module) {
     // Get the target specific parser.
     std::string msg;
     const Target * TheTarget = TargetRegistry::lookupTarget(TheTriple.getTriple(), msg);
-
     if (TheTarget == nullptr) {
         throw std::runtime_error(msg);
     }
@@ -175,7 +174,7 @@ void compileUCDModule(Module * module) {
 
     #ifdef USE_LLVM_3_5
     std::string error;
-    std::unique_ptr<tool_output_file> Out = make_unique<tool_output_file>(OutputFilename.c_str(), error, sys::fs::F_None);
+    std::unique_ptr<tool_output_file> Out = make_unique<tool_output_file>(ObjectFilename.c_str(), error, sys::fs::F_None);
     if (!error.empty()) {
         throw std::runtime_error(error);
     }
@@ -191,9 +190,7 @@ void compileUCDModule(Module * module) {
     PassManager PM;
 
     // Add an appropriate TargetLibraryInfo pass for the module's triple.
-    TargetLibraryInfo * TLI = new TargetLibraryInfo(TheTriple);
-
-    PM.add(TLI);
+    PM.add(new TargetLibraryInfo(TheTriple));
 
     // Add the target data from the target machine, if it exists, or the module.
     #ifdef USE_LLVM_3_5
@@ -204,7 +201,11 @@ void compileUCDModule(Module * module) {
     if (DL) {
         module->setDataLayout(DL);
     }
+    #ifdef USE_LLVM_3_5
+    PM.add(new DataLayoutPass(module));
+    #else
     PM.add(new DataLayoutPass());
+    #endif
     PM.add(createReassociatePass());
     PM.add(createInstructionCombiningPass());
     PM.add(createSinkingPass());
