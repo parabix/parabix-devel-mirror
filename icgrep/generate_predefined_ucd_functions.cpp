@@ -34,8 +34,6 @@
 #include <llvm/Support/FormattedStream.h>
 #include "llvm/Support/FileSystem.h"
 #include <llvm/Transforms/Scalar.h>
-
-
 #include <boost/algorithm/string/case_conv.hpp>
 #include <iostream>
 
@@ -52,6 +50,11 @@ inline std::string lowercase(const std::string & name) {
 static cl::opt<std::string>
 OutputFilename("o", cl::desc("Output filename"), cl::value_desc("filename"));
 
+#ifdef ENABLE_MULTIPLEXING
+static cl::opt<bool> EnableMultiplexing("multiplexing", cl::init(false),
+                                        cl::desc("combine Advances whose inputs are mutual exclusive into the fewest number of advances possible (expensive)."));
+#endif
+
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief compileUnicodeSet
  ** ------------------------------------------------------------------------------------------------------------- */
@@ -61,13 +64,18 @@ void compileUnicodeSet(std::string name, const UnicodeSet & set, PabloCompiler &
     CC_Compiler ccCompiler(function, encoding);
     UCDCompiler ucdCompiler(ccCompiler);
     PabloBuilder builder(function.getEntryBlock());
+
+    std::cerr << "Compiling " << name << std::endl;
+
     // Build the unicode set function
     ucdCompiler.generateWithDefaultIfHierarchy(set, builder);
     // Optimize it at the pablo level
     Simplifier::optimize(function);
     CodeSinking::optimize(function);
     #ifdef ENABLE_MULTIPLEXING
-    AutoMultiplexing::optimize(function);
+    if (EnableMultiplexing) {
+        AutoMultiplexing::optimize(function);
+    }
     #endif
     // Now compile the function ...
     pc.compile(function, module);
@@ -82,28 +90,26 @@ Module * generateUCDModule() {
     Module * module = new Module("ucd", getGlobalContext());
     for (PropertyObject * obj : property_object_table) {
 
-        if (isa<UnsupportedPropertyObject>(obj)) continue;
-
-        if (auto * enumObj = dyn_cast<EnumeratedPropertyObject>(obj)) {
+        if (EnumeratedPropertyObject * enumObj = dyn_cast<EnumeratedPropertyObject>(obj)) {
             for (const std::string value : *enumObj) {
                 const UnicodeSet & set = enumObj->GetCodepointSet(canonicalize_value_name(value));
-                std::string name = "__get_" + property_enum_name[enumObj->getPropertyCode()] + "_" + lowercase(value);
+                std::string name = "__get_" + property_enum_name[enumObj->getPropertyCode()] + "_" + value;
                 compileUnicodeSet(name, set, pc, module);
             }
-            break;
         }
-        else if (auto * extObj = dyn_cast<ExtensionPropertyObject>(obj)) {
+        else if (ExtensionPropertyObject * extObj = dyn_cast<ExtensionPropertyObject>(obj)) {
             for (const std::string value : *extObj) {
                 const UnicodeSet & set = extObj->GetCodepointSet(canonicalize_value_name(value));
-                std::string name = "__get_" + property_enum_name[extObj->getPropertyCode()] + "_" + lowercase(value);
+                std::string name = "__get_" + property_enum_name[extObj->getPropertyCode()] + "_" + value;
                 compileUnicodeSet(name, set, pc, module);
             }
         }
-        else if (auto * binObj = dyn_cast<BinaryPropertyObject>(obj)) {
+        else if (BinaryPropertyObject * binObj = dyn_cast<BinaryPropertyObject>(obj)) {
             const UnicodeSet & set = binObj->GetCodepointSet(Binary_ns::Y);
-            std::string name = "__get_" + property_enum_name[binObj->getPropertyCode()] + "_y";
+            std::string name = "__get_" + property_enum_name[binObj->getPropertyCode()] + "_Y";
             compileUnicodeSet(name, set, pc, module);
         }
+
     }
 
     // Print an error message if our module is malformed in any way.

@@ -53,7 +53,10 @@ public:
         return false;
     }
 
-    UnsupportedPropertyObject(property_t p, ClassTypeId k) : PropertyObject(p, k) {}
+    UnsupportedPropertyObject(property_t p, ClassTypeId)
+    : PropertyObject(p, ClassTypeId::UnsupportedProperty) {
+
+    }
     UnicodeSet GetCodepointSet(const std::string &);
     UnicodeSet GetCodepointSet(const int);
 };
@@ -143,14 +146,17 @@ public:
     }
 
     BinaryPropertyObject(UCD::property_t p, UnicodeSet s)
-        : PropertyObject(p, ClassTypeId::BinaryProperty)
-        , the_codepoint_set(s) {
+    : PropertyObject(p, ClassTypeId::BinaryProperty)
+    , noUninitialized(true)
+    , mY(s) {
 
     }
-    UnicodeSet GetCodepointSet(const std::string & value_spec) const;
-    UnicodeSet GetCodepointSet(const int property_enum_val) const;
+    const UnicodeSet & GetCodepointSet(const std::string & value_spec);
+    const UnicodeSet & GetCodepointSet(const int property_enum_val);
 private:
-    UnicodeSet the_codepoint_set;
+    bool noUninitialized;
+    UnicodeSet mY;
+    UnicodeSet mN;
 };
 
 }

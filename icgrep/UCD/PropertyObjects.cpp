@@ -97,23 +97,26 @@ int ExtensionPropertyObject::GetPropertyValueEnumCode(const std::string & value_
     return property_object_table[base_property]->GetPropertyValueEnumCode(value_spec);
 }
 
-UnicodeSet BinaryPropertyObject::GetCodepointSet(const std::string & value_spec) const {
+const UnicodeSet & BinaryPropertyObject::GetCodepointSet(const std::string & value_spec) {
+    int property_enum_val = Binary_ns::Y;
     if (value_spec.length() != 0) {
         auto valit = Binary_ns::aliases_only_map.find(value_spec);
         if (valit == Binary_ns::aliases_only_map.end()) {
             throw std::runtime_error("Binary Property " + UCD::property_full_name[the_property] +  ": bad value: " + value_spec);
         }
-        if (valit->second == Binary_ns::Y)
-            return the_codepoint_set;
-        return ~the_codepoint_set;
+        property_enum_val = valit->second;
     }
-    return the_codepoint_set;
+    return GetCodepointSet(property_enum_val);
 }
 
-UnicodeSet BinaryPropertyObject::GetCodepointSet(const int property_enum_val) const {
-    if (property_enum_val == Binary_ns::Y)
-        return the_codepoint_set;
-    return ~the_codepoint_set;
+const UnicodeSet & BinaryPropertyObject::GetCodepointSet(const int property_enum_val) {
+    if (property_enum_val == Binary_ns::Y) {
+        return mY;
+    }
+    if (noUninitialized) {
+        mN = uset_complement(mY);
+    }
+    return mN;
 }
 
 }
