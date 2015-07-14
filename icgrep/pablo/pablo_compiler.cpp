@@ -88,7 +88,7 @@ PabloCompiler::PabloCompiler()
 PabloCompiler::~PabloCompiler() {
 }
     
-void PabloCompiler::InstallExternalFunction(std::string C_fn_name, void * fn_ptr) {
+void PabloCompiler::InstallExternalFunction(std::string C_fn_name, void * fn_ptr, const size_t carrySize) {
     mExternalMap.insert(std::make_pair(C_fn_name, fn_ptr));
 }
 

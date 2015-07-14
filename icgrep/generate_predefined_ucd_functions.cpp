@@ -48,7 +48,10 @@ inline std::string lowercase(const std::string & name) {
 }
 
 static cl::opt<std::string>
-OutputFilename("o", cl::desc("Output filename"), cl::value_desc("filename"));
+ObjectFilename("o", cl::desc("Output Object filename"), cl::value_desc("filename"));
+
+static cl::opt<std::string>
+PropertyFilename("p", cl::desc("Install Property filename"), cl::value_desc("filename"));
 
 #ifdef ENABLE_MULTIPLEXING
 static cl::opt<bool> EnableMultiplexing("multiplexing", cl::init(false),
@@ -58,15 +61,12 @@ static cl::opt<bool> EnableMultiplexing("multiplexing", cl::init(false),
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief compileUnicodeSet
  ** ------------------------------------------------------------------------------------------------------------- */
-void compileUnicodeSet(std::string name, const UnicodeSet & set, PabloCompiler & pc, Module * module) {
+void compileUnicodeSet(std::string name, const UnicodeSet & set, PabloCompiler & pc, Module * module, raw_ostream & out) {
     PabloFunction function = PabloFunction::Create(std::move(name));
     Encoding encoding(Encoding::Type::UTF_8, 8);
     CC_Compiler ccCompiler(function, encoding);
     UCDCompiler ucdCompiler(ccCompiler);
     PabloBuilder builder(function.getEntryBlock());
-
-    std::cerr << "Compiling " << name << std::endl;
-
     // Build the unicode set function
     ucdCompiler.generateWithDefaultIfHierarchy(set, builder);
     // Optimize it at the pablo level
@@ -78,7 +78,8 @@ void compileUnicodeSet(std::string name, const UnicodeSet & set, PabloCompiler &
     }
     #endif
     // Now compile the function ...
-    pc.compile(function, module);
+    auto func = pc.compile(function, module);
+    out << "    p.InstallExternalFunction(\"" + name + "\", &" + name + ", " + std::to_string(func.second) + ");\n";
     releaseSlabAllocatorMemory();
 }
 
@@ -86,31 +87,51 @@ void compileUnicodeSet(std::string name, const UnicodeSet & set, PabloCompiler &
  * @brief generateUCDModule
  ** ------------------------------------------------------------------------------------------------------------- */
 Module * generateUCDModule() {
+
+    #ifdef USE_LLVM_3_5
+    std::string error;
+    raw_fd_ostream out(PropertyFilename.c_str(), error, sys::fs::F_None);
+    if (!error.empty()) {
+        throw std::runtime_error(error);
+    }
+    #else
+    std::error_code error;
+    raw_fd_ostream out(PropertyFilename, error, sys::fs::F_None);
+    if (error) {
+        throw std::runtime_error(error.message());
+    }
+    #endif
+
+    out << "#ifndef PROPERTYINSTALL\n";
+    out << "#define PROPERTYINSTALL\n\n";
+    out << "#include <pablo/pablo_compiler.h>\n\n";
+    out << "void install_properties(pablo::PabloCompiler & p) {\n";
+
     PabloCompiler pc;
     Module * module = new Module("ucd", getGlobalContext());
     for (PropertyObject * obj : property_object_table) {
-
         if (EnumeratedPropertyObject * enumObj = dyn_cast<EnumeratedPropertyObject>(obj)) {
             for (const std::string value : *enumObj) {
                 const UnicodeSet & set = enumObj->GetCodepointSet(canonicalize_value_name(value));
                 std::string name = "__get_" + property_enum_name[enumObj->getPropertyCode()] + "_" + value;
-                compileUnicodeSet(name, set, pc, module);
+                compileUnicodeSet(name, set, pc, module, out);
             }
         }
         else if (ExtensionPropertyObject * extObj = dyn_cast<ExtensionPropertyObject>(obj)) {
             for (const std::string value : *extObj) {
                 const UnicodeSet & set = extObj->GetCodepointSet(canonicalize_value_name(value));
                 std::string name = "__get_" + property_enum_name[extObj->getPropertyCode()] + "_" + value;
-                compileUnicodeSet(name, set, pc, module);
+                compileUnicodeSet(name, set, pc, module, out);
             }
         }
         else if (BinaryPropertyObject * binObj = dyn_cast<BinaryPropertyObject>(obj)) {
             const UnicodeSet & set = binObj->GetCodepointSet(Binary_ns::Y);
             std::string name = "__get_" + property_enum_name[binObj->getPropertyCode()] + "_Y";
-            compileUnicodeSet(name, set, pc, module);
+            compileUnicodeSet(name, set, pc, module, out);
         }
-
     }
+
+    out << "}\n\n#endif\n"; out.close();
 
     // Print an error message if our module is malformed in any way.
     verifyModule(*module, &dbgs());
@@ -129,7 +150,6 @@ void compileUCDModule(Module * module) {
     InitializeAllTargetMCs();
     InitializeAllAsmPrinters();
     InitializeAllAsmParsers();
-
 
     TheTriple.setTriple(sys::getDefaultTargetTriple());
 
@@ -153,10 +173,6 @@ void compileUCDModule(Module * module) {
         throw std::runtime_error("Could not allocate target machine!");
     }
 
-    if (OutputFilename.empty()) {
-        OutputFilename = "ucd.o";
-    }
-
     #ifdef USE_LLVM_3_5
     std::string error;
     std::unique_ptr<tool_output_file> Out = make_unique<tool_output_file>(OutputFilename.c_str(), error, sys::fs::F_None);
@@ -165,7 +181,7 @@ void compileUCDModule(Module * module) {
     }
     #else
     std::error_code error;
-    std::unique_ptr<tool_output_file> Out = make_unique<tool_output_file>(OutputFilename, error, sys::fs::F_None);
+    std::unique_ptr<tool_output_file> Out = make_unique<tool_output_file>(ObjectFilename, error, sys::fs::F_None);
     if (error) {
         throw std::runtime_error(error.message());
     }
@@ -209,6 +225,12 @@ void compileUCDModule(Module * module) {
  ** ------------------------------------------------------------------------------------------------------------- */
 int main(int argc, char *argv[]) {
     cl::ParseCommandLineOptions(argc, argv, "UCD Compiler\n");
+    if (PropertyFilename.empty()) {
+        PropertyFilename = "PropertyInstall.h";
+    }
+    if (ObjectFilename.empty()) {
+        ObjectFilename = "ucd.o";
+    }
     Module * module = generateUCDModule();
     compileUCDModule(module);
     return 0;

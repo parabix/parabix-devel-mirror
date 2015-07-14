@@ -106,7 +106,7 @@ class PabloCompiler {
 public:
     PabloCompiler();
     ~PabloCompiler();
-    void InstallExternalFunction(std::string C_fn_name, void * fn_ptr);
+    void InstallExternalFunction(std::string C_fn_name, void * fn_ptr, const size_t carrySize = 0);
     CompiledPabloFunction compile(pablo::PabloFunction & function);
     std::pair<Function *, size_t> compile(pablo::PabloFunction & function, Module *module);
     Module *getModule();
