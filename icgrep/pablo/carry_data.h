@@ -40,7 +40,7 @@ public:
                            addWithCarry({0, 0}),
                            nested({0, 0, 0}),
                            summary({0, 0}),
-                           totalCarryDataBits(0)
+                           scopeCarryDataBits(0)
                            {}
         
     unsigned enumerate(PabloBlock & p);
@@ -89,11 +89,11 @@ public:
     
     unsigned getLocalCarryDataSize () { return nested.frameOffsetinBits / BLOCK_SIZE; }
 
-    unsigned getTotalCarryDataSize () { return totalCarryDataBits / BLOCK_SIZE; }
+    unsigned getScopeCarryDataSize () { return scopeCarryDataBits / BLOCK_SIZE; }
    
-    bool blockHasCarries() const { return totalCarryDataBits > 0;}
+    bool blockHasCarries() const { return scopeCarryDataBits > 0;}
     
-    bool explicitSummaryRequired() const { return totalCarryDataBits > BLOCK_SIZE;}
+    bool explicitSummaryRequired() const { return scopeCarryDataBits > BLOCK_SIZE;}
     
     bool summaryNeededInParentBlock() const {return (ifDepth > 0) && blockHasCarries();}
     
@@ -112,7 +112,7 @@ private:
     struct {unsigned frameOffsetinBits; unsigned entries; unsigned allocatedBits;} nested;
     struct {unsigned frameOffsetinBits; unsigned allocatedBits;} summary;
 
-    unsigned totalCarryDataBits;
+    unsigned scopeCarryDataBits;
     
 };
 

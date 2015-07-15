@@ -24,17 +24,18 @@ unsigned CarryManager::initialize(PabloBlock * pb, Value * carryPtr) {
     
     mCarryDataPtr = carryPtr;
     mCarryInfo = &(pb->carryData);
-    mTotalCarryDataSize = mCarryInfo->enumerate(*pb)/BLOCK_SIZE + 1;   // One extra element for the block no.
-    mBlockNoPtr = mBuilder->CreateBitCast(mBuilder->CreateGEP(mCarryDataPtr, mBuilder->getInt64(mTotalCarryDataSize - 1)), Type::getInt64PtrTy(mBuilder->getContext()));
+    unsigned totalCarryDataBits = mCarryInfo->enumerate(*pb);
+    mTotalCarryDataBitBlocks = (totalCarryDataBits + BLOCK_SIZE - 1)/BLOCK_SIZE + 1; // One extra element for the block no.
+    mBlockNoPtr = mBuilder->CreateBitCast(mBuilder->CreateGEP(mCarryDataPtr, mBuilder->getInt64(mTotalCarryDataBitBlocks - 1)), Type::getInt64PtrTy(mBuilder->getContext()));
     mBlockNo = mBuilder->CreateLoad(mBlockNoPtr);
-    mCarryInVector.resize(mTotalCarryDataSize);
-    mCarryInPhis.resize(mTotalCarryDataSize);
-    mCarryOutAccumPhis.resize(mTotalCarryDataSize);
-    mCarryOutVector.resize(mTotalCarryDataSize);
+    mCarryInVector.resize(mTotalCarryDataBitBlocks);
+    mCarryInPhis.resize(mTotalCarryDataBitBlocks);
+    mCarryOutAccumPhis.resize(mTotalCarryDataBitBlocks);
+    mCarryOutVector.resize(mTotalCarryDataBitBlocks);
     
-    return mTotalCarryDataSize;
+    return mTotalCarryDataBitBlocks;
 }
-
+    
 void CarryManager::generateBlockNoIncrement() {
     mBuilder->CreateStore(mBuilder->CreateAdd(mBlockNo, mBuilder->getInt64(1)), mBlockNoPtr);
 }
@@ -203,7 +204,7 @@ Value * CarryManager::getCarrySummaryExpr() {
     unsigned summary_idx = mCurrentScopeIndex + mCarryInfo->summaryCarryDataIndex();
     Value * packPtr = mBuilder->CreateGEP(mCarryDataPtr, mBuilder->getInt64(summary_idx));
     Value * summary_expr = mBuilder->CreateAlignedLoad(packPtr, BLOCK_SIZE/8);
-    // If the totalCarryDataSize is 1, then the carry summary is also the pack expr.
+    // If the scopeCarryDataSize is 1, then the carry summary is also the pack expr.
     mCarryInVector[summary_idx] = summary_expr;
     return summary_expr;
 }
@@ -224,8 +225,8 @@ void CarryManager::generateCarryOutSummaryCode() {
     
     const unsigned carrySummaryIndex = mCurrentScopeIndex + mCarryInfo->summaryCarryDataIndex();
     
-    if (mCarryInfo->getTotalCarryDataSize() == 1) {
-        // If totalCarryDataSize == 1, then we have one pack which serves as
+    if (mCarryInfo->getScopeCarryDataSize() == 1) {
+        // If scopeCarryDataSize == 1, then we have one pack which serves as
         // the summary.   It should already be stored.   
         return;
     }
@@ -275,9 +276,9 @@ void CarryManager::ensureCarriesLoadedLocal() {
     const PabloBlockCarryData & cd = blk.carryData;
     const unsigned baseCarryDataIdx = cd.getBlockCarryDataIndex();
     const unsigned localCarryDataSize = cd.getLocalCarryDataSize();
-    const unsigned totalCarryDataSize = cd.getTotalCarryDataSize();
-    if (totalCarryDataSize == 0) return;
-    if ((cd.getIfDepth() > 0) && (totalCarryDataSize == 1)) return;
+    const unsigned scopeCarryDataSize = cd.getScopeCarryDataSize();
+    if (scopeCarryDataSize == 0) return;
+    if ((cd.getIfDepth() > 0) && (scopeCarryDataSize == 1)) return;
     if (cd.getWhileDepth() > 0) return;
     for (auto i = baseCarryDataIdx; i < baseCarryDataIdx + localCarryDataSize; ++i) {
         mCarryInVector[i] = mBuilder->CreateAlignedLoad(mBuilder->CreateGEP(mCarryDataPtr, mBuilder->getInt64(i)), BLOCK_SIZE/8, false);
@@ -290,15 +291,15 @@ void CarryManager::ensureCarriesStoredLocal() {
     const PabloBlockCarryData & cd = blk.carryData;
     const unsigned baseCarryDataIdx = cd.getBlockCarryDataIndex();
     const unsigned localCarryDataSize = cd.getLocalCarryDataSize();
-    const unsigned totalCarryDataSize = cd.getTotalCarryDataSize();
+    const unsigned scopeCarryDataSize = cd.getScopeCarryDataSize();
     const unsigned carrySummaryIndex = cd.summaryCarryDataIndex();
-    if (totalCarryDataSize == 0) return;
+    if (scopeCarryDataSize == 0) return;
     if (cd.getWhileDepth() > 0) return;
     for (auto i = baseCarryDataIdx; i < baseCarryDataIdx + localCarryDataSize; ++i) {
         Value * storePtr = mBuilder->CreateGEP(mCarryDataPtr, mBuilder->getInt64(i));
         mBuilder->CreateAlignedStore(mCarryOutVector[i], storePtr, BLOCK_SIZE/8, false);
     }
-    if (totalCarryDataSize > 1) {
+    if (scopeCarryDataSize > 1) {
         Value * summaryPtr = mBuilder->CreateGEP(mCarryDataPtr, mBuilder->getInt64(carrySummaryIndex));
         mBuilder->CreateAlignedStore(mCarryOutVector[carrySummaryIndex], summaryPtr, BLOCK_SIZE/8, false);
     }
@@ -308,9 +309,9 @@ void CarryManager::ensureCarriesStoredLocal() {
 
 
 void CarryManager::ensureCarriesLoadedRecursive() {
-    const unsigned totalCarryDataSize = mCarryInfo->getTotalCarryDataSize();
+    const unsigned scopeCarryDataSize = mCarryInfo->getScopeCarryDataSize();
     if (mCarryInfo->getWhileDepth() == 1) {
-        for (auto i = mCurrentScopeIndex; i < mCurrentScopeIndex + totalCarryDataSize; ++i) {
+        for (auto i = mCurrentScopeIndex; i < mCurrentScopeIndex + scopeCarryDataSize; ++i) {
             mCarryInVector[i] = mBuilder->CreateAlignedLoad(mBuilder->CreateGEP(mCarryDataPtr, mBuilder->getInt64(i)), BLOCK_SIZE/8, false);
         }
     }
@@ -318,8 +319,8 @@ void CarryManager::ensureCarriesLoadedRecursive() {
 
 
 void CarryManager::initializeCarryDataPhisAtWhileEntry(BasicBlock * whileEntryBlock) {
-    const unsigned totalCarryDataSize = mCarryInfo->getTotalCarryDataSize();
-    for (unsigned index = mCurrentScopeIndex; index < mCurrentScopeIndex + totalCarryDataSize; ++index) {
+    const unsigned scopeCarryDataSize = mCarryInfo->getScopeCarryDataSize();
+    for (unsigned index = mCurrentScopeIndex; index < mCurrentScopeIndex + scopeCarryDataSize; ++index) {
 #ifdef SET_WHILE_CARRY_IN_TO_ZERO_AFTER_FIRST_ITERATION
         PHINode * phi_in = mBuilder->CreatePHI(mBitBlockType, 2);
         phi_in->addIncoming(mCarryInVector[index], whileEntryBlock);
@@ -333,8 +334,8 @@ void CarryManager::initializeCarryDataPhisAtWhileEntry(BasicBlock * whileEntryBl
 
 
 void CarryManager::extendCarryDataPhisAtWhileBodyFinalBlock(BasicBlock * whileBodyFinalBlock) {
-    const unsigned totalCarryDataSize = mCarryInfo->getTotalCarryDataSize();
-    for (unsigned index = mCurrentScopeIndex; index < mCurrentScopeIndex + totalCarryDataSize; ++index) {
+    const unsigned scopeCarryDataSize = mCarryInfo->getScopeCarryDataSize();
+    for (unsigned index = mCurrentScopeIndex; index < mCurrentScopeIndex + scopeCarryDataSize; ++index) {
 #ifdef SET_WHILE_CARRY_IN_TO_ZERO_AFTER_FIRST_ITERATION
         mCarryInPhis[index]->addIncoming(mZeroInitializer, whileBodyFinalBlock);
 #endif
@@ -346,9 +347,9 @@ void CarryManager::extendCarryDataPhisAtWhileBodyFinalBlock(BasicBlock * whileBo
 }
 
 void CarryManager::ensureCarriesStoredRecursive() {
-    const unsigned totalCarryDataSize = mCarryInfo->getTotalCarryDataSize();
+    const unsigned scopeCarryDataSize = mCarryInfo->getScopeCarryDataSize();
     if (mCarryInfo->getWhileDepth() == 1) {
-        for (auto i = mCurrentScopeIndex; i < mCurrentScopeIndex + totalCarryDataSize; ++i) {
+        for (auto i = mCurrentScopeIndex; i < mCurrentScopeIndex + scopeCarryDataSize; ++i) {
             Value * storePtr = mBuilder->CreateGEP(mCarryDataPtr, mBuilder->getInt64(i));
             mBuilder->CreateAlignedStore(mCarryOutVector[i], storePtr, BLOCK_SIZE/8, false);
         }

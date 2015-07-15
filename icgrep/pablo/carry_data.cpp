@@ -109,21 +109,21 @@ unsigned PabloBlockCarryData::enumerate(PabloBlock & blk) {
     }
     
     
-    totalCarryDataBits = nestedframePosition;
+    scopeCarryDataBits = nestedframePosition;
     
-    if ((ifDepth > 0) && (totalCarryDataBits > BLOCK_SIZE)) {
+    if ((ifDepth > 0) && (scopeCarryDataBits > BLOCK_SIZE)) {
         // Need extra space for the summary variable, always the last
         // entry within an if block.
-        AlignUpwards(totalCarryDataBits, BLOCK_SIZE);
-        summary.frameOffsetinBits = totalCarryDataBits;
+        AlignUpwards(scopeCarryDataBits, BLOCK_SIZE);
+        summary.frameOffsetinBits = scopeCarryDataBits;
         summary.allocatedBits = BLOCK_SIZE;
-        totalCarryDataBits += BLOCK_SIZE;
+        scopeCarryDataBits += BLOCK_SIZE;
     }
     else {
         summary.frameOffsetinBits = 0;
-        summary.allocatedBits = totalCarryDataBits;
+        summary.allocatedBits = scopeCarryDataBits;
     }
-    return totalCarryDataBits;
+    return scopeCarryDataBits;
 }
 
 }

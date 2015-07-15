@@ -195,12 +195,6 @@ private:
     Ones * const                                        mOnes;
     SymbolGenerator &                                   mSymbolGenerator;
     PabloBlock *                                        mParent;
-    unsigned                                            mCarryVectorIndex;
-    unsigned                                            mPackedCarryDataIndex;
-    unsigned                                            mLocalCarryCount;
-    unsigned                                            mLocalAdvanceCount;
-    unsigned                                            mTotalCarryVectorSize;
-    unsigned                                            mTotalCarryDataSize;
 };
 
 }

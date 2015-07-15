@@ -44,7 +44,7 @@ public:
     , mCarryDataPtr(nullptr)
     , mBlockNoPtr(nullptr)
     , mBlockNo(nullptr)
-    , mTotalCarryDataSize(0)
+    , mTotalCarryDataBitBlocks(0)
     {
 
     }
@@ -111,7 +111,7 @@ private:
     Value * mCarryDataPtr;
     Value * mBlockNoPtr;
     Value * mBlockNo;
-    unsigned mTotalCarryDataSize;
+    unsigned mTotalCarryDataBitBlocks;
 
     std::vector<Value *> mCarryInVector;
     std::vector<PHINode *> mCarryInPhis;  
