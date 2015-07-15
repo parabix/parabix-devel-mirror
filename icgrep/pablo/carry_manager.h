@@ -9,6 +9,7 @@
 #include <llvm/IR/IRBuilder.h>
 #include <llvm/IR/Module.h>
 #include <IDISA/idisa_builder.h>
+#include <codegenstate.h>
 
 /* 
  * Carry Data Manager.
@@ -35,7 +36,16 @@ public:
     , mBitBlockType(bitBlockType)
     , mZeroInitializer(zero)
     , mOneInitializer(one)
-    , iBuilder(idb) {
+    , iBuilder(idb)
+    , mPabloRoot(nullptr)
+    , mCurrentScope(nullptr)
+    , mCarryInfo(nullptr)
+    , mCurrentScopeIndex(0)
+    , mCarryDataPtr(nullptr)
+    , mBlockNoPtr(nullptr)
+    , mBlockNo(nullptr)
+    , mTotalCarryDataSize(0)
+    {
 
     }
     
@@ -45,41 +55,47 @@ public:
     
     Value * getBlockNoPtr();
     
+    /* Entering and leaving scopes. */
+    
+    void enterScope(PabloBlock * blk);
+
+    void leaveScope();
+    
     /* Methods for processing individual carry-generating operations. */
     
-    Value * getCarryOpCarryIn(PabloBlock * blk, int localIndex);
+    Value * getCarryOpCarryIn(int localIndex);
 
-    void setCarryOpCarryOut(PabloBlock * blk, unsigned idx, Value * carry_out);
+    void setCarryOpCarryOut(unsigned idx, Value * carry_out);
 
-    Value * advanceCarryInCarryOut(PabloBlock * blk, int localIndex, int shift_amount, Value * strm);
+    Value * advanceCarryInCarryOut(int localIndex, int shift_amount, Value * strm);
  
     /* Methods for getting and setting carry summary values for If statements */
    
-    bool blockHasCarries(PabloBlock & blk);
+    bool blockHasCarries();
     
-    Value * getCarrySummaryExpr(PabloBlock & blk);
+    Value * getCarrySummaryExpr();
     
-    void generateCarryOutSummaryCode(PabloBlock & blk);
+    void generateCarryOutSummaryCode();
     
-    bool summaryNeededInParentBlock(PabloBlock & blk);
+    bool summaryNeededInParentBlock();
     
-    void addSummaryPhi(PabloBlock & blk, BasicBlock * ifEntryBlock, BasicBlock * ifBodyFinalBlock);
+    void addSummaryPhi(BasicBlock * ifEntryBlock, BasicBlock * ifBodyFinalBlock);
     
     /* Methods for load/store of carries for non-while blocks. */
     
-    void ensureCarriesLoadedLocal(PabloBlock & blk);
+    void ensureCarriesLoadedLocal();
 
-    void ensureCarriesStoredLocal(PabloBlock & blk);
+    void ensureCarriesStoredLocal();
     
     /* Methods for handling while statements */
     
-    void ensureCarriesLoadedRecursive(PabloBlock & whileBlk);
+    void ensureCarriesLoadedRecursive();
 
-    void initializeCarryDataPhisAtWhileEntry(PabloBlock & whileBlk, BasicBlock * whileBodyFinalBlock);
+    void initializeCarryDataPhisAtWhileEntry(BasicBlock * whileBodyFinalBlock);
 
-    void extendCarryDataPhisAtWhileBodyFinalBlock(PabloBlock & whileBlk, BasicBlock * whileBodyFinalBlock);
+    void extendCarryDataPhisAtWhileBodyFinalBlock(BasicBlock * whileBodyFinalBlock);
 
-    void ensureCarriesStoredRecursive(PabloBlock & whileBlk);
+    void ensureCarriesStoredRecursive();
 
     
 private:
@@ -89,6 +105,9 @@ private:
     Constant * mOneInitializer;
     IDISA::IDISA_Builder * iBuilder;
     PabloBlock * mPabloRoot;
+    PabloBlock * mCurrentScope;
+    PabloBlockCarryData * mCarryInfo;
+    unsigned mCurrentScopeIndex;
     Value * mCarryDataPtr;
     Value * mBlockNoPtr;
     Value * mBlockNo;
@@ -99,9 +118,9 @@ private:
     std::vector<PHINode *> mCarryOutAccumPhis;  
     std::vector<Value *> mCarryOutVector;
 
-    Value * unitAdvanceCarryInCarryOut(PabloBlock * blk, int localIndex, Value * strm);
-    Value * shortAdvanceCarryInCarryOut(PabloBlock * blk, int localIndex, int shift_amount, Value * strm);
-    Value * longAdvanceCarryInCarryOut(PabloBlock * blk, int localIndex, int shift_amount, Value * strm);
+    Value * unitAdvanceCarryInCarryOut(int localIndex, Value * strm);
+    Value * shortAdvanceCarryInCarryOut(int localIndex, int shift_amount, Value * strm);
+    Value * longAdvanceCarryInCarryOut(int localIndex, int shift_amount, Value * strm);
     
 };
 

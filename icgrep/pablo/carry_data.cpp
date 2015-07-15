@@ -13,95 +13,117 @@
 
 namespace pablo {
   
+    
+const unsigned bitsPerPack = 64;
+
+
+void AlignUpwards(unsigned & toAlign, unsigned alignment) {
+    if ((toAlign & (alignment - 1)) != 0) {
+        toAlign = (toAlign + alignment) & (alignment - 1);
+    }
+}
+
+void EnsurePackHasSpace(unsigned & packedTotalBits, unsigned addedBits) {
+    unsigned bitsInCurrentPack = packedTotalBits % bitsPerPack;
+    if (bitsInCurrentPack + addedBits > bitsPerPack) {
+        AlignUpwards(packedTotalBits, bitsPerPack);
+    }
+}
+    
+    
 unsigned PabloBlockCarryData::enumerate(PabloBlock & blk) {
     for (Statement * stmt : blk) {
         if (Advance * adv = dyn_cast<Advance>(stmt)) {
             unsigned shift_amount = adv->getAdvanceAmount();
             if (shift_amount == 1) {
-                adv->setLocalAdvanceIndex(unitAdvances);
-                unitAdvances++;                
+                adv->setLocalAdvanceIndex(advance1.entries);
+                advance1.entries++;                
             }
             else if (shift_amount < LongAdvanceBase) {
-                //EnsurePackHasSpace(shortAdvanceTotal, shift_amount);
-                //adv->setLocalAdvanceIndex(shortAdvanceTotal);
-                adv->setLocalAdvanceIndex(shortAdvances);
-                shortAdvances++;
-                shortAdvanceTotal += shift_amount;
+#ifdef PACKING
+                EnsurePackHasSpace(shortAdvance.allocatedBits, shift_amount);
+                adv->setLocalAdvanceIndex(shortAdvance.allocatedBits);
+#else
+                adv->setLocalAdvanceIndex(shortAdvance.entries);
+#endif
+                shortAdvance.entries++;
+                shortAdvance.allocatedBits += shift_amount;
             }
             else {
-                adv->setLocalAdvanceIndex(longAdvanceTotalBlocks);
-                longAdvances++;
-                longAdvanceTotalBlocks += longAdvanceBufferSize(shift_amount);
+                adv->setLocalAdvanceIndex(longAdvance.allocatedBitBlocks);
+                longAdvance.entries++;
+                longAdvance.allocatedBitBlocks += longAdvanceBufferSize(shift_amount);
             }
         }
         else if (MatchStar * m = dyn_cast<MatchStar>(stmt)) {
-            m->setLocalCarryIndex(localCarries);
-            ++localCarries;
+            m->setLocalCarryIndex(addWithCarry.entries);
+            ++addWithCarry.entries;
         }
         else if (ScanThru * s = dyn_cast<ScanThru>(stmt)) {
-            s->setLocalCarryIndex(localCarries);
-            ++localCarries;
+            s->setLocalCarryIndex(addWithCarry.entries);
+            ++addWithCarry.entries;
         }
     }
-    unsigned localCarryDataIndex = localCarries + unitAdvances + shortAdvances + longAdvanceTotalBlocks;
-    localCarryDataSize = localCarryDataIndex;
-    /*
-    totalCarryDataSize = longAdvanceTotalBlocks * BLOCK_SIZE; 
-    totalCarryDataSize += shortAdvanceTotal;
-    EnsurePackHasSpace(totalCarryDataSize, localCarries);
-    totalCarryDataSize += localCarries;
-    EnsurePackHasSpace(totalCarryDataSize, unitAdvances);
-    totalCarryDataSize += unitAdvances;
-     */
+    longAdvance.frameOffsetinBits = 0;
+#ifdef PACKING
+    shortAdvance.frameOffsetinBits = longAdvance.frameOffsetinBits + longAdvance.allocatedBitBlocks * BLOCK_SIZE;
+    addWithCarry.frameOffsetinBits = shortAdvance.frameOffsetinBits + shortAdvance.allocatedBits;
+    EnsurePackHasSpace(addWithCarry.frameOffsetinBits, addWithCarry.entries);
+    advance1.frameOffsetinBits = addWithCarry.frameOffsetinBits + addWithCarry.entries;
+    EnsurePackHasSpace(advance1.frameOffsetinBits, advance1.entries);
+    nested.frameOffsetinBits = advance1.frameOffsetinBits + advance1.entries;
+#else
+    addWithCarry.frameOffsetinBits = longAdvance.frameOffsetinBits + longAdvance.allocatedBitBlocks * BLOCK_SIZE;
+    advance1.frameOffsetinBits = addWithCarry.frameOffsetinBits + addWithCarry.entries * BLOCK_SIZE;
+    shortAdvance.frameOffsetinBits = advance1.frameOffsetinBits + advance1.entries * BLOCK_SIZE;
+    nested.frameOffsetinBits = shortAdvance.frameOffsetinBits + shortAdvance.entries * BLOCK_SIZE;
+#endif
+    unsigned nestedframePosition = nested.frameOffsetinBits;
     
     for (Statement * stmt : blk) {
         if (If * ifStatement = dyn_cast<If>(stmt)) {
             PabloBlockCarryData & nestedBlockData = ifStatement->getBody().carryData;
-            nestedBlockData.setIfDepth(ifDepth + 1);
-            nestedBlockData.setBlockCarryDataIndex(blockCarryDataIndex + localCarryDataIndex);
-            const unsigned ifCarryDataSize = nestedBlockData.enumerate(ifStatement->getBody());
-            nestedBlockCount++;
-            //EnsurePackHasSpace(totalCarryDataSize, ifCarryDataSize);
-            nestedCarryDataSize += ifCarryDataSize;
-            localCarryDataIndex += ifCarryDataSize;            
+            nestedBlockData.ifDepth = ifDepth + 1;
+            const unsigned ifCarryDataBits = nestedBlockData.enumerate(ifStatement->getBody());
+#ifdef PACKING
+            EnsurePackHasSpace(nestedframePosition, ifCarryDataBits);
+#endif
+            nestedBlockData.framePosition = nestedframePosition;
+            nestedframePosition += ifCarryDataBits;
+            if (maxNestingDepth <= nestedBlockData.maxNestingDepth) maxNestingDepth = nestedBlockData.maxNestingDepth + 1;
+            nested.entries++;
         }
         else if (While * whileStatement = dyn_cast<While>(stmt)) {
             PabloBlockCarryData & nestedBlockData = whileStatement->getBody().carryData;
-            nestedBlockData.setWhileDepth(whileDepth + 1);
-            nestedBlockData.setBlockCarryDataIndex(blockCarryDataIndex + localCarryDataIndex);
-            unsigned whileCarryDataSize = nestedBlockData.enumerate(whileStatement->getBody());
-            //if (whileStatement->isMultiCarry()) whileCarryDataSize *= whileStatement->getMaxIterations();
-            nestedBlockCount++;
-            //EnsurePackHasSpace(totalCarryDataSize, whileCarryDataSize);
-            nestedCarryDataSize += whileCarryDataSize;
-            localCarryDataIndex += whileCarryDataSize;
+            nestedBlockData.whileDepth = whileDepth + 1;
+            unsigned whileCarryDataBits = nestedBlockData.enumerate(whileStatement->getBody());
+            //if (whileStatement->isMultiCarry()) whileCarryDataBits *= whileStatement->getMaxIterations();
+#ifdef PACKING
+            EnsurePackHasSpace(nestedframePosition, whileCarryDataBits);
+#endif
+            nestedBlockData.framePosition = nestedframePosition;
+            nestedframePosition += whileCarryDataBits;
+            if (maxNestingDepth <= nestedBlockData.maxNestingDepth) maxNestingDepth = nestedBlockData.maxNestingDepth + 1;
+            nested.entries++;
         }
     }
-    totalCarryDataSize = localCarryDataIndex;
-    if ((ifDepth > 0) && (totalCarryDataSize > 1)) {
+    
+    
+    totalCarryDataBits = nestedframePosition;
+    
+    if ((ifDepth > 0) && (totalCarryDataBits > BLOCK_SIZE)) {
         // Need extra space for the summary variable, always the last
         // entry within an if block.
-        totalCarryDataSize += 1;
+        AlignUpwards(totalCarryDataBits, BLOCK_SIZE);
+        summary.frameOffsetinBits = totalCarryDataBits;
+        summary.allocatedBits = BLOCK_SIZE;
+        totalCarryDataBits += BLOCK_SIZE;
     }
-    longAdvanceOffset = 0;
-    /*
-    if (totalCarryDataSize > CarryPackSize) {
-        // Need extra space for the summary variable, always the first
-        // entry within an if block.
-        totalCarryDataSize += BLOCK_SIZE;
-        longAdvanceOffset = BLOCK_SIZE;
+    else {
+        summary.frameOffsetinBits = 0;
+        summary.allocatedBits = totalCarryDataBits;
     }
-     */
-    carryOffset = longAdvanceOffset + longAdvanceTotalBlocks;
-    unitAdvanceOffset = carryOffset + localCarries;
-    shortAdvanceOffset = unitAdvanceOffset + unitAdvances;
-
-//     std::cerr << "blockCarryDataIndex = " << blockCarryDataIndex << " nestedBlockCount = " << nestedBlockCount << std::endl;
-//     std::cerr << "longAdvanceOffset = " << longAdvanceOffset << " carryOffset = " << carryOffset << std::endl;
-//     std::cerr << "unitAdvanceOffset = " << unitAdvanceOffset << " shortAdvanceOffset = " << shortAdvanceOffset << std::endl;
-//     std::cerr << "ifDepth = " << ifDepth << " whileDepth = " << whileDepth << std::endl;
-//     std::cerr << "totalCarryDataSize = " << totalCarryDataSize << std::endl;
-    return totalCarryDataSize;
+    return totalCarryDataBits;
 }
 
 }

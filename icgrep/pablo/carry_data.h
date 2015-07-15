@@ -32,28 +32,21 @@ class PabloBlock;
 
 class PabloBlockCarryData {
 public:
-    PabloBlockCarryData(): blockCarryDataIndex(0),
-                           ifDepth(0), whileDepth (0),
-                           localCarries(0), unitAdvances(0),
-                           shortAdvances(0), shortAdvanceTotal(0),
-                           longAdvances(0), longAdvanceTotalBlocks(0),
-                           nestedBlockCount(0), nestedCarryDataSize(0),
-                           localCarryDataSize(0), totalCarryDataSize(0), 
-                           carryOffset(0), unitAdvanceOffset(0),
-                           shortAdvanceOffset(0), longAdvanceOffset(0)
+    PabloBlockCarryData(): framePosition(0), 
+                           ifDepth(0), whileDepth (0), maxNestingDepth(0),
+                           longAdvance({0, 0, 0}),
+                           shortAdvance({0, 0, 0}),
+                           advance1({0, 0}),
+                           addWithCarry({0, 0}),
+                           nested({0, 0, 0}),
+                           summary({0, 0}),
+                           totalCarryDataBits(0)
                            {}
-    
-    
-    void setBlockCarryDataIndex (unsigned idx) {blockCarryDataIndex = idx;}
-    
-    void setIfDepth (unsigned depth) {ifDepth = depth;}
-    
-    void setWhileDepth (unsigned depth) {whileDepth = depth;}
-    
+        
     unsigned enumerate(PabloBlock & p);
     
     unsigned getBlockCarryDataIndex()  const {
-        return blockCarryDataIndex;
+        return framePosition/BLOCK_SIZE;
     }
     
     unsigned getIfDepth()  const {
@@ -63,9 +56,9 @@ public:
     unsigned getWhileDepth()  const {
         return whileDepth;
     }
-    
+        
     unsigned longAdvanceCarryDataOffset(unsigned advanceIndex)  const {
-        return blockCarryDataIndex + longAdvanceOffset + advanceIndex;
+        return longAdvance.frameOffsetinBits / BLOCK_SIZE + advanceIndex;
     }
     
     unsigned longAdvanceEntries(unsigned shift_amount) const {
@@ -76,56 +69,50 @@ public:
         return power2ceil(longAdvanceEntries(shift_amount));
     }
     
-    bool blockHasLongAdvances() const { return longAdvances > 0;}
+    bool blockHasLongAdvances() const { return longAdvance.entries > 0;}
     
     unsigned shortAdvanceCarryDataOffset(unsigned advanceIndex)  const {
-        return blockCarryDataIndex + shortAdvanceOffset + advanceIndex;
+        return shortAdvance.frameOffsetinBits / BLOCK_SIZE + advanceIndex;
     }
     
     unsigned unitAdvanceCarryDataOffset(unsigned advanceIndex)  const {
-        return blockCarryDataIndex + unitAdvanceOffset + advanceIndex;
+        return advance1.frameOffsetinBits / BLOCK_SIZE + advanceIndex;
     }
     
     unsigned carryOpCarryDataOffset(unsigned idx)  const {
-        return blockCarryDataIndex + carryOffset + idx;
+        return addWithCarry.frameOffsetinBits / BLOCK_SIZE + idx;
     }
     
-    bool blockHasCarries() const { return totalCarryDataSize > 0;}
+    unsigned summaryCarryDataIndex()  const {
+        return summary.frameOffsetinBits / BLOCK_SIZE;
+    }
     
-    bool explicitSummaryRequired() const { return totalCarryDataSize > 1;}
+    unsigned getLocalCarryDataSize () { return nested.frameOffsetinBits / BLOCK_SIZE; }
+
+    unsigned getTotalCarryDataSize () { return totalCarryDataBits / BLOCK_SIZE; }
+   
+    bool blockHasCarries() const { return totalCarryDataBits > 0;}
+    
+    bool explicitSummaryRequired() const { return totalCarryDataBits > BLOCK_SIZE;}
     
     bool summaryNeededInParentBlock() const {return (ifDepth > 0) && blockHasCarries();}
     
-    unsigned summaryCarryDataIndex()  const {
-        return blockCarryDataIndex + totalCarryDataSize - 1;
-    }
-    
-    unsigned getLocalCarryDataSize()  const {
-        return localCarryDataSize;
-    }
-    
-    unsigned getTotalCarryDataSize()  const {
-        return totalCarryDataSize;
-    }
-    
 private:
-    unsigned blockCarryDataIndex;
+    
+    unsigned framePosition;
+    
     unsigned ifDepth;
     unsigned whileDepth;
-    unsigned localCarries;
-    unsigned unitAdvances;
-    unsigned shortAdvances;
-    unsigned shortAdvanceTotal;
-    unsigned longAdvances;
-    unsigned longAdvanceTotalBlocks;
-    unsigned nestedBlockCount;
-    unsigned nestedCarryDataSize;
-    unsigned localCarryDataSize;
-    unsigned totalCarryDataSize;
-    unsigned carryOffset;
-    unsigned unitAdvanceOffset;
-    unsigned shortAdvanceOffset;
-    unsigned longAdvanceOffset;
+    unsigned maxNestingDepth;    
+    
+    struct {unsigned frameOffsetinBits; unsigned entries; unsigned allocatedBitBlocks;} longAdvance;
+    struct {unsigned frameOffsetinBits; unsigned entries; unsigned allocatedBits;} shortAdvance;
+    struct {unsigned frameOffsetinBits; unsigned entries;} advance1;
+    struct {unsigned frameOffsetinBits; unsigned entries;} addWithCarry;
+    struct {unsigned frameOffsetinBits; unsigned entries; unsigned allocatedBits;} nested;
+    struct {unsigned frameOffsetinBits; unsigned allocatedBits;} summary;
+
+    unsigned totalCarryDataBits;
     
 };
 

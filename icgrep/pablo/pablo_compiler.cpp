@@ -384,13 +384,11 @@ void PabloCompiler::DeclareCallFunctions(PabloFunction & function, ExecutionEngi
 }
 
 void PabloCompiler::compileBlock(PabloBlock & block) {
-    mCarryManager->ensureCarriesLoadedLocal(block);
     mPabloBlock = & block;
     for (const Statement * statement : block) {
         compileStatement(statement);
     }
     mPabloBlock = block.getParent();
-    mCarryManager->ensureCarriesStoredLocal(block);
 }
 
 Value * PabloCompiler::genBitTest2(Value * e1, Value * e2) {
@@ -440,9 +438,11 @@ void PabloCompiler::compileIf(const If * ifStatement) {
     PabloBlock & ifBody = ifStatement -> getBody();
     
     Value * if_test_value = compileExpression(ifStatement->getCondition());
-    if (mCarryManager->blockHasCarries(ifBody)) {
+    
+    mCarryManager->enterScope(&ifBody);
+    if (mCarryManager->blockHasCarries()) {
         // load the summary variable
-        Value* last_if_pending_data = mCarryManager->getCarrySummaryExpr(ifBody);
+        Value* last_if_pending_data = mCarryManager->getCarrySummaryExpr();
         mBuilder->CreateCondBr(genBitTest2(if_test_value, last_if_pending_data), ifBodyBlock, ifEndBlock);
 
     }
@@ -452,11 +452,12 @@ void PabloCompiler::compileIf(const If * ifStatement) {
     // Entry processing is complete, now handle the body of the if.
     mBuilder->SetInsertPoint(ifBodyBlock);
     
+    
     ++mIfDepth;
     compileBlock(ifBody);
     --mIfDepth;
-    if (mCarryManager->blockHasCarries(ifBody)) {
-        mCarryManager->generateCarryOutSummaryCode(ifBody);
+    if (mCarryManager->blockHasCarries()) {
+        mCarryManager->generateCarryOutSummaryCode();
     }
     BasicBlock * ifBodyFinalBlock = mBuilder->GetInsertBlock();
     mBuilder->CreateBr(ifEndBlock);
@@ -472,9 +473,10 @@ void PabloCompiler::compileIf(const If * ifStatement) {
         mMarkerMap[assign] = phi;
     }
     // Create the phi Node for the summary variable, if needed.
-    if (mCarryManager->summaryNeededInParentBlock(ifBody)) {
-        mCarryManager->addSummaryPhi(ifBody, ifEntryBlock, ifBodyFinalBlock);
+    if (mCarryManager->summaryNeededInParentBlock()) {
+        mCarryManager->addSummaryPhi(ifEntryBlock, ifBodyFinalBlock);
     }
+    mCarryManager->leaveScope();
 }
 
 void PabloCompiler::compileWhile(const While * whileStatement) {
@@ -485,7 +487,8 @@ void PabloCompiler::compileWhile(const While * whileStatement) {
     BasicBlock * whileBodyBlock = BasicBlock::Create(mMod->getContext(), "while.body", mFunction, 0);
     BasicBlock * whileEndBlock = BasicBlock::Create(mMod->getContext(), "while.end", mFunction, 0);
 
-    mCarryManager->ensureCarriesLoadedRecursive(whileBody);
+    mCarryManager->enterScope(&whileBody);
+    mCarryManager->ensureCarriesLoadedRecursive();
 
     const auto & nextNodes = whileStatement->getVariants();
     std::vector<PHINode *> nextPhis;
@@ -504,7 +507,7 @@ void PabloCompiler::compileWhile(const While * whileStatement) {
     // (2) Carry-out accumulators: (a) zero first iteration, (b) |= carry-out of each iteration
     // (3) Next nodes: (a) values set up before loop, (b) modified values calculated in loop.
 
-    mCarryManager->initializeCarryDataPhisAtWhileEntry(whileBody, whileEntryBlock);
+    mCarryManager->initializeCarryDataPhisAtWhileEntry(whileEntryBlock);
 
     // for any Next nodes in the loop body, initialize to (a) pre-loop value.
     for (const Next * n : nextNodes) {
@@ -524,7 +527,7 @@ void PabloCompiler::compileWhile(const While * whileStatement) {
 
     BasicBlock * whileBodyFinalBlock = mBuilder->GetInsertBlock();
 
-    mCarryManager->extendCarryDataPhisAtWhileBodyFinalBlock(whileBody, whileBodyFinalBlock);
+    mCarryManager->extendCarryDataPhisAtWhileBodyFinalBlock(whileBodyFinalBlock);
 
     // Terminate the while loop body with a conditional branch back.
     mBuilder->CreateCondBr(iBuilder.bitblock_any(compileExpression(whileStatement->getCondition())), whileBodyBlock, whileEndBlock);
@@ -542,7 +545,8 @@ void PabloCompiler::compileWhile(const While * whileStatement) {
     mBuilder->SetInsertPoint(whileEndBlock);
     --mWhileDepth;
 
-    mCarryManager->ensureCarriesStoredRecursive(whileBody);
+    mCarryManager->ensureCarriesStoredRecursive();
+    mCarryManager->leaveScope();
 }
 
 
@@ -598,7 +602,7 @@ void PabloCompiler::compileStatement(const Statement * stmt) {
         Value* strm_value = compileExpression(adv->getExpr());
         int shift = adv->getAdvanceAmount();
         unsigned advance_index = adv->getLocalAdvanceIndex();
-        expr = mCarryManager->advanceCarryInCarryOut(mPabloBlock, advance_index, shift, strm_value);
+        expr = mCarryManager->advanceCarryInCarryOut(advance_index, shift, strm_value);
     }
     else if (const MatchStar * mstar = dyn_cast<MatchStar>(stmt)) {
         Value * marker = compileExpression(mstar->getMarker());
@@ -698,7 +702,7 @@ PabloCompiler::SumWithOverflowPack PabloCompiler::callUaddOverflow(Value* int128
 
 
 Value* PabloCompiler::genAddWithCarry(Value* e1, Value* e2, unsigned localIndex) {
-    Value * carryq_value = mCarryManager->getCarryOpCarryIn(mPabloBlock, localIndex);
+    Value * carryq_value = mCarryManager->getCarryOpCarryIn(localIndex);
 #ifdef USE_TWO_UADD_OVERFLOW
     //This is the ideal implementation, which uses two uadd.with.overflow
     //The back end should be able to recognize this pattern and combine it into uadd.with.overflow.carryin
@@ -755,7 +759,7 @@ Value* PabloCompiler::genAddWithCarry(Value* e1, Value* e2, unsigned localIndex)
     static_assert(false, "Add with carry for 256-bit bitblock requires USE_UADD_OVERFLOW");
 #endif //USE_TWO_UADD_OVERFLOW
 
-    mCarryManager->setCarryOpCarryOut(mPabloBlock, localIndex, carry_out);
+    mCarryManager->setCarryOpCarryOut(localIndex, carry_out);
     return sum;
 }
 
