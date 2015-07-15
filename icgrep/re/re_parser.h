@@ -7,17 +7,18 @@
 #ifndef RE_PARSER_H
 #define RE_PARSER_H
 
-#include "re_re.h"
-#include "re_any.h"
-#include "re_name.h"
-
+#include <re/re_re.h>
+#include <re/re_any.h>
+#include <re/re_name.h>
+#include <UCD/resolve_properties.h>
 #include <string>
 #include <list>
 #include <memory>
 #include <map>
 
+
 namespace re {
-	
+
 enum CharsetOperatorKind
 	{intersectOp, setDiffOp, ampChar, hyphenChar, rangeHyphen, posixPropertyOpener, setOpener, setCloser, backSlash, emptyOperator};
 
@@ -36,6 +37,9 @@ typedef unsigned ModeFlagSet;
 class RE_Parser
 {
 public:
+
+    friend Name * UCD::resolveProperty(const std::string, RE_Parser *);
+    friend Name * UCD::resolveProperty(const std::string, const std::string, RE_Parser *);
 
     static RE * parse(const std::string &input_string, ModeFlagSet initialFlags);
 
@@ -74,15 +78,15 @@ private:
     Name * parsePropertyExpression();
 	
     RE * makeComplement(RE * s);
-    RE * makeWordBoundary ();
-    RE * makeWordNonBoundary ();
+    RE * makeWordBoundary();
+    RE * makeWordNonBoundary();
     Name * makeDigitSet();
     Name * makeAlphaNumeric();
     Name * makeWhitespaceSet();
     Name * makeWordSet();
-    Name * resolvePropertyExpression(std::string nameValue);
 
-    Name * resolvePropertyExpression(std::string namespaceValue, std::string nameValue);
+    Name * createName(const std::string value);
+    Name * createName(const std::string prop, const std::string value);
 
 	CharsetOperatorKind getCharsetOperator();
 

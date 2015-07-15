@@ -15,6 +15,7 @@
 #include <re/re_intersect.h>
 #include <re/re_assertion.h>
 #include <re/parsefailure.h>
+#include <UCD/resolve_properties.h>
 #include <UCD/CaseFolding_txt.h>
 #include <sstream>
 #include <algorithm>
@@ -485,12 +486,12 @@ Name * RE_Parser::parsePropertyExpression() {
             _cursor++;
         }
         // We have a property-name = value expression
-        return resolvePropertyExpression(canonicalize(start, prop_end), canonicalize(val_start, _cursor));
+        return createName(canonicalize(start, prop_end), canonicalize(val_start, _cursor));
     }
-    return resolvePropertyExpression(canonicalize(start, _cursor));
+    return createName(canonicalize(start, _cursor));
 }
 
-Name * RE_Parser::resolvePropertyExpression(std::string value) {
+Name * RE_Parser::createName(const std::string value) {
 
     auto key = std::make_pair("", value);
     auto f = mNameMap.find(key);
@@ -498,74 +499,25 @@ Name * RE_Parser::resolvePropertyExpression(std::string value) {
         return f->second;
     }
 
-    Name * property = makeName(value, Name::Type::UnicodeProperty);
+    Name * property = UCD::resolveProperty(value, this);
 
-    // Try special cases of Unicode TR #18
-    if (value == "any") {
-        property->setDefinition(makeAny());
-    }
-    else if (value == "ascii") {
-        property->setDefinition(resolvePropertyExpression("blk", "ascii"));
-    }
-    else if (value == "assigned") {
-        Name * unassigned = resolvePropertyExpression("cn");
-        property->setDefinition(makeDiff(makeAny(), unassigned));
-    }
-    // Now compatibility properties of UTR #18 Annex C
-    else if (value == "xdigit") {
-        Name * digit = resolvePropertyExpression("nd");
-        Name * hexdigit = resolvePropertyExpression("hexdigit");
-        property->setDefinition(makeAlt({digit, hexdigit}));
-    }
-    else if (value == "alnum") {
-        Name * digit = resolvePropertyExpression("nd");
-        Name * alpha = resolvePropertyExpression("alphabetic");
-        property->setDefinition(makeAlt({digit, alpha}));
-    }
-    else if (value == "blank") {
-        Name * space_sep = resolvePropertyExpression("space_separator");
-        CC * tab = makeCC(0x09);
-        property->setDefinition(makeAlt({space_sep, tab}));
-    }
-    else if (value == "graph") {
-        Name * space = resolvePropertyExpression("space");
-        Name * ctrl = resolvePropertyExpression("control");
-        Name * surr = resolvePropertyExpression("surrogate");
-        Name * unassigned = resolvePropertyExpression("cn");
-        property->setDefinition(makeDiff(makeAny(), makeAlt({space, ctrl, surr, unassigned})));
-    }
-    else if (value == "print") {
-        Name * graph = resolvePropertyExpression("graph");
-        Name * space_sep = resolvePropertyExpression("space_separator");
-        property->setDefinition(makeAlt({graph, space_sep}));
-    }
-    else if (value == "word") {
-        Name * alnum = resolvePropertyExpression("alnum");
-        Name * mark = resolvePropertyExpression("mark");
-        Name * conn = resolvePropertyExpression("connectorpunctuation");
-        Name * join = resolvePropertyExpression("joincontrol");
-        property->setDefinition(makeAlt({alnum, mark, conn, join}));
-    }
-
-    mNameMap.emplace(std::move(key), property);
+    mNameMap.insert(std::make_pair(std::move(key), property));
 
     return property;
 }
 
-Name * RE_Parser::resolvePropertyExpression(std::string namespaceValue, std::string nameValue) {
+Name * RE_Parser::createName(const std::string prop, const std::string value) {
 
-    auto key = std::make_pair(namespaceValue, nameValue);
+    auto key = std::make_pair(prop, value);
 
     auto f = mNameMap.find(key);
     if (f != mNameMap.end()) {
         return f->second;
     }
 
+    Name * property = UCD::resolveProperty(prop, value, this);
 
-
-    Name * property = makeName(namespaceValue, nameValue, Name::Type::UnicodeProperty);
-
-    mNameMap.emplace(std::move(key), property);
+    mNameMap.insert(std::make_pair(std::move(key), property));
 
     return property;
 }
@@ -968,19 +920,19 @@ RE * RE_Parser::makeWordNonBoundary () {
 }
 
 inline Name * RE_Parser::makeDigitSet() {
-    return resolvePropertyExpression("nd");
+    return createName("nd");
 }
 
 inline Name * RE_Parser::makeAlphaNumeric() {
-    return resolvePropertyExpression("alnum");
+    return createName("alnum");
 }
 
 inline Name * RE_Parser::makeWhitespaceSet() {
-    return resolvePropertyExpression("whitespace");
+    return createName("whitespace");
 }
 
 inline Name * RE_Parser::makeWordSet() {
-    return resolvePropertyExpression("word");
+    return createName("word");
 }
 
 }

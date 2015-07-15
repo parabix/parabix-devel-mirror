@@ -46,22 +46,12 @@ RE * CC_NameMap::process(RE * re, const CC_type type) {
             }
         }
         else {
-
             std::string classname = name->getName();
             auto f = mNameMap.find(classname);
             if (f != mNameMap.end()) {
                 return f->second;
-            }
-            insert(std::move(classname), name);
-            if (name->getType() == Name::Type::UnicodeProperty) {
-                resolveProperty(name);
-                RE * def = name->getDefinition();
-                if (def) {
-                    name->setDefinition(process(def, CC_type::UnicodeClass));
-                }
-            }
-
-            return name;
+            }            
+            return insert(std::move(classname), name);
         }
     }
     else if (CC * cc = dyn_cast<CC>(re)) {

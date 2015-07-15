@@ -278,7 +278,7 @@ PabloAST * RE_Compiler::getNamedCharacterClassStream(Name * name, PabloBuilder &
             var = mPB.createCall(name->getFunctionName());
         }
         else {
-            var = mUCDCompiler.generateWithDefaultIfHierarchy(resolveUnicodeSet(name), pb);
+            var = mUCDCompiler.generateWithDefaultIfHierarchy(UCD::resolveUnicodeSet(name), pb);
         }
     }
     else {
