@@ -40,30 +40,37 @@ RE * CC_NameMap::process(RE * re, const CC_type type) {
     }
     else if (Name * name = dyn_cast<Name>(re)) {
         RE * def = name->getDefinition();
-        if (def && !isa<CC>(def)) {
-            name->setDefinition(process(def, type));
+        if (def) {
+            if (!isa<CC>(def)) {
+                name->setDefinition(process(def, type));
+            }
         }
-        std::string classname = name->getName();
-        auto f = mNameMap.find(classname);
-        if (f == mNameMap.end()) {
+        else {
+
+            std::string classname = name->getName();
+            auto f = mNameMap.find(classname);
+            if (f != mNameMap.end()) {
+                return f->second;
+            }
+            insert(std::move(classname), name);
             if (name->getType() == Name::Type::UnicodeProperty) {
                 resolveProperty(name);
                 RE * def = name->getDefinition();
                 if (def) {
-                    name->setDefinition(process(def, type));
+                    name->setDefinition(process(def, CC_type::UnicodeClass));
                 }
             }
-            return insert(std::move(classname), name);
+
+            return name;
         }
-        return f->second;
     }
     else if (CC * cc = dyn_cast<CC>(re)) {
         std::string classname = cc->canonicalName(type);
         auto f = mNameMap.find(classname);
-        if (f == mNameMap.end()) {
-            return insert(std::move(classname), (type == ByteClass) ? makeByteName(classname, cc) : makeName(classname, cc));
+        if (f != mNameMap.end()) {
+            return f->second;
         }
-        return f->second;
+        return insert(std::move(classname), (type == ByteClass) ? makeByteName(classname, cc) : makeName(classname, cc));
     }
     return re;
 }

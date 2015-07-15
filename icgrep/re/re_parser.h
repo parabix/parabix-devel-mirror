@@ -14,6 +14,7 @@
 #include <string>
 #include <list>
 #include <memory>
+#include <map>
 
 namespace re {
 	
@@ -40,6 +41,8 @@ public:
 
 private:
 
+    using NameMap = std::map<std::pair<std::string, std::string>, re::Name *>;
+
     typedef std::string::const_iterator cursor_t;
 
     RE_Parser(const std::string & regular_expression);
@@ -64,12 +67,23 @@ private:
     
     RE * parse_escaped();
 
-    RE * parse_escaped_set();
+    RE * parseEscapedSet();
 
     codepoint_t parse_utf8_codepoint();
 
-    Name * parse_property_expression();
+    Name * parsePropertyExpression();
 	
+    RE * makeComplement(RE * s);
+    RE * makeWordBoundary ();
+    RE * makeWordNonBoundary ();
+    Name * makeDigitSet();
+    Name * makeAlphaNumeric();
+    Name * makeWhitespaceSet();
+    Name * makeWordSet();
+    Name * resolvePropertyExpression(std::string nameValue);
+
+    Name * resolvePropertyExpression(std::string namespaceValue, std::string nameValue);
+
 	CharsetOperatorKind getCharsetOperator();
 
     RE * parse_charset();
@@ -91,11 +105,14 @@ private:
     
     void CC_add_range(CC * cc, codepoint_t lo, codepoint_t hi);
 
+    static std::string canonicalize(const cursor_t begin, const cursor_t end);
+
 private:
 
     cursor_t                    _cursor;
     const cursor_t              _end;
-    ModeFlagSet	fModeFlagSet;
+    ModeFlagSet                 fModeFlagSet;
+    NameMap                     mNameMap;
 };
 
 }

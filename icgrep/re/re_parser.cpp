@@ -16,6 +16,7 @@
 #include <re/re_assertion.h>
 #include <re/parsefailure.h>
 #include <UCD/CaseFolding_txt.h>
+#include <sstream>
 #include <algorithm>
 
 
@@ -365,40 +366,12 @@ inline bool isSetEscapeChar(char c) {
 inline RE * RE_Parser::parse_escaped() {
     throw_incomplete_expression_error_if_end_of_stream();
     if (isSetEscapeChar(*_cursor)) 
-      return parse_escaped_set();
+      return parseEscapedSet();
     else 
       return build_CC(parse_escaped_codepoint());
 }
 
-RE * makeDigitSet() {
-    return makeName("Nd", Name::Type::UnicodeProperty);
-}
-
-RE * makeWhitespaceSet() {
-    return makeName("Whitespace", Name::Type::UnicodeProperty);
-}
-
-RE * makeWordSet() {
-    return makeName("word", Name::Type::UnicodeProperty);
-}
-
-RE * makeComplement(RE * s) {
-  return makeDiff(makeAny(), s);
-}
-
-RE * makeWordBoundary () {
-    RE * wordC = makeWordSet();
-    return makeAlt({makeSeq({makeNegativeLookBehindAssertion(wordC), makeLookAheadAssertion(wordC)}),
-                    makeSeq({makeLookBehindAssertion(wordC), makeNegativeLookAheadAssertion(wordC)})});
-}
-
-RE * makeWordNonBoundary () {
-    RE * wordC = makeWordSet();
-    return makeAlt({makeSeq({makeNegativeLookBehindAssertion(wordC), makeNegativeLookAheadAssertion(wordC)}),
-                    makeSeq({makeLookBehindAssertion(wordC), makeLookAheadAssertion(wordC)})});
-}
-
-RE * RE_Parser::parse_escaped_set() {
+RE * RE_Parser::parseEscapedSet() {
     bool complemented = false;
     RE * s;
     switch (*_cursor) {
@@ -432,11 +405,10 @@ RE * RE_Parser::parse_escaped_set() {
             ++_cursor;
             if (_cursor == _end || *_cursor != '{') throw ParseFailure("Malformed property expression");
             ++_cursor;
-            s = parse_property_expression();
+            s = parsePropertyExpression();
             if (_cursor == _end || *_cursor != '}') throw ParseFailure("Malformed property expression");
             ++_cursor;
-            if (complemented) return makeComplement(s);
-            else return s;
+            return complemented ? makeComplement(s) : s;
         default:
             throw ParseFailure("Internal error");
     }
@@ -486,7 +458,21 @@ codepoint_t RE_Parser::parse_utf8_codepoint() {
     return cp;
 }
 
-Name * RE_Parser::parse_property_expression() {
+std::string RE_Parser::canonicalize(const cursor_t begin, const cursor_t end) {
+    std::locale loc;
+    std::stringstream s;
+    for (auto i = begin; i != end; ++i) {
+        switch (*i) {
+            case '_': case ' ': case '-':
+                break;
+            default:
+                s << std::tolower(*i, loc);
+        }
+    }
+    return s.str();
+}
+
+Name * RE_Parser::parsePropertyExpression() {
     const cursor_t start = _cursor;
     while (_cursor != _end && *_cursor != '}' and *_cursor != ':' and *_cursor != '=') {
         _cursor++;
@@ -499,9 +485,89 @@ Name * RE_Parser::parse_property_expression() {
             _cursor++;
         }
         // We have a property-name = value expression
-        return makeName(std::string(start, prop_end), std::string(val_start, _cursor), Name::Type::UnicodeProperty);
+        return resolvePropertyExpression(canonicalize(start, prop_end), canonicalize(val_start, _cursor));
     }
-    return makeName(std::string(start, _cursor), Name::Type::UnicodeProperty);
+    return resolvePropertyExpression(canonicalize(start, _cursor));
+}
+
+Name * RE_Parser::resolvePropertyExpression(std::string value) {
+
+    auto key = std::make_pair("", value);
+    auto f = mNameMap.find(key);
+    if (f != mNameMap.end()) {
+        return f->second;
+    }
+
+    Name * property = makeName(value, Name::Type::UnicodeProperty);
+
+    // Try special cases of Unicode TR #18
+    if (value == "any") {
+        property->setDefinition(makeAny());
+    }
+    else if (value == "ascii") {
+        property->setDefinition(resolvePropertyExpression("blk", "ascii"));
+    }
+    else if (value == "assigned") {
+        Name * unassigned = resolvePropertyExpression("cn");
+        property->setDefinition(makeDiff(makeAny(), unassigned));
+    }
+    // Now compatibility properties of UTR #18 Annex C
+    else if (value == "xdigit") {
+        Name * digit = resolvePropertyExpression("nd");
+        Name * hexdigit = resolvePropertyExpression("hexdigit");
+        property->setDefinition(makeAlt({digit, hexdigit}));
+    }
+    else if (value == "alnum") {
+        Name * digit = resolvePropertyExpression("nd");
+        Name * alpha = resolvePropertyExpression("alphabetic");
+        property->setDefinition(makeAlt({digit, alpha}));
+    }
+    else if (value == "blank") {
+        Name * space_sep = resolvePropertyExpression("space_separator");
+        CC * tab = makeCC(0x09);
+        property->setDefinition(makeAlt({space_sep, tab}));
+    }
+    else if (value == "graph") {
+        Name * space = resolvePropertyExpression("space");
+        Name * ctrl = resolvePropertyExpression("control");
+        Name * surr = resolvePropertyExpression("surrogate");
+        Name * unassigned = resolvePropertyExpression("cn");
+        property->setDefinition(makeDiff(makeAny(), makeAlt({space, ctrl, surr, unassigned})));
+    }
+    else if (value == "print") {
+        Name * graph = resolvePropertyExpression("graph");
+        Name * space_sep = resolvePropertyExpression("space_separator");
+        property->setDefinition(makeAlt({graph, space_sep}));
+    }
+    else if (value == "word") {
+        Name * alnum = resolvePropertyExpression("alnum");
+        Name * mark = resolvePropertyExpression("mark");
+        Name * conn = resolvePropertyExpression("connectorpunctuation");
+        Name * join = resolvePropertyExpression("joincontrol");
+        property->setDefinition(makeAlt({alnum, mark, conn, join}));
+    }
+
+    mNameMap.emplace(std::move(key), property);
+
+    return property;
+}
+
+Name * RE_Parser::resolvePropertyExpression(std::string namespaceValue, std::string nameValue) {
+
+    auto key = std::make_pair(namespaceValue, nameValue);
+
+    auto f = mNameMap.find(key);
+    if (f != mNameMap.end()) {
+        return f->second;
+    }
+
+
+
+    Name * property = makeName(namespaceValue, nameValue, Name::Type::UnicodeProperty);
+
+    mNameMap.emplace(std::move(key), property);
+
+    return property;
 }
 
 CharsetOperatorKind RE_Parser::getCharsetOperator() {
@@ -674,7 +740,7 @@ RE * RE_Parser::parse_charset() {
                         negated = true;
                         _cursor++;
                     }
-                    RE * posixSet = parse_property_expression();
+                    RE * posixSet = parsePropertyExpression();
                     if (negated) posixSet = makeComplement(posixSet);
                     subexprs.push_back(posixSet);
                     lastItemKind = BrackettedSetItem;
@@ -703,7 +769,7 @@ RE * RE_Parser::parse_charset() {
             case backSlash:
                 throw_incomplete_expression_error_if_end_of_stream();
                 if (isSetEscapeChar(*_cursor)) {
-                    subexprs.push_back(parse_escaped_set());
+                    subexprs.push_back(parseEscapedSet());
                     lastItemKind = SetItem;
                 }
                 else {
@@ -885,5 +951,36 @@ void RE_Parser::CC_add_range(CC * cc, codepoint_t lo, codepoint_t hi) {
     else cc->insert_range(lo, hi);
 }
     
-    
+RE * RE_Parser::makeComplement(RE * s) {
+  return makeDiff(makeAny(), s);
+}
+
+RE * RE_Parser::makeWordBoundary () {
+    RE * wordC = makeWordSet();
+    return makeAlt({makeSeq({makeNegativeLookBehindAssertion(wordC), makeLookAheadAssertion(wordC)}),
+                    makeSeq({makeLookBehindAssertion(wordC), makeNegativeLookAheadAssertion(wordC)})});
+}
+
+RE * RE_Parser::makeWordNonBoundary () {
+    RE * wordC = makeWordSet();
+    return makeAlt({makeSeq({makeNegativeLookBehindAssertion(wordC), makeNegativeLookAheadAssertion(wordC)}),
+                    makeSeq({makeLookBehindAssertion(wordC), makeLookAheadAssertion(wordC)})});
+}
+
+inline Name * RE_Parser::makeDigitSet() {
+    return resolvePropertyExpression("nd");
+}
+
+inline Name * RE_Parser::makeAlphaNumeric() {
+    return resolvePropertyExpression("alnum");
+}
+
+inline Name * RE_Parser::makeWhitespaceSet() {
+    return resolvePropertyExpression("whitespace");
+}
+
+inline Name * RE_Parser::makeWordSet() {
+    return resolvePropertyExpression("word");
+}
+
 }

@@ -73,7 +73,7 @@ void CC_Compiler::compileByteClasses(RE * re) {
     }
     else if (Name * name = dyn_cast<Name>(re)) {
         RE * def = name->getDefinition();
-        if (LLVM_LIKELY(def != nullptr)) {
+        if (def) {
             if (!isa<CC>(def)) {
                 compileByteClasses(def);
             }

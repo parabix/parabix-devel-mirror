@@ -13,7 +13,7 @@ namespace cc {
 class CC_NameMap {
 public:
 
-    typedef std::unordered_map<std::string, re::Name*>          NameMap;
+    typedef std::unordered_map<std::string, re::Name *>          NameMap;
     typedef std::vector<re::Name*>                              NameVector;
     typedef NameVector::const_iterator                          iterator;
 

@@ -58,10 +58,12 @@ static cl::opt<bool> EnableMultiplexing("multiplexing", cl::init(false),
                                         cl::desc("combine Advances whose inputs are mutual exclusive into the fewest number of advances possible (expensive)."));
 #endif
 
+using property_list = std::vector<std::pair<std::string, size_t>>;
+
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief compileUnicodeSet
  ** ------------------------------------------------------------------------------------------------------------- */
-void compileUnicodeSet(std::string name, const UnicodeSet & set, PabloCompiler & pc, Module * module, raw_ostream & out) {
+size_t compileUnicodeSet(std::string name, const UnicodeSet & set, PabloCompiler & pc, Module * module) {
     PabloFunction function = PabloFunction::Create(std::move(name));
     Encoding encoding(Encoding::Type::UTF_8, 8);
     CC_Compiler ccCompiler(function, encoding);
@@ -79,14 +81,16 @@ void compileUnicodeSet(std::string name, const UnicodeSet & set, PabloCompiler &
     #endif
     // Now compile the function ...
     auto func = pc.compile(function, module);
-    out << "    p.InstallExternalFunction(\"" + name + "\", &" + name + ", " + std::to_string(func.second) + ");\n";
     releaseSlabAllocatorMemory();
+
+    return func.second;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief generateUCDModule
+ * @brief writePropertyInstaller
  ** ------------------------------------------------------------------------------------------------------------- */
-Module * generateUCDModule() {
+
+void writePropertyInstaller(property_list && properties) {
 
     #ifdef USE_LLVM_3_5
     std::string error;
@@ -104,8 +108,29 @@ Module * generateUCDModule() {
 
     out << "#ifndef PROPERTYINSTALL\n";
     out << "#define PROPERTYINSTALL\n\n";
+    out << "#include <include/simd-lib/bitblock.hpp>\n";
     out << "#include <pablo/pablo_compiler.h>\n\n";
-    out << "void install_properties(pablo::PabloCompiler & p) {\n";
+    out << "namespace UCD {\n\n";
+    out << "struct Input {\n    BitBlock bit[8];\n};\n\n";
+    out << "struct Output {\n    BitBlock bit[1];\n};\n\n";
+    for (auto prop : properties) {
+        out << "extern \"C\" void " + prop.first + "(const Input &, BitBlock *, Output &);\n";
+    }
+    out << "\nvoid install_properties(pablo::PabloCompiler & p) {\n";
+    for (auto prop : properties) {
+        out << "    p.InstallExternalFunction(\"" + prop.first + "\", reinterpret_cast<void *>(&" + prop.first + "), " + std::to_string(prop.second) + ");\n";
+    }
+    out << "}\n}\n\n#endif\n";
+    out.close();
+}
+
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief generateUCDModule
+ ** ------------------------------------------------------------------------------------------------------------- */
+Module * generateUCDModule() {
+
+    property_list properties;
 
     PabloCompiler pc;
     Module * module = new Module("ucd", getGlobalContext());
@@ -114,27 +139,27 @@ Module * generateUCDModule() {
             for (const std::string value : *enumObj) {
                 const UnicodeSet & set = enumObj->GetCodepointSet(canonicalize_value_name(value));
                 std::string name = "__get_" + property_enum_name[enumObj->getPropertyCode()] + "_" + value;
-                compileUnicodeSet(name, set, pc, module, out);
+                properties.emplace_back(name, compileUnicodeSet(name, set, pc, module));
             }
         }
         else if (ExtensionPropertyObject * extObj = dyn_cast<ExtensionPropertyObject>(obj)) {
             for (const std::string value : *extObj) {
                 const UnicodeSet & set = extObj->GetCodepointSet(canonicalize_value_name(value));
                 std::string name = "__get_" + property_enum_name[extObj->getPropertyCode()] + "_" + value;
-                compileUnicodeSet(name, set, pc, module, out);
+                properties.emplace_back(name, compileUnicodeSet(name, set, pc, module));
             }
         }
         else if (BinaryPropertyObject * binObj = dyn_cast<BinaryPropertyObject>(obj)) {
             const UnicodeSet & set = binObj->GetCodepointSet(Binary_ns::Y);
             std::string name = "__get_" + property_enum_name[binObj->getPropertyCode()] + "_Y";
-            compileUnicodeSet(name, set, pc, module, out);
+            properties.emplace_back(name, compileUnicodeSet(name, set, pc, module));
         }
     }
 
-    out << "}\n\n#endif\n"; out.close();
-
     // Print an error message if our module is malformed in any way.
     verifyModule(*module, &dbgs());
+
+    writePropertyInstaller(std::move(properties));
 
     return module;
 }
@@ -213,7 +238,7 @@ void compileUCDModule(Module * module) {
     formatted_raw_ostream FOS(Out->os());
     // Ask the target to add backend passes as necessary.
     if (Target->addPassesToEmitFile(PM, FOS, TargetMachine::CGFT_ObjectFile)) {
-        throw std::runtime_error("Target does not support generation of this file type!\n");
+        throw std::runtime_error("Target does not support generation of object file type!\n");
     }
 
     PM.run(*module);
@@ -230,7 +255,7 @@ int main(int argc, char *argv[]) {
         PropertyFilename = "PropertyInstall.h";
     }
     if (ObjectFilename.empty()) {
-        ObjectFilename = "ucd.o";
+        ObjectFilename = "pregenerated_properties.o";
     }
     Module * module = generateUCDModule();
     compileUCDModule(module);

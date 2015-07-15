@@ -131,54 +131,6 @@ void resolveProperty(Name * name) {
                 throw UnicodePropertyExpressionError("Error: property " + property_full_name[theprop] + " specified without a value");
             }
         }
-        // Now try special cases of Unicode TR #18
-        else if (value == "any") {
-            name->setDefinition(makeAny());
-        }
-        else if (value == "assigned") {
-            Name * Cn = makeName("Cn", Name::Type::UnicodeProperty);
-            name->setDefinition(makeDiff(makeAny(), Cn));
-        }
-        else if (value == "ascii") {
-            name->setFunctionName("__get_blk_ASCII");
-        }
-        // Now compatibility properties of UTR #18 Annex C
-        else if (value == "xdigit") {
-            Name * Nd = makeName("Nd", Name::Type::UnicodeProperty);
-            Name * hexdigit = makeName("Hex_digit", Name::Type::UnicodeProperty);
-            name->setDefinition(makeAlt({Nd, hexdigit}));
-        }
-        else if (value == "alnum") {
-            Name * digit = makeName("Nd", Name::Type::UnicodeProperty);
-            Name * alpha = makeName("alphabetic", Name::Type::UnicodeProperty);
-            name->setDefinition(makeAlt({digit, alpha}));
-        }
-        else if (value == "blank") {
-            Name * space_sep = makeName("space_separator", Name::Type::UnicodeProperty);
-            CC * tab = makeCC(0x09);
-            name->setDefinition(makeAlt({space_sep, tab}));
-        }
-        else if (value == "graph") {
-            Name * space = makeName("space", Name::Type::UnicodeProperty);
-            Name * ctrl = makeName("control", Name::Type::UnicodeProperty);
-            Name * surr = makeName("surrogate", Name::Type::UnicodeProperty);
-            Name * unassigned = makeName("Cn", Name::Type::UnicodeProperty);
-            Name * nongraph = makeName("[^graph]", Name::Type::UnicodeProperty);
-            nongraph->setDefinition(makeAlt({space, ctrl, surr, unassigned}));
-            name->setDefinition(makeDiff(makeAny(), nongraph));
-        }
-        else if (value == "print") {
-            Name * graph = makeName("graph", Name::Type::UnicodeProperty);
-            Name * space_sep = makeName("space_separator", Name::Type::UnicodeProperty);
-            name->setDefinition(makeAlt({graph, space_sep}));
-        }
-        else if (value == "word") {
-            Name * alnum = makeName("alnum", Name::Type::UnicodeProperty);
-            Name * mark = makeName("mark", Name::Type::UnicodeProperty);
-            Name * conn = makeName("Connector_Punctuation", Name::Type::UnicodeProperty);
-            Name * join = makeName("Join_Control", Name::Type::UnicodeProperty);
-            name->setDefinition(makeAlt({alnum, mark, conn, join}));
-        }
         else {
             throw UnicodePropertyExpressionError("Expected a general category, script or binary property name, but '" + name->getName() + "' found instead");
         }
