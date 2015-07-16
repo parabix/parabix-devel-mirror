@@ -28740,1330 +28740,1064 @@ CarryArray<count, 0> name;\
 Property_scx_Aghb fscx_Aghb;
 
 extern "C" {
-    BitBlock __get_scx_Aghb (Basis_bits & basis_bits) {
-        Struct_scx_Aghb output;
+    void __get_scx_Aghb (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Aghb & output) {
         fscx_Aghb . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Ahom fscx_Ahom;
 
 extern "C" {
-    BitBlock __get_scx_Ahom (Basis_bits & basis_bits) {
-        Struct_scx_Ahom output;
+    void __get_scx_Ahom (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Ahom & output) {
         fscx_Ahom . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Arab fscx_Arab;
 
 extern "C" {
-    BitBlock __get_scx_Arab (Basis_bits & basis_bits) {
-        Struct_scx_Arab output;
+    void __get_scx_Arab (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Arab & output) {
         fscx_Arab . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Armi fscx_Armi;
 
 extern "C" {
-    BitBlock __get_scx_Armi (Basis_bits & basis_bits) {
-        Struct_scx_Armi output;
+    void __get_scx_Armi (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Armi & output) {
         fscx_Armi . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Armn fscx_Armn;
 
 extern "C" {
-    BitBlock __get_scx_Armn (Basis_bits & basis_bits) {
-        Struct_scx_Armn output;
+    void __get_scx_Armn (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Armn & output) {
         fscx_Armn . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Avst fscx_Avst;
 
 extern "C" {
-    BitBlock __get_scx_Avst (Basis_bits & basis_bits) {
-        Struct_scx_Avst output;
+    void __get_scx_Avst (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Avst & output) {
         fscx_Avst . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Bali fscx_Bali;
 
 extern "C" {
-    BitBlock __get_scx_Bali (Basis_bits & basis_bits) {
-        Struct_scx_Bali output;
+    void __get_scx_Bali (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Bali & output) {
         fscx_Bali . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Bamu fscx_Bamu;
 
 extern "C" {
-    BitBlock __get_scx_Bamu (Basis_bits & basis_bits) {
-        Struct_scx_Bamu output;
+    void __get_scx_Bamu (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Bamu & output) {
         fscx_Bamu . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Bass fscx_Bass;
 
 extern "C" {
-    BitBlock __get_scx_Bass (Basis_bits & basis_bits) {
-        Struct_scx_Bass output;
+    void __get_scx_Bass (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Bass & output) {
         fscx_Bass . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Batk fscx_Batk;
 
 extern "C" {
-    BitBlock __get_scx_Batk (Basis_bits & basis_bits) {
-        Struct_scx_Batk output;
+    void __get_scx_Batk (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Batk & output) {
         fscx_Batk . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Beng fscx_Beng;
 
 extern "C" {
-    BitBlock __get_scx_Beng (Basis_bits & basis_bits) {
-        Struct_scx_Beng output;
+    void __get_scx_Beng (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Beng & output) {
         fscx_Beng . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Bopo fscx_Bopo;
 
 extern "C" {
-    BitBlock __get_scx_Bopo (Basis_bits & basis_bits) {
-        Struct_scx_Bopo output;
+    void __get_scx_Bopo (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Bopo & output) {
         fscx_Bopo . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Brah fscx_Brah;
 
 extern "C" {
-    BitBlock __get_scx_Brah (Basis_bits & basis_bits) {
-        Struct_scx_Brah output;
+    void __get_scx_Brah (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Brah & output) {
         fscx_Brah . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Brai fscx_Brai;
 
 extern "C" {
-    BitBlock __get_scx_Brai (Basis_bits & basis_bits) {
-        Struct_scx_Brai output;
+    void __get_scx_Brai (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Brai & output) {
         fscx_Brai . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Bugi fscx_Bugi;
 
 extern "C" {
-    BitBlock __get_scx_Bugi (Basis_bits & basis_bits) {
-        Struct_scx_Bugi output;
+    void __get_scx_Bugi (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Bugi & output) {
         fscx_Bugi . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Buhd fscx_Buhd;
 
 extern "C" {
-    BitBlock __get_scx_Buhd (Basis_bits & basis_bits) {
-        Struct_scx_Buhd output;
+    void __get_scx_Buhd (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Buhd & output) {
         fscx_Buhd . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Cakm fscx_Cakm;
 
 extern "C" {
-    BitBlock __get_scx_Cakm (Basis_bits & basis_bits) {
-        Struct_scx_Cakm output;
+    void __get_scx_Cakm (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Cakm & output) {
         fscx_Cakm . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Cans fscx_Cans;
 
 extern "C" {
-    BitBlock __get_scx_Cans (Basis_bits & basis_bits) {
-        Struct_scx_Cans output;
+    void __get_scx_Cans (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Cans & output) {
         fscx_Cans . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Cari fscx_Cari;
 
 extern "C" {
-    BitBlock __get_scx_Cari (Basis_bits & basis_bits) {
-        Struct_scx_Cari output;
+    void __get_scx_Cari (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Cari & output) {
         fscx_Cari . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Cham fscx_Cham;
 
 extern "C" {
-    BitBlock __get_scx_Cham (Basis_bits & basis_bits) {
-        Struct_scx_Cham output;
+    void __get_scx_Cham (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Cham & output) {
         fscx_Cham . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Cher fscx_Cher;
 
 extern "C" {
-    BitBlock __get_scx_Cher (Basis_bits & basis_bits) {
-        Struct_scx_Cher output;
+    void __get_scx_Cher (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Cher & output) {
         fscx_Cher . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Copt fscx_Copt;
 
 extern "C" {
-    BitBlock __get_scx_Copt (Basis_bits & basis_bits) {
-        Struct_scx_Copt output;
+    void __get_scx_Copt (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Copt & output) {
         fscx_Copt . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Cprt fscx_Cprt;
 
 extern "C" {
-    BitBlock __get_scx_Cprt (Basis_bits & basis_bits) {
-        Struct_scx_Cprt output;
+    void __get_scx_Cprt (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Cprt & output) {
         fscx_Cprt . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Cyrl fscx_Cyrl;
 
 extern "C" {
-    BitBlock __get_scx_Cyrl (Basis_bits & basis_bits) {
-        Struct_scx_Cyrl output;
+    void __get_scx_Cyrl (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Cyrl & output) {
         fscx_Cyrl . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Deva fscx_Deva;
 
 extern "C" {
-    BitBlock __get_scx_Deva (Basis_bits & basis_bits) {
-        Struct_scx_Deva output;
+    void __get_scx_Deva (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Deva & output) {
         fscx_Deva . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Dsrt fscx_Dsrt;
 
 extern "C" {
-    BitBlock __get_scx_Dsrt (Basis_bits & basis_bits) {
-        Struct_scx_Dsrt output;
+    void __get_scx_Dsrt (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Dsrt & output) {
         fscx_Dsrt . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Dupl fscx_Dupl;
 
 extern "C" {
-    BitBlock __get_scx_Dupl (Basis_bits & basis_bits) {
-        Struct_scx_Dupl output;
+    void __get_scx_Dupl (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Dupl & output) {
         fscx_Dupl . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Egyp fscx_Egyp;
 
 extern "C" {
-    BitBlock __get_scx_Egyp (Basis_bits & basis_bits) {
-        Struct_scx_Egyp output;
+    void __get_scx_Egyp (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Egyp & output) {
         fscx_Egyp . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Elba fscx_Elba;
 
 extern "C" {
-    BitBlock __get_scx_Elba (Basis_bits & basis_bits) {
-        Struct_scx_Elba output;
+    void __get_scx_Elba (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Elba & output) {
         fscx_Elba . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Ethi fscx_Ethi;
 
 extern "C" {
-    BitBlock __get_scx_Ethi (Basis_bits & basis_bits) {
-        Struct_scx_Ethi output;
+    void __get_scx_Ethi (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Ethi & output) {
         fscx_Ethi . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Geor fscx_Geor;
 
 extern "C" {
-    BitBlock __get_scx_Geor (Basis_bits & basis_bits) {
-        Struct_scx_Geor output;
+    void __get_scx_Geor (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Geor & output) {
         fscx_Geor . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Glag fscx_Glag;
 
 extern "C" {
-    BitBlock __get_scx_Glag (Basis_bits & basis_bits) {
-        Struct_scx_Glag output;
+    void __get_scx_Glag (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Glag & output) {
         fscx_Glag . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Goth fscx_Goth;
 
 extern "C" {
-    BitBlock __get_scx_Goth (Basis_bits & basis_bits) {
-        Struct_scx_Goth output;
+    void __get_scx_Goth (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Goth & output) {
         fscx_Goth . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Gran fscx_Gran;
 
 extern "C" {
-    BitBlock __get_scx_Gran (Basis_bits & basis_bits) {
-        Struct_scx_Gran output;
+    void __get_scx_Gran (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Gran & output) {
         fscx_Gran . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Grek fscx_Grek;
 
 extern "C" {
-    BitBlock __get_scx_Grek (Basis_bits & basis_bits) {
-        Struct_scx_Grek output;
+    void __get_scx_Grek (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Grek & output) {
         fscx_Grek . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Gujr fscx_Gujr;
 
 extern "C" {
-    BitBlock __get_scx_Gujr (Basis_bits & basis_bits) {
-        Struct_scx_Gujr output;
+    void __get_scx_Gujr (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Gujr & output) {
         fscx_Gujr . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Guru fscx_Guru;
 
 extern "C" {
-    BitBlock __get_scx_Guru (Basis_bits & basis_bits) {
-        Struct_scx_Guru output;
+    void __get_scx_Guru (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Guru & output) {
         fscx_Guru . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Hang fscx_Hang;
 
 extern "C" {
-    BitBlock __get_scx_Hang (Basis_bits & basis_bits) {
-        Struct_scx_Hang output;
+    void __get_scx_Hang (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Hang & output) {
         fscx_Hang . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Hani fscx_Hani;
 
 extern "C" {
-    BitBlock __get_scx_Hani (Basis_bits & basis_bits) {
-        Struct_scx_Hani output;
+    void __get_scx_Hani (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Hani & output) {
         fscx_Hani . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Hano fscx_Hano;
 
 extern "C" {
-    BitBlock __get_scx_Hano (Basis_bits & basis_bits) {
-        Struct_scx_Hano output;
+    void __get_scx_Hano (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Hano & output) {
         fscx_Hano . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Hatr fscx_Hatr;
 
 extern "C" {
-    BitBlock __get_scx_Hatr (Basis_bits & basis_bits) {
-        Struct_scx_Hatr output;
+    void __get_scx_Hatr (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Hatr & output) {
         fscx_Hatr . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Hebr fscx_Hebr;
 
 extern "C" {
-    BitBlock __get_scx_Hebr (Basis_bits & basis_bits) {
-        Struct_scx_Hebr output;
+    void __get_scx_Hebr (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Hebr & output) {
         fscx_Hebr . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Hira fscx_Hira;
 
 extern "C" {
-    BitBlock __get_scx_Hira (Basis_bits & basis_bits) {
-        Struct_scx_Hira output;
+    void __get_scx_Hira (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Hira & output) {
         fscx_Hira . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Hluw fscx_Hluw;
 
 extern "C" {
-    BitBlock __get_scx_Hluw (Basis_bits & basis_bits) {
-        Struct_scx_Hluw output;
+    void __get_scx_Hluw (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Hluw & output) {
         fscx_Hluw . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Hmng fscx_Hmng;
 
 extern "C" {
-    BitBlock __get_scx_Hmng (Basis_bits & basis_bits) {
-        Struct_scx_Hmng output;
+    void __get_scx_Hmng (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Hmng & output) {
         fscx_Hmng . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Hrkt fscx_Hrkt;
 
 extern "C" {
-    BitBlock __get_scx_Hrkt (Basis_bits & basis_bits) {
-        Struct_scx_Hrkt output;
+    void __get_scx_Hrkt (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Hrkt & output) {
         fscx_Hrkt . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Hung fscx_Hung;
 
 extern "C" {
-    BitBlock __get_scx_Hung (Basis_bits & basis_bits) {
-        Struct_scx_Hung output;
+    void __get_scx_Hung (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Hung & output) {
         fscx_Hung . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Ital fscx_Ital;
 
 extern "C" {
-    BitBlock __get_scx_Ital (Basis_bits & basis_bits) {
-        Struct_scx_Ital output;
+    void __get_scx_Ital (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Ital & output) {
         fscx_Ital . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Java fscx_Java;
 
 extern "C" {
-    BitBlock __get_scx_Java (Basis_bits & basis_bits) {
-        Struct_scx_Java output;
+    void __get_scx_Java (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Java & output) {
         fscx_Java . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Kali fscx_Kali;
 
 extern "C" {
-    BitBlock __get_scx_Kali (Basis_bits & basis_bits) {
-        Struct_scx_Kali output;
+    void __get_scx_Kali (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Kali & output) {
         fscx_Kali . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Kana fscx_Kana;
 
 extern "C" {
-    BitBlock __get_scx_Kana (Basis_bits & basis_bits) {
-        Struct_scx_Kana output;
+    void __get_scx_Kana (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Kana & output) {
         fscx_Kana . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Khar fscx_Khar;
 
 extern "C" {
-    BitBlock __get_scx_Khar (Basis_bits & basis_bits) {
-        Struct_scx_Khar output;
+    void __get_scx_Khar (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Khar & output) {
         fscx_Khar . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Khmr fscx_Khmr;
 
 extern "C" {
-    BitBlock __get_scx_Khmr (Basis_bits & basis_bits) {
-        Struct_scx_Khmr output;
+    void __get_scx_Khmr (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Khmr & output) {
         fscx_Khmr . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Khoj fscx_Khoj;
 
 extern "C" {
-    BitBlock __get_scx_Khoj (Basis_bits & basis_bits) {
-        Struct_scx_Khoj output;
+    void __get_scx_Khoj (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Khoj & output) {
         fscx_Khoj . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Knda fscx_Knda;
 
 extern "C" {
-    BitBlock __get_scx_Knda (Basis_bits & basis_bits) {
-        Struct_scx_Knda output;
+    void __get_scx_Knda (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Knda & output) {
         fscx_Knda . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Kthi fscx_Kthi;
 
 extern "C" {
-    BitBlock __get_scx_Kthi (Basis_bits & basis_bits) {
-        Struct_scx_Kthi output;
+    void __get_scx_Kthi (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Kthi & output) {
         fscx_Kthi . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Lana fscx_Lana;
 
 extern "C" {
-    BitBlock __get_scx_Lana (Basis_bits & basis_bits) {
-        Struct_scx_Lana output;
+    void __get_scx_Lana (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Lana & output) {
         fscx_Lana . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Laoo fscx_Laoo;
 
 extern "C" {
-    BitBlock __get_scx_Laoo (Basis_bits & basis_bits) {
-        Struct_scx_Laoo output;
+    void __get_scx_Laoo (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Laoo & output) {
         fscx_Laoo . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Latn fscx_Latn;
 
 extern "C" {
-    BitBlock __get_scx_Latn (Basis_bits & basis_bits) {
-        Struct_scx_Latn output;
+    void __get_scx_Latn (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Latn & output) {
         fscx_Latn . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Lepc fscx_Lepc;
 
 extern "C" {
-    BitBlock __get_scx_Lepc (Basis_bits & basis_bits) {
-        Struct_scx_Lepc output;
+    void __get_scx_Lepc (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Lepc & output) {
         fscx_Lepc . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Limb fscx_Limb;
 
 extern "C" {
-    BitBlock __get_scx_Limb (Basis_bits & basis_bits) {
-        Struct_scx_Limb output;
+    void __get_scx_Limb (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Limb & output) {
         fscx_Limb . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Lina fscx_Lina;
 
 extern "C" {
-    BitBlock __get_scx_Lina (Basis_bits & basis_bits) {
-        Struct_scx_Lina output;
+    void __get_scx_Lina (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Lina & output) {
         fscx_Lina . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Linb fscx_Linb;
 
 extern "C" {
-    BitBlock __get_scx_Linb (Basis_bits & basis_bits) {
-        Struct_scx_Linb output;
+    void __get_scx_Linb (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Linb & output) {
         fscx_Linb . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Lisu fscx_Lisu;
 
 extern "C" {
-    BitBlock __get_scx_Lisu (Basis_bits & basis_bits) {
-        Struct_scx_Lisu output;
+    void __get_scx_Lisu (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Lisu & output) {
         fscx_Lisu . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Lyci fscx_Lyci;
 
 extern "C" {
-    BitBlock __get_scx_Lyci (Basis_bits & basis_bits) {
-        Struct_scx_Lyci output;
+    void __get_scx_Lyci (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Lyci & output) {
         fscx_Lyci . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Lydi fscx_Lydi;
 
 extern "C" {
-    BitBlock __get_scx_Lydi (Basis_bits & basis_bits) {
-        Struct_scx_Lydi output;
+    void __get_scx_Lydi (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Lydi & output) {
         fscx_Lydi . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Mahj fscx_Mahj;
 
 extern "C" {
-    BitBlock __get_scx_Mahj (Basis_bits & basis_bits) {
-        Struct_scx_Mahj output;
+    void __get_scx_Mahj (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Mahj & output) {
         fscx_Mahj . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Mand fscx_Mand;
 
 extern "C" {
-    BitBlock __get_scx_Mand (Basis_bits & basis_bits) {
-        Struct_scx_Mand output;
+    void __get_scx_Mand (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Mand & output) {
         fscx_Mand . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Mani fscx_Mani;
 
 extern "C" {
-    BitBlock __get_scx_Mani (Basis_bits & basis_bits) {
-        Struct_scx_Mani output;
+    void __get_scx_Mani (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Mani & output) {
         fscx_Mani . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Mend fscx_Mend;
 
 extern "C" {
-    BitBlock __get_scx_Mend (Basis_bits & basis_bits) {
-        Struct_scx_Mend output;
+    void __get_scx_Mend (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Mend & output) {
         fscx_Mend . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Merc fscx_Merc;
 
 extern "C" {
-    BitBlock __get_scx_Merc (Basis_bits & basis_bits) {
-        Struct_scx_Merc output;
+    void __get_scx_Merc (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Merc & output) {
         fscx_Merc . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Mero fscx_Mero;
 
 extern "C" {
-    BitBlock __get_scx_Mero (Basis_bits & basis_bits) {
-        Struct_scx_Mero output;
+    void __get_scx_Mero (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Mero & output) {
         fscx_Mero . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Mlym fscx_Mlym;
 
 extern "C" {
-    BitBlock __get_scx_Mlym (Basis_bits & basis_bits) {
-        Struct_scx_Mlym output;
+    void __get_scx_Mlym (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Mlym & output) {
         fscx_Mlym . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Modi fscx_Modi;
 
 extern "C" {
-    BitBlock __get_scx_Modi (Basis_bits & basis_bits) {
-        Struct_scx_Modi output;
+    void __get_scx_Modi (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Modi & output) {
         fscx_Modi . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Mong fscx_Mong;
 
 extern "C" {
-    BitBlock __get_scx_Mong (Basis_bits & basis_bits) {
-        Struct_scx_Mong output;
+    void __get_scx_Mong (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Mong & output) {
         fscx_Mong . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Mroo fscx_Mroo;
 
 extern "C" {
-    BitBlock __get_scx_Mroo (Basis_bits & basis_bits) {
-        Struct_scx_Mroo output;
+    void __get_scx_Mroo (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Mroo & output) {
         fscx_Mroo . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Mtei fscx_Mtei;
 
 extern "C" {
-    BitBlock __get_scx_Mtei (Basis_bits & basis_bits) {
-        Struct_scx_Mtei output;
+    void __get_scx_Mtei (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Mtei & output) {
         fscx_Mtei . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Mult fscx_Mult;
 
 extern "C" {
-    BitBlock __get_scx_Mult (Basis_bits & basis_bits) {
-        Struct_scx_Mult output;
+    void __get_scx_Mult (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Mult & output) {
         fscx_Mult . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Mymr fscx_Mymr;
 
 extern "C" {
-    BitBlock __get_scx_Mymr (Basis_bits & basis_bits) {
-        Struct_scx_Mymr output;
+    void __get_scx_Mymr (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Mymr & output) {
         fscx_Mymr . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Narb fscx_Narb;
 
 extern "C" {
-    BitBlock __get_scx_Narb (Basis_bits & basis_bits) {
-        Struct_scx_Narb output;
+    void __get_scx_Narb (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Narb & output) {
         fscx_Narb . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Nbat fscx_Nbat;
 
 extern "C" {
-    BitBlock __get_scx_Nbat (Basis_bits & basis_bits) {
-        Struct_scx_Nbat output;
+    void __get_scx_Nbat (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Nbat & output) {
         fscx_Nbat . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Nkoo fscx_Nkoo;
 
 extern "C" {
-    BitBlock __get_scx_Nkoo (Basis_bits & basis_bits) {
-        Struct_scx_Nkoo output;
+    void __get_scx_Nkoo (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Nkoo & output) {
         fscx_Nkoo . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Ogam fscx_Ogam;
 
 extern "C" {
-    BitBlock __get_scx_Ogam (Basis_bits & basis_bits) {
-        Struct_scx_Ogam output;
+    void __get_scx_Ogam (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Ogam & output) {
         fscx_Ogam . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Olck fscx_Olck;
 
 extern "C" {
-    BitBlock __get_scx_Olck (Basis_bits & basis_bits) {
-        Struct_scx_Olck output;
+    void __get_scx_Olck (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Olck & output) {
         fscx_Olck . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Orkh fscx_Orkh;
 
 extern "C" {
-    BitBlock __get_scx_Orkh (Basis_bits & basis_bits) {
-        Struct_scx_Orkh output;
+    void __get_scx_Orkh (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Orkh & output) {
         fscx_Orkh . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Orya fscx_Orya;
 
 extern "C" {
-    BitBlock __get_scx_Orya (Basis_bits & basis_bits) {
-        Struct_scx_Orya output;
+    void __get_scx_Orya (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Orya & output) {
         fscx_Orya . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Osma fscx_Osma;
 
 extern "C" {
-    BitBlock __get_scx_Osma (Basis_bits & basis_bits) {
-        Struct_scx_Osma output;
+    void __get_scx_Osma (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Osma & output) {
         fscx_Osma . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Palm fscx_Palm;
 
 extern "C" {
-    BitBlock __get_scx_Palm (Basis_bits & basis_bits) {
-        Struct_scx_Palm output;
+    void __get_scx_Palm (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Palm & output) {
         fscx_Palm . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Pauc fscx_Pauc;
 
 extern "C" {
-    BitBlock __get_scx_Pauc (Basis_bits & basis_bits) {
-        Struct_scx_Pauc output;
+    void __get_scx_Pauc (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Pauc & output) {
         fscx_Pauc . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Perm fscx_Perm;
 
 extern "C" {
-    BitBlock __get_scx_Perm (Basis_bits & basis_bits) {
-        Struct_scx_Perm output;
+    void __get_scx_Perm (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Perm & output) {
         fscx_Perm . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Phag fscx_Phag;
 
 extern "C" {
-    BitBlock __get_scx_Phag (Basis_bits & basis_bits) {
-        Struct_scx_Phag output;
+    void __get_scx_Phag (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Phag & output) {
         fscx_Phag . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Phli fscx_Phli;
 
 extern "C" {
-    BitBlock __get_scx_Phli (Basis_bits & basis_bits) {
-        Struct_scx_Phli output;
+    void __get_scx_Phli (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Phli & output) {
         fscx_Phli . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Phlp fscx_Phlp;
 
 extern "C" {
-    BitBlock __get_scx_Phlp (Basis_bits & basis_bits) {
-        Struct_scx_Phlp output;
+    void __get_scx_Phlp (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Phlp & output) {
         fscx_Phlp . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Phnx fscx_Phnx;
 
 extern "C" {
-    BitBlock __get_scx_Phnx (Basis_bits & basis_bits) {
-        Struct_scx_Phnx output;
+    void __get_scx_Phnx (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Phnx & output) {
         fscx_Phnx . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Plrd fscx_Plrd;
 
 extern "C" {
-    BitBlock __get_scx_Plrd (Basis_bits & basis_bits) {
-        Struct_scx_Plrd output;
+    void __get_scx_Plrd (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Plrd & output) {
         fscx_Plrd . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Prti fscx_Prti;
 
 extern "C" {
-    BitBlock __get_scx_Prti (Basis_bits & basis_bits) {
-        Struct_scx_Prti output;
+    void __get_scx_Prti (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Prti & output) {
         fscx_Prti . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Rjng fscx_Rjng;
 
 extern "C" {
-    BitBlock __get_scx_Rjng (Basis_bits & basis_bits) {
-        Struct_scx_Rjng output;
+    void __get_scx_Rjng (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Rjng & output) {
         fscx_Rjng . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Runr fscx_Runr;
 
 extern "C" {
-    BitBlock __get_scx_Runr (Basis_bits & basis_bits) {
-        Struct_scx_Runr output;
+    void __get_scx_Runr (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Runr & output) {
         fscx_Runr . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Samr fscx_Samr;
 
 extern "C" {
-    BitBlock __get_scx_Samr (Basis_bits & basis_bits) {
-        Struct_scx_Samr output;
+    void __get_scx_Samr (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Samr & output) {
         fscx_Samr . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Sarb fscx_Sarb;
 
 extern "C" {
-    BitBlock __get_scx_Sarb (Basis_bits & basis_bits) {
-        Struct_scx_Sarb output;
+    void __get_scx_Sarb (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Sarb & output) {
         fscx_Sarb . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Saur fscx_Saur;
 
 extern "C" {
-    BitBlock __get_scx_Saur (Basis_bits & basis_bits) {
-        Struct_scx_Saur output;
+    void __get_scx_Saur (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Saur & output) {
         fscx_Saur . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Sgnw fscx_Sgnw;
 
 extern "C" {
-    BitBlock __get_scx_Sgnw (Basis_bits & basis_bits) {
-        Struct_scx_Sgnw output;
+    void __get_scx_Sgnw (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Sgnw & output) {
         fscx_Sgnw . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Shaw fscx_Shaw;
 
 extern "C" {
-    BitBlock __get_scx_Shaw (Basis_bits & basis_bits) {
-        Struct_scx_Shaw output;
+    void __get_scx_Shaw (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Shaw & output) {
         fscx_Shaw . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Shrd fscx_Shrd;
 
 extern "C" {
-    BitBlock __get_scx_Shrd (Basis_bits & basis_bits) {
-        Struct_scx_Shrd output;
+    void __get_scx_Shrd (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Shrd & output) {
         fscx_Shrd . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Sidd fscx_Sidd;
 
 extern "C" {
-    BitBlock __get_scx_Sidd (Basis_bits & basis_bits) {
-        Struct_scx_Sidd output;
+    void __get_scx_Sidd (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Sidd & output) {
         fscx_Sidd . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Sind fscx_Sind;
 
 extern "C" {
-    BitBlock __get_scx_Sind (Basis_bits & basis_bits) {
-        Struct_scx_Sind output;
+    void __get_scx_Sind (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Sind & output) {
         fscx_Sind . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Sinh fscx_Sinh;
 
 extern "C" {
-    BitBlock __get_scx_Sinh (Basis_bits & basis_bits) {
-        Struct_scx_Sinh output;
+    void __get_scx_Sinh (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Sinh & output) {
         fscx_Sinh . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Sora fscx_Sora;
 
 extern "C" {
-    BitBlock __get_scx_Sora (Basis_bits & basis_bits) {
-        Struct_scx_Sora output;
+    void __get_scx_Sora (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Sora & output) {
         fscx_Sora . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Sund fscx_Sund;
 
 extern "C" {
-    BitBlock __get_scx_Sund (Basis_bits & basis_bits) {
-        Struct_scx_Sund output;
+    void __get_scx_Sund (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Sund & output) {
         fscx_Sund . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Sylo fscx_Sylo;
 
 extern "C" {
-    BitBlock __get_scx_Sylo (Basis_bits & basis_bits) {
-        Struct_scx_Sylo output;
+    void __get_scx_Sylo (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Sylo & output) {
         fscx_Sylo . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Syrc fscx_Syrc;
 
 extern "C" {
-    BitBlock __get_scx_Syrc (Basis_bits & basis_bits) {
-        Struct_scx_Syrc output;
+    void __get_scx_Syrc (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Syrc & output) {
         fscx_Syrc . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Tagb fscx_Tagb;
 
 extern "C" {
-    BitBlock __get_scx_Tagb (Basis_bits & basis_bits) {
-        Struct_scx_Tagb output;
+    void __get_scx_Tagb (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Tagb & output) {
         fscx_Tagb . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Takr fscx_Takr;
 
 extern "C" {
-    BitBlock __get_scx_Takr (Basis_bits & basis_bits) {
-        Struct_scx_Takr output;
+    void __get_scx_Takr (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Takr & output) {
         fscx_Takr . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Tale fscx_Tale;
 
 extern "C" {
-    BitBlock __get_scx_Tale (Basis_bits & basis_bits) {
-        Struct_scx_Tale output;
+    void __get_scx_Tale (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Tale & output) {
         fscx_Tale . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Talu fscx_Talu;
 
 extern "C" {
-    BitBlock __get_scx_Talu (Basis_bits & basis_bits) {
-        Struct_scx_Talu output;
+    void __get_scx_Talu (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Talu & output) {
         fscx_Talu . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Taml fscx_Taml;
 
 extern "C" {
-    BitBlock __get_scx_Taml (Basis_bits & basis_bits) {
-        Struct_scx_Taml output;
+    void __get_scx_Taml (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Taml & output) {
         fscx_Taml . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Tavt fscx_Tavt;
 
 extern "C" {
-    BitBlock __get_scx_Tavt (Basis_bits & basis_bits) {
-        Struct_scx_Tavt output;
+    void __get_scx_Tavt (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Tavt & output) {
         fscx_Tavt . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Telu fscx_Telu;
 
 extern "C" {
-    BitBlock __get_scx_Telu (Basis_bits & basis_bits) {
-        Struct_scx_Telu output;
+    void __get_scx_Telu (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Telu & output) {
         fscx_Telu . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Tfng fscx_Tfng;
 
 extern "C" {
-    BitBlock __get_scx_Tfng (Basis_bits & basis_bits) {
-        Struct_scx_Tfng output;
+    void __get_scx_Tfng (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Tfng & output) {
         fscx_Tfng . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Tglg fscx_Tglg;
 
 extern "C" {
-    BitBlock __get_scx_Tglg (Basis_bits & basis_bits) {
-        Struct_scx_Tglg output;
+    void __get_scx_Tglg (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Tglg & output) {
         fscx_Tglg . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Thaa fscx_Thaa;
 
 extern "C" {
-    BitBlock __get_scx_Thaa (Basis_bits & basis_bits) {
-        Struct_scx_Thaa output;
+    void __get_scx_Thaa (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Thaa & output) {
         fscx_Thaa . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Thai fscx_Thai;
 
 extern "C" {
-    BitBlock __get_scx_Thai (Basis_bits & basis_bits) {
-        Struct_scx_Thai output;
+    void __get_scx_Thai (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Thai & output) {
         fscx_Thai . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Tibt fscx_Tibt;
 
 extern "C" {
-    BitBlock __get_scx_Tibt (Basis_bits & basis_bits) {
-        Struct_scx_Tibt output;
+    void __get_scx_Tibt (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Tibt & output) {
         fscx_Tibt . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Tirh fscx_Tirh;
 
 extern "C" {
-    BitBlock __get_scx_Tirh (Basis_bits & basis_bits) {
-        Struct_scx_Tirh output;
+    void __get_scx_Tirh (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Tirh & output) {
         fscx_Tirh . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Ugar fscx_Ugar;
 
 extern "C" {
-    BitBlock __get_scx_Ugar (Basis_bits & basis_bits) {
-        Struct_scx_Ugar output;
+    void __get_scx_Ugar (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Ugar & output) {
         fscx_Ugar . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Vaii fscx_Vaii;
 
 extern "C" {
-    BitBlock __get_scx_Vaii (Basis_bits & basis_bits) {
-        Struct_scx_Vaii output;
+    void __get_scx_Vaii (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Vaii & output) {
         fscx_Vaii . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Wara fscx_Wara;
 
 extern "C" {
-    BitBlock __get_scx_Wara (Basis_bits & basis_bits) {
-        Struct_scx_Wara output;
+    void __get_scx_Wara (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Wara & output) {
         fscx_Wara . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Xpeo fscx_Xpeo;
 
 extern "C" {
-    BitBlock __get_scx_Xpeo (Basis_bits & basis_bits) {
-        Struct_scx_Xpeo output;
+    void __get_scx_Xpeo (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Xpeo & output) {
         fscx_Xpeo . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Xsux fscx_Xsux;
 
 extern "C" {
-    BitBlock __get_scx_Xsux (Basis_bits & basis_bits) {
-        Struct_scx_Xsux output;
+    void __get_scx_Xsux (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Xsux & output) {
         fscx_Xsux . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Yiii fscx_Yiii;
 
 extern "C" {
-    BitBlock __get_scx_Yiii (Basis_bits & basis_bits) {
-        Struct_scx_Yiii output;
+    void __get_scx_Yiii (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Yiii & output) {
         fscx_Yiii . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Zinh fscx_Zinh;
 
 extern "C" {
-    BitBlock __get_scx_Zinh (Basis_bits & basis_bits) {
-        Struct_scx_Zinh output;
+    void __get_scx_Zinh (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Zinh & output) {
         fscx_Zinh . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Zyyy fscx_Zyyy;
 
 extern "C" {
-    BitBlock __get_scx_Zyyy (Basis_bits & basis_bits) {
-        Struct_scx_Zyyy output;
+    void __get_scx_Zyyy (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Zyyy & output) {
         fscx_Zyyy . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_scx_Zzzz fscx_Zzzz;
 
 extern "C" {
-    BitBlock __get_scx_Zzzz (Basis_bits & basis_bits) {
-        Struct_scx_Zzzz output;
+    void __get_scx_Zzzz (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_scx_Zzzz & output) {
         fscx_Zzzz . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 

@@ -99,8 +99,8 @@ class PabloCompiler {
     };
     #endif
 
-    typedef std::unordered_map<const pablo::PabloAST *, Value*>    ASTToValueMap;
-    typedef std::unordered_map<const pablo::String *, Value*>      StringToValueMap;
+    typedef std::unordered_map<const pablo::PabloAST *, Value *>   ASTToValueMap;
+    typedef std::unordered_map<const pablo::String *, Function *>  CalleeMap;
     typedef std::vector<Value*>                                    CarryQueueVector;
 
 public:
@@ -112,10 +112,10 @@ public:
     Module *getModule();
 private:
     void GenerateFunction(PabloFunction & function);
-    void DeclareFunctions(ExecutionEngine * engine);
+    void DeclareFunctions(ExecutionEngine * const engine);
     void Examine(PabloFunction & function);
     void Examine(PabloBlock & block);
-    void DeclareCallFunctions(PabloFunction & function, ExecutionEngine * engine);
+    void DeclareCallFunctions(ExecutionEngine * const engine);
     void SetOutputValue(Value * marker, const unsigned index);
 
     void genPrintRegister(std::string regName, Value * bitblockValue);
@@ -173,7 +173,7 @@ private:
     unsigned                            mMaxWhileDepth;
 
     std::map<std::string, void *>       mExternalMap;
-    StringToValueMap                    mCalleeMap;
+    CalleeMap                           mCalleeMap;
 
     Constant *                          mPrintRegisterFunction;
 };

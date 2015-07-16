@@ -25434,2630 +25434,2104 @@ CarryArray<count, 0> name;\
 Property_blk_Aegean_Numbers fblk_Aegean_Numbers;
 
 extern "C" {
-    BitBlock __get_blk_Aegean_Numbers (Basis_bits & basis_bits) {
-        Struct_blk_Aegean_Numbers output;
+    void __get_blk_Aegean_Numbers (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Aegean_Numbers & output) {
         fblk_Aegean_Numbers . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Ahom fblk_Ahom;
 
 extern "C" {
-    BitBlock __get_blk_Ahom (Basis_bits & basis_bits) {
-        Struct_blk_Ahom output;
+    void __get_blk_Ahom (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Ahom & output) {
         fblk_Ahom . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Alchemical fblk_Alchemical;
 
 extern "C" {
-    BitBlock __get_blk_Alchemical (Basis_bits & basis_bits) {
-        Struct_blk_Alchemical output;
+    void __get_blk_Alchemical (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Alchemical & output) {
         fblk_Alchemical . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Alphabetic_PF fblk_Alphabetic_PF;
 
 extern "C" {
-    BitBlock __get_blk_Alphabetic_PF (Basis_bits & basis_bits) {
-        Struct_blk_Alphabetic_PF output;
+    void __get_blk_Alphabetic_PF (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Alphabetic_PF & output) {
         fblk_Alphabetic_PF . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Anatolian_Hieroglyphs fblk_Anatolian_Hieroglyphs;
 
 extern "C" {
-    BitBlock __get_blk_Anatolian_Hieroglyphs (Basis_bits & basis_bits) {
-        Struct_blk_Anatolian_Hieroglyphs output;
+    void __get_blk_Anatolian_Hieroglyphs (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Anatolian_Hieroglyphs & output) {
         fblk_Anatolian_Hieroglyphs . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Ancient_Greek_Music fblk_Ancient_Greek_Music;
 
 extern "C" {
-    BitBlock __get_blk_Ancient_Greek_Music (Basis_bits & basis_bits) {
-        Struct_blk_Ancient_Greek_Music output;
+    void __get_blk_Ancient_Greek_Music (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Ancient_Greek_Music & output) {
         fblk_Ancient_Greek_Music . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Ancient_Greek_Numbers fblk_Ancient_Greek_Numbers;
 
 extern "C" {
-    BitBlock __get_blk_Ancient_Greek_Numbers (Basis_bits & basis_bits) {
-        Struct_blk_Ancient_Greek_Numbers output;
+    void __get_blk_Ancient_Greek_Numbers (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Ancient_Greek_Numbers & output) {
         fblk_Ancient_Greek_Numbers . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Ancient_Symbols fblk_Ancient_Symbols;
 
 extern "C" {
-    BitBlock __get_blk_Ancient_Symbols (Basis_bits & basis_bits) {
-        Struct_blk_Ancient_Symbols output;
+    void __get_blk_Ancient_Symbols (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Ancient_Symbols & output) {
         fblk_Ancient_Symbols . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Arabic fblk_Arabic;
 
 extern "C" {
-    BitBlock __get_blk_Arabic (Basis_bits & basis_bits) {
-        Struct_blk_Arabic output;
+    void __get_blk_Arabic (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Arabic & output) {
         fblk_Arabic . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Arabic_Ext_A fblk_Arabic_Ext_A;
 
 extern "C" {
-    BitBlock __get_blk_Arabic_Ext_A (Basis_bits & basis_bits) {
-        Struct_blk_Arabic_Ext_A output;
+    void __get_blk_Arabic_Ext_A (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Arabic_Ext_A & output) {
         fblk_Arabic_Ext_A . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Arabic_Math fblk_Arabic_Math;
 
 extern "C" {
-    BitBlock __get_blk_Arabic_Math (Basis_bits & basis_bits) {
-        Struct_blk_Arabic_Math output;
+    void __get_blk_Arabic_Math (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Arabic_Math & output) {
         fblk_Arabic_Math . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Arabic_PF_A fblk_Arabic_PF_A;
 
 extern "C" {
-    BitBlock __get_blk_Arabic_PF_A (Basis_bits & basis_bits) {
-        Struct_blk_Arabic_PF_A output;
+    void __get_blk_Arabic_PF_A (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Arabic_PF_A & output) {
         fblk_Arabic_PF_A . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Arabic_PF_B fblk_Arabic_PF_B;
 
 extern "C" {
-    BitBlock __get_blk_Arabic_PF_B (Basis_bits & basis_bits) {
-        Struct_blk_Arabic_PF_B output;
+    void __get_blk_Arabic_PF_B (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Arabic_PF_B & output) {
         fblk_Arabic_PF_B . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Arabic_Sup fblk_Arabic_Sup;
 
 extern "C" {
-    BitBlock __get_blk_Arabic_Sup (Basis_bits & basis_bits) {
-        Struct_blk_Arabic_Sup output;
+    void __get_blk_Arabic_Sup (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Arabic_Sup & output) {
         fblk_Arabic_Sup . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Armenian fblk_Armenian;
 
 extern "C" {
-    BitBlock __get_blk_Armenian (Basis_bits & basis_bits) {
-        Struct_blk_Armenian output;
+    void __get_blk_Armenian (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Armenian & output) {
         fblk_Armenian . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Arrows fblk_Arrows;
 
 extern "C" {
-    BitBlock __get_blk_Arrows (Basis_bits & basis_bits) {
-        Struct_blk_Arrows output;
+    void __get_blk_Arrows (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Arrows & output) {
         fblk_Arrows . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_ASCII fblk_ASCII;
 
 extern "C" {
-    BitBlock __get_blk_ASCII (Basis_bits & basis_bits) {
-        Struct_blk_ASCII output;
+    void __get_blk_ASCII (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_ASCII & output) {
         fblk_ASCII . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Avestan fblk_Avestan;
 
 extern "C" {
-    BitBlock __get_blk_Avestan (Basis_bits & basis_bits) {
-        Struct_blk_Avestan output;
+    void __get_blk_Avestan (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Avestan & output) {
         fblk_Avestan . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Balinese fblk_Balinese;
 
 extern "C" {
-    BitBlock __get_blk_Balinese (Basis_bits & basis_bits) {
-        Struct_blk_Balinese output;
+    void __get_blk_Balinese (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Balinese & output) {
         fblk_Balinese . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Bamum fblk_Bamum;
 
 extern "C" {
-    BitBlock __get_blk_Bamum (Basis_bits & basis_bits) {
-        Struct_blk_Bamum output;
+    void __get_blk_Bamum (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Bamum & output) {
         fblk_Bamum . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Bamum_Sup fblk_Bamum_Sup;
 
 extern "C" {
-    BitBlock __get_blk_Bamum_Sup (Basis_bits & basis_bits) {
-        Struct_blk_Bamum_Sup output;
+    void __get_blk_Bamum_Sup (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Bamum_Sup & output) {
         fblk_Bamum_Sup . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Bassa_Vah fblk_Bassa_Vah;
 
 extern "C" {
-    BitBlock __get_blk_Bassa_Vah (Basis_bits & basis_bits) {
-        Struct_blk_Bassa_Vah output;
+    void __get_blk_Bassa_Vah (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Bassa_Vah & output) {
         fblk_Bassa_Vah . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Batak fblk_Batak;
 
 extern "C" {
-    BitBlock __get_blk_Batak (Basis_bits & basis_bits) {
-        Struct_blk_Batak output;
+    void __get_blk_Batak (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Batak & output) {
         fblk_Batak . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Bengali fblk_Bengali;
 
 extern "C" {
-    BitBlock __get_blk_Bengali (Basis_bits & basis_bits) {
-        Struct_blk_Bengali output;
+    void __get_blk_Bengali (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Bengali & output) {
         fblk_Bengali . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Block_Elements fblk_Block_Elements;
 
 extern "C" {
-    BitBlock __get_blk_Block_Elements (Basis_bits & basis_bits) {
-        Struct_blk_Block_Elements output;
+    void __get_blk_Block_Elements (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Block_Elements & output) {
         fblk_Block_Elements . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Bopomofo fblk_Bopomofo;
 
 extern "C" {
-    BitBlock __get_blk_Bopomofo (Basis_bits & basis_bits) {
-        Struct_blk_Bopomofo output;
+    void __get_blk_Bopomofo (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Bopomofo & output) {
         fblk_Bopomofo . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Bopomofo_Ext fblk_Bopomofo_Ext;
 
 extern "C" {
-    BitBlock __get_blk_Bopomofo_Ext (Basis_bits & basis_bits) {
-        Struct_blk_Bopomofo_Ext output;
+    void __get_blk_Bopomofo_Ext (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Bopomofo_Ext & output) {
         fblk_Bopomofo_Ext . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Box_Drawing fblk_Box_Drawing;
 
 extern "C" {
-    BitBlock __get_blk_Box_Drawing (Basis_bits & basis_bits) {
-        Struct_blk_Box_Drawing output;
+    void __get_blk_Box_Drawing (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Box_Drawing & output) {
         fblk_Box_Drawing . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Brahmi fblk_Brahmi;
 
 extern "C" {
-    BitBlock __get_blk_Brahmi (Basis_bits & basis_bits) {
-        Struct_blk_Brahmi output;
+    void __get_blk_Brahmi (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Brahmi & output) {
         fblk_Brahmi . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Braille fblk_Braille;
 
 extern "C" {
-    BitBlock __get_blk_Braille (Basis_bits & basis_bits) {
-        Struct_blk_Braille output;
+    void __get_blk_Braille (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Braille & output) {
         fblk_Braille . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Buginese fblk_Buginese;
 
 extern "C" {
-    BitBlock __get_blk_Buginese (Basis_bits & basis_bits) {
-        Struct_blk_Buginese output;
+    void __get_blk_Buginese (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Buginese & output) {
         fblk_Buginese . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Buhid fblk_Buhid;
 
 extern "C" {
-    BitBlock __get_blk_Buhid (Basis_bits & basis_bits) {
-        Struct_blk_Buhid output;
+    void __get_blk_Buhid (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Buhid & output) {
         fblk_Buhid . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Byzantine_Music fblk_Byzantine_Music;
 
 extern "C" {
-    BitBlock __get_blk_Byzantine_Music (Basis_bits & basis_bits) {
-        Struct_blk_Byzantine_Music output;
+    void __get_blk_Byzantine_Music (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Byzantine_Music & output) {
         fblk_Byzantine_Music . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Carian fblk_Carian;
 
 extern "C" {
-    BitBlock __get_blk_Carian (Basis_bits & basis_bits) {
-        Struct_blk_Carian output;
+    void __get_blk_Carian (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Carian & output) {
         fblk_Carian . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Caucasian_Albanian fblk_Caucasian_Albanian;
 
 extern "C" {
-    BitBlock __get_blk_Caucasian_Albanian (Basis_bits & basis_bits) {
-        Struct_blk_Caucasian_Albanian output;
+    void __get_blk_Caucasian_Albanian (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Caucasian_Albanian & output) {
         fblk_Caucasian_Albanian . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Chakma fblk_Chakma;
 
 extern "C" {
-    BitBlock __get_blk_Chakma (Basis_bits & basis_bits) {
-        Struct_blk_Chakma output;
+    void __get_blk_Chakma (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Chakma & output) {
         fblk_Chakma . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Cham fblk_Cham;
 
 extern "C" {
-    BitBlock __get_blk_Cham (Basis_bits & basis_bits) {
-        Struct_blk_Cham output;
+    void __get_blk_Cham (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Cham & output) {
         fblk_Cham . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Cherokee fblk_Cherokee;
 
 extern "C" {
-    BitBlock __get_blk_Cherokee (Basis_bits & basis_bits) {
-        Struct_blk_Cherokee output;
+    void __get_blk_Cherokee (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Cherokee & output) {
         fblk_Cherokee . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Cherokee_Sup fblk_Cherokee_Sup;
 
 extern "C" {
-    BitBlock __get_blk_Cherokee_Sup (Basis_bits & basis_bits) {
-        Struct_blk_Cherokee_Sup output;
+    void __get_blk_Cherokee_Sup (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Cherokee_Sup & output) {
         fblk_Cherokee_Sup . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_CJK fblk_CJK;
 
 extern "C" {
-    BitBlock __get_blk_CJK (Basis_bits & basis_bits) {
-        Struct_blk_CJK output;
+    void __get_blk_CJK (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_CJK & output) {
         fblk_CJK . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_CJK_Compat fblk_CJK_Compat;
 
 extern "C" {
-    BitBlock __get_blk_CJK_Compat (Basis_bits & basis_bits) {
-        Struct_blk_CJK_Compat output;
+    void __get_blk_CJK_Compat (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_CJK_Compat & output) {
         fblk_CJK_Compat . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_CJK_Compat_Forms fblk_CJK_Compat_Forms;
 
 extern "C" {
-    BitBlock __get_blk_CJK_Compat_Forms (Basis_bits & basis_bits) {
-        Struct_blk_CJK_Compat_Forms output;
+    void __get_blk_CJK_Compat_Forms (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_CJK_Compat_Forms & output) {
         fblk_CJK_Compat_Forms . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_CJK_Compat_Ideographs fblk_CJK_Compat_Ideographs;
 
 extern "C" {
-    BitBlock __get_blk_CJK_Compat_Ideographs (Basis_bits & basis_bits) {
-        Struct_blk_CJK_Compat_Ideographs output;
+    void __get_blk_CJK_Compat_Ideographs (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_CJK_Compat_Ideographs & output) {
         fblk_CJK_Compat_Ideographs . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_CJK_Compat_Ideographs_Sup fblk_CJK_Compat_Ideographs_Sup;
 
 extern "C" {
-    BitBlock __get_blk_CJK_Compat_Ideographs_Sup (Basis_bits & basis_bits) {
-        Struct_blk_CJK_Compat_Ideographs_Sup output;
+    void __get_blk_CJK_Compat_Ideographs_Sup (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_CJK_Compat_Ideographs_Sup & output) {
         fblk_CJK_Compat_Ideographs_Sup . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_CJK_Ext_A fblk_CJK_Ext_A;
 
 extern "C" {
-    BitBlock __get_blk_CJK_Ext_A (Basis_bits & basis_bits) {
-        Struct_blk_CJK_Ext_A output;
+    void __get_blk_CJK_Ext_A (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_CJK_Ext_A & output) {
         fblk_CJK_Ext_A . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_CJK_Ext_B fblk_CJK_Ext_B;
 
 extern "C" {
-    BitBlock __get_blk_CJK_Ext_B (Basis_bits & basis_bits) {
-        Struct_blk_CJK_Ext_B output;
+    void __get_blk_CJK_Ext_B (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_CJK_Ext_B & output) {
         fblk_CJK_Ext_B . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_CJK_Ext_C fblk_CJK_Ext_C;
 
 extern "C" {
-    BitBlock __get_blk_CJK_Ext_C (Basis_bits & basis_bits) {
-        Struct_blk_CJK_Ext_C output;
+    void __get_blk_CJK_Ext_C (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_CJK_Ext_C & output) {
         fblk_CJK_Ext_C . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_CJK_Ext_D fblk_CJK_Ext_D;
 
 extern "C" {
-    BitBlock __get_blk_CJK_Ext_D (Basis_bits & basis_bits) {
-        Struct_blk_CJK_Ext_D output;
+    void __get_blk_CJK_Ext_D (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_CJK_Ext_D & output) {
         fblk_CJK_Ext_D . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_CJK_Ext_E fblk_CJK_Ext_E;
 
 extern "C" {
-    BitBlock __get_blk_CJK_Ext_E (Basis_bits & basis_bits) {
-        Struct_blk_CJK_Ext_E output;
+    void __get_blk_CJK_Ext_E (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_CJK_Ext_E & output) {
         fblk_CJK_Ext_E . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_CJK_Radicals_Sup fblk_CJK_Radicals_Sup;
 
 extern "C" {
-    BitBlock __get_blk_CJK_Radicals_Sup (Basis_bits & basis_bits) {
-        Struct_blk_CJK_Radicals_Sup output;
+    void __get_blk_CJK_Radicals_Sup (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_CJK_Radicals_Sup & output) {
         fblk_CJK_Radicals_Sup . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_CJK_Strokes fblk_CJK_Strokes;
 
 extern "C" {
-    BitBlock __get_blk_CJK_Strokes (Basis_bits & basis_bits) {
-        Struct_blk_CJK_Strokes output;
+    void __get_blk_CJK_Strokes (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_CJK_Strokes & output) {
         fblk_CJK_Strokes . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_CJK_Symbols fblk_CJK_Symbols;
 
 extern "C" {
-    BitBlock __get_blk_CJK_Symbols (Basis_bits & basis_bits) {
-        Struct_blk_CJK_Symbols output;
+    void __get_blk_CJK_Symbols (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_CJK_Symbols & output) {
         fblk_CJK_Symbols . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Compat_Jamo fblk_Compat_Jamo;
 
 extern "C" {
-    BitBlock __get_blk_Compat_Jamo (Basis_bits & basis_bits) {
-        Struct_blk_Compat_Jamo output;
+    void __get_blk_Compat_Jamo (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Compat_Jamo & output) {
         fblk_Compat_Jamo . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Control_Pictures fblk_Control_Pictures;
 
 extern "C" {
-    BitBlock __get_blk_Control_Pictures (Basis_bits & basis_bits) {
-        Struct_blk_Control_Pictures output;
+    void __get_blk_Control_Pictures (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Control_Pictures & output) {
         fblk_Control_Pictures . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Coptic fblk_Coptic;
 
 extern "C" {
-    BitBlock __get_blk_Coptic (Basis_bits & basis_bits) {
-        Struct_blk_Coptic output;
+    void __get_blk_Coptic (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Coptic & output) {
         fblk_Coptic . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Coptic_Epact_Numbers fblk_Coptic_Epact_Numbers;
 
 extern "C" {
-    BitBlock __get_blk_Coptic_Epact_Numbers (Basis_bits & basis_bits) {
-        Struct_blk_Coptic_Epact_Numbers output;
+    void __get_blk_Coptic_Epact_Numbers (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Coptic_Epact_Numbers & output) {
         fblk_Coptic_Epact_Numbers . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Counting_Rod fblk_Counting_Rod;
 
 extern "C" {
-    BitBlock __get_blk_Counting_Rod (Basis_bits & basis_bits) {
-        Struct_blk_Counting_Rod output;
+    void __get_blk_Counting_Rod (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Counting_Rod & output) {
         fblk_Counting_Rod . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Cuneiform fblk_Cuneiform;
 
 extern "C" {
-    BitBlock __get_blk_Cuneiform (Basis_bits & basis_bits) {
-        Struct_blk_Cuneiform output;
+    void __get_blk_Cuneiform (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Cuneiform & output) {
         fblk_Cuneiform . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Cuneiform_Numbers fblk_Cuneiform_Numbers;
 
 extern "C" {
-    BitBlock __get_blk_Cuneiform_Numbers (Basis_bits & basis_bits) {
-        Struct_blk_Cuneiform_Numbers output;
+    void __get_blk_Cuneiform_Numbers (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Cuneiform_Numbers & output) {
         fblk_Cuneiform_Numbers . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Currency_Symbols fblk_Currency_Symbols;
 
 extern "C" {
-    BitBlock __get_blk_Currency_Symbols (Basis_bits & basis_bits) {
-        Struct_blk_Currency_Symbols output;
+    void __get_blk_Currency_Symbols (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Currency_Symbols & output) {
         fblk_Currency_Symbols . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Cypriot_Syllabary fblk_Cypriot_Syllabary;
 
 extern "C" {
-    BitBlock __get_blk_Cypriot_Syllabary (Basis_bits & basis_bits) {
-        Struct_blk_Cypriot_Syllabary output;
+    void __get_blk_Cypriot_Syllabary (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Cypriot_Syllabary & output) {
         fblk_Cypriot_Syllabary . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Cyrillic fblk_Cyrillic;
 
 extern "C" {
-    BitBlock __get_blk_Cyrillic (Basis_bits & basis_bits) {
-        Struct_blk_Cyrillic output;
+    void __get_blk_Cyrillic (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Cyrillic & output) {
         fblk_Cyrillic . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Cyrillic_Ext_A fblk_Cyrillic_Ext_A;
 
 extern "C" {
-    BitBlock __get_blk_Cyrillic_Ext_A (Basis_bits & basis_bits) {
-        Struct_blk_Cyrillic_Ext_A output;
+    void __get_blk_Cyrillic_Ext_A (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Cyrillic_Ext_A & output) {
         fblk_Cyrillic_Ext_A . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Cyrillic_Ext_B fblk_Cyrillic_Ext_B;
 
 extern "C" {
-    BitBlock __get_blk_Cyrillic_Ext_B (Basis_bits & basis_bits) {
-        Struct_blk_Cyrillic_Ext_B output;
+    void __get_blk_Cyrillic_Ext_B (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Cyrillic_Ext_B & output) {
         fblk_Cyrillic_Ext_B . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Cyrillic_Sup fblk_Cyrillic_Sup;
 
 extern "C" {
-    BitBlock __get_blk_Cyrillic_Sup (Basis_bits & basis_bits) {
-        Struct_blk_Cyrillic_Sup output;
+    void __get_blk_Cyrillic_Sup (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Cyrillic_Sup & output) {
         fblk_Cyrillic_Sup . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Deseret fblk_Deseret;
 
 extern "C" {
-    BitBlock __get_blk_Deseret (Basis_bits & basis_bits) {
-        Struct_blk_Deseret output;
+    void __get_blk_Deseret (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Deseret & output) {
         fblk_Deseret . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Devanagari fblk_Devanagari;
 
 extern "C" {
-    BitBlock __get_blk_Devanagari (Basis_bits & basis_bits) {
-        Struct_blk_Devanagari output;
+    void __get_blk_Devanagari (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Devanagari & output) {
         fblk_Devanagari . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Devanagari_Ext fblk_Devanagari_Ext;
 
 extern "C" {
-    BitBlock __get_blk_Devanagari_Ext (Basis_bits & basis_bits) {
-        Struct_blk_Devanagari_Ext output;
+    void __get_blk_Devanagari_Ext (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Devanagari_Ext & output) {
         fblk_Devanagari_Ext . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Diacriticals fblk_Diacriticals;
 
 extern "C" {
-    BitBlock __get_blk_Diacriticals (Basis_bits & basis_bits) {
-        Struct_blk_Diacriticals output;
+    void __get_blk_Diacriticals (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Diacriticals & output) {
         fblk_Diacriticals . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Diacriticals_Ext fblk_Diacriticals_Ext;
 
 extern "C" {
-    BitBlock __get_blk_Diacriticals_Ext (Basis_bits & basis_bits) {
-        Struct_blk_Diacriticals_Ext output;
+    void __get_blk_Diacriticals_Ext (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Diacriticals_Ext & output) {
         fblk_Diacriticals_Ext . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Diacriticals_For_Symbols fblk_Diacriticals_For_Symbols;
 
 extern "C" {
-    BitBlock __get_blk_Diacriticals_For_Symbols (Basis_bits & basis_bits) {
-        Struct_blk_Diacriticals_For_Symbols output;
+    void __get_blk_Diacriticals_For_Symbols (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Diacriticals_For_Symbols & output) {
         fblk_Diacriticals_For_Symbols . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Diacriticals_Sup fblk_Diacriticals_Sup;
 
 extern "C" {
-    BitBlock __get_blk_Diacriticals_Sup (Basis_bits & basis_bits) {
-        Struct_blk_Diacriticals_Sup output;
+    void __get_blk_Diacriticals_Sup (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Diacriticals_Sup & output) {
         fblk_Diacriticals_Sup . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Dingbats fblk_Dingbats;
 
 extern "C" {
-    BitBlock __get_blk_Dingbats (Basis_bits & basis_bits) {
-        Struct_blk_Dingbats output;
+    void __get_blk_Dingbats (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Dingbats & output) {
         fblk_Dingbats . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Domino fblk_Domino;
 
 extern "C" {
-    BitBlock __get_blk_Domino (Basis_bits & basis_bits) {
-        Struct_blk_Domino output;
+    void __get_blk_Domino (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Domino & output) {
         fblk_Domino . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Duployan fblk_Duployan;
 
 extern "C" {
-    BitBlock __get_blk_Duployan (Basis_bits & basis_bits) {
-        Struct_blk_Duployan output;
+    void __get_blk_Duployan (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Duployan & output) {
         fblk_Duployan . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Early_Dynastic_Cuneiform fblk_Early_Dynastic_Cuneiform;
 
 extern "C" {
-    BitBlock __get_blk_Early_Dynastic_Cuneiform (Basis_bits & basis_bits) {
-        Struct_blk_Early_Dynastic_Cuneiform output;
+    void __get_blk_Early_Dynastic_Cuneiform (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Early_Dynastic_Cuneiform & output) {
         fblk_Early_Dynastic_Cuneiform . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Egyptian_Hieroglyphs fblk_Egyptian_Hieroglyphs;
 
 extern "C" {
-    BitBlock __get_blk_Egyptian_Hieroglyphs (Basis_bits & basis_bits) {
-        Struct_blk_Egyptian_Hieroglyphs output;
+    void __get_blk_Egyptian_Hieroglyphs (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Egyptian_Hieroglyphs & output) {
         fblk_Egyptian_Hieroglyphs . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Elbasan fblk_Elbasan;
 
 extern "C" {
-    BitBlock __get_blk_Elbasan (Basis_bits & basis_bits) {
-        Struct_blk_Elbasan output;
+    void __get_blk_Elbasan (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Elbasan & output) {
         fblk_Elbasan . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Emoticons fblk_Emoticons;
 
 extern "C" {
-    BitBlock __get_blk_Emoticons (Basis_bits & basis_bits) {
-        Struct_blk_Emoticons output;
+    void __get_blk_Emoticons (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Emoticons & output) {
         fblk_Emoticons . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Enclosed_Alphanum fblk_Enclosed_Alphanum;
 
 extern "C" {
-    BitBlock __get_blk_Enclosed_Alphanum (Basis_bits & basis_bits) {
-        Struct_blk_Enclosed_Alphanum output;
+    void __get_blk_Enclosed_Alphanum (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Enclosed_Alphanum & output) {
         fblk_Enclosed_Alphanum . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Enclosed_Alphanum_Sup fblk_Enclosed_Alphanum_Sup;
 
 extern "C" {
-    BitBlock __get_blk_Enclosed_Alphanum_Sup (Basis_bits & basis_bits) {
-        Struct_blk_Enclosed_Alphanum_Sup output;
+    void __get_blk_Enclosed_Alphanum_Sup (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Enclosed_Alphanum_Sup & output) {
         fblk_Enclosed_Alphanum_Sup . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Enclosed_CJK fblk_Enclosed_CJK;
 
 extern "C" {
-    BitBlock __get_blk_Enclosed_CJK (Basis_bits & basis_bits) {
-        Struct_blk_Enclosed_CJK output;
+    void __get_blk_Enclosed_CJK (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Enclosed_CJK & output) {
         fblk_Enclosed_CJK . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Enclosed_Ideographic_Sup fblk_Enclosed_Ideographic_Sup;
 
 extern "C" {
-    BitBlock __get_blk_Enclosed_Ideographic_Sup (Basis_bits & basis_bits) {
-        Struct_blk_Enclosed_Ideographic_Sup output;
+    void __get_blk_Enclosed_Ideographic_Sup (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Enclosed_Ideographic_Sup & output) {
         fblk_Enclosed_Ideographic_Sup . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Ethiopic fblk_Ethiopic;
 
 extern "C" {
-    BitBlock __get_blk_Ethiopic (Basis_bits & basis_bits) {
-        Struct_blk_Ethiopic output;
+    void __get_blk_Ethiopic (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Ethiopic & output) {
         fblk_Ethiopic . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Ethiopic_Ext fblk_Ethiopic_Ext;
 
 extern "C" {
-    BitBlock __get_blk_Ethiopic_Ext (Basis_bits & basis_bits) {
-        Struct_blk_Ethiopic_Ext output;
+    void __get_blk_Ethiopic_Ext (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Ethiopic_Ext & output) {
         fblk_Ethiopic_Ext . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Ethiopic_Ext_A fblk_Ethiopic_Ext_A;
 
 extern "C" {
-    BitBlock __get_blk_Ethiopic_Ext_A (Basis_bits & basis_bits) {
-        Struct_blk_Ethiopic_Ext_A output;
+    void __get_blk_Ethiopic_Ext_A (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Ethiopic_Ext_A & output) {
         fblk_Ethiopic_Ext_A . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Ethiopic_Sup fblk_Ethiopic_Sup;
 
 extern "C" {
-    BitBlock __get_blk_Ethiopic_Sup (Basis_bits & basis_bits) {
-        Struct_blk_Ethiopic_Sup output;
+    void __get_blk_Ethiopic_Sup (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Ethiopic_Sup & output) {
         fblk_Ethiopic_Sup . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Geometric_Shapes fblk_Geometric_Shapes;
 
 extern "C" {
-    BitBlock __get_blk_Geometric_Shapes (Basis_bits & basis_bits) {
-        Struct_blk_Geometric_Shapes output;
+    void __get_blk_Geometric_Shapes (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Geometric_Shapes & output) {
         fblk_Geometric_Shapes . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Geometric_Shapes_Ext fblk_Geometric_Shapes_Ext;
 
 extern "C" {
-    BitBlock __get_blk_Geometric_Shapes_Ext (Basis_bits & basis_bits) {
-        Struct_blk_Geometric_Shapes_Ext output;
+    void __get_blk_Geometric_Shapes_Ext (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Geometric_Shapes_Ext & output) {
         fblk_Geometric_Shapes_Ext . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Georgian fblk_Georgian;
 
 extern "C" {
-    BitBlock __get_blk_Georgian (Basis_bits & basis_bits) {
-        Struct_blk_Georgian output;
+    void __get_blk_Georgian (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Georgian & output) {
         fblk_Georgian . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Georgian_Sup fblk_Georgian_Sup;
 
 extern "C" {
-    BitBlock __get_blk_Georgian_Sup (Basis_bits & basis_bits) {
-        Struct_blk_Georgian_Sup output;
+    void __get_blk_Georgian_Sup (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Georgian_Sup & output) {
         fblk_Georgian_Sup . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Glagolitic fblk_Glagolitic;
 
 extern "C" {
-    BitBlock __get_blk_Glagolitic (Basis_bits & basis_bits) {
-        Struct_blk_Glagolitic output;
+    void __get_blk_Glagolitic (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Glagolitic & output) {
         fblk_Glagolitic . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Gothic fblk_Gothic;
 
 extern "C" {
-    BitBlock __get_blk_Gothic (Basis_bits & basis_bits) {
-        Struct_blk_Gothic output;
+    void __get_blk_Gothic (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Gothic & output) {
         fblk_Gothic . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Grantha fblk_Grantha;
 
 extern "C" {
-    BitBlock __get_blk_Grantha (Basis_bits & basis_bits) {
-        Struct_blk_Grantha output;
+    void __get_blk_Grantha (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Grantha & output) {
         fblk_Grantha . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Greek fblk_Greek;
 
 extern "C" {
-    BitBlock __get_blk_Greek (Basis_bits & basis_bits) {
-        Struct_blk_Greek output;
+    void __get_blk_Greek (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Greek & output) {
         fblk_Greek . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Greek_Ext fblk_Greek_Ext;
 
 extern "C" {
-    BitBlock __get_blk_Greek_Ext (Basis_bits & basis_bits) {
-        Struct_blk_Greek_Ext output;
+    void __get_blk_Greek_Ext (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Greek_Ext & output) {
         fblk_Greek_Ext . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Gujarati fblk_Gujarati;
 
 extern "C" {
-    BitBlock __get_blk_Gujarati (Basis_bits & basis_bits) {
-        Struct_blk_Gujarati output;
+    void __get_blk_Gujarati (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Gujarati & output) {
         fblk_Gujarati . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Gurmukhi fblk_Gurmukhi;
 
 extern "C" {
-    BitBlock __get_blk_Gurmukhi (Basis_bits & basis_bits) {
-        Struct_blk_Gurmukhi output;
+    void __get_blk_Gurmukhi (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Gurmukhi & output) {
         fblk_Gurmukhi . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Half_And_Full_Forms fblk_Half_And_Full_Forms;
 
 extern "C" {
-    BitBlock __get_blk_Half_And_Full_Forms (Basis_bits & basis_bits) {
-        Struct_blk_Half_And_Full_Forms output;
+    void __get_blk_Half_And_Full_Forms (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Half_And_Full_Forms & output) {
         fblk_Half_And_Full_Forms . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Half_Marks fblk_Half_Marks;
 
 extern "C" {
-    BitBlock __get_blk_Half_Marks (Basis_bits & basis_bits) {
-        Struct_blk_Half_Marks output;
+    void __get_blk_Half_Marks (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Half_Marks & output) {
         fblk_Half_Marks . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Hangul fblk_Hangul;
 
 extern "C" {
-    BitBlock __get_blk_Hangul (Basis_bits & basis_bits) {
-        Struct_blk_Hangul output;
+    void __get_blk_Hangul (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Hangul & output) {
         fblk_Hangul . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Hanunoo fblk_Hanunoo;
 
 extern "C" {
-    BitBlock __get_blk_Hanunoo (Basis_bits & basis_bits) {
-        Struct_blk_Hanunoo output;
+    void __get_blk_Hanunoo (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Hanunoo & output) {
         fblk_Hanunoo . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Hatran fblk_Hatran;
 
 extern "C" {
-    BitBlock __get_blk_Hatran (Basis_bits & basis_bits) {
-        Struct_blk_Hatran output;
+    void __get_blk_Hatran (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Hatran & output) {
         fblk_Hatran . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Hebrew fblk_Hebrew;
 
 extern "C" {
-    BitBlock __get_blk_Hebrew (Basis_bits & basis_bits) {
-        Struct_blk_Hebrew output;
+    void __get_blk_Hebrew (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Hebrew & output) {
         fblk_Hebrew . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_High_PU_Surrogates fblk_High_PU_Surrogates;
 
 extern "C" {
-    BitBlock __get_blk_High_PU_Surrogates (Basis_bits & basis_bits) {
-        Struct_blk_High_PU_Surrogates output;
+    void __get_blk_High_PU_Surrogates (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_High_PU_Surrogates & output) {
         fblk_High_PU_Surrogates . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_High_Surrogates fblk_High_Surrogates;
 
 extern "C" {
-    BitBlock __get_blk_High_Surrogates (Basis_bits & basis_bits) {
-        Struct_blk_High_Surrogates output;
+    void __get_blk_High_Surrogates (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_High_Surrogates & output) {
         fblk_High_Surrogates . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Hiragana fblk_Hiragana;
 
 extern "C" {
-    BitBlock __get_blk_Hiragana (Basis_bits & basis_bits) {
-        Struct_blk_Hiragana output;
+    void __get_blk_Hiragana (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Hiragana & output) {
         fblk_Hiragana . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_IDC fblk_IDC;
 
 extern "C" {
-    BitBlock __get_blk_IDC (Basis_bits & basis_bits) {
-        Struct_blk_IDC output;
+    void __get_blk_IDC (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_IDC & output) {
         fblk_IDC . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Imperial_Aramaic fblk_Imperial_Aramaic;
 
 extern "C" {
-    BitBlock __get_blk_Imperial_Aramaic (Basis_bits & basis_bits) {
-        Struct_blk_Imperial_Aramaic output;
+    void __get_blk_Imperial_Aramaic (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Imperial_Aramaic & output) {
         fblk_Imperial_Aramaic . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Indic_Number_Forms fblk_Indic_Number_Forms;
 
 extern "C" {
-    BitBlock __get_blk_Indic_Number_Forms (Basis_bits & basis_bits) {
-        Struct_blk_Indic_Number_Forms output;
+    void __get_blk_Indic_Number_Forms (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Indic_Number_Forms & output) {
         fblk_Indic_Number_Forms . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Inscriptional_Pahlavi fblk_Inscriptional_Pahlavi;
 
 extern "C" {
-    BitBlock __get_blk_Inscriptional_Pahlavi (Basis_bits & basis_bits) {
-        Struct_blk_Inscriptional_Pahlavi output;
+    void __get_blk_Inscriptional_Pahlavi (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Inscriptional_Pahlavi & output) {
         fblk_Inscriptional_Pahlavi . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Inscriptional_Parthian fblk_Inscriptional_Parthian;
 
 extern "C" {
-    BitBlock __get_blk_Inscriptional_Parthian (Basis_bits & basis_bits) {
-        Struct_blk_Inscriptional_Parthian output;
+    void __get_blk_Inscriptional_Parthian (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Inscriptional_Parthian & output) {
         fblk_Inscriptional_Parthian . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_IPA_Ext fblk_IPA_Ext;
 
 extern "C" {
-    BitBlock __get_blk_IPA_Ext (Basis_bits & basis_bits) {
-        Struct_blk_IPA_Ext output;
+    void __get_blk_IPA_Ext (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_IPA_Ext & output) {
         fblk_IPA_Ext . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Jamo fblk_Jamo;
 
 extern "C" {
-    BitBlock __get_blk_Jamo (Basis_bits & basis_bits) {
-        Struct_blk_Jamo output;
+    void __get_blk_Jamo (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Jamo & output) {
         fblk_Jamo . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Jamo_Ext_A fblk_Jamo_Ext_A;
 
 extern "C" {
-    BitBlock __get_blk_Jamo_Ext_A (Basis_bits & basis_bits) {
-        Struct_blk_Jamo_Ext_A output;
+    void __get_blk_Jamo_Ext_A (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Jamo_Ext_A & output) {
         fblk_Jamo_Ext_A . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Jamo_Ext_B fblk_Jamo_Ext_B;
 
 extern "C" {
-    BitBlock __get_blk_Jamo_Ext_B (Basis_bits & basis_bits) {
-        Struct_blk_Jamo_Ext_B output;
+    void __get_blk_Jamo_Ext_B (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Jamo_Ext_B & output) {
         fblk_Jamo_Ext_B . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Javanese fblk_Javanese;
 
 extern "C" {
-    BitBlock __get_blk_Javanese (Basis_bits & basis_bits) {
-        Struct_blk_Javanese output;
+    void __get_blk_Javanese (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Javanese & output) {
         fblk_Javanese . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Kaithi fblk_Kaithi;
 
 extern "C" {
-    BitBlock __get_blk_Kaithi (Basis_bits & basis_bits) {
-        Struct_blk_Kaithi output;
+    void __get_blk_Kaithi (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Kaithi & output) {
         fblk_Kaithi . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Kana_Sup fblk_Kana_Sup;
 
 extern "C" {
-    BitBlock __get_blk_Kana_Sup (Basis_bits & basis_bits) {
-        Struct_blk_Kana_Sup output;
+    void __get_blk_Kana_Sup (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Kana_Sup & output) {
         fblk_Kana_Sup . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Kanbun fblk_Kanbun;
 
 extern "C" {
-    BitBlock __get_blk_Kanbun (Basis_bits & basis_bits) {
-        Struct_blk_Kanbun output;
+    void __get_blk_Kanbun (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Kanbun & output) {
         fblk_Kanbun . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Kangxi fblk_Kangxi;
 
 extern "C" {
-    BitBlock __get_blk_Kangxi (Basis_bits & basis_bits) {
-        Struct_blk_Kangxi output;
+    void __get_blk_Kangxi (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Kangxi & output) {
         fblk_Kangxi . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Kannada fblk_Kannada;
 
 extern "C" {
-    BitBlock __get_blk_Kannada (Basis_bits & basis_bits) {
-        Struct_blk_Kannada output;
+    void __get_blk_Kannada (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Kannada & output) {
         fblk_Kannada . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Katakana fblk_Katakana;
 
 extern "C" {
-    BitBlock __get_blk_Katakana (Basis_bits & basis_bits) {
-        Struct_blk_Katakana output;
+    void __get_blk_Katakana (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Katakana & output) {
         fblk_Katakana . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Katakana_Ext fblk_Katakana_Ext;
 
 extern "C" {
-    BitBlock __get_blk_Katakana_Ext (Basis_bits & basis_bits) {
-        Struct_blk_Katakana_Ext output;
+    void __get_blk_Katakana_Ext (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Katakana_Ext & output) {
         fblk_Katakana_Ext . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Kayah_Li fblk_Kayah_Li;
 
 extern "C" {
-    BitBlock __get_blk_Kayah_Li (Basis_bits & basis_bits) {
-        Struct_blk_Kayah_Li output;
+    void __get_blk_Kayah_Li (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Kayah_Li & output) {
         fblk_Kayah_Li . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Kharoshthi fblk_Kharoshthi;
 
 extern "C" {
-    BitBlock __get_blk_Kharoshthi (Basis_bits & basis_bits) {
-        Struct_blk_Kharoshthi output;
+    void __get_blk_Kharoshthi (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Kharoshthi & output) {
         fblk_Kharoshthi . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Khmer fblk_Khmer;
 
 extern "C" {
-    BitBlock __get_blk_Khmer (Basis_bits & basis_bits) {
-        Struct_blk_Khmer output;
+    void __get_blk_Khmer (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Khmer & output) {
         fblk_Khmer . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Khmer_Symbols fblk_Khmer_Symbols;
 
 extern "C" {
-    BitBlock __get_blk_Khmer_Symbols (Basis_bits & basis_bits) {
-        Struct_blk_Khmer_Symbols output;
+    void __get_blk_Khmer_Symbols (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Khmer_Symbols & output) {
         fblk_Khmer_Symbols . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Khojki fblk_Khojki;
 
 extern "C" {
-    BitBlock __get_blk_Khojki (Basis_bits & basis_bits) {
-        Struct_blk_Khojki output;
+    void __get_blk_Khojki (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Khojki & output) {
         fblk_Khojki . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Khudawadi fblk_Khudawadi;
 
 extern "C" {
-    BitBlock __get_blk_Khudawadi (Basis_bits & basis_bits) {
-        Struct_blk_Khudawadi output;
+    void __get_blk_Khudawadi (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Khudawadi & output) {
         fblk_Khudawadi . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Lao fblk_Lao;
 
 extern "C" {
-    BitBlock __get_blk_Lao (Basis_bits & basis_bits) {
-        Struct_blk_Lao output;
+    void __get_blk_Lao (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Lao & output) {
         fblk_Lao . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Latin_1_Sup fblk_Latin_1_Sup;
 
 extern "C" {
-    BitBlock __get_blk_Latin_1_Sup (Basis_bits & basis_bits) {
-        Struct_blk_Latin_1_Sup output;
+    void __get_blk_Latin_1_Sup (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Latin_1_Sup & output) {
         fblk_Latin_1_Sup . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Latin_Ext_A fblk_Latin_Ext_A;
 
 extern "C" {
-    BitBlock __get_blk_Latin_Ext_A (Basis_bits & basis_bits) {
-        Struct_blk_Latin_Ext_A output;
+    void __get_blk_Latin_Ext_A (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Latin_Ext_A & output) {
         fblk_Latin_Ext_A . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Latin_Ext_Additional fblk_Latin_Ext_Additional;
 
 extern "C" {
-    BitBlock __get_blk_Latin_Ext_Additional (Basis_bits & basis_bits) {
-        Struct_blk_Latin_Ext_Additional output;
+    void __get_blk_Latin_Ext_Additional (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Latin_Ext_Additional & output) {
         fblk_Latin_Ext_Additional . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Latin_Ext_B fblk_Latin_Ext_B;
 
 extern "C" {
-    BitBlock __get_blk_Latin_Ext_B (Basis_bits & basis_bits) {
-        Struct_blk_Latin_Ext_B output;
+    void __get_blk_Latin_Ext_B (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Latin_Ext_B & output) {
         fblk_Latin_Ext_B . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Latin_Ext_C fblk_Latin_Ext_C;
 
 extern "C" {
-    BitBlock __get_blk_Latin_Ext_C (Basis_bits & basis_bits) {
-        Struct_blk_Latin_Ext_C output;
+    void __get_blk_Latin_Ext_C (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Latin_Ext_C & output) {
         fblk_Latin_Ext_C . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Latin_Ext_D fblk_Latin_Ext_D;
 
 extern "C" {
-    BitBlock __get_blk_Latin_Ext_D (Basis_bits & basis_bits) {
-        Struct_blk_Latin_Ext_D output;
+    void __get_blk_Latin_Ext_D (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Latin_Ext_D & output) {
         fblk_Latin_Ext_D . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Latin_Ext_E fblk_Latin_Ext_E;
 
 extern "C" {
-    BitBlock __get_blk_Latin_Ext_E (Basis_bits & basis_bits) {
-        Struct_blk_Latin_Ext_E output;
+    void __get_blk_Latin_Ext_E (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Latin_Ext_E & output) {
         fblk_Latin_Ext_E . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Lepcha fblk_Lepcha;
 
 extern "C" {
-    BitBlock __get_blk_Lepcha (Basis_bits & basis_bits) {
-        Struct_blk_Lepcha output;
+    void __get_blk_Lepcha (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Lepcha & output) {
         fblk_Lepcha . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Letterlike_Symbols fblk_Letterlike_Symbols;
 
 extern "C" {
-    BitBlock __get_blk_Letterlike_Symbols (Basis_bits & basis_bits) {
-        Struct_blk_Letterlike_Symbols output;
+    void __get_blk_Letterlike_Symbols (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Letterlike_Symbols & output) {
         fblk_Letterlike_Symbols . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Limbu fblk_Limbu;
 
 extern "C" {
-    BitBlock __get_blk_Limbu (Basis_bits & basis_bits) {
-        Struct_blk_Limbu output;
+    void __get_blk_Limbu (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Limbu & output) {
         fblk_Limbu . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Linear_A fblk_Linear_A;
 
 extern "C" {
-    BitBlock __get_blk_Linear_A (Basis_bits & basis_bits) {
-        Struct_blk_Linear_A output;
+    void __get_blk_Linear_A (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Linear_A & output) {
         fblk_Linear_A . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Linear_B_Ideograms fblk_Linear_B_Ideograms;
 
 extern "C" {
-    BitBlock __get_blk_Linear_B_Ideograms (Basis_bits & basis_bits) {
-        Struct_blk_Linear_B_Ideograms output;
+    void __get_blk_Linear_B_Ideograms (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Linear_B_Ideograms & output) {
         fblk_Linear_B_Ideograms . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Linear_B_Syllabary fblk_Linear_B_Syllabary;
 
 extern "C" {
-    BitBlock __get_blk_Linear_B_Syllabary (Basis_bits & basis_bits) {
-        Struct_blk_Linear_B_Syllabary output;
+    void __get_blk_Linear_B_Syllabary (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Linear_B_Syllabary & output) {
         fblk_Linear_B_Syllabary . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Lisu fblk_Lisu;
 
 extern "C" {
-    BitBlock __get_blk_Lisu (Basis_bits & basis_bits) {
-        Struct_blk_Lisu output;
+    void __get_blk_Lisu (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Lisu & output) {
         fblk_Lisu . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Low_Surrogates fblk_Low_Surrogates;
 
 extern "C" {
-    BitBlock __get_blk_Low_Surrogates (Basis_bits & basis_bits) {
-        Struct_blk_Low_Surrogates output;
+    void __get_blk_Low_Surrogates (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Low_Surrogates & output) {
         fblk_Low_Surrogates . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Lycian fblk_Lycian;
 
 extern "C" {
-    BitBlock __get_blk_Lycian (Basis_bits & basis_bits) {
-        Struct_blk_Lycian output;
+    void __get_blk_Lycian (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Lycian & output) {
         fblk_Lycian . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Lydian fblk_Lydian;
 
 extern "C" {
-    BitBlock __get_blk_Lydian (Basis_bits & basis_bits) {
-        Struct_blk_Lydian output;
+    void __get_blk_Lydian (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Lydian & output) {
         fblk_Lydian . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Mahajani fblk_Mahajani;
 
 extern "C" {
-    BitBlock __get_blk_Mahajani (Basis_bits & basis_bits) {
-        Struct_blk_Mahajani output;
+    void __get_blk_Mahajani (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Mahajani & output) {
         fblk_Mahajani . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Mahjong fblk_Mahjong;
 
 extern "C" {
-    BitBlock __get_blk_Mahjong (Basis_bits & basis_bits) {
-        Struct_blk_Mahjong output;
+    void __get_blk_Mahjong (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Mahjong & output) {
         fblk_Mahjong . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Malayalam fblk_Malayalam;
 
 extern "C" {
-    BitBlock __get_blk_Malayalam (Basis_bits & basis_bits) {
-        Struct_blk_Malayalam output;
+    void __get_blk_Malayalam (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Malayalam & output) {
         fblk_Malayalam . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Mandaic fblk_Mandaic;
 
 extern "C" {
-    BitBlock __get_blk_Mandaic (Basis_bits & basis_bits) {
-        Struct_blk_Mandaic output;
+    void __get_blk_Mandaic (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Mandaic & output) {
         fblk_Mandaic . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Manichaean fblk_Manichaean;
 
 extern "C" {
-    BitBlock __get_blk_Manichaean (Basis_bits & basis_bits) {
-        Struct_blk_Manichaean output;
+    void __get_blk_Manichaean (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Manichaean & output) {
         fblk_Manichaean . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Math_Alphanum fblk_Math_Alphanum;
 
 extern "C" {
-    BitBlock __get_blk_Math_Alphanum (Basis_bits & basis_bits) {
-        Struct_blk_Math_Alphanum output;
+    void __get_blk_Math_Alphanum (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Math_Alphanum & output) {
         fblk_Math_Alphanum . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Math_Operators fblk_Math_Operators;
 
 extern "C" {
-    BitBlock __get_blk_Math_Operators (Basis_bits & basis_bits) {
-        Struct_blk_Math_Operators output;
+    void __get_blk_Math_Operators (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Math_Operators & output) {
         fblk_Math_Operators . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Meetei_Mayek fblk_Meetei_Mayek;
 
 extern "C" {
-    BitBlock __get_blk_Meetei_Mayek (Basis_bits & basis_bits) {
-        Struct_blk_Meetei_Mayek output;
+    void __get_blk_Meetei_Mayek (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Meetei_Mayek & output) {
         fblk_Meetei_Mayek . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Meetei_Mayek_Ext fblk_Meetei_Mayek_Ext;
 
 extern "C" {
-    BitBlock __get_blk_Meetei_Mayek_Ext (Basis_bits & basis_bits) {
-        Struct_blk_Meetei_Mayek_Ext output;
+    void __get_blk_Meetei_Mayek_Ext (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Meetei_Mayek_Ext & output) {
         fblk_Meetei_Mayek_Ext . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Mende_Kikakui fblk_Mende_Kikakui;
 
 extern "C" {
-    BitBlock __get_blk_Mende_Kikakui (Basis_bits & basis_bits) {
-        Struct_blk_Mende_Kikakui output;
+    void __get_blk_Mende_Kikakui (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Mende_Kikakui & output) {
         fblk_Mende_Kikakui . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Meroitic_Cursive fblk_Meroitic_Cursive;
 
 extern "C" {
-    BitBlock __get_blk_Meroitic_Cursive (Basis_bits & basis_bits) {
-        Struct_blk_Meroitic_Cursive output;
+    void __get_blk_Meroitic_Cursive (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Meroitic_Cursive & output) {
         fblk_Meroitic_Cursive . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Meroitic_Hieroglyphs fblk_Meroitic_Hieroglyphs;
 
 extern "C" {
-    BitBlock __get_blk_Meroitic_Hieroglyphs (Basis_bits & basis_bits) {
-        Struct_blk_Meroitic_Hieroglyphs output;
+    void __get_blk_Meroitic_Hieroglyphs (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Meroitic_Hieroglyphs & output) {
         fblk_Meroitic_Hieroglyphs . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Miao fblk_Miao;
 
 extern "C" {
-    BitBlock __get_blk_Miao (Basis_bits & basis_bits) {
-        Struct_blk_Miao output;
+    void __get_blk_Miao (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Miao & output) {
         fblk_Miao . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Misc_Arrows fblk_Misc_Arrows;
 
 extern "C" {
-    BitBlock __get_blk_Misc_Arrows (Basis_bits & basis_bits) {
-        Struct_blk_Misc_Arrows output;
+    void __get_blk_Misc_Arrows (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Misc_Arrows & output) {
         fblk_Misc_Arrows . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Misc_Math_Symbols_A fblk_Misc_Math_Symbols_A;
 
 extern "C" {
-    BitBlock __get_blk_Misc_Math_Symbols_A (Basis_bits & basis_bits) {
-        Struct_blk_Misc_Math_Symbols_A output;
+    void __get_blk_Misc_Math_Symbols_A (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Misc_Math_Symbols_A & output) {
         fblk_Misc_Math_Symbols_A . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Misc_Math_Symbols_B fblk_Misc_Math_Symbols_B;
 
 extern "C" {
-    BitBlock __get_blk_Misc_Math_Symbols_B (Basis_bits & basis_bits) {
-        Struct_blk_Misc_Math_Symbols_B output;
+    void __get_blk_Misc_Math_Symbols_B (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Misc_Math_Symbols_B & output) {
         fblk_Misc_Math_Symbols_B . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Misc_Pictographs fblk_Misc_Pictographs;
 
 extern "C" {
-    BitBlock __get_blk_Misc_Pictographs (Basis_bits & basis_bits) {
-        Struct_blk_Misc_Pictographs output;
+    void __get_blk_Misc_Pictographs (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Misc_Pictographs & output) {
         fblk_Misc_Pictographs . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Misc_Symbols fblk_Misc_Symbols;
 
 extern "C" {
-    BitBlock __get_blk_Misc_Symbols (Basis_bits & basis_bits) {
-        Struct_blk_Misc_Symbols output;
+    void __get_blk_Misc_Symbols (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Misc_Symbols & output) {
         fblk_Misc_Symbols . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Misc_Technical fblk_Misc_Technical;
 
 extern "C" {
-    BitBlock __get_blk_Misc_Technical (Basis_bits & basis_bits) {
-        Struct_blk_Misc_Technical output;
+    void __get_blk_Misc_Technical (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Misc_Technical & output) {
         fblk_Misc_Technical . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Modi fblk_Modi;
 
 extern "C" {
-    BitBlock __get_blk_Modi (Basis_bits & basis_bits) {
-        Struct_blk_Modi output;
+    void __get_blk_Modi (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Modi & output) {
         fblk_Modi . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Modifier_Letters fblk_Modifier_Letters;
 
 extern "C" {
-    BitBlock __get_blk_Modifier_Letters (Basis_bits & basis_bits) {
-        Struct_blk_Modifier_Letters output;
+    void __get_blk_Modifier_Letters (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Modifier_Letters & output) {
         fblk_Modifier_Letters . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Modifier_Tone_Letters fblk_Modifier_Tone_Letters;
 
 extern "C" {
-    BitBlock __get_blk_Modifier_Tone_Letters (Basis_bits & basis_bits) {
-        Struct_blk_Modifier_Tone_Letters output;
+    void __get_blk_Modifier_Tone_Letters (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Modifier_Tone_Letters & output) {
         fblk_Modifier_Tone_Letters . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Mongolian fblk_Mongolian;
 
 extern "C" {
-    BitBlock __get_blk_Mongolian (Basis_bits & basis_bits) {
-        Struct_blk_Mongolian output;
+    void __get_blk_Mongolian (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Mongolian & output) {
         fblk_Mongolian . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Mro fblk_Mro;
 
 extern "C" {
-    BitBlock __get_blk_Mro (Basis_bits & basis_bits) {
-        Struct_blk_Mro output;
+    void __get_blk_Mro (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Mro & output) {
         fblk_Mro . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Multani fblk_Multani;
 
 extern "C" {
-    BitBlock __get_blk_Multani (Basis_bits & basis_bits) {
-        Struct_blk_Multani output;
+    void __get_blk_Multani (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Multani & output) {
         fblk_Multani . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Music fblk_Music;
 
 extern "C" {
-    BitBlock __get_blk_Music (Basis_bits & basis_bits) {
-        Struct_blk_Music output;
+    void __get_blk_Music (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Music & output) {
         fblk_Music . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Myanmar fblk_Myanmar;
 
 extern "C" {
-    BitBlock __get_blk_Myanmar (Basis_bits & basis_bits) {
-        Struct_blk_Myanmar output;
+    void __get_blk_Myanmar (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Myanmar & output) {
         fblk_Myanmar . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Myanmar_Ext_A fblk_Myanmar_Ext_A;
 
 extern "C" {
-    BitBlock __get_blk_Myanmar_Ext_A (Basis_bits & basis_bits) {
-        Struct_blk_Myanmar_Ext_A output;
+    void __get_blk_Myanmar_Ext_A (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Myanmar_Ext_A & output) {
         fblk_Myanmar_Ext_A . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Myanmar_Ext_B fblk_Myanmar_Ext_B;
 
 extern "C" {
-    BitBlock __get_blk_Myanmar_Ext_B (Basis_bits & basis_bits) {
-        Struct_blk_Myanmar_Ext_B output;
+    void __get_blk_Myanmar_Ext_B (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Myanmar_Ext_B & output) {
         fblk_Myanmar_Ext_B . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Nabataean fblk_Nabataean;
 
 extern "C" {
-    BitBlock __get_blk_Nabataean (Basis_bits & basis_bits) {
-        Struct_blk_Nabataean output;
+    void __get_blk_Nabataean (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Nabataean & output) {
         fblk_Nabataean . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_NB fblk_NB;
 
 extern "C" {
-    BitBlock __get_blk_NB (Basis_bits & basis_bits) {
-        Struct_blk_NB output;
+    void __get_blk_NB (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_NB & output) {
         fblk_NB . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_New_Tai_Lue fblk_New_Tai_Lue;
 
 extern "C" {
-    BitBlock __get_blk_New_Tai_Lue (Basis_bits & basis_bits) {
-        Struct_blk_New_Tai_Lue output;
+    void __get_blk_New_Tai_Lue (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_New_Tai_Lue & output) {
         fblk_New_Tai_Lue . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_NKo fblk_NKo;
 
 extern "C" {
-    BitBlock __get_blk_NKo (Basis_bits & basis_bits) {
-        Struct_blk_NKo output;
+    void __get_blk_NKo (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_NKo & output) {
         fblk_NKo . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Number_Forms fblk_Number_Forms;
 
 extern "C" {
-    BitBlock __get_blk_Number_Forms (Basis_bits & basis_bits) {
-        Struct_blk_Number_Forms output;
+    void __get_blk_Number_Forms (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Number_Forms & output) {
         fblk_Number_Forms . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_OCR fblk_OCR;
 
 extern "C" {
-    BitBlock __get_blk_OCR (Basis_bits & basis_bits) {
-        Struct_blk_OCR output;
+    void __get_blk_OCR (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_OCR & output) {
         fblk_OCR . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Ogham fblk_Ogham;
 
 extern "C" {
-    BitBlock __get_blk_Ogham (Basis_bits & basis_bits) {
-        Struct_blk_Ogham output;
+    void __get_blk_Ogham (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Ogham & output) {
         fblk_Ogham . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Ol_Chiki fblk_Ol_Chiki;
 
 extern "C" {
-    BitBlock __get_blk_Ol_Chiki (Basis_bits & basis_bits) {
-        Struct_blk_Ol_Chiki output;
+    void __get_blk_Ol_Chiki (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Ol_Chiki & output) {
         fblk_Ol_Chiki . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Old_Hungarian fblk_Old_Hungarian;
 
 extern "C" {
-    BitBlock __get_blk_Old_Hungarian (Basis_bits & basis_bits) {
-        Struct_blk_Old_Hungarian output;
+    void __get_blk_Old_Hungarian (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Old_Hungarian & output) {
         fblk_Old_Hungarian . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Old_Italic fblk_Old_Italic;
 
 extern "C" {
-    BitBlock __get_blk_Old_Italic (Basis_bits & basis_bits) {
-        Struct_blk_Old_Italic output;
+    void __get_blk_Old_Italic (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Old_Italic & output) {
         fblk_Old_Italic . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Old_North_Arabian fblk_Old_North_Arabian;
 
 extern "C" {
-    BitBlock __get_blk_Old_North_Arabian (Basis_bits & basis_bits) {
-        Struct_blk_Old_North_Arabian output;
+    void __get_blk_Old_North_Arabian (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Old_North_Arabian & output) {
         fblk_Old_North_Arabian . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Old_Permic fblk_Old_Permic;
 
 extern "C" {
-    BitBlock __get_blk_Old_Permic (Basis_bits & basis_bits) {
-        Struct_blk_Old_Permic output;
+    void __get_blk_Old_Permic (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Old_Permic & output) {
         fblk_Old_Permic . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Old_Persian fblk_Old_Persian;
 
 extern "C" {
-    BitBlock __get_blk_Old_Persian (Basis_bits & basis_bits) {
-        Struct_blk_Old_Persian output;
+    void __get_blk_Old_Persian (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Old_Persian & output) {
         fblk_Old_Persian . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Old_South_Arabian fblk_Old_South_Arabian;
 
 extern "C" {
-    BitBlock __get_blk_Old_South_Arabian (Basis_bits & basis_bits) {
-        Struct_blk_Old_South_Arabian output;
+    void __get_blk_Old_South_Arabian (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Old_South_Arabian & output) {
         fblk_Old_South_Arabian . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Old_Turkic fblk_Old_Turkic;
 
 extern "C" {
-    BitBlock __get_blk_Old_Turkic (Basis_bits & basis_bits) {
-        Struct_blk_Old_Turkic output;
+    void __get_blk_Old_Turkic (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Old_Turkic & output) {
         fblk_Old_Turkic . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Oriya fblk_Oriya;
 
 extern "C" {
-    BitBlock __get_blk_Oriya (Basis_bits & basis_bits) {
-        Struct_blk_Oriya output;
+    void __get_blk_Oriya (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Oriya & output) {
         fblk_Oriya . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Ornamental_Dingbats fblk_Ornamental_Dingbats;
 
 extern "C" {
-    BitBlock __get_blk_Ornamental_Dingbats (Basis_bits & basis_bits) {
-        Struct_blk_Ornamental_Dingbats output;
+    void __get_blk_Ornamental_Dingbats (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Ornamental_Dingbats & output) {
         fblk_Ornamental_Dingbats . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Osmanya fblk_Osmanya;
 
 extern "C" {
-    BitBlock __get_blk_Osmanya (Basis_bits & basis_bits) {
-        Struct_blk_Osmanya output;
+    void __get_blk_Osmanya (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Osmanya & output) {
         fblk_Osmanya . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Pahawh_Hmong fblk_Pahawh_Hmong;
 
 extern "C" {
-    BitBlock __get_blk_Pahawh_Hmong (Basis_bits & basis_bits) {
-        Struct_blk_Pahawh_Hmong output;
+    void __get_blk_Pahawh_Hmong (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Pahawh_Hmong & output) {
         fblk_Pahawh_Hmong . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Palmyrene fblk_Palmyrene;
 
 extern "C" {
-    BitBlock __get_blk_Palmyrene (Basis_bits & basis_bits) {
-        Struct_blk_Palmyrene output;
+    void __get_blk_Palmyrene (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Palmyrene & output) {
         fblk_Palmyrene . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Pau_Cin_Hau fblk_Pau_Cin_Hau;
 
 extern "C" {
-    BitBlock __get_blk_Pau_Cin_Hau (Basis_bits & basis_bits) {
-        Struct_blk_Pau_Cin_Hau output;
+    void __get_blk_Pau_Cin_Hau (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Pau_Cin_Hau & output) {
         fblk_Pau_Cin_Hau . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Phags_Pa fblk_Phags_Pa;
 
 extern "C" {
-    BitBlock __get_blk_Phags_Pa (Basis_bits & basis_bits) {
-        Struct_blk_Phags_Pa output;
+    void __get_blk_Phags_Pa (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Phags_Pa & output) {
         fblk_Phags_Pa . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Phaistos fblk_Phaistos;
 
 extern "C" {
-    BitBlock __get_blk_Phaistos (Basis_bits & basis_bits) {
-        Struct_blk_Phaistos output;
+    void __get_blk_Phaistos (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Phaistos & output) {
         fblk_Phaistos . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Phoenician fblk_Phoenician;
 
 extern "C" {
-    BitBlock __get_blk_Phoenician (Basis_bits & basis_bits) {
-        Struct_blk_Phoenician output;
+    void __get_blk_Phoenician (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Phoenician & output) {
         fblk_Phoenician . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Phonetic_Ext fblk_Phonetic_Ext;
 
 extern "C" {
-    BitBlock __get_blk_Phonetic_Ext (Basis_bits & basis_bits) {
-        Struct_blk_Phonetic_Ext output;
+    void __get_blk_Phonetic_Ext (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Phonetic_Ext & output) {
         fblk_Phonetic_Ext . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Phonetic_Ext_Sup fblk_Phonetic_Ext_Sup;
 
 extern "C" {
-    BitBlock __get_blk_Phonetic_Ext_Sup (Basis_bits & basis_bits) {
-        Struct_blk_Phonetic_Ext_Sup output;
+    void __get_blk_Phonetic_Ext_Sup (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Phonetic_Ext_Sup & output) {
         fblk_Phonetic_Ext_Sup . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Playing_Cards fblk_Playing_Cards;
 
 extern "C" {
-    BitBlock __get_blk_Playing_Cards (Basis_bits & basis_bits) {
-        Struct_blk_Playing_Cards output;
+    void __get_blk_Playing_Cards (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Playing_Cards & output) {
         fblk_Playing_Cards . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Psalter_Pahlavi fblk_Psalter_Pahlavi;
 
 extern "C" {
-    BitBlock __get_blk_Psalter_Pahlavi (Basis_bits & basis_bits) {
-        Struct_blk_Psalter_Pahlavi output;
+    void __get_blk_Psalter_Pahlavi (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Psalter_Pahlavi & output) {
         fblk_Psalter_Pahlavi . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_PUA fblk_PUA;
 
 extern "C" {
-    BitBlock __get_blk_PUA (Basis_bits & basis_bits) {
-        Struct_blk_PUA output;
+    void __get_blk_PUA (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_PUA & output) {
         fblk_PUA . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Punctuation fblk_Punctuation;
 
 extern "C" {
-    BitBlock __get_blk_Punctuation (Basis_bits & basis_bits) {
-        Struct_blk_Punctuation output;
+    void __get_blk_Punctuation (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Punctuation & output) {
         fblk_Punctuation . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Rejang fblk_Rejang;
 
 extern "C" {
-    BitBlock __get_blk_Rejang (Basis_bits & basis_bits) {
-        Struct_blk_Rejang output;
+    void __get_blk_Rejang (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Rejang & output) {
         fblk_Rejang . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Rumi fblk_Rumi;
 
 extern "C" {
-    BitBlock __get_blk_Rumi (Basis_bits & basis_bits) {
-        Struct_blk_Rumi output;
+    void __get_blk_Rumi (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Rumi & output) {
         fblk_Rumi . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Runic fblk_Runic;
 
 extern "C" {
-    BitBlock __get_blk_Runic (Basis_bits & basis_bits) {
-        Struct_blk_Runic output;
+    void __get_blk_Runic (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Runic & output) {
         fblk_Runic . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Samaritan fblk_Samaritan;
 
 extern "C" {
-    BitBlock __get_blk_Samaritan (Basis_bits & basis_bits) {
-        Struct_blk_Samaritan output;
+    void __get_blk_Samaritan (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Samaritan & output) {
         fblk_Samaritan . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Saurashtra fblk_Saurashtra;
 
 extern "C" {
-    BitBlock __get_blk_Saurashtra (Basis_bits & basis_bits) {
-        Struct_blk_Saurashtra output;
+    void __get_blk_Saurashtra (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Saurashtra & output) {
         fblk_Saurashtra . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Sharada fblk_Sharada;
 
 extern "C" {
-    BitBlock __get_blk_Sharada (Basis_bits & basis_bits) {
-        Struct_blk_Sharada output;
+    void __get_blk_Sharada (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Sharada & output) {
         fblk_Sharada . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Shavian fblk_Shavian;
 
 extern "C" {
-    BitBlock __get_blk_Shavian (Basis_bits & basis_bits) {
-        Struct_blk_Shavian output;
+    void __get_blk_Shavian (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Shavian & output) {
         fblk_Shavian . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Shorthand_Format_Controls fblk_Shorthand_Format_Controls;
 
 extern "C" {
-    BitBlock __get_blk_Shorthand_Format_Controls (Basis_bits & basis_bits) {
-        Struct_blk_Shorthand_Format_Controls output;
+    void __get_blk_Shorthand_Format_Controls (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Shorthand_Format_Controls & output) {
         fblk_Shorthand_Format_Controls . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Siddham fblk_Siddham;
 
 extern "C" {
-    BitBlock __get_blk_Siddham (Basis_bits & basis_bits) {
-        Struct_blk_Siddham output;
+    void __get_blk_Siddham (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Siddham & output) {
         fblk_Siddham . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Sinhala fblk_Sinhala;
 
 extern "C" {
-    BitBlock __get_blk_Sinhala (Basis_bits & basis_bits) {
-        Struct_blk_Sinhala output;
+    void __get_blk_Sinhala (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Sinhala & output) {
         fblk_Sinhala . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Sinhala_Archaic_Numbers fblk_Sinhala_Archaic_Numbers;
 
 extern "C" {
-    BitBlock __get_blk_Sinhala_Archaic_Numbers (Basis_bits & basis_bits) {
-        Struct_blk_Sinhala_Archaic_Numbers output;
+    void __get_blk_Sinhala_Archaic_Numbers (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Sinhala_Archaic_Numbers & output) {
         fblk_Sinhala_Archaic_Numbers . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Small_Forms fblk_Small_Forms;
 
 extern "C" {
-    BitBlock __get_blk_Small_Forms (Basis_bits & basis_bits) {
-        Struct_blk_Small_Forms output;
+    void __get_blk_Small_Forms (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Small_Forms & output) {
         fblk_Small_Forms . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Sora_Sompeng fblk_Sora_Sompeng;
 
 extern "C" {
-    BitBlock __get_blk_Sora_Sompeng (Basis_bits & basis_bits) {
-        Struct_blk_Sora_Sompeng output;
+    void __get_blk_Sora_Sompeng (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Sora_Sompeng & output) {
         fblk_Sora_Sompeng . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Specials fblk_Specials;
 
 extern "C" {
-    BitBlock __get_blk_Specials (Basis_bits & basis_bits) {
-        Struct_blk_Specials output;
+    void __get_blk_Specials (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Specials & output) {
         fblk_Specials . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Sundanese fblk_Sundanese;
 
 extern "C" {
-    BitBlock __get_blk_Sundanese (Basis_bits & basis_bits) {
-        Struct_blk_Sundanese output;
+    void __get_blk_Sundanese (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Sundanese & output) {
         fblk_Sundanese . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Sundanese_Sup fblk_Sundanese_Sup;
 
 extern "C" {
-    BitBlock __get_blk_Sundanese_Sup (Basis_bits & basis_bits) {
-        Struct_blk_Sundanese_Sup output;
+    void __get_blk_Sundanese_Sup (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Sundanese_Sup & output) {
         fblk_Sundanese_Sup . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Sup_Arrows_A fblk_Sup_Arrows_A;
 
 extern "C" {
-    BitBlock __get_blk_Sup_Arrows_A (Basis_bits & basis_bits) {
-        Struct_blk_Sup_Arrows_A output;
+    void __get_blk_Sup_Arrows_A (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Sup_Arrows_A & output) {
         fblk_Sup_Arrows_A . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Sup_Arrows_B fblk_Sup_Arrows_B;
 
 extern "C" {
-    BitBlock __get_blk_Sup_Arrows_B (Basis_bits & basis_bits) {
-        Struct_blk_Sup_Arrows_B output;
+    void __get_blk_Sup_Arrows_B (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Sup_Arrows_B & output) {
         fblk_Sup_Arrows_B . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Sup_Arrows_C fblk_Sup_Arrows_C;
 
 extern "C" {
-    BitBlock __get_blk_Sup_Arrows_C (Basis_bits & basis_bits) {
-        Struct_blk_Sup_Arrows_C output;
+    void __get_blk_Sup_Arrows_C (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Sup_Arrows_C & output) {
         fblk_Sup_Arrows_C . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Sup_Math_Operators fblk_Sup_Math_Operators;
 
 extern "C" {
-    BitBlock __get_blk_Sup_Math_Operators (Basis_bits & basis_bits) {
-        Struct_blk_Sup_Math_Operators output;
+    void __get_blk_Sup_Math_Operators (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Sup_Math_Operators & output) {
         fblk_Sup_Math_Operators . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Sup_PUA_A fblk_Sup_PUA_A;
 
 extern "C" {
-    BitBlock __get_blk_Sup_PUA_A (Basis_bits & basis_bits) {
-        Struct_blk_Sup_PUA_A output;
+    void __get_blk_Sup_PUA_A (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Sup_PUA_A & output) {
         fblk_Sup_PUA_A . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Sup_PUA_B fblk_Sup_PUA_B;
 
 extern "C" {
-    BitBlock __get_blk_Sup_PUA_B (Basis_bits & basis_bits) {
-        Struct_blk_Sup_PUA_B output;
+    void __get_blk_Sup_PUA_B (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Sup_PUA_B & output) {
         fblk_Sup_PUA_B . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Sup_Punctuation fblk_Sup_Punctuation;
 
 extern "C" {
-    BitBlock __get_blk_Sup_Punctuation (Basis_bits & basis_bits) {
-        Struct_blk_Sup_Punctuation output;
+    void __get_blk_Sup_Punctuation (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Sup_Punctuation & output) {
         fblk_Sup_Punctuation . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Sup_Symbols_And_Pictographs fblk_Sup_Symbols_And_Pictographs;
 
 extern "C" {
-    BitBlock __get_blk_Sup_Symbols_And_Pictographs (Basis_bits & basis_bits) {
-        Struct_blk_Sup_Symbols_And_Pictographs output;
+    void __get_blk_Sup_Symbols_And_Pictographs (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Sup_Symbols_And_Pictographs & output) {
         fblk_Sup_Symbols_And_Pictographs . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Super_And_Sub fblk_Super_And_Sub;
 
 extern "C" {
-    BitBlock __get_blk_Super_And_Sub (Basis_bits & basis_bits) {
-        Struct_blk_Super_And_Sub output;
+    void __get_blk_Super_And_Sub (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Super_And_Sub & output) {
         fblk_Super_And_Sub . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Sutton_SignWriting fblk_Sutton_SignWriting;
 
 extern "C" {
-    BitBlock __get_blk_Sutton_SignWriting (Basis_bits & basis_bits) {
-        Struct_blk_Sutton_SignWriting output;
+    void __get_blk_Sutton_SignWriting (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Sutton_SignWriting & output) {
         fblk_Sutton_SignWriting . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Syloti_Nagri fblk_Syloti_Nagri;
 
 extern "C" {
-    BitBlock __get_blk_Syloti_Nagri (Basis_bits & basis_bits) {
-        Struct_blk_Syloti_Nagri output;
+    void __get_blk_Syloti_Nagri (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Syloti_Nagri & output) {
         fblk_Syloti_Nagri . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Syriac fblk_Syriac;
 
 extern "C" {
-    BitBlock __get_blk_Syriac (Basis_bits & basis_bits) {
-        Struct_blk_Syriac output;
+    void __get_blk_Syriac (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Syriac & output) {
         fblk_Syriac . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Tagalog fblk_Tagalog;
 
 extern "C" {
-    BitBlock __get_blk_Tagalog (Basis_bits & basis_bits) {
-        Struct_blk_Tagalog output;
+    void __get_blk_Tagalog (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Tagalog & output) {
         fblk_Tagalog . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Tagbanwa fblk_Tagbanwa;
 
 extern "C" {
-    BitBlock __get_blk_Tagbanwa (Basis_bits & basis_bits) {
-        Struct_blk_Tagbanwa output;
+    void __get_blk_Tagbanwa (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Tagbanwa & output) {
         fblk_Tagbanwa . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Tags fblk_Tags;
 
 extern "C" {
-    BitBlock __get_blk_Tags (Basis_bits & basis_bits) {
-        Struct_blk_Tags output;
+    void __get_blk_Tags (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Tags & output) {
         fblk_Tags . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Tai_Le fblk_Tai_Le;
 
 extern "C" {
-    BitBlock __get_blk_Tai_Le (Basis_bits & basis_bits) {
-        Struct_blk_Tai_Le output;
+    void __get_blk_Tai_Le (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Tai_Le & output) {
         fblk_Tai_Le . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Tai_Tham fblk_Tai_Tham;
 
 extern "C" {
-    BitBlock __get_blk_Tai_Tham (Basis_bits & basis_bits) {
-        Struct_blk_Tai_Tham output;
+    void __get_blk_Tai_Tham (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Tai_Tham & output) {
         fblk_Tai_Tham . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Tai_Viet fblk_Tai_Viet;
 
 extern "C" {
-    BitBlock __get_blk_Tai_Viet (Basis_bits & basis_bits) {
-        Struct_blk_Tai_Viet output;
+    void __get_blk_Tai_Viet (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Tai_Viet & output) {
         fblk_Tai_Viet . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Tai_Xuan_Jing fblk_Tai_Xuan_Jing;
 
 extern "C" {
-    BitBlock __get_blk_Tai_Xuan_Jing (Basis_bits & basis_bits) {
-        Struct_blk_Tai_Xuan_Jing output;
+    void __get_blk_Tai_Xuan_Jing (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Tai_Xuan_Jing & output) {
         fblk_Tai_Xuan_Jing . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Takri fblk_Takri;
 
 extern "C" {
-    BitBlock __get_blk_Takri (Basis_bits & basis_bits) {
-        Struct_blk_Takri output;
+    void __get_blk_Takri (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Takri & output) {
         fblk_Takri . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Tamil fblk_Tamil;
 
 extern "C" {
-    BitBlock __get_blk_Tamil (Basis_bits & basis_bits) {
-        Struct_blk_Tamil output;
+    void __get_blk_Tamil (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Tamil & output) {
         fblk_Tamil . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Telugu fblk_Telugu;
 
 extern "C" {
-    BitBlock __get_blk_Telugu (Basis_bits & basis_bits) {
-        Struct_blk_Telugu output;
+    void __get_blk_Telugu (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Telugu & output) {
         fblk_Telugu . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Thaana fblk_Thaana;
 
 extern "C" {
-    BitBlock __get_blk_Thaana (Basis_bits & basis_bits) {
-        Struct_blk_Thaana output;
+    void __get_blk_Thaana (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Thaana & output) {
         fblk_Thaana . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Thai fblk_Thai;
 
 extern "C" {
-    BitBlock __get_blk_Thai (Basis_bits & basis_bits) {
-        Struct_blk_Thai output;
+    void __get_blk_Thai (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Thai & output) {
         fblk_Thai . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Tibetan fblk_Tibetan;
 
 extern "C" {
-    BitBlock __get_blk_Tibetan (Basis_bits & basis_bits) {
-        Struct_blk_Tibetan output;
+    void __get_blk_Tibetan (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Tibetan & output) {
         fblk_Tibetan . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Tifinagh fblk_Tifinagh;
 
 extern "C" {
-    BitBlock __get_blk_Tifinagh (Basis_bits & basis_bits) {
-        Struct_blk_Tifinagh output;
+    void __get_blk_Tifinagh (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Tifinagh & output) {
         fblk_Tifinagh . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Tirhuta fblk_Tirhuta;
 
 extern "C" {
-    BitBlock __get_blk_Tirhuta (Basis_bits & basis_bits) {
-        Struct_blk_Tirhuta output;
+    void __get_blk_Tirhuta (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Tirhuta & output) {
         fblk_Tirhuta . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Transport_And_Map fblk_Transport_And_Map;
 
 extern "C" {
-    BitBlock __get_blk_Transport_And_Map (Basis_bits & basis_bits) {
-        Struct_blk_Transport_And_Map output;
+    void __get_blk_Transport_And_Map (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Transport_And_Map & output) {
         fblk_Transport_And_Map . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_UCAS fblk_UCAS;
 
 extern "C" {
-    BitBlock __get_blk_UCAS (Basis_bits & basis_bits) {
-        Struct_blk_UCAS output;
+    void __get_blk_UCAS (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_UCAS & output) {
         fblk_UCAS . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_UCAS_Ext fblk_UCAS_Ext;
 
 extern "C" {
-    BitBlock __get_blk_UCAS_Ext (Basis_bits & basis_bits) {
-        Struct_blk_UCAS_Ext output;
+    void __get_blk_UCAS_Ext (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_UCAS_Ext & output) {
         fblk_UCAS_Ext . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Ugaritic fblk_Ugaritic;
 
 extern "C" {
-    BitBlock __get_blk_Ugaritic (Basis_bits & basis_bits) {
-        Struct_blk_Ugaritic output;
+    void __get_blk_Ugaritic (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Ugaritic & output) {
         fblk_Ugaritic . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Vai fblk_Vai;
 
 extern "C" {
-    BitBlock __get_blk_Vai (Basis_bits & basis_bits) {
-        Struct_blk_Vai output;
+    void __get_blk_Vai (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Vai & output) {
         fblk_Vai . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Vedic_Ext fblk_Vedic_Ext;
 
 extern "C" {
-    BitBlock __get_blk_Vedic_Ext (Basis_bits & basis_bits) {
-        Struct_blk_Vedic_Ext output;
+    void __get_blk_Vedic_Ext (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Vedic_Ext & output) {
         fblk_Vedic_Ext . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Vertical_Forms fblk_Vertical_Forms;
 
 extern "C" {
-    BitBlock __get_blk_Vertical_Forms (Basis_bits & basis_bits) {
-        Struct_blk_Vertical_Forms output;
+    void __get_blk_Vertical_Forms (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Vertical_Forms & output) {
         fblk_Vertical_Forms . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_VS fblk_VS;
 
 extern "C" {
-    BitBlock __get_blk_VS (Basis_bits & basis_bits) {
-        Struct_blk_VS output;
+    void __get_blk_VS (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_VS & output) {
         fblk_VS . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_VS_Sup fblk_VS_Sup;
 
 extern "C" {
-    BitBlock __get_blk_VS_Sup (Basis_bits & basis_bits) {
-        Struct_blk_VS_Sup output;
+    void __get_blk_VS_Sup (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_VS_Sup & output) {
         fblk_VS_Sup . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Warang_Citi fblk_Warang_Citi;
 
 extern "C" {
-    BitBlock __get_blk_Warang_Citi (Basis_bits & basis_bits) {
-        Struct_blk_Warang_Citi output;
+    void __get_blk_Warang_Citi (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Warang_Citi & output) {
         fblk_Warang_Citi . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Yi_Radicals fblk_Yi_Radicals;
 
 extern "C" {
-    BitBlock __get_blk_Yi_Radicals (Basis_bits & basis_bits) {
-        Struct_blk_Yi_Radicals output;
+    void __get_blk_Yi_Radicals (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Yi_Radicals & output) {
         fblk_Yi_Radicals . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Yi_Syllables fblk_Yi_Syllables;
 
 extern "C" {
-    BitBlock __get_blk_Yi_Syllables (Basis_bits & basis_bits) {
-        Struct_blk_Yi_Syllables output;
+    void __get_blk_Yi_Syllables (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Yi_Syllables & output) {
         fblk_Yi_Syllables . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_blk_Yijing fblk_Yijing;
 
 extern "C" {
-    BitBlock __get_blk_Yijing (Basis_bits & basis_bits) {
-        Struct_blk_Yijing output;
+    void __get_blk_Yijing (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_blk_Yijing & output) {
         fblk_Yijing . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 

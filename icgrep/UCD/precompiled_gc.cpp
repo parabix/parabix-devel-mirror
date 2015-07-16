@@ -46947,380 +46947,304 @@ CarryArray<count, 0> name;\
 Property_gc_C fgc_C;
 
 extern "C" {
-    BitBlock __get_gc_C (Basis_bits & basis_bits) {
-        Struct_gc_C output;
+    void __get_gc_C (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_gc_C & output) {
         fgc_C . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_gc_Cc fgc_Cc;
 
 extern "C" {
-    BitBlock __get_gc_Cc (Basis_bits & basis_bits) {
-        Struct_gc_Cc output;
+    void __get_gc_Cc (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_gc_Cc & output) {
         fgc_Cc . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_gc_Cf fgc_Cf;
 
 extern "C" {
-    BitBlock __get_gc_Cf (Basis_bits & basis_bits) {
-        Struct_gc_Cf output;
+    void __get_gc_Cf (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_gc_Cf & output) {
         fgc_Cf . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_gc_Cn fgc_Cn;
 
 extern "C" {
-    BitBlock __get_gc_Cn (Basis_bits & basis_bits) {
-        Struct_gc_Cn output;
+    void __get_gc_Cn (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_gc_Cn & output) {
         fgc_Cn . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_gc_Co fgc_Co;
 
 extern "C" {
-    BitBlock __get_gc_Co (Basis_bits & basis_bits) {
-        Struct_gc_Co output;
+    void __get_gc_Co (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_gc_Co & output) {
         fgc_Co . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_gc_Cs fgc_Cs;
 
 extern "C" {
-    BitBlock __get_gc_Cs (Basis_bits & basis_bits) {
-        Struct_gc_Cs output;
+    void __get_gc_Cs (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_gc_Cs & output) {
         fgc_Cs . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_gc_L fgc_L;
 
 extern "C" {
-    BitBlock __get_gc_L (Basis_bits & basis_bits) {
-        Struct_gc_L output;
+    void __get_gc_L (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_gc_L & output) {
         fgc_L . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_gc_LC fgc_LC;
 
 extern "C" {
-    BitBlock __get_gc_LC (Basis_bits & basis_bits) {
-        Struct_gc_LC output;
+    void __get_gc_LC (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_gc_LC & output) {
         fgc_LC . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_gc_Ll fgc_Ll;
 
 extern "C" {
-    BitBlock __get_gc_Ll (Basis_bits & basis_bits) {
-        Struct_gc_Ll output;
+    void __get_gc_Ll (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_gc_Ll & output) {
         fgc_Ll . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_gc_Lm fgc_Lm;
 
 extern "C" {
-    BitBlock __get_gc_Lm (Basis_bits & basis_bits) {
-        Struct_gc_Lm output;
+    void __get_gc_Lm (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_gc_Lm & output) {
         fgc_Lm . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_gc_Lo fgc_Lo;
 
 extern "C" {
-    BitBlock __get_gc_Lo (Basis_bits & basis_bits) {
-        Struct_gc_Lo output;
+    void __get_gc_Lo (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_gc_Lo & output) {
         fgc_Lo . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_gc_Lt fgc_Lt;
 
 extern "C" {
-    BitBlock __get_gc_Lt (Basis_bits & basis_bits) {
-        Struct_gc_Lt output;
+    void __get_gc_Lt (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_gc_Lt & output) {
         fgc_Lt . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_gc_Lu fgc_Lu;
 
 extern "C" {
-    BitBlock __get_gc_Lu (Basis_bits & basis_bits) {
-        Struct_gc_Lu output;
+    void __get_gc_Lu (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_gc_Lu & output) {
         fgc_Lu . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_gc_M fgc_M;
 
 extern "C" {
-    BitBlock __get_gc_M (Basis_bits & basis_bits) {
-        Struct_gc_M output;
+    void __get_gc_M (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_gc_M & output) {
         fgc_M . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_gc_Mc fgc_Mc;
 
 extern "C" {
-    BitBlock __get_gc_Mc (Basis_bits & basis_bits) {
-        Struct_gc_Mc output;
+    void __get_gc_Mc (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_gc_Mc & output) {
         fgc_Mc . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_gc_Me fgc_Me;
 
 extern "C" {
-    BitBlock __get_gc_Me (Basis_bits & basis_bits) {
-        Struct_gc_Me output;
+    void __get_gc_Me (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_gc_Me & output) {
         fgc_Me . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_gc_Mn fgc_Mn;
 
 extern "C" {
-    BitBlock __get_gc_Mn (Basis_bits & basis_bits) {
-        Struct_gc_Mn output;
+    void __get_gc_Mn (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_gc_Mn & output) {
         fgc_Mn . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_gc_N fgc_N;
 
 extern "C" {
-    BitBlock __get_gc_N (Basis_bits & basis_bits) {
-        Struct_gc_N output;
+    void __get_gc_N (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_gc_N & output) {
         fgc_N . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_gc_Nd fgc_Nd;
 
 extern "C" {
-    BitBlock __get_gc_Nd (Basis_bits & basis_bits) {
-        Struct_gc_Nd output;
+    void __get_gc_Nd (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_gc_Nd & output) {
         fgc_Nd . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_gc_Nl fgc_Nl;
 
 extern "C" {
-    BitBlock __get_gc_Nl (Basis_bits & basis_bits) {
-        Struct_gc_Nl output;
+    void __get_gc_Nl (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_gc_Nl & output) {
         fgc_Nl . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_gc_No fgc_No;
 
 extern "C" {
-    BitBlock __get_gc_No (Basis_bits & basis_bits) {
-        Struct_gc_No output;
+    void __get_gc_No (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_gc_No & output) {
         fgc_No . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_gc_P fgc_P;
 
 extern "C" {
-    BitBlock __get_gc_P (Basis_bits & basis_bits) {
-        Struct_gc_P output;
+    void __get_gc_P (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_gc_P & output) {
         fgc_P . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_gc_Pc fgc_Pc;
 
 extern "C" {
-    BitBlock __get_gc_Pc (Basis_bits & basis_bits) {
-        Struct_gc_Pc output;
+    void __get_gc_Pc (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_gc_Pc & output) {
         fgc_Pc . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_gc_Pd fgc_Pd;
 
 extern "C" {
-    BitBlock __get_gc_Pd (Basis_bits & basis_bits) {
-        Struct_gc_Pd output;
+    void __get_gc_Pd (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_gc_Pd & output) {
         fgc_Pd . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_gc_Pe fgc_Pe;
 
 extern "C" {
-    BitBlock __get_gc_Pe (Basis_bits & basis_bits) {
-        Struct_gc_Pe output;
+    void __get_gc_Pe (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_gc_Pe & output) {
         fgc_Pe . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_gc_Pf fgc_Pf;
 
 extern "C" {
-    BitBlock __get_gc_Pf (Basis_bits & basis_bits) {
-        Struct_gc_Pf output;
+    void __get_gc_Pf (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_gc_Pf & output) {
         fgc_Pf . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_gc_Pi fgc_Pi;
 
 extern "C" {
-    BitBlock __get_gc_Pi (Basis_bits & basis_bits) {
-        Struct_gc_Pi output;
+    void __get_gc_Pi (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_gc_Pi & output) {
         fgc_Pi . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_gc_Po fgc_Po;
 
 extern "C" {
-    BitBlock __get_gc_Po (Basis_bits & basis_bits) {
-        Struct_gc_Po output;
+    void __get_gc_Po (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_gc_Po & output) {
         fgc_Po . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_gc_Ps fgc_Ps;
 
 extern "C" {
-    BitBlock __get_gc_Ps (Basis_bits & basis_bits) {
-        Struct_gc_Ps output;
+    void __get_gc_Ps (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_gc_Ps & output) {
         fgc_Ps . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_gc_S fgc_S;
 
 extern "C" {
-    BitBlock __get_gc_S (Basis_bits & basis_bits) {
-        Struct_gc_S output;
+    void __get_gc_S (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_gc_S & output) {
         fgc_S . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_gc_Sc fgc_Sc;
 
 extern "C" {
-    BitBlock __get_gc_Sc (Basis_bits & basis_bits) {
-        Struct_gc_Sc output;
+    void __get_gc_Sc (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_gc_Sc & output) {
         fgc_Sc . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_gc_Sk fgc_Sk;
 
 extern "C" {
-    BitBlock __get_gc_Sk (Basis_bits & basis_bits) {
-        Struct_gc_Sk output;
+    void __get_gc_Sk (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_gc_Sk & output) {
         fgc_Sk . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_gc_Sm fgc_Sm;
 
 extern "C" {
-    BitBlock __get_gc_Sm (Basis_bits & basis_bits) {
-        Struct_gc_Sm output;
+    void __get_gc_Sm (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_gc_Sm & output) {
         fgc_Sm . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_gc_So fgc_So;
 
 extern "C" {
-    BitBlock __get_gc_So (Basis_bits & basis_bits) {
-        Struct_gc_So output;
+    void __get_gc_So (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_gc_So & output) {
         fgc_So . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_gc_Z fgc_Z;
 
 extern "C" {
-    BitBlock __get_gc_Z (Basis_bits & basis_bits) {
-        Struct_gc_Z output;
+    void __get_gc_Z (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_gc_Z & output) {
         fgc_Z . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_gc_Zl fgc_Zl;
 
 extern "C" {
-    BitBlock __get_gc_Zl (Basis_bits & basis_bits) {
-        Struct_gc_Zl output;
+    void __get_gc_Zl (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_gc_Zl & output) {
         fgc_Zl . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_gc_Zp fgc_Zp;
 
 extern "C" {
-    BitBlock __get_gc_Zp (Basis_bits & basis_bits) {
-        Struct_gc_Zp output;
+    void __get_gc_Zp (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_gc_Zp & output) {
         fgc_Zp . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_gc_Zs fgc_Zs;
 
 extern "C" {
-    BitBlock __get_gc_Zs (Basis_bits & basis_bits) {
-        Struct_gc_Zs output;
+    void __get_gc_Zs (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_gc_Zs & output) {
         fgc_Zs . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 

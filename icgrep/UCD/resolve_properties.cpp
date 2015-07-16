@@ -4,18 +4,10 @@
  *  icgrep is a trademark of International Characters.
  */
 #include "resolve_properties.h"
-#include <re/re_re.h>
 #include <re/re_alt.h>
 #include <re/re_any.h>
-#include <re/re_cc.h>
-#include <re/re_seq.h>
-#include <re/re_rep.h>
 #include <re/re_name.h>
 #include <re/re_diff.h>
-#include <re/re_intersect.h>
-#include <re/re_assertion.h>
-#include <re/re_start.h>
-#include <re/re_end.h>
 #include <re/re_parser.h>
 #include <cc/cc_namemap.hpp>
 #include "UCD/PropertyAliases.h"

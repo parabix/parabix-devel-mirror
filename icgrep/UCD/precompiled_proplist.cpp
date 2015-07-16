@@ -14383,320 +14383,256 @@ CarryArray<count, 0> name;\
 Property_wspace_Y fwspace_Y;
 
 extern "C" {
-    BitBlock __get_wspace_Y (Basis_bits & basis_bits) {
-        Struct_wspace_Y output;
+    void __get_wspace_Y (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_wspace_Y & output) {
         fwspace_Y . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_bidi_c_Y fbidi_c_Y;
 
 extern "C" {
-    BitBlock __get_bidi_c_Y (Basis_bits & basis_bits) {
-        Struct_bidi_c_Y output;
+    void __get_bidi_c_Y (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_bidi_c_Y & output) {
         fbidi_c_Y . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_join_c_Y fjoin_c_Y;
 
 extern "C" {
-    BitBlock __get_join_c_Y (Basis_bits & basis_bits) {
-        Struct_join_c_Y output;
+    void __get_join_c_Y (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_join_c_Y & output) {
         fjoin_c_Y . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_dash_Y fdash_Y;
 
 extern "C" {
-    BitBlock __get_dash_Y (Basis_bits & basis_bits) {
-        Struct_dash_Y output;
+    void __get_dash_Y (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_dash_Y & output) {
         fdash_Y . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_hyphen_Y fhyphen_Y;
 
 extern "C" {
-    BitBlock __get_hyphen_Y (Basis_bits & basis_bits) {
-        Struct_hyphen_Y output;
+    void __get_hyphen_Y (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_hyphen_Y & output) {
         fhyphen_Y . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_qmark_Y fqmark_Y;
 
 extern "C" {
-    BitBlock __get_qmark_Y (Basis_bits & basis_bits) {
-        Struct_qmark_Y output;
+    void __get_qmark_Y (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_qmark_Y & output) {
         fqmark_Y . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_term_Y fterm_Y;
 
 extern "C" {
-    BitBlock __get_term_Y (Basis_bits & basis_bits) {
-        Struct_term_Y output;
+    void __get_term_Y (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_term_Y & output) {
         fterm_Y . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_omath_Y fomath_Y;
 
 extern "C" {
-    BitBlock __get_omath_Y (Basis_bits & basis_bits) {
-        Struct_omath_Y output;
+    void __get_omath_Y (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_omath_Y & output) {
         fomath_Y . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_hex_Y fhex_Y;
 
 extern "C" {
-    BitBlock __get_hex_Y (Basis_bits & basis_bits) {
-        Struct_hex_Y output;
+    void __get_hex_Y (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_hex_Y & output) {
         fhex_Y . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_ahex_Y fahex_Y;
 
 extern "C" {
-    BitBlock __get_ahex_Y (Basis_bits & basis_bits) {
-        Struct_ahex_Y output;
+    void __get_ahex_Y (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_ahex_Y & output) {
         fahex_Y . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_oalpha_Y foalpha_Y;
 
 extern "C" {
-    BitBlock __get_oalpha_Y (Basis_bits & basis_bits) {
-        Struct_oalpha_Y output;
+    void __get_oalpha_Y (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_oalpha_Y & output) {
         foalpha_Y . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_ideo_Y fideo_Y;
 
 extern "C" {
-    BitBlock __get_ideo_Y (Basis_bits & basis_bits) {
-        Struct_ideo_Y output;
+    void __get_ideo_Y (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_ideo_Y & output) {
         fideo_Y . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_dia_Y fdia_Y;
 
 extern "C" {
-    BitBlock __get_dia_Y (Basis_bits & basis_bits) {
-        Struct_dia_Y output;
+    void __get_dia_Y (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_dia_Y & output) {
         fdia_Y . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_ext_Y fext_Y;
 
 extern "C" {
-    BitBlock __get_ext_Y (Basis_bits & basis_bits) {
-        Struct_ext_Y output;
+    void __get_ext_Y (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_ext_Y & output) {
         fext_Y . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_olower_Y folower_Y;
 
 extern "C" {
-    BitBlock __get_olower_Y (Basis_bits & basis_bits) {
-        Struct_olower_Y output;
+    void __get_olower_Y (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_olower_Y & output) {
         folower_Y . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_oupper_Y foupper_Y;
 
 extern "C" {
-    BitBlock __get_oupper_Y (Basis_bits & basis_bits) {
-        Struct_oupper_Y output;
+    void __get_oupper_Y (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_oupper_Y & output) {
         foupper_Y . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_nchar_Y fnchar_Y;
 
 extern "C" {
-    BitBlock __get_nchar_Y (Basis_bits & basis_bits) {
-        Struct_nchar_Y output;
+    void __get_nchar_Y (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_nchar_Y & output) {
         fnchar_Y . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_ogr_ext_Y fogr_ext_Y;
 
 extern "C" {
-    BitBlock __get_ogr_ext_Y (Basis_bits & basis_bits) {
-        Struct_ogr_ext_Y output;
+    void __get_ogr_ext_Y (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_ogr_ext_Y & output) {
         fogr_ext_Y . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_idsb_Y fidsb_Y;
 
 extern "C" {
-    BitBlock __get_idsb_Y (Basis_bits & basis_bits) {
-        Struct_idsb_Y output;
+    void __get_idsb_Y (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_idsb_Y & output) {
         fidsb_Y . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_idst_Y fidst_Y;
 
 extern "C" {
-    BitBlock __get_idst_Y (Basis_bits & basis_bits) {
-        Struct_idst_Y output;
+    void __get_idst_Y (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_idst_Y & output) {
         fidst_Y . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_radical_Y fradical_Y;
 
 extern "C" {
-    BitBlock __get_radical_Y (Basis_bits & basis_bits) {
-        Struct_radical_Y output;
+    void __get_radical_Y (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_radical_Y & output) {
         fradical_Y . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_uideo_Y fuideo_Y;
 
 extern "C" {
-    BitBlock __get_uideo_Y (Basis_bits & basis_bits) {
-        Struct_uideo_Y output;
+    void __get_uideo_Y (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_uideo_Y & output) {
         fuideo_Y . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_odi_Y fodi_Y;
 
 extern "C" {
-    BitBlock __get_odi_Y (Basis_bits & basis_bits) {
-        Struct_odi_Y output;
+    void __get_odi_Y (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_odi_Y & output) {
         fodi_Y . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_dep_Y fdep_Y;
 
 extern "C" {
-    BitBlock __get_dep_Y (Basis_bits & basis_bits) {
-        Struct_dep_Y output;
+    void __get_dep_Y (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_dep_Y & output) {
         fdep_Y . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_sd_Y fsd_Y;
 
 extern "C" {
-    BitBlock __get_sd_Y (Basis_bits & basis_bits) {
-        Struct_sd_Y output;
+    void __get_sd_Y (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_sd_Y & output) {
         fsd_Y . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_loe_Y floe_Y;
 
 extern "C" {
-    BitBlock __get_loe_Y (Basis_bits & basis_bits) {
-        Struct_loe_Y output;
+    void __get_loe_Y (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_loe_Y & output) {
         floe_Y . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_oids_Y foids_Y;
 
 extern "C" {
-    BitBlock __get_oids_Y (Basis_bits & basis_bits) {
-        Struct_oids_Y output;
+    void __get_oids_Y (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_oids_Y & output) {
         foids_Y . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_oidc_Y foidc_Y;
 
 extern "C" {
-    BitBlock __get_oidc_Y (Basis_bits & basis_bits) {
-        Struct_oidc_Y output;
+    void __get_oidc_Y (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_oidc_Y & output) {
         foidc_Y . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_sterm_Y fsterm_Y;
 
 extern "C" {
-    BitBlock __get_sterm_Y (Basis_bits & basis_bits) {
-        Struct_sterm_Y output;
+    void __get_sterm_Y (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_sterm_Y & output) {
         fsterm_Y . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_vs_Y fvs_Y;
 
 extern "C" {
-    BitBlock __get_vs_Y (Basis_bits & basis_bits) {
-        Struct_vs_Y output;
+    void __get_vs_Y (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_vs_Y & output) {
         fvs_Y . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_pat_ws_Y fpat_ws_Y;
 
 extern "C" {
-    BitBlock __get_pat_ws_Y (Basis_bits & basis_bits) {
-        Struct_pat_ws_Y output;
+    void __get_pat_ws_Y (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_pat_ws_Y & output) {
         fpat_ws_Y . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 
 Property_pat_syn_Y fpat_syn_Y;
 
 extern "C" {
-    BitBlock __get_pat_syn_Y (Basis_bits & basis_bits) {
-        Struct_pat_syn_Y output;
+    void __get_pat_syn_Y (Basis_bits & basis_bits, BitBlock * /* carryFramePtr */, Struct_pat_syn_Y & output) {
         fpat_syn_Y . do_block(basis_bits, output);
-        return output.cc;
     }
 }
 

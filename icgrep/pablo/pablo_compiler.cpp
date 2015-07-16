@@ -132,7 +132,7 @@ CompiledPabloFunction PabloCompiler::compile(PabloFunction & function) {
         throw std::runtime_error("Could not create ExecutionEngine: " + errMessage);
     }
     DeclareFunctions(engine);
-    DeclareCallFunctions(function, engine);
+    DeclareCallFunctions(engine);
 
     auto func = compile(function, mMod);
 
@@ -346,36 +346,40 @@ void PabloCompiler::Examine(PabloBlock & block) {
     }
 }
 
-inline void PabloCompiler::DeclareFunctions(ExecutionEngine * engine) {
+inline void PabloCompiler::DeclareFunctions(ExecutionEngine * const engine) {
     if (DumpTrace || TraceNext) {
         //This function can be used for testing to print the contents of a register from JIT'd code to the terminal window.
         mPrintRegisterFunction = mMod->getOrInsertFunction("wrapped_print_register", Type::getVoidTy(mMod->getContext()), Type::getInt8PtrTy(mMod->getContext()), mBitBlockType, NULL);
-        engine->addGlobalMapping(cast<GlobalValue>(mPrintRegisterFunction), (void *)&wrapped_print_register);
+        if (engine) engine->addGlobalMapping(cast<GlobalValue>(mPrintRegisterFunction), (void *)&wrapped_print_register);
     }
 }
     
-void PabloCompiler::DeclareCallFunctions(PabloFunction & function, ExecutionEngine * engine) {
+void PabloCompiler::DeclareCallFunctions(ExecutionEngine * const engine) {
     for (auto mapping : mCalleeMap) {
         const String * callee = mapping.first;
         auto ei = mExternalMap.find(callee->value());
         if (ei != mExternalMap.end()) {
 
-            PointerType * inputType = PointerType::get(StructType::get(mMod->getContext(), std::vector<Type *>(function.getParameters().size(), mBitBlockType)), 0);
-            ArrayRef<Type*> args = {inputType};
-            FunctionType * functionType = FunctionType::get(mBitBlockType, args, false);
+            Type * inputType = PointerType::get(StructType::get(mMod->getContext(), std::vector<Type *>{8, mBitBlockType}), 0);
+            Type * carryType = PointerType::get(mBitBlockType, 0);
+            Type * outputType = PointerType::get(StructType::get(mMod->getContext(), std::vector<Type *>{1, mBitBlockType}), 0);
+            FunctionType * functionType = FunctionType::get(Type::getVoidTy(mMod->getContext()), std::vector<Type *>{inputType, carryType, outputType}, false);
 
-            SmallVector<AttributeSet, 4> Attrs;
-            Attrs.push_back(AttributeSet::get(mMod->getContext(), ~0U, { Attribute::NoUnwind, Attribute::UWTable }));
+            //Starts on process_block
+            SmallVector<AttributeSet, 3> Attrs;
             Attrs.push_back(AttributeSet::get(mMod->getContext(), 1U, { Attribute::ReadOnly, Attribute::NoCapture }));
+            Attrs.push_back(AttributeSet::get(mMod->getContext(), 2U, { Attribute::NoCapture }));
+            Attrs.push_back(AttributeSet::get(mMod->getContext(), 3U, { Attribute::ReadNone, Attribute::NoCapture }));
             AttributeSet AttrSet = AttributeSet::get(mMod->getContext(), Attrs);
 
-            Value * externalValue = mMod->getOrInsertFunction(callee->value(), functionType, AttrSet);
-
-            if (LLVM_UNLIKELY(externalValue == nullptr)) {
+            Function * externalFunction = cast<Function>(mMod->getOrInsertFunction(callee->value(), functionType, AttrSet));
+            if (LLVM_UNLIKELY(externalFunction == nullptr)) {
                 throw std::runtime_error("Could not create static method call for external function \"" + callee->to_string() + "\"");
             }
-            engine->addGlobalMapping(cast<GlobalValue>(externalValue), ei->second);
-            mCalleeMap[callee] = externalValue;
+            externalFunction->setCallingConv(llvm::CallingConv::C);
+
+            if (engine) engine->addGlobalMapping(externalFunction, ei->second);
+            mCalleeMap[callee] = externalFunction;
         }
         else {
             throw std::runtime_error("External function \"" + callee->to_string() + "\" not installed");
@@ -577,8 +581,15 @@ void PabloCompiler::compileStatement(const Statement * stmt) {
         auto ci = mCalleeMap.find(call->getCallee());
         if (LLVM_UNLIKELY(ci == mCalleeMap.end())) {
             throw std::runtime_error("Unexpected error locating static function for \"" + call->getCallee()->to_string() + "\"");
-        }
-        expr = mBuilder->CreateCall(ci->second, mInputAddressPtr);
+        }       
+
+        Function * function = ci->second;
+        auto arg = function->getArgumentList().begin();
+        Value * carryFramePtr = ConstantPointerNull::get(cast<PointerType>((++arg)->getType()));
+        AllocaInst * outputStruct = mBuilder->CreateAlloca(cast<PointerType>((++arg)->getType())->getElementType());
+        mBuilder->CreateCall3(function, mInputAddressPtr, carryFramePtr, outputStruct);
+        Value * outputPtr = mBuilder->CreateGEP(outputStruct, { mBuilder->getInt32(0), mBuilder->getInt32(0) });
+        expr = mBuilder->CreateAlignedLoad(outputPtr, BLOCK_SIZE / 8, false);
     }
     else if (const And * pablo_and = dyn_cast<And>(stmt)) {
         expr = mBuilder->CreateAnd(compileExpression(pablo_and->getExpr1()), compileExpression(pablo_and->getExpr2()), "and");
