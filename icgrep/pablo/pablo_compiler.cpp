@@ -545,6 +545,9 @@ void PabloCompiler::compileWhile(const While * whileStatement) {
     }
 
     mBuilder->SetInsertPoint(whileEndBlock);
+    if (mCarryManager->blockHasCarries()) {
+        mCarryManager->generateCarryOutSummaryCodeIfNeeded();
+    }
     --mWhileDepth;
 
     mCarryManager->ensureCarriesStoredRecursive();

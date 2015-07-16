@@ -84,6 +84,7 @@ unsigned PabloBlockCarryData::enumerate(PabloBlock & blk) {
         if (If * ifStatement = dyn_cast<If>(stmt)) {
             PabloBlockCarryData & nestedBlockData = ifStatement->getBody().carryData;
             nestedBlockData.ifDepth = ifDepth + 1;
+            nestedBlockData.whileDepth = whileDepth;
             const unsigned ifCarryDataBits = nestedBlockData.enumerate(ifStatement->getBody());
 #ifdef PACKING
             EnsurePackHasSpace(nestedframePosition, ifCarryDataBits);
@@ -95,6 +96,7 @@ unsigned PabloBlockCarryData::enumerate(PabloBlock & blk) {
         }
         else if (While * whileStatement = dyn_cast<While>(stmt)) {
             PabloBlockCarryData & nestedBlockData = whileStatement->getBody().carryData;
+            nestedBlockData.ifDepth = ifDepth;
             nestedBlockData.whileDepth = whileDepth + 1;
             unsigned whileCarryDataBits = nestedBlockData.enumerate(whileStatement->getBody());
             //if (whileStatement->isMultiCarry()) whileCarryDataBits *= whileStatement->getMaxIterations();
