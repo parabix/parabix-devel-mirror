@@ -26,6 +26,19 @@ private: \
 __##NAME functor(mPb); \
 PabloAST * result = mExprTable.findUnaryOrCall(std::move(functor), TYPE, ARGS)
 
+#define MAKE_UNARY_VARIABLE(NAME, TYPE, ARGS...) \
+struct __##NAME { \
+    inline PabloAST * operator()(PabloAST * arg, const std::vector<PabloAST *> & args) { \
+        return mPb->NAME(arg, args); \
+    } \
+    inline __##NAME(PabloBlock * pb) : mPb(pb) {} \
+private: \
+    PabloBlock * mPb; \
+}; \
+__##NAME functor(mPb); \
+PabloAST * result = mExprTable.findUnaryVariableOrCall(std::move(functor), TYPE, ARGS)
+
+
 #define MAKE_BINARY(NAME, TYPE, ARGS...) \
 struct __##NAME { \
     inline PabloAST * operator()(PabloAST * arg1, PabloAST * arg2) { \
@@ -74,9 +87,24 @@ private: \
 __##NAME functor(mPb); \
 PabloAST * result = mExprTable.findTernaryOrCall(std::move(functor), TYPE, ARGS)
 
+#define MAKE_VARIABLE(NAME, TYPE, ARGS) \
+struct __##NAME { \
+    inline PabloAST * operator()(PabloAST * arg) { \
+        return mPb->NAME(arg); \
+    } \
+    inline __##NAME(PabloBlock * pb) : mPb(pb) {} \
+private: \
+    PabloBlock * mPb; \
+}; \
+__##NAME functor(mPb); \
+PabloAST * result = mExprTable.findUnaryOrCall(std::move(functor), TYPE, ARGS)
 
-Call * PabloBuilder::createCall(Prototype * prototype) {
-    MAKE_UNARY(createCall, PabloAST::ClassTypeId::Call, prototype);
+
+Call * PabloBuilder::createCall(Prototype * prototype, const std::vector<Var *> & args) {
+    if (args.size() != cast<Prototype>(prototype)->getNumOfParameters()) {
+        throw std::runtime_error("Invalid number of arguments passed into Call object!");
+    }
+    MAKE_UNARY_VARIABLE(createCall, PabloAST::ClassTypeId::Call, prototype, reinterpret_cast<const std::vector<PabloAST *> &>(args));
     return cast<Call>(result);
 }
 

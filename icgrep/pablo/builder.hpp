@@ -50,7 +50,7 @@ public:
         return mPb->createVar(name);
     }
 
-    Call * createCall(Prototype * prototype);
+    Call * createCall(Prototype * prototype, const std::vector<Var *> & vars);
 
     Assign * createAssign(const std::string && prefix, PabloAST * expr) {
         return mPb->createAssign(std::move(prefix), expr);

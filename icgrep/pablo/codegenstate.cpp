@@ -71,8 +71,14 @@ PabloAST * PabloBlock::createAdvance(PabloAST * expr, const Integer::integer_t s
     return insertAtInsertionPoint(new Advance(expr, getInteger(shiftAmount), makeName(prefix, false)));
 }
 
-Call * PabloBlock::createCall(PabloAST * prototype) {
+Call * PabloBlock::createCall(PabloAST * prototype, const std::vector<PabloAST *> & args) {
     assert (prototype);
+    if (prototype == nullptr) {
+        throw std::runtime_error("Call object cannot be created with a Null prototype!");
+    }
+    if (args.size() != cast<Prototype>(prototype)->getNumOfParameters()) {
+        throw std::runtime_error("Invalid number of arguments passed into Call object!");
+    }
     return insertAtInsertionPoint(new Call(prototype));
 }
 

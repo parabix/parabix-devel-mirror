@@ -91,9 +91,8 @@ void PabloPrinter::print(const Statement * stmt, std::string indent, llvm::raw_o
         strm << ":" << "\n";
         print(whl->getBody(), indent + "  ", strm);
     }
-    else if (const Call * pablo_call = dyn_cast<const Call>(stmt)) {
-        print(pablo_call, strm);
-        strm << " = " << pablo_call->getCallee() << "()";
+    else if (const Call * call = dyn_cast<const Call>(stmt)) {
+        strm << " = " << call->getCallee() << "()";
     }
     else if (const And * pablo_and = dyn_cast<const And>(stmt)) {
         print(pablo_and, strm);

@@ -34,7 +34,7 @@ CC_Compiler::CC_Compiler(PabloFunction & function, const Encoding & encoding, co
     for (unsigned i = 0; i != encoding.getBits(); i++) {
         Var * var = mBuilder.createVar(prefix + std::to_string(i));
         function.setParameter(i, var);
-        mBasisBit[encoding.getBits() - i - 1] = var;
+        mBasisBit[i] = var;
     }
 }
 
@@ -268,7 +268,7 @@ inline PabloAST * CC_Compiler::char_or_range_expr(const codepoint_t lo, const co
 }
 
 inline Var * CC_Compiler::getBasisVar(const int i) const {
-    return mBasisBit[i];
+    return mBasisBit[mEncoding.getBits() - i - 1];
 }
 
 } // end of namespace cc

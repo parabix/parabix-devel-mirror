@@ -29,6 +29,7 @@
 #include <pablo/ps_if.h>
 #include <pablo/ps_while.h>
 #include <pablo/function.h>
+#include <llvm/ADT/ArrayRef.h>
 #include <stdexcept>
 
 namespace pablo {
@@ -75,8 +76,8 @@ public:
         return mOnes;
     }
 
-    inline Call * createCall(Prototype * prototype) {
-        return createCall(prototype);
+    inline Call * createCall(Prototype * prototype, const std::vector<Var *> & args) {
+        return createCall(prototype, reinterpret_cast<const std::vector<PabloAST *> &>(args));
     }
 
     Assign * createAssign(const std::string && prefix, PabloAST * expr);
@@ -185,7 +186,7 @@ protected:
     }
 private:
 
-    Call * createCall(PabloAST * prototype);
+    Call * createCall(PabloAST * prototype, const std::vector<PabloAST *> & args);
 
     Var * createVar(PabloAST * name);
 

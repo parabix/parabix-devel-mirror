@@ -48,7 +48,7 @@ bool UsePregeneratedUnicode() {
     return !DisablePregeneratedUnicode;
 }
 
-RE_Compiler::RE_Compiler(cc::CC_Compiler & ccCompiler)
+RE_Compiler::RE_Compiler(pablo::PabloFunction & function, cc::CC_Compiler & ccCompiler)
 : mCCCompiler(ccCompiler)
 , mLineFeed(nullptr)
 , mCRLF(nullptr)
@@ -61,6 +61,7 @@ RE_Compiler::RE_Compiler(cc::CC_Compiler & ccCompiler)
 , mLoopVariants()
 , mPB(*ccCompiler.getBuilder().getPabloBlock(), ccCompiler.getBuilder())
 , mUCDCompiler(ccCompiler)
+, mFunction(function)
 {
 
 }
@@ -174,12 +175,12 @@ void RE_Compiler::initializeRequiredStreams() {
     mUnicodeLineBreak = mPB.createAnd(LB_chars, mPB.createNot(mCRLF));  // count the CR, but not CRLF
 }
 
-void RE_Compiler::finalizeMatchResult(PabloFunction & function, MarkerType match_result) {
+void RE_Compiler::finalizeMatchResult(MarkerType match_result) {
     //These three lines are specifically for grep.
     PabloAST * lb = UNICODE_LINE_BREAK ? mUnicodeLineBreak : mLineFeed;
     PabloAST * v = markerVar(match_result);
-    function.setResult(0, mPB.createAssign("matches", mPB.createAnd(mPB.createMatchStar(v, mPB.createNot(lb)), lb)));
-    function.setResult(1, mPB.createAssign("lf", mPB.createAnd(lb, mPB.createNot(mCRLF))));
+    mFunction.setResult(0, mPB.createAssign("matches", mPB.createAnd(mPB.createMatchStar(v, mPB.createNot(lb)), lb)));
+    mFunction.setResult(1, mPB.createAssign("lf", mPB.createAnd(lb, mPB.createNot(mCRLF))));
 }
 
 MarkerType RE_Compiler::compile(RE * re, PabloBuilder & pb) {
@@ -274,7 +275,7 @@ PabloAST * RE_Compiler::getNamedCharacterClassStream(Name * name, PabloBuilder &
     }
     else if (name->getType() == Name::Type::UnicodeProperty) {
         if (UsePregeneratedUnicode()) {
-            var = pb.createCall(Prototype::Create(name->getFunctionName(), 8, 1, 0));
+            var = pb.createCall(Prototype::Create(name->getFunctionName(), 8, 1, 0), mCCCompiler.getBasisBits());
         }
         else {
             var = mUCDCompiler.generateWithDefaultIfHierarchy(UCD::resolveUnicodeSet(name), pb);

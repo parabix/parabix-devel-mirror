@@ -42,6 +42,10 @@ public:
 
     pablo::PabloBuilder & getBuilder();
 
+    const std::vector<pablo::Var *> & getBasisBits() {
+        return mBasisBit;
+    }
+
 private:
     pablo::Var * getBasisVar(const int n) const;
     template<typename PabloBlockOrBuilder>

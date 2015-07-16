@@ -58,9 +58,9 @@ inline MarkerType makeMarker(MarkerPosition newpos, pablo::PabloAST * strm) {ret
 class RE_Compiler {
 public:
 
-    RE_Compiler(cc::CC_Compiler & ccCompiler);
+    RE_Compiler(pablo::PabloFunction & function, cc::CC_Compiler & ccCompiler);
     void initializeRequiredStreams();
-    void finalizeMatchResult(pablo::PabloFunction & function, MarkerType match_result);
+    void finalizeMatchResult(MarkerType match_result);
     MarkerType compile(RE * re) {
         return compile(re, mPB);
     }
@@ -104,6 +104,7 @@ private:
     std::vector<pablo::Next *>                      mLoopVariants; // <- rethink name
     pablo::PabloBuilder                             mPB;
     UCD::UCDCompiler                                mUCDCompiler;
+    pablo::PabloFunction &                          mFunction;
 };
 
 }

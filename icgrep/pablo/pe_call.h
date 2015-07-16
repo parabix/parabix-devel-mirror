@@ -16,8 +16,12 @@ public:
         return false;
     }
     virtual ~Call() { }
+
+    inline const Prototype * getPrototype() const {
+        return cast<Prototype>(getOperand(0));
+    }
     inline const String * getCallee() const {
-        return cast<Prototype>(getOperand(0))->getName();
+        return getPrototype()->getName();
     }
     inline void setLocalCarryIndex(const unsigned idx) {
         mLocalCarryIndex = idx;

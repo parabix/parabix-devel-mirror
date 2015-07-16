@@ -1,28 +1,28 @@
 #ifndef EXPRESSION_MAP_HPP
 #define EXPRESSION_MAP_HPP
 
-#include <map>
-#include <tuple>
 #include <pablo/pabloAST.h>
+#include <llvm/ADT/ArrayRef.h>
+#include <map>
 
 namespace pablo {
 
 template<typename... Args>
-struct ExpressionMap {
+struct FixedArgMap {
     enum {N = sizeof...(Args)};
-    typedef ExpressionMap<Args...> Type;
+    typedef FixedArgMap<Args...> Type;
     typedef std::tuple<PabloAST::ClassTypeId, Args...> Key;
     friend struct ExpressionTable;
 
-    explicit ExpressionMap(Type * predecessor = nullptr) : mPredecessor(predecessor) { }
+    explicit FixedArgMap(Type * predecessor = nullptr) : mPredecessor(predecessor) { }
 
-    explicit ExpressionMap(Type && other) noexcept
+    explicit FixedArgMap(Type && other) noexcept
     : mPredecessor(other.mPredecessor)
     , mMap(std::move(other.mMap)) {
 
     }
 
-    ExpressionMap & operator=(Type && other) {
+    FixedArgMap & operator=(Type && other) {
         mPredecessor = other.mPredecessor;
         mMap = std::move(other.mMap);
         return *this;
@@ -52,17 +52,18 @@ struct ExpressionMap {
 
     inline bool erase(const PabloAST::ClassTypeId type, Args... args) {
         Key key = std::make_tuple(type, args...);
-        auto itr = mMap.find(key);
-        if (itr == mMap.end()) {
-            return mPredecessor ? mPredecessor->erase(type, args...) : false;
+        for (Type * obj = this; obj; obj = obj->mPredecessor) {
+            auto itr = obj->mMap.find(key);
+            if (itr != mMap.end()) {
+                obj->mMap.erase(itr);
+                return true;
+            }
         }
-        mMap.erase(itr);
-        return true;
+        return false;
     }
 
     inline PabloAST * find(const PabloAST::ClassTypeId type, Args... args) const {
-        Key key = std::make_tuple(type, args...);
-        return find(key);
+        return find(std::make_tuple(type, args...));
     }
 
 private:
@@ -87,18 +88,18 @@ private:
     }
 
 private:
-    const Type *                mPredecessor;
+    Type *                      mPredecessor;
     std::map<Key, PabloAST *>   mMap;
 };
 
-
 struct ExpressionTable {
 
-    explicit ExpressionTable(const ExpressionTable * predecessor = nullptr) noexcept {
+    explicit ExpressionTable(ExpressionTable * predecessor = nullptr) noexcept {
         if (predecessor) {
             mUnary.mPredecessor = &(predecessor->mUnary);
             mBinary.mPredecessor = &(predecessor->mBinary);
             mTernary.mPredecessor = &(predecessor->mTernary);
+            mUnaryVariable.mPredecessor = &(predecessor->mUnaryVariable);
         }
     }
 
@@ -107,7 +108,8 @@ struct ExpressionTable {
     explicit ExpressionTable(ExpressionTable && other) noexcept
     : mUnary(std::move(other.mUnary))
     , mBinary(std::move(other.mBinary))
-    , mTernary(std::move(other.mTernary)) {
+    , mTernary(std::move(other.mTernary))
+    , mUnaryVariable(std::move(other.mUnaryVariable)) {
 
     }
 
@@ -115,6 +117,7 @@ struct ExpressionTable {
         mUnary = std::move(other.mUnary);
         mBinary = std::move(other.mBinary);
         mTernary = std::move(other.mTernary);
+        mUnaryVariable = std::move(other.mUnaryVariable);
         return *this;
     }
 
@@ -122,6 +125,11 @@ struct ExpressionTable {
     template <class Functor, typename... Params>
     inline PabloAST * findUnaryOrCall(Functor && functor, const PabloAST::ClassTypeId type, PabloAST * expr, Params... params) {
         return mUnary.findOrCall(std::move(functor), type, expr, std::forward<Params>(params)...);
+    }
+
+    template <class Functor, typename... Params>
+    inline PabloAST * findUnaryVariableOrCall(Functor && functor, const PabloAST::ClassTypeId type, PabloAST * expr, const std::vector<PabloAST *> & args, Params... params) {
+        return mUnaryVariable.findOrCall(std::move(functor), type, expr, args, std::forward<Params>(params)...);
     }
 
     template <class Functor, typename... Params>
@@ -134,10 +142,10 @@ struct ExpressionTable {
         return mTernary.findOrCall(std::move(functor), type, expr1, expr2, expr3, std::forward<Params>(params)...);
     }
 
+
     std::pair<PabloAST *, bool> findOrAdd(Statement * stmt) {
         switch (stmt->getClassTypeId()) {            
-            case PabloAST::ClassTypeId::Assign:
-            case PabloAST::ClassTypeId::Call:
+            case PabloAST::ClassTypeId::Assign:            
             case PabloAST::ClassTypeId::Var:
             case PabloAST::ClassTypeId::Not:
                 return mUnary.findOrAdd(stmt, stmt->getClassTypeId(), stmt->getOperand(0));
@@ -155,6 +163,8 @@ struct ExpressionTable {
                 return mBinary.findOrAdd(stmt, stmt->getClassTypeId(), stmt->getOperand(0), stmt->getOperand(1));
             case PabloAST::ClassTypeId::Sel:
                 return mTernary.findOrAdd(stmt, stmt->getClassTypeId(), stmt->getOperand(0), stmt->getOperand(1), stmt->getOperand(2));
+            case PabloAST::ClassTypeId::Call:
+                // temporarily ignored
             default:
                 return std::make_pair(stmt, true);
         }
@@ -162,9 +172,10 @@ struct ExpressionTable {
 
 
 private:
-    ExpressionMap<PabloAST *>                           mUnary;
-    ExpressionMap<PabloAST *, PabloAST *>               mBinary;
-    ExpressionMap<PabloAST *, PabloAST *, PabloAST *>   mTernary;
+    FixedArgMap<PabloAST *>                                     mUnary;
+    FixedArgMap<PabloAST *, PabloAST *>                         mBinary;
+    FixedArgMap<PabloAST *, PabloAST *, PabloAST *>             mTernary;
+    FixedArgMap<PabloAST *, const std::vector<PabloAST *> &>    mUnaryVariable;
 };
 
 }
