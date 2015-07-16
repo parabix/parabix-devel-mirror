@@ -66,11 +66,12 @@ void CarryManager::leaveScope() {
     /* Methods for getting and setting individual carry values. */
     
 Value * CarryManager::getCarryOpCarryIn(int localIndex) {
+    unsigned cd_index = mCurrentScopeIndex + mCarryInfo->carryOpCarryDataOffset(localIndex);
     if (mCarryInfo->getWhileDepth() == 0) {
-       Value * packPtr = mBuilder->CreateGEP(mCarryDataPtr, mBuilder->getInt64(mCurrentScopeIndex + mCarryInfo->carryOpCarryDataOffset(localIndex)));
+       Value * packPtr = mBuilder->CreateGEP(mCarryDataPtr, mBuilder->getInt64(cd_index));
        mCarryInVector[mCarryInfo->carryOpCarryDataOffset(localIndex)] = mBuilder->CreateAlignedLoad(packPtr, BLOCK_SIZE/8);
     }
-    return mCarryInVector[mCarryInfo->carryOpCarryDataOffset(localIndex)];
+    return mCarryInVector[cd_index];
 }
 
 void CarryManager::setCarryOpCarryOut(unsigned localIndex, Value * carry_out) {
@@ -102,7 +103,6 @@ Value * CarryManager::unitAdvanceCarryInCarryOut(int localIndex, Value * strm) {
         Value * packPtr = mBuilder->CreateGEP(mCarryDataPtr, mBuilder->getInt64(carryDataIndex));
         mCarryInVector[carryDataIndex] = mBuilder->CreateAlignedLoad(packPtr, BLOCK_SIZE/8);
         mBuilder->CreateAlignedStore(strm, packPtr, BLOCK_SIZE/8);
-        
     }
     Value * carry_in = mCarryInVector[carryDataIndex];
     Value* result_value;
@@ -127,7 +127,6 @@ Value * CarryManager::shortAdvanceCarryInCarryOut(int localIndex, int shift_amou
         Value * packPtr = mBuilder->CreateGEP(mCarryDataPtr, mBuilder->getInt64(carryDataIndex));
         mCarryInVector[carryDataIndex] = mBuilder->CreateAlignedLoad(packPtr, BLOCK_SIZE/8);
         mBuilder->CreateAlignedStore(strm, packPtr, BLOCK_SIZE/8);
-        
     }
     Value * carry_in = mCarryInVector[carryDataIndex];
     Value* advanceq_longint = mBuilder->CreateBitCast(carry_in, mBuilder->getIntNTy(BLOCK_SIZE));
