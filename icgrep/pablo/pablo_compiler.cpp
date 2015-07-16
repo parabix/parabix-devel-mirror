@@ -165,7 +165,7 @@ std::pair<llvm::Function *, size_t> PabloCompiler::compile(PabloFunction & funct
     mBuilder->SetInsertPoint(BasicBlock::Create(mMod->getContext(), "entry", mFunction,0));
 
     //The basis bits structure
-    for (unsigned i = 0; i != function.getParameters().size(); ++i) {
+    for (unsigned i = 0; i != function.getNumOfParameters(); ++i) {
         Value* indices[] = {mBuilder->getInt64(0), mBuilder->getInt32(i)};
         Value * gep = mBuilder->CreateGEP(mInputAddressPtr, indices);
         LoadInst * basisBit = mBuilder->CreateAlignedLoad(gep, BLOCK_SIZE/8, false, function.getParameter(i)->getName()->to_string());
@@ -187,7 +187,8 @@ std::pair<llvm::Function *, size_t> PabloCompiler::compile(PabloFunction & funct
     }
     
     // Write the output values out
-    for (unsigned i = 0; i != function.getResults().size(); ++i) {
+    for (unsigned i = 0; i != function.getNumOfResults(); ++i) {
+        assert (function.getResult(i));
         SetOutputValue(mMarkerMap[function.getResult(i)], i);
     }
 
@@ -204,9 +205,9 @@ std::pair<llvm::Function *, size_t> PabloCompiler::compile(PabloFunction & funct
 }
 
 inline void PabloCompiler::GenerateFunction(PabloFunction & function) {
-    mInputType = PointerType::get(StructType::get(mMod->getContext(), std::vector<Type *>(function.getParameters().size(), mBitBlockType)), 0);
+    mInputType = PointerType::get(StructType::get(mMod->getContext(), std::vector<Type *>(function.getNumOfParameters(), mBitBlockType)), 0);
     Type * carryType = PointerType::get(mBitBlockType, 0);
-    Type * outputType = PointerType::get(StructType::get(mMod->getContext(), std::vector<Type *>(function.getResults().size(), mBitBlockType)), 0);
+    Type * outputType = PointerType::get(StructType::get(mMod->getContext(), std::vector<Type *>(function.getNumOfResults(), mBitBlockType)), 0);
     FunctionType * functionType = FunctionType::get(Type::getVoidTy(mMod->getContext()), {{mInputType, carryType, outputType}}, false);
 
 #ifdef USE_UADD_OVERFLOW
@@ -792,6 +793,7 @@ inline Value* PabloCompiler::genNot(Value* expr) {
 }
     
 void PabloCompiler::SetOutputValue(Value * marker, const unsigned index) {
+    assert (marker);
     if (marker->getType()->isPointerTy()) {
         marker = mBuilder->CreateAlignedLoad(marker, BLOCK_SIZE/8, false);
     }

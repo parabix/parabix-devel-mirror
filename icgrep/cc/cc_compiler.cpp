@@ -33,7 +33,7 @@ CC_Compiler::CC_Compiler(PabloFunction & function, const Encoding & encoding, co
 , mEncoding(encoding) {
     for (unsigned i = 0; i != encoding.getBits(); i++) {
         Var * var = mBuilder.createVar(prefix + std::to_string(i));
-        function.addParameter(var);
+        function.setParameter(i, var);
         mBasisBit[encoding.getBits() - i - 1] = var;
     }
 }

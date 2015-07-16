@@ -175,7 +175,7 @@ bool AutoMultiplexing::initialize(PabloFunction & function) {
 
     flat_map<const PabloAST *, unsigned> map;    
     std::stack<Statement *> scope;
-    unsigned complexStatements = 0; // number of statements that cannot always be categorized without generating a new variable
+    unsigned variableCount = 0; // number of statements that cannot always be categorized without generating a new variable
 
     // Scan through and collect all the advances, calls, scanthrus and matchstars ...
     unsigned n = 0, m = 0;
@@ -201,7 +201,7 @@ bool AutoMultiplexing::initialize(PabloFunction & function) {
                 case PabloAST::ClassTypeId::Call:
                 case PabloAST::ClassTypeId::ScanThru:
                 case PabloAST::ClassTypeId::MatchStar:
-                    complexStatements++;
+                    variableCount++;
                     break;
                 default:
                     break;
@@ -293,7 +293,7 @@ bool AutoMultiplexing::initialize(PabloFunction & function) {
     }
 
     // Initialize the BDD engine ...
-    mManager = Cudd_Init((complexStatements + function.getParameters().size()), 0, CUDD_UNIQUE_SLOTS, CUDD_CACHE_SLOTS, 0);
+    mManager = Cudd_Init((variableCount + function.getNumOfParameters()), 0, CUDD_UNIQUE_SLOTS, CUDD_CACHE_SLOTS, 0);
     Cudd_AutodynDisable(mManager);
 
     // Map the predefined 0/1 entries
@@ -302,9 +302,8 @@ bool AutoMultiplexing::initialize(PabloFunction & function) {
 
     // Order the variables so the input Vars are pushed to the end; they ought to
     // be the most complex to resolve.
-    unsigned i = complexStatements;
-    for (const Var * var : function.getParameters()) {
-        mCharacterizationMap[var] = Cudd_bddIthVar(mManager, i++);
+    for (auto i = 0; i != function.getNumOfParameters(); ++i) {
+        mCharacterizationMap[function.getParameter(i)] = Cudd_bddIthVar(mManager, variableCount++);
     }
 
     return false;

@@ -64,7 +64,7 @@ using property_list = std::vector<std::pair<std::string, size_t>>;
  * @brief compileUnicodeSet
  ** ------------------------------------------------------------------------------------------------------------- */
 size_t compileUnicodeSet(std::string name, const UnicodeSet & set, PabloCompiler & pc, Module * module) {
-    PabloFunction function = PabloFunction::Create(std::move(name));
+    PabloFunction function = PabloFunction::Create(std::move(name), 8, 1);
     Encoding encoding(Encoding::Type::UTF_8, 8);
     CC_Compiler ccCompiler(function, encoding);
     UCDCompiler ucdCompiler(ccCompiler);

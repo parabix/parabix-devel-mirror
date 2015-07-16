@@ -13,6 +13,7 @@ namespace pablo {
 
 class String : public PabloAST {
     friend class SymbolGenerator;
+    friend class Prototype;
     friend std::ostream & operator<< (std::ostream& stream, const String & string);
 public:
     using StringAllocator = SlabAllocator<char>;

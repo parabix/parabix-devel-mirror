@@ -2,7 +2,7 @@
 #define PE_CALL_H
 
 #include <pablo/pabloAST.h>
-#include <pablo/pe_string.h>
+#include <pablo/function.h>
 
 namespace pablo {
 
@@ -15,16 +15,24 @@ public:
     static inline bool classof(const void *) {
         return false;
     }
-    virtual ~Call() {
-    }
+    virtual ~Call() { }
     inline const String * getCallee() const {
-        return cast<String>(getOperand(0));
+        return cast<Prototype>(getOperand(0))->getName();
+    }
+    inline void setLocalCarryIndex(const unsigned idx) {
+        mLocalCarryIndex = idx;
+    }
+    inline unsigned getLocalCarryIndex() const {
+        return mLocalCarryIndex;
     }
 protected:
-    Call(PabloAST * callee)
-    : Statement(ClassTypeId::Call, {callee}, cast<String>(callee)) {
+    Call(PabloAST * prototype)
+    : Statement(ClassTypeId::Call, {prototype}, cast<Prototype>(prototype)->getName())
+    , mLocalCarryIndex(0) {
 
     }
+private:
+    unsigned mLocalCarryIndex;
 };
 }
 

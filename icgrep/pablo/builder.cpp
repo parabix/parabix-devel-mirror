@@ -75,8 +75,8 @@ __##NAME functor(mPb); \
 PabloAST * result = mExprTable.findTernaryOrCall(std::move(functor), TYPE, ARGS)
 
 
-Call * PabloBuilder::createCall(String * name) {
-    MAKE_UNARY(createCall, PabloAST::ClassTypeId::Call, name);
+Call * PabloBuilder::createCall(Prototype * prototype) {
+    MAKE_UNARY(createCall, PabloAST::ClassTypeId::Call, prototype);
     return cast<Call>(result);
 }
 

@@ -50,11 +50,7 @@ public:
         return mPb->createVar(name);
     }
 
-    inline Call * createCall(const std::string name) {
-        return createCall(mPb->getName(name));
-    }
-
-    Call * createCall(String * name);
+    Call * createCall(Prototype * prototype);
 
     Assign * createAssign(const std::string && prefix, PabloAST * expr) {
         return mPb->createAssign(std::move(prefix), expr);
@@ -169,6 +165,19 @@ public:
     inline Statement * back() const {
         return mPb->back();
     }
+
+    inline String * getName(const std::string name, const bool generated = true) const {
+        return mPb->getName(std::move(name), generated);
+    }
+
+    inline String * makeName(const std::string prefix, const bool generated = true) const {
+        return mPb->makeName(std::move(prefix), generated);
+    }
+
+    inline Integer * getInteger(Integer::integer_t value) {
+        return mPb->getInteger(value);
+    }
+
 
     inline Statement * getInsertPoint() const {
         return mPb->getInsertPoint();

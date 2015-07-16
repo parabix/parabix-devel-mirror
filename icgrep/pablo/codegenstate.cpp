@@ -71,9 +71,9 @@ PabloAST * PabloBlock::createAdvance(PabloAST * expr, const Integer::integer_t s
     return insertAtInsertionPoint(new Advance(expr, getInteger(shiftAmount), makeName(prefix, false)));
 }
 
-Call * PabloBlock::createCall(PabloAST * name) {
-    assert (name);
-    return insertAtInsertionPoint(new Call(name));
+Call * PabloBlock::createCall(PabloAST * prototype) {
+    assert (prototype);
+    return insertAtInsertionPoint(new Call(prototype));
 }
 
 PabloAST * PabloBlock::createNot(PabloAST * expr) {

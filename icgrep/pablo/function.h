@@ -13,23 +13,76 @@ class Assign;
 class PabloBlock;
 class String;
 
-class PabloFunction : public PabloAST {
+class Prototype : public PabloAST {
     friend class PabloBlock;
-    using ParamAllocator = VectorAllocator::rebind<Var *>::other;
-    using Parameters = std::vector<Var *, ParamAllocator>;
-    using ResultAllocator = VectorAllocator::rebind<Assign *>::other;
-    using Results = std::vector<Assign *, ResultAllocator>;
 public:
 
     static inline bool classof(const PabloAST * e) {
-        return e->getClassTypeId() == ClassTypeId::Function;
+        return e->getClassTypeId() == ClassTypeId::Prototype;
     }
 
     static inline bool classof(const void *) {
         return false;
     }
 
-    static PabloFunction Create(std::string && name);
+    static Prototype * Create(std::string name, const unsigned inputVariables, const unsigned outputVariables, const unsigned requiredStateSpace);
+
+    const String * getName() const {
+        return mName;
+    }
+
+    // Note: this will have to be updated once different stream types exist
+    unsigned getNumOfParameters() const {
+        return mNumOfParameters;
+    }
+
+    unsigned getNumOfResults() const {
+        return mNumOfResults;
+    }
+
+    unsigned getRequiredStateSpace() const {
+        return mRequiredStateSpace;
+    }
+
+protected:
+    // Should only be modified by a pablo::Function after compilation
+    void setRequiredStateSpace(const unsigned value) {
+        mRequiredStateSpace = value;
+    }
+
+    Prototype(const PabloAST::ClassTypeId type, std::string && name, const unsigned numOfParameters, const unsigned numOfResults, const unsigned requiredStateSpace);
+protected:
+    const String * const    mName;
+    const unsigned          mNumOfParameters;
+    const unsigned          mNumOfResults;
+    unsigned                mRequiredStateSpace;
+};
+
+inline Prototype * Prototype::Create(std::string name, const unsigned numOfParameters, const unsigned numOfResults, const unsigned requiredStateSpace) {
+    return new Prototype(PabloAST::ClassTypeId::Prototype, std::move(name), numOfParameters, numOfResults, requiredStateSpace);
+}
+
+class PabloFunction : public Prototype {
+    friend class PabloBlock;
+    using ParamAllocator = VectorAllocator::rebind<Var *>::other;
+    using ResultAllocator = VectorAllocator::rebind<Assign *>::other;
+public:
+
+    static inline bool classof(const PabloAST * e) {
+        switch (e->getClassTypeId()) {
+            case ClassTypeId::Function:
+            case ClassTypeId::Prototype:
+                return true;
+            default:
+                return false;
+        }        
+    }
+
+    static inline bool classof(const void *) {
+        return false;
+    }
+
+    static PabloFunction Create(std::string name, const unsigned numOfParameters, const unsigned numOfResults);
 
     virtual bool operator==(const PabloAST & other) const {
         return &other == this;
@@ -39,68 +92,75 @@ public:
         return mEntryBlock;
     }
 
-    const String * getName() const {
-        return mName;
-    }
-
     const PabloBlock & getEntryBlock() const {
         return mEntryBlock;
-    }
-
-    const Parameters & getParameters() const {
-        return mParameters;
-    }
-
-    const Results & getResults() const {
-        return mResults;
-    }
-
-    Var * getParameter(const unsigned index) {
-        return mParameters[index];
-    }
-
-    const Var * getParameter(const unsigned index) const {
-        return mParameters[index];
-    }
-
-    void addParameter(Var * value) {
-        mParameters.push_back(value); value->addUser(this);
-    }
-
-    Assign * getResult(const unsigned index) {
-        return mResults[index];
-    }
-
-    const Assign * getResult(const unsigned index) const {
-        return mResults[index];
-    }
-
-    void addResult(Assign * value) {
-        mResults.push_back(value); value->addUser(this);
-    }
-
-    void setResult(const unsigned index, PabloAST * value) {
-        getResult(index)->setExpression(value);
     }
 
     SymbolGenerator & getSymbolTable() {
         return mSymbolTable;
     }
 
+    Var * getParameter(const unsigned index) {
+        if (LLVM_LIKELY(index < getNumOfParameters()))
+            return mParameters[index];
+        else throwInvalidParameterIndex(index);
+    }
+
+    const Var * getParameter(const unsigned index) const {
+        if (LLVM_LIKELY(index < getNumOfParameters()))
+            return mParameters[index];
+        else throwInvalidParameterIndex(index);
+    }
+
+    void setParameter(const unsigned index, Var * value) {
+        if (LLVM_LIKELY(index < getNumOfParameters()))
+            mParameters[index] = value;
+        else throwInvalidParameterIndex(index);
+    }
+
+    Assign * getResult(const unsigned index) {
+        if (LLVM_LIKELY(index < getNumOfResults()))
+            return mResults[index];
+        else throwInvalidResultIndex(index);
+    }
+
+    const Assign * getResult(const unsigned index) const {
+        if (LLVM_LIKELY(index < getNumOfResults()))
+            return mResults[index];
+        else throwInvalidResultIndex(index);
+    }
+
+    void setResult(const unsigned index, Assign * value) {        
+        if (LLVM_LIKELY(index < getNumOfResults())) {
+            if (LLVM_LIKELY(mResults[index] != value)) {
+                if (LLVM_UNLIKELY(mResults[index] != nullptr)) {
+                    mResults[index]->removeUser(this);
+                }
+                mResults[index] = value;
+                value->addUser(this);
+            }
+        }
+        else throwInvalidResultIndex(index);
+    }
+
     virtual ~PabloFunction() { }
 
 protected:
-    PabloFunction(std::string && name);
+
+    __attribute__((noreturn)) void throwInvalidParameterIndex(const unsigned index) const;
+
+    __attribute__((noreturn)) void throwInvalidResultIndex(const unsigned index) const;
+
+    PabloFunction(std::string && name, const unsigned numOfParameters, const unsigned numOfResults);
 private:
     PabloBlock &        mEntryBlock;
-    Parameters          mParameters;
-    Results             mResults;
     SymbolGenerator     mSymbolTable;
-    String *            mName;
+    Var ** const        mParameters;
+    Assign ** const     mResults;
 };
 
-inline PabloFunction PabloFunction::Create(std::string && name) {
-    return PabloFunction(std::move(name));
+inline PabloFunction PabloFunction::Create(std::string name, const unsigned numOfParameters, const unsigned numOfResults) {
+    return PabloFunction(std::move(name), numOfParameters, numOfResults);
 }
 
 }

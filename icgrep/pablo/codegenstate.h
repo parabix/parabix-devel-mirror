@@ -28,6 +28,7 @@
 #include <pablo/ps_assign.h>
 #include <pablo/ps_if.h>
 #include <pablo/ps_while.h>
+#include <pablo/function.h>
 #include <stdexcept>
 
 namespace pablo {
@@ -74,12 +75,8 @@ public:
         return mOnes;
     }
 
-    inline Call * createCall(const std::string name) {
-        return createCall(getName(name, false));
-    }
-
-    inline Call * createCall(String * name) {
-        return createCall(cast<PabloAST>(name));
+    inline Call * createCall(Prototype * prototype) {
+        return createCall(prototype);
     }
 
     Assign * createAssign(const std::string && prefix, PabloAST * expr);
@@ -167,6 +164,8 @@ public:
 
     
 protected:
+
+
     PabloBlock(SymbolGenerator & symbolGenerator);
 
     PabloBlock(PabloBlock * predecessor);
@@ -186,7 +185,7 @@ protected:
     }
 private:
 
-    Call * createCall(PabloAST * name);
+    Call * createCall(PabloAST * prototype);
 
     Var * createVar(PabloAST * name);
 

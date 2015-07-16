@@ -27,6 +27,7 @@ class PabloAST {
     friend class If;    
     friend class While;
     friend class PabloBlock;
+    friend class Prototype;
     friend class PabloFunction;
     friend class SymbolGenerator;
 public:
@@ -64,6 +65,7 @@ public:
         // Internal variables
         , Integer
         , String
+        , Prototype
     };
     inline ClassTypeId getClassTypeId() const {
         return mClassTypeId;
