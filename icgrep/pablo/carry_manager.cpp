@@ -61,15 +61,13 @@ void CarryManager::leaveScope() {
     //std::cerr << "leaveScope:  mCurrentScopeIndex = " << mCurrentScopeIndex << std::endl;
 }
 
-
-
     /* Methods for getting and setting individual carry values. */
     
 Value * CarryManager::getCarryOpCarryIn(int localIndex) {
     unsigned cd_index = mCurrentScopeIndex + mCarryInfo->carryOpCarryDataOffset(localIndex);
     if (mCarryInfo->getWhileDepth() == 0) {
        Value * packPtr = mBuilder->CreateGEP(mCarryDataPtr, mBuilder->getInt64(cd_index));
-       mCarryInVector[mCarryInfo->carryOpCarryDataOffset(localIndex)] = mBuilder->CreateAlignedLoad(packPtr, BLOCK_SIZE/8);
+       mCarryInVector[cd_index] = mBuilder->CreateAlignedLoad(packPtr, BLOCK_SIZE/8);
     }
     return mCarryInVector[cd_index];
 }
@@ -272,35 +270,31 @@ void CarryManager::generateCarryOutSummaryCodeIfNeeded() {
     mBuilder->CreateAlignedStore(carry_summary, packPtr, BLOCK_SIZE/8);
 }
 
+
 void CarryManager::ensureCarriesLoadedLocal() {
 #if 0
-    const PabloBlockCarryData & cd = blk.carryData;
-    const unsigned baseCarryDataIdx = cd.getBlockCarryDataIndex();
-    const unsigned localCarryDataSize = cd.getLocalCarryDataSize();
-    const unsigned scopeCarryDataSize = cd.getScopeCarryDataSize();
-    if (scopeCarryDataSize == 0) return;
-    if ((cd.getIfDepth() > 0) && (scopeCarryDataSize == 1)) return;
-    if (cd.getWhileDepth() > 0) return;
-    for (auto i = baseCarryDataIdx; i < baseCarryDataIdx + localCarryDataSize; ++i) {
-        mCarryInVector[i] = mBuilder->CreateAlignedLoad(mBuilder->CreateGEP(mCarryDataPtr, mBuilder->getInt64(i)), BLOCK_SIZE/8, false);
+    if ((mCarryInfo->getScopeCarryDataSize() == 0 ) || (mCarryInfo->getWhileDepth() > 0)) return;
+    if (mCarryInfo->explicitSummaryRequired()) {
+        auto localCarryIndex = mCurrentScopeIndex + mCarryInfo->getLocalCarryDataOffset();
+        auto localCarryPacks = mCarryInfo->getLocalCarryDataSize();
+        for (auto i = 0; i < localCarryPacks; i++) {        
+            mCarryInVector[i] = mBuilder->CreateAlignedLoad(mBuilder->CreateGEP(mCarryDataPtr, mBuilder->getInt64(i)), BLOCK_SIZE/8, false);
+        }
     }
 #endif
 }
 
 void CarryManager::ensureCarriesStoredLocal() {
 #if 0
-    const PabloBlockCarryData & cd = blk.carryData;
-    const unsigned baseCarryDataIdx = cd.getBlockCarryDataIndex();
-    const unsigned localCarryDataSize = cd.getLocalCarryDataSize();
-    const unsigned scopeCarryDataSize = cd.getScopeCarryDataSize();
-    const unsigned carrySummaryIndex = cd.summaryCarryDataIndex();
-    if (scopeCarryDataSize == 0) return;
-    if (cd.getWhileDepth() > 0) return;
-    for (auto i = baseCarryDataIdx; i < baseCarryDataIdx + localCarryDataSize; ++i) {
+    if ((mCarryInfo->getScopeCarryDataSize() == 0 ) || (mCarryInfo->getWhileDepth() > 0)) return;
+    auto localCarryIndex = mCurrentScopeIndex + mCarryInfo->getLocalCarryDataOffset();
+    auto localCarryPacks = mCarryInfo->getLocalCarryDataSize();
+    for (auto i = 0; i < localCarryPacks; i++) {        
         Value * storePtr = mBuilder->CreateGEP(mCarryDataPtr, mBuilder->getInt64(i));
         mBuilder->CreateAlignedStore(mCarryOutVector[i], storePtr, BLOCK_SIZE/8, false);
     }
-    if (scopeCarryDataSize > 1) {
+    if (mCarryInfo->getScopeCarryDataSize() > 1) {
+        const unsigned carrySummaryIndex = mCurrentScopeIndex + mCarryInfo->summaryCarryDataIndex();
         Value * summaryPtr = mBuilder->CreateGEP(mCarryDataPtr, mBuilder->getInt64(carrySummaryIndex));
         mBuilder->CreateAlignedStore(mCarryOutVector[carrySummaryIndex], summaryPtr, BLOCK_SIZE/8, false);
     }
