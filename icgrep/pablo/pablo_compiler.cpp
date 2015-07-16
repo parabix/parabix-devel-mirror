@@ -461,7 +461,7 @@ void PabloCompiler::compileIf(const If * ifStatement) {
     compileBlock(ifBody);
     --mIfDepth;
     if (mCarryManager->blockHasCarries()) {
-        mCarryManager->generateCarryOutSummaryCode();
+        mCarryManager->generateCarryOutSummaryCodeIfNeeded();
     }
     BasicBlock * ifBodyFinalBlock = mBuilder->GetInsertBlock();
     mBuilder->CreateBr(ifEndBlock);
@@ -477,9 +477,7 @@ void PabloCompiler::compileIf(const If * ifStatement) {
         mMarkerMap[assign] = phi;
     }
     // Create the phi Node for the summary variable, if needed.
-    if (mCarryManager->summaryNeededInParentBlock()) {
-        mCarryManager->addSummaryPhi(ifEntryBlock, ifBodyFinalBlock);
-    }
+    mCarryManager->addSummaryPhiIfNeeded(ifEntryBlock, ifBodyFinalBlock);
     mCarryManager->leaveScope();
 }
 

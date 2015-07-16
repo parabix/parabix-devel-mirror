@@ -111,7 +111,7 @@ unsigned PabloBlockCarryData::enumerate(PabloBlock & blk) {
     
     scopeCarryDataBits = nestedframePosition;
     
-    if ((ifDepth > 0) && (scopeCarryDataBits > BLOCK_SIZE)) {
+    if (explicitSummaryRequired()) {
         // Need extra space for the summary variable, always the last
         // entry within an if block.
         AlignUpwards(scopeCarryDataBits, BLOCK_SIZE);

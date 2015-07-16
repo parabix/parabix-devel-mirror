@@ -209,11 +209,12 @@ Value * CarryManager::getCarrySummaryExpr() {
     return summary_expr;
 }
 
-bool CarryManager::summaryNeededInParentBlock(){
-    return mCarryInfo->summaryNeededInParentBlock();
-} 
-
-void CarryManager::addSummaryPhi(BasicBlock * ifEntryBlock, BasicBlock * ifBodyFinalBlock) {
+void CarryManager::addSummaryPhiIfNeeded(BasicBlock * ifEntryBlock, BasicBlock * ifBodyFinalBlock) {
+    if ((mCarryInfo->getIfDepth() <= 1) || !mCarryInfo->blockHasCarries()){
+        // For ifDepth == 1, the parent does not need a summary as it is not itself within an if.
+        // Therefore, it doesn't need access to this block's summary in building its own.
+        return;
+    }
     const unsigned carrySummaryIndex = mCurrentScopeIndex + mCarryInfo->summaryCarryDataIndex();
     PHINode * summary_phi = mBuilder->CreatePHI(mBitBlockType, 2, "summary");
     summary_phi->addIncoming(mZeroInitializer, ifEntryBlock);
@@ -221,15 +222,16 @@ void CarryManager::addSummaryPhi(BasicBlock * ifEntryBlock, BasicBlock * ifBodyF
     mCarryOutVector[carrySummaryIndex] = summary_phi;
 }
 
-void CarryManager::generateCarryOutSummaryCode() {
+void CarryManager::generateCarryOutSummaryCodeIfNeeded() {
     
-    const unsigned carrySummaryIndex = mCurrentScopeIndex + mCarryInfo->summaryCarryDataIndex();
-    
-    if (mCarryInfo->getScopeCarryDataSize() == 1) {
-        // If scopeCarryDataSize == 1, then we have one pack which serves as
-        // the summary.   It should already be stored.   
+    if (!mCarryInfo->explicitSummaryRequired()) {
+        // An explicit summary may not be required, if there is a single carry
+        // operation within the block, or the carries are packed and all carry
+        // bits fit within a single pack.
         return;
     }
+    
+    const unsigned carrySummaryIndex = mCurrentScopeIndex + mCarryInfo->summaryCarryDataIndex();
     
     Value * carry_summary = mZeroInitializer;
     

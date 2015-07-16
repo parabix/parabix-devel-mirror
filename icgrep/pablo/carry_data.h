@@ -93,9 +93,7 @@ public:
    
     bool blockHasCarries() const { return scopeCarryDataBits > 0;}
     
-    bool explicitSummaryRequired() const { return scopeCarryDataBits > BLOCK_SIZE;}
-    
-    bool summaryNeededInParentBlock() const {return (ifDepth > 0) && blockHasCarries();}
+    bool explicitSummaryRequired() const { return (ifDepth > 0) && (scopeCarryDataBits > BLOCK_SIZE);}
     
 private:
     

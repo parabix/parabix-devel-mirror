@@ -75,11 +75,9 @@ public:
     
     Value * getCarrySummaryExpr();
     
-    void generateCarryOutSummaryCode();
+    void generateCarryOutSummaryCodeIfNeeded();
     
-    bool summaryNeededInParentBlock();
-    
-    void addSummaryPhi(BasicBlock * ifEntryBlock, BasicBlock * ifBodyFinalBlock);
+    void addSummaryPhiIfNeeded(BasicBlock * ifEntryBlock, BasicBlock * ifBodyFinalBlock);
     
     /* Methods for load/store of carries for non-while blocks. */
     
