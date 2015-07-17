@@ -63,22 +63,27 @@ void CarryManager::leaveScope() {
 
     /* Methods for getting and setting individual carry values. */
     
+//#define LOAD_STORE_ON_BLOCK_ENTRY_EXIT    
 Value * CarryManager::getCarryOpCarryIn(int localIndex) {
     unsigned cd_index = mCurrentScopeIndex + mCarryInfo->carryOpCarryDataOffset(localIndex);
+#ifndef LOAD_STORE_ON_BLOCK_ENTRY_EXIT
     if (mCarryInfo->getWhileDepth() == 0) {
        Value * packPtr = mBuilder->CreateGEP(mCarryDataPtr, mBuilder->getInt64(cd_index));
        mCarryInVector[cd_index] = mBuilder->CreateAlignedLoad(packPtr, BLOCK_SIZE/8);
     }
+#endif
     return mCarryInVector[cd_index];
 }
 
 void CarryManager::setCarryOpCarryOut(unsigned localIndex, Value * carry_out) {
     unsigned cd_index = mCurrentScopeIndex + mCarryInfo->carryOpCarryDataOffset(localIndex);
     mCarryOutVector[cd_index] = carry_out;
+#ifndef LOAD_STORE_ON_BLOCK_ENTRY_EXIT
     if (mCarryInfo->getWhileDepth() == 0) {
        Value * packPtr = mBuilder->CreateGEP(mCarryDataPtr, mBuilder->getInt64(cd_index));
        mBuilder->CreateAlignedStore(carry_out, packPtr, BLOCK_SIZE/8);
     }
+#endif
 }
 
     
@@ -97,11 +102,13 @@ Value * CarryManager::advanceCarryInCarryOut(int localIndex, int shift_amount, V
 Value * CarryManager::unitAdvanceCarryInCarryOut(int localIndex, Value * strm) {
     unsigned carryDataIndex = mCurrentScopeIndex + mCarryInfo->unitAdvanceCarryDataOffset(localIndex);
     mCarryOutVector[carryDataIndex] = strm; 
+#ifndef LOAD_STORE_ON_BLOCK_ENTRY_EXIT
     if (mCarryInfo->getWhileDepth() == 0) {
         Value * packPtr = mBuilder->CreateGEP(mCarryDataPtr, mBuilder->getInt64(carryDataIndex));
         mCarryInVector[carryDataIndex] = mBuilder->CreateAlignedLoad(packPtr, BLOCK_SIZE/8);
         mBuilder->CreateAlignedStore(strm, packPtr, BLOCK_SIZE/8);
     }
+#endif
     Value * carry_in = mCarryInVector[carryDataIndex];
     Value* result_value;
     
@@ -121,11 +128,13 @@ Value * CarryManager::unitAdvanceCarryInCarryOut(int localIndex, Value * strm) {
 Value * CarryManager::shortAdvanceCarryInCarryOut(int localIndex, int shift_amount, Value * strm) {
     unsigned carryDataIndex = mCurrentScopeIndex + mCarryInfo->shortAdvanceCarryDataOffset(localIndex);
     mCarryOutVector[carryDataIndex] = strm; 
+#ifndef LOAD_STORE_ON_BLOCK_ENTRY_EXIT
     if (mCarryInfo->getWhileDepth() == 0) {
         Value * packPtr = mBuilder->CreateGEP(mCarryDataPtr, mBuilder->getInt64(carryDataIndex));
         mCarryInVector[carryDataIndex] = mBuilder->CreateAlignedLoad(packPtr, BLOCK_SIZE/8);
         mBuilder->CreateAlignedStore(strm, packPtr, BLOCK_SIZE/8);
     }
+#endif
     Value * carry_in = mCarryInVector[carryDataIndex];
     Value* advanceq_longint = mBuilder->CreateBitCast(carry_in, mBuilder->getIntNTy(BLOCK_SIZE));
     Value* strm_longint = mBuilder->CreateBitCast(strm, mBuilder->getIntNTy(BLOCK_SIZE));
@@ -236,12 +245,13 @@ void CarryManager::generateCarryOutSummaryCodeIfNeeded() {
         carry_summary = mOneInitializer;
     }
     else {
+        auto localCarryIndex = mCurrentScopeIndex + mCarryInfo->getLocalCarryPackIndex();
         auto localCarryPacks = mCarryInfo->getLocalCarryDataSize();
         if (localCarryPacks > 0) {
-            carry_summary = mCarryOutVector[mCurrentScopeIndex];
+            carry_summary = mCarryOutVector[localCarryIndex];
             for (auto i = 1; i < localCarryPacks; i++) {
                 //carry_summary = mBuilder->CreateOr(carry_summary, mPabloBlock->mCarryOutPack[i]);            
-                carry_summary = mBuilder->CreateOr(carry_summary, mCarryOutVector[mCurrentScopeIndex+i]);
+                carry_summary = mBuilder->CreateOr(carry_summary, mCarryOutVector[localCarryIndex+i]);
             }
         }
         for (Statement * stmt : *mCurrentScope) {
@@ -272,12 +282,13 @@ void CarryManager::generateCarryOutSummaryCodeIfNeeded() {
 
 
 void CarryManager::ensureCarriesLoadedLocal() {
-#if 0
+#ifdef LOAD_STORE_ON_BLOCK_ENTRY_EXIT
     if ((mCarryInfo->getScopeCarryDataSize() == 0 ) || (mCarryInfo->getWhileDepth() > 0)) return;
-    if (mCarryInfo->explicitSummaryRequired()) {
-        auto localCarryIndex = mCurrentScopeIndex + mCarryInfo->getLocalCarryDataOffset();
+    if ((mCarryInfo->getIfDepth() == 0) || mCarryInfo->explicitSummaryRequired()) {
+        auto localCarryIndex = mCurrentScopeIndex + mCarryInfo->getLocalCarryPackIndex();
         auto localCarryPacks = mCarryInfo->getLocalCarryDataSize();
-        for (auto i = 0; i < localCarryPacks; i++) {        
+        //std::cerr << "ensureCarriesLoadedLocal: localCarryIndex =  " << localCarryIndex << "localCarryPacks =  " << localCarryPacks << std::endl;
+        for (auto i = localCarryIndex; i < localCarryIndex + localCarryPacks; i++) {        
             mCarryInVector[i] = mBuilder->CreateAlignedLoad(mBuilder->CreateGEP(mCarryDataPtr, mBuilder->getInt64(i)), BLOCK_SIZE/8, false);
         }
     }
@@ -285,18 +296,14 @@ void CarryManager::ensureCarriesLoadedLocal() {
 }
 
 void CarryManager::ensureCarriesStoredLocal() {
-#if 0
+#ifdef LOAD_STORE_ON_BLOCK_ENTRY_EXIT
     if ((mCarryInfo->getScopeCarryDataSize() == 0 ) || (mCarryInfo->getWhileDepth() > 0)) return;
-    auto localCarryIndex = mCurrentScopeIndex + mCarryInfo->getLocalCarryDataOffset();
+    auto localCarryIndex = mCurrentScopeIndex + mCarryInfo->getLocalCarryPackIndex();
     auto localCarryPacks = mCarryInfo->getLocalCarryDataSize();
-    for (auto i = 0; i < localCarryPacks; i++) {        
+    //std::cerr << "ensureCarriesStoredLocal: localCarryIndex =  " << localCarryIndex << "localCarryPacks =  " << localCarryPacks << std::endl;
+    for (auto i = localCarryIndex; i < localCarryIndex + localCarryPacks; i++) {        
         Value * storePtr = mBuilder->CreateGEP(mCarryDataPtr, mBuilder->getInt64(i));
         mBuilder->CreateAlignedStore(mCarryOutVector[i], storePtr, BLOCK_SIZE/8, false);
-    }
-    if (mCarryInfo->getScopeCarryDataSize() > 1) {
-        const unsigned carrySummaryIndex = mCurrentScopeIndex + mCarryInfo->summaryCarryDataIndex();
-        Value * summaryPtr = mBuilder->CreateGEP(mCarryDataPtr, mBuilder->getInt64(carrySummaryIndex));
-        mBuilder->CreateAlignedStore(mCarryOutVector[carrySummaryIndex], summaryPtr, BLOCK_SIZE/8, false);
     }
 #endif
 }

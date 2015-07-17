@@ -20,10 +20,25 @@
 */
 unsigned const LongAdvanceBase = 64;
 
+#ifdef PACKING
+const unsigned PACK_SIZE = 64;
+#else
+const unsigned PACK_SIZE = BLOCK_SIZE;
+#endif
+
+
 static unsigned power2ceil (unsigned v) {
     unsigned ceil = 1;
     while (ceil < v) ceil *= 2;
     return ceil;
+}
+
+static unsigned alignCeiling(unsigned toAlign, unsigned alignment) {
+    return ((toAlign - 1) | (alignment - 1)) + 1;
+}
+
+static unsigned fullOrPartialBlocks(unsigned bits, unsigned block_size) {
+    return alignCeiling(bits, block_size) / block_size;
 }
 
 namespace pablo {
@@ -58,11 +73,11 @@ public:
     }
         
     unsigned longAdvanceCarryDataOffset(unsigned advanceIndex)  const {
-        return longAdvance.frameOffsetinBits / BLOCK_SIZE + advanceIndex;
+        return fullOrPartialBlocks(longAdvance.frameOffsetinBits, BLOCK_SIZE) + advanceIndex;
     }
     
     unsigned longAdvanceEntries(unsigned shift_amount) const {
-        return (shift_amount + BLOCK_SIZE - 1)/BLOCK_SIZE;
+        return fullOrPartialBlocks(shift_amount, BLOCK_SIZE);
     }
     
     unsigned longAdvanceBufferSize(unsigned shift_amount)  const {
@@ -72,28 +87,30 @@ public:
     bool blockHasLongAdvances() const { return longAdvance.entries > 0;}
     
     unsigned shortAdvanceCarryDataOffset(unsigned advanceIndex)  const {
-        return shortAdvance.frameOffsetinBits / BLOCK_SIZE + advanceIndex;
+        return fullOrPartialBlocks(shortAdvance.frameOffsetinBits, PACK_SIZE) + advanceIndex;
     }
     
     unsigned unitAdvanceCarryDataOffset(unsigned advanceIndex)  const {
-        return advance1.frameOffsetinBits / BLOCK_SIZE + advanceIndex;
+        return fullOrPartialBlocks(advance1.frameOffsetinBits, PACK_SIZE) + advanceIndex;
     }
     
     unsigned carryOpCarryDataOffset(unsigned idx)  const {
-        return addWithCarry.frameOffsetinBits / BLOCK_SIZE + idx;
+        return fullOrPartialBlocks(addWithCarry.frameOffsetinBits, PACK_SIZE) + idx;
     }
     
     unsigned summaryCarryDataIndex()  const {
-        return summary.frameOffsetinBits / BLOCK_SIZE;
+        return fullOrPartialBlocks(summary.frameOffsetinBits, PACK_SIZE);
     }
     
-    unsigned getLocalCarryDataSize () { return nested.frameOffsetinBits / BLOCK_SIZE; }
+    unsigned getLocalCarryPackIndex () { return shortAdvance.frameOffsetinBits / PACK_SIZE; }
 
-    unsigned getScopeCarryDataSize () { return scopeCarryDataBits / BLOCK_SIZE; }
+    unsigned getLocalCarryDataSize () { return fullOrPartialBlocks(nested.frameOffsetinBits - shortAdvance.frameOffsetinBits, PACK_SIZE); }
+
+    unsigned getScopeCarryDataSize () { return fullOrPartialBlocks(scopeCarryDataBits, PACK_SIZE); }
    
     bool blockHasCarries() const { return scopeCarryDataBits > 0;}
     
-    bool explicitSummaryRequired() const { return (ifDepth > 0) && (scopeCarryDataBits > BLOCK_SIZE);}
+    bool explicitSummaryRequired() const { return (ifDepth > 0) && (scopeCarryDataBits > PACK_SIZE);}
     
 private:
     

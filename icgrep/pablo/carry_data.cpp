@@ -12,25 +12,19 @@
 #include <iostream>
 
 namespace pablo {
-  
-    
-const unsigned bitsPerPack = 64;
 
-
-void AlignUpwards(unsigned & toAlign, unsigned alignment) {
-    if ((toAlign & (alignment - 1)) != 0) {
-        toAlign = (toAlign + alignment) & (alignment - 1);
-    }
+   
+unsigned alignCeiling(unsigned toAlign, unsigned alignment) {
+    return ((toAlign - 1) | (alignment - 1)) + 1;
 }
 
 void EnsurePackHasSpace(unsigned & packedTotalBits, unsigned addedBits) {
-    unsigned bitsInCurrentPack = packedTotalBits % bitsPerPack;
-    if (bitsInCurrentPack + addedBits > bitsPerPack) {
-        AlignUpwards(packedTotalBits, bitsPerPack);
+    unsigned bitsInCurrentPack = packedTotalBits % PACK_SIZE;
+    if ((bitsInCurrentPack > 0) && (bitsInCurrentPack + addedBits > PACK_SIZE)) {
+      packedTotalBits = alignCeiling(packedTotalBits, PACK_SIZE);
     }
 }
-    
-    
+
 unsigned PabloBlockCarryData::enumerate(PabloBlock & blk) {
     for (Statement * stmt : blk) {
         if (Advance * adv = dyn_cast<Advance>(stmt)) {
@@ -73,10 +67,10 @@ unsigned PabloBlockCarryData::enumerate(PabloBlock & blk) {
     EnsurePackHasSpace(advance1.frameOffsetinBits, advance1.entries);
     nested.frameOffsetinBits = advance1.frameOffsetinBits + advance1.entries;
 #else
-    addWithCarry.frameOffsetinBits = longAdvance.frameOffsetinBits + longAdvance.allocatedBitBlocks * BLOCK_SIZE;
+    shortAdvance.frameOffsetinBits = longAdvance.frameOffsetinBits + longAdvance.allocatedBitBlocks * BLOCK_SIZE;
+    addWithCarry.frameOffsetinBits = shortAdvance.frameOffsetinBits + shortAdvance.entries * BLOCK_SIZE;
     advance1.frameOffsetinBits = addWithCarry.frameOffsetinBits + addWithCarry.entries * BLOCK_SIZE;
-    shortAdvance.frameOffsetinBits = advance1.frameOffsetinBits + advance1.entries * BLOCK_SIZE;
-    nested.frameOffsetinBits = shortAdvance.frameOffsetinBits + shortAdvance.entries * BLOCK_SIZE;
+    nested.frameOffsetinBits = advance1.frameOffsetinBits + advance1.entries * BLOCK_SIZE;
 #endif
     unsigned nestedframePosition = nested.frameOffsetinBits;
     
@@ -116,10 +110,10 @@ unsigned PabloBlockCarryData::enumerate(PabloBlock & blk) {
     if (explicitSummaryRequired()) {
         // Need extra space for the summary variable, always the last
         // entry within an if block.
-        AlignUpwards(scopeCarryDataBits, BLOCK_SIZE);
+        scopeCarryDataBits = alignCeiling(scopeCarryDataBits, PACK_SIZE);
         summary.frameOffsetinBits = scopeCarryDataBits;
-        summary.allocatedBits = BLOCK_SIZE;
-        scopeCarryDataBits += BLOCK_SIZE;
+        summary.allocatedBits = PACK_SIZE;
+        scopeCarryDataBits += PACK_SIZE;
     }
     else {
         summary.frameOffsetinBits = 0;
