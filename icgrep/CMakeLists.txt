@@ -54,7 +54,7 @@ set(Boost_USE_MULTITHREADED OFF)
 set(Boost_USE_STATIC_RUNTIME ON)
 
 if(ENABLE_MULTIPLEXING)
-find_package(Boost COMPONENTS system)
+find_package(Boost COMPONENTS system REQUIRED)
 else()
 find_package(Boost)
 endif()
@@ -65,10 +65,44 @@ SET(PABLO_SRC ${PABLO_SRC} pablo/optimizers/pablo_automultiplexing.cpp)
 ENDIF()
 
 add_library(PabloADT ${PABLO_SRC})
-add_library(RegExpADT re/re_re.cpp re/re_cc.cpp re/re_parser.cpp re/re_rep.cpp re/parsefailure.cpp re/re_nullable.cpp re/re_simplifier.cpp re/re_compiler.cpp re/printer_re.cpp re/re_diff.cpp re/re_intersect.cpp re/re_analysis.cpp)
+add_library(RegExpADT re/re_re.cpp re/re_cc.cpp re/re_rep.cpp re/re_diff.cpp re/re_intersect.cpp re/printer_re.cpp)
+add_library(RegExpCompiler re/re_parser.cpp re/parsefailure.cpp re/re_nullable.cpp re/re_simplifier.cpp re/re_compiler.cpp re/re_analysis.cpp)
 add_library(CCADT cc/cc_namemap.cpp cc/cc_compiler.cpp utf8_encoder.cpp UCD/CaseFolding_txt.cpp)
-add_library(UCDlib UCD/unicode_set.cpp UCD/ucd_compiler.cpp UCD/PropertyObjects.cpp UCD/precompiled_gc.cpp UCD/precompiled_sc.cpp UCD/precompiled_scx.cpp UCD/precompiled_blk.cpp UCD/precompiled_derivedcoreproperties.cpp UCD/precompiled_proplist.cpp UCD/resolve_properties.cpp)
+add_library(UCDlib UCD/unicode_set.cpp UCD/ucd_compiler.cpp UCD/PropertyObjects.cpp UCD/resolve_properties.cpp)
 
+
+# add the executable
+target_link_libraries (PabloADT ${REQ_LLVM_LIBRARIES})
+target_link_libraries (CCADT PabloADT)
+target_link_libraries (UCDlib RegExpADT PabloADT CCADT)
+target_link_libraries (RegExpADT PabloADT CCADT UCDlib)
+target_link_libraries (RegExpCompiler RegExpADT)
+
+# add the executable
+add_executable(generate_predefined_ucd_functions generate_predefined_ucd_functions.cpp)
+target_link_libraries (generate_predefined_ucd_functions RegExpADT UCDlib PabloADT CCADT ${REQ_LLVM_LIBRARIES})
+
+set(PRECOMPILED_PROPERTIES_OBJ ${PROJECT_BINARY_DIR}/precompiled_properties.o)
+set(PRECOMPILED_FILES ${PRECOMPILED_PROPERTIES_OBJ} ${PROJECT_SOURCE_DIR}/UCD/precompiled_properties.cpp)
+
+if(ENABLE_MULTIPLEXING)
+set(MULTIPLEXING_FLAG -multiplexing)
+endif()
+
+add_custom_command(OUTPUT ${PRECOMPILED_FILES}
+  COMMAND generate_predefined_ucd_functions
+  ARGS -o ${PRECOMPILED_PROPERTIES_OBJ} -dir ${PROJECT_SOURCE_DIR}/UCD/ -lib $<TARGET_FILE:UCDlib> ${MULTIPLEXING_FLAG}
+  DEPENDS generate_predefined_ucd_functions
+  COMMENT "Building predefined UCD functions..."
+  VERBATIM)
+
+add_custom_target(run_generate_predefined_ucd_functions ALL DEPENDS ${PRECOMPILED_FILES})
+
+add_executable(icgrep icgrep.cpp do_grep.cpp compiler.cpp ${PRECOMPILED_FILES})
+target_link_libraries (icgrep UCDlib PabloADT RegExpCompiler CCADT ${REQ_LLVM_LIBRARIES})
+
+add_dependencies(icgrep run_generate_predefined_ucd_functions)
+add_dependencies(RegExpCompiler run_generate_predefined_ucd_functions)
 
 IF(Boost_FOUND)
     include_directories("${Boost_INCLUDE_DIRS}")
@@ -96,24 +130,6 @@ SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DENABLE_MULTIPLEXING")
 ENDIF()
 
 include_directories("${PROJECT_SOURCE_DIR}")
-include_directories("${PROJECT_SOURCE_DIR}/re")
-include_directories("${PROJECT_SOURCE_DIR}/cc")
-include_directories("${PROJECT_SOURCE_DIR}/pablo")
-include_directories("${PROJECT_SOURCE_DIR}/UCD")
-include_directories("${PROJECT_SOURCE_DIR}/include")
-include_directories("${PROJECT_SOURCE_DIR}/include/simd-lib")
-include_directories("${PROJECT_SOURCE_DIR}/include/simd-lib/idisa_cpp")
-
-# add the executable
-add_executable(icgrep icgrep.cpp do_grep.cpp compiler.cpp)
-add_executable(generate_predefined_ucd_functions generate_predefined_ucd_functions.cpp)
-
-target_link_libraries (PabloADT ${REQ_LLVM_LIBRARIES})
-target_link_libraries (CCADT PabloADT RegExpADT)
-target_link_libraries (UCDlib PabloADT CCADT)
-target_link_libraries (RegExpADT PabloADT CCADT UCDlib)
-target_link_libraries (icgrep UCDlib PabloADT RegExpADT CCADT ${REQ_LLVM_LIBRARIES})
-target_link_libraries (generate_predefined_ucd_functions UCDlib PabloADT CCADT ${REQ_LLVM_LIBRARIES})
 
 #Check compiler support for 0x / 11
 include(CheckCXXCompilerFlag)

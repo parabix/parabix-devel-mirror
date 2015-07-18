@@ -6,6 +6,10 @@
 
 
 #include <include/simd-lib/bitblock.hpp>
+#include <pablo/carry_data.h>
+#include <pablo/codegenstate.h>
+#include <pablo/carry_manager.h>
+#include <pablo/pabloAST.h>
 #include <stdexcept>
 #include <pablo/carry_data.h>
 #include <pablo/codegenstate.h>
@@ -14,7 +18,6 @@
 #include <iostream>
 
 namespace pablo {
-  
 
 unsigned CarryManager::initialize(PabloBlock * pb, Value * carryPtr) {
   

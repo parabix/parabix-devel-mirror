@@ -34,7 +34,6 @@
 #include <llvm/Support/FormattedStream.h>
 #include "llvm/Support/FileSystem.h"
 #include <llvm/Transforms/Scalar.h>
-#include <boost/algorithm/string/case_conv.hpp>
 #include <iostream>
 
 using namespace pablo;
@@ -42,16 +41,14 @@ using namespace UCD;
 using namespace cc;
 using namespace llvm;
 
-inline std::string lowercase(const std::string & name) {
-    std::locale loc;
-    return boost::algorithm::to_lower_copy(name, loc);
-}
+static cl::opt<std::string>
+ObjectFilename("o", cl::desc("Output object filename"), cl::value_desc("filename"), cl::Required);
 
 static cl::opt<std::string>
-ObjectFilename("o", cl::desc("Output Object filename"), cl::value_desc("filename"));
+UCDSourcePath("dir", cl::desc("UCD source code directory"), cl::value_desc("directory"), cl::Required);
 
 static cl::opt<std::string>
-PropertyFilename("p", cl::desc("Install Property filename"), cl::value_desc("filename"));
+UCDLibraryPath("lib", cl::desc("Static UCD library path"), cl::value_desc("filename"), cl::Required);
 
 #ifdef ENABLE_MULTIPLEXING
 static cl::opt<bool> EnableMultiplexing("multiplexing", cl::init(false),
@@ -70,7 +67,8 @@ size_t compileUnicodeSet(std::string name, const UnicodeSet & set, PabloCompiler
     UCDCompiler ucdCompiler(ccCompiler);
     PabloBuilder builder(function.getEntryBlock());
     // Build the unicode set function
-    ucdCompiler.generateWithDefaultIfHierarchy(set, builder);
+    PabloAST * target = ucdCompiler.generateWithDefaultIfHierarchy(set, builder);
+    function.setResult(0, builder.createAssign("matches", target));
     // Optimize it at the pablo level
     Simplifier::optimize(function);
     CodeSinking::optimize(function);
@@ -90,38 +88,77 @@ size_t compileUnicodeSet(std::string name, const UnicodeSet & set, PabloCompiler
  * @brief writePropertyInstaller
  ** ------------------------------------------------------------------------------------------------------------- */
 
-void writePropertyInstaller(property_list && properties) {
+void writePrecompiledProperties(property_list && properties) {
 
+    const std::string headerFilename = UCDSourcePath + "/precompiled_properties.h";
     #ifdef USE_LLVM_3_5
     std::string error;
-    raw_fd_ostream out(PropertyFilename.c_str(), error, sys::fs::F_None);
+    raw_fd_ostream header(headerFilename.c_str(), error, sys::fs::F_None);
     if (!error.empty()) {
         throw std::runtime_error(error);
     }
     #else
     std::error_code error;
-    raw_fd_ostream out(PropertyFilename, error, sys::fs::F_None);
+    raw_fd_ostream header(headerFilename, error, sys::fs::F_None);
     if (error) {
         throw std::runtime_error(error.message());
     }
     #endif
 
-    out << "#ifndef PROPERTYINSTALL\n";
-    out << "#define PROPERTYINSTALL\n\n";
-    out << "#include <include/simd-lib/bitblock.hpp>\n";
-    out << "#include <pablo/pablo_compiler.h>\n\n";
-    out << "namespace UCD {\n\n";
-    out << "struct Input {\n    BitBlock bit[8];\n};\n\n";
-    out << "struct Output {\n    BitBlock bit[1];\n};\n\n";
-    for (auto prop : properties) {
-        out << "extern \"C\" void " + prop.first + "(const Input &, BitBlock *, Output &);\n";
+    header << "#ifndef PRECOMPILED_PROPERTIES\n";
+    header << "#define PRECOMPILED_PROPERTIES\n\n";
+    header << "#include <string>\n\n";
+    header << "#include <tuple>\n";
+    header << "namespace UCD {\n\n";
+    header << "using ExternalProperty = std::tuple<void *, unsigned, unsigned, size_t>;\n\n";
+    header << "const ExternalProperty & resolveExternalProperty(const std::string & name);\n\n";
+    header << "}\n\n";
+    header << "#endif\n";
+    header.close();
+
+    const std::string cppFilename = UCDSourcePath + "/precompiled_properties.cpp";
+    #ifdef USE_LLVM_3_5
+    raw_fd_ostream cpp(cppFilename.c_str(), error, sys::fs::F_None);
+    if (!error.empty()) {
+        throw std::runtime_error(error);
     }
-    out << "\nvoid install_properties(pablo::PabloCompiler & p) {\n";
-    for (auto prop : properties) {
-        out << "    p.InstallExternalFunction(\"" + prop.first + "\", reinterpret_cast<void *>(&" + prop.first + "), " + std::to_string(prop.second) + ");\n";
+    #else
+    raw_fd_ostream cpp(cppFilename, error, sys::fs::F_None);
+    if (error) {
+        throw std::runtime_error(error.message());
     }
-    out << "}\n}\n\n#endif\n";
-    out.close();
+    #endif
+
+    cpp << "#include \"precompiled_properties.h\"\n";
+    cpp << "#include <include/simd-lib/bitblock.hpp>\n";
+    cpp << "#include <stdexcept>\n";
+    cpp << "#include <unordered_map>\n\n";
+    cpp << "namespace UCD {\n\n";
+    cpp << "struct Input {\n    BitBlock bit[8];\n};\n\n";
+    cpp << "struct Output {\n    BitBlock bit[1];\n};\n\n";
+    for (auto prop : properties) {
+        cpp << "extern \"C\" void " + prop.first + "(const Input &, BitBlock *, Output &);\n";
+    }
+
+    cpp << "\nconst static std::unordered_map<std::string, ExternalProperty> ExternalPropertyMap = {\n";
+    for (auto itr = properties.begin(); itr != properties.end(); ) {
+        cpp << "    {\"" + itr->first + "\", std::make_tuple(reinterpret_cast<void *>(&" + itr->first + "), 8, 1, " + std::to_string(itr->second) + ")}";
+        if (++itr != properties.end()) {
+            cpp << ",";
+        }
+        cpp << "\n";
+    }
+    cpp << "};\n\n";
+
+    cpp << "const ExternalProperty & resolveExternalProperty(const std::string & name) {\n";
+    cpp << "    auto f = ExternalPropertyMap.find(name);\n";
+    cpp << "    if (f == ExternalPropertyMap.end())\n";
+    cpp << "        throw std::runtime_error(\"No external property named \\\"\" + name + \"\\\" found!\");\n";
+    cpp << "    return f->second;\n";
+    cpp << "}\n\n}\n";
+
+    cpp.close();
+
 }
 
 
@@ -159,7 +196,7 @@ Module * generateUCDModule() {
     // Print an error message if our module is malformed in any way.
     verifyModule(*module, &dbgs());
 
-    writePropertyInstaller(std::move(properties));
+    writePrecompiledProperties(std::move(properties));
 
     return module;
 }
@@ -251,12 +288,6 @@ void compileUCDModule(Module * module) {
  ** ------------------------------------------------------------------------------------------------------------- */
 int main(int argc, char *argv[]) {
     cl::ParseCommandLineOptions(argc, argv, "UCD Compiler\n");
-    if (PropertyFilename.empty()) {
-        PropertyFilename = "PropertyInstall.h";
-    }
-    if (ObjectFilename.empty()) {
-        ObjectFilename = "pregenerated_properties.o";
-    }
     Module * module = generateUCDModule();
     compileUCDModule(module);
     return 0;

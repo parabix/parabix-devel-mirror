@@ -106,16 +106,15 @@ class PabloCompiler {
 public:
     PabloCompiler();
     ~PabloCompiler();
-    void InstallExternalFunction(std::string C_fn_name, void * fn_ptr, const size_t carrySize = 0);
     CompiledPabloFunction compile(pablo::PabloFunction & function);
     std::pair<Function *, size_t> compile(pablo::PabloFunction & function, Module *module);
     Module *getModule();
 private:
     void GenerateFunction(PabloFunction & function);
-    void DeclareFunctions(ExecutionEngine * const engine);
+    void DeclareFunctions();
     void Examine(PabloFunction & function);
     void Examine(PabloBlock & block);
-    void DeclareCallFunctions(ExecutionEngine * const engine);
+
     void SetOutputValue(Value * marker, const unsigned index);
 
     void genPrintRegister(std::string regName, Value * bitblockValue);
@@ -149,9 +148,11 @@ private:
 
 
     Module *                            mMod;
+    ExecutionEngine *                   mExecutionEngine;
     IRBuilder <> *                      mBuilder;
 
     CarryManager *                      mCarryManager;
+    size_t                              mCarryOffset;
 
     VectorType* const                   mBitBlockType;
     IDISA::IDISA_Builder                iBuilder;
@@ -172,7 +173,6 @@ private:
 
     unsigned                            mMaxWhileDepth;
 
-    std::map<std::string, void *>       mExternalMap;
     CalleeMap                           mCalleeMap;
 
     Constant *                          mPrintRegisterFunction;

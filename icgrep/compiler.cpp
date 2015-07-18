@@ -21,12 +21,6 @@
 #ifdef ENABLE_MULTIPLEXING
 #include <pablo/optimizers/pablo_automultiplexing.hpp>
 #endif
-#include "UCD/precompiled_gc.h"
-#include "UCD/precompiled_sc.h"
-#include "UCD/precompiled_scx.h"
-#include "UCD/precompiled_blk.h"
-#include "UCD/precompiled_derivedcoreproperties.h"
-#include "UCD/precompiled_proplist.h"
 #include <llvm/Support/CommandLine.h>
 #include <pablo/function.h>
 #include <re/printer_re.h>
@@ -175,14 +169,6 @@ CompiledPabloFunction compile(const Encoding encoding, const std::vector<std::st
     }
 
     PabloCompiler pablo_compiler;
-    if (UsePregeneratedUnicode()) {
-        install_property_gc_fn_ptrs(pablo_compiler);
-        install_property_sc_fn_ptrs(pablo_compiler);
-        install_property_scx_fn_ptrs(pablo_compiler);
-        install_property_blk_fn_ptrs(pablo_compiler);
-        install_property_DerivedCoreProperties_fn_ptrs(pablo_compiler);
-        install_property_PropList_fn_ptrs(pablo_compiler);
-    }
     try {
         CompiledPabloFunction retVal = pablo_compiler.compile(function);
         releaseSlabAllocatorMemory();

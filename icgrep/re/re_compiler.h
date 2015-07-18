@@ -11,7 +11,6 @@
 #include <re/re_seq.h>
 #include <cc/cc_compiler.h>
 #include <pablo/builder.hpp>
-#include <UCD/ucd_compiler.hpp>
 #include <string>
 #include <list>
 #include <map>
@@ -38,8 +37,6 @@ class PabloFunction;
 */
 
 namespace re {
-
-bool UsePregeneratedUnicode();
 
 enum MarkerPosition {FinalMatchByte, InitialPostPositionByte, FinalPostPositionByte};
 
@@ -103,7 +100,6 @@ private:
     int                                             mStarDepth;
     std::vector<pablo::Next *>                      mLoopVariants; // <- rethink name
     pablo::PabloBuilder                             mPB;
-    UCD::UCDCompiler                                mUCDCompiler;
     pablo::PabloFunction &                          mFunction;
 };
 

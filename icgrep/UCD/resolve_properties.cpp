@@ -14,7 +14,6 @@
 #include "UCD/PropertyObjects.h"
 #include "UCD/PropertyObjectTable.h"
 #include "UCD/PropertyValueAliases.h"
-#include <boost/algorithm/string/case_conv.hpp>
 #include <string>
 #include <iostream>
 
@@ -29,11 +28,6 @@ private:
     inline UnicodePropertyExpressionError() noexcept {}
     const std::string _msg;
 };
-
-inline std::string lowercase(const std::string & name) {
-    std::locale loc;
-    return boost::algorithm::to_lower_copy(name, loc);
-}
 
 inline int GetPropertyValueEnumCode(const UCD::property_t type, const std::string & value) {
     return property_object_table[type]->GetPropertyValueEnumCode(value);
@@ -88,10 +82,10 @@ Name * resolveProperty(const std::string prop, const std::string value, re::RE_P
             throw UnicodePropertyExpressionError("Erroneous property value for binary property " + property_full_name[theprop]);
         }
         if (valit->second == Binary_ns::Y) {
-            property->setFunctionName("__get_" + lowercase(property_enum_name[theprop]) + "_Y");
+            property->setFunctionName("__get_" + property_enum_name[theprop] + "_Y");
         }
         else {
-            Name * binprop = parser->createName("__get_" + lowercase(property_enum_name[theprop]) + "_Y");
+            Name * binprop = parser->createName("__get_" + property_enum_name[theprop] + "_Y");
             property->setDefinition(makeDiff(makeAny(), binprop));
         }
     }
@@ -167,7 +161,7 @@ Name * resolveProperty(const std::string value, re::RE_Parser * parser) {
             if (propit != alias_map.end()) {
                 auto theprop = propit->second;
                 if (isa<BinaryPropertyObject>(property_object_table[theprop])) {
-                    property->setFunctionName("__get_" + lowercase(property_enum_name[theprop]) + "_Y");
+                    property->setFunctionName("__get_" + property_enum_name[theprop] + "_Y");
                 }
                 else {
                     throw UnicodePropertyExpressionError("Error: property " + property_full_name[theprop] + " specified without a value");

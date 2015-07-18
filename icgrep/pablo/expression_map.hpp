@@ -2,7 +2,7 @@
 #define EXPRESSION_MAP_HPP
 
 #include <pablo/pabloAST.h>
-#include <llvm/ADT/ArrayRef.h>
+#include <slab_allocator.h>
 #include <map>
 
 namespace pablo {
@@ -92,6 +92,113 @@ private:
     std::map<Key, PabloAST *>   mMap;
 };
 
+
+struct VarArgMap {
+
+    friend struct ExpressionTable;
+
+    struct Key {
+        inline Key(PabloAST::ClassTypeId type, unsigned args, PabloAST ** arg) : mType(type), mArgs(args), mArg(arg) {}
+        inline Key(const Key & key) = default;
+        inline Key(Key && key) = default;
+        inline bool operator < (const Key & other) const {
+            if (mType != other.mType)
+                return mType < other.mType;
+            if (mArgs != other.mArgs)
+                return mArgs < other.mArgs;
+            for (unsigned i = 0; i != mArgs; ++i) {
+                if (mArg[i] != other.mArg[i]) {
+                    return mArg[i] < other.mArg[i];
+                }
+            }
+            return false;
+        }
+    private:
+        PabloAST::ClassTypeId         mType;
+        unsigned                      mArgs;
+        PabloAST **                   mArg;
+    };
+
+    using Allocator = LLVMAllocator;
+    using MapAllocator = LLVMAllocatorProxy<std::pair<Key, PabloAST *>>;
+    using Map = std::map<Key, PabloAST *>; // , std::less<Key>, MapAllocator
+
+    explicit VarArgMap(VarArgMap * predecessor = nullptr)
+    : mPredecessor(predecessor) {
+
+    }
+
+    explicit VarArgMap(VarArgMap && other) noexcept
+    : mPredecessor(other.mPredecessor)
+    , mMap(std::move(other.mMap)) {
+
+    }
+
+    VarArgMap & operator=(VarArgMap && other) {
+        mPredecessor = other.mPredecessor;
+        mMap = std::move(other.mMap);
+        return *this;
+    }
+
+    template <class Functor, typename... Params>
+    inline PabloAST * findOrCall(Functor && functor, const PabloAST::ClassTypeId type, std::initializer_list<PabloAST *> args, Params... params) {
+        PabloAST * const f = find(type, args);
+        if (f) {
+            return f;
+        }
+        PabloAST * const object = functor(args, std::forward<Params>(params)...);
+        PabloAST ** const args_copy = mAllocator.Allocate<PabloAST *>(args.size());
+        std::copy(args.begin(), args.end(), args_copy);
+        Key key(type, args.size(), args_copy);
+        mMap.insert(std::make_pair(std::move(key), object));
+        return object;
+    }
+
+    inline std::pair<PabloAST *, bool> findOrAdd(PabloAST * object, const PabloAST::ClassTypeId type, std::initializer_list<PabloAST *> args) {
+        PabloAST * const entry = find(type, args);
+        if (entry) {
+            return std::make_pair(entry, false);
+        }
+        PabloAST ** const args_copy = mAllocator.Allocate<PabloAST *>(args.size());
+        std::copy(args.begin(), args.end(), args_copy);
+        Key key(type, args.size(), args_copy);
+        mMap.insert(std::make_pair(std::move(key), object));
+        return std::make_pair(object, true);
+    }
+
+    inline PabloAST * find(const PabloAST::ClassTypeId type, const std::initializer_list<PabloAST *> args) const {
+        PabloAST * value[args.size()];
+        std::copy(args.begin(), args.end(), value);
+        return find(std::move(Key(type, args.size(), value)));
+    }
+
+private:
+
+    inline PabloAST * find(Key && key) const {
+        // check this map to see if we have it
+        auto itr = mMap.find(key);
+        if (itr != mMap.end()) {
+            return itr->second;
+        }
+        // check any previous maps to see if it exists
+        auto * pred = mPredecessor;
+        while (pred) {
+            itr = pred->mMap.find(key);
+            if (itr == pred->mMap.end()) {
+                pred = pred->mPredecessor;
+                continue;
+            }
+            return itr->second;
+        }
+        return nullptr;
+    }
+
+private:
+    VarArgMap *     mPredecessor;
+    Allocator       mAllocator;
+    Map             mMap;
+};
+
 struct ExpressionTable {
 
     explicit ExpressionTable(ExpressionTable * predecessor = nullptr) noexcept {
@@ -124,7 +231,7 @@ struct ExpressionTable {
 
     template <class Functor, typename... Params>
     inline PabloAST * findUnaryOrCall(Functor && functor, const PabloAST::ClassTypeId type, PabloAST * expr, Params... params) {
-        return mUnary.findOrCall(std::move(functor), type, expr, std::forward<Params>(params)...);
+        return mUnary.findOrCall(std::move(functor), type,  expr , std::forward<Params>(params)...);
     }
 
     template <class Functor, typename... Params>

@@ -1,11 +1,11 @@
 #include "re_nullable.h"
-#include "re_cc.h"
-#include "re_start.h"
-#include "re_end.h"
-#include "re_alt.h"
-#include "re_rep.h"
-#include "re_simplifier.h"
-#include <printer_re.h>
+#include <re/re_cc.h>
+#include <re/re_start.h>
+#include <re/re_end.h>
+#include <re/re_alt.h>
+#include <re/re_rep.h>
+#include <re/re_simplifier.h>
+#include <re/printer_re.h>
 #include <iostream>
 /*
 

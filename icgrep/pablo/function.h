@@ -21,11 +21,11 @@ public:
         return e->getClassTypeId() == ClassTypeId::Prototype;
     }
 
-    static inline bool classof(const void *) {
+    static inline bool classof(void *) {
         return false;
     }
 
-    static Prototype * Create(std::string name, const unsigned inputVariables, const unsigned outputVariables, const unsigned requiredStateSpace);
+    static Prototype * Create(std::string name, const unsigned inputVariables, const unsigned outputVariables, const unsigned requiredStateSpace, void * functionPtr = nullptr);
 
     const String * getName() const {
         return mName;
@@ -44,22 +44,22 @@ public:
         return mRequiredStateSpace;
     }
 
-protected:
-    // Should only be modified by a pablo::Function after compilation
-    void setRequiredStateSpace(const unsigned value) {
-        mRequiredStateSpace = value;
+    void * getFunctionPtr() const {
+        return mFunctionPtr;
     }
 
-    Prototype(const PabloAST::ClassTypeId type, std::string && name, const unsigned numOfParameters, const unsigned numOfResults, const unsigned requiredStateSpace);
+protected:
+    Prototype(const PabloAST::ClassTypeId type, std::string && name, const unsigned numOfParameters, const unsigned numOfResults, const unsigned requiredStateSpace, void * functionPtr);
 protected:
     const String * const    mName;
     const unsigned          mNumOfParameters;
     const unsigned          mNumOfResults;
     unsigned                mRequiredStateSpace;
+    void *                  mFunctionPtr;
 };
 
-inline Prototype * Prototype::Create(std::string name, const unsigned numOfParameters, const unsigned numOfResults, const unsigned requiredStateSpace) {
-    return new Prototype(PabloAST::ClassTypeId::Prototype, std::move(name), numOfParameters, numOfResults, requiredStateSpace);
+inline Prototype * Prototype::Create(std::string name, const unsigned numOfParameters, const unsigned numOfResults, const unsigned requiredStateSpace, void * functionPtr) {
+    return new Prototype(PabloAST::ClassTypeId::Prototype, std::move(name), numOfParameters, numOfResults, requiredStateSpace, functionPtr);
 }
 
 class PabloFunction : public Prototype {
@@ -78,7 +78,7 @@ public:
         }        
     }
 
-    static inline bool classof(const void *) {
+    static inline bool classof(void *) {
         return false;
     }
 
@@ -141,6 +141,14 @@ public:
             }
         }
         else throwInvalidResultIndex(index);
+    }
+
+    void setRequiredStateSpace(const unsigned value) {
+        mRequiredStateSpace = value;
+    }
+
+    void setFunctionPtr(void * functionPtr) {
+        mFunctionPtr = functionPtr;
     }
 
     virtual ~PabloFunction() { }

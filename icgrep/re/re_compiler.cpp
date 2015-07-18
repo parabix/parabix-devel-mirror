@@ -20,6 +20,8 @@
 #include <re/re_analysis.h>
 #include <cc/cc_namemap.hpp>
 #include <pablo/codegenstate.h>
+#include <UCD/ucd_compiler.hpp>
+#include <UCD/precompiled_properties.h>
 #include <UCD/resolve_properties.h>
 #include <assert.h>
 #include <stdexcept>
@@ -39,14 +41,9 @@ static cl::opt<bool> DisableUnicodeLineBreak("disable-unicode-linebreak", cl::in
                      cl::desc("disable Unicode line breaks - use LF only"), cl::cat(fREcompilationOptions));
 static cl::opt<bool> DisablePregeneratedUnicode("disable-pregenerated-unicode", cl::init(false),
                      cl::desc("disable use of pregenerated Unicode character class sets"), cl::cat(fREcompilationOptions));
-
 using namespace pablo;
 
 namespace re {
-
-bool UsePregeneratedUnicode() {
-    return !DisablePregeneratedUnicode;
-}
 
 RE_Compiler::RE_Compiler(pablo::PabloFunction & function, cc::CC_Compiler & ccCompiler)
 : mCCCompiler(ccCompiler)
@@ -60,7 +57,6 @@ RE_Compiler::RE_Compiler(pablo::PabloFunction & function, cc::CC_Compiler & ccCo
 , mStarDepth(0)
 , mLoopVariants()
 , mPB(*ccCompiler.getBuilder().getPabloBlock(), ccCompiler.getBuilder())
-, mUCDCompiler(ccCompiler)
 , mFunction(function)
 {
 
@@ -274,11 +270,13 @@ PabloAST * RE_Compiler::getNamedCharacterClassStream(Name * name, PabloBuilder &
         var = markerVar(m);
     }
     else if (name->getType() == Name::Type::UnicodeProperty) {
-        if (UsePregeneratedUnicode()) {
-            var = pb.createCall(Prototype::Create(name->getFunctionName(), 8, 1, 0), mCCCompiler.getBasisBits());
+        if (DisablePregeneratedUnicode) {
+            UCD::UCDCompiler ucdCompiler(mCCCompiler);
+            var = ucdCompiler.generateWithDefaultIfHierarchy(UCD::resolveUnicodeSet(name), pb);
         }
         else {
-            var = mUCDCompiler.generateWithDefaultIfHierarchy(UCD::resolveUnicodeSet(name), pb);
+            const UCD::ExternalProperty & ep = UCD::resolveExternalProperty(name->getFunctionName());
+            var = pb.createCall(Prototype::Create(name->getFunctionName(), std::get<1>(ep), std::get<2>(ep), std::get<3>(ep), std::get<0>(ep)), mCCCompiler.getBasisBits());
         }
     }
     else {
