@@ -7,10 +7,10 @@
 
 #include <include/simd-lib/bitblock.hpp>
 #include <stdexcept>
-#include <carry_data.h>
-#include <codegenstate.h>
-#include <carry_manager.h>
-#include <pabloAST.h>
+#include <pablo/carry_data.h>
+#include <pablo/codegenstate.h>
+#include <pablo/carry_manager.h>
+#include <pablo/pabloAST.h>
 #include <iostream>
 
 namespace pablo {

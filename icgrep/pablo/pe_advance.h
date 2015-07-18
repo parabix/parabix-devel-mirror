@@ -7,7 +7,7 @@
 #ifndef PE_ADVANCE_H
 #define PE_ADVANCE_H
 
-#include "pabloAST.h"
+#include <pablo/pabloAST.h>
 #include <pablo/symbol_generator.h>
 #include <pablo/pe_integer.h>
 

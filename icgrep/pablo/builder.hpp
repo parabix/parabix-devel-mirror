@@ -1,8 +1,8 @@
 #ifndef BUILDER_HPP
 #define BUILDER_HPP
 
-#include "codegenstate.h"
-#include "expression_map.hpp"
+#include <pablo/codegenstate.h>
+#include <pablo/expression_map.hpp>
 
 namespace pablo {
 

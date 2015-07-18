@@ -7,7 +7,7 @@
 #ifndef PE_ZEROES_H
 #define PE_ZEROES_H
 
-#include "pabloAST.h"
+#include <pablo/pabloAST.h>
 #include <pablo/pe_var.h>
 
 namespace pablo {
