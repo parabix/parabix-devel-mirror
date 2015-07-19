@@ -91,7 +91,7 @@ endif()
 
 add_custom_command(OUTPUT ${PRECOMPILED_FILES}
   COMMAND generate_predefined_ucd_functions
-  ARGS -o ${PRECOMPILED_PROPERTIES_OBJ} -dir ${PROJECT_SOURCE_DIR}/UCD/ -lib $<TARGET_FILE:UCDlib> ${MULTIPLEXING_FLAG}
+  ARGS -o ${PRECOMPILED_PROPERTIES_OBJ} -dir ${PROJECT_SOURCE_DIR}/UCD/ ${MULTIPLEXING_FLAG}
   DEPENDS generate_predefined_ucd_functions
   COMMENT "Building predefined UCD functions..."
   VERBATIM)

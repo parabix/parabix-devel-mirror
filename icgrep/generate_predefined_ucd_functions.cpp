@@ -47,9 +47,6 @@ ObjectFilename("o", cl::desc("Output object filename"), cl::value_desc("filename
 static cl::opt<std::string>
 UCDSourcePath("dir", cl::desc("UCD source code directory"), cl::value_desc("directory"), cl::Required);
 
-static cl::opt<std::string>
-UCDLibraryPath("lib", cl::desc("Static UCD library path"), cl::value_desc("filename"), cl::Required);
-
 #ifdef ENABLE_MULTIPLEXING
 static cl::opt<bool> EnableMultiplexing("multiplexing", cl::init(false),
                                         cl::desc("combine Advances whose inputs are mutual exclusive into the fewest number of advances possible (expensive)."));
@@ -75,6 +72,7 @@ size_t compileUnicodeSet(std::string name, const UnicodeSet & set, PabloCompiler
     #ifdef ENABLE_MULTIPLEXING
     if (EnableMultiplexing) {
         AutoMultiplexing::optimize(function);
+        Simplifier::optimize(function);
     }
     #endif
     // Now compile the function ...
@@ -222,12 +220,10 @@ void compileUCDModule(Module * module) {
         throw std::runtime_error(msg);
     }
 
-    auto MCPU = llvm::sys::getHostCPUName();
-
     TargetOptions Options;
 
     std::unique_ptr<TargetMachine> Target(
-                TheTarget->createTargetMachine(TheTriple.getTriple(), MCPU, "", Options,
+                TheTarget->createTargetMachine(TheTriple.getTriple(), sys::getHostCPUName(), "", Options,
                                                Reloc::Default, CodeModel::Small, CodeGenOpt::Aggressive));
 
     if (Target == nullptr) {
@@ -236,13 +232,13 @@ void compileUCDModule(Module * module) {
 
     #ifdef USE_LLVM_3_5
     std::string error;
-    std::unique_ptr<tool_output_file> Out = make_unique<tool_output_file>(ObjectFilename.c_str(), error, sys::fs::F_None);
+    std::unique_ptr<tool_output_file> out = make_unique<tool_output_file>(ObjectFilename.c_str(), error, sys::fs::F_None);
     if (!error.empty()) {
         throw std::runtime_error(error);
     }
     #else
     std::error_code error;
-    std::unique_ptr<tool_output_file> Out = make_unique<tool_output_file>(ObjectFilename, error, sys::fs::F_None);
+    std::unique_ptr<tool_output_file> out = make_unique<tool_output_file>(ObjectFilename, error, sys::fs::F_None);
     if (error) {
         throw std::runtime_error(error.message());
     }
@@ -272,7 +268,7 @@ void compileUCDModule(Module * module) {
     PM.add(createInstructionCombiningPass());
     PM.add(createSinkingPass());
 
-    formatted_raw_ostream FOS(Out->os());
+    formatted_raw_ostream FOS(out->os());
     // Ask the target to add backend passes as necessary.
     if (Target->addPassesToEmitFile(PM, FOS, TargetMachine::CGFT_ObjectFile)) {
         throw std::runtime_error("Target does not support generation of object file type!\n");
@@ -280,7 +276,7 @@ void compileUCDModule(Module * module) {
 
     PM.run(*module);
 
-    Out->keep();
+    out->keep();
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

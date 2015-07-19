@@ -61,7 +61,6 @@ RE_Compiler::RE_Compiler(pablo::PabloFunction & function, cc::CC_Compiler & ccCo
 {
 
 }
-
     
 MarkerType RE_Compiler::AdvanceMarker(MarkerType m, MarkerPosition newpos, PabloBuilder & pb) {
     if (m.pos == newpos) return m;
@@ -88,7 +87,6 @@ void RE_Compiler::AlignMarkers(MarkerType & m1, MarkerType & m2, PabloBuilder & 
 }
 
 #define UNICODE_LINE_BREAK (!DisableUnicodeLineBreak)
-
 
 void RE_Compiler::initializeRequiredStreams() {
 
