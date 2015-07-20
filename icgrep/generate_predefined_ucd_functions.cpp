@@ -34,7 +34,8 @@
 #include <llvm/Support/FormattedStream.h>
 #include "llvm/Support/FileSystem.h"
 #include <llvm/Transforms/Scalar.h>
-#include <iostream>
+#include <llvm/Support/raw_ostream.h>
+#include <llvm/Analysis/DependenceAnalysis.h>
 
 using namespace pablo;
 using namespace UCD;
@@ -47,32 +48,66 @@ ObjectFilename("o", cl::desc("Output object filename"), cl::value_desc("filename
 static cl::opt<std::string>
 UCDSourcePath("dir", cl::desc("UCD source code directory"), cl::value_desc("directory"), cl::Required);
 
+static cl::opt<bool> PrintDependenceAnalysis("print-da", cl::init(false), cl::desc("print Dependence Analysis."));
+
+
 #ifdef ENABLE_MULTIPLEXING
 static cl::opt<bool> EnableMultiplexing("multiplexing", cl::init(false),
                                         cl::desc("combine Advances whose inputs are mutual exclusive into the fewest number of advances possible (expensive)."));
+
+static cl::opt<std::string>
+MultiplexingDistribution("multiplexing-dist", cl::desc("Generate a CSV containing the # of Advances found in each UCD function before and after applying multiplexing."), cl::value_desc("filename"));
+
+static raw_fd_ostream * MultiplexingDistributionFile = nullptr;
 #endif
 
 using property_list = std::vector<std::pair<std::string, size_t>>;
 
 /** ------------------------------------------------------------------------------------------------------------- *
+ * @brief getNumOfAdvances
+ ** ------------------------------------------------------------------------------------------------------------- */
+unsigned getNumOfAdvances(const PabloBlock & entry) {
+    unsigned advances = 0;
+    for (const Statement * stmt : entry ) {
+        if (isa<Advance>(stmt)) {
+            ++advances;
+        }
+        else if (LLVM_UNLIKELY(isa<If>(stmt) || isa<While>(stmt))) {
+            advances += getNumOfAdvances(isa<If>(stmt) ? cast<If>(stmt)->getBody() : cast<While>(stmt)->getBody());
+        }
+    }
+    return advances;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
  * @brief compileUnicodeSet
  ** ------------------------------------------------------------------------------------------------------------- */
 size_t compileUnicodeSet(std::string name, const UnicodeSet & set, PabloCompiler & pc, Module * module) {
+    #ifdef ENABLE_MULTIPLEXING
+    if (MultiplexingDistributionFile) {
+        (*MultiplexingDistributionFile) << name;
+    }
+    #endif
     PabloFunction function = PabloFunction::Create(std::move(name), 8, 1);
     Encoding encoding(Encoding::Type::UTF_8, 8);
     CC_Compiler ccCompiler(function, encoding);
     UCDCompiler ucdCompiler(ccCompiler);
     PabloBuilder builder(function.getEntryBlock());
     // Build the unicode set function
-    PabloAST * target = ucdCompiler.generateWithDefaultIfHierarchy(set, builder);
-    function.setResult(0, builder.createAssign("matches", target));
+    function.setResult(0, builder.createAssign("matches", ucdCompiler.generateWithDefaultIfHierarchy(set, builder)));
     // Optimize it at the pablo level
     Simplifier::optimize(function);
     CodeSinking::optimize(function);
     #ifdef ENABLE_MULTIPLEXING
     if (EnableMultiplexing) {
+        if (MultiplexingDistributionFile) {
+            (*MultiplexingDistributionFile) << ',' << getNumOfAdvances(function.getEntryBlock());
+        }
         AutoMultiplexing::optimize(function);
         Simplifier::optimize(function);
+        if (MultiplexingDistributionFile) {
+            (*MultiplexingDistributionFile) << ',' << getNumOfAdvances(function.getEntryBlock()) << '\n';
+        }
     }
     #endif
     // Now compile the function ...
@@ -131,14 +166,14 @@ void writePrecompiledProperties(property_list && properties) {
     cpp << "#include <include/simd-lib/bitblock.hpp>\n";
     cpp << "#include <stdexcept>\n";
     cpp << "#include <unordered_map>\n\n";
-    cpp << "namespace UCD {\n\n";
+    cpp << "namespace UCD {\nnamespace {\n\n";
     cpp << "struct Input {\n    BitBlock bit[8];\n};\n\n";
     cpp << "struct Output {\n    BitBlock bit[1];\n};\n\n";
     for (auto prop : properties) {
         cpp << "extern \"C\" void " + prop.first + "(const Input &, BitBlock *, Output &);\n";
     }
 
-    cpp << "\nconst static std::unordered_map<std::string, ExternalProperty> ExternalPropertyMap = {\n";
+    cpp << "\nconst static std::unordered_map<std::string, ExternalProperty> EXTERNAL_UCD_PROPERTY_MAP = {\n";
     for (auto itr = properties.begin(); itr != properties.end(); ) {
         cpp << "    {\"" + itr->first + "\", std::make_tuple(reinterpret_cast<void *>(&" + itr->first + "), 8, 1, " + std::to_string(itr->second) + ")}";
         if (++itr != properties.end()) {
@@ -146,14 +181,14 @@ void writePrecompiledProperties(property_list && properties) {
         }
         cpp << "\n";
     }
-    cpp << "};\n\n";
+    cpp << "};\n\n} // end of anonymous namespace\n\n";
 
     cpp << "const ExternalProperty & resolveExternalProperty(const std::string & name) {\n";
-    cpp << "    auto f = ExternalPropertyMap.find(name);\n";
-    cpp << "    if (f == ExternalPropertyMap.end())\n";
+    cpp << "    auto f = EXTERNAL_UCD_PROPERTY_MAP.find(name);\n";
+    cpp << "    if (f == EXTERNAL_UCD_PROPERTY_MAP.end())\n";
     cpp << "        throw std::runtime_error(\"No external property named \\\"\" + name + \"\\\" found!\");\n";
     cpp << "    return f->second;\n";
-    cpp << "}\n\n}\n";
+    cpp << "}\n\n} // end of UCD namespace\n";
 
     cpp.close();
 
@@ -204,12 +239,6 @@ Module * generateUCDModule() {
  ** ------------------------------------------------------------------------------------------------------------- */
 void compileUCDModule(Module * module) {
     Triple TheTriple;
-
-    // Initialize targets first, so that --version shows registered targets.
-    InitializeAllTargets();
-    InitializeAllTargetMCs();
-    InitializeAllAsmPrinters();
-    InitializeAllAsmParsers();
 
     TheTriple.setTriple(sys::getDefaultTargetTriple());
 
@@ -264,13 +293,14 @@ void compileUCDModule(Module * module) {
     #else
     PM.add(new DataLayoutPass());
     #endif
+    // PM.add(createDependenceAnalysisPass());
     PM.add(createReassociatePass());
     PM.add(createInstructionCombiningPass());
     PM.add(createSinkingPass());
 
-    formatted_raw_ostream FOS(out->os());
+    formatted_raw_ostream outStream(out->os());
     // Ask the target to add backend passes as necessary.
-    if (Target->addPassesToEmitFile(PM, FOS, TargetMachine::CGFT_ObjectFile)) {
+    if (Target->addPassesToEmitFile(PM, outStream, TargetMachine::CGFT_ObjectFile)) {
         throw std::runtime_error("Target does not support generation of object file type!\n");
     }
 
@@ -283,8 +313,36 @@ void compileUCDModule(Module * module) {
  * @brief main
  ** ------------------------------------------------------------------------------------------------------------- */
 int main(int argc, char *argv[]) {
+    // Initialize targets first, so that --version shows registered targets.
+    InitializeAllTargets();
+    InitializeAllTargetMCs();
+    InitializeAllAsmPrinters();
+    InitializeAllAsmParsers();
     cl::ParseCommandLineOptions(argc, argv, "UCD Compiler\n");
+    #ifdef ENABLE_MULTIPLEXING
+    if (MultiplexingDistribution.length() > 0) {
+        #ifdef USE_LLVM_3_5
+        std::string error;
+        MultiplexingDistributionFile = new raw_fd_ostream(MultiplexingDistribution.c_str(), error, sys::fs::F_Text);
+        if (!error.empty()) {
+            throw std::runtime_error(error);
+        }
+        #else
+        std::error_code error;
+        MultiplexingDistributionFile = new raw_fd_ostream(MultiplexingDistribution, error, sys::fs::F_Text);
+        if (error) {
+            throw std::runtime_error(error.message());
+        }
+        #endif
+    }
+    #endif
     Module * module = generateUCDModule();
+    #ifdef ENABLE_MULTIPLEXING
+    if (MultiplexingDistributionFile) {
+        MultiplexingDistributionFile->close();
+        delete MultiplexingDistributionFile;
+    }
+    #endif
     compileUCDModule(module);
     return 0;
 }

@@ -21,8 +21,10 @@
 #include <cc/cc_namemap.hpp>
 #include <pablo/codegenstate.h>
 #include <UCD/ucd_compiler.hpp>
-#include <UCD/precompiled_properties.h>
 #include <UCD/resolve_properties.h>
+#ifndef DISABLE_PREGENERATED_UCD_FUNCTIONS
+#include <UCD/precompiled_properties.h>
+#endif
 #include <assert.h>
 #include <stdexcept>
 
@@ -39,8 +41,10 @@ static cl::opt<bool> DisableUnicodeMatchStar("disable-unicode-matchstar", cl::in
                      cl::desc("disable Unicode MatchStar optimization"), cl::cat(fREcompilationOptions));
 static cl::opt<bool> DisableUnicodeLineBreak("disable-unicode-linebreak", cl::init(false),
                      cl::desc("disable Unicode line breaks - use LF only"), cl::cat(fREcompilationOptions));
+#ifndef DISABLE_PREGENERATED_UCD_FUNCTIONS
 static cl::opt<bool> DisablePregeneratedUnicode("disable-pregenerated-unicode", cl::init(false),
                      cl::desc("disable use of pregenerated Unicode character class sets"), cl::cat(fREcompilationOptions));
+#endif
 using namespace pablo;
 
 namespace re {
@@ -268,14 +272,17 @@ PabloAST * RE_Compiler::getNamedCharacterClassStream(Name * name, PabloBuilder &
         var = markerVar(m);
     }
     else if (name->getType() == Name::Type::UnicodeProperty) {
+        #ifndef DISABLE_PREGENERATED_UCD_FUNCTIONS
         if (DisablePregeneratedUnicode) {
+        #endif
             UCD::UCDCompiler ucdCompiler(mCCCompiler);
             var = ucdCompiler.generateWithDefaultIfHierarchy(UCD::resolveUnicodeSet(name), pb);
-        }
-        else {
+        #ifndef DISABLE_PREGENERATED_UCD_FUNCTIONS
+        } else {
             const UCD::ExternalProperty & ep = UCD::resolveExternalProperty(name->getFunctionName());
             var = pb.createCall(Prototype::Create(name->getFunctionName(), std::get<1>(ep), std::get<2>(ep), std::get<3>(ep), std::get<0>(ep)), mCCCompiler.getBasisBits());
         }
+        #endif
     }
     else {
         throw std::runtime_error("Unresolved name " + name->getName());

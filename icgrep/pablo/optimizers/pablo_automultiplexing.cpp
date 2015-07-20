@@ -108,14 +108,14 @@ bool AutoMultiplexing::optimize(PabloFunction & function) {
 
     AutoMultiplexing am;
     RECORD_TIMESTAMP(start_initialize);
-    const bool fewerThanThreeAdvances = am.initialize(function);
+    const bool abort = am.initialize(function);
     RECORD_TIMESTAMP(end_initialize);
 
     LOG("Initialize:              " << (end_initialize - start_initialize));
 
     LOG_NUMBER_OF_ADVANCES(function.getEntryBlock());
 
-    if (fewerThanThreeAdvances) {
+    if (abort) {
         return false;
     }
 
@@ -216,7 +216,7 @@ bool AutoMultiplexing::initialize(PabloFunction & function) {
     }
 
     // If there are fewer than three Advances in this program, just abort. We cannot reduce it.
-    if (mAdvanceMap.size() < 3) {
+    if (m < 3) {
         return true;
     }
 

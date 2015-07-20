@@ -14,6 +14,7 @@ else ()
   message("-- Build with BLOCK_SIZE=128")
 endif()
 option(ENABLE_MULTIPLEXING "Compiling the Multiplexing Module")
+option(DISABLE_PREGENERATED_UCD_FUNCTIONS "Disable compiling the pregenerated UCD functions")
 
 
 # configure a header file to pass some of the CMake settings
@@ -78,15 +79,21 @@ target_link_libraries (UCDlib RegExpADT PabloADT CCADT)
 target_link_libraries (RegExpADT PabloADT CCADT UCDlib)
 target_link_libraries (RegExpCompiler RegExpADT)
 
+set(PRECOMPILED_FILES "")
+
+IF(DISABLE_PREGENERATED_UCD_FUNCTIONS)
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DDISABLE_PREGENERATED_UCD_FUNCTIONS")
+MESSAGE("Disabling predefined UCD functions...")
+ELSE()
 # add the executable
 add_executable(generate_predefined_ucd_functions generate_predefined_ucd_functions.cpp)
-target_link_libraries (generate_predefined_ucd_functions RegExpADT UCDlib PabloADT CCADT ${REQ_LLVM_LIBRARIES})
+target_link_libraries (generate_predefined_ucd_functions RegExpADT UCDlib PabloADT CCADT)
 
 set(PRECOMPILED_PROPERTIES_OBJ ${PROJECT_BINARY_DIR}/precompiled_properties.o)
 set(PRECOMPILED_FILES ${PRECOMPILED_PROPERTIES_OBJ} ${PROJECT_SOURCE_DIR}/UCD/precompiled_properties.cpp)
 
 if(ENABLE_MULTIPLEXING)
-set(MULTIPLEXING_FLAG -multiplexing)
+set(MULTIPLEXING_FLAG -multiplexing -multiplexing-dist=${PROJECT_BINARY_DIR}/ucd-multiplexing.csv)
 endif()
 
 add_custom_command(OUTPUT ${PRECOMPILED_FILES}
@@ -98,11 +105,14 @@ add_custom_command(OUTPUT ${PRECOMPILED_FILES}
 
 add_custom_target(run_generate_predefined_ucd_functions ALL DEPENDS ${PRECOMPILED_FILES})
 
-add_executable(icgrep icgrep.cpp do_grep.cpp compiler.cpp ${PRECOMPILED_FILES})
-target_link_libraries (icgrep UCDlib PabloADT RegExpCompiler CCADT ${REQ_LLVM_LIBRARIES})
-
-add_dependencies(icgrep run_generate_predefined_ucd_functions)
 add_dependencies(RegExpCompiler run_generate_predefined_ucd_functions)
+ENDIF()
+
+add_executable(icgrep icgrep.cpp do_grep.cpp compiler.cpp ${PRECOMPILED_FILES})
+IF(NOT DISABLE_PREGENERATED_UCD_FUNCTIONS)
+add_dependencies(icgrep run_generate_predefined_ucd_functions)
+ENDIF()
+target_link_libraries (icgrep UCDlib PabloADT RegExpCompiler CCADT ${REQ_LLVM_LIBRARIES})
 
 IF(Boost_FOUND)
     include_directories("${Boost_INCLUDE_DIRS}")
@@ -113,7 +123,6 @@ ENDIF()
 IF (ENABLE_MULTIPLEXING)
 message(STATUS "Enabling Multiplexing")
 SET(CUDD_ROOT "${CMAKE_SOURCE_DIR}/../cudd-2.5.1")
-message(STATUS ${CUDD_ROOT})
 file(GLOB CUDD_SOURCES "${CUDD_ROOT}/cudd/*.c")
 file(GLOB EPD_SOURCES "${CUDD_ROOT}/epd/*.c")
 file(GLOB MTR_SOURCES "${CUDD_ROOT}/mtr/*.c")

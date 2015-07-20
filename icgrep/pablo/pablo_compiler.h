@@ -100,7 +100,6 @@ class PabloCompiler {
     #endif
 
     typedef std::unordered_map<const pablo::PabloAST *, Value *>   ASTToValueMap;
-    typedef std::unordered_map<const pablo::String *, Function *>  CalleeMap;
     typedef std::vector<Value*>                                    CarryQueueVector;
 
 public:
@@ -111,7 +110,7 @@ public:
     Module *getModule();
 private:
     void GenerateFunction(PabloFunction & function);
-    void DeclareFunctions();
+    void DeclareDebugFunctions();
     void Examine(PabloFunction & function);
     void Examine(PabloBlock & block);
 
@@ -172,8 +171,6 @@ private:
     Value *                             mOutputAddressPtr;
 
     unsigned                            mMaxWhileDepth;
-
-    CalleeMap                           mCalleeMap;
 
     Constant *                          mPrintRegisterFunction;
 };
