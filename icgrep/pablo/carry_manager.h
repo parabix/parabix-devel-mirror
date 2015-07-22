@@ -54,7 +54,7 @@ public:
     
     unsigned initialize(PabloBlock * blk, Value * carryDataPtr);  
     
-    unsigned enumerate(PabloBlock * blk, unsigned ifDepth, unsigned whileDepth, unsigned nestedframePosition);
+    unsigned enumerate(PabloBlock * blk, unsigned ifDepth, unsigned whileDepth);
     
     void generateBlockNoIncrement();
     

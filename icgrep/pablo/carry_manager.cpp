@@ -39,7 +39,7 @@ unsigned CarryManager::initialize(PabloBlock * pb, Value * carryPtr) {
     unsigned scopeCount = doScopeCount(pb);
     mCarryInfoVector.resize(scopeCount);
     
-    unsigned totalCarryDataBits = enumerate(pb, 0, 0, 0);
+    unsigned totalCarryDataBits = enumerate(pb, 0, 0);
     
     mTotalCarryDataBitBlocks = (totalCarryDataBits + BLOCK_SIZE - 1)/BLOCK_SIZE + 1; // One extra element for the block no.
     mBlockNoPtr = mBuilder->CreateBitCast(mBuilder->CreateGEP(mCarryDataPtr, mBuilder->getInt64(mTotalCarryDataBitBlocks - 1)), Type::getInt64PtrTy(mBuilder->getContext()));
@@ -60,7 +60,7 @@ Value * CarryManager::getBlockNoPtr() {
     return mBlockNoPtr;
 }
 
-unsigned CarryManager::enumerate(PabloBlock * blk, unsigned ifDepth, unsigned whileDepth, unsigned nestedframePosition) {
+unsigned CarryManager::enumerate(PabloBlock * blk, unsigned ifDepth, unsigned whileDepth) {
     llvm::raw_os_ostream cerr(std::cerr);
     unsigned idx = blk->getScopeIndex();
     PabloBlockCarryData * cd = new PabloBlockCarryData(blk);
@@ -68,27 +68,29 @@ unsigned CarryManager::enumerate(PabloBlock * blk, unsigned ifDepth, unsigned wh
 
     cd->setIfDepth(ifDepth);
     cd->setWhileDepth(whileDepth);
-    cd->setFramePosition(nestedframePosition);
     unsigned nestedOffset = cd->nested.frameOffsetinBits;
   
     for (Statement * stmt : *blk) {
         if (If * ifStatement = dyn_cast<If>(stmt)) {
-            const unsigned ifCarryDataBits = enumerate(&ifStatement->getBody(), ifDepth+1, whileDepth, nestedOffset);
+            const unsigned ifCarryDataBits = enumerate(&ifStatement->getBody(), ifDepth+1, whileDepth);
             PabloBlockCarryData * nestedBlockData = mCarryInfoVector[ifStatement->getBody().getScopeIndex()];
 #ifdef PACKING
             EnsurePackHasSpace(nestedOffset, ifCarryDataBits);
 #endif
+            nestedBlockData->setFramePosition(nestedOffset);
+
             nestedOffset += ifCarryDataBits;
             if (cd->maxNestingDepth <= nestedBlockData->maxNestingDepth) cd->maxNestingDepth = nestedBlockData->maxNestingDepth + 1;
             cd->nested.entries++;
         }
         else if (While * whileStatement = dyn_cast<While>(stmt)) {
-            const unsigned whileCarryDataBits = enumerate(&whileStatement->getBody(), ifDepth, whileDepth+1, nestedOffset);
+            const unsigned whileCarryDataBits = enumerate(&whileStatement->getBody(), ifDepth, whileDepth+1);
             PabloBlockCarryData * nestedBlockData = mCarryInfoVector[whileStatement->getBody().getScopeIndex()];
             //if (whileStatement->isMultiCarry()) whileCarryDataBits *= whileStatement->getMaxIterations();
 #ifdef PACKING
             EnsurePackHasSpace(nestedOffset, whileCarryDataBits);
 #endif
+            nestedBlockData->setFramePosition(nestedOffset);
             nestedOffset += whileCarryDataBits;
             if (cd->maxNestingDepth <= nestedBlockData->maxNestingDepth) cd->maxNestingDepth = nestedBlockData->maxNestingDepth + 1;
             cd->nested.entries++;
