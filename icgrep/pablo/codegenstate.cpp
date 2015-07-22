@@ -433,6 +433,25 @@ While * PabloBlock::createWhile(PabloAST * condition, std::vector<Next *> && nex
     return insertAtInsertionPoint(new While(condition, nextVars, body));
 }
 
+// Assign sequential scope indexes, returning the next unassigned index    
+
+unsigned PabloBlock::enumerateScopes(unsigned baseScopeIndex) {
+    mScopeIndex = baseScopeIndex;
+    unsigned nextScopeIndex = baseScopeIndex + 1;
+    for (Statement * stmt : *this) {
+        if (If * ifStatement = dyn_cast<If>(stmt)) {
+            nextScopeIndex = ifStatement->getBody().enumerateScopes(nextScopeIndex);
+        }
+        else if (While * whileStatement = dyn_cast<While>(stmt)) {
+            nextScopeIndex = whileStatement->getBody().enumerateScopes(nextScopeIndex);
+        }
+    }
+    return nextScopeIndex;
+}    
+            
+   
+        
+    
 /// CONSTRUCTOR
 
 PabloBlock::PabloBlock(SymbolGenerator & symbolGenerator)
@@ -441,6 +460,7 @@ PabloBlock::PabloBlock(SymbolGenerator & symbolGenerator)
 , mOnes(new Ones())
 , mSymbolGenerator(symbolGenerator)
 , mParent(nullptr)
+, mScopeIndex(0)
 {
 
 }
@@ -450,7 +470,9 @@ PabloBlock::PabloBlock(PabloBlock * predecessor)
 , mZeroes(predecessor->mZeroes) // inherit the original "Zeroes" variable for simplicity
 , mOnes(predecessor->mOnes) // inherit the original "Ones" variable for simplicity
 , mSymbolGenerator(predecessor->mSymbolGenerator)
-, mParent(predecessor) {
+, mParent(predecessor)
+, mScopeIndex(0)
+{
 
 }
 

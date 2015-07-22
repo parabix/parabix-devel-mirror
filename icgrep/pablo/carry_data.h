@@ -8,6 +8,9 @@
 #define CARRY_DATA_H
 #include <include/simd-lib/bitblock.hpp>
 #include <stdexcept>
+#include <iostream>
+#include <ostream>
+#include <llvm/Support/raw_os_ostream.h>
 /* 
  * Carry Data system.
  * 
@@ -47,7 +50,8 @@ class PabloBlock;
 
 class PabloBlockCarryData {
 public:
-    PabloBlockCarryData(): framePosition(0), 
+    PabloBlockCarryData(PabloBlock * b):
+                           theScope(b), framePosition(0),
                            ifDepth(0), whileDepth (0), maxNestingDepth(0),
                            longAdvance({0, 0, 0}),
                            shortAdvance({0, 0, 0}),
@@ -56,22 +60,37 @@ public:
                            nested({0, 0, 0}),
                            summary({0, 0}),
                            scopeCarryDataBits(0)
-                           {}
+    {enumerateLocal();}
         
-    unsigned enumerate(PabloBlock & p);
+    friend class CarryManager;
+    
+    void enumerateLocal();
+    void dumpCarryData(llvm::raw_ostream & strm);
     
     unsigned getBlockCarryDataIndex()  const {
         return framePosition/BLOCK_SIZE;
+    }
+    
+    void setFramePosition(unsigned p) {
+        framePosition = p;
     }
     
     unsigned getIfDepth()  const {
         return ifDepth;
     }
     
+    void setIfDepth(unsigned d) {
+        ifDepth = d;
+    }
+    
     unsigned getWhileDepth()  const {
         return whileDepth;
     }
         
+    void setWhileDepth(unsigned d) {
+        whileDepth = d;
+    }
+    
     unsigned longAdvanceCarryDataOffset(unsigned advanceIndex)  const {
         return fullOrPartialBlocks(longAdvance.frameOffsetinBits, BLOCK_SIZE) + advanceIndex;
     }
@@ -112,7 +131,9 @@ public:
     
     bool explicitSummaryRequired() const { return (ifDepth > 0) && (scopeCarryDataBits > PACK_SIZE);}
     
-private:
+protected:
+    
+    PabloBlock * theScope;
     
     unsigned framePosition;
     

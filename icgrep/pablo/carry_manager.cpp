@@ -6,10 +6,6 @@
 
 
 #include <include/simd-lib/bitblock.hpp>
-#include <pablo/carry_data.h>
-#include <pablo/codegenstate.h>
-#include <pablo/carry_manager.h>
-#include <pablo/pabloAST.h>
 #include <stdexcept>
 #include <pablo/carry_data.h>
 #include <pablo/codegenstate.h>
@@ -18,16 +14,33 @@
 #include <iostream>
 
 namespace pablo {
+  
+    unsigned doScopeCount(PabloBlock * pb) {
+        unsigned count = 1;
+        
+        for (Statement * stmt : *pb) {
+            if (If * ifStatement = dyn_cast<If>(stmt)) {
+                count += doScopeCount(&ifStatement->getBody());
+            }
+            else if (While * whileStatement = dyn_cast<While>(stmt)) {
+                count += doScopeCount(&whileStatement->getBody());
+            }
+        }
+        return count;
+       
+    }
 
 unsigned CarryManager::initialize(PabloBlock * pb, Value * carryPtr) {
-  
     mPabloRoot = pb;
     mCurrentScope = pb;
     mCurrentScopeIndex = 0;
     
     mCarryDataPtr = carryPtr;
-    mCarryInfo = &(pb->carryData);
-    unsigned totalCarryDataBits = mCarryInfo->enumerate(*pb);
+    unsigned scopeCount = doScopeCount(pb);
+    mCarryInfoVector.resize(scopeCount);
+    
+    unsigned totalCarryDataBits = enumerate(pb, 0, 0, 0);
+    
     mTotalCarryDataBitBlocks = (totalCarryDataBits + BLOCK_SIZE - 1)/BLOCK_SIZE + 1; // One extra element for the block no.
     mBlockNoPtr = mBuilder->CreateBitCast(mBuilder->CreateGEP(mCarryDataPtr, mBuilder->getInt64(mTotalCarryDataBitBlocks - 1)), Type::getInt64PtrTy(mBuilder->getContext()));
     mBlockNo = mBuilder->CreateLoad(mBlockNoPtr);
@@ -47,12 +60,68 @@ Value * CarryManager::getBlockNoPtr() {
     return mBlockNoPtr;
 }
 
+unsigned CarryManager::enumerate(PabloBlock * blk, unsigned ifDepth, unsigned whileDepth, unsigned nestedframePosition) {
+    llvm::raw_os_ostream cerr(std::cerr);
+    unsigned idx = blk->getScopeIndex();
+    PabloBlockCarryData * cd = new PabloBlockCarryData(blk);
+    mCarryInfoVector[idx] = cd;
+
+    cd->setIfDepth(ifDepth);
+    cd->setWhileDepth(whileDepth);
+    cd->setFramePosition(nestedframePosition);
+    unsigned nestedOffset = cd->nested.frameOffsetinBits;
+  
+    for (Statement * stmt : *blk) {
+        if (If * ifStatement = dyn_cast<If>(stmt)) {
+            const unsigned ifCarryDataBits = enumerate(&ifStatement->getBody(), ifDepth+1, whileDepth, nestedOffset);
+            PabloBlockCarryData * nestedBlockData = mCarryInfoVector[ifStatement->getBody().getScopeIndex()];
+#ifdef PACKING
+            EnsurePackHasSpace(nestedOffset, ifCarryDataBits);
+#endif
+            nestedOffset += ifCarryDataBits;
+            if (cd->maxNestingDepth <= nestedBlockData->maxNestingDepth) cd->maxNestingDepth = nestedBlockData->maxNestingDepth + 1;
+            cd->nested.entries++;
+        }
+        else if (While * whileStatement = dyn_cast<While>(stmt)) {
+            const unsigned whileCarryDataBits = enumerate(&whileStatement->getBody(), ifDepth, whileDepth+1, nestedOffset);
+            PabloBlockCarryData * nestedBlockData = mCarryInfoVector[whileStatement->getBody().getScopeIndex()];
+            //if (whileStatement->isMultiCarry()) whileCarryDataBits *= whileStatement->getMaxIterations();
+#ifdef PACKING
+            EnsurePackHasSpace(nestedOffset, whileCarryDataBits);
+#endif
+            nestedOffset += whileCarryDataBits;
+            if (cd->maxNestingDepth <= nestedBlockData->maxNestingDepth) cd->maxNestingDepth = nestedBlockData->maxNestingDepth + 1;
+            cd->nested.entries++;
+        }
+    }
+    
+    cd->scopeCarryDataBits = nestedOffset;
+    
+    if (cd->explicitSummaryRequired()) {
+        // Need extra space for the summary variable, always the last
+        // entry within an if block.
+        cd->scopeCarryDataBits = alignCeiling(cd->scopeCarryDataBits, PACK_SIZE);
+        cd->summary.frameOffsetinBits = cd->scopeCarryDataBits;
+        cd->summary.allocatedBits = PACK_SIZE;
+        cd->scopeCarryDataBits += PACK_SIZE;
+    }
+    else {
+        cd->summary.frameOffsetinBits = 0;
+        cd->summary.allocatedBits = cd->scopeCarryDataBits;
+    }
+#ifndef NDEBUG
+    cd->dumpCarryData(cerr);
+#endif
+    return cd->scopeCarryDataBits;
+}
+
+
 /* Entering and leaving blocks. */
 
 void CarryManager::enterScope(PabloBlock * blk) {
     
     mCurrentScope = blk;
-    mCarryInfo = & (blk->carryData);
+    mCarryInfo = mCarryInfoVector[blk->getScopeIndex()];
     mCurrentScopeIndex += mCarryInfo->getBlockCarryDataIndex();
     //std::cerr << "enterScope:  mCurrentScopeIndex = " << mCurrentScopeIndex << std::endl;
 }
@@ -60,7 +129,7 @@ void CarryManager::enterScope(PabloBlock * blk) {
 void CarryManager::leaveScope() {
     mCurrentScopeIndex -= mCarryInfo->getBlockCarryDataIndex();
     mCurrentScope = mCurrentScope->getParent();
-    mCarryInfo = & (mCurrentScope->carryData);
+    mCarryInfo = mCarryInfoVector[mCurrentScope->getScopeIndex()];
     //std::cerr << "leaveScope:  mCurrentScopeIndex = " << mCurrentScopeIndex << std::endl;
 }
 

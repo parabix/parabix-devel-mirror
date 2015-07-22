@@ -25,8 +25,8 @@ void EnsurePackHasSpace(unsigned & packedTotalBits, unsigned addedBits) {
     }
 }
 
-unsigned PabloBlockCarryData::enumerate(PabloBlock & blk) {
-    for (Statement * stmt : blk) {
+void PabloBlockCarryData::enumerateLocal() {
+    for (Statement * stmt : *theScope) {
         if (Advance * adv = dyn_cast<Advance>(stmt)) {
             unsigned shift_amount = adv->getAdvanceAmount();
             if (shift_amount == 1) {
@@ -72,54 +72,29 @@ unsigned PabloBlockCarryData::enumerate(PabloBlock & blk) {
     advance1.frameOffsetinBits = addWithCarry.frameOffsetinBits + addWithCarry.entries * BLOCK_SIZE;
     nested.frameOffsetinBits = advance1.frameOffsetinBits + advance1.entries * BLOCK_SIZE;
 #endif
-    unsigned nestedframePosition = nested.frameOffsetinBits;
+}
+        
+void PabloBlockCarryData::dumpCarryData(llvm::raw_ostream & strm) {
+    unsigned totalDepth = ifDepth + whileDepth;
+    for (int i = 0; i < totalDepth; i++) strm << "  ";
+    strm << "scope index = " << theScope->getScopeIndex();
+    strm << " framePosition: " << framePosition << ", ifDepth: " << ifDepth << ", whileDepth:" << whileDepth << ", maxNestingDepth: " << maxNestingDepth << "\n";
+    for (int i = 0; i < totalDepth; i++) strm << "  ";
+    strm << "longAdvance: offset = " << longAdvance.frameOffsetinBits << ", entries = " << longAdvance.entries << "\n";
+    for (int i = 0; i < totalDepth; i++) strm << "  ";
+    strm << "shortAdvance: offset = " << shortAdvance.frameOffsetinBits << ", entries = " << shortAdvance.entries << "\n";
+    for (int i = 0; i < totalDepth; i++) strm << "  ";
+    strm << "advance1: offset = " << advance1.frameOffsetinBits << ", entries = " << advance1.entries << "\n";
+    for (int i = 0; i < totalDepth; i++) strm << "  ";
+    strm << "addWithCarry: offset = " << addWithCarry.frameOffsetinBits << ", entries = " << addWithCarry.entries << "\n";
+    for (int i = 0; i < totalDepth; i++) strm << "  ";
+    strm << "nested: offset = " << nested.frameOffsetinBits << ", allocatedBits = " << nested.allocatedBits << "\n";
+    for (int i = 0; i < totalDepth; i++) strm << "  ";
+    strm << "summary: offset = " << summary.frameOffsetinBits << ", allocatedBits = " << summary.allocatedBits << "\n";
+    for (int i = 0; i < totalDepth; i++) strm << "  ";
+    strm << "scopeCarryDataBits = " << scopeCarryDataBits  << "\n";
+    strm.flush();
     
-    for (Statement * stmt : blk) {
-        if (If * ifStatement = dyn_cast<If>(stmt)) {
-            PabloBlockCarryData & nestedBlockData = ifStatement->getBody().carryData;
-            nestedBlockData.ifDepth = ifDepth + 1;
-            nestedBlockData.whileDepth = whileDepth;
-            const unsigned ifCarryDataBits = nestedBlockData.enumerate(ifStatement->getBody());
-#ifdef PACKING
-            EnsurePackHasSpace(nestedframePosition, ifCarryDataBits);
-#endif
-            nestedBlockData.framePosition = nestedframePosition;
-            nestedframePosition += ifCarryDataBits;
-            if (maxNestingDepth <= nestedBlockData.maxNestingDepth) maxNestingDepth = nestedBlockData.maxNestingDepth + 1;
-            nested.entries++;
-        }
-        else if (While * whileStatement = dyn_cast<While>(stmt)) {
-            PabloBlockCarryData & nestedBlockData = whileStatement->getBody().carryData;
-            nestedBlockData.ifDepth = ifDepth;
-            nestedBlockData.whileDepth = whileDepth + 1;
-            unsigned whileCarryDataBits = nestedBlockData.enumerate(whileStatement->getBody());
-            //if (whileStatement->isMultiCarry()) whileCarryDataBits *= whileStatement->getMaxIterations();
-#ifdef PACKING
-            EnsurePackHasSpace(nestedframePosition, whileCarryDataBits);
-#endif
-            nestedBlockData.framePosition = nestedframePosition;
-            nestedframePosition += whileCarryDataBits;
-            if (maxNestingDepth <= nestedBlockData.maxNestingDepth) maxNestingDepth = nestedBlockData.maxNestingDepth + 1;
-            nested.entries++;
-        }
-    }
-    
-    
-    scopeCarryDataBits = nestedframePosition;
-    
-    if (explicitSummaryRequired()) {
-        // Need extra space for the summary variable, always the last
-        // entry within an if block.
-        scopeCarryDataBits = alignCeiling(scopeCarryDataBits, PACK_SIZE);
-        summary.frameOffsetinBits = scopeCarryDataBits;
-        summary.allocatedBits = PACK_SIZE;
-        scopeCarryDataBits += PACK_SIZE;
-    }
-    else {
-        summary.frameOffsetinBits = 0;
-        summary.allocatedBits = scopeCarryDataBits;
-    }
-    return scopeCarryDataBits;
 }
 
 }

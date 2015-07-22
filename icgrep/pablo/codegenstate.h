@@ -7,7 +7,6 @@
 #ifndef PS_PABLOS_H
 #define PS_PABLOS_H
 
-#include <pablo/carry_data.h>
 #include <pablo/pabloAST.h>
 #include <pablo/symbol_generator.h>
 #include <pablo/pe_advance.h>
@@ -159,11 +158,14 @@ public:
     
     void insert(Statement * const statement);
 
-    PabloBlockCarryData carryData;
+    unsigned enumerateScopes(unsigned baseScopeIndex);
+    
+    inline unsigned getScopeIndex() const {
+        return mScopeIndex;
+    }
     
     virtual ~PabloBlock();
 
-    
 protected:
 
 
@@ -195,6 +197,7 @@ private:
     Ones * const                                        mOnes;
     SymbolGenerator &                                   mSymbolGenerator;
     PabloBlock *                                        mParent;
+    unsigned                                            mScopeIndex;
 };
 
 }

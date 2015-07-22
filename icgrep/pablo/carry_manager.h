@@ -10,6 +10,7 @@
 #include <llvm/IR/Module.h>
 #include <IDISA/idisa_builder.h>
 #include <pablo/codegenstate.h>
+#include <pablo/carry_data.h>
 
 /* 
  * Carry Data Manager.
@@ -27,6 +28,8 @@ using namespace llvm;
 namespace pablo {
 
 class PabloBlock;
+
+
 
 class CarryManager {
 public:
@@ -50,6 +53,8 @@ public:
     }
     
     unsigned initialize(PabloBlock * blk, Value * carryDataPtr);  
+    
+    unsigned enumerate(PabloBlock * blk, unsigned ifDepth, unsigned whileDepth, unsigned nestedframePosition);
     
     void generateBlockNoIncrement();
     
@@ -110,6 +115,9 @@ private:
     Value * mBlockNoPtr;
     Value * mBlockNo;
     unsigned mTotalCarryDataBitBlocks;
+    
+    std::vector<PabloBlockCarryData *> mCarryInfoVector;
+
 
     std::vector<Value *> mCarryInVector;
     std::vector<PHINode *> mCarryInPhis;  

@@ -150,6 +150,9 @@ CompiledPabloFunction PabloCompiler::compile(PabloFunction & function) {
 
 std::pair<llvm::Function *, size_t> PabloCompiler::compile(PabloFunction & function, Module * module) {
 
+  
+    function.getEntryBlock().enumerateScopes(0);
+    
     Examine(function);
 
     mMod = module;
