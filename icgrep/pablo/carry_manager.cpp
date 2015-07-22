@@ -32,9 +32,6 @@ namespace pablo {
 
 unsigned CarryManager::initialize(PabloBlock * pb, Value * carryPtr) {
     mPabloRoot = pb;
-    mCurrentScope = pb;
-    mCurrentScopeIndex = 0;
-    
     mCarryDataPtr = carryPtr;
     unsigned scopeCount = doScopeCount(pb);
     mCarryInfoVector.resize(scopeCount);
@@ -49,6 +46,11 @@ unsigned CarryManager::initialize(PabloBlock * pb, Value * carryPtr) {
     mCarryOutAccumPhis.resize(mTotalCarryDataBitBlocks);
     mCarryOutVector.resize(mTotalCarryDataBitBlocks);
     
+    /*  Set the current scope to PabloRoot */
+    mCurrentScope = mPabloRoot;
+    mCurrentScopeIndex = 0;
+    mCarryInfo = mCarryInfoVector[0];
+
     return mTotalCarryDataBitBlocks;
 }
     
@@ -174,6 +176,7 @@ Value * CarryManager::advanceCarryInCarryOut(int localIndex, int shift_amount, V
 }
 
 Value * CarryManager::unitAdvanceCarryInCarryOut(int localIndex, Value * strm) {
+   
     unsigned carryDataIndex = mCurrentScopeIndex + mCarryInfo->unitAdvanceCarryDataOffset(localIndex);
     mCarryOutVector[carryDataIndex] = strm; 
 #ifndef LOAD_STORE_ON_BLOCK_ENTRY_EXIT

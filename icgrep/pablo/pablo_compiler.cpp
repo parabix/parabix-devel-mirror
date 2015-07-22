@@ -177,11 +177,14 @@ std::pair<llvm::Function *, size_t> PabloCompiler::compile(PabloFunction & funct
             genPrintRegister(function.getParameter(i)->getName()->to_string(), basisBit);
         }
     }
-        
-    mCarryOffset = mCarryManager->initialize(&(function.getEntryBlock()), mCarryDataPtr);
+     
+    PabloBlock & mainScope = function.getEntryBlock();
+
+    mCarryOffset = mCarryManager->initialize(&mainScope, mCarryDataPtr);
     
     //Generate the IR instructions for the function.
-    compileBlock(function.getEntryBlock());
+    
+    compileBlock(mainScope);
     
     mCarryManager->generateBlockNoIncrement();
 
