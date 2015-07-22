@@ -499,6 +499,9 @@ void PabloCompiler::compileWhile(const While * whileStatement) {
 
     BasicBlock * whileBodyFinalBlock = mBuilder->GetInsertBlock();
 
+    if (mCarryManager->blockHasCarries()) {
+        mCarryManager->generateCarryOutSummaryCodeIfNeeded();
+    }
     mCarryManager->extendCarryDataPhisAtWhileBodyFinalBlock(whileBodyFinalBlock);
 
     // Terminate the while loop body with a conditional branch back.
@@ -515,9 +518,6 @@ void PabloCompiler::compileWhile(const While * whileStatement) {
     }
 
     mBuilder->SetInsertPoint(whileEndBlock);
-    if (mCarryManager->blockHasCarries()) {
-        mCarryManager->generateCarryOutSummaryCodeIfNeeded();
-    }
     --mWhileDepth;
 
     mCarryManager->ensureCarriesStoredRecursive();
