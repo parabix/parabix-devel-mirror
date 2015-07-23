@@ -67,7 +67,7 @@ public:
     void enumerateLocal();
     void dumpCarryData(llvm::raw_ostream & strm);
     
-    unsigned getBlockCarryDataIndex()  const {
+    unsigned getFrameIndex()  const {
         return framePosition/BLOCK_SIZE;
     }
     

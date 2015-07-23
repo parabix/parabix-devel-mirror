@@ -43,7 +43,7 @@ public:
     , mPabloRoot(nullptr)
     , mCurrentScope(nullptr)
     , mCarryInfo(nullptr)
-    , mCurrentScopeIndex(0)
+    , mCurrentFrameIndex(0)
     , mCarryDataPtr(nullptr)
     , mBlockNoPtr(nullptr)
     , mBlockNo(nullptr)
@@ -110,7 +110,7 @@ private:
     PabloBlock * mPabloRoot;
     PabloBlock * mCurrentScope;
     PabloBlockCarryData * mCarryInfo;
-    unsigned mCurrentScopeIndex;
+    unsigned mCurrentFrameIndex;
     Value * mCarryDataPtr;
     Value * mBlockNoPtr;
     Value * mBlockNo;
