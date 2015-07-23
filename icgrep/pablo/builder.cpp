@@ -7,15 +7,6 @@ struct __##NAME { \
     inline PabloAST * operator()(PabloAST * arg) { \
         return mPb->NAME(arg); \
     } \
-    inline __##NAME(PabloBlock * pb) : mPb(pb) {} \
-private: \
-    PabloBlock * mPb; \
-}; \
-__##NAME functor(mPb); \
-PabloAST * result = mExprTable.findUnaryOrCall(std::move(functor), TYPE, ARGS)
-
-#define MAKE_NAMED_UNARY(NAME, TYPE, ARGS...) \
-struct __##NAME { \
     inline PabloAST * operator()(PabloAST * arg, const std::string name) { \
         return mPb->NAME(arg, name); \
     } \
@@ -26,33 +17,11 @@ private: \
 __##NAME functor(mPb); \
 PabloAST * result = mExprTable.findUnaryOrCall(std::move(functor), TYPE, ARGS)
 
-#define MAKE_UNARY_VARIABLE(NAME, TYPE, ARGS...) \
-struct __##NAME { \
-    inline PabloAST * operator()(PabloAST * arg, const std::vector<PabloAST *> & args) { \
-        return mPb->NAME(arg, args); \
-    } \
-    inline __##NAME(PabloBlock * pb) : mPb(pb) {} \
-private: \
-    PabloBlock * mPb; \
-}; \
-__##NAME functor(mPb); \
-PabloAST * result = mExprTable.findUnaryVariableOrCall(std::move(functor), TYPE, ARGS)
-
-
 #define MAKE_BINARY(NAME, TYPE, ARGS...) \
 struct __##NAME { \
     inline PabloAST * operator()(PabloAST * arg1, PabloAST * arg2) { \
         return mPb->NAME(arg1, arg2); \
     } \
-    inline __##NAME(PabloBlock * pb) : mPb(pb) {} \
-private: \
-    PabloBlock * mPb; \
-}; \
-__##NAME functor(mPb); \
-PabloAST * result = mExprTable.findBinaryOrCall(std::move(functor), TYPE, ARGS)
-
-#define MAKE_NAMED_BINARY(NAME, TYPE, ARGS...) \
-struct __##NAME { \
     inline PabloAST * operator()(PabloAST * arg1, PabloAST * arg2, const std::string name) { \
         return mPb->NAME(arg1, arg2, name); \
     } \
@@ -63,20 +32,12 @@ private: \
 __##NAME functor(mPb); \
 PabloAST * result = mExprTable.findBinaryOrCall(std::move(functor), TYPE, ARGS)
 
+
 #define MAKE_TERNARY(NAME, TYPE, ARGS...) \
 struct __##NAME { \
     inline PabloAST * operator()(PabloAST * arg1, PabloAST * arg2, PabloAST * arg3) { \
         return mPb->NAME(arg1, arg2, arg3); \
     } \
-    inline __##NAME(PabloBlock * pb) : mPb(pb) {} \
-private: \
-    PabloBlock * mPb; \
-}; \
-__##NAME functor(mPb); \
-PabloAST * result = mExprTable.findTernaryOrCall(std::move(functor), TYPE, ARGS)
-
-#define MAKE_NAMED_TERNARY(NAME, TYPE, ARGS...) \
-struct __##NAME { \
     inline PabloAST * operator()(PabloAST * arg1, PabloAST * arg2, PabloAST * arg3, const std::string name) { \
         return mPb->NAME(arg1, arg2, arg3, name); \
     } \
@@ -87,24 +48,26 @@ private: \
 __##NAME functor(mPb); \
 PabloAST * result = mExprTable.findTernaryOrCall(std::move(functor), TYPE, ARGS)
 
-#define MAKE_VARIABLE(NAME, TYPE, ARGS) \
+#define MAKE_VARIABLE(NAME, TYPE, ARGS...) \
 struct __##NAME { \
-    inline PabloAST * operator()(PabloAST * arg) { \
-        return mPb->NAME(arg); \
+    inline PabloAST * operator()(const std::vector<PabloAST *> & args, PabloAST * prototype) { \
+        return mPb->NAME(prototype, args); \
     } \
     inline __##NAME(PabloBlock * pb) : mPb(pb) {} \
 private: \
     PabloBlock * mPb; \
 }; \
 __##NAME functor(mPb); \
-PabloAST * result = mExprTable.findUnaryOrCall(std::move(functor), TYPE, ARGS)
+PabloAST * result = mExprTable.findVariableOrCall(std::move(functor), TYPE, ARGS)
 
-
-Call * PabloBuilder::createCall(Prototype * prototype, const std::vector<Var *> & args) {
+Call * PabloBuilder::createCall(Prototype * prototype, const std::vector<PabloAST *> & args) {
+    if (prototype == nullptr) {
+        throw std::runtime_error("Call object cannot be created with a Null prototype!");
+    }
     if (args.size() != cast<Prototype>(prototype)->getNumOfParameters()) {
         throw std::runtime_error("Invalid number of arguments passed into Call object!");
     }
-    MAKE_UNARY_VARIABLE(createCall, PabloAST::ClassTypeId::Call, prototype, reinterpret_cast<const std::vector<PabloAST *> &>(args));
+    MAKE_VARIABLE(createCall, PabloAST::ClassTypeId::Call, prototype->getName(), args, prototype);
     return cast<Call>(result);
 }
 
@@ -114,7 +77,7 @@ PabloAST * PabloBuilder::createAdvance(PabloAST * expr, PabloAST * shiftAmount) 
 }
 
 PabloAST * PabloBuilder::createAdvance(PabloAST * expr, PabloAST * shiftAmount, const std::string prefix) {
-    MAKE_NAMED_BINARY(createAdvance, PabloAST::ClassTypeId::Advance, expr, shiftAmount, prefix);
+    MAKE_BINARY(createAdvance, PabloAST::ClassTypeId::Advance, expr, shiftAmount, prefix);
     return result;
 }
 
@@ -124,7 +87,7 @@ PabloAST * PabloBuilder::createNot(PabloAST * expr) {
 }
 
 PabloAST * PabloBuilder::createNot(PabloAST * expr, const std::string prefix) {
-    MAKE_NAMED_UNARY(createNot, PabloAST::ClassTypeId::Not, expr, prefix);
+    MAKE_UNARY(createNot, PabloAST::ClassTypeId::Not, expr, prefix);
     return result;
 }
 
@@ -140,7 +103,7 @@ PabloAST * PabloBuilder::createAnd(PabloAST * expr1, PabloAST * expr2, const std
     if (expr1 < expr2) {
         std::swap(expr1, expr2);
     }
-    MAKE_NAMED_BINARY(createAnd, PabloAST::ClassTypeId::And, expr1, expr2, prefix);
+    MAKE_BINARY(createAnd, PabloAST::ClassTypeId::And, expr1, expr2, prefix);
     return result;
 }
 
@@ -156,7 +119,7 @@ PabloAST * PabloBuilder::createOr(PabloAST * expr1, PabloAST * expr2, const std:
     if (expr1 < expr2) {
         std::swap(expr1, expr2);
     }
-    MAKE_NAMED_BINARY(createOr, PabloAST::ClassTypeId::Or, expr1, expr2, prefix);
+    MAKE_BINARY(createOr, PabloAST::ClassTypeId::Or, expr1, expr2, prefix);
     return result;
 }
 
@@ -172,7 +135,7 @@ PabloAST * PabloBuilder::createXor(PabloAST * expr1, PabloAST * expr2, const std
     if (expr1 < expr2) {
         std::swap(expr1, expr2);
     }
-    MAKE_NAMED_BINARY(createXor, PabloAST::ClassTypeId::Xor, expr1, expr2, prefix);
+    MAKE_BINARY(createXor, PabloAST::ClassTypeId::Xor, expr1, expr2, prefix);
     return result;
 }
 
@@ -182,7 +145,7 @@ PabloAST * PabloBuilder::createMatchStar(PabloAST * marker, PabloAST * charclass
 }
 
 PabloAST * PabloBuilder::createMatchStar(PabloAST * marker, PabloAST * charclass, const std::string prefix) {
-    MAKE_NAMED_BINARY(createMatchStar, PabloAST::ClassTypeId::MatchStar, marker, charclass, prefix);
+    MAKE_BINARY(createMatchStar, PabloAST::ClassTypeId::MatchStar, marker, charclass, prefix);
     return result;
 }
 
@@ -192,7 +155,7 @@ PabloAST * PabloBuilder::createScanThru(PabloAST * from, PabloAST * thru) {
 }
 
 PabloAST * PabloBuilder::createScanThru(PabloAST * from, PabloAST * thru, const std::string prefix) {
-    MAKE_NAMED_BINARY(createScanThru, PabloAST::ClassTypeId::ScanThru, from, thru, prefix);
+    MAKE_BINARY(createScanThru, PabloAST::ClassTypeId::ScanThru, from, thru, prefix);
     return result;
 }
 
@@ -203,7 +166,7 @@ PabloAST * PabloBuilder::createSel(PabloAST * condition, PabloAST * trueExpr, Pa
 }
 
 PabloAST * PabloBuilder::createSel(PabloAST * condition, PabloAST * trueExpr, PabloAST * falseExpr, const std::string prefix) {
-    MAKE_NAMED_TERNARY(createSel, PabloAST::ClassTypeId::Sel, condition, trueExpr, falseExpr, prefix);
+    MAKE_TERNARY(createSel, PabloAST::ClassTypeId::Sel, condition, trueExpr, falseExpr, prefix);
     return result;
 }
 

@@ -60,7 +60,8 @@ else()
 find_package(Boost)
 endif()
 
-SET(PABLO_SRC pablo/pabloAST.cpp pablo/ps_if.cpp pablo/ps_while.cpp pablo/function.cpp pablo/codegenstate.cpp pablo/builder.cpp pablo/symbol_generator.cpp pablo/printer_pablos.cpp pablo/pablo_compiler.cpp pablo/optimizers/pablo_simplifier.cpp pablo/optimizers/pablo_codesinking.cpp pablo/carry_data.cpp pablo/carry_manager.cpp IDISA/idisa_builder.cpp)
+SET(PABLO_SRC pablo/pabloAST.cpp pablo/ps_if.cpp pablo/ps_while.cpp pablo/function.cpp pablo/codegenstate.cpp pablo/builder.cpp pablo/symbol_generator.cpp pablo/carry_data.cpp pablo/printer_pablos.cpp)
+SET(PABLO_SRC ${PABLO_SRC} pablo/pablo_compiler.cpp pablo/optimizers/pablo_simplifier.cpp pablo/optimizers/pablo_codesinking.cpp pablo/optimizers/booleanreassociationpass.cpp pablo/carry_manager.cpp IDISA/idisa_builder.cpp)
 IF (ENABLE_MULTIPLEXING)
 SET(PABLO_SRC ${PABLO_SRC} pablo/optimizers/pablo_automultiplexing.cpp)
 ENDIF()
@@ -85,6 +86,7 @@ IF(DISABLE_PREGENERATED_UCD_FUNCTIONS)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DDISABLE_PREGENERATED_UCD_FUNCTIONS")
 MESSAGE("Disabling predefined UCD functions...")
 ELSE()
+
 # add the executable
 add_executable(generate_predefined_ucd_functions generate_predefined_ucd_functions.cpp)
 target_link_libraries (generate_predefined_ucd_functions RegExpADT UCDlib PabloADT CCADT)
@@ -103,7 +105,7 @@ add_custom_command(OUTPUT ${PRECOMPILED_FILES}
   COMMENT "Building predefined UCD functions..."
   VERBATIM)
 
-add_custom_target(run_generate_predefined_ucd_functions ALL DEPENDS ${PRECOMPILED_FILES})
+add_custom_target(run_generate_predefined_ucd_functions DEPENDS ${PRECOMPILED_FILES})
 
 add_dependencies(RegExpCompiler run_generate_predefined_ucd_functions)
 ENDIF()

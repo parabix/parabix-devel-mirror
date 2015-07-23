@@ -79,6 +79,16 @@ public:
         return createCall(prototype, reinterpret_cast<const std::vector<PabloAST *> &>(args));
     }
 
+    inline Call * createCall(Prototype * prototype, const std::vector<PabloAST *> & args) {
+        if (prototype == nullptr) {
+            throw std::runtime_error("Call object cannot be created with a Null prototype!");
+        }
+        if (args.size() != cast<Prototype>(prototype)->getNumOfParameters()) {
+            throw std::runtime_error("Invalid number of arguments passed into Call object!");
+        }
+        return createCall(static_cast<PabloAST *>(prototype), args);
+    }
+
     Assign * createAssign(const std::string && prefix, PabloAST * expr);
 
     inline Var * createVar(const std::string name) {
@@ -168,7 +178,6 @@ public:
 
 protected:
 
-
     PabloBlock(SymbolGenerator & symbolGenerator);
 
     PabloBlock(PabloBlock * predecessor);
@@ -186,9 +195,10 @@ protected:
         }
         return expr;
     }
+
 private:
 
-    Call * createCall(PabloAST * prototype, const std::vector<PabloAST *> & args);
+    Call * createCall(PabloAST * prototype, const std::vector<PabloAST *> &);
 
     Var * createVar(PabloAST * name);
 

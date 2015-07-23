@@ -101,7 +101,7 @@ namespace pablo {
 bool AutoMultiplexing::optimize(PabloFunction & function) {
 
     std::random_device rd;
-    const auto seed = rd();
+    const auto seed = rd(); // 83234827342;
     RNG rng(seed);
 
     LOG("Seed:                    " << seed);

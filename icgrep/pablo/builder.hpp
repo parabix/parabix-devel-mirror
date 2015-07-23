@@ -50,7 +50,11 @@ public:
         return mPb->createVar(name);
     }
 
-    Call * createCall(Prototype * prototype, const std::vector<Var *> & vars);
+    inline Call * createCall(Prototype * prototype, const std::vector<Var *> & args) {
+        return createCall(prototype, reinterpret_cast<const std::vector<PabloAST *> &>(args));
+    }
+
+    Call * createCall(Prototype * prototype, const std::vector<PabloAST *> &vars);
 
     Assign * createAssign(const std::string && prefix, PabloAST * expr) {
         return mPb->createAssign(std::move(prefix), expr);

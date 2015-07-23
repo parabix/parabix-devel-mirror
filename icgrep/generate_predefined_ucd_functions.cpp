@@ -292,8 +292,7 @@ void compileUCDModule(Module * module) {
     PM.add(new DataLayoutPass(module));
     #else
     PM.add(new DataLayoutPass());
-    #endif
-    // PM.add(createDependenceAnalysisPass());
+    #endif    
     PM.add(createReassociatePass());
     PM.add(createInstructionCombiningPass());
     PM.add(createSinkingPass());
@@ -305,6 +304,7 @@ void compileUCDModule(Module * module) {
     }
 
     PM.run(*module);
+
 
     out->keep();
 }
@@ -319,6 +319,10 @@ int main(int argc, char *argv[]) {
     InitializeAllAsmPrinters();
     InitializeAllAsmParsers();
     cl::ParseCommandLineOptions(argc, argv, "UCD Compiler\n");
+
+
+
+
     #ifdef ENABLE_MULTIPLEXING
     if (MultiplexingDistribution.length() > 0) {
         #ifdef USE_LLVM_3_5

@@ -136,7 +136,7 @@ protected:
     static Allocator        mAllocator;
 private:
     const ClassTypeId       mClassTypeId;
-    Vector                   mUsers;
+    Vector                  mUsers;
     static VectorAllocator  mVectorAllocator;
 };
 

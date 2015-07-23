@@ -35,6 +35,8 @@ private:
     std::unordered_map<integer_t, Integer *>    mIntegerMap;
 };
 
+static SymbolGenerator GlobalSymbolGenerator;
+
 }
 
 #endif // SYMBOL_GENERATOR_H

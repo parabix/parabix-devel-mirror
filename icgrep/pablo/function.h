@@ -25,13 +25,12 @@ public:
         return false;
     }
 
-    static Prototype * Create(std::string name, const unsigned inputVariables, const unsigned outputVariables, const unsigned requiredStateSpace, void * functionPtr = nullptr);
+    static Prototype * Create(std::string name, const unsigned numOfParameters, const unsigned numOfResults, const unsigned requiredStateSpace, void * functionPtr = nullptr);
 
     const String * getName() const {
         return mName;
     }
 
-    // Note: this will have to be updated once different stream types exist
     unsigned getNumOfParameters() const {
         return mNumOfParameters;
     }

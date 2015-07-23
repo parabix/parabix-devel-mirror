@@ -6,7 +6,7 @@ namespace pablo {
 
 Prototype::Prototype(const PabloAST::ClassTypeId type, std::string && name, const unsigned numOfParameters, const unsigned numOfResults, const unsigned requiredStateSpace, void * functionPtr)
 : PabloAST(type)
-, mName(new String(name, false)) // <-- Should there be a global pool to assert that no two prototypes have the same name?
+, mName(GlobalSymbolGenerator.get(name, false))
 , mNumOfParameters(numOfParameters)
 , mNumOfResults(numOfResults)
 , mRequiredStateSpace(requiredStateSpace)
@@ -36,6 +36,5 @@ void PabloFunction::throwInvalidResultIndex(const unsigned index) const {
                 std::to_string(index) + " of " + std::to_string(getNumOfResults()) +
                 " in function " + getName()->to_string());
 }
-
 
 }

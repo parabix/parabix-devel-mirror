@@ -82,6 +82,7 @@ inline llvm::raw_ostream & operator <<(llvm::raw_ostream & stream, const String 
     return stream;
 }
 
+
 }
 
 #endif // PE_STRING_H

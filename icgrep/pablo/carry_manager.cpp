@@ -419,6 +419,8 @@ void CarryManager::extendCarryDataPhisAtWhileBodyFinalBlock(BasicBlock * whileBo
         mCarryInPhis[index]->addIncoming(mZeroInitializer, whileBodyFinalBlock);
 #endif
         PHINode * phi = mCarryOutAccumPhis[index];
+        assert (phi);
+        assert (mCarryOutVector[index]);
         Value * carryOut = mBuilder->CreateOr(phi, mCarryOutVector[index]);
         phi->addIncoming(carryOut, whileBodyFinalBlock);
         mCarryOutVector[index] = carryOut;

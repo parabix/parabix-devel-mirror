@@ -97,15 +97,31 @@ struct VarArgMap {
 
     friend struct ExpressionTable;
 
+    using Allocator = LLVMAllocator;
+
     struct Key {
-        inline Key(PabloAST::ClassTypeId type, unsigned args, PabloAST ** arg) : mType(type), mArgs(args), mArg(arg) {}
+
+        inline Key(PabloAST::ClassTypeId type, const PabloAST * arg1, const std::vector<PabloAST *> & args, Allocator & allocator)
+        : mType(type)
+        , mArgs(1 + args.size())
+        , mArg(allocator.Allocate<const PabloAST *>(mArgs)) {
+            unsigned i = 1;
+            mArg[0] = arg1;
+            for (PabloAST * arg : args) {
+                mArg[i++] = arg;
+            }
+        }
+
         inline Key(const Key & key) = default;
+
         inline Key(Key && key) = default;
+
         inline bool operator < (const Key & other) const {
-            if (mType != other.mType)
+            if (mType != other.mType) {
                 return mType < other.mType;
-            if (mArgs != other.mArgs)
+            } else if (mArgs != other.mArgs) {
                 return mArgs < other.mArgs;
+            }
             for (unsigned i = 0; i != mArgs; ++i) {
                 if (mArg[i] != other.mArg[i]) {
                     return mArg[i] < other.mArg[i];
@@ -113,15 +129,13 @@ struct VarArgMap {
             }
             return false;
         }
-    private:
-        PabloAST::ClassTypeId         mType;
-        unsigned                      mArgs;
-        PabloAST **                   mArg;
+
+        const PabloAST::ClassTypeId   mType;
+        const unsigned                mArgs;
+        const PabloAST **             mArg;
     };
 
-    using Allocator = LLVMAllocator;
-    using MapAllocator = LLVMAllocatorProxy<std::pair<Key, PabloAST *>>;
-    using Map = std::map<Key, PabloAST *>; // , std::less<Key>, MapAllocator
+    using Map = std::map<Key, PabloAST *>;
 
     explicit VarArgMap(VarArgMap * predecessor = nullptr)
     : mPredecessor(predecessor) {
@@ -141,40 +155,32 @@ struct VarArgMap {
     }
 
     template <class Functor, typename... Params>
-    inline PabloAST * findOrCall(Functor && functor, const PabloAST::ClassTypeId type, std::initializer_list<PabloAST *> args, Params... params) {
-        PabloAST * const f = find(type, args);
+    inline PabloAST * findOrCall(Functor && functor, const PabloAST::ClassTypeId type, const PabloAST * arg1, const std::vector<PabloAST *> & args, Params... params) {
+        Key key(type, arg1, args, mAllocator);
+        PabloAST * const f = find(key);
         if (f) {
+            mAllocator.Deallocate<const PabloAST *>(key.mArg);
             return f;
         }
         PabloAST * const object = functor(args, std::forward<Params>(params)...);
-        PabloAST ** const args_copy = mAllocator.Allocate<PabloAST *>(args.size());
-        std::copy(args.begin(), args.end(), args_copy);
-        Key key(type, args.size(), args_copy);
         mMap.insert(std::make_pair(std::move(key), object));
         return object;
     }
 
-    inline std::pair<PabloAST *, bool> findOrAdd(PabloAST * object, const PabloAST::ClassTypeId type, std::initializer_list<PabloAST *> args) {
-        PabloAST * const entry = find(type, args);
+    inline std::pair<PabloAST *, bool> findOrAdd(PabloAST * object, const PabloAST::ClassTypeId type, PabloAST * arg1, const std::vector<PabloAST *> & args) {
+        Key key(type, arg1, args, mAllocator);
+        PabloAST * const entry = find(key);
         if (entry) {
+            mAllocator.Deallocate<const PabloAST *>(key.mArg);
             return std::make_pair(entry, false);
         }
-        PabloAST ** const args_copy = mAllocator.Allocate<PabloAST *>(args.size());
-        std::copy(args.begin(), args.end(), args_copy);
-        Key key(type, args.size(), args_copy);
         mMap.insert(std::make_pair(std::move(key), object));
         return std::make_pair(object, true);
     }
 
-    inline PabloAST * find(const PabloAST::ClassTypeId type, const std::initializer_list<PabloAST *> args) const {
-        PabloAST * value[args.size()];
-        std::copy(args.begin(), args.end(), value);
-        return find(std::move(Key(type, args.size(), value)));
-    }
-
 private:
 
-    inline PabloAST * find(Key && key) const {
+    inline PabloAST * find(const Key & key) const {
         // check this map to see if we have it
         auto itr = mMap.find(key);
         if (itr != mMap.end()) {
@@ -195,8 +201,8 @@ private:
 
 private:
     VarArgMap *     mPredecessor;
-    Allocator       mAllocator;
     Map             mMap;
+    Allocator       mAllocator;
 };
 
 struct ExpressionTable {
@@ -206,7 +212,7 @@ struct ExpressionTable {
             mUnary.mPredecessor = &(predecessor->mUnary);
             mBinary.mPredecessor = &(predecessor->mBinary);
             mTernary.mPredecessor = &(predecessor->mTernary);
-            mUnaryVariable.mPredecessor = &(predecessor->mUnaryVariable);
+            mVariable.mPredecessor = &(predecessor->mVariable);
         }
     }
 
@@ -216,7 +222,7 @@ struct ExpressionTable {
     : mUnary(std::move(other.mUnary))
     , mBinary(std::move(other.mBinary))
     , mTernary(std::move(other.mTernary))
-    , mUnaryVariable(std::move(other.mUnaryVariable)) {
+    , mVariable(std::move(other.mVariable)) {
 
     }
 
@@ -224,19 +230,13 @@ struct ExpressionTable {
         mUnary = std::move(other.mUnary);
         mBinary = std::move(other.mBinary);
         mTernary = std::move(other.mTernary);
-        mUnaryVariable = std::move(other.mUnaryVariable);
+        mVariable = std::move(other.mVariable);
         return *this;
     }
-
 
     template <class Functor, typename... Params>
     inline PabloAST * findUnaryOrCall(Functor && functor, const PabloAST::ClassTypeId type, PabloAST * expr, Params... params) {
         return mUnary.findOrCall(std::move(functor), type,  expr , std::forward<Params>(params)...);
-    }
-
-    template <class Functor, typename... Params>
-    inline PabloAST * findUnaryVariableOrCall(Functor && functor, const PabloAST::ClassTypeId type, PabloAST * expr, const std::vector<PabloAST *> & args, Params... params) {
-        return mUnaryVariable.findOrCall(std::move(functor), type, expr, args, std::forward<Params>(params)...);
     }
 
     template <class Functor, typename... Params>
@@ -249,6 +249,10 @@ struct ExpressionTable {
         return mTernary.findOrCall(std::move(functor), type, expr1, expr2, expr3, std::forward<Params>(params)...);
     }
 
+    template <class Functor, typename... Params>
+    inline PabloAST * findVariableOrCall(Functor && functor, const PabloAST::ClassTypeId type, const PabloAST * arg1, const std::vector<PabloAST *> & args, Params... params) {
+        return mVariable.findOrCall(std::move(functor), type, arg1, args, std::forward<Params>(params)...);
+    }
 
     std::pair<PabloAST *, bool> findOrAdd(Statement * stmt) {
         switch (stmt->getClassTypeId()) {            
@@ -259,10 +263,6 @@ struct ExpressionTable {
             case PabloAST::ClassTypeId::And:
             case PabloAST::ClassTypeId::Or:
             case PabloAST::ClassTypeId::Xor:
-                // test whether the communative version of this statement exists
-                if (PabloAST * commExpr = mBinary.find(stmt->getClassTypeId(), stmt->getOperand(1), stmt->getOperand(0))) {
-                    return std::make_pair(commExpr, false);
-                }
             case PabloAST::ClassTypeId::Advance:
             case PabloAST::ClassTypeId::ScanThru:
             case PabloAST::ClassTypeId::MatchStar:
@@ -279,10 +279,10 @@ struct ExpressionTable {
 
 
 private:
-    FixedArgMap<PabloAST *>                                     mUnary;
-    FixedArgMap<PabloAST *, PabloAST *>                         mBinary;
-    FixedArgMap<PabloAST *, PabloAST *, PabloAST *>             mTernary;
-    FixedArgMap<PabloAST *, const std::vector<PabloAST *> &>    mUnaryVariable;
+    FixedArgMap<PabloAST *>                             mUnary;
+    FixedArgMap<PabloAST *, PabloAST *>                 mBinary;
+    FixedArgMap<PabloAST *, PabloAST *, PabloAST *>     mTernary;
+    VarArgMap                                           mVariable;
 };
 
 }

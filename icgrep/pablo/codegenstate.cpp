@@ -71,16 +71,11 @@ PabloAST * PabloBlock::createAdvance(PabloAST * expr, const Integer::integer_t s
     return insertAtInsertionPoint(new Advance(expr, getInteger(shiftAmount), makeName(prefix, false)));
 }
 
-Call * PabloBlock::createCall(PabloAST * prototype, const std::vector<PabloAST *> & args) {
+Call * PabloBlock::createCall(PabloAST * prototype, const std::vector<PabloAST *> &) {
     assert (prototype);
-    if (prototype == nullptr) {
-        throw std::runtime_error("Call object cannot be created with a Null prototype!");
-    }
-    if (args.size() != cast<Prototype>(prototype)->getNumOfParameters()) {
-        throw std::runtime_error("Invalid number of arguments passed into Call object!");
-    }
     return insertAtInsertionPoint(new Call(prototype));
 }
+
 
 PabloAST * PabloBlock::createNot(PabloAST * expr) {
     assert (expr);
@@ -175,7 +170,7 @@ PabloAST * PabloBlock::createAnd(PabloAST * expr1, PabloAST * expr2) {
             return createZeroes();
         }
     }
-    if (isa<Not>(expr1)) {
+    if (isa<Not>(expr1) || expr1 > expr2) {
         std::swap(expr1, expr2);
     }
     return insertAtInsertionPoint(new And(expr1, expr2, makeName("and_")));
@@ -203,7 +198,7 @@ PabloAST * PabloBlock::createAnd(PabloAST * expr1, PabloAST * expr2, const std::
             return createZeroes();
         }
     }
-    if (isa<Not>(expr1)) {
+    if (isa<Not>(expr1) || expr1 > expr2) {
         std::swap(expr1, expr2);
     }
     return insertAtInsertionPoint(new And(expr1, expr2, makeName(prefix, false)));
@@ -250,6 +245,9 @@ PabloAST * PabloBlock::createOr(PabloAST * expr1, PabloAST * expr2) {
             }
         }
     }
+    if (expr1 > expr2) {
+        std::swap(expr1, expr2);
+    }
     return insertAtInsertionPoint(new Or(expr1, expr2, makeName("or_")));
 }
 
@@ -291,6 +289,9 @@ PabloAST * PabloBlock::createOr(PabloAST * expr1, PabloAST * expr2, const std::s
             }
         }
     }
+    if (expr1 > expr2) {
+        std::swap(expr1, expr2);
+    }
     return insertAtInsertionPoint(new Or(expr1, expr2, makeName(prefix, false)));
 }
 
@@ -312,6 +313,9 @@ PabloAST * PabloBlock::createXor(PabloAST * expr1, PabloAST * expr2) {
         if (Not * not2 = dyn_cast<Not>(expr2)) {
             return createXor(not1->getExpr(), not2->getExpr());
         }
+    }
+    if (expr1 > expr2) {
+        std::swap(expr1, expr2);
     }
     return insertAtInsertionPoint(new Xor(expr1, expr2, makeName("xor_")));
 }
@@ -335,6 +339,9 @@ PabloAST * PabloBlock::createXor(PabloAST * expr1, PabloAST * expr2, const std::
             return createXor(not1->getExpr(), not2->getExpr(), prefix);
         }
     }
+    if (expr1 > expr2) {
+        std::swap(expr1, expr2);
+    }
     return insertAtInsertionPoint(new Xor(expr1, expr2, makeName(prefix, false)));
 }
 
@@ -342,7 +349,6 @@ PabloAST * PabloBlock::createXor(PabloAST * expr1, PabloAST * expr2, const std::
 
 PabloAST * PabloBlock::createSel(PabloAST * condition, PabloAST * trueExpr, PabloAST * falseExpr) {
     assert (condition && trueExpr && falseExpr);
-
     if (isa<Ones>(condition)) {
         return trueExpr;
     }

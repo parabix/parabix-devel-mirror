@@ -172,7 +172,7 @@ std::pair<llvm::Function *, size_t> PabloCompiler::compile(PabloFunction & funct
         Value* indices[] = {mBuilder->getInt64(0), mBuilder->getInt32(i)};
         Value * gep = mBuilder->CreateGEP(mInputAddressPtr, indices);
         LoadInst * basisBit = mBuilder->CreateAlignedLoad(gep, BLOCK_SIZE/8, false, function.getParameter(i)->getName()->to_string());
-        mMarkerMap.insert(std::make_pair(function.getParameter(i), basisBit));
+        mMarkerMap[function.getParameter(i)] = basisBit;
         if (DumpTrace) {
             genPrintRegister(function.getParameter(i)->getName()->to_string(), basisBit);
         }
@@ -322,17 +322,12 @@ inline void PabloCompiler::GenerateFunction(PabloFunction & function) {
 }
 
 inline void PabloCompiler::Examine(PabloFunction & function) {
-    if (mMod == nullptr) {
-
-        mWhileDepth = 0;
-        mIfDepth = 0;
-        mMaxWhileDepth = 0;
-
-        Examine(function.getEntryBlock());
-
-        if (LLVM_UNLIKELY(mWhileDepth != 0 || mIfDepth != 0)) {
-            throw std::runtime_error("Malformed Pablo AST: Unbalanced If or While nesting depth!");
-        }
+    mWhileDepth = 0;
+    mIfDepth = 0;
+    mMaxWhileDepth = 0;
+    Examine(function.getEntryBlock());
+    if (LLVM_UNLIKELY(mWhileDepth != 0 || mIfDepth != 0)) {
+        throw std::runtime_error("Malformed Pablo AST: Unbalanced If or While nesting depth!");
     }
 }
 
