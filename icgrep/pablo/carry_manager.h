@@ -37,6 +37,9 @@ public:
     CarryManager(IRBuilder <> * b, VectorType * bitBlockType, ConstantAggregateZero * zero, Constant * one, IDISA::IDISA_Builder * idb)
     : mBuilder(b)
     , mBitBlockType(bitBlockType)
+#ifdef PACKING
+    , mPackType(b->getIntNTy(PACK_SIZE))
+#endif
     , mZeroInitializer(zero)
     , mOneInitializer(one)
     , iBuilder(idb)
@@ -66,6 +69,17 @@ public:
 
     void leaveScope();
     
+/* Helper routines */
+
+
+Value * getCarryPack(unsigned packIndex);
+
+void CarryPackStore(unsigned packIndex);
+
+Value * genCarryInRange(unsigned carryBit_lo, unsigned carryRangeSize);
+ 
+Value * genCarryInBit(unsigned carryBitPos);
+
     /* Methods for processing individual carry-generating operations. */
     
     Value * getCarryOpCarryIn(int localIndex);
@@ -104,6 +118,9 @@ public:
 private:
     IRBuilder <> * mBuilder;
     VectorType * mBitBlockType;
+#ifdef PACKING
+    Type * mPackType;
+#endif
     ConstantAggregateZero * mZeroInitializer;
     Constant * mOneInitializer;
     IDISA::IDISA_Builder * iBuilder;
@@ -119,7 +136,8 @@ private:
     std::vector<PabloBlockCarryData *> mCarryInfoVector;
 
 
-    std::vector<Value *> mCarryInVector;
+    std::vector<Value *> mCarryPackPtr;
+    std::vector<Value *> mCarryInPack;
     std::vector<PHINode *> mCarryInPhis;  
     std::vector<PHINode *> mCarryOutAccumPhis;  
     std::vector<Value *> mCarryOutVector;
