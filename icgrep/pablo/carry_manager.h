@@ -59,31 +59,17 @@ public:
     
     unsigned enumerate(PabloBlock * blk, unsigned ifDepth, unsigned whileDepth);
     
-    void generateBlockNoIncrement();
-    
+    void generateBlockNoIncrement();    
     Value * getBlockNoPtr();
     
     /* Entering and leaving scopes. */
     
     void enterScope(PabloBlock * blk);
-
     void leaveScope();
     
-/* Helper routines */
-
-
-Value * getCarryPack(unsigned packIndex);
-
-void CarryPackStore(unsigned packIndex);
-
-Value * genCarryInRange(unsigned carryBit_lo, unsigned carryRangeSize);
- 
-Value * genCarryInBit(unsigned carryBitPos);
-
     /* Methods for processing individual carry-generating operations. */
     
     Value * getCarryOpCarryIn(int localIndex);
-
     void setCarryOpCarryOut(unsigned idx, Value * carry_out);
 
     Value * advanceCarryInCarryOut(int localIndex, int shift_amount, Value * strm);
@@ -97,12 +83,6 @@ Value * genCarryInBit(unsigned carryBitPos);
     void generateCarryOutSummaryCodeIfNeeded();
     
     void addSummaryPhiIfNeeded(BasicBlock * ifEntryBlock, BasicBlock * ifBodyFinalBlock);
-    
-    /* Methods for load/store of carries for non-while blocks. */
-    
-    void ensureCarriesLoadedLocal();
-
-    void ensureCarriesStoredLocal();
     
     /* Methods for handling while statements */
     
@@ -140,11 +120,22 @@ private:
     std::vector<Value *> mCarryInPack;
     std::vector<PHINode *> mCarryInPhis;  
     std::vector<PHINode *> mCarryOutAccumPhis;  
-    std::vector<Value *> mCarryOutVector;
+    std::vector<Value *> mCarryOutPack;
 
     Value * unitAdvanceCarryInCarryOut(int localIndex, Value * strm);
     Value * shortAdvanceCarryInCarryOut(int localIndex, int shift_amount, Value * strm);
     Value * longAdvanceCarryInCarryOut(int localIndex, int shift_amount, Value * strm);
+    
+    
+    /* Helper routines */
+    Value * getCarryPack(unsigned packIndex);
+    void storeCarryPack(unsigned packIndex);
+    
+    Value * getCarryRange(unsigned carryBit_lo, unsigned carryRangeSize);     
+    Value * getCarryBit(unsigned carryBitPos);
+    void setCarryBits(unsigned carryBit_lo, Value * bits);
+
+    
     
 };
 

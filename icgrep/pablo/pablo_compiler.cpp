@@ -355,11 +355,9 @@ inline void PabloCompiler::DeclareDebugFunctions() {
 
 void PabloCompiler::compileBlock(PabloBlock & block) {
     mPabloBlock = & block;
-    mCarryManager->ensureCarriesLoadedLocal();
     for (const Statement * statement : block) {
         compileStatement(statement);
     }
-    mCarryManager->ensureCarriesStoredLocal();
     mPabloBlock = block.getParent();
 }
 

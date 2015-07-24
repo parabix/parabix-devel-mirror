@@ -44,9 +44,7 @@ unsigned CarryManager::initialize(PabloBlock * pb, Value * carryPtr) {
     mBlockNo = mBuilder->CreateLoad(mBlockNoPtr);
     mCarryPackPtr.resize(mTotalCarryDataBitBlocks);
     mCarryInPack.resize(mTotalCarryDataBitBlocks);
-    mCarryInPhis.resize(mTotalCarryDataBitBlocks);
-    mCarryOutAccumPhis.resize(mTotalCarryDataBitBlocks);
-    mCarryOutVector.resize(mTotalCarryDataBitBlocks);
+    mCarryOutPack.resize(mTotalCarryDataBitBlocks);
     for (auto i = 0; i < mTotalCarryDataBitBlocks; i++) mCarryInPack[i]=nullptr;
     
     /*  Set the current scope to PabloRoot */
@@ -88,6 +86,9 @@ unsigned CarryManager::enumerate(PabloBlock * blk, unsigned ifDepth, unsigned wh
             nestedOffset += ifCarryDataBits;
             if (cd->maxNestingDepth <= nestedBlockData->maxNestingDepth) cd->maxNestingDepth = nestedBlockData->maxNestingDepth + 1;
             cd->nested.entries++;
+#ifndef NDEBUG
+            nestedBlockData->dumpCarryData(cerr);
+#endif
         }
         else if (While * whileStatement = dyn_cast<While>(stmt)) {
             const unsigned whileCarryDataBits = enumerate(&whileStatement->getBody(), ifDepth, whileDepth+1);
@@ -100,6 +101,9 @@ unsigned CarryManager::enumerate(PabloBlock * blk, unsigned ifDepth, unsigned wh
             nestedOffset += whileCarryDataBits;
             if (cd->maxNestingDepth <= nestedBlockData->maxNestingDepth) cd->maxNestingDepth = nestedBlockData->maxNestingDepth + 1;
             cd->nested.entries++;
+#ifndef NDEBUG
+            nestedBlockData->dumpCarryData(cerr);
+#endif
         }
     }
     
@@ -117,9 +121,6 @@ unsigned CarryManager::enumerate(PabloBlock * blk, unsigned ifDepth, unsigned wh
         cd->summary.frameOffsetinBits = 0;
         cd->summary.allocatedBits = cd->scopeCarryDataBits;
     }
-#ifndef NDEBUG
-    cd->dumpCarryData(cerr);
-#endif
     return cd->scopeCarryDataBits;
 }
 
@@ -154,11 +155,11 @@ Value * CarryManager::getCarryPack(unsigned packIndex) {
     return mCarryInPack[packIndex];
 }
 
-void CarryManager::CarryPackStore(unsigned packIndex) {
-    mBuilder->CreateAlignedStore(mCarryOutVector[packIndex], mCarryPackPtr[packIndex], PACK_SIZE/8);
+void CarryManager::storeCarryPack(unsigned packIndex) {
+    mBuilder->CreateAlignedStore(mCarryOutPack[packIndex], mCarryPackPtr[packIndex], PACK_SIZE/8);
 }
 
-Value * CarryManager::genCarryInRange(unsigned carryBit_lo, unsigned carryRangeSize) {
+Value * CarryManager::getCarryRange(unsigned carryBit_lo, unsigned carryRangeSize) {
 
     unsigned packIndex = carryBit_lo / PACK_SIZE;
     unsigned carryOffset = carryBit_lo % PACK_SIZE;
@@ -174,24 +175,45 @@ Value * CarryManager::genCarryInRange(unsigned carryBit_lo, unsigned carryRangeS
     return carryItem;
 }
     
- 
-Value * CarryManager::genCarryInBit(unsigned carryBitPos) {
-    return genCarryInRange(carryBitPos, 1);
+Value * CarryManager::getCarryBit(unsigned carryBitPos) {
+    return getCarryRange(carryBitPos, 1);
 }
-    /* Methods for getting and setting individual carry values. */
     
-//#define LOAD_STORE_ON_BLOCK_ENTRY_EXIT    
+void CarryManager::setCarryBits(unsigned carryBit_lo, Value * bits) {
+    
+    unsigned packIndex = carryBit_lo / PACK_SIZE;
+    unsigned carryOffset = carryBit_lo % PACK_SIZE;
+    if (carryOffset > 0) {
+        bits = mBuilder->CreateLShr(bits, mBuilder->getInt64(carryOffset));
+    }
+    if (mCarryOutPack[packIndex] == nullptr) {
+        mCarryOutPack[packIndex] = bits;
+    }
+    else {
+        mCarryOutPack[packIndex] = mBuilder->CreateOr(mCarryOutPack[packIndex], bits);
+    }
+}
+    
+    
+/* Methods for getting and setting individual carry values. */
+    
 Value * CarryManager::getCarryOpCarryIn(int localIndex) {
     unsigned cd_index = mCurrentFrameIndex + mCarryInfo->carryOpCarryDataOffset(localIndex);
+#ifdef PACKING
+    return getCarryBit(cd_index);
+#else
     return getCarryPack(cd_index);
+#endif
 }
-
+    
+    
 void CarryManager::setCarryOpCarryOut(unsigned localIndex, Value * carry_out) {
+#ifdef PACKING
+#else
     unsigned cd_index = mCurrentFrameIndex + mCarryInfo->carryOpCarryDataOffset(localIndex);
-    mCarryOutVector[cd_index] = carry_out;
-#ifndef LOAD_STORE_ON_BLOCK_ENTRY_EXIT
+    mCarryOutPack[cd_index] = carry_out;
     if (mCarryInfo->getWhileDepth() == 0) {
-        CarryPackStore(cd_index);
+        storeCarryPack(cd_index);
     }
 #endif
 }
@@ -210,15 +232,15 @@ Value * CarryManager::advanceCarryInCarryOut(int localIndex, int shift_amount, V
 }
 
 Value * CarryManager::unitAdvanceCarryInCarryOut(int localIndex, Value * strm) {
+#ifdef PACKING
+#else
    
     unsigned carryDataIndex = mCurrentFrameIndex + mCarryInfo->unitAdvanceCarryDataOffset(localIndex);
-    mCarryOutVector[carryDataIndex] = strm; 
+    mCarryOutPack[carryDataIndex] = strm; 
     Value * carry_in = getCarryPack(carryDataIndex);
-#ifndef LOAD_STORE_ON_BLOCK_ENTRY_EXIT
     if (mCarryInfo->getWhileDepth() == 0) {
-        CarryPackStore(carryDataIndex);
+        storeCarryPack(carryDataIndex);
     }
-#endif
     Value* result_value;
     
 #if (BLOCK_SIZE == 128) && !defined(USE_LONG_INTEGER_SHIFT)
@@ -232,21 +254,23 @@ Value * CarryManager::unitAdvanceCarryInCarryOut(int localIndex, Value * strm) {
     
 #endif
     return result_value;
+#endif
 }
 
 Value * CarryManager::shortAdvanceCarryInCarryOut(int localIndex, int shift_amount, Value * strm) {
+#ifdef PACKING
+#else
     unsigned carryDataIndex = mCurrentFrameIndex + mCarryInfo->shortAdvanceCarryDataOffset(localIndex);
-    mCarryOutVector[carryDataIndex] = strm; 
+    mCarryOutPack[carryDataIndex] = strm; 
     Value * carry_in = getCarryPack(carryDataIndex);
-#ifndef LOAD_STORE_ON_BLOCK_ENTRY_EXIT
     if (mCarryInfo->getWhileDepth() == 0) {
-        CarryPackStore(carryDataIndex);
+        storeCarryPack(carryDataIndex);
     }
-#endif
     Value* advanceq_longint = mBuilder->CreateBitCast(carry_in, mBuilder->getIntNTy(BLOCK_SIZE));
     Value* strm_longint = mBuilder->CreateBitCast(strm, mBuilder->getIntNTy(BLOCK_SIZE));
     Value* adv_longint = mBuilder->CreateOr(mBuilder->CreateShl(strm_longint, shift_amount), mBuilder->CreateLShr(advanceq_longint, BLOCK_SIZE - shift_amount), "advance");
     return mBuilder->CreateBitCast(adv_longint, mBitBlockType);
+#endif
 }
     
 
@@ -314,8 +338,11 @@ bool CarryManager::blockHasCarries(){
 
 
 Value * CarryManager::getCarrySummaryExpr() {
+#ifdef PACKING
+#else
     unsigned summary_idx = mCurrentFrameIndex + mCarryInfo->summaryCarryDataIndex();
     return getCarryPack(summary_idx);
+#endif
 }
 
 void CarryManager::addSummaryPhiIfNeeded(BasicBlock * ifEntryBlock, BasicBlock * ifBodyFinalBlock) {
@@ -327,8 +354,8 @@ void CarryManager::addSummaryPhiIfNeeded(BasicBlock * ifEntryBlock, BasicBlock *
     const unsigned carrySummaryIndex = mCurrentFrameIndex + mCarryInfo->summaryCarryDataIndex();
     PHINode * summary_phi = mBuilder->CreatePHI(mBitBlockType, 2, "summary");
     summary_phi->addIncoming(mZeroInitializer, ifEntryBlock);
-    summary_phi->addIncoming(mCarryOutVector[carrySummaryIndex], ifBodyFinalBlock);
-    mCarryOutVector[carrySummaryIndex] = summary_phi;
+    summary_phi->addIncoming(mCarryOutPack[carrySummaryIndex], ifBodyFinalBlock);
+    mCarryOutPack[carrySummaryIndex] = summary_phi;
 }
 
 void CarryManager::generateCarryOutSummaryCodeIfNeeded() {
@@ -349,12 +376,12 @@ void CarryManager::generateCarryOutSummaryCodeIfNeeded() {
     }
     else {
         auto localCarryIndex = mCurrentFrameIndex + mCarryInfo->getLocalCarryPackIndex();
-        auto localCarryPacks = mCarryInfo->getLocalCarryDataSize();
+        auto localCarryPacks = mCarryInfo->getLocalCarryPackCount();
         if (localCarryPacks > 0) {
-            carry_summary = mCarryOutVector[localCarryIndex];
+            carry_summary = mCarryOutPack[localCarryIndex];
             for (auto i = 1; i < localCarryPacks; i++) {
                 //carry_summary = mBuilder->CreateOr(carry_summary, mPabloBlock->mCarryOutPack[i]);            
-                carry_summary = mBuilder->CreateOr(carry_summary, mCarryOutVector[localCarryIndex+i]);
+                carry_summary = mBuilder->CreateOr(carry_summary, mCarryOutPack[localCarryIndex+i]);
             }
         }
         for (Statement * stmt : *mCurrentScope) {
@@ -362,7 +389,7 @@ void CarryManager::generateCarryOutSummaryCodeIfNeeded() {
                 PabloBlock * inner_blk = & innerIf->getBody();
                 enterScope(inner_blk);
                 if (blockHasCarries()) {
-                  carry_summary = mBuilder->CreateOr(carry_summary, mCarryOutVector[mCurrentFrameIndex + mCarryInfo->summaryCarryDataIndex()]);
+                  carry_summary = mBuilder->CreateOr(carry_summary, mCarryOutPack[mCurrentFrameIndex + mCarryInfo->summaryCarryDataIndex()]);
                 }
                 leaveScope();
             }
@@ -370,7 +397,7 @@ void CarryManager::generateCarryOutSummaryCodeIfNeeded() {
                 PabloBlock * inner_blk = & innerWhile->getBody();
                 enterScope(inner_blk);
                 if (blockHasCarries()) {
-                    carry_summary = mBuilder->CreateOr(carry_summary, mCarryOutVector[mCurrentFrameIndex + mCarryInfo->summaryCarryDataIndex()]);
+                    carry_summary = mBuilder->CreateOr(carry_summary, mCarryOutPack[mCurrentFrameIndex + mCarryInfo->summaryCarryDataIndex()]);
                 }
                 leaveScope();
             }
@@ -378,44 +405,16 @@ void CarryManager::generateCarryOutSummaryCodeIfNeeded() {
     }
     // Calculation of the carry out summary is complete.   Store it and make it
     // available in case it must included by parent blocks.
-    mCarryOutVector[carrySummaryIndex] = carry_summary;
-    CarryPackStore(carrySummaryIndex);
-}
-
-
-void CarryManager::ensureCarriesLoadedLocal() {
-#ifdef LOAD_STORE_ON_BLOCK_ENTRY_EXIT
-    if ((mCarryInfo->getScopeCarryDataSize() == 0 ) || (mCarryInfo->getWhileDepth() > 0)) return;
-    if ((mCarryInfo->getIfDepth() == 0) || mCarryInfo->explicitSummaryRequired()) {
-        auto localCarryIndex = mCurrentFrameIndex + mCarryInfo->getLocalCarryPackIndex();
-        auto localCarryPacks = mCarryInfo->getLocalCarryDataSize();
-        //std::cerr << "ensureCarriesLoadedLocal: localCarryIndex =  " << localCarryIndex << "localCarryPacks =  " << localCarryPacks << std::endl;
-        for (auto i = localCarryIndex; i < localCarryIndex + localCarryPacks; i++) {        
-            mCarryInPack[i] = mBuilder->CreateAlignedLoad(mBuilder->CreateGEP(mCarryDataPtr, mBuilder->getInt64(i)), BLOCK_SIZE/8, false);
-        }
-    }
-#endif
-}
-
-void CarryManager::ensureCarriesStoredLocal() {
-#ifdef LOAD_STORE_ON_BLOCK_ENTRY_EXIT
-    if ((mCarryInfo->getScopeCarryDataSize() == 0 ) || (mCarryInfo->getWhileDepth() > 0)) return;
-    auto localCarryIndex = mCurrentFrameIndex + mCarryInfo->getLocalCarryPackIndex();
-    auto localCarryPacks = mCarryInfo->getLocalCarryDataSize();
-    //std::cerr << "ensureCarriesStoredLocal: localCarryIndex =  " << localCarryIndex << "localCarryPacks =  " << localCarryPacks << std::endl;
-    for (auto i = localCarryIndex; i < localCarryIndex + localCarryPacks; i++) {        
-        Value * storePtr = mBuilder->CreateGEP(mCarryDataPtr, mBuilder->getInt64(i));
-        mBuilder->CreateAlignedStore(mCarryOutVector[i], storePtr, BLOCK_SIZE/8, false);
-    }
-#endif
+    mCarryOutPack[carrySummaryIndex] = carry_summary;
+    storeCarryPack(carrySummaryIndex);
 }
 
 
 
 void CarryManager::ensureCarriesLoadedRecursive() {
-    const unsigned scopeCarryDataSize = mCarryInfo->getScopeCarryDataSize();
+    const unsigned scopeCarryPacks = mCarryInfo->getScopeCarryPackCount();
     if (mCarryInfo->getWhileDepth() == 1) {
-        for (auto i = mCurrentFrameIndex; i < mCurrentFrameIndex + scopeCarryDataSize; ++i) {
+        for (auto i = mCurrentFrameIndex; i < mCurrentFrameIndex + scopeCarryPacks; ++i) {
             getCarryPack(i);
         }
     }
@@ -423,11 +422,15 @@ void CarryManager::ensureCarriesLoadedRecursive() {
 
 
 void CarryManager::initializeCarryDataPhisAtWhileEntry(BasicBlock * whileEntryBlock) {
-    const unsigned scopeCarryDataSize = mCarryInfo->getScopeCarryDataSize();
-    for (unsigned index = mCurrentFrameIndex; index < mCurrentFrameIndex + scopeCarryDataSize; ++index) {
+    const unsigned scopeCarryPacks = mCarryInfo->getScopeCarryPackCount();
+    mCarryOutAccumPhis.resize(scopeCarryPacks);
+#ifdef SET_WHILE_CARRY_IN_TO_ZERO_AFTER_FIRST_ITERATION
+    mCarryInPhis.resize(scopeCarryPacks);
+#endif
+    for (unsigned index = 0; index < scopeCarryPacks; ++index) {
 #ifdef SET_WHILE_CARRY_IN_TO_ZERO_AFTER_FIRST_ITERATION
         PHINode * phi_in = mBuilder->CreatePHI(mBitBlockType, 2);
-        phi_in->addIncoming(mCarryInPack[index], whileEntryBlock);
+        phi_in->addIncoming(mCarryInPack[mCurrentFrameIndex+index], whileEntryBlock);
         mCarryInPhis[index] = phi_in;
 #endif
         PHINode * phi_out = mBuilder->CreatePHI(mBitBlockType, 2);
@@ -438,25 +441,23 @@ void CarryManager::initializeCarryDataPhisAtWhileEntry(BasicBlock * whileEntryBl
 
 
 void CarryManager::extendCarryDataPhisAtWhileBodyFinalBlock(BasicBlock * whileBodyFinalBlock) {
-    const unsigned scopeCarryDataSize = mCarryInfo->getScopeCarryDataSize();
-    for (unsigned index = mCurrentFrameIndex; index < mCurrentFrameIndex + scopeCarryDataSize; ++index) {
+    const unsigned scopeCarryPacks = mCarryInfo->getScopeCarryPackCount();
+    for (unsigned index = 0; index < scopeCarryPacks; ++index) {
 #ifdef SET_WHILE_CARRY_IN_TO_ZERO_AFTER_FIRST_ITERATION
         mCarryInPhis[index]->addIncoming(mZeroInitializer, whileBodyFinalBlock);
 #endif
         PHINode * phi = mCarryOutAccumPhis[index];
-        assert (phi);
-        assert (mCarryOutVector[index]);
-        Value * carryOut = mBuilder->CreateOr(phi, mCarryOutVector[index]);
+        Value * carryOut = mBuilder->CreateOr(phi, mCarryOutPack[mCurrentFrameIndex+index]);
         phi->addIncoming(carryOut, whileBodyFinalBlock);
-        mCarryOutVector[index] = carryOut;
+        mCarryOutPack[mCurrentFrameIndex+index] = carryOut;
     }
 }
 
 void CarryManager::ensureCarriesStoredRecursive() {
-    const unsigned scopeCarryDataSize = mCarryInfo->getScopeCarryDataSize();
+    const unsigned scopeCarryPacks = mCarryInfo->getScopeCarryPackCount();
     if (mCarryInfo->getWhileDepth() == 1) {
-        for (auto i = mCurrentFrameIndex; i < mCurrentFrameIndex + scopeCarryDataSize; ++i) {
-            CarryPackStore(i);
+        for (auto i = mCurrentFrameIndex; i < mCurrentFrameIndex + scopeCarryPacks; ++i) {
+            storeCarryPack(i);
         }
     }
 }

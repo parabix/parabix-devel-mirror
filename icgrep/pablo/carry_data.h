@@ -123,9 +123,9 @@ public:
     
     unsigned getLocalCarryPackIndex () { return shortAdvance.frameOffsetinBits / PACK_SIZE; }
 
-    unsigned getLocalCarryDataSize () { return fullOrPartialBlocks(nested.frameOffsetinBits - shortAdvance.frameOffsetinBits, PACK_SIZE); }
+    unsigned getLocalCarryPackCount () { return fullOrPartialBlocks(nested.frameOffsetinBits - shortAdvance.frameOffsetinBits, PACK_SIZE); }
 
-    unsigned getScopeCarryDataSize () { return fullOrPartialBlocks(scopeCarryDataBits, PACK_SIZE); }
+    unsigned getScopeCarryPackCount () { return fullOrPartialBlocks(scopeCarryDataBits, PACK_SIZE); }
    
     bool blockHasCarries() const { return scopeCarryDataBits > 0;}
     
