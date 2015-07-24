@@ -91,10 +91,6 @@ public:
         whileDepth = d;
     }
     
-    unsigned longAdvanceCarryDataOffset(unsigned advanceIndex)  const {
-        return fullOrPartialBlocks(longAdvance.frameOffsetinBits, BLOCK_SIZE) + advanceIndex;
-    }
-    
     unsigned longAdvanceEntries(unsigned shift_amount) const {
         return fullOrPartialBlocks(shift_amount, BLOCK_SIZE);
     }
@@ -104,22 +100,6 @@ public:
     }
     
     bool blockHasLongAdvances() const { return longAdvance.entries > 0;}
-    
-    unsigned shortAdvanceCarryDataOffset(unsigned advanceIndex)  const {
-        return fullOrPartialBlocks(shortAdvance.frameOffsetinBits, PACK_SIZE) + advanceIndex;
-    }
-    
-    unsigned unitAdvanceCarryDataOffset(unsigned advanceIndex)  const {
-        return fullOrPartialBlocks(advance1.frameOffsetinBits, PACK_SIZE) + advanceIndex;
-    }
-    
-    unsigned carryOpCarryDataOffset(unsigned idx)  const {
-        return fullOrPartialBlocks(addWithCarry.frameOffsetinBits, PACK_SIZE) + idx;
-    }
-    
-    unsigned summaryCarryDataIndex()  const {
-        return fullOrPartialBlocks(summary.frameOffsetinBits, PACK_SIZE);
-    }
     
     unsigned getLocalCarryPackIndex () { return shortAdvance.frameOffsetinBits / PACK_SIZE; }
 

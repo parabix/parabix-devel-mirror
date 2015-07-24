@@ -135,8 +135,14 @@ private:
     Value * getCarryBit(unsigned carryBitPos);
     void setCarryBits(unsigned carryBit_lo, Value * bits);
 
-    
-    
+    unsigned absPosition(unsigned frameOffsetinBits, unsigned relPos);
+    unsigned carryOpPosition(unsigned localIndex) ;
+    unsigned advance1Position(unsigned localIndex);
+    unsigned shortAdvancePosition(unsigned localIndex);
+    unsigned longAdvancePosition(unsigned localIndex);
+    unsigned summaryPosition();
+    unsigned summaryBits();
+
 };
 
 }

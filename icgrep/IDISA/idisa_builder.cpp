@@ -150,6 +150,11 @@ Value * IDISA_Builder::hsimd_signmask(unsigned fw, Value * a) {
     return mLLVMBuilder->CreateBitCast(mask, mLLVMBuilder->getIntNTy(mBitBlockSize/fw));
 }
 
+Value * IDISA_Builder::mvmd_extract(unsigned fw, Value * a, unsigned fieldIndex) {
+    Value * aVec = fwCast(fw, a);
+    return mLLVMBuilder->CreateExtractElement(aVec, mLLVMBuilder->getInt32(fieldIndex));
+}
+
 Value * IDISA_Builder::mvmd_dslli(unsigned fw, Value * a, Value * b, unsigned shift) {
     unsigned field_count = mBitBlockSize/fw;
     Value * aVec = fwCast(fw, a);

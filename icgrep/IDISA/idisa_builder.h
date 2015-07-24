@@ -57,6 +57,8 @@ public:
     Value * hsimd_packl(unsigned fw, Value * a, Value * b);
     Value * hsimd_signmask(unsigned fw, Value * a);
 
+    
+    Value * mvmd_extract(unsigned fw, Value * a, unsigned fieldIndex);
     Value * mvmd_dslli(unsigned fw, Value * a, Value * b, unsigned shift);
     
     Value * bitblock_any(Value * a);
