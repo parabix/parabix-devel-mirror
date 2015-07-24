@@ -263,6 +263,10 @@ struct ExpressionTable {
             case PabloAST::ClassTypeId::And:
             case PabloAST::ClassTypeId::Or:
             case PabloAST::ClassTypeId::Xor:
+                // test whether the communative version of this statement exists
+                if (PabloAST * commExpr = mBinary.find(stmt->getClassTypeId(), stmt->getOperand(1), stmt->getOperand(0))) {
+                    return std::make_pair(commExpr, false);
+                }
             case PabloAST::ClassTypeId::Advance:
             case PabloAST::ClassTypeId::ScanThru:
             case PabloAST::ClassTypeId::MatchStar:

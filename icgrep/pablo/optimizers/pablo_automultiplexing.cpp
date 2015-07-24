@@ -100,8 +100,8 @@ namespace pablo {
 
 bool AutoMultiplexing::optimize(PabloFunction & function) {
 
-    std::random_device rd;
-    const auto seed = rd(); // 83234827342;
+    // std::random_device rd;
+    const auto seed = 83234827342;
     RNG rng(seed);
 
     LOG("Seed:                    " << seed);
@@ -442,10 +442,10 @@ inline DdNode * AutoMultiplexing::characterize(Statement * const stmt) {
 
     if (LLVM_UNLIKELY(NoSatisfyingAssignment(bdd))) {
         Deref(bdd);
-        // If there is no satisfing assignment for this bdd, the statement will always produce
-        // 0. If this is an Assign or Next node, replace the value with 0. Otherwise replace
-        // the statement with 0.
-        if (LLVM_UNLIKELY(isa<Assign>(stmt) || isa<Next>(stmt))) {
+        // If there is no satisfing assignment for this bdd, the statement will always produce 0.
+        // We can safely replace this statement with 0 unless it is an Advance, Assign or Next node.
+        // Those must be handled specially or we may end up producing a non-equivalent function.
+        if (LLVM_UNLIKELY(isa<Advance>(stmt) || isa<Assign>(stmt) || isa<Next>(stmt))) {
             stmt->setOperand(0, stmt->getParent()->createZeroes());
         }
         else {

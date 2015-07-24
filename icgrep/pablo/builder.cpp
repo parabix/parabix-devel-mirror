@@ -92,7 +92,7 @@ PabloAST * PabloBuilder::createNot(PabloAST * expr, const std::string prefix) {
 }
 
 PabloAST * PabloBuilder::createAnd(PabloAST * expr1, PabloAST * expr2) {
-    if (expr1 < expr2) {
+    if (isa<Not>(expr1) || expr1 > expr2) {
         std::swap(expr1, expr2);
     }
     MAKE_BINARY(createAnd, PabloAST::ClassTypeId::And, expr1, expr2);
@@ -100,7 +100,7 @@ PabloAST * PabloBuilder::createAnd(PabloAST * expr1, PabloAST * expr2) {
 }
 
 PabloAST * PabloBuilder::createAnd(PabloAST * expr1, PabloAST * expr2, const std::string prefix) {
-    if (expr1 < expr2) {
+    if (isa<Not>(expr1) || expr1 > expr2) {
         std::swap(expr1, expr2);
     }
     MAKE_BINARY(createAnd, PabloAST::ClassTypeId::And, expr1, expr2, prefix);
@@ -108,7 +108,7 @@ PabloAST * PabloBuilder::createAnd(PabloAST * expr1, PabloAST * expr2, const std
 }
 
 PabloAST * PabloBuilder::createOr(PabloAST * expr1, PabloAST * expr2) {
-    if (expr1 < expr2) {
+    if (expr1 > expr2) {
         std::swap(expr1, expr2);
     }
     MAKE_BINARY(createOr, PabloAST::ClassTypeId::Or, expr1, expr2);
@@ -116,7 +116,7 @@ PabloAST * PabloBuilder::createOr(PabloAST * expr1, PabloAST * expr2) {
 }
 
 PabloAST * PabloBuilder::createOr(PabloAST * expr1, PabloAST * expr2, const std::string prefix) {
-    if (expr1 < expr2) {
+    if (expr1 > expr2) {
         std::swap(expr1, expr2);
     }
     MAKE_BINARY(createOr, PabloAST::ClassTypeId::Or, expr1, expr2, prefix);
@@ -124,7 +124,7 @@ PabloAST * PabloBuilder::createOr(PabloAST * expr1, PabloAST * expr2, const std:
 }
 
 PabloAST * PabloBuilder::createXor(PabloAST * expr1, PabloAST * expr2) {
-    if (expr1 < expr2) {
+    if (expr1 > expr2) {
         std::swap(expr1, expr2);
     }
     MAKE_BINARY(createXor, PabloAST::ClassTypeId::Xor, expr1, expr2);
@@ -132,7 +132,7 @@ PabloAST * PabloBuilder::createXor(PabloAST * expr1, PabloAST * expr2) {
 }
 
 PabloAST * PabloBuilder::createXor(PabloAST * expr1, PabloAST * expr2, const std::string prefix) {
-    if (expr1 < expr2) {
+    if (expr1 > expr2) {
         std::swap(expr1, expr2);
     }
     MAKE_BINARY(createXor, PabloAST::ClassTypeId::Xor, expr1, expr2, prefix);
