@@ -23,6 +23,8 @@
 */
 unsigned const LongAdvanceBase = 64;
 
+//#define PACKING
+
 #ifdef PACKING
 const unsigned PACK_SIZE = 64;
 #else
@@ -43,6 +45,14 @@ static unsigned alignCeiling(unsigned toAlign, unsigned alignment) {
 static unsigned fullOrPartialBlocks(unsigned bits, unsigned block_size) {
     return alignCeiling(bits, block_size) / block_size;
 }
+
+static void EnsurePackHasSpace(unsigned & packedTotalBits, unsigned addedBits) {
+    unsigned bitsInCurrentPack = packedTotalBits % PACK_SIZE;
+    if ((bitsInCurrentPack > 0) && (bitsInCurrentPack + addedBits > PACK_SIZE)) {
+        packedTotalBits = alignCeiling(packedTotalBits, PACK_SIZE);
+    }
+}
+
 
 namespace pablo {
 

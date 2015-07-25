@@ -98,7 +98,7 @@ public:
 private:
     IRBuilder <> * mBuilder;
     VectorType * mBitBlockType;
-    ConstantAggregateZero * mZeroInitializer;
+    Constant * mZeroInitializer;
     Constant * mOneInitializer;
     IDISA::IDISA_Builder * iBuilder;
     PabloBlock * mPabloRoot;
@@ -107,6 +107,7 @@ private:
     unsigned mCurrentFrameIndex;
     Value * mCarryPackBasePtr;
 #ifdef PACKING
+    Type * mCarryPackType;
     Value * mCarryBitBlockPtr;
 #endif
     Value * mBlockNoPtr;
@@ -140,6 +141,8 @@ private:
     unsigned advance1Position(unsigned localIndex);
     unsigned shortAdvancePosition(unsigned localIndex);
     unsigned longAdvanceBitBlockPosition(unsigned localIndex);
+    unsigned localBasePack();
+    unsigned scopeBasePack();
     unsigned summaryPosition();
     unsigned summaryBits();
 

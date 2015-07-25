@@ -14,16 +14,6 @@
 namespace pablo {
 
    
-unsigned alignCeiling(unsigned toAlign, unsigned alignment) {
-    return ((toAlign - 1) | (alignment - 1)) + 1;
-}
-
-void EnsurePackHasSpace(unsigned & packedTotalBits, unsigned addedBits) {
-    unsigned bitsInCurrentPack = packedTotalBits % PACK_SIZE;
-    if ((bitsInCurrentPack > 0) && (bitsInCurrentPack + addedBits > PACK_SIZE)) {
-      packedTotalBits = alignCeiling(packedTotalBits, PACK_SIZE);
-    }
-}
 
 void PabloBlockCarryData::enumerateLocal() {
     for (Statement * stmt : *theScope) {
