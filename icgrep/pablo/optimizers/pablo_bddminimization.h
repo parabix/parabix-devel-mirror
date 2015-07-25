@@ -1,17 +1,6 @@
 #ifndef PABLO_BDDMINIMIZATION_H
 #define PABLO_BDDMINIMIZATION_H
 
-#include <pablo/codegenstate.h>
-#include <slab_allocator.h>
-#include <queue>
-#include <boost/graph/adjacency_list.hpp>
-#include <boost/graph/adjacency_matrix.hpp>
-#include <boost/graph/edge_list.hpp>
-#include <boost/container/flat_map.hpp>
-#include <boost/container/flat_set.hpp>
-#include <boost/numeric/ublas/matrix.hpp>
-#include <random>
-#include <stdint.h>
 #include <llvm/ADT/DenseMap.h>
 
 struct DdManager; // forward declare of the CUDD manager
@@ -19,9 +8,15 @@ struct DdNode;
 
 namespace pablo {
 
+class PabloAST;
+class PabloBlock;
+class PabloFunction;
+class Statement;
+
 class BDDMinimizationPass {
 
     using CharacterizationMap = llvm::DenseMap<const PabloAST *, DdNode *>;
+    using StatementVector = std::vector<PabloAST *>;
 
     struct SubsitutionMap {
         SubsitutionMap(SubsitutionMap * parent = nullptr) : mParent(parent) {}
@@ -29,7 +24,7 @@ class BDDMinimizationPass {
         PabloAST * operator [](const DdNode * node) const {
             auto f = mMap.find(node);
             if (f == mMap.end()) {
-                return mParent ? mParent->find(node) : nullptr;
+                return mParent ? mParent->operator [](node) : nullptr;
             }
             return f->second;
         }
@@ -45,13 +40,14 @@ class BDDMinimizationPass {
 public:
     static bool optimize(PabloFunction & function);
 protected:
-    void initialize(PabloFunction & function);
-    void characterize(const PabloBlock &block);
+    void initialize(const PabloFunction & function);
+    void characterize(const PabloBlock & block);
     DdNode * characterize(const Statement * const stmt);
     void eliminateLogicallyEquivalentStatements(PabloBlock & entry);
     void eliminateLogicallyEquivalentStatements(PabloBlock & block, SubsitutionMap & parent);
-    void simplify(PabloBlock & entry);
-    PabloAST * simplify(DdNode * bdd);
+    void simplifyAST(PabloFunction & function);
+    void simplifyAST(PabloBlock & block);
+    void simplifyAST(PabloBlock & block, PabloAST * const stmt);
 
 private:
     DdNode * Zero() const;
@@ -63,14 +59,16 @@ private:
     DdNode * Xor(DdNode * const x, DdNode * const y);
     DdNode * Not(DdNode * x) const;
     DdNode * Ite(DdNode * const x, DdNode * const y, DdNode * const z);
-    DdNode * NewVar();
+    DdNode * NewVar(Statement * const stmt);
     bool noSatisfyingAssignment(DdNode * const x);
     void shutdown();
 private:
     DdManager *             mManager;
     unsigned                mVariables;
     CharacterizationMap     mCharacterizationMap;
+    StatementVector         mStatementVector;
 };
 
+}
 
 #endif // PABLO_BDDMINIMIZATION_H

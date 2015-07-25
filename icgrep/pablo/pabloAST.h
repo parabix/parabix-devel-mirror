@@ -57,6 +57,7 @@ public:
         , Next
         , Call
         , Var
+        , SetIthBit
         // Scope blocks
         , If
         , While

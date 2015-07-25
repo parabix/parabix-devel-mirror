@@ -59,11 +59,11 @@ public:
         return *(new PabloBlock(&parent));
     }
 
-    PabloAST * createAdvance(PabloAST * expr, const Integer::integer_t shiftAmount);
+    PabloAST * createAdvance(PabloAST * expr, const Integer::Type shiftAmount);
 
     PabloAST * createAdvance(PabloAST * expr, PabloAST * shiftAmount);
 
-    PabloAST * createAdvance(PabloAST * expr, const Integer::integer_t shiftAmount, const std::string prefix);
+    PabloAST * createAdvance(PabloAST * expr, const Integer::Type shiftAmount, const std::string prefix);
 
     PabloAST * createAdvance(PabloAST * expr, PabloAST * shiftAmount, const std::string prefix);
 
@@ -158,7 +158,7 @@ public:
         return mSymbolGenerator.make(prefix, generated);
     }
 
-    inline Integer * getInteger(Integer::integer_t value) {
+    inline Integer * getInteger(Integer::Type value) {
         return mSymbolGenerator.getInteger(value);
     }
 

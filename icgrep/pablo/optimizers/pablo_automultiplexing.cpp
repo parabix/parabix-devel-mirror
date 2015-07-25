@@ -14,6 +14,9 @@
 #include <queue>
 #include <unordered_set>
 
+#include <pablo/optimizers/pablo_simplifier.hpp>
+#include <pablo/optimizers/pablo_bddminimization.h>
+
 using namespace llvm;
 using namespace boost;
 using namespace boost::container;
@@ -159,6 +162,8 @@ bool AutoMultiplexing::optimize(PabloFunction & function) {
     LOG("Shutdown:                " << (end_shutdown - start_shutdown));
 
     LOG_NUMBER_OF_ADVANCES(function.getEntryBlock());
+
+    BDDMinimizationPass::optimize(function);
 
     return multiplex;
 }

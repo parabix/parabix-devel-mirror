@@ -42,7 +42,22 @@ static bool verifyStatementIsInSameBlock(const Statement * const stmt, const Pab
 
 inline bool Simplifier::isSuperfluous(const Assign * const assign) {
     for (const PabloAST * inst : assign->users()) {
-        if (isa<Next>(inst) || isa<PabloFunction>(inst) || isa<If>(inst)) {
+        if (isa<Next>(inst) || isa<PabloFunction>(inst)) {
+            return false;
+        } else if (isa<If>(inst)) {
+            const If * ifNode = cast<If>(inst);
+            if (ifNode->getCondition() == assign) {
+                bool notFound = true;
+                for (Assign * defVar : ifNode->getDefined()) {
+                    if (defVar == assign) {
+                        notFound = false;
+                        break;
+                    }
+                }
+                if (notFound) {
+                    continue;
+                }
+            }
             return false;
         }
     }
@@ -67,7 +82,7 @@ void Simplifier::eliminateRedundantCode(PabloBlock & block, ExpressionTable * pr
                     stmt = assign->eraseFromParent();
                 }
                 else {
-                    stmt = assign->replaceWith(assign->getExpression());
+                    stmt = assign->replaceWith(assign->getExpression(), true, true);
                 }
                 continue;
             }

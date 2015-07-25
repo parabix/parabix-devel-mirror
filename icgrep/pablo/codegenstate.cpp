@@ -57,14 +57,14 @@ PabloAST * PabloBlock::createAdvance(PabloAST * expr, PabloAST * shiftAmount, co
     return insertAtInsertionPoint(new Advance(expr, shiftAmount, makeName(prefix, false)));
 }
 
-PabloAST * PabloBlock::createAdvance(PabloAST * expr, const Integer::integer_t shiftAmount) {
+PabloAST * PabloBlock::createAdvance(PabloAST * expr, const Integer::Type shiftAmount) {
     if (isa<Zeroes>(expr) || shiftAmount == 0) {
         return expr;
     }
     return insertAtInsertionPoint(new Advance(expr, getInteger(shiftAmount), makeName("advance")));
 }
 
-PabloAST * PabloBlock::createAdvance(PabloAST * expr, const Integer::integer_t shiftAmount, const std::string prefix) {
+PabloAST * PabloBlock::createAdvance(PabloAST * expr, const Integer::Type shiftAmount, const std::string prefix) {
     if (isa<Zeroes>(expr) || shiftAmount == 0) {
         return renameNonNamedNode(expr, std::move(prefix));
     }    

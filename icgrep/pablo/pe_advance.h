@@ -27,7 +27,7 @@ public:
     inline PabloAST * getExpr() const {
         return getOperand(0);
     }
-    inline Integer::integer_t getAdvanceAmount() const {
+    inline Integer::Type getAdvanceAmount() const {
         return cast<Integer>(getOperand(1))->value();
     }
     inline void setLocalAdvanceIndex(const unsigned idx) {

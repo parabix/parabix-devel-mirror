@@ -8,7 +8,7 @@ namespace pablo {
 class Integer : public PabloAST {
     friend class SymbolGenerator;
 public:
-    typedef u_int64_t integer_t;
+    typedef u_int64_t Type;
     static inline bool classof(const PabloAST * e) {
         return e->getClassTypeId() == ClassTypeId::Integer;
     }
@@ -18,18 +18,18 @@ public:
     virtual ~Integer(){
 
     }
-    inline integer_t value() const {
+    inline Type value() const {
         return mValue;
     }
 protected:
-    Integer(const integer_t value) noexcept
+    Integer(const Type value) noexcept
     : PabloAST(ClassTypeId::Integer)
     , mValue(value)
     {
 
     }
 private:
-    const integer_t mValue;
+    const Type mValue;
 };
 
 }

@@ -60,7 +60,7 @@ public:
         return mPb->createAssign(std::move(prefix), expr);
     }
 
-    inline PabloAST * createAdvance(PabloAST * expr, const Integer::integer_t shiftAmount) {
+    inline PabloAST * createAdvance(PabloAST * expr, const Integer::Type shiftAmount) {
         if (shiftAmount == 0) {
             return expr;
         }
@@ -69,7 +69,7 @@ public:
 
     PabloAST * createAdvance(PabloAST * expr, PabloAST * shiftAmount);
 
-    inline PabloAST * createAdvance(PabloAST * expr, const Integer::integer_t shiftAmount, const std::string prefix) {
+    inline PabloAST * createAdvance(PabloAST * expr, const Integer::Type shiftAmount, const std::string prefix) {
         if (shiftAmount == 0) {
             return expr;
         }
@@ -178,7 +178,7 @@ public:
         return mPb->makeName(std::move(prefix), generated);
     }
 
-    inline Integer * getInteger(Integer::integer_t value) {
+    inline Integer * getInteger(Integer::Type value) {
         return mPb->getInteger(value);
     }
 
