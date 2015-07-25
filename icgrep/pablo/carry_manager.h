@@ -37,9 +37,6 @@ public:
     CarryManager(IRBuilder <> * b, VectorType * bitBlockType, ConstantAggregateZero * zero, Constant * one, IDISA::IDISA_Builder * idb)
     : mBuilder(b)
     , mBitBlockType(bitBlockType)
-#ifdef PACKING
-    , mPackType(b->getIntNTy(PACK_SIZE))
-#endif
     , mZeroInitializer(zero)
     , mOneInitializer(one)
     , iBuilder(idb)
@@ -47,7 +44,10 @@ public:
     , mCurrentScope(nullptr)
     , mCarryInfo(nullptr)
     , mCurrentFrameIndex(0)
-    , mCarryDataPtr(nullptr)
+    , mCarryPackBasePtr(nullptr)
+#ifdef PACKING
+    , mCarryBitBlockPtr(nullptr)
+#endif
     , mBlockNoPtr(nullptr)
     , mBlockNo(nullptr)
     , mTotalCarryDataBitBlocks(0)
@@ -98,9 +98,6 @@ public:
 private:
     IRBuilder <> * mBuilder;
     VectorType * mBitBlockType;
-#ifdef PACKING
-    Type * mPackType;
-#endif
     ConstantAggregateZero * mZeroInitializer;
     Constant * mOneInitializer;
     IDISA::IDISA_Builder * iBuilder;
@@ -108,7 +105,10 @@ private:
     PabloBlock * mCurrentScope;
     PabloBlockCarryData * mCarryInfo;
     unsigned mCurrentFrameIndex;
-    Value * mCarryDataPtr;
+    Value * mCarryPackBasePtr;
+#ifdef PACKING
+    Value * mCarryBitBlockPtr;
+#endif
     Value * mBlockNoPtr;
     Value * mBlockNo;
     unsigned mTotalCarryDataBitBlocks;
@@ -139,7 +139,7 @@ private:
     unsigned carryOpPosition(unsigned localIndex) ;
     unsigned advance1Position(unsigned localIndex);
     unsigned shortAdvancePosition(unsigned localIndex);
-    unsigned longAdvancePosition(unsigned localIndex);
+    unsigned longAdvanceBitBlockPosition(unsigned localIndex);
     unsigned summaryPosition();
     unsigned summaryBits();
 

@@ -32,7 +32,13 @@ namespace pablo {
 
 unsigned CarryManager::initialize(PabloBlock * pb, Value * carryPtr) {
     mPabloRoot = pb;
-    mCarryDataPtr = carryPtr;
+#ifdef PACKING
+    mCarryPackBasePtr = mBuilder->CreateBitCast(carryPtr, Type::getInt64PtrTy(mBuilder->getContext()));
+    mCarryBitBlockPtr = carryPtr;
+#else
+    mCarryPackBasePtr = carryPtr;
+#define mCarryBitBlockPtr mCarryPackBasePtr
+#endif
     unsigned scopeCount = doScopeCount(pb);
     mCarryInfoVector.resize(scopeCount);
     
@@ -40,7 +46,7 @@ unsigned CarryManager::initialize(PabloBlock * pb, Value * carryPtr) {
     
     mTotalCarryDataBitBlocks = (totalCarryDataBits + BLOCK_SIZE - 1)/BLOCK_SIZE; 
     // Carry Data area will have one extra bit block to store the block number.
-    mBlockNoPtr = mBuilder->CreateBitCast(mBuilder->CreateGEP(mCarryDataPtr, mBuilder->getInt64(mTotalCarryDataBitBlocks)), Type::getInt64PtrTy(mBuilder->getContext()));
+    mBlockNoPtr = mBuilder->CreateBitCast(mBuilder->CreateGEP(carryPtr, mBuilder->getInt64(mTotalCarryDataBitBlocks)), Type::getInt64PtrTy(mBuilder->getContext()));
     mBlockNo = mBuilder->CreateLoad(mBlockNoPtr);
     mCarryPackPtr.resize(mTotalCarryDataBitBlocks);
     mCarryInPack.resize(mTotalCarryDataBitBlocks);
@@ -166,8 +172,12 @@ unsigned CarryManager::shortAdvancePosition(unsigned localIndex) {
     return absPosition(mCarryInfo->shortAdvance.frameOffsetinBits, localIndex);
 }
 
-unsigned CarryManager::longAdvancePosition(unsigned localIndex) {
-    return absPosition(mCarryInfo->longAdvance.frameOffsetinBits, localIndex);
+unsigned CarryManager::longAdvanceBitBlockPosition(unsigned localIndex) {
+#ifdef PACKING
+    return (mCurrentFrameIndex + mCarryInfo->longAdvance.frameOffsetinBits) / BLOCK_SIZE + localIndex;
+#else
+    return mCurrentFrameIndex + (mCarryInfo->longAdvance.frameOffsetinBits / BLOCK_SIZE) + localIndex;
+#endif
 }
 
 unsigned CarryManager::summaryPosition() {
@@ -182,7 +192,7 @@ unsigned CarryManager::summaryBits() {
 
 Value * CarryManager::getCarryPack(unsigned packIndex) {
     if (mCarryInPack[packIndex] == nullptr) {
-        Value * packPtr = mBuilder->CreateGEP(mCarryDataPtr, mBuilder->getInt64(packIndex));
+        Value * packPtr = mBuilder->CreateGEP(mCarryPackBasePtr, mBuilder->getInt64(packIndex));
         mCarryPackPtr[packIndex] = packPtr;
         mCarryInPack[packIndex] = mBuilder->CreateAlignedLoad(packPtr, PACK_SIZE/8);
     }
@@ -357,11 +367,11 @@ Value * CarryManager::shortAdvanceCarryInCarryOut(int localIndex, int shift_amou
 
     
 Value * CarryManager::longAdvanceCarryInCarryOut(int localIndex, int shift_amount, Value * carry_out) {
-    unsigned carryDataIndex = longAdvancePosition(localIndex);
+    unsigned carryDataIndex = longAdvanceBitBlockPosition(localIndex);
     Value * advBaseIndex = mBuilder->getInt64(carryDataIndex);
     if (shift_amount <= BLOCK_SIZE) {
         // special case using a single buffer entry and the carry_out value.
-        Value * advanceDataPtr = mBuilder->CreateGEP(mCarryDataPtr, advBaseIndex);
+        Value * advanceDataPtr = mBuilder->CreateGEP(mCarryBitBlockPtr, advBaseIndex);
         Value * carry_block0 = mBuilder->CreateAlignedLoad(advanceDataPtr, BLOCK_SIZE/8);
         mBuilder->CreateAlignedStore(carry_out, advanceDataPtr, BLOCK_SIZE/8);
         /* Very special case - no combine */
@@ -377,19 +387,19 @@ Value * CarryManager::longAdvanceCarryInCarryOut(int localIndex, int shift_amoun
     Value * indexMask = mBuilder->getInt64(bufsize - 1);  // A mask to implement circular buffer indexing
     Value * loadIndex0 = mBuilder->CreateAdd(mBuilder->CreateAnd(mBuilder->CreateSub(mBlockNo, mBuilder->getInt64(advanceEntries)), indexMask), advBaseIndex);
     Value * storeIndex = mBuilder->CreateAdd(mBuilder->CreateAnd(mBlockNo, indexMask), advBaseIndex);
-    Value * carry_block0 = mBuilder->CreateAlignedLoad(mBuilder->CreateGEP(mCarryDataPtr, loadIndex0), BLOCK_SIZE/8);
+    Value * carry_block0 = mBuilder->CreateAlignedLoad(mBuilder->CreateGEP(mCarryBitBlockPtr, loadIndex0), BLOCK_SIZE/8);
     // If the long advance is an exact multiple of BLOCK_SIZE, we simply return the oldest 
     // block in the long advance carry data area.  
     if (block_shift == 0) {
-        mBuilder->CreateAlignedStore(carry_out, mBuilder->CreateGEP(mCarryDataPtr, storeIndex), BLOCK_SIZE/8);
+        mBuilder->CreateAlignedStore(carry_out, mBuilder->CreateGEP(mCarryBitBlockPtr, storeIndex), BLOCK_SIZE/8);
         return carry_block0;
     }
     // Otherwise we need to combine data from the two oldest blocks.
     Value * loadIndex1 = mBuilder->CreateAdd(mBuilder->CreateAnd(mBuilder->CreateSub(mBlockNo, mBuilder->getInt64(advanceEntries-1)), indexMask), advBaseIndex);
-    Value * carry_block1 = mBuilder->CreateAlignedLoad(mBuilder->CreateGEP(mCarryDataPtr, loadIndex1), BLOCK_SIZE/8);
+    Value * carry_block1 = mBuilder->CreateAlignedLoad(mBuilder->CreateGEP(mCarryBitBlockPtr, loadIndex1), BLOCK_SIZE/8);
     Value* block0_shr = mBuilder->CreateLShr(mBuilder->CreateBitCast(carry_block0, mBuilder->getIntNTy(BLOCK_SIZE)), BLOCK_SIZE - block_shift);
     Value* block1_shl = mBuilder->CreateShl(mBuilder->CreateBitCast(carry_block1, mBuilder->getIntNTy(BLOCK_SIZE)), block_shift);
-    mBuilder->CreateAlignedStore(carry_out, mBuilder->CreateGEP(mCarryDataPtr, storeIndex), BLOCK_SIZE/8);
+    mBuilder->CreateAlignedStore(carry_out, mBuilder->CreateGEP(mCarryBitBlockPtr, storeIndex), BLOCK_SIZE/8);
     return mBuilder->CreateBitCast(mBuilder->CreateOr(block1_shl, block0_shr), mBitBlockType);
 }
     
@@ -437,7 +447,11 @@ void CarryManager::generateCarryOutSummaryCodeIfNeeded() {
     Value * carry_summary = mZeroInitializer;
     
     if (mCarryInfo->blockHasLongAdvances()) { // Force if entry
+#ifdef PACKING
+        carry_summary = mBuilder->getInt64(-1);
+#else
         carry_summary = mOneInitializer;
+#endif
     }
     else {
         auto localCarryIndex = mCurrentFrameIndex + mCarryInfo->getLocalCarryPackIndex();
