@@ -41,13 +41,12 @@ public:
     static bool optimize(PabloFunction & function);
 protected:
     void initialize(const PabloFunction & function);
-    void characterize(const PabloBlock & block);
-    DdNode * characterize(const Statement * const stmt);
-    void eliminateLogicallyEquivalentStatements(PabloBlock & entry);
-    void eliminateLogicallyEquivalentStatements(PabloBlock & block, SubsitutionMap & parent);
+    void characterizeAndEliminateLogicallyEquivalentStatements(PabloFunction & function);
+    void characterizeAndEliminateLogicallyEquivalentStatements(PabloBlock & block, SubsitutionMap & parent);
+    DdNode * characterizeAndEliminateLogicallyEquivalentStatements(const Statement * const stmt);
     void simplifyAST(PabloFunction & function);
     void simplifyAST(PabloBlock & block);
-    void simplifyAST(PabloBlock & block, PabloAST * const stmt);
+    void simplifyAST(PabloAST * const value, PabloBlock & block, Statement * const insertionPoint);
 
 private:
     DdNode * Zero() const;
@@ -59,14 +58,13 @@ private:
     DdNode * Xor(DdNode * const x, DdNode * const y);
     DdNode * Not(DdNode * x) const;
     DdNode * Ite(DdNode * const x, DdNode * const y, DdNode * const z);
-    DdNode * NewVar(Statement * const stmt);
+    DdNode * NewVar();
     bool noSatisfyingAssignment(DdNode * const x);
     void shutdown();
 private:
     DdManager *             mManager;
     unsigned                mVariables;
     CharacterizationMap     mCharacterizationMap;
-    StatementVector         mStatementVector;
 };
 
 }
