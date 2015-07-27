@@ -34,8 +34,7 @@ class AutoMultiplexing {
     using AdvanceMap = boost::container::flat_map<const Statement *, unsigned>;
     using AdvanceVector = std::vector<std::tuple<Advance *, DdNode *, DdNode *>>;
     using VertexVector = std::vector<ConstraintVertex>;
-    using RecentCharacterizations = std::vector<std::pair<const PabloAST *, DdNode *>>;
-
+    using RecentCharacterizations = std::vector<std::pair<const PabloAST *, DdNode *>>;   
 public:
     static bool optimize(PabloFunction & function);
 protected:
@@ -48,7 +47,8 @@ protected:
     void addCandidateSet(const VertexVector & S);
     void selectMultiplexSets(RNG &);
     void applySubsetConstraints();
-    void multiplexSelectedIndependentSets() const;
+    std::vector<std::vector<PabloAST *>> multiplexSelectedIndependentSets() const;
+    void reduce(const std::vector<std::vector<PabloAST *>> & sets) const;
     void topologicalSort(PabloBlock & entry) const;
     inline AutoMultiplexing()
     : mVariables(0)
