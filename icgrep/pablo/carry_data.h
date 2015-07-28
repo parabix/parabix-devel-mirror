@@ -11,6 +11,8 @@
 #include <iostream>
 #include <ostream>
 #include <llvm/Support/raw_os_ostream.h>
+#include <llvm/IR/Module.h>
+
 /* 
  * Carry Data system.
  * 
@@ -46,12 +48,14 @@ static unsigned fullOrPartialBlocks(unsigned bits, unsigned block_size) {
     return alignCeiling(bits, block_size) / block_size;
 }
 
+#ifdef PACKING
 static void EnsurePackHasSpace(unsigned & packedTotalBits, unsigned addedBits) {
     unsigned bitsInCurrentPack = packedTotalBits % PACK_SIZE;
     if ((bitsInCurrentPack > 0) && (bitsInCurrentPack + addedBits > PACK_SIZE)) {
         packedTotalBits = alignCeiling(packedTotalBits, PACK_SIZE);
     }
 }
+#endif
 
 
 namespace pablo {
@@ -139,6 +143,8 @@ protected:
     struct {unsigned frameOffsetinBits; unsigned allocatedBits;} summary;
 
     unsigned scopeCarryDataBits;
+    
+    llvm::Value * ifEntryPack;
     
 };
 

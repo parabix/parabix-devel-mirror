@@ -186,6 +186,9 @@ std::pair<llvm::Function *, size_t> PabloCompiler::compile(PabloFunction & funct
     
     compileBlock(mainScope);
     
+    mCarryManager->leaveScope();
+    
+    
     mCarryManager->generateBlockNoIncrement();
 
     if (DumpTrace || TraceNext) {
@@ -422,10 +425,8 @@ void PabloCompiler::compileIf(const If * ifStatement) {
     // Entry processing is complete, now handle the body of the if.
     mBuilder->SetInsertPoint(ifBodyBlock);
     
-    
-    ++mIfDepth;
+    mCarryManager->initializeCarryDataAtIfEntry();
     compileBlock(ifBody);
-    --mIfDepth;
     if (mCarryManager->blockHasCarries()) {
         mCarryManager->generateCarryOutSummaryCodeIfNeeded();
     }
@@ -443,7 +444,8 @@ void PabloCompiler::compileIf(const If * ifStatement) {
         mMarkerMap[assign] = phi;
     }
     // Create the phi Node for the summary variable, if needed.
-    mCarryManager->addSummaryPhiIfNeeded(ifEntryBlock, ifBodyFinalBlock);
+    mCarryManager->buildCarryDataPhisAfterIfBody(ifEntryBlock, ifBodyFinalBlock);
+    //mCarryManager->addSummaryPhiIfNeeded(ifEntryBlock, ifBodyFinalBlock);
     mCarryManager->leaveScope();
 }
 

@@ -78,9 +78,13 @@ public:
    
     bool blockHasCarries();
     
+    void initializeCarryDataAtIfEntry();
+    
     Value * getCarrySummaryExpr();
     
     void generateCarryOutSummaryCodeIfNeeded();
+    
+    void buildCarryDataPhisAfterIfBody(BasicBlock * ifEntryBlock, BasicBlock * ifBodyFinalBlock);
     
     void addSummaryPhiIfNeeded(BasicBlock * ifEntryBlock, BasicBlock * ifBodyFinalBlock);
     
@@ -134,7 +138,7 @@ private:
     
     Value * getCarryRange(unsigned carryBit_lo, unsigned carryRangeSize);     
     Value * getCarryBit(unsigned carryBitPos);
-    void setCarryBits(unsigned carryBit_lo, Value * bits);
+    void setCarryBits(unsigned carryBit_lo, unsigned carryRangeSize, Value * bits);
 
     unsigned absPosition(unsigned frameOffsetinBits, unsigned relPos);
     unsigned carryOpPosition(unsigned localIndex) ;
