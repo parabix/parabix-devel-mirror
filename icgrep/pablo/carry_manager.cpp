@@ -251,6 +251,7 @@ Value * CarryManager::getCarryPack(unsigned packIndex) {
 }
 
 void CarryManager::storeCarryPack(unsigned packIndex) {
+    //std::cerr << "storeCarryPack , pack = " << packIndex << std::endl;
     mBuilder->CreateAlignedStore(mCarryOutPack[packIndex], mCarryPackPtr[packIndex], PACK_SIZE/8);
 }
 
@@ -288,12 +289,14 @@ void CarryManager::setCarryBits(unsigned carryBit_lo, unsigned carryRangeSize, V
     unsigned packIndex = carryBit_lo / PACK_SIZE;
     unsigned carryOffset = carryBit_lo % PACK_SIZE;
     if (carryOffset > 0) {
-        bits = mBuilder->CreateLShr(bits, mBuilder->getInt64(carryOffset));
+        bits = mBuilder->CreateShl(bits, mBuilder->getInt64(carryOffset));
     }
     if (mCarryOutPack[packIndex] == nullptr) {
         mCarryOutPack[packIndex] = bits;
+        //std::cerr << "setCarryBits/initial , pack = " << packIndex << ", offset = " << carryOffset << ", count = " << carryRangeSize << std::endl;
     }
     else {
+        //std::cerr << "setCarryBits/combine , pack = " << packIndex << ", offset = " << carryOffset << ", count = " << carryRangeSize << std::endl;
         mCarryOutPack[packIndex] = mBuilder->CreateOr(mCarryOutPack[packIndex], bits);
     }
 }
@@ -309,7 +312,7 @@ Value * CarryManager::getCarryOpCarryIn(int localIndex) {
     return getCarryPack(posn);
 #endif
 }
-    
+
     
 void CarryManager::setCarryOpCarryOut(unsigned localIndex, Value * carry_out_strm) {
     unsigned posn = carryOpPosition(localIndex);
