@@ -261,7 +261,7 @@ Value * CarryManager::getCarryRange(unsigned carryBit_lo, unsigned carryRangeSiz
     unsigned carryOffset = carryBit_lo % PACK_SIZE;
     
     Value * carryItem = getCarryPack(packIndex);
-    if (carryRangeSize == 64) {
+    if (carryRangeSize == PACK_SIZE) {
         assert(carryOffset == 0);
         return carryItem;
     }
@@ -509,7 +509,7 @@ void CarryManager::buildCarryDataPhisAfterIfBody(BasicBlock * ifEntryBlock, Basi
         mCarryOutPack[ifPackIndex] = ifPack_phi;
     }
 #endif
-    if (mCarryInfo->explicitSummaryRequired()) {
+    if (mCarryInfo->getIfDepth() > 1) {
         const unsigned summaryPackIndex = summaryPosition();
         PHINode * summary_phi = mBuilder->CreatePHI(mCarryPackType, 2, "summary");
         summary_phi->addIncoming(mZeroInitializer, ifEntryBlock);
