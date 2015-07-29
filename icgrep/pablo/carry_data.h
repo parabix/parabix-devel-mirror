@@ -73,7 +73,7 @@ public:
                            addWithCarry({0, 0}),
                            nested({0, 0, 0}),
                            summary({0, 0}),
-                           scopeCarryDataBits(0)
+                           scopeCarryDataSize(0)
     {enumerateLocal();}
         
     friend class CarryManager;
@@ -82,7 +82,7 @@ public:
     void dumpCarryData(llvm::raw_ostream & strm);
     
     unsigned getFrameIndex()  const {
-        return framePosition/BLOCK_SIZE;
+        return framePosition;
     }
     
     void setFramePosition(unsigned p) {
@@ -115,15 +115,39 @@ public:
     
     bool blockHasLongAdvances() const { return longAdvance.entries > 0;}
     
-    unsigned getLocalCarryPackIndex () { return shortAdvance.frameOffsetinBits / PACK_SIZE; }
+    unsigned getLocalCarryPackIndex () { 
+#ifdef PACKING
+        return shortAdvance.frameOffset / PACK_SIZE;
+#else
+        return shortAdvance.frameOffset;
+#endif
+    }
 
-    unsigned getLocalCarryPackCount () { return fullOrPartialBlocks(nested.frameOffsetinBits - shortAdvance.frameOffsetinBits, PACK_SIZE); }
-
-    unsigned getScopeCarryPackCount () { return fullOrPartialBlocks(scopeCarryDataBits, PACK_SIZE); }
-   
-    bool blockHasCarries() const { return scopeCarryDataBits > 0;}
+    unsigned getLocalCarryPackCount () { 
+#ifdef PACKING
+        return fullOrPartialBlocks(nested.frameOffset, PACK_SIZE) - shortAdvance.frameOffset / PACK_SIZE;
+#else
+        return nested.frameOffset - shortAdvance.frameOffset;
+#endif
+    }
     
-    bool explicitSummaryRequired() const { return (ifDepth > 0) && (scopeCarryDataBits > PACK_SIZE);}
+    unsigned getScopeCarryPackCount () { 
+#ifdef PACKING
+        return fullOrPartialBlocks(scopeCarryDataSize, PACK_SIZE);
+#else
+        return scopeCarryDataSize;
+#endif
+    }
+    
+    bool blockHasCarries() const { return scopeCarryDataSize > 0;}
+    
+    bool explicitSummaryRequired() const { 
+#ifdef PACKING
+        return (ifDepth > 0) && (scopeCarryDataSize > PACK_SIZE);
+#else
+        return (ifDepth > 0) && (scopeCarryDataSize > 1);
+#endif
+    }
     
 protected:
     
@@ -135,14 +159,14 @@ protected:
     unsigned whileDepth;
     unsigned maxNestingDepth;    
     
-    struct {unsigned frameOffsetinBits; unsigned entries; unsigned allocatedBitBlocks;} longAdvance;
-    struct {unsigned frameOffsetinBits; unsigned entries; unsigned allocatedBits;} shortAdvance;
-    struct {unsigned frameOffsetinBits; unsigned entries;} advance1;
-    struct {unsigned frameOffsetinBits; unsigned entries;} addWithCarry;
-    struct {unsigned frameOffsetinBits; unsigned entries; unsigned allocatedBits;} nested;
-    struct {unsigned frameOffsetinBits; unsigned allocatedBits;} summary;
+    struct {unsigned frameOffset; unsigned entries; unsigned allocatedBitBlocks;} longAdvance;
+    struct {unsigned frameOffset; unsigned entries; unsigned allocatedBits;} shortAdvance;
+    struct {unsigned frameOffset; unsigned entries;} advance1;
+    struct {unsigned frameOffset; unsigned entries;} addWithCarry;
+    struct {unsigned frameOffset; unsigned entries; unsigned allocatedBits;} nested;
+    struct {unsigned frameOffset; unsigned allocatedBits;} summary;
 
-    unsigned scopeCarryDataBits;
+    unsigned scopeCarryDataSize;
     
     llvm::Value * ifEntryPack;
     

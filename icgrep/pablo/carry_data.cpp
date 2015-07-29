@@ -48,19 +48,19 @@ void PabloBlockCarryData::enumerateLocal() {
             ++addWithCarry.entries;
         }
     }
-    longAdvance.frameOffsetinBits = 0;
+    longAdvance.frameOffset = 0;
 #ifdef PACKING
-    shortAdvance.frameOffsetinBits = longAdvance.frameOffsetinBits + longAdvance.allocatedBitBlocks * BLOCK_SIZE;
-    addWithCarry.frameOffsetinBits = shortAdvance.frameOffsetinBits + shortAdvance.allocatedBits;
-    EnsurePackHasSpace(addWithCarry.frameOffsetinBits, addWithCarry.entries);
-    advance1.frameOffsetinBits = addWithCarry.frameOffsetinBits + addWithCarry.entries;
-    EnsurePackHasSpace(advance1.frameOffsetinBits, advance1.entries);
-    nested.frameOffsetinBits = advance1.frameOffsetinBits + advance1.entries;
+    shortAdvance.frameOffset = longAdvance.frameOffset + longAdvance.allocatedBitBlocks * BLOCK_SIZE;
+    addWithCarry.frameOffset = shortAdvance.frameOffset + shortAdvance.allocatedBits;
+    EnsurePackHasSpace(addWithCarry.frameOffset, addWithCarry.entries);
+    advance1.frameOffset = addWithCarry.frameOffset + addWithCarry.entries;
+    EnsurePackHasSpace(advance1.frameOffset, advance1.entries);
+    nested.frameOffset = advance1.frameOffset + advance1.entries;
 #else
-    shortAdvance.frameOffsetinBits = longAdvance.frameOffsetinBits + longAdvance.allocatedBitBlocks * BLOCK_SIZE;
-    addWithCarry.frameOffsetinBits = shortAdvance.frameOffsetinBits + shortAdvance.entries * BLOCK_SIZE;
-    advance1.frameOffsetinBits = addWithCarry.frameOffsetinBits + addWithCarry.entries * BLOCK_SIZE;
-    nested.frameOffsetinBits = advance1.frameOffsetinBits + advance1.entries * BLOCK_SIZE;
+    shortAdvance.frameOffset = longAdvance.frameOffset + longAdvance.allocatedBitBlocks;
+    addWithCarry.frameOffset = shortAdvance.frameOffset + shortAdvance.entries;
+    advance1.frameOffset = addWithCarry.frameOffset + addWithCarry.entries;
+    nested.frameOffset = advance1.frameOffset + advance1.entries;
 #endif
 }
         
@@ -70,19 +70,19 @@ void PabloBlockCarryData::dumpCarryData(llvm::raw_ostream & strm) {
     strm << "scope index = " << theScope->getScopeIndex();
     strm << " framePosition: " << framePosition << ", ifDepth: " << ifDepth << ", whileDepth:" << whileDepth << ", maxNestingDepth: " << maxNestingDepth << "\n";
     for (int i = 0; i < totalDepth; i++) strm << "  ";
-    strm << "longAdvance: offset = " << longAdvance.frameOffsetinBits << ", entries = " << longAdvance.entries << "\n";
+    strm << "longAdvance: offset = " << longAdvance.frameOffset << ", entries = " << longAdvance.entries << "\n";
     for (int i = 0; i < totalDepth; i++) strm << "  ";
-    strm << "shortAdvance: offset = " << shortAdvance.frameOffsetinBits << ", entries = " << shortAdvance.entries << "\n";
+    strm << "shortAdvance: offset = " << shortAdvance.frameOffset << ", entries = " << shortAdvance.entries << "\n";
     for (int i = 0; i < totalDepth; i++) strm << "  ";
-    strm << "advance1: offset = " << advance1.frameOffsetinBits << ", entries = " << advance1.entries << "\n";
+    strm << "advance1: offset = " << advance1.frameOffset << ", entries = " << advance1.entries << "\n";
     for (int i = 0; i < totalDepth; i++) strm << "  ";
-    strm << "addWithCarry: offset = " << addWithCarry.frameOffsetinBits << ", entries = " << addWithCarry.entries << "\n";
+    strm << "addWithCarry: offset = " << addWithCarry.frameOffset << ", entries = " << addWithCarry.entries << "\n";
     for (int i = 0; i < totalDepth; i++) strm << "  ";
-    strm << "nested: offset = " << nested.frameOffsetinBits << ", allocatedBits = " << nested.allocatedBits << "\n";
+    strm << "nested: offset = " << nested.frameOffset << ", allocatedBits = " << nested.allocatedBits << "\n";
     for (int i = 0; i < totalDepth; i++) strm << "  ";
-    strm << "summary: offset = " << summary.frameOffsetinBits << ", allocatedBits = " << summary.allocatedBits << "\n";
+    strm << "summary: offset = " << summary.frameOffset << "\n";
     for (int i = 0; i < totalDepth; i++) strm << "  ";
-    strm << "scopeCarryDataBits = " << scopeCarryDataBits  << "\n";
+    strm << "scopeCarryDataSize = " << scopeCarryDataSize  << "\n";
     strm.flush();
     
 }

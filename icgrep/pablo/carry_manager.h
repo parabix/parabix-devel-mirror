@@ -137,6 +137,7 @@ private:
     void storeCarryPack(unsigned packIndex);
     
     Value * getCarryRange(unsigned carryBit_lo, unsigned carryRangeSize);     
+    Value * getCarryBits(unsigned carryBitPos, unsigned bits);
     Value * getCarryBit(unsigned carryBitPos);
     void setCarryBits(unsigned carryBit_lo, unsigned carryRangeSize, Value * bits);
 
