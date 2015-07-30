@@ -255,9 +255,10 @@ void CarryManager::storeCarryPack(unsigned packIndex) {
     mBuilder->CreateAlignedStore(mCarryOutPack[packIndex], mCarryPackPtr[packIndex], PACK_SIZE/8);
 }
 
+    
 /* maskSelectBitRange selects the bits of a pack from lo_bit through
- lo_bit + bitCount - 1, setting all other bits to zero.  */
-
+   lo_bit + bitCount - 1, setting all other bits to zero.  */
+    
 Value * CarryManager::maskSelectBitRange(Value * pack, unsigned lo_bit, unsigned bitCount) {
     if (bitCount == PACK_SIZE) {
         assert(lo_bit == 0);
@@ -266,7 +267,7 @@ Value * CarryManager::maskSelectBitRange(Value * pack, unsigned lo_bit, unsigned
     unsigned mask = (1 << bitCount) - 1;
     return mBuilder->CreateAnd(pack, mBuilder->getInt64(mask << lo_bit));
 }
-
+    
 Value * CarryManager::getCarryInBits(unsigned carryBitPos, unsigned carryBitCount) {
     unsigned packIndex = carryBitPos / PACK_SIZE;
     unsigned packOffset = carryBitPos % PACK_SIZE;
@@ -276,7 +277,6 @@ Value * CarryManager::getCarryInBits(unsigned carryBitPos, unsigned carryBitCoun
 }
 
 void CarryManager::extractAndSaveCarryOutBits(Value * bitblock, unsigned carryBit_pos, unsigned carryBitCount) {
-    
     unsigned packIndex = carryBit_pos / PACK_SIZE;
     unsigned packOffset = carryBit_pos % PACK_SIZE;
     unsigned rshift = PACK_SIZE - packOffset - carryBitCount;
@@ -300,25 +300,6 @@ Value * CarryManager::pack2bitblock(Value * pack) {
     return mBuilder->CreateBitCast(mBuilder->CreateZExt(pack, mBuilder->getIntNTy(BLOCK_SIZE)), mBitBlockType);
 }
     
-    /*  NOTE: In the following the mCarryOutPack is an accumulator.
-    It must be created at the appropriate outer level.  */
-void CarryManager::setCarryBits(unsigned carryBit_lo, unsigned carryRangeSize, Value * bits) {
-    
-    unsigned packIndex = carryBit_lo / PACK_SIZE;
-    unsigned carryOffset = carryBit_lo % PACK_SIZE;
-    if (carryOffset > 0) {
-        bits = mBuilder->CreateShl(bits, mBuilder->getInt64(carryOffset));
-    }
-    if (mCarryOutPack[packIndex] == nullptr) {
-        mCarryOutPack[packIndex] = bits;
-        //std::cerr << "setCarryBits/initial , pack = " << packIndex << ", offset = " << carryOffset << ", count = " << carryRangeSize << std::endl;
-    }
-    else {
-        //std::cerr << "setCarryBits/combine , pack = " << packIndex << ", offset = " << carryOffset << ", count = " << carryRangeSize << std::endl;
-        mCarryOutPack[packIndex] = mBuilder->CreateOr(mCarryOutPack[packIndex], bits);
-    }
-}
-    
     
 /* Methods for getting and setting individual carry values. */
     
@@ -335,18 +316,43 @@ Value * CarryManager::getCarryOpCarryIn(int localIndex) {
 void CarryManager::setCarryOpCarryOut(unsigned localIndex, Value * carry_out_strm) {
     unsigned posn = carryOpPosition(localIndex);
 #ifdef PACKING
-    Value * field = iBuilder->mvmd_extract(PACK_SIZE, carry_out_strm, 0);
-    //setCarryBits(posn, mBuilder->CreateLShr(field, mBuilder->getInt64(PACK_SIZE - 1)));
-    setCarryBits(posn, 1, field);
+    extractAndSaveCarryOutBits(carry_out_strm, posn, 1);
 #else
-    mCarryOutPack[posn] = carry_out_strm;
+    Value * carry_bit = mBuilder->CreateLShr(mBuilder->CreateBitCast(carry_out_strm, mBuilder->getIntNTy(BLOCK_SIZE)), 127);
+    mCarryOutPack[posn] = mBuilder->CreateBitCast(carry_bit, mBitBlockType);
     if (mCarryInfo->getWhileDepth() == 0) {
         storeCarryPack(posn);
     }
 #endif
 }
 
-    
+Value* CarryManager::genShiftLeft64(Value* e) {
+    Value* i128_val = mBuilder->CreateBitCast(e, mBuilder->getIntNTy(BLOCK_SIZE));
+    return mBuilder->CreateBitCast(mBuilder->CreateShl(i128_val, 64), mBitBlockType);
+}
+
+Value * CarryManager::addCarryInCarryOut(int localIndex, Value* e1, Value* e2) {
+    Value * carryq_value = getCarryOpCarryIn(localIndex);
+    #if (BLOCK_SIZE == 128)
+    //calculate carry through logical ops
+    Value* carrygen = mBuilder->CreateAnd(e1, e2, "carrygen");
+    Value* carryprop = mBuilder->CreateOr(e1, e2, "carryprop");
+    Value* digitsum = mBuilder->CreateAdd(e1, e2, "digitsum");
+    Value* partial = mBuilder->CreateAdd(digitsum, carryq_value, "partial");
+    Value* digitcarry = mBuilder->CreateOr(carrygen, mBuilder->CreateAnd(carryprop, mBuilder->CreateNot(partial)));
+    Value* mid_carry_in = genShiftLeft64(mBuilder->CreateLShr(digitcarry, 63));
+    Value* sum = mBuilder->CreateAdd(partial, mBuilder->CreateBitCast(mid_carry_in, mBitBlockType), "sum");
+    Value* carry_out_strm = mBuilder->CreateOr(carrygen, mBuilder->CreateAnd(carryprop, mBuilder->CreateNot(sum)));
+
+    #else
+    //BLOCK_SIZE == 256, there is no other implementation
+    static_assert(false, "Add with carry for 256-bit bitblock requires USE_UADD_OVERFLOW");
+    #endif         
+    setCarryOpCarryOut(localIndex, carry_out_strm);
+    return sum;
+}
+
+
 Value * CarryManager::advanceCarryInCarryOut(int localIndex, int shift_amount, Value * strm) {
     if (shift_amount == 1) {
         return unitAdvanceCarryInCarryOut(localIndex, strm);

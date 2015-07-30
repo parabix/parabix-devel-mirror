@@ -364,28 +364,28 @@ void PabloCompiler::compileBlock(PabloBlock & block) {
     mPabloBlock = block.getParent();
 }
 
-Value * PabloCompiler::genBitTest2(Value * e1, Value * e2) {
-    Type * t1 = e1->getType();
-    Type * t2 = e2->getType();
-    if (t1 == mBitBlockType) {
-        if (t2 == mBitBlockType) {
-            return iBuilder.bitblock_any(mBuilder->CreateOr(e1, e2));
+    Value * PabloCompiler::genBitTest2(Value * e1, Value * e2) {
+        Type * t1 = e1->getType();
+        Type * t2 = e2->getType();
+        if (t1 == mBitBlockType) {
+            if (t2 == mBitBlockType) {
+                return iBuilder.bitblock_any(mBuilder->CreateOr(e1, e2));
+            }
+            else {
+                Value * m1 = mBuilder->CreateZExt(iBuilder.hsimd_signmask(16, e1), t2);
+                return mBuilder->CreateICmpNE(mBuilder->CreateOr(m1, e2), ConstantInt::get(t2, 0));
+            }
+        }
+        else if (t2 == mBitBlockType) {
+            Value * m2 = mBuilder->CreateZExt(iBuilder.hsimd_signmask(16, e2), t1);
+            return mBuilder->CreateICmpNE(mBuilder->CreateOr(e1, m2), ConstantInt::get(t1, 0));
         }
         else {
-            Value * m1 = mBuilder->CreateZExt(iBuilder.hsimd_signmask(16, e1), t2);
-            return mBuilder->CreateICmpNE(mBuilder->CreateOr(m1, e2), ConstantInt::get(t2, 0));
+            return mBuilder->CreateICmpNE(mBuilder->CreateOr(e1, e2), ConstantInt::get(t1, 0));
         }
     }
-    else if (t2 == mBitBlockType) {
-        Value * m2 = mBuilder->CreateZExt(iBuilder.hsimd_signmask(16, e2), t1);
-        return mBuilder->CreateICmpNE(mBuilder->CreateOr(e1, m2), ConstantInt::get(t1, 0));
-    }
-    else {
-        return mBuilder->CreateICmpNE(mBuilder->CreateOr(e1, e2), ConstantInt::get(t1, 0));
-    }
-}
-
-void PabloCompiler::compileIf(const If * ifStatement) {        
+    
+    void PabloCompiler::compileIf(const If * ifStatement) {        
     //
     //  The If-ElseZero stmt:
     //  if <predicate:expr> then <body:stmt>* elsezero <defined:var>* endif
@@ -445,7 +445,6 @@ void PabloCompiler::compileIf(const If * ifStatement) {
     }
     // Create the phi Node for the summary variable, if needed.
     mCarryManager->buildCarryDataPhisAfterIfBody(ifEntryBlock, ifBodyFinalBlock);
-    //mCarryManager->addSummaryPhiIfNeeded(ifEntryBlock, ifBodyFinalBlock);
     mCarryManager->leaveScope();
 }
 
@@ -609,13 +608,15 @@ void PabloCompiler::compileStatement(const Statement * stmt) {
         Value * cc = compileExpression(mstar->getCharClass());
         Value * marker_and_cc = mBuilder->CreateAnd(marker, cc);
         unsigned carry_index = mstar->getLocalCarryIndex();
-        expr = mBuilder->CreateOr(mBuilder->CreateXor(genAddWithCarry(marker_and_cc, cc, carry_index), cc), marker, "matchstar");
+        Value * sum = mCarryManager->addCarryInCarryOut(carry_index, marker_and_cc, cc);
+        expr = mBuilder->CreateOr(mBuilder->CreateXor(sum, cc), marker, "matchstar");
     }
     else if (const ScanThru * sthru = dyn_cast<ScanThru>(stmt)) {
         Value * marker_expr = compileExpression(sthru->getScanFrom());
         Value * cc_expr = compileExpression(sthru->getScanThru());
         unsigned carry_index = sthru->getLocalCarryIndex();
-        expr = mBuilder->CreateAnd(genAddWithCarry(marker_expr, cc_expr, carry_index), genNot(cc_expr), "scanthru");
+        Value * sum = mCarryManager->addCarryInCarryOut(carry_index, marker_expr, cc_expr);
+        expr = mBuilder->CreateAnd(sum, genNot(cc_expr), "scanthru");
     }
     else {
         llvm::raw_os_ostream cerr(std::cerr);

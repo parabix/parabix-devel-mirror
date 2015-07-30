@@ -140,9 +140,10 @@ private:
     
     Value * maskSelectBitRange(Value * pack, unsigned lo_bit, unsigned bitCount);     
     Value * getCarryInBits(unsigned carryBitPos, unsigned bits);
-    void setCarryBits(unsigned carryBit_lo, unsigned carryRangeSize, Value * bits);
     void extractAndSaveCarryOutBits(Value * strm, unsigned carryBit_lo, unsigned carryBitCount);
     Value * pack2bitblock(Value * pack);
+    Value* genShiftLeft64(Value* e);
+
 
     unsigned absPosition(unsigned frameOffsetinBits, unsigned relPos);
     unsigned carryOpPosition(unsigned localIndex) ;
