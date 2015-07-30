@@ -264,8 +264,8 @@ Value * CarryManager::maskSelectBitRange(Value * pack, unsigned lo_bit, unsigned
         assert(lo_bit == 0);
         return pack;
     }
-    unsigned mask = (1 << bitCount) - 1;
-    return mBuilder->CreateAnd(pack, mBuilder->getInt64(mask << lo_bit));
+    uint64_t mask = ((((uint64_t) 1) << bitCount) - 1) << lo_bit;
+    return mBuilder->CreateAnd(pack, mBuilder->getInt64(mask));
 }
     
 Value * CarryManager::getCarryInBits(unsigned carryBitPos, unsigned carryBitCount) {
@@ -280,13 +280,15 @@ void CarryManager::extractAndSaveCarryOutBits(Value * bitblock, unsigned carryBi
     unsigned packIndex = carryBit_pos / PACK_SIZE;
     unsigned packOffset = carryBit_pos % PACK_SIZE;
     unsigned rshift = PACK_SIZE - packOffset - carryBitCount;
+    uint64_t mask = ((((uint64_t) 1) << carryBitCount) - 1)  << packOffset;
+    //std::cerr << "extractAndSaveCarryOutBits: packIndex =" << packIndex << ", packOffset = " << packOffset << ", mask = " << mask << std::endl;
     Value * field = iBuilder->mvmd_extract(PACK_SIZE, bitblock, BLOCK_SIZE/PACK_SIZE - 1);
     //Value * field = maskSelectBitRange(field, PACK_SIZE - carryBitCount, carryBitCount);
     if (rshift != 0) {
         field = mBuilder->CreateLShr(field, mBuilder->getInt64(rshift));
     }
     if (packOffset != 0) {
-        field = mBuilder->CreateAnd(field, mBuilder->getInt64(((1<<carryBitCount) - 1) << packOffset));
+        field = mBuilder->CreateAnd(field, mBuilder->getInt64(mask));
     }
     if (mCarryOutPack[packIndex] == nullptr) {
         mCarryOutPack[packIndex] = field;
@@ -400,6 +402,7 @@ Value * CarryManager::shortAdvanceCarryInCarryOut(int localIndex, int shift_amou
     unsigned posn = shortAdvancePosition(localIndex);
 #ifdef PACKING
     extractAndSaveCarryOutBits(strm, posn, shift_amount);
+    //std::cerr << "shortAdvanceCarryInCarryOut: posn = " << posn << ", shift_amount = " << shift_amount << std::endl;
     Value* carry_longint = mBuilder->CreateZExt(getCarryInBits(posn, shift_amount), mBuilder->getIntNTy(BLOCK_SIZE));
     Value* strm_longint = mBuilder->CreateBitCast(strm, mBuilder->getIntNTy(BLOCK_SIZE));
     Value* adv_longint = mBuilder->CreateOr(mBuilder->CreateShl(strm_longint, shift_amount), carry_longint);
