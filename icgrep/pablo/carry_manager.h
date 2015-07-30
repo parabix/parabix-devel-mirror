@@ -71,6 +71,8 @@ public:
     
     Value * getCarryOpCarryIn(int localIndex);
     void setCarryOpCarryOut(unsigned idx, Value * carry_out);
+    Value * addCarryInCarryOut(int localIndex, Value* e1, Value* e2);
+
 
     Value * advanceCarryInCarryOut(int localIndex, int shift_amount, Value * strm);
  
@@ -136,10 +138,11 @@ private:
     Value * getCarryPack(unsigned packIndex);
     void storeCarryPack(unsigned packIndex);
     
-    Value * getCarryRange(unsigned carryBit_lo, unsigned carryRangeSize);     
-    Value * getCarryBits(unsigned carryBitPos, unsigned bits);
-    Value * getCarryBit(unsigned carryBitPos);
+    Value * maskSelectBitRange(Value * pack, unsigned lo_bit, unsigned bitCount);     
+    Value * getCarryInBits(unsigned carryBitPos, unsigned bits);
     void setCarryBits(unsigned carryBit_lo, unsigned carryRangeSize, Value * bits);
+    void extractAndSaveCarryOutBits(Value * strm, unsigned carryBit_lo, unsigned carryBitCount);
+    Value * pack2bitblock(Value * pack);
 
     unsigned absPosition(unsigned frameOffsetinBits, unsigned relPos);
     unsigned carryOpPosition(unsigned localIndex) ;

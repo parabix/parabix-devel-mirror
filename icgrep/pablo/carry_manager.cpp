@@ -255,34 +255,52 @@ void CarryManager::storeCarryPack(unsigned packIndex) {
     mBuilder->CreateAlignedStore(mCarryOutPack[packIndex], mCarryPackPtr[packIndex], PACK_SIZE/8);
 }
 
-Value * CarryManager::getCarryRange(unsigned carryBit_lo, unsigned carryRangeSize) {
+/* maskSelectBitRange selects the bits of a pack from lo_bit through
+ lo_bit + bitCount - 1, setting all other bits to zero.  */
 
-    unsigned packIndex = carryBit_lo / PACK_SIZE;
-    unsigned carryOffset = carryBit_lo % PACK_SIZE;
-    
-    Value * carryItem = getCarryPack(packIndex);
-    if (carryRangeSize == PACK_SIZE) {
-        assert(carryOffset == 0);
-        return carryItem;
+Value * CarryManager::maskSelectBitRange(Value * pack, unsigned lo_bit, unsigned bitCount) {
+    if (bitCount == PACK_SIZE) {
+        assert(lo_bit == 0);
+        return pack;
     }
-    unsigned mask = (1 << carryRangeSize) - 1;
-    return mBuilder->CreateAnd(carryItem, mBuilder->getInt64(mask << carryOffset));
+    unsigned mask = (1 << bitCount) - 1;
+    return mBuilder->CreateAnd(pack, mBuilder->getInt64(mask << lo_bit));
+}
+
+Value * CarryManager::getCarryInBits(unsigned carryBitPos, unsigned carryBitCount) {
+    unsigned packIndex = carryBitPos / PACK_SIZE;
+    unsigned packOffset = carryBitPos % PACK_SIZE;
+    Value * selected = maskSelectBitRange(getCarryPack(packIndex), packOffset, carryBitCount);
+    if (packOffset == 0) return selected;
+    return mBuilder->CreateLShr(selected, packOffset);
+}
+
+void CarryManager::extractAndSaveCarryOutBits(Value * bitblock, unsigned carryBit_pos, unsigned carryBitCount) {
+    
+    unsigned packIndex = carryBit_pos / PACK_SIZE;
+    unsigned packOffset = carryBit_pos % PACK_SIZE;
+    unsigned rshift = PACK_SIZE - packOffset - carryBitCount;
+    Value * field = iBuilder->mvmd_extract(PACK_SIZE, bitblock, BLOCK_SIZE/PACK_SIZE - 1);
+    //Value * field = maskSelectBitRange(field, PACK_SIZE - carryBitCount, carryBitCount);
+    if (rshift != 0) {
+        field = mBuilder->CreateLShr(field, mBuilder->getInt64(rshift));
+    }
+    if (packOffset != 0) {
+        field = mBuilder->CreateAnd(field, mBuilder->getInt64(((1<<carryBitCount) - 1) << packOffset));
+    }
+    if (mCarryOutPack[packIndex] == nullptr) {
+        mCarryOutPack[packIndex] = field;
+    }
+    else {
+        mCarryOutPack[packIndex] = mBuilder->CreateOr(mCarryOutPack[packIndex], field);
+    }
+}
+
+Value * CarryManager::pack2bitblock(Value * pack) {
+    return mBuilder->CreateBitCast(mBuilder->CreateZExt(pack, mBuilder->getIntNTy(BLOCK_SIZE)), mBitBlockType);
 }
     
-Value * CarryManager::getCarryBits(unsigned carryBitPos, unsigned carryBitCount) {
-    
-    unsigned carryOffset = carryBitPos % PACK_SIZE;
-
-    Value * carryRange = getCarryRange(carryBitPos, carryBitCount);
-    if (carryOffset == 0) return carryRange;
-    return mBuilder->CreateLShr(carryRange, carryOffset);
-}
-
-Value * CarryManager::getCarryBit(unsigned carryBitPos) {
-    return getCarryBits(carryBitPos, 1);
-}
-
-/*  NOTE: In the following the mCarryOutPack is an accumulator.
+    /*  NOTE: In the following the mCarryOutPack is an accumulator.
     It must be created at the appropriate outer level.  */
 void CarryManager::setCarryBits(unsigned carryBit_lo, unsigned carryRangeSize, Value * bits) {
     
@@ -307,7 +325,7 @@ void CarryManager::setCarryBits(unsigned carryBit_lo, unsigned carryRangeSize, V
 Value * CarryManager::getCarryOpCarryIn(int localIndex) {
     unsigned posn = carryOpPosition(localIndex);
 #ifdef PACKING
-    return  mBuilder->CreateBitCast(mBuilder->CreateZExt(getCarryBit(posn), mBuilder->getIntNTy(BLOCK_SIZE)), mBitBlockType);
+    return pack2bitblock(getCarryInBits(posn, 1));
 #else
     return getCarryPack(posn);
 #endif
@@ -344,17 +362,8 @@ Value * CarryManager::advanceCarryInCarryOut(int localIndex, int shift_amount, V
 Value * CarryManager::unitAdvanceCarryInCarryOut(int localIndex, Value * strm) {
     unsigned posn = advance1Position(localIndex);
 #ifdef PACKING
-    unsigned offset = posn % PACK_SIZE;
-    unsigned rshift = PACK_SIZE - offset - 1;
-    Value * field = iBuilder->mvmd_extract(PACK_SIZE, strm, BLOCK_SIZE/PACK_SIZE - 1);
-    if (rshift != 0) {
-        field = mBuilder->CreateLShr(field, mBuilder->getInt64(rshift));
-    }
-    if (offset != 0) {
-        field = mBuilder->CreateAnd(field, mBuilder->getInt64(1<<offset));
-    }
-    setCarryBits(posn - offset, 1, field);
-    Value* carry_longint = mBuilder->CreateZExt(getCarryBit(posn), mBuilder->getIntNTy(BLOCK_SIZE));
+    extractAndSaveCarryOutBits(strm, posn, 1);
+    Value* carry_longint = mBuilder->CreateZExt(getCarryInBits(posn, 1), mBuilder->getIntNTy(BLOCK_SIZE));
     Value* strm_longint = mBuilder->CreateBitCast(strm, mBuilder->getIntNTy(BLOCK_SIZE));
     Value* adv_longint = mBuilder->CreateOr(mBuilder->CreateShl(strm_longint, 1), carry_longint);
     Value* result_value = mBuilder->CreateBitCast(adv_longint, mBitBlockType);
@@ -384,17 +393,8 @@ Value * CarryManager::unitAdvanceCarryInCarryOut(int localIndex, Value * strm) {
 Value * CarryManager::shortAdvanceCarryInCarryOut(int localIndex, int shift_amount, Value * strm) {
     unsigned posn = shortAdvancePosition(localIndex);
 #ifdef PACKING
-    unsigned offset = posn % PACK_SIZE;
-    unsigned rshift = PACK_SIZE - offset - shift_amount;
-    Value * field = iBuilder->mvmd_extract(PACK_SIZE, strm, BLOCK_SIZE/PACK_SIZE - 1);
-    if (rshift != 0) {
-        field = mBuilder->CreateLShr(field, mBuilder->getInt64(rshift));
-    }
-    if (offset != 0) {
-        field = mBuilder->CreateAnd(field, mBuilder->getInt64(((1<<shift_amount) - 1) << offset));
-    }    
-    setCarryBits(posn - offset, shift_amount, field);
-    Value* carry_longint = mBuilder->CreateZExt(getCarryBits(posn, shift_amount), mBuilder->getIntNTy(BLOCK_SIZE));
+    extractAndSaveCarryOutBits(strm, posn, shift_amount);
+    Value* carry_longint = mBuilder->CreateZExt(getCarryInBits(posn, shift_amount), mBuilder->getIntNTy(BLOCK_SIZE));
     Value* strm_longint = mBuilder->CreateBitCast(strm, mBuilder->getIntNTy(BLOCK_SIZE));
     Value* adv_longint = mBuilder->CreateOr(mBuilder->CreateShl(strm_longint, shift_amount), carry_longint);
     Value* result_value = mBuilder->CreateBitCast(adv_longint, mBitBlockType);
@@ -479,7 +479,9 @@ bool CarryManager::blockHasCarries(){
 Value * CarryManager::getCarrySummaryExpr() {
     unsigned summary_posn = summaryPosition();
 #ifdef PACKING
-    return mBuilder->CreateBitCast(mBuilder->CreateZExt(getCarryRange(summary_posn, summaryBits()), mBuilder->getIntNTy(BLOCK_SIZE)), mBitBlockType);
+    Value * pack = getCarryPack(summary_posn/PACK_SIZE);
+    Value * summary_bits = maskSelectBitRange(pack, summary_posn % PACK_SIZE, summaryBits());
+    return mBuilder->CreateBitCast(mBuilder->CreateZExt(summary_bits, mBuilder->getIntNTy(BLOCK_SIZE)), mBitBlockType);
 #else
     return getCarryPack(summary_posn);
 #endif
@@ -501,12 +503,13 @@ void CarryManager::buildCarryDataPhisAfterIfBody(BasicBlock * ifEntryBlock, Basi
         return;
     }
 #ifdef PACKING
-    if (ifScopeCarrySize < PACK_SIZE) {
+    if (ifScopeCarrySize <= PACK_SIZE) {
         unsigned const ifPackIndex = scopeBasePack();
         PHINode * ifPack_phi = mBuilder->CreatePHI(mCarryPackType, 2, "ifPack");
         ifPack_phi->addIncoming(mCarryInfo->ifEntryPack, ifEntryBlock);
         ifPack_phi->addIncoming(mCarryOutPack[ifPackIndex], ifBodyFinalBlock);
         mCarryOutPack[ifPackIndex] = ifPack_phi;
+        return;
     }
 #endif
     if (mCarryInfo->getIfDepth() > 1) {
