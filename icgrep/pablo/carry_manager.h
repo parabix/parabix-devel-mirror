@@ -100,6 +100,7 @@ public:
 
     void ensureCarriesStoredRecursive();
 
+    void ensureCarriesStoredLocal();
     
 private:
     IRBuilder <> * mBuilder;
@@ -152,6 +153,7 @@ private:
     unsigned longAdvanceBitBlockPosition(unsigned localIndex);
     unsigned localBasePack();
     unsigned scopeBasePack();
+    unsigned summaryPackIndex();
     unsigned summaryPosition();
     unsigned summaryBits();
 

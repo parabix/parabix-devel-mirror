@@ -186,6 +186,7 @@ std::pair<llvm::Function *, size_t> PabloCompiler::compile(PabloFunction & funct
     
     compileBlock(mainScope);
     
+    mCarryManager->ensureCarriesStoredLocal();
     mCarryManager->leaveScope();
     
     
@@ -431,6 +432,7 @@ void PabloCompiler::compileBlock(PabloBlock & block) {
         mCarryManager->generateCarryOutSummaryCodeIfNeeded();
     }
     BasicBlock * ifBodyFinalBlock = mBuilder->GetInsertBlock();
+    mCarryManager->ensureCarriesStoredLocal();
     mBuilder->CreateBr(ifEndBlock);
     //End Block
     mBuilder->SetInsertPoint(ifEndBlock);
