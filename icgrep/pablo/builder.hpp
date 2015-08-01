@@ -26,6 +26,10 @@ public:
         return *this;
     }
 
+    using iterator = PabloBlock::iterator;
+
+    using const_iterator = PabloBlock::const_iterator;
+
     inline static PabloBuilder Create(PabloBuilder & parent) noexcept {
         return std::move(PabloBuilder(PabloBlock::Create(*(parent.mPb)), parent));
     }
@@ -162,6 +166,32 @@ public:
         return mPb->createWhile(condition, std::move(nextVars), *builder.mPb);
     }
 
+    /// Statement Iterator Wrappers
+
+    iterator begin() {
+        return mPb->begin();
+    }
+
+    iterator end() {
+        return mPb->end();
+    }
+
+    const_iterator begin() const {
+        return mPb->cbegin();
+    }
+
+    const_iterator end() const {
+        return mPb->cend();
+    }
+
+    const_iterator cbegin() const {
+        return mPb->cbegin();
+    }
+
+    const_iterator cend() const {
+        return mPb->cend();
+    }
+
     inline Statement * front() const {
         return mPb->front();
     }
@@ -193,6 +223,10 @@ public:
 
     inline PabloBuilder * getParent() {
         return mParent;
+    }
+
+    inline void record(Statement * stmt) {
+        mExprTable.findOrAdd(stmt);
     }
 
 private:

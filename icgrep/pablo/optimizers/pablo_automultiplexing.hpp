@@ -47,8 +47,10 @@ protected:
     void addCandidateSet(const VertexVector & S);
     void selectMultiplexSets(RNG &);
     void applySubsetConstraints();
-    std::vector<std::vector<PabloAST *>> multiplexSelectedIndependentSets() const;
-    void reduce(const std::vector<std::vector<PabloAST *>> & sets) const;
+    void multiplexSelectedIndependentSets() const;
+    void simplifyAST(Advance * const muxed[], const unsigned m, PabloBuilder & builder) const;
+    std::pair<PabloAST *, unsigned> simplifyAST(DdManager * manager, DdNode * const f, PabloAST * const variables[], PabloBuilder & builder) const;
+    std::pair<PabloAST *, unsigned> makeCoverAST(DdManager * manager, DdNode * const f, PabloAST * const variables[], PabloBuilder & builder) const;
     void topologicalSort(PabloBlock & entry) const;
     inline AutoMultiplexing()
     : mVariables(0)

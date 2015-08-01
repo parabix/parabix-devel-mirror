@@ -11,6 +11,7 @@ namespace pablo {
 class PabloAST;
 class PabloBlock;
 class PabloFunction;
+class PabloBuilder;
 class Statement;
 
 class BDDMinimizationPass {
@@ -40,14 +41,16 @@ class BDDMinimizationPass {
 public:
     static bool optimize(PabloFunction & function);
 protected:
+    static void promoteCrossBlockReachingDefs(const PabloFunction & function);
     void initialize(const PabloFunction & function);
     void characterizeAndEliminateLogicallyEquivalentStatements(PabloFunction & function);
     void characterizeAndEliminateLogicallyEquivalentStatements(PabloBlock & block, SubsitutionMap & parent);
     DdNode * characterizeAndEliminateLogicallyEquivalentStatements(const Statement * const stmt);
     void simplifyAST(PabloFunction & function);
-    void simplifyAST(PabloBlock & block);
-    void simplifyAST(PabloAST * const value, PabloBlock & block, Statement * const insertionPoint);
-
+    void simplifyAST(PabloBuilder & block);
+    void simplifyAST(Statement *stmt, Statement * const value, PabloBuilder & builder);
+    PabloAST * simplifyAST(DdNode * const f, PabloBuilder & builder);
+    PabloAST * makeCoverAST(DdNode * const f, PabloBuilder & builder);
 private:
     DdNode * Zero() const;
     DdNode * One() const;
@@ -58,13 +61,14 @@ private:
     DdNode * Xor(DdNode * const x, DdNode * const y);
     DdNode * Not(DdNode * x) const;
     DdNode * Ite(DdNode * const x, DdNode * const y, DdNode * const z);
-    DdNode * NewVar();
+    DdNode * NewVar(const PabloAST * expr);
     bool noSatisfyingAssignment(DdNode * const x);
     void shutdown();
 private:
-    DdManager *             mManager;
-    unsigned                mVariables;
-    CharacterizationMap     mCharacterizationMap;
+    DdManager *                     mManager;
+    std::vector<PabloAST *>         mVariables;
+    std::vector<const Statement *>  mPromotions;
+    CharacterizationMap             mCharacterizationMap;
 };
 
 }

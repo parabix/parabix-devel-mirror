@@ -10,13 +10,11 @@
 #include <boost/range/iterator_range.hpp>
 #include <llvm/ADT/BitVector.h>
 #include <cudd.h>
+#include <cuddInt.h>
 #include <util.h>
 #include <stack>
 #include <queue>
 #include <unordered_set>
-
-#include <pablo/optimizers/pablo_simplifier.hpp>
-#include <pablo/optimizers/pablo_bddminimization.h>
 
 using namespace llvm;
 using namespace boost;
@@ -134,6 +132,11 @@ bool AutoMultiplexing::optimize(PabloFunction & function) {
     RECORD_TIMESTAMP(end_create_multiplex_graph);
     LOG("GenerateMultiplexSets:   " << (end_create_multiplex_graph - start_create_multiplex_graph));
 
+    RECORD_TIMESTAMP(start_shutdown);
+    am.Shutdown();
+    RECORD_TIMESTAMP(end_shutdown);
+    LOG("Shutdown:                " << (end_shutdown - start_shutdown));
+
     if (multiplex) {
 
         RECORD_TIMESTAMP(start_select_multiplex_sets);
@@ -147,7 +150,7 @@ bool AutoMultiplexing::optimize(PabloFunction & function) {
         LOG("ApplySubsetConstraints:  " << (end_subset_constraints - start_subset_constraints));
 
         RECORD_TIMESTAMP(start_select_independent_sets);
-        auto multiplexedSets = am.multiplexSelectedIndependentSets();
+        am.multiplexSelectedIndependentSets();
         RECORD_TIMESTAMP(end_select_independent_sets);
         LOG("MultiplexSelectedSets:   " << (end_select_independent_sets - start_select_independent_sets));
 
@@ -155,25 +158,9 @@ bool AutoMultiplexing::optimize(PabloFunction & function) {
         am.topologicalSort(function.getEntryBlock());
         RECORD_TIMESTAMP(end_topological_sort);
         LOG("TopologicalSort:         " << (end_topological_sort - start_topological_sort));
-
-        llvm::raw_os_ostream out(std::cerr);
-        PabloPrinter::print(function.getEntryBlock(), out);
-        out.flush();
-
-        RECORD_TIMESTAMP(start_reduce);
-        am.reduce(multiplexedSets);
-        RECORD_TIMESTAMP(end_reduce);
-        LOG("Reduce:                  " << (end_reduce - start_reduce));
     }
 
-    RECORD_TIMESTAMP(start_shutdown);
-    am.Shutdown();
-    RECORD_TIMESTAMP(end_shutdown);
-    LOG("Shutdown:                " << (end_shutdown - start_shutdown));
-
     LOG_NUMBER_OF_ADVANCES(function.getEntryBlock());
-
-    // BDDMinimizationPass::optimize(function);
 
     return multiplex;
 }
@@ -375,9 +362,6 @@ void AutoMultiplexing::characterize(PabloBlock &block) {
                     Deref(bdd);
                 }
             }
-
-            assert (Cudd_DebugCheck(mManager) == 0);
-
             mRecentCharacterizations.erase(mRecentCharacterizations.begin() + start, mRecentCharacterizations.end());
             continue;
         }
@@ -454,7 +438,6 @@ inline DdNode * AutoMultiplexing::characterize(Statement * const stmt) {
     }
 
     Ref(bdd);
-
     if (LLVM_UNLIKELY(NoSatisfyingAssignment(bdd))) {
         Deref(bdd);
         // If there is no satisfing assignment for this bdd, the statement will always produce 0.
@@ -462,13 +445,13 @@ inline DdNode * AutoMultiplexing::characterize(Statement * const stmt) {
         // Those must be handled specially or we may end up producing a non-equivalent function.
         if (LLVM_UNLIKELY(isa<Advance>(stmt) || isa<Assign>(stmt) || isa<Next>(stmt))) {
             stmt->setOperand(0, stmt->getParent()->createZeroes());
+            bdd = Zero();
         }
         else {
             stmt->replaceWith(stmt->getParent()->createZeroes());
+            return nullptr;
         }
-        bdd = Zero();
     }
-
     mRecentCharacterizations.emplace_back(stmt, bdd);
     return bdd;
 }
@@ -970,7 +953,7 @@ void AutoMultiplexing::applySubsetConstraints() {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief multiplexSelectedIndependentSets
  ** ------------------------------------------------------------------------------------------------------------- */
-std::vector<std::vector<PabloAST *>> AutoMultiplexing::multiplexSelectedIndependentSets() const {
+void AutoMultiplexing::multiplexSelectedIndependentSets() const {
 
     const unsigned f = num_vertices(mConstraintGraph);
     const unsigned l = num_vertices(mMultiplexSetGraph);
@@ -982,8 +965,6 @@ std::vector<std::vector<PabloAST *>> AutoMultiplexing::multiplexSelectedIndepend
     }
 
     std::vector<MultiplexSetGraph::vertex_descriptor> I(max_n);
-    std::vector<Advance *> input(max_n);
-    std::vector<std::vector<PabloAST *>> outputs;
     circular_buffer<PabloAST *> Q(max_n);
 
     // When entering thus function, the multiplex set graph M is a DAG with edges denoting the set
@@ -992,10 +973,9 @@ std::vector<std::vector<PabloAST *>> AutoMultiplexing::multiplexSelectedIndepend
     for (unsigned s = f; s != l; ++s) {
         const size_t n = out_degree(s, mMultiplexSetGraph);
         if (n) {
-
             const size_t m = log2_plus_one(n);
-
-            std::vector<PabloAST *> muxed(m);
+            Advance * input[n];
+            Advance * muxed[m];
 
             graph_traits<MultiplexSetGraph>::out_edge_iterator ei, ei_end;
             std::tie(ei, ei_end) = out_edges(s, mMultiplexSetGraph);
@@ -1032,7 +1012,9 @@ std::vector<std::vector<PabloAST *>> AutoMultiplexing::multiplexSelectedIndepend
                 }
 
                 PabloAST * mux = Q.front(); Q.pop_front(); assert (mux);
-                muxed[j] = builder.createAdvance(mux, adv->getOperand(1), prefix.str());
+                // The only way this did not return an Advance statement would be if either the mux or shift amount
+                // is zero. Since these cases would have been eliminated earlier, we are safe to cast here.
+                muxed[j] = cast<Advance>(builder.createAdvance(mux, adv->getOperand(1), prefix.str()));
             }
 
             /// Perform m-to-n Demultiplexing            
@@ -1040,7 +1022,7 @@ std::vector<std::vector<PabloAST *>> AutoMultiplexing::multiplexSelectedIndepend
 
                 // Construct the demuxed values and replaces all the users of the original advances with them.
                 for (size_t j = 0; j != m; ++j) {
-                    if ((i & (static_cast<size_t>(1) << j)) == 0) {
+                    if ((i & (1ULL << j)) == 0) {
                         Q.push_back(muxed[j]);
                     }
                 }
@@ -1058,7 +1040,7 @@ std::vector<std::vector<PabloAST *>> AutoMultiplexing::multiplexSelectedIndepend
                 }
 
                 for (unsigned j = 0; j != m; ++j) {
-                    if ((i & (static_cast<unsigned>(1) << j)) != 0) {
+                    if ((i & (1ULL << j)) != 0) {
                         assert (!Q.full());
                         Q.push_back(muxed[j]);
                     }
@@ -1074,206 +1056,707 @@ std::vector<std::vector<PabloAST *>> AutoMultiplexing::multiplexSelectedIndepend
                 PabloAST * demuxed = Q.front(); Q.pop_front(); assert (demuxed);
                 input[i - 1]->replaceWith(demuxed, true, true);
             }
-            outputs.push_back(std::move(muxed));
+
+            /// Attempt to simplify the demultiplexed values
+            // simplifyAST(muxed, m, builder);
         }
     }
-    return outputs;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief reduce
+ * @brief simplifyAST
  ** ------------------------------------------------------------------------------------------------------------- */
-inline bool isBinaryOp(const PabloAST * const expr) {
-    switch (expr->getClassTypeId()) {
-        case PabloAST::ClassTypeId::And:
-        case PabloAST::ClassTypeId::Or:
-        case PabloAST::ClassTypeId::Not:
-        case PabloAST::ClassTypeId::Xor:
-        case PabloAST::ClassTypeId::Sel:
-            return true;
-        default:
-            return false;
-    }
-}
+void AutoMultiplexing::simplifyAST(Advance * const muxed[], const unsigned m, PabloBuilder & builder) const {
 
+    // first do a BFS to build a topological ordering of statements we're going to end up visiting
+    // and determine which of those will be terminals in the BDD
+    using Graph = adjacency_list<hash_setS, vecS, bidirectionalS, PabloAST *>;
+    using Vertex = Graph::vertex_descriptor;
 
-void AutoMultiplexing::reduce(const std::vector<std::vector<PabloAST *>> & sets) const {
+    Graph G;
+    std::unordered_map<PabloAST *, unsigned> M;
+    std::queue<Statement *> Q;
 
-    for (const auto & set : sets) {
+    for (unsigned i = 0; i != m; ++i) {
 
-        // first do a BFS to build a topological ordering of statements we're going to end up visiting
-        // and determine which of those will be terminals in the BDD
-        using Graph = adjacency_list<hash_setS, vecS, bidirectionalS, PabloAST *>;
-        using Vertex = Graph::vertex_descriptor;
-
-        Graph G;
-        std::unordered_map<PabloAST *, unsigned> M;
-
-        std::queue<Statement *> Q;
-
-        llvm::raw_os_ostream out(std::cerr);
-
-        for (PabloAST * inst : set) {
-            if (LLVM_LIKELY(isa<Advance>(inst))) {
-                const auto u = add_vertex(inst, G);
-                M.insert(std::make_pair(inst, u));
-
-                for (PabloAST * user : inst->users()) {
-                    auto f = M.find(user);
-                    Vertex v = 0;
-                    if (f == M.end()) {
-                        v = add_vertex(user, G);
-                        M.insert(std::make_pair(user, v));
-                        if (isBinaryOp(user)) {
-                            Q.push(cast<Statement>(user));
-                        }
-                    } else { // if (f != M.end()) {
-                        v = f->second;
-                    }
-                    add_edge(u, v, G);
-                }
-
-            }
-        }
-
-        while (!Q.empty()) {
-            Statement * const var = Q.front(); Q.pop();
-            const Vertex u = M[var];
-
-            for (unsigned i = 0; i != var->getNumOperands(); ++i) {
-                PabloAST * operand = var->getOperand(i);
-                auto f = M.find(operand);
-                Vertex v;
-                if (LLVM_UNLIKELY(f == M.end())) {
-                    v = add_vertex(operand, G);
-                    M.insert(std::make_pair(operand, v));
-                } else { // if (f != M.end()) {
-                    v = f->second;
-                }
-                add_edge(v, u, G);
-            }
-
-            for (PabloAST * user : var->users()) {
-                auto f = M.find(user);
-                Vertex v = 0;
-                if (LLVM_LIKELY(f == M.end())) {
-                    v = add_vertex(user, G);
-                    M.insert(std::make_pair(user, v));
-                    if (isBinaryOp(user)) {
+        const auto u = add_vertex(muxed[i], G);
+        M.insert(std::make_pair(muxed[i], u));
+        for (PabloAST * user : muxed[i]->users()) {
+            auto f = M.find(user);
+            Vertex v = 0;
+            if (f == M.end()) {
+                v = add_vertex(user, G);
+                M.insert(std::make_pair(user, v));
+                switch (user->getClassTypeId()) {
+                    case PabloAST::ClassTypeId::And:
+                    case PabloAST::ClassTypeId::Or:
+                    case PabloAST::ClassTypeId::Not:
+                    case PabloAST::ClassTypeId::Sel:
                         Q.push(cast<Statement>(user));
-                    }
-                } else { // if (f != M.end()) {
-                    v = f->second;
+                    default: break;
                 }
-                add_edge(u, v, G);
+            } else { // if (f != M.end()) {
+                v = f->second;
             }
+            add_edge(u, v, G);
+        }
+    }
+
+    while (!Q.empty()) {
+        Statement * const var = Q.front(); Q.pop();
+        const Vertex u = M[var];
+        for (unsigned i = 0; i != var->getNumOperands(); ++i) {
+            PabloAST * operand = var->getOperand(i);
+            auto f = M.find(operand);
+            Vertex v = 0;
+            if (LLVM_UNLIKELY(f == M.end())) {
+                v = add_vertex(operand, G);
+                M.insert(std::make_pair(operand, v));
+            } else { // if (f != M.end()) {
+                v = f->second;
+            }
+            add_edge(v, u, G);
         }
 
-        out << "\ndigraph G {\n";
-        for (auto u : make_iterator_range(vertices(G))) {
-            out << "  v" << u;
-            PabloPrinter::print(cast<Statement>(G[u]), " [label=\"", out);
-            out << "\"];\n";
-        }
-        for (auto e : make_iterator_range(edges(G))) {
-            out << "  v" << source(e, G) << " -> v" << target(e, G) << ";\n";
-        }
-        out << "}\n\n";
-        out.flush();
-
-        // count the number of sinks (sources) so we know how many variables (terminals) will exist in the BDD
-        std::vector<Vertex> variable;
-        flat_set<Vertex> terminal;
-        for (auto u : make_iterator_range(vertices(G))) {
-            if (in_degree(u, G) == 0) {
-                variable.push_back(u);
-            }
-            if (out_degree(u, G) == 0) {
-                // the inputs to the sinks become the terminals in the BDD
-                for (auto e : make_iterator_range(in_edges(u, G))) {
-                    terminal.insert(target(e, G));
+        for (PabloAST * user : var->users()) {
+            auto f = M.find(user);
+            Vertex v = 0;
+            if (LLVM_LIKELY(f == M.end())) {
+                v = add_vertex(user, G);
+                M.insert(std::make_pair(user, v));
+                switch (user->getClassTypeId()) {
+                    case PabloAST::ClassTypeId::And:
+                    case PabloAST::ClassTypeId::Or:
+                    case PabloAST::ClassTypeId::Not:
+                    case PabloAST::ClassTypeId::Sel:
+                        Q.push(cast<Statement>(user));
+                    default: break;
                 }
+            } else { // if (f != M.end()) {
+                v = f->second;
+            }
+            add_edge(u, v, G);
+        }
+    }
+
+    // count the number of sources (sinks) so we know how many inputs (terminals) will exist in the BDD
+    std::vector<Vertex> inputs;
+    flat_set<Vertex> terminals;
+    for (auto u : make_iterator_range(vertices(G))) {
+        if (in_degree(u, G) == 0) {
+            inputs.push_back(u);
+        }
+        if (out_degree(u, G) == 0) {
+            // the inputs to the sinks become the terminals in the BDD
+            for (auto e : make_iterator_range(in_edges(u, G))) {
+                terminals.insert(source(e, G));
             }
         }
+    }
 
-        DdManager * manager = Cudd_Init(variable.size(), 0, CUDD_UNIQUE_SLOTS, CUDD_CACHE_SLOTS, 0);
-        Cudd_AutodynEnable(manager, CUDD_REORDER_LAZY_SIFT);
+    const auto n = inputs.size();
 
-        std::vector<DdNode *> characterization(num_vertices(G), nullptr);
+    DdManager * manager = Cudd_Init(n, 0, CUDD_UNIQUE_SLOTS, CUDD_CACHE_SLOTS, 0);
+    Cudd_AutodynEnable(manager, CUDD_REORDER_LAZY_SIFT);
+
+    PabloAST * variables[n];
+    std::vector<DdNode *> characterization(num_vertices(G), nullptr);
+    for (unsigned i = 0; i != n; ++i) {
+        variables[i] = G[inputs[i]];
+        characterization[inputs[i]] = Cudd_bddIthVar(manager, i);
+    }
+
+    std::vector<Vertex> ordering;
+    ordering.reserve(num_vertices(G));
+    topological_sort(G, std::back_inserter(ordering));
+
+    for (auto ui = ordering.rbegin(); ui != ordering.rend(); ++ui) {
+
+        const Vertex u = *ui;
+
+        if (characterization[u]) {
+            continue;
+        }
+
+        std::array<DdNode *, 3> input;
+
         unsigned i = 0;
-        for (auto u : variable) {
-            characterization[u] = Cudd_bddIthVar(manager, i++);
+        for (const auto e : make_iterator_range(in_edges(u, G))) {
+            input[i++] = characterization[source(e, G)];
+
         }
 
-        std::vector<Vertex> ordering;
-        ordering.reserve(num_vertices(G));
-        topological_sort(G, std::back_inserter(ordering));
+        assert (is<Statement>(G[u]) ? i == cast<Statement>(G[u])->getNumOperands() : i == 0);
 
-        for (auto ui = ordering.rbegin(); ui != ordering.rend(); ++ui) {
+        DdNode * bdd = nullptr;
+        bool characterized = true;
+        switch (G[u]->getClassTypeId()) {
+            case PabloAST::ClassTypeId::And:
+                bdd = Cudd_bddAnd(manager, input[0], input[1]);
+                break;
+            case PabloAST::ClassTypeId::Or:
+                bdd = Cudd_bddOr(manager, input[0], input[1]);
+                break;
+            case PabloAST::ClassTypeId::Not:
+                bdd = Cudd_Not(input[0]);
+                break;
+            case PabloAST::ClassTypeId::Sel:
+                bdd = Cudd_bddIte(manager, input[0], input[1], input[2]);
+                break;
+            default: characterized = false; break;
+        }
 
-            const Vertex u = *ui;
-
-            Statement * stmt = cast<Statement>(G[u]);
-
-            out << u; PabloPrinter::print(stmt, " : ", out); out << " = " << (long)characterization[u] << '\n';
-            out.flush();
-
-            if (characterization[u]) {
-                continue;
-            }
-
-            std::array<DdNode *, 3> input;
-
-            unsigned i = 0;
-            for (const auto e : make_iterator_range(in_edges(u, G))) {
-                input[i++] = characterization[source(e, G)];
-
-            }
-
-            assert (is<Statement>(G[u]) ? i == cast<Statement>(G[u])->getNumOperands() : i == 0);
-
-            DdNode * bdd = nullptr;
-
-            switch (G[u]->getClassTypeId()) {
-                case PabloAST::ClassTypeId::And:
-                    bdd = Cudd_bddAnd(manager, input[0], input[1]);
-                    break;
-                case PabloAST::ClassTypeId::Or:
-                    bdd = Cudd_bddOr(manager, input[0], input[1]);
-                    break;
-                case PabloAST::ClassTypeId::Not:
-                    bdd = Cudd_Not(input[0]);
-                    break;
-                case PabloAST::ClassTypeId::Xor:
-                    bdd = Cudd_bddXor(manager, input[0], input[1]);
-                    break;
-                case PabloAST::ClassTypeId::Sel:
-                    bdd = Cudd_bddIte(manager, input[0], input[1], input[2]);
-                    break;
-                default: break;
-            }
-
+        if (characterized) {
+            Cudd_Ref(bdd);
             characterization[u] = bdd;
         }
-
-        Cudd_ReduceHeap(manager, CUDD_REORDER_SIFT, 0);
-
-        for (auto t : terminal) {
-
-            llvm::raw_os_ostream out(std::cerr);
-            out << " REDUNCTION : "; PabloPrinter::print(G[t], out); out << '\n';
-            out.flush();
-
-            DdNode * bdd = characterization[t];
-            Cudd_bddPrintCover(manager, bdd, bdd);
-
-            out << '\n'; out.flush();
-        }
-
-        Cudd_Quit(manager);
     }
 
+    Cudd_AutodynDisable(manager);
+    Cudd_ReduceHeap(manager, CUDD_REORDER_SIFT, 0);
+    Cudd_ReduceHeap(manager, CUDD_REORDER_EXACT, 0);
+
+    raw_os_ostream out(std::cerr);
+
+    for (Vertex t : terminals) {
+
+//        out << "*******************************************************************************************\n";
+//        PabloPrinter::print(*(builder.getPabloBlock()), "", out);
+//        out << "\n\n";
+        PabloPrinter::print(cast<Statement>(G[t]), " >> ", out);
+        out << '\n';
+        out.flush();
+
+        DdNode * const f = characterization[t];
+        Cudd_Ref(f);
+        PabloAST * expr;
+        unsigned count;
+        std::tie(expr, count) = simplifyAST(manager, f, variables, builder);
+        if (expr) {
+
+            PabloPrinter::print(cast<Statement>(expr), "    replacement: ", out);
+            out << '\n';
+            out.flush();
+
+            cast<Statement>(G[t])->replaceWith(expr, true, true);
+        }
+        Cudd_RecursiveDeref(manager, f);
+    }
+
+//    out << "+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n";
+//    PabloPrinter::print(*(builder.getPabloBlock()), "", out);
+//    out << '\n';
+//    out.flush();
+
+    Cudd_Quit(manager);
 }
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief simplifyAST
+ ** ------------------------------------------------------------------------------------------------------------- */
+std::pair<PabloAST *, unsigned> AutoMultiplexing::simplifyAST(DdManager * manager, DdNode * const f, PabloAST * const variables[], PabloBuilder & builder) const {
+    DdNode * g = Cudd_FindEssential(manager, f);
+    if (g && Cudd_SupportSize(manager, g) > 0) {
+        if (g == f) { // every variable is essential
+            return makeCoverAST(manager, f, variables, builder);
+        }
+        Cudd_Ref(g);
+        PabloAST * c0;
+        unsigned count0;
+        std::tie(c0, count0) = makeCoverAST(manager, g, variables, builder);
+        if (LLVM_UNLIKELY(c0 == nullptr)) {
+            Cudd_RecursiveDeref(manager, g);
+            return std::make_pair(nullptr, 0);
+        }
+        DdNode * h = Cudd_Cofactor(manager, f, g);
+        Cudd_Ref(h);
+        Cudd_RecursiveDeref(manager, g);
+        PabloAST * c1;
+        unsigned count1;
+        std::tie(c1, count1) = simplifyAST(manager, h, variables, builder);
+        Cudd_RecursiveDeref(manager, h);
+        if (LLVM_UNLIKELY(c1 == nullptr)) {
+            cast<Statement>(c0)->eraseFromParent(true);
+            return std::make_pair(nullptr, 0);
+        }
+        return std::make_pair(builder.createAnd(c0, c1), count0 + count1 + 1);
+    }
+
+    PabloAST * disjunctionAST = nullptr;
+    unsigned disjunctionCount = 0;
+    PabloAST * conjunctionAST = nullptr;
+    unsigned conjunctionCount = 0;
+
+    DdNode ** decomp = nullptr;
+    const auto disjuncts = Cudd_bddGenDisjDecomp(manager, f, &decomp);
+    if (LLVM_LIKELY(disjuncts == 2)) {
+        Cudd_Ref(decomp[0]);
+        Cudd_Ref(decomp[1]);
+        PabloAST * d0;
+        unsigned count0;
+        std::tie(d0, count0) = simplifyAST(manager, decomp[0], variables, builder);
+        Cudd_RecursiveDeref(manager, decomp[0]);
+        if (LLVM_UNLIKELY(d0 == nullptr)) {
+            Cudd_RecursiveDeref(manager, decomp[1]);
+            return std::make_pair(nullptr, 0);
+        }
+        PabloAST * d1;
+        unsigned count1;
+        std::tie(d1, count1) = simplifyAST(manager, decomp[1], variables, builder);
+        Cudd_RecursiveDeref(manager, decomp[1]);
+        FREE(decomp);
+        if (LLVM_UNLIKELY(d1 == nullptr)) {
+            cast<Statement>(d0)->eraseFromParent(true);
+            return std::make_pair(nullptr, 0);
+        }
+        disjunctionAST = builder.createOr(d0, d1);
+        disjunctionCount = count0 + count1 + 1;
+    }
+    FREE(decomp);
+
+    const auto conjuncts = Cudd_bddGenConjDecomp(manager, f, &decomp);
+    if (LLVM_LIKELY(conjuncts == 2)) {
+        Cudd_Ref(decomp[0]);
+        Cudd_Ref(decomp[1]);
+        PabloAST * d0;
+        unsigned count0;
+        std::tie(d0, count0) = simplifyAST(manager, decomp[0], variables, builder);
+        Cudd_RecursiveDeref(manager, decomp[0]);
+        if (LLVM_UNLIKELY(d0 == nullptr)) {
+            Cudd_RecursiveDeref(manager, decomp[1]);
+            return std::make_pair(nullptr, 0);
+        }
+        PabloAST * d1;
+        unsigned count1;
+        std::tie(d1, count1) = simplifyAST(manager, decomp[1], variables, builder);
+        Cudd_RecursiveDeref(manager, decomp[1]);
+        FREE(decomp);
+        if (LLVM_UNLIKELY(d1 == nullptr)) {
+            cast<Statement>(d0)->eraseFromParent(true);
+            return std::make_pair(nullptr, 0);
+        }
+        conjunctionAST = builder.createAnd(d0, d1);
+        conjunctionCount = count0 + count1 + 1;
+    }
+    FREE(decomp);
+
+    if (disjunctionAST && conjunctionAST) {
+        if (disjunctionCount > conjunctionCount) {
+            cast<Statement>(disjunctionAST)->eraseFromParent(true);
+            return std::make_pair(conjunctionAST, conjunctionCount);
+        } else {
+            cast<Statement>(conjunctionAST)->eraseFromParent(true);
+            return std::make_pair(disjunctionAST, disjunctionCount);
+        }
+    } else if (disjunctionAST) {
+        return std::make_pair(disjunctionAST, disjunctionCount);
+    } else if (conjunctionAST) {
+        return std::make_pair(conjunctionAST, conjunctionCount);
+    }
+    return makeCoverAST(manager, f, variables, builder);
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief makeCoverAST
+ ** ------------------------------------------------------------------------------------------------------------- */
+std::pair<PabloAST *, unsigned> AutoMultiplexing::makeCoverAST(DdManager * manager, DdNode * const f, PabloAST * const variables[], PabloBuilder & builder) const {
+
+    std::queue<PabloAST *> SQ;
+
+    circular_buffer<PabloAST *> CQ(manager->size);
+    circular_buffer<PabloAST *> DQ(manager->size);
+
+    int cube[manager->size];
+
+    unsigned count = 0;
+
+    DdNode * g = f;
+
+    Cudd_Ref(g);
+
+    while (g != Cudd_ReadLogicZero(manager)) {
+        int length;
+        DdNode * implicant = Cudd_LargestCube(manager, g, &length);
+        if (LLVM_UNLIKELY(implicant == nullptr)) {
+            Cudd_RecursiveDeref(manager, g);
+            return std::make_pair(nullptr, 0);
+        }
+        Cudd_Ref(implicant);
+        DdNode * prime = Cudd_bddMakePrime(manager, implicant, f);
+        if (LLVM_UNLIKELY(prime == nullptr)) {
+            Cudd_RecursiveDeref(manager, g);
+            Cudd_RecursiveDeref(manager, implicant);
+            return std::make_pair(nullptr, 0);
+        }
+        Cudd_Ref(prime);
+        Cudd_RecursiveDeref(manager, implicant);
+
+        DdNode * h = Cudd_bddAnd(manager, g, Cudd_Not(prime));
+        if (LLVM_UNLIKELY(h == nullptr)) {
+            Cudd_RecursiveDeref(manager, g);
+            Cudd_RecursiveDeref(manager, prime);
+            return std::make_pair(nullptr, 0);
+        }
+        Cudd_Ref(h);
+        Cudd_RecursiveDeref(manager, g);
+
+        g = h;
+        if (LLVM_UNLIKELY(Cudd_BddToCubeArray(manager, prime, cube) == 0)) {
+            Cudd_RecursiveDeref(manager, g);
+            Cudd_RecursiveDeref(manager, prime);
+            return std::make_pair(nullptr, 0);
+        }
+        Cudd_RecursiveDeref(manager, prime);
+
+        for (auto i = 0; i != manager->size; ++i) {
+            if (cube[i] == 0) {
+                DQ.push_back(variables[i]);
+            } else if (cube[i] == 1) {
+                CQ.push_back(variables[i]);
+            }
+        }
+        if (!DQ.empty()) {
+            while (DQ.size() > 1) {
+                PabloAST * v1 = DQ.front(); DQ.pop_front();
+                PabloAST * v2 = DQ.front(); DQ.pop_front();
+                DQ.push_back(builder.createOr(v1, v2));
+                ++count;
+            }
+            CQ.push_back(builder.createNot(DQ.front()));
+            DQ.clear();
+        }
+        while (CQ.size() > 1) {
+            PabloAST * v1 = CQ.front(); CQ.pop_front();
+            PabloAST * v2 = CQ.front(); CQ.pop_front();
+            CQ.push_back(builder.createAnd(v1, v2));
+            ++count;
+        }
+        SQ.push(CQ.front()); CQ.clear();
+    }
+    Cudd_RecursiveDeref(manager, g);
+
+    while (SQ.size() > 1) {
+        PabloAST * v1 = SQ.front(); SQ.pop();
+        PabloAST * v2 = SQ.front(); SQ.pop();
+        SQ.push(builder.createOr(v1, v2));
+        ++count;
+    }
+
+    return std::make_pair(SQ.front(), count);
+}
+
+///** ------------------------------------------------------------------------------------------------------------- *
+// * @brief reduce
+// ** ------------------------------------------------------------------------------------------------------------- */
+//inline bool isBinaryOp(const PabloAST * const expr) {
+//    switch (expr->getClassTypeId()) {
+//        case PabloAST::ClassTypeId::And:
+//        case PabloAST::ClassTypeId::Or:
+//        case PabloAST::ClassTypeId::Not:
+//        case PabloAST::ClassTypeId::Xor:
+//        case PabloAST::ClassTypeId::Sel:
+//            return true;
+//        default:
+//            return false;
+//    }
+//}
+
+///** ------------------------------------------------------------------------------------------------------------- *
+// * @brief minimizeCoFactor
+// ** ------------------------------------------------------------------------------------------------------------- */
+//PabloAST * minimizeCoFactor(DdManager * const manager, DdNode * const f, const std::vector<PabloAST *> & variables, PabloBuilder & builder) {
+
+//    std::queue<PabloAST *> SQ;
+//    std::queue<PabloAST *> CQ;
+//    std::queue<PabloAST *> DQ;
+
+//    int cube[manager->size];
+
+//    DdNode * g = f;
+
+//    Cudd_Ref(g);
+
+//    while (g != Cudd_ReadLogicZero(manager)) {
+//        int length;
+//        DdNode * implicant = Cudd_LargestCube(manager, g, &length);
+//        if (LLVM_UNLIKELY(implicant == nullptr)) {
+//            Cudd_RecursiveDeref(manager, g);
+//            std::cerr << "Cudd_LargestCube" << std::endl;
+//            return nullptr;
+//        }
+//        Cudd_Ref(implicant);
+//        DdNode * prime = Cudd_bddMakePrime(manager, implicant, f);
+//        if (LLVM_UNLIKELY(prime == nullptr)) {
+//            Cudd_RecursiveDeref(manager, g);
+//            Cudd_RecursiveDeref(manager, implicant);
+//            std::cerr << "Cudd_bddMakePrime" << std::endl;
+//            return nullptr;
+//        }
+//        Cudd_Ref(prime);
+//        Cudd_RecursiveDeref(manager, implicant);
+
+//        DdNode * h = Cudd_bddAnd(manager, g, Cudd_Not(prime));
+//        if (LLVM_UNLIKELY(h == nullptr)) {
+//            Cudd_RecursiveDeref(manager, g);
+//            Cudd_RecursiveDeref(manager, prime);
+//            std::cerr << "Cudd_bddAnd" << std::endl;
+//            return nullptr;
+//        }
+//        Cudd_Ref(h);
+//        Cudd_RecursiveDeref(manager, g);
+
+//        g = h;
+//        if (LLVM_UNLIKELY(Cudd_BddToCubeArray(manager, prime, cube) == 0)) {
+//            Cudd_RecursiveDeref(manager, g);
+//            Cudd_RecursiveDeref(manager, prime);
+//            std::cerr << "Cudd_BddToCubeArray" << std::endl;
+//            return nullptr;
+//        }
+//        Cudd_RecursiveDeref(manager, prime);
+
+//        for (auto i = 0; i != manager->size; ++i) {
+//            if (cube[i] == 0) {
+//                DQ.push(variables[i]);
+//            } else if (cube[i] == 1) {
+//                CQ.push(variables[i]);
+//            }
+//        }
+
+//        if (DQ.size() > 0) {
+//            while (DQ.size() > 1) {
+//                PabloAST * v1 = DQ.front(); DQ.pop();
+//                PabloAST * v2 = DQ.front(); DQ.pop();
+//                DQ.push(builder.createOr(v1, v2));
+//            }
+//            CQ.push(builder.createNot(DQ.front())); DQ.pop();
+//        }
+
+//        while (CQ.size() > 1) {
+//            PabloAST * v1 = CQ.front(); CQ.pop();
+//            PabloAST * v2 = CQ.front(); CQ.pop();
+//            CQ.push(builder.createAnd(v1, v2));
+//        }
+
+//        SQ.push(CQ.front()); CQ.pop();
+//    }
+//    Cudd_RecursiveDeref(manager, g);
+
+//    while (SQ.size() > 1) {
+//        PabloAST * v1 = SQ.front(); SQ.pop();
+//        PabloAST * v2 = SQ.front(); SQ.pop();
+//        SQ.push(builder.createOr(v1, v2));
+//    }
+
+//    return SQ.front();
+//}
+
+///** ------------------------------------------------------------------------------------------------------------- *
+// * @brief minimize
+// ** ------------------------------------------------------------------------------------------------------------- */
+//PabloAST * minimize(DdManager * const manager, DdNode * const f, const std::vector<PabloAST *> & variables, PabloBuilder & builder) {
+//     DdNode * g = Cudd_FindEssential(manager, f);
+//    if (f == g || g == nullptr || Cudd_SupportSize(manager, g) == 0) {
+////        g = Cudd_SubsetCompress(manager, f, Cudd_SupportSize(manager, f), Cudd_DagSize(f));
+////        if (f == g || g == nullptr) {
+//            return minimizeCoFactor(manager, f, variables, builder);
+////        }
+//    }
+//    Cudd_Ref(g);
+//    PabloAST * essentialAST = minimize(manager, g, variables, builder);
+//    if (LLVM_UNLIKELY(essentialAST == nullptr)) {
+//        Cudd_RecursiveDeref(manager, g);
+//        return nullptr;
+//    }
+//    DdNode * h = Cudd_Cofactor(manager, f, g);
+//    Cudd_Ref(h);
+//    Cudd_RecursiveDeref(manager, g);
+//    PabloAST * cofactorAST = minimize(manager, h, variables, builder);
+//    Cudd_RecursiveDeref(manager, h);
+//    if (LLVM_UNLIKELY(cofactorAST == nullptr)) {
+//        if (LLVM_LIKELY(isa<Statement>(essentialAST))) {
+//            cast<Statement>(essentialAST)->eraseFromParent(true);
+//        }
+//        return nullptr;
+//    }
+//    return builder.createAnd(essentialAST, cofactorAST);
+//}
+
+///** ------------------------------------------------------------------------------------------------------------- *
+// * @brief reduce
+// ** ------------------------------------------------------------------------------------------------------------- */
+//void AutoMultiplexing::reduce(const std::vector<std::vector<PabloAST *>> & sets) const {
+
+//    for (const auto & set : sets) {
+
+//        // first do a BFS to build a topological ordering of statements we're going to end up visiting
+//        // and determine which of those will be terminals in the BDD
+//        using Graph = adjacency_list<hash_setS, vecS, bidirectionalS, PabloAST *>;
+//        using Vertex = Graph::vertex_descriptor;
+
+//        Graph G;
+//        std::unordered_map<PabloAST *, unsigned> M;
+
+//        std::queue<Statement *> Q;
+
+//        for (PabloAST * inst : set) {
+//            if (LLVM_LIKELY(isa<Advance>(inst))) {
+//                const auto u = add_vertex(inst, G);
+//                M.insert(std::make_pair(inst, u));
+
+//                for (PabloAST * user : inst->users()) {
+//                    auto f = M.find(user);
+//                    Vertex v = 0;
+//                    if (f == M.end()) {
+//                        v = add_vertex(user, G);
+//                        M.insert(std::make_pair(user, v));
+//                        if (isBinaryOp(user)) {
+//                            Q.push(cast<Statement>(user));
+//                        }
+//                    } else { // if (f != M.end()) {
+//                        v = f->second;
+//                    }
+//                    add_edge(u, v, G);
+//                }
+
+//            }
+//        }
+
+//        while (!Q.empty()) {
+//            Statement * const var = Q.front(); Q.pop();
+//            const Vertex u = M[var];
+
+//            for (unsigned i = 0; i != var->getNumOperands(); ++i) {
+//                PabloAST * operand = var->getOperand(i);
+//                auto f = M.find(operand);
+//                Vertex v;
+//                if (LLVM_UNLIKELY(f == M.end())) {
+//                    v = add_vertex(operand, G);
+//                    M.insert(std::make_pair(operand, v));
+//                } else { // if (f != M.end()) {
+//                    v = f->second;
+//                }
+//                add_edge(v, u, G);
+//            }
+
+//            for (PabloAST * user : var->users()) {
+//                auto f = M.find(user);
+//                Vertex v = 0;
+//                if (LLVM_LIKELY(f == M.end())) {
+//                    v = add_vertex(user, G);
+//                    M.insert(std::make_pair(user, v));
+//                    if (isBinaryOp(user)) {
+//                        Q.push(cast<Statement>(user));
+//                    }
+//                } else { // if (f != M.end()) {
+//                    v = f->second;
+//                }
+//                add_edge(u, v, G);
+//            }
+//        }
+
+//        // count the number of sinks (sources) so we know how many variables (terminals) will exist in the BDD
+//        std::vector<Vertex> variable;
+//        flat_set<Vertex> terminal;
+//        for (auto u : make_iterator_range(vertices(G))) {
+//            if (in_degree(u, G) == 0) {
+//                variable.push_back(u);
+//            }
+//            if (out_degree(u, G) == 0) {
+//                // the inputs to the sinks become the terminals in the BDD
+//                for (auto e : make_iterator_range(in_edges(u, G))) {
+//                    terminal.insert(source(e, G));
+//                }
+//            }
+//        }
+
+//        DdManager * manager = Cudd_Init(variable.size(), 0, CUDD_UNIQUE_SLOTS, CUDD_CACHE_SLOTS, 0);
+//        Cudd_AutodynEnable(manager, CUDD_REORDER_SIFT);
+
+//        std::vector<DdNode *> characterization(num_vertices(G), nullptr);
+//        unsigned i = 0;
+//        for (auto u : variable) {
+//            characterization[u] = Cudd_bddIthVar(manager, i++);
+//        }
+
+//        std::vector<Vertex> ordering;
+//        ordering.reserve(num_vertices(G));
+//        topological_sort(G, std::back_inserter(ordering));
+
+//        for (auto ui = ordering.rbegin(); ui != ordering.rend(); ++ui) {
+
+//            const Vertex u = *ui;
+
+//            if (characterization[u]) {
+//                continue;
+//            }
+
+//            std::array<DdNode *, 3> input;
+
+//            unsigned i = 0;
+//            for (const auto e : make_iterator_range(in_edges(u, G))) {
+//                input[i++] = characterization[source(e, G)];
+
+//            }
+
+//            assert (is<Statement>(G[u]) ? i == cast<Statement>(G[u])->getNumOperands() : i == 0);
+
+//            DdNode * bdd = nullptr;
+//            bool characterized = true;
+//            switch (G[u]->getClassTypeId()) {
+//                case PabloAST::ClassTypeId::And:
+//                    bdd = Cudd_bddAnd(manager, input[0], input[1]);
+//                    break;
+//                case PabloAST::ClassTypeId::Or:
+//                    bdd = Cudd_bddOr(manager, input[0], input[1]);
+//                    break;
+//                case PabloAST::ClassTypeId::Not:
+//                    bdd = Cudd_Not(input[0]);
+//                    break;
+//                case PabloAST::ClassTypeId::Xor:
+//                    bdd = Cudd_bddXor(manager, input[0], input[1]);
+//                    break;
+//                case PabloAST::ClassTypeId::Sel:
+//                    bdd = Cudd_bddIte(manager, input[0], input[1], input[2]);
+//                    break;
+//                default: characterized = false; break;
+//            }
+
+//            if (characterized) {
+//                Cudd_Ref(bdd);
+//                characterization[u] = bdd;
+//            }
+//        }
+
+//        Cudd_AutodynDisable(manager);
+//        Cudd_ReduceHeap(manager, CUDD_REORDER_SIFT, 0);
+
+//        std::vector<PabloAST *> inputs;
+//        for (Vertex s : variable) {
+//            inputs.push_back(G[s]);
+//        }
+
+//        for (Vertex t : terminal) {
+//            Statement * const stmt = cast<Statement>(G[t]);
+//            PabloBlock * const block = stmt->getParent();
+//            block->setInsertPoint(stmt);
+//            PabloBuilder builder(*block);
+//            DdNode * const f = characterization[t];
+//            llvm::raw_os_ostream out(std::cerr);
+//            PabloPrinter::print(stmt, " > ", out); out << '\n'; out.flush();
+
+//            Cudd_Ref(f);
+//            PabloAST * expr = minimize(manager, f, inputs, builder);
+//            if (LLVM_LIKELY(expr != nullptr)) {
+//                stmt->replaceWith(expr);
+//            } else {
+//                llvm::raw_os_ostream out(std::cerr);
+//                PabloPrinter::print(stmt, "Failed to minimize: ", out); out << '\n'; out.flush();
+//            }
+//            Cudd_RecursiveDeref(manager, f);
+//        }
+//        Cudd_Quit(manager);
+//    }
+//}
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief topologicalSort

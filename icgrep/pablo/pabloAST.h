@@ -39,9 +39,18 @@ public:
     using const_user_iterator = Vector::const_iterator;
 
     enum class ClassTypeId : unsigned {
+        /** Non-statements **/
         // Constants
         Zeroes
         , Ones
+        // Internal types
+        , Var
+        , Integer
+        , String
+        , Block
+        , Function
+        , Prototype
+        /** Statements **/
         // Boolean operations
         , And
         , Or
@@ -56,17 +65,10 @@ public:
         , Assign
         , Next
         , Call
-        , Var
         , SetIthBit
         // Scope blocks
         , If
         , While
-        , Block
-        , Function
-        // Internal variables
-        , Integer
-        , String
-        , Prototype
     };
     inline ClassTypeId getClassTypeId() const {
         return mClassTypeId;
@@ -156,11 +158,14 @@ class Statement : public PabloAST {
 public:
     static inline bool classof(const PabloAST * e) {
         switch (e->getClassTypeId()) {
-            case PabloAST::ClassTypeId::String:
-            case PabloAST::ClassTypeId::Integer:
             case PabloAST::ClassTypeId::Zeroes:
             case PabloAST::ClassTypeId::Ones:
             case PabloAST::ClassTypeId::Var:
+            case PabloAST::ClassTypeId::String:
+            case PabloAST::ClassTypeId::Integer:
+            case PabloAST::ClassTypeId::Block:
+            case PabloAST::ClassTypeId::Function:
+            case PabloAST::ClassTypeId::Prototype:
                 return false;
             default:
                 return true;

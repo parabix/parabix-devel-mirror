@@ -88,7 +88,7 @@ void PabloAST::replaceAllUsesWith(PabloAST * expr) {
     Statement * user[mUsers.size()];
     Vector::size_type users = 0;
     for (PabloAST * u : mUsers) {
-        if (isa<Statement>(u)) {
+        if (isa<Statement>(u) && u != expr) {
             user[users++] = cast<Statement>(u);
         }
     }
