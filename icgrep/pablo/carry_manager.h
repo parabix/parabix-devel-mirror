@@ -54,6 +54,8 @@ public:
     {
 
     }
+
+    ~CarryManager();
     
     unsigned initialize(PabloBlock * blk, Value * carryDataPtr);  
     

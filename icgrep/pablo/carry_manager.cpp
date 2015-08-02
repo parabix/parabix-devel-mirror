@@ -661,5 +661,11 @@ void CarryManager::ensureCarriesStoredLocal() {
 #endif
 }
 
+CarryManager::~CarryManager() {
+    for (auto * cd : mCarryInfoVector) {
+        delete cd;
+    }
+}
+
 }
 
