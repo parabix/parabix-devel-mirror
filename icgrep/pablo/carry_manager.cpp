@@ -144,6 +144,9 @@ unsigned CarryManager::enumerate(PabloBlock * blk, unsigned ifDepth, unsigned wh
     else {
         cd->summary.frameOffset = 0;
     }
+#ifndef NDEBUG
+    if (cd->ifDepth == 0) cd->dumpCarryData(cerr);
+#endif
     return cd->scopeCarryDataSize;
 }
 
@@ -647,15 +650,21 @@ void CarryManager::ensureCarriesStoredRecursive() {
     }
 }
 
-/* Store all the full carry packs generated locally in this scope. */
+/* Store all the full carry packs generated locally in this scope or the
+   single full pack for this scope*/
 void CarryManager::ensureCarriesStoredLocal() {
 #ifdef PACKING
-    if ((mCurrentFrameIndex % PACK_SIZE) == 0) {
+    const unsigned scopeCarryPacks = mCarryInfo->getScopeCarryPackCount();
+    if ((scopeCarryPacks > 0) && ((mCurrentFrameIndex % PACK_SIZE) == 0)) {
+        // We have carry data and we are not in the middle of a pack.
         // Write out all local packs.
         auto localCarryIndex = localBasePack();
         auto localCarryPacks = mCarryInfo->getLocalCarryPackCount();
         for (auto i = localCarryIndex; i < localCarryIndex + localCarryPacks; i++) {
             storeCarryPack(i);
+        }
+        if ((localCarryPacks == 0) && (scopeCarryPacks == 1) && (mCarryInfo->nested.entries > 1)) {
+            storeCarryPack(localCarryIndex);
         }
     }
 #endif

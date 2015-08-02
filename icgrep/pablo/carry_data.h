@@ -29,8 +29,10 @@ unsigned const LongAdvanceBase = 64;
 
 #ifdef PACKING
 const unsigned PACK_SIZE = 64;
+const unsigned ITEMS_PER_PACK = PACK_SIZE;
 #else
 const unsigned PACK_SIZE = BLOCK_SIZE;
+const unsigned ITEMS_PER_PACK = 1;
 #endif
 
 
@@ -116,37 +118,21 @@ public:
     bool blockHasLongAdvances() const { return longAdvance.entries > 0;}
     
     unsigned getLocalCarryPackIndex () { 
-#ifdef PACKING
-        return shortAdvance.frameOffset / PACK_SIZE;
-#else
-        return shortAdvance.frameOffset;
-#endif
+        return shortAdvance.frameOffset / ITEMS_PER_PACK;
     }
 
     unsigned getLocalCarryPackCount () { 
-#ifdef PACKING
-        return fullOrPartialBlocks(nested.frameOffset, PACK_SIZE) - shortAdvance.frameOffset / PACK_SIZE;
-#else
-        return nested.frameOffset - shortAdvance.frameOffset;
-#endif
+        return fullOrPartialBlocks(nested.frameOffset, ITEMS_PER_PACK) - shortAdvance.frameOffset / ITEMS_PER_PACK;
     }
     
     unsigned getScopeCarryPackCount () { 
-#ifdef PACKING
-        return fullOrPartialBlocks(scopeCarryDataSize, PACK_SIZE);
-#else
-        return scopeCarryDataSize;
-#endif
+        return fullOrPartialBlocks(scopeCarryDataSize, ITEMS_PER_PACK);
     }
     
     bool blockHasCarries() const { return scopeCarryDataSize > 0;}
     
     bool explicitSummaryRequired() const { 
-#ifdef PACKING
-        return (ifDepth > 0) && (scopeCarryDataSize > PACK_SIZE);
-#else
-        return (ifDepth > 0) && (scopeCarryDataSize > 1);
-#endif
+        return (ifDepth > 0) && (scopeCarryDataSize > ITEMS_PER_PACK);
     }
     
 protected:
