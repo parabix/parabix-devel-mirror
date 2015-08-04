@@ -13,8 +13,6 @@
 
 namespace pablo {
 
-   
-
 void PabloBlockCarryData::enumerateLocal() {
     for (Statement * stmt : *theScope) {
         if (Advance * adv = dyn_cast<Advance>(stmt)) {
@@ -24,12 +22,19 @@ void PabloBlockCarryData::enumerateLocal() {
                 advance1.entries++;                
             }
             else if (shift_amount < LongAdvanceBase) {
-#ifdef PACKING
-                EnsurePackHasSpace(shortAdvance.allocatedBits, shift_amount);
-                adv->setLocalAdvanceIndex(shortAdvance.allocatedBits);
-#else
-                adv->setLocalAdvanceIndex(shortAdvance.entries);
-#endif
+                // short Advance
+                if (ITEMS_PER_PACK >= LongAdvanceBase) {
+                    // Packing is possible.   We will use the allocated bit position as
+                    // the index.
+                    if (roomInFinalPack(shortAdvance.allocatedBits) < shift_amount) {
+                        // Start a new pack.
+                        shortAdvance.allocatedBits = alignCeiling(shortAdvance.allocatedBits, PACK_SIZE);
+                    }
+                    adv->setLocalAdvanceIndex(shortAdvance.allocatedBits);
+                }
+                else {
+                    adv->setLocalAdvanceIndex(shortAdvance.entries);
+                }
                 shortAdvance.entries++;
                 shortAdvance.allocatedBits += shift_amount;
             }
@@ -49,19 +54,23 @@ void PabloBlockCarryData::enumerateLocal() {
         }
     }
     longAdvance.frameOffset = 0;
-#ifdef PACKING
-    shortAdvance.frameOffset = longAdvance.frameOffset + longAdvance.allocatedBitBlocks * BLOCK_SIZE;
-    addWithCarry.frameOffset = shortAdvance.frameOffset + shortAdvance.allocatedBits;
-    EnsurePackHasSpace(addWithCarry.frameOffset, addWithCarry.entries);
-    advance1.frameOffset = addWithCarry.frameOffset + addWithCarry.entries;
-    EnsurePackHasSpace(advance1.frameOffset, advance1.entries);
+    shortAdvance.frameOffset = longAdvance.frameOffset + longAdvance.allocatedBitBlocks * POSITIONS_PER_BLOCK;
+    if (ITEMS_PER_PACK == PACK_SIZE) {
+        addWithCarry.frameOffset = shortAdvance.frameOffset + shortAdvance.allocatedBits;
+        if (roomInFinalPack(addWithCarry.frameOffset) < addWithCarry.entries) {
+            addWithCarry.frameOffset = alignCeiling(addWithCarry.frameOffset, PACK_SIZE);
+        }
+        advance1.frameOffset = addWithCarry.frameOffset + addWithCarry.entries;
+        if (roomInFinalPack(advance1.frameOffset) < advance1.entries) {
+            advance1.frameOffset = alignCeiling(advance1.frameOffset, PACK_SIZE);
+        }
+    }
+    else {
+        addWithCarry.frameOffset = shortAdvance.frameOffset + shortAdvance.entries;
+        advance1.frameOffset = addWithCarry.frameOffset + addWithCarry.entries;
+
+    }
     nested.frameOffset = advance1.frameOffset + advance1.entries;
-#else
-    shortAdvance.frameOffset = longAdvance.frameOffset + longAdvance.allocatedBitBlocks;
-    addWithCarry.frameOffset = shortAdvance.frameOffset + shortAdvance.entries;
-    advance1.frameOffset = addWithCarry.frameOffset + addWithCarry.entries;
-    nested.frameOffset = advance1.frameOffset + advance1.entries;
-#endif
 }
         
 void PabloBlockCarryData::dumpCarryData(llvm::raw_ostream & strm) {

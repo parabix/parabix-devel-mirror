@@ -98,9 +98,11 @@ unsigned CarryManager::enumerate(PabloBlock * blk, unsigned ifDepth, unsigned wh
         if (If * ifStatement = dyn_cast<If>(stmt)) {
             const unsigned ifCarryDataBits = enumerate(&ifStatement->getBody(), ifDepth+1, whileDepth);
             PabloBlockCarryData * nestedBlockData = mCarryInfoVector[ifStatement->getBody().getScopeIndex()];
-#ifdef PACKING
-            EnsurePackHasSpace(nestedOffset, ifCarryDataBits);
-#endif
+            if (ITEMS_PER_PACK == PACK_SIZE) {  // PACKING
+                if (cd->roomInFinalPack(nestedOffset) < ifCarryDataBits) {
+                    nestedOffset = alignCeiling(nestedOffset, PACK_SIZE);
+                }
+            }
             nestedBlockData->setFramePosition(nestedOffset);
 
             nestedOffset += ifCarryDataBits;
@@ -114,9 +116,11 @@ unsigned CarryManager::enumerate(PabloBlock * blk, unsigned ifDepth, unsigned wh
             const unsigned whileCarryDataBits = enumerate(&whileStatement->getBody(), ifDepth, whileDepth+1);
             PabloBlockCarryData * nestedBlockData = mCarryInfoVector[whileStatement->getBody().getScopeIndex()];
             //if (whileStatement->isMultiCarry()) whileCarryDataBits *= whileStatement->getMaxIterations();
-#ifdef PACKING
-            EnsurePackHasSpace(nestedOffset, whileCarryDataBits);
-#endif
+            if (ITEMS_PER_PACK == PACK_SIZE) {  // PACKING
+                if (cd->roomInFinalPack(nestedOffset) < whileCarryDataBits) {
+                    nestedOffset = alignCeiling(nestedOffset, PACK_SIZE);
+                }
+            }
             nestedBlockData->setFramePosition(nestedOffset);
             nestedOffset += whileCarryDataBits;
             if (cd->maxNestingDepth <= nestedBlockData->maxNestingDepth) cd->maxNestingDepth = nestedBlockData->maxNestingDepth + 1;
@@ -132,14 +136,11 @@ unsigned CarryManager::enumerate(PabloBlock * blk, unsigned ifDepth, unsigned wh
     if (cd->explicitSummaryRequired()) {
         // Need extra space for the summary variable, always the last
         // entry within an if block.
-#ifdef PACKING
-        cd->scopeCarryDataSize = alignCeiling(cd->scopeCarryDataSize, PACK_SIZE);
+        if (ITEMS_PER_PACK == PACK_SIZE) {  // PACKING
+            cd->scopeCarryDataSize = alignCeiling(cd->scopeCarryDataSize, PACK_SIZE);
+        }
         cd->summary.frameOffset = cd->scopeCarryDataSize;
-        cd->scopeCarryDataSize += PACK_SIZE;
-#else
-        cd->summary.frameOffset = cd->scopeCarryDataSize;
-        cd->scopeCarryDataSize++;
-#endif
+        cd->scopeCarryDataSize += ITEMS_PER_PACK;  //  computed summary is a full pack.
     }
     else {
         cd->summary.frameOffset = 0;

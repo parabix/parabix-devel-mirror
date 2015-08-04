@@ -34,6 +34,7 @@ const unsigned ITEMS_PER_PACK = PACK_SIZE;
 const unsigned PACK_SIZE = BLOCK_SIZE;
 const unsigned ITEMS_PER_PACK = 1;
 #endif
+const unsigned POSITIONS_PER_BLOCK = ITEMS_PER_PACK * (BLOCK_SIZE/PACK_SIZE);
 
 
 static unsigned power2ceil (unsigned v) {
@@ -49,16 +50,6 @@ static unsigned alignCeiling(unsigned toAlign, unsigned alignment) {
 static unsigned fullOrPartialBlocks(unsigned bits, unsigned block_size) {
     return alignCeiling(bits, block_size) / block_size;
 }
-
-#ifdef PACKING
-static void EnsurePackHasSpace(unsigned & packedTotalBits, unsigned addedBits) {
-    unsigned bitsInCurrentPack = packedTotalBits % PACK_SIZE;
-    if ((bitsInCurrentPack > 0) && (bitsInCurrentPack + addedBits > PACK_SIZE)) {
-        packedTotalBits = alignCeiling(packedTotalBits, PACK_SIZE);
-    }
-}
-#endif
-
 
 namespace pablo {
 
@@ -79,6 +70,10 @@ public:
     {enumerateLocal();}
         
     friend class CarryManager;
+    
+    inline unsigned roomInFinalPack(unsigned allocatedBits) {
+        return ITEMS_PER_PACK - (allocatedBits % ITEMS_PER_PACK);
+    }
     
     void enumerateLocal();
     void dumpCarryData(llvm::raw_ostream & strm);
