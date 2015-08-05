@@ -23,6 +23,9 @@
 
 */
 
+enum CarryManagerStrategy {BitBlockStrategy, SequentialFullyPackedStrategy};
+
+
 using namespace llvm;
 
 namespace pablo {
@@ -35,7 +38,9 @@ class CarryManager {
 public:
   
     CarryManager(IRBuilder <> * b, VectorType * bitBlockType, ConstantAggregateZero * zero, Constant * one, IDISA::IDISA_Builder * idb)
-    : mBuilder(b)
+    : mPACK_SIZE(BLOCK_SIZE)
+    , mITEMS_PER_PACK(1)
+    , mBuilder(b)
     , mBitBlockType(bitBlockType)
     , mZeroInitializer(zero)
     , mOneInitializer(one)
@@ -45,9 +50,7 @@ public:
     , mCarryInfo(nullptr)
     , mCurrentFrameIndex(0)
     , mCarryPackBasePtr(nullptr)
-#ifdef PACKING
     , mCarryBitBlockPtr(nullptr)
-#endif
     , mBlockNoPtr(nullptr)
     , mBlockNo(nullptr)
     , mTotalCarryDataBitBlocks(0)
@@ -105,6 +108,8 @@ public:
     void ensureCarriesStoredLocal();
     
 private:
+    unsigned mPACK_SIZE;
+    unsigned mITEMS_PER_PACK;
     IRBuilder <> * mBuilder;
     VectorType * mBitBlockType;
     Constant * mZeroInitializer;
@@ -115,10 +120,8 @@ private:
     PabloBlockCarryData * mCarryInfo;
     unsigned mCurrentFrameIndex;
     Value * mCarryPackBasePtr;
-#ifdef PACKING
     Type * mCarryPackType;
     Value * mCarryBitBlockPtr;
-#endif
     Value * mBlockNoPtr;
     Value * mBlockNo;
     unsigned mTotalCarryDataBitBlocks;

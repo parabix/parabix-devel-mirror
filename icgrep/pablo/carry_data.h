@@ -25,17 +25,6 @@
 */
 unsigned const LongAdvanceBase = 64;
 
-//#define PACKING
-
-#ifdef PACKING
-const unsigned PACK_SIZE = 64;
-const unsigned ITEMS_PER_PACK = PACK_SIZE;
-#else
-const unsigned PACK_SIZE = BLOCK_SIZE;
-const unsigned ITEMS_PER_PACK = 1;
-#endif
-const unsigned POSITIONS_PER_BLOCK = ITEMS_PER_PACK * (BLOCK_SIZE/PACK_SIZE);
-
 
 static unsigned power2ceil (unsigned v) {
     unsigned ceil = 1;
@@ -57,7 +46,10 @@ class PabloBlock;
 
 class PabloBlockCarryData {
 public:
-    PabloBlockCarryData(PabloBlock * b):
+    PabloBlockCarryData(PabloBlock * b, unsigned PACK_SIZE, unsigned ITEMS_PER_PACK):
+                           mPACK_SIZE(PACK_SIZE),
+                           mITEMS_PER_PACK(ITEMS_PER_PACK),
+                           mPOSITIONS_PER_BLOCK(mITEMS_PER_PACK * (BLOCK_SIZE/mPACK_SIZE)),
                            theScope(b), framePosition(0),
                            ifDepth(0), whileDepth (0), maxNestingDepth(0),
                            longAdvance({0, 0, 0}),
@@ -72,7 +64,7 @@ public:
     friend class CarryManager;
     
     inline unsigned roomInFinalPack(unsigned allocatedBits) {
-        return ITEMS_PER_PACK - (allocatedBits % ITEMS_PER_PACK);
+        return mITEMS_PER_PACK - (allocatedBits % mITEMS_PER_PACK);
     }
     
     void enumerateLocal();
@@ -113,24 +105,26 @@ public:
     bool blockHasLongAdvances() const { return longAdvance.entries > 0;}
     
     unsigned getLocalCarryPackIndex () { 
-        return shortAdvance.frameOffset / ITEMS_PER_PACK;
+        return shortAdvance.frameOffset / mITEMS_PER_PACK;
     }
 
-    unsigned getLocalCarryPackCount () { 
-        return fullOrPartialBlocks(nested.frameOffset, ITEMS_PER_PACK) - shortAdvance.frameOffset / ITEMS_PER_PACK;
+    unsigned getLocalCarryPackCount () {
+        return fullOrPartialBlocks(nested.frameOffset, mITEMS_PER_PACK) - shortAdvance.frameOffset / mITEMS_PER_PACK;
     }
     
     unsigned getScopeCarryPackCount () { 
-        return fullOrPartialBlocks(scopeCarryDataSize, ITEMS_PER_PACK);
+        return fullOrPartialBlocks(scopeCarryDataSize, mITEMS_PER_PACK);
     }
     
     bool blockHasCarries() const { return scopeCarryDataSize > 0;}
     
     bool explicitSummaryRequired() const { 
-        return (ifDepth > 0) && (scopeCarryDataSize > ITEMS_PER_PACK);
+        return (ifDepth > 0) && (scopeCarryDataSize > mITEMS_PER_PACK);
     }
     
 protected:
+    
+    unsigned mPACK_SIZE, mITEMS_PER_PACK, mPOSITIONS_PER_BLOCK;
     
     PabloBlock * theScope;
     

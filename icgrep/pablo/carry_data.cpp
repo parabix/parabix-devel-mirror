@@ -23,12 +23,12 @@ void PabloBlockCarryData::enumerateLocal() {
             }
             else if (shift_amount < LongAdvanceBase) {
                 // short Advance
-                if (ITEMS_PER_PACK >= LongAdvanceBase) {
+                if (mITEMS_PER_PACK >= LongAdvanceBase) {
                     // Packing is possible.   We will use the allocated bit position as
                     // the index.
                     if (roomInFinalPack(shortAdvance.allocatedBits) < shift_amount) {
                         // Start a new pack.
-                        shortAdvance.allocatedBits = alignCeiling(shortAdvance.allocatedBits, PACK_SIZE);
+                        shortAdvance.allocatedBits = alignCeiling(shortAdvance.allocatedBits, mPACK_SIZE);
                     }
                     adv->setLocalAdvanceIndex(shortAdvance.allocatedBits);
                 }
@@ -54,15 +54,15 @@ void PabloBlockCarryData::enumerateLocal() {
         }
     }
     longAdvance.frameOffset = 0;
-    shortAdvance.frameOffset = longAdvance.frameOffset + longAdvance.allocatedBitBlocks * POSITIONS_PER_BLOCK;
-    if (ITEMS_PER_PACK == PACK_SIZE) {
+    shortAdvance.frameOffset = longAdvance.frameOffset + longAdvance.allocatedBitBlocks * mPOSITIONS_PER_BLOCK;
+    if (mITEMS_PER_PACK == mPACK_SIZE) {
         addWithCarry.frameOffset = shortAdvance.frameOffset + shortAdvance.allocatedBits;
         if (roomInFinalPack(addWithCarry.frameOffset) < addWithCarry.entries) {
-            addWithCarry.frameOffset = alignCeiling(addWithCarry.frameOffset, PACK_SIZE);
+            addWithCarry.frameOffset = alignCeiling(addWithCarry.frameOffset, mPACK_SIZE);
         }
         advance1.frameOffset = addWithCarry.frameOffset + addWithCarry.entries;
         if (roomInFinalPack(advance1.frameOffset) < advance1.entries) {
-            advance1.frameOffset = alignCeiling(advance1.frameOffset, PACK_SIZE);
+            advance1.frameOffset = alignCeiling(advance1.frameOffset, mPACK_SIZE);
         }
     }
     else {
