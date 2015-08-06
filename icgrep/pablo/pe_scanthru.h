@@ -34,13 +34,21 @@ public:
     inline unsigned getLocalCarryIndex() const {
         return localCarryIndex;
     }
+    inline void setMod64() {
+        isMod64approx = true;
+    }
+    inline bool isMod64() const {
+        return isMod64approx;
+    }
 protected:
     ScanThru(PabloAST * from, PabloAST * thru, String * name)
     : Statement(ClassTypeId::ScanThru, {from, thru}, name)
+    , isMod64approx(false)
     {
 
     }
 private:
+    bool isMod64approx;
     unsigned localCarryIndex;
 };
 

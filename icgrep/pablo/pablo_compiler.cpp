@@ -602,22 +602,39 @@ void PabloCompiler::compileStatement(const Statement * stmt) {
     else if (const Advance * adv = dyn_cast<Advance>(stmt)) {
         Value* strm_value = compileExpression(adv->getExpr());
         int shift = adv->getAdvanceAmount();
-        unsigned advance_index = adv->getLocalAdvanceIndex();
-        expr = mCarryManager->advanceCarryInCarryOut(advance_index, shift, strm_value);
+        if (adv->isMod64()) {
+            expr = iBuilder.simd_slli(64, strm_value, shift);
+        }
+        else {
+            unsigned advance_index = adv->getLocalAdvanceIndex();
+            expr = mCarryManager->advanceCarryInCarryOut(advance_index, shift, strm_value);
+        }
     }
     else if (const MatchStar * mstar = dyn_cast<MatchStar>(stmt)) {
         Value * marker = compileExpression(mstar->getMarker());
         Value * cc = compileExpression(mstar->getCharClass());
         Value * marker_and_cc = mBuilder->CreateAnd(marker, cc);
-        unsigned carry_index = mstar->getLocalCarryIndex();
-        Value * sum = mCarryManager->addCarryInCarryOut(carry_index, marker_and_cc, cc);
+        Value * sum = nullptr;
+        if (mstar->isMod64()) {
+            sum = iBuilder.simd_add(64, marker_and_cc, cc);
+        }
+        else {
+            unsigned carry_index = mstar->getLocalCarryIndex();
+            sum = mCarryManager->addCarryInCarryOut(carry_index, marker_and_cc, cc);
+        }
         expr = mBuilder->CreateOr(mBuilder->CreateXor(sum, cc), marker, "matchstar");
     }
     else if (const ScanThru * sthru = dyn_cast<ScanThru>(stmt)) {
         Value * marker_expr = compileExpression(sthru->getScanFrom());
         Value * cc_expr = compileExpression(sthru->getScanThru());
-        unsigned carry_index = sthru->getLocalCarryIndex();
-        Value * sum = mCarryManager->addCarryInCarryOut(carry_index, marker_expr, cc_expr);
+        Value * sum = nullptr;
+        if (sthru->isMod64()) {
+            sum = iBuilder.simd_add(64, marker_expr, cc_expr);
+        }
+        else {
+            unsigned carry_index = sthru->getLocalCarryIndex();
+            sum = mCarryManager->addCarryInCarryOut(carry_index, marker_expr, cc_expr);
+        }
         expr = mBuilder->CreateAnd(sum, genNot(cc_expr), "scanthru");
     }
     else {

@@ -27,6 +27,7 @@
 #endif
 #include <assert.h>
 #include <stdexcept>
+#include <iostream>
 
 #include "llvm/Support/CommandLine.h"
 static cl::OptionCategory fREcompilationOptions("Regex Compilation Options",
@@ -41,6 +42,8 @@ static cl::opt<bool> DisableUnicodeMatchStar("disable-unicode-matchstar", cl::in
                      cl::desc("disable Unicode MatchStar optimization"), cl::cat(fREcompilationOptions));
 static cl::opt<bool> DisableUnicodeLineBreak("disable-unicode-linebreak", cl::init(false),
                      cl::desc("disable Unicode line breaks - use LF only"), cl::cat(fREcompilationOptions));
+static cl::opt<bool> SetMod64Approximation("mod64-approximate", cl::init(false),
+                     cl::desc("set mod64 approximate mode"), cl::cat(fREcompilationOptions));
 #ifndef DISABLE_PREGENERATED_UCD_FUNCTIONS
 static cl::opt<bool> DisablePregeneratedUnicode("disable-pregenerated-unicode", cl::init(false),
                      cl::desc("disable use of pregenerated Unicode character class sets"), cl::cat(fREcompilationOptions));
@@ -500,7 +503,13 @@ MarkerType RE_Compiler::processUnboundedRep(RE * repeated, MarkerType marker, Pa
     }
     else if (isUnicodeUnitLength(repeated) && !DisableMatchStar && !DisableUnicodeMatchStar) {
         PabloAST * cc = markerVar(compile(repeated, pb));
-        return makeMarker(FinalPostPositionByte, pb.createAnd(pb.createMatchStar(base, pb.createOr(mNonFinal, cc)), mFinal, "unbounded"));
+        PabloAST * mstar = pb.createMatchStar(base, pb.createOr(mNonFinal, cc));
+        if (SetMod64Approximation) {
+            if (isa<MatchStar>(mstar)) {
+                dyn_cast<MatchStar>(mstar)->setMod64();
+            }
+        }
+        return makeMarker(FinalPostPositionByte, pb.createAnd(mstar, mFinal, "unbounded"));
     }
     else if (mStarDepth > 0){
         

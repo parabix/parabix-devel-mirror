@@ -32,14 +32,22 @@ public:
     inline unsigned getLocalCarryIndex() const {
         return localCarryIndex;
     }
+    inline void setMod64() {
+        isMod64approx = true;
+    }
+    inline bool isMod64() const {
+        return isMod64approx;
+    }
     virtual ~MatchStar() {}
 protected:
     MatchStar(PabloAST * marker, PabloAST * cc, String * name)
     : Statement(ClassTypeId::MatchStar, {marker, cc}, name)
+    , isMod64approx(false)
     {
 
     }
 private:
+    bool isMod64approx;
     unsigned localCarryIndex;
 };
 

@@ -36,13 +36,21 @@ public:
     inline unsigned getLocalAdvanceIndex() const {
         return localAdvanceIndex;
     }
+    inline void setMod64() {
+        isMod64approx = true;
+    }
+    inline bool isMod64() const {
+        return isMod64approx;
+    }
 protected:
     Advance(PabloAST * expr, PabloAST * shiftAmount, String * name)
     : Statement(ClassTypeId::Advance, {expr, shiftAmount}, name)
+   , isMod64approx(false)
     {
         assert(isa<Integer>(shiftAmount));
     }
 private:
+    bool isMod64approx;
     unsigned localAdvanceIndex;
 };
     
