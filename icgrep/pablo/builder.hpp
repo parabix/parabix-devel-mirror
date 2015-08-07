@@ -114,6 +114,10 @@ public:
 
     PabloAST * createSel(PabloAST * condition, PabloAST * trueExpr, PabloAST * falseExpr, const std::string prefix);
     
+    PabloAST * createCount(PabloAST * expr);
+    
+    PabloAST * createCount(PabloAST * expr, const std::string prefix);
+    
     /// Mod64 approximate function wrappers.
     
     PabloAST * createMod64Advance(PabloAST * expr, PabloAST * shiftAmount);

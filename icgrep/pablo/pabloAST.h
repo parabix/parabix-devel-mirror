@@ -65,6 +65,8 @@ public:
         , Mod64Advance
         , Mod64ScanThru
         , Mod64MatchStar
+        // Statistics operations
+        , Count
         // Variable assignments
         , Assign
         , Next

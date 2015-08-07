@@ -138,7 +138,17 @@ PabloAST * PabloBlock::createMod64Advance(PabloAST * expr, const Integer::Type s
     return insertAtInsertionPoint(new Mod64Advance(expr, getInteger(shiftAmount), makeName(prefix, false)));
 }
 
+PabloAST * PabloBlock::createCount(PabloAST * expr) {
+    assert (expr);
+    return insertAtInsertionPoint(new Count(expr, makeName("count_")));
+}
 
+PabloAST * PabloBlock::createCount(PabloAST * expr, const std::string prefix) {
+    assert (expr);
+    return insertAtInsertionPoint(new Count(expr, makeName(prefix, false)));
+}
+
+    
 /// BINARY CREATE FUNCTIONS
 
 Next * PabloBlock::createNext(Assign * assign, PabloAST * expr) {

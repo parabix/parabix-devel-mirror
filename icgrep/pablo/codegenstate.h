@@ -24,6 +24,7 @@
 #include <pablo/pe_var.h>
 #include <pablo/pe_xor.h>
 #include <pablo/pe_zeroes.h>
+#include <pablo/pe_count.h>
 #include <pablo/ps_assign.h>
 #include <pablo/ps_if.h>
 #include <pablo/ps_while.h>
@@ -129,6 +130,10 @@ public:
 
     PabloAST * createSel(PabloAST * condition, PabloAST * trueExpr, PabloAST * falseExpr, const std::string prefix);
 
+    PabloAST * createCount(PabloAST * expr);
+    
+    PabloAST * createCount(PabloAST * expr, const std::string prefix);
+    
     If * createIf(PabloAST * condition, const std::initializer_list<Assign *> definedVars, PabloBlock & body);
 
     If * createIf(PabloAST * condition, const std::vector<Assign *> & definedVars, PabloBlock & body);

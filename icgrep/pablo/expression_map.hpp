@@ -259,6 +259,7 @@ struct ExpressionTable {
             case PabloAST::ClassTypeId::Assign:            
             case PabloAST::ClassTypeId::Var:
             case PabloAST::ClassTypeId::Not:
+            case PabloAST::ClassTypeId::Count:
                 return mUnary.findOrAdd(stmt, stmt->getClassTypeId(), stmt->getOperand(0));
             case PabloAST::ClassTypeId::And:
             case PabloAST::ClassTypeId::Or:

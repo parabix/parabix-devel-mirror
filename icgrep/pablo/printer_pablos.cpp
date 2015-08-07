@@ -156,6 +156,34 @@ void PabloPrinter::print(const Statement * stmt, std::string indent, llvm::raw_o
         print(sthru->getScanThru(), strm);
         strm << ")";
     }
+    else if (const Mod64Advance * adv = dyn_cast<const Mod64Advance>(stmt)) {
+        print(adv, strm);
+        strm << " = pablo.Mod64Advance(";
+        print(adv->getExpr(), strm);
+        strm << ", " << std::to_string(adv->getAdvanceAmount()) << ")";
+    }
+    else if (const Mod64MatchStar * mstar = dyn_cast<const Mod64MatchStar>(stmt)) {
+        print(mstar, strm);
+        strm << " = pablo.Mod64MatchStar(";
+        print(mstar->getMarker(), strm);
+        strm << ", ";
+        print(mstar->getCharClass(), strm);
+        strm << ")";
+    }
+    else if (const Mod64ScanThru * sthru = dyn_cast<const Mod64ScanThru>(stmt)) {
+        print(sthru, strm);
+        strm << " = pablo.Mod64ScanThru(";
+        print(sthru->getScanFrom(), strm);
+        strm << ", ";
+        print(sthru->getScanThru(), strm);
+        strm << ")";
+    }
+    else if (const Count * pablo_not = dyn_cast<const Count>(stmt)) {
+        print(pablo_not, strm);
+        strm << " = pablo.Count(";
+        print(pablo_not->getExpr(), strm);
+        strm << ")";
+    }
     else {
         strm << indent << "**UNKNOWN Pablo Statement type **" << "\n";
     }
