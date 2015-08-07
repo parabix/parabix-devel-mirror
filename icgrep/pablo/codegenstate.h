@@ -141,6 +141,22 @@ public:
 
     While * createWhile(PabloAST * condition, std::vector<Next *> && nextVars, PabloBlock & body);
 
+    PabloAST * createMod64Advance(PabloAST * expr, const Integer::Type shiftAmount);
+
+    PabloAST * createMod64Advance(PabloAST * expr, PabloAST * shiftAmount);
+
+    PabloAST * createMod64Advance(PabloAST * expr, const Integer::Type shiftAmount, const std::string prefix);
+
+    PabloAST * createMod64Advance(PabloAST * expr, PabloAST * shiftAmount, const std::string prefix);
+
+    PabloAST * createMod64MatchStar(PabloAST * marker, PabloAST * charclass);
+
+    PabloAST * createMod64MatchStar(PabloAST * marker, PabloAST * charclass, const std::string prefix);
+
+    PabloAST * createMod64ScanThru(PabloAST * from, PabloAST * thru);
+
+    PabloAST * createMod64ScanThru(PabloAST * from, PabloAST * thru, const std::string prefix);
+
 
     inline StatementList & statements() {
         return *this;

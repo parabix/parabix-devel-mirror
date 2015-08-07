@@ -81,6 +81,16 @@ PabloAST * PabloBuilder::createAdvance(PabloAST * expr, PabloAST * shiftAmount, 
     return result;
 }
 
+PabloAST * PabloBuilder::createMod64Advance(PabloAST * expr, PabloAST * shiftAmount) {
+    MAKE_BINARY(createMod64Advance, PabloAST::ClassTypeId::Mod64Advance, expr, shiftAmount);
+    return result;
+}
+
+PabloAST * PabloBuilder::createMod64Advance(PabloAST * expr, PabloAST * shiftAmount, const std::string prefix) {
+    MAKE_BINARY(createMod64Advance, PabloAST::ClassTypeId::Mod64Advance, expr, shiftAmount, prefix);
+    return result;
+}
+
 PabloAST * PabloBuilder::createNot(PabloAST * expr) {
     MAKE_UNARY(createNot, PabloAST::ClassTypeId::Not, expr);
     return result;
@@ -169,6 +179,27 @@ PabloAST * PabloBuilder::createSel(PabloAST * condition, PabloAST * trueExpr, Pa
     MAKE_TERNARY(createSel, PabloAST::ClassTypeId::Sel, condition, trueExpr, falseExpr, prefix);
     return result;
 }
+
+PabloAST * PabloBuilder::createMod64MatchStar(PabloAST * marker, PabloAST * charclass) {
+    MAKE_BINARY(createMod64MatchStar, PabloAST::ClassTypeId::Mod64MatchStar, marker, charclass);
+    return result;
+}
+
+PabloAST * PabloBuilder::createMod64MatchStar(PabloAST * marker, PabloAST * charclass, const std::string prefix) {
+    MAKE_BINARY(createMod64MatchStar, PabloAST::ClassTypeId::Mod64MatchStar, marker, charclass, prefix);
+    return result;
+}
+
+PabloAST * PabloBuilder::createMod64ScanThru(PabloAST * from, PabloAST * thru) {
+    MAKE_BINARY(createMod64ScanThru, PabloAST::ClassTypeId::Mod64ScanThru, from, thru);
+    return result;
+}
+
+PabloAST * PabloBuilder::createMod64ScanThru(PabloAST * from, PabloAST * thru, const std::string prefix) {
+    MAKE_BINARY(createMod64ScanThru, PabloAST::ClassTypeId::Mod64ScanThru, from, thru, prefix);
+    return result;
+}
+
 
 
 }

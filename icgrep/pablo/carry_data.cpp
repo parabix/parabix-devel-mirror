@@ -17,46 +17,40 @@ void PabloBlockCarryData::enumerateLocal() {
     for (Statement * stmt : *theScope) {
         if (Advance * adv = dyn_cast<Advance>(stmt)) {
             unsigned shift_amount = adv->getAdvanceAmount();
-            if (!adv->isMod64()) {
-                if (shift_amount == 1) {
-                    adv->setLocalAdvanceIndex(advance1.entries);
-                    advance1.entries++;                
-                }
-                else if (shift_amount < LongAdvanceBase) {
-                    // short Advance
-                    if (mITEMS_PER_PACK >= LongAdvanceBase) {
-                        // Packing is possible.   We will use the allocated bit position as
-                        // the index.
-                        if (roomInFinalPack(shortAdvance.allocatedBits) < shift_amount) {
-                            // Start a new pack.
-                            shortAdvance.allocatedBits = alignCeiling(shortAdvance.allocatedBits, mPACK_SIZE);
-                        }
-                        adv->setLocalAdvanceIndex(shortAdvance.allocatedBits);
+            if (shift_amount == 1) {
+                adv->setLocalAdvanceIndex(advance1.entries);
+                advance1.entries++;                
+            }
+            else if (shift_amount < LongAdvanceBase) {
+                // short Advance
+                if (mITEMS_PER_PACK >= LongAdvanceBase) {
+                    // Packing is possible.   We will use the allocated bit position as
+                    // the index.
+                    if (roomInFinalPack(shortAdvance.allocatedBits) < shift_amount) {
+                        // Start a new pack.
+                        shortAdvance.allocatedBits = alignCeiling(shortAdvance.allocatedBits, mPACK_SIZE);
                     }
-                    else {
-                        adv->setLocalAdvanceIndex(shortAdvance.entries);
-                    }
-                    shortAdvance.entries++;
-                    shortAdvance.allocatedBits += shift_amount;
+                    adv->setLocalAdvanceIndex(shortAdvance.allocatedBits);
                 }
                 else {
-                    adv->setLocalAdvanceIndex(longAdvance.allocatedBitBlocks);
-                    longAdvance.entries++;
-                    longAdvance.allocatedBitBlocks += longAdvanceBufferSize(shift_amount);
+                    adv->setLocalAdvanceIndex(shortAdvance.entries);
                 }
+                shortAdvance.entries++;
+                shortAdvance.allocatedBits += shift_amount;
+            }
+            else {
+                adv->setLocalAdvanceIndex(longAdvance.allocatedBitBlocks);
+                longAdvance.entries++;
+                longAdvance.allocatedBitBlocks += longAdvanceBufferSize(shift_amount);
             }
         }
         else if (MatchStar * m = dyn_cast<MatchStar>(stmt)) {
-            if (!m->isMod64()) {
-                m->setLocalCarryIndex(addWithCarry.entries);
-                ++addWithCarry.entries;
-            }
+            m->setLocalCarryIndex(addWithCarry.entries);
+            ++addWithCarry.entries;
         }
         else if (ScanThru * s = dyn_cast<ScanThru>(stmt)) {
-            if (!s->isMod64()) {
-                s->setLocalCarryIndex(addWithCarry.entries);
-                ++addWithCarry.entries;
-            }
+            s->setLocalCarryIndex(addWithCarry.entries);
+            ++addWithCarry.entries;
         }
     }
     longAdvance.frameOffset = 0;

@@ -61,6 +61,10 @@ public:
         , Advance
         , ScanThru
         , MatchStar
+        // Mod 64 approximate stream operations
+        , Mod64Advance
+        , Mod64ScanThru
+        , Mod64MatchStar
         // Variable assignments
         , Assign
         , Next

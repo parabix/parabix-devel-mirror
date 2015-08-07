@@ -270,6 +270,9 @@ struct ExpressionTable {
             case PabloAST::ClassTypeId::Advance:
             case PabloAST::ClassTypeId::ScanThru:
             case PabloAST::ClassTypeId::MatchStar:
+            case PabloAST::ClassTypeId::Mod64Advance:
+            case PabloAST::ClassTypeId::Mod64ScanThru:
+            case PabloAST::ClassTypeId::Mod64MatchStar:
             case PabloAST::ClassTypeId::Next:
                 return mBinary.findOrAdd(stmt, stmt->getClassTypeId(), stmt->getOperand(0), stmt->getOperand(1));
             case PabloAST::ClassTypeId::Sel:

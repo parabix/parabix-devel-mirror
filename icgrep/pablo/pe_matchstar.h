@@ -32,23 +32,39 @@ public:
     inline unsigned getLocalCarryIndex() const {
         return localCarryIndex;
     }
-    inline void setMod64() {
-        isMod64approx = true;
-    }
-    inline bool isMod64() const {
-        return isMod64approx;
-    }
     virtual ~MatchStar() {}
 protected:
     MatchStar(PabloAST * marker, PabloAST * cc, String * name)
     : Statement(ClassTypeId::MatchStar, {marker, cc}, name)
-    , isMod64approx(false)
     {
 
     }
 private:
-    bool isMod64approx;
     unsigned localCarryIndex;
+};
+
+class Mod64MatchStar : public Statement {
+    friend class PabloBlock;
+public:
+    static inline bool classof(const PabloAST * e) {
+        return e->getClassTypeId() == ClassTypeId::Mod64MatchStar;
+    }
+    static inline bool classof(const void *) {
+        return false;
+    }
+    inline PabloAST * getMarker() const {
+        return getOperand(0);
+    }
+    inline PabloAST * getCharClass() const  {
+        return getOperand(1);
+    }
+    virtual ~Mod64MatchStar() {}
+protected:
+    Mod64MatchStar(PabloAST * marker, PabloAST * cc, String * name)
+    : Statement(ClassTypeId::Mod64MatchStar, {marker, cc}, name)
+    {
+
+    }
 };
 
 }

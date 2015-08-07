@@ -499,16 +499,12 @@ MarkerType RE_Compiler::processUnboundedRep(RE * repeated, MarkerType marker, Pa
     
     if (isByteLength(repeated)  && !DisableMatchStar) {
         PabloAST * cc = markerVar(compile(repeated, pb));  
-        return makeMarker(InitialPostPositionByte, pb.createMatchStar(base, cc, "unbounded"));
+        PabloAST * mstar = SetMod64Approximation ? pb.createMod64MatchStar(base, cc) : pb.createMatchStar(base, cc, "unbounded");
+        return makeMarker(InitialPostPositionByte, mstar);
     }
     else if (isUnicodeUnitLength(repeated) && !DisableMatchStar && !DisableUnicodeMatchStar) {
         PabloAST * cc = markerVar(compile(repeated, pb));
-        PabloAST * mstar = pb.createMatchStar(base, pb.createOr(mNonFinal, cc));
-        if (SetMod64Approximation) {
-            if (isa<MatchStar>(mstar)) {
-                dyn_cast<MatchStar>(mstar)->setMod64();
-            }
-        }
+        PabloAST * mstar = SetMod64Approximation ? pb.createMod64MatchStar(base, pb.createOr(mNonFinal, cc)) : pb.createMatchStar(base, pb.createOr(mNonFinal, cc));
         return makeMarker(FinalPostPositionByte, pb.createAnd(mstar, mFinal, "unbounded"));
     }
     else if (mStarDepth > 0){
