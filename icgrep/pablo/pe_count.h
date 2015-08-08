@@ -15,7 +15,7 @@ class Count : public Statement {
     friend class PabloBlock;
 public:
     static inline bool classof(const PabloAST * e) {
-        return e->getClassTypeId() == ClassTypeId::Advance;
+        return e->getClassTypeId() == ClassTypeId::Count;
     }
     static inline bool classof(const void *) {
         return false;

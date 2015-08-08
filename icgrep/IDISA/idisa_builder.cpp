@@ -99,6 +99,12 @@ Value * IDISA_Builder::simd_cttz(unsigned fw, Value * a) {
     return bitBlockCast(rslt);
 }
 
+Value * IDISA_Builder::simd_popcount(unsigned fw, Value * a) {
+    Value * ctpopFunc = Intrinsic::getDeclaration(mMod, Intrinsic::ctpop, fwVectorType(fw));
+    Value * rslt = mLLVMBuilder->CreateCall(ctpopFunc, {fwCast(fw, a)});
+    return bitBlockCast(rslt);
+}
+
 Value * IDISA_Builder::esimd_mergeh(unsigned fw, Value * a, Value * b) {
     unsigned field_count = mBitBlockSize/fw;
     Value * aVec = fwCast(fw, a);

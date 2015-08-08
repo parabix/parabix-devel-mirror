@@ -634,6 +634,11 @@ void PabloCompiler::compileStatement(const Statement * stmt) {
         Value * sum = iBuilder.simd_add(64, marker_expr, cc_expr);
         expr = mBuilder->CreateAnd(sum, genNot(cc_expr), "scanthru64");
     }
+    else if (const Count * c = dyn_cast<Count>(stmt)) {
+        unsigned count_index = c->getGlobalCountIndex();
+        Value * to_count = compileExpression(c->getExpr());
+        expr = mCarryManager->popCount(to_count, count_index);
+    }
     else {
         llvm::raw_os_ostream cerr(std::cerr);
         PabloPrinter::print(stmt, cerr);

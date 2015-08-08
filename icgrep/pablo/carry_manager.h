@@ -51,8 +51,10 @@ public:
     , mCurrentFrameIndex(0)
     , mCarryPackBasePtr(nullptr)
     , mCarryBitBlockPtr(nullptr)
+    , mPopcountBasePtr(nullptr)
     , mBlockNoPtr(nullptr)
     , mBlockNo(nullptr)
+    , mPabloCountCount(0)
     , mTotalCarryDataBitBlocks(0)
     {
 
@@ -107,6 +109,8 @@ public:
 
     void ensureCarriesStoredLocal();
     
+    Value * popCount(Value * to_count, unsigned globalIdx);
+    
 private:
     unsigned mPACK_SIZE;
     unsigned mITEMS_PER_PACK;
@@ -122,8 +126,10 @@ private:
     Value * mCarryPackBasePtr;
     Type * mCarryPackType;
     Value * mCarryBitBlockPtr;
+    Value * mPopcountBasePtr;
     Value * mBlockNoPtr;
     Value * mBlockNo;
+    unsigned mPabloCountCount; // Number of Pablo "Count" operations
     unsigned mTotalCarryDataBitBlocks;
     
     std::vector<PabloBlockCarryData *> mCarryInfoVector;

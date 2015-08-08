@@ -73,6 +73,11 @@ unsigned CarryManager::initialize(PabloBlock * pb, Value * carryPtr) {
     else {
         mTotalCarryDataBitBlocks = totalCarryDataSize;
     }
+    // Popcount data is stored after all the carry data.
+    if (mPabloCountCount > 0) {
+        mPopcountBasePtr = mBuilder->CreateBitCast(mBuilder->CreateGEP(carryPtr, mBuilder->getInt64(mTotalCarryDataBitBlocks)), Type::getInt64PtrTy(mBuilder->getContext()));
+        mTotalCarryDataBitBlocks += (mPabloCountCount + BLOCK_SIZE/64 - 1) * 64/BLOCK_SIZE;
+    }
     // Carry Data area will have one extra bit block to store the block number.
     mBlockNoPtr = mBuilder->CreateBitCast(mBuilder->CreateGEP(carryPtr, mBuilder->getInt64(mTotalCarryDataBitBlocks)), Type::getInt64PtrTy(mBuilder->getContext()));
     mBlockNo = mBuilder->CreateLoad(mBlockNoPtr);
@@ -103,7 +108,11 @@ unsigned CarryManager::enumerate(PabloBlock * blk, unsigned ifDepth, unsigned wh
     unsigned nestedOffset = cd->nested.frameOffset;
   
     for (Statement * stmt : *blk) {
-        if (If * ifStatement = dyn_cast<If>(stmt)) {
+        if (Count * c = dyn_cast<Count>(stmt)) {
+            c->setGlobalCountIndex(mPabloCountCount);
+            mPabloCountCount++;
+        }
+        else if (If * ifStatement = dyn_cast<If>(stmt)) {
             const unsigned ifCarryDataBits = enumerate(&ifStatement->getBody(), ifDepth+1, whileDepth);
             PabloBlockCarryData * nestedBlockData = mCarryInfoVector[ifStatement->getBody().getScopeIndex()];
             if (mITEMS_PER_PACK == mPACK_SIZE) {  // PACKING
@@ -659,6 +668,17 @@ void CarryManager::ensureCarriesStoredLocal() {
     }
 }
 
+Value * CarryManager::popCount(Value * to_count, unsigned globalIdx) {
+    Value * countPtr = mBuilder->CreateGEP(mPopcountBasePtr, mBuilder->getInt64(globalIdx));
+    Value * countSoFar = mBuilder->CreateAlignedLoad(countPtr, 8);
+    Value * fieldCounts = iBuilder->simd_popcount(64, to_count);
+    for (int i = 0; i < BLOCK_SIZE/64; i++) {
+        countSoFar = mBuilder->CreateAdd(countSoFar, iBuilder->mvmd_extract(64, fieldCounts, i));
+    }
+    mBuilder->CreateAlignedStore(countSoFar, countPtr, 8);
+    return mBuilder->CreateBitCast(mBuilder->CreateZExt(countSoFar, mBuilder->getIntNTy(BLOCK_SIZE)), mBitBlockType);
+}
+    
 CarryManager::~CarryManager() {
     for (auto * cd : mCarryInfoVector) {
         delete cd;

@@ -49,6 +49,7 @@ public:
     Value * simd_srai(unsigned fw, Value * a, unsigned shift);
     
     Value * simd_cttz(unsigned fw, Value * a);
+    Value * simd_popcount(unsigned fw, Value * a);
     
     Value * esimd_mergeh(unsigned fw, Value * a, Value * b);
     Value * esimd_mergel(unsigned fw, Value * a, Value * b);
