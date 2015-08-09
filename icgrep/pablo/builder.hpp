@@ -122,6 +122,13 @@ public:
     
     PabloAST * createMod64Advance(PabloAST * expr, PabloAST * shiftAmount);
 
+    inline PabloAST * createMod64Advance(PabloAST * expr, const Integer::Type shiftAmount) {
+        if (shiftAmount == 0) {
+            return expr;
+        }
+        return createMod64Advance(expr, mPb->getInteger(shiftAmount));
+    }
+
     inline PabloAST * createMod64Advance(PabloAST * expr, const Integer::Type shiftAmount, const std::string prefix) {
         if (shiftAmount == 0) {
             return expr;

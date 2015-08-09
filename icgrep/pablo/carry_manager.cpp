@@ -497,11 +497,13 @@ Value * CarryManager::getCarrySummaryExpr() {
 }
 
 void CarryManager::initializeCarryDataAtIfEntry() {
-    if (mCarryOutPack[scopeBasePack()] == nullptr) {
-        mCarryInfo->ifEntryPack = mZeroInitializer;
-    }
-    else {
-        mCarryInfo->ifEntryPack = mCarryOutPack[scopeBasePack()];
+    if (blockHasCarries()) {
+        if (mCarryOutPack[scopeBasePack()] == nullptr) {
+            mCarryInfo->ifEntryPack = mZeroInitializer;
+        }
+        else {
+            mCarryInfo->ifEntryPack = mCarryOutPack[scopeBasePack()];
+        }
     }
 }
     
