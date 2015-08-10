@@ -12,7 +12,7 @@
 #include <pablo/carry_manager.h>
 #include <pablo/pabloAST.h>
 #include <iostream>
-
+#include <llvm/Support/CommandLine.h>
 
 static cl::opt<CarryManagerStrategy> Strategy(cl::desc("Choose carry management strategy:"),
                                               cl::values(

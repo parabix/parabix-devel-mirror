@@ -21,11 +21,11 @@
 #ifdef ENABLE_MULTIPLEXING
 #include <pablo/optimizers/pablo_automultiplexing.hpp>
 #endif
-#include <llvm/Support/CommandLine.h>
 #include <pablo/function.h>
 #include <re/printer_re.h>
 #include <pablo/printer_pablos.h>
 #include <iostream>
+#include <llvm/Support/CommandLine.h>
 
 static cl::OptionCategory cRegexOutputOptions("Regex Dump Options",
                                       "These options control printing of intermediate regular expression structures.");
@@ -43,9 +43,7 @@ static cl::opt<bool> PrintCompiledCCcode("print-CC-pablo", cl::init(false), cl::
 static cl::opt<bool> PrintCompiledREcode("print-RE-pablo", cl::init(false), cl::desc("print Pablo output from the regular expression compiler"), cl::cat(dPabloDumpOptions));
 static cl::opt<bool> PrintOptimizedREcode("print-pablo", cl::init(false), cl::desc("print final optimized Pablo code"), cl::cat(dPabloDumpOptions));
 
-
-static cl::OptionCategory cPabloOptimizationsOptions("Pablo Optimizations",
-                                              "These options control Pablo optimization passes.");
+static cl::OptionCategory cPabloOptimizationsOptions("Pablo Optimizations", "These options control Pablo optimization passes.");
 
 static cl::opt<bool> DisablePabloCSE("disable-CSE", cl::init(false),
                                       cl::desc("Disable Pablo common subexpression elimination/dead code elimination"),
@@ -53,10 +51,11 @@ static cl::opt<bool> DisablePabloCSE("disable-CSE", cl::init(false),
 static cl::opt<bool> PabloSinkingPass("sinking", cl::init(false),
                                       cl::desc("Moves all instructions into the innermost legal If-scope so that they are only executed when needed."),
                                       cl::cat(cPabloOptimizationsOptions));
+
 #ifdef ENABLE_MULTIPLEXING
-static cl::opt<bool> EnableMultiplexing("enable-multiplexing", cl::init(false),
-                                      cl::desc("combine Advances whose inputs are mutual exclusive into the fewest number of advances possible (expensive)."),
-                                      cl::cat(cPabloOptimizationsOptions));
+static cl::opt<bool> EnableMultiplexing("multiplexing", cl::init(false),
+    cl::desc("combine Advances whose inputs are mutual exclusive into the fewest number of advances possible (expensive)."),
+    cl::cat(cPabloOptimizationsOptions));
 #endif
 
 using namespace re;

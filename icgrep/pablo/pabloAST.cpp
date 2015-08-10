@@ -8,10 +8,11 @@
 #include <pablo/codegenstate.h>
 #include <llvm/Support/Compiler.h>
 #include <pablo/printer_pablos.h>
-
 #ifndef NDEBUG
 #include <queue>
+#include <unordered_set>
 #endif
+
 namespace pablo {
 
 PabloAST::Allocator PabloAST::mAllocator;
@@ -103,10 +104,10 @@ void Statement::setOperand(const unsigned index, PabloAST * const value) {
     assert (value);
     assert (index < getNumOperands());
     assert (noRecursiveOperand(value));
-    if (LLVM_UNLIKELY(getOperand(index) == value)) {
+    PabloAST * const priorValue = getOperand(index);
+    if (LLVM_UNLIKELY(priorValue == value)) {
         return;
-    }
-    PabloAST * priorValue = getOperand(index);
+    }    
     if (LLVM_LIKELY(priorValue != nullptr)) {
         // Test just to be sure that we don't have multiple operands pointing to
         // what we're replacing. If not, remove this from the prior value's
@@ -258,21 +259,26 @@ Statement * Statement::replaceWith(PabloAST * const expr, const bool rename, con
 
 #ifndef NDEBUG
 bool Statement::noRecursiveOperand(const PabloAST * const operand) {
-    if (operand && isa<Statement>(operand)) {
+    if (const Statement * stmt = dyn_cast<Statement>(operand)) {
         std::queue<const Statement *> Q;
-        Q.push(cast<Statement>(operand));
-        while (!Q.empty()) {
-            const Statement * stmt = Q.front();
+        std::unordered_set<const PabloAST *> V;
+        V.insert(stmt);
+        for (;;) {
             if (stmt == this) {
                 return false;
             }
-            Q.pop();
-            for (auto i = 0; i != stmt->getNumOperands(); ++i) {
-                const PabloAST * op = stmt->getOperand(i);
-                if (isa<Statement>(op)) {
+            for (unsigned i = 0; i != stmt->getNumOperands(); ++i) {
+                const PabloAST * op = stmt->getOperand(i);                
+                if (isa<Statement>(op) && V.count(op) == 0) {
                     Q.push(cast<Statement>(op));
+                    V.insert(op);
                 }
             }
+            if (LLVM_UNLIKELY(Q.empty())) {
+                break;
+            }
+            stmt = Q.front();
+            Q.pop();
         }
     }
     return true;

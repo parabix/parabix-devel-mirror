@@ -37,6 +37,9 @@
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/Analysis/DependenceAnalysis.h>
 
+#include <queue>
+#include <unordered_map>
+
 using namespace pablo;
 using namespace UCD;
 using namespace cc;
@@ -48,15 +51,16 @@ ObjectFilename("o", cl::desc("Output object filename"), cl::value_desc("filename
 static cl::opt<std::string>
 UCDSourcePath("dir", cl::desc("UCD source code directory"), cl::value_desc("directory"), cl::Required);
 
-static cl::opt<bool> PrintDependenceAnalysis("print-da", cl::init(false), cl::desc("print Dependence Analysis."));
+static cl::opt<bool> PrintDependenceAnalysis("pablo-ldc", cl::init(false), cl::desc("print Pablo longest dependency chain metrics."));
 
 
 #ifdef ENABLE_MULTIPLEXING
 static cl::opt<bool> EnableMultiplexing("multiplexing", cl::init(false),
-                                        cl::desc("combine Advances whose inputs are mutual exclusive into the fewest number of advances possible (expensive)."));
+    cl::desc("combine Advances whose inputs are mutual exclusive into the fewest number of advances possible (expensive)."));
 
 static cl::opt<std::string>
-MultiplexingDistribution("multiplexing-dist", cl::desc("Generate a CSV containing the # of Advances found in each UCD function before and after applying multiplexing."), cl::value_desc("filename"));
+MultiplexingDistribution("multiplexing-dist",
+    cl::desc("Generate a CSV containing the # of Advances found in each UCD function before and after applying multiplexing."), cl::value_desc("filename"));
 
 static raw_fd_ostream * MultiplexingDistributionFile = nullptr;
 #endif
@@ -77,6 +81,68 @@ unsigned getNumOfAdvances(const PabloBlock & entry) {
         }
     }
     return advances;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief computePabloDependencyMetrics
+ ** ------------------------------------------------------------------------------------------------------------- */
+void computePabloDependencyChainMetrics(const PabloFunction & f) {
+
+    std::queue<const PabloAST *> Q;
+    std::unordered_map<const PabloAST *, unsigned> V;
+
+    for (unsigned i = 0; i != f.getNumOfResults(); ++i) {
+        V.insert(std::make_pair(f.getResult(i), 0));
+        const PabloAST * expr = f.getResult(i)->getExpression();
+        if (expr->getNumUses() == 1 && V.count(expr) == 0) {
+            V.insert(std::make_pair(expr, 1));
+            if (LLVM_LIKELY(isa<Statement>(expr))) {
+                Q.push(cast<Statement>(expr));
+            }
+        }
+    }
+
+    while (!Q.empty()) {
+        const PabloAST * expr = Q.front(); Q.pop();
+        unsigned lpl = 0; // longest path length
+        for (const PabloAST * user : expr->users()) {
+            lpl = std::max<unsigned>(lpl, V[user]);
+        }
+        V.insert(std::make_pair(expr, lpl + 1));
+        if (const Statement * stmt = dyn_cast<Statement>(expr)) {
+            for (unsigned i = 0; i != stmt->getNumOperands(); ++i) {
+                assert (V.count(stmt->getOperand(i)) == 0);
+                bool everyUserOfThisOperandWasProcessed = true;
+                for (const PabloAST * user : stmt->getOperand(i)->users()) {
+                    if (V.count(user) == 0) {
+                        everyUserOfThisOperandWasProcessed = false;
+                        break;
+                    }
+                }
+                if (everyUserOfThisOperandWasProcessed) {
+                    Q.push(stmt->getOperand(i));
+                }
+            }
+        }
+    }
+
+    unsigned lpl = 0;
+    for (unsigned i = 0; i != f.getNumOfParameters(); ++i) {
+        assert (V.count(f.getParameter(i)));
+        lpl = std::max<unsigned>(lpl, V[f.getParameter(i)]);
+    }
+
+
+
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief computeLLVMDependencyMetrics
+ ** ------------------------------------------------------------------------------------------------------------- */
+void computeLLVMDependencyChainMetrics(const llvm::Function & f) {
+
+
+
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -193,7 +259,6 @@ void writePrecompiledProperties(property_list && properties) {
     cpp.close();
 
 }
-
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief generateUCDModule

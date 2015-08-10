@@ -102,6 +102,8 @@ PabloAST * PabloBuilder::createNot(PabloAST * expr, const std::string prefix) {
 }
 
 PabloAST * PabloBuilder::createAnd(PabloAST * expr1, PabloAST * expr2) {
+    assert (expr1);
+    assert (expr2);
     if (isa<Not>(expr1) || expr1 > expr2) {
         std::swap(expr1, expr2);
     }
@@ -110,6 +112,8 @@ PabloAST * PabloBuilder::createAnd(PabloAST * expr1, PabloAST * expr2) {
 }
 
 PabloAST * PabloBuilder::createAnd(PabloAST * expr1, PabloAST * expr2, const std::string prefix) {
+    assert (expr1);
+    assert (expr2);
     if (isa<Not>(expr1) || expr1 > expr2) {
         std::swap(expr1, expr2);
     }
@@ -118,6 +122,8 @@ PabloAST * PabloBuilder::createAnd(PabloAST * expr1, PabloAST * expr2, const std
 }
 
 PabloAST * PabloBuilder::createOr(PabloAST * expr1, PabloAST * expr2) {
+    assert (expr1);
+    assert (expr2);
     if (expr1 > expr2) {
         std::swap(expr1, expr2);
     }
@@ -126,6 +132,8 @@ PabloAST * PabloBuilder::createOr(PabloAST * expr1, PabloAST * expr2) {
 }
 
 PabloAST * PabloBuilder::createOr(PabloAST * expr1, PabloAST * expr2, const std::string prefix) {
+    assert (expr1);
+    assert (expr2);
     if (expr1 > expr2) {
         std::swap(expr1, expr2);
     }
@@ -134,6 +142,8 @@ PabloAST * PabloBuilder::createOr(PabloAST * expr1, PabloAST * expr2, const std:
 }
 
 PabloAST * PabloBuilder::createXor(PabloAST * expr1, PabloAST * expr2) {
+    assert (expr1);
+    assert (expr2);
     if (expr1 > expr2) {
         std::swap(expr1, expr2);
     }
@@ -142,6 +152,8 @@ PabloAST * PabloBuilder::createXor(PabloAST * expr1, PabloAST * expr2) {
 }
 
 PabloAST * PabloBuilder::createXor(PabloAST * expr1, PabloAST * expr2, const std::string prefix) {
+    assert (expr1);
+    assert (expr2);
     if (expr1 > expr2) {
         std::swap(expr1, expr2);
     }

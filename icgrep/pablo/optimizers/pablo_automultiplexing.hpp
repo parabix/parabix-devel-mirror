@@ -34,7 +34,8 @@ class AutoMultiplexing {
     using AdvanceMap = boost::container::flat_map<const Statement *, unsigned>;
     using AdvanceVector = std::vector<std::tuple<Advance *, DdNode *, DdNode *>>;
     using VertexVector = std::vector<ConstraintVertex>;
-    using RecentCharacterizations = std::vector<std::pair<const PabloAST *, DdNode *>>;   
+    using RecentCharacterizations = std::vector<std::pair<const PabloAST *, DdNode *>>;
+    using MuxedVariables = std::vector<std::vector<PabloAST *>>;
 public:
     static bool optimize(PabloFunction & function);
 protected:
@@ -47,10 +48,10 @@ protected:
     void addCandidateSet(const VertexVector & S);
     void selectMultiplexSets(RNG &);
     void applySubsetConstraints();
-    void multiplexSelectedIndependentSets() const;
-    void simplifyAST(Advance * const muxed[], const unsigned m, PabloBuilder & builder) const;
-    std::pair<PabloAST *, unsigned> simplifyAST(DdManager * manager, DdNode * const f, PabloAST * const variables[], PabloBuilder & builder) const;
-    std::pair<PabloAST *, unsigned> makeCoverAST(DdManager * manager, DdNode * const f, PabloAST * const variables[], PabloBuilder & builder) const;
+    void multiplexSelectedIndependentSets();
+    void simplifyAST(const PabloFunction & function);
+    PabloAST * simplifyAST(DdNode * const f, const std::vector<PabloAST *> & variables, PabloBuilder & builder);
+    PabloAST * makeCoverAST(DdNode * const f, const std::vector<PabloAST *> & variables, PabloBuilder & builder);
     void topologicalSort(PabloBlock & entry) const;
     inline AutoMultiplexing()
     : mVariables(0)
@@ -83,6 +84,8 @@ private:
     AdvanceVector               mAdvance;
     MultiplexSetGraph           mMultiplexSetGraph;
     RecentCharacterizations     mRecentCharacterizations;
+    MuxedVariables              mMuxedVariables;
+    unsigned                    mSimplifyDepth;
 };
 
 }
