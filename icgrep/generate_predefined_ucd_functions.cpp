@@ -36,7 +36,7 @@
 #include <llvm/Transforms/Scalar.h>
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/Analysis/DependenceAnalysis.h>
-
+#include <boost/container/flat_map.hpp>
 #include <queue>
 #include <unordered_map>
 
@@ -44,6 +44,7 @@ using namespace pablo;
 using namespace UCD;
 using namespace cc;
 using namespace llvm;
+using namespace boost::container;
 
 static cl::opt<std::string>
 ObjectFilename("o", cl::desc("Output object filename"), cl::value_desc("filename"), cl::Required);
@@ -51,8 +52,10 @@ ObjectFilename("o", cl::desc("Output object filename"), cl::value_desc("filename
 static cl::opt<std::string>
 UCDSourcePath("dir", cl::desc("UCD source code directory"), cl::value_desc("directory"), cl::Required);
 
-static cl::opt<bool> PrintDependenceAnalysis("pablo-ldc", cl::init(false), cl::desc("print Pablo longest dependency chain metrics."));
+static cl::opt<std::string>
+PrintLongestDependenceChain("ldc", cl::desc("print longest dependency chain metrics."), cl::value_desc("filename"));
 
+static raw_fd_ostream * LongestDependenceChainFile = nullptr;
 
 #ifdef ENABLE_MULTIPLEXING
 static cl::opt<bool> EnableMultiplexing("multiplexing", cl::init(false),
@@ -60,9 +63,12 @@ static cl::opt<bool> EnableMultiplexing("multiplexing", cl::init(false),
 
 static cl::opt<std::string>
 MultiplexingDistribution("multiplexing-dist",
-    cl::desc("Generate a CSV containing the # of Advances found in each UCD function before and after applying multiplexing."), cl::value_desc("filename"));
+    cl::desc("Generate a CSV containing the # of Advances found in each UCD function before and after applying multiplexing."),
+    cl::value_desc("filename"));
 
 static raw_fd_ostream * MultiplexingDistributionFile = nullptr;
+#else
+const bool EnableMultiplexing = false;
 #endif
 
 using property_list = std::vector<std::pair<std::string, size_t>>;
@@ -86,63 +92,111 @@ unsigned getNumOfAdvances(const PabloBlock & entry) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief computePabloDependencyMetrics
  ** ------------------------------------------------------------------------------------------------------------- */
-void computePabloDependencyChainMetrics(const PabloFunction & f) {
-
-    std::queue<const PabloAST *> Q;
-    std::unordered_map<const PabloAST *, unsigned> V;
-
-    for (unsigned i = 0; i != f.getNumOfResults(); ++i) {
-        V.insert(std::make_pair(f.getResult(i), 0));
-        const PabloAST * expr = f.getResult(i)->getExpression();
-        if (expr->getNumUses() == 1 && V.count(expr) == 0) {
-            V.insert(std::make_pair(expr, 1));
-            if (LLVM_LIKELY(isa<Statement>(expr))) {
-                Q.push(cast<Statement>(expr));
-            }
-        }
-    }
-
-    while (!Q.empty()) {
-        const PabloAST * expr = Q.front(); Q.pop();
-        unsigned lpl = 0; // longest path length
-        for (const PabloAST * user : expr->users()) {
-            lpl = std::max<unsigned>(lpl, V[user]);
-        }
-        V.insert(std::make_pair(expr, lpl + 1));
-        if (const Statement * stmt = dyn_cast<Statement>(expr)) {
-            for (unsigned i = 0; i != stmt->getNumOperands(); ++i) {
-                assert (V.count(stmt->getOperand(i)) == 0);
-                bool everyUserOfThisOperandWasProcessed = true;
-                for (const PabloAST * user : stmt->getOperand(i)->users()) {
-                    if (V.count(user) == 0) {
-                        everyUserOfThisOperandWasProcessed = false;
-                        break;
-                    }
-                }
-                if (everyUserOfThisOperandWasProcessed) {
-                    Q.push(stmt->getOperand(i));
-                }
-            }
-        }
-    }
-
+unsigned computePabloDependencyChainMetrics(const PabloBlock & b, std::unordered_map<const PabloAST *, unsigned> G) {
     unsigned lpl = 0;
-    for (unsigned i = 0; i != f.getNumOfParameters(); ++i) {
-        assert (V.count(f.getParameter(i)));
-        lpl = std::max<unsigned>(lpl, V[f.getParameter(i)]);
+    flat_map<const PabloAST *, unsigned> L;
+    for (const Statement * stmt : b) {
+        unsigned local_lpl = 0;
+        unsigned global_lpl = 0;
+        for (unsigned i = 0; i != stmt->getNumOperands(); ++i) {
+            const auto l = L.find(stmt->getOperand(i));
+            if (l != L.end()) {
+                local_lpl = std::max<unsigned>(local_lpl, l->second);
+            }
+            const auto g = G.find(stmt->getOperand(i));
+            if (LLVM_UNLIKELY(g == G.end())) {
+                throw std::runtime_error("Could not find dependency chain length for all operands!");
+            }
+            global_lpl = std::max<unsigned>(global_lpl, g->second);
+        }
+        L.emplace(stmt, local_lpl + 1);
+        G.insert(std::make_pair(stmt, global_lpl + 1));
+        if (LLVM_UNLIKELY(isa<If>(stmt) || isa<While>(stmt))) {
+            for (const auto & l : L) {
+                lpl = std::max(lpl, l.second);
+            }
+            L.clear();
+            lpl = std::max(lpl, computePabloDependencyChainMetrics(isa<If>(stmt) ? cast<If>(stmt)->getBody() : cast<While>(stmt)->getBody(), G));
+        }
     }
+    return lpl;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief computePabloDependencyMetrics
+ ** ------------------------------------------------------------------------------------------------------------- */
+std::pair<unsigned, unsigned> computePabloDependencyChainMetrics(const PabloFunction & f) {
+    std::unordered_map<const PabloAST *, unsigned> G;
+    for (unsigned i = 0; i != f.getNumOfParameters(); ++i) {
+        G.insert(std::make_pair(f.getParameter(i), 0));
+    }
+    const unsigned local_lpl = computePabloDependencyChainMetrics(f.getEntryBlock(), G);
+    unsigned global_lpl = 0;
+    for (unsigned i = 0; i != f.getNumOfResults(); ++i) {
+        assert (V.count(f.getParameter(i)));
+        global_lpl = std::max<unsigned>(global_lpl, G[f.getResult(i)]);
+    }
+    return std::make_pair(global_lpl, local_lpl);
+}
 
 
-
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief computeLLVMDependencyMetrics
+ ** ------------------------------------------------------------------------------------------------------------- */
+unsigned computeLLVMDependencyChainMetrics(const llvm::BasicBlock & b, std::unordered_map<const llvm::Value *, unsigned> G) {
+    unsigned lpl = 0;
+    if (true) {
+        flat_map<const llvm::Value *, unsigned> L;
+        for (const llvm::Instruction & inst : b) {
+            unsigned local_lpl = 0;
+            unsigned global_lpl = 0;
+            for (unsigned i = 0; i != inst.getNumOperands(); ++i) {
+                const auto l = L.find(inst.getOperand(i));
+                if (l != L.end()) {
+                    local_lpl = std::max<unsigned>(local_lpl, l->second);
+                }
+                const auto g = G.find(inst.getOperand(i));
+                if (LLVM_UNLIKELY(g == G.end())) {
+                    throw std::runtime_error("Could not find dependency chain length for all operands!");
+                }
+                global_lpl = std::max<unsigned>(global_lpl, g->second);
+            }
+            L.emplace(&inst, local_lpl + 1);
+            G.insert(std::make_pair(&inst, global_lpl + 1));
+        }
+        for (const auto & l : L) {
+            lpl = std::max(lpl, l.second);
+        }
+    }
+    const TerminatorInst * t = b.getTerminator();
+    if (LLVM_LIKELY(isa<BranchInst>(t))) {
+        for (unsigned i = t->getNumSuccessors(); i-- != 0; ) {
+            lpl = std::max(lpl, computeLLVMDependencyChainMetrics(*(t->getSuccessor(i)), G));
+        }
+    }
+    return lpl;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief computeLLVMDependencyMetrics
  ** ------------------------------------------------------------------------------------------------------------- */
-void computeLLVMDependencyChainMetrics(const llvm::Function & f) {
-
-
-
+std::pair<unsigned, unsigned> computeLLVMDependencyChainMetrics(const llvm::Function & f) {
+    std::unordered_map<const llvm::Value *, unsigned> G;
+    auto arg_itr = f.getArgumentList().begin();
+    const Argument & input = *arg_itr++;
+    input.dump();
+    for (const auto user : input.users()) {
+        user->dump();
+        G.insert(std::make_pair(user, 0));
+    }
+    const unsigned local_lpl = computeLLVMDependencyChainMetrics(f.getEntryBlock(), G);
+    const Argument & output = *arg_itr;
+    unsigned global_lpl = 0;
+    for (const auto user : output.users()) {
+        user->dump();
+        global_lpl = std::max<unsigned>(global_lpl, G[user]);
+    }
+    return std::make_pair(global_lpl, local_lpl);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -154,6 +208,10 @@ size_t compileUnicodeSet(std::string name, const UnicodeSet & set, PabloCompiler
         (*MultiplexingDistributionFile) << name;
     }
     #endif
+    if (LongestDependenceChainFile) {
+        (*LongestDependenceChainFile) << name;
+    }
+
     PabloFunction function = PabloFunction::Create(std::move(name), 8, 1);
     Encoding encoding(Encoding::Type::UTF_8, 8);
     CC_Compiler ccCompiler(function, encoding);
@@ -164,6 +222,7 @@ size_t compileUnicodeSet(std::string name, const UnicodeSet & set, PabloCompiler
     // Optimize it at the pablo level
     Simplifier::optimize(function);
     CodeSinking::optimize(function);
+
     #ifdef ENABLE_MULTIPLEXING
     if (EnableMultiplexing) {
         if (MultiplexingDistributionFile) {
@@ -174,11 +233,27 @@ size_t compileUnicodeSet(std::string name, const UnicodeSet & set, PabloCompiler
         if (MultiplexingDistributionFile) {
             (*MultiplexingDistributionFile) << ',' << getNumOfAdvances(function.getEntryBlock()) << '\n';
         }
+
+        if (LongestDependenceChainFile) {
+            const auto pablo_metrix = computePabloDependencyChainMetrics(function);
+            (*LongestDependenceChainFile) << ',' << pablo_metrix.first << ',' << pablo_metrix.second;
+            Module module("tmp", getGlobalContext());
+            auto func = pc.compile(function, &module);
+            const auto llvm_metrix = computeLLVMDependencyChainMetrics(func.second);
+            (*LongestDependenceChainFile) << ',' << llvm_metrix.first << ',' << llvm_metrix.second;
+        }
     }
     #endif
     // Now compile the function ...
     auto func = pc.compile(function, module);
     releaseSlabAllocatorMemory();
+
+    if (LongestDependenceChainFile) {
+        const auto pablo_metrix = computePabloDependencyChainMetrics(function);
+        (*LongestDependenceChainFile) << ',' << pablo_metrix.first << ',' << pablo_metrix.second;
+        const auto llvm_metrix = computeLLVMDependencyChainMetrics(*func.first);
+        (*LongestDependenceChainFile) << ',' << llvm_metrix.first << ',' << llvm_metrix.second << '\n';
+    }
 
     return func.second;
 }
@@ -386,8 +461,6 @@ int main(int argc, char *argv[]) {
     cl::ParseCommandLineOptions(argc, argv, "UCD Compiler\n");
 
 
-
-
     #ifdef ENABLE_MULTIPLEXING
     if (MultiplexingDistribution.length() > 0) {
         #ifdef USE_LLVM_3_5
@@ -405,13 +478,49 @@ int main(int argc, char *argv[]) {
         #endif
     }
     #endif
+
+    if (PrintLongestDependenceChain.length() > 0) {
+        #ifdef USE_LLVM_3_5
+        std::string error;
+        LongestDependenceChainFile = new raw_fd_ostream(PrintLongestDependenceChain.c_str(), error, sys::fs::F_Text);
+        if (!error.empty()) {
+            throw std::runtime_error(error);
+        }
+        #else
+        std::error_code error;
+        LongestDependenceChainFile = new raw_fd_ostream(PrintLongestDependenceChain, error, sys::fs::F_Text);
+        if (error) {
+            throw std::runtime_error(error.message());
+        }
+        #endif
+
+        if (LongestDependenceChainFile) {
+            if (EnableMultiplexing) {
+                (*LongestDependenceChainFile) << ",Pre-Multiplexing,,,,Post-Multiplexing\n";
+            }
+            (*LongestDependenceChainFile) << ",Pablo,,LLVM,";
+            if (EnableMultiplexing) {
+                (*LongestDependenceChainFile) << ",Pablo,,LLVM,";
+            }
+            (*LongestDependenceChainFile) << "\nName,Global,Max Local,Global,Max Local";
+            if (EnableMultiplexing) {
+                (*LongestDependenceChainFile) << ",Global,Max Local,Global,Max Local";
+            }
+            (*LongestDependenceChainFile) << "\n";
+        }
+    }
+
     Module * module = generateUCDModule();
     #ifdef ENABLE_MULTIPLEXING
     if (MultiplexingDistributionFile) {
         MultiplexingDistributionFile->close();
         delete MultiplexingDistributionFile;
-    }
+    }    
     #endif
+    if (LongestDependenceChainFile) {
+        LongestDependenceChainFile->close();
+        delete LongestDependenceChainFile;
+    }
     compileUCDModule(module);
     return 0;
 }

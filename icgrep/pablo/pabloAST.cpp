@@ -130,10 +130,10 @@ void Statement::insertBefore(Statement * const statement) {
         return;
     }
     else if (LLVM_UNLIKELY(statement == nullptr)) {
-        throw std::runtime_error("Cannot insert before Null statement!");
+        throw std::runtime_error("cannot insert before null statement!");
     }
     else if (LLVM_UNLIKELY(statement->mParent == nullptr)) {
-        throw std::runtime_error("Cannot insert before before statement in Null AST!");
+        throw std::runtime_error("statement is not contained in a pablo block!");
     }
     removeFromParent();
     mParent = statement->mParent;
@@ -157,10 +157,10 @@ void Statement::insertAfter(Statement * const statement) {
         return;
     }
     else if (LLVM_UNLIKELY(statement == nullptr)) {
-        throw std::runtime_error("Cannot insert before Null statement!");
+        throw std::runtime_error("cannot insert after null statement!");
     }
     else if (LLVM_UNLIKELY(statement->mParent == nullptr)) {
-        throw std::runtime_error("Cannot insert before before statement in Null AST!");
+        throw std::runtime_error("statement is not contained in a pablo block!");
     }
     removeFromParent();
     mParent = statement->mParent;
