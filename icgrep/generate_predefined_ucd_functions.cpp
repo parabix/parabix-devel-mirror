@@ -39,6 +39,8 @@
 #include <boost/container/flat_map.hpp>
 #include <queue>
 #include <unordered_map>
+#include <pablo/printer_pablos.h>
+#include <llvm/Analysis/PostDominators.h>
 
 using namespace pablo;
 using namespace UCD;
@@ -92,18 +94,22 @@ unsigned getNumOfAdvances(const PabloBlock & entry) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief computePabloDependencyMetrics
  ** ------------------------------------------------------------------------------------------------------------- */
-unsigned computePabloDependencyChainMetrics(const PabloBlock & b, std::unordered_map<const PabloAST *, unsigned> G) {
+unsigned computePabloDependencyChainMetrics(const PabloBlock & b, std::unordered_map<const PabloAST *, unsigned> & G) {
     unsigned lpl = 0;
     flat_map<const PabloAST *, unsigned> L;
     for (const Statement * stmt : b) {
         unsigned local_lpl = 0;
         unsigned global_lpl = 0;
         for (unsigned i = 0; i != stmt->getNumOperands(); ++i) {
-            const auto l = L.find(stmt->getOperand(i));
+            const PabloAST * const op = stmt->getOperand(i);
+            if (isa<String>(op) || isa<Integer>(op)) {
+                continue;
+            }
+            const auto l = L.find(op);
             if (l != L.end()) {
                 local_lpl = std::max<unsigned>(local_lpl, l->second);
             }
-            const auto g = G.find(stmt->getOperand(i));
+            const auto g = G.find(op);
             if (LLVM_UNLIKELY(g == G.end())) {
                 throw std::runtime_error("Could not find dependency chain length for all operands!");
             }
@@ -127,52 +133,55 @@ unsigned computePabloDependencyChainMetrics(const PabloBlock & b, std::unordered
  ** ------------------------------------------------------------------------------------------------------------- */
 std::pair<unsigned, unsigned> computePabloDependencyChainMetrics(const PabloFunction & f) {
     std::unordered_map<const PabloAST *, unsigned> G;
+    G.insert(std::make_pair(f.getEntryBlock().createZeroes(), 0));
+    G.insert(std::make_pair(f.getEntryBlock().createOnes(), 0));
     for (unsigned i = 0; i != f.getNumOfParameters(); ++i) {
         G.insert(std::make_pair(f.getParameter(i), 0));
     }
     const unsigned local_lpl = computePabloDependencyChainMetrics(f.getEntryBlock(), G);
     unsigned global_lpl = 0;
     for (unsigned i = 0; i != f.getNumOfResults(); ++i) {
-        assert (V.count(f.getParameter(i)));
-        global_lpl = std::max<unsigned>(global_lpl, G[f.getResult(i)]);
+        const auto e = G.find(f.getResult(i));
+        if (e == G.end()) {
+            throw std::runtime_error("No result computed!");
+        }
+        global_lpl = std::max<unsigned>(global_lpl, e->second);
     }
     return std::make_pair(global_lpl, local_lpl);
 }
 
-
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief computeLLVMDependencyMetrics
  ** ------------------------------------------------------------------------------------------------------------- */
-unsigned computeLLVMDependencyChainMetrics(const llvm::BasicBlock & b, std::unordered_map<const llvm::Value *, unsigned> G) {
+unsigned computeLLVMDependencyChainMetrics(const DomTreeNode * t, std::unordered_map<const Value *, unsigned> & G) {
     unsigned lpl = 0;
     if (true) {
-        flat_map<const llvm::Value *, unsigned> L;
-        for (const llvm::Instruction & inst : b) {
+        flat_map<const Value *, unsigned> L;
+        const BasicBlock * b = t->getBlock();
+        for (auto itr = b->rbegin(); itr != b->rend(); ++itr) {
             unsigned local_lpl = 0;
             unsigned global_lpl = 0;
-            for (unsigned i = 0; i != inst.getNumOperands(); ++i) {
-                const auto l = L.find(inst.getOperand(i));
-                if (l != L.end()) {
-                    local_lpl = std::max<unsigned>(local_lpl, l->second);
+            const Instruction & inst = *itr;
+            for (const Value * user : inst.users()) {
+                if (LLVM_LIKELY(isa<Instruction>(user))) {
+                    const auto l = L.find(user);
+                    if (l != L.end()) {
+                        local_lpl = std::max<unsigned>(local_lpl, l->second);
+                    }
+                    const auto g = G.find(user);
+                    if (LLVM_UNLIKELY(g == G.end())) {
+                        throw std::runtime_error("Could not find chain length for all users!");
+                    }
+                    global_lpl = std::max<unsigned>(global_lpl, g->second);
                 }
-                const auto g = G.find(inst.getOperand(i));
-                if (LLVM_UNLIKELY(g == G.end())) {
-                    throw std::runtime_error("Could not find dependency chain length for all operands!");
-                }
-                global_lpl = std::max<unsigned>(global_lpl, g->second);
             }
             L.emplace(&inst, local_lpl + 1);
             G.insert(std::make_pair(&inst, global_lpl + 1));
-        }
-        for (const auto & l : L) {
-            lpl = std::max(lpl, l.second);
+            lpl = std::max(lpl, local_lpl + 1);
         }
     }
-    const TerminatorInst * t = b.getTerminator();
-    if (LLVM_LIKELY(isa<BranchInst>(t))) {
-        for (unsigned i = t->getNumSuccessors(); i-- != 0; ) {
-            lpl = std::max(lpl, computeLLVMDependencyChainMetrics(*(t->getSuccessor(i)), G));
-        }
+    for (const DomTreeNode * pt : *t) {
+        lpl = std::max(lpl, computeLLVMDependencyChainMetrics(pt, G));
     }
     return lpl;
 }
@@ -180,21 +189,28 @@ unsigned computeLLVMDependencyChainMetrics(const llvm::BasicBlock & b, std::unor
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief computeLLVMDependencyMetrics
  ** ------------------------------------------------------------------------------------------------------------- */
-std::pair<unsigned, unsigned> computeLLVMDependencyChainMetrics(const llvm::Function & f) {
+std::pair<unsigned, unsigned> computeLLVMDependencyChainMetrics(llvm::Function & f) {
     std::unordered_map<const llvm::Value *, unsigned> G;
-    auto arg_itr = f.getArgumentList().begin();
-    const Argument & input = *arg_itr++;
-    input.dump();
-    for (const auto user : input.users()) {
-        user->dump();
+
+    auto itr = f.getArgumentList().begin();
+    const Argument & input = *itr++;
+    const Argument & output = *itr;
+    for (const User * user : output.users()) {
         G.insert(std::make_pair(user, 0));
     }
-    const unsigned local_lpl = computeLLVMDependencyChainMetrics(f.getEntryBlock(), G);
-    const Argument & output = *arg_itr;
+
+    PostDominatorTree dt;
+    dt.runOnFunction(f);
+    const unsigned local_lpl = computeLLVMDependencyChainMetrics(dt.getRootNode(), G);
+    dt.releaseMemory();
+
     unsigned global_lpl = 0;
-    for (const auto user : output.users()) {
-        user->dump();
-        global_lpl = std::max<unsigned>(global_lpl, G[user]);
+    for (const User * user : input.users()) {
+        const auto e = G.find(user);
+        if (e == G.end()) {
+            throw std::runtime_error("No result computed!");
+        }
+        global_lpl = std::max<unsigned>(global_lpl, e->second);
     }
     return std::make_pair(global_lpl, local_lpl);
 }
@@ -225,6 +241,16 @@ size_t compileUnicodeSet(std::string name, const UnicodeSet & set, PabloCompiler
 
     #ifdef ENABLE_MULTIPLEXING
     if (EnableMultiplexing) {
+
+        if (LongestDependenceChainFile) {
+            const auto pablo_metrix = computePabloDependencyChainMetrics(function);
+            (*LongestDependenceChainFile) << ',' << pablo_metrix.first << ',' << pablo_metrix.second;
+            Module module("tmp", getGlobalContext());
+            auto func = pc.compile(function, &module);
+            const auto llvm_metrix = computeLLVMDependencyChainMetrics(*func.first);
+            (*LongestDependenceChainFile) << ',' << llvm_metrix.first << ',' << llvm_metrix.second;
+        }
+
         if (MultiplexingDistributionFile) {
             (*MultiplexingDistributionFile) << ',' << getNumOfAdvances(function.getEntryBlock());
         }
@@ -232,15 +258,6 @@ size_t compileUnicodeSet(std::string name, const UnicodeSet & set, PabloCompiler
         Simplifier::optimize(function);
         if (MultiplexingDistributionFile) {
             (*MultiplexingDistributionFile) << ',' << getNumOfAdvances(function.getEntryBlock()) << '\n';
-        }
-
-        if (LongestDependenceChainFile) {
-            const auto pablo_metrix = computePabloDependencyChainMetrics(function);
-            (*LongestDependenceChainFile) << ',' << pablo_metrix.first << ',' << pablo_metrix.second;
-            Module module("tmp", getGlobalContext());
-            auto func = pc.compile(function, &module);
-            const auto llvm_metrix = computeLLVMDependencyChainMetrics(func.second);
-            (*LongestDependenceChainFile) << ',' << llvm_metrix.first << ',' << llvm_metrix.second;
         }
     }
     #endif

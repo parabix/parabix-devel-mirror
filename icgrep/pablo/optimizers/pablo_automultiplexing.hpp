@@ -35,7 +35,7 @@ class AutoMultiplexing {
     using AdvanceVector = std::vector<std::tuple<Advance *, DdNode *, DdNode *>>;
     using VertexVector = std::vector<ConstraintVertex>;
     using RecentCharacterizations = std::vector<std::pair<const PabloAST *, DdNode *>>;
-    using MuxedVariables = std::vector<std::vector<PabloAST *>>;
+    using MuxedVariables = std::vector<std::vector<Advance *>>;
 public:
     static bool optimize(PabloFunction & function);
 protected:
@@ -85,7 +85,6 @@ private:
     MultiplexSetGraph           mMultiplexSetGraph;
     RecentCharacterizations     mRecentCharacterizations;
     MuxedVariables              mMuxedVariables;
-    unsigned                    mSimplifyDepth;
 };
 
 }

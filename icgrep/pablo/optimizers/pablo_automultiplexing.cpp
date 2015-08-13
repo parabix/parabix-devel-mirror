@@ -169,6 +169,7 @@ bool AutoMultiplexing::optimize(PabloFunction & function) {
 //        am.topologicalSort(function.getEntryBlock());
 //        RECORD_TIMESTAMP(end_topological_sort2);
 //        LOG("TopologicalSort (2):     " << (end_topological_sort2 - start_topological_sort2));
+
     }
 
     LOG_NUMBER_OF_ADVANCES(function.getEntryBlock());
@@ -985,7 +986,7 @@ void AutoMultiplexing::multiplexSelectedIndependentSets() {
         if (n) {
             const size_t m = log2_plus_one(n);
             Advance * input[n];
-            std::vector<PabloAST *> muxed(m);
+            std::vector<Advance *> muxed(m);
 
             graph_traits<MultiplexSetGraph>::out_edge_iterator ei, ei_end;
             std::tie(ei, ei_end) = out_edges(s, mMultiplexSetGraph);
@@ -1024,7 +1025,7 @@ void AutoMultiplexing::multiplexSelectedIndependentSets() {
                 PabloAST * mux = Q.front(); Q.pop_front(); assert (mux);
                 // The only way this did not return an Advance statement would be if either the mux or shift amount
                 // is zero. Since these cases would have been eliminated earlier, we are safe to cast here.               
-                muxed[j] = builder.createAdvance(mux, adv->getOperand(1), prefix.str());
+                muxed[j] = cast<Advance>(builder.createAdvance(mux, adv->getOperand(1), prefix.str()));
             }
 
             /// Perform m-to-n Demultiplexing            
@@ -1084,17 +1085,17 @@ void AutoMultiplexing::simplifyAST(const PabloFunction & function) {
 
     raw_os_ostream out(std::cerr);
 
-    PabloPrinter::print(function.getEntryBlock(), "", out);
-    out << "\n+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n\n";
-    out.flush();
-
-
     // TODO: this should build a single graph and iterate by connected component instead.
     for (const auto & muxed : mMuxedVariables) {
 
         Graph G;
         std::unordered_map<PabloAST *, unsigned> M;
         std::queue<Statement *> Q;
+
+        out << "-----------------------------------------------------------------------------------\n";
+        PabloPrinter::print(function.getEntryBlock().statements(), out);
+        out << "-----------------------------------------------------------------------------------\n"; out.flush();
+
 
         for (unsigned i = 0; i != muxed.size(); ++i) {
 
@@ -1123,6 +1124,8 @@ void AutoMultiplexing::simplifyAST(const PabloFunction & function) {
 
         while (!Q.empty()) {
             Statement * const var = Q.front(); Q.pop();
+
+
             const Vertex u = M[var];
             for (unsigned i = 0; i != var->getNumOperands(); ++i) {
                 PabloAST * operand = var->getOperand(i);
@@ -1158,9 +1161,59 @@ void AutoMultiplexing::simplifyAST(const PabloFunction & function) {
             }
         }
 
+        for (auto u : make_iterator_range(vertices(G))) {
+            PabloAST * expr = G[u];
+            switch (expr->getClassTypeId()) {
+                case PabloAST::ClassTypeId::And:
+                case PabloAST::ClassTypeId::Or:
+                case PabloAST::ClassTypeId::Not:
+                case PabloAST::ClassTypeId::Sel:
+                    break;
+                default: // this vertex corresponds to a non-Boolean function. It needs to be split.
+                    if (in_degree(u, G) > 0 && out_degree(u, G) > 0) {
+                        Vertex v = add_vertex(expr, G);
+                        for (auto e : make_iterator_range(out_edges(u, G))) {
+                            add_edge(v, target(e, G), G);
+                        }
+                        clear_out_edges(u, G);
+                    }
+            }
+        }
+
+        out << "\ndigraph x {\n";
+        for (auto u : make_iterator_range(vertices(G))) {
+            std::string tmp;
+            raw_string_ostream name(tmp);
+            PabloPrinter::print(G[u], name);
+            out << "v" << u << " [label=\"" << name.str() << "\"];\n";
+        }
+        for (auto e : make_iterator_range(edges(G))) {
+            out << "v" << source(e, G) << " -> v" << target(e, G) << '\n';
+        }
+
+        out << " { rank=same;";
+        for (auto u : make_iterator_range(vertices(G))) {
+            if (in_degree(u, G) == 0) {
+                out << " v" << u;
+            }
+        }
+        out << "}\n";
+
+        out << " { rank=same;";
+        for (auto u : make_iterator_range(vertices(G))) {
+            if (out_degree(u, G) == 0) {
+                out << " v" << u;
+            }
+        }
+        out << "}\n";
+
+        out << "}\n\n";
+        out.flush();
+
         // count the number of sources (sinks) so we know how many variables (terminals) will exist in the BDD
         std::vector<Vertex> inputs;
         flat_set<Vertex> terminals;
+
         for (auto u : make_iterator_range(vertices(G))) {
             if (in_degree(u, G) == 0) {
                 inputs.push_back(u);
@@ -1172,6 +1225,9 @@ void AutoMultiplexing::simplifyAST(const PabloFunction & function) {
                 }
             }
         }
+
+
+
 
         const auto n = inputs.size();
 
@@ -1204,7 +1260,11 @@ void AutoMultiplexing::simplifyAST(const PabloFunction & function) {
             for (const auto e : make_iterator_range(in_edges(u, G))) {                
                 input[i] = characterization[source(e, G)];
                 if (input[i] == nullptr) {
-                    throw std::runtime_error("Uncharacterized input!");
+                    std::string tmp;
+                    raw_string_ostream out(tmp);
+                    out << "Uncharacterized input! ";
+                    PabloPrinter::print(G[source(e, G)], out);
+                    throw std::runtime_error(out.str());
                 }
                 ++i;
             }
@@ -1233,11 +1293,8 @@ void AutoMultiplexing::simplifyAST(const PabloFunction & function) {
             }
         }
 
-        Cudd_AutodynDisable(mManager);
         assert (Cudd_DebugCheck(mManager) == 0);
         Cudd_ReduceHeap(mManager, CUDD_REORDER_SIFT, 0);
-
-        mSimplifyDepth = 0;
 
         assert (mManager->size == nodes.size());
 
@@ -1289,14 +1346,17 @@ PabloAST * AutoMultiplexing::simplifyAST(DdNode * const f, const std::vector<Pab
         }
         DdNode * h = Cudd_Cofactor(mManager, f, g);
         Cudd_Ref(h);
-        Cudd_RecursiveDeref(mManager, g);
         PabloAST * c1 = simplifyAST(h, variables, builder);
-        Cudd_RecursiveDeref(mManager, h);
         if (LLVM_UNLIKELY(c1 == nullptr)) {
+            Cudd_RecursiveDeref(mManager, g);
+            Cudd_RecursiveDeref(mManager, h);
             cast<Statement>(c0)->eraseFromParent(true);
             return nullptr;
         }
-        return builder.createAnd(c0, c1);
+        assert (And(g, h) == f);
+        Cudd_RecursiveDeref(mManager, g);
+        Cudd_RecursiveDeref(mManager, h);
+        return builder.createAnd(c0, c1, "escf");
     }
 
     DdNode ** disjunct = nullptr;
@@ -1313,14 +1373,17 @@ PabloAST * AutoMultiplexing::simplifyAST(DdNode * const f, const std::vector<Pab
         }
     }
 
-    DdNode ** decomp = nullptr;
+    DdNode * decomp[] = { nullptr, nullptr };
     if (disjuncts == 2) {
-        FREE(conjunct); conjunct = nullptr; decomp = disjunct;
+        memcpy(decomp, disjunct, sizeof(DdNode *) * 2);
     } else if (conjuncts == 2) {
-        FREE(disjunct); disjunct = nullptr; decomp = conjunct;
+        memcpy(decomp, conjunct, sizeof(DdNode *) * 2);
     }
 
-    if (decomp && (decomp[0] != decomp[1]) && (decomp[0] != f) && (decomp[1] != f)) {
+    FREE(disjunct);
+    FREE(conjunct);
+
+    if ((decomp[0] != decomp[1]) && (decomp[0] != f) && (decomp[1] != f)) {
         Cudd_Ref(decomp[0]);
         Cudd_Ref(decomp[1]);
         PabloAST * d0 = simplifyAST(decomp[0], variables, builder);
@@ -1332,18 +1395,15 @@ PabloAST * AutoMultiplexing::simplifyAST(DdNode * const f, const std::vector<Pab
 
         PabloAST * d1 = simplifyAST(decomp[1], variables, builder);
         Cudd_RecursiveDeref(mManager, decomp[1]);
-        FREE(decomp);
         if (LLVM_UNLIKELY(d1 == nullptr)) {
             cast<Statement>(d0)->eraseFromParent(true);
             return nullptr;
         }
 
-        std::cerr << "d0: " << (ptruint)(d0) << "  d1: " << (ptruint)(d1) << " disjunct: " << (disjunct != 0) << " conjunct: " << (conjunct != 0) << std::endl;
-
-        if (disjunct) {
-            return builder.createOr(d0, d1);
+        if (disjuncts == 2) {
+            return builder.createOr(d0, d1, "disj");
         } else {
-            return builder.createAnd(d0, d1);
+            return builder.createAnd(d0, d1, "conj");
         }
     }
     return makeCoverAST(f, variables, builder);
@@ -1404,6 +1464,7 @@ PabloAST * AutoMultiplexing::makeCoverAST(DdNode * const f, const std::vector<Pa
         assert (DQ.empty() && CQ.empty());
 
         for (auto i = 0; i != n; ++i) {
+            assert (cube[i] >= 0 && cube[i] <= 2);
             if (cube[i] == 0) {
                 assert (!DQ.full());
                 DQ.push_back(variables[i]);
@@ -1414,7 +1475,7 @@ PabloAST * AutoMultiplexing::makeCoverAST(DdNode * const f, const std::vector<Pa
         }
 
         if (LLVM_UNLIKELY(DQ.empty() && CQ.empty())) {
-            continue;
+            throw std::runtime_error("Error! statement contains no elements!");
         }
 
         if (DQ.size() > 0) {
@@ -1437,7 +1498,7 @@ PabloAST * AutoMultiplexing::makeCoverAST(DdNode * const f, const std::vector<Pa
     }
     Cudd_RecursiveDeref(mManager, g);
     if (LLVM_UNLIKELY(SQ.empty())) {
-        return nullptr;
+        throw std::runtime_error("Error! statement queue empty!");
     }
     while (SQ.size() > 1) {
         PabloAST * v1 = SQ.front(); SQ.pop();
