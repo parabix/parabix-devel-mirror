@@ -38,16 +38,15 @@ typedef BitStreamScanner<BitBlock, uint32_t, uint32_t, SEGMENT_BLOCKS> ScannerT;
 #endif
 
 
-typedef void (*process_block_fcn)(const Basis_bits & basis_bits, BitBlock process_block_state_data[], Output & output);
+typedef void (*process_block_fcn)(const Basis_bits & basis_bits, Output & output);
 
 class GrepExecutor {
 public:
 
-    GrepExecutor(size_t process_block_state_size, void * process_block)
+    GrepExecutor(void * process_block)
     : mCountOnlyOption(false)
     , mShowFileNameOption(false)
     , mShowLineNumberingOption(false)
-    , mProcessBlockStateSize(process_block_state_size)
     , mProcessBlockFcn(reinterpret_cast<process_block_fcn>(process_block)) {
 
     }
@@ -67,7 +66,6 @@ private:
     bool mShowLineNumberingOption;
     bool mNormalizeLineBreaksOption;
 
-    size_t mProcessBlockStateSize;
     process_block_fcn mProcessBlockFcn;
     
     std::string mFileName;

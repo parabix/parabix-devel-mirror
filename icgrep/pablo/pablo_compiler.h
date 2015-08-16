@@ -57,13 +57,12 @@ class If;
 class While;
 
 struct CompiledPabloFunction {
-    const size_t        CarryDataSize;
     void * const        FunctionPointer;
 private:
     Function *          mFunction;
     ExecutionEngine *   mExecutionEngine;
 public:
-    CompiledPabloFunction(size_t carryDataSize, Function * function, ExecutionEngine * executionEngine);
+    CompiledPabloFunction(Function * function, ExecutionEngine * executionEngine);
 
     inline Function * getLLVMFunction() const {
         return mFunction;
@@ -74,8 +73,7 @@ public:
     }
 
     inline CompiledPabloFunction(CompiledPabloFunction && cpf)
-    : CarryDataSize(cpf.CarryDataSize)
-    , FunctionPointer(cpf.FunctionPointer)
+    : FunctionPointer(cpf.FunctionPointer)
     , mFunction(cpf.mFunction)
     , mExecutionEngine(cpf.mExecutionEngine)
     {
@@ -106,7 +104,7 @@ public:
     PabloCompiler();
     ~PabloCompiler();
     CompiledPabloFunction compile(pablo::PabloFunction & function);
-    std::pair<Function *, size_t> compile(pablo::PabloFunction & function, Module *module);
+    Function * compile(pablo::PabloFunction & function, Module *module);
     Module *getModule();
 private:
     void GenerateFunction(PabloFunction & function);
@@ -151,7 +149,6 @@ private:
     IRBuilder <> *                      mBuilder;
 
     CarryManager *                      mCarryManager;
-    size_t                              mCarryOffset;
 
     VectorType* const                   mBitBlockType;
     IDISA::IDISA_Builder                iBuilder;

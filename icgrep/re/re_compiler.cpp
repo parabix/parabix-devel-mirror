@@ -283,7 +283,7 @@ PabloAST * RE_Compiler::getNamedCharacterClassStream(Name * name, PabloBuilder &
         #ifndef DISABLE_PREGENERATED_UCD_FUNCTIONS
         } else {
             const UCD::ExternalProperty & ep = UCD::resolveExternalProperty(name->getFunctionName());
-            var = pb.createCall(Prototype::Create(name->getFunctionName(), std::get<1>(ep), std::get<2>(ep), std::get<3>(ep), std::get<0>(ep)), mCCCompiler.getBasisBits());
+            var = pb.createCall(Prototype::Create(name->getFunctionName(), std::get<1>(ep), std::get<2>(ep), std::get<0>(ep)), mCCCompiler.getBasisBits());
         }
         #endif
     }

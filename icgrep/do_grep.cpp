@@ -132,7 +132,6 @@ void GrepExecutor::doGrep(const std::string infilename) {
 
     Basis_bits basis_bits;
     BitBlock match_vector;
-    BitBlock process_block_state_data[(mProcessBlockStateSize + sizeof(BitBlock) - 1)/sizeof(BitBlock)];    
     
     mFileName = infilename + ":";
     
@@ -145,7 +144,6 @@ void GrepExecutor::doGrep(const std::string infilename) {
     line_no = 1;
 
     match_vector = simd<1>::constant<0>();
-    memset (process_block_state_data, 0, mProcessBlockStateSize);
     int fdSrc;
     struct stat infile_sb;
     fdSrc = open(infilename.c_str(), O_RDONLY);
@@ -195,7 +193,7 @@ void GrepExecutor::doGrep(const std::string infilename) {
             block_base = blk*BLOCK_SIZE + segment_base;
             s2p_do_block((BytePack *) &mFileBuffer[block_base], basis_bits);
             Output output;
-            mProcessBlockFcn(basis_bits, process_block_state_data, output);
+            mProcessBlockFcn(basis_bits, output);
 
             mMatch_scanner.load_block(output.matches, blk);
             mLineBreak_scanner.load_block(output.LF, blk);
@@ -242,7 +240,7 @@ void GrepExecutor::doGrep(const std::string infilename) {
         block_base = block_pos + segment_base;
         s2p_do_block((BytePack *) &mFileBuffer[block_base], basis_bits);
         Output output;
-        mProcessBlockFcn(basis_bits, process_block_state_data, output);
+        mProcessBlockFcn(basis_bits, output);
 
         mLineBreak_scanner.load_block(output.LF, blk);
         mMatch_scanner.load_block(output.matches, blk);
@@ -286,7 +284,7 @@ void GrepExecutor::doGrep(const std::string infilename) {
     }
     
     Output output;
-    mProcessBlockFcn(basis_bits, process_block_state_data, output);
+    mProcessBlockFcn(basis_bits, output);
 
     if (mCountOnlyOption)
     {

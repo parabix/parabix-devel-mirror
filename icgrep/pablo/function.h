@@ -25,7 +25,7 @@ public:
         return false;
     }
 
-    static Prototype * Create(std::string name, const unsigned numOfParameters, const unsigned numOfResults, const unsigned requiredStateSpace, void * functionPtr = nullptr);
+    static Prototype * Create(std::string name, const unsigned numOfParameters, const unsigned numOfResults, void * functionPtr = nullptr);
 
     const String * getName() const {
         return mName;
@@ -39,26 +39,21 @@ public:
         return mNumOfResults;
     }
 
-    unsigned getRequiredStateSpace() const {
-        return mRequiredStateSpace;
-    }
-
     void * getFunctionPtr() const {
         return mFunctionPtr;
     }
 
 protected:
-    Prototype(const PabloAST::ClassTypeId type, std::string && name, const unsigned numOfParameters, const unsigned numOfResults, const unsigned requiredStateSpace, void * functionPtr);
+    Prototype(const PabloAST::ClassTypeId type, std::string && name, const unsigned numOfParameters, const unsigned numOfResults, void * functionPtr);
 protected:
     const String * const    mName;
     const unsigned          mNumOfParameters;
     const unsigned          mNumOfResults;
-    unsigned                mRequiredStateSpace;
     void *                  mFunctionPtr;
 };
 
-inline Prototype * Prototype::Create(std::string name, const unsigned numOfParameters, const unsigned numOfResults, const unsigned requiredStateSpace, void * functionPtr) {
-    return new Prototype(PabloAST::ClassTypeId::Prototype, std::move(name), numOfParameters, numOfResults, requiredStateSpace, functionPtr);
+inline Prototype * Prototype::Create(std::string name, const unsigned numOfParameters, const unsigned numOfResults, void * functionPtr) {
+    return new Prototype(PabloAST::ClassTypeId::Prototype, std::move(name), numOfParameters, numOfResults, functionPtr);
 }
 
 class PabloFunction : public Prototype {
@@ -140,10 +135,6 @@ public:
             }
         }
         else throwInvalidResultIndex(index);
-    }
-
-    void setRequiredStateSpace(const unsigned value) {
-        mRequiredStateSpace = value;
     }
 
     void setFunctionPtr(void * functionPtr) {

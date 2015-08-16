@@ -13,6 +13,10 @@
 #include <pablo/pabloAST.h>
 #include <iostream>
 #include <llvm/Support/CommandLine.h>
+#include <llvm/IR/BasicBlock.h>
+#include <llvm/IR/CallingConv.h>
+#include <llvm/IR/Function.h>
+
 
 static cl::opt<CarryManagerStrategy> Strategy(cl::desc("Choose carry management strategy:"),
                                               cl::values(
@@ -38,24 +42,8 @@ namespace pablo {
        
     }
 
-unsigned CarryManager::initialize(PabloBlock * pb, Value * carryPtr) {
+void CarryManager::initialize(Module * m, PabloBlock * pb) {
     mPabloRoot = pb;
-    if (Strategy == SequentialFullyPackedStrategy) {
-        mPACK_SIZE = 64;
-        mITEMS_PER_PACK = 64;
-        mCarryPackType = mBuilder->getIntNTy(mPACK_SIZE);
-        mCarryPackBasePtr = mBuilder->CreateBitCast(carryPtr, Type::getInt64PtrTy(mBuilder->getContext()));
-        mCarryBitBlockPtr = carryPtr;
-        mZeroInitializer = mBuilder->getInt64(0);
-        mOneInitializer = mBuilder->getInt64(-1);
-    }
-    else { // if Strategy == BitBlockStrategy
-        mPACK_SIZE = BLOCK_SIZE;
-        mITEMS_PER_PACK = 1;
-        mCarryPackType = mBitBlockType;
-        mCarryPackBasePtr = carryPtr;
-        mCarryBitBlockPtr = mCarryPackBasePtr;
-    }
     unsigned scopeCount = doScopeCount(pb);
     mCarryInfoVector.resize(scopeCount);
     unsigned totalCarryDataSize = enumerate(pb, 0, 0);
@@ -68,24 +56,49 @@ unsigned CarryManager::initialize(PabloBlock * pb, Value * carryPtr) {
     for (auto i = 0; i < totalPackCount; i++) mCarryInPack[i]=nullptr;
 
     if (Strategy == SequentialFullyPackedStrategy) {
+        mPACK_SIZE = 64;
+        mITEMS_PER_PACK = 64;
+        mCarryPackType = mBuilder->getIntNTy(mPACK_SIZE);
+        mZeroInitializer = mBuilder->getInt64(0);
+        mOneInitializer = mBuilder->getInt64(-1);
         mTotalCarryDataBitBlocks = (totalCarryDataSize + BLOCK_SIZE - 1)/BLOCK_SIZE;
+        
     }
     else {
+        mPACK_SIZE = BLOCK_SIZE;
+        mITEMS_PER_PACK = 1;
+        mCarryPackType = mBitBlockType;
         mTotalCarryDataBitBlocks = totalCarryDataSize;
     }
+    
+    ArrayType* cdArrayTy = ArrayType::get(mBitBlockType, mTotalCarryDataBitBlocks);
+    GlobalVariable* cdArray = new GlobalVariable(*m, cdArrayTy, /*isConstant=*/false, GlobalValue::CommonLinkage, /*Initializer=*/0, "process_block_carry_data");
+    cdArray->setAlignment(BLOCK_SIZE/8);
+    ConstantAggregateZero* cdInitData = ConstantAggregateZero::get(cdArrayTy);
+    cdArray->setInitializer(cdInitData);
+    
+    mCarryPackBasePtr = mBuilder->CreateBitCast(cdArray, PointerType::get(mCarryPackType, 0));
+    mCarryBitBlockPtr = mBuilder->CreateBitCast(cdArray, PointerType::get(mBitBlockType, 0));
+    
     // Popcount data is stored after all the carry data.
     if (mPabloCountCount > 0) {
-        mPopcountBasePtr = mBuilder->CreateBitCast(mBuilder->CreateGEP(carryPtr, mBuilder->getInt64(mTotalCarryDataBitBlocks)), Type::getInt64PtrTy(mBuilder->getContext()));
-        mTotalCarryDataBitBlocks += (mPabloCountCount + BLOCK_SIZE/64 - 1) * 64/BLOCK_SIZE;
+        ArrayType* pcArrayTy = ArrayType::get(mBuilder->getIntNTy(64), mPabloCountCount);
+        GlobalVariable* pcArray = new GlobalVariable(*m, pcArrayTy, /*isConstant=*/false, GlobalValue::CommonLinkage, 0, "popcount_data");
+        cdArray->setAlignment(BLOCK_SIZE/8);
+        ConstantAggregateZero* pcInitData = ConstantAggregateZero::get(pcArrayTy);
+        pcArray->setInitializer(pcInitData);
+        mPopcountBasePtr = mBuilder->CreateBitCast(pcArray, Type::getInt64PtrTy(mBuilder->getContext()));
     }
     // Carry Data area will have one extra bit block to store the block number.
-    mBlockNoPtr = mBuilder->CreateBitCast(mBuilder->CreateGEP(carryPtr, mBuilder->getInt64(mTotalCarryDataBitBlocks)), Type::getInt64PtrTy(mBuilder->getContext()));
+    GlobalVariable* blkNo = new GlobalVariable(*m, mBuilder->getIntNTy(64), /*isConstant=*/false, GlobalValue::CommonLinkage, 0, "blockNo");
+    blkNo->setAlignment(8);
+    blkNo->setInitializer(mBuilder->getInt64(0));
+    mBlockNoPtr = blkNo;
     mBlockNo = mBuilder->CreateLoad(mBlockNoPtr);
     /*  Set the current scope to PabloRoot */
     mCurrentScope = mPabloRoot;
     mCurrentFrameIndex = 0;
     mCarryInfo = mCarryInfoVector[0];
-    return mTotalCarryDataBitBlocks + 1; // One extra element for the block no.
 }
     
 void CarryManager::generateBlockNoIncrement() {
@@ -680,7 +693,7 @@ Value * CarryManager::popCount(Value * to_count, unsigned globalIdx) {
     mBuilder->CreateAlignedStore(countSoFar, countPtr, 8);
     return mBuilder->CreateBitCast(mBuilder->CreateZExt(countSoFar, mBuilder->getIntNTy(BLOCK_SIZE)), mBitBlockType);
 }
-    
+
 CarryManager::~CarryManager() {
     for (auto * cd : mCarryInfoVector) {
         delete cd;

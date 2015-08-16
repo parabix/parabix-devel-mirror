@@ -56,13 +56,14 @@ public:
     , mBlockNo(nullptr)
     , mPabloCountCount(0)
     , mTotalCarryDataBitBlocks(0)
+    , mCarryDataAllocationSize(0)
     {
 
     }
 
     ~CarryManager();
     
-    unsigned initialize(PabloBlock * blk, Value * carryDataPtr);  
+    void initialize(Module * m, PabloBlock * blk);
     
     unsigned enumerate(PabloBlock * blk, unsigned ifDepth, unsigned whileDepth);
     
@@ -111,6 +112,9 @@ public:
     
     Value * popCount(Value * to_count, unsigned globalIdx);
     
+    Value * declareCarryDataArray(Module * m);
+
+    
 private:
     unsigned mPACK_SIZE;
     unsigned mITEMS_PER_PACK;
@@ -131,6 +135,7 @@ private:
     Value * mBlockNo;
     unsigned mPabloCountCount; // Number of Pablo "Count" operations
     unsigned mTotalCarryDataBitBlocks;
+    unsigned mCarryDataAllocationSize;
     
     std::vector<PabloBlockCarryData *> mCarryInfoVector;
 
@@ -167,7 +172,6 @@ private:
     unsigned summaryPackIndex();
     unsigned summaryPosition();
     unsigned summaryBits();
-
 };
 
 }

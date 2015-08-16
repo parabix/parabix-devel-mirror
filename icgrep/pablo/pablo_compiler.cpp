@@ -69,7 +69,6 @@ PabloCompiler::PabloCompiler()
 , mExecutionEngine(nullptr)
 , mBuilder(nullptr)
 , mCarryManager(nullptr)
-, mCarryOffset(0)
 , mBitBlockType(VectorType::get(IntegerType::get(getGlobalContext(), 64), BLOCK_SIZE / 64))
 , iBuilder(mBitBlockType)
 , mInputType(nullptr)
@@ -144,13 +143,15 @@ CompiledPabloFunction PabloCompiler::compile(PabloFunction & function) {
     ExecutionEngine * engine = mExecutionEngine;
     mExecutionEngine = nullptr; // <-- pass ownership of the execution engine to the caller
 
-    return CompiledPabloFunction(func.second, func.first, engine);
+    return CompiledPabloFunction(func, engine);
 }
 
-std::pair<llvm::Function *, size_t> PabloCompiler::compile(PabloFunction & function, Module * module) {
+llvm::Function * PabloCompiler::compile(PabloFunction & function, Module * module) {
 
   
-    function.getEntryBlock().enumerateScopes(0);
+    PabloBlock & mainScope = function.getEntryBlock();
+
+    mainScope.enumerateScopes(0);
     
     Examine(function);
 
@@ -161,7 +162,8 @@ std::pair<llvm::Function *, size_t> PabloCompiler::compile(PabloFunction & funct
     iBuilder.initialize(mMod, mBuilder);
 
     mCarryManager = new CarryManager(mBuilder, mBitBlockType, mZeroInitializer, mOneInitializer, &iBuilder);
-
+    
+        
     GenerateFunction(function);
 
     mBuilder->SetInsertPoint(BasicBlock::Create(mMod->getContext(), "entry", mFunction,0));
@@ -177,11 +179,9 @@ std::pair<llvm::Function *, size_t> PabloCompiler::compile(PabloFunction & funct
         }
     }
      
-    PabloBlock & mainScope = function.getEntryBlock();
-
-    mCarryOffset = mCarryManager->initialize(&mainScope, mCarryDataPtr);
-    
     //Generate the IR instructions for the function.
+    
+    mCarryManager->initialize(mMod, &mainScope);
     
     compileBlock(mainScope);
     
@@ -203,6 +203,7 @@ std::pair<llvm::Function *, size_t> PabloCompiler::compile(PabloFunction & funct
 
     //Terminate the block
     ReturnInst::Create(mMod->getContext(), mBuilder->GetInsertBlock());
+    
 
     // Clean up
     delete mCarryManager; mCarryManager = nullptr;
@@ -210,14 +211,13 @@ std::pair<llvm::Function *, size_t> PabloCompiler::compile(PabloFunction & funct
     mMod = nullptr; // don't delete this. It's either owned by the ExecutionEngine or the calling function.
 
     //Return the required size of the carry data area to the process_block function.
-    return std::make_pair(mFunction, mCarryOffset * sizeof(BitBlock));
+    return mFunction;
 }
 
 inline void PabloCompiler::GenerateFunction(PabloFunction & function) {
     mInputType = PointerType::get(StructType::get(mMod->getContext(), std::vector<Type *>(function.getNumOfParameters(), mBitBlockType)), 0);
-    Type * carryType = PointerType::get(mBitBlockType, 0);
     Type * outputType = PointerType::get(StructType::get(mMod->getContext(), std::vector<Type *>(function.getNumOfResults(), mBitBlockType)), 0);
-    FunctionType * functionType = FunctionType::get(Type::getVoidTy(mMod->getContext()), {{mInputType, carryType, outputType}}, false);
+    FunctionType * functionType = FunctionType::get(Type::getVoidTy(mMod->getContext()), {{mInputType, outputType}}, false);
 
 #ifdef USE_UADD_OVERFLOW
 #ifdef USE_TWO_UADD_OVERFLOW
@@ -303,11 +303,10 @@ inline void PabloCompiler::GenerateFunction(PabloFunction & function) {
 #endif
 
     //Starts on process_block
-    SmallVector<AttributeSet, 4> Attrs;
+    SmallVector<AttributeSet, 3> Attrs;
     Attrs.push_back(AttributeSet::get(mMod->getContext(), ~0U, { Attribute::NoUnwind, Attribute::UWTable }));
     Attrs.push_back(AttributeSet::get(mMod->getContext(), 1U, { Attribute::ReadOnly, Attribute::NoCapture }));
-    Attrs.push_back(AttributeSet::get(mMod->getContext(), 2U, { Attribute::NoCapture }));
-    Attrs.push_back(AttributeSet::get(mMod->getContext(), 3U, { Attribute::ReadNone, Attribute::NoCapture }));
+    Attrs.push_back(AttributeSet::get(mMod->getContext(), 2U, { Attribute::ReadNone, Attribute::NoCapture }));
     AttributeSet AttrSet = AttributeSet::get(mMod->getContext(), Attrs);
 
     // Create the function that will be generated.
@@ -318,8 +317,6 @@ inline void PabloCompiler::GenerateFunction(PabloFunction & function) {
     Function::arg_iterator args = mFunction->arg_begin();
     mInputAddressPtr = args++;
     mInputAddressPtr->setName("input");
-    mCarryDataPtr = args++;
-    mCarryDataPtr->setName("carry");
     mOutputAddressPtr = args++;
     mOutputAddressPtr->setName("output");
 }
@@ -549,15 +546,13 @@ void PabloCompiler::compileStatement(const Statement * stmt) {
         const String * callee = proto->getName();
 
         Type * inputType = StructType::get(mMod->getContext(), std::vector<Type *>{proto->getNumOfParameters(), mBitBlockType});
-        Type * carryType = mBitBlockType;
         Type * outputType = StructType::get(mMod->getContext(), std::vector<Type *>{proto->getNumOfResults(), mBitBlockType});
-        FunctionType * functionType = FunctionType::get(Type::getVoidTy(mMod->getContext()), std::vector<Type *>{PointerType::get(inputType, 0), PointerType::get(carryType, 0), PointerType::get(outputType, 0)}, false);
+        FunctionType * functionType = FunctionType::get(Type::getVoidTy(mMod->getContext()), std::vector<Type *>{PointerType::get(inputType, 0), PointerType::get(outputType, 0)}, false);
 
         //Starts on process_block
         SmallVector<AttributeSet, 3> Attrs;
         Attrs.push_back(AttributeSet::get(mMod->getContext(), 1U, { Attribute::ReadOnly, Attribute::NoCapture }));
-        Attrs.push_back(AttributeSet::get(mMod->getContext(), 2U, { Attribute::NoCapture }));
-        Attrs.push_back(AttributeSet::get(mMod->getContext(), 3U, { Attribute::ReadNone, Attribute::NoCapture }));
+        Attrs.push_back(AttributeSet::get(mMod->getContext(), 2U, { Attribute::ReadNone, Attribute::NoCapture }));
         AttributeSet AttrSet = AttributeSet::get(mMod->getContext(), Attrs);
 
         Function * externalFunction = cast<Function>(mMod->getOrInsertFunction(callee->value(), functionType, AttrSet));
@@ -568,14 +563,10 @@ void PabloCompiler::compileStatement(const Statement * stmt) {
 
         if (mExecutionEngine) mExecutionEngine->addGlobalMapping(externalFunction, proto->getFunctionPtr());
 
-        // add mCarryOffset to mCarryDataPtr
-        Value * carryFramePtr = mBuilder->CreateGEP(mCarryDataPtr, mBuilder->getInt64(mCarryOffset));
         AllocaInst * outputStruct = mBuilder->CreateAlloca(outputType);
-        mBuilder->CreateCall3(externalFunction, mInputAddressPtr, carryFramePtr, outputStruct);
+        mBuilder->CreateCall2(externalFunction, mInputAddressPtr, outputStruct);
         Value * outputPtr = mBuilder->CreateGEP(outputStruct, { mBuilder->getInt32(0), mBuilder->getInt32(0) });
         expr = mBuilder->CreateAlignedLoad(outputPtr, BLOCK_SIZE / 8, false);
-
-        mCarryOffset += (proto->getRequiredStateSpace() + (BLOCK_SIZE / 8) - 1) / (BLOCK_SIZE / 8);
     }
     else if (const And * pablo_and = dyn_cast<And>(stmt)) {
         expr = mBuilder->CreateAnd(compileExpression(pablo_and->getExpr1()), compileExpression(pablo_and->getExpr2()), "and");
@@ -813,9 +804,8 @@ void PabloCompiler::SetOutputValue(Value * marker, const unsigned index) {
     mBuilder->CreateAlignedStore(marker, gep, BLOCK_SIZE/8, false);
 }
 
-CompiledPabloFunction::CompiledPabloFunction(size_t carryDataSize, Function * function, ExecutionEngine * executionEngine)
-: CarryDataSize(carryDataSize)
-, FunctionPointer(executionEngine->getPointerToFunction(function))
+CompiledPabloFunction::CompiledPabloFunction(Function * function, ExecutionEngine * executionEngine)
+: FunctionPointer(executionEngine->getPointerToFunction(function))
 , mFunction(function)
 , mExecutionEngine(executionEngine)
 {

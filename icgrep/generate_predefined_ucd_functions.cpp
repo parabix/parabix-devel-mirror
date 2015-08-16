@@ -73,7 +73,7 @@ static raw_fd_ostream * MultiplexingDistributionFile = nullptr;
 const bool EnableMultiplexing = false;
 #endif
 
-using property_list = std::vector<std::pair<std::string, size_t>>;
+using property_list = std::vector<std::string>;
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getNumOfAdvances
@@ -218,7 +218,7 @@ std::pair<unsigned, unsigned> computeLLVMDependencyChainMetrics(llvm::Function &
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief compileUnicodeSet
  ** ------------------------------------------------------------------------------------------------------------- */
-size_t compileUnicodeSet(std::string name, const UnicodeSet & set, PabloCompiler & pc, Module * module) {
+void compileUnicodeSet(std::string name, const UnicodeSet & set, PabloCompiler & pc, Module * module) {
     #ifdef ENABLE_MULTIPLEXING
     if (MultiplexingDistributionFile) {
         (*MultiplexingDistributionFile) << name;
@@ -264,15 +264,14 @@ size_t compileUnicodeSet(std::string name, const UnicodeSet & set, PabloCompiler
     // Now compile the function ...
     auto func = pc.compile(function, module);
     releaseSlabAllocatorMemory();
-
+/*
     if (LongestDependenceChainFile) {
         const auto pablo_metrix = computePabloDependencyChainMetrics(function);
         (*LongestDependenceChainFile) << ',' << pablo_metrix.first << ',' << pablo_metrix.second;
         const auto llvm_metrix = computeLLVMDependencyChainMetrics(*func.first);
         (*LongestDependenceChainFile) << ',' << llvm_metrix.first << ',' << llvm_metrix.second << '\n';
     }
-
-    return func.second;
+*/
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -301,7 +300,7 @@ void writePrecompiledProperties(property_list && properties) {
     header << "#include <string>\n\n";
     header << "#include <tuple>\n";
     header << "namespace UCD {\n\n";
-    header << "using ExternalProperty = std::tuple<void *, unsigned, unsigned, size_t>;\n\n";
+    header << "using ExternalProperty = std::tuple<void *, unsigned, unsigned>;\n\n";
     header << "const ExternalProperty & resolveExternalProperty(const std::string & name);\n\n";
     header << "}\n\n";
     header << "#endif\n";
@@ -328,12 +327,12 @@ void writePrecompiledProperties(property_list && properties) {
     cpp << "struct Input {\n    BitBlock bit[8];\n};\n\n";
     cpp << "struct Output {\n    BitBlock bit[1];\n};\n\n";
     for (auto prop : properties) {
-        cpp << "extern \"C\" void " + prop.first + "(const Input &, BitBlock *, Output &);\n";
+        cpp << "extern \"C\" void " + prop + "(const Input &, Output &);\n";
     }
 
     cpp << "\nconst static std::unordered_map<std::string, ExternalProperty> EXTERNAL_UCD_PROPERTY_MAP = {\n";
     for (auto itr = properties.begin(); itr != properties.end(); ) {
-        cpp << "    {\"" + itr->first + "\", std::make_tuple(reinterpret_cast<void *>(&" + itr->first + "), 8, 1, " + std::to_string(itr->second) + ")}";
+        cpp << "    {\"" + *itr + "\", std::make_tuple(reinterpret_cast<void *>(&" + *itr + "), 8, 1)}";
         if (++itr != properties.end()) {
             cpp << ",";
         }
@@ -366,20 +365,23 @@ Module * generateUCDModule() {
             for (const std::string value : *enumObj) {
                 const UnicodeSet & set = enumObj->GetCodepointSet(canonicalize_value_name(value));
                 std::string name = "__get_" + property_enum_name[enumObj->getPropertyCode()] + "_" + value;
-                properties.emplace_back(name, compileUnicodeSet(name, set, pc, module));
+                compileUnicodeSet(name, set, pc, module);
+                properties.emplace_back(name);
             }
         }
         else if (ExtensionPropertyObject * extObj = dyn_cast<ExtensionPropertyObject>(obj)) {
             for (const std::string value : *extObj) {
                 const UnicodeSet & set = extObj->GetCodepointSet(canonicalize_value_name(value));
                 std::string name = "__get_" + property_enum_name[extObj->getPropertyCode()] + "_" + value;
-                properties.emplace_back(name, compileUnicodeSet(name, set, pc, module));
+                compileUnicodeSet(name, set, pc, module);
+                properties.emplace_back(name);
             }
         }
         else if (BinaryPropertyObject * binObj = dyn_cast<BinaryPropertyObject>(obj)) {
             const UnicodeSet & set = binObj->GetCodepointSet(Binary_ns::Y);
             std::string name = "__get_" + property_enum_name[binObj->getPropertyCode()] + "_Y";
-            properties.emplace_back(name, compileUnicodeSet(name, set, pc, module));
+            compileUnicodeSet(name, set, pc, module);
+            properties.emplace_back(name);
         }
     }
 
