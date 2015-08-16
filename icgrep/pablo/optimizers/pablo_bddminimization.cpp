@@ -173,11 +173,17 @@ inline DdNode * BDDMinimizationPass::eliminateLogicallyEquivalentStatements(cons
         case PabloAST::ClassTypeId::Sel:
             bdd = Ite(input[0], input[1], input[2]);
             break;
-        case PabloAST::ClassTypeId::Call:
-            // TODO: we may have more than one output. Need to fix call class to allow for it.
-        case PabloAST::ClassTypeId::Advance:
         case PabloAST::ClassTypeId::MatchStar:
         case PabloAST::ClassTypeId::ScanThru:
+            if (LLVM_UNLIKELY(isZero(input[1]))) {
+                return Zero();
+            }
+        case PabloAST::ClassTypeId::Advance:
+            if (LLVM_UNLIKELY(isZero(input[0]))) {
+                return Zero();
+            }
+        case PabloAST::ClassTypeId::Call:
+            // TODO: we may have more than one output. Need to fix call class to allow for it.
             return NewVar(stmt);
         default:
             throw std::runtime_error("Unexpected statement type " + stmt->getName()->to_string());

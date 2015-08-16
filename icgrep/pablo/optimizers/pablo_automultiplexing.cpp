@@ -165,19 +165,6 @@ bool AutoMultiplexing::optimize(PabloFunction & function) {
         LOG("TopologicalSort (1):     " << (end_topological_sort - start_topological_sort));
 
         BDDMinimizationPass::optimize(function, true);
-
-//        LOG_NUMBER_OF_ADVANCES(function.getEntryBlock());
-
-//        RECORD_TIMESTAMP(start_simplify_ast);
-//        am.simplifyAST(function);
-//        RECORD_TIMESTAMP(end_simplify_ast);
-//        LOG("SimplifyAST:             " << (end_simplify_ast - start_simplify_ast));
-
-//        RECORD_TIMESTAMP(start_topological_sort2);
-//        am.topologicalSort(function.getEntryBlock());
-//        RECORD_TIMESTAMP(end_topological_sort2);
-//        LOG("TopologicalSort (2):     " << (end_topological_sort2 - start_topological_sort2));
-
     }
 
     LOG_NUMBER_OF_ADVANCES(function.getEntryBlock());
@@ -441,9 +428,6 @@ inline DdNode * AutoMultiplexing::characterize(Statement * const stmt) {
             // of a contradition being erroneously calculated later. An example of this
             // would be ¬(ScanThru(c,m) ∨ m)
         case PabloAST::ClassTypeId::MatchStar:
-            if (LLVM_UNLIKELY(isZero(input[0]) || isZero(input[1]))) {
-                return Zero();
-            }
         case PabloAST::ClassTypeId::Call:
             bdd = NewVar();
             mRecentCharacterizations.emplace_back(stmt, bdd);
@@ -455,22 +439,7 @@ inline DdNode * AutoMultiplexing::characterize(Statement * const stmt) {
         default:
             throw std::runtime_error("Unexpected statement type " + stmt->getName()->to_string());
     }
-
     Ref(bdd);
-    if (LLVM_UNLIKELY(NoSatisfyingAssignment(bdd))) {
-        Deref(bdd);
-        // If there is no satisfing assignment for this bdd, the statement will always produce 0.
-        // We can safely replace this statement with 0 unless it is an Advance, Assign or Next node.
-        // Those must be handled specially or we may end up producing a non-equivalent function.
-        if (LLVM_UNLIKELY(isa<Advance>(stmt) || isa<Assign>(stmt) || isa<Next>(stmt))) {
-            stmt->setOperand(0, stmt->getParent()->createZeroes());
-            bdd = Zero();
-        }
-        else {
-            stmt->replaceWith(stmt->getParent()->createZeroes());
-            return nullptr;
-        }
-    }
     mRecentCharacterizations.emplace_back(stmt, bdd);
     return bdd;
 }
@@ -987,9 +956,9 @@ void AutoMultiplexing::multiplexSelectedIndependentSets() {
     for (unsigned s = f; s != l; ++s) {
         const size_t n = out_degree(s, mMultiplexSetGraph);
         if (n) {
-            const size_t m = log2_plus_one(n);
-            std::vector<Statement *> muxed(m);
+            const size_t m = log2_plus_one(n);            
             Advance * input[n];
+            Advance * muxed[m];
 
             unsigned i = 0;
             for (const auto e : make_iterator_range(out_edges(s, mMultiplexSetGraph))) {
@@ -1025,7 +994,7 @@ void AutoMultiplexing::multiplexSelectedIndependentSets() {
                 PabloAST * mux = Q.front(); Q.pop_front(); assert (mux);
                 // The only way this did not return an Advance statement would be if either the mux or shift amount
                 // is zero. Since these cases would have been eliminated earlier, we are safe to cast here.               
-                muxed[j] = cast<Statement>(builder.createAdvance(mux, adv->getOperand(1), prefix.str()));
+                muxed[j] = cast<Advance>(builder.createAdvance(mux, adv->getOperand(1), prefix.str()));
             }
 
             /// Perform m-to-n Demultiplexing            
@@ -1067,8 +1036,6 @@ void AutoMultiplexing::multiplexSelectedIndependentSets() {
                 PabloAST * demuxed = Q.front(); Q.pop_front(); assert (demuxed);
                 input[i - 1]->replaceWith(demuxed, true, true);
             }
-
-            mSimplificationQueue.push(std::move(muxed));
         }        
     }
 }
