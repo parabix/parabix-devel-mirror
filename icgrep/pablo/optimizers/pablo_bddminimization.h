@@ -45,11 +45,11 @@ protected:
     void eliminateLogicallyEquivalentStatements(PabloBlock & block, SubsitutionMap & parent);
     DdNode * eliminateLogicallyEquivalentStatements(const Statement * const stmt);
     void simplifyAST(PabloFunction & function);
-    void simplifyAST(PabloBuilder & block, std::vector<Statement *> &terminals);
-    DdNode * characterizeTerminalBddTree(PabloAST * expr);
-    void simplifyAST(Statement *stmt, Statement * const value, PabloBuilder & builder);
-    PabloAST * simplifyAST(DdNode * const f, const std::vector<PabloAST *> & variables, PabloBuilder & builder);
-    PabloAST * makeCoverAST(DdNode * const f, const std::vector<PabloAST *> & variables, PabloBuilder & builder);
+    void promoteSimpleInputDerivationsToAssigns(PabloFunction & function);
+    void simplifyAST(PabloBlock & block, Terminals && terminals);
+    DdNode * characterizeTerminal(PabloAST * expr);
+    PabloAST * simplifyAST(DdNode * const f, PabloBuilder &block);
+    PabloAST * makeCoverAST(DdNode * const f, PabloBuilder &block);
 private:
     DdNode * Zero() const;
     DdNode * One() const;

@@ -49,11 +49,7 @@ protected:
     void selectMultiplexSets(RNG &);
     void applySubsetConstraints();
     void multiplexSelectedIndependentSets();
-    void simplifyAST(const PabloFunction & function);
-    PabloAST * simplifyAST(DdNode * const f, const std::vector<PabloAST *> & variables, PabloBuilder & builder);
-    PabloAST * makeCoverAST(DdNode * const f, const std::vector<PabloAST *> & variables, PabloBuilder & builder);
     void topologicalSort(PabloBlock & entry) const;
-    void reassociate(PabloBlock & entry) const;
     inline AutoMultiplexing()
     : mVariables(0)
     , mConstraintGraph(0)
