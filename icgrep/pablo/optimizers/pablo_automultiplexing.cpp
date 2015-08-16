@@ -16,6 +16,8 @@
 #include <queue>
 #include <unordered_set>
 #include <pablo/optimizers/pablo_simplifier.hpp>
+#include <pablo/optimizers/booleanreassociationpass.h>
+#include <pablo/optimizers/pablo_bddminimization.h>
 
 using namespace llvm;
 using namespace boost;
@@ -103,6 +105,8 @@ namespace pablo {
 
 bool AutoMultiplexing::optimize(PabloFunction & function) {
 
+    BDDMinimizationPass::optimize(function);
+
     // std::random_device rd;
     const auto seed = 83234827342;
     RNG rng(seed);
@@ -159,6 +163,10 @@ bool AutoMultiplexing::optimize(PabloFunction & function) {
         am.topologicalSort(function.getEntryBlock());
         RECORD_TIMESTAMP(end_topological_sort);
         LOG("TopologicalSort (1):     " << (end_topological_sort - start_topological_sort));
+
+        BDDMinimizationPass::optimize(function, true);
+
+//        LOG_NUMBER_OF_ADVANCES(function.getEntryBlock());
 
 //        RECORD_TIMESTAMP(start_simplify_ast);
 //        am.simplifyAST(function);
@@ -769,14 +777,12 @@ void AutoMultiplexing::selectMultiplexSets(RNG &) {
             break;
         }
 
-        OutEdgeIterator ei, ei_end;
-        for (std::tie(ei, ei_end) = out_edges(k + m, mMultiplexSetGraph); ei != ei_end; ++ei) {
-            const vertex_t j = target(*ei, mMultiplexSetGraph);
+        for (const auto ei : make_iterator_range(out_edges(k + m, mMultiplexSetGraph))) {
+            const vertex_t j = target(ei, mMultiplexSetGraph);
             if (chosen_set[j] == 0) {
                 chosen_set[j] = (k + m);
-                InEdgeIterator ej, ej_end;
-                for (std::tie(ej, ej_end) = in_edges(j, mMultiplexSetGraph); ej != ej_end; ++ej) {
-                    remaining[source(*ej, mMultiplexSetGraph) - m]--;
+                for (const auto ej : make_iterator_range(in_edges(j, mMultiplexSetGraph))) {
+                    remaining[source(ej, mMultiplexSetGraph) - m]--;
                 }
             }
         }
@@ -790,11 +796,10 @@ void AutoMultiplexing::selectMultiplexSets(RNG &) {
             degree_t w = 0;
             for (vertex_t i = 0; i != m; ++i) {
                 if (chosen_set[i] == (k + m)) {
-                    InEdgeIterator ej, ej_end;
                     degree_t r = 1;
-                    for (std::tie(ej, ej_end) = in_edges(i, mMultiplexSetGraph); ej != ej_end; ++ej) {
+                    for (const auto ej : make_iterator_range(in_edges(i, mMultiplexSetGraph))) {
                         // strongly prefer adding weight to unvisited sets that have more remaining vertices
-                        r += std::pow(remaining[source(*ej, mMultiplexSetGraph) - m], 2);
+                        r += std::pow(remaining[source(ej, mMultiplexSetGraph) - m], 2);
                     }
                     if (w < r) {
                         j = i;
@@ -804,9 +809,8 @@ void AutoMultiplexing::selectMultiplexSets(RNG &) {
             }
             assert (w > 0);
             chosen_set[j] = 0;
-            InEdgeIterator ej, ej_end;
-            for (std::tie(ej, ej_end) = in_edges(j, mMultiplexSetGraph); ej != ej_end; ++ej) {
-                remaining[source(*ej, mMultiplexSetGraph) - m]++;
+            for (const auto ej : make_iterator_range(in_edges(j, mMultiplexSetGraph))) {
+                remaining[source(ej, mMultiplexSetGraph) - m]++;
             }
         }
     }
@@ -975,7 +979,6 @@ void AutoMultiplexing::multiplexSelectedIndependentSets() {
         max_n = std::max<unsigned>(max_n, out_degree(s, mMultiplexSetGraph));
     }
 
-    std::vector<MultiplexSetGraph::vertex_descriptor> I(max_n);
     circular_buffer<PabloAST *> Q(max_n);
 
     // When entering thus function, the multiplex set graph M is a DAG with edges denoting the set
@@ -985,19 +988,28 @@ void AutoMultiplexing::multiplexSelectedIndependentSets() {
         const size_t n = out_degree(s, mMultiplexSetGraph);
         if (n) {
             const size_t m = log2_plus_one(n);
+            std::vector<Statement *> muxed(m);
             Advance * input[n];
-            std::vector<Advance *> muxed(m);
 
-            graph_traits<MultiplexSetGraph>::out_edge_iterator ei, ei_end;
-            std::tie(ei, ei_end) = out_edges(s, mMultiplexSetGraph);
-            for (unsigned i = 0; i != n; ++ei, ++i) {
-                I[i] = target(*ei, mMultiplexSetGraph);
+            unsigned i = 0;
+            for (const auto e : make_iterator_range(out_edges(s, mMultiplexSetGraph))) {
+                input[i] = std::get<0>(mAdvance[target(e, mMultiplexSetGraph)]);
+                assert (input[i]);
+                ++i;
             }
-            std::sort(I.begin(), I.begin() + n);
+            assert (i == n);
 
-            for (unsigned i = 0; i != n; ++i) {
-                input[i] = std::get<0>(mAdvance[I[i]]);
-            }
+//            MultiplexSetGraph::vertex_descriptor indices[n];
+//            unsigned i = 0;
+//            for (const auto e : make_iterator_range(out_edges(s, mMultiplexSetGraph))) {
+//                indices[i++] = target(e, mMultiplexSetGraph);
+//            }
+//            assert (i == n);
+//            std::sort(std::begin(indices), std::begin(indices) + n);
+//            for (unsigned i = 0; i != n; ++i) {
+//                input[i] = std::get<0>(indices[i]);
+//                assert (input[i]);
+//            }
 
             PabloBlock * const block = input[0]->getParent();
             block->setInsertPoint(block->back());
@@ -1025,7 +1037,7 @@ void AutoMultiplexing::multiplexSelectedIndependentSets() {
                 PabloAST * mux = Q.front(); Q.pop_front(); assert (mux);
                 // The only way this did not return an Advance statement would be if either the mux or shift amount
                 // is zero. Since these cases would have been eliminated earlier, we are safe to cast here.               
-                muxed[j] = cast<Advance>(builder.createAdvance(mux, adv->getOperand(1), prefix.str()));
+                muxed[j] = cast<Statement>(builder.createAdvance(mux, adv->getOperand(1), prefix.str()));
             }
 
             /// Perform m-to-n Demultiplexing            
@@ -1068,8 +1080,23 @@ void AutoMultiplexing::multiplexSelectedIndependentSets() {
                 input[i - 1]->replaceWith(demuxed, true, true);
             }
 
-            mMuxedVariables.push_back(std::move(muxed));
+            mSimplificationQueue.push(std::move(muxed));
         }        
+    }
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief isSimplifiable
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline bool isSimplifiable(const PabloAST * const expr, const PabloBlock * const pb) {
+    switch (expr->getClassTypeId()) {
+        case PabloAST::ClassTypeId::And:
+        case PabloAST::ClassTypeId::Or:
+        case PabloAST::ClassTypeId::Not:
+        case PabloAST::ClassTypeId::Sel:
+            return cast<Statement>(expr)->getParent() == pb;
+        default:
+            return false;
     }
 }
 
@@ -1085,35 +1112,32 @@ void AutoMultiplexing::simplifyAST(const PabloFunction & function) {
 
     raw_os_ostream out(std::cerr);
 
+    unsigned index = 0;
+
     // TODO: this should build a single graph and iterate by connected component instead.
-    for (const auto & muxed : mMuxedVariables) {
+    while (!mSimplificationQueue.empty()) {
 
         Graph G;
-        std::unordered_map<PabloAST *, unsigned> M;
+        std::unordered_map<PabloAST *, unsigned> M;        
         std::queue<Statement *> Q;
+        const std::vector<Statement *> set(std::move(mSimplificationQueue.front()));
 
-        out << "-----------------------------------------------------------------------------------\n";
-        PabloPrinter::print(function.getEntryBlock().statements(), out);
-        out << "-----------------------------------------------------------------------------------\n"; out.flush();
+        mSimplificationQueue.pop();
 
+        ++index;
 
-        for (unsigned i = 0; i != muxed.size(); ++i) {
+        for (unsigned i = 0; i != set.size(); ++i) {
 
-            const auto u = add_vertex(muxed[i], G);
-            M.insert(std::make_pair(muxed[i], u));
-            for (PabloAST * user : muxed[i]->users()) {
+            const auto u = add_vertex(set[i], G);
+            M.insert(std::make_pair(set[i], u));
+            for (PabloAST * user : set[i]->users()) {
                 auto f = M.find(user);
                 Vertex v = 0;
                 if (f == M.end()) {
                     v = add_vertex(user, G);
                     M.insert(std::make_pair(user, v));
-                    switch (user->getClassTypeId()) {
-                        case PabloAST::ClassTypeId::And:
-                        case PabloAST::ClassTypeId::Or:
-                        case PabloAST::ClassTypeId::Not:
-                        case PabloAST::ClassTypeId::Sel:
-                            Q.push(cast<Statement>(user));
-                        default: break;
+                    if (isSimplifiable(user, set[i]->getParent())) {
+                        Q.push(cast<Statement>(user));
                     }
                 } else { // if (f != M.end()) {
                     v = f->second;
@@ -1123,10 +1147,11 @@ void AutoMultiplexing::simplifyAST(const PabloFunction & function) {
         }
 
         while (!Q.empty()) {
+
             Statement * const var = Q.front(); Q.pop();
 
-
             const Vertex u = M[var];
+
             for (unsigned i = 0; i != var->getNumOperands(); ++i) {
                 PabloAST * operand = var->getOperand(i);
                 auto f = M.find(operand);
@@ -1146,13 +1171,8 @@ void AutoMultiplexing::simplifyAST(const PabloFunction & function) {
                 if (LLVM_LIKELY(f == M.end())) {
                     v = add_vertex(user, G);
                     M.insert(std::make_pair(user, v));
-                    switch (user->getClassTypeId()) {
-                        case PabloAST::ClassTypeId::And:
-                        case PabloAST::ClassTypeId::Or:
-                        case PabloAST::ClassTypeId::Not:
-                        case PabloAST::ClassTypeId::Sel:
-                            Q.push(cast<Statement>(user));
-                        default: break;
+                    if (isSimplifiable(user, var->getParent())) {
+                        Q.push(cast<Statement>(user));
                     }
                 } else { // if (f != M.end()) {
                     v = f->second;
@@ -1161,37 +1181,134 @@ void AutoMultiplexing::simplifyAST(const PabloFunction & function) {
             }
         }
 
-        for (auto u : make_iterator_range(vertices(G))) {
+        // Even though the above BFS attempts to stop at each non-Boolean function, it's possible
+        // that one takes an input derived from the initial set whose output is used as part of
+        // another computation.
+
+        std::vector<unsigned> C(num_vertices(G), 0);
+        std::vector<Vertex> ordering;
+        ordering.reserve(num_vertices(G));
+        topological_sort(G, std::back_inserter(ordering));
+
+        unsigned n = 0;
+
+        for (auto ui = ordering.rbegin(); ui != ordering.rend(); ++ui) {
+            Vertex u = *ui;
             PabloAST * expr = G[u];
             switch (expr->getClassTypeId()) {
                 case PabloAST::ClassTypeId::And:
                 case PabloAST::ClassTypeId::Or:
                 case PabloAST::ClassTypeId::Not:
                 case PabloAST::ClassTypeId::Sel:
+
+
                     break;
-                default: // this vertex corresponds to a non-Boolean function. It needs to be split.
+                default: // this vertex corresponds to a non-Boolean function. Everything that depends
+                         // on it must be removed from the current graph.
                     if (in_degree(u, G) > 0 && out_degree(u, G) > 0) {
-                        Vertex v = add_vertex(expr, G);
-                        for (auto e : make_iterator_range(out_edges(u, G))) {
-                            add_edge(v, target(e, G), G);
-                        }
-                        clear_out_edges(u, G);
+                        ++n;
+//                        std::queue<Vertex> Q;
+//                        for (;;) {
+//                            C[u] = n;
+//                            for (const auto e : make_iterator_range(out_edges(u, G))) {
+//                                Q.push(target(e, G));
+//                            }
+//                            if (Q.empty()) {
+//                                break;
+//                            }
+//                            u = Q.front();
+//                            Q.pop();
+//                        }
                     }
             }
         }
 
-        out << "\ndigraph x {\n";
-        for (auto u : make_iterator_range(vertices(G))) {
+
+        if (n) {
+            continue;
+        }
+
+
+
+//        std::vector<Statement *> split_set;
+
+//        for (auto ui = ordering.rbegin(); ui != ordering.rend(); ++ui) {
+//            Vertex u = *ui;
+//            PabloAST * expr = G[u];
+//            switch (expr->getClassTypeId()) {
+//                case PabloAST::ClassTypeId::And:
+//                case PabloAST::ClassTypeId::Or:
+//                case PabloAST::ClassTypeId::Not:
+//                case PabloAST::ClassTypeId::Sel:
+//                    break;
+//                default: // this vertex corresponds to a non-Boolean function. Everything that depends
+//                         // on it must be removed from the current graph.
+//                    if (in_degree(u, G) > 0 && out_degree(u, G) > 0) {
+//                        split_set.push_back(cast<Statement>(G[u]));
+//                        std::queue<Vertex> Q;
+//                        for (;;) {
+//                            for (const auto e : make_iterator_range(out_edges(u, G))) {
+//                                Q.push(target(e, G));
+//                            }
+//                            clear_out_edges(u, G);
+//                            if (Q.empty()) {
+//                                break;
+//                            }
+//                            u = Q.front();
+//                            Q.pop();
+//                        }
+//                    }
+//            }
+//        }
+
+//        if (!split_set.empty()) {
+//            mSimplificationQueue.push(std::move(split_set));
+//        }
+
+        // count the number of sources (sinks) so we know how many variables (terminals) will exist in the BDD
+        std::vector<Vertex> inputs;
+        flat_set<Vertex> terminals;
+
+        for (Vertex u : ordering) {
+            if (in_degree(u, G) == 0) {
+                inputs.push_back(u);
+            }
+            if (out_degree(u, G) == 0) {
+                // the inputs to the sinks are the terminals of the BDD
+                for (auto e : make_iterator_range(in_edges(u, G))) {
+                    terminals.insert(source(e, G));
+                }
+            }
+        }
+
+//        for (auto ui = ordering.begin(); ui != ordering.end(); ) {
+//            const Vertex u = *ui;
+//            if (in_degree(u, G) == 0 && out_degree(u, G) == 0) {
+//                ui = ordering.erase(ui);
+//                continue;
+//            } else if (in_degree(u, G) == 0) {
+//                inputs.push_back(u);
+//            } else if (out_degree(u, G) == 0) {
+//                // the inputs to the sinks are the terminals of the BDD
+//                for (auto e : make_iterator_range(in_edges(u, G))) {
+//                    terminals.insert(source(e, G));
+//                }
+//            }
+//            ++ui;
+//        }
+
+        out << "\ndigraph G" << index << " {\n";
+        for (auto ui = ordering.rbegin(); ui != ordering.rend(); ++ui) {
             std::string tmp;
             raw_string_ostream name(tmp);
-            PabloPrinter::print(G[u], name);
-            out << "v" << u << " [label=\"" << name.str() << "\"];\n";
+            PabloPrinter::print(G[*ui], name);
+            out << "v" << *ui << " [label=\"" << name.str() << "\"];\n";
         }
         for (auto e : make_iterator_range(edges(G))) {
             out << "v" << source(e, G) << " -> v" << target(e, G) << '\n';
         }
 
-        out << " { rank=same;";
+        out << "{ rank=same;";
         for (auto u : make_iterator_range(vertices(G))) {
             if (in_degree(u, G) == 0) {
                 out << " v" << u;
@@ -1199,7 +1316,7 @@ void AutoMultiplexing::simplifyAST(const PabloFunction & function) {
         }
         out << "}\n";
 
-        out << " { rank=same;";
+        out << "{ rank=same;";
         for (auto u : make_iterator_range(vertices(G))) {
             if (out_degree(u, G) == 0) {
                 out << " v" << u;
@@ -1210,26 +1327,10 @@ void AutoMultiplexing::simplifyAST(const PabloFunction & function) {
         out << "}\n\n";
         out.flush();
 
-        // count the number of sources (sinks) so we know how many variables (terminals) will exist in the BDD
-        std::vector<Vertex> inputs;
-        flat_set<Vertex> terminals;
-
-        for (auto u : make_iterator_range(vertices(G))) {
-            if (in_degree(u, G) == 0) {
-                inputs.push_back(u);
-            }
-            if (out_degree(u, G) == 0) {
-                // the inputs to the sinks become the terminals in the BDD
-                for (auto e : make_iterator_range(in_edges(u, G))) {
-                    terminals.insert(source(e, G));
-                }
-            }
+        if (index == 9) {
+            continue;
         }
-
-
-
-
-        const auto n = inputs.size();
+        n = inputs.size();
 
         mManager = Cudd_Init(n, 0, CUDD_UNIQUE_SLOTS, CUDD_CACHE_SLOTS, 0);
         Cudd_AutodynEnable(mManager, CUDD_REORDER_LAZY_SIFT);
@@ -1242,10 +1343,6 @@ void AutoMultiplexing::simplifyAST(const PabloFunction & function) {
             characterization[inputs[i]] = Cudd_bddIthVar(mManager, i);
         }
 
-        std::vector<Vertex> ordering;
-        ordering.reserve(num_vertices(G));
-        topological_sort(G, std::back_inserter(ordering));
-
         for (auto ui = ordering.rbegin(); ui != ordering.rend(); ++ui) {
 
             const Vertex u = *ui;
@@ -1257,7 +1354,7 @@ void AutoMultiplexing::simplifyAST(const PabloFunction & function) {
             std::array<DdNode *, 3> input;
 
             unsigned i = 0;
-            for (const auto e : make_iterator_range(in_edges(u, G))) {                
+            for (const auto e : make_iterator_range(in_edges(u, G))) {
                 input[i] = characterization[source(e, G)];
                 if (input[i] == nullptr) {
                     std::string tmp;
@@ -1309,6 +1406,7 @@ void AutoMultiplexing::simplifyAST(const PabloFunction & function) {
             PabloBuilder builder(*(stmt->getParent()));
 
             DdNode * const f = characterization[t];
+            assert (f);
             Cudd_Ref(f);
 
             PabloAST * expr = simplifyAST(f, nodes, builder);
@@ -1327,6 +1425,261 @@ void AutoMultiplexing::simplifyAST(const PabloFunction & function) {
 
     }
 }
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief simplifyAST
+ ** ------------------------------------------------------------------------------------------------------------- */
+//void AutoMultiplexing::simplifyAST(const PabloFunction & function) {
+
+//    // first do a BFS to build a topological ordering of statements we're going to end up visiting
+//    // and determine which of those will be terminals in the BDD
+//    using Graph = adjacency_list<hash_setS, vecS, bidirectionalS, PabloAST *>;
+//    using Vertex = Graph::vertex_descriptor;
+
+//    raw_os_ostream out(std::cerr);
+
+//    // TODO: this should build a single graph and iterate by connected component instead.
+//    for (const auto & muxed : mSimplificationQueue) {
+
+//        Graph G;
+//        std::unordered_map<PabloAST *, unsigned> M;
+//        std::queue<Statement *> Q;
+
+//        out << "-----------------------------------------------------------------------------------\n";
+//        PabloPrinter::print(function.getEntryBlock().statements(), out);
+//        out << "-----------------------------------------------------------------------------------\n"; out.flush();
+
+
+//        for (unsigned i = 0; i != muxed.size(); ++i) {
+
+//            const auto u = add_vertex(muxed[i], G);
+//            M.insert(std::make_pair(muxed[i], u));
+//            for (PabloAST * user : muxed[i]->users()) {
+//                auto f = M.find(user);
+//                Vertex v = 0;
+//                if (f == M.end()) {
+//                    v = add_vertex(user, G);
+//                    M.insert(std::make_pair(user, v));
+//                    switch (user->getClassTypeId()) {
+//                        case PabloAST::ClassTypeId::And:
+//                        case PabloAST::ClassTypeId::Or:
+//                        case PabloAST::ClassTypeId::Not:
+//                        case PabloAST::ClassTypeId::Sel:
+//                            Q.push(cast<Statement>(user));
+//                        default: break;
+//                    }
+//                } else { // if (f != M.end()) {
+//                    v = f->second;
+//                }
+//                add_edge(u, v, G);
+//            }
+//        }
+
+//        while (!Q.empty()) {
+//            Statement * const var = Q.front(); Q.pop();
+
+//            const Vertex u = M[var];
+
+//            for (unsigned i = 0; i != var->getNumOperands(); ++i) {
+//                PabloAST * operand = var->getOperand(i);
+//                auto f = M.find(operand);
+//                Vertex v = 0;
+//                if (LLVM_UNLIKELY(f == M.end())) {
+//                    v = add_vertex(operand, G);
+//                    M.insert(std::make_pair(operand, v));
+//                } else { // if (f != M.end()) {
+//                    v = f->second;
+//                }
+//                add_edge(v, u, G);
+//            }
+
+//            for (PabloAST * user : var->users()) {
+//                auto f = M.find(user);
+//                Vertex v = 0;
+//                if (LLVM_LIKELY(f == M.end())) {
+//                    v = add_vertex(user, G);
+//                    M.insert(std::make_pair(user, v));
+//                    switch (user->getClassTypeId()) {
+//                        case PabloAST::ClassTypeId::And:
+//                        case PabloAST::ClassTypeId::Or:
+//                        case PabloAST::ClassTypeId::Not:
+//                        case PabloAST::ClassTypeId::Sel:
+//                            Q.push(cast<Statement>(user));
+//                        default: break;
+//                    }
+//                } else { // if (f != M.end()) {
+//                    v = f->second;
+//                }
+//                add_edge(u, v, G);
+//            }
+//        }
+
+//        for (auto u : make_iterator_range(vertices(G))) {
+//            PabloAST * expr = G[u];
+//            switch (expr->getClassTypeId()) {
+//                case PabloAST::ClassTypeId::And:
+//                case PabloAST::ClassTypeId::Or:
+//                case PabloAST::ClassTypeId::Not:
+//                case PabloAST::ClassTypeId::Sel:
+//                    break;
+//                default: // this vertex corresponds to a non-Boolean function. It needs to be split.
+//                    if (in_degree(u, G) > 0 && out_degree(u, G) > 0) {
+//                        Vertex v = add_vertex(expr, G);
+//                        for (auto e : make_iterator_range(out_edges(u, G))) {
+//                            add_edge(v, target(e, G), G);
+//                        }
+//                        clear_out_edges(u, G);
+//                    }
+//            }
+//        }
+
+//        out << "\ndigraph x {\n";
+//        for (auto u : make_iterator_range(vertices(G))) {
+//            std::string tmp;
+//            raw_string_ostream name(tmp);
+//            PabloPrinter::print(G[u], name);
+//            out << "v" << u << " [label=\"" << name.str() << "\"];\n";
+//        }
+//        for (auto e : make_iterator_range(edges(G))) {
+//            out << "v" << source(e, G) << " -> v" << target(e, G) << '\n';
+//        }
+
+//        out << " { rank=same;";
+//        for (auto u : make_iterator_range(vertices(G))) {
+//            if (in_degree(u, G) == 0) {
+//                out << " v" << u;
+//            }
+//        }
+//        out << "}\n";
+
+//        out << " { rank=same;";
+//        for (auto u : make_iterator_range(vertices(G))) {
+//            if (out_degree(u, G) == 0) {
+//                out << " v" << u;
+//            }
+//        }
+//        out << "}\n";
+
+//        out << "}\n\n";
+//        out.flush();
+
+//        // count the number of sources (sinks) so we know how many variables (terminals) will exist in the BDD
+//        std::vector<Vertex> inputs;
+//        flat_set<Vertex> terminals;
+
+//        for (auto u : make_iterator_range(vertices(G))) {
+//            if (in_degree(u, G) == 0) {
+//                inputs.push_back(u);
+//            }
+//            if (out_degree(u, G) == 0) {
+//                // the inputs to the sinks become the terminals in the BDD
+//                for (auto e : make_iterator_range(in_edges(u, G))) {
+//                    terminals.insert(source(e, G));
+//                }
+//            }
+//        }
+
+
+
+
+//        const auto n = inputs.size();
+
+//        mManager = Cudd_Init(n, 0, CUDD_UNIQUE_SLOTS, CUDD_CACHE_SLOTS, 0);
+//        Cudd_AutodynEnable(mManager, CUDD_REORDER_LAZY_SIFT);
+
+//        std::vector<PabloAST *> nodes(n);
+//        std::vector<DdNode *> characterization(num_vertices(G), nullptr);
+//        for (unsigned i = 0; i != n; ++i) {
+//            nodes[i] = G[inputs[i]];
+//            assert (nodes[i]);
+//            characterization[inputs[i]] = Cudd_bddIthVar(mManager, i);
+//        }
+
+//        std::vector<Vertex> ordering;
+//        ordering.reserve(num_vertices(G));
+//        topological_sort(G, std::back_inserter(ordering));
+
+//        for (auto ui = ordering.rbegin(); ui != ordering.rend(); ++ui) {
+
+//            const Vertex u = *ui;
+
+//            if (characterization[u]) {
+//                continue;
+//            }
+
+//            std::array<DdNode *, 3> input;
+
+//            unsigned i = 0;
+//            for (const auto e : make_iterator_range(in_edges(u, G))) {
+//                input[i] = characterization[source(e, G)];
+//                if (input[i] == nullptr) {
+//                    std::string tmp;
+//                    raw_string_ostream out(tmp);
+//                    out << "Uncharacterized input! ";
+//                    PabloPrinter::print(G[source(e, G)], out);
+//                    throw std::runtime_error(out.str());
+//                }
+//                ++i;
+//            }
+
+//            DdNode * bdd = nullptr;
+//            bool characterized = true;
+//            switch (G[u]->getClassTypeId()) {
+//                case PabloAST::ClassTypeId::And:
+//                    bdd = And(input[0], input[1]);
+//                    break;
+//                case PabloAST::ClassTypeId::Or:
+//                    bdd = Or(input[0], input[1]);
+//                    break;
+//                case PabloAST::ClassTypeId::Not:
+//                    bdd = Not(input[0]);
+//                    break;
+//                case PabloAST::ClassTypeId::Sel:
+//                    bdd = Ite(input[0], input[1], input[2]);
+//                    break;
+//                default: characterized = false; break;
+//            }
+
+//            if (characterized) {
+//                Ref(bdd);
+//                characterization[u] = bdd;
+//            }
+//        }
+
+//        assert (Cudd_DebugCheck(mManager) == 0);
+//        Cudd_ReduceHeap(mManager, CUDD_REORDER_SIFT, 0);
+
+//        assert (mManager->size == nodes.size());
+
+//        for (Vertex t : terminals) {
+
+//            PabloPrinter::print(cast<Statement>(G[t]), " >> ", out);
+//            out << '\n';
+//            out.flush();
+
+//            Statement * stmt = cast<Statement>(G[t]);
+
+//            PabloBuilder builder(*(stmt->getParent()));
+
+//            DdNode * const f = characterization[t];
+//            Cudd_Ref(f);
+
+//            PabloAST * expr = simplifyAST(f, nodes, builder);
+//            if (expr) {
+
+//                PabloPrinter::print(cast<Statement>(expr), "    replacement: ", out);
+//                out << '\n';
+//                out.flush();
+
+//                stmt->replaceWith(expr, false, true);
+//            }
+//            Cudd_RecursiveDeref(mManager, f);
+//        }
+
+//        Cudd_Quit(mManager);
+
+//    }
+//}
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief simplifyAST
@@ -1561,6 +1914,14 @@ void AutoMultiplexing::topologicalSort(PabloBlock & entry) const {
         stmt = scope.top();
         scope.pop();
     }
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief reassociation
+ *
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline void AutoMultiplexing::reassociate(PabloBlock & entry) const {
+
 }
 
 } // end of namespace pablo

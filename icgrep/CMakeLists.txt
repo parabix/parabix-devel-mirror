@@ -63,7 +63,7 @@ endif()
 SET(PABLO_SRC pablo/pabloAST.cpp pablo/ps_if.cpp pablo/ps_while.cpp pablo/function.cpp pablo/codegenstate.cpp pablo/builder.cpp pablo/symbol_generator.cpp pablo/carry_data.cpp pablo/printer_pablos.cpp)
 SET(PABLO_SRC ${PABLO_SRC} pablo/pablo_compiler.cpp pablo/optimizers/pablo_simplifier.cpp pablo/optimizers/pablo_codesinking.cpp pablo/carry_manager.cpp IDISA/idisa_builder.cpp)
 IF (ENABLE_MULTIPLEXING)
-SET(PABLO_SRC ${PABLO_SRC} pablo/optimizers/pablo_automultiplexing.cpp pablo/optimizers/pablo_bddminimization.cpp)
+SET(PABLO_SRC ${PABLO_SRC} pablo/optimizers/pablo_automultiplexing.cpp pablo/optimizers/pablo_bddminimization.cpp pablo/optimizers/booleanreassociationpass.cpp)
 ENDIF()
 
 add_library(PabloADT ${PABLO_SRC})

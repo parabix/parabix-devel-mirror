@@ -17,7 +17,7 @@ class Statement;
 class BDDMinimizationPass {
 
     using CharacterizationMap = llvm::DenseMap<const PabloAST *, DdNode *>;
-    using StatementVector = std::vector<PabloAST *>;
+    using Terminals = std::vector<Statement *>;
 
     struct SubsitutionMap {
         SubsitutionMap(SubsitutionMap * parent = nullptr) : mParent(parent) {}
@@ -39,18 +39,17 @@ class BDDMinimizationPass {
     };
 
 public:
-    static bool optimize(PabloFunction & function);
+    static bool optimize(PabloFunction & function, const bool full = false);
 protected:
-    static void promoteCrossBlockReachingDefs(const PabloFunction & function);
-    void initialize(const PabloFunction & function);
-    void characterizeAndEliminateLogicallyEquivalentStatements(PabloFunction & function);
-    void characterizeAndEliminateLogicallyEquivalentStatements(PabloBlock & block, SubsitutionMap & parent);
-    DdNode * characterizeAndEliminateLogicallyEquivalentStatements(const Statement * const stmt);
+    void eliminateLogicallyEquivalentStatements(PabloFunction & function);
+    void eliminateLogicallyEquivalentStatements(PabloBlock & block, SubsitutionMap & parent);
+    DdNode * eliminateLogicallyEquivalentStatements(const Statement * const stmt);
     void simplifyAST(PabloFunction & function);
-    void simplifyAST(PabloBuilder & block);
+    void simplifyAST(PabloBuilder & block, std::vector<Statement *> &terminals);
+    DdNode * characterizeTerminalBddTree(PabloAST * expr);
     void simplifyAST(Statement *stmt, Statement * const value, PabloBuilder & builder);
-    PabloAST * simplifyAST(DdNode * const f, PabloBuilder & builder);
-    PabloAST * makeCoverAST(DdNode * const f, PabloBuilder & builder);
+    PabloAST * simplifyAST(DdNode * const f, const std::vector<PabloAST *> & variables, PabloBuilder & builder);
+    PabloAST * makeCoverAST(DdNode * const f, const std::vector<PabloAST *> & variables, PabloBuilder & builder);
 private:
     DdNode * Zero() const;
     DdNode * One() const;
@@ -67,7 +66,6 @@ private:
 private:
     DdManager *                     mManager;
     std::vector<PabloAST *>         mVariables;
-    std::vector<const Statement *>  mPromotions;
     CharacterizationMap             mCharacterizationMap;
 };
 

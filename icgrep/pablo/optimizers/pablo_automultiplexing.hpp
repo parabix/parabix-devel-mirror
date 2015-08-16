@@ -35,7 +35,7 @@ class AutoMultiplexing {
     using AdvanceVector = std::vector<std::tuple<Advance *, DdNode *, DdNode *>>;
     using VertexVector = std::vector<ConstraintVertex>;
     using RecentCharacterizations = std::vector<std::pair<const PabloAST *, DdNode *>>;
-    using MuxedVariables = std::vector<std::vector<Advance *>>;
+    using SimplificationQueue = std::queue<std::vector<Statement *>>;
 public:
     static bool optimize(PabloFunction & function);
 protected:
@@ -53,6 +53,7 @@ protected:
     PabloAST * simplifyAST(DdNode * const f, const std::vector<PabloAST *> & variables, PabloBuilder & builder);
     PabloAST * makeCoverAST(DdNode * const f, const std::vector<PabloAST *> & variables, PabloBuilder & builder);
     void topologicalSort(PabloBlock & entry) const;
+    void reassociate(PabloBlock & entry) const;
     inline AutoMultiplexing()
     : mVariables(0)
     , mConstraintGraph(0)
@@ -84,7 +85,7 @@ private:
     AdvanceVector               mAdvance;
     MultiplexSetGraph           mMultiplexSetGraph;
     RecentCharacterizations     mRecentCharacterizations;
-    MuxedVariables              mMuxedVariables;
+    SimplificationQueue         mSimplificationQueue;
 };
 
 }
