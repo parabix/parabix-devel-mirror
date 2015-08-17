@@ -46,6 +46,18 @@ void CarryManager::initialize(Module * m, PabloBlock * pb) {
     mPabloRoot = pb;
     unsigned scopeCount = doScopeCount(pb);
     mCarryInfoVector.resize(scopeCount);
+    if (Strategy == SequentialFullyPackedStrategy) {
+        mPACK_SIZE = 64;
+        mITEMS_PER_PACK = 64;
+        mCarryPackType = mBuilder->getIntNTy(mPACK_SIZE);
+        mZeroInitializer = mBuilder->getInt64(0);
+        mOneInitializer = mBuilder->getInt64(-1);
+    }
+    else {
+        mPACK_SIZE = BLOCK_SIZE;
+        mITEMS_PER_PACK = 1;
+        mCarryPackType = mBitBlockType;
+    }
     unsigned totalCarryDataSize = enumerate(pb, 0, 0);
     
     unsigned totalPackCount = (totalCarryDataSize + mITEMS_PER_PACK - 1)/mITEMS_PER_PACK;
@@ -56,18 +68,9 @@ void CarryManager::initialize(Module * m, PabloBlock * pb) {
     for (auto i = 0; i < totalPackCount; i++) mCarryInPack[i]=nullptr;
 
     if (Strategy == SequentialFullyPackedStrategy) {
-        mPACK_SIZE = 64;
-        mITEMS_PER_PACK = 64;
-        mCarryPackType = mBuilder->getIntNTy(mPACK_SIZE);
-        mZeroInitializer = mBuilder->getInt64(0);
-        mOneInitializer = mBuilder->getInt64(-1);
-        mTotalCarryDataBitBlocks = (totalCarryDataSize + BLOCK_SIZE - 1)/BLOCK_SIZE;
-        
+        mTotalCarryDataBitBlocks = (totalCarryDataSize + BLOCK_SIZE - 1)/BLOCK_SIZE;       
     }
     else {
-        mPACK_SIZE = BLOCK_SIZE;
-        mITEMS_PER_PACK = 1;
-        mCarryPackType = mBitBlockType;
         mTotalCarryDataBitBlocks = totalCarryDataSize;
     }
     
@@ -579,7 +582,6 @@ void CarryManager::generateCarryOutSummaryCodeIfNeeded() {
         if (localCarryPacks > 0) {
             carry_summary = mCarryOutPack[localCarryIndex];
             for (auto i = 1; i < localCarryPacks; i++) {
-                //carry_summary = mBuilder->CreateOr(carry_summary, mPabloBlock->mCarryOutPack[i]);            
                 carry_summary = mBuilder->CreateOr(carry_summary, mCarryOutPack[localCarryIndex+i]);
             }
         }
