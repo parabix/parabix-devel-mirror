@@ -12,10 +12,11 @@
 #include <re/re_parser.h>
 #include <pablo/pablo_compiler.h>
 #include <string>
+#include <llvm/IR/Function.h>
 
 namespace icgrep {
 
-    pablo::CompiledPabloFunction compile(const Encoding encoding, const std::vector<std::string> regexps, const re::ModeFlagSet initialFlags);
+    llvm::Function * compile(const Encoding encoding, const std::vector<std::string> regexps, const re::ModeFlagSet initialFlags);
 
 }
 

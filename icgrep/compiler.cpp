@@ -64,7 +64,7 @@ using namespace pablo;
 
 namespace icgrep {
 
-CompiledPabloFunction compile(const Encoding encoding, const std::vector<std::string> regexps, const ModeFlagSet initialFlags) {
+llvm::Function * compile(const Encoding encoding, const std::vector<std::string> regexps, const ModeFlagSet initialFlags) {
     std::vector<RE *> REs;
     RE * re_ast = nullptr;
     for (int i = 0; i < regexps.size(); i++) {
@@ -169,7 +169,7 @@ CompiledPabloFunction compile(const Encoding encoding, const std::vector<std::st
 
     PabloCompiler pablo_compiler;
     try {
-        CompiledPabloFunction retVal = pablo_compiler.compile(function);
+        llvm::Function * retVal = pablo_compiler.compile(function);
         releaseSlabAllocatorMemory();
         return retVal;
     }

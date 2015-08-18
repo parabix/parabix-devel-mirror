@@ -56,34 +56,6 @@ class StatementList;
 class If;
 class While;
 
-struct CompiledPabloFunction {
-    void * const        FunctionPointer;
-private:
-    Function *          mFunction;
-    ExecutionEngine *   mExecutionEngine;
-public:
-    CompiledPabloFunction(Function * function, ExecutionEngine * executionEngine);
-
-    inline Function * getLLVMFunction() const {
-        return mFunction;
-    }
-
-    inline ExecutionEngine * getExecutionEngine() const {
-        return mExecutionEngine;
-    }
-
-    inline CompiledPabloFunction(CompiledPabloFunction && cpf)
-    : FunctionPointer(cpf.FunctionPointer)
-    , mFunction(cpf.mFunction)
-    , mExecutionEngine(cpf.mExecutionEngine)
-    {
-        cpf.mFunction = nullptr;
-        cpf.mExecutionEngine = nullptr;
-    }
-
-    ~CompiledPabloFunction();
-
-};
 #if (BLOCK_SIZE==256)
 #define USE_UADD_OVERFLOW
 #define USE_TWO_UADD_OVERFLOW
@@ -103,7 +75,7 @@ class PabloCompiler {
 public:
     PabloCompiler();
     ~PabloCompiler();
-    CompiledPabloFunction compile(pablo::PabloFunction & function);
+    Function * compile(pablo::PabloFunction & function);
     Function * compile(pablo::PabloFunction & function, Module *module);
     Module *getModule();
 private:
@@ -145,7 +117,6 @@ private:
 
 
     Module *                            mMod;
-    ExecutionEngine *                   mExecutionEngine;
     IRBuilder <> *                      mBuilder;
 
     CarryManager *                      mCarryManager;

@@ -12,9 +12,16 @@
 #include "utf_encoding.h"
 #include "compiler.h"
 #include "pablo/pablo_compiler.h"
-#include "do_grep.h"
+#include <llvm/IR/Function.h>
+#include <llvm/ExecutionEngine/ExecutionEngine.h>
+#include <llvm/ExecutionEngine/MCJIT.h>
+#include <llvm/IRReader/IRReader.h>
+#include <llvm/Support/SourceMgr.h>
+#include <llvm/Support/CommandLine.h>
+#include <llvm/Support/TargetSelect.h>
+#include <llvm/Support/Host.h>
 
-#include "llvm/Support/CommandLine.h"
+#include "do_grep.h"
 
 static cl::OptionCategory aRegexSourceOptions("Regular Expression Options",
                                        "These options control the regular expression source.");
@@ -37,6 +44,31 @@ static cl::alias ShowLineNumbersLong("line-number", cl::desc("Alias for -n"), cl
 
 static cl::list<std::string> regexVector("e", cl::desc("Regular expression"), cl::ZeroOrMore, cl::cat(aRegexSourceOptions));
 static cl::opt<std::string> RegexFilename("f", cl::desc("Take regular expressions (one per line) from a file"), cl::value_desc("regex file"), cl::init(""), cl::cat(aRegexSourceOptions));
+
+
+
+ExecutionEngine * JIT_to_ExecutionEngine (llvm::Function * f) {
+
+    InitializeNativeTarget();
+    InitializeNativeTargetAsmPrinter();
+    InitializeNativeTargetAsmParser();
+
+    std::string errMessage;
+    EngineBuilder builder(std::move(std::unique_ptr<Module>(f->getParent())));
+    builder.setErrorStr(&errMessage);
+    builder.setMCPU(sys::getHostCPUName());
+
+    //builder.setOptLevel(mMaxWhileDepth ? CodeGenOpt::Level::Less : CodeGenOpt::Level::None);
+    ExecutionEngine * engine = builder.create();
+    if (engine == nullptr) {
+        throw std::runtime_error("Could not create ExecutionEngine: " + errMessage);
+    }
+    //engine->addGlobalMapping(cast<GlobalValue>(mPrintRegisterFunction), (void *)&wrapped_print_register);
+    // engine->addGlobalMapping(externalFunction, proto->getFunctionPtr());
+
+    engine->finalizeObject();
+    return engine;
+}
 
 
 int main(int argc, char *argv[]) {
@@ -105,9 +137,15 @@ int main(int argc, char *argv[]) {
     re::ModeFlagSet globalFlags = 0;
     if (CaseInsensitive) globalFlags |= re::CASE_INSENSITIVE_MODE_FLAG;
     
-    const auto llvm_codegen = icgrep::compile(encoding, regexVector, globalFlags);
-    if (llvm_codegen.FunctionPointer) {
-        GrepExecutor grepEngine = GrepExecutor(llvm_codegen.FunctionPointer);
+    
+    llvm::Function * llvm_codegen = icgrep::compile(encoding, regexVector, globalFlags);
+    
+    llvm::ExecutionEngine * engine = JIT_to_ExecutionEngine(llvm_codegen);
+    
+    void * functionPointer = engine->getPointerToFunction(llvm_codegen);
+    
+    if (functionPointer) {
+        GrepExecutor grepEngine = GrepExecutor(functionPointer);
         grepEngine.setCountOnlyOption(CountOnly);
         grepEngine.setNormalizeLineBreaksOption(NormalizeLineBreaks);
         grepEngine.setShowLineNumberOption(ShowLineNumbers);
@@ -119,6 +157,9 @@ int main(int argc, char *argv[]) {
         }
     }
     
+    //engine->freeMachineCodeForFunction(llvm_codegen); // This function only prints a "not supported" message. Reevaluate with LLVM 3.6.
+    delete engine;
+
     return 0;
 }
 
