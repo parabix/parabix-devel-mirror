@@ -54,12 +54,6 @@ static cl::opt<bool> DumpGeneratedIR("dump-generated-IR", cl::init(false), cl::d
 static cl::OptionCategory fTracingOptions("Run-time Tracing Options", "These options control execution traces.");
 static cl::opt<bool> DumpTrace("dump-trace", cl::init(false), cl::desc("Generate dynamic traces of executed assignments."), cl::cat(fTracingOptions));
 
-extern "C" {
-  void wrapped_print_register(char * regName, BitBlock bit_block) {
-      print_register<BitBlock>(regName, bit_block);
-  }
-}
-
 namespace pablo {
 
 PabloCompiler::PabloCompiler()
@@ -129,9 +123,10 @@ llvm::Function * PabloCompiler::compile(PabloFunction & function, Module * modul
 
     mCarryManager = new CarryManager(mBuilder, mBitBlockType, mZeroInitializer, mOneInitializer, &iBuilder);
     
+    if (DumpTrace) DeclareDebugFunctions();
         
     GenerateFunction(function);
-
+    
     mBuilder->SetInsertPoint(BasicBlock::Create(mMod->getContext(), "entry", mFunction,0));
 
     //The basis bits structure
@@ -311,10 +306,8 @@ void PabloCompiler::Examine(PabloBlock & block) {
 }
 
 inline void PabloCompiler::DeclareDebugFunctions() {
-    if (DumpTrace) {
         //This function can be used for testing to print the contents of a register from JIT'd code to the terminal window.
         mPrintRegisterFunction = mMod->getOrInsertFunction("wrapped_print_register", Type::getVoidTy(mMod->getContext()), Type::getInt8PtrTy(mMod->getContext()), mBitBlockType, NULL);
-    }
 }
 
 void PabloCompiler::compileBlock(PabloBlock & block) {

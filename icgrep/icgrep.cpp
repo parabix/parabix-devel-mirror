@@ -57,7 +57,7 @@ ExecutionEngine * JIT_to_ExecutionEngine (llvm::Function * f) {
     EngineBuilder builder(std::move(std::unique_ptr<Module>(f->getParent())));
     builder.setErrorStr(&errMessage);
     builder.setMCPU(sys::getHostCPUName());
-
+    builder.setOptLevel(CodeGenOpt::Level::None);
     //builder.setOptLevel(mMaxWhileDepth ? CodeGenOpt::Level::Less : CodeGenOpt::Level::None);
     ExecutionEngine * engine = builder.create();
     if (engine == nullptr) {
@@ -66,8 +66,21 @@ ExecutionEngine * JIT_to_ExecutionEngine (llvm::Function * f) {
     //engine->addGlobalMapping(cast<GlobalValue>(mPrintRegisterFunction), (void *)&wrapped_print_register);
     // engine->addGlobalMapping(externalFunction, proto->getFunctionPtr());
 
-    engine->finalizeObject();
     return engine;
+}
+
+
+extern "C" {
+  void wrapped_print_register(char * regName, BitBlock bit_block) {
+      print_register<BitBlock>(regName, bit_block);
+  }
+}
+
+void icgrep_Linking(Module * m, ExecutionEngine * e) {
+    Function * printRegFn = m->getFunction("wrapped_print_register");
+    if (printRegFn) {
+        e->addGlobalMapping(cast<GlobalValue>(printRegFn), (void *)&wrapped_print_register); 
+    }
 }
 
 
@@ -111,6 +124,8 @@ int main(int argc, char *argv[]) {
     Encoding encoding(Encoding::Type::UTF_8, 8);
 
     
+    
+    
     //std::vector<std::string> regexVector;
     if (RegexFilename != "") {
         std::ifstream regexFile(RegexFilename.c_str());
@@ -137,15 +152,19 @@ int main(int argc, char *argv[]) {
     re::ModeFlagSet globalFlags = 0;
     if (CaseInsensitive) globalFlags |= re::CASE_INSENSITIVE_MODE_FLAG;
     
+    llvm::Function * icgrep_IR = icgrep::compile(encoding, regexVector, globalFlags);
     
-    llvm::Function * llvm_codegen = icgrep::compile(encoding, regexVector, globalFlags);
+    llvm::ExecutionEngine * engine = JIT_to_ExecutionEngine(icgrep_IR);
     
-    llvm::ExecutionEngine * engine = JIT_to_ExecutionEngine(llvm_codegen);
+    icgrep_Linking(icgrep_IR->getParent(), engine);
     
-    void * functionPointer = engine->getPointerToFunction(llvm_codegen);
+    // Ensure everything is ready to go.
+    engine->finalizeObject();
     
-    if (functionPointer) {
-        GrepExecutor grepEngine = GrepExecutor(functionPointer);
+    void * icgrep_MCptr = engine->getPointerToFunction(icgrep_IR);
+    
+    if (icgrep_MCptr) {
+        GrepExecutor grepEngine = GrepExecutor(icgrep_MCptr);
         grepEngine.setCountOnlyOption(CountOnly);
         grepEngine.setNormalizeLineBreaksOption(NormalizeLineBreaks);
         grepEngine.setShowLineNumberOption(ShowLineNumbers);
@@ -157,7 +176,7 @@ int main(int argc, char *argv[]) {
         }
     }
     
-    //engine->freeMachineCodeForFunction(llvm_codegen); // This function only prints a "not supported" message. Reevaluate with LLVM 3.6.
+    //engine->freeMachineCodeForFunction(icgrep_IR); // This function only prints a "not supported" message. Reevaluate with LLVM 3.6.
     delete engine;
 
     return 0;
