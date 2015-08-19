@@ -141,7 +141,7 @@ unsigned CarryManager::enumerate(PabloBlock * blk, unsigned ifDepth, unsigned wh
             nestedOffset += ifCarryDataBits;
             if (cd->maxNestingDepth <= nestedBlockData->maxNestingDepth) cd->maxNestingDepth = nestedBlockData->maxNestingDepth + 1;
             cd->nested.entries++;
-#ifndef NDEBUG
+#ifdef CARRY_DEBUG
             nestedBlockData->dumpCarryData(cerr);
 #endif
         }
@@ -158,7 +158,7 @@ unsigned CarryManager::enumerate(PabloBlock * blk, unsigned ifDepth, unsigned wh
             nestedOffset += whileCarryDataBits;
             if (cd->maxNestingDepth <= nestedBlockData->maxNestingDepth) cd->maxNestingDepth = nestedBlockData->maxNestingDepth + 1;
             cd->nested.entries++;
-#ifndef NDEBUG
+#ifdef CARRY_DEBUG
             nestedBlockData->dumpCarryData(cerr);
 #endif
         }
@@ -178,7 +178,7 @@ unsigned CarryManager::enumerate(PabloBlock * blk, unsigned ifDepth, unsigned wh
     else {
         cd->summary.frameOffset = 0;
     }
-#ifndef NDEBUG
+#ifdef CARRY_DEBUG
     if (cd->ifDepth == 0) cd->dumpCarryData(cerr);
 #endif
     return cd->scopeCarryDataSize;

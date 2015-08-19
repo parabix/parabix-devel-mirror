@@ -13,6 +13,7 @@
 #include "compiler.h"
 #include "pablo/pablo_compiler.h"
 #include <llvm/IR/Function.h>
+#include <llvm/IR/Module.h>
 #include <llvm/ExecutionEngine/ExecutionEngine.h>
 #include <llvm/ExecutionEngine/MCJIT.h>
 #include <llvm/IRReader/IRReader.h>
@@ -20,6 +21,9 @@
 #include <llvm/Support/CommandLine.h>
 #include <llvm/Support/TargetSelect.h>
 #include <llvm/Support/Host.h>
+#ifndef DISABLE_PREGENERATED_UCD_FUNCTIONS
+#include <UCD/precompiled_properties.h>
+#endif
 
 #include "do_grep.h"
 
@@ -77,9 +81,19 @@ extern "C" {
 }
 
 void icgrep_Linking(Module * m, ExecutionEngine * e) {
-    Function * printRegFn = m->getFunction("wrapped_print_register");
-    if (printRegFn) {
-        e->addGlobalMapping(cast<GlobalValue>(printRegFn), (void *)&wrapped_print_register); 
+    Module::FunctionListType & fns = m->getFunctionList();
+    for (Module::FunctionListType::iterator it = fns.begin(), it_end = fns.end(); it != it_end; ++it) {
+        std::string fnName = it->getName().str();
+        if (fnName == "process_block") continue;
+        if (fnName == "wrapped_print_register") {
+            e->addGlobalMapping(cast<GlobalValue>(it), (void *)&wrapped_print_register);
+        }
+#ifndef DISABLE_PREGENERATED_UCD_FUNCTIONS
+        else {
+            const UCD::ExternalProperty & ep = UCD::resolveExternalProperty(fnName);
+            e->addGlobalMapping(cast<GlobalValue>(it), std::get<0>(ep));
+        }
+#endif
     }
 }
 
