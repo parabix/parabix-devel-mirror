@@ -94,7 +94,7 @@ void CarryManager::initialize(Module * m, PabloBlock * pb) {
     }
     // Carry Data area will have one extra bit block to store the block number.
     GlobalVariable* blkNo = new GlobalVariable(*m, mBuilder->getIntNTy(64), /*isConstant=*/false, GlobalValue::CommonLinkage, 0, "blockNo");
-    blkNo->setAlignment(8);
+    blkNo->setAlignment(16);
     blkNo->setInitializer(mBuilder->getInt64(0));
     mBlockNoPtr = blkNo;
     mBlockNo = mBuilder->CreateLoad(mBlockNoPtr);
