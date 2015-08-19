@@ -91,7 +91,7 @@ void PabloCompiler::genPrintRegister(std::string regName, Value * bitblockValue)
     mBuilder->CreateCall(mPrintRegisterFunction, {regStrPtr, bitblockValue});
 }
 
-llvm::Function * PabloCompiler::compile(PabloFunction & function) {
+llvm::Function * PabloCompiler::compile(PabloFunction * function) {
     Module * module = new Module("", getGlobalContext());
     
     auto func = compile(function, module);
@@ -106,14 +106,14 @@ llvm::Function * PabloCompiler::compile(PabloFunction & function) {
     return func;
 }
 
-llvm::Function * PabloCompiler::compile(PabloFunction & function, Module * module) {
+llvm::Function * PabloCompiler::compile(PabloFunction * function, Module * module) {
 
   
-    PabloBlock & mainScope = function.getEntryBlock();
+    PabloBlock & mainScope = function->getEntryBlock();
 
     mainScope.enumerateScopes(0);
     
-    Examine(function);
+    Examine(*function);
 
     mMod = module;
 
@@ -125,18 +125,18 @@ llvm::Function * PabloCompiler::compile(PabloFunction & function, Module * modul
     
     if (DumpTrace) DeclareDebugFunctions();
         
-    GenerateFunction(function);
+    GenerateFunction(*function);
     
     mBuilder->SetInsertPoint(BasicBlock::Create(mMod->getContext(), "entry", mFunction,0));
 
     //The basis bits structure
-    for (unsigned i = 0; i != function.getNumOfParameters(); ++i) {
+    for (unsigned i = 0; i != function->getNumOfParameters(); ++i) {
         Value* indices[] = {mBuilder->getInt64(0), mBuilder->getInt32(i)};
         Value * gep = mBuilder->CreateGEP(mInputAddressPtr, indices);
-        LoadInst * basisBit = mBuilder->CreateAlignedLoad(gep, BLOCK_SIZE/8, false, function.getParameter(i)->getName()->to_string());
-        mMarkerMap[function.getParameter(i)] = basisBit;
+        LoadInst * basisBit = mBuilder->CreateAlignedLoad(gep, BLOCK_SIZE/8, false, function->getParameter(i)->getName()->to_string());
+        mMarkerMap[function->getParameter(i)] = basisBit;
         if (DumpTrace) {
-            genPrintRegister(function.getParameter(i)->getName()->to_string(), basisBit);
+            genPrintRegister(function->getParameter(i)->getName()->to_string(), basisBit);
         }
     }
      
@@ -157,9 +157,9 @@ llvm::Function * PabloCompiler::compile(PabloFunction & function, Module * modul
     }
     
     // Write the output values out
-    for (unsigned i = 0; i != function.getNumOfResults(); ++i) {
+    for (unsigned i = 0; i != function->getNumOfResults(); ++i) {
         assert (function.getResult(i));
-        SetOutputValue(mMarkerMap[function.getResult(i)], i);
+        SetOutputValue(mMarkerMap[function->getResult(i)], i);
     }
 
     //Terminate the block

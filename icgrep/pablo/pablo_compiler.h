@@ -75,8 +75,8 @@ class PabloCompiler {
 public:
     PabloCompiler();
     ~PabloCompiler();
-    Function * compile(pablo::PabloFunction & function);
-    Function * compile(pablo::PabloFunction & function, Module *module);
+    Function * compile(pablo::PabloFunction * function);
+    Function * compile(pablo::PabloFunction * function, Module *module);
     Module *getModule();
 private:
     void GenerateFunction(PabloFunction & function);

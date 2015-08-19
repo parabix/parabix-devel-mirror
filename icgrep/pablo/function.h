@@ -76,8 +76,8 @@ public:
         return false;
     }
 
-    static PabloFunction Create(std::string name, const unsigned numOfParameters, const unsigned numOfResults);
-
+    static PabloFunction * Create(std::string name, const unsigned numOfParameters, const unsigned numOfResults);
+    
     virtual bool operator==(const PabloAST & other) const {
         return &other == this;
     }
@@ -157,10 +157,10 @@ private:
     Assign ** const     mResults;
 };
 
-inline PabloFunction PabloFunction::Create(std::string name, const unsigned numOfParameters, const unsigned numOfResults) {
-    return PabloFunction(std::move(name), numOfParameters, numOfResults);
+inline PabloFunction * PabloFunction::Create(std::string name, const unsigned numOfParameters, const unsigned numOfResults) {
+    return new PabloFunction(std::move(name), numOfParameters, numOfResults);
 }
-
+    
 }
 
 #endif // FUNCTION_H

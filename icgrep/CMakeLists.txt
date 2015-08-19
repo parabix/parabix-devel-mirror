@@ -45,7 +45,7 @@ add_definitions( ${LLVM_DEFINITIONS} )
 
 # Let's suppose we want to build a JIT compiler with support for
 # binary code (no interpreter):
-llvm_map_components_to_libnames(REQ_LLVM_LIBRARIES mcjit native)
+llvm_map_components_to_libnames(REQ_LLVM_LIBRARIES mcjit native IRReader)
 
 message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
 
@@ -110,17 +110,19 @@ add_custom_target(run_generate_predefined_ucd_functions DEPENDS ${PRECOMPILED_FI
 add_dependencies(RegExpCompiler run_generate_predefined_ucd_functions)
 ENDIF()
 
-add_executable(icgrep icgrep.cpp do_grep.cpp compiler.cpp ${PRECOMPILED_FILES})
+add_executable(icgrep icgrep.cpp do_grep.cpp ${PRECOMPILED_FILES})
 IF(NOT DISABLE_PREGENERATED_UCD_FUNCTIONS)
 add_dependencies(icgrep run_generate_predefined_ucd_functions)
 ENDIF()
-target_link_libraries (icgrep UCDlib PabloADT RegExpCompiler CCADT ${REQ_LLVM_LIBRARIES})
-
 IF(Boost_FOUND)
     include_directories("${Boost_INCLUDE_DIRS}")
     link_directories(${Boost_LIBRARY_DIR})
     SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DUSE_BOOST")
 ENDIF()
+
+target_link_libraries (icgrep UCDlib PabloADT RegExpCompiler CCADT ${REQ_LLVM_LIBRARIES})
+
+
 
 IF (ENABLE_MULTIPLEXING)
 message(STATUS "Enabling Multiplexing")
