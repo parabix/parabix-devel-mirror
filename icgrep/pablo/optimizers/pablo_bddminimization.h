@@ -48,8 +48,8 @@ protected:
     void promoteSimpleInputDerivationsToAssigns(PabloFunction & function);
     void simplifyAST(PabloBlock & block, Terminals && terminals);
     DdNode * characterizeTerminal(PabloAST * expr);
-    PabloAST * simplifyAST(DdNode * const f, PabloBuilder &block);
-    PabloAST * makeCoverAST(DdNode * const f, PabloBuilder &block);
+    PabloAST * simplifyAST(DdNode * const f, PabloBlock &block);
+    PabloAST * makeCoverAST(DdNode * const f, PabloBlock &block);
 private:
     DdNode * Zero() const;
     DdNode * One() const;

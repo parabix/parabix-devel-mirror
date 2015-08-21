@@ -28,7 +28,6 @@ class AutoMultiplexing {
     using RNG = std::mt19937;
     using IntDistribution = std::uniform_int_distribution<RNG::result_type>;
     using MultiplexSetGraph = boost::adjacency_list<boost::hash_setS, boost::vecS, boost::bidirectionalS>;
-    using Trie = boost::adjacency_list<boost::hash_setS, boost::vecS, boost::directedS, ConstraintVertex, boost::no_property>;
     using SubsetGraph = boost::adjacency_list<boost::hash_setS, boost::vecS, boost::bidirectionalS>;
     // the Advance pointer, input BDD and the BDD variable of the i-th Advance
     using AdvanceMap = boost::container::flat_map<const Statement *, unsigned>;
@@ -48,6 +47,7 @@ protected:
     void selectMultiplexSets(RNG &);
     void applySubsetConstraints();
     void multiplexSelectedIndependentSets();
+    void reassociate(PabloBuilder & builder, PabloAST * const demuxed[], const unsigned n) const;
     void topologicalSort(PabloBlock & entry) const;
     inline AutoMultiplexing()
     : mVariables(0)

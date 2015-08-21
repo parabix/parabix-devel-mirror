@@ -48,6 +48,8 @@ using namespace cc;
 using namespace llvm;
 using namespace boost::container;
 
+enum IfHierarchy {DefaultIfHierarchy, NoIfHierarchy};
+
 static cl::opt<std::string>
 ObjectFilename("o", cl::desc("Output object filename"), cl::value_desc("filename"), cl::Required);
 
@@ -56,6 +58,14 @@ UCDSourcePath("dir", cl::desc("UCD source code directory"), cl::value_desc("dire
 
 static cl::opt<std::string>
 PrintLongestDependenceChain("ldc", cl::desc("print longest dependency chain metrics."), cl::value_desc("filename"));
+
+static cl::opt<IfHierarchy> IfHierarchyStrategy(cl::desc("If Hierarchy strategy:"),
+                                                cl::values(clEnumVal(DefaultIfHierarchy, "Default"),
+                                                           clEnumVal(NoIfHierarchy, "None"),
+                                                           clEnumValEnd));
+
+
+
 
 static raw_fd_ostream * LongestDependenceChainFile = nullptr;
 
@@ -131,17 +141,17 @@ unsigned computePabloDependencyChainMetrics(const PabloBlock & b, std::unordered
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief computePabloDependencyMetrics
  ** ------------------------------------------------------------------------------------------------------------- */
-std::pair<unsigned, unsigned> computePabloDependencyChainMetrics(const PabloFunction & f) {
+std::pair<unsigned, unsigned> computePabloDependencyChainMetrics(const PabloFunction * f) {
     std::unordered_map<const PabloAST *, unsigned> G;
-    G.insert(std::make_pair(f.getEntryBlock().createZeroes(), 0));
-    G.insert(std::make_pair(f.getEntryBlock().createOnes(), 0));
-    for (unsigned i = 0; i != f.getNumOfParameters(); ++i) {
-        G.insert(std::make_pair(f.getParameter(i), 0));
+    G.insert(std::make_pair(f->getEntryBlock().createZeroes(), 0));
+    G.insert(std::make_pair(f->getEntryBlock().createOnes(), 0));
+    for (unsigned i = 0; i != f->getNumOfParameters(); ++i) {
+        G.insert(std::make_pair(f->getParameter(i), 0));
     }
-    const unsigned local_lpl = computePabloDependencyChainMetrics(f.getEntryBlock(), G);
+    const unsigned local_lpl = computePabloDependencyChainMetrics(f->getEntryBlock(), G);
     unsigned global_lpl = 0;
-    for (unsigned i = 0; i != f.getNumOfResults(); ++i) {
-        const auto e = G.find(f.getResult(i));
+    for (unsigned i = 0; i != f->getNumOfResults(); ++i) {
+        const auto e = G.find(f->getResult(i));
         if (e == G.end()) {
             throw std::runtime_error("No result computed!");
         }
@@ -189,10 +199,10 @@ unsigned computeLLVMDependencyChainMetrics(const DomTreeNode * t, std::unordered
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief computeLLVMDependencyMetrics
  ** ------------------------------------------------------------------------------------------------------------- */
-std::pair<unsigned, unsigned> computeLLVMDependencyChainMetrics(llvm::Function & f) {
+std::pair<unsigned, unsigned> computeLLVMDependencyChainMetrics(llvm::Function * f) {
     std::unordered_map<const llvm::Value *, unsigned> G;
 
-    auto itr = f.getArgumentList().begin();
+    auto itr = f->getArgumentList().begin();
     const Argument & input = *itr++;
     const Argument & output = *itr;
     for (const User * user : output.users()) {
@@ -200,7 +210,7 @@ std::pair<unsigned, unsigned> computeLLVMDependencyChainMetrics(llvm::Function &
     }
 
     PostDominatorTree dt;
-    dt.runOnFunction(f);
+    dt.runOnFunction(*f);
     const unsigned local_lpl = computeLLVMDependencyChainMetrics(dt.getRootNode(), G);
     dt.releaseMemory();
 
@@ -227,51 +237,58 @@ void compileUnicodeSet(std::string name, const UnicodeSet & set, PabloCompiler &
     if (LongestDependenceChainFile) {
         (*LongestDependenceChainFile) << name;
     }
+    std::cerr << name << std::endl;
 
-    PabloFunction function = PabloFunction::Create(std::move(name), 8, 1);
+    PabloFunction * function = PabloFunction::Create(std::move(name), 8, 1);
     Encoding encoding(Encoding::Type::UTF_8, 8);
-    CC_Compiler ccCompiler(function, encoding);
+    CC_Compiler ccCompiler(*function, encoding);
     UCDCompiler ucdCompiler(ccCompiler);
-    PabloBuilder builder(function.getEntryBlock());
+    PabloBuilder builder(function->getEntryBlock());
     // Build the unicode set function
-    function.setResult(0, builder.createAssign("matches", ucdCompiler.generateWithDefaultIfHierarchy(set, builder)));
+    PabloAST * result = nullptr;
+    if (IfHierarchyStrategy == IfHierarchy::DefaultIfHierarchy) {
+        result = ucdCompiler.generateWithDefaultIfHierarchy(set, builder);
+    } else if (IfHierarchyStrategy == IfHierarchy::NoIfHierarchy) {
+        result = ucdCompiler.generateWithoutIfHierarchy(set, builder);
+    } else {
+        throw std::runtime_error("Unknown if hierarchy strategy!");
+    }
+    function->setResult(0, builder.createAssign("matches", result));
     // Optimize it at the pablo level
-    Simplifier::optimize(function);
-    CodeSinking::optimize(function);
+    Simplifier::optimize(*function);
+    CodeSinking::optimize(*function);
 
     #ifdef ENABLE_MULTIPLEXING
     if (EnableMultiplexing) {
-
         if (LongestDependenceChainFile) {
             const auto pablo_metrix = computePabloDependencyChainMetrics(function);
             (*LongestDependenceChainFile) << ',' << pablo_metrix.first << ',' << pablo_metrix.second;
             Module module("tmp", getGlobalContext());
-            auto func = pc.compile(function, &module);
-            const auto llvm_metrix = computeLLVMDependencyChainMetrics(*func.first);
+            llvm::Function * func = pc.compile(function, &module);
+            const auto llvm_metrix = computeLLVMDependencyChainMetrics(func);
             (*LongestDependenceChainFile) << ',' << llvm_metrix.first << ',' << llvm_metrix.second;
         }
 
         if (MultiplexingDistributionFile) {
-            (*MultiplexingDistributionFile) << ',' << getNumOfAdvances(function.getEntryBlock());
+            (*MultiplexingDistributionFile) << ',' << getNumOfAdvances(function->getEntryBlock());
         }
-        AutoMultiplexing::optimize(function);
-        Simplifier::optimize(function);
+        AutoMultiplexing::optimize(*function);
         if (MultiplexingDistributionFile) {
-            (*MultiplexingDistributionFile) << ',' << getNumOfAdvances(function.getEntryBlock()) << '\n';
+            (*MultiplexingDistributionFile) << ',' << getNumOfAdvances(function->getEntryBlock()) << '\n';
         }
     }
     #endif
     // Now compile the function ...
-    auto func = pc.compile(function, module);
+    llvm::Function * func = pc.compile(function, module);
     releaseSlabAllocatorMemory();
-/*
+
     if (LongestDependenceChainFile) {
         const auto pablo_metrix = computePabloDependencyChainMetrics(function);
         (*LongestDependenceChainFile) << ',' << pablo_metrix.first << ',' << pablo_metrix.second;
-        const auto llvm_metrix = computeLLVMDependencyChainMetrics(*func.first);
+        const auto llvm_metrix = computeLLVMDependencyChainMetrics(func);
         (*LongestDependenceChainFile) << ',' << llvm_metrix.first << ',' << llvm_metrix.second << '\n';
     }
-*/
+
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

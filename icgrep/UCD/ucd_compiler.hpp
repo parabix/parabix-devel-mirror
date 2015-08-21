@@ -30,6 +30,8 @@ public:
 
     PabloAST * generateWithDefaultIfHierarchy(const UnicodeSet & set, PabloBuilder & entry);
 
+    PabloAST * generateWithoutIfHierarchy(const UnicodeSet & set, PabloBuilder & entry);
+
     PabloAST * generateWithIfHierarchy(const RangeList & ifRanges, const UnicodeSet & set, PabloBuilder & entry);
 
 protected:

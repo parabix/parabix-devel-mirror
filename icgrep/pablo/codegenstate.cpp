@@ -220,28 +220,29 @@ PabloAST * PabloBlock::createMod64ScanThru(PabloAST * from, PabloAST * thru, con
     return insertAtInsertionPoint(new Mod64ScanThru(from, thru, makeName(prefix, false)));
 }
 
-
-
-
 PabloAST * PabloBlock::createAnd(PabloAST * expr1, PabloAST * expr2) {
     assert (expr1 && expr2);
     if (isa<Zeroes>(expr2) || isa<Ones>(expr1)) {
         return expr2;
-    }
-    else if (isa<Zeroes>(expr1) || isa<Ones>(expr2) || equals(expr1, expr2)){
+    } else if (isa<Zeroes>(expr1) || isa<Ones>(expr2) || equals(expr1, expr2)){
         return expr1;
-    }
-    else if (Not * not1 = dyn_cast<Not>(expr1)) {
+    } else if (Not * not1 = dyn_cast<Not>(expr1)) {
         if (Not * not2 = dyn_cast<Not>(expr2)) {
             return createNot(createOr(not1->getExpr(), not2->getExpr()));
-        }
-        else if (equals(not1->getExpr(), expr2)) {
+        } else if (equals(not1->getExpr(), expr2)) {
             return createZeroes();
         }
-    }
-    else if (Not * not2 = dyn_cast<Not>(expr2)) {
+    } else if (Not * not2 = dyn_cast<Not>(expr2)) {
         if (equals(expr1, not2->getExpr())) {
             return createZeroes();
+        }
+    } else if (Or * or1 = dyn_cast<Or>(expr1)) {
+        if (equals(or1->getExpr1(), expr2) || equals(or1->getExpr2(), expr2)) {
+            return expr2;
+        }
+    } else if (Or * or2 = dyn_cast<Or>(expr2)) {
+        if (equals(or2->getExpr1(), expr1) || equals(or2->getExpr2(), expr1)) {
+            return expr1;
         }
     }
     if (isa<Not>(expr1) || expr1 > expr2) {
@@ -250,26 +251,30 @@ PabloAST * PabloBlock::createAnd(PabloAST * expr1, PabloAST * expr2) {
     return insertAtInsertionPoint(new And(expr1, expr2, makeName("and_")));
 }
 
-
 PabloAST * PabloBlock::createAnd(PabloAST * expr1, PabloAST * expr2, const std::string prefix) {
     assert (expr1 && expr2);
     if (isa<Zeroes>(expr2) || isa<Ones>(expr1)) {
         return renameNonNamedNode(expr2, std::move(prefix));
-    }
-    else if (isa<Zeroes>(expr1) || isa<Ones>(expr2) || equals(expr1, expr2)){
+    } else if (isa<Zeroes>(expr1) || isa<Ones>(expr2) || equals(expr1, expr2)){
         return renameNonNamedNode(expr1, std::move(prefix));
-    }
-    else if (Not * not1 = dyn_cast<Not>(expr1)) {
+    } else if (Not * not1 = dyn_cast<Not>(expr1)) {
         if (Not * not2 = dyn_cast<Not>(expr2)) {
             return createNot(createOr(not1->getExpr(), not2->getExpr()), prefix);
         }
         else if (equals(not1->getExpr(), expr2)) {
             return createZeroes();
         }
-    }
-    else if (Not * not2 = dyn_cast<Not>(expr2)) {
+    } else if (Not * not2 = dyn_cast<Not>(expr2)) {
         if (equals(expr1, not2->getExpr())) {
             return createZeroes();
+        }
+    } else if (Or * or1 = dyn_cast<Or>(expr1)) {
+        if (equals(or1->getExpr1(), expr2) || equals(or1->getExpr2(), expr2)) {
+            return expr2;
+        }
+    } else if (Or * or2 = dyn_cast<Or>(expr2)) {
+        if (equals(or2->getExpr1(), expr1) || equals(or2->getExpr2(), expr1)) {
+            return expr1;
         }
     }
     if (isa<Not>(expr1) || expr1 > expr2) {
@@ -285,38 +290,38 @@ PabloAST * PabloBlock::createOr(PabloAST * expr1, PabloAST * expr2) {
     }
     if (isa<Zeroes>(expr2) || isa<Ones>(expr1) || equals(expr1, expr2)) {
         return expr1;
-    }
-    else if (Not * not1 = dyn_cast<Not>(expr1)) {
+    } else if (Not * not1 = dyn_cast<Not>(expr1)) {
         // ¬a∨b = ¬¬(¬a∨b) = ¬(a ∧ ¬b)
         return createNot(createAnd(not1->getExpr(), createNot(expr2)));
-    }
-    else if (Not * not2 = dyn_cast<Not>(expr2)) {
+    } else if (Not * not2 = dyn_cast<Not>(expr2)) {
         // a∨¬b = ¬¬(¬b∨a) = ¬(b ∧ ¬a)
         return createNot(createAnd(not2->getExpr(), createNot(expr1)));
-    }
-    else if (equals(expr1, expr2)) {
+    } else if (equals(expr1, expr2)) {
         return expr1;
-    }
-    else if (And * and_expr1 = dyn_cast<And>(expr1)) {
-        if (And * and_expr2 = dyn_cast<And>(expr2)) {
-            PabloAST * const expr1a = and_expr1->getExpr1();
-            PabloAST * const expr1b = and_expr1->getExpr2();
-            PabloAST * const expr2a = and_expr2->getExpr1();
-            PabloAST * const expr2b = and_expr2->getExpr2();
+    } else if (And * and1 = dyn_cast<And>(expr1)) {
+        if (And * and2 = dyn_cast<And>(expr2)) {
+            PabloAST * const expr1a = and1->getExpr1();
+            PabloAST * const expr1b = and1->getExpr2();
+            PabloAST * const expr2a = and2->getExpr1();
+            PabloAST * const expr2b = and2->getExpr2();
             //These optimizations factor out common components that can occur when sets are formed by union
             //(e.g., union of [a-z] and [A-Z].
             if (equals(expr1a, expr2a)) {
                 return createAnd(expr1a, createOr(expr1b, expr2b));
-            }
-            else if (equals(expr1b, expr2b)) {
+            } else if (equals(expr1b, expr2b)) {
                 return createAnd(expr1b, createOr(expr1a, expr2a));
-            }
-            else if (equals(expr1a, expr2b)) {
+            } else if (equals(expr1a, expr2b)) {
                 return createAnd(expr1a, createOr(expr1b, expr2a));
-            }
-            else if (equals(expr1b, expr2a)) {
+            } else if (equals(expr1b, expr2a)) {
                 return createAnd(expr1b, createOr(expr1a, expr2b));
             }
+        } else if (equals(and1->getExpr1(), expr2) || equals(and1->getExpr2(), expr2)){
+            // (a∧b) ∨ a = a
+            return expr2;
+        }
+    } else if (And * and2 = dyn_cast<And>(expr2)) {
+        if (equals(and2->getExpr1(), expr1) || equals(and2->getExpr2(), expr1)) {
+            return expr1;
         }
     }
     if (expr1 > expr2) {
@@ -341,12 +346,12 @@ PabloAST * PabloBlock::createOr(PabloAST * expr1, PabloAST * expr2, const std::s
         // a∨¬b = ¬¬(¬b∨a) = ¬(b ∧ ¬a)
         return createNot(createAnd(not2->getExpr(), createNot(expr1)), prefix);
     }
-    else if (And * and_expr1 = dyn_cast<And>(expr1)) {
-        if (And * and_expr2 = dyn_cast<And>(expr2)) {
-            PabloAST * const expr1a = and_expr1->getExpr1();
-            PabloAST * const expr1b = and_expr1->getExpr2();
-            PabloAST * const expr2a = and_expr2->getExpr1();
-            PabloAST * const expr2b = and_expr2->getExpr2();
+    else if (And * and1 = dyn_cast<And>(expr1)) {
+        if (And * and2 = dyn_cast<And>(expr2)) {
+            PabloAST * const expr1a = and1->getExpr1();
+            PabloAST * const expr1b = and1->getExpr2();
+            PabloAST * const expr2a = and2->getExpr1();
+            PabloAST * const expr2b = and2->getExpr2();
             //These optimizations factor out common components that can occur when sets are formed by union
             //(e.g., union of [a-z] and [A-Z].
             if (equals(expr1a, expr2a)) {
@@ -361,6 +366,13 @@ PabloAST * PabloBlock::createOr(PabloAST * expr1, PabloAST * expr2, const std::s
             else if (equals(expr1b, expr2a)) {
                 return createAnd(expr1b, createOr(expr1a, expr2b), prefix);
             }
+        } else if (equals(and1->getExpr1(), expr2) || equals(and1->getExpr2(), expr2)) {
+            // (a∧b) ∨ a = a
+            return expr2;
+        }
+    } else if (And * and2 = dyn_cast<And>(expr2)) {
+        if (equals(and2->getExpr1(), expr1) || equals(and2->getExpr2(), expr1)) {
+            return expr1;
         }
     }
     if (expr1 > expr2) {

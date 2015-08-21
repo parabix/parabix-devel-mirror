@@ -159,16 +159,17 @@ bool AutoMultiplexing::optimize(PabloFunction & function) {
         RECORD_TIMESTAMP(end_select_independent_sets);
         LOG("SelectedIndependentSets: " << (end_select_independent_sets - start_select_independent_sets));
 
+        BooleanReassociationPass::optimize(function);
+
         RECORD_TIMESTAMP(start_topological_sort);
         am.topologicalSort(function.getEntryBlock());
         RECORD_TIMESTAMP(end_topological_sort);
         LOG("TopologicalSort (1):     " << (end_topological_sort - start_topological_sort));
 
-        BDDMinimizationPass::optimize(function, true);
+        BDDMinimizationPass::optimize(function, false);
     }
 
     LOG_NUMBER_OF_ADVANCES(function.getEntryBlock());
-
     return multiplex;
 }
 
@@ -642,6 +643,8 @@ bool AutoMultiplexing::generateCandidateSets(RNG & rng) {
         }
     }
 
+    assert (S.size() > 0);
+
     auto remainingVerticies = num_vertices(mConstraintGraph) - S.size();
 
     do {
@@ -650,16 +653,18 @@ bool AutoMultiplexing::generateCandidateSets(RNG & rng) {
 
         bool noNewElements = true;
         do {
+            assert (S.size() > 0);
             // Randomly choose a vertex in S and discard it.
             const auto i = S.begin() + IntDistribution(0, S.size() - 1)(rng);
-            const ConstraintVertex u = *i;
-            S.erase(i);
-            --remainingVerticies;
+            assert (i != S.end());
+            const ConstraintVertex u = *i;            
+            S.erase(i);            
 
             for (auto e : make_iterator_range(out_edges(u, mConstraintGraph))) {
                 const ConstraintVertex v = target(e, mConstraintGraph);
                 if ((--D[v]) == 0) {
                     S.push_back(v);
+                    --remainingVerticies;
                     noNewElements = false;
                 }
             }
@@ -848,9 +853,8 @@ void AutoMultiplexing::applySubsetConstraints() {
         for (auto i = m; i != n; ++i) {
             graph_traits<MultiplexSetGraph>::out_edge_iterator ei, ei_end;
             // For each member of a "set vertex" ...
-            std::tie(ei, ei_end) = out_edges(i, mMultiplexSetGraph);
-            for (; ei != ei_end; ++ei) {
-                const auto s = source(*ei, mMultiplexSetGraph);
+            for (auto e : make_iterator_range(out_edges(i, mMultiplexSetGraph))) {
+                const auto s = source(e, mMultiplexSetGraph);
                 if (out_degree(s, mMultiplexSetGraph) != 0) {
                     // First scan through the subgraph of vertices in M dominated by s and build up the set T,
                     // consisting of all sinks w.r.t. vertex s.
@@ -939,13 +943,13 @@ void AutoMultiplexing::applySubsetConstraints() {
  ** ------------------------------------------------------------------------------------------------------------- */
 void AutoMultiplexing::multiplexSelectedIndependentSets() {
 
-    const unsigned f = num_vertices(mConstraintGraph);
-    const unsigned l = num_vertices(mMultiplexSetGraph);
+    const unsigned first_set = num_vertices(mConstraintGraph);
+    const unsigned last_set = num_vertices(mMultiplexSetGraph);
 
     // Preallocate the structures based on the size of the largest multiplex set
     size_t max_n = 3;
-    for (unsigned s = f; s != l; ++s) {
-        max_n = std::max<unsigned>(max_n, out_degree(s, mMultiplexSetGraph));
+    for (unsigned idx = first_set; idx != last_set; ++idx) {
+        max_n = std::max<unsigned>(max_n, out_degree(idx, mMultiplexSetGraph));
     }
 
     circular_buffer<PabloAST *> Q(max_n);
@@ -953,15 +957,15 @@ void AutoMultiplexing::multiplexSelectedIndependentSets() {
     // When entering thus function, the multiplex set graph M is a DAG with edges denoting the set
     // relationships of our independent sets.
 
-    for (unsigned s = f; s != l; ++s) {
-        const size_t n = out_degree(s, mMultiplexSetGraph);
+    for (unsigned idx = first_set; idx != last_set; ++idx) {
+        const size_t n = out_degree(idx, mMultiplexSetGraph);
         if (n) {
             const size_t m = log2_plus_one(n);            
             Advance * input[n];
-            Advance * muxed[m];
+            Advance * muxed[m];            
 
             unsigned i = 0;
-            for (const auto e : make_iterator_range(out_edges(s, mMultiplexSetGraph))) {
+            for (const auto e : make_iterator_range(out_edges(idx, mMultiplexSetGraph))) {
                 input[i] = std::get<0>(mAdvance[target(e, mMultiplexSetGraph)]);
                 assert (input[i]);
                 ++i;
@@ -977,10 +981,10 @@ void AutoMultiplexing::multiplexSelectedIndependentSets() {
             for (size_t j = 0; j != m; ++j) {
 
                 std::ostringstream prefix;
-                prefix << "mux" << n << "to" << m << '_';
-                for (size_t i = 1; i <= n; ++i) {
-                    if ((i & (static_cast<size_t>(1) << j)) != 0) {
-                        Q.push_back(input[i - 1]->getOperand(0));
+                prefix << "mux" << n << "to" << m << '.' << (j + 1);
+                for (size_t i = 0; i != n; ++i) {
+                    if (((i + 1) & (1ULL << j)) != 0) {
+                        Q.push_back(input[i]->getOperand(0));
                     }
                 }
 
@@ -997,12 +1001,12 @@ void AutoMultiplexing::multiplexSelectedIndependentSets() {
                 muxed[j] = cast<Advance>(builder.createAdvance(mux, adv->getOperand(1), prefix.str()));
             }
 
-            /// Perform m-to-n Demultiplexing            
-            for (size_t i = 1; i <= n; ++i) {
+            /// Perform m-to-n Demultiplexing                        
+            for (size_t i = 0; i != n; ++i) {
 
                 // Construct the demuxed values and replaces all the users of the original advances with them.
                 for (size_t j = 0; j != m; ++j) {
-                    if ((i & (1ULL << j)) == 0) {
+                    if (((i + 1) & (1ULL << j)) == 0) {
                         Q.push_back(muxed[j]);
                     }
                 }
@@ -1020,7 +1024,7 @@ void AutoMultiplexing::multiplexSelectedIndependentSets() {
                 }
 
                 for (unsigned j = 0; j != m; ++j) {
-                    if ((i & (1ULL << j)) != 0) {
+                    if (((i + 1) & (1ULL << j)) != 0) {
                         assert (!Q.full());
                         Q.push_back(muxed[j]);
                     }
@@ -1034,7 +1038,7 @@ void AutoMultiplexing::multiplexSelectedIndependentSets() {
                 }
 
                 PabloAST * demuxed = Q.front(); Q.pop_front(); assert (demuxed);
-                input[i - 1]->replaceWith(demuxed, true, true);
+                input[i]->replaceWith(demuxed, true, true);
             }
         }        
     }
@@ -1056,9 +1060,10 @@ void AutoMultiplexing::topologicalSort(PabloBlock & entry) const {
     std::unordered_set<const PabloAST *> encountered;
     std::stack<Statement *> scope;
 
+    raw_os_ostream out(std::cerr);
+
     for (Statement * stmt = entry.front(); ; ) { restart:
         while ( stmt ) {
-
             for (unsigned i = 0; i != stmt->getNumOperands(); ++i) {
                 PabloAST * const op = stmt->getOperand(i);
                 if (LLVM_LIKELY(isa<Statement>(op))) {
@@ -1094,6 +1099,177 @@ void AutoMultiplexing::topologicalSort(PabloBlock & entry) const {
         scope.pop();
     }
 }
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief reassociate
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline void AutoMultiplexing::reassociate(PabloBuilder & builder, PabloAST * const demuxed[], const unsigned n) const {
+    using Graph = boost::adjacency_list<boost::hash_setS, boost::vecS, boost::bidirectionalS, PabloAST *>;
+    using Map = std::unordered_map<PabloAST *, Graph::vertex_descriptor>;
+    using Queue = std::queue<Graph::vertex_descriptor>;
+    using Or = pablo::Or;
+    using And = pablo::And;
+
+
+    flat_set<PabloAST *> initial_vars;
+
+
+    std::queue<And *> andQ;
+    for (unsigned i = 0; i != n; ++i) {
+        for (PabloAST * user : demuxed[i]->users()) {
+            if (isa<And>(user)) {
+                andQ.push(cast<And>(user));
+            } else if (isa<Or>(user)) {
+                initial_vars.insert(demuxed[i]);
+            }
+        }
+    }
+
+    while (!andQ.empty()) {
+        And * inst = andQ.front(); andQ.pop();
+        for (PabloAST * user : inst->users()) {
+            if (isa<And>(user)) {
+                andQ.push(cast<And>(user));
+            } else if (isa<Or>(user)) {
+                initial_vars.insert(inst);
+            }
+        }
+    }
+
+    Graph G;
+    Map M;
+    Queue Q;
+
+    // First insert the demuxed variables as our initial sources (as vertices 0 ... n-1)
+    for (PabloAST * inst : initial_vars) {
+        M.insert(std::make_pair(inst, add_vertex(inst, G)));
+    }
+
+    // Now add in the users of those demuxed variables
+    for (PabloAST * inst : initial_vars) {
+        const auto i = M[inst];
+        for (PabloAST * user : inst->users()) {
+            const auto f = M.find(user);
+            if (LLVM_LIKELY(f == M.end())) {
+                const auto j = add_vertex(user, G);
+                M.insert(std::make_pair(user, j));
+                add_edge(i, j, G);
+                if (isa<Or>(user)) {
+                    Q.push(j);
+                }
+            } else {
+                add_edge(i, f->second, G);
+            }
+        }
+    }
+
+    // Now scan through the graph to locate any disjunctions and the final outputs
+    while (!Q.empty()) {
+        const auto u = Q.front(); Q.pop();
+        Or * expr = cast<Or>(G[u]);
+        for (unsigned i = 0; i != 2; ++i) {
+            PabloAST * op = expr->getOperand(i);
+            const auto f = M.find(op);
+            if (LLVM_UNLIKELY(f == M.end())) {
+                const auto v = add_vertex(op, G);
+                M.insert(std::make_pair(op, v));
+                add_edge(v, u, G);
+                if (isa<Or>(op)) {
+                    Q.push(v);
+                }
+            }
+        }
+        for (PabloAST * user : expr->users()) {
+            const auto f = M.find(user);
+            if (LLVM_UNLIKELY(f == M.end())) {
+                const auto v = add_vertex(user, G);
+                M.insert(std::make_pair(user, v));
+                add_edge(u, v, G);
+                if (isa<Or>(user)) {
+                    Q.push(v);
+                }
+            } else {
+                add_edge(u, f->second, G);
+            }
+        }
+    }
+
+    // Clean up the graph to remove any non-disjunctions and their dependencies
+    for (auto u : make_iterator_range(vertices(G))) {
+        if (in_degree(u, G) == 0 || isa<Or>(G[u])) {
+            continue;
+        }
+        clear_in_edges(u, G);
+        for (;;) {
+            for (auto e : make_iterator_range(out_edges(u, G))) {
+                Q.push(target(e, G));
+            }
+            clear_out_edges(u, G);
+            if (Q.empty()) {
+                break;
+            }
+            u = Q.front(); Q.pop();
+        }
+    }
+
+    // Now determine the number of source variables
+    unsigned m = 0;
+    for (auto u : make_iterator_range(vertices(G))) {
+        if (in_degree(u, G) == 0 && out_degree(u, G) > 0) {
+            ++m;
+        }
+    }
+
+
+    circular_buffer<PabloAST *> R(m);
+    // And then which variables required to compute each disjunction
+    for (const auto u : make_iterator_range(vertices(G))) {
+        if (out_degree(u, G) == 0 && in_degree(u, G) > 0) {
+
+            std::vector<bool> visited(num_vertices(G), false);
+            flat_set<Graph::vertex_descriptor> variables;
+            for (auto v = u; ; ) {
+                if (in_degree(v, G) == 0) {
+                    variables.insert(v);
+                } else {
+                    for (auto e : make_iterator_range(in_edges(v, G))) {
+                        const auto w = source(e, G);
+                        if (!visited[w]) {
+                            Q.push(w);
+                            visited[w] = true;
+                        }
+                    }
+                }
+                if (Q.empty()) {
+                    break;
+                }
+                v = Q.front(); Q.pop();
+            }
+            if (variables.size() > 3) {
+                unsigned i = 0;
+                for (auto j : variables) {
+                    for (; i < j; ++i) {
+                        R.push_back(builder.createZeroes());
+                    }
+                    R.push_back(G[j]);
+                }
+                for (; i < m; ++i) {
+                    R.push_back(builder.createZeroes());
+                }
+                while (R.size() > 1) {
+                    PabloAST * e1 = R.front(); R.pop_front();
+                    PabloAST * e2 = R.front(); R.pop_front();
+                    R.push_back(builder.createOr(e1, e2));
+                }
+                Statement * stmt = cast<Statement>(G[u]);
+                stmt->replaceAllUsesWith(R.front());
+                R.clear();
+            }
+        }
+    }
+
+}
+
 
 } // end of namespace pablo
 

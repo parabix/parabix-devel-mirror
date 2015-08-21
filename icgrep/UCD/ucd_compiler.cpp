@@ -430,6 +430,19 @@ PabloAST * UCDCompiler::generateWithDefaultIfHierarchy(const UnicodeSet & set, P
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
+ * @brief generateWithoutIfHierarchy
+ * @param set the unicode set to generate
+ * @param the entry block to the function we're filling
+ * @return the output stream with a 1-bit in any position of a character in the unicode set
+ ** ------------------------------------------------------------------------------------------------------------- */
+PabloAST * UCDCompiler::generateWithoutIfHierarchy(const UnicodeSet & set, PabloBuilder & entry) {
+
+    const RangeList defaultIfHierachy = {{0x10000, 0x10FFFF}};
+
+    return generateWithIfHierarchy(defaultIfHierachy, set, entry);
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
  * @brief constructor
  ** ------------------------------------------------------------------------------------------------------------- */
 UCDCompiler::UCDCompiler(cc::CC_Compiler & ccCompiler)

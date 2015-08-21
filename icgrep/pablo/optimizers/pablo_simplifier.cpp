@@ -227,11 +227,11 @@ void Simplifier::eliminateRedundantComplexStatements(PabloBlock & block) {
                         op->eraseFromParent();
                     }
                 }
-            }
-            // If an AND, OR or XOR instruction has two Advance instructions as inputs and neither Advance
-            // has another user and both shift their input by the same amount, we can perform the AND, OR
-            // or XOR on the inputs to the Advances and remove one of the Advance statements.
-            else if (LLVM_UNLIKELY(isa<Advance>(stmt->getOperand(1)) && isa<Advance>(stmt->getOperand(0)))) {
+            } else if (LLVM_UNLIKELY(isa<Advance>(stmt->getOperand(1)) && isa<Advance>(stmt->getOperand(0)))) {
+                // If an AND, OR or XOR instruction has two Advance instructions as inputs and neither Advance
+                // has another user and both shift their input by the same amount, we can perform the AND, OR
+                // or XOR on the inputs to the Advances and remove one of the Advance statements.
+
                 Advance * const a0 = cast<Advance>(stmt->getOperand(0));
                 Advance * const a1 = cast<Advance>(stmt->getOperand(1));
                 switch (stmt->getClassTypeId()) {
@@ -251,11 +251,43 @@ void Simplifier::eliminateRedundantComplexStatements(PabloBlock & block) {
                     }
                     default: break;
                 }
-            }
-            else if (LLVM_UNLIKELY(isa<MatchStar>(stmt->getOperand(1)) && isa<MatchStar>(stmt->getOperand(0))) && isa<Or>(stmt)) {
+            } else if (LLVM_UNLIKELY(isa<MatchStar>(stmt->getOperand(1)) && isa<MatchStar>(stmt->getOperand(0))) && isa<Or>(stmt)) {
 
 
-            }
+            } /*else if (LLVM_UNLIKELY(isa<Or>(stmt) && isa<And>(stmt->getOperand(0)) && isa<And>(stmt->getOperand(1)))) {
+
+                // If we have an OR(AND(A,B),AND(NOT(A),C)) statement and neither of the inner operands are used elsewhere, we can
+                // promote the Or to a Sel statement.
+
+                And * const a0 = cast<And>(stmt->getOperand(0));
+                And * const a1 = cast<And>(stmt->getOperand(1));
+
+                if (LLVM_UNLIKELY(a0->getNumUses() == 1 && a1->getNumUses() == 1)) {
+
+                    bool neg[4] = { false, false, false, false };
+
+                    for (unsigned i = 0; i != 2; ++i) {
+                        if (isa<Not>(a0->getOperand(i))) {
+                            PabloAST * i0 = cast<Not>(a0->getOperand(i))->getOperand(0);
+                            for (unsigned j = 0; j != 2; ++j) {
+                                if (a0->getOperand(j) == i0) {
+                                    neg[i + j * 2] = true;
+                                }
+                            }
+                        }
+                    }
+
+
+
+
+
+
+
+
+
+                }
+
+            }*/
         }
         stmt = stmt->getNextNode();
     }

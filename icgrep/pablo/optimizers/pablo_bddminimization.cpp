@@ -22,10 +22,11 @@ namespace pablo {
 
 bool BDDMinimizationPass::optimize(PabloFunction & function, const bool full) {
     BDDMinimizationPass am;
+    am.eliminateLogicallyEquivalentStatements(function);
     if (full) {
         am.simplifyAST(function);
     }
-    am.eliminateLogicallyEquivalentStatements(function);
+    am.shutdown();
     return Simplifier::optimize(function);
 }
 
@@ -90,12 +91,13 @@ void BDDMinimizationPass::eliminateLogicallyEquivalentStatements(PabloFunction &
     baseMap.insert(Zero(), function.getEntryBlock().createZeroes());
     baseMap.insert(One(), function.getEntryBlock().createOnes());
 
+    Cudd_SetSiftMaxVar(mManager, 1000000);
+    Cudd_SetSiftMaxSwap(mManager, 1000000000);
     Cudd_AutodynEnable(mManager, CUDD_REORDER_LAZY_SIFT);
 
     eliminateLogicallyEquivalentStatements(function.getEntryBlock(), baseMap);
 
-    Cudd_Quit(mManager);
-    mCharacterizationMap.clear();
+    Cudd_AutodynDisable(mManager);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -107,12 +109,17 @@ void BDDMinimizationPass::eliminateLogicallyEquivalentStatements(PabloFunction &
 void BDDMinimizationPass::eliminateLogicallyEquivalentStatements(PabloBlock & block, SubsitutionMap & parent) {
     SubsitutionMap subsitutionMap(&parent);
     Statement * stmt = block.front();
-
     while (stmt) {
         if (LLVM_UNLIKELY(isa<If>(stmt))) {
             eliminateLogicallyEquivalentStatements(cast<If>(stmt)->getBody(), subsitutionMap);
+            for (Assign * var : cast<const If>(stmt)->getDefined()) {
+                mCharacterizationMap[var] = NewVar(var);
+            }
         } else if (LLVM_UNLIKELY(isa<While>(stmt))) {
             eliminateLogicallyEquivalentStatements(cast<While>(stmt)->getBody(), subsitutionMap);
+            for (Next * var : cast<const While>(stmt)->getVariants()) {
+                mCharacterizationMap[var] = NewVar(var);
+            }
         } else { // attempt to characterize this statement and replace it if
             DdNode * bdd = eliminateLogicallyEquivalentStatements(stmt);
             if (LLVM_LIKELY(!isa<Assign>(stmt) && !isa<Next>(stmt))) {
@@ -127,8 +134,8 @@ void BDDMinimizationPass::eliminateLogicallyEquivalentStatements(PabloBlock & bl
             mCharacterizationMap.insert(std::make_pair(stmt, bdd));
         }
         stmt = stmt->getNextNode();
-    }
-    Cudd_ReduceHeap(mManager, CUDD_REORDER_SIFT, 0);
+    }   
+    Cudd_ReduceHeap(mManager, CUDD_REORDER_SIFT, 1);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -206,100 +213,11 @@ inline void BDDMinimizationPass::simplifyAST(PabloFunction & function) {
     Terminals terminals;
     for (unsigned i = 0; i != function.getNumOfResults(); ++i) {
         terminals.push_back(function.getResult(i));
-    }
+    }    
+    Cudd_ReduceHeap(mManager, CUDD_REORDER_EXACT, 1);
     simplifyAST(function.getEntryBlock(), std::move(terminals));
 }
 
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief promoteSimpleInputDerivationsToAssigns
- ** ------------------------------------------------------------------------------------------------------------- */
-inline void BDDMinimizationPass::promoteSimpleInputDerivationsToAssigns(PabloFunction & function) {
-
-    using Graph = adjacency_list<hash_setS, vecS, bidirectionalS, PabloAST *>;
-    using Vertex = Graph::vertex_descriptor;
-
-    Graph G;
-    flat_map<PabloAST *, Vertex> M;
-    std::queue<Vertex> Q;
-    for (unsigned i = 0; i != function.getNumOfParameters(); ++i) {
-        PabloAST * var = function.getParameter(i);
-        const Vertex u = add_vertex(var, G);
-        Q.push(u);
-        M[var] = u;
-    }
-
-    for (;;) {
-        const Vertex u = Q.front(); Q.pop();
-        for (PabloAST * user : G[u]->users()) {
-            auto f = M.find(user);
-            Vertex v = 0;
-            if (f == M.end()) {
-                v = add_vertex(user, G);
-                switch (user->getClassTypeId()) {
-                    case PabloAST::ClassTypeId::And:
-                    case PabloAST::ClassTypeId::Or:
-                    case PabloAST::ClassTypeId::Not:
-                    case PabloAST::ClassTypeId::Xor:
-                    case PabloAST::ClassTypeId::Sel:
-                        Q.push(v);
-                    default:
-                        M[user] = v;
-                }
-            } else {
-                v = f->second;
-            }
-            add_edge(u, v, G);
-        }
-
-        if (Q.empty()) {
-            break;
-        }
-    }
-
-    flat_set<Statement *> promotions;
-
-    for (Vertex u : make_iterator_range(vertices(G))) {
-        if (out_degree(u, G) == 0) {
-            Statement * stmt = cast<Statement>(G[u]);
-            if (isa<Assign>(stmt)) {
-                continue;
-            }
-            for (unsigned i = 0; i != stmt->getNumOperands(); ++i) {
-                if (Statement * expr = dyn_cast<Statement>(stmt->getOperand(i))) {
-                    promotions.insert(expr);
-                }
-            }
-        }
-    }
-
-    for (Statement * promoted : promotions) {
-        PabloBlock * block = promoted->getParent();
-        block->setInsertPoint(promoted);
-        Assign * replacement = block->createAssign("t", promoted);
-        promoted->replaceAllUsesWith(replacement);
-    }
-
-    raw_os_ostream out(std::cerr);
-    PabloPrinter::print(function.getEntryBlock().statements(), out);
-    out << "**************************************\n";
-    out.flush();
-}
-
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief isSimplifiable
- ** ------------------------------------------------------------------------------------------------------------- */
-inline bool isSimplifiable(const PabloAST * const expr, const PabloBlock * const pb) {
-    switch (expr->getClassTypeId()) {
-        case PabloAST::ClassTypeId::And:
-        case PabloAST::ClassTypeId::Or:
-        case PabloAST::ClassTypeId::Not:
-//        case PabloAST::ClassTypeId::Sel:
-            return cast<Statement>(expr)->getParent() == pb;
-        default:
-            return false;
-    }
-}
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief simplifyAST
@@ -313,154 +231,76 @@ void BDDMinimizationPass::simplifyAST(PabloBlock & block, Terminals && terminals
                 terminals.push_back(var);
             }
             simplifyAST(cast<If>(stmt)->getBody(), std::move(terminals));
-//            for (Assign * var : cast<const If>(stmt)->getDefined()) {
-//                block.record(var);
-//            }
-//            continue;
         } else if (isa<While>(stmt)) {
             Terminals terminals;
             for (Next * var : cast<const While>(stmt)->getVariants()) {
                 terminals.push_back(var);
             }
             simplifyAST(cast<While>(stmt)->getBody(), std::move(terminals));
-//            for (Next * var : cast<const While>(stmt)->getVariants()) {
-//                block.record(var);
+        }
+    }
+
+//    // find the variables for this set of terminals
+//    DdNode * careSet = One();
+//    std::queue<Statement *> Q;
+//    for (Statement * term : terminals) {
+//        Q.push(term);
+//    }
+//    flat_set<PabloAST *> visited;
+//    for (;;) {
+//        Statement * stmt = Q.front();
+//        Q.pop();
+//        for (unsigned i = 0; i != stmt->getNumOperands(); ++i) {
+//            PabloAST * const op = stmt->getOperand(i);
+//            if (visited.count(op) == 0) {
+//                DdNode * n = mCharacterizationMap[op];
+//                if (Cudd_bddIsVar(mManager, n)) {
+//                    careSet = And(careSet, n);
+//                    Cudd_Ref(careSet);
+//                } else if (isa<Statement>(op)){
+//                    Q.push(cast<Statement>(op));
+//                }
+//                visited.insert(op);
 //            }
-//            continue;
-        }
-        // block.record(stmt);
-    }
-
-    for (;;) {
-
-        flat_set<Statement *> inputs;
-        for (Statement * term : terminals) {
-            for (unsigned i = 0; i != term->getNumOperands(); ++i) {
-                if (isSimplifiable(term->getOperand(i), term->getParent())) {
-                    inputs.insert(cast<Statement>(term->getOperand(i)));
-                }
-            }
-        }
-
-        if (inputs.empty()) {
-            break;
-        }
-
-        std::queue<Statement *> Q;
-        for (Statement * term : inputs) {
-            Q.push(term);
-        }
-
-        flat_set<PabloAST *> visited;
-        flat_set<PabloAST *> variables;
-        // find the variables for this set of terminals
-        for (;;) {
-            Statement * stmt = Q.front();
-            Q.pop();
-            for (unsigned i = 0; i != stmt->getNumOperands(); ++i) {
-                if (visited.count(stmt->getOperand(i)) == 0) {
-                    if (isSimplifiable(stmt->getOperand(i), stmt->getParent())) {
-                        Q.push(cast<Statement>(stmt->getOperand(i)));
-                    } else {
-                        variables.insert(stmt->getOperand(i));
-                    }
-                    visited.insert(stmt->getOperand(i));
-                }
-            }
-            if (Q.empty()) {
-                break;
-            }
-        }
-
-        mVariables.clear();
-        mManager = Cudd_Init(variables.size(), 0, CUDD_UNIQUE_SLOTS, CUDD_CACHE_SLOTS, 0);
-        Cudd_AutodynEnable(mManager, CUDD_REORDER_LAZY_SIFT);
-        for (PabloAST * var : variables) {
-            mCharacterizationMap.insert(std::make_pair(var, Cudd_bddIthVar(mManager, mVariables.size())));
-            mVariables.push_back(var);
-        }
-
-
-        std::vector<DdNode *> nodes;
-        for (PabloAST * term : inputs) {
-            nodes.push_back(characterizeTerminal(term));
-        }
-        Cudd_AutodynDisable(mManager);
-        Cudd_ReduceHeap(mManager, CUDD_REORDER_SIFT, 0);
-
-        visited.clear();
-        for (Statement * input : inputs) {
-            DdNode * const f = mCharacterizationMap[input]; assert (f);
-            Cudd_Ref(f);
-            block.setInsertPoint(input);
-            PabloBuilder builder(block);
-            PabloAST * replacement = simplifyAST(f, builder);
-            if (replacement) {
-                input->replaceWith(replacement, false, true);
-            }
-            Cudd_RecursiveDeref(mManager, f);
-        }
-
-        Cudd_Quit(mManager);
-
-        mCharacterizationMap.clear();
-
-        // Now clear our terminals and test whether we can process another layer within this block
-        terminals.clear();
-        for (PabloAST * var : variables) {
-            if (LLVM_LIKELY(isa<Statement>(var) && cast<Statement>(var)->getParent() == &block)) {
-                terminals.push_back(cast<Statement>(var));
-            }
-        }
-
-        if (terminals.empty()) {
-            break;
-        }
-
-    }
-
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief characterizeTerminal
- ** ------------------------------------------------------------------------------------------------------------- */
-DdNode * BDDMinimizationPass::characterizeTerminal(PabloAST * expr) {
-    const auto f = mCharacterizationMap.find(expr);
-    if (f != mCharacterizationMap.end()) {
-        return f->second;
-    }
-    std::array<DdNode *, 3> input;
-    for (unsigned i = 0; i != cast<Statement>(expr)->getNumOperands(); ++i) {
-        input[i] = characterizeTerminal(cast<Statement>(expr)->getOperand(i)); assert (input[i]);
-    }
-    DdNode * bdd = nullptr;
-    switch (expr->getClassTypeId()) {
-        case PabloAST::ClassTypeId::And:
-            bdd = And(input[0], input[1]);
-            break;
-        case PabloAST::ClassTypeId::Or:
-            bdd = Or(input[0], input[1]);
-            break;
-        case PabloAST::ClassTypeId::Not:
-            bdd = Not(input[0]);
-            break;
-//        case PabloAST::ClassTypeId::Sel:
-//            bdd = Ite(input[0], input[1], input[2]);
+//        }
+//        if (Q.empty()) {
 //            break;
-        default:
-            return nullptr;
+//        }
+//    }
+
+    flat_set<Statement *> inputs;
+
+    for (Statement * term : terminals) {
+        for (unsigned i = 0; i != term->getNumOperands(); ++i) {
+            if (isa<Statement>(term->getOperand(i))) {
+                inputs.insert(cast<Statement>(term->getOperand(i)));
+            }
+        }
     }
-    Cudd_Ref(bdd);
-    mCharacterizationMap.insert(std::make_pair(expr, bdd));
-    return bdd;
+
+    for (Statement * input : inputs) {
+
+        DdNode * f = mCharacterizationMap[input]; assert (f);
+        Cudd_Ref(f);
+
+        block.setInsertPoint(input);
+        PabloAST * replacement = simplifyAST(f, block);
+        if (replacement) {
+            input->replaceWith(replacement, false, true);
+        }
+
+        Cudd_RecursiveDeref(mManager, f);
+    }
 }
+
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief simplifyAST
  ** ------------------------------------------------------------------------------------------------------------- */
-PabloAST * BDDMinimizationPass::simplifyAST(DdNode * const f, PabloBuilder &block) {
-    assert (!noSatisfyingAssignment(f));
+PabloAST * BDDMinimizationPass::simplifyAST(DdNode * const f, PabloBlock &block) {
+
     DdNode * g = Cudd_FindEssential(mManager, f);
+
     if (g && Cudd_SupportSize(mManager, g) > 0) {
         if (g == f) { // every variable is essential
             return makeCoverAST(f, block);
@@ -483,7 +323,7 @@ PabloAST * BDDMinimizationPass::simplifyAST(DdNode * const f, PabloBuilder &bloc
         assert (And(g, h) == f);
         Cudd_RecursiveDeref(mManager, g);
         Cudd_RecursiveDeref(mManager, h);
-        return block.createAnd(c0, c1, "t");
+        return block.createAnd(c0, c1, "e");
     }
 
     DdNode ** disjunct = nullptr;
@@ -511,6 +351,7 @@ PabloAST * BDDMinimizationPass::simplifyAST(DdNode * const f, PabloBuilder &bloc
     FREE(conjunct);
 
     if ((decomp[0] != decomp[1]) && (decomp[0] != f) && (decomp[1] != f)) {
+
         Cudd_Ref(decomp[0]);
         Cudd_Ref(decomp[1]);
         PabloAST * d0 = simplifyAST(decomp[0], block);
@@ -528,31 +369,61 @@ PabloAST * BDDMinimizationPass::simplifyAST(DdNode * const f, PabloBuilder &bloc
         }
 
         if (disjuncts == 2) {
-            return block.createOr(d0, d1, "t");
+            return block.createOr(d0, d1, "d");
         } else {
-            return block.createAnd(d0, d1, "t");
+            return block.createAnd(d0, d1, "c");
         }
     }
     return makeCoverAST(f, block);
 }
 
+///** ------------------------------------------------------------------------------------------------------------- *
+// * @brief makeCoverAST
+// ** ------------------------------------------------------------------------------------------------------------- */
+//PabloAST * BDDMinimizationPass::makeCover(DdNode * const f, PabloBlock & block) {
+
+//    const auto n = mVariables.size();
+
+//    if (Cudd_DagSize(f) > 100) {
+
+//        int * indices = nullptr;
+//        const int count = Cudd_SupportIndices(mManager, f, &indices);
+//        DdManager * manager = Cudd_Init(count, 0, CUDD_UNIQUE_SLOTS, CUDD_CACHE_SLOTS, 0);
+
+//        std::vector<DdNode *> var(n, nullptr);
+
+//        for (unsigned i = 0; i != count; ++i) {
+//            var[indicies[i]] = Cudd_bddIthVar(manager, i);
+//        }
+
+//        makeCloneOf()
+
+
+
+//        Cudd_Quit(manager);
+//    }
+
+
+
+//}
+
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief makeCoverAST
  ** ------------------------------------------------------------------------------------------------------------- */
-PabloAST * BDDMinimizationPass::makeCoverAST(DdNode * const f, PabloBuilder & block) {
+PabloAST * BDDMinimizationPass::makeCoverAST(DdNode * const f, PabloBlock & block) {
 
-    std::queue<PabloAST *> SQ;
     const auto n = mVariables.size();
-    circular_buffer<PabloAST *> CQ(n + 1);
-    circular_buffer<PabloAST *> DQ(n + 1);
-
     assert (mManager->size == n);
-
-    int cube[n];
 
     DdNode * g = f;
 
     Cudd_Ref(g);
+
+    std::queue<PabloAST *> SQ;
+    circular_buffer<PabloAST *> CQ(n + 1);
+    circular_buffer<PabloAST *> DQ(n + 1);
+
+    int cube[n];
 
     while (g != Cudd_ReadLogicZero(mManager)) {
         int length = 0;
@@ -594,10 +465,8 @@ PabloAST * BDDMinimizationPass::makeCoverAST(DdNode * const f, PabloBuilder & bl
             assert (cube[i] >= 0 && cube[i] <= 2);
             if (cube[i] == 0) {
                 DQ.push_back(mVariables[i]);
-                // CQ.push_back(block.createOnes());
             } else if (cube[i] == 1) {
                 CQ.push_back(mVariables[i]);
-                // DQ.push_back(block.createZeroes());
             }
         }
 
@@ -623,17 +492,314 @@ PabloAST * BDDMinimizationPass::makeCoverAST(DdNode * const f, PabloBuilder & bl
         }
         SQ.push(CQ.front()); CQ.pop_front();
     }
+
     Cudd_RecursiveDeref(mManager, g);
+
     if (LLVM_UNLIKELY(SQ.empty())) {
         throw std::runtime_error("Error! statement queue empty!");
     }
+
     while (SQ.size() > 1) {
         PabloAST * v1 = SQ.front(); SQ.pop();
         PabloAST * v2 = SQ.front(); SQ.pop();
         SQ.push(block.createOr(v1, v2));
     }
     return SQ.front();
+
 }
+
+//DdNode * BDDMinimizationPass::makeCloneOf(DdManager * sourceMgr, DdNode * const f, DdManager * destinationMgr) {
+
+//    const auto n = mVariables.size();
+//    assert (sourceMgr->size == n);
+
+//    std::queue<DdNode *> SQ;
+//    circular_buffer<DdNode *> CQ(n + 1);
+//    circular_buffer<DdNode *> DQ(n + 1);
+
+//    int cube[n];
+
+//    DdNode * g = f;
+
+//    Cudd_Ref(g);
+
+//    Cudd_AutodynEnable(destinationMgr, CUDD_REORDER_SIFT);
+
+//    while (g != Cudd_ReadLogicZero(sourceMgr)) {
+//        int length = 0;
+//        DdNode * implicant = Cudd_LargestCube(sourceMgr, g, &length);
+//        if (LLVM_UNLIKELY(implicant == nullptr)) {
+//            Cudd_RecursiveDeref(sourceMgr, g);
+//            return nullptr;
+//        }
+//        Cudd_Ref(implicant);
+//        DdNode * prime = Cudd_bddMakePrime(sourceMgr, implicant, f);
+//        if (LLVM_UNLIKELY(prime == nullptr)) {
+//            Cudd_RecursiveDeref(sourceMgr, g);
+//            Cudd_RecursiveDeref(sourceMgr, implicant);
+//            return nullptr;
+//        }
+//        Cudd_Ref(prime);
+//        Cudd_RecursiveDeref(sourceMgr, implicant);
+
+//        DdNode * h = Cudd_bddAnd(sourceMgr, g, Cudd_Not(prime));
+//        if (LLVM_UNLIKELY(h == nullptr)) {
+//            Cudd_RecursiveDeref(sourceMgr, g);
+//            Cudd_RecursiveDeref(sourceMgr, prime);
+//            return nullptr;
+//        }
+//        Cudd_Ref(h);
+//        Cudd_RecursiveDeref(sourceMgr, g);
+
+//        g = h;
+//        if (LLVM_UNLIKELY(Cudd_BddToCubeArray(sourceMgr, prime, cube) == 0)) {
+//            Cudd_RecursiveDeref(sourceMgr, g);
+//            Cudd_RecursiveDeref(sourceMgr, prime);
+//            return nullptr;
+//        }
+//        Cudd_RecursiveDeref(sourceMgr, prime);
+
+//        assert (DQ.empty() && CQ.empty());
+
+//        for (auto i = 0; i != n; ++i) {
+//            assert (cube[i] >= 0 && cube[i] <= 2);
+//            if (cube[i] == 0) {
+//                DQ.push_back(var[i]);
+//            } else if (cube[i] == 1) {
+//                CQ.push_back(var[i]);
+//            }
+//        }
+
+//        if (LLVM_UNLIKELY(DQ.empty() && CQ.empty())) {
+//            throw std::runtime_error("Error! statement contains no elements!");
+//        }
+
+//        if (DQ.size() > 0) {
+//            while (DQ.size() > 1) {
+//                PabloAST * v1 = DQ.front(); DQ.pop_front();
+//                PabloAST * v2 = DQ.front(); DQ.pop_front();
+//                DQ.push_back(Cudd_bddOr(destinationMgr, v1, v2));
+//            }
+//            CQ.push_back(Cudd_Not(DQ.front()));
+//            DQ.pop_front();
+//        }
+
+//        assert (!CQ.empty());
+//        while (CQ.size() > 1) {
+//            PabloAST * v1 = CQ.front(); CQ.pop_front();
+//            PabloAST * v2 = CQ.front(); CQ.pop_front();
+//            CQ.push_back(Cudd_bddOr(destinationMgr, v1, v2));
+//        }
+//        SQ.push(CQ.front()); CQ.pop_front();
+//    }
+
+//    Cudd_RecursiveDeref(sourceMgr, g);
+
+//    if (LLVM_UNLIKELY(SQ.empty())) {
+//        throw std::runtime_error("Error! statement queue empty!");
+//    }
+
+//    while (SQ.size() > 1) {
+//        PabloAST * v1 = SQ.front(); SQ.pop();
+//        PabloAST * v2 = SQ.front(); SQ.pop();
+//        SQ.push(Cudd_bddOr(destinationMgr, v1, v2));
+//    }
+
+//    Cudd_ReduceHeap(destinationMgr, CUDD_REORDER_EXACT, 0);
+
+//    return SQ.front();
+
+//}
+
+///** ------------------------------------------------------------------------------------------------------------- *
+// * @brief simplifyAST
+// ** ------------------------------------------------------------------------------------------------------------- */
+//PabloAST * BDDMinimizationPass::simplifyAST(DdNode * const f, PabloBlock &block) {
+
+//    DdNode * g = Cudd_FindEssential(mManager, f);
+
+//    if (g && Cudd_SupportSize(mManager, g) > 0) {
+//        if (g == f) { // every variable is essential
+//            return makeCoverAST(f, block);
+//        }
+//        Cudd_Ref(g);
+//        PabloAST * c0 = makeCoverAST(g, block);
+//        if (LLVM_UNLIKELY(c0 == nullptr)) {
+//            Cudd_RecursiveDeref(mManager, g);
+//            return nullptr;
+//        }
+//        DdNode * h = Cudd_Cofactor(mManager, f, g);
+//        Cudd_Ref(h);
+//        PabloAST * c1 = simplifyAST(h, block);
+//        if (LLVM_UNLIKELY(c1 == nullptr)) {
+//            Cudd_RecursiveDeref(mManager, g);
+//            Cudd_RecursiveDeref(mManager, h);
+//            cast<Statement>(c0)->eraseFromParent(true);
+//            return nullptr;
+//        }
+//        assert (And(g, h) == f);
+//        Cudd_RecursiveDeref(mManager, g);
+//        Cudd_RecursiveDeref(mManager, h);
+//        return block.createAnd(c0, c1, "e");
+//    }
+
+//    DdNode ** disjunct = nullptr;
+//    int disjuncts = Cudd_bddIterDisjDecomp(mManager, f, &disjunct);
+//    assert (disjuncts < 2 || Or(disjunct[0], disjunct[1]) == f);
+
+//    DdNode ** conjunct = nullptr;
+//    int conjuncts = Cudd_bddIterConjDecomp(mManager, f, &conjunct);
+//    assert (conjuncts < 2 || And(conjunct[0], conjunct[1]) == f);
+
+//    if (LLVM_LIKELY(disjuncts == 2 && conjuncts == 2)) {
+//        if (Cudd_SharingSize(disjunct, 2) > Cudd_SharingSize(conjunct, 2)) {
+//            disjuncts = 0;
+//        }
+//    }
+
+//    DdNode * decomp[] = { nullptr, nullptr };
+//    if (disjuncts == 2) {
+//        memcpy(decomp, disjunct, sizeof(DdNode *) * 2);
+//    } else if (conjuncts == 2) {
+//        memcpy(decomp, conjunct, sizeof(DdNode *) * 2);
+//    }
+
+//    FREE(disjunct);
+//    FREE(conjunct);
+
+//    if ((decomp[0] != decomp[1]) && (decomp[0] != f) && (decomp[1] != f)) {
+//        Cudd_Ref(decomp[0]);
+//        Cudd_Ref(decomp[1]);
+//        PabloAST * d0 = simplifyAST(decomp[0], block);
+//        Cudd_RecursiveDeref(mManager, decomp[0]);
+//        if (LLVM_UNLIKELY(d0 == nullptr)) {
+//            Cudd_RecursiveDeref(mManager, decomp[1]);
+//            return nullptr;
+//        }
+
+//        PabloAST * d1 = simplifyAST(decomp[1], block);
+//        Cudd_RecursiveDeref(mManager, decomp[1]);
+//        if (LLVM_UNLIKELY(d1 == nullptr)) {
+//            cast<Statement>(d0)->eraseFromParent(true);
+//            return nullptr;
+//        }
+
+//        if (disjuncts == 2) {
+//            return block.createOr(d0, d1, "t");
+//        } else {
+//            return block.createAnd(d0, d1, "t");
+//        }
+//    }
+//    return makeCoverAST(f, block);
+//}
+
+///** ------------------------------------------------------------------------------------------------------------- *
+// * @brief makeCoverAST
+// ** ------------------------------------------------------------------------------------------------------------- */
+//PabloAST * BDDMinimizationPass::makeCoverAST(DdNode * const f, PabloBlock & block) {
+
+//    std::queue<PabloAST *> SQ;
+
+//    const auto n = mVariables.size();
+//    circular_buffer<PabloAST *> CQ(n + 1);
+//    circular_buffer<PabloAST *> DQ(n + 1);
+
+//    assert (mManager->size == n);
+
+//    int cube[n];
+
+//    std::cout << std::endl;
+
+//    Cudd_PrintMinterm(mManager, f);
+
+//    DdNode * g = f;
+
+//    Cudd_Ref(g);
+
+//    PabloBuilder builder(block);
+
+//    while (g != Cudd_ReadLogicZero(mManager)) {
+//        int length = 0;
+//        DdNode * implicant = Cudd_LargestCube(mManager, g, &length);
+//        if (LLVM_UNLIKELY(implicant == nullptr)) {
+//            Cudd_RecursiveDeref(mManager, g);
+//            return nullptr;
+//        }
+//        Cudd_Ref(implicant);
+//        DdNode * prime = Cudd_bddMakePrime(mManager, implicant, f);
+//        if (LLVM_UNLIKELY(prime == nullptr)) {
+//            Cudd_RecursiveDeref(mManager, g);
+//            Cudd_RecursiveDeref(mManager, implicant);
+//            return nullptr;
+//        }
+//        Cudd_Ref(prime);
+//        Cudd_RecursiveDeref(mManager, implicant);
+
+//        DdNode * h = Cudd_bddAnd(mManager, g, Cudd_Not(prime));
+//        if (LLVM_UNLIKELY(h == nullptr)) {
+//            Cudd_RecursiveDeref(mManager, g);
+//            Cudd_RecursiveDeref(mManager, prime);
+//            return nullptr;
+//        }
+//        Cudd_Ref(h);
+//        Cudd_RecursiveDeref(mManager, g);
+
+//        g = h;
+//        if (LLVM_UNLIKELY(Cudd_BddToCubeArray(mManager, prime, cube) == 0)) {
+//            Cudd_RecursiveDeref(mManager, g);
+//            Cudd_RecursiveDeref(mManager, prime);
+//            return nullptr;
+//        }
+//        Cudd_RecursiveDeref(mManager, prime);
+
+//        assert (DQ.empty() && CQ.empty());
+
+//        for (auto i = 0; i != n; ++i) {
+//            assert (cube[i] >= 0 && cube[i] <= 2);
+//            if (cube[i] == 0) {
+//                DQ.push_back(mVariables[i]);
+//                CQ.push_back(builder.createOnes());
+//            } else if (cube[i] == 1) {
+//                CQ.push_back(mVariables[i]);
+//                DQ.push_back(builder.createZeroes());
+//            }
+//        }
+
+//        if (LLVM_UNLIKELY(DQ.empty() && CQ.empty())) {
+//            throw std::runtime_error("Error! statement contains no elements!");
+//        }
+
+//        if (DQ.size() > 0) {
+//            while (DQ.size() > 1) {
+//                PabloAST * v1 = DQ.front(); DQ.pop_front();
+//                PabloAST * v2 = DQ.front(); DQ.pop_front();
+//                DQ.push_back(builder.createOr(v1, v2));
+//            }
+//            CQ.push_back(builder.createNot(DQ.front()));
+//            DQ.pop_front();
+//        }
+
+//        assert (!CQ.empty());
+//        while (CQ.size() > 1) {
+//            PabloAST * v1 = CQ.front(); CQ.pop_front();
+//            PabloAST * v2 = CQ.front(); CQ.pop_front();
+//            CQ.push_back(builder.createAnd(v1, v2));
+//        }
+//        SQ.push(CQ.front()); CQ.pop_front();
+//    }
+//    Cudd_RecursiveDeref(mManager, g);
+
+//    if (LLVM_UNLIKELY(SQ.empty())) {
+//        throw std::runtime_error("Error! statement queue empty!");
+//    }
+
+//    while (SQ.size() > 1) {
+//        PabloAST * v1 = SQ.front(); SQ.pop();
+//        PabloAST * v2 = SQ.front(); SQ.pop();
+//        SQ.push(builder.createOr(v1, v2));
+//    }
+//    return SQ.front();
+//}
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief CUDD wrappers
@@ -692,6 +858,8 @@ inline bool BDDMinimizationPass::noSatisfyingAssignment(DdNode * const x) {
 
 inline void BDDMinimizationPass::shutdown() {
     Cudd_Quit(mManager);
+    mCharacterizationMap.clear();
+    mVariables.clear();
 }
 
 } // end of namespace pablo
