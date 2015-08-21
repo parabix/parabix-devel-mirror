@@ -15,11 +15,14 @@
 #include "DerivedCoreProperties.h"
 #include "DerivedGeneralCategory.h"
 #include "EastAsianWidth.h"
+#include "GraphemeBreakProperty.h"
 #include "HangulSyllableType.h"
 #include "LineBreak.h"
 #include "PropList.h"
 #include "ScriptExtensions.h"
 #include "Scripts.h"
+#include "SentenceBreakProperty.h"
+#include "WordBreakProperty.h"
 
 namespace UCD {
 
@@ -68,7 +71,7 @@ namespace UCD {
     new UnsupportedPropertyObject(dt, PropertyObject::ClassTypeId::EnumeratedProperty),
     &EA_ns::property_object,
     &GC_ns::property_object,
-    new UnsupportedPropertyObject(GCB, PropertyObject::ClassTypeId::EnumeratedProperty),
+    &GCB_ns::property_object,
     &HST_ns::property_object,
     new UnsupportedPropertyObject(InPC, PropertyObject::ClassTypeId::EnumeratedProperty),
     new UnsupportedPropertyObject(InSC, PropertyObject::ClassTypeId::EnumeratedProperty),
@@ -80,8 +83,8 @@ namespace UCD {
     new UnsupportedPropertyObject(NFKC_QC, PropertyObject::ClassTypeId::EnumeratedProperty),
     new UnsupportedPropertyObject(NFKD_QC, PropertyObject::ClassTypeId::EnumeratedProperty),
     new UnsupportedPropertyObject(nt, PropertyObject::ClassTypeId::EnumeratedProperty),
-    new UnsupportedPropertyObject(SB, PropertyObject::ClassTypeId::EnumeratedProperty),
-    new UnsupportedPropertyObject(WB, PropertyObject::ClassTypeId::EnumeratedProperty),
+    &SB_ns::property_object,
+    &WB_ns::property_object,
     &AHEX_ns::property_object,
     &ALPHA_ns::property_object,
     &BIDI_C_ns::property_object,

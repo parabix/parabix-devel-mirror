@@ -76,6 +76,38 @@ Name * resolveProperty(const std::string prop, const std::string value, re::RE_P
         }
         property->setFunctionName("__get_blk_" + BLK_ns::enum_names[valcode]);
     }
+    else if (theprop == GCB) {
+        // Grapheme Cluster Break property identified
+        int valcode = GetPropertyValueEnumCode(GCB, value);
+        if (valcode < 0) {
+             throw UnicodePropertyExpressionError("Erroneous property value for grapheme cluster break property");
+        }
+        property->setFunctionName("__get_gcb_" + GCB_ns::enum_names[valcode]);
+    }
+    else if (theprop == WB) {
+        // Word Break property identified
+        int valcode = GetPropertyValueEnumCode(WB, value);
+        if (valcode < 0) {
+             throw UnicodePropertyExpressionError("Erroneous property value for word break property");
+        }
+        property->setFunctionName("__get_wb_" + WB_ns::enum_names[valcode]);
+    }
+    else if (theprop == lb) {
+        // Line Break property identified
+        int valcode = GetPropertyValueEnumCode(lb, value);
+        if (valcode < 0) {
+             throw UnicodePropertyExpressionError("Erroneous property value for line break property");
+        }
+        property->setFunctionName("__get_lb_" + LB_ns::enum_names[valcode]);
+    }
+    else if (theprop == SB) {
+        // Sentence Break property identified
+        int valcode = GetPropertyValueEnumCode(SB, value);
+        if (valcode < 0) {
+             throw UnicodePropertyExpressionError("Erroneous property value for sentence break property");
+        }
+        property->setFunctionName("__get_lb_" + SB_ns::enum_names[valcode]);
+    }
     else if (isa<BinaryPropertyObject>(property_object_table[theprop])){
         auto valit = Binary_ns::aliases_only_map.find(value);
         if (valit == Binary_ns::aliases_only_map.end()) {
@@ -186,21 +218,8 @@ UnicodeSet resolveUnicodeSet(Name * const name) {
                 throw UnicodePropertyExpressionError("Expected a property name, but '" + name->getNamespace() + "' found instead");
             }
             auto theprop = propit->second;
-            if (theprop == gc) {
-                // General Category
-                return cast<EnumeratedPropertyObject>(property_object_table[gc])->GetCodepointSet(value);
-            }
-            else if (theprop == sc) {
-                // Script property identified
-                return cast<EnumeratedPropertyObject>(property_object_table[sc])->GetCodepointSet(value);
-            }
-            else if (theprop == scx) {
-                // Script extension property identified
-                return cast<ExtensionPropertyObject>(property_object_table[scx])->GetCodepointSet(value);
-            }
-            else if (theprop == blk) {
-                // Block property identified
-                return cast<EnumeratedPropertyObject>(property_object_table[blk])->GetCodepointSet(value);
+            if (EnumeratedPropertyObject * p = dyn_cast<EnumeratedPropertyObject>(property_object_table[theprop])){
+                return p->GetCodepointSet(value);
             }
             else if (BinaryPropertyObject * p = dyn_cast<BinaryPropertyObject>(property_object_table[theprop])){
                 auto valit = Binary_ns::aliases_only_map.find(value);
