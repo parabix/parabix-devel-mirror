@@ -20,14 +20,6 @@
 using namespace UCD;
 using namespace re;
 
-class UnicodePropertyExpressionError : public std::exception {
-public:
-    UnicodePropertyExpressionError(const std::string && msg) noexcept : _msg(msg) {}
-    const char* what() const noexcept { return _msg.c_str();}
-private:
-    inline UnicodePropertyExpressionError() noexcept {}
-    const std::string _msg;
-};
 
 inline int GetPropertyValueEnumCode(const UCD::property_t type, const std::string & value) {
     return property_object_table[type]->GetPropertyValueEnumCode(value);
@@ -44,21 +36,14 @@ Name * resolveProperty(const std::string prop, const std::string value, re::RE_P
     Name * property = makeName(prop, value, Name::Type::UnicodeProperty);
 
     auto theprop = propit->second;
-    if (theprop == gc) {
-        // General Category
-        int valcode = GetPropertyValueEnumCode(gc, value);
+    
+    
+    if (EnumeratedPropertyObject * p = dyn_cast<EnumeratedPropertyObject>(property_object_table[theprop])){
+        int valcode = p->GetPropertyValueEnumCode(value);
         if (valcode < 0) {
-            throw UnicodePropertyExpressionError("Erroneous property value for general_category property");
+            throw UnicodePropertyExpressionError("Erroneous property value '" + value + "' for " + property_full_name[theprop] + " property");
         }
-        property->setFunctionName("__get_gc_" + GC_ns::enum_names[valcode]);
-    }
-    else if (theprop == sc) {
-        // Script property identified
-        int valcode = GetPropertyValueEnumCode(sc, value);
-        if (valcode < 0) {
-            throw UnicodePropertyExpressionError("Erroneous property value for script property");
-        }
-        property->setFunctionName("__get_sc_" + SC_ns::enum_names[valcode]);
+        property->setFunctionName("__get_" + property_enum_name[theprop] + "_" + p->GetValueEnumName(valcode));
     }
     else if (theprop == scx) {
         // Script extension property identified
@@ -67,46 +52,6 @@ Name * resolveProperty(const std::string prop, const std::string value, re::RE_P
             throw UnicodePropertyExpressionError("Erroneous property value for script_extension property");
         }
         property->setFunctionName("__get_scx_" + SC_ns::enum_names[valcode]);
-    }
-    else if (theprop == blk) {
-        // Block property identified
-        int valcode = GetPropertyValueEnumCode(blk, value);
-        if (valcode < 0) {
-             throw UnicodePropertyExpressionError("Erroneous property value for block property");
-        }
-        property->setFunctionName("__get_blk_" + BLK_ns::enum_names[valcode]);
-    }
-    else if (theprop == GCB) {
-        // Grapheme Cluster Break property identified
-        int valcode = GetPropertyValueEnumCode(GCB, value);
-        if (valcode < 0) {
-             throw UnicodePropertyExpressionError("Erroneous property value for grapheme cluster break property");
-        }
-        property->setFunctionName("__get_gcb_" + GCB_ns::enum_names[valcode]);
-    }
-    else if (theprop == WB) {
-        // Word Break property identified
-        int valcode = GetPropertyValueEnumCode(WB, value);
-        if (valcode < 0) {
-             throw UnicodePropertyExpressionError("Erroneous property value for word break property");
-        }
-        property->setFunctionName("__get_wb_" + WB_ns::enum_names[valcode]);
-    }
-    else if (theprop == lb) {
-        // Line Break property identified
-        int valcode = GetPropertyValueEnumCode(lb, value);
-        if (valcode < 0) {
-             throw UnicodePropertyExpressionError("Erroneous property value for line break property");
-        }
-        property->setFunctionName("__get_lb_" + LB_ns::enum_names[valcode]);
-    }
-    else if (theprop == SB) {
-        // Sentence Break property identified
-        int valcode = GetPropertyValueEnumCode(SB, value);
-        if (valcode < 0) {
-             throw UnicodePropertyExpressionError("Erroneous property value for sentence break property");
-        }
-        property->setFunctionName("__get_lb_" + SB_ns::enum_names[valcode]);
     }
     else if (isa<BinaryPropertyObject>(property_object_table[theprop])){
         auto valit = Binary_ns::aliases_only_map.find(value);
@@ -124,7 +69,6 @@ Name * resolveProperty(const std::string prop, const std::string value, re::RE_P
     else {
         throw UnicodePropertyExpressionError("Property " + property_full_name[theprop] + " recognized but not supported in icgrep 1.0");
     }
-
     return property;
 }
 

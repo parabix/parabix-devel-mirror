@@ -144,6 +144,12 @@ re::RE * get_icgrep_RE() {
             std::cerr << regexVector[i] << std::endl;
             exit(1);
         }
+        catch (UCD::UnicodePropertyExpressionError e)
+        {
+            std::cerr << "Unicode error: " << e.what() << std::endl;
+            std::cerr << regexVector[i] << std::endl;
+            exit(1);
+        }
         REs.push_back(re_ast);
     }
     if (REs.size() > 1) {
