@@ -47,7 +47,6 @@ protected:
     void selectMultiplexSets(RNG &);
     void applySubsetConstraints();
     void multiplexSelectedIndependentSets();
-    void reassociate(PabloBuilder & builder, PabloAST * const demuxed[], const unsigned n) const;
     void topologicalSort(PabloBlock & entry) const;
     inline AutoMultiplexing()
     : mVariables(0)

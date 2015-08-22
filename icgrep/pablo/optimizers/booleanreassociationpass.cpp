@@ -20,6 +20,9 @@ bool BooleanReassociationPass::optimize(PabloFunction & function) {
     return true;
 }
 
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief scan
+ ** ------------------------------------------------------------------------------------------------------------- */
 void BooleanReassociationPass::scan(PabloFunction & function) {
     Terminals terminals;
     for (unsigned i = 0; i != function.getNumOfResults(); ++i) {
@@ -28,12 +31,31 @@ void BooleanReassociationPass::scan(PabloFunction & function) {
     scan(function.getEntryBlock(), std::move(terminals));
 }
 
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief is_power_of_2
+ * @param n an integer
+ ** ------------------------------------------------------------------------------------------------------------- */
+static inline bool is_power_of_2(const size_t n) {
+    return ((n & (n - 1)) == 0);
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief log2_plus_one
+ ** ------------------------------------------------------------------------------------------------------------- */
+static inline size_t ceil_log2(const size_t n) {
+    return std::log2<size_t>(n) + (is_power_of_2(n) ? 1 : 0);
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief scan
+ ** ------------------------------------------------------------------------------------------------------------- */
 void BooleanReassociationPass::scan(PabloBlock & block, Terminals && terminals) {
 
     using Graph = boost::adjacency_list<boost::hash_setS, boost::vecS, boost::bidirectionalS, PabloAST *>;
     using Vertex = Graph::vertex_descriptor;
     using Map = std::unordered_map<PabloAST *, Vertex>;
-    using Queue = std::queue<Vertex>;
+    using VertexQueue = std::queue<Vertex>;
+    using EdgeQueue = std::queue<std::pair<Vertex, Vertex>>;
 
     for (Statement * stmt : block) {
         if (isa<If>(stmt)) {
@@ -78,7 +100,7 @@ void BooleanReassociationPass::scan(PabloBlock & block, Terminals && terminals) 
                     Vertex v = add_vertex(var, G);
                     f = M.insert(std::make_pair(var, v)).first;
                     if ((isa<And>(var) || isa<Or>(var) || isa<Xor>(var))) {
-                        Queue Q;
+                        VertexQueue Q;
                         // Scan through the use-def chains to locate any chains of rearrangable expressions and their inputs
                         for (Statement * stmt = cast<Statement>(var); ;) {
                             for (unsigned i = 0; i != 2; ++i) {
@@ -110,13 +132,16 @@ void BooleanReassociationPass::scan(PabloBlock & block, Terminals && terminals) 
         topological_sort(G, std::back_inserter(ordering));
         std::vector<unsigned> component(num_vertices(G));
 
-        for (unsigned i = 0; ;) {
+        // unsigned i = 0;
+
+        for (;;) {
 
             // Mark which computation component these vertices are in based on their topological (occurence) order.
             unsigned count = 0;
             for (auto u : ordering) {
                 unsigned id = 0;
-                if (out_degree(u, G) == 0) {
+                // If this one of our original terminals or a sink in G, it is the root of a new component.
+                if (u < terminals.size() || out_degree(u, G) == 0) {
                     id = ++count;
                 } else {
                     for (auto e : make_iterator_range(out_edges(u, G))) {
@@ -129,29 +154,29 @@ void BooleanReassociationPass::scan(PabloBlock & block, Terminals && terminals) 
 
             if (count > 1) {
 
-                if (i++ == 0) {
+//                if (i++ == 0) {
 
-                    out << "digraph G_" << i << " {\n";
-                    unsigned i = 0;
-                    for (auto u : ordering) {
-                        out << "u" << u << " [label=\"";
-                        out << i++ << " : ";
-                        PabloPrinter::print(G[u], out);
-                        out << " (" << component[u] << ')';
-                        out << "\"];\n";
-                    }
-                    for (auto e : make_iterator_range(edges(G))) {
-                        out << "u" << source(e, G) << " -> u" << target(e, G) << ";\n";
-                    }
-                    out << "}\n";
-                    out.flush();
+//                    out << "digraph G_" << i << " {\n";
+//                    unsigned i = 0;
+//                    for (auto u : ordering) {
+//                        out << "u" << u << " [label=\"";
+//                        out << i++ << " : ";
+//                        PabloPrinter::print(G[u], out);
+//                        out << " (" << component[u] << ')';
+//                        out << "\"];\n";
+//                    }
+//                    for (auto e : make_iterator_range(edges(G))) {
+//                        out << "u" << source(e, G) << " -> u" << target(e, G) << ";\n";
+//                    }
+//                    out << "}\n";
+//                    out.flush();
 
-                    out << "*************************************************\n";
+//                    out << "*************************************************\n";
 
-                }
+//                }
 
-                // Cut the graph wherever a computation is crosses a component
-                std::queue<std::pair<Vertex, Vertex>> Q;
+                // Cut the graph wherever a computation crosses a component
+                EdgeQueue Q;
                 graph_traits<Graph>::edge_iterator ei, ei_end;
 
                 for (std::tie(ei, ei_end) = edges(G); ei != ei_end; ) {
@@ -175,16 +200,17 @@ void BooleanReassociationPass::scan(PabloBlock & block, Terminals && terminals) 
                     std::tie(u, v) = Q.front(); Q.pop();
 
                     // The vertex belonging to a component with a greater number must come "earlier"
-                    // in the program. Thus it must be computed first.
+                    // in the program. By replicating it, this ensures it's computed as an output of
+                    // one component and used as an input of another.
 
                     if (component[u] < component[v]) {
                         std::swap(u, v);
                     }
 
-                    out << " -- replicating ";
-                    PabloPrinter::print(G[u], out);
-                    out << " for component " << component[v] << '\n';
-                    out.flush();
+//                    out << " -- replicating ";
+//                    PabloPrinter::print(G[u], out);
+//                    out << " for component " << component[v] << '\n';
+//                    out.flush();
 
                     // Replicate u and fix the ordering and component vectors to reflect the change in G.
                     Vertex w = add_vertex(G[u], G);
@@ -210,7 +236,7 @@ void BooleanReassociationPass::scan(PabloBlock & block, Terminals && terminals) 
 
                 }
 
-                out << "*************************************************\n";
+//                out << "*************************************************\n";
 
                 continue; // outer for loop
             }
@@ -232,26 +258,108 @@ void BooleanReassociationPass::scan(PabloBlock & block, Terminals && terminals) 
         out << "}\n";
         out.flush();
 
+        // Scan through the graph in reverse order so that we find all subexpressions first
+        for (auto ui = ordering.rbegin(), ui_end = ordering.rend(); ui != ui_end; ++ui) {
+            const Vertex u = *ui;
+            if (out_degree(u, G) == 0 && in_degree(u, G) != 0) {
 
-        // Determine the source variables in this portion of the AST
-        flat_set<PabloAST *> variables;
+                PabloAST * expr = G[u];
 
-        for (auto u : make_iterator_range(vertices(G))) {
+
+                std::array<Vertex, 3> root;
+                unsigned count = 0;
+
+                if (isa<And>(expr) || isa<Or>(expr) || isa<Xor>(expr)) {
+                    root[count++] = u;
+                } else {
+                    for (auto e : make_iterator_range(in_edges(u, G))) {
+                        root[count++] = source(e, G);
+                    }
+                }
+
+                for (unsigned i = 0; i != count; ++i) {
+                    // While we're collecting our variable set V, keep track of the maximum path length L.
+                    // If L == ceil(log2(|V|)), then this portion of the AST is already optimal.
+
+                    flat_map<Vertex, unsigned> L;
+                    flat_set<PabloAST *> V;
+                    VertexQueue Q;
+
+                    Vertex v = root[i];
+                    unsigned maxPathLength = 0;
+                    L.emplace(v, 0);
+                    for (;;) {
+                        if (in_degree(v, G) == 0) {
+                            V.insert(G[v]);
+                        } else {
+                            const auto l = L[v] + 1;
+                            maxPathLength = std::max(maxPathLength, l);
+                            for (auto e : make_iterator_range(in_edges(v, G))) {
+                                const Vertex w = source(e, G);
+                                auto f = L.find(w);
+                                if (LLVM_LIKELY(f == L.end())) {
+                                    L.emplace(w, l);
+                                } else {
+                                    f->second = std::max(f->second, l);
+                                }
+                                Q.push(w);
+                            }
+                        }
+                        if (Q.empty()) {
+                            break;
+                        }
+                        v = Q.front();
+                        Q.pop();
+                    }
+
+                    // Should we optimize this portion of the AST?
+                    if (maxPathLength != ceil_log2(V.size())) {
+
+
+
+                    }
+
+
+                }
+
+
+
+
+
+            }
+        }
+
+        // if (u < terminals.size() || out_degree(u, G) == 0) {
+
+        for (auto e : make_iterator_range(edges(G))) {
+            Vertex u = target(e, G);
+            Vertex v = source(e, G);
+            if (u >= terminals.size() && out_degree(v, G) != 0 && G[u]->getClassTypeId() != G[v]->getClassTypeId()) {
+                throw std::runtime_error("Illegal graph generated!");
+            }
+        }
+
+        // Determine the source variables of the next "layer" of the AST
+        flat_set<Statement *> nextSet;
+        for (auto u : ordering) {
             if (in_degree(u, G) == 0) {
-                variables.insert(G[u]);
+                PabloAST * const var = G[u];
+                if (LLVM_LIKELY(isa<Statement>(var) && cast<Statement>(var)->getParent() == &block)) {
+                    nextSet.insert(cast<Statement>(var));
+                }
+            } else if (out_degree(u, G) == 0) { // an input may also be the output of some subgraph of G. We don't need to reevaluate it.
+                PabloAST * const var = G[u];
+                if (LLVM_LIKELY(isa<Statement>(var) && cast<Statement>(var)->getParent() == &block)) {
+                    nextSet.erase(cast<Statement>(var));
+                }
             }
         }
 
-        terminals.clear();
-        for (PabloAST * var : variables) {
-            if (isa<Statement>(var) && cast<Statement>(var)->getParent() == &block) {
-                terminals.push_back(cast<Statement>(var));
-            }
-        }
-
-        if (terminals.empty()) {
+        if (nextSet.empty()) {
             break;
         }
+
+        terminals.assign(nextSet.begin(), nextSet.end());
 
         out << "-------------------------------------------------\n";
 
