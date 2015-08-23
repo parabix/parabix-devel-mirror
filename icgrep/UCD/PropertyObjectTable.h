@@ -13,6 +13,7 @@
 #include <array>
 #include "Blocks.h"
 #include "DerivedAge.h"
+#include "DerivedCombiningClass.h"
 #include "DerivedCoreProperties.h"
 #include "DerivedGeneralCategory.h"
 #include "EastAsianWidth.h"
@@ -68,7 +69,7 @@ namespace UCD {
     &SC_ns::property_object,
     new UnsupportedPropertyObject(bc, PropertyObject::ClassTypeId::EnumeratedProperty),
     new UnsupportedPropertyObject(bpt, PropertyObject::ClassTypeId::EnumeratedProperty),
-    new UnsupportedPropertyObject(ccc, PropertyObject::ClassTypeId::EnumeratedProperty),
+    &CCC_ns::property_object,
     new UnsupportedPropertyObject(dt, PropertyObject::ClassTypeId::EnumeratedProperty),
     &EA_ns::property_object,
     &GC_ns::property_object,

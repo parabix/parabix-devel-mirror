@@ -515,7 +515,31 @@ namespace UCD {
             "Above_Left", "Above", "Above_Right", "Double_Below",
             "Double_Above", "Iota_Subscript"};
         static std::unordered_map<std::string, int> aliases_only_map {{
-            }};
+            {"0", CCC_ns::NR}, {"1", CCC_ns::OV}, {"10", CCC_ns::CCC10},
+            {"103", CCC_ns::CCC103}, {"107", CCC_ns::CCC107},
+            {"11", CCC_ns::CCC11}, {"118", CCC_ns::CCC118},
+            {"12", CCC_ns::CCC12}, {"122", CCC_ns::CCC122},
+            {"129", CCC_ns::CCC129}, {"13", CCC_ns::CCC13},
+            {"130", CCC_ns::CCC130}, {"132", CCC_ns::CCC132},
+            {"133", CCC_ns::CCC133}, {"14", CCC_ns::CCC14},
+            {"15", CCC_ns::CCC15}, {"16", CCC_ns::CCC16},
+            {"17", CCC_ns::CCC17}, {"18", CCC_ns::CCC18},
+            {"19", CCC_ns::CCC19}, {"20", CCC_ns::CCC20},
+            {"200", CCC_ns::ATBL}, {"202", CCC_ns::ATB},
+            {"21", CCC_ns::CCC21}, {"214", CCC_ns::ATA},
+            {"216", CCC_ns::ATAR}, {"218", CCC_ns::BL},
+            {"22", CCC_ns::CCC22}, {"220", CCC_ns::B}, {"222", CCC_ns::BR},
+            {"224", CCC_ns::L}, {"226", CCC_ns::R}, {"228", CCC_ns::AL},
+            {"23", CCC_ns::CCC23}, {"230", CCC_ns::A}, {"232", CCC_ns::AR},
+            {"233", CCC_ns::DB}, {"234", CCC_ns::DA}, {"24", CCC_ns::CCC24},
+            {"240", CCC_ns::IS}, {"25", CCC_ns::CCC25},
+            {"26", CCC_ns::CCC26}, {"27", CCC_ns::CCC27},
+            {"28", CCC_ns::CCC28}, {"29", CCC_ns::CCC29},
+            {"30", CCC_ns::CCC30}, {"31", CCC_ns::CCC31},
+            {"32", CCC_ns::CCC32}, {"33", CCC_ns::CCC33},
+            {"34", CCC_ns::CCC34}, {"35", CCC_ns::CCC35},
+            {"36", CCC_ns::CCC36}, {"7", CCC_ns::NK}, {"8", CCC_ns::KV},
+            {"84", CCC_ns::CCC84}, {"9", CCC_ns::VR}, {"91", CCC_ns::CCC91}}};
     }
 
     namespace DT_ns {
