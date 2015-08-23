@@ -28,7 +28,7 @@ void BooleanReassociationPass::scan(PabloFunction & function) {
     for (unsigned i = 0; i != function.getNumOfResults(); ++i) {
         terminals.push_back(function.getResult(i));
     }
-    scan(function.getEntryBlock(), std::move(terminals));
+    return scan(function.getEntryBlock(), std::move(terminals));
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -67,46 +67,14 @@ using Vertex = Graph::vertex_descriptor;
  * @brief isCutNecessary
  ** ------------------------------------------------------------------------------------------------------------- */
 static inline bool isCutNecessary(const Vertex u, const Vertex v, const Graph & G, const std::vector<unsigned> & component) {
+    // Either this edge crosses a component boundary or the operations performed by the vertices differs, we need to cut
+    // the graph here and generate two partial equations.
     if (LLVM_UNLIKELY(component[u] != component[v])) {
         return true;
     } else if (LLVM_UNLIKELY(out_degree(v, G) && in_degree(u, G) && G[u]->getClassTypeId() != G[v]->getClassTypeId())) {
         return true;
     }
     return false;
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief isCutNecessary
- ** ------------------------------------------------------------------------------------------------------------- */
-static bool print(const Graph & G, const std::vector<unsigned> & component, raw_os_ostream & out) {
-    bool hasError = false;
-    out << "digraph G {\n";
-    unsigned i = 0;
-    for (auto u : make_iterator_range(vertices(G))) {
-        out << "u" << u << " [label=\"";
-        out << i++ << " : ";
-        PabloPrinter::print(G[u], out);
-        out << " (" << component[u] << ')';
-        out << "\"";
-        if (isaBooleanOperation(G[u]) && (in_degree(u, G) == 1 || in_degree(u, G) > 2)) {
-            out << " color=red";
-            hasError = true;
-        }
-        out << "];\n";
-    }
-    for (auto e : make_iterator_range(edges(G))) {
-        Vertex u = source(e, G);
-        Vertex v = target(e, G);
-        out << "u" << u << " -> u" << v;
-        if (isCutNecessary(u, v, G, component)) {
-            out << " [color=red]";
-            hasError = true;
-        }
-        out << ";\n";
-    }
-    out << "}\n";
-    out.flush();
-    return hasError;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -118,6 +86,8 @@ void BooleanReassociationPass::scan(PabloBlock & block, Terminals && terminals) 
     using VertexQueue = std::queue<Vertex>;
     using EdgeQueue = std::queue<std::pair<Vertex, Vertex>>;
 
+    PabloBuilder builder(block);
+
     for (Statement * stmt : block) {
         if (isa<If>(stmt)) {
             const auto & defs = cast<const If>(stmt)->getDefined();
@@ -127,17 +97,15 @@ void BooleanReassociationPass::scan(PabloBlock & block, Terminals && terminals) 
             const auto & vars = cast<const While>(stmt)->getVariants();
             Terminals terminals(vars.begin(), vars.end());
             scan(cast<While>(stmt)->getBody(), std::move(terminals));
+        } else {
+            builder.record(stmt);
         }
     }
 
     // And, Or and Xor instructions are all associative, commutative and distributive operations. Thus we can
     // safely rearrange expressions such as "((((a ∨ b) ∨ c) ∨ d) ∨ e) ∨ f" into "((a ∨ b) ∨ (c ∨ d)) ∨ (e ∨ f)".
 
-    raw_os_ostream out(std::cerr);
-
-    out << "=================================================\n";
-
-    PabloBuilder builder(block);
+    bool modifiedAST = false;
 
     for (;;) {
 
@@ -166,7 +134,6 @@ void BooleanReassociationPass::scan(PabloBlock & block, Terminals && terminals) 
                     }
                 }
             }
-
         }
 
         for (;;) {
@@ -193,7 +160,7 @@ void BooleanReassociationPass::scan(PabloBlock & block, Terminals && terminals) 
         }
 
         // Generate a topological ordering for G; if one of our terminals happens to also be a partial computation of
-        // another terminal, we need to make sure we compute it.
+        // another terminal, we need to make sure we compute it as an independent subexpression.
         std::vector<unsigned> ordering;
         ordering.reserve(num_vertices(G));
         topological_sort(G, std::back_inserter(ordering));
@@ -202,12 +169,12 @@ void BooleanReassociationPass::scan(PabloBlock & block, Terminals && terminals) 
         for (;;) {
 
             // Mark which computation component these vertices are in based on their topological (occurence) order.
-            unsigned count = 0;
+            unsigned components = 0;
             for (auto u : ordering) {
                 unsigned id = 0;
-                // If this one of our original terminals or a sink in G, it is the root of a new component.
+                // If this is a sink in G, it is the root of a new component.
                 if (out_degree(u, G) == 0) {
-                    id = ++count;
+                    id = ++components;
                 } else {
                     for (auto e : make_iterator_range(out_edges(u, G))) {
                         id = std::max(id, component[target(e, G)]);
@@ -217,82 +184,67 @@ void BooleanReassociationPass::scan(PabloBlock & block, Terminals && terminals) 
                 component[u] = id;
             }
 
-            if (count > 1) {
-                // Cut the graph wherever a computation crosses a component
-                EdgeQueue Q;
-                graph_traits<Graph>::edge_iterator ei, ei_end;
+            // Cut the graph wherever a computation crosses a component or whenever we need to cut the graph because
+            // the instructions corresponding to the pair of nodes differs.
+            EdgeQueue Q;
+            graph_traits<Graph>::edge_iterator ei, ei_end;
 
-                for (std::tie(ei, ei_end) = edges(G); ei != ei_end; ) {
-                    const Graph::edge_descriptor e = *ei++;
-                    const Vertex u = source(e, G);
-                    const Vertex v = target(e, G);
-                    if (LLVM_UNLIKELY(isCutNecessary(u, v, G, component))) {
-                        Q.push(std::make_pair(u, v));
-                        remove_edge(u, v, G);
-                    }
+            for (std::tie(ei, ei_end) = edges(G); ei != ei_end; ) {
+                const Graph::edge_descriptor e = *ei++;
+                const Vertex u = source(e, G);
+                const Vertex v = target(e, G);
+                if (LLVM_UNLIKELY(isCutNecessary(u, v, G, component))) {
+                    Q.push(std::make_pair(u, v));
+                    remove_edge(u, v, G);
                 }
-
-                // If no edges cross a component, we're done.
-                if (Q.empty()) {
-                    break; // outer for loop
-                }
-
-                for (;;) {
-
-                    Vertex u, v;
-                    std::tie(u, v) = Q.front(); Q.pop();
-
-                    // The vertex belonging to a component with a greater number must come "earlier"
-                    // in the program. By replicating it, this ensures it's computed as an output of
-                    // one component and used as an input of another.
-
-                    if (component[u] < component[v]) {
-                        std::swap(u, v);
-                    }
-
-                    // Replicate u and fix the ordering and component vectors to reflect the change in G.
-                    Vertex w = add_vertex(G[u], G);
-                    ordering.insert(std::find(ordering.begin(), ordering.end(), u), w);
-                    assert (component.size() == w);
-                    component.push_back(component[v]);
-                    add_edge(w, v, G);
-
-                    // However, after we do so, we need to make sure the original source vertex will be a
-                    // sink in G unless it is also an input variable (in which case we'd simply end up with
-                    // extraneous isolated vertex. Otherwise, we need to make further cuts and replications.
-
-                    if (in_degree(u, G) != 0) {
-                        for (auto e : make_iterator_range(out_edges(u, G))) {
-                            Q.push(std::make_pair(source(e, G), target(e, G)));
-                        }
-                        clear_out_edges(u, G);
-                    }
-
-                    if (Q.empty()) {
-                        break;
-                    }
-
-                }
-                continue; // outer for loop
             }
-            break; // outer for loop
-        }
 
-        if (print(G, component, out)) {
-            PabloPrinter::print(block.statements(), out);
-            out.flush();
-            throw std::runtime_error("Illegal graph generated!");
+            // If no cuts are necessary, we're done.
+            if (Q.empty()) {
+                break;
+            }
+
+            for (;;) {
+
+                Vertex u, v;
+                std::tie(u, v) = Q.front(); Q.pop();
+
+                // The vertex belonging to a component with a greater number must come "earlier"
+                // in the program. By replicating it, this ensures it's computed as an output of
+                // one component and used as an input of another.
+
+                if (component[u] < component[v]) {
+                    std::swap(u, v);
+                }
+
+                // Replicate u and fix the ordering and component vectors to reflect the change in G.
+                Vertex w = add_vertex(G[u], G);
+                ordering.insert(std::find(ordering.begin(), ordering.end(), u), w);
+                assert (component.size() == w);
+                component.push_back(component[v]);
+                add_edge(w, v, G);
+
+                // However, after we do so, we need to make sure the original source vertex will be a
+                // sink in G unless it is also an input variable (in which case we'd simply end up with
+                // extraneous isolated vertex. Otherwise, we need to make further cuts and replications.
+
+                if (in_degree(u, G) != 0) {
+                    for (auto e : make_iterator_range(out_edges(u, G))) {
+                        Q.push(std::make_pair(source(e, G), target(e, G)));
+                    }
+                    clear_out_edges(u, G);
+                }
+
+                if (Q.empty()) {
+                    break;
+                }
+
+            }
         }
 
         // Scan through the graph in reverse order so that we find all subexpressions first
-        for (auto ui = ordering.begin(); ui != ordering.end(); ++ui) {
-            const Vertex u = *ui;
+        for (const Vertex u : ordering) {
             if (out_degree(u, G) == 0 && in_degree(u, G) != 0) {
-
-                out << " -- checking component " << component[u] << " : ";
-                PabloPrinter::print(G[u], out);
-                out << "\n";
-                out.flush();
 
                 // While we're collecting our variable set V, keep track of the maximum path length L.
                 // If L == ceil(log2(|V|)), then this portion of the AST is already optimal.
@@ -304,8 +256,7 @@ void BooleanReassociationPass::scan(PabloBlock & block, Terminals && terminals) 
                 Vertex v = u;
                 unsigned maxPathLength = 0;
                 L.emplace(v, 0);
-                for (;;) {
-                    assert (isa<Statement>(G[v]) ? cast<Statement>(G[v])->getParent() != nullptr : true);
+                for (;;) {                    
                     if (in_degree(v, G) == 0) {
                         V.insert(G[v]);
                     } else {
@@ -331,15 +282,11 @@ void BooleanReassociationPass::scan(PabloBlock & block, Terminals && terminals) 
 
                 // Should we optimize this portion of the AST?
                 if (maxPathLength > ceil_log2(V.size())) {
-
-                    out << " -- rewriting component " << component[u] << " : |P|=" << maxPathLength << ", |V|=" << V.size() << " (" << ceil_log2(V.size()) << ")\n";
-                    out.flush();
-
+                    Statement * stmt = cast<Statement>(G[u]);
                     circular_buffer<PabloAST *> Q(V.size());
                     for (PabloAST * var : V) {
                         Q.push_back(var);
                     }
-                    Statement * stmt = cast<Statement>(G[u]);
 
                     block.setInsertPoint(stmt->getPrevNode());
                     if (isa<And>(stmt)) {
@@ -354,20 +301,16 @@ void BooleanReassociationPass::scan(PabloBlock & block, Terminals && terminals) 
                             PabloAST * e2 = Q.front(); Q.pop_front();
                             Q.push_back(builder.createOr(e1, e2));
                         }
-                    } else { // if (isa<Xor>(stmt)) {
+                    } else { assert(isa<Xor>(stmt));
                         while (Q.size() > 1) {
                             PabloAST * e1 = Q.front(); Q.pop_front();
                             PabloAST * e2 = Q.front(); Q.pop_front();
                             Q.push_back(builder.createXor(e1, e2));
                         }
                     }
-                    stmt->replaceWith(Q.front(), true, true);
+                    stmt->replaceAllUsesWith(Q.front());
+                    modifiedAST = true;
                 }
-
-                for (auto uj = ui; ++uj != ordering.end(); ) {
-                    assert (isa<Statement>(G[*uj]) ? cast<Statement>(G[*uj])->getParent() != nullptr : true);
-                }
-
             }
         }
 
@@ -392,8 +335,18 @@ void BooleanReassociationPass::scan(PabloBlock & block, Terminals && terminals) 
         }
 
         terminals.assign(nextSet.begin(), nextSet.end());
+    }
 
-        out << "-------------------------------------------------\n";
+    // If we modified the AST, we likely left dead code in it. Go through and remove any from this block.
+    if (modifiedAST) {
+        Statement * stmt = block.front();
+        while (stmt) {
+            if (stmt->getNumUses() == 0 && !(isa<If>(stmt) || isa<While>(stmt))){
+                stmt = stmt->eraseFromParent(true);
+            } else {
+                stmt = stmt->getNextNode();
+            }
+        }
     }
 }
 
