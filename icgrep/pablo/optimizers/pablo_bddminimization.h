@@ -17,6 +17,7 @@ class Statement;
 class BDDMinimizationPass {
 
     using CharacterizationMap = llvm::DenseMap<const PabloAST *, DdNode *>;
+    using ReverseCharacterizationMap = llvm::DenseMap<const DdNode *, PabloAST *>;
     using Terminals = std::vector<Statement *>;
 
     struct SubsitutionMap {
@@ -67,6 +68,7 @@ private:
     DdManager *                     mManager;
     std::vector<PabloAST *>         mVariables;
     CharacterizationMap             mCharacterizationMap;
+    ReverseCharacterizationMap      mLookupMap;
 };
 
 }

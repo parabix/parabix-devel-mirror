@@ -158,7 +158,7 @@ llvm::Function * PabloCompiler::compile(PabloFunction * function, Module * modul
     
     // Write the output values out
     for (unsigned i = 0; i != function->getNumOfResults(); ++i) {
-        assert (function.getResult(i));
+        assert (function->getResult(i));
         SetOutputValue(mMarkerMap[function->getResult(i)], i);
     }
 

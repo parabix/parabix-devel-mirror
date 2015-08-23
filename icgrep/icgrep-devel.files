@@ -334,3 +334,5 @@ pablo/function.cpp
 UCD/resolve_properties.cpp
 UCD/resolve_properties.h
 generate_predefined_ucd_functions.cpp
+pablo/optimizers/booleanreassociationpass.cpp
+pablo/optimizers/booleanreassociationpass.h
