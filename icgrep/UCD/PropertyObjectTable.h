@@ -12,6 +12,7 @@
 #include "PropertyObjects.h"
 #include <array>
 #include "Blocks.h"
+#include "DerivedAge.h"
 #include "DerivedCoreProperties.h"
 #include "DerivedGeneralCategory.h"
 #include "EastAsianWidth.h"
@@ -62,7 +63,7 @@ namespace UCD {
     new UnsupportedPropertyObject(na1, PropertyObject::ClassTypeId::MiscellaneousProperty),
     new UnsupportedPropertyObject(Name_Alias, PropertyObject::ClassTypeId::MiscellaneousProperty),
     &SCX_ns::property_object,
-    new UnsupportedPropertyObject(age, PropertyObject::ClassTypeId::CatalogProperty),
+    &AGE_ns::property_object,
     &BLK_ns::property_object,
     &SC_ns::property_object,
     new UnsupportedPropertyObject(bc, PropertyObject::ClassTypeId::EnumeratedProperty),
