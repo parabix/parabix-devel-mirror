@@ -717,8 +717,6 @@ static inline size_t log2_plus_one(const size_t n) {
  ** ------------------------------------------------------------------------------------------------------------- */
 void AutoMultiplexing::selectMultiplexSets(RNG &) {
 
-
-    using OutEdgeIterator = graph_traits<MultiplexSetGraph>::out_edge_iterator;
     using InEdgeIterator = graph_traits<MultiplexSetGraph>::in_edge_iterator;
     using degree_t = MultiplexSetGraph::degree_size_type;
     using vertex_t = MultiplexSetGraph::vertex_descriptor;
@@ -823,15 +821,13 @@ void AutoMultiplexing::applySubsetConstraints() {
     // Add in any edges from our subset constraints to M that are within the same set.
     bool hasSubsetConstraint = false;
 
-    graph_traits<SubsetGraph>::edge_iterator ei, ei_end;
-    for (std::tie(ei, ei_end) = edges(mSubsetGraph); ei != ei_end; ++ei) {
-        const auto u = source(*ei, mSubsetGraph);
-        const auto v = target(*ei, mSubsetGraph);
-        graph_traits<MultiplexSetGraph>::in_edge_iterator ej, ej_end;
+    for (auto ei : make_iterator_range(edges(mSubsetGraph))) {
+        const auto u = source(ei, mSubsetGraph);
+        const auto v = target(ei, mSubsetGraph);
         // If both the source and target of ei are adjacent to the same vertex, that vertex must be the
         // "set vertex". Add the edge between the vertices.
-        for (std::tie(ej, ej_end) = in_edges(u, mMultiplexSetGraph); ej != ej_end; ++ej) {
-            auto w = target(*ej, mMultiplexSetGraph);
+        for (auto ej : make_iterator_range(in_edges(u, mMultiplexSetGraph))) {
+            auto w = target(ej, mMultiplexSetGraph);
             // Only check (v, w) if w is a "set vertex".
             if (w >= (n - m) && edge(v, w, mMultiplexSetGraph).second) {
                 add_edge(u, v, mMultiplexSetGraph);

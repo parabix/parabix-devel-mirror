@@ -1,13 +1,11 @@
 #include "booleanreassociationpass.h"
-#include <pablo/printer_pablos.h>
 #include <boost/container/flat_set.hpp>
 #include <boost/container/flat_map.hpp>
-#include <iostream>
 #include <boost/circular_buffer.hpp>
-#include <queue>
 #include <pablo/builder.hpp>
 #include <boost/graph/adjacency_list.hpp>
 #include <boost/graph/topological_sort.hpp>
+#include <queue>
 
 using namespace boost;
 using namespace boost::container;
@@ -28,7 +26,7 @@ void BooleanReassociationPass::scan(PabloFunction & function) {
     for (unsigned i = 0; i != function.getNumOfResults(); ++i) {
         terminals.push_back(function.getResult(i));
     }
-    return scan(function.getEntryBlock(), std::move(terminals));
+    scan(function.getEntryBlock(), std::move(terminals));
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -50,6 +48,7 @@ static inline size_t ceil_log2(const size_t n) {
  * @brief isACD
  ** ------------------------------------------------------------------------------------------------------------- */
 static inline bool isaBooleanOperation(const PabloAST * const expr) {
+    assert (expr);
     switch (expr->getClassTypeId()) {
         case PabloAST::ClassTypeId::And:
         case PabloAST::ClassTypeId::Or:
@@ -71,7 +70,7 @@ static inline bool isCutNecessary(const Vertex u, const Vertex v, const Graph & 
     // the graph here and generate two partial equations.
     if (LLVM_UNLIKELY(component[u] != component[v])) {
         return true;
-    } else if (LLVM_UNLIKELY(out_degree(v, G) && in_degree(u, G) && G[u]->getClassTypeId() != G[v]->getClassTypeId())) {
+    } else if (LLVM_UNLIKELY((in_degree(u, G) != 0) && (G[u]->getClassTypeId() != G[v]->getClassTypeId()))) {
         return true;
     }
     return false;
@@ -100,6 +99,7 @@ void BooleanReassociationPass::scan(PabloBlock & block, Terminals && terminals) 
         } else {
             builder.record(stmt);
         }
+
     }
 
     // And, Or and Xor instructions are all associative, commutative and distributive operations. Thus we can
@@ -116,28 +116,38 @@ void BooleanReassociationPass::scan(PabloBlock & block, Terminals && terminals) 
         // cannot be optimized with this algorithm bypass them in favour of their operands.
 
         VertexQueue Q;
-
+        unsigned count = 0;
         for (Statement * const term : terminals) {
+            assert (term);
+            assert (Q.size() == count);
             if (isaBooleanOperation(term)) {
-                if (LLVM_LIKELY(M.count(term) == 0)) {
+                if (LLVM_LIKELY(M.count(term) == 0)) {                    
                     const auto v = add_vertex(term, G);
+                    assert (v < num_vertices(G));
                     M.insert(std::make_pair(term, v));
                     Q.push(v);
+                    ++count;
                 }
             } else {
                 for (unsigned i = 0; i != term->getNumOperands(); ++i) {
                     PabloAST * const op = term->getOperand(i);
+                    assert (op);
                     if (LLVM_LIKELY(isa<Statement>(op) && M.count(op) == 0)) {
                         const auto v = add_vertex(op, G);
+                        assert (v < num_vertices(G));
                         M.insert(std::make_pair(op, v));
                         Q.push(v);
+                        ++count;
                     }
                 }
-            }
+            }            
         }
 
         for (;;) {
+            assert (Q.size() == count);
             const Vertex u = Q.front(); Q.pop();
+            --count;
+            assert (u < num_vertices(G));
             if (isaBooleanOperation(G[u])) {
                 // Scan through the use-def chains to locate any chains of rearrangable expressions and their inputs
                 Statement * stmt = cast<Statement>(G[u]);
@@ -146,9 +156,11 @@ void BooleanReassociationPass::scan(PabloBlock & block, Terminals && terminals) 
                     auto f = M.find(op);
                     if (f == M.end()) {
                         const auto v = add_vertex(op, G);
+                        assert (v < num_vertices(G));
                         f = M.insert(std::make_pair(op, v)).first;
                         if (op->getClassTypeId() == stmt->getClassTypeId() && cast<Statement>(op)->getParent() == &block) {
                             Q.push(v);
+                            ++count;
                         }
                     }
                     add_edge(f->second, u, G);
@@ -188,7 +200,6 @@ void BooleanReassociationPass::scan(PabloBlock & block, Terminals && terminals) 
             // the instructions corresponding to the pair of nodes differs.
             EdgeQueue Q;
             graph_traits<Graph>::edge_iterator ei, ei_end;
-
             for (std::tie(ei, ei_end) = edges(G); ei != ei_end; ) {
                 const Graph::edge_descriptor e = *ei++;
                 const Vertex u = source(e, G);
@@ -282,7 +293,9 @@ void BooleanReassociationPass::scan(PabloBlock & block, Terminals && terminals) 
 
                 // Should we optimize this portion of the AST?
                 if (maxPathLength > ceil_log2(V.size())) {
+
                     Statement * stmt = cast<Statement>(G[u]);
+
                     circular_buffer<PabloAST *> Q(V.size());
                     for (PabloAST * var : V) {
                         Q.push_back(var);
@@ -308,7 +321,7 @@ void BooleanReassociationPass::scan(PabloBlock & block, Terminals && terminals) 
                             Q.push_back(builder.createXor(e1, e2));
                         }
                     }
-                    stmt->replaceAllUsesWith(Q.front());
+                    stmt->replaceWith(Q.front(), true, false);
                     modifiedAST = true;
                 }
             }
