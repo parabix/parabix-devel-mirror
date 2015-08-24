@@ -13,9 +13,15 @@
 #include <array>
 #include "Blocks.h"
 #include "DerivedAge.h"
+#include "DerivedBidiClass.h"
+#include "DerivedBinaryProperties.h"
 #include "DerivedCombiningClass.h"
 #include "DerivedCoreProperties.h"
+#include "DerivedDecompositionType.h"
 #include "DerivedGeneralCategory.h"
+#include "DerivedJoiningGroup.h"
+#include "DerivedJoiningType.h"
+#include "DerivedNumericType.h"
 #include "EastAsianWidth.h"
 #include "GraphemeBreakProperty.h"
 #include "HangulSyllableType.h"
@@ -67,30 +73,30 @@ namespace UCD {
     &AGE_ns::property_object,
     &BLK_ns::property_object,
     &SC_ns::property_object,
-    new UnsupportedPropertyObject(bc, PropertyObject::ClassTypeId::EnumeratedProperty),
+    &BC_ns::property_object,
     new UnsupportedPropertyObject(bpt, PropertyObject::ClassTypeId::EnumeratedProperty),
     &CCC_ns::property_object,
-    new UnsupportedPropertyObject(dt, PropertyObject::ClassTypeId::EnumeratedProperty),
+    &DT_ns::property_object,
     &EA_ns::property_object,
     &GC_ns::property_object,
     &GCB_ns::property_object,
     &HST_ns::property_object,
     new UnsupportedPropertyObject(InPC, PropertyObject::ClassTypeId::EnumeratedProperty),
     new UnsupportedPropertyObject(InSC, PropertyObject::ClassTypeId::EnumeratedProperty),
-    new UnsupportedPropertyObject(jg, PropertyObject::ClassTypeId::EnumeratedProperty),
-    new UnsupportedPropertyObject(jt, PropertyObject::ClassTypeId::EnumeratedProperty),
+    &JG_ns::property_object,
+    &JT_ns::property_object,
     &LB_ns::property_object,
     new UnsupportedPropertyObject(NFC_QC, PropertyObject::ClassTypeId::EnumeratedProperty),
     new UnsupportedPropertyObject(NFD_QC, PropertyObject::ClassTypeId::EnumeratedProperty),
     new UnsupportedPropertyObject(NFKC_QC, PropertyObject::ClassTypeId::EnumeratedProperty),
     new UnsupportedPropertyObject(NFKD_QC, PropertyObject::ClassTypeId::EnumeratedProperty),
-    new UnsupportedPropertyObject(nt, PropertyObject::ClassTypeId::EnumeratedProperty),
+    &NT_ns::property_object,
     &SB_ns::property_object,
     &WB_ns::property_object,
     &AHEX_ns::property_object,
     &ALPHA_ns::property_object,
     &BIDI_C_ns::property_object,
-    new UnsupportedPropertyObject(Bidi_M, PropertyObject::ClassTypeId::BinaryProperty),
+    &BIDI_M_ns::property_object,
     &CASED_ns::property_object,
     new UnsupportedPropertyObject(CE, PropertyObject::ClassTypeId::BinaryProperty),
     &CI_ns::property_object,
