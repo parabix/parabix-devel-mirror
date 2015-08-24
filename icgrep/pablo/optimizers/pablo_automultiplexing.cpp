@@ -24,7 +24,7 @@ using namespace boost;
 using namespace boost::container;
 using namespace boost::numeric::ublas;
 
-#define PRINT_DEBUG_OUTPUT
+// #define PRINT_DEBUG_OUTPUT
 
 #if !defined(NDEBUG) && !defined(PRINT_DEBUG_OUTPUT)
 #define PRINT_DEBUG_OUTPUT
@@ -159,14 +159,14 @@ bool AutoMultiplexing::optimize(PabloFunction & function) {
         RECORD_TIMESTAMP(end_select_independent_sets);
         LOG("SelectedIndependentSets: " << (end_select_independent_sets - start_select_independent_sets));
 
-        BooleanReassociationPass::optimize(function);
-
         RECORD_TIMESTAMP(start_topological_sort);
         am.topologicalSort(function.getEntryBlock());
         RECORD_TIMESTAMP(end_topological_sort);
-        LOG("TopologicalSort (1):     " << (end_topological_sort - start_topological_sort));
+        LOG("TopologicalSort:        " << (end_topological_sort - start_topological_sort));
 
-        BDDMinimizationPass::optimize(function, false);
+        BooleanReassociationPass::optimize(function);
+
+        BDDMinimizationPass::optimize(function);
     }
 
     LOG_NUMBER_OF_ADVANCES(function.getEntryBlock());
@@ -1056,8 +1056,6 @@ void AutoMultiplexing::topologicalSort(PabloBlock & entry) const {
     std::unordered_set<const PabloAST *> encountered;
     std::stack<Statement *> scope;
 
-    raw_os_ostream out(std::cerr);
-
     for (Statement * stmt = entry.front(); ; ) { restart:
         while ( stmt ) {
             for (unsigned i = 0; i != stmt->getNumOperands(); ++i) {
@@ -1070,6 +1068,14 @@ void AutoMultiplexing::topologicalSort(PabloBlock & entry) const {
                             }
                         }
                         Statement * const next = stmt->getNextNode();
+                        Statement * after = cast<Statement>(op);
+                        if (LLVM_UNLIKELY(after->getParent() != stmt->getParent())) {
+                            if (after->getParent()) {
+                                throw std::runtime_error("Operand is not in the same scope as the statement!");
+                            } else {
+                                throw std::runtime_error("Operand is not in any pablo scope!");
+                            }
+                        }
                         stmt->insertAfter(cast<Statement>(op));
                         stmt = next;
                         goto restart;
