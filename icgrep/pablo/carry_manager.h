@@ -82,7 +82,7 @@ public:
     Value * addCarryInCarryOut(int localIndex, Value* e1, Value* e2);
 
 
-    Value * advanceCarryInCarryOut(int localIndex, int shift_amount, Value * strm);
+    Value * advanceCarryInCarryOut(int localIndex, unsigned shift_amount, Value * strm);
  
     /* Methods for getting and setting carry summary values for If statements */
    
@@ -147,8 +147,8 @@ private:
     std::vector<Value *> mCarryOutPack;
 
     Value * unitAdvanceCarryInCarryOut(int localIndex, Value * strm);
-    Value * shortAdvanceCarryInCarryOut(int localIndex, int shift_amount, Value * strm);
-    Value * longAdvanceCarryInCarryOut(int localIndex, int shift_amount, Value * strm);
+    Value * shortAdvanceCarryInCarryOut(int localIndex, unsigned shift_amount, Value * strm);
+    Value * longAdvanceCarryInCarryOut(int localIndex, unsigned shift_amount, Value * strm);
     
     
     /* Helper routines */

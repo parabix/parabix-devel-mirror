@@ -87,8 +87,8 @@ void PabloCompiler::genPrintRegister(std::string regName, Value * bitblockValue)
                                                    /*isConstant=*/ true,
                                                    /*Linkage=*/ GlobalValue::PrivateLinkage,
                                                    /*Initializer=*/ regNameData);
-    Value * regStrPtr = mBuilder->CreateGEP(regStrVar, {mBuilder->getInt64(0), mBuilder->getInt32(0)});
-    mBuilder->CreateCall(mPrintRegisterFunction, {regStrPtr, bitblockValue});
+    Value * regStrPtr = mBuilder->CreateGEP(regStrVar, std::vector<Value *>({mBuilder->getInt64(0), mBuilder->getInt32(0)}));
+    mBuilder->CreateCall(mPrintRegisterFunction, std::vector<Value *>({regStrPtr, bitblockValue}));
 }
 
 llvm::Function * PabloCompiler::compile(PabloFunction * function) {
@@ -177,14 +177,14 @@ llvm::Function * PabloCompiler::compile(PabloFunction * function, Module * modul
 inline void PabloCompiler::GenerateFunction(PabloFunction & function) {
     mInputType = PointerType::get(StructType::get(mMod->getContext(), std::vector<Type *>(function.getNumOfParameters(), mBitBlockType)), 0);
     Type * outputType = PointerType::get(StructType::get(mMod->getContext(), std::vector<Type *>(function.getNumOfResults(), mBitBlockType)), 0);
-    FunctionType * functionType = FunctionType::get(Type::getVoidTy(mMod->getContext()), {{mInputType, outputType}}, false);
+    FunctionType * functionType = FunctionType::get(Type::getVoidTy(mMod->getContext()), std::vector<Type *>({mInputType, outputType}), false);
 
 
     //Starts on process_block
     SmallVector<AttributeSet, 3> Attrs;
-    Attrs.push_back(AttributeSet::get(mMod->getContext(), ~0U, { Attribute::NoUnwind, Attribute::UWTable }));
-    Attrs.push_back(AttributeSet::get(mMod->getContext(), 1U, { Attribute::ReadOnly, Attribute::NoCapture }));
-    Attrs.push_back(AttributeSet::get(mMod->getContext(), 2U, { Attribute::ReadNone, Attribute::NoCapture }));
+    Attrs.push_back(AttributeSet::get(mMod->getContext(), ~0U, std::vector<Attribute::AttrKind>({ Attribute::NoUnwind, Attribute::UWTable })));
+    Attrs.push_back(AttributeSet::get(mMod->getContext(), 1U, std::vector<Attribute::AttrKind>({ Attribute::ReadOnly, Attribute::NoCapture })));
+    Attrs.push_back(AttributeSet::get(mMod->getContext(), 2U, std::vector<Attribute::AttrKind>({ Attribute::ReadNone, Attribute::NoCapture })));
     AttributeSet AttrSet = AttributeSet::get(mMod->getContext(), Attrs);
 
     // Create the function that will be generated.
@@ -426,8 +426,8 @@ void PabloCompiler::compileStatement(const Statement * stmt) {
 
         //Starts on process_block
         SmallVector<AttributeSet, 3> Attrs;
-        Attrs.push_back(AttributeSet::get(mMod->getContext(), 1U, { Attribute::ReadOnly, Attribute::NoCapture }));
-        Attrs.push_back(AttributeSet::get(mMod->getContext(), 2U, { Attribute::ReadNone, Attribute::NoCapture }));
+        Attrs.push_back(AttributeSet::get(mMod->getContext(), 1U, std::vector<Attribute::AttrKind>({ Attribute::ReadOnly, Attribute::NoCapture })));
+        Attrs.push_back(AttributeSet::get(mMod->getContext(), 2U, std::vector<Attribute::AttrKind>({ Attribute::ReadNone, Attribute::NoCapture })));
         AttributeSet AttrSet = AttributeSet::get(mMod->getContext(), Attrs);
 
         Function * externalFunction = cast<Function>(mMod->getOrInsertFunction(callee->value(), functionType, AttrSet));
@@ -439,7 +439,7 @@ void PabloCompiler::compileStatement(const Statement * stmt) {
 
         AllocaInst * outputStruct = mBuilder->CreateAlloca(outputType);
         mBuilder->CreateCall2(externalFunction, mInputAddressPtr, outputStruct);
-        Value * outputPtr = mBuilder->CreateGEP(outputStruct, { mBuilder->getInt32(0), mBuilder->getInt32(0) });
+        Value * outputPtr = mBuilder->CreateGEP(outputStruct, std::vector<Value *>({ mBuilder->getInt32(0), mBuilder->getInt32(0) }));
         expr = mBuilder->CreateAlignedLoad(outputPtr, BLOCK_SIZE / 8, false);
     }
     else if (const And * pablo_and = dyn_cast<And>(stmt)) {

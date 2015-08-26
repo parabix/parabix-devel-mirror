@@ -95,13 +95,13 @@ Value * IDISA_Builder::simd_srai(unsigned fw, Value * a, unsigned shift) {
 
 Value * IDISA_Builder::simd_cttz(unsigned fw, Value * a) {
     Value * cttzFunc = Intrinsic::getDeclaration(mMod, Intrinsic::cttz, fwVectorType(fw));
-    Value * rslt = mLLVMBuilder->CreateCall(cttzFunc, {fwCast(fw, a), ConstantInt::get(mLLVMBuilder->getInt1Ty(), 0)});
+    Value * rslt = mLLVMBuilder->CreateCall(cttzFunc, std::vector<Value *>({fwCast(fw, a), ConstantInt::get(mLLVMBuilder->getInt1Ty(), 0)}));
     return bitBlockCast(rslt);
 }
 
 Value * IDISA_Builder::simd_popcount(unsigned fw, Value * a) {
     Value * ctpopFunc = Intrinsic::getDeclaration(mMod, Intrinsic::ctpop, fwVectorType(fw));
-    Value * rslt = mLLVMBuilder->CreateCall(ctpopFunc, {fwCast(fw, a)});
+    Value * rslt = mLLVMBuilder->CreateCall(ctpopFunc, std::vector<Value *>({fwCast(fw, a)}));
     return bitBlockCast(rslt);
 }
 

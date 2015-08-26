@@ -50,8 +50,8 @@ BitBlock EOF_mask = simd<1>::constant<1>();
 ssize_t GrepExecutor::write_matches(char * buffer, ssize_t first_line_start) {
 
   ssize_t line_start = first_line_start;
-  size_t match_pos;
-  size_t line_end;
+  ssize_t match_pos;
+  ssize_t line_end;
   while (mMatch_scanner.has_next()) {
     match_pos = mMatch_scanner.scan_to_next();
     // If we found a match, it must be at a line end.

@@ -95,7 +95,7 @@ void PabloAST::replaceAllUsesWith(PabloAST * expr) {
     }
     mUsers.clear();
     assert (expr);
-    for (auto i = 0; i != users; ++i) {
+    for (Vector::size_type i = 0; i != users; ++i) {
         user[i]->replaceUsesOfWith(this, expr);
     }
 }
@@ -210,7 +210,7 @@ Statement * Statement::removeFromParent() {
 
 Statement * Statement::eraseFromParent(const bool recursively) {
     // remove this statement from its operands' users list
-    for (auto i = 0; i != mOperands; ++i) {
+    for (unsigned i = 0; i != mOperands; ++i) {
         mOperand[i]->removeUser(this);
     }
     // If this is an If or While statement, we'll have to remove the statements within the
@@ -232,7 +232,7 @@ Statement * Statement::eraseFromParent(const bool recursively) {
     }
 
     if (recursively) {
-        for (auto i = 0; i != mOperands; ++i) {
+        for (unsigned i = 0; i != mOperands; ++i) {
             PabloAST * const op = mOperand[i];
             if (op->getNumUses() == 0 && isa<Statement>(op)) {
                 cast<Statement>(op)->eraseFromParent(true);

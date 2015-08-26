@@ -65,7 +65,7 @@ void CarryManager::initialize(Module * m, PabloBlock * pb) {
     mCarryPackPtr.resize(totalPackCount);
     mCarryInPack.resize(totalPackCount);
     mCarryOutPack.resize(totalPackCount);
-    for (auto i = 0; i < totalPackCount; i++) mCarryInPack[i]=nullptr;
+    for (unsigned i = 0; i < totalPackCount; i++) mCarryInPack[i]=nullptr;
 
     if (Strategy == SequentialFullyPackedStrategy) {
         mTotalCarryDataBitBlocks = (totalCarryDataSize + BLOCK_SIZE - 1)/BLOCK_SIZE;       
@@ -337,7 +337,7 @@ void CarryManager::setCarryOpCarryOut(unsigned localIndex, Value * carry_out_str
         extractAndSaveCarryOutBits(carry_out_strm, posn, 1);
     }
     else {
-        Value * carry_bit = mBuilder->CreateLShr(mBuilder->CreateBitCast(carry_out_strm, mBuilder->getIntNTy(BLOCK_SIZE)), 127);
+        Value * carry_bit = mBuilder->CreateLShr(mBuilder->CreateBitCast(carry_out_strm, mBuilder->getIntNTy(BLOCK_SIZE)), BLOCK_SIZE-1);
         mCarryOutPack[posn] = mBuilder->CreateBitCast(carry_bit, mBitBlockType);
         if (mCarryInfo->getWhileDepth() == 0) {
             storeCarryPack(posn);
@@ -351,8 +351,8 @@ Value* CarryManager::genShiftLeft64(Value* e) {
 }
 
 Value * CarryManager::addCarryInCarryOut(int localIndex, Value* e1, Value* e2) {
+#if (BLOCK_SIZE == 128)
     Value * carryq_value = getCarryOpCarryIn(localIndex);
-    #if (BLOCK_SIZE == 128)
     //calculate carry through logical ops
     Value* carrygen = mBuilder->CreateAnd(e1, e2, "carrygen");
     Value* carryprop = mBuilder->CreateOr(e1, e2, "carryprop");
@@ -362,17 +362,22 @@ Value * CarryManager::addCarryInCarryOut(int localIndex, Value* e1, Value* e2) {
     Value* mid_carry_in = genShiftLeft64(mBuilder->CreateLShr(digitcarry, 63));
     Value* sum = mBuilder->CreateAdd(partial, mBuilder->CreateBitCast(mid_carry_in, mBitBlockType), "sum");
     Value* carry_out_strm = mBuilder->CreateOr(carrygen, mBuilder->CreateAnd(carryprop, mBuilder->CreateNot(sum)));
-
-    #else
-    //BLOCK_SIZE == 256, there is no other implementation
-    static_assert(false, "Add with carry for 256-bit bitblock requires USE_UADD_OVERFLOW");
-    #endif         
     setCarryOpCarryOut(localIndex, carry_out_strm);
     return sum;
+#else
+    //BLOCK_SIZE == 256, there is no other implementation
+    Value * carryq_value = getCarryOpCarryIn(localIndex);
+    Value* carrygen = mBuilder->CreateAnd(e1, e2, "carrygen");
+    Value* carryprop = mBuilder->CreateOr(e1, e2, "carryprop");
+    Value * sum = iBuilder->simd_add(BLOCK_SIZE, iBuilder->simd_add(BLOCK_SIZE, e1, e2), carryq_value);
+    Value* carry_out_strm = mBuilder->CreateOr(carrygen, mBuilder->CreateAnd(carryprop, mBuilder->CreateNot(sum)));
+    setCarryOpCarryOut(localIndex, carry_out_strm);
+    return sum;
+#endif         
 }
 
 
-Value * CarryManager::advanceCarryInCarryOut(int localIndex, int shift_amount, Value * strm) {
+Value * CarryManager::advanceCarryInCarryOut(int localIndex, unsigned shift_amount, Value * strm) {
     if (shift_amount == 1) {
         return unitAdvanceCarryInCarryOut(localIndex, strm);
     }
@@ -414,7 +419,7 @@ Value * CarryManager::unitAdvanceCarryInCarryOut(int localIndex, Value * strm) {
     return result_value;
 }
 
-Value * CarryManager::shortAdvanceCarryInCarryOut(int localIndex, int shift_amount, Value * strm) {
+Value * CarryManager::shortAdvanceCarryInCarryOut(int localIndex, unsigned shift_amount, Value * strm) {
     unsigned posn = shortAdvancePosition(localIndex);
     if (mITEMS_PER_PACK > 1) {// #ifdef PACKING
         extractAndSaveCarryOutBits(strm, posn, shift_amount);
@@ -455,7 +460,7 @@ Value * CarryManager::shortAdvanceCarryInCarryOut(int localIndex, int shift_amou
  */
 
     
-Value * CarryManager::longAdvanceCarryInCarryOut(int localIndex, int shift_amount, Value * carry_out) {
+Value * CarryManager::longAdvanceCarryInCarryOut(int localIndex, unsigned shift_amount, Value * carry_out) {
     unsigned carryDataIndex = longAdvanceBitBlockPosition(localIndex);
     Value * advBaseIndex = mBuilder->getInt64(carryDataIndex);
     if (shift_amount <= BLOCK_SIZE) {
@@ -577,11 +582,11 @@ void CarryManager::generateCarryOutSummaryCodeIfNeeded() {
         carry_summary = mOneInitializer;
     }
     else {
-        auto localCarryIndex = localBasePack();
-        auto localCarryPacks = mCarryInfo->getLocalCarryPackCount();
+        unsigned localCarryIndex = localBasePack();
+        unsigned localCarryPacks = mCarryInfo->getLocalCarryPackCount();
         if (localCarryPacks > 0) {
             carry_summary = mCarryOutPack[localCarryIndex];
-            for (auto i = 1; i < localCarryPacks; i++) {
+            for (unsigned i = 1; i < localCarryPacks; i++) {
                 carry_summary = mBuilder->CreateOr(carry_summary, mCarryOutPack[localCarryIndex+i]);
             }
         }

@@ -75,22 +75,22 @@ void PabloBlockCarryData::enumerateLocal() {
         
 void PabloBlockCarryData::dumpCarryData(llvm::raw_ostream & strm) {
     unsigned totalDepth = ifDepth + whileDepth;
-    for (int i = 0; i < totalDepth; i++) strm << "  ";
+    for (unsigned i = 0; i < totalDepth; i++) strm << "  ";
     strm << "scope index = " << theScope->getScopeIndex();
     strm << " framePosition: " << framePosition << ", ifDepth: " << ifDepth << ", whileDepth:" << whileDepth << ", maxNestingDepth: " << maxNestingDepth << "\n";
-    for (int i = 0; i < totalDepth; i++) strm << "  ";
+    for (unsigned i = 0; i < totalDepth; i++) strm << "  ";
     strm << "longAdvance: offset = " << longAdvance.frameOffset << ", entries = " << longAdvance.entries << "\n";
-    for (int i = 0; i < totalDepth; i++) strm << "  ";
+    for (unsigned i = 0; i < totalDepth; i++) strm << "  ";
     strm << "shortAdvance: offset = " << shortAdvance.frameOffset << ", entries = " << shortAdvance.entries << "\n";
-    for (int i = 0; i < totalDepth; i++) strm << "  ";
+    for (unsigned i = 0; i < totalDepth; i++) strm << "  ";
     strm << "advance1: offset = " << advance1.frameOffset << ", entries = " << advance1.entries << "\n";
-    for (int i = 0; i < totalDepth; i++) strm << "  ";
+    for (unsigned i = 0; i < totalDepth; i++) strm << "  ";
     strm << "addWithCarry: offset = " << addWithCarry.frameOffset << ", entries = " << addWithCarry.entries << "\n";
-    for (int i = 0; i < totalDepth; i++) strm << "  ";
+    for (unsigned i = 0; i < totalDepth; i++) strm << "  ";
     strm << "nested: offset = " << nested.frameOffset << ", allocatedBits = " << nested.allocatedBits << "\n";
-    for (int i = 0; i < totalDepth; i++) strm << "  ";
+    for (unsigned i = 0; i < totalDepth; i++) strm << "  ";
     strm << "summary: offset = " << summary.frameOffset << "\n";
-    for (int i = 0; i < totalDepth; i++) strm << "  ";
+    for (unsigned i = 0; i < totalDepth; i++) strm << "  ";
     strm << "scopeCarryDataSize = " << scopeCarryDataSize  << "\n";
     strm.flush();
     

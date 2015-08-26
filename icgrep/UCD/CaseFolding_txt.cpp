@@ -63,7 +63,7 @@ void caseInsensitiveInsertRange(CC * cc, const codepoint_t lo, const codepoint_t
             cc->insert_range(lo1 + fe.fold_offset, hi1 + fe.fold_offset);
         }
         // Now pick up any individual fold entries.
-        for (int i = 0; i < fe.fold_pairs.size(); i++) {
+        for (unsigned i = 0; i < fe.fold_pairs.size(); i++) {
             if (fe.fold_pairs[i].first < lo) continue;  // Only possible for first fold_entry.
             if (fe.fold_pairs[i].first > hi) break;     // Only possible for last fold_entry.
             cc->insert(fe.fold_pairs[i].second);

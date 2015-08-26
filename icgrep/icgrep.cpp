@@ -100,7 +100,7 @@ static cl::opt<bool> EnableMultiplexing("multiplexing", cl::init(false),
     cl::cat(cPabloOptimizationsOptions));
 #endif
 
-static int firstInputFile = 1;  // Normal case when first positional arg is a regex.
+static unsigned firstInputFile = 1;  // Normal case when first positional arg is a regex.
 
 re::RE * get_icgrep_RE() {
   
@@ -133,7 +133,7 @@ re::RE * get_icgrep_RE() {
   
     std::vector<re::RE *> REs;
     re::RE * re_ast = nullptr;
-    for (int i = 0; i < regexVector.size(); i++) {
+    for (unsigned i = 0; i < regexVector.size(); i++) {
         try
         {
             re_ast = re::RE_Parser::parse(regexVector[i], globalFlags);
