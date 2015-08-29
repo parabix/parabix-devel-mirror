@@ -387,9 +387,8 @@ inline DdNode * AutoMultiplexing::characterize(Statement * const stmt) {
     DdNode * bdd = nullptr;
     // Map our operands to the computed BDDs
     std::array<DdNode *, 3> input;
-    unsigned count = 0;
-    for (; count != stmt->getNumOperands(); ++count) {
-        PabloAST * const op = stmt->getOperand(count);
+    for (unsigned i = 0; i != stmt->getNumOperands(); ++i) {
+        PabloAST * const op = stmt->getOperand(i);
         if (LLVM_UNLIKELY(isa<Integer>(op) || isa<String>(op))) {
             continue;
         }
@@ -397,11 +396,11 @@ inline DdNode * AutoMultiplexing::characterize(Statement * const stmt) {
         if (LLVM_UNLIKELY(f == mCharacterizationMap.end())) {
             std::string tmp;
             llvm::raw_string_ostream msg(tmp);
-            msg << "Uncharacterized operand " << std::to_string(count);
+            msg << "AutoMultiplexing: Uncharacterized operand " << std::to_string(i);
             PabloPrinter::print(stmt, " of ", msg);
             throw std::runtime_error(msg.str());
         }
-        input[count] = f->second;
+        input[i] = f->second;
     }
 
     switch (stmt->getClassTypeId()) {

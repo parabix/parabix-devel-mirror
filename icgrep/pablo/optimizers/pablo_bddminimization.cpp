@@ -155,7 +155,11 @@ inline std::pair<DdNode *, bool> BDDMinimizationPass::characterize(Statement * c
         }
         auto f = mCharacterizationMap.find(op);
         if (LLVM_UNLIKELY(f == mCharacterizationMap.end())) {
-            throw std::runtime_error("BDDMinimizationPass: attempted to characterize statement with unknown operand!");
+            std::string tmp;
+            llvm::raw_string_ostream msg(tmp);
+            msg << "BDDMinimizationPass: uncharacterized operand " << std::to_string(i);
+            PabloPrinter::print(stmt, " of ", msg);
+            throw std::runtime_error(msg.str());
         }
         input[i] = f->second;
     }
