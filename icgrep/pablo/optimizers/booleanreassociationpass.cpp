@@ -116,6 +116,18 @@ static inline bool inCurrentBlock(const PabloAST * expr, const PabloBlock & bloc
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
+ * @brief isAnyUserNotInCurrentBlock
+ ** ------------------------------------------------------------------------------------------------------------- */
+static inline bool isAnyUserNotInCurrentBlock(const PabloAST * expr, const PabloBlock & block) {
+    for (PabloAST * user : expr->users()) {
+        if (!inCurrentBlock(cast<Statement>(user), block)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
  * @brief isCutNecessary
  ** ------------------------------------------------------------------------------------------------------------- */
 static inline bool isCutNecessary(const Vertex u, const Vertex v, const Graph & G, const std::vector<unsigned> & component) {
@@ -288,16 +300,48 @@ void BooleanReassociationPass::processScope(PabloBlock & block, std::vector<Stat
     out << "digraph G {\n";
     for (auto u : make_iterator_range(vertices(G))) {
         out << "v" << u << " [label=\"";
-        if (in_degree(u, G) > 0) {
-            PabloPrinter::print(cast<Statement>(G[u]), "", out);
+        PabloAST * expr = G[u];
+        if (isa<Statement>(expr)) {
+            if (LLVM_UNLIKELY(isa<If>(expr))) {
+                out << "if ";
+                PabloPrinter::print(cast<If>(expr)->getOperand(0), out);
+                out << ":";
+            } else if (LLVM_UNLIKELY(isa<While>(expr))) {
+                out << "while ";
+                PabloPrinter::print(cast<While>(expr)->getOperand(0), out);
+                out << ":";
+            } else {
+                PabloPrinter::print(cast<Statement>(expr), "", out);
+            }
         } else {
-            PabloPrinter::print(G[u], out);
+            PabloPrinter::print(expr, out);
         }
-        out << "\"];\n";
+        out << "\"";
+        if (!inCurrentBlock(expr, block)) {
+            out << " style=dashed";
+        }
+        out << "];\n";
     }
     for (auto e : make_iterator_range(edges(G))) {
         out << "v" << source(e, G) << " -> v" << target(e, G) << ";\n";
     }
+
+    out << "{ rank=same;";
+    for (auto u : make_iterator_range(vertices(G))) {
+        if (in_degree(u, G) == 0 && out_degree(u, G) != 0) {
+            out << " v" << u;
+        }
+    }
+    out << "}\n";
+
+    out << "{ rank=same;";
+    for (auto u : make_iterator_range(vertices(G))) {
+        if (out_degree(u, G) == 0 && in_degree(u, G) != 0) {
+            out << " v" << u;
+        }
+    }
+    out << "}\n";
+
     out << "}\n\n";
     out.flush();
 
@@ -333,13 +377,14 @@ static void summarizeAST(PabloBlock & block, std::vector<Statement *> && termina
             if (LLVM_LIKELY(Mk.count(term) == 0)) {
                 // add or find this terminal in our global graph
                 Vertex x = getVertex(term, G, M);
-
-                if (isOptimizable(term)) {
-                    const Vertex u = add_vertex(term, Gk);
-                    Mk.insert(std::make_pair(term, u));
-                    push(u, Q);
-                    continue;
-                } else if ((isa<Assign>(term) || isa<Next>(term)) && !inCurrentBlock(term->getOperand(0), block)) {
+                if (inCurrentBlock(term, block)) {
+                    if (isOptimizable(term)) {
+                        const Vertex u = add_vertex(term, Gk);
+                        Mk.insert(std::make_pair(term, u));
+                        push(u, Q);
+                        continue;
+                    }
+                } else if (isa<Assign>(term) || isa<Next>(term)) {
                     // If this is an Assign (Next) node whose operand does not originate from the current block
                     // then check to see if there is an If (While) node that does.
                     Statement * branch = nullptr;
@@ -347,12 +392,12 @@ static void summarizeAST(PabloBlock & block, std::vector<Statement *> && termina
                         for (PabloAST * user : term->users()) {
                             if (isa<If>(user)) {
                                 const If * ifNode = cast<If>(user);
-                                const auto & defs = ifNode->getDefined();
-                                if (LLVM_LIKELY(std::find(defs.begin(), defs.end(), cast<Assign>(term)) != defs.end())) {
-                                    if (inCurrentBlock(ifNode, block)) {
+                                if (inCurrentBlock(ifNode, block)) {
+                                    const auto & defs = ifNode->getDefined();
+                                    if (LLVM_LIKELY(std::find(defs.begin(), defs.end(), cast<Assign>(term)) != defs.end())) {
                                         branch = cast<Statement>(user);
+                                        break;
                                     }
-                                    break;
                                 }
                             }
                         }
@@ -360,12 +405,12 @@ static void summarizeAST(PabloBlock & block, std::vector<Statement *> && termina
                         for (PabloAST * user : term->users()) {
                             if (isa<While>(user)) {
                                 const While * whileNode = cast<While>(user);
-                                const auto & vars = whileNode->getVariants();
-                                if (LLVM_LIKELY(std::find(vars.begin(), vars.end(), cast<Next>(term)) != vars.end())) {
-                                    if (inCurrentBlock(whileNode, block)) {
+                                if (inCurrentBlock(whileNode, block)) {
+                                    const auto & vars = whileNode->getVariants();
+                                    if (LLVM_LIKELY(std::find(vars.begin(), vars.end(), cast<Next>(term)) != vars.end())) {
                                         branch = cast<Statement>(user);
+                                        break;
                                     }
-                                    break;
                                 }
                             }
                         }
@@ -379,41 +424,46 @@ static void summarizeAST(PabloBlock & block, std::vector<Statement *> && termina
 
                     // Otherwise add the branch to G and test its operands rather than the original terminal
                     const Vertex z = getVertex(branch, G, M);
-                    add_edge(x, z, G);
+                    add_edge(z, x, G);
                     x = z;
                     term = branch;
                 }
 
                 for (unsigned i = 0; i != term->getNumOperands(); ++i) {
                     PabloAST * const op = term->getOperand(i);
-                    const Vertex y = getVertex(op, G, M);
-                    add_edge(x, y, G);
-                    if (LLVM_LIKELY(in_degree(y, G) == 0 && Mk.count(op) == 0 && isa<Statement>(op))) {
-                        const Vertex v = add_vertex(op, Gk);
-                        Mk.insert(std::make_pair(op, v));
-                        push(v, Q);
+                    if (LLVM_LIKELY(inCurrentBlock(op, block))) {
+                        const Vertex y = getVertex(op, G, M);
+                        add_edge(y, x, G);
+                        if (LLVM_LIKELY(Mk.count(op) == 0)) {
+                            const Vertex v = add_vertex(op, Gk);
+                            Mk.insert(std::make_pair(op, v));
+                            push(v, Q);
+                        }
                     }
                 }
-
             }
         }
 
-        if (Q.empty()) {
+        if (LLVM_UNLIKELY(Q.empty())) {
             break;
         }
 
         for (;;) {
             const Vertex u = pop(Q);
             if (isOptimizable(Gk[u])) {
-                // Scan through the use-def chains to locate any chains of rearrangable expressions and their inputs
                 Statement * stmt = cast<Statement>(Gk[u]);
+                if (isAnyUserNotInCurrentBlock(stmt, block)) {
+                    const Vertex v = add_vertex(block.createZeroes(), Gk);
+                    add_edge(u, v, Gk);
+                }
+                // Scan through the use-def chains to locate any chains of rearrangable expressions and their inputs
                 for (unsigned i = 0; i != 2; ++i) {
                     PabloAST * op = stmt->getOperand(i);
                     auto f = Mk.find(op);
                     if (f == Mk.end()) {
                         const Vertex v = add_vertex(op, Gk);
                         f = Mk.insert(std::make_pair(op, v)).first;
-                        if (op->getClassTypeId() == stmt->getClassTypeId() && cast<Statement>(op)->getParent() == &block) {
+                        if (op->getClassTypeId() == stmt->getClassTypeId() && inCurrentBlock(cast<Statement>(op), block)) {
                             push(v, Q);
                         }
                     }
@@ -508,8 +558,11 @@ static void summarizeAST(PabloBlock & block, std::vector<Statement *> && termina
         // Scan through the graph so that we process the outermost expressions first
         for (const Vertex u : ordering) {
             if (LLVM_UNLIKELY(out_degree(u, Gk) == 0)) {
+                if (LLVM_UNLIKELY(isa<Zeroes>(Gk[u]))) {
+                    continue;
+                }
                 const Vertex x = getVertex(Gk[u], G, M);
-                if (LLVM_LIKELY(in_degree(u, Gk) != 0)) {
+                if (LLVM_LIKELY(in_degree(u, Gk) > 0)) {
                     flat_set<PabloAST *> vars;
                     flat_set<Vertex> visited;
                     for (Vertex v = u;;) {
@@ -529,7 +582,7 @@ static void summarizeAST(PabloBlock & block, std::vector<Statement *> && termina
                         v = pop(Q);
                     }
                     for (PabloAST * var : vars) {
-                        add_edge(x, getVertex(var, G, M), G);
+                        add_edge(getVertex(var, G, M), x, G);
                     }
                 }
             }
@@ -538,25 +591,20 @@ static void summarizeAST(PabloBlock & block, std::vector<Statement *> && termina
         // Determine the source variables of the next "layer" of the AST
         flat_set<Statement *> nextSet;
         for (auto u : ordering) {
-            if (in_degree(u, Gk) == 0) {
-                PabloAST * const var = Gk[u];
-                if (LLVM_LIKELY(inCurrentBlock(var, block))) {
-                    nextSet.insert(cast<Statement>(var));
-                }
-            } else if (out_degree(u, Gk) == 0) { // an input may also be the output of a subgraph of G. We don't need to reevaluate it.
-                PabloAST * const var = Gk[u];
-                if (LLVM_LIKELY(inCurrentBlock(var, block))) {
-                    nextSet.erase(cast<Statement>(var));
-                }
+            if (LLVM_UNLIKELY(in_degree(u, Gk) == 0 && isa<Statement>(Gk[u]))) {
+                nextSet.insert(cast<Statement>(Gk[u]));
+            } else if (LLVM_UNLIKELY(out_degree(u, Gk) == 0 && isa<Statement>(Gk[u]))) { // an input may also be the output of a subgraph of G. We don't need to reevaluate it.
+                nextSet.erase(cast<Statement>(Gk[u]));
             }
         }
 
-        if (nextSet.empty()) {
+        if (LLVM_UNLIKELY(nextSet.empty())) {
             break;
         }
 
         terminals.assign(nextSet.begin(), nextSet.end());
     }
+
 }
 
 BooleanReassociationPass::BooleanReassociationPass()

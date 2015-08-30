@@ -97,23 +97,38 @@ void Simplifier::eliminateRedundantCode(PabloBlock & block, ExpressionTable * pr
                 continue;
             }
             // Process the If body
-            eliminateRedundantCode(cast<If>(stmt)->getBody(), &encountered);
-            // Scan through and replace any defined variable that is assigned Zero with a Zero object
-            // and remove it from the defined variable list.
-            If::DefinedVars & defVars = ifNode->getDefined();
-            for (auto i = defVars.begin(); i != defVars.end(); ) {
-                Assign * defVar = cast<Assign>(*i);
-                if (LLVM_UNLIKELY(isa<Zeroes>(defVar->getExpression()))) {
-                    i = defVars.erase(i);
-                    defVar->replaceWith(block.createZeroes(), false, true);
+            eliminateRedundantCode(cast<If>(stmt)->getBody(), &encountered);            
+            // If the defined variable is actually equivalent to the condition, promote the assignment out of If
+            // scope and remove it from the list of defined variables. Otherwise, replace any defined variable that
+            // is assigned Zero with a Zero object and remove it from the defined variable list.
+            If::DefinedVars & defs = ifNode->getDefined();
+            for (auto itr = defs.begin(); itr != defs.end(); ) {
+                Assign * def = *itr;
+                if (LLVM_UNLIKELY((ifNode->getCondition() == def->getExpression()) || isa<Zeroes>(def->getExpression()))) {
+                    itr = defs.erase(itr);
+                    def->replaceWith(def->getExpression(), false, true);
                     continue;
                 }
-                ++i;
+                ++itr;
             }
-            // If we ended up Zero-ing out all of the defined variables, delete the If node.
-            if (LLVM_UNLIKELY(defVars.empty())) {
+            // If we ended up removing all of the defined variables, delete the If node.
+            if (LLVM_UNLIKELY(defs.empty())) {
                 stmt = stmt->eraseFromParent(true);
                 continue;
+            }
+            // Otherwise check if we any Assign reports the same value as another. If so, replace all uses of the
+            // second with the first. This will simplify future analysis.
+            for (auto i = defs.begin(); i != defs.end(); ++i) {
+                PabloAST * expr = (*i)->getExpression();
+                for (auto j = i + 1; j != defs.end(); ) {
+                    Assign * def = (*j);
+                    if (LLVM_UNLIKELY(def->getExpression() == expr)) {
+                        j = defs.erase(j);
+                        def->replaceWith(*i, false, true);
+                        continue;
+                    }
+                    ++j;
+                }
             }
         }
         else if (isa<While>(stmt)) {
