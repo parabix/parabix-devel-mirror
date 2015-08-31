@@ -15,13 +15,13 @@ using namespace boost::container;
 
 namespace pablo {
 
-using Graph = adjacency_list<hash_setS, vecS, bidirectionalS, PabloAST *>;
+using Graph = BooleanReassociationPass::Graph;
 using Vertex = Graph::vertex_descriptor;
 using VertexQueue = circular_buffer<Vertex>;
 using Map = std::unordered_map<PabloAST *, Vertex>;
 using EdgeQueue = std::queue<std::pair<Vertex, Vertex>>;
 
-static void redistributeAST(Graph & G);
+static void redistributeAST(PabloBlock &block, Graph & G);
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief optimize
@@ -201,14 +201,9 @@ static PabloAST * createTree(PabloBlock & block, const PabloAST::ClassTypeId typ
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief processScope
+ * @brief printGraph
  ** ------------------------------------------------------------------------------------------------------------- */
-void BooleanReassociationPass::processScope(PabloBlock & block, std::vector<Statement *> && terminals) {
-
-    Graph G;
-    summarizeAST(block, std::move(terminals), G);
-    redistributeAST(G);
-
+static void printGraph(PabloBlock & block, const Graph & G) {
     raw_os_ostream out(std::cerr);
     out << "digraph G {\n";
     for (auto u : make_iterator_range(vertices(G))) {
@@ -216,11 +211,11 @@ void BooleanReassociationPass::processScope(PabloBlock & block, std::vector<Stat
         PabloAST * expr = G[u];
         if (isa<Statement>(expr)) {
             if (LLVM_UNLIKELY(isa<If>(expr))) {
-                out << "if ";
+                out << "If ";
                 PabloPrinter::print(cast<If>(expr)->getOperand(0), out);
                 out << ":";
             } else if (LLVM_UNLIKELY(isa<While>(expr))) {
-                out << "while ";
+                out << "While ";
                 PabloPrinter::print(cast<While>(expr)->getOperand(0), out);
                 out << ":";
             } else {
@@ -257,10 +252,21 @@ void BooleanReassociationPass::processScope(PabloBlock & block, std::vector<Stat
 
     out << "}\n\n";
     out.flush();
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief processScope
+ ** ------------------------------------------------------------------------------------------------------------- */
+void BooleanReassociationPass::processScope(PabloBlock & block, std::vector<Statement *> && terminals) {
+
+    Graph G;
+    summarizeAST(block, std::move(terminals), G);
+    redistributeAST(block, G);
 
 
 
 
+    printGraph(block, G);
 
 }
 
@@ -540,17 +546,97 @@ void BooleanReassociationPass::summarizeAST(PabloBlock & block, std::vector<Stat
  *
  * Apply the distribution law to reduce computations whenever possible.
  ** ------------------------------------------------------------------------------------------------------------- */
-static void redistributeAST(Graph & G) {
+static void redistributeAST(PabloBlock & block, Graph & G) {
+    using TypeId = PabloAST::ClassTypeId;
+
+    // Process the graph in reverse topological order so that we end up recursively applying the distribution law
+    // to the entire AST.
+    std::vector<unsigned> ordering;
+    ordering.reserve(num_vertices(G));
+    topological_sort(G, std::back_inserter(ordering));
+
+    for (const Vertex u : ordering) {
+        const TypeId outerTypeId = G[u]->getClassTypeId();
+        if (outerTypeId == TypeId::And || outerTypeId == TypeId::Or) {
+            if (inCurrentBlock(cast<Statement>(G[u]), block)) {
+                const TypeId innerTypeId = (outerTypeId == TypeId::And) ? TypeId::Or : TypeId::And;
+
+                Graph H;
+                Map M;
+
+                flat_set<Vertex> distributable;
+
+                for (auto e : make_iterator_range(in_edges(u, G))) {
+                    const Vertex v = source(e, G);
+                    if (G[v]->getClassTypeId() == innerTypeId && inCurrentBlock(cast<Statement>(G[v]), block)) {
+                        bool safe = true;
+                        // This operation is safe to transform if all of its users are AND or OR instructions.
+                        if (out_degree(v, G) > 1) {
+                            for (auto e : make_iterator_range(out_edges(v, G))) {
+                                const PabloAST * expr = G[target(e, G)];
+                                if (expr->getClassTypeId() != TypeId::And && expr->getClassTypeId() != TypeId::Or) {
+                                    safe = false;
+                                    break;
+                                }
+                            }
+                        }
+                        if (safe) {
+                            distributable.insert(v);
+                        }
+                    }
+                }
+
+                if (distributable.size() > 1) {
+                    flat_map<Vertex, unsigned> sources;
+                    bool canRedistribute = false;
+                    for (const Vertex v : distributable) {
+                        for (auto e : make_iterator_range(in_edges(v, G))) {
+                            const Vertex w = source(e, G);
+                            const auto f = sources.find(w);
+                            if (f == sources.end()) {
+                                sources.emplace(w, 1);
+                            } else {
+                                f->second += 1;
+                                canRedistribute = true;
+                            }
+                        }
+                    }
+                    if (canRedistribute) {
+                        Vertex w = 0;
+                        unsigned count = 0;
+                        const Vertex x = getVertex(G[u], H, M);
+                        for (auto s : sources) {
+                            std::tie(w, count) = s;
+                            if (count > 1) {
+                                const Vertex z = getVertex(G[w], H, M);
+                                for (auto e : make_iterator_range(out_edges(w, G))) {
+                                    const Vertex v = target(e, G);
+                                    if (distributable.count(v)) {
+                                        const Vertex y = getVertex(G[v], H, M);
+                                        add_edge(y, x, H);
+                                        add_edge(z, y, H);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                printGraph(block, H);
+            }
+        }
+    }
+
+
+
+
 
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief applyDistributionLaw
  ** ------------------------------------------------------------------------------------------------------------- */
-BooleanReassociationPass::BooleanReassociationPass()
-{
-
-}
+BooleanReassociationPass::BooleanReassociationPass() { }
 
 
 }

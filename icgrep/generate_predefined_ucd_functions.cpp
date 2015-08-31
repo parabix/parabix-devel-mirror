@@ -17,8 +17,6 @@
 #include <pablo/optimizers/pablo_codesinking.hpp>
 #ifdef ENABLE_MULTIPLEXING
 #include <pablo/optimizers/pablo_automultiplexing.hpp>
-#include <pablo/optimizers/booleanreassociationpass.h>
-#include <pablo/optimizers/pablo_bddminimization.h>
 #endif
 #include <llvm/IR/Verifier.h>
 #include <llvm/Support/Debug.h>
@@ -274,10 +272,7 @@ void compileUnicodeSet(std::string name, const UnicodeSet & set, PabloCompiler &
         if (MultiplexingDistributionFile) {
             (*MultiplexingDistributionFile) << ',' << getNumOfAdvances(function->getEntryBlock());
         }
-        BDDMinimizationPass::optimize(*function);
-        // AutoMultiplexing::optimize(*function);
-        BooleanReassociationPass::optimize(*function);
-        BDDMinimizationPass::optimize(*function);
+        AutoMultiplexing::optimize(*function);
         if (MultiplexingDistributionFile) {
             (*MultiplexingDistributionFile) << ',' << getNumOfAdvances(function->getEntryBlock()) << '\n';
         }

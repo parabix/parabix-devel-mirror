@@ -8,8 +8,9 @@
 namespace pablo {
 
 class BooleanReassociationPass {
-    using Graph = boost::adjacency_list<boost::hash_setS, boost::vecS, boost::bidirectionalS, PabloAST *>;
 public:
+    using Graph = boost::adjacency_list<boost::hash_setS, boost::vecS, boost::bidirectionalS, PabloAST *>;
+
     static bool optimize(PabloFunction & function);
 protected:
     BooleanReassociationPass();
