@@ -21,54 +21,67 @@ using VertexQueue = circular_buffer<Vertex>;
 using Map = std::unordered_map<PabloAST *, Vertex>;
 using EdgeQueue = std::queue<std::pair<Vertex, Vertex>>;
 
-static void summarizeAST(PabloBlock & block, std::vector<Statement *> && terminals, Graph & G);
+static void redistributeAST(Graph & G);
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief optimize
  ** ------------------------------------------------------------------------------------------------------------- */
 bool BooleanReassociationPass::optimize(PabloFunction & function) {
     BooleanReassociationPass brp;
-//    raw_os_ostream out(std::cerr);
-//    out << "BEFORE:\n\n";
-//    PabloPrinter::print(function.getEntryBlock().statements(), out);
-    brp.scan(function);
+    brp.resolveScopes(function);
+    brp.processScopes(function);
     Simplifier::optimize(function);
-
-//    out << "\n\nAFTER:\n\n";
-//    PabloPrinter::print(function.getEntryBlock().statements(), out);
     return true;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
+ * @brief resolveScopes
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline void BooleanReassociationPass::resolveScopes(PabloFunction &function) {
+    resolveScopes(function.getEntryBlock());
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief resolveScopes
+ ** ------------------------------------------------------------------------------------------------------------- */
+void BooleanReassociationPass::resolveScopes(PabloBlock & block) {
+    for (Statement * stmt : block) {
+        if (isa<If>(stmt) || isa<While>(stmt)) {
+            PabloBlock & nested = isa<If>(stmt) ? cast<If>(stmt)->getBody() : cast<While>(stmt)->getBody();
+            mResolvedScopes.emplace(&nested, stmt);
+            resolveScopes(nested);
+        }
+    }
+}
+
+
+/** ------------------------------------------------------------------------------------------------------------- *
  * @brief scan
  ** ------------------------------------------------------------------------------------------------------------- */
-void BooleanReassociationPass::scan(PabloFunction & function) {
+inline void BooleanReassociationPass::processScopes(PabloFunction & function) {
     std::vector<Statement *> terminals;
     for (unsigned i = 0; i != function.getNumOfResults(); ++i) {
         terminals.push_back(function.getResult(i));
     }
-    scan(function.getEntryBlock(), std::move(terminals));
+    processScopes(function.getEntryBlock(), std::move(terminals));
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief scan
  ** ------------------------------------------------------------------------------------------------------------- */
-void BooleanReassociationPass::scan(PabloBlock & block, std::vector<Statement *> && terminals) {
-
+void BooleanReassociationPass::processScopes(PabloBlock & block, std::vector<Statement *> && terminals) {
     processScope(block, std::move(terminals));
-
     for (Statement * stmt : block) {
         if (isa<If>(stmt)) {
             const auto & defs = cast<const If>(stmt)->getDefined();
             std::vector<Statement *> terminals(defs.begin(), defs.end());
-            scan(cast<If>(stmt)->getBody(), std::move(terminals));
+            processScopes(cast<If>(stmt)->getBody(), std::move(terminals));
         } else if (isa<While>(stmt)) {
             const auto & vars = cast<const While>(stmt)->getVariants();
             std::vector<Statement *> terminals(vars.begin(), vars.end());
-            scan(cast<While>(stmt)->getBody(), std::move(terminals));
+            processScopes(cast<While>(stmt)->getBody(), std::move(terminals));
         }
     }
-
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -113,18 +126,6 @@ static inline bool inCurrentBlock(const Statement * stmt, const PabloBlock & blo
 
 static inline bool inCurrentBlock(const PabloAST * expr, const PabloBlock & block) {
     return isa<Statement>(expr) && inCurrentBlock(cast<Statement>(expr), block);
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief isAnyUserNotInCurrentBlock
- ** ------------------------------------------------------------------------------------------------------------- */
-static inline bool isAnyUserNotInCurrentBlock(const PabloAST * expr, const PabloBlock & block) {
-    for (PabloAST * user : expr->users()) {
-        if (!inCurrentBlock(cast<Statement>(user), block)) {
-            return true;
-        }
-    }
-    return false;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -200,101 +201,13 @@ static PabloAST * createTree(PabloBlock & block, const PabloAST::ClassTypeId typ
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief applyDistributionLaw
- ** ------------------------------------------------------------------------------------------------------------- */
-static bool applyDistributionLaw(PabloBlock & block, const PabloAST::ClassTypeId typeId, flat_set<PabloAST *> & vars) {
-    circular_buffer<PabloAST *> Q0(vars.size());
-    circular_buffer<PabloAST *> Q1(vars.size());
-    std::vector<PabloAST *> distributedVars;
-
-    for (auto vi = vars.begin(); vi != vars.end(); ) {
-        PabloAST * const e0 = *vi;
-
-        if (e0->getClassTypeId() == typeId) {
-            Statement * const s0 = cast<Statement>(e0);
-
-            for (auto vj = vi + 1; vj != vars.end(); ) {
-                PabloAST * const e1 = *vj;
-
-                if (e1->getClassTypeId() == typeId) {
-                    Statement * const s1 = cast<Statement>(e1);
-                    bool distributed = false;
-
-                    if (s0->getOperand(0) == s1->getOperand(0)) {
-                        Q0.push_back(s1->getOperand(1));
-                        distributed = true;
-                    } else if (s0->getOperand(0) == s1->getOperand(1)) {
-                        Q0.push_back(s1->getOperand(0));
-                        distributed = true;
-                    }
-
-                    if (s0->getOperand(1) == s1->getOperand(0)) {
-                        Q1.push_back(s1->getOperand(1));
-                        distributed = true;
-                    } else if (s0->getOperand(1) == s1->getOperand(1)) {
-                        Q1.push_back(s1->getOperand(0));
-                        distributed = true;
-                    }
-
-                    if (distributed) {
-                        vj = vars.erase(vj);
-                        continue;
-                    }
-                }
-
-                ++vj;
-            }
-
-            if (LLVM_UNLIKELY(Q0.size() > 0 || Q1.size() > 0)) {
-                const PabloAST::ClassTypeId innerTypeId =
-                        (typeId == PabloAST::ClassTypeId::Or) ? PabloAST::ClassTypeId::And : PabloAST::ClassTypeId::Or;
-
-                vi = vars.erase(vi);
-                if (Q0.size() > 0) {
-                    Q0.push_back(s0->getOperand(1));
-                    PabloAST * distributed = createTree(block, innerTypeId, Q0);
-                    switch (typeId) {
-                        case PabloAST::ClassTypeId::And:
-                            distributed = block.createAnd(s0->getOperand(0), distributed); break;
-                        case PabloAST::ClassTypeId::Or:
-                            distributed = block.createOr(s0->getOperand(0), distributed); break;
-                        default: break;
-                    }
-                    distributedVars.push_back(distributed);
-                }
-                if (Q1.size() > 0) {
-                    Q1.push_front(s0->getOperand(0));
-                    PabloAST * distributed = createTree(block, innerTypeId, Q1);
-                    switch (typeId) {
-                        case PabloAST::ClassTypeId::And:
-                            distributed = block.createAnd(s0->getOperand(1), distributed); break;
-                        case PabloAST::ClassTypeId::Or:
-                            distributed = block.createOr(s0->getOperand(1), distributed); break;
-                        default: break;
-                    }
-                    distributedVars.push_back(distributed);
-                }
-                continue;
-            }
-        }
-        ++vi;
-    }
-    if (distributedVars.empty()) {
-        return false;
-    }
-    for (PabloAST * var : distributedVars) {
-        vars.insert(var);
-    }
-    return true;
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
  * @brief processScope
  ** ------------------------------------------------------------------------------------------------------------- */
 void BooleanReassociationPass::processScope(PabloBlock & block, std::vector<Statement *> && terminals) {
 
     Graph G;
     summarizeAST(block, std::move(terminals), G);
+    redistributeAST(G);
 
     raw_os_ostream out(std::cerr);
     out << "digraph G {\n";
@@ -358,7 +271,7 @@ void BooleanReassociationPass::processScope(PabloBlock & block, std::vector<Stat
  * of AND, OR or XOR functions are "flattened" and allowed to have any number of inputs. This allows us to
  * reassociate them in the most efficient way possible.
  ** ------------------------------------------------------------------------------------------------------------- */
-static void summarizeAST(PabloBlock & block, std::vector<Statement *> && terminals, Graph & G) {
+void BooleanReassociationPass::summarizeAST(PabloBlock & block, std::vector<Statement *> && terminals, Graph & G) {
 
     Map M;
     VertexQueue Q(128);
@@ -452,9 +365,26 @@ static void summarizeAST(PabloBlock & block, std::vector<Statement *> && termina
             const Vertex u = pop(Q);
             if (isOptimizable(Gk[u])) {
                 Statement * stmt = cast<Statement>(Gk[u]);
-                if (isAnyUserNotInCurrentBlock(stmt, block)) {
-                    const Vertex v = add_vertex(block.createZeroes(), Gk);
-                    add_edge(u, v, Gk);
+                // If any user of this statement is not in the current block, determine the outermost If/While node
+                // that contains this statement within and add an edge from this statement to it to denote both the
+                // topological ordering necessary and that this statement must be computed.
+                for (PabloAST * user : stmt->users()) {
+                    if (LLVM_LIKELY(isa<Statement>(user))) {
+                        PabloBlock * parent = cast<Statement>(user)->getParent();
+                        if (LLVM_UNLIKELY(parent != &block)) {
+                            while (parent->getParent() != &block) {
+                                parent = parent->getParent();
+                            }
+                            if (LLVM_UNLIKELY(parent == nullptr)) {
+                                throw std::runtime_error("Could not locate nested scope block!");
+                            }
+                            const auto f = mResolvedScopes.find(parent);
+                            if (LLVM_UNLIKELY(f == mResolvedScopes.end())) {
+                                throw std::runtime_error("Failed to resolve scope block!");
+                            }
+                            add_edge(u, getVertex(f->second, Gk, Mk), Gk);
+                        }
+                    }
                 }
                 // Scan through the use-def chains to locate any chains of rearrangable expressions and their inputs
                 for (unsigned i = 0; i != 2; ++i) {
@@ -491,7 +421,7 @@ static void summarizeAST(PabloBlock & block, std::vector<Statement *> && termina
                 // If this is a sink in G, it is the root of a new component.
                 if (out_degree(u, Gk) == 0) {
                     id = ++components;
-                } else {
+                } else { // otherwise it belongs to the outermost component.
                     for (auto e : make_iterator_range(out_edges(u, Gk))) {
                         id = std::max(id, component[target(e, Gk)]);
                     }
@@ -526,12 +456,11 @@ static void summarizeAST(PabloBlock & block, std::vector<Statement *> && termina
                 // The vertex belonging to a component with a greater number must come "earlier"
                 // in the program. By replicating it, this ensures it's computed as an output of
                 // one component and used as an input of another.
-
                 if (component[u] < component[v]) {
                     std::swap(u, v);
                 }
 
-                // Replicate u and fix the ordering and component vectors to reflect the change in G.
+                // Replicate u and fix the ordering and component vectors to reflect the change in Gk.
                 Vertex w = add_vertex(Gk[u], Gk);
                 ordering.insert(std::find(ordering.begin(), ordering.end(), u), w);
                 assert (component.size() == w);
@@ -539,9 +468,8 @@ static void summarizeAST(PabloBlock & block, std::vector<Statement *> && termina
                 add_edge(w, v, Gk);
 
                 // However, after we do so, we need to make sure the original source vertex will be a
-                // sink in G unless it is also an input variable (in which case we'd simply end up with
+                // sink in Gk unless it is also an input variable (in which case we'd simply end up with
                 // extraneous isolated vertex. Otherwise, we need to make further cuts and replications.
-
                 if (in_degree(u, Gk) != 0) {
                     for (auto e : make_iterator_range(out_edges(u, Gk))) {
                         E.push(std::make_pair(source(e, Gk), target(e, Gk)));
@@ -558,9 +486,8 @@ static void summarizeAST(PabloBlock & block, std::vector<Statement *> && termina
         // Scan through the graph so that we process the outermost expressions first
         for (const Vertex u : ordering) {
             if (LLVM_UNLIKELY(out_degree(u, Gk) == 0)) {
-                if (LLVM_UNLIKELY(isa<Zeroes>(Gk[u]))) {
-                    continue;
-                }
+                // Create a vertex marking the output statement we may end up replacing
+                // and collect the set of source variables in the component
                 const Vertex x = getVertex(Gk[u], G, M);
                 if (LLVM_LIKELY(in_degree(u, Gk) > 0)) {
                     flat_set<PabloAST *> vars;
@@ -593,7 +520,9 @@ static void summarizeAST(PabloBlock & block, std::vector<Statement *> && termina
         for (auto u : ordering) {
             if (LLVM_UNLIKELY(in_degree(u, Gk) == 0 && isa<Statement>(Gk[u]))) {
                 nextSet.insert(cast<Statement>(Gk[u]));
-            } else if (LLVM_UNLIKELY(out_degree(u, Gk) == 0 && isa<Statement>(Gk[u]))) { // an input may also be the output of a subgraph of G. We don't need to reevaluate it.
+            } else if (LLVM_UNLIKELY(out_degree(u, Gk) == 0 && isa<Statement>(Gk[u]))) {
+                // some input will also be the output of some subgraph of Gk whenever we cut and
+                // replicated a vertex. We don't need to reevaluate it as part of the next layer.
                 nextSet.erase(cast<Statement>(Gk[u]));
             }
         }
@@ -604,9 +533,20 @@ static void summarizeAST(PabloBlock & block, std::vector<Statement *> && termina
 
         terminals.assign(nextSet.begin(), nextSet.end());
     }
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief redistributeAST
+ *
+ * Apply the distribution law to reduce computations whenever possible.
+ ** ------------------------------------------------------------------------------------------------------------- */
+static void redistributeAST(Graph & G) {
 
 }
 
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief applyDistributionLaw
+ ** ------------------------------------------------------------------------------------------------------------- */
 BooleanReassociationPass::BooleanReassociationPass()
 {
 

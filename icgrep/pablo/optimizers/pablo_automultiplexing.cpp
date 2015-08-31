@@ -162,7 +162,7 @@ bool AutoMultiplexing::optimize(PabloFunction & function) {
         RECORD_TIMESTAMP(start_topological_sort);
         am.topologicalSort(function.getEntryBlock());
         RECORD_TIMESTAMP(end_topological_sort);
-        LOG("TopologicalSort:        " << (end_topological_sort - start_topological_sort));
+        LOG("TopologicalSort:         " << (end_topological_sort - start_topological_sort));
 
         BooleanReassociationPass::optimize(function);
 
