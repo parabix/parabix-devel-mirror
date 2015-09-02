@@ -100,6 +100,8 @@ static cl::opt<bool> EnableMultiplexing("multiplexing", cl::init(false),
     cl::cat(cPabloOptimizationsOptions));
 #endif
 
+static cl::opt<bool> UseAVX2("use-AVX2", cl::init(false), cl::desc("execute with AVX2 instruction set."), cl::cat(cRegexOutputOptions));
+
 static unsigned firstInputFile = 1;  // Normal case when first positional arg is a regex.
 
 re::RE * get_icgrep_RE() {
@@ -263,6 +265,13 @@ ExecutionEngine * JIT_to_ExecutionEngine (llvm::Function * f) {
     builder.setErrorStr(&errMessage);
     builder.setMCPU(sys::getHostCPUName());
     builder.setOptLevel(CodeGenOpt::Level::None);
+#if (BLOCK_SIZE == 256)
+    if(UseAVX2){
+            std::vector<std::string> attrs;
+            attrs.push_back("avx2");
+            builder.setMAttrs(attrs);
+    }
+#endif
     //builder.setOptLevel(mMaxWhileDepth ? CodeGenOpt::Level::Less : CodeGenOpt::Level::None);
     ExecutionEngine * engine = builder.create();
     if (engine == nullptr) {
