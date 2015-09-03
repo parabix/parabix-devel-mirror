@@ -329,15 +329,6 @@ void BooleanReassociationPass::processScope(PabloBlock & block, std::vector<Stat
     summarizeAST(block, terminals, G);
     redistributeAST(block, G);
 
-//    for (;;) {
-//        summarizeAST(block, terminals, G);
-//        if (redistributeAST(block, G)) {
-//            G.clear();
-//        } else {
-//            break;
-//        }
-//    }
-
     printGraph(block, G, "G");
 
 }
@@ -614,7 +605,7 @@ void BooleanReassociationPass::summarizeAST(PabloBlock & block, std::vector<Stat
 }
 
 using VertexSet = std::vector<Vertex>;
-using VertexSets = std::set<VertexSet>;
+using VertexSets = std::vector<VertexSet>;
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief mica
@@ -624,9 +615,11 @@ using VertexSets = std::set<VertexSet>;
  * to be in bipartition A and their adjacencies to be in bipartition B. Because we do not care about the rank 1
  * (star) cliques, this does not record them.
  ** ------------------------------------------------------------------------------------------------------------- */
-static std::vector<VertexSet> mica(const Graph & G) {
+template <class Graph>
+static VertexSets mica(const Graph & G) {
+    using IntersectionSets = std::set<VertexSet>;
 
-    VertexSets B1;
+    IntersectionSets B1;
     for (auto u : make_iterator_range(vertices(G))) {
         if (in_degree(u, G) == 0) {
             VertexSet B;
@@ -639,8 +632,7 @@ static std::vector<VertexSet> mica(const Graph & G) {
         }
     }
 
-    VertexSets Bi;
-
+    IntersectionSets Bi;
     VertexSet clique;
     for (auto i = B1.begin(); i != B1.end(); ++i) {
         for (auto j = i; ++j != B1.end(); ) {
@@ -652,15 +644,14 @@ static std::vector<VertexSet> mica(const Graph & G) {
         }
     }
 
-    VertexSets C;
-
+    IntersectionSets C;
     for (;;) {
         if (Bi.empty()) {
             break;
         }
         C.insert(Bi.begin(), Bi.end());
 
-        VertexSets Bk;
+        IntersectionSets Bk;
         for (auto i = B1.begin(); i != B1.end(); ++i) {
             for (auto j = Bi.begin(); j != Bi.end(); ++j) {
                 std::set_intersection(i->begin(), i->end(), j->begin(), j->end(), std::back_inserter(clique));
@@ -675,14 +666,14 @@ static std::vector<VertexSet> mica(const Graph & G) {
         Bi.swap(Bk);
     }
 
-    return std::vector<VertexSet>(C.begin(), C.end());
+    return VertexSets(C.begin(), C.end());
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief areNonDisjoint
  ** ------------------------------------------------------------------------------------------------------------- */
 template <class Type>
-inline bool areNonDisjoint(const Type & A, const Type & B) {
+inline bool intersects(const Type & A, const Type & B) {
     auto first1 = A.begin(), last1 = A.end();
     auto first2 = B.begin(), last2 = B.end();
     while (first1 != last1 && first2 != last2) {
@@ -700,7 +691,7 @@ inline bool areNonDisjoint(const Type & A, const Type & B) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief maximalIndependentSet
  ** ------------------------------------------------------------------------------------------------------------- */
-static void maximalIndependentSet(std::vector<VertexSet> & V) {
+static void maximalIndependentSet(VertexSets & V) {
     using IndependentSetGraph = adjacency_list<hash_setS, vecS, undirectedS, unsigned>;
     const auto l = V.size();
     IndependentSetGraph I(l);
@@ -711,14 +702,13 @@ static void maximalIndependentSet(std::vector<VertexSet> & V) {
     // Determine our constraints
     for (unsigned i = 0; i != l; ++i) {
         for (unsigned j = i + 1; j != l; ++j) {
-            if (areNonDisjoint(V[i], V[j])) {
+            if (intersects(V[i], V[j])) {
                 add_edge(i, j, I);
             }
         }
     }
     // Use the greedy algorithm to choose our independent set (TODO: try the similar randomized approach)
-    std::vector<Vertex> selected;
-
+    VertexSet selected;
     std::vector<bool> ignored(l, false);
     for (;;) {
         unsigned w = 0;
@@ -738,28 +728,26 @@ static void maximalIndependentSet(std::vector<VertexSet> & V) {
     }
 
     // Sort the selected list and then remove the unselected sets from V
-    std::sort(selected.begin(), selected.end(), std::greater<unsigned>());
+    std::sort(selected.begin(), selected.end(), std::greater<Vertex>());
     auto end = V.end();
     for (const unsigned offset : selected) {
         end = V.erase(V.begin() + offset + 1, end) - 1;
     }
     V.erase(V.begin(), end);
-
 }
 
-
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief maximalIndependentBicliqueSet
+ * @brief computeSafeBicliqueSet
  ** ------------------------------------------------------------------------------------------------------------- */
-static void maximalIndependentBicliqueSet(Graph & G) {
+template <class Graph>
+static void computeSafeBicliqueSet(Graph & G) {
     // First enumerate our bicliques in G.
     auto R = mica(G);
     // Then compute the maximal independent set of the vertices in the B bipartition.
-    // NOTE: this means vertices in A can point to more than one vertex in B. These
-    // have to be resolved specially later.
     maximalIndependentSet(R);
-    // Update G to reflect our maximal independent biclique set
-    std::vector<VertexSet> L;
+    // Finally update G to reflect our chosen bicliques
+    VertexSets L;
+    L.reserve(R.size());
     for (const VertexSet & B : R) {
         // Compute our A set
         VertexSet A;
@@ -782,10 +770,14 @@ static void maximalIndependentBicliqueSet(Graph & G) {
         }
         L.emplace_back(std::move(A));
     }
+    std::vector<Vertex> sources;
     for (auto u : make_iterator_range(vertices(G))) {
         if (in_degree(u, G) == 0) {
-            clear_out_edges(u, G);
+            sources.push_back(u);
         }
+    }
+    for (auto u : sources) {
+        clear_out_edges(u, G);
     }
     for (unsigned i = 0; i != R.size(); ++i) {
         for (auto u : L[i]) {
@@ -804,8 +796,8 @@ static void maximalIndependentBicliqueSet(Graph & G) {
 bool BooleanReassociationPass::redistributeAST(PabloBlock & block, Graph & G) const {
     using TypeId = PabloAST::ClassTypeId;
 
-    Graph B;
-    Map M;
+    adjacency_list<hash_setS, vecS, bidirectionalS, Vertex> H;
+    flat_map<Vertex, Vertex> M;
 
     for (const Vertex u : make_iterator_range(vertices(G))) {
         const TypeId outerTypeId = G[u]->getClassTypeId();
@@ -846,14 +838,18 @@ bool BooleanReassociationPass::redistributeAST(PabloBlock & block, Graph & G) co
                             }
                         }
                     }
-                    if (anyOpportunities) {
+                    if (anyOpportunities) {                        
                         for (auto ob : observed) {
                             if (std::get<1>(ob)) {
-                                const Vertex v = std::get<0>(ob);
-                                for (auto e : make_iterator_range(out_edges(v, G))) {
-                                    const Vertex w = target(e, G);
-                                    if (distributable.count(w)) {
-                                        add_edge(getVertex(G[v], B, M), getVertex(G[w], B, M), B);
+                                const Vertex w = std::get<0>(ob);
+                                for (auto e : make_iterator_range(out_edges(w, G))) {
+                                    const Vertex v = target(e, G);
+                                    if (distributable.count(v)) {
+                                        const Vertex x = getVertex(u, H, M);
+                                        const Vertex y = getVertex(v, H, M);
+                                        const Vertex z = getVertex(w, H, M);
+                                        add_edge(y, x, H);
+                                        add_edge(z, y, H);
                                     }
                                 }
                             }
@@ -865,18 +861,29 @@ bool BooleanReassociationPass::redistributeAST(PabloBlock & block, Graph & G) co
     }
 
     // If we found no potential opportunities then we cannot apply the distribution law to any part of G.
-    if (num_vertices(B) == 0) {
+    if (num_vertices(H) == 0) {
         return false;
     }
 
-    printGraph(block, B, "B0");
+    printGraph(block, H, G, "H0");
 
-    // By finding the maximal set of independent bicliques in S,
+    // By finding the maximal set of bicliques in H=(A,B) ∪ T in which the verticies in bipartition B are
+    // independent, we can identify a safe set of vertices to apply the distribution law to.
+    computeSafeBicliqueSet(H);
 
-    maximalIndependentBicliqueSet(B);
+    // If no edges are remaining, no bicliques were found that would have a meaningful impact on the AST.
+    if (LLVM_UNLIKELY(num_edges(H) == 0)) {
+        return false;
+    }
 
+    printGraph(block, H, G, "H1");
 
-    printGraph(block, B, "B1");
+//    for (const Vertex u : make_iterator_range(vertices(H))) {
+//        if (LLVM_UNLIKELY(in_degree(u, H) == 0 && out_degree(u, H) != 0)) {
+
+//        }
+//    }
+
 
 
 
