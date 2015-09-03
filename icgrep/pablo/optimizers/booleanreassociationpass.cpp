@@ -864,17 +864,17 @@ static VertexSets computeSafeBicliqueSet(Graph & G) {
                     }
                     clear_out_edges(u, G);
                     auto mi = membership.begin();
-                    for (Vertex uu = u; ;) {
+                    for (Vertex w = u; ;) {
                         const unsigned m = *mi;
                         for (auto v : adjacent) {
                             if (component[v] == m) {
-                                add_edge(uu, v, G);
+                                add_edge(w, v, G);
                             }
                         }
                         if (++mi == membership.end()) {
                             break;
                         }
-                        uu = add_vertex(G[u], G);
+                        w = add_vertex(G[u], G);
                     }
                 }
             }
@@ -905,7 +905,7 @@ bool BooleanReassociationPass::redistributeAST(PabloBlock & block, Graph & G) co
                     if (G[v]->getClassTypeId() == innerTypeId && inCurrentBlock(cast<Statement>(G[v]), block)) {
                         bool safe = true;
                         for (PabloAST * user : G[v]->users()) {
-                            if (user->getClassTypeId() != outerTypeId) {
+                            if (user->getClassTypeId() != outerTypeId || !inCurrentBlock(cast<Statement>(user), block)) {
                                 safe = false;
                                 break;
                             }
@@ -960,20 +960,60 @@ bool BooleanReassociationPass::redistributeAST(PabloBlock & block, Graph & G) co
         return false;
     }
 
-    printGraph(block, H, G, "H0");
+    // printGraph(block, H, G, "H0");
 
     // By finding the maximal set of bicliques in H=(A,B) ∪ T in which the verticies in bipartition B are
     // independent, we can identify a safe set of vertices to apply the distribution law to.
-    VertexSets sources(std::move(computeSafeBicliqueSet(H)));
+    VertexSets sourceSets(std::move(computeSafeBicliqueSet(H)));
 
     // If no sources remain, no bicliques were found that would have a meaningful impact on the AST.
-    if (LLVM_UNLIKELY(sources.size() == 0)) {
+    if (LLVM_UNLIKELY(sourceSets.size() == 0)) {
         return false;
     }
 
-    printGraph(block, H, G, "H1");
+    // printGraph(block, H, G, "H1");
+
+    for (VertexSet & sources : sourceSets) {
+        VertexSet intermediary;
+        intermediary.reserve(out_degree(sources.front(), H));
+        for (auto e : make_iterator_range(out_edges(sources.front(), H))) {
+            const Vertex v = H[target(e, H)];
 
 
+            intermediary.push_back(v);
+        }
+        VertexSet terminals;
+        terminals.reserve(out_degree(intermediary.front(), H));
+        for (auto e : make_iterator_range(out_edges(intermediary.front(), H))) {
+            terminals.push_back(H[target(e, H)]);
+        }
+        const TypeId typeId = G[H[terminals.front()]]->getClassTypeId();
+        assert (typeId == TypeId::And || typeId == TypeId::Or);
+        circular_buffer<Vertex> Q(std::max(sources.size(), intermediary.size() + 1));
+        for (const Vertex u : intermediary) {
+            Q.push_back(G[H[u]]);
+        }
+        PabloAST * merged = createTree(block, typeId, Q);
+        for (const Vertex u : sources) {
+            Q.push_back(G[H[u]]);
+        }
+        Q.push_back(merged);
+        PabloAST * masked = createTree(block, typeId == TypeId::Or ? TypeId::And : TypeId::Or, Q);
+
+
+
+
+
+        circular_buffer<Vertex> I(out_degree(S.front(), H));
+        for (auto e : make_iterator_range(out_edges(S.front(), H))) {
+            I.push_back(H[target(e, H)]);
+        }
+
+
+
+
+
+    }
 
 
     return true;
