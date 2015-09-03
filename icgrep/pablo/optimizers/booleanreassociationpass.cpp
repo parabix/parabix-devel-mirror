@@ -268,6 +268,9 @@ static void printGraph(PabloBlock & block, const SubgraphType & S, const Graph &
     raw_os_ostream out(std::cerr);
     out << "digraph " << name << " {\n";
     for (auto u : make_iterator_range(vertices(S))) {
+        if (in_degree(u, S) == 0 && out_degree(u, S) == 0) {
+            continue;
+        }
         out << "v" << u << " [label=\"";
         PabloAST * expr = G[S[u]];
         if (isa<Statement>(expr)) {
@@ -607,30 +610,49 @@ void BooleanReassociationPass::summarizeAST(PabloBlock & block, std::vector<Stat
 using VertexSet = std::vector<Vertex>;
 using VertexSets = std::vector<VertexSet>;
 
+template <class Graph>
+static VertexSet incomingVertexSet(const Vertex u, const Graph & G) {
+    VertexSet V;
+    V.reserve(in_degree(u, G));
+    for (auto e : make_iterator_range(in_edges(u, G))) {
+        V.push_back(source(e, G));
+    }
+    std::sort(V.begin(), V.end());
+    return std::move(V);
+}
+
+template <class Graph>
+static VertexSet outgoingVertexSet(const Vertex u, const Graph & G) {
+    VertexSet V;
+    V.reserve(out_degree(u, G));
+    for (auto e : make_iterator_range(out_edges(u, G))) {
+        V.push_back(target(e, G));
+    }
+    std::sort(V.begin(), V.end());
+    return std::move(V);
+}
+
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief mica
  *
  * Adaptation of the MICA algorithm as described in "Consensus algorithms for the generation of all maximal
  * bicliques" by Alexe et. al. (2003). Note: this implementation considers all verticies with an in-degree of 0
- * to be in bipartition A and their adjacencies to be in bipartition B. Because we do not care about the rank 1
- * (star) cliques, this does not record them.
- ** ------------------------------------------------------------------------------------------------------------- */
-template <class Graph>
+ * (or out-degree of 0 if the graph is transposed) to be in bipartition A and their adjacencies to be in B.
+  ** ------------------------------------------------------------------------------------------------------------- */
+template <bool transposed, class Graph>
 static VertexSets mica(const Graph & G) {
     using IntersectionSets = std::set<VertexSet>;
 
+    IntersectionSets C;
+
     IntersectionSets B1;
     for (auto u : make_iterator_range(vertices(G))) {
-        if (in_degree(u, G) == 0) {
-            VertexSet B;
-            B.reserve(out_degree(u, G));
-            for (auto e : make_iterator_range(out_edges(u, G))) {
-                B.push_back(target(e, G));
-            }
-            std::sort(B.begin(), B.end()); // note: these already ought to be in order
-            B1.insert(std::move(B));
+        if ((transposed ? out_degree(u, G) : in_degree(u, G)) == 0) {
+            B1.insert(std::move(transposed ? incomingVertexSet(u, G) : outgoingVertexSet(u, G)));
         }
     }
+
+    C.insert(B1.begin(), B1.end());
 
     IntersectionSets Bi;
     VertexSet clique;
@@ -638,13 +660,14 @@ static VertexSets mica(const Graph & G) {
         for (auto j = i; ++j != B1.end(); ) {
             std::set_intersection(i->begin(), i->end(), j->begin(), j->end(), std::back_inserter(clique));
             if (clique.size() > 0) {
-                Bi.insert(clique);
+                if (C.count(clique) == 0) {
+                    Bi.insert(clique);
+                }
                 clique.clear();
             }
         }
     }
 
-    IntersectionSets C;
     for (;;) {
         if (Bi.empty()) {
             break;
@@ -670,7 +693,7 @@ static VertexSets mica(const Graph & G) {
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief areNonDisjoint
+ * @brief intersects
  ** ------------------------------------------------------------------------------------------------------------- */
 template <class Type>
 inline bool intersects(const Type & A, const Type & B) {
@@ -691,13 +714,13 @@ inline bool intersects(const Type & A, const Type & B) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief maximalIndependentSet
  ** ------------------------------------------------------------------------------------------------------------- */
-static void maximalIndependentSet(VertexSets & V) {
+static VertexSets && maximalIndependentSet(VertexSets && V) {
     using IndependentSetGraph = adjacency_list<hash_setS, vecS, undirectedS, unsigned>;
     const auto l = V.size();
     IndependentSetGraph I(l);
     // Initialize our weights
     for (unsigned i = 0; i != l; ++i) {
-        I[i] = std::pow(V[i].size(), 2);
+        I[i] = V[i].size();
     }
     // Determine our constraints
     for (unsigned i = 0; i != l; ++i) {
@@ -719,14 +742,13 @@ static void maximalIndependentSet(VertexSets & V) {
                 u = i;
             }
         }
-        if (w < 2) break;
+        if (w == 0) break;
         selected.push_back(u);
         ignored[u] = true;
         for (auto v : make_iterator_range(adjacent_vertices(u, I))) {
             ignored[v] = true;
         }
     }
-
     // Sort the selected list and then remove the unselected sets from V
     std::sort(selected.begin(), selected.end(), std::greater<Vertex>());
     auto end = V.end();
@@ -734,58 +756,131 @@ static void maximalIndependentSet(VertexSets & V) {
         end = V.erase(V.begin() + offset + 1, end) - 1;
     }
     V.erase(V.begin(), end);
+    return std::move(V);
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief filterBicliqueGraph
+ ** ------------------------------------------------------------------------------------------------------------- */
+template <bool transposed, class Graph>
+static VertexSets filterBicliqueGraph(Graph & G) {
+    VertexSets B(std::move(maximalIndependentSet(std::move(mica<transposed>(G)))));
+    VertexSets A;
+    A.reserve(B.size());
+    for (const VertexSet & Bi : B) {
+        // Compute our A set
+        auto bi = Bi.begin();
+        VertexSet Ai(std::move(transposed ? outgoingVertexSet(*bi, G) : incomingVertexSet(*bi, G)));
+        while (++bi != Bi.end()) {
+            VertexSet Ai(std::move(transposed ? outgoingVertexSet(*bi, G) : incomingVertexSet(*bi, G)));
+            VertexSet Ak;
+            std::set_intersection(Ai.begin(), Ai.end(), Ai.begin(), Ai.end(), std::back_inserter(Ak));
+            Ai.swap(Ak);
+        }
+        A.emplace_back(std::move(Ai));
+    }
+    if (transposed) {
+        std::vector<Vertex> sinks;
+        std::vector<Vertex> intermediary;
+        for (auto u : make_iterator_range(vertices(G))) {
+            if (out_degree(u, G) == 0) {
+                sinks.push_back(u);
+            } else if (in_degree(u, G) != 0) {
+                intermediary.push_back(u);
+            }
+        }
+        for (auto u : sinks) {
+            clear_in_edges(u, G);
+        }
+        for (unsigned i = 0; i != B.size(); ++i) {
+            for (auto u : A[i]) {
+                for (auto v : B[i]) {
+                    add_edge(v, u, G);
+                }
+            }
+        }
+        for (auto u : intermediary) {
+            if (out_degree(u, G) == 0) {
+                clear_in_edges(u, G);
+            }
+        }
+    } else {
+        std::vector<Vertex> sources;
+        std::vector<Vertex> intermediary;
+        for (auto u : make_iterator_range(vertices(G))) {
+            if (in_degree(u, G) == 0) {
+                sources.push_back(u);
+            } else if (out_degree(u, G) != 0) {
+                intermediary.push_back(u);
+            }
+        }
+        for (auto u : sources) {
+            clear_out_edges(u, G);
+        }
+        for (unsigned i = 0; i != B.size(); ++i) {
+            for (auto u : A[i]) {
+                for (auto v : B[i]) {
+                    add_edge(u, v, G);
+                }
+            }
+        }
+        for (auto u : intermediary) {
+            if (in_degree(u, G) == 0) {
+                clear_out_edges(u, G);
+            }
+        }
+    }
+    return std::move(A);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief computeSafeBicliqueSet
  ** ------------------------------------------------------------------------------------------------------------- */
 template <class Graph>
-static void computeSafeBicliqueSet(Graph & G) {
-    // First enumerate our bicliques in G.
-    auto R = mica(G);
-    // Then compute the maximal independent set of the vertices in the B bipartition.
-    maximalIndependentSet(R);
-    // Finally update G to reflect our chosen bicliques
-    VertexSets L;
-    L.reserve(R.size());
-    for (const VertexSet & B : R) {
-        // Compute our A set
-        VertexSet A;
-        auto bi = B.begin();
-        A.reserve(in_degree(*bi, G));
-        for (auto e : make_iterator_range(in_edges(*bi, G))) {
-            A.push_back(source(e, G));
-        }
-        std::sort(A.begin(), A.end());
-        while (++bi != B.end()) {
-            VertexSet Ai;
-            Ai.reserve(in_degree(*bi, G));
-            for (auto e : make_iterator_range(in_edges(*bi, G))) {
-                Ai.push_back(source(e, G));
+static VertexSets computeSafeBicliqueSet(Graph & G) {
+    VertexSets sinks(std::move(filterBicliqueGraph<true>(G)));
+    // scan through G and replicate any source that has more than one sink until G is broken
+    // into weakly connected components with exactly one sink.
+    if (sinks.size() > 1) {
+        std::vector<unsigned> component(num_vertices(G), 0);
+        unsigned components = 0;
+        for (const VertexSet & S : sinks) {
+            ++components;
+            for (auto e : make_iterator_range(in_edges(S.front(), G))) {
+                component[source(e, G)] = components;
             }
-            std::sort(Ai.begin(), Ai.end());
-            VertexSet Ak;
-            std::set_intersection(A.begin(), A.end(), Ai.begin(), Ai.end(), std::back_inserter(Ak));
-            A.swap(Ak);
         }
-        L.emplace_back(std::move(A));
-    }
-    std::vector<Vertex> sources;
-    for (auto u : make_iterator_range(vertices(G))) {
-        if (in_degree(u, G) == 0) {
-            sources.push_back(u);
-        }
-    }
-    for (auto u : sources) {
-        clear_out_edges(u, G);
-    }
-    for (unsigned i = 0; i != R.size(); ++i) {
-        for (auto u : L[i]) {
-            for (auto v : R[i]) {
-                add_edge(u, v, G);
+        for (const Vertex u : make_iterator_range(vertices(G))) {
+            if (LLVM_UNLIKELY(in_degree(u, G) == 0)) {
+                flat_set<unsigned> membership;
+                for (auto e : make_iterator_range(out_edges(u, G))) {
+                    membership.insert(component[target(e, G)]);
+                }
+                if (LLVM_UNLIKELY(membership.size() > 1)) {
+                    VertexSet adjacent;
+                    adjacent.reserve(out_degree(u, G));
+                    for (auto e : make_iterator_range(out_edges(u, G))) {
+                        adjacent.push_back(target(e, G));
+                    }
+                    clear_out_edges(u, G);
+                    auto mi = membership.begin();
+                    for (Vertex uu = u; ;) {
+                        const unsigned m = *mi;
+                        for (auto v : adjacent) {
+                            if (component[v] == m) {
+                                add_edge(uu, v, G);
+                            }
+                        }
+                        if (++mi == membership.end()) {
+                            break;
+                        }
+                        uu = add_vertex(G[u], G);
+                    }
+                }
             }
         }
     }
+    return std::move(filterBicliqueGraph<false>(G));
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -869,20 +964,14 @@ bool BooleanReassociationPass::redistributeAST(PabloBlock & block, Graph & G) co
 
     // By finding the maximal set of bicliques in H=(A,B) ∪ T in which the verticies in bipartition B are
     // independent, we can identify a safe set of vertices to apply the distribution law to.
-    computeSafeBicliqueSet(H);
+    VertexSets sources(std::move(computeSafeBicliqueSet(H)));
 
-    // If no edges are remaining, no bicliques were found that would have a meaningful impact on the AST.
-    if (LLVM_UNLIKELY(num_edges(H) == 0)) {
+    // If no sources remain, no bicliques were found that would have a meaningful impact on the AST.
+    if (LLVM_UNLIKELY(sources.size() == 0)) {
         return false;
     }
 
     printGraph(block, H, G, "H1");
-
-//    for (const Vertex u : make_iterator_range(vertices(H))) {
-//        if (LLVM_UNLIKELY(in_degree(u, H) == 0 && out_degree(u, H) != 0)) {
-
-//        }
-//    }
 
 
 
