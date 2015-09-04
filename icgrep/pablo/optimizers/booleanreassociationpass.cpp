@@ -11,7 +11,7 @@
 #include <set>
 #include <iostream>
 #include <pablo/printer_pablos.h>
-
+#include "graph-facade.hpp"
 
 using namespace boost;
 using namespace boost::container;
@@ -186,6 +186,7 @@ static PabloAST * createTree(PabloBlock & block, const PabloAST::ClassTypeId typ
         PabloAST * e1 = Q.front(); Q.pop_front();
         PabloAST * e2 = Q.front(); Q.pop_front();
         PabloAST * expr = nullptr;
+        // Note: this switch ought to compile to an array of function pointers to the appropriate method.
         switch (typeId) {
             case PabloAST::ClassTypeId::And:
                 expr = block.createAnd(e1, e2); break;
@@ -330,10 +331,10 @@ void BooleanReassociationPass::processScope(PabloBlock & block, std::vector<Stat
     Graph G;
 
     summarizeAST(block, terminals, G);
-    redistributeAST(block, G);
-
     printGraph(block, G, "G");
-
+    if (redistributeAST(block, G)) {
+        printGraph(block, G, "H");
+    }
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -613,9 +614,9 @@ using VertexSets = std::vector<VertexSet>;
 template <class Graph>
 static VertexSet incomingVertexSet(const Vertex u, const Graph & G) {
     VertexSet V;
-    V.reserve(in_degree(u, G));
-    for (auto e : make_iterator_range(in_edges(u, G))) {
-        V.push_back(source(e, G));
+    V.reserve(G.in_degree(u));
+    for (auto e : make_iterator_range(G.in_edges(u))) {
+        V.push_back(G.source(e));
     }
     std::sort(V.begin(), V.end());
     return std::move(V);
@@ -624,35 +625,33 @@ static VertexSet incomingVertexSet(const Vertex u, const Graph & G) {
 template <class Graph>
 static VertexSet outgoingVertexSet(const Vertex u, const Graph & G) {
     VertexSet V;
-    V.reserve(out_degree(u, G));
-    for (auto e : make_iterator_range(out_edges(u, G))) {
-        V.push_back(target(e, G));
+    V.reserve(G.out_degree(u));
+    for (auto e : make_iterator_range(G.out_edges(u))) {
+        V.push_back(G.target(e));
     }
     std::sort(V.begin(), V.end());
     return std::move(V);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief mica
+ * @brief enumerateBicliques
  *
  * Adaptation of the MICA algorithm as described in "Consensus algorithms for the generation of all maximal
  * bicliques" by Alexe et. al. (2003). Note: this implementation considers all verticies with an in-degree of 0
- * (or out-degree of 0 if the graph is transposed) to be in bipartition A and their adjacencies to be in B.
+ * to be in bipartition A and their adjacencies to be in B.
   ** ------------------------------------------------------------------------------------------------------------- */
-template <bool transposed, class Graph>
-static VertexSets mica(const Graph & G) {
+template <class Graph>
+static VertexSets enumerateBicliques(const Graph & G) {
     using IntersectionSets = std::set<VertexSet>;
 
-    IntersectionSets C;
-
     IntersectionSets B1;
-    for (auto u : make_iterator_range(vertices(G))) {
-        if ((transposed ? out_degree(u, G) : in_degree(u, G)) == 0) {
-            B1.insert(std::move(transposed ? incomingVertexSet(u, G) : outgoingVertexSet(u, G)));
+    for (auto u : make_iterator_range(G.vertices())) {
+        if (G.in_degree(u) == 0) {
+            B1.insert(std::move(outgoingVertexSet(u, G)));
         }
     }
 
-    C.insert(B1.begin(), B1.end());
+    IntersectionSets C(B1.begin(), B1.end());
 
     IntersectionSets Bi;
     VertexSet clique;
@@ -673,7 +672,6 @@ static VertexSets mica(const Graph & G) {
             break;
         }
         C.insert(Bi.begin(), Bi.end());
-
         IntersectionSets Bk;
         for (auto i = B1.begin(); i != B1.end(); ++i) {
             for (auto j = Bi.begin(); j != Bi.end(); ++j) {
@@ -760,87 +758,60 @@ static VertexSets && maximalIndependentSet(VertexSets && V) {
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief filterBicliqueGraph
+ * @brief sinkIndependentBicliques
  ** ------------------------------------------------------------------------------------------------------------- */
-template <bool transposed, class Graph>
-static VertexSets filterBicliqueGraph(Graph & G) {
-    VertexSets B(std::move(maximalIndependentSet(std::move(mica<transposed>(G)))));
+template <class Graph>
+static VertexSets sinkIndependentBicliques(Graph && G) {
+    VertexSets B = maximalIndependentSet(std::move(enumerateBicliques(G)));
     VertexSets A;
     A.reserve(B.size());
     for (const VertexSet & Bi : B) {
         // Compute our A set
         auto bi = Bi.begin();
-        VertexSet Ai(std::move(transposed ? outgoingVertexSet(*bi, G) : incomingVertexSet(*bi, G)));
+        VertexSet Ai = incomingVertexSet(*bi, G);
         while (++bi != Bi.end()) {
-            VertexSet Ai(std::move(transposed ? outgoingVertexSet(*bi, G) : incomingVertexSet(*bi, G)));
+            VertexSet Ai = incomingVertexSet(*bi, G);
             VertexSet Ak;
             std::set_intersection(Ai.begin(), Ai.end(), Ai.begin(), Ai.end(), std::back_inserter(Ak));
             Ai.swap(Ak);
         }
         A.emplace_back(std::move(Ai));
     }
-    if (transposed) {
-        std::vector<Vertex> sinks;
-        std::vector<Vertex> intermediary;
-        for (auto u : make_iterator_range(vertices(G))) {
-            if (out_degree(u, G) == 0) {
-                sinks.push_back(u);
-            } else if (in_degree(u, G) != 0) {
-                intermediary.push_back(u);
+    std::vector<Vertex> sources;
+    std::vector<Vertex> intermediary;
+    for (auto u : make_iterator_range(G.vertices())) {
+        if (G.in_degree(u) == 0) {
+            sources.push_back(u);
+        } else if (G.out_degree(u) != 0) {
+            intermediary.push_back(u);
+        }
+    }
+    for (auto u : sources) {
+        G.clear_out_edges(u);
+    }
+    for (unsigned i = 0; i != B.size(); ++i) {
+        for (auto u : A[i]) {
+            for (auto v : B[i]) {
+                G.add_edge(u, v);
             }
         }
-        for (auto u : sinks) {
-            clear_in_edges(u, G);
-        }
-        for (unsigned i = 0; i != B.size(); ++i) {
-            for (auto u : A[i]) {
-                for (auto v : B[i]) {
-                    add_edge(v, u, G);
-                }
-            }
-        }
-        for (auto u : intermediary) {
-            if (out_degree(u, G) == 0) {
-                clear_in_edges(u, G);
-            }
-        }
-    } else {
-        std::vector<Vertex> sources;
-        std::vector<Vertex> intermediary;
-        for (auto u : make_iterator_range(vertices(G))) {
-            if (in_degree(u, G) == 0) {
-                sources.push_back(u);
-            } else if (out_degree(u, G) != 0) {
-                intermediary.push_back(u);
-            }
-        }
-        for (auto u : sources) {
-            clear_out_edges(u, G);
-        }
-        for (unsigned i = 0; i != B.size(); ++i) {
-            for (auto u : A[i]) {
-                for (auto v : B[i]) {
-                    add_edge(u, v, G);
-                }
-            }
-        }
-        for (auto u : intermediary) {
-            if (in_degree(u, G) == 0) {
-                clear_out_edges(u, G);
-            }
+    }
+    for (auto u : intermediary) {
+        if (G.in_degree(u) == 0) {
+            G.clear_out_edges(u);
         }
     }
     return std::move(A);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief computeSafeBicliqueSet
+ * @brief safeDistributionSets
  ** ------------------------------------------------------------------------------------------------------------- */
 template <class Graph>
-static VertexSets computeSafeBicliqueSet(Graph & G) {
-    VertexSets sinks(std::move(filterBicliqueGraph<true>(G)));
-    // scan through G and replicate any source that has more than one sink until G is broken
-    // into weakly connected components with exactly one sink.
+static VertexSets safeDistributionSets(Graph & G) {
+    VertexSets sinks(std::move(sinkIndependentBicliques(makeTransposedGraphFacade(G))));
+    // Scan through G and replicate any source that has more than one sink until G is broken
+    // into weakly connected components in which each has exactly one sink.
     if (sinks.size() > 1) {
         std::vector<unsigned> component(num_vertices(G), 0);
         unsigned components = 0;
@@ -880,7 +851,36 @@ static VertexSets computeSafeBicliqueSet(Graph & G) {
             }
         }
     }
-    return std::move(filterBicliqueGraph<false>(G));
+    return std::move(sinkIndependentBicliques(makeGraphFacade(G)));
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief segmentInto3LevelGraph
+ *
+ * Ensure that every source-to-sink path in G has a distance of exactly 2.
+ ** ------------------------------------------------------------------------------------------------------------- */
+template <class Graph>
+Graph & segmentInto3LevelGraph(Graph & G) {
+
+    std::vector<Vertex> ordering;
+    ordering.reserve(num_vertices(G));
+
+    topological_sort(G, std::back_inserter(ordering));
+
+    std::vector<unsigned> distance(num_vertices(G));
+    // Compute the distance to furthest sink for each node
+    for (Vertex u : ordering) {
+        unsigned d = 0;
+        for (auto e : make_iterator_range(out_edges(u, G))) {
+            d = std::max<unsigned>(d, distance[target(e, G)] + 1);
+        }
+        distance[u] = d;
+    }
+
+
+
+
+    return G;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -891,60 +891,63 @@ static VertexSets computeSafeBicliqueSet(Graph & G) {
 bool BooleanReassociationPass::redistributeAST(PabloBlock & block, Graph & G) const {
     using TypeId = PabloAST::ClassTypeId;
 
-    adjacency_list<hash_setS, vecS, bidirectionalS, Vertex> H;
-    flat_map<Vertex, Vertex> M;
+    bool anyChanges = false;
 
-    for (const Vertex u : make_iterator_range(vertices(G))) {
-        const TypeId outerTypeId = G[u]->getClassTypeId();
-        if (outerTypeId == TypeId::And || outerTypeId == TypeId::Or) {
-            if (inCurrentBlock(cast<Statement>(G[u]), block)) {
-                const TypeId innerTypeId = (outerTypeId == TypeId::And) ? TypeId::Or : TypeId::And;
-                flat_set<Vertex> distributable;
-                for (auto e : make_iterator_range(in_edges(u, G))) {
-                    const Vertex v = source(e, G);
-                    if (G[v]->getClassTypeId() == innerTypeId && inCurrentBlock(cast<Statement>(G[v]), block)) {
-                        bool safe = true;
-                        for (PabloAST * user : G[v]->users()) {
-                            if (user->getClassTypeId() != outerTypeId || !inCurrentBlock(cast<Statement>(user), block)) {
-                                safe = false;
-                                break;
+    for (;;) {
+
+        adjacency_list<hash_setS, vecS, bidirectionalS, Vertex> H;
+        flat_map<Vertex, Vertex> M;
+
+        for (const Vertex u : make_iterator_range(vertices(G))) {
+            const TypeId outerTypeId = G[u]->getClassTypeId();
+            if (outerTypeId == TypeId::And || outerTypeId == TypeId::Or) {
+                if (inCurrentBlock(cast<Statement>(G[u]), block)) {
+                    const TypeId innerTypeId = (outerTypeId == TypeId::And) ? TypeId::Or : TypeId::And;
+                    flat_set<Vertex> distributable;
+                    for (auto e : make_iterator_range(in_edges(u, G))) {
+                        const Vertex v = source(e, G);
+                        if (LLVM_UNLIKELY(G[v]->getClassTypeId() == innerTypeId) && LLVM_LIKELY(inCurrentBlock(cast<Statement>(G[v]), block))) {
+                            bool safe = true;
+                            for (const auto e : make_iterator_range(out_edges(v, G))) {
+                                if (G[target(e, G)]->getClassTypeId() != outerTypeId) {
+                                    safe = false;
+                                    break;
+                                }
                             }
-                        }
-                        if (safe) {
-                            distributable.insert(v);
-                        }
-                    }
-                }
-                if (LLVM_LIKELY(distributable.size() > 1)) {
-                    // We're only interested in computing a subgraph of G in which every source has an out-degree
-                    // greater than 1. Otherwise we'd only end up permuting the AND/OR sequence with no logical
-                    // benefit. (Note: this does not consider register pressure / liveness.)
-                    flat_map<Vertex, unsigned> observed;
-                    bool anyOpportunities = false;
-                    for (const Vertex v : distributable) {
-                        for (auto e : make_iterator_range(in_edges(v, G))) {
-                            const Vertex w = source(e, G);
-                            const auto f = observed.find(w);
-                            if (f == observed.end()) {
-                                observed.emplace(w, 0);
-                            } else {
-                                f->second += 1;
-                                anyOpportunities = true;
+                            if (safe) {
+                                distributable.insert(v);
                             }
                         }
                     }
-                    if (anyOpportunities) {                        
-                        for (auto ob : observed) {
-                            if (std::get<1>(ob)) {
-                                const Vertex w = std::get<0>(ob);
-                                for (auto e : make_iterator_range(out_edges(w, G))) {
-                                    const Vertex v = target(e, G);
-                                    if (distributable.count(v)) {
-                                        const Vertex x = getVertex(u, H, M);
-                                        const Vertex y = getVertex(v, H, M);
-                                        const Vertex z = getVertex(w, H, M);
-                                        add_edge(y, x, H);
-                                        add_edge(z, y, H);
+                    if (LLVM_LIKELY(distributable.size() > 1)) {
+                        // We're only interested in computing a subgraph of G in which every source has an out-degree
+                        // greater than 1. Otherwise we'd only end up permuting the AND/OR sequence with no logical
+                        // benefit. (Note: this does not consider register pressure / liveness.)
+                        flat_map<Vertex, unsigned> observed;
+                        bool anyOpportunities = false;
+                        for (const Vertex v : distributable) {
+                            for (auto e : make_iterator_range(in_edges(v, G))) {
+                                const Vertex w = source(e, G);
+                                const auto f = observed.find(w);
+                                if (f == observed.end()) {
+                                    observed.emplace(w, 0);
+                                } else {
+                                    f->second += 1;
+                                    anyOpportunities = true;
+                                }
+                            }
+                        }
+                        if (anyOpportunities) {
+                            for (auto ob : observed) {
+                                if (std::get<1>(ob)) {
+                                    const Vertex w = std::get<0>(ob);
+                                    for (auto e : make_iterator_range(out_edges(w, G))) {
+                                        const Vertex v = target(e, G);
+                                        if (distributable.count(v)) {
+                                            const Vertex y = getVertex(v, H, M);
+                                            add_edge(y, getVertex(u, H, M), H);
+                                            add_edge(getVertex(w, H, M), y, H);
+                                        }
                                     }
                                 }
                             }
@@ -953,70 +956,69 @@ bool BooleanReassociationPass::redistributeAST(PabloBlock & block, Graph & G) co
                 }
             }
         }
+
+        // If we found no potential opportunities then we cannot apply the distribution law to any part of G.
+        if (num_vertices(H) == 0) {
+            break;
+        }
+
+        const VertexSets distributionSets = safeDistributionSets(segmentInto3LevelGraph(H));
+
+        // If no sources remain, no bicliques were found that would have a meaningful impact on the AST.
+        if (LLVM_UNLIKELY(distributionSets.size() == 0)) {
+            break;
+        }
+
+        for (const VertexSet & sources : distributionSets) {
+            assert (sources.size() > 0);
+            const VertexSet intermediary = outgoingVertexSet(sources.front(), makeGraphFacade(H));
+            assert (intermediary.size() > 0);
+            const VertexSet sinks = outgoingVertexSet(intermediary.front(), makeGraphFacade(H));
+            assert (sinks.size() > 0);
+
+            // Now begin transforming the AST
+            const TypeId typeId = G[H[sinks.front()]]->getClassTypeId();
+            assert (typeId == TypeId::And || typeId == TypeId::Or);
+
+            circular_buffer<PabloAST *> Q(std::max(sources.size(), intermediary.size() + 1));
+            for (const Vertex u : intermediary) {
+                Q.push_back(G[H[u]]);
+            }
+            PabloAST * merged = createTree(block, typeId, Q);
+            for (const Vertex s : sources) {
+                Q.push_back(G[H[s]]);
+            }
+            Q.push_back(merged);
+            PabloAST * masked = createTree(block, typeId == TypeId::Or ? TypeId::And : TypeId::Or, Q);
+
+            // Eliminate the edges from our original graph
+            for (const Vertex u : intermediary) {
+                for (const Vertex s : sources) {
+                    remove_edge(H[s], H[u], G);
+                }
+                for (const Vertex t : sinks) {
+                    remove_edge(H[u], H[t], G);
+                }
+            }
+
+            // Finally update G to match the desired changes
+            const Vertex x = add_vertex(merged, G);
+            const Vertex y = add_vertex(masked, G);
+            for (const Vertex u : intermediary) {
+                add_edge(H[u], x, G);
+            }
+            add_edge(x, y, G);
+            for (const Vertex s : sources) {
+                add_edge(H[s], y, G);
+            }
+            for (const Vertex t : sinks) {
+                add_edge(y, H[t], G);
+            }
+        }
+        anyChanges = true;
     }
 
-    // If we found no potential opportunities then we cannot apply the distribution law to any part of G.
-    if (num_vertices(H) == 0) {
-        return false;
-    }
-
-    // printGraph(block, H, G, "H0");
-
-    // By finding the maximal set of bicliques in H=(A,B) ∪ T in which the verticies in bipartition B are
-    // independent, we can identify a safe set of vertices to apply the distribution law to.
-    VertexSets sourceSets(std::move(computeSafeBicliqueSet(H)));
-
-    // If no sources remain, no bicliques were found that would have a meaningful impact on the AST.
-    if (LLVM_UNLIKELY(sourceSets.size() == 0)) {
-        return false;
-    }
-
-    // printGraph(block, H, G, "H1");
-
-    for (VertexSet & sources : sourceSets) {
-        VertexSet intermediary;
-        intermediary.reserve(out_degree(sources.front(), H));
-        for (auto e : make_iterator_range(out_edges(sources.front(), H))) {
-            const Vertex v = H[target(e, H)];
-
-
-            intermediary.push_back(v);
-        }
-        VertexSet terminals;
-        terminals.reserve(out_degree(intermediary.front(), H));
-        for (auto e : make_iterator_range(out_edges(intermediary.front(), H))) {
-            terminals.push_back(H[target(e, H)]);
-        }
-        const TypeId typeId = G[H[terminals.front()]]->getClassTypeId();
-        assert (typeId == TypeId::And || typeId == TypeId::Or);
-        circular_buffer<Vertex> Q(std::max(sources.size(), intermediary.size() + 1));
-        for (const Vertex u : intermediary) {
-            Q.push_back(G[H[u]]);
-        }
-        PabloAST * merged = createTree(block, typeId, Q);
-        for (const Vertex u : sources) {
-            Q.push_back(G[H[u]]);
-        }
-        Q.push_back(merged);
-        PabloAST * masked = createTree(block, typeId == TypeId::Or ? TypeId::And : TypeId::Or, Q);
-
-
-
-
-
-        circular_buffer<Vertex> I(out_degree(S.front(), H));
-        for (auto e : make_iterator_range(out_edges(S.front(), H))) {
-            I.push_back(H[target(e, H)]);
-        }
-
-
-
-
-
-    }
-
-
-    return true;
+    return anyChanges;
 }
 
 }
