@@ -23,6 +23,7 @@ using Vertex = Graph::vertex_descriptor;
 using VertexQueue = circular_buffer<Vertex>;
 using Map = BooleanReassociationPass::Map;
 using EdgeQueue = std::queue<std::pair<Vertex, Vertex>>;
+using TypeId = PabloAST::ClassTypeId;
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief optimize
@@ -55,9 +56,8 @@ void BooleanReassociationPass::resolveScopes(PabloBlock & block) {
     }
 }
 
-
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief scan
+ * @brief processScopes
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void BooleanReassociationPass::processScopes(PabloFunction & function) {
     std::vector<Statement *> terminals;
@@ -68,7 +68,7 @@ inline void BooleanReassociationPass::processScopes(PabloFunction & function) {
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief scan
+ * @brief processScopes
  ** ------------------------------------------------------------------------------------------------------------- */
 void BooleanReassociationPass::processScopes(PabloBlock & block, std::vector<Statement *> && terminals) {
     processScope(block, std::move(terminals));
@@ -182,6 +182,7 @@ static inline Vertex getVertex(ValueType value, GraphType & G, MapType & M) {
  * @brief createTree
  ** ------------------------------------------------------------------------------------------------------------- */
 static PabloAST * createTree(PabloBlock & block, const PabloAST::ClassTypeId typeId, circular_buffer<PabloAST *> & Q) {
+    assert (!Q.empty());
     while (Q.size() > 1) {
         PabloAST * e1 = Q.front(); Q.pop_front();
         PabloAST * e2 = Q.front(); Q.pop_front();
@@ -326,15 +327,50 @@ static void printGraph(PabloBlock & block, const SubgraphType & S, const Graph &
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief processScope
  ** ------------------------------------------------------------------------------------------------------------- */
-void BooleanReassociationPass::processScope(PabloBlock & block, std::vector<Statement *> && terminals) {
-
+inline void BooleanReassociationPass::processScope(PabloBlock & block, std::vector<Statement *> && terminals) {
     Graph G;
-
     summarizeAST(block, terminals, G);
-    printGraph(block, G, "G");
-    if (redistributeAST(block, G)) {
-        printGraph(block, G, "H");
+
+    printGraph(block, G, "G0");
+
+    redistributeAST(block, G);
+
+    printGraph(block, G, "G1");
+
+    circular_buffer<Vertex> Q(num_vertices(G));
+    topological_sort(G, std::front_inserter(Q));
+
+    circular_buffer<PabloAST *> nodes;
+    block.setInsertPoint(nullptr);
+
+    while (!Q.empty()) {
+        const Vertex u = Q.front();
+        Q.pop_front();
+        PabloAST * expr = G[u];
+        if (LLVM_LIKELY(inCurrentBlock(expr, block))) {
+            switch (expr->getClassTypeId()) {
+                case TypeId::And:
+                case TypeId::Or:
+                case TypeId::Xor:
+                    if (LLVM_UNLIKELY(in_degree(u, G) < 2)) {
+                        std::string tmp;
+                        raw_string_ostream str(tmp);
+                        PabloPrinter::print(cast<Statement>(expr), "Unexpected error: ", str);
+                        str << " only had " << in_degree(u, G) << " nodes!";
+                        throw std::runtime_error(str.str());
+                    }
+                    nodes.set_capacity(in_degree(u, G));
+                    for (auto e : make_iterator_range(in_edges(u, G))) {
+                        nodes.push_back(G[source(e, G)]);
+                    }
+                    expr = createTree(block, expr->getClassTypeId(), nodes);
+                default:
+                    block.insert(cast<Statement>(expr));
+            }
+        }
     }
+
+
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -686,7 +722,6 @@ static VertexSets enumerateBicliques(const Graph & G) {
         }
         Bi.swap(Bk);
     }
-
     return VertexSets(C.begin(), C.end());
 }
 
@@ -758,10 +793,10 @@ static VertexSets && maximalIndependentSet(VertexSets && V) {
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief sinkIndependentBicliques
+ * @brief sinkIndependentMaximalBicliques
  ** ------------------------------------------------------------------------------------------------------------- */
 template <class Graph>
-static VertexSets sinkIndependentBicliques(Graph && G) {
+static VertexSets sinkIndependentMaximalBicliques(Graph && G) {
     VertexSets B = maximalIndependentSet(std::move(enumerateBicliques(G)));
     VertexSets A;
     A.reserve(B.size());
@@ -809,7 +844,7 @@ static VertexSets sinkIndependentBicliques(Graph && G) {
  ** ------------------------------------------------------------------------------------------------------------- */
 template <class Graph>
 static VertexSets safeDistributionSets(Graph & G) {
-    VertexSets sinks(std::move(sinkIndependentBicliques(makeTransposedGraphFacade(G))));
+    VertexSets sinks = sinkIndependentMaximalBicliques(makeTransposedGraphFacade(G));
     // Scan through G and replicate any source that has more than one sink until G is broken
     // into weakly connected components in which each has exactly one sink.
     if (sinks.size() > 1) {
@@ -851,35 +886,68 @@ static VertexSets safeDistributionSets(Graph & G) {
             }
         }
     }
-    return std::move(sinkIndependentBicliques(makeGraphFacade(G)));
+    return std::move(sinkIndependentMaximalBicliques(makeGraphFacade(G)));
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief segmentInto3LevelGraph
  *
- * Ensure that every source-to-sink path in G has a distance of exactly 2.
+ * Ensure that every source-to-sink path in G has an edge-distance of exactly 2. The safeDistributionSets algorithm
+ * expects that G exibits this property but if an input to a distributable function is also the output of another
+ * distributable function, this complicates the analysis process. Thus method resolves that by replicating the
+ * appropriate vertices into input-only and output-only vertices.
  ** ------------------------------------------------------------------------------------------------------------- */
 template <class Graph>
 Graph & segmentInto3LevelGraph(Graph & G) {
-
-    std::vector<Vertex> ordering;
-    ordering.reserve(num_vertices(G));
-
-    topological_sort(G, std::back_inserter(ordering));
-
-    std::vector<unsigned> distance(num_vertices(G));
-    // Compute the distance to furthest sink for each node
-    for (Vertex u : ordering) {
-        unsigned d = 0;
-        for (auto e : make_iterator_range(out_edges(u, G))) {
-            d = std::max<unsigned>(d, distance[target(e, G)] + 1);
+    std::vector<unsigned> distance(num_vertices(G), 0);
+    std::queue<Vertex> Q;
+    for (const Vertex u : make_iterator_range(vertices(G))) {
+        if (in_degree(u, G) == 0) {
+            distance[u] = 1;
+            for (const auto e : make_iterator_range(out_edges(u, G))) {
+                Q.push(target(e, G));
+            }
         }
-        distance[u] = d;
     }
-
-
-
-
+    for (;;) {
+        const Vertex u = Q.front(); Q.pop();
+        unsigned dist = 0;
+        bool ready = true;
+        for (const auto e : make_iterator_range(in_edges(u, G))) {
+            const Vertex v = source(e, G);
+            if (LLVM_UNLIKELY(distance[v] == 0)) {
+                ready = false;
+                break;
+            }
+            dist = std::max(dist, distance[v]);
+        }
+        assert (dist <= 4);
+        if (ready) {
+            if (LLVM_UNLIKELY(dist == 4)) {
+                for (const auto e : make_iterator_range(in_edges(u, G))) {
+                    const Vertex v = source(e, G);
+                    if (distance[v] == 3) {
+                        const Vertex w = add_vertex(G[v], G);
+                        for (const auto e : make_iterator_range(out_edges(v, G))) {
+                            add_edge(w, target(e, G), G);
+                        }
+                        clear_out_edges(v, G);
+                        assert (w == distance.size());
+                        distance.push_back(0);
+                        Q.push(w);
+                    }
+                }
+            } else { // update the distance and add in the adjacent vertices to Q
+                distance[u] = dist + 1;
+                for (const auto e : make_iterator_range(out_edges(u, G))) {
+                    Q.push(target(e, G));
+                }
+            }
+        }
+        if (Q.empty()) {
+            break;
+        }
+    }
     return G;
 }
 
@@ -889,10 +957,7 @@ Graph & segmentInto3LevelGraph(Graph & G) {
  * Apply the distribution law to reduce computations whenever possible.
  ** ------------------------------------------------------------------------------------------------------------- */
 bool BooleanReassociationPass::redistributeAST(PabloBlock & block, Graph & G) const {
-    using TypeId = PabloAST::ClassTypeId;
-
     bool anyChanges = false;
-
     for (;;) {
 
         adjacency_list<hash_setS, vecS, bidirectionalS, Vertex> H;
@@ -962,7 +1027,15 @@ bool BooleanReassociationPass::redistributeAST(PabloBlock & block, Graph & G) co
             break;
         }
 
-        const VertexSets distributionSets = safeDistributionSets(segmentInto3LevelGraph(H));
+        printGraph(block, H, G, "H0");
+
+        segmentInto3LevelGraph(H);
+
+        printGraph(block, H, G, "H1");
+
+        const VertexSets distributionSets = safeDistributionSets(H);
+
+        printGraph(block, H, G, "H2");
 
         // If no sources remain, no bicliques were found that would have a meaningful impact on the AST.
         if (LLVM_UNLIKELY(distributionSets.size() == 0)) {
@@ -1017,7 +1090,6 @@ bool BooleanReassociationPass::redistributeAST(PabloBlock & block, Graph & G) co
         }
         anyChanges = true;
     }
-
     return anyChanges;
 }
 
