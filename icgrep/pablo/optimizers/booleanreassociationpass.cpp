@@ -32,6 +32,10 @@ bool BooleanReassociationPass::optimize(PabloFunction & function) {
     BooleanReassociationPass brp;
     brp.resolveScopes(function);
     brp.processScopes(function);
+
+    raw_os_ostream out(std::cerr);
+    PabloPrinter::print(function.getEntryBlock().statements(), out);
+
     Simplifier::optimize(function);
     return true;
 }
@@ -129,46 +133,47 @@ static inline bool inCurrentBlock(const PabloAST * expr, const PabloBlock & bloc
     return isa<Statement>(expr) && inCurrentBlock(cast<Statement>(expr), block);
 }
 
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief isCutNecessary
- ** ------------------------------------------------------------------------------------------------------------- */
-static inline bool isCutNecessary(const Vertex u, const Vertex v, const Graph & G, const std::vector<unsigned> & component) {
-    // Either this edge crosses a component boundary or the operations performed by the vertices differs, we need to cut
-    // the graph here and generate two partial equations.
-    if (LLVM_UNLIKELY(component[u] != component[v])) {
-        return true;
-    } else if (LLVM_UNLIKELY((in_degree(u, G) != 0) && (G[u]->getClassTypeId() != G[v]->getClassTypeId()))) {
-        return true;
-    }
-    return false;
-}
+///** ------------------------------------------------------------------------------------------------------------- *
+// * @brief isCutNecessary
+// ** ------------------------------------------------------------------------------------------------------------- */
+//static inline bool isCutNecessary(const Vertex u, const Vertex v, const Graph & G, const std::vector<unsigned> & component) {
+//    // Either this edge crosses a component boundary or the operations performed by the vertices differs, we need to cut
+//    // the graph here and generate two partial equations.
+//    if (LLVM_UNLIKELY(component[u] != component[v])) {
+//        return true;
+//    } else if (LLVM_UNLIKELY((in_degree(u, G) != 0) && (G[u]->getClassTypeId() != G[v]->getClassTypeId()))) {
+//        return true;
+//    }
+//    return false;
+//}
 
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief push
- ** ------------------------------------------------------------------------------------------------------------- */
-static inline void push(const Vertex u, VertexQueue & Q) {
-    if (LLVM_UNLIKELY(Q.full())) {
-        Q.set_capacity(Q.capacity() * 2);
-    }
-    Q.push_back(u);
-    assert (Q.back() == u);
-}
+///** ------------------------------------------------------------------------------------------------------------- *
+// * @brief push
+// ** ------------------------------------------------------------------------------------------------------------- */
+//static inline void push(const Vertex u, VertexQueue & Q) {
+//    if (LLVM_UNLIKELY(Q.full())) {
+//        Q.set_capacity(Q.capacity() * 2);
+//    }
+//    Q.push_back(u);
+//    assert (Q.back() == u);
+//}
 
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief pop
- ** ------------------------------------------------------------------------------------------------------------- */
-static inline Vertex pop(VertexQueue & Q) {
-    assert (!Q.empty() && "Popping an empty vertex queue");
-    const Vertex u = Q.front();
-    Q.pop_front();
-    return u;
-}
+///** ------------------------------------------------------------------------------------------------------------- *
+// * @brief pop
+// ** ------------------------------------------------------------------------------------------------------------- */
+//static inline Vertex pop(VertexQueue & Q) {
+//    assert (!Q.empty() && "Popping an empty vertex queue");
+//    const Vertex u = Q.front();
+//    Q.pop_front();
+//    return u;
+//}
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getVertex
  ** ------------------------------------------------------------------------------------------------------------- */
 template<typename ValueType, typename GraphType, typename MapType>
 static inline Vertex getVertex(ValueType value, GraphType & G, MapType & M) {
+    assert (value);
     const auto f = M.find(value);
     if (f != M.end()) {
         return f->second;
@@ -211,6 +216,9 @@ static void printGraph(PabloBlock & block, const Graph & G, const std::string na
     raw_os_ostream out(std::cerr);
     out << "digraph " << name << " {\n";
     for (auto u : make_iterator_range(vertices(G))) {
+        if (in_degree(u, G) == 0 && out_degree(u, G) == 0) {
+            continue;
+        }
         out << "v" << u << " [label=\"";
         PabloAST * expr = G[u];
         if (isa<Statement>(expr)) {
@@ -329,13 +337,13 @@ static void printGraph(PabloBlock & block, const SubgraphType & S, const Graph &
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void BooleanReassociationPass::processScope(PabloBlock & block, std::vector<Statement *> && terminals) {
     Graph G;
-    summarizeAST(block, terminals, G);
-
-    printGraph(block, G, "G0");
-
+    summarizeAST(block, G);
     redistributeAST(block, G);
+    printGraph(block, G, "G");
 
-    printGraph(block, G, "G1");
+
+
+
 
     circular_buffer<Vertex> Q(num_vertices(G));
     topological_sort(G, std::front_inserter(Q));
@@ -346,26 +354,24 @@ inline void BooleanReassociationPass::processScope(PabloBlock & block, std::vect
     while (!Q.empty()) {
         const Vertex u = Q.front();
         Q.pop_front();
-        PabloAST * expr = G[u];
-        if (LLVM_LIKELY(inCurrentBlock(expr, block))) {
-            switch (expr->getClassTypeId()) {
-                case TypeId::And:
-                case TypeId::Or:
-                case TypeId::Xor:
-                    if (LLVM_UNLIKELY(in_degree(u, G) < 2)) {
-                        std::string tmp;
-                        raw_string_ostream str(tmp);
-                        PabloPrinter::print(cast<Statement>(expr), "Unexpected error: ", str);
-                        str << " only had " << in_degree(u, G) << " nodes!";
-                        throw std::runtime_error(str.str());
-                    }
-                    nodes.set_capacity(in_degree(u, G));
-                    for (auto e : make_iterator_range(in_edges(u, G))) {
-                        nodes.push_back(G[source(e, G)]);
-                    }
-                    expr = createTree(block, expr->getClassTypeId(), nodes);
-                default:
-                    block.insert(cast<Statement>(expr));
+        if (LLVM_LIKELY(in_degree(u, G) != 0 || out_degree(u, G) != 0)) {
+            PabloAST * expr = G[u];
+            if (LLVM_LIKELY(inCurrentBlock(expr, block))) {
+                switch (expr->getClassTypeId()) {
+                    case TypeId::And:
+                    case TypeId::Or:
+                case TypeId::Xor: {
+                            nodes.set_capacity(in_degree(u, G));
+                            for (auto e : make_iterator_range(in_edges(u, G))) {
+                                nodes.push_back(G[source(e, G)]);
+                            }
+                            PabloAST * replacement = createTree(block, expr->getClassTypeId(), nodes);
+                            cast<Statement>(expr)->replaceWith(replacement, true, true);
+                            expr = replacement;
+                        }
+                    default:
+                        block.insert(cast<Statement>(expr));
+                }
             }
         }
     }
@@ -380,269 +386,394 @@ inline void BooleanReassociationPass::processScope(PabloBlock & block, std::vect
  * of AND, OR or XOR functions are "flattened" (i.e., allowed to have any number of inputs.) This allows us to
  * reassociate them in the most efficient way possible.
  ** ------------------------------------------------------------------------------------------------------------- */
-void BooleanReassociationPass::summarizeAST(PabloBlock & block, std::vector<Statement *> terminals, Graph & G) const {
+void BooleanReassociationPass::summarizeAST(PabloBlock & block, Graph & G) const {
 
-    VertexQueue Q(128);
-    EdgeQueue E;
     Map M;
 
-    for (;;) {
-
-        Graph Gk;
-        Map Mk;
-
-        // Generate a graph depicting the relationships between the terminals. If the original terminals
-        // cannot be optimized with this algorithm bypass them in favour of their operands. If those cannot
-        // be optimized, they'll be left as the initial terminals for the next "layer" of the AST.
-
-        for (Statement * term : terminals) {
-            if (LLVM_LIKELY(Mk.count(term) == 0)) {
-                // add or find this terminal in our global graph
-                Vertex x = getVertex(term, G, M);
-                if (inCurrentBlock(term, block)) {
-                    if (isOptimizable(term)) {
-                        const Vertex u = add_vertex(term, Gk);
-                        Mk.insert(std::make_pair(term, u));
-                        push(u, Q);
-                        continue;
-                    }
-                } else if (isa<Assign>(term) || isa<Next>(term)) {
-                    // If this is an Assign (Next) node whose operand does not originate from the current block
-                    // then check to see if there is an If (While) node that does.
-                    Statement * branch = nullptr;
-                    if (isa<Assign>(term)) {
-                        for (PabloAST * user : term->users()) {
-                            if (isa<If>(user)) {
-                                const If * ifNode = cast<If>(user);
-                                if (inCurrentBlock(ifNode, block)) {
-                                    const auto & defs = ifNode->getDefined();
-                                    if (LLVM_LIKELY(std::find(defs.begin(), defs.end(), cast<Assign>(term)) != defs.end())) {
-                                        branch = cast<Statement>(user);
-                                        break;
-                                    }
-                                }
-                            }
+    // Compute the base def-use graph ...
+    for (Statement * stmt : block) {
+        const Vertex u = getVertex(stmt, G, M);
+        for (unsigned i = 0; i != stmt->getNumOperands(); ++i) {
+            PabloAST * const op = stmt->getOperand(i);
+            if (LLVM_UNLIKELY(isa<Integer>(op) || isa<String>(op))) {
+                continue;
+            }
+            add_edge(getVertex(op, G, M), u, G);
+        }
+        if (isa<If>(stmt)) {
+            for (Assign * def : cast<const If>(stmt)->getDefined()) {
+                add_edge(u, getVertex(def, G, M), G);
+            }
+        } else if (isa<While>(stmt)) {
+            for (Next * var : cast<const While>(stmt)->getVariants()) {
+                add_edge(u, getVertex(var, G, M), G);
+            }
+        } else if (isOptimizable(stmt)) {
+            for (PabloAST * user : stmt->users()) {
+                if (LLVM_LIKELY(isa<Statement>(user))) {
+                    PabloBlock * parent = cast<Statement>(user)->getParent();
+                    if (LLVM_UNLIKELY(parent != &block)) {
+                        while (parent->getParent() != &block) {
+                            parent = parent->getParent();
                         }
-                    } else { // if (isa<Next>(term))
-                        for (PabloAST * user : term->users()) {
-                            if (isa<While>(user)) {
-                                const While * whileNode = cast<While>(user);
-                                if (inCurrentBlock(whileNode, block)) {
-                                    const auto & vars = whileNode->getVariants();
-                                    if (LLVM_LIKELY(std::find(vars.begin(), vars.end(), cast<Next>(term)) != vars.end())) {
-                                        branch = cast<Statement>(user);
-                                        break;
-                                    }
-                                }
-                            }
+                        if (LLVM_UNLIKELY(parent == nullptr)) {
+                            throw std::runtime_error("Could not locate nested scope block!");
                         }
-                    }
-
-                    // If we didn't find a branch, then the Assign (Next) node must have come from a preceeding
-                    // block. Just skip it for now.
-                    if (branch == nullptr) {
-                        continue;
-                    }
-
-                    // Otherwise add the branch to G and test its operands rather than the original terminal
-                    const Vertex z = getVertex(branch, G, M);
-                    add_edge(z, x, G);
-                    x = z;
-                    term = branch;
-                }
-
-                for (unsigned i = 0; i != term->getNumOperands(); ++i) {
-                    PabloAST * const op = term->getOperand(i);
-                    if (LLVM_LIKELY(inCurrentBlock(op, block))) {
-                        const Vertex y = getVertex(op, G, M);
-                        add_edge(y, x, G);
-                        if (LLVM_LIKELY(Mk.count(op) == 0)) {
-                            const Vertex v = add_vertex(op, Gk);
-                            Mk.insert(std::make_pair(op, v));
-                            push(v, Q);
+                        const auto f = mResolvedScopes.find(parent);
+                        if (LLVM_UNLIKELY(f == mResolvedScopes.end())) {
+                            throw std::runtime_error("Failed to resolve scope block!");
                         }
+                        add_edge(u, getVertex(f->second, G, M), G);
                     }
                 }
             }
         }
-
-        if (LLVM_UNLIKELY(Q.empty())) {
-            break;
-        }
-
-        for (;;) {
-            const Vertex u = pop(Q);
-            if (isOptimizable(Gk[u])) {
-                Statement * stmt = cast<Statement>(Gk[u]);
-                // If any user of this statement is not in the current block, determine the outermost If/While node
-                // that contains this statement within and add an edge from this statement to it to denote both the
-                // topological ordering necessary and that this statement must be computed.
-                for (PabloAST * user : stmt->users()) {
-                    if (LLVM_LIKELY(isa<Statement>(user))) {
-                        PabloBlock * parent = cast<Statement>(user)->getParent();
-                        if (LLVM_UNLIKELY(parent != &block)) {
-                            while (parent->getParent() != &block) {
-                                parent = parent->getParent();
-                            }
-                            if (LLVM_UNLIKELY(parent == nullptr)) {
-                                throw std::runtime_error("Could not locate nested scope block!");
-                            }
-                            const auto f = mResolvedScopes.find(parent);
-                            if (LLVM_UNLIKELY(f == mResolvedScopes.end())) {
-                                throw std::runtime_error("Failed to resolve scope block!");
-                            }
-                            add_edge(u, getVertex(f->second, Gk, Mk), Gk);
-                        }
-                    }
-                }
-                // Scan through the use-def chains to locate any chains of rearrangable expressions and their inputs
-                for (unsigned i = 0; i != 2; ++i) {
-                    PabloAST * op = stmt->getOperand(i);
-                    auto f = Mk.find(op);
-                    if (f == Mk.end()) {
-                        const Vertex v = add_vertex(op, Gk);
-                        f = Mk.insert(std::make_pair(op, v)).first;
-                        if (op->getClassTypeId() == stmt->getClassTypeId() && inCurrentBlock(cast<Statement>(op), block)) {
-                            push(v, Q);
-                        }
-                    }
-                    add_edge(f->second, u, Gk);
-                }
-            }
-            if (Q.empty()) {
-                break;
-            }
-        }
-
-        // Generate a topological ordering for G; if one of our terminals happens to also be a partial computation of
-        // another terminal, we need to make sure we compute it as an independent subexpression.
-        std::vector<unsigned> ordering;
-        ordering.reserve(num_vertices(Gk));
-        topological_sort(Gk, std::back_inserter(ordering));
-        std::vector<unsigned> component(num_vertices(Gk));
-
-        for (;;) {
-
-            // Mark which computation component these vertices are in based on their topological (occurence) order.
-            unsigned components = 0;
-            for (auto u : ordering) {
-                unsigned id = 0;
-                // If this is a sink in G, it is the root of a new component.
-                if (out_degree(u, Gk) == 0) {
-                    id = ++components;
-                } else { // otherwise it belongs to the outermost component.
-                    for (auto e : make_iterator_range(out_edges(u, Gk))) {
-                        id = std::max(id, component[target(e, Gk)]);
-                    }
-                }
-                assert (id && "Topological ordering failed!");
-                component[u] = id;
-            }
-
-            // Cut the graph wherever a computation crosses a component or whenever we need to cut the graph because
-            // the instructions corresponding to the pair of nodes differs.
-            graph_traits<Graph>::edge_iterator ei, ei_end;
-            for (std::tie(ei, ei_end) = edges(Gk); ei != ei_end; ) {
-                const Graph::edge_descriptor e = *ei++;
-                const Vertex u = source(e, Gk);
-                const Vertex v = target(e, Gk);
-                if (LLVM_UNLIKELY(isCutNecessary(u, v, Gk, component))) {
-                    E.push(std::make_pair(u, v));
-                    remove_edge(u, v, Gk);
-                }
-            }
-
-            // If no cuts are necessary, we're done.
-            if (E.empty()) {
-                break;
-            }
-
-            for (;;) {
-
-                Vertex u, v;
-                std::tie(u, v) = E.front(); E.pop();
-
-                // The vertex belonging to a component with a greater number must come "earlier"
-                // in the program. By replicating it, this ensures it's computed as an output of
-                // one component and used as an input of another.
-                if (component[u] < component[v]) {
-                    std::swap(u, v);
-                }
-
-                // Replicate u and fix the ordering and component vectors to reflect the change in Gk.
-                Vertex w = add_vertex(Gk[u], Gk);
-                ordering.insert(std::find(ordering.begin(), ordering.end(), u), w);
-                assert (component.size() == w);
-                component.push_back(component[v]);
-                add_edge(w, v, Gk);
-
-                // However, after we do so, we need to make sure the original source vertex will be a
-                // sink in Gk unless it is also an input variable (in which case we'd simply end up with
-                // extraneous isolated vertex. Otherwise, we need to make further cuts and replications.
-                if (in_degree(u, Gk) != 0) {
-                    for (auto e : make_iterator_range(out_edges(u, Gk))) {
-                        E.push(std::make_pair(source(e, Gk), target(e, Gk)));
-                    }
-                    clear_out_edges(u, Gk);
-                }
-
-                if (E.empty()) {
-                    break;
-                }
-            }
-        }
-
-        // Scan through the graph so that we process the outermost expressions first
-        for (const Vertex u : ordering) {
-            if (LLVM_UNLIKELY(out_degree(u, Gk) == 0)) {
-                // Create a vertex marking the output statement we may end up replacing
-                // and collect the set of source variables in the component
-                const Vertex x = getVertex(Gk[u], G, M);
-                if (LLVM_LIKELY(in_degree(u, Gk) > 0)) {
-                    flat_set<PabloAST *> vars;
-                    flat_set<Vertex> visited;
-                    for (Vertex v = u;;) {
-                        if (in_degree(v, Gk) == 0) {
-                            vars.insert(Gk[v]);
-                        } else {
-                            for (auto e : make_iterator_range(in_edges(v, Gk))) {
-                                const Vertex w = source(e, Gk);
-                                if (LLVM_LIKELY(visited.insert(w).second)) {
-                                    push(w, Q);
-                                }
-                            }
-                        }
-                        if (Q.empty()) {
-                            break;
-                        }
-                        v = pop(Q);
-                    }
-                    for (PabloAST * var : vars) {
-                        add_edge(getVertex(var, G, M), x, G);
-                    }
-                }
-            }
-        }
-
-        // Determine the source variables of the next "layer" of the AST
-        flat_set<Statement *> nextSet;
-        for (auto u : ordering) {
-            if (LLVM_UNLIKELY(in_degree(u, Gk) == 0 && isa<Statement>(Gk[u]))) {
-                nextSet.insert(cast<Statement>(Gk[u]));
-            } else if (LLVM_UNLIKELY(out_degree(u, Gk) == 0 && isa<Statement>(Gk[u]))) {
-                // some input will also be the output of some subgraph of Gk whenever we cut and
-                // replicated a vertex. We don't need to reevaluate it as part of the next layer.
-                nextSet.erase(cast<Statement>(Gk[u]));
-            }
-        }
-
-        if (LLVM_UNLIKELY(nextSet.empty())) {
-            break;
-        }
-
-        terminals.assign(nextSet.begin(), nextSet.end());
     }
+
+    std::vector<Vertex> ordering;
+    ordering.reserve(num_vertices(G));
+    topological_sort(G, std::back_inserter(ordering));
+
+    for (auto i = ordering.rbegin(); i != ordering.rend(); ++i) {
+        const Vertex u = *i;
+        if (isOptimizable(G[u])) {
+            std::vector<Vertex> removable;
+            for (auto e : make_iterator_range(in_edges(u, G))) {
+                const Vertex v = source(e, G);
+                if (out_degree(v, G) == 1 && in_degree(v, G) != 0 && G[u]->getClassTypeId() == G[v]->getClassTypeId()) {
+                    removable.push_back(v);
+                    for (auto e : make_iterator_range(in_edges(v, G))) {
+                        add_edge(source(e, G), u, G);
+                    }
+                }
+            }
+            for (auto v : removable) {
+                clear_vertex(v, G);
+            }
+        }
+    }
+
 }
+
+
+///** ------------------------------------------------------------------------------------------------------------- *
+// * @brief summarizeAST
+// *
+// * This function scans through a basic block (starting by its terminals) and computes a DAG in which any sequences
+// * of AND, OR or XOR functions are "flattened" (i.e., allowed to have any number of inputs.) This allows us to
+// * reassociate them in the most efficient way possible.
+// ** ------------------------------------------------------------------------------------------------------------- */
+//void BooleanReassociationPass::summarizeAST(PabloBlock & block, std::vector<Statement *> terminals, Graph & G) const {
+
+//    VertexQueue Q(128);
+//    EdgeQueue E;
+//    Map M;
+
+
+
+//    raw_os_ostream out(std::cerr);
+
+//    out << "================================================================\n";
+
+//    for (;;) {
+
+
+//        Graph Gk;
+//        Map Mk;
+
+//        // Generate a graph depicting the relationships between the terminals. If the original terminals
+//        // cannot be optimized with this algorithm bypass them in favour of their operands. If those cannot
+//        // be optimized, they'll be left as the initial terminals for the next "layer" of the AST.
+
+//        for (Statement * term : terminals) {
+//            if (LLVM_LIKELY(Mk.count(term) == 0)) {
+//                // add or find this terminal in our global graph
+//                Vertex x = getVertex(term, G, M);
+
+//                PabloPrinter::print(term, "term: ", out);
+//                out << '\n';
+
+
+//                if (inCurrentBlock(term, block)) {
+//                    if (isOptimizable(term)) {
+//                        const Vertex u = add_vertex(term, Gk);
+//                        Mk.insert(std::make_pair(term, u));
+//                        push(u, Q);
+//                        continue;
+//                    }
+//                } else if (isa<Assign>(term) || isa<Next>(term)) {
+//                    // If this is an Assign (Next) node whose operand does not originate from the current block
+//                    // then check to see if there is an If (While) node that does.
+//                    Statement * branch = nullptr;
+//                    if (isa<Assign>(term)) {
+//                        for (PabloAST * user : term->users()) {
+//                            if (isa<If>(user)) {
+//                                const If * ifNode = cast<If>(user);
+//                                if (inCurrentBlock(ifNode, block)) {
+//                                    const auto & defs = ifNode->getDefined();
+//                                    if (LLVM_LIKELY(std::find(defs.begin(), defs.end(), cast<Assign>(term)) != defs.end())) {
+//                                        branch = cast<Statement>(user);
+//                                        break;
+//                                    }
+//                                }
+//                            }
+//                        }
+//                    } else { // if (isa<Next>(term))
+//                        for (PabloAST * user : term->users()) {
+//                            if (isa<While>(user)) {
+//                                const While * whileNode = cast<While>(user);
+//                                if (inCurrentBlock(whileNode, block)) {
+//                                    const auto & vars = whileNode->getVariants();
+//                                    if (LLVM_LIKELY(std::find(vars.begin(), vars.end(), cast<Next>(term)) != vars.end())) {
+//                                        branch = cast<Statement>(user);
+//                                        break;
+//                                    }
+//                                }
+//                            }
+//                        }
+//                    }
+
+//                    // If we didn't find a branch, then the Assign (Next) node must have come from a preceeding
+//                    // block. Just skip it for now.
+//                    if (branch == nullptr) {
+//                        continue;
+//                    }
+
+//                    // Otherwise add the branch to G and test its operands rather than the original terminal
+//                    const Vertex z = getVertex(branch, G, M);
+//                    add_edge(z, x, G);
+//                    x = z;
+//                    term = branch;
+
+//                }
+
+//                for (unsigned i = 0; i != term->getNumOperands(); ++i) {
+//                    PabloAST * const op = term->getOperand(i);
+//                    if (LLVM_LIKELY(inCurrentBlock(op, block))) {
+//                        const Vertex y = getVertex(op, G, M);
+//                        add_edge(y, x, G);
+
+//                        if (LLVM_LIKELY(Mk.count(op) == 0)) {
+//                            const Vertex v = add_vertex(op, Gk);
+//                            Mk.insert(std::make_pair(op, v));
+//                            push(v, Q);
+//                        }
+//                    }
+//                }
+//            }
+//        }
+
+//        out << "----------------------------------------------------------------\n";
+//        out.flush();
+
+//        if (LLVM_UNLIKELY(Q.empty())) {
+//            break;
+//        }
+
+//        for (;;) {
+//            const Vertex u = pop(Q);
+//            if (isOptimizable(Gk[u])) {
+//                Statement * stmt = cast<Statement>(Gk[u]);
+//                // If any user of this statement is not in the current block, determine the outermost If/While node
+//                // that contains this statement within and add an edge from this statement to it to denote both the
+//                // topological ordering necessary and that this statement must be computed.
+//                for (PabloAST * user : stmt->users()) {
+//                    if (LLVM_LIKELY(isa<Statement>(user))) {
+//                        PabloBlock * parent = cast<Statement>(user)->getParent();
+//                        if (LLVM_UNLIKELY(parent != &block)) {
+//                            while (parent->getParent() != &block) {
+//                                parent = parent->getParent();
+//                            }
+//                            if (LLVM_UNLIKELY(parent == nullptr)) {
+//                                throw std::runtime_error("Could not locate nested scope block!");
+//                            }
+//                            const auto f = mResolvedScopes.find(parent);
+//                            if (LLVM_UNLIKELY(f == mResolvedScopes.end())) {
+//                                throw std::runtime_error("Failed to resolve scope block!");
+//                            }
+//                            add_edge(u, getVertex(f->second, Gk, Mk), Gk);
+//                        }
+//                    }
+//                }
+//                // Scan through the use-def chains to locate any chains of rearrangable expressions and their inputs
+//                for (unsigned i = 0; i != 2; ++i) {
+//                    PabloAST * op = stmt->getOperand(i);
+//                    auto f = Mk.find(op);
+//                    if (f == Mk.end()) {
+//                        const Vertex v = add_vertex(op, Gk);
+//                        f = Mk.insert(std::make_pair(op, v)).first;
+//                        if (op->getClassTypeId() == stmt->getClassTypeId() && inCurrentBlock(cast<Statement>(op), block)) {
+//                            push(v, Q);
+//                        }
+//                    }
+//                    add_edge(f->second, u, Gk);
+//                }
+//            }
+//            if (Q.empty()) {
+//                break;
+//            }
+//        }
+
+//        printGraph(block, Gk, "Gk1");
+
+//        // Generate a topological ordering for G; if one of our terminals happens to also be a partial computation of
+//        // another terminal, we need to make sure we compute it as an independent subexpression.
+//        std::vector<unsigned> ordering;
+//        ordering.reserve(num_vertices(Gk));
+//        topological_sort(Gk, std::back_inserter(ordering));
+//        std::vector<unsigned> component(num_vertices(Gk), 0);
+
+//        // Mark which computation component each terminal is in based on their topological (occurence) order.
+//        unsigned components = 0;
+//        std::sort(terminals.begin(), terminals.end());
+//        for (auto u : ordering) {
+//            unsigned id = 0;
+//            // If this is a sink in G, it is the root of a new component.
+//            if (out_degree(u, Gk) == 0 || std::binary_search(terminals.begin(), terminals.end(), Gk[u])) {
+//                id = ++components;
+//            } else { // otherwise it belongs to the outermost component.
+//                for (auto e : make_iterator_range(out_edges(u, Gk))) {
+//                    assert (component[target(e, Gk)] != 0);
+//                    id = std::max(id, component[target(e, Gk)]);
+//                }
+//            }
+//            assert (id && "Topological ordering failed!");
+//            component[u] = id;
+//        }
+
+//        for (;;) {
+
+//            // Cut the graph wherever a computation crosses a component or whenever we need to cut the graph because
+//            // the instructions corresponding to the pair of nodes differs.
+//            graph_traits<Graph>::edge_iterator ei, ei_end;
+//            for (std::tie(ei, ei_end) = edges(Gk); ei != ei_end; ) {
+//                const Graph::edge_descriptor e = *ei++;
+//                const Vertex u = source(e, Gk);
+//                const Vertex v = target(e, Gk);
+//                if (LLVM_UNLIKELY(isCutNecessary(u, v, Gk, component))) {
+//                    E.push(std::make_pair(u, v));
+//                    remove_edge(u, v, Gk);
+//                }
+//            }
+
+//            // If no cuts are necessary, we're done.
+//            if (E.empty()) {
+//                break;
+//            }
+
+//            for (;;) {
+
+//                Vertex u, v;
+//                std::tie(u, v) = E.front(); E.pop();
+
+//                // The vertex belonging to a component with a greater number must come "earlier"
+//                // in the program. By replicating it, this ensures it's computed as an output of
+//                // one component and used as an input of another.
+//                if (component[u] < component[v]) {
+//                    std::swap(u, v);
+//                }
+
+//                // Replicate u and fix the ordering and component vectors to reflect the change in Gk.
+//                const Vertex w = add_vertex(Gk[u], Gk);
+//                ordering.insert(std::find(ordering.begin(), ordering.end(), u), w);
+//                assert (component.size() == w);
+//                component.push_back(component[v]);
+//                add_edge(w, v, Gk);
+
+//                // However, after we do so, we need to make sure the original source vertex will be a
+//                // sink in Gk unless it is also an input variable (in which case we'd simply end up with
+//                // extraneous isolated vertex. Otherwise, we need to make further cuts and replications.
+//                if (in_degree(u, Gk) != 0) {
+//                    for (auto e : make_iterator_range(out_edges(u, Gk))) {
+//                        E.push(std::make_pair(source(e, Gk), target(e, Gk)));
+//                    }
+//                    clear_out_edges(u, Gk);
+//                }
+
+//                if (E.empty()) {
+//                    break;
+//                }
+//            }
+
+//            // Mark which computation component each sink is in based on their topological (occurence) order.
+//            unsigned components = 0;
+//            #ifndef NDEBUG
+//            std::fill(component.begin(), component.end(), 0);
+//            #endif
+//            for (auto u : ordering) {
+//                unsigned id = 0;
+//                // If this is a sink in G, it is the root of a new component.
+//                if (out_degree(u, Gk) == 0) {
+//                    id = ++components;
+//                } else { // otherwise it belongs to the outermost component.
+//                    for (auto e : make_iterator_range(out_edges(u, Gk))) {
+//                        assert (component[target(e, Gk)] != 0);
+//                        id = std::max(id, component[target(e, Gk)]);
+//                    }
+//                }
+//                assert (id && "Topological ordering failed!");
+//                component[u] = id;
+//            }
+//        }
+
+//        printGraph(block, Gk, "Gk2");
+
+//        // Scan through the graph so that we process the outermost expressions first
+//        for (const Vertex u : ordering) {
+//            if (LLVM_UNLIKELY(out_degree(u, Gk) == 0)) {
+//                // Create a vertex marking the output statement we may end up replacing
+//                // and collect the set of source variables in the component
+//                const Vertex x = getVertex(Gk[u], G, M);
+//                if (LLVM_LIKELY(in_degree(u, Gk) > 0)) {
+//                    flat_set<PabloAST *> vars;
+//                    flat_set<Vertex> visited;
+//                    for (Vertex v = u;;) {
+//                        if (in_degree(v, Gk) == 0) {
+//                            vars.insert(Gk[v]);
+//                        } else {
+//                            for (auto e : make_iterator_range(in_edges(v, Gk))) {
+//                                const Vertex w = source(e, Gk);
+//                                if (LLVM_LIKELY(visited.insert(w).second)) {
+//                                    push(w, Q);
+//                                }
+//                            }
+//                        }
+//                        if (Q.empty()) {
+//                            break;
+//                        }
+//                        v = pop(Q);
+//                    }
+//                    for (PabloAST * var : vars) {
+//                        add_edge(getVertex(var, G, M), x, G);
+//                    }
+//                }
+//            }
+//        }
+
+//        // Determine the source variables of the next "layer" of the AST
+//        flat_set<Statement *> nextSet;
+//        for (auto u : ordering) {
+//            if (LLVM_UNLIKELY(in_degree(u, Gk) == 0 && isa<Statement>(Gk[u]))) {
+//                nextSet.insert(cast<Statement>(Gk[u]));
+//            } else if (LLVM_UNLIKELY(out_degree(u, Gk) == 0 && isa<Statement>(Gk[u]))) {
+//                // some input will also be the output of some subgraph of Gk whenever we cut and
+//                // replicated a vertex. We don't need to reevaluate it as part of the next layer.
+//                nextSet.erase(cast<Statement>(Gk[u]));
+//            }
+//        }
+
+//        if (LLVM_UNLIKELY(nextSet.empty())) {
+//            break;
+//        }
+
+//        out << "----------------------------------------------------------------\n";
+
+//        terminals.assign(nextSet.begin(), nextSet.end());
+//    }
+
+
+
+//}
 
 using VertexSet = std::vector<Vertex>;
 using VertexSets = std::vector<VertexSet>;
@@ -1027,15 +1158,11 @@ bool BooleanReassociationPass::redistributeAST(PabloBlock & block, Graph & G) co
             break;
         }
 
-        printGraph(block, H, G, "H0");
-
         segmentInto3LevelGraph(H);
-
-        printGraph(block, H, G, "H1");
 
         const VertexSets distributionSets = safeDistributionSets(H);
 
-        printGraph(block, H, G, "H2");
+        printGraph(block, H, G, "H");
 
         // If no sources remain, no bicliques were found that would have a meaningful impact on the AST.
         if (LLVM_UNLIKELY(distributionSets.size() == 0)) {
@@ -1086,6 +1213,11 @@ bool BooleanReassociationPass::redistributeAST(PabloBlock & block, Graph & G) co
             }
             for (const Vertex t : sinks) {
                 add_edge(y, H[t], G);
+            }
+            for (const Vertex u : intermediary) {
+                if (LLVM_UNLIKELY(in_degree(H[u], G) == 0)) {
+                    clear_out_edges(H[u], G);
+                }
             }
         }
         anyChanges = true;

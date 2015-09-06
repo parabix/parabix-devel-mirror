@@ -21,7 +21,7 @@ protected:
     void processScopes(PabloFunction & function);
     void processScopes(PabloBlock & block, std::vector<Statement *> && terminals);
     void processScope(PabloBlock & block, std::vector<Statement *> && terminals);
-    void summarizeAST(PabloBlock & block, std::vector<Statement *> terminals, Graph & G) const;
+    void summarizeAST(PabloBlock & block, Graph & G) const;
     bool redistributeAST(PabloBlock & block, Graph & G) const;
 private:
     boost::container::flat_map<PabloBlock *, Statement *> mResolvedScopes;
