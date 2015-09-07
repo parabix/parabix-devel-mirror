@@ -3,7 +3,7 @@
 #include <pablo/expression_map.hpp>
 #include <pablo/function.h>
 #include <pablo/printer_pablos.h>
-
+#include <iostream>
 
 
 namespace pablo {
@@ -96,21 +96,43 @@ void Simplifier::eliminateRedundantCode(PabloBlock & block, ExpressionTable * pr
                 stmt = stmt->eraseFromParent(true);
                 continue;
             }
-            // Process the If body
-            eliminateRedundantCode(cast<If>(stmt)->getBody(), &encountered);            
-            // If the defined variable is actually equivalent to the condition, promote the assignment out of If
-            // scope and remove it from the list of defined variables. Otherwise, replace any defined variable that
-            // is assigned Zero with a Zero object and remove it from the defined variable list.
+
+            bool evaluate = true;
             If::DefinedVars & defs = ifNode->getDefined();
-            for (auto itr = defs.begin(); itr != defs.end(); ) {
-                Assign * def = *itr;
-                if (LLVM_UNLIKELY((ifNode->getCondition() == def->getExpression()) || isa<Zeroes>(def->getExpression()))) {
-                    itr = defs.erase(itr);
-                    def->replaceWith(def->getExpression(), false, true);
-                    continue;
+            while (evaluate) {
+                evaluate = false;
+                // Process the If body
+                eliminateRedundantCode(cast<If>(stmt)->getBody(), &encountered);
+                // Now test whether all of the defined variables are necessary
+                for (auto itr = defs.begin(); itr != defs.end(); ) {
+                    Assign * def = *itr;
+                    // If this value isn't used outside of this scope then there is no reason to allow it to escape it.
+                    bool unusedOutsideOfNestedScope = true;
+                    for (PabloAST * user : def->users()) {
+                        if (user != ifNode) {
+                            PabloBlock * parent = cast<Statement>(user)->getParent();
+                            while (parent && parent != def->getParent()) {
+                                parent = parent->getParent();
+                            }
+                            if (parent == nullptr) {
+                                unusedOutsideOfNestedScope = false;
+                                break;
+                            }
+                        }
+                    }
+                    // If the defined variable is actually equivalent to the condition, promote the assignment out of If
+                    // scope and remove it from the list of defined variables. Additionally, replace any defined variable
+                    // assigned Zero or One with the appropriate constant and remove it from the defined variable list.
+                    if (LLVM_UNLIKELY(unusedOutsideOfNestedScope || (ifNode->getCondition() == def->getExpression()) || isa<Zeroes>(def->getExpression()) || isa<Ones>(def->getExpression()))) {
+                        itr = defs.erase(itr);
+                        def->replaceWith(def->getExpression(), unusedOutsideOfNestedScope, true);
+                        evaluate = true;
+                        continue;
+                    }
+                    ++itr;
                 }
-                ++itr;
             }
+
             // If we ended up removing all of the defined variables, delete the If node.
             if (LLVM_UNLIKELY(defs.empty())) {
                 stmt = stmt->eraseFromParent(true);
