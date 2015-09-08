@@ -31,9 +31,19 @@ using TypeId = PabloAST::ClassTypeId;
 bool BooleanReassociationPass::optimize(PabloFunction & function) {
     BooleanReassociationPass brp;
 
+    raw_os_ostream out(std::cerr);
+
+    out << "BEFORE:\n";
+    PabloPrinter::print(function.getEntryBlock().statements(), out);
+    out << "----------------------------------------------------------\n";
+    out.flush();
+
     brp.resolveScopes(function);
     brp.processScopes(function);
     Simplifier::optimize(function);
+
+    out << "AFTER:\n";
+    PabloPrinter::print(function.getEntryBlock().statements(), out);
 
     return true;
 }
@@ -89,21 +99,6 @@ void BooleanReassociationPass::processScopes(PabloBlock & block, std::vector<Sta
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief is_power_of_2
- * @param n an integer
- ** ------------------------------------------------------------------------------------------------------------- */
-static inline bool is_power_of_2(const size_t n) {
-    return ((n & (n - 1)) == 0);
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief log2_plus_one
- ** ------------------------------------------------------------------------------------------------------------- */
-static inline size_t ceil_log2(const size_t n) {
-    return std::log2<size_t>(n) + (is_power_of_2(n) ? 0 : 1);
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
  * @brief isOptimizable
  *
  * And, Or and Xor instructions are all associative, commutative and distributive operations. Thus we can
@@ -132,47 +127,11 @@ static inline bool inCurrentBlock(const PabloAST * expr, const PabloBlock & bloc
     return isa<Statement>(expr) && inCurrentBlock(cast<Statement>(expr), block);
 }
 
-///** ------------------------------------------------------------------------------------------------------------- *
-// * @brief isCutNecessary
-// ** ------------------------------------------------------------------------------------------------------------- */
-//static inline bool isCutNecessary(const Vertex u, const Vertex v, const Graph & G, const std::vector<unsigned> & component) {
-//    // Either this edge crosses a component boundary or the operations performed by the vertices differs, we need to cut
-//    // the graph here and generate two partial equations.
-//    if (LLVM_UNLIKELY(component[u] != component[v])) {
-//        return true;
-//    } else if (LLVM_UNLIKELY((in_degree(u, G) != 0) && (G[u]->getClassTypeId() != G[v]->getClassTypeId()))) {
-//        return true;
-//    }
-//    return false;
-//}
-
-///** ------------------------------------------------------------------------------------------------------------- *
-// * @brief push
-// ** ------------------------------------------------------------------------------------------------------------- */
-//static inline void push(const Vertex u, VertexQueue & Q) {
-//    if (LLVM_UNLIKELY(Q.full())) {
-//        Q.set_capacity(Q.capacity() * 2);
-//    }
-//    Q.push_back(u);
-//    assert (Q.back() == u);
-//}
-
-///** ------------------------------------------------------------------------------------------------------------- *
-// * @brief pop
-// ** ------------------------------------------------------------------------------------------------------------- */
-//static inline Vertex pop(VertexQueue & Q) {
-//    assert (!Q.empty() && "Popping an empty vertex queue");
-//    const Vertex u = Q.front();
-//    Q.pop_front();
-//    return u;
-//}
-
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getVertex
  ** ------------------------------------------------------------------------------------------------------------- */
 template<typename ValueType, typename GraphType, typename MapType>
-static inline Vertex getVertex(ValueType value, GraphType & G, MapType & M) {
-    assert (value);
+static inline Vertex getVertex(const ValueType value, GraphType & G, MapType & M) {
     const auto f = M.find(value);
     if (f != M.end()) {
         return f->second;
@@ -338,16 +297,7 @@ inline void BooleanReassociationPass::processScope(PabloBlock & block, std::vect
     Graph G;
 
     summarizeAST(block, G);
-//    redistributeAST(block, G);
-
-
-    raw_os_ostream out(std::cerr);
-
-    out << "BEFORE:\n";
-    PabloPrinter::print(block.statements(), out);
-    out << "----------------------------------------------------------\n";
-    out.flush();
-
+    redistributeAST(block, G);
 
     circular_buffer<Vertex> Q(num_vertices(G));
     topological_sort(G, std::front_inserter(Q));
@@ -362,8 +312,7 @@ inline void BooleanReassociationPass::processScope(PabloBlock & block, std::vect
         if (LLVM_LIKELY(inCurrentBlock(expr, block))) {
             if (isOptimizable(expr)) {
                 if (in_degree(u, G) == 0) {
-                    PabloPrinter::print(cast<Statement>(expr), " erasing ", out); out << '\n';
-                    cast<Statement>(expr)->eraseFromParent(true);
+                    cast<Statement>(expr)->eraseFromParent(false);
                     continue;
                 } else {
                     if (LLVM_UNLIKELY(nodes.capacity() < in_degree(u, G))) {
@@ -375,27 +324,14 @@ inline void BooleanReassociationPass::processScope(PabloBlock & block, std::vect
                     assert (nodes.size() == in_degree(u, G));
                     PabloAST * replacement = createTree(block, expr->getClassTypeId(), nodes);
 
-                    PabloPrinter::print(cast<Statement>(expr), " replacing ", out);
-                    PabloPrinter::print(cast<Statement>(replacement), " with ", out);
-                    out << '\n';
-
-                    cast<Statement>(expr)->replaceWith(replacement, true, true);
+                    cast<Statement>(expr)->replaceWith(replacement, true, false);
                     expr = replacement;
+                    G[u] = replacement;
                 }
             }
-
-            PabloPrinter::print(cast<Statement>(expr), "    -> ", out);
-            out << '\n';
-
             block.insert(cast<Statement>(expr));
         }
     }
-
-    out << "----------------------------------------------------------\n";
-    out << "AFTER:\n";
-    PabloPrinter::print(block.statements(), out);
-    out.flush();
-    out << "==========================================================\n";
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -423,16 +359,16 @@ void BooleanReassociationPass::summarizeAST(PabloBlock & block, Graph & G) const
             for (Assign * def : cast<const If>(stmt)->getDefined()) {
                 const Vertex v = getVertex(def, G, M);
                 add_edge(u, v, G);
-                annotateUseDefs(v, def, block, G, M);
+                resolveUsages(v, def, block, G, M);
             }
         } else if (isa<While>(stmt)) {
             for (Next * var : cast<const While>(stmt)->getVariants()) {
                 const Vertex v = getVertex(var, G, M);
                 add_edge(u, v, G);
-                annotateUseDefs(v, var, block, G, M);
+                resolveUsages(v, var, block, G, M);
             }
         } else {
-            annotateUseDefs(u, stmt, block, G, M);
+            resolveUsages(u, stmt, block, G, M);
         }
     }
 
@@ -458,34 +394,18 @@ void BooleanReassociationPass::summarizeAST(PabloBlock & block, Graph & G) const
             }
         }
     }
-
-    printGraph(block, G, "G");
-
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief annotateUseDefs
+ * @brief resolveUsages
  ** ------------------------------------------------------------------------------------------------------------- */
-void BooleanReassociationPass::annotateUseDefs(const Vertex u, PabloAST * expr, PabloBlock & block, Graph & G, Map & M) const {
+void BooleanReassociationPass::resolveUsages(const Vertex u, PabloAST * expr, PabloBlock & block, Graph & G, Map & M) const {
     for (PabloAST * user : expr->users()) {
         assert (user);
-        if (LLVM_UNLIKELY(user == expr)) {
-            continue;
-        }
-        if (LLVM_LIKELY(isa<Statement>(user))) {
+        if (LLVM_LIKELY(user != expr && isa<Statement>(user))) {
             PabloBlock * parent = cast<Statement>(user)->getParent();
             assert (parent);
             if (LLVM_UNLIKELY(parent != &block)) {
-                #ifndef NDEBUG
-                bool found = false;
-                for (Statement * test : *parent) {
-                    if (test == user) {
-                        found = true;
-                        break;
-                    }
-                }
-                assert ("Could not locate user in its recorded scope block!" && found);
-                #endif
                 for (;;) {
                     if (LLVM_UNLIKELY(parent == nullptr)) {
                         assert (isa<Assign>(expr) || isa<Next>(expr));
@@ -888,11 +808,11 @@ bool BooleanReassociationPass::redistributeAST(PabloBlock & block, Graph & G) co
             break;
         }
 
-        segmentInto3LevelGraph(H);
+        printGraph(block, H, G, "H1");
 
-        const VertexSets distributionSets = safeDistributionSets(H);
+        const VertexSets distributionSets = safeDistributionSets(segmentInto3LevelGraph(H));
 
-        printGraph(block, H, G, "H");
+        printGraph(block, H, G, "H2");
 
         // If no sources remain, no bicliques were found that would have a meaningful impact on the AST.
         if (LLVM_UNLIKELY(distributionSets.size() == 0)) {

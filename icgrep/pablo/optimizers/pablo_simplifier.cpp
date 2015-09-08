@@ -3,8 +3,8 @@
 #include <pablo/expression_map.hpp>
 #include <pablo/function.h>
 #include <pablo/printer_pablos.h>
+#include <unordered_map>
 #include <iostream>
-
 
 namespace pablo {
 
@@ -330,7 +330,6 @@ void Simplifier::eliminateRedundantComplexStatements(PabloBlock & block) {
     }
     block.setInsertPoint(block.back());
 }
-
 
 Simplifier::Simplifier()
 {

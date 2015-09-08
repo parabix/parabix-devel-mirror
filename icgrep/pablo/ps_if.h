@@ -43,6 +43,7 @@ public:
     inline const DefinedVars & getDefined() const {
         return mDefined;
     }
+    void addDefined(Assign * def);
 protected:
     inline DefinedVars & getDefined() {
         return mDefined;

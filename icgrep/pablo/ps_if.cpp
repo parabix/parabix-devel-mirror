@@ -20,9 +20,9 @@ If::If(PabloAST * expr, const std::initializer_list<Assign *> definedVars, Pablo
     // Assign's value is also dependant on the 'Next' value, the If node is also a user
     // of it.
 
-    for (PabloAST * assign : mDefined) {
-        assign->addUser(this);
-        addUser(assign);
+    for (PabloAST * def : mDefined) {
+        def->addUser(this);
+        addUser(def);
     }
 }
 
@@ -31,11 +31,21 @@ If::If(PabloAST * expr, const std::vector<Assign *> & definedVars, PabloBlock & 
 , mBody(body)
 , mDefined(definedVars.begin(), definedVars.end(), reinterpret_cast<DefinedAllocator &>(mVectorAllocator))
 {
-    for (PabloAST * assign : mDefined) {
-        assign->addUser(this);
-        addUser(assign);
+    for (PabloAST * def : mDefined) {
+        def->addUser(this);
+        addUser(def);
     }
 }
 
+void If::addDefined(Assign * def) {
+    if (LLVM_LIKELY(std::find(mDefined.begin(), mDefined.end(), def) != mDefined.end())) {
+        const auto size = mDefined.size();
+        mDefined.push_back(def);
+        assert (mDefined.size() == size + 1);
+        assert (mDefined.back() == def);
+        def->addUser(this);
+        addUser(def);
+    }
+}
 
 }

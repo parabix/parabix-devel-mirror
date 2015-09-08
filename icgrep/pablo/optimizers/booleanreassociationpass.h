@@ -11,7 +11,7 @@ class BooleanReassociationPass {
 public:
     using Graph = boost::adjacency_list<boost::hash_setS, boost::vecS, boost::bidirectionalS, PabloAST *>;
     using Vertex = Graph::vertex_descriptor;
-    using Map = std::unordered_map<PabloAST *, Vertex>;
+    using Map = std::unordered_map<const PabloAST *, Vertex>;
 
     static bool optimize(PabloFunction & function);
 protected:
@@ -22,7 +22,7 @@ protected:
     void processScopes(PabloBlock & block, std::vector<Statement *> && terminals);
     void processScope(PabloBlock & block, std::vector<Statement *> && terminals);
     void summarizeAST(PabloBlock & block, Graph & G) const;
-    void annotateUseDefs(const Vertex u, PabloAST * expr, PabloBlock & block, Graph & G, Map & M) const;
+    void resolveUsages(const Vertex u, PabloAST * expr, PabloBlock & block, Graph & G, Map & M) const;
     bool redistributeAST(PabloBlock & block, Graph & G) const;
 private:
     boost::container::flat_map<PabloBlock *, Statement *> mResolvedScopes;
