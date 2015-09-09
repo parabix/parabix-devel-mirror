@@ -19,8 +19,8 @@ protected:
     void resolveScopes(PabloFunction & function);
     void resolveScopes(PabloBlock &block);
     void processScopes(PabloFunction & function);
-    void processScopes(PabloBlock & block, std::vector<Statement *> && terminals);
-    void processScope(PabloBlock & block, std::vector<Statement *> && terminals);
+    void processScopes(PabloBlock & block);
+    void processScope(PabloBlock & block);
     void summarizeAST(PabloBlock & block, Graph & G) const;
     void resolveUsages(const Vertex u, PabloAST * expr, PabloBlock & block, Graph & G, Map & M) const;
     bool redistributeAST(PabloBlock & block, Graph & G) const;
