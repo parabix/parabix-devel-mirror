@@ -2,6 +2,7 @@
 #define GRAPHFACADE_HPP
 
 #include <boost/graph/adjacency_list.hpp>
+#include <vector>
 
 template <class Graph, bool transposed = false>
 struct DirectedGraphFacade;
