@@ -9,7 +9,7 @@ namespace pablo {
 
 class BooleanReassociationPass {
 public:
-    using Graph = boost::adjacency_list<boost::hash_setS, boost::vecS, boost::bidirectionalS, PabloAST *>;
+    using Graph = boost::adjacency_list<boost::hash_setS, boost::vecS, boost::bidirectionalS, PabloAST *, PabloAST *>;
     using Vertex = Graph::vertex_descriptor;
     using Map = std::unordered_map<const PabloAST *, Vertex>;
 
@@ -22,7 +22,8 @@ protected:
     void processScopes(PabloFunction & function, PabloBlock & block);
     void processScope(PabloFunction & function, PabloBlock & block);
     void summarizeAST(PabloBlock & block, Graph & G) const;
-    void resolveUsages(const Vertex u, PabloAST * expr, PabloBlock & block, Graph & G, Map & M) const;
+    static bool summarizeGraph(PabloBlock & block, Graph & G);
+    void resolveUsages(const Vertex u, PabloAST * expr, PabloBlock & block, Graph & G, Map & M, Statement * ignoreIfThis = nullptr) const;
     bool redistributeAST(PabloBlock & block, Graph & G) const;
 private:
     boost::container::flat_map<PabloBlock *, Statement *> mResolvedScopes;
