@@ -207,9 +207,10 @@ void PabloPrinter::print(const PabloAST * expr, llvm::raw_ostream & strm) {
         strm << "while ";
         print(whl->getCondition(), strm);
     } else if (const Statement * stmt = dyn_cast<Statement>(expr)) {
+        assert (stmt->getName());
         strm << stmt->getName();
     } else {
-        strm << "**UNKNOWN Pablo Expression type **\n" << "\n";
+        strm << "???";
     }
 }
 

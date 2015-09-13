@@ -20,19 +20,19 @@ using namespace boost::container;
 
 namespace pablo {
 
+using TypeId = PabloAST::ClassTypeId;
 using Graph = BooleanReassociationPass::Graph;
 using Vertex = Graph::vertex_descriptor;
 using VertexQueue = circular_buffer<Vertex>;
 using Map = BooleanReassociationPass::Map;
 using EdgeQueue = std::queue<std::pair<Vertex, Vertex>>;
-using TypeId = PabloAST::ClassTypeId;
 using DistributionGraph = adjacency_list<hash_setS, vecS, bidirectionalS, Vertex>;
 using DistributionMap = flat_map<Graph::vertex_descriptor, DistributionGraph::vertex_descriptor>;
 using VertexSet = std::vector<Vertex>;
 using VertexSets = std::vector<VertexSet>;
 using Biclique = std::pair<VertexSet, VertexSet>;
 using BicliqueSet = std::vector<Biclique>;
-using DistributionSet = std::tuple<std::vector<Vertex>, std::vector<Vertex>, std::vector<Vertex>>;
+using DistributionSet = std::tuple<VertexSet, VertexSet, VertexSet>;
 using DistributionSets = std::vector<DistributionSet>;
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -82,7 +82,6 @@ inline void add_edge(PabloAST * expr, const Vertex u, const Vertex v, Graph & G)
     G[add_edge(u, v, G).first] = expr;
 }
 
-static unsigned distributionCount = 0;
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief optimize
  ** ------------------------------------------------------------------------------------------------------------- */
@@ -137,14 +136,24 @@ void BooleanReassociationPass::processScopes(PabloFunction & function, PabloBloc
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
+ * @brief inCurrentBlock
+ ** ------------------------------------------------------------------------------------------------------------- */
+static inline bool inCurrentBlock(const Statement * stmt, const PabloBlock & block) {
+    return stmt->getParent() == &block;
+}
+
+static inline bool inCurrentBlock(const PabloAST * expr, const PabloBlock & block) {
+    return expr ? isa<Statement>(expr) && inCurrentBlock(cast<Statement>(expr), block) : true;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
  * @brief isOptimizable
  *
  * And, Or and Xor instructions are all associative, commutative and distributive operations. Thus we can
  * safely rearrange expressions such as "((((a ∨ b) ∨ c) ∨ d) ∨ e) ∨ f" into "((a ∨ b) ∨ (c ∨ d)) ∨ (e ∨ f)".
  ** ------------------------------------------------------------------------------------------------------------- */
-static inline bool isOptimizable(const PabloAST * const expr) {
-    assert (expr);
-    switch (expr->getClassTypeId()) {
+inline bool BooleanReassociationPass::isOptimizable(const VertexData & data) {
+    switch (data.first) {
         case PabloAST::ClassTypeId::And:
         case PabloAST::ClassTypeId::Or:
         case PabloAST::ClassTypeId::Xor:
@@ -154,16 +163,22 @@ static inline bool isOptimizable(const PabloAST * const expr) {
     }
 }
 
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief inCurrentBlock
- ** ------------------------------------------------------------------------------------------------------------- */
-static inline bool inCurrentBlock(const Statement * stmt, const PabloBlock & block) {
-    return stmt->getParent() == &block;
+inline bool isNegated(const BooleanReassociationPass::VertexData & data) {
+    return (data.first == TypeId::Not) && (data.second != nullptr);
 }
 
-static inline bool inCurrentBlock(const PabloAST * expr, const PabloBlock & block) {
-    return isa<Statement>(expr) && inCurrentBlock(cast<Statement>(expr), block);
+inline bool BooleanReassociationPass::isMutable(const VertexData & data, const PabloBlock &) {
+    return (data.first != TypeId::Var);
 }
+
+inline bool BooleanReassociationPass::isNonEscaping(const VertexData & data) {
+    return data.first != TypeId::Assign && data.first != TypeId::Next;
+}
+
+inline bool BooleanReassociationPass::isSameType(const VertexData & data1, const VertexData & data2) {
+    return data1.first == data2.first;
+}
+
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getVertex
@@ -184,23 +199,36 @@ static inline Vertex getVertex(const ValueType value, GraphType & G, MapType & M
  ** ------------------------------------------------------------------------------------------------------------- */
 static void printGraph(const PabloBlock & block, const Graph & G, const std::string name) {
     raw_os_ostream out(std::cerr);
-
-    std::vector<unsigned> component(num_vertices(G));
-    strong_components(G, make_iterator_property_map(component.begin(), get(vertex_index, G)));
-
-    std::vector<Vertex> ordering;
-    ordering.reserve(num_vertices(G));
-    topological_sort(G, std::back_inserter(ordering));
-    std::reverse(ordering.begin(), ordering.end());
-
     out << "digraph " << name << " {\n";
-    for (auto u : ordering) {
+    for (auto u : make_iterator_range(vertices(G))) {
         if (in_degree(u, G) == 0 && out_degree(u, G) == 0) {
             continue;
         }
         out << "v" << u << " [label=\"";
-        PabloAST * expr = G[u];
-        if (isa<Statement>(expr)) {
+        PabloAST * expr;
+        TypeId typeId;
+        std::tie(typeId, expr) = G[u];
+        bool temporary = false;
+        bool error = false;
+        if (expr == nullptr) {
+            temporary = true;
+            out << u << ": ";
+            switch (typeId) {
+                case TypeId::And:
+                    out << "And";
+                    break;
+                case TypeId::Or:
+                    out << "Or";
+                    break;
+                case TypeId::Xor:
+                    out << "Xor";
+                    break;
+                default:
+                    out << "???";
+                    error = true;
+                    break;
+            }
+        } else if (isa<Statement>(expr)) {
             if (LLVM_UNLIKELY(isa<If>(expr))) {
                 out << "If ";
                 PabloPrinter::print(cast<If>(expr)->getOperand(0), out);
@@ -216,17 +244,22 @@ static void printGraph(const PabloBlock & block, const Graph & G, const std::str
             PabloPrinter::print(expr, out);
         }
         out << "\"";
-        if (!inCurrentBlock(expr, block)) {
+        if (BooleanReassociationPass::isMutable(G[u], block) == false) {
             out << " style=dashed";
+        }
+        if (error) {
+            out << " color=red";
+        } else if (temporary) {
+            out << " color=blue";
         }
         out << "];\n";
     }
-
     for (auto e : make_iterator_range(edges(G))) {
-        const auto i = source(e, G), j = target(e, G);
-        out << "v" << i << " -> v" << j;
-        if (LLVM_UNLIKELY(component[i] == component[j])) {
-            out << "[color=red]";
+        out << "v" << source(e, G) << " -> v" << target(e, G);
+        if (G[e]) {
+             out << " [label=\"";
+             PabloPrinter::print(G[e], out);
+             out << "\"]";
         }
         out << ";\n";
     }
@@ -234,7 +267,7 @@ static void printGraph(const PabloBlock & block, const Graph & G, const std::str
     if (num_vertices(G) > 0) {
 
         out << "{ rank=same;";
-        for (auto u : ordering) {
+        for (auto u : make_iterator_range(vertices(G))) {
             if (in_degree(u, G) == 0 && out_degree(u, G) != 0) {
                 out << " v" << u;
             }
@@ -242,7 +275,7 @@ static void printGraph(const PabloBlock & block, const Graph & G, const std::str
         out << "}\n";
 
         out << "{ rank=same;";
-        for (auto u : ordering) {
+        for (auto u : make_iterator_range(vertices(G))) {
             if (out_degree(u, G) == 0 && in_degree(u, G) != 0) {
                 out << " v" << u;
             }
@@ -256,73 +289,18 @@ static void printGraph(const PabloBlock & block, const Graph & G, const std::str
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief printGraph
- ** ------------------------------------------------------------------------------------------------------------- */
-template<typename SubgraphType>
-static void printGraph(const PabloBlock & block, const SubgraphType & S, const Graph & G, const std::string name) {
-    raw_os_ostream out(std::cerr);
-    out << "digraph " << name << " {\n";
-    for (auto u : make_iterator_range(vertices(S))) {
-        if (in_degree(u, S) == 0 && out_degree(u, S) == 0) {
-            continue;
-        }
-        out << "v" << u << " [label=\"";
-        PabloAST * expr = G[S[u]];
-        if (isa<Statement>(expr)) {
-            if (LLVM_UNLIKELY(isa<If>(expr))) {
-                out << "If ";
-                PabloPrinter::print(cast<If>(expr)->getOperand(0), out);
-                out << ":";
-            } else if (LLVM_UNLIKELY(isa<While>(expr))) {
-                out << "While ";
-                PabloPrinter::print(cast<While>(expr)->getOperand(0), out);
-                out << ":";
-            } else {
-                PabloPrinter::print(cast<Statement>(expr), "", out);
-            }
-        } else {
-            PabloPrinter::print(expr, out);
-        }
-        out << "\"";
-        if (!inCurrentBlock(expr, block)) {
-            out << " style=dashed";
-        }
-        out << "];\n";
-    }
-    for (auto e : make_iterator_range(edges(S))) {
-        out << "v" << source(e, S) << " -> v" << target(e, S) << ";\n";
-    }
-
-    if (num_vertices(S) > 0) {
-
-        out << "{ rank=same;";
-        for (auto u : make_iterator_range(vertices(S))) {
-            if (in_degree(u, S) == 0 && out_degree(u, S) != 0) {
-                out << " v" << u;
-            }
-        }
-        out << "}\n";
-
-        out << "{ rank=same;";
-        for (auto u : make_iterator_range(vertices(S))) {
-            if (out_degree(u, S) == 0 && in_degree(u, S) != 0) {
-                out << " v" << u;
-            }
-        }
-        out << "}\n";
-
-    }
-
-    out << "}\n\n";
-    out.flush();
-}
-
-
-/** ------------------------------------------------------------------------------------------------------------- *
  * @brief createTree
  ** ------------------------------------------------------------------------------------------------------------- */
-static PabloAST * createTree(PabloBlock & block, const PabloAST::ClassTypeId typeId, circular_buffer<PabloAST *> & Q) {
+static Statement * createTree(PabloBlock & block, const Vertex u, Graph & G) {
+    circular_buffer<PabloAST *> Q(in_degree(u, G));
+    for (const auto e : make_iterator_range(in_edges(u, G))) {
+        PabloAST * expr = G[source(e, G)].second;
+        assert (expr);
+        assert (std::find(Q.begin(), Q.end(), expr) == Q.end());
+        Q.push_back(expr);
+    }
     assert (Q.size() > 1);
+    const TypeId typeId = G[u].first;
     while (Q.size() > 1) {
         PabloAST * e1 = Q.front(); Q.pop_front();
         PabloAST * e2 = Q.front(); Q.pop_front();
@@ -339,9 +317,9 @@ static PabloAST * createTree(PabloBlock & block, const PabloAST::ClassTypeId typ
         }
         Q.push_back(expr);
     }
-    PabloAST * const expr = Q.front();
-    Q.clear();
-    return expr;
+    Statement * const result = cast<Statement>(Q.front());
+    G[u].second = result;
+    return result;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -350,20 +328,14 @@ static PabloAST * createTree(PabloBlock & block, const PabloAST::ClassTypeId typ
 inline void BooleanReassociationPass::processScope(PabloFunction & function, PabloBlock & block) {
     Graph G;
 
-    summarizeAST(block, G);
-    assert (summarizeGraph(block, G) == false);
-    redistributeAST(block, G);
-    assert (summarizeGraph(block, G) == false);
-
     raw_os_ostream out(std::cerr);
-    out << "======================================================\n";
-    PabloPrinter::print(block, " > ", out);
-    out << "------------------------------------------------------\n";
+    out << "============================================================\n";
+    PabloPrinter::print(function.getEntryBlock().statements(), out);
+    out << "------------------------------------------------------------\n";
     out.flush();
 
-    printGraph(block, G, "G");
-
-    out << "------------------------------------------------------\n";
+    summarizeAST(block, G);
+    redistributeAST(block, G);
 
     circular_buffer<Vertex> Q(num_vertices(G));
     topological_sort(G, std::back_inserter(Q));
@@ -371,70 +343,96 @@ inline void BooleanReassociationPass::processScope(PabloFunction & function, Pab
 
     while (!Q.empty()) {
         const Vertex u = Q.back(); Q.pop_back();
-        if (LLVM_LIKELY(in_degree(u, G) != 0 || out_degree(u, G) != 0)) {
-            if (LLVM_LIKELY(inCurrentBlock(G[u], block))) {
-                Statement * stmt = cast<Statement>(G[u]);
-                PabloPrinter::print(stmt, " - ", out); out << '\n';
-                if (isOptimizable(stmt)) {
-                    circular_buffer<PabloAST *> nodes(in_degree(u, G));
-                    for (auto e : make_iterator_range(in_edges(u, G))) {
-                        nodes.push_back(G[source(e, G)]);
-                    }
-                    Statement * replacement = cast<Statement>(createTree(block, stmt->getClassTypeId(), nodes));
-                    stmt->replaceWith(replacement, false, true);
-                    G[u] = stmt = replacement;
-                    PabloPrinter::print(replacement, "   -> replaced with ", out); out << '\n';
-                } else {
-                    for (const auto e : make_iterator_range(in_edges(u, G))) {
-                        const auto v = source(e, G);
-                        if (LLVM_UNLIKELY(G[v] != G[e])) {
-
-
-
-                        }
+        if (LLVM_LIKELY(isMutable(G[u], block))) {
+            out << "Mutable: " << u << ": ";
+            PabloPrinter::print(G[u].second, out);
+            out.flush();
+            Statement * stmt = nullptr;
+            if (isOptimizable(G[u])) {
+                stmt = createTree(block, u, G);
+            } else { // update any potential mappings
+                stmt = cast<Statement>(G[u].second);
+            }
+            assert (stmt);
+            PabloPrinter::print(stmt, " -> ", out);
+            out << '\n';
+            out.flush();
+            assert (stmt->getParent() == &block);
+            for (auto e : make_iterator_range(out_edges(u, G))) {
+                if (G[e] && G[e] != stmt) {
+                    PabloAST * expr = G[target(e, G)].second;
+                    if (expr) { // processing a yet-to-be created value
+                        cast<Statement>(expr)->replaceUsesOfWith(G[e], stmt);
                     }
                 }
-                block.insert(stmt);
             }
+            block.insert(stmt);
         }
     }
 
-    out << "------------------------------------------------------\n";
-    PabloPrinter::print(block, " < ", out);
-    out << "------------------------------------------------------\n";
+    Simplifier::deadCodeElimination(function.getEntryBlock());
+
+    out << "------------------------------------------------------------\n";
+    PabloPrinter::print(function.getEntryBlock().statements(), out);
     out.flush();
 
     PabloVerifier::verify(function);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
+ * @brief getVertex
+ ** ------------------------------------------------------------------------------------------------------------- */
+static inline Vertex getVertex(PabloAST * expr, Graph & G, Map & M, const PabloBlock & block) {
+    const auto f = M.find(expr);
+    if (f != M.end()) {
+        return f->second;
+    }
+    // To simplify future analysis, every statement not in the current block will be recorded as a Var.
+    const TypeId typeId = inCurrentBlock(expr, block) ? expr->getClassTypeId() : TypeId::Var;
+    const auto u = add_vertex(std::make_pair(typeId, expr), G);
+    M.insert(std::make_pair(expr, u));
+    return u;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
  * @brief summarizeAST
  *
- * This function scans through a basic block (starting by its terminals) and computes a DAG in which any sequences
- * of AND, OR or XOR functions are "flattened" (i.e., allowed to have any number of inputs.) This allows us to
- * reassociate them in the most efficient way possible.
+ * This function scans through a scope blockand computes a DAG G in which any sequences of AND, OR or XOR functions
+ * are "flattened" (i.e., allowed to have any number of inputs.)
  ** ------------------------------------------------------------------------------------------------------------- */
 void BooleanReassociationPass::summarizeAST(PabloBlock & block, Graph & G) const {
     Map M;
     // Compute the base def-use graph ...
     for (Statement * stmt : block) {
-        const Vertex u = getVertex(stmt, G, M);
+        const Vertex u = getVertex(stmt, G, M, block);
         for (unsigned i = 0; i != stmt->getNumOperands(); ++i) {
             PabloAST * const op = stmt->getOperand(i);
             if (LLVM_UNLIKELY(isa<Integer>(op) || isa<String>(op))) {
                 continue;
             }
-            add_edge(op, getVertex(op, G, M), u, G);
+            const Vertex v = getVertex(op, G, M, block);
+            if (!edge(v, u, G).second) {
+                add_edge(op, v, u, G);
+            }
+            // If this operand is a Not operation that is not in this PabloBlock,
+            // pull its input operand in. It may lead to future optimizations.
+            if (LLVM_UNLIKELY(isa<Not>(op) && !inCurrentBlock(cast<Not>(op), block))) {
+                PabloAST * const neg = cast<Not>(op)->getExpr();
+                const Vertex w = getVertex(neg, G, M, block);
+                if (!edge(w, v, G).second) {
+                    add_edge(neg, w, v, G);
+                }
+            }
         }
         if (isa<If>(stmt)) {
             for (Assign * def : cast<const If>(stmt)->getDefined()) {
-                const Vertex v = getVertex(def, G, M);
+                const Vertex v = getVertex(def, G, M, block);
                 add_edge(def, u, v, G);
                 resolveUsages(v, def, block, G, M, stmt);
             }
         } else if (isa<While>(stmt)) {
             for (Next * var : cast<const While>(stmt)->getVariants()) {
-                const Vertex v = getVertex(var, G, M);
+                const Vertex v = getVertex(var, G, M, block);
                 add_edge(var, u, v, G);
                 resolveUsages(v, var, block, G, M, stmt);
             }
@@ -442,54 +440,8 @@ void BooleanReassociationPass::summarizeAST(PabloBlock & block, Graph & G) const
             resolveUsages(u, stmt, block, G, M);
         }
     }
-    summarizeGraph(block, G);
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief resolveUsages
- ** ------------------------------------------------------------------------------------------------------------- */
-bool BooleanReassociationPass::summarizeGraph(PabloBlock & block, Graph & G) {
-    bool modified = false;
-    std::vector<Vertex> reverseTopologicalOrdering;
-    reverseTopologicalOrdering.reserve(num_vertices(G));
-    topological_sort(G, std::back_inserter(reverseTopologicalOrdering));
-    for (const Vertex u : reverseTopologicalOrdering) {
-        if (isOptimizable(G[u]) && inCurrentBlock(G[u], block)) {
-            if (LLVM_UNLIKELY(in_degree(u, G) == 1)) {
-                // We have a redundant node here that'll simply end up being a duplicate
-                // of the input value. Remove it and add any of its outgoing edges to its
-                // input node.
-                const auto ei = first(in_edges(u, G));
-                const Vertex v = source(ei, G);
-                for (auto ej : make_iterator_range(out_edges(u, G))) {
-                    add_edge(G[ei], v, target(ej, G), G);
-                }
-                clear_vertex(u, G);
-                modified = true;
-                continue;
-            } else if (LLVM_UNLIKELY(out_degree(u, G) == 1)) {
-                // Otherwise if we have a single user, we have a similar case as above but
-                // we can only merge this vertex into the outgoing instruction if they are
-                // of the same type.
-                const auto ei = first(out_edges(u, G));
-                const Vertex v = target(ei, G);
-                if (LLVM_UNLIKELY(G[v]->getClassTypeId() == G[u]->getClassTypeId())) {
-                    for (auto ej : make_iterator_range(in_edges(u, G))) {
-                        add_edge(G[ei], source(ej, G), v, G);
-                    }
-                    clear_vertex(u, G);
-                    modified = true;
-                    continue;
-                }
-            }
-        }
-        // Finally, eliminate any unnecessary instruction
-        if (LLVM_UNLIKELY(out_degree(u, G) == 0 && !(isa<Assign>(G[u]) || isa<Next>(G[u])))) {
-            clear_in_edges(u, G);
-        }
-    }
-    assert (modified ? (summarizeGraph(block, G) == false) : true);
-    return modified;
+    std::vector<Vertex> mapping(num_vertices(G));
+    summarizeGraph(G, mapping);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -511,10 +463,15 @@ void BooleanReassociationPass::resolveUsages(const Vertex u, PabloAST * expr, Pa
                         if (LLVM_UNLIKELY(f == mResolvedScopes.end())) {
                             throw std::runtime_error("Failed to resolve scope block!");
                         }
-                        if (LLVM_UNLIKELY(f->second == ignoreIfThis)) {
+                        Statement * branch = f->second;
+                        if (LLVM_UNLIKELY(branch == ignoreIfThis)) {
                             break;
                         }
-                        add_edge(u, getVertex(f->second, G, M), G);
+                        // Add in a Var denoting the user of this expression so that it can be updated if expr changes.
+                        const Vertex v = getVertex(user, G, M, block);
+                        add_edge(expr, u, v, G);
+                        const Vertex w = getVertex(branch, G, M, block);
+                        add_edge(nullptr, v, w, G);
                         break;
                     }
                     parent = parent->getParent();
@@ -522,6 +479,110 @@ void BooleanReassociationPass::resolveUsages(const Vertex u, PabloAST * expr, Pa
             }
         }
     }
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief summarizeGraph
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline void BooleanReassociationPass::summarizeGraph(Graph & G, std::vector<Vertex> & mapping) {
+    std::vector<Vertex> reverse_topological_ordering;
+    reverse_topological_ordering.reserve(num_vertices(G));
+    topological_sort(G, std::back_inserter(reverse_topological_ordering));
+    assert(mapping.size() >= num_vertices(G));
+    for (const Vertex u : reverse_topological_ordering) {
+        if (LLVM_LIKELY(out_degree(u, G) > 0)) {
+            if (isOptimizable(G[u])) {
+                if (LLVM_UNLIKELY(in_degree(u, G) == 1)) {
+                    // We have a redundant node here that'll simply end up being a duplicate
+                    // of the input value. Remove it and add any of its outgoing edges to its
+                    // input node.
+                    const auto ei = first(in_edges(u, G));
+                    const Vertex v = source(ei, G);
+                    for (auto ej : make_iterator_range(out_edges(u, G))) {
+                        const Vertex w = target(ej, G);
+                        add_edge(G[ei], v, w, G);
+                        if (mapping[w] == mapping[u]) {
+                            mapping[w] = v;
+                        }
+                    }
+                    clear_vertex(u, G);
+                    G[u].first = TypeId::Var;
+                    mapping[u] = v;
+                    continue;
+                } else if (LLVM_UNLIKELY(out_degree(u, G) == 1)) {
+                    // Otherwise if we have a single user, we have a similar case as above but
+                    // we can only merge this vertex into the outgoing instruction if they are
+                    // of the same type.
+                    const auto ei = first(out_edges(u, G));
+                    const Vertex v = target(ei, G);
+                    if (LLVM_UNLIKELY(isSameType(G[v], G[u]))) {
+                        for (auto ej : make_iterator_range(in_edges(u, G))) {
+                            add_edge(G[ei], source(ej, G), v, G);
+                        }
+                        clear_vertex(u, G);
+                        G[u].first = TypeId::Var;
+                        mapping[u] = v;
+                    }
+                }
+            }
+        } else if (isNonEscaping(G[u])) {
+            clear_in_edges(u, G);
+            G[u].first = TypeId::Var;
+        }
+    }
+
+    // Test whether any operation has (A op2 B) op1 (¬A op3 C) contained within it, where op1, op2 and op3 are all
+    // optimizable operations; if so, modify G to reflect the result. The main goal is to optimize the underlying
+    // equations but this also eliminates a problematic case in which the internal boolean simplification logic
+    // could detect the contradiction and return an unexpected value.
+
+//    VertexSet inputs;
+//    VertexSets lit;
+//    VertexSets neg;
+//    for (const Vertex t : reverse_topological_ordering) {
+//        if (isOptimizable(G[t])) {
+//            for (auto e : make_iterator_range(in_edges(t, G))) {
+//                const Vertex u = source(e, G);
+//                if (isOptimizable(G[u])) {
+//                    inputs.push_back(u);
+//                }
+//            }
+//            if (inputs.size() > 1) {
+//                unsigned count = 0;
+
+//                for (const Vertex u : inputs) {
+//                    lit[count].clear();
+//                    neg[count].clear();
+//                    for (auto ei : make_iterator_range(in_edges(u, G))) {
+//                        const Vertex w = source(ei, G);
+//                        if (isOptimizable(G[w])) {
+//                            lit[count].push_back(w);
+//                        } else if (LLVM_UNLIKELY(isNegated(G[w]))) {
+//                            assert (in_degree(w, G) > 0);
+//                            neg[count].push_back(source(first(in_edges(w, G)), G));
+//                        }
+//                    }
+//                    std::sort(lit[count].begin(), lit[count].end());
+//                    std::sort(neg[count].begin(), neg[count].end());
+//                    ++count;
+//                }
+
+
+//                for (unsigned i = 0; i != count; ++i) {
+//                    for (unsigned j = 0; j != count; ++j) {
+//                        VertexSet cap;
+//                        std::set_intersection(lit[i].begin(), lit[i].end(), neg[j].begin(), neg[j].end(), std::back_inserter(cap));
+
+
+//                    }
+//                }
+
+
+
+//            }
+//            inputs.clear();
+//        }
+//    }
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -695,7 +756,7 @@ static BicliqueSet && removeUnhelpfulBicliques(BicliqueSet && cliques, const Gra
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief safeDistributionSets
  ** ------------------------------------------------------------------------------------------------------------- */
-static DistributionSets safeDistributionSets(const PabloBlock & block, const Graph & G, DistributionGraph & H) {
+static DistributionSets safeDistributionSets(const Graph & G, DistributionGraph & H) {
     const auto F = makeGraphFacade(H);
     DistributionSets T;
     BicliqueSet lowerSet = independentCliqueSets<1>(removeUnhelpfulBicliques(enumerateBicliques(F, sinks(H)), G, H), 1);
@@ -711,60 +772,56 @@ static DistributionSets safeDistributionSets(const PabloBlock & block, const Gra
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief generateDistributionGraph
  ** ------------------------------------------------------------------------------------------------------------- */
-void generateDistributionGraph(const PabloBlock & block, const Graph & G, DistributionGraph & H) {
+void generateDistributionGraph(const Graph & G, DistributionGraph & H) {
     DistributionMap M;
     for (const Vertex u : make_iterator_range(vertices(G))) {
-        if (in_degree(u, G) > 0) {
-            const TypeId outerTypeId = G[u]->getClassTypeId();
-            if (outerTypeId == TypeId::And || outerTypeId == TypeId::Or) {
-                if (inCurrentBlock(cast<Statement>(G[u]), block)) {
-                    const TypeId innerTypeId = (outerTypeId == TypeId::And) ? TypeId::Or : TypeId::And;
-                    flat_set<Vertex> distributable;
-                    for (auto e : make_iterator_range(in_edges(u, G))) {
-                        const Vertex v = source(e, G);
-                        if (LLVM_UNLIKELY(G[v]->getClassTypeId() == innerTypeId && inCurrentBlock(cast<Statement>(G[v]), block))) {
-                            bool safe = true;
-                            for (const auto e : make_iterator_range(out_edges(v, G))) {
-                                if (G[target(e, G)]->getClassTypeId() != outerTypeId) {
-                                    safe = false;
-                                    break;
-                                }
-                            }
-                            if (safe) {
-                                distributable.insert(v);
-                            }
+        const TypeId outerTypeId = G[u].first;
+        if (outerTypeId == TypeId::And || outerTypeId == TypeId::Or) {
+            const TypeId innerTypeId = (outerTypeId == TypeId::And) ? TypeId::Or : TypeId::And;
+            flat_set<Vertex> distributable;
+            for (auto e : make_iterator_range(in_edges(u, G))) {
+                const Vertex v = source(e, G);
+                if (LLVM_UNLIKELY(G[v].first == innerTypeId)) {
+                    bool safe = true;
+                    for (const auto e : make_iterator_range(out_edges(v, G))) {
+                        if (G[target(e, G)].first != outerTypeId) {
+                            safe = false;
+                            break;
                         }
                     }
-                    if (LLVM_LIKELY(distributable.size() > 1)) {
-                        // We're only interested in computing a subgraph of G in which every source has an out-degree
-                        // greater than 1. Otherwise we'd only end up permuting the AND/OR sequence with no logical
-                        // benefit. (Note: this does not consider register pressure / liveness.)
-                        flat_map<Vertex, bool> observedMoreThanOnce;
-                        bool anyOpportunities = false;
-                        for (const Vertex v : distributable) {
-                            for (auto e : make_iterator_range(in_edges(v, G))) {
-                                const Vertex w = source(e, G);
-                                auto ob = observedMoreThanOnce.find(w);
-                                if (ob == observedMoreThanOnce.end()) {
-                                    observedMoreThanOnce.emplace(w, false);
-                                } else {
-                                    ob->second = true;
-                                    anyOpportunities = true;
-                                }
-                            }
+                    if (safe) {
+                        distributable.insert(v);
+                    }
+                }
+            }
+            if (LLVM_LIKELY(distributable.size() > 1)) {
+                // We're only interested in computing a subgraph of G in which every source has an out-degree
+                // greater than 1. Otherwise we'd only end up permuting the AND/OR sequence with no logical
+                // benefit. (Note: this does not consider register pressure / liveness.)
+                flat_map<Vertex, bool> observedMoreThanOnce;
+                bool anyOpportunities = false;
+                for (const Vertex v : distributable) {
+                    for (auto e : make_iterator_range(in_edges(v, G))) {
+                        const Vertex w = source(e, G);
+                        auto ob = observedMoreThanOnce.find(w);
+                        if (ob == observedMoreThanOnce.end()) {
+                            observedMoreThanOnce.emplace(w, false);
+                        } else {
+                            ob->second = true;
+                            anyOpportunities = true;
                         }
-                        if (anyOpportunities) {
-                            for (const auto ob : observedMoreThanOnce) {
-                                if (ob.second) {
-                                    const Vertex w = ob.first;
-                                    for (auto e : make_iterator_range(out_edges(w, G))) {
-                                        const Vertex v = target(e, G);
-                                        if (distributable.count(v)) {
-                                            const Vertex y = getVertex(v, H, M);
-                                            add_edge(y, getVertex(u, H, M), H);
-                                            add_edge(getVertex(w, H, M), y, H);
-                                        }
-                                    }
+                    }
+                }
+                if (anyOpportunities) {
+                    for (const auto ob : observedMoreThanOnce) {
+                        if (ob.second) {
+                            const Vertex w = ob.first;
+                            for (auto e : make_iterator_range(out_edges(w, G))) {
+                                const Vertex v = target(e, G);
+                                if (distributable.count(v)) {
+                                    const Vertex y = getVertex(v, H, M);
+                                    add_edge(y, getVertex(u, H, M), H);
+                                    add_edge(getVertex(w, H, M), y, H);
                                 }
                             }
                         }
@@ -775,89 +832,126 @@ void generateDistributionGraph(const PabloBlock & block, const Graph & G, Distri
     }
 }
 
+
+
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief redistributeAST
  *
  * Apply the distribution law to reduce computations whenever possible.
  ** ------------------------------------------------------------------------------------------------------------- */
-bool BooleanReassociationPass::redistributeAST(PabloBlock & block, Graph & G) const {
-    bool anyChanges = false;
+void BooleanReassociationPass::redistributeAST(const PabloBlock & block, Graph & G) const {
 
-    ++distributionCount;
+    printGraph(block, G, "G0");
+
+    unsigned count = 0;
+
+    std::vector<Vertex> mapping(num_vertices(G) + 16);
+    std::iota(mapping.begin(), mapping.end(), 0); // 0,1,.....n
 
     for (;;) {
 
         DistributionGraph H;
 
-        generateDistributionGraph(block, G, H);
+        generateDistributionGraph(G, H);
 
         // If we found no potential opportunities then we cannot apply the distribution law to any part of G.
         if (num_vertices(H) == 0) {
             break;
         }
 
-        const DistributionSets distributionSets = safeDistributionSets(block, G, H);
+        const DistributionSets distributionSets = safeDistributionSets(G, H);
 
         if (LLVM_UNLIKELY(distributionSets.empty())) {
             break;
         }
 
+        raw_os_ostream out(std::cerr);
+        out << "DISTRIBUTION SETS: " << distributionSets.size() << '\n';
+
+        ++count;
+
+        unsigned subcount = 0;
+
+
+
         for (const DistributionSet & set : distributionSets) {
+
             // Each distribution tuple consists of the sources, intermediary, and sink nodes.
             const VertexSet & sources = std::get<0>(set);
             const VertexSet & intermediary = std::get<1>(set);
             const VertexSet & sinks = std::get<2>(set);
 
-            const TypeId outerTypeId = G[H[sinks.front()]]->getClassTypeId();
+            out << "SOURCES:";
+            for (const Vertex u : sources) {
+                const Vertex x = mapping[H[u]];
+                out << " " << x << ": "; PabloPrinter::print(G[x].second, out);
+            }
+            out << "\n";
+            out << "INTERMEDIARY:";
+            for (const Vertex u : intermediary) {
+                const Vertex x = mapping[H[u]];
+                out << " " << x << ": "; PabloPrinter::print(G[x].second, out);
+            }
+            out << "\n";
+            out << "SINKS:";
+            for (const Vertex u : sinks) {
+                const Vertex x = mapping[H[u]];
+                out << " " << x << ": "; PabloPrinter::print(G[x].second, out);
+            }
+            out << "\n";
+            out.flush();
+
+            const TypeId outerTypeId = G[mapping[H[sinks.front()]]].first;
             assert (outerTypeId == TypeId::And || outerTypeId == TypeId::Or);
             const TypeId innerTypeId = (outerTypeId == TypeId::Or) ? TypeId::And : TypeId::Or;
 
-            // Eliminate the edges from our original graph G
-            for (const Vertex u : intermediary) {
-                const auto x = H[u];
-                assert (G[x]->getClassTypeId() == innerTypeId);
-                for (const Vertex s : sources) {
-                    assert (edge(H[s], x, G).second);
-                    remove_edge(H[s], x, G);
-                }
+            // Update G to match the desired changes (TODO: modify this to reuse a discarded vertex instead)
+            const Vertex x = add_vertex(std::make_pair(outerTypeId, nullptr), G);
+            const Vertex y = add_vertex(std::make_pair(innerTypeId, nullptr), G);
+            mapping.resize(num_vertices(G));
+            mapping[x] = x;
+            mapping[y] = y;
+
+            for (const Vertex i : intermediary) {
+                const auto u = mapping[H[i]];
+                assert (G[u].first == innerTypeId);
                 for (const Vertex t : sinks) {
-                    assert (edge(x, H[t], G).second);
-                    assert (G[H[t]]->getClassTypeId() == outerTypeId);
-                    remove_edge(x, H[t], G);
+                    const auto v = mapping[H[t]];
+                    assert (G[v].first == outerTypeId);
+                    for (auto e : make_iterator_range(out_edges(u, G))) {
+                        if (target(e, G) == v) {
+                            remove_edge(e, G);
+                        }
+                    }
                 }
+                add_edge(nullptr, u, x, G);
+            }            
+
+            for (const Vertex s : sources) {
+                const auto u = mapping[H[s]];
+                for (const Vertex i : intermediary) {
+                    const auto v = mapping[H[i]];
+                    for (auto e : make_iterator_range(out_edges(u, G))) {
+                        if (target(e, G) == v) {
+                            remove_edge(e, G);
+                        }
+                    }
+                }
+                add_edge(nullptr, u, y, G);
             }
 
-            // Update G to match the desired changes
-            const Vertex x = add_vertex(nullptr, G);
-            const Vertex y = add_vertex(nullptr, G);
-            for (const Vertex u : intermediary) {
-                add_edge(nullptr, H[u], x, G);
-            }
-            for (const Vertex s : sources) {
-                add_edge(nullptr, H[s], y, G);
-            }
-            for (const Vertex t : sinks) {
-                add_edge(nullptr, y, H[t], G);
-            }
             add_edge(nullptr, x, y, G);
 
-            // Now begin transforming the AST (TODO: fix the abstraction so I can defer creation until the final phase)
-            circular_buffer<PabloAST *> Q(std::max(in_degree(x, G), in_degree(y, G)));
-            for (auto e : make_iterator_range(in_edges(x, G))) {
-                Q.push_back(G[source(e, G)]);
+            for (const Vertex t : sinks) {
+                const auto v = mapping[H[t]];
+                add_edge(G[v].second, y, v, G);
             }
-            G[x] = createTree(block, outerTypeId, Q);
-            for (auto e : make_iterator_range(in_edges(y, G))) {
-                Q.push_back(G[source(e, G)]);
-            }
-            G[y] = createTree(block, innerTypeId, Q);
 
-            // Summarize the graph after transforming G
-            summarizeGraph(block, G);
+            summarizeGraph(G, mapping);
+
+            printGraph(block, G, "G" + std::to_string(count) + "_" + std::to_string(++subcount));
         }
-        anyChanges = true;
     }
-    return anyChanges;
 }
 
 }

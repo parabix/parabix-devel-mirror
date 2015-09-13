@@ -2,6 +2,7 @@
 #define BOOLEANREASSOCIATIONPASS_H
 
 #include <pablo/codegenstate.h>
+#include <boost/container/flat_set.hpp>
 #include <boost/container/flat_map.hpp>
 #include <boost/graph/adjacency_list.hpp>
 
@@ -9,7 +10,8 @@ namespace pablo {
 
 class BooleanReassociationPass {
 public:
-    using Graph = boost::adjacency_list<boost::hash_setS, boost::vecS, boost::bidirectionalS, PabloAST *, PabloAST *>;
+    using VertexData = std::pair<PabloAST::ClassTypeId, PabloAST *>;
+    using Graph = boost::adjacency_list<boost::vecS, boost::vecS, boost::bidirectionalS, VertexData, PabloAST *>;
     using Vertex = Graph::vertex_descriptor;
     using Map = std::unordered_map<const PabloAST *, Vertex>;
 
@@ -22,9 +24,14 @@ protected:
     void processScopes(PabloFunction & function, PabloBlock & block);
     void processScope(PabloFunction & function, PabloBlock & block);
     void summarizeAST(PabloBlock & block, Graph & G) const;
-    static bool summarizeGraph(PabloBlock & block, Graph & G);
+    static void summarizeGraph(Graph & G, std::vector<Vertex> & mapping);
     void resolveUsages(const Vertex u, PabloAST * expr, PabloBlock & block, Graph & G, Map & M, Statement * ignoreIfThis = nullptr) const;
-    bool redistributeAST(PabloBlock & block, Graph & G) const;
+    void redistributeAST(const PabloBlock & block, Graph & G) const;
+public:
+    static bool isOptimizable(const VertexData & data);
+    static bool isMutable(const VertexData & data, const PabloBlock &block);
+    static bool isNonEscaping(const VertexData & data);
+    static bool isSameType(const VertexData & data1, const VertexData & data2);
 private:
     boost::container::flat_map<PabloBlock *, Statement *> mResolvedScopes;
 };
