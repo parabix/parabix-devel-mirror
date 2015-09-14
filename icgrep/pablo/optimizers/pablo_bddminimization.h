@@ -46,6 +46,7 @@ protected:
     void eliminateLogicallyEquivalentStatements(PabloBlock & block, SubsitutionMap & parent);
     void eliminateLogicallyEquivalentStatements(Statement * const stmt, SubsitutionMap & map);
     std::pair<DdNode *, bool> characterize(Statement * const stmt);
+    void identifyHiddenContradicionsAndTautologies(PabloBlock & block);
 private:
     DdNode * Zero() const;
     DdNode * One() const;

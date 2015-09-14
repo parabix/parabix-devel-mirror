@@ -13,6 +13,7 @@
 #include <boost/container/flat_set.hpp>
 #include <boost/container/flat_map.hpp>
 #include <boost/graph/adjacency_list.hpp>
+#include <boost/graph/topological_sort.hpp>
 
 using namespace llvm;
 using namespace boost;
@@ -20,9 +21,13 @@ using namespace boost::container;
 
 namespace pablo {
 
+using TypeId = PabloAST::ClassTypeId;
+
 bool BDDMinimizationPass::optimize(PabloFunction & function) {
     BDDMinimizationPass am;
     am.eliminateLogicallyEquivalentStatements(function);
+
+    am.shutdown();
     return Simplifier::optimize(function);
 }
 
@@ -51,12 +56,12 @@ void BDDMinimizationPass::eliminateLogicallyEquivalentStatements(PabloFunction &
                 continue;
             }
             switch (stmt->getClassTypeId()) {
-                case PabloAST::ClassTypeId::Assign:
-                case PabloAST::ClassTypeId::Next:
-                case PabloAST::ClassTypeId::Advance:
-                case PabloAST::ClassTypeId::Call:
-                case PabloAST::ClassTypeId::MatchStar:
-                case PabloAST::ClassTypeId::ScanThru:
+                case TypeId::Assign:
+                case TypeId::Next:
+                case TypeId::Advance:
+                case TypeId::Call:
+                case TypeId::MatchStar:
+                case TypeId::ScanThru:
                     variableCount++;
                     break;                                   
                 default:
@@ -92,8 +97,6 @@ void BDDMinimizationPass::eliminateLogicallyEquivalentStatements(PabloFunction &
     Cudd_AutodynEnable(mManager, CUDD_REORDER_LAZY_SIFT);
 
     eliminateLogicallyEquivalentStatements(function.getEntryBlock(), baseMap);
-
-    Cudd_Quit(mManager);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -134,7 +137,7 @@ void BDDMinimizationPass::eliminateLogicallyEquivalentStatements(PabloBlock & bl
         }
         stmt = stmt->getNextNode();
     }   
-    Cudd_ReduceHeap(mManager, CUDD_REORDER_SIFT, 1);
+    // Cudd_ReduceHeap(mManager, CUDD_REORDER_SIFT, 1);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -165,34 +168,34 @@ inline std::pair<DdNode *, bool> BDDMinimizationPass::characterize(Statement * c
     }
 
     switch (stmt->getClassTypeId()) {
-        case PabloAST::ClassTypeId::Assign:
-        case PabloAST::ClassTypeId::Next:
+        case TypeId::Assign:
+        case TypeId::Next:
             return std::make_pair(input[0], false);
-        case PabloAST::ClassTypeId::And:
+        case TypeId::And:
             bdd = And(input[0], input[1]);
             break;
-        case PabloAST::ClassTypeId::Or:
+        case TypeId::Or:
             bdd = Or(input[0], input[1]);
             break;
-        case PabloAST::ClassTypeId::Xor:
+        case TypeId::Xor:
             bdd = Xor(input[0], input[1]);
             break;
-        case PabloAST::ClassTypeId::Not:
+        case TypeId::Not:
             bdd = Not(input[0]);
             break;
-        case PabloAST::ClassTypeId::Sel:
+        case TypeId::Sel:
             bdd = Ite(input[0], input[1], input[2]);
             break;
-        case PabloAST::ClassTypeId::MatchStar:
-        case PabloAST::ClassTypeId::ScanThru:
+        case TypeId::MatchStar:
+        case TypeId::ScanThru:
             if (LLVM_UNLIKELY(input[1] == Zero())) {
                 return std::make_pair(Zero(), true);
             }
-        case PabloAST::ClassTypeId::Advance:
+        case TypeId::Advance:
             if (LLVM_UNLIKELY(input[0] == Zero())) {
                 return std::make_pair(Zero(), true);
             }
-        case PabloAST::ClassTypeId::Call:
+        case TypeId::Call:
             // TODO: we may have more than one output. Need to fix call class to allow for it.
             return std::make_pair(NewVar(stmt), false);
         default:
@@ -204,6 +207,56 @@ inline std::pair<DdNode *, bool> BDDMinimizationPass::characterize(Statement * c
         bdd = Zero();
     }
     return std::make_pair(bdd, true);
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief identifyHiddenContradicionsAndTautologies
+ *
+ * This function attempts to scan through the AST and identify statements such as (A op2 B) op1 (¬A op3 C), where
+ * op1, op2 and op3 are And, Or or Xor operations.
+ ** ------------------------------------------------------------------------------------------------------------- */
+void BDDMinimizationPass::identifyHiddenContradicionsAndTautologies(PabloBlock & block) {
+
+    using Graph = adjacency_list<hash_setS, vecS, bidirectionalS, PabloAST *>;
+    using Vertex = Graph::vertex_descriptor;
+    using Map = std::unordered_map<const PabloAST *, Vertex>;
+
+    Graph G;
+    Map M;
+    for (Statement * stmt : block) {
+        const TypeId typeId = stmt->getClassTypeId();
+        if (typeId == TypeId::And || typeId == TypeId::Or || typeId == TypeId::Xor) {
+            const auto u = add_vertex(stmt, G);
+            M.insert(std::make_pair(stmt, u));
+            for (unsigned i = 0; i != stmt->getNumOperands(); ++i) {
+                const auto f = M.find(stmt->getOperand(i));
+                if (f != M.end()) {
+                    add_edge(f->second, u, G);
+                }
+            }
+        }
+    }
+
+    if (num_edges(G) == 0) {
+        return;
+    }
+
+    std::vector<Vertex> ordering;
+    ordering.reserve(num_vertices(G));
+    topological_sort(G, std::back_inserter(ordering));
+
+    std::vector<unsigned> component(num_vertices(G));
+    unsigned components = 0;
+    for (auto u : ordering) {
+        if (out_degree(u, G) != G[u]->users().size()) {
+            assert (out_degree(u, G) > G[u]->users().size());
+            component[u] = ++components;
+        }
+    }
+
+    // ....
+
+
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

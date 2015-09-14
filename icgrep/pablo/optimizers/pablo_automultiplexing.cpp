@@ -16,8 +16,8 @@
 #include <queue>
 #include <unordered_set>
 #include <pablo/optimizers/pablo_simplifier.hpp>
-#include <pablo/optimizers/booleanreassociationpass.h>
 #include <pablo/optimizers/pablo_bddminimization.h>
+
 
 using namespace llvm;
 using namespace boost;
@@ -163,10 +163,6 @@ bool AutoMultiplexing::optimize(PabloFunction & function) {
         am.topologicalSort(function.getEntryBlock());
         RECORD_TIMESTAMP(end_topological_sort);
         LOG("TopologicalSort:         " << (end_topological_sort - start_topological_sort));
-
-        BooleanReassociationPass::optimize(function);
-
-        BDDMinimizationPass::optimize(function);
     }
 
     LOG_NUMBER_OF_ADVANCES(function.getEntryBlock());
