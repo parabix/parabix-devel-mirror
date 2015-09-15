@@ -7,7 +7,7 @@ class PabloFunction;
 
 class PabloVerifier {
 public:
-    static void verify(const PabloFunction & function);
+    static void verify(const PabloFunction & function, const bool ignoreUnusedStatements = true);
 private:
 
 };

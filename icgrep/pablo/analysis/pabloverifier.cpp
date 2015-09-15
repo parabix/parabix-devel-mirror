@@ -25,9 +25,18 @@ private:
     std::unordered_set<const PabloAST *> mSet;
 };
 
-void isTopologicallyOrdered(const PabloBlock & block, const OrderingVerifier & parent) {
+void isTopologicallyOrdered(const PabloBlock & block, const OrderingVerifier & parent, const bool ignoreUnusedStatements) {
     OrderingVerifier ov(parent);
     for (const Statement * stmt : block) {
+        if (stmt->getNumUses() == 0 && ignoreUnusedStatements) {
+            continue;
+        }
+        if (LLVM_UNLIKELY(isa<While>(stmt))) {
+            isTopologicallyOrdered(cast<While>(stmt)->getBody(), ov, ignoreUnusedStatements);
+            for (const Next * var : cast<While>(stmt)->getVariants()) {
+                ov.insert(var);
+            }
+        }
         for (unsigned i = 0; i != stmt->getNumOperands(); ++i) {
             const PabloAST * op = stmt->getOperand(i);
             if ((isa<Statement>(op) || isa<Var>(op)) && ov.count(op) == false) {
@@ -43,29 +52,24 @@ void isTopologicallyOrdered(const PabloBlock & block, const OrderingVerifier & p
         }
         ov.insert(stmt);
         if (LLVM_UNLIKELY(isa<If>(stmt))) {
-            isTopologicallyOrdered(cast<If>(stmt)->getBody(), ov);
+            isTopologicallyOrdered(cast<If>(stmt)->getBody(), ov, ignoreUnusedStatements);
             for (const Assign * def : cast<If>(stmt)->getDefined()) {
                 ov.insert(def);
-            }
-        } else if (LLVM_UNLIKELY(isa<While>(stmt))) {
-            isTopologicallyOrdered(cast<While>(stmt)->getBody(), ov);
-            for (const Next * var : cast<While>(stmt)->getVariants()) {
-                ov.insert(var);
             }
         }
     }
 }
 
-void isTopologicallyOrdered(const PabloFunction & function) {
+void isTopologicallyOrdered(const PabloFunction & function, const bool ignoreUnusedStatements) {
     OrderingVerifier ov;
     for (unsigned i = 0; i != function.getNumOfParameters(); ++i) {
         ov.insert(function.getParameter(i));
     }
-    isTopologicallyOrdered(function.getEntryBlock(), ov);
+    isTopologicallyOrdered(function.getEntryBlock(), ov, ignoreUnusedStatements);
 }
 
-void PabloVerifier::verify(const PabloFunction & function) {
-    isTopologicallyOrdered(function);
+void PabloVerifier::verify(const PabloFunction & function, const bool ignoreUnusedStatements) {
+    isTopologicallyOrdered(function, ignoreUnusedStatements);
 }
 
 }

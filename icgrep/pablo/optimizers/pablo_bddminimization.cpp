@@ -78,6 +78,7 @@ void BDDMinimizationPass::eliminateLogicallyEquivalentStatements(PabloFunction &
 
     // Initialize the BDD engine ...
     mManager = Cudd_Init(variableCount + function.getNumOfParameters() - function.getNumOfResults(), 0, CUDD_UNIQUE_SLOTS, CUDD_CACHE_SLOTS, 0);
+    mVariables = 0;
     Cudd_MakeTreeNode(mManager, 0, function.getNumOfParameters(), MTR_DEFAULT);
     // Map the predefined 0/1 entries
     mCharacterizationMap[function.getEntryBlock().createZeroes()] = Zero();
@@ -137,7 +138,6 @@ void BDDMinimizationPass::eliminateLogicallyEquivalentStatements(PabloBlock & bl
         }
         stmt = stmt->getNextNode();
     }   
-    // Cudd_ReduceHeap(mManager, CUDD_REORDER_SIFT, 1);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -210,56 +210,6 @@ inline std::pair<DdNode *, bool> BDDMinimizationPass::characterize(Statement * c
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief identifyHiddenContradicionsAndTautologies
- *
- * This function attempts to scan through the AST and identify statements such as (A op2 B) op1 (¬A op3 C), where
- * op1, op2 and op3 are And, Or or Xor operations.
- ** ------------------------------------------------------------------------------------------------------------- */
-void BDDMinimizationPass::identifyHiddenContradicionsAndTautologies(PabloBlock & block) {
-
-    using Graph = adjacency_list<hash_setS, vecS, bidirectionalS, PabloAST *>;
-    using Vertex = Graph::vertex_descriptor;
-    using Map = std::unordered_map<const PabloAST *, Vertex>;
-
-    Graph G;
-    Map M;
-    for (Statement * stmt : block) {
-        const TypeId typeId = stmt->getClassTypeId();
-        if (typeId == TypeId::And || typeId == TypeId::Or || typeId == TypeId::Xor) {
-            const auto u = add_vertex(stmt, G);
-            M.insert(std::make_pair(stmt, u));
-            for (unsigned i = 0; i != stmt->getNumOperands(); ++i) {
-                const auto f = M.find(stmt->getOperand(i));
-                if (f != M.end()) {
-                    add_edge(f->second, u, G);
-                }
-            }
-        }
-    }
-
-    if (num_edges(G) == 0) {
-        return;
-    }
-
-    std::vector<Vertex> ordering;
-    ordering.reserve(num_vertices(G));
-    topological_sort(G, std::back_inserter(ordering));
-
-    std::vector<unsigned> component(num_vertices(G));
-    unsigned components = 0;
-    for (auto u : ordering) {
-        if (out_degree(u, G) != G[u]->users().size()) {
-            assert (out_degree(u, G) > G[u]->users().size());
-            component[u] = ++components;
-        }
-    }
-
-    // ....
-
-
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
  * @brief CUDD wrappers
  ** ------------------------------------------------------------------------------------------------------------- */
 
@@ -271,10 +221,8 @@ inline DdNode * BDDMinimizationPass::One() const {
     return Cudd_ReadOne(mManager);
 }
 
-inline DdNode * BDDMinimizationPass::NewVar(const PabloAST * expr) {
-    DdNode * var = Cudd_bddIthVar(mManager, mVariables.size());
-    mVariables.push_back(const_cast<PabloAST *>(expr));
-    return var;
+inline DdNode * BDDMinimizationPass::NewVar(const PabloAST *) {
+    return Cudd_bddIthVar(mManager, mVariables++);
 }
 
 inline bool BDDMinimizationPass::nonConstant(DdNode * const x) const {
@@ -317,7 +265,6 @@ inline bool BDDMinimizationPass::noSatisfyingAssignment(DdNode * const x) {
 inline void BDDMinimizationPass::shutdown() {
     Cudd_Quit(mManager);
     mCharacterizationMap.clear();
-    mVariables.clear();
 }
 
 } // end of namespace pablo

@@ -57,12 +57,12 @@ private:
     DdNode * Xor(DdNode * const x, DdNode * const y);
     DdNode * Not(DdNode * x) const;
     DdNode * Ite(DdNode * const x, DdNode * const y, DdNode * const z);
-    DdNode * NewVar(const PabloAST * expr);
+    DdNode * NewVar(const PabloAST *);
     bool noSatisfyingAssignment(DdNode * const x);
     void shutdown();
 private:
     DdManager *                     mManager;
-    std::vector<PabloAST *>         mVariables;
+    unsigned                        mVariables;
     CharacterizationMap             mCharacterizationMap;
 };
 
