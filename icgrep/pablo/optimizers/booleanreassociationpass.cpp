@@ -13,7 +13,6 @@
 #include <set>
 #include <iostream>
 #include <pablo/printer_pablos.h>
-#include "graph-facade.hpp"
 
 using namespace boost;
 using namespace boost::container;
@@ -38,40 +37,6 @@ using DistributionSets = std::vector<DistributionSet>;
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief helper functions
  ** ------------------------------------------------------------------------------------------------------------- */
-template <class Graph>
-static VertexSet incomingVertexSet(const Vertex u, const Graph & G) {
-    VertexSet V;
-    V.reserve(G.in_degree(u));
-    for (auto e : make_iterator_range(G.in_edges(u))) {
-        V.push_back(G.source(e));
-    }
-    std::sort(V.begin(), V.end());
-    return std::move(V);
-}
-
-template <class Graph>
-static VertexSet outgoingVertexSet(const Vertex u, const Graph & G) {
-    VertexSet V;
-    V.reserve(G.out_degree(u));
-    for (auto e : make_iterator_range(G.out_edges(u))) {
-        V.push_back(G.target(e));
-    }
-    std::sort(V.begin(), V.end());
-    return std::move(V);
-}
-
-template <class Graph>
-static VertexSet sinks(const Graph & G) {
-    VertexSet V;
-    for (const Vertex u : make_iterator_range(vertices(G))) {
-        if (out_degree(u, G) == 0) {
-            V.push_back(u);
-        }
-    }
-    std::sort(V.begin(), V.end());
-    return std::move(V);
-}
-
 template<typename Iterator>
 inline Graph::edge_descriptor first(const std::pair<Iterator, Iterator> & range) {
     assert (range.first != range.second);
@@ -87,8 +52,8 @@ inline bool no_edge(const Vertex u, const Vertex v, const Graph & G) {
 }
 
 inline void add_edge(PabloAST * expr, const Vertex u, const Vertex v, Graph & G) {
-    // assert (u != v);
-    // assert (no_edge(v, u, G));
+    assert (u != v);
+    assert (no_edge(v, u, G));
     // Make sure each edge is unique
     for (auto e : make_iterator_range(out_edges(u, G))) {
         if (LLVM_UNLIKELY(target(e, G) == v && (G[e] == nullptr || G[e] == expr))) {
@@ -561,7 +526,13 @@ static BicliqueSet enumerateBicliques(const Graph & G, const VertexSet & A) {
 
     IntersectionSets B1;
     for (auto u : A) {
-        B1.insert(std::move(incomingVertexSet(u, G)));
+        VertexSet V;
+        V.reserve(in_degree(u, G));
+        for (auto e : make_iterator_range(in_edges(u, G))) {
+            V.push_back(source(e, G));
+        }
+        std::sort(V.begin(), V.end());
+        B1.insert(std::move(V));
     }
 
     IntersectionSets B(B1);
@@ -606,9 +577,16 @@ static BicliqueSet enumerateBicliques(const Graph & G, const VertexSet & A) {
     for (auto Bi = B.begin(); Bi != B.end(); ++Bi) {
         VertexSet Ai(A);
         for (const Vertex u : *Bi) {
-            VertexSet Aj = outgoingVertexSet(u, G);
+            VertexSet Aj;
+            Aj.reserve(out_degree(u, G));
+            for (auto e : make_iterator_range(out_edges(u, G))) {
+                Aj.push_back(target(e, G));
+            }
+            std::sort(Aj.begin(), Aj.end());
+
             VertexSet Ak;
             std::set_intersection(Ai.begin(), Ai.end(), Aj.begin(), Aj.end(), std::back_inserter(Ak));
+
             Ai.swap(Ak);
         }
         cliques.emplace_back(std::move(Ai), std::move(*Bi));
@@ -720,11 +698,19 @@ static BicliqueSet && removeUnhelpfulBicliques(BicliqueSet && cliques, const Gra
  * @brief safeDistributionSets
  ** ------------------------------------------------------------------------------------------------------------- */
 static DistributionSets safeDistributionSets(const Graph & G, DistributionGraph & H) {
-    const auto F = makeGraphFacade(H);
+
+    VertexSet sinks;
+    for (const Vertex u : make_iterator_range(vertices(G))) {
+        if (out_degree(u, G) == 0) {
+            sinks.push_back(u);
+        }
+    }
+    std::sort(sinks.begin(), sinks.end());
+
     DistributionSets T;
-    BicliqueSet lowerSet = independentCliqueSets<1>(removeUnhelpfulBicliques(enumerateBicliques(F, sinks(H)), G, H), 1);
+    BicliqueSet lowerSet = independentCliqueSets<1>(removeUnhelpfulBicliques(enumerateBicliques(H, sinks), G, H), 1);
     for (Biclique & lower : lowerSet) {
-        BicliqueSet upperSet = independentCliqueSets<0>(enumerateBicliques(F, std::get<1>(lower)), 2);
+        BicliqueSet upperSet = independentCliqueSets<0>(enumerateBicliques(H, std::get<1>(lower)), 2);
         for (Biclique & upper : upperSet) {
             T.emplace_back(std::move(std::get<1>(upper)), std::move(std::get<0>(upper)), std::get<0>(lower));
         }

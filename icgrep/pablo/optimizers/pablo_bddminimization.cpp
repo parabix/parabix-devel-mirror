@@ -26,7 +26,6 @@ using TypeId = PabloAST::ClassTypeId;
 bool BDDMinimizationPass::optimize(PabloFunction & function) {
     BDDMinimizationPass am;
     am.eliminateLogicallyEquivalentStatements(function);
-
     am.shutdown();
     return Simplifier::optimize(function);
 }
@@ -56,8 +55,6 @@ void BDDMinimizationPass::eliminateLogicallyEquivalentStatements(PabloFunction &
                 continue;
             }
             switch (stmt->getClassTypeId()) {
-                case TypeId::Assign:
-                case TypeId::Next:
                 case TypeId::Advance:
                 case TypeId::Call:
                 case TypeId::MatchStar:

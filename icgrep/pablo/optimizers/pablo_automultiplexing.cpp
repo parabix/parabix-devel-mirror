@@ -16,8 +16,6 @@
 #include <queue>
 #include <unordered_set>
 #include <pablo/optimizers/pablo_simplifier.hpp>
-#include <pablo/optimizers/pablo_bddminimization.h>
-
 
 using namespace llvm;
 using namespace boost;
@@ -103,9 +101,9 @@ unsigned __count_advances(const PabloBlock & entry) {
 
 namespace pablo {
 
-bool AutoMultiplexing::optimize(PabloFunction & function) {
+using TypeId = PabloAST::ClassTypeId;
 
-    BDDMinimizationPass::optimize(function);
+bool AutoMultiplexing::optimize(PabloFunction & function) {
 
     // std::random_device rd;
     const auto seed = 83234827342;
@@ -201,12 +199,12 @@ bool AutoMultiplexing::initialize(PabloFunction & function) {
             assert ("Run the Simplifer pass prior to this!" && (stmt->getNumUses() > 0));
 
             switch (stmt->getClassTypeId()) {
-                case PabloAST::ClassTypeId::Advance:
+                case TypeId::Advance:
                     mAdvanceMap.emplace(stmt, m);
                     map.emplace(stmt, m++);
-                case PabloAST::ClassTypeId::Call:
-                case PabloAST::ClassTypeId::ScanThru:
-                case PabloAST::ClassTypeId::MatchStar:
+                case TypeId::Call:
+                case TypeId::ScanThru:
+                case TypeId::MatchStar:
                     variableCount++;
                     break;
                 default:
@@ -400,35 +398,35 @@ inline DdNode * AutoMultiplexing::characterize(Statement * const stmt) {
     }
 
     switch (stmt->getClassTypeId()) {
-        case PabloAST::ClassTypeId::Assign:
-        case PabloAST::ClassTypeId::Next:
+        case TypeId::Assign:
+        case TypeId::Next:
             bdd = input[0];
             break;
-        case PabloAST::ClassTypeId::And:
+        case TypeId::And:
             bdd = And(input[0], input[1]);
             break;        
-        case PabloAST::ClassTypeId::Or:
+        case TypeId::Or:
             bdd = Or(input[0], input[1]);
             break;
-        case PabloAST::ClassTypeId::Xor:
+        case TypeId::Xor:
             bdd = Xor(input[0], input[1]);
             break;
-        case PabloAST::ClassTypeId::Not:
+        case TypeId::Not:
             bdd = Not(input[0]);
             break;
-        case PabloAST::ClassTypeId::Sel:
+        case TypeId::Sel:
             bdd = Ite(input[0], input[1], input[2]);
             break;
-        case PabloAST::ClassTypeId::ScanThru:
+        case TypeId::ScanThru:
             // It may be possible use "Not(input[1])" for ScanThrus if we rule out the possibility
             // of a contradition being erroneously calculated later. An example of this
             // would be ¬(ScanThru(c,m) ∨ m)
-        case PabloAST::ClassTypeId::MatchStar:
-        case PabloAST::ClassTypeId::Call:
+        case TypeId::MatchStar:
+        case TypeId::Call:
             bdd = NewVar();
             mRecentCharacterizations.emplace_back(stmt, bdd);
             return bdd;
-        case PabloAST::ClassTypeId::Advance:
+        case TypeId::Advance:
             // This returns so that it doesn't mistakeningly replace the Advance with 0 or add it
             // to the list of recent characterizations.
             return characterize(cast<Advance>(stmt), input[0]);
