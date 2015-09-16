@@ -42,6 +42,7 @@ class BDDMinimizationPass {
 public:
     static bool optimize(PabloFunction & function);
 protected:
+    void initialize(PabloFunction & function);
     void eliminateLogicallyEquivalentStatements(PabloFunction & function);
     void eliminateLogicallyEquivalentStatements(PabloBlock & block, SubsitutionMap & parent);
     void eliminateLogicallyEquivalentStatements(Statement * const stmt, SubsitutionMap & map);

@@ -286,7 +286,7 @@ static void printGraph(const PabloBlock & block, const Graph & G, const std::str
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief createTree
  ** ------------------------------------------------------------------------------------------------------------- */
-static PabloAST * createTree(PabloBlock & block, const Vertex u, Graph & G) {
+static PabloAST * createTree(PabloBlock & block, const Vertex u, Graph & G, const flat_map<const PabloAST *, unsigned> & writtenAt) {
     flat_set<PabloAST *> sources;
     for (const auto e : make_iterator_range(in_edges(u, G))) {
         PabloAST * expr = std::get<1>(G[source(e, G)]);
@@ -294,6 +294,15 @@ static PabloAST * createTree(PabloBlock & block, const Vertex u, Graph & G) {
         sources.insert(expr);
     }
     circular_buffer<PabloAST *> Q(sources.begin(), sources.end());
+    // Sort the queue in order of how the inputs were written
+    std::sort(Q.begin(), Q.end(), [&writtenAt](const PabloAST * const e1, const PabloAST * const e2) -> bool {
+        const auto f1 = writtenAt.find(e1);
+        const unsigned v1 = (f1 == writtenAt.end()) ? 0 : f1->second;
+        const auto f2 = writtenAt.find(e2);
+        const unsigned v2 = (f2 == writtenAt.end()) ? 0 : f2->second;
+        return v1 < v2;
+    });
+
     const TypeId typeId = std::get<0>(G[u]);
     while (Q.size() > 1) {
         PabloAST * e1 = Q.front(); Q.pop_front();
@@ -320,30 +329,30 @@ static PabloAST * createTree(PabloBlock & block, const Vertex u, Graph & G) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief processScope
  ** ------------------------------------------------------------------------------------------------------------- */
-inline void BooleanReassociationPass::processScope(PabloFunction & function, PabloBlock & block) {
+inline void BooleanReassociationPass::processScope(PabloFunction &, PabloBlock & block) {
     Graph G;
     summarizeAST(block, G);
     redistributeAST(block, G);
-    mergeAndWrite(block, G);
+    rewriteAST(block, G);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief mergeAndWrite
+ * @brief rewriteAST
  ** ------------------------------------------------------------------------------------------------------------- */
-void BooleanReassociationPass::mergeAndWrite(PabloBlock & block, Graph & G) {
+void BooleanReassociationPass::rewriteAST(PabloBlock & block, Graph & G) {
 
     circular_buffer<Vertex> Q(num_vertices(G));
     topological_sort(G, std::back_inserter(Q));
     block.setInsertPoint(nullptr);
 
-    flat_set<PabloAST *> alreadyWritten;
-
+    unsigned index = 0;
+    flat_map<const PabloAST *, unsigned> writtenAt;
     while (!Q.empty()) {
         const Vertex u = Q.back(); Q.pop_back();
         if (LLVM_LIKELY(isMutable(G[u], block))) {
             Statement * stmt = nullptr;
             if (isOptimizable(G[u])) {
-                PabloAST * replacement = createTree(block, u, G);
+                PabloAST * replacement = createTree(block, u, G, writtenAt);
                 if (LLVM_LIKELY(inCurrentBlock(replacement, block))) {
                     stmt = cast<Statement>(replacement);
                 } else { // optimization reduced this to a Constant, Var or an outer-scope statement
@@ -354,36 +363,23 @@ void BooleanReassociationPass::mergeAndWrite(PabloBlock & block, Graph & G) {
                 stmt = cast<Statement>(std::get<1>(G[u]));
             }
             assert (stmt);
-            assert (inCurrentBlock(stmt, block));
-            // make sure that optimization doesn't reduce this to an already written statement
-            if (alreadyWritten.insert(stmt).second) {
-                for (auto e : make_iterator_range(out_edges(u, G))) {
-                    if (G[e] && G[e] != stmt) {
-                        PabloAST * expr = std::get<1>(G[target(e, G)]);
-                        if (expr) { // processing a yet-to-be created value
-                            cast<Statement>(expr)->replaceUsesOfWith(G[e], stmt);
-                        }
+            assert (inCurrentBlock(stmt, block));            
+            for (auto e : make_iterator_range(out_edges(u, G))) {
+                if (G[e] && G[e] != stmt) {
+                    PabloAST * expr = std::get<1>(G[target(e, G)]);
+                    if (expr) { // processing a yet-to-be created value
+                        cast<Statement>(expr)->replaceUsesOfWith(G[e], stmt);
                     }
                 }
-                block.insert(stmt);
             }
+            // make sure that optimization doesn't reduce this to an already written statement
+            if (writtenAt.count(stmt)) {
+                continue;
+            }
+            writtenAt.emplace(stmt, ++index);
+            block.insert(stmt);
         }
     }
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief getVertex
- ** ------------------------------------------------------------------------------------------------------------- */
-static inline Vertex getVertex(PabloAST * expr, Graph & G, Map & M, const PabloBlock & block) {
-    const auto f = M.find(expr);
-    if (f != M.end()) {
-        return f->second;
-    }
-    // To simplify future analysis, every statement not in the current block will be recorded as a Var.
-    const TypeId typeId = inCurrentBlock(expr, block) ? expr->getClassTypeId() : TypeId::Var;
-    const auto u = add_vertex(std::make_pair(typeId, expr), G);
-    M.insert(std::make_pair(expr, u));
-    return u;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -396,24 +392,24 @@ void BooleanReassociationPass::summarizeAST(PabloBlock & block, Graph & G) const
     Map M;
     // Compute the base def-use graph ...
     for (Statement * stmt : block) {
-        const Vertex u = getVertex(stmt, G, M, block);
+        const Vertex u = getSummaryVertex(stmt, G, M, block);
         for (unsigned i = 0; i != stmt->getNumOperands(); ++i) {
             PabloAST * const op = stmt->getOperand(i);
             if (LLVM_UNLIKELY(isa<Integer>(op) || isa<String>(op))) {
                 continue;
             }
-            const Vertex v = getVertex(op, G, M, block);
+            const Vertex v = getSummaryVertex(op, G, M, block);
             add_edge(op, v, u, G);
             // If this operand is a Not operation that is not in this PabloBlock,
             // pull its input operand in. It may lead to future optimizations.
             if (LLVM_UNLIKELY(isa<Not>(op) && !inCurrentBlock(cast<Not>(op), block))) {
                 PabloAST * const negatedValue = cast<Not>(op)->getExpr();
-                add_edge(negatedValue, getVertex(negatedValue, G, M, block), v, G);
+                add_edge(negatedValue, getSummaryVertex(negatedValue, G, M, block), v, G);
             }
         }
         if (isa<If>(stmt)) {
             for (Assign * def : cast<const If>(stmt)->getDefined()) {
-                const Vertex v = getVertex(def, G, M, block);
+                const Vertex v = getSummaryVertex(def, G, M, block);
                 add_edge(def, u, v, G);
                 resolveUsages(v, def, block, G, M, stmt);
             }
@@ -423,7 +419,7 @@ void BooleanReassociationPass::summarizeAST(PabloBlock & block, Graph & G) const
             // we make the loop dependent on the original value of each Next node and
             // the Next node dependent on the loop.
             for (Next * var : cast<const While>(stmt)->getVariants()) {
-                const Vertex v = getVertex(var, G, M, block);
+                const Vertex v = getSummaryVertex(var, G, M, block);
                 assert (in_degree(v, G) == 1);
                 add_edge(nullptr, source(first(in_edges(v, G)), G), u, G);
                 remove_edge(v, u, G);
@@ -462,10 +458,10 @@ void BooleanReassociationPass::resolveUsages(const Vertex u, PabloAST * expr, Pa
                             break;
                         }
                         // Add in a Var denoting the user of this expression so that it can be updated if expr changes.
-                        const Vertex v = getVertex(user, G, M, block);                        
+                        const Vertex v = getSummaryVertex(user, G, M, block);
                         add_edge(expr, u, v, G);
 
-                        const Vertex w = getVertex(branch, G, M, block);
+                        const Vertex w = getSummaryVertex(branch, G, M, block);
                         add_edge(nullptr, v, w, G);
                         break;
                     }
@@ -688,9 +684,9 @@ inline static BicliqueSet && independentCliqueSets(BicliqueSet && cliques, const
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief removeUnhelpfulBicliques
  *
- * An intermediary vertex could have more than one outgoing edge but if any edge is not directed to a vertex in our
- * biclique, we'll need to compute that specific value anyway. Remove them from the clique set and if there are not
- * enough vertices in the biclique to make distribution profitable, eliminate the clique.
+ * An intermediary vertex could have more than one outgoing edge but if any that are not directed to vertices in
+ * the lower biclique, we'll need to compute that specific value anyway. Remove them from the clique set and if
+ * there are not enough vertices in the biclique to make distribution profitable, eliminate the clique.
  ** ------------------------------------------------------------------------------------------------------------- */
 static BicliqueSet && removeUnhelpfulBicliques(BicliqueSet && cliques, const Graph & G, DistributionGraph & H) {
     for (auto ci = cliques.begin(); ci != cliques.end(); ) {
@@ -872,6 +868,21 @@ void BooleanReassociationPass::redistributeAST(const PabloBlock & block, Graph &
             summarizeGraph(block, G, mapping);
         }
     }
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief getVertex
+ ** ------------------------------------------------------------------------------------------------------------- */
+Vertex BooleanReassociationPass::getSummaryVertex(PabloAST * expr, Graph & G, Map & M, const PabloBlock & block) {
+    const auto f = M.find(expr);
+    if (f != M.end()) {
+        return f->second;
+    }
+    // To simplify future analysis, every statement not in the current block will be recorded as a Var.
+    const TypeId typeId = inCurrentBlock(expr, block) ? expr->getClassTypeId() : TypeId::Var;
+    const auto u = add_vertex(std::make_pair(typeId, expr), G);
+    M.insert(std::make_pair(expr, u));
+    return u;
 }
 
 }

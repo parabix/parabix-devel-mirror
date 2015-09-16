@@ -25,20 +25,20 @@ using TypeId = PabloAST::ClassTypeId;
 
 bool BDDMinimizationPass::optimize(PabloFunction & function) {
     BDDMinimizationPass am;
+    am.initialize(function);
     am.eliminateLogicallyEquivalentStatements(function);
+
     am.shutdown();
     return Simplifier::optimize(function);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief initialize
- * @param vars the input vars for this program
- * @param entry the entry block
  *
  * Scan through the program to identify any advances and calls then initialize the BDD engine with
  * the proper variable ordering.
  ** ------------------------------------------------------------------------------------------------------------- */
-void BDDMinimizationPass::eliminateLogicallyEquivalentStatements(PabloFunction & function) {
+void BDDMinimizationPass::initialize(PabloFunction & function) {
 
     std::stack<Statement *> scope;
     unsigned variableCount = 0; // number of statements that cannot always be categorized without generating a new variable
@@ -59,8 +59,12 @@ void BDDMinimizationPass::eliminateLogicallyEquivalentStatements(PabloFunction &
                 case TypeId::Call:
                 case TypeId::MatchStar:
                 case TypeId::ScanThru:
-                    variableCount++;
-                    break;                                   
+                    ++variableCount;
+                    break;
+                case TypeId::Next:
+                    if (escapes(stmt)) {
+                        ++variableCount;
+                    }
                 default:
                     break;
             }
@@ -85,23 +89,23 @@ void BDDMinimizationPass::eliminateLogicallyEquivalentStatements(PabloFunction &
     for (auto i = 0; i != function.getNumOfParameters(); ++i) {
         mCharacterizationMap[function.getParameter(i)] = NewVar(function.getParameter(i));
     }
-
-    SubsitutionMap baseMap;
-    baseMap.insert(Zero(), function.getEntryBlock().createZeroes());
-    baseMap.insert(One(), function.getEntryBlock().createOnes());
-
     Cudd_SetSiftMaxVar(mManager, 1000000);
     Cudd_SetSiftMaxSwap(mManager, 1000000000);
     Cudd_AutodynEnable(mManager, CUDD_REORDER_LAZY_SIFT);
+}
 
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief eliminateLogicallyEquivalentStatements
+ ** ------------------------------------------------------------------------------------------------------------- */
+void BDDMinimizationPass::eliminateLogicallyEquivalentStatements(PabloFunction & function) {
+    SubsitutionMap baseMap;
+    baseMap.insert(Zero(), function.getEntryBlock().createZeroes());
+    baseMap.insert(One(), function.getEntryBlock().createOnes());
     eliminateLogicallyEquivalentStatements(function.getEntryBlock(), baseMap);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief characterize
- * @param vars the input vars for this program
- *
- * Scan through the program and iteratively compute the BDDs for each statement.
+ * @brief eliminateLogicallyEquivalentStatements
  ** ------------------------------------------------------------------------------------------------------------- */
 void BDDMinimizationPass::eliminateLogicallyEquivalentStatements(PabloBlock & block, SubsitutionMap & parent) {
     SubsitutionMap map(&parent);
@@ -110,12 +114,19 @@ void BDDMinimizationPass::eliminateLogicallyEquivalentStatements(PabloBlock & bl
         if (LLVM_UNLIKELY(isa<If>(stmt))) {
             eliminateLogicallyEquivalentStatements(cast<If>(stmt)->getBody(), map);
             for (Assign * def : cast<const If>(stmt)->getDefined()) {
+                // Any defined variable that wasn't used outside of the If scope would have
+                // been demoted by the Simplifier pass.
                 map.insert(mCharacterizationMap[def], def);
             }
         } else if (LLVM_UNLIKELY(isa<While>(stmt))) {
             eliminateLogicallyEquivalentStatements(cast<While>(stmt)->getBody(), map);
             for (Next * var : cast<const While>(stmt)->getVariants()) {
-                map.insert(mCharacterizationMap[var], var);
+                if (escapes(var)) {
+                    map.insert(NewVar(var), var);
+                } else { // we don't need to retain the BDD for this variant
+                    Cudd_RecursiveDeref(mManager, mCharacterizationMap[var]);
+                    mCharacterizationMap.erase(var);
+                }
             }
         } else { // attempt to characterize this statement and replace it if we've encountered an equivalent one
             DdNode * bdd = nullptr;
@@ -227,23 +238,15 @@ inline bool BDDMinimizationPass::nonConstant(DdNode * const x) const {
 }
 
 inline DdNode * BDDMinimizationPass::And(DdNode * const x, DdNode * const y) {
-    DdNode * r = Cudd_bddAnd(mManager, x, y);
-    return r;
-}
-
-inline DdNode * BDDMinimizationPass::Intersect(DdNode * const x, DdNode * const y) {
-    DdNode * r = Cudd_bddIntersect(mManager, x, y); Cudd_Ref(r);
-    return r;
+    return Cudd_bddAnd(mManager, x, y);
 }
 
 inline DdNode * BDDMinimizationPass::Or(DdNode * const x, DdNode * const y) {
-    DdNode * r = Cudd_bddOr(mManager, x, y);
-    return r;
+    return Cudd_bddOr(mManager, x, y);
 }
 
 inline DdNode * BDDMinimizationPass::Xor(DdNode * const x, DdNode * const y) {
-    DdNode * r = Cudd_bddXor(mManager, x, y);
-    return r;
+    return Cudd_bddXor(mManager, x, y);
 }
 
 inline DdNode * BDDMinimizationPass::Not(DdNode * const x) const {
@@ -251,8 +254,7 @@ inline DdNode * BDDMinimizationPass::Not(DdNode * const x) const {
 }
 
 inline DdNode * BDDMinimizationPass::Ite(DdNode * const x, DdNode * const y, DdNode * const z) {
-    DdNode * r = Cudd_bddIte(mManager, x, y, z);
-    return r;
+    return Cudd_bddIte(mManager, x, y, z);
 }
 
 inline bool BDDMinimizationPass::noSatisfyingAssignment(DdNode * const x) {

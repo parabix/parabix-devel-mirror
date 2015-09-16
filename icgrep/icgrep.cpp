@@ -243,9 +243,9 @@ void pablo_function_passes(pablo::PabloFunction * function) {
     }
 #ifdef ENABLE_MULTIPLEXING
     pablo::BDDMinimizationPass::optimize(*function);
-    if (EnableMultiplexing) {
-        pablo::AutoMultiplexing::optimize(*function);
-    }
+//    if (EnableMultiplexing) {
+//        pablo::AutoMultiplexing::optimize(*function);
+//    }
     pablo::BooleanReassociationPass::optimize(*function);
 #endif
     if (PrintOptimizedREcode) {

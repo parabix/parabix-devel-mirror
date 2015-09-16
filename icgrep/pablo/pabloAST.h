@@ -256,6 +256,8 @@ protected:
     PabloAST **                 mOperand;
 };
 
+bool escapes(const Statement * statement);
+
 class StatementList {
     friend class Statement;
     friend class PabloBlock;

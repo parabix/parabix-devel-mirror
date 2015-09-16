@@ -289,4 +289,26 @@ StatementList::~StatementList() {
 
 }
 
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief escapes
+ *
+ * Is this statement used outside of its scope?
+ ** ------------------------------------------------------------------------------------------------------------- */
+bool escapes(const Statement * statement) {
+    const PabloBlock * const parent = statement->getParent();
+    for (const PabloAST * user : statement->users()) {
+        if (LLVM_LIKELY(isa<Statement>(user))) {
+            const PabloBlock * used = cast<Statement>(user)->getParent();
+            while (used != parent) {
+                used = used->getParent();
+                if (used == nullptr) {
+                    assert (isa<Assign>(statement) || isa<Next>(statement));
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
+}
+
 }
