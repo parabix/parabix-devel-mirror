@@ -156,11 +156,6 @@ bool AutoMultiplexing::optimize(PabloFunction & function) {
         am.multiplexSelectedIndependentSets();
         RECORD_TIMESTAMP(end_select_independent_sets);
         LOG("SelectedIndependentSets: " << (end_select_independent_sets - start_select_independent_sets));
-
-        RECORD_TIMESTAMP(start_topological_sort);
-        am.topologicalSort(function.getEntryBlock());
-        RECORD_TIMESTAMP(end_topological_sort);
-        LOG("TopologicalSort:         " << (end_topological_sort - start_topological_sort));
     }
 
     LOG_NUMBER_OF_ADVANCES(function.getEntryBlock());
@@ -1030,68 +1025,6 @@ void AutoMultiplexing::multiplexSelectedIndependentSets() {
                 input[i]->replaceWith(demuxed, true, true);
             }
         }        
-    }
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief topologicalSort
- *
- * After transforming the IR, we need to run this in order to always have a valid program. Each multiplex set
- * contains vertices corresponding to an Advance in the IR. While we know each Advance within a set is independent
- * w.r.t. the transitive closure of their dependencies in the IR, the position of each Advance's dependencies and
- * users within the IR isn't taken into consideration. Thus while there must be a valid ordering for the program,
- * it's not necessarily the original ordering.
- ** ------------------------------------------------------------------------------------------------------------- */
-void AutoMultiplexing::topologicalSort(PabloBlock & entry) const {
-    // Note: not a real topological sort. I expect the original graph to be close to the resulting one. Thus cost
-    // of constructing a graph in which to perform the sort takes longer than potentially moving an instruction
-    // multiple times.
-    std::unordered_set<const PabloAST *> encountered;
-    std::stack<Statement *> scope;
-
-    for (Statement * stmt = entry.front(); ; ) { restart:
-        while ( stmt ) {
-            for (unsigned i = 0; i != stmt->getNumOperands(); ++i) {
-                PabloAST * const op = stmt->getOperand(i);
-                if (LLVM_LIKELY(isa<Statement>(op))) {
-                    if (LLVM_UNLIKELY(encountered.count(op) == 0)) {
-                        if (LLVM_UNLIKELY(isa<While>(stmt) && isa<Next>(op))) {
-                            if (encountered.count(cast<Next>(op)->getInitial()) != 0) {
-                                continue;
-                            }
-                        }
-                        Statement * const next = stmt->getNextNode();
-                        Statement * after = cast<Statement>(op);
-                        if (LLVM_UNLIKELY(after->getParent() != stmt->getParent())) {
-                            if (after->getParent()) {
-                                throw std::runtime_error("Operand is not in the same scope as the statement!");
-                            } else {
-                                throw std::runtime_error("Operand is not in any pablo scope!");
-                            }
-                        }
-                        stmt->insertAfter(cast<Statement>(op));
-                        stmt = next;
-                        goto restart;
-                    }
-                }
-            }
-            if (LLVM_UNLIKELY(isa<If>(stmt) || isa<While>(stmt))) {
-                // Set the next statement to be the first statement of the inner scope and push the
-                // next statement of the current statement into the scope stack.
-                const PabloBlock & nested = isa<If>(stmt) ? cast<If>(stmt)->getBody() : cast<While>(stmt)->getBody();
-                scope.push(stmt->getNextNode());
-                stmt = nested.front();
-                continue;
-            }
-
-            encountered.insert(stmt);
-            stmt = stmt->getNextNode();
-        }
-        if (scope.empty()) {
-            break;
-        }
-        stmt = scope.top();
-        scope.pop();
     }
 }
 

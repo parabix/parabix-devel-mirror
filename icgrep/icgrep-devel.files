@@ -337,3 +337,5 @@ generate_predefined_ucd_functions.cpp
 pablo/optimizers/booleanreassociationpass.cpp
 pablo/optimizers/booleanreassociationpass.h
 pablo/optimizers/graph-facade.hpp
+pablo/analysis/pabloverifier.hpp
+pablo/analysis/pabloverifier.cpp

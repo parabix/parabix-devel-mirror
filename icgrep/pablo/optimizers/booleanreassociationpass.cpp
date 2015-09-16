@@ -322,10 +322,21 @@ static PabloAST * createTree(PabloBlock & block, const Vertex u, Graph & G) {
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void BooleanReassociationPass::processScope(PabloFunction & function, PabloBlock & block) {
     Graph G;
+    summarizeAST(block, G);
+    redistributeAST(block, G);
+    mergeAndWrite(block, G);
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief mergeAndWrite
+ ** ------------------------------------------------------------------------------------------------------------- */
+void BooleanReassociationPass::mergeAndWrite(PabloBlock & block, Graph & G) {
 
     circular_buffer<Vertex> Q(num_vertices(G));
     topological_sort(G, std::back_inserter(Q));
     block.setInsertPoint(nullptr);
+
+    flat_set<PabloAST *> alreadyWritten;
 
     while (!Q.empty()) {
         const Vertex u = Q.back(); Q.pop_back();
@@ -336,6 +347,7 @@ inline void BooleanReassociationPass::processScope(PabloFunction & function, Pab
                 if (LLVM_LIKELY(inCurrentBlock(replacement, block))) {
                     stmt = cast<Statement>(replacement);
                 } else { // optimization reduced this to a Constant, Var or an outer-scope statement
+                    std::get<0>(G[u]) = TypeId::Var;
                     continue;
                 }
             } else { // update any potential mappings
@@ -343,15 +355,18 @@ inline void BooleanReassociationPass::processScope(PabloFunction & function, Pab
             }
             assert (stmt);
             assert (inCurrentBlock(stmt, block));
-            for (auto e : make_iterator_range(out_edges(u, G))) {
-                if (G[e] && G[e] != stmt) {
-                    PabloAST * expr = std::get<1>(G[target(e, G)]);
-                    if (expr) { // processing a yet-to-be created value
-                        cast<Statement>(expr)->replaceUsesOfWith(G[e], stmt);
+            // make sure that optimization doesn't reduce this to an already written statement
+            if (alreadyWritten.insert(stmt).second) {
+                for (auto e : make_iterator_range(out_edges(u, G))) {
+                    if (G[e] && G[e] != stmt) {
+                        PabloAST * expr = std::get<1>(G[target(e, G)]);
+                        if (expr) { // processing a yet-to-be created value
+                            cast<Statement>(expr)->replaceUsesOfWith(G[e], stmt);
+                        }
                     }
                 }
+                block.insert(stmt);
             }
-            block.insert(stmt);
         }
     }
 }
@@ -526,13 +541,16 @@ static BicliqueSet enumerateBicliques(const Graph & G, const VertexSet & A) {
 
     IntersectionSets B1;
     for (auto u : A) {
-        VertexSet V;
-        V.reserve(in_degree(u, G));
-        for (auto e : make_iterator_range(in_edges(u, G))) {
-            V.push_back(source(e, G));
+        assert (u < num_vertices(G));
+        if (in_degree(u, G) > 0) {
+            VertexSet V;
+            V.reserve(in_degree(u, G));
+            for (auto e : make_iterator_range(in_edges(u, G))) {
+                V.push_back(source(e, G));
+            }
+            std::sort(V.begin(), V.end());
+            B1.insert(std::move(V));
         }
-        std::sort(V.begin(), V.end());
-        B1.insert(std::move(V));
     }
 
     IntersectionSets B(B1);
@@ -576,17 +594,17 @@ static BicliqueSet enumerateBicliques(const Graph & G, const VertexSet & A) {
     cliques.reserve(B.size());
     for (auto Bi = B.begin(); Bi != B.end(); ++Bi) {
         VertexSet Ai(A);
-        for (const Vertex u : *Bi) {
-            VertexSet Aj;
-            Aj.reserve(out_degree(u, G));
-            for (auto e : make_iterator_range(out_edges(u, G))) {
-                Aj.push_back(target(e, G));
-            }
-            std::sort(Aj.begin(), Aj.end());
-
+        for (const Vertex u : *Bi) {            
             VertexSet Ak;
-            std::set_intersection(Ai.begin(), Ai.end(), Aj.begin(), Aj.end(), std::back_inserter(Ak));
-
+            if (out_degree(u, G) > 0) {
+                VertexSet Aj;
+                Aj.reserve(out_degree(u, G));
+                for (auto e : make_iterator_range(out_edges(u, G))) {
+                    Aj.push_back(target(e, G));
+                }
+                std::sort(Aj.begin(), Aj.end());
+                std::set_intersection(Ai.begin(), Ai.end(), Aj.begin(), Aj.end(), std::back_inserter(Ak));
+            }
             Ai.swap(Ak);
         }
         cliques.emplace_back(std::move(Ai), std::move(*Bi));
@@ -700,8 +718,8 @@ static BicliqueSet && removeUnhelpfulBicliques(BicliqueSet && cliques, const Gra
 static DistributionSets safeDistributionSets(const Graph & G, DistributionGraph & H) {
 
     VertexSet sinks;
-    for (const Vertex u : make_iterator_range(vertices(G))) {
-        if (out_degree(u, G) == 0) {
+    for (const Vertex u : make_iterator_range(vertices(H))) {
+        if (out_degree(u, H) == 0) {
             sinks.push_back(u);
         }
     }

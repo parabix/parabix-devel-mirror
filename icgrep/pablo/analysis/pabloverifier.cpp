@@ -2,6 +2,7 @@
 #include <pablo/function.h>
 #include <pablo/codegenstate.h>
 #include <pablo/printer_pablos.h>
+#include <iostream>
 #include <unordered_set>
 
 namespace pablo {
@@ -69,7 +70,14 @@ void isTopologicallyOrdered(const PabloFunction & function, const bool ignoreUnu
 }
 
 void PabloVerifier::verify(const PabloFunction & function, const bool ignoreUnusedStatements) {
-    isTopologicallyOrdered(function, ignoreUnusedStatements);
+    try {
+        isTopologicallyOrdered(function, ignoreUnusedStatements);
+    } catch(std::runtime_error err) {
+        raw_os_ostream out(std::cerr);
+        PabloPrinter::print(function.getEntryBlock().statements(), out);
+        out.flush();
+        throw err;
+    }
 }
 
 }

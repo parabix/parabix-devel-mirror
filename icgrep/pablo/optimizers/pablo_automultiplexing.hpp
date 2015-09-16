@@ -47,7 +47,6 @@ protected:
     void selectMultiplexSets(RNG &);
     void applySubsetConstraints();
     void multiplexSelectedIndependentSets();
-    void topologicalSort(PabloBlock & entry) const;
     inline AutoMultiplexing()
     : mVariables(0)
     , mConstraintGraph(0)

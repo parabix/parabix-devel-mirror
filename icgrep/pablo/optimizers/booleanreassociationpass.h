@@ -27,6 +27,7 @@ protected:
     static void summarizeGraph(const PabloBlock & block, Graph & G, std::vector<Vertex> & mapping);
     void resolveUsages(const Vertex u, PabloAST * expr, PabloBlock & block, Graph & G, Map & M, Statement * ignoreIfThis = nullptr) const;
     void redistributeAST(const PabloBlock & block, Graph & G) const;
+    void mergeAndWrite(PabloBlock & block, Graph & G);
 public:
     static bool isOptimizable(const VertexData & data);
     static bool isMutable(const VertexData & data, const PabloBlock &block);
