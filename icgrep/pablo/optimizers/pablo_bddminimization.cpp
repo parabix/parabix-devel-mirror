@@ -142,7 +142,7 @@ void BDDMinimizationPass::eliminateLogicallyEquivalentStatements(PabloBlock & bl
             } else if (LLVM_LIKELY(nonConstant(bdd))) {
                 map.insert(bdd, stmt);
             }
-            mCharacterizationMap.insert(std::make_pair(stmt, bdd));
+            mCharacterizationMap.emplace(stmt, bdd);
         }
         stmt = stmt->getNextNode();
     }   

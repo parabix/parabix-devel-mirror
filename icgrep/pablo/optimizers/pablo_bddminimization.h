@@ -1,7 +1,7 @@
 #ifndef PABLO_BDDMINIMIZATION_H
 #define PABLO_BDDMINIMIZATION_H
 
-#include <unordered_map>
+#include <boost/container/flat_map.hpp>
 #include <vector>
 
 struct DdManager; // forward declare of the CUDD manager
@@ -17,7 +17,7 @@ class Statement;
 
 class BDDMinimizationPass {
 
-    using CharacterizationMap = std::unordered_map<const PabloAST *, DdNode *>;
+    using CharacterizationMap = boost::container::flat_map<const PabloAST *, DdNode *>;
     using Terminals = std::vector<Statement *>;
 
     struct SubsitutionMap {
@@ -32,11 +32,11 @@ class BDDMinimizationPass {
         }
 
         void insert(const DdNode * node, PabloAST * stmt) {
-            mMap.insert(std::make_pair(node, stmt));
+            mMap.emplace(node, stmt);
         }
     private:
         const SubsitutionMap * const mParent;
-        std::unordered_map<const DdNode *, PabloAST *> mMap;
+        boost::container::flat_map<const DdNode *, PabloAST *> mMap;
     };
 
 public:

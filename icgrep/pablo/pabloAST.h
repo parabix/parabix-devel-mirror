@@ -485,6 +485,7 @@ public:
     }
 
     inline void setInsertPoint(Statement * const statement) {
+        assert (statement == nullptr || contains(statement));
         mInsertionPoint = statement;
     }
 
@@ -493,6 +494,8 @@ public:
     }
 
     ~StatementList();
+
+    bool contains(Statement * const statement);
 
 private:
 

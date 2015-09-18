@@ -13,11 +13,14 @@
 #include <pablo/function.h>
 #include <llvm/Support/CommandLine.h>
 #include <utf_encoding.h>
+#include <pablo/analysis/pabloverifier.hpp>
 #include <pablo/optimizers/pablo_simplifier.hpp>
 #include <pablo/optimizers/pablo_codesinking.hpp>
 #ifdef ENABLE_MULTIPLEXING
+#include <pablo/optimizers/pablo_bddminimization.h>
 #include <pablo/optimizers/pablo_automultiplexing.hpp>
 #endif
+#include <pablo/optimizers/booleanreassociationpass.h>
 #include <llvm/IR/Verifier.h>
 #include <llvm/Support/Debug.h>
 #include <llvm/Support/TargetRegistry.h>
@@ -64,7 +67,8 @@ static cl::opt<IfHierarchy> IfHierarchyStrategy(cl::desc("If Hierarchy strategy:
                                                            clEnumVal(NoIfHierarchy, "None"),
                                                            clEnumValEnd));
 
-
+static cl::opt<bool> EnableReassociation("reassoc", cl::init(false),
+                                      cl::desc("Enable reassociation and distribution optimization of Boolean functions."), cl::Optional);
 
 
 static raw_fd_ostream * LongestDependenceChainFile = nullptr;
@@ -237,7 +241,7 @@ void compileUnicodeSet(std::string name, const UnicodeSet & set, PabloCompiler &
     if (LongestDependenceChainFile) {
         (*LongestDependenceChainFile) << name;
     }
-    //std::cerr << name << std::endl;
+    std::cerr << name << std::endl;
 
     PabloFunction * function = PabloFunction::Create(std::move(name), 8, 1);
     Encoding encoding(Encoding::Type::UTF_8, 8);
@@ -259,6 +263,7 @@ void compileUnicodeSet(std::string name, const UnicodeSet & set, PabloCompiler &
     CodeSinking::optimize(*function);
 
     #ifdef ENABLE_MULTIPLEXING
+    BDDMinimizationPass::optimize(*function);
     if (EnableMultiplexing) {
         if (LongestDependenceChainFile) {
             const auto pablo_metrix = computePabloDependencyChainMetrics(function);
@@ -278,6 +283,10 @@ void compileUnicodeSet(std::string name, const UnicodeSet & set, PabloCompiler &
         }
     }
     #endif
+    if (EnableReassociation) {
+        BooleanReassociationPass::optimize(*function);
+    }
+
     // Now compile the function ...
     llvm::Function * func = pc.compile(function, module);
     releaseSlabAllocatorMemory();

@@ -34,11 +34,15 @@ class AutoMultiplexing {
     using AdvanceVector = std::vector<std::tuple<Advance *, DdNode *, DdNode *>>;
     using VertexVector = std::vector<ConstraintVertex>;
     using RecentCharacterizations = std::vector<std::pair<const PabloAST *, DdNode *>>;
+    using ScopeMap = boost::container::flat_map<const PabloBlock *, Statement *>;
+    using TopologicalGraph = boost::adjacency_list<boost::hash_setS, boost::vecS, boost::bidirectionalS, Statement *>;
+    using TopologicalVertex = TopologicalGraph::vertex_descriptor;
+    using TopologicalMap = boost::container::flat_map<const Statement *, TopologicalVertex>;
 public:
     static bool optimize(PabloFunction & function);
 protected:
     bool initialize(PabloFunction & function);
-    void characterize(PabloBlock &block);
+    void characterize(PabloBlock & block);
     DdNode * characterize(Statement * const stmt);
     DdNode * characterize(Advance * adv, DdNode * input);
     bool notTransitivelyDependant(const ConstraintVertex i, const ConstraintVertex j) const;
@@ -46,7 +50,11 @@ protected:
     void addCandidateSet(const VertexVector & S);
     void selectMultiplexSets(RNG &);
     void applySubsetConstraints();
-    void multiplexSelectedIndependentSets();
+    void multiplexSelectedIndependentSets(PabloFunction & function);
+    void topologicalSort(PabloFunction & function, PabloBlock & block) const;
+    void resolveUsages(const TopologicalVertex u, Statement * expr, PabloBlock & block, TopologicalGraph & G, TopologicalMap & M, Statement * ignoreIfThis) const;
+    static TopologicalVertex getVertex(Statement * expr, TopologicalGraph & G, TopologicalMap & M);
+
     inline AutoMultiplexing()
     : mVariables(0)
     , mConstraintGraph(0)
@@ -78,6 +86,7 @@ private:
     AdvanceVector               mAdvance;
     MultiplexSetGraph           mMultiplexSetGraph;
     RecentCharacterizations     mRecentCharacterizations;
+    ScopeMap                    mResolvedScopes;
 };
 
 }

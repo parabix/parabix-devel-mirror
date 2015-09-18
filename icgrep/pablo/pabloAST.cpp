@@ -285,6 +285,15 @@ bool Statement::noRecursiveOperand(const PabloAST * const operand) {
 }
 #endif
 
+bool StatementList::contains(Statement * const statement) {
+    for (Statement * stmt : *this) {
+        if (statement == stmt) {
+            return true;
+        }
+    }
+    return false;
+}
+
 StatementList::~StatementList() {
 
 }

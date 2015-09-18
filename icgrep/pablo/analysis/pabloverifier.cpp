@@ -3,7 +3,7 @@
 #include <pablo/codegenstate.h>
 #include <pablo/printer_pablos.h>
 #include <iostream>
-#include <unordered_set>
+#include <boost/container/flat_set.hpp>
 
 namespace pablo {
 
@@ -23,12 +23,23 @@ struct OrderingVerifier {
     }
 private:
     const OrderingVerifier * const mParent;
-    std::unordered_set<const PabloAST *> mSet;
+    boost::container::flat_set<const PabloAST *> mSet;
 };
 
 void isTopologicallyOrdered(const PabloBlock & block, const OrderingVerifier & parent, const bool ignoreUnusedStatements) {
     OrderingVerifier ov(parent);
+    const Statement * previousStatement = nullptr;
     for (const Statement * stmt : block) {
+        if (stmt->getPrevNode() != previousStatement) {
+            // TODO: make this actually test whether the operand is ever defined,
+            // or if it was defined in a scope that cannot be reached?
+            std::string tmp;
+            raw_string_ostream str(tmp);
+            PabloPrinter::print(stmt, "PabloVerifier: ", str);
+            str << " is not preceeded by the expected statement!";
+            throw std::runtime_error(str.str());
+        }
+        previousStatement = stmt;
         if (stmt->getNumUses() == 0 && ignoreUnusedStatements) {
             continue;
         }
@@ -47,7 +58,7 @@ void isTopologicallyOrdered(const PabloBlock & block, const OrderingVerifier & p
                 raw_string_ostream str(tmp);
                 str << "PabloVerifier: function is not topologically ordered! ";
                 PabloPrinter::print(stmt->getOperand(i), str);
-                str << " was used before definition!";
+                PabloPrinter::print(stmt, " was used before definition by ", str);
                 throw std::runtime_error(str.str());
             }
         }

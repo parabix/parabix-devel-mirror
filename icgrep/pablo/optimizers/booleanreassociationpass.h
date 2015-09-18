@@ -14,6 +14,8 @@ public:
     using Graph = boost::adjacency_list<boost::vecS, boost::vecS, boost::bidirectionalS, VertexData, PabloAST *>;
     using Vertex = Graph::vertex_descriptor;
     using Map = std::unordered_map<const PabloAST *, Vertex>;
+    using WrittenAt = boost::container::flat_map<const PabloAST *, unsigned>;
+    using ScopeMap = boost::container::flat_map<const PabloBlock *, Statement *>;
 
     static bool optimize(PabloFunction & function);
 protected:
@@ -28,14 +30,10 @@ protected:
     void resolveUsages(const Vertex u, PabloAST * expr, PabloBlock & block, Graph & G, Map & M, Statement * ignoreIfThis = nullptr) const;
     void redistributeAST(const PabloBlock & block, Graph & G) const;
     void rewriteAST(PabloBlock & block, Graph & G);
-public:
-    static bool isOptimizable(const VertexData & data);
-    static bool isMutable(const VertexData & data, const PabloBlock &block);
-    static bool isNonEscaping(const VertexData & data);
-    static bool isSameType(const VertexData & data1, const VertexData & data2);
+    static PabloAST * createTree(PabloBlock & block, const Vertex u, Graph & G, const WrittenAt & writtenAt);
     static Vertex getSummaryVertex(PabloAST * expr, Graph & G, Map & M, const PabloBlock & block);
 private:
-    boost::container::flat_map<PabloBlock *, Statement *> mResolvedScopes;
+    ScopeMap mResolvedScopes;
 };
 
 }

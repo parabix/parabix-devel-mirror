@@ -96,8 +96,7 @@ void Simplifier::eliminateRedundantCode(PabloBlock & block, ExpressionTable * pr
             if (isSuperfluous(assign)) {
                 if (assign->getNumUses() == 0) {
                     stmt = assign->eraseFromParent();
-                }
-                else {
+                } else {
                     stmt = assign->replaceWith(assign->getExpression(), true, true);
                 }
                 continue;
@@ -212,7 +211,7 @@ void Simplifier::eliminateRedundantCode(PabloBlock & block, ExpressionTable * pr
             // and erase this statement from the AST
             const auto f = encountered.findOrAdd(stmt);
             if (!std::get<1>(f)) {
-                stmt = stmt->replaceWith(std::get<0>(f));
+                stmt = stmt->replaceWith(std::get<0>(f), true, true);
                 continue;
             }
         }

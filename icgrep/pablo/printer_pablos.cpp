@@ -67,9 +67,6 @@ void PabloPrinter::print(const Statement * stmt, std::string indent, llvm::raw_o
         strm << "<null-stmt>";
     }
     else if (const Assign * an = dyn_cast<const Assign>(stmt)) {
-//        if (an->isOutputAssignment()) {
-//            strm << "output.";
-//        }
         strm << an->getName() << " = ";
         print(an->getExpression(), strm);
     }
@@ -190,6 +187,7 @@ void PabloPrinter::print(const Statement * stmt, std::string indent, llvm::raw_o
 }
 
 void PabloPrinter::print(const PabloAST * expr, llvm::raw_ostream & strm) {
+    strm.write_hex((unsigned long long)expr) << " ";
     if (expr == nullptr) {
         strm << "<null-expr>";
     } else if (isa<const Zeroes>(expr)) {

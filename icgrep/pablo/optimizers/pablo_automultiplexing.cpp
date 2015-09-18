@@ -16,6 +16,7 @@
 #include <queue>
 #include <unordered_set>
 #include <pablo/optimizers/pablo_simplifier.hpp>
+#include <pablo/analysis/pabloverifier.hpp>
 
 using namespace llvm;
 using namespace boost;
@@ -153,9 +154,11 @@ bool AutoMultiplexing::optimize(PabloFunction & function) {
         LOG("ApplySubsetConstraints:  " << (end_subset_constraints - start_subset_constraints));
 
         RECORD_TIMESTAMP(start_select_independent_sets);
-        am.multiplexSelectedIndependentSets();
+        am.multiplexSelectedIndependentSets(function);
         RECORD_TIMESTAMP(end_select_independent_sets);
         LOG("SelectedIndependentSets: " << (end_select_independent_sets - start_select_independent_sets));
+
+        Simplifier::optimize(function);
     }
 
     LOG_NUMBER_OF_ADVANCES(function.getEntryBlock());
@@ -185,6 +188,7 @@ bool AutoMultiplexing::initialize(PabloFunction & function) {
                 // Set the next statement to be the first statement of the inner scope and push the
                 // next statement of the current statement into the scope stack.
                 const PabloBlock & nested = isa<If>(stmt) ? cast<If>(stmt)->getBody() : cast<While>(stmt)->getBody();
+                mResolvedScopes.emplace(&nested, stmt);
                 scope.push(stmt->getNextNode());
                 stmt = nested.front();
                 assert (stmt);
@@ -925,7 +929,7 @@ void AutoMultiplexing::applySubsetConstraints() {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief multiplexSelectedIndependentSets
  ** ------------------------------------------------------------------------------------------------------------- */
-void AutoMultiplexing::multiplexSelectedIndependentSets() {
+void AutoMultiplexing::multiplexSelectedIndependentSets(PabloFunction & function) {
 
     const unsigned first_set = num_vertices(mConstraintGraph);
     const unsigned last_set = num_vertices(mMultiplexSetGraph);
@@ -937,6 +941,7 @@ void AutoMultiplexing::multiplexSelectedIndependentSets() {
     }
 
     circular_buffer<PabloAST *> Q(max_n);
+    flat_set<PabloBlock *> modified;
 
     // When entering thus function, the multiplex set graph M is a DAG with edges denoting the set
     // relationships of our independent sets.
@@ -956,10 +961,12 @@ void AutoMultiplexing::multiplexSelectedIndependentSets() {
             }
             assert (i == n);
 
-            PabloBlock * const block = input[0]->getParent();
-            block->setInsertPoint(block->back());
-            PabloBuilder builder(*block);
             Advance * const adv = input[0];
+            assert (adv);
+            PabloBlock * const block = adv->getParent();
+            assert (block);           
+            PabloBuilder builder(*block);
+            block->setInsertPoint(block->back());
 
             /// Perform n-to-m Multiplexing
             for (size_t j = 0; j != m; ++j) {
@@ -968,6 +975,7 @@ void AutoMultiplexing::multiplexSelectedIndependentSets() {
                 prefix << "mux" << n << "to" << m << '.' << (j + 1);
                 for (size_t i = 0; i != n; ++i) {
                     if (((i + 1) & (1ULL << j)) != 0) {
+                        assert (input[i]->getParent() == block);
                         Q.push_back(input[i]->getOperand(0));
                     }
                 }
@@ -1024,8 +1032,161 @@ void AutoMultiplexing::multiplexSelectedIndependentSets() {
                 PabloAST * demuxed = Q.front(); Q.pop_front(); assert (demuxed);
                 input[i]->replaceWith(demuxed, true, true);
             }
-        }        
+            modified.insert(block);
+        }
     }
+
+    for (PabloBlock * block : modified) {
+        topologicalSort(function, *block);
+    }
+}
+
+///** ------------------------------------------------------------------------------------------------------------- *
+// * @brief printGraph
+// ** ------------------------------------------------------------------------------------------------------------- */
+//template <class Graph>
+//static void printGraph(const PabloBlock & block, const Graph & G, const std::string name) {
+//    raw_os_ostream out(std::cerr);
+
+//    out << "digraph " << name << " {\n";
+//    for (auto u : make_iterator_range(vertices(G))) {
+//        if (in_degree(u, G) == 0 && out_degree(u, G) == 0) {
+//            continue;
+//        }
+//        out << "v" << u << " [label=\"" << u << ": ";
+//        PabloAST * const expr = G[u];
+//        if (isa<Statement>(expr)) {
+//            if (LLVM_UNLIKELY(isa<If>(expr))) {
+//                out << "If ";
+//                PabloPrinter::print(cast<If>(expr)->getOperand(0), out);
+//                out << ":";
+//            } else if (LLVM_UNLIKELY(isa<While>(expr))) {
+//                out << "While ";
+//                PabloPrinter::print(cast<While>(expr)->getOperand(0), out);
+//                out << ":";
+//            } else {
+//                PabloPrinter::print(cast<Statement>(expr), "", out);
+//            }
+//        } else {
+//            PabloPrinter::print(expr, out);
+//        }
+//        out << "\"";
+//        if (!isa<Statement>(expr) || cast<Statement>(expr)->getParent() != &block) {
+//            out << " style=dashed";
+//        }
+//        out << "];\n";
+//    }
+//    for (auto e : make_iterator_range(edges(G))) {
+//        const auto s = source(e, G);
+//        const auto t = target(e, G);
+//        out << "v" << s << " -> v" << t << ";\n";
+//    }
+
+//    if (num_vertices(G) > 0) {
+
+//        out << "{ rank=same;";
+//        for (auto u : make_iterator_range(vertices(G))) {
+//            if (in_degree(u, G) == 0 && out_degree(u, G) != 0) {
+//                out << " v" << u;
+//            }
+//        }
+//        out << "}\n";
+
+//        out << "{ rank=same;";
+//        for (auto u : make_iterator_range(vertices(G))) {
+//            if (out_degree(u, G) == 0 && in_degree(u, G) != 0) {
+//                out << " v" << u;
+//            }
+//        }
+//        out << "}\n";
+
+//    }
+
+//    out << "}\n\n";
+//    out.flush();
+//}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief topologicalSort
+ ** ------------------------------------------------------------------------------------------------------------- */
+void AutoMultiplexing::topologicalSort(PabloFunction &, PabloBlock & block) const {
+
+    TopologicalGraph G;
+    TopologicalMap M;
+    // Compute the base def-use graph ...
+    for (Statement * stmt : block) {        
+        const TopologicalVertex u = getVertex(stmt, G, M);
+        if (isa<If>(stmt)) {
+            for (Assign * def : cast<const If>(stmt)->getDefined()) {
+                resolveUsages(u, def, block, G, M, stmt);
+            }
+        } else if (isa<While>(stmt)) {
+            for (Next * var : cast<const While>(stmt)->getVariants()) {
+                resolveUsages(u, var, block, G, M, stmt);
+            }
+        } else {
+            resolveUsages(u, stmt, block, G, M, nullptr);
+        }
+    }
+
+    circular_buffer<TopologicalVertex> Q(num_vertices(G));
+    topological_sort(G, std::back_inserter(Q));
+
+    block.setInsertPoint(nullptr);
+    while (!Q.empty()) {
+        Statement * stmt = G[Q.back()];
+        Q.pop_back();
+        if (stmt->getParent() == &block) {
+            block.insert(stmt);
+        }
+    }
+
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief resolveUsages
+ ** ------------------------------------------------------------------------------------------------------------- */
+void AutoMultiplexing::resolveUsages(const TopologicalVertex u, Statement * expr, PabloBlock & block, TopologicalGraph & G, TopologicalMap & M, Statement * ignoreIfThis) const {
+    for (PabloAST * user : expr->users()) {
+        if (LLVM_LIKELY(user != ignoreIfThis && isa<Statement>(user))) {
+            PabloBlock * parent = cast<Statement>(user)->getParent();
+            assert (parent);
+            if (LLVM_LIKELY(parent == &block)) {
+                add_edge(u, getVertex(cast<Statement>(user), G, M), G);
+            } else {
+                for (;;) {
+                    if (LLVM_UNLIKELY(parent == nullptr)) {
+                        assert (isa<Assign>(expr) || isa<Next>(expr));
+                        break;
+                    } else if (parent->getParent() == &block) {
+                        const auto f = mResolvedScopes.find(parent);
+                        if (LLVM_UNLIKELY(f == mResolvedScopes.end())) {
+                            throw std::runtime_error("Failed to resolve scope block!");
+                        }
+                        Statement * const branch = f->second;
+                        if (LLVM_UNLIKELY(branch != ignoreIfThis)) {
+                            add_edge(u, getVertex(branch, G, M), G);
+                        }
+                        break;
+                    }
+                    parent = parent->getParent();
+                }
+            }
+        }
+    }
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief getVertex
+ ** ------------------------------------------------------------------------------------------------------------- */
+AutoMultiplexing::TopologicalVertex AutoMultiplexing::getVertex(Statement * expr, TopologicalGraph & G, TopologicalMap & M) {
+    const auto f = M.find(expr);
+    if (f != M.end()) {
+        return f->second;
+    }
+    const auto u = add_vertex(expr, G);
+    M.emplace(expr, u);
+    return u;
 }
 
 } // end of namespace pablo

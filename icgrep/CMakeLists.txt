@@ -96,13 +96,13 @@ target_link_libraries (generate_predefined_ucd_functions RegExpADT UCDlib PabloA
 set(PRECOMPILED_PROPERTIES_OBJ ${PROJECT_BINARY_DIR}/precompiled_properties.o)
 set(PRECOMPILED_FILES ${PRECOMPILED_PROPERTIES_OBJ} ${PROJECT_SOURCE_DIR}/UCD/precompiled_properties.cpp)
 
-if(ENABLE_MULTIPLEXING)
-set(MULTIPLEXING_FLAG -multiplexing -multiplexing-dist=${PROJECT_BINARY_DIR}/ucd-multiplexing.csv)
-endif()
+#if(ENABLE_MULTIPLEXING)
+#set(MULTIPLEXING_FLAG -multiplexing) # -multiplexing-dist=${PROJECT_BINARY_DIR}/ucd-multiplexing.csv #-ldc=ldc.csv
+#endif()
 
 add_custom_command(OUTPUT ${PRECOMPILED_FILES}
   COMMAND generate_predefined_ucd_functions
-  ARGS -o ${PRECOMPILED_PROPERTIES_OBJ} -dir ${PROJECT_SOURCE_DIR}/UCD/ ${MULTIPLEXING_FLAG} -ldc=ldc.csv -DefaultIfHierarchy
+  ARGS -o ${PRECOMPILED_PROPERTIES_OBJ} -dir ${PROJECT_SOURCE_DIR}/UCD/ -multiplexing -reassoc -DefaultIfHierarchy
   DEPENDS generate_predefined_ucd_functions
   COMMENT "Building predefined UCD functions..."
   VERBATIM)

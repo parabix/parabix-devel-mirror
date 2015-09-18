@@ -22,9 +22,9 @@ namespace pablo {
 using TypeId = PabloAST::ClassTypeId;
 using Graph = BooleanReassociationPass::Graph;
 using Vertex = Graph::vertex_descriptor;
+using VertexData = BooleanReassociationPass::VertexData;
 using VertexQueue = circular_buffer<Vertex>;
 using Map = BooleanReassociationPass::Map;
-using EdgeQueue = std::queue<std::pair<Vertex, Vertex>>;
 using DistributionGraph = adjacency_list<hash_setS, vecS, bidirectionalS, Vertex>;
 using DistributionMap = flat_map<Graph::vertex_descriptor, DistributionGraph::vertex_descriptor>;
 using VertexSet = std::vector<Vertex>;
@@ -62,6 +62,98 @@ inline void add_edge(PabloAST * expr, const Vertex u, const Vertex v, Graph & G)
         }
     }
     G[std::get<0>(add_edge(u, v, G))] = expr;
+}
+
+static inline bool inCurrentBlock(const Statement * stmt, const PabloBlock & block) {
+    return stmt->getParent() == &block;
+}
+
+static inline bool inCurrentBlock(const PabloAST * expr, const PabloBlock & block) {
+    return expr ? isa<Statement>(expr) && inCurrentBlock(cast<Statement>(expr), block) : true;
+}
+
+inline TypeId & getType(VertexData & data) {
+    return std::get<0>(data);
+}
+
+inline TypeId getType(const VertexData & data) {
+    return std::get<0>(data);
+}
+
+inline bool isAssociative(const VertexData & data) {
+    switch (getType(data)) {
+        case TypeId::And:
+        case TypeId::Or:
+        case TypeId::Xor:
+            return true;
+        default:
+            return false;
+    }
+}
+
+inline bool isDistributive(const VertexData & data) {
+    switch (getType(data)) {
+        case TypeId::And:
+        case TypeId::Or:
+            return true;
+        default:
+            return false;
+    }
+}
+
+inline bool isNegated(const VertexData & data) {
+    return getType(data) == TypeId::Not && (std::get<1>(data) != nullptr);
+}
+
+inline bool isMutable(const VertexData & data, const PabloBlock &) {
+    return getType(data) != TypeId::Var;
+}
+
+inline bool isNonEscaping(const VertexData & data) {
+    return getType(data) != TypeId::Assign && getType(data) != TypeId::Next;
+}
+
+inline bool isSameType(const VertexData & data1, const VertexData & data2) {
+    return getType(data1) == getType(data2);
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief intersects
+ ** ------------------------------------------------------------------------------------------------------------- */
+template <class Type>
+inline bool intersects(const Type & A, const Type & B) {
+    auto first1 = A.begin(), last1 = A.end();
+    auto first2 = B.begin(), last2 = B.end();
+    while (first1 != last1 && first2 != last2) {
+        if (*first1 < *first2) {
+            ++first1;
+        } else if (*first2 < *first1) {
+            ++first2;
+        } else {
+            return true;
+        }
+    }
+    return false;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief intersection_count
+ ** ------------------------------------------------------------------------------------------------------------- */
+template <class Type>
+inline unsigned intersection_count(const Type & A, const Type & B) {
+    auto first1 = A.begin(), last1 = A.end();
+    auto first2 = B.begin(), last2 = B.end();
+    unsigned count = 0;
+    while (first1 != last1 && first2 != last2) {
+        if (*first1 < *first2) {
+            ++first1;
+        } else if (*first2 < *first1) {
+            ++first2;
+        } else {
+            ++count;
+        }
+    }
+    return count;
 }
 
 
@@ -119,50 +211,6 @@ void BooleanReassociationPass::processScopes(PabloFunction & function, PabloBloc
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief inCurrentBlock
- ** ------------------------------------------------------------------------------------------------------------- */
-static inline bool inCurrentBlock(const Statement * stmt, const PabloBlock & block) {
-    return stmt->getParent() == &block;
-}
-
-static inline bool inCurrentBlock(const PabloAST * expr, const PabloBlock & block) {
-    return expr ? isa<Statement>(expr) && inCurrentBlock(cast<Statement>(expr), block) : true;
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief isOptimizable
- *
- * And, Or and Xor instructions are all associative, commutative and distributive operations. Thus we can
- * safely rearrange expressions such as "((((a ∨ b) ∨ c) ∨ d) ∨ e) ∨ f" into "((a ∨ b) ∨ (c ∨ d)) ∨ (e ∨ f)".
- ** ------------------------------------------------------------------------------------------------------------- */
-inline bool BooleanReassociationPass::isOptimizable(const VertexData & data) {
-    switch (std::get<0>(data)) {
-        case PabloAST::ClassTypeId::And:
-        case PabloAST::ClassTypeId::Or:
-        case PabloAST::ClassTypeId::Xor:
-            return true;
-        default:
-            return false;
-    }
-}
-
-inline bool isNegated(const BooleanReassociationPass::VertexData & data) {
-    return (std::get<0>(data) == TypeId::Not) && (std::get<1>(data) != nullptr);
-}
-
-inline bool BooleanReassociationPass::isMutable(const VertexData & data, const PabloBlock &) {
-    return (std::get<0>(data) != TypeId::Var);
-}
-
-inline bool BooleanReassociationPass::isNonEscaping(const VertexData & data) {
-    return std::get<0>(data) != TypeId::Assign && std::get<0>(data) != TypeId::Next;
-}
-
-inline bool BooleanReassociationPass::isSameType(const VertexData & data1, const VertexData & data2) {
-    return std::get<0>(data1) == std::get<0>(data2);
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
  * @brief getVertex
  ** ------------------------------------------------------------------------------------------------------------- */
 template<typename ValueType, typename GraphType, typename MapType>
@@ -213,7 +261,7 @@ static void printGraph(const PabloBlock & block, const Graph & G, const std::str
                     error = true;
                     break;
             }
-        } else if (std::get<0>(G[u]) != TypeId::Var) {
+        } else if (isMutable(G[u], block)) {
             if (LLVM_UNLIKELY(isa<If>(expr))) {
                 out << "If ";
                 PabloPrinter::print(cast<If>(expr)->getOperand(0), out);
@@ -229,7 +277,7 @@ static void printGraph(const PabloBlock & block, const Graph & G, const std::str
             PabloPrinter::print(expr, out);
         }
         out << "\"";
-        if (!BooleanReassociationPass::isMutable(G[u], block)) {
+        if (!isMutable(G[u], block)) {
             out << " style=dashed";
         }
         if (error) {
@@ -286,7 +334,7 @@ static void printGraph(const PabloBlock & block, const Graph & G, const std::str
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief createTree
  ** ------------------------------------------------------------------------------------------------------------- */
-static PabloAST * createTree(PabloBlock & block, const Vertex u, Graph & G, const flat_map<const PabloAST *, unsigned> & writtenAt) {
+PabloAST * BooleanReassociationPass::createTree(PabloBlock & block, const Vertex u, Graph & G, const WrittenAt & writtenAt) {
     flat_set<PabloAST *> sources;
     for (const auto e : make_iterator_range(in_edges(u, G))) {
         PabloAST * expr = std::get<1>(G[source(e, G)]);
@@ -303,18 +351,18 @@ static PabloAST * createTree(PabloBlock & block, const Vertex u, Graph & G, cons
         return v1 < v2;
     });
 
-    const TypeId typeId = std::get<0>(G[u]);
+    const TypeId typeId = getType(G[u]);
     while (Q.size() > 1) {
         PabloAST * e1 = Q.front(); Q.pop_front();
         PabloAST * e2 = Q.front(); Q.pop_front();
         PabloAST * expr = nullptr;
         // Note: this switch ought to compile to an array of function pointers to the appropriate method.
         switch (typeId) {
-            case PabloAST::ClassTypeId::And:
+            case TypeId::And:
                 expr = block.createAnd(e1, e2); break;
-            case PabloAST::ClassTypeId::Or:
+            case TypeId::Or:
                 expr = block.createOr(e1, e2); break;
-            case PabloAST::ClassTypeId::Xor:
+            case TypeId::Xor:
                 expr = block.createXor(e1, e2); break;
             default: break;
         }
@@ -346,17 +394,17 @@ void BooleanReassociationPass::rewriteAST(PabloBlock & block, Graph & G) {
     block.setInsertPoint(nullptr);
 
     unsigned index = 0;
-    flat_map<const PabloAST *, unsigned> writtenAt;
+    WrittenAt writtenAt;
     while (!Q.empty()) {
         const Vertex u = Q.back(); Q.pop_back();
         if (LLVM_LIKELY(isMutable(G[u], block))) {
             Statement * stmt = nullptr;
-            if (isOptimizable(G[u])) {
+            if (isAssociative(G[u])) {
                 PabloAST * replacement = createTree(block, u, G, writtenAt);
                 if (LLVM_LIKELY(inCurrentBlock(replacement, block))) {
                     stmt = cast<Statement>(replacement);
                 } else { // optimization reduced this to a Constant, Var or an outer-scope statement
-                    std::get<0>(G[u]) = TypeId::Var;
+                    getType(G[u]) = TypeId::Var;
                     continue;
                 }
             } else { // update any potential mappings
@@ -475,7 +523,7 @@ void BooleanReassociationPass::resolveUsages(const Vertex u, PabloAST * expr, Pa
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief summarizeGraph
  ** ------------------------------------------------------------------------------------------------------------- */
-inline void BooleanReassociationPass::summarizeGraph(const PabloBlock & block, Graph & G, std::vector<Vertex> & mapping) {
+inline void BooleanReassociationPass::summarizeGraph(const PabloBlock &, Graph & G, std::vector<Vertex> & mapping) {
     std::vector<Vertex> reverse_topological_ordering;
     reverse_topological_ordering.reserve(num_vertices(G));
 
@@ -483,7 +531,7 @@ inline void BooleanReassociationPass::summarizeGraph(const PabloBlock & block, G
     assert(mapping.size() >= num_vertices(G));
     for (const Vertex u : reverse_topological_ordering) {
         if (LLVM_LIKELY(out_degree(u, G) > 0)) {
-            if (isOptimizable(G[u])) {
+            if (isAssociative(G[u])) {
                 if (LLVM_UNLIKELY(in_degree(u, G) == 1)) {
                     // We have a redundant node here that'll simply end up being a duplicate
                     // of the input value. Remove it and add any of its outgoing edges to its
@@ -498,7 +546,7 @@ inline void BooleanReassociationPass::summarizeGraph(const PabloBlock & block, G
                         }
                     }
                     clear_vertex(u, G);
-                    std::get<0>(G[u]) = TypeId::Var;
+                    getType(G[u]) = TypeId::Var;
                     mapping[u] = v;
                     continue;
                 } else if (LLVM_UNLIKELY(out_degree(u, G) == 1)) {
@@ -512,14 +560,14 @@ inline void BooleanReassociationPass::summarizeGraph(const PabloBlock & block, G
                             add_edge(G[ei], source(ej, G), v, G);
                         }
                         clear_vertex(u, G);
-                        std::get<0>(G[u]) = TypeId::Var;
+                        getType(G[u]) = TypeId::Var;
                         mapping[u] = v;
                     }
                 }
             }
         } else if (isNonEscaping(G[u])) {
             clear_in_edges(u, G);
-            std::get<0>(G[u]) = TypeId::Var;
+            getType(G[u]) = TypeId::Var;
         }
     }   
 }
@@ -528,8 +576,8 @@ inline void BooleanReassociationPass::summarizeGraph(const PabloBlock & block, G
  * @brief enumerateBicliques
  *
  * Adaptation of the MICA algorithm as described in "Consensus algorithms for the generation of all maximal
- * bicliques" by Alexe et. al. (2003). Note: this implementation considers all verticies with an in-degree of 0
- * to be in bipartition A and their adjacencies to be in B.
+ * bicliques" by Alexe et. al. (2003). Note: this implementation considers all verticies in set A to be in
+ * bipartition A and their adjacencies to be in B.
   ** ------------------------------------------------------------------------------------------------------------- */
 template <class Graph>
 static BicliqueSet enumerateBicliques(const Graph & G, const VertexSet & A) {
@@ -537,15 +585,14 @@ static BicliqueSet enumerateBicliques(const Graph & G, const VertexSet & A) {
 
     IntersectionSets B1;
     for (auto u : A) {
-        assert (u < num_vertices(G));
         if (in_degree(u, G) > 0) {
-            VertexSet V;
-            V.reserve(in_degree(u, G));
+            VertexSet incomingAdjacencies;
+            incomingAdjacencies.reserve(in_degree(u, G));
             for (auto e : make_iterator_range(in_edges(u, G))) {
-                V.push_back(source(e, G));
+                incomingAdjacencies.push_back(source(e, G));
             }
-            std::sort(V.begin(), V.end());
-            B1.insert(std::move(V));
+            std::sort(incomingAdjacencies.begin(), incomingAdjacencies.end());
+            B1.insert(std::move(incomingAdjacencies));
         }
     }
 
@@ -590,41 +637,22 @@ static BicliqueSet enumerateBicliques(const Graph & G, const VertexSet & A) {
     cliques.reserve(B.size());
     for (auto Bi = B.begin(); Bi != B.end(); ++Bi) {
         VertexSet Ai(A);
-        for (const Vertex u : *Bi) {            
-            VertexSet Ak;
-            if (out_degree(u, G) > 0) {
-                VertexSet Aj;
-                Aj.reserve(out_degree(u, G));
-                for (auto e : make_iterator_range(out_edges(u, G))) {
-                    Aj.push_back(target(e, G));
-                }
-                std::sort(Aj.begin(), Aj.end());
-                std::set_intersection(Ai.begin(), Ai.end(), Aj.begin(), Aj.end(), std::back_inserter(Ak));
+        for (const Vertex u : *Bi) {                                    
+            VertexSet Aj;
+            Aj.reserve(out_degree(u, G));
+            for (auto e : make_iterator_range(out_edges(u, G))) {
+                Aj.push_back(target(e, G));
             }
+            std::sort(Aj.begin(), Aj.end());
+            VertexSet Ak;
+            Ak.reserve(std::min(Ai.size(), Aj.size()));
+            std::set_intersection(Ai.begin(), Ai.end(), Aj.begin(), Aj.end(), std::back_inserter(Ak));
             Ai.swap(Ak);
         }
+        assert (Ai.size() > 0); // cannot happen if this algorithm is working correctly
         cliques.emplace_back(std::move(Ai), std::move(*Bi));
     }
     return std::move(cliques);
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief intersects
- ** ------------------------------------------------------------------------------------------------------------- */
-template <class Type>
-inline bool intersects(const Type & A, const Type & B) {
-    auto first1 = A.begin(), last1 = A.end();
-    auto first2 = B.begin(), last2 = B.end();
-    while (first1 != last1 && first2 != last2) {
-        if (*first1 < *first2) {
-            ++first1;
-        } else if (*first2 < *first1) {
-            ++first2;
-        } else {
-            return true;
-        }
-    }
-    return false;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -737,17 +765,17 @@ static DistributionSets safeDistributionSets(const Graph & G, DistributionGraph 
  ** ------------------------------------------------------------------------------------------------------------- */
 void generateDistributionGraph(const Graph & G, DistributionGraph & H) {
     DistributionMap M;
-    for (const Vertex u : make_iterator_range(vertices(G))) {
-        const TypeId outerTypeId = std::get<0>(G[u]);
-        if (outerTypeId == TypeId::And || outerTypeId == TypeId::Or) {
+    for (const Vertex u : make_iterator_range(vertices(G))) {        
+        if (isDistributive(G[u])) {
+            const TypeId outerTypeId = getType(G[u]);
             const TypeId innerTypeId = (outerTypeId == TypeId::And) ? TypeId::Or : TypeId::And;
             flat_set<Vertex> distributable;
             for (auto e : make_iterator_range(in_edges(u, G))) {
                 const Vertex v = source(e, G);
-                if (LLVM_UNLIKELY(std::get<0>(G[v]) == innerTypeId)) {
+                if (LLVM_UNLIKELY(getType(G[v]) == innerTypeId)) {
                     bool safe = true;
                     for (const auto e : make_iterator_range(out_edges(v, G))) {
-                        if (std::get<0>(G[target(e, G)]) != outerTypeId) {
+                        if (getType(G[target(e, G)]) != outerTypeId) {
                             safe = false;
                             break;
                         }
@@ -829,7 +857,7 @@ void BooleanReassociationPass::redistributeAST(const PabloBlock & block, Graph &
             const VertexSet & intermediary = std::get<1>(set);
             const VertexSet & sinks = std::get<2>(set);
 
-            const TypeId outerTypeId = std::get<0>(G[mapping[H[sinks.front()]]]);
+            const TypeId outerTypeId = getType(G[mapping[H[sinks.front()]]]);
             assert (outerTypeId == TypeId::And || outerTypeId == TypeId::Or);
             const TypeId innerTypeId = (outerTypeId == TypeId::Or) ? TypeId::And : TypeId::Or;
 
@@ -842,9 +870,9 @@ void BooleanReassociationPass::redistributeAST(const PabloBlock & block, Graph &
 
             for (const Vertex i : intermediary) {
                 const auto u = mapping[H[i]];
-                assert (std::get<0>(G[u]) == innerTypeId);
+                assert (getType(G[u]) == innerTypeId);
                 for (const Vertex t : sinks) {
-                    assert (std::get<0>(G[mapping[H[t]]]) == outerTypeId);
+                    assert (getType(G[mapping[H[t]]]) == outerTypeId);
                     remove_edge(u, mapping[H[t]], G);
                 }
                 add_edge(nullptr, u, x, G);
