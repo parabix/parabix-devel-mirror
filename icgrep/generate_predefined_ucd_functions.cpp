@@ -241,8 +241,7 @@ void compileUnicodeSet(std::string name, const UnicodeSet & set, PabloCompiler &
     if (LongestDependenceChainFile) {
         (*LongestDependenceChainFile) << name;
     }
-    std::cerr << name << std::endl;
-
+    // std::cerr << name << std::endl;
     PabloFunction * function = PabloFunction::Create(std::move(name), 8, 1);
     Encoding encoding(Encoding::Type::UTF_8, 8);
     CC_Compiler ccCompiler(*function, encoding);
