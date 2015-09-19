@@ -9,6 +9,7 @@
 #include <pablo/optimizers/pablo_simplifier.hpp>
 #include <pablo/analysis/pabloverifier.hpp>
 #include <algorithm>
+#include <numeric> // std::iota
 #include <queue>
 #include <set>
 #include <iostream>

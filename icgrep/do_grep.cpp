@@ -27,7 +27,11 @@
 #include "include/simd-lib/buffer.hpp"
 
 // mmap system
+#ifdef USE_BOOST_MMAP
+#include <boost/iostreams/device/mapped_file.hpp>
+#else
 #include <sys/mman.h>
+#endif
 #include <fcntl.h>
 
 
@@ -164,6 +168,20 @@ void GrepExecutor::doGrep(const std::string infilename) {
     // Set 2 sentinel bytes, 1 for possible addition of LF for unterminated last line, 
     // 1 guard byte.  PROT_WRITE enables writing the sentinel.
     const size_t mmap_sentinel_bytes = 2;  
+#ifdef USE_BOOST_MMAP
+    boost::iostreams::mapped_file mFile;
+    try {
+        mFile.open(
+            infilename,
+            boost::iostreams::mapped_file_base::mapmode::priv,
+            mFileSize + mmap_sentinel_bytes, 0
+        );
+    } catch (std::ios_base::failure e) {
+        std::cerr << "Error: Boost mmap " << e.what() << std::endl;
+        return;
+    }
+    mFileBuffer = mFile.data();
+#else
     mFileBuffer = (char *) mmap(NULL, mFileSize + mmap_sentinel_bytes, PROT_READ|PROT_WRITE, MAP_PRIVATE, fdSrc, 0);
     if (mFileBuffer == MAP_FAILED) {
         if (errno ==  ENOMEM) {
@@ -174,6 +192,7 @@ void GrepExecutor::doGrep(const std::string infilename) {
         }
         return;
     }
+#endif
     char * buffer_ptr;
     size_t segment = 0;
     size_t segment_base = 0;
@@ -312,7 +331,11 @@ void GrepExecutor::doGrep(const std::string infilename) {
         line_start = write_matches(buffer_ptr, line_start);
     }
     
+#ifdef USE_BOOST_MMAP
+    mFile.close();
+#else
     munmap((void *) mFileBuffer, mFileSize + mmap_sentinel_bytes);
+#endif
     close(fdSrc);
     
 }

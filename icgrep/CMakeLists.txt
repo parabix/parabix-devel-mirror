@@ -14,6 +14,7 @@ else ()
   message("-- Build with BLOCK_SIZE=128")
 endif()
 option(ENABLE_MULTIPLEXING "Compiling the Multiplexing Module")
+option(USE_BOOST_MMAP "Using mmap from Boost.Iostreams")
 option(DISABLE_PREGENERATED_UCD_FUNCTIONS "Disable compiling the pregenerated UCD functions")
 
 
@@ -55,9 +56,14 @@ set(Boost_USE_MULTITHREADED OFF)
 set(Boost_USE_STATIC_RUNTIME ON)
 
 if(ENABLE_MULTIPLEXING)
-find_package(Boost COMPONENTS system REQUIRED)
-else()
-find_package(Boost)
+  SET(REQ_BOOST_COMPONENTS ${REQ_BOOST_COMPONENTS} system)
+endif()
+if(USE_BOOST_MMAP)
+  SET(REQ_BOOST_COMPONENTS ${REQ_BOOST_COMPONENTS} iostreams)
+endif()
+
+if(REQ_BOOST_COMPONENTS)
+  find_package(Boost COMPONENTS ${REQ_BOOST_COMPONENTS} REQUIRED)
 endif()
 
 SET(PABLO_SRC pablo/pabloAST.cpp pablo/ps_if.cpp pablo/ps_while.cpp pablo/function.cpp pablo/codegenstate.cpp pablo/builder.cpp pablo/symbol_generator.cpp pablo/printer_pablos.cpp)
@@ -120,10 +126,14 @@ IF(Boost_FOUND)
     include_directories("${Boost_INCLUDE_DIRS}")
     link_directories(${Boost_LIBRARY_DIR})
     SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DUSE_BOOST")
+    target_link_libraries(icgrep ${Boost_LIBRARIES})
 ENDIF()
 
 target_link_libraries (icgrep UCDlib PabloADT RegExpCompiler CCADT ${REQ_LLVM_LIBRARIES})
 
+IF(USE_BOOST_MMAP)
+  SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DUSE_BOOST_MMAP")
+ENDIF()
 
 
 IF (ENABLE_MULTIPLEXING)
