@@ -97,7 +97,8 @@ ELSE()
 
 # add the executable
 add_executable(generate_predefined_ucd_functions generate_predefined_ucd_functions.cpp)
-target_link_libraries (generate_predefined_ucd_functions RegExpADT UCDlib PabloADT CCADT)
+llvm_map_components_to_libnames(REQ_LLVM_TARGETS ${LLVM_TARGETS_TO_BUILD})
+target_link_libraries (generate_predefined_ucd_functions RegExpADT UCDlib PabloADT CCADT ${REQ_LLVM_TARGETS})
 
 set(PRECOMPILED_PROPERTIES_OBJ ${PROJECT_BINARY_DIR}/precompiled_properties.o)
 set(PRECOMPILED_FILES ${PRECOMPILED_PROPERTIES_OBJ} ${PROJECT_SOURCE_DIR}/UCD/precompiled_properties.cpp)
