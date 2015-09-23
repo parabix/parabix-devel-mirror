@@ -98,10 +98,9 @@ ssize_t GrepExecutor::write_matches(llvm::raw_ostream & out, const char * buffer
                 // Do not write it.
                 line_end--;
             } else if (end_byte == 0x0D) {
-                // Check for line_end on first byte of CRLF;  note that to safely
-                // access past line_end, even at the end of buffer, we require the
-                // MMAP_SENTINEL_BYTES >= 1.
-                if (buffer[line_end + 1] == 0x0A) {
+                // Check for line_end on first byte of CRLF;  note that we don't
+                // want to access past the end of buffer.
+                if ((buffer + line_end + 1 < mFileBuffer + mFileSize) && (buffer[line_end + 1] == 0x0A)) {
                     // Found CRLF; preserve both bytes.
                     line_end++;
                 }
