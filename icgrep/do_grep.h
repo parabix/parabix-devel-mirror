@@ -37,8 +37,9 @@ typedef BitStreamScanner<BitBlock, uint64_t, uint64_t, SEGMENT_BLOCKS> ScannerT;
 typedef BitStreamScanner<BitBlock, uint32_t, uint32_t, SEGMENT_BLOCKS> ScannerT;
 #endif
 
-
 typedef void (*process_block_fcn)(const Basis_bits & basis_bits, Output & output);
+
+namespace llvm { class raw_ostream; }
 
 class GrepExecutor {
 public:
@@ -56,10 +57,10 @@ public:
     void setShowLineNumberOption(bool showN = true) {mShowLineNumberingOption = showN;}
     void setNormalizeLineBreaksOption(bool normLB = true) {mNormalizeLineBreaksOption = normLB;}
     
-    void doGrep(std::string fileName);
+    void doGrep(const std::string & fileName);
 private:
-    ssize_t write_matches(char * buffer, ssize_t first_line_start);
-    bool finalLineIsUnterminated();
+    ssize_t write_matches(llvm::raw_ostream & out, const char *buffer, ssize_t first_line_start);
+    bool finalLineIsUnterminated() const;
 
     bool mCountOnlyOption;
     bool mShowFileNameOption;
@@ -73,7 +74,7 @@ private:
     char * mFileBuffer;
     ScannerT mLineBreak_scanner;
     ScannerT mMatch_scanner;
-    size_t line_no;
+    size_t mLineNum;
 };
 
 

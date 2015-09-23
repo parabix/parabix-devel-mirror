@@ -9,3 +9,6 @@ pablo/optimizers
 UCD
 ../ucd
 ../QA/unit-tests
+/usr/include/boost/filesystem
+/usr/include/boost/iostreams
+/usr/include/boost/system

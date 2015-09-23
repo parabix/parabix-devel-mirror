@@ -300,8 +300,8 @@ bool AutoMultiplexing::initialize(PabloFunction & function) {
     Cudd_AutodynDisable(mManager);
 
     // Map the predefined 0/1 entries
-    mCharacterizationMap[function.getEntryBlock().createZeroes()] = Zero();
-    mCharacterizationMap[function.getEntryBlock().createOnes()] = One();
+    mCharacterizationMap[PabloBlock::createZeroes()] = Zero();
+    mCharacterizationMap[PabloBlock::createOnes()] = One();
 
     // Order the variables so the input Vars are pushed to the end; they ought to
     // be the most complex to resolve.

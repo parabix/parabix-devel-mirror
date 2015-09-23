@@ -82,8 +82,8 @@ void BDDMinimizationPass::initialize(PabloFunction & function) {
     mVariables = 0;
     Cudd_MakeTreeNode(mManager, 0, function.getNumOfParameters(), MTR_DEFAULT);
     // Map the predefined 0/1 entries
-    mCharacterizationMap[function.getEntryBlock().createZeroes()] = Zero();
-    mCharacterizationMap[function.getEntryBlock().createOnes()] = One();    
+    mCharacterizationMap[PabloBlock::createZeroes()] = Zero();
+    mCharacterizationMap[PabloBlock::createOnes()] = One();
     // Order the variables so the input Vars are pushed to the end; they ought to
     // be the most complex to resolve.    
     for (auto i = 0; i != function.getNumOfParameters(); ++i) {

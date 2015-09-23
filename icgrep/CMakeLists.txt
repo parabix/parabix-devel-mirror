@@ -59,7 +59,7 @@ if(ENABLE_MULTIPLEXING)
   SET(REQ_BOOST_COMPONENTS ${REQ_BOOST_COMPONENTS} system)
 endif()
 if(USE_BOOST_MMAP)
-  SET(REQ_BOOST_COMPONENTS ${REQ_BOOST_COMPONENTS} iostreams)
+  SET(REQ_BOOST_COMPONENTS ${REQ_BOOST_COMPONENTS} iostreams filesystem)
 endif()
 
 if(REQ_BOOST_COMPONENTS)
@@ -104,12 +104,12 @@ set(PRECOMPILED_PROPERTIES_OBJ ${PROJECT_BINARY_DIR}/precompiled_properties.o)
 set(PRECOMPILED_FILES ${PRECOMPILED_PROPERTIES_OBJ} ${PROJECT_SOURCE_DIR}/UCD/precompiled_properties.cpp)
 
 if(ENABLE_MULTIPLEXING)
-set(MULTIPLEXING_FLAG -multiplexing) # -multiplexing-dist=${PROJECT_BINARY_DIR}/ucd-multiplexing.csv #-ldc=ldc.csv
+set(MULTIPLEXING_FLAG -multiplexing -reassoc) # -multiplexing-dist=${PROJECT_BINARY_DIR}/ucd-multiplexing.csv #-ldc=ldc.csv
 endif()
 
 add_custom_command(OUTPUT ${PRECOMPILED_FILES}
   COMMAND generate_predefined_ucd_functions
-  ARGS -o ${PRECOMPILED_PROPERTIES_OBJ} -dir ${PROJECT_SOURCE_DIR}/UCD/ #{MULTIPLEXING_FLAG} -reassoc -DefaultIfHierarchy
+  ARGS -o ${PRECOMPILED_PROPERTIES_OBJ} -dir ${PROJECT_SOURCE_DIR}/UCD/ ${MULTIPLEXING_FLAG} -DefaultIfHierarchy
   DEPENDS generate_predefined_ucd_functions
   COMMENT "Building predefined UCD functions..."
   VERBATIM)

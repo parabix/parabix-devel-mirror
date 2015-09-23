@@ -8,6 +8,10 @@
 
 namespace pablo {
 
+Zeroes * const PabloBlock::mZeroes = new Zeroes();
+
+Ones * const PabloBlock::mOnes = new Ones();
+
 inline PabloAST * PabloBlock::renameNonNamedNode(PabloAST * expr, const std::string && prefix) {
     if (Statement * stmt = dyn_cast<Statement>(expr)) {
         if (stmt->getName()->isGenerated()) {
@@ -548,8 +552,6 @@ unsigned PabloBlock::enumerateScopes(unsigned baseScopeIndex) {
 
 PabloBlock::PabloBlock(SymbolGenerator & symbolGenerator)
 : PabloAST(PabloAST::ClassTypeId::Block)
-, mZeroes(new Zeroes())
-, mOnes(new Ones())
 , mSymbolGenerator(symbolGenerator)
 , mParent(nullptr)
 , mScopeIndex(0)
@@ -559,8 +561,6 @@ PabloBlock::PabloBlock(SymbolGenerator & symbolGenerator)
 
 PabloBlock::PabloBlock(PabloBlock * predecessor)
 : PabloAST(PabloAST::ClassTypeId::Block)
-, mZeroes(predecessor->mZeroes) // inherit the original "Zeroes" variable for simplicity
-, mOnes(predecessor->mOnes) // inherit the original "Ones" variable for simplicity
 , mSymbolGenerator(predecessor->mSymbolGenerator)
 , mParent(predecessor)
 , mScopeIndex(0)

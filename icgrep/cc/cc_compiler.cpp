@@ -157,10 +157,9 @@ PabloAST * CC_Compiler::bit_pattern_expr(const unsigned pattern, unsigned select
 
     if (bit_terms.size() > 1) {
         //Reduce the list so that all of the expressions are contained within a single expression.
-        std::vector<PabloAST*> new_terms(bit_terms.size() / 2);
-        do
-        {
-            new_terms.clear();
+        std::vector<PabloAST*> new_terms;
+        new_terms.reserve(bit_terms.size() / 2);
+        do {
             for (auto i = 0; i < (bit_terms.size() / 2); i++) {
                 new_terms.push_back(pb.createAnd(bit_terms[(2 * i) + 1], bit_terms[2 * i]));
             }
@@ -168,6 +167,7 @@ PabloAST * CC_Compiler::bit_pattern_expr(const unsigned pattern, unsigned select
                 new_terms.push_back(bit_terms[bit_terms.size() - 1]);
             }
             bit_terms.swap(new_terms);
+            new_terms.clear();
         }
         while (bit_terms.size() > 1);
     }

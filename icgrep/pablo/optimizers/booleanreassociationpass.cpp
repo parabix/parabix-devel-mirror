@@ -81,6 +81,14 @@ inline TypeId getType(const VertexData & data) {
     return std::get<0>(data);
 }
 
+inline PabloAST *& getValue(VertexData & data) {
+    return std::get<1>(data);
+}
+
+inline PabloAST * getValue(const VertexData & data) {
+    return std::get<1>(data);
+}
+
 inline bool isAssociative(const VertexData & data) {
     switch (getType(data)) {
         case TypeId::And:
@@ -103,7 +111,7 @@ inline bool isDistributive(const VertexData & data) {
 }
 
 inline bool isNegated(const VertexData & data) {
-    return getType(data) == TypeId::Not && (std::get<1>(data) != nullptr);
+    return getType(data) == TypeId::Not && (getValue(data) != nullptr);
 }
 
 inline bool isMutable(const VertexData & data, const PabloBlock &) {
@@ -338,26 +346,23 @@ static void printGraph(const PabloBlock & block, const Graph & G, const std::str
 PabloAST * BooleanReassociationPass::createTree(PabloBlock & block, const Vertex u, Graph & G, const WrittenAt & writtenAt) {
     flat_set<PabloAST *> sources;
     for (const auto e : make_iterator_range(in_edges(u, G))) {
-        PabloAST * expr = std::get<1>(G[source(e, G)]);
+        PabloAST * expr = getValue(G[source(e, G)]);
         assert ("G contains a null input variable!" && (expr != nullptr));
         sources.insert(expr);
     }
     circular_buffer<PabloAST *> Q(sources.begin(), sources.end());
     // Sort the queue in order of how the inputs were written
     std::sort(Q.begin(), Q.end(), [&writtenAt](const PabloAST * const e1, const PabloAST * const e2) -> bool {
-        const auto f1 = writtenAt.find(e1);
-        const unsigned v1 = (f1 == writtenAt.end()) ? 0 : f1->second;
-        const auto f2 = writtenAt.find(e2);
-        const unsigned v2 = (f2 == writtenAt.end()) ? 0 : f2->second;
-        return v1 < v2;
+        const auto f1 = writtenAt.find(e1); assert (f1 != writtenAt.end());
+        const auto f2 = writtenAt.find(e2); assert (f2 != writtenAt.end());
+        return f1->second < f2->second;
     });
 
     const TypeId typeId = getType(G[u]);
     while (Q.size() > 1) {
-        PabloAST * e1 = Q.front(); Q.pop_front();
+        PabloAST * e1 = Q.front(); Q.pop_front();        
         PabloAST * e2 = Q.front(); Q.pop_front();
         PabloAST * expr = nullptr;
-        // Note: this switch ought to compile to an array of function pointers to the appropriate method.
         switch (typeId) {
             case TypeId::And:
                 expr = block.createAnd(e1, e2); break;
@@ -371,7 +376,7 @@ PabloAST * BooleanReassociationPass::createTree(PabloBlock & block, const Vertex
     }
     PabloAST * const result = Q.front();
     assert (result);
-    std::get<1>(G[u]) = result;
+    getValue(G[u]) = result;
     return result;
 }
 
@@ -390,32 +395,44 @@ inline void BooleanReassociationPass::processScope(PabloFunction &, PabloBlock &
  ** ------------------------------------------------------------------------------------------------------------- */
 void BooleanReassociationPass::rewriteAST(PabloBlock & block, Graph & G) {
 
+//    // Clear out the current AST
+//    std::vector<Statement *> currentAST;
+//    for (Statement * stmt = block.front(); stmt; stmt = stmt->removeFromParent()) {
+//        currentAST.push_back(stmt);
+//    }
+    // Rewrite the AST in accordance to G
     circular_buffer<Vertex> Q(num_vertices(G));
     topological_sort(G, std::back_inserter(Q));
-    block.setInsertPoint(nullptr);
 
-    unsigned index = 0;
+    block.setInsertPoint(nullptr);
+    unsigned statementCount = 0;
     WrittenAt writtenAt;
     while (!Q.empty()) {
-        const Vertex u = Q.back(); Q.pop_back();
+        const Vertex u = Q.back();
+        Q.pop_back();
+        // Supress any isolated vertices; the AST must be a single connected component.
+        if (in_degree(u, G) == 0 && out_degree(u, G) == 0) {
+            continue;
+        }
+        unsigned statementIndex = 0;
+        PabloAST * expr = getValue(G[u]);
         if (LLVM_LIKELY(isMutable(G[u], block))) {
             Statement * stmt = nullptr;
             if (isAssociative(G[u])) {
                 PabloAST * replacement = createTree(block, u, G, writtenAt);
                 if (LLVM_LIKELY(inCurrentBlock(replacement, block))) {
                     stmt = cast<Statement>(replacement);
-                } else { // optimization reduced this to a Constant, Var or an outer-scope statement
+                } else { // optimization reduced this to a Constant, Var or a prior-scope statement
                     getType(G[u]) = TypeId::Var;
                     continue;
                 }
             } else { // update any potential mappings
-                stmt = cast<Statement>(std::get<1>(G[u]));
+                stmt = cast<Statement>(getValue(G[u]));
             }
             assert (stmt);
-            assert (inCurrentBlock(stmt, block));            
             for (auto e : make_iterator_range(out_edges(u, G))) {
                 if (G[e] && G[e] != stmt) {
-                    PabloAST * expr = std::get<1>(G[target(e, G)]);
+                    PabloAST * expr = getValue(G[target(e, G)]);
                     if (expr) { // processing a yet-to-be created value
                         cast<Statement>(expr)->replaceUsesOfWith(G[e], stmt);
                     }
@@ -425,10 +442,18 @@ void BooleanReassociationPass::rewriteAST(PabloBlock & block, Graph & G) {
             if (writtenAt.count(stmt)) {
                 continue;
             }
-            writtenAt.emplace(stmt, ++index);
             block.insert(stmt);
+            statementIndex = ++statementCount;
+            expr = stmt;
         }
+        writtenAt.emplace(expr, statementIndex);
     }
+//    // Erase any AST node that weren't placed back into the AST
+//    for (Statement * stmt : currentAST) {
+//        if (stmt->getParent() == nullptr) {
+//            stmt->eraseFromParent(true);
+//        }
+//    }
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -744,7 +769,7 @@ static DistributionSets safeDistributionSets(const Graph & G, DistributionGraph 
 
     VertexSet sinks;
     for (const Vertex u : make_iterator_range(vertices(H))) {
-        if (out_degree(u, H) == 0) {
+        if (out_degree(u, H) == 0 && in_degree(u, G) != 0) {
             sinks.push_back(u);
         }
     }
@@ -891,7 +916,7 @@ void BooleanReassociationPass::redistributeAST(const PabloBlock & block, Graph &
 
             for (const Vertex t : sinks) {
                 const auto v = mapping[H[t]];
-                add_edge(std::get<1>(G[v]), y, v, G);
+                add_edge(getValue(G[v]), y, v, G);
             }
 
             summarizeGraph(block, G, mapping);

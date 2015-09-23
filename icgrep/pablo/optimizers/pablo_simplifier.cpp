@@ -106,7 +106,7 @@ void Simplifier::eliminateRedundantCode(PabloBlock & block, ExpressionTable * pr
             // Check to see if the Cond is Zero and delete the loop.
             if (LLVM_UNLIKELY(isa<Zeroes>(ifNode->getCondition()))) {
                 for (Assign * defVar : ifNode->getDefined()) {
-                    defVar->replaceWith(block.createZeroes(), false, true);
+                    defVar->replaceWith(PabloBlock::createZeroes(), false, true);
                 }
                 stmt = stmt->eraseFromParent(true);
                 continue;

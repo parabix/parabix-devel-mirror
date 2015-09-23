@@ -147,8 +147,8 @@ unsigned computePabloDependencyChainMetrics(const PabloBlock & b, std::unordered
  ** ------------------------------------------------------------------------------------------------------------- */
 std::pair<unsigned, unsigned> computePabloDependencyChainMetrics(const PabloFunction * f) {
     std::unordered_map<const PabloAST *, unsigned> G;
-    G.insert(std::make_pair(f->getEntryBlock().createZeroes(), 0));
-    G.insert(std::make_pair(f->getEntryBlock().createOnes(), 0));
+    G.insert(std::make_pair(PabloBlock::createZeroes(), 0));
+    G.insert(std::make_pair(PabloBlock::createOnes(), 0));
     for (unsigned i = 0; i != f->getNumOfParameters(); ++i) {
         G.insert(std::make_pair(f->getParameter(i), 0));
     }

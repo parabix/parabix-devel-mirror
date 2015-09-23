@@ -26,9 +26,14 @@
 #include "include/simd-lib/s2p.hpp"
 #include "include/simd-lib/buffer.hpp"
 
+#include <llvm/Support/raw_os_ostream.h>
+
 // mmap system
 #ifdef USE_BOOST_MMAP
+#include <boost/filesystem.hpp>
 #include <boost/iostreams/device/mapped_file.hpp>
+using namespace boost::iostreams;
+using namespace boost::filesystem;
 #else
 #include <sys/mman.h>
 #endif
@@ -37,8 +42,6 @@
 
 #define BUFFER_SEGMENTS 15
 #define BUFFER_SIZE (BUFFER_SEGMENTS * SEGMENT_SIZE)
-
-BitBlock EOF_mask = simd<1>::constant<1>();
 
 //
 // Write matched lines from a buffer to an output file, given segment
@@ -51,79 +54,79 @@ BitBlock EOF_mask = simd<1>::constant<1>();
 // The start position of the final line in the processed segment is returned.
 //
 
-ssize_t GrepExecutor::write_matches(char * buffer, ssize_t first_line_start) {
+ssize_t GrepExecutor::write_matches(llvm::raw_ostream & out, const char * buffer, ssize_t line_start) {
 
-  ssize_t line_start = first_line_start;
-  ssize_t match_pos;
-  ssize_t line_end;
-  while (mMatch_scanner.has_next()) {
-    match_pos = mMatch_scanner.scan_to_next();
-    // If we found a match, it must be at a line end.
-    line_end = mLineBreak_scanner.scan_to_next();
-    while (line_end < match_pos) {
-      line_start = line_end + 1;
-      line_no++;
-      line_end = mLineBreak_scanner.scan_to_next();
+    ssize_t match_pos;
+    ssize_t line_end;
+    while (mMatch_scanner.has_next()) {
+        match_pos = mMatch_scanner.scan_to_next();
+        // If we found a match, it must be at a line end.
+        while (true) {
+            line_end = mLineBreak_scanner.scan_to_next();
+            if (line_end >= match_pos) {
+                break;
+            }
+            line_start = line_end + 1;
+            mLineNum++;
+        }
+        assert (buffer + line_end < mFileBuffer + mFileSize);
+        if (mShowFileNameOption) {
+            out << mFileName << ':';
+        }
+        if (mShowLineNumberingOption) {
+            out << mLineNum << ":";
+        }
+        if ((buffer[line_start] == 0xA) && (line_start != line_end)) {
+            // The LF of a CRLF.  Really the end of the last line.
+            line_start++;
+        }
+        unsigned char end_byte = (unsigned char)buffer[line_end];
+        if (mNormalizeLineBreaksOption) {
+            if (end_byte == 0x85) {
+                // Line terminated with NEL, on the second byte.  Back up 1.
+                line_end--;
+            } else if (end_byte > 0xD) {
+                // Line terminated with PS or LS, on the third byte.  Back up 2.
+                line_end -= 2;
+            }
+            out.write(&buffer[line_start], line_end - line_start);
+            out << '\n';
+        }
+        else {
+            if (end_byte == 0x0) {
+                // This must be a sentinel byte position at the end of file.
+                // Do not write it.
+                line_end--;
+            } else if (end_byte == 0x0D) {
+                // Check for line_end on first byte of CRLF;  note that to safely
+                // access past line_end, even at the end of buffer, we require the
+                // MMAP_SENTINEL_BYTES >= 1.
+                if (buffer[line_end + 1] == 0x0A) {
+                    // Found CRLF; preserve both bytes.
+                    line_end++;
+                }
+            }
+            out.write(&buffer[line_start], line_end - line_start + 1);
+        }
+        line_start = line_end + 1;
+        mLineNum++;
     }
-    if (mShowFileNameOption) {
-      std::cout << mFileName;
+    while(mLineBreak_scanner.has_next()) {
+        line_end = mLineBreak_scanner.scan_to_next();
+        line_start = line_end+1;
+        mLineNum++;
     }
-    if (mShowLineNumberingOption) {
-      std::cout << line_no << ":";
-    }
-    if ((buffer[line_start] == 0xA) && (line_start != line_end)) {
-        // The LF of a CRLF.  Really the end of the last line.  
-        line_start++;
-    }
-    unsigned char end_byte = (unsigned char) buffer[line_end];
-    if (mNormalizeLineBreaksOption) {
-      if (end_byte == 0x85) {
-          // Line terminated with NEL, on the second byte.  Back up 1.
-          line_end--;
-      }
-      else if (end_byte > 0xD) {
-          // Line terminated with PS or LS, on the third byte.  Back up 2.
-          line_end -= 2;
-      }
-      std::cout.write(&buffer[line_start], line_end - line_start);
-      std::cout << std::endl;
-    }
-    else {
-      if (end_byte == 0x0) {
-          // This must be a sentinel byte position at the end of file.
-          // Do not write it.
-          line_end--;
-      }
-      else if (end_byte == 0x0D) {
-          // Check for line_end on first byte of CRLF;  note that to safely
-          // access past line_end, even at the end of buffer, we require the
-          // mmap_sentinel_bytes >= 1.
-          if (buffer[line_end + 1] == 0x0A) { 
-              // Found CRLF; preserve both bytes.
-              line_end++;
-          }
-      }
-      std::cout.write(&buffer[line_start], line_end - line_start + 1);
-    }
-    line_start = line_end + 1;
-    line_no++;
-  }
-  while(mLineBreak_scanner.has_next()) {
-    line_end = mLineBreak_scanner.scan_to_next();
-    line_start = line_end+1;
-    line_no++;
-  }
-  return line_start;
+    return line_start;
 }
 
-bool GrepExecutor::finalLineIsUnterminated() {
+bool GrepExecutor::finalLineIsUnterminated() const {
     if (mFileSize == 0) return false;
     unsigned char end_byte = static_cast<unsigned char>(mFileBuffer[mFileSize-1]);
     // LF through CR are line break characters
     if ((end_byte >= 0xA) && (end_byte <= 0xD)) return false;
     // Other line breaks require at least two bytes.
     if (mFileSize == 1) return true;
-    // NEL  
+    // NEL
     unsigned char penult_byte = static_cast<unsigned char>(mFileBuffer[mFileSize-2]);
     if ((end_byte == 0x85) && (penult_byte == 0xC2)) return false;
     if (mFileSize == 2) return true;
@@ -132,165 +135,141 @@ bool GrepExecutor::finalLineIsUnterminated() {
     return (static_cast<unsigned char>(mFileBuffer[mFileSize-3]) != 0xE2) || (penult_byte != 0x80);
 }
 
-void GrepExecutor::doGrep(const std::string infilename) {
+void GrepExecutor::doGrep(const std::string & fileName) {
 
     Basis_bits basis_bits;
-    BitBlock match_vector;
-    
-    mFileName = infilename + ":";
-    
+    BitBlock match_vector = simd<1>::constant<0>();
     size_t match_count = 0;
-    size_t blk = 0;
-    size_t block_base  = 0;
-    size_t block_pos   = 0;
     size_t chars_avail = 0;
     ssize_t line_start = 0;
-    line_no = 1;
 
-    match_vector = simd<1>::constant<0>();
-    int fdSrc;
-    struct stat infile_sb;
-    fdSrc = open(infilename.c_str(), O_RDONLY);
-    if (fdSrc == -1) {
-        std::cerr << "Error: cannot open " << infilename << " for processing. Skipped.\n";
-        return;
-    }
-    if (fstat(fdSrc, &infile_sb) == -1) {
-        std::cerr << "Error: cannot stat " << infilename << " for processing. Skipped.\n";
-        return;
-    }
-    if (S_ISDIR(infile_sb.st_mode)) {
-        // Silently ignore directories.
-        // std::cerr << "Error: " << infilename << " is a directory. Skipped.\n";
-        return;
-    }
-    mFileSize = infile_sb.st_size;
-    // Set 2 sentinel bytes, 1 for possible addition of LF for unterminated last line, 
-    // 1 guard byte.  PROT_WRITE enables writing the sentinel.
-    const size_t mmap_sentinel_bytes = 2;  
+    mFileName = fileName;
+    mLineNum = 1;
+
 #ifdef USE_BOOST_MMAP
-    boost::iostreams::mapped_file mFile;
+    const path file(mFileName);
+    if (exists(file)) {
+        if (is_directory(file)) {
+            return;
+        }
+    } else {
+        std::cerr << "Error: cannot open " << mFileName << " for processing. Skipped.\n";
+        return;
+    }
+
+    mFileSize = file_size(file);
+    mapped_file mFile;
     try {
-        mFile.open(
-            infilename,
-            boost::iostreams::mapped_file_base::mapmode::priv,
-            mFileSize + mmap_sentinel_bytes, 0
-        );
+        mFile.open(mFileName, mapped_file::priv, mFileSize, 0);
     } catch (std::ios_base::failure e) {
         std::cerr << "Error: Boost mmap " << e.what() << std::endl;
         return;
     }
     mFileBuffer = mFile.data();
 #else
-    mFileBuffer = (char *) mmap(NULL, mFileSize + mmap_sentinel_bytes, PROT_READ|PROT_WRITE, MAP_PRIVATE, fdSrc, 0);
+    struct stat infile_sb;
+    const int fdSrc = open(mFileName.c_str(), O_RDONLY);
+    if (fdSrc == -1) {
+        std::cerr << "Error: cannot open " << mFileName << " for processing. Skipped.\n";
+        return;
+    }
+    if (fstat(fdSrc, &infile_sb) == -1) {
+        std::cerr << "Error: cannot stat " << mFileName << " for processing. Skipped.\n";
+        close (fdSrc);
+        return;
+    }
+    if (S_ISDIR(infile_sb.st_mode)) {
+        close (fdSrc);
+        return;
+    }
+    mFileSize = infile_sb.st_size;
+    mFileBuffer = (char *) mmap(NULL, mFileSize, PROT_READ, MAP_PRIVATE, fdSrc, 0);
     if (mFileBuffer == MAP_FAILED) {
         if (errno ==  ENOMEM) {
-            std::cerr << "Error:  mmap of " << infilename << " failed: out of memory\n";
+            std::cerr << "Error:  mmap of " << mFileName << " failed: out of memory\n";
         }
         else {
-            std::cerr << "Error: mmap of " << infilename << " failed with errno " << errno << ". Skipped.\n";
+            std::cerr << "Error: mmap of " << mFileName << " failed with errno " << errno << ". Skipped.\n";
         }
         return;
     }
 #endif
-    char * buffer_ptr;
     size_t segment = 0;
-    size_t segment_base = 0;
     chars_avail = mFileSize;
-    
-//////////////////////////////////////////////////////////////////////////////////////////
-// Full Segments
-//////////////////////////////////////////////////////////////////////////////////////////
+
+    llvm::raw_os_ostream out(std::cout);
+    //////////////////////////////////////////////////////////////////////////////////////////
+    // Full Segments
+    //////////////////////////////////////////////////////////////////////////////////////////
 
     while (chars_avail >= SEGMENT_SIZE) {
 
-        segment_base = segment * SEGMENT_SIZE;
         mLineBreak_scanner.init();
         mMatch_scanner.init();
 
-        for (blk = 0; blk < SEGMENT_BLOCKS; blk++) {
-            block_base = blk*BLOCK_SIZE + segment_base;
-            s2p_do_block((BytePack *) &mFileBuffer[block_base], basis_bits);
+        for (size_t blk = 0; blk != SEGMENT_BLOCKS; ++blk) {
+            s2p_do_block(reinterpret_cast<BytePack *>(mFileBuffer + (blk * BLOCK_SIZE) + (segment * SEGMENT_SIZE)), basis_bits);
             Output output;
             mProcessBlockFcn(basis_bits, output);
 
             mMatch_scanner.load_block(output.matches, blk);
             mLineBreak_scanner.load_block(output.LF, blk);
 
-            if (mCountOnlyOption){
-                if (bitblock::any(output.matches))
-                {
-                    if (bitblock::any(simd_and(match_vector, output.matches))){
+            if (mCountOnlyOption) {
+                if (bitblock::any(output.matches)) {
+                    if (bitblock::any(simd_and(match_vector, output.matches))) {
                         match_count += bitblock::popcount(match_vector);
                         match_vector = output.matches;
-                    }
-                    else
-                    {
+                    } else {
                         match_vector = simd_or(match_vector, output.matches);
                     }
                 }
             }
         }
 
-        buffer_ptr = &mFileBuffer[segment_base];
-
         if (!mCountOnlyOption) {
-          line_start = write_matches(buffer_ptr, line_start);
+            line_start = write_matches(out, mFileBuffer + (segment * SEGMENT_SIZE), line_start);
         }
         segment++;
         line_start -= SEGMENT_SIZE;  /* Will be negative offset for use within next segment. */
         chars_avail -= SEGMENT_SIZE;
     }
 
-//////////////////////////////////////////////////////////////////////////////////////////
-// For the Final Partial Segment.
-//////////////////////////////////////////////////////////////////////////////////////////
+    //////////////////////////////////////////////////////////////////////////////////////////
+    // For the Final Partial Segment.
+    //////////////////////////////////////////////////////////////////////////////////////////
 
-    segment_base = segment * SEGMENT_SIZE;
-    int remaining = chars_avail;
-        
+    size_t remaining = chars_avail;
+    size_t blk = 0;
 
     mLineBreak_scanner.init();
     mMatch_scanner.init();
 
     /* Full Blocks */
-    blk = 0;
-    while (remaining >= BLOCK_SIZE) {
-        block_base = block_pos + segment_base;
-        s2p_do_block((BytePack *) &mFileBuffer[block_base], basis_bits);
+    for (; remaining >= BLOCK_SIZE; remaining -= BLOCK_SIZE, ++blk) {
+        s2p_do_block(reinterpret_cast<BytePack *>(mFileBuffer + (blk * BLOCK_SIZE) + (segment * SEGMENT_SIZE)), basis_bits);
         Output output;
         mProcessBlockFcn(basis_bits, output);
 
         mLineBreak_scanner.load_block(output.LF, blk);
         mMatch_scanner.load_block(output.matches, blk);
-        if (mCountOnlyOption)
-        {
-            if (bitblock::any(output.matches))
-            {
-                if (bitblock::any(simd_and(match_vector, output.matches)))
-                {
+        if (mCountOnlyOption) {
+            if (bitblock::any(output.matches)) {
+                if (bitblock::any(simd_and(match_vector, output.matches))) {
                     match_count += bitblock::popcount(match_vector);
                     match_vector = output.matches;
-                }
-                else
-                {
+                } else {
                     match_vector = simd_or(match_vector, output.matches);
                 }
             }
         }
-
-        block_pos += BLOCK_SIZE;
-        remaining -= BLOCK_SIZE;
-        blk++;
     }
-    block_base = block_pos;
 
     //Final Partial Block (may be empty, but there could be carries pending).
     
-    EOF_mask = bitblock::srl(simd<1>::constant<1>(), convert(BLOCK_SIZE-remaining));
+    const auto EOF_mask = bitblock::srl(simd<1>::constant<1>(), convert(BLOCK_SIZE - remaining));
     
-    block_base = block_pos + segment_base;
-    s2p_do_final_block((BytePack *) &mFileBuffer[block_base], basis_bits, EOF_mask);
+    s2p_do_final_block(reinterpret_cast<BytePack *>(mFileBuffer + (blk * BLOCK_SIZE) + (segment * SEGMENT_SIZE)), basis_bits, EOF_mask);
 
     if (finalLineIsUnterminated()) {
         // Add a LF at the EOF position
@@ -298,44 +277,33 @@ void GrepExecutor::doGrep(const std::string infilename) {
         //  LF = 00001010  (bits 4 and 6 set).
         basis_bits.bit_4 = simd_or(basis_bits.bit_4, EOF_pos);
         basis_bits.bit_6 = simd_or(basis_bits.bit_6, EOF_pos);
-        // Add final sentinel byte so write_matches knows what to do.
-        mFileBuffer[mFileSize] = 0x0;
     }
     
     Output output;
     mProcessBlockFcn(basis_bits, output);
 
-    if (mCountOnlyOption)
-    {
+    if (mCountOnlyOption) {
         match_count += bitblock::popcount(match_vector);
-        if (bitblock::any(output.matches))
-        {
+        if (bitblock::any(output.matches)) {
             match_count += bitblock::popcount(output.matches);
         }
         if (mShowFileNameOption) {
-            std::cout << mFileName;
+            out << mFileName << ':';
         }
-        std::cout << match_count << std::endl;
-    }
-    else
-    {
+        out << match_count << '\n';
+    } else {
         mLineBreak_scanner.load_block(output.LF, blk);
         mMatch_scanner.load_block(output.matches, blk);
-        blk++;
-        for (int i = blk; i < SEGMENT_BLOCKS; i++)
-        {
-            mLineBreak_scanner.load_block(simd<1>::constant<0>(), i);
-            mMatch_scanner.load_block(simd<1>::constant<0>(), i);
+        while (++blk < SEGMENT_BLOCKS) {
+            mLineBreak_scanner.load_block(simd<1>::constant<0>(), blk);
+            mMatch_scanner.load_block(simd<1>::constant<0>(), blk);
         }
-        buffer_ptr = &mFileBuffer[segment_base];
-        line_start = write_matches(buffer_ptr, line_start);
+        line_start = write_matches(out, mFileBuffer + (segment * SEGMENT_SIZE), line_start);
     }
-    
 #ifdef USE_BOOST_MMAP
     mFile.close();
 #else
-    munmap((void *) mFileBuffer, mFileSize + mmap_sentinel_bytes);
-#endif
+    munmap((void *)mFileBuffer, mFileSize);
     close(fdSrc);
-    
+#endif   
 }

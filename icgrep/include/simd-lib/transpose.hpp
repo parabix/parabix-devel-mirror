@@ -18,14 +18,14 @@ typedef struct Basis_bits {
 #endif
 
 static inline void s2p_do_block(BytePack U8[], Basis_bits & basis_bits);
-static inline void s2p_do_final_block(BytePack U8[], Basis_bits & basis_bits, BitBlock EOF_mask);
+static inline void s2p_do_final_block(BytePack U8[], Basis_bits & basis_bits, const BitBlock & EOF_mask);
 
 static IDISA_ALWAYS_INLINE void s2p_do_block(BytePack U8[], Basis_bits & basis_bits) {
   s2p(U8[0], U8[1], U8[2], U8[3], U8[4], U8[5], U8[6], U8[7],
     basis_bits.bit_0, basis_bits.bit_1, basis_bits.bit_2, basis_bits.bit_3, basis_bits.bit_4, basis_bits.bit_5, basis_bits.bit_6, basis_bits.bit_7);
 }
 
-static IDISA_ALWAYS_INLINE void s2p_do_final_block(BytePack U8[], Basis_bits & basis_bits, BitBlock EOF_mask) {
+static IDISA_ALWAYS_INLINE void s2p_do_final_block(BytePack U8[], Basis_bits & basis_bits, const BitBlock & EOF_mask) {
   s2p_do_block(U8, basis_bits);
   basis_bits.bit_0 = simd_and(basis_bits.bit_0, EOF_mask);
   basis_bits.bit_1 = simd_and(basis_bits.bit_1, EOF_mask);

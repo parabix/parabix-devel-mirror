@@ -34,12 +34,12 @@ public:
         return std::move(PabloBuilder(PabloBlock::Create(*(parent.mPb)), parent));
     }
 
-    inline Zeroes * createZeroes() const {
-        return mPb->createZeroes();
+    static inline Zeroes * createZeroes() {
+        return PabloBlock::createZeroes();
     }
 
-    inline Ones * createOnes() const {
-        return mPb->createOnes();
+    static inline Ones * createOnes() {
+        return PabloBlock::createOnes();
     }
 
     inline Var * createVar(const std::string name) {

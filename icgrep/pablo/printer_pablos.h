@@ -10,11 +10,10 @@
 #include <pablo/pabloAST.h>
 #include <pablo/ps_if.h>
 #include <string>
-#include <llvm/Support/raw_os_ostream.h>
 
-namespace pablo {
-    class PabloBlock;
-}
+namespace pablo { class PabloBlock; }
+
+namespace llvm { class raw_ostream; }
 
 class PabloPrinter {
 public:
