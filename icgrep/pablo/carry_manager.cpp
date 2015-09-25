@@ -318,6 +318,12 @@ Value * CarryManager::pack2bitblock(Value * pack) {
 }
     
     
+// Use field size 32 for BLOCK_SIZE 256, so that signmasks are i8.
+#if (BLOCK_SIZE==256)
+//#define PARALLEL_LONG_ADD
+#define PARALLEL_LONG_ADD_DIGIT_SIZE 32
+#endif
+    
 /* Methods for getting and setting individual carry values. */
     
 Value * CarryManager::getCarryOpCarryIn(int localIndex) {
@@ -333,6 +339,7 @@ Value * CarryManager::getCarryOpCarryIn(int localIndex) {
     
 void CarryManager::setCarryOpCarryOut(unsigned localIndex, Value * carry_out_strm) {
     unsigned posn = carryOpPosition(localIndex);
+#ifndef PARALLEL_LONG_ADD
     if (mITEMS_PER_PACK > 1) {// #ifdef PACKING
         extractAndSaveCarryOutBits(carry_out_strm, posn, 1);
     }
@@ -343,13 +350,45 @@ void CarryManager::setCarryOpCarryOut(unsigned localIndex, Value * carry_out_str
             storeCarryPack(posn);
         }
     }
+#else
+    if (mITEMS_PER_PACK > 1) {// #ifdef PACKING
+        // Carry is at low bit position
+        unsigned packIndex = posn / mPACK_SIZE;
+        unsigned packOffset = posn % mPACK_SIZE;
+        Value * field = mBuilder->CreateZExt(carry_out_strm, mBuilder->getIntNTy(mPACK_SIZE));
+        if (packOffset != 0) {
+            field = mBuilder->CreateShl(field, mBuilder->getInt64(packOffset));
+        }
+        if (mCarryOutPack[packIndex] == nullptr) {
+            mCarryOutPack[packIndex] = field;
+        }
+        else {
+            mCarryOutPack[packIndex] = mBuilder->CreateOr(mCarryOutPack[packIndex], field);
+        }        
+    }
+    else {
+        Value * carry_bit = mBuilder->CreateZExt(carry_out_strm, mBuilder->getIntNTy(BLOCK_SIZE));
+        mCarryOutPack[posn] = mBuilder->CreateBitCast(carry_bit, mBitBlockType);
+        if (mCarryInfo->getWhileDepth() == 0) {
+            storeCarryPack(posn);
+        }
+    }
+
+    
+#endif
 }
 
+    
+    
 Value* CarryManager::genShiftLeft64(Value* e) {
     Value* i128_val = mBuilder->CreateBitCast(e, mBuilder->getIntNTy(BLOCK_SIZE));
     return mBuilder->CreateBitCast(mBuilder->CreateShl(i128_val, 64), mBitBlockType);
 }
 
+Value* MatchStar(IRBuilder<> * b, Value * m, Value * c) {
+    return b->CreateOr(b->CreateXor(b->CreateAdd(b->CreateAnd(m, c), c), c), m);
+}
+        
 Value * CarryManager::addCarryInCarryOut(int localIndex, Value* e1, Value* e2) {
 #if (BLOCK_SIZE == 128)
     Value * carryq_value = getCarryOpCarryIn(localIndex);
@@ -364,8 +403,32 @@ Value * CarryManager::addCarryInCarryOut(int localIndex, Value* e1, Value* e2) {
     Value* carry_out_strm = mBuilder->CreateOr(carrygen, mBuilder->CreateAnd(carryprop, mBuilder->CreateNot(sum)));
     setCarryOpCarryOut(localIndex, carry_out_strm);
     return sum;
-#else
+#elif (defined(PARALLEL_LONG_ADD))
     //BLOCK_SIZE == 256, there is no other implementation
+    Type * longAddVectorType = VectorType::get(mBuilder->getIntNTy(PARALLEL_LONG_ADD_DIGIT_SIZE), BLOCK_SIZE/PARALLEL_LONG_ADD_DIGIT_SIZE);
+    Type * longAddBitMaskIntegerType = mBuilder->getIntNTy(BLOCK_SIZE/PARALLEL_LONG_ADD_DIGIT_SIZE);
+    Type * longAddBitMaskVectorType = VectorType::get(mBuilder->getIntNTy(1), BLOCK_SIZE/PARALLEL_LONG_ADD_DIGIT_SIZE);
+    // double the mask size to allow room for carry-out.
+    Type * longAddBitMaskManipulationType = mBuilder->getIntNTy(2 * BLOCK_SIZE/PARALLEL_LONG_ADD_DIGIT_SIZE);
+    Value * all_ones = Constant::getAllOnesValue(longAddVectorType);
+    Value * carryin = iBuilder->mvmd_extract(2 * BLOCK_SIZE/PARALLEL_LONG_ADD_DIGIT_SIZE, getCarryOpCarryIn(localIndex), 0);
+    Value * carrygen = mBuilder->CreateAnd(e1, e2, "carrygen");
+    Value * carryprop = mBuilder->CreateOr(e1, e2, "carryprop");
+    // Sum individual digits.
+    Value * digitsum = iBuilder->simd_add(PARALLEL_LONG_ADD_DIGIT_SIZE, e1, e2);
+    Value * digitcarry = mBuilder->CreateOr(carrygen, mBuilder->CreateAnd(carryprop, mBuilder->CreateNot(digitsum)));
+    Value * carry_mask = mBuilder->CreateZExt(iBuilder->hsimd_signmask(PARALLEL_LONG_ADD_DIGIT_SIZE, digitcarry), longAddBitMaskManipulationType);
+    Value * bubble_fields = iBuilder->simd_eq(PARALLEL_LONG_ADD_DIGIT_SIZE, digitsum, all_ones);
+    Value * bubble_mask = mBuilder->CreateZExt(iBuilder->hsimd_signmask(PARALLEL_LONG_ADD_DIGIT_SIZE, bubble_fields), longAddBitMaskManipulationType);
+    Value * carry_markers = mBuilder->CreateAdd(mBuilder->CreateAdd(carry_mask, carry_mask), carryin);  
+    Value * increments = MatchStar(mBuilder, carry_markers, bubble_mask);
+    Value * carry_out = mBuilder->CreateLShr(increments, BLOCK_SIZE/PARALLEL_LONG_ADD_DIGIT_SIZE);
+    Value * spread = mBuilder->CreateZExt(mBuilder->CreateBitCast(mBuilder->CreateTrunc(increments, longAddBitMaskIntegerType), longAddBitMaskVectorType), longAddVectorType);
+    Value* sum = iBuilder->simd_add(PARALLEL_LONG_ADD_DIGIT_SIZE, digitsum, spread);
+    setCarryOpCarryOut(localIndex, carry_out);
+    return sum;
+#else
+    //BLOCK_SIZE == 256, default implementation
     Value * carryq_value = getCarryOpCarryIn(localIndex);
     Value* carrygen = mBuilder->CreateAnd(e1, e2, "carrygen");
     Value* carryprop = mBuilder->CreateOr(e1, e2, "carryprop");
@@ -458,7 +521,6 @@ Value * CarryManager::shortAdvanceCarryInCarryOut(int localIndex, unsigned shift
  return power2ceil(longAdvanceEntries(shift_amount));
  }
  */
-
     
 Value * CarryManager::longAdvanceCarryInCarryOut(int localIndex, unsigned shift_amount, Value * carry_out) {
     unsigned carryDataIndex = longAdvanceBitBlockPosition(localIndex);

@@ -266,9 +266,22 @@ void GrepExecutor::doGrep(const std::string & fileName) {
 
     //Final Partial Block (may be empty, but there could be carries pending).
     
+    
     const auto EOF_mask = bitblock::srl(simd<1>::constant<1>(), convert(BLOCK_SIZE - remaining));
     
-    s2p_do_final_block(reinterpret_cast<BytePack *>(mFileBuffer + (blk * BLOCK_SIZE) + (segment * SEGMENT_SIZE)), basis_bits, EOF_mask);
+    if (remaining == 0) {  // No data, we may be at a page boundary.   Do not access memory.
+        basis_bits.bit_0 = simd<1>::constant<0>();
+        basis_bits.bit_1 = simd<1>::constant<0>();
+        basis_bits.bit_2 = simd<1>::constant<0>();
+        basis_bits.bit_3 = simd<1>::constant<0>();
+        basis_bits.bit_4 = simd<1>::constant<0>();
+        basis_bits.bit_5 = simd<1>::constant<0>();
+        basis_bits.bit_6 = simd<1>::constant<0>();
+        basis_bits.bit_7 = simd<1>::constant<0>();
+    }
+    else { // At least 1 byte, so we are not at a page boundary yet, safe to access a full block. 
+        s2p_do_final_block(reinterpret_cast<BytePack *>(mFileBuffer + (blk * BLOCK_SIZE) + (segment * SEGMENT_SIZE)), basis_bits, EOF_mask);
+    }
 
     if (finalLineIsUnterminated()) {
         // Add a LF at the EOF position
