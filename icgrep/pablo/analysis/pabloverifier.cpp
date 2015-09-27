@@ -151,14 +151,14 @@ void verifyProgramStructure(const PabloBlock & block) {
             const Statement * misreportedEscapingValue = nullptr;
             if (isa<If>(stmt)) {
                 for (const Assign * def : cast<If>(stmt)->getDefined()) {
-                    if (def->getParent() != &block) {
+                    if (def->getParent() != &nested) {
                         misreportedEscapingValue = def;
                         break;
                     }
                 }
             } else {
                 for (const Next * var : cast<While>(stmt)->getVariants()) {
-                    if (var->getParent() != &block) {
+                    if (var->getParent() != &nested) {
                         misreportedEscapingValue = var;
                         break;
                     }

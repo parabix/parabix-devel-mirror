@@ -11,7 +11,7 @@ class PabloFunction;
 
 class CodeSinking {
 
-    struct BlockSetVector : public std::vector<PabloBlock *> {
+    struct ScopeSet : public std::vector<PabloBlock *> {
         inline bool insert(PabloBlock * block) {
             const auto i = std::lower_bound(begin(), end(), block);
             if (i == end() || *i != block) {
@@ -33,7 +33,7 @@ protected:
     void sink(PabloBlock & block);
     CodeSinking() { }
 private:
-    BlockSetVector mProcessed;
+    ScopeSet mProcessed;
 };
 
 }

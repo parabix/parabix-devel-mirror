@@ -104,7 +104,7 @@ set(PRECOMPILED_PROPERTIES_OBJ ${PROJECT_BINARY_DIR}/precompiled_properties.o)
 set(PRECOMPILED_FILES ${PRECOMPILED_PROPERTIES_OBJ} ${PROJECT_SOURCE_DIR}/UCD/precompiled_properties.cpp)
 
 if(ENABLE_MULTIPLEXING)
-set(MULTIPLEXING_FLAG -multiplexing -reassoc) # -multiplexing-dist=${PROJECT_BINARY_DIR}/ucd-multiplexing.csv #-ldc=ldc.csv
+set(MULTIPLEXING_FLAG -multiplexing -reassoc -multiplexing-dist=${PROJECT_BINARY_DIR}/ucd-multiplexing.csv) # -multiplexing-dist=${PROJECT_BINARY_DIR}/ucd-multiplexing.csv #-ldc=ldc.csv
 endif()
 
 add_custom_command(OUTPUT ${PRECOMPILED_FILES}
