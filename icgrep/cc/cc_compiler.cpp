@@ -132,46 +132,42 @@ PabloAST * CC_Compiler::charset_expr(const CC * cc, PabloBlockOrBuilder & pb) {
 }
 
 template<typename PabloBlockOrBuilder>
-PabloAST * CC_Compiler::bit_pattern_expr(const unsigned pattern, unsigned selected_bits, PabloBlockOrBuilder &pb)
-{
-    if (selected_bits == 0) {
-        return pb.createOnes();
-    }
-
-    std::vector<PabloAST*> bit_terms;
-    for (unsigned i = 0; selected_bits; ++i) {
-        unsigned test_bit = static_cast<unsigned>(1) << i;
-        if ((selected_bits & test_bit) != 0) {
-            if ((pattern & test_bit) == 0) {
-                bit_terms.push_back(pb.createNot(getBasisVar(i)));
+PabloAST * CC_Compiler::bit_pattern_expr(const unsigned pattern, unsigned selected_bits, PabloBlockOrBuilder & pb) {
+    if (LLVM_UNLIKELY(selected_bits == 0)) {
+        return PabloBlock::createOnes();
+    } else {
+        std::vector<PabloAST*> terms;
+        for (unsigned i = 0; selected_bits; ++i) {
+            unsigned test_bit = static_cast<unsigned>(1) << i;
+            PabloAST * term = PabloBlock::createOnes();
+            if (selected_bits & test_bit) {
+                term = getBasisVar(i);
+                if ((pattern & test_bit) == 0) {
+                    term = pb.createNot(term);
+                }
+                selected_bits ^= test_bit;
             }
-            else {
-                bit_terms.push_back(getBasisVar(i));
-            }
+            terms.push_back(term);
         }
-        else {
-            bit_terms.push_back(pb.createOnes());
-        }
-        selected_bits &= ~test_bit;
-    }
-
-    if (bit_terms.size() > 1) {
-        //Reduce the list so that all of the expressions are contained within a single expression.
-        std::vector<PabloAST*> new_terms;
-        new_terms.reserve(bit_terms.size() / 2);
-        do {
-            for (auto i = 0; i < (bit_terms.size() / 2); i++) {
-                new_terms.push_back(pb.createAnd(bit_terms[(2 * i) + 1], bit_terms[2 * i]));
+        if (terms.size() > 1) {
+            //Reduce the list so that all of the expressions are contained within a single expression.
+            std::vector<PabloAST*> temp;
+            temp.reserve(terms.size());
+            do {
+                for (unsigned i = 0; i < (terms.size() / 2); i++) {
+                    temp.push_back(pb.createAnd(terms[2 * i], terms[(2 * i) + 1]));
+                }
+                if (terms.size() % 2 == 1) {
+                    temp.push_back(terms.back());
+                }
+                terms.swap(temp);
+                temp.clear();
             }
-            if (bit_terms.size() % 2 == 1) {
-                new_terms.push_back(bit_terms[bit_terms.size() - 1]);
-            }
-            bit_terms.swap(new_terms);
-            new_terms.clear();
+            while (terms.size() > 1);
         }
-        while (bit_terms.size() > 1);
+        assert (terms.size() == 1);
+        return terms.front();
     }
-    return bit_terms[0];
 }
 
 template<typename PabloBlockOrBuilder>
@@ -268,6 +264,7 @@ inline PabloAST * CC_Compiler::char_or_range_expr(const codepoint_t lo, const co
 }
 
 inline Var * CC_Compiler::getBasisVar(const int i) const {
+    assert (i >= 0 && i < mEncoding.getBits());
     return mBasisBit[mEncoding.getBits() - i - 1];
 }
 

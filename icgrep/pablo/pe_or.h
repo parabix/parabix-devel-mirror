@@ -32,7 +32,7 @@ protected:
     Or(PabloAST * expr1, PabloAST * expr2, String * name)
     : Statement(ClassTypeId::Or, {expr1, expr2}, name)
     {
-
+        assert (getNumOperands() == 2);
     }
 };
 

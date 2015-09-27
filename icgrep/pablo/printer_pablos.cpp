@@ -71,7 +71,7 @@ void PabloPrinter::print(const Statement * stmt, std::string indent, llvm::raw_o
         print(an->getExpression(), strm);
     }
     else if (const Next * next = dyn_cast<const Next>(stmt)) {        
-        strm << next->getName() << "' = ";
+        strm << "Next(" << next->getName() << ") = ";
         print(next->getExpr(), strm);
     }
     else if (const If * ifstmt = dyn_cast<const If>(stmt)) {
@@ -182,7 +182,7 @@ void PabloPrinter::print(const Statement * stmt, std::string indent, llvm::raw_o
         strm << ")";
     }
     else {
-        strm << indent << "**UNKNOWN Pablo Statement type **" << "\n";
+        strm << "???";
     }
 }
 
@@ -194,8 +194,10 @@ void PabloPrinter::print(const PabloAST * expr, llvm::raw_ostream & strm) {
     } else if (isa<const Ones>(expr)) {
         strm << "1";
     } else if (const Var * var = dyn_cast<const Var>(expr)) {
+        assert (var->getName());
         strm  << var->getName();
     } else if (const Next * next = dyn_cast<const Next>(expr)) {
+        assert (next->getName());
         strm << "Next(" << next->getName() << ")";
     } else if (const If * ifstmt = dyn_cast<If>(expr)) {
         strm << "if ";
@@ -206,6 +208,8 @@ void PabloPrinter::print(const PabloAST * expr, llvm::raw_ostream & strm) {
     } else if (const Statement * stmt = dyn_cast<Statement>(expr)) {
         assert (stmt->getName());
         strm << stmt->getName();
+    } else if (isa<Integer>(expr)) {
+        strm << cast<Integer>(expr)->value();
     } else {
         strm << "???";
     }

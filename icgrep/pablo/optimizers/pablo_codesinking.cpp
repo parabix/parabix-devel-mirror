@@ -1,5 +1,6 @@
 #include "pablo_codesinking.hpp"
 #include <pablo/function.h>
+#include <pablo/analysis/pabloverifier.hpp>
 
 namespace pablo {
 
@@ -7,6 +8,9 @@ bool CodeSinking::optimize(PabloFunction & function)
 {
     CodeSinking lcf;
     lcf.sink(function.getEntryBlock());
+    #ifndef NDEBUG
+    PabloVerifier::verify(*function, "post-sinking");
+    #endif
     return true;
 }
 

@@ -10,10 +10,7 @@
 #include <queue>
 #include <boost/circular_buffer.hpp>
 #include <pablo/optimizers/pablo_simplifier.hpp>
-#include <boost/container/flat_set.hpp>
-#include <boost/container/flat_map.hpp>
-#include <boost/graph/adjacency_list.hpp>
-#include <boost/graph/topological_sort.hpp>
+#include <pablo/analysis/pabloverifier.hpp>
 
 using namespace llvm;
 using namespace boost;
@@ -27,8 +24,10 @@ bool BDDMinimizationPass::optimize(PabloFunction & function) {
     BDDMinimizationPass am;
     am.initialize(function);
     am.eliminateLogicallyEquivalentStatements(function);
-
     am.shutdown();
+    #ifndef NDEBUG
+    PabloVerifier::verify(function, "post-bdd-minimization");
+    #endif
     return Simplifier::optimize(function);
 }
 
@@ -61,12 +60,7 @@ void BDDMinimizationPass::initialize(PabloFunction & function) {
                 case TypeId::ScanThru:
                     ++variableCount;
                     break;
-                case TypeId::Next:
-                    if (escapes(stmt)) {
-                        ++variableCount;
-                    }
-                default:
-                    break;
+                default: break;
             }
             stmt = stmt->getNextNode();
         }
@@ -113,17 +107,10 @@ void BDDMinimizationPass::eliminateLogicallyEquivalentStatements(PabloBlock & bl
     while (stmt) {
         if (LLVM_UNLIKELY(isa<If>(stmt))) {
             eliminateLogicallyEquivalentStatements(cast<If>(stmt)->getBody(), map);
-            for (Assign * def : cast<const If>(stmt)->getDefined()) {
-                // Any defined variable that wasn't used outside of the If scope would have
-                // been demoted by the Simplifier pass.
-                map.insert(mCharacterizationMap[def], def);
-            }
         } else if (LLVM_UNLIKELY(isa<While>(stmt))) {
             eliminateLogicallyEquivalentStatements(cast<While>(stmt)->getBody(), map);
             for (Next * var : cast<const While>(stmt)->getVariants()) {
-                if (escapes(var)) {
-                    map.insert(NewVar(var), var);
-                } else { // we don't need to retain the BDD for this variant
+                if (!escapes(var)) {
                     Cudd_RecursiveDeref(mManager, mCharacterizationMap[var]);
                     mCharacterizationMap.erase(var);
                 }

@@ -3,6 +3,7 @@
 #include <pablo/expression_map.hpp>
 #include <pablo/function.h>
 #include <pablo/printer_pablos.h>
+#include <pablo/analysis/pabloverifier.hpp>
 #include <unordered_map>
 #include <iostream>
 
@@ -11,7 +12,10 @@ namespace pablo {
 bool Simplifier::optimize(PabloFunction & function) {
     eliminateRedundantCode(function.getEntryBlock());
     deadCodeElimination(function.getEntryBlock());
-    eliminateRedundantComplexStatements(function.getEntryBlock());
+    // eliminateRedundantComplexStatements(function.getEntryBlock());
+    #ifndef NDEBUG
+    PabloVerifier::verify(function, "post-simplification");
+    #endif
     return true;
 }
 
@@ -26,19 +30,6 @@ inline static bool canTriviallyFold(const Statement * stmt) {
     }
     return false;
 }
-
-#ifndef NDEBUG
-static bool verifyStatementIsInSameBlock(const Statement * const stmt, const PabloBlock & block) {
-    Statement * curr = block.front();
-    while (curr) {
-        if (curr == stmt) {
-            return true;
-        }
-        curr = curr->getNextNode();
-    }
-    return false;
-}
-#endif
 
 inline bool Simplifier::isSuperfluous(const Assign * const assign) {
     for (const PabloAST * inst : assign->users()) {
@@ -66,14 +57,14 @@ inline bool Simplifier::isSuperfluous(const Assign * const assign) {
 
 inline bool demoteDefinedVar(const If * ifNode, const Assign * def) {
     // If this value isn't used outside of this scope then there is no reason to allow it to escape it.
-    if (!escapes(def) || (ifNode->getCondition() == def->getExpression())) {
+    if (!escapes(def)) {
         return true;
     }
     // Similarly if the defined variable is equivalent to the condition, an equivalent value is already available.
     if (ifNode->getCondition() == def->getExpression()) {
         return true;
     }
-    // Finally, if the assignment is a constant Zero or One, it's already known.
+    // Finally, if the assignment is a constant, it's already known.
     if (isa<Zeroes>(def->getExpression()) || isa<Ones>(def->getExpression()))  {
         return true;
     }
@@ -82,14 +73,8 @@ inline bool demoteDefinedVar(const If * ifNode, const Assign * def) {
 
 void Simplifier::eliminateRedundantCode(PabloBlock & block, ExpressionTable * predecessor) {
     ExpressionTable encountered(predecessor);
-
     Statement * stmt = block.front();
-
     while (stmt) {
-
-        assert (stmt);
-        assert (verifyStatementIsInSameBlock(stmt, block));
-
         if (Assign * assign = dyn_cast<Assign>(stmt)) {
             // If we have an Assign whose users do not contain an If or Next node, we can replace its users with
             // the Assign's expression directly.
@@ -101,8 +86,15 @@ void Simplifier::eliminateRedundantCode(PabloBlock & block, ExpressionTable * pr
                 }
                 continue;
             }
-        }
-        else if (If * ifNode = dyn_cast<If>(stmt)) {
+            // Force the uses of an local Assign to be the expression instead.
+            for (PabloAST * use : assign->users()) {
+                if (Statement * user = dyn_cast<Statement>(use)) {
+                    if (LLVM_UNLIKELY(user->getParent() == &block)) {
+                        user->replaceUsesOfWith(assign, assign->getExpression());
+                    }
+                }
+            }
+        } else if (If * ifNode = dyn_cast<If>(stmt)) {
             // Check to see if the Cond is Zero and delete the loop.
             if (LLVM_UNLIKELY(isa<Zeroes>(ifNode->getCondition()))) {
                 for (Assign * defVar : ifNode->getDefined()) {
@@ -150,18 +142,9 @@ void Simplifier::eliminateRedundantCode(PabloBlock & block, ExpressionTable * pr
                     ++j;
                 }
             }
-        }
-        else if (isa<While>(stmt)) {
+        } else if (isa<While>(stmt)) {
             eliminateRedundantCode(cast<While>(stmt)->getBody(), &encountered);
-        }        
-        else if (stmt->getNumUses() == 0) {
-            // If this statement has no users, we can discard it. If a future "identical" statement occurs that does
-            // have users, we can use that statement instead.
-            stmt = stmt->eraseFromParent();
-            continue;
-        }
-        else if (canTriviallyFold(stmt)) { // non-Assign node
-
+        } else if (canTriviallyFold(stmt)) { // non-Assign node
             // Do a trivial folding test to see if we're using all 0s or 1s as an operand.
             PabloAST * expr = nullptr;
             block.setInsertPoint(stmt->getPrevNode());
@@ -201,24 +184,21 @@ void Simplifier::eliminateRedundantCode(PabloBlock & block, ExpressionTable * pr
                 }
             }
             stmt = stmt->replaceWith(expr);
-            // the next statement could be an Assign; just restart the loop.
+            block.setInsertPoint(block.back());
             continue;
-        }
-        else {
+        } else {
             // When we're creating the Pablo program, it's possible to have multiple instances of an "identical"
             // statement. By recording which statements have already been seen, we can detect the redundant statements
             // as any having the same type and operands. If so, we can replace its users with the prior statement.
             // and erase this statement from the AST
             const auto f = encountered.findOrAdd(stmt);
-            if (!std::get<1>(f)) {
-                stmt = stmt->replaceWith(std::get<0>(f), true, true);
+            if (f.second == false) {
+                stmt = stmt->replaceWith(f.first, true, true);
                 continue;
             }
         }
-        assert (stmt);
         stmt = stmt->getNextNode();
     }
-    block.setInsertPoint(block.back());
 }
 
 

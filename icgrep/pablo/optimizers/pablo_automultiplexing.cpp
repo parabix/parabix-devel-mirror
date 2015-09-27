@@ -106,7 +106,8 @@ using TypeId = PabloAST::ClassTypeId;
 
 bool AutoMultiplexing::optimize(PabloFunction & function) {
 
-    // std::random_device rd;
+//    std::random_device rd;
+//    const auto seed = rd();
     const auto seed = 83234827342;
     RNG rng(seed);
 
@@ -157,6 +158,10 @@ bool AutoMultiplexing::optimize(PabloFunction & function) {
         am.multiplexSelectedIndependentSets(function);
         RECORD_TIMESTAMP(end_select_independent_sets);
         LOG("SelectedIndependentSets: " << (end_select_independent_sets - start_select_independent_sets));
+
+        #ifndef NDEBUG
+        PabloVerifier::verify(function, "post-multiplexing");
+        #endif
 
         Simplifier::optimize(function);
     }
@@ -839,7 +844,6 @@ void AutoMultiplexing::applySubsetConstraints() {
         BitVector D(n - m, 0);
 
         for (auto i = m; i != n; ++i) {
-            graph_traits<MultiplexSetGraph>::out_edge_iterator ei, ei_end;
             // For each member of a "set vertex" ...
             for (auto e : make_iterator_range(out_edges(i, mMultiplexSetGraph))) {
                 const auto s = source(e, mMultiplexSetGraph);

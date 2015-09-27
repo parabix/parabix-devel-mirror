@@ -31,8 +31,7 @@ std::string CC::canonicalName(const CC_type type) const {
     name << std::hex;
     if ((type == ByteClass) && (max_codepoint() >= 0x80)) {
         name << "BC";
-    }
-    else {
+    } else {
         name << "CC";
     }
     char separator = '_';
@@ -54,11 +53,9 @@ void CC::insert_range(const codepoint_t lo, const codepoint_t hi) {
         if (hi < lo_codepoint(i) - 1) {
             mSparseCharSet.emplace(i, lo, hi);
             return;
-        }
-        else if (lo > hi_codepoint(i) + 1) {
+        } else if (lo > hi_codepoint(i) + 1) {
             ++i;
-        }
-        else {
+        } else {
             // ranges overlap; expand the range to include the overlapp
             lo_codepoint(i) = std::min(lo_codepoint(i), lo);
             hi_codepoint(i) = std::max(hi_codepoint(i), hi);

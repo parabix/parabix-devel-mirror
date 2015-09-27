@@ -32,7 +32,7 @@ protected:
     And(PabloAST * expr1, PabloAST * expr2, String * name)
     : Statement(ClassTypeId::And, {expr1, expr2}, name)
     {
-
+        assert (getNumOperands() == 2);
     }
 };
 

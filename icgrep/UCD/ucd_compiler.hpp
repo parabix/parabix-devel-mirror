@@ -1,8 +1,13 @@
 #ifndef UCDCOMPILER_HPP
 #define UCDCOMPILER_HPP
 
-#include <vector>
 #include <re/re_cc.h>
+#include <vector>
+#ifdef USE_BOOST
+#include <boost/container/flat_map.hpp>
+#else
+#include <unordered_map>
+#endif
 
 namespace cc {
     class CC_Compiler;
@@ -24,6 +29,13 @@ class UCDCompiler {
     using PabloAST = pablo::PabloAST;
     using codepoint_t = re::codepoint_t;
     using RangeList = std::vector<re::interval_t>;
+    #ifdef USE_BOOST
+    using TargetMap = boost::container::flat_map<const UnicodeSet *, PabloAST *>;
+    #else
+    using TargetMap = std::unordered_map<const UnicodeSet *, PabloAST *>;
+    #endif
+    using Target = TargetMap::value_type;
+    using TargetVector = std::vector<Target>;
 
 public:
     UCDCompiler(cc::CC_Compiler & ccCompiler);
@@ -32,13 +44,13 @@ public:
 
     PabloAST * generateWithoutIfHierarchy(const UnicodeSet & set, PabloBuilder & entry);
 
-    PabloAST * generateWithIfHierarchy(const RangeList & ifRanges, const UnicodeSet & set, PabloBuilder & entry);
-
 protected:
 
-    PabloAST * generateWithIfHierarchy(const RangeList & ifRanges, const UnicodeSet & set, const codepoint_t lo, const codepoint_t hi, PabloBuilder & builder);
+    void generateRange(const RangeList & ifRanges, PabloBuilder & entry);
 
-    PabloAST * generateSubRanges(const UnicodeSet & set, const codepoint_t lo, const codepoint_t hi, PabloBuilder & builder, PabloAST * target);
+    void generateRange(const RangeList & ifRanges, const codepoint_t lo, const codepoint_t hi, PabloBuilder & builder);
+
+    void generateSubRanges(const codepoint_t lo, const codepoint_t hi, PabloBuilder & builder);
 
     PabloAST * sequenceGenerator(const RangeList && ranges, const unsigned byte_no, PabloBuilder & builder, PabloAST * target, PabloAST * prefix);
 
@@ -49,6 +61,8 @@ protected:
     PabloAST * ifTestCompiler(const codepoint_t lo, const codepoint_t hi, const unsigned byte_no, PabloBuilder & builder, PabloAST * target);
 
     PabloAST * makePrefix(const codepoint_t cp, const unsigned byte_no, PabloBuilder & builder, PabloAST * prefix);
+
+    void addTarget(const UnicodeSet & set);
 
     static RangeList byteDefinitions(const RangeList & list, const unsigned byte_no);
 
@@ -64,6 +78,7 @@ protected:
 private:
     cc::CC_Compiler &       mCharacterClassCompiler;
     PabloAST *              mSuffixVar;
+    TargetMap               mTargetMap;
 };
 
 }

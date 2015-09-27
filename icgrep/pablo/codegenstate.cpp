@@ -8,9 +8,9 @@
 
 namespace pablo {
 
-Zeroes * const PabloBlock::mZeroes = new Zeroes();
+Zeroes PabloBlock::mZeroes;
 
-Ones * const PabloBlock::mOnes = new Ones();
+Ones PabloBlock::mOnes;
 
 inline PabloAST * PabloBlock::renameNonNamedNode(PabloAST * expr, const std::string && prefix) {
     if (Statement * stmt = dyn_cast<Statement>(expr)) {
@@ -338,19 +338,15 @@ PabloAST * PabloBlock::createOr(PabloAST * expr1, PabloAST * expr2, const std::s
     assert (expr1 && expr2);
     if (isa<Zeroes>(expr1) || isa<Ones>(expr2)){
         return renameNonNamedNode(expr2, std::move(prefix));
-    }
-    if (isa<Zeroes>(expr2) || isa<Ones>(expr1) || equals(expr1, expr2)) {
+    } else if (isa<Zeroes>(expr2) || isa<Ones>(expr1) || equals(expr1, expr2)) {
         return renameNonNamedNode(expr1, std::move(prefix));
-    }
-    else if (Not * not1 = dyn_cast<Not>(expr1)) {
+    } else if (Not * not1 = dyn_cast<Not>(expr1)) {
         // ¬a∨b = ¬¬(¬a∨b) = ¬(a ∧ ¬b)
         return createNot(createAnd(not1->getExpr(), createNot(expr2)), prefix);
-    }
-    else if (Not * not2 = dyn_cast<Not>(expr2)) {
+    } else if (Not * not2 = dyn_cast<Not>(expr2)) {
         // a∨¬b = ¬¬(¬b∨a) = ¬(b ∧ ¬a)
         return createNot(createAnd(not2->getExpr(), createNot(expr1)), prefix);
-    }
-    else if (And * and1 = dyn_cast<And>(expr1)) {
+    } else if (And * and1 = dyn_cast<And>(expr1)) {
         if (And * and2 = dyn_cast<And>(expr2)) {
             PabloAST * const expr1a = and1->getExpr1();
             PabloAST * const expr1b = and1->getExpr2();
@@ -360,14 +356,11 @@ PabloAST * PabloBlock::createOr(PabloAST * expr1, PabloAST * expr2, const std::s
             //(e.g., union of [a-z] and [A-Z].
             if (equals(expr1a, expr2a)) {
                 return createAnd(expr1a, createOr(expr1b, expr2b), prefix);
-            }
-            else if (equals(expr1b, expr2b)) {
+            } else if (equals(expr1b, expr2b)) {
                 return createAnd(expr1b, createOr(expr1a, expr2a), prefix);
-            }
-            else if (equals(expr1a, expr2b)) {
+            } else if (equals(expr1a, expr2b)) {
                 return createAnd(expr1a, createOr(expr1b, expr2a), prefix);
-            }
-            else if (equals(expr1b, expr2a)) {
+            } else if (equals(expr1b, expr2a)) {
                 return createAnd(expr1b, createOr(expr1a, expr2b), prefix);
             }
         } else if (equals(and1->getExpr1(), expr2) || equals(and1->getExpr2(), expr2)) {
@@ -387,19 +380,18 @@ PabloAST * PabloBlock::createOr(PabloAST * expr1, PabloAST * expr2, const std::s
 
 PabloAST * PabloBlock::createXor(PabloAST * expr1, PabloAST * expr2) {
     assert (expr1 && expr2);
+    if (expr1 == expr2) {
+        return PabloBlock::createZeroes();
+    }
     if (isa<Ones>(expr1)) {
         return createNot(expr2);
-    }
-    else if (isa<Zeroes>(expr1)){
+    } else if (isa<Zeroes>(expr1)){
         return expr2;
-    }
-    else if (isa<Ones>(expr2)) {
+    } else if (isa<Ones>(expr2)) {
         return createNot(expr1);
-    }
-    else if (isa<Zeroes>(expr2)){
+    } else if (isa<Zeroes>(expr2)){
         return expr1;
-    }
-    else if (Not * not1 = dyn_cast<Not>(expr1)) {
+    } else if (Not * not1 = dyn_cast<Not>(expr1)) {
         if (Not * not2 = dyn_cast<Not>(expr2)) {
             return createXor(not1->getExpr(), not2->getExpr());
         }
@@ -412,19 +404,18 @@ PabloAST * PabloBlock::createXor(PabloAST * expr1, PabloAST * expr2) {
 
 PabloAST * PabloBlock::createXor(PabloAST * expr1, PabloAST * expr2, const std::string prefix) {
     assert (expr1 && expr2);
+    if (expr1 == expr2) {
+        return PabloBlock::createZeroes();
+    }
     if (isa<Ones>(expr1)) {
         return createNot(expr2, prefix);
-    }
-    else if (isa<Zeroes>(expr1)){
+    } else if (isa<Zeroes>(expr1)){
         return expr2;
-    }
-    else if (isa<Ones>(expr2)) {
+    } else if (isa<Ones>(expr2)) {
         return createNot(expr1, prefix);
-    }
-    else if (isa<Zeroes>(expr2)){
+    } else if (isa<Zeroes>(expr2)){
         return expr1;
-    }
-    else if (Not * not1 = dyn_cast<Not>(expr1)) {
+    } else if (Not * not1 = dyn_cast<Not>(expr1)) {
         if (Not * not2 = dyn_cast<Not>(expr2)) {
             return createXor(not1->getExpr(), not2->getExpr(), prefix);
         }
@@ -441,29 +432,21 @@ PabloAST * PabloBlock::createSel(PabloAST * condition, PabloAST * trueExpr, Pabl
     assert (condition && trueExpr && falseExpr);
     if (isa<Ones>(condition)) {
         return trueExpr;
-    }
-    else if (isa<Zeroes>(condition)){
+    } else if (isa<Zeroes>(condition)){
         return falseExpr;
-    }
-    else if (isa<Ones>(trueExpr)) {
+    } else if (isa<Ones>(trueExpr)) {
         return createOr(condition, falseExpr);
-    }
-    else if (isa<Zeroes>(trueExpr)){
+    } else if (isa<Zeroes>(trueExpr)){
         return createAnd(createNot(condition), falseExpr);
-    }
-    else if (isa<Ones>(falseExpr)) {
+    } else if (isa<Ones>(falseExpr)) {
         return createOr(createNot(condition), trueExpr);
-    }
-    else if (isa<Zeroes>(falseExpr)){
+    } else if (isa<Zeroes>(falseExpr)){
         return createAnd(condition, trueExpr);
-    }
-    else if (equals(trueExpr, falseExpr)) {
+    } else if (equals(trueExpr, falseExpr)) {
         return trueExpr;
-    }
-    else if (isa<Not>(trueExpr) && equals(cast<Not>(trueExpr)->getExpr(), falseExpr)) {
+    } else if (isa<Not>(trueExpr) && equals(cast<Not>(trueExpr)->getExpr(), falseExpr)) {
         return createXor(condition, falseExpr);
-    }
-    else if (isa<Not>(falseExpr) && equals(trueExpr, cast<Not>(falseExpr)->getExpr())){
+    } else if (isa<Not>(falseExpr) && equals(trueExpr, cast<Not>(falseExpr)->getExpr())){
         return createXor(condition, falseExpr);
     }
     return insertAtInsertionPoint(new Sel(condition, trueExpr, falseExpr, makeName("sel")));

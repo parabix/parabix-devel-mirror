@@ -45,6 +45,7 @@
 #include <pablo/function.h>
 #include <re/printer_re.h>
 #include <pablo/printer_pablos.h>
+#include <pablo/analysis/pabloverifier.hpp>
 
 #include "do_grep.h"
 
@@ -248,7 +249,7 @@ void pablo_function_passes(pablo::PabloFunction * function) {
 #ifdef ENABLE_MULTIPLEXING    
     if (EnableMultiplexing) {
         pablo::BDDMinimizationPass::optimize(*function);
-        pablo::AutoMultiplexing::optimize(*function);        
+        pablo::AutoMultiplexing::optimize(*function);
     }    
     if (EnableReassociation) {
         pablo::BooleanReassociationPass::optimize(*function);
@@ -356,6 +357,9 @@ int main(int argc, char *argv[]) {
         re_ast = regular_expression_passes(encoding, re_ast);
         
         pablo::PabloFunction * function = re2pablo_compiler(encoding, re_ast);
+        #ifndef NDEBUG
+        pablo::PabloVerifier::verify(*function, "creation");
+        #endif
 
         pablo_function_passes(function);
         pablo::PabloCompiler pablo_compiler;

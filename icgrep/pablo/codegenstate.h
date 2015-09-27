@@ -69,11 +69,11 @@ public:
     PabloAST * createAdvance(PabloAST * expr, PabloAST * shiftAmount, const std::string prefix);
 
     static inline Zeroes * createZeroes() {
-        return mZeroes;
+        return &mZeroes;
     }
 
     static inline Ones * createOnes() {
-        return mOnes;
+        return &mOnes;
     }
 
     inline Call * createCall(Prototype * prototype, const std::vector<Var *> & args) {
@@ -224,8 +224,8 @@ private:
     Var * createVar(PabloAST * name);
 
 private:        
-    static Zeroes * const                               mZeroes;
-    static Ones * const                                 mOnes;
+    static Zeroes                                       mZeroes;
+    static Ones                                         mOnes;
     SymbolGenerator &                                   mSymbolGenerator;
     PabloBlock *                                        mParent;
     unsigned                                            mScopeIndex;

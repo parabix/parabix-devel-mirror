@@ -76,9 +76,7 @@ private:
     codepoint_t parse_utf8_codepoint();
 
     Name * parsePropertyExpression();
-    
-    CC * parseNamePatternExpression();
-    
+	
     RE * makeComplement(RE * s);
     RE * makeWordBoundary();
     RE * makeWordNonBoundary();
@@ -118,7 +116,6 @@ private:
     cursor_t                    _cursor;
     const cursor_t              _end;
     ModeFlagSet                 fModeFlagSet;
-    bool                        fNested;
     NameMap                     mNameMap;
 };
 
