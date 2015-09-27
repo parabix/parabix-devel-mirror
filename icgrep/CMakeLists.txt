@@ -59,7 +59,7 @@ if(ENABLE_MULTIPLEXING)
   SET(REQ_BOOST_COMPONENTS ${REQ_BOOST_COMPONENTS} system)
 endif()
 if(USE_BOOST_MMAP)
-  SET(REQ_BOOST_COMPONENTS ${REQ_BOOST_COMPONENTS} iostreams filesystem)
+  SET(REQ_BOOST_COMPONENTS ${REQ_BOOST_COMPONENTS} system iostreams filesystem)
 endif()
 
 if(REQ_BOOST_COMPONENTS)
@@ -119,7 +119,7 @@ add_custom_target(run_generate_predefined_ucd_functions DEPENDS ${PRECOMPILED_FI
 add_dependencies(RegExpCompiler run_generate_predefined_ucd_functions)
 ENDIF()
 
-add_executable(icgrep icgrep.cpp do_grep.cpp ${PRECOMPILED_FILES})
+add_executable(icgrep icgrep.cpp toolchain.cpp do_grep.cpp ${PRECOMPILED_FILES})
 IF(NOT DISABLE_PREGENERATED_UCD_FUNCTIONS)
 add_dependencies(icgrep run_generate_predefined_ucd_functions)
 ENDIF()
