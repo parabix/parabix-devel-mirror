@@ -12,6 +12,7 @@
 #include "include/simd-lib/bitblock.hpp"
 #include "include/simd-lib/transpose.hpp"
 #include "include/simd-lib/bitblock_iterator.hpp"
+#include <re/re_cc.h>
 
 struct Output {
     BitBlock matches;
@@ -46,26 +47,38 @@ public:
 
     GrepExecutor(void * process_block)
     : mCountOnlyOption(false)
+    , mGetCodePointsOption(false)
     , mShowFileNameOption(false)
     , mShowLineNumberingOption(false)
+    , mParsedCodePointSet(nullptr)
     , mProcessBlockFcn(reinterpret_cast<process_block_fcn>(process_block)) {
 
     }
           
     void setCountOnlyOption(bool doCount = true) {mCountOnlyOption = doCount;}
+    void setGetCodePointsOption(bool doCodepoints = true) {
+        mGetCodePointsOption = doCodepoints;
+        mParsedCodePointSet = re::makeCC();
+    }
     void setShowFileNameOption(bool showF = true) {mShowFileNameOption = showF;}
     void setShowLineNumberOption(bool showN = true) {mShowLineNumberingOption = showN;}
     void setNormalizeLineBreaksOption(bool normLB = true) {mNormalizeLineBreaksOption = normLB;}
     
     void doGrep(const std::string & fileName);
+    re::CC * getParsedCodepoints() { return mParsedCodePointSet;}
 private:
     ssize_t write_matches(llvm::raw_ostream & out, const char *buffer, ssize_t first_line_start);
+    
     bool finalLineIsUnterminated() const;
+    ssize_t extract_codepoints(char * buffer, ssize_t first_line_start);
 
     bool mCountOnlyOption;
+    bool mGetCodePointsOption;
     bool mShowFileNameOption;
     bool mShowLineNumberingOption;
     bool mNormalizeLineBreaksOption;
+    
+    re::CC * mParsedCodePointSet;
 
     process_block_fcn mProcessBlockFcn;
     

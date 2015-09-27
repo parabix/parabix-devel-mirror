@@ -20,6 +20,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <stdexcept>
+#include <cctype>
 
 #include "include/simd-lib/carryQ.hpp"
 #include "include/simd-lib/pabloSupport.hpp"
@@ -137,6 +138,49 @@ bool GrepExecutor::finalLineIsUnterminated() const {
     return (static_cast<unsigned char>(mFileBuffer[mFileSize-3]) != 0xE2) || (penult_byte != 0x80);
 }
 
+// Extracting codepoint data from UCD name data file.
+ssize_t GrepExecutor::extract_codepoints(char * buffer, ssize_t first_line_start) {
+    
+    ssize_t line_start = first_line_start;
+    size_t match_pos;
+    size_t line_end;
+    
+    while (mMatch_scanner.has_next()) {
+        match_pos = mMatch_scanner.scan_to_next();
+        // If we found a match, it must be at a line end.
+        line_end = mLineBreak_scanner.scan_to_next();
+        while (line_end < match_pos) {
+            line_start = line_end + 1;
+            mLineNum++;
+            line_end = mLineBreak_scanner.scan_to_next();
+        }
+        
+        re::codepoint_t c = 0;
+        ssize_t line_pos = line_start;
+        while (isxdigit(buffer[line_pos])) {
+            if (isdigit(buffer[line_pos])) {
+                c = (c << 4) | (buffer[line_pos] - '0');
+            }
+            else {
+                c = (c << 4) | (tolower(buffer[line_pos]) - 'a' + 10);
+            }
+        }
+        assert(((line_pos - line_start) >= 4) && ((line_pos - line_start) <= 6)); // UCD format 4 to 6 hex digits.
+        mParsedCodePointSet->insert(c);
+        
+        line_start = line_end + 1;
+        mLineNum++;
+    }
+    while(mLineBreak_scanner.has_next()) {
+        line_end = mLineBreak_scanner.scan_to_next();
+        line_start = line_end+1;
+        mLineNum++;
+    }
+    return line_start;
+    
+}
+
+
 void GrepExecutor::doGrep(const std::string & fileName) {
 
     Basis_bits basis_bits;
@@ -228,9 +272,13 @@ void GrepExecutor::doGrep(const std::string & fileName) {
                 }
             }
         }
-
         if (!mCountOnlyOption) {
-            line_start = write_matches(out, mFileBuffer + (segment * SEGMENT_SIZE), line_start);
+            if (mGetCodePointsOption) {
+                line_start = extract_codepoints(mFileBuffer + (segment * SEGMENT_SIZE), line_start);
+            }
+            else {
+                line_start = write_matches(out, mFileBuffer + (segment * SEGMENT_SIZE), line_start);
+            }
         }
         segment++;
         line_start -= SEGMENT_SIZE;  /* Will be negative offset for use within next segment. */
@@ -313,7 +361,12 @@ void GrepExecutor::doGrep(const std::string & fileName) {
             mLineBreak_scanner.load_block(simd<1>::constant<0>(), blk);
             mMatch_scanner.load_block(simd<1>::constant<0>(), blk);
         }
-        line_start = write_matches(out, mFileBuffer + (segment * SEGMENT_SIZE), line_start);
+        if (mGetCodePointsOption) {
+            line_start = extract_codepoints(mFileBuffer + (segment * SEGMENT_SIZE), line_start);
+        }
+        else {
+            line_start = write_matches(out, mFileBuffer + (segment * SEGMENT_SIZE), line_start);
+        }
     }
 #ifdef USE_BOOST_MMAP
     mFile.close();
