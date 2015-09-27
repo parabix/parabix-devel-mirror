@@ -69,7 +69,6 @@ ssize_t GrepExecutor::write_matches(llvm::raw_ostream & out, const char * buffer
             line_start = line_end + 1;
             mLineNum++;
         }
-        assert (buffer + line_end < mFileBuffer + mFileSize);
         if (mShowFileNameOption) {
             out << mFileName << ':';
         }
@@ -77,8 +76,16 @@ ssize_t GrepExecutor::write_matches(llvm::raw_ostream & out, const char * buffer
             out << mLineNum << ":";
         }
         if ((buffer[line_start] == 0xA) && (line_start != line_end)) {
-            // The LF of a CRLF.  Really the end of the last line.
+            // The line "starts" on the LF of a CRLF.  Really the end of the last line.
             line_start++;
+        }
+        if (buffer + line_end == mFileBuffer + mFileSize) {
+            // The match position is at end-of-file.   We have a final unterminated line.
+            out.write(&buffer[line_start], line_end - line_start);
+            if (mNormalizeLineBreaksOption) {
+              out << '\n';  // terminate it
+            }
+            return line_end;
         }
         unsigned char end_byte = (unsigned char)buffer[line_end];
         if (mNormalizeLineBreaksOption) {
@@ -93,11 +100,7 @@ ssize_t GrepExecutor::write_matches(llvm::raw_ostream & out, const char * buffer
             out << '\n';
         }
         else {
-            if (end_byte == 0x0) {
-                // This must be a sentinel byte position at the end of file.
-                // Do not write it.
-                line_end--;
-            } else if (end_byte == 0x0D) {
+            if (end_byte == 0x0D) {
                 // Check for line_end on first byte of CRLF;  note that we don't
                 // want to access past the end of buffer.
                 if ((buffer + line_end + 1 < mFileBuffer + mFileSize) && (buffer[line_end + 1] == 0x0A)) {
@@ -266,9 +269,22 @@ void GrepExecutor::doGrep(const std::string & fileName) {
 
     //Final Partial Block (may be empty, but there could be carries pending).
     
+    
     const auto EOF_mask = bitblock::srl(simd<1>::constant<1>(), convert(BLOCK_SIZE - remaining));
     
-    s2p_do_final_block(reinterpret_cast<BytePack *>(mFileBuffer + (blk * BLOCK_SIZE) + (segment * SEGMENT_SIZE)), basis_bits, EOF_mask);
+    if (remaining == 0) {  // No data, we may be at a page boundary.   Do not access memory.
+        basis_bits.bit_0 = simd<1>::constant<0>();
+        basis_bits.bit_1 = simd<1>::constant<0>();
+        basis_bits.bit_2 = simd<1>::constant<0>();
+        basis_bits.bit_3 = simd<1>::constant<0>();
+        basis_bits.bit_4 = simd<1>::constant<0>();
+        basis_bits.bit_5 = simd<1>::constant<0>();
+        basis_bits.bit_6 = simd<1>::constant<0>();
+        basis_bits.bit_7 = simd<1>::constant<0>();
+    }
+    else { // At least 1 byte, so we are not at a page boundary yet, safe to access a full block. 
+        s2p_do_final_block(reinterpret_cast<BytePack *>(mFileBuffer + (blk * BLOCK_SIZE) + (segment * SEGMENT_SIZE)), basis_bits, EOF_mask);
+    }
 
     if (finalLineIsUnterminated()) {
         // Add a LF at the EOF position
