@@ -34,6 +34,7 @@ namespace re {
 RE * RE_Parser::parse(const std::string & regular_expression, ModeFlagSet initialFlags) {
     RE_Parser parser(regular_expression);
     parser.fModeFlagSet = initialFlags;
+    parser.fNested = false;
     RE * re = parser.parse_RE();
     if (re == nullptr) {
         throw ParseFailure("An unexpected parsing error occurred!");
@@ -45,10 +46,11 @@ inline RE_Parser::RE_Parser(const std::string & regular_expression)
     : _cursor(regular_expression.begin())
     , _end(regular_expression.end())
     , fModeFlagSet(0)
+    , fNested(false)
     {
-        
+
     }
-    
+
 RE * makeLookAheadAssertion(RE * r) {
     return makeAssertion(r, Assertion::Kind::Lookahead, Assertion::Sense::Positive);
 }
@@ -74,12 +76,9 @@ RE * makeBranchResetGroup(RE * r) {
     // this has no effect in icgrep.
     return r;
 }
-    
+
 RE * RE_Parser::parse_RE() {
     RE * r = parse_alt();
-    if (_cursor != _end) { 
-        throw ParseFailure("Unrecognized junk remaining at end of regexp");
-    }
     return r;
 }
 
@@ -127,13 +126,21 @@ RE * RE_Parser::parse_next_item() {
                 return makeEnd();
             case '|': case ')':
                 return nullptr;  // This is ugly.
-            case '*': case '+': case '?': case '{': 
+            case '*': case '+': case '?': case '{':
                 throw NothingToRepeat();
-            case ']': case '}':
+            case ']':
                 if (LEGACY_UNESCAPED_RBRAK_RBRACE_ALLOWED) {
                     return build_CC(parse_utf8_codepoint());
                 }
-                else throw ParseFailure("Use  \\] or \\} for literal ] or }.");
+                else throw ParseFailure("Use  \\] for literal ].");
+            case '}':
+                if (fNested) {
+                    return nullptr;  //  a recursive invocation for a regexp in \N{...}
+                }
+                else if (LEGACY_UNESCAPED_RBRAK_RBRACE_ALLOWED) {
+                    return build_CC(parse_utf8_codepoint());
+                }
+                else throw ParseFailure("Use \\} for literal }.");
             case '[':
                 _cursor++;
                 return parse_charset();
@@ -149,8 +156,8 @@ RE * RE_Parser::parse_next_item() {
     }
     return re;
 }
-    
-    
+
+
 // Parse some kind of parenthesized group.  Input precondition: _cursor
 // after the (
 RE * RE_Parser::parse_group() {
@@ -241,7 +248,7 @@ RE * RE_Parser::parse_group() {
                 }
                 else {  // if *_cursor == ')'
                     ++_cursor;
-		    // return immediately without restoring mode flags
+            // return immediately without restoring mode flags
                     return parse_next_item();
                 }
                 break;
@@ -260,7 +267,7 @@ RE * RE_Parser::parse_group() {
         throw ParseFailure("Closing paren required.");
     return group_expr;
 }
-    
+
 RE * RE_Parser::extend_item(RE * re) {
     int lower_bound, upper_bound;
     if (_cursor == _end) {
@@ -357,8 +364,8 @@ unsigned RE_Parser::parse_int() {
 
 
 #define bit40(x) (1ULL << ((x) - 0x40))
-const uint64_t setEscapeCharacters = bit40('b') | bit40('p') | bit40('d') | bit40('w') | bit40('s') | 
-                                     bit40('B') | bit40('P') | bit40('D') | bit40('W') | bit40('S');
+const uint64_t setEscapeCharacters = bit40('b') | bit40('p') | bit40('d') | bit40('w') | bit40('s') |
+                                     bit40('B') | bit40('P') | bit40('D') | bit40('W') | bit40('S') | bit40('N');
 
 inline bool isSetEscapeChar(char c) {
     return c >= 0x40 && c <= 0x7F && ((setEscapeCharacters >> (c - 0x40)) & 1) == 1;
@@ -366,9 +373,9 @@ inline bool isSetEscapeChar(char c) {
 
 inline RE * RE_Parser::parse_escaped() {
     throw_incomplete_expression_error_if_end_of_stream();
-    if (isSetEscapeChar(*_cursor)) 
+    if (isSetEscapeChar(*_cursor))
       return parseEscapedSet();
-    else 
+    else
       return build_CC(parse_escaped_codepoint());
 }
 
@@ -410,6 +417,14 @@ RE * RE_Parser::parseEscapedSet() {
             if (_cursor == _end || *_cursor != '}') throw ParseFailure("Malformed property expression");
             ++_cursor;
             return complemented ? makeComplement(s) : s;
+        case 'N':
+            ++_cursor;
+            if (_cursor == _end || *_cursor != '{') throw ParseFailure("Malformed \\N expression");
+            ++_cursor;
+            s = parseNamePatternExpression();
+            if (_cursor == _end || *_cursor != '}') throw ParseFailure("Malformed \\N expression");
+            ++_cursor;
+            return s;
         default:
             throw ParseFailure("Internal error");
     }
@@ -451,8 +466,8 @@ codepoint_t RE_Parser::parse_utf8_codepoint() {
     if ((pfx == 0xE0 && cp < 0x800) || (pfx == 0xF0 && cp < 0x10000)) {
         throw InvalidUTF8Encoding();
     }
-    // It is an error if a 4-byte sequence is used to encode a codepoint 
-    // above the Unicode maximum.   
+    // It is an error if a 4-byte sequence is used to encode a codepoint
+    // above the Unicode maximum.
     if (cp > CC::UNICODE_MAX) {
         throw InvalidUTF8Encoding();
     }
@@ -522,6 +537,31 @@ Name * RE_Parser::createName(const std::string prop, const std::string value) {
     return property;
 }
 
+CC * RE_Parser::parseNamePatternExpression(){
+
+    re::ModeFlagSet outerFlags = fModeFlagSet;
+    fModeFlagSet = 1;
+
+    bool outerNested = fNested;
+    fNested = true;
+
+    RE * nameRE = parse_RE();
+
+    // Reset outer parsing state.
+    fModeFlagSet = outerFlags;
+    fNested = outerNested;
+
+
+    // Embed the nameRE in ";.*$nameRE" to skip the codepoint field of Uname.txt
+    RE * embedded = makeSeq({re::makeCC(0x3B), re::makeRep(re::makeAny(), 0, Rep::UNBOUNDED_REP), nameRE});
+
+
+    throw ParseFailure("\\N{...} character name expression recognized but not yet supported.");
+
+
+}
+
+
 CharsetOperatorKind RE_Parser::getCharsetOperator() {
     throw_incomplete_expression_error_if_end_of_stream();
     switch (*_cursor) {
@@ -565,13 +605,13 @@ CharsetOperatorKind RE_Parser::getCharsetOperator() {
         default:
             return emptyOperator;
     }
-}            
-    
+}
+
 // Precondition: cursor is immediately after opening '[' character
 RE * RE_Parser::parse_charset() {
     // Sets are accumulated using two variables:
     // subexprs accumulates set expressions such as \p{Lu}, [\w && \p{Greek}]
-    // cc accumulates the literal and calculated codepoints and ranges 
+    // cc accumulates the literal and calculated codepoints and ranges
     std::vector<RE *> subexprs;
     CC * cc = makeCC();
     // When the last item deal with is a single literal charcacter or calculated codepoint,
@@ -579,11 +619,11 @@ RE * RE_Parser::parse_charset() {
     // a following hyphen can indicate set subtraction.
     enum {NoItem, CodepointItem, RangeItem, SetItem, BrackettedSetItem} lastItemKind = NoItem;
     codepoint_t lastCodepointItem;
-    
+
     bool havePendingOperation = false;
     CharsetOperatorKind pendingOperationKind;
     RE * pendingOperand;
-    
+
     // If the first character after the [ is a ^ (caret) then the matching character class is complemented.
     bool negated = false;
     if (_cursor != _end && *_cursor == '^') {
@@ -709,12 +749,12 @@ RE * RE_Parser::parse_charset() {
                 lastItemKind = RangeItem;
                 break;
             case hyphenChar:
-                cc->insert('-');  
+                cc->insert('-');
                 lastItemKind = CodepointItem;
                 lastCodepointItem = static_cast<codepoint_t> ('-');
                 break;
             case ampChar:
-                cc->insert('&'); 
+                cc->insert('&');
                 lastItemKind = CodepointItem;
                 lastCodepointItem = static_cast<codepoint_t> ('&');
                 break;
@@ -760,7 +800,7 @@ codepoint_t RE_Parser::parse_codepoint() {
 // 3. Restricted octal notation 0 - 0777
 // 4. General octal notation o\{[0-7]+\}
 // 5. General hex notation x\{[0-9A-Fa-f]+\}
-// 6. An error for any unrecognized alphabetic escape 
+// 6. An error for any unrecognized alphabetic escape
 // 7. An escaped ASCII symbol, standing for itself
 
 codepoint_t RE_Parser::parse_escaped_codepoint() {
@@ -788,7 +828,7 @@ codepoint_t RE_Parser::parse_escaped_codepoint() {
         case '0': // Octal escape:  0 - 0377
             ++_cursor;
             return parse_octal_codepoint(0,3);
-        case 'o': 
+        case 'o':
             ++_cursor;
             throw_incomplete_expression_error_if_end_of_stream();
             if (*_cursor == '{') {
@@ -800,7 +840,7 @@ codepoint_t RE_Parser::parse_escaped_codepoint() {
             else {
                 throw ParseFailure("Malformed octal escape sequence");
             }
-        case 'x': 
+        case 'x':
             ++_cursor;
             throw_incomplete_expression_error_if_end_of_stream();
             if (*_cursor == '{') {
@@ -824,13 +864,9 @@ codepoint_t RE_Parser::parse_escaped_codepoint() {
             else {
                 return parse_hex_codepoint(4,4);  // ICU compatibility
             }
-        case 'U': 
+        case 'U':
             ++_cursor;
             return parse_hex_codepoint(8,8);  // ICU compatibility
-        case 'N':
-            ++_cursor;
-            throw ParseFailure("\\N{...} character name syntax not yet supported.");
-
         default:
             // Escaped letters should be reserved for special functions.
             if (((*_cursor >= 'A') && (*_cursor <= 'Z')) || ((*_cursor >= 'a') && (*_cursor <= 'z')))
@@ -867,7 +903,7 @@ codepoint_t RE_Parser::parse_hex_codepoint(int mindigits, int maxdigits) {
         if (isdigit(t)) {
             value = (value * 16) | (t - '0');
         }
-        else {    
+        else {
             value = (value * 16) | ((t | 32) - 'a') + 10;
         }
         ++_cursor;
@@ -902,7 +938,7 @@ void RE_Parser::CC_add_range(CC * cc, codepoint_t lo, codepoint_t hi) {
     }
     else cc->insert_range(lo, hi);
 }
-    
+
 RE * RE_Parser::makeComplement(RE * s) {
   return makeDiff(makeAny(), s);
 }
