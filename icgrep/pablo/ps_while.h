@@ -31,6 +31,9 @@ public:
     inline PabloAST * getCondition() const {
         return getOperand(0);
     }
+    inline NextVars & getVariants() {
+        return mNext;
+    }
     inline const NextVars & getVariants() const {
         return mNext;
     }

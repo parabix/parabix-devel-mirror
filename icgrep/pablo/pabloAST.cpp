@@ -68,7 +68,7 @@ bool equals(const PabloAST * expr1, const PabloAST * expr2) {
         } else if (isa<Integer>(expr1) || isa<String>(expr1) || isa<Call>(expr1)) {
             // If these weren't equivalent by address they won't be equivalent by their operands.
             return false;
-        } else { // Non-reassociatable functions (i.e., Sel, Advance, ScanThru, MatchStar)
+        } else { // Non-reassociatable functions (i.e., Sel, Advance, ScanThru, MatchStar, Assign, Next)
             const Statement * stmt1 = cast<Statement>(expr1);
             const Statement * stmt2 = cast<Statement>(expr2);
             assert (stmt1->getNumOperands() == stmt2->getNumOperands());

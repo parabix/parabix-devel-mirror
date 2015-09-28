@@ -108,6 +108,20 @@ inline void replaceReachableUsersOfWith(Statement * stmt, PabloAST * expr) {
     }
 }
 
+template <class ValueList>
+inline void removeIdenticalEscapedValues(ValueList & list) {
+    for (auto i = list.begin(); i != list.end(); ++i) {
+        for (auto j = i + 1; j != list.end(); ) {
+            if (LLVM_UNLIKELY(equals(*i, *j))) {
+                (*j)->replaceWith(*i, false, true);
+                j = list.erase(j);
+                continue;
+            }
+            ++j;
+        }
+    }
+}
+
 void Simplifier::eliminateRedundantCode(PabloBlock & block, ExpressionTable * predecessor) {
     ExpressionTable encountered(predecessor);
     Statement * stmt = block.front();
@@ -160,18 +174,8 @@ void Simplifier::eliminateRedundantCode(PabloBlock & block, ExpressionTable * pr
             }
             // Otherwise check if we any Assign reports the same value as another. If so, replace all uses of the
             // second with the first. This will simplify future analysis.
-            for (auto i = defs.begin(); i != defs.end(); ++i) {
-                PabloAST * expr = (*i)->getExpression();
-                for (auto j = i + 1; j != defs.end(); ) {
-                    Assign * def = (*j);
-                    if (LLVM_UNLIKELY(def->getExpression() == expr)) {
-                        j = defs.erase(j);
-                        def->replaceWith(*i, false, true);
-                        continue;
-                    }
-                    ++j;
-                }
-            }
+            removeIdenticalEscapedValues(ifNode->getDefined());
+
         } else if (While * whileNode = dyn_cast<While>(stmt)) {
 
             const PabloAST * initial = whileNode->getCondition();
@@ -185,6 +189,7 @@ void Simplifier::eliminateRedundantCode(PabloBlock & block, ExpressionTable * pr
 
             eliminateRedundantCode(whileNode->getBody(), &encountered);
 
+            removeIdenticalEscapedValues(whileNode->getVariants());
 
         } else if (canTriviallyFold(stmt)) { // non-Assign node
             // Do a trivial folding test to see if we're using all 0s or 1s as an operand.
