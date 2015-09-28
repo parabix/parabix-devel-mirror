@@ -57,19 +57,19 @@ void CodeSinking::sink(PabloBlock & block) {
             // (Note: the current scope is added to the list of processed ones AFTER we've traversed it.)
 
             ScopeSet scopes;
-            bool canSinkInstruction = false;
+            bool sinkable = false;
             for (const PabloAST * use : stmt->users()) {
                 if (const Statement * user = dyn_cast<Statement>(use)) {
                     if (mProcessed.count(user->getParent())) {
-                        canSinkInstruction = true;
+                        sinkable = true;
                         scopes.insert(user->getParent());
                         continue;
                     }
-                    canSinkInstruction = false;
+                    sinkable = false;
                     break;
                 }
             }
-            if (canSinkInstruction) {
+            if (sinkable) {
 
                 while (scopes.size() > 1) {
                     // Find the LCA of both scopes then add the LCA back to the list of scopes.
@@ -101,13 +101,13 @@ void CodeSinking::sink(PabloBlock & block) {
                     assert (scope1 && scope2);
                     // But if the LCA is the current block, we can't sink the statement.
                     if (scope1 == &block) {
-                        canSinkInstruction = false;
+                        sinkable = false;
                         break;
                     }
                     scopes.push_back(scope1);
                 }
 
-                if (canSinkInstruction) {
+                if (sinkable) {
                     assert (scopes.size() == 1);
                     stmt->insertBefore(scopes.front()->front());
                 }

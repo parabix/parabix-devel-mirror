@@ -1,16 +1,12 @@
 #include "pablo_bddminimization.h"
 #include <pablo/codegenstate.h>
 #include <pablo/builder.hpp>
-#include <stack>
-#include <iostream>
 #include <pablo/printer_pablos.h>
 #include <cudd.h>
-#include <cuddInt.h>
 #include <util.h>
-#include <queue>
-#include <boost/circular_buffer.hpp>
 #include <pablo/optimizers/pablo_simplifier.hpp>
 #include <pablo/analysis/pabloverifier.hpp>
+#include <stack>
 
 using namespace llvm;
 using namespace boost;
@@ -116,6 +112,14 @@ void BDDMinimizationPass::eliminateLogicallyEquivalentStatements(PabloBlock & bl
                 }
             }
         } else { // attempt to characterize this statement and replace it if we've encountered an equivalent one
+
+            /// TODO: I found evidence that some of the UCD functions have disjunctions of nested marker values
+            /// in which one is a superset of the other. It's not safe to eliminate the subset marker unless the
+            /// condition that lead us to compute the first marker is a superset of the condition that let us
+            /// compute the subset value too. We can alter the superset condition to include the union of both
+            /// but this may lead to taking an expensive branch more often. So, we'd need to decide whether the
+            /// cost of each scope is close enough w.r.t. the probability both branches are taken.
+
             DdNode * bdd = nullptr;
             bool test = false;
             std::tie(bdd, test) = characterize(stmt);

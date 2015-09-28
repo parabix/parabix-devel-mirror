@@ -10,6 +10,13 @@ using namespace pablo;
 namespace UCD {
 
 /** ------------------------------------------------------------------------------------------------------------- *
+ * @brief addTarget
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline void UCDCompiler::addTarget(const UnicodeSet & set) {
+    mTargetMap.emplace(&set, PabloBlock::createZeroes());
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
  * @brief generateRange
  ** ------------------------------------------------------------------------------------------------------------- */
 void UCDCompiler::generateRange(const RangeList & ifRanges, PabloBuilder & entry) {
@@ -88,8 +95,8 @@ void UCDCompiler::generateRange(const RangeList & ifRanges, const codepoint_t lo
                 }
             }
         }
-        for (Target t : nonIntersectingTargets) {
-            mTargetMap.insert(t);
+        for (const Target t : nonIntersectingTargets) {
+            mTargetMap.emplace(t.first, t.second);
         }
     }
 }
@@ -98,7 +105,7 @@ void UCDCompiler::generateRange(const RangeList & ifRanges, const codepoint_t lo
  * @brief generateSubRanges
  ** ------------------------------------------------------------------------------------------------------------- */
 void UCDCompiler::generateSubRanges(const codepoint_t lo, const codepoint_t hi, PabloBuilder & builder) {
-    for (Target & t : mTargetMap) {
+    for (auto & t : mTargetMap) {
         const auto range = rangeIntersect(*t.first, lo, hi);
         PabloAST * target = t.second;
         // Divide by UTF-8 length, separating out E0, ED, F0 and F4 ranges
@@ -353,17 +360,6 @@ UCDCompiler::RangeList UCDCompiler::innerRanges(const RangeList & list) {
         }
     }
     return ranges;
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief addTarget
- ** ------------------------------------------------------------------------------------------------------------- */
-inline void UCDCompiler::addTarget(const UnicodeSet & set) {
-#ifdef USE_BOOST
-    mTargetMap.emplace(&set, PabloBlock::createZeroes());
-#else
-    mTargetMap.insert(std::make_pair(&set, PabloBlock::createZeroes()));
-#endif
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

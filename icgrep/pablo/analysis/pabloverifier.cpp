@@ -3,14 +3,23 @@
 #include <pablo/codegenstate.h>
 #include <pablo/printer_pablos.h>
 #include <iostream>
+#ifdef USE_BOOST
 #include <boost/container/flat_set.hpp>
-#include <boost/container/flat_map.hpp>
-
-using namespace boost::container;
+#else
+#include <unordered_set>
+#endif
 
 namespace pablo {
 
-using ScopeSet = flat_set<const PabloBlock *>;
+#ifdef USE_BOOST
+template <typename Type>
+using SmallSet = boost::container::flat_set<Type>;
+#else
+template <typename Type>
+using SmallSet = std::unordered_set<Type>;
+#endif
+
+using ScopeSet = SmallSet<const PabloBlock *>;
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief verifyUseDefInformation
@@ -201,7 +210,7 @@ struct OrderingVerifier {
     }
 private:
     const OrderingVerifier * const mParent;
-    boost::container::flat_set<const PabloAST *> mSet;
+    SmallSet<const PabloAST *> mSet;
 };
 
 void isTopologicallyOrdered(const PabloBlock & block, const OrderingVerifier & parent) {

@@ -4,10 +4,22 @@
 #include <pablo/function.h>
 #include <pablo/printer_pablos.h>
 #include <pablo/analysis/pabloverifier.hpp>
-#include <unordered_map>
+#ifdef USE_BOOST
+#include <boost/container/flat_set.hpp>
+#else
+#include <unordered_set>
+#endif
 #include <iostream>
 
 namespace pablo {
+
+#ifdef USE_BOOST
+template <typename Type>
+using SmallSet = boost::container::flat_set<Type>;
+#else
+template <typename Type>
+using SmallSet = std::unordered_set<Type>;
+#endif
 
 bool Simplifier::optimize(PabloFunction & function) {
     eliminateRedundantCode(function.getEntryBlock());
@@ -71,6 +83,31 @@ inline bool demoteDefinedVar(const If * ifNode, const Assign * def) {
     return false;
 }
 
+inline void replaceReachableUsersOfWith(Statement * stmt, PabloAST * expr) {
+    const PabloBlock * const root = stmt->getParent();
+    SmallSet<const PabloBlock *> forbidden;
+    for (PabloAST * use : stmt->users()) {
+        if (LLVM_UNLIKELY(isa<Next>(use))) {
+            const PabloBlock * parent = cast<Next>(use)->getParent();
+            if (parent != root) {
+                forbidden.insert(parent);
+            }
+        }
+    }
+    for (PabloAST * use : stmt->users()) {
+        if (Statement * user = dyn_cast<Statement>(use)) {
+            const PabloBlock * parent = user->getParent();
+            while (parent && forbidden.count(parent) == 0) {
+                if (LLVM_UNLIKELY(parent == root)) {
+                    user->replaceUsesOfWith(stmt, expr);
+                    break;
+                }
+                parent = parent->getParent();
+            }
+        }
+    }
+}
+
 void Simplifier::eliminateRedundantCode(PabloBlock & block, ExpressionTable * predecessor) {
     ExpressionTable encountered(predecessor);
     Statement * stmt = block.front();
@@ -86,20 +123,13 @@ void Simplifier::eliminateRedundantCode(PabloBlock & block, ExpressionTable * pr
                 }
                 continue;
             }
-            // Force the uses of an local Assign to be the expression instead.
-            for (PabloAST * use : assign->users()) {
-                if (Statement * user = dyn_cast<Statement>(use)) {
-                    if (LLVM_UNLIKELY(user->getParent() == &block)) {
-                        user->replaceUsesOfWith(assign, assign->getExpression());
-                    }
-                }
-            }
+            // Force the uses of an Assign node that can reach the original expression to use the expression instead.
+            replaceReachableUsersOfWith(assign, assign->getExpression());
+        } else if (Next * next = dyn_cast<Next>(stmt)) {
+            replaceReachableUsersOfWith(next, next->getExpr());
         } else if (If * ifNode = dyn_cast<If>(stmt)) {
             // Check to see if the Cond is Zero and delete the loop.
             if (LLVM_UNLIKELY(isa<Zeroes>(ifNode->getCondition()))) {
-                for (Assign * defVar : ifNode->getDefined()) {
-                    defVar->replaceWith(PabloBlock::createZeroes(), false, true);
-                }
                 stmt = stmt->eraseFromParent(true);
                 continue;
             }
@@ -142,8 +172,20 @@ void Simplifier::eliminateRedundantCode(PabloBlock & block, ExpressionTable * pr
                     ++j;
                 }
             }
-        } else if (isa<While>(stmt)) {
-            eliminateRedundantCode(cast<While>(stmt)->getBody(), &encountered);
+        } else if (While * whileNode = dyn_cast<While>(stmt)) {
+
+            const PabloAST * initial = whileNode->getCondition();
+            if (LLVM_LIKELY(isa<Next>(initial))) {
+                initial = cast<Next>(initial)->getInitial();
+            }
+            if (LLVM_UNLIKELY(isa<Zeroes>(initial))) {
+                stmt = stmt->eraseFromParent(true);
+                continue;
+            }
+
+            eliminateRedundantCode(whileNode->getBody(), &encountered);
+
+
         } else if (canTriviallyFold(stmt)) { // non-Assign node
             // Do a trivial folding test to see if we're using all 0s or 1s as an operand.
             PabloAST * expr = nullptr;

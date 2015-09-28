@@ -5,7 +5,6 @@
 #include <boost/graph/adjacency_list.hpp>
 #include <boost/graph/filtered_graph.hpp>
 #include <boost/graph/topological_sort.hpp>
-#include <boost/graph/strong_components.hpp>
 #include <pablo/optimizers/pablo_simplifier.hpp>
 #include <pablo/analysis/pabloverifier.hpp>
 #include <algorithm>
@@ -123,15 +122,6 @@ inline bool isDistributive(const VertexData & data) {
             return true;
         default:
             return false;
-    }
-}
-
-inline bool isConstant(const VertexData & data) {
-    switch (getType(data)) {
-        case TypeId::Zeroes:
-        case TypeId::Ones:
-            return true;
-        default: return false;
     }
 }
 

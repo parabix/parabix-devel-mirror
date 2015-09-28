@@ -34,7 +34,7 @@ class UCDCompiler {
     #else
     using TargetMap = std::unordered_map<const UnicodeSet *, PabloAST *>;
     #endif
-    using Target = TargetMap::value_type;
+    using Target = std::pair<const UnicodeSet *, PabloAST *>;
     using TargetVector = std::vector<Target>;
 
 public:
