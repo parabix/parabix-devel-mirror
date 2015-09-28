@@ -4,7 +4,7 @@
  *  icgrep is a trademark of International Characters.
  */
 
-#include "icgrep.h"
+#include "basis_bits.h"
 #include "do_grep.h"
 
 #include <fstream>

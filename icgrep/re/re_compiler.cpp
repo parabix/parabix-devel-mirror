@@ -3,8 +3,7 @@
  *  This software is licensed to the public under the Open Software License 3.0.
  *  icgrep is a trademark of International Characters.
  */
-
-#include "re_compiler.h"
+#include <re/re_compiler.h>
 //Regular Expressions
 #include <re/re_name.h>
 #include <re/re_any.h>

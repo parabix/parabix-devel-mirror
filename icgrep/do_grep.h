@@ -8,7 +8,7 @@
 
 #include <string>
 #include <stdint.h>
-
+#include "basis_bits.h"
 #include "include/simd-lib/bitblock.hpp"
 #include "include/simd-lib/transpose.hpp"
 #include "include/simd-lib/bitblock_iterator.hpp"
@@ -56,8 +56,8 @@ public:
     }
           
     void setCountOnlyOption(bool doCount = true) {mCountOnlyOption = doCount;}
-    void setGetCodePointsOption(bool doCodepoints = true) {
-        mGetCodePointsOption = doCodepoints;
+    void setParseCodepointsOption() {
+        mGetCodePointsOption = true;
         mParsedCodePointSet = re::makeCC();
     }
     void setShowFileNameOption(bool showF = true) {mShowFileNameOption = showF;}

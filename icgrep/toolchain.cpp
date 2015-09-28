@@ -8,7 +8,7 @@
 #include <iostream>
 #include <fstream>
 
-#include "icgrep.h"
+#include "basis_bits.h"
 #include "utf_encoding.h"
 #include "pablo/pablo_compiler.h"
 #include <llvm/IR/Function.h>

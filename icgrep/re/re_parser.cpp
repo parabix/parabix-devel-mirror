@@ -17,6 +17,11 @@
 #include <re/parsefailure.h>
 #include <UCD/resolve_properties.h>
 #include <UCD/CaseFolding_txt.h>
+#include <toolchain.h>
+#include "utf_encoding.h"
+#include <pablo/pablo_compiler.h>
+#include <do_grep.h>
+
 #include <sstream>
 #include <algorithm>
 
@@ -554,11 +559,44 @@ CC * RE_Parser::parseNamePatternExpression(){
 
     // Embed the nameRE in ";.*$nameRE" to skip the codepoint field of Uname.txt
     RE * embedded = makeSeq({re::makeCC(0x3B), re::makeRep(re::makeAny(), 0, Rep::UNBOUNDED_REP), nameRE});
-
-
+    Encoding encoding(Encoding::Type::UTF_8, 8);
     throw ParseFailure("\\N{...} character name expression recognized but not yet supported.");
-
-
+    // Debugging needed:
+    pablo::PabloFunction * nameSearchFunction = re2pablo_compiler(encoding, embedded);
+    llvm::Function * nameSearchIR = nullptr;
+    
+    pablo_function_passes(nameSearchFunction);
+    pablo::PabloCompiler pablo_compiler;
+    try {
+        nameSearchIR = pablo_compiler.compile(nameSearchFunction);
+        releaseSlabAllocatorMemory();
+    }
+    catch (std::runtime_error e) {
+        releaseSlabAllocatorMemory();
+        std::cerr << "Runtime error: " << e.what() << std::endl;
+        exit(1);
+    }
+    llvm::ExecutionEngine * engine = JIT_to_ExecutionEngine(nameSearchIR);
+    
+    icgrep_Linking(nameSearchIR->getParent(), engine);
+    
+    // Ensure everything is ready to go.
+    engine->finalizeObject();
+    
+    void * icgrep_MCptr = engine->getPointerToFunction(nameSearchIR);
+    
+    if (icgrep_MCptr) {
+        GrepExecutor grepEngine(icgrep_MCptr);
+        grepEngine.setParseCodepointsOption();
+        grepEngine.doGrep("../Uname.txt");
+        return grepEngine.getParsedCodepoints();
+    }
+    else {
+        return nullptr;
+    }
+    
+    //engine->freeMachineCodeForFunction(nameSearchIR); // This function only prints a "not supported" message. Reevaluate with LLVM 3.6.
+    delete engine;
 }
 
 
