@@ -10,6 +10,9 @@ namespace pablo {
     class PabloAST;
 }
 
+namespace UCD {
+    class UnicodeSet;
+}
 
 namespace re {
 
@@ -34,7 +37,7 @@ public:
     std::string getFunctionName() const;
 
     Type getType() const;
-    RE *getDefinition() const;
+    RE * getDefinition() const;
     pablo::PabloAST * getCompiled() const {
         return mCompiled;
     }

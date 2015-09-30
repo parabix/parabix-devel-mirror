@@ -232,7 +232,7 @@ std::pair<unsigned, unsigned> computeLLVMDependencyChainMetrics(llvm::Function *
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief compileUnicodeSet
  ** ------------------------------------------------------------------------------------------------------------- */
-void compileUnicodeSet(std::string name, const UnicodeSet & set, PabloCompiler & pc, Module * module) {
+void compileUnicodeSet(std::string name, UnicodeSet && set, PabloCompiler & pc, Module * module) {
     #ifdef ENABLE_MULTIPLEXING
     if (MultiplexingDistributionFile) {
         (*MultiplexingDistributionFile) << name;
@@ -251,10 +251,12 @@ void compileUnicodeSet(std::string name, const UnicodeSet & set, PabloCompiler &
     PabloBuilder builder(function->getEntryBlock());
     // Build the unicode set function
     PabloAST * result = nullptr;
+    std::vector<UnicodeSet> sets;
+    sets.push_back(std::move(set));
     if (IfHierarchyStrategy == IfHierarchy::DefaultIfHierarchy) {
-        result = ucdCompiler.generateWithDefaultIfHierarchy(set, builder);
+        result = ucdCompiler.generateWithDefaultIfHierarchy(sets, builder).front();
     } else if (IfHierarchyStrategy == IfHierarchy::NoIfHierarchy) {
-        result = ucdCompiler.generateWithoutIfHierarchy(set, builder);
+        result = ucdCompiler.generateWithoutIfHierarchy(sets, builder).front();
     } else {
         throw std::runtime_error("Unknown if hierarchy strategy!");
     }
@@ -390,24 +392,24 @@ Module * generateUCDModule() {
     for (PropertyObject * obj : property_object_table) {
         if (EnumeratedPropertyObject * enumObj = dyn_cast<EnumeratedPropertyObject>(obj)) {
             for (const std::string value : *enumObj) {
-                const UnicodeSet & set = enumObj->GetCodepointSet(canonicalize_value_name(value));
+                UnicodeSet set = enumObj->GetCodepointSet(canonicalize_value_name(value));
                 std::string name = "__get_" + property_enum_name[enumObj->getPropertyCode()] + "_" + value;
-                compileUnicodeSet(name, set, pc, module);
+                compileUnicodeSet(name, std::move(set), pc, module);
                 properties.emplace_back(name);
             }
         }
         else if (ExtensionPropertyObject * extObj = dyn_cast<ExtensionPropertyObject>(obj)) {
             for (const std::string value : *extObj) {
-                const UnicodeSet & set = extObj->GetCodepointSet(canonicalize_value_name(value));
+                UnicodeSet set = extObj->GetCodepointSet(canonicalize_value_name(value));
                 std::string name = "__get_" + property_enum_name[extObj->getPropertyCode()] + "_" + value;
-                compileUnicodeSet(name, set, pc, module);
+                compileUnicodeSet(name, std::move(set), pc, module);
                 properties.emplace_back(name);
             }
         }
         else if (BinaryPropertyObject * binObj = dyn_cast<BinaryPropertyObject>(obj)) {
-            const UnicodeSet & set = binObj->GetCodepointSet(Binary_ns::Y);
+            UnicodeSet set = binObj->GetCodepointSet(Binary_ns::Y);
             std::string name = "__get_" + property_enum_name[binObj->getPropertyCode()] + "_Y";
-            compileUnicodeSet(name, set, pc, module);
+            compileUnicodeSet(name, std::move(set), pc, module);
             properties.emplace_back(name);
         }
     }

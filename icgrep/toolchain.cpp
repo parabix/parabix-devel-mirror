@@ -142,9 +142,10 @@ pablo::PabloFunction * re2pablo_compiler(const Encoding encoding, re::RE * re_as
         cerr << "CC AST:" << "\n";
         PabloPrinter::print(function->getEntryBlock().statements(), cerr);
     }
-    
+
     re::RE_Compiler re_compiler(*function, cc_compiler);
     re_compiler.initializeRequiredStreams();
+    re_compiler.compileUnicodeNames(re_ast);
     re_compiler.finalizeMatchResult(re_compiler.compile(re_ast));
 
     if (PrintCompiledREcode) {

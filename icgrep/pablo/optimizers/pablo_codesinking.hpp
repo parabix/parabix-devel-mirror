@@ -10,7 +10,6 @@ namespace pablo {
 class PabloFunction;
 
 class CodeSinking {
-
     struct ScopeSet : public std::vector<PabloBlock *> {
         inline bool insert(PabloBlock * block) {
             const auto i = std::lower_bound(begin(), end(), block);
@@ -32,8 +31,6 @@ public:
 protected:
     void sink(PabloBlock & block);
     CodeSinking() { }
-private:
-    ScopeSet mProcessed;
 };
 
 }

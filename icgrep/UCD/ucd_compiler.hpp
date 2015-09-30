@@ -40,9 +40,9 @@ class UCDCompiler {
 public:
     UCDCompiler(cc::CC_Compiler & ccCompiler);
 
-    PabloAST * generateWithDefaultIfHierarchy(const UnicodeSet & set, PabloBuilder & entry);
+    std::vector<PabloAST *> generateWithDefaultIfHierarchy(const std::vector<UnicodeSet> &sets, PabloBuilder & entry);
 
-    PabloAST * generateWithoutIfHierarchy(const UnicodeSet & set, PabloBuilder & entry);
+    std::vector<PabloAST *> generateWithoutIfHierarchy(const std::vector<UnicodeSet> & sets, PabloBuilder & entry);
 
 protected:
 
@@ -62,8 +62,6 @@ protected:
 
     PabloAST * makePrefix(const codepoint_t cp, const unsigned byte_no, PabloBuilder & builder, PabloAST * prefix);
 
-    void addTarget(const UnicodeSet & set);
-
     static RangeList byteDefinitions(const RangeList & list, const unsigned byte_no);
 
     template <typename RangeListOrUnicodeSet>
@@ -74,6 +72,10 @@ protected:
     static RangeList outerRanges(const RangeList & list);
 
     static RangeList innerRanges(const RangeList & list);
+
+    void addTargets(const std::vector<UnicodeSet> & sets);
+
+    std::vector<PabloAST *> returnMarkers(const std::vector<UnicodeSet> &sets) const;
 
 private:
     cc::CC_Compiler &       mCharacterClassCompiler;

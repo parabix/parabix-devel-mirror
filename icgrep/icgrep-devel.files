@@ -339,3 +339,6 @@ pablo/optimizers/booleanreassociationpass.h
 pablo/optimizers/graph-facade.hpp
 pablo/analysis/pabloverifier.hpp
 pablo/analysis/pabloverifier.cpp
+basis_bits.h
+toolchain.h
+toolchain.cpp

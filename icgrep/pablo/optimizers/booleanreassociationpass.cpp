@@ -11,7 +11,6 @@
 #include <numeric> // std::iota
 #include <queue>
 #include <set>
-#include <iostream>
 #include <pablo/printer_pablos.h>
 
 using namespace boost;

@@ -10,13 +10,6 @@ using namespace pablo;
 namespace UCD {
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief addTarget
- ** ------------------------------------------------------------------------------------------------------------- */
-inline void UCDCompiler::addTarget(const UnicodeSet & set) {
-    mTargetMap.emplace(&set, PabloBlock::createZeroes());
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
  * @brief generateRange
  ** ------------------------------------------------------------------------------------------------------------- */
 void UCDCompiler::generateRange(const RangeList & ifRanges, PabloBuilder & entry) {
@@ -368,7 +361,7 @@ UCDCompiler::RangeList UCDCompiler::innerRanges(const RangeList & list) {
  * @param the entry block to the function we're filling
  * @return the output stream with a 1-bit in any position of a character in the unicode set
  ** ------------------------------------------------------------------------------------------------------------- */
-PabloAST * UCDCompiler::generateWithDefaultIfHierarchy(const UnicodeSet & set, PabloBuilder & entry) {
+std::vector<PabloAST *> UCDCompiler::generateWithDefaultIfHierarchy(const std::vector<UnicodeSet> & sets, PabloBuilder & entry) {
 
     const RangeList defaultIfHierachy = {
         // Non-ASCII
@@ -457,9 +450,9 @@ PabloAST * UCDCompiler::generateWithDefaultIfHierarchy(const UnicodeSet & set, P
 
         {0x10000, 0x10FFFF}};
 
-    addTarget(set);
+    addTargets(sets);
     generateRange(defaultIfHierachy, entry);
-    return mTargetMap[&set];
+    return std::move(returnMarkers(sets));
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -468,11 +461,36 @@ PabloAST * UCDCompiler::generateWithDefaultIfHierarchy(const UnicodeSet & set, P
  * @param the entry block to the function we're filling
  * @return the output stream with a 1-bit in any position of a character in the unicode set
  ** ------------------------------------------------------------------------------------------------------------- */
-PabloAST * UCDCompiler::generateWithoutIfHierarchy(const UnicodeSet & set, PabloBuilder & entry) {
-    const RangeList defaultIfHierachy = {{0x10000, 0x10FFFF}};
-    addTarget(set);
-    generateRange(defaultIfHierachy, entry);
-    return mTargetMap[&set];
+std::vector<PabloAST *> UCDCompiler::generateWithoutIfHierarchy(const std::vector<UnicodeSet> & sets, PabloBuilder & entry) {
+    const RangeList noIfHierachy = {{0x10000, 0x10FFFF}};
+
+    addTargets(sets);
+    generateRange(noIfHierachy, entry);
+    return std::move(returnMarkers(sets));
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief addTargets
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline void UCDCompiler::addTargets(const std::vector<UnicodeSet> &sets) {
+    for (const UnicodeSet & set : sets) {
+        mTargetMap.emplace(&set, PabloBlock::createZeroes());
+    }
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief returnMarkers
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline std::vector<PabloAST *> UCDCompiler::returnMarkers(const std::vector<UnicodeSet> & sets) const {
+    std::vector<PabloAST *> markers(sets.size());
+    unsigned i = 0;
+    for (const UnicodeSet & set : sets) {
+        auto f = mTargetMap.find(&set);
+        assert (f != mTargetMap.end());
+        assert (f->second);
+        markers[i++] = f->second;
+    }
+    return std::move(markers);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
