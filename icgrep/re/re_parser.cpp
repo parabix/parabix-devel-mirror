@@ -15,6 +15,7 @@
 #include <re/re_intersect.h>
 #include <re/re_assertion.h>
 #include <re/parsefailure.h>
+#include <re/printer_re.h>
 #include <UCD/resolve_properties.h>
 #include <UCD/CaseFolding_txt.h>
 #include <toolchain.h>
@@ -551,7 +552,9 @@ CC * RE_Parser::parseNamePatternExpression(){
     fNested = true;
 
     RE * nameRE = parse_RE();
-
+#ifndef NDEBUG
+    std::cerr << "nameRE:" << std::endl << Printer_RE::PrintRE(nameRE) << std::endl;
+#endif
     // Reset outer parsing state.
     fModeFlagSet = outerFlags;
     fNested = outerNested;
@@ -560,8 +563,10 @@ CC * RE_Parser::parseNamePatternExpression(){
     // Embed the nameRE in ";.*$nameRE" to skip the codepoint field of Uname.txt
     RE * embedded = makeSeq({re::makeCC(0x3B), re::makeRep(re::makeAny(), 0, Rep::UNBOUNDED_REP), nameRE});
     Encoding encoding(Encoding::Type::UTF_8, 8);
-    throw ParseFailure("\\N{...} character name expression recognized but not yet supported.");
-    // Debugging needed:
+    embedded = regular_expression_passes(encoding, embedded);
+#ifndef NDEBUG
+    std::cerr << "embedded:" << std::endl << Printer_RE::PrintRE(embedded) << std::endl;
+#endif
     pablo::PabloFunction * nameSearchFunction = re2pablo_compiler(encoding, embedded);
     llvm::Function * nameSearchIR = nullptr;
     
@@ -576,6 +581,9 @@ CC * RE_Parser::parseNamePatternExpression(){
         std::cerr << "Runtime error: " << e.what() << std::endl;
         exit(1);
     }
+#ifndef NDEBUG
+    nameSearchIR->dump();
+#endif
     llvm::ExecutionEngine * engine = JIT_to_ExecutionEngine(nameSearchIR);
     
     icgrep_Linking(nameSearchIR->getParent(), engine);
@@ -585,18 +593,17 @@ CC * RE_Parser::parseNamePatternExpression(){
     
     void * icgrep_MCptr = engine->getPointerToFunction(nameSearchIR);
     
+    CC * nameSearchResult = nullptr;
     if (icgrep_MCptr) {
         GrepExecutor grepEngine(icgrep_MCptr);
         grepEngine.setParseCodepointsOption();
         grepEngine.doGrep("../Uname.txt");
-        return grepEngine.getParsedCodepoints();
-    }
-    else {
-        return nullptr;
+        nameSearchResult = grepEngine.getParsedCodepoints();
     }
     
     //engine->freeMachineCodeForFunction(nameSearchIR); // This function only prints a "not supported" message. Reevaluate with LLVM 3.6.
     delete engine;
+    return nameSearchResult;
 }
 
 

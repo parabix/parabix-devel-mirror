@@ -164,8 +164,13 @@ ssize_t GrepExecutor::extract_codepoints(char * buffer, ssize_t first_line_start
             else {
                 c = (c << 4) | (tolower(buffer[line_pos]) - 'a' + 10);
             }
+            line_pos++;
         }
         assert(((line_pos - line_start) >= 4) && ((line_pos - line_start) <= 6)); // UCD format 4 to 6 hex digits.
+#ifndef NDEBUG
+        std::cerr << "\\N expression found codepoint " << std::hex << c << std::dec << std::endl;
+#endif
+        
         mParsedCodePointSet->insert(c);
         
         line_start = line_end + 1;
@@ -257,7 +262,6 @@ void GrepExecutor::doGrep(const std::string & fileName) {
             s2p_do_block(reinterpret_cast<BytePack *>(mFileBuffer + (blk * BLOCK_SIZE) + (segment * SEGMENT_SIZE)), basis_bits);
             Output output;
             mProcessBlockFcn(basis_bits, output);
-
             mMatch_scanner.load_block(output.matches, blk);
             mLineBreak_scanner.load_block(output.LF, blk);
 
@@ -300,7 +304,6 @@ void GrepExecutor::doGrep(const std::string & fileName) {
         s2p_do_block(reinterpret_cast<BytePack *>(mFileBuffer + (blk * BLOCK_SIZE) + (segment * SEGMENT_SIZE)), basis_bits);
         Output output;
         mProcessBlockFcn(basis_bits, output);
-
         mLineBreak_scanner.load_block(output.LF, blk);
         mMatch_scanner.load_block(output.matches, blk);
         if (mCountOnlyOption) {
@@ -344,7 +347,6 @@ void GrepExecutor::doGrep(const std::string & fileName) {
     
     Output output;
     mProcessBlockFcn(basis_bits, output);
-
     if (mCountOnlyOption) {
         match_count += bitblock::popcount(match_vector);
         if (bitblock::any(output.matches)) {
