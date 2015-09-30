@@ -32,10 +32,8 @@ public:
         , Unknown
     };
     std::string getNamespace() const;
+    bool hasNamespace() const;
     std::string getName() const;
-    void setFunctionName(const std::string &);
-    std::string getFunctionName() const;
-
     Type getType() const;
     RE * getDefinition() const;
     pablo::PabloAST * getCompiled() const {
@@ -57,8 +55,6 @@ protected:
     , mNamespace(replicateString(nameSpace, namespaceLength))
     , mNameLength(nameLength)
     , mName(replicateString(name, nameLength))
-    , mFunctionNameLength(0)
-    , mFunctionName(nullptr)
     , mType(type)
     , mDefiningRE(defn)
     , mCompiled(nullptr)
@@ -79,8 +75,6 @@ private:
     const char * const  mNamespace;
     const length_t      mNameLength;
     const char * const  mName;
-    length_t            mFunctionNameLength;
-    const char *        mFunctionName;
     const Type          mType;
     RE *                mDefiningRE;
     pablo::PabloAST *   mCompiled;
@@ -90,17 +84,12 @@ inline std::string Name::getNamespace() const {
     return std::string(mNamespace, mNamespaceLength);
 }
 
+inline bool Name::hasNamespace() const {
+    return (mNamespaceLength != 0);
+}
+
 inline std::string Name::getName() const {
     return std::string(mName, mNameLength);
-}
-
-inline std::string Name::getFunctionName() const {
-    return std::string(mFunctionName, mFunctionNameLength);
-}
-
-inline void Name::setFunctionName(const std::string & n) {
-    mFunctionNameLength = n.length();
-    mFunctionName = replicateString(n.c_str(), n.length());
 }
     
 inline Name::Type Name::getType() const {
@@ -112,6 +101,7 @@ inline RE * Name::getDefinition() const {
 }
 
 inline void Name::setDefinition(RE * d) {
+    assert (d != this);
     mDefiningRE = d;
 }
 

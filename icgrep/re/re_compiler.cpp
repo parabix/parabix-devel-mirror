@@ -45,7 +45,7 @@ static cl::opt<bool> DisableUnicodeLineBreak("disable-unicode-linebreak", cl::in
 static cl::opt<bool> SetMod64Approximation("mod64-approximate", cl::init(false),
                      cl::desc("set mod64 approximate mode"), cl::cat(fREcompilationOptions));
 #ifndef DISABLE_PREGENERATED_UCD_FUNCTIONS
-static cl::opt<bool> UsePregeneratedUnicode("use-pregenerated-unicode", cl::init(false),
+static cl::opt<bool> UsePregeneratedUnicode("use-pregenerated-unicode", cl::init(true),
                      cl::desc("use fixed pregenerated Unicode character class sets instead"), cl::cat(fREcompilationOptions));
 #endif
 using namespace pablo;
@@ -179,31 +179,74 @@ void RE_Compiler::initializeRequiredStreams() {
 }
 
 void RE_Compiler::gatherUnicodePropertyNames(RE * re, NameSet & nameSet) {
-    if (Name * name = dyn_cast<Name>(re)) {
-        if (name->getDefinition()) {
-            gatherUnicodePropertyNames(name->getDefinition(), nameSet);
-        } else if (name->getType() == Name::Type::UnicodeProperty) {
-            nameSet.insert(name);
+
+    struct UnicodePropertyNameMap {
+        using PropertyMap = std::map<std::string, Name *>;
+        using NamespacedPropertyMap = std::map<std::pair<std::string, std::string>, Name *>;
+        void process(RE * re) {
+            if (Name * name = dyn_cast<Name>(re)) {
+                if (name->getDefinition()) {
+                    process(name->getDefinition());
+                    return;
+                }
+                if (name->hasNamespace()) {
+                    const auto f = mNamespacedPropertyMap.find(std::make_pair(name->getNamespace(), name->getName()));
+                    if (f != mNamespacedPropertyMap.end()) {
+                        if (f->second != name) {
+                            name->setDefinition(f->second);
+                        }
+                        return;
+                    }
+                    mNamespacedPropertyMap.insert(std::make_pair(std::make_pair(name->getNamespace(), name->getName()), name));
+                } else {
+                    const auto f = mPropertyMap.find(name->getName());
+                    if (f != mPropertyMap.end()) {
+                        if (f->second != name) {
+                            name->setDefinition(f->second);
+                        }
+                        return;
+                    }
+                    mPropertyMap.insert(std::make_pair(name->getName(), name));
+                }
+                if (name->getType() == Name::Type::UnicodeProperty) {
+                    RE * definition = UCD::resolvePropertyDefinition(name);
+                    if (definition) {
+                        process(definition);
+                    } else {
+                        mNameSet.insert(name);
+                    }
+                }
+            } else if (Seq* seq = dyn_cast<Seq>(re)) {
+                for (RE * re : *seq) {
+                    process(re);
+                }
+            } else if (Alt * alt = dyn_cast<Alt>(re)) {
+                for (RE * re : *alt) {
+                    process(re);
+                }
+            } else if (Rep * rep = dyn_cast<Rep>(re)) {
+                process(rep->getRE());
+            } else if (Assertion * a = dyn_cast<Assertion>(re)) {
+                process(a->getAsserted());
+            } else if (Diff * diff = dyn_cast<Diff>(re)) {
+                process(diff->getLH());
+                process(diff->getRH());
+            } else if (Intersect * ix = dyn_cast<Intersect>(re)) {
+                process(ix->getLH());
+                process(ix->getRH());
+            }
+
         }
-    } else if (Seq* seq = dyn_cast<Seq>(re)) {
-        for (RE * re : *seq) {
-            gatherUnicodePropertyNames(re, nameSet);
-        }
-    } else if (Alt * alt = dyn_cast<Alt>(re)) {
-        for (RE * re : *alt) {
-            gatherUnicodePropertyNames(re, nameSet);
-        }
-    } else if (Rep * rep = dyn_cast<Rep>(re)) {
-        gatherUnicodePropertyNames(rep->getRE(), nameSet);
-    } else if (Assertion * a = dyn_cast<Assertion>(re)) {
-        gatherUnicodePropertyNames(a->getAsserted(), nameSet);
-    } else if (Diff * diff = dyn_cast<Diff>(re)) {
-        gatherUnicodePropertyNames(diff->getLH(), nameSet);
-        gatherUnicodePropertyNames(diff->getRH(), nameSet);
-    } else if (Intersect * ix = dyn_cast<Intersect>(re)) {
-        gatherUnicodePropertyNames(ix->getLH(), nameSet);
-        gatherUnicodePropertyNames(ix->getRH(), nameSet);
-    }
+
+        UnicodePropertyNameMap(NameSet & nameSet) : mNameSet(nameSet) {}
+
+    private:
+        NameSet &                   mNameSet;
+        PropertyMap                 mPropertyMap;
+        NamespacedPropertyMap       mNamespacedPropertyMap;
+    } ;
+
+    UnicodePropertyNameMap(nameSet).process(re);
 }
 
 void RE_Compiler::compileUnicodeNames(RE * re) {
@@ -212,8 +255,9 @@ void RE_Compiler::compileUnicodeNames(RE * re) {
 #ifndef DISABLE_PREGENERATED_UCD_FUNCTIONS
     if (UsePregeneratedUnicode) {
         for (Name * name : nameSet) {
-            const UCD::ExternalProperty & ep = UCD::resolveExternalProperty(name->getFunctionName());
-            Call * call = mPB.createCall(Prototype::Create(name->getFunctionName(), std::get<1>(ep), std::get<2>(ep), std::get<0>(ep)), mCCCompiler.getBasisBits());
+            const std::string functionName = UCD::resolvePropertyFunction(name);
+            const UCD::ExternalProperty & ep = UCD::resolveExternalProperty(functionName);
+            Call * call = mPB.createCall(Prototype::Create(functionName, std::get<1>(ep), std::get<2>(ep), std::get<0>(ep)), mCCCompiler.getBasisBits());
             name->setCompiled(mPB.createAnd(call, mPB.createNot(UNICODE_LINE_BREAK ? mUnicodeLineBreak : mLineFeed)));
         }
     } else {

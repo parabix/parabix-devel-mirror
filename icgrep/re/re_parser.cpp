@@ -519,27 +519,19 @@ Name * RE_Parser::createName(const std::string value) {
     if (f != mNameMap.end()) {
         return f->second;
     }
-
-    Name * property = UCD::resolveProperty(value, this);
-
+    Name * property = makeName(value, Name::Type::UnicodeProperty);
     mNameMap.insert(std::make_pair(std::move(key), property));
-
     return property;
 }
 
 Name * RE_Parser::createName(const std::string prop, const std::string value) {
-
     auto key = std::make_pair(prop, value);
-
     auto f = mNameMap.find(key);
     if (f != mNameMap.end()) {
         return f->second;
     }
-
-    Name * property = UCD::resolveProperty(prop, value, this);
-
+    Name * property = makeName(prop, value, Name::Type::UnicodeProperty);
     mNameMap.insert(std::make_pair(std::move(key), property));
-
     return property;
 }
 

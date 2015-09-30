@@ -38,9 +38,6 @@ class RE_Parser
 {
 public:
 
-    friend Name * UCD::resolveProperty(const std::string, RE_Parser *);
-    friend Name * UCD::resolveProperty(const std::string, const std::string, RE_Parser *);
-
     static RE * parse(const std::string &input_string, ModeFlagSet initialFlags);
 
 private:

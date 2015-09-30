@@ -24,7 +24,7 @@ using namespace boost;
 using namespace boost::container;
 using namespace boost::numeric::ublas;
 
-#define PRINT_DEBUG_OUTPUT
+// #define PRINT_DEBUG_OUTPUT
 
 #if !defined(NDEBUG) && !defined(PRINT_DEBUG_OUTPUT)
 #define PRINT_DEBUG_OUTPUT

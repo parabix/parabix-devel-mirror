@@ -4,8 +4,8 @@
 #include <UCD/unicode_set.h>
 
 namespace re {
-    class Name;
-    class RE_Parser;
+    class RE;
+    class Name;    
 }
 
 namespace UCD {
@@ -18,8 +18,9 @@ private:
     inline UnicodePropertyExpressionError() noexcept {}
     const std::string _msg;
 };
-re::Name * resolveProperty(const std::string value, re::RE_Parser * parser);
-re::Name * resolveProperty(const std::string prop, const std::string value, re::RE_Parser * parser);
+
+re::RE * resolvePropertyDefinition(re::Name * const property);
+std::string resolvePropertyFunction(re::Name * const property);
 UCD::UnicodeSet resolveUnicodeSet(re::Name * const name);
 
 }
