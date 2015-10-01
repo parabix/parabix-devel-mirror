@@ -24,8 +24,6 @@
 #include <llvm/Support/Format.h>
 #include <include/simd-lib/builtins.hpp>
 
-using namespace re;
-
 namespace UCD {
 
 using bitquad_t = UnicodeSet::bitquad_t;
@@ -35,15 +33,15 @@ using QuadVector = UnicodeSet::QuadVector;
 
 const size_t QUAD_BITS = (8 * sizeof(bitquad_t));
 const size_t MOD_QUAD_BIT_MASK = QUAD_BITS - 1;
-const size_t UNICODE_QUAD_COUNT = (CC::UNICODE_MAX + 1) / QUAD_BITS;
+const size_t UNICODE_QUAD_COUNT = (UNICODE_MAX + 1) / QUAD_BITS;
 const bitquad_t FULL_QUAD_MASK = -1;
 
 inline run_type_t typeOf(const run_t & run) {
-    return std::get<0>(run);
+    return run.first;
 }
 
 inline UnicodeSet::length_t lengthOf(const run_t & run) {
-    return std::get<1>(run);
+    return run.second;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -78,6 +76,7 @@ inline void append_quad(const bitquad_t quad, QuadVector & quads, RunVector & ru
     append_run(type, 1, runs);
 }
 
+#ifndef NDEBUG
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief runLengthSumsUpToUnicodeQuadCount
  *
@@ -89,6 +88,37 @@ inline bool runLengthSumsUpToUnicodeQuadCount(const RunVector & runs) {
         sum += lengthOf(run);
     }
     return sum == UNICODE_QUAD_COUNT;
+}
+#endif
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief empty
+ ** ------------------------------------------------------------------------------------------------------------- */
+bool UnicodeSet::empty() const {
+    return (mRuns.size() == 1) && typeOf(mRuns.front()) == Empty;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief size
+ ** ------------------------------------------------------------------------------------------------------------- */
+UnicodeSet::size_type UnicodeSet::size() const {
+    return std::distance(begin(), end());
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief front
+ ** ------------------------------------------------------------------------------------------------------------- */
+UnicodeSet::interval_t UnicodeSet::front() const {
+    return *begin();
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief back
+ ** ------------------------------------------------------------------------------------------------------------- */
+UnicodeSet::interval_t UnicodeSet::back() const {
+    auto back = begin();
+    for (auto i = back; i != end(); back = i++);
+    return *back;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -321,6 +351,107 @@ UnicodeSet UnicodeSet::operator==(const UnicodeSet & other) const {
     return true;
 }
 
+///** ------------------------------------------------------------------------------------------------------------- *
+// * @brief insert_range
+// ** ------------------------------------------------------------------------------------------------------------- */
+//void UnicodeSet::insert_range(const codepoint_t lo, const codepoint_t hi)  {
+
+//    if (LLVM_UNLIKELY(lo > hi)) {
+//        throw std::runtime_error('[' + std::to_string(lo) + ',' + std::to_string(hi) + "] is an illegal codepoint range!");
+//    } else if (LLVM_UNLIKELY(hi >= 0x110000)) {
+//        throw std::runtime_error(std::to_string(hi) + " exceeds maximum code point.");
+//    }
+
+//    auto r = mRuns.begin();
+//    auto q = mQuads.begin();
+//    unsigned offset = 0;
+
+//    auto lo_quad_no = lo / QUAD_BITS;
+//    auto lo_offset = lo & MOD_QUAD_BIT_MASK;
+
+//    auto hi_quad_no = hi / QUAD_BITS;
+//    auto hi_offset = hi & MOD_QUAD_BIT_MASK;
+
+//    // Scan up to the lo codepoint
+//    for (;;) {
+//        assert (r != mRuns.end());
+//        const auto l = lengthOf(*r);
+//        if ((offset + l) > lo_quad_no) {
+//            break;
+//        }
+//        if (typeOf(*r) == Mixed) {
+//            q += lengthOf(*r);
+//        }
+//        offset += l;
+//        ++r;
+//    }
+
+//    // Test whether the range is already 'full' and skip ahead to the first empty or mixed quad.
+//    // If the entire [lo,hi] range is already covered by a Full run, abort.
+//    while (typeOf(*r) == Full) {
+//        const auto l = lengthOf(*r);
+//        lo_quad_no += l;
+//        offset = lo_quad_no;
+//        lo_offset = 0;
+//        if (lo_quad_no > hi_quad_no) {
+//            return;
+//        }
+//        ++r;
+//    }
+
+//    // Otherwise, some portion of this range has to be inserted into the current sparse set.
+//    // Begin by inserting the initial (potentially) partial lo quad.
+//    const bitquad_t lo_quad = (FULL_QUAD_MASK << lo_offset);
+//    const bitquad_t hi_quad = (FULL_QUAD_MASK >> (QUAD_BITS - 1 - hi_offset));
+//    bitquad_t quad = (lo_quad_no == hi_quad_no) ? (lo_quad & hi_quad) : lo_quad;
+//    run_type_t newType = (quad == FULL_QUAD_MASK) ? Full : ((quad == 0) ? Empty : Mixed);
+//    run_type_t runType = typeOf(*r);
+//    // If the original run is Mixed, we may be able to simply update the quad accordingly.
+//    if (runType == Mixed) {
+//        q += (lo_quad_no - offset);
+//        quad |= *q;
+//        if (LLVM_LIKELY(quad != FULL_QUAD_MASK)) {
+//            *q = quad;
+//            if (lo_quad_no == hi_quad_no) {
+//                return;
+//            }
+//        } else { // we filled a Mixed quad
+//            mQuads.erase(q);
+//        }
+//        newType = Full;
+//    }
+//    auto length = lengthOf(*r);
+//    auto splitAt = length - (lo_quad_no - offset) - 1;
+//    if (splitAt) {
+//        // reduce the original run length
+//        lengthOf(*r) = splitAt;
+//        // and add in a new quad
+//        r = mRuns.emplace(r, newType, 1);
+//    } else { // we're inserting this quad at the beginning of the run
+//        typeOf(*r) = newType;
+//        lengthOf(*r) = 1;
+//    }
+//    if (newType == Mixed) {
+//        q = mQuads.emplace(q, quad);
+//    }
+//    length -= splitAt + 1;
+//    auto remaining = (hi_quad_no - lo_quad_no);
+//    // We're inserting a Full run so if the original run type was Full and exceeds the
+//    // length of what we're inserting, we can abort without considering the hi_quad
+//    if (runType == Full && length > remaining) {
+//        return;
+//    }
+//    if (remaining) {
+//        r = mRuns.emplace(r, Full, remaining);
+
+
+
+//    }
+
+//}
+
+
+
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief contains
  * @param codepoint
@@ -355,10 +486,10 @@ bool UnicodeSet::contains(const codepoint_t codepoint) const {
  ** ------------------------------------------------------------------------------------------------------------- */
 bool UnicodeSet::intersects(const codepoint_t lo, const codepoint_t hi) const {
     for (auto range : *this) {
-        if (hi_codepoint(range) < lo) {
+        if (range.second < lo) {
             continue;
         }
-        if (lo_codepoint(range) > hi) {
+        if (range.first > hi) {
             break;
         }
         return true;
@@ -393,7 +524,7 @@ void UnicodeSet::quad_iterator::advance(unsigned n) {
  ** ------------------------------------------------------------------------------------------------------------- */
 void UnicodeSet::iterator::advance(const unsigned n) {
 
-    assert (n == 1);    
+    assert (n == 1);
 
     if (LLVM_UNLIKELY(mMinCodePoint >= 0x110000)) {
         throw std::runtime_error("UnicodeSet iterator exceeded maximum code point.");
@@ -413,8 +544,7 @@ void UnicodeSet::iterator::advance(const unsigned n) {
                 found = true;
                 break;
             }
-        }
-        else { // if (typeOf(t) == Mixed)
+        } else { // if (typeOf(t) == Mixed)
             while (mMixedRunIndex != lengthOf(*mRunIterator)) {
                 const bitquad_t m = (*mQuadIterator) & (FULL_QUAD_MASK << mQuadOffset);
                 // If we found a marker in m, it marks the beginning of our current interval.
@@ -460,8 +590,7 @@ void UnicodeSet::iterator::advance(const unsigned n) {
                 found = true;
                 break;
             }
-        }
-        else { // if (typeOf(t) == Mixed)
+        } else { // if (typeOf(t) == Mixed)
             while (mMixedRunIndex != lengthOf(*mRunIterator)) {
                 const bitquad_t m = ((~(*mQuadIterator)) & FULL_QUAD_MASK) & (FULL_QUAD_MASK << mQuadOffset);
 

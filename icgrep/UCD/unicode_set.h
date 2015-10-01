@@ -2,7 +2,6 @@
 #define UNICODE_SET_H
 #include <stdint.h>
 #include <vector>
-#include <re/re_cc.h>
 #include <boost/iterator/iterator_facade.hpp>
 
 //
@@ -45,10 +44,13 @@ public:
     using run_t = std::pair<run_type_t, length_t>;
     using quad_iterator_return_t = std::pair<run_t, bitquad_t>;
 
-    using codepoint_t = re::codepoint_t;
-    using interval_t = re::interval_t;
+    using codepoint_t = unsigned;
+    using interval_t = std::pair<codepoint_t, codepoint_t>;
+
     using RunVector = std::vector<run_t>;
     using QuadVector = std::vector<bitquad_t>;
+
+    using size_type = RunVector::size_type;
 
     class iterator : public boost::iterator_facade<iterator, interval_t, boost::forward_traversal_tag, interval_t> {
         friend class UnicodeSet;
@@ -111,11 +113,11 @@ public:
         }
 
         inline run_type_t type() const {
-            return std::get<0>(*mRunIterator);
+            return mRunIterator->first;
         }
 
         inline length_t length() const {
-            return std::get<1>(*mRunIterator) - mOffset;
+            return mRunIterator->second - mOffset;
         }
 
         inline bitquad_t quad() const {
@@ -144,6 +146,22 @@ public:
 
     bool intersects(const codepoint_t lo, const codepoint_t hi) const;
 
+    inline void insert(const codepoint_t cp) {
+        *this = std::move(*this + UnicodeSet(cp));
+    }
+
+    inline void insert_range(const codepoint_t lo, const codepoint_t hi) {
+        *this = std::move(*this + UnicodeSet(lo, hi));
+    }
+
+    bool empty() const;
+
+    size_type size() const;
+
+    interval_t front() const;
+
+    interval_t back() const;
+
     void dump(llvm::raw_ostream & out) const;
 
     UnicodeSet operator~() const;
@@ -151,6 +169,7 @@ public:
     UnicodeSet operator+(const UnicodeSet & other) const;
     UnicodeSet operator-(const UnicodeSet & other) const;
     UnicodeSet operator^(const UnicodeSet & other) const;
+
     inline UnicodeSet & operator=(const UnicodeSet & other) = default;
     inline UnicodeSet & operator=(UnicodeSet && other) = default;
     UnicodeSet operator==(const UnicodeSet & other) const;
@@ -170,6 +189,8 @@ private:
     RunVector       mRuns;
     QuadVector      mQuads;
 };
+
+enum : UnicodeSet::codepoint_t { UNICODE_MAX = 0x10FFFF };
 
 inline void UnicodeSet::swap(UnicodeSet & other) {
     mRuns.swap(other.mRuns); mQuads.swap(other.mQuads);

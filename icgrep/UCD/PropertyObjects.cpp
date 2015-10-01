@@ -9,6 +9,10 @@
 #include "PropertyObjectTable.h"
 #include <sstream>
 #include <algorithm>
+#include <assert.h>
+#include <llvm/Support/Casting.h>
+
+using namespace llvm;
 
 namespace UCD {
 

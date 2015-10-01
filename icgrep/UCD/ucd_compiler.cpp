@@ -18,7 +18,7 @@ void UCDCompiler::generateRange(const RangeList & ifRanges, PabloBuilder & entry
     CC *  suffix = makeCC(0x80, 0xBF);
     assert (!suffix->empty());
     mSuffixVar = mCharacterClassCompiler.compileCC(suffix, entry);
-    generateRange(ifRanges, 0, CC::UNICODE_MAX, entry);
+    generateRange(ifRanges, 0, UNICODE_MAX, entry);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

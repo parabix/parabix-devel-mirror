@@ -474,7 +474,7 @@ codepoint_t RE_Parser::parse_utf8_codepoint() {
     }
     // It is an error if a 4-byte sequence is used to encode a codepoint
     // above the Unicode maximum.
-    if (cp > CC::UNICODE_MAX) {
+    if (cp > UCD::UNICODE_MAX) {
         throw InvalidUTF8Encoding();
     }
     return cp;
@@ -928,7 +928,7 @@ codepoint_t RE_Parser::parse_octal_codepoint(int mindigits, int maxdigits) {
         ++count;
     }
     if (count < mindigits) throw ParseFailure("Octal sequence has too few digits");
-    if (value > CC::UNICODE_MAX) throw ParseFailure("Octal value too large");
+    if (value > UCD::UNICODE_MAX) throw ParseFailure("Octal value too large");
     return value;
 }
 
@@ -947,7 +947,7 @@ codepoint_t RE_Parser::parse_hex_codepoint(int mindigits, int maxdigits) {
         ++count;
     }
     if (count < mindigits) throw ParseFailure("Hexadecimal sequence has too few digits");
-    if (value > CC::UNICODE_MAX) throw ParseFailure("Hexadecimal value too large");
+    if (value > UCD::UNICODE_MAX) throw ParseFailure("Hexadecimal value too large");
     return value;
 }
 
@@ -965,15 +965,17 @@ CC * RE_Parser::build_CC(codepoint_t cp) {
 void RE_Parser::CC_add_codepoint(CC * cc, codepoint_t cp) {
     if (fModeFlagSet & CASE_INSENSITIVE_MODE_FLAG) {
         caseInsensitiveInsert(cc, cp);
+    } else {
+        cc->insert(cp);
     }
-    else cc->insert(cp);
 }
 
 void RE_Parser::CC_add_range(CC * cc, codepoint_t lo, codepoint_t hi) {
     if (fModeFlagSet & CASE_INSENSITIVE_MODE_FLAG) {
         caseInsensitiveInsertRange(cc, lo, hi);
+    } else {
+        cc->insert_range(lo, hi);
     }
-    else cc->insert_range(lo, hi);
 }
 
 RE * RE_Parser::makeComplement(RE * s) {

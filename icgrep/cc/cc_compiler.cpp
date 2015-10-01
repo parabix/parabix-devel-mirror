@@ -101,8 +101,8 @@ PabloAST * CC_Compiler::charset_expr(const CC * cc, PabloBlockOrBuilder & pb) {
             }
         }
         if (combine) {
-            auto i = cc->cbegin();
-            for (auto j = i; ++j != cc->cend(); i = j) {
+            auto i = cc->begin(), e = cc->end();
+            for (auto j = i; ++j != e; i = j) {
                 if ((lo_codepoint(i) + 2) != lo_codepoint(j)) {
                     combine  = false;
                     break;
