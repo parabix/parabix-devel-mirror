@@ -373,6 +373,7 @@ void PabloCompiler::compileWhile(const While * whileStatement) {
         mCarryManager->generateCarryOutSummaryCodeIfNeeded();
     }
     mCarryManager->extendCarryDataPhisAtWhileBodyFinalBlock(whileBodyFinalBlock);
+    mCarryManager->addSummaryPhiIfNeeded(whileEntryBlock, whileBodyFinalBlock);
 
     // Terminate the while loop body with a conditional branch back.
     mBuilder->CreateCondBr(iBuilder.bitblock_any(compileExpression(whileStatement->getCondition())), whileBodyBlock, whileEndBlock);

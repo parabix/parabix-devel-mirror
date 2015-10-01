@@ -553,7 +553,7 @@ void CarryManager::buildCarryDataPhisAfterIfBody(BasicBlock * ifEntryBlock, Basi
     }
 }
     
-void CarryManager::addSummaryPhiIfNeeded(BasicBlock * ifEntryBlock, BasicBlock * ifBodyFinalBlock) {
+void CarryManager::addSummaryPhiIfNeeded(BasicBlock * entryBlock, BasicBlock * bodyFinalBlock) {
     if ((mCarryInfo->getIfDepth() <= 1) || !mCarryInfo->blockHasCarries()){
         // For ifDepth == 1, the parent does not need a summary as it is not itself within an if.
         // Therefore, it doesn't need access to this block's summary in building its own.
@@ -561,8 +561,8 @@ void CarryManager::addSummaryPhiIfNeeded(BasicBlock * ifEntryBlock, BasicBlock *
     }
     const unsigned carrySummaryIndex = summaryPackIndex();
     PHINode * summary_phi = mBuilder->CreatePHI(mCarryPackType, 2, "summary");
-    summary_phi->addIncoming(mZeroInitializer, ifEntryBlock);
-    summary_phi->addIncoming(mCarryOutPack[carrySummaryIndex], ifBodyFinalBlock);
+    summary_phi->addIncoming(mZeroInitializer, entryBlock);
+    summary_phi->addIncoming(mCarryOutPack[carrySummaryIndex], bodyFinalBlock);
     mCarryOutPack[carrySummaryIndex] = summary_phi;
 }
     
