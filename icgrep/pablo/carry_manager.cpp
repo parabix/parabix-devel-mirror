@@ -529,6 +529,18 @@ void CarryManager::initializeCarryDataAtIfEntry() {
 }
     
 void CarryManager::buildCarryDataPhisAfterIfBody(BasicBlock * ifEntryBlock, BasicBlock * ifBodyFinalBlock) {
+    if (mCarryInfo->getWhileDepth() > 0) {
+        // We need to phi out everything for the while carry accumulation process.
+        const unsigned scopeCarryPacks = mCarryInfo->getScopeCarryPackCount();
+        const unsigned currentScopeBase = scopeBasePack();
+        for (unsigned index = currentScopeBase; index < currentScopeBase + scopeCarryPacks; ++index) {
+            PHINode * phi_out = mBuilder->CreatePHI(mCarryPackType, 2);
+            phi_out->addIncoming(mZeroInitializer,ifEntryBlock);
+            phi_out->addIncoming(mCarryOutPack[index],ifBodyFinalBlock);
+            mCarryOutPack[index] = phi_out;
+        }
+        return;
+    }
     unsigned const ifScopeCarrySize = mCarryInfo->scopeCarryDataSize;
     if (ifScopeCarrySize == 0) {
         // No carry data, therefore no phi nodes.
@@ -545,6 +557,8 @@ void CarryManager::buildCarryDataPhisAfterIfBody(BasicBlock * ifEntryBlock, Basi
         }
     }
     if (mCarryInfo->getIfDepth() > 1) {
+        // Our parent block is also an if.  It needs access to our summary to compute
+        // its own summary.
         const unsigned summaryIndex = summaryPackIndex();
         PHINode * summary_phi = mBuilder->CreatePHI(mCarryPackType, 2, "summary");
         summary_phi->addIncoming(mZeroInitializer, ifEntryBlock);
