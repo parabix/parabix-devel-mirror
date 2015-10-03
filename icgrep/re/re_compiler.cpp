@@ -28,11 +28,6 @@
 #include <stdexcept>
 #include <iostream>
 #include <pablo/printer_pablos.h>
-#ifdef USE_BOOST
-#include <boost/container/flat_set.hpp>
-#else
-#include <unordered_set>
-#endif
 
 #include "llvm/Support/CommandLine.h"
 static cl::OptionCategory fREcompilationOptions("Regex Compilation Options",
@@ -185,6 +180,15 @@ void RE_Compiler::initializeRequiredStreams() {
     mFunction.setResult(1, mPB.createAssign("lf", mPB.createAnd(lb, mPB.createNot(mCRLF))));
 }
 
+static inline CC * getDefinitionIfCC(RE * re) {
+    if (LLVM_LIKELY(isa<Name>(re))) {
+        Name * name = cast<Name>(re);
+        if (name->getDefinition() && isa<CC>(name->getDefinition())) {
+            return cast<CC>(name->getDefinition());
+        }
+    }
+    return nullptr;
+}
 
 RE * RE_Compiler::resolveUnicodeProperties(RE * re) {
 
@@ -192,165 +196,137 @@ RE * RE_Compiler::resolveUnicodeProperties(RE * re) {
     using NamespacedPropertyMap = std::map<std::pair<std::string, std::string>, RE *>;
     using NameMap = UCD::UCDCompiler::NameMap;
 
-    struct UnicodePropertyResolver {
+    PropertyMap                 propertyMap;
+    NamespacedPropertyMap       namespacedPropertyMap;
+    NameMap                     nameMap;
 
-        static inline CC * getNamedCC(RE * re) {
-            if (LLVM_LIKELY(isa<Name>(re))) {
-                Name * name = cast<Name>(re);
-                if (name->getDefinition() && isa<CC>(name->getDefinition())) {
-                    return cast<CC>(name->getDefinition());
-                }
-            }
-            return nullptr;
-        }
-
-        RE * resolve(RE * re) {
-            if (Name * name = dyn_cast<Name>(re)) {
-                if (LLVM_LIKELY(name->getDefinition() != nullptr)) {
-                    name->setDefinition(resolve(name->getDefinition()));
-                } else if (LLVM_LIKELY(name->getType() == Name::Type::UnicodeProperty)) {
-                    // Attempt to look up an equivalently named Name object
-                    if (name->hasNamespace()) {
-                        const auto f = mNamespacedPropertyMap.find(std::make_pair(name->getNamespace(), name->getName()));
-                        if (f != mNamespacedPropertyMap.end()) {
-                            if (f->second != name) {
-                                return f->second;
-                            }
+    std::function<RE*(RE*)> resolve = [&](RE * re) -> RE * {
+        if (Name * name = dyn_cast<Name>(re)) {
+            if (LLVM_LIKELY(name->getDefinition() != nullptr)) {
+                name->setDefinition(resolve(name->getDefinition()));
+            } else if (LLVM_LIKELY(name->getType() == Name::Type::UnicodeProperty)) {
+                // Attempt to look up an equivalently named Name object
+                if (name->hasNamespace()) {
+                    const auto f = namespacedPropertyMap.find(std::make_pair(name->getNamespace(), name->getName()));
+                    if (f != namespacedPropertyMap.end()) {
+                        if (f->second != name) {
+                            return f->second;
                         }
-                        mNamespacedPropertyMap.insert(std::make_pair(std::make_pair(name->getNamespace(), name->getName()), name));
-                    } else {
-                        const auto f = mPropertyMap.find(name->getName());
-                        if (f != mPropertyMap.end()) {
-                            if (f->second != name) {
-                                return f->second;
-                            }
-                        }
-                        mPropertyMap.insert(std::make_pair(name->getName(), name));
                     }
-                    if (UCD::resolvePropertyDefinition(name)) {
-                        resolve(name->getDefinition());
-                    } else {
-                        #ifndef DISABLE_PREGENERATED_UCD_FUNCTIONS
-                        if (UsePregeneratedUnicode) {
-                            const std::string functionName = UCD::resolvePropertyFunction(name);
-                            const UCD::ExternalProperty & ep = UCD::resolveExternalProperty(functionName);
-                            Call * call = mPB.createCall(Prototype::Create(functionName, std::get<1>(ep), std::get<2>(ep), std::get<0>(ep)), mCCCompiler.getBasisBits());
-                            name->setCompiled(mPB.createAnd(call, mNonLineBreak));
-                        } else {
-                        #endif
-                            name->setDefinition(makeCC(std::move(UCD::resolveUnicodeSet(name))));
-                        #ifndef DISABLE_PREGENERATED_UCD_FUNCTIONS
-                        }
-                        #endif
-                    }
+                    namespacedPropertyMap.insert(std::make_pair(std::make_pair(name->getNamespace(), name->getName()), name));
                 } else {
-                    throw std::runtime_error("All non-unicode-property Name objects should have been defined prior to Unicode property resolution.");
+                    const auto f = propertyMap.find(name->getName());
+                    if (f != propertyMap.end()) {
+                        if (f->second != name) {
+                            return f->second;
+                        }
+                    }
+                    propertyMap.insert(std::make_pair(name->getName(), name));
                 }
-            } else if (Seq * seq = dyn_cast<Seq>(re)) {
-                for (auto si = seq->begin(); si != seq->end(); ) {
-                    RE * re = resolve(*si);
-                    if (LLVM_UNLIKELY(isa<Seq>(re))) {
-                        auto sj = cast<Seq>(re)->begin();
-                        *si = *sj;
-                        si = seq->insert(++si, ++sj, cast<Seq>(re)->end());
+                if (UCD::resolvePropertyDefinition(name)) {
+                    resolve(name->getDefinition());
+                } else {
+                    #ifndef DISABLE_PREGENERATED_UCD_FUNCTIONS
+                    if (UsePregeneratedUnicode) {
+                        const std::string functionName = UCD::resolvePropertyFunction(name);
+                        const UCD::ExternalProperty & ep = UCD::resolveExternalProperty(functionName);
+                        Call * call = mPB.createCall(Prototype::Create(functionName, std::get<1>(ep), std::get<2>(ep), std::get<0>(ep)), mCCCompiler.getBasisBits());
+                        name->setCompiled(mPB.createAnd(call, mNonLineBreak));
                     } else {
-                        *si++ = re;
+                    #endif
+                        name->setDefinition(makeCC(std::move(UCD::resolveUnicodeSet(name))));
+                    #ifndef DISABLE_PREGENERATED_UCD_FUNCTIONS
                     }
+                    #endif
                 }
-            } else if (Alt * alt = dyn_cast<Alt>(re)) {
-                CC * unionCC = nullptr;
-                for (auto ai = alt->begin(); ai != alt->end(); ) {
-                    RE * re = resolve(*ai);
-                    if (CC * cc = getNamedCC(re)) {
-                        unionCC = (unionCC == nullptr) ? cc : makeCC(unionCC, cc);
-                        ai = alt->erase(ai);
-                    } else if (LLVM_UNLIKELY(isa<Alt>(re))) {
-                        auto aj = cast<Alt>(re)->begin();
-                        *ai = *aj;
-                        ai = alt->insert(++ai, ++aj, cast<Alt>(re)->end());
-                    } else {
-                        *ai++ = re;
-                    }
-                }
-                if (unionCC) {
-                    alt->push_back(makeName("union", unionCC));
-                }
-                if (alt->size() == 1) {
-                    return alt->front();
-                }
-            } else if (Rep * rep = dyn_cast<Rep>(re)) {
-                rep->setRE(resolve(rep->getRE()));
-            } else if (Assertion * a = dyn_cast<Assertion>(re)) {
-                a->setAsserted(resolve(a->getAsserted()));
-            } else if (Diff * diff = dyn_cast<Diff>(re)) {
-                diff->setLH(resolve(diff->getLH()));
-                diff->setRH(resolve(diff->getRH()));
-                #ifndef DISABLE_PREGENERATED_UCD_FUNCTIONS
-                if (!UsePregeneratedUnicode) {
-                #endif
-                    CC * lh = getNamedCC(diff->getLH());
-                    CC * rh = getNamedCC(diff->getRH());
-                    if (lh && rh) {
-                        return resolve(makeName("diff", subtractCC(lh, rh)));
-                    }
-                #ifndef DISABLE_PREGENERATED_UCD_FUNCTIONS
-                }
-                #endif
-            } else if (Intersect * ix = dyn_cast<Intersect>(re)) {
-                ix->setLH(resolve(ix->getLH()));
-                ix->setRH(resolve(ix->getRH()));
-                #ifndef DISABLE_PREGENERATED_UCD_FUNCTIONS
-                if (!UsePregeneratedUnicode) {
-                #endif
-                    CC * lh = getNamedCC(diff->getLH());
-                    CC * rh = getNamedCC(diff->getRH());
-                    if (lh && rh) {
-                        return resolve(makeName("intersect", intersectCC(lh, rh)));
-                    }
-                #ifndef DISABLE_PREGENERATED_UCD_FUNCTIONS
-                }
-                #endif
+            } else {
+                throw std::runtime_error("All non-unicode-property Name objects should have been defined prior to Unicode property resolution.");
             }
-            return re;
+        } else if (Seq * seq = dyn_cast<Seq>(re)) {
+            for (auto si = seq->begin(); si != seq->end(); ) {
+                RE * re = resolve(*si);
+                if (LLVM_UNLIKELY(isa<Seq>(re))) {
+                    auto sj = cast<Seq>(re)->begin();
+                    *si = *sj;
+                    si = seq->insert(++si, ++sj, cast<Seq>(re)->end());
+                } else {
+                    *si++ = re;
+                }
+            }
+        } else if (Alt * alt = dyn_cast<Alt>(re)) {
+            CC * unionCC = nullptr;
+            for (auto ai = alt->begin(); ai != alt->end(); ) {
+                RE * re = resolve(*ai);
+                if (CC * cc = getDefinitionIfCC(re)) {
+                    unionCC = (unionCC == nullptr) ? cc : makeCC(unionCC, cc);
+                    ai = alt->erase(ai);
+                } else if (LLVM_UNLIKELY(isa<Alt>(re))) {
+                    auto aj = cast<Alt>(re)->begin();
+                    *ai = *aj;
+                    ai = alt->insert(++ai, ++aj, cast<Alt>(re)->end());
+                } else {
+                    *ai++ = re;
+                }
+            }
+            if (unionCC) {
+                alt->push_back(makeName("union", unionCC));
+            }
+            if (alt->size() == 1) {
+                return alt->front();
+            }
+        } else if (Rep * rep = dyn_cast<Rep>(re)) {
+            rep->setRE(resolve(rep->getRE()));
+        } else if (Assertion * a = dyn_cast<Assertion>(re)) {
+            a->setAsserted(resolve(a->getAsserted()));
+        } else if (Diff * diff = dyn_cast<Diff>(re)) {
+            diff->setLH(resolve(diff->getLH()));
+            diff->setRH(resolve(diff->getRH()));
+            CC * lh = getDefinitionIfCC(diff->getLH());
+            CC * rh = getDefinitionIfCC(diff->getRH());
+            if (lh && rh) {
+                return resolve(makeName("diff", subtractCC(lh, rh)));
+            }
+        } else if (Intersect * ix = dyn_cast<Intersect>(re)) {
+            ix->setLH(resolve(ix->getLH()));
+            ix->setRH(resolve(ix->getRH()));
+            CC * lh = getDefinitionIfCC(diff->getLH());
+            CC * rh = getDefinitionIfCC(diff->getRH());
+            if (lh && rh) {
+                return resolve(makeName("intersect", intersectCC(lh, rh)));
+            }
         }
+        return re;
+    };
 
-        static void collect(RE * re, NameMap & nameMap) {
-            if (Name * name = dyn_cast<Name>(re)) {
+    std::function<void(RE*)> gather = [&](RE * re) {
+        if (Name * name = dyn_cast<Name>(re)) {
+            if (name->getCompiled() == nullptr) {
                 if (isa<CC>(name->getDefinition())) {
                     nameMap.emplace(name, nullptr);
                 } else {
-                    collect(name->getDefinition(), nameMap);
+                    gather(name->getDefinition());
                 }
-            } else if (Seq * seq = dyn_cast<Seq>(re)) {
-                for (auto re : *seq) {
-                    collect(re, nameMap);
-                }
-            } else if (Alt * alt = dyn_cast<Alt>(re)) {
-                for (auto re : *alt) {
-                    collect(re, nameMap);
-                }
-            } else if (Rep * rep = dyn_cast<Rep>(re)) {
-                collect(rep->getRE(), nameMap);
-            } else if (Assertion * a = dyn_cast<Assertion>(re)) {
-                collect(a->getAsserted(), nameMap);
-            } else if (Diff * diff = dyn_cast<Diff>(re)) {
-                collect(diff->getLH(), nameMap);
-                collect(diff->getRH(), nameMap);
             }
+        } else if (Seq * seq = dyn_cast<Seq>(re)) {
+            for (auto re : *seq) {
+                gather(re);
+            }
+        } else if (Alt * alt = dyn_cast<Alt>(re)) {
+            for (auto re : *alt) {
+                gather(re);
+            }
+        } else if (Rep * rep = dyn_cast<Rep>(re)) {
+            gather(rep->getRE());
+        } else if (Assertion * a = dyn_cast<Assertion>(re)) {
+            gather(a->getAsserted());
+        } else if (Diff * diff = dyn_cast<Diff>(re)) {
+            gather(diff->getLH());
+            gather(diff->getRH());
         }
-
-    private:
-        PropertyMap                 mPropertyMap;
-        NamespacedPropertyMap       mNamespacedPropertyMap;
     };
 
-    UnicodePropertyResolver resolver;
-    re = resolver.resolve(re);
-    #ifndef DISABLE_PREGENERATED_UCD_FUNCTIONS
-    if (UsePregeneratedUnicode) return re;
-    #endif
-    NameMap nameMap;
-    resolver.collect(re, nameMap);
+    re = resolve(re);
+    gather(re);
 
     if (nameMap.size() > 0) {
         UCD::UCDCompiler ucdCompiler(mCCCompiler);

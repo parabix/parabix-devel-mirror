@@ -46,47 +46,6 @@ Assign * CC_Compiler::compileCC(const std::string && canonicalName, const CC *cc
     return builder.createAssign(std::move(canonicalName), charset_expr(cc, builder));
 }
 
-void CC_Compiler::compileByteClasses(RE * re) {
-    if (Alt * alt = dyn_cast<Alt>(re)) {
-        for (auto i = alt->begin(); i != alt->end(); ++i) {
-            compileByteClasses(*i);
-        }
-    }
-    else if (Seq * seq = dyn_cast<Seq>(re)) {
-        for (auto i = seq->begin(); i != seq->end(); ++i) {
-            compileByteClasses(*i);
-        }
-    }
-    else if (Rep * rep = dyn_cast<Rep>(re)) {
-        compileByteClasses(rep->getRE());
-    }
-    else if (Assertion * a = dyn_cast<Assertion>(re)) {
-        compileByteClasses(a->getAsserted());
-    }
-    else if (Diff * diff = dyn_cast<Diff>(re)) {
-        compileByteClasses(diff->getRH());
-        compileByteClasses(diff->getLH());
-    }
-    else if (Intersect * e = dyn_cast<Intersect>(re)) {
-        compileByteClasses(e->getRH());
-        compileByteClasses(e->getLH());
-    }
-    else if (Name * name = dyn_cast<Name>(re)) {
-        RE * def = name->getDefinition();
-        if (def) {
-            if (!isa<CC>(def)) {
-                compileByteClasses(def);
-            }
-            else if (name->getCompiled() == nullptr) {
-                name->setCompiled(compileCC(cast<CC>(def)));
-            }
-        }
-    }
-    else if (isa<CC>(re)) {
-        throw std::runtime_error("icgrep internal error: unexpected CC object \"" + Printer_RE::PrintRE(re) + "\" found in compileByteClasses.");
-    }
-}
-
 template<typename PabloBlockOrBuilder>
 PabloAST * CC_Compiler::charset_expr(const CC * cc, PabloBlockOrBuilder & pb) {
     if (cc->empty()) {

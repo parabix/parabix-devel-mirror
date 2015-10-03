@@ -38,8 +38,6 @@ public:
 
     pablo::Assign * compileCC(const std::string && canonicalName, const re::CC *cc, pablo::PabloBuilder & builder);
 
-    void compileByteClasses(re::RE * re);
-
     pablo::PabloBuilder & getBuilder();
 
     const std::vector<pablo::Var *> & getBasisBits() {
