@@ -13,13 +13,13 @@ namespace re {
 
 CC::CC(const CC * cc1, const CC * cc2)
 : RE(ClassTypeId::CC)
-, mSparseCharSet(std::move(cc1->mSparseCharSet + cc2->mSparseCharSet)) {
+, UCD::UnicodeSet(std::move(*cc1 + *cc2)) {
 
 }
 
 CC::CC(const CC & cc)
 : RE(ClassTypeId::CC)
-, mSparseCharSet(cc.mSparseCharSet) {
+, UCD::UnicodeSet(cc) {
 
 }
 
@@ -32,7 +32,7 @@ std::string CC::canonicalName(const CC_type type) const {
         name << "CC";
     }
     char separator = '_';
-    for (const interval_t & i : mSparseCharSet) {
+    for (const interval_t & i : *this) {
         name << separator;
         if (lo_codepoint(i) == hi_codepoint(i)) {
             name << lo_codepoint(i);
@@ -43,14 +43,6 @@ std::string CC::canonicalName(const CC_type type) const {
         separator = ',';
     }
     return name.str();
-}
-
-CC * subtractCC(const CC * a, const CC * b) {
-    return makeCC(a->mSparseCharSet - b->mSparseCharSet);
-}
-    
-CC * intersectCC(const CC * a, const CC * b) {
-    return makeCC(a->mSparseCharSet & b->mSparseCharSet);
 }
     
 CC * caseInsensitize(const CC * cc) {

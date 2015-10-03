@@ -27,7 +27,7 @@ inline int GetPropertyValueEnumCode(const UCD::property_t type, const std::strin
 
 namespace UCD {
 
-RE * resolvePropertyDefinition(Name * const property) {
+bool resolvePropertyDefinition(Name * const property) {
     if (property->hasNamespace()) {
         auto propit = alias_map.find(property->getNamespace());
         if (propit == alias_map.end()) {
@@ -40,6 +40,7 @@ RE * resolvePropertyDefinition(Name * const property) {
                 if (valit->second == Binary_ns::N) {
                     Name * binprop = makeName(property_enum_name[theprop], Name::Type::UnicodeProperty);
                     property->setDefinition(makeDiff(makeAny(), binprop));
+                    return true;
                 }
             }
         }
@@ -48,51 +49,53 @@ RE * resolvePropertyDefinition(Name * const property) {
         // Try special cases of Unicode TR #18
         if (value == "any") {
             property->setDefinition(makeAny());
-        }
-        else if (value == "ascii") {
+            return true;
+        } else if (value == "ascii") {
             property->setDefinition(makeName("blk", "ascii", Name::Type::UnicodeProperty));
-        }
-        else if (value == "assigned") {
+            return true;
+        } else if (value == "assigned") {
             Name * unassigned = makeName("cn", Name::Type::UnicodeProperty);
             property->setDefinition(makeDiff(makeAny(), unassigned));
+            return true;
         }
         // Now compatibility properties of UTR #18 Annex C
         else if (value == "xdigit") {
             Name * digit = makeName("nd", Name::Type::UnicodeProperty);
             Name * hexdigit = makeName("hexdigit", Name::Type::UnicodeProperty);
             property->setDefinition(makeAlt({digit, hexdigit}));
-        }
-        else if (value == "alnum") {
+            return true;
+        } else if (value == "alnum") {
             Name * digit = makeName("nd", Name::Type::UnicodeProperty);
             Name * alpha = makeName("alphabetic", Name::Type::UnicodeProperty);
             property->setDefinition(makeAlt({digit, alpha}));
-        }
-        else if (value == "blank") {
+            return true;
+        } else if (value == "blank") {
             Name * space_sep = makeName("space_separator", Name::Type::UnicodeProperty);
             CC * tab = makeCC(0x09);
             property->setDefinition(makeAlt({space_sep, tab}));
-        }
-        else if (value == "graph") {
+            return true;
+        } else if (value == "graph") {
             Name * space = makeName("space", Name::Type::UnicodeProperty);
             Name * ctrl = makeName("control", Name::Type::UnicodeProperty);
             Name * surr = makeName("surrogate", Name::Type::UnicodeProperty);
             Name * unassigned = makeName("cn", Name::Type::UnicodeProperty);
             property->setDefinition(makeDiff(makeAny(), makeAlt({space, ctrl, surr, unassigned})));
-        }
-        else if (value == "print") {
+            return true;
+        } else if (value == "print") {
             Name * graph = makeName("graph", Name::Type::UnicodeProperty);
             Name * space_sep = makeName("space_separator", Name::Type::UnicodeProperty);
             property->setDefinition(makeAlt({graph, space_sep}));
-        }
-        else if (value == "word") {
+            return true;
+        } else if (value == "word") {
             Name * alnum = makeName("alnum", Name::Type::UnicodeProperty);
             Name * mark = makeName("mark", Name::Type::UnicodeProperty);
             Name * conn = makeName("connectorpunctuation", Name::Type::UnicodeProperty);
             Name * join = makeName("joincontrol", Name::Type::UnicodeProperty);
             property->setDefinition(makeAlt({alnum, mark, conn, join}));
+            return true;
         }
     }
-    return property->getDefinition();
+    return false;
 }
 
 std::string resolvePropertyFunction(Name * const property) {

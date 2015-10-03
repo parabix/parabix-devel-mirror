@@ -251,12 +251,10 @@ void compileUnicodeSet(std::string name, UnicodeSet && set, PabloCompiler & pc, 
     PabloBuilder builder(function->getEntryBlock());
     // Build the unicode set function
     PabloAST * result = nullptr;
-    std::vector<UnicodeSet> sets;
-    sets.push_back(std::move(set));
     if (IfHierarchyStrategy == IfHierarchy::DefaultIfHierarchy) {
-        result = ucdCompiler.generateWithDefaultIfHierarchy(sets, builder).front();
+        result = ucdCompiler.generateWithDefaultIfHierarchy(&set, builder);
     } else if (IfHierarchyStrategy == IfHierarchy::NoIfHierarchy) {
-        result = ucdCompiler.generateWithoutIfHierarchy(sets, builder).front();
+        result = ucdCompiler.generateWithoutIfHierarchy(&set, builder);
     } else {
         throw std::runtime_error("Unknown if hierarchy strategy!");
     }

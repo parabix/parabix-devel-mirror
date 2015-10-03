@@ -11,11 +11,6 @@
 #include <re/re_seq.h>
 #include <cc/cc_compiler.h>
 #include <pablo/builder.hpp>
-#ifdef USE_BOOST
-#include <boost/container/flat_set.hpp>
-#else
-#include <unordered_set>
-#endif
 
 namespace pablo {
 class PabloFunction;
@@ -58,19 +53,13 @@ public:
 
     RE_Compiler(pablo::PabloFunction & function, cc::CC_Compiler & ccCompiler);
     void initializeRequiredStreams();
-    void compileUnicodeNames(RE * re);
+    void compileUnicodeNames(RE *& re);
     void finalizeMatchResult(MarkerType match_result);
     MarkerType compile(RE * re) {
         return compile(re, mPB);
     }
 
 private:
-
-    #ifdef USE_BOOST
-    using NameSet = boost::container::flat_set<Name *>;
-    #else
-    using NameSet = std::unordered_set<Name *>;
-    #endif
 
     MarkerType compile(RE * re, pablo::PabloBuilder & cg);
     MarkerType AdvanceMarker(MarkerType m, MarkerPosition newpos, pablo::PabloBuilder & pb);
@@ -94,7 +83,7 @@ private:
     MarkerType processLowerBound(RE * repeated,  int lb, MarkerType marker, pablo::PabloBuilder & pb);
     MarkerType processUnboundedRep(RE * repeated, MarkerType marker, pablo::PabloBuilder & pb);
     MarkerType processBoundedRep(RE * repeated, int ub, MarkerType marker, pablo::PabloBuilder & pb);
-    static void gatherUnicodePropertyNames(RE * re, NameSet & nameSet);
+    RE * resolveUnicodeProperties(RE * re);
 
 private:
 
@@ -102,6 +91,7 @@ private:
     pablo::Assign *                                 mLineFeed;
     pablo::PabloAST *                               mCRLF;
     pablo::PabloAST *                               mUnicodeLineBreak;
+    pablo::PabloAST *                               mNonLineBreak;
     pablo::PabloAST *                               mInitial;
     pablo::Assign *                                 mNonFinal;
     pablo::PabloAST *                               mFinal;

@@ -19,7 +19,7 @@ private:
     const std::string _msg;
 };
 
-re::RE * resolvePropertyDefinition(re::Name * const property);
+bool resolvePropertyDefinition(re::Name * const property);
 std::string resolvePropertyFunction(re::Name * const property);
 UCD::UnicodeSet resolveUnicodeSet(re::Name * const name);
 

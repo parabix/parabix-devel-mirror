@@ -13,6 +13,10 @@ namespace cc {
     class CC_Compiler;
 }
 
+namespace re {
+    class Name;
+}
+
 namespace pablo {
     class PabloBuilder;
     class PabloAST;
@@ -37,12 +41,26 @@ class UCDCompiler {
     using Target = std::pair<const UnicodeSet *, PabloAST *>;
     using TargetVector = std::vector<Target>;
 
+    static const RangeList defaultIfHierachy;
+    static const RangeList noIfHierachy;
+
 public:
+
+    #ifdef USE_BOOST
+    using NameMap = boost::container::flat_map<re::Name *, PabloAST *>;
+    #else
+    using NameMap = std::unordered_map<re::Name *, PabloAST *>;
+    #endif
+
     UCDCompiler(cc::CC_Compiler & ccCompiler);
 
-    std::vector<PabloAST *> generateWithDefaultIfHierarchy(const std::vector<UnicodeSet> &sets, PabloBuilder & entry);
+    void generateWithDefaultIfHierarchy(NameMap & names, PabloBuilder & entry);
 
-    std::vector<PabloAST *> generateWithoutIfHierarchy(const std::vector<UnicodeSet> & sets, PabloBuilder & entry);
+    void generateWithoutIfHierarchy(NameMap & names, PabloBuilder & entry);
+
+    PabloAST * generateWithDefaultIfHierarchy(const UnicodeSet * set, PabloBuilder & entry);
+
+    PabloAST * generateWithoutIfHierarchy(const UnicodeSet * set, PabloBuilder & entry);
 
 protected:
 
@@ -73,9 +91,9 @@ protected:
 
     static RangeList innerRanges(const RangeList & list);
 
-    void addTargets(const std::vector<UnicodeSet> & sets);
+    void addTargets(const NameMap & names);
 
-    std::vector<PabloAST *> returnMarkers(const std::vector<UnicodeSet> &sets) const;
+    void updateNames(NameMap & names);
 
 private:
     cc::CC_Compiler &       mCharacterClassCompiler;

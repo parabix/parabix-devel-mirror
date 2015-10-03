@@ -9,6 +9,95 @@ using namespace pablo;
 
 namespace UCD {
 
+const UCDCompiler::RangeList UCDCompiler::defaultIfHierachy = {
+    // Non-ASCII
+    {0x80, 0x10FFFF},
+    // Two-byte sequences
+    {0x80, 0x7FF},
+    {0x100, 0x3FF},
+    // 0100..017F; Latin Extended-A
+    // 0180..024F; Latin Extended-B
+    // 0250..02AF; IPA Extensions
+    // 02B0..02FF; Spacing Modifier Letters
+    {0x100, 0x2FF}, {0x100, 0x24F}, {0x100, 0x17F}, {0x180, 0x24F}, {0x250, 0x2AF}, {0x2B0, 0x2FF},
+    // 0300..036F; Combining Diacritical Marks
+    // 0370..03FF; Greek and Coptic
+    {0x300, 0x36F}, {0x370, 0x3FF},
+    // 0400..04FF; Cyrillic
+    // 0500..052F; Cyrillic Supplement
+    // 0530..058F; Armenian
+    // 0590..05FF; Hebrew
+    // 0600..06FF; Arabic
+    {0x400, 0x5FF}, {0x400, 0x4FF}, {0x500, 0x058F}, {0x500, 0x52F}, {0x530, 0x58F}, {0x590, 0x5FF}, {0x600, 0x6FF},
+    // 0700..074F; Syriac
+    // 0750..077F; Arabic Supplement
+    // 0780..07BF; Thaana
+    // 07C0..07FF; NKo
+    {0x700, 0x77F}, {0x700, 0x74F}, {0x750, 0x77F}, {0x780, 0x7FF}, {0x780, 0x7BF}, {0x7C0, 0x7FF},
+    // Three-byte sequences
+    {0x800, 0xFFFF}, {0x800, 0x4DFF}, {0x800, 0x1FFF}, {0x800, 0x0FFF},
+    // 0800..083F; Samaritan
+    // 0840..085F; Mandaic
+    // 08A0..08FF; Arabic Extended-A
+    // 0900..097F; Devanagari
+    // 0980..09FF; Bengali
+    // 0A00..0A7F; Gurmukhi
+    // 0A80..0AFF; Gujarati
+    // 0B00..0B7F; Oriya
+    // 0B80..0BFF; Tamil
+    // 0C00..0C7F; Telugu
+    // 0C80..0CFF; Kannada
+    // 0D00..0D7F; Malayalam
+    // 0D80..0DFF; Sinhala
+    // 0E00..0E7F; Thai
+    // 0E80..0EFF; Lao
+    // 0F00..0FFF; Tibetan
+    {0x1000, 0x1FFF},
+    // 1000..109F; Myanmar
+    // 10A0..10FF; Georgian
+    // 1100..11FF; Hangul Jamo
+    // 1200..137F; Ethiopic
+    // 1380..139F; Ethiopic Supplement
+    // 13A0..13FF; Cherokee
+    // 1400..167F; Unified Canadian Aboriginal Syllabics
+    // 1680..169F; Ogham
+    // 16A0..16FF; Runic
+    // 1700..171F; Tagalog
+    // 1720..173F; Hanunoo
+    // 1740..175F; Buhid
+    // 1760..177F; Tagbanwa
+    // 1780..17FF; Khmer
+    // 1800..18AF; Mongolian
+    // 18B0..18FF; Unified Canadian Aboriginal Syllabics Extended
+    // 1900..194F; Limbu
+    // 1950..197F; Tai Le
+    // 1980..19DF; New Tai Lue
+    // 19E0..19FF; Khmer Symbols
+    // 1A00..1A1F; Buginese
+    // 1A20..1AAF; Tai Tham
+    // 1AB0..1AFF; Combining Diacritical Marks Extended
+    // 1B00..1B7F; Balinese
+    // 1B80..1BBF; Sundanese
+    // 1BC0..1BFF; Batak
+    // 1C00..1C4F; Lepcha
+    // 1C50..1C7F; Ol Chiki
+    // 1CC0..1CCF; Sundanese Supplement
+    // 1CD0..1CFF; Vedic Extensions
+    // 1D00..1D7F; Phonetic Extensions
+    // 1D80..1DBF; Phonetic Extensions Supplement
+    // 1DC0..1DFF; Combining Diacritical Marks Supplement
+    // 1E00..1EFF; Latin Extended Additional
+    // 1F00..1FFF; Greek Extended
+    {0x2000, 0x4DFF}, {0x2000, 0x2FFF},
+    {0x3000, 0x4DFF},
+    {0x4E00, 0x9FFF},
+    // 4E00..9FFF; CJK Unified Ideographs
+    {0xA000, 0xFFFF},
+
+    {0x10000, 0x10FFFF}};
+
+const UCDCompiler::RangeList UCDCompiler::noIfHierachy = {{0x10000, 0x10FFFF}};
+
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief generateRange
  ** ------------------------------------------------------------------------------------------------------------- */
@@ -357,140 +446,64 @@ UCDCompiler::RangeList UCDCompiler::innerRanges(const RangeList & list) {
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief generateWithDefaultIfHierarchy
- * @param set the unicode set to generate
- * @param the entry block to the function we're filling
- * @return the output stream with a 1-bit in any position of a character in the unicode set
  ** ------------------------------------------------------------------------------------------------------------- */
-std::vector<PabloAST *> UCDCompiler::generateWithDefaultIfHierarchy(const std::vector<UnicodeSet> & sets, PabloBuilder & entry) {
-
-    const RangeList defaultIfHierachy = {
-        // Non-ASCII
-        {0x80, 0x10FFFF},
-        // Two-byte sequences
-        {0x80, 0x7FF},
-        {0x100, 0x3FF},
-        // 0100..017F; Latin Extended-A
-        // 0180..024F; Latin Extended-B
-        // 0250..02AF; IPA Extensions
-        // 02B0..02FF; Spacing Modifier Letters
-        {0x100, 0x2FF}, {0x100, 0x24F}, {0x100, 0x17F}, {0x180, 0x24F}, {0x250, 0x2AF}, {0x2B0, 0x2FF},
-        // 0300..036F; Combining Diacritical Marks
-        // 0370..03FF; Greek and Coptic
-        {0x300, 0x36F}, {0x370, 0x3FF},
-        // 0400..04FF; Cyrillic
-        // 0500..052F; Cyrillic Supplement
-        // 0530..058F; Armenian
-        // 0590..05FF; Hebrew
-        // 0600..06FF; Arabic
-        {0x400, 0x5FF}, {0x400, 0x4FF}, {0x500, 0x058F}, {0x500, 0x52F}, {0x530, 0x58F}, {0x590, 0x5FF}, {0x600, 0x6FF},
-        // 0700..074F; Syriac
-        // 0750..077F; Arabic Supplement
-        // 0780..07BF; Thaana
-        // 07C0..07FF; NKo
-        {0x700, 0x77F}, {0x700, 0x74F}, {0x750, 0x77F}, {0x780, 0x7FF}, {0x780, 0x7BF}, {0x7C0, 0x7FF},
-        // Three-byte sequences
-        {0x800, 0xFFFF}, {0x800, 0x4DFF}, {0x800, 0x1FFF}, {0x800, 0x0FFF},
-        // 0800..083F; Samaritan
-        // 0840..085F; Mandaic
-        // 08A0..08FF; Arabic Extended-A
-        // 0900..097F; Devanagari
-        // 0980..09FF; Bengali
-        // 0A00..0A7F; Gurmukhi
-        // 0A80..0AFF; Gujarati
-        // 0B00..0B7F; Oriya
-        // 0B80..0BFF; Tamil
-        // 0C00..0C7F; Telugu
-        // 0C80..0CFF; Kannada
-        // 0D00..0D7F; Malayalam
-        // 0D80..0DFF; Sinhala
-        // 0E00..0E7F; Thai
-        // 0E80..0EFF; Lao
-        // 0F00..0FFF; Tibetan
-        {0x1000, 0x1FFF},
-        // 1000..109F; Myanmar
-        // 10A0..10FF; Georgian
-        // 1100..11FF; Hangul Jamo
-        // 1200..137F; Ethiopic
-        // 1380..139F; Ethiopic Supplement
-        // 13A0..13FF; Cherokee
-        // 1400..167F; Unified Canadian Aboriginal Syllabics
-        // 1680..169F; Ogham
-        // 16A0..16FF; Runic
-        // 1700..171F; Tagalog
-        // 1720..173F; Hanunoo
-        // 1740..175F; Buhid
-        // 1760..177F; Tagbanwa
-        // 1780..17FF; Khmer
-        // 1800..18AF; Mongolian
-        // 18B0..18FF; Unified Canadian Aboriginal Syllabics Extended
-        // 1900..194F; Limbu
-        // 1950..197F; Tai Le
-        // 1980..19DF; New Tai Lue
-        // 19E0..19FF; Khmer Symbols
-        // 1A00..1A1F; Buginese
-        // 1A20..1AAF; Tai Tham
-        // 1AB0..1AFF; Combining Diacritical Marks Extended
-        // 1B00..1B7F; Balinese
-        // 1B80..1BBF; Sundanese
-        // 1BC0..1BFF; Batak
-        // 1C00..1C4F; Lepcha
-        // 1C50..1C7F; Ol Chiki
-        // 1CC0..1CCF; Sundanese Supplement
-        // 1CD0..1CFF; Vedic Extensions
-        // 1D00..1D7F; Phonetic Extensions
-        // 1D80..1DBF; Phonetic Extensions Supplement
-        // 1DC0..1DFF; Combining Diacritical Marks Supplement
-        // 1E00..1EFF; Latin Extended Additional
-        // 1F00..1FFF; Greek Extended
-        {0x2000, 0x4DFF}, {0x2000, 0x2FFF},
-        {0x3000, 0x4DFF},
-        {0x4E00, 0x9FFF},
-        // 4E00..9FFF; CJK Unified Ideographs
-        {0xA000, 0xFFFF},
-
-        {0x10000, 0x10FFFF}};
-
-    addTargets(sets);
+void UCDCompiler::generateWithDefaultIfHierarchy(NameMap & names, PabloBuilder & entry) {
+    addTargets(names);
     generateRange(defaultIfHierachy, entry);
-    return std::move(returnMarkers(sets));
+    updateNames(names);
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief generateWithDefaultIfHierarchy
+ ** ------------------------------------------------------------------------------------------------------------- */
+PabloAST * UCDCompiler::generateWithDefaultIfHierarchy(const UnicodeSet * set, PabloBuilder & entry) {
+    // mTargetMap.insert(std::make_pair<const UnicodeSet *, PabloAST *>(set, PabloBlock::createZeroes()));
+    mTargetMap.emplace(set, PabloBlock::createZeroes());
+    generateRange(defaultIfHierachy, entry);
+    return mTargetMap.begin()->second;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief generateWithoutIfHierarchy
- * @param set the unicode set to generate
- * @param the entry block to the function we're filling
- * @return the output stream with a 1-bit in any position of a character in the unicode set
  ** ------------------------------------------------------------------------------------------------------------- */
-std::vector<PabloAST *> UCDCompiler::generateWithoutIfHierarchy(const std::vector<UnicodeSet> & sets, PabloBuilder & entry) {
-    const RangeList noIfHierachy = {{0x10000, 0x10FFFF}};
-
-    addTargets(sets);
+void UCDCompiler::generateWithoutIfHierarchy(NameMap & names, PabloBuilder & entry) {
+    addTargets(names);
     generateRange(noIfHierachy, entry);
-    return std::move(returnMarkers(sets));
+    updateNames(names);
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief generateWithoutIfHierarchy
+ ** ------------------------------------------------------------------------------------------------------------- */
+PabloAST * UCDCompiler::generateWithoutIfHierarchy(const UnicodeSet * set, PabloBuilder & entry) {
+    mTargetMap.emplace(set, PabloBlock::createZeroes());
+    generateRange(noIfHierachy, entry);
+    return mTargetMap.begin()->second;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief addTargets
  ** ------------------------------------------------------------------------------------------------------------- */
-inline void UCDCompiler::addTargets(const std::vector<UnicodeSet> &sets) {
-    for (const UnicodeSet & set : sets) {
-        mTargetMap.emplace(&set, PabloBlock::createZeroes());
+inline void UCDCompiler::addTargets(const NameMap & names) {
+    for (const auto t : names) {
+        if (isa<CC>(t.first->getDefinition())) {
+            mTargetMap.emplace(cast<CC>(t.first->getDefinition()), t.second ? t.second : PabloBlock::createZeroes());
+        } else {
+            throw std::runtime_error(t.first->getName() + " is not defined by a CC!");
+        }
     }
+    assert (mTargetMap.size() > 0);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief returnMarkers
+ * @brief updateNames
  ** ------------------------------------------------------------------------------------------------------------- */
-inline std::vector<PabloAST *> UCDCompiler::returnMarkers(const std::vector<UnicodeSet> & sets) const {
-    std::vector<PabloAST *> markers(sets.size());
-    unsigned i = 0;
-    for (const UnicodeSet & set : sets) {
-        auto f = mTargetMap.find(&set);
-        assert (f != mTargetMap.end());
-        assert (f->second);
-        markers[i++] = f->second;
+inline void UCDCompiler::updateNames(NameMap & names) {
+    for (auto & t : names) {
+        auto f = mTargetMap.find(cast<CC>(t.first->getDefinition()));
+        t.second = f->second;
     }
-    return std::move(markers);
+    mTargetMap.clear();
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

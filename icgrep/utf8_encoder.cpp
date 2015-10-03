@@ -5,11 +5,6 @@
  */
 
 #include <utf8_encoder.h>
-#include <re/re_name.h>
-#include <re/re_seq.h>
-#include <re/re_alt.h>
-#include <re/re_rep.h>
-#include <cc/cc_namemap.hpp>
 #include <assert.h>
 #include <algorithm>
 #include <stdexcept>
@@ -17,62 +12,6 @@
 using namespace re;
 
 namespace cc {
-
-RE * UTF8_Encoder::toUTF8(CC_NameMap & nameMap, RE * ast) {
-    for (Name * name : nameMap) {
-        if (const CC * cc = dyn_cast_or_null<CC>(name->getDefinition())) {
-            if (cc->size() == 1) {
-                name->setDefinition(rangeToUTF8(cc->front()));
-            }
-            else if (cc->size() > 1) {
-                std::vector<RE *> alt;
-                for (const interval_t & i : *cc) {
-                    alt.push_back(rangeToUTF8(i));
-                }
-                name->setDefinition(makeAlt(alt.begin(), alt.end()));
-            }
-        }
-    }
-    return nameMap.process(ast, ByteClass);
-}
-
-RE * UTF8_Encoder::rangeToUTF8(const interval_t & item) {
-    const auto min = length(lo_codepoint(item));
-    const auto max = length(hi_codepoint(item));
-    if (min < max) {
-        const auto m = maxCodePoint(min);
-        return makeAlt({rangeToUTF8(std::make_pair(lo_codepoint(item), m)), rangeToUTF8(std::make_pair(m + 1, hi_codepoint(item)))});
-    }
-    else {
-        return rangeToUTF8(lo_codepoint(item), hi_codepoint(item), 1, max);
-    }
-}
-
-RE * UTF8_Encoder::rangeToUTF8(const codepoint_t lo, const codepoint_t hi, const unsigned index, const unsigned max)
-{
-    const codepoint_t hbyte = encodingByte(hi, index);
-    const codepoint_t lbyte = encodingByte(lo, index);
-    if (index == max) {
-        return makeByteRange(lbyte, hbyte);
-    }
-    else if (hbyte == lbyte) {
-        return makeSeq({makeByteClass(hbyte), rangeToUTF8(lo, hi, index + 1, max)});
-    }
-    else {
-        const unsigned suffix_mask = (static_cast<unsigned>(1) << ((max - index) * 6)) - 1;
-        if ((hi & suffix_mask) != suffix_mask) {
-            const unsigned hi_floor = (~suffix_mask) & hi;
-            return makeAlt({rangeToUTF8(hi_floor, hi, index, max), rangeToUTF8(lo, hi_floor - 1, index, max)});
-        }
-        else if ((lo & suffix_mask) != 0) {
-            const unsigned low_ceil = lo | suffix_mask;
-            return makeAlt({rangeToUTF8(low_ceil + 1, hi, index, max), rangeToUTF8(lo, low_ceil, index, max)});
-        }
-        else {
-            return makeSeq({makeByteRange(lbyte, hbyte), rangeToUTF8(lo, hi, index + 1, max)});
-        }
-    }
-}
 
 bool UTF8_Encoder::isPrefix(const codepoint_t cp) {
     return (cp >= 0xC2) && (cp <= 0xF4);
@@ -157,14 +96,6 @@ codepoint_t UTF8_Encoder::maxCodePointWithCommonBytes(const re::codepoint_t cp, 
     const auto len = length(cp);
     const auto mask = (static_cast<codepoint_t>(1) << (len - n) * 6) - 1;
     return cp | mask;
-}
-
-inline CC * UTF8_Encoder::makeByteRange(const codepoint_t lo, const codepoint_t hi) {
-    return makeCC(lo, hi);
-}
-
-inline CC * UTF8_Encoder::makeByteClass(const codepoint_t cp) {
-    return makeCC(cp, cp);
 }
 
 }
