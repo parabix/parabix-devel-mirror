@@ -1,6 +1,7 @@
 #ifndef RESOLVE_PROPERTIES_H
 #define RESOLVE_PROPERTIES_H
 
+#include <string>
 #include <UCD/unicode_set.h>
 
 namespace re {
