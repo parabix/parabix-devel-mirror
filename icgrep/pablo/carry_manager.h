@@ -11,6 +11,8 @@
 #include <IDISA/idisa_builder.h>
 #include <pablo/codegenstate.h>
 #include <pablo/carry_data.h>
+#include <llvm/IR/Constants.h>
+
 
 /* 
  * Carry Data Manager.
@@ -37,13 +39,13 @@ class PabloBlock;
 class CarryManager {
 public:
   
-    CarryManager(IRBuilder <> * b, VectorType * bitBlockType, ConstantAggregateZero * zero, Constant * one, IDISA::IDISA_Builder * idb)
+    CarryManager(IRBuilder <> * b, VectorType * bitBlockType, ConstantAggregateZero * zero, IDISA::IDISA_Builder * idb)
     : mPACK_SIZE(BLOCK_SIZE)
     , mITEMS_PER_PACK(1)
     , mBuilder(b)
     , mBitBlockType(bitBlockType)
     , mZeroInitializer(zero)
-    , mOneInitializer(one)
+    , mOneInitializer(ConstantVector::getAllOnesValue(bitBlockType))
     , iBuilder(idb)
     , mPabloRoot(nullptr)
     , mCurrentScope(nullptr)

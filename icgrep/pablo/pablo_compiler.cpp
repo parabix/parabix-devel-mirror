@@ -23,7 +23,6 @@
 #include <llvm/Analysis/Passes.h>
 #include <llvm/IR/BasicBlock.h>
 #include <llvm/IR/CallingConv.h>
-#include <llvm/IR/Constants.h>
 #include <llvm/IR/DataLayout.h>
 #include <llvm/IR/DerivedTypes.h>
 #include <llvm/IR/Function.h>
@@ -63,7 +62,6 @@ PabloCompiler::PabloCompiler()
 , mBitBlockType(VectorType::get(IntegerType::get(getGlobalContext(), 64), BLOCK_SIZE / 64))
 , iBuilder(mBitBlockType)
 , mInputType(nullptr)
-, mCarryDataPtr(nullptr)
 , mWhileDepth(0)
 , mIfDepth(0)
 , mZeroInitializer(ConstantAggregateZero::get(mBitBlockType))
@@ -121,7 +119,7 @@ llvm::Function * PabloCompiler::compile(PabloFunction * function, Module * modul
 
     iBuilder.initialize(mMod, mBuilder);
 
-    mCarryManager = new CarryManager(mBuilder, mBitBlockType, mZeroInitializer, mOneInitializer, &iBuilder);
+    mCarryManager = new CarryManager(mBuilder, mBitBlockType, mZeroInitializer, &iBuilder);
     
     if (DumpTrace) DeclareDebugFunctions();
         
@@ -454,11 +452,11 @@ void PabloCompiler::compileStatement(const Statement * stmt) {
     else if (const Sel * sel = dyn_cast<Sel>(stmt)) {
         Value* ifMask = compileExpression(sel->getCondition());
         Value* ifTrue = mBuilder->CreateAnd(ifMask, compileExpression(sel->getTrueExpr()));
-        Value* ifFalse = mBuilder->CreateAnd(genNot(ifMask), compileExpression(sel->getFalseExpr()));
+        Value* ifFalse = mBuilder->CreateAnd(mBuilder->CreateNot(ifMask), compileExpression(sel->getFalseExpr()));
         expr = mBuilder->CreateOr(ifTrue, ifFalse);
     }
     else if (const Not * pablo_not = dyn_cast<Not>(stmt)) {
-        expr = genNot(compileExpression(pablo_not->getExpr()));
+        expr = mBuilder->CreateNot(compileExpression(pablo_not->getExpr()));
     }
     else if (const Advance * adv = dyn_cast<Advance>(stmt)) {
         Value* strm_value = compileExpression(adv->getExpr());
@@ -491,13 +489,13 @@ void PabloCompiler::compileStatement(const Statement * stmt) {
         Value * cc_expr = compileExpression(sthru->getScanThru());
         unsigned carry_index = sthru->getLocalCarryIndex();
         Value * sum = mCarryManager->addCarryInCarryOut(carry_index, marker_expr, cc_expr);
-        expr = mBuilder->CreateAnd(sum, genNot(cc_expr), "scanthru");
+        expr = mBuilder->CreateAnd(sum, mBuilder->CreateNot(cc_expr), "scanthru");
     }
     else if (const Mod64ScanThru * sthru = dyn_cast<Mod64ScanThru>(stmt)) {
         Value * marker_expr = compileExpression(sthru->getScanFrom());
         Value * cc_expr = compileExpression(sthru->getScanThru());
         Value * sum = iBuilder.simd_add(64, marker_expr, cc_expr);
-        expr = mBuilder->CreateAnd(sum, genNot(cc_expr), "scanthru64");
+        expr = mBuilder->CreateAnd(sum, mBuilder->CreateNot(cc_expr), "scanthru64");
     }
     else if (const Count * c = dyn_cast<Count>(stmt)) {
         unsigned count_index = c->getGlobalCountIndex();
@@ -535,15 +533,6 @@ Value * PabloCompiler::compileExpression(const PabloAST * expr) {
     return f->second;
 }
 
-Value* PabloCompiler::genShiftLeft64(Value* e, const Twine &namehint) {
-    Value* i128_val = mBuilder->CreateBitCast(e, mBuilder->getIntNTy(BLOCK_SIZE));
-    return mBuilder->CreateBitCast(mBuilder->CreateShl(i128_val, 64, namehint), mBitBlockType);
-}
-
-inline Value* PabloCompiler::genNot(Value* expr) {
-    return mBuilder->CreateXor(expr, mOneInitializer, "not");
-}
-    
 void PabloCompiler::SetOutputValue(Value * marker, const unsigned index) {
     if (LLVM_UNLIKELY(marker == nullptr)) {
         throw std::runtime_error("Cannot set result " + std::to_string(index) + " to Null");

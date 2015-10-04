@@ -93,13 +93,6 @@ private:
     void compileIf(const If * ifStmt);
     void compileWhile(const While * whileStmt);
     Value* compileExpression(const PabloAST * expr);
-    Value* genAddWithCarry(Value* e1, Value* e2, unsigned localIndex);
-    Value* genUnitAdvanceWithCarry(Value* e1, unsigned localIndex);
-    Value* genShortAdvanceWithCarry(Value* e1, unsigned localIndex, int shift_amount);
-    Value* genLongAdvanceWithCarry(Value* e1, unsigned localIndex, int shift_amount);
-    Value* genShiftHighbitToLow(unsigned FieldWidth, Value * op);
-    Value* genShiftLeft64(Value* e, const Twine & namehint = "") ;
-    Value* genNot(Value* expr);
 
     #ifdef USE_UADD_OVERFLOW
     #ifdef USE_TWO_UADD_OVERFLOW
@@ -127,7 +120,6 @@ private:
 
     PabloBlock *                        mPabloBlock;
     
-    Value*                              mCarryDataPtr;
     unsigned                            mWhileDepth;
     unsigned                            mIfDepth;
 
