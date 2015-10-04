@@ -42,7 +42,7 @@ public:
     void setCompiled(pablo::PabloAST * var) {
         mCompiled = var;
     }
-    void setDefinition(RE * def);
+    void setDefinition(RE * definition);
     virtual ~Name() {}
 protected:
     friend Name * makeName(const std::string &, RE *);
@@ -56,7 +56,7 @@ protected:
     , mNameLength(nameLength)
     , mName(replicateString(name, nameLength))
     , mType(type)
-    , mDefiningRE(defn)
+    , mDefinition(defn)
     , mCompiled(nullptr)
     {
 
@@ -76,7 +76,7 @@ private:
     const length_t      mNameLength;
     const char * const  mName;
     const Type          mType;
-    RE *                mDefiningRE;
+    RE *                mDefinition;
     pablo::PabloAST *   mCompiled;
 };
 
@@ -97,12 +97,12 @@ inline Name::Type Name::getType() const {
 }
 
 inline RE * Name::getDefinition() const {
-    return mDefiningRE;
+    return mDefinition;
 }
 
-inline void Name::setDefinition(RE * d) {
-    assert (d != this);
-    mDefiningRE = d;
+inline void Name::setDefinition(RE * definition) {
+    assert (definition != this);
+    mDefinition = definition;
 }
 
 inline Name * makeName(const std::string & name, const Name::Type type) {

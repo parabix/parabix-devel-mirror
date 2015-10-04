@@ -117,8 +117,9 @@ const UnicodeSet & BinaryPropertyObject::GetCodepointSet(const int property_enum
     if (property_enum_val == Binary_ns::Y) {
         return mY;
     }
-    if (noUninitialized) {
-        mN = uset_complement(mY);
+    if (mNoUninitialized) {
+        mN = ~mY;
+        mNoUninitialized = false;
     }
     return mN;
 }

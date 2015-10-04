@@ -149,14 +149,14 @@ public:
 
     BinaryPropertyObject(UCD::property_t p, UnicodeSet s)
     : PropertyObject(p, ClassTypeId::BinaryProperty)
-    , noUninitialized(true)
+    , mNoUninitialized(true)
     , mY(s) {
 
     }
     const UnicodeSet & GetCodepointSet(const std::string & value_spec);
     const UnicodeSet & GetCodepointSet(const int property_enum_val);
 private:
-    bool noUninitialized;
+    bool mNoUninitialized;
     UnicodeSet mY;
     UnicodeSet mN;
 };

@@ -243,15 +243,8 @@ RE * RE_Compiler::resolveUnicodeProperties(RE * re) {
                 throw std::runtime_error("All non-unicode-property Name objects should have been defined prior to Unicode property resolution.");
             }
         } else if (Seq * seq = dyn_cast<Seq>(re)) {
-            for (auto si = seq->begin(); si != seq->end(); ) {
-                RE * re = resolve(*si);
-                if (LLVM_UNLIKELY(isa<Seq>(re))) {
-                    auto sj = cast<Seq>(re)->begin();
-                    *si = *sj;
-                    si = seq->insert(++si, ++sj, cast<Seq>(re)->end());
-                } else {
-                    *si++ = re;
-                }
+            for (auto si = seq->begin(); si != seq->end(); ++si) {
+                *si = resolve(*si);
             }
         } else if (Alt * alt = dyn_cast<Alt>(re)) {
             CC * unionCC = nullptr;
@@ -260,10 +253,6 @@ RE * RE_Compiler::resolveUnicodeProperties(RE * re) {
                 if (CC * cc = getDefinitionIfCC(re)) {
                     unionCC = (unionCC == nullptr) ? cc : makeCC(unionCC, cc);
                     ai = alt->erase(ai);
-                } else if (LLVM_UNLIKELY(isa<Alt>(re))) {
-                    auto aj = cast<Alt>(re)->begin();
-                    *ai = *aj;
-                    ai = alt->insert(++ai, ++aj, cast<Alt>(re)->end());
                 } else {
                     *ai++ = re;
                 }

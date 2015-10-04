@@ -172,7 +172,8 @@ public:
 
     inline UnicodeSet & operator=(const UnicodeSet & other) = default;
     inline UnicodeSet & operator=(UnicodeSet && other) = default;
-    UnicodeSet operator==(const UnicodeSet & other) const;
+    bool operator==(const UnicodeSet & other) const;
+    bool operator<(const UnicodeSet & other) const;
 
     UnicodeSet();
     UnicodeSet(const codepoint_t codepoint);
@@ -198,26 +199,6 @@ inline void UnicodeSet::swap(UnicodeSet & other) {
 
 inline void UnicodeSet::swap(UnicodeSet && other) {
     mRuns.swap(other.mRuns); mQuads.swap(other.mQuads);
-}
-
-inline UnicodeSet uset_complement(const UnicodeSet & s) {
-    return ~s;
-}
-
-inline UnicodeSet uset_intersection(const UnicodeSet & s1, const UnicodeSet & s2) {
-    return s1 & s2;
-}
-
-inline UnicodeSet uset_union(const UnicodeSet & s1, const UnicodeSet & s2) {
-    return s1 + s2;
-}
-
-inline UnicodeSet uset_difference(const UnicodeSet & s1, const UnicodeSet & s2) {
-    return s1 - s2;
-}
-
-inline UnicodeSet uset_symmetric_difference(const UnicodeSet & s1, const UnicodeSet & s2) {
-    return s1 ^ s2;
 }
 
 }

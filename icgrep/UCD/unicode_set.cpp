@@ -338,7 +338,7 @@ UnicodeSet UnicodeSet::operator^(const UnicodeSet & other) const {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief equality
  ** ------------------------------------------------------------------------------------------------------------- */
-UnicodeSet UnicodeSet::operator==(const UnicodeSet & other) const {
+bool UnicodeSet::operator==(const UnicodeSet & other) const {
     if (mRuns.size() != other.mRuns.size() || mQuads.size() != other.mQuads.size()) {
         return false;
     }
@@ -349,6 +349,33 @@ UnicodeSet UnicodeSet::operator==(const UnicodeSet & other) const {
         if (*i != *j) return false;
     }
     return true;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief less operator
+ ** ------------------------------------------------------------------------------------------------------------- */
+bool UnicodeSet::operator<(const UnicodeSet & other) const {
+    if (LLVM_LIKELY(mRuns.size() != other.mRuns.size())) {
+        return mRuns.size() < other.mRuns.size();
+    } else if (LLVM_LIKELY(mQuads.size() != other.mQuads.size())) {
+        return (mQuads.size() < other.mQuads.size());
+    } else { // equal run and quad lengths; test their individual values
+        for (auto ri = mRuns.cbegin(), end = mRuns.cend(), rj = other.mRuns.cbegin(); ri != end; ++ri, ++rj) {
+            if (*ri < *rj) {
+                return true;
+            } else if (*ri > *rj) {
+                return false;
+            }
+        }
+        for (auto qi = mQuads.cbegin(), end = mQuads.cend(), qj = other.mQuads.cbegin(); qi != end; ++qi, ++qj) {
+            if (*qi < *qj) {
+                return true;
+            } else if (*qi > *qj) {
+                return false;
+            }
+        }
+        return false;
+    }
 }
 
 ///** ------------------------------------------------------------------------------------------------------------- *
