@@ -1,6 +1,7 @@
 #include "ucd_compiler.hpp"
 #include <cc/cc_compiler.h>
 #include <UCD/unicode_set.h>
+#include <re/re_name.h>
 #include <utf8_encoder.h>
 
 using namespace cc;

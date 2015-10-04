@@ -15,7 +15,7 @@
 #include <list>
 #include <memory>
 #include <map>
-
+#include <re/re_memoizer.hpp>
 
 namespace re {
 
@@ -42,9 +42,9 @@ public:
 
 private:
 
-    using NameMap = std::map<std::pair<std::string, std::string>, re::Name *>;
+    using NameMap = std::map<std::pair<std::string, std::string>, re::RE *>;
 
-    typedef std::string::const_iterator cursor_t;
+    using cursor_t = std::string::const_iterator;
 
     RE_Parser(const std::string & regular_expression);
 
@@ -72,20 +72,20 @@ private:
 
     codepoint_t parse_utf8_codepoint();
 
-    Name * parsePropertyExpression();
+    RE * parsePropertyExpression();
 
-    CC * parseNamePatternExpression();
+    RE * parseNamePatternExpression();
 
     RE * makeComplement(RE * s);
     RE * makeWordBoundary();
     RE * makeWordNonBoundary();
-    Name * makeDigitSet();
-    Name * makeAlphaNumeric();
-    Name * makeWhitespaceSet();
-    Name * makeWordSet();
+    RE * makeDigitSet();
+    RE * makeAlphaNumeric();
+    RE * makeWhitespaceSet();
+    RE * makeWordSet();
 
-    Name * createName(const std::string value);
-    Name * createName(const std::string prop, const std::string value);
+    RE * createName(const std::string value);
+    RE * createName(const std::string prop, const std::string value);
 
     CharsetOperatorKind getCharsetOperator();
 
@@ -102,11 +102,9 @@ private:
     inline void throw_incomplete_expression_error_if_end_of_stream() const;
 
     // CC insertion dependent on case-insensitive flag.
-    CC * build_CC(codepoint_t cp);
-
-    void CC_add_codepoint(CC * cc, codepoint_t cp);
-
-    void CC_add_range(CC * cc, codepoint_t lo, codepoint_t hi);
+    Name * createCC(const codepoint_t cp);
+    void insert(CC * cc, const codepoint_t cp);
+    void insert_range(CC * cc, const codepoint_t lo, const codepoint_t hi);
 
     static std::string canonicalize(const cursor_t begin, const cursor_t end);
 
@@ -117,6 +115,7 @@ private:
     ModeFlagSet                 fModeFlagSet;
     bool                        fNested;
     NameMap                     mNameMap;
+    Memoizer                    mMemoizer;
 };
 
 }

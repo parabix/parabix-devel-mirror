@@ -4,7 +4,6 @@
 #include <re/re_re.h>
 #include <re/re_cc.h>
 #include <string>
-#include <re/printer_re.h>
 
 namespace pablo {
     class PabloAST;
@@ -42,11 +41,12 @@ public:
     void setCompiled(pablo::PabloAST * var) {
         mCompiled = var;
     }
+    bool operator<(const Name & other) const;
+    bool operator<(const CC & other) const;
     void setDefinition(RE * definition);
     virtual ~Name() {}
 protected:
     friend Name * makeName(const std::string &, RE *);
-    friend Name * makeByteName(const std::string &, RE *);
     friend Name * makeName(const std::string &, const Type);
     friend Name * makeName(const std::string &, const std::string &, const Type);
     Name(const char * nameSpace, const length_t namespaceLength, const char * name, const length_t nameLength, const Type type, RE * defn)
@@ -105,6 +105,34 @@ inline void Name::setDefinition(RE * definition) {
     mDefinition = definition;
 }
 
+inline bool Name::operator < (const Name & other) const {
+    if (mDefinition && other.mDefinition && isa<CC>(mDefinition) && isa<CC>(other.mDefinition)) {
+        return *cast<CC>(mDefinition) < *cast<CC>(other.mDefinition);
+    } else if (mNamespaceLength < other.mNamespaceLength) {
+        return true;
+    } else if (mNamespaceLength > other.mNamespaceLength) {
+        return false;
+    } else if (mNameLength < other.mNameLength) {
+        return true;
+    } else if (mNameLength > other.mNameLength) {
+        return false;
+    }
+    const auto diff = std::memcmp(mNamespace, other.mNamespace, mNamespaceLength);
+    if (diff < 0) {
+        return true;
+    } else if (diff > 0) {
+        return false;
+    }
+    return (std::memcmp(mName, other.mName, mNameLength) < 0);
+}
+
+inline bool Name::operator < (const CC & other) const {
+    if (mDefinition && isa<CC>(mDefinition)) {
+        return *cast<CC>(mDefinition) < other;
+    }
+    return false;
+}
+
 inline Name * makeName(const std::string & name, const Name::Type type) {
     return new Name(nullptr, 0, name.c_str(), name.length(), type, nullptr);
 }
@@ -122,15 +150,6 @@ inline Name * makeName(const std::string & name, RE * cc) {
         return new Name(nullptr, 0, name.c_str(), name.length(), ccType, cc);
     }
     else return new Name(nullptr, 0, name.c_str(), name.length(), Name::Type::Unknown, cc);
-}
-
-inline Name * makeByteName(const std::string & name, RE * cc) {
-    if (isa<Name>(cc)) {
-        return cast<Name>(cc);
-    }
-    else {
-        return new Name(nullptr, 0, name.c_str(), name.length(), Name::Type::Byte, cc);
-    }
 }
 
 }

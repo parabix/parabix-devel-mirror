@@ -136,7 +136,7 @@ RE * RE_Parser::parse_next_item() {
                 throw NothingToRepeat();
             case ']':
                 if (LEGACY_UNESCAPED_RBRAK_RBRACE_ALLOWED) {
-                    return build_CC(parse_utf8_codepoint());
+                    return createCC(parse_utf8_codepoint());
                 }
                 else throw ParseFailure("Use  \\] for literal ].");
             case '}':
@@ -144,7 +144,7 @@ RE * RE_Parser::parse_next_item() {
                     return nullptr;  //  a recursive invocation for a regexp in \N{...}
                 }
                 else if (LEGACY_UNESCAPED_RBRAK_RBRACE_ALLOWED) {
-                    return build_CC(parse_utf8_codepoint());
+                    return createCC(parse_utf8_codepoint());
                 }
                 else throw ParseFailure("Use \\} for literal }.");
             case '[':
@@ -157,7 +157,7 @@ RE * RE_Parser::parse_next_item() {
                 ++_cursor;
                 return parse_escaped();
             default:
-                return build_CC(parse_utf8_codepoint());
+                return createCC(parse_utf8_codepoint());
         }
     }
     return re;
@@ -382,7 +382,7 @@ inline RE * RE_Parser::parse_escaped() {
     if (isSetEscapeChar(*_cursor))
       return parseEscapedSet();
     else
-      return build_CC(parse_escaped_codepoint());
+      return createCC(parse_escaped_codepoint());
 }
 
 RE * RE_Parser::parseEscapedSet() {
@@ -494,7 +494,7 @@ std::string RE_Parser::canonicalize(const cursor_t begin, const cursor_t end) {
     return s.str();
 }
 
-Name * RE_Parser::parsePropertyExpression() {
+RE * RE_Parser::parsePropertyExpression() {
     const cursor_t start = _cursor;
     while (_cursor != _end && *_cursor != '}' and *_cursor != ':' and *_cursor != '=') {
         _cursor++;
@@ -512,32 +512,9 @@ Name * RE_Parser::parsePropertyExpression() {
     return createName(canonicalize(start, _cursor));
 }
 
-Name * RE_Parser::createName(const std::string value) {
+RE * RE_Parser::parseNamePatternExpression(){
 
-    auto key = std::make_pair("", value);
-    auto f = mNameMap.find(key);
-    if (f != mNameMap.end()) {
-        return f->second;
-    }
-    Name * property = makeName(value, Name::Type::UnicodeProperty);
-    mNameMap.insert(std::make_pair(std::move(key), property));
-    return property;
-}
-
-Name * RE_Parser::createName(const std::string prop, const std::string value) {
-    auto key = std::make_pair(prop, value);
-    auto f = mNameMap.find(key);
-    if (f != mNameMap.end()) {
-        return f->second;
-    }
-    Name * property = makeName(prop, value, Name::Type::UnicodeProperty);
-    mNameMap.insert(std::make_pair(std::move(key), property));
-    return property;
-}
-
-CC * RE_Parser::parseNamePatternExpression(){
-
-    re::ModeFlagSet outerFlags = fModeFlagSet;
+    ModeFlagSet outerFlags = fModeFlagSet;
     fModeFlagSet = 1;
 
     bool outerNested = fNested;
@@ -553,7 +530,7 @@ CC * RE_Parser::parseNamePatternExpression(){
 
 
     // Embed the nameRE in ";.*$nameRE" to skip the codepoint field of Uname.txt
-    RE * embedded = makeSeq({re::makeCC(0x3B), re::makeRep(re::makeAny(), 0, Rep::UNBOUNDED_REP), nameRE});
+    RE * embedded = makeSeq({mMemoizer.memoize(makeCC(0x3B)), makeRep(makeAny(), 0, Rep::UNBOUNDED_REP), nameRE});
     Encoding encoding(Encoding::Type::UTF_8, 8);
     embedded = regular_expression_passes(encoding, embedded);
 #ifndef NDEBUG
@@ -570,8 +547,7 @@ CC * RE_Parser::parseNamePatternExpression(){
     }
     catch (std::runtime_error e) {
         releaseSlabAllocatorMemory();
-        std::cerr << "Runtime error: " << e.what() << std::endl;
-        exit(1);
+        throw e;
     }
 #ifndef NDEBUG
     nameSearchIR->dump();
@@ -585,17 +561,15 @@ CC * RE_Parser::parseNamePatternExpression(){
     
     void * icgrep_MCptr = engine->getPointerToFunction(nameSearchIR);
     
-    CC * nameSearchResult = nullptr;
+    CC * result = nullptr;
     if (icgrep_MCptr) {
         GrepExecutor grepEngine(icgrep_MCptr);
         grepEngine.setParseCodepointsOption();
         grepEngine.doGrep("../Uname.txt");
-        nameSearchResult = grepEngine.getParsedCodepoints();
+        result = grepEngine.getParsedCodepoints();
     }
-    
-    //engine->freeMachineCodeForFunction(nameSearchIR); // This function only prints a "not supported" message. Reevaluate with LLVM 3.6.
     delete engine;
-    return nameSearchResult;
+    return mMemoizer.memoize(result);
 }
 
 
@@ -671,14 +645,14 @@ RE * RE_Parser::parse_charset() {
     // Legacy rule: an unescaped ] may appear as a literal set character
     // if and only if it appears immediately after the opening [ or [^
     if ( *_cursor == ']' && LEGACY_UNESCAPED_RBRAK_RBRACE_ALLOWED) {
-        cc->insert(']');
+        insert(cc, ']');
         lastItemKind = CodepointItem;
         lastCodepointItem = static_cast<codepoint_t> (']');
         ++_cursor;
     }
     else if ( *_cursor == '-' && LEGACY_UNESCAPED_HYPHEN_ALLOWED) {
         ++_cursor;
-        cc->insert('-');
+        insert(cc, '-');
         lastItemKind = CodepointItem;
         lastCodepointItem = static_cast<codepoint_t> ('-');
         if (*_cursor == '-') {
@@ -693,8 +667,8 @@ RE * RE_Parser::parse_charset() {
                 if (lastItemKind == NoItem) {
                     throw ParseFailure("Set operator has no left operand.");
                 }
-                if (cc->begin() != cc->end()) {
-                    subexprs.push_back(cc);
+                if (!cc->empty()) {
+                    subexprs.push_back(mMemoizer.memoize(cc));
                 }
                 RE * newOperand = makeAlt(subexprs.begin(), subexprs.end());
                 subexprs.clear();
@@ -719,8 +693,8 @@ RE * RE_Parser::parse_charset() {
                 if (lastItemKind == NoItem) {
                     throw ParseFailure("Set operator has no right operand.");
                 }
-                if (cc->begin() != cc->end()) {
-                    subexprs.push_back(cc);
+                if (!cc->empty()) {
+                    subexprs.push_back(mMemoizer.memoize(cc));
                 }
                 RE * newOperand = makeAlt(subexprs.begin(), subexprs.end());
                 if (havePendingOperation) {
@@ -741,7 +715,9 @@ RE * RE_Parser::parse_charset() {
             case setOpener:
             case posixPropertyOpener: {
                 if (lastItemKind != NoItem) {
-                    if (cc->begin() != cc->end()) subexprs.push_back(cc);
+                    if (!cc->empty()) {
+                        subexprs.push_back(mMemoizer.memoize(cc));
+                    }
                     RE * newOperand = makeAlt(subexprs.begin(), subexprs.end());
                     subexprs.clear();
                     cc = makeCC();
@@ -782,16 +758,16 @@ RE * RE_Parser::parse_charset() {
                 if (lastItemKind != CodepointItem) {
                     throw ParseFailure("Range operator - has illegal left operand.");
                 }
-                cc->insert_range(lastCodepointItem, parse_codepoint());
+                insert_range(cc, lastCodepointItem, parse_codepoint());
                 lastItemKind = RangeItem;
                 break;
             case hyphenChar:
-                cc->insert('-');
+                insert(cc, '-');
                 lastItemKind = CodepointItem;
                 lastCodepointItem = static_cast<codepoint_t> ('-');
                 break;
             case ampChar:
-                cc->insert('&');
+                insert(cc, '&');
                 lastItemKind = CodepointItem;
                 lastCodepointItem = static_cast<codepoint_t> ('&');
                 break;
@@ -803,13 +779,13 @@ RE * RE_Parser::parse_charset() {
                 }
                 else {
                     lastCodepointItem = parse_escaped_codepoint();
-                    cc->insert(lastCodepointItem);
+                    insert(cc, lastCodepointItem);
                     lastItemKind = CodepointItem;
                 }
                 break;
             case emptyOperator:
                 lastCodepointItem = parse_utf8_codepoint();
-                cc->insert(lastCodepointItem);
+                insert(cc, lastCodepointItem);
                 lastItemKind = CodepointItem;
                 break;
         }
@@ -956,13 +932,18 @@ inline void RE_Parser::throw_incomplete_expression_error_if_end_of_stream() cons
     if (_cursor == _end) throw IncompleteRegularExpression();
 }
 
-CC * RE_Parser::build_CC(codepoint_t cp) {
-    CC * cc = makeCC();
-    CC_add_codepoint(cc, cp);
-    return cc;
+inline Name * RE_Parser::createCC(const codepoint_t cp) {
+    CC * cc = nullptr;
+    if (fModeFlagSet & CASE_INSENSITIVE_MODE_FLAG) {
+        cc = makeCC();
+        caseInsensitiveInsert(cc, cp);
+    } else {
+        cc = makeCC(cp);
+    }
+    return mMemoizer.memoize(cc);
 }
 
-void RE_Parser::CC_add_codepoint(CC * cc, codepoint_t cp) {
+inline void RE_Parser::insert(CC * cc, const codepoint_t cp) {
     if (fModeFlagSet & CASE_INSENSITIVE_MODE_FLAG) {
         caseInsensitiveInsert(cc, cp);
     } else {
@@ -970,7 +951,7 @@ void RE_Parser::CC_add_codepoint(CC * cc, codepoint_t cp) {
     }
 }
 
-void RE_Parser::CC_add_range(CC * cc, codepoint_t lo, codepoint_t hi) {
+inline void RE_Parser::insert_range(CC * cc, const codepoint_t lo, const codepoint_t hi) {
     if (fModeFlagSet & CASE_INSENSITIVE_MODE_FLAG) {
         caseInsensitiveInsertRange(cc, lo, hi);
     } else {
@@ -994,20 +975,42 @@ RE * RE_Parser::makeWordNonBoundary () {
                     makeSeq({makeLookBehindAssertion(wordC), makeLookAheadAssertion(wordC)})});
 }
 
-inline Name * RE_Parser::makeDigitSet() {
+inline RE * RE_Parser::makeDigitSet() {
     return createName("nd");
 }
 
-inline Name * RE_Parser::makeAlphaNumeric() {
+inline RE * RE_Parser::makeAlphaNumeric() {
     return createName("alnum");
 }
 
-inline Name * RE_Parser::makeWhitespaceSet() {
+inline RE * RE_Parser::makeWhitespaceSet() {
     return createName("whitespace");
 }
 
-inline Name * RE_Parser::makeWordSet() {
+inline RE * RE_Parser::makeWordSet() {
     return createName("word");
+}
+
+RE * RE_Parser::createName(const std::string value) {
+    auto key = std::make_pair("", value);
+    auto f = mNameMap.find(key);
+    if (f != mNameMap.end()) {
+        return f->second;
+    }
+    RE * const property = mMemoizer.memoize(makeName(value, Name::Type::UnicodeProperty));
+    mNameMap.insert(std::make_pair(std::move(key), property));
+    return property;
+}
+
+RE * RE_Parser::createName(const std::string prop, const std::string value) {
+    auto key = std::make_pair(prop, value);
+    auto f = mNameMap.find(key);
+    if (f != mNameMap.end()) {
+        return f->second;
+    }
+    RE * const property = mMemoizer.memoize(makeName(prop, value, Name::Type::UnicodeProperty));
+    mNameMap.insert(std::make_pair(std::move(key), property));
+    return property;
 }
 
 }

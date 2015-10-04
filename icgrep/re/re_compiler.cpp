@@ -17,6 +17,7 @@
 #include <re/re_intersect.h>
 #include <re/re_assertion.h>
 #include <re/re_analysis.h>
+#include <re/printer_re.h>
 #include <cc/cc_namemap.hpp>
 #include <pablo/codegenstate.h>
 #include <UCD/ucd_compiler.hpp>

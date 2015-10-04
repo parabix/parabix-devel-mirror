@@ -8,6 +8,7 @@
 #include <re/re_intersect.h>
 #include <re/re_assertion.h>
 #include <UCD/resolve_properties.h>
+#include <re/printer_re.h>
 
 using namespace re;
 
@@ -60,7 +61,7 @@ RE * CC_NameMap::process(RE * re, const CC_type type) {
         if (f != mNameMap.end()) {
             return f->second;
         }
-        return insert(std::move(classname), (type == ByteClass) ? makeByteName(classname, cc) : makeName(classname, cc));
+        return insert(std::move(classname), makeName(classname, cc));
     }
     return re;
 }

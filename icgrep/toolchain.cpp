@@ -99,16 +99,6 @@ re::RE * regular_expression_passes(const Encoding encoding, re::RE * re_ast)  {
     if (PrintAllREs || PrintStrippedREs) {
         std::cerr << "RemoveNullableSuffix:" << std::endl << Printer_RE::PrintRE(re_ast) << std::endl;
     }
-    
-    cc::CC_NameMap nameMap;
-    re_ast = nameMap.process(re_ast, re::UnicodeClass);
-    
-    // std::cerr << "-----------------------------" << std::endl;
-    
-    if (PrintAllREs || PrintNamedREs) {
-        std::cerr << "Namer:" << std::endl << Printer_RE::PrintRE(re_ast) << std::endl;
-        std::cerr << "NameMap:\n" << nameMap.printMap() << std::endl;
-    }
 
     re_ast = re::RE_Simplifier::simplify(re_ast);
     if (PrintAllREs || PrintSimplifiedREs) {

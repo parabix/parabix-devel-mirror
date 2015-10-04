@@ -7,13 +7,9 @@
 #ifndef UTF8_ENCODER_H
 #define UTF8_ENCODER_H
 
-//Regular Expressions
 #include <re/re_cc.h>
-#include <cc/cc_namemap.hpp>
 
 namespace cc {
-
-class CC_NameMap;
 
 struct UTF8_Encoder {
     static bool isPrefix(const re::codepoint_t cp);
