@@ -16,7 +16,6 @@
 #include <re/re_diff.h>
 #include <re/re_intersect.h>
 #include <re/re_assertion.h>
-#include <cc/cc_namemap.hpp>
 #include <pablo/codegenstate.h>
 #include <pablo/builder.hpp>
 #include <pablo/function.h>

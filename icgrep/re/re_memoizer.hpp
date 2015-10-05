@@ -21,7 +21,7 @@ struct MemoizerComparator {
 
 }
 
-struct Memoizer : private std::set<RE *, MemoizerComparator> {
+struct Memoizer : public std::set<RE *, MemoizerComparator> {
 
     inline Name * memoize(CC * cc) {
         auto f = find(cc);

@@ -10,7 +10,6 @@
 #include <pablo/carry_manager.h>
 #include <pablo/printer_pablos.h>
 #include <pablo/function.h>
-#include <cc/cc_namemap.hpp>
 #include <re/re_name.h>
 #include <stdexcept>
 #include <include/simd-lib/bitblock.hpp>

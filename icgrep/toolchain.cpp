@@ -33,7 +33,6 @@
 #include <re/re_compiler.h>
 #include <utf8_encoder.h>
 #include <cc/cc_compiler.h>
-#include <cc/cc_namemap.hpp>
 #include <pablo/pablo_compiler.h>
 #include <pablo/optimizers/pablo_simplifier.hpp>
 #include <pablo/optimizers/pablo_codesinking.hpp>

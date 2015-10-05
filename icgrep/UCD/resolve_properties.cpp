@@ -9,7 +9,6 @@
 #include <re/re_name.h>
 #include <re/re_diff.h>
 #include <re/re_parser.h>
-#include <cc/cc_namemap.hpp>
 #include "UCD/PropertyAliases.h"
 #include "UCD/PropertyObjects.h"
 #include "UCD/PropertyObjectTable.h"

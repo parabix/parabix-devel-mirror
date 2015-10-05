@@ -17,8 +17,8 @@
 #include <re/re_intersect.h>
 #include <re/re_assertion.h>
 #include <re/re_analysis.h>
+#include <re/re_memoizer.hpp>
 #include <re/printer_re.h>
-#include <cc/cc_namemap.hpp>
 #include <pablo/codegenstate.h>
 #include <UCD/ucd_compiler.hpp>
 #include <UCD/resolve_properties.h>
@@ -193,55 +193,36 @@ static inline CC * getDefinitionIfCC(RE * re) {
 
 RE * RE_Compiler::resolveUnicodeProperties(RE * re) {
 
-    using PropertyMap = std::map<std::string, RE *>;
-    using NamespacedPropertyMap = std::map<std::pair<std::string, std::string>, RE *>;
-    using NameMap = UCD::UCDCompiler::NameMap;
-
-    PropertyMap                 propertyMap;
-    NamespacedPropertyMap       namespacedPropertyMap;
-    NameMap                     nameMap;
+    Memoizer memoizer;
 
     std::function<RE*(RE*)> resolve = [&](RE * re) -> RE * {
         if (Name * name = dyn_cast<Name>(re)) {
-            if (LLVM_LIKELY(name->getDefinition() != nullptr)) {
-                name->setDefinition(resolve(name->getDefinition()));
-            } else if (LLVM_LIKELY(name->getType() == Name::Type::UnicodeProperty)) {
-                // Attempt to look up an equivalently named Name object
-                if (name->hasNamespace()) {
-                    const auto f = namespacedPropertyMap.find(std::make_pair(name->getNamespace(), name->getName()));
-                    if (f != namespacedPropertyMap.end()) {
-                        if (f->second != name) {
-                            return f->second;
-                        }
-                    }
-                    namespacedPropertyMap.insert(std::make_pair(std::make_pair(name->getNamespace(), name->getName()), name));
-                } else {
-                    const auto f = propertyMap.find(name->getName());
-                    if (f != propertyMap.end()) {
-                        if (f->second != name) {
-                            return f->second;
-                        }
-                    }
-                    propertyMap.insert(std::make_pair(name->getName(), name));
-                }
-                if (UCD::resolvePropertyDefinition(name)) {
-                    resolve(name->getDefinition());
-                } else {
-                    #ifndef DISABLE_PREGENERATED_UCD_FUNCTIONS
-                    if (UsePregeneratedUnicode) {
-                        const std::string functionName = UCD::resolvePropertyFunction(name);
-                        const UCD::ExternalProperty & ep = UCD::resolveExternalProperty(functionName);
-                        Call * call = mPB.createCall(Prototype::Create(functionName, std::get<1>(ep), std::get<2>(ep), std::get<0>(ep)), mCCCompiler.getBasisBits());
-                        name->setCompiled(mPB.createAnd(call, mNonLineBreak));
+            auto f = memoizer.find(name);
+            if (f == memoizer.end()) {
+                if (LLVM_LIKELY(name->getDefinition() != nullptr)) {
+                    name->setDefinition(resolve(name->getDefinition()));
+                } else if (LLVM_LIKELY(name->getType() == Name::Type::UnicodeProperty)) {
+                    if (UCD::resolvePropertyDefinition(name)) {
+                        resolve(name->getDefinition());
                     } else {
-                    #endif
-                        name->setDefinition(makeCC(std::move(UCD::resolveUnicodeSet(name))));
-                    #ifndef DISABLE_PREGENERATED_UCD_FUNCTIONS
+                        #ifndef DISABLE_PREGENERATED_UCD_FUNCTIONS
+                        if (UsePregeneratedUnicode) {
+                            const std::string functionName = UCD::resolvePropertyFunction(name);
+                            const UCD::ExternalProperty & ep = UCD::resolveExternalProperty(functionName);
+                            Call * call = mPB.createCall(Prototype::Create(functionName, std::get<1>(ep), std::get<2>(ep), std::get<0>(ep)), mCCCompiler.getBasisBits());
+                            name->setCompiled(mPB.createAnd(call, mNonLineBreak));
+                        } else {
+                        #endif
+                            name->setDefinition(makeCC(std::move(UCD::resolveUnicodeSet(name))));
+                        #ifndef DISABLE_PREGENERATED_UCD_FUNCTIONS
+                        }
+                        #endif
                     }
-                    #endif
+                } else {
+                    throw std::runtime_error("All non-unicode-property Name objects should have been defined prior to Unicode property resolution.");
                 }
             } else {
-                throw std::runtime_error("All non-unicode-property Name objects should have been defined prior to Unicode property resolution.");
+                return *f;
             }
         } else if (Seq * seq = dyn_cast<Seq>(re)) {
             for (auto si = seq->begin(); si != seq->end(); ++si) {
@@ -287,6 +268,8 @@ RE * RE_Compiler::resolveUnicodeProperties(RE * re) {
         }
         return re;
     };
+
+    UCD::UCDCompiler::NameMap nameMap;
 
     std::function<void(RE*)> gather = [&](RE * re) {
         if (Name * name = dyn_cast<Name>(re)) {
