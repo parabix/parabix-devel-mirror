@@ -39,7 +39,7 @@ class AutoMultiplexing {
     using TopologicalVertex = TopologicalGraph::vertex_descriptor;
     using TopologicalMap = boost::container::flat_map<const Statement *, TopologicalVertex>;
 public:
-    static bool optimize(PabloFunction & function);
+    static bool optimize(PabloFunction & function, const unsigned limit = std::numeric_limits<unsigned>::max(), const unsigned maxSelections = 100);
 protected:
     bool initialize(PabloFunction & function);
     void characterize(PabloBlock & block);
@@ -47,7 +47,7 @@ protected:
     DdNode * characterize(Advance * adv, DdNode * input);
     bool notTransitivelyDependant(const ConstraintVertex i, const ConstraintVertex j) const;
     bool generateCandidateSets(RNG & rng);
-    void addCandidateSet(const VertexVector & S);
+    void addCandidateSet(const VertexVector & S, RNG & rng);
     void selectMultiplexSets(RNG &);
     void applySubsetConstraints();
     void multiplexSelectedIndependentSets(PabloFunction & function);
@@ -55,11 +55,14 @@ protected:
     void resolveUsages(const TopologicalVertex u, Statement * expr, PabloBlock & block, TopologicalGraph & G, TopologicalMap & M, Statement * ignoreIfThis) const;
     static TopologicalVertex getVertex(Statement * expr, TopologicalGraph & G, TopologicalMap & M);
 
-    inline AutoMultiplexing()
-    : mVariables(0)
+    inline AutoMultiplexing(const unsigned limit, const unsigned maxSelections)
+    : mLimit(limit)
+    , mMaxSelections(maxSelections)
+    , mVariables(0)
     , mConstraintGraph(0)
     {
     }
+
 private:
 
     DdNode * Zero() const;
@@ -78,6 +81,8 @@ private:
 
 private:
     DdManager *                 mManager;
+    const unsigned              mLimit;
+    const unsigned              mMaxSelections;
     unsigned                    mVariables;
     CharacterizationMap         mCharacterizationMap;
     ConstraintGraph             mConstraintGraph;

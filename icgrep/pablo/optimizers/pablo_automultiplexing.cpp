@@ -105,7 +105,7 @@ namespace pablo {
 
 using TypeId = PabloAST::ClassTypeId;
 
-bool AutoMultiplexing::optimize(PabloFunction & function) {
+bool AutoMultiplexing::optimize(PabloFunction & function, const unsigned limit, const unsigned maxSelections) {
 
 //    std::random_device rd;
 //    const auto seed = rd();
@@ -114,7 +114,7 @@ bool AutoMultiplexing::optimize(PabloFunction & function) {
 
     LOG("Seed:                    " << seed);
 
-    AutoMultiplexing am;
+    AutoMultiplexing am(limit, maxSelections);
     RECORD_TIMESTAMP(start_initialize);
     const bool abort = am.initialize(function);
     RECORD_TIMESTAMP(end_initialize);
@@ -647,7 +647,7 @@ bool AutoMultiplexing::generateCandidateSets(RNG & rng) {
 
     do {
 
-        addCandidateSet(S);
+        addCandidateSet(S, rng);
 
         bool noNewElements = true;
         do {
@@ -675,16 +675,73 @@ bool AutoMultiplexing::generateCandidateSets(RNG & rng) {
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
+ * @brief choose
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline unsigned long choose(const unsigned n, const unsigned k) {
+    if (n < k)
+        return 0;
+    if (n == k || k == 0)
+        return 1;
+    unsigned long delta = k;
+    unsigned long max = n - k;
+    if (delta < max) {
+        std::swap(delta, max);
+    }
+    unsigned long result = delta + 1;
+    for (unsigned i = 2; i <= max; ++i) {
+        result = (result * (delta + i)) / i;
+    }
+    return result;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief select
+ *
+ * James McCaffrey's algorithm for "Generating the mth Lexicographical Element of a Mathematical Combination"
+ ** ------------------------------------------------------------------------------------------------------------- */
+void select(const unsigned n, const unsigned k, const unsigned m, unsigned * element) {
+    unsigned long a = n;
+    unsigned long b = k;
+    unsigned long x = (choose(n, k) - 1) - m;
+    for (unsigned i = 0; i != k; ++i) {
+        while (choose(--a, b) > x);
+        x = x - choose(a, b);
+        b = b - 1;
+        element[i] = (n - 1) - a;
+    }
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
  * @brief addCandidateSet
  * @param S an independent set
- * @param T the trie in which to encode this new set into
- * @param roots the roots (source nodes) for each tree in T
  ** ------------------------------------------------------------------------------------------------------------- */
-inline void AutoMultiplexing::addCandidateSet(const VertexVector & S) {
+inline void AutoMultiplexing::addCandidateSet(const VertexVector & S, RNG & rng) {
     if (S.size() >= 3) {
-        const auto u = add_vertex(mMultiplexSetGraph);
-        for (const auto v : S) {
-            add_edge(u, v, mMultiplexSetGraph);
+        if (S.size() <= mLimit) {
+            const auto u = add_vertex(mMultiplexSetGraph);
+            for (const auto v : S) {
+                add_edge(u, v, mMultiplexSetGraph);
+            }
+        } else {
+            const auto max = choose(S.size(), mLimit);
+            unsigned element[mLimit];
+            if (LLVM_UNLIKELY(max <= mMaxSelections)) {
+                for (unsigned i = 0; i != max; ++i) {
+                    select(S.size(), mLimit, i, element);
+                    const auto u = add_vertex(mMultiplexSetGraph);
+                    for (unsigned j = 0; j != mLimit; ++j) {
+                        add_edge(u, S[element[j]], mMultiplexSetGraph);
+                    }
+                }
+            } else { // take m random samples
+                for (unsigned i = 0; i != mMaxSelections; ++i) {
+                    select(S.size(), mLimit, rng() % max, element);
+                    const auto u = add_vertex(mMultiplexSetGraph);
+                    for (unsigned j = 0; j != mLimit; ++j) {
+                        add_edge(u, S[element[j]], mMultiplexSetGraph);
+                    }
+                }
+            }
         }
     }
 }

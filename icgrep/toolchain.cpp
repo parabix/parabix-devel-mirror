@@ -77,6 +77,14 @@ static cl::opt<bool> EnableMultiplexing("multiplexing", cl::init(false),
                                         cl::desc("combine Advances whose inputs are mutual exclusive into the fewest number of advances possible (expensive)."),
                                         cl::cat(cPabloOptimizationsOptions));
 
+static cl::opt<unsigned> MultiplexingSetLimit("multiplexing-set-limit", cl::init(std::numeric_limits<unsigned>::max()),
+                                        cl::desc("maximum size of any candidate multiplexing set."),
+                                        cl::cat(cPabloOptimizationsOptions));
+
+static cl::opt<unsigned> MultiplexingSelectionLimit("multiplexing-selection-limit", cl::init(100),
+                                        cl::desc("maximum number of selections from any partial candidate multiplexing set."),
+                                        cl::cat(cPabloOptimizationsOptions));
+
 static cl::opt<bool> EnableReassociation("reassoc", cl::init(false),
                                          cl::desc("perform reassocation and distribution law optimization."),
                                          cl::cat(cPabloOptimizationsOptions));
@@ -138,7 +146,7 @@ void pablo_function_passes(pablo::PabloFunction * function) {
 #ifdef ENABLE_MULTIPLEXING    
     if (EnableMultiplexing) {
         pablo::BDDMinimizationPass::optimize(*function);
-        pablo::AutoMultiplexing::optimize(*function);        
+        pablo::AutoMultiplexing::optimize(*function, MultiplexingSetLimit, MultiplexingSelectionLimit);
     }    
     if (EnableReassociation) {
         pablo::BooleanReassociationPass::optimize(*function);
