@@ -7,6 +7,7 @@
  *  icgrep is a trademark of International Characters.
  */
 #include <llvm/IR/Module.h>
+#include <llvm/IR/Constant.h>
 #include <llvm/IR/Type.h>
 #include <llvm/IR/Value.h>
 #include <llvm/IR/IRBuilder.h>
@@ -22,7 +23,9 @@ public:
     : mMod(nullptr)
     , mLLVMBuilder(nullptr)
     , mBitBlockType(bitBlockType)
-    , mBitBlockSize(bitBlockType->isIntegerTy() ? cast<IntegerType>(bitBlockType)->getIntegerBitWidth() : cast<VectorType>(bitBlockType)->getBitWidth()) {
+    , mBitBlockSize(bitBlockType->isIntegerTy() ? cast<IntegerType>(bitBlockType)->getIntegerBitWidth() : cast<VectorType>(bitBlockType)->getBitWidth())
+    , mZeroInitializer(Constant::getNullValue(bitBlockType)) 
+    , mOneInitializer(Constant::getAllOnesValue(bitBlockType)) {
 
     }
 
@@ -30,6 +33,11 @@ public:
         mMod = m;
         mLLVMBuilder = b;
     }
+    
+    Type * getBitBlockType() { return mBitBlockType;}
+    int getBitBlockSize() { return mBitBlockSize;}
+    Constant * allZeroes() {return mZeroInitializer;}
+    Constant * allOnes() {return mOneInitializer;}
         
     Value * simd_add(unsigned fw, Value * a, Value * b);
     Value * simd_sub(unsigned fw, Value * a, Value * b);
@@ -70,6 +78,8 @@ private:
     IRBuilder <> * mLLVMBuilder;
     Type * mBitBlockType;
     unsigned mBitBlockSize;
+    Constant * mZeroInitializer;
+    Constant * mOneInitializer;
     
     Value * bitBlockCast(Value * a);
     VectorType * fwVectorType(unsigned fw);

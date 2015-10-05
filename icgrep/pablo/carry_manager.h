@@ -39,14 +39,13 @@ class PabloBlock;
 class CarryManager {
 public:
   
-    CarryManager(IRBuilder <> * b, VectorType * bitBlockType, ConstantAggregateZero * zero, IDISA::IDISA_Builder * idb)
+    CarryManager(IRBuilder <> * b, IDISA::IDISA_Builder * idb)
     : mPACK_SIZE(BLOCK_SIZE)
     , mITEMS_PER_PACK(1)
     , mBuilder(b)
-    , mBitBlockType(bitBlockType)
-    , mZeroInitializer(zero)
-    , mOneInitializer(ConstantVector::getAllOnesValue(bitBlockType))
     , iBuilder(idb)
+    , mPackBuilder(idb)
+    , mBitBlockType(idb->getBitBlockType())
     , mPabloRoot(nullptr)
     , mCurrentScope(nullptr)
     , mCarryInfo(nullptr)
@@ -121,10 +120,9 @@ private:
     unsigned mPACK_SIZE;
     unsigned mITEMS_PER_PACK;
     IRBuilder <> * mBuilder;
-    VectorType * mBitBlockType;
-    Constant * mZeroInitializer;
-    Constant * mOneInitializer;
     IDISA::IDISA_Builder * iBuilder;
+    IDISA::IDISA_Builder * mPackBuilder;
+    Type * mBitBlockType;
     PabloBlock * mPabloRoot;
     PabloBlock * mCurrentScope;
     PabloBlockCarryData * mCarryInfo;

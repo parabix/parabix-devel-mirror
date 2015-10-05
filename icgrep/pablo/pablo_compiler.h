@@ -123,9 +123,6 @@ private:
     unsigned                            mWhileDepth;
     unsigned                            mIfDepth;
 
-    ConstantAggregateZero* const        mZeroInitializer;
-    Constant* const                     mOneInitializer;
-
     Function *                          mFunction;
     Value *                             mInputAddressPtr;
     Value *                             mOutputAddressPtr;

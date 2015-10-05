@@ -63,8 +63,6 @@ PabloCompiler::PabloCompiler()
 , mInputType(nullptr)
 , mWhileDepth(0)
 , mIfDepth(0)
-, mZeroInitializer(ConstantAggregateZero::get(mBitBlockType))
-, mOneInitializer(ConstantVector::getAllOnesValue(mBitBlockType))
 , mFunction(nullptr)
 , mInputAddressPtr(nullptr)
 , mOutputAddressPtr(nullptr)
@@ -118,7 +116,7 @@ llvm::Function * PabloCompiler::compile(PabloFunction * function, Module * modul
 
     iBuilder.initialize(mMod, mBuilder);
 
-    mCarryManager = new CarryManager(mBuilder, mBitBlockType, mZeroInitializer, &iBuilder);
+    mCarryManager = new CarryManager(mBuilder, &iBuilder);
     
     if (DumpTrace) DeclareDebugFunctions();
         
@@ -309,7 +307,7 @@ void PabloCompiler::compileBlock(PabloBlock & block) {
         PHINode * phi = mBuilder->CreatePHI(mBitBlockType, 2, assign->getName()->value());
         auto f = mMarkerMap.find(assign);
         assert (f != mMarkerMap.end());
-        phi->addIncoming(mZeroInitializer, ifEntryBlock);
+        phi->addIncoming(iBuilder.allZeroes(), ifEntryBlock);
         phi->addIncoming(f->second, ifBodyFinalBlock);
         mMarkerMap[assign] = phi;
     }
@@ -515,10 +513,10 @@ void PabloCompiler::compileStatement(const Statement * stmt) {
 
 Value * PabloCompiler::compileExpression(const PabloAST * expr) {
     if (isa<Ones>(expr)) {
-        return mOneInitializer;
+        return iBuilder.allOnes();
     }
     else if (isa<Zeroes>(expr)) {
-        return mZeroInitializer;
+        return iBuilder.allZeroes();
     }
     auto f = mMarkerMap.find(expr);
     if (LLVM_UNLIKELY(f == mMarkerMap.end())) {

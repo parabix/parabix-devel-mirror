@@ -50,8 +50,8 @@ void CarryManager::initialize(Module * m, PabloBlock * pb) {
         mPACK_SIZE = 64;
         mITEMS_PER_PACK = 64;
         mCarryPackType = mBuilder->getIntNTy(mPACK_SIZE);
-        mZeroInitializer = mBuilder->getInt64(0);
-        mOneInitializer = mBuilder->getInt64(-1);
+        mPackBuilder = new IDISA::IDISA_Builder(mCarryPackType);
+        mPackBuilder->initialize(m, mBuilder);
     }
     else {
         mPACK_SIZE = BLOCK_SIZE;
@@ -520,7 +520,7 @@ Value * CarryManager::getCarrySummaryExpr() {
 void CarryManager::initializeCarryDataAtIfEntry() {
     if (blockHasCarries()) {
         if (mCarryOutPack[scopeBasePack()] == nullptr) {
-            mCarryInfo->ifEntryPack = mZeroInitializer;
+            mCarryInfo->ifEntryPack = mPackBuilder->allZeroes();
         }
         else {
             mCarryInfo->ifEntryPack = mCarryOutPack[scopeBasePack()];
@@ -535,7 +535,7 @@ void CarryManager::buildCarryDataPhisAfterIfBody(BasicBlock * ifEntryBlock, Basi
         const unsigned currentScopeBase = scopeBasePack();
         for (unsigned index = currentScopeBase; index < currentScopeBase + scopeCarryPacks; ++index) {
             PHINode * phi_out = mBuilder->CreatePHI(mCarryPackType, 2);
-            phi_out->addIncoming(mZeroInitializer,ifEntryBlock);
+            phi_out->addIncoming(mPackBuilder->allZeroes(),ifEntryBlock);
             phi_out->addIncoming(mCarryOutPack[index],ifBodyFinalBlock);
             mCarryOutPack[index] = phi_out;
         }
@@ -561,7 +561,7 @@ void CarryManager::buildCarryDataPhisAfterIfBody(BasicBlock * ifEntryBlock, Basi
         // its own summary.
         const unsigned summaryIndex = summaryPackIndex();
         PHINode * summary_phi = mBuilder->CreatePHI(mCarryPackType, 2, "summary");
-        summary_phi->addIncoming(mZeroInitializer, ifEntryBlock);
+        summary_phi->addIncoming(mPackBuilder->allZeroes(), ifEntryBlock);
         summary_phi->addIncoming(mCarryOutPack[summaryIndex], ifBodyFinalBlock);
         mCarryOutPack[summaryIndex] = summary_phi;
     }
@@ -575,7 +575,7 @@ void CarryManager::addSummaryPhiIfNeeded(BasicBlock * ifEntryBlock, BasicBlock *
     }
     const unsigned carrySummaryIndex = summaryPackIndex();
     PHINode * summary_phi = mBuilder->CreatePHI(mCarryPackType, 2, "summary");
-    summary_phi->addIncoming(mZeroInitializer, ifEntryBlock);
+    summary_phi->addIncoming(mPackBuilder->allZeroes(), ifEntryBlock);
     summary_phi->addIncoming(mCarryOutPack[carrySummaryIndex], ifBodyFinalBlock);
     mCarryOutPack[carrySummaryIndex] = summary_phi;
 }
@@ -591,9 +591,9 @@ void CarryManager::generateCarryOutSummaryCodeIfNeeded() {
     
     const unsigned carrySummaryIndex = summaryPackIndex();
     
-    Value * carry_summary = mZeroInitializer;
+    Value * carry_summary = mPackBuilder->allZeroes();
     if (mCarryInfo->blockHasLongAdvances()) { // Force if entry
-        carry_summary = mOneInitializer;
+        carry_summary = mPackBuilder->allOnes();
     }
     else {
         unsigned localCarryIndex = localBasePack();
@@ -654,7 +654,7 @@ void CarryManager::initializeCarryDataPhisAtWhileEntry(BasicBlock * whileEntryBl
         mCarryInPhis[index] = phi_in;
 #endif
         PHINode * phi_out = mBuilder->CreatePHI(mCarryPackType, 2);
-        phi_out->addIncoming(mZeroInitializer, whileEntryBlock);
+        phi_out->addIncoming(mPackBuilder->allZeroes(), whileEntryBlock);
         mCarryOutAccumPhis[index] = phi_out;
     }
 }
@@ -665,7 +665,7 @@ void CarryManager::extendCarryDataPhisAtWhileBodyFinalBlock(BasicBlock * whileBo
     const unsigned currentScopeBase = scopeBasePack();
     for (unsigned index = 0; index < scopeCarryPacks; ++index) {
 #ifdef SET_WHILE_CARRY_IN_TO_ZERO_AFTER_FIRST_ITERATION
-        mCarryInPhis[index]->addIncoming(mZeroInitializer, whileBodyFinalBlock);
+        mCarryInPhis[index]->addIncoming(mPackBuilder->allZeroes(), whileBodyFinalBlock);
 #endif
         PHINode * phi = mCarryOutAccumPhis[index];
         Value * carryOut = mBuilder->CreateOr(phi, mCarryOutPack[currentScopeBase+index]);
