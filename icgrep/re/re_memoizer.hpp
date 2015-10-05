@@ -15,7 +15,7 @@ struct MemoizerComparator {
         } else if (isa<Name>(lh)) {
             return *cast<Name>(lh) < *cast<CC>(rh);
         }
-        return !(*cast<Name>(rh) < *cast<CC>(lh));
+        return *cast<Name>(rh) > *cast<CC>(lh);
     }
 };
 
@@ -28,7 +28,7 @@ struct Memoizer : public std::set<RE *, MemoizerComparator> {
         if (f != end()) {
             return cast<Name>(*f);
         } else {
-            Name * name = makeName(cc->canonicalName(CC_type::UnicodeClass), cc);
+            Name * name = makeName(cc);
             insert(name);
             return name;
         }
