@@ -203,6 +203,7 @@ void icgrep_Linking(Module * m, ExecutionEngine * e) {
     for (Module::FunctionListType::iterator it = fns.begin(), it_end = fns.end(); it != it_end; ++it) {
         std::string fnName = it->getName().str();
         if (fnName == "process_block") continue;
+        if (fnName == "process_block_initialize_carries") continue;
         if (fnName == "wrapped_print_register") {
             e->addGlobalMapping(cast<GlobalValue>(it), (void *)&wrapped_print_register);
         }
