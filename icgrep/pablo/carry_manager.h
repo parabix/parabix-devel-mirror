@@ -66,6 +66,8 @@ public:
     
     void initialize(Module * m, PabloBlock * blk);
     
+    void generateCarryDataInitializer(Module * m);
+    
     unsigned enumerate(PabloBlock * blk, unsigned ifDepth, unsigned whileDepth);
     
     void generateBlockNoIncrement();    
