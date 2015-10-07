@@ -184,10 +184,11 @@ int main(int argc, char *argv[]) {
     // Ensure everything is ready to go.
     engine->finalizeObject();
     
+    void * icgrep_init_carry_ptr = engine->getPointerToFunction(icgrep_IR->getParent()->getFunction("process_block_initialize_carries"));
     void * icgrep_MCptr = engine->getPointerToFunction(icgrep_IR);
     
     if (icgrep_MCptr) {
-        GrepExecutor grepEngine(icgrep_MCptr);
+        GrepExecutor grepEngine(icgrep_init_carry_ptr, icgrep_MCptr);
         grepEngine.setCountOnlyOption(CountOnly);
         grepEngine.setNormalizeLineBreaksOption(NormalizeLineBreaks);
         grepEngine.setShowLineNumberOption(ShowLineNumbers);
@@ -204,4 +205,3 @@ int main(int argc, char *argv[]) {
 
     return 0;
 }
-

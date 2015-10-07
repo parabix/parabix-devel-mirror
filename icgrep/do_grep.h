@@ -38,6 +38,7 @@ typedef BitStreamScanner<BitBlock, uint64_t, uint64_t, SEGMENT_BLOCKS> ScannerT;
 typedef BitStreamScanner<BitBlock, uint32_t, uint32_t, SEGMENT_BLOCKS> ScannerT;
 #endif
 
+typedef void (*process_block_initialize_carries_fcn)();
 typedef void (*process_block_fcn)(const Basis_bits & basis_bits, Output & output);
 
 namespace llvm { class raw_ostream; }
@@ -45,12 +46,13 @@ namespace llvm { class raw_ostream; }
 class GrepExecutor {
 public:
 
-    GrepExecutor(void * process_block)
+    GrepExecutor(void * process_block_initialize_carries, void * process_block)
     : mCountOnlyOption(false)
     , mGetCodePointsOption(false)
     , mShowFileNameOption(false)
     , mShowLineNumberingOption(false)
     , mParsedCodePointSet(nullptr)
+    , mInitializeCarriesFcn(reinterpret_cast<process_block_initialize_carries_fcn>(process_block_initialize_carries))
     , mProcessBlockFcn(reinterpret_cast<process_block_fcn>(process_block)) {
 
     }
@@ -80,6 +82,7 @@ private:
     
     re::CC * mParsedCodePointSet;
 
+    process_block_initialize_carries_fcn mInitializeCarriesFcn;
     process_block_fcn mProcessBlockFcn;
     
     std::string mFileName;

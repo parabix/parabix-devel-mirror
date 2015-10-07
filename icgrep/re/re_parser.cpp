@@ -559,11 +559,12 @@ RE * RE_Parser::parseNamePatternExpression(){
     // Ensure everything is ready to go.
     engine->finalizeObject();
     
+    void * icgrep_init_carry_ptr = engine->getPointerToFunction(nameSearchIR->getParent()->getFunction("process_block_initialize_carries"));
     void * icgrep_MCptr = engine->getPointerToFunction(nameSearchIR);
     
     CC * result = nullptr;
     if (icgrep_MCptr) {
-        GrepExecutor grepEngine(icgrep_MCptr);
+        GrepExecutor grepEngine(icgrep_init_carry_ptr, icgrep_MCptr);
         grepEngine.setParseCodepointsOption();
         grepEngine.doGrep("../Uname.txt");
         result = grepEngine.getParsedCodepoints();

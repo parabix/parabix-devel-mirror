@@ -53,8 +53,8 @@ void CarryManager::generateCarryDataInitializer(Module * m) {
     f->setCallingConv(CallingConv::C);
     f->setAttributes(AttrSet);
     llvm::IRBuilderBase::InsertPoint ip = mBuilder->saveIP();
-    mBuilder->SetInsertPoint(BasicBlock::Create(m->getContext(), "entry", f,0));
-    mBuilder->CreateMemSet(mCarryBitBlockPtr, mBuilder->getInt8(0), mTotalCarryDataBitBlocks * BLOCK_SIZE, BLOCK_SIZE/8);
+    mBuilder->SetInsertPoint(BasicBlock::Create(m->getContext(), "entry1", f,0));
+    mBuilder->CreateMemSet(mCarryBitBlockPtr, mBuilder->getInt8(0), mTotalCarryDataBitBlocks * BLOCK_SIZE/8, 4);
     ReturnInst::Create(m->getContext(), mBuilder->GetInsertBlock());
     mBuilder->restoreIP(ip);
 }
