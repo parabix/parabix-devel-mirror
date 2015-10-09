@@ -40,12 +40,13 @@ class CarryManager {
 public:
   
     CarryManager(IRBuilder <> * b, IDISA::IDISA_Builder * idb)
-    : mPACK_SIZE(BLOCK_SIZE)
-    , mITEMS_PER_PACK(1)
-    , mBuilder(b)
+    : mBuilder(b)
     , iBuilder(idb)
     , mPackBuilder(idb)
     , mBitBlockType(idb->getBitBlockType())
+    , mBITBLOCK_WIDTH(idb->getBitBlockWidth())
+    , mPACK_SIZE(mBITBLOCK_WIDTH)
+    , mITEMS_PER_PACK(1)
     , mPabloRoot(nullptr)
     , mCurrentScope(nullptr)
     , mCarryInfo(nullptr)
@@ -119,12 +120,13 @@ public:
 
     
 private:
-    unsigned mPACK_SIZE;
-    unsigned mITEMS_PER_PACK;
     IRBuilder <> * mBuilder;
     IDISA::IDISA_Builder * iBuilder;
     IDISA::IDISA_Builder * mPackBuilder;
     Type * mBitBlockType;
+    unsigned mBITBLOCK_WIDTH;
+    unsigned mPACK_SIZE;
+    unsigned mITEMS_PER_PACK;
     PabloBlock * mPabloRoot;
     PabloBlock * mCurrentScope;
     PabloBlockCarryData * mCarryInfo;

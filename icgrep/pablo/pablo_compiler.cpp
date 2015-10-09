@@ -128,7 +128,7 @@ llvm::Function * PabloCompiler::compile(PabloFunction * function, Module * modul
     for (unsigned i = 0; i != function->getNumOfParameters(); ++i) {
         Value* indices[] = {mBuilder->getInt64(0), mBuilder->getInt32(i)};
         Value * gep = mBuilder->CreateGEP(mInputAddressPtr, indices);
-        LoadInst * basisBit = mBuilder->CreateAlignedLoad(gep, BLOCK_SIZE/8, false, function->getParameter(i)->getName()->to_string());
+        LoadInst * basisBit = mBuilder->CreateAlignedLoad(gep, iBuilder.getBitBlockWidth()/8, false, function->getParameter(i)->getName()->to_string());
         mMarkerMap[function->getParameter(i)] = basisBit;
         if (DumpTrace) {
             genPrintRegister(function->getParameter(i)->getName()->to_string(), basisBit);
@@ -148,7 +148,7 @@ llvm::Function * PabloCompiler::compile(PabloFunction * function, Module * modul
     mCarryManager->generateBlockNoIncrement();
 
     if (DumpTrace) {
-        genPrintRegister("mBlockNo", mBuilder->CreateAlignedLoad(mBuilder->CreateBitCast(mCarryManager->getBlockNoPtr(), PointerType::get(mBitBlockType, 0)), BLOCK_SIZE/8, false));
+        genPrintRegister("mBlockNo", mBuilder->CreateAlignedLoad(mBuilder->CreateBitCast(mCarryManager->getBlockNoPtr(), PointerType::get(mBitBlockType, 0)), iBuilder.getBitBlockWidth()/8, false));
     }
     
     // Write the output values out
@@ -165,7 +165,6 @@ llvm::Function * PabloCompiler::compile(PabloFunction * function, Module * modul
     delete mBuilder; mBuilder = nullptr;
     mMod = nullptr; // don't delete this. It's either owned by the ExecutionEngine or the calling function.
 
-    //Return the required size of the carry data area to the process_block function.
     return mFunction;
 }
 
@@ -252,7 +251,7 @@ void PabloCompiler::compileBlock(PabloBlock & block) {
         }
     }
     
-    void PabloCompiler::compileIf(const If * ifStatement) {        
+void PabloCompiler::compileIf(const If * ifStatement) {        
     //
     //  The If-ElseZero stmt:
     //  if <predicate:expr> then <body:stmt>* elsezero <defined:var>* endif
@@ -435,7 +434,7 @@ void PabloCompiler::compileStatement(const Statement * stmt) {
         AllocaInst * outputStruct = mBuilder->CreateAlloca(outputType);
         mBuilder->CreateCall2(externalFunction, mInputAddressPtr, outputStruct);
         Value * outputPtr = mBuilder->CreateGEP(outputStruct, std::vector<Value *>({ mBuilder->getInt32(0), mBuilder->getInt32(0) }));
-        expr = mBuilder->CreateAlignedLoad(outputPtr, BLOCK_SIZE / 8, false);
+        expr = mBuilder->CreateAlignedLoad(outputPtr, iBuilder.getBitBlockWidth() / 8, false);
     }
     else if (const And * pablo_and = dyn_cast<And>(stmt)) {
         expr = mBuilder->CreateAnd(compileExpression(pablo_and->getExpr1()), compileExpression(pablo_and->getExpr2()), "and");
@@ -535,11 +534,11 @@ void PabloCompiler::SetOutputValue(Value * marker, const unsigned index) {
         throw std::runtime_error("Cannot set result " + std::to_string(index) + " to Null");
     }
     if (LLVM_UNLIKELY(marker->getType()->isPointerTy())) {
-        marker = mBuilder->CreateAlignedLoad(marker, BLOCK_SIZE/8, false);
+        marker = mBuilder->CreateAlignedLoad(marker, iBuilder.getBitBlockWidth()/8, false);
     }
     Value* indices[] = {mBuilder->getInt64(0), mBuilder->getInt32(index)};
     Value* gep = mBuilder->CreateGEP(mOutputAddressPtr, indices);
-    mBuilder->CreateAlignedStore(marker, gep, BLOCK_SIZE/8, false);
+    mBuilder->CreateAlignedStore(marker, gep, iBuilder.getBitBlockWidth()/8, false);
 }
 
 }

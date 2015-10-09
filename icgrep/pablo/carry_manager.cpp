@@ -54,7 +54,7 @@ void CarryManager::generateCarryDataInitializer(Module * m) {
     f->setAttributes(AttrSet);
     llvm::IRBuilderBase::InsertPoint ip = mBuilder->saveIP();
     mBuilder->SetInsertPoint(BasicBlock::Create(m->getContext(), "entry1", f,0));
-    mBuilder->CreateMemSet(mCarryBitBlockPtr, mBuilder->getInt8(0), mTotalCarryDataBitBlocks * BLOCK_SIZE/8, 4);
+    mBuilder->CreateMemSet(mCarryBitBlockPtr, mBuilder->getInt8(0), mTotalCarryDataBitBlocks * mBITBLOCK_WIDTH/8, 4);
     ReturnInst::Create(m->getContext(), mBuilder->GetInsertBlock());
     mBuilder->restoreIP(ip);
 }
@@ -73,7 +73,7 @@ void CarryManager::initialize(Module * m, PabloBlock * pb) {
         mPackBuilder->initialize(m, mBuilder);
     }
     else {
-        mPACK_SIZE = BLOCK_SIZE;
+        mPACK_SIZE = mBITBLOCK_WIDTH;
         mITEMS_PER_PACK = 1;
         mCarryPackType = mBitBlockType;
     }
@@ -87,7 +87,7 @@ void CarryManager::initialize(Module * m, PabloBlock * pb) {
     for (unsigned i = 0; i < totalPackCount; i++) mCarryInPack[i]=nullptr;
 
     if (Strategy == SequentialFullyPackedStrategy) {
-        mTotalCarryDataBitBlocks = (totalCarryDataSize + BLOCK_SIZE - 1)/BLOCK_SIZE;       
+        mTotalCarryDataBitBlocks = (totalCarryDataSize + mBITBLOCK_WIDTH - 1)/mBITBLOCK_WIDTH;       
     }
     else {
         mTotalCarryDataBitBlocks = totalCarryDataSize;
@@ -95,7 +95,7 @@ void CarryManager::initialize(Module * m, PabloBlock * pb) {
     
     ArrayType* cdArrayTy = ArrayType::get(mBitBlockType, mTotalCarryDataBitBlocks);
     GlobalVariable* cdArray = new GlobalVariable(*m, cdArrayTy, /*isConstant=*/false, GlobalValue::CommonLinkage, /*Initializer=*/0, "process_block_carry_data");
-    cdArray->setAlignment(BLOCK_SIZE/8);
+    cdArray->setAlignment(mBITBLOCK_WIDTH/8);
     ConstantAggregateZero* cdInitData = ConstantAggregateZero::get(cdArrayTy);
     cdArray->setInitializer(cdInitData);
     
@@ -108,7 +108,7 @@ void CarryManager::initialize(Module * m, PabloBlock * pb) {
     if (mPabloCountCount > 0) {
         ArrayType* pcArrayTy = ArrayType::get(mBuilder->getIntNTy(64), mPabloCountCount);
         GlobalVariable* pcArray = new GlobalVariable(*m, pcArrayTy, /*isConstant=*/false, GlobalValue::CommonLinkage, 0, "popcount_data");
-        cdArray->setAlignment(BLOCK_SIZE/8);
+        cdArray->setAlignment(mBITBLOCK_WIDTH/8);
         ConstantAggregateZero* pcInitData = ConstantAggregateZero::get(pcArrayTy);
         pcArray->setInitializer(pcInitData);
         mPopcountBasePtr = mBuilder->CreateBitCast(pcArray, Type::getInt64PtrTy(mBuilder->getContext()));
@@ -318,7 +318,7 @@ void CarryManager::extractAndSaveCarryOutBits(Value * bitblock, unsigned carryBi
     unsigned rshift = mPACK_SIZE - packOffset - carryBitCount;
     uint64_t mask = ((((uint64_t) 1) << carryBitCount) - 1)  << packOffset;
     //std::cerr << "extractAndSaveCarryOutBits: packIndex =" << packIndex << ", packOffset = " << packOffset << ", mask = " << mask << std::endl;
-    Value * field = iBuilder->mvmd_extract(mPACK_SIZE, bitblock, BLOCK_SIZE/mPACK_SIZE - 1);
+    Value * field = iBuilder->mvmd_extract(mPACK_SIZE, bitblock, mBITBLOCK_WIDTH/mPACK_SIZE - 1);
     //Value * field = maskSelectBitRange(field, PACK_SIZE - carryBitCount, carryBitCount);
     if (rshift != 0) {
         field = mBuilder->CreateLShr(field, mBuilder->getInt64(rshift));
@@ -335,7 +335,7 @@ void CarryManager::extractAndSaveCarryOutBits(Value * bitblock, unsigned carryBi
 }
 
 Value * CarryManager::pack2bitblock(Value * pack) {
-    return mBuilder->CreateBitCast(mBuilder->CreateZExt(pack, mBuilder->getIntNTy(BLOCK_SIZE)), mBitBlockType);
+    return mBuilder->CreateBitCast(mBuilder->CreateZExt(pack, mBuilder->getIntNTy(mBITBLOCK_WIDTH)), mBitBlockType);
 }
     
     
@@ -358,7 +358,7 @@ void CarryManager::setCarryOpCarryOut(unsigned localIndex, Value * carry_out_str
         extractAndSaveCarryOutBits(carry_out_strm, posn, 1);
     }
     else {
-        Value * carry_bit = mBuilder->CreateLShr(mBuilder->CreateBitCast(carry_out_strm, mBuilder->getIntNTy(BLOCK_SIZE)), BLOCK_SIZE-1);
+        Value * carry_bit = mBuilder->CreateLShr(mBuilder->CreateBitCast(carry_out_strm, mBuilder->getIntNTy(mBITBLOCK_WIDTH)), mBITBLOCK_WIDTH-1);
         mCarryOutPack[posn] = mBuilder->CreateBitCast(carry_bit, mBitBlockType);
         if (mCarryInfo->getWhileDepth() == 0) {
             storeCarryPack(posn);
@@ -367,12 +367,12 @@ void CarryManager::setCarryOpCarryOut(unsigned localIndex, Value * carry_out_str
 }
 
 Value* CarryManager::genShiftLeft64(Value* e) {
-    Value* i128_val = mBuilder->CreateBitCast(e, mBuilder->getIntNTy(BLOCK_SIZE));
+    Value* i128_val = mBuilder->CreateBitCast(e, mBuilder->getIntNTy(mBITBLOCK_WIDTH));
     return mBuilder->CreateBitCast(mBuilder->CreateShl(i128_val, 64), mBitBlockType);
 }
 
 Value * CarryManager::addCarryInCarryOut(int localIndex, Value* e1, Value* e2) {
-#if (BLOCK_SIZE == 128)
+#if (mBITBLOCK_WIDTH == 128)
     Value * carryq_value = getCarryOpCarryIn(localIndex);
     //calculate carry through logical ops
     Value* carrygen = mBuilder->CreateAnd(e1, e2, "carrygen");
@@ -386,11 +386,11 @@ Value * CarryManager::addCarryInCarryOut(int localIndex, Value* e1, Value* e2) {
     setCarryOpCarryOut(localIndex, carry_out_strm);
     return sum;
 #else
-    //BLOCK_SIZE == 256, there is no other implementation
+    //mBITBLOCK_WIDTH == 256, there is no other implementation
     Value * carryq_value = getCarryOpCarryIn(localIndex);
     Value* carrygen = mBuilder->CreateAnd(e1, e2, "carrygen");
     Value* carryprop = mBuilder->CreateOr(e1, e2, "carryprop");
-    Value * sum = iBuilder->simd_add(BLOCK_SIZE, iBuilder->simd_add(BLOCK_SIZE, e1, e2), carryq_value);
+    Value * sum = iBuilder->simd_add(mBITBLOCK_WIDTH, iBuilder->simd_add(mBITBLOCK_WIDTH, e1, e2), carryq_value);
     Value* carry_out_strm = mBuilder->CreateOr(carrygen, mBuilder->CreateAnd(carryprop, mBuilder->CreateNot(sum)));
     setCarryOpCarryOut(localIndex, carry_out_strm);
     return sum;
@@ -414,8 +414,8 @@ Value * CarryManager::unitAdvanceCarryInCarryOut(int localIndex, Value * strm) {
     unsigned posn = advance1Position(localIndex);
     if (mITEMS_PER_PACK > 1) {// #ifdef PACKING
         extractAndSaveCarryOutBits(strm, posn, 1);
-        Value* carry_longint = mBuilder->CreateZExt(getCarryInBits(posn, 1), mBuilder->getIntNTy(BLOCK_SIZE));
-        Value* strm_longint = mBuilder->CreateBitCast(strm, mBuilder->getIntNTy(BLOCK_SIZE));
+        Value* carry_longint = mBuilder->CreateZExt(getCarryInBits(posn, 1), mBuilder->getIntNTy(mBITBLOCK_WIDTH));
+        Value* strm_longint = mBuilder->CreateBitCast(strm, mBuilder->getIntNTy(mBITBLOCK_WIDTH));
         Value* adv_longint = mBuilder->CreateOr(mBuilder->CreateShl(strm_longint, 1), carry_longint);
         Value* result_value = mBuilder->CreateBitCast(adv_longint, mBitBlockType);
         return result_value;
@@ -427,13 +427,13 @@ Value * CarryManager::unitAdvanceCarryInCarryOut(int localIndex, Value * strm) {
     }
     Value* result_value;
     
-#if (BLOCK_SIZE == 128) && !defined(USE_LONG_INTEGER_SHIFT)
+#if (mBITBLOCK_WIDTH == 128) && !defined(USE_LONG_INTEGER_SHIFT)
     Value * ahead64 = iBuilder->mvmd_dslli(64, carry_in, strm, 1);
     result_value = mBuilder->CreateOr(iBuilder->simd_srli(64, ahead64, 63), iBuilder->simd_slli(64, strm, 1));
 #else
-    Value* advanceq_longint = mBuilder->CreateBitCast(carry_in, mBuilder->getIntNTy(BLOCK_SIZE));
-    Value* strm_longint = mBuilder->CreateBitCast(strm, mBuilder->getIntNTy(BLOCK_SIZE));
-    Value* adv_longint = mBuilder->CreateOr(mBuilder->CreateShl(strm_longint, 1), mBuilder->CreateLShr(advanceq_longint, BLOCK_SIZE - 1), "advance");
+    Value* advanceq_longint = mBuilder->CreateBitCast(carry_in, mBuilder->getIntNTy(mBITBLOCK_WIDTH));
+    Value* strm_longint = mBuilder->CreateBitCast(strm, mBuilder->getIntNTy(mBITBLOCK_WIDTH));
+    Value* adv_longint = mBuilder->CreateOr(mBuilder->CreateShl(strm_longint, 1), mBuilder->CreateLShr(advanceq_longint, mBITBLOCK_WIDTH - 1), "advance");
     result_value = mBuilder->CreateBitCast(adv_longint, mBitBlockType);
     
 #endif
@@ -445,8 +445,8 @@ Value * CarryManager::shortAdvanceCarryInCarryOut(int localIndex, unsigned shift
     if (mITEMS_PER_PACK > 1) {// #ifdef PACKING
         extractAndSaveCarryOutBits(strm, posn, shift_amount);
         //std::cerr << "shortAdvanceCarryInCarryOut: posn = " << posn << ", shift_amount = " << shift_amount << std::endl;
-        Value* carry_longint = mBuilder->CreateZExt(getCarryInBits(posn, shift_amount), mBuilder->getIntNTy(BLOCK_SIZE));
-        Value* strm_longint = mBuilder->CreateBitCast(strm, mBuilder->getIntNTy(BLOCK_SIZE));
+        Value* carry_longint = mBuilder->CreateZExt(getCarryInBits(posn, shift_amount), mBuilder->getIntNTy(mBITBLOCK_WIDTH));
+        Value* strm_longint = mBuilder->CreateBitCast(strm, mBuilder->getIntNTy(mBITBLOCK_WIDTH));
         Value* adv_longint = mBuilder->CreateOr(mBuilder->CreateShl(strm_longint, shift_amount), carry_longint);
         Value* result_value = mBuilder->CreateBitCast(adv_longint, mBitBlockType);
         return result_value;
@@ -456,9 +456,9 @@ Value * CarryManager::shortAdvanceCarryInCarryOut(int localIndex, unsigned shift
     if (mCarryInfo->getWhileDepth() == 0) {
         storeCarryPack(posn);
     }
-    Value* advanceq_longint = mBuilder->CreateBitCast(carry_in, mBuilder->getIntNTy(BLOCK_SIZE));
-    Value* strm_longint = mBuilder->CreateBitCast(strm, mBuilder->getIntNTy(BLOCK_SIZE));
-    Value* adv_longint = mBuilder->CreateOr(mBuilder->CreateShl(strm_longint, shift_amount), mBuilder->CreateLShr(advanceq_longint, BLOCK_SIZE - shift_amount), "advance");
+    Value* advanceq_longint = mBuilder->CreateBitCast(carry_in, mBuilder->getIntNTy(mBITBLOCK_WIDTH));
+    Value* strm_longint = mBuilder->CreateBitCast(strm, mBuilder->getIntNTy(mBITBLOCK_WIDTH));
+    Value* adv_longint = mBuilder->CreateOr(mBuilder->CreateShl(strm_longint, shift_amount), mBuilder->CreateLShr(advanceq_longint, mBITBLOCK_WIDTH - shift_amount), "advance");
     return mBuilder->CreateBitCast(adv_longint, mBitBlockType);
 }
     
@@ -472,7 +472,7 @@ Value * CarryManager::shortAdvanceCarryInCarryOut(int localIndex, unsigned shift
  }
  
  unsigned longAdvanceEntries(unsigned shift_amount) const {
- return (shift_amount + BLOCK_SIZE - 1)/BLOCK_SIZE;
+ return (shift_amount + mBITBLOCK_WIDTH - 1)/mBITBLOCK_WIDTH;
  }
  
  unsigned longAdvanceBufferSize(unsigned shift_amount)  const {
@@ -484,37 +484,37 @@ Value * CarryManager::shortAdvanceCarryInCarryOut(int localIndex, unsigned shift
 Value * CarryManager::longAdvanceCarryInCarryOut(int localIndex, unsigned shift_amount, Value * carry_out) {
     unsigned carryDataIndex = longAdvanceBitBlockPosition(localIndex);
     Value * advBaseIndex = mBuilder->getInt64(carryDataIndex);
-    if (shift_amount <= BLOCK_SIZE) {
+    if (shift_amount <= mBITBLOCK_WIDTH) {
         // special case using a single buffer entry and the carry_out value.
         Value * advanceDataPtr = mBuilder->CreateGEP(mCarryBitBlockPtr, advBaseIndex);
-        Value * carry_block0 = mBuilder->CreateAlignedLoad(advanceDataPtr, BLOCK_SIZE/8);
-        mBuilder->CreateAlignedStore(carry_out, advanceDataPtr, BLOCK_SIZE/8);
+        Value * carry_block0 = mBuilder->CreateAlignedLoad(advanceDataPtr, mBITBLOCK_WIDTH/8);
+        mBuilder->CreateAlignedStore(carry_out, advanceDataPtr, mBITBLOCK_WIDTH/8);
         /* Very special case - no combine */
-        if (shift_amount == BLOCK_SIZE) return carry_block0;
-        Value* block0_shr = mBuilder->CreateLShr(mBuilder->CreateBitCast(carry_block0, mBuilder->getIntNTy(BLOCK_SIZE)), BLOCK_SIZE - shift_amount);
-        Value* block1_shl = mBuilder->CreateShl(mBuilder->CreateBitCast(carry_out, mBuilder->getIntNTy(BLOCK_SIZE)), shift_amount);
+        if (shift_amount == mBITBLOCK_WIDTH) return carry_block0;
+        Value* block0_shr = mBuilder->CreateLShr(mBuilder->CreateBitCast(carry_block0, mBuilder->getIntNTy(mBITBLOCK_WIDTH)), mBITBLOCK_WIDTH - shift_amount);
+        Value* block1_shl = mBuilder->CreateShl(mBuilder->CreateBitCast(carry_out, mBuilder->getIntNTy(mBITBLOCK_WIDTH)), shift_amount);
         return mBuilder->CreateBitCast(mBuilder->CreateOr(block1_shl, block0_shr), mBitBlockType);
     }
     // We need a buffer of at least two elements for storing the advance data.
-    const unsigned block_shift = shift_amount % BLOCK_SIZE;
+    const unsigned block_shift = shift_amount % mBITBLOCK_WIDTH;
     const unsigned advanceEntries = mCarryInfo->longAdvanceEntries(shift_amount);
     const unsigned bufsize = mCarryInfo->longAdvanceBufferSize(shift_amount);
     Value * indexMask = mBuilder->getInt64(bufsize - 1);  // A mask to implement circular buffer indexing
     Value * loadIndex0 = mBuilder->CreateAdd(mBuilder->CreateAnd(mBuilder->CreateSub(mBlockNo, mBuilder->getInt64(advanceEntries)), indexMask), advBaseIndex);
     Value * storeIndex = mBuilder->CreateAdd(mBuilder->CreateAnd(mBlockNo, indexMask), advBaseIndex);
-    Value * carry_block0 = mBuilder->CreateAlignedLoad(mBuilder->CreateGEP(mCarryBitBlockPtr, loadIndex0), BLOCK_SIZE/8);
-    // If the long advance is an exact multiple of BLOCK_SIZE, we simply return the oldest 
+    Value * carry_block0 = mBuilder->CreateAlignedLoad(mBuilder->CreateGEP(mCarryBitBlockPtr, loadIndex0), mBITBLOCK_WIDTH/8);
+    // If the long advance is an exact multiple of mBITBLOCK_WIDTH, we simply return the oldest 
     // block in the long advance carry data area.  
     if (block_shift == 0) {
-        mBuilder->CreateAlignedStore(carry_out, mBuilder->CreateGEP(mCarryBitBlockPtr, storeIndex), BLOCK_SIZE/8);
+        mBuilder->CreateAlignedStore(carry_out, mBuilder->CreateGEP(mCarryBitBlockPtr, storeIndex), mBITBLOCK_WIDTH/8);
         return carry_block0;
     }
     // Otherwise we need to combine data from the two oldest blocks.
     Value * loadIndex1 = mBuilder->CreateAdd(mBuilder->CreateAnd(mBuilder->CreateSub(mBlockNo, mBuilder->getInt64(advanceEntries-1)), indexMask), advBaseIndex);
-    Value * carry_block1 = mBuilder->CreateAlignedLoad(mBuilder->CreateGEP(mCarryBitBlockPtr, loadIndex1), BLOCK_SIZE/8);
-    Value* block0_shr = mBuilder->CreateLShr(mBuilder->CreateBitCast(carry_block0, mBuilder->getIntNTy(BLOCK_SIZE)), BLOCK_SIZE - block_shift);
-    Value* block1_shl = mBuilder->CreateShl(mBuilder->CreateBitCast(carry_block1, mBuilder->getIntNTy(BLOCK_SIZE)), block_shift);
-    mBuilder->CreateAlignedStore(carry_out, mBuilder->CreateGEP(mCarryBitBlockPtr, storeIndex), BLOCK_SIZE/8);
+    Value * carry_block1 = mBuilder->CreateAlignedLoad(mBuilder->CreateGEP(mCarryBitBlockPtr, loadIndex1), mBITBLOCK_WIDTH/8);
+    Value* block0_shr = mBuilder->CreateLShr(mBuilder->CreateBitCast(carry_block0, mBuilder->getIntNTy(mBITBLOCK_WIDTH)), mBITBLOCK_WIDTH - block_shift);
+    Value* block1_shl = mBuilder->CreateShl(mBuilder->CreateBitCast(carry_block1, mBuilder->getIntNTy(mBITBLOCK_WIDTH)), block_shift);
+    mBuilder->CreateAlignedStore(carry_out, mBuilder->CreateGEP(mCarryBitBlockPtr, storeIndex), mBITBLOCK_WIDTH/8);
     return mBuilder->CreateBitCast(mBuilder->CreateOr(block1_shl, block0_shr), mBitBlockType);
 }
     
@@ -531,7 +531,7 @@ Value * CarryManager::getCarrySummaryExpr() {
     if (mITEMS_PER_PACK > 1) {// #ifdef PACKING
         Value * pack = getCarryPack(summary_index);
         Value * summary_bits = maskSelectBitRange(pack, summaryPosition() % mPACK_SIZE, summaryBits());
-        return mBuilder->CreateBitCast(mBuilder->CreateZExt(summary_bits, mBuilder->getIntNTy(BLOCK_SIZE)), mBitBlockType);
+        return mBuilder->CreateBitCast(mBuilder->CreateZExt(summary_bits, mBuilder->getIntNTy(mBITBLOCK_WIDTH)), mBitBlockType);
     }
     else {
         return getCarryPack(summary_index);
@@ -729,11 +729,11 @@ Value * CarryManager::popCount(Value * to_count, unsigned globalIdx) {
     Value * countPtr = mBuilder->CreateGEP(mPopcountBasePtr, mBuilder->getInt64(globalIdx));
     Value * countSoFar = mBuilder->CreateAlignedLoad(countPtr, 8);
     Value * fieldCounts = iBuilder->simd_popcount(64, to_count);
-    for (int i = 0; i < BLOCK_SIZE/64; i++) {
+    for (int i = 0; i < mBITBLOCK_WIDTH/64; i++) {
         countSoFar = mBuilder->CreateAdd(countSoFar, iBuilder->mvmd_extract(64, fieldCounts, i));
     }
     mBuilder->CreateAlignedStore(countSoFar, countPtr, 8);
-    return mBuilder->CreateBitCast(mBuilder->CreateZExt(countSoFar, mBuilder->getIntNTy(BLOCK_SIZE)), mBitBlockType);
+    return mBuilder->CreateBitCast(mBuilder->CreateZExt(countSoFar, mBuilder->getIntNTy(mBITBLOCK_WIDTH)), mBitBlockType);
 }
 
 CarryManager::~CarryManager() {

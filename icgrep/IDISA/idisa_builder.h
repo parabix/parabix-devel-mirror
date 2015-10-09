@@ -23,7 +23,7 @@ public:
     : mMod(nullptr)
     , mLLVMBuilder(nullptr)
     , mBitBlockType(bitBlockType)
-    , mBitBlockSize(bitBlockType->isIntegerTy() ? cast<IntegerType>(bitBlockType)->getIntegerBitWidth() : cast<VectorType>(bitBlockType)->getBitWidth())
+    , mBitBlockWidth(bitBlockType->isIntegerTy() ? cast<IntegerType>(bitBlockType)->getIntegerBitWidth() : cast<VectorType>(bitBlockType)->getBitWidth())
     , mZeroInitializer(Constant::getNullValue(bitBlockType)) 
     , mOneInitializer(Constant::getAllOnesValue(bitBlockType)) {
 
@@ -35,7 +35,7 @@ public:
     }
     
     Type * getBitBlockType() { return mBitBlockType;}
-    int getBitBlockSize() { return mBitBlockSize;}
+    int getBitBlockWidth() { return mBitBlockWidth;}
     Constant * allZeroes() {return mZeroInitializer;}
     Constant * allOnes() {return mOneInitializer;}
         
@@ -77,7 +77,7 @@ private:
     Module * mMod;
     IRBuilder <> * mLLVMBuilder;
     Type * mBitBlockType;
-    unsigned mBitBlockSize;
+    unsigned mBitBlockWidth;
     Constant * mZeroInitializer;
     Constant * mOneInitializer;
     

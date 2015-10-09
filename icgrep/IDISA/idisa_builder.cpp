@@ -17,7 +17,7 @@ Value * IDISA_Builder::bitBlockCast(Value * a) {
 }
 
 VectorType * IDISA_Builder::fwVectorType(unsigned fw) {
-    int fieldCount = mBitBlockSize/fw;
+    int fieldCount = mBitBlockWidth/fw;
     return VectorType::get(mLLVMBuilder->getIntNTy(fw), fieldCount);
 }
 
@@ -106,7 +106,7 @@ Value * IDISA_Builder::simd_popcount(unsigned fw, Value * a) {
 }
 
 Value * IDISA_Builder::esimd_mergeh(unsigned fw, Value * a, Value * b) {
-    unsigned field_count = mBitBlockSize/fw;
+    unsigned field_count = mBitBlockWidth/fw;
     Value * aVec = fwCast(fw, a);
     Value * bVec = fwCast(fw, b);
     std::vector<Constant*> Idxs;
@@ -118,7 +118,7 @@ Value * IDISA_Builder::esimd_mergeh(unsigned fw, Value * a, Value * b) {
 }
 
 Value * IDISA_Builder::esimd_mergel(unsigned fw, Value * a, Value * b) {
-    unsigned field_count = mBitBlockSize/fw;
+    unsigned field_count = mBitBlockWidth/fw;
     Value * aVec = fwCast(fw, a);
     Value * bVec = fwCast(fw, b);
     std::vector<Constant*> Idxs;
@@ -130,7 +130,7 @@ Value * IDISA_Builder::esimd_mergel(unsigned fw, Value * a, Value * b) {
 }
 
 Value * IDISA_Builder::hsimd_packh(unsigned fw, Value * a, Value * b) {
-    unsigned field_count = 2 * mBitBlockSize/fw;
+    unsigned field_count = 2 * mBitBlockWidth/fw;
     Value * aVec = fwCast(fw/2, a);
     Value * bVec = fwCast(fw/2, b);
     std::vector<Constant*> Idxs;
@@ -141,7 +141,7 @@ Value * IDISA_Builder::hsimd_packh(unsigned fw, Value * a, Value * b) {
 }
 
 Value * IDISA_Builder::hsimd_packl(unsigned fw, Value * a, Value * b) {
-    unsigned field_count = 2 * mBitBlockSize/fw;
+    unsigned field_count = 2 * mBitBlockWidth/fw;
     Value * aVec = fwCast(fw/2, a);
     Value * bVec = fwCast(fw/2, b);
     std::vector<Constant*> Idxs;
@@ -153,7 +153,7 @@ Value * IDISA_Builder::hsimd_packl(unsigned fw, Value * a, Value * b) {
 
 Value * IDISA_Builder::hsimd_signmask(unsigned fw, Value * a) {
     Value * mask = mLLVMBuilder->CreateICmpSLT(fwCast(fw, a), ConstantAggregateZero::get(fwVectorType(fw)));
-    return mLLVMBuilder->CreateBitCast(mask, mLLVMBuilder->getIntNTy(mBitBlockSize/fw));
+    return mLLVMBuilder->CreateBitCast(mask, mLLVMBuilder->getIntNTy(mBitBlockWidth/fw));
 }
 
 Value * IDISA_Builder::mvmd_extract(unsigned fw, Value * a, unsigned fieldIndex) {
@@ -162,7 +162,7 @@ Value * IDISA_Builder::mvmd_extract(unsigned fw, Value * a, unsigned fieldIndex)
 }
 
 Value * IDISA_Builder::mvmd_dslli(unsigned fw, Value * a, Value * b, unsigned shift) {
-    unsigned field_count = mBitBlockSize/fw;
+    unsigned field_count = mBitBlockWidth/fw;
     Value * aVec = fwCast(fw, a);
     Value * bVec = fwCast(fw, b);
     std::vector<Constant*> Idxs;
@@ -173,7 +173,7 @@ Value * IDISA_Builder::mvmd_dslli(unsigned fw, Value * a, Value * b, unsigned sh
 }
 
 Value * IDISA_Builder::bitblock_any(Value * a) {
-    Type * iBitBlock = mLLVMBuilder->getIntNTy(mBitBlockSize);
+    Type * iBitBlock = mLLVMBuilder->getIntNTy(mBitBlockWidth);
     return mLLVMBuilder->CreateICmpNE(mLLVMBuilder->CreateBitCast(a, iBitBlock),  ConstantInt::get(iBitBlock, 0));
 }
 
