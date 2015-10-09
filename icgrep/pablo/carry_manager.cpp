@@ -366,35 +366,30 @@ void CarryManager::setCarryOpCarryOut(unsigned localIndex, Value * carry_out_str
     }
 }
 
-Value* CarryManager::genShiftLeft64(Value* e) {
-    Value* i128_val = mBuilder->CreateBitCast(e, mBuilder->getIntNTy(mBITBLOCK_WIDTH));
-    return mBuilder->CreateBitCast(mBuilder->CreateShl(i128_val, 64), mBitBlockType);
-}
-
 Value * CarryManager::addCarryInCarryOut(int localIndex, Value* e1, Value* e2) {
-#if (mBITBLOCK_WIDTH == 128)
-    Value * carryq_value = getCarryOpCarryIn(localIndex);
-    //calculate carry through logical ops
-    Value* carrygen = mBuilder->CreateAnd(e1, e2, "carrygen");
-    Value* carryprop = mBuilder->CreateOr(e1, e2, "carryprop");
-    Value* digitsum = mBuilder->CreateAdd(e1, e2, "digitsum");
-    Value* partial = mBuilder->CreateAdd(digitsum, carryq_value, "partial");
-    Value* digitcarry = mBuilder->CreateOr(carrygen, mBuilder->CreateAnd(carryprop, mBuilder->CreateNot(partial)));
-    Value* mid_carry_in = genShiftLeft64(mBuilder->CreateLShr(digitcarry, 63));
-    Value* sum = mBuilder->CreateAdd(partial, mBuilder->CreateBitCast(mid_carry_in, mBitBlockType), "sum");
-    Value* carry_out_strm = mBuilder->CreateOr(carrygen, mBuilder->CreateAnd(carryprop, mBuilder->CreateNot(sum)));
-    setCarryOpCarryOut(localIndex, carry_out_strm);
-    return sum;
-#else
-    //mBITBLOCK_WIDTH == 256, there is no other implementation
-    Value * carryq_value = getCarryOpCarryIn(localIndex);
-    Value* carrygen = mBuilder->CreateAnd(e1, e2, "carrygen");
-    Value* carryprop = mBuilder->CreateOr(e1, e2, "carryprop");
-    Value * sum = iBuilder->simd_add(mBITBLOCK_WIDTH, iBuilder->simd_add(mBITBLOCK_WIDTH, e1, e2), carryq_value);
-    Value* carry_out_strm = mBuilder->CreateOr(carrygen, mBuilder->CreateAnd(carryprop, mBuilder->CreateNot(sum)));
-    setCarryOpCarryOut(localIndex, carry_out_strm);
-    return sum;
-#endif         
+    if (mBITBLOCK_WIDTH == 128) {
+        Value * carryq_value = getCarryOpCarryIn(localIndex);
+        //calculate carry through logical ops
+        Value* carrygen = mBuilder->CreateAnd(e1, e2, "carrygen");
+        Value* carryprop = mBuilder->CreateOr(e1, e2, "carryprop");
+        Value* digitsum = iBuilder->simd_add(64, e1, e2);
+        Value* partial = iBuilder->simd_add(64, digitsum, carryq_value);
+        Value* digitcarry = mBuilder->CreateOr(carrygen, mBuilder->CreateAnd(carryprop, mBuilder->CreateNot(partial)));
+        Value* mid_carry_in = iBuilder->simd_slli(128, mBuilder->CreateLShr(digitcarry, 63), 64);
+        Value* sum = iBuilder->simd_add(64, partial, mBuilder->CreateBitCast(mid_carry_in, mBitBlockType));
+        Value* carry_out_strm = mBuilder->CreateOr(carrygen, mBuilder->CreateAnd(carryprop, mBuilder->CreateNot(sum)));
+        setCarryOpCarryOut(localIndex, carry_out_strm);
+        return sum;
+    }
+    else {
+        Value * carryq_value = getCarryOpCarryIn(localIndex);
+        Value* carrygen = mBuilder->CreateAnd(e1, e2, "carrygen");
+        Value* carryprop = mBuilder->CreateOr(e1, e2, "carryprop");
+        Value * sum = iBuilder->simd_add(mBITBLOCK_WIDTH, iBuilder->simd_add(mBITBLOCK_WIDTH, e1, e2), carryq_value);
+        Value* carry_out_strm = mBuilder->CreateOr(carrygen, mBuilder->CreateAnd(carryprop, mBuilder->CreateNot(sum)));
+        setCarryOpCarryOut(localIndex, carry_out_strm);
+        return sum;
+    }
 }
 
 
@@ -427,16 +422,16 @@ Value * CarryManager::unitAdvanceCarryInCarryOut(int localIndex, Value * strm) {
     }
     Value* result_value;
     
-#if (mBITBLOCK_WIDTH == 128) && !defined(USE_LONG_INTEGER_SHIFT)
-    Value * ahead64 = iBuilder->mvmd_dslli(64, carry_in, strm, 1);
-    result_value = mBuilder->CreateOr(iBuilder->simd_srli(64, ahead64, 63), iBuilder->simd_slli(64, strm, 1));
-#else
-    Value* advanceq_longint = mBuilder->CreateBitCast(carry_in, mBuilder->getIntNTy(mBITBLOCK_WIDTH));
-    Value* strm_longint = mBuilder->CreateBitCast(strm, mBuilder->getIntNTy(mBITBLOCK_WIDTH));
-    Value* adv_longint = mBuilder->CreateOr(mBuilder->CreateShl(strm_longint, 1), mBuilder->CreateLShr(advanceq_longint, mBITBLOCK_WIDTH - 1), "advance");
-    result_value = mBuilder->CreateBitCast(adv_longint, mBitBlockType);
-    
-#endif
+    if (mBITBLOCK_WIDTH == 128) {
+        Value * ahead64 = iBuilder->mvmd_dslli(64, carry_in, strm, 1);
+        result_value = mBuilder->CreateOr(iBuilder->simd_srli(64, ahead64, 63), iBuilder->simd_slli(64, strm, 1));
+    }
+    else {
+        Value* advanceq_longint = mBuilder->CreateBitCast(carry_in, mBuilder->getIntNTy(mBITBLOCK_WIDTH));
+        Value* strm_longint = mBuilder->CreateBitCast(strm, mBuilder->getIntNTy(mBITBLOCK_WIDTH));
+        Value* adv_longint = mBuilder->CreateOr(mBuilder->CreateShl(strm_longint, 1), mBuilder->CreateLShr(advanceq_longint, mBITBLOCK_WIDTH - 1), "advance");
+        result_value = mBuilder->CreateBitCast(adv_longint, mBitBlockType);
+    }
     return result_value;
 }
 

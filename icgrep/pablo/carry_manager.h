@@ -163,7 +163,6 @@ private:
     Value * getCarryInBits(unsigned carryBitPos, unsigned bits);
     void extractAndSaveCarryOutBits(Value * strm, unsigned carryBit_lo, unsigned carryBitCount);
     Value * pack2bitblock(Value * pack);
-    Value* genShiftLeft64(Value* e);
 
 
     unsigned absPosition(unsigned frameOffsetinBits, unsigned relPos);
