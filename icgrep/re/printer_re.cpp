@@ -19,6 +19,7 @@
 #include <re/re_diff.h>
 #include <re/re_intersect.h>
 #include <re/re_assertion.h>
+#include <re/re_grapheme_boundary.hpp>
 
 using namespace re;
 
@@ -82,6 +83,23 @@ const std::string Printer_RE::PrintRE(const RE * re)
         retVal += PrintRE(x->getLH());
         retVal += " , ";
         retVal += PrintRE(x->getRH());
+        retVal += ") ";
+    }
+    else if (const GraphemeBoundary * g = dyn_cast<GraphemeBoundary>(re))
+    {
+        retVal = "Grapheme";
+        switch (g->getType()) {
+            case GraphemeBoundary::Type::ClusterBoundary:
+                retVal += "Cluster"; break;
+            case GraphemeBoundary::Type::LineBreakBoundary:
+                retVal += "LineBreak"; break;
+            case GraphemeBoundary::Type::SentenceBoundary:
+                retVal += "Sentence"; break;
+            case GraphemeBoundary::Type::WordBoundary:
+                retVal += "Word"; break;
+        }
+        retVal += "Boundary(";
+        retVal += PrintRE(g->getExpression());
         retVal += ") ";
     }
     else if (isa<const End>(re))

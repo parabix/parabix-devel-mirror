@@ -43,6 +43,22 @@ inline Assertion * makeAssertion(RE * asserted, Assertion::Kind k, Assertion::Se
     return new Assertion(asserted, k, s);
 }
 
+inline RE * makeLookAheadAssertion(RE * r) {
+    return makeAssertion(r, Assertion::Kind::Lookahead, Assertion::Sense::Positive);
+}
+
+inline RE * makeNegativeLookAheadAssertion(RE * r) {
+    return makeAssertion(r, Assertion::Kind::Lookahead, Assertion::Sense::Negative);
+}
+
+inline RE * makeLookBehindAssertion(RE * r) {
+    return makeAssertion(r, Assertion::Kind::Lookbehind, Assertion::Sense::Positive);
+}
+
+inline RE * makeNegativeLookBehindAssertion(RE * r) {
+    return makeAssertion(r, Assertion::Kind::Lookbehind, Assertion::Sense::Negative);
+}
+
 }
 
 #endif // RE_ASSERTION_H

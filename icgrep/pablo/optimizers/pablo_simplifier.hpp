@@ -13,13 +13,11 @@ public:
     static bool optimize(PabloFunction & function);
     static void deadCodeElimination(PabloBlock & block);
 protected:
-    Simplifier();
+    Simplifier() = default;
 private:
     static void eliminateRedundantCode(PabloBlock & block, ExpressionTable * predecessor = nullptr);
-    static void eliminateRedundantComplexStatements(PabloBlock & block);
+    static void eliminateRedundantEquations(PabloBlock & block);
     static bool isSuperfluous(const Assign * const assign);
-private:
-
 };
 
 }

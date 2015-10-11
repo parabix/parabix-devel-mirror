@@ -32,7 +32,7 @@ std::string CC::canonicalName(const CC_type type) const {
         name << "CC";
     }
     char separator = '_';
-    for (const interval_t & i : *this) {
+    for (const interval_t i : *this) {
         name << separator;
         if (lo_codepoint(i) == hi_codepoint(i)) {
             name << lo_codepoint(i);
@@ -47,7 +47,7 @@ std::string CC::canonicalName(const CC_type type) const {
     
 CC * caseInsensitize(const CC * cc) {
     CC * cci = makeCC();
-    for (const interval_t & i : *cc) {
+    for (const interval_t i : *cc) {
         caseInsensitiveInsertRange(cci, lo_codepoint(i), hi_codepoint(i));
     }
     return cci;

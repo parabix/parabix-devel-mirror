@@ -7,9 +7,11 @@
 
 namespace re {
 
-bool isByteLength(RE * re);
+bool isByteLength(const RE *re);
     
-bool isUnicodeUnitLength(RE * re);
+bool isUnicodeUnitLength(const RE * re);
+
+std::pair<int, int> getUnicodeUnitLengthRange(const RE * re);
 
 int minMatchLength(RE * re);
 

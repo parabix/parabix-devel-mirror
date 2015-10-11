@@ -4,9 +4,9 @@
 #include <re/re_end.h>
 #include <re/re_alt.h>
 #include <re/re_rep.h>
-#include <re/re_simplifier.h>
-#include <re/printer_re.h>
-#include <iostream>
+#include <re/re_grapheme_boundary.hpp>
+#include <re/re_name.h>
+
 /*
 
  A regular expression is nullable if it (a) matches the empty
@@ -28,15 +28,13 @@ RE * RE_Nullable::removeNullablePrefix(RE * re) {
             }
         }
         re = makeSeq(list.begin(), list.end());
-    }
-    else if (Alt * alt = dyn_cast<Alt>(re)) {
+    } else if (Alt * alt = dyn_cast<Alt>(re)) {
         std::vector<RE*> list;
         for (auto i = alt->begin(); i != alt->end(); ++i) {
             list.push_back(removeNullablePrefix(*i));
         }
         re = makeAlt(list.begin(), list.end());
-    }
-    else if (Rep * rep = dyn_cast<Rep>(re)) {
+    } else if (Rep * rep = dyn_cast<Rep>(re)) {
         if ((rep->getLB() == 0) || (isNullable(rep->getRE()))) {
             re = makeSeq();
         }
@@ -46,6 +44,12 @@ RE * RE_Nullable::removeNullablePrefix(RE * re) {
         else {
             re = makeRep(rep->getRE(), rep->getLB(), rep->getLB());
         }
+    } else if (Name * name = dyn_cast<Name>(re)) {
+        if (name->getDefinition()) {
+            name->setDefinition(removeNullablePrefix(name->getDefinition()));
+        }
+    } else if (GraphemeBoundary * g = dyn_cast<GraphemeBoundary>(re)) {
+        g->setExpression(removeNullablePrefix(g->getExpression()));
     }
     return re;
 }
@@ -61,15 +65,13 @@ RE * RE_Nullable::removeNullableSuffix(RE * re) {
             }
         }
         re = makeSeq(list.begin(), list.end());
-    }
-    else if (Alt* alt = dyn_cast<Alt>(re)) {
+    } else if (Alt* alt = dyn_cast<Alt>(re)) {
         std::vector<RE*> list;
         for (auto i = alt->begin(); i != alt->end(); ++i) {
             list.push_back(removeNullableSuffix(*i));
         }
         re = makeAlt(list.begin(), list.end());
-    }
-    else if (Rep * rep = dyn_cast<Rep>(re)) {
+    } else if (Rep * rep = dyn_cast<Rep>(re)) {
         if ((rep->getLB() == 0) || (isNullable(rep->getRE()))) {
             re = makeSeq();
         }
@@ -79,6 +81,12 @@ RE * RE_Nullable::removeNullableSuffix(RE * re) {
         else {
             re = makeRep(rep->getRE(), rep->getLB(), rep->getLB());
         }
+    } else if (Name * name = dyn_cast<Name>(re)) {
+        if (name->getDefinition()) {
+            name->setDefinition(removeNullableSuffix(name->getDefinition()));
+        }
+    } else if (GraphemeBoundary * g = dyn_cast<GraphemeBoundary>(re)) {
+        g->setExpression(removeNullableSuffix(g->getExpression()));
     }
     return re;
 }
@@ -91,15 +99,13 @@ bool RE_Nullable::isNullable(const RE * re) {
             }
         }
         return true;
-    }
-    else if (const Alt * re_alt = dyn_cast<const Alt>(re)) {
+    } else if (const Alt * re_alt = dyn_cast<const Alt>(re)) {
         for (const RE * re : *re_alt) {
             if (isNullable(re)) {
                 return true;
             }
         }
-    }
-    else if (const Rep* re_rep = dyn_cast<const Rep>(re)) {
+    } else if (const Rep* re_rep = dyn_cast<const Rep>(re)) {
         return re_rep->getLB() == 0 ? true : isNullable(re_rep->getRE());
     }
     return false;
@@ -109,16 +115,14 @@ bool RE_Nullable::hasNullablePrefix(const RE * re) {
     bool nullable = false;
     if (const Seq * seq = dyn_cast<const Seq>(re)) {
         nullable = isNullable(seq->front()) ? true : hasNullablePrefix(seq->front());
-    }
-    else if (const Alt * alt = dyn_cast<const Alt>(re)) {
+    } else if (const Alt * alt = dyn_cast<const Alt>(re)) {
         for (const RE * re : *alt) {
             if (hasNullablePrefix(re)) {
                 nullable = true;
                 break;
             }
         }
-    }
-    else if (const Rep * rep = dyn_cast<const Rep>(re)) {
+    } else if (const Rep * rep = dyn_cast<const Rep>(re)) {
         nullable = true;
         if (rep->getLB() == rep->getUB()) {
             nullable = hasNullablePrefix(rep->getRE());
@@ -131,16 +135,14 @@ bool RE_Nullable::hasNullableSuffix(const RE * re) {
     bool nullable = false;
     if (const Seq * seq = dyn_cast<const Seq>(re)) {
         nullable = isNullable(seq->back()) ? true : hasNullableSuffix(seq->back());
-    }
-    else if (const Alt * alt = dyn_cast<const Alt>(re)) {
+    } else if (const Alt * alt = dyn_cast<const Alt>(re)) {
         for (const RE * re : *alt) {
             if (hasNullableSuffix(re)) {
                 nullable = true;
                 break;
             }
         }
-    }
-    else if (const Rep * rep = dyn_cast<const Rep>(re)) {
+    } else if (const Rep * rep = dyn_cast<const Rep>(re)) {
         nullable = true;
         if (rep->getLB() == rep->getUB()) {
             nullable = hasNullableSuffix(rep->getRE());

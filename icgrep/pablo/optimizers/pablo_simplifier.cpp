@@ -24,23 +24,60 @@ using SmallSet = std::unordered_set<Type>;
 bool Simplifier::optimize(PabloFunction & function) {
     eliminateRedundantCode(function.getEntryBlock());
     deadCodeElimination(function.getEntryBlock());
-    // eliminateRedundantComplexStatements(function.getEntryBlock());
+    eliminateRedundantEquations(function.getEntryBlock());
     #ifndef NDEBUG
     PabloVerifier::verify(function, "post-simplification");
     #endif
     return true;
 }
 
-inline static bool canTriviallyFold(const Statement * stmt) {
+inline static PabloAST * canTriviallyFold(Statement * stmt, PabloBlock & block) {
     for (unsigned i = 0; i != stmt->getNumOperands(); ++i) {
-        switch (stmt->getOperand(i)->getClassTypeId()) {
-            case PabloAST::ClassTypeId::Zeroes:
-            case PabloAST::ClassTypeId::Ones:
-                return true;
-            default: break;
+        if (LLVM_UNLIKELY(isa<Zeroes>(stmt->getOperand(i)))) {
+            switch (stmt->getClassTypeId()) {
+                case PabloAST::ClassTypeId::And:
+                case PabloAST::ClassTypeId::Advance:
+                    return block.createZeroes();
+                case PabloAST::ClassTypeId::Xor:
+                case PabloAST::ClassTypeId::Or:
+                    return stmt->getOperand(1 - i);
+                case PabloAST::ClassTypeId::Not:
+                    return block.createOnes();
+                case PabloAST::ClassTypeId::Sel:
+                    block.setInsertPoint(stmt->getPrevNode());
+                    switch (i) {
+                        case 0: return stmt->getOperand(2);
+                        case 1: return block.createAnd(block.createNot(stmt->getOperand(0)), stmt->getOperand(2));
+                        case 2: return block.createAnd(stmt->getOperand(0), stmt->getOperand(1));
+                    }
+                case PabloAST::ClassTypeId::ScanThru:
+                case PabloAST::ClassTypeId::MatchStar:
+                    return stmt->getOperand(0);
+                default: break;
+            }
+        } else if (LLVM_UNLIKELY(isa<Ones>(stmt->getOperand(i)))) {
+            block.setInsertPoint(stmt->getPrevNode());
+            switch (stmt->getClassTypeId()) {
+                case PabloAST::ClassTypeId::And:
+                    return stmt->getOperand(1 - i);
+                case PabloAST::ClassTypeId::Or:
+                    return block.createOnes();
+                case PabloAST::ClassTypeId::Xor:
+                    return block.createNot(stmt->getOperand(1 - i));
+                case PabloAST::ClassTypeId::Not:
+                    return block.createZeroes();
+                case PabloAST::ClassTypeId::Sel:
+                    block.setInsertPoint(stmt->getPrevNode());
+                    switch (i) {
+                        case 0: return stmt->getOperand(1);
+                        case 1: return block.createOr(stmt->getOperand(0), stmt->getOperand(2));
+                        case 2: return block.createOr(block.createNot(stmt->getOperand(0)), stmt->getOperand(1));
+                    }
+                default: break;
+            }
         }
     }
-    return false;
+    return nullptr;
 }
 
 inline bool Simplifier::isSuperfluous(const Assign * const assign) {
@@ -113,8 +150,9 @@ inline void removeIdenticalEscapedValues(ValueList & list) {
     for (auto i = list.begin(); i != list.end(); ++i) {
         for (auto j = i + 1; j != list.end(); ) {
             if (LLVM_UNLIKELY(equals(*i, *j))) {
-                (*j)->replaceWith(*i, false, true);
+                Statement * redundantValue = *j;
                 j = list.erase(j);
+                redundantValue->replaceWith(*i, false, true);
                 continue;
             }
             ++j;
@@ -177,7 +215,6 @@ void Simplifier::eliminateRedundantCode(PabloBlock & block, ExpressionTable * pr
             removeIdenticalEscapedValues(ifNode->getDefined());
 
         } else if (While * whileNode = dyn_cast<While>(stmt)) {
-
             const PabloAST * initial = whileNode->getCondition();
             if (LLVM_LIKELY(isa<Next>(initial))) {
                 initial = cast<Next>(initial)->getInitial();
@@ -186,52 +223,10 @@ void Simplifier::eliminateRedundantCode(PabloBlock & block, ExpressionTable * pr
                 stmt = stmt->eraseFromParent(true);
                 continue;
             }
-
             eliminateRedundantCode(whileNode->getBody(), &encountered);
-
             removeIdenticalEscapedValues(whileNode->getVariants());
-
-        } else if (canTriviallyFold(stmt)) { // non-Assign node
-            // Do a trivial folding test to see if we're using all 0s or 1s as an operand.
-            PabloAST * expr = nullptr;
-            block.setInsertPoint(stmt->getPrevNode());
-            switch (stmt->getClassTypeId()) {
-                case PabloAST::ClassTypeId::Advance:
-                    expr = block.createAdvance(stmt->getOperand(0), stmt->getOperand(1));
-                    break;
-                case PabloAST::ClassTypeId::And:
-                    expr = block.createAnd(stmt->getOperand(0), stmt->getOperand(1));
-                    break;
-                case PabloAST::ClassTypeId::Or:
-                    expr = block.createOr(stmt->getOperand(0), stmt->getOperand(1));
-                    break;
-                case PabloAST::ClassTypeId::Not:
-                    expr = block.createNot(stmt->getOperand(0));
-                    break;
-                case PabloAST::ClassTypeId::Xor:
-                    expr = block.createXor(stmt->getOperand(0), stmt->getOperand(1));
-                    break;
-                case PabloAST::ClassTypeId::Sel:
-                    expr = block.createSel(stmt->getOperand(0), stmt->getOperand(1), stmt->getOperand(2));
-                    break;
-                case PabloAST::ClassTypeId::ScanThru:
-                    expr = block.createScanThru(stmt->getOperand(0), stmt->getOperand(1));
-                    break;
-                case PabloAST::ClassTypeId::MatchStar:
-                    expr = block.createMatchStar(stmt->getOperand(0), stmt->getOperand(1));
-                    break;
-                case PabloAST::ClassTypeId::Next:
-                    expr = stmt;
-                    break;
-                default: {
-                    std::string tmp;
-                    llvm::raw_string_ostream msg(tmp);
-                    PabloPrinter::print(stmt, "Unhandled trivial folding optimization! ", msg);
-                    throw std::runtime_error(msg.str());
-                }
-            }
-            stmt = stmt->replaceWith(expr);
-            block.setInsertPoint(block.back());
+        } else if (PabloAST * expr = canTriviallyFold(stmt, block)) {
+            stmt = stmt->replaceWith(expr, true, true);
             continue;
         } else {
             // When we're creating the Pablo program, it's possible to have multiple instances of an "identical"
@@ -239,7 +234,7 @@ void Simplifier::eliminateRedundantCode(PabloBlock & block, ExpressionTable * pr
             // as any having the same type and operands. If so, we can replace its users with the prior statement.
             // and erase this statement from the AST
             const auto f = encountered.findOrAdd(stmt);
-            if (f.second == false) {
+            if (!f.second) {
                 stmt = stmt->replaceWith(f.first, true, true);
                 continue;
             }
@@ -254,11 +249,9 @@ void Simplifier::deadCodeElimination(PabloBlock & block) {
     while (stmt) {
         if (isa<If>(stmt)) {
             deadCodeElimination(cast<If>(stmt)->getBody());
-        }
-        else if (isa<While>(stmt)) {
+        } else if (isa<While>(stmt)) {
             deadCodeElimination(cast<While>(stmt)->getBody());
-        }
-        else if (stmt->getNumUses() == 0){
+        } else if (stmt->getNumUses() == 0){
             stmt = stmt->eraseFromParent(true);
             continue;
         }
@@ -266,100 +259,42 @@ void Simplifier::deadCodeElimination(PabloBlock & block) {
     }
 }
 
-void Simplifier::eliminateRedundantComplexStatements(PabloBlock & block) {
+void Simplifier::eliminateRedundantEquations(PabloBlock & block) {
     Statement * stmt = block.front();
     while (stmt) {
         if (isa<If>(stmt)) {
-            eliminateRedundantComplexStatements(cast<If>(stmt)->getBody());
+            eliminateRedundantEquations(cast<If>(stmt)->getBody());
         }
         else if (isa<While>(stmt)) {
-            eliminateRedundantComplexStatements(cast<While>(stmt)->getBody());
-        }
-        else if (stmt->getNumOperands() == 2){
-            if (isa<Advance>(stmt)) {
-                // If we're advancing an Advance and the internal Advance does not have any other user,
-                // we can merge both Advance instructions.
-                if (LLVM_UNLIKELY(isa<Advance>(stmt->getOperand(0)))) {
-                    Advance * op = cast<Advance>(stmt->getOperand(0));
-                    if (LLVM_UNLIKELY(op->getNumUses() == 1)) {
-                        Advance * adv = cast<Advance>(stmt);
-                        adv->setOperand(0, op->getOperand(0));
-                        adv->setOperand(1, block.getInteger(adv->getAdvanceAmount() + op->getAdvanceAmount()));
-                        assert(op->getNumUses() == 0);
-                        op->eraseFromParent();
-                    }
+            eliminateRedundantEquations(cast<While>(stmt)->getBody());
+        } else if (isa<Advance>(stmt)) {
+            Advance * adv = cast<Advance>(stmt);
+            if (LLVM_UNLIKELY(isa<Advance>(adv->getOperand(0)))) {
+                // Replace an Advance(Advance(x, n), m) with an Advance(x,n + m)
+                Advance * op = cast<Advance>(stmt->getOperand(0));
+                if (LLVM_UNLIKELY(op->getNumUses() == 1)) {
+                    adv->setOperand(0, op->getOperand(0));
+                    adv->setOperand(1, block.getInteger(adv->getAdvanceAmount() + op->getAdvanceAmount()));
+                    op->eraseFromParent(false);
                 }
-            } else if (LLVM_UNLIKELY(isa<Advance>(stmt->getOperand(1)) && isa<Advance>(stmt->getOperand(0)))) {
-                // If an AND, OR or XOR instruction has two Advance instructions as inputs and neither Advance
-                // has another user and both shift their input by the same amount, we can perform the AND, OR
-                // or XOR on the inputs to the Advances and remove one of the Advance statements.
-
-                Advance * const a0 = cast<Advance>(stmt->getOperand(0));
-                Advance * const a1 = cast<Advance>(stmt->getOperand(1));
-                switch (stmt->getClassTypeId()) {
-                    case PabloAST::ClassTypeId::And:
-                    case PabloAST::ClassTypeId::Or:
-                    case PabloAST::ClassTypeId::Xor:
-                        if (LLVM_UNLIKELY(a0->getNumUses() == 1 && a1->getNumUses() == 1 && a0->getOperand(1) == a1->getOperand(1))) {
-                            block.setInsertPoint(stmt);
-                            stmt->setOperand(0, a0->getOperand(0));
-                            stmt->setOperand(1, a1->getOperand(0));
-                            a0->insertAfter(stmt);
-                            a0->setOperand(0, stmt);
-                            stmt->replaceAllUsesWith(a0);
-                            assert(a1->getNumUses() == 0);
-                            a1->eraseFromParent();
-                            stmt = a0;
-                    }
-                    default: break;
+            }
+        } else if (LLVM_UNLIKELY(isa<ScanThru>(stmt))) {
+            ScanThru * scanThru = cast<ScanThru>(stmt);
+            if (LLVM_UNLIKELY(isa<Advance>(scanThru->getOperand(0)))) {
+                // Replace a ScanThru(Advance(x,n),y) with an ScanThru(Advance(x, n - 1), Advance(x, n - 1) | y), where Advance(x, 0) = x
+                Advance * op = cast<Advance>(stmt->getOperand(0));
+                if (LLVM_UNLIKELY(op->getNumUses() == 1)) {
+                    block.setInsertPoint(scanThru);
+                    PabloAST * expr = block.createAdvance(op->getOperand(0), op->getAdvanceAmount() - 1);
+                    scanThru->setOperand(0, expr);
+                    scanThru->setOperand(1, block.createOr(scanThru->getOperand(1), expr));
+                    op->eraseFromParent(false);
                 }
-            } else if (LLVM_UNLIKELY(isa<MatchStar>(stmt->getOperand(1)) && isa<MatchStar>(stmt->getOperand(0))) && isa<Or>(stmt)) {
-
-
-            } /*else if (LLVM_UNLIKELY(isa<Or>(stmt) && isa<And>(stmt->getOperand(0)) && isa<And>(stmt->getOperand(1)))) {
-
-                // If we have an OR(AND(A,B),AND(NOT(A),C)) statement and neither of the inner operands are used elsewhere, we can
-                // promote the Or to a Sel statement.
-
-                And * const a0 = cast<And>(stmt->getOperand(0));
-                And * const a1 = cast<And>(stmt->getOperand(1));
-
-                if (LLVM_UNLIKELY(a0->getNumUses() == 1 && a1->getNumUses() == 1)) {
-
-                    bool neg[4] = { false, false, false, false };
-
-                    for (unsigned i = 0; i != 2; ++i) {
-                        if (isa<Not>(a0->getOperand(i))) {
-                            PabloAST * i0 = cast<Not>(a0->getOperand(i))->getOperand(0);
-                            for (unsigned j = 0; j != 2; ++j) {
-                                if (a0->getOperand(j) == i0) {
-                                    neg[i + j * 2] = true;
-                                }
-                            }
-                        }
-                    }
-
-
-
-
-
-
-
-
-
-                }
-
-            }*/
+            }
         }
         stmt = stmt->getNextNode();
     }
     block.setInsertPoint(block.back());
 }
-
-Simplifier::Simplifier()
-{
-
-}
-
 
 }

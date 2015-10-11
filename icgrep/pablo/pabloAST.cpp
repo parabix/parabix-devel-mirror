@@ -211,21 +211,28 @@ Statement * Statement::eraseFromParent(const bool recursively) {
     for (unsigned i = 0; i != mOperands; ++i) {
         mOperand[i]->removeUser(this);
     }
+    Statement * redundantBranch = nullptr;
     // If this is an If or While statement, we'll have to remove the statements within the
     // body or we'll lose track of them.
     if (LLVM_UNLIKELY(isa<If>(this) || isa<While>(this))) {
         PabloBlock & body = isa<If>(this) ? cast<If>(this)->getBody() : cast<While>(this)->getBody();
         Statement * stmt = body.front();
+        // Note: by erasing the body, any Assign/Next nodes will be replaced with Zero.
         while (stmt) {
             stmt = stmt->eraseFromParent(recursively);
         }
     } else if (LLVM_UNLIKELY(isa<Assign>(this))) {
         for (PabloAST * use : mUsers) {
             if (If * ifNode = dyn_cast<If>(use)) {
-                const auto & defs = ifNode->getDefined();
-                if (LLVM_LIKELY(std::find(defs.begin(), defs.end(), this) != defs.end())) {
+                auto & defs = ifNode->getDefined();
+                auto f = std::find(defs.begin(), defs.end(), this);
+                if (LLVM_LIKELY(f != defs.end())) {
                     this->removeUser(ifNode);
                     ifNode->removeUser(this);
+                    defs.erase(f);
+                    if (LLVM_UNLIKELY(defs.empty())) {
+                        redundantBranch = ifNode;
+                    }
                     break;
                 }
             }
@@ -233,10 +240,15 @@ Statement * Statement::eraseFromParent(const bool recursively) {
     } else if (LLVM_UNLIKELY(isa<Next>(this))) {
         for (PabloAST * use : mUsers) {
             if (While * whileNode = dyn_cast<While>(use)) {
-                const auto & vars = whileNode->getVariants();
-                if (LLVM_LIKELY(std::find(vars.begin(), vars.end(), this) != vars.end())) {
+                auto & vars = whileNode->getVariants();
+                auto f = std::find(vars.begin(), vars.end(), this);
+                if (LLVM_LIKELY(f != vars.end())) {
                     this->removeUser(whileNode);
                     whileNode->removeUser(this);
+                    vars.erase(f);
+                    if (LLVM_UNLIKELY(vars.empty())) {
+                        redundantBranch = whileNode;
+                    }
                     break;
                 }
             }
@@ -248,9 +260,20 @@ Statement * Statement::eraseFromParent(const bool recursively) {
     if (recursively) {
         for (unsigned i = 0; i != mOperands; ++i) {
             PabloAST * const op = mOperand[i];
-            if (op->getNumUses() == 0 && isa<Statement>(op)) {
-                cast<Statement>(op)->eraseFromParent(true);
+            if (LLVM_LIKELY(isa<Statement>(op))) {
+                bool erase = false;
+                if (op->getNumUses() == 0) {
+                    erase = true;
+                } else if ((isa<Assign>(op) || isa<Next>(op)) && op->getNumUses() == 1) {
+                    erase = true;
+                }
+                if (erase) {
+                    cast<Statement>(op)->eraseFromParent(true);
+                }
             }
+        }
+        if (LLVM_UNLIKELY(redundantBranch != nullptr)) {
+            redundantBranch->eraseFromParent(true);
         }
     }
 

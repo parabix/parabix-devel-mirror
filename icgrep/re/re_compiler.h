@@ -62,14 +62,12 @@ public:
 private:
 
     MarkerType compile(RE * re, pablo::PabloBuilder & cg);
-    MarkerType AdvanceMarker(MarkerType m, MarkerPosition newpos, pablo::PabloBuilder & pb);
+    MarkerType AdvanceMarker(const MarkerType m, const MarkerPosition newpos, pablo::PabloBuilder & pb);
     
     void AlignMarkers(MarkerType & m1, MarkerType & m2, pablo::PabloBuilder & pb);
     
-    pablo::PabloAST * getNamedCharacterClassStream(Name * name, pablo::PabloBuilder & pb);
-    pablo::PabloAST * nextUnicodePosition(MarkerType m, pablo::PabloBuilder & pb);
     MarkerType process(RE * re, MarkerType marker, pablo::PabloBuilder & pb);
-    MarkerType process(Name * name, MarkerType marker, pablo::PabloBuilder & pb);
+    MarkerType compileName(Name * name, MarkerType marker, pablo::PabloBuilder & pb);
     MarkerType process(Seq * seq, MarkerType marker, pablo::PabloBuilder & pb);
     MarkerType processSeqTail(Seq::iterator current, Seq::iterator end, int matchLenSoFar, MarkerType marker, pablo::PabloBuilder & pb);
     MarkerType process(Alt * alt, MarkerType marker, pablo::PabloBuilder & pb);
@@ -85,13 +83,18 @@ private:
     MarkerType processBoundedRep(RE * repeated, int ub, MarkerType marker, pablo::PabloBuilder & pb);
     RE * resolveUnicodeProperties(RE * re);
 
+    Name * generateGraphemeClusterBoundaryRule();
+    pablo::PabloAST * compileName(Name * name, pablo::PabloBuilder & pb);
+    MarkerType compileAny(const MarkerType m, pablo::PabloBuilder & pb);
+
 private:
 
     cc::CC_Compiler &                               mCCCompiler;
     pablo::Assign *                                 mLineFeed;
     pablo::PabloAST *                               mCRLF;
     pablo::PabloAST *                               mUnicodeLineBreak;
-    pablo::PabloAST *                               mNonLineBreak;
+    pablo::PabloAST *                               mAny;
+    Name *                                          mGraphemeBoundaryRule;
     pablo::PabloAST *                               mInitial;
     pablo::Assign *                                 mNonFinal;
     pablo::PabloAST *                               mFinal;

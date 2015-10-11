@@ -8,7 +8,6 @@
 #include <re/re_any.h>
 #include <re/re_name.h>
 #include <re/re_diff.h>
-#include <re/re_parser.h>
 #include "UCD/PropertyAliases.h"
 #include "UCD/PropertyObjects.h"
 #include "UCD/PropertyObjectTable.h"

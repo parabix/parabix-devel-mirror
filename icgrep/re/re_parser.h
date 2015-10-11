@@ -16,6 +16,7 @@
 #include <memory>
 #include <map>
 #include <re/re_memoizer.hpp>
+#include <re/parsefailure.h>
 
 namespace re {
 
@@ -42,9 +43,65 @@ public:
 
 private:
 
-    using NameMap = std::map<std::pair<std::string, std::string>, re::RE *>;
+    using NameMap = std::map<std::pair<std::string, std::string>, re::Name *>;
 
     using cursor_t = std::string::const_iterator;
+
+    using char_t = const std::string::value_type;
+
+    struct Cursor {
+
+        inline Cursor & operator++() {
+            if (LLVM_UNLIKELY(mCursor == mEnd)) {
+                throw IncompleteRegularExpression();
+            }
+            ++mCursor;
+            return *this;
+        }
+
+        inline Cursor operator++(int) {
+            if (LLVM_UNLIKELY(mCursor == mEnd)) {
+                throw IncompleteRegularExpression();
+            }
+            Cursor tmp(*this);
+            ++mCursor;
+            return tmp;
+        }
+
+        inline const char_t operator*() const {
+            if (LLVM_UNLIKELY(mCursor == mEnd)) {
+                throw IncompleteRegularExpression();
+            }
+            return *mCursor;
+        }
+
+        inline bool noMore() const {
+            return mCursor == mEnd;
+        }
+
+        inline bool more() const {
+            return mCursor != mEnd;
+        }
+
+        inline cursor_t::difference_type remaining() const {
+            return mEnd - mCursor;
+        }
+
+        inline cursor_t pos() const {
+            return mCursor;
+        }
+
+        Cursor(const std::string & expression) : mCursor(expression.cbegin()), mEnd(expression.cend()) {}
+        Cursor(const Cursor & cursor) : mCursor(cursor.mCursor), mEnd(cursor.mEnd) {}
+        inline Cursor & operator=(const Cursor & cursor) {
+            mCursor = cursor.mCursor;
+            mEnd = cursor.mEnd;
+            return *this;
+        }
+    private:
+        cursor_t    mCursor;
+        cursor_t    mEnd;
+    };
 
     RE_Parser(const std::string & regular_expression);
 
@@ -62,7 +119,9 @@ private:
 
     RE * extend_item(RE * re);
 
-    void parse_range_bound(int & lo_codepoint, int & hi_codepoint);
+    RE * parseGraphemeBoundary(RE * re);
+
+    std::pair<int, int> parse_range_bound();
 
     unsigned parse_int();
 
@@ -79,13 +138,13 @@ private:
     RE * makeComplement(RE * s);
     RE * makeWordBoundary();
     RE * makeWordNonBoundary();
-    RE * makeDigitSet();
-    RE * makeAlphaNumeric();
-    RE * makeWhitespaceSet();
-    RE * makeWordSet();
+    Name * makeDigitSet();
+    Name * makeAlphaNumeric();
+    Name * makeWhitespaceSet();
+    Name * makeWordSet();
 
-    RE * createName(const std::string value);
-    RE * createName(const std::string prop, const std::string value);
+    Name * createName(std::string && value);
+    Name * createName(std::string && prop, std::string && value);
 
     CharsetOperatorKind getCharsetOperator();
 
@@ -99,8 +158,6 @@ private:
 
     codepoint_t parse_octal_codepoint(int mindigits, int maxdigits);
 
-    inline void throw_incomplete_expression_error_if_end_of_stream() const;
-
     // CC insertion dependent on case-insensitive flag.
     Name * createCC(const codepoint_t cp);
     void insert(CC * cc, const codepoint_t cp);
@@ -110,8 +167,7 @@ private:
 
 private:
 
-    cursor_t                    _cursor;
-    const cursor_t              _end;
+    Cursor                      mCursor;
     ModeFlagSet                 fModeFlagSet;
     bool                        fNested;
     NameMap                     mNameMap;

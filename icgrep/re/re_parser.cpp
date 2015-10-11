@@ -14,7 +14,7 @@
 #include <re/re_diff.h>
 #include <re/re_intersect.h>
 #include <re/re_assertion.h>
-#include <re/parsefailure.h>
+#include <re/re_grapheme_boundary.hpp>
 #include <re/printer_re.h>
 #include <UCD/resolve_properties.h>
 #include <UCD/CaseFolding_txt.h>
@@ -40,6 +40,7 @@ namespace re {
 RE * RE_Parser::parse(const std::string & regular_expression, ModeFlagSet initialFlags) {
     RE_Parser parser(regular_expression);
     parser.fModeFlagSet = initialFlags;
+
     parser.fNested = false;
     RE * re = parser.parse_RE();
     if (re == nullptr) {
@@ -49,29 +50,12 @@ RE * RE_Parser::parse(const std::string & regular_expression, ModeFlagSet initia
 }
 
 inline RE_Parser::RE_Parser(const std::string & regular_expression)
-    : _cursor(regular_expression.begin())
-    , _end(regular_expression.end())
+    : mCursor(regular_expression)
     , fModeFlagSet(0)
     , fNested(false)
     {
 
     }
-
-RE * makeLookAheadAssertion(RE * r) {
-    return makeAssertion(r, Assertion::Kind::Lookahead, Assertion::Sense::Positive);
-}
-
-RE * makeNegativeLookAheadAssertion(RE * r) {
-    return makeAssertion(r, Assertion::Kind::Lookahead, Assertion::Sense::Negative);
-}
-
-RE * makeLookBehindAssertion(RE * r) {
-    return makeAssertion(r, Assertion::Kind::Lookbehind, Assertion::Sense::Positive);
-}
-
-RE * makeNegativeLookBehindAssertion(RE * r) {
-    return makeAssertion(r, Assertion::Kind::Lookbehind, Assertion::Sense::Negative);
-}
 
 RE * makeAtomicGroup(RE * r) {
     throw ParseFailure("Atomic grouping not supported.");
@@ -92,10 +76,10 @@ RE * RE_Parser::parse_alt() {
     std::vector<RE *> alt;
     for (;;) {
         alt.push_back(parse_seq());
-        if (_cursor == _end || *_cursor != '|') {
+        if (mCursor.noMore() || *mCursor != '|') {
             break;
         }
-        ++_cursor; // advance past the alternation character '|'
+        ++mCursor; // advance past the alternation character '|'
     }
     if (alt.empty())
     {
@@ -119,16 +103,16 @@ inline RE * RE_Parser::parse_seq() {
 
 RE * RE_Parser::parse_next_item() {
     RE * re = nullptr;
-    if (_cursor != _end) {
-        switch (*_cursor) {
+    if (mCursor.more()) {
+        switch (*mCursor) {
             case '(':
-                ++_cursor;
+                ++mCursor;
                 return parse_group();
             case '^':
-                ++_cursor;
+                ++mCursor;
                 return makeStart();
             case '$':
-                ++_cursor;
+                ++mCursor;
                 return makeEnd();
             case '|': case ')':
                 return nullptr;  // This is ugly.
@@ -148,13 +132,13 @@ RE * RE_Parser::parse_next_item() {
                 }
                 else throw ParseFailure("Use \\} for literal }.");
             case '[':
-                _cursor++;
+                mCursor++;
                 return parse_charset();
             case '.': // the 'any' metacharacter
-                _cursor++;
+                mCursor++;
                 return makeAny();
             case '\\':  // escape processing
-                ++_cursor;
+                ++mCursor;
                 return parse_escaped();
             default:
                 return createCC(parse_utf8_codepoint());
@@ -170,70 +154,63 @@ RE * RE_Parser::parse_group() {
     RE * subexpr;
     RE * group_expr;
     ModeFlagSet savedModeFlags = fModeFlagSet;
-    throw_incomplete_expression_error_if_end_of_stream();
-    if (*_cursor == '?') {
-        ++_cursor;
-        throw_incomplete_expression_error_if_end_of_stream();
-        switch (*_cursor) {
+    if (*mCursor == '?') {
+        switch (*++mCursor) {
             case '#':  // comment
-                ++_cursor;
-                while (_cursor != _end && *_cursor != ')') {
-                    ++_cursor;
+                ++mCursor;
+                while (mCursor.more() && *mCursor != ')') {
+                    ++mCursor;
                 }
-                throw_incomplete_expression_error_if_end_of_stream();
-                ++_cursor;
+                ++mCursor;
                 return parse_next_item();
             case ':':  // Non-capturing paren
-                ++_cursor;
+                ++mCursor;
                 group_expr = parse_alt();
                 break;
             case '=':
-                ++_cursor;
+                ++mCursor;
                 subexpr = parse_alt();
                 group_expr = makeLookAheadAssertion(subexpr);
                 break;
             case '!':
-                ++_cursor;
+                ++mCursor;
                 subexpr = parse_alt();
                 group_expr = makeNegativeLookAheadAssertion(subexpr);
                 break;
             case '>':
-                ++_cursor;
+                ++mCursor;
                 subexpr = parse_alt();
                 group_expr = makeAtomicGroup(subexpr);
                 break;
             case '|':
-                ++_cursor;
+                ++mCursor;
                 subexpr = parse_alt();
                 group_expr = makeBranchResetGroup(subexpr);
                 break;
             case '<':
-                ++_cursor;
-                throw_incomplete_expression_error_if_end_of_stream();
-                if (*_cursor == '=') {
-                    ++_cursor;
+                ++mCursor;
+                if (*mCursor == '=') {
+                    ++mCursor;
                     subexpr = parse_alt();
                     group_expr = makeLookBehindAssertion(subexpr);
                 }
-                else if (*_cursor == '!') {
-                    ++_cursor;
+                else if (*mCursor == '!') {
+                    ++mCursor;
                     subexpr = parse_alt();
                     group_expr = makeNegativeLookBehindAssertion(subexpr);
-                }
-                else {
+                } else {
                     throw ParseFailure("Illegal lookbehind assertion syntax.");
                 }
                 break;
             case '-': case 'd' : case 'i': case 'm': case 's': case 'x': {
                 bool negateMode = false;
                 ModeFlagType modeBit;
-                while (_cursor != _end && *_cursor != ')' && *_cursor != ':') {
-                    if (*_cursor == '-') {
+                while (mCursor.more() && *mCursor != ')' && *mCursor != ':') {
+                    if (*mCursor == '-') {
                         negateMode = true;
-                        _cursor++;
-                        throw_incomplete_expression_error_if_end_of_stream();
+                        ++mCursor;
                     }
-                    switch (*_cursor++) {
+                    switch (*mCursor++) {
                         case 'i': modeBit = CASE_INSENSITIVE_MODE_FLAG; break;
                         //case 'm': modeBit = MULTILINE_MODE_FLAG; break;
                         //case 's': modeBit = DOTALL_MODE_FLAG; break;
@@ -244,17 +221,16 @@ RE * RE_Parser::parse_group() {
                     if (negateMode) {
                         fModeFlagSet &= ~modeBit;
                         negateMode = false;  // for next flag
+                    } else {
+                        fModeFlagSet |= modeBit;
                     }
-                    else fModeFlagSet |= modeBit;
                 }
-                throw_incomplete_expression_error_if_end_of_stream();
-                if (*_cursor == ':') {
-                    ++_cursor;
+                if (*mCursor == ':') {
+                    ++mCursor;
                     group_expr = parse_alt();
-                }
-                else {  // if *_cursor == ')'
-                    ++_cursor;
-            // return immediately without restoring mode flags
+                } else {  // if *_cursor == ')'
+                    ++mCursor;
+                    // return immediately without restoring mode flags
                     return parse_next_item();
                 }
                 break;
@@ -262,124 +238,147 @@ RE * RE_Parser::parse_group() {
             default:
                 throw ParseFailure("Illegal (? syntax.");
         }
-    }
-    else {
-        // Capturing paren group, but ignore capture in icgrep.
+    } else { // Capturing paren group, but ignore capture in icgrep.
         group_expr = parse_alt();
     }
     // Restore mode flags.
     fModeFlagSet = savedModeFlags;
-    if (_cursor == _end || *_cursor++ != ')')
-        throw ParseFailure("Closing paren required.");
+    if (*mCursor != ')') {
+        throw ParseFailure("Closing parenthesis required.");
+    }
+    ++mCursor;
     return group_expr;
 }
 
 RE * RE_Parser::extend_item(RE * re) {
-    int lower_bound, upper_bound;
-    if (_cursor == _end) {
+    if (mCursor.noMore()) {
         return re;
-    }
-    switch (*_cursor) {
-        case '*':
-            lower_bound = 0;
-            upper_bound = Rep::UNBOUNDED_REP;
-            break;
-        case '?':
-            lower_bound = 0;
-            upper_bound = 1;
-            break;
-        case '+':
-            lower_bound = 1;
-            upper_bound = Rep::UNBOUNDED_REP;
-            break;
-        case '{':
-            parse_range_bound(lower_bound, upper_bound);
-            break;
-        default:
-            return re;
-    }
-    if (lower_bound > MAX_REPETITION_LOWER_BOUND || upper_bound > MAX_REPETITION_UPPER_BOUND) {
-        throw ParseFailure("Bounded repetition exceeds icgrep implementation limit");
-    }
-    if ((upper_bound != Rep::UNBOUNDED_REP) && (lower_bound > upper_bound)) {
-        throw ParseFailure("Lower bound cannot exceed upper bound in bounded repetition");
-    }
-    ++_cursor;
-    if (*_cursor == '?') {
-        // Non-greedy qualifier
-        ++_cursor;
-        //return makeNonGreedyRep(re, lower_bound, upper_bound);
-        // Greedy vs. non-greedy makes no difference for icgrep.
-        return makeRep(re, lower_bound, upper_bound);
-    }
-    else if (*_cursor == '+') {
-        // Possessive qualifier
-        ++_cursor;
-        //return makePossessiveRep(re, lower_bound, upper_bound);
-        throw ParseFailure("Possessive repetition is not supported in icgrep 1.0");
-    }
-    else {
-        // Normal repetition operator.
-        return makeRep(re, lower_bound, upper_bound);
+    } else {
+        int lb = 0, ub = 0;
+        switch (*mCursor) {
+            case '*':
+                lb = 0;
+                ub = Rep::UNBOUNDED_REP;
+                break;
+            case '?':
+                lb = 0;
+                ub = 1;
+                break;
+            case '+':
+                lb = 1;
+                ub = Rep::UNBOUNDED_REP;
+                break;
+            case '{':
+                std::tie(lb, ub) = parse_range_bound();
+                break;
+            case '\\':
+                re = parseGraphemeBoundary(re);
+            default:
+                return re;
+        }
+        if (lb > MAX_REPETITION_LOWER_BOUND || ub > MAX_REPETITION_UPPER_BOUND) {
+            throw ParseFailure("Bounded repetition exceeds icgrep implementation limit");
+        }
+        if ((ub != Rep::UNBOUNDED_REP) && (lb > ub)) {
+            throw ParseFailure("Lower bound cannot exceed upper bound in bounded repetition");
+        }
+        ++mCursor;
+        if (mCursor.more()) {
+            if (*mCursor == '?') { // Non-greedy qualifier
+                // Greedy vs. non-greedy makes no difference for icgrep.
+                ++mCursor;
+            } else if (*mCursor == '+') {
+                ++mCursor;
+                throw ParseFailure("Possessive repetition is not supported in icgrep 1.0");
+            }
+        }
+        return makeRep(re, lb, ub);
     }
 }
 
-inline void RE_Parser::parse_range_bound(int & lower_bound, int & upper_bound) {
-    ++_cursor;
-    throw_incomplete_expression_error_if_end_of_stream();
-    if (*_cursor == ',') {
-        ++_cursor;
-        lower_bound = 0;
+RE * RE_Parser::parseGraphemeBoundary(RE * re) {
+    if (mCursor.remaining() > 3) {
+        Cursor cursor(mCursor);
+        bool complement = false;
+        ++cursor;
+        if (*cursor == 'b') {
+            complement = false;
+        } else if (*cursor == 'B') {
+            complement = true;
+        } else {
+            return re;
+        }
+        // since /b and /B also denote word break, which could also be extended with a range,
+        // we'll quietly abort if we cannot find a valid grapheme boundary identifier
+        if (*++cursor == '{') {
+            GraphemeBoundary::Type type = GraphemeBoundary::Type::ClusterBoundary;
+            switch (*++cursor) {
+                case 'g': type = GraphemeBoundary::Type::ClusterBoundary; break;
+                case 'w': type = GraphemeBoundary::Type::WordBoundary; break;
+                case 'l': type = GraphemeBoundary::Type::LineBreakBoundary; break;
+                case 's': type = GraphemeBoundary::Type::SentenceBoundary; break;
+                default: return re;
+            }
+            if (*++cursor == '}') {
+                mCursor = ++cursor;
+                re = makeGraphemeBoundary(re, type);
+            }
+        }
     }
-    else {
+    return re;
+}
+
+inline std::pair<int, int> RE_Parser::parse_range_bound() {
+    int lower_bound = 0, upper_bound = 0;
+    ++mCursor;
+    if (*mCursor == ',') {
+        ++mCursor;
+        lower_bound = 0;
+    } else {
         lower_bound = parse_int();
     }
-    throw_incomplete_expression_error_if_end_of_stream();
-    if (*_cursor == '}') {
+    if (*mCursor == '}') {
         upper_bound = lower_bound;
-    }
-    else if (*_cursor != ',') {
+    } else if (*mCursor != ',') {
         throw BadLowerBound();
-    }
-    else { // [^,}]
-        ++_cursor;
-        throw_incomplete_expression_error_if_end_of_stream();
-        if (*_cursor == '}') {
+    } else { // [^,}]
+        ++mCursor;
+        if (*mCursor == '}') {
             upper_bound = Rep::UNBOUNDED_REP;
         }
         else {
             upper_bound = parse_int();
-            if (*_cursor != '}') {
+            if (*mCursor != '}') {
                 throw BadUpperBound();
             }
         }
     }
+    return std::make_pair(lower_bound, upper_bound);
 }
 
 unsigned RE_Parser::parse_int() {
     unsigned value = 0;
-    for (; _cursor != _end; ++_cursor) {
-        if (!isdigit(*_cursor)) {
+    for (; mCursor.more(); ++mCursor) {
+        if (!isdigit(*mCursor)) {
             break;
         }
         value *= 10;
-        value += static_cast<int>(*_cursor) - 48;
+        value += static_cast<int>(*mCursor) - 48;
     }
     return value;
 }
 
 
 #define bit40(x) (1ULL << ((x) - 0x40))
-const uint64_t setEscapeCharacters = bit40('b') | bit40('p') | bit40('d') | bit40('w') | bit40('s') |
-                                     bit40('B') | bit40('P') | bit40('D') | bit40('W') | bit40('S') | bit40('N');
+const uint64_t setEscapeCharacters = bit40('b') | bit40('p') | bit40('q') | bit40('d') | bit40('w') | bit40('s') |
+                                     bit40('B') | bit40('P') | bit40('Q') | bit40('D') | bit40('W') | bit40('S') | bit40('N') | bit40('X');
 
 inline bool isSetEscapeChar(char c) {
     return c >= 0x40 && c <= 0x7F && ((setEscapeCharacters >> (c - 0x40)) & 1) == 1;
 }
 
 inline RE * RE_Parser::parse_escaped() {
-    throw_incomplete_expression_error_if_end_of_stream();
-    if (isSetEscapeChar(*_cursor))
+    if (isSetEscapeChar(*mCursor))
       return parseEscapedSet();
     else
       return createCC(parse_escaped_codepoint());
@@ -387,50 +386,75 @@ inline RE * RE_Parser::parse_escaped() {
 
 RE * RE_Parser::parseEscapedSet() {
     bool complemented = false;
-    RE * s;
-    switch (*_cursor) {
+    RE * re = nullptr;
+    switch (*mCursor) {
         case 'b':
-            ++_cursor;
+            ++mCursor;
             return makeWordBoundary();
         case 'B':
-            ++_cursor;
+            ++mCursor;
             return makeWordNonBoundary();
         case 'd':
-            ++_cursor;
+            ++mCursor;
             return makeDigitSet();
         case 'D':
-            ++_cursor;
+            ++mCursor;
             return makeComplement(makeDigitSet());
         case 's':
-            ++_cursor;
+            ++mCursor;
             return makeWhitespaceSet();
         case 'S':
-            ++_cursor;
+            ++mCursor;
             return makeComplement(makeWhitespaceSet());
         case 'w':
-            ++_cursor;
+            ++mCursor;
             return makeWordSet();
         case 'W':
-            ++_cursor;
+            ++mCursor;
             return makeComplement(makeWordSet());
+        case 'Q':
+            complemented = true;
+        case 'q':
+            if (*++mCursor != '{') {
+                throw ParseFailure("Malformed grapheme-boundary property expression");
+            }
+            ++mCursor;
+            re = parsePropertyExpression();
+            if (*mCursor != '}') {
+                throw ParseFailure("Malformed grapheme-boundary property expression");
+            }
+            ++mCursor;
+            re = makeGraphemeBoundary(re, GraphemeBoundary::Type::ClusterBoundary);
+            return complemented ? makeComplement(re) : re;
         case 'P':
             complemented = true;
         case 'p':
-            ++_cursor;
-            if (_cursor == _end || *_cursor != '{') throw ParseFailure("Malformed property expression");
-            ++_cursor;
-            s = parsePropertyExpression();
-            if (_cursor == _end || *_cursor != '}') throw ParseFailure("Malformed property expression");
-            ++_cursor;
-            return complemented ? makeComplement(s) : s;
+            if (*++mCursor != '{') {
+                throw ParseFailure("Malformed property expression");
+            }
+            ++mCursor;
+            re = parsePropertyExpression();
+            if (*mCursor != '}') {
+                throw ParseFailure("Malformed property expression");
+            }
+            ++mCursor;
+            return complemented ? makeComplement(re) : re;
+        case 'X':
+            // \X is equivalent to ".+?\b{g}"; proceed the minimal number of characters (but at least one)
+            // to get to the next extended grapheme cluster boundary. Nullable transforms this to ".\b{g}".
+            ++mCursor;
+            return makeGraphemeBoundary(makeAny(), GraphemeBoundary::Type::ClusterBoundary);
         case 'N':
-            ++_cursor;
-            if (_cursor == _end || *_cursor != '{') throw ParseFailure("Malformed \\N expression");
-            ++_cursor;
-            s = parseNamePatternExpression();
-            if (_cursor == _end || *_cursor != '}') throw ParseFailure("Malformed \\N expression");
-            ++_cursor;
-            return s;
+            if (*++mCursor != '{') {
+                throw ParseFailure("Malformed \\N expression");
+            }
+            ++mCursor;
+            re = parseNamePatternExpression();
+            if (*mCursor != '}') {
+                throw ParseFailure("Malformed \\N expression");
+            }
+            ++mCursor;
+            return re;
         default:
             throw ParseFailure("Internal error");
     }
@@ -438,30 +462,28 @@ RE * RE_Parser::parseEscapedSet() {
 
 codepoint_t RE_Parser::parse_utf8_codepoint() {
     // Must cast to unsigned char to avoid sign extension.
-    unsigned char pfx = static_cast<unsigned char>(*_cursor++);
+    unsigned char pfx = static_cast<unsigned char>(*mCursor++);
     codepoint_t cp = pfx;
     if (pfx < 0x80) return cp;
-    unsigned suffix_bytes;
+    unsigned suffix_bytes = 0;
     if (pfx < 0xE0) {
         if (pfx < 0xC2) {  // bare suffix or illegal prefix 0xC0 or 0xC2
             throw InvalidUTF8Encoding();
         }
         suffix_bytes = 1;
         cp &= 0x1F;
-    }
-    else if (pfx < 0xF0) { // [0xE0, 0xEF]
+    } else if (pfx < 0xF0) { // [0xE0, 0xEF]
         cp &= 0x0F;
         suffix_bytes = 2;
-    }
-    else { // [0xF0, 0xFF]
+    } else { // [0xF0, 0xFF]
         cp &= 0x0F;
         suffix_bytes = 3;
     }
     while (suffix_bytes--) {
-        if (_cursor == _end) {
+        if (mCursor.noMore()) {
             throw InvalidUTF8Encoding();
         }
-        unsigned char sfx = static_cast<unsigned char>(*_cursor++);
+        char_t sfx = *mCursor++;
         if ((sfx & 0xC0) != 0x80) {
             throw InvalidUTF8Encoding();
         }
@@ -482,7 +504,7 @@ codepoint_t RE_Parser::parse_utf8_codepoint() {
 
 std::string RE_Parser::canonicalize(const cursor_t begin, const cursor_t end) {
     std::locale loc;
-    std::stringstream s;
+    std::stringstream s;   
     for (auto i = begin; i != end; ++i) {
         switch (*i) {
             case '_': case ' ': case '-':
@@ -495,21 +517,37 @@ std::string RE_Parser::canonicalize(const cursor_t begin, const cursor_t end) {
 }
 
 RE * RE_Parser::parsePropertyExpression() {
-    const cursor_t start = _cursor;
-    while (_cursor != _end && *_cursor != '}' and *_cursor != ':' and *_cursor != '=') {
-        _cursor++;
+    const auto start = mCursor.pos();
+    while (mCursor.more()) {
+        bool done = false;
+        switch (*mCursor) {
+            case '}': case ':': case '=':
+                done = true;
+        }
+        if (done) {
+            break;
+        }
+        ++mCursor;
     }
-    if (_cursor != _end && *_cursor == '=') {
-        const cursor_t prop_end = _cursor;
-        _cursor++;
-        const cursor_t val_start = _cursor;
-        while (_cursor != _end && *_cursor != '}' and *_cursor != ':') {
-            _cursor++;
+    if (*mCursor == '=') {
+        const auto prop_end = mCursor.pos();
+        mCursor++;
+        const auto val_start = mCursor.pos();
+        while (mCursor.more()) {
+            bool done = false;
+            switch (*mCursor) {
+                case '}': case ':':
+                    done = true;
+            }
+            if (done) {
+                break;
+            }
+            ++mCursor;
         }
         // We have a property-name = value expression
-        return createName(canonicalize(start, prop_end), canonicalize(val_start, _cursor));
+        return createName(std::move(canonicalize(start, prop_end)), std::move(canonicalize(val_start, mCursor.pos())));
     }
-    return createName(canonicalize(start, _cursor));
+    return createName(std::move(canonicalize(start, mCursor.pos())));
 }
 
 RE * RE_Parser::parseNamePatternExpression(){
@@ -521,21 +559,16 @@ RE * RE_Parser::parseNamePatternExpression(){
     fNested = true;
 
     RE * nameRE = parse_RE();
-#ifndef NDEBUG
-    std::cerr << "nameRE:" << std::endl << Printer_RE::PrintRE(nameRE) << std::endl;
-#endif
+
     // Reset outer parsing state.
     fModeFlagSet = outerFlags;
     fNested = outerNested;
-
 
     // Embed the nameRE in ";.*$nameRE" to skip the codepoint field of Uname.txt
     RE * embedded = makeSeq({mMemoizer.memoize(makeCC(0x3B)), makeRep(makeAny(), 0, Rep::UNBOUNDED_REP), nameRE});
     Encoding encoding(Encoding::Type::UTF_8, 8);
     embedded = regular_expression_passes(encoding, embedded);
-#ifndef NDEBUG
-    std::cerr << "embedded:" << std::endl << Printer_RE::PrintRE(embedded) << std::endl;
-#endif
+
     pablo::PabloFunction * nameSearchFunction = re2pablo_compiler(encoding, embedded);
     llvm::Function * nameSearchIR = nullptr;
     
@@ -549,11 +582,8 @@ RE * RE_Parser::parseNamePatternExpression(){
         releaseSlabAllocatorMemory();
         throw e;
     }
-#ifndef NDEBUG
-    nameSearchIR->dump();
-#endif
-    llvm::ExecutionEngine * engine = JIT_to_ExecutionEngine(nameSearchIR);
-    
+
+    llvm::ExecutionEngine * engine = JIT_to_ExecutionEngine(nameSearchIR);   
     icgrep_Linking(nameSearchIR->getParent(), engine);
     
     // Ensure everything is ready to go.
@@ -575,44 +605,43 @@ RE * RE_Parser::parseNamePatternExpression(){
 
 
 CharsetOperatorKind RE_Parser::getCharsetOperator() {
-    throw_incomplete_expression_error_if_end_of_stream();
-    switch (*_cursor) {
+    switch (*mCursor) {
         case '&':
-            ++_cursor;
-            if (_cursor != _end && *_cursor == '&') {
-                ++_cursor;
+            ++mCursor;
+            if (mCursor.more() && *mCursor == '&') {
+                ++mCursor;
                 return intersectOp;
             }
-            else if (_cursor != _end && *_cursor == '[') {
+            else if (mCursor.more() && *mCursor == '[') {
                 // Short-hand for intersectOp when a set follows
                 return intersectOp;
             }
             else return ampChar;
         case '-':
-            ++_cursor;
-            if (_cursor != _end && *_cursor == '-') {
-                ++_cursor;
+            ++mCursor;
+            if (mCursor.more() && *mCursor == '-') {
+                ++mCursor;
                 return setDiffOp;
             }
-            else if (_cursor != _end && *_cursor == '[') {
+            else if (mCursor.more() && *mCursor == '[') {
                 return setDiffOp;
             }
-            else if (_cursor != _end && *_cursor == ']') {
+            else if (mCursor.more() && *mCursor == ']') {
                 return hyphenChar;
             }
             else return rangeHyphen;
         case '[':
-            ++_cursor;
-            if (_cursor != _end && *_cursor == ':') {
-                ++_cursor;
+            ++mCursor;
+            if (mCursor.more() && *mCursor == ':') {
+                ++mCursor;
                 return posixPropertyOpener;
             }
             else return setOpener;
         case ']':
-            ++_cursor;
+            ++mCursor;
             return setCloser;
         case '\\':
-            ++_cursor;
+            ++mCursor;
             return backSlash;
         default:
             return emptyOperator;
@@ -638,29 +667,27 @@ RE * RE_Parser::parse_charset() {
 
     // If the first character after the [ is a ^ (caret) then the matching character class is complemented.
     bool negated = false;
-    if (_cursor != _end && *_cursor == '^') {
+    if (*mCursor == '^') {
         negated = true;
-        ++_cursor;
+        ++mCursor;
     }
-    throw_incomplete_expression_error_if_end_of_stream();
     // Legacy rule: an unescaped ] may appear as a literal set character
     // if and only if it appears immediately after the opening [ or [^
-    if ( *_cursor == ']' && LEGACY_UNESCAPED_RBRAK_RBRACE_ALLOWED) {
+    if ( *mCursor == ']' && LEGACY_UNESCAPED_RBRAK_RBRACE_ALLOWED) {
         insert(cc, ']');
         lastItemKind = CodepointItem;
         lastCodepointItem = static_cast<codepoint_t> (']');
-        ++_cursor;
-    }
-    else if ( *_cursor == '-' && LEGACY_UNESCAPED_HYPHEN_ALLOWED) {
-        ++_cursor;
+        ++mCursor;
+    } else if ( *mCursor == '-' && LEGACY_UNESCAPED_HYPHEN_ALLOWED) {
+        ++mCursor;
         insert(cc, '-');
         lastItemKind = CodepointItem;
         lastCodepointItem = static_cast<codepoint_t> ('-');
-        if (*_cursor == '-') {
+        if (*mCursor == '-') {
             throw ParseFailure("Set operator has no left operand.");
         }
     }
-    while (_cursor != _end) {
+    while (mCursor.more()) {
         const CharsetOperatorKind op = getCharsetOperator();
         switch (op) {
             case intersectOp:
@@ -725,8 +752,7 @@ RE * RE_Parser::parse_charset() {
                     if (havePendingOperation) {
                         if (pendingOperationKind == intersectOp) {
                             pendingOperand = makeIntersect(pendingOperand, newOperand);
-                        }
-                        else {
+                        } else {
                             pendingOperand = makeDiff(pendingOperand, newOperand);
                         }
                     }
@@ -742,15 +768,14 @@ RE * RE_Parser::parse_charset() {
                 }
                 else if (op == posixPropertyOpener) {
                     bool negated = false;
-                    if (*_cursor == '^') {
+                    if (*mCursor == '^') {
                         negated = true;
-                        _cursor++;
+                        mCursor++;
                     }
                     RE * posixSet = parsePropertyExpression();
-                    if (negated) posixSet = makeComplement(posixSet);
-                    subexprs.push_back(posixSet);
+                    subexprs.push_back(negated ? makeComplement(posixSet) : posixSet);
                     lastItemKind = BrackettedSetItem;
-                    if (_cursor == _end || *_cursor++ != ':' || _cursor == _end || *_cursor++ != ']')
+                    if (*mCursor++ != ':' || *mCursor++ != ']')
                         throw ParseFailure("Posix set expression improperly terminated.");
                 }
             }
@@ -773,8 +798,7 @@ RE * RE_Parser::parse_charset() {
                 lastCodepointItem = static_cast<codepoint_t> ('&');
                 break;
             case backSlash:
-                throw_incomplete_expression_error_if_end_of_stream();
-                if (isSetEscapeChar(*_cursor)) {
+                if (isSetEscapeChar(*mCursor)) {
                     subexprs.push_back(parseEscapedSet());
                     lastItemKind = SetItem;
                 }
@@ -796,8 +820,8 @@ RE * RE_Parser::parse_charset() {
 
 
 codepoint_t RE_Parser::parse_codepoint() {
-    if (_cursor != _end && *_cursor == '\\') {
-        _cursor++;
+    if (mCursor.more() && *mCursor == '\\') {
+        mCursor++;
         return parse_escaped_codepoint();
     }
     else {
@@ -819,89 +843,83 @@ codepoint_t RE_Parser::parse_codepoint() {
 
 codepoint_t RE_Parser::parse_escaped_codepoint() {
     codepoint_t cp_value;
-    throw_incomplete_expression_error_if_end_of_stream();
-    switch (*_cursor) {
-        case 'a': ++_cursor; return 0x07; // BEL
-        case 'e': ++_cursor; return 0x1B; // ESC
-        case 'f': ++_cursor; return 0x0C; // FF
-        case 'n': ++_cursor; return 0x0A; // LF
-        case 'r': ++_cursor; return 0x0D; // CR
-        case 't': ++_cursor; return 0x09; // HT
-        case 'v': ++_cursor; return 0x0B; // VT
+    switch (*mCursor) {
+        case 'a': ++mCursor; return 0x07; // BEL
+        case 'e': ++mCursor; return 0x1B; // ESC
+        case 'f': ++mCursor; return 0x0C; // FF
+        case 'n': ++mCursor; return 0x0A; // LF
+        case 'r': ++mCursor; return 0x0D; // CR
+        case 't': ++mCursor; return 0x09; // HT
+        case 'v': ++mCursor; return 0x0B; // VT
         case 'c': // Control-escape based on next char
-            ++_cursor;
-            throw_incomplete_expression_error_if_end_of_stream();
+            ++mCursor;
             // \c@, \cA, ... \c_, or \ca, ..., \cz
-            if (((*_cursor >= '@') && (*_cursor <= '_')) || ((*_cursor >= 'a') && (*_cursor <= 'z'))) {
-                cp_value = static_cast<codepoint_t>(*_cursor & 0x1F);
-                _cursor++;
+            if (((*mCursor >= '@') && (*mCursor <= '_')) || ((*mCursor >= 'a') && (*mCursor <= 'z'))) {
+                cp_value = static_cast<codepoint_t>(*mCursor & 0x1F);
+                mCursor++;
                 return cp_value;
             }
-            else if (*_cursor++ == '?') return 0x7F;  // \c? ==> DEL
+            else if (*mCursor++ == '?') return 0x7F;  // \c? ==> DEL
             else throw("Illegal \\c escape sequence");
         case '0': // Octal escape:  0 - 0377
-            ++_cursor;
+            ++mCursor;
             return parse_octal_codepoint(0,3);
         case 'o':
-            ++_cursor;
-            throw_incomplete_expression_error_if_end_of_stream();
-            if (*_cursor == '{') {
-                ++_cursor;
+            ++mCursor;
+            if (*mCursor == '{') {
+                ++mCursor;
                 cp_value = parse_octal_codepoint(1, 7);
-                if (_cursor == _end || *_cursor++ != '}') throw ParseFailure("Malformed octal escape sequence");
+                if (*mCursor++ != '}') throw ParseFailure("Malformed octal escape sequence");
                 return cp_value;
             }
             else {
                 throw ParseFailure("Malformed octal escape sequence");
             }
         case 'x':
-            ++_cursor;
-            throw_incomplete_expression_error_if_end_of_stream();
-            if (*_cursor == '{') {
-              ++_cursor;
+            ++mCursor;
+            if (*mCursor == '{') {
+              ++mCursor;
               cp_value = parse_hex_codepoint(1, 6);
-              if (_cursor == _end || *_cursor++ != '}') throw ParseFailure("Malformed hex escape sequence");
+              if (*mCursor++ != '}') throw ParseFailure("Malformed hex escape sequence");
               return cp_value;
             }
             else {
                 return parse_hex_codepoint(1,2);  // ICU compatibility
             }
         case 'u':
-            ++_cursor;
-            throw_incomplete_expression_error_if_end_of_stream();
-            if (*_cursor == '{') {
-                ++_cursor;
+            ++mCursor;
+            if (*mCursor == '{') {
+                ++mCursor;
                 cp_value = parse_hex_codepoint(1, 6);
-                if (_cursor == _end || *_cursor++ != '}') throw ParseFailure("Malformed hex escape sequence");
+                if (*mCursor++ != '}') throw ParseFailure("Malformed hex escape sequence");
                 return cp_value;
             }
             else {
                 return parse_hex_codepoint(4,4);  // ICU compatibility
             }
         case 'U':
-            ++_cursor;
+            ++mCursor;
             return parse_hex_codepoint(8,8);  // ICU compatibility
         default:
             // Escaped letters should be reserved for special functions.
-            if (((*_cursor >= 'A') && (*_cursor <= 'Z')) || ((*_cursor >= 'a') && (*_cursor <= 'z')))
+            if (((*mCursor >= 'A') && (*mCursor <= 'Z')) || ((*mCursor >= 'a') && (*mCursor <= 'z')))
                 throw ParseFailure("Undefined or unsupported escape sequence");
-            else if ((*_cursor < 0x20) || (*_cursor >= 0x7F))
+            else if ((*mCursor < 0x20) || (*mCursor >= 0x7F))
                 throw ParseFailure("Illegal escape sequence");
-            else return static_cast<codepoint_t>(*_cursor++);
+            else return static_cast<codepoint_t>(*mCursor++);
     }
 }
-
 
 codepoint_t RE_Parser::parse_octal_codepoint(int mindigits, int maxdigits) {
     codepoint_t value = 0;
     int count = 0;
-    while (_cursor != _end && count < maxdigits) {
-        const char t = *_cursor;
+    while (mCursor.more() && count < maxdigits) {
+        const char t = *mCursor;
         if (t < '0' || t > '7') {
             break;
         }
         value = value * 8 | (t - '0');
-        ++_cursor;
+        ++mCursor;
         ++count;
     }
     if (count < mindigits) throw ParseFailure("Octal sequence has too few digits");
@@ -912,25 +930,20 @@ codepoint_t RE_Parser::parse_octal_codepoint(int mindigits, int maxdigits) {
 codepoint_t RE_Parser::parse_hex_codepoint(int mindigits, int maxdigits) {
     codepoint_t value = 0;
     int count = 0;
-    while (_cursor != _end && isxdigit(*_cursor) && count < maxdigits) {
-        const char t = *_cursor;
+    while (mCursor.more() && isxdigit(*mCursor) && count < maxdigits) {
+        const char t = *mCursor;
         if (isdigit(t)) {
             value = (value * 16) | (t - '0');
         }
         else {
             value = (value * 16) | ((t | 32) - 'a') + 10;
         }
-        ++_cursor;
+        ++mCursor;
         ++count;
     }
     if (count < mindigits) throw ParseFailure("Hexadecimal sequence has too few digits");
     if (value > UCD::UNICODE_MAX) throw ParseFailure("Hexadecimal value too large");
     return value;
-}
-
-
-inline void RE_Parser::throw_incomplete_expression_error_if_end_of_stream() const {
-    if (_cursor == _end) throw IncompleteRegularExpression();
 }
 
 inline Name * RE_Parser::createCC(const codepoint_t cp) {
@@ -964,52 +977,52 @@ RE * RE_Parser::makeComplement(RE * s) {
   return makeDiff(makeAny(), s);
 }
 
-RE * RE_Parser::makeWordBoundary () {
-    RE * wordC = makeWordSet();
+RE * RE_Parser::makeWordBoundary() {
+    Name * wordC = makeWordSet();
     return makeAlt({makeSeq({makeNegativeLookBehindAssertion(wordC), makeLookAheadAssertion(wordC)}),
                     makeSeq({makeLookBehindAssertion(wordC), makeNegativeLookAheadAssertion(wordC)})});
 }
 
-RE * RE_Parser::makeWordNonBoundary () {
-    RE * wordC = makeWordSet();
+RE * RE_Parser::makeWordNonBoundary() {
+    Name * wordC = makeWordSet();
     return makeAlt({makeSeq({makeNegativeLookBehindAssertion(wordC), makeNegativeLookAheadAssertion(wordC)}),
                     makeSeq({makeLookBehindAssertion(wordC), makeLookAheadAssertion(wordC)})});
 }
 
-inline RE * RE_Parser::makeDigitSet() {
-    return createName("nd");
+inline Name * RE_Parser::makeDigitSet() {
+    return mMemoizer.memoize(createName("nd"));
 }
 
-inline RE * RE_Parser::makeAlphaNumeric() {
-    return createName("alnum");
+inline Name * RE_Parser::makeAlphaNumeric() {
+    return mMemoizer.memoize(createName("alnum"));
 }
 
-inline RE * RE_Parser::makeWhitespaceSet() {
-    return createName("whitespace");
+inline Name * RE_Parser::makeWhitespaceSet() {
+    return mMemoizer.memoize(createName("whitespace"));
 }
 
-inline RE * RE_Parser::makeWordSet() {
-    return createName("word");
+inline Name * RE_Parser::makeWordSet() {
+    return mMemoizer.memoize(createName("word"));
 }
 
-RE * RE_Parser::createName(const std::string value) {
+Name * RE_Parser::createName(std::string && value) {
     auto key = std::make_pair("", value);
     auto f = mNameMap.find(key);
     if (f != mNameMap.end()) {
         return f->second;
     }
-    RE * const property = mMemoizer.memoize(makeName(value, Name::Type::UnicodeProperty));
+    Name * const property = mMemoizer.memoize(makeName(value, Name::Type::UnicodeProperty));
     mNameMap.insert(std::make_pair(std::move(key), property));
     return property;
 }
 
-RE * RE_Parser::createName(const std::string prop, const std::string value) {
+Name * RE_Parser::createName(std::string && prop, std::string && value) {
     auto key = std::make_pair(prop, value);
     auto f = mNameMap.find(key);
     if (f != mNameMap.end()) {
         return f->second;
     }
-    RE * const property = mMemoizer.memoize(makeName(prop, value, Name::Type::UnicodeProperty));
+    Name * const property = mMemoizer.memoize(makeName(prop, value, Name::Type::UnicodeProperty));
     mNameMap.insert(std::make_pair(std::move(key), property));
     return property;
 }
