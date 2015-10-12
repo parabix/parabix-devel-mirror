@@ -271,8 +271,6 @@ RE * RE_Parser::extend_item(RE * re) {
             case '{':
                 std::tie(lb, ub) = parse_range_bound();
                 break;
-            case '\\':
-                re = parseGraphemeBoundary(re);
             default:
                 return re;
         }
@@ -294,38 +292,6 @@ RE * RE_Parser::extend_item(RE * re) {
         }
         return makeRep(re, lb, ub);
     }
-}
-
-RE * RE_Parser::parseGraphemeBoundary(RE * re) {
-    if (mCursor.remaining() > 3) {
-        Cursor cursor(mCursor);
-        bool complement = false;
-        ++cursor;
-        if (*cursor == 'b') {
-            complement = false;
-        } else if (*cursor == 'B') {
-            complement = true;
-        } else {
-            return re;
-        }
-        // since /b and /B also denote word break, which could also be extended with a range,
-        // we'll quietly abort if we cannot find a valid grapheme boundary identifier
-        if (*++cursor == '{') {
-            GraphemeBoundary::Type type = GraphemeBoundary::Type::ClusterBoundary;
-            switch (*++cursor) {
-                case 'g': type = GraphemeBoundary::Type::ClusterBoundary; break;
-                case 'w': type = GraphemeBoundary::Type::WordBoundary; break;
-                case 'l': type = GraphemeBoundary::Type::LineBreakBoundary; break;
-                case 's': type = GraphemeBoundary::Type::SentenceBoundary; break;
-                default: return re;
-            }
-            if (*++cursor == '}') {
-                mCursor = ++cursor;
-                re = makeGraphemeBoundary(re, type);
-            }
-        }
-    }
-    return re;
 }
 
 inline std::pair<int, int> RE_Parser::parse_range_bound() {
@@ -378,22 +344,45 @@ inline bool isSetEscapeChar(char c) {
 }
 
 inline RE * RE_Parser::parse_escaped() {
-    if (isSetEscapeChar(*mCursor))
-      return parseEscapedSet();
-    else
-      return createCC(parse_escaped_codepoint());
+    if (isSetEscapeChar(*mCursor)) {
+        return parseEscapedSet();
+    }
+    else {
+        return createCC(parse_escaped_codepoint());
+    }
 }
-
+    
+inline RE * makeGraphemeClusterBoundary() {
+    throw ParseFailure("makeGraphemeClusterBoundary() not yet supported.");
+}
+    
+    
 RE * RE_Parser::parseEscapedSet() {
     bool complemented = false;
     RE * re = nullptr;
     switch (*mCursor) {
+        case 'B': complemented = true;
         case 'b':
             ++mCursor;
-            return makeWordBoundary();
-        case 'B':
-            ++mCursor;
-            return makeWordNonBoundary();
+            if (!mCursor.more() || *mCursor != '{') {
+                return complemented ? makeWordNonBoundary() : makeWordBoundary();
+            }
+            else {
+                ++mCursor;
+                switch (*mCursor) {
+                    case 'g': re = makeGraphemeClusterBoundary();
+                    case 'w': throw ParseFailure("\\b{w} not yet supported.");
+                    case 'l': throw ParseFailure("\\b{l} not yet supported.");
+                    case 's': throw ParseFailure("\\b{s} not yet supported.");
+                    default: throw ParseFailure("Unrecognized boundary assertion");
+                }
+                ++mCursor;
+                if (*mCursor != '}') {
+                    throw ParseFailure("Malformed boundary assertion");
+                }
+                ++mCursor;
+                return complemented ? makeComplement(re) : re;
+            }
         case 'd':
             ++mCursor;
             return makeDigitSet();
@@ -419,12 +408,11 @@ RE * RE_Parser::parseEscapedSet() {
                 throw ParseFailure("Malformed grapheme-boundary property expression");
             }
             ++mCursor;
-            re = parsePropertyExpression();
+            throw ParseFailure("Literal grapheme cluster expressions not yet supported.");
             if (*mCursor != '}') {
                 throw ParseFailure("Malformed grapheme-boundary property expression");
             }
             ++mCursor;
-            re = makeGraphemeBoundary(re, GraphemeBoundary::Type::ClusterBoundary);
             return complemented ? makeComplement(re) : re;
         case 'P':
             complemented = true;
@@ -441,9 +429,9 @@ RE * RE_Parser::parseEscapedSet() {
             return complemented ? makeComplement(re) : re;
         case 'X':
             // \X is equivalent to ".+?\b{g}"; proceed the minimal number of characters (but at least one)
-            // to get to the next extended grapheme cluster boundary. Nullable transforms this to ".\b{g}".
+            // to get to the next extended grapheme cluster boundary.
             ++mCursor;
-            return makeGraphemeBoundary(makeAny(), GraphemeBoundary::Type::ClusterBoundary);
+            return makeSeq({makeRep(makeAny(),1,Rep::UNBOUNDED_REP), makeGraphemeClusterBoundary()});
         case 'N':
             if (*++mCursor != '{') {
                 throw ParseFailure("Malformed \\N expression");
@@ -977,6 +965,9 @@ RE * RE_Parser::makeComplement(RE * s) {
   return makeDiff(makeAny(), s);
 }
 
+           
+                       
+                           
 RE * RE_Parser::makeWordBoundary() {
     Name * wordC = makeWordSet();
     return makeAlt({makeSeq({makeNegativeLookBehindAssertion(wordC), makeLookAheadAssertion(wordC)}),
