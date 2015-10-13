@@ -156,7 +156,7 @@ static inline CC * getDefinitionIfCC(RE * re) {
 RE * RE_Compiler::resolveUnicodeProperties(RE * re) {
 
     Memoizer memoizer;
-    Name * gcbRule = nullptr;
+    Name * graphemeClusterRule = nullptr;
 
     std::function<RE*(RE*)> resolve = [&](RE * re) -> RE * {
         if (Name * name = dyn_cast<Name>(re)) {
@@ -240,13 +240,13 @@ RE * RE_Compiler::resolveUnicodeProperties(RE * re) {
                 return resolve(makeName("intersect", intersectCC(lh, rh)));
             }
         } else if (GraphemeBoundary * gb = dyn_cast<GraphemeBoundary>(re)) {
-            if (LLVM_LIKELY(gb->getGraphemeBoundaryRule() == nullptr)) {
+            if (LLVM_LIKELY(gb->getGraphemeExtenderRule() == nullptr)) {
                 switch (gb->getType()) {
                     case GraphemeBoundary::Type::ClusterBoundary:
-                        if (gcbRule == nullptr) {
-                            gcbRule = cast<Name>(resolve(generateGraphemeClusterBoundaryRule()));
+                        if (graphemeClusterRule == nullptr) {
+                            graphemeClusterRule = cast<Name>(resolve(generateGraphemeClusterExtenderRule()));
                         }
-                        gb->setBoundaryRule(gcbRule);
+                        gb->setBoundaryRule(graphemeClusterRule);
                         break;
                     default:
                         throw std::runtime_error("Only grapheme cluster boundary rules are supported in icGrep 1.0");
@@ -289,7 +289,7 @@ RE * RE_Compiler::resolveUnicodeProperties(RE * re) {
             gather(ix->getRH());
         } else if (GraphemeBoundary * gb = dyn_cast<GraphemeBoundary>(re)) {
             gather(gb->getExpression());
-            gather(gb->getGraphemeBoundaryRule());
+            gather(gb->getGraphemeExtenderRule());
         }
     };
 
@@ -307,8 +307,8 @@ RE * RE_Compiler::resolveUnicodeProperties(RE * re) {
     }
 
     // Now precompile any grapheme segmentation rules
-    if (gcbRule) {
-        mCompiledName.insert(std::make_pair(gcbRule, compileName(gcbRule, mPB)));
+    if (graphemeClusterRule) {
+        mCompiledName.insert(std::make_pair(graphemeClusterRule, compileName(graphemeClusterRule, mPB)));
     }
     return re;
 }
@@ -317,7 +317,7 @@ void RE_Compiler::compileUnicodeNames(RE *& re) {
     re = resolveUnicodeProperties(re);
 }
 
-Name * RE_Compiler::generateGraphemeClusterBoundaryRule() {
+Name * RE_Compiler::generateGraphemeClusterExtenderRule() {
     // 3.1.1 Grapheme Cluster Boundary Rules
     #define Behind(x) makeLookBehindAssertion(x)
     #define Ahead(x) makeLookAheadAssertion(x)
@@ -638,8 +638,8 @@ MarkerType RE_Compiler::processUnboundedRep(RE * repeated, MarkerType marker, Pa
         PabloAST * cc = markerVar(compile(repeated, pb));
         PabloAST * mstar = nullptr;
         PabloAST * nonFinal = mNonFinal;
-        if (mGraphemeBoundaryRule) {
-            nonFinal = pb.createOr(nonFinal, pb.createNot(mGraphemeBoundaryRule));
+        if (mGraphemeExtenderRule) {
+            nonFinal = pb.createOr(nonFinal, mGraphemeExtenderRule);
         }
         cc = pb.createOr(cc, nonFinal);
         if (SetMod64Approximation) {
@@ -648,8 +648,8 @@ MarkerType RE_Compiler::processUnboundedRep(RE * repeated, MarkerType marker, Pa
             mstar = pb.createMatchStar(base, cc);
         }
         PabloAST * final = mFinal;
-        if (mGraphemeBoundaryRule) {
-            final = pb.createOr(final, mGraphemeBoundaryRule);
+        if (mGraphemeExtenderRule) {
+            final = pb.createOr(final, pb.createNot(mGraphemeExtenderRule));
         }
         return makeMarker(MarkerPosition::FinalPostPositionByte, pb.createAnd(mstar, final, "unbounded"));
     } else if (mStarDepth > 0){
@@ -713,15 +713,15 @@ inline MarkerType RE_Compiler::compileEnd(const MarkerType marker, pablo::PabloB
 }
 
 inline MarkerType RE_Compiler::compileGraphemeBoundary(GraphemeBoundary * gb, const MarkerType marker, pablo::PabloBuilder & pb) {
-    const auto inGraphemeBoundaryRule = mGraphemeBoundaryRule;
-    auto f = mCompiledName.find(gb->getGraphemeBoundaryRule());
+    const auto inGraphemeBoundaryRule = mGraphemeExtenderRule;
+    auto f = mCompiledName.find(gb->getGraphemeExtenderRule());
     if (LLVM_UNLIKELY(f == mCompiledName.end())) {
         throw std::runtime_error("Internal error: failed to locate grapheme boundary rule!");
     }
-    mGraphemeBoundaryRule = markerVar(f->second);
-    assert (mGraphemeBoundaryRule);
+    mGraphemeExtenderRule = markerVar(f->second);
+    assert (mGraphemeExtenderRule);
     MarkerType result = process(gb->getExpression(), marker, pb);
-    mGraphemeBoundaryRule = inGraphemeBoundaryRule;
+    mGraphemeExtenderRule = inGraphemeBoundaryRule;
     return result;
 }
 
@@ -736,8 +736,8 @@ inline MarkerType RE_Compiler::AdvanceMarker(const MarkerType m, const MarkerPos
     if (newpos == MarkerPosition::FinalPostPositionByte) {
         // Must advance through nonfinal bytes
         PabloAST * nonFinal = mNonFinal;
-        if (mGraphemeBoundaryRule) {
-            nonFinal = pb.createOr(nonFinal, mGraphemeBoundaryRule, "gext");
+        if (mGraphemeExtenderRule) {
+            nonFinal = pb.createOr(nonFinal, mGraphemeExtenderRule, "gext");
         }
         a = pb.createScanThru(pb.createAnd(mInitial, a), nonFinal, "fpp");
     }
@@ -758,7 +758,7 @@ RE_Compiler::RE_Compiler(pablo::PabloFunction & function, cc::CC_Compiler & ccCo
 , mCRLF(nullptr)
 , mUnicodeLineBreak(nullptr)
 , mAny(nullptr)
-, mGraphemeBoundaryRule(nullptr)
+, mGraphemeExtenderRule(nullptr)
 , mInitial(nullptr)
 , mNonFinal(nullptr)
 , mFinal(nullptr)

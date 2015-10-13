@@ -83,7 +83,7 @@ private:
     MarkerType processBoundedRep(RE * repeated, int ub, MarkerType marker, pablo::PabloBuilder & pb);
     RE * resolveUnicodeProperties(RE * re);
 
-    Name * generateGraphemeClusterBoundaryRule();
+    Name * generateGraphemeClusterExtenderRule();
     MarkerType compileName(Name * name, pablo::PabloBuilder & pb);
     MarkerType compileAny(const MarkerType m, pablo::PabloBuilder & pb);
     MarkerType compileStart(const MarkerType marker, pablo::PabloBuilder & pb);
@@ -97,7 +97,7 @@ private:
     pablo::PabloAST *                               mCRLF;
     pablo::PabloAST *                               mUnicodeLineBreak;
     pablo::PabloAST *                               mAny;
-    pablo::PabloAST *                               mGraphemeBoundaryRule;
+    pablo::PabloAST *                               mGraphemeExtenderRule;
     pablo::PabloAST *                               mInitial;
     pablo::Assign *                                 mNonFinal;    
     pablo::PabloAST *                               mFinal;

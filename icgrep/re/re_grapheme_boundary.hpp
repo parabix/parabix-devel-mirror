@@ -23,7 +23,7 @@ public:
 
     inline RE * getExpression() const {return mExpression;}
     inline void setExpression(RE * const r) {mExpression = r; }
-    inline Name * getGraphemeBoundaryRule() const {return mBoundaryRule;}
+    inline Name * getGraphemeExtenderRule() const {return mBoundaryRule;}
     inline void setBoundaryRule(Name * const r) {mBoundaryRule = r; }
     inline Type getType() const {return mType;}
 
