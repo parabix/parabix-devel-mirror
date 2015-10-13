@@ -459,6 +459,7 @@ abcdefghijklmno</datafile>
 <grepcase regexp="in" datafile="simple1" grepcount="2"/>
 <grepcase regexp="[A-Z]" datafile="simple1" grepcount="1"/>
 <grepcase regexp="fodder|simple" datafile="simple1" grepcount="2"/>
+<grepcase regexp="(?g)fodder|simple" datafile="simple1" grepcount="2"/>
 
 <grepcase regexp="[cde]{3}" datafile="bounded_charclass" grepcount="3"/>
 <grepcase regexp="[f-h]{5}" datafile="bounded_charclass" grepcount="3"/>
@@ -491,7 +492,8 @@ abcdefghijklmno</datafile>
 <grepcase regexp="Na?t" datafile="RangeAltSeqMatchStarKplusWhileNotOptAny" grepcount="2"/>
 <grepcase regexp="h.t" datafile="RangeAltSeqMatchStarKplusWhileNotOptAny" grepcount="3" />
 <grepcase regexp="do*?c|ez*?t" datafile="RangeAltSeqMatchStarKplusWhileNotOptAny" grepcount="4"/>
-<grepcase regexp="^.....\b" datafile="RangeAltSeqMatchStarKplusWhileNotOptAny" grepcount="6"/>>
+<grepcase regexp="^.....\b" datafile="RangeAltSeqMatchStarKplusWhileNotOptAny" grepcount="6"/>
+<grepcase regexp="^\X\X\X\X\X\b" datafile="RangeAltSeqMatchStarKplusWhileNotOptAny" grepcount="6"/>
 
 <grepcase regexp="[]]" datafile="special_characters" grepcount="9"/>
 <grepcase regexp="[-]" datafile="special_characters" grepcount="8"/>
@@ -504,6 +506,7 @@ abcdefghijklmno</datafile>
 <grepcase regexp="[.]" datafile="special_characters" grepcount="7"/>
 
 <grepcase regexp="^((([2][5][0-5]|([2][0-4]|[1][0-9]|[0-9])?[0-9])[.]){3})([2][5][0-5]|([2][0-4]|[1][0-9]|[0-9])?[0-9])$" datafile="ips" grepcount="60"/>
+<grepcase regexp="^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.([a-zA-Z]{2}|com|org|net|edu|gov|mil|biz|info|mobi|name|aero|asia|jobs|museum)$" datafile="emails" grepcount="116"/>
 <grepcase regexp="^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.([a-zA-Z]{2}|com|org|net|edu|gov|mil|biz|info|mobi|name|aero|asia|jobs|museum)$" datafile="emails" grepcount="116"/>
 <grepcase regexp="^[-+]?([1-9]0?)+\.?((0*[1-9])+|0)([eE][-+]?([0-9]+)+)?$" datafile="floats" grepcount="26"/>
 
@@ -523,32 +526,36 @@ abcdefghijklmno</datafile>
 <grepcase regexp="\p{Ll}" datafile="LU_test" grepcount="1"/>
 
 
- <datafile id="codepoints">
- A line with 0x89 &#x89;
- A line with 0x1234 &#x1234;
- A line with 0x1245 &#x1245;
- 你
- 好
- A plain line.
+<datafile id="codepoints">
+A line with 0x89 &#x89;
+A line with 0x1234 &#x1234;
+A line with 0x1245 &#x1245;
+你
+好
+ক
+কী
+A plain line.
 </datafile>
- <grepcase regexp="[\u{1234}-\u{1245}]" datafile="codepoints" grepcount="2"/>
- <grepcase regexp="[\u{086}-\u{9A}]" datafile="codepoints" grepcount="1"/>
- <grepcase regexp="[你好]" datafile="codepoints" grepcount="2"/>
- <grepcase regexp="\u{4F60}" datafile="codepoints" grepcount="1"/>
+<grepcase regexp="[\u{1234}-\u{1245}]" datafile="codepoints" grepcount="2"/>
+<grepcase regexp="[\u{086}-\u{9A}]" datafile="codepoints" grepcount="1"/>
+<grepcase regexp="[你好]" datafile="codepoints" grepcount="2"/>
+<grepcase regexp="^\u{4F60}$" datafile="codepoints" grepcount="1"/>
+<grepcase regexp="(?g)^\u{4F60}$" datafile="codepoints" grepcount="1"/> 
+ <grepcase regexp="^ক$" datafile="codepoints" grepcount="1"/> 
+ <grepcase regexp="(?g)^ক$" datafile="codepoints" grepcount="2"/> 
  
  
  
- 
- <datafile id = "LineBreaking">CRLF1&#13;&#10;CRLF2&#13;&#10;CRLF3&#13;&#10;
+<datafile id = "LineBreaking">CRLF1&#13;&#10;CRLF2&#13;&#10;CRLF3&#13;&#10;
 LS1&#x2028;LS2&#x2028;LS3&#x2028;PS1&#x2029;PS2&#x2029;PS3&#x2029;
 PS4&#x2029;CRLF4&#13;&#10;LS4&#x2028;LS5&#x2028;CRLF5&#13;&#10;LS6&#x2028;
 Unterminated</datafile>
 
- <grepcase regexp="^.*$" datafile="LineBreaking" grepcount="19"/>
- <grepcase regexp="Unterminated$" datafile="LineBreaking" grepcount="1"/>
- <grepcase regexp="^CRLF.$" datafile="LineBreaking" grepcount="5"/>
- <grepcase regexp="LS[0-9]*" datafile="LineBreaking" grepcount="6"/>
- <grepcase regexp="PS" datafile="LineBreaking" grepcount="4"/>
+<grepcase regexp="^.*$" datafile="LineBreaking" grepcount="19"/>
+<grepcase regexp="Unterminated$" datafile="LineBreaking" grepcount="1"/>
+<grepcase regexp="^CRLF.$" datafile="LineBreaking" grepcount="5"/>
+<grepcase regexp="LS[0-9]*" datafile="LineBreaking" grepcount="6"/>
+<grepcase regexp="PS" datafile="LineBreaking" grepcount="4"/>
  
 <grepcase regexp="[a-z]{20}" datafile="4KiB-onepage" grepcount="77"/>
 <grepcase regexp="[a-z]{15}" datafile="4KiB-onepage" grepcount="78"/>
