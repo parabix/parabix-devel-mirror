@@ -23,12 +23,15 @@ namespace re {
 enum CharsetOperatorKind
     {intersectOp, setDiffOp, ampChar, hyphenChar, rangeHyphen, posixPropertyOpener, setOpener, setCloser, backSlash, emptyOperator};
 
-enum ModeFlagType
-    {CASE_INSENSITIVE_MODE_FLAG = 1,
-     MULTILINE_MODE_FLAG = 2,      // not currently implemented
-     DOTALL_MODE_FLAG = 4,         // not currently implemented
-     IGNORE_SPACE_MODE_FLAG = 8,   // not currently implemented
-     UNIX_LINES_MODE_FLAG = 16};   // not currently implemented
+enum ModeFlagType : unsigned {
+    NONE = 0,
+    CASE_INSENSITIVE_MODE_FLAG = 1,
+    MULTILINE_MODE_FLAG = 2,      // not currently implemented
+    DOTALL_MODE_FLAG = 4,         // not currently implemented
+    IGNORE_SPACE_MODE_FLAG = 8,   // not currently implemented
+    UNIX_LINES_MODE_FLAG = 16,    // not currently implemented
+    GRAPHEME_CLUSTER_MODE = 32
+};
 
 const int MAX_REPETITION_LOWER_BOUND = 1024;
 const int MAX_REPETITION_UPPER_BOUND = 2048;
@@ -70,7 +73,7 @@ private:
 
         inline const char_t operator*() const {
             if (LLVM_UNLIKELY(mCursor == mEnd)) {
-                throw IncompleteRegularExpression();
+                return 0;
             }
             return *mCursor;
         }

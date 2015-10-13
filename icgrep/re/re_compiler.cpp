@@ -32,6 +32,7 @@
 #include <pablo/printer_pablos.h>
 #include "llvm/Support/CommandLine.h"
 #include <sstream>
+#include <unordered_set>
 
 static cl::OptionCategory fREcompilationOptions("Regex Compilation Options", "These options control the compilation of regular expressions to Pablo.");
 
@@ -257,10 +258,11 @@ RE * RE_Compiler::resolveUnicodeProperties(RE * re) {
     };
 
     UCD::UCDCompiler::NameMap nameMap;
+    std::unordered_set<Name *> visited;
 
     std::function<void(RE*)> gather = [&](RE * re) {
         if (Name * name = dyn_cast<Name>(re)) {
-            if (name->getCompiled() == nullptr) {
+            if (visited.insert(name).second) {
                 if (isa<CC>(name->getDefinition())) {
                     nameMap.emplace(name, nullptr);
                 } else {
@@ -299,14 +301,14 @@ RE * RE_Compiler::resolveUnicodeProperties(RE * re) {
         ucdCompiler.generateWithDefaultIfHierarchy(nameMap, mPB);
         for (auto t : nameMap) {
             if (t.second) {
-                t.first->setCompiled(mPB.createAnd(t.second, mAny));
+                mCompiledName.insert(std::make_pair(t.first, makeMarker(MarkerPosition::FinalMatchByte, mPB.createAnd(t.second, mAny))));
             }
         }
     }
 
     // Now precompile any grapheme segmentation rules
     if (gcbRule) {
-        compileName(gcbRule, mPB);
+        mCompiledName.insert(std::make_pair(gcbRule, compileName(gcbRule, mPB)));
     }
     return re;
 }
@@ -364,44 +366,27 @@ MarkerType RE_Compiler::process(RE * re, MarkerType marker, PabloBuilder & pb) {
     if (Name * name = dyn_cast<Name>(re)) {
         return compileName(name, marker, pb);
     } else if (Seq* seq = dyn_cast<Seq>(re)) {
-        return process(seq, marker, pb);
+        return compileSeq(seq, marker, pb);
     } else if (Alt * alt = dyn_cast<Alt>(re)) {
-        return process(alt, marker, pb);
+        return compileAlt(alt, marker, pb);
     } else if (Rep * rep = dyn_cast<Rep>(re)) {
-        return process(rep, marker, pb);
+        return compileRep(rep, marker, pb);
     } else if (Assertion * a = dyn_cast<Assertion>(re)) {
-        return process(a, marker, pb);
+        return compileAssertion(a, marker, pb);
     } else if (isa<Any>(re)) {
         return compileAny(marker, pb);
     } else if (Diff * diff = dyn_cast<Diff>(re)) {
-        return process(diff, marker, pb);
+        return compileDiff(diff, marker, pb);
     } else if (Intersect * ix = dyn_cast<Intersect>(re)) {
-        return process(ix, marker, pb);
+        return compileIntersect(ix, marker, pb);
     } else if (isa<Start>(re)) {
-        MarkerType m = AdvanceMarker(marker, MarkerPosition::InitialPostPositionByte, pb);
-        if (UNICODE_LINE_BREAK) {
-            PabloAST * line_end = mPB.createOr(mUnicodeLineBreak, mCRLF);
-            PabloAST * sol = pb.createNot(pb.createOr(pb.createAdvance(pb.createNot(line_end), 1), mCRLF));
-            return makeMarker(MarkerPosition::InitialPostPositionByte, pb.createAnd(markerVar(m), sol, "sol"));
-        } else {
-            PabloAST * sol = pb.createNot(pb.createAdvance(pb.createNot(mLineFeed), 1));
-            return makeMarker(MarkerPosition::FinalPostPositionByte, pb.createAnd(markerVar(m), sol, "sol"));
-        }
+        return compileStart(marker, pb);
     } else if (isa<End>(re)) {
-        if (UNICODE_LINE_BREAK) {
-            PabloAST * nextPos = markerVar(AdvanceMarker(marker, MarkerPosition::FinalPostPositionByte, pb));
-            return makeMarker(MarkerPosition::FinalPostPositionByte, pb.createAnd(nextPos, mUnicodeLineBreak, "end"));
-        }
-        PabloAST * nextPos = markerVar(AdvanceMarker(marker, MarkerPosition::InitialPostPositionByte, pb));  // For LF match
-        return makeMarker(MarkerPosition::FinalPostPositionByte, pb.createAnd(nextPos, mLineFeed, "eol"));
+        return compileEnd(marker, pb);
     } else if (GraphemeBoundary * gb = dyn_cast<GraphemeBoundary>(re)) {
-        const auto inGraphemeBoundaryRule = mGraphemeBoundaryRule;
-        mGraphemeBoundaryRule = gb->getGraphemeBoundaryRule();
-        assert (mGraphemeBoundaryRule);
-        marker = process(gb->getExpression(), marker, pb);
-        mGraphemeBoundaryRule = inGraphemeBoundaryRule;
+        return compileGraphemeBoundary(gb, marker, pb);
     }
-    return marker;
+    throw std::runtime_error("RE Compiler failed to process " + Printer_RE::PrintRE(re));
 }
 
 inline MarkerType RE_Compiler::compileAny(const MarkerType m, PabloBuilder & pb) {
@@ -410,16 +395,11 @@ inline MarkerType RE_Compiler::compileAny(const MarkerType m, PabloBuilder & pb)
     if (UNICODE_LINE_BREAK) {
         lb = pb.createOr(mUnicodeLineBreak, mCRLF);
     }
-    PabloAST * dot = pb.createAnd(nextFinalByte, pb.createNot(lb), "dot");
-    MarkerPosition pos = MarkerPosition::FinalMatchByte;
-    if (mGraphemeBoundaryRule) {
-        dot = pb.createScanThru(dot, pb.createOr(dot, mGraphemeBoundaryRule->getCompiled()), "dot_gext");
-        pos = MarkerPosition::InitialPostPositionByte;
-    }
-    return makeMarker(pos, dot);
+    return makeMarker(MarkerPosition::FinalMatchByte, pb.createAnd(nextFinalByte, pb.createNot(lb), "dot"));
 }
 
 inline MarkerType RE_Compiler::compileName(Name * name, MarkerType marker, PabloBuilder & pb) {
+    MarkerType nameMarker = compileName(name, pb);
     MarkerType nextPos;
     if (markerPos(marker) == MarkerPosition::FinalPostPositionByte) {
         nextPos = marker;
@@ -428,30 +408,23 @@ inline MarkerType RE_Compiler::compileName(Name * name, MarkerType marker, Pablo
     } else {
         nextPos = AdvanceMarker(marker, MarkerPosition::FinalPostPositionByte, pb);
     }
-    PabloAST * namePos = pb.createAnd(markerVar(nextPos), compileName(name, pb), name->getName());
-    MarkerPosition pos = MarkerPosition::FinalMatchByte;
-    if (mGraphemeBoundaryRule) {
-        namePos = pb.createScanThru(namePos, pb.createOr(namePos, pb.createOr(mNonFinal, mGraphemeBoundaryRule->getCompiled())), name->getName() + "_gext");
-        pos = MarkerPosition::FinalPostPositionByte;
-    }
-    return makeMarker(pos, namePos);
+    nameMarker.stream = pb.createAnd(markerVar(nextPos), markerVar(nameMarker), name->getName());
+    return nameMarker;
 }
 
-inline PabloAST * RE_Compiler::compileName(Name * name, PabloBuilder & pb) {
-    PabloAST * var = name->getCompiled();
-    if (LLVM_LIKELY(var != nullptr)) {
-        return var;
+inline MarkerType RE_Compiler::compileName(Name * name, PabloBuilder & pb) {
+    auto f = mCompiledName.find(name);
+    if (LLVM_LIKELY(f != mCompiledName.end())) {
+        return f->second;
     } else if (LLVM_LIKELY(name->getDefinition() != nullptr)) {
         MarkerType m = compile(name->getDefinition(), pb);
-        assert(markerPos(m) == MarkerPosition::FinalMatchByte);
-        var = pb.createAnd(markerVar(m), mAny);
-        name->setCompiled(var);
-        return var;
+        mCompiledName.insert(std::make_pair(name, m));
+        return m;
     }
     throw std::runtime_error("Unresolved name " + name->getName());
 }
 
-MarkerType RE_Compiler::process(Seq * seq, MarkerType marker, PabloBuilder & pb) {
+MarkerType RE_Compiler::compileSeq(Seq * seq, MarkerType marker, PabloBuilder & pb) {
     // if-hierarchies are not inserted within unbounded repetitions
     if (mStarDepth > 0) {
         for (RE * re : *seq) {
@@ -459,27 +432,27 @@ MarkerType RE_Compiler::process(Seq * seq, MarkerType marker, PabloBuilder & pb)
         }
         return marker;
     } else {
-        return processSeqTail(seq->begin(), seq->end(), 0, marker, pb);
+        return compileSeqTail(seq->begin(), seq->end(), 0, marker, pb);
     }
 }
 
-MarkerType RE_Compiler::processSeqTail(Seq::iterator current, Seq::iterator end, int matchLenSoFar, MarkerType marker, PabloBuilder & pb) {
+MarkerType RE_Compiler::compileSeqTail(Seq::iterator current, Seq::iterator end, int matchLenSoFar, MarkerType marker, PabloBuilder & pb) {
     if (current == end) return marker;
     if (matchLenSoFar < IfInsertionGap) {
         RE * r = *current;
         marker = process(r, marker, pb);
         current++;
-        return processSeqTail(current, end, matchLenSoFar + minMatchLength(r), marker, pb);
+        return compileSeqTail(current, end, matchLenSoFar + minMatchLength(r), marker, pb);
     } else {
         PabloBuilder nested = PabloBuilder::Create(pb);
-        MarkerType m1 = processSeqTail(current, end, 0, marker, nested);
+        MarkerType m1 = compileSeqTail(current, end, 0, marker, nested);
         Assign * m1a = nested.createAssign("m", markerVar(m1));
         pb.createIf(markerVar(marker), {m1a}, nested);
         return makeMarker(m1.pos, m1a);
     }
 }
 
-MarkerType RE_Compiler::process(Alt * alt, MarkerType marker, PabloBuilder & pb) {
+MarkerType RE_Compiler::compileAlt(Alt * alt, MarkerType marker, PabloBuilder & pb) {
     std::vector<PabloAST *>  accum = {pb.createZeroes(), pb.createZeroes(), pb.createZeroes()};
     MarkerType const base = marker;
     // The following may be useful to force a common Advance rather than separate
@@ -501,7 +474,7 @@ MarkerType RE_Compiler::process(Alt * alt, MarkerType marker, PabloBuilder & pb)
     return makeMarker(MarkerPosition::FinalPostPositionByte, combine);
 }
 
-MarkerType RE_Compiler::process(Assertion * a, MarkerType marker, PabloBuilder & pb) {
+MarkerType RE_Compiler::compileAssertion(Assertion * a, MarkerType marker, PabloBuilder & pb) {
     RE * asserted = a->getAsserted();
     if (a->getKind() == Assertion::Kind::Lookbehind) {
         MarkerType m = marker;
@@ -514,13 +487,14 @@ MarkerType RE_Compiler::process(Assertion * a, MarkerType marker, PabloBuilder &
         return makeMarker(markerPos(m), pb.createAnd(markerVar(marker), lb, "lookback"));
     } else if (isUnicodeUnitLength(asserted)) {
         MarkerType lookahead = compile(asserted, pb);
-        assert(markerPos(lookahead) == MarkerPosition::FinalMatchByte);
-        PabloAST * la = markerVar(lookahead);
-        if (a->getSense() == Assertion::Sense::Negative) {
-            la = pb.createNot(la);
+        if (LLVM_LIKELY(markerPos(lookahead) == MarkerPosition::FinalMatchByte)) {
+            PabloAST * la = markerVar(lookahead);
+            if (a->getSense() == Assertion::Sense::Negative) {
+                la = pb.createNot(la);
+            }
+            MarkerType fbyte = AdvanceMarker(marker, MarkerPosition::FinalPostPositionByte, pb);
+            return makeMarker(MarkerPosition::FinalPostPositionByte, pb.createAnd(markerVar(fbyte), la, "lookahead"));
         }
-        MarkerType fbyte = AdvanceMarker(marker, MarkerPosition::FinalPostPositionByte, pb);
-        return makeMarker(MarkerPosition::FinalPostPositionByte, pb.createAnd(markerVar(fbyte), la, "lookahead"));
     }
     throw std::runtime_error("Unsupported lookahead assertion.");
 }
@@ -531,7 +505,7 @@ inline bool alignedUnicodeLength(const RE * lh, const RE * rh) {
     return (lhl.first == lhl.second && lhl.first == rhl.first && lhl.second == rhl.second);
 }
 
-MarkerType RE_Compiler::process(Diff * diff, MarkerType marker, PabloBuilder & pb) {
+MarkerType RE_Compiler::compileDiff(Diff * diff, MarkerType marker, PabloBuilder & pb) {
     RE * lh = diff->getLH();
     RE * rh = diff->getRH();
     if (alignedUnicodeLength(lh, rh)) {
@@ -543,7 +517,7 @@ MarkerType RE_Compiler::process(Diff * diff, MarkerType marker, PabloBuilder & p
     throw std::runtime_error("Unsupported Diff operands: " + Printer_RE::PrintRE(diff));
 }
 
-MarkerType RE_Compiler::process(Intersect * x, MarkerType marker, PabloBuilder & pb) {
+MarkerType RE_Compiler::compileIntersect(Intersect * x, MarkerType marker, PabloBuilder & pb) {
     RE * lh = x->getLH();
     RE * rh = x->getRH();
     if (alignedUnicodeLength(lh, rh)) {
@@ -555,21 +529,18 @@ MarkerType RE_Compiler::process(Intersect * x, MarkerType marker, PabloBuilder &
     throw std::runtime_error("Unsupported Intersect operands: " + Printer_RE::PrintRE(x));
 }
 
-MarkerType RE_Compiler::process(Rep * rep, MarkerType marker, PabloBuilder & pb) {
+MarkerType RE_Compiler::compileRep(Rep * rep, MarkerType marker, PabloBuilder & pb) {
     int lb = rep->getLB();
     int ub = rep->getUB();
     if (lb > 0) {
         marker = processLowerBound(rep->getRE(), lb, marker, pb);
     }
     if (ub == Rep::UNBOUNDED_REP) {
-        return processUnboundedRep(rep->getRE(), marker, pb);
+        marker = processUnboundedRep(rep->getRE(), marker, pb);
+    } else if (lb < ub) {
+        marker = processBoundedRep(rep->getRE(), ub - lb, marker, pb);
     }
-    else if (ub == lb) { // if (rep->getUB() != Rep::UNBOUNDED_REP)
-        return marker;
-    }
-    else { // if (rep->getUB() != Rep::UNBOUNDED_REP)
-        return processBoundedRep(rep->getRE(), ub - lb, marker, pb);
-    }
+    return marker;
 }
 
 /*
@@ -578,19 +549,19 @@ MarkerType RE_Compiler::process(Rep * rep, MarkerType marker, PabloBuilder & pb)
    occurrences of such items.
 */
 
-inline PabloAST * RE_Compiler::consecutive1(PabloAST * repeated, int repeated_lgth, int repeat_count, PabloBuilder & pb) {
-        int i = repeated_lgth;
-        int total_lgth = repeat_count * repeated_lgth;
+inline PabloAST * RE_Compiler::consecutive_matches(PabloAST * repeated, int length, int repeat_count, PabloBuilder & pb) {
+        int i = length;
+        int total = repeat_count * length;
         PabloAST * consecutive_i = repeated;
-        while (i * 2 <= total_lgth) {
+        while (i * 2 < total) {
             PabloAST * v = consecutive_i;
             PabloAST * v2 =  pb.createAdvance(v, i);
             i *= 2;
-            consecutive_i = pb.createAnd(v, v2, "at" + std::to_string(i) + "inarow");
+            consecutive_i = pb.createAnd(v, v2, "at" + std::to_string(i) + "of" + std::to_string(total));
         }        
-        if (i < total_lgth) {
+        if (i < total) {
             PabloAST * v = consecutive_i;
-            consecutive_i = pb.createAnd(v, pb.createAdvance(v, total_lgth - i), "at" + std::to_string(total_lgth) + "inarow");
+            consecutive_i = pb.createAnd(v, pb.createAdvance(v, total - i), "at" + std::to_string(total));
         }
         return consecutive_i;
 }
@@ -618,7 +589,7 @@ inline PabloAST * RE_Compiler::reachable(PabloAST *repeated, int repeated_lgth, 
 MarkerType RE_Compiler::processLowerBound(RE * repeated, int lb, MarkerType marker, PabloBuilder & pb) {
     if (isByteLength(repeated) && !DisableLog2BoundedRepetition) {
         PabloAST * cc = markerVar(compile(repeated, pb));
-        PabloAST * cc_lb = consecutive1(cc, 1, lb, pb);
+        PabloAST * cc_lb = consecutive_matches(cc, 1, lb, pb);
         PabloAST * marker_fwd = pb.createAdvance(markerVar(marker), markerPos(marker) == MarkerPosition::FinalMatchByte ? lb : lb - 1);
         return makeMarker(MarkerPosition::FinalMatchByte, pb.createAnd(marker_fwd, cc_lb, "lowerbound"));
     }
@@ -652,8 +623,7 @@ MarkerType RE_Compiler::processBoundedRep(RE * repeated, int ub, MarkerType mark
 
 MarkerType RE_Compiler::processUnboundedRep(RE * repeated, MarkerType marker, PabloBuilder & pb) {
     // always use PostPosition markers for unbounded repetition.
-    PabloAST * base = markerVar(AdvanceMarker(marker, MarkerPosition::InitialPostPositionByte, pb));
-    
+    PabloAST * base = markerVar(AdvanceMarker(marker, MarkerPosition::InitialPostPositionByte, pb));    
     if (isByteLength(repeated)  && !DisableMatchStar) {
         PabloAST * cc = markerVar(compile(repeated, pb));
         PabloAST * mstar = nullptr;
@@ -669,7 +639,7 @@ MarkerType RE_Compiler::processUnboundedRep(RE * repeated, MarkerType marker, Pa
         PabloAST * mstar = nullptr;
         PabloAST * nonFinal = mNonFinal;
         if (mGraphemeBoundaryRule) {
-            nonFinal = pb.createOr(nonFinal, pb.createNot(mGraphemeBoundaryRule->getCompiled()));
+            nonFinal = pb.createOr(nonFinal, pb.createNot(mGraphemeBoundaryRule));
         }
         cc = pb.createOr(cc, nonFinal);
         if (SetMod64Approximation) {
@@ -679,16 +649,13 @@ MarkerType RE_Compiler::processUnboundedRep(RE * repeated, MarkerType marker, Pa
         }
         PabloAST * final = mFinal;
         if (mGraphemeBoundaryRule) {
-            final = pb.createOr(final, mGraphemeBoundaryRule->getCompiled());
+            final = pb.createOr(final, mGraphemeBoundaryRule);
         }
         return makeMarker(MarkerPosition::FinalPostPositionByte, pb.createAnd(mstar, final, "unbounded"));
     } else if (mStarDepth > 0){
-
-        PabloBuilder * outerb = pb.getParent();
-        
+        PabloBuilder * outerb = pb.getParent();       
         Assign * starPending = outerb->createAssign("pending", outerb->createZeroes());
-        Assign * starAccum = outerb->createAssign("accum", outerb->createZeroes());
-        
+        Assign * starAccum = outerb->createAssign("accum", outerb->createZeroes());       
         mStarDepth++;
         PabloAST * m1 = pb.createOr(base, starPending);
         PabloAST * m2 = pb.createOr(base, starAccum);
@@ -698,8 +665,7 @@ MarkerType RE_Compiler::processUnboundedRep(RE * repeated, MarkerType marker, Pa
         mWhileTest = pb.createOr(mWhileTest, nextPending);
         mLoopVariants.push_back(nextPending);
         mLoopVariants.push_back(nextStarAccum);
-        mStarDepth--;
-        
+        mStarDepth--;        
         return makeMarker(MarkerPosition::InitialPostPositionByte, pb.createAssign("unbounded", pb.createOr(base, nextStarAccum)));
     } else {
         Assign * whileTest = pb.createAssign("test", base);
@@ -724,17 +690,56 @@ MarkerType RE_Compiler::processUnboundedRep(RE * repeated, MarkerType marker, Pa
     }    
 }
 
+inline MarkerType RE_Compiler::compileStart(const MarkerType marker, pablo::PabloBuilder & pb) {
+    MarkerType m = AdvanceMarker(marker, MarkerPosition::InitialPostPositionByte, pb);
+    if (UNICODE_LINE_BREAK) {
+        PabloAST * line_end = mPB.createOr(mUnicodeLineBreak, mCRLF);
+        PabloAST * sol = pb.createNot(pb.createOr(pb.createAdvance(pb.createNot(line_end), 1), mCRLF));
+        return makeMarker(MarkerPosition::InitialPostPositionByte, pb.createAnd(markerVar(m), sol, "sol"));
+    } else {
+        PabloAST * sol = pb.createNot(pb.createAdvance(pb.createNot(mLineFeed), 1));
+        return makeMarker(MarkerPosition::FinalPostPositionByte, pb.createAnd(markerVar(m), sol, "sol"));
+    }
+}
+
+inline MarkerType RE_Compiler::compileEnd(const MarkerType marker, pablo::PabloBuilder & pb) {
+    if (UNICODE_LINE_BREAK) {
+        PabloAST * nextPos = markerVar(AdvanceMarker(marker, MarkerPosition::FinalPostPositionByte, pb));
+        return makeMarker(MarkerPosition::FinalPostPositionByte, pb.createAnd(nextPos, mUnicodeLineBreak, "end"));
+    } else {
+        PabloAST * nextPos = markerVar(AdvanceMarker(marker, MarkerPosition::InitialPostPositionByte, pb));  // For LF match
+        return makeMarker(MarkerPosition::FinalPostPositionByte, pb.createAnd(nextPos, mLineFeed, "eol"));
+    }
+}
+
+inline MarkerType RE_Compiler::compileGraphemeBoundary(GraphemeBoundary * gb, const MarkerType marker, pablo::PabloBuilder & pb) {
+    const auto inGraphemeBoundaryRule = mGraphemeBoundaryRule;
+    auto f = mCompiledName.find(gb->getGraphemeBoundaryRule());
+    if (LLVM_UNLIKELY(f == mCompiledName.end())) {
+        throw std::runtime_error("Internal error: failed to locate grapheme boundary rule!");
+    }
+    mGraphemeBoundaryRule = markerVar(f->second);
+    assert (mGraphemeBoundaryRule);
+    MarkerType result = process(gb->getExpression(), marker, pb);
+    mGraphemeBoundaryRule = inGraphemeBoundaryRule;
+    return result;
+}
+
 inline MarkerType RE_Compiler::AdvanceMarker(const MarkerType m, const MarkerPosition newpos, PabloBuilder & pb) {
     if (m.pos == newpos) return m;
     PabloAST * a = m.stream;
     if (m.pos == MarkerPosition::FinalMatchByte) {
         // Must advance the previous marker to the InitialPostPositionByte
-        a = pb.createAdvance(a, 1, "initial");
+        a = pb.createAdvance(a, 1, "ipp");
     }
     // Now at InitialPostPositionByte; is a further advance needed?
     if (newpos == MarkerPosition::FinalPostPositionByte) {
         // Must advance through nonfinal bytes
-        a = pb.createScanThru(pb.createAnd(mInitial, a), mNonFinal, "final");
+        PabloAST * nonFinal = mNonFinal;
+        if (mGraphemeBoundaryRule) {
+            nonFinal = pb.createOr(nonFinal, mGraphemeBoundaryRule, "gext");
+        }
+        a = pb.createScanThru(pb.createAnd(mInitial, a), nonFinal, "fpp");
     }
     return {newpos, a};
 }

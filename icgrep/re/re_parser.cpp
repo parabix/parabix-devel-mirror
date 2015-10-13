@@ -40,11 +40,13 @@ namespace re {
 RE * RE_Parser::parse(const std::string & regular_expression, ModeFlagSet initialFlags) {
     RE_Parser parser(regular_expression);
     parser.fModeFlagSet = initialFlags;
-
     parser.fNested = false;
     RE * re = parser.parse_RE();
     if (re == nullptr) {
         throw ParseFailure("An unexpected parsing error occurred!");
+    }
+    if (parser.fModeFlagSet & ModeFlagType::GRAPHEME_CLUSTER_MODE) {
+        re = makeGraphemeBoundary(re, GraphemeBoundary::Type::ClusterBoundary);
     }
     return re;
 }
@@ -202,16 +204,17 @@ RE * RE_Parser::parse_group() {
                     throw ParseFailure("Illegal lookbehind assertion syntax.");
                 }
                 break;
-            case '-': case 'd' : case 'i': case 'm': case 's': case 'x': {
+            case '-': case 'd' : case 'i': case 'm': case 's': case 'x': case 'g': {
                 bool negateMode = false;
                 ModeFlagType modeBit;
-                while (mCursor.more() && *mCursor != ')' && *mCursor != ':') {
+                while (*mCursor != ')' && *mCursor != ':') {
                     if (*mCursor == '-') {
                         negateMode = true;
                         ++mCursor;
                     }
                     switch (*mCursor++) {
                         case 'i': modeBit = CASE_INSENSITIVE_MODE_FLAG; break;
+                        case 'g': modeBit = GRAPHEME_CLUSTER_MODE; break;
                         //case 'm': modeBit = MULTILINE_MODE_FLAG; break;
                         //case 's': modeBit = DOTALL_MODE_FLAG; break;
                         //case 'x': modeBit = IGNORE_SPACE_MODE_FLAG; break;
@@ -281,14 +284,12 @@ RE * RE_Parser::extend_item(RE * re) {
             throw ParseFailure("Lower bound cannot exceed upper bound in bounded repetition");
         }
         ++mCursor;
-        if (mCursor.more()) {
-            if (*mCursor == '?') { // Non-greedy qualifier
-                // Greedy vs. non-greedy makes no difference for icgrep.
-                ++mCursor;
-            } else if (*mCursor == '+') {
-                ++mCursor;
-                throw ParseFailure("Possessive repetition is not supported in icgrep 1.0");
-            }
+        if (*mCursor == '?') { // Non-greedy qualifier
+            // Greedy vs. non-greedy makes no difference for icgrep.
+            ++mCursor;
+        } else if (*mCursor == '+') {
+            ++mCursor;
+            throw ParseFailure("Possessive repetition is not supported in icgrep 1.0");
         }
         return makeRep(re, lb, ub);
     }
@@ -296,10 +297,8 @@ RE * RE_Parser::extend_item(RE * re) {
 
 inline std::pair<int, int> RE_Parser::parse_range_bound() {
     int lower_bound = 0, upper_bound = 0;
-    ++mCursor;
-    if (*mCursor == ',') {
+    if (*++mCursor == ',') {
         ++mCursor;
-        lower_bound = 0;
     } else {
         lower_bound = parse_int();
     }
@@ -307,16 +306,12 @@ inline std::pair<int, int> RE_Parser::parse_range_bound() {
         upper_bound = lower_bound;
     } else if (*mCursor != ',') {
         throw BadLowerBound();
-    } else { // [^,}]
-        ++mCursor;
-        if (*mCursor == '}') {
-            upper_bound = Rep::UNBOUNDED_REP;
-        }
-        else {
-            upper_bound = parse_int();
-            if (*mCursor != '}') {
-                throw BadUpperBound();
-            }
+    } else if (*++mCursor == '}') {
+        upper_bound = Rep::UNBOUNDED_REP;
+    } else {
+        upper_bound = parse_int();
+        if (*mCursor != '}') {
+            throw BadUpperBound();
         }
     }
     return std::make_pair(lower_bound, upper_bound);
@@ -324,12 +319,9 @@ inline std::pair<int, int> RE_Parser::parse_range_bound() {
 
 unsigned RE_Parser::parse_int() {
     unsigned value = 0;
-    for (; mCursor.more(); ++mCursor) {
-        if (!isdigit(*mCursor)) {
-            break;
-        }
+    while (isdigit(*mCursor)) {
         value *= 10;
-        value += static_cast<int>(*mCursor) - 48;
+        value += static_cast<int>(*mCursor++) - 48;
     }
     return value;
 }
@@ -363,21 +355,17 @@ RE * RE_Parser::parseEscapedSet() {
     switch (*mCursor) {
         case 'B': complemented = true;
         case 'b':
-            ++mCursor;
-            if (!mCursor.more() || *mCursor != '{') {
+            if (*++mCursor != '{') {
                 return complemented ? makeWordNonBoundary() : makeWordBoundary();
-            }
-            else {
-                ++mCursor;
-                switch (*mCursor) {
+            } else {
+                switch (*++mCursor) {
                     case 'g': re = makeGraphemeClusterBoundary();
                     case 'w': throw ParseFailure("\\b{w} not yet supported.");
                     case 'l': throw ParseFailure("\\b{l} not yet supported.");
                     case 's': throw ParseFailure("\\b{s} not yet supported.");
                     default: throw ParseFailure("Unrecognized boundary assertion");
                 }
-                ++mCursor;
-                if (*mCursor != '}') {
+                if (*++mCursor != '}') {
                     throw ParseFailure("Malformed boundary assertion");
                 }
                 ++mCursor;
@@ -431,7 +419,7 @@ RE * RE_Parser::parseEscapedSet() {
             // \X is equivalent to ".+?\b{g}"; proceed the minimal number of characters (but at least one)
             // to get to the next extended grapheme cluster boundary.
             ++mCursor;
-            return makeSeq({makeRep(makeAny(),1,Rep::UNBOUNDED_REP), makeGraphemeClusterBoundary()});
+            return makeGraphemeBoundary(makeAny(), GraphemeBoundary::Type::ClusterBoundary);
         case 'N':
             if (*++mCursor != '{') {
                 throw ParseFailure("Malformed \\N expression");
@@ -596,35 +584,32 @@ CharsetOperatorKind RE_Parser::getCharsetOperator() {
     switch (*mCursor) {
         case '&':
             ++mCursor;
-            if (mCursor.more() && *mCursor == '&') {
+            if (*mCursor == '&') {
                 ++mCursor;
                 return intersectOp;
-            }
-            else if (mCursor.more() && *mCursor == '[') {
+            } else if (*mCursor == '[') {
                 // Short-hand for intersectOp when a set follows
                 return intersectOp;
             }
-            else return ampChar;
+            return ampChar;
         case '-':
             ++mCursor;
-            if (mCursor.more() && *mCursor == '-') {
+            if (*mCursor == '-') {
                 ++mCursor;
                 return setDiffOp;
-            }
-            else if (mCursor.more() && *mCursor == '[') {
+            } else if (*mCursor == '[') {
                 return setDiffOp;
-            }
-            else if (mCursor.more() && *mCursor == ']') {
+            } else if (*mCursor == ']') {
                 return hyphenChar;
             }
-            else return rangeHyphen;
+            return rangeHyphen;
         case '[':
             ++mCursor;
-            if (mCursor.more() && *mCursor == ':') {
+            if (*mCursor == ':') {
                 ++mCursor;
                 return posixPropertyOpener;
             }
-            else return setOpener;
+            return setOpener;
         case ']':
             ++mCursor;
             return setCloser;
@@ -808,11 +793,10 @@ RE * RE_Parser::parse_charset() {
 
 
 codepoint_t RE_Parser::parse_codepoint() {
-    if (mCursor.more() && *mCursor == '\\') {
+    if (*mCursor == '\\') {
         mCursor++;
         return parse_escaped_codepoint();
-    }
-    else {
+    } else {
         return parse_utf8_codepoint();
     }
 }

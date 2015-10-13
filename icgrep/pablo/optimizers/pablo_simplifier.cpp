@@ -284,7 +284,7 @@ void Simplifier::eliminateRedundantEquations(PabloBlock & block) {
                 // Replace a ScanThru(Advance(x,n),y) with an ScanThru(Advance(x, n - 1), Advance(x, n - 1) | y), where Advance(x, 0) = x
                 Advance * op = cast<Advance>(stmt->getOperand(0));
                 if (LLVM_UNLIKELY(op->getNumUses() == 1)) {
-                    block.setInsertPoint(scanThru);
+                    block.setInsertPoint(scanThru->getPrevNode());
                     PabloAST * expr = block.createAdvance(op->getOperand(0), op->getAdvanceAmount() - 1);
                     scanThru->setOperand(0, expr);
                     scanThru->setOperand(1, block.createOr(scanThru->getOperand(1), expr));

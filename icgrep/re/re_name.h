@@ -5,10 +5,6 @@
 #include <re/re_cc.h>
 #include <string>
 
-namespace pablo {
-    class PabloAST;
-}
-
 namespace UCD {
     class UnicodeSet;
 }
@@ -35,12 +31,6 @@ public:
     std::string getName() const;
     Type getType() const;
     RE * getDefinition() const;
-    pablo::PabloAST * getCompiled() const {
-        return mCompiled;
-    }
-    void setCompiled(pablo::PabloAST * var) {
-        mCompiled = var;
-    }
     bool operator<(const Name & other) const;
     bool operator<(const CC & other) const;
     bool operator>(const CC & other) const;
@@ -59,7 +49,6 @@ protected:
     , mName(replicateString(name, nameLength))
     , mType(type)
     , mDefinition(defn)
-    , mCompiled(nullptr)
     {
 
     }
@@ -79,7 +68,6 @@ private:
     const char * const  mName;
     const Type          mType;
     RE *                mDefinition;
-    pablo::PabloAST *   mCompiled;
 };
 
 inline std::string Name::getNamespace() const {
