@@ -20,6 +20,11 @@
 
 import sys, subprocess, os, optparse, re, codecs, stat
 import xml.parsers.expat
+import sys
+import codecs
+
+sys.stdout = codecs.getwriter('utf8')(sys.stdout)
+sys.stderr = codecs.getwriter('utf8')(sys.stderr)
 
 in_datafile = False
 
