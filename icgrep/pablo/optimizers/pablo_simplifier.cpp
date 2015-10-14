@@ -264,8 +264,7 @@ void Simplifier::eliminateRedundantEquations(PabloBlock & block) {
     while (stmt) {
         if (isa<If>(stmt)) {
             eliminateRedundantEquations(cast<If>(stmt)->getBody());
-        }
-        else if (isa<While>(stmt)) {
+        } else if (isa<While>(stmt)) {
             eliminateRedundantEquations(cast<While>(stmt)->getBody());
         } else if (isa<Advance>(stmt)) {
             Advance * adv = cast<Advance>(stmt);

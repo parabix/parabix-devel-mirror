@@ -1,15 +1,16 @@
 #include "re_analysis.h"
-#include "re_cc.h"
-#include "re_name.h"
-#include "re_start.h"
-#include "re_end.h"
-#include "re_any.h"
-#include "re_seq.h"
-#include "re_alt.h"
-#include "re_rep.h"
-#include "re_diff.h"
-#include "re_intersect.h"
-#include "re_assertion.h"
+#include <re/re_cc.h>
+#include <re/re_name.h>
+#include <re/re_start.h>
+#include <re/re_end.h>
+#include <re/re_any.h>
+#include <re/re_seq.h>
+#include <re/re_alt.h>
+#include <re/re_rep.h>
+#include <re/re_diff.h>
+#include <re/re_intersect.h>
+#include <re/re_assertion.h>
+#include <re/re_grapheme_boundary.hpp>
 #include <iostream>
 #include <re/printer_re.h>
 #include <limits.h>
@@ -24,26 +25,15 @@ bool isByteLength(const RE * re) {
             }
         }
         return true;
-    }
-    else if (const Seq * seq = dyn_cast<Seq>(re)) {
+    } else if (const Seq * seq = dyn_cast<Seq>(re)) {
         return (seq->size() == 1) && isByteLength(&seq[0]);
-    }
-    else if (const Rep * rep = dyn_cast<Rep>(re)) {
+    } else if (const Rep * rep = dyn_cast<Rep>(re)) {
         return (rep->getLB() == 1) && (rep->getUB() == 1) && isByteLength(rep->getRE());
-    }
-    else if (isa<Assertion>(re)) {
-        return false;
-    }
-    else if (const Diff * diff = dyn_cast<Diff>(re)) {
+    } else if (const Diff * diff = dyn_cast<Diff>(re)) {
         return isByteLength(diff->getLH()) && isByteLength(diff->getRH());
-    }
-    else if (const Intersect * e = dyn_cast<Intersect>(re)) {
+    } else if (const Intersect * e = dyn_cast<Intersect>(re)) {
         return isByteLength(e->getLH()) && isByteLength(e->getRH());
-    }
-    else if (isa<Any>(re)) {
-        return false;
-    }
-    else if (const Name * n = dyn_cast<Name>(re)) {
+    } else if (const Name * n = dyn_cast<Name>(re)) {
         return (n->getType() == Name::Type::Byte);
     }
     return false; // otherwise
@@ -57,28 +47,23 @@ bool isUnicodeUnitLength(const RE * re) {
             }
         }
         return true;
-    }
-    else if (const Seq * seq = dyn_cast<Seq>(re)) {
+    } else if (const Seq * seq = dyn_cast<Seq>(re)) {
         return (seq->size() == 1) && isUnicodeUnitLength(&seq[0]);
-    }
-    else if (const Rep * rep = dyn_cast<Rep>(re)) {
+    } else if (const Rep * rep = dyn_cast<Rep>(re)) {
         return (rep->getLB() == 1) && (rep->getUB() == 1) && isUnicodeUnitLength(rep->getRE());
-    }
-    else if (isa<Assertion>(re)) {
+    } else if (isa<Assertion>(re)) {
         return false;
-    }
-    else if (const Diff * diff = dyn_cast<Diff>(re)) {
+    } else if (const Diff * diff = dyn_cast<Diff>(re)) {
         return isUnicodeUnitLength(diff->getLH()) && isUnicodeUnitLength(diff->getRH());
-    }
-    else if (const Intersect * e = dyn_cast<Intersect>(re)) {
+    } else if (const Intersect * e = dyn_cast<Intersect>(re)) {
         return isUnicodeUnitLength(e->getLH()) && isUnicodeUnitLength(e->getRH());
-    }
-    else if (isa<Any>(re)) {
+    } else if (isa<Any>(re)) {
         return true;
-    }
-    else if (const Name * n = dyn_cast<Name>(re)) {
+    } else if (const Name * n = dyn_cast<Name>(re)) {
         // Eventually names might be set up for not unit length items.
         return (n->getType() == Name::Type::Unicode || n->getType() == Name::Type::UnicodeProperty || n->getType() == Name::Type::Byte);
+    } else if (const GraphemeBoundary * gb = dyn_cast<GraphemeBoundary>(re)) {
+        return isUnicodeUnitLength(gb->getExpression());
     }
     return false; // otherwise
 }
@@ -141,6 +126,8 @@ std::pair<int, int> getUnicodeUnitLengthRange(const RE * re) {
             case Name::Type::Unknown:
                 return std::make_pair(0, std::numeric_limits<int>::max());
         }
+    } else if (const GraphemeBoundary * gb = dyn_cast<GraphemeBoundary>(re)) {
+        return std::make_pair(getUnicodeUnitLengthRange(gb->getExpression()).first, std::numeric_limits<int>::max());
     }
     return std::make_pair(1, 1);
 }

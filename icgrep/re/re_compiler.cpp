@@ -477,14 +477,13 @@ MarkerType RE_Compiler::compileAlt(Alt * alt, MarkerType marker, PabloBuilder & 
 MarkerType RE_Compiler::compileAssertion(Assertion * a, MarkerType marker, PabloBuilder & pb) {
     RE * asserted = a->getAsserted();
     if (a->getKind() == Assertion::Kind::Lookbehind) {
-        MarkerType m = marker;
         MarkerType lookback = compile(asserted, pb);
-        AlignMarkers(m, lookback, pb);
+        AlignMarkers(marker, lookback, pb);
         PabloAST * lb = markerVar(lookback);
         if (a->getSense() == Assertion::Sense::Negative) {
             lb = pb.createNot(lb);
         }
-        return makeMarker(markerPos(m), pb.createAnd(markerVar(marker), lb, "lookback"));
+        return makeMarker(markerPos(marker), pb.createAnd(markerVar(marker), lb, "lookback"));
     } else if (isUnicodeUnitLength(asserted)) {
         MarkerType lookahead = compile(asserted, pb);
         if (LLVM_LIKELY(markerPos(lookahead) == MarkerPosition::FinalMatchByte)) {
