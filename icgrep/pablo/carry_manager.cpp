@@ -521,16 +521,19 @@ bool CarryManager::blockHasCarries(){
 } 
 
 
-Value * CarryManager::getCarrySummaryExpr() {
-    unsigned summary_index = summaryPackIndex();
-    if (mITEMS_PER_PACK > 1) {// #ifdef PACKING
-        Value * pack = getCarryPack(summary_index);
-        Value * summary_bits = maskSelectBitRange(pack, summaryPosition() % mPACK_SIZE, summaryBits());
-        return mBuilder->CreateBitCast(mBuilder->CreateZExt(summary_bits, mBuilder->getIntNTy(mBITBLOCK_WIDTH)), mBitBlockType);
+Value * CarryManager::generateBitBlockOrSummaryTest(Value * bitblock) {
+    Value * test_expr = bitblock;
+    if (mCarryInfo->blockHasCarries()) {
+        Value * summary_pack = getCarryPack(summaryPackIndex());
+        if (mITEMS_PER_PACK > 1) {// #ifdef PACKING
+            Value * summary_bits = maskSelectBitRange(summary_pack, summaryPosition() % mPACK_SIZE, summaryBits());
+            test_expr = iBuilder->simd_or(test_expr, mBuilder->CreateZExt(summary_bits, mBuilder->getIntNTy(mBITBLOCK_WIDTH)));
+        }
+        else {
+            test_expr = iBuilder->simd_or(test_expr, summary_pack);
+        }
     }
-    else {
-        return getCarryPack(summary_index);
-    }
+    return iBuilder->bitblock_any(test_expr);
 }
 
 void CarryManager::initializeCarryDataAtIfEntry() {

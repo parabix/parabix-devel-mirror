@@ -89,20 +89,9 @@ private:
     void genPrintRegister(std::string regName, Value * bitblockValue);
     void compileBlock(PabloBlock & block);
     void compileStatement(const Statement * stmt);
-    Value * genBitTest2(Value * e1, Value * e2);
     void compileIf(const If * ifStmt);
     void compileWhile(const While * whileStmt);
     Value* compileExpression(const PabloAST * expr);
-
-    #ifdef USE_UADD_OVERFLOW
-    #ifdef USE_TWO_UADD_OVERFLOW
-    Function* mFunctionUaddOverflow;
-    SumWithOverflowPack callUaddOverflow(Value *e1, Value *e2);
-    #else
-    Function* mFunctionUaddOverflowCarryin;
-    SumWithOverflowPack callUaddOverflow(Value *e1, Value *e2, Value *cin);
-    #endif
-    #endif
 
     ASTToValueMap                       mMarkerMap;
     CarryQueueVector                    mCarryInVector;

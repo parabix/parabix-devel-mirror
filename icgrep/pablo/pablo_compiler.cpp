@@ -230,27 +230,6 @@ void PabloCompiler::compileBlock(PabloBlock & block) {
     mPabloBlock = block.getParent();
 }
 
-    Value * PabloCompiler::genBitTest2(Value * e1, Value * e2) {
-        Type * t1 = e1->getType();
-        Type * t2 = e2->getType();
-        if (t1 == mBitBlockType) {
-            if (t2 == mBitBlockType) {
-                return iBuilder.bitblock_any(iBuilder.simd_or(e1, e2));
-            }
-            else {
-                Value * m1 = mBuilder->CreateZExt(iBuilder.hsimd_signmask(16, e1), t2);
-                return mBuilder->CreateICmpNE(mBuilder->CreateOr(m1, e2), ConstantInt::get(t2, 0));
-            }
-        }
-        else if (t2 == mBitBlockType) {
-            Value * m2 = mBuilder->CreateZExt(iBuilder.hsimd_signmask(16, e2), t1);
-            return mBuilder->CreateICmpNE(mBuilder->CreateOr(e1, m2), ConstantInt::get(t1, 0));
-        }
-        else {
-            return mBuilder->CreateICmpNE(mBuilder->CreateOr(e1, e2), ConstantInt::get(t1, 0));
-        }
-    }
-    
 void PabloCompiler::compileIf(const If * ifStatement) {        
     //
     //  The If-ElseZero stmt:
@@ -279,15 +258,8 @@ void PabloCompiler::compileIf(const If * ifStatement) {
     Value * if_test_value = compileExpression(ifStatement->getCondition());
     
     mCarryManager->enterScope(&ifBody);
-    if (mCarryManager->blockHasCarries()) {
-        // load the summary variable
-        Value* last_if_pending_data = mCarryManager->getCarrySummaryExpr();
-        mBuilder->CreateCondBr(genBitTest2(if_test_value, last_if_pending_data), ifBodyBlock, ifEndBlock);
-
-    }
-    else {
-        mBuilder->CreateCondBr(iBuilder.bitblock_any(if_test_value), ifBodyBlock, ifEndBlock);
-    }
+    mBuilder->CreateCondBr(mCarryManager->generateBitBlockOrSummaryTest(if_test_value), ifBodyBlock, ifEndBlock);
+    
     // Entry processing is complete, now handle the body of the if.
     mBuilder->SetInsertPoint(ifBodyBlock);
     

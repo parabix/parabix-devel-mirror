@@ -94,7 +94,7 @@ public:
     
     void initializeCarryDataAtIfEntry();
     
-    Value * getCarrySummaryExpr();
+    Value * generateBitBlockOrSummaryTest(Value * bitblock);
     
     void generateCarryOutSummaryCodeIfNeeded();
     
