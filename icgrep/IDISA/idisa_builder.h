@@ -35,7 +35,10 @@ public:
     }
     
     Type * getBitBlockType() { return mBitBlockType;}
+    Value * bitCast(Value * a) {return a->getType() == mBitBlockType ? a : mLLVMBuilder->CreateBitCast(a, mBitBlockType);}
     int getBitBlockWidth() { return mBitBlockWidth;}
+    
+    
     Constant * allZeroes() {return mZeroInitializer;}
     Constant * allOnes() {return mOneInitializer;}
         
@@ -71,8 +74,11 @@ public:
     Value * mvmd_dslli(unsigned fw, Value * a, Value * b, unsigned shift);
     
     Value * bitblock_any(Value * a);
-
-
+    Value * simd_and(Value * a, Value * b);
+    Value * simd_or(Value * a, Value * b);
+    Value * simd_xor(Value * a, Value * b);
+    Value * simd_not(Value * a);
+    
 private:
     Module * mMod;
     IRBuilder <> * mLLVMBuilder;

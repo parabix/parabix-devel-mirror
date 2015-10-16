@@ -114,7 +114,7 @@ private:
 
     CarryManager *                      mCarryManager;
 
-    VectorType* const                   mBitBlockType;
+    Type* const                   mBitBlockType;
     IDISA::IDISA_Builder                iBuilder;
     PointerType*                        mInputType;
 
