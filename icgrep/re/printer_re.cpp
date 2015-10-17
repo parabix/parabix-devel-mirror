@@ -85,8 +85,7 @@ const std::string Printer_RE::PrintRE(const RE * re)
         retVal += PrintRE(x->getRH());
         retVal += ") ";
     }
-    else if (const GraphemeBoundary * g = dyn_cast<GraphemeBoundary>(re))
-    {
+    else if (const GraphemeBoundary * g = dyn_cast<GraphemeBoundary>(re)) {
         retVal = "Grapheme";
         switch (g->getType()) {
             case GraphemeBoundary::Type::ClusterBoundary:
@@ -99,8 +98,10 @@ const std::string Printer_RE::PrintRE(const RE * re)
                 retVal += "Word"; break;
         }
         retVal += "Boundary(";
-        retVal += PrintRE(g->getExpression());
-        retVal += ") ";
+        if (g->getExpression()) {
+            retVal += PrintRE(g->getExpression());
+        }
+        retVal += ")";
     }
     else if (isa<const End>(re))
     {

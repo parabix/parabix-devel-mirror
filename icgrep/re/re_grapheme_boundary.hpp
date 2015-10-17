@@ -15,31 +15,39 @@ public:
     }
 
     enum class Type {
-        ClusterBoundary     // g
-        , WordBoundary      // w
-        , LineBreakBoundary // l
-        , SentenceBoundary  // s
+        ClusterBoundary = 0     // g
+        , WordBoundary = 1      // w
+        , LineBreakBoundary = 2 // l
+        , SentenceBoundary = 3  // s
     };
 
+    enum class Sense {Positive, Negative};
+
+    inline Type getType() const { return mType; }
+    GraphemeBoundary::Sense getSense() const {return mSense;}
     inline RE * getExpression() const {return mExpression;}
-    inline void setExpression(RE * const r) {mExpression = r; }
-    inline Name * getGraphemeExtenderRule() const {return mBoundaryRule;}
-    inline void setBoundaryRule(Name * const r) {mBoundaryRule = r; }
-    inline Type getType() const {return mType;}
+    inline void setExpression(RE * const r) { mExpression = r; }
+    inline Name * getBoundaryRule() const {return mBoundaryRule;}
+    inline void setBoundaryRule(Name * const r) { mBoundaryRule = r; }
 
 protected:
-    friend GraphemeBoundary * makeGraphemeBoundary(RE * const expression, const Type type);
-    GraphemeBoundary(RE * const expression, const Type type) : RE(ClassTypeId::GraphemeBoundary), mExpression(expression), mBoundaryRule(nullptr), mType(type) {}
+    friend GraphemeBoundary * makeGraphemeBoundary(const Type type, const Sense sense, RE * expression);
+    GraphemeBoundary(const Type type, const Sense sense, RE * expression) : RE(ClassTypeId::GraphemeBoundary), mType(type), mSense(sense), mExpression(expression), mBoundaryRule(nullptr) {}
     virtual ~GraphemeBoundary() {}
 
 private:
-    RE *        mExpression;
-    Name *      mBoundaryRule;
-    const Type  mType;
+    const Type      mType;
+    const Sense     mSense;
+    RE *            mExpression;
+    Name *          mBoundaryRule;
 };
 
-inline GraphemeBoundary * makeGraphemeBoundary(RE * const expression, const GraphemeBoundary::Type type) {
-    return new GraphemeBoundary(expression, type);
+inline GraphemeBoundary * makeGraphemeBoundary(const GraphemeBoundary::Type type, const GraphemeBoundary::Sense sense, RE * expression) {
+    return new GraphemeBoundary(type, sense, expression);
+}
+
+inline GraphemeBoundary * makeGraphemeClusterBoundary(const GraphemeBoundary::Sense sense = GraphemeBoundary::Sense::Positive, RE * expression = nullptr) {
+    return makeGraphemeBoundary(GraphemeBoundary::Type::ClusterBoundary, sense, expression);
 }
 
 }

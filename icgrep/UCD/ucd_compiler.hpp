@@ -93,7 +93,7 @@ protected:
 
     void addTargets(const NameMap & names);
 
-    void updateNames(NameMap & names);
+    void updateNames(NameMap & names, PabloBuilder & entry);
 
 private:
     cc::CC_Compiler &       mCharacterClassCompiler;

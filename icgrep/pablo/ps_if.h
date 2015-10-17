@@ -43,13 +43,12 @@ public:
     inline const DefinedVars & getDefined() const {
         return mDefined;
     }
-    void addDefined(Assign * def);
-protected:
     inline DefinedVars & getDefined() {
         return mDefined;
     }
+    void addDefined(Assign * def);
+protected:
     If(PabloAST * expr, const std::initializer_list<Assign *> definedVars, PabloBlock & body);
-
     If(PabloAST * expr, const std::vector<Assign *> & definedVars, PabloBlock & body);
 private:
     PabloBlock &    mBody;

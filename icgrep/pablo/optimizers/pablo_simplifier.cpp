@@ -21,6 +21,9 @@ template <typename Type>
 using SmallSet = std::unordered_set<Type>;
 #endif
 
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief optimize
+ ** ------------------------------------------------------------------------------------------------------------- */
 bool Simplifier::optimize(PabloFunction & function) {
     eliminateRedundantCode(function.getEntryBlock());
     deadCodeElimination(function.getEntryBlock());
@@ -31,6 +34,9 @@ bool Simplifier::optimize(PabloFunction & function) {
     return true;
 }
 
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief canTriviallyFold
+ ** ------------------------------------------------------------------------------------------------------------- */
 inline static PabloAST * canTriviallyFold(Statement * stmt, PabloBlock & block) {
     for (unsigned i = 0; i != stmt->getNumOperands(); ++i) {
         if (LLVM_UNLIKELY(isa<Zeroes>(stmt->getOperand(i)))) {
@@ -80,6 +86,9 @@ inline static PabloAST * canTriviallyFold(Statement * stmt, PabloBlock & block) 
     return nullptr;
 }
 
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief isSuperfluous
+ ** ------------------------------------------------------------------------------------------------------------- */
 inline bool Simplifier::isSuperfluous(const Assign * const assign) {
     for (const PabloAST * inst : assign->users()) {
         if (isa<Next>(inst) || isa<PabloFunction>(inst)) {
@@ -104,6 +113,9 @@ inline bool Simplifier::isSuperfluous(const Assign * const assign) {
     return true;
 }
 
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief demoteDefinedVar
+ ** ------------------------------------------------------------------------------------------------------------- */
 inline bool demoteDefinedVar(const If * ifNode, const Assign * def) {
     // If this value isn't used outside of this scope then there is no reason to allow it to escape it.
     if (!escapes(def)) {
@@ -120,6 +132,9 @@ inline bool demoteDefinedVar(const If * ifNode, const Assign * def) {
     return false;
 }
 
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief replaceReachableUsersOfWith
+ ** ------------------------------------------------------------------------------------------------------------- */
 inline void replaceReachableUsersOfWith(Statement * stmt, PabloAST * expr) {
     const PabloBlock * const root = stmt->getParent();
     SmallSet<const PabloBlock *> forbidden;
@@ -145,6 +160,35 @@ inline void replaceReachableUsersOfWith(Statement * stmt, PabloAST * expr) {
     }
 }
 
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief discardNestedIfBlock
+ *
+ * If this inner block is composed of only Boolean logic and Assign statements and there are fewer than 3
+ * statements, just add the statements in the inner block to the current block.
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline bool discardNestedIfBlock(const PabloBlock & pb) {
+    unsigned computations = 0;
+    for (const Statement * stmt : pb) {
+        switch (stmt->getClassTypeId()) {
+            case PabloAST::ClassTypeId::And:
+            case PabloAST::ClassTypeId::Or:
+            case PabloAST::ClassTypeId::Xor:
+                if (++computations > 3) {
+                    return false;
+                }
+            case PabloAST::ClassTypeId::Not:
+            case PabloAST::ClassTypeId::Assign:
+                break;
+            default:
+                return false;
+        }
+    }
+    return true;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief removeIdenticalEscapedValues
+ ** ------------------------------------------------------------------------------------------------------------- */
 template <class ValueList>
 inline void removeIdenticalEscapedValues(ValueList & list) {
     for (auto i = list.begin(); i != list.end(); ++i) {
@@ -160,6 +204,9 @@ inline void removeIdenticalEscapedValues(ValueList & list) {
     }
 }
 
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief eliminateRedundantCode
+ ** ------------------------------------------------------------------------------------------------------------- */
 void Simplifier::eliminateRedundantCode(PabloBlock & block, ExpressionTable * predecessor) {
     ExpressionTable encountered(predecessor);
     Statement * stmt = block.front();
@@ -210,9 +257,25 @@ void Simplifier::eliminateRedundantCode(PabloBlock & block, ExpressionTable * pr
                 stmt = stmt->eraseFromParent(true);
                 continue;
             }
+
             // Otherwise check if we any Assign reports the same value as another. If so, replace all uses of the
             // second with the first. This will simplify future analysis.
             removeIdenticalEscapedValues(ifNode->getDefined());
+
+            // Finally after we've eliminated everything we can from the If body, check whether testing the If
+            // condition will meet or exceed the cost of executing the body.
+            if (LLVM_UNLIKELY(discardNestedIfBlock(ifNode->getBody()))) {
+                Statement * nested = ifNode->getBody().front();
+                while (nested) {
+                    Statement * next = nested->removeFromParent();
+                    nested->insertAfter(stmt);
+                    stmt = nested;
+                    nested = next;
+                }
+                ifNode->getDefined().clear();
+                stmt = ifNode->eraseFromParent(true);
+                continue;
+            }
 
         } else if (While * whileNode = dyn_cast<While>(stmt)) {
             const PabloAST * initial = whileNode->getCondition();
@@ -243,7 +306,9 @@ void Simplifier::eliminateRedundantCode(PabloBlock & block, ExpressionTable * pr
     }
 }
 
-
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief deadCodeElimination
+ ** ------------------------------------------------------------------------------------------------------------- */
 void Simplifier::deadCodeElimination(PabloBlock & block) {
     Statement * stmt = block.front();
     while (stmt) {
@@ -259,6 +324,9 @@ void Simplifier::deadCodeElimination(PabloBlock & block) {
     }
 }
 
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief eliminateRedundantEquations
+ ** ------------------------------------------------------------------------------------------------------------- */
 void Simplifier::eliminateRedundantEquations(PabloBlock & block) {
     Statement * stmt = block.front();
     while (stmt) {

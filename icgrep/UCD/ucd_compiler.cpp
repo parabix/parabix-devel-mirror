@@ -451,7 +451,7 @@ UCDCompiler::RangeList UCDCompiler::innerRanges(const RangeList & list) {
 void UCDCompiler::generateWithDefaultIfHierarchy(NameMap & names, PabloBuilder & entry) {
     addTargets(names);
     generateRange(defaultIfHierachy, entry);
-    updateNames(names);
+    updateNames(names, entry);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -470,7 +470,7 @@ PabloAST * UCDCompiler::generateWithDefaultIfHierarchy(const UnicodeSet * set, P
 void UCDCompiler::generateWithoutIfHierarchy(NameMap & names, PabloBuilder & entry) {
     addTargets(names);
     generateRange(noIfHierachy, entry);
-    updateNames(names);
+    updateNames(names, entry);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -487,7 +487,7 @@ PabloAST * UCDCompiler::generateWithoutIfHierarchy(const UnicodeSet * set, Pablo
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void UCDCompiler::addTargets(const NameMap & names) {
     for (const auto t : names) {
-        if (isa<CC>(t.first->getDefinition())) {
+        if (LLVM_LIKELY(isa<CC>(t.first->getDefinition()))) {
             mTargetMap.emplace(cast<CC>(t.first->getDefinition()), t.second ? t.second : PabloBlock::createZeroes());
         } else {
             throw std::runtime_error(t.first->getName() + " is not defined by a CC!");
@@ -499,10 +499,18 @@ inline void UCDCompiler::addTargets(const NameMap & names) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief updateNames
  ** ------------------------------------------------------------------------------------------------------------- */
-inline void UCDCompiler::updateNames(NameMap & names) {
+inline void UCDCompiler::updateNames(NameMap & names, PabloBuilder & entry) {
     for (auto & t : names) {
         auto f = mTargetMap.find(cast<CC>(t.first->getDefinition()));
-        t.second = f->second;
+        if (f != mTargetMap.end()) {
+            std::string name = t.first->getName();
+            if (Statement * result = dyn_cast<Statement>(f->second)) {
+                result->setName(entry.getName(name, false));
+                t.second = result;
+            } else {
+                t.second = entry.createAssign(std::move(name), f->second);
+            }
+        }
     }
     mTargetMap.clear();
 }

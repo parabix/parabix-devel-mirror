@@ -212,6 +212,9 @@ public:
     inline const String * getName() const {
         return mName;
     }
+    inline void setName(const String * const name) {
+        mName = name;
+    }
     inline Statement * getNextNode() const {
         return mNext;
     }
@@ -238,10 +241,7 @@ protected:
                 op->addUser(this);
             }
         }
-    }
-    inline void setName(const String * const name) {
-        mName = name;
-    }    
+    }  
 #ifndef NDEBUG
     bool noRecursiveOperand(const PabloAST * const operand);
 #endif

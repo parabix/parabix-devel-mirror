@@ -62,10 +62,7 @@ public:
 private:
 
     MarkerType compile(RE * re, pablo::PabloBuilder & cg);
-    MarkerType AdvanceMarker(const MarkerType m, const MarkerPosition newpos, pablo::PabloBuilder & pb);
-    
-    void AlignMarkers(MarkerType & m1, MarkerType & m2, pablo::PabloBuilder & pb);
-    
+
     MarkerType process(RE * re, MarkerType marker, pablo::PabloBuilder & pb);
     MarkerType compileName(Name * name, MarkerType marker, pablo::PabloBuilder & pb);
     MarkerType compileSeq(Seq * seq, MarkerType marker, pablo::PabloBuilder & pb);
@@ -76,19 +73,22 @@ private:
     MarkerType compileDiff(Diff * diff, MarkerType marker, pablo::PabloBuilder & cg);
     MarkerType compileIntersect(Intersect * x, MarkerType marker, pablo::PabloBuilder & cg);
     pablo::PabloAST * consecutive_matches(pablo::PabloAST * repeated,  int length, int repeat_count, pablo::PabloBuilder & pb);
-    pablo::PabloAST * reachable(pablo::PabloAST * repeated,  int repeated_lgth, int repeat_count, pablo::PabloBuilder & pb);
+    pablo::PabloAST * reachable(pablo::PabloAST * repeated,  int length, int repeat_count, pablo::PabloBuilder & pb);
     static bool isFixedLength(RE * regexp);
     MarkerType processLowerBound(RE * repeated,  int lb, MarkerType marker, pablo::PabloBuilder & pb);
     MarkerType processUnboundedRep(RE * repeated, MarkerType marker, pablo::PabloBuilder & pb);
     MarkerType processBoundedRep(RE * repeated, int ub, MarkerType marker, pablo::PabloBuilder & pb);
     RE * resolveUnicodeProperties(RE * re);
 
-    Name * generateGraphemeClusterExtenderRule();
+    Name * generateGraphemeClusterBoundaryRule();
     MarkerType compileName(Name * name, pablo::PabloBuilder & pb);
     MarkerType compileAny(const MarkerType m, pablo::PabloBuilder & pb);
     MarkerType compileStart(const MarkerType marker, pablo::PabloBuilder & pb);
     MarkerType compileEnd(const MarkerType marker, pablo::PabloBuilder & pb);
-    MarkerType compileGraphemeBoundary(GraphemeBoundary *gb, const MarkerType marker, pablo::PabloBuilder & pb);
+    MarkerType compileGraphemeBoundary(GraphemeBoundary *gb, MarkerType marker, pablo::PabloBuilder & pb);
+
+    MarkerType AdvanceMarker(MarkerType marker, const MarkerPosition newpos, pablo::PabloBuilder & pb);
+    void AlignMarkers(MarkerType & m1, MarkerType & m2, pablo::PabloBuilder & pb);
 
 private:
 
@@ -97,7 +97,7 @@ private:
     pablo::PabloAST *                               mCRLF;
     pablo::PabloAST *                               mUnicodeLineBreak;
     pablo::PabloAST *                               mAny;
-    pablo::PabloAST *                               mGraphemeExtenderRule;
+    pablo::PabloAST *                               mGraphemeBoundaryRule;
     pablo::PabloAST *                               mInitial;
     pablo::Assign *                                 mNonFinal;    
     pablo::PabloAST *                               mFinal;
@@ -105,7 +105,7 @@ private:
     int                                             mStarDepth;
     std::vector<pablo::Next *>                      mLoopVariants; // <- rethink name
     pablo::PabloBuilder                             mPB;
-    std::unordered_map<Name *, MarkerType>          mCompiledName;    
+    std::unordered_map<Name *, MarkerType>          mCompiledName;
     pablo::PabloFunction &                          mFunction;
 };
 

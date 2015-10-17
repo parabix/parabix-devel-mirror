@@ -62,8 +62,6 @@ bool isUnicodeUnitLength(const RE * re) {
     } else if (const Name * n = dyn_cast<Name>(re)) {
         // Eventually names might be set up for not unit length items.
         return (n->getType() == Name::Type::Unicode || n->getType() == Name::Type::UnicodeProperty || n->getType() == Name::Type::Byte);
-    } else if (const GraphemeBoundary * gb = dyn_cast<GraphemeBoundary>(re)) {
-        return isUnicodeUnitLength(gb->getExpression());
     }
     return false; // otherwise
 }
@@ -126,8 +124,11 @@ std::pair<int, int> getUnicodeUnitLengthRange(const RE * re) {
             case Name::Type::Unknown:
                 return std::make_pair(0, std::numeric_limits<int>::max());
         }
-    } else if (const GraphemeBoundary * gb = dyn_cast<GraphemeBoundary>(re)) {
-        return std::make_pair(getUnicodeUnitLengthRange(gb->getExpression()).first, std::numeric_limits<int>::max());
+    } else if (const GraphemeBoundary * gp = dyn_cast<GraphemeBoundary>(re)) {
+        if (gp->getExpression()) {
+            return getUnicodeUnitLengthRange(gp->getExpression());
+        }
+        return std::make_pair(0, 0);
     }
     return std::make_pair(1, 1);
 }

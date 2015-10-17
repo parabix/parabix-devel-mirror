@@ -48,8 +48,6 @@ RE * RE_Nullable::removeNullablePrefix(RE * re) {
         if (name->getDefinition()) {
             name->setDefinition(removeNullablePrefix(name->getDefinition()));
         }
-    } else if (GraphemeBoundary * g = dyn_cast<GraphemeBoundary>(re)) {
-        g->setExpression(removeNullablePrefix(g->getExpression()));
     }
     return re;
 }
@@ -85,8 +83,6 @@ RE * RE_Nullable::removeNullableSuffix(RE * re) {
         if (name->getDefinition()) {
             name->setDefinition(removeNullableSuffix(name->getDefinition()));
         }
-    } else if (GraphemeBoundary * g = dyn_cast<GraphemeBoundary>(re)) {
-        g->setExpression(removeNullableSuffix(g->getExpression()));
     }
     return re;
 }
