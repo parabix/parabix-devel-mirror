@@ -13,6 +13,7 @@
 #include "utf_encoding.h"
 #include "pablo/pablo_compiler.h"
 #include <llvm/IR/Function.h>
+#include <llvm/IR/Type.h>
 #include <llvm/IR/Module.h>
 #include <llvm/ExecutionEngine/ExecutionEngine.h>
 #include <llvm/ExecutionEngine/MCJIT.h>
@@ -156,7 +157,7 @@ int main(int argc, char *argv[]) {
         pablo::PabloFunction * function = re2pablo_compiler(encoding, re_ast);
 
         pablo_function_passes(function);
-        pablo::PabloCompiler pablo_compiler;
+        pablo::PabloCompiler pablo_compiler(VectorType::get(IntegerType::get(getGlobalContext(), 64), BLOCK_SIZE/64));
         try {
             icgrep_IR = pablo_compiler.compile(function);
             releaseSlabAllocatorMemory();

@@ -20,6 +20,7 @@
 #include <UCD/CaseFolding_txt.h>
 #include <toolchain.h>
 #include "utf_encoding.h"
+#include <llvm/IR/Type.h>
 #include <pablo/pablo_compiler.h>
 #include <do_grep.h>
 
@@ -549,7 +550,7 @@ RE * RE_Parser::parseNamePatternExpression(){
     llvm::Function * nameSearchIR = nullptr;
     
     pablo_function_passes(nameSearchFunction);
-    pablo::PabloCompiler pablo_compiler;
+    pablo::PabloCompiler pablo_compiler(VectorType::get(IntegerType::get(getGlobalContext(), 64), BLOCK_SIZE/64));
     try {
         nameSearchIR = pablo_compiler.compile(nameSearchFunction);
         releaseSlabAllocatorMemory();

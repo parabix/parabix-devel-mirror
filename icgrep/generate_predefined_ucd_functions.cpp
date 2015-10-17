@@ -21,6 +21,7 @@
 #include <pablo/optimizers/pablo_automultiplexing.hpp>
 #endif
 #include <pablo/optimizers/booleanreassociationpass.h>
+#include <llvm/IR/Type.h>
 #include <llvm/IR/Verifier.h>
 #include <llvm/Support/Debug.h>
 #include <llvm/Support/TargetRegistry.h>
@@ -385,7 +386,7 @@ Module * generateUCDModule() {
 
     property_list properties;
 
-    PabloCompiler pc;
+    PabloCompiler pc(VectorType::get(IntegerType::get(getGlobalContext(), 64), BLOCK_SIZE/64));
     Module * module = new Module("ucd", getGlobalContext());
     for (PropertyObject * obj : property_object_table) {
         if (EnumeratedPropertyObject * enumObj = dyn_cast<EnumeratedPropertyObject>(obj)) {

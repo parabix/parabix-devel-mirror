@@ -73,7 +73,7 @@ class PabloCompiler {
     typedef std::vector<Value*>                                    CarryQueueVector;
 
 public:
-    PabloCompiler();
+    PabloCompiler(Type * bitBlockType);
     ~PabloCompiler();
     Function * compile(pablo::PabloFunction * function);
     Function * compile(pablo::PabloFunction * function, Module *module);

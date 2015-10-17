@@ -54,11 +54,11 @@ static cl::opt<bool> DumpTrace("dump-trace", cl::init(false), cl::desc("Generate
 
 namespace pablo {
 
-PabloCompiler::PabloCompiler()
+PabloCompiler::PabloCompiler(Type * bitBlockType)
 : mMod(nullptr)
 , mBuilder(nullptr)
 , mCarryManager(nullptr)
-    , mBitBlockType(VectorType::get(IntegerType::get(getGlobalContext(), 64), BLOCK_SIZE/64))
+, mBitBlockType(bitBlockType)
 , iBuilder(mBitBlockType)
 , mInputType(nullptr)
 , mWhileDepth(0)
