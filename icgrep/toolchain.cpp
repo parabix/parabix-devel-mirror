@@ -90,7 +90,7 @@ static cl::opt<bool> EnableReassociation("reassoc", cl::init(false),
                                          cl::cat(cPabloOptimizationsOptions));
 #endif
 
-static cl::opt<bool> UseAVX2("use-AVX2", cl::init(false), cl::desc("execute with AVX2 instruction set."), cl::cat(cPabloOptimizationsOptions));
+static cl::opt<bool> DisableAVX2("disable-AVX2", cl::init(false), cl::desc("disable AVX2 instruction set."), cl::cat(cPabloOptimizationsOptions));
 
 re::RE * regular_expression_passes(const Encoding encoding, re::RE * re_ast)  {
     if (PrintAllREs || PrintParsedREs) {
@@ -174,7 +174,7 @@ ExecutionEngine * JIT_to_ExecutionEngine (llvm::Function * f) {
     builder.setMCPU(sys::getHostCPUName());
     builder.setOptLevel(CodeGenOpt::Level::None);
 #if (BLOCK_SIZE == 256)
-    if(UseAVX2){
+    if (!DisableAVX2){
             std::vector<std::string> attrs;
             attrs.push_back("avx2");
             builder.setMAttrs(attrs);
