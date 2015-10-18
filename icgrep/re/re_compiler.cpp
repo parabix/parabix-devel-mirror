@@ -78,14 +78,14 @@ void RE_Compiler::initializeRequiredStreams() {
     PabloAST * u8pfx3 = mCCCompiler.compileCC(makeCC(0xE0, 0xEF), it);
     PabloAST * u8pfx4 = mCCCompiler.compileCC(makeCC(0xF0, 0xF4), it);
     Assign * u8suffix = it.createAssign("u8suffix", mCCCompiler.compileCC(makeCC(0x80, 0xBF)));
-    
+
     //
     // Two-byte sequences
     PabloBuilder it2 = PabloBuilder::Create(it);
     Assign * u8scope22 = it2.createAssign("u8scope22", it2.createAdvance(u8pfx2, 1));
     Assign * NEL = it2.createAssign("NEL", it2.createAnd(it2.createAdvance(mCCCompiler.compileCC(makeCC(0xC2), it2), 1), mCCCompiler.compileCC(makeCC(0x85), it2)));
     it.createIf(u8pfx2, {u8scope22, NEL}, it2);
-    
+
     //
     // Three-byte sequences
     PabloBuilder it3 = PabloBuilder::Create(it);
@@ -98,7 +98,7 @@ void RE_Compiler::initializeRequiredStreams() {
     PabloAST * ED_invalid = it3.createAnd(it3.createAdvance(mCCCompiler.compileCC(makeCC(0xED), it3), 1), mCCCompiler.compileCC(makeCC(0xA0, 0xBF), it3));
     Assign * EX_invalid = it3.createAssign("EX_invalid", it3.createOr(E0_invalid, ED_invalid));
     it.createIf(u8pfx3, {u8scope32, u8scope3X, LS_PS, EX_invalid}, it3);
- 
+
     //
     // Four-byte sequences
     PabloBuilder it4 = PabloBuilder::Create(it);
@@ -126,13 +126,13 @@ void RE_Compiler::initializeRequiredStreams() {
     Assign * u8valid = it.createAssign("u8valid", it.createNot(u8invalid));
     //
     //
-    
+
     Assign * valid_pfx = it.createAssign("valid_pfx", it.createAnd(u8pfx, u8valid));
     mNonFinal = it.createAssign("nonfinal", it.createAnd(it.createOr(it.createOr(u8pfx, u8scope32), u8scope4nonfinal), u8valid));
-    
+
     Assign * NEL_LS_PS = it.createAssign("NEL_LS_PS", it.createOr(NEL, LS_PS));
     mPB.createIf(u8pfx, {u8invalid, valid_pfx, mNonFinal, NEL_LS_PS}, it);
-    
+
     PabloAST * LB_chars = mPB.createOr(LF_VT_FF_CR, NEL_LS_PS);
     PabloAST * u8single = mPB.createAnd(mCCCompiler.compileCC(makeCC(0x00, 0x7F)), mPB.createNot(u8invalid));
     mInitial = mPB.createOr(u8single, valid_pfx, "initial");
@@ -262,7 +262,7 @@ RE * RE_Compiler::resolveUnicodeProperties(RE * re) {
     UCD::UCDCompiler::NameMap nameMap;
     std::unordered_set<Name *> visited;
 
-    std::function<void(RE*)> gather = [&](RE * re) {        
+    std::function<void(RE*)> gather = [&](RE * re) {
         if (Name * name = dyn_cast<Name>(re)) {
             if (visited.insert(name).second) {
                 if (isa<CC>(name->getDefinition())) {
@@ -558,7 +558,7 @@ MarkerType RE_Compiler::compileRep(Rep * rep, MarkerType marker, PabloBuilder & 
 
 /*
    Given a stream |repeated| marking positions associated with matches to an item
-   of length |repeated_lgth|, compute a stream marking |repeat_count| consecutive 
+   of length |repeated_lgth|, compute a stream marking |repeat_count| consecutive
    occurrences of such items.
 */
 
@@ -600,21 +600,24 @@ inline PabloAST * RE_Compiler::reachable(PabloAST * repeated, int length, int re
 }
 
 MarkerType RE_Compiler::processLowerBound(RE * repeated, int lb, MarkerType marker, PabloBuilder & pb) {
-    if (isByteLength(repeated) && !DisableLog2BoundedRepetition) {
+    if (!mGraphemeBoundaryRule && isByteLength(repeated) && !DisableLog2BoundedRepetition) {
         PabloAST * cc = markerVar(compile(repeated, pb));
         PabloAST * cc_lb = consecutive_matches(cc, 1, lb, pb);
         PabloAST * marker_fwd = pb.createAdvance(markerVar(marker), markerPos(marker) == MarkerPosition::FinalMatchByte ? lb : lb - 1);
         return makeMarker(MarkerPosition::FinalMatchByte, pb.createAnd(marker_fwd, cc_lb, "lowerbound"));
     }
     // Fall through to general case.
-    while (lb-- != 0) {
+    for (int i = 1; i <= lb; ++i) {
         marker = process(repeated, marker, pb);
+        if (mGraphemeBoundaryRule) {
+            marker = AdvanceMarker(marker, MarkerPosition::FinalPostPositionByte, pb);
+        }
     }
     return marker;
 }
 
 MarkerType RE_Compiler::processBoundedRep(RE * repeated, int ub, MarkerType marker, PabloBuilder & pb) {
-    if (isByteLength(repeated) && ub > 1 && !DisableLog2BoundedRepetition) {
+    if (!mGraphemeBoundaryRule && isByteLength(repeated) && ub > 1 && !DisableLog2BoundedRepetition) {
         // log2 upper bound for fixed length (=1) class
         // Create a mask of positions reachable within ub from current marker.
         // Use matchstar, then apply filter.
@@ -625,19 +628,22 @@ MarkerType RE_Compiler::processBoundedRep(RE * repeated, int ub, MarkerType mark
         return makeMarker(MarkerPosition::InitialPostPositionByte, pb.createAnd(pb.createMatchStar(cursor, rep_class_var), upperLimitMask, "bounded"));
     }
     // Fall through to general case.
-    while (ub-- != 0) {
+    for (int i = 1; i <= ub; ++i) {
         MarkerType a = process(repeated, marker, pb);
         MarkerType m = marker;
         AlignMarkers(a, m, pb);
-        marker = makeMarker(markerPos(a), pb.createOr(markerVar(a), markerVar(m), "m"));
+        marker = makeMarker(markerPos(a), pb.createOr(markerVar(a), markerVar(m), "upper" + std::to_string(i)));
+        if (mGraphemeBoundaryRule) {
+            marker = AdvanceMarker(marker, MarkerPosition::FinalPostPositionByte, pb);
+        }
     }
     return marker;
 }
 
 MarkerType RE_Compiler::processUnboundedRep(RE * repeated, MarkerType marker, PabloBuilder & pb) {
     // always use PostPosition markers for unbounded repetition.
-    PabloAST * base = markerVar(AdvanceMarker(marker, MarkerPosition::InitialPostPositionByte, pb));    
-    if (isByteLength(repeated)  && !DisableMatchStar) {
+    PabloAST * base = markerVar(AdvanceMarker(marker, MarkerPosition::InitialPostPositionByte, pb));
+    if (!mGraphemeBoundaryRule && isByteLength(repeated)  && !DisableMatchStar) {
         PabloAST * cc = markerVar(compile(repeated, pb));
         PabloAST * mstar = nullptr;
         if (SetMod64Approximation) {
@@ -665,9 +671,9 @@ MarkerType RE_Compiler::processUnboundedRep(RE * repeated, MarkerType marker, Pa
         }
         return makeMarker(MarkerPosition::FinalPostPositionByte, pb.createAnd(mstar, final, "unbounded"));
     } else if (mStarDepth > 0){
-        PabloBuilder * outerb = pb.getParent();       
+        PabloBuilder * outerb = pb.getParent();
         Assign * starPending = outerb->createAssign("pending", outerb->createZeroes());
-        Assign * starAccum = outerb->createAssign("accum", outerb->createZeroes());       
+        Assign * starAccum = outerb->createAssign("accum", outerb->createZeroes());
         mStarDepth++;
         PabloAST * m1 = pb.createOr(base, starPending);
         PabloAST * m2 = pb.createOr(base, starAccum);
@@ -701,7 +707,7 @@ MarkerType RE_Compiler::processUnboundedRep(RE * repeated, MarkerType marker, Pa
         mStarDepth--;
         mLoopVariants.clear();
         return makeMarker(markerPos(result), pb.createAssign("unbounded", nextWhileAccum));
-    }    
+    }
 }
 
 inline MarkerType RE_Compiler::compileStart(const MarkerType marker, pablo::PabloBuilder & pb) {
