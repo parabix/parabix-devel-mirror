@@ -66,25 +66,13 @@ PabloCompiler::PabloCompiler(Type * bitBlockType)
 , mFunction(nullptr)
 , mInputAddressPtr(nullptr)
 , mOutputAddressPtr(nullptr)
-, mMaxWhileDepth(0)
-, mPrintRegisterFunction(nullptr) {
+, mMaxWhileDepth(0) {
 
 }
 
 PabloCompiler::~PabloCompiler() {
 }
     
-
-void PabloCompiler::genPrintRegister(std::string regName, Value * bitblockValue) {
-    Constant * regNameData = ConstantDataArray::getString(mMod->getContext(), regName);
-    GlobalVariable *regStrVar = new GlobalVariable(*mMod,
-                                                   ArrayType::get(IntegerType::get(mMod->getContext(), 8), regName.length()+1),
-                                                   /*isConstant=*/ true,
-                                                   /*Linkage=*/ GlobalValue::PrivateLinkage,
-                                                   /*Initializer=*/ regNameData);
-    Value * regStrPtr = mBuilder->CreateGEP(regStrVar, std::vector<Value *>({mBuilder->getInt64(0), mBuilder->getInt32(0)}));
-    mBuilder->CreateCall(mPrintRegisterFunction, std::vector<Value *>({regStrPtr, bitblockValue}));
-}
 
 llvm::Function * PabloCompiler::compile(PabloFunction * function) {
     Module * module = new Module("", getGlobalContext());
@@ -118,8 +106,6 @@ llvm::Function * PabloCompiler::compile(PabloFunction * function, Module * modul
 
     mCarryManager = new CarryManager(mBuilder, &iBuilder);
     
-    if (DumpTrace) DeclareDebugFunctions();
-        
     GenerateFunction(*function);
     
     mBuilder->SetInsertPoint(BasicBlock::Create(mMod->getContext(), "entry", mFunction,0));
@@ -131,7 +117,7 @@ llvm::Function * PabloCompiler::compile(PabloFunction * function, Module * modul
         LoadInst * basisBit = mBuilder->CreateAlignedLoad(gep, iBuilder.getBitBlockWidth()/8, false, function->getParameter(i)->getName()->to_string());
         mMarkerMap[function->getParameter(i)] = basisBit;
         if (DumpTrace) {
-            genPrintRegister(function->getParameter(i)->getName()->to_string(), basisBit);
+            iBuilder.genPrintRegister(function->getParameter(i)->getName()->to_string(), basisBit);
         }
     }
      
@@ -148,7 +134,7 @@ llvm::Function * PabloCompiler::compile(PabloFunction * function, Module * modul
     mCarryManager->generateBlockNoIncrement();
 
     if (DumpTrace) {
-        genPrintRegister("mBlockNo", mBuilder->CreateAlignedLoad(mBuilder->CreateBitCast(mCarryManager->getBlockNoPtr(), PointerType::get(mBitBlockType, 0)), iBuilder.getBitBlockWidth()/8, false));
+        iBuilder.genPrintRegister("mBlockNo", mBuilder->CreateAlignedLoad(mBuilder->CreateBitCast(mCarryManager->getBlockNoPtr(), PointerType::get(mBitBlockType, 0)), iBuilder.getBitBlockWidth()/8, false));
     }
     
     // Write the output values out
@@ -215,11 +201,6 @@ void PabloCompiler::Examine(PabloBlock & block) {
             --mWhileDepth;
         }
     }
-}
-
-inline void PabloCompiler::DeclareDebugFunctions() {
-        //This function can be used for testing to print the contents of a register from JIT'd code to the terminal window.
-        mPrintRegisterFunction = mMod->getOrInsertFunction("wrapped_print_register", Type::getVoidTy(mMod->getContext()), Type::getInt8PtrTy(mMod->getContext()), mBitBlockType, NULL);
 }
 
 void PabloCompiler::compileBlock(PabloBlock & block) {
@@ -477,7 +458,7 @@ void PabloCompiler::compileStatement(const Statement * stmt) {
     }
     mMarkerMap[stmt] = expr;
     if (DumpTrace) {
-        genPrintRegister(stmt->getName()->to_string(), expr);
+        iBuilder.genPrintRegister(stmt->getName()->to_string(), expr);
     }
     
 }

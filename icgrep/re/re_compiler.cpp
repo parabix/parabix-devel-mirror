@@ -330,6 +330,7 @@ Name * RE_Compiler::generateGraphemeClusterBoundaryRule() {
     RE * GCB_Control = makeName("gcb", "cn", Name::Type::UnicodeProperty);
     RE * GCB_CR = makeName("gcb", "cr", Name::Type::UnicodeProperty);
     RE * GCB_LF = makeName("gcb", "lf", Name::Type::UnicodeProperty);
+    RE * GCB_Control_CR_LF = makeAlt({GCB_CR, GCB_LF, GCB_Control});
 
     // Break at the start and end of text.
     RE * GCB_1 = makeStart();
@@ -337,9 +338,9 @@ Name * RE_Compiler::generateGraphemeClusterBoundaryRule() {
     // Do not break between a CR and LF.
     RE * GCB_3 = makeSeq({Behind(GCB_CR), Ahead(GCB_LF)});
     // Otherwise, break before and after controls.
-    RE * GCB_4 = Behind(GCB_Control);
-    RE * GCB_5 = Ahead(GCB_Control);
-    RE * GCB_1_5 = makeAlt({GCB_1, GCB_2, makeDiff(makeSeq({GCB_4, GCB_5}), GCB_3)});
+    RE * GCB_4 = Behind(GCB_Control_CR_LF);
+    RE * GCB_5 = Ahead(GCB_Control_CR_LF);
+    RE * GCB_1_5 = makeAlt({GCB_1, GCB_2, makeDiff(makeAlt({GCB_4, GCB_5}), GCB_3)});
 
     RE * GCB_L = makeName("gcb", "l", Name::Type::UnicodeProperty);
     RE * GCB_V = makeName("gcb", "v", Name::Type::UnicodeProperty);

@@ -25,7 +25,8 @@ public:
     , mBitBlockType(bitBlockType)
     , mBitBlockWidth(bitBlockType->isIntegerTy() ? cast<IntegerType>(bitBlockType)->getIntegerBitWidth() : cast<VectorType>(bitBlockType)->getBitWidth())
     , mZeroInitializer(Constant::getNullValue(bitBlockType)) 
-    , mOneInitializer(Constant::getAllOnesValue(bitBlockType)) {
+    , mOneInitializer(Constant::getAllOnesValue(bitBlockType))
+    , mPrintRegisterFunction(nullptr) {
 
     }
 
@@ -37,6 +38,7 @@ public:
     Type * getBitBlockType() { return mBitBlockType;}
     Value * bitCast(Value * a) {return a->getType() == mBitBlockType ? a : mLLVMBuilder->CreateBitCast(a, mBitBlockType);}
     int getBitBlockWidth() { return mBitBlockWidth;}
+    void genPrintRegister(std::string regName, Value * bitblockValue);
     
     
     Constant * allZeroes() {return mZeroInitializer;}
@@ -86,6 +88,7 @@ private:
     unsigned mBitBlockWidth;
     Constant * mZeroInitializer;
     Constant * mOneInitializer;
+    Constant * mPrintRegisterFunction;
     
     Value * bitBlockCast(Value * a);
     VectorType * fwVectorType(unsigned fw);

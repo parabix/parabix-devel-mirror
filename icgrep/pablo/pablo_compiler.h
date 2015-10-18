@@ -80,13 +80,11 @@ public:
     Module *getModule();
 private:
     void GenerateFunction(PabloFunction & function);
-    void DeclareDebugFunctions();
     void Examine(PabloFunction & function);
     void Examine(PabloBlock & block);
 
     void SetOutputValue(Value * marker, const unsigned index);
 
-    void genPrintRegister(std::string regName, Value * bitblockValue);
     void compileBlock(PabloBlock & block);
     void compileStatement(const Statement * stmt);
     void compileIf(const If * ifStmt);
@@ -118,7 +116,6 @@ private:
 
     unsigned                            mMaxWhileDepth;
 
-    Constant *                          mPrintRegisterFunction;
 };
 
 inline Module * PabloCompiler::getModule() {

@@ -25,6 +25,21 @@ Value * IDISA_Builder::fwCast(unsigned fw, Value * a) {
     return a->getType() == fwVectorType(fw) ? a : mLLVMBuilder->CreateBitCast(a, fwVectorType(fw));
 }
 
+void IDISA_Builder::genPrintRegister(std::string regName, Value * bitblockValue) {
+    if (mPrintRegisterFunction == nullptr) {
+        mPrintRegisterFunction = mMod->getOrInsertFunction("wrapped_print_register", Type::getVoidTy(mMod->getContext()), Type::getInt8PtrTy(mMod->getContext()), mBitBlockType, NULL);
+    }
+    Constant * regNameData = ConstantDataArray::getString(mMod->getContext(), regName);
+    GlobalVariable *regStrVar = new GlobalVariable(*mMod,
+                                                   ArrayType::get(IntegerType::get(mMod->getContext(), 8), regName.length()+1),
+                                                   /*isConstant=*/ true,
+                                                   /*Linkage=*/ GlobalValue::PrivateLinkage,
+                                                   /*Initializer=*/ regNameData);
+    Value * regStrPtr = mLLVMBuilder->CreateGEP(regStrVar, std::vector<Value *>({mLLVMBuilder->getInt64(0), mLLVMBuilder->getInt32(0)}));
+    mLLVMBuilder->CreateCall(mPrintRegisterFunction, std::vector<Value *>({regStrPtr, bitblockValue}));
+}
+
+    
 Value * IDISA_Builder::simd_add(unsigned fw, Value * a, Value * b) {
     return mLLVMBuilder->CreateAdd(fwCast(fw, a), fwCast(fw, b));
 }
