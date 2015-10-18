@@ -174,7 +174,7 @@ info.soopercredit@qq.com
 aliceisdale@yahoo.com
 elizabethjohnson134@hotmail.com
 anikaebertus@yahoo.se
-bayford_A@qq.com
+bayford_A@qq.biz
 hijabfarid@hotmail.com
 zaringwarkipkalya@aol.fr
 monahmeddd2014@gmail.com
@@ -182,11 +182,12 @@ hijab.farid@hotmail.cam
 dennis.melcher01@gmail.com
 publicitycbn@gmail.com
 michaelkruegerloancompany@gmail.com
+michaelkruegerloancompany@gmail.co&#x0313;m
 ben525387@gmail.com
 dgill_pwc@mynet.com
 dgill_pwc1@terra.com
 tuthpala12@gmail.com
-johanthony1956@e-mail.ua
+johanthony1956@e-mail.museum
 christopher.white01@live.co.uk
 anitaloanfirm@live.com
 aliadamssolicitors@gmail.com
@@ -220,6 +221,7 @@ m2424m@live.com
 stevewilliam197@gmail.com
 mrmathew.martins@yahoo.com
 benjaminwilliam917@gmail.com
+benja&#x031C;&#x030A;minwilliam917@gmail.com
 abe.shelton1@lenta.ru
 owengah@live.com
 dlserv01@aol.com
@@ -230,6 +232,8 @@ janievitek@gmail.com
 creditservice@careceo.com
 cying011@yahoo.com
 christophe_gbeffa@hotmail.fr
+christophe_gbeffa@hotmail.f&#x0301;r
+christophe_gbeffa@hotmail.fr&#x0301;
 maracasinter@yahoo.com
 iquad94@yahoo.com
 emil.jacobs@mail.com 
@@ -243,6 +247,7 @@ mrsmorganhenlenloanfirm@gmail.com
 barr.njdmdcggroup@yahoo.com
 hknbddhb@gmail.com
 michelfoucault@outlook.fr
+michélfoucault@outlook.fr
 goldsupply@rediffmail.com
 dvdmumbai2000@gmail.com
 mikefinance02@gmail.com
@@ -364,8 +369,9 @@ alshat@emirates.net.ae
 
 <datafile id = "CRLF">line with CRLF &#13;&#10;two lines with LFCR &#10;&#13;final line 
 </datafile>
- <grepcase regexp="^$" datafile="CRLF" grepcount="1"/>
- <grepcase regexp="^.*$" datafile="CRLF" grepcount="4"/>
+
+<grepcase regexp="^$" datafile="CRLF" grepcount="1"/>
+<grepcase regexp="^.*$" datafile="CRLF" grepcount="4"/>
 
  <datafile id = "LU_test">
 The following line has LATIN CAPITAL LETTER G WITH MACRON in single quotes.
@@ -507,7 +513,7 @@ abcdefghijklmno</datafile>
 
 <grepcase regexp="^((([2][5][0-5]|([2][0-4]|[1][0-9]|[0-9])?[0-9])[.]){3})([2][5][0-5]|([2][0-4]|[1][0-9]|[0-9])?[0-9])$" datafile="ips" grepcount="60"/>
 <grepcase regexp="^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.([a-zA-Z]{2}|com|org|net|edu|gov|mil|biz|info|mobi|name|aero|asia|jobs|museum)$" datafile="emails" grepcount="116"/>
-<grepcase regexp="(?g)^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.([a-zA-Z]{2}|com|org|net|edu|gov|mil|biz|info|mobi|name|aero|asia|jobs|museum)$" datafile="emails" grepcount="116"/>
+<grepcase regexp="^(?g)[a-zA-Z0-9._%+-]+(?-g)@(?g)[a-zA-Z0-9.-]+(?-g)\.((?g)[a-zA-Z]{2}(?-g)|com|org|net|edu|gov|mil|biz|info|mobi|name|aero|asia|jobs|museum)$" datafile="emails" grepcount="120"/>
 <grepcase regexp="^[-+]?([1-9]0?)+\.?((0*[1-9])+|0)([eE][-+]?([0-9]+)+)?$" datafile="floats" grepcount="26"/>
 
 <!-- . should match a unique character, even if it is 3 bytes. -->
@@ -561,6 +567,7 @@ Unterminated</datafile>
 
 <grepcase regexp="^.*$" datafile="LineBreaking" grepcount="19"/>
 <grepcase regexp="^\X*$" datafile="LineBreaking" grepcount="19"/>
+<grepcase regexp="(?g)^.*$" datafile="LineBreaking" grepcount="19"/>
 <grepcase regexp="Unterminated$" datafile="LineBreaking" grepcount="1"/>
 <grepcase regexp="^CRLF.$" datafile="LineBreaking" grepcount="5"/>
 <grepcase regexp="LS[0-9]*" datafile="LineBreaking" grepcount="6"/>
@@ -796,4 +803,5 @@ Unterminated</datafile>
 <grepcase regexp="\x{1160}\B{g}" datafile="graphemebreaktest" grepcount="14"/>
 <grepcase regexp="\b{g}\x{308}" datafile="graphemebreaktest" grepcount="0"/>
 <grepcase regexp="\B{g}\x{308}" datafile="graphemebreaktest" grepcount="100"/>
+
 </greptest>
