@@ -671,24 +671,26 @@ MarkerType RE_Compiler::processUnboundedRep(RE * repeated, MarkerType marker, Pa
         mStarDepth++;
         PabloAST * m1 = pb.createOr(base, starPending);
         PabloAST * m2 = pb.createOr(base, starAccum);
-        PabloAST * loopComputation = markerVar(AdvanceMarker(process(repeated, makeMarker(MarkerPosition::InitialPostPositionByte, m1), pb), MarkerPosition::InitialPostPositionByte, pb));
+        MarkerType result = process(repeated, makeMarker(MarkerPosition::InitialPostPositionByte, m1), pb);
+        result = AdvanceMarker(result, MarkerPosition::InitialPostPositionByte, pb);
+        PabloAST * loopComputation = markerVar(result);
         Next * nextPending = pb.createNext(starPending, pb.createAnd(loopComputation, pb.createNot(m2)));
         Next * nextStarAccum = pb.createNext(starAccum, pb.createOr(loopComputation, m2));
         mWhileTest = pb.createOr(mWhileTest, nextPending);
         mLoopVariants.push_back(nextPending);
         mLoopVariants.push_back(nextStarAccum);
-        mStarDepth--;        
-        return makeMarker(MarkerPosition::InitialPostPositionByte, pb.createAssign("unbounded", pb.createOr(base, nextStarAccum)));
+        mStarDepth--;
+        return makeMarker(markerPos(result), pb.createAssign("unbounded", pb.createOr(base, nextStarAccum)));
     } else {
         Assign * whileTest = pb.createAssign("test", base);
         Assign * whilePending = pb.createAssign("pending", base);
         Assign * whileAccum = pb.createAssign("accum", base);
         mWhileTest = pb.createZeroes();
-
         PabloBuilder wb = PabloBuilder::Create(pb);
         mStarDepth++;
-
-        PabloAST * loopComputation = markerVar(AdvanceMarker(process(repeated, makeMarker(MarkerPosition::InitialPostPositionByte, whilePending), wb), MarkerPosition::InitialPostPositionByte, wb));
+        MarkerType result = process(repeated, makeMarker(MarkerPosition::InitialPostPositionByte, whilePending), wb);
+        result = AdvanceMarker(result, MarkerPosition::InitialPostPositionByte, wb);
+        PabloAST * loopComputation = markerVar(result);
         Next * nextWhilePending = wb.createNext(whilePending, wb.createAnd(loopComputation, wb.createNot(whileAccum)));
         Next * nextWhileAccum = wb.createNext(whileAccum, wb.createOr(loopComputation, whileAccum));
         Next * nextWhileTest = wb.createNext(whileTest, wb.createOr(mWhileTest, nextWhilePending));
@@ -698,7 +700,7 @@ MarkerType RE_Compiler::processUnboundedRep(RE * repeated, MarkerType marker, Pa
         pb.createWhile(nextWhileTest, mLoopVariants, wb);
         mStarDepth--;
         mLoopVariants.clear();
-        return makeMarker(MarkerPosition::InitialPostPositionByte, pb.createAssign("unbounded", nextWhileAccum));
+        return makeMarker(markerPos(result), pb.createAssign("unbounded", nextWhileAccum));
     }    
 }
 
