@@ -405,6 +405,8 @@ Value * CarryManager::advanceCarryInCarryOut(int localIndex, unsigned shift_amou
     }
 }
 
+#define DSSLI_FIELDWIDTH 64
+
 Value * CarryManager::unitAdvanceCarryInCarryOut(int localIndex, Value * strm) {
     unsigned posn = advance1Position(localIndex);
     if (mITEMS_PER_PACK > 1) {// #ifdef PACKING
@@ -420,19 +422,8 @@ Value * CarryManager::unitAdvanceCarryInCarryOut(int localIndex, Value * strm) {
     if (mCarryInfo->getWhileDepth() == 0) {
         storeCarryPack(posn);
     }
-    Value* result_value;
-    
-    if (mBITBLOCK_WIDTH == 128) {
-        Value * ahead64 = iBuilder->mvmd_dslli(64, carry_in, strm, 1);
-        result_value = iBuilder->simd_or(iBuilder->simd_srli(64, ahead64, 63), iBuilder->simd_slli(64, strm, 1));
-    }
-    else {
-        Value* advanceq_longint = mBuilder->CreateBitCast(carry_in, mBuilder->getIntNTy(mBITBLOCK_WIDTH));
-        Value* strm_longint = mBuilder->CreateBitCast(strm, mBuilder->getIntNTy(mBITBLOCK_WIDTH));
-        Value* adv_longint = mBuilder->CreateOr(mBuilder->CreateShl(strm_longint, 1), mBuilder->CreateLShr(advanceq_longint, mBITBLOCK_WIDTH - 1), "advance");
-        result_value = mBuilder->CreateBitCast(adv_longint, mBitBlockType);
-    }
-    return result_value;
+    Value * ahead = iBuilder->mvmd_dslli(DSSLI_FIELDWIDTH, strm, carry_in, iBuilder->getBitBlockWidth()/DSSLI_FIELDWIDTH -1);
+    return iBuilder->simd_or(iBuilder->simd_srli(DSSLI_FIELDWIDTH, ahead, DSSLI_FIELDWIDTH-1), iBuilder->simd_slli(DSSLI_FIELDWIDTH, strm, 1));
 }
 
 Value * CarryManager::shortAdvanceCarryInCarryOut(int localIndex, unsigned shift_amount, Value * strm) {
@@ -450,6 +441,14 @@ Value * CarryManager::shortAdvanceCarryInCarryOut(int localIndex, unsigned shift
     Value * carry_in = getCarryPack(posn);
     if (mCarryInfo->getWhileDepth() == 0) {
         storeCarryPack(posn);
+    }
+    // Use a single whole-byte shift, if possible.
+    if (shift_amount % 8 == 0) {
+        return iBuilder->mvmd_dslli(8, strm, carry_in, iBuilder->getBitBlockWidth()/8 - shift_amount/8);
+    }
+    else if (shift_amount < DSSLI_FIELDWIDTH) {
+        Value * ahead = iBuilder->mvmd_dslli(DSSLI_FIELDWIDTH, strm, carry_in, iBuilder->getBitBlockWidth()/DSSLI_FIELDWIDTH - 1);
+        return iBuilder->simd_or(iBuilder->simd_srli(DSSLI_FIELDWIDTH, ahead, DSSLI_FIELDWIDTH-shift_amount), iBuilder->simd_slli(DSSLI_FIELDWIDTH, strm, shift_amount));
     }
     Value* advanceq_longint = mBuilder->CreateBitCast(carry_in, mBuilder->getIntNTy(mBITBLOCK_WIDTH));
     Value* strm_longint = mBuilder->CreateBitCast(strm, mBuilder->getIntNTy(mBITBLOCK_WIDTH));

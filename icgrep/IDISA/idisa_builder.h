@@ -90,7 +90,6 @@ private:
     Constant * mOneInitializer;
     Constant * mPrintRegisterFunction;
     
-    Value * bitBlockCast(Value * a);
     VectorType * fwVectorType(unsigned fw);
     Value * fwCast(unsigned fw, Value * a);
 };
