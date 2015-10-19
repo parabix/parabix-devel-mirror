@@ -234,8 +234,8 @@ RE * RE_Compiler::resolveUnicodeProperties(RE * re) {
         } else if (Intersect * ix = dyn_cast<Intersect>(re)) {
             ix->setLH(resolve(ix->getLH()));
             ix->setRH(resolve(ix->getRH()));
-            CC * lh = getDefinitionIfCC(diff->getLH());
-            CC * rh = getDefinitionIfCC(diff->getRH());
+            CC * lh = getDefinitionIfCC(ix->getLH());
+            CC * rh = getDefinitionIfCC(ix->getRH());
             if (lh && rh) {
                 return resolve(makeName("intersect", intersectCC(lh, rh)));
             }

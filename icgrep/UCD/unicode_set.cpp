@@ -23,6 +23,7 @@
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/Support/Format.h>
 #include <include/simd-lib/builtins.hpp>
+#include <iostream>
 
 namespace UCD {
 
@@ -179,8 +180,13 @@ UnicodeSet UnicodeSet::operator&(const UnicodeSet & other) const {
     const auto e2 = other.quad_end();
     for (auto i1 = quad_begin(), i2 = other.quad_begin(); i1 != e1 && i2 != e2; ) {
         const auto n = std::min(i1.length(), i2.length());
-        if (i1.type() == i2.type() && i1.type() != Mixed) {
-            append_run(i1.type(), n, runs);
+        if ((i1.type() == Full) && (i2.type() == Full)) {
+            append_run(Full, n, runs);
+            i1 += n;
+            i2 += n;
+        }
+        else if ((i1.type() == Empty) || (i2.type() == Empty)) {
+            append_run(Empty, n, runs);
             i1 += n;
             i2 += n;
         }
@@ -196,7 +202,7 @@ UnicodeSet UnicodeSet::operator&(const UnicodeSet & other) const {
             }
             i2 += n;
         }
-        else {
+        else { //both Mixed
             for (unsigned i = 0; i != n; ++i, ++i1, ++i2) {
                 append_quad(i1.quad() & i2.quad(), quads, runs);
             }
