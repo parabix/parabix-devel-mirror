@@ -43,22 +43,28 @@ inline Seq * makeSeq() {
 template<typename itr>
 void Seq::flatten(itr begin, itr end) {
     for (auto i = begin; i != end; ++i) {
-        if (Seq * seq = dyn_cast<Seq>(*i)) {
-            flatten<Seq::iterator>(seq->begin(), seq->end());
-            continue;
+        if (LLVM_UNLIKELY(isa<Seq>(*i))) {
+            flatten<Seq::iterator>(cast<Seq>(*i)->begin(), cast<Seq>(*i)->end());
+        } else {
+            push_back(*i);
         }
-        push_back(*i);
     }
 }
 
 template<typename itr>
 inline RE * makeSeq(itr begin, itr end) {
-    Seq * seq = makeSeq();
-    seq->flatten(begin, end);
-    if (seq->size() == 1) {
-        return seq->back();
+    if (LLVM_UNLIKELY(std::distance(begin, end) == 0)) {
+        return makeSeq();
+    } else if (std::distance(begin, end) == 1) {
+        return *begin;
+    } else {
+        Seq * seq = makeSeq();
+        seq->flatten(begin, end);
+        if (seq->size() == 1) {
+            return seq->front();
+        }
+        return seq;
     }
-    return seq;
 }
 
 inline RE * makeSeq(RE::InitializerList list) {

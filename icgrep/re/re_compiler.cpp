@@ -263,37 +263,37 @@ RE * RE_Compiler::resolveUnicodeProperties(RE * re) {
     std::unordered_set<Name *> visited;
 
     std::function<void(RE*)> gather = [&](RE * re) {
-        if (Name * name = dyn_cast<Name>(re)) {
-            if (visited.insert(name).second) {
-                if (isa<CC>(name->getDefinition())) {
-                    nameMap.emplace(name, nullptr);
+        if (isa<Name>(re)) {
+            if (visited.insert(cast<Name>(re)).second) {
+                if (isa<CC>(cast<Name>(re)->getDefinition())) {
+                    nameMap.emplace(cast<Name>(re), nullptr);
                 } else {
-                    gather(name->getDefinition());
+                    gather(cast<Name>(re)->getDefinition());
                 }
             }
-        } else if (Seq * seq = dyn_cast<Seq>(re)) {
-            for (auto re : *seq) {
+        } else if (isa<Seq>(re)) {
+            for (RE * re : *cast<Seq>(re)) {
                 gather(re);
             }
-        } else if (Alt * alt = dyn_cast<Alt>(re)) {
-            for (auto re : *alt) {
+        } else if (isa<Alt>(re)) {
+            for (RE * re : *cast<Alt>(re)) {
                 gather(re);
             }
-        } else if (Rep * rep = dyn_cast<Rep>(re)) {
-            gather(rep->getRE());
-        } else if (Assertion * a = dyn_cast<Assertion>(re)) {
-            gather(a->getAsserted());
-        } else if (Diff * diff = dyn_cast<Diff>(re)) {
-            gather(diff->getLH());
-            gather(diff->getRH());
-        } else if (Intersect * ix = dyn_cast<Intersect>(re)) {
-            gather(ix->getLH());
-            gather(ix->getRH());
-        } else if (GraphemeBoundary * gb = dyn_cast<GraphemeBoundary>(re)) {
-            if (gb->getExpression()) {
-                gather(gb->getExpression());
+        } else if (isa<Rep>(re)) {
+            gather(cast<Rep>(re)->getRE());
+        } else if (isa<Assertion>(re)) {
+            gather(cast<Assertion>(re)->getAsserted());
+        } else if (isa<Diff>(re)) {
+            gather(cast<Diff>(re)->getLH());
+            gather(cast<Diff>(re)->getRH());
+        } else if (isa<Intersect>(re)) {
+            gather(cast<Intersect>(re)->getLH());
+            gather(cast<Intersect>(re)->getRH());
+        } else if (isa<GraphemeBoundary>(re)) {
+            if (cast<GraphemeBoundary>(re)->getExpression()) {
+                gather(cast<GraphemeBoundary>(re)->getExpression());
             }
-            gather(gb->getBoundaryRule());
+            gather(cast<GraphemeBoundary>(re)->getBoundaryRule());
         }
     };
 
@@ -377,28 +377,28 @@ MarkerType RE_Compiler::compile(RE * re, PabloBuilder & pb) {
 }
 
 MarkerType RE_Compiler::process(RE * re, MarkerType marker, PabloBuilder & pb) {
-    if (Name * name = dyn_cast<Name>(re)) {
-        return compileName(name, marker, pb);
-    } else if (Seq* seq = dyn_cast<Seq>(re)) {
-        return compileSeq(seq, marker, pb);
-    } else if (Alt * alt = dyn_cast<Alt>(re)) {
-        return compileAlt(alt, marker, pb);
-    } else if (Rep * rep = dyn_cast<Rep>(re)) {
-        return compileRep(rep, marker, pb);
-    } else if (Assertion * a = dyn_cast<Assertion>(re)) {
-        return compileAssertion(a, marker, pb);
+    if (isa<Name>(re)) {
+        return compileName(cast<Name>(re), marker, pb);
+    } else if (isa<Seq>(re)) {
+        return compileSeq(cast<Seq>(re), marker, pb);
+    } else if (isa<Alt>(re)) {
+        return compileAlt(cast<Alt>(re), marker, pb);
+    } else if (isa<Rep>(re)) {
+        return compileRep(cast<Rep>(re), marker, pb);
+    } else if (isa<Assertion>(re)) {
+        return compileAssertion(cast<Assertion>(re), marker, pb);
     } else if (isa<Any>(re)) {
         return compileAny(marker, pb);
-    } else if (Diff * diff = dyn_cast<Diff>(re)) {
-        return compileDiff(diff, marker, pb);
-    } else if (Intersect * ix = dyn_cast<Intersect>(re)) {
-        return compileIntersect(ix, marker, pb);
+    } else if (isa<Diff>(re)) {
+        return compileDiff(cast<Diff>(re), marker, pb);
+    } else if (isa<Intersect>(re)) {
+        return compileIntersect(cast<Intersect>(re), marker, pb);
     } else if (isa<Start>(re)) {
         return compileStart(marker, pb);
     } else if (isa<End>(re)) {
         return compileEnd(marker, pb);
-    } else if (GraphemeBoundary * gb = dyn_cast<GraphemeBoundary>(re)) {
-        return compileGraphemeBoundary(gb, marker, pb);
+    } else if (isa<GraphemeBoundary>(re)) {
+        return compileGraphemeBoundary(cast<GraphemeBoundary>(re), marker, pb);
     }
     throw std::runtime_error("RE Compiler failed to process " + Printer_RE::PrintRE(re));
 }

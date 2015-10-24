@@ -9,7 +9,6 @@
 
 #include "re_re.h"
 #include "re_cc.h"
-#include <queue>
 
 namespace re {
 
@@ -34,17 +33,13 @@ protected:
     }
 private:
     template<typename iterator>
-    void flatten(iterator begin, iterator end, std::queue<CC*> & ccQ) {
+    void flatten(iterator begin, iterator end) {
         for (auto i = begin; i != end; ++i) {
-            if (Alt * alt = dyn_cast<Alt>(*i)) {
-                flatten(alt->begin(), alt->end(), ccQ);
-                continue;
+            if (LLVM_UNLIKELY(isa<Alt>(*i))) {
+                flatten<Alt::iterator>(cast<Alt>(*i)->begin(), cast<Alt>(*i)->end());
+            } else {
+                push_back(*i);
             }
-            else if (CC * cc = dyn_cast<CC>(*i)) {
-                ccQ.push(cc);
-                continue;
-            }
-            push_back(*i);
         }
     }
 };
@@ -65,21 +60,18 @@ inline Alt * makeAlt() {
 
 template<typename iterator>
 RE * makeAlt(iterator begin, iterator end) {
-    Alt * alt = makeAlt();
-    std::queue<CC*> ccQ;
-    alt->flatten(begin, end, ccQ);
-    if (!ccQ.empty()) {
-        while (ccQ.size() > 1) {
-            CC * a = ccQ.front(); ccQ.pop();
-            CC * b = ccQ.front(); ccQ.pop();
-            ccQ.push(makeCC(a, b));
+    if (LLVM_UNLIKELY(std::distance(begin, end) == 0)) {
+        throw std::runtime_error("Alt objects cannot be empty!");
+    } else if (std::distance(begin, end) == 1) {
+        return *begin;
+    } else {
+        Alt * alt = makeAlt();
+        alt->flatten(begin, end);
+        if (alt->size() == 1) {
+            return alt->front();
         }
-        alt->push_back(ccQ.front());
+        return alt;
     }
-    if (alt->size() == 1) {
-        return alt->back();
-    }
-    return alt;
 }
 
 inline RE * makeAlt(RE::InitializerList list) {

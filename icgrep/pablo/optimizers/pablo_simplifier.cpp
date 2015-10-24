@@ -79,6 +79,16 @@ inline static PabloAST * canTriviallyFold(Statement * stmt, PabloBlock & block) 
                         case 1: return block.createOr(stmt->getOperand(0), stmt->getOperand(2));
                         case 2: return block.createOr(block.createNot(stmt->getOperand(0)), stmt->getOperand(1));
                     }
+                case PabloAST::ClassTypeId::ScanThru:
+                    if (i == 1) {
+                        return block.createZeroes();
+                    }
+                    break;
+                case PabloAST::ClassTypeId::MatchStar:
+                    if (i == 0) {
+                        return block.createOnes();
+                    }
+                    break;
                 default: break;
             }
         }

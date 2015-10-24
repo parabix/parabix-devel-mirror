@@ -136,7 +136,7 @@ private:
 
     RE * parsePropertyExpression();
 
-    RE * parseNamePatternExpression();
+    Name * parseNamePatternExpression();
 
     RE * makeComplement(RE * s);
     RE * makeWordBoundary();

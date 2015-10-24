@@ -23,7 +23,6 @@
 #include <llvm/IR/Type.h>
 #include <pablo/pablo_compiler.h>
 #include <do_grep.h>
-
 #include <sstream>
 #include <algorithm>
 
@@ -93,14 +92,14 @@ inline RE * RE_Parser::parse_seq() {
         if (re == nullptr) {
             break;
         }
-        seq.push_back(extend_item(re));
+        re = extend_item(re);
+        seq.push_back(re);
     }
-    //  Note: empty sequences are legal.
     return makeSeq(seq.begin(), seq.end());
 }
 
 RE * RE_Parser::parse_next_item() {
-    if (mCursor.more()) {
+    if (mCursor.more()) {        
         switch (*mCursor) {
             case '(':
                 ++mCursor;
@@ -415,6 +414,7 @@ RE * RE_Parser::parseEscapedSet() {
                 throw ParseFailure("Malformed \\N expression");
             }
             ++mCursor;
+            assert (re);
             return re;
         default:
             throw ParseFailure("Internal error");
@@ -511,7 +511,7 @@ RE * RE_Parser::parsePropertyExpression() {
     return createName(std::move(canonicalize(start, mCursor.pos())));
 }
 
-RE * RE_Parser::parseNamePatternExpression(){
+Name * RE_Parser::parseNamePatternExpression(){
 
     ModeFlagSet outerFlags = fModeFlagSet;
     fModeFlagSet = 1;
@@ -537,7 +537,6 @@ RE * RE_Parser::parseNamePatternExpression(){
     pablo::PabloCompiler pablo_compiler(VectorType::get(IntegerType::get(getGlobalContext(), 64), BLOCK_SIZE/64));
     try {
         nameSearchIR = pablo_compiler.compile(nameSearchFunction);
-        releaseSlabAllocatorMemory();
     }
     catch (std::runtime_error e) {
         releaseSlabAllocatorMemory();
@@ -549,19 +548,24 @@ RE * RE_Parser::parseNamePatternExpression(){
     
     // Ensure everything is ready to go.
     engine->finalizeObject();
-    
-    void * icgrep_init_carry_ptr = engine->getPointerToFunction(nameSearchIR->getParent()->getFunction("process_block_initialize_carries"));
-    void * icgrep_MCptr = engine->getPointerToFunction(nameSearchIR);
-    
-    CC * result = nullptr;
+        
+    void * icgrep_MCptr = engine->getPointerToFunction(nameSearchIR);    
+    CC * codepoints = nullptr;
     if (icgrep_MCptr) {
+        void * icgrep_init_carry_ptr = engine->getPointerToFunction(nameSearchIR->getParent()->getFunction("process_block_initialize_carries"));
         GrepExecutor grepEngine(icgrep_init_carry_ptr, icgrep_MCptr);
         grepEngine.setParseCodepointsOption();
         grepEngine.doGrep("../Uname.txt");
-        result = grepEngine.getParsedCodepoints();
+        codepoints = grepEngine.getParsedCodepoints();
+        assert (codepoints);
     }
     delete engine;
-    return mMemoizer.memoize(result);
+    if (codepoints) {
+        Name * const result = mMemoizer.memoize(codepoints);
+        assert (*cast<CC>(result->getDefinition()) == *codepoints);
+        return result;
+    }
+    return nullptr;
 }
 
 
