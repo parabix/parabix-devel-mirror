@@ -185,6 +185,7 @@ int main(int argc, char *argv[]) {
     // Ensure everything is ready to go.
     engine->finalizeObject();
     
+    // TODO getPointerToFunction() is deprecated. Investigate getFunctionAddress(string name) instead.
     void * icgrep_init_carry_ptr = engine->getPointerToFunction(icgrep_IR->getParent()->getFunction("process_block_initialize_carries"));
     void * icgrep_MCptr = engine->getPointerToFunction(icgrep_IR);
     
@@ -193,7 +194,7 @@ int main(int argc, char *argv[]) {
         grepEngine.setCountOnlyOption(CountOnly);
         grepEngine.setNormalizeLineBreaksOption(NormalizeLineBreaks);
         grepEngine.setShowLineNumberOption(ShowLineNumbers);
-	    if (inputFiles.size() > (firstInputFile + 1) || ShowFileNames) {
+        if (inputFiles.size() > (firstInputFile + 1) || ShowFileNames) {
             grepEngine.setShowFileNameOption();
         }
         for (unsigned i = firstInputFile; i != inputFiles.size(); ++i) {
@@ -201,7 +202,7 @@ int main(int argc, char *argv[]) {
         }
     }
     
-    //engine->freeMachineCodeForFunction(icgrep_IR); // This function only prints a "not supported" message. Reevaluate with LLVM 3.6.
+    //engine->freeMachineCodeForFunction(icgrep_IR); // Removed in LLVM 3.6. MC will be automatically freed in destructors.
     delete engine;
 
     return 0;
