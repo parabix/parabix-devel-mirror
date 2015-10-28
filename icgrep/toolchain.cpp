@@ -35,7 +35,7 @@
 #include <cc/cc_compiler.h>
 #include <pablo/pablo_compiler.h>
 #include <pablo/optimizers/pablo_simplifier.hpp>
-#include <pablo/optimizers/pablo_codesinking.hpp>
+#include <pablo/optimizers/codemotionpass.h>
 #ifdef ENABLE_MULTIPLEXING
 #include <pablo/optimizers/pablo_automultiplexing.hpp>
 #include <pablo/optimizers/pablo_bddminimization.h>
@@ -141,7 +141,7 @@ void pablo_function_passes(pablo::PabloFunction * function) {
         pablo::Simplifier::optimize(*function);
     }
     if (PabloSinkingPass) {
-        pablo::CodeSinking::optimize(*function);
+        pablo::CodeMotionPass::optimize(*function);
     }
 #ifdef ENABLE_MULTIPLEXING    
     if (EnableMultiplexing) {

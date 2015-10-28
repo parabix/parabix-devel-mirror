@@ -9,7 +9,7 @@ namespace pablo {
 
 class PabloFunction;
 
-class CodeSinking {
+class CodeMotionPass {
     struct ScopeSet : public std::vector<PabloBlock *> {
         inline bool insert(PabloBlock * block) {
             const auto i = std::lower_bound(begin(), end(), block);
@@ -29,8 +29,10 @@ class CodeSinking {
 public:
     static bool optimize(PabloFunction & function);
 protected:
-    void sink(PabloBlock & block);
-    CodeSinking() { }
+    static void process(PabloBlock & block);
+    static bool isAcceptableTarget(Statement *stmt, ScopeSet & scopeSet, const PabloBlock & block);
+    static void sink(PabloBlock & block);    
+    static void hoistLoopInvariants(While * loop);
 };
 
 }

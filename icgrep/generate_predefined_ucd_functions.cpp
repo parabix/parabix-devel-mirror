@@ -263,7 +263,7 @@ void compileUnicodeSet(std::string name, UnicodeSet && set, PabloCompiler & pc, 
     // Optimize it at the pablo level
     PabloVerifier::verify(*function, "creation");
     Simplifier::optimize(*function);
-    CodeSinking::optimize(*function);
+    CodeMotionPass::optimize(*function);
     #ifdef ENABLE_MULTIPLEXING
     BDDMinimizationPass::optimize(*function);
     if (EnableMultiplexing) {

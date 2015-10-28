@@ -406,3 +406,5 @@ re/re_analysis.h
 re/re_rep.cpp
 re/re_alt.h
 re/re_grapheme_boundary.hpp
+pablo/optimizers/codemotionpass.h
+pablo/optimizers/codemotionpass.cpp

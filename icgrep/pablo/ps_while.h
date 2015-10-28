@@ -18,7 +18,7 @@ class While : public Statement {
 public:
 
     using NextAllocator = VectorAllocator::rebind<Next*>::other;
-    using NextVars = std::vector<Next *, NextAllocator>;
+    using Variants = std::vector<Next *, NextAllocator>;
 
     static inline bool classof(const PabloAST * e) {
         return e->getClassTypeId() == ClassTypeId::While;
@@ -31,10 +31,10 @@ public:
     inline PabloAST * getCondition() const {
         return getOperand(0);
     }
-    inline NextVars & getVariants() {
+    inline Variants & getVariants() {
         return mNext;
     }
-    inline const NextVars & getVariants() const {
+    inline const Variants & getVariants() const {
         return mNext;
     }
     inline PabloBlock & getBody() {
@@ -49,7 +49,7 @@ protected:
 
 private:
     PabloBlock &    mBody;
-    NextVars        mNext;
+    Variants        mNext;
 };
 
 }
