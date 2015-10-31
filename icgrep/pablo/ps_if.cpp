@@ -22,7 +22,7 @@ If::If(PabloAST * expr, const std::initializer_list<Assign *> definedVars, Pablo
 
     for (PabloAST * def : mDefined) {
         def->addUser(this);
-        addUser(def);
+        this->addUser(def);
     }
 }
 
@@ -33,18 +33,24 @@ If::If(PabloAST * expr, const std::vector<Assign *> & definedVars, PabloBlock & 
 {
     for (PabloAST * def : mDefined) {
         def->addUser(this);
-        addUser(def);
+        this->addUser(def);
     }
 }
 
 void If::addDefined(Assign * def) {
-    if (LLVM_LIKELY(std::find(mDefined.begin(), mDefined.end(), def) != mDefined.end())) {
-        const auto size = mDefined.size();
+    if (LLVM_LIKELY(std::find(mDefined.begin(), mDefined.end(), def) == mDefined.end())) {
         mDefined.push_back(def);
-        assert (mDefined.size() == size + 1);
-        assert (mDefined.back() == def);
         def->addUser(this);
-        addUser(def);
+        this->addUser(def);
+    }
+}
+
+void If::removeDefined(Assign * def) {
+    auto f = std::find(mDefined.begin(), mDefined.end(), def);
+    if (LLVM_LIKELY(f != mDefined.end())) {
+        mDefined.erase(f);
+        def->removeUser(this);
+        this->removeUser(def);
     }
 }
 

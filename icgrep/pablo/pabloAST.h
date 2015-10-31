@@ -20,6 +20,7 @@ namespace pablo {
 
 class PabloBlock;
 class String;
+class Statement;
 
 class PabloAST {
     friend class Statement;
@@ -161,6 +162,8 @@ class Statement : public PabloAST {
     friend class While;
     friend class Simplifier;
     friend class PabloBlock;
+    template <class ValueType, class ValueList>
+    friend void checkForReplacementInEscapedValueList(const Statement *, const PabloAST * const, PabloAST * const, ValueList &);
 public:
     static inline bool classof(const PabloAST * e) {
         switch (e->getClassTypeId()) {
@@ -184,13 +187,7 @@ public:
         return false;
     }
 
-    inline void replaceUsesOfWith(const PabloAST * const from, PabloAST * const to) {
-        for (unsigned i = 0; i != getNumOperands(); ++i) {
-            if (getOperand(i) == from) {
-                setOperand(i, to);
-            }
-        }
-    }
+    void replaceUsesOfWith(PabloAST * const from, PabloAST * const to);
 
     inline PabloAST * getOperand(const unsigned index) const {
         assert (index < getNumOperands());
@@ -242,9 +239,9 @@ protected:
             }
         }
     }  
-#ifndef NDEBUG
-    bool noRecursiveOperand(const PabloAST * const operand);
-#endif
+private:
+    template <class ValueType, class ValueList>
+    void checkForReplacementInEscapedValueList(Statement * branch, PabloAST * const from, PabloAST * const to, ValueList & list);
 protected:    
     const String *              mName;
     Statement *                 mNext;

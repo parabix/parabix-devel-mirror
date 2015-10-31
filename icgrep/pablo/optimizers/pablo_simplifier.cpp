@@ -199,18 +199,19 @@ inline bool discardNestedIfBlock(const PabloBlock & pb) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief removeIdenticalEscapedValues
  ** ------------------------------------------------------------------------------------------------------------- */
-template <class ValueList>
+template <class ValueList, class ValueType = typename ValueList::value_type>
 inline void removeIdenticalEscapedValues(ValueList & list) {
+    std::vector<ValueType> identicalValues;
     for (auto i = list.begin(); i != list.end(); ++i) {
-        for (auto j = i + 1; j != list.end(); ) {
+        for (auto j = i + 1; j != list.end(); ++j) {
             if (LLVM_UNLIKELY(equals(*i, *j))) {
-                Statement * redundantValue = *j;
-                j = list.erase(j);
-                redundantValue->replaceWith(*i, false, true);
-                continue;
+                identicalValues.push_back(*j);
             }
-            ++j;
         }
+        for (ValueType identicalValue : identicalValues) {
+            identicalValue->replaceWith(*i);
+        }
+        identicalValues.clear();
     }
 }
 
@@ -278,11 +279,13 @@ void Simplifier::eliminateRedundantCode(PabloBlock & block, ExpressionTable * pr
                 Statement * nested = ifNode->getBody().front();
                 while (nested) {
                     Statement * next = nested->removeFromParent();
+                    if (isa<Assign>(nested)) {
+                        ifNode->removeDefined(cast<Assign>(nested));
+                    }
                     nested->insertAfter(stmt);
                     stmt = nested;
                     nested = next;
                 }
-                ifNode->getDefined().clear();
                 stmt = ifNode->eraseFromParent(true);
                 continue;
             }

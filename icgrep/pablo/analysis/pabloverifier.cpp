@@ -8,6 +8,8 @@
 #else
 #include <unordered_set>
 #endif
+#include <queue>
+
 
 namespace pablo {
 
@@ -45,7 +47,8 @@ void verifyUseDefInformation(const PabloBlock & block, const ScopeSet & validSco
                     std::string tmp;
                     raw_string_ostream str(tmp);
                     PabloPrinter::print(user, "PabloVerifier: use-def error: ", str);
-                    PabloPrinter::print(stmt, " is a user of ", str);
+                    str << " is a user of ";
+                    PabloPrinter::print(stmt, str);
                     if (user->getParent() == nullptr) {
                         str << " but is not in any scope.";
                     } else {
@@ -135,7 +138,7 @@ void verifyProgramStructure(const PabloBlock & block) {
             PabloPrinter::print(stmt, "PabloVerifier: structure error: ", str);
             str << " succeeds ";
             PabloPrinter::print(prev, str);
-            str << " but expects to preceed  ";
+            str << " but expects to preceed ";
             PabloPrinter::print(stmt->getPrevNode(), str);
             throw std::runtime_error(str.str());
         }
@@ -157,29 +160,54 @@ void verifyProgramStructure(const PabloBlock & block) {
                 str << " is not nested within the expected scope block";
                 throw std::runtime_error(str.str());
             }
-            const Statement * misreportedEscapingValue = nullptr;
+            const Statement * badEscapedValue = nullptr;
             if (isa<If>(stmt)) {
                 for (const Assign * def : cast<If>(stmt)->getDefined()) {
                     if (def->getParent() != &nested) {
-                        misreportedEscapingValue = def;
+                        badEscapedValue = def;
                         break;
                     }
                 }
             } else {
                 for (const Next * var : cast<While>(stmt)->getVariants()) {
                     if (var->getParent() != &nested) {
-                        misreportedEscapingValue = var;
+                        badEscapedValue = var;
                         break;
                     }
                 }
             }
-            if (misreportedEscapingValue) {
+            if (badEscapedValue) {
                 std::string tmp;
                 raw_string_ostream str(tmp);
                 str << "PabloVerifier: structure error: ";
-                PabloPrinter::print(misreportedEscapingValue, str);
+                PabloPrinter::print(badEscapedValue, str);
                 str << " is not contained within the body of ";
                 PabloPrinter::print(stmt, str);
+                throw std::runtime_error(str.str());
+            }
+            if (isa<If>(stmt)) {
+                for (const Assign * def : cast<If>(stmt)->getDefined()) {
+                    if (LLVM_UNLIKELY(std::find(stmt->user_begin(), stmt->user_end(), def) == stmt->user_end())) {
+                        badEscapedValue = def;
+                        break;
+                    }
+                }
+            } else {
+                for (const Next * var : cast<While>(stmt)->getVariants()) {
+                    if (LLVM_UNLIKELY(std::find(stmt->user_begin(), stmt->user_end(), var) == stmt->user_end())) {
+                        badEscapedValue = var;
+                        break;
+                    }
+                }
+            }
+            if (badEscapedValue) {
+                std::string tmp;
+                raw_string_ostream str(tmp);
+                str << "PabloVerifier: structure error: ";
+                PabloPrinter::print(badEscapedValue, str);
+                str << " is an escaped value of ";
+                PabloPrinter::print(stmt, str);
+                str << " but not a user";
                 throw std::runtime_error(str.str());
             }
             verifyProgramStructure(nested);
@@ -213,6 +241,30 @@ private:
     SmallSet<const PabloAST *> mSet;
 };
 
+bool recursivelyDefined(const Statement * const stmt) {
+    std::queue<const Statement *> Q;
+    SmallSet<const PabloAST *> V;
+    V.insert(stmt);
+    for (const Statement * ancestor = stmt;;) {
+        for (unsigned i = 0; i != ancestor->getNumOperands(); ++i) {
+            const PabloAST * op = ancestor->getOperand(i);
+            if (isa<Statement>(op) && V.count(op) == 0) {
+                if (op == stmt) {
+                    return true;
+                }
+                Q.push(cast<Statement>(op));
+                V.insert(op);
+            }
+        }
+        if (LLVM_UNLIKELY(Q.empty())) {
+            break;
+        }
+        ancestor = Q.front();
+        Q.pop();
+    }
+    return false;
+}
+
 void isTopologicallyOrdered(const PabloBlock & block, const OrderingVerifier & parent) {
     OrderingVerifier ov(parent);
     for (const Statement * stmt : block) {
@@ -225,11 +277,19 @@ void isTopologicallyOrdered(const PabloBlock & block, const OrderingVerifier & p
         for (unsigned i = 0; i != stmt->getNumOperands(); ++i) {
             const PabloAST * const op = stmt->getOperand(i);
             if (LLVM_UNLIKELY((isa<Statement>(op) || isa<Var>(op)) && ov.count(op) == 0)) {
-                // TODO: make this actually test whether the operand is ever defined,
-                // or if it was defined in a scope that cannot be reached?
+
                 std::string tmp;
                 raw_string_ostream str(tmp);
-                str << "PabloVerifier: function is not topologically ordered! ";
+                str << "PabloVerifier: ordering volation: ";
+                if (LLVM_UNLIKELY(recursivelyDefined(stmt))) {
+                    PabloPrinter::print(stmt, str);
+                    str << " is recursively defined!";
+                    throw std::runtime_error(str.str());
+                }
+                // TODO: make this actually test whether the operand is ever defined,
+                // or if it was defined in a scope that cannot be reached?
+
+                str << "function is not topologically ordered! ";
                 PabloPrinter::print(stmt->getOperand(i), str);
                 PabloPrinter::print(stmt, " was used before definition by ", str);
                 throw std::runtime_error(str.str());

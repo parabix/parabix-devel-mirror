@@ -8,10 +8,7 @@
 #include <pablo/codegenstate.h>
 #include <llvm/Support/Compiler.h>
 #include <pablo/printer_pablos.h>
-#ifndef NDEBUG
-#include <queue>
-#include <unordered_set>
-#endif
+#include <iostream>
 
 namespace pablo {
 
@@ -26,6 +23,9 @@ PabloAST::VectorAllocator PabloAST::mVectorAllocator;
 
 */
 
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief equals
+ ** ------------------------------------------------------------------------------------------------------------- */
 bool equals(const PabloAST * expr1, const PabloAST * expr2) {
     assert (expr1 && expr2);
     if (expr1 == expr2) {
@@ -83,6 +83,9 @@ bool equals(const PabloAST * expr1, const PabloAST * expr2) {
     return false;
 }
 
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief replaceAllUsesWith
+ ** ------------------------------------------------------------------------------------------------------------- */
 void PabloAST::replaceAllUsesWith(PabloAST * expr) {    
     Statement * user[mUsers.size()];
     Vector::size_type users = 0;
@@ -98,10 +101,63 @@ void PabloAST::replaceAllUsesWith(PabloAST * expr) {
     }
 }
 
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief checkForReplacementInEscapedValueList
+ ** ------------------------------------------------------------------------------------------------------------- */
+template <class ValueType, class ValueList>
+inline void Statement::checkForReplacementInEscapedValueList(Statement * branch, PabloAST * const from, PabloAST * const to, ValueList & list) {
+    if (LLVM_LIKELY(isa<ValueType>(from))) {
+        auto f = std::find(list.begin(), list.end(), cast<ValueType>(from));
+        if (LLVM_LIKELY(f != list.end())) {
+            if (LLVM_LIKELY(isa<ValueType>(to))) {
+                if (std::find(list.begin(), list.end(), cast<ValueType>(to)) == list.end()) {
+                    *f = cast<ValueType>(to);
+                    branch->addUser(to);
+                } else {
+                    list.erase(f);
+                }
+                branch->removeUser(from);
+                assert (std::find(list.begin(), list.end(), cast<ValueType>(to)) != list.end());
+                assert (std::find(branch->user_begin(), branch->user_end(), cast<ValueType>(to)) != branch->user_end());
+            } else { // replacement error occured
+                std::string tmp;
+                raw_string_ostream str(tmp);
+                str << "cannot replace escaped value ";
+                PabloPrinter::print(from, str);
+                str << " with ";
+                PabloPrinter::print(to, str);
+                str << " in ";
+                PabloPrinter::print(branch, str);
+                throw std::runtime_error(str.str());
+            }
+        }                
+        assert (std::find(list.begin(), list.end(), cast<ValueType>(from)) == list.end());
+        assert (std::find(branch->user_begin(), branch->user_end(), cast<ValueType>(from)) == branch->user_end());
+    }
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief replaceUsesOfWith
+ ** ------------------------------------------------------------------------------------------------------------- */
+void Statement::replaceUsesOfWith(PabloAST * const from, PabloAST * const to) {
+    for (unsigned i = 0; i != getNumOperands(); ++i) {
+       if (getOperand(i) == from) {
+           setOperand(i, to);
+       }
+    }
+    if (LLVM_UNLIKELY(isa<If>(this))) {
+        checkForReplacementInEscapedValueList<Assign>(this, from, to, cast<If>(this)->getDefined());
+    } else if (LLVM_UNLIKELY(isa<While>(this))) {
+        checkForReplacementInEscapedValueList<Next>(this, from, to, cast<While>(this)->getVariants());
+    }
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief setOperand
+ ** ------------------------------------------------------------------------------------------------------------- */
 void Statement::setOperand(const unsigned index, PabloAST * const value) {
     assert (value);
     assert (index < getNumOperands());
-    assert (noRecursiveOperand(value));
     PabloAST * const priorValue = getOperand(index);
     if (LLVM_UNLIKELY(priorValue == value)) {
         return;
@@ -123,6 +179,9 @@ void Statement::setOperand(const unsigned index, PabloAST * const value) {
     value->addUser(this);
 }
 
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief insertBefore
+ ** ------------------------------------------------------------------------------------------------------------- */
 void Statement::insertBefore(Statement * const statement) {
     if (LLVM_UNLIKELY(statement == this)) {
         return;
@@ -150,6 +209,9 @@ void Statement::insertBefore(Statement * const statement) {
     }
 }
 
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief insertAfter
+ ** ------------------------------------------------------------------------------------------------------------- */
 void Statement::insertAfter(Statement * const statement) {
     if (LLVM_UNLIKELY(statement == this)) {
         return;
@@ -177,6 +239,9 @@ void Statement::insertAfter(Statement * const statement) {
     }
 }
 
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief removeFromParent
+ ** ------------------------------------------------------------------------------------------------------------- */
 Statement * Statement::removeFromParent() {
     Statement * next = mNext;
     if (LLVM_LIKELY(mParent != nullptr)) {
@@ -206,6 +271,9 @@ Statement * Statement::removeFromParent() {
     return next;
 }
 
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief eraseFromParent
+ ** ------------------------------------------------------------------------------------------------------------- */
 Statement * Statement::eraseFromParent(const bool recursively) {
     // remove this statement from its operands' users list
     for (unsigned i = 0; i != mOperands; ++i) {
@@ -280,6 +348,9 @@ Statement * Statement::eraseFromParent(const bool recursively) {
     return removeFromParent();
 }
 
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief replaceWith
+ ** ------------------------------------------------------------------------------------------------------------- */
 Statement * Statement::replaceWith(PabloAST * const expr, const bool rename, const bool recursively) {
     assert (expr);
     if (LLVM_UNLIKELY(expr == this)) {
@@ -295,34 +366,9 @@ Statement * Statement::replaceWith(PabloAST * const expr, const bool rename, con
     return eraseFromParent(recursively);
 }
 
-#ifndef NDEBUG
-bool Statement::noRecursiveOperand(const PabloAST * const operand) {
-    if (const Statement * stmt = dyn_cast<Statement>(operand)) {
-        std::queue<const Statement *> Q;
-        std::unordered_set<const PabloAST *> V;
-        V.insert(stmt);
-        for (;;) {
-            if (stmt == this) {
-                return false;
-            }
-            for (unsigned i = 0; i != stmt->getNumOperands(); ++i) {
-                const PabloAST * op = stmt->getOperand(i);                
-                if (isa<Statement>(op) && V.count(op) == 0) {
-                    Q.push(cast<Statement>(op));
-                    V.insert(op);
-                }
-            }
-            if (LLVM_UNLIKELY(Q.empty())) {
-                break;
-            }
-            stmt = Q.front();
-            Q.pop();
-        }
-    }
-    return true;
-}
-#endif
-
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief contains
+ ** ------------------------------------------------------------------------------------------------------------- */
 bool StatementList::contains(Statement * const statement) {
     for (Statement * stmt : *this) {
         if (statement == stmt) {
