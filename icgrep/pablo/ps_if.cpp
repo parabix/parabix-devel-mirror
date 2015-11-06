@@ -7,7 +7,7 @@ namespace pablo {
 If::If(PabloAST * expr, const std::initializer_list<Assign *> definedVars, PabloBlock & body)
 : Statement(ClassTypeId::If, {expr}, nullptr)
 , mBody(body)
-, mDefined(definedVars.begin(), definedVars.end(), reinterpret_cast<DefinedAllocator &>(mVectorAllocator))
+, mDefined(definedVars.begin(), definedVars.end(), reinterpret_cast<DefinedAllocator &>(mAllocator))
 {
     // Conceptually, having a defined var X is identical to having:
     //
@@ -29,7 +29,7 @@ If::If(PabloAST * expr, const std::initializer_list<Assign *> definedVars, Pablo
 If::If(PabloAST * expr, const std::vector<Assign *> & definedVars, PabloBlock & body)
 : Statement(ClassTypeId::If, {expr}, nullptr)
 , mBody(body)
-, mDefined(definedVars.begin(), definedVars.end(), reinterpret_cast<DefinedAllocator &>(mVectorAllocator))
+, mDefined(definedVars.begin(), definedVars.end(), reinterpret_cast<DefinedAllocator &>(mAllocator))
 {
     for (PabloAST * def : mDefined) {
         def->addUser(this);

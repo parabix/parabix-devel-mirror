@@ -10,17 +10,15 @@
 
 namespace pablo {
 
-SymbolGenerator::SymbolGenerator()
-: mPrefixMap()
-{
-
-}
-
 String * SymbolGenerator::get(const std::string name, const bool generated) {
+    if (name.length() == 0) {
+        throw std::runtime_error("symbol name cannot be 0-length");
+    }
     auto f = mStringMap.find(name);
-    String * result;
+    String * result = nullptr;
     if (f == mStringMap.end()) {
         result = new String(name, generated);
+        assert (result);
         mStringMap.insert(std::make_pair(std::move(name), result));
     }
     else {
@@ -36,8 +34,7 @@ Integer * SymbolGenerator::getInteger(const integer_t value) {
         result = new Integer(value);
         assert (result->value() == value);
         mIntegerMap.insert(std::make_pair(value, result));
-    }
-    else {
+    } else {
         result = f->second;
     }
     return result;
@@ -49,15 +46,10 @@ String * SymbolGenerator::make(const std::string prefix, const bool generated) {
     if (f == mPrefixMap.end()) {
         mPrefixMap.insert(std::make_pair(prefix, 1));
         return get(prefix, generated);
-    }
-    else {
+    } else {
         count = f->second++;
         return get(prefix + std::to_string(count), generated);
     }
-}
-
-SymbolGenerator::~SymbolGenerator() {
-
 }
 
 }

@@ -16,7 +16,6 @@ public:
     using Map = std::unordered_map<const PabloAST *, Vertex>;
     using WrittenAt = boost::container::flat_map<const PabloAST *, unsigned>;
     using ScopeMap = boost::container::flat_map<const PabloBlock *, Statement *>;
-
     static bool optimize(PabloFunction & function);
 protected:
     inline BooleanReassociationPass() {}
@@ -26,12 +25,11 @@ protected:
     void processScopes(PabloFunction & function, PabloBlock & block);
     void processScope(PabloFunction &, PabloBlock & block);
     void summarizeAST(PabloBlock & block, Graph & G, Map & M) const;
-    static void findAndPropogateAnyConstants(const Vertex u, Graph & G, Map & M);
     static void summarizeGraph(const PabloBlock & block, Graph & G, std::vector<Vertex> & mapping, Map &M);
     void resolveUsages(const Vertex u, PabloAST * expr, PabloBlock & block, Graph & G, Map & M, const Statement * const ignoreIfThis = nullptr) const;
     void redistributeAST(const PabloBlock & block, Graph & G, Map & M) const;
     void rewriteAST(PabloBlock & block, Graph & G);
-    static PabloAST * createTree(PabloBlock & block, const Vertex u, Graph & G, const WrittenAt & writtenAt);
+    static PabloAST * createTree(PabloBlock & block, const Vertex u, Graph & G);
     static Vertex getSummaryVertex(PabloAST * expr, Graph & G, Map & M, const PabloBlock & block);
     static Vertex addSummaryVertex(const PabloAST::ClassTypeId typeId, Graph & G);
 private:

@@ -227,7 +227,7 @@ void Simplifier::eliminateRedundantCode(PabloBlock & block, ExpressionTable * pr
             // the Assign's expression directly.
             if (isSuperfluous(assign)) {
                 if (assign->getNumUses() == 0) {
-                    stmt = assign->eraseFromParent();
+                    stmt = assign->eraseFromParent(true);
                 } else {
                     stmt = assign->replaceWith(assign->getExpression(), true, true);
                 }

@@ -24,6 +24,7 @@ class Statement;
 
 class PabloAST {
     friend class Statement;
+    friend class StatementList;
     friend class Var;
     friend class If;    
     friend class While;
@@ -34,7 +35,7 @@ class PabloAST {
 public:
 
     using Allocator = SlabAllocator<u_int8_t>;
-    using VectorAllocator = SlabAllocator<PabloAST *>;
+    using VectorAllocator = Allocator::rebind<PabloAST *>::other;
     using Vector = std::vector<PabloAST*, VectorAllocator>;
     using user_iterator = Vector::iterator;
     using const_user_iterator = Vector::const_iterator;
@@ -114,10 +115,15 @@ public:
     void* operator new (std::size_t size) noexcept {
         return mAllocator.allocate(size);
     }
+
+    void operator delete (void * ptr) {
+        mAllocator.deallocate(static_cast<Allocator::value_type *>(ptr));
+    }
+
 protected:
     inline PabloAST(const ClassTypeId id)
     : mClassTypeId(id)
-    , mUsers(mVectorAllocator)
+    , mUsers(reinterpret_cast<VectorAllocator &>(mAllocator))
     {
 
     }
@@ -147,7 +153,6 @@ protected:
 private:
     const ClassTypeId       mClassTypeId;
     Vector                  mUsers;
-    static VectorAllocator  mVectorAllocator;
 };
 
 bool equals(const PabloAST * expr1, const PabloAST *expr2);
@@ -480,6 +485,8 @@ public:
     inline Statement * back() const {
         return mLast;
     }
+
+    void clear();
 
     inline void setInsertPoint(Statement * const statement) {
         assert (statement == nullptr || contains(statement));

@@ -42,7 +42,6 @@ public:
     void * getFunctionPtr() const {
         return mFunctionPtr;
     }
-
 protected:
     Prototype(const PabloAST::ClassTypeId type, std::string && name, const unsigned numOfParameters, const unsigned numOfResults, void * functionPtr);
 protected:
@@ -88,10 +87,6 @@ public:
 
     const PabloBlock & getEntryBlock() const {
         return mEntryBlock;
-    }
-
-    SymbolGenerator & getSymbolTable() {
-        return mSymbolTable;
     }
 
     Var * getParameter(const unsigned index) {
@@ -141,6 +136,8 @@ public:
         mFunctionPtr = functionPtr;
     }
 
+    void operator delete (void*);
+
     virtual ~PabloFunction() { }
 
 protected:
@@ -151,8 +148,8 @@ protected:
 
     PabloFunction(std::string && name, const unsigned numOfParameters, const unsigned numOfResults);
 private:
-    PabloBlock &        mEntryBlock;
-    SymbolGenerator     mSymbolTable;
+    SymbolGenerator *   mSymbolTable;
+    PabloBlock &        mEntryBlock;    
     Var ** const        mParameters;
     Assign ** const     mResults;
 };

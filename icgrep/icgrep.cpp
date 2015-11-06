@@ -160,15 +160,15 @@ int main(int argc, char *argv[]) {
         pablo::PabloCompiler pablo_compiler(VectorType::get(IntegerType::get(getGlobalContext(), 64), BLOCK_SIZE/64));
         try {
             icgrep_IR = pablo_compiler.compile(function);
+            delete function;
             releaseSlabAllocatorMemory();
-        }
-        catch (std::runtime_error e) {
+        } catch (std::runtime_error e) {
+            delete function;
             releaseSlabAllocatorMemory();
             std::cerr << "Runtime error: " << e.what() << std::endl;
             exit(1);
         }
-    }
-    else {
+    } else {
         firstInputFile = 0;  // No regexp arguments; first positional argument is a file to process.
         SMDiagnostic ParseErr;
         Module * M = parseIRFile(IRFileName, ParseErr, getGlobalContext()).release();

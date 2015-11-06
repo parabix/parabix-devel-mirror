@@ -15,6 +15,7 @@ Prototype::Prototype(const PabloAST::ClassTypeId type, std::string && name, cons
 
 PabloFunction::PabloFunction(std::string && name, const unsigned numOfParameters, const unsigned numOfResults)
 : Prototype(ClassTypeId::Function, std::move(name), numOfParameters, numOfResults, nullptr)
+, mSymbolTable(new SymbolGenerator())
 , mEntryBlock(PabloBlock::Create(mSymbolTable))
 , mParameters(reinterpret_cast<Var **>(mAllocator.allocate(sizeof(Var *) * numOfParameters)))
 , mResults(reinterpret_cast<Assign **>(mAllocator.allocate(sizeof(Assign *) * numOfResults))) {
@@ -34,6 +35,12 @@ void PabloFunction::throwInvalidResultIndex(const unsigned index) const {
                 "Invalid result index " +
                 std::to_string(index) + " of " + std::to_string(getNumOfResults()) +
                 " in function " + getName()->to_string());
+}
+
+void PabloFunction::operator delete(void * ptr) {
+    PabloFunction * f = static_cast<PabloFunction *>(ptr);
+    delete f->mSymbolTable;
+    f->mSymbolTable = nullptr;
 }
 
 }

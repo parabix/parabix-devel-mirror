@@ -52,7 +52,8 @@ public:
         return false;
     }
 
-    inline static PabloBlock & Create(SymbolGenerator & symbolGenerator) {
+    inline static PabloBlock & Create(SymbolGenerator * symbolGenerator) {
+        assert (symbolGenerator);
         return *(new PabloBlock(symbolGenerator));
     }
 
@@ -172,15 +173,15 @@ public:
     }
 
     inline String * getName(const std::string name, const bool generated = true) const {
-        return mSymbolGenerator.get(name, generated);
+        return mSymbolGenerator->get(name, generated);
     }
 
     inline String * makeName(const std::string prefix, const bool generated = true) const {
-        return mSymbolGenerator.make(prefix, generated);
+        return mSymbolGenerator->make(prefix, generated);
     }
 
     inline Integer * getInteger(Integer::Type value) {
-        return mSymbolGenerator.getInteger(value);
+        return mSymbolGenerator->getInteger(value);
     }
 
     inline PabloBlock * getParent() const {
@@ -199,9 +200,9 @@ public:
 
 protected:
 
-    PabloBlock(SymbolGenerator & symbolGenerator);
+    explicit PabloBlock(SymbolGenerator * symbolGenerator);
 
-    PabloBlock(PabloBlock * predecessor);
+    explicit PabloBlock(PabloBlock * predecessor);
 
     PabloAST * renameNonNamedNode(PabloAST * expr, const std::string && prefix);
 
@@ -226,7 +227,7 @@ private:
 private:        
     static Zeroes                                       mZeroes;
     static Ones                                         mOnes;
-    SymbolGenerator &                                   mSymbolGenerator;
+    SymbolGenerator *                                   mSymbolGenerator;
     PabloBlock *                                        mParent;
     unsigned                                            mScopeIndex;
 };

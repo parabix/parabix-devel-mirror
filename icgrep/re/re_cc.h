@@ -49,8 +49,8 @@ protected:
     friend CC * makeCC(const codepoint_t codepoint);
     friend CC * makeCC(const codepoint_t lo, const codepoint_t hi);
     friend CC * makeCC(const CC * cc1, const CC * cc2);
-    friend CC * makeCC(const std::initializer_list<interval_t> list);
-    friend CC * makeCC(const std::vector<interval_t> & list);
+    friend CC * makeCC(std::initializer_list<interval_t> list);
+    friend CC * makeCC(std::vector<interval_t> && list);
     friend CC * makeCC(UCD::UnicodeSet && set);
     friend CC * subtractCC(const CC * a, const CC * b);
     friend CC * intersectCC(const CC * a, const CC * b);
@@ -83,8 +83,19 @@ protected:
 
     }
 
-    template <typename itr>
-    CC * initialize(itr begin, itr end);
+    CC(std::initializer_list<interval_t>::iterator begin, std::initializer_list<interval_t>::iterator end)
+    : RE(ClassTypeId::CC)
+    , UCD::UnicodeSet(begin, end)
+    {
+
+    }
+
+    CC(const std::vector<interval_t>::iterator begin, const std::vector<interval_t>::iterator end)
+    : RE(ClassTypeId::CC)
+    , UCD::UnicodeSet(begin, end)
+    {
+
+    }
 
 };
 
@@ -108,14 +119,6 @@ inline codepoint_t hi_codepoint(const interval_t & i) {
 }
 inline codepoint_t hi_codepoint(const CC::iterator i) {
     return hi_codepoint(*i);
-}
-
-template<typename itr>
-CC * CC::initialize(itr begin, itr end) {
-    for (auto i = begin; i != end; ++i) {
-        insert_range(i->first, i->second);
-    }
-    return this;
 }
 
 /**
@@ -142,12 +145,12 @@ inline CC * makeCC(const CC * cc1, const CC * cc2) {
     return new CC(cc1, cc2);
 }
 
-inline CC * makeCC(const std::initializer_list<interval_t> list) {
-    return makeCC()->initialize(list.begin(), list.end());
+inline CC * makeCC(std::initializer_list<interval_t> list) {
+    return new CC(list.begin(), list.end());
 }
 
-inline CC * makeCC(const std::vector<interval_t> & list) {
-    return makeCC()->initialize(list.begin(), list.end());
+inline CC * makeCC(std::vector<interval_t> && list) {
+    return new CC(list.begin(), list.end());
 }
 
 inline CC * makeCC(UCD::UnicodeSet && set) {
@@ -155,11 +158,11 @@ inline CC * makeCC(UCD::UnicodeSet && set) {
 }
 
 inline CC * subtractCC(const CC * a, const CC * b) {
-    return makeCC(std::move(*a - *b));
+    return new CC(std::move(*a - *b));
 }
 
 inline CC * intersectCC(const CC * a, const CC * b) {
-    return makeCC(std::move(*a & *b));
+    return new CC(std::move(*a & *b));
 }
 
 CC * caseInsensitize(const CC * cc);

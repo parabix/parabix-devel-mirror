@@ -13,7 +13,6 @@
 namespace pablo {
 
 PabloAST::Allocator PabloAST::mAllocator;
-PabloAST::VectorAllocator PabloAST::mVectorAllocator;
 
 /*
 
@@ -376,6 +375,27 @@ bool StatementList::contains(Statement * const statement) {
         }
     }
     return false;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief clear
+ ** ------------------------------------------------------------------------------------------------------------- */
+void StatementList::clear() {
+    Statement * stmt = front();
+    while (stmt) {
+        Statement * next = stmt->mNext;
+        if (LLVM_UNLIKELY(isa<If>(stmt) || isa<While>(stmt))) {
+            PabloBlock & body = isa<If>(stmt) ? cast<If>(stmt)->getBody() : cast<While>(stmt)->getBody();
+            stmt->mParent->removeUser(&body);
+        }
+        stmt->mPrev = nullptr;
+        stmt->mNext = nullptr;
+        stmt->mParent = nullptr;
+        stmt = next;
+    }
+    mInsertionPoint = nullptr;
+    mFirst = nullptr;
+    mLast = nullptr;
 }
 
 StatementList::~StatementList() {

@@ -51,9 +51,6 @@ protected:
     void selectMultiplexSets(RNG &);
     void applySubsetConstraints();
     void multiplexSelectedIndependentSets(PabloFunction & function);
-    void topologicalSort(PabloFunction & function, PabloBlock & block) const;
-    void resolveUsages(const TopologicalVertex u, Statement * expr, PabloBlock & block, TopologicalGraph & G, TopologicalMap & M, Statement * ignoreIfThis) const;
-    static TopologicalVertex getVertex(Statement * expr, TopologicalGraph & G, TopologicalMap & M);
 
     inline AutoMultiplexing(const unsigned limit, const unsigned maxSelections)
     : mLimit(limit)

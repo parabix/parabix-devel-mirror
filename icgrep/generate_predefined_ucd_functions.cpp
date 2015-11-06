@@ -15,7 +15,7 @@
 #include <utf_encoding.h>
 #include <pablo/analysis/pabloverifier.hpp>
 #include <pablo/optimizers/pablo_simplifier.hpp>
-#include <pablo/optimizers/pablo_codesinking.hpp>
+#include <pablo/optimizers/codemotionpass.h>
 #ifdef ENABLE_MULTIPLEXING
 #include <pablo/optimizers/pablo_bddminimization.h>
 #include <pablo/optimizers/pablo_automultiplexing.hpp>
@@ -245,11 +245,11 @@ void compileUnicodeSet(std::string name, UnicodeSet && set, PabloCompiler & pc, 
     #ifndef NDEBUG
     std::cerr << name << std::endl;
     #endif
-    PabloFunction * function = PabloFunction::Create(std::move(name), 8, 1);
+    PabloFunction * pbFunction = PabloFunction::Create(std::move(name), 8, 1);
     Encoding encoding(Encoding::Type::UTF_8, 8);
-    CC_Compiler ccCompiler(*function, encoding);
+    CC_Compiler ccCompiler(*pbFunction, encoding);
     UCDCompiler ucdCompiler(ccCompiler);
-    PabloBuilder builder(function->getEntryBlock());
+    PabloBuilder builder(pbFunction->getEntryBlock());
     // Build the unicode set function
     PabloAST * result = nullptr;
     if (IfHierarchyStrategy == IfHierarchy::DefaultIfHierarchy) {
@@ -259,11 +259,11 @@ void compileUnicodeSet(std::string name, UnicodeSet && set, PabloCompiler & pc, 
     } else {
         throw std::runtime_error("Unknown if hierarchy strategy!");
     }
-    function->setResult(0, builder.createAssign("matches", result));
+    pbFunction->setResult(0, builder.createAssign("matches", result));
     // Optimize it at the pablo level
-    PabloVerifier::verify(*function, "creation");
-    Simplifier::optimize(*function);
-    CodeMotionPass::optimize(*function);
+    PabloVerifier::verify(*pbFunction, "creation");
+    Simplifier::optimize(*pbFunction);
+    CodeMotionPass::optimize(*pbFunction);
     #ifdef ENABLE_MULTIPLEXING
     BDDMinimizationPass::optimize(*function);
     if (EnableMultiplexing) {
@@ -286,20 +286,20 @@ void compileUnicodeSet(std::string name, UnicodeSet && set, PabloCompiler & pc, 
     }
     #endif
     if (EnableReassociation) {
-        BooleanReassociationPass::optimize(*function);        
+        BooleanReassociationPass::optimize(*pbFunction);
     }
 
     // Now compile the function ...
-    llvm::Function * func = pc.compile(function, module);
-    releaseSlabAllocatorMemory();
+    llvm::Function * func = pc.compile(pbFunction, module);
 
     if (LongestDependenceChainFile) {
-        const auto pablo_metrix = computePabloDependencyChainMetrics(function);
+        const auto pablo_metrix = computePabloDependencyChainMetrics(pbFunction);
         (*LongestDependenceChainFile) << ',' << pablo_metrix.first << ',' << pablo_metrix.second;
         const auto llvm_metrix = computeLLVMDependencyChainMetrics(func);
         (*LongestDependenceChainFile) << ',' << llvm_metrix.first << ',' << llvm_metrix.second << '\n';
     }
 
+    delete pbFunction;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

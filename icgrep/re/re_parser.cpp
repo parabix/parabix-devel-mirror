@@ -530,18 +530,10 @@ Name * RE_Parser::parseNamePatternExpression(){
     Encoding encoding(Encoding::Type::UTF_8, 8);
     embedded = regular_expression_passes(encoding, embedded);
 
-    pablo::PabloFunction * nameSearchFunction = re2pablo_compiler(encoding, embedded);
-    llvm::Function * nameSearchIR = nullptr;
-    
+    pablo::PabloFunction * const nameSearchFunction = re2pablo_compiler(encoding, embedded);
     pablo_function_passes(nameSearchFunction);
     pablo::PabloCompiler pablo_compiler(VectorType::get(IntegerType::get(getGlobalContext(), 64), BLOCK_SIZE/64));
-    try {
-        nameSearchIR = pablo_compiler.compile(nameSearchFunction);
-    }
-    catch (std::runtime_error e) {
-        releaseSlabAllocatorMemory();
-        throw e;
-    }
+    llvm::Function * const nameSearchIR = pablo_compiler.compile(nameSearchFunction); // <- may throw error if parsing exception occurs.
 
     llvm::ExecutionEngine * engine = JIT_to_ExecutionEngine(nameSearchIR);   
     icgrep_Linking(nameSearchIR->getParent(), engine);

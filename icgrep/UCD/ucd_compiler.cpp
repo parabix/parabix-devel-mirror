@@ -228,8 +228,7 @@ PabloAST * UCDCompiler::sequenceGenerator(const RangeList && ranges, const unsig
         } else if (min == byte_no) {
             // We have a single byte remaining to match for all code points in this CC.
             // Use the byte class compiler to generate matches for these codepoints.
-            const auto bytes = byteDefinitions(ranges, byte_no);
-            PabloAST * var = mCharacterClassCompiler.compileCC(makeCC(bytes), builder);
+            PabloAST * var = mCharacterClassCompiler.compileCC(makeCC(byteDefinitions(ranges, byte_no)), builder);
             if (byte_no > 1) {
                 var = builder.createAnd(var, builder.createAdvance(makePrefix(lo, byte_no, builder, prefix), 1));
             }

@@ -27,8 +27,8 @@ public:
     String * get(const std::string name, const bool generated = true);
     String * make(const std::string prefix, const bool generated = true);
     Integer * getInteger(const integer_t value);
-    SymbolGenerator();
-    ~SymbolGenerator();
+    SymbolGenerator() = default;
+    ~SymbolGenerator() = default;
 private:
     std::unordered_map<std::string, integer_t>  mPrefixMap;
     std::unordered_map<std::string, String *>   mStringMap;

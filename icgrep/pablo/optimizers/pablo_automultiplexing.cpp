@@ -15,7 +15,6 @@
 #include <stack>
 #include <queue>
 #include <unordered_set>
-#include <pablo/optimizers/pablo_simplifier.hpp>
 #include <pablo/optimizers/booleanreassociationpass.h>
 #include <pablo/analysis/pabloverifier.hpp>
 
@@ -164,7 +163,7 @@ bool AutoMultiplexing::optimize(PabloFunction & function, const unsigned limit, 
         PabloVerifier::verify(function, "post-multiplexing");
         #endif
 
-        Simplifier::optimize(function);
+        BooleanReassociationPass::optimize(function);
     }
 
     LOG_NUMBER_OF_ADVANCES(function.getEntryBlock());
@@ -991,7 +990,7 @@ void AutoMultiplexing::applySubsetConstraints() {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief multiplexSelectedIndependentSets
  ** ------------------------------------------------------------------------------------------------------------- */
-void AutoMultiplexing::multiplexSelectedIndependentSets(PabloFunction & function) {
+void AutoMultiplexing::multiplexSelectedIndependentSets(PabloFunction &) {
 
     const unsigned first_set = num_vertices(mConstraintGraph);
     const unsigned last_set = num_vertices(mMultiplexSetGraph);
@@ -1097,158 +1096,6 @@ void AutoMultiplexing::multiplexSelectedIndependentSets(PabloFunction & function
             modified.insert(block);
         }
     }
-
-    for (PabloBlock * block : modified) {
-        topologicalSort(function, *block);
-    }
-}
-
-///** ------------------------------------------------------------------------------------------------------------- *
-// * @brief printGraph
-// ** ------------------------------------------------------------------------------------------------------------- */
-//template <class Graph>
-//static void printGraph(const PabloBlock & block, const Graph & G, const std::string name) {
-//    raw_os_ostream out(std::cerr);
-
-//    out << "digraph " << name << " {\n";
-//    for (auto u : make_iterator_range(vertices(G))) {
-//        if (in_degree(u, G) == 0 && out_degree(u, G) == 0) {
-//            continue;
-//        }
-//        out << "v" << u << " [label=\"" << u << ": ";
-//        PabloAST * const expr = G[u];
-//        if (isa<Statement>(expr)) {
-//            if (LLVM_UNLIKELY(isa<If>(expr))) {
-//                out << "If ";
-//                PabloPrinter::print(cast<If>(expr)->getOperand(0), out);
-//                out << ":";
-//            } else if (LLVM_UNLIKELY(isa<While>(expr))) {
-//                out << "While ";
-//                PabloPrinter::print(cast<While>(expr)->getOperand(0), out);
-//                out << ":";
-//            } else {
-//                PabloPrinter::print(cast<Statement>(expr), "", out);
-//            }
-//        } else {
-//            PabloPrinter::print(expr, out);
-//        }
-//        out << "\"";
-//        if (!isa<Statement>(expr) || cast<Statement>(expr)->getParent() != &block) {
-//            out << " style=dashed";
-//        }
-//        out << "];\n";
-//    }
-//    for (auto e : make_iterator_range(edges(G))) {
-//        const auto s = source(e, G);
-//        const auto t = target(e, G);
-//        out << "v" << s << " -> v" << t << ";\n";
-//    }
-
-//    if (num_vertices(G) > 0) {
-
-//        out << "{ rank=same;";
-//        for (auto u : make_iterator_range(vertices(G))) {
-//            if (in_degree(u, G) == 0 && out_degree(u, G) != 0) {
-//                out << " v" << u;
-//            }
-//        }
-//        out << "}\n";
-
-//        out << "{ rank=same;";
-//        for (auto u : make_iterator_range(vertices(G))) {
-//            if (out_degree(u, G) == 0 && in_degree(u, G) != 0) {
-//                out << " v" << u;
-//            }
-//        }
-//        out << "}\n";
-
-//    }
-
-//    out << "}\n\n";
-//    out.flush();
-//}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief topologicalSort
- ** ------------------------------------------------------------------------------------------------------------- */
-void AutoMultiplexing::topologicalSort(PabloFunction &, PabloBlock & block) const {
-
-    TopologicalGraph G;
-    TopologicalMap M;
-    // Compute the base def-use graph ...
-    for (Statement * stmt : block) {        
-        const TopologicalVertex u = getVertex(stmt, G, M);
-        if (isa<If>(stmt)) {
-            for (Assign * def : cast<const If>(stmt)->getDefined()) {
-                resolveUsages(u, def, block, G, M, stmt);
-            }
-        } else if (isa<While>(stmt)) {
-            for (Next * var : cast<const While>(stmt)->getVariants()) {
-                resolveUsages(u, var, block, G, M, stmt);
-            }
-        } else {
-            resolveUsages(u, stmt, block, G, M, nullptr);
-        }
-    }
-
-    circular_buffer<TopologicalVertex> Q(num_vertices(G));
-    topological_sort(G, std::back_inserter(Q));
-
-    block.setInsertPoint(nullptr);
-    while (!Q.empty()) {
-        Statement * stmt = G[Q.back()];
-        Q.pop_back();
-        if (stmt->getParent() == &block) {
-            block.insert(stmt);
-        }
-    }
-
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief resolveUsages
- ** ------------------------------------------------------------------------------------------------------------- */
-void AutoMultiplexing::resolveUsages(const TopologicalVertex u, Statement * expr, PabloBlock & block, TopologicalGraph & G, TopologicalMap & M, Statement * ignoreIfThis) const {
-    for (PabloAST * user : expr->users()) {
-        if (LLVM_LIKELY(user != ignoreIfThis && isa<Statement>(user))) {
-            PabloBlock * parent = cast<Statement>(user)->getParent();
-            assert (parent);
-            if (LLVM_LIKELY(parent == &block)) {
-                add_edge(u, getVertex(cast<Statement>(user), G, M), G);
-            } else {
-                for (;;) {
-                    if (LLVM_UNLIKELY(parent == nullptr)) {
-                        assert (isa<Assign>(expr) || isa<Next>(expr));
-                        break;
-                    } else if (parent->getParent() == &block) {
-                        const auto f = mResolvedScopes.find(parent);
-                        if (LLVM_UNLIKELY(f == mResolvedScopes.end())) {
-                            throw std::runtime_error("Failed to resolve scope block!");
-                        }
-                        Statement * const branch = f->second;
-                        if (LLVM_UNLIKELY(branch != ignoreIfThis)) {
-                            add_edge(u, getVertex(branch, G, M), G);
-                        }
-                        break;
-                    }
-                    parent = parent->getParent();
-                }
-            }
-        }
-    }
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief getVertex
- ** ------------------------------------------------------------------------------------------------------------- */
-AutoMultiplexing::TopologicalVertex AutoMultiplexing::getVertex(Statement * expr, TopologicalGraph & G, TopologicalMap & M) {
-    const auto f = M.find(expr);
-    if (f != M.end()) {
-        return f->second;
-    }
-    const auto u = add_vertex(expr, G);
-    M.emplace(expr, u);
-    return u;
 }
 
 } // end of namespace pablo

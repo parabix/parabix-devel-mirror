@@ -533,7 +533,7 @@ unsigned PabloBlock::enumerateScopes(unsigned baseScopeIndex) {
     
 /// CONSTRUCTOR
 
-PabloBlock::PabloBlock(SymbolGenerator & symbolGenerator)
+PabloBlock::PabloBlock(SymbolGenerator * symbolGenerator)
 : PabloAST(PabloAST::ClassTypeId::Block)
 , mSymbolGenerator(symbolGenerator)
 , mParent(nullptr)

@@ -24,7 +24,7 @@ using LoopVariants = std::unordered_set<const PabloAST *>;
 bool CodeMotionPass::optimize(PabloFunction & function) {
     CodeMotionPass::process(function.getEntryBlock());
     #ifndef NDEBUG
-    PabloVerifier::verify(function, "post-sinking");
+    PabloVerifier::verify(function, "post-code-motion");
     #endif
     return true;
 }
@@ -39,8 +39,8 @@ void CodeMotionPass::process(PabloBlock & block) {
             process(cast<If>(stmt)->getBody());
         } else if (isa<While>(stmt)) {
             process(cast<While>(stmt)->getBody());
-            // TODO: if we analyzed the probability of this loop being executed once, twice or many times, we could
-            // determine hoisting will helpful or harmful to the expected run time.
+            // TODO: if we analyzed the probability of this loop being executed once, twice, or many times, we could
+            // determine whether hoisting will helpful or harmful to the expected run time.
             hoistLoopInvariants(cast<While>(stmt));
         }
     }
