@@ -26,14 +26,12 @@ void PabloBlock::insert(Statement * const statement) {
     if (LLVM_UNLIKELY(mInsertionPoint == nullptr)) {
         if (mFirst) {
             statement->insertBefore(mFirst);
-        }
-        else {
+        } else {
             statement->removeFromParent();
             statement->mParent = this;
             mFirst = mLast = statement;
         }
-    }
-    else if (LLVM_LIKELY(statement != mInsertionPoint)) {
+    } else if (LLVM_LIKELY(statement != mInsertionPoint)) {
         statement->insertAfter(mInsertionPoint);
         mLast = (mLast == mInsertionPoint) ? statement : mLast;
         assert (statement->mPrev == mInsertionPoint);

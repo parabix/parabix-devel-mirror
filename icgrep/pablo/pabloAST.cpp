@@ -344,7 +344,9 @@ Statement * Statement::eraseFromParent(const bool recursively) {
         }
     }
 
-    return removeFromParent();
+    Statement * const next = removeFromParent();
+    mAllocator.deallocate(reinterpret_cast<Allocator::pointer>(this));
+    return next;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

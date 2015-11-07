@@ -2,7 +2,6 @@
 #define BOOLEANREASSOCIATIONPASS_H
 
 #include <pablo/codegenstate.h>
-#include <boost/container/flat_set.hpp>
 #include <boost/container/flat_map.hpp>
 #include <boost/graph/adjacency_list.hpp>
 

@@ -158,111 +158,111 @@ inline bool intersects(const Type & A, const Type & B) {
     return false;
 }
 
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief printGraph
- ** ------------------------------------------------------------------------------------------------------------- */
-static void printGraph(const Graph & G, const std::string name, raw_ostream & out) {
+///** ------------------------------------------------------------------------------------------------------------- *
+// * @brief printGraph
+// ** ------------------------------------------------------------------------------------------------------------- */
+//static void printGraph(const Graph & G, const std::string name, raw_ostream & out) {
 
-    std::vector<unsigned> c(num_vertices(G));
-    strong_components(G, make_iterator_property_map(c.begin(), get(vertex_index, G), c[0]));
+//    std::vector<unsigned> c(num_vertices(G));
+//    strong_components(G, make_iterator_property_map(c.begin(), get(vertex_index, G), c[0]));
 
-    out << "digraph " << name << " {\n";
-    for (auto u : make_iterator_range(vertices(G))) {
-        if (in_degree(u, G) == 0 && out_degree(u, G) == 0) {
-            continue;
-        }
-        out << "v" << u << " [label=\"" << u << ": ";
-        PabloAST * expr;
-        TypeId typeId;
-        std::tie(typeId, expr) = G[u];
-        bool temporary = false;
-        bool error = false;
-        if (expr == nullptr) {
-            temporary = true;
-            switch (typeId) {
-                case TypeId::And:
-                    out << "And";
-                    break;
-                case TypeId::Or:
-                    out << "Or";
-                    break;
-                case TypeId::Xor:
-                    out << "Xor";
-                    break;
-                default:
-                    out << "???";
-                    error = true;
-                    break;
-            }
-        } else if (isMutable(G[u])) {
-            if (LLVM_UNLIKELY(isa<If>(expr))) {
-                out << "If ";
-                PabloPrinter::print(cast<If>(expr)->getOperand(0), out);
-                out << ":";
-            } else if (LLVM_UNLIKELY(isa<While>(expr))) {
-                out << "While ";
-                PabloPrinter::print(cast<While>(expr)->getOperand(0), out);
-                out << ":";
-            } else {
-                PabloPrinter::print(cast<Statement>(expr), "", out);
-            }
-        } else {
-            PabloPrinter::print(expr, out);
-        }
-        out << "\"";
-        if (!isMutable(G[u])) {
-            out << " style=dashed";
-        }
-        if (error) {
-            out << " color=red";
-        } else if (temporary) {
-            out << " color=blue";
-        }
-        out << "];\n";
-    }
-    for (auto e : make_iterator_range(edges(G))) {
-        const auto s = source(e, G);
-        const auto t = target(e, G);
-        out << "v" << s << " -> v" << t;
-        bool cyclic = (c[s] == c[t]);
-        if (G[e] || cyclic) {
-            out << " [";
-             if (G[e]) {
-                out << "label=\"";
-                PabloPrinter::print(G[e], out);
-                out << "\" ";
-             }
-             if (cyclic) {
-                out << "color=red ";
-             }
-             out << "]";
-        }
-        out << ";\n";
-    }
+//    out << "digraph " << name << " {\n";
+//    for (auto u : make_iterator_range(vertices(G))) {
+//        if (in_degree(u, G) == 0 && out_degree(u, G) == 0) {
+//            continue;
+//        }
+//        out << "v" << u << " [label=\"" << u << ": ";
+//        PabloAST * expr;
+//        TypeId typeId;
+//        std::tie(typeId, expr) = G[u];
+//        bool temporary = false;
+//        bool error = false;
+//        if (expr == nullptr) {
+//            temporary = true;
+//            switch (typeId) {
+//                case TypeId::And:
+//                    out << "And";
+//                    break;
+//                case TypeId::Or:
+//                    out << "Or";
+//                    break;
+//                case TypeId::Xor:
+//                    out << "Xor";
+//                    break;
+//                default:
+//                    out << "???";
+//                    error = true;
+//                    break;
+//            }
+//        } else if (isMutable(G[u])) {
+//            if (LLVM_UNLIKELY(isa<If>(expr))) {
+//                out << "If ";
+//                PabloPrinter::print(cast<If>(expr)->getOperand(0), out);
+//                out << ":";
+//            } else if (LLVM_UNLIKELY(isa<While>(expr))) {
+//                out << "While ";
+//                PabloPrinter::print(cast<While>(expr)->getOperand(0), out);
+//                out << ":";
+//            } else {
+//                PabloPrinter::print(cast<Statement>(expr), "", out);
+//            }
+//        } else {
+//            PabloPrinter::print(expr, out);
+//        }
+//        out << "\"";
+//        if (!isMutable(G[u])) {
+//            out << " style=dashed";
+//        }
+//        if (error) {
+//            out << " color=red";
+//        } else if (temporary) {
+//            out << " color=blue";
+//        }
+//        out << "];\n";
+//    }
+//    for (auto e : make_iterator_range(edges(G))) {
+//        const auto s = source(e, G);
+//        const auto t = target(e, G);
+//        out << "v" << s << " -> v" << t;
+//        bool cyclic = (c[s] == c[t]);
+//        if (G[e] || cyclic) {
+//            out << " [";
+//             if (G[e]) {
+//                out << "label=\"";
+//                PabloPrinter::print(G[e], out);
+//                out << "\" ";
+//             }
+//             if (cyclic) {
+//                out << "color=red ";
+//             }
+//             out << "]";
+//        }
+//        out << ";\n";
+//    }
 
-    if (num_vertices(G) > 0) {
+//    if (num_vertices(G) > 0) {
 
-        out << "{ rank=same;";
-        for (auto u : make_iterator_range(vertices(G))) {
-            if (in_degree(u, G) == 0 && out_degree(u, G) != 0) {
-                out << " v" << u;
-            }
-        }
-        out << "}\n";
+//        out << "{ rank=same;";
+//        for (auto u : make_iterator_range(vertices(G))) {
+//            if (in_degree(u, G) == 0 && out_degree(u, G) != 0) {
+//                out << " v" << u;
+//            }
+//        }
+//        out << "}\n";
 
-        out << "{ rank=same;";
-        for (auto u : make_iterator_range(vertices(G))) {
-            if (out_degree(u, G) == 0 && in_degree(u, G) != 0) {
-                out << " v" << u;
-            }
-        }
-        out << "}\n";
+//        out << "{ rank=same;";
+//        for (auto u : make_iterator_range(vertices(G))) {
+//            if (out_degree(u, G) == 0 && in_degree(u, G) != 0) {
+//                out << " v" << u;
+//            }
+//        }
+//        out << "}\n";
 
-    }
+//    }
 
-    out << "}\n\n";
-    out.flush();
-}
+//    out << "}\n\n";
+//    out.flush();
+//}
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief optimize
@@ -337,7 +337,7 @@ static inline Vertex getVertex(const ValueType value, GraphType & G, MapType & M
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief writeTree
  ** ------------------------------------------------------------------------------------------------------------- */
-inline void writeTree(PabloBlock & block, const TypeId typeId, circular_buffer<PabloAST *> & Q) {
+inline PabloAST * writeTree(PabloBlock & block, const TypeId typeId, circular_buffer<PabloAST *> & Q) {
     while (Q.size() > 1) {
         PabloAST * e1 = Q.front(); Q.pop_front();
         PabloAST * e2 = Q.front(); Q.pop_front();
@@ -352,7 +352,33 @@ inline void writeTree(PabloBlock & block, const TypeId typeId, circular_buffer<P
             default: break;
         }
         Q.push_back(expr);
+    }    
+    return Q.front();
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief isReachableAtEntryPoint
+ ** ------------------------------------------------------------------------------------------------------------- */
+bool isReachableAtEntryPoint(const PabloAST * const expr, const PabloBlock & block) {
+    // if expr is not a statement, it's always reachable
+    if (isa<Statement>(expr)) {
+        const PabloBlock * const parent = cast<Statement>(expr)->getParent();
+        // if expr is in the current block, it's not reachable at the entry point of this block
+        if (parent == &block) {
+            return false;
+        }
+        const PabloBlock * current = block.getParent();
+        // if we can find expr in a preceeding block, it's reachable
+        while (current) {
+            if (parent == current) {
+                return true;
+            }
+            current = current->getParent();
+        }
+        // otherwise it must be in a nested block and therefore unreachable
+        return false;
     }
+    return true;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -360,53 +386,80 @@ inline void writeTree(PabloBlock & block, const TypeId typeId, circular_buffer<P
  ** ------------------------------------------------------------------------------------------------------------- */
 PabloAST * BooleanReassociationPass::createTree(PabloBlock & block, const Vertex u, Graph & G) {
 
-    flat_set<PabloAST *> sources;
+    flat_set<PabloAST *> internalVars;
+
+    flat_set<PabloAST *> externalVars;
+
+    assert (in_degree(u, G) > 0);
 
     for (const auto e : make_iterator_range(in_edges(u, G))) {
         PabloAST * const expr = getValue(G[source(e, G)]);
         assert ("G contains a null input variable!" && (expr != nullptr));
-        sources.insert(expr);
+        if (isReachableAtEntryPoint(expr, block)) {
+            externalVars.insert(expr);
+        } else {
+            internalVars.insert(expr);
+        }
     }
 
-    circular_buffer<PabloAST *> Q(sources.size());
-
-    for (auto si = sources.begin(); si != sources.end(); ) {
-        if (inCurrentBlock(*si, block)) {
-            ++si;
-        } else { // combine any non-Statements or statements from a preceeding block at the beginning of this block.
-            Q.push_back(*si);
-            si = sources.erase(si);
-        }
+    circular_buffer<PabloAST *> Q(in_degree(u, G));
+    for (auto expr : externalVars) {
+        Q.push_back(expr);
     }
 
     const TypeId typeId = getType(G[u]);
-    Statement * current = block.front();
+    Statement * stmt = block.front();
     if (Q.size() > 1) {
         block.setInsertPoint(nullptr);
         writeTree(block, typeId, Q);
-        current = block.getInsertPoint();
+        assert (Q.size() == 1);
     }
 
-    unsigned distance = 0;
-    while (current) {
-        if (sources.count(current)) {
-            if (distance > 2) { // write out the current Q
-                writeTree(block, typeId, Q);
-            } else {
-                block.setInsertPoint(current);
+    for (unsigned distance = 0; stmt; ++distance, stmt = stmt->getNextNode()) {
+
+        if (distance > 3 && Q.size() > 1) { // write out the current Q
+            writeTree(block, typeId, Q);
+            assert (Q.size() == 1);
+        }
+
+        bool found = false;
+        if (isa<If>(stmt)) {
+            for (Assign * def : cast<If>(stmt)->getDefined()) {
+                if (internalVars.erase(def) != 0) {
+                    assert (!Q.full());
+                    Q.push_back(def);
+                    found = true;
+                }
             }
-            Q.push_back(current);
+        } else if (isa<While>(stmt)) {
+            for (Next * var : cast<While>(stmt)->getVariants()) {
+                if (internalVars.erase(var) != 0) {
+                    assert (!Q.full());
+                    Q.push_back(var);
+                    found = true;
+                }
+            }
+        } else if (internalVars.erase(stmt) != 0) {
+            Q.push_back(stmt);
+            found = true;
+        }
+
+        if (found) {
+            block.setInsertPoint(stmt);
             distance = 0;
         }
-        ++distance;
-        current = current->getNextNode();
     }
+
+    assert (internalVars.empty());
+
+    block.setInsertPoint(block.back());
+
     writeTree(block, typeId, Q);
     assert (Q.size() == 1);
     PabloAST * const result = Q.front();
     assert (result);
     getValue(G[u]) = result;
-    block.setInsertPoint(block.back());
+
     return result;
 }
 
@@ -426,12 +479,8 @@ inline void BooleanReassociationPass::processScope(PabloFunction &, PabloBlock &
  ** ------------------------------------------------------------------------------------------------------------- */
 void BooleanReassociationPass::rewriteAST(PabloBlock & block, Graph & G) {
 
-    using ReadySetQueue = std::priority_queue<std::pair<unsigned, Vertex>, std::deque<std::pair<unsigned, Vertex>>, std::greater<std::pair<unsigned, Vertex>>>;
-
-    raw_os_ostream out(std::cerr);
-    out << "***************************************************\n";
-    printGraph(G, "G_" + std::to_string((unsigned long)(&block)), out);
-
+    using ReadyPair = std::pair<unsigned, Vertex>;
+    using ReadySet = std::vector<ReadyPair>;
 
     // Determine the bottom-up ordering of G
     std::vector<unsigned> ordering(num_vertices(G));
@@ -471,34 +520,64 @@ void BooleanReassociationPass::rewriteAST(PabloBlock & block, Graph & G) {
         }
     }
 
-    ReadySetQueue readySet;
+    // Compute the initial ready set
+    ReadySet readySet;
     for (const Vertex u : make_iterator_range(vertices(G))) {
         if (in_degree(u, G) == 0 && out_degree(u, G) != 0) {
-            readySet.emplace(ordering[u], u);
+            readySet.emplace_back(ordering[u], u);
         }
     }
 
-    out << "---------------------------------------------------\n";
-    out.flush();
+    struct {
+        bool operator()(const ReadyPair a, const ReadyPair b) {
+            return std::get<0>(a) > std::get<0>(b);
+        }
+    } readyComparator;
+
+    std::sort(readySet.begin(), readySet.end(), readyComparator);
 
     // Store the original AST then clear the block
     std::vector<Statement *> originalAST(block.begin(), block.end());
     block.clear();
-    flat_set<Vertex> contains;
+    flat_set<Vertex> tested;
 
     // Rewrite the AST using the bottom-up ordering
     while (!readySet.empty()) {
 
+        // Scan through the ready set to determine which one 'kills' the greatest number of inputs
+        // NOTE: the readySet is kept in sorted "distance to sink" order; thus those closest to a
+        // sink will be evaluated first.
+        unsigned best = 0;
+        auto chosen = readySet.begin();
+        for (auto ri = readySet.begin(); ri != readySet.end(); ++ri) {
+            const Vertex u = std::get<1>(*ri);
+            unsigned kills = 0;
+            for (auto ei : make_iterator_range(in_edges(u, G))) {
+                const auto v = source(ei, G);
+                unsigned remaining = 0;
+                for (auto ej : make_iterator_range(out_edges(v, G))) {
+                    const auto w = target(ej, G);
+                    PabloAST * expr = getValue(G[w]);
+                    if (expr == nullptr || (isa<Statement>(expr) && cast<Statement>(expr)->getParent() == nullptr)) {
+                        if (++remaining > 1) {
+                            break;
+                        }
+                    }
+                }
+                if (remaining < 2) {
+                    ++kills;
+                }
+            }
+            if (kills > best) {
+                chosen = ri;
+                best = kills;
+            }
+        }
         Vertex u; unsigned weight;
-        std::tie(weight, u) = readySet.top();
-        readySet.pop();
+        std::tie(weight, u) = *chosen;
+        readySet.erase(chosen);
 
         PabloAST * expr = getValue(G[u]);
-
-        out << " * processing " << u << ' ';
-        PabloPrinter::print(expr, out);
-        out << ", weight=" << weight;
-        out.flush();
 
         assert (weight > 0);
 
@@ -524,19 +603,12 @@ void BooleanReassociationPass::rewriteAST(PabloBlock & block, Graph & G) {
                 }
             }
             // Make sure that optimization doesn't reduce this to an already written statement
-            if (stmt->getParent()) {
-                goto check_ready;
+            if (stmt->getParent() == nullptr) {
+                block.insert(stmt);
             }
-            block.insert(stmt);
             expr = stmt;
         }
 check_ready:
-
-        out << ", wrote ";
-        PabloPrinter::print(expr, out);
-        out << '\n';
-        out.flush();
-
         // mark this instruction as written
         ordering[u] = 0;
         // Now check whether any new instructions are ready
@@ -544,7 +616,7 @@ check_ready:
             bool ready = true;
             const auto v = target(ei, G);
             // since G may be a multigraph, we need to check whether we've already tested v
-            if (contains.insert(v).second) {
+            if (tested.insert(v).second) {
                 for (auto ej : make_iterator_range(in_edges(v, G))) {
                     if (ordering[source(ej, G)]) {
                         ready = false;
@@ -552,19 +624,21 @@ check_ready:
                     }
                 }
                 if (ready) {
-
-                    out << "   adding " << v << ' ';
-                    PabloPrinter::print(getValue(G[v]), out);
-                    out << " to ready set, weight=" << ordering[v] << '\n';
-
-                    readySet.emplace(ordering[v], v);
+                    auto entry = std::make_pair(ordering[v], v);
+                    auto li = std::lower_bound(readySet.begin(), readySet.end(), entry, readyComparator);
+                    while (li != readySet.end()) {
+                        auto next = li + 1;
+                        if (next == readySet.end() || std::get<0>(*next) == ordering[v]) {
+                            li = next;
+                            continue;
+                        }
+                        break;
+                    }
+                    readySet.insert(li, entry);
                 }
             }
         }
-        contains.clear();
-
-        out << "---------------------------------------------------\n";
-        out.flush();
+        tested.clear();
     }
 
     for (Statement * stmt : originalAST) {
@@ -572,9 +646,6 @@ check_ready:
             stmt->eraseFromParent();
         }
     }
-
-    PabloPrinter::print(block.statements(), out);
-
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
