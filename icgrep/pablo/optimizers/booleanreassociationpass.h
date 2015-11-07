@@ -13,7 +13,6 @@ public:
     using Graph = boost::adjacency_list<boost::vecS, boost::vecS, boost::bidirectionalS, VertexData, PabloAST *>;
     using Vertex = Graph::vertex_descriptor;
     using Map = std::unordered_map<const PabloAST *, Vertex>;
-    using WrittenAt = boost::container::flat_map<const PabloAST *, unsigned>;
     using ScopeMap = boost::container::flat_map<const PabloBlock *, Statement *>;
     static bool optimize(PabloFunction & function);
 protected:
