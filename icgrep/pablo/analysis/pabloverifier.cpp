@@ -127,6 +127,20 @@ void verifyUseDefInformation(const PabloFunction & function) {
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
+ * @brief unreachable
+ ** ------------------------------------------------------------------------------------------------------------- */
+bool unreachable(const Statement * stmt, const PabloBlock & block) {
+    PabloBlock * parent = stmt->getParent();
+    while (parent)  {
+        if (parent == &block) {
+            return false;
+        }
+        parent = parent->getParent();
+    }
+    return true;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
  * @brief verifyProgramStructure
  ** ------------------------------------------------------------------------------------------------------------- */
 void verifyProgramStructure(const PabloBlock & block) {
@@ -163,14 +177,14 @@ void verifyProgramStructure(const PabloBlock & block) {
             const Statement * badEscapedValue = nullptr;
             if (isa<If>(stmt)) {
                 for (const Assign * def : cast<If>(stmt)->getDefined()) {
-                    if (def->getParent() != &nested) {
+                    if (unreachable(def, nested)) {
                         badEscapedValue = def;
                         break;
                     }
                 }
             } else {
                 for (const Next * var : cast<While>(stmt)->getVariants()) {
-                    if (var->getParent() != &nested) {
+                    if (unreachable(var, nested)) {
                         badEscapedValue = var;
                         break;
                     }
@@ -179,9 +193,9 @@ void verifyProgramStructure(const PabloBlock & block) {
             if (badEscapedValue) {
                 std::string tmp;
                 raw_string_ostream str(tmp);
-                str << "PabloVerifier: structure error: ";
+                str << "PabloVerifier: structure error: escaped value \"";
                 PabloPrinter::print(badEscapedValue, str);
-                str << " is not contained within the body of ";
+                str << "\" is not contained within the body of ";
                 PabloPrinter::print(stmt, str);
                 throw std::runtime_error(str.str());
             }

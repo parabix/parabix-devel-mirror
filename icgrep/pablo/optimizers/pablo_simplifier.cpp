@@ -215,22 +215,24 @@ inline void removeIdenticalEscapedValues(ValueList & list) {
     }
 }
 
+
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief eliminateRedundantCode
+ *
+ * Note: Do not recursively erase statements in this function. The ExpressionTable could use deleted statements
+ * as replacements. Let the DCE remove the unnecessary statements with the final Use-Def information.
  ** ------------------------------------------------------------------------------------------------------------- */
 void Simplifier::eliminateRedundantCode(PabloBlock & block, ExpressionTable * predecessor) {
     ExpressionTable encountered(predecessor);
     Statement * stmt = block.front();
+
     while (stmt) {
+
         if (Assign * assign = dyn_cast<Assign>(stmt)) {
             // If we have an Assign whose users do not contain an If or Next node, we can replace its users with
             // the Assign's expression directly.
             if (isSuperfluous(assign)) {
-                if (assign->getNumUses() == 0) {
-                    stmt = assign->eraseFromParent(true);
-                } else {
-                    stmt = assign->replaceWith(assign->getExpression(), true, true);
-                }
+                stmt = assign->replaceWith(assign->getExpression(), true);
                 continue;
             }
             // Force the uses of an Assign node that can reach the original expression to use the expression instead.
@@ -240,7 +242,7 @@ void Simplifier::eliminateRedundantCode(PabloBlock & block, ExpressionTable * pr
         } else if (If * ifNode = dyn_cast<If>(stmt)) {
             // Check to see if the Cond is Zero and delete the loop.
             if (LLVM_UNLIKELY(isa<Zeroes>(ifNode->getCondition()))) {
-                stmt = stmt->eraseFromParent(true);
+                stmt = stmt->eraseFromParent();
                 continue;
             }
 
@@ -255,7 +257,7 @@ void Simplifier::eliminateRedundantCode(PabloBlock & block, ExpressionTable * pr
                     Assign * def = *itr;
                     if (LLVM_UNLIKELY(demoteDefinedVar(ifNode, def))) {
                         itr = defs.erase(itr);
-                        def->replaceWith(def->getExpression(), false, true);
+                        def->replaceWith(def->getExpression());
                         evaluate = true;
                         continue;
                     }
@@ -265,7 +267,7 @@ void Simplifier::eliminateRedundantCode(PabloBlock & block, ExpressionTable * pr
 
             // If we ended up removing all of the defined variables, delete the If node.
             if (LLVM_UNLIKELY(defs.empty())) {
-                stmt = stmt->eraseFromParent(true);
+                stmt = stmt->eraseFromParent();
                 continue;
             }
 
@@ -286,7 +288,7 @@ void Simplifier::eliminateRedundantCode(PabloBlock & block, ExpressionTable * pr
                     stmt = nested;
                     nested = next;
                 }
-                stmt = ifNode->eraseFromParent(true);
+                stmt = ifNode->eraseFromParent();
                 continue;
             }
 
@@ -296,13 +298,13 @@ void Simplifier::eliminateRedundantCode(PabloBlock & block, ExpressionTable * pr
                 initial = cast<Next>(initial)->getInitial();
             }
             if (LLVM_UNLIKELY(isa<Zeroes>(initial))) {
-                stmt = stmt->eraseFromParent(true);
+                stmt = stmt->eraseFromParent();
                 continue;
             }
             eliminateRedundantCode(whileNode->getBody(), &encountered);
             removeIdenticalEscapedValues(whileNode->getVariants());
         } else if (PabloAST * expr = canTriviallyFold(stmt, block)) {
-            stmt = stmt->replaceWith(expr, true, true);
+            stmt = stmt->replaceWith(expr, true);
             continue;
         } else {
             // When we're creating the Pablo program, it's possible to have multiple instances of an "identical"
@@ -311,7 +313,7 @@ void Simplifier::eliminateRedundantCode(PabloBlock & block, ExpressionTable * pr
             // and erase this statement from the AST
             const auto f = encountered.findOrAdd(stmt);
             if (!f.second) {
-                stmt = stmt->replaceWith(f.first, true, true);
+                stmt = stmt->replaceWith(f.first, true);
                 continue;
             }
         }
