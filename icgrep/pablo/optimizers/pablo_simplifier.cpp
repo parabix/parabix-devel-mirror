@@ -215,12 +215,11 @@ inline void removeIdenticalEscapedValues(ValueList & list) {
     }
 }
 
-
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief eliminateRedundantCode
  *
- * Note: Do not recursively erase statements in this function. The ExpressionTable could use deleted statements
- * as replacements. Let the DCE remove the unnecessary statements with the final Use-Def information.
+ * Note: Do not recursively delete statements in this function. The ExpressionTable could use deleted statements
+ * as replacements. Let the DCE remove the unnecessary statements with the finalized Def-Use information.
  ** ------------------------------------------------------------------------------------------------------------- */
 void Simplifier::eliminateRedundantCode(PabloBlock & block, ExpressionTable * predecessor) {
     ExpressionTable encountered(predecessor);
@@ -232,7 +231,7 @@ void Simplifier::eliminateRedundantCode(PabloBlock & block, ExpressionTable * pr
             // If we have an Assign whose users do not contain an If or Next node, we can replace its users with
             // the Assign's expression directly.
             if (isSuperfluous(assign)) {
-                stmt = assign->replaceWith(assign->getExpression(), true);
+                stmt = assign->replaceWith(assign->getExpression());
                 continue;
             }
             // Force the uses of an Assign node that can reach the original expression to use the expression instead.
@@ -246,24 +245,19 @@ void Simplifier::eliminateRedundantCode(PabloBlock & block, ExpressionTable * pr
                 continue;
             }
 
-            bool evaluate = true;
+            // Test whether all of the defined variables are necessary
             If::DefinedVars & defs = ifNode->getDefined();
-            while (evaluate) {
-                evaluate = false;
-                // Process the If body
-                eliminateRedundantCode(cast<If>(stmt)->getBody(), &encountered);
-                // Now test whether all of the defined variables are necessary
-                for (auto itr = defs.begin(); itr != defs.end(); ) {
-                    Assign * def = *itr;
-                    if (LLVM_UNLIKELY(demoteDefinedVar(ifNode, def))) {
-                        itr = defs.erase(itr);
-                        def->replaceWith(def->getExpression());
-                        evaluate = true;
-                        continue;
-                    }
-                    ++itr;
+            for (auto def = defs.begin(); def != defs.end(); ) {
+                if (LLVM_UNLIKELY(demoteDefinedVar(ifNode, *def))) {
+                    (*def)->replaceWith((*def)->getExpression());
+                    def = ifNode->removeDefined(*def);
+                    continue;
                 }
+                ++def;
             }
+
+            // Process the If body
+            eliminateRedundantCode(cast<If>(stmt)->getBody(), &encountered);
 
             // If we ended up removing all of the defined variables, delete the If node.
             if (LLVM_UNLIKELY(defs.empty())) {

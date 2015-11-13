@@ -257,7 +257,8 @@ PabloAST * PabloBlock::createAnd(PabloAST * expr1, PabloAST * expr2, const std::
     assert (expr1 && expr2);
     if (isa<Zeroes>(expr2) || isa<Ones>(expr1)) {
         return renameNonNamedNode(expr2, std::move(prefix));
-    } else if (isa<Zeroes>(expr1) || isa<Ones>(expr2) || equals(expr1, expr2)){
+    }
+    else if (isa<Zeroes>(expr1) || isa<Ones>(expr2) || equals(expr1, expr2)){
         return renameNonNamedNode(expr1, std::move(prefix));
     } else if (Not * not1 = dyn_cast<Not>(expr1)) {
         if (Not * not2 = dyn_cast<Not>(expr2)) {
@@ -336,7 +337,8 @@ PabloAST * PabloBlock::createOr(PabloAST * expr1, PabloAST * expr2, const std::s
     assert (expr1 && expr2);
     if (isa<Zeroes>(expr1) || isa<Ones>(expr2)){
         return renameNonNamedNode(expr2, std::move(prefix));
-    } else if (isa<Zeroes>(expr2) || isa<Ones>(expr1) || equals(expr1, expr2)) {
+    }
+    else if (isa<Zeroes>(expr2) || isa<Ones>(expr1) || equals(expr1, expr2)) {
         return renameNonNamedNode(expr1, std::move(prefix));
     } else if (Not * not1 = dyn_cast<Not>(expr1)) {
         // ¬a∨b = ¬¬(¬a∨b) = ¬(a ∧ ¬b)
@@ -452,7 +454,6 @@ PabloAST * PabloBlock::createSel(PabloAST * condition, PabloAST * trueExpr, Pabl
 
 PabloAST * PabloBlock::createSel(PabloAST * condition, PabloAST * trueExpr, PabloAST * falseExpr, const std::string prefix) {
     assert (condition && trueExpr && falseExpr);
-
     if (isa<Zeroes>(condition)){
         return renameNonNamedNode(falseExpr, std::move(prefix));
     }
@@ -525,9 +526,6 @@ unsigned PabloBlock::enumerateScopes(unsigned baseScopeIndex) {
     }
     return nextScopeIndex;
 }    
-            
-   
-        
     
 /// CONSTRUCTOR
 

@@ -47,7 +47,7 @@ public:
         return mDefined;
     }
     void addDefined(Assign * def);
-    void removeDefined(Assign * def);
+    DefinedVars::iterator removeDefined(Assign * def);
 protected:
     If(PabloAST * expr, const std::initializer_list<Assign *> definedVars, PabloBlock & body);
     If(PabloAST * expr, const std::vector<Assign *> & definedVars, PabloBlock & body);

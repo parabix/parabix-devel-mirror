@@ -2,11 +2,10 @@
 #include <pablo/codegenstate.h>
 #include <pablo/builder.hpp>
 #include <pablo/printer_pablos.h>
-#include <cudd.h>
-#include <util.h>
 #include <pablo/optimizers/pablo_simplifier.hpp>
 #include <pablo/analysis/pabloverifier.hpp>
 #include <stack>
+#include <bdd.h>
 
 using namespace llvm;
 using namespace boost;
@@ -16,11 +15,15 @@ namespace pablo {
 
 using TypeId = PabloAST::ClassTypeId;
 
+// TODO: add in analysis to verify that the outputs of an If would be zero if the If cond is false?
+
+// TODO: test whether an If node can be moved into another If body in the same scope?
+
 bool BDDMinimizationPass::optimize(PabloFunction & function) {
     BDDMinimizationPass am;
     am.initialize(function);
     am.eliminateLogicallyEquivalentStatements(function);
-    am.shutdown();
+    bdd_done();
     #ifndef NDEBUG
     PabloVerifier::verify(function, "post-bdd-minimization");
     #endif
@@ -36,8 +39,8 @@ bool BDDMinimizationPass::optimize(PabloFunction & function) {
 void BDDMinimizationPass::initialize(PabloFunction & function) {
 
     std::stack<Statement *> scope;
-    unsigned variableCount = 0; // number of statements that cannot always be categorized without generating a new variable
-
+    unsigned variableCount = function.getNumOfParameters(); // number of statements that cannot always be categorized without generating a new variable
+    unsigned statementCount = 0;
     for (const Statement * stmt = function.getEntryBlock().front(); ; ) {
         while ( stmt ) {
             if (LLVM_UNLIKELY(isa<If>(stmt) || isa<While>(stmt))) {
@@ -49,6 +52,7 @@ void BDDMinimizationPass::initialize(PabloFunction & function) {
                 assert (stmt);
                 continue;
             }
+            ++statementCount;
             switch (stmt->getClassTypeId()) {
                 case TypeId::Advance:
                 case TypeId::Call:
@@ -68,20 +72,20 @@ void BDDMinimizationPass::initialize(PabloFunction & function) {
     }
 
     // Initialize the BDD engine ...
-    mManager = Cudd_Init(variableCount + function.getNumOfParameters() - function.getNumOfResults(), 0, CUDD_UNIQUE_SLOTS, CUDD_CACHE_SLOTS, 0);
-    mVariables = 0;
-    Cudd_MakeTreeNode(mManager, 0, function.getNumOfParameters(), MTR_DEFAULT);
+    bdd_init(1000000, 10000);
+    bdd_setvarnum(variableCount + function.getNumOfParameters());
+    bdd_setcacheratio(32);
+    bdd_setmaxincrease(1000000);
+    bdd_disable_reorder();
+
     // Map the predefined 0/1 entries
-    mCharacterizationMap[PabloBlock::createZeroes()] = Zero();
-    mCharacterizationMap[PabloBlock::createOnes()] = One();
+    mCharacterizationMap[PabloBlock::createZeroes()] = bdd_zero();
+    mCharacterizationMap[PabloBlock::createOnes()] = bdd_one();
     // Order the variables so the input Vars are pushed to the end; they ought to
     // be the most complex to resolve.    
-    for (auto i = 0; i != function.getNumOfParameters(); ++i) {
-        mCharacterizationMap[function.getParameter(i)] = NewVar(function.getParameter(i));
+    for (mVariables = 0; mVariables != function.getNumOfParameters(); ++mVariables) {
+        mCharacterizationMap[function.getParameter(mVariables)] = bdd_ithvar(mVariables);
     }
-    Cudd_SetSiftMaxVar(mManager, 1000000);
-    Cudd_SetSiftMaxSwap(mManager, 1000000000);
-    Cudd_AutodynEnable(mManager, CUDD_REORDER_LAZY_SIFT);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -89,8 +93,8 @@ void BDDMinimizationPass::initialize(PabloFunction & function) {
  ** ------------------------------------------------------------------------------------------------------------- */
 void BDDMinimizationPass::eliminateLogicallyEquivalentStatements(PabloFunction & function) {
     SubsitutionMap baseMap;
-    baseMap.insert(Zero(), function.getEntryBlock().createZeroes());
-    baseMap.insert(One(), function.getEntryBlock().createOnes());
+    baseMap.insert(bdd_zero(), function.getEntryBlock().createZeroes());
+    baseMap.insert(bdd_one(), function.getEntryBlock().createOnes());
     eliminateLogicallyEquivalentStatements(function.getEntryBlock(), baseMap);
 }
 
@@ -107,7 +111,7 @@ void BDDMinimizationPass::eliminateLogicallyEquivalentStatements(PabloBlock & bl
             eliminateLogicallyEquivalentStatements(cast<While>(stmt)->getBody(), map);
             for (Next * var : cast<const While>(stmt)->getVariants()) {
                 if (!escapes(var)) {
-                    Cudd_RecursiveDeref(mManager, mCharacterizationMap[var]);
+                    bdd_delref(mCharacterizationMap[var]);
                     mCharacterizationMap.erase(var);
                 }
             }
@@ -120,17 +124,17 @@ void BDDMinimizationPass::eliminateLogicallyEquivalentStatements(PabloBlock & bl
             /// but this may lead to taking an expensive branch more often. So, we'd need to decide whether the
             /// cost of each scope is close enough w.r.t. the probability both branches are taken.
 
-            DdNode * bdd = nullptr;
+            BDD bdd = bdd_zero();
             bool test = false;
             std::tie(bdd, test) = characterize(stmt);
             if (test) {
                 PabloAST * replacement = map.get(bdd);
                 if (LLVM_UNLIKELY(replacement != nullptr)) {
-                    Cudd_RecursiveDeref(mManager, bdd);
+                    bdd_delref(bdd);
                     stmt = stmt->replaceWith(replacement, false, true);
                     continue;
                 }
-            } else if (LLVM_LIKELY(nonConstant(bdd))) {
+            } else if (LLVM_LIKELY(!bdd_constant(bdd))) {
                 map.insert(bdd, stmt);
             }
             mCharacterizationMap.emplace(stmt, bdd);
@@ -142,11 +146,11 @@ void BDDMinimizationPass::eliminateLogicallyEquivalentStatements(PabloBlock & bl
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief characterize
  ** ------------------------------------------------------------------------------------------------------------- */
-inline std::pair<DdNode *, bool> BDDMinimizationPass::characterize(Statement * const stmt) {
+inline std::pair<BDD, bool> BDDMinimizationPass::characterize(Statement * const stmt) {
 
-    DdNode * bdd = nullptr;
+    BDD bdd = bdd_zero();
     // Map our operands to the computed BDDs
-    std::array<DdNode *, 3> input;
+    std::array<BDD, 3> input;
     for (unsigned i = 0; i != stmt->getNumOperands(); ++i) {
         PabloAST * const op = stmt->getOperand(i);
         if (op == nullptr) {
@@ -171,90 +175,41 @@ inline std::pair<DdNode *, bool> BDDMinimizationPass::characterize(Statement * c
         case TypeId::Next:
             return std::make_pair(input[0], false);
         case TypeId::And:
-            bdd = And(input[0], input[1]);
+            bdd = bdd_and(input[0], input[1]);
             break;
         case TypeId::Or:
-            bdd = Or(input[0], input[1]);
+            bdd = bdd_or(input[0], input[1]);
             break;
         case TypeId::Xor:
-            bdd = Xor(input[0], input[1]);
+            bdd = bdd_xor(input[0], input[1]);
             break;
         case TypeId::Not:
-            bdd = Not(input[0]);
+            bdd = bdd_not(input[0]);
             break;
         case TypeId::Sel:
-            bdd = Ite(input[0], input[1], input[2]);
+            bdd = bdd_ite(input[0], input[1], input[2]);
             break;
         case TypeId::MatchStar:
         case TypeId::ScanThru:
-            if (LLVM_UNLIKELY(input[1] == Zero())) {
-                return std::make_pair(Zero(), true);
+            if (LLVM_UNLIKELY(input[1] == bdd_zero())) {
+                bdd = input[0];
             }
         case TypeId::Advance:
-            if (LLVM_UNLIKELY(input[0] == Zero())) {
-                return std::make_pair(Zero(), true);
+            if (LLVM_UNLIKELY(input[0] == bdd_zero())) {
+                return std::make_pair(bdd_zero(), true);
             }
         case TypeId::Call:
             // TODO: we may have more than one output. Need to fix call class to allow for it.
-            return std::make_pair(NewVar(stmt), false);
+            return std::make_pair(bdd_ithvar(mVariables++), false);
         default:
             throw std::runtime_error("Unexpected statement type " + stmt->getName()->to_string());
     }
-    Cudd_Ref(bdd);
-    if (LLVM_UNLIKELY(noSatisfyingAssignment(bdd))) {
-        Cudd_RecursiveDeref(mManager, bdd);
-        bdd = Zero();
+    bdd_addref(bdd);
+    if (LLVM_UNLIKELY(bdd_satone(bdd) == bdd_zero())) {
+        bdd_delref(bdd);
+        bdd = bdd_zero();
     }
     return std::make_pair(bdd, true);
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief CUDD wrappers
- ** ------------------------------------------------------------------------------------------------------------- */
-
-inline DdNode * BDDMinimizationPass::Zero() const {
-    return Cudd_ReadLogicZero(mManager);
-}
-
-inline DdNode * BDDMinimizationPass::One() const {
-    return Cudd_ReadOne(mManager);
-}
-
-inline DdNode * BDDMinimizationPass::NewVar(const PabloAST *) {
-    return Cudd_bddIthVar(mManager, mVariables++);
-}
-
-inline bool BDDMinimizationPass::nonConstant(DdNode * const x) const {
-    return x != Zero() && x != One();
-}
-
-inline DdNode * BDDMinimizationPass::And(DdNode * const x, DdNode * const y) {
-    return Cudd_bddAnd(mManager, x, y);
-}
-
-inline DdNode * BDDMinimizationPass::Or(DdNode * const x, DdNode * const y) {
-    return Cudd_bddOr(mManager, x, y);
-}
-
-inline DdNode * BDDMinimizationPass::Xor(DdNode * const x, DdNode * const y) {
-    return Cudd_bddXor(mManager, x, y);
-}
-
-inline DdNode * BDDMinimizationPass::Not(DdNode * const x) const {
-    return Cudd_Not(x);
-}
-
-inline DdNode * BDDMinimizationPass::Ite(DdNode * const x, DdNode * const y, DdNode * const z) {
-    return Cudd_bddIte(mManager, x, y, z);
-}
-
-inline bool BDDMinimizationPass::noSatisfyingAssignment(DdNode * const x) {
-    return Cudd_bddLeq(mManager, x, Zero());
-}
-
-inline void BDDMinimizationPass::shutdown() {
-    Cudd_Quit(mManager);
-    mCharacterizationMap.clear();
 }
 
 } // end of namespace pablo

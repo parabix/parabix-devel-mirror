@@ -147,7 +147,7 @@ void pablo_function_passes(pablo::PabloFunction * function) {
     if (EnableMultiplexing) {
         pablo::BDDMinimizationPass::optimize(*function);
         pablo::AutoMultiplexing::optimize(*function, MultiplexingSetLimit, MultiplexingSelectionLimit);
-    }    
+    }
     if (EnableReassociation) {
         pablo::BooleanReassociationPass::optimize(*function);
     }

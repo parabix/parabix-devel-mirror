@@ -3,11 +3,21 @@
 #include <boost/container/flat_map.hpp>
 #include <boost/circular_buffer.hpp>
 #include <boost/graph/adjacency_list.hpp>
+#include <boost/graph/filtered_graph.hpp>
 #include <boost/graph/topological_sort.hpp>
 #include <pablo/optimizers/pablo_simplifier.hpp>
 #include <pablo/analysis/pabloverifier.hpp>
 #include <algorithm>
 #include <numeric> // std::iota
+
+#ifndef NDEBUG
+#include <queue>
+#include <pablo/printer_pablos.h>
+#include <iostream>
+#include <llvm/Support/raw_os_ostream.h>
+#include <boost/graph/strong_components.hpp>
+#endif
+
 
 using namespace boost;
 using namespace boost::container;
@@ -510,6 +520,7 @@ void BooleanReassociationPass::rewriteAST(PabloBlock & block, Graph & G) {
                     }
                 }
                 if (ready) {
+
                     auto entry = std::make_pair(ordering[v], v);
                     auto position = std::lower_bound(readySet.begin(), readySet.end(), entry, readyComparator);
                     readySet.insert(position, entry);
@@ -530,7 +541,7 @@ void BooleanReassociationPass::rewriteAST(PabloBlock & block, Graph & G) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief summarizeAST
  *
- * This function scans through a scope blockand computes a DAG G in which any sequences of AND, OR or XOR functions
+ * This function scans through a scope block and computes a DAG G in which any sequences of AND, OR or XOR functions
  * are "flattened" (i.e., allowed to have any number of inputs.)
  ** ------------------------------------------------------------------------------------------------------------- */
 void BooleanReassociationPass::summarizeAST(PabloBlock & block, Graph & G, Map & M) const {
@@ -555,7 +566,7 @@ void BooleanReassociationPass::summarizeAST(PabloBlock & block, Graph & G, Map &
             for (Assign * def : cast<const If>(stmt)->getDefined()) {
                 const Vertex v = getSummaryVertex(def, G, M, block);
                 add_edge(def, u, v, G);
-                resolveUsages(v, def, block, G, M, stmt);
+                resolveNestedUsages(v, def, block, G, M, stmt);
             }
         } else if (isa<While>(stmt)) {
             // To keep G a DAG, we need to do a bit of surgery on loop variants because
@@ -568,10 +579,10 @@ void BooleanReassociationPass::summarizeAST(PabloBlock & block, Graph & G, Map &
                 add_edge(nullptr, source(first(in_edges(v, G)), G), u, G);
                 remove_edge(v, u, G);
                 add_edge(var, u, v, G);
-                resolveUsages(v, var, block, G, M, stmt);
+                resolveNestedUsages(v, var, block, G, M, stmt);
             }
         } else {
-            resolveUsages(u, stmt, block, G, M);
+            resolveNestedUsages(u, stmt, block, G, M);
         }
     }
     std::vector<Vertex> mapping(num_vertices(G));
@@ -579,9 +590,9 @@ void BooleanReassociationPass::summarizeAST(PabloBlock & block, Graph & G, Map &
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief resolveUsages
+ * @brief resolveNestedUsages
  ** ------------------------------------------------------------------------------------------------------------- */
-void BooleanReassociationPass::resolveUsages(const Vertex u, PabloAST * expr, PabloBlock & block, Graph & G, Map & M, const Statement * const ignoreIfThis) const {
+void BooleanReassociationPass::resolveNestedUsages(const Vertex u, PabloAST * expr, PabloBlock & block, Graph & G, Map & M, const Statement * const ignoreIfThis) const {
     for (PabloAST * user : expr->users()) {
         assert (user);
         if (LLVM_LIKELY(user != expr && isa<Statement>(user))) {

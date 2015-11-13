@@ -45,13 +45,14 @@ void If::addDefined(Assign * def) {
     }
 }
 
-void If::removeDefined(Assign * def) {
+If::DefinedVars::iterator If::removeDefined(Assign * def) {
     auto f = std::find(mDefined.begin(), mDefined.end(), def);
     if (LLVM_LIKELY(f != mDefined.end())) {
-        mDefined.erase(f);
         def->removeUser(this);
         this->removeUser(def);
+        return mDefined.erase(f);
     }
+    return mDefined.end();
 }
 
 }

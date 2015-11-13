@@ -8,15 +8,11 @@
 #include <boost/circular_buffer.hpp>
 #include <boost/graph/topological_sort.hpp>
 #include <boost/range/iterator_range.hpp>
-#include <llvm/ADT/BitVector.h>
-#include <cudd.h>
-#include <cuddInt.h>
-#include <util.h>
+#include <pablo/analysis/pabloverifier.hpp>
 #include <stack>
 #include <queue>
 #include <unordered_set>
-#include <pablo/optimizers/booleanreassociationpass.h>
-#include <pablo/analysis/pabloverifier.hpp>
+#include <bdd.h>
 
 using namespace llvm;
 using namespace boost;
@@ -115,14 +111,14 @@ bool AutoMultiplexing::optimize(PabloFunction & function, const unsigned limit, 
 
     AutoMultiplexing am(limit, maxSelections);
     RECORD_TIMESTAMP(start_initialize);
-    const bool abort = am.initialize(function);
+    const unsigned advances = am.initialize(function);
     RECORD_TIMESTAMP(end_initialize);
 
     LOG("Initialize:              " << (end_initialize - start_initialize));
 
     LOG_NUMBER_OF_ADVANCES(function.getEntryBlock());
 
-    if (abort) {
+    if (advances == 0) {
         return false;
     }
 
@@ -132,15 +128,17 @@ bool AutoMultiplexing::optimize(PabloFunction & function, const unsigned limit, 
 
     LOG("Characterize:            " << (end_characterize - start_characterize));
 
+    LOG("Nodes in BDD:            " << bdd_getnodenum() << " of " << bdd_getallocnum());
+
+    RECORD_TIMESTAMP(start_shutdown);
+    bdd_done();
+    RECORD_TIMESTAMP(end_shutdown);
+    LOG("Shutdown:                " << (end_shutdown - start_shutdown));
+
     RECORD_TIMESTAMP(start_create_multiplex_graph);
     const bool multiplex = am.generateCandidateSets(rng);
     RECORD_TIMESTAMP(end_create_multiplex_graph);
     LOG("GenerateCandidateSets:   " << (end_create_multiplex_graph - start_create_multiplex_graph));
-
-    RECORD_TIMESTAMP(start_shutdown);
-    am.Shutdown();
-    RECORD_TIMESTAMP(end_shutdown);
-    LOG("Shutdown:                " << (end_shutdown - start_shutdown));
 
     if (multiplex) {
 
@@ -159,11 +157,7 @@ bool AutoMultiplexing::optimize(PabloFunction & function, const unsigned limit, 
         RECORD_TIMESTAMP(end_select_independent_sets);
         LOG("SelectedIndependentSets: " << (end_select_independent_sets - start_select_independent_sets));
 
-        #ifndef NDEBUG
-        PabloVerifier::verify(function, "post-multiplexing");
-        #endif
-
-        BooleanReassociationPass::optimize(function);
+        AutoMultiplexing::topologicalSort(function);
     }
 
     LOG_NUMBER_OF_ADVANCES(function.getEntryBlock());
@@ -178,17 +172,19 @@ bool AutoMultiplexing::optimize(PabloFunction & function, const unsigned limit, 
  * Scan through the program to identify any advances and calls then initialize the BDD engine with
  * the proper variable ordering.
  ** ------------------------------------------------------------------------------------------------------------- */
-bool AutoMultiplexing::initialize(PabloFunction & function) {
+unsigned AutoMultiplexing::initialize(PabloFunction & function) {
 
     flat_map<const PabloAST *, unsigned> map;    
     std::stack<Statement *> scope;
     unsigned variableCount = 0; // number of statements that cannot always be categorized without generating a new variable
 
     // Scan through and collect all the advances, calls, scanthrus and matchstars ...
-    unsigned n = 0, m = 0;
+    unsigned statements = 0, advances = 0;
+    unsigned maxDepth = 0;
+    mResolvedScopes.emplace(&function.getEntryBlock(), nullptr);
     for (Statement * stmt = function.getEntryBlock().front(); ; ) {
         while ( stmt ) {
-            ++n;
+            ++statements;
             if (LLVM_UNLIKELY(isa<If>(stmt) || isa<While>(stmt))) {
                 // Set the next statement to be the first statement of the inner scope and push the
                 // next statement of the current statement into the scope stack.
@@ -196,6 +192,7 @@ bool AutoMultiplexing::initialize(PabloFunction & function) {
                 mResolvedScopes.emplace(&nested, stmt);
                 scope.push(stmt->getNextNode());
                 stmt = nested.front();
+                maxDepth = std::max<unsigned>(maxDepth, scope.size());
                 assert (stmt);
                 continue;
             }
@@ -204,12 +201,11 @@ bool AutoMultiplexing::initialize(PabloFunction & function) {
 
             switch (stmt->getClassTypeId()) {
                 case TypeId::Advance:
-                    mAdvanceMap.emplace(stmt, m);
-                    map.emplace(stmt, m++);
-                case TypeId::Call:
+                    ++advances;
                 case TypeId::ScanThru:
+                case TypeId::Call:
                 case TypeId::MatchStar:
-                    variableCount++;
+                    ++variableCount;
                     break;
                 default:
                     break;
@@ -224,8 +220,8 @@ bool AutoMultiplexing::initialize(PabloFunction & function) {
     }
 
     // If there are fewer than three Advances in this program, just abort. We cannot reduce it.
-    if (m < 3) {
-        return true;
+    if (advances < 3) {
+        return 0;
     }
 
     // Create the transitive closure matrix of graph. From this we'll construct
@@ -235,28 +231,25 @@ bool AutoMultiplexing::initialize(PabloFunction & function) {
     // of that graph, which forms the basis of our constraint graph when deciding
     // which advances ought to be multiplexed.
 
-    matrix<bool> G(n, m); // Let G be a matrix with n rows of m (Advance) elements
+    matrix<bool> G(statements, advances);
     G.clear();
-    for (unsigned i = 0; i != m; ++i) {
+    for (unsigned i = 0; i != advances; ++i) {
         G(i, i) = true;
     }
 
-    n = m;
-    m = 0;
+    unsigned n = advances;
+    unsigned m = 0;
 
-    const Statement * stmt = function.getEntryBlock().front();
-    for (;;) {
+    for (const Statement * stmt = function.getEntryBlock().front();;) {
         while ( stmt ) {
 
-            unsigned u;
+            unsigned u = 0;
             if (isa<Advance>(stmt)) {
-                assert (mAdvanceMap.count(stmt) && mAdvanceMap[stmt] == m);
                 u = m++;
-            }
-            else {
+            } else {
                 u = n++;
-                map.emplace(stmt, u);
             }
+            map.emplace(stmt, u);
 
             for (unsigned i = 0; i != stmt->getNumOperands(); ++i) {
                 const PabloAST * const op = stmt->getOperand(i);
@@ -288,12 +281,12 @@ bool AutoMultiplexing::initialize(PabloFunction & function) {
     // Record the path / base constraint graph after removing any reflexive-loops.
     // Since G is a use-def graph and we want our constraint graph to be a def-use graph,
     // reverse the edges as we're writing them to obtain the transposed graph.
-    mConstraintGraph = ConstraintGraph(m);
-    mSubsetGraph = SubsetGraph(m);
+    mConstraintGraph = ConstraintGraph(advances);
+    mSubsetGraph = SubsetGraph(advances);
 
-    for (unsigned i = 0; i != m; ++i) {
+    for (unsigned i = 0; i != advances; ++i) {
         G(i, i) = false;
-        for (unsigned j = 0; j != m; ++j) {
+        for (unsigned j = 0; j != advances; ++j) {
             if (G(i, j)) {
                 add_edge(j, i, mConstraintGraph);
             }
@@ -301,20 +294,24 @@ bool AutoMultiplexing::initialize(PabloFunction & function) {
     }
 
     // Initialize the BDD engine ...
-    mManager = Cudd_Init((variableCount + function.getNumOfParameters()), 0, CUDD_UNIQUE_SLOTS, CUDD_CACHE_SLOTS, 0);
-    Cudd_AutodynDisable(mManager);
+    bdd_init(10000000, 100000);
+    bdd_setvarnum(variableCount + function.getNumOfParameters());
+    bdd_setcacheratio(64);
+    bdd_setmaxincrease(10000000);
+    // bdd_setminfreenodes(10000);
+    bdd_autoreorder(BDD_REORDER_NONE);
 
     // Map the predefined 0/1 entries
-    mCharacterizationMap[PabloBlock::createZeroes()] = Zero();
-    mCharacterizationMap[PabloBlock::createOnes()] = One();
+    mCharacterizationMap[PabloBlock::createZeroes()] = bdd_zero();
+    mCharacterizationMap[PabloBlock::createOnes()] = bdd_one();
 
     // Order the variables so the input Vars are pushed to the end; they ought to
     // be the most complex to resolve.
-    for (auto i = 0; i != function.getNumOfParameters(); ++i) {
-        mCharacterizationMap[function.getParameter(i)] = Cudd_bddIthVar(mManager, variableCount++);
+    for (mVariables = 0; mVariables != function.getNumOfParameters(); ++mVariables) {
+        mCharacterizationMap[function.getParameter(mVariables)] = bdd_ithvar(mVariables);
     }
 
-    return false;
+    return advances;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -323,68 +320,23 @@ bool AutoMultiplexing::initialize(PabloFunction & function) {
  *
  * Scan through the program and iteratively compute the BDDs for each statement.
  ** ------------------------------------------------------------------------------------------------------------- */
-void AutoMultiplexing::characterize(PabloBlock &block) {
+void AutoMultiplexing::characterize(PabloBlock & block) {
     for (Statement * stmt : block) {
         if (LLVM_UNLIKELY(isa<If>(stmt) || isa<While>(stmt))) {
-            const auto start = mRecentCharacterizations.size();
             characterize(isa<If>(stmt) ? cast<If>(stmt)->getBody() : cast<While>(stmt)->getBody());
-            assert (mRecentCharacterizations.size() >= start);
-            if (isa<If>(stmt)) {
-                const auto & defined = cast<const If>(stmt)->getDefined();
-                for (auto pair = mRecentCharacterizations.begin() + start; pair != mRecentCharacterizations.end(); ++pair) {
-                    const PabloAST * expr = nullptr;
-                    DdNode * bdd = nullptr;
-                    std::tie(expr, bdd) = *pair;
-                    if (LLVM_UNLIKELY(isa<Assign>(expr))) {
-                        if (LLVM_LIKELY(std::find(defined.begin(), defined.end(), expr) != defined.end())) {
-                            continue;
-                        }
-                    }
-                    mCharacterizationMap.erase(mCharacterizationMap.find(expr));
-                    if (LLVM_UNLIKELY(Cudd_IsConstant(bdd))) {
-                        continue;
-                    }
-                    Deref(bdd);
-                }
-            }
-            else { // if isa<While>(stmt)
-                const auto & variants = cast<const While>(stmt)->getVariants();
-                for (auto pair = mRecentCharacterizations.begin() + start; pair != mRecentCharacterizations.end(); ++pair) {
-                    const PabloAST * expr = nullptr;
-                    DdNode * bdd = nullptr;
-                    std::tie(expr, bdd) = *pair;
-                    if (LLVM_UNLIKELY(isa<Next>(expr))) {
-                        if (LLVM_LIKELY(std::find(variants.begin(), variants.end(), expr) != variants.end())) {
-                            DdNode *& next = mCharacterizationMap[expr];
-                            next = Or(next, bdd);
-                            Ref(next);
-                            continue;
-                        }
-                    }
-                    mCharacterizationMap.erase(mCharacterizationMap.find(expr));
-                    if (LLVM_UNLIKELY(Cudd_IsConstant(bdd))) {
-                        continue;
-                    }
-                    Deref(bdd);
-                }
-            }
-            mRecentCharacterizations.erase(mRecentCharacterizations.begin() + start, mRecentCharacterizations.end());
-            continue;
+        } else {
+            mCharacterizationMap.insert(std::make_pair(stmt, characterize(stmt)));
         }
-
-        DdNode * var = characterize(stmt);
-        mCharacterizationMap[stmt] = var;        
     }
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief characterize
  ** ------------------------------------------------------------------------------------------------------------- */
-inline DdNode * AutoMultiplexing::characterize(Statement * const stmt) {
+inline BDD AutoMultiplexing::characterize(Statement * const stmt) {
 
-    DdNode * bdd = nullptr;
     // Map our operands to the computed BDDs
-    std::array<DdNode *, 3> input;
+    std::array<BDD, 3> input;
     for (unsigned i = 0; i != stmt->getNumOperands(); ++i) {
         PabloAST * const op = stmt->getOperand(i);
         if (LLVM_UNLIKELY(isa<Integer>(op) || isa<String>(op))) {
@@ -401,216 +353,138 @@ inline DdNode * AutoMultiplexing::characterize(Statement * const stmt) {
         input[i] = f->second;
     }
 
+    BDD bdd = bdd_zero();
     switch (stmt->getClassTypeId()) {
         case TypeId::Assign:
         case TypeId::Next:
             bdd = input[0];
             break;
         case TypeId::And:
-            bdd = And(input[0], input[1]);
-            break;        
+            bdd = bdd_and(input[0], input[1]);
+            break;
         case TypeId::Or:
-            bdd = Or(input[0], input[1]);
+            bdd = bdd_or(input[0], input[1]);
             break;
         case TypeId::Xor:
-            bdd = Xor(input[0], input[1]);
+            bdd = bdd_xor(input[0], input[1]);
             break;
         case TypeId::Not:
-            bdd = Not(input[0]);
+            bdd = bdd_not(input[0]);
             break;
         case TypeId::Sel:
-            bdd = Ite(input[0], input[1], input[2]);
+            bdd = bdd_ite(input[0], input[1], input[2]);
             break;
         case TypeId::ScanThru:
-            // It may be possible use "Not(input[1])" for ScanThrus if we rule out the possibility
-            // of a contradition being erroneously calculated later. An example of this
-            // would be ¬(ScanThru(c,m) ∨ m)
+            // ScanThru(c, m) := (c + m) ∧ ¬m. We can conservatively represent this statement using the BDD for ¬m --- provided
+            // no derivative of this statement is negated in any fashion.
         case TypeId::MatchStar:
         case TypeId::Call:
-            bdd = NewVar();
-            mRecentCharacterizations.emplace_back(stmt, bdd);
-            return bdd;
+            return bdd_ithvar(mVariables++);
         case TypeId::Advance:
-            // This returns so that it doesn't mistakeningly replace the Advance with 0 or add it
-            // to the list of recent characterizations.
             return characterize(cast<Advance>(stmt), input[0]);
         default:
             throw std::runtime_error("Unexpected statement type " + stmt->getName()->to_string());
     }
-    Ref(bdd);
-    mRecentCharacterizations.emplace_back(stmt, bdd);
-    return bdd;
+    return bdd_addref(bdd);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief characterize
  ** ------------------------------------------------------------------------------------------------------------- */
-inline DdNode * AutoMultiplexing::characterize(Advance *adv, DdNode * input) {
-    DdNode * Ik, * Ck, * Nk;
-    if (LLVM_UNLIKELY(isZero(input))) {
-        Ik = Ck = Nk = Zero();
-    }
-    else {
+inline BDD AutoMultiplexing::characterize(Advance * const adv, const BDD Ik) {
 
-        Ik = input;
-        Ref(input);
-        Ck = NewVar();
-        Nk = Not(Ck);
+    assert (Ik != bdd_zero());
 
-        assert (mAdvanceMap.count(adv));
+    bdd_addref(Ik);
 
-        const auto k = mAdvanceMap[adv];
+    const auto k = mAdvanceAttributes.size();
 
-        std::vector<bool> unconstrained(k , false);
+    std::vector<bool> unconstrained(k , false);
 
-        // Can we use a transposed copy of the subset graph to determine an ordering of variables?
-        for (unsigned i = 0; i != k; ++i) {
-            // Have we already proven that these are unconstrained by the subset relationships?
-            if (unconstrained[i]) continue;
-            Advance * tmp = std::get<0>(mAdvance[i]);
-            // If these advances are "shifting" their values by the same amount and aren't transitively dependant ...
-            if ((adv->getOperand(1) == tmp->getOperand(1)) && (notTransitivelyDependant(i, k))) {
-                DdNode * Ii = std::get<1>(mAdvance[i]);
-                DdNode * const IiIk = And(Ik, Ii);
-                Ref(IiIk);
-                // Is there any satisfying truth assignment? If not, these streams are mutually exclusive.
-                if (NoSatisfyingAssignment(IiIk)) {
-                    assert (mCharacterizationMap.count(tmp));
-                    DdNode *& Ci = mCharacterizationMap[tmp];
-                    // Mark the i-th and k-th Advances as being mutually exclusive
-                    DdNode * Ni = std::get<2>(mAdvance[i]);
-                    Ck = And(Ck, Ni); Ref(Ck);
-                    Ci = And(Ci, Nk); Ref(Ci);
-                    // If Ai ∩ Ak = ∅ and Aj ⊂ Ai, Aj ∩ Ak = ∅.
-                    graph_traits<SubsetGraph>::in_edge_iterator ei, ei_end;
-                    for (std::tie(ei, ei_end) = in_edges(i, mSubsetGraph); ei != ei_end; ++ei) {
-                        const auto j = source(*ei, mSubsetGraph);
-                        if (notTransitivelyDependant(k, j)) {
-                            Advance * adv = std::get<0>(mAdvance[j]);
-                            assert (mCharacterizationMap.count(adv));
-                            DdNode *& Cj = mCharacterizationMap[adv];
-                            DdNode * Nj = std::get<2>(mAdvance[j]);
-                            // Mark the i-th and j-th Advances as being mutually exclusive
-                            Ck = And(Ck, Nj); Ref(Ck);
-                            Cj = And(Cj, Nk); Ref(Cj);
-                            unconstrained[j] = true;
-                        }
-                    }
-                    unconstrained[i] = true;
+    for (unsigned i = 0; i != k; ++i) {
+        // Have we already proven that these are unconstrained by the subset relationships?
+        if (unconstrained[i]) continue;
+
+        const Advance * const ithAdv = std::get<0>(mAdvanceAttributes[i]);
+        // If these advances are "shifting" their values by the same amount ...
+        if (adv->getOperand(1) == ithAdv->getOperand(1)) {
+            BDD Ii = std::get<1>(mAdvanceAttributes[i]);
+            const BDD IiIk = bdd_and(Ik, Ii);
+            bdd_addref(IiIk);
+            // Is there any satisfying truth assignment? If not, these streams are mutually exclusive.
+            if (bdd_satone(IiIk) == bdd_zero()) {
+                // If Ai ∩ Ak = ∅ and Aj ⊂ Ai, Aj ∩ Ak = ∅.
+                for (auto e : make_iterator_range(in_edges(i, mSubsetGraph))) {
+                     unconstrained[source(e, mSubsetGraph)] = true;
                 }
-                else if (Ik == IiIk) {
-                    // If Ik = Ii ∩ Ik then Ik ⊂ Ii. Record this in the subset graph with the arc (k,i).
-                    // These edges will be moved into the multiplex set graph if Ai and Ak happen to be
-                    // in the same mutually exclusive set.
-                    add_edge(k, i, mSubsetGraph);
-                    // If Ak ⊂ Ai and Ai ⊂ Aj, Ak ⊂ Aj.
-                    graph_traits<SubsetGraph>::out_edge_iterator ei, ei_end;
-                    for (std::tie(ei, ei_end) = out_edges(i, mSubsetGraph); ei != ei_end; ++ei) {
-                        const auto j = target(*ei, mSubsetGraph);
-                        add_edge(k, j, mSubsetGraph);
-                        unconstrained[j] = true;
-                    }
-                    unconstrained[i] = true;
+                unconstrained[i] = true;
+            } else if (Ik == IiIk) {
+                // If Ik = Ii ∩ Ik then Ik ⊂ Ii. Record this in the subset graph with the arc (k, i).
+                // The AST will be modified to make these mutually exclusive if Ai and Ak end up in
+                // the same multiplexing set.
+                add_edge(k, i, mSubsetGraph);
+                // If Ak ⊂ Ai and Ai ⊂ Aj, Ak ⊂ Aj.
+                for (auto e : make_iterator_range(out_edges(i, mSubsetGraph))) {
+                    const auto j = target(e, mSubsetGraph);
+                    add_edge(k, j, mSubsetGraph);
+                    unconstrained[j] = true;
                 }
-                else if (Ii == IiIk) {
-                    // If Ii = Ii ∩ Ik then Ii ⊂ Ik. Record this in the subset graph with the arc (i,k).
-                    add_edge(i, k, mSubsetGraph);
-                    // If Ai ⊂ Ak and Aj ⊂ Ai, Aj ⊂ Ak.
-                    graph_traits<SubsetGraph>::in_edge_iterator ei, ei_end;
-                    for (std::tie(ei, ei_end) = in_edges(i, mSubsetGraph); ei != ei_end; ++ei) {
-                        const auto j = source(*ei, mSubsetGraph);
-                        add_edge(j, k, mSubsetGraph);
-                        unconstrained[j] = true;
-                    }
-                    unconstrained[i] = true;
+                unconstrained[i] = true;
+            } else if (Ii == IiIk) {
+                // If Ii = Ii ∩ Ik then Ii ⊂ Ik. Record this in the subset graph with the arc (i, k).
+                add_edge(i, k, mSubsetGraph);
+                // If Ai ⊂ Ak and Aj ⊂ Ai, Aj ⊂ Ak.
+                for (auto e : make_iterator_range(in_edges(i, mSubsetGraph))) {
+                    const auto j = source(e, mSubsetGraph);
+                    add_edge(j, k, mSubsetGraph);
+                    unconstrained[j] = true;
                 }
-                Deref(IiIk);
+                unconstrained[i] = true;
             }
-        }
-
-        for (unsigned i = 0; i != k; ++i) {
-            const Advance * const tmp = std::get<0>(mAdvance[i]);
-            // Even if these Advances are mutually exclusive, they must be in the same scope or they cannot be safely multiplexed.
-            if (!unconstrained[i] || (adv->getParent() != tmp->getParent())) {
-                // We want the constraint graph to be acyclic; since the dependencies are already in topological order,
-                // adding an arc from a lesser to greater numbered vertex won't induce a cycle.
-                add_edge(i, k, mConstraintGraph);
-            }
+            bdd_delref(IiIk);
         }
     }
 
-    mAdvance.emplace_back(adv, Ik, Nk);
+    const BDD Vk = bdd_ithvar(mVariables++);
+
+    BDD Ck = Vk;
+
+    for (unsigned i = 0; i != k; ++i) {
+        const Advance * const ithAdv = std::get<0>(mAdvanceAttributes[i]);
+        auto f = mCharacterizationMap.find(ithAdv);
+        assert (f != mCharacterizationMap.end());
+        BDD & Ci = f->second;
+        const BDD Vi = std::get<2>(mAdvanceAttributes[i]);
+        if (unconstrained[i]) {
+            Ck = bdd_and(Ck, bdd_not(Vi));
+            bdd_addref(Ck);
+            Ci = bdd_and(Ci, bdd_not(Vk));
+            bdd_addref(Ci);
+            // If these Advances are mutually exclusive, in the same scope, and transitively independent,
+            // we safely multiplex them.
+            if ((adv->getParent() == ithAdv->getParent()) && independent(i, k)) {
+                continue;
+            }
+        } else { // TODO: investigate how to determine when it's safe to avoid computing these
+            Ck = bdd_imp(Ck, Vi);
+            bdd_addref(Ck);
+            Ci = bdd_imp(Ci, Vk);
+            bdd_addref(Ci);
+        }
+        add_edge(i, k, mConstraintGraph);
+    }
+
+    mAdvanceAttributes.emplace_back(adv, Ik, Vk);
+
     return Ck;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief notTransitivelyDependant
+ * @brief independent
  ** ------------------------------------------------------------------------------------------------------------- */
-inline bool AutoMultiplexing::notTransitivelyDependant(const ConstraintVertex i, const ConstraintVertex j) const {
+inline bool AutoMultiplexing::independent(const ConstraintVertex i, const ConstraintVertex j) const {
     assert (i < num_vertices(mConstraintGraph) && j < num_vertices(mConstraintGraph));
     return (mConstraintGraph.get_edge(i, j) == 0);
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief CUDD wrappers
- ** ------------------------------------------------------------------------------------------------------------- */
-
-inline DdNode * AutoMultiplexing::Zero() const {
-    return Cudd_ReadLogicZero(mManager);
-}
-
-inline DdNode * AutoMultiplexing::One() const {
-    return Cudd_ReadOne(mManager);
-}
-
-inline DdNode * AutoMultiplexing::NewVar() {
-    DdNode * var = Cudd_bddIthVar(mManager, mVariables++);
-    return var;
-}
-
-inline bool AutoMultiplexing::isZero(DdNode * const x) const {
-    return x == Zero();
-}
-
-inline DdNode * AutoMultiplexing::And(DdNode * const x, DdNode * const y) {
-    return Cudd_bddAnd(mManager, x, y);
-}
-
-inline DdNode * AutoMultiplexing::Or(DdNode * const x, DdNode * const y) {
-    return Cudd_bddOr(mManager, x, y);
-}
-
-inline DdNode * AutoMultiplexing::Xor(DdNode * const x, DdNode * const y) {
-    return Cudd_bddXor(mManager, x, y);
-}
-
-inline DdNode * AutoMultiplexing::Not(DdNode * const x) const {
-    return Cudd_Not(x);
-}
-
-inline DdNode * AutoMultiplexing::Ite(DdNode * const x, DdNode * const y, DdNode * const z) {
-    return Cudd_bddIte(mManager, x, y, z);
-}
-
-inline bool AutoMultiplexing::NoSatisfyingAssignment(DdNode * const x) {
-    return Cudd_bddLeq(mManager, x, Zero());
-}
-
-inline void AutoMultiplexing::Ref(DdNode * const x) {
-    assert (x);
-    Cudd_Ref(x);
-}
-
-inline void AutoMultiplexing::Deref(DdNode * const x) {
-    assert (x);
-    Cudd_RecursiveDeref(mManager, x);
-}
-
-inline void AutoMultiplexing::Shutdown() {
-//    #ifdef PRINT_DEBUG_OUTPUT
-//    Cudd_PrintInfo(mManager, stderr);
-//    #endif
-    Cudd_Quit(mManager);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -867,123 +741,45 @@ void AutoMultiplexing::selectMultiplexSets(RNG &) {
  ** ------------------------------------------------------------------------------------------------------------- */
 void AutoMultiplexing::applySubsetConstraints() {
 
-    // When entering thus function, the multiplex set graph M is a bipartite DAG with edges denoting the set
-    // relationships of our independent sets.
-    const unsigned m = num_vertices(mConstraintGraph);
-    const unsigned n = num_vertices(mMultiplexSetGraph);
+    using SubsetEdgeIterator = graph_traits<SubsetGraph>::edge_iterator;
 
-    // Add in any edges from our subset constraints to M that are within the same set.
-    bool hasSubsetConstraint = false;
-
-    for (auto ei : make_iterator_range(edges(mSubsetGraph))) {
-        const auto u = source(ei, mSubsetGraph);
-        const auto v = target(ei, mSubsetGraph);
-        // If both the source and target of ei are adjacent to the same vertex, that vertex must be the
-        // "set vertex". Add the edge between the vertices.
-        for (auto ej : make_iterator_range(in_edges(u, mMultiplexSetGraph))) {
-            auto w = target(ej, mMultiplexSetGraph);
-            // Only check (v, w) if w is a "set vertex".
-            if (w >= (n - m) && edge(v, w, mMultiplexSetGraph).second) {
-                add_edge(u, v, mMultiplexSetGraph);
-                hasSubsetConstraint = true;
+    // If Ai ⊂ Aj then the subset graph will contain the arc (i, j). Remove all arcs corresponding to vertices
+    // that are not elements of the same multiplexing set.
+    SubsetEdgeIterator ei, ei_end, ei_next;
+    std::tie(ei, ei_end) = edges(mSubsetGraph);
+    for (ei_next = ei; ei != ei_end; ei = ei_next) {
+        ++ei_next;
+        const auto u = source(*ei, mSubsetGraph);
+        const auto v = target(*ei, mSubsetGraph);
+        if (in_degree(u, mMultiplexSetGraph) != 0 && in_degree(v, mMultiplexSetGraph) != 0) {
+            const auto su = source(*(in_edges(u, mMultiplexSetGraph).first), mMultiplexSetGraph);
+            const auto sv = source(*(in_edges(v, mMultiplexSetGraph).first), mMultiplexSetGraph);
+            if (su == sv) {
+                continue;
             }
         }
+        remove_edge(*ei, mSubsetGraph);
     }
 
-    if (LLVM_UNLIKELY(hasSubsetConstraint)) {
-        // At this point, M is still a DAG but no longer bipartite. We're going to scan through the set vertices
-        // in M, and use a DFS to scan through M and eliminate any subset relationships in the AST.
-        // That way, "multiplexSelectedIndependentSets" only needs to consider muxing and demuxing of the streams.
+    if (num_edges(mSubsetGraph) != 0) {
 
-        std::vector<MultiplexSetGraph::vertex_descriptor> V;
-        std::stack<MultiplexSetGraph::vertex_descriptor> S;
-        std::queue<PabloAST *> Q;
-        BitVector D(n - m, 0);
+        // At least one subset constraint exists; perform a transitive reduction on the graph to ensure that
+        // we perform the minimum number of AST modifications for the given multiplexing sets.
 
-        for (auto i = m; i != n; ++i) {
-            // For each member of a "set vertex" ...
-            for (auto e : make_iterator_range(out_edges(i, mMultiplexSetGraph))) {
-                const auto s = source(e, mMultiplexSetGraph);
-                if (out_degree(s, mMultiplexSetGraph) != 0) {
-                    // First scan through the subgraph of vertices in M dominated by s and build up the set T,
-                    // consisting of all sinks w.r.t. vertex s.
-                    auto u = s;
-                    for (;;) {
-                        graph_traits<MultiplexSetGraph>::out_edge_iterator ej, ej_end;
-                        for (std::tie(ej, ej_end) = out_edges(u, mMultiplexSetGraph); ej != ej_end; ++ej) {
-                            auto v = target(*ej, mMultiplexSetGraph);
-                            if (D.test(v)) {
-                                continue;
-                            }
-                            D.set(v);
-                            if (out_degree(v, mMultiplexSetGraph) == 0) {
-                                V.push_back(v);
-                            }
-                            else {
-                                S.push(v);
-                            }
-                        }
-                        if (S.empty()) {
-                            break;
-                        }
-                        u = S.top();
-                        S.pop();
-                    }
-                    D.clear();
-                    // Now in order for these advances to be mutually exclusive, the input to A_s must be masked
-                    // with the complement of each advance indicated by V.
+        transitiveReductionOfSubsetGraph();
 
-                    Advance * adv = std::get<0>(mAdvance[s]);
-                    PabloBlock * pb = adv->getParent();
-
-                    for (auto i : V) {
-                        Q.push(std::get<0>(mAdvance[i])->getOperand(0));
-                    }                    
-                    pb->setInsertPoint(adv);
-                    while (Q.size() > 1) {
-                        PabloAST * a1 = Q.front(); Q.pop();
-                        PabloAST * a2 = Q.front(); Q.pop();                        
-                        Q.push(pb->createOr(a1, a2, "subset"));
-                    }
-                    assert (Q.size() == 1);
-
-                    PabloAST * const mask = pb->createNot(Q.front()); Q.pop();
-                    adv->setOperand(0, pb->createAnd(adv->getOperand(0), mask, "subset"));
-
-                    // Similar to the above, we're going to OR together the result of each advance,
-                    // including s. This will restore the advanced variable back to its original state.
-
-                    // Gather the original users to this advance. We'll be manipulating it shortly.
-                    std::vector<PabloAST *> U(adv->users().begin(), adv->users().end());
-
-                    // Add s to V and sort the list; it'll be closer to being in topological order.
-                    V.push_back(s);
-                    std::sort(V.begin(), V.end());
-                    for (auto i : V) {
-                        Q.push(std::get<0>(mAdvance[i]));
-                    }
-                    pb->setInsertPoint(adv);
-                    while (Q.size() > 1) {
-                        PabloAST * a1 = Q.front(); Q.pop();
-                        PabloAST * a2 = Q.front(); Q.pop();                        
-                        Q.push(pb->createOr(a1, a2, "subset"));
-                    }
-                    assert (Q.size() == 1);
-
-                    PabloAST * const input = Q.front(); Q.pop();
-                    for (PabloAST * use : U) {
-                        if (LLVM_LIKELY(isa<Statement>(use))) {
-                            cast<Statement>(use)->replaceUsesOfWith(adv, input);
-                        }
-                    }
-
-                    pb->setInsertPoint(pb->back());
-
-                    V.clear();
-
-                }
-            }
+        // Afterwards modify the AST to ensure that multiplexing algorithm can ignore any subset constraints
+        for (auto e : make_iterator_range(edges(mSubsetGraph))) {
+            Advance * adv1 = std::get<0>(mAdvanceAttributes[source(e, mSubsetGraph)]);
+            Advance * adv2 = std::get<0>(mAdvanceAttributes[target(e, mSubsetGraph)]);
+            assert (adv1->getParent() == adv2->getParent());
+            PabloBlock * const pb = adv1->getParent();
+            pb->setInsertPoint(adv2->getPrevNode());
+            adv2->setOperand(0, pb->createAnd(adv2->getOperand(0), pb->createNot(adv1->getOperand(0)), "subset"));
+            pb->setInsertPoint(adv2);
+            adv2->replaceAllUsesWith(pb->createOr(adv1, adv2, "merge"));
         }
+
     }
 }
 
@@ -1002,7 +798,6 @@ void AutoMultiplexing::multiplexSelectedIndependentSets(PabloFunction &) {
     }
 
     circular_buffer<PabloAST *> Q(max_n);
-    flat_set<PabloBlock *> modified;
 
     // When entering thus function, the multiplex set graph M is a DAG with edges denoting the set
     // relationships of our independent sets.
@@ -1016,16 +811,11 @@ void AutoMultiplexing::multiplexSelectedIndependentSets(PabloFunction &) {
 
             unsigned i = 0;
             for (const auto e : make_iterator_range(out_edges(idx, mMultiplexSetGraph))) {
-                input[i] = std::get<0>(mAdvance[target(e, mMultiplexSetGraph)]);
-                assert (input[i]);
-                ++i;
+                input[i++] = std::get<0>(mAdvanceAttributes[target(e, mMultiplexSetGraph)]);
             }
-            assert (i == n);
 
             Advance * const adv = input[0];
-            assert (adv);
-            PabloBlock * const block = adv->getParent();
-            assert (block);           
+            PabloBlock * const block = adv->getParent(); assert (block);
             PabloBuilder builder(*block);
             block->setInsertPoint(block->back());
 
@@ -1035,7 +825,7 @@ void AutoMultiplexing::multiplexSelectedIndependentSets(PabloFunction &) {
                 std::ostringstream prefix;
                 prefix << "mux" << n << "to" << m << '.' << (j + 1);
                 for (size_t i = 0; i != n; ++i) {
-                    if (((i + 1) & (1ULL << j)) != 0) {
+                    if (((i + 1) & (1UL << j)) != 0) {
                         assert (input[i]->getParent() == block);
                         Q.push_back(input[i]->getOperand(0));
                     }
@@ -1059,7 +849,7 @@ void AutoMultiplexing::multiplexSelectedIndependentSets(PabloFunction &) {
 
                 // Construct the demuxed values and replaces all the users of the original advances with them.
                 for (size_t j = 0; j != m; ++j) {
-                    if (((i + 1) & (1ULL << j)) == 0) {
+                    if (((i + 1) & (1UL << j)) == 0) {
                         Q.push_back(muxed[j]);
                     }
                 }
@@ -1072,8 +862,8 @@ void AutoMultiplexing::multiplexSelectedIndependentSets(PabloFunction &) {
                         Q.push_back(builder.createOr(a2, a1, "demuxing"));
                     }
                     assert (Q.size() == 1);
-                    PabloAST * neg = Q.front(); Q.pop_front();
-                    Q.push_back(builder.createNot(neg, "demuxing")); assert (neg);
+                    PabloAST * neg = Q.front(); Q.pop_front(); assert (neg);
+                    Q.push_back(builder.createNot(neg, "demuxing"));
                 }
 
                 for (unsigned j = 0; j != m; ++j) {
@@ -1093,10 +883,89 @@ void AutoMultiplexing::multiplexSelectedIndependentSets(PabloFunction &) {
                 PabloAST * demuxed = Q.front(); Q.pop_front(); assert (demuxed);
                 input[i]->replaceWith(demuxed, true, true);
             }
-            modified.insert(block);
         }
     }
 }
 
-} // end of namespace pablo
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief topologicalSort
+ *
+ * After transforming the IR, we need to run this in order to always have a valid program. Each multiplex set
+ * contains vertices corresponding to an Advance in the IR. While we know each Advance within a set is independent
+ * w.r.t. the transitive closure of their dependencies in the IR, the position of each Advance's dependencies and
+ * users within the IR isn't taken into consideration. Thus while there must be a valid ordering for the program,
+ * it's not necessarily the original ordering.
+ ** ------------------------------------------------------------------------------------------------------------- */
+void AutoMultiplexing::topologicalSort(PabloFunction & function) {
+    // Note: not a real topological sort. I expect the original order to be very close to the resulting one.
+    std::unordered_set<const PabloAST *> encountered;
+    std::stack<Statement *> scope;
+    for (Statement * stmt = function.getEntryBlock().front(); ; ) { restart:
+        while ( stmt ) {
+            for (unsigned i = 0; i != stmt->getNumOperands(); ++i) {
+                PabloAST * const op = stmt->getOperand(i);
+                if (LLVM_LIKELY(isa<Statement>(op))) {
+                    if (LLVM_UNLIKELY(encountered.count(op) == 0)) {
+                        if (LLVM_UNLIKELY(isa<While>(stmt) && isa<Next>(op))) {
+                            if (encountered.count(cast<Next>(op)->getInitial()) != 0) {
+                                continue;
+                            }
+                        }
+                        Statement * const next = stmt->getNextNode();
+                        stmt->insertAfter(cast<Statement>(op));
+                        stmt = next;
+                        goto restart;
+                    }
+                }
+            }
+            if (LLVM_UNLIKELY(isa<If>(stmt) || isa<While>(stmt))) {
+                // Set the next statement to be the first statement of the inner scope and push the
+                // next statement of the current statement into the scope stack.
+                const PabloBlock & nested = isa<If>(stmt) ? cast<If>(stmt)->getBody() : cast<While>(stmt)->getBody();
+                scope.push(stmt->getNextNode());
+                stmt = nested.front();
+                continue;
+            }
+            encountered.insert(stmt);
+            stmt = stmt->getNextNode();
+        }
+        if (scope.empty()) {
+            break;
+        }
+        stmt = scope.top();
+        scope.pop();
+    }
+}
 
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief transitiveReductionOfSubsetGraph
+ ** ------------------------------------------------------------------------------------------------------------- */
+void AutoMultiplexing::transitiveReductionOfSubsetGraph() {
+    std::vector<SubsetGraph::vertex_descriptor> Q;
+    for (auto u : make_iterator_range(vertices(mSubsetGraph))) {
+        if (in_degree(u, mSubsetGraph) == 0 && out_degree(u, mSubsetGraph) != 0) {
+            Q.push_back(u);
+        }
+    }
+    flat_set<SubsetGraph::vertex_descriptor> targets;
+    flat_set<SubsetGraph::vertex_descriptor> visited;
+    do {
+        const auto u = Q.back(); Q.pop_back();
+        for (auto ei : make_iterator_range(out_edges(u, mSubsetGraph))) {
+            for (auto ej : make_iterator_range(out_edges(target(ei, mSubsetGraph), mSubsetGraph))) {
+                targets.insert(target(ej, mSubsetGraph));
+            }
+        }
+        for (auto v : targets) {
+            remove_edge(u, v, mSubsetGraph);
+        }
+        for (auto e : make_iterator_range(out_edges(u, mSubsetGraph))) {
+            const auto v = target(e, mSubsetGraph);
+            if (visited.insert(v).second) {
+                Q.push_back(v);
+            }
+        }
+    } while (Q.size() > 0);
+}
+
+} // end of namespace pablo

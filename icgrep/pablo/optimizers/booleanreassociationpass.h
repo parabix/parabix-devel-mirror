@@ -24,7 +24,7 @@ protected:
     void processScope(PabloFunction &, PabloBlock & block);
     void summarizeAST(PabloBlock & block, Graph & G, Map & M) const;
     static void summarizeGraph(const PabloBlock & block, Graph & G, std::vector<Vertex> & mapping, Map &M);
-    void resolveUsages(const Vertex u, PabloAST * expr, PabloBlock & block, Graph & G, Map & M, const Statement * const ignoreIfThis = nullptr) const;
+    void resolveNestedUsages(const Vertex u, PabloAST * expr, PabloBlock & block, Graph & G, Map & M, const Statement * const ignoreIfThis = nullptr) const;
     void redistributeAST(const PabloBlock & block, Graph & G, Map & M) const;
     void rewriteAST(PabloBlock & block, Graph & G);
     static PabloAST * createTree(PabloBlock & block, const Vertex u, Graph & G);

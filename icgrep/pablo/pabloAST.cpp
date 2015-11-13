@@ -86,17 +86,23 @@ bool equals(const PabloAST * expr1, const PabloAST * expr2) {
  * @brief replaceAllUsesWith
  ** ------------------------------------------------------------------------------------------------------------- */
 void PabloAST::replaceAllUsesWith(PabloAST * expr) {    
-    Statement * user[mUsers.size()];
+    Statement * replacements[mUsers.size()];
     Vector::size_type users = 0;
-    for (PabloAST * u : mUsers) {
-        if (isa<Statement>(u) && u != expr) {
-            user[users++] = cast<Statement>(u);
+    bool exprIsAUser = false;
+    assert (expr);
+    for (PabloAST * user : mUsers) {
+        if (LLVM_UNLIKELY(user == expr)) {
+            exprIsAUser = true;
+            continue;
         }
+        replacements[users++] = cast<Statement>(user);
     }
     mUsers.clear();
-    assert (expr);
+    if (LLVM_UNLIKELY(exprIsAUser)) {
+        mUsers.push_back(expr);
+    }
     for (Vector::size_type i = 0; i != users; ++i) {
-        user[i]->replaceUsesOfWith(this, expr);
+        replacements[i]->replaceUsesOfWith(this, expr);
     }
 }
 
