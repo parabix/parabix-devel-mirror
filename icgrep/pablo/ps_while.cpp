@@ -3,7 +3,7 @@
 
 namespace pablo {
 
-While::While(PabloAST * expr, const std::initializer_list<Next *> nextVars, PabloBlock & body)
+While::While(PabloAST * expr, const std::initializer_list<Next *> nextVars, PabloBlock * body)
 : Statement(ClassTypeId::While, {expr}, nullptr)
 , mBody(body)
 , mNext(nextVars.begin(), nextVars.end(), reinterpret_cast<NextAllocator &>(mAllocator)) {
@@ -13,7 +13,7 @@ While::While(PabloAST * expr, const std::initializer_list<Next *> nextVars, Pabl
     }
 }
 
-While::While(PabloAST * expr, const std::vector<Next *> & nextVars, PabloBlock & body)
+While::While(PabloAST * expr, const std::vector<Next *> & nextVars, PabloBlock * body)
 : Statement(ClassTypeId::While, {expr}, nullptr)
 , mBody(body)
 , mNext(nextVars.begin(), nextVars.end(), reinterpret_cast<NextAllocator &>(mAllocator)) {
@@ -21,6 +21,13 @@ While::While(PabloAST * expr, const std::vector<Next *> & nextVars, PabloBlock &
         variant->addUser(this);
         this->addUser(variant);
     }
+}
+
+PabloBlock * While::setBody(PabloBlock * body) {
+    body->setParent(mBody->getParent());
+    std::swap(mBody, body);
+    body->setParent(nullptr);
+    return body;
 }
 
 }

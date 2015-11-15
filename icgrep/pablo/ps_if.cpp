@@ -4,7 +4,7 @@
 
 namespace pablo {
 
-If::If(PabloAST * expr, const std::initializer_list<Assign *> definedVars, PabloBlock & body)
+If::If(PabloAST * expr, const std::initializer_list<Assign *> definedVars, PabloBlock * body)
 : Statement(ClassTypeId::If, {expr}, nullptr)
 , mBody(body)
 , mDefined(definedVars.begin(), definedVars.end(), reinterpret_cast<DefinedAllocator &>(mAllocator))
@@ -26,7 +26,7 @@ If::If(PabloAST * expr, const std::initializer_list<Assign *> definedVars, Pablo
     }
 }
 
-If::If(PabloAST * expr, const std::vector<Assign *> & definedVars, PabloBlock & body)
+If::If(PabloAST * expr, const std::vector<Assign *> & definedVars, PabloBlock * body)
 : Statement(ClassTypeId::If, {expr}, nullptr)
 , mBody(body)
 , mDefined(definedVars.begin(), definedVars.end(), reinterpret_cast<DefinedAllocator &>(mAllocator))
@@ -53,6 +53,13 @@ If::DefinedVars::iterator If::removeDefined(Assign * def) {
         return mDefined.erase(f);
     }
     return mDefined.end();
+}
+
+PabloBlock * If::setBody(PabloBlock * body) {
+    body->setParent(mBody->getParent());
+    std::swap(mBody, body);
+    body->setParent(nullptr);
+    return body;
 }
 
 }

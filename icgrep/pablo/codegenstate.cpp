@@ -5,6 +5,8 @@
  */
 
 #include <pablo/codegenstate.h>
+#include <iostream>
+#include <pablo/printer_pablos.h>
 
 namespace pablo {
 
@@ -481,35 +483,49 @@ PabloAST * PabloBlock::createSel(PabloAST * condition, PabloAST * trueExpr, Pabl
     return insertAtInsertionPoint(new Sel(condition, trueExpr, falseExpr, makeName(prefix, false)));
 }
 
-If * PabloBlock::createIf(PabloAST * condition, const std::initializer_list<Assign *> definedVars, PabloBlock & body) {
+If * PabloBlock::createIf(PabloAST * condition, const std::initializer_list<Assign *> definedVars, PabloBlock * body) {
     assert (condition);
     return insertAtInsertionPoint(new If(condition, definedVars, body));
 }
 
-If * PabloBlock::createIf(PabloAST * condition, const std::vector<Assign *> & definedVars, PabloBlock & body) {
+If * PabloBlock::createIf(PabloAST * condition, const std::vector<Assign *> & definedVars, PabloBlock * body) {
     assert (condition);
     return insertAtInsertionPoint(new If(condition, definedVars, body));
 }
 
-If * PabloBlock::createIf(PabloAST * condition, std::vector<Assign *> && definedVars, PabloBlock & body) {
+If * PabloBlock::createIf(PabloAST * condition, std::vector<Assign *> && definedVars, PabloBlock * body) {
     assert (condition);
     return insertAtInsertionPoint(new If(condition, definedVars, body));
 }
 
-While * PabloBlock::createWhile(PabloAST * condition, const std::initializer_list<Next *> nextVars, PabloBlock & body) {
+While * PabloBlock::createWhile(PabloAST * condition, const std::initializer_list<Next *> nextVars, PabloBlock * body) {
     assert (condition);
     return insertAtInsertionPoint(new While(condition, nextVars, body));
 }
 
-While * PabloBlock::createWhile(PabloAST * condition, const std::vector<Next *> & nextVars, PabloBlock & body) {
+While * PabloBlock::createWhile(PabloAST * condition, const std::vector<Next *> & nextVars, PabloBlock * body) {
     assert (condition);
     return insertAtInsertionPoint(new While(condition, nextVars, body));
 }
 
-While * PabloBlock::createWhile(PabloAST * condition, std::vector<Next *> && nextVars, PabloBlock & body) {
+While * PabloBlock::createWhile(PabloAST * condition, std::vector<Next *> && nextVars, PabloBlock * body) {
     assert (condition);
     return insertAtInsertionPoint(new While(condition, nextVars, body));
 }
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief eraseFromParent
+ ** ------------------------------------------------------------------------------------------------------------- */
+void PabloBlock::eraseFromParent(const bool recursively) {
+    Statement * stmt = front();
+    // Note: by erasing the scope block, any Assign/Next nodes will be replaced with Zero and removed from
+    // the If/While node
+    while (stmt) {
+        stmt = stmt->eraseFromParent(recursively);
+    }
+    mAllocator.deallocate(reinterpret_cast<Allocator::pointer>(this));
+}
+
 
 // Assign sequential scope indexes, returning the next unassigned index    
 
@@ -518,10 +534,10 @@ unsigned PabloBlock::enumerateScopes(unsigned baseScopeIndex) {
     unsigned nextScopeIndex = baseScopeIndex + 1;
     for (Statement * stmt : *this) {
         if (If * ifStatement = dyn_cast<If>(stmt)) {
-            nextScopeIndex = ifStatement->getBody().enumerateScopes(nextScopeIndex);
+            nextScopeIndex = ifStatement->getBody()->enumerateScopes(nextScopeIndex);
         }
         else if (While * whileStatement = dyn_cast<While>(stmt)) {
-            nextScopeIndex = whileStatement->getBody().enumerateScopes(nextScopeIndex);
+            nextScopeIndex = whileStatement->getBody()->enumerateScopes(nextScopeIndex);
         }
     }
     return nextScopeIndex;
@@ -529,19 +545,10 @@ unsigned PabloBlock::enumerateScopes(unsigned baseScopeIndex) {
     
 /// CONSTRUCTOR
 
-PabloBlock::PabloBlock(SymbolGenerator * symbolGenerator)
+PabloBlock::PabloBlock(SymbolGenerator * symbolGenerator) noexcept
 : PabloAST(PabloAST::ClassTypeId::Block)
 , mSymbolGenerator(symbolGenerator)
 , mParent(nullptr)
-, mScopeIndex(0)
-{
-
-}
-
-PabloBlock::PabloBlock(PabloBlock * predecessor)
-: PabloAST(PabloAST::ClassTypeId::Block)
-, mSymbolGenerator(predecessor->mSymbolGenerator)
-, mParent(predecessor)
 , mScopeIndex(0)
 {
 

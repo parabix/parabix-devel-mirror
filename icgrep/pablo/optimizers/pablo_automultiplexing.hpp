@@ -28,25 +28,27 @@ class AutoMultiplexing {
     using IntDistribution = std::uniform_int_distribution<RNG::result_type>;
     using MultiplexSetGraph = boost::adjacency_list<boost::hash_setS, boost::vecS, boost::bidirectionalS>;
     using SubsetGraph = boost::adjacency_list<boost::hash_setS, boost::vecS, boost::bidirectionalS>;
-    using AdvanceAttributes = std::vector<std::tuple<Advance *, BDD, BDD>>; // the Advance pointer, input BDD, the base BDD variable
+    using AdvanceAttributes = std::vector<std::pair<Advance *, BDD>>; // the Advance pointer and its respective base BDD variable
     using VertexVector = std::vector<ConstraintVertex>;
     using ScopeMap = boost::container::flat_map<const PabloBlock *, Statement *>;
 
 public:
     static bool optimize(PabloFunction & function, const unsigned limit = std::numeric_limits<unsigned>::max(), const unsigned maxSelections = 100);
 protected:
-    unsigned initialize(PabloFunction & function);
-    void characterize(PabloBlock & block);
+    unsigned initialize(PabloFunction & function, raw_ostream & out);
+    void characterize(PabloBlock * const block);
     BDD characterize(Statement * const stmt);
     BDD characterize(Advance * const adv, const BDD Ik);
     bool independent(const ConstraintVertex i, const ConstraintVertex j) const;
     bool generateCandidateSets(RNG & rng);
     void addCandidateSet(const VertexVector & S, RNG & rng);
     void selectMultiplexSets(RNG &);
-    void transitiveReductionOfSubsetGraph() ;
+    void doTransitiveReductionOfSubsetGraph() ;
     void applySubsetConstraints();
     void multiplexSelectedIndependentSets(PabloFunction & function);
     static void topologicalSort(PabloFunction & function);
+    BDD & get(const PabloAST * const expr);
+
 
     inline AutoMultiplexing(const unsigned limit, const unsigned maxSelections)
     : mLimit(limit)
@@ -57,7 +59,7 @@ protected:
     }
 
 private:
-    unsigned                    mLimit;
+    const unsigned              mLimit;
     const unsigned              mMaxSelections;
     unsigned                    mVariables;
     CharacterizationMap         mCharacterizationMap;

@@ -34,12 +34,13 @@ public:
     inline PabloAST * getCondition() const {
         return getOperand(0);
     }
-    inline PabloBlock & getBody() {
+    inline PabloBlock * getBody() {
         return mBody;
     }
-    inline  PabloBlock & getBody() const {
+    inline  PabloBlock * getBody() const {
         return mBody;
     }
+    PabloBlock * setBody(PabloBlock * body);
     inline const DefinedVars & getDefined() const {
         return mDefined;
     }
@@ -49,10 +50,10 @@ public:
     void addDefined(Assign * def);
     DefinedVars::iterator removeDefined(Assign * def);
 protected:
-    If(PabloAST * expr, const std::initializer_list<Assign *> definedVars, PabloBlock & body);
-    If(PabloAST * expr, const std::vector<Assign *> & definedVars, PabloBlock & body);
+    If(PabloAST * expr, const std::initializer_list<Assign *> definedVars, PabloBlock * body);
+    If(PabloAST * expr, const std::vector<Assign *> & definedVars, PabloBlock * body);
 private:
-    PabloBlock &    mBody;
+    PabloBlock *    mBody;
     DefinedVars     mDefined;
 };
 

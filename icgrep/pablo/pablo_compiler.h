@@ -81,11 +81,11 @@ public:
 private:
     void GenerateFunction(PabloFunction & function);
     void Examine(PabloFunction & function);
-    void Examine(PabloBlock & block);
+    void Examine(PabloBlock * block);
 
     void SetOutputValue(Value * marker, const unsigned index);
 
-    void compileBlock(PabloBlock & block);
+    void compileBlock(PabloBlock * block);
     void compileStatement(const Statement * stmt);
     void compileIf(const If * ifStmt);
     void compileWhile(const While * whileStmt);

@@ -29,9 +29,9 @@ class CodeMotionPass {
 public:
     static bool optimize(PabloFunction & function);
 protected:
-    static void process(PabloBlock & block);
-    static bool isAcceptableTarget(Statement *stmt, ScopeSet & scopeSet, const PabloBlock & block);
-    static void sink(PabloBlock & block);    
+    static void process(PabloBlock * const block);
+    static bool isAcceptableTarget(Statement *stmt, ScopeSet & scopeSet, const PabloBlock * const block);
+    static void sink(PabloBlock * const block);
     static void hoistLoopInvariants(While * loop);
 };
 

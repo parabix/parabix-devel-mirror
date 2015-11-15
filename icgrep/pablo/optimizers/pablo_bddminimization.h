@@ -41,7 +41,7 @@ public:
 protected:
     void initialize(PabloFunction & function);
     void eliminateLogicallyEquivalentStatements(PabloFunction & function);
-    void eliminateLogicallyEquivalentStatements(PabloBlock & block, SubsitutionMap & parent);
+    void eliminateLogicallyEquivalentStatements(PabloBlock * const block, SubsitutionMap & parent);
     void eliminateLogicallyEquivalentStatements(Statement * const stmt, SubsitutionMap & map);
     std::pair<BDD, bool> characterize(Statement * const stmt);
 private:

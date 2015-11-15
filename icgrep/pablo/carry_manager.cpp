@@ -32,10 +32,10 @@ namespace pablo {
         
         for (Statement * stmt : *pb) {
             if (If * ifStatement = dyn_cast<If>(stmt)) {
-                count += doScopeCount(&ifStatement->getBody());
+                count += doScopeCount(ifStatement->getBody());
             }
             else if (While * whileStatement = dyn_cast<While>(stmt)) {
-                count += doScopeCount(&whileStatement->getBody());
+                count += doScopeCount(whileStatement->getBody());
             }
         }
         return count;
@@ -150,8 +150,8 @@ unsigned CarryManager::enumerate(PabloBlock * blk, unsigned ifDepth, unsigned wh
             mPabloCountCount++;
         }
         else if (If * ifStatement = dyn_cast<If>(stmt)) {
-            const unsigned ifCarryDataBits = enumerate(&ifStatement->getBody(), ifDepth+1, whileDepth);
-            PabloBlockCarryData * nestedBlockData = mCarryInfoVector[ifStatement->getBody().getScopeIndex()];
+            const unsigned ifCarryDataBits = enumerate(ifStatement->getBody(), ifDepth+1, whileDepth);
+            PabloBlockCarryData * nestedBlockData = mCarryInfoVector[ifStatement->getBody()->getScopeIndex()];
             if (mITEMS_PER_PACK == mPACK_SIZE) {  // PACKING
                 if (cd->roomInFinalPack(nestedOffset) < ifCarryDataBits) {
                     nestedOffset = alignCeiling(nestedOffset, mPACK_SIZE);
@@ -167,8 +167,8 @@ unsigned CarryManager::enumerate(PabloBlock * blk, unsigned ifDepth, unsigned wh
 #endif
         }
         else if (While * whileStatement = dyn_cast<While>(stmt)) {
-            const unsigned whileCarryDataBits = enumerate(&whileStatement->getBody(), ifDepth, whileDepth+1);
-            PabloBlockCarryData * nestedBlockData = mCarryInfoVector[whileStatement->getBody().getScopeIndex()];
+            const unsigned whileCarryDataBits = enumerate(whileStatement->getBody(), ifDepth, whileDepth+1);
+            PabloBlockCarryData * nestedBlockData = mCarryInfoVector[whileStatement->getBody()->getScopeIndex()];
             //if (whileStatement->isMultiCarry()) whileCarryDataBits *= whileStatement->getMaxIterations();
             if (mITEMS_PER_PACK == mPACK_SIZE) {  // PACKING
                 if (cd->roomInFinalPack(nestedOffset) < whileCarryDataBits) {
@@ -624,7 +624,7 @@ void CarryManager::generateCarryOutSummaryCodeIfNeeded() {
         }
         for (Statement * stmt : *mCurrentScope) {
             if (If * innerIf = dyn_cast<If>(stmt)) {
-                PabloBlock * inner_blk = & innerIf->getBody();
+                PabloBlock * inner_blk = innerIf->getBody();
                 enterScope(inner_blk);
                 if (blockHasCarries()) {
                   carry_summary = mPackBuilder->simd_or(carry_summary, mCarryOutPack[summaryPackIndex()]);
@@ -632,7 +632,7 @@ void CarryManager::generateCarryOutSummaryCodeIfNeeded() {
                 leaveScope();
             }
             else if (While * innerWhile = dyn_cast<While>(stmt)) {
-                PabloBlock * inner_blk = & innerWhile->getBody();
+                PabloBlock * inner_blk = innerWhile->getBody();
                 enterScope(inner_blk);
                 if (blockHasCarries()) {
                     carry_summary = mPackBuilder->simd_or(carry_summary, mCarryOutPack[summaryPackIndex()]);

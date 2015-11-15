@@ -7,23 +7,23 @@
 #ifndef SHOW_H
 #define SHOW_H
 
-#include <pablo/pabloAST.h>
-#include <pablo/ps_if.h>
-#include <string>
-
-namespace pablo { class PabloBlock; }
-
 namespace llvm { class raw_ostream; }
+
+namespace pablo {
+
+class PabloFunction;
+class PabloBlock;
+class Statement;
+class PabloAST;
 
 class PabloPrinter {
 public:
-    using DefinedVars = pablo::If::DefinedVars;
-    static void print(const pablo::PabloBlock & block, llvm::raw_ostream & strm);
-    static void print(const pablo::StatementList & stmts, llvm::raw_ostream & strm);
-    static void print(const pablo::StatementList & stmts, std::string indent, llvm::raw_ostream & strm);
-    static void print_vars(const DefinedVars & vars, std::string indent, llvm::raw_ostream & strm);
-    static void print(const pablo::PabloAST * expr, llvm::raw_ostream & strm);
-    static void print(const pablo::Statement *stmt, std::string indent, llvm::raw_ostream & strm);
+    static void print(const pablo::PabloFunction & function, llvm::raw_ostream & out);
+    static void print(const pablo::PabloAST * expr, llvm::raw_ostream & out);
+    static void print(const pablo::PabloBlock * block, llvm::raw_ostream & strm, const bool expandNested = false, const unsigned indent = 0);
+    static void print(const pablo::Statement * stmt, llvm::raw_ostream & out, const bool expandNested = false, const unsigned indent = 0);
 };
+
+}
 
 #endif // SHOW_H

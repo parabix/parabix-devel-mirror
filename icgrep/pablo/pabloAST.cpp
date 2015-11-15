@@ -209,8 +209,9 @@ void Statement::insertBefore(Statement * const statement) {
         mPrev->mNext = this;
     }
     if (LLVM_UNLIKELY(isa<If>(this) || isa<While>(this))) {
-        PabloBlock & body = isa<If>(this) ? cast<If>(this)->getBody() : cast<While>(this)->getBody();
-        mParent->addUser(&body);
+        PabloBlock * body = isa<If>(this) ? cast<If>(this)->getBody() : cast<While>(this)->getBody();
+        body->setParent(mParent);
+        mParent->addUser(body);
     }
 }
 
@@ -239,8 +240,9 @@ void Statement::insertAfter(Statement * const statement) {
         mNext->mPrev = this;
     }
     if (LLVM_UNLIKELY(isa<If>(this) || isa<While>(this))) {
-        PabloBlock & body = isa<If>(this) ? cast<If>(this)->getBody() : cast<While>(this)->getBody();
-        mParent->addUser(&body);
+        PabloBlock * body = isa<If>(this) ? cast<If>(this)->getBody() : cast<While>(this)->getBody();
+        body->setParent(mParent);
+        mParent->addUser(body);
     }
 }
 
@@ -266,8 +268,9 @@ Statement * Statement::removeFromParent() {
             mNext->mPrev = mPrev;
         }
         if (LLVM_UNLIKELY(isa<If>(this) || isa<While>(this))) {
-            PabloBlock & body = isa<If>(this) ? cast<If>(this)->getBody() : cast<While>(this)->getBody();
-            mParent->removeUser(&body);
+            PabloBlock * body = isa<If>(this) ? cast<If>(this)->getBody() : cast<While>(this)->getBody();
+            body->setParent(nullptr);
+            mParent->removeUser(body);
         }
     }
     mPrev = nullptr;
@@ -288,12 +291,8 @@ Statement * Statement::eraseFromParent(const bool recursively) {
     // If this is an If or While statement, we'll have to remove the statements within the
     // body or we'll lose track of them.
     if (LLVM_UNLIKELY(isa<If>(this) || isa<While>(this))) {
-        PabloBlock & body = isa<If>(this) ? cast<If>(this)->getBody() : cast<While>(this)->getBody();
-        Statement * stmt = body.front();
-        // Note: by erasing the body, any Assign/Next nodes will be replaced with Zero.
-        while (stmt) {
-            stmt = stmt->eraseFromParent(recursively);
-        }
+        PabloBlock * const body = isa<If>(this) ? cast<If>(this)->getBody() : cast<While>(this)->getBody();
+        body->eraseFromParent(recursively);
     } else if (LLVM_UNLIKELY(isa<Assign>(this))) {
         for (PabloAST * use : mUsers) {
             if (If * ifNode = dyn_cast<If>(use)) {
@@ -346,10 +345,16 @@ Statement * Statement::eraseFromParent(const bool recursively) {
             }
         }
         if (LLVM_UNLIKELY(redundantBranch != nullptr)) {
+            // By eliminating this redundant branch, we may inadvertantly delete the scope block this statement
+            // resides within. Check and return null if so.
+            const PabloBlock * const body = isa<If>(redundantBranch) ? cast<If>(redundantBranch)->getBody() : cast<While>(redundantBranch)->getBody();
+            const bool eliminatedScope = (body == getParent());
             redundantBranch->eraseFromParent(true);
+            if (eliminatedScope) {
+                return nullptr;
+            }
         }
     }
-
     Statement * const next = removeFromParent();
     mAllocator.deallocate(reinterpret_cast<Allocator::pointer>(this));
     return next;
@@ -383,27 +388,6 @@ bool StatementList::contains(Statement * const statement) {
         }
     }
     return false;
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief clear
- ** ------------------------------------------------------------------------------------------------------------- */
-void StatementList::clear() {
-    Statement * stmt = front();
-    while (stmt) {
-        Statement * next = stmt->mNext;
-        if (LLVM_UNLIKELY(isa<If>(stmt) || isa<While>(stmt))) {
-            PabloBlock & body = isa<If>(stmt) ? cast<If>(stmt)->getBody() : cast<While>(stmt)->getBody();
-            stmt->mParent->removeUser(&body);
-        }
-        stmt->mPrev = nullptr;
-        stmt->mNext = nullptr;
-        stmt->mParent = nullptr;
-        stmt = next;
-    }
-    mInsertionPoint = nullptr;
-    mFirst = nullptr;
-    mLast = nullptr;
 }
 
 StatementList::~StatementList() {

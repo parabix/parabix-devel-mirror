@@ -18,17 +18,17 @@ public:
 protected:
     inline BooleanReassociationPass() {}
     void resolveScopes(PabloFunction & function);
-    void resolveScopes(PabloBlock &block);
+    void resolveScopes(PabloBlock * const block);
     void processScopes(PabloFunction & function);
-    void processScopes(PabloFunction & function, PabloBlock & block);
-    void processScope(PabloFunction &, PabloBlock & block);
-    void summarizeAST(PabloBlock & block, Graph & G, Map & M) const;
-    static void summarizeGraph(const PabloBlock & block, Graph & G, std::vector<Vertex> & mapping, Map &M);
-    void resolveNestedUsages(const Vertex u, PabloAST * expr, PabloBlock & block, Graph & G, Map & M, const Statement * const ignoreIfThis = nullptr) const;
-    void redistributeAST(const PabloBlock & block, Graph & G, Map & M) const;
-    void rewriteAST(PabloBlock & block, Graph & G);
-    static PabloAST * createTree(PabloBlock & block, const Vertex u, Graph & G);
-    static Vertex getSummaryVertex(PabloAST * expr, Graph & G, Map & M, const PabloBlock & block);
+    PabloBlock * processScopes(PabloFunction & f, PabloBlock * const block);
+    PabloBlock * processScope(PabloFunction & f, PabloBlock * const block);
+    void summarizeAST(PabloBlock * const block, Graph & G) const;
+    static void summarizeGraph(Graph & G, std::vector<Vertex> & mapping);
+    void resolveNestedUsages(const Vertex u, PabloAST * expr, PabloBlock * const block, Graph & G, Map & M, const Statement * const ignoreIfThis = nullptr) const;
+    void redistributeAST(Graph & G) const;
+    PabloBlock * rewriteAST(PabloFunction & f, PabloBlock * const block, Graph & G);
+    static PabloAST * createTree(const PabloBlock * const block, PabloBlock * const newScope, const Vertex u, Graph & G);
+    static Vertex getSummaryVertex(PabloAST * expr, Graph & G, Map & M, const PabloBlock * const block);
     static Vertex addSummaryVertex(const PabloAST::ClassTypeId typeId, Graph & G);
 private:
     ScopeMap mResolvedScopes;

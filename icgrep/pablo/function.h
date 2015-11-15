@@ -81,12 +81,18 @@ public:
         return &other == this;
     }
 
-    PabloBlock & getEntryBlock() {
+    PabloBlock * getEntryBlock() {
         return mEntryBlock;
     }
 
-    const PabloBlock & getEntryBlock() const {
+    const PabloBlock * getEntryBlock() const {
         return mEntryBlock;
+    }
+
+    PabloBlock * setEntryBlock(PabloBlock * entryBlock) {
+        assert (entryBlock);
+        std::swap(mEntryBlock, entryBlock);
+        return entryBlock;
     }
 
     Var * getParameter(const unsigned index) {
@@ -149,7 +155,7 @@ protected:
     PabloFunction(std::string && name, const unsigned numOfParameters, const unsigned numOfResults);
 private:
     SymbolGenerator *   mSymbolTable;
-    PabloBlock &        mEntryBlock;    
+    PabloBlock *        mEntryBlock;
     Var ** const        mParameters;
     Assign ** const     mResults;
 };

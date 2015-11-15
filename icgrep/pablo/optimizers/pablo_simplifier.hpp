@@ -11,12 +11,12 @@ class PabloFunction;
 class Simplifier {
 public:
     static bool optimize(PabloFunction & function);
-    static void deadCodeElimination(PabloBlock & block);
+    static void deadCodeElimination(PabloBlock * const block);
 protected:
     Simplifier() = default;
 private:
-    static void eliminateRedundantCode(PabloBlock & block, ExpressionTable * predecessor = nullptr);
-    static void eliminateRedundantEquations(PabloBlock & block);
+    static void eliminateRedundantCode(PabloBlock * const block, ExpressionTable * predecessor = nullptr);
+    static void eliminateRedundantEquations(PabloBlock * const block);
     static bool isSuperfluous(const Assign * const assign);
 };
 

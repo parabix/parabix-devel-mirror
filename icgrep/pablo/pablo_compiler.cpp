@@ -92,9 +92,9 @@ llvm::Function * PabloCompiler::compile(PabloFunction * function) {
 llvm::Function * PabloCompiler::compile(PabloFunction * function, Module * module) {
 
   
-    PabloBlock & mainScope = function->getEntryBlock();
+    PabloBlock * const mainScope = function->getEntryBlock();
 
-    mainScope.enumerateScopes(0);
+    mainScope->enumerateScopes(0);
     
     Examine(*function);
 
@@ -123,7 +123,7 @@ llvm::Function * PabloCompiler::compile(PabloFunction * function, Module * modul
      
     //Generate the IR instructions for the function.
     
-    mCarryManager->initialize(mMod, &mainScope);
+    mCarryManager->initialize(mMod, mainScope);
     
     compileBlock(mainScope);
     
@@ -190,8 +190,8 @@ inline void PabloCompiler::Examine(PabloFunction & function) {
 }
 
 
-void PabloCompiler::Examine(PabloBlock & block) {
-    for (Statement * stmt : block) {
+void PabloCompiler::Examine(PabloBlock * block) {
+    for (Statement * stmt : *block) {
         if (If * ifStatement = dyn_cast<If>(stmt)) {
             Examine(ifStatement->getBody());
         }
@@ -203,12 +203,12 @@ void PabloCompiler::Examine(PabloBlock & block) {
     }
 }
 
-void PabloCompiler::compileBlock(PabloBlock & block) {
-    mPabloBlock = & block;
-    for (const Statement * statement : block) {
+void PabloCompiler::compileBlock(PabloBlock * block) {
+    mPabloBlock = block;
+    for (const Statement * statement : *block) {
         compileStatement(statement);
     }
-    mPabloBlock = block.getParent();
+    mPabloBlock = block->getParent();
 }
 
 void PabloCompiler::compileIf(const If * ifStatement) {        
@@ -234,11 +234,11 @@ void PabloCompiler::compileIf(const If * ifStatement) {
     BasicBlock * ifBodyBlock = BasicBlock::Create(mMod->getContext(), "if.body", mFunction, 0);
     BasicBlock * ifEndBlock = BasicBlock::Create(mMod->getContext(), "if.end", mFunction, 0);
     
-    PabloBlock & ifBody = ifStatement -> getBody();
+    PabloBlock * ifBody = ifStatement->getBody();
     
     Value * if_test_value = compileExpression(ifStatement->getCondition());
     
-    mCarryManager->enterScope(&ifBody);
+    mCarryManager->enterScope(ifBody);
     mBuilder->CreateCondBr(mCarryManager->generateBitBlockOrSummaryTest(if_test_value), ifBodyBlock, ifEndBlock);
     
     // Entry processing is complete, now handle the body of the if.
@@ -270,13 +270,13 @@ void PabloCompiler::compileIf(const If * ifStatement) {
 
 void PabloCompiler::compileWhile(const While * whileStatement) {
 
-    PabloBlock & whileBody = whileStatement -> getBody();
+    PabloBlock * const whileBody = whileStatement->getBody();
     
     BasicBlock * whileEntryBlock = mBuilder->GetInsertBlock();
     BasicBlock * whileBodyBlock = BasicBlock::Create(mMod->getContext(), "while.body", mFunction, 0);
     BasicBlock * whileEndBlock = BasicBlock::Create(mMod->getContext(), "while.end", mFunction, 0);
 
-    mCarryManager->enterScope(&whileBody);
+    mCarryManager->enterScope(whileBody);
     mCarryManager->ensureCarriesLoadedRecursive();
 
     const auto & nextNodes = whileStatement->getVariants();

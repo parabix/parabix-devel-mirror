@@ -486,8 +486,6 @@ public:
         return mLast;
     }
 
-    void clear();
-
     inline void setInsertPoint(Statement * const statement) {
         assert (statement == nullptr || contains(statement));
         mInsertionPoint = statement;

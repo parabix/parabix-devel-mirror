@@ -55,13 +55,13 @@ timestamp_t ts;
     LOG(Name << " |V|=" << num_vertices(G) << ", |E|="  << num_edges(G) << \
                 " (" << (((double)num_edges(G)) / ((double)(num_vertices(G) * (num_vertices(G) - 1) / 2))) << ')')
 
-unsigned __count_advances(const PabloBlock & entry) {
+unsigned __count_advances(const PabloBlock * const entry) {
 
     std::stack<const Statement *> scope;
     unsigned advances = 0;
 
     // Scan through and collect all the advances, calls, scanthrus and matchstars ...
-    for (const Statement * stmt = entry.front(); ; ) {
+    for (const Statement * stmt = entry->front(); ; ) {
         while ( stmt ) {
             if (isa<Advance>(stmt)) {
                 ++advances;
@@ -69,9 +69,9 @@ unsigned __count_advances(const PabloBlock & entry) {
             else if (LLVM_UNLIKELY(isa<If>(stmt) || isa<While>(stmt))) {
                 // Set the next statement to be the first statement of the inner scope and push the
                 // next statement of the current statement into the scope stack.
-                const PabloBlock & nested = isa<If>(stmt) ? cast<If>(stmt)->getBody() : cast<While>(stmt)->getBody();
+                const PabloBlock * const nested = isa<If>(stmt) ? cast<If>(stmt)->getBody() : cast<While>(stmt)->getBody();
                 scope.push(stmt->getNextNode());
-                stmt = nested.front();
+                stmt = nested->front();
                 assert (stmt);
                 continue;
             }
@@ -107,11 +107,16 @@ bool AutoMultiplexing::optimize(PabloFunction & function, const unsigned limit, 
     const auto seed = 83234827342;
     RNG rng(seed);
 
+
+    raw_os_ostream out(std::cerr);
+
+//    out << seed << ',';
+
     LOG("Seed:                    " << seed);
 
     AutoMultiplexing am(limit, maxSelections);
     RECORD_TIMESTAMP(start_initialize);
-    const unsigned advances = am.initialize(function);
+    const unsigned advances = am.initialize(function, out);
     RECORD_TIMESTAMP(end_initialize);
 
     LOG("Initialize:              " << (end_initialize - start_initialize));
@@ -125,6 +130,8 @@ bool AutoMultiplexing::optimize(PabloFunction & function, const unsigned limit, 
     RECORD_TIMESTAMP(start_characterize);
     am.characterize(function.getEntryBlock());
     RECORD_TIMESTAMP(end_characterize);
+
+    out << bdd_getnodenum() << ',' << bdd_getallocnum() << '\n';
 
     LOG("Characterize:            " << (end_characterize - start_characterize));
 
@@ -146,6 +153,10 @@ bool AutoMultiplexing::optimize(PabloFunction & function, const unsigned limit, 
         am.selectMultiplexSets(rng);
         RECORD_TIMESTAMP(end_select_multiplex_sets);
         LOG("SelectMultiplexSets:     " << (end_select_multiplex_sets - start_select_multiplex_sets));
+
+//        raw_os_ostream out(std::cerr);
+//        PabloPrinter::print(function.getEntryBlock().statements(), out);
+//        out.flush();
 
         RECORD_TIMESTAMP(start_subset_constraints);
         am.applySubsetConstraints();
@@ -172,7 +183,7 @@ bool AutoMultiplexing::optimize(PabloFunction & function, const unsigned limit, 
  * Scan through the program to identify any advances and calls then initialize the BDD engine with
  * the proper variable ordering.
  ** ------------------------------------------------------------------------------------------------------------- */
-unsigned AutoMultiplexing::initialize(PabloFunction & function) {
+unsigned AutoMultiplexing::initialize(PabloFunction & function, raw_ostream & out) {
 
     flat_map<const PabloAST *, unsigned> map;    
     std::stack<Statement *> scope;
@@ -180,19 +191,17 @@ unsigned AutoMultiplexing::initialize(PabloFunction & function) {
 
     // Scan through and collect all the advances, calls, scanthrus and matchstars ...
     unsigned statements = 0, advances = 0;
-    unsigned maxDepth = 0;
-    mResolvedScopes.emplace(&function.getEntryBlock(), nullptr);
-    for (Statement * stmt = function.getEntryBlock().front(); ; ) {
+    mResolvedScopes.emplace(function.getEntryBlock(), nullptr);
+    for (Statement * stmt = function.getEntryBlock()->front(); ; ) {
         while ( stmt ) {
             ++statements;
             if (LLVM_UNLIKELY(isa<If>(stmt) || isa<While>(stmt))) {
                 // Set the next statement to be the first statement of the inner scope and push the
                 // next statement of the current statement into the scope stack.
-                const PabloBlock & nested = isa<If>(stmt) ? cast<If>(stmt)->getBody() : cast<While>(stmt)->getBody();
-                mResolvedScopes.emplace(&nested, stmt);
+                const PabloBlock * const nested = isa<If>(stmt) ? cast<If>(stmt)->getBody() : cast<While>(stmt)->getBody();
+                mResolvedScopes.emplace(nested, stmt);
                 scope.push(stmt->getNextNode());
-                stmt = nested.front();
-                maxDepth = std::max<unsigned>(maxDepth, scope.size());
+                stmt = nested->front();
                 assert (stmt);
                 continue;
             }
@@ -219,6 +228,8 @@ unsigned AutoMultiplexing::initialize(PabloFunction & function) {
         scope.pop();
     }
 
+    out << statements << ',' << variableCount << ',' << advances << ',';
+
     // If there are fewer than three Advances in this program, just abort. We cannot reduce it.
     if (advances < 3) {
         return 0;
@@ -240,7 +251,7 @@ unsigned AutoMultiplexing::initialize(PabloFunction & function) {
     unsigned n = advances;
     unsigned m = 0;
 
-    for (const Statement * stmt = function.getEntryBlock().front();;) {
+    for (const Statement * stmt = function.getEntryBlock()->front();;) {
         while ( stmt ) {
 
             unsigned u = 0;
@@ -263,9 +274,9 @@ unsigned AutoMultiplexing::initialize(PabloFunction & function) {
             if (LLVM_UNLIKELY(isa<If>(stmt) || isa<While>(stmt))) {
                 // Set the next statement to be the first statement of the inner scope
                 // and push the next statement of the current statement into the stack.
-                const PabloBlock & nested = isa<If>(stmt) ? cast<If>(stmt)->getBody() : cast<While>(stmt)->getBody();
+                const PabloBlock * const nested = isa<If>(stmt) ? cast<If>(stmt)->getBody() : cast<While>(stmt)->getBody();
                 scope.push(stmt->getNextNode());
-                stmt = nested.front();
+                stmt = nested->front();
                 assert (stmt);
                 continue;
             }
@@ -320,10 +331,21 @@ unsigned AutoMultiplexing::initialize(PabloFunction & function) {
  *
  * Scan through the program and iteratively compute the BDDs for each statement.
  ** ------------------------------------------------------------------------------------------------------------- */
-void AutoMultiplexing::characterize(PabloBlock & block) {
-    for (Statement * stmt : block) {
-        if (LLVM_UNLIKELY(isa<If>(stmt) || isa<While>(stmt))) {
-            characterize(isa<If>(stmt) ? cast<If>(stmt)->getBody() : cast<While>(stmt)->getBody());
+void AutoMultiplexing::characterize(PabloBlock * const block) {
+    for (Statement * stmt : *block) {
+        if (LLVM_UNLIKELY(isa<If>(stmt))) {
+            characterize(cast<If>(stmt)->getBody());
+        } else if (LLVM_UNLIKELY(isa<While>(stmt))) {
+            const auto & variants = cast<While>(stmt)->getVariants();
+            std::vector<BDD> assignments(variants.size());
+            for (unsigned i = 0; i != variants.size(); ++i) {
+                assignments[i] = get(variants[i]->getInitial());
+            }
+            characterize(cast<While>(stmt)->getBody());
+            for (unsigned i = 0; i != variants.size(); ++i) {
+                BDD & var = get(variants[i]->getInitial());
+                var = bdd_addref(bdd_or(var, assignments[i]));
+            }
         } else {
             mCharacterizationMap.insert(std::make_pair(stmt, characterize(stmt)));
         }
@@ -342,15 +364,7 @@ inline BDD AutoMultiplexing::characterize(Statement * const stmt) {
         if (LLVM_UNLIKELY(isa<Integer>(op) || isa<String>(op))) {
             continue;
         }
-        auto f = mCharacterizationMap.find(op);
-        if (LLVM_UNLIKELY(f == mCharacterizationMap.end())) {
-            std::string tmp;
-            llvm::raw_string_ostream msg(tmp);
-            msg << "AutoMultiplexing: Uncharacterized operand " << std::to_string(i);
-            PabloPrinter::print(stmt, " of ", msg);
-            throw std::runtime_error(msg.str());
-        }
-        input[i] = f->second;
+        input[i] = get(op);
     }
 
     BDD bdd = bdd_zero();
@@ -393,8 +407,6 @@ inline BDD AutoMultiplexing::characterize(Statement * const stmt) {
  ** ------------------------------------------------------------------------------------------------------------- */
 inline BDD AutoMultiplexing::characterize(Advance * const adv, const BDD Ik) {
 
-    assert (Ik != bdd_zero());
-
     bdd_addref(Ik);
 
     const auto k = mAdvanceAttributes.size();
@@ -405,38 +417,37 @@ inline BDD AutoMultiplexing::characterize(Advance * const adv, const BDD Ik) {
         // Have we already proven that these are unconstrained by the subset relationships?
         if (unconstrained[i]) continue;
 
-        const Advance * const ithAdv = std::get<0>(mAdvanceAttributes[i]);
         // If these advances are "shifting" their values by the same amount ...
+        const Advance * const ithAdv = std::get<0>(mAdvanceAttributes[i]);
         if (adv->getOperand(1) == ithAdv->getOperand(1)) {
-            BDD Ii = std::get<1>(mAdvanceAttributes[i]);
-            const BDD IiIk = bdd_and(Ik, Ii);
-            bdd_addref(IiIk);
+            const BDD Ii = get(ithAdv->getOperand(0));
+            const BDD IiIk = bdd_addref(bdd_and(Ii, Ik));
             // Is there any satisfying truth assignment? If not, these streams are mutually exclusive.
             if (bdd_satone(IiIk) == bdd_zero()) {
                 // If Ai ∩ Ak = ∅ and Aj ⊂ Ai, Aj ∩ Ak = ∅.
                 for (auto e : make_iterator_range(in_edges(i, mSubsetGraph))) {
-                     unconstrained[source(e, mSubsetGraph)] = true;
-                }
-                unconstrained[i] = true;
-            } else if (Ik == IiIk) {
-                // If Ik = Ii ∩ Ik then Ik ⊂ Ii. Record this in the subset graph with the arc (k, i).
-                // The AST will be modified to make these mutually exclusive if Ai and Ak end up in
-                // the same multiplexing set.
-                add_edge(k, i, mSubsetGraph);
-                // If Ak ⊂ Ai and Ai ⊂ Aj, Ak ⊂ Aj.
-                for (auto e : make_iterator_range(out_edges(i, mSubsetGraph))) {
-                    const auto j = target(e, mSubsetGraph);
-                    add_edge(k, j, mSubsetGraph);
-                    unconstrained[j] = true;
+                    unconstrained[source(e, mSubsetGraph)] = true;
                 }
                 unconstrained[i] = true;
             } else if (Ii == IiIk) {
                 // If Ii = Ii ∩ Ik then Ii ⊂ Ik. Record this in the subset graph with the arc (i, k).
+                // Note: the AST will be modified to make these mutually exclusive if Ai and Ak end up in
+                // the same multiplexing set.
                 add_edge(i, k, mSubsetGraph);
                 // If Ai ⊂ Ak and Aj ⊂ Ai, Aj ⊂ Ak.
                 for (auto e : make_iterator_range(in_edges(i, mSubsetGraph))) {
                     const auto j = source(e, mSubsetGraph);
                     add_edge(j, k, mSubsetGraph);
+                    unconstrained[j] = true;
+                }
+                unconstrained[i] = true;
+            } else if (Ik == IiIk) {
+                // If Ik = Ii ∩ Ik then Ik ⊂ Ii. Record this in the subset graph with the arc (k, i).
+                add_edge(k, i, mSubsetGraph);
+                // If Ak ⊂ Ai and Ai ⊂ Aj, Ak ⊂ Aj.
+                for (auto e : make_iterator_range(out_edges(i, mSubsetGraph))) {
+                    const auto j = target(e, mSubsetGraph);
+                    add_edge(k, j, mSubsetGraph);
                     unconstrained[j] = true;
                 }
                 unconstrained[i] = true;
@@ -451,30 +462,23 @@ inline BDD AutoMultiplexing::characterize(Advance * const adv, const BDD Ik) {
 
     for (unsigned i = 0; i != k; ++i) {
         const Advance * const ithAdv = std::get<0>(mAdvanceAttributes[i]);
-        auto f = mCharacterizationMap.find(ithAdv);
-        assert (f != mCharacterizationMap.end());
-        BDD & Ci = f->second;
-        const BDD Vi = std::get<2>(mAdvanceAttributes[i]);
+        BDD & Ci = get(ithAdv);
+        const BDD Vi = std::get<1>(mAdvanceAttributes[i]);
         if (unconstrained[i]) {
-            Ck = bdd_and(Ck, bdd_not(Vi));
-            bdd_addref(Ck);
-            Ci = bdd_and(Ci, bdd_not(Vk));
-            bdd_addref(Ci);
+            Ck = bdd_addref(bdd_imp(Ck, bdd_addref(bdd_not(Vi))));
+            Ci = bdd_addref(bdd_imp(Ci, bdd_addref(bdd_not(Vk))));
             // If these Advances are mutually exclusive, in the same scope, and transitively independent,
             // we safely multiplex them.
             if ((adv->getParent() == ithAdv->getParent()) && independent(i, k)) {
                 continue;
             }
-        } else { // TODO: investigate how to determine when it's safe to avoid computing these
-            Ck = bdd_imp(Ck, Vi);
-            bdd_addref(Ck);
-            Ci = bdd_imp(Ci, Vk);
-            bdd_addref(Ci);
         }
         add_edge(i, k, mConstraintGraph);
     }
 
-    mAdvanceAttributes.emplace_back(adv, Ik, Vk);
+    bdd_delref(Ik);
+
+    mAdvanceAttributes.emplace_back(adv, Vk);
 
     return Ck;
 }
@@ -752,7 +756,9 @@ void AutoMultiplexing::applySubsetConstraints() {
         const auto u = source(*ei, mSubsetGraph);
         const auto v = target(*ei, mSubsetGraph);
         if (in_degree(u, mMultiplexSetGraph) != 0 && in_degree(v, mMultiplexSetGraph) != 0) {
+            assert (in_degree(u, mMultiplexSetGraph) == 1);
             const auto su = source(*(in_edges(u, mMultiplexSetGraph).first), mMultiplexSetGraph);
+            assert (in_degree(v, mMultiplexSetGraph) == 1);
             const auto sv = source(*(in_edges(v, mMultiplexSetGraph).first), mMultiplexSetGraph);
             if (su == sv) {
                 continue;
@@ -766,7 +772,7 @@ void AutoMultiplexing::applySubsetConstraints() {
         // At least one subset constraint exists; perform a transitive reduction on the graph to ensure that
         // we perform the minimum number of AST modifications for the given multiplexing sets.
 
-        transitiveReductionOfSubsetGraph();
+        doTransitiveReductionOfSubsetGraph();
 
         // Afterwards modify the AST to ensure that multiplexing algorithm can ignore any subset constraints
         for (auto e : make_iterator_range(edges(mSubsetGraph))) {
@@ -816,7 +822,7 @@ void AutoMultiplexing::multiplexSelectedIndependentSets(PabloFunction &) {
 
             Advance * const adv = input[0];
             PabloBlock * const block = adv->getParent(); assert (block);
-            PabloBuilder builder(*block);
+            PabloBuilder builder(block);
             block->setInsertPoint(block->back());
 
             /// Perform n-to-m Multiplexing
@@ -900,7 +906,7 @@ void AutoMultiplexing::topologicalSort(PabloFunction & function) {
     // Note: not a real topological sort. I expect the original order to be very close to the resulting one.
     std::unordered_set<const PabloAST *> encountered;
     std::stack<Statement *> scope;
-    for (Statement * stmt = function.getEntryBlock().front(); ; ) { restart:
+    for (Statement * stmt = function.getEntryBlock()->front(); ; ) { restart:
         while ( stmt ) {
             for (unsigned i = 0; i != stmt->getNumOperands(); ++i) {
                 PabloAST * const op = stmt->getOperand(i);
@@ -921,9 +927,9 @@ void AutoMultiplexing::topologicalSort(PabloFunction & function) {
             if (LLVM_UNLIKELY(isa<If>(stmt) || isa<While>(stmt))) {
                 // Set the next statement to be the first statement of the inner scope and push the
                 // next statement of the current statement into the scope stack.
-                const PabloBlock & nested = isa<If>(stmt) ? cast<If>(stmt)->getBody() : cast<While>(stmt)->getBody();
+                const PabloBlock * const nested = isa<If>(stmt) ? cast<If>(stmt)->getBody() : cast<While>(stmt)->getBody();
                 scope.push(stmt->getNextNode());
-                stmt = nested.front();
+                stmt = nested->front();
                 continue;
             }
             encountered.insert(stmt);
@@ -938,9 +944,9 @@ void AutoMultiplexing::topologicalSort(PabloFunction & function) {
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief transitiveReductionOfSubsetGraph
+ * @brief doTransitiveReductionOfSubsetGraph
  ** ------------------------------------------------------------------------------------------------------------- */
-void AutoMultiplexing::transitiveReductionOfSubsetGraph() {
+void AutoMultiplexing::doTransitiveReductionOfSubsetGraph() {
     std::vector<SubsetGraph::vertex_descriptor> Q;
     for (auto u : make_iterator_range(vertices(mSubsetGraph))) {
         if (in_degree(u, mSubsetGraph) == 0 && out_degree(u, mSubsetGraph) != 0) {
@@ -966,6 +972,15 @@ void AutoMultiplexing::transitiveReductionOfSubsetGraph() {
             }
         }
     } while (Q.size() > 0);
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief get
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline BDD & AutoMultiplexing::get(const PabloAST * const expr) {
+    auto f = mCharacterizationMap.find(expr);
+    assert (f != mCharacterizationMap.end());
+    return f->second;
 }
 
 } // end of namespace pablo

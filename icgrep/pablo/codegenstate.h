@@ -52,13 +52,8 @@ public:
         return false;
     }
 
-    inline static PabloBlock & Create(SymbolGenerator * symbolGenerator) {
-        assert (symbolGenerator);
-        return *(new PabloBlock(symbolGenerator));
-    }
-
-    inline static PabloBlock & Create(PabloBlock & parent) {
-        return *(new PabloBlock(&parent));
+    inline static PabloBlock * Create(PabloFunction & function) noexcept {
+        return new PabloBlock(function.mSymbolTable);
     }
 
     PabloAST * createAdvance(PabloAST * expr, const Integer::Type shiftAmount);
@@ -135,17 +130,17 @@ public:
     
     PabloAST * createCount(PabloAST * expr, const std::string prefix);
     
-    If * createIf(PabloAST * condition, const std::initializer_list<Assign *> definedVars, PabloBlock & body);
+    If * createIf(PabloAST * condition, const std::initializer_list<Assign *> definedVars, PabloBlock * body);
 
-    If * createIf(PabloAST * condition, const std::vector<Assign *> & definedVars, PabloBlock & body);
+    If * createIf(PabloAST * condition, const std::vector<Assign *> & definedVars, PabloBlock * body);
 
-    If * createIf(PabloAST * condition, std::vector<Assign *> && definedVars, PabloBlock & body);
+    If * createIf(PabloAST * condition, std::vector<Assign *> && definedVars, PabloBlock * body);
 
-    While * createWhile(PabloAST * condition, const std::initializer_list<Next *> nextVars, PabloBlock & body);
+    While * createWhile(PabloAST * condition, const std::initializer_list<Next *> nextVars, PabloBlock * body);
 
-    While * createWhile(PabloAST * condition, const std::vector<Next *> & nextVars, PabloBlock & body);
+    While * createWhile(PabloAST * condition, const std::vector<Next *> & nextVars, PabloBlock * body);
 
-    While * createWhile(PabloAST * condition, std::vector<Next *> && nextVars, PabloBlock & body);
+    While * createWhile(PabloAST * condition, std::vector<Next *> && nextVars, PabloBlock * body);
 
     PabloAST * createMod64Advance(PabloAST * expr, const Integer::Type shiftAmount);
 
@@ -188,6 +183,11 @@ public:
         return mParent;
     }
     
+    void setParent(PabloBlock * parent) {
+        mParent = parent;
+        // Add test to assert this block is in the same function.
+    }
+
     void insert(Statement * const statement);
 
     unsigned enumerateScopes(unsigned baseScopeIndex);
@@ -196,13 +196,13 @@ public:
         return mScopeIndex;
     }
     
+    void eraseFromParent(const bool recursively = false);
+
     virtual ~PabloBlock();
 
 protected:
 
-    explicit PabloBlock(SymbolGenerator * symbolGenerator);
-
-    explicit PabloBlock(PabloBlock * predecessor);
+    explicit PabloBlock(SymbolGenerator * symbolGenerator) noexcept;
 
     PabloAST * renameNonNamedNode(PabloAST * expr, const std::string && prefix);
 
@@ -210,8 +210,9 @@ protected:
     inline Type * insertAtInsertionPoint(Type * expr) {
         if (isa<Statement>(expr)) {
             if (LLVM_UNLIKELY(isa<If>(expr) || isa<While>(expr))) {
-                PabloBlock & body = isa<If>(expr) ? cast<If>(expr)->getBody() : cast<While>(expr)->getBody();
-                this->addUser(&body);
+                PabloBlock * const body = isa<If>(expr) ? cast<If>(expr)->getBody() : cast<While>(expr)->getBody();
+                body->setParent(this);
+                addUser(body);
             }
             insert(cast<Statement>(expr));
         }
@@ -227,7 +228,7 @@ private:
 private:        
     static Zeroes                                       mZeroes;
     static Ones                                         mOnes;
-    SymbolGenerator *                                   mSymbolGenerator;
+    SymbolGenerator *                                   mSymbolGenerator; // TODO: need a better way of passing a symbol generator around
     PabloBlock *                                        mParent;
     unsigned                                            mScopeIndex;
 };

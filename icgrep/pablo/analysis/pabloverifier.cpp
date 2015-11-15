@@ -36,9 +36,8 @@ bool checkVector(const Statement * value, const VectorType & vector) {
     return true;
 }
 
-void verifyUseDefInformation(const PabloBlock & block, const ScopeSet & validScopes) {
-    for (const Statement * stmt : block) {
-
+void verifyUseDefInformation(const PabloBlock * block, const ScopeSet & validScopes) {
+    for (const Statement * stmt : *block) {
         for (const PabloAST * use : stmt->users()) {
             if (LLVM_LIKELY(isa<Statement>(use))) {
                 const Statement * const user = cast<Statement>(use);
@@ -46,7 +45,8 @@ void verifyUseDefInformation(const PabloBlock & block, const ScopeSet & validSco
                 if (LLVM_UNLIKELY(validScopes.count(user->getParent()) == 0)) {
                     std::string tmp;
                     raw_string_ostream str(tmp);
-                    PabloPrinter::print(user, "PabloVerifier: use-def error: ", str);
+                    str << "PabloVerifier: use-def error: ";
+                    PabloPrinter::print(user, str);
                     str << " is a user of ";
                     PabloPrinter::print(stmt, str);
                     if (user->getParent() == nullptr) {
@@ -99,7 +99,8 @@ void verifyUseDefInformation(const PabloBlock & block, const ScopeSet & validSco
             if (LLVM_UNLIKELY(notFound)) {
                 std::string tmp;
                 raw_string_ostream str(tmp);
-                PabloPrinter::print(stmt, "PabloVerifier: def-use error: ", str);
+                str << "PabloVerifier: def-use error: ";
+                PabloPrinter::print(stmt, str);
                 str << " is not a user of ";
                 PabloPrinter::print(def, str);
                 throw std::runtime_error(str.str());
@@ -111,9 +112,9 @@ void verifyUseDefInformation(const PabloBlock & block, const ScopeSet & validSco
     }
 }
 
-void gatherValidScopes(const PabloBlock & block, ScopeSet & validScopes) {
-    validScopes.insert(&block);
-    for (const Statement * stmt : block) {
+void gatherValidScopes(const PabloBlock * block, ScopeSet & validScopes) {
+    validScopes.insert(block);
+    for (const Statement * stmt : *block) {
         if (LLVM_UNLIKELY(isa<If>(stmt) || isa<While>(stmt))) {
             gatherValidScopes(isa<If>(stmt) ? cast<If>(stmt)->getBody() : cast<While>(stmt)->getBody(), validScopes);
         }
@@ -129,10 +130,10 @@ void verifyUseDefInformation(const PabloFunction & function) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief unreachable
  ** ------------------------------------------------------------------------------------------------------------- */
-bool unreachable(const Statement * stmt, const PabloBlock & block) {
+bool unreachable(const Statement * stmt, const PabloBlock * const block) {
     PabloBlock * parent = stmt->getParent();
     while (parent)  {
-        if (parent == &block) {
+        if (parent == block) {
             return false;
         }
         parent = parent->getParent();
@@ -143,13 +144,14 @@ bool unreachable(const Statement * stmt, const PabloBlock & block) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief verifyProgramStructure
  ** ------------------------------------------------------------------------------------------------------------- */
-void verifyProgramStructure(const PabloBlock & block) {
+void verifyProgramStructure(const PabloBlock * block) {
     const Statement * prev = nullptr;
-    for (const Statement * stmt : block) {
+    for (const Statement * stmt : *block) {
         if (LLVM_UNLIKELY(stmt->getPrevNode() != prev)) {
             std::string tmp;
             raw_string_ostream str(tmp);
-            PabloPrinter::print(stmt, "PabloVerifier: structure error: ", str);
+            str << "PabloVerifier: structure error: ";
+            PabloPrinter::print(stmt, str);
             str << " succeeds ";
             PabloPrinter::print(prev, str);
             str << " but expects to preceed ";
@@ -157,16 +159,17 @@ void verifyProgramStructure(const PabloBlock & block) {
             throw std::runtime_error(str.str());
         }
         prev = stmt;
-        if (LLVM_UNLIKELY(stmt->getParent() != &block)) {
+        if (LLVM_UNLIKELY(stmt->getParent() != block)) {
             std::string tmp;
             raw_string_ostream str(tmp);
-            PabloPrinter::print(stmt, "PabloVerifier: structure error: ", str);
+            str << "PabloVerifier: structure error: ";
+            PabloPrinter::print(stmt, str);
             str << " is not contained in its reported scope block";
             throw std::runtime_error(str.str());
         }
         if (LLVM_UNLIKELY(isa<If>(stmt) || isa<While>(stmt))) {
-            const PabloBlock & nested = isa<If>(stmt) ? cast<If>(stmt)->getBody() : cast<While>(stmt)->getBody();
-            if (LLVM_UNLIKELY(nested.getParent() != &block)) {
+            const PabloBlock * nested = isa<If>(stmt) ? cast<If>(stmt)->getBody() : cast<While>(stmt)->getBody();
+            if (LLVM_UNLIKELY(nested->getParent() != block)) {
                 std::string tmp;
                 raw_string_ostream str(tmp);
                 str << "PabloVerifier: structure error: body of ";
@@ -279,9 +282,9 @@ bool recursivelyDefined(const Statement * const stmt) {
     return false;
 }
 
-void isTopologicallyOrdered(const PabloBlock & block, const OrderingVerifier & parent) {
+void isTopologicallyOrdered(const PabloBlock * block, const OrderingVerifier & parent) {
     OrderingVerifier ov(parent);
-    for (const Statement * stmt : block) {
+    for (const Statement * stmt : *block) {
         if (LLVM_UNLIKELY(isa<While>(stmt))) {
             isTopologicallyOrdered(cast<While>(stmt)->getBody(), ov);
             for (const Next * var : cast<While>(stmt)->getVariants()) {
@@ -305,7 +308,8 @@ void isTopologicallyOrdered(const PabloBlock & block, const OrderingVerifier & p
 
                 str << "function is not topologically ordered! ";
                 PabloPrinter::print(stmt->getOperand(i), str);
-                PabloPrinter::print(stmt, " was used before definition by ", str);
+                str << " was used before definition by ";
+                PabloPrinter::print(stmt, str);
                 throw std::runtime_error(str.str());
             }
         }
@@ -334,7 +338,7 @@ void PabloVerifier::verify(const PabloFunction & function, const std::string loc
         isTopologicallyOrdered(function);
     } catch(std::runtime_error err) {
         raw_os_ostream out(std::cerr);
-        PabloPrinter::print(function.getEntryBlock().statements(), out);
+        PabloPrinter::print(function, out);
         out.flush();
         if (location.empty()) {
             throw err;

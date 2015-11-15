@@ -16,7 +16,7 @@ Prototype::Prototype(const PabloAST::ClassTypeId type, std::string && name, cons
 PabloFunction::PabloFunction(std::string && name, const unsigned numOfParameters, const unsigned numOfResults)
 : Prototype(ClassTypeId::Function, std::move(name), numOfParameters, numOfResults, nullptr)
 , mSymbolTable(new SymbolGenerator())
-, mEntryBlock(PabloBlock::Create(mSymbolTable))
+, mEntryBlock(PabloBlock::Create(*this))
 , mParameters(reinterpret_cast<Var **>(mAllocator.allocate(sizeof(Var *) * numOfParameters)))
 , mResults(reinterpret_cast<Assign **>(mAllocator.allocate(sizeof(Assign *) * numOfResults))) {
     std::memset(mParameters, 0, sizeof(Var *) * numOfParameters);

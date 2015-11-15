@@ -41,14 +41,14 @@ void BDDMinimizationPass::initialize(PabloFunction & function) {
     std::stack<Statement *> scope;
     unsigned variableCount = function.getNumOfParameters(); // number of statements that cannot always be categorized without generating a new variable
     unsigned statementCount = 0;
-    for (const Statement * stmt = function.getEntryBlock().front(); ; ) {
+    for (const Statement * stmt = function.getEntryBlock()->front(); ; ) {
         while ( stmt ) {
             if (LLVM_UNLIKELY(isa<If>(stmt) || isa<While>(stmt))) {
                 // Set the next statement to be the first statement of the inner scope and push the
                 // next statement of the current statement into the scope stack.
-                const PabloBlock & nested = isa<If>(stmt) ? cast<If>(stmt)->getBody() : cast<While>(stmt)->getBody();
+                const PabloBlock * const nested = isa<If>(stmt) ? cast<If>(stmt)->getBody() : cast<While>(stmt)->getBody();
                 scope.push(stmt->getNextNode());
-                stmt = nested.front();
+                stmt = nested->front();
                 assert (stmt);
                 continue;
             }
@@ -93,17 +93,17 @@ void BDDMinimizationPass::initialize(PabloFunction & function) {
  ** ------------------------------------------------------------------------------------------------------------- */
 void BDDMinimizationPass::eliminateLogicallyEquivalentStatements(PabloFunction & function) {
     SubsitutionMap baseMap;
-    baseMap.insert(bdd_zero(), function.getEntryBlock().createZeroes());
-    baseMap.insert(bdd_one(), function.getEntryBlock().createOnes());
+    baseMap.insert(bdd_zero(), PabloBlock::createZeroes());
+    baseMap.insert(bdd_one(), PabloBlock::createOnes());
     eliminateLogicallyEquivalentStatements(function.getEntryBlock(), baseMap);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief eliminateLogicallyEquivalentStatements
  ** ------------------------------------------------------------------------------------------------------------- */
-void BDDMinimizationPass::eliminateLogicallyEquivalentStatements(PabloBlock & block, SubsitutionMap & parent) {
+void BDDMinimizationPass::eliminateLogicallyEquivalentStatements(PabloBlock * const block, SubsitutionMap & parent) {
     SubsitutionMap map(&parent);
-    Statement * stmt = block.front();
+    Statement * stmt = block->front();
     while (stmt) {
         if (LLVM_UNLIKELY(isa<If>(stmt))) {
             eliminateLogicallyEquivalentStatements(cast<If>(stmt)->getBody(), map);
@@ -163,8 +163,8 @@ inline std::pair<BDD, bool> BDDMinimizationPass::characterize(Statement * const 
         if (LLVM_UNLIKELY(f == mCharacterizationMap.end())) {
             std::string tmp;
             llvm::raw_string_ostream msg(tmp);
-            msg << "BDDMinimizationPass: uncharacterized operand " << std::to_string(i);
-            PabloPrinter::print(stmt, " of ", msg);
+            msg << "BDDMinimizationPass: uncharacterized operand " << std::to_string(i) << " of ";
+            PabloPrinter::print(stmt, msg);
             throw std::runtime_error(msg.str());
         }
         input[i] = f->second;

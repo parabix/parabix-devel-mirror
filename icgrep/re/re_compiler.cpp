@@ -791,7 +791,7 @@ RE_Compiler::RE_Compiler(pablo::PabloFunction & function, cc::CC_Compiler & ccCo
 , mWhileTest(nullptr)
 , mStarDepth(0)
 , mLoopVariants()
-, mPB(*ccCompiler.getBuilder().getPabloBlock(), ccCompiler.getBuilder())
+, mPB(ccCompiler.getBuilder().getPabloBlock(), ccCompiler.getBuilder())
 , mFunction(function)
 {
 

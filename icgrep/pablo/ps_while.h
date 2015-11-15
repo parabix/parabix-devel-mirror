@@ -37,18 +37,19 @@ public:
     inline const Variants & getVariants() const {
         return mNext;
     }
-    inline PabloBlock & getBody() {
+    inline PabloBlock * getBody() {
         return mBody;
     }
-    inline PabloBlock & getBody() const {
+    inline PabloBlock * getBody() const {
         return mBody;
     }
+    PabloBlock * setBody(PabloBlock * body);
 protected:
-    While(PabloAST * expr, const std::initializer_list<Next *> nextVars, PabloBlock &body);
-    While(PabloAST * expr, const std::vector<Next *> & nextVars, PabloBlock &body);
+    While(PabloAST * expr, const std::initializer_list<Next *> nextVars, PabloBlock * body);
+    While(PabloAST * expr, const std::vector<Next *> & nextVars, PabloBlock * body);
 
 private:
-    PabloBlock &    mBody;
+    PabloBlock *    mBody;
     Variants        mNext;
 };
 
