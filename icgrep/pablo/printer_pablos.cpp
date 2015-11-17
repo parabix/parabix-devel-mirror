@@ -55,21 +55,24 @@ void PabloPrinter::print(const Statement * stmt, llvm::raw_ostream & out, const 
         out << " = " << call->getCallee() << "()";
     } else if (const And * pablo_and = dyn_cast<const And>(stmt)) {
         out << pablo_and->getName() << " = (";
-        print(pablo_and->getExpr1(), out);
-        out << " & ";
-        print(pablo_and->getExpr2(), out);
+        for (unsigned i = 0; i != pablo_and->getNumOperands(); ++i) {
+            if (i) out << " & ";
+            print(pablo_and->getOperand(i), out);
+        }
         out << ")";
     } else if (const Or * pablo_or = dyn_cast<const Or>(stmt)) {
         out << pablo_or->getName() << " = (";
-        print(pablo_or->getExpr1(), out);
-        out << " | ";
-        print(pablo_or->getExpr2(), out);
+        for (unsigned i = 0; i != pablo_or->getNumOperands(); ++i) {
+            if (i) out << " | ";
+            print(pablo_or->getOperand(i), out);
+        }
         out << ")";
     } else if (const Xor * pablo_xor = dyn_cast<const Xor>(stmt)) {
         out << pablo_xor->getName() << " = (";
-        print(pablo_xor->getExpr1(), out);
-        out << " ^ ";
-        print(pablo_xor->getExpr2(), out);
+        for (unsigned i = 0; i != pablo_xor->getNumOperands(); ++i) {
+            if (i) out << " ^ ";
+            print(pablo_xor->getOperand(i), out);
+        }
         out << ")";
     } else if (const Sel * pablo_sel = dyn_cast<const Sel>(stmt)) {
         out << pablo_sel->getName() << " = (";

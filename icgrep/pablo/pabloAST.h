@@ -248,14 +248,26 @@ private:
     template <class ValueType, class ValueList>
     void checkEscapedValueList(Statement * branch, PabloAST * const from, PabloAST * const to, ValueList & list);
 protected:    
-    const String *              mName;
-    Statement *                 mNext;
-    Statement *                 mPrev;
-    PabloBlock *                mParent;
-    const unsigned              mOperands;
-    // If we knew prior to construction how many operands were needed, we could
-    // eliminate the mOperand pointer and simply use this[1] instead.
-    PabloAST **                 mOperand;
+    const String *  mName;
+    Statement *     mNext;
+    Statement *     mPrev;
+    PabloBlock *    mParent;
+    unsigned        mOperands;
+    PabloAST **     mOperand;
+};
+
+class Variadic : public Statement {
+public:
+    void addOperand(PabloAST * expr);
+    void removeOperand(const unsigned index);
+protected:
+    Variadic(const ClassTypeId id, std::initializer_list<PabloAST *> operands, const String * const name)
+    : Statement(id, operands, name)
+    , mCapacity(operands.size()) {
+
+    }
+private:
+    unsigned        mCapacity;
 };
 
 bool escapes(const Statement * statement);

@@ -241,11 +241,11 @@ PabloAST * PabloBlock::createAnd(PabloAST * expr1, PabloAST * expr2) {
             return createZeroes();
         }
     } else if (Or * or1 = dyn_cast<Or>(expr1)) {
-        if (equals(or1->getExpr1(), expr2) || equals(or1->getExpr2(), expr2)) {
+        if (equals(or1->getOperand(0), expr2) || equals(or1->getOperand(1), expr2)) {
             return expr2;
         }
     } else if (Or * or2 = dyn_cast<Or>(expr2)) {
-        if (equals(or2->getExpr1(), expr1) || equals(or2->getExpr2(), expr1)) {
+        if (equals(or2->getOperand(0), expr1) || equals(or2->getOperand(1), expr1)) {
             return expr1;
         }
     }
@@ -274,11 +274,11 @@ PabloAST * PabloBlock::createAnd(PabloAST * expr1, PabloAST * expr2, const std::
             return createZeroes();
         }
     } else if (Or * or1 = dyn_cast<Or>(expr1)) {
-        if (equals(or1->getExpr1(), expr2) || equals(or1->getExpr2(), expr2)) {
+        if (equals(or1->getOperand(0), expr2) || equals(or1->getOperand(1), expr2)) {
             return expr2;
         }
     } else if (Or * or2 = dyn_cast<Or>(expr2)) {
-        if (equals(or2->getExpr1(), expr1) || equals(or2->getExpr2(), expr1)) {
+        if (equals(or2->getOperand(0), expr1) || equals(or2->getOperand(1), expr1)) {
             return expr1;
         }
     }
@@ -305,10 +305,10 @@ PabloAST * PabloBlock::createOr(PabloAST * expr1, PabloAST * expr2) {
         return expr1;
     } else if (And * and1 = dyn_cast<And>(expr1)) {
         if (And * and2 = dyn_cast<And>(expr2)) {
-            PabloAST * const expr1a = and1->getExpr1();
-            PabloAST * const expr1b = and1->getExpr2();
-            PabloAST * const expr2a = and2->getExpr1();
-            PabloAST * const expr2b = and2->getExpr2();
+            PabloAST * const expr1a = and1->getOperand(0);
+            PabloAST * const expr1b = and1->getOperand(1);
+            PabloAST * const expr2a = and2->getOperand(0);
+            PabloAST * const expr2b = and2->getOperand(1);
             //These optimizations factor out common components that can occur when sets are formed by union
             //(e.g., union of [a-z] and [A-Z].
             if (equals(expr1a, expr2a)) {
@@ -320,12 +320,12 @@ PabloAST * PabloBlock::createOr(PabloAST * expr1, PabloAST * expr2) {
             } else if (equals(expr1b, expr2a)) {
                 return createAnd(expr1b, createOr(expr1a, expr2b));
             }
-        } else if (equals(and1->getExpr1(), expr2) || equals(and1->getExpr2(), expr2)){
+        } else if (equals(and1->getOperand(0), expr2) || equals(and1->getOperand(1), expr2)){
             // (a∧b) ∨ a = a
             return expr2;
         }
     } else if (And * and2 = dyn_cast<And>(expr2)) {
-        if (equals(and2->getExpr1(), expr1) || equals(and2->getExpr2(), expr1)) {
+        if (equals(and2->getOperand(0), expr1) || equals(and2->getOperand(1), expr1)) {
             return expr1;
         }
     }
@@ -350,10 +350,10 @@ PabloAST * PabloBlock::createOr(PabloAST * expr1, PabloAST * expr2, const std::s
         return createNot(createAnd(not2->getExpr(), createNot(expr1)), prefix);
     } else if (And * and1 = dyn_cast<And>(expr1)) {
         if (And * and2 = dyn_cast<And>(expr2)) {
-            PabloAST * const expr1a = and1->getExpr1();
-            PabloAST * const expr1b = and1->getExpr2();
-            PabloAST * const expr2a = and2->getExpr1();
-            PabloAST * const expr2b = and2->getExpr2();
+            PabloAST * const expr1a = and1->getOperand(0);
+            PabloAST * const expr1b = and1->getOperand(1);
+            PabloAST * const expr2a = and2->getOperand(0);
+            PabloAST * const expr2b = and2->getOperand(1);
             //These optimizations factor out common components that can occur when sets are formed by union
             //(e.g., union of [a-z] and [A-Z].
             if (equals(expr1a, expr2a)) {
@@ -365,12 +365,12 @@ PabloAST * PabloBlock::createOr(PabloAST * expr1, PabloAST * expr2, const std::s
             } else if (equals(expr1b, expr2a)) {
                 return createAnd(expr1b, createOr(expr1a, expr2b), prefix);
             }
-        } else if (equals(and1->getExpr1(), expr2) || equals(and1->getExpr2(), expr2)) {
+        } else if (equals(and1->getOperand(0), expr2) || equals(and1->getOperand(1), expr2)) {
             // (a∧b) ∨ a = a
             return expr2;
         }
     } else if (And * and2 = dyn_cast<And>(expr2)) {
-        if (equals(and2->getExpr1(), expr1) || equals(and2->getExpr2(), expr1)) {
+        if (equals(and2->getOperand(0), expr1) || equals(and2->getOperand(1), expr1)) {
             return expr1;
         }
     }

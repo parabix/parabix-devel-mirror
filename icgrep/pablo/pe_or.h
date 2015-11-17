@@ -11,7 +11,7 @@
 
 namespace pablo {
 
-class Or : public Statement {
+class Or : public Variadic {
     friend class PabloBlock;
 public:
     static inline bool classof(const PabloAST * e) {
@@ -20,19 +20,12 @@ public:
     static inline bool classof(const void *) {
         return false;
     }
-    virtual ~Or() {
-    }
-    PabloAST * getExpr1() const {
-        return mOperand[0];
-    }
-    PabloAST * getExpr2() const {
-        return mOperand[1];
-    }
+    virtual ~Or() { }
 protected:
     Or(PabloAST * expr1, PabloAST * expr2, String * name)
-    : Statement(ClassTypeId::Or, {expr1, expr2}, name)
+    : Variadic(ClassTypeId::Or, {expr1, expr2}, name)
     {
-        assert (getNumOperands() == 2);
+
     }
 };
 

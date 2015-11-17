@@ -8,11 +8,10 @@
 #define XOR_H
 
 #include <pablo/pabloAST.h>
-#include <array>
 
 namespace pablo {
 
-class Xor : public Statement {
+class Xor : public Variadic {
     friend class PabloBlock;
 public:
     static inline bool classof(const PabloAST * e) {
@@ -21,19 +20,12 @@ public:
     static inline bool classof(const void *) {
         return false;
     }
-    virtual ~Xor() {
-    }
-    PabloAST * getExpr1() const {
-        return getOperand(0);
-    }
-    PabloAST * getExpr2() const {
-        return getOperand(1);
-    }
+    virtual ~Xor() { }
 protected:
     Xor(PabloAST * expr1, PabloAST * expr2, String * name)
-    : Statement(ClassTypeId::Xor, {expr1, expr2}, name)
+    : Variadic(ClassTypeId::Xor, {expr1, expr2}, name)
     {
-        assert (getNumOperands() == 2);
+
     }
 };
 

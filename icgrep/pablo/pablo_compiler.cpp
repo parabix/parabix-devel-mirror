@@ -390,13 +390,13 @@ void PabloCompiler::compileStatement(const Statement * stmt) {
         expr = mBuilder->CreateAlignedLoad(outputPtr, iBuilder.getBitBlockWidth() / 8, false);
     }
     else if (const And * pablo_and = dyn_cast<And>(stmt)) {
-        expr = iBuilder.simd_and(compileExpression(pablo_and->getExpr1()), compileExpression(pablo_and->getExpr2()));
+        expr = iBuilder.simd_and(compileExpression(pablo_and->getOperand(0)), compileExpression(pablo_and->getOperand(1)));
     }
     else if (const Or * pablo_or = dyn_cast<Or>(stmt)) {
-        expr = iBuilder.simd_or(compileExpression(pablo_or->getExpr1()), compileExpression(pablo_or->getExpr2()));
+        expr = iBuilder.simd_or(compileExpression(pablo_or->getOperand(0)), compileExpression(pablo_or->getOperand(1)));
     }
     else if (const Xor * pablo_xor = dyn_cast<Xor>(stmt)) {
-        expr = iBuilder.simd_xor(compileExpression(pablo_xor->getExpr1()), compileExpression(pablo_xor->getExpr2()));
+        expr = iBuilder.simd_xor(compileExpression(pablo_xor->getOperand(0)), compileExpression(pablo_xor->getOperand(1)));
     }
     else if (const Sel * sel = dyn_cast<Sel>(stmt)) {
         Value* ifMask = compileExpression(sel->getCondition());

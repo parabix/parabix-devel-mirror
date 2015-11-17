@@ -42,26 +42,26 @@ bool equals(const PabloAST * expr1, const PabloAST * expr2) {
             }
         } else if (const And* and1 = dyn_cast<const And>(expr1)) {
             if (const And* and2 = cast<const And>(expr2)) {
-                if (equals(and1->getExpr1(), and2->getExpr1())) {
-                    return equals(and1->getExpr2(), and2->getExpr2());
-                } else if (equals(and1->getExpr1(), and2->getExpr2())) {
-                    return equals(and1->getExpr2(), and2->getExpr1());
+                if (equals(and1->getOperand(0), and2->getOperand(0))) {
+                    return equals(and1->getOperand(1), and2->getOperand(1));
+                } else if (equals(and1->getOperand(0), and2->getOperand(1))) {
+                    return equals(and1->getOperand(1), and2->getOperand(0));
                 }
             }
         } else if (const Or * or1 = dyn_cast<const Or>(expr1)) {
             if (const Or* or2 = cast<const Or>(expr2)) {
-                if (equals(or1->getExpr1(), or2->getExpr1())) {
-                    return equals(or1->getExpr2(), or2->getExpr2());
-                } else if (equals(or1->getExpr1(), or2->getExpr2())) {
-                    return equals(or1->getExpr2(), or2->getExpr1());
+                if (equals(or1->getOperand(0), or2->getOperand(0))) {
+                    return equals(or1->getOperand(1), or2->getOperand(1));
+                } else if (equals(or1->getOperand(0), or2->getOperand(1))) {
+                    return equals(or1->getOperand(1), or2->getOperand(0));
                 }
             }
         } else if (const Xor * xor1 = dyn_cast<const Xor>(expr1)) {
             if (const Xor * xor2 = cast<const Xor>(expr2)) {
-                if (equals(xor1->getExpr1(), xor2->getExpr1())) {
-                    return equals(xor1->getExpr2(), xor2->getExpr2());
-                } else if (equals(xor1->getExpr1(), xor2->getExpr2())) {
-                    return equals(xor1->getExpr2(), xor2->getExpr1());
+                if (equals(xor1->getOperand(0), xor2->getOperand(0))) {
+                    return equals(xor1->getOperand(1), xor2->getOperand(1));
+                } else if (equals(xor1->getOperand(0), xor2->getOperand(1))) {
+                    return equals(xor1->getOperand(1), xor2->getOperand(0));
                 }
             }
         } else if (isa<Integer>(expr1) || isa<String>(expr1) || isa<Call>(expr1)) {
@@ -370,6 +370,37 @@ Statement * Statement::replaceWith(PabloAST * const expr, const bool rename, con
     }
     replaceAllUsesWith(expr);    
     return eraseFromParent(recursively);
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief addOperand
+ ** ------------------------------------------------------------------------------------------------------------- */
+void Variadic::addOperand(PabloAST * expr) {
+    unsigned index = 0;
+    for (; index != mOperands; ++index) {
+        if (mOperand[index] > expr) {
+            break;
+        }
+    }
+    if (mOperands == mCapacity) {
+        mCapacity = std::max<unsigned>(mCapacity * 2, 2);
+        PabloAST ** expandedArray = reinterpret_cast<PabloAST**>(mAllocator.allocate(mOperands * sizeof(PabloAST *)));
+        std::memcpy(expandedArray, mOperand, mOperands * sizeof(PabloAST *));
+        mAllocator.deallocate(reinterpret_cast<Allocator::pointer>(mOperand));
+        mOperand = expandedArray;
+    }
+    std::memcpy(mOperand + index + 1, mOperand + index, (mOperands - index) * sizeof(PabloAST *));
+    mOperand[index] = expr;
+    ++mOperands;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief removeOperand
+ ** ------------------------------------------------------------------------------------------------------------- */
+void Variadic::removeOperand(const unsigned index) {
+    assert (index < getNumOperands());
+    std::memcpy(mOperand + index, mOperand + index + 1, (mOperands - index - 1) * sizeof(PabloAST *));
+    --mOperands;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
