@@ -91,22 +91,6 @@ re::RE * get_icgrep_RE() {
     std::vector<re::RE *> REs;
     re::RE * re_ast = nullptr;
     for (unsigned i = 0; i < regexVector.size(); i++) {
-//        try
-//        {
-//            re_ast = re::RE_Parser::parse(regexVector[i], globalFlags);
-//        }
-//        catch (ParseFailure failure)
-//        {
-//            std::cerr << "Regex parsing failure: " << failure.what() << std::endl;
-//            std::cerr << regexVector[i] << std::endl;
-//            exit(1);
-//        }
-//        catch (UCD::UnicodePropertyExpressionError e)
-//        {
-//            std::cerr << "Unicode error: " << e.what() << std::endl;
-//            std::cerr << regexVector[i] << std::endl;
-//            exit(1);
-//        }
         re_ast = re::RE_Parser::parse(regexVector[i], globalFlags);
         REs.push_back(re_ast);
     }

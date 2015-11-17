@@ -19,7 +19,7 @@ using namespace boost;
 using namespace boost::container;
 using namespace boost::numeric::ublas;
 
-// #define PRINT_DEBUG_OUTPUT
+#define PRINT_DEBUG_OUTPUT
 
 #if !defined(NDEBUG) && !defined(PRINT_DEBUG_OUTPUT)
 #define PRINT_DEBUG_OUTPUT
@@ -100,23 +100,18 @@ namespace pablo {
 
 using TypeId = PabloAST::ClassTypeId;
 
-bool AutoMultiplexing::optimize(PabloFunction & function, const unsigned limit, const unsigned maxSelections) {
+bool AutoMultiplexing::optimize(PabloFunction & function, const unsigned limit, const unsigned maxSelections, const bool independent) {
 
 //    std::random_device rd;
 //    const auto seed = rd();
     const auto seed = 83234827342;
     RNG rng(seed);
 
-
-    raw_os_ostream out(std::cerr);
-
-//    out << seed << ',';
-
     LOG("Seed:                    " << seed);
 
     AutoMultiplexing am(limit, maxSelections);
     RECORD_TIMESTAMP(start_initialize);
-    const unsigned advances = am.initialize(function, out);
+    const unsigned advances = am.initialize(function, independent);
     RECORD_TIMESTAMP(end_initialize);
 
     LOG("Initialize:              " << (end_initialize - start_initialize));
@@ -130,8 +125,6 @@ bool AutoMultiplexing::optimize(PabloFunction & function, const unsigned limit, 
     RECORD_TIMESTAMP(start_characterize);
     am.characterize(function.getEntryBlock());
     RECORD_TIMESTAMP(end_characterize);
-
-    out << bdd_getnodenum() << ',' << bdd_getallocnum() << '\n';
 
     LOG("Characterize:            " << (end_characterize - start_characterize));
 
@@ -154,10 +147,6 @@ bool AutoMultiplexing::optimize(PabloFunction & function, const unsigned limit, 
         RECORD_TIMESTAMP(end_select_multiplex_sets);
         LOG("SelectMultiplexSets:     " << (end_select_multiplex_sets - start_select_multiplex_sets));
 
-//        raw_os_ostream out(std::cerr);
-//        PabloPrinter::print(function.getEntryBlock().statements(), out);
-//        out.flush();
-
         RECORD_TIMESTAMP(start_subset_constraints);
         am.applySubsetConstraints();
         RECORD_TIMESTAMP(end_subset_constraints);
@@ -169,6 +158,10 @@ bool AutoMultiplexing::optimize(PabloFunction & function, const unsigned limit, 
         LOG("SelectedIndependentSets: " << (end_select_independent_sets - start_select_independent_sets));
 
         AutoMultiplexing::topologicalSort(function);
+
+        #ifndef NDEBUG
+        PabloVerifier::verify(function, "post-multiplexing");
+        #endif
     }
 
     LOG_NUMBER_OF_ADVANCES(function.getEntryBlock());
@@ -183,9 +176,9 @@ bool AutoMultiplexing::optimize(PabloFunction & function, const unsigned limit, 
  * Scan through the program to identify any advances and calls then initialize the BDD engine with
  * the proper variable ordering.
  ** ------------------------------------------------------------------------------------------------------------- */
-unsigned AutoMultiplexing::initialize(PabloFunction & function, raw_ostream & out) {
+unsigned AutoMultiplexing::initialize(PabloFunction & function, const bool independent) {
 
-    flat_map<const PabloAST *, unsigned> map;    
+    flat_map<const PabloAST *, unsigned> map;
     std::stack<Statement *> scope;
     unsigned variableCount = 0; // number of statements that cannot always be categorized without generating a new variable
 
@@ -228,8 +221,6 @@ unsigned AutoMultiplexing::initialize(PabloFunction & function, raw_ostream & ou
         scope.pop();
     }
 
-    out << statements << ',' << variableCount << ',' << advances << ',';
-
     // If there are fewer than three Advances in this program, just abort. We cannot reduce it.
     if (advances < 3) {
         return 0;
@@ -242,8 +233,7 @@ unsigned AutoMultiplexing::initialize(PabloFunction & function, raw_ostream & ou
     // of that graph, which forms the basis of our constraint graph when deciding
     // which advances ought to be multiplexed.
 
-    matrix<bool> G(statements, advances);
-    G.clear();
+    matrix<bool> G(statements, advances, false);
     for (unsigned i = 0; i != advances; ++i) {
         G(i, i) = true;
     }
@@ -289,9 +279,13 @@ unsigned AutoMultiplexing::initialize(PabloFunction & function, raw_ostream & ou
         scope.pop();
     }
 
+    // Can I use the data in the matrix to indicate whether an Advance is dependent on a particular instruction and only
+    // for which there is still a use left of it?
+
     // Record the path / base constraint graph after removing any reflexive-loops.
     // Since G is a use-def graph and we want our constraint graph to be a def-use graph,
     // reverse the edges as we're writing them to obtain the transposed graph.
+
     mConstraintGraph = ConstraintGraph(advances);
     mSubsetGraph = SubsetGraph(advances);
 
@@ -301,7 +295,7 @@ unsigned AutoMultiplexing::initialize(PabloFunction & function, raw_ostream & ou
             if (G(i, j)) {
                 add_edge(j, i, mConstraintGraph);
             }
-        }        
+        }
     }
 
     // Initialize the BDD engine ...
@@ -309,17 +303,31 @@ unsigned AutoMultiplexing::initialize(PabloFunction & function, raw_ostream & ou
     bdd_setvarnum(variableCount + function.getNumOfParameters());
     bdd_setcacheratio(64);
     bdd_setmaxincrease(10000000);
-    // bdd_setminfreenodes(10000);
-    bdd_autoreorder(BDD_REORDER_NONE);
+    bdd_autoreorder(BDD_REORDER_SIFT);
 
-    // Map the predefined 0/1 entries
-    mCharacterizationMap[PabloBlock::createZeroes()] = bdd_zero();
-    mCharacterizationMap[PabloBlock::createOnes()] = bdd_one();
+    // Map the constants and input variables
+    mCharacterization[PabloBlock::createZeroes()] = bdd_zero();
+    mCharacterization[PabloBlock::createOnes()] = bdd_one();
+    mVariables = function.getNumOfParameters();
 
-    // Order the variables so the input Vars are pushed to the end; they ought to
-    // be the most complex to resolve.
-    for (mVariables = 0; mVariables != function.getNumOfParameters(); ++mVariables) {
-        mCharacterizationMap[function.getParameter(mVariables)] = bdd_ithvar(mVariables);
+    // TODO: record information in the function to indicate which pairs of input variables are independent
+    if (independent) {
+        for (unsigned i = 0; i != mVariables; ++i) {
+            BDD Vi = bdd_ithvar(i);
+            BDD Ni = bdd_zero();
+            for (unsigned j = 0; j != i; ++j) {
+                Ni = bdd_addref(bdd_or(Ni, bdd_ithvar(j)));
+            }
+            for (unsigned j = i + 1; j != mVariables; ++j) {
+                Ni = bdd_addref(bdd_or(Ni, bdd_ithvar(j)));
+            }
+            Ni = bdd_addref(bdd_not(Ni));
+            mCharacterization[function.getParameter(i)] = bdd_addref(bdd_imp(Vi, Ni));
+        }
+    } else {
+        for (unsigned i = 0; i != mVariables; ++i) {
+            mCharacterization[function.getParameter(i)] = bdd_ithvar(i);
+        }
     }
 
     return advances;
@@ -347,7 +355,7 @@ void AutoMultiplexing::characterize(PabloBlock * const block) {
                 var = bdd_addref(bdd_or(var, assignments[i]));
             }
         } else {
-            mCharacterizationMap.insert(std::make_pair(stmt, characterize(stmt)));
+            mCharacterization.insert(std::make_pair(stmt, characterize(stmt)));
         }
     }
 }
@@ -407,8 +415,6 @@ inline BDD AutoMultiplexing::characterize(Statement * const stmt) {
  ** ------------------------------------------------------------------------------------------------------------- */
 inline BDD AutoMultiplexing::characterize(Advance * const adv, const BDD Ik) {
 
-    bdd_addref(Ik);
-
     const auto k = mAdvanceAttributes.size();
 
     std::vector<bool> unconstrained(k , false);
@@ -419,7 +425,7 @@ inline BDD AutoMultiplexing::characterize(Advance * const adv, const BDD Ik) {
 
         // If these advances are "shifting" their values by the same amount ...
         const Advance * const ithAdv = std::get<0>(mAdvanceAttributes[i]);
-        if (adv->getOperand(1) == ithAdv->getOperand(1)) {
+        if (independent(i, k) && adv->getOperand(1) == ithAdv->getOperand(1)) {
             const BDD Ii = get(ithAdv->getOperand(0));
             const BDD IiIk = bdd_addref(bdd_and(Ii, Ik));
             // Is there any satisfying truth assignment? If not, these streams are mutually exclusive.
@@ -469,14 +475,12 @@ inline BDD AutoMultiplexing::characterize(Advance * const adv, const BDD Ik) {
             Ci = bdd_addref(bdd_imp(Ci, bdd_addref(bdd_not(Vk))));
             // If these Advances are mutually exclusive, in the same scope, and transitively independent,
             // we safely multiplex them.
-            if ((adv->getParent() == ithAdv->getParent()) && independent(i, k)) {
+            if (adv->getParent() == ithAdv->getParent()) {
                 continue;
             }
         }
         add_edge(i, k, mConstraintGraph);
     }
-
-    bdd_delref(Ik);
 
     mAdvanceAttributes.emplace_back(adv, Vk);
 
@@ -532,8 +536,8 @@ bool AutoMultiplexing::generateCandidateSets(RNG & rng) {
             // Randomly choose a vertex in S and discard it.
             const auto i = S.begin() + IntDistribution(0, S.size() - 1)(rng);
             assert (i != S.end());
-            const ConstraintVertex u = *i;            
-            S.erase(i);            
+            const ConstraintVertex u = *i;
+            S.erase(i);
 
             for (auto e : make_iterator_range(out_edges(u, mConstraintGraph))) {
                 const ConstraintVertex v = target(e, mConstraintGraph);
@@ -811,9 +815,9 @@ void AutoMultiplexing::multiplexSelectedIndependentSets(PabloFunction &) {
     for (unsigned idx = first_set; idx != last_set; ++idx) {
         const size_t n = out_degree(idx, mMultiplexSetGraph);
         if (n) {
-            const size_t m = log2_plus_one(n);            
+            const size_t m = log2_plus_one(n);
             Advance * input[n];
-            Advance * muxed[m];            
+            Advance * muxed[m];
 
             unsigned i = 0;
             for (const auto e : make_iterator_range(out_edges(idx, mMultiplexSetGraph))) {
@@ -840,17 +844,17 @@ void AutoMultiplexing::multiplexSelectedIndependentSets(PabloFunction &) {
                 while (Q.size() > 1) {
                     PabloAST * a1 = Q.front(); Q.pop_front(); assert (a1);
                     PabloAST * a2 = Q.front(); Q.pop_front(); assert (a2);
-                    assert (!Q.full());                                        
+                    assert (!Q.full());
                     Q.push_back(builder.createOr(a2, a1, "muxing"));
                 }
 
                 PabloAST * mux = Q.front(); Q.pop_front(); assert (mux);
                 // The only way this did not return an Advance statement would be if either the mux or shift amount
-                // is zero. Since these cases would have been eliminated earlier, we are safe to cast here.               
+                // is zero. Since these cases would have been eliminated earlier, we are safe to cast here.
                 muxed[j] = cast<Advance>(builder.createAdvance(mux, adv->getOperand(1), prefix.str()));
             }
 
-            /// Perform m-to-n Demultiplexing                        
+            /// Perform m-to-n Demultiplexing
             for (size_t i = 0; i != n; ++i) {
 
                 // Construct the demuxed values and replaces all the users of the original advances with them.
@@ -978,8 +982,8 @@ void AutoMultiplexing::doTransitiveReductionOfSubsetGraph() {
  * @brief get
  ** ------------------------------------------------------------------------------------------------------------- */
 inline BDD & AutoMultiplexing::get(const PabloAST * const expr) {
-    auto f = mCharacterizationMap.find(expr);
-    assert (f != mCharacterizationMap.end());
+    auto f = mCharacterization.find(expr);
+    assert (f != mCharacterization.end());
     return f->second;
 }
 

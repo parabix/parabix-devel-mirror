@@ -33,9 +33,9 @@ class AutoMultiplexing {
     using ScopeMap = boost::container::flat_map<const PabloBlock *, Statement *>;
 
 public:
-    static bool optimize(PabloFunction & function, const unsigned limit = std::numeric_limits<unsigned>::max(), const unsigned maxSelections = 100);
+    static bool optimize(PabloFunction & function, const unsigned limit = std::numeric_limits<unsigned>::max(), const unsigned maxSelections = 100, const bool independent = false);
 protected:
-    unsigned initialize(PabloFunction & function, raw_ostream & out);
+    unsigned initialize(PabloFunction & function, const bool independent);
     void characterize(PabloBlock * const block);
     BDD characterize(Statement * const stmt);
     BDD characterize(Advance * const adv, const BDD Ik);
@@ -49,7 +49,6 @@ protected:
     static void topologicalSort(PabloFunction & function);
     BDD & get(const PabloAST * const expr);
 
-
     inline AutoMultiplexing(const unsigned limit, const unsigned maxSelections)
     : mLimit(limit)
     , mMaxSelections(maxSelections)
@@ -62,7 +61,7 @@ private:
     const unsigned              mLimit;
     const unsigned              mMaxSelections;
     unsigned                    mVariables;
-    CharacterizationMap         mCharacterizationMap;
+    CharacterizationMap         mCharacterization;
     ConstraintGraph             mConstraintGraph;
     SubsetGraph                 mSubsetGraph;
     AdvanceAttributes           mAdvanceAttributes;

@@ -17,8 +17,6 @@ public:
     static bool optimize(PabloFunction & function);
 protected:
     inline BooleanReassociationPass() {}
-    void resolveScopes(PabloFunction & function);
-    void resolveScopes(PabloBlock * const block);
     void processScopes(PabloFunction & function);
     PabloBlock * processScopes(PabloFunction & f, PabloBlock * const block);
     PabloBlock * processScope(PabloFunction & f, PabloBlock * const block);

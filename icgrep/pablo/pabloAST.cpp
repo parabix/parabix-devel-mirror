@@ -8,7 +8,7 @@
 #include <pablo/codegenstate.h>
 #include <llvm/Support/Compiler.h>
 #include <pablo/printer_pablos.h>
-#include <iostream>
+#include <llvm/ADT/SmallVector.h>
 
 namespace pablo {
 
@@ -85,7 +85,10 @@ bool equals(const PabloAST * expr1, const PabloAST * expr2) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief replaceAllUsesWith
  ** ------------------------------------------------------------------------------------------------------------- */
-void PabloAST::replaceAllUsesWith(PabloAST * expr) {    
+void PabloAST::replaceAllUsesWith(PabloAST * expr) {
+    if (LLVM_UNLIKELY(this == expr)) {
+        return;
+    }
     Statement * replacements[mUsers.size()];
     Vector::size_type users = 0;
     bool exprIsAUser = false;
@@ -107,10 +110,10 @@ void PabloAST::replaceAllUsesWith(PabloAST * expr) {
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief checkForReplacementInEscapedValueList
+ * @brief checkEscapedValueList
  ** ------------------------------------------------------------------------------------------------------------- */
 template <class ValueType, class ValueList>
-inline void Statement::checkForReplacementInEscapedValueList(Statement * branch, PabloAST * const from, PabloAST * const to, ValueList & list) {
+inline void Statement::checkEscapedValueList(Statement * branch, PabloAST * const from, PabloAST * const to, ValueList & list) {
     if (LLVM_LIKELY(isa<ValueType>(from))) {
         auto f = std::find(list.begin(), list.end(), cast<ValueType>(from));
         if (LLVM_LIKELY(f != list.end())) {
@@ -124,16 +127,9 @@ inline void Statement::checkForReplacementInEscapedValueList(Statement * branch,
                 branch->removeUser(from);
                 assert (std::find(list.begin(), list.end(), cast<ValueType>(to)) != list.end());
                 assert (std::find(branch->user_begin(), branch->user_end(), cast<ValueType>(to)) != branch->user_end());
-            } else { // replacement error occured
-                std::string tmp;
-                raw_string_ostream str(tmp);
-                str << "cannot replace escaped value ";
-                PabloPrinter::print(from, str);
-                str << " with ";
-                PabloPrinter::print(to, str);
-                str << " in ";
-                PabloPrinter::print(branch, str);
-                throw std::runtime_error(str.str());
+            } else {
+                list.erase(f);
+                branch->removeUser(from);
             }
         }                
         assert (std::find(list.begin(), list.end(), cast<ValueType>(from)) == list.end());
@@ -145,15 +141,18 @@ inline void Statement::checkForReplacementInEscapedValueList(Statement * branch,
  * @brief replaceUsesOfWith
  ** ------------------------------------------------------------------------------------------------------------- */
 void Statement::replaceUsesOfWith(PabloAST * const from, PabloAST * const to) {
+    if (LLVM_UNLIKELY(from == to)) {
+        return;
+    }
     for (unsigned i = 0; i != getNumOperands(); ++i) {
        if (getOperand(i) == from) {
            setOperand(i, to);
        }
     }
     if (LLVM_UNLIKELY(isa<If>(this))) {
-        checkForReplacementInEscapedValueList<Assign>(this, from, to, cast<If>(this)->getDefined());
+        checkEscapedValueList<Assign>(this, from, to, cast<If>(this)->getDefined());
     } else if (LLVM_UNLIKELY(isa<While>(this))) {
-        checkForReplacementInEscapedValueList<Next>(this, from, to, cast<While>(this)->getVariants());
+        checkEscapedValueList<Next>(this, from, to, cast<While>(this)->getVariants());
     }
 }
 
@@ -221,11 +220,9 @@ void Statement::insertBefore(Statement * const statement) {
 void Statement::insertAfter(Statement * const statement) {
     if (LLVM_UNLIKELY(statement == this)) {
         return;
-    }
-    else if (LLVM_UNLIKELY(statement == nullptr)) {
+    } else if (LLVM_UNLIKELY(statement == nullptr)) {
         throw std::runtime_error("cannot insert after null statement!");
-    }
-    else if (LLVM_UNLIKELY(statement->mParent == nullptr)) {
+    } else if (LLVM_UNLIKELY(statement->mParent == nullptr)) {
         throw std::runtime_error("statement is not contained in a pablo block!");
     }
     removeFromParent();
@@ -287,7 +284,7 @@ Statement * Statement::eraseFromParent(const bool recursively) {
     for (unsigned i = 0; i != mOperands; ++i) {
         mOperand[i]->removeUser(this);
     }
-    Statement * redundantBranch = nullptr;
+    SmallVector<Statement *, 1> redundantBranches;
     // If this is an If or While statement, we'll have to remove the statements within the
     // body or we'll lose track of them.
     if (LLVM_UNLIKELY(isa<If>(this) || isa<While>(this))) {
@@ -303,9 +300,8 @@ Statement * Statement::eraseFromParent(const bool recursively) {
                     ifNode->removeUser(this);
                     defs.erase(f);
                     if (LLVM_UNLIKELY(defs.empty())) {
-                        redundantBranch = ifNode;
+                        redundantBranches.push_back(ifNode);
                     }
-                    break;
                 }
             }
         }
@@ -319,9 +315,8 @@ Statement * Statement::eraseFromParent(const bool recursively) {
                     whileNode->removeUser(this);
                     vars.erase(f);
                     if (LLVM_UNLIKELY(vars.empty())) {
-                        redundantBranch = whileNode;
+                        redundantBranches.push_back(whileNode);
                     }
-                    break;
                 }
             }
         }
@@ -333,23 +328,22 @@ Statement * Statement::eraseFromParent(const bool recursively) {
         for (unsigned i = 0; i != mOperands; ++i) {
             PabloAST * const op = mOperand[i];
             if (LLVM_LIKELY(isa<Statement>(op))) {
-                bool erase = false;
                 if (op->getNumUses() == 0) {
-                    erase = true;
-                } else if ((isa<Assign>(op) || isa<Next>(op)) && op->getNumUses() == 1) {
-                    erase = true;
-                }
-                if (erase) {
                     cast<Statement>(op)->eraseFromParent(true);
                 }
             }
         }
-        if (LLVM_UNLIKELY(redundantBranch != nullptr)) {
+        if (LLVM_UNLIKELY(redundantBranches.size() != 0)) {
             // By eliminating this redundant branch, we may inadvertantly delete the scope block this statement
             // resides within. Check and return null if so.
-            const PabloBlock * const body = isa<If>(redundantBranch) ? cast<If>(redundantBranch)->getBody() : cast<While>(redundantBranch)->getBody();
-            const bool eliminatedScope = (body == getParent());
-            redundantBranch->eraseFromParent(true);
+            bool eliminatedScope = false;
+            for (Statement * br : redundantBranches) {
+                const PabloBlock * const body = isa<If>(br) ? cast<If>(br)->getBody() : cast<While>(br)->getBody();
+                if (LLVM_UNLIKELY(body == getParent())) {
+                    eliminatedScope = true;
+                }
+                br->eraseFromParent(true);
+            }
             if (eliminatedScope) {
                 return nullptr;
             }

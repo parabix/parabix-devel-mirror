@@ -168,7 +168,7 @@ class Statement : public PabloAST {
     friend class Simplifier;
     friend class PabloBlock;
     template <class ValueType, class ValueList>
-    friend void checkForReplacementInEscapedValueList(const Statement *, const PabloAST * const, PabloAST * const, ValueList &);
+    friend void checkEscapedValueList(const Statement *, const PabloAST * const, PabloAST * const, ValueList &);
 public:
     static inline bool classof(const PabloAST * e) {
         switch (e->getClassTypeId()) {
@@ -246,7 +246,7 @@ protected:
     }  
 private:
     template <class ValueType, class ValueList>
-    void checkForReplacementInEscapedValueList(Statement * branch, PabloAST * const from, PabloAST * const to, ValueList & list);
+    void checkEscapedValueList(Statement * branch, PabloAST * const from, PabloAST * const to, ValueList & list);
 protected:    
     const String *              mName;
     Statement *                 mNext;

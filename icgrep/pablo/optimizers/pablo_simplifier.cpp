@@ -239,12 +239,6 @@ void Simplifier::eliminateRedundantCode(PabloBlock * const block, ExpressionTabl
         } else if (Next * next = dyn_cast<Next>(stmt)) {
             replaceReachableUsersOfWith(next, next->getExpr());
         } else if (If * ifNode = dyn_cast<If>(stmt)) {
-            // Check to see if the Cond is Zero and delete the loop.
-            if (LLVM_UNLIKELY(isa<Zeroes>(ifNode->getCondition()))) {
-                stmt = stmt->eraseFromParent();
-                continue;
-            }
-
             // Test whether all of the defined variables are necessary
             If::DefinedVars & defs = ifNode->getDefined();
             for (auto def = defs.begin(); def != defs.end(); ) {
@@ -287,16 +281,12 @@ void Simplifier::eliminateRedundantCode(PabloBlock * const block, ExpressionTabl
             }
 
         } else if (While * whileNode = dyn_cast<While>(stmt)) {
-            const PabloAST * initial = whileNode->getCondition();
-            if (LLVM_LIKELY(isa<Next>(initial))) {
-                initial = cast<Next>(initial)->getInitial();
-            }
-            if (LLVM_UNLIKELY(isa<Zeroes>(initial))) {
-                stmt = stmt->eraseFromParent();
-                continue;
-            }
             eliminateRedundantCode(whileNode->getBody(), &encountered);
             removeIdenticalEscapedValues(whileNode->getVariants());
+            // If the condition's Next state is Zero, we can eliminate the loop after copying the internal
+            // statements into the body.
+
+
         } else if (PabloAST * expr = canTriviallyFold(stmt, block)) {
             stmt = stmt->replaceWith(expr, true);
             continue;
@@ -322,8 +312,20 @@ void Simplifier::deadCodeElimination(PabloBlock * const block) {
     Statement * stmt = block->front();
     while (stmt) {
         if (isa<If>(stmt)) {
+            if (LLVM_UNLIKELY(isa<Zeroes>(cast<If>(stmt)->getCondition()))) {
+                stmt = stmt->eraseFromParent();
+                continue;
+            }
             deadCodeElimination(cast<If>(stmt)->getBody());
         } else if (isa<While>(stmt)) {
+            const PabloAST * initial = cast<While>(stmt)->getCondition();
+            if (LLVM_LIKELY(isa<Next>(initial))) {
+                initial = cast<Next>(initial)->getInitial();
+            }
+            if (LLVM_UNLIKELY(isa<Zeroes>(initial))) {
+                stmt = stmt->eraseFromParent();
+                continue;
+            }
             deadCodeElimination(cast<While>(stmt)->getBody());
         } else if (stmt->getNumUses() == 0){
             stmt = stmt->eraseFromParent(true);

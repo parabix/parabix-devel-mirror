@@ -56,6 +56,10 @@ public:
         return new PabloBlock(function.mSymbolTable);
     }
 
+    inline static PabloBlock * Create(PabloBlock * const block) noexcept {
+        return new PabloBlock(block->mSymbolGenerator);
+    }
+
     PabloAST * createAdvance(PabloAST * expr, const Integer::Type shiftAmount);
 
     PabloAST * createAdvance(PabloAST * expr, PabloAST * shiftAmount);
