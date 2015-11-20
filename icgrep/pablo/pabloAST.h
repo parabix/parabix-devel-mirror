@@ -13,6 +13,7 @@
 #include <slab_allocator.h>
 #include <iterator>
 #include <unordered_map>
+#include <boost/iterator/iterator_facade.hpp>
 
 using namespace llvm;
 
@@ -24,6 +25,7 @@ class Statement;
 
 class PabloAST {
     friend class Statement;
+    friend class Variadic;
     friend class StatementList;
     friend class Var;
     friend class If;    
@@ -36,9 +38,9 @@ public:
 
     using Allocator = SlabAllocator<u_int8_t>;
     using VectorAllocator = Allocator::rebind<PabloAST *>::other;
-    using Vector = std::vector<PabloAST*, VectorAllocator>;
-    using user_iterator = Vector::iterator;
-    using const_user_iterator = Vector::const_iterator;
+    using Users = std::vector<PabloAST *, VectorAllocator>;
+    using user_iterator = Users::iterator;
+    using const_user_iterator = Users::const_iterator;
 
     enum class ClassTypeId : unsigned {
         /** Non-statements **/
@@ -98,17 +100,17 @@ public:
         return mUsers.cend();
     }
 
-    inline Vector & users() {
+    inline Users & users() {
         return mUsers;
     }
 
-    inline const Vector & users() const {
+    inline const Users & users() const {
         return mUsers;
     }
 
     void replaceAllUsesWith(PabloAST * expr);
 
-    inline Vector::size_type getNumUses() const {
+    inline Users::size_type getNumUses() const {
         return mUsers.size();
     }
 
@@ -127,32 +129,15 @@ protected:
     {
 
     }
-    inline void addUser(PabloAST * user) {
-        assert (user);
-        auto pos = std::lower_bound(mUsers.begin(), mUsers.end(), user);
-        if (LLVM_UNLIKELY(pos != mUsers.end() && *pos == user)) {
-            return;
-        }
-        mUsers.insert(pos, user);
-    }
-    inline void removeUser(PabloAST * user) {
-        assert (user);
-        if (mUsers.empty()) {
-            return;
-        }
-        auto pos = std::lower_bound(mUsers.begin(), mUsers.end(), user);
-        if (LLVM_UNLIKELY(pos == mUsers.end() || *pos != user)) {
-            return;
-        }
-        mUsers.erase(pos);
-    }
+    void addUser(PabloAST * user);
+    void removeUser(PabloAST * user);
     virtual ~PabloAST() {
         mUsers.clear();
     }
     static Allocator        mAllocator;
 private:
     const ClassTypeId       mClassTypeId;
-    Vector                  mUsers;
+    Users                   mUsers;
 };
 
 bool equals(const PabloAST * expr1, const PabloAST *expr2);
@@ -258,8 +243,68 @@ protected:
 
 class Variadic : public Statement {
 public:
-    void addOperand(PabloAST * expr);
-    void removeOperand(const unsigned index);
+
+    static inline bool classof(const PabloAST * e) {
+        switch (e->getClassTypeId()) {
+            case PabloAST::ClassTypeId::And:
+            case PabloAST::ClassTypeId::Or:
+            case PabloAST::ClassTypeId::Xor:
+                return true;
+            default: return false;
+        }
+    }
+    static inline bool classof(const Variadic *) {
+        return true;
+    }
+    static inline bool classof(const void *) {
+        return false;
+    }
+
+    class iterator : public boost::iterator_facade<iterator, PabloAST *, boost::random_access_traversal_tag> {
+        friend class Variadic;
+        friend class boost::iterator_core_access;
+    protected:
+
+        iterator(PabloAST ** pointer) : mCurrent(pointer) { }
+        inline void increment() { ++mCurrent; }
+        inline void decrement() { --mCurrent; }
+        inline void advance(const unsigned n) { mCurrent += n; }
+        inline std::ptrdiff_t distance_to(const iterator & other) const { return other.mCurrent - mCurrent; }
+        inline PabloAST *& dereference() const { return *mCurrent; }
+
+        inline bool equal(const iterator & other) const { return (mCurrent == other.mCurrent); }
+
+    private:
+        PabloAST **        mCurrent;
+    };
+
+    using const_iterator = iterator;
+
+    void addOperand(PabloAST * const expr);
+
+    PabloAST * removeOperand(const unsigned index);
+
+    inline iterator erase(iterator itr) {
+        removeOperand(itr.distance_to(begin()));
+        return itr;
+    }
+
+    iterator begin() {
+        return iterator(mOperand);
+    }
+
+    const_iterator begin() const {
+        return iterator(mOperand);
+    }
+
+    iterator end() {
+        return iterator(mOperand + mOperands);
+    }
+
+    const_iterator end() const {
+        return iterator(mOperand + mOperands);
+    }
+
 protected:
     Variadic(const ClassTypeId id, std::initializer_list<PabloAST *> operands, const String * const name)
     : Statement(id, operands, name)
@@ -429,15 +474,15 @@ public:
     StatementList()
     : mInsertionPoint(nullptr)
     , mFirst(nullptr)
-    , mLast(nullptr)
-    {
+    , mLast(nullptr) {
 
     }
 
     StatementList(StatementList && other)
-    : mFirst(other.mFirst)
-    , mLast(other.mLast)
-    {
+    : mInsertionPoint(nullptr)
+    , mFirst(other.mFirst)
+    , mLast(other.mLast) {
+        other.mInsertionPoint = nullptr;
         other.mFirst = nullptr;
         other.mLast = nullptr;
     }
@@ -507,9 +552,11 @@ public:
         return mInsertionPoint;
     }
 
-    ~StatementList();
-
     bool contains(Statement * const statement);
+
+protected:
+
+    ~StatementList() = default;
 
 private:
 
@@ -518,9 +565,25 @@ private:
     Statement   * mLast;    
 };
 
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief addUser
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline void PabloAST::addUser(PabloAST *user) {
+    assert (user);
+    // Note: for the rare situation that this node is used multiple times by a statement, duplicates are allowed.
+    mUsers.insert(std::lower_bound(mUsers.begin(), mUsers.end(), user), user);
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief removeUser
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline void PabloAST::removeUser(PabloAST * user) {
+    assert (user);
+    auto pos = std::lower_bound(mUsers.begin(), mUsers.end(), user);
+    assert ("Could not find user to remove!" && (pos != mUsers.end() && *pos == user));
+    mUsers.erase(pos);
+}
+
 }
 
 #endif // PE_PabloAST_H
-
-
-

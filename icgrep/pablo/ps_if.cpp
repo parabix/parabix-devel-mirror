@@ -20,7 +20,7 @@ If::If(PabloAST * expr, const std::initializer_list<Assign *> definedVars, Pablo
     // Assign's value is also dependant on the 'Next' value, the If node is also a user
     // of it.
 
-    for (PabloAST * def : mDefined) {
+    for (Assign * def : mDefined) {
         def->addUser(this);
         this->addUser(def);
     }
@@ -31,7 +31,7 @@ If::If(PabloAST * expr, const std::vector<Assign *> & definedVars, PabloBlock * 
 , mBody(body)
 , mDefined(definedVars.begin(), definedVars.end(), reinterpret_cast<DefinedAllocator &>(mAllocator))
 {
-    for (PabloAST * def : mDefined) {
+    for (Assign * def : mDefined) {
         def->addUser(this);
         this->addUser(def);
     }

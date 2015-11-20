@@ -483,3 +483,5 @@ UCD/ucd_compiler.hpp
 UCD/ucd_compiler.cpp
 UCD/unicode_set.h
 UCD/unicode_set.cpp
+pablo/passes/flattenassociativedfg.h
+pablo/passes/flattenassociativedfg.cpp

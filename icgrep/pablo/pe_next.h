@@ -27,7 +27,7 @@ public:
 protected:
     explicit Next(PabloAST * initial, PabloAST * expr)
     : Statement(ClassTypeId::Next, {expr, cast<Assign>(initial)}, cast<Assign>(initial)->getName()) {
-        this->addUser(initial);
+
     }
 };
 

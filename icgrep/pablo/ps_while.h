@@ -32,10 +32,10 @@ public:
         return getOperand(0);
     }
     inline Variants & getVariants() {
-        return mNext;
+        return mVariant;
     }
     inline const Variants & getVariants() const {
-        return mNext;
+        return mVariant;
     }
     inline PabloBlock * getBody() {
         return mBody;
@@ -50,7 +50,7 @@ protected:
 
 private:
     PabloBlock *    mBody;
-    Variants        mNext;
+    Variants        mVariant;
 };
 
 }

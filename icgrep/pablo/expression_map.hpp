@@ -112,6 +112,16 @@ struct VarArgMap {
             }
         }
 
+        inline Key(PabloAST::ClassTypeId type, const Variadic * stmt, Allocator & allocator)
+        : mType(type)
+        , mArgs(stmt->getNumOperands())
+        , mArg(allocator.Allocate<const PabloAST *>(mArgs)) {
+            unsigned i = 0;
+            for (PabloAST * arg : *stmt) {
+                mArg[i++] = arg;
+            }
+        }
+
         inline Key(const Key & key) = default;
 
         inline Key(Key && key) = default;
@@ -167,8 +177,8 @@ struct VarArgMap {
         return object;
     }
 
-    inline std::pair<PabloAST *, bool> findOrAdd(PabloAST * object, const PabloAST::ClassTypeId type, PabloAST * arg1, const std::vector<PabloAST *> & args) {
-        Key key(type, arg1, args, mAllocator);
+    inline std::pair<PabloAST *, bool> findOrAdd(Variadic * object, const PabloAST::ClassTypeId type) {
+        Key key(type, object, mAllocator);
         PabloAST * const entry = find(key);
         if (entry) {
             mAllocator.Deallocate<const PabloAST *>(key.mArg);
@@ -264,10 +274,7 @@ struct ExpressionTable {
             case PabloAST::ClassTypeId::And:
             case PabloAST::ClassTypeId::Or:
             case PabloAST::ClassTypeId::Xor:
-                // test whether the communative version of this statement exists
-                if (PabloAST * commExpr = mBinary.find(stmt->getClassTypeId(), stmt->getOperand(1), stmt->getOperand(0))) {
-                    return std::make_pair(commExpr, false);
-                }
+                return mVariable.findOrAdd(cast<Variadic>(stmt), stmt->getClassTypeId());
             case PabloAST::ClassTypeId::Advance:
             case PabloAST::ClassTypeId::ScanThru:
             case PabloAST::ClassTypeId::MatchStar:

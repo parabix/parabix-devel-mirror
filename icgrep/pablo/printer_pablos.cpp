@@ -53,38 +53,38 @@ void PabloPrinter::print(const Statement * stmt, llvm::raw_ostream & out, const 
         }
     } else if (const Call * call = dyn_cast<const Call>(stmt)) {
         out << " = " << call->getCallee() << "()";
-    } else if (const And * pablo_and = dyn_cast<const And>(stmt)) {
-        out << pablo_and->getName() << " = (";
-        for (unsigned i = 0; i != pablo_and->getNumOperands(); ++i) {
+    } else if (const And * andNode = dyn_cast<const And>(stmt)) {
+        out << andNode->getName() << " = (";
+        for (unsigned i = 0; i != andNode->getNumOperands(); ++i) {
             if (i) out << " & ";
-            print(pablo_and->getOperand(i), out);
+            print(andNode->getOperand(i), out);
         }
         out << ")";
-    } else if (const Or * pablo_or = dyn_cast<const Or>(stmt)) {
-        out << pablo_or->getName() << " = (";
-        for (unsigned i = 0; i != pablo_or->getNumOperands(); ++i) {
+    } else if (const Or * orNode = dyn_cast<const Or>(stmt)) {
+        out << orNode->getName() << " = (";
+        for (unsigned i = 0; i != orNode->getNumOperands(); ++i) {
             if (i) out << " | ";
-            print(pablo_or->getOperand(i), out);
+            print(orNode->getOperand(i), out);
         }
         out << ")";
-    } else if (const Xor * pablo_xor = dyn_cast<const Xor>(stmt)) {
-        out << pablo_xor->getName() << " = (";
-        for (unsigned i = 0; i != pablo_xor->getNumOperands(); ++i) {
+    } else if (const Xor * xorNode = dyn_cast<const Xor>(stmt)) {
+        out << xorNode->getName() << " = (";
+        for (unsigned i = 0; i != xorNode->getNumOperands(); ++i) {
             if (i) out << " ^ ";
-            print(pablo_xor->getOperand(i), out);
+            print(xorNode->getOperand(i), out);
         }
         out << ")";
-    } else if (const Sel * pablo_sel = dyn_cast<const Sel>(stmt)) {
-        out << pablo_sel->getName() << " = (";
-        print(pablo_sel->getCondition(), out);
+    } else if (const Sel * selNode = dyn_cast<const Sel>(stmt)) {
+        out << selNode->getName() << " = (";
+        print(selNode->getCondition(), out);
         out << " ? ";
-        print(pablo_sel->getTrueExpr(), out);
+        print(selNode->getTrueExpr(), out);
         out << " : ";
-        print(pablo_sel->getFalseExpr(), out);
+        print(selNode->getFalseExpr(), out);
         out << ")";
-    } else if (const Not * pablo_not = dyn_cast<const Not>(stmt)) {
-        out << pablo_not->getName() << " = (~";
-        print(pablo_not->getExpr(), out);
+    } else if (const Not * notNode = dyn_cast<const Not>(stmt)) {
+        out << notNode->getName() << " = (~";
+        print(notNode->getExpr(), out);
         out << ")";
     } else if (const Advance * adv = dyn_cast<const Advance>(stmt)) {
         out << adv->getName() << " = pablo.Advance(";

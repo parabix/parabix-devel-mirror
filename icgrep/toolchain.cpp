@@ -36,6 +36,7 @@
 #include <pablo/pablo_compiler.h>
 #include <pablo/optimizers/pablo_simplifier.hpp>
 #include <pablo/optimizers/codemotionpass.h>
+#include <pablo/passes/flattenassociativedfg.h>
 #ifdef ENABLE_MULTIPLEXING
 #include <pablo/optimizers/pablo_automultiplexing.hpp>
 #include <pablo/optimizers/pablo_bddminimization.h>
@@ -142,6 +143,7 @@ void pablo_function_passes(PabloFunction * function) {
     if (!DisablePabloCSE) {
         Simplifier::optimize(*function);
     }
+    // FlattenAssociativeDFG::process(*function);
     if (PabloSinkingPass) {
         CodeMotionPass::optimize(*function);
     }

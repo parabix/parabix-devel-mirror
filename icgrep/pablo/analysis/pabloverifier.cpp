@@ -101,8 +101,9 @@ void verifyUseDefInformation(const PabloBlock * block, const ScopeSet & validSco
                 raw_string_ostream str(tmp);
                 str << "PabloVerifier: def-use error: ";
                 PabloPrinter::print(stmt, str);
-                str << " is not a user of ";
+                str << " is not recorded in ";
                 PabloPrinter::print(def, str);
+                str << "'s user list";
                 throw std::runtime_error(str.str());
             }
         }
@@ -294,21 +295,25 @@ void isTopologicallyOrdered(const PabloBlock * block, const OrderingVerifier & p
         for (unsigned i = 0; i != stmt->getNumOperands(); ++i) {
             const PabloAST * const op = stmt->getOperand(i);
             if (LLVM_UNLIKELY((isa<Statement>(op) || isa<Var>(op)) && ov.count(op) == 0)) {
-
                 std::string tmp;
                 raw_string_ostream str(tmp);
                 str << "PabloVerifier: ordering volation: ";
                 if (LLVM_UNLIKELY(recursivelyDefined(stmt))) {
                     PabloPrinter::print(stmt, str);
-                    str << " is recursively defined!";
+                    str << " is defined by a recursive function!";
                     throw std::runtime_error(str.str());
                 }
                 // TODO: make this actually test whether the operand is ever defined,
                 // or if it was defined in a scope that cannot be reached?
 
                 str << "function is not topologically ordered! ";
-                PabloPrinter::print(stmt->getOperand(i), str);
-                str << " was used before definition by ";
+                PabloAST * op = stmt->getOperand(i);
+                PabloPrinter::print(op, str);
+                if (LLVM_UNLIKELY(isa<Statement>(op) && unreachable(stmt, cast<Statement>(op)->getParent()))) {
+                    str << " was defined in a scope that is unreachable by ";
+                } else {
+                    str << " was used before definition by ";
+                }
                 PabloPrinter::print(stmt, str);
                 throw std::runtime_error(str.str());
             }

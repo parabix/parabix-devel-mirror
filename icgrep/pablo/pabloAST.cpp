@@ -9,21 +9,17 @@
 #include <llvm/Support/Compiler.h>
 #include <pablo/printer_pablos.h>
 #include <llvm/ADT/SmallVector.h>
+#include <iostream>
 
 namespace pablo {
 
 PabloAST::Allocator PabloAST::mAllocator;
 
-/*
-
-    Return true if expr1 and expr2 can be proven equivalent according to some rules,
-    false otherwise.  Note that false may be returned i some cases when the exprs are
-    equivalent.
-
-*/
-
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief equals
+ *
+ *  Return true if expr1 and expr2 can be proven equivalent according to some rules, false otherwise.  Note that
+ *  false may be returned i some cases when the exprs are equivalent.
  ** ------------------------------------------------------------------------------------------------------------- */
 bool equals(const PabloAST * expr1, const PabloAST * expr2) {
     assert (expr1 && expr2);
@@ -86,26 +82,23 @@ bool equals(const PabloAST * expr1, const PabloAST * expr2) {
  * @brief replaceAllUsesWith
  ** ------------------------------------------------------------------------------------------------------------- */
 void PabloAST::replaceAllUsesWith(PabloAST * expr) {
+    assert (expr);
     if (LLVM_UNLIKELY(this == expr)) {
         return;
     }
-    Statement * replacements[mUsers.size()];
-    Vector::size_type users = 0;
-    bool exprIsAUser = false;
-    assert (expr);
+    Statement * replacement[mUsers.size()];
+    Users::size_type replacements = 0;
+    PabloAST * last = nullptr;
     for (PabloAST * user : mUsers) {
-        if (LLVM_UNLIKELY(user == expr)) {
-            exprIsAUser = true;
+        if (LLVM_UNLIKELY(user == expr || user == last)) {
             continue;
+        } else if (isa<Statement>(user)) {
+            replacement[replacements++] = cast<Statement>(user);
+            last = user;
         }
-        replacements[users++] = cast<Statement>(user);
     }
-    mUsers.clear();
-    if (LLVM_UNLIKELY(exprIsAUser)) {
-        mUsers.push_back(expr);
-    }
-    for (Vector::size_type i = 0; i != users; ++i) {
-        replacements[i]->replaceUsesOfWith(this, expr);
+    for (Users::size_type i = 0; i != replacements; ++i) {
+        replacement[i]->replaceUsesOfWith(this, expr);
     }
 }
 
@@ -160,25 +153,14 @@ void Statement::replaceUsesOfWith(PabloAST * const from, PabloAST * const to) {
  * @brief setOperand
  ** ------------------------------------------------------------------------------------------------------------- */
 void Statement::setOperand(const unsigned index, PabloAST * const value) {
-    assert (value);
+    assert ("No operand can be null!" && value);
     assert (index < getNumOperands());
-    PabloAST * const priorValue = getOperand(index);
-    if (LLVM_UNLIKELY(priorValue == value)) {
+    PabloAST * const prior = getOperand(index);
+    assert ("No operand can be null!" && prior);
+    if (LLVM_UNLIKELY(prior == value)) {
         return;
     }    
-    if (LLVM_LIKELY(priorValue != nullptr)) {
-        // Test just to be sure that we don't have multiple operands pointing to
-        // what we're replacing. If not, remove this from the prior value's
-        // user list.
-        unsigned count = 0;
-        for (unsigned i = 0; i != getNumOperands(); ++i) {
-            count += (getOperand(i) == priorValue) ? 1 : 0;
-        }
-        assert (count >= 1);
-        if (LLVM_LIKELY(count == 1)) {
-            priorValue->removeUser(this);
-        }
-    }
+    prior->removeUser(this);
     mOperand[index] = value;
     value->addUser(this);
 }
@@ -335,7 +317,7 @@ Statement * Statement::eraseFromParent(const bool recursively) {
         }
         if (LLVM_UNLIKELY(redundantBranches.size() != 0)) {
             // By eliminating this redundant branch, we may inadvertantly delete the scope block this statement
-            // resides within. Check and return null if so.
+            // resides within. Return null if so.
             bool eliminatedScope = false;
             for (Statement * br : redundantBranches) {
                 const PabloBlock * const body = isa<If>(br) ? cast<If>(br)->getBody() : cast<While>(br)->getBody();
@@ -375,32 +357,33 @@ Statement * Statement::replaceWith(PabloAST * const expr, const bool rename, con
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief addOperand
  ** ------------------------------------------------------------------------------------------------------------- */
-void Variadic::addOperand(PabloAST * expr) {
-    unsigned index = 0;
-    for (; index != mOperands; ++index) {
-        if (mOperand[index] > expr) {
-            break;
-        }
-    }
-    if (mOperands == mCapacity) {
+void Variadic::addOperand(PabloAST * const expr) {
+    if (LLVM_UNLIKELY(mOperands == mCapacity)) {
         mCapacity = std::max<unsigned>(mCapacity * 2, 2);
-        PabloAST ** expandedArray = reinterpret_cast<PabloAST**>(mAllocator.allocate(mOperands * sizeof(PabloAST *)));
-        std::memcpy(expandedArray, mOperand, mOperands * sizeof(PabloAST *));
+        PabloAST ** expandedOperandSpace = reinterpret_cast<PabloAST**>(mAllocator.allocate(mCapacity * sizeof(PabloAST *)));
+        for (unsigned i = 0; i != mOperands; ++i) {
+            expandedOperandSpace[i] = mOperand[i];
+        }
         mAllocator.deallocate(reinterpret_cast<Allocator::pointer>(mOperand));
-        mOperand = expandedArray;
+        mOperand = expandedOperandSpace;
     }
-    std::memcpy(mOperand + index + 1, mOperand + index, (mOperands - index) * sizeof(PabloAST *));
-    mOperand[index] = expr;
-    ++mOperands;
+    mOperand[mOperands++] = expr;
+    expr->addUser(this);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief removeOperand
  ** ------------------------------------------------------------------------------------------------------------- */
-void Variadic::removeOperand(const unsigned index) {
-    assert (index < getNumOperands());
-    std::memcpy(mOperand + index, mOperand + index + 1, (mOperands - index - 1) * sizeof(PabloAST *));
+PabloAST * Variadic::removeOperand(const unsigned index) {
+    assert (index < mOperands);
+    PabloAST * const expr = mOperand[index];
     --mOperands;
+    for (unsigned i = index; i != mOperands; ++i) {
+        mOperand[i] = mOperand[i + 1];
+    }
+    mOperand[mOperands] = nullptr;
+    expr->removeUser(this);
+    return expr;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -413,10 +396,6 @@ bool StatementList::contains(Statement * const statement) {
         }
     }
     return false;
-}
-
-StatementList::~StatementList() {
-
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

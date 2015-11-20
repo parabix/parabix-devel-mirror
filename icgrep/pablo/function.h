@@ -57,8 +57,8 @@ inline Prototype * Prototype::Create(std::string name, const unsigned numOfParam
 
 class PabloFunction : public Prototype {
     friend class PabloBlock;
-    using ParamAllocator = VectorAllocator::rebind<Var *>::other;
-    using ResultAllocator = VectorAllocator::rebind<Assign *>::other;
+    using ParamAllocator = Allocator::rebind<Var *>::other;
+    using ResultAllocator = Allocator::rebind<Assign *>::other;
 public:
 
     static inline bool classof(const PabloAST * e) {
