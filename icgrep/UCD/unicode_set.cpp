@@ -741,9 +741,10 @@ void UnicodeSet::iterator::advance(const unsigned n) {
  * @brief Empty Set Constructor
  ** ------------------------------------------------------------------------------------------------------------- */
 UnicodeSet::UnicodeSet()
-: mRuns({{{Empty, UNICODE_QUAD_COUNT}}}, reinterpret_cast<RunAllocator &>(mAllocator))
+: mRuns(reinterpret_cast<RunAllocator &>(mAllocator))
 , mQuads(reinterpret_cast<QuadAllocator &>(mAllocator))
 {
+    append_run(Empty, UNICODE_QUAD_COUNT, mRuns);
     assert (verify(mRuns, mQuads));
 }
 
