@@ -847,7 +847,7 @@ static DistributionSets safeDistributionSets(const Graph & G, DistributionGraph 
 
     VertexSet sinks;
     for (const Vertex u : make_iterator_range(vertices(H))) {
-        if (out_degree(u, H) == 0 && in_degree(u, G) != 0) {
+        if (out_degree(u, H) == 0 && in_degree(u, H) != 0) {
             sinks.push_back(u);
         }
     }

@@ -104,6 +104,8 @@ public:
 
     PabloAST * createAnd(PabloAST * expr1, PabloAST * expr2);
 
+    And * createAnd(const unsigned operands, PabloAST * value);
+
     PabloAST * createAnd(PabloAST * expr1, PabloAST * expr2, const std::string prefix);
 
     PabloAST * createNot(PabloAST * expr);
@@ -111,6 +113,8 @@ public:
     PabloAST * createNot(PabloAST * expr, const std::string prefix);
 
     PabloAST * createOr(PabloAST * expr1, PabloAST * expr2);
+
+    Or * createOr(const unsigned operands, PabloAST * value);
 
     PabloAST * createOr(PabloAST * expr1, PabloAST * expr2, const std::string prefix);
 

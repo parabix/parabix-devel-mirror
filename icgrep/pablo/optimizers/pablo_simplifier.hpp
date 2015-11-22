@@ -9,7 +9,6 @@ struct ExpressionTable;
 class PabloFunction;
 
 class Simplifier {
-    friend class FlattenAssociativeDFG;
 public:
     static bool optimize(PabloFunction & function);
 protected:

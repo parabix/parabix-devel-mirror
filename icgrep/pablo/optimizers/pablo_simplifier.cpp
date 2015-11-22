@@ -35,9 +35,9 @@ bool Simplifier::optimize(PabloFunction & function) {
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief isReassociatable
+ * @brief isReassociative
  ** ------------------------------------------------------------------------------------------------------------- */
-inline bool isReassociatable(const Statement * const stmt) {
+inline bool isReassociative(const Statement * const stmt) {
     switch (stmt->getClassTypeId()) {
         case PabloAST::ClassTypeId::And:
         case PabloAST::ClassTypeId::Or:
@@ -53,6 +53,17 @@ inline bool isReassociatable(const Statement * const stmt) {
 PabloAST * Simplifier::foldReassociativeFunction(Variadic * const var, PabloBlock * const block) {
 
     assert (var);
+
+    bool negated = false;
+    if (LLVM_UNLIKELY(isa<Xor>(var))) {
+        for (unsigned i = 0; i != var->getNumOperands(); ++i) {
+            if (isa<Not>(var->getOperand(i))) {
+                // (A ⊕ ¬B) = ¬(A ⊕ B)
+                var->setOperand(i, cast<Not>(var->getOperand(i))->getOperand(0));
+                negated = !negated;
+            }
+        }
+    }
 
     // Ensure all operands of a reassociatiable function are consistently ordered.
     std::sort(var->begin(), var->end());
@@ -72,31 +83,22 @@ PabloAST * Simplifier::foldReassociativeFunction(Variadic * const var, PabloBloc
         ++i;
     }
 
-    // Apply the complementation law whenever possible.
-    bool negated = false;
-    for (unsigned i = 0; i < var->getNumOperands(); ++i) {
-        if (isa<Not>(var->getOperand(i))) {
-            PabloAST * const negatedOp = cast<Not>(var->getOperand(i))->getOperand(0);
-            bool complementation = false;
-            for (unsigned j = 0; j != var->getNumOperands(); ++j) {
-                if (LLVM_UNLIKELY(var->getOperand(j) == negatedOp)) {
-                    if (isa<And>(var)) { // (A ∧ ¬A) ∧ B = 0 for any B
-                        return PabloBlock::createZeroes();
-                    } else if (isa<Or>(var)) { // (A ∨ ¬A) ∨ B = 1 for any B
-                        return PabloBlock::createOnes();
+    if (LLVM_LIKELY(!isa<Xor>(var))) {
+        // Apply the complementation law whenever possible.
+        for (unsigned i = 0; i < var->getNumOperands(); ++i) {
+            if (isa<Not>(var->getOperand(i))) {
+                const PabloAST * const negatedOp = cast<Not>(var->getOperand(i))->getOperand(0);
+                for (unsigned j = 0; j != var->getNumOperands(); ++j) {
+                    if (LLVM_UNLIKELY(var->getOperand(j) == negatedOp)) {
+                        if (isa<And>(var)) { // (A ∧ ¬A) ∧ B = 0 for any B
+                            return PabloBlock::createZeroes();
+                        } else if (isa<Or>(var)) { // (A ∨ ¬A) ∨ B = 1 for any B
+                            return PabloBlock::createOnes();
+                        }
                     }
-                    var->removeOperand(i); // (A ⊕ ¬A) ⊕ B = 1 ⊕ B = ¬B for any B
-                    var->removeOperand(j);
-                    negated = !negated;
-                    complementation = true;
-                    break;
                 }
             }
-            if (complementation) {
-                continue;
-            }
         }
-        ++i;
     }
 
     // Apply the annihilator and identity laws
@@ -391,7 +393,7 @@ void Simplifier::eliminateRedundantCode(PabloBlock * const block, ExpressionTabl
             // statements into the body.
         } else {
             PabloAST * folded = nullptr;
-            if (isReassociatable(stmt)) {
+            if (isReassociative(stmt)) {
                 folded =  foldReassociativeFunction(cast<Variadic>(stmt), block);
             } else {
                 folded = canTriviallyFold(stmt, block);

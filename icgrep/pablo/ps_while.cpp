@@ -7,6 +7,7 @@ While::While(PabloAST * expr, const std::initializer_list<Next *> nextVars, Pabl
 : Statement(ClassTypeId::While, {expr}, nullptr)
 , mBody(body)
 , mVariant(nextVars.begin(), nextVars.end(), reinterpret_cast<NextAllocator &>(mAllocator)) {
+    mBody->setParent(getParent());
     for (Next * variant : nextVars) {
         variant->addUser(this);
         this->addUser(variant);
@@ -17,6 +18,7 @@ While::While(PabloAST * expr, const std::vector<Next *> & nextVars, PabloBlock *
 : Statement(ClassTypeId::While, {expr}, nullptr)
 , mBody(body)
 , mVariant(nextVars.begin(), nextVars.end(), reinterpret_cast<NextAllocator &>(mAllocator)) {
+    mBody->setParent(getParent());
     for (Next * variant : nextVars) {
         variant->addUser(this);
         this->addUser(variant);

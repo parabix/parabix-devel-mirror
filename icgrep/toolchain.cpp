@@ -143,7 +143,7 @@ void pablo_function_passes(PabloFunction * function) {
     if (!DisablePabloCSE) {
         Simplifier::optimize(*function);
     }
-    // FlattenAssociativeDFG::process(*function);
+    // FlattenAssociativeDFG::transform(*function);
     if (PabloSinkingPass) {
         CodeMotionPass::optimize(*function);
     }

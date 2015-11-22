@@ -100,6 +100,10 @@ public:
         return mUsers.cend();
     }
 
+    inline unsigned getNumUsers() const {
+        return mUsers.size();
+    }
+
     inline Users & users() {
         return mUsers;
     }
@@ -222,13 +226,27 @@ protected:
     , mOperands(operands.size())
     , mOperand(reinterpret_cast<PabloAST**>(mAllocator.allocate(mOperands * sizeof(PabloAST *)))) {
         unsigned i = 0;
-        for (PabloAST * const op : operands) {
-            mOperand[i++] = op;
-            if (LLVM_LIKELY(op != nullptr)) {
-                op->addUser(this);
-            }
+        for (PabloAST * const value : operands) {
+            assert (value);
+            mOperand[i] = value;
+            value->addUser(this);
+            ++i;
         }
     }  
+    Statement(const ClassTypeId id, unsigned operands, PabloAST * value, const String * const name)
+    : PabloAST(id)
+    , mName(name)
+    , mNext(nullptr)
+    , mPrev(nullptr)
+    , mParent(nullptr)
+    , mOperands(operands)
+    , mOperand(reinterpret_cast<PabloAST**>(mAllocator.allocate(mOperands * sizeof(PabloAST *)))) {
+        for (unsigned i = 0; i != operands; ++i) {
+            assert (value);
+            mOperand[i] = value;
+            value->addUser(this);
+        }
+    }
 private:
     template <class ValueType, class ValueList>
     void checkEscapedValueList(Statement * branch, PabloAST * const from, PabloAST * const to, ValueList & list);
@@ -268,7 +286,7 @@ public:
         iterator(PabloAST ** pointer) : mCurrent(pointer) { }
         inline void increment() { ++mCurrent; }
         inline void decrement() { --mCurrent; }
-        inline void advance(const unsigned n) { mCurrent += n; }
+        inline void advance(const std::ptrdiff_t n) { mCurrent += n; }
         inline std::ptrdiff_t distance_to(const iterator & other) const { return other.mCurrent - mCurrent; }
         inline PabloAST *& dereference() const { return *mCurrent; }
 
@@ -283,11 +301,6 @@ public:
     void addOperand(PabloAST * const expr);
 
     PabloAST * removeOperand(const unsigned index);
-
-    inline iterator erase(iterator itr) {
-        removeOperand(itr.distance_to(begin()));
-        return itr;
-    }
 
     iterator begin() {
         return iterator(mOperand);
@@ -309,6 +322,11 @@ protected:
     Variadic(const ClassTypeId id, std::initializer_list<PabloAST *> operands, const String * const name)
     : Statement(id, operands, name)
     , mCapacity(operands.size()) {
+
+    }
+    Variadic(const ClassTypeId id, const unsigned operands, PabloAST * value, String * name)
+    : Statement(id, operands, value, name)
+    , mCapacity(operands) {
 
     }
 private:
@@ -569,7 +587,7 @@ private:
  * @brief addUser
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void PabloAST::addUser(PabloAST *user) {
-    assert (user);
+    assert (user);    
     // Note: for the rare situation that this node is used multiple times by a statement, duplicates are allowed.
     mUsers.insert(std::lower_bound(mUsers.begin(), mUsers.end(), user), user);
 }

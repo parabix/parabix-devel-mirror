@@ -1,21 +1,28 @@
 #ifndef FLATTENASSOCIATIVEDFG_H
 #define FLATTENASSOCIATIVEDFG_H
 
-
 namespace pablo {
 
 class PabloFunction;
 class PabloBlock;
 class Variadic;
+class Not;
+class Assign;
+
 
 class FlattenAssociativeDFG {
 public:
-    static void process(PabloFunction & function);
+    static void transform(PabloFunction & function);
 protected:
-    static void traverse(PabloBlock * const block);
-    static bool flatten(PabloBlock * const block);
-    static bool factorize(PabloBlock * const block);
-    static bool flatten(Variadic * const var, PabloBlock * const block);
+
+    static void flatten(PabloBlock * const block);
+    static void flatten(Variadic * const var);
+    static void applyNegationInwards(Not * const var, PabloBlock * const block);
+
+    static void extract(PabloBlock * const block);
+    static void extractNegationsOutwards(Variadic * const var, PabloBlock * const block);
+    static void removeCommonCalculation(Assign * const def);
+
     FlattenAssociativeDFG() = default;
 };
 

@@ -27,6 +27,11 @@ protected:
     {
 
     }
+    Xor(const unsigned operands, PabloAST * value, String * name)
+    : Variadic(ClassTypeId::Xor, operands, value, name)
+    {
+
+    }
 };
 
 }

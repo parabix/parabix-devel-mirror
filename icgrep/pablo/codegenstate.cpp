@@ -224,7 +224,6 @@ PabloAST * PabloBlock::createMod64ScanThru(PabloAST * from, PabloAST * thru, con
     return insertAtInsertionPoint(new Mod64ScanThru(from, thru, makeName(prefix, false)));
 }
 
-
 PabloAST * PabloBlock::createAnd(PabloAST * expr1, PabloAST * expr2) {
     assert (expr1 && expr2);
     if (isa<Zeroes>(expr2) || isa<Ones>(expr1)) {
@@ -249,6 +248,10 @@ PabloAST * PabloBlock::createAnd(PabloAST * expr1, PabloAST * expr2) {
         }
     }
     return insertAtInsertionPoint(new And(expr1, expr2, makeName("and_")));
+}
+
+And * PabloBlock::createAnd(const unsigned operands, PabloAST * value) {
+    return insertAtInsertionPoint(new And(operands, value, makeName("and_")));
 }
 
 PabloAST * PabloBlock::createAnd(PabloAST * expr1, PabloAST * expr2, const std::string prefix) {
@@ -293,6 +296,10 @@ PabloAST * PabloBlock::createOr(PabloAST * expr1, PabloAST * expr2) {
         }
     }
     return insertAtInsertionPoint(new Or(expr1, expr2, makeName("or_")));
+}
+
+Or * PabloBlock::createOr(const unsigned operands, PabloAST * value) {
+    return insertAtInsertionPoint(new Or(operands, value, makeName("or_")));
 }
 
 PabloAST * PabloBlock::createOr(PabloAST * expr1, PabloAST * expr2, const std::string prefix) {

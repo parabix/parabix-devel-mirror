@@ -192,7 +192,6 @@ void Statement::insertBefore(Statement * const statement) {
     if (LLVM_UNLIKELY(isa<If>(this) || isa<While>(this))) {
         PabloBlock * body = isa<If>(this) ? cast<If>(this)->getBody() : cast<While>(this)->getBody();
         body->setParent(mParent);
-        mParent->addUser(body);
     }
 }
 
@@ -221,7 +220,6 @@ void Statement::insertAfter(Statement * const statement) {
     if (LLVM_UNLIKELY(isa<If>(this) || isa<While>(this))) {
         PabloBlock * body = isa<If>(this) ? cast<If>(this)->getBody() : cast<While>(this)->getBody();
         body->setParent(mParent);
-        mParent->addUser(body);
     }
 }
 
@@ -249,7 +247,6 @@ Statement * Statement::removeFromParent() {
         if (LLVM_UNLIKELY(isa<If>(this) || isa<While>(this))) {
             PabloBlock * body = isa<If>(this) ? cast<If>(this)->getBody() : cast<While>(this)->getBody();
             body->setParent(nullptr);
-            mParent->removeUser(body);
         }
     }
     mPrev = nullptr;
