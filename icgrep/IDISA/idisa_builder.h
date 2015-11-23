@@ -66,6 +66,7 @@ public:
     
     Value * esimd_mergeh(unsigned fw, Value * a, Value * b);
     Value * esimd_mergel(unsigned fw, Value * a, Value * b);
+    Value * esimd_bitspread(unsigned fw, Value * bitmask);
     
     Value * hsimd_packh(unsigned fw, Value * a, Value * b);
     Value * hsimd_packl(unsigned fw, Value * a, Value * b);

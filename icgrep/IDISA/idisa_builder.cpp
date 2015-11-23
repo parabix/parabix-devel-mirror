@@ -140,6 +140,29 @@ Value * IDISA_Builder::esimd_mergel(unsigned fw, Value * a, Value * b) {
     return mLLVMBuilder->CreateShuffleVector(aVec, bVec, ConstantVector::get(Idxs));
 }
 
+Value * IDISA_Builder:: esimd_bitspread(unsigned fw, Value * bitmask) {
+    unsigned field_count = mBitBlockWidth/fw;
+    Type * field_type = mLLVMBuilder->getIntNTy(fw);
+    if (bitmask->getType()->getIntegerBitWidth() < fw) {
+        bitmask = mLLVMBuilder->CreateZExt(bitmask, field_type);
+    }
+    else if (bitmask->getType()->getIntegerBitWidth() > fw) {
+        bitmask = mLLVMBuilder->CreateTrunc(bitmask, field_type);
+    }
+    Value * spread_field = mLLVMBuilder->CreateBitCast(bitmask, VectorType::get(mLLVMBuilder->getIntNTy(fw), 1));
+    Value * undefVec = UndefValue::get(VectorType::get(mLLVMBuilder->getIntNTy(fw), 1));
+    Value * broadcast = mLLVMBuilder->CreateShuffleVector(spread_field, undefVec, Constant::getNullValue(VectorType::get(mLLVMBuilder->getInt32Ty(), field_count)));
+    std::vector<Constant*> bitSel;
+    std::vector<Constant*> bitShift;
+    for (unsigned i = 0; i < field_count; i++) {
+        bitSel.push_back(ConstantInt::get(field_type, 1 << i));
+        bitShift.push_back(ConstantInt::get(field_type, i));
+    }
+    Value * bitSelVec = ConstantVector::get(bitSel);
+    Value * bitShiftVec = ConstantVector::get(bitShift);
+    return mLLVMBuilder->CreateLShr(mLLVMBuilder->CreateAnd(bitSelVec, broadcast), bitShiftVec);
+}
+
 Value * IDISA_Builder::hsimd_packh(unsigned fw, Value * a, Value * b) {
     unsigned field_count = 2 * mBitBlockWidth/fw;
     Value * aVec = fwCast(fw/2, a);
