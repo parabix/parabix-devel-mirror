@@ -5,10 +5,10 @@ namespace pablo {
 
 class PabloFunction;
 class PabloBlock;
+class Statement;
 class Variadic;
 class Not;
 class Assign;
-
 
 class FlattenAssociativeDFG {
 public:
@@ -19,9 +19,12 @@ protected:
     static void flatten(Variadic * const var);
     static void applyNegationInwards(Not * const var, PabloBlock * const block);
 
+    static void removeCommonLiterals(PabloBlock * const block);
+    static void removeCommonLiterals(Assign * const def);
+    static void removeCommonLiterals(Statement * input, Variadic * var);
+
     static void extract(PabloBlock * const block);
     static void extractNegationsOutwards(Variadic * const var, PabloBlock * const block);
-    static void removeCommonCalculation(Assign * const def);
 
     FlattenAssociativeDFG() = default;
 };

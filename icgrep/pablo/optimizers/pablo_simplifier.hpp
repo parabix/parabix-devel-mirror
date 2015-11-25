@@ -17,7 +17,7 @@ private:
     static void eliminateRedundantCode(PabloBlock * const block, ExpressionTable * predecessor = nullptr);
     static PabloAST * foldReassociativeFunction(Variadic * const var, PabloBlock * const block);
     static void deadCodeElimination(PabloBlock * const block);
-    static void eliminateRedundantEquations(PabloBlock * const block);
+    static void strengthReduction(PabloBlock * const block);
     static bool isSuperfluous(const Assign * const assign);
 };
 

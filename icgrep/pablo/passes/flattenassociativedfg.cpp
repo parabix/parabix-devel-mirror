@@ -5,8 +5,9 @@
 #include <boost/container/flat_map.hpp>
 #include <boost/graph/adjacency_list.hpp>
 #include <pablo/analysis/pabloverifier.hpp>
+#include <pablo/optimizers/distributivepass.h>
 
-#include <boost/graph/strong_components.hpp>
+
 #include <pablo/printer_pablos.h>
 #include <iostream>
 
@@ -108,38 +109,53 @@ inline void FlattenAssociativeDFG::extractNegationsOutwards(Variadic * const var
         }
         std::sort(extractedVar->begin(), extractedVar->end());
         var->addOperand(block->createNot(extractedVar));
-        std::sort(var->begin(), var->end());
     }
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief removeCommonCalculation
+ * @brief removeCommonLiterals
  ** ------------------------------------------------------------------------------------------------------------- */
-inline void FlattenAssociativeDFG::removeCommonCalculation(Assign * const def) {
+inline void FlattenAssociativeDFG::removeCommonLiterals(Assign * const def) {
     PabloAST * op = def->getOperand(0);
     if (isa<And>(op) || isa<Or>(op) || isa<Xor>(op)) {
-        Variadic * const var = cast<Variadic>(op);
-        std::vector<PabloAST *> common(var->begin(), var->end());
-        std::vector<PabloAST *> temp;
-        temp.reserve(common.size());
-        for (PabloAST * user : def->users()) {
-            if (user->getClassTypeId() != var->getClassTypeId()) {
-                if (isa<If>(user)) {
-                    continue;
-                }
-                return;
+        removeCommonLiterals(def, cast<Variadic>(op));
+    }
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief removeCommonLiterals
+ ** ------------------------------------------------------------------------------------------------------------- */
+void FlattenAssociativeDFG::removeCommonLiterals(Statement * input, Variadic * var) {
+    std::vector<PabloAST *> common(var->begin(), var->end());
+    std::vector<PabloAST *> temp;
+    temp.reserve(common.size());
+    for (PabloAST * user : input->users()) {
+        if (user->getClassTypeId() != var->getClassTypeId()) {
+            if (isa<If>(user) && (input != cast<If>(user)->getCondition())) {
+                continue;
             }
-            std::set_intersection(common.begin(), common.end(), cast<Variadic>(user)->begin(), cast<Variadic>(user)->end(), std::back_inserter(temp));
-            common.swap(temp);
-            temp.clear();
+            return;
         }
-        for (PabloAST * op : common) {
-            for (unsigned i = 0; i != var->getNumOperands(); ++i) {
-                if (var->getOperand(i) == op) {
-                    var->removeOperand(i);
-                    break;
-                }
-            }
+        std::set_intersection(common.begin(), common.end(), cast<Variadic>(user)->begin(), cast<Variadic>(user)->end(), std::back_inserter(temp));
+        common.swap(temp);
+        temp.clear();
+    }
+    for (PabloAST * op : common) {
+        var->removeOperand(op);
+    }
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief removeCommonLiterals
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline void FlattenAssociativeDFG::removeCommonLiterals(PabloBlock * const block) {
+    for (Statement * stmt : *block) {
+        if (isa<If>(stmt) || isa<While>(stmt)) {
+            removeCommonLiterals(isa<If>(stmt) ? cast<If>(stmt)->getBody() : cast<While>(stmt)->getBody());
+        } else if (isa<And>(stmt) || isa<Or>(stmt)) {
+            removeCommonLiterals(cast<Variadic>(stmt), cast<Variadic>(stmt));
+        } else if (isa<Assign>(stmt)) {
+            removeCommonLiterals(cast<Assign>(stmt));
         }
     }
 }
@@ -147,17 +163,13 @@ inline void FlattenAssociativeDFG::removeCommonCalculation(Assign * const def) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief extract
  ** ------------------------------------------------------------------------------------------------------------- */
-void FlattenAssociativeDFG::extract(PabloBlock * const block) {
-    Statement * stmt = block->front();
-    while (stmt) {
+inline void FlattenAssociativeDFG::extract(PabloBlock * const block) {
+    for (Statement * stmt : *block) {
         if (isa<If>(stmt) || isa<While>(stmt)) {
             extract(isa<If>(stmt) ? cast<If>(stmt)->getBody() : cast<While>(stmt)->getBody());
         } else if (isa<And>(stmt) || isa<Or>(stmt)) {
             extractNegationsOutwards(cast<Variadic>(stmt), block);
-        } else if (isa<Assign>(stmt)) {
-            removeCommonCalculation(cast<Assign>(stmt));
         }
-        stmt = stmt->getNextNode();
     }
 }
 
@@ -166,17 +178,35 @@ void FlattenAssociativeDFG::extract(PabloBlock * const block) {
  ** ------------------------------------------------------------------------------------------------------------- */
 void FlattenAssociativeDFG::transform(PabloFunction & function) {
 
-    FlattenAssociativeDFG::flatten(function.getEntryBlock());
-    #ifndef NDEBUG
-    PabloVerifier::verify(function, "post-flatten");
-    #endif
-    Simplifier::optimize(function);
+    for (;;) {
 
-    FlattenAssociativeDFG::extract(function.getEntryBlock());
-    #ifndef NDEBUG
-    PabloVerifier::verify(function, "post-extract");
-    #endif
-    Simplifier::optimize(function);
+        FlattenAssociativeDFG::flatten(function.getEntryBlock());
+        #ifndef NDEBUG
+        PabloVerifier::verify(function, "post-flatten");
+        #endif
+        FlattenAssociativeDFG::removeCommonLiterals(function.getEntryBlock());
+        #ifndef NDEBUG
+        PabloVerifier::verify(function, "post-remove-common-literals");
+        #endif
+
+        Simplifier::optimize(function);
+
+        const bool distributed = DistributivePass::optimize(function);
+
+        FlattenAssociativeDFG::extract(function.getEntryBlock());
+        #ifndef NDEBUG
+        PabloVerifier::verify(function, "post-extract");
+        #endif
+        Simplifier::optimize(function);
+
+        if (distributed == 0) {
+            break;
+        }
+    }
+
+    if (DistributivePass::optimize(function)) {
+        throw std::runtime_error("Some distributions remained!");
+    }
 
 }
 

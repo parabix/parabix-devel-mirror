@@ -27,7 +27,7 @@ using SmallSet = std::unordered_set<Type>;
 bool Simplifier::optimize(PabloFunction & function) {
     eliminateRedundantCode(function.getEntryBlock());
     deadCodeElimination(function.getEntryBlock());
-    eliminateRedundantEquations(function.getEntryBlock());
+    strengthReduction(function.getEntryBlock());
     #ifndef NDEBUG
     PabloVerifier::verify(function, "post-simplification");
     #endif
@@ -439,15 +439,17 @@ void Simplifier::deadCodeElimination(PabloBlock * const block) {
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief eliminateRedundantEquations
+ * @brief strengthReduction
+ *
+ * Find and replace any Pablo operations with the less expensive equivalent operations whenever possible.
  ** ------------------------------------------------------------------------------------------------------------- */
-void Simplifier::eliminateRedundantEquations(PabloBlock * const block) {
+void Simplifier::strengthReduction(PabloBlock * const block) {
     Statement * stmt = block->front();
     while (stmt) {
         if (isa<If>(stmt)) {
-            eliminateRedundantEquations(cast<If>(stmt)->getBody());
+            strengthReduction(cast<If>(stmt)->getBody());
         } else if (isa<While>(stmt)) {
-            eliminateRedundantEquations(cast<While>(stmt)->getBody());
+            strengthReduction(cast<While>(stmt)->getBody());
         } else if (isa<Advance>(stmt)) {
             Advance * adv = cast<Advance>(stmt);
             if (LLVM_UNLIKELY(isa<Advance>(adv->getOperand(0)))) {

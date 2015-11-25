@@ -361,40 +361,45 @@ void AutoMultiplexing::characterize(PabloBlock * const block) {
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
+ * @brief throwUnexpectedStatementTypeError
+ ** ------------------------------------------------------------------------------------------------------------- */
+static void throwUnexpectedStatementTypeError(const Statement * const stmt) {
+    std::string tmp;
+    raw_string_ostream err(tmp);
+    err << "Unexpected statement type ";
+    PabloPrinter::print(stmt, err);
+    throw std::runtime_error(err.str());
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
  * @brief characterize
  ** ------------------------------------------------------------------------------------------------------------- */
 inline BDD AutoMultiplexing::characterize(Statement * const stmt) {
-
-    // Map our operands to the computed BDDs
-    std::array<BDD, 3> input;
-    for (unsigned i = 0; i != stmt->getNumOperands(); ++i) {
-        PabloAST * const op = stmt->getOperand(i);
-        if (LLVM_UNLIKELY(isa<Integer>(op) || isa<String>(op))) {
-            continue;
-        }
-        input[i] = get(op);
-    }
-
-    BDD bdd = bdd_zero();
+    BDD bdd = get(stmt->getOperand(0));
     switch (stmt->getClassTypeId()) {
         case TypeId::Assign:
         case TypeId::Next:
-            bdd = input[0];
             break;
         case TypeId::And:
-            bdd = bdd_and(input[0], input[1]);
+            for (unsigned i = 1; i != stmt->getNumOperands(); ++i) {
+                bdd = bdd_and(bdd, get(stmt->getOperand(i)));
+            }
             break;
         case TypeId::Or:
-            bdd = bdd_or(input[0], input[1]);
+            for (unsigned i = 1; i != stmt->getNumOperands(); ++i) {
+                bdd = bdd_or(bdd, get(stmt->getOperand(i)));
+            }
             break;
         case TypeId::Xor:
-            bdd = bdd_xor(input[0], input[1]);
+            for (unsigned i = 1; i != stmt->getNumOperands(); ++i) {
+                bdd = bdd_xor(bdd, get(stmt->getOperand(i)));
+            }
             break;
         case TypeId::Not:
-            bdd = bdd_not(input[0]);
+            bdd = bdd_not(bdd);
             break;
         case TypeId::Sel:
-            bdd = bdd_ite(input[0], input[1], input[2]);
+            bdd = bdd_ite(bdd, get(stmt->getOperand(1)), get(stmt->getOperand(2)));
             break;
         case TypeId::ScanThru:
             // ScanThru(c, m) := (c + m) ∧ ¬m. We can conservatively represent this statement using the BDD for ¬m --- provided
@@ -403,9 +408,9 @@ inline BDD AutoMultiplexing::characterize(Statement * const stmt) {
         case TypeId::Call:
             return bdd_ithvar(mVariables++);
         case TypeId::Advance:
-            return characterize(cast<Advance>(stmt), input[0]);
+            return characterize(cast<Advance>(stmt), bdd);
         default:
-            throw std::runtime_error("Unexpected statement type " + stmt->getName()->to_string());
+            throwUnexpectedStatementTypeError(stmt);
     }
     return bdd_addref(bdd);
 }
@@ -416,7 +421,6 @@ inline BDD AutoMultiplexing::characterize(Statement * const stmt) {
 inline BDD AutoMultiplexing::characterize(Advance * const adv, const BDD Ik) {
 
     const auto k = mAdvanceAttributes.size();
-
     std::vector<bool> unconstrained(k , false);
 
     for (unsigned i = 0; i != k; ++i) {

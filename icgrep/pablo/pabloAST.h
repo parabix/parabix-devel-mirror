@@ -302,6 +302,8 @@ public:
 
     PabloAST * removeOperand(const unsigned index);
 
+    unsigned removeOperand(const PabloAST * const expr);
+
     iterator begin() {
         return iterator(mOperand);
     }
@@ -600,6 +602,19 @@ inline void PabloAST::removeUser(PabloAST * user) {
     auto pos = std::lower_bound(mUsers.begin(), mUsers.end(), user);
     assert ("Could not find user to remove!" && (pos != mUsers.end() && *pos == user));
     mUsers.erase(pos);
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief removeOperand
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline unsigned Variadic::removeOperand(const PabloAST * const expr) {
+    for (unsigned i = 0; i != getNumOperands(); ++i) {
+        if (getOperand(i) == expr) {
+            removeOperand(i);
+            return i;
+        }
+    }
+    return -1;
 }
 
 }

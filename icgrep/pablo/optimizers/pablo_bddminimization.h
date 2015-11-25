@@ -44,6 +44,7 @@ protected:
     void eliminateLogicallyEquivalentStatements(PabloBlock * const block, SubsitutionMap & parent);
     void eliminateLogicallyEquivalentStatements(Statement * const stmt, SubsitutionMap & map);
     std::pair<BDD, bool> characterize(Statement * const stmt);
+    BDD & get(const PabloAST * const expr);
 private:
     unsigned                        mVariables;
     CharacterizationMap             mCharacterizationMap;

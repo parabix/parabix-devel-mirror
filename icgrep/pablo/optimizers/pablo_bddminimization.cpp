@@ -144,65 +144,60 @@ void BDDMinimizationPass::eliminateLogicallyEquivalentStatements(PabloBlock * co
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
+ * @brief throwUnexpectedStatementTypeError
+ ** ------------------------------------------------------------------------------------------------------------- */
+static void throwUnexpectedStatementTypeError(const Statement * const stmt) {
+    std::string tmp;
+    raw_string_ostream err(tmp);
+    err << "Unexpected statement type ";
+    PabloPrinter::print(stmt, err);
+    throw std::runtime_error(err.str());
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
  * @brief characterize
  ** ------------------------------------------------------------------------------------------------------------- */
 inline std::pair<BDD, bool> BDDMinimizationPass::characterize(Statement * const stmt) {
-
-    BDD bdd = bdd_zero();
-    // Map our operands to the computed BDDs
-    std::array<BDD, 3> input;
-    for (unsigned i = 0; i != stmt->getNumOperands(); ++i) {
-        PabloAST * const op = stmt->getOperand(i);
-        if (op == nullptr) {
-            throw std::runtime_error("Statement has Null operand!");
-        }
-        if (LLVM_UNLIKELY(isa<Integer>(op) || isa<String>(op))) {
-            continue;
-        }
-        auto f = mCharacterizationMap.find(op);
-        if (LLVM_UNLIKELY(f == mCharacterizationMap.end())) {
-            std::string tmp;
-            llvm::raw_string_ostream msg(tmp);
-            msg << "BDDMinimizationPass: uncharacterized operand " << std::to_string(i) << " of ";
-            PabloPrinter::print(stmt, msg);
-            throw std::runtime_error(msg.str());
-        }
-        input[i] = f->second;
-    }
-
+    BDD bdd = get(stmt->getOperand(0));
     switch (stmt->getClassTypeId()) {
         case TypeId::Assign:
         case TypeId::Next:
-            return std::make_pair(input[0], false);
+            break;
         case TypeId::And:
-            bdd = bdd_and(input[0], input[1]);
+            for (unsigned i = 1; i != stmt->getNumOperands(); ++i) {
+                bdd = bdd_and(bdd, get(stmt->getOperand(i)));
+            }
             break;
         case TypeId::Or:
-            bdd = bdd_or(input[0], input[1]);
+            for (unsigned i = 1; i != stmt->getNumOperands(); ++i) {
+                bdd = bdd_or(bdd, get(stmt->getOperand(i)));
+            }
             break;
         case TypeId::Xor:
-            bdd = bdd_xor(input[0], input[1]);
+            for (unsigned i = 1; i != stmt->getNumOperands(); ++i) {
+                bdd = bdd_xor(bdd, get(stmt->getOperand(i)));
+            }
             break;
         case TypeId::Not:
-            bdd = bdd_not(input[0]);
+            bdd = bdd_not(bdd);
             break;
         case TypeId::Sel:
-            bdd = bdd_ite(input[0], input[1], input[2]);
+            bdd = bdd_ite(bdd, get(stmt->getOperand(1)), get(stmt->getOperand(2)));
             break;
         case TypeId::MatchStar:
         case TypeId::ScanThru:
-            if (LLVM_UNLIKELY(input[1] == bdd_zero())) {
-                bdd = input[0];
+            if (LLVM_UNLIKELY(get(stmt->getOperand(1)) == bdd_zero())) {
+                break;
             }
         case TypeId::Advance:
-            if (LLVM_UNLIKELY(input[0] == bdd_zero())) {
+            if (LLVM_UNLIKELY(bdd == bdd_zero())) {
                 return std::make_pair(bdd_zero(), true);
             }
         case TypeId::Call:
             // TODO: we may have more than one output. Need to fix call class to allow for it.
             return std::make_pair(bdd_ithvar(mVariables++), false);
         default:
-            throw std::runtime_error("Unexpected statement type " + stmt->getName()->to_string());
+            throwUnexpectedStatementTypeError(stmt);
     }
     bdd_addref(bdd);
     if (LLVM_UNLIKELY(bdd_satone(bdd) == bdd_zero())) {
@@ -210,6 +205,28 @@ inline std::pair<BDD, bool> BDDMinimizationPass::characterize(Statement * const 
         bdd = bdd_zero();
     }
     return std::make_pair(bdd, true);
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief throwUnexpectedStatementTypeError
+ ** ------------------------------------------------------------------------------------------------------------- */
+static void throwUncharacterizedOperand(const PabloAST * const expr) {
+    std::string tmp;
+    raw_string_ostream err(tmp);
+    err << "Uncharacterized operand ";
+    PabloPrinter::print(expr, err);
+    throw std::runtime_error(err.str());
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief get
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline BDD & BDDMinimizationPass::get(const PabloAST * const expr) {
+    auto f = mCharacterizationMap.find(expr);
+    if (LLVM_UNLIKELY(f == mCharacterizationMap.end())) {
+        throwUncharacterizedOperand(expr);
+    }
+    return f->second;
 }
 
 } // end of namespace pablo
