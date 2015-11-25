@@ -17,7 +17,6 @@
 #include <llvm/IR/CallingConv.h>
 #include <llvm/IR/Function.h>
 
-
 static cl::opt<CarryManagerStrategy> Strategy(cl::desc("Choose carry management strategy:"),
                                               cl::values(
                                                          clEnumVal(BitBlockStrategy, "Unpacked, each carry in a separate bitblock."),
@@ -351,6 +350,10 @@ Value * CarryManager::getCarryOpCarryIn(int localIndex) {
     }
 }
 
+#if (BLOCK_SIZE==256)
+#define LONGADD 1
+#endif
+
     
 void CarryManager::setCarryOpCarryOut(unsigned localIndex, Value * carry_out_strm) {
     unsigned posn = carryOpPosition(localIndex);
@@ -358,8 +361,12 @@ void CarryManager::setCarryOpCarryOut(unsigned localIndex, Value * carry_out_str
         extractAndSaveCarryOutBits(carry_out_strm, posn, 1);
     }
     else {
+#ifndef LONGADD
         Value * carry_bit = mBuilder->CreateLShr(mBuilder->CreateBitCast(carry_out_strm, mBuilder->getIntNTy(mBITBLOCK_WIDTH)), mBITBLOCK_WIDTH-1);
         mCarryOutPack[posn] = mBuilder->CreateBitCast(carry_bit, mBitBlockType);
+#else
+        mCarryOutPack[posn] = carry_out_strm;
+#endif
         if (mCarryInfo->getWhileDepth() == 0) {
             storeCarryPack(posn);
         }
@@ -382,6 +389,7 @@ Value * CarryManager::addCarryInCarryOut(int localIndex, Value* e1, Value* e2) {
         return sum;
     }
     else {
+#ifndef LONGADD
         Value * carryq_value = getCarryOpCarryIn(localIndex);
         Value* carrygen = iBuilder->simd_and(e1, e2);
         Value* carryprop = iBuilder->simd_or(e1, e2);
@@ -389,6 +397,24 @@ Value * CarryManager::addCarryInCarryOut(int localIndex, Value* e1, Value* e2) {
         Value* carry_out_strm = iBuilder->simd_or(carrygen, iBuilder->simd_and(carryprop, mBuilder->CreateNot(sum)));
         setCarryOpCarryOut(localIndex, carry_out_strm);
         return sum;
+#else
+        Value * carryq_value = getCarryOpCarryIn(localIndex);
+        Value * carryin = iBuilder->mvmd_extract(32, carryq_value, 0);
+        Value * carrygen = iBuilder->simd_and(e1, e2);
+        Value * carryprop = iBuilder->simd_or(e1, e2);
+        Value * digitsum = iBuilder->simd_add(64, e1, e2);
+        Value * digitcarry = iBuilder->simd_or(carrygen, iBuilder->simd_and(carryprop, mBuilder->CreateNot(digitsum)));
+        Value * carryMask = iBuilder->hsimd_signmask(64, digitcarry);
+        Value * carryMask2 = mBuilder->CreateOr(mBuilder->CreateAdd(carryMask, carryMask), carryin);
+        Value * bubble = iBuilder->simd_eq(64, digitsum, iBuilder->allOnes());
+        Value * bubbleMask = iBuilder->hsimd_signmask(64, bubble);
+        Value * incrementMask = mBuilder->CreateXor(mBuilder->CreateAdd(bubbleMask, carryMask2), bubbleMask);
+        Value * increments = iBuilder->esimd_bitspread(64,incrementMask);
+        Value * sum = iBuilder->simd_add(64, digitsum, increments);
+        Value * carry_out_strm = iBuilder->mvmd_insert(32, iBuilder->allZeroes(), mBuilder->CreateLShr(incrementMask, iBuilder->getBitBlockWidth()/64), 0);
+        setCarryOpCarryOut(localIndex, carry_out_strm);
+        return sum;
+#endif
     }
 }
 

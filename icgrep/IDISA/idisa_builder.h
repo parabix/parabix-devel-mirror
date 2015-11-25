@@ -38,6 +38,7 @@ public:
     Type * getBitBlockType() { return mBitBlockType;}
     Value * bitCast(Value * a) {return a->getType() == mBitBlockType ? a : mLLVMBuilder->CreateBitCast(a, mBitBlockType);}
     int getBitBlockWidth() { return mBitBlockWidth;}
+    Module * getModule() {return mMod;}
     void genPrintRegister(std::string regName, Value * bitblockValue);
     
     
@@ -74,6 +75,7 @@ public:
 
     
     Value * mvmd_extract(unsigned fw, Value * a, unsigned fieldIndex);
+    Value * mvmd_insert(unsigned fw, Value * blk, Value * elt, unsigned fieldIndex);
     Value * mvmd_dslli(unsigned fw, Value * a, Value * b, unsigned shift);
     
     Value * bitblock_any(Value * a);
