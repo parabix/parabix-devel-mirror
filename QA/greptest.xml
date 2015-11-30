@@ -559,7 +559,8 @@ A plain line.
 <grepcase regexp="(?g)^ক{1,27}$" datafile="codepoints" grepcount="6"/>  
 <grepcase regexp="(^ক{1,2}$)|(^ক{4,6}$)" datafile="codepoints" grepcount="1"/> 
 <grepcase regexp="(?g)(^ক{1,2}$)|(^ক{4,6}$)" datafile="codepoints" grepcount="6"/> 
-
+<datafile id = "EmptyFile"/>
+<grepcase regexp="ab" datafile="EmptyFile" grepcount="0"/> 
 <datafile id = "LineBreaking">CRLF1&#13;&#10;CRLF2&#13;&#10;CRLF3&#13;&#10;
 LS1&#x2028;LS2&#x2028;LS3&#x2028;PS1&#x2029;PS2&#x2029;PS3&#x2029;
 PS4&#x2029;CRLF4&#13;&#10;LS4&#x2028;LS5&#x2028;CRLF5&#13;&#10;LS6&#x2028;
