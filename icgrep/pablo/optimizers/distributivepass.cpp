@@ -7,6 +7,9 @@
 #include <boost/container/flat_map.hpp>
 #include <boost/graph/adjacency_list.hpp>
 
+#include <pablo/printer_pablos.h>
+#include <iostream>
+
 using namespace boost;
 using namespace boost::container;
 
@@ -330,7 +333,6 @@ inline bool DistributivePass::distribute(PabloBlock * const block) {
         Variadic * outerOp = nullptr;
 
         block->setInsertPoint(cast<Variadic>(G[sinks.front()])->getPrevNode());
-
         if (isa<And>(G[sinks.front()])) {
             outerOp = block->createAnd(intermediary.size(), PabloBlock::createOnes());
             innerOp = block->createOr(sources.size() + 1, outerOp);
@@ -342,7 +344,7 @@ inline bool DistributivePass::distribute(PabloBlock * const block) {
         unsigned i = 0;
         for (const Vertex u : intermediary) {
             for (const Vertex v : sinks) {
-                cast<Variadic>(G[v])->removeOperand(cast<Variadic>(G[u]));
+                cast<Variadic>(G[v])->deleteOperand(G[u]);
             }
             outerOp->setOperand(i++, cast<Variadic>(G[u]));
         }
@@ -350,7 +352,7 @@ inline bool DistributivePass::distribute(PabloBlock * const block) {
         i = 0;
         for (const Vertex u : sources) {
             for (const Vertex v : intermediary) {
-                cast<Variadic>(G[v])->removeOperand(G[u]);
+                cast<Variadic>(G[v])->deleteOperand(G[u]);
             }
             innerOp->setOperand(i++, G[u]);
         }

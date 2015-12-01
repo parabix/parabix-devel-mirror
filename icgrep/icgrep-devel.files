@@ -487,3 +487,5 @@ pablo/passes/flattenassociativedfg.h
 pablo/passes/flattenassociativedfg.cpp
 pablo/optimizers/distributivepass.h
 pablo/optimizers/distributivepass.cpp
+pablo/passes/factorizedfg.h
+pablo/passes/factorizedfg.cpp

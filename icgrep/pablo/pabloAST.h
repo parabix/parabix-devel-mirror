@@ -9,11 +9,12 @@
 
 #include <llvm/Support/Casting.h>
 #include <llvm/Support/Compiler.h>
-#include <vector>
-#include <slab_allocator.h>
-#include <iterator>
-#include <unordered_map>
 #include <boost/iterator/iterator_facade.hpp>
+#include <iterator>
+#include <slab_allocator.h>
+#include <type_traits>
+#include <unordered_map>
+#include <vector>
 
 using namespace llvm;
 
@@ -232,7 +233,7 @@ protected:
             value->addUser(this);
             ++i;
         }
-    }  
+    }
     Statement(const ClassTypeId id, unsigned operands, PabloAST * value, const String * const name)
     : PabloAST(id)
     , mName(name)
@@ -245,6 +246,22 @@ protected:
             assert (value);
             mOperand[i] = value;
             value->addUser(this);
+        }
+    }
+    template<typename iterator>
+    explicit Statement(const ClassTypeId id, iterator begin, iterator end, const String * const name)
+    : PabloAST(id)
+    , mName(name)
+    , mNext(nullptr)
+    , mPrev(nullptr)
+    , mParent(nullptr)
+    , mOperands(std::distance(begin, end))
+    , mOperand(reinterpret_cast<PabloAST**>(mAllocator.allocate(mOperands * sizeof(PabloAST *)))) {
+        unsigned i = 0;
+        for (auto value = begin; value != end; ++value, ++i) {
+            assert (*value);
+            mOperand[i] = *value;
+            (*value)->addUser(this);
         }
     }
 private:
@@ -302,7 +319,7 @@ public:
 
     PabloAST * removeOperand(const unsigned index);
 
-    unsigned removeOperand(const PabloAST * const expr);
+    bool deleteOperand(const PabloAST * const expr);
 
     iterator begin() {
         return iterator(mOperand);
@@ -329,6 +346,12 @@ protected:
     Variadic(const ClassTypeId id, const unsigned operands, PabloAST * value, String * name)
     : Statement(id, operands, value, name)
     , mCapacity(operands) {
+
+    }
+    template<typename iterator>
+    explicit Variadic(const ClassTypeId id, iterator begin, iterator end, String * name)
+    : Statement(id, begin, end, name)
+    , mCapacity(std::distance(begin, end)) {
 
     }
 private:
@@ -607,14 +630,14 @@ inline void PabloAST::removeUser(PabloAST * user) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief removeOperand
  ** ------------------------------------------------------------------------------------------------------------- */
-inline unsigned Variadic::removeOperand(const PabloAST * const expr) {
+inline bool Variadic::deleteOperand(const PabloAST * const expr) {
     for (unsigned i = 0; i != getNumOperands(); ++i) {
         if (getOperand(i) == expr) {
             removeOperand(i);
-            return i;
+            return true;
         }
     }
-    return -1;
+    return false;
 }
 
 }

@@ -178,6 +178,18 @@ void verifyProgramStructure(const PabloBlock * block) {
                 str << " is not nested within the expected scope block";
                 throw std::runtime_error(str.str());
             }
+            if (isa<If>(stmt)) {
+                for (const Assign * def : cast<If>(stmt)->getDefined()) {
+                    if (LLVM_UNLIKELY(def == cast<If>(stmt)->getCondition())) {
+                        std::string tmp;
+                        raw_string_ostream str(tmp);
+                        str << "PabloVerifier: structure error: the condition of ";
+                        PabloPrinter::print(cast<PabloAST>(stmt), str);
+                        str << " cannot be defined by the If node itself.";
+                        throw std::runtime_error(str.str());
+                    }
+                }
+            }
             const Statement * badEscapedValue = nullptr;
             if (isa<If>(stmt)) {
                 for (const Assign * def : cast<If>(stmt)->getDefined()) {

@@ -32,6 +32,11 @@ protected:
     {
 
     }
+    template<typename iterator>
+    Xor(iterator begin, iterator end, String * name)
+    : Variadic(ClassTypeId::Xor, begin, end, name) {
+
+    }
 };
 
 }

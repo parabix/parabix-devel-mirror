@@ -19,7 +19,7 @@ using namespace boost;
 using namespace boost::container;
 using namespace boost::numeric::ublas;
 
-#define PRINT_DEBUG_OUTPUT
+// #define PRINT_DEBUG_OUTPUT
 
 #if !defined(NDEBUG) && !defined(PRINT_DEBUG_OUTPUT)
 #define PRINT_DEBUG_OUTPUT
@@ -158,7 +158,6 @@ bool AutoMultiplexing::optimize(PabloFunction & function, const unsigned limit, 
         LOG("SelectedIndependentSets: " << (end_select_independent_sets - start_select_independent_sets));
 
         AutoMultiplexing::topologicalSort(function);
-
         #ifndef NDEBUG
         PabloVerifier::verify(function, "post-multiplexing");
         #endif
@@ -466,19 +465,18 @@ inline BDD AutoMultiplexing::characterize(Advance * const adv, const BDD Ik) {
         }
     }
 
-    const BDD Vk = bdd_ithvar(mVariables++);
-
-    BDD Ck = Vk;
-
+    const BDD Vk = bdd_addref(bdd_not(bdd_ithvar(mVariables++)));
+    BDD Ck = bdd_one();
     for (unsigned i = 0; i != k; ++i) {
         const Advance * const ithAdv = std::get<0>(mAdvanceAttributes[i]);
         BDD & Ci = get(ithAdv);
         const BDD Vi = std::get<1>(mAdvanceAttributes[i]);
         if (unconstrained[i]) {
-            Ck = bdd_addref(bdd_imp(Ck, bdd_addref(bdd_not(Vi))));
-            Ci = bdd_addref(bdd_imp(Ci, bdd_addref(bdd_not(Vk))));
-            // If these Advances are mutually exclusive, in the same scope, and transitively independent,
-            // we safely multiplex them.
+            const BDD exclusionConstraint = bdd_addref(bdd_or(Vi, Vk));
+            Ci = bdd_addref(bdd_and(Ci, exclusionConstraint));
+            Ck = bdd_addref(bdd_and(Ck, exclusionConstraint));
+            // If these Advances are mutually exclusive, in the same scope and transitively independent,
+            // we can safely multiplex them. Otherwise mark the constraint edge in the graph.
             if (adv->getParent() == ithAdv->getParent()) {
                 continue;
             }

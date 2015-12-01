@@ -9,7 +9,6 @@
 #else
 #include <unordered_set>
 #endif
-#include <iostream>
 
 namespace pablo {
 
@@ -26,10 +25,16 @@ using SmallSet = std::unordered_set<Type>;
  ** ------------------------------------------------------------------------------------------------------------- */
 bool Simplifier::optimize(PabloFunction & function) {
     eliminateRedundantCode(function.getEntryBlock());
+    #ifndef NDEBUG
+    PabloVerifier::verify(function, "post-eliminate-redundant-code");
+    #endif
     deadCodeElimination(function.getEntryBlock());
+    #ifndef NDEBUG
+    PabloVerifier::verify(function, "post-dead-code-elimination");
+    #endif
     strengthReduction(function.getEntryBlock());
     #ifndef NDEBUG
-    PabloVerifier::verify(function, "post-simplification");
+    PabloVerifier::verify(function, "post-strength-reduction");
     #endif
     return true;
 }
@@ -58,7 +63,7 @@ PabloAST * Simplifier::foldReassociativeFunction(Variadic * const var, PabloBloc
     if (LLVM_UNLIKELY(isa<Xor>(var))) {
         for (unsigned i = 0; i != var->getNumOperands(); ++i) {
             if (isa<Not>(var->getOperand(i))) {
-                // (A ⊕ ¬B) = ¬(A ⊕ B)
+                // (A ⊕ ¬B) = (A ⊕ (B ⊕ 1)) = ¬(A ⊕ B)
                 var->setOperand(i, cast<Not>(var->getOperand(i))->getOperand(0));
                 negated = !negated;
             }
@@ -89,7 +94,7 @@ PabloAST * Simplifier::foldReassociativeFunction(Variadic * const var, PabloBloc
             if (isa<Not>(var->getOperand(i))) {
                 const PabloAST * const negatedOp = cast<Not>(var->getOperand(i))->getOperand(0);
                 for (unsigned j = 0; j != var->getNumOperands(); ++j) {
-                    if (LLVM_UNLIKELY(var->getOperand(j) == negatedOp)) {
+                    if (LLVM_UNLIKELY(equals(var->getOperand(j), negatedOp))) {
                         if (isa<And>(var)) { // (A ∧ ¬A) ∧ B = 0 for any B
                             return PabloBlock::createZeroes();
                         } else if (isa<Or>(var)) { // (A ∨ ¬A) ∨ B = 1 for any B
@@ -193,22 +198,7 @@ inline static PabloAST * canTriviallyFold(Statement * stmt, PabloBlock * block) 
  ** ------------------------------------------------------------------------------------------------------------- */
 inline bool Simplifier::isSuperfluous(const Assign * const assign) {
     for (const PabloAST * inst : assign->users()) {
-        if (isa<Next>(inst) || isa<PabloFunction>(inst)) {
-            return false;
-        } else if (isa<If>(inst)) {
-            const If * ifNode = cast<If>(inst);
-            if (ifNode->getCondition() == assign) {
-                bool notFound = true;
-                for (Assign * defVar : ifNode->getDefined()) {
-                    if (defVar == assign) {
-                        notFound = false;
-                        break;
-                    }
-                }
-                if (notFound) {
-                    continue;
-                }
-            }
+        if (isa<Next>(inst) || isa<PabloFunction>(inst) || (isa<If>(inst) && (cast<If>(inst)->getCondition() != assign))) {
             return false;
         }
     }

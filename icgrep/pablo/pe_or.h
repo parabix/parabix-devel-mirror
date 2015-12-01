@@ -32,6 +32,11 @@ protected:
     {
 
     }
+    template<typename iterator>
+    Or(iterator begin, iterator end, String * name)
+    : Variadic(ClassTypeId::Or, begin, end, name) {
+
+    }
 };
 
 }

@@ -32,6 +32,11 @@ protected:
     {
 
     }
+    template<typename iterator>
+    And(iterator begin, iterator end, String * name)
+    : Variadic(ClassTypeId::And, begin, end, name) {
+
+    }
 };
 
 }

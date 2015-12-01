@@ -104,9 +104,13 @@ public:
 
     PabloAST * createAnd(PabloAST * expr1, PabloAST * expr2);
 
+    PabloAST * createAnd(PabloAST * expr1, PabloAST * expr2, const std::string prefix);
+
     And * createAnd(const unsigned operands, PabloAST * value);
 
-    PabloAST * createAnd(PabloAST * expr1, PabloAST * expr2, const std::string prefix);
+    And * createAnd(std::vector<PabloAST *>::iterator begin, std::vector<PabloAST *>::iterator end) {
+        return insertAtInsertionPoint(new And(begin, end, makeName("and_")));
+    }
 
     PabloAST * createNot(PabloAST * expr);
 
@@ -114,13 +118,21 @@ public:
 
     PabloAST * createOr(PabloAST * expr1, PabloAST * expr2);
 
-    Or * createOr(const unsigned operands, PabloAST * value);
-
     PabloAST * createOr(PabloAST * expr1, PabloAST * expr2, const std::string prefix);
+
+    Or * createOr(std::vector<PabloAST *>::iterator begin, std::vector<PabloAST *>::iterator end) {
+        return insertAtInsertionPoint(new Or(begin, end, makeName("or_")));
+    }
+
+    Or * createOr(const unsigned operands, PabloAST * value);
 
     PabloAST * createXor(PabloAST * expr1, PabloAST * expr2);
 
     PabloAST * createXor(PabloAST * expr1, PabloAST * expr2, const std::string prefix);
+
+    Xor * createXor(std::vector<PabloAST *>::iterator begin, std::vector<PabloAST *>::iterator end) {
+        return insertAtInsertionPoint(new Xor(begin, end, makeName("xor_")));
+    }
 
     PabloAST * createMatchStar(PabloAST * marker, PabloAST * charclass);
 
