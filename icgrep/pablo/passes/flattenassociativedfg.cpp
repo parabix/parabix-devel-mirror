@@ -41,12 +41,12 @@ inline void FlattenAssociativeDFG::coalesce(Variadic * const var) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief coalesce
  ** ------------------------------------------------------------------------------------------------------------- */
-void FlattenAssociativeDFG::coalesce(PabloBlock * const block) {
+void FlattenAssociativeDFG::coalesce(PabloBlock * const block, const bool traverse) {
     Statement * stmt = block->front();
     while (stmt) {
         Statement * next = stmt->getNextNode();
-        if (isa<If>(stmt) || isa<While>(stmt)) {
-            coalesce(isa<If>(stmt) ? cast<If>(stmt)->getBody() : cast<While>(stmt)->getBody());
+        if (traverse && (isa<If>(stmt) || isa<While>(stmt))) {
+            coalesce(isa<If>(stmt) ? cast<If>(stmt)->getBody() : cast<While>(stmt)->getBody(), true);
         } else if (isa<And>(stmt) || isa<Or>(stmt) || isa<Xor>(stmt)) {
             coalesce(cast<Variadic>(stmt));
         } else if (isa<Not>(stmt)) {
@@ -132,7 +132,7 @@ inline void FlattenAssociativeDFG::deMorgansReduction(PabloBlock * const block) 
  ** ------------------------------------------------------------------------------------------------------------- */
 void FlattenAssociativeDFG::transform(PabloFunction & function) {
 
-    FlattenAssociativeDFG::coalesce(function.getEntryBlock());
+    FlattenAssociativeDFG::coalesce(function.getEntryBlock(), true);
     #ifndef NDEBUG
     PabloVerifier::verify(function, "post-coalescence");
     #endif

@@ -3,6 +3,7 @@
 #include <pablo/codegenstate.h>
 #include <pablo/analysis/pabloverifier.hpp>
 #include <pablo/optimizers/pablo_simplifier.hpp>
+#include <pablo/passes/flattenassociativedfg.h>
 #include <boost/container/flat_set.hpp>
 #include <boost/container/flat_map.hpp>
 #include <boost/graph/adjacency_list.hpp>
@@ -299,93 +300,98 @@ static DistributionSets safeDistributionSets(Graph & G, const VertexSet & distSe
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
+ * @brief process
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline void DistributivePass::process(PabloBlock * const block) {
+
+    for (;;) {
+
+        FlattenAssociativeDFG::coalesce(block, false);
+
+        Graph G;
+
+        const VertexSet distSet = generateDistributionGraph(block, G);
+
+        // If we found no potential opportunities then we cannot apply the distribution law to any part of G.
+        if (LLVM_UNLIKELY(distSet.empty())) {
+            break;
+        }
+
+        const DistributionSets distributionSets = safeDistributionSets(G, distSet);
+
+        if (LLVM_UNLIKELY(distributionSets.empty())) {
+            break;
+        }
+
+        for (const DistributionSet & set : distributionSets) {
+
+            // Each distribution tuple consists of the sources, intermediary, and sink nodes.
+            const VertexSet & sources = std::get<0>(set);
+            const VertexSet & intermediary = std::get<1>(set);
+            const VertexSet & sinks = std::get<2>(set);
+
+            // Find the first sink and set the insert point immediately before that.
+            Variadic * innerOp = nullptr;
+            Variadic * outerOp = nullptr;
+
+            block->setInsertPoint(cast<Variadic>(G[sinks.front()])->getPrevNode());
+            if (isa<And>(G[sinks.front()])) {
+                outerOp = block->createAnd(intermediary.size());
+                innerOp = block->createOr(sources.size() + 1);
+            } else {
+                outerOp = block->createOr(intermediary.size());
+                innerOp = block->createAnd(sources.size() + 1);
+            }
+
+            for (const Vertex u : intermediary) {
+                for (const Vertex v : sinks) {
+                    cast<Variadic>(G[v])->deleteOperand(G[u]);
+                }
+                outerOp->addOperand(G[u]);
+            }
+
+            for (const Vertex u : sources) {
+                for (const Vertex v : intermediary) {
+                    cast<Variadic>(G[v])->deleteOperand(G[u]);
+                }
+                innerOp->addOperand(G[u]);
+            }
+            innerOp->addOperand(outerOp);
+
+            for (const Vertex u : sinks) {
+                cast<Variadic>(G[u])->addOperand(innerOp);
+            }
+        }
+
+    }
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
  * @brief distribute
  ** ------------------------------------------------------------------------------------------------------------- */
-inline bool DistributivePass::distribute(PabloBlock * const block) {
-
-    Graph G;
-
-    const VertexSet distSet = generateDistributionGraph(block, G);
-
-    // If we found no potential opportunities then we cannot apply the distribution law to any part of G.
-    if (LLVM_UNLIKELY(distSet.empty())) {
-        return false;
-    }
-
-    const DistributionSets distributionSets = safeDistributionSets(G, distSet);
-
-    if (LLVM_UNLIKELY(distributionSets.empty())) {
-        return false;
-    }
-
-    for (const DistributionSet & set : distributionSets) {
-
-        // Each distribution tuple consists of the sources, intermediary, and sink nodes.
-        const VertexSet & sources = std::get<0>(set);
-        const VertexSet & intermediary = std::get<1>(set);
-        const VertexSet & sinks = std::get<2>(set);
-
-        // Find the first sink and set the insert point immediately before that.
-        Variadic * innerOp = nullptr;
-        Variadic * outerOp = nullptr;
-
-        block->setInsertPoint(cast<Variadic>(G[sinks.front()])->getPrevNode());
-        if (isa<And>(G[sinks.front()])) {
-            outerOp = block->createAnd(intermediary.size());
-            innerOp = block->createOr(sources.size() + 1);
-        } else {
-            outerOp = block->createOr(intermediary.size());
-            innerOp = block->createAnd(sources.size() + 1);
-        }
-
-        for (const Vertex u : intermediary) {
-            for (const Vertex v : sinks) {
-                cast<Variadic>(G[v])->deleteOperand(G[u]);
-            }
-            outerOp->addOperand(G[u]);
-        }
-
-        for (const Vertex u : sources) {
-            for (const Vertex v : intermediary) {
-                cast<Variadic>(G[v])->deleteOperand(G[u]);
-            }
-            innerOp->addOperand(G[u]);
-        }
-        innerOp->addOperand(outerOp);
-
-        for (const Vertex u : sinks) {
-            cast<Variadic>(G[u])->addOperand(innerOp);
-        }
-    }
-
-    return true;
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief process
- ** ------------------------------------------------------------------------------------------------------------- */
-bool DistributivePass::process(PabloBlock * const block) {
-    bool modified = false;
+void DistributivePass::distribute(PabloBlock * const block) {
     for (Statement * stmt : *block) {
         if (isa<If>(stmt) || isa<While>(stmt)) {
-            modified |= process(isa<If>(stmt) ? cast<If>(stmt)->getBody() : cast<While>(stmt)->getBody());
+            distribute(isa<If>(stmt) ? cast<If>(stmt)->getBody() : cast<While>(stmt)->getBody());
         }
     }
-    modified |= distribute(block);
-    return modified;
+    process(block);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief process
+ * @brief optimize
  ** ------------------------------------------------------------------------------------------------------------- */
-bool DistributivePass::optimize(PabloFunction & function) {
-    const bool modified = DistributivePass::process(function.getEntryBlock());
+void DistributivePass::optimize(PabloFunction & function) {
+    DistributivePass::distribute(function.getEntryBlock());
     #ifndef NDEBUG
     PabloVerifier::verify(function, "post-distribution");
     #endif
-
     Simplifier::optimize(function);
-    return modified;
+    FlattenAssociativeDFG::deMorgansReduction(function.getEntryBlock());
+    #ifndef NDEBUG
+    PabloVerifier::verify(function, "post-demorgans-reduction");
+    #endif
+    Simplifier::optimize(function);
 }
 
 

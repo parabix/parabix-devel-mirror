@@ -15,7 +15,7 @@ class FlattenAssociativeDFG {
 public:
     static void transform(PabloFunction & function);
 protected:
-    static void coalesce(PabloBlock * const block);
+    static void coalesce(PabloBlock * const block, const bool traverse);
     static void coalesce(Variadic * const var);
     static void deMorgansExpansion(Not * const var, PabloBlock * const block);
     static void deMorgansReduction(PabloBlock * const block);
