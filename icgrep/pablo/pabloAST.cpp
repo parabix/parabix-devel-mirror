@@ -28,41 +28,36 @@ bool equals(const PabloAST * expr1, const PabloAST * expr2) {
     } else if (expr1->getClassTypeId() == expr2->getClassTypeId()) {
         if ((isa<Zeroes>(expr1)) || (isa<Ones>(expr1))) {
             return true;
-        } else if (const Var * var1 = dyn_cast<const Var>(expr1)) {
-            if (const Var * var2 = cast<const Var>(expr2)) {
-                return (var1->getName() == var2->getName());
-            }
-        } else if (const Not* not1 = dyn_cast<const Not>(expr1)) {
-            if (const Not* not2 = cast<const Not>(expr2)) {
-                return equals(not1->getExpr(), not2->getExpr());
-            }
-        } else if (const And* and1 = dyn_cast<const And>(expr1)) {
-            if (const And* and2 = cast<const And>(expr2)) {
-                if (equals(and1->getOperand(0), and2->getOperand(0))) {
-                    return equals(and1->getOperand(1), and2->getOperand(1));
-                } else if (equals(and1->getOperand(0), and2->getOperand(1))) {
-                    return equals(and1->getOperand(1), and2->getOperand(0));
+        } else if (isa<Var>(expr1)) {
+            return (cast<Var>(expr1)->getName() == cast<Var>(expr2)->getName());
+        } else if (isa<Not>(expr1)) {
+            return equals(cast<Not>(expr1)->getOperand(0), cast<Not>(expr2)->getOperand(0));
+        } else if (isa<Variadic>(expr1)) {
+            const Variadic * const var1 = cast<Variadic>(expr1);
+            const Variadic * const var2 = cast<Variadic>(expr2);
+            if (var1->getNumOperands() == var2->getNumOperands()) {
+                const unsigned operands = var1->getNumOperands();
+                for (unsigned i = 0; i != operands; ++i) {
+                    bool missing = true;
+                    for (unsigned j = 0; j != operands; ++j) {
+                        // odds are both variadics will be sorted; optimize towards testing them in order.
+                        unsigned k = i + j;
+                        if (LLVM_UNLIKELY(k >= operands)) {
+                            k -= operands;
+                        }
+                        if (equals(var1->getOperand(i), var2->getOperand(k))) {
+                            missing = false;
+                            break;
+                        }
+                    }
+                    if (missing) {
+                        return false;
+                    }
                 }
-            }
-        } else if (const Or * or1 = dyn_cast<const Or>(expr1)) {
-            if (const Or* or2 = cast<const Or>(expr2)) {
-                if (equals(or1->getOperand(0), or2->getOperand(0))) {
-                    return equals(or1->getOperand(1), or2->getOperand(1));
-                } else if (equals(or1->getOperand(0), or2->getOperand(1))) {
-                    return equals(or1->getOperand(1), or2->getOperand(0));
-                }
-            }
-        } else if (const Xor * xor1 = dyn_cast<const Xor>(expr1)) {
-            if (const Xor * xor2 = cast<const Xor>(expr2)) {
-                if (equals(xor1->getOperand(0), xor2->getOperand(0))) {
-                    return equals(xor1->getOperand(1), xor2->getOperand(1));
-                } else if (equals(xor1->getOperand(0), xor2->getOperand(1))) {
-                    return equals(xor1->getOperand(1), xor2->getOperand(0));
-                }
+                return true;
             }
         } else if (isa<Integer>(expr1) || isa<String>(expr1) || isa<Call>(expr1)) {
-            // If these weren't equivalent by address they won't be equivalent by their operands.
-            return false;
+            return false; // If these weren't equivalent by address they won't be equivalent by their operands.
         } else { // Non-reassociatable functions (i.e., Sel, Advance, ScanThru, MatchStar, Assign, Next)
             const Statement * stmt1 = cast<Statement>(expr1);
             const Statement * stmt2 = cast<Statement>(expr2);

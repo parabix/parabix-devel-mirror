@@ -53,9 +53,9 @@ inline bool isReassociative(const Statement * const stmt) {
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief foldReassociativeFunction
+ * @brief fold
  ** ------------------------------------------------------------------------------------------------------------- */
-PabloAST * Simplifier::foldReassociativeFunction(Variadic * const var, PabloBlock * const block) {
+inline PabloAST * Simplifier::fold(Variadic * const var, PabloBlock * const block) {
 
     assert (var);
 
@@ -79,9 +79,6 @@ PabloAST * Simplifier::foldReassociativeFunction(Variadic * const var, PabloBloc
             var->removeOperand(i);
             if (LLVM_UNLIKELY(isa<Xor>(var))) {
                 var->removeOperand(i - 1);
-                if (LLVM_UNLIKELY(var->getNumOperands() == 0)) {
-                    return PabloBlock::createZeroes();
-                }
             }
             continue;
         }
@@ -132,65 +129,65 @@ PabloAST * Simplifier::foldReassociativeFunction(Variadic * const var, PabloBloc
     }
     if (LLVM_UNLIKELY(negated)) {
         block->setInsertPoint(var);
-        if (replacement) {
-            replacement = block->createNot(replacement);
-        } else {
-            var->replaceAllUsesWith(block->createNot(var));
-        }
+        replacement = block->createNot(replacement ? replacement : var);
     }
     return replacement;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief canTriviallyFold
+ * @brief fold
  ** ------------------------------------------------------------------------------------------------------------- */
-inline static PabloAST * canTriviallyFold(Statement * stmt, PabloBlock * block) {
-    for (unsigned i = 0; i != stmt->getNumOperands(); ++i) {
-        if (LLVM_UNLIKELY(isa<Zeroes>(stmt->getOperand(i)))) {
-            switch (stmt->getClassTypeId()) {
-                case PabloAST::ClassTypeId::Advance:
-                    return block->createZeroes();
-                case PabloAST::ClassTypeId::Not:
-                    return block->createOnes();
-                case PabloAST::ClassTypeId::Sel:
-                    block->setInsertPoint(stmt->getPrevNode());
-                    switch (i) {
-                        case 0: return stmt->getOperand(2);
-                        case 1: return block->createAnd(block->createNot(stmt->getOperand(0)), stmt->getOperand(2));
-                        case 2: return block->createAnd(stmt->getOperand(0), stmt->getOperand(1));
-                    }
-                case PabloAST::ClassTypeId::ScanThru:
-                case PabloAST::ClassTypeId::MatchStar:
-                    return stmt->getOperand(0);
-                default: break;
-            }
-        } else if (LLVM_UNLIKELY(isa<Ones>(stmt->getOperand(i)))) {
-            block->setInsertPoint(stmt->getPrevNode());
-            switch (stmt->getClassTypeId()) {
-                case PabloAST::ClassTypeId::Not:
-                    return block->createZeroes();
-                case PabloAST::ClassTypeId::Sel:
-                    block->setInsertPoint(stmt->getPrevNode());
-                    switch (i) {
-                        case 0: return stmt->getOperand(1);
-                        case 1: return block->createOr(stmt->getOperand(0), stmt->getOperand(2));
-                        case 2: return block->createOr(block->createNot(stmt->getOperand(0)), stmt->getOperand(1));
-                    }
-                case PabloAST::ClassTypeId::ScanThru:
-                    if (i == 1) {
+inline PabloAST * Simplifier::fold(Statement * stmt, PabloBlock * block) {
+    if (isReassociative(stmt)) {
+        return fold(cast<Variadic>(stmt), block);
+    } else {
+        for (unsigned i = 0; i != stmt->getNumOperands(); ++i) {
+            if (LLVM_UNLIKELY(isa<Zeroes>(stmt->getOperand(i)))) {
+                switch (stmt->getClassTypeId()) {
+                    case PabloAST::ClassTypeId::Advance:
                         return block->createZeroes();
-                    }
-                    break;
-                case PabloAST::ClassTypeId::MatchStar:
-                    if (i == 0) {
+                    case PabloAST::ClassTypeId::Not:
                         return block->createOnes();
-                    }
-                    break;
-                default: break;
+                    case PabloAST::ClassTypeId::Sel:
+                        block->setInsertPoint(stmt->getPrevNode());
+                        switch (i) {
+                            case 0: return stmt->getOperand(2);
+                            case 1: return block->createAnd(block->createNot(stmt->getOperand(0)), stmt->getOperand(2));
+                            case 2: return block->createAnd(stmt->getOperand(0), stmt->getOperand(1));
+                        }
+                    case PabloAST::ClassTypeId::ScanThru:
+                    case PabloAST::ClassTypeId::MatchStar:
+                        return stmt->getOperand(0);
+                    default: break;
+                }
+            } else if (LLVM_UNLIKELY(isa<Ones>(stmt->getOperand(i)))) {
+                block->setInsertPoint(stmt->getPrevNode());
+                switch (stmt->getClassTypeId()) {
+                    case PabloAST::ClassTypeId::Not:
+                        return block->createZeroes();
+                    case PabloAST::ClassTypeId::Sel:
+                        block->setInsertPoint(stmt->getPrevNode());
+                        switch (i) {
+                            case 0: return stmt->getOperand(1);
+                            case 1: return block->createOr(stmt->getOperand(0), stmt->getOperand(2));
+                            case 2: return block->createOr(block->createNot(stmt->getOperand(0)), stmt->getOperand(1));
+                        }
+                    case PabloAST::ClassTypeId::ScanThru:
+                        if (i == 1) {
+                            return block->createZeroes();
+                        }
+                        break;
+                    case PabloAST::ClassTypeId::MatchStar:
+                        if (i == 0) {
+                            return block->createOnes();
+                        }
+                        break;
+                    default: break;
+                }
             }
         }
+        return nullptr;
     }
-    return nullptr;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -382,17 +379,11 @@ void Simplifier::eliminateRedundantCode(PabloBlock * const block, ExpressionTabl
             // If the condition's Next state is Zero, we can eliminate the loop after copying the internal
             // statements into the body.
         } else {
-            PabloAST * folded = nullptr;
-            if (isReassociative(stmt)) {
-                folded =  foldReassociativeFunction(cast<Variadic>(stmt), block);
-            } else {
-                folded = canTriviallyFold(stmt, block);
-            }
-            if (folded) {
+            if (PabloAST * folded = fold(stmt, block)) {
                 // If we determine we can fold this statement,
                 Statement * const prior = stmt->getPrevNode();
                 stmt->replaceWith(folded, true);
-                stmt = prior ? prior->getNextNode() : block->front();
+                stmt = LLVM_LIKELY(prior != nullptr) ? prior->getNextNode() : block->front();
                 continue;
             }
             // When we're creating the Pablo program, it's possible to have multiple instances of an "identical"

@@ -27,8 +27,8 @@ protected:
     {
 
     }
-    Or(const unsigned operands, PabloAST * value, String * name)
-    : Variadic(ClassTypeId::Or, operands, value, name)
+    Or(const unsigned reserved, String * name)
+    : Variadic(ClassTypeId::Or, reserved, name)
     {
 
     }

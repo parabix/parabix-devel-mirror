@@ -27,8 +27,8 @@ protected:
     {
 
     }
-    And(const unsigned operands, PabloAST * value, String * name)
-    : Variadic(ClassTypeId::And, operands, value, name)
+    And(const unsigned reserved, String * name)
+    : Variadic(ClassTypeId::And, reserved, name)
     {
 
     }

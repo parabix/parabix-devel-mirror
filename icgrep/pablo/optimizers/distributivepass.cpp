@@ -7,9 +7,6 @@
 #include <boost/container/flat_map.hpp>
 #include <boost/graph/adjacency_list.hpp>
 
-#include <pablo/printer_pablos.h>
-#include <iostream>
-
 using namespace boost;
 using namespace boost::container;
 
@@ -334,28 +331,28 @@ inline bool DistributivePass::distribute(PabloBlock * const block) {
 
         block->setInsertPoint(cast<Variadic>(G[sinks.front()])->getPrevNode());
         if (isa<And>(G[sinks.front()])) {
-            outerOp = block->createAnd(intermediary.size(), PabloBlock::createOnes());
-            innerOp = block->createOr(sources.size() + 1, outerOp);
+            outerOp = block->createAnd(intermediary.size());
+            innerOp = block->createOr(sources.size() + 1);
         } else {
-            outerOp = block->createOr(intermediary.size(), PabloBlock::createZeroes());
-            innerOp = block->createAnd(sources.size() + 1, outerOp);
+            outerOp = block->createOr(intermediary.size());
+            innerOp = block->createAnd(sources.size() + 1);
         }
 
-        unsigned i = 0;
         for (const Vertex u : intermediary) {
             for (const Vertex v : sinks) {
                 cast<Variadic>(G[v])->deleteOperand(G[u]);
             }
-            outerOp->setOperand(i++, cast<Variadic>(G[u]));
+            outerOp->addOperand(G[u]);
         }
 
-        i = 0;
         for (const Vertex u : sources) {
             for (const Vertex v : intermediary) {
                 cast<Variadic>(G[v])->deleteOperand(G[u]);
             }
-            innerOp->setOperand(i++, G[u]);
+            innerOp->addOperand(G[u]);
         }
+        innerOp->addOperand(outerOp);
+
         for (const Vertex u : sinks) {
             cast<Variadic>(G[u])->addOperand(innerOp);
         }
@@ -386,6 +383,7 @@ bool DistributivePass::optimize(PabloFunction & function) {
     #ifndef NDEBUG
     PabloVerifier::verify(function, "post-distribution");
     #endif
+
     Simplifier::optimize(function);
     return modified;
 }

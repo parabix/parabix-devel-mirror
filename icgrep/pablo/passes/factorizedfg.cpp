@@ -21,22 +21,24 @@ using TypeId = PabloAST::ClassTypeId;
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief finalize
  ** ------------------------------------------------------------------------------------------------------------- */
-inline void FactorizeDFG::finalize(Variadic * const var, PabloBlock * block) {
+inline Statement * FactorizeDFG::finalize(Variadic * const var, PabloBlock * block) {
+    PabloAST * result = nullptr;
+    assert (var->getNumOperands() > 2);
     block->setInsertPoint(var->getPrevNode());
-    std::sort(var->begin(), var->end());
-    while (var->getNumOperands() > 2) {
+    while (var->getNumOperands() > 1) {
+        PabloAST * const op2 = var->removeOperand(1);
         PabloAST * const op1 = var->removeOperand(0);
-        PabloAST * const op2 = var->removeOperand(0);
-        PabloAST * newOp = nullptr;
+        assert (op1 != op2);
         if (isa<And>(var)) {
-            newOp = block->createAnd(op1, op2);
+            result = block->createAnd(op1, op2);
         } else if (isa<Or>(var)) {
-            newOp = block->createOr(op1, op2);
+            result = block->createOr(op1, op2);
         } else { // if (isa<Xor>(var)) {
-            newOp = block->createXor(op1, op2);
+            result = block->createXor(op1, op2);
         }
-        var->addOperand(newOp);
+        var->addOperand(result);
     }
+    return var->replaceWith(result, true);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -47,8 +49,9 @@ void FactorizeDFG::finalize(PabloBlock * const block) {
     while (stmt) {
         if (isa<If>(stmt) || isa<While>(stmt)) {
             finalize(isa<If>(stmt) ? cast<If>(stmt)->getBody() : cast<While>(stmt)->getBody());
-        } else if ((isa<And>(stmt) || isa<Or>(stmt) || isa<Xor>(stmt))) {
-            finalize(cast<Variadic>(stmt), block);
+        } else if ((isa<And>(stmt) || isa<Or>(stmt) || isa<Xor>(stmt)) && (stmt->getNumOperands() > 2)) {
+            stmt = finalize(cast<Variadic>(stmt), block);
+            continue;
         }
         stmt = stmt->getNextNode();
     }
@@ -316,11 +319,11 @@ void FactorizeDFG::transform(PabloFunction & function) {
     #ifndef NDEBUG
     PabloVerifier::verify(function, "post-factorize");
     #endif
-    Simplifier::optimize(function);
     ldfg.finalize(function.getEntryBlock());
     #ifndef NDEBUG
     PabloVerifier::verify(function, "post-finalize");
     #endif
+    Simplifier::optimize(function);
 }
 
 }

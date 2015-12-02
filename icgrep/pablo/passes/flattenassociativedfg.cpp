@@ -5,11 +5,6 @@
 #include <boost/container/flat_map.hpp>
 #include <boost/graph/adjacency_list.hpp>
 #include <pablo/analysis/pabloverifier.hpp>
-#include <pablo/optimizers/distributivepass.h>
-#include <pablo/optimizers/codemotionpass.h>
-
-#include <pablo/printer_pablos.h>
-#include <iostream>
 
 using namespace boost;
 using namespace boost::container;
@@ -21,16 +16,21 @@ using Graph = adjacency_list<hash_setS, vecS, bidirectionalS, PabloAST *>;
 using Map = flat_map<PabloAST *, Graph::vertex_descriptor>;
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief flatten
+ * @brief coalesce
  ** ------------------------------------------------------------------------------------------------------------- */
-inline void FlattenAssociativeDFG::flatten(Variadic * const var) {
+inline void FlattenAssociativeDFG::coalesce(Variadic * const var) {
     const TypeId typeId = var->getClassTypeId();
     for (unsigned i = 0; i < var->getNumOperands(); ) {
         PabloAST * const op = var->getOperand(i);
         if (op->getClassTypeId() == typeId) {
-            var->removeOperand(i);
+            Variadic * removedVar = cast<Variadic>(var->removeOperand(i));
             for (unsigned j = 0; j != cast<Variadic>(op)->getNumOperands(); ++j) {
                 var->addOperand(cast<Variadic>(op)->getOperand(j));
+            }
+            if (removedVar->getNumOperands() == 1) {
+                removedVar->replaceWith(removedVar->getOperand(0));
+            } else if (removedVar->getNumUsers() == 0) {
+                removedVar->eraseFromParent(true);
             }
             continue;
         }
@@ -39,75 +39,77 @@ inline void FlattenAssociativeDFG::flatten(Variadic * const var) {
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief applyNegationInwards
- *
- * Apply the De Morgans' law to any negated And or Or statement with the intent of further flattening its operands
- * and creating a bigger clause for the Simplifier to analyze.
+ * @brief coalesce
  ** ------------------------------------------------------------------------------------------------------------- */
-inline void FlattenAssociativeDFG::applyNegationInwards(Not * const var, PabloBlock * const block) {
-    PabloAST * negatedVar = var->getOperand(0);
-    if (isa<And>(negatedVar) || isa<Or>(negatedVar)) {
-        Variadic * src = cast<Variadic>(negatedVar);
-        const unsigned operands = src->getNumOperands();
-        Variadic * replacement = nullptr;
-        block->setInsertPoint(var->getPrevNode());
-        if (isa<And>(negatedVar)) {
-            replacement = block->createOr(operands, PabloBlock::createZeroes());
-        } else {
-            replacement = block->createAnd(operands, PabloBlock::createOnes());
-        }
-        block->setInsertPoint(replacement->getPrevNode());
-        for (unsigned i = 0; i != operands; ++i) {
-            replacement->setOperand(i, block->createNot(src->getOperand(i)));
-        }
-        flatten(replacement);
-        var->replaceWith(replacement, true, true);
-    }
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief flatten
- ** ------------------------------------------------------------------------------------------------------------- */
-void FlattenAssociativeDFG::flatten(PabloBlock * const block) {
+void FlattenAssociativeDFG::coalesce(PabloBlock * const block) {
     Statement * stmt = block->front();
     while (stmt) {
         Statement * next = stmt->getNextNode();
         if (isa<If>(stmt) || isa<While>(stmt)) {
-            flatten(isa<If>(stmt) ? cast<If>(stmt)->getBody() : cast<While>(stmt)->getBody());
+            coalesce(isa<If>(stmt) ? cast<If>(stmt)->getBody() : cast<While>(stmt)->getBody());
         } else if (isa<And>(stmt) || isa<Or>(stmt) || isa<Xor>(stmt)) {
-            flatten(cast<Variadic>(stmt));
+            coalesce(cast<Variadic>(stmt));
         } else if (isa<Not>(stmt)) {
-            applyNegationInwards(cast<Not>(stmt), block);
+            deMorgansExpansion(cast<Not>(stmt), block);
         }
         stmt = next;
     }
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief extractNegationsOutwards
+ * @brief deMorgansExpansion
+ *
+ * Apply the De Morgans' law to any negated And or Or statement with the intent of further coalescing its operands
+ * thereby allowing the Simplifier to check for tautologies and contradictions.
  ** ------------------------------------------------------------------------------------------------------------- */
-inline void FlattenAssociativeDFG::extractNegationsOutwards(Variadic * const var, PabloBlock * const block) {
-    PabloAST * negated[var->getNumOperands()];
-    unsigned operands = 0;
-    for (unsigned i = 0; i != var->getNumOperands(); ) {
-        if (isa<Not>(var->getOperand(i))) {
-            negated[operands++] = cast<Not>(var->removeOperand(i))->getOperand(0);
-            continue;
+inline void FlattenAssociativeDFG::deMorgansExpansion(Not * const var, PabloBlock * const block) {
+    PabloAST * const negatedVar = var->getOperand(0);
+    if (isa<And>(negatedVar) || isa<Or>(negatedVar)) {
+        Variadic * src = cast<Variadic>(negatedVar);
+        const unsigned operands = src->getNumOperands();
+        Variadic * replacement = nullptr;
+        block->setInsertPoint(var->getPrevNode());
+        if (isa<And>(negatedVar)) {
+            replacement = block->createOr(operands);
+        } else {
+            replacement = block->createAnd(operands);
         }
-        ++i;
+        block->setInsertPoint(replacement->getPrevNode());
+        for (unsigned i = 0; i != operands; ++i) {
+            replacement->addOperand(block->createNot(src->getOperand(i)));
+        }
+        coalesce(replacement);
+        var->replaceWith(replacement, true, true);
     }
-    if (operands) {
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief deMorgansReduction
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline void FlattenAssociativeDFG::deMorgansReduction(Variadic * const var, PabloBlock * const block) {
+    unsigned negations = 0;
+    for (unsigned i = 0; i < var->getNumOperands(); ++i) {
+        if (isa<Not>(var->getOperand(i))) {
+            ++negations;
+        }
+    }
+    if (negations > 1) {
+        PabloAST * negated[negations];
+        for (unsigned i = var->getNumOperands(), j = negations; i && j; ) {
+            if (isa<Not>(var->getOperand(--i))) {
+                negated[--j] = cast<Not>(var->removeOperand(i))->getOperand(0);
+            }
+        }
         block->setInsertPoint(var->getPrevNode());
         Variadic * extractedVar = nullptr;
         if (isa<And>(var)) {
-            extractedVar = block->createOr(operands, PabloBlock::createZeroes());
-        } else {
-            extractedVar = block->createAnd(operands, PabloBlock::createOnes());
+            extractedVar = block->createOr(negations);
+        } else { // if (isa<Or>(var)) {
+            extractedVar = block->createAnd(negations);
         }
-        for (unsigned i = 0; i != operands; ++i) {
-            extractedVar->setOperand(i, negated[i]);
+        for (unsigned i = 0; i != negations; ++i) {
+            extractedVar->addOperand(negated[i]);
         }
-        std::sort(extractedVar->begin(), extractedVar->end());
         var->addOperand(block->createNot(extractedVar));
     }
 }
@@ -115,12 +117,12 @@ inline void FlattenAssociativeDFG::extractNegationsOutwards(Variadic * const var
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief extractNegationsOutwards
  ** ------------------------------------------------------------------------------------------------------------- */
-inline void FlattenAssociativeDFG::extractNegationsOutwards(PabloBlock * const block) {
+inline void FlattenAssociativeDFG::deMorgansReduction(PabloBlock * const block) {
     for (Statement * stmt : *block) {
         if (isa<If>(stmt) || isa<While>(stmt)) {
-            extractNegationsOutwards(isa<If>(stmt) ? cast<If>(stmt)->getBody() : cast<While>(stmt)->getBody());
+            deMorgansReduction(isa<If>(stmt) ? cast<If>(stmt)->getBody() : cast<While>(stmt)->getBody());
         } else if (isa<And>(stmt) || isa<Or>(stmt)) {
-            extractNegationsOutwards(cast<Variadic>(stmt), block);
+            deMorgansReduction(cast<Variadic>(stmt), block);
         }
     }
 }
@@ -130,21 +132,19 @@ inline void FlattenAssociativeDFG::extractNegationsOutwards(PabloBlock * const b
  ** ------------------------------------------------------------------------------------------------------------- */
 void FlattenAssociativeDFG::transform(PabloFunction & function) {
 
-    FlattenAssociativeDFG::flatten(function.getEntryBlock());
+    FlattenAssociativeDFG::coalesce(function.getEntryBlock());
     #ifndef NDEBUG
-    PabloVerifier::verify(function, "post-flatten");
-    #endif
-
-    Simplifier::optimize(function);
-    DistributivePass::optimize(function);
-
-    FlattenAssociativeDFG::extractNegationsOutwards(function.getEntryBlock());
-    #ifndef NDEBUG
-    PabloVerifier::verify(function, "post-extract-negations-outwards");
+    PabloVerifier::verify(function, "post-coalescence");
     #endif
 
     Simplifier::optimize(function);
 
+    FlattenAssociativeDFG::deMorgansReduction(function.getEntryBlock());
+    #ifndef NDEBUG
+    PabloVerifier::verify(function, "post-demorgans-reduction");
+    #endif
+
+    Simplifier::optimize(function);
 }
 
 }

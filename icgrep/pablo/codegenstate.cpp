@@ -224,6 +224,14 @@ PabloAST * PabloBlock::createMod64ScanThru(PabloAST * from, PabloAST * thru, con
     return insertAtInsertionPoint(new Mod64ScanThru(from, thru, makeName(prefix, false)));
 }
 
+template<typename Type>
+static inline Type * isBinary(PabloAST * expr) {
+    if (isa<Type>(expr) && cast<Type>(expr)->getNumOperands() == 2) {
+        return cast<Type>(expr);
+    }
+    return nullptr;
+}
+
 PabloAST * PabloBlock::createAnd(PabloAST * expr1, PabloAST * expr2) {
     assert (expr1 && expr2);
     if (isa<Zeroes>(expr2) || isa<Ones>(expr1)) {
@@ -240,17 +248,14 @@ PabloAST * PabloBlock::createAnd(PabloAST * expr1, PabloAST * expr2) {
         if (equals(expr1, not2->getOperand(0))) {
             return createZeroes();
         }
-    } else if (Or * or1 = dyn_cast<Or>(expr1)) {
+    } else if (Or * or1 = isBinary<Or>(expr1)) {
         if (equals(or1->getOperand(0), expr2) || equals(or1->getOperand(1), expr2)) {
             return expr2;
         }
-    } else if (Or * or2 = dyn_cast<Or>(expr2)) {
+    } else if (Or * or2 = isBinary<Or>(expr2)) {
         if (equals(or2->getOperand(0), expr1) || equals(or2->getOperand(1), expr1)) {
             return expr1;
         }
-    }
-    if (isa<Not>(expr1) || expr1 > expr2) {
-        std::swap(expr1, expr2);
     }
     return insertAtInsertionPoint(new And(expr1, expr2, makeName("and_")));
 }
@@ -273,23 +278,20 @@ PabloAST * PabloBlock::createAnd(PabloAST * expr1, PabloAST * expr2, const std::
         if (equals(expr1, not2->getOperand(0))) {
             return createZeroes();
         }
-    } else if (Or * or1 = dyn_cast<Or>(expr1)) {
+    } else if (Or * or1 = isBinary<Or>(expr1)) {
         if (equals(or1->getOperand(0), expr2) || equals(or1->getOperand(1), expr2)) {
             return expr2;
         }
-    } else if (Or * or2 = dyn_cast<Or>(expr2)) {
+    } else if (Or * or2 = isBinary<Or>(expr2)) {
         if (equals(or2->getOperand(0), expr1) || equals(or2->getOperand(1), expr1)) {
             return expr1;
         }
     }
-    if (isa<Not>(expr1) || expr1 > expr2) {
-        std::swap(expr1, expr2);
-    }
     return insertAtInsertionPoint(new And(expr1, expr2, makeName(prefix, false)));
 }
 
-And * PabloBlock::createAnd(const unsigned operands, PabloAST * value) {
-    return insertAtInsertionPoint(new And(operands, value, makeName("and_")));
+And * PabloBlock::createAnd(const unsigned reserved) {
+    return insertAtInsertionPoint(new And(reserved, makeName("and_")));
 }
 
 PabloAST * PabloBlock::createOr(PabloAST * expr1, PabloAST * expr2) {
@@ -300,15 +302,15 @@ PabloAST * PabloBlock::createOr(PabloAST * expr1, PabloAST * expr2) {
     if (isa<Zeroes>(expr2) || isa<Ones>(expr1) || equals(expr1, expr2)) {
         return expr1;
     } else if (Not * not1 = dyn_cast<Not>(expr1)) {
-        // ¬a∨b = ¬¬(¬a∨b) = ¬(a ∧ ¬b)
+        // ¬a∨b = ¬¬(¬a ∨ b) = ¬(a ∧ ¬b)
         return createNot(createAnd(not1->getOperand(0), createNot(expr2)));
     } else if (Not * not2 = dyn_cast<Not>(expr2)) {
-        // a∨¬b = ¬¬(¬b∨a) = ¬(b ∧ ¬a)
+        // a∨¬b = ¬¬(¬b ∨ a) = ¬(b ∧ ¬a)
         return createNot(createAnd(not2->getOperand(0), createNot(expr1)));
     } else if (equals(expr1, expr2)) {
         return expr1;
-    } else if (And * and1 = dyn_cast<And>(expr1)) {
-        if (And * and2 = dyn_cast<And>(expr2)) {
+    } else if (And * and1 = isBinary<And>(expr1)) {
+        if (And * and2 = isBinary<And>(expr2)) {
             PabloAST * const expr1a = and1->getOperand(0);
             PabloAST * const expr1b = and1->getOperand(1);
             PabloAST * const expr2a = and2->getOperand(0);
@@ -324,17 +326,14 @@ PabloAST * PabloBlock::createOr(PabloAST * expr1, PabloAST * expr2) {
             } else if (equals(expr1b, expr2a)) {
                 return createAnd(expr1b, createOr(expr1a, expr2b));
             }
-        } else if (equals(and1->getOperand(0), expr2) || equals(and1->getOperand(1), expr2)){
-            // (a∧b) ∨ a = a
+        } else if (equals(and1->getOperand(0), expr2) || equals(and1->getOperand(1), expr2)) {
+            // (a ∧ b) ∨ a = a
             return expr2;
         }
-    } else if (And * and2 = dyn_cast<And>(expr2)) {
+    } else if (And * and2 = isBinary<And>(expr2)) {
         if (equals(and2->getOperand(0), expr1) || equals(and2->getOperand(1), expr1)) {
             return expr1;
         }
-    }
-    if (expr1 > expr2) {
-        std::swap(expr1, expr2);
     }
     return insertAtInsertionPoint(new Or(expr1, expr2, makeName("or_")));
 }
@@ -352,8 +351,8 @@ PabloAST * PabloBlock::createOr(PabloAST * expr1, PabloAST * expr2, const std::s
     } else if (Not * not2 = dyn_cast<Not>(expr2)) {
         // a∨¬b = ¬¬(¬b∨a) = ¬(b ∧ ¬a)
         return createNot(createAnd(not2->getOperand(0), createNot(expr1)), prefix);
-    } else if (And * and1 = dyn_cast<And>(expr1)) {
-        if (And * and2 = dyn_cast<And>(expr2)) {
+    } else if (And * and1 = isBinary<And>(expr1)) {
+        if (And * and2 = isBinary<And>(expr2)) {
             PabloAST * const expr1a = and1->getOperand(0);
             PabloAST * const expr1b = and1->getOperand(1);
             PabloAST * const expr2a = and2->getOperand(0);
@@ -373,19 +372,16 @@ PabloAST * PabloBlock::createOr(PabloAST * expr1, PabloAST * expr2, const std::s
             // (a∧b) ∨ a = a
             return expr2;
         }
-    } else if (And * and2 = dyn_cast<And>(expr2)) {
+    } else if (And * and2 = isBinary<And>(expr2)) {
         if (equals(and2->getOperand(0), expr1) || equals(and2->getOperand(1), expr1)) {
             return expr1;
         }
     }
-    if (expr1 > expr2) {
-        std::swap(expr1, expr2);
-    }
     return insertAtInsertionPoint(new Or(expr1, expr2, makeName(prefix, false)));
 }
 
-Or * PabloBlock::createOr(const unsigned operands, PabloAST * value) {
-    return insertAtInsertionPoint(new Or(operands, value, makeName("or_")));
+Or * PabloBlock::createOr(const unsigned reserved) {
+    return insertAtInsertionPoint(new Or(reserved, makeName("or_")));
 }
 
 PabloAST * PabloBlock::createXor(PabloAST * expr1, PabloAST * expr2) {
@@ -405,9 +401,6 @@ PabloAST * PabloBlock::createXor(PabloAST * expr1, PabloAST * expr2) {
         if (Not * not2 = dyn_cast<Not>(expr2)) {
             return createXor(not1->getOperand(0), not2->getOperand(0));
         }
-    }
-    if (expr1 > expr2) {
-        std::swap(expr1, expr2);
     }
     return insertAtInsertionPoint(new Xor(expr1, expr2, makeName("xor_")));
 }
@@ -430,10 +423,11 @@ PabloAST * PabloBlock::createXor(PabloAST * expr1, PabloAST * expr2, const std::
             return createXor(not1->getOperand(0), not2->getOperand(0), prefix);
         }
     }
-    if (expr1 > expr2) {
-        std::swap(expr1, expr2);
-    }
     return insertAtInsertionPoint(new Xor(expr1, expr2, makeName(prefix, false)));
+}
+
+Xor * PabloBlock::createXor(const unsigned reserved) {
+    return insertAtInsertionPoint(new Xor(reserved, makeName("xor_")));
 }
 
 /// TERNARY CREATE FUNCTION

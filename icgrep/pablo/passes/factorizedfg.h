@@ -25,7 +25,7 @@ protected:
     PabloBlock * chooseInsertionScope(const VertexSet & users);
     void findInsertionPoint(const VertexSet & operands, PabloBlock * const scope);
     void finalize(PabloBlock * const block);
-    void finalize(Variadic * const var, PabloBlock * block);
+    Statement * finalize(Variadic * const var, PabloBlock * block);
     FactorizeDFG() = default;
 private:
     ScopeDepth  mScopeDepth;

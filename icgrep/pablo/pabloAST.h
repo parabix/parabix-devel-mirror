@@ -218,7 +218,7 @@ public:
     }
     virtual ~Statement() {}
 protected:
-    Statement(const ClassTypeId id, std::initializer_list<PabloAST *> operands, const String * const name)
+    explicit Statement(const ClassTypeId id, std::initializer_list<PabloAST *> operands, const String * const name)
     : PabloAST(id)
     , mName(name)
     , mNext(nullptr)
@@ -234,19 +234,15 @@ protected:
             ++i;
         }
     }
-    Statement(const ClassTypeId id, unsigned operands, PabloAST * value, const String * const name)
+    explicit Statement(const ClassTypeId id, const unsigned reserved, const String * const name)
     : PabloAST(id)
     , mName(name)
     , mNext(nullptr)
     , mPrev(nullptr)
     , mParent(nullptr)
-    , mOperands(operands)
-    , mOperand(reinterpret_cast<PabloAST**>(mAllocator.allocate(mOperands * sizeof(PabloAST *)))) {
-        for (unsigned i = 0; i != operands; ++i) {
-            assert (value);
-            mOperand[i] = value;
-            value->addUser(this);
-        }
+    , mOperands(0)
+    , mOperand(reinterpret_cast<PabloAST**>(mAllocator.allocate(reserved * sizeof(PabloAST *)))) {
+        std::memset(mOperand, reserved * sizeof(PabloAST *), 0);
     }
     template<typename iterator>
     explicit Statement(const ClassTypeId id, iterator begin, iterator end, const String * const name)
@@ -338,14 +334,14 @@ public:
     }
 
 protected:
-    Variadic(const ClassTypeId id, std::initializer_list<PabloAST *> operands, const String * const name)
+    explicit Variadic(const ClassTypeId id, std::initializer_list<PabloAST *> operands, const String * const name)
     : Statement(id, operands, name)
     , mCapacity(operands.size()) {
 
     }
-    Variadic(const ClassTypeId id, const unsigned operands, PabloAST * value, String * name)
-    : Statement(id, operands, value, name)
-    , mCapacity(operands) {
+    explicit Variadic(const ClassTypeId id, const unsigned reserved, String * name)
+    : Statement(id, reserved, name)
+    , mCapacity(reserved) {
 
     }
     template<typename iterator>

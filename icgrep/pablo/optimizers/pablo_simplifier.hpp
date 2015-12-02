@@ -15,7 +15,8 @@ protected:
     Simplifier() = default;
 private:
     static void eliminateRedundantCode(PabloBlock * const block, ExpressionTable * predecessor = nullptr);
-    static PabloAST * foldReassociativeFunction(Variadic * const var, PabloBlock * const block);
+    static PabloAST * fold(Variadic * const var, PabloBlock * const block);
+    static PabloAST * fold(Statement * const stmt, PabloBlock * const block);
     static void deadCodeElimination(PabloBlock * const block);
     static void strengthReduction(PabloBlock * const block);
     static bool isSuperfluous(const Assign * const assign);
