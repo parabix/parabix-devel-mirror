@@ -77,17 +77,20 @@ static cl::opt<bool> PabloSinkingPass("sinking", cl::init(false),
                                       cl::cat(cPabloOptimizationsOptions));
 
 #ifdef ENABLE_MULTIPLEXING
-static cl::opt<bool> EnableMultiplexing("multiplexing", cl::init(false),
+static cl::opt<bool> EnableMultiplexing("multiplexing", cl::init(true),
                                         cl::desc("combine Advances whose inputs are mutual exclusive into the fewest number of advances possible (expensive)."),
                                         cl::cat(cPabloOptimizationsOptions));
 
 static cl::opt<unsigned> MultiplexingSetLimit("multiplexing-set-limit", cl::init(std::numeric_limits<unsigned>::max()),
                                         cl::desc("maximum size of any candidate multiplexing set."),
                                         cl::cat(cPabloOptimizationsOptions));
-
 static cl::opt<unsigned> MultiplexingSelectionLimit("multiplexing-selection-limit", cl::init(100),
                                         cl::desc("maximum number of selections from any partial candidate multiplexing set."),
                                         cl::cat(cPabloOptimizationsOptions));
+static cl::opt<unsigned> MultiplexingWindowSize("multiplexing-window-size", cl::init(100),
+                                        cl::desc("maximum depth difference for computing mutual exclusion of Advance nodes."),
+                                        cl::cat(cPabloOptimizationsOptions));
+
 static cl::opt<bool> EnableLowering("lowering", cl::init(false),
                                          cl::desc("coalesce associative functions prior to optimization passes."),
                                          cl::cat(cPabloOptimizationsOptions));
@@ -156,8 +159,7 @@ void pablo_function_passes(PabloFunction * function) {
     }
 #ifdef ENABLE_MULTIPLEXING    
     if (EnableMultiplexing) {
-        AutoMultiplexing::optimize(*function, MultiplexingSetLimit, MultiplexingSelectionLimit);
-        FlattenAssociativeDFG::transform(*function);
+        MultiplexingPass::optimize(*function, MultiplexingSetLimit, MultiplexingSelectionLimit, MultiplexingWindowSize);
     }
     if (EnableDistribution) {
         DistributivePass::optimize(*function);
