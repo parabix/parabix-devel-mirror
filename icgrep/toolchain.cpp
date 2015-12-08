@@ -17,6 +17,7 @@
 #include <llvm/ExecutionEngine/MCJIT.h>
 #include <llvm/IRReader/IRReader.h>
 #include <llvm/Support/CommandLine.h>
+#include <llvm/CodeGen/CommandFlags.h>
 #include <llvm/Support/SourceMgr.h>
 #include <llvm/Support/TargetSelect.h>
 #include <llvm/Support/Host.h>
@@ -176,6 +177,13 @@ void pablo_function_passes(PabloFunction * function) {
     }
 }
 
+// Dynamic AVX2 confirmation
+#if (BLOCK_SIZE == 256)
+#define ISPC_LLVM_VERSION ISPC_LLVM_3_6
+#include "ispc.cpp"
+#endif
+
+
 ExecutionEngine * JIT_to_ExecutionEngine (llvm::Function * f) {
 
     InitializeNativeTarget();
@@ -187,11 +195,13 @@ ExecutionEngine * JIT_to_ExecutionEngine (llvm::Function * f) {
     builder.setErrorStr(&errMessage);
     builder.setMCPU(sys::getHostCPUName());
     builder.setOptLevel(CodeGenOpt::Level::None);
+
 #if (BLOCK_SIZE == 256)
-    if (!DisableAVX2){
+    if (!DisableAVX2 && (strncmp(lGetSystemISA(), "avx2", 4) == 0)) {
             std::vector<std::string> attrs;
             attrs.push_back("avx2");
             builder.setMAttrs(attrs);
+    //std::cerr << "+avx2 set" << std::endl;
     }
 #endif
     //builder.setOptLevel(mMaxWhileDepth ? CodeGenOpt::Level::Less : CodeGenOpt::Level::None);
