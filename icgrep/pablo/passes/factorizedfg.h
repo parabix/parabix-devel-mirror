@@ -9,6 +9,7 @@ namespace pablo {
 class PabloFunction;
 class PabloBlock;
 class Variadic;
+class Not;
 class Statement;
 class PabloAST;
 
@@ -20,8 +21,8 @@ public:
 protected:    
     void initialize(const PabloFunction & function);
     void initialize(const PabloBlock * const block, const unsigned depth);
-    void factorize(PabloBlock * const block);
-    void factorize(Variadic * const var);
+    void CSE(PabloBlock * const block);
+    void CSE(Variadic * const var);
     PabloBlock * chooseInsertionScope(const VertexSet & users);
     void findInsertionPoint(const VertexSet & operands, PabloBlock * const scope);
     void finalize(PabloBlock * const block);

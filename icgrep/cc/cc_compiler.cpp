@@ -178,7 +178,7 @@ PabloAST * CC_Compiler::GE_Range(const unsigned N, const unsigned n, PabloBlockO
         {
             /*
               If the hi_bit of n is not set, then whenever the corresponding bit
-              is set in the target, the target will certaily be >=.  Oterwise,
+              is set in the target, the target will certaily be >=.  Otherwise,
               the value of GE_range(N-1), lo_range) is required.
             */
             return pb.createOr(getBasisVar(N - 1), lo_range);

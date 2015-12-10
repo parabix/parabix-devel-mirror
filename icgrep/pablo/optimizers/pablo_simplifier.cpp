@@ -140,14 +140,23 @@ inline PabloAST * Simplifier::fold(Variadic * const var, PabloBlock * const bloc
 inline PabloAST * Simplifier::fold(Statement * stmt, PabloBlock * block) {
     if (isReassociative(stmt)) {
         return fold(cast<Variadic>(stmt), block);
+    } else if (isa<Not>(stmt)) {
+        PabloAST * value = stmt->getOperand(0);
+        if (LLVM_UNLIKELY(isa<Not>(value))) {
+            return cast<Not>(value)->getOperand(0);
+        } else if (LLVM_UNLIKELY(isa<Zeroes>(value))) {
+            return block->createOnes();
+        }  else if (LLVM_UNLIKELY(isa<Ones>(value))) {
+            return block->createZeroes();
+        }
+    } else if (isa<Advance>(stmt)) {
+        if (LLVM_UNLIKELY(isa<Zeroes>(stmt->getOperand(0)))) {
+            return block->createZeroes();
+        }
     } else {
         for (unsigned i = 0; i != stmt->getNumOperands(); ++i) {
             if (LLVM_UNLIKELY(isa<Zeroes>(stmt->getOperand(i)))) {
                 switch (stmt->getClassTypeId()) {
-                    case PabloAST::ClassTypeId::Advance:
-                        return block->createZeroes();
-                    case PabloAST::ClassTypeId::Not:
-                        return block->createOnes();
                     case PabloAST::ClassTypeId::Sel:
                         block->setInsertPoint(stmt->getPrevNode());
                         switch (i) {
@@ -163,8 +172,6 @@ inline PabloAST * Simplifier::fold(Statement * stmt, PabloBlock * block) {
             } else if (LLVM_UNLIKELY(isa<Ones>(stmt->getOperand(i)))) {
                 block->setInsertPoint(stmt->getPrevNode());
                 switch (stmt->getClassTypeId()) {
-                    case PabloAST::ClassTypeId::Not:
-                        return block->createZeroes();
                     case PabloAST::ClassTypeId::Sel:
                         block->setInsertPoint(stmt->getPrevNode());
                         switch (i) {
@@ -185,9 +192,9 @@ inline PabloAST * Simplifier::fold(Statement * stmt, PabloBlock * block) {
                     default: break;
                 }
             }
-        }
-        return nullptr;
+        }        
     }
+    return nullptr;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

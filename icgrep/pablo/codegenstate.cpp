@@ -294,6 +294,10 @@ And * PabloBlock::createAnd(const unsigned reserved) {
     return insertAtInsertionPoint(new And(reserved, makeName("and_")));
 }
 
+And * PabloBlock::createAnd(const unsigned reserved, const std::string prefix) {
+    return insertAtInsertionPoint(new And(reserved, makeName(prefix, false)));
+}
+
 PabloAST * PabloBlock::createOr(PabloAST * expr1, PabloAST * expr2) {
     assert (expr1 && expr2);
     if (isa<Zeroes>(expr1) || isa<Ones>(expr2)){
@@ -384,6 +388,10 @@ Or * PabloBlock::createOr(const unsigned reserved) {
     return insertAtInsertionPoint(new Or(reserved, makeName("or_")));
 }
 
+Or * PabloBlock::createOr(const unsigned reserved, const std::string prefix) {
+    return insertAtInsertionPoint(new Or(reserved, makeName(prefix, false)));
+}
+
 PabloAST * PabloBlock::createXor(PabloAST * expr1, PabloAST * expr2) {
     assert (expr1 && expr2);
     if (expr1 == expr2) {
@@ -430,6 +438,10 @@ Xor * PabloBlock::createXor(const unsigned reserved) {
     return insertAtInsertionPoint(new Xor(reserved, makeName("xor_")));
 }
 
+Xor * PabloBlock::createXor(const unsigned reserved, const std::string prefix) {
+    return insertAtInsertionPoint(new Xor(reserved, makeName(prefix, false)));
+}
+
 /// TERNARY CREATE FUNCTION
 
 PabloAST * PabloBlock::createSel(PabloAST * condition, PabloAST * trueExpr, PabloAST * falseExpr) {
@@ -451,7 +463,7 @@ PabloAST * PabloBlock::createSel(PabloAST * condition, PabloAST * trueExpr, Pabl
     } else if (isa<Not>(trueExpr) && equals(cast<Not>(trueExpr)->getOperand(0), falseExpr)) {
         return createXor(condition, falseExpr);
     } else if (isa<Not>(falseExpr) && equals(trueExpr, cast<Not>(falseExpr)->getOperand(0))){
-        return createXor(condition, falseExpr);
+        return createXor(condition, trueExpr);
     }
     return insertAtInsertionPoint(new Sel(condition, trueExpr, falseExpr, makeName("sel")));
 }
@@ -480,7 +492,7 @@ PabloAST * PabloBlock::createSel(PabloAST * condition, PabloAST * trueExpr, Pabl
         return createXor(condition, falseExpr, prefix);
     }
     else if (isa<Not>(falseExpr) && equals(trueExpr, cast<Not>(falseExpr)->getOperand(0))){
-        return createXor(condition, falseExpr, prefix);
+        return createXor(condition, trueExpr, prefix);
     }
     return insertAtInsertionPoint(new Sel(condition, trueExpr, falseExpr, makeName(prefix, false)));
 }

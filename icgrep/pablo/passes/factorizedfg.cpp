@@ -3,7 +3,7 @@
 #include <pablo/codegenstate.h>
 #include <pablo/analysis/pabloverifier.hpp>
 #include <pablo/optimizers/pablo_simplifier.hpp>
-#include <pablo/optimizers/codemotionpass.h>
+#include <pablo/passes/flattenassociativedfg.h>
 #include <boost/container/flat_set.hpp>
 #include <set>
 
@@ -238,11 +238,10 @@ void FactorizeDFG::findInsertionPoint(const VertexSet & operands, PabloBlock * c
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief factorize
+ * @brief Common Subexpression Elimination
  ** ------------------------------------------------------------------------------------------------------------- */
-inline void FactorizeDFG::factorize(Variadic * var) {
+inline void FactorizeDFG::CSE(Variadic * var) {
     while (var->getNumOperands() > 2) {
-        unsigned numOperands = var->getNumOperands();
         BicliqueSet bicliques = enumerateBicliques(var);
         if (bicliques.empty()) {
             break;
@@ -267,27 +266,26 @@ inline void FactorizeDFG::factorize(Variadic * var) {
             }
             cast<Variadic>(user)->addOperand(factored);
         }
-        assert (var->getNumOperands() < numOperands);
     }
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief factorize
+ * @brief Common Subexpression Elimination
  ** ------------------------------------------------------------------------------------------------------------- */
-void FactorizeDFG::factorize(PabloBlock * const block) {
+void FactorizeDFG::CSE(PabloBlock * const block) {
     Statement * stmt = block->front();
     while (stmt) {
         if (isa<If>(stmt) || isa<While>(stmt)) {            
-            factorize(isa<If>(stmt) ? cast<If>(stmt)->getBody() : cast<While>(stmt)->getBody());
+            CSE(isa<If>(stmt) ? cast<If>(stmt)->getBody() : cast<While>(stmt)->getBody());
         } else if (isa<And>(stmt) || isa<Or>(stmt) || isa<Xor>(stmt)) {
-            factorize(cast<Variadic>(stmt));
+            CSE(cast<Variadic>(stmt));
         }
         stmt = stmt->getNextNode();
     }
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief initialize
+ * @brief preScanDFG
  ** ------------------------------------------------------------------------------------------------------------- */
 void FactorizeDFG::initialize(const PabloBlock * const block, const unsigned depth) {
     const Statement * stmt = block->front();
@@ -302,9 +300,9 @@ void FactorizeDFG::initialize(const PabloBlock * const block, const unsigned dep
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief initialize
+ * @brief preScanDFG
  ** ------------------------------------------------------------------------------------------------------------- */
-inline void FactorizeDFG::initialize(const PabloFunction & function) {
+inline void FactorizeDFG::initialize(const PabloFunction &function) {
     mScopeDepth.emplace(function.getEntryBlock(), 0);
     initialize(function.getEntryBlock(), 1);
 }
@@ -315,7 +313,7 @@ inline void FactorizeDFG::initialize(const PabloFunction & function) {
 void FactorizeDFG::transform(PabloFunction & function) {
     FactorizeDFG ldfg;
     ldfg.initialize(function);
-    ldfg.factorize(function.getEntryBlock());
+    ldfg.CSE(function.getEntryBlock());
     #ifndef NDEBUG
     PabloVerifier::verify(function, "post-factorize");
     #endif

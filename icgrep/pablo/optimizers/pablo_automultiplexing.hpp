@@ -3,9 +3,9 @@
 
 #include <pablo/codegenstate.h>
 #include <slab_allocator.h>
-#include <queue>
 #include <boost/graph/adjacency_list.hpp>
 #include <boost/graph/adjacency_matrix.hpp>
+#include <boost/container/flat_set.hpp>
 #include <boost/container/flat_map.hpp>
 #include <boost/numeric/ublas/matrix.hpp>
 #include <random>
@@ -18,6 +18,7 @@ namespace pablo {
 
 class PabloBuilder;
 class PabloFunction;
+struct OrderingVerifier;
 
 class MultiplexingPass {
 
@@ -28,14 +29,22 @@ class MultiplexingPass {
     using IntDistribution = std::uniform_int_distribution<RNG::result_type>;
     using MultiplexSetGraph = boost::adjacency_list<boost::hash_setS, boost::vecS, boost::bidirectionalS>;
     using SubsetGraph = boost::adjacency_list<boost::hash_setS, boost::vecS, boost::bidirectionalS>;
+    using SubsetEdgeIterator = boost::graph_traits<SubsetGraph>::edge_iterator;
+    using CliqueGraph = boost::adjacency_list<boost::hash_setS, boost::vecS, boost::undirectedS>;
+    using CliqueSet = boost::container::flat_set<CliqueGraph::vertex_descriptor>;
+    using CliqueSets = boost::container::flat_set<std::vector<CliqueGraph::vertex_descriptor>>;
+
+    using AdvanceVector = std::vector<Advance *>;
     using AdvanceDepth = std::vector<int>;
-    using AdvanceAttributes = std::vector<std::pair<Advance *, BDD>>; // the Advance pointer and its respective base BDD variable
+    using AdvanceVariable = std::vector<BDD>;
     using VertexVector = std::vector<ConstraintVertex>;
-    using ScopeMap = boost::container::flat_map<const PabloBlock *, Statement *>;
 
 public:
-    static bool optimize(PabloFunction & function, const unsigned limit = std::numeric_limits<unsigned>::max(), const unsigned maxSelections = 100, const unsigned windowSize = 10, const bool independent = false);
+
+    static bool optimize(PabloFunction & function, const unsigned limit = std::numeric_limits<unsigned>::max(), const unsigned maxSelections = 100, const unsigned windowSize = 1, const bool independent = false);
+
 protected:
+
     unsigned initialize(PabloFunction & function, const bool independent);
     void initializeBaseConstraintGraph(PabloBlock * const block, const unsigned statements, const unsigned advances);
     void initializeAdvanceDepth(PabloBlock * const block, const unsigned advances) ;
@@ -45,24 +54,36 @@ protected:
     BDD characterize(Advance * const adv, const BDD Ik);
     bool independent(const ConstraintVertex i, const ConstraintVertex j) const;
     bool exceedsWindowSize(const ConstraintVertex i, const ConstraintVertex j) const;
-    bool generateCandidateSets(RNG & rng);
 
-    void addCandidateSet(const VertexVector & S, RNG & rng);
-    void selectMultiplexSets(RNG & rng);
-    void doTransitiveReductionOfSubsetGraph();
+    void generateUsageWeightingGraph();
+    CliqueSets findMaximalCliques(const CliqueGraph & G);
+    void findMaximalCliques(const CliqueGraph & G, CliqueSet & R, CliqueSet && P, CliqueSet && X, CliqueSets & S);
+
+    bool generateCandidateSets();
+    void addCandidateSet(const VertexVector & S);
+    void selectMultiplexSets();
+
     void eliminateSubsetConstraints();
+    void doTransitiveReductionOfSubsetGraph();
+
     void multiplexSelectedIndependentSets(PabloFunction & function);
+
     static void topologicalSort(PabloFunction & function);
+    static void topologicalSort(PabloBlock * block, OrderingVerifier & parent);
+
     BDD & get(const PabloAST * const expr);
 
-    inline MultiplexingPass(const unsigned limit, const unsigned maxSelections, const unsigned windowSize)
+    inline MultiplexingPass(const RNG::result_type seed, const unsigned limit, const unsigned maxSelections, const unsigned windowSize)
     : mMultiplexingSetSizeLimit(limit)
     , mMaxMultiplexingSetSelections(maxSelections)
     , mWindowSize(windowSize)
     , mTestConstrainedAdvances(true)
     , mVariables(0)
+    , mRNG(seed)
     , mConstraintGraph(0)
+    , mAdvance(0, nullptr)
     , mAdvanceDepth(0, 0)
+    , mAdvanceNegatedVariable(0, 0)
     {
 
     }
@@ -73,13 +94,15 @@ private:
     const unsigned              mWindowSize;
     const bool                  mTestConstrainedAdvances;
     unsigned                    mVariables;
+    RNG                         mRNG;
     CharacterizationMap         mCharacterization;
-    ConstraintGraph             mConstraintGraph;
+    ConstraintGraph             mConstraintGraph;   
+    AdvanceVector               mAdvance;
     AdvanceDepth                mAdvanceDepth;
+    AdvanceVariable             mAdvanceNegatedVariable;
     SubsetGraph                 mSubsetGraph;
-    AdvanceAttributes           mAdvanceAttributes;
+    CliqueGraph                 mUsageWeightingGraph;
     MultiplexSetGraph           mMultiplexSetGraph;
-    ScopeMap                    mResolvedScopes;
 };
 
 }

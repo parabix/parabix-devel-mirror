@@ -12,6 +12,7 @@ class Assign;
 
 class FlattenAssociativeDFG {
     friend class DistributivePass;
+    friend class FactorizeDFG;
 public:
     static void transform(PabloFunction & function);
 protected:
