@@ -116,6 +116,13 @@ Value * IDISA_Builder::simd_popcount(unsigned fw, Value * a) {
     return rslt;
 }
 
+Value * IDISA_Builder::simd_if(unsigned fw, Value * cond, Value * a, Value * b) {
+    Value * aVec = fwCast(fw, a);
+    Value * bVec = fwCast(fw, b);
+    return mLLVMBuilder->CreateSelect(mLLVMBuilder->CreateICmpSLT(cond, mZeroInitializer), aVec, bVec);
+}
+
+    
 Value * IDISA_Builder::esimd_mergeh(unsigned fw, Value * a, Value * b) {
     unsigned field_count = mBitBlockWidth/fw;
     Value * aVec = fwCast(fw, a);

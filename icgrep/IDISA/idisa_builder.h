@@ -57,6 +57,7 @@ public:
     Value * simd_umax(unsigned fw, Value * a, Value * b);
     Value * simd_min(unsigned fw, Value * a, Value * b);
     Value * simd_umin(unsigned fw, Value * a, Value * b);
+    Value * simd_if(unsigned fw, Value * cond, Value * a, Value * b);
     
     Value * simd_slli(unsigned fw, Value * a, unsigned shift);
     Value * simd_srli(unsigned fw, Value * a, unsigned shift);
@@ -83,6 +84,7 @@ public:
     Value * simd_or(Value * a, Value * b);
     Value * simd_xor(Value * a, Value * b);
     Value * simd_not(Value * a);
+    Value * fwCast(unsigned fw, Value * a);
     
 private:
     Module * mMod;
@@ -94,7 +96,6 @@ private:
     Constant * mPrintRegisterFunction;
     
     VectorType * fwVectorType(unsigned fw);
-    Value * fwCast(unsigned fw, Value * a);
 };
 
 }
