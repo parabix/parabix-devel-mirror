@@ -29,6 +29,7 @@ public:
     , mPrintRegisterFunction(nullptr) {
 
     }
+    virtual ~IDISA_Builder() {};
 
     void initialize(Module * m, IRBuilder <> * b) {
         mMod = m;
@@ -45,48 +46,49 @@ public:
     Constant * allZeroes() {return mZeroInitializer;}
     Constant * allOnes() {return mOneInitializer;}
         
-    Value * simd_add(unsigned fw, Value * a, Value * b);
-    Value * simd_sub(unsigned fw, Value * a, Value * b);
-    Value * simd_mult(unsigned fw, Value * a, Value * b);
-    Value * simd_eq(unsigned fw, Value * a, Value * b);
-    Value * simd_gt(unsigned fw, Value * a, Value * b);
-    Value * simd_ugt(unsigned fw, Value * a, Value * b);
-    Value * simd_lt(unsigned fw, Value * a, Value * b);
-    Value * simd_ult(unsigned fw, Value * a, Value * b);
-    Value * simd_max(unsigned fw, Value * a, Value * b);
-    Value * simd_umax(unsigned fw, Value * a, Value * b);
-    Value * simd_min(unsigned fw, Value * a, Value * b);
-    Value * simd_umin(unsigned fw, Value * a, Value * b);
+    virtual Value * simd_add(unsigned fw, Value * a, Value * b);
+    virtual Value * simd_sub(unsigned fw, Value * a, Value * b);
+    virtual Value * simd_mult(unsigned fw, Value * a, Value * b);
+    virtual Value * simd_eq(unsigned fw, Value * a, Value * b);
+    virtual Value * simd_gt(unsigned fw, Value * a, Value * b);
+    virtual Value * simd_ugt(unsigned fw, Value * a, Value * b);
+    virtual Value * simd_lt(unsigned fw, Value * a, Value * b);
+    virtual Value * simd_ult(unsigned fw, Value * a, Value * b);
+    virtual Value * simd_max(unsigned fw, Value * a, Value * b);
+    virtual Value * simd_umax(unsigned fw, Value * a, Value * b);
+    virtual Value * simd_min(unsigned fw, Value * a, Value * b);
+    virtual Value * simd_umin(unsigned fw, Value * a, Value * b);
+    virtual Value * simd_if(unsigned fw, Value * cond, Value * a, Value * b);
     Value * simd_if(unsigned fw, Value * cond, Value * a, Value * b);
     
-    Value * simd_slli(unsigned fw, Value * a, unsigned shift);
-    Value * simd_srli(unsigned fw, Value * a, unsigned shift);
-    Value * simd_srai(unsigned fw, Value * a, unsigned shift);
+    virtual Value * simd_slli(unsigned fw, Value * a, unsigned shift);
+    virtual Value * simd_srli(unsigned fw, Value * a, unsigned shift);
+    virtual Value * simd_srai(unsigned fw, Value * a, unsigned shift);
     
-    Value * simd_cttz(unsigned fw, Value * a);
-    Value * simd_popcount(unsigned fw, Value * a);
+    virtual Value * simd_cttz(unsigned fw, Value * a);
+    virtual Value * simd_popcount(unsigned fw, Value * a);
     
-    Value * esimd_mergeh(unsigned fw, Value * a, Value * b);
-    Value * esimd_mergel(unsigned fw, Value * a, Value * b);
-    Value * esimd_bitspread(unsigned fw, Value * bitmask);
+    virtual Value * esimd_mergeh(unsigned fw, Value * a, Value * b);
+    virtual Value * esimd_mergel(unsigned fw, Value * a, Value * b);
+    virtual Value * esimd_bitspread(unsigned fw, Value * bitmask);
     
-    Value * hsimd_packh(unsigned fw, Value * a, Value * b);
-    Value * hsimd_packl(unsigned fw, Value * a, Value * b);
-    Value * hsimd_signmask(unsigned fw, Value * a);
+    virtual Value * hsimd_packh(unsigned fw, Value * a, Value * b);
+    virtual Value * hsimd_packl(unsigned fw, Value * a, Value * b);
+    virtual Value * hsimd_signmask(unsigned fw, Value * a);
 
     
-    Value * mvmd_extract(unsigned fw, Value * a, unsigned fieldIndex);
-    Value * mvmd_insert(unsigned fw, Value * blk, Value * elt, unsigned fieldIndex);
-    Value * mvmd_dslli(unsigned fw, Value * a, Value * b, unsigned shift);
+    virtual Value * mvmd_extract(unsigned fw, Value * a, unsigned fieldIndex);
+    virtual Value * mvmd_insert(unsigned fw, Value * blk, Value * elt, unsigned fieldIndex);
+    virtual Value * mvmd_dslli(unsigned fw, Value * a, Value * b, unsigned shift);
     
-    Value * bitblock_any(Value * a);
+    virtual Value * bitblock_any(Value * a);
     Value * simd_and(Value * a, Value * b);
     Value * simd_or(Value * a, Value * b);
     Value * simd_xor(Value * a, Value * b);
     Value * simd_not(Value * a);
     Value * fwCast(unsigned fw, Value * a);
     
-private:
+protected:
     Module * mMod;
     IRBuilder <> * mLLVMBuilder;
     Type * mBitBlockType;

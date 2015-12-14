@@ -15,6 +15,7 @@
 #include <include/simd-lib/bitblock.hpp>
 #include <sstream>
 #include <IDISA/idisa_builder.h>
+#include <IDISA/idisa_avx_builder.h>
 #include <llvm/IR/Verifier.h>
 #include <llvm/Pass.h>
 #include <llvm/PassManager.h>
@@ -59,7 +60,7 @@ PabloCompiler::PabloCompiler(Type * bitBlockType)
 , mBuilder(nullptr)
 , mCarryManager(nullptr)
 , mBitBlockType(bitBlockType)
-, iBuilder(mBitBlockType)
+, iBuilder(nullptr)
 , mInputType(nullptr)
 , mWhileDepth(0)
 , mIfDepth(0)
@@ -67,6 +68,8 @@ PabloCompiler::PabloCompiler(Type * bitBlockType)
 , mInputAddressPtr(nullptr)
 , mOutputAddressPtr(nullptr)
 , mMaxWhileDepth(0) {
+    
+    
 
 }
 
@@ -89,6 +92,12 @@ llvm::Function * PabloCompiler::compile(PabloFunction * function) {
     return func;
 }
 
+// Dynamic AVX2 confirmation
+#if (BLOCK_SIZE == 256)
+#define ISPC_LLVM_VERSION ISPC_LLVM_3_6
+#include <ispc.cpp>
+#endif
+    
 llvm::Function * PabloCompiler::compile(PabloFunction * function, Module * module) {
 
   
@@ -102,9 +111,21 @@ llvm::Function * PabloCompiler::compile(PabloFunction * function, Module * modul
 
     mBuilder = new IRBuilder<>(mMod->getContext());
 
-    iBuilder.initialize(mMod, mBuilder);
+#if (BLOCK_SIZE == 256)
+    if ((strncmp(lGetSystemISA(), "avx2", 4) == 0)) {
+        iBuilder = new IDISA::IDISA_AVX2_Builder(mBitBlockType);
+        //std::cerr << "IDISA_AVX2_Builder selected\n";
+    }
+    else{
+        iBuilder = new IDISA::IDISA_Builder(mBitBlockType);
+        //std::cerr << "Generic IDISA_Builder selected\n";
+    }
+#else    
+    iBuilder = new IDISA::IDISA_Builder(mBitBlockType);
+#endif
+    iBuilder->initialize(mMod, mBuilder);
 
-    mCarryManager = new CarryManager(mBuilder, &iBuilder);
+    mCarryManager = new CarryManager(mBuilder, iBuilder);
     
     GenerateFunction(*function);
     
@@ -114,10 +135,10 @@ llvm::Function * PabloCompiler::compile(PabloFunction * function, Module * modul
     for (unsigned i = 0; i != function->getNumOfParameters(); ++i) {
         Value* indices[] = {mBuilder->getInt64(0), mBuilder->getInt32(i)};
         Value * gep = mBuilder->CreateGEP(mInputAddressPtr, indices);
-        LoadInst * basisBit = mBuilder->CreateAlignedLoad(gep, iBuilder.getBitBlockWidth()/8, false, function->getParameter(i)->getName()->to_string());
+        LoadInst * basisBit = mBuilder->CreateAlignedLoad(gep, iBuilder->getBitBlockWidth()/8, false, function->getParameter(i)->getName()->to_string());
         mMarkerMap[function->getParameter(i)] = basisBit;
         if (DumpTrace) {
-            iBuilder.genPrintRegister(function->getParameter(i)->getName()->to_string(), basisBit);
+            iBuilder->genPrintRegister(function->getParameter(i)->getName()->to_string(), basisBit);
         }
     }
      
@@ -134,7 +155,7 @@ llvm::Function * PabloCompiler::compile(PabloFunction * function, Module * modul
     mCarryManager->generateBlockNoIncrement();
 
     if (DumpTrace) {
-        iBuilder.genPrintRegister("mBlockNo", mBuilder->CreateAlignedLoad(mBuilder->CreateBitCast(mCarryManager->getBlockNoPtr(), PointerType::get(mBitBlockType, 0)), iBuilder.getBitBlockWidth()/8, false));
+        iBuilder->genPrintRegister("mBlockNo", mBuilder->CreateAlignedLoad(mBuilder->CreateBitCast(mCarryManager->getBlockNoPtr(), PointerType::get(mBitBlockType, 0)), iBuilder->getBitBlockWidth()/8, false));
     }
     
     // Write the output values out
@@ -148,6 +169,7 @@ llvm::Function * PabloCompiler::compile(PabloFunction * function, Module * modul
     
     // Clean up
     delete mCarryManager; mCarryManager = nullptr;
+    delete iBuilder; iBuilder = nullptr;
     delete mBuilder; mBuilder = nullptr;
     mMod = nullptr; // don't delete this. It's either owned by the ExecutionEngine or the calling function.
 
@@ -259,7 +281,7 @@ void PabloCompiler::compileIf(const If * ifStatement) {
         PHINode * phi = mBuilder->CreatePHI(mBitBlockType, 2, assign->getName()->value());
         auto f = mMarkerMap.find(assign);
         assert (f != mMarkerMap.end());
-        phi->addIncoming(iBuilder.allZeroes(), ifEntryBlock);
+        phi->addIncoming(iBuilder->allZeroes(), ifEntryBlock);
         phi->addIncoming(f->second, ifBodyFinalBlock);
         mMarkerMap[assign] = phi;
     }
@@ -322,7 +344,7 @@ void PabloCompiler::compileWhile(const While * whileStatement) {
     mCarryManager->extendCarryDataPhisAtWhileBodyFinalBlock(whileBodyFinalBlock);
 
     // Terminate the while loop body with a conditional branch back.
-    mBuilder->CreateCondBr(iBuilder.bitblock_any(compileExpression(whileStatement->getCondition())), whileBodyBlock, whileEndBlock);
+    mBuilder->CreateCondBr(iBuilder->bitblock_any(compileExpression(whileStatement->getCondition())), whileBodyBlock, whileEndBlock);
 
     // and for any Next nodes in the loop body
     for (unsigned i = 0; i < nextNodes.size(); i++) {
@@ -387,25 +409,25 @@ void PabloCompiler::compileStatement(const Statement * stmt) {
         AllocaInst * outputStruct = mBuilder->CreateAlloca(outputType);
         mBuilder->CreateCall2(externalFunction, mInputAddressPtr, outputStruct);
         Value * outputPtr = mBuilder->CreateGEP(outputStruct, std::vector<Value *>({ mBuilder->getInt32(0), mBuilder->getInt32(0) }));
-        expr = mBuilder->CreateAlignedLoad(outputPtr, iBuilder.getBitBlockWidth() / 8, false);
+        expr = mBuilder->CreateAlignedLoad(outputPtr, iBuilder->getBitBlockWidth() / 8, false);
     }
     else if (const And * pablo_and = dyn_cast<And>(stmt)) {
-        expr = iBuilder.simd_and(compileExpression(pablo_and->getOperand(0)), compileExpression(pablo_and->getOperand(1)));
+        expr = iBuilder->simd_and(compileExpression(pablo_and->getOperand(0)), compileExpression(pablo_and->getOperand(1)));
     }
     else if (const Or * pablo_or = dyn_cast<Or>(stmt)) {
-        expr = iBuilder.simd_or(compileExpression(pablo_or->getOperand(0)), compileExpression(pablo_or->getOperand(1)));
+        expr = iBuilder->simd_or(compileExpression(pablo_or->getOperand(0)), compileExpression(pablo_or->getOperand(1)));
     }
     else if (const Xor * pablo_xor = dyn_cast<Xor>(stmt)) {
-        expr = iBuilder.simd_xor(compileExpression(pablo_xor->getOperand(0)), compileExpression(pablo_xor->getOperand(1)));
+        expr = iBuilder->simd_xor(compileExpression(pablo_xor->getOperand(0)), compileExpression(pablo_xor->getOperand(1)));
     }
     else if (const Sel * sel = dyn_cast<Sel>(stmt)) {
         Value* ifMask = compileExpression(sel->getCondition());
-        Value* ifTrue = iBuilder.simd_and(ifMask, compileExpression(sel->getTrueExpr()));
-        Value* ifFalse = iBuilder.simd_and(iBuilder.simd_not(ifMask), compileExpression(sel->getFalseExpr()));
-        expr = iBuilder.simd_or(ifTrue, ifFalse);
+        Value* ifTrue = iBuilder->simd_and(ifMask, compileExpression(sel->getTrueExpr()));
+        Value* ifFalse = iBuilder->simd_and(iBuilder->simd_not(ifMask), compileExpression(sel->getFalseExpr()));
+        expr = iBuilder->simd_or(ifTrue, ifFalse);
     }
     else if (const Not * pablo_not = dyn_cast<Not>(stmt)) {
-        expr = iBuilder.simd_not(compileExpression(pablo_not->getExpr()));
+        expr = iBuilder->simd_not(compileExpression(pablo_not->getExpr()));
     }
     else if (const Advance * adv = dyn_cast<Advance>(stmt)) {
         Value* strm_value = compileExpression(adv->getExpr());
@@ -416,35 +438,35 @@ void PabloCompiler::compileStatement(const Statement * stmt) {
     else if (const Mod64Advance * adv = dyn_cast<Mod64Advance>(stmt)) {
         Value* strm_value = compileExpression(adv->getExpr());
         int shift = adv->getAdvanceAmount();
-        expr = iBuilder.simd_slli(64, strm_value, shift);
+        expr = iBuilder->simd_slli(64, strm_value, shift);
     }
     else if (const MatchStar * mstar = dyn_cast<MatchStar>(stmt)) {
         Value * marker = compileExpression(mstar->getMarker());
         Value * cc = compileExpression(mstar->getCharClass());
-        Value * marker_and_cc = iBuilder.simd_and(marker, cc);
+        Value * marker_and_cc = iBuilder->simd_and(marker, cc);
         unsigned carry_index = mstar->getLocalCarryIndex();
         Value * sum = mCarryManager->addCarryInCarryOut(carry_index, marker_and_cc, cc);
-        expr = iBuilder.simd_or(iBuilder.simd_xor(sum, cc), marker);
+        expr = iBuilder->simd_or(iBuilder->simd_xor(sum, cc), marker);
     }
     else if (const Mod64MatchStar * mstar = dyn_cast<Mod64MatchStar>(stmt)) {
         Value * marker = compileExpression(mstar->getMarker());
         Value * cc = compileExpression(mstar->getCharClass());
-        Value * marker_and_cc = iBuilder.simd_and(marker, cc);
-        Value * sum = iBuilder.simd_add(64, marker_and_cc, cc);
-        expr = iBuilder.simd_or(iBuilder.simd_xor(sum, cc), marker);
+        Value * marker_and_cc = iBuilder->simd_and(marker, cc);
+        Value * sum = iBuilder->simd_add(64, marker_and_cc, cc);
+        expr = iBuilder->simd_or(iBuilder->simd_xor(sum, cc), marker);
     }
     else if (const ScanThru * sthru = dyn_cast<ScanThru>(stmt)) {
         Value * marker_expr = compileExpression(sthru->getScanFrom());
         Value * cc_expr = compileExpression(sthru->getScanThru());
         unsigned carry_index = sthru->getLocalCarryIndex();
         Value * sum = mCarryManager->addCarryInCarryOut(carry_index, marker_expr, cc_expr);
-        expr = iBuilder.simd_and(sum, iBuilder.simd_not(cc_expr));
+        expr = iBuilder->simd_and(sum, iBuilder->simd_not(cc_expr));
     }
     else if (const Mod64ScanThru * sthru = dyn_cast<Mod64ScanThru>(stmt)) {
         Value * marker_expr = compileExpression(sthru->getScanFrom());
         Value * cc_expr = compileExpression(sthru->getScanThru());
-        Value * sum = iBuilder.simd_add(64, marker_expr, cc_expr);
-        expr = iBuilder.simd_and(sum, iBuilder.simd_not(cc_expr));
+        Value * sum = iBuilder->simd_add(64, marker_expr, cc_expr);
+        expr = iBuilder->simd_and(sum, iBuilder->simd_not(cc_expr));
     }
     else if (const Count * c = dyn_cast<Count>(stmt)) {
         unsigned count_index = c->getGlobalCountIndex();
@@ -458,17 +480,17 @@ void PabloCompiler::compileStatement(const Statement * stmt) {
     }
     mMarkerMap[stmt] = expr;
     if (DumpTrace) {
-        iBuilder.genPrintRegister(stmt->getName()->to_string(), expr);
+        iBuilder->genPrintRegister(stmt->getName()->to_string(), expr);
     }
     
 }
 
 Value * PabloCompiler::compileExpression(const PabloAST * expr) {
     if (isa<Ones>(expr)) {
-        return iBuilder.allOnes();
+        return iBuilder->allOnes();
     }
     else if (isa<Zeroes>(expr)) {
-        return iBuilder.allZeroes();
+        return iBuilder->allZeroes();
     }
     auto f = mMarkerMap.find(expr);
     if (LLVM_UNLIKELY(f == mMarkerMap.end())) {
@@ -487,14 +509,14 @@ void PabloCompiler::SetOutputValue(Value * marker, const unsigned index) {
         throw std::runtime_error("Cannot set result " + std::to_string(index) + " to Null");
     }
     if (LLVM_UNLIKELY(marker->getType()->isPointerTy())) {
-        marker = mBuilder->CreateAlignedLoad(marker, iBuilder.getBitBlockWidth()/8, false);
+        marker = mBuilder->CreateAlignedLoad(marker, iBuilder->getBitBlockWidth()/8, false);
     }
     Value* indices[] = {mBuilder->getInt64(0), mBuilder->getInt32(index)};
     Value* gep = mBuilder->CreateGEP(mOutputAddressPtr, indices);
     if (marker->getType() != mBitBlockType) {
         marker = mBuilder->CreateBitCast(marker, mBitBlockType);
     }
-    mBuilder->CreateAlignedStore(marker, gep, iBuilder.getBitBlockWidth()/8, false);
+    mBuilder->CreateAlignedStore(marker, gep, iBuilder->getBitBlockWidth()/8, false);
 }
 
 }

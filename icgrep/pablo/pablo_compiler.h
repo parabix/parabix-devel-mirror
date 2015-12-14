@@ -102,7 +102,7 @@ private:
     CarryManager *                      mCarryManager;
 
     Type* const                   mBitBlockType;
-    IDISA::IDISA_Builder                iBuilder;
+    IDISA::IDISA_Builder *              iBuilder;
     PointerType*                        mInputType;
 
     PabloBlock *                        mPabloBlock;
