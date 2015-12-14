@@ -59,7 +59,6 @@ public:
     virtual Value * simd_min(unsigned fw, Value * a, Value * b);
     virtual Value * simd_umin(unsigned fw, Value * a, Value * b);
     virtual Value * simd_if(unsigned fw, Value * cond, Value * a, Value * b);
-    Value * simd_if(unsigned fw, Value * cond, Value * a, Value * b);
     
     virtual Value * simd_slli(unsigned fw, Value * a, unsigned shift);
     virtual Value * simd_srli(unsigned fw, Value * a, unsigned shift);
