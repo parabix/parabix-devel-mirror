@@ -35,11 +35,15 @@ void IDISA_Builder::genPrintRegister(std::string regName, Value * bitblockValue)
     mLLVMBuilder->CreateCall(mPrintRegisterFunction, std::vector<Value *>({regStrPtr, bitCast(bitblockValue)}));
 }
 
-Constant * IDISA_Builder::simd_himask(unsigned fw) {
-    return Constant::getIntegerValue(mLLVMBuilder->getIntNTy(mBitBlockWidth), APInt::getSplat(mBitBlockWidth, APInt::getHighBitsSet(fw, fw/2)));
-}
-
-Value * IDISA_Builder::simd_add(unsigned fw, Value * a, Value * b) {
+    Constant * IDISA_Builder::simd_himask(unsigned fw) {
+        return Constant::getIntegerValue(mLLVMBuilder->getIntNTy(mBitBlockWidth), APInt::getSplat(mBitBlockWidth, APInt::getHighBitsSet(fw, fw/2)));
+    }
+    
+    Constant * IDISA_Builder::simd_lomask(unsigned fw) {
+        return Constant::getIntegerValue(mLLVMBuilder->getIntNTy(mBitBlockWidth), APInt::getSplat(mBitBlockWidth, APInt::getLowBitsSet(fw, fw/2)));
+    }
+    
+    Value * IDISA_Builder::simd_add(unsigned fw, Value * a, Value * b) {
     return mLLVMBuilder->CreateAdd(fwCast(fw, a), fwCast(fw, b));
 }
 
