@@ -45,6 +45,7 @@ public:
     
     Constant * allZeroes() {return mZeroInitializer;}
     Constant * allOnes() {return mOneInitializer;}
+    Constant * simd_himask(unsigned fw);
         
     virtual Value * simd_add(unsigned fw, Value * a, Value * b);
     virtual Value * simd_sub(unsigned fw, Value * a, Value * b);
