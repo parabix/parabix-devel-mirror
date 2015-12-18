@@ -1,22 +1,12 @@
 #include "codemotionpass.h"
-#include <pablo/function.h>
-#include <pablo/ps_while.h>
+#include <pablo/codegenstate.h>
 #include <pablo/analysis/pabloverifier.hpp>
-#ifdef USE_BOOST
 #include <boost/container/flat_set.hpp>
-#else
-#include <unordered_set>
-#endif
-#include <pablo/printer_pablos.h>
-#include <iostream>
+
+using namespace boost;
+using namespace boost::container;
 
 namespace pablo {
-
-#ifdef USE_BOOST
-using LoopVariants = boost::container::flat_set<const PabloAST *>;
-#else
-using LoopVariants = std::unordered_set<const PabloAST *>;
-#endif
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief optimize
@@ -70,14 +60,14 @@ inline static unsigned calculateDepthToCurrentBlock(const PabloBlock * scope, co
  * @brief findScopeUsages
  ** ------------------------------------------------------------------------------------------------------------- */
 template <class ScopeSet>
-inline bool findScopeUsages(Statement * stmt, ScopeSet & scopeSet, const PabloBlock * const block, const PabloBlock * const ignored = nullptr) {
+inline bool findScopeUsages(Statement * stmt, ScopeSet & scopeSet, const PabloBlock * const block, const PabloBlock * const blocker) {
     for (PabloAST * use : stmt->users()) {
         assert (isa<Statement>(use));
         PabloBlock * const parent = cast<Statement>(use)->getParent();
         if (LLVM_LIKELY(parent == block)) {
             return false;
         }
-        if (parent != ignored) {
+        if (parent != blocker) {
             scopeSet.insert(parent);
         }
     }
@@ -104,7 +94,7 @@ inline bool CodeMotionPass::isAcceptableTarget(Statement * stmt, ScopeSet & scop
             }
         }
     } else if (isSafeToMove(stmt)) {
-        return findScopeUsages(stmt, scopeSet, block);
+        return findScopeUsages(stmt, scopeSet, block, nullptr);
     }
     return false;
 }
@@ -165,7 +155,7 @@ abort:  scopes.clear();
  * @brief hoistWhileLoopInvariants
  ** ------------------------------------------------------------------------------------------------------------- */
 void CodeMotionPass::hoistLoopInvariants(While * loop) {
-    LoopVariants loopVariants;
+    flat_set<const PabloAST *> loopVariants;
     for (Next * variant : loop->getVariants()) {
         loopVariants.insert(variant);
         loopVariants.insert(variant->getInitial());

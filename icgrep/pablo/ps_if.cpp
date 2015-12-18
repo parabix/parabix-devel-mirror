@@ -18,7 +18,7 @@ If::If(PabloAST * expr, const std::initializer_list<Assign *> definedVars, Pablo
     // embedded into the If, the defined var is a user of the If node. However, since the
     // Assign's value is also dependant on the 'Next' value, the If node is also a user
     // of it.
-
+    mBody->setBranch(this);
     mBody->setParent(getParent());
     for (Assign * def : mDefined) {
         def->addUser(this);
@@ -30,6 +30,7 @@ If::If(PabloAST * expr, const std::vector<Assign *> & definedVars, PabloBlock * 
 : Statement(ClassTypeId::If, {expr}, nullptr)
 , mBody(body)
 , mDefined(definedVars.begin(), definedVars.end(), reinterpret_cast<DefinedAllocator &>(mAllocator)) {
+    mBody->setBranch(this);
     mBody->setParent(getParent());
     for (Assign * def : mDefined) {
         def->addUser(this);

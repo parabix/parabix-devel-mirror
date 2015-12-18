@@ -563,6 +563,7 @@ PabloBlock::PabloBlock(SymbolGenerator * symbolGenerator) noexcept
 : PabloAST(PabloAST::ClassTypeId::Block)
 , mSymbolGenerator(symbolGenerator)
 , mParent(nullptr)
+, mBranch(nullptr)
 , mScopeIndex(0)
 {
 

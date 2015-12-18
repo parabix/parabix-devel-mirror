@@ -159,7 +159,7 @@ bool MultiplexingPass::optimize(PabloFunction & function, const unsigned limit, 
         LOG("ApplySubsetConstraints:   " << (end_subset_constraints - start_subset_constraints));
 
         RECORD_TIMESTAMP(start_select_independent_sets);
-        mp.multiplexSelectedIndependentSets(function);
+        mp.multiplexSelectedSets(function);
         RECORD_TIMESTAMP(end_select_independent_sets);
         LOG("SelectedIndependentSets:  " << (end_select_independent_sets - start_select_independent_sets));
 
@@ -572,9 +572,9 @@ static inline bool is_power_of_2(const size_t n) {
  * the demultiplexing calculations using range expressions.
  *
  * Note: it'd be preferable to contract vertices in the constraint graph prior to scanning through it but that
- * leaves us with a more difficult problem. Namely, an Advance node may belong to more than one clique and we
- * want to avoid generating a multiplexing set whose size is 2^n for any n ∈ ℤ* but don't want to needlessly
- * limit the size of any clique. Look into this further later.
+ * leaves us with a more difficult problem. Namely, Advance nodes may belong to more than one clique but it'd be
+ * useless to compute a value twice; furthermore, we want to avoid generating a multiplexing set whose size is 2^n
+ * for any n ∈ ℤ* but don't want to needlessly limit the size of any clique. Look into this further later.
  ** ------------------------------------------------------------------------------------------------------------- */
 void MultiplexingPass::generateUsageWeightingGraph() {
     const auto n = num_vertices(mConstraintGraph); assert (n > 2);
@@ -585,7 +585,7 @@ void MultiplexingPass::generateUsageWeightingGraph() {
         const Advance * const advI = mAdvance[i];
         for (unsigned j = i + 1; j != n; ++j) {
             const Advance * const advJ = mAdvance[j];
-            if (LLVM_UNLIKELY(advI->getNumUsers() == advJ->getNumUsers()) && independent(i, j)) {
+            if (LLVM_UNLIKELY(advI->getNumUses() == advJ->getNumUses()) && independent(i, j)) {
                 if (LLVM_UNLIKELY(std::equal(advI->user_begin(), advI->user_end(), advJ->user_begin()))) {
                     // INVESTIGATE: we should be able to ignore subset relations if these are going to become a
                     // range expression. Look into making a proof for it once the range expression calculation
@@ -611,7 +611,7 @@ void MultiplexingPass::generateUsageWeightingGraph() {
             }
         }
     }
-    mUsageWeightingGraph = G;
+    mUsageGraph = G;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -759,7 +759,7 @@ static inline size_t log2_plus_one(const size_t n) {
  * This algorithm is simply computes a greedy set cover. We want an exact max-weight set cover but can generate new
  * sets by taking a subset of any existing set. With a few modifications, the greedy approach seems to work well
  * enough but can be shown to produce a suboptimal solution if there are three candidate sets labelled A, B and C,
- * in which A ∩ B = ∅, |A| ≤ |B| < |C| < (|A| + |B|), and C ∩ (A ∪ B) = C.
+ * in which A ∩ B = ∅, |A| ≤ |B| < |C|, and C ⊂ (A ∪ B).
  ** ------------------------------------------------------------------------------------------------------------- */
 void MultiplexingPass::selectMultiplexSets() {
 
@@ -794,7 +794,7 @@ void MultiplexingPass::selectMultiplexSets() {
                 std::tie(begin, end) = out_edges(i + m, mMultiplexSetGraph);
                 for (auto ei = begin; ei != end; ++ei) {
                     for (auto ej = ei; ++ej != end; ) {
-                        if (edge(target(*ei, mMultiplexSetGraph), target(*ej, mMultiplexSetGraph), mUsageWeightingGraph).second) {
+                        if (edge(target(*ei, mMultiplexSetGraph), target(*ej, mMultiplexSetGraph), mUsageGraph).second) {
                             ++r;
                         }
                     }
@@ -897,7 +897,7 @@ void MultiplexingPass::eliminateSubsetConstraints() {
     if (num_edges(mSubsetGraph) != 0) {
 
         // At least one subset constraint exists; perform a transitive reduction on the graph to ensure that
-        // we perform the minimum number of AST modifications for the given multiplexing sets.
+        // we perform the minimum number of AST modifications for the selected multiplexing sets.
 
         doTransitiveReductionOfSubsetGraph();
 
@@ -917,9 +917,9 @@ void MultiplexingPass::eliminateSubsetConstraints() {
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief multiplexSelectedIndependentSets
+ * @brief multiplexSelectedSets
  ** ------------------------------------------------------------------------------------------------------------- */
-void MultiplexingPass::multiplexSelectedIndependentSets(PabloFunction &) {
+void MultiplexingPass::multiplexSelectedSets(PabloFunction &) {
     const auto first_set = num_vertices(mConstraintGraph);
     const auto last_set = num_vertices(mMultiplexSetGraph);
     for (auto idx = first_set; idx != last_set; ++idx) {
@@ -930,8 +930,8 @@ void MultiplexingPass::multiplexSelectedIndependentSets(PabloFunction &) {
             Advance * muxed[m];
             // The multiplex set graph is a DAG with edges denoting the set relationships of our independent sets.
             unsigned i = 0;
-            for (const auto e : make_iterator_range(out_edges(idx, mMultiplexSetGraph))) {
-                input[i++] = mAdvance[target(e, mMultiplexSetGraph)];
+            for (const auto u : orderMultiplexSet(idx)) {
+                input[i++] = mAdvance[u];
             }
             Advance * const adv = input[0];
             PabloBlock * const block = adv->getParent(); assert (block);
@@ -956,7 +956,7 @@ void MultiplexingPass::multiplexSelectedIndependentSets(PabloFunction &) {
                 for (size_t j = 0; j != m; ++j) {
                     demuxing[j] = muxed[j];
                     if (((i + 1) & (1UL << j)) == 0) {
-                        demuxing[j] = block->createNot(demuxing[j]);
+                        demuxing[j] = block->createNot(muxed[j]);
                     }
                 }
                 And * demuxed = block->createAnd(m);
@@ -967,6 +967,48 @@ void MultiplexingPass::multiplexSelectedIndependentSets(PabloFunction &) {
             }
         }
     }
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief orderMultiplexSet
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline MultiplexingPass::MultiplexVector MultiplexingPass::orderMultiplexSet(const MultiplexSetGraph::vertex_descriptor u) {
+    MultiplexVector set;
+    set.reserve(out_degree(u, mMultiplexSetGraph));
+    for (const auto e : make_iterator_range(out_edges(u, mMultiplexSetGraph))) {
+        set.push_back(target(e, mMultiplexSetGraph));
+    }
+    std::sort(set.begin(), set.end());
+    MultiplexVector clique;
+    MultiplexVector result;
+    result.reserve(out_degree(u, mMultiplexSetGraph));
+    while (set.size() > 0) {
+        const auto v = *set.begin();
+        clique.push_back(v);
+        set.erase(set.begin());
+        for (const auto w : make_iterator_range(adjacent_vertices(v, mUsageGraph))) {
+            auto f = std::lower_bound(set.begin(), set.end(), w);
+            // Is w in our multiplexing set?
+            if (f == set.end() || *f != w) {
+                continue;
+            }
+            // Is our subgraph still a clique after adding w to it?
+            bool valid = true;
+            for (const auto y : clique) {
+                if (!edge(w, y, mUsageGraph).second) {
+                    valid = false;
+                    break;
+                }
+            }
+            if (valid) {
+                clique.push_back(w);
+                set.erase(f);
+            }
+        }
+        result.insert(result.end(), clique.begin(), clique.end());
+        clique.clear();
+    }
+    return result;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

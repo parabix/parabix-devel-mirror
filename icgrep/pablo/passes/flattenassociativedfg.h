@@ -21,6 +21,9 @@ protected:
     static void deMorgansExpansion(Not * const var, PabloBlock * const block);
     static void deMorgansReduction(PabloBlock * const block);
     static void deMorgansReduction(Variadic * const var, PabloBlock * const block);
+    static void removeFalseScopeDependencies(PabloBlock * const block);
+    static void removeFalseScopeDependencies(Assign * const def);
+    static void tryToPartiallyExtractVariadic(Variadic * const var);
     FlattenAssociativeDFG() = default;
 };
 

@@ -269,7 +269,7 @@ static BicliqueSet && removeUnhelpfulBicliques(BicliqueSet && cliques, Graph & G
         const auto cardinalityA = std::get<0>(*ci).size();
         VertexSet & B = std::get<1>(*ci);
         for (auto bi = B.begin(); bi != B.end(); ) {
-            if (G[*bi]->getNumUsers() == cardinalityA) {
+            if (G[*bi]->getNumUses() == cardinalityA) {
                 ++bi;
             } else {
                 bi = B.erase(bi);

@@ -50,6 +50,7 @@ void FactorizeDFG::finalize(PabloBlock * const block) {
         if (isa<If>(stmt) || isa<While>(stmt)) {
             finalize(isa<If>(stmt) ? cast<If>(stmt)->getBody() : cast<While>(stmt)->getBody());
         } else if ((isa<And>(stmt) || isa<Or>(stmt) || isa<Xor>(stmt)) && (stmt->getNumOperands() > 2)) {
+            // We should maintain an ordering list and sort each Variadic according to it prior to writing them out.
             stmt = finalize(cast<Variadic>(stmt), block);
             continue;
         }
@@ -72,7 +73,7 @@ static BicliqueSet enumerateBicliques(Variadic * const var) {
     for (unsigned i = 0; i != var->getNumOperands(); ++i) {
         PabloAST * const op = var->getOperand(i);
         VertexSet B;
-        B.reserve(op->getNumUsers());
+        B.reserve(op->getNumUses());
         for (PabloAST * user : op->users()) {
             if (user->getClassTypeId() == typeId) {
                 B.push_back(user);

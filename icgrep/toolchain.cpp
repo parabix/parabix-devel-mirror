@@ -43,6 +43,7 @@
 #include <pablo/optimizers/pablo_automultiplexing.hpp>
 #include <pablo/optimizers/pablo_bddminimization.h>
 #include <pablo/optimizers/distributivepass.h>
+#include <pablo/optimizers/schedulingprepass.h>
 #endif
 #include <pablo/function.h>
 #include <pablo/analysis/pabloverifier.hpp>
@@ -165,6 +166,7 @@ void pablo_function_passes(PabloFunction * function) {
     if (EnableMultiplexing) {
         MultiplexingPass::optimize(*function, MultiplexingSetLimit, MultiplexingSelectionLimit, MultiplexingWindowSize);
     }
+    SchedulingPrePass::optimize(*function);
     if (EnableLowering || EnableDistribution || EnableMultiplexing) {
         FactorizeDFG::transform(*function);
     }

@@ -490,3 +490,5 @@ pablo/optimizers/distributivepass.cpp
 pablo/passes/factorizedfg.h
 pablo/passes/factorizedfg.cpp
 ispc.cpp
+pablo/optimizers/schedulingprepass.h
+pablo/optimizers/schedulingprepass.cpp

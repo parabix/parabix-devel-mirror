@@ -36,6 +36,8 @@ namespace pablo {
 
 class PabloBlock : public PabloAST, public StatementList {
     friend class PabloAST;
+    friend class If;
+    friend class While;
     friend class PabloBuilder;
 public:
 
@@ -186,7 +188,6 @@ public:
 
     PabloAST * createMod64ScanThru(PabloAST * from, PabloAST * thru, const std::string prefix);
 
-
     inline StatementList & statements() {
         return *this;
     }
@@ -226,6 +227,10 @@ public:
     
     void eraseFromParent(const bool recursively = false);
 
+    inline Statement * getBranch() const {
+        return mBranch;
+    }
+
     virtual ~PabloBlock();
 
 protected:
@@ -247,6 +252,10 @@ protected:
         return expr;
     }
 
+    inline void setBranch(Statement * const branch) {
+        mBranch = branch;
+    }
+
 private:
 
     Call * createCall(PabloAST * prototype, const std::vector<PabloAST *> &);
@@ -258,6 +267,7 @@ private:
     static Ones                                         mOnes;
     SymbolGenerator *                                   mSymbolGenerator; // TODO: need a better way of passing a symbol generator around
     PabloBlock *                                        mParent;
+    Statement *                                         mBranch; // What statement branches into this scope block?
     unsigned                                            mScopeIndex;
 };
 

@@ -28,6 +28,7 @@ class MultiplexingPass {
     using RNG = std::mt19937;
     using IntDistribution = std::uniform_int_distribution<RNG::result_type>;
     using MultiplexSetGraph = boost::adjacency_list<boost::hash_setS, boost::vecS, boost::bidirectionalS>;
+    using MultiplexVector = std::vector<MultiplexSetGraph::vertex_descriptor>;
     using SubsetGraph = boost::adjacency_list<boost::hash_setS, boost::vecS, boost::bidirectionalS>;
     using SubsetEdgeIterator = boost::graph_traits<SubsetGraph>::edge_iterator;
     using CliqueGraph = boost::adjacency_list<boost::hash_setS, boost::vecS, boost::undirectedS>;
@@ -66,7 +67,8 @@ protected:
     void eliminateSubsetConstraints();
     void doTransitiveReductionOfSubsetGraph();
 
-    void multiplexSelectedIndependentSets(PabloFunction & function);
+    MultiplexVector orderMultiplexSet(const MultiplexSetGraph::vertex_descriptor u);
+    void multiplexSelectedSets(PabloFunction & function);
 
     static void topologicalSort(PabloFunction & function);
     static void topologicalSort(PabloBlock * block, OrderingVerifier & parent);
@@ -101,7 +103,7 @@ private:
     AdvanceDepth                mAdvanceDepth;
     AdvanceVariable             mAdvanceNegatedVariable;
     SubsetGraph                 mSubsetGraph;
-    CliqueGraph                 mUsageWeightingGraph;
+    CliqueGraph                 mUsageGraph;
     MultiplexSetGraph           mMultiplexSetGraph;
 };
 

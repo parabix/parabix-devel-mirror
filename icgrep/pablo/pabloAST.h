@@ -59,8 +59,8 @@ public:
         // Boolean operations
         , And
         , Or
-        , Not
         , Xor
+        , Not        
         , Sel
         // Stream operations
         , Advance
@@ -99,10 +99,6 @@ public:
 
     inline const_user_iterator user_end() const {
         return mUsers.cend();
-    }
-
-    inline unsigned getNumUsers() const {
-        return mUsers.size();
     }
 
     inline Users & users() {
