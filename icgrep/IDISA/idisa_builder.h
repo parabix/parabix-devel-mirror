@@ -16,12 +16,11 @@ using namespace llvm;
 
 namespace IDISA {
 
-class IDISA_Builder {
+    class IDISA_Builder : public IRBuilder<> {
 public:
 
-    IDISA_Builder(Type * bitBlockType)
-    : mMod(nullptr)
-    , mLLVMBuilder(nullptr)
+        IDISA_Builder(Module * m, Type * bitBlockType) : IRBuilder<>(m->getContext())
+    , mMod(m)
     , mBitBlockType(bitBlockType)
     , mBitBlockWidth(bitBlockType->isIntegerTy() ? cast<IntegerType>(bitBlockType)->getIntegerBitWidth() : cast<VectorType>(bitBlockType)->getBitWidth())
     , mZeroInitializer(Constant::getNullValue(bitBlockType)) 
@@ -30,14 +29,9 @@ public:
 
     }
     virtual ~IDISA_Builder() {};
-
-    void initialize(Module * m, IRBuilder <> * b) {
-        mMod = m;
-        mLLVMBuilder = b;
-    }
     
     Type * getBitBlockType() { return mBitBlockType;}
-    Value * bitCast(Value * a) {return a->getType() == mBitBlockType ? a : mLLVMBuilder->CreateBitCast(a, mBitBlockType);}
+    Value * bitCast(Value * a) {return a->getType() == mBitBlockType ? a : CreateBitCast(a, mBitBlockType);}
     int getBitBlockWidth() { return mBitBlockWidth;}
     Module * getModule() {return mMod;}
     void genPrintRegister(std::string regName, Value * bitblockValue);
@@ -91,7 +85,6 @@ public:
     
 protected:
     Module * mMod;
-    IRBuilder <> * mLLVMBuilder;
     Type * mBitBlockType;
     unsigned mBitBlockWidth;
     Constant * mZeroInitializer;

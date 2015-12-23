@@ -57,7 +57,6 @@ namespace pablo {
 
 PabloCompiler::PabloCompiler(Type * bitBlockType)
 : mMod(nullptr)
-, mBuilder(nullptr)
 , mCarryManager(nullptr)
 , mBitBlockType(bitBlockType)
 , iBuilder(nullptr)
@@ -109,33 +108,30 @@ llvm::Function * PabloCompiler::compile(PabloFunction * function, Module * modul
 
     mMod = module;
 
-    mBuilder = new IRBuilder<>(mMod->getContext());
-
 #if (BLOCK_SIZE == 256)
     if ((strncmp(lGetSystemISA(), "avx2", 4) == 0)) {
-        iBuilder = new IDISA::IDISA_AVX2_Builder(mBitBlockType);
+        iBuilder = new IDISA::IDISA_AVX2_Builder(mMod, mBitBlockType);
         //std::cerr << "IDISA_AVX2_Builder selected\n";
     }
     else{
-        iBuilder = new IDISA::IDISA_Builder(mBitBlockType);
+        iBuilder = new IDISA::IDISA_Builder(mMod, mBitBlockType);
         //std::cerr << "Generic IDISA_Builder selected\n";
     }
 #else    
-    iBuilder = new IDISA::IDISA_Builder(mBitBlockType);
+    iBuilder = new IDISA::IDISA_Builder(mMod, mBitBlockType);
 #endif
-    iBuilder->initialize(mMod, mBuilder);
 
-    mCarryManager = new CarryManager(mBuilder, iBuilder);
+    mCarryManager = new CarryManager(iBuilder);
     
     GenerateFunction(*function);
     
-    mBuilder->SetInsertPoint(BasicBlock::Create(mMod->getContext(), "entry", mFunction,0));
+    iBuilder->SetInsertPoint(BasicBlock::Create(mMod->getContext(), "entry", mFunction,0));
 
     //The basis bits structure
     for (unsigned i = 0; i != function->getNumOfParameters(); ++i) {
-        Value* indices[] = {mBuilder->getInt64(0), mBuilder->getInt32(i)};
-        Value * gep = mBuilder->CreateGEP(mInputAddressPtr, indices);
-        LoadInst * basisBit = mBuilder->CreateAlignedLoad(gep, iBuilder->getBitBlockWidth()/8, false, function->getParameter(i)->getName()->to_string());
+        Value* indices[] = {iBuilder->getInt64(0), iBuilder->getInt32(i)};
+        Value * gep = iBuilder->CreateGEP(mInputAddressPtr, indices);
+        LoadInst * basisBit = iBuilder->CreateAlignedLoad(gep, iBuilder->getBitBlockWidth()/8, false, function->getParameter(i)->getName()->to_string());
         mMarkerMap[function->getParameter(i)] = basisBit;
         if (DumpTrace) {
             iBuilder->genPrintRegister(function->getParameter(i)->getName()->to_string(), basisBit);
@@ -155,7 +151,7 @@ llvm::Function * PabloCompiler::compile(PabloFunction * function, Module * modul
     mCarryManager->generateBlockNoIncrement();
 
     if (DumpTrace) {
-        iBuilder->genPrintRegister("mBlockNo", mBuilder->CreateAlignedLoad(mBuilder->CreateBitCast(mCarryManager->getBlockNoPtr(), PointerType::get(mBitBlockType, 0)), iBuilder->getBitBlockWidth()/8, false));
+        iBuilder->genPrintRegister("mBlockNo", iBuilder->CreateAlignedLoad(iBuilder->CreateBitCast(mCarryManager->getBlockNoPtr(), PointerType::get(mBitBlockType, 0)), iBuilder->getBitBlockWidth()/8, false));
     }
     
     // Write the output values out
@@ -165,12 +161,12 @@ llvm::Function * PabloCompiler::compile(PabloFunction * function, Module * modul
     }
 
     //Terminate the block
-    ReturnInst::Create(mMod->getContext(), mBuilder->GetInsertBlock());
+    ReturnInst::Create(mMod->getContext(), iBuilder->GetInsertBlock());
     
     // Clean up
     delete mCarryManager; mCarryManager = nullptr;
     delete iBuilder; iBuilder = nullptr;
-    delete mBuilder; mBuilder = nullptr;
+    delete iBuilder; iBuilder = nullptr;
     mMod = nullptr; // don't delete this. It's either owned by the ExecutionEngine or the calling function.
 
     return mFunction;
@@ -252,7 +248,7 @@ void PabloCompiler::compileIf(const If * ifStatement) {
     //  body.
     //
 
-    BasicBlock * ifEntryBlock = mBuilder->GetInsertBlock();
+    BasicBlock * ifEntryBlock = iBuilder->GetInsertBlock();
     BasicBlock * ifBodyBlock = BasicBlock::Create(mMod->getContext(), "if.body", mFunction, 0);
     BasicBlock * ifEndBlock = BasicBlock::Create(mMod->getContext(), "if.end", mFunction, 0);
     
@@ -261,24 +257,24 @@ void PabloCompiler::compileIf(const If * ifStatement) {
     Value * if_test_value = compileExpression(ifStatement->getCondition());
     
     mCarryManager->enterScope(ifBody);
-    mBuilder->CreateCondBr(mCarryManager->generateBitBlockOrSummaryTest(if_test_value), ifBodyBlock, ifEndBlock);
+    iBuilder->CreateCondBr(mCarryManager->generateBitBlockOrSummaryTest(if_test_value), ifBodyBlock, ifEndBlock);
     
     // Entry processing is complete, now handle the body of the if.
-    mBuilder->SetInsertPoint(ifBodyBlock);
+    iBuilder->SetInsertPoint(ifBodyBlock);
     
     mCarryManager->initializeCarryDataAtIfEntry();
     compileBlock(ifBody);
     if (mCarryManager->blockHasCarries()) {
         mCarryManager->generateCarryOutSummaryCodeIfNeeded();
     }
-    BasicBlock * ifBodyFinalBlock = mBuilder->GetInsertBlock();
+    BasicBlock * ifBodyFinalBlock = iBuilder->GetInsertBlock();
     mCarryManager->ensureCarriesStoredLocal();
-    mBuilder->CreateBr(ifEndBlock);
+    iBuilder->CreateBr(ifEndBlock);
     //End Block
-    mBuilder->SetInsertPoint(ifEndBlock);
+    iBuilder->SetInsertPoint(ifEndBlock);
     for (const PabloAST * node : ifStatement->getDefined()) {
         const Assign * assign = cast<Assign>(node);
-        PHINode * phi = mBuilder->CreatePHI(mBitBlockType, 2, assign->getName()->value());
+        PHINode * phi = iBuilder->CreatePHI(mBitBlockType, 2, assign->getName()->value());
         auto f = mMarkerMap.find(assign);
         assert (f != mMarkerMap.end());
         phi->addIncoming(iBuilder->allZeroes(), ifEntryBlock);
@@ -294,7 +290,7 @@ void PabloCompiler::compileWhile(const While * whileStatement) {
 
     PabloBlock * const whileBody = whileStatement->getBody();
     
-    BasicBlock * whileEntryBlock = mBuilder->GetInsertBlock();
+    BasicBlock * whileEntryBlock = iBuilder->GetInsertBlock();
     BasicBlock * whileBodyBlock = BasicBlock::Create(mMod->getContext(), "while.body", mFunction, 0);
     BasicBlock * whileEndBlock = BasicBlock::Create(mMod->getContext(), "while.end", mFunction, 0);
 
@@ -309,8 +305,8 @@ void PabloCompiler::compileWhile(const While * whileStatement) {
     // of the loop body unconditionally.   The while condition is tested at the end of
     // the loop.
 
-    mBuilder->CreateBr(whileBodyBlock);
-    mBuilder->SetInsertPoint(whileBodyBlock);
+    iBuilder->CreateBr(whileBodyBlock);
+    iBuilder->SetInsertPoint(whileBodyBlock);
 
     //
     // There are 3 sets of Phi nodes for the while loop.
@@ -322,7 +318,7 @@ void PabloCompiler::compileWhile(const While * whileStatement) {
 
     // for any Next nodes in the loop body, initialize to (a) pre-loop value.
     for (const Next * n : nextNodes) {
-        PHINode * phi = mBuilder->CreatePHI(mBitBlockType, 2, n->getName()->value());
+        PHINode * phi = iBuilder->CreatePHI(mBitBlockType, 2, n->getName()->value());
         auto f = mMarkerMap.find(n->getInitial());
         assert (f != mMarkerMap.end());
         phi->addIncoming(f->second, whileEntryBlock);
@@ -336,7 +332,7 @@ void PabloCompiler::compileWhile(const While * whileStatement) {
     ++mWhileDepth;
     compileBlock(whileBody);
 
-    BasicBlock * whileBodyFinalBlock = mBuilder->GetInsertBlock();
+    BasicBlock * whileBodyFinalBlock = iBuilder->GetInsertBlock();
 
     if (mCarryManager->blockHasCarries()) {
         mCarryManager->generateCarryOutSummaryCodeIfNeeded();
@@ -344,7 +340,7 @@ void PabloCompiler::compileWhile(const While * whileStatement) {
     mCarryManager->extendCarryDataPhisAtWhileBodyFinalBlock(whileBodyFinalBlock);
 
     // Terminate the while loop body with a conditional branch back.
-    mBuilder->CreateCondBr(iBuilder->bitblock_any(compileExpression(whileStatement->getCondition())), whileBodyBlock, whileEndBlock);
+    iBuilder->CreateCondBr(iBuilder->bitblock_any(compileExpression(whileStatement->getCondition())), whileBodyBlock, whileEndBlock);
 
     // and for any Next nodes in the loop body
     for (unsigned i = 0; i < nextNodes.size(); i++) {
@@ -356,7 +352,7 @@ void PabloCompiler::compileWhile(const While * whileStatement) {
         nextPhis[i]->addIncoming(f->second, whileBodyFinalBlock);
     }
 
-    mBuilder->SetInsertPoint(whileEndBlock);
+    iBuilder->SetInsertPoint(whileEndBlock);
     --mWhileDepth;
 
     mCarryManager->ensureCarriesStoredRecursive();
@@ -406,10 +402,10 @@ void PabloCompiler::compileStatement(const Statement * stmt) {
         externalFunction->setCallingConv(llvm::CallingConv::C);
 
 
-        AllocaInst * outputStruct = mBuilder->CreateAlloca(outputType);
-        mBuilder->CreateCall2(externalFunction, mInputAddressPtr, outputStruct);
-        Value * outputPtr = mBuilder->CreateGEP(outputStruct, std::vector<Value *>({ mBuilder->getInt32(0), mBuilder->getInt32(0) }));
-        expr = mBuilder->CreateAlignedLoad(outputPtr, iBuilder->getBitBlockWidth() / 8, false);
+        AllocaInst * outputStruct = iBuilder->CreateAlloca(outputType);
+        iBuilder->CreateCall2(externalFunction, mInputAddressPtr, outputStruct);
+        Value * outputPtr = iBuilder->CreateGEP(outputStruct, std::vector<Value *>({ iBuilder->getInt32(0), iBuilder->getInt32(0) }));
+        expr = iBuilder->CreateAlignedLoad(outputPtr, iBuilder->getBitBlockWidth() / 8, false);
     }
     else if (const And * pablo_and = dyn_cast<And>(stmt)) {
         expr = iBuilder->simd_and(compileExpression(pablo_and->getOperand(0)), compileExpression(pablo_and->getOperand(1)));
@@ -509,14 +505,14 @@ void PabloCompiler::SetOutputValue(Value * marker, const unsigned index) {
         throw std::runtime_error("Cannot set result " + std::to_string(index) + " to Null");
     }
     if (LLVM_UNLIKELY(marker->getType()->isPointerTy())) {
-        marker = mBuilder->CreateAlignedLoad(marker, iBuilder->getBitBlockWidth()/8, false);
+        marker = iBuilder->CreateAlignedLoad(marker, iBuilder->getBitBlockWidth()/8, false);
     }
-    Value* indices[] = {mBuilder->getInt64(0), mBuilder->getInt32(index)};
-    Value* gep = mBuilder->CreateGEP(mOutputAddressPtr, indices);
+    Value* indices[] = {iBuilder->getInt64(0), iBuilder->getInt32(index)};
+    Value* gep = iBuilder->CreateGEP(mOutputAddressPtr, indices);
     if (marker->getType() != mBitBlockType) {
-        marker = mBuilder->CreateBitCast(marker, mBitBlockType);
+        marker = iBuilder->CreateBitCast(marker, mBitBlockType);
     }
-    mBuilder->CreateAlignedStore(marker, gep, iBuilder->getBitBlockWidth()/8, false);
+    iBuilder->CreateAlignedStore(marker, gep, iBuilder->getBitBlockWidth()/8, false);
 }
 
 }

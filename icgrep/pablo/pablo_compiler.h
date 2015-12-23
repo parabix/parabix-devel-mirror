@@ -97,7 +97,6 @@ private:
 
 
     Module *                            mMod;
-    IRBuilder <> *                      mBuilder;
 
     CarryManager *                      mCarryManager;
 

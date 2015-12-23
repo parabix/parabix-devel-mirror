@@ -39,9 +39,8 @@ class PabloBlock;
 class CarryManager {
 public:
   
-    CarryManager(IRBuilder <> * b, IDISA::IDISA_Builder * idb)
-    : mBuilder(b)
-    , iBuilder(idb)
+    CarryManager(IDISA::IDISA_Builder * idb)
+    : iBuilder(idb)
     , mBitBlockType(idb->getBitBlockType())
     , mBITBLOCK_WIDTH(idb->getBitBlockWidth())
     , mPACK_SIZE(mBITBLOCK_WIDTH)
@@ -119,7 +118,6 @@ public:
 
     
 private:
-    IRBuilder <> * mBuilder;
     IDISA::IDISA_Builder * iBuilder;
     Type * mBitBlockType;
     unsigned mBITBLOCK_WIDTH;

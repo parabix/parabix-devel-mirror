@@ -14,11 +14,11 @@ namespace IDISA {
 
 VectorType * IDISA_Builder::fwVectorType(unsigned fw) {
     int fieldCount = mBitBlockWidth/fw;
-    return VectorType::get(mLLVMBuilder->getIntNTy(fw), fieldCount);
+    return VectorType::get(getIntNTy(fw), fieldCount);
 }
 
 Value * IDISA_Builder::fwCast(unsigned fw, Value * a) {
-    return a->getType() == fwVectorType(fw) ? a : mLLVMBuilder->CreateBitCast(a, fwVectorType(fw));
+    return a->getType() == fwVectorType(fw) ? a : CreateBitCast(a, fwVectorType(fw));
 }
 
 void IDISA_Builder::genPrintRegister(std::string regName, Value * bitblockValue) {
@@ -31,102 +31,102 @@ void IDISA_Builder::genPrintRegister(std::string regName, Value * bitblockValue)
                                                    /*isConstant=*/ true,
                                                    /*Linkage=*/ GlobalValue::PrivateLinkage,
                                                    /*Initializer=*/ regNameData);
-    Value * regStrPtr = mLLVMBuilder->CreateGEP(regStrVar, std::vector<Value *>({mLLVMBuilder->getInt64(0), mLLVMBuilder->getInt32(0)}));
-    mLLVMBuilder->CreateCall(mPrintRegisterFunction, std::vector<Value *>({regStrPtr, bitCast(bitblockValue)}));
+    Value * regStrPtr = CreateGEP(regStrVar, std::vector<Value *>({getInt64(0), getInt32(0)}));
+    CreateCall(mPrintRegisterFunction, std::vector<Value *>({regStrPtr, bitCast(bitblockValue)}));
 }
 
     Constant * IDISA_Builder::simd_himask(unsigned fw) {
-        return Constant::getIntegerValue(mLLVMBuilder->getIntNTy(mBitBlockWidth), APInt::getSplat(mBitBlockWidth, APInt::getHighBitsSet(fw, fw/2)));
+        return Constant::getIntegerValue(getIntNTy(mBitBlockWidth), APInt::getSplat(mBitBlockWidth, APInt::getHighBitsSet(fw, fw/2)));
     }
     
     Constant * IDISA_Builder::simd_lomask(unsigned fw) {
-        return Constant::getIntegerValue(mLLVMBuilder->getIntNTy(mBitBlockWidth), APInt::getSplat(mBitBlockWidth, APInt::getLowBitsSet(fw, fw/2)));
+        return Constant::getIntegerValue(getIntNTy(mBitBlockWidth), APInt::getSplat(mBitBlockWidth, APInt::getLowBitsSet(fw, fw/2)));
     }
     
     Value * IDISA_Builder::simd_add(unsigned fw, Value * a, Value * b) {
-    return mLLVMBuilder->CreateAdd(fwCast(fw, a), fwCast(fw, b));
+    return CreateAdd(fwCast(fw, a), fwCast(fw, b));
 }
 
 Value * IDISA_Builder::simd_sub(unsigned fw, Value * a, Value * b) {
-    return mLLVMBuilder->CreateSub(fwCast(fw, a), fwCast(fw, b));
+    return CreateSub(fwCast(fw, a), fwCast(fw, b));
 }
 
 Value * IDISA_Builder::simd_mult(unsigned fw, Value * a, Value * b) {
-    return mLLVMBuilder->CreateMul(fwCast(fw, a), fwCast(fw, b));
+    return CreateMul(fwCast(fw, a), fwCast(fw, b));
 }
 
 Value * IDISA_Builder::simd_eq(unsigned fw, Value * a, Value * b) {
-    return mLLVMBuilder->CreateSExt(mLLVMBuilder->CreateICmpEQ(fwCast(fw, a), fwCast(fw, b)), fwVectorType(fw));
+    return CreateSExt(CreateICmpEQ(fwCast(fw, a), fwCast(fw, b)), fwVectorType(fw));
 }
 
 Value * IDISA_Builder::simd_gt(unsigned fw, Value * a, Value * b) {
-    return mLLVMBuilder->CreateSExt(mLLVMBuilder->CreateICmpSGT(fwCast(fw, a), fwCast(fw, b)), fwVectorType(fw));
+    return CreateSExt(CreateICmpSGT(fwCast(fw, a), fwCast(fw, b)), fwVectorType(fw));
 }
 
 Value * IDISA_Builder::simd_ugt(unsigned fw, Value * a, Value * b) {
-    return mLLVMBuilder->CreateSExt(mLLVMBuilder->CreateICmpUGT(fwCast(fw, a), fwCast(fw, b)), fwVectorType(fw));
+    return CreateSExt(CreateICmpUGT(fwCast(fw, a), fwCast(fw, b)), fwVectorType(fw));
 }
 
 Value * IDISA_Builder::simd_lt(unsigned fw, Value * a, Value * b) {
-    return mLLVMBuilder->CreateSExt(mLLVMBuilder->CreateICmpSLT(fwCast(fw, a), fwCast(fw, b)), fwVectorType(fw));
+    return CreateSExt(CreateICmpSLT(fwCast(fw, a), fwCast(fw, b)), fwVectorType(fw));
 }
 
 Value * IDISA_Builder::simd_ult(unsigned fw, Value * a, Value * b) {
-    return mLLVMBuilder->CreateSExt(mLLVMBuilder->CreateICmpULT(fwCast(fw, a), fwCast(fw, b)), fwVectorType(fw));
+    return CreateSExt(CreateICmpULT(fwCast(fw, a), fwCast(fw, b)), fwVectorType(fw));
 }
 
 Value * IDISA_Builder::simd_max(unsigned fw, Value * a, Value * b) {
     Value * aVec = fwCast(fw, a);
     Value * bVec = fwCast(fw, b);
-    return mLLVMBuilder->CreateSelect(mLLVMBuilder->CreateICmpSGT(aVec, bVec), aVec, bVec);
+    return CreateSelect(CreateICmpSGT(aVec, bVec), aVec, bVec);
 }
 
 Value * IDISA_Builder::simd_umax(unsigned fw, Value * a, Value * b) {
     Value * aVec = fwCast(fw, a);
     Value * bVec = fwCast(fw, b);
-    return mLLVMBuilder->CreateSelect(mLLVMBuilder->CreateICmpUGT(aVec, bVec), aVec, bVec);
+    return CreateSelect(CreateICmpUGT(aVec, bVec), aVec, bVec);
 }
 
 Value * IDISA_Builder::simd_min(unsigned fw, Value * a, Value * b) {
     Value * aVec = fwCast(fw, a);
     Value * bVec = fwCast(fw, b);
-    return mLLVMBuilder->CreateSelect(mLLVMBuilder->CreateICmpSLT(aVec, bVec), aVec, bVec);
+    return CreateSelect(CreateICmpSLT(aVec, bVec), aVec, bVec);
 }
 
 Value * IDISA_Builder::simd_umin(unsigned fw, Value * a, Value * b) {
     Value * aVec = fwCast(fw, a);
     Value * bVec = fwCast(fw, b);
-    return mLLVMBuilder->CreateSelect(mLLVMBuilder->CreateICmpULT(aVec, bVec), aVec, bVec);
+    return CreateSelect(CreateICmpULT(aVec, bVec), aVec, bVec);
 }
 
 Value * IDISA_Builder::simd_slli(unsigned fw, Value * a, unsigned shift) {
-    return mLLVMBuilder->CreateShl(fwCast(fw, a), shift);
+    return CreateShl(fwCast(fw, a), shift);
 }
 
 Value * IDISA_Builder::simd_srli(unsigned fw, Value * a, unsigned shift) {
-    return mLLVMBuilder->CreateLShr(fwCast(fw, a), shift);
+    return CreateLShr(fwCast(fw, a), shift);
 }
 
 Value * IDISA_Builder::simd_srai(unsigned fw, Value * a, unsigned shift) {
-    return mLLVMBuilder->CreateAShr(fwCast(fw, a), shift);
+    return CreateAShr(fwCast(fw, a), shift);
 }
 
 Value * IDISA_Builder::simd_cttz(unsigned fw, Value * a) {
     Value * cttzFunc = Intrinsic::getDeclaration(mMod, Intrinsic::cttz, fwVectorType(fw));
-    Value * rslt = mLLVMBuilder->CreateCall(cttzFunc, std::vector<Value *>({fwCast(fw, a), ConstantInt::get(mLLVMBuilder->getInt1Ty(), 0)}));
+    Value * rslt = CreateCall(cttzFunc, std::vector<Value *>({fwCast(fw, a), ConstantInt::get(getInt1Ty(), 0)}));
     return rslt;
 }
 
 Value * IDISA_Builder::simd_popcount(unsigned fw, Value * a) {
     Value * ctpopFunc = Intrinsic::getDeclaration(mMod, Intrinsic::ctpop, fwVectorType(fw));
-    Value * rslt = mLLVMBuilder->CreateCall(ctpopFunc, std::vector<Value *>({fwCast(fw, a)}));
+    Value * rslt = CreateCall(ctpopFunc, std::vector<Value *>({fwCast(fw, a)}));
     return rslt;
 }
 
 Value * IDISA_Builder::simd_if(unsigned fw, Value * cond, Value * a, Value * b) {
     Value * aVec = fwCast(fw, a);
     Value * bVec = fwCast(fw, b);
-    return mLLVMBuilder->CreateSelect(mLLVMBuilder->CreateICmpSLT(cond, mZeroInitializer), aVec, bVec);
+    return CreateSelect(CreateICmpSLT(cond, mZeroInitializer), aVec, bVec);
 }
 
     
@@ -136,10 +136,10 @@ Value * IDISA_Builder::esimd_mergeh(unsigned fw, Value * a, Value * b) {
     Value * bVec = fwCast(fw, b);
     std::vector<Constant*> Idxs;
     for (unsigned i = field_count/2; i < field_count; i++) {
-        Idxs.push_back(mLLVMBuilder->getInt32(i));    // selects elements from first reg.
-        Idxs.push_back(mLLVMBuilder->getInt32(i + field_count)); // selects elements from second reg.
+        Idxs.push_back(getInt32(i));    // selects elements from first reg.
+        Idxs.push_back(getInt32(i + field_count)); // selects elements from second reg.
     }
-    return mLLVMBuilder->CreateShuffleVector(aVec, bVec, ConstantVector::get(Idxs));
+    return CreateShuffleVector(aVec, bVec, ConstantVector::get(Idxs));
 }
 
 Value * IDISA_Builder::esimd_mergel(unsigned fw, Value * a, Value * b) {
@@ -148,24 +148,24 @@ Value * IDISA_Builder::esimd_mergel(unsigned fw, Value * a, Value * b) {
     Value * bVec = fwCast(fw, b);
     std::vector<Constant*> Idxs;
     for (unsigned i = 0; i < field_count/2; i++) {
-        Idxs.push_back(mLLVMBuilder->getInt32(i));    // selects elements from first reg.
-        Idxs.push_back(mLLVMBuilder->getInt32(i + field_count)); // selects elements from second reg.
+        Idxs.push_back(getInt32(i));    // selects elements from first reg.
+        Idxs.push_back(getInt32(i + field_count)); // selects elements from second reg.
     }
-    return mLLVMBuilder->CreateShuffleVector(aVec, bVec, ConstantVector::get(Idxs));
+    return CreateShuffleVector(aVec, bVec, ConstantVector::get(Idxs));
 }
 
 Value * IDISA_Builder::esimd_bitspread(unsigned fw, Value * bitmask) {
     unsigned field_count = mBitBlockWidth/fw;
-    Type * field_type = mLLVMBuilder->getIntNTy(fw);
+    Type * field_type = getIntNTy(fw);
     if (bitmask->getType()->getIntegerBitWidth() < fw) {
-        bitmask = mLLVMBuilder->CreateZExt(bitmask, field_type);
+        bitmask = CreateZExt(bitmask, field_type);
     }
     else if (bitmask->getType()->getIntegerBitWidth() > fw) {
-        bitmask = mLLVMBuilder->CreateTrunc(bitmask, field_type);
+        bitmask = CreateTrunc(bitmask, field_type);
     }
-    Value * spread_field = mLLVMBuilder->CreateBitCast(bitmask, VectorType::get(mLLVMBuilder->getIntNTy(fw), 1));
-    Value * undefVec = UndefValue::get(VectorType::get(mLLVMBuilder->getIntNTy(fw), 1));
-    Value * broadcast = mLLVMBuilder->CreateShuffleVector(spread_field, undefVec, Constant::getNullValue(VectorType::get(mLLVMBuilder->getInt32Ty(), field_count)));
+    Value * spread_field = CreateBitCast(bitmask, VectorType::get(getIntNTy(fw), 1));
+    Value * undefVec = UndefValue::get(VectorType::get(getIntNTy(fw), 1));
+    Value * broadcast = CreateShuffleVector(spread_field, undefVec, Constant::getNullValue(VectorType::get(getInt32Ty(), field_count)));
     std::vector<Constant*> bitSel;
     std::vector<Constant*> bitShift;
     for (unsigned i = 0; i < field_count; i++) {
@@ -174,7 +174,7 @@ Value * IDISA_Builder::esimd_bitspread(unsigned fw, Value * bitmask) {
     }
     Value * bitSelVec = ConstantVector::get(bitSel);
     Value * bitShiftVec = ConstantVector::get(bitShift);
-    return mLLVMBuilder->CreateLShr(mLLVMBuilder->CreateAnd(bitSelVec, broadcast), bitShiftVec);
+    return CreateLShr(CreateAnd(bitSelVec, broadcast), bitShiftVec);
 }
 
 Value * IDISA_Builder::hsimd_packh(unsigned fw, Value * a, Value * b) {
@@ -183,9 +183,9 @@ Value * IDISA_Builder::hsimd_packh(unsigned fw, Value * a, Value * b) {
     Value * bVec = fwCast(fw/2, b);
     std::vector<Constant*> Idxs;
     for (unsigned i = 0; i < field_count; i++) {
-        Idxs.push_back(mLLVMBuilder->getInt32(2*i));
+        Idxs.push_back(getInt32(2*i));
     }
-    return mLLVMBuilder->CreateShuffleVector(aVec, bVec, ConstantVector::get(Idxs));
+    return CreateShuffleVector(aVec, bVec, ConstantVector::get(Idxs));
 }
 
 Value * IDISA_Builder::hsimd_packl(unsigned fw, Value * a, Value * b) {
@@ -194,24 +194,24 @@ Value * IDISA_Builder::hsimd_packl(unsigned fw, Value * a, Value * b) {
     Value * bVec = fwCast(fw/2, b);
     std::vector<Constant*> Idxs;
     for (unsigned i = 0; i < field_count; i++) {
-        Idxs.push_back(mLLVMBuilder->getInt32(2*i+1));
+        Idxs.push_back(getInt32(2*i+1));
     }
-    return mLLVMBuilder->CreateShuffleVector(aVec, bVec, ConstantVector::get(Idxs));
+    return CreateShuffleVector(aVec, bVec, ConstantVector::get(Idxs));
 }
 
 Value * IDISA_Builder::hsimd_signmask(unsigned fw, Value * a) {
-    Value * mask = mLLVMBuilder->CreateICmpSLT(fwCast(fw, a), ConstantAggregateZero::get(fwVectorType(fw)));
-    return mLLVMBuilder->CreateZExt(mLLVMBuilder->CreateBitCast(mask, mLLVMBuilder->getIntNTy(mBitBlockWidth/fw)), mLLVMBuilder->getInt32Ty());
+    Value * mask = CreateICmpSLT(fwCast(fw, a), ConstantAggregateZero::get(fwVectorType(fw)));
+    return CreateZExt(CreateBitCast(mask, getIntNTy(mBitBlockWidth/fw)), getInt32Ty());
 }
 
 Value * IDISA_Builder::mvmd_extract(unsigned fw, Value * a, unsigned fieldIndex) {
     Value * aVec = fwCast(fw, a);
-    return mLLVMBuilder->CreateExtractElement(aVec, mLLVMBuilder->getInt32(fieldIndex));
+    return CreateExtractElement(aVec, getInt32(fieldIndex));
 }
 
 Value * IDISA_Builder::mvmd_insert(unsigned fw, Value * blk, Value * elt, unsigned fieldIndex) {
     Value * vec = fwCast(fw, blk);
-    return mLLVMBuilder->CreateInsertElement(vec, elt, mLLVMBuilder->getInt32(fieldIndex));
+    return CreateInsertElement(vec, elt, getInt32(fieldIndex));
 }
 
 Value * IDISA_Builder::mvmd_dslli(unsigned fw, Value * a, Value * b, unsigned shift) {
@@ -220,26 +220,26 @@ Value * IDISA_Builder::mvmd_dslli(unsigned fw, Value * a, Value * b, unsigned sh
     Value * bVec = fwCast(fw, b);
     std::vector<Constant*> Idxs;
     for (unsigned i = 0; i < field_count; i++) {
-        Idxs.push_back(mLLVMBuilder->getInt32(i + shift));
+        Idxs.push_back(getInt32(i + shift));
     }
-    return mLLVMBuilder->CreateShuffleVector(bVec, aVec, ConstantVector::get(Idxs));
+    return CreateShuffleVector(bVec, aVec, ConstantVector::get(Idxs));
 }
 
 Value * IDISA_Builder::bitblock_any(Value * a) {
-    Type * iBitBlock = mLLVMBuilder->getIntNTy(mBitBlockWidth);
-    return mLLVMBuilder->CreateICmpNE(mLLVMBuilder->CreateBitCast(a, iBitBlock),  ConstantInt::get(iBitBlock, 0));
+    Type * iBitBlock = getIntNTy(mBitBlockWidth);
+    return CreateICmpNE(CreateBitCast(a, iBitBlock),  ConstantInt::get(iBitBlock, 0));
 }
 
 Value * IDISA_Builder::simd_and(Value * a, Value * b) {
-    return a->getType() == b->getType() ? mLLVMBuilder->CreateAnd(a, b) : mLLVMBuilder->CreateAnd(bitCast(a), bitCast(b));
+    return a->getType() == b->getType() ? CreateAnd(a, b) : CreateAnd(bitCast(a), bitCast(b));
 }
 
 Value * IDISA_Builder::simd_or(Value * a, Value * b) {
-    return a->getType() == b->getType() ? mLLVMBuilder->CreateOr(a, b) : mLLVMBuilder->CreateOr(bitCast(a), bitCast(b));
+    return a->getType() == b->getType() ? CreateOr(a, b) : CreateOr(bitCast(a), bitCast(b));
 }
     
 Value * IDISA_Builder::simd_xor(Value * a, Value * b) {
-    return a->getType() == b->getType() ? mLLVMBuilder->CreateXor(a, b) : mLLVMBuilder->CreateXor(bitCast(a), bitCast(b));
+    return a->getType() == b->getType() ? CreateXor(a, b) : CreateXor(bitCast(a), bitCast(b));
 }
 
 Value * IDISA_Builder::simd_not(Value * a) {
