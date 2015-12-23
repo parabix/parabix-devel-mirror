@@ -42,7 +42,6 @@ public:
     CarryManager(IRBuilder <> * b, IDISA::IDISA_Builder * idb)
     : mBuilder(b)
     , iBuilder(idb)
-    , mPackBuilder(idb)
     , mBitBlockType(idb->getBitBlockType())
     , mBITBLOCK_WIDTH(idb->getBitBlockWidth())
     , mPACK_SIZE(mBITBLOCK_WIDTH)
@@ -122,7 +121,6 @@ public:
 private:
     IRBuilder <> * mBuilder;
     IDISA::IDISA_Builder * iBuilder;
-    IDISA::IDISA_Builder * mPackBuilder;
     Type * mBitBlockType;
     unsigned mBITBLOCK_WIDTH;
     unsigned mPACK_SIZE;
