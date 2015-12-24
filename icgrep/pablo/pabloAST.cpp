@@ -9,7 +9,6 @@
 #include <llvm/Support/Compiler.h>
 #include <pablo/printer_pablos.h>
 #include <llvm/ADT/SmallVector.h>
-#include <iostream>
 
 namespace pablo {
 
@@ -76,7 +75,7 @@ bool equals(const PabloAST * expr1, const PabloAST * expr2) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief replaceAllUsesWith
  ** ------------------------------------------------------------------------------------------------------------- */
-void PabloAST::replaceAllUsesWith(PabloAST * expr) {
+void PabloAST::replaceAllUsesWith(PabloAST * const expr) {
     assert (expr);
     if (LLVM_UNLIKELY(this == expr)) {
         return;
@@ -101,27 +100,22 @@ void PabloAST::replaceAllUsesWith(PabloAST * expr) {
  * @brief checkEscapedValueList
  ** ------------------------------------------------------------------------------------------------------------- */
 template <class ValueType, class ValueList>
-inline void Statement::checkEscapedValueList(Statement * branch, PabloAST * const from, PabloAST * const to, ValueList & list) {
+inline void Statement::checkEscapedValueList(Statement * const branch, PabloAST * const from, PabloAST * const to, ValueList & list) {
     if (LLVM_LIKELY(isa<ValueType>(from))) {
         auto f = std::find(list.begin(), list.end(), cast<ValueType>(from));
         if (LLVM_LIKELY(f != list.end())) {
+            branch->removeUser(from);
+            from->removeUser(branch);
             if (LLVM_LIKELY(isa<ValueType>(to))) {
-                if (std::find(list.begin(), list.end(), cast<ValueType>(to)) == list.end()) {
+                if (std::count(list.begin(), list.end(), cast<ValueType>(to)) == 0) {
                     *f = cast<ValueType>(to);
                     branch->addUser(to);
-                } else {
-                    list.erase(f);
+                    to->addUser(branch);
+                    return;
                 }
-                branch->removeUser(from);
-                assert (std::find(list.begin(), list.end(), cast<ValueType>(to)) != list.end());
-                assert (std::find(branch->user_begin(), branch->user_end(), cast<ValueType>(to)) != branch->user_end());
-            } else {
-                list.erase(f);
-                branch->removeUser(from);
             }
-        }                
-        assert (std::find(list.begin(), list.end(), cast<ValueType>(from)) == list.end());
-        assert (std::find(branch->user_begin(), branch->user_end(), cast<ValueType>(from)) == branch->user_end());
+            list.erase(f);
+        }                              
     }
 }
 
@@ -148,10 +142,10 @@ void Statement::replaceUsesOfWith(PabloAST * const from, PabloAST * const to) {
  * @brief setOperand
  ** ------------------------------------------------------------------------------------------------------------- */
 void Statement::setOperand(const unsigned index, PabloAST * const value) {
-    assert ("No operand can be null!" && value);
+    assert ("Operand cannot be null!" && value);
     assert (index < getNumOperands());
     PabloAST * const prior = getOperand(index);
-    assert ("No operand can be null!" && prior);
+    assert ("Operand cannot be null!" && prior);
     if (LLVM_UNLIKELY(prior == value)) {
         return;
     }    
@@ -342,7 +336,7 @@ Statement * Statement::replaceWith(PabloAST * const expr, const bool rename, con
             stmt->setName(getName());
         }
     }
-    replaceAllUsesWith(expr);    
+    replaceAllUsesWith(expr);
     return eraseFromParent(recursively);
 }
 

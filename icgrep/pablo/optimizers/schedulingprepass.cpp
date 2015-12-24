@@ -4,6 +4,9 @@
 #include <boost/container/flat_set.hpp>
 #include <pablo/analysis/pabloverifier.hpp>
 
+#include <pablo/printer_pablos.h>
+#include <iostream>
+
 using namespace boost;
 using namespace boost::container;
 
@@ -37,6 +40,27 @@ void SchedulingPrePass::resolveNestedUsages(Statement * const root, Statement * 
     }
 }
 
+///** ------------------------------------------------------------------------------------------------------------- *
+// * @brief printGraph
+// ** ------------------------------------------------------------------------------------------------------------- */
+//template <typename Graph>
+//static void printGraph(const Graph & G, const std::vector<unsigned> & ordering, const std::string name, raw_ostream & out) {
+//    out << "*******************************************\n";
+//    out << "digraph " << name << " {\n";
+//    for (auto u : make_iterator_range(vertices(G))) {
+//        out << "v" << u << " [label=\"" << ordering[u] << " : ";
+//        PabloPrinter::print(G[u], out);
+//        out << "\"];\n";
+//    }
+//    for (auto e : make_iterator_range(edges(G))) {
+//        out << "v" << source(e, G) << " -> v" << target(e, G);
+//        out << ";\n";
+//    }
+
+//    out << "}\n\n";
+//    out.flush();
+//}
+
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief schedule
  ** ------------------------------------------------------------------------------------------------------------- */
@@ -61,6 +85,7 @@ void SchedulingPrePass::schedule(PabloBlock * const block) {
                 if (scope == block) {
                     auto v = M.find(op);
                     assert (v != M.end());
+                    assert (v->second != u);
                     add_edge(v->second, u, G);
                 } else if (isa<Assign>(op) || isa<Next>(op)) {
                     // if this statement isn't an Assign or Next node, it cannot come from a nested scope
@@ -73,7 +98,9 @@ void SchedulingPrePass::schedule(PabloBlock * const block) {
                             assert (s->second);
                             auto v = M.find(s->second);
                             assert (v != M.end());
-                            add_edge(v->second, u, G);
+                            if (v->second != u) {
+                                add_edge(v->second, u, G);
+                            }
                             break;
                         }
                     }
@@ -100,7 +127,7 @@ void SchedulingPrePass::schedule(PabloBlock * const block) {
     std::vector<unsigned> ordering(num_vertices(G));
     circular_buffer<Vertex> Q(num_vertices(G));
     for (const Vertex u : make_iterator_range(vertices(G))) {
-        if (out_degree(u, G) == 0 && in_degree(u, G) != 0) {
+        if (out_degree(u, G) == 0) {
             ordering[u] = 1;
             Q.push_back(u);
         }
@@ -138,7 +165,6 @@ void SchedulingPrePass::schedule(PabloBlock * const block) {
     ReadySet readySet;
     for (const Vertex u : make_iterator_range(vertices(G))) {
         if (in_degree(u, G) == 0) {
-            assert (out_degree(u, G) > 0);
             readySet.emplace_back(ordering[u], u);
         }
     }
@@ -152,6 +178,7 @@ void SchedulingPrePass::schedule(PabloBlock * const block) {
     std::sort(readySet.begin(), readySet.end(), readyComparator);
 
     block->setInsertPoint(nullptr);
+
 
     // Rewrite the AST using the bottom-up ordering
     while (!readySet.empty()) {
@@ -194,7 +221,7 @@ void SchedulingPrePass::schedule(PabloBlock * const block) {
         std::tie(weight, u) = *chosen;
         readySet.erase(chosen);
 
-        assert (weight > 0);
+        assert ("Error: SchedulingPrePass is attempting to reschedule a statement!" && (weight > 0));
 
         // insert the statement then mark it as written ...
         block->insert(cast<Statement>(G[u]));

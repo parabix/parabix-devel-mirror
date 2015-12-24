@@ -109,7 +109,7 @@ public:
         return mUsers;
     }
 
-    void replaceAllUsesWith(PabloAST * expr);
+    void replaceAllUsesWith(PabloAST * const expr);
 
     inline Users::size_type getNumUses() const {
         return mUsers.size();
@@ -130,8 +130,8 @@ protected:
     {
 
     }
-    void addUser(PabloAST * user);
-    void removeUser(PabloAST * user);
+    void addUser(PabloAST * const user);
+    void removeUser(PabloAST * const user);
     virtual ~PabloAST() {
         mUsers.clear();
     }
@@ -603,18 +603,18 @@ private:
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief addUser
  ** ------------------------------------------------------------------------------------------------------------- */
-inline void PabloAST::addUser(PabloAST *user) {
+inline void PabloAST::addUser(PabloAST * const user) {
     assert (user);    
-    // Note: for the rare situation that this node is used multiple times by a statement, duplicates are allowed.
+    // Note: for the rare situation that this node is used multiple times by the same statement, duplicates are allowed.
     mUsers.insert(std::lower_bound(mUsers.begin(), mUsers.end(), user), user);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief removeUser
  ** ------------------------------------------------------------------------------------------------------------- */
-inline void PabloAST::removeUser(PabloAST * user) {
+inline void PabloAST::removeUser(PabloAST * const user) {
     assert (user);
-    auto pos = std::lower_bound(mUsers.begin(), mUsers.end(), user);
+    const auto pos = std::lower_bound(mUsers.begin(), mUsers.end(), user);
     assert ("Could not find user to remove!" && (pos != mUsers.end() && *pos == user));
     mUsers.erase(pos);
 }

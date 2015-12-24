@@ -9,6 +9,7 @@
 #include <boost/graph/topological_sort.hpp>
 #include <boost/range/iterator_range.hpp>
 #include <pablo/analysis/pabloverifier.hpp>
+#include <pablo/optimizers/pablo_simplifier.hpp>
 #include <stack>
 #include <queue>
 #include <unordered_set>
@@ -171,6 +172,8 @@ bool MultiplexingPass::optimize(PabloFunction & function, const unsigned limit, 
         #ifndef NDEBUG
         PabloVerifier::verify(function, "post-multiplexing");
         #endif
+
+        Simplifier::optimize(function);
     }
 
     LOG_NUMBER_OF_ADVANCES(function.getEntryBlock());
@@ -927,7 +930,8 @@ void MultiplexingPass::multiplexSelectedSets(PabloFunction &) {
         if (n) {
             const size_t m = log2_plus_one(n);
             Advance * input[n];
-            Advance * muxed[m];
+            PabloAST * muxed[m];
+            PabloAST * muxed_n[m];
             // The multiplex set graph is a DAG with edges denoting the set relationships of our independent sets.
             unsigned i = 0;
             for (const auto u : orderMultiplexSet(idx)) {
@@ -935,7 +939,7 @@ void MultiplexingPass::multiplexSelectedSets(PabloFunction &) {
             }
             Advance * const adv = input[0];
             PabloBlock * const block = adv->getParent(); assert (block);
-            block->setInsertPoint(nullptr);
+            block->setInsertPoint(nullptr);            
             /// Perform n-to-m Multiplexing
             for (size_t j = 0; j != m; ++j) {
                 std::ostringstream prefix;
@@ -947,21 +951,15 @@ void MultiplexingPass::multiplexSelectedSets(PabloFunction &) {
                         muxing->addOperand(input[i]->getOperand(0));
                     }
                 }
-                muxed[j] = cast<Advance>(block->createAdvance(muxing, adv->getOperand(1), prefix.str()));
+                muxed[j] = block->createAdvance(muxing, adv->getOperand(1), prefix.str());
+                muxed_n[j] = block->createNot(muxed[j]);
             }
             /// Perform m-to-n Demultiplexing
             for (size_t i = 0; i != n; ++i) {
                 // Construct the demuxed values and replaces all the users of the original advances with them.                
-                PabloAST * demuxing[m];
-                for (size_t j = 0; j != m; ++j) {
-                    demuxing[j] = muxed[j];
-                    if (((i + 1) & (1UL << j)) == 0) {
-                        demuxing[j] = block->createNot(muxed[j]);
-                    }
-                }
                 And * demuxed = block->createAnd(m);
                 for (size_t j = 0; j != m; ++j) {
-                    demuxed->addOperand(demuxing[j]);
+                    demuxed->addOperand((((i + 1) & (1UL << j)) != 0) ? muxed[j] : muxed_n[j]);
                 }
                 input[i]->replaceWith(demuxed, true, true);
             }

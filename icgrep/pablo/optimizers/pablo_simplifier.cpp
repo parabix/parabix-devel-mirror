@@ -201,8 +201,15 @@ inline PabloAST * Simplifier::fold(Statement * stmt, PabloBlock * block) {
  * @brief isSuperfluous
  ** ------------------------------------------------------------------------------------------------------------- */
 inline bool Simplifier::isSuperfluous(const Assign * const assign) {
-    for (const PabloAST * inst : assign->users()) {
-        if (isa<Next>(inst) || isa<PabloFunction>(inst) || (isa<If>(inst) && (cast<If>(inst)->getCondition() != assign))) {
+    for (const PabloAST * user : assign->users()) {
+        if (LLVM_UNLIKELY(isa<PabloFunction>(user) || isa<Next>(user))) {
+            return false;
+        } else if (isa<If>(user)) {
+            if (LLVM_UNLIKELY(cast<If>(user)->getCondition() == assign)) {
+                continue;
+            } else if (isa<Assign>(assign->getExpression())) {
+                continue;
+            }
             return false;
         }
     }
@@ -317,7 +324,7 @@ void Simplifier::eliminateRedundantCode(PabloBlock * const block, ExpressionTabl
             // If we have an Assign whose users do not contain an If or Next node, we can replace its users with
             // the Assign's expression directly.
             if (isSuperfluous(assign)) {
-                stmt = assign->replaceWith(assign->getExpression());
+                stmt = assign->replaceWith(assign->getExpression());                
                 continue;
             }
             // Force the uses of an Assign node that can reach the original expression to use the expression instead.

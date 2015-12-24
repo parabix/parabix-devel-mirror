@@ -143,6 +143,41 @@ bool unreachable(const Statement * stmt, const PabloBlock * const block) {
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
+ * @brief throwUncontainedEscapedValueError
+ ** ------------------------------------------------------------------------------------------------------------- */
+static void throwUncontainedEscapedValueError(const Statement * const stmt, const PabloAST * const value) {
+    std::string tmp;
+    raw_string_ostream str(tmp);
+    str << "PabloVerifier: structure error: escaped value \"";
+    PabloPrinter::print(value, str);
+    str << "\" is not contained within the body of ";
+    PabloPrinter::print(stmt, str);
+    throw std::runtime_error(str.str());
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief throwEscapedValueUsageError
+ ** ------------------------------------------------------------------------------------------------------------- */
+static void throwEscapedValueUsageError(const Statement * const stmt, const PabloAST * const value, const PabloAST * const def, const PabloAST * const user, const unsigned count) {
+    std::string tmp;
+    raw_string_ostream str(tmp);
+    str << "PabloVerifier: structure error: ";
+    PabloPrinter::print(value, str);
+    str << " is an escaped value of ";
+    PabloPrinter::print(stmt, str);
+    str << " but ";
+    PabloPrinter::print(user, str);
+    if (count == 0) {
+        str << " is not recorded in ";
+    } else if (count > 0) {
+        str << " is recorded" << count << " times in ";
+    }
+    PabloPrinter::print(def, str);
+    str << "'s user list.";
+    throw std::runtime_error(str.str());
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
  * @brief verifyProgramStructure
  ** ------------------------------------------------------------------------------------------------------------- */
 void verifyProgramStructure(const PabloBlock * block) {
@@ -190,55 +225,34 @@ void verifyProgramStructure(const PabloBlock * block) {
                     }
                 }
             }
-            const Statement * badEscapedValue = nullptr;
             if (isa<If>(stmt)) {
                 for (const Assign * def : cast<If>(stmt)->getDefined()) {
-                    if (unreachable(def, nested)) {
-                        badEscapedValue = def;
-                        break;
+                    if (LLVM_UNLIKELY(unreachable(def, nested))) {
+                        throwUncontainedEscapedValueError(stmt, def);
+                    }
+                    unsigned count = std::count(stmt->user_begin(), stmt->user_end(), def);
+                    if (LLVM_UNLIKELY(count != 1)) {
+                        throwEscapedValueUsageError(stmt, def, stmt, def, count);
+                    }
+                    count = std::count(def->user_begin(), def->user_end(), stmt);
+                    if (LLVM_UNLIKELY(count != 1)) {
+                        throwEscapedValueUsageError(stmt, def, def, stmt, count);
                     }
                 }
             } else {
                 for (const Next * var : cast<While>(stmt)->getVariants()) {
-                    if (unreachable(var, nested)) {
-                        badEscapedValue = var;
-                        break;
+                    if (LLVM_UNLIKELY(unreachable(var, nested))) {
+                        throwUncontainedEscapedValueError(stmt, var);
+                    }
+                    unsigned count = std::count(stmt->user_begin(), stmt->user_end(), var);
+                    if (LLVM_UNLIKELY(count != 1)) {
+                        throwEscapedValueUsageError(stmt, var, stmt, var, count);
+                    }
+                    count = std::count(var->user_begin(), var->user_end(), stmt);
+                    if (LLVM_UNLIKELY(count != 1)) {
+                        throwEscapedValueUsageError(stmt, var, var, stmt, count);
                     }
                 }
-            }
-            if (badEscapedValue) {
-                std::string tmp;
-                raw_string_ostream str(tmp);
-                str << "PabloVerifier: structure error: escaped value \"";
-                PabloPrinter::print(badEscapedValue, str);
-                str << "\" is not contained within the body of ";
-                PabloPrinter::print(stmt, str);
-                throw std::runtime_error(str.str());
-            }
-            if (isa<If>(stmt)) {
-                for (const Assign * def : cast<If>(stmt)->getDefined()) {
-                    if (LLVM_UNLIKELY(std::find(stmt->user_begin(), stmt->user_end(), def) == stmt->user_end())) {
-                        badEscapedValue = def;
-                        break;
-                    }
-                }
-            } else {
-                for (const Next * var : cast<While>(stmt)->getVariants()) {
-                    if (LLVM_UNLIKELY(std::find(stmt->user_begin(), stmt->user_end(), var) == stmt->user_end())) {
-                        badEscapedValue = var;
-                        break;
-                    }
-                }
-            }
-            if (badEscapedValue) {
-                std::string tmp;
-                raw_string_ostream str(tmp);
-                str << "PabloVerifier: structure error: ";
-                PabloPrinter::print(badEscapedValue, str);
-                str << " is an escaped value of ";
-                PabloPrinter::print(stmt, str);
-                str << " but not a user";
-                throw std::runtime_error(str.str());
             }
             verifyProgramStructure(nested);
         }

@@ -15,7 +15,7 @@ namespace pablo {
 
 using Graph = adjacency_list<hash_setS, vecS, bidirectionalS, PabloAST *>;
 using Vertex = Graph::vertex_descriptor;
-using Map = flat_map<PabloAST *, Vertex>;
+using SinkMap = flat_map<PabloAST *, Vertex>;
 using VertexSet = std::vector<Vertex>;
 using Biclique = std::pair<VertexSet, VertexSet>;
 using BicliqueSet = std::vector<Biclique>;
@@ -27,7 +27,7 @@ using TypeId = PabloAST::ClassTypeId;
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getVertex
  ** ------------------------------------------------------------------------------------------------------------- */
-static inline Vertex getVertex(PabloAST * value, Graph & G, Map & M) {
+static inline Vertex getVertex(PabloAST * value, Graph & G, SinkMap & M) {
     const auto f = M.find(value);
     if (f != M.end()) {
         return f->second;
@@ -43,7 +43,7 @@ static inline Vertex getVertex(PabloAST * value, Graph & G, Map & M) {
  * Generate a graph G describing the potential applications of the distributive law for the given block.
  ** ------------------------------------------------------------------------------------------------------------- */
 VertexSet generateDistributionGraph(PabloBlock * block, Graph & G) {
-    Map M;
+    SinkMap M;
     VertexSet distSet;
     for (Statement * stmt : *block) {
         if (isa<And>(stmt) || isa<Or>(stmt)) {
@@ -306,7 +306,7 @@ inline void DistributivePass::process(PabloBlock * const block) {
 
     for (;;) {
 
-        FlattenAssociativeDFG::coalesce(block, false);
+        // FlattenAssociativeDFG::coalesce(block, false);
 
         Graph G;
 
@@ -349,6 +349,7 @@ inline void DistributivePass::process(PabloBlock * const block) {
                 }
                 outerOp->addOperand(G[u]);
             }
+            FlattenAssociativeDFG::coalesce(outerOp);
 
             for (const Vertex u : sources) {
                 for (const Vertex v : intermediary) {
@@ -357,12 +358,14 @@ inline void DistributivePass::process(PabloBlock * const block) {
                 innerOp->addOperand(G[u]);
             }
             innerOp->addOperand(outerOp);
+            FlattenAssociativeDFG::coalesce(innerOp);
 
             for (const Vertex u : sinks) {
-                cast<Variadic>(G[u])->addOperand(innerOp);
+                Variadic * const resultOp = cast<Variadic>(G[u]);
+                resultOp->addOperand(innerOp);
+                FlattenAssociativeDFG::coalesce(resultOp);
             }
         }
-
     }
 }
 
@@ -387,11 +390,11 @@ void DistributivePass::optimize(PabloFunction & function) {
     PabloVerifier::verify(function, "post-distribution");
     #endif
     Simplifier::optimize(function);
-    FlattenAssociativeDFG::deMorgansReduction(function.getEntryBlock());
-    #ifndef NDEBUG
-    PabloVerifier::verify(function, "post-demorgans-reduction");
-    #endif
-    Simplifier::optimize(function);
+//    FlattenAssociativeDFG::deMorgansReduction(function.getEntryBlock());
+//    #ifndef NDEBUG
+//    PabloVerifier::verify(function, "post-demorgans-reduction");
+//    #endif
+//    Simplifier::optimize(function);
 }
 
 

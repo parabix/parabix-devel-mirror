@@ -19,11 +19,11 @@ protected:
     static void coalesce(PabloBlock * const block, const bool traverse);
     static void coalesce(Variadic * const var);
     static void deMorgansExpansion(Not * const var, PabloBlock * const block);
-    static void deMorgansReduction(PabloBlock * const block);
+    static void deMorgansReduction(PabloBlock * const block, const bool traverse);
     static void deMorgansReduction(Variadic * const var, PabloBlock * const block);
-    static void removeFalseScopeDependencies(PabloBlock * const block);
-    static void removeFalseScopeDependencies(Assign * const def);
+    static void tryToPartiallyExtractVariadic(PabloBlock * const block);
     static void tryToPartiallyExtractVariadic(Variadic * const var);
+    static void removeFalseScopeDependencies(PabloFunction & function);
     FlattenAssociativeDFG() = default;
 };
 

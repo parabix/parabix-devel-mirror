@@ -5,9 +5,7 @@
 #include <boost/container/flat_set.hpp>
 #include <boost/container/flat_map.hpp>
 #include <boost/graph/adjacency_list.hpp>
-
-#include <pablo/printer_pablos.h>
-#include <iostream>
+#include <queue>
 
 using namespace boost;
 using namespace boost::container;
@@ -118,10 +116,10 @@ inline void FlattenAssociativeDFG::deMorgansReduction(Variadic * const var, Pabl
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief deMorgansReduction
  ** ------------------------------------------------------------------------------------------------------------- */
-inline void FlattenAssociativeDFG::deMorgansReduction(PabloBlock * const block) {
+void FlattenAssociativeDFG::deMorgansReduction(PabloBlock * const block, const bool traverse) {
     for (Statement * stmt : *block) {
-        if (LLVM_UNLIKELY(isa<If>(stmt) || isa<While>(stmt))) {
-            deMorgansReduction(isa<If>(stmt) ? cast<If>(stmt)->getBody() : cast<While>(stmt)->getBody());
+        if (LLVM_UNLIKELY((isa<If>(stmt) || isa<While>(stmt)) && traverse)) {
+            deMorgansReduction(isa<If>(stmt) ? cast<If>(stmt)->getBody() : cast<While>(stmt)->getBody(), true);
         } else if (isa<And>(stmt) || isa<Or>(stmt)) {
             deMorgansReduction(cast<Variadic>(stmt), block);
         }
@@ -137,7 +135,8 @@ union VertexData {
 };
 using Graph = adjacency_list<vecS, vecS, bidirectionalS, VertexData, Variadic *>;
 using Vertex = Graph::vertex_descriptor;
-using Map = flat_map<TypeId, Vertex>;
+using SourceMap = flat_map<Assign *, Vertex>;
+using SinkMap = flat_map<TypeId, Vertex>;
 using VertexSet = std::vector<Vertex>;
 using Biclique = std::pair<VertexSet, VertexSet>;
 using BicliqueSet = std::vector<Biclique>;
@@ -145,32 +144,33 @@ using BicliqueSet = std::vector<Biclique>;
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief addToVariadicGraph
  ** ------------------------------------------------------------------------------------------------------------- */
-static bool addToVariadicGraph(Assign * const def, Graph & G, Map & M, VertexSet & A) {
+static bool addToVariadicGraph(Assign * const def, Graph & G, SourceMap & A, SinkMap & B) {
 
-    // Test if its valid to transform this statement
-    for (PabloAST * user : def->users()) {
-        if (isa<Variadic>(user) == 0) {
-            if (isa<If>(user)) {
-                const auto defs = cast<If>(user)->getDefined();
-                if (LLVM_LIKELY(std::find(defs.begin(), defs.end(), def) != defs.end())) {
-                    continue;
+    if (LLVM_LIKELY(A.count(def) == 0)) {
+        // Test if its valid to transform this statement
+        for (PabloAST * user : def->users()) {
+            if (isa<Variadic>(user) == 0) {
+                if (isa<If>(user)) {
+                    if (LLVM_LIKELY(cast<If>(user)->getCondition() != def)) {
+                        continue;
+                    }
                 }
+                return false;
             }
-            return false;
         }
-    }
 
-    // Add the statement and its users to G
-    const Vertex u = add_vertex(VertexData(def), G);
-    A.push_back(u);
-    for (PabloAST * user : def->users()) {
-        if (isa<Variadic>(user)) {
-            auto f = M.find(user->getClassTypeId());
-            if (f == M.end()) {
-                f = M.emplace(user->getClassTypeId(), add_vertex(VertexData(user->getClassTypeId()), G)).first;
+        // Add the statement and its users to G
+        const Vertex u = add_vertex(VertexData(def), G);
+        A.emplace(def, u);
+        for (PabloAST * user : def->users()) {
+            if (isa<Variadic>(user)) {
+                auto f = B.find(user->getClassTypeId());
+                if (f == B.end()) {
+                    f = B.emplace(user->getClassTypeId(), add_vertex(VertexData(user->getClassTypeId()), G)).first;
+                }
+                assert (f != B.end());
+                G[add_edge(u, f->second, G).first] = cast<Variadic>(user);
             }
-            assert (f != M.end());
-            G[add_edge(u, f->second, G).first] = cast<Variadic>(user);
         }
     }
     return true;
@@ -341,33 +341,45 @@ inline static BicliqueSet independentCliqueSets(BicliqueSet && cliques, const un
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief tryToPartiallyExtractVariadic
  ** ------------------------------------------------------------------------------------------------------------- */
-void FlattenAssociativeDFG::tryToPartiallyExtractVariadic(Variadic * const var) {
+inline void FlattenAssociativeDFG::tryToPartiallyExtractVariadic(Variadic * const var) {
 
     for (unsigned i = 0; i < var->getNumOperands(); ++i) {
         PabloAST * const op = var->getOperand(i);
         if (isa<Assign>(op)) {
+
             // Have we found a variadic operation that can sunk into a nested scope?
             for (unsigned j = i + 1; j != var->getNumOperands(); ++j) {
                 bool invalid = false;
                 if (LLVM_UNLIKELY(matches(op, var->getOperand(j)))) {
                     Graph G;
-                    Map M;
-                    VertexSet A;
-                    if (addToVariadicGraph(cast<Assign>(op), G, M, A) == 0) {
+                    SourceMap A;
+                    SinkMap B;
+                    if (addToVariadicGraph(cast<Assign>(op), G, A, B) == 0) {
                         invalid = true;
                         break;
                     }
-                    addToVariadicGraph(cast<Assign>(var->getOperand(j)), G, M, A);
+                    addToVariadicGraph(cast<Assign>(var->getOperand(j)), G, A, B);
                     for (++j; j != var->getNumOperands(); ++j) {
                         if (LLVM_UNLIKELY(matches(op, var->getOperand(j)))) {
-                            addToVariadicGraph(cast<Assign>(var->getOperand(j)), G, M, A);
+                            addToVariadicGraph(cast<Assign>(var->getOperand(j)), G, A, B);
                         }
                     }
+
                     if (A.size() > 1) {
-                        const auto S = independentCliqueSets<0>(std::move(enumerateBicliques(G, A)), 2);
+
+                        VertexSet H;
+                        H.reserve(A.size());
+                        for (auto a : A) {
+                            H.push_back(a.second);
+                        }
+
+                        const auto S = independentCliqueSets<0>(std::move(enumerateBicliques(G, H)), 2);
+                        assert (S.size() > 0);
                         for (const Biclique & C : S) {
                             const VertexSet & sources = std::get<0>(C);
                             const VertexSet & variadics = std::get<1>(C);
+                            assert (variadics.size() > 0);
+                            assert (sources.size() > variadics.size());
                             PabloBlock * const block = cast<Assign>(op)->getParent();
                             block->setInsertPoint(block->back());
                             for (const auto v : variadics) {
@@ -382,32 +394,27 @@ void FlattenAssociativeDFG::tryToPartiallyExtractVariadic(Variadic * const var) 
                                     case TypeId::Xor:
                                         joiner = block->createXor(sources.size());
                                         break;
-                                    default:
-                                        break;
+                                    default: llvm_unreachable("Unexpected!");
                                 }
                                 assert (joiner);
-                                flat_set<Variadic *> vars;
+                                flat_set<Assign *> defs;
                                 for (const auto u : sources) {
-                                    Assign * const def = G[u].def;
-                                    joiner->addOperand(def->getOperand(0));
-                                    for (auto e : make_iterator_range(out_edges(u, G))) {
-                                        if (LLVM_LIKELY(target(e, G) == v)) {
-                                            Variadic * const var = cast<Variadic>(G[e]);
-                                            vars.insert(var);
-                                            var->deleteOperand(def);
-                                        }
-                                    }
-                                    assert (def->getNumUses() == 1);
-                                    def->eraseFromParent();
+                                    defs.insert(G[u].def);
                                 }
+                                for (Assign * def : defs) {
+                                    joiner->addOperand(def->getOperand(0));                                    
+                                }
+
                                 coalesce(joiner);
-                                Assign * const def = block->createAssign("m", joiner);
-                                cast<If>(block->getBranch())->addDefined(def);
-                                for (Variadic * var : vars) {
-                                    var->addOperand(def);
+                                Assign * const joined = block->createAssign("m", joiner);
+
+                                for (Assign * def : defs) {
+                                    def->replaceWith(joined);
+                                    assert (def->getNumUses() == 0);
                                 }
                             }
                         }
+                        --i;
                     }
                     break;
                 }
@@ -420,34 +427,134 @@ void FlattenAssociativeDFG::tryToPartiallyExtractVariadic(Variadic * const var) 
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief removeFalseScopeDependencies
+ * @brief tryToPartiallyExtractVariadic
  ** ------------------------------------------------------------------------------------------------------------- */
-inline void FlattenAssociativeDFG::removeFalseScopeDependencies(Assign * const def) {
-    if (isa<Variadic>(def->getOperand(0))) {
-        Variadic * const var = cast<Variadic>(def->getOperand(0));
-        for (unsigned i = 0; i != var->getNumOperands(); ++i) {
-            if (isa<Assign>(var->getOperand(i))) {
-                Assign * const nestedDef = cast<Assign>(var->getOperand(i));
-                if (LLVM_LIKELY(nestedDef->getOperand(0)->getClassTypeId() == var->getClassTypeId())) {
-                    if (LLVM_LIKELY(nestedDef->getNumUses() == 2)) { // The If node that produces it and the "var"
-                        Variadic * const nestedVar = cast<Variadic>(nestedDef->getOperand(0));
-                        if (LLVM_LIKELY(nestedVar->getNumUses() == 1 && nestedVar->getNumOperands() > 0)) {
-                            for (unsigned i = 0, j = 0; ; ) {
-                                if (var->getOperand(i) < nestedVar->getOperand(j)) {
-                                    if (++i == var->getNumOperands()) {
-                                        break;
-                                    }
-                                } else {
-                                    if (var->getOperand(i) > nestedVar->getOperand(j)) {
-                                        ++j;
-                                    } else {
-                                        nestedVar->removeOperand(j);
-                                    }
-                                    if (j == nestedVar->getNumOperands()) {
-                                        break;
-                                    }
-                                }
-                            }
+void FlattenAssociativeDFG::tryToPartiallyExtractVariadic(PabloBlock * const block) {
+    for (Statement * stmt = block->back(); stmt; stmt = stmt->getPrevNode()) {
+        if (LLVM_UNLIKELY(isa<If>(stmt) || isa<While>(stmt))) {
+            tryToPartiallyExtractVariadic(isa<If>(stmt) ? cast<If>(stmt)->getBody() : cast<While>(stmt)->getBody());
+        } else if (isa<Variadic>(stmt)) {
+            tryToPartiallyExtractVariadic(cast<Variadic>(stmt));
+        }
+    }
+}
+
+using ScopeDependencyGraph = adjacency_list<hash_setS, vecS, bidirectionalS, PabloAST *>;
+using ScopeDependencyMap = flat_map<PabloAST *, ScopeDependencyGraph::vertex_descriptor>;
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief find
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline ScopeDependencyGraph::vertex_descriptor find(PabloAST * expr, ScopeDependencyGraph & G, ScopeDependencyMap & M) {
+    auto f = M.find(expr);
+    if (f == M.end()) {
+        f = M.emplace(expr, add_vertex(expr, G)).first;
+    }
+    return f->second;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief buildScopeDependencyGraph
+ ** ------------------------------------------------------------------------------------------------------------- */
+ScopeDependencyGraph::vertex_descriptor buildScopeDependencyGraph(Variadic * const var, ScopeDependencyGraph & G, ScopeDependencyMap & M) {
+    auto f = M.find(var);
+    if (f != M.end()) {
+        return f->second;
+    }
+    auto u = add_vertex(var, G);
+    M.emplace(var, u);
+    for (unsigned i = 0; i != var->getNumOperands(); ++i) {
+        PabloAST * expr = var->getOperand(i);
+        PabloAST * value = var;
+        while (isa<Assign>(expr)) {            
+            value = expr;
+            expr = cast<Assign>(expr)->getExpression();
+        }
+        if ((expr->getClassTypeId() == var->getClassTypeId()) && (expr->getNumUses() == 1)) {
+            const auto v = find(value, G, M);
+            add_edge(v, u, G);
+            add_edge(buildScopeDependencyGraph(cast<Variadic>(expr), G, M), v, G);
+        }
+    }
+    return u;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief analyzeScopeDependencies
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline void analyzeScopeDependencies(Assign * const def, ScopeDependencyGraph & G, ScopeDependencyMap & M) {
+    if (LLVM_LIKELY(isa<Variadic>(def->getExpression()))) {
+        buildScopeDependencyGraph(cast<Variadic>(def->getExpression()), G, M);
+    }
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief analyzeScopeDependencies
+ ** ------------------------------------------------------------------------------------------------------------- */
+void analyzeScopeDependencies(PabloBlock * const block, ScopeDependencyGraph & G, ScopeDependencyMap & M) {
+    for (Statement * stmt : *block) {
+        if (LLVM_UNLIKELY(isa<If>(stmt) || isa<While>(stmt))) {
+            analyzeScopeDependencies(isa<If>(stmt) ? cast<If>(stmt)->getBody() : cast<While>(stmt)->getBody(), G, M);
+        } else if (LLVM_UNLIKELY(isa<Assign>(stmt))) {
+            analyzeScopeDependencies(cast<Assign>(stmt), G, M);
+        }
+    }
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief removeDependenciesWithUnresolvedUses
+ ** ------------------------------------------------------------------------------------------------------------- */
+void removeDependenciesWithUnresolvedUses(ScopeDependencyGraph & G) {
+    for (auto u : make_iterator_range(vertices(G))) {
+        const PabloAST * const expr = G[u];
+        unsigned uses = 0;
+        if (isa<Assign>(expr)) {
+            for (const PabloAST * user : cast<Assign>(expr)->users()) {
+                if (!isa<If>(user) || cast<If>(user)->getCondition() == expr) {
+                    ++uses;
+                }
+            }
+        } else {
+            uses = expr->getNumUses();
+        }
+        if (uses != out_degree(u, G)) {
+            clear_out_edges(u, G);
+        }
+    }
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief eliminateUnecessaryDependencies
+ ** ------------------------------------------------------------------------------------------------------------- */
+void eliminateUnecessaryDependencies(ScopeDependencyGraph & G) {
+    using Vertex = ScopeDependencyGraph::vertex_descriptor;
+    std::vector<bool> visited(num_vertices(G), false);
+    std::queue<Vertex> Q;
+    for (auto u : make_iterator_range(vertices(G))) {
+        if (out_degree(u, G) == 0 && in_degree(u, G) != 0) {
+            Q.push(u);
+        }
+    }
+    while (Q.size() > 0) {
+        const auto u = Q.front(); Q.pop();
+        visited[u] = true;
+        for (auto e : make_iterator_range(in_edges(u, G))) {
+            bool usersHaveBeenVisited = true;
+            const auto v = source(e, G);
+            for (auto e : make_iterator_range(out_edges(v, G))) {
+                if (visited[target(e, G)] == 0) {
+                    usersHaveBeenVisited = false;
+                    break;
+                }
+            }
+            if (usersHaveBeenVisited) {
+                Q.push(v);
+                for (auto e : make_iterator_range(in_edges(u, G))) {
+                    const auto w = source(e, G);
+                    if (w != v) {
+                        auto f = add_edge(w, v, G);
+                        if (f.second == 0) {
+                            cast<Variadic>(G[v])->deleteOperand(G[w]);
                         }
                     }
                 }
@@ -462,17 +569,17 @@ inline void FlattenAssociativeDFG::removeFalseScopeDependencies(Assign * const d
  * After coalescing the AST, we may find that a result of some If statement is added to a result of a subsequent
  * If statement. Unless necessary for correctness, eliminate it as we can potentially schedule the If nodes
  * better without the sequential dependency.
+ *
+ * TODO: make this only iterate over the scope blocks and test the scope branch.
  ** ------------------------------------------------------------------------------------------------------------- */
-void FlattenAssociativeDFG::removeFalseScopeDependencies(PabloBlock * const block) {
-    for (Statement * stmt = block->back(); stmt; stmt = stmt->getPrevNode()) {
-        if (LLVM_UNLIKELY(isa<If>(stmt) || isa<While>(stmt))) {
-            removeFalseScopeDependencies(isa<If>(stmt) ? cast<If>(stmt)->getBody() : cast<While>(stmt)->getBody());
-        } else if (LLVM_UNLIKELY(isa<Assign>(stmt))) {
-            removeFalseScopeDependencies(cast<Assign>(stmt));
-        } else if (isa<Variadic>(stmt)) {
-            tryToPartiallyExtractVariadic(cast<Variadic>(stmt));
-        }
+inline void FlattenAssociativeDFG::removeFalseScopeDependencies(PabloFunction & function) {
+    ScopeDependencyGraph G;
+    {
+        ScopeDependencyMap M;
+        analyzeScopeDependencies(function.getEntryBlock(), G, M);
     }
+    removeDependenciesWithUnresolvedUses(G);
+    eliminateUnecessaryDependencies(G);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -487,19 +594,26 @@ void FlattenAssociativeDFG::transform(PabloFunction & function) {
 
     Simplifier::optimize(function);
 
-    FlattenAssociativeDFG::deMorgansReduction(function.getEntryBlock());
+    FlattenAssociativeDFG::deMorgansReduction(function.getEntryBlock(), true);
     #ifndef NDEBUG
     PabloVerifier::verify(function, "post-demorgans-reduction");
     #endif
 
     Simplifier::optimize(function);
 
-    FlattenAssociativeDFG::removeFalseScopeDependencies(function.getEntryBlock());
+    FlattenAssociativeDFG::removeFalseScopeDependencies(function);
     #ifndef NDEBUG
     PabloVerifier::verify(function, "post-remove-false-scope-dependencies");
     #endif
 
+    FlattenAssociativeDFG::tryToPartiallyExtractVariadic(function.getEntryBlock());
+    #ifndef NDEBUG
+    PabloVerifier::verify(function, "post-partial-variadic-extraction");
+    #endif
+
     Simplifier::optimize(function);
+
+
 }
 
 }
