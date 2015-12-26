@@ -70,14 +70,11 @@ class PabloCompiler {
     #endif
 
     typedef std::unordered_map<const pablo::PabloAST *, Value *>   ASTToValueMap;
-    typedef std::vector<Value*>                                    CarryQueueVector;
 
 public:
-    PabloCompiler(Type * bitBlockType);
+    PabloCompiler(Module * m, IDISA::IDISA_Builder * b);
     ~PabloCompiler();
     Function * compile(pablo::PabloFunction * function);
-    Function * compile(pablo::PabloFunction * function, Module *module);
-    Module *getModule();
 private:
     void GenerateFunction(PabloFunction & function);
     void Examine(PabloFunction & function);
@@ -92,16 +89,13 @@ private:
     Value* compileExpression(const PabloAST * expr);
 
     ASTToValueMap                       mMarkerMap;
-    CarryQueueVector                    mCarryInVector;
-    CarryQueueVector                    mCarryOutVector;
-
 
     Module *                            mMod;
+    IDISA::IDISA_Builder *              iBuilder;
+    Type* const                         mBitBlockType;
 
     CarryManager *                      mCarryManager;
 
-    Type* const                   mBitBlockType;
-    IDISA::IDISA_Builder *              iBuilder;
     PointerType*                        mInputType;
 
     PabloBlock *                        mPabloBlock;
@@ -116,10 +110,6 @@ private:
     unsigned                            mMaxWhileDepth;
 
 };
-
-inline Module * PabloCompiler::getModule() {
-    return mMod;
-}
 
 }
 

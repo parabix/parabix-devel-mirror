@@ -272,7 +272,7 @@ void GrepExecutor::doGrep(const std::string & fileName) {
         mMatch_scanner.init();
 
         for (size_t blk = 0; blk != SEGMENT_BLOCKS; ++blk) {
-            s2p_do_block(reinterpret_cast<BytePack *>(mFileBuffer + (blk * BLOCK_SIZE) + (segment * SEGMENT_SIZE)), basis_bits);
+            mTransposeFcn(reinterpret_cast<BytePack *>(mFileBuffer + (blk * BLOCK_SIZE) + (segment * SEGMENT_SIZE)), basis_bits);
             Output output;
             mProcessBlockFcn(basis_bits, output);
             mMatch_scanner.load_block(output.matches, blk);
@@ -314,7 +314,7 @@ void GrepExecutor::doGrep(const std::string & fileName) {
 
     /* Full Blocks */
     for (; remaining >= BLOCK_SIZE; remaining -= BLOCK_SIZE, ++blk) {
-        s2p_do_block(reinterpret_cast<BytePack *>(mFileBuffer + (blk * BLOCK_SIZE) + (segment * SEGMENT_SIZE)), basis_bits);
+        mTransposeFcn(reinterpret_cast<BytePack *>(mFileBuffer + (blk * BLOCK_SIZE) + (segment * SEGMENT_SIZE)), basis_bits);
         Output output;
         mProcessBlockFcn(basis_bits, output);
         mLineBreak_scanner.load_block(output.LF, blk);
@@ -347,7 +347,7 @@ void GrepExecutor::doGrep(const std::string & fileName) {
         basis_bits.bit_7 = simd<1>::constant<0>();
     }
     else { // At least 1 byte, so we are not at a page boundary yet, safe to access a full block. 
-        s2p_do_final_block(reinterpret_cast<BytePack *>(mFileBuffer + (blk * BLOCK_SIZE) + (segment * SEGMENT_SIZE)), basis_bits, EOF_mask);
+        mTransposeFcn(reinterpret_cast<BytePack *>(mFileBuffer + (blk * BLOCK_SIZE) + (segment * SEGMENT_SIZE)), basis_bits);
     }
 
     if (finalLineIsUnterminated()) {

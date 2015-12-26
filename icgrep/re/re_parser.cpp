@@ -532,11 +532,14 @@ Name * RE_Parser::parseNamePatternExpression(){
 
     pablo::PabloFunction * const nameSearchFunction = re2pablo_compiler(encoding, embedded);
     pablo_function_passes(nameSearchFunction);
-    pablo::PabloCompiler pablo_compiler(VectorType::get(IntegerType::get(getGlobalContext(), 64), BLOCK_SIZE/64));
+    
+    Module * M = new Module("NamePattern", getGlobalContext());
+    IDISA::IDISA_Builder * idb = GetNativeIDISA_Builder(M, VectorType::get(IntegerType::get(getGlobalContext(), 64), BLOCK_SIZE/64));
+    pablo::PabloCompiler pablo_compiler(M, idb);
     llvm::Function * const nameSearchIR = pablo_compiler.compile(nameSearchFunction); // <- may throw error if parsing exception occurs.
 
-    llvm::ExecutionEngine * engine = JIT_to_ExecutionEngine(nameSearchIR);   
-    icgrep_Linking(nameSearchIR->getParent(), engine);
+    llvm::ExecutionEngine * engine = JIT_to_ExecutionEngine(M);   
+    icgrep_Linking(M, engine);
     
     // Ensure everything is ready to go.
     engine->finalizeObject();

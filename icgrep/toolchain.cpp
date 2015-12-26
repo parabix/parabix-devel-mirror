@@ -22,6 +22,8 @@
 #include <llvm/Support/TargetSelect.h>
 #include <llvm/Support/Host.h>
 
+#include <IDISA/idisa_avx_builder.h>
+#include <IDISA/idisa_sse_builder.h>
 #ifndef DISABLE_PREGENERATED_UCD_FUNCTIONS
 #include <UCD/precompiled_properties.h>
 #endif
@@ -201,14 +203,32 @@ void pablo_function_passes(PabloFunction * function) {
 #endif
 
 
-ExecutionEngine * JIT_to_ExecutionEngine (llvm::Function * f) {
+IDISA::IDISA_Builder * GetNativeIDISA_Builder(Module * mod, Type * bitBlockType) {
+
+#if (BLOCK_SIZE == 256)
+    if ((strncmp(lGetSystemISA(), "avx2", 4) == 0)) {
+        return new IDISA::IDISA_AVX2_Builder(mod, bitBlockType);
+        //std::cerr << "IDISA_AVX2_Builder selected\n";
+    }
+    else{
+        return new IDISA::IDISA_SSE2_Builder(mod, bitBlockType);
+        //std::cerr << "Generic IDISA_Builder selected\n";
+    }
+#else    
+    return new IDISA::IDISA_SSE2_Builder(mod, bitBlockType);
+#endif
+}
+
+
+
+ExecutionEngine * JIT_to_ExecutionEngine (Module * m) {
 
     InitializeNativeTarget();
     InitializeNativeTargetAsmPrinter();
     InitializeNativeTargetAsmParser();
 
     std::string errMessage;
-    EngineBuilder builder(std::move(std::unique_ptr<Module>(f->getParent())));
+    EngineBuilder builder(std::move(std::unique_ptr<Module>(m)));
     builder.setErrorStr(&errMessage);
     builder.setMCPU(sys::getHostCPUName());
     builder.setOptLevel(CodeGenOpt::Level::None);
@@ -243,6 +263,7 @@ void icgrep_Linking(Module * m, ExecutionEngine * e) {
     Module::FunctionListType & fns = m->getFunctionList();
     for (Module::FunctionListType::iterator it = fns.begin(), it_end = fns.end(); it != it_end; ++it) {
         std::string fnName = it->getName().str();
+        if (fnName == "s2p_block") continue;
         if (fnName == "process_block") continue;
         if (fnName == "process_block_initialize_carries") continue;
         if (fnName == "wrapped_print_register") {

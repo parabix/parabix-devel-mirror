@@ -38,6 +38,7 @@ typedef BitStreamScanner<BitBlock, uint64_t, uint64_t, SEGMENT_BLOCKS> ScannerT;
 typedef BitStreamScanner<BitBlock, uint32_t, uint32_t, SEGMENT_BLOCKS> ScannerT;
 #endif
 
+typedef void (*transpose_fcn_T)(BytePack * byte_data, Basis_bits & basis_bits);
 typedef void (*process_block_initialize_carries_fcn)();
 typedef void (*process_block_fcn)(const Basis_bits & basis_bits, Output & output);
 
@@ -52,11 +53,23 @@ public:
     , mShowFileNameOption(false)
     , mShowLineNumberingOption(false)
     , mParsedCodePointSet(nullptr)
+    , mTransposeFcn(reinterpret_cast<transpose_fcn_T>(&s2p_do_block))
     , mInitializeCarriesFcn(reinterpret_cast<process_block_initialize_carries_fcn>(process_block_initialize_carries))
     , mProcessBlockFcn(reinterpret_cast<process_block_fcn>(process_block)) {
-
+        
     }
-          
+    GrepExecutor(void * s2p_fnptr, void * process_block_initialize_carries, void * process_block)
+    : mCountOnlyOption(false)
+    , mGetCodePointsOption(false)
+    , mShowFileNameOption(false)
+    , mShowLineNumberingOption(false)
+    , mParsedCodePointSet(nullptr)
+    , mTransposeFcn(reinterpret_cast<transpose_fcn_T>(s2p_fnptr))
+    , mInitializeCarriesFcn(reinterpret_cast<process_block_initialize_carries_fcn>(process_block_initialize_carries))
+    , mProcessBlockFcn(reinterpret_cast<process_block_fcn>(process_block)) {
+        
+    }
+    
     void setCountOnlyOption(bool doCount = true) {mCountOnlyOption = doCount;}
     void setParseCodepointsOption() {
         mGetCodePointsOption = true;
@@ -82,6 +95,7 @@ private:
     
     re::CC * mParsedCodePointSet;
 
+    transpose_fcn_T mTransposeFcn;
     process_block_initialize_carries_fcn mInitializeCarriesFcn;
     process_block_fcn mProcessBlockFcn;
     

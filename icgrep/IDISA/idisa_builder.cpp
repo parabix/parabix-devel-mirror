@@ -124,9 +124,15 @@ Value * IDISA_Builder::simd_popcount(unsigned fw, Value * a) {
 }
 
 Value * IDISA_Builder::simd_if(unsigned fw, Value * cond, Value * a, Value * b) {
-    Value * aVec = fwCast(fw, a);
-    Value * bVec = fwCast(fw, b);
-    return CreateSelect(CreateICmpSLT(cond, mZeroInitializer), aVec, bVec);
+    if (fw == 1) {
+        Value * c = bitCast(cond);
+        return CreateOr(CreateAnd(c, bitCast(a)), CreateAnd(CreateNot(c), bitCast(b)));
+    }
+    else {
+        Value * aVec = fwCast(fw, a);
+        Value * bVec = fwCast(fw, b);
+        return CreateSelect(CreateICmpSLT(cond, mZeroInitializer), aVec, bVec);
+    }
 }
 
     
@@ -183,7 +189,7 @@ Value * IDISA_Builder::hsimd_packh(unsigned fw, Value * a, Value * b) {
     Value * bVec = fwCast(fw/2, b);
     std::vector<Constant*> Idxs;
     for (unsigned i = 0; i < field_count; i++) {
-        Idxs.push_back(getInt32(2*i));
+        Idxs.push_back(getInt32(2*i+1));
     }
     return CreateShuffleVector(aVec, bVec, ConstantVector::get(Idxs));
 }
@@ -194,7 +200,7 @@ Value * IDISA_Builder::hsimd_packl(unsigned fw, Value * a, Value * b) {
     Value * bVec = fwCast(fw/2, b);
     std::vector<Constant*> Idxs;
     for (unsigned i = 0; i < field_count; i++) {
-        Idxs.push_back(getInt32(2*i+1));
+        Idxs.push_back(getInt32(2*i));
     }
     return CreateShuffleVector(aVec, bVec, ConstantVector::get(Idxs));
 }

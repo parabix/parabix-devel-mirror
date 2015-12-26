@@ -20,8 +20,12 @@
 #include <llvm/IRReader/IRReader.h>
 #include <llvm/Support/SourceMgr.h>
 #include <llvm/Support/CommandLine.h>
+#include <llvm/Support/Debug.h>
 #include <llvm/Support/TargetSelect.h>
 #include <llvm/Support/Host.h>
+#include <llvm/IR/Verifier.h>
+
+#include <IDISA/s2p_gen.h>
 
 #include <re/re_re.h>
 #include <re/parsefailure.h>
@@ -135,6 +139,13 @@ int main(int argc, char *argv[]) {
 
     llvm::Function * icgrep_IR = nullptr;
     
+    Module * M = new Module("grepcode", getGlobalContext());
+    
+    IDISA::IDISA_Builder * idb = GetNativeIDISA_Builder(M, VectorType::get(IntegerType::get(getGlobalContext(), 64), BLOCK_SIZE/64));
+    
+    gen_s2p_function(M, idb);
+
+    
     if (IRFileName == "") {        
         re::RE * re_ast = get_icgrep_RE();
         re_ast = regular_expression_passes(encoding, re_ast);
@@ -142,7 +153,9 @@ int main(int argc, char *argv[]) {
         pablo::PabloFunction * function = re2pablo_compiler(encoding, re_ast);
 
         pablo_function_passes(function);
-        pablo::PabloCompiler pablo_compiler(VectorType::get(IntegerType::get(getGlobalContext(), 64), BLOCK_SIZE/64));
+        
+        
+        pablo::PabloCompiler pablo_compiler(M, idb);
         try {
             icgrep_IR = pablo_compiler.compile(function);
             delete function;
@@ -156,26 +169,38 @@ int main(int argc, char *argv[]) {
     } else {
         firstInputFile = 0;  // No regexp arguments; first positional argument is a file to process.
         SMDiagnostic ParseErr;
-        Module * M = parseIRFile(IRFileName, ParseErr, getGlobalContext()).release();
+        M = parseIRFile(IRFileName, ParseErr, getGlobalContext()).release();
         if (!M) {
             throw std::runtime_error("Error in Parsing IR File " + IRFileName);
         }
         icgrep_IR = M->getFunction("process_block");
     }
+    llvm::Function * s2p_IR = M->getFunction("s2p_block");
+
+    if (s2p_IR == nullptr) {
+        std::cerr << "No s2p_IR!\n";
+        exit(1);
+    }
     
-    llvm::ExecutionEngine * engine = JIT_to_ExecutionEngine(icgrep_IR);
+    llvm::ExecutionEngine * engine = JIT_to_ExecutionEngine(M);
     
-    icgrep_Linking(icgrep_IR->getParent(), engine);
+    icgrep_Linking(M, engine);
+    verifyModule(*M, &dbgs());
     
     // Ensure everything is ready to go.
     engine->finalizeObject();
     
     // TODO getPointerToFunction() is deprecated. Investigate getFunctionAddress(string name) instead.
-    void * icgrep_init_carry_ptr = engine->getPointerToFunction(icgrep_IR->getParent()->getFunction("process_block_initialize_carries"));
+    void * icgrep_init_carry_ptr = engine->getPointerToFunction(M->getFunction("process_block_initialize_carries"));
     void * icgrep_MCptr = engine->getPointerToFunction(icgrep_IR);
+    void * s2p_MCptr = engine->getPointerToFunction(s2p_IR);
+    if (s2p_MCptr == nullptr) {
+        std::cerr << "No s2p_MCptr!\n";
+        exit(1);
+    }
     
     if (icgrep_MCptr) {
-        GrepExecutor grepEngine(icgrep_init_carry_ptr, icgrep_MCptr);
+        GrepExecutor grepEngine(s2p_MCptr, icgrep_init_carry_ptr, icgrep_MCptr);
         grepEngine.setCountOnlyOption(CountOnly);
         grepEngine.setNormalizeLineBreaksOption(NormalizeLineBreaks);
         grepEngine.setShowLineNumberOption(ShowLineNumbers);
