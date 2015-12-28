@@ -17,6 +17,7 @@ public:
     
     IDISA_AVX_Builder(Module * m, Type * bitBlockType) : IDISA_Builder(m, bitBlockType) {
     }
+    Value * hsimd_signmask(unsigned fw, Value * a) override;
     ~IDISA_AVX_Builder() {};
 
 };
@@ -26,7 +27,6 @@ public:
     
     IDISA_AVX2_Builder(Module * m, Type * bitBlockType) : IDISA_AVX_Builder(m, bitBlockType) {
     }
-    Value * hsimd_signmask(unsigned fw, Value * a) override;
 
     ~IDISA_AVX2_Builder() {};
 };

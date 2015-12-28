@@ -12,7 +12,7 @@
 
 namespace IDISA {
 
-Value * IDISA_AVX2_Builder::hsimd_signmask(unsigned fw, Value * a) {
+Value * IDISA_AVX_Builder::hsimd_signmask(unsigned fw, Value * a) {
     if (fw == 64) {
         Value * signmask_f64func = Intrinsic::getDeclaration(mMod, Intrinsic::x86_avx_movmsk_pd_256);
         Type * bitBlock_f64type = VectorType::get(getDoubleTy(), mBitBlockWidth/64);
