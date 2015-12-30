@@ -82,6 +82,8 @@ public:
     void doGrep(const std::string & fileName);
     re::CC * getParsedCodepoints() { return mParsedCodePointSet;}
 private:
+    void write_matched_line(llvm::raw_ostream & out, const char * buffer, ssize_t line_start, ssize_t line_end);
+
     ssize_t write_matches(llvm::raw_ostream & out, const char *buffer, ssize_t first_line_start);
     
     bool finalLineIsUnterminated() const;

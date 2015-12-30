@@ -21,6 +21,7 @@
 #include <toolchain.h>
 #include "utf_encoding.h"
 #include <llvm/IR/Type.h>
+#include <IDISA/s2p_gen.h>
 #include <pablo/pablo_compiler.h>
 #include <do_grep.h>
 #include <sstream>
@@ -535,8 +536,12 @@ Name * RE_Parser::parseNamePatternExpression(){
     
     Module * M = new Module("NamePattern", getGlobalContext());
     IDISA::IDISA_Builder * idb = GetNativeIDISA_Builder(M, VectorType::get(IntegerType::get(getGlobalContext(), 64), BLOCK_SIZE/64));
+    gen_s2p_function(M, idb);
+
     pablo::PabloCompiler pablo_compiler(M, idb);
+
     llvm::Function * const nameSearchIR = pablo_compiler.compile(nameSearchFunction); // <- may throw error if parsing exception occurs.
+    llvm::Function * s2p_IR = M->getFunction("s2p_block");
 
     llvm::ExecutionEngine * engine = JIT_to_ExecutionEngine(M);   
     icgrep_Linking(M, engine);
@@ -544,11 +549,13 @@ Name * RE_Parser::parseNamePatternExpression(){
     // Ensure everything is ready to go.
     engine->finalizeObject();
         
-    void * icgrep_MCptr = engine->getPointerToFunction(nameSearchIR);    
+    void * icgrep_MCptr = engine->getPointerToFunction(nameSearchIR);
+    void * s2p_MCptr = engine->getPointerToFunction(s2p_IR);
+
     CC * codepoints = nullptr;
     if (icgrep_MCptr) {
         void * icgrep_init_carry_ptr = engine->getPointerToFunction(nameSearchIR->getParent()->getFunction("process_block_initialize_carries"));
-        GrepExecutor grepEngine(icgrep_init_carry_ptr, icgrep_MCptr);
+        GrepExecutor grepEngine(s2p_MCptr, icgrep_init_carry_ptr, icgrep_MCptr);
         grepEngine.setParseCodepointsOption();
         grepEngine.doGrep("../Uname.txt");
         codepoints = grepEngine.getParsedCodepoints();

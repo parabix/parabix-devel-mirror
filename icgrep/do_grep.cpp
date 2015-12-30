@@ -55,6 +55,52 @@ using namespace boost::filesystem;
 // The start position of the final line in the processed segment is returned.
 //
 
+
+void GrepExecutor::write_matched_line(llvm::raw_ostream & out, const char * buffer, ssize_t line_start, ssize_t line_end) {
+    if (mShowFileNameOption) {
+        out << mFileName << ':';
+    }
+    if (mShowLineNumberingOption) {
+        out << mLineNum << ":";
+    }
+    if ((buffer[line_start] == 0xA) && (line_start != line_end)) {
+        // The line "starts" on the LF of a CRLF.  Really the end of the last line.
+        line_start++;
+    }
+    if (buffer + line_end == mFileBuffer + mFileSize) {
+        // The match position is at end-of-file.   We have a final unterminated line.
+        out.write(&buffer[line_start], line_end - line_start);
+        if (mNormalizeLineBreaksOption) {
+            out << '\n';  // terminate it
+        }
+        return;
+    }
+    unsigned char end_byte = (unsigned char)buffer[line_end];
+    if (mNormalizeLineBreaksOption) {
+        if (end_byte == 0x85) {
+            // Line terminated with NEL, on the second byte.  Back up 1.
+            line_end--;
+        } else if (end_byte > 0xD) {
+            // Line terminated with PS or LS, on the third byte.  Back up 2.
+            line_end -= 2;
+        }
+        out.write(&buffer[line_start], line_end - line_start);
+        out << '\n';
+    }
+    else {
+        if (end_byte == 0x0D) {
+            // Check for line_end on first byte of CRLF;  note that we don't
+            // want to access past the end of buffer.
+            if ((buffer + line_end + 1 < mFileBuffer + mFileSize) && (buffer[line_end + 1] == 0x0A)) {
+                // Found CRLF; preserve both bytes.
+                line_end++;
+            }
+        }
+        out.write(&buffer[line_start], line_end - line_start + 1);
+    }
+    
+}
+
 ssize_t GrepExecutor::write_matches(llvm::raw_ostream & out, const char * buffer, ssize_t line_start) {
 
     ssize_t match_pos;
@@ -70,47 +116,7 @@ ssize_t GrepExecutor::write_matches(llvm::raw_ostream & out, const char * buffer
             line_start = line_end + 1;
             mLineNum++;
         }
-        if (mShowFileNameOption) {
-            out << mFileName << ':';
-        }
-        if (mShowLineNumberingOption) {
-            out << mLineNum << ":";
-        }
-        if ((buffer[line_start] == 0xA) && (line_start != line_end)) {
-            // The line "starts" on the LF of a CRLF.  Really the end of the last line.
-            line_start++;
-        }
-        if (buffer + line_end == mFileBuffer + mFileSize) {
-            // The match position is at end-of-file.   We have a final unterminated line.
-            out.write(&buffer[line_start], line_end - line_start);
-            if (mNormalizeLineBreaksOption) {
-              out << '\n';  // terminate it
-            }
-            return line_end;
-        }
-        unsigned char end_byte = (unsigned char)buffer[line_end];
-        if (mNormalizeLineBreaksOption) {
-            if (end_byte == 0x85) {
-                // Line terminated with NEL, on the second byte.  Back up 1.
-                line_end--;
-            } else if (end_byte > 0xD) {
-                // Line terminated with PS or LS, on the third byte.  Back up 2.
-                line_end -= 2;
-            }
-            out.write(&buffer[line_start], line_end - line_start);
-            out << '\n';
-        }
-        else {
-            if (end_byte == 0x0D) {
-                // Check for line_end on first byte of CRLF;  note that we don't
-                // want to access past the end of buffer.
-                if ((buffer + line_end + 1 < mFileBuffer + mFileSize) && (buffer[line_end + 1] == 0x0A)) {
-                    // Found CRLF; preserve both bytes.
-                    line_end++;
-                }
-            }
-            out.write(&buffer[line_start], line_end - line_start + 1);
-        }
+        write_matched_line(out,buffer, line_start, line_end);
         line_start = line_end + 1;
         mLineNum++;
     }

@@ -74,6 +74,10 @@ static IDISA_ALWAYS_INLINE carry_t carryout2carry(carry_t carryout) {
   return carryout;
 }
 
+#ifndef AVX2
+#define _mm256_cvtepu16_epi64(x) _mm256_castps128_ps256((__m128) (x))
+#endif
+
 static IDISA_ALWAYS_INLINE void add_ci_co(bitblock256_t x, bitblock256_t y, carry_t carry_in, carry_t & carry_out, bitblock256_t & sum) {
   bitblock256_t all_ones = simd256<1>::constant<1>();
   bitblock256_t gen = simd_and(x, y);
