@@ -21,7 +21,7 @@
 #include <toolchain.h>
 #include "utf_encoding.h"
 #include <llvm/IR/Type.h>
-#include <IDISA/s2p_gen.h>
+#include <kernels/s2p_gen.h>
 #include <pablo/pablo_compiler.h>
 #include <do_grep.h>
 #include <sstream>

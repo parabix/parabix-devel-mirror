@@ -246,10 +246,14 @@ ExecutionEngine * JIT_to_ExecutionEngine (Module * m) {
     if (engine == nullptr) {
         throw std::runtime_error("Could not create ExecutionEngine: " + errMessage);
     }
-    //engine->addGlobalMapping(cast<GlobalValue>(mPrintRegisterFunction), (void *)&wrapped_print_register);
-    // engine->addGlobalMapping(externalFunction, proto->getFunctionPtr());
 
     return engine;
+}
+
+extern "C" {
+    void wrapped_report_match(uint64_t recordNum, uint64_t recordStart, uint64_t recordEnd) {
+        printf("line %llu: (%llu, %llu)\n", recordNum, recordStart, recordEnd);
+    }
 }
 
 
@@ -266,8 +270,12 @@ void icgrep_Linking(Module * m, ExecutionEngine * e) {
         if (fnName == "s2p_block") continue;
         if (fnName == "process_block") continue;
         if (fnName == "process_block_initialize_carries") continue;
+        
         if (fnName == "wrapped_print_register") {
             e->addGlobalMapping(cast<GlobalValue>(it), (void *)&wrapped_print_register);
+        }
+        if (fnName == "wrapped_report_match") {
+            e->addGlobalMapping(cast<GlobalValue>(it), (void *)&wrapped_report_match);
         }
 #ifndef DISABLE_PREGENERATED_UCD_FUNCTIONS
         else {

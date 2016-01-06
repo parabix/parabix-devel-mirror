@@ -25,7 +25,8 @@
 #include <llvm/Support/Host.h>
 #include <llvm/IR/Verifier.h>
 
-#include <IDISA/s2p_gen.h>
+#include <kernels/s2p_gen.h>
+#include <kernels/scanmatchgen.h>
 
 #include <re/re_re.h>
 #include <re/parsefailure.h>
@@ -144,7 +145,9 @@ int main(int argc, char *argv[]) {
     IDISA::IDISA_Builder * idb = GetNativeIDISA_Builder(M, VectorType::get(IntegerType::get(getGlobalContext(), 64), BLOCK_SIZE/64));
     
     gen_s2p_function(M, idb);
-
+    
+    
+    generateScanBitBlockRoutine(M, idb, 64);
     
     if (IRFileName == "") {        
         re::RE * re_ast = get_icgrep_RE();
@@ -176,7 +179,9 @@ int main(int argc, char *argv[]) {
         icgrep_IR = M->getFunction("process_block");
     }
     llvm::Function * s2p_IR = M->getFunction("s2p_block");
-
+    
+    llvm::Function * scanRoutine = M->getFunction("scan_matches_in_bitblock");
+    
     if (s2p_IR == nullptr) {
         std::cerr << "No s2p_IR!\n";
         exit(1);
@@ -194,6 +199,7 @@ int main(int argc, char *argv[]) {
     void * icgrep_init_carry_ptr = engine->getPointerToFunction(M->getFunction("process_block_initialize_carries"));
     void * icgrep_MCptr = engine->getPointerToFunction(icgrep_IR);
     void * s2p_MCptr = engine->getPointerToFunction(s2p_IR);
+    void * scan_MCptr = engine->getPointerToFunction(scanRoutine);
     if (s2p_MCptr == nullptr) {
         std::cerr << "No s2p_MCptr!\n";
         exit(1);
@@ -201,6 +207,7 @@ int main(int argc, char *argv[]) {
     
     if (icgrep_MCptr) {
         GrepExecutor grepEngine(s2p_MCptr, icgrep_init_carry_ptr, icgrep_MCptr);
+        //GrepExecutor grepEngine(s2p_MCptr, icgrep_init_carry_ptr, icgrep_MCptr, scan_MCptr);
         grepEngine.setCountOnlyOption(CountOnly);
         grepEngine.setNormalizeLineBreaksOption(NormalizeLineBreaks);
         grepEngine.setShowLineNumberOption(ShowLineNumbers);
