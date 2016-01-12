@@ -409,8 +409,9 @@ Value * CarryManager::addCarryInCarryOut(int localIndex, Value* e1, Value* e2) {
         Value * incrementMask = iBuilder->CreateXor(iBuilder->CreateAdd(bubbleMask, carryMask2), bubbleMask);
         Value * increments = iBuilder->esimd_bitspread(64,incrementMask);
         Value * sum = iBuilder->simd_add(64, digitsum, increments);
-        Value * carry_out_strm = iBuilder->mvmd_insert(32, iBuilder->allZeroes(), iBuilder->CreateLShr(incrementMask, iBuilder->getBitBlockWidth()/64), 0);
-        setCarryOpCarryOut(localIndex, carry_out_strm);
+        //Value * carry_out_strm = iBuilder->mvmd_insert(32, iBuilder->allZeroes(), iBuilder->CreateLShr(incrementMask, iBuilder->getBitBlockWidth()/64), 0);
+        Value * carry_out_strm = iBuilder->CreateZExt(iBuilder->CreateLShr(incrementMask, iBuilder->getBitBlockWidth()/64), iBuilder->getIntNTy(mBITBLOCK_WIDTH));
+        setCarryOpCarryOut(localIndex, iBuilder->bitCast(carry_out_strm));
         return sum;
 #endif
     }

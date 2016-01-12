@@ -252,7 +252,7 @@ ExecutionEngine * JIT_to_ExecutionEngine (Module * m) {
 
 extern "C" {
     void wrapped_report_match(uint64_t recordNum, uint64_t recordStart, uint64_t recordEnd) {
-        printf("line %llu: (%llu, %llu)\n", recordNum, recordStart, recordEnd);
+        printf("line %lu: (%lu, %lu)\n", recordNum, recordStart, recordEnd);
     }
 }
 
