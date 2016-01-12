@@ -15,7 +15,7 @@ else ()
 endif()
 option(ENABLE_MULTIPLEXING "Compiling the Multiplexing Module")
 option(USE_BOOST_MMAP "Using mmap from Boost.Iostreams")
-option(DISABLE_PREGENERATED_UCD_FUNCTIONS "Disable compiling the pregenerated UCD functions")
+option(ENABLE_PREGENERATED_UCD_FUNCTIONS "Enable compiling the pregenerated UCD functions")
 
 
 # configure a header file to pass some of the CMake settings
@@ -85,11 +85,10 @@ target_link_libraries (RegExpCompiler RegExpADT)
 
 set(PRECOMPILED_FILES "")
 
-IF(DISABLE_PREGENERATED_UCD_FUNCTIONS)
+IF(NOT ENABLE_PREGENERATED_UCD_FUNCTIONS)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DDISABLE_PREGENERATED_UCD_FUNCTIONS")
-MESSAGE("Disabling predefined UCD functions...")
 ELSE()
-
+MESSAGE("Enabling predefined UCD functions...")
 # add the executable
 add_executable(generate_predefined_ucd_functions generate_predefined_ucd_functions.cpp)
 llvm_map_components_to_libnames(REQ_LLVM_TARGETS ${LLVM_TARGETS_TO_BUILD})
@@ -115,7 +114,7 @@ add_dependencies(RegExpCompiler run_generate_predefined_ucd_functions)
 ENDIF()
 
 add_executable(icgrep icgrep.cpp toolchain.cpp do_grep.cpp ${PRECOMPILED_FILES})
-IF(NOT DISABLE_PREGENERATED_UCD_FUNCTIONS)
+IF(ENABLE_PREGENERATED_UCD_FUNCTIONS)
 add_dependencies(icgrep run_generate_predefined_ucd_functions)
 ENDIF()
 IF(Boost_FOUND)
