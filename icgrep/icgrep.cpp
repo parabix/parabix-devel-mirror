@@ -221,6 +221,7 @@ int main(int argc, char *argv[]) {
     
     //engine->freeMachineCodeForFunction(icgrep_IR); // Removed in LLVM 3.6. MC will be automatically freed in destructors.
     delete engine;
+    delete idb;
 
     return 0;
 }
