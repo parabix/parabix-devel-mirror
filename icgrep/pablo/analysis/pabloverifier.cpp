@@ -168,12 +168,49 @@ static void throwEscapedValueUsageError(const Statement * const stmt, const Pabl
     str << " but ";
     PabloPrinter::print(user, str);
     if (count == 0) {
-        str << " is not recorded in ";
+        str << " is not considered a user of ";
     } else if (count > 0) {
-        str << " is recorded" << count << " times in ";
+        str << " was recorded too many times (" << count << ") in the user list of ";
     }
     PabloPrinter::print(def, str);
-    str << "'s user list.";
+    throw std::runtime_error(str.str());
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief throwReportedScopeError
+ ** ------------------------------------------------------------------------------------------------------------- */
+static void throwReportedScopeError(const Statement * const stmt) {
+    std::string tmp;
+    raw_string_ostream str(tmp);
+    str << "PabloVerifier: structure error: ";
+    PabloPrinter::print(stmt, str);
+    str << " is not contained in its reported scope block";
+    throw std::runtime_error(str.str());
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief throwMisreportedBranchError
+ ** ------------------------------------------------------------------------------------------------------------- */
+static void throwMisreportedBranchError(const Statement * const stmt, const Statement * const branch) {
+    std::string tmp;
+    raw_string_ostream str(tmp);
+    str << "PabloVerifier: structure error: ";
+    PabloPrinter::print(stmt, str);
+    str << " branches into a scope block that reports ";
+    PabloPrinter::print(stmt, str);
+    str << " as its branching statement.";
+    throw std::runtime_error(str.str());
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief throwReflexiveIfConditionError
+ ** ------------------------------------------------------------------------------------------------------------- */
+static void throwReflexiveIfConditionError(const PabloAST * const ifNode) {
+    std::string tmp;
+    raw_string_ostream str(tmp);
+    str << "PabloVerifier: structure error: the condition of ";
+    PabloPrinter::print(ifNode, str);
+    str << " cannot be defined by the If node itself.";
     throw std::runtime_error(str.str());
 }
 
@@ -205,29 +242,16 @@ void verifyProgramStructure(const PabloBlock * block) {
         }
         if (LLVM_UNLIKELY(isa<If>(stmt) || isa<While>(stmt))) {
             const PabloBlock * nested = isa<If>(stmt) ? cast<If>(stmt)->getBody() : cast<While>(stmt)->getBody();
-            if (LLVM_UNLIKELY(nested->getParent() != block)) {
-                std::string tmp;
-                raw_string_ostream str(tmp);
-                str << "PabloVerifier: structure error: body of ";
-                PabloPrinter::print(stmt, str);
-                str << " is not nested within the expected scope block";
-                throw std::runtime_error(str.str());
+            if (LLVM_UNLIKELY(nested->getBranch() != stmt)) {
+                throwMisreportedBranchError(stmt, nested->getBranch());
+            } else if (LLVM_UNLIKELY(nested->getParent() != block)) {
+                throwReportedScopeError(stmt);
             }
             if (isa<If>(stmt)) {
                 for (const Assign * def : cast<If>(stmt)->getDefined()) {
                     if (LLVM_UNLIKELY(def == cast<If>(stmt)->getCondition())) {
-                        std::string tmp;
-                        raw_string_ostream str(tmp);
-                        str << "PabloVerifier: structure error: the condition of ";
-                        PabloPrinter::print(cast<PabloAST>(stmt), str);
-                        str << " cannot be defined by the If node itself.";
-                        throw std::runtime_error(str.str());
-                    }
-                }
-            }
-            if (isa<If>(stmt)) {
-                for (const Assign * def : cast<If>(stmt)->getDefined()) {
-                    if (LLVM_UNLIKELY(unreachable(def, nested))) {
+                        throwReflexiveIfConditionError(stmt);
+                    } else if (LLVM_UNLIKELY(unreachable(def, nested))) {
                         throwUncontainedEscapedValueError(stmt, def);
                     }
                     unsigned count = std::count(stmt->user_begin(), stmt->user_end(), def);
@@ -249,7 +273,7 @@ void verifyProgramStructure(const PabloBlock * block) {
                         throwEscapedValueUsageError(stmt, var, stmt, var, count);
                     }
                     count = std::count(var->user_begin(), var->user_end(), stmt);
-                    if (LLVM_UNLIKELY(count != 1)) {
+                    if (LLVM_UNLIKELY(count != ((cast<While>(stmt)->getCondition() == var) ? 2 : 1))) {
                         throwEscapedValueUsageError(stmt, var, var, stmt, count);
                     }
                 }

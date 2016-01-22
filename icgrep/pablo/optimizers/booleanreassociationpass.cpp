@@ -21,12 +21,12 @@ using namespace boost::container;
 namespace pablo {
 
 using TypeId = PabloAST::ClassTypeId;
-using Graph = BooleanReassociationPass::Graph;
-using Vertex = Graph::vertex_descriptor;
+using DependencyGraph = BooleanReassociationPass::Graph;
+using Vertex = DependencyGraph::vertex_descriptor;
 using VertexData = BooleanReassociationPass::VertexData;
 using SinkMap = BooleanReassociationPass::Map;
 using DistributionGraph = adjacency_list<hash_setS, vecS, bidirectionalS, Vertex>;
-using DistributionMap = flat_map<Graph::vertex_descriptor, DistributionGraph::vertex_descriptor>;
+using DistributionMap = flat_map<DependencyGraph::vertex_descriptor, DistributionGraph::vertex_descriptor>;
 using VertexSet = std::vector<Vertex>;
 using VertexSets = std::vector<VertexSet>;
 using Biclique = std::pair<VertexSet, VertexSet>;
@@ -38,13 +38,13 @@ using DistributionSets = std::vector<DistributionSet>;
  * @brief helper functions
  ** ------------------------------------------------------------------------------------------------------------- */
 template<typename Iterator>
-inline Graph::edge_descriptor first(const std::pair<Iterator, Iterator> & range) {
+inline DependencyGraph::edge_descriptor first(const std::pair<Iterator, Iterator> & range) {
     assert (range.first != range.second);
     return *range.first;
 }
 
 #ifndef NDEBUG
-static bool no_path(const Vertex u, const Vertex v, const Graph & G) {
+static bool no_path(const Vertex u, const Vertex v, const DependencyGraph & G) {
     if (u == v) return false;
     flat_set<Vertex> V;
     std::queue<Vertex> Q;
@@ -69,7 +69,7 @@ static bool no_path(const Vertex u, const Vertex v, const Graph & G) {
 }
 #endif
 
-inline void add_edge(PabloAST * expr, const Vertex u, const Vertex v, Graph & G) {
+inline void add_edge(PabloAST * expr, const Vertex u, const Vertex v, DependencyGraph & G) {
     assert (no_path(v, u, G));
     // Make sure each edge is unique
     for (auto e : make_iterator_range(out_edges(u, G))) {
@@ -820,7 +820,7 @@ inline static BicliqueSet && independentCliqueSets(BicliqueSet && cliques, const
  * the lower biclique, we'll need to compute that specific value anyway. Remove them from the clique set and if
  * there are not enough vertices in the biclique to make distribution profitable, eliminate the clique.
  ** ------------------------------------------------------------------------------------------------------------- */
-static BicliqueSet && removeUnhelpfulBicliques(BicliqueSet && cliques, const Graph & G, DistributionGraph & H) {
+static BicliqueSet && removeUnhelpfulBicliques(BicliqueSet && cliques, const DependencyGraph & G, DistributionGraph & H) {
     for (auto ci = cliques.begin(); ci != cliques.end(); ) {
         const auto cardinalityA = std::get<0>(*ci).size();
         VertexSet & B = std::get<1>(*ci);
@@ -843,7 +843,7 @@ static BicliqueSet && removeUnhelpfulBicliques(BicliqueSet && cliques, const Gra
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief safeDistributionSets
  ** ------------------------------------------------------------------------------------------------------------- */
-static DistributionSets safeDistributionSets(const Graph & G, DistributionGraph & H) {
+static DistributionSets safeDistributionSets(const DependencyGraph & G, DistributionGraph & H) {
 
     VertexSet sinks;
     for (const Vertex u : make_iterator_range(vertices(H))) {
@@ -867,7 +867,7 @@ static DistributionSets safeDistributionSets(const Graph & G, DistributionGraph 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief generateDistributionGraph
  ** ------------------------------------------------------------------------------------------------------------- */
-void generateDistributionGraph(const Graph & G, DistributionGraph & H) {
+void generateDistributionGraph(const DependencyGraph & G, DistributionGraph & H) {
     DistributionMap M;
     for (const Vertex u : make_iterator_range(vertices(G))) {
         if (in_degree(u, G) == 0 && out_degree(u, G) == 0) {

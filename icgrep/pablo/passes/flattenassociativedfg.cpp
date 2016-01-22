@@ -17,7 +17,7 @@ using TypeId = PabloAST::ClassTypeId;
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief coalesce
  ** ------------------------------------------------------------------------------------------------------------- */
-inline void FlattenAssociativeDFG::coalesce(Variadic * const var) {
+inline Variadic * CoalesceDFG::coalesce(Variadic * const var) {
     const TypeId typeId = var->getClassTypeId();
     for (unsigned i = 0; i < var->getNumOperands(); ) {
         PabloAST * const op = var->getOperand(i);
@@ -35,12 +35,13 @@ inline void FlattenAssociativeDFG::coalesce(Variadic * const var) {
         }
         ++i;
     }
+    return var;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief coalesce
  ** ------------------------------------------------------------------------------------------------------------- */
-void FlattenAssociativeDFG::coalesce(PabloBlock * const block, const bool traverse) {
+void CoalesceDFG::coalesce(PabloBlock * const block, const bool traverse) {
     Statement * stmt = block->front();
     while (stmt) {
         Statement * next = stmt->getNextNode();
@@ -48,9 +49,9 @@ void FlattenAssociativeDFG::coalesce(PabloBlock * const block, const bool traver
             coalesce(isa<If>(stmt) ? cast<If>(stmt)->getBody() : cast<While>(stmt)->getBody(), true);
         } else if (isa<And>(stmt) || isa<Or>(stmt) || isa<Xor>(stmt)) {
             coalesce(cast<Variadic>(stmt));
-        } else if (isa<Not>(stmt)) {
+        }/* else if (isa<Not>(stmt)) {
             deMorgansExpansion(cast<Not>(stmt), block);
-        }
+        }*/
         stmt = next;
     }
 }
@@ -61,31 +62,42 @@ void FlattenAssociativeDFG::coalesce(PabloBlock * const block, const bool traver
  * Apply the De Morgans' law to any negated And or Or statement with the intent of further coalescing its operands
  * thereby allowing the Simplifier to check for tautologies and contradictions.
  ** ------------------------------------------------------------------------------------------------------------- */
-inline void FlattenAssociativeDFG::deMorgansExpansion(Not * const var, PabloBlock * const block) {
+inline void CoalesceDFG::deMorgansExpansion(Not * const var, PabloBlock * const block) {
     PabloAST * const negatedVar = var->getOperand(0);
     if (isa<And>(negatedVar) || isa<Or>(negatedVar)) {
-        Variadic * src = cast<Variadic>(negatedVar);
-        const unsigned operands = src->getNumOperands();
-        Variadic * replacement = nullptr;
-        block->setInsertPoint(var->getPrevNode());
-        if (isa<And>(negatedVar)) {
-            replacement = block->createOr(operands);
-        } else {
-            replacement = block->createAnd(operands);
+        const TypeId desiredTypeId = isa<And>(negatedVar) ? TypeId::Or : TypeId::And;
+        bool canApplyDeMorgans = true;
+        for (PabloAST * user : var->users()) {
+            if (desiredTypeId != user->getClassTypeId()) {
+                canApplyDeMorgans = false;
+                break;
+            }
         }
-        block->setInsertPoint(replacement->getPrevNode());
-        for (unsigned i = 0; i != operands; ++i) {
-            replacement->addOperand(block->createNot(src->getOperand(i)));
+        if (canApplyDeMorgans) {
+            const unsigned operands = cast<Variadic>(negatedVar)->getNumOperands();
+            PabloAST * negations[operands];
+            block->setInsertPoint(var);
+            for (unsigned i = 0; i != operands; ++i) {
+                negations[i] = block->createNot(cast<Variadic>(negatedVar)->getOperand(i));
+            }
+            const unsigned users = var->getNumUses();
+            PabloAST * user[users];
+            std::copy(var->user_begin(), var->user_end(), user);
+            for (unsigned i = 0; i != users; ++i) {
+                cast<Variadic>(user[i])->deleteOperand(var);
+                for (unsigned j = 0; j != operands; ++j) {
+                    cast<Variadic>(user[i])->addOperand(negations[j]);
+                }
+            }
+            var->eraseFromParent(true);
         }
-        coalesce(replacement);
-        var->replaceWith(replacement, true, true);
     }
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief deMorgansReduction
  ** ------------------------------------------------------------------------------------------------------------- */
-inline void FlattenAssociativeDFG::deMorgansReduction(Variadic * const var, PabloBlock * const block) {
+inline void CoalesceDFG::deMorgansReduction(Variadic * const var, PabloBlock * const block) {
     unsigned negations = 0;
     for (unsigned i = 0; i < var->getNumOperands(); ++i) {
         if (isa<Not>(var->getOperand(i))) {
@@ -116,7 +128,7 @@ inline void FlattenAssociativeDFG::deMorgansReduction(Variadic * const var, Pabl
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief deMorgansReduction
  ** ------------------------------------------------------------------------------------------------------------- */
-void FlattenAssociativeDFG::deMorgansReduction(PabloBlock * const block, const bool traverse) {
+void CoalesceDFG::deMorgansReduction(PabloBlock * const block, const bool traverse) {
     for (Statement * stmt : *block) {
         if (LLVM_UNLIKELY((isa<If>(stmt) || isa<While>(stmt)) && traverse)) {
             deMorgansReduction(isa<If>(stmt) ? cast<If>(stmt)->getBody() : cast<While>(stmt)->getBody(), true);
@@ -133,8 +145,8 @@ union VertexData {
     explicit VertexData(Assign * def) : def(def) { }
     explicit VertexData(TypeId typeId) : typeId(typeId) { }
 };
-using Graph = adjacency_list<vecS, vecS, bidirectionalS, VertexData, Variadic *>;
-using Vertex = Graph::vertex_descriptor;
+using DependencyGraph = adjacency_list<vecS, vecS, bidirectionalS, VertexData, Variadic *>;
+using Vertex = DependencyGraph::vertex_descriptor;
 using SourceMap = flat_map<Assign *, Vertex>;
 using SinkMap = flat_map<TypeId, Vertex>;
 using VertexSet = std::vector<Vertex>;
@@ -144,7 +156,7 @@ using BicliqueSet = std::vector<Biclique>;
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief addToVariadicGraph
  ** ------------------------------------------------------------------------------------------------------------- */
-static bool addToVariadicGraph(Assign * const def, Graph & G, SourceMap & A, SinkMap & B) {
+static bool addToVariadicGraph(Assign * const def, DependencyGraph & G, SourceMap & A, SinkMap & B) {
 
     if (LLVM_LIKELY(A.count(def) == 0)) {
         // Test if its valid to transform this statement
@@ -190,7 +202,7 @@ inline static bool matches(const PabloAST * const a, const PabloAST * const b) {
  * bicliques" by Alexe et. al. (2003). Note: this implementation considers all verticies in set A to be in
  * bipartition A and their adjacencies to be in B.
   ** ------------------------------------------------------------------------------------------------------------- */
-static BicliqueSet enumerateBicliques(const Graph & G, const VertexSet & A) {
+static BicliqueSet enumerateBicliques(const DependencyGraph & G, const VertexSet & A) {
     using IntersectionSets = std::set<VertexSet>;
 
     IntersectionSets B1;
@@ -272,6 +284,8 @@ template <class Type>
 inline bool intersects(const Type & A, const Type & B) {
     auto first1 = A.begin(), last1 = A.end();
     auto first2 = B.begin(), last2 = B.end();
+    assert (std::is_sorted(first1, last1));
+    assert (std::is_sorted(first2, last2));
     while (first1 != last1 && first2 != last2) {
         if (*first1 < *first2) {
             ++first1;
@@ -288,22 +302,18 @@ inline bool intersects(const Type & A, const Type & B) {
  * @brief independentCliqueSets
  ** ------------------------------------------------------------------------------------------------------------- */
 template <unsigned side>
-inline static BicliqueSet independentCliqueSets(BicliqueSet && cliques, const unsigned minimum) {
+inline static BicliqueSet independentCliqueSets(BicliqueSet && bicliques, const unsigned minimum) {
     using IndependentSetGraph = adjacency_list<hash_setS, vecS, undirectedS, unsigned>;
 
-    const auto l = cliques.size();
+    const auto l = bicliques.size();
     IndependentSetGraph I(l);
 
-    // Initialize our weights
-    for (unsigned i = 0; i != l; ++i) {
-        I[i] = std::pow(std::get<side>(cliques[i]).size(), 2);
-    }
-
-    // Determine our constraints
-    for (unsigned i = 0; i != l; ++i) {
-        for (unsigned j = i + 1; j != l; ++j) {
-            if (intersects(std::get<side>(cliques[i]), std::get<side>(cliques[j]))) {
-                add_edge(i, j, I);
+    // Initialize our weights and determine the constraints
+    for (auto i = bicliques.begin(); i != bicliques.end(); ++i) {
+        I[std::distance(bicliques.begin(), i)] = std::pow(std::get<side>(*i).size(), 2);
+        for (auto j = i; ++j != bicliques.end(); ) {
+            if (intersects(i->second, j->second) && intersects(i->first, j->first)) {
+                add_edge(std::distance(bicliques.begin(), i), std::distance(bicliques.begin(), j), I);
             }
         }
     }
@@ -329,29 +339,28 @@ inline static BicliqueSet independentCliqueSets(BicliqueSet && cliques, const un
 
     // Sort the selected list and then remove the unselected cliques
     std::sort(selected.begin(), selected.end(), std::greater<Vertex>());
-    auto end = cliques.end();
+    auto end = bicliques.end();
     for (const unsigned offset : selected) {
-        end = cliques.erase(cliques.begin() + offset + 1, end) - 1;
+        end = bicliques.erase(bicliques.begin() + offset + 1, end) - 1;
     }
-    cliques.erase(cliques.begin(), end);
+    bicliques.erase(bicliques.begin(), end);
 
-    return std::move(cliques);
+    return std::move(bicliques);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief tryToPartiallyExtractVariadic
  ** ------------------------------------------------------------------------------------------------------------- */
-inline void FlattenAssociativeDFG::tryToPartiallyExtractVariadic(Variadic * const var) {
-
+inline void CoalesceDFG::tryToPartiallyExtractVariadic(Variadic * const var) {
     for (unsigned i = 0; i < var->getNumOperands(); ++i) {
         PabloAST * const op = var->getOperand(i);
         if (isa<Assign>(op)) {
-
-            // Have we found a variadic operation that can sunk into a nested scope?
+            // Look for two Assign statements in this variadic; we don't want to generate a dependency graph unless
+            // we expect some optimization can occur.
             for (unsigned j = i + 1; j != var->getNumOperands(); ++j) {
                 bool invalid = false;
                 if (LLVM_UNLIKELY(matches(op, var->getOperand(j)))) {
-                    Graph G;
+                    DependencyGraph G;
                     SourceMap A;
                     SinkMap B;
                     if (addToVariadicGraph(cast<Assign>(op), G, A, B) == 0) {
@@ -374,7 +383,9 @@ inline void FlattenAssociativeDFG::tryToPartiallyExtractVariadic(Variadic * cons
                         }
 
                         const auto S = independentCliqueSets<0>(std::move(enumerateBicliques(G, H)), 2);
-                        assert (S.size() > 0);
+                        if (LLVM_UNLIKELY(S.empty())) {
+                            break;
+                        }
                         for (const Biclique & C : S) {
                             const VertexSet & sources = std::get<0>(C);
                             const VertexSet & variadics = std::get<1>(C);
@@ -404,10 +415,7 @@ inline void FlattenAssociativeDFG::tryToPartiallyExtractVariadic(Variadic * cons
                                 for (Assign * def : defs) {
                                     joiner->addOperand(def->getOperand(0));                                    
                                 }
-
-                                coalesce(joiner);
-                                Assign * const joined = block->createAssign("m", joiner);
-
+                                Assign * const joined = block->createAssign("m", coalesce(joiner));
                                 for (Assign * def : defs) {
                                     def->replaceWith(joined);
                                     assert (def->getNumUses() == 0);
@@ -429,7 +437,7 @@ inline void FlattenAssociativeDFG::tryToPartiallyExtractVariadic(Variadic * cons
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief tryToPartiallyExtractVariadic
  ** ------------------------------------------------------------------------------------------------------------- */
-void FlattenAssociativeDFG::tryToPartiallyExtractVariadic(PabloBlock * const block) {
+void CoalesceDFG::tryToPartiallyExtractVariadic(PabloBlock * const block) {
     for (Statement * stmt = block->back(); stmt; stmt = stmt->getPrevNode()) {
         if (LLVM_UNLIKELY(isa<If>(stmt) || isa<While>(stmt))) {
             tryToPartiallyExtractVariadic(isa<If>(stmt) ? cast<If>(stmt)->getBody() : cast<While>(stmt)->getBody());
@@ -572,7 +580,7 @@ void eliminateUnecessaryDependencies(ScopeDependencyGraph & G) {
  *
  * TODO: make this only iterate over the scope blocks and test the scope branch.
  ** ------------------------------------------------------------------------------------------------------------- */
-inline void FlattenAssociativeDFG::removeFalseScopeDependencies(PabloFunction & function) {
+inline void CoalesceDFG::removeFalseScopeDependencies(PabloFunction & function) {
     ScopeDependencyGraph G;
     {
         ScopeDependencyMap M;
@@ -585,28 +593,30 @@ inline void FlattenAssociativeDFG::removeFalseScopeDependencies(PabloFunction & 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief transform
  ** ------------------------------------------------------------------------------------------------------------- */
-void FlattenAssociativeDFG::transform(PabloFunction & function) {
+void CoalesceDFG::transform(PabloFunction & function) {
 
-    FlattenAssociativeDFG::coalesce(function.getEntryBlock(), true);
+    CoalesceDFG::coalesce(function.getEntryBlock(), true);
     #ifndef NDEBUG
     PabloVerifier::verify(function, "post-coalescence");
     #endif
 
     Simplifier::optimize(function);
 
-    FlattenAssociativeDFG::deMorgansReduction(function.getEntryBlock(), true);
-    #ifndef NDEBUG
-    PabloVerifier::verify(function, "post-demorgans-reduction");
-    #endif
+//    CoalesceDFG::deMorgansReduction(function.getEntryBlock(), true);
+//    #ifndef NDEBUG
+//    PabloVerifier::verify(function, "post-demorgans-reduction");
+//    #endif
 
-    Simplifier::optimize(function);
+//    Simplifier::optimize(function);
 
-    FlattenAssociativeDFG::removeFalseScopeDependencies(function);
+    CoalesceDFG::removeFalseScopeDependencies(function);
     #ifndef NDEBUG
     PabloVerifier::verify(function, "post-remove-false-scope-dependencies");
     #endif
 
-    FlattenAssociativeDFG::tryToPartiallyExtractVariadic(function.getEntryBlock());
+    Simplifier::optimize(function);
+
+    CoalesceDFG::tryToPartiallyExtractVariadic(function.getEntryBlock());
     #ifndef NDEBUG
     PabloVerifier::verify(function, "post-partial-variadic-extraction");
     #endif

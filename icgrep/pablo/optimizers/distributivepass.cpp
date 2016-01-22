@@ -13,8 +13,8 @@ using namespace boost::container;
 
 namespace pablo {
 
-using Graph = adjacency_list<hash_setS, vecS, bidirectionalS, PabloAST *>;
-using Vertex = Graph::vertex_descriptor;
+using DependencyGraph = adjacency_list<hash_setS, vecS, bidirectionalS, PabloAST *>;
+using Vertex = DependencyGraph::vertex_descriptor;
 using SinkMap = flat_map<PabloAST *, Vertex>;
 using VertexSet = std::vector<Vertex>;
 using Biclique = std::pair<VertexSet, VertexSet>;
@@ -27,7 +27,7 @@ using TypeId = PabloAST::ClassTypeId;
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getVertex
  ** ------------------------------------------------------------------------------------------------------------- */
-static inline Vertex getVertex(PabloAST * value, Graph & G, SinkMap & M) {
+static inline Vertex getVertex(PabloAST * value, DependencyGraph & G, SinkMap & M) {
     const auto f = M.find(value);
     if (f != M.end()) {
         return f->second;
@@ -42,7 +42,7 @@ static inline Vertex getVertex(PabloAST * value, Graph & G, SinkMap & M) {
  *
  * Generate a graph G describing the potential applications of the distributive law for the given block.
  ** ------------------------------------------------------------------------------------------------------------- */
-VertexSet generateDistributionGraph(PabloBlock * block, Graph & G) {
+VertexSet generateDistributionGraph(PabloBlock * block, DependencyGraph & G) {
     SinkMap M;
     VertexSet distSet;
     for (Statement * stmt : *block) {
@@ -125,25 +125,31 @@ inline bool intersects(const Type & A, const Type & B) {
  * @brief independentCliqueSets
  ** ------------------------------------------------------------------------------------------------------------- */
 template <unsigned side>
-inline static BicliqueSet && independentCliqueSets(BicliqueSet && cliques, const unsigned minimum) {
+inline static BicliqueSet && independentCliqueSets(BicliqueSet && bicliques, const unsigned minimum) {
     using IndependentSetGraph = adjacency_list<hash_setS, vecS, undirectedS, unsigned>;
 
-    const auto l = cliques.size();
+    const auto l = bicliques.size();
     IndependentSetGraph I(l);
 
-    // Initialize our weights
+    // Initialize our weights and determine the constraints
     for (unsigned i = 0; i != l; ++i) {
-        I[i] = std::pow(std::get<side>(cliques[i]).size(), 2);
-    }
-
-    // Determine our constraints
-    for (unsigned i = 0; i != l; ++i) {
+        I[i] = std::pow(std::get<side>(bicliques[i]).size(), 2);
         for (unsigned j = i + 1; j != l; ++j) {
-            if (intersects(std::get<side>(cliques[i]), std::get<side>(cliques[j]))) {
+            if (intersects(std::get<side>(bicliques[i]), std::get<side>(bicliques[j]))) {
                 add_edge(i, j, I);
             }
         }
     }
+
+//    // Initialize our weights and determine the constraints
+//    for (auto i = bicliques.begin(); i != bicliques.end(); ++i) {
+//        I[std::distance(bicliques.begin(), i)] = std::pow(std::get<side>(*i).size(), 2);
+//        for (auto j = i; ++j != bicliques.end(); ) {
+//            if (intersects(i->second, j->second) && intersects(i->first, j->first)) {
+//                add_edge(std::distance(bicliques.begin(), i), std::distance(bicliques.begin(), j), I);
+//            }
+//        }
+//    }
 
     // Use the greedy algorithm to choose our independent set
     VertexSet selected;
@@ -166,13 +172,13 @@ inline static BicliqueSet && independentCliqueSets(BicliqueSet && cliques, const
 
     // Sort the selected list and then remove the unselected cliques
     std::sort(selected.begin(), selected.end(), std::greater<Vertex>());
-    auto end = cliques.end();
+    auto end = bicliques.end();
     for (const unsigned offset : selected) {
-        end = cliques.erase(cliques.begin() + offset + 1, end) - 1;
+        end = bicliques.erase(bicliques.begin() + offset + 1, end) - 1;
     }
-    cliques.erase(cliques.begin(), end);
+    bicliques.erase(bicliques.begin(), end);
 
-    return std::move(cliques);
+    return std::move(bicliques);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -182,7 +188,7 @@ inline static BicliqueSet && independentCliqueSets(BicliqueSet && cliques, const
  * bicliques" by Alexe et. al. (2003). Note: this implementation considers all verticies in set A to be in
  * bipartition A and their adjacencies to be in B.
   ** ------------------------------------------------------------------------------------------------------------- */
-static BicliqueSet enumerateBicliques(const Graph & G, const VertexSet & A) {
+static BicliqueSet enumerateBicliques(const DependencyGraph & G, const VertexSet & A) {
     using IntersectionSets = std::set<VertexSet>;
 
     IntersectionSets B1;
@@ -264,7 +270,7 @@ static BicliqueSet enumerateBicliques(const Graph & G, const VertexSet & A) {
  * the lower biclique, we'll need to compute that specific value anyway. Remove them from the clique set and if
  * there are not enough vertices in the biclique to make distribution profitable, eliminate the clique.
  ** ------------------------------------------------------------------------------------------------------------- */
-static BicliqueSet && removeUnhelpfulBicliques(BicliqueSet && cliques, Graph & G) {
+static BicliqueSet && removeUnhelpfulBicliques(BicliqueSet && cliques, DependencyGraph & G) {
     for (auto ci = cliques.begin(); ci != cliques.end(); ) {
         const auto cardinalityA = std::get<0>(*ci).size();
         VertexSet & B = std::get<1>(*ci);
@@ -287,7 +293,7 @@ static BicliqueSet && removeUnhelpfulBicliques(BicliqueSet && cliques, Graph & G
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief safeDistributionSets
  ** ------------------------------------------------------------------------------------------------------------- */
-static DistributionSets safeDistributionSets(Graph & G, const VertexSet & distSet) {
+static DistributionSets safeDistributionSets(DependencyGraph & G, const VertexSet & distSet) {
     DistributionSets T;
     BicliqueSet lowerSet = independentCliqueSets<1>(removeUnhelpfulBicliques(enumerateBicliques(G, distSet), G), 1);
     for (Biclique & lower : lowerSet) {
@@ -308,7 +314,7 @@ inline void DistributivePass::process(PabloBlock * const block) {
 
         // FlattenAssociativeDFG::coalesce(block, false);
 
-        Graph G;
+        DependencyGraph G;
 
         const VertexSet distSet = generateDistributionGraph(block, G);
 
@@ -349,7 +355,7 @@ inline void DistributivePass::process(PabloBlock * const block) {
                 }
                 outerOp->addOperand(G[u]);
             }
-            FlattenAssociativeDFG::coalesce(outerOp);
+            CoalesceDFG::coalesce(outerOp);
 
             for (const Vertex u : sources) {
                 for (const Vertex v : intermediary) {
@@ -358,12 +364,10 @@ inline void DistributivePass::process(PabloBlock * const block) {
                 innerOp->addOperand(G[u]);
             }
             innerOp->addOperand(outerOp);
-            FlattenAssociativeDFG::coalesce(innerOp);
+            CoalesceDFG::coalesce(innerOp);
 
             for (const Vertex u : sinks) {
-                Variadic * const resultOp = cast<Variadic>(G[u]);
-                resultOp->addOperand(innerOp);
-                FlattenAssociativeDFG::coalesce(resultOp);
+                cast<Variadic>(G[u])->addOperand(innerOp);
             }
         }
     }
@@ -390,11 +394,6 @@ void DistributivePass::optimize(PabloFunction & function) {
     PabloVerifier::verify(function, "post-distribution");
     #endif
     Simplifier::optimize(function);
-//    FlattenAssociativeDFG::deMorgansReduction(function.getEntryBlock());
-//    #ifndef NDEBUG
-//    PabloVerifier::verify(function, "post-demorgans-reduction");
-//    #endif
-//    Simplifier::optimize(function);
 }
 
 

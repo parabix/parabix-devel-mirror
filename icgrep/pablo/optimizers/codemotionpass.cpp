@@ -12,7 +12,7 @@ namespace pablo {
  * @brief optimize
  ** ------------------------------------------------------------------------------------------------------------- */
 bool CodeMotionPass::optimize(PabloFunction & function) {
-    CodeMotionPass::process(function.getEntryBlock());
+    CodeMotionPass::global(function.getEntryBlock());
     #ifndef NDEBUG
     PabloVerifier::verify(function, "post-code-motion");
     #endif
@@ -22,13 +22,13 @@ bool CodeMotionPass::optimize(PabloFunction & function) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief process
  ** ------------------------------------------------------------------------------------------------------------- */
-void CodeMotionPass::process(PabloBlock * const block) {
+void CodeMotionPass::global(PabloBlock * const block) {
     sink(block);
     for (Statement * stmt : *block) {
         if (isa<If>(stmt)) {
-            process(cast<If>(stmt)->getBody());
+            global(cast<If>(stmt)->getBody());
         } else if (isa<While>(stmt)) {
-            process(cast<While>(stmt)->getBody());
+            global(cast<While>(stmt)->getBody());
             // TODO: if we analyzed the probability of this loop being executed once, twice, or many times, we could
             // determine whether hoisting will helpful or harmful to the expected run time.
             hoistLoopInvariants(cast<While>(stmt));
@@ -131,10 +131,11 @@ void CodeMotionPass::sink(PabloBlock * const block) {
                 // Then iteratively step backwards until we find a matching set of scopes; this
                 // must be the LCA of our original scopes.
                 while (scope1 != scope2) {
+                    assert (scope1 && scope2);
                     scope1 = scope1->getParent();
                     scope2 = scope2->getParent();
                 }
-                assert (scope1 && scope2);
+                assert (scope1);
                 // But if the LCA is the current block, we can't sink the statement.
                 if (scope1 == block) {
                     goto abort;

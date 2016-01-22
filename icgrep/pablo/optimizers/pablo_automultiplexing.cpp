@@ -10,6 +10,7 @@
 #include <boost/range/iterator_range.hpp>
 #include <pablo/analysis/pabloverifier.hpp>
 #include <pablo/optimizers/pablo_simplifier.hpp>
+#include <pablo/builder.hpp>
 #include <stack>
 #include <queue>
 #include <unordered_set>
@@ -22,7 +23,7 @@ using namespace boost;
 using namespace boost::container;
 using namespace boost::numeric::ublas;
 
-#define PRINT_DEBUG_OUTPUT
+// #define PRINT_DEBUG_OUTPUT
 
 #if !defined(NDEBUG) && !defined(PRINT_DEBUG_OUTPUT)
 #define PRINT_DEBUG_OUTPUT
@@ -101,15 +102,27 @@ unsigned __count_advances(const PabloBlock * const entry) {
 
 namespace pablo {
 
+#ifdef PRINT_TIMING_INFORMATION
+MultiplexingPass::seed_t MultiplexingPass::SEED = 0;
+unsigned MultiplexingPass::NODES_ALLOCATED = 0;
+unsigned MultiplexingPass::NODES_USED = 0;
+#endif
+
 using TypeId = PabloAST::ClassTypeId;
 
 bool MultiplexingPass::optimize(PabloFunction & function, const unsigned limit, const unsigned maxSelections, const unsigned windowSize, const bool independent) {
 
-//    std::random_device rd;
-//    const auto seed = rd();
-    const auto seed = 83234827342;
+    std::random_device rd;
+    const RNG::result_type seed = rd();
+    // const RNG::result_type seed = 83234827342;
 
     LOG("Seed:                    " << seed);
+
+    #ifdef PRINT_TIMING_INFORMATION
+    MultiplexingPass::SEED = seed;
+    MultiplexingPass::NODES_ALLOCATED = 0;
+    MultiplexingPass::NODES_USED = 0;
+    #endif
 
     MultiplexingPass mp(seed, limit, maxSelections, windowSize);
     RECORD_TIMESTAMP(start_initialize);
@@ -131,6 +144,11 @@ bool MultiplexingPass::optimize(PabloFunction & function, const unsigned limit, 
     LOG("Characterize:             " << (end_characterize - start_characterize));
 
     LOG("Nodes in BDD:             " << bdd_getnodenum() << " of " << bdd_getallocnum());
+
+    #ifdef PRINT_TIMING_INFORMATION
+    MultiplexingPass::NODES_ALLOCATED = bdd_getallocnum();
+    MultiplexingPass::NODES_USED = bdd_getnodenum();
+    #endif
 
     RECORD_TIMESTAMP(start_shutdown);
     bdd_done();
@@ -488,7 +506,11 @@ inline BDD MultiplexingPass::characterize(Advance * const adv, const BDD Ik) {
             if (bdd_satone(IiIk) == bdd_zero()) {
                 // If Ai ∩ Ak = ∅ and Aj ⊂ Ai, Aj ∩ Ak = ∅.
                 for (auto e : make_iterator_range(in_edges(i, mSubsetGraph))) {
-                    unconstrained[source(e, mSubsetGraph)] = true;
+                    const auto j = source(e, mSubsetGraph);
+                    if (mSubsetImplicationsAdhereToWindowingSizeConstraint && exceedsWindowSize(j, k)) {
+                        continue;
+                    }
+                    unconstrained[j] = true;
                 }
                 unconstrained[i] = true;
             } else if (Ii == IiIk) {
@@ -500,6 +522,9 @@ inline BDD MultiplexingPass::characterize(Advance * const adv, const BDD Ik) {
                 for (auto e : make_iterator_range(in_edges(i, mSubsetGraph))) {
                     const auto j = source(e, mSubsetGraph);
                     add_edge(j, k, mSubsetGraph);
+                    if (mSubsetImplicationsAdhereToWindowingSizeConstraint && exceedsWindowSize(j, k)) {
+                        continue;
+                    }
                     unconstrained[j] = true;
                 }
                 unconstrained[i] = true;
@@ -510,6 +535,9 @@ inline BDD MultiplexingPass::characterize(Advance * const adv, const BDD Ik) {
                 for (auto e : make_iterator_range(out_edges(i, mSubsetGraph))) {
                     const auto j = target(e, mSubsetGraph);
                     add_edge(k, j, mSubsetGraph);
+                    if (mSubsetImplicationsAdhereToWindowingSizeConstraint && exceedsWindowSize(j, k)) {
+                        continue;
+                    }
                     unconstrained[j] = true;
                 }
                 unconstrained[i] = true;
@@ -524,8 +552,8 @@ inline BDD MultiplexingPass::characterize(Advance * const adv, const BDD Ik) {
         if (unconstrained[i]) {
             // Note: this algorithm deems two streams are mutually exclusive if and only if the conjuntion of their BDDs results
             // in a contradiction. To generate a contradiction when comparing Advances, the BDD of each Advance is represented by
-            // the conjunction of variable representing that Advance and the negation of all variables for the Advances in which
-            // the inputs are deemed to be mutually exclusive. For example, if the input of the i-th Advance is mutually exclusive
+            // the conjunction of variable representing the k-th Advance and the negation of all variables for the Advances whose
+            // inputs are mutually exclusive with the k-th input. For example, if the input of the i-th Advance is mutually exclusive
             // with the input of the j-th and k-th Advance, the BDD of the i-th Advance is Ai ∧ ¬Aj ∧ ¬Ak.
             const Advance * const ithAdv = mAdvance[i];
             const BDD Ni = mAdvanceNegatedVariable[i];
@@ -939,28 +967,51 @@ void MultiplexingPass::multiplexSelectedSets(PabloFunction &) {
             }
             Advance * const adv = input[0];
             PabloBlock * const block = adv->getParent(); assert (block);
-            block->setInsertPoint(nullptr);            
-            /// Perform n-to-m Multiplexing
+            block->setInsertPoint(nullptr);
+            circular_buffer<PabloAST *> Q(n);
+            PabloBuilder builder(block);
+            /// Perform n-to-m Multiplexing            
             for (size_t j = 0; j != m; ++j) {
                 std::ostringstream prefix;
                 prefix << "mux" << n << "to" << m << '.' << (j + 1);
-                Or * muxing = block->createOr(n);
+//                Or * muxing = block->createOr(n);
+//                for (size_t i = 0; i != n; ++i) {
+//                    if (((i + 1) & (1UL << j)) != 0) {
+//                        assert (input[i]->getParent() == block);
+//                        muxing->addOperand(input[i]->getOperand(0));
+//                    }
+//                }
                 for (size_t i = 0; i != n; ++i) {
                     if (((i + 1) & (1UL << j)) != 0) {
-                        assert (input[i]->getParent() == block);
-                        muxing->addOperand(input[i]->getOperand(0));
+                        Q.push_back(input[i]->getOperand(0));
                     }
                 }
-                muxed[j] = block->createAdvance(muxing, adv->getOperand(1), prefix.str());
-                muxed_n[j] = block->createNot(muxed[j]);
-            }
-            /// Perform m-to-n Demultiplexing
-            for (size_t i = 0; i != n; ++i) {
-                // Construct the demuxed values and replaces all the users of the original advances with them.                
-                And * demuxed = block->createAnd(m);
-                for (size_t j = 0; j != m; ++j) {
-                    demuxed->addOperand((((i + 1) & (1UL << j)) != 0) ? muxed[j] : muxed_n[j]);
+                while (Q.size() > 1) {
+                    PabloAST * a = Q.front(); Q.pop_front();
+                    PabloAST * b = Q.front(); Q.pop_front();
+                    Q.push_back(builder.createOr(a, b));
                 }
+                PabloAST * muxing =  Q.front(); Q.clear();
+                muxed[j] = builder.createAdvance(muxing, adv->getOperand(1), prefix.str());
+                muxed_n[j] = builder.createNot(muxed[j]);
+            }
+            /// Perform m-to-n Demultiplexing            
+            for (size_t i = 0; i != n; ++i) {
+                // Construct the demuxed values and replaces all the users of the original advances with them.
+                assert (Q.empty());
+                for (size_t j = 0; j != m; ++j) {
+                    Q.push_back((((i + 1) & (1UL << j)) != 0) ? muxed[j] : muxed_n[j]);
+                }
+                while (Q.size() > 1) {
+                    PabloAST * a = Q.front(); Q.pop_front();
+                    PabloAST * b = Q.front(); Q.pop_front();
+                    Q.push_back(builder.createAnd(a, b));
+                }
+                PabloAST * demuxed =  Q.front(); Q.clear();
+//                And * demuxed = block->createAnd(m);
+//                for (size_t j = 0; j != m; ++j) {
+//                    demuxed->addOperand((((i + 1) & (1UL << j)) != 0) ? muxed[j] : muxed_n[j]);
+//                }
                 input[i]->replaceWith(demuxed, true, true);
             }
         }

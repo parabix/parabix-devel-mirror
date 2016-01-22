@@ -38,6 +38,8 @@ static cl::OptionCategory fREcompilationOptions("Regex Compilation Options", "Th
 
 static cl::opt<bool> DisableLog2BoundedRepetition("disable-log2-bounded-repetition", cl::init(false),
                      cl::desc("disable log2 optimizations for bounded repetition of bytes"), cl::cat(fREcompilationOptions));
+static cl::opt<bool> DisableIfHierarchy("disable-if-hierarchy-strategy", cl::init(false),
+                     cl::desc("disable nested if hierarchy for generated Unicode classes (not recommended)"), cl::cat(fREcompilationOptions));
 static cl::opt<int> IfInsertionGap("if-insertion-gap", cl::init(3), cl::desc("minimum number of nonempty elements between inserted if short-circuit tests"), cl::cat(fREcompilationOptions));
 static cl::opt<bool> DisableMatchStar("disable-matchstar", cl::init(false),
                      cl::desc("disable MatchStar optimization"), cl::cat(fREcompilationOptions));
@@ -302,7 +304,11 @@ RE * RE_Compiler::resolveUnicodeProperties(RE * re) {
 
     if (LLVM_LIKELY(nameMap.size() > 0)) {
         UCD::UCDCompiler ucdCompiler(mCCCompiler);
-        ucdCompiler.generateWithDefaultIfHierarchy(nameMap, mPB);
+        if (LLVM_UNLIKELY(DisableIfHierarchy)) {
+            ucdCompiler.generateWithoutIfHierarchy(nameMap, mPB);
+        } else {
+            ucdCompiler.generateWithDefaultIfHierarchy(nameMap, mPB);
+        }
         for (auto t : nameMap) {
             if (t.second) {
                 mCompiledName.insert(std::make_pair(t.first, makeMarker(MarkerPosition::FinalMatchByte, t.second)));

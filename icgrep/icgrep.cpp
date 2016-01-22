@@ -24,7 +24,6 @@
 #include <llvm/Support/TargetSelect.h>
 #include <llvm/Support/Host.h>
 #include <llvm/IR/Verifier.h>
-
 #include <kernels/s2p_gen.h>
 #include <kernels/scanmatchgen.h>
 
@@ -35,7 +34,14 @@
 #include <re/re_alt.h>
 #include <pablo/function.h>
 
-#include "do_grep.h"
+#include <iostream>
+
+#include <do_grep.h>
+#include <hrtime.h>
+
+#ifdef PRINT_TIMING_INFORMATION
+#include "papi_helper.hpp"
+#endif
 
 static cl::OptionCategory aRegexSourceOptions("Regular Expression Options",
                                        "These options control the regular expression source.");
@@ -60,7 +66,7 @@ static cl::list<std::string> regexVector("e", cl::desc("Regular expression"), cl
 static cl::opt<std::string> RegexFilename("f", cl::desc("Take regular expressions (one per line) from a file"), cl::value_desc("regex file"), cl::init(""), cl::cat(aRegexSourceOptions));
 static cl::opt<std::string> IRFileName("precompiled", cl::desc("Use precompiled regular expression"), cl::value_desc("LLVM IR file"), cl::init(""), cl::cat(aRegexSourceOptions));
 
-
+using namespace llvm;
 
 static unsigned firstInputFile = 1;  // Normal case when first positional arg is a regex.
 
@@ -153,10 +159,16 @@ int main(int argc, char *argv[]) {
         re::RE * re_ast = get_icgrep_RE();
         re_ast = regular_expression_passes(encoding, re_ast);
         
+        #ifdef PRINT_TIMING_INFORMATION
+        const timestamp_t regex_compilation_start = read_cycle_counter();
+        #endif
         pablo::PabloFunction * function = re2pablo_compiler(encoding, re_ast);
+        #ifdef PRINT_TIMING_INFORMATION
+        const timestamp_t regex_compilation_end = read_cycle_counter();
+        std::cerr << "REGEX COMPILATION TIME: " << (regex_compilation_end - regex_compilation_start) << std::endl;
+        #endif
 
         pablo_function_passes(function);
-        
         
         pablo::PabloCompiler pablo_compiler(M, idb);
         try {
@@ -180,7 +192,7 @@ int main(int argc, char *argv[]) {
     }
     llvm::Function * s2p_IR = M->getFunction("s2p_block");
     
-    llvm::Function * scanRoutine = M->getFunction("scan_matches_in_bitblock");
+   // llvm::Function * scanRoutine = M->getFunction("scan_matches_in_bitblock");
     
     if (s2p_IR == nullptr) {
         std::cerr << "No s2p_IR!\n";
@@ -199,12 +211,12 @@ int main(int argc, char *argv[]) {
     void * icgrep_init_carry_ptr = engine->getPointerToFunction(M->getFunction("process_block_initialize_carries"));
     void * icgrep_MCptr = engine->getPointerToFunction(icgrep_IR);
     void * s2p_MCptr = engine->getPointerToFunction(s2p_IR);
-    void * scan_MCptr = engine->getPointerToFunction(scanRoutine);
+    // void * scan_MCptr = engine->getPointerToFunction(scanRoutine);
     if (s2p_MCptr == nullptr) {
         std::cerr << "No s2p_MCptr!\n";
         exit(1);
     }
-    
+
     if (icgrep_MCptr) {
         GrepExecutor grepEngine(s2p_MCptr, icgrep_init_carry_ptr, icgrep_MCptr);
         //GrepExecutor grepEngine(s2p_MCptr, icgrep_init_carry_ptr, icgrep_MCptr, scan_MCptr);
@@ -214,8 +226,20 @@ int main(int argc, char *argv[]) {
         if (inputFiles.size() > (firstInputFile + 1) || ShowFileNames) {
             grepEngine.setShowFileNameOption();
         }
+        #ifdef PRINT_TIMING_INFORMATION
+        papi::PapiCounter<4> papiCounters({PAPI_RES_STL, PAPI_STL_CCY, PAPI_FUL_CCY, PAPI_MEM_WCY});
+        #endif
         for (unsigned i = firstInputFile; i != inputFiles.size(); ++i) {
+            #ifdef PRINT_TIMING_INFORMATION
+            papiCounters.start();
+            const timestamp_t execution_start = read_cycle_counter();
+            #endif
             grepEngine.doGrep(inputFiles[i]);
+            #ifdef PRINT_TIMING_INFORMATION
+            const timestamp_t execution_end = read_cycle_counter();
+            papiCounters.stop();
+            std::cerr << "EXECUTION TIME: " << inputFiles[i] << ":" << "CYCLES|" << (execution_end - execution_start) << papiCounters << std::endl;
+            #endif
         }
     }
     

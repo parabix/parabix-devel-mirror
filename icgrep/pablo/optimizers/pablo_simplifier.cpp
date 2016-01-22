@@ -4,26 +4,21 @@
 #include <pablo/function.h>
 #include <pablo/printer_pablos.h>
 #include <pablo/analysis/pabloverifier.hpp>
-#ifdef USE_BOOST
 #include <boost/container/flat_set.hpp>
-#else
-#include <unordered_set>
-#endif
 
 namespace pablo {
 
-#ifdef USE_BOOST
 template <typename Type>
 using SmallSet = boost::container::flat_set<Type>;
-#else
-template <typename Type>
-using SmallSet = std::unordered_set<Type>;
-#endif
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief optimize
  ** ------------------------------------------------------------------------------------------------------------- */
 bool Simplifier::optimize(PabloFunction & function) {
+    // negationsShouldImmediatelySucceedTheirLiteral(function.getEntryBlock());
+    #ifndef NDEBUG
+    PabloVerifier::verify(function, "post-negation-must-immediately-succeed-their-literal");
+    #endif
     eliminateRedundantCode(function.getEntryBlock());
     #ifndef NDEBUG
     PabloVerifier::verify(function, "post-eliminate-redundant-code");
@@ -473,6 +468,44 @@ void Simplifier::strengthReduction(PabloBlock * const block) {
         stmt = stmt->getNextNode();
     }
     block->setInsertPoint(block->back());
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief negationsShouldImmediatelySucceedTheirLiteral
+ *
+ * Assuming that most negations are actually replaced by an ANDC operations or that we only need a literal or its
+ * negation, by pushing all negations up to immediately succeed the literal we should generate equally efficient
+ * code whilst simplifying analysis.
+ *
+ * TODO: this theory needs evaluation.
+ ** ------------------------------------------------------------------------------------------------------------- */
+void Simplifier::negationsShouldImmediatelySucceedTheirLiteral(PabloBlock * const block) {
+    Statement * stmt = block->front();
+    while (stmt) {
+        Statement * next = stmt->getNextNode();
+        if (isa<If>(stmt)) {
+            negationsShouldImmediatelySucceedTheirLiteral(cast<If>(stmt)->getBody());
+        } else if (isa<While>(stmt)) {
+            negationsShouldImmediatelySucceedTheirLiteral(cast<While>(stmt)->getBody());
+        } else if (isa<Not>(stmt)) {
+            PabloAST * op = cast<Not>(stmt)->getExpr();
+            if (LLVM_LIKELY(isa<Statement>(op))) {
+                PabloBlock * scope = cast<Statement>(op)->getParent();
+                // If the operand is not in a nested scope, we can move it.
+                for (;;) {
+                    if (LLVM_UNLIKELY(scope == nullptr)) {
+                        stmt->insertAfter(cast<Statement>(op));
+                        break;
+                    }
+                    scope = scope->getParent();
+                    if (LLVM_UNLIKELY(scope == block)) {
+                        break;
+                    }
+                }
+            }
+        }
+        stmt = next;
+    }
 }
 
 }

@@ -34,18 +34,18 @@ void PabloPrinter::print(const Statement * stmt, llvm::raw_ostream & out, const 
     } else if (const Next * next = dyn_cast<const Next>(stmt)) {
         out << "Next(" << next->getName() << ") = ";
         print(next->getExpr(), out);
-    } else if (const If * ifstmt = dyn_cast<const If>(stmt)) {
-        out << "if ";
-        print(ifstmt->getCondition(), out);
+    } else if (const If * ifNode = dyn_cast<const If>(stmt)) {
+        out << "If ";
+        print(ifNode->getCondition(), out);
         if (expandNested) {
             out << ":\n";
-            print(ifstmt->getBody(), out, true, indent + BlockIndenting);
+            print(ifNode->getBody(), out, true, indent + BlockIndenting);
             out.indent(indent);
-            out << "else:\n";
-            print_vars(ifstmt->getDefined(), out, indent + BlockIndenting);
+            out << "Else:\n";
+            print_vars(ifNode->getDefined(), out, indent + BlockIndenting);
         }
     } else if (const While * whileNode = dyn_cast<const While>(stmt)) {
-        out << "while ";
+        out << "While ";
         print(whileNode->getCondition(), out);
         if (expandNested) {
             out << ":\n";

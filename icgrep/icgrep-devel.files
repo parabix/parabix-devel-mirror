@@ -492,3 +492,4 @@ pablo/passes/factorizedfg.cpp
 ispc.cpp
 pablo/optimizers/schedulingprepass.h
 pablo/optimizers/schedulingprepass.cpp
+papi_helper.hpp

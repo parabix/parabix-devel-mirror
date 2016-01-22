@@ -43,7 +43,12 @@ class MultiplexingPass {
 public:
 
     static bool optimize(PabloFunction & function, const unsigned limit = std::numeric_limits<unsigned>::max(), const unsigned maxSelections = 100, const unsigned windowSize = 1, const bool independent = false);
-
+    #ifdef PRINT_TIMING_INFORMATION
+    using seed_t = RNG::result_type;
+    static seed_t SEED;
+    static unsigned NODES_ALLOCATED;
+    static unsigned NODES_USED;
+    #endif
 protected:
 
     unsigned initialize(PabloFunction & function, const bool independent);
@@ -80,6 +85,7 @@ protected:
     , mMaxMultiplexingSetSelections(maxSelections)
     , mWindowSize(windowSize)
     , mTestConstrainedAdvances(true)
+    , mSubsetImplicationsAdhereToWindowingSizeConstraint(false)
     , mVariables(0)
     , mRNG(seed)
     , mConstraintGraph(0)
@@ -95,6 +101,7 @@ private:
     const unsigned              mMaxMultiplexingSetSelections;
     const unsigned              mWindowSize;
     const bool                  mTestConstrainedAdvances;
+    const bool                  mSubsetImplicationsAdhereToWindowingSizeConstraint;
     unsigned                    mVariables;
     RNG                         mRNG;
     CharacterizationMap         mCharacterization;

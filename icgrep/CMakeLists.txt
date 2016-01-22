@@ -16,7 +16,7 @@ endif()
 option(ENABLE_MULTIPLEXING "Compiling the Multiplexing Module")
 option(USE_BOOST_MMAP "Using mmap from Boost.Iostreams")
 option(ENABLE_PREGENERATED_UCD_FUNCTIONS "Enable compiling the pregenerated UCD functions")
-
+option(PRINT_TIMING_INFORMATION "Write compilation and execution timing information to standard error stream")
 
 # configure a header file to pass some of the CMake settings
 # to the source code
@@ -36,7 +36,8 @@ message(FATAL_ERROR "LLVM_ROOT (${LLVM_ROOT}) is not a valid LLVM install")
 endif()
 
 # We incorporate the CMake features provided by LLVM:
-set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${LLVM_ROOT}/share/llvm/cmake")
+set(CMAKE_MODULE_PATH "${CMAKE_MODULE_PATH};${LLVM_ROOT}/share/llvm/cmake;${CMAKE_CURRENT_SOURCE_DIR}/cmake")
+
 include(LLVMConfig)
 
 # Now set the header and library paths:
@@ -46,7 +47,7 @@ add_definitions( ${LLVM_DEFINITIONS} )
 
 # Let's suppose we want to build a JIT compiler with support for
 # binary code (no interpreter):
-llvm_map_components_to_libnames(REQ_LLVM_LIBRARIES mcjit native IRReader)
+llvm_map_components_to_libnames(REQ_LLVM_LIBRARIES mcjit native IRReader) # ipo
 
 message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
 
@@ -123,6 +124,12 @@ IF(Boost_FOUND)
     SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DUSE_BOOST")
     target_link_libraries(icgrep ${Boost_LIBRARIES})
 ENDIF()
+IF (PRINT_TIMING_INFORMATION)
+    find_package(PAPI REQUIRED)
+    include_directories(${PAPI_INCLUDE_DIRS})
+    target_link_libraries(icgrep ${PAPI_LIBRARIES})
+ENDIF()
+
 
 target_link_libraries (icgrep UCDlib PabloADT RegExpCompiler CCADT ${REQ_LLVM_LIBRARIES})
 
@@ -311,6 +318,10 @@ IF (BLOCK_SIZE_256)
     ELSEIF ("${SIMD_SUPPORT}" STREQUAL "AVX2")
         SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DUSE_S2P_AVX2 -DBLOCK_SIZE=256 -march=core-avx2 -m64")
     ENDIF()
+ENDIF()
+
+IF (PRINT_TIMING_INFORMATION)   
+    SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DPRINT_TIMING_INFORMATION")
 ENDIF()
 
 SET(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS} -O3 -DNDEBUG")

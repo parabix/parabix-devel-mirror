@@ -2,7 +2,10 @@
 #include <pablo/codegenstate.h>
 #include <boost/circular_buffer.hpp>
 #include <boost/container/flat_set.hpp>
+#include <boost/container/flat_map.hpp>
 #include <pablo/analysis/pabloverifier.hpp>
+#include <boost/graph/adjacency_list.hpp>
+#include <unordered_map>
 
 #include <pablo/printer_pablos.h>
 #include <iostream>
@@ -12,20 +15,65 @@ using namespace boost::container;
 
 namespace pablo {
 
+using DependencyGraph = boost::adjacency_list<boost::hash_setS, boost::vecS, boost::bidirectionalS, std::vector<PabloAST *>>;
+using Vertex = DependencyGraph::vertex_descriptor;
+using Map = std::unordered_map<const PabloAST *, Vertex>;
+using ReadyPair = std::pair<unsigned, Vertex>;
+using ReadySet = std::vector<ReadyPair>;
+
+using weight_t = unsigned;
+using TypeId = PabloAST::ClassTypeId;
+using LiveSet = flat_set<Vertex>;
+
+void schedule(PabloBlock * const block);
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief printGraph
+ ** ------------------------------------------------------------------------------------------------------------- */
+template <typename DependencyGraph>
+static void printGraph(const DependencyGraph & G, const std::vector<unsigned> & ordering, const std::string name, raw_ostream & out) {
+    out << "*******************************************\n";
+    out << "digraph " << name << " {\n";
+    for (auto u : make_iterator_range(vertices(G))) {
+        if (G[u].empty()) {
+            continue;
+        }
+        out << "v" << u << " [label=\"" << ordering[u] << " : ";
+        bool newLine = false;
+        for (PabloAST * expr : G[u]) {
+            if (newLine) {
+                out << '\n';
+            }
+            newLine = true;
+            if (isa<Statement>(expr)) {
+                PabloPrinter::print(cast<Statement>(expr), out);
+            } else {
+                PabloPrinter::print(expr, out);
+            }
+        }
+        out << "\"];\n";
+    }
+    for (auto e : make_iterator_range(edges(G))) {
+        out << "v" << source(e, G) << " -> v" << target(e, G);
+        out << ";\n";
+    }
+
+    out << "}\n\n";
+    out.flush();
+}
+
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief resolveNestedUsages
  ** ------------------------------------------------------------------------------------------------------------- */
-void SchedulingPrePass::resolveNestedUsages(Statement * const root, Statement * const stmt, Graph & G, Map & M, PabloBlock * const block) {
+static void resolveNestedUsages(Statement * const root, Statement * const stmt, DependencyGraph & G, Map & M, PabloBlock * const block) {
     for (PabloAST * use : stmt->users()) {
         if (LLVM_LIKELY(isa<Statement>(use))) {
             const PabloBlock * scope = cast<Statement>(use)->getParent();
             if (scope != block) {
                 for (PabloBlock * prior = scope->getParent(); prior; scope = prior, prior = prior->getParent()) {
                     if (prior == block) {
-                        auto s = mResolvedScopes.find(scope);
-                        assert (s != mResolvedScopes.end());
-                        assert (s->second);
-                        auto v = M.find(s->second);
+                        assert (scope->getBranch());
+                        auto v = M.find(scope->getBranch());
                         assert (v != M.end());
                         auto u = M.find(root);
                         assert (u != M.end());
@@ -40,42 +88,17 @@ void SchedulingPrePass::resolveNestedUsages(Statement * const root, Statement * 
     }
 }
 
-///** ------------------------------------------------------------------------------------------------------------- *
-// * @brief printGraph
-// ** ------------------------------------------------------------------------------------------------------------- */
-//template <typename Graph>
-//static void printGraph(const Graph & G, const std::vector<unsigned> & ordering, const std::string name, raw_ostream & out) {
-//    out << "*******************************************\n";
-//    out << "digraph " << name << " {\n";
-//    for (auto u : make_iterator_range(vertices(G))) {
-//        out << "v" << u << " [label=\"" << ordering[u] << " : ";
-//        PabloPrinter::print(G[u], out);
-//        out << "\"];\n";
-//    }
-//    for (auto e : make_iterator_range(edges(G))) {
-//        out << "v" << source(e, G) << " -> v" << target(e, G);
-//        out << ";\n";
-//    }
-
-//    out << "}\n\n";
-//    out.flush();
-//}
-
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief schedule
+ * @brief resolveNestedUsages
  ** ------------------------------------------------------------------------------------------------------------- */
-void SchedulingPrePass::schedule(PabloBlock * const block) {
-    Graph G;
+static void computeDependencyGraph(DependencyGraph & G, PabloBlock * const block) {
     Map M;
-
     // Construct a use-def graph G representing the current scope block
     for (Statement * stmt : *block) {
-        if (isa<If>(stmt) || isa<While>(stmt)) {
-            PabloBlock * body = isa<If>(stmt) ? cast<If>(stmt)->getBody() : cast<While>(stmt)->getBody();
-            mResolvedScopes.emplace(body, stmt);
-            schedule(body);
+        if (LLVM_UNLIKELY(isa<If>(stmt) || isa<While>(stmt))) {
+            schedule(isa<If>(stmt) ? cast<If>(stmt)->getBody() : cast<While>(stmt)->getBody());
         }
-        const auto u = add_vertex(stmt, G);
+        const auto u = add_vertex({stmt}, G);
         M.insert(std::make_pair(stmt, u));
         for (unsigned i = 0; i != stmt->getNumOperands(); ++i) {
             const PabloAST * const op = stmt->getOperand(i);
@@ -93,10 +116,8 @@ void SchedulingPrePass::schedule(PabloBlock * const block) {
                     for (PabloBlock * prior = scope->getParent(); prior; scope = prior, prior = prior->getParent()) {
                         // Was this instruction computed by a nested block?
                         if (prior == block) {
-                            auto s = mResolvedScopes.find(scope);
-                            assert (s != mResolvedScopes.end());
-                            assert (s->second);
-                            auto v = M.find(s->second);
+                            assert (scope->getBranch());
+                            auto v = M.find(scope->getBranch());
                             assert (v != M.end());
                             if (v->second != u) {
                                 add_edge(v->second, u, G);
@@ -108,7 +129,7 @@ void SchedulingPrePass::schedule(PabloBlock * const block) {
             }
         }
     }
-    // Do a second pass to ensure that we've accounted for any nested usage of a statement
+    // Do a second pass to ensure that we've accounted for any nested usage of an If or While statement
     for (Statement * stmt : *block) {
         if (LLVM_UNLIKELY(isa<If>(stmt))) {
             for (Assign * def : cast<If>(stmt)->getDefined()) {
@@ -122,17 +143,42 @@ void SchedulingPrePass::schedule(PabloBlock * const block) {
             resolveNestedUsages(stmt, stmt, G, M, block);
         }
     }
+    // Contract the graph
+    for (;;) {
+        bool done = true;
+        for (const Vertex u : make_iterator_range(vertices(G))) {
+            if (out_degree(u, G) == 1) {
+                const Vertex v = target(*(out_edges(u, G).first), G);
+                G[v].insert(G[v].begin(), G[u].begin(), G[u].end());
+                for (auto e : make_iterator_range(in_edges(u, G))) {
+                    add_edge(source(e, G), v, G);
+                }
+                G[u].clear();
+                clear_vertex(u, G);
+                done = false;
+            }
+        }
+        if (done) {
+            break;
+        }
+    }
 
+
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief computeGraphOrdering
+ ** ------------------------------------------------------------------------------------------------------------- */
+std::vector<weight_t> computeGraphOrdering(const DependencyGraph & G) {
     // Determine the bottom-up ordering of G
-    std::vector<unsigned> ordering(num_vertices(G));
+    std::vector<weight_t> ordering(num_vertices(G));
     circular_buffer<Vertex> Q(num_vertices(G));
     for (const Vertex u : make_iterator_range(vertices(G))) {
-        if (out_degree(u, G) == 0) {
+        if (out_degree(u, G) == 0 && G[u].size() > 0) {
             ordering[u] = 1;
             Q.push_back(u);
         }
     }
-
     while (!Q.empty()) {
         const Vertex u = Q.front();
         Q.pop_front();
@@ -140,11 +186,11 @@ void SchedulingPrePass::schedule(PabloBlock * const block) {
         for (const auto ei : make_iterator_range(in_edges(u, G))) {
             const Vertex v = source(ei, G);
             if (ordering[v] == 0) {
-                unsigned weight = 0;
+                weight_t weight = 0;
                 bool ready = true;
                 for (const auto ej : make_iterator_range(out_edges(v, G))) {
                     const Vertex w = target(ej, G);
-                    const unsigned t = ordering[w];
+                    const weight_t t = ordering[w];
                     if (t == 0) {
                         ready = false;
                         break;
@@ -154,17 +200,30 @@ void SchedulingPrePass::schedule(PabloBlock * const block) {
                 if (ready) {
                     assert (weight < std::numeric_limits<unsigned>::max());
                     assert (weight > 0);
-                    ordering[v] = (weight + 1);
+                    ordering[v] = weight + 1;
                     Q.push_back(v);
                 }
             }
         }
     }
+    return ordering;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief schedule
+ ** ------------------------------------------------------------------------------------------------------------- */
+void schedule(PabloBlock * const block) {
+    DependencyGraph G;
+    computeDependencyGraph(G, block);
+    std::vector<weight_t> ordering = computeGraphOrdering(G);
+
+//    raw_os_ostream out(std::cerr);
+//    printGraph(G, ordering, "G", out);
 
     // Compute the initial ready set
     ReadySet readySet;
     for (const Vertex u : make_iterator_range(vertices(G))) {
-        if (in_degree(u, G) == 0) {
+        if (in_degree(u, G) == 0 && G[u].size() > 0) {
             readySet.emplace_back(ordering[u], u);
         }
     }
@@ -179,52 +238,35 @@ void SchedulingPrePass::schedule(PabloBlock * const block) {
 
     block->setInsertPoint(nullptr);
 
-
-    // Rewrite the AST using the bottom-up ordering
+    // Rewrite the AST
     while (!readySet.empty()) {
-
-        // Scan through the ready set to determine which one 'kills' the greatest number of inputs
-        // NOTE: the readySet is kept in sorted "distance to sink" order; thus those closest to a
-        // sink will be evaluated first.
-        double best = 0;
+        DependencyGraph::degree_size_type killed = 0;
         auto chosen = readySet.begin();
         for (auto ri = readySet.begin(); ri != readySet.end(); ++ri) {
-            const Vertex u = std::get<1>(*ri);
-            const PabloAST * const expr = G[u];
-            if (expr && (isa<Assign>(expr) || isa<Next>(expr))) {
-                chosen = ri;
-                break;
-            }
-            double progress = 0;
-            for (auto ei : make_iterator_range(in_edges(u, G))) {
-                const auto v = source(ei, G);
-                const auto totalUsesOfIthOperand = out_degree(v, G);
-                if (LLVM_UNLIKELY(totalUsesOfIthOperand == 0)) {
-                    progress += 1.0;
-                } else {
-                    unsigned unscheduledUsesOfIthOperand = 0;
-                    for (auto ej : make_iterator_range(out_edges(v, G))) {
-                        if (ordering[target(ej, G)]) { // if this edge leads to an unscheduled statement
-                            ++unscheduledUsesOfIthOperand;
-                        }
-                    }
-                    progress += std::pow((double)(totalUsesOfIthOperand - unscheduledUsesOfIthOperand + 1) / (double)(totalUsesOfIthOperand), 2);
+            DependencyGraph::degree_size_type kills = 0;
+            for (auto e : make_iterator_range(in_edges(ri->first, G))) {
+                if (out_degree(source(e, G), G) == 1) {
+                    ++kills;
                 }
             }
-            if (progress > best) {
+            if (kills > killed) {
                 chosen = ri;
-                best = progress;
+                killed = kills;
             }
         }
 
         Vertex u; unsigned weight;
         std::tie(weight, u) = *chosen;
         readySet.erase(chosen);
+        clear_in_edges(u, G);
 
         assert ("Error: SchedulingPrePass is attempting to reschedule a statement!" && (weight > 0));
 
         // insert the statement then mark it as written ...
-        block->insert(cast<Statement>(G[u]));
+        for (PabloAST * expr : G[u]) {
+            block->insert(cast<Statement>(expr));
+        }
+
         ordering[u] = 0;
         // Now check whether any new instructions are ready
         for (auto ei : make_iterator_range(out_edges(u, G))) {
@@ -244,13 +286,13 @@ void SchedulingPrePass::schedule(PabloBlock * const block) {
             }
         }
     }
+
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief schedule
  ** ------------------------------------------------------------------------------------------------------------- */
-void SchedulingPrePass::schedule(PabloFunction & function) {
-    mResolvedScopes.emplace(function.getEntryBlock(), nullptr);
+void schedule(PabloFunction & function) {
     schedule(function.getEntryBlock());
 }
 
@@ -258,8 +300,7 @@ void SchedulingPrePass::schedule(PabloFunction & function) {
  * @brief optimize
  ** ------------------------------------------------------------------------------------------------------------- */
 bool SchedulingPrePass::optimize(PabloFunction & function) {
-    SchedulingPrePass pp;
-    pp.schedule(function);
+    schedule(function);
     #ifndef NDEBUG
     PabloVerifier::verify(function, "post-scheduling-prepass");
     #endif

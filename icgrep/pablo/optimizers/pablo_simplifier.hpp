@@ -14,6 +14,7 @@ public:
 protected:
     Simplifier() = default;
 private:
+    static void negationsShouldImmediatelySucceedTheirLiteral(PabloBlock * const block);
     static void eliminateRedundantCode(PabloBlock * const block, ExpressionTable * predecessor = nullptr);
     static PabloAST * fold(Variadic * const var, PabloBlock * const block);
     static PabloAST * fold(Statement * const stmt, PabloBlock * const block);
