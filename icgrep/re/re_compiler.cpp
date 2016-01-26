@@ -265,6 +265,7 @@ RE * RE_Compiler::resolveUnicodeProperties(RE * re) {
     std::unordered_set<Name *> visited;
 
     std::function<void(RE*)> gather = [&](RE * re) {
+        assert ("RE object cannot be null!" && re);
         if (isa<Name>(re)) {
             if (visited.insert(cast<Name>(re)).second) {
                 if (isa<CC>(cast<Name>(re)->getDefinition())) {
@@ -274,12 +275,12 @@ RE * RE_Compiler::resolveUnicodeProperties(RE * re) {
                 }
             }
         } else if (isa<Seq>(re)) {
-            for (RE * re : *cast<Seq>(re)) {
-                gather(re);
+            for (RE * item : *cast<Seq>(re)) {
+                gather(item);
             }
         } else if (isa<Alt>(re)) {
-            for (RE * re : *cast<Alt>(re)) {
-                gather(re);
+            for (RE * item : *cast<Alt>(re)) {
+                gather(item);
             }
         } else if (isa<Rep>(re)) {
             gather(cast<Rep>(re)->getRE());
