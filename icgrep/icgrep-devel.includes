@@ -12,3 +12,5 @@ UCD
 ../buddy-2.4/src
 pablo/passes
 ../llvm-build/lib
+kernels
+IDISA

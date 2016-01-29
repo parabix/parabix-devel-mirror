@@ -7,6 +7,8 @@
 #include <boost/graph/adjacency_list.hpp>
 #include <queue>
 
+#include <pablo/optimizers/distributivepass.h>
+
 using namespace boost;
 using namespace boost::container;
 
@@ -15,20 +17,17 @@ namespace pablo {
 using TypeId = PabloAST::ClassTypeId;
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief coalesce
+ * @brief canonicalize
  ** ------------------------------------------------------------------------------------------------------------- */
-inline Variadic * CoalesceDFG::coalesce(Variadic * const var) {
-    const TypeId typeId = var->getClassTypeId();
+Variadic * CanonicalizeDFG::canonicalize(Variadic * var) {
+    assert (isa<And>(var) || isa<Or>(var) || isa<Xor>(var));
     for (unsigned i = 0; i < var->getNumOperands(); ) {
-        PabloAST * const op = var->getOperand(i);
-        if (op->getClassTypeId() == typeId) {
-            Variadic * removedVar = cast<Variadic>(var->removeOperand(i));
-            for (unsigned j = 0; j != cast<Variadic>(op)->getNumOperands(); ++j) {
-                var->addOperand(cast<Variadic>(op)->getOperand(j));
+        if (var->getOperand(i)->getClassTypeId() == var->getClassTypeId()) {
+            Variadic * const removedVar = cast<Variadic>(var->removeOperand(i));
+            for (unsigned j = 0; j != removedVar->getNumOperands(); ++j) {
+                var->addOperand(removedVar->getOperand(j));
             }
-            if (removedVar->getNumOperands() == 1) {
-                removedVar->replaceWith(removedVar->getOperand(0));
-            } else if (removedVar->getNumUses() == 0) {
+            if (removedVar->getNumUses() == 0) {
                 removedVar->eraseFromParent(true);
             }
             continue;
@@ -41,17 +40,15 @@ inline Variadic * CoalesceDFG::coalesce(Variadic * const var) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief coalesce
  ** ------------------------------------------------------------------------------------------------------------- */
-void CoalesceDFG::coalesce(PabloBlock * const block, const bool traverse) {
+void CanonicalizeDFG::canonicalize(PabloBlock * const block) {
     Statement * stmt = block->front();
     while (stmt) {
         Statement * next = stmt->getNextNode();
-        if (LLVM_UNLIKELY((isa<If>(stmt) || isa<While>(stmt)) && traverse)) {
-            coalesce(isa<If>(stmt) ? cast<If>(stmt)->getBody() : cast<While>(stmt)->getBody(), true);
-        } else if (isa<And>(stmt) || isa<Or>(stmt) || isa<Xor>(stmt)) {
-            coalesce(cast<Variadic>(stmt));
-        }/* else if (isa<Not>(stmt)) {
-            deMorgansExpansion(cast<Not>(stmt), block);
-        }*/
+        if (LLVM_UNLIKELY(isa<If>(stmt) || isa<While>(stmt))) {
+            canonicalize(isa<If>(stmt) ? cast<If>(stmt)->getBody() : cast<While>(stmt)->getBody());
+        } else if (isa<Variadic>(stmt)) {
+            canonicalize(cast<Variadic>(stmt));
+        }
         stmt = next;
     }
 }
@@ -62,34 +59,64 @@ void CoalesceDFG::coalesce(PabloBlock * const block, const bool traverse) {
  * Apply the De Morgans' law to any negated And or Or statement with the intent of further coalescing its operands
  * thereby allowing the Simplifier to check for tautologies and contradictions.
  ** ------------------------------------------------------------------------------------------------------------- */
-inline void CoalesceDFG::deMorgansExpansion(Not * const var, PabloBlock * const block) {
-    PabloAST * const negatedVar = var->getOperand(0);
+inline void CanonicalizeDFG::deMorgansExpansion(Not * const negation, PabloBlock * const block) {
+    PabloAST * const negatedVar = negation->getOperand(0);
     if (isa<And>(negatedVar) || isa<Or>(negatedVar)) {
-        const TypeId desiredTypeId = isa<And>(negatedVar) ? TypeId::Or : TypeId::And;
-        bool canApplyDeMorgans = true;
-        for (PabloAST * user : var->users()) {
-            if (desiredTypeId != user->getClassTypeId()) {
-                canApplyDeMorgans = false;
+        const TypeId typeId = isa<And>(negatedVar) ? TypeId::Or : TypeId::And;
+        bool expandable = false;
+        for (PabloAST * user : negation->users()) {
+            if (user->getClassTypeId() == typeId) {
+                expandable = true;
                 break;
             }
         }
-        if (canApplyDeMorgans) {
+        if (expandable) {
+
             const unsigned operands = cast<Variadic>(negatedVar)->getNumOperands();
             PabloAST * negations[operands];
-            block->setInsertPoint(var);
             for (unsigned i = 0; i != operands; ++i) {
-                negations[i] = block->createNot(cast<Variadic>(negatedVar)->getOperand(i));
+                PabloAST * op = cast<Variadic>(negatedVar)->getOperand(i);
+                Statement * ip = negation;
+                if (LLVM_LIKELY(isa<Statement>(op))) {
+                    Statement * br = cast<Statement>(op);
+                    PabloBlock * scope = br->getParent();
+                    for (;;) {
+                        if (LLVM_UNLIKELY(scope == nullptr)) {
+                            break;
+                        } else if (LLVM_UNLIKELY(scope == negation->getParent())) {
+                            ip = br;
+                            break;
+                        }
+                        br = scope->getBranch();
+                        scope = scope->getParent();
+                    }
+                }
+                block->setInsertPoint(ip);
+                negations[i] = block->createNot(op);
             }
-            const unsigned users = var->getNumUses();
-            PabloAST * user[users];
-            std::copy(var->user_begin(), var->user_end(), user);
-            for (unsigned i = 0; i != users; ++i) {
-                cast<Variadic>(user[i])->deleteOperand(var);
-                for (unsigned j = 0; j != operands; ++j) {
-                    cast<Variadic>(user[i])->addOperand(negations[j]);
+
+            for (PabloAST * user : negation->users()) {
+                if (user->getClassTypeId() == typeId) {
+                    cast<Variadic>(user)->deleteOperand(negation);
+                    for (unsigned i = 0; i != operands; ++i) {
+                        cast<Variadic>(user)->addOperand(negations[i]);
+                    }
                 }
             }
-            var->eraseFromParent(true);
+
+        }
+    }
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief deMorgansExpansion
+ ** ------------------------------------------------------------------------------------------------------------- */
+void CanonicalizeDFG::deMorgansExpansion(PabloBlock * const block) {
+    for (Statement * stmt : *block) {
+        if (LLVM_UNLIKELY(isa<If>(stmt) || isa<While>(stmt))) {
+            deMorgansExpansion(isa<If>(stmt) ? cast<If>(stmt)->getBody() : cast<While>(stmt)->getBody());
+        } else if (isa<Not>(stmt)) {
+            deMorgansExpansion(cast<Not>(stmt), block);
         }
     }
 }
@@ -97,18 +124,22 @@ inline void CoalesceDFG::deMorgansExpansion(Not * const var, PabloBlock * const 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief deMorgansReduction
  ** ------------------------------------------------------------------------------------------------------------- */
-inline void CoalesceDFG::deMorgansReduction(Variadic * const var, PabloBlock * const block) {
+inline void CanonicalizeDFG::deMorgansReduction(Variadic * const var, PabloBlock * const block) {
+    assert (isa<And>(var) || isa<Or>(var));
     unsigned negations = 0;
-    for (unsigned i = 0; i < var->getNumOperands(); ++i) {
-        if (isa<Not>(var->getOperand(i))) {
-            ++negations;
+    const unsigned operands = var->getNumOperands();
+    PabloAST * negated[operands];
+    for (unsigned i = 0; i < operands; ++i) {
+        PabloAST * const op = var->getOperand(i);
+        if (isa<Not>(op)) {
+            negated[negations++] = cast<Not>(op)->getOperand(0);
         }
     }
     if (negations > 1) {
-        PabloAST * negated[negations];
-        for (unsigned i = var->getNumOperands(), j = negations; i && j; ) {
-            if (isa<Not>(var->getOperand(--i))) {
-                negated[--j] = cast<Not>(var->removeOperand(i))->getOperand(0);
+        for (unsigned i = operands; i; ) {
+            PabloAST * const op = var->getOperand(--i);
+            if (isa<Not>(op)) {
+                var->removeOperand(i);
             }
         }
         block->setInsertPoint(var->getPrevNode());
@@ -128,10 +159,10 @@ inline void CoalesceDFG::deMorgansReduction(Variadic * const var, PabloBlock * c
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief deMorgansReduction
  ** ------------------------------------------------------------------------------------------------------------- */
-void CoalesceDFG::deMorgansReduction(PabloBlock * const block, const bool traverse) {
+void CanonicalizeDFG::deMorgansReduction(PabloBlock * const block) {
     for (Statement * stmt : *block) {
-        if (LLVM_UNLIKELY((isa<If>(stmt) || isa<While>(stmt)) && traverse)) {
-            deMorgansReduction(isa<If>(stmt) ? cast<If>(stmt)->getBody() : cast<While>(stmt)->getBody(), true);
+        if (LLVM_UNLIKELY(isa<If>(stmt) || isa<While>(stmt))) {
+            deMorgansReduction(isa<If>(stmt) ? cast<If>(stmt)->getBody() : cast<While>(stmt)->getBody());
         } else if (isa<And>(stmt) || isa<Or>(stmt)) {
             deMorgansReduction(cast<Variadic>(stmt), block);
         }
@@ -351,7 +382,7 @@ inline static BicliqueSet independentCliqueSets(BicliqueSet && bicliques, const 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief tryToPartiallyExtractVariadic
  ** ------------------------------------------------------------------------------------------------------------- */
-inline void CoalesceDFG::tryToPartiallyExtractVariadic(Variadic * const var) {
+inline void CanonicalizeDFG::tryToPartiallyExtractVariadic(Variadic * const var) {
     for (unsigned i = 0; i < var->getNumOperands(); ++i) {
         PabloAST * const op = var->getOperand(i);
         if (isa<Assign>(op)) {
@@ -415,7 +446,7 @@ inline void CoalesceDFG::tryToPartiallyExtractVariadic(Variadic * const var) {
                                 for (Assign * def : defs) {
                                     joiner->addOperand(def->getOperand(0));                                    
                                 }
-                                Assign * const joined = block->createAssign("m", coalesce(joiner));
+                                Assign * const joined = block->createAssign("m", canonicalize(joiner));
                                 for (Assign * def : defs) {
                                     def->replaceWith(joined);
                                     assert (def->getNumUses() == 0);
@@ -437,7 +468,7 @@ inline void CoalesceDFG::tryToPartiallyExtractVariadic(Variadic * const var) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief tryToPartiallyExtractVariadic
  ** ------------------------------------------------------------------------------------------------------------- */
-void CoalesceDFG::tryToPartiallyExtractVariadic(PabloBlock * const block) {
+void CanonicalizeDFG::tryToPartiallyExtractVariadic(PabloBlock * const block) {
     for (Statement * stmt = block->back(); stmt; stmt = stmt->getPrevNode()) {
         if (LLVM_UNLIKELY(isa<If>(stmt) || isa<While>(stmt))) {
             tryToPartiallyExtractVariadic(isa<If>(stmt) ? cast<If>(stmt)->getBody() : cast<While>(stmt)->getBody());
@@ -580,7 +611,7 @@ void eliminateUnecessaryDependencies(ScopeDependencyGraph & G) {
  *
  * TODO: make this only iterate over the scope blocks and test the scope branch.
  ** ------------------------------------------------------------------------------------------------------------- */
-inline void CoalesceDFG::removeFalseScopeDependencies(PabloFunction & function) {
+inline void CanonicalizeDFG::removeFalseScopeDependencies(PabloFunction & function) {
     ScopeDependencyGraph G;
     {
         ScopeDependencyMap M;
@@ -593,35 +624,42 @@ inline void CoalesceDFG::removeFalseScopeDependencies(PabloFunction & function) 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief transform
  ** ------------------------------------------------------------------------------------------------------------- */
-void CoalesceDFG::transform(PabloFunction & function) {
+void CanonicalizeDFG::transform(PabloFunction & function) {
 
-    CoalesceDFG::coalesce(function.getEntryBlock(), true);
+    CanonicalizeDFG::canonicalize(function.getEntryBlock());
     #ifndef NDEBUG
-    PabloVerifier::verify(function, "post-coalescence");
+    PabloVerifier::verify(function, "post-canonicalize");
     #endif
 
     Simplifier::optimize(function);
 
-//    CoalesceDFG::deMorgansReduction(function.getEntryBlock(), true);
+//    CanonicalizeDFG::deMorgansReduction(function.getEntryBlock());
 //    #ifndef NDEBUG
 //    PabloVerifier::verify(function, "post-demorgans-reduction");
 //    #endif
 
 //    Simplifier::optimize(function);
 
-    CoalesceDFG::removeFalseScopeDependencies(function);
+    CanonicalizeDFG::removeFalseScopeDependencies(function);
     #ifndef NDEBUG
     PabloVerifier::verify(function, "post-remove-false-scope-dependencies");
     #endif
 
     Simplifier::optimize(function);
 
-    CoalesceDFG::tryToPartiallyExtractVariadic(function.getEntryBlock());
+    CanonicalizeDFG::tryToPartiallyExtractVariadic(function.getEntryBlock());
     #ifndef NDEBUG
     PabloVerifier::verify(function, "post-partial-variadic-extraction");
     #endif
 
     Simplifier::optimize(function);
+
+//    CanonicalizeDFG::deMorgansExpansion(function.getEntryBlock());
+//    #ifndef NDEBUG
+//    PabloVerifier::verify(function, "post-demorgans-expansion");
+//    #endif
+
+//    Simplifier::optimize(function);
 
 
 }

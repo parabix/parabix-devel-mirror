@@ -41,9 +41,9 @@
 #include <pablo/pablo_compiler.h>
 #include <pablo/optimizers/pablo_simplifier.hpp>
 #include <pablo/optimizers/codemotionpass.h>
+#ifdef ENABLE_MULTIPLEXING
 #include <pablo/passes/flattenassociativedfg.h>
 #include <pablo/passes/factorizedfg.h>
-#ifdef ENABLE_MULTIPLEXING
 #include <pablo/optimizers/pablo_automultiplexing.hpp>
 #include <pablo/optimizers/pablo_bddminimization.h>
 #include <pablo/optimizers/distributivepass.h>
@@ -296,7 +296,7 @@ void pablo_function_passes(PabloFunction * function) {
 #ifdef ENABLE_MULTIPLEXING
     if (EnableLowering || EnablePreDistribution || EnablePostDistribution) {
         READ_CYCLE_COUNTER(coalescing_start);
-        CoalesceDFG::transform(*function);
+        CanonicalizeDFG::transform(*function);
         READ_CYCLE_COUNTER(coalescing_end);
     }
     if (EnablePreDistribution) {
@@ -309,7 +309,7 @@ void pablo_function_passes(PabloFunction * function) {
         MultiplexingPass::optimize(*function, MultiplexingSetLimit, MultiplexingSelectionLimit, MultiplexingWindowSize);
         READ_CYCLE_COUNTER(multiplexing_end);
         if (EnableLowering || EnablePreDistribution || EnablePostDistribution) {
-            CoalesceDFG::transform(*function);
+            CanonicalizeDFG::transform(*function);
         }
     }
     if (EnablePostDistribution) {

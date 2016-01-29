@@ -11,7 +11,9 @@
 #include <pablo/codegenstate.h>
 #include <pablo/carry_manager.h>
 #include <pablo/pabloAST.h>
+#ifdef CARRY_DEBUG
 #include <iostream>
+#endif
 #include <llvm/Support/CommandLine.h>
 #include <llvm/IR/BasicBlock.h>
 #include <llvm/IR/CallingConv.h>
@@ -26,20 +28,20 @@ static cl::opt<CarryManagerStrategy> Strategy(cl::desc("Choose carry management 
 
 namespace pablo {
   
-    unsigned doScopeCount(PabloBlock * pb) {
-        unsigned count = 1;
-        
-        for (Statement * stmt : *pb) {
-            if (If * ifStatement = dyn_cast<If>(stmt)) {
-                count += doScopeCount(ifStatement->getBody());
-            }
-            else if (While * whileStatement = dyn_cast<While>(stmt)) {
-                count += doScopeCount(whileStatement->getBody());
-            }
+unsigned doScopeCount(PabloBlock * pb) {
+    unsigned count = 1;
+
+    for (Statement * stmt : *pb) {
+        if (If * ifStatement = dyn_cast<If>(stmt)) {
+            count += doScopeCount(ifStatement->getBody());
         }
-        return count;
-       
+        else if (While * whileStatement = dyn_cast<While>(stmt)) {
+            count += doScopeCount(whileStatement->getBody());
+        }
     }
+    return count;
+
+}
     
 void CarryManager::generateCarryDataInitializer(Module * m) {
     FunctionType * functionType = FunctionType::get(Type::getVoidTy(m->getContext()), std::vector<Type *>({}), false);
@@ -78,10 +80,9 @@ void CarryManager::initialize(Module * m, PabloBlock * pb) {
     
     unsigned totalPackCount = (totalCarryDataSize + mITEMS_PER_PACK - 1)/mITEMS_PER_PACK;
 
-    mCarryPackPtr.resize(totalPackCount);
-    mCarryInPack.resize(totalPackCount);
-    mCarryOutPack.resize(totalPackCount);
-    for (unsigned i = 0; i < totalPackCount; i++) mCarryInPack[i]=nullptr;
+    mCarryPackPtr.resize(totalPackCount, nullptr);
+    mCarryInPack.resize(totalPackCount, nullptr);
+    mCarryOutPack.resize(totalPackCount, nullptr);
 
     if (Strategy == SequentialFullyPackedStrategy) {
         mTotalCarryDataBitBlocks = (totalCarryDataSize + mBITBLOCK_WIDTH - 1)/mBITBLOCK_WIDTH;       
@@ -132,7 +133,9 @@ Value * CarryManager::getBlockNoPtr() {
 
 
 unsigned CarryManager::enumerate(PabloBlock * blk, unsigned ifDepth, unsigned whileDepth) {
+#ifdef CARRY_DEBUG
     llvm::raw_os_ostream cerr(std::cerr);
+#endif
     unsigned idx = blk->getScopeIndex();
     PabloBlockCarryData * cd = new PabloBlockCarryData(blk, mPACK_SIZE, mITEMS_PER_PACK);
     mCarryInfoVector[idx] = cd;
@@ -634,25 +637,30 @@ void CarryManager::generateCarryOutSummaryCodeIfNeeded() {
     
     const unsigned carrySummaryIndex = summaryPackIndex();
     
-    Value * carry_summary = Constant::getNullValue(mCarryPackType);
+    Value * carry_summary = nullptr;
     if (mCarryInfo->blockHasLongAdvances()) { // Force if entry
         carry_summary = Constant::getAllOnesValue(mCarryPackType);
     }
     else {
+        carry_summary = Constant::getNullValue(mCarryPackType);
         unsigned localCarryIndex = localBasePack();
         unsigned localCarryPacks = mCarryInfo->getLocalCarryPackCount();
         if (localCarryPacks > 0) {
             carry_summary = mCarryOutPack[localCarryIndex];
             for (unsigned i = 1; i < localCarryPacks; i++) {
-                carry_summary = iBuilder->CreateOr(carry_summary, mCarryOutPack[localCarryIndex+i]);
+                carry_summary = iBuilder->CreateOr(carry_summary, mCarryOutPack[localCarryIndex + i]);
             }
         }
+
+
+        // iBuilder->SetInsertPoint(&(iBuilder->GetInsertBlock()->back()));
+
         for (Statement * stmt : *mCurrentScope) {
             if (If * innerIf = dyn_cast<If>(stmt)) {
                 PabloBlock * inner_blk = innerIf->getBody();
                 enterScope(inner_blk);
-                if (blockHasCarries()) {
-                  carry_summary = iBuilder->CreateOr(carry_summary, mCarryOutPack[summaryPackIndex()]);
+                if (blockHasCarries()) {                    
+                    carry_summary = iBuilder->CreateOr(carry_summary, mCarryOutPack[summaryPackIndex()]);
                 }
                 leaveScope();
             }

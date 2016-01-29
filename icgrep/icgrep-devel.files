@@ -493,3 +493,13 @@ ispc.cpp
 pablo/optimizers/schedulingprepass.h
 pablo/optimizers/schedulingprepass.cpp
 papi_helper.hpp
+kernels/s2p_gen.cpp
+kernels/scanmatchgen.cpp
+kernels/s2p_gen.h
+kernels/scanmatchgen.h
+IDISA/idisa_builder.cpp
+IDISA/idisa_sse_builder.h
+IDISA/idisa_sse_builder.cpp
+IDISA/idisa_avx_builder.h
+IDISA/idisa_avx_builder.cpp
+IDISA/idisa_builder.h

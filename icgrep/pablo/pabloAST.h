@@ -620,11 +620,11 @@ inline void PabloAST::removeUser(PabloAST * const user) {
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief removeOperand
+ * @brief deleteOperand
  ** ------------------------------------------------------------------------------------------------------------- */
 inline bool Variadic::deleteOperand(const PabloAST * const expr) {
     for (unsigned i = 0; i != getNumOperands(); ++i) {
-        if (getOperand(i) == expr) {
+        if (LLVM_UNLIKELY(getOperand(i) == expr)) {
             removeOperand(i);
             return true;
         }

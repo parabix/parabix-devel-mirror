@@ -65,7 +65,7 @@ SET(PABLO_SRC pablo/pabloAST.cpp pablo/ps_if.cpp pablo/ps_while.cpp pablo/functi
 SET(PABLO_SRC ${PABLO_SRC} pablo/pablo_compiler.cpp pablo/carry_manager.cpp pablo/carry_data.cpp IDISA/idisa_builder.cpp IDISA/idisa_avx_builder.cpp IDISA/idisa_sse_builder.cpp kernels/s2p_gen.cpp kernels/scanmatchgen.cpp)
 SET(PABLO_SRC ${PABLO_SRC} pablo/analysis/pabloverifier.cpp)
 SET(PABLO_SRC ${PABLO_SRC} pablo/optimizers/pablo_simplifier.cpp pablo/optimizers/codemotionpass.cpp)
-IF (ENABLE_MULTIPLEXING)
+IF(ENABLE_MULTIPLEXING)
 SET(PABLO_SRC ${PABLO_SRC} pablo/optimizers/distributivepass.cpp pablo/passes/flattenassociativedfg.cpp pablo/passes/factorizedfg.cpp)
 SET(PABLO_SRC ${PABLO_SRC} pablo/optimizers/schedulingprepass.cpp pablo/optimizers/pablo_automultiplexing.cpp pablo/optimizers/pablo_bddminimization.cpp)
 ENDIF()
@@ -75,7 +75,6 @@ add_library(RegExpADT re/re_re.cpp re/re_cc.cpp re/re_rep.cpp re/re_diff.cpp re/
 add_library(RegExpCompiler re/re_parser.cpp re/parsefailure.cpp re/re_nullable.cpp re/re_simplifier.cpp re/re_compiler.cpp re/re_analysis.cpp)
 add_library(CCADT cc/cc_compiler.cpp utf8_encoder.cpp UCD/CaseFolding_txt.cpp)
 add_library(UCDlib UCD/unicode_set.cpp UCD/ucd_compiler.cpp UCD/PropertyObjects.cpp UCD/resolve_properties.cpp)
-
 
 # add the executable
 target_link_libraries (PabloADT ${REQ_LLVM_LIBRARIES})
@@ -138,7 +137,7 @@ IF(USE_BOOST_MMAP)
 ENDIF()
 
 
-IF (ENABLE_MULTIPLEXING)
+IF(ENABLE_MULTIPLEXING)
 message(STATUS "Enabling Multiplexing")
 SET(BUDDY_ROOT "${CMAKE_SOURCE_DIR}/../buddy-2.4")
 file(GLOB BUDDY_SOURCES "${BUDDY_ROOT}/src/*.cpp")

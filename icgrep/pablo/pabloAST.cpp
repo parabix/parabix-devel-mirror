@@ -363,6 +363,7 @@ void Variadic::addOperand(PabloAST * const expr) {
 PabloAST * Variadic::removeOperand(const unsigned index) {
     assert (index < mOperands);
     PabloAST * const expr = mOperand[index];
+    assert (expr);
     --mOperands;
     for (unsigned i = index; i != mOperands; ++i) {
         mOperand[i] = mOperand[i + 1];

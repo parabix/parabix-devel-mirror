@@ -16,7 +16,6 @@
 #include <sstream>
 #include <IDISA/idisa_builder.h>
 #include <IDISA/idisa_avx_builder.h>
-#include <llvm/IR/Verifier.h>
 #include <llvm/Pass.h>
 #include <llvm/PassManager.h>
 #include <llvm/ADT/SmallVector.h>
@@ -48,6 +47,9 @@
 #include <iostream>
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/Support/FileSystem.h>
+#ifndef NDEBUG
+#include <llvm/IR/Verifier.h>
+#endif
 
 //#include <llvm/PassManager.h>
 //#include <llvm/Transforms/IPO/PassManagerBuilder.h>
@@ -143,6 +145,11 @@ llvm::Function * PabloCompiler::compile(PabloFunction * function) {
     #ifdef PRINT_TIMING_INFORMATION
     const timestamp_t pablo_compilation_end = read_cycle_counter();
     std::cerr << "PABLO COMPILATION TIME: " << (pablo_compilation_end - pablo_compilation_start) << std::endl;
+    #endif
+
+    #ifndef NDEBUG
+    raw_os_ostream err(std::cerr);
+    verifyModule(*mMod, &err);
     #endif
 
 //    llvm::PassManager pm;
@@ -257,10 +264,12 @@ void PabloCompiler::compileIf(const If * ifStatement) {
     
     mCarryManager->initializeCarryDataAtIfEntry();
     compileBlock(ifBody);
+    BasicBlock * ifBodyFinalBlock = iBuilder->GetInsertBlock();
+
     if (mCarryManager->blockHasCarries()) {
         mCarryManager->generateCarryOutSummaryCodeIfNeeded();
     }
-    BasicBlock * ifBodyFinalBlock = iBuilder->GetInsertBlock();
+
     mCarryManager->ensureCarriesStoredLocal();
     iBuilder->CreateBr(ifEndBlock);
     //End Block

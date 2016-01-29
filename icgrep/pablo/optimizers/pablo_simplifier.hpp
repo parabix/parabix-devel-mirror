@@ -9,14 +9,14 @@ struct ExpressionTable;
 class PabloFunction;
 
 class Simplifier {
+    friend class DistributivePass;
 public:
     static bool optimize(PabloFunction & function);
 protected:
     Simplifier() = default;
 private:
-    static void negationsShouldImmediatelySucceedTheirLiteral(PabloBlock * const block);
-    static void eliminateRedundantCode(PabloBlock * const block, ExpressionTable * predecessor = nullptr);
-    static PabloAST * fold(Variadic * const var, PabloBlock * const block);
+    static void redundancyElimination(PabloBlock * const block, ExpressionTable * predecessor = nullptr);
+    static PabloAST * fold(Variadic * var, PabloBlock * const block);
     static PabloAST * fold(Statement * const stmt, PabloBlock * const block);
     static void deadCodeElimination(PabloBlock * const block);
     static void strengthReduction(PabloBlock * const block);

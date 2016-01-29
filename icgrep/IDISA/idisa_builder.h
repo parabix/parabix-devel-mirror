@@ -16,10 +16,10 @@ using namespace llvm;
 
 namespace IDISA {
 
-    class IDISA_Builder : public IRBuilder<> {
+class IDISA_Builder : public IRBuilder<> {
 public:
 
-        IDISA_Builder(Module * m, Type * bitBlockType) : IRBuilder<>(m->getContext())
+    IDISA_Builder(Module * m, Type * bitBlockType) : IRBuilder<>(m->getContext())
     , mMod(m)
     , mBitBlockType(bitBlockType)
     , mBitBlockWidth(bitBlockType->isIntegerTy() ? cast<IntegerType>(bitBlockType)->getIntegerBitWidth() : cast<VectorType>(bitBlockType)->getBitWidth())
@@ -28,7 +28,7 @@ public:
     , mPrintRegisterFunction(nullptr) {
 
     }
-    virtual ~IDISA_Builder() {};
+    virtual ~IDISA_Builder() {}
     
     Type * getBitBlockType() { return mBitBlockType;}
     Value * bitCast(Value * a) {return a->getType() == mBitBlockType ? a : CreateBitCast(a, mBitBlockType);}
