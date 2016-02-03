@@ -25,9 +25,6 @@
 
 */
 
-enum CarryManagerStrategy {BitBlockStrategy, SequentialFullyPackedStrategy};
-
-
 using namespace llvm;
 
 namespace pablo {
@@ -42,10 +39,8 @@ public:
     CarryManager(IDISA::IDISA_Builder * idb)
     : iBuilder(idb)
     , mBitBlockType(idb->getBitBlockType())
-    , mBITBLOCK_WIDTH(idb->getBitBlockWidth())
-    , mPACK_SIZE(mBITBLOCK_WIDTH)
-    , mITEMS_PER_PACK(1)
-    , mPabloRoot(nullptr)
+    , mBitBlockWidth(idb->getBitBlockWidth())
+    , mRootScope(nullptr)
     , mCurrentScope(nullptr)
     , mCarryInfo(nullptr)
     , mCurrentFrameIndex(0)
@@ -70,62 +65,78 @@ public:
     unsigned enumerate(PabloBlock * blk, unsigned ifDepth, unsigned whileDepth);
     
     void generateBlockNoIncrement();    
-    Value * getBlockNoPtr();
+    Value * getBlockNoPtr() const;
     
     /* Entering and leaving scopes. */
     
-    void enterScope(PabloBlock * blk);
+    void enterScope(PabloBlock * const scope);
     void leaveScope();
     
     /* Methods for processing individual carry-generating operations. */
     
-    Value * getCarryOpCarryIn(int localIndex);
-    void setCarryOpCarryOut(unsigned idx, Value * carry_out);
-    Value * addCarryInCarryOut(int localIndex, Value* e1, Value* e2);
+    Value * addCarryInCarryOut(const unsigned localIndex, Value * const e1, Value * const e2);
 
-
-    Value * advanceCarryInCarryOut(int localIndex, unsigned shift_amount, Value * strm);
+    Value * advanceCarryInCarryOut(const unsigned localIndex, const unsigned shiftAmount, Value * const strm);
  
     /* Methods for getting and setting carry summary values for If statements */
    
-    bool blockHasCarries();
+    bool hasCarries() const;
+       
+    Value * generateSummaryTest(Value * condition);
     
-    void initializeCarryDataAtIfEntry();
-    
-    Value * generateBitBlockOrSummaryTest(Value * bitblock);
-    
-    void generateCarryOutSummaryCodeIfNeeded();
-    
-    void buildCarryDataPhisAfterIfBody(BasicBlock * ifEntryBlock, BasicBlock * ifBodyFinalBlock);
-    
-    void addSummaryPhiIfNeeded(BasicBlock * ifEntryBlock, BasicBlock * ifBodyFinalBlock);
-    
+    void storeCarryOutSummary();
+
+    void blendCarrySummaryWithOuterSummary();
+
+    void buildCarryDataPhisAfterIfBody(BasicBlock * const entry, BasicBlock * const end);
+       
     /* Methods for handling while statements */
     
     void ensureCarriesLoadedRecursive();
 
-    void initializeCarryDataPhisAtWhileEntry(BasicBlock * whileBodyFinalBlock);
+    void initializeWhileEntryCarryDataPhis(BasicBlock * const end);
 
-    void extendCarryDataPhisAtWhileBodyFinalBlock(BasicBlock * whileBodyFinalBlock);
+    void finalizeWhileBlockCarryDataPhis(BasicBlock * const end);
 
     void ensureCarriesStoredRecursive();
-
-    void ensureCarriesStoredLocal();
     
     Value * popCount(Value * to_count, unsigned globalIdx);
     
     Value * declareCarryDataArray(Module * m);
 
+protected:
+
+    Value * shortAdvanceCarryInCarryOut(const unsigned index, const unsigned shiftAmount, Value * const value);
+    Value * longAdvanceCarryInCarryOut(const unsigned index, const unsigned shiftAmount, Value * const value);
+
+    /* Methods for processing individual carry-generating operations. */
+
+    Value * getCarryIn(const unsigned localIndex);
+    void setCarryOut(const unsigned idx, Value * carryOut);
+
+    /* Helper routines */
+    Value * getCarryPack(const unsigned packIndex);
+    void storeCarryOut(const unsigned packIndex);
     
+    Value * addToSummary(Value * const value);
+
+    bool hasSummary() const;
+    unsigned relativeFrameOffset(const unsigned frameOffset, const unsigned index) const;
+    unsigned addPosition(const unsigned localIndex) const;
+    unsigned unitAdvancePosition(const unsigned localIndex) const;
+    unsigned shortAdvancePosition(const unsigned localIndex) const;
+    unsigned longAdvancePosition(const unsigned localIndex) const;
+    unsigned localBasePack() const;
+    unsigned scopeBasePack() const;
+    unsigned summaryPack() const;
+
 private:
-    IDISA::IDISA_Builder * iBuilder;
-    Type * mBitBlockType;
-    unsigned mBITBLOCK_WIDTH;
-    unsigned mPACK_SIZE;
-    unsigned mITEMS_PER_PACK;
-    PabloBlock * mPabloRoot;
+    IDISA::IDISA_Builder * const iBuilder;
+    Type * const mBitBlockType;
+    const unsigned mBitBlockWidth;
+    PabloBlock * mRootScope;
     PabloBlock * mCurrentScope;
-    PabloBlockCarryData * mCarryInfo;
+    CarryData * mCarryInfo;
     unsigned mCurrentFrameIndex;
     Value * mCarryPackBasePtr;
     Type * mCarryPackType;
@@ -136,42 +147,22 @@ private:
     unsigned mPabloCountCount; // Number of Pablo "Count" operations
     unsigned mTotalCarryDataBitBlocks;
     unsigned mCarryDataAllocationSize;
-    
-    std::vector<PabloBlockCarryData *> mCarryInfoVector;
-
-
+    std::vector<CarryData *> mCarryInfoVector;
     std::vector<Value *> mCarryPackPtr;
     std::vector<Value *> mCarryInPack;
-    std::vector<PHINode *> mCarryInPhis;  
-    std::vector<PHINode *> mCarryOutAccumPhis;  
+    std::vector<PHINode *> mCarryInPhis;
+    std::vector<PHINode *> mCarryOutAccumPhis;
     std::vector<Value *> mCarryOutPack;
-
-    Value * unitAdvanceCarryInCarryOut(int localIndex, Value * strm);
-    Value * shortAdvanceCarryInCarryOut(int localIndex, unsigned shift_amount, Value * strm);
-    Value * longAdvanceCarryInCarryOut(int localIndex, unsigned shift_amount, Value * strm);
-    
-    
-    /* Helper routines */
-    Value * getCarryPack(unsigned packIndex);
-    void storeCarryPack(unsigned packIndex);
-    
-    Value * maskSelectBitRange(Value * pack, unsigned lo_bit, unsigned bitCount);     
-    Value * getCarryInBits(unsigned carryBitPos, unsigned bits);
-    void extractAndSaveCarryOutBits(Value * strm, unsigned carryBit_lo, unsigned carryBitCount);
-    Value * pack2bitblock(Value * pack);
-
-
-    unsigned absPosition(unsigned frameOffsetinBits, unsigned relPos);
-    unsigned carryOpPosition(unsigned localIndex) ;
-    unsigned advance1Position(unsigned localIndex);
-    unsigned shortAdvancePosition(unsigned localIndex);
-    unsigned longAdvanceBitBlockPosition(unsigned localIndex);
-    unsigned localBasePack();
-    unsigned scopeBasePack();
-    unsigned summaryPackIndex();
-    unsigned summaryPosition();
-    unsigned summaryBits();
+    std::vector<Value *> mCarrySummary;
 };
+
+inline bool CarryManager::hasCarries() const {
+    return mCarryInfo->hasCarries();
+}
+
+inline Value * CarryManager::getBlockNoPtr() const {
+    return mBlockNoPtr;
+}
 
 }
 

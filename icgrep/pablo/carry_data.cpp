@@ -13,22 +13,22 @@
 
 namespace pablo {
 
-void PabloBlockCarryData::enumerateLocal() {
+void CarryData::enumerateLocal() {
     for (Statement * stmt : *theScope) {
         if (Advance * adv = dyn_cast<Advance>(stmt)) {
             unsigned shift_amount = adv->getAdvanceAmount();
             if (shift_amount == 1) {
-                adv->setLocalAdvanceIndex(advance1.entries);
-                advance1.entries++;                
+                adv->setLocalAdvanceIndex(unitAdvance.entries);
+                unitAdvance.entries++;                
             }
             else if (shift_amount < LongAdvanceBase) {
                 // short Advance
-                if (mITEMS_PER_PACK >= LongAdvanceBase) {
+                if (mItemsPerPack >= LongAdvanceBase) {
                     // Packing is possible.   We will use the allocated bit position as
                     // the index.
                     if (roomInFinalPack(shortAdvance.allocatedBits) < shift_amount) {
                         // Start a new pack.
-                        shortAdvance.allocatedBits = alignCeiling(shortAdvance.allocatedBits, mPACK_SIZE);
+                        shortAdvance.allocatedBits = alignCeiling(shortAdvance.allocatedBits, mPackSize);
                     }
                     adv->setLocalAdvanceIndex(shortAdvance.allocatedBits);
                 }
@@ -54,26 +54,26 @@ void PabloBlockCarryData::enumerateLocal() {
         }
     }
     longAdvance.frameOffset = 0;
-    shortAdvance.frameOffset = longAdvance.frameOffset + longAdvance.allocatedBitBlocks * mPOSITIONS_PER_BLOCK;
-    if (mITEMS_PER_PACK == mPACK_SIZE) {
+    shortAdvance.frameOffset = longAdvance.frameOffset + longAdvance.allocatedBitBlocks * mPositionsPerBlock;
+    if (mItemsPerPack == mPackSize) {
         addWithCarry.frameOffset = shortAdvance.frameOffset + shortAdvance.allocatedBits;
         if (roomInFinalPack(addWithCarry.frameOffset) < addWithCarry.entries) {
-            addWithCarry.frameOffset = alignCeiling(addWithCarry.frameOffset, mPACK_SIZE);
+            addWithCarry.frameOffset = alignCeiling(addWithCarry.frameOffset, mPackSize);
         }
-        advance1.frameOffset = addWithCarry.frameOffset + addWithCarry.entries;
-        if (roomInFinalPack(advance1.frameOffset) < advance1.entries) {
-            advance1.frameOffset = alignCeiling(advance1.frameOffset, mPACK_SIZE);
+        unitAdvance.frameOffset = addWithCarry.frameOffset + addWithCarry.entries;
+        if (roomInFinalPack(unitAdvance.frameOffset) < unitAdvance.entries) {
+            unitAdvance.frameOffset = alignCeiling(unitAdvance.frameOffset, mPackSize);
         }
     }
     else {
         addWithCarry.frameOffset = shortAdvance.frameOffset + shortAdvance.entries;
-        advance1.frameOffset = addWithCarry.frameOffset + addWithCarry.entries;
+        unitAdvance.frameOffset = addWithCarry.frameOffset + addWithCarry.entries;
 
     }
-    nested.frameOffset = advance1.frameOffset + advance1.entries;
+    nested.frameOffset = unitAdvance.frameOffset + unitAdvance.entries;
 }
         
-void PabloBlockCarryData::dumpCarryData(llvm::raw_ostream & strm) {
+void CarryData::dumpCarryData(llvm::raw_ostream & strm) {
     unsigned totalDepth = ifDepth + whileDepth;
     for (unsigned i = 0; i < totalDepth; i++) strm << "  ";
     strm << "scope index = " << theScope->getScopeIndex();
@@ -83,7 +83,7 @@ void PabloBlockCarryData::dumpCarryData(llvm::raw_ostream & strm) {
     for (unsigned i = 0; i < totalDepth; i++) strm << "  ";
     strm << "shortAdvance: offset = " << shortAdvance.frameOffset << ", entries = " << shortAdvance.entries << "\n";
     for (unsigned i = 0; i < totalDepth; i++) strm << "  ";
-    strm << "advance1: offset = " << advance1.frameOffset << ", entries = " << advance1.entries << "\n";
+    strm << "advance1: offset = " << unitAdvance.frameOffset << ", entries = " << unitAdvance.entries << "\n";
     for (unsigned i = 0; i < totalDepth; i++) strm << "  ";
     strm << "addWithCarry: offset = " << addWithCarry.frameOffset << ", entries = " << addWithCarry.entries << "\n";
     for (unsigned i = 0; i < totalDepth; i++) strm << "  ";
@@ -93,7 +93,7 @@ void PabloBlockCarryData::dumpCarryData(llvm::raw_ostream & strm) {
     for (unsigned i = 0; i < totalDepth; i++) strm << "  ";
     strm << "scopeCarryDataSize = " << scopeCarryDataSize  << "\n";
     strm.flush();
-    
+
 }
 
 }

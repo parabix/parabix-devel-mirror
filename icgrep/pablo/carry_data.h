@@ -44,30 +44,37 @@ namespace pablo {
 
 class PabloBlock;
 
-class PabloBlockCarryData {
+class CarryData {
 public:
-    PabloBlockCarryData(PabloBlock * b, unsigned PACK_SIZE, unsigned ITEMS_PER_PACK):
-                           mPACK_SIZE(PACK_SIZE),
-                           mITEMS_PER_PACK(ITEMS_PER_PACK),
-                           mPOSITIONS_PER_BLOCK(mITEMS_PER_PACK * (BLOCK_SIZE/mPACK_SIZE)),
-                           theScope(b), framePosition(0),
-                           ifDepth(0), whileDepth (0), maxNestingDepth(0),
-                           longAdvance({0, 0, 0}),
-                           shortAdvance({0, 0, 0}),
-                           advance1({0, 0}),
-                           addWithCarry({0, 0}),
-                           nested({0, 0, 0}),
-                           summary({0, 0}),
-                           scopeCarryDataSize(0)
-    {enumerateLocal();}
-        
+
+    CarryData(PabloBlock * b, unsigned PACK_SIZE, unsigned ITEMS_PER_PACK):
+       mPackSize(PACK_SIZE),
+       mItemsPerPack(ITEMS_PER_PACK),
+       mPositionsPerBlock(mItemsPerPack * (BLOCK_SIZE/mPackSize)),
+       theScope(b),
+       framePosition(0),
+       ifDepth(0),
+       whileDepth (0),
+       maxNestingDepth(0),
+       longAdvance({0, 0, 0}),
+       shortAdvance({0, 0, 0}),
+       unitAdvance({0, 0}),
+       addWithCarry({0, 0}),
+       nested({0, 0, 0}),
+       summary({0, 0}),
+       scopeCarryDataSize(0)
+    {
+        enumerateLocal();
+    }
+
     friend class CarryManager;
     
-    inline unsigned roomInFinalPack(unsigned allocatedBits) {
-        return mITEMS_PER_PACK - (allocatedBits % mITEMS_PER_PACK);
+    inline unsigned roomInFinalPack(unsigned allocatedBits) const {
+        return mItemsPerPack - (allocatedBits % mItemsPerPack);
     }
     
     void enumerateLocal();
+
     void dumpCarryData(llvm::raw_ostream & strm);
     
     unsigned getFrameIndex()  const {
@@ -102,29 +109,29 @@ public:
         return power2ceil(longAdvanceEntries(shift_amount));
     }
     
-    bool blockHasLongAdvances() const { return longAdvance.entries > 0;}
+    bool hasLongAdvances() const { return longAdvance.entries > 0;}
     
     unsigned getLocalCarryPackIndex () { 
-        return shortAdvance.frameOffset / mITEMS_PER_PACK;
+        return shortAdvance.frameOffset / mItemsPerPack;
     }
 
     unsigned getLocalCarryPackCount () {
-        return fullOrPartialBlocks(nested.frameOffset, mITEMS_PER_PACK) - shortAdvance.frameOffset / mITEMS_PER_PACK;
+        return fullOrPartialBlocks(nested.frameOffset, mItemsPerPack) - shortAdvance.frameOffset / mItemsPerPack;
     }
     
     unsigned getScopeCarryPackCount () { 
-        return fullOrPartialBlocks(scopeCarryDataSize, mITEMS_PER_PACK);
+        return fullOrPartialBlocks(scopeCarryDataSize, mItemsPerPack);
     }
     
-    bool blockHasCarries() const { return scopeCarryDataSize > 0;}
+    bool hasCarries() const { return scopeCarryDataSize > 0;}
     
     bool explicitSummaryRequired() const { 
-        return (ifDepth > 0) && (scopeCarryDataSize > mITEMS_PER_PACK);
+        return (ifDepth > 0) && (scopeCarryDataSize > mItemsPerPack);
     }
     
 protected:
-    
-    unsigned mPACK_SIZE, mITEMS_PER_PACK, mPOSITIONS_PER_BLOCK;
+
+    unsigned mPackSize, mItemsPerPack, mPositionsPerBlock;
     
     PabloBlock * theScope;
     
@@ -136,14 +143,12 @@ protected:
     
     struct {unsigned frameOffset; unsigned entries; unsigned allocatedBitBlocks;} longAdvance;
     struct {unsigned frameOffset; unsigned entries; unsigned allocatedBits;} shortAdvance;
-    struct {unsigned frameOffset; unsigned entries;} advance1;
+    struct {unsigned frameOffset; unsigned entries;} unitAdvance;
     struct {unsigned frameOffset; unsigned entries;} addWithCarry;
     struct {unsigned frameOffset; unsigned entries; unsigned allocatedBits;} nested;
     struct {unsigned frameOffset; unsigned allocatedBits;} summary;
 
     unsigned scopeCarryDataSize;
-    
-    llvm::Value * ifEntryPack;
     
 };
 

@@ -116,12 +116,8 @@ llvm::Function * PabloCompiler::compile(PabloFunction * function) {
     //Generate the IR instructions for the function.
     
     mCarryManager->initialize(mMod, mainScope);
-    
+
     compileBlock(mainScope);
-    
-    mCarryManager->ensureCarriesStoredLocal();
-    mCarryManager->leaveScope();
-    
     
     mCarryManager->generateBlockNoIncrement();
 
@@ -147,11 +143,6 @@ llvm::Function * PabloCompiler::compile(PabloFunction * function) {
     std::cerr << "PABLO COMPILATION TIME: " << (pablo_compilation_end - pablo_compilation_start) << std::endl;
     #endif
 
-    #ifndef NDEBUG
-    raw_os_ostream err(std::cerr);
-    verifyModule(*mMod, &err);
-    #endif
-
 //    llvm::PassManager pm;
 //    llvm::PassManagerBuilder pmb;
 //    pmb.OptLevel = 3;
@@ -168,6 +159,11 @@ llvm::Function * PabloCompiler::compile(PabloFunction * function) {
             mMod->print(out, nullptr);
         }
     }
+
+    #ifndef NDEBUG
+    raw_os_ostream err(std::cerr);
+    verifyModule(*mMod, &err);
+    #endif
 
     return mFunction;
 }
@@ -248,29 +244,28 @@ void PabloCompiler::compileIf(const If * ifStatement) {
     //  body.
     //
 
-    BasicBlock * ifEntryBlock = iBuilder->GetInsertBlock();
-    BasicBlock * ifBodyBlock = BasicBlock::Create(mMod->getContext(), "if.body", mFunction, 0);
-    BasicBlock * ifEndBlock = BasicBlock::Create(mMod->getContext(), "if.end", mFunction, 0);
+    BasicBlock * const ifEntryBlock = iBuilder->GetInsertBlock();
+    BasicBlock * const ifBodyBlock = BasicBlock::Create(mMod->getContext(), "if.body", mFunction, 0);
+    BasicBlock * const ifEndBlock = BasicBlock::Create(mMod->getContext(), "if.end", mFunction, 0);
     
     PabloBlock * ifBody = ifStatement->getBody();
     
-    Value * if_test_value = compileExpression(ifStatement->getCondition());
+    Value * const condition = compileExpression(ifStatement->getCondition());
     
     mCarryManager->enterScope(ifBody);
-    iBuilder->CreateCondBr(mCarryManager->generateBitBlockOrSummaryTest(if_test_value), ifBodyBlock, ifEndBlock);
+    iBuilder->CreateCondBr(mCarryManager->generateSummaryTest(condition), ifBodyBlock, ifEndBlock);
     
     // Entry processing is complete, now handle the body of the if.
     iBuilder->SetInsertPoint(ifBodyBlock);
     
-    mCarryManager->initializeCarryDataAtIfEntry();
     compileBlock(ifBody);
-    BasicBlock * ifBodyFinalBlock = iBuilder->GetInsertBlock();
+    BasicBlock * ifExitBlock = iBuilder->GetInsertBlock();
 
-    if (mCarryManager->blockHasCarries()) {
-        mCarryManager->generateCarryOutSummaryCodeIfNeeded();
+    if (mCarryManager->hasCarries()) {
+        mCarryManager->storeCarryOutSummary();
     }
+    mCarryManager->blendCarrySummaryWithOuterSummary();
 
-    mCarryManager->ensureCarriesStoredLocal();
     iBuilder->CreateBr(ifEndBlock);
     //End Block
     iBuilder->SetInsertPoint(ifEndBlock);
@@ -280,11 +275,11 @@ void PabloCompiler::compileIf(const If * ifStatement) {
         auto f = mMarkerMap.find(assign);
         assert (f != mMarkerMap.end());
         phi->addIncoming(iBuilder->allZeroes(), ifEntryBlock);
-        phi->addIncoming(f->second, ifBodyFinalBlock);
+        phi->addIncoming(f->second, ifExitBlock);
         mMarkerMap[assign] = phi;
     }
     // Create the phi Node for the summary variable, if needed.
-    mCarryManager->buildCarryDataPhisAfterIfBody(ifEntryBlock, ifBodyFinalBlock);
+    mCarryManager->buildCarryDataPhisAfterIfBody(ifEntryBlock, ifExitBlock);
     mCarryManager->leaveScope();
 }
 
@@ -316,7 +311,7 @@ void PabloCompiler::compileWhile(const While * whileStatement) {
     // (2) Carry-out accumulators: (a) zero first iteration, (b) |= carry-out of each iteration
     // (3) Next nodes: (a) values set up before loop, (b) modified values calculated in loop.
 
-    mCarryManager->initializeCarryDataPhisAtWhileEntry(whileEntryBlock);
+    mCarryManager->initializeWhileEntryCarryDataPhis(whileEntryBlock);
 
     // for any Next nodes in the loop body, initialize to (a) pre-loop value.
     for (const Next * n : nextNodes) {
@@ -334,12 +329,12 @@ void PabloCompiler::compileWhile(const While * whileStatement) {
     ++mWhileDepth;
     compileBlock(whileBody);
 
-    BasicBlock * whileBodyFinalBlock = iBuilder->GetInsertBlock();
+    BasicBlock * whileExitBlock = iBuilder->GetInsertBlock();
 
-    if (mCarryManager->blockHasCarries()) {
-        mCarryManager->generateCarryOutSummaryCodeIfNeeded();
+    if (mCarryManager->hasCarries()) {
+        mCarryManager->storeCarryOutSummary();
     }
-    mCarryManager->extendCarryDataPhisAtWhileBodyFinalBlock(whileBodyFinalBlock);
+    mCarryManager->finalizeWhileBlockCarryDataPhis(whileExitBlock);
 
     // Terminate the while loop body with a conditional branch back.
     iBuilder->CreateCondBr(iBuilder->bitblock_any(compileExpression(whileStatement->getCondition())), whileBodyBlock, whileEndBlock);
@@ -351,7 +346,7 @@ void PabloCompiler::compileWhile(const While * whileStatement) {
         if (LLVM_UNLIKELY(f == mMarkerMap.end())) {
             throw std::runtime_error("Next node expression was not compiled!");
         }
-        nextPhis[i]->addIncoming(f->second, whileBodyFinalBlock);
+        nextPhis[i]->addIncoming(f->second, whileExitBlock);
     }
 
     iBuilder->SetInsertPoint(whileEndBlock);
@@ -379,8 +374,8 @@ void PabloCompiler::compileStatement(const Statement * stmt) {
         return;
     }
     else if (const Call* call = dyn_cast<Call>(stmt)) {
-        //Call the callee once and store the result in the marker map.
-        if (mMarkerMap.count(call) != 0) {
+        // Call the callee once and store the result in the marker map.
+        if (mMarkerMap.count(call)) {
             return;
         }
 
@@ -428,53 +423,49 @@ void PabloCompiler::compileStatement(const Statement * stmt) {
         expr = iBuilder->simd_not(compileExpression(pablo_not->getExpr()));
     }
     else if (const Advance * adv = dyn_cast<Advance>(stmt)) {
-        Value* strm_value = compileExpression(adv->getExpr());
-        int shift = adv->getAdvanceAmount();
-        unsigned advance_index = adv->getLocalAdvanceIndex();
-        expr = mCarryManager->advanceCarryInCarryOut(advance_index, shift, strm_value);
+        Value * const strm_value = compileExpression(adv->getExpr());
+        expr = mCarryManager->advanceCarryInCarryOut(adv->getLocalAdvanceIndex(), adv->getAdvanceAmount(), strm_value);
     }
     else if (const Mod64Advance * adv = dyn_cast<Mod64Advance>(stmt)) {
-        Value* strm_value = compileExpression(adv->getExpr());
-        int shift = adv->getAdvanceAmount();
-        expr = iBuilder->simd_slli(64, strm_value, shift);
+        Value * const strm_value = compileExpression(adv->getExpr());
+        expr = iBuilder->simd_slli(64, strm_value, adv->getAdvanceAmount());
     }
     else if (const MatchStar * mstar = dyn_cast<MatchStar>(stmt)) {
-        Value * marker = compileExpression(mstar->getMarker());
-        Value * cc = compileExpression(mstar->getCharClass());
-        Value * marker_and_cc = iBuilder->simd_and(marker, cc);
-        unsigned carry_index = mstar->getLocalCarryIndex();
-        Value * sum = mCarryManager->addCarryInCarryOut(carry_index, marker_and_cc, cc);
+        Value * const marker = compileExpression(mstar->getMarker());
+        Value * const cc = compileExpression(mstar->getCharClass());
+        Value * const marker_and_cc = iBuilder->simd_and(marker, cc);
+        Value * const sum = mCarryManager->addCarryInCarryOut(mstar->getLocalCarryIndex(), marker_and_cc, cc);
         expr = iBuilder->simd_or(iBuilder->simd_xor(sum, cc), marker);
     }
     else if (const Mod64MatchStar * mstar = dyn_cast<Mod64MatchStar>(stmt)) {
-        Value * marker = compileExpression(mstar->getMarker());
-        Value * cc = compileExpression(mstar->getCharClass());
-        Value * marker_and_cc = iBuilder->simd_and(marker, cc);
-        Value * sum = iBuilder->simd_add(64, marker_and_cc, cc);
+        Value * const marker = compileExpression(mstar->getMarker());
+        Value * const cc = compileExpression(mstar->getCharClass());
+        Value * const marker_and_cc = iBuilder->simd_and(marker, cc);
+        Value * const sum = iBuilder->simd_add(64, marker_and_cc, cc);
         expr = iBuilder->simd_or(iBuilder->simd_xor(sum, cc), marker);
     }
     else if (const ScanThru * sthru = dyn_cast<ScanThru>(stmt)) {
-        Value * marker_expr = compileExpression(sthru->getScanFrom());
-        Value * cc_expr = compileExpression(sthru->getScanThru());
-        unsigned carry_index = sthru->getLocalCarryIndex();
-        Value * sum = mCarryManager->addCarryInCarryOut(carry_index, marker_expr, cc_expr);
+        Value * const  marker_expr = compileExpression(sthru->getScanFrom());
+        Value * const  cc_expr = compileExpression(sthru->getScanThru());
+        Value * const  sum = mCarryManager->addCarryInCarryOut(sthru->getLocalCarryIndex(), marker_expr, cc_expr);
         expr = iBuilder->simd_and(sum, iBuilder->simd_not(cc_expr));
     }
     else if (const Mod64ScanThru * sthru = dyn_cast<Mod64ScanThru>(stmt)) {
-        Value * marker_expr = compileExpression(sthru->getScanFrom());
-        Value * cc_expr = compileExpression(sthru->getScanThru());
-        Value * sum = iBuilder->simd_add(64, marker_expr, cc_expr);
+        Value * const marker_expr = compileExpression(sthru->getScanFrom());
+        Value * const cc_expr = compileExpression(sthru->getScanThru());
+        Value * const sum = iBuilder->simd_add(64, marker_expr, cc_expr);
         expr = iBuilder->simd_and(sum, iBuilder->simd_not(cc_expr));
     }
     else if (const Count * c = dyn_cast<Count>(stmt)) {
-        unsigned count_index = c->getGlobalCountIndex();
-        Value * to_count = compileExpression(c->getExpr());
-        expr = mCarryManager->popCount(to_count, count_index);
-    }
-    else {
-        llvm::raw_os_ostream cerr(std::cerr);
-        PabloPrinter::print(stmt, cerr);
-        throw std::runtime_error("Unrecognized Pablo Statement! can't compile.");
+        Value * const to_count = compileExpression(c->getExpr());
+        expr = mCarryManager->popCount(to_count, c->getGlobalCountIndex());
+    } else {
+        std::string tmp;
+        llvm::raw_string_ostream msg(tmp);
+        msg << "Internal error: ";
+        PabloPrinter::print(stmt, msg);
+        msg << " is not a recognized statement in the Pablo compiler.";
+        throw std::runtime_error(msg.str());
     }
     mMarkerMap[stmt] = expr;
     if (DumpTrace) {
