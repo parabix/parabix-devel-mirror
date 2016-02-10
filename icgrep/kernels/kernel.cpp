@@ -42,9 +42,9 @@ void KernelBuilder::addKernelOutputAccum(Type * t){
 }
 void KernelBuilder::addKernelInputStream(int fw, std::string name = ""){
     if (name=="")
-        mInputStreamNames.push_back(name);
-    else
         mInputStreamNames.push_back(mKernelName + "_inputstream_" + std::to_string(mInputStreams.size()));
+    else
+        mInputStreamNames.push_back(name);
 
     if (fw == 1){
         mInputStreams.push_back(mBitBlockType);
@@ -55,30 +55,34 @@ void KernelBuilder::addKernelInputStream(int fw, std::string name = ""){
 }
 void KernelBuilder::addKernelInputScalar(Type * t, std::string name = ""){
     if (name=="")
-        mInputScalarNames.push_back(name);
-    else
         mInputScalarNames.push_back(mKernelName + "_inputscalar_" + std::to_string(mInputScalars.size()));
+    else
+        mInputScalarNames.push_back(name);
 
     mInputScalars.push_back(t);
 }
 
-
-//create doBlock method with empty body and load inputs
-std::vector<std::vector<Value *>> KernelBuilder::openDoBlock(){
+Function* KernelBuilder::CreateDoBlockFunction(){ 
     Type * inputStreamType = PointerType::get(ArrayType::get(StructType::get(mMod->getContext(), mInputStreams), mSegmentBlocks), 0);
     Type * inputScalarType = PointerType::get(StructType::get(mMod->getContext(), mInputScalars), 0);
     Type * outputStreamType = ArrayType::get(StructType::get(mMod->getContext(), mOutputStreams), mSegmentBlocks);
     Type * outputAccumType = StructType::get(mMod->getContext(), mOutputAccums);
     Type * stateType = StructType::create(mMod->getContext(), mStates, mKernelName);
-    mKernelStructType = StructType::create(mMod->getContext(),std::vector<Type *>({stateType, outputStreamType, outputAccumType}), "KernelStruct");
+    mKernelStructType = StructType::create(mMod->getContext(),std::vector<Type *>({stateType, outputStreamType, outputAccumType}), "KernelStruct_"+mKernelName);
   
     
     FunctionType * functionType = FunctionType::get(Type::getVoidTy(mMod->getContext()), 
         std::vector<Type *>({PointerType::get(mKernelStructType, 0), inputStreamType, inputScalarType}), false); 
-    
-   
+       
     mDoBlockFunction = Function::Create(functionType, GlobalValue::ExternalLinkage, mKernelName + "_DoBlock", mMod);
     mDoBlockFunction->setCallingConv(CallingConv::C);
+
+    return mDoBlockFunction;
+}
+
+//create doBlock method with empty body and load inputs
+struct Inputs KernelBuilder::openDoBlock(){
+   
 
     Function::arg_iterator args = mDoBlockFunction->arg_begin();
     mKernelStructParam = args++;
@@ -90,7 +94,8 @@ std::vector<std::vector<Value *>> KernelBuilder::openDoBlock(){
 
     iBuilder->SetInsertPoint(BasicBlock::Create(mMod->getContext(), "entry", mDoBlockFunction,0));
 
-    std::vector<std::vector<Value *>> inputs;
+    // std::vector<std::vector<valptr>> inputs;
+    struct Inputs inputs;
     for(int j = 0; j<mSegmentBlocks; j++){
         for(int i = 0; i<mInputStreams.size(); i++){
             Value* indices[] = {iBuilder->getInt64(0), iBuilder->getInt32(j), iBuilder->getInt32(i)};
@@ -98,46 +103,66 @@ std::vector<std::vector<Value *>> KernelBuilder::openDoBlock(){
             Type * t = gep->getType()->getPointerElementType();
             if (t != mBitBlockType) {
                 int arraySize = t->getArrayNumElements();
-                inputs.resize(mSegmentBlocks, std::vector<Value *>(arraySize));
+                inputs.streams.resize(mSegmentBlocks, std::vector<valptr>(arraySize));
                 for (int k=0; k<arraySize; k++){
                     Value * gep_array_elem = iBuilder->CreateGEP(gep, {iBuilder->getInt32(0), iBuilder->getInt32(k)});
-                    inputs[j][k] = iBuilder->CreateAlignedLoad(gep_array_elem, mBlockSize/8, false, mInputStreamNames.at(i));
+                    inputs.streams[j][k] = iBuilder->CreateAlignedLoad(gep_array_elem, mBlockSize/8, false, mInputStreamNames.at(i));
                 }
             }
             else{
-                inputs.resize(mSegmentBlocks, std::vector<Value *>(mInputStreams.size()));
-                inputs[j][i] = iBuilder->CreateAlignedLoad(gep, mBlockSize/8, false, mInputStreamNames.at(i));
+                inputs.streams.resize(mSegmentBlocks, std::vector<valptr>(mInputStreams.size()));
+                inputs.streams[j][i] = iBuilder->CreateAlignedLoad(gep, mBlockSize/8, false, mInputStreamNames.at(i));
             }
             
         }
     }
 
-    // for(int i = 0; i<mInputScalars.size(); i++){
-    //     Value* indices[] = {iBuilder->getInt64(0), iBuilder->getInt32(i)};
-    //     Value * gep = iBuilder->CreateGEP(input_scalar_param, indices);
-    // }
+    inputs.scalars.resize(mInputScalars.size());
+    for(int i = 0; i<mInputScalars.size(); i++){
+        Value* indices[] = {iBuilder->getInt64(0), iBuilder->getInt32(i)};
+        Value * gep = iBuilder->CreateGEP(input_scalar_param, indices);
+        inputs.scalars[i] = iBuilder->CreateAlignedLoad(gep, mBlockSize/8, false, mInputScalarNames.at(i));
+    }
 
     return inputs;
 }
-// void KernelBuilder::closeDoBlock(std::vector<std::vector<Value *>> result){
 
-void KernelBuilder::closeDoBlock(Value * result[][8]){
+void KernelBuilder::closeDoBlock(struct Outputs result){
+    
+
     for(int j=0; j<mSegmentBlocks; j++){
-        for(int i = 0; i<mOutputStreams.size(); i++){      
+        for(int i = 0; i<mOutputStreams.size(); i++){   
             Value* indices[] = {iBuilder->getInt64(0), iBuilder->getInt32(1), iBuilder->getInt32(j), iBuilder->getInt32(i)};
             Value* gep = iBuilder->CreateGEP(mKernelStructParam, indices);
-            iBuilder->CreateAlignedStore(result[j][i], gep, mBlockSize/8, false);
+            iBuilder->CreateAlignedStore(result.streams[j][i], gep, mBlockSize/8, false);
         }
     }
 
-    // for(int j=0; j<mSegmentBlocks; j++){
-    //     for(int i = 0; i<mOutputAccums.size(); i++){
-    //         Value* indices[] = {iBuilder->getInt64(0), iBuilder->getInt32(2), iBuilder->getInt32(j), iBuilder->getInt32(i)};
-    //         Value* gep = iBuilder->CreateGEP(mKernelStructType, indices);
-    //         iBuilder->CreateAlignedStore(result[j][i], gep, mBlockSize/8, false);
-    //     }
-    // }
+    for(int i = 0; i<mOutputAccums.size(); i++){    
+        Value* indices[] = {iBuilder->getInt64(0), iBuilder->getInt32(2), iBuilder->getInt32(i)};
+        Value* gep = iBuilder->CreateGEP(mKernelStructParam, indices);
+        iBuilder->CreateAlignedStore(result.accums[i], gep, mBlockSize/8, false);
+    }
+
     iBuilder->CreateRetVoid();
+}
+
+void KernelBuilder::changeKernelInternalState(int idx, Value * stateValue){
+    Value* indices[] = {iBuilder->getInt64(0), iBuilder->getInt32(0), iBuilder->getInt32(idx)};
+    Value* gep = iBuilder->CreateGEP(mKernelStructParam, indices);
+    iBuilder->CreateAlignedStore(stateValue, gep, mBlockSize/8, false);
+}
+
+Value * KernelBuilder::getKernelInternalState(int idx){
+    Value* indices[] = {iBuilder->getInt64(0), iBuilder->getInt32(0), iBuilder->getInt32(idx)};
+    Value* gep = iBuilder->CreateGEP(mKernelStructParam, indices);
+    return iBuilder->CreateAlignedLoad(gep, mBlockSize/8, false, "state"+std::to_string(idx));
+}
+
+Value * KernelBuilder::getKernelInternalStatePtr(int idx){
+    Value* indices[] = {iBuilder->getInt64(0), iBuilder->getInt32(0), iBuilder->getInt32(idx)};
+    Value* gep = iBuilder->CreateGEP(mKernelStructParam, indices);
+    return gep;
 }
 
 void KernelBuilder::finalizeMethods(){
@@ -158,10 +183,13 @@ void KernelBuilder::finalizeMethods(){
     gep = iBuilder->CreateGEP(this_param, std::vector<Value *>({ iBuilder->getInt32(0), iBuilder->getInt32(0), iBuilder->getInt32(i++) }));
     iBuilder->CreateStore(iBuilder->getInt64(0), gep);  //AvailableBlocks
 
-    // while(i < mStates.size()){
-    //     gep = iBuilder->CreateGEP(this_param, std::vector<Value *>({ iBuilder->getInt32(0), iBuilder->getInt32(i) }));
-    //     iBuilder->CreateMemSet(gep, iBuilder->getInt8(0), DataLayout::getTypeAllocSize(mStates[i]), 4);
-    // }
+    while(i < mStates.size()){
+        gep = iBuilder->CreateGEP(this_param, std::vector<Value *>({ iBuilder->getInt32(0), iBuilder->getInt32(0), iBuilder->getInt32(i++) }));
+        // iBuilder->CreateStore(iBuilder->getInt64(0), gep); 
+        // std::cerr << "size = " << mMod->getDataLayout()->getTypeAllocSize(mStates[i]) << std::endl;
+        // iBuilder->CreateMemSet(gep, iBuilder->getInt8(0), mMod->getDataLayout()->getTypeAllocSize(mStates[i]), 4);
+    }
+
     iBuilder->CreateRetVoid();
 
     c = mMod->getOrInsertFunction(mKernelName+"_Create_Default", Type::getVoidTy(mMod->getContext()), PointerType::get(mKernelStructType, 0), T, T, NULL);

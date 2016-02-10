@@ -24,7 +24,19 @@ namespace llvm {
 }
 
 using namespace llvm;
-        
+
+typedef Value* valptr;
+
+struct Inputs {
+    std::vector<std::vector<valptr>> streams;
+    std::vector<valptr> scalars;
+};
+
+struct Outputs {
+    std::vector<valptr *> streams;
+    std::vector<valptr> accums;
+};
+
 class KernelBuilder{
 public:
     // sets name & sets internal state to the kernel superclass state
@@ -36,14 +48,20 @@ public:
 	void addKernelOutputAccum(Type * t);
 	void addKernelInputStream(int fw, std::string name);
 	void addKernelInputScalar(Type * t, std::string name);
-	std::vector<std::vector<Value *>> openDoBlock();
-	void closeDoBlock(Value * result[][8]);
+    Function* CreateDoBlockFunction();
+	struct Inputs openDoBlock();
+	void closeDoBlock(struct Outputs);
 	void finalizeMethods();
 	void generateKernelInstance(int buffersize);
 	void generateInitCall();
 	Value * generateDoBlockCall(Value * input);
     int getSegmentBlocks();
 
+    void changeKernelInternalState(int idx, Value * stateValue);
+    Value * getKernelInternalState(int idx);
+    Value * getKernelInternalStatePtr(int idx);
+
+private:
 	Module *                            mMod;
     IDISA::IDISA_Builder *              iBuilder;
     std::string							mKernelName;
