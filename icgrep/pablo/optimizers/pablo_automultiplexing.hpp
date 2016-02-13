@@ -11,6 +11,7 @@
 #include <random>
 #include <stdint.h>
 #include <llvm/ADT/DenseMap.h>
+#include <llvm/ADT/DenseSet.h>
 
 typedef int BDD;
 
@@ -18,7 +19,6 @@ namespace pablo {
 
 class PabloBuilder;
 class PabloFunction;
-struct OrderingVerifier;
 
 class MultiplexingPass {
 
@@ -34,6 +34,8 @@ class MultiplexingPass {
     using CliqueGraph = boost::adjacency_list<boost::hash_setS, boost::vecS, boost::undirectedS>;
     using CliqueSet = boost::container::flat_set<CliqueGraph::vertex_descriptor>;
     using CliqueSets = boost::container::flat_set<std::vector<CliqueGraph::vertex_descriptor>>;
+    using OrderingGraph = boost::adjacency_list<boost::hash_setS, boost::vecS, boost::bidirectionalS, Statement *>;
+    using OrderingMap = boost::container::flat_map<const Statement *, OrderingGraph::vertex_descriptor>;
 
     using AdvanceVector = std::vector<Advance *>;
     using AdvanceDepth = std::vector<int>;
@@ -75,8 +77,8 @@ protected:
     MultiplexVector orderMultiplexSet(const MultiplexSetGraph::vertex_descriptor u);
     void multiplexSelectedSets(PabloFunction & function);
 
-    static void topologicalSort(PabloFunction & function);
-    static void topologicalSort(PabloBlock * block, OrderingVerifier & parent);
+    static void topologicalSort(PabloBlock * const block);
+    static void topologicalSort(const OrderingGraph::vertex_descriptor u, const PabloBlock * const block, const Statement * const stmt, OrderingGraph & G, OrderingMap & M);
 
     BDD & get(const PabloAST * const expr);
 

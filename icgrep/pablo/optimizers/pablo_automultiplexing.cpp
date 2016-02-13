@@ -16,12 +16,12 @@
 #include <unordered_set>
 #include <bdd.h>
 
-/// TODO: Investigate why ./icgrep -c -multiplexing-window-size=13,14...,20 "^\p{l}$" causes segfault in BuDDy.
-
 using namespace llvm;
 using namespace boost;
 using namespace boost::container;
 using namespace boost::numeric::ublas;
+
+/// Interesting test case: ./icgrep '[\p{Lm}\p{Meetei_Mayek}]' -disable-if-hierarchy-strategy
 
 // #define PRINT_DEBUG_OUTPUT
 
@@ -114,7 +114,7 @@ bool MultiplexingPass::optimize(PabloFunction & function, const unsigned limit, 
 
     std::random_device rd;
     const RNG::result_type seed = rd();
-    // const RNG::result_type seed = 83234827342;
+//    const RNG::result_type seed = 83234827342;
 
     LOG("Seed:                    " << seed);
 
@@ -180,12 +180,7 @@ bool MultiplexingPass::optimize(PabloFunction & function, const unsigned limit, 
         RECORD_TIMESTAMP(start_select_independent_sets);
         mp.multiplexSelectedSets(function);
         RECORD_TIMESTAMP(end_select_independent_sets);
-        LOG("SelectedIndependentSets:  " << (end_select_independent_sets - start_select_independent_sets));
-
-        RECORD_TIMESTAMP(start_topological_sort);
-        MultiplexingPass::topologicalSort(function);
-        RECORD_TIMESTAMP(end_topological_sort);
-        LOG("TopologicalSort:          " << (end_topological_sort - start_topological_sort));
+        LOG("MultiplexSelectedSets:    " << (end_select_independent_sets - start_select_independent_sets));
 
         #ifndef NDEBUG
         PabloVerifier::verify(function, "post-multiplexing");
@@ -950,7 +945,8 @@ void MultiplexingPass::eliminateSubsetConstraints() {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief multiplexSelectedSets
  ** ------------------------------------------------------------------------------------------------------------- */
-void MultiplexingPass::multiplexSelectedSets(PabloFunction &) {
+void MultiplexingPass::multiplexSelectedSets(PabloFunction & function) {
+    flat_set<PabloBlock *> modified;
     const auto first_set = num_vertices(mConstraintGraph);
     const auto last_set = num_vertices(mMultiplexSetGraph);
     for (auto idx = first_set; idx != last_set; ++idx) {
@@ -967,20 +963,17 @@ void MultiplexingPass::multiplexSelectedSets(PabloFunction &) {
             }
             Advance * const adv = input[0];
             PabloBlock * const block = adv->getParent(); assert (block);
-            block->setInsertPoint(nullptr);
+            modified.insert(block);
+
             circular_buffer<PabloAST *> Q(n);
+
             PabloBuilder builder(block);
+            block->setInsertPoint(nullptr);
             /// Perform n-to-m Multiplexing            
-            for (size_t j = 0; j != m; ++j) {
+            for (size_t j = 0; j != m; ++j) {                
                 std::ostringstream prefix;
-                prefix << "mux" << n << "to" << m << '.' << (j + 1);
-//                Or * muxing = block->createOr(n);
-//                for (size_t i = 0; i != n; ++i) {
-//                    if (((i + 1) & (1UL << j)) != 0) {
-//                        assert (input[i]->getParent() == block);
-//                        muxing->addOperand(input[i]->getOperand(0));
-//                    }
-//                }
+                prefix << "mux" << n << "to" << m << '.' << (j);
+                assert (Q.empty());
                 for (size_t i = 0; i != n; ++i) {
                     if (((i + 1) & (1UL << j)) != 0) {
                         Q.push_back(input[i]->getOperand(0));
@@ -991,11 +984,12 @@ void MultiplexingPass::multiplexSelectedSets(PabloFunction &) {
                     PabloAST * b = Q.front(); Q.pop_front();
                     Q.push_back(builder.createOr(a, b));
                 }
-                PabloAST * muxing =  Q.front(); Q.clear();
+                PabloAST * const muxing =  Q.front(); Q.clear();
                 muxed[j] = builder.createAdvance(muxing, adv->getOperand(1), prefix.str());
                 muxed_n[j] = builder.createNot(muxed[j]);
             }
-            /// Perform m-to-n Demultiplexing            
+            /// Perform m-to-n Demultiplexing
+            block->setInsertPoint(block->back());
             for (size_t i = 0; i != n; ++i) {
                 // Construct the demuxed values and replaces all the users of the original advances with them.
                 assert (Q.empty());
@@ -1003,18 +997,17 @@ void MultiplexingPass::multiplexSelectedSets(PabloFunction &) {
                     Q.push_back((((i + 1) & (1UL << j)) != 0) ? muxed[j] : muxed_n[j]);
                 }
                 while (Q.size() > 1) {
-                    PabloAST * a = Q.front(); Q.pop_front();
-                    PabloAST * b = Q.front(); Q.pop_front();
+                    PabloAST * const a = Q.front(); Q.pop_front();
+                    PabloAST * const b = Q.front(); Q.pop_front();
                     Q.push_back(builder.createAnd(a, b));
                 }
-                PabloAST * demuxed =  Q.front(); Q.clear();
-//                And * demuxed = block->createAnd(m);
-//                for (size_t j = 0; j != m; ++j) {
-//                    demuxed->addOperand((((i + 1) & (1UL << j)) != 0) ? muxed[j] : muxed_n[j]);
-//                }
+                PabloAST * const demuxed =  Q.front(); Q.clear();
                 input[i]->replaceWith(demuxed, true, true);
             }
         }
+    }
+    for (PabloBlock * block : modified) {
+        topologicalSort(block);
     }
 }
 
@@ -1061,99 +1054,98 @@ inline MultiplexingPass::MultiplexVector MultiplexingPass::orderMultiplexSet(con
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief OrderingVerifier
- ** ------------------------------------------------------------------------------------------------------------- */
-struct OrderingVerifier {
-    OrderingVerifier() : mParent(nullptr) {}
-    OrderingVerifier(const OrderingVerifier & parent) : mParent(&parent) {}
-    bool count(const PabloAST * expr) const {
-        if (mSet.count(expr)) {
-            return true;
-        } else if (mParent) {
-            return mParent->count(expr);
-        }
-        return false;
-    }
-    void insert(const PabloAST * expr) {
-        mSet.insert(expr);
-    }
-private:
-    const OrderingVerifier * const mParent;
-    std::unordered_set<const PabloAST *> mSet;
-};
-
-/** ------------------------------------------------------------------------------------------------------------- *
  * @brief topologicalSort
  ** ------------------------------------------------------------------------------------------------------------- */
-void MultiplexingPass::topologicalSort(PabloFunction & function) {
-    OrderingVerifier set;
-    set.insert(PabloBlock::createZeroes());
-    set.insert(PabloBlock::createOnes());
-    for (unsigned i = 0; i != function.getNumOfParameters(); ++i) {
-        set.insert(function.getParameter(i));
+void MultiplexingPass::topologicalSort(PabloBlock * const block) {
+
+    using Vertex = OrderingGraph::vertex_descriptor;
+
+    OrderingGraph G;
+    OrderingMap M;
+
+    for (Statement * stmt : *block ) {
+        const auto u = add_vertex(G);
+        G[u] = stmt;
+        M.emplace(stmt, u);
+        if (LLVM_UNLIKELY(isa<If>(stmt))) {
+            for (Assign * def : cast<If>(stmt)->getDefined()) {
+                M.emplace(def, u);
+            }
+        } else if (LLVM_UNLIKELY(isa<While>(stmt))) {
+            for (Next * var : cast<While>(stmt)->getVariants()) {
+                M.emplace(var, u);
+            }
+        }
     }
-    topologicalSort(function.getEntryBlock(), set);
+
+    Vertex u = 0;
+    for (Statement * stmt : *block ) {
+
+        for (unsigned i = 0; i != stmt->getNumOperands(); ++i) {
+            PabloAST * const op = stmt->getOperand(i);
+            if (isa<Statement>(op)) {
+                auto f = M.find(cast<Statement>(op));
+                if (f != M.end()) {
+                    add_edge(f->second, u, G);
+                }
+            }
+        }
+
+        if (LLVM_UNLIKELY(isa<If>(stmt))) {
+            for (Assign * def : cast<If>(stmt)->getDefined()) {
+                topologicalSort(u, block, def, G, M);
+            }
+        } else if (LLVM_UNLIKELY(isa<While>(stmt))) {
+            for (Next * var : cast<While>(stmt)->getVariants()) {
+                topologicalSort(u, block, var, G, M);
+            }
+        } else {
+            topologicalSort(u, block, stmt, G, M);
+        }
+
+        ++u;
+
+    }
+
+    circular_buffer<Vertex> Q(num_vertices(G));
+    topological_sort(G, std::back_inserter(Q));
+
+    block->setInsertPoint(nullptr);
+    while (Q.size() > 0) {
+        const Vertex u = Q.back(); Q.pop_back();
+        block->insert(G[u]);
+    }
+
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief topologicalSort
  ** ------------------------------------------------------------------------------------------------------------- */
-void MultiplexingPass::topologicalSort(PabloBlock * block, OrderingVerifier & parent) {
-    OrderingVerifier encountered(parent);
-    for (Statement * stmt = block->front(); stmt; ) {
-        if (LLVM_UNLIKELY(isa<If>(stmt))) {
-            topologicalSort(cast<If>(stmt)->getBody(), encountered);
-            for (Assign * def : cast<If>(stmt)->getDefined()) {
-                encountered.insert(def);
-            }
-        } else if (LLVM_UNLIKELY(isa<While>(stmt))) {
-            topologicalSort(cast<While>(stmt)->getBody(), encountered);
-            for (Next * var : cast<While>(stmt)->getVariants()) {
-                encountered.insert(var);
-            }
-        }
-        bool unmodified = true;
-        for (unsigned i = 0; i != stmt->getNumOperands(); ++i) {
-            PabloAST * const op = stmt->getOperand(i);
-            if (LLVM_UNLIKELY(encountered.count(op) == 0 && isa<Statement>(op))) {
-                Statement * const next = stmt->getNextNode();
-                Statement * pos = cast<Statement>(op);
-                if (cast<Statement>(op)->getParent() != block) {
-                    // If we haven't already encountered the Assign or Next node, it must come from a If or
-                    // While node that we haven't processed yet. Scan ahead and try to locate it.
-                    pos = nullptr;
-                    if (isa<Assign>(pos)) {
-                        for (pos = cast<Statement>(op); pos; pos = pos->getNextNode()) {
-                            if (LLVM_UNLIKELY(isa<If>(pos))) {
-                                const auto & defs = cast<If>(pos)->getDefined();
-                                if (LLVM_LIKELY(std::find(defs.begin(), defs.end(), op) != defs.end())) {
-                                    break;
-                                }
-                            }
-                        }
-                    } else if (isa<Next>(pos)) {
-                        for (pos = cast<Statement>(op); pos; pos = pos->getNextNode()) {
-                            if (LLVM_UNLIKELY(isa<While>(pos))) {
-                                const auto & vars = cast<While>(pos)->getVariants();
-                                if (LLVM_LIKELY(std::find(vars.begin(), vars.end(), op) != vars.end())) {
-                                    break;
-                                }
-                            }
-                        }
+void MultiplexingPass::topologicalSort(const OrderingGraph::vertex_descriptor u, const PabloBlock * const block, const Statement * const stmt, OrderingGraph & G, OrderingMap & M) {
+    for (const PabloAST * user : stmt->users()) {
+        if (LLVM_LIKELY(isa<Statement>(user))) {
+            const Statement * use = cast<Statement>(user);
+            auto f = M.find(use);
+            if (LLVM_UNLIKELY(f == M.end())) {
+                const PabloBlock * parent = use->getParent();
+                for (;;) {
+                    if (parent == block) {
+                        break;
                     }
-                    if (LLVM_UNLIKELY(pos == nullptr)) {
-                        throw std::runtime_error("Unexpected error: MultiplexingPass failed to topologically sort the function!");
+                    use = parent->getBranch();
+                    parent = parent->getParent();
+                    if (parent == nullptr) {
+                        return;
                     }
                 }
-                stmt->insertAfter(pos);
-                stmt = next;
-                unmodified = false;
-                break;
+                f = M.find(use);
+                assert (f != M.end());
+                M.emplace(use, f->second);
             }
-        }
-        if (unmodified) {
-            encountered.insert(stmt);
-            stmt = stmt->getNextNode();
+            const auto v = f->second;
+            if (LLVM_UNLIKELY(u != v)) {
+                add_edge(u, v, G);
+            }
         }
     }
 }

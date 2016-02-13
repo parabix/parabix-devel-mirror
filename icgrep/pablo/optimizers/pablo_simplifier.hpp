@@ -10,6 +10,7 @@ class PabloFunction;
 
 class Simplifier {
     friend class DistributivePass;
+    friend class FactorizeDFG;
 public:
     static bool optimize(PabloFunction & function);
 protected:

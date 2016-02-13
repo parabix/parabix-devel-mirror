@@ -376,19 +376,17 @@ static inline void computeDistributionGraph(Variadic * const expr, Graph & G, Ve
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void DistributivePass::distribute(Variadic * const var) {
 
-    std::vector<Variadic *> Q;
+
 
     assert (isa<And>(var) || isa<Or>(var));
-
-    Q.push_back(var);
 
     Graph G;
     VertexSet A;
 
-    while (Q.size() > 0) {
+    std::vector<Variadic *> Q = {var};
 
-        Variadic * expr = CanonicalizeDFG::canonicalize(Q.back());
-        Q.pop_back();
+    while (Q.size() > 0) {
+        Variadic * expr = CanonicalizeDFG::canonicalize(Q.back()); Q.pop_back();
         PabloAST * const replacement = Simplifier::fold(expr, expr->getParent());
         if (LLVM_UNLIKELY(replacement != nullptr)) {
             expr->replaceWith(replacement, true, true);
@@ -427,9 +425,6 @@ inline void DistributivePass::distribute(Variadic * const var) {
                 const VertexSet & sinks = std::get<2>(set);
                 assert (sinks.size() > 0);
 
-                // Test whether we can apply the identity law to distributed set. I.e., (P ∧ Q) ∨ (P ∧ ¬Q) ⇔ (P ∨ Q) ∧ (P ∨ ¬Q) ⇔ P
-
-
                 for (const Vertex u : intermediary) {
                     for (const Vertex v : sources) {
                         cast<Variadic>(G[u])->deleteOperand(G[v]);
@@ -464,36 +459,52 @@ inline void DistributivePass::distribute(Variadic * const var) {
                 // Push our newly constructed ops into the Q
                 Q.push_back(innerOp);
                 Q.push_back(outerOp);
+
+                unmodified = false;
             }
 
             G.clear();
             A.clear();
         }
     }
+
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief distribute
  ** ------------------------------------------------------------------------------------------------------------- */
 void DistributivePass::distribute(PabloBlock * const block) {
-    for (Statement * stmt : *block) {
+    Statement * stmt = block->front();
+    while (stmt) {
+        Statement * next = stmt->getNextNode();
         if (isa<If>(stmt) || isa<While>(stmt)) {
             distribute(isa<If>(stmt) ? cast<If>(stmt)->getBody() : cast<While>(stmt)->getBody());
         } else if (isa<And>(stmt) || isa<Or>(stmt)) {
             distribute(cast<Variadic>(stmt));
         }
+        stmt = next;
     }
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief optimize
  ** ------------------------------------------------------------------------------------------------------------- */
-void DistributivePass::optimize(PabloFunction & function) {
-    DistributivePass::distribute(function.getEntryBlock());
-    #ifndef NDEBUG
-    PabloVerifier::verify(function, "post-distribution");
-    #endif
-    Simplifier::optimize(function);
+bool DistributivePass::optimize(PabloFunction & function) {
+    DistributivePass dp;
+    unsigned rounds = 0;
+    for (;;) {
+        dp.unmodified = true;
+        dp.distribute(function.getEntryBlock());
+        if (dp.unmodified) {
+            break;
+        }
+        ++rounds;
+        #ifndef NDEBUG
+        PabloVerifier::verify(function, "post-distribution");
+        #endif
+        Simplifier::optimize(function);
+    }
+    return rounds > 0;
 }
 
 

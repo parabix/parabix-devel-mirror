@@ -86,7 +86,7 @@ public:
     
     void storeCarryOutSummary();
 
-    void blendCarrySummaryWithOuterSummary();
+    void addOuterSummaryToNestedSummary();
 
     void buildCarryDataPhisAfterIfBody(BasicBlock * const entry, BasicBlock * const end);
        

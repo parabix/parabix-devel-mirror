@@ -264,7 +264,7 @@ void PabloCompiler::compileIf(const If * ifStatement) {
     if (mCarryManager->hasCarries()) {
         mCarryManager->storeCarryOutSummary();
     }
-    mCarryManager->blendCarrySummaryWithOuterSummary();
+    mCarryManager->addOuterSummaryToNestedSummary();
 
     iBuilder->CreateBr(ifEndBlock);
     //End Block

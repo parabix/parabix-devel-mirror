@@ -302,7 +302,7 @@ Value * CarryManager::popCount(Value * to_count, unsigned globalIdx) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief blendCarrySummaryWithOuterSummary
  ** ------------------------------------------------------------------------------------------------------------- */
-void CarryManager::blendCarrySummaryWithOuterSummary() {
+void CarryManager::addOuterSummaryToNestedSummary() {
     if (LLVM_LIKELY(mCarrySummary.size() > 0)) {
         addToSummary(mCarrySummary.back());
     }

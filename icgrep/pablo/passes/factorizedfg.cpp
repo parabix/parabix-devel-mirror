@@ -9,12 +9,15 @@
 #include <boost/graph/adjacency_list.hpp>
 #include <boost/graph/adjacency_matrix.hpp>
 #include <queue>
+#include <llvm/Support/CommandLine.h>
 
 #include <pablo/printer_pablos.h>
 #include <iostream>
 
 using namespace boost;
 using namespace boost::container;
+
+//static cl::opt<unsigned> RematerializationThreshold("factoring-remat", cl::desc("Number of registers available for factoring rematerialization"), cl::init(16));
 
 namespace pablo {
 
@@ -453,22 +456,110 @@ inline void FactorizeDFG::factor(PabloFunction & function) {
     while (factor(function.getEntryBlock()));
 }
 
-//inline void print(PabloAST * expr, raw_ostream & out) {
-//    if (isa<Statement>(expr)) {
-//        PabloPrinter::print(cast<Statement>(expr), out);
-//    } else {
-//        PabloPrinter::print(expr, out);
+///** ------------------------------------------------------------------------------------------------------------- *
+// * @brief rematerialize
+// ** ------------------------------------------------------------------------------------------------------------- */
+//void FactorizeDFG::rematerialize(PabloBlock * const block, LiveSet & priorSet) {
+
+//    LiveSet liveSet(priorSet);
+
+//    Statement * stmt = block->front();
+//    block->setInsertPoint(nullptr);
+//    while (stmt) {
+//        for (unsigned i = 0; i != stmt->getNumOperands(); ++i) {
+//            PabloAST * const op = stmt->getOperand(i);
+//            auto f = std::find(liveSet.begin(), liveSet.end(), op);
+//            if (f != liveSet.end()) {
+//                liveSet.erase(f);
+//                liveSet.push_back(op);
+//            } else if (isa<Variadic>(op)) {
+//                Variadic * const var = cast<Variadic>(op);
+//                const double minimum = 4.0 + (3.0 / (double)var->getNumUses());
+//                if ((double)(var->getNumOperands()) < minimum) {
+//                    if (std::find(liveSet.begin(), liveSet.end(), var) == liveSet.end()) {
+//                        // If we don't have this value in the live set, test whether it is cheaper to recompute it
+//                        // rather than spill and reload it; if so, rematerialize the value and replace its reachable users.
+//                        bool rematerialize = true;
+//                        for (unsigned j = 0; j != var->getNumOperands(); ++j) {
+//                            if (std::find(liveSet.begin(), liveSet.end(), var->getOperand(j)) == liveSet.end()) {
+//                                rematerialize = false;
+//                                break;
+//                            }
+//                        }
+//                        if (rematerialize) {
+//                            Variadic * replacement = nullptr;
+//                            if (isa<And>(var)) {
+//                                replacement = block->createAnd(var->begin(), var->end());
+//                            } else if (isa<Or>(var)) {
+//                                replacement = block->createOr(var->begin(), var->end());
+//                            } else if (isa<Xor>(var)) {
+//                                replacement = block->createXor(var->begin(), var->end());
+//                            }
+//                            raw_os_ostream out(std::cerr);
+//                            out << "Remateralizing ";
+//                            PabloPrinter::print(var, out);
+//                            out << " as ";
+//                            PabloPrinter::print(replacement, out);
+//                            out << '\n';
+//                            out.flush();
+//                            for (PabloAST * user : var->users()) {
+//                                if (LLVM_LIKELY(isa<Statement>(user))) {
+//                                    PabloBlock * parent = cast<Statement>(user)->getParent();
+//                                    while (parent) {
+//                                        if (parent == block) {
+//                                            stmt->replaceUsesOfWith(var, replacement);
+//                                            break;
+//                                        }
+//                                        parent = parent->getParent();
+//                                    }
+//                                }
+//                            }
+//                            if (liveSet.size() > RematerializationThreshold) {
+//                                liveSet.pop_front();
+//                            }
+//                            liveSet.push_back(replacement);
+//                        }
+//                    }
+//                }
+//            }
+//        }
+//        if (liveSet.size() > RematerializationThreshold) {
+//            liveSet.pop_front();
+//        }
+//        liveSet.push_back(stmt);
+
+//        if (isa<If>(stmt) || isa<While>(stmt)) {
+//            rematerialize(isa<If>(stmt) ? cast<If>(stmt)->getBody() : cast<While>(stmt)->getBody(), liveSet);
+//        }
+//        block->setInsertPoint(stmt);
+//        stmt = stmt->getNextNode();
 //    }
+
+//    // Let the prior set be an intersection between it and the current live set.
+//    for (auto i = priorSet.begin(); i != priorSet.end(); ) {
+//        if (LLVM_LIKELY(std::find(liveSet.begin(), liveSet.end(), *i) == liveSet.end())) {
+//            i = priorSet.erase(i);
+//        } else {
+//            ++i;
+//        }
+//    }
+
+
 //}
+
+///** ------------------------------------------------------------------------------------------------------------- *
+// * @brief rematerialize
+// ** ------------------------------------------------------------------------------------------------------------- */
+//inline void FactorizeDFG::rematerialize(PabloFunction & function) {
+//    LiveSet live;
+//    rematerialize(function.getEntryBlock(), live);
+//}
+
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief lower
- *
- * The goal of this function is to try and lower a variadic operation into binary form while attempting to mitigate
- * register pressure under the assumption that LLVM is not going to significantly change the IR (which was observed
- * when assessing the ASM output of LLVM 3.6.1 using O3.)
  ** ------------------------------------------------------------------------------------------------------------- */
-inline Statement * FactorizeDFG::lower(Variadic * const var, PabloBlock * block) const {
+inline PabloAST * FactorizeDFG::lower(Variadic * const var, PabloBlock * block) const {
 
     using Graph = adjacency_list<hash_setS, vecS, bidirectionalS, PabloAST *, unsigned>;
     using Vertex = Graph::vertex_descriptor;
@@ -492,10 +583,10 @@ inline Statement * FactorizeDFG::lower(Variadic * const var, PabloBlock * block)
     G[operands] = var;
     M.emplace(var, operands);
 
-    for (Vertex u = 0; u != operands; ++u) {
-        PabloAST * const op = var->getOperand(u);
-        G[u] = op;
-        M.emplace(op, u);
+    for (Vertex i = 0; i < operands; ++i) {
+        PabloAST * const op = var->getOperand(i);
+        G[i] = op;
+        M.emplace(op, i);
         assert ("AST structural error!" && (op->getNumUses() > 0));
         for (PabloAST * user : op->users()) {
             if (LLVM_LIKELY(isa<Statement>(user))) {
@@ -511,32 +602,32 @@ inline Statement * FactorizeDFG::lower(Variadic * const var, PabloBlock * block)
                         } else {
                             v = f->second;
                         }
-                        G[add_edge(u, v, G).first] = 0;
+                        G[add_edge(i, v, G).first] = 0;
                         break;
                     }
                     usage = scope->getBranch();
+                    assert (scope != scope->getParent());
                     scope = scope->getParent();
                 }
             }
         }
     }
 
-    assert (M.count(var) == 1);
-
-    unsigned estQuantum = 0;
+    unsigned time = 0;
     circular_buffer<std::pair<unsigned, Vertex>> defs(operands);
     for (Statement * stmt : *block) {
         switch (stmt->getClassTypeId()) {
             case TypeId::And:
             case TypeId::Or:
             case TypeId::Xor:
-                estQuantum += BOOLEAN_STEP;
+                assert (stmt->getNumOperands() == 2 || stmt == var);
+                time += BOOLEAN_STEP;
                 break;
             case TypeId::Not:
-                estQuantum += NOT_STEP;
+                time += NOT_STEP;
                 break;
             default:
-                estQuantum += OTHER_STEP;
+                time += OTHER_STEP;
         }
         auto f = M.find(stmt);
         if (LLVM_UNLIKELY(f != M.end())) {
@@ -546,18 +637,19 @@ inline Statement * FactorizeDFG::lower(Variadic * const var, PabloBlock * block)
                 break;
             }
             for (auto e : make_iterator_range(in_edges(u, G)))   {
-                G[e] = estQuantum;
+                G[e] = time;
             }
             if (u < operands) {
-                defs.push_back(std::make_pair(estQuantum + DESIRED_GAP, u));
+                defs.push_back(std::make_pair(time + DESIRED_GAP, u));
             }
         }
+        assert (stmt != var);
         // Annotate G to indicate when we expect a statement will be available
         while (defs.size() > 0) {
-            unsigned availQuantum = 0;
+            unsigned avail = 0;
             Vertex u = 0;
-            std::tie(availQuantum, u) = defs.front();
-            if (availQuantum > estQuantum) {
+            std::tie(avail, u) = defs.front();
+            if (avail > time) {
                 break;
             }
             defs.pop_front();
@@ -569,7 +661,7 @@ inline Statement * FactorizeDFG::lower(Variadic * const var, PabloBlock * block)
             } else {
                 v = f->second;
             }
-            G[add_edge(u, v, G).first] = estQuantum;
+            G[add_edge(u, v, G).first] = time;
         }
     }
 
@@ -587,52 +679,26 @@ inline Statement * FactorizeDFG::lower(Variadic * const var, PabloBlock * block)
     }
 
     for (auto e : make_iterator_range(in_edges(operands, G)))   {
-        G[e] = estQuantum;
+        G[e] = time;
     }
 
     assert (num_edges(G) == var->getNumOperands());
-
-//    raw_os_ostream out(std::cerr);
-
-//    out << "==============================================================================\n";
-//    PabloPrinter::print(var, out); out << '\n';
-//    out << "------------------------------------------------------------------------------\n";
-
-//    out << "digraph G {\n";
-//    for (auto u : make_iterator_range(vertices(G))) {
-//        if (in_degree(u, G) == 0 && out_degree(u, G) == 0) {
-//            continue;
-//        }
-//        out << "v" << u << " [label=\"" << u << ": ";
-//        PabloPrinter::print(G[u], out);
-//        out << "\"];\n";
-//    }
-//    for (auto e : make_iterator_range(edges(G))) {
-//        const auto s = source(e, G);
-//        const auto t = target(e, G);
-//        out << "v" << s << " -> v" << t << "[label=\"" << G[e] << "\"];\n";
-//    }
-
-//    out << "}\n\n";
-//    out.flush();
-
-//    out << "------------------------------------------------------------------------------\n";
 
     SchedulingPriorityQueue Q;
     while (num_edges(G) > 0) {
 
         Graph::edge_descriptor f;
-        unsigned quantum = std::numeric_limits<unsigned>::max();
+        unsigned t = std::numeric_limits<unsigned>::max();
         for (auto e : make_iterator_range(edges(G))) {
             if (in_degree(source(e, G), G) == 0) {
-                if (quantum > G[e]) {
-                    quantum = G[e];
+                if (t > G[e]) {
+                    t = G[e];
                     f = e;
                 }
             }
         }
 
-        assert ("No edge selected!" && (quantum < std::numeric_limits<unsigned>::max()));
+        assert ("No edge selected!" && (t < std::numeric_limits<unsigned>::max()));
 
         const auto u = source(f, G);
         assert (u < operands);
@@ -645,9 +711,9 @@ inline Statement * FactorizeDFG::lower(Variadic * const var, PabloBlock * block)
         // G when checking which value is indicated by u.
         block->setInsertPoint(cast<Statement>(G[v]));
         if (LLVM_LIKELY(Q.size() > 0)) {
-            unsigned minQuantum = 0; PabloAST * op2 = nullptr;
-            std::tie(minQuantum, op2) = Q.top();
-            if (minQuantum < quantum) {
+            unsigned min = 0; PabloAST * op2 = nullptr;
+            std::tie(min, op2) = Q.top();
+            if (min < t) {
                 Q.pop();
                 PabloAST * result = nullptr;
                 if (isa<And>(var)) {
@@ -657,31 +723,19 @@ inline Statement * FactorizeDFG::lower(Variadic * const var, PabloBlock * block)
                 } else { // if (isa<Xor>(var)) {
                     result = block->createXor(op1, op2);
                 }
-
-//                out << " -- ";
-//                print(op1, out);
-//                out << " + ";
-//                print(op2, out);
-//                out << " -> ";
-//                print(result, out);
-//                out << '\n';
-//                out.flush();
-
                 if (LLVM_LIKELY(isa<Statement>(result))) {
                     G[v] = result; // update the insertion point node value
-                    quantum += DESIRED_GAP;
+                    t += DESIRED_GAP;
                 } else {
                     G[v] = cast<Statement>(op2); // update the insertion point node value
-                    quantum = estQuantum;
+                    t = time;
                 }
-                Q.emplace(quantum, result);
+                Q.emplace(t, result);
                 continue;
             }
         }
-        Q.emplace(quantum, op1);
+        Q.emplace(t, op1);
     }
-
-//    out << "------------------------------------------------------------------------------\n";
 
     // If we've done our best to schedule the statements and have operands remaining in our queue, generate a
     // tree of the remaining operands.
@@ -704,21 +758,11 @@ inline Statement * FactorizeDFG::lower(Variadic * const var, PabloBlock * block)
         } else { // if (isa<Xor>(var)) {
             result = block->createXor(op1, op2);
         }
-
-//        out << " -- ";
-//        print(op1, out);
-//        out << " + ";
-//        print(op2, out);
-//        out << " -> ";
-//        print(result, out);
-//        out << '\n';
-//        out.flush();
-
         Q.emplace(q2 + DESIRED_GAP, result);
     }
 
     assert (Q.size() == 1);
-    return var->replaceWith(std::get<1>(Q.top()));
+    return std::get<1>(Q.top());
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -729,8 +773,12 @@ void FactorizeDFG::lower(PabloBlock * const block) const {
     while (stmt) {
         if (isa<If>(stmt) || isa<While>(stmt)) {
             lower(isa<If>(stmt) ? cast<If>(stmt)->getBody() : cast<While>(stmt)->getBody());
-        } else if ((stmt->getNumOperands() > 2) && (isa<Variadic>(stmt))) {
-            stmt = lower(cast<Variadic>(stmt), block);
+        } else if (LLVM_UNLIKELY(stmt->getNumOperands() > 2 && isa<Variadic>(stmt))) {
+            PabloAST * const replacement = lower(cast<Variadic>(stmt), block);
+            stmt = stmt->replaceWith(replacement);
+            if (LLVM_LIKELY(isa<Variadic>(replacement))) {
+                elevate(cast<Variadic>(replacement), block);
+            }
             continue;
         }
         stmt = stmt->getNextNode();
@@ -738,10 +786,97 @@ void FactorizeDFG::lower(PabloBlock * const block) const {
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief lower
+ * @brief elevate
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void FactorizeDFG::lower(PabloFunction & function) const {
     lower(function.getEntryBlock());
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief noUsesOfAfter
+ ** ------------------------------------------------------------------------------------------------------------- */
+static bool noUsesOfAfter(const PabloAST * value, const Statement * const stmt) {
+    if (value->getNumUses() == 1) {
+        return true;
+    }
+    for (const Statement * after = stmt->getNextNode(); after; after = after->getNextNode()) {
+        for (unsigned i = 0; i != after->getNumOperands(); ++i) {
+            if (LLVM_UNLIKELY(after->getOperand(i) == value)) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief elevate
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline void FactorizeDFG::elevate(Variadic * const var, PabloBlock * block) const {
+    assert (var->getParent() == block);
+    const unsigned operands = var->getNumOperands();
+    PabloAST * operand[operands];
+    unsigned count = 0;
+    for (unsigned i = 0; i != operands; ++i) {
+        PabloAST * const op = var->getOperand(i);
+        if (noUsesOfAfter(op, var)) {
+            operand[count++] = op;
+        }
+    }
+    if (count) {
+        PabloAST * def[operands];
+        for (unsigned i = 0; i != operands; ++i) {
+            PabloAST * op = var->getOperand(i);
+            if (LLVM_LIKELY(isa<Statement>(op))) {
+                PabloBlock * scope = cast<Statement>(op)->getParent();
+                while (scope) {
+                    if (scope == block) {
+                        break;
+                    }
+                    op = scope->getBranch();
+                    scope = scope->getParent();
+                }
+            }
+            def[i] = op;
+        }
+        std::sort(operand, operand + count);
+        std::sort(def, def + operands);
+        for (Statement * ip = var->getPrevNode(); ip; ip = ip->getPrevNode()) {
+            if (std::binary_search(def, def + operands, ip)) {
+                var->insertAfter(ip);
+                return;
+            }
+            for (unsigned i = 0; i != ip->getNumOperands(); ++i) {
+                if (std::binary_search(operand, operand + count, ip->getOperand(i))) {
+                    var->insertAfter(ip);
+                    return;
+                }
+            }
+        }
+    }
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief elevate
+ ** ------------------------------------------------------------------------------------------------------------- */
+void FactorizeDFG::elevate(PabloBlock * const block) const {
+    Statement * stmt = block->front();
+    while (stmt) {
+        Statement * next = stmt->getNextNode();
+        if (LLVM_UNLIKELY(isa<If>(stmt) || isa<While>(stmt))) {
+            elevate(isa<If>(stmt) ? cast<If>(stmt)->getBody() : cast<While>(stmt)->getBody());
+        } else if (LLVM_LIKELY(isa<Variadic>(stmt))) {
+            elevate(cast<Variadic>(stmt), block);
+        }
+        stmt = next;
+    }
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief elevate
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline void FactorizeDFG::elevate(PabloFunction & function) const {
+    elevate(function.getEntryBlock());
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -798,11 +933,15 @@ void FactorizeDFG::transform(PabloFunction & function) {
     #endif
     Simplifier::optimize(function);
 
+    ldfg.elevate(function);
+    #ifndef NDEBUG
+    PabloVerifier::verify(function, "post-elevation");
+    #endif
+
     ldfg.lower(function);
     #ifndef NDEBUG
     PabloVerifier::verify(function, "post-lowering");
     #endif
-    Simplifier::optimize(function);
 }
 
 }

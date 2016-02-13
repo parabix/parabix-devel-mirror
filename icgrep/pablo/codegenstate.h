@@ -116,6 +116,10 @@ public:
         return insertAtInsertionPoint(new And(begin, end, makeName("and_")));
     }
 
+    And * createAnd(Variadic::iterator begin, Variadic::iterator end) {
+        return insertAtInsertionPoint(new And(begin, end, makeName("and_")));
+    }
+
     PabloAST * createNot(PabloAST * expr);
 
     PabloAST * createNot(PabloAST * expr, const std::string prefix);
@@ -128,6 +132,10 @@ public:
         return insertAtInsertionPoint(new Or(begin, end, makeName("or_")));
     }
 
+    Or * createOr(Variadic::iterator begin, Variadic::iterator end) {
+        return insertAtInsertionPoint(new Or(begin, end, makeName("or_")));
+    }
+
     Or * createOr(const unsigned reserved);
 
     Or * createOr(const unsigned reserved, const std::string prefix);
@@ -137,6 +145,10 @@ public:
     PabloAST * createXor(PabloAST * expr1, PabloAST * expr2, const std::string prefix);
 
     Xor * createXor(std::vector<PabloAST *>::iterator begin, std::vector<PabloAST *>::iterator end) {
+        return insertAtInsertionPoint(new Xor(begin, end, makeName("xor_")));
+    }
+
+    Xor * createXor(Variadic::iterator begin, Variadic::iterator end) {
         return insertAtInsertionPoint(new Xor(begin, end, makeName("xor_")));
     }
 

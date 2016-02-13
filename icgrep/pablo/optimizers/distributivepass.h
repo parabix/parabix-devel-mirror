@@ -9,11 +9,13 @@ class Variadic;
 
 class DistributivePass {
 public:
-    static void optimize(PabloFunction & function);
+    static bool optimize(PabloFunction & function);
 protected:
-    static void distribute(PabloBlock * const block);
-    static void distribute(Variadic * const expr);
+    void distribute(PabloBlock * const block);
+    void distribute(Variadic * const var);
     DistributivePass() = default;
+private:
+    bool unmodified;
 };
 
 }

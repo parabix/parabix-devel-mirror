@@ -39,9 +39,10 @@ PabloAST * Simplifier::fold(Variadic * var, PabloBlock * const block) {
 
     // Ensure all operands of a reassociatiable function are consistently ordered.
     std::sort(var->begin(), var->end());
+
     // Apply the idempotence law to any And and Or statement and the identity law to any Xor
     for (int i = var->getNumOperands() - 1; i > 0; --i) {
-        if (LLVM_UNLIKELY(var->getOperand(i) == var->getOperand(i - 1))) {
+        if (LLVM_UNLIKELY(equals(var->getOperand(i), var->getOperand(i - 1)))) {
             var->removeOperand(i);
             if (LLVM_UNLIKELY(isa<Xor>(var))) {
                 var->removeOperand(--i);
@@ -121,7 +122,9 @@ PabloAST * Simplifier::fold(Variadic * var, PabloBlock * const block) {
                                 if (LLVM_UNLIKELY(apply)) {
                                     // Although we can apply this transformation, we have a potential problem. If P is not a "literal", we
                                     // cannot optimize var without creating a new And/Or statement. However, the redundancy elimination
-                                    // pass will miss this new statement unless we mark "var" as its own replacement.
+                                    // pass will miss this new statement unless we mark "var" as its own replacement. We'll end up checking
+                                    // "var" again but termination is still guaranteed once none of the new statements can be replaced by
+                                    // prior statements in the AST.
                                     PabloAST * expr = nullptr;
                                     if (operands == 2) {
                                         expr = Vi->getOperand(1 ^ di);
@@ -144,9 +147,19 @@ PabloAST * Simplifier::fold(Variadic * var, PabloBlock * const block) {
                                         }
                                         replacement = var;
                                     }
-                                    var->setOperand(j, expr);
                                     var->removeOperand(i);
-                                    i = 0;
+                                    var->removeOperand(j);
+                                    bool unique = true;
+                                    for (unsigned k = 0; k != var->getNumOperands(); ++k) {
+                                        if (LLVM_UNLIKELY(equals(var->getOperand(k), expr))) {
+                                            unique = false;
+                                            break;
+                                        }
+                                    }
+                                    if (LLVM_LIKELY(unique)) {
+                                        var->addOperand(expr);
+                                    }
+                                    i -= 2;
                                     break; // out of for j = 0 to i - 1
                                 }
                             }
@@ -208,17 +221,6 @@ PabloAST * Simplifier::fold(Variadic * var, PabloBlock * const block) {
                             return PabloBlock::createOnes();
                         }
                     }
-                }
-            }
-        }
-
-        if (LLVM_UNLIKELY(replacement != nullptr)) {
-            // Ensure all operands of a reassociatiable function are consistently ordered.
-            std::sort(var->begin(), var->end());
-            // Apply the idempotence law to any And and Or statement
-            for (int i = var->getNumOperands() - 1; i > 0; --i) {
-                if (LLVM_UNLIKELY(var->getOperand(i) == var->getOperand(i - 1))) {
-                    var->removeOperand(i);
                 }
             }
         }

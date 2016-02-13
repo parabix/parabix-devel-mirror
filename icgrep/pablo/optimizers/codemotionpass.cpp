@@ -2,6 +2,10 @@
 #include <pablo/codegenstate.h>
 #include <pablo/analysis/pabloverifier.hpp>
 #include <boost/container/flat_set.hpp>
+#include <boost/container/flat_map.hpp>
+#include <boost/graph/adjacency_list.hpp>
+#include <boost/graph/topological_sort.hpp>
+#include <boost/circular_buffer.hpp>
 
 using namespace boost;
 using namespace boost::container;
@@ -12,7 +16,7 @@ namespace pablo {
  * @brief optimize
  ** ------------------------------------------------------------------------------------------------------------- */
 bool CodeMotionPass::optimize(PabloFunction & function) {
-    CodeMotionPass::global(function.getEntryBlock());
+    CodeMotionPass::movement(function.getEntryBlock());
     #ifndef NDEBUG
     PabloVerifier::verify(function, "post-code-motion");
     #endif
@@ -20,20 +24,21 @@ bool CodeMotionPass::optimize(PabloFunction & function) {
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief process
+ * @brief movement
  ** ------------------------------------------------------------------------------------------------------------- */
-void CodeMotionPass::global(PabloBlock * const block) {
+void CodeMotionPass::movement(PabloBlock * const block) {
     sink(block);
     for (Statement * stmt : *block) {
         if (isa<If>(stmt)) {
-            global(cast<If>(stmt)->getBody());
+            movement(cast<If>(stmt)->getBody());
         } else if (isa<While>(stmt)) {
-            global(cast<While>(stmt)->getBody());
+            movement(cast<While>(stmt)->getBody());
             // TODO: if we analyzed the probability of this loop being executed once, twice, or many times, we could
             // determine whether hoisting will helpful or harmful to the expected run time.
             hoistLoopInvariants(cast<While>(stmt));
         }
     }
+    reschedule(block);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -46,7 +51,7 @@ inline static bool isSafeToMove(Statement * stmt) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief calculateDepthToCurrentBlock
  ** ------------------------------------------------------------------------------------------------------------- */
-inline static unsigned calculateDepthToCurrentBlock(const PabloBlock * scope, const PabloBlock * const root) {
+inline static unsigned depthTo(const PabloBlock * scope, const PabloBlock * const root) {
     unsigned depth = 0;
     while (scope != root) {
         ++depth;
@@ -102,7 +107,7 @@ inline bool CodeMotionPass::isAcceptableTarget(Statement * stmt, ScopeSet & scop
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief sink
  ** ------------------------------------------------------------------------------------------------------------- */
-void CodeMotionPass::sink(PabloBlock * const block) {
+inline void CodeMotionPass::sink(PabloBlock * const block) {
     ScopeSet scopes;
     Statement * stmt = block->back(); // note: reverse AST traversal
     while (stmt) {
@@ -112,10 +117,10 @@ void CodeMotionPass::sink(PabloBlock * const block) {
             while (scopes.size() > 1) {
                 // Find the LCA of both scopes then add the LCA back to the list of scopes.
                 PabloBlock * scope1 = scopes.back(); scopes.pop_back();
-                unsigned depth1 = calculateDepthToCurrentBlock(scope1, block);
+                unsigned depth1 = depthTo(scope1, block);
 
                 PabloBlock * scope2 = scopes.back(); scopes.pop_back();
-                unsigned depth2 = calculateDepthToCurrentBlock(scope2, block);
+                unsigned depth2 = depthTo(scope2, block);
 
                 // If one of these scopes is nested deeper than the other, scan upwards through
                 // the scope tree until both scopes are at the same depth.
@@ -191,6 +196,58 @@ void CodeMotionPass::hoistLoopInvariants(While * loop) {
             }
         }
     }
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief reschedule
+ ** ------------------------------------------------------------------------------------------------------------- */
+void CodeMotionPass::reschedule(PabloBlock * const block) {
+
+//    using Graph = adjacency_list<hash_setS, vecS, bidirectionalS, Statement *>;
+//    using Vertex = Graph::vertex_descriptor;
+//    using Map = flat_map<Statement *, Vertex>;
+
+//    const unsigned size = std::distance(block->begin(), block->end());
+
+//    Graph G(size);
+//    Map M;
+
+//    M.reserve(size);
+
+//    unsigned i = 0;
+//    for (Statement * stmt : *block) {
+//        G[i] = stmt;
+//        M.emplace(stmt, i);
+//        ++i;
+//    }
+
+//    i = 0;
+//    for (Statement * stmt : *block) {
+//        for (PabloAST * user : stmt->users()) {
+//            if (isa<Statement>(user)) {
+//                Statement * use = cast<Statement>(user);
+//                PabloBlock * parent = use->getParent();
+//                while (parent) {
+//                    if (parent == block) {
+//                        break;
+//                    }
+//                    use = parent->getBranch();
+//                    parent = parent->getParent();
+//                }
+//                auto f = M.find(use);
+//                assert (f != M.end());
+//                add_edge(i, f->second, G);
+//            }
+//        }
+//        ++i;
+//    }
+
+//    circular_buffer<Vertex> ordering(size);
+//    std::vector<unsigned> cumulativeDependencies;
+//    topological_sort(G, std::back_inserter(ordering));
+    
+
+
 }
 
 }

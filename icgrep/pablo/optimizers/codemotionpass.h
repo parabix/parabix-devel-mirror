@@ -30,10 +30,12 @@ class CodeMotionPass {
 public:
     static bool optimize(PabloFunction & function);
 protected:
-    static void global(PabloBlock * const block);
+    static void movement(PabloBlock * const block);
     static bool isAcceptableTarget(Statement *stmt, ScopeSet & scopeSet, const PabloBlock * const block);
     static void sink(PabloBlock * const block);
     static void hoistLoopInvariants(While * loop);
+
+    static void reschedule(PabloBlock * const block);
 };
 
 }

@@ -6,6 +6,7 @@
 #include <boost/container/flat_map.hpp>
 #include <pablo/pabloAST.h>
 #include <vector>
+#include <deque>
 
 namespace pablo {
 
@@ -23,6 +24,7 @@ class FactorizeDFG {
     using Biclique = std::pair<ObjectSet, ObjectSet>; // [{Operands}, {Users}]
     using BicliqueSet = std::vector<Biclique>;
     using CheckSet = boost::container::flat_set<PabloAST *>;
+    using LiveSet = std::deque<PabloAST *>;
     using TypeId = PabloAST::ClassTypeId;
 public:
     static void transform(PabloFunction & function);
@@ -47,9 +49,16 @@ protected:
     void factor(PabloFunction & function, const TypeId typeId);
     void factor(PabloFunction & function);
 
+//    void rematerialize(PabloBlock * const block, LiveSet & priorSet);
+//    void rematerialize(PabloFunction & function);
+
+    void elevate(PabloFunction & function) const;
+    void elevate(PabloBlock * const block) const;
+    void elevate(Variadic * const var, PabloBlock * block) const;
+
     void lower(PabloFunction & function) const;
     void lower(PabloBlock * const block) const;
-    Statement * lower(Variadic * const var, PabloBlock * block) const;
+    PabloAST * lower(Variadic * const var, PabloBlock * block) const;
 
     FactorizeDFG() = default;
 
