@@ -41,7 +41,6 @@
 /*=== Includes =========================================================*/
 
 #include <limits.h>
-#include <setjmp.h>
 #include "bdd.h"
 
 /*=== SANITY CHECKS ====================================================*/
@@ -73,7 +72,6 @@
     else if (r >= 2 && LOW(r) == -1)\
 { bdd_error(BDD_ILLBDD); return; }
 
-
 /*=== SEMI-INTERNAL TYPES ==============================================*/
 
 typedef struct s_BddNode /* Node table entry */
@@ -104,7 +102,6 @@ extern int*      bddrefstack;        /* Internal node reference stack */
 extern int*      bddrefstacktop;     /* Internal node reference stack top */
 extern int*      bddvar2level;
 extern int*      bddlevel2var;
-extern jmp_buf   bddexception;
 extern int       bddreorderdisabled;
 extern int       bddresized;
 extern bddCacheStat bddcachestats;
@@ -207,9 +204,6 @@ extern void   bdd_pairs_init(void);
 extern void   bdd_pairs_done(void);
 extern int    bdd_pairs_resize(int,int);
 extern void   bdd_pairs_vardown(int);
-
-extern void   bdd_fdd_init(void);
-extern void   bdd_fdd_done(void);
 
 extern void   bdd_reorder_init(void);
 extern void   bdd_reorder_done(void);

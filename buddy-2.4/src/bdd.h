@@ -248,7 +248,9 @@ extern BDD      bdd_low(BDD);
 extern BDD      bdd_high(BDD);
 extern int      bdd_varlevel(int);
 extern BDD      bdd_addref(BDD);
+extern BDD      bdd_addref(BDD, unsigned int);
 extern BDD      bdd_delref(BDD);
+extern BDD      bdd_recursive_deref(BDD root);
 extern void     bdd_gbc(void);
 extern int      bdd_scanset(BDD, int**, int*);
 extern BDD      bdd_makeset(int *, int);
@@ -267,11 +269,6 @@ extern BDD      bdd_buildcube(int, int, BDD *);
 extern BDD      bdd_ibuildcube(int, int, int *);
 extern BDD      bdd_not(BDD);
 extern BDD      bdd_apply(BDD, BDD, int);
-extern BDD      bdd_and(BDD, BDD);
-extern BDD      bdd_or(BDD, BDD);
-extern BDD      bdd_xor(BDD, BDD);
-extern BDD      bdd_imp(BDD, BDD);
-extern BDD      bdd_biimp(BDD, BDD);
 extern BDD      bdd_ite(BDD, BDD, BDD);
 extern BDD      bdd_restrict(BDD, BDD);
 extern BDD      bdd_constrain(BDD, BDD);
@@ -358,6 +355,32 @@ static inline BDD bdd_zero(void) {
 
 static inline BDD bdd_constant(const BDD var) {
     return var == 0 || var == 1;
+}
+
+/*=== BDD helpers ====================================================*/
+
+static inline BDD bdd_and(BDD l, BDD r) {
+    return bdd_apply(l, r, bddop_and);
+}
+
+static inline BDD bdd_or(BDD l, BDD r) {
+    return bdd_apply(l, r, bddop_or);
+}
+
+static inline BDD bdd_xor(BDD l, BDD r) {
+    return bdd_apply(l, r, bddop_xor);
+}
+
+static inline BDD bdd_nor(BDD l, BDD r) {
+    return bdd_apply(l, r, bddop_nor);
+}
+
+static inline BDD bdd_imp(BDD l, BDD r) {
+    return bdd_apply(l, r, bddop_imp);
+}
+
+static inline BDD bdd_biimp(BDD l, BDD r) {
+    return bdd_apply(l, r, bddop_biimp);
 }
 
 /*=== Reordering algorithms ============================================*/

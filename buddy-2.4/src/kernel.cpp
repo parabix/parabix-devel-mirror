@@ -38,7 +38,6 @@
            as makenode may resize/move the nodetable.
 
 *************************************************************************/
-#include "config.h"
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
@@ -77,7 +76,6 @@ int*         bddrefstack;       /* Internal node reference stack */
 int*         bddrefstacktop;    /* Internal node reference stack top */
 int*         bddvar2level;      /* Variable -> level table */
 int*         bddlevel2var;      /* Level -> variable table */
-jmp_buf      bddexception;      /* Long-jump point for interrupting calc. */
 int          bddresized;        /* Flag indicating a resize of the nodetable */
 
 bddCacheStat bddcachestats;
@@ -129,21 +127,20 @@ RETURN {* If no errors occur then 0 is returned, otherwise
           a negative error code. *}
 ALSO   {* bdd\_done, bdd\_resize\_hook *}
 */
-int bdd_init(int initnodesize, int cs)
-{
-    int n, err;
+int bdd_init(int initnodesize, int cs) {
 
     if (bddrunning)
         return bdd_error(BDD_RUNNING);
 
     bddnodesize = bdd_prime_gte(initnodesize);
 
-    if ((bddnodes=(BddNode*)malloc(sizeof(BddNode)*bddnodesize)) == NULL)
+    if ((bddnodes=(BddNode*)malloc(sizeof(BddNode)*bddnodesize)) == NULL) {
         return bdd_error(BDD_MEMORY);
+    }
 
     bddresized = 0;
 
-    for (n=0 ; n<bddnodesize ; n++)
+    for (unsigned n = 0 ; n != bddnodesize ; n++)
     {
         bddnodes[n].refcou = 0;
         LOW(n) = -1;
@@ -157,8 +154,8 @@ int bdd_init(int initnodesize, int cs)
     LOW(0) = HIGH(0) = 0;
     LOW(1) = HIGH(1) = 1;
 
-    if ((err=bdd_operator_init(cs)) < 0)
-    {
+    const auto err = bdd_operator_init(cs);
+    if (err < 0) {
         bdd_done();
         return err;
     }
@@ -183,19 +180,19 @@ int bdd_init(int initnodesize, int cs)
     bddcachestats.opMiss = 0;
     bddcachestats.swapCount = 0;
 
-    bdd_gbc_hook(bdd_default_gbchandler);
     bdd_error_hook(bdd_default_errhandler);
-    bdd_resize_hook(NULL);
+    bdd_gbc_hook(nullptr);
+    bdd_resize_hook(nullptr);
     bdd_pairs_init();
     bdd_reorder_init();
-    bdd_fdd_init();
-
-    if (setjmp(bddexception) != 0)
-        assert(0);
+//    bdd_fdd_init();
 
     return 0;
 }
 
+void bdd_default_errhandler(int e) {
+    throw std::runtime_error("BDD error: " + bdd_errstring(e));
+}
 
 /*
 NAME    {* bdd\_done*}
@@ -209,7 +206,7 @@ ALSO  {* bdd\_init *}
 void bdd_done(void)
 {
     /*sanitycheck(); FIXME */
-    bdd_fdd_done();
+    // bdd_fdd_done();
     bdd_reorder_done();
     bdd_pairs_done();
 
@@ -747,12 +744,6 @@ std::string bdd_errstring(const int code) {
     return errorstrings[e - 1];
 }
 
-
-void bdd_default_errhandler(int e) {
-    throw std::runtime_error("BDD error: " + bdd_errstring(e));
-}
-
-
 int bdd_error(int e)
 {
     if (err_handler != NULL)
@@ -848,9 +839,9 @@ RETURN  {* The variable number. *}
 int bdd_var(BDD root)
 {
     CHECK(root);
-    if (root < 2)
+    if (ISCONST(root)) {
         return bdd_error(BDD_ILLBDD);
-
+    }
     return (bddlevel2var[LEVEL(root)]);
 }
 
@@ -867,9 +858,9 @@ ALSO    {* bdd\_high *}
 BDD bdd_low(BDD root)
 {
     CHECK(root);
-    if (root < 2)
+    if (ISCONST(root)) {
         return bdd_error(BDD_ILLBDD);
-
+    }
     return (LOW(root));
 }
 
@@ -886,9 +877,9 @@ ALSO    {* bdd\_low *}
 BDD bdd_high(BDD root)
 {
     CHECK(root);
-    if (root < 2)
+    if (ISCONST(root)) {
         return bdd_error(BDD_ILLBDD);
-
+    }
     return (HIGH(root));
 }
 
@@ -897,8 +888,6 @@ BDD bdd_high(BDD root)
 /*************************************************************************
   Garbage collection and node referencing
 *************************************************************************/
-
-void bdd_default_gbchandler(int, bddGbcStat *) { }
 
 static void bdd_gbc_rehash(void)
 {
@@ -999,7 +988,6 @@ void bdd_gbc(void)
     }
 }
 
-
 /*
 NAME    {* bdd\_addref *}
 SECTION {* kernel *}
@@ -1012,19 +1000,42 @@ DESCR   {* Reference counting is done on externaly referenced nodes only
 ALSO    {* bdd\_delref *}
 RETURN  {* The BDD node {\tt r}. *}
 */
-BDD bdd_addref(BDD root)
-{
-    if (root < 2  ||  !bddrunning)
+BDD bdd_addref(BDD root) {
+    assert (bddrunning);
+    if (ISCONST(root)) {
         return root;
-    if (root >= bddnodesize)
+    }
+    if (LOW(root) == -1 || root >= bddnodesize) {
         return bdd_error(BDD_ILLBDD);
-    if (LOW(root) == -1)
-        return bdd_error(BDD_ILLBDD);
+    }
 
     INCREF(root);
     return root;
 }
 
+/*
+NAME    {* bdd\_addref *}
+SECTION {* kernel *}
+SHORT   {* increases the reference count on a node by n *}
+PROTO   {* BDD bdd_addref(BDD r) *}
+DESCR   {* Reference counting is done on externaly referenced nodes only
+           and the count for a specific node {\tt r} can and must be
+       increased using this function to avoid loosing the node in the next
+       garbage collection. *}
+ALSO    {* bdd\_delref *}
+RETURN  {* The BDD node {\tt r}. *}
+*/
+BDD bdd_addref(BDD root, unsigned int n) {
+    assert (bddrunning);
+    if (ISCONST(root)) {
+        return root;
+    }
+    if (LOW(root) == -1 || root >= bddnodesize) {
+        return bdd_error(BDD_ILLBDD);
+    }
+    bddnodes[root].refcou = std::min<unsigned int>(n + bddnodes[root].refcou, MAXREF);
+    return root;
+}
 
 /*
 NAME    {* bdd\_delref *}
@@ -1038,19 +1049,50 @@ DESCR   {* Reference counting is done on externaly referenced nodes only
 ALSO    {* bdd\_addref *}
 RETURN  {* The BDD node {\tt r}. *}
 */
-BDD bdd_delref(BDD root)
-{
-    if (root < 2  ||  !bddrunning)
+BDD bdd_delref(BDD root) {
+    assert (bddrunning);
+    if (ISCONST(root)) {
         return root;
-    if (root >= bddnodesize)
+    }
+    if (LOW(root) == -1 || root >= bddnodesize) {
         return bdd_error(BDD_ILLBDD);
-    if (LOW(root) == -1)
-        return bdd_error(BDD_ILLBDD);
-
+    }
     /* if the following line is present, fails there much earlier */
     if (!HASREF(root)) bdd_error(BDD_BREAK); /* distinctive */
 
     DECREF(root);
+    return root;
+}
+
+/*
+NAME    {* bdd\_bdd_recursive\_deref *}
+SECTION {* kernel *}
+SHORT   {* recursively decreases the reference count on a node *}
+PROTO   {* BDD bdd_delref(BDD r) *}
+DESCR   {* Reference counting is done on externaly referenced nodes only
+           and the count for a specific node {\tt r} can and must be
+       decreased using this function to make it possible to reclaim the
+       node in the next garbage collection. *}
+ALSO    {* bdd\_addref *}
+RETURN  {* The BDD node {\tt r}. *}
+*/
+BDD bdd_recursive_deref(BDD root) {
+    assert (bddrunning);
+    if (ISCONST(root)) {
+        return root;
+    }
+    if (root >= bddnodesize)
+        return bdd_error(BDD_ILLBDD);    
+    BddNode * node = bddnodes + root;
+    if (node->low == -1)
+        return bdd_error(BDD_ILLBDD);
+    if (node->low == -1 || node->refcou == 0) {
+        return root;
+    }
+    if (--node->refcou == 0) {
+        bdd_recursive_deref(node->low);
+        bdd_recursive_deref(node->high);
+    }
     return root;
 }
 
@@ -1162,6 +1204,9 @@ int bdd_makenode(unsigned int level, int low, int high)
     unsigned int hash;
     int res;
 
+    assert (low >= 0);
+    assert (high >= 0);
+
 #ifdef CACHESTATS
     bddcachestats.uniqueAccess++;
 #endif
@@ -1204,10 +1249,8 @@ int bdd_makenode(unsigned int level, int low, int high)
         /* Try to allocate more nodes */
         bdd_gbc();
 
-        if ((bddnodesize-bddfreenum) >= usednodes_nextreorder  &&
-                bdd_reorder_ready())
-        {
-            longjmp(bddexception,1);
+        if ((bddnodesize - bddfreenum) >= usednodes_nextreorder && bdd_reorder_ready()) {
+            throw std::runtime_error("restarting without reallocation");
         }
 
         if ((bddfreenum*100) / bddnodesize <= minfreenodes)
@@ -1304,10 +1347,11 @@ void bdd_checkreorder(void)
     usednodes_nextreorder = 2 * (bddnodesize - bddfreenum);
 
     /* And if very little was gained this time (< 20%) then wait until
-       * even more nodes (upto twice as many again) have been used */
-    if (bdd_reorder_gain() < 20)
-        usednodes_nextreorder +=
-                (usednodes_nextreorder * (20-bdd_reorder_gain())) / 20;
+     * even more nodes (upto twice as many again) have been used */
+    const auto gain = bdd_reorder_gain();
+    if (gain < 20) {
+        usednodes_nextreorder += (usednodes_nextreorder * (20 - gain)) / 20;
+    }
 }
 
 

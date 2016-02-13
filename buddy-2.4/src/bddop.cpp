@@ -39,6 +39,7 @@
 #include <math.h>
 #include <time.h>
 #include <assert.h>
+#include <stdexcept>
 
 #include "kernel.h"
 #include "cache.h"
@@ -109,10 +110,6 @@ static BddCache replacecache;       /* Cache for replace results */
 static BddCache misccache;          /* Cache for other results */
 static int cacheratio;
 static BDD satPolarity;
-static int firstReorder;            /* Used instead of local variable in order
-                       to avoid compiler warning about 'first'
-                       being clobbered by setjmp */
-
 static char*            allsatProfile; /* Variable profile for bdd_allsat() */
 static bddallsathandler allsatHandler; /* Callback handler for bdd_allsat() */
 
@@ -296,8 +293,7 @@ int bdd_setcacheratio(int r)
   Operators
 *************************************************************************/
 
-static void checkresize(void)
-{
+inline static void checkresize(void) {
     if (bddresized)
         bdd_operator_noderesize();
     bddresized = 0;
@@ -327,24 +323,21 @@ DESCR   {* This function builds a cube from the variables in {\tt
 RETURN  {* The resulting cube *}
 ALSO    {* bdd\_ithvar, fdd\_ithvar *}
 */
-BDD bdd_buildcube(int value, int width, BDD *variables)
+BDD bdd_buildcube(int value, int width, BDD * variables)
 {
     BDD result = BDDONE;
-    int z;
 
-    for (z=0 ; z<width ; z++, value>>=1)
-    {
-        BDD tmp;
-        BDD v;
-
-        if (value & 0x1)
-            v = bdd_addref( variables[width-z-1] );
-        else
-            v = bdd_addref( bdd_not(variables[width-z-1]) );
+    for (int z = 0; z < width ; z++, value>>=1) {
+        BDD v = variables[width - z - 1];
+        if ((value & 1) == 0) {
+            v = bdd_not(v);
+        }
+        v = bdd_addref(v);
 
         bdd_addref(result);
-        tmp = bdd_apply(result,v,bddop_and);
+        BDD tmp = bdd_apply(result, v, bddop_and);
         bdd_delref(result);
+
         bdd_delref(v);
 
         result = tmp;
@@ -357,9 +350,8 @@ BDD bdd_buildcube(int value, int width, BDD *variables)
 BDD bdd_ibuildcube(int value, int width, int *variables)
 {
     BDD result = BDDONE;
-    int z;
 
-    for (z=0 ; z<width ; z++, value>>=1)
+    for (int z = 0 ; z<width ; z++, value>>=1)
     {
         BDD tmp;
         BDD v;
@@ -379,7 +371,6 @@ BDD bdd_ibuildcube(int value, int width, int *variables)
     return result;
 }
 
-
 /*=== NOT ==============================================================*/
 
 /*
@@ -394,30 +385,20 @@ RETURN  {* The negated bdd. *}
 */
 BDD bdd_not(BDD r)
 {
-    BDD res;
-    firstReorder = 1;
+    BDD res = BDDZERO;
     CHECKa(r, bdd_zero());
 
-again:
-    if (setjmp(bddexception) == 0)
-    {
+    try {
         INITREF;
-
-        if (!firstReorder)
-            bdd_disable_reorder();
         res = not_rec(r);
-        if (!firstReorder)
-            bdd_enable_reorder();
-    }
-    else
-    {
+        checkresize();
+    } catch (...) {
         bdd_checkreorder();
-        if (firstReorder-- == 1)
-            goto again;
-        res = BDDZERO;  /* avoid warning about res being uninitialized */
+        bdd_disable_reorder();
+        res = bdd_not(r);
+        bdd_enable_reorder();
     }
 
-    checkresize();
     return res;
 }
 
@@ -425,7 +406,7 @@ again:
 static BDD not_rec(BDD r)
 {
     BddCacheData *entry;
-    BDD res;
+    BDD res = BDDZERO;
 
     if (ISZERO(r))
         return BDDONE;
@@ -498,40 +479,25 @@ DESCR   {* The {\tt bdd\_apply} function performs all of the basic
 */
 BDD bdd_apply(BDD l, BDD r, int op)
 {
-    BDD res;
-    firstReorder = 1;
+    BDD res = BDDZERO;
 
     CHECKa(l, bdd_zero());
     CHECKa(r, bdd_zero());
 
-    if (op<0 || op>bddop_invimp)
-    {
-        bdd_error(BDD_OP);
-        return bdd_zero();
-    }
+    assert (op >= 0 && op <= bddop_invimp);
 
-again:
-    if (setjmp(bddexception) == 0)
-    {
+    try {
         INITREF;
         applyop = op;
-
-        if (!firstReorder)
-            bdd_disable_reorder();
         res = apply_rec(l, r);
-        if (!firstReorder)
-            bdd_enable_reorder();
-    }
-    else
-    {
+        checkresize();
+    } catch (...) {
         bdd_checkreorder();
-
-        if (firstReorder-- == 1)
-            goto again;
-        res = BDDZERO;  /* avoid warning about res being uninitialized */
+        bdd_disable_reorder();
+        res = bdd_apply(l, r, op);
+        bdd_enable_reorder();
     }
 
-    checkresize();
     return res;
 }
 
@@ -539,60 +505,64 @@ again:
 static BDD apply_rec(BDD l, BDD r)
 {
     BddCacheData *entry;
-    BDD res;
+    BDD res = BDDZERO;
 
-    switch (applyop)
-    {
-    case bddop_and:
-        if (l == r)
-            return l;
-        if (ISZERO(l)  ||  ISZERO(r))
-            return 0;
-        if (ISONE(l))
-            return r;
-        if (ISONE(r))
-            return l;
-        break;
-    case bddop_or:
-        if (l == r)
-            return l;
-        if (ISONE(l)  ||  ISONE(r))
-            return 1;
-        if (ISZERO(l))
-            return r;
-        if (ISZERO(r))
-            return l;
-        break;
-    case bddop_xor:
-        if (l == r)
-            return 0;
-        if (ISZERO(l))
-            return r;
-        if (ISZERO(r))
-            return l;
-        break;
-    case bddop_nand:
-        if (ISZERO(l) || ISZERO(r))
-            return 1;
-        break;
-    case bddop_nor:
-        if (ISONE(l)  ||  ISONE(r))
-            return 0;
-        break;
-    case bddop_imp:
-        if (ISZERO(l))
-            return 1;
-        if (ISONE(l))
-            return r;
-        if (ISONE(r))
-            return 1;
-        break;
+    if (l < 0) {
+        return r;
+    } else if (r  < 0) {
+        return l;
     }
 
-    if (ISCONST(l)  &&  ISCONST(r))
+    switch (applyop) {
+        case bddop_and:
+            if (l == r)
+                return l;
+            if (ISZERO(l) || ISZERO(r))
+                return 0;
+            if (ISONE(l))
+                return r;
+            if (ISONE(r))
+                return l;
+            break;
+        case bddop_or:
+            if (l == r)
+                return l;
+            if (ISONE(l) || ISONE(r))
+                return 1;
+            if (ISZERO(l))
+                return r;
+            if (ISZERO(r))
+                return l;
+            break;
+        case bddop_xor:
+            if (l == r)
+                return 0;
+            if (ISZERO(l))
+                return r;
+            if (ISZERO(r))
+                return l;
+            break;
+        case bddop_nand:
+            if (ISZERO(l) || ISZERO(r))
+                return 1;
+            break;
+        case bddop_nor:
+            if (ISONE(l) || ISONE(r))
+                return 0;
+            break;
+        case bddop_imp:
+            if (ISZERO(l))
+                return 1;
+            if (ISONE(l))
+                return r;
+            if (ISONE(r))
+                return 1;
+            break;
+    }
+
+    if (ISCONST(l) && ISCONST(r)) {
         res = oprres[applyop][l<<1 | r];
-    else
-    {
+    } else {
         entry = BddCache_lookup(&applycache, APPLYHASH(l,r,applyop));
 
         if (entry->a == l  &&  entry->b == r  &&  entry->c == applyop)
@@ -606,25 +576,19 @@ static BDD apply_rec(BDD l, BDD r)
         bddcachestats.opMiss++;
 #endif
 
-        if (LEVEL(l) == LEVEL(r))
-        {
+        if (LEVEL(l) == LEVEL(r)) {
             PUSHREF( apply_rec(LOW(l), LOW(r)) );
             PUSHREF( apply_rec(HIGH(l), HIGH(r)) );
             res = bdd_makenode(LEVEL(l), READREF(2), READREF(1));
+        } else if (LEVEL(l) < LEVEL(r)) {
+            PUSHREF( apply_rec(LOW(l), r) );
+            PUSHREF( apply_rec(HIGH(l), r) );
+            res = bdd_makenode(LEVEL(l), READREF(2), READREF(1));
+        } else {
+            PUSHREF( apply_rec(l, LOW(r)) );
+            PUSHREF( apply_rec(l, HIGH(r)) );
+            res = bdd_makenode(LEVEL(r), READREF(2), READREF(1));
         }
-        else
-            if (LEVEL(l) < LEVEL(r))
-            {
-                PUSHREF( apply_rec(LOW(l), r) );
-                PUSHREF( apply_rec(HIGH(l), r) );
-                res = bdd_makenode(LEVEL(l), READREF(2), READREF(1));
-            }
-            else
-            {
-                PUSHREF( apply_rec(l, LOW(r)) );
-                PUSHREF( apply_rec(l, HIGH(r)) );
-                res = bdd_makenode(LEVEL(r), READREF(2), READREF(1));
-            }
 
         POPREF(2);
 
@@ -636,82 +600,6 @@ static BDD apply_rec(BDD l, BDD r)
 
     return res;
 }
-
-
-/*
-NAME    {* bdd\_and *}
-SECTION {* operator *}
-SHORT   {* The logical 'and' of two BDDs *}
-PROTO   {* BDD bdd_and(BDD l, BDD r) *}
-DESCR   {* This a wrapper that calls {\tt bdd\_apply(l,r,bddop\_and)}. *}
-RETURN  {* The logical 'and' of {\tt l} and {\tt r}. *}
-ALSO    {* bdd\_apply, bdd\_or, bdd\_xor *}
-*/
-BDD bdd_and(BDD l, BDD r)
-{
-    return bdd_apply(l,r,bddop_and);
-}
-
-
-/*
-NAME    {* bdd\_or *}
-SECTION {* operator *}
-SHORT   {* The logical 'or' of two BDDs *}
-PROTO   {* BDD bdd_or(BDD l, BDD r) *}
-DESCR   {* This a wrapper that calls {\tt bdd\_apply(l,r,bddop\_or)}. *}
-RETURN  {* The logical 'or' of {\tt l} and {\tt r}. *}
-ALSO    {* bdd\_apply, bdd\_xor, bdd\_and *}
-*/
-BDD bdd_or(BDD l, BDD r)
-{
-    return bdd_apply(l,r,bddop_or);
-}
-
-
-/*
-NAME    {* bdd\_xor *}
-SECTION {* operator *}
-SHORT   {* The logical 'xor' of two BDDs *}
-PROTO   {* BDD bdd_xor(BDD l, BDD r) *}
-DESCR   {* This a wrapper that calls {\tt bdd\_apply(l,r,bddop\_xor)}. *}
-RETURN  {* The logical 'xor' of {\tt l} and {\tt r}. *}
-ALSO    {* bdd\_apply, bdd\_or, bdd\_and *}
-*/
-BDD bdd_xor(BDD l, BDD r)
-{
-    return bdd_apply(l,r,bddop_xor);
-}
-
-
-/*
-NAME    {* bdd\_imp *}
-SECTION {* operator *}
-SHORT   {* The logical 'implication' between two BDDs *}
-PROTO   {* BDD bdd_imp(BDD l, BDD r) *}
-DESCR   {* This a wrapper that calls {\tt bdd\_apply(l,r,bddop\_imp)}. *}
-RETURN  {* The logical 'implication' of {\tt l} and {\tt r} ($l \Rightarrow r$). *}
-ALSO    {* bdd\_apply, bdd\_biimp *}
-*/
-BDD bdd_imp(BDD l, BDD r)
-{
-    return bdd_apply(l,r,bddop_imp);
-}
-
-
-/*
-NAME    {* bdd\_biimp *}
-SECTION {* operator *}
-SHORT   {* The logical 'bi-implication' between two BDDs *}
-PROTO   {* BDD bdd_biimp(BDD l, BDD r) *}
-DESCR   {* This a wrapper that calls {\tt bdd\_apply(l,r,bddop\_biimp)}. *}
-RETURN  {* The logical 'bi-implication' of {\tt l} and {\tt r} ($l \Leftrightarrow r$). *}
-ALSO    {* bdd\_apply, bdd\_imp *}
-*/
-BDD bdd_biimp(BDD l, BDD r)
-{
-    return bdd_apply(l,r,bddop_biimp);
-}
-
 
 /*=== ITE ==============================================================*/
 
@@ -730,34 +618,23 @@ ALSO    {* bdd\_apply *}
 */
 BDD bdd_ite(BDD f, BDD g, BDD h)
 {
-    BDD res;
-    firstReorder = 1;
+    BDD res = BDDZERO;
 
     CHECKa(f, bdd_zero());
     CHECKa(g, bdd_zero());
     CHECKa(h, bdd_zero());
 
-again:
-    if (setjmp(bddexception) == 0)
-    {
+    try {
         INITREF;
-
-        if (!firstReorder)
-            bdd_disable_reorder();
-        res = ite_rec(f,g,h);
-        if (!firstReorder)
-            bdd_enable_reorder();
-    }
-    else
-    {
+        res = ite_rec(f, g, h);
+        checkresize();
+    } catch (...) {
         bdd_checkreorder();
-
-        if (firstReorder-- == 1)
-            goto again;
-        res = BDDZERO;  /* avoid warning about res being uninitialized */
+        bdd_disable_reorder();
+        res = bdd_ite(f, g, h);
+        bdd_enable_reorder();
     }
 
-    checkresize();
     return res;
 }
 
@@ -765,7 +642,7 @@ again:
 static BDD ite_rec(BDD f, BDD g, BDD h)
 {
     BddCacheData *entry;
-    BDD res;
+    BDD res = BDDZERO;
 
     if (ISONE(f))
         return g;
@@ -899,40 +776,28 @@ ALSO    {* bdd\_makeset, bdd\_exist, bdd\_forall *}
 */
 BDD bdd_restrict(BDD r, BDD var)
 {
-    BDD res;
-    firstReorder = 1;
+    BDD res = BDDZERO;
 
-    CHECKa(r,bdd_zero());
-    CHECKa(var,bdd_zero());
+    CHECKa(r, bdd_zero());
+    CHECKa(var, bdd_zero());
 
     if (var < 2)  /* Empty set */
         return r;
 
-again:
-    if (setjmp(bddexception) == 0)
-    {
+    try {
         if (varset2svartable(var) < 0)
             return bdd_zero();
-
         INITREF;
         miscid = (var << 3) | CACHEID_RESTRICT;
-
-        if (!firstReorder)
-            bdd_disable_reorder();
         res = restrict_rec(r);
-        if (!firstReorder)
-            bdd_enable_reorder();
-    }
-    else
-    {
+        checkresize();
+    } catch (...) {
         bdd_checkreorder();
-
-        if (firstReorder-- == 1)
-            goto again;
-        res = BDDZERO;  /* avoid warning about res being uninitialized */
+        bdd_disable_reorder();
+        res = bdd_restrict(r, var);
+        bdd_enable_reorder();
     }
 
-    checkresize();
     return res;
 }
 
@@ -994,34 +859,23 @@ ALSO    {* bdd\_restrict, bdd\_simplify *}
 */
 BDD bdd_constrain(BDD f, BDD c)
 {
-    BDD res;
-    firstReorder = 1;
+    BDD res = BDDZERO;
 
     CHECKa(f,bdd_zero());
     CHECKa(c,bdd_zero());
 
-again:
-    if (setjmp(bddexception) == 0)
-    {
+    try {
         INITREF;
         miscid = CACHEID_CONSTRAIN;
-
-        if (!firstReorder)
-            bdd_disable_reorder();
         res = constrain_rec(f, c);
-        if (!firstReorder)
-            bdd_enable_reorder();
-    }
-    else
-    {
+        checkresize();
+    } catch (...) {
         bdd_checkreorder();
-
-        if (firstReorder-- == 1)
-            goto again;
-        res = BDDZERO;  /* avoid warning about res being uninitialized */
+        bdd_disable_reorder();
+        res = bdd_constrain(f, c);
+        bdd_enable_reorder();
     }
 
-    checkresize();
     return res;
 }
 
@@ -1029,7 +883,7 @@ again:
 static BDD constrain_rec(BDD f, BDD c)
 {
     BddCacheData *entry;
-    BDD res;
+    BDD res = BDDZERO;
 
     if (ISONE(c))
         return f;
@@ -1115,35 +969,24 @@ RETURN {* The result of the operation. *}
 */
 BDD bdd_replace(BDD r, bddPair *pair)
 {
-    BDD res;
-    firstReorder = 1;
+    BDD res = BDDZERO;
 
     CHECKa(r, bdd_zero());
 
-again:
-    if (setjmp(bddexception) == 0)
-    {
+    try {
         INITREF;
         replacepair = pair->result;
         replacelast = pair->last;
         replaceid = (pair->id << 2) | CACHEID_REPLACE;
-
-        if (!firstReorder)
-            bdd_disable_reorder();
         res = replace_rec(r);
-        if (!firstReorder)
-            bdd_enable_reorder();
-    }
-    else
-    {
+        checkresize();
+    } catch (...) {
         bdd_checkreorder();
-
-        if (firstReorder-- == 1)
-            goto again;
-        res = BDDZERO;  /* avoid warning about res being uninitialized */
+        bdd_disable_reorder();
+        res = bdd_replace(r, pair);
+        bdd_enable_reorder();
     }
 
-    checkresize();
     return res;
 }
 
@@ -1151,7 +994,7 @@ again:
 static BDD replace_rec(BDD r)
 {
     BddCacheData *entry;
-    BDD res;
+    BDD res = BDDZERO;
 
     if (ISCONST(r)  ||  LEVEL(r) > replacelast)
         return r;
@@ -1184,7 +1027,7 @@ static BDD replace_rec(BDD r)
 
 static BDD bdd_correctify(int level, BDD l, BDD r)
 {
-    BDD res;
+    BDD res = BDDZERO;
 
     if (level < LEVEL(l)  &&  level < LEVEL(r))
         return bdd_makenode(level, l, r);
@@ -1234,53 +1077,41 @@ ALSO    {* bdd\_veccompose, bdd\_replace, bdd\_restrict *}
 */
 BDD bdd_compose(BDD f, BDD g, int var)
 {
-    BDD res;
-    firstReorder = 1;
+    BDD res = BDDZERO;
 
     CHECKa(f, bdd_zero());
     CHECKa(g, bdd_zero());
-    if (var < 0 || var >= bddvarnum)
-    {
+    if (var < 0 || var >= bddvarnum) {
         bdd_error(BDD_VAR);
         return bdd_zero();
     }
 
-again:
-    if (setjmp(bddexception) == 0)
-    {
+    try {
         INITREF;
         composelevel = bddvar2level[var];
         replaceid = (composelevel << 2) | CACHEID_COMPOSE;
-
-        if (!firstReorder)
-            bdd_disable_reorder();
         res = compose_rec(f, g);
-        if (!firstReorder)
-            bdd_enable_reorder();
-    }
-    else
-    {
+        checkresize();
+    } catch (...) {
         bdd_checkreorder();
-
-        if (firstReorder-- == 1)
-            goto again;
-        res = BDDZERO;  /* avoid warning about res being uninitialized */
+        bdd_disable_reorder();
+        res = bdd_compose(f, g, var);
+        bdd_enable_reorder();
     }
 
-    checkresize();
     return res;
 }
 
 
 static BDD compose_rec(BDD f, BDD g)
 {
-    BddCacheData *entry;
-    BDD res;
+
+    BDD res = BDDZERO;
 
     if (LEVEL(f) > composelevel)
         return f;
 
-    entry = BddCache_lookup(&replacecache, COMPOSEHASH(f,g));
+    BddCacheData * entry = BddCache_lookup(&replacecache, COMPOSEHASH(f,g));
     if (entry->a == f  &&  entry->b == g  &&  entry->c == replaceid)
     {
 #ifdef CACHESTATS
@@ -1352,35 +1183,23 @@ ALSO    {* bdd\_compose, bdd\_replace, bdd\_restrict *}
 */
 BDD bdd_veccompose(BDD f, bddPair *pair)
 {
-    BDD res;
-    firstReorder = 1;
+    BDD res = BDDZERO;
 
     CHECKa(f, bdd_zero());
 
-again:
-    if (setjmp(bddexception) == 0)
-    {
+    try {
         INITREF;
         replacepair = pair->result;
         replaceid = (pair->id << 2) | CACHEID_VECCOMPOSE;
         replacelast = pair->last;
-
-        if (!firstReorder)
-            bdd_disable_reorder();
         res = veccompose_rec(f);
-        if (!firstReorder)
-            bdd_enable_reorder();
-    }
-    else
-    {
+        checkresize();
+    } catch (...) {
         bdd_checkreorder();
-
-        if (firstReorder-- == 1)
-            goto again;
-        res = BDDZERO;  /* avoid warning about res being uninitialized */
+        bdd_disable_reorder();
+        res = bdd_veccompose(f, pair);
+        bdd_enable_reorder();
     }
-
-    checkresize();
     return res;
 }
 
@@ -1388,7 +1207,7 @@ again:
 static BDD veccompose_rec(BDD f)
 {
     BddCacheData *entry;
-    BDD res;
+    BDD res = BDDZERO;
 
     if (LEVEL(f) > replacelast)
         return f;
@@ -1434,34 +1253,23 @@ RETURN  {* The simplified BDD *}
 */
 BDD bdd_simplify(BDD f, BDD d)
 {
-    BDD res;
-    firstReorder = 1;
+    BDD res = BDDZERO;
 
     CHECKa(f, bdd_zero());
     CHECKa(d, bdd_zero());
 
-again:
-    if (setjmp(bddexception) == 0)
-    {
+    try {
         INITREF;
         applyop = bddop_or;
-
-        if (!firstReorder)
-            bdd_disable_reorder();
         res = simplify_rec(f, d);
-        if (!firstReorder)
-            bdd_enable_reorder();
-    }
-    else
-    {
+        checkresize();
+    } catch (...) {
         bdd_checkreorder();
-
-        if (firstReorder-- == 1)
-            goto again;
-        res = BDDZERO;  /* avoid warning about res being uninitialized */
+        bdd_disable_reorder();
+        res = bdd_simplify(f, d);
+        bdd_enable_reorder();
     }
 
-    checkresize();
     return res;
 }
 
@@ -1469,7 +1277,7 @@ again:
 static BDD simplify_rec(BDD f, BDD d)
 {
     BddCacheData *entry;
-    BDD res;
+    BDD res = BDDZERO;
 
     if (ISONE(d)  ||  ISCONST(f))
         return f;
@@ -1544,8 +1352,7 @@ RETURN  {* The quantified BDD. *}
 */
 BDD bdd_exist(BDD r, BDD var)
 {
-    BDD res;
-    firstReorder = 1;
+    BDD res = BDDZERO;
 
     CHECKa(r, bdd_zero());
     CHECKa(var, bdd_zero());
@@ -1553,32 +1360,21 @@ BDD bdd_exist(BDD r, BDD var)
     if (var < 2)  /* Empty set */
         return r;
 
-again:
-    if (setjmp(bddexception) == 0)
-    {
+    try {
         if (varset2vartable(var) < 0)
             return bdd_zero();
-
         INITREF;
         quantid = (var << 3) | CACHEID_EXIST; /* FIXME: range */
         applyop = bddop_or;
-
-        if (!firstReorder)
-            bdd_disable_reorder();
         res = quant_rec(r);
-        if (!firstReorder)
-            bdd_enable_reorder();
-    }
-    else
-    {
+        checkresize();
+    } catch (...) {
         bdd_checkreorder();
-
-        if (firstReorder-- == 1)
-            goto again;
-        res = BDDZERO;  /* avoid warning about res being uninitialized */
+        bdd_disable_reorder();
+        res = bdd_exist(r, var);
+        bdd_enable_reorder();
     }
 
-    checkresize();
     return res;
 }
 
@@ -1595,8 +1391,7 @@ RETURN  {* The quantified BDD. *}
 */
 BDD bdd_forall(BDD r, BDD var)
 {
-    BDD res;
-    firstReorder = 1;
+    BDD res = BDDZERO;
 
     CHECKa(r, bdd_zero());
     CHECKa(var, bdd_zero());
@@ -1604,32 +1399,21 @@ BDD bdd_forall(BDD r, BDD var)
     if (var < 2)  /* Empty set */
         return r;
 
-again:
-    if (setjmp(bddexception) == 0)
-    {
+    try {
         if (varset2vartable(var) < 0)
             return bdd_zero();
-
         INITREF;
         quantid = (var << 3) | CACHEID_FORALL;
         applyop = bddop_and;
-
-        if (!firstReorder)
-            bdd_disable_reorder();
         res = quant_rec(r);
-        if (!firstReorder)
-            bdd_enable_reorder();
-    }
-    else
-    {
+        checkresize();
+    } catch (...) {
         bdd_checkreorder();
-
-        if (firstReorder-- == 1)
-            goto again;
-        res = BDDZERO;  /* avoid warning about res being uninitialized */
+        bdd_disable_reorder();
+        res = bdd_forall(r, var);
+        bdd_enable_reorder();
     }
 
-    checkresize();
     return res;
 }
 
@@ -1649,8 +1433,7 @@ RETURN  {* The quantified BDD. *}
 */
 BDD bdd_unique(BDD r, BDD var)
 {
-    BDD res;
-    firstReorder = 1;
+    BDD res = BDDZERO;
 
     CHECKa(r, bdd_zero());
     CHECKa(var, bdd_zero());
@@ -1658,32 +1441,21 @@ BDD bdd_unique(BDD r, BDD var)
     if (var < 2)  /* Empty set */
         return r;
 
-again:
-    if (setjmp(bddexception) == 0)
-    {
+    try {
         if (varset2vartable(var) < 0)
             return bdd_zero();
-
         INITREF;
         quantid = (var << 3) | CACHEID_UNIQUE;
         applyop = bddop_xor;
-
-        if (!firstReorder)
-            bdd_disable_reorder();
         res = quant_rec(r);
-        if (!firstReorder)
-            bdd_enable_reorder();
-    }
-    else
-    {
+        checkresize();
+    } catch (...) {
         bdd_checkreorder();
-
-        if (firstReorder-- == 1)
-            goto again;
-        res = BDDZERO;  /* avoid warning about res being uninitialized */
+        bdd_disable_reorder();
+        res = bdd_unique(r, var);
+        bdd_enable_reorder();
     }
 
-    checkresize();
     return res;
 }
 
@@ -1748,50 +1520,37 @@ RETURN  {* The result of the operation. *}
 */
 BDD bdd_appex(BDD l, BDD r, int opr, BDD var)
 {
-    BDD res;
-    firstReorder = 1;
+    BDD res = BDDZERO;
 
     CHECKa(l, bdd_zero());
     CHECKa(r, bdd_zero());
     CHECKa(var, bdd_zero());
 
-    if (opr<0 || opr>bddop_invimp)
-    {
+    if (opr<0 || opr>bddop_invimp) {
         bdd_error(BDD_OP);
         return bdd_zero();
     }
 
     if (var < 2)  /* Empty set */
-        return bdd_apply(l,r,opr);
+        return bdd_apply(l, r, opr);
 
-again:
-    if (setjmp(bddexception) == 0)
-    {
+    try {
         if (varset2vartable(var) < 0)
             return bdd_zero();
-
         INITREF;
         applyop = bddop_or;
         appexop = opr;
         appexid = (var << 5) | (appexop << 1); /* FIXME: range! */
         quantid = (appexid << 3) | CACHEID_APPEX;
-
-        if (!firstReorder)
-            bdd_disable_reorder();
         res = appquant_rec(l, r);
-        if (!firstReorder)
-            bdd_enable_reorder();
-    }
-    else
-    {
+        checkresize();
+    } catch (...) {
         bdd_checkreorder();
-
-        if (firstReorder-- == 1)
-            goto again;
-        res = BDDZERO;  /* avoid warning about res being uninitialized */
+        bdd_disable_reorder();
+        res = bdd_appex(l, r, opr, var);
+        bdd_enable_reorder();
     }
 
-    checkresize();
     return res;
 }
 
@@ -1814,8 +1573,7 @@ RETURN  {* The result of the operation. *}
 */
 BDD bdd_appall(BDD l, BDD r, int opr, BDD var)
 {
-    BDD res;
-    firstReorder = 1;
+    BDD res = BDDZERO;
 
     CHECKa(l, bdd_zero());
     CHECKa(r, bdd_zero());
@@ -1830,34 +1588,23 @@ BDD bdd_appall(BDD l, BDD r, int opr, BDD var)
     if (var < 2)  /* Empty set */
         return bdd_apply(l,r,opr);
 
-again:
-    if (setjmp(bddexception) == 0)
-    {
+    try {
         if (varset2vartable(var) < 0)
             return bdd_zero();
-
         INITREF;
         applyop = bddop_and;
         appexop = opr;
         appexid = (var << 5) | (appexop << 1) | 1; /* FIXME: range! */
         quantid = (appexid << 3) | CACHEID_APPAL;
-
-        if (!firstReorder)
-            bdd_disable_reorder();
         res = appquant_rec(l, r);
-        if (!firstReorder)
-            bdd_enable_reorder();
-    }
-    else
-    {
+        checkresize();
+    } catch (...) {
         bdd_checkreorder();
-
-        if (firstReorder-- == 1)
-            goto again;
-        res = BDDZERO;  /* avoid warning about res being uninitialized */
+        bdd_disable_reorder();
+        res = bdd_appall(l, r, opr, var);
+        bdd_enable_reorder();
     }
 
-    checkresize();
     return res;
 }
 
@@ -1880,8 +1627,7 @@ RETURN  {* The result of the operation. *}
 */
 BDD bdd_appuni(BDD l, BDD r, int opr, BDD var)
 {
-    BDD res;
-    firstReorder = 1;
+    BDD res = BDDZERO;
 
     CHECKa(l, bdd_zero());
     CHECKa(r, bdd_zero());
@@ -1896,34 +1642,23 @@ BDD bdd_appuni(BDD l, BDD r, int opr, BDD var)
     if (var < 2)  /* Empty set */
         return bdd_apply(l,r,opr);
 
-again:
-    if (setjmp(bddexception) == 0)
-    {
+    try {
         if (varset2vartable(var) < 0)
             return bdd_zero();
-
         INITREF;
         applyop = bddop_xor;
         appexop = opr;
         appexid = (var << 5) | (appexop << 1) | 1; /* FIXME: range! */
         quantid = (appexid << 3) | CACHEID_APPUN;
-
-        if (!firstReorder)
-            bdd_disable_reorder();
         res = appquant_rec(l, r);
-        if (!firstReorder)
-            bdd_enable_reorder();
-    }
-    else
-    {
+        checkresize();
+    } catch (...) {
         bdd_checkreorder();
-
-        if (firstReorder-- == 1)
-            goto again;
-        res = BDDZERO;  /* avoid warning about res being uninitialized */
+        bdd_disable_reorder();
+        res = bdd_appuni(l, r, opr, var);
+        bdd_enable_reorder();
     }
 
-    checkresize();
     return res;
 }
 
@@ -2153,7 +1888,7 @@ RETURN  {* The result of the operation. *}
 */
 BDD bdd_satone(BDD r)
 {
-    BDD res;
+    BDD res = BDDZERO;
 
     CHECKa(r, bdd_zero());
     if (r < 2)
@@ -2206,7 +1941,7 @@ RETURN  {* The result of the operation. *}
 */
 BDD bdd_satoneset(BDD r, BDD var, BDD pol)
 {
-    BDD res;
+    BDD res = BDDZERO;
 
     CHECKa(r, bdd_zero());
     if (ISZERO(r))
@@ -2288,7 +2023,7 @@ RETURN  {* The result of the operation. *}
 */
 BDD bdd_fullsatone(BDD r)
 {
-    BDD res;
+    BDD res = BDDZERO;
     int v;
 
     CHECKa(r, bdd_zero());
