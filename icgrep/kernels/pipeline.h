@@ -1,0 +1,50 @@
+#ifndef PIPELINE_H
+#define PIPELINE_H
+/*
+ *  Copyright (c) 2016 International Characters.
+ *  This software is licensed to the public under the Open Software License 3.0.
+ */
+
+
+#include <IDISA/idisa_builder.h>
+#include <llvm/IR/Function.h>
+#include <llvm/IR/Module.h>
+#include "kernel.h"
+
+namespace llvm {
+    class Value;
+    class Module;
+    class ExecutionEngine;
+    class VectorType;
+    class PointerType;
+    class Constant;
+    class FunctionType;
+    class Function;
+    class BasicBlock;
+    class Type;
+}
+
+namespace re { class RE; }
+
+using namespace llvm;
+
+class PipelineBuilder{
+public:
+	PipelineBuilder(Module * m, IDISA::IDISA_Builder * b);
+	~PipelineBuilder();
+
+	void CreateKernels(re::RE * re_ast);
+    void ExecuteKernels();
+
+private:
+	Module *                            mMod;
+    IDISA::IDISA_Builder *              iBuilder;
+    KernelBuilder *                     mS2PKernel;
+    KernelBuilder *                     mICgrepKernel;   
+    KernelBuilder *                     mScanMatchKernel;
+    int                                 mFilePosIdx;
+    Type*                               mBitBlockType;
+    int                                 mBlockSize;
+};
+
+#endif // PIPELINE_H
