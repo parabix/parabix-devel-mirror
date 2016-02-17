@@ -62,39 +62,35 @@ void KernelBuilder::addKernelInputScalar(Type * t, std::string name = ""){
     mInputScalars.push_back(t);
 }
 
-Function* KernelBuilder::CreateDoBlockFunction(){ 
-    Type * inputStreamType = PointerType::get(ArrayType::get(StructType::get(mMod->getContext(), mInputStreams), mSegmentBlocks), 0);
-    Type * inputScalarType = PointerType::get(StructType::get(mMod->getContext(), mInputScalars), 0);
+void KernelBuilder::PrepareDoBlockFunction(){ 
+    mInputStreamType = PointerType::get(ArrayType::get(StructType::get(mMod->getContext(), mInputStreams), mSegmentBlocks), 0);
+    mInputScalarType = PointerType::get(StructType::get(mMod->getContext(), mInputScalars), 0);
     Type * outputStreamType = ArrayType::get(StructType::get(mMod->getContext(), mOutputStreams), mSegmentBlocks);
     Type * outputAccumType = StructType::get(mMod->getContext(), mOutputAccums);
     Type * stateType = StructType::create(mMod->getContext(), mStates, mKernelName);
     mKernelStructType = StructType::create(mMod->getContext(),std::vector<Type *>({stateType, outputStreamType, outputAccumType}), "KernelStruct_"+mKernelName);
-  
-    
-    FunctionType * functionType = FunctionType::get(Type::getVoidTy(mMod->getContext()), 
-        std::vector<Type *>({PointerType::get(mKernelStructType, 0), inputStreamType, inputScalarType}), false); 
-       
-    mDoBlockFunction = Function::Create(functionType, GlobalValue::ExternalLinkage, mKernelName + "_DoBlock", mMod);
-    mDoBlockFunction->setCallingConv(CallingConv::C);
-
-    return mDoBlockFunction;
 }
 
-//create doBlock method with empty body and load inputs
 struct Inputs KernelBuilder::openDoBlock(){
-   
+    // FunctionType * functionType = FunctionType::get(Type::getVoidTy(mMod->getContext()), 
+    //     std::vector<Type *>({PointerType::get(mKernelStructType, 0), mInputStreamType, mInputScalarType}), false); 
+       
+    FunctionType * functionType = FunctionType::get(Type::getVoidTy(mMod->getContext()), 
+        std::vector<Type *>({PointerType::get(mKernelStructType, 0), mInputStreamType}), false); 
 
+    mDoBlockFunction = Function::Create(functionType, GlobalValue::ExternalLinkage, mKernelName + "_DoBlock", mMod);
+    mDoBlockFunction->setCallingConv(CallingConv::C);
+   
     Function::arg_iterator args = mDoBlockFunction->arg_begin();
     mKernelStructParam = args++;
     mKernelStructParam->setName("this");
     Value* input_stream_param = args++;
     input_stream_param->setName("input_stream");
-    Value* input_scalar_param = args++;
-    input_scalar_param->setName("input_scalar");
+    // Value* input_scalar_param = args++;
+    // input_scalar_param->setName("input_scalar");
 
     iBuilder->SetInsertPoint(BasicBlock::Create(mMod->getContext(), "entry", mDoBlockFunction,0));
 
-    // std::vector<std::vector<valptr>> inputs;
     struct Inputs inputs;
     for(int j = 0; j<mSegmentBlocks; j++){
         for(int i = 0; i<mInputStreams.size(); i++){
@@ -117,12 +113,12 @@ struct Inputs KernelBuilder::openDoBlock(){
         }
     }
 
-    inputs.scalars.resize(mInputScalars.size());
-    for(int i = 0; i<mInputScalars.size(); i++){
-        Value* indices[] = {iBuilder->getInt64(0), iBuilder->getInt32(i)};
-        Value * gep = iBuilder->CreateGEP(input_scalar_param, indices);
-        inputs.scalars[i] = iBuilder->CreateAlignedLoad(gep, mBlockSize/8, false, mInputScalarNames.at(i));
-    }
+    // inputs.scalars.resize(mInputScalars.size());
+    // for(int i = 0; i<mInputScalars.size(); i++){
+    //     Value* indices[] = {iBuilder->getInt64(0), iBuilder->getInt32(i)};
+    //     Value * gep = iBuilder->CreateGEP(input_scalar_param, indices);
+    //     inputs.scalars[i] = iBuilder->CreateAlignedLoad(gep, mBlockSize/8, false, mInputScalarNames.at(i));
+    // }
 
     return inputs;
 }
@@ -185,15 +181,17 @@ void KernelBuilder::finalizeMethods(){
 
     while(i < mStates.size()){
         gep = iBuilder->CreateGEP(this_param, std::vector<Value *>({ iBuilder->getInt32(0), iBuilder->getInt32(0), iBuilder->getInt32(i++) }));
-        // iBuilder->CreateStore(iBuilder->getInt64(0), gep); 
-        // std::cerr << "size = " << mMod->getDataLayout()->getTypeAllocSize(mStates[i]) << std::endl;
-        // iBuilder->CreateMemSet(gep, iBuilder->getInt8(0), mMod->getDataLayout()->getTypeAllocSize(mStates[i]), 4);
+        Value * gep_next = iBuilder->CreateGEP(gep, std::vector<Value *>({iBuilder->getInt32(1)}));
+        Value * get_int = iBuilder->CreatePtrToInt(gep, T);
+        Value * get_next_int = iBuilder->CreatePtrToInt(gep_next, T);
+        Value * state_size = iBuilder->CreateSub(get_next_int, get_int);
+        iBuilder->CreateMemSet(gep, iBuilder->getInt8(0), state_size, 4);
     }
 
     iBuilder->CreateRetVoid();
 
     c = mMod->getOrInsertFunction(mKernelName+"_Create_Default", Type::getVoidTy(mMod->getContext()), PointerType::get(mKernelStructType, 0), T, T, NULL);
-    Function* mConstructor = cast<Function>(c);
+    mConstructor = cast<Function>(c);
     mConstructor->setCallingConv(CallingConv::C);
     args = mConstructor->arg_begin();
 
@@ -203,9 +201,7 @@ void KernelBuilder::finalizeMethods(){
     block_size_param->setName("block_size");
     Value* seg_size_param = args++;
     seg_size_param->setName("seg_size");
-
-    //initialize blockz_size and seg_size in Constructor not in init function
-    //allocate buffer 
+ 
     iBuilder->SetInsertPoint(BasicBlock::Create(mMod->getContext(), "entry", mConstructor, 0));
     gep = iBuilder->CreateGEP(this_param, std::vector<Value *>({ iBuilder->getInt32(0), iBuilder->getInt32(0), iBuilder->getInt32(0) }));
     iBuilder->CreateStore(block_size_param, gep);   
@@ -216,25 +212,40 @@ void KernelBuilder::finalizeMethods(){
     iBuilder->CreateRetVoid();
 
 }
-//alloc space & set buffer size
-void KernelBuilder::generateKernelInstance(int segmentBlocks = 1){
+
+Value * KernelBuilder::generateKernelInstance(){
 
     mKernelStruct = iBuilder->CreateAlloca(mKernelStructType); 
     iBuilder->CreateCall3(mConstructor, mKernelStruct, 
         ConstantInt::get(iBuilder->getIntNTy(64), mBlockSize), 
         ConstantInt::get(iBuilder->getIntNTy(64), mBufferSize));
+    return mKernelStruct;
 
 }
 void KernelBuilder::generateInitCall(){
     iBuilder->CreateCall(mInitFunction, mKernelStruct);
 }
 
-// Value * KernelBuilder::generateDoBlockCall(Value * inputBuffer){
-//     iBuilder->CreateCall3(mDoBlockFunction, mKernelStruct, inputBuffer, outputBuffer);
-//     return outputBuffer;
+// void KernelBuilder::generateDoBlockCall(Value * inputStreams, Value * inputScalars){
+//     iBuilder->CreateCall3(mDoBlockFunction, mKernelStruct, inputStreams, inputScalars);
 // }
+void KernelBuilder::generateDoBlockCall(Value * inputStreams){
+    iBuilder->CreateCall2(mDoBlockFunction, mKernelStruct, inputStreams);
+}
 
 int KernelBuilder::getSegmentBlocks(){
     return mSegmentBlocks;
+}
+
+Function * KernelBuilder::getDoBlockFunction(){
+    return mDoBlockFunction;
+}
+
+Type * KernelBuilder::getKernelStructType(){
+    return mKernelStructType;
+}
+
+Value * KernelBuilder::getKernelStructParam(){
+    return mKernelStructParam;
 }
 

@@ -48,14 +48,18 @@ public:
 	void addKernelOutputAccum(Type * t);
 	void addKernelInputStream(int fw, std::string name);
 	void addKernelInputScalar(Type * t, std::string name);
-    Function* CreateDoBlockFunction();
+    void PrepareDoBlockFunction();
 	struct Inputs openDoBlock();
 	void closeDoBlock(struct Outputs);
 	void finalizeMethods();
-	void generateKernelInstance(int buffersize);
+	Value * generateKernelInstance();
 	void generateInitCall();
-	Value * generateDoBlockCall(Value * input);
+	// void generateDoBlockCall(Value * inputStreams, Value * inputScalars);
+    void generateDoBlockCall(Value * inputStreams);
     int getSegmentBlocks();
+    Function * getDoBlockFunction();
+    Type * getKernelStructType();
+    Value * getKernelStructParam();
 
     void changeKernelInternalState(int idx, Value * stateValue);
     Value * getKernelInternalState(int idx);
@@ -81,6 +85,8 @@ private:
     int                                 mBlockSize;
     int                                 mSegmentBlocks;
     Type *                              mKernelStructType;
+    Type *                              mInputStreamType;    
+    Type *                              mInputScalarType;
     Value*                              mKernelStruct;
     Value*                              mKernelStructParam;
 };
