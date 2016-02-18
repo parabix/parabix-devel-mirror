@@ -24,7 +24,7 @@ namespace llvm {
     class Type;
 }
 
-namespace re { class RE; }
+namespace pablo { class PabloFunction; }
 
 using namespace llvm;
 
@@ -33,7 +33,7 @@ public:
 	PipelineBuilder(Module * m, IDISA::IDISA_Builder * b);
 	~PipelineBuilder();
 
-	void CreateKernels(re::RE * re_ast);
+	void CreateKernels(pablo::PabloFunction * function);
     void ExecuteKernels();
 
 private:
