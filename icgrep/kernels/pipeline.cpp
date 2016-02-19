@@ -17,7 +17,9 @@
 PipelineBuilder::PipelineBuilder(Module * m, IDISA::IDISA_Builder * b)
 : mMod(m)
 , iBuilder(b)
-, mFilePosIdx(2)
+, mFileBufIdx(7)
+, mFileSizeIdx(8)
+, mFileNameIdx(9)
 , mBitBlockType(b->getBitBlockType())
 , mBlockSize(b->getBitBlockWidth()){
 
@@ -88,12 +90,12 @@ void PipelineBuilder::ExecuteKernels(){
     Value * icGrepKernelStruct = mICgrepKernel->generateKernelInstance();
     Value * scanMatchKernelStruct = mScanMatchKernel->generateKernelInstance();
 
-    Value * gep = iBuilder->CreateGEP(scanMatchKernelStruct, {iBuilder->getInt32(0), iBuilder->getInt32(0), iBuilder->getInt32(7)});
+    Value * gep = iBuilder->CreateGEP(scanMatchKernelStruct, {iBuilder->getInt32(0), iBuilder->getInt32(0), iBuilder->getInt32(mFileBufIdx)});
     Value* filebuf = iBuilder->CreateBitCast(input_param, S);
     iBuilder->CreateStore(filebuf, gep);
-    gep = iBuilder->CreateGEP(scanMatchKernelStruct, {iBuilder->getInt32(0), iBuilder->getInt32(0), iBuilder->getInt32(8)});
+    gep = iBuilder->CreateGEP(scanMatchKernelStruct, {iBuilder->getInt32(0), iBuilder->getInt32(0), iBuilder->getInt32(mFileSizeIdx)});
     iBuilder->CreateStore(buffersize_param, gep);
-    gep = iBuilder->CreateGEP(scanMatchKernelStruct, {iBuilder->getInt32(0), iBuilder->getInt32(0), iBuilder->getInt32(9)});
+    gep = iBuilder->CreateGEP(scanMatchKernelStruct, {iBuilder->getInt32(0), iBuilder->getInt32(0), iBuilder->getInt32(mFileNameIdx)});
     iBuilder->CreateStore(filename_param, gep);
 
     Value * basis_bits = iBuilder->CreateGEP(s2pKernelStruct, {iBuilder->getInt32(0), iBuilder->getInt32(1)});
@@ -147,7 +149,7 @@ void PipelineBuilder::ExecuteKernels(){
     
     iBuilder->SetInsertPoint(pipeline_Unterminated_block);
 
-    Value * remaining = iBuilder->CreateBitCast(remaining_phi, iBuilder->getIntNTy(128));
+    Value * remaining = iBuilder->CreateZExt(remaining_phi, iBuilder->getIntNTy(128));
     Value * EOF_mask = iBuilder->CreateShl(ConstantInt::get(iBuilder->getIntNTy(128), 1), remaining);
     EOF_mask = iBuilder->CreateSub(EOF_mask, ConstantInt::get(iBuilder->getIntNTy(128), 1));
 
