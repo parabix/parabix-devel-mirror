@@ -10,6 +10,8 @@
 #include <llvm/IR/Function.h>
 #include <llvm/IR/Module.h>
         
-void generateScanBitBlockRoutine(Module * m, IDISA::IDISA_Builder * iBuilder, int segBitWidth);
+void generateScanBitBlockRoutine(Module * m, IDISA::IDISA_Builder * iBuilder, int segBitWidth, Type * kernelStuctType);
+
+void generateScanMatch(Module * m, IDISA::IDISA_Builder * iBuilder, int segBitWidth, KernelBuilder * kBuilder);
 
 #endif // SCANMATCHGEN_H

@@ -3,7 +3,7 @@
  *  This software is licensed to the public under the Open Software License 3.0.
  */
 
-
+#include "kernel.h"
 #include "scanmatchgen.h"
 #include <llvm/IR/Intrinsics.h>
 
@@ -31,47 +31,14 @@ Value * generateResetLowestBit(IDISA::IDISA_Builder * iBuilder, Value * bits) {
     Value * bits_minus1 = iBuilder->CreateSub(bits, ConstantInt::get(bits->getType(), 1));
     return iBuilder->CreateAnd(bits_minus1, bits);
 }
-
-/*
-        
-void write_matches_ending_in_segment(scanword_t matches, scanword_t lbreaks, ssize_t segmentPos, ssize_t & pendingLineStart, int & lineNum) {
-    scanword_t remaining_matches = matches;
-    scanword_t remaining_LBs = lbreaks;
-    while (remaining_matches != 0) {
-        // Find all the line marks prior to the match position 
-        scanword_t priorLineMarks = ForwardZeroesMask(remaining_matches) & remaining_LBs;
-        if (priorLineMarks != 0) {
-            int matchLineNum = lineNum + popcount(priorLineMarks);
-            // The last of these line marks prior to the match position is the
-            // starting positions of the matched line.
-            matchLineStart = segmentPos + segmentBitWidth - CountReverseZeroes(priorLineMarks);
-        }
-        else {
-            matchLineNum = lineNum;
-            matchLineStart = pendingLineStart;
-        }
-        // The line end is marked by the match posiiton.
-        matchLineEnd = segmentPos + CountForwardZeroes(remaining_matches);
-        call write_match(matchLineNum, matchLineStart, matchLineEnd);
-        
-        remaining_matches = ResetLowestBit(remaining_matches);
-        remaining_LBs = remaining_LBs ^ priorLineMarks;
-        lineNum = matchLineNum;
-    }
-    if (remaining_LBs != 0) {
-        lineNum += popcount(remaining_LBs);
-        pendingLineStart = segmentPos + segmentBitWidth - CountReverseZeroes(remaining_LBs);
-    }
-}    
-        */
-
         
         
-void generateScanSegmentRoutine(Module * m, IDISA::IDISA_Builder * iBuilder, int segBitWidth) {
+void generateScanWordRoutine(Module * m, IDISA::IDISA_Builder * iBuilder, int scanwordBitWidth, Type * kernelStuctType) {
     LLVMContext & ctxt = m->getContext();
-    Type * T = iBuilder->getIntNTy(segBitWidth);
+    Type * T = iBuilder->getIntNTy(scanwordBitWidth);   
+    Type * S = PointerType::get(iBuilder->getIntNTy(8), 0);
     Type * returnType = StructType::get(ctxt, std::vector<Type *>({T, T}));
-    FunctionType * functionType = FunctionType::get(returnType, std::vector<Type *>({T, T, T, T, T}), false);
+    FunctionType * functionType = FunctionType::get(returnType, std::vector<Type *>({kernelStuctType, T, T, T, T, T}), false);
     Function * sFunction;
         
     SmallVector<AttributeSet, 6> Attrs;
@@ -83,24 +50,25 @@ void generateScanSegmentRoutine(Module * m, IDISA::IDISA_Builder * iBuilder, int
     Attrs.push_back(AttributeSet::get(ctxt, 5, std::vector<Attribute::AttrKind>({})));
     AttributeSet AttrSet = AttributeSet::get(ctxt, Attrs);
     
-    sFunction = Function::Create(functionType, GlobalValue::ExternalLinkage, "scan_matches_in_segment", m);
+    sFunction = Function::Create(functionType, GlobalValue::ExternalLinkage, "scan_matches_in_scanword", m);
     sFunction->setCallingConv(CallingConv::C);
     sFunction->setAttributes(AttrSet);
         
     Function::arg_iterator args = sFunction->arg_begin();
+    Value * this_input_parm = args++;
+    this_input_parm->setName("this");
     Value * matches_input_parm = args++;
     matches_input_parm->setName("matches");
     Value * record_breaks_input_parm = args++;
     record_breaks_input_parm->setName("breaks");
-    Value * segmentPos = args++;
-    segmentPos->setName("segmentPos");
+    Value * scanwordPos = args++;
+    scanwordPos->setName("scanwordPos");
     Value * recordStart_input_parm = args++;
     recordStart_input_parm->setName("pendingLineStart");
     Value * recordNum_input_parm = args++;
     recordNum_input_parm->setName("lineNum");
     
-    Constant * matchProcessor = m->getOrInsertFunction("wrapped_report_match", Type::getVoidTy(ctxt), T, T, T, NULL);
-
+    Constant * matchProcessor = m->getOrInsertFunction("wrapped_report_match", Type::getVoidTy(ctxt), T, T, T, S, T, S, NULL);
     
     iBuilder->SetInsertPoint(BasicBlock::Create(ctxt, "entry", sFunction,0));
 
@@ -115,8 +83,8 @@ void generateScanSegmentRoutine(Module * m, IDISA::IDISA_Builder * iBuilder, int
         
         
     // The match scanner works with a loop involving four variables:
-    // (a) the bit stream segment of matches marking the ends of selected records,
-    // (b) the bit stream segment of record_breaks marking the ends of all records,
+    // (a) the bit stream scanword of matches marking the ends of selected records,
+    // (b) the bit stream scanword of record_breaks marking the ends of all records,
     // (c) the integer lastRecordNum indicating the number of records processed so far, 
     // (d) the index lastRecordStart indicating the file position of the last record.
     // We set up a loop structure, in which a set of 4 phi nodes initialize these
@@ -153,8 +121,8 @@ void generateScanSegmentRoutine(Module * m, IDISA::IDISA_Builder * iBuilder, int
     iBuilder->SetInsertPoint(prior_breaks_block);
     Value * matchRecordNum = iBuilder->CreateAdd(generatePopcount(iBuilder, prior_breaks), recordNum_phi);
     Value * reverseDistance = generateCountReverseZeroes(iBuilder, prior_breaks);
-    Value * width = ConstantInt::get(T, segBitWidth);
-    Value * matchRecordStart = iBuilder->CreateAdd(segmentPos, iBuilder->CreateSub(width, reverseDistance));
+    Value * width = ConstantInt::get(T, scanwordBitWidth);
+    Value * matchRecordStart = iBuilder->CreateAdd(scanwordPos, iBuilder->CreateSub(width, reverseDistance));
     iBuilder->CreateBr(loop_final_block);
     
     // LOOP FINAL BLOCK
@@ -167,8 +135,18 @@ void generateScanSegmentRoutine(Module * m, IDISA::IDISA_Builder * iBuilder, int
     matchRecordNum_phi->addIncoming(matchRecordNum, prior_breaks_block);
     matchRecordStart_phi->addIncoming(recordStart_phi, process_matches_loop_entry);
     matchRecordStart_phi->addIncoming(matchRecordStart, prior_breaks_block);
-    Value * matchRecordEnd = iBuilder->CreateAdd(segmentPos, generateCountForwardZeroes(iBuilder, matches_phi));
-    iBuilder->CreateCall(matchProcessor, std::vector<Value *>({matchRecordNum_phi, matchRecordStart_phi, matchRecordEnd}));
+    Value * matchRecordEnd = iBuilder->CreateAdd(scanwordPos, generateCountForwardZeroes(iBuilder, matches_phi));
+
+    Value* filebuf_gep = iBuilder->CreateGEP(this_input_parm, {iBuilder->getInt64(0), iBuilder->getInt32(0), iBuilder->getInt32(7)});
+    Value* filebufptr = iBuilder->CreateLoad(filebuf_gep, "filebuf");
+
+    Value* filesize_gep = iBuilder->CreateGEP(this_input_parm, {iBuilder->getInt64(0), iBuilder->getInt32(0), iBuilder->getInt32(8)});
+    Value* filesize = iBuilder->CreateLoad(filesize_gep, "filensize");
+
+    Value* filename_gep = iBuilder->CreateGEP(this_input_parm, {iBuilder->getInt64(0), iBuilder->getInt32(0), iBuilder->getInt32(9)});
+    Value* filenameptr = iBuilder->CreateLoad(filename_gep, "filename");
+
+    iBuilder->CreateCall(matchProcessor, std::vector<Value *>({matchRecordNum_phi, matchRecordStart_phi, matchRecordEnd, filebufptr, filesize, filenameptr}));
     Value * remaining_matches = generateResetLowestBit(iBuilder, matches_phi);
     Value * remaining_breaks = iBuilder->CreateXor(record_breaks_phi, prior_breaks);
     matches_phi->addIncoming(remaining_matches, loop_final_block);
@@ -189,7 +167,7 @@ void generateScanSegmentRoutine(Module * m, IDISA::IDISA_Builder * iBuilder, int
     Value * break_count = generatePopcount(iBuilder, record_breaks_phi);
     Value * final_record_num = iBuilder->CreateAdd(recordNum_phi, break_count);
     Value * reverseZeroes = generateCountReverseZeroes(iBuilder, record_breaks_phi);
-    Value * pendingLineStart = iBuilder->CreateAdd(segmentPos, iBuilder->CreateSub(width, reverseZeroes));
+    Value * pendingLineStart = iBuilder->CreateAdd(scanwordPos, iBuilder->CreateSub(width, reverseZeroes));
     iBuilder->CreateBr(return_block);
     
     // RETURN block
@@ -201,72 +179,70 @@ void generateScanSegmentRoutine(Module * m, IDISA::IDISA_Builder * iBuilder, int
     finalRecordStart_phi->addIncoming(recordStart_phi, matches_done_block);
     finalRecordStart_phi->addIncoming(pendingLineStart, remaining_breaks_block);
     Value * retVal = UndefValue::get(returnType);
-    retVal = iBuilder->CreateInsertValue(retVal, finalRecordCount_phi, 0);
-    retVal = iBuilder->CreateInsertValue(retVal, finalRecordStart_phi, 1);
+    retVal = iBuilder->CreateInsertValue(retVal, finalRecordStart_phi, 0);
+    retVal = iBuilder->CreateInsertValue(retVal, finalRecordCount_phi, 1);
     iBuilder->CreateRet(retVal);
     
 }
 
 
-void generateScanBitBlockRoutine(Module * m, IDISA::IDISA_Builder * iBuilder, int segBitWidth) {
-    LLVMContext & ctxt = m->getContext();
-    Type * B = iBuilder->getBitBlockType();
-    Type * T = iBuilder->getIntNTy(segBitWidth);
-    generateScanSegmentRoutine(m, iBuilder, segBitWidth);
-    int fieldCount = iBuilder->getBitBlockWidth()/segBitWidth;
-    Type * segmentVectorType =  VectorType::get(T, fieldCount);
+void generateScanMatch(Module * m, IDISA::IDISA_Builder * iBuilder, int scanwordBitWidth, KernelBuilder * kBuilder){
     
     
-    Type * returnType = StructType::get(ctxt, std::vector<Type *>({T, T}));
-    FunctionType * functionType = FunctionType::get(returnType, std::vector<Type *>({B, B, T, T, T}), false);
-    Function * sFunction;
-    
-    SmallVector<AttributeSet, 6> Attrs;
-    Attrs.push_back(AttributeSet::get(ctxt, ~0U, std::vector<Attribute::AttrKind>({ Attribute::NoUnwind, Attribute::UWTable })));
-    Attrs.push_back(AttributeSet::get(ctxt, 1, std::vector<Attribute::AttrKind>({})));
-    Attrs.push_back(AttributeSet::get(ctxt, 2, std::vector<Attribute::AttrKind>({})));
-    Attrs.push_back(AttributeSet::get(ctxt, 3, std::vector<Attribute::AttrKind>({})));
-    Attrs.push_back(AttributeSet::get(ctxt, 4, std::vector<Attribute::AttrKind>({})));
-    Attrs.push_back(AttributeSet::get(ctxt, 5, std::vector<Attribute::AttrKind>({})));
-    AttributeSet AttrSet = AttributeSet::get(ctxt, Attrs);
-    sFunction = Function::Create(functionType, GlobalValue::ExternalLinkage, "scan_matches_in_bitblock", m);
-    sFunction->setCallingConv(CallingConv::C);
-    sFunction->setAttributes(AttrSet);
-    
-    
-    
-    Function::arg_iterator args = sFunction->arg_begin();
-    Value * matches_input_parm = args++;
-    matches_input_parm->setName("matches");
-    Value * record_breaks_input_parm = args++;
-    record_breaks_input_parm->setName("breaks");
-    Value * blockPos = args++;
-    blockPos->setName("blockPos");
-    Value * recordStart_input_parm = args++;
-    recordStart_input_parm->setName("pendingLineStart");
-    Value * recordNum_input_parm = args++;
-    recordNum_input_parm->setName("lineNum");
-    
-    iBuilder->SetInsertPoint(BasicBlock::Create(ctxt, "entry", sFunction,0));
-    
-    Value * matchSegVector = iBuilder->CreateBitCast(matches_input_parm, segmentVectorType);
-    Value * breakSegVector = iBuilder->CreateBitCast(record_breaks_input_parm, segmentVectorType);
-    Value * segmentPos = blockPos;
-    Value * recordStart = recordStart_input_parm;
-    Value * recordNum = recordNum_input_parm;
-    Value * segResult = nullptr;
-    Function * segScanFcn = m->getFunction("scan_matches_in_segment");
-    for (uint64_t i = 0; i < iBuilder->getBitBlockWidth()/segBitWidth; i++) {
-        Value * matchSeg = iBuilder->CreateExtractElement(matchSegVector, ConstantInt::get(T, i));
-        Value * recordBreaksSeg = iBuilder->CreateExtractElement(breakSegVector, ConstantInt::get(T, i));
-        segResult = iBuilder->CreateCall(segScanFcn, std::vector<Value *>({matchSeg, recordBreaksSeg, segmentPos, recordStart, recordNum}));
-        segmentPos = iBuilder->CreateAdd(segmentPos, ConstantInt::get(T, segBitWidth));
-        recordStart = iBuilder->CreateExtractValue(segResult, std::vector<unsigned>({0}));
-        recordNum = iBuilder->CreateExtractValue(segResult, std::vector<unsigned>({1}));
-    }
-    iBuilder->CreateRet(segResult);
-}
+    Type * T = iBuilder->getIntNTy(scanwordBitWidth);
+    Type * S = PointerType::get(iBuilder->getIntNTy(8), 0);
+    int fieldCount = iBuilder->getBitBlockWidth()/scanwordBitWidth;
+    Type * scanwordVectorType =  VectorType::get(T, fieldCount);
 
+    kBuilder->addKernelInputStream(1, "matches");
+    kBuilder->addKernelInputStream(1, "breaks");
+    //use index
+    int blockPosIdx = kBuilder->extendKernelInternalStateType(T);
+    int lineStartIdx = kBuilder->extendKernelInternalStateType(T);
+    int lineNumIdx = kBuilder->extendKernelInternalStateType(T);
+    int fileBufIdx = kBuilder->extendKernelInternalStateType(S);
+    int bufSizeIdx = kBuilder->extendKernelInternalStateType(T);
+    int fileNameIdx = kBuilder->extendKernelInternalStateType(S);
+
+    int segBlocks = kBuilder->getSegmentBlocks();
+
+    kBuilder->PrepareDoBlockFunction();
+
+    Type * kernelStuctType = PointerType::get(kBuilder->getKernelStructType(), 0);
+    generateScanWordRoutine(m, iBuilder, scanwordBitWidth, kernelStuctType);
+
+    struct Inputs inputs = kBuilder->openDoBlock();
+    struct Outputs outputs;   
+    Value * kernelStuctParam = kBuilder->getKernelStructParam();
+    
+    Value * scanwordPos = kBuilder->getKernelInternalState(blockPosIdx);
+    Value * recordStart = kBuilder->getKernelInternalState(lineStartIdx);
+    Value * recordNum = kBuilder->getKernelInternalState(lineNumIdx);
+    Value * wordResult = nullptr;
+
+    Function * wordScanFcn = m->getFunction("scan_matches_in_scanword");
+    for(int j=0; j<segBlocks; j++){
+        Value * matchWordVector = iBuilder->CreateBitCast(inputs.streams[j][0], scanwordVectorType);
+        Value * breakWordVector = iBuilder->CreateBitCast(inputs.streams[j][1], scanwordVectorType);
+        for(int i=0; i<segBlocks*iBuilder->getBitBlockWidth()/scanwordBitWidth; i++){
+
+            Value * matchWord = iBuilder->CreateExtractElement(matchWordVector, ConstantInt::get(T, i));
+            Value * recordBreaksWord = iBuilder->CreateExtractElement(breakWordVector, ConstantInt::get(T, i));
+            wordResult = iBuilder->CreateCall(wordScanFcn, std::vector<Value *>({kernelStuctParam, matchWord, recordBreaksWord, scanwordPos, recordStart, recordNum}));
+            scanwordPos = iBuilder->CreateAdd(scanwordPos, ConstantInt::get(T, scanwordBitWidth));
+            recordStart = iBuilder->CreateExtractValue(wordResult, std::vector<unsigned>({0}));
+            recordNum = iBuilder->CreateExtractValue(wordResult, std::vector<unsigned>({1}));
+        }
+    }
+
+    kBuilder->changeKernelInternalState(blockPosIdx, scanwordPos);
+    kBuilder->changeKernelInternalState(lineStartIdx, recordStart);
+    kBuilder->changeKernelInternalState(lineNumIdx, recordNum);
+
+    kBuilder->closeDoBlock(outputs);
+
+    kBuilder->finalizeMethods();
+}
 
 
 
