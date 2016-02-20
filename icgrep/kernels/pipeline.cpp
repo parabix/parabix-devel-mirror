@@ -144,7 +144,7 @@ void PipelineBuilder::ExecuteKernels(){
 
     iBuilder->SetInsertPoint(pipeline_end_block);
 
-    Value * return_block_cond = iBuilder->CreateICmpNE(finalLineUnterminated_param, ConstantInt::get(T, 0));
+    Value * return_block_cond = iBuilder->CreateICmpEQ(finalLineUnterminated_param, ConstantInt::get(T, 0));
     iBuilder->CreateCondBr(return_block_cond, pipeline_return_block, pipeline_Unterminated_block);
     
     iBuilder->SetInsertPoint(pipeline_Unterminated_block);
