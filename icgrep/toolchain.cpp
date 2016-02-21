@@ -97,18 +97,6 @@ static cl::opt<bool> EnableMultiplexing("multiplexing", cl::init(false),
                                         cl::desc("combine Advances whose inputs are mutual exclusive into the fewest number of advances possible (expensive)."),
                                         cl::cat(cPabloOptimizationsOptions));
 
-static cl::opt<unsigned> MultiplexingSetLimit("multiplexing-set-limit", cl::init(std::numeric_limits<unsigned>::max()),
-                                        cl::desc("maximum size of any candidate multiplexing set."),
-                                        cl::cat(cPabloOptimizationsOptions));
-
-static cl::opt<unsigned> MultiplexingSelectionLimit("multiplexing-selection-limit", cl::init(100),
-                                        cl::desc("maximum number of selections from any partial candidate multiplexing set."),
-                                        cl::cat(cPabloOptimizationsOptions));
-
-static cl::opt<unsigned> MultiplexingWindowSize("multiplexing-window-size", cl::init(1),
-                                        cl::desc("maximum depth difference for computing mutual exclusion of Advance nodes."),
-                                        cl::cat(cPabloOptimizationsOptions));
-
 static cl::opt<bool> EnableLowering("lowering", cl::init(false),
                                          cl::desc("coalesce associative functions prior to optimization passes."),
                                          cl::cat(cPabloOptimizationsOptions));
@@ -306,7 +294,7 @@ void pablo_function_passes(PabloFunction * function) {
     }
     if (EnableMultiplexing) {
         READ_CYCLE_COUNTER(multiplexing_start);
-        MultiplexingPass::optimize(*function, MultiplexingSetLimit, MultiplexingSelectionLimit, MultiplexingWindowSize);
+        MultiplexingPass::optimize(*function);
         READ_CYCLE_COUNTER(multiplexing_end);
         if (EnableLowering || EnablePreDistribution || EnablePostDistribution) {
             CanonicalizeDFG::transform(*function);

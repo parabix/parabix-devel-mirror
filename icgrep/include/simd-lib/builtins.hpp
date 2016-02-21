@@ -12,8 +12,8 @@
 
 #include "config.hpp"
 
-static IDISA_ALWAYS_INLINE long likely(long x);
-static IDISA_ALWAYS_INLINE long unlikely(long x);
+static IDISA_ALWAYS_INLINE long LIKELY(long x);
+static IDISA_ALWAYS_INLINE long UNLIKELY(long x);
 
 #if defined (_MSC_VER)
 	IDISA_ALWAYS_INLINE long likely(long x) {
@@ -25,11 +25,11 @@ static IDISA_ALWAYS_INLINE long unlikely(long x);
 
 #elif defined (__GNUC__)
 
-	IDISA_ALWAYS_INLINE long likely(long x) {
+	IDISA_ALWAYS_INLINE long LIKELY(long x) {
 		return __builtin_expect(x, 1);
 	}
 
-	IDISA_ALWAYS_INLINE long unlikely(long x) {
+	IDISA_ALWAYS_INLINE long UNLIKELY(long x) {
 		return __builtin_expect(x, 0);
 	}
 

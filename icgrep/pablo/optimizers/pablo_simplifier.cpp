@@ -544,7 +544,7 @@ void Simplifier::deadCodeElimination(PabloBlock * const block) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief strengthReduction
  *
- * Find and replace any Pablo operations with the less expensive equivalent operations whenever possible.
+ * Find and replace any Pablo operations with a less expensive equivalent operation whenever possible.
  ** ------------------------------------------------------------------------------------------------------------- */
 void Simplifier::strengthReduction(PabloBlock * const block) {
     Statement * stmt = block->front();
@@ -577,7 +577,20 @@ void Simplifier::strengthReduction(PabloBlock * const block) {
                     scanThru->setOperand(1, block->createOr(scanThru->getOperand(1), expr));
                     op->eraseFromParent(false);
                 }
+            } else if (isa<And>(scanThru->getOperand(0))) {
+                // Suppose B is an arbitrary bitstream and A = Advance(B, 1). ScanThru(B ∧ ¬A, B) will leave a marker on the position
+                // following the end of any run of 1-bits in B. But this is equivalent to computing A ∧ ¬B since A will have exactly
+                // one 1-bit past the end of any run of 1-bits in B.
+
+
+
+
+
             }
+
+
+
+
         }
         stmt = stmt->getNextNode();
     }
@@ -591,13 +604,13 @@ bool Simplifier::optimize(PabloFunction & function) {
     #ifndef NDEBUG
     PabloVerifier::verify(function, "post-eliminate-redundant-code");
     #endif
-    deadCodeElimination(function.getEntryBlock());
-    #ifndef NDEBUG
-    PabloVerifier::verify(function, "post-dead-code-elimination");
-    #endif
     strengthReduction(function.getEntryBlock());
     #ifndef NDEBUG
     PabloVerifier::verify(function, "post-strength-reduction");
+    #endif
+    deadCodeElimination(function.getEntryBlock());
+    #ifndef NDEBUG
+    PabloVerifier::verify(function, "post-dead-code-elimination");
     #endif
     return true;
 }

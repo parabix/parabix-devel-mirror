@@ -249,7 +249,7 @@ void GrepExecutor::doGrep(const std::string & fileName) {
         mFileBuffer = nullptr;
     }
     else {
-        mFileBuffer = (char *) mmap(NULL, mFileSize, PROT_READ, MAP_PRIVATE, fdSrc, 0);
+        mFileBuffer = (char *) mmap(nullptr, mFileSize, PROT_READ, MAP_PRIVATE, fdSrc, 0);
         if (mFileBuffer == MAP_FAILED) {
             if (errno ==  ENOMEM) {
                 std::cerr << "Error:  mmap of " << mFileName << " failed: out of memory\n";

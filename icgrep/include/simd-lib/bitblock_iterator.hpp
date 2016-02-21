@@ -244,7 +244,7 @@ template <class bitblock_t, class scanblock_t>
 class Scanner {
 
 protected:
-	Scanner(): strm(NULL), pos(EOS), blk(-1), scan_blk(-1) {}
+	Scanner(): strm(nullptr), pos(EOS), blk(-1), scan_blk(-1) {}
 	Scanner(const bitblock_t * s, uint32_t start_pos, uint32_t start_blk, scanblock_t start_scan_blk): strm(s), pos(start_pos), blk(start_blk), scan_blk(start_scan_blk) {}
 
 	const bitblock_t * strm;
@@ -510,7 +510,7 @@ private:
 class BitStreamIterator: public std::iterator<std::input_iterator_tag, int>
 {
 public:
-	BitStreamIterator():pos(EOS), blk(-1), blk_pos(-1), strm(NULL), scan_blk(-1), scan_blk_cnt(0)
+	BitStreamIterator():pos(EOS), blk(-1), blk_pos(-1), strm(nullptr), scan_blk(-1), scan_blk_cnt(0)
 	{
 		// default constructor defines past-the-end of bit stream semantics, pos == EOS
 	}

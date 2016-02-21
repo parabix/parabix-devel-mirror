@@ -15,13 +15,61 @@
 #include <queue>
 #include <unordered_set>
 #include <bdd.h>
+#include <functional>
+
+#include <llvm/Support/CommandLine.h>
 
 using namespace llvm;
 using namespace boost;
 using namespace boost::container;
 using namespace boost::numeric::ublas;
 
-/// Interesting test case: ./icgrep '[\p{Lm}\p{Meetei_Mayek}]' -disable-if-hierarchy-strategy
+/// Interesting test cases:
+/// ./icgrep -c -multiplexing '[\p{Lm}\p{Meetei_Mayek}]' -disable-if-hierarchy-strategy
+
+/// ./icgrep -c -multiplexing '\p{Imperial_Aramaic}(?<!\p{Sm})' -disable-if-hierarchy-strategy
+
+
+static cl::OptionCategory MultiplexingOptions("Multiplexing Optimization Options", "These options control the Pablo Multiplexing optimization pass.");
+
+#ifdef NDEBUG
+#define INITIAL_SEED_VALUE (std::random_device()())
+#else
+#define INITIAL_SEED_VALUE (83234827342)
+#endif
+
+static cl::opt<std::mt19937::result_type> Seed("multiplexing-seed", cl::init(INITIAL_SEED_VALUE),
+                                        cl::desc("randomization seed used when performing any non-deterministic operations."),
+                                        cl::cat(MultiplexingOptions));
+
+#undef INITIAL_SEED_VALUE
+
+static cl::opt<unsigned> SetLimit("multiplexing-set-limit", cl::init(std::numeric_limits<unsigned>::max()),
+                                        cl::desc("maximum size of any candidate set."),
+                                        cl::cat(MultiplexingOptions));
+
+static cl::opt<unsigned> SelectionLimit("multiplexing-selection-limit", cl::init(100),
+                                        cl::desc("maximum number of selections from any partial candidate set."),
+                                        cl::cat(MultiplexingOptions));
+
+static cl::opt<unsigned> WindowSize("multiplexing-window-size", cl::init(1),
+                                        cl::desc("maximum depth difference for computing mutual exclusion of Advance nodes."),
+                                        cl::cat(MultiplexingOptions));
+
+static cl::opt<unsigned> Samples("multiplexing-samples", cl::init(1),
+                                 cl::desc("number of times the Advance constraint graph is sampled to find multiplexing opportunities."),
+                                 cl::cat(MultiplexingOptions));
+
+
+enum SelectionStrategy {Greedy, WorkingSet};
+
+static cl::opt<SelectionStrategy> Strategy(cl::desc("Choose set selection strategy:"),
+                                             cl::values(
+                                             clEnumVal(Greedy, "choose the largest multiplexing sets possible (w.r.t. the multiplexing-set-limit)."),
+                                             clEnumVal(WorkingSet, "choose multiplexing sets that share common input values."),
+                                             clEnumValEnd),
+                                           cl::init(Greedy),
+                                           cl::cat(MultiplexingOptions));
 
 // #define PRINT_DEBUG_OUTPUT
 
@@ -110,21 +158,23 @@ unsigned MultiplexingPass::NODES_USED = 0;
 
 using TypeId = PabloAST::ClassTypeId;
 
-bool MultiplexingPass::optimize(PabloFunction & function, const unsigned limit, const unsigned maxSelections, const unsigned windowSize, const bool independent) {
+template<typename Graph>
+static Graph construct(PabloBlock * const block);
 
-    std::random_device rd;
-    const RNG::result_type seed = rd();
-//    const RNG::result_type seed = 83234827342;
+template<typename Graph, typename Map>
+static Graph construct(PabloBlock * const block, Map & M);
 
-    LOG("Seed:                    " << seed);
+bool MultiplexingPass::optimize(PabloFunction & function, const bool independent) {
+
+    LOG("Seed:                    " << Seed);
 
     #ifdef PRINT_TIMING_INFORMATION
-    MultiplexingPass::SEED = seed;
+    MultiplexingPass::SEED = Seed;
     MultiplexingPass::NODES_ALLOCATED = 0;
     MultiplexingPass::NODES_USED = 0;
     #endif
 
-    MultiplexingPass mp(seed, limit, maxSelections, windowSize);
+    MultiplexingPass mp(Seed);
     RECORD_TIMESTAMP(start_initialize);
     const unsigned advances = mp.initialize(function, independent);
     RECORD_TIMESTAMP(end_initialize);
@@ -168,7 +218,11 @@ bool MultiplexingPass::optimize(PabloFunction & function, const unsigned limit, 
         LOG("GenerateUsageWeighting:   " << (end_usage_weighting - start_usage_weighting));
 
         RECORD_TIMESTAMP(start_select_multiplex_sets);
-        mp.selectMultiplexSets();
+        if (Strategy == SelectionStrategy::Greedy) {
+            mp.selectMultiplexSetsGreedy();
+        } else if (Strategy == SelectionStrategy::WorkingSet) {
+            mp.selectMultiplexSetsWorkingSet();
+        }
         RECORD_TIMESTAMP(end_select_multiplex_sets);
         LOG("SelectMultiplexSets:      " << (end_select_multiplex_sets - start_select_multiplex_sets));
 
@@ -255,7 +309,7 @@ unsigned MultiplexingPass::initialize(PabloFunction & function, const bool indep
     bdd_setvarnum(variableCount + function.getNumOfParameters());
     bdd_setcacheratio(64);
     bdd_setmaxincrease(10000000);
-    bdd_autoreorder(BDD_REORDER_SIFT);
+    bdd_autoreorder(BDD_REORDER_SIFT); // BDD_REORDER_SIFT
 
     // Map the constants and input variables
     mCharacterization[PabloBlock::createZeroes()] = bdd_zero();
@@ -363,7 +417,7 @@ inline void MultiplexingPass::initializeAdvanceDepth(PabloBlock * const entryBlo
     int maxDepth = 0;
     const PabloBlock * advanceScope[advances];
     mAdvance.resize(advances, nullptr);
-    mAdvanceDepth.resize(advances, 0);
+    mAdvanceRank.resize(advances, 0);
     mAdvanceNegatedVariable.reserve(advances);
     for (Statement * stmt = entryBlock->front(); ; ) {
         while ( stmt ) {
@@ -379,10 +433,10 @@ inline void MultiplexingPass::initializeAdvanceDepth(PabloBlock * const entryBlo
                 advanceScope[k] = cast<Advance>(stmt)->getParent();
                 for (unsigned i = 0; i != k; ++i) {
                     if (edge(i, k, mConstraintGraph).second || (advanceScope[i] != advanceScope[k])) {
-                        depth = std::max<int>(depth, mAdvanceDepth[i]);
+                        depth = std::max<int>(depth, mAdvanceRank[i]);
                     }
                 }
-                mAdvanceDepth[k++] = ++depth;
+                mAdvanceRank[k++] = ++depth;
                 maxDepth = std::max(maxDepth, depth);
             }
             stmt = stmt->getNextNode();
@@ -395,7 +449,7 @@ inline void MultiplexingPass::initializeAdvanceDepth(PabloBlock * const entryBlo
     }
     assert (k == advances);
 
-    LOG("Window Size / Max Depth: " << mWindowSize << " of " << maxDepth);
+    LOG("Window Size / Max Depth: " << WindowSize << " of " << maxDepth);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -408,11 +462,20 @@ void MultiplexingPass::characterize(PabloBlock * const block) {
     for (Statement * stmt : *block) {
         if (LLVM_UNLIKELY(isa<If>(stmt))) {
             characterize(cast<If>(stmt)->getBody());
+            for (const Assign * def : cast<If>(stmt)->getDefined()) {
+                if (LLVM_LIKELY(escapes(def))) {
+                    bdd_addref(get(def));
+                }
+            }
         } else if (LLVM_UNLIKELY(isa<While>(stmt))) {
             characterize(cast<While>(stmt)->getBody());
             for (const Next * var : cast<While>(stmt)->getVariants()) {
-                BDD & assign = get(var->getInitial());
-                assign = bdd_addref(bdd_or(assign, get(var)));
+                if (LLVM_LIKELY(escapes(var))) {
+                    BDD & initial = get(var->getInitial());
+                    BDD & escaped = get(var);
+                    initial = bdd_addref(bdd_or(initial, escaped));
+                    escaped = initial;
+                }
             }
         } else {
             mCharacterization.insert(std::make_pair(stmt, characterize(stmt)));
@@ -545,23 +608,26 @@ inline BDD MultiplexingPass::characterize(Advance * const adv, const BDD Ik) {
     const BDD Nk = bdd_addref(bdd_not(Ak));
     for (unsigned i = 0; i != k; ++i) {
         if (unconstrained[i]) {
-            // Note: this algorithm deems two streams are mutually exclusive if and only if the conjuntion of their BDDs results
-            // in a contradiction. To generate a contradiction when comparing Advances, the BDD of each Advance is represented by
-            // the conjunction of variable representing the k-th Advance and the negation of all variables for the Advances whose
-            // inputs are mutually exclusive with the k-th input. For example, if the input of the i-th Advance is mutually exclusive
-            // with the input of the j-th and k-th Advance, the BDD of the i-th Advance is Ai ∧ ¬Aj ∧ ¬Ak.
-            const Advance * const ithAdv = mAdvance[i];
+            // This algorithm deems two streams mutually exclusive if and only if the conjuntion of their BDDs is a contradiction.
+            // To generate a contradiction when comparing Advances, the BDD of each Advance is represented by the conjunction of
+            // variables representing the k-th Advance and the negation of all variables for the Advances whose inputs are mutually
+            // exclusive with the k-th input.
+
+            // For example, if the input of the i-th Advance is mutually exclusive with the input of the j-th and k-th Advance, the
+            // BDD of the i-th Advance is Ai ∧ ¬Aj ∧ ¬Ak. Similarly, the j- and k-th Advance is Aj ∧ ¬Ai and Ak ∧ ¬Ai, respectively
+            // (assuming that the j-th and k-th Advance are not mutually exclusive.)
+
             const BDD Ni = mAdvanceNegatedVariable[i];
-            BDD & Ai = get(ithAdv);
+            BDD & Ai = get(mAdvance[i]);
             Ai = bdd_addref(bdd_and(Ai, Nk));
             Ak = bdd_addref(bdd_and(Ak, Ni));
-            if (independent(i, k) && (adv->getParent() == ithAdv->getParent())) {
+            if (independent(i, k) && (adv->getParent() == mAdvance[i]->getParent())) {
                 continue;
             }
         }
         add_edge(i, k, mConstraintGraph);
     }
-    // To minimize the number of BDD computations, store the negated variable instead of negating it each time.
+    // To minimize the number of BDD computations, we store the negated variable instead of negating it each time.
     mAdvanceNegatedVariable.emplace_back(Nk);
     return Ak;
 }
@@ -578,8 +644,8 @@ inline bool MultiplexingPass::independent(const ConstraintVertex i, const Constr
  * @brief exceedsWindowSize
  ** ------------------------------------------------------------------------------------------------------------- */
 inline bool MultiplexingPass::exceedsWindowSize(const ConstraintVertex i, const ConstraintVertex j) const {
-    assert (i < mAdvanceDepth.size() && j < mAdvanceDepth.size());
-    return (std::abs<int>(mAdvanceDepth[i] - mAdvanceDepth[j]) > mWindowSize);
+    assert (i < mAdvanceRank.size() && j < mAdvanceRank.size());
+    return (std::abs<int>(mAdvanceRank[i] - mAdvanceRank[j]) > WindowSize);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -641,60 +707,66 @@ void MultiplexingPass::generateUsageWeightingGraph() {
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief generateMultiplexSets
+ * @brief generateCandidateSets
  ** ------------------------------------------------------------------------------------------------------------- */
 bool MultiplexingPass::generateCandidateSets() {
 
-    // What if we generated a "constraint free" graph instead? By taking each connected component of it
-    // and computing the complement of it (with the same lesser to greater index ordering), we should
-    // have the same problem here but decomposed into subgraphs.
+    Constraints S;
 
-    VertexVector S;
-    std::vector<ConstraintGraph::degree_size_type> D(num_vertices(mConstraintGraph));
-    S.reserve(15);
+    ConstraintGraph::degree_size_type D[num_vertices(mConstraintGraph)];
 
-    mMultiplexSetGraph = MultiplexSetGraph(num_vertices(mConstraintGraph));
+    mCandidateGraph = CandidateGraph(num_vertices(mConstraintGraph));
 
-    // Push all source nodes into the (initial) independent set S
-    for (auto v : make_iterator_range(vertices(mConstraintGraph))) {
-        const auto d = in_degree(v, mConstraintGraph);
-        D[v] = d;
-        if (d == 0) {
-            S.push_back(v);
+    for (unsigned iteration = 0; iteration < Samples; ++iteration) {
+
+        // Push all source nodes into the (initial) independent set S
+        for (const auto v : make_iterator_range(vertices(mConstraintGraph))) {
+            const auto d = in_degree(v, mConstraintGraph);
+            D[v] = d;
+            if (d == 0) {
+                S.push_back(v);
+            }
         }
-    }
 
-    assert (S.size() > 0);
+        auto remaining = num_vertices(mConstraintGraph) - S.size();
 
-    auto remainingVerticies = num_vertices(mConstraintGraph) - S.size();
-
-    do {
-
-        addCandidateSet(S);
-
-        bool noNewElements = true;
-        do {
+        for (;;) {
             assert (S.size() > 0);
-            // Randomly choose a vertex in S and discard it.
-            const auto i = S.begin() + IntDistribution(0, S.size() - 1)(mRNG);
-            assert (i != S.end());
-            const ConstraintVertex u = *i;
-            S.erase(i);
-
-            for (auto e : make_iterator_range(out_edges(u, mConstraintGraph))) {
-                const ConstraintVertex v = target(e, mConstraintGraph);
-                if ((--D[v]) == 0) {
-                    S.push_back(v);
-                    --remainingVerticies;
-                    noNewElements = false;
+            addCandidateSet(S);
+            if (LLVM_UNLIKELY(remaining == 0)) {
+                break;
+            }
+            for (;;) {
+                assert (S.size() > 0);
+                // Randomly choose a vertex in S and discard it.
+                const auto i = S.begin() + IntDistribution(0, S.size() - 1)(mRNG);
+                assert (i != S.end());
+                const auto u = *i;
+                S.erase(i);
+                bool checkCandidate = false;
+                for (auto e : make_iterator_range(out_edges(u, mConstraintGraph))) {
+                    const auto v = target(e, mConstraintGraph);
+                    assert ("Constraint set degree subtraction error!" && (D[v] != 0));
+                    if ((--D[v]) == 0) {
+                        assert ("Error v is already in S!" && std::count(S.begin(), S.end(), v) == 0);
+                        S.push_back(v);
+                        assert (remaining != 0);
+                        --remaining;
+                        if (LLVM_LIKELY(S.size() >= 3)) {
+                            checkCandidate = true;
+                        }
+                    }
+                }
+                if (checkCandidate || LLVM_UNLIKELY(remaining == 0)) {
+                    break;
                 }
             }
         }
-        while (noNewElements && remainingVerticies);
-    }
-    while (remainingVerticies);
 
-    return num_vertices(mMultiplexSetGraph) > num_vertices(mConstraintGraph);
+        S.clear();
+    }
+
+    return num_vertices(mCandidateGraph) > num_vertices(mConstraintGraph);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -724,7 +796,7 @@ __attribute__ ((const)) inline unsigned long choose(const unsigned n, const unsi
  *
  * James McCaffrey's algorithm for "Generating the mth Lexicographical Element of a Mathematical Combination"
  ** ------------------------------------------------------------------------------------------------------------- */
-void select(const unsigned n, const unsigned k, const unsigned m, unsigned * element) {
+void MultiplexingPass::selectCandidateSet(const unsigned n, const unsigned k, const unsigned m, const Constraints & S, ConstraintVertex * const element) {
     unsigned long a = n;
     unsigned long b = k;
     unsigned long x = (choose(n, k) - 1) - m;
@@ -733,39 +805,80 @@ void select(const unsigned n, const unsigned k, const unsigned m, unsigned * ele
         while ((y = choose(--a, b)) > x);
         x = x - y;
         b = b - 1;
-        element[i] = (n - 1) - a;
+        element[i] = S[(n - 1) - a];
     }
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief updateCandidateSet
+ ** ------------------------------------------------------------------------------------------------------------- */
+void MultiplexingPass::updateCandidateSet(ConstraintVertex * const begin, ConstraintVertex * const end) {
+
+    using Vertex = CandidateGraph::vertex_descriptor;
+
+    const auto n = num_vertices(mConstraintGraph);
+    const auto m = num_vertices(mCandidateGraph);
+    const auto d = end - begin;
+
+    std::sort(begin, end);
+
+    Vertex u = 0;
+
+    for (Vertex i = n; i != m; ++i) {
+
+        if (LLVM_UNLIKELY(degree(i, mCandidateGraph) == 0)) {
+            u = i;
+            continue;
+        }
+
+        const auto adj = adjacent_vertices(i, mCandidateGraph);
+        if (degree(i, mCandidateGraph) < d) {
+            // set_i can only be a subset of the new set
+            if (LLVM_UNLIKELY(std::includes(begin, end, adj.first, adj.second))) {
+                clear_vertex(i, mCandidateGraph);
+                u = i;
+            }
+        } else if (LLVM_UNLIKELY(std::includes(adj.first, adj.second, begin, end))) {
+            // the new set is a subset of set_i; discard it.
+            return;
+        }
+
+    }
+
+    if (LLVM_LIKELY(u == 0)) { // n must be at least 3 so u is 0 if and only if we're not reusing a set vertex.
+        u = add_vertex(mCandidateGraph);
+    }
+
+    for (ConstraintVertex * i = begin; i != end; ++i) {
+        add_edge(u, *i, mCandidateGraph);
+    }
+
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief addCandidateSet
  * @param S an independent set
  ** ------------------------------------------------------------------------------------------------------------- */
-inline void MultiplexingPass::addCandidateSet(const VertexVector & S) {
+inline void MultiplexingPass::addCandidateSet(const Constraints & S) {
     if (S.size() >= 3) {
-        if (S.size() <= mMultiplexingSetSizeLimit) {
-            const auto u = add_vertex(mMultiplexSetGraph);
-            for (const auto v : S) {
-                add_edge(u, v, mMultiplexSetGraph);
-            }
+        const unsigned setLimit = SetLimit;
+        if (S.size() <= setLimit) {
+            ConstraintVertex E[S.size()];
+            std::copy(S.cbegin(), S.cend(), E);
+            updateCandidateSet(E, E + S.size());
         } else {
-            const auto max = choose(S.size(), mMultiplexingSetSizeLimit);
-            unsigned element[mMultiplexingSetSizeLimit];
-            if (LLVM_UNLIKELY(max <= mMaxMultiplexingSetSelections)) {
+            assert (setLimit > 0);
+            ConstraintVertex E[setLimit];
+            const auto max = choose(S.size(), setLimit);
+            if (LLVM_UNLIKELY(max <= SelectionLimit)) {
                 for (unsigned i = 0; i != max; ++i) {
-                    select(S.size(), mMultiplexingSetSizeLimit, i, element);
-                    const auto u = add_vertex(mMultiplexSetGraph);
-                    for (unsigned j = 0; j != mMultiplexingSetSizeLimit; ++j) {
-                        add_edge(u, S[element[j]], mMultiplexSetGraph);
-                    }
+                    selectCandidateSet(S.size(), setLimit, i, S, E);
+                    updateCandidateSet(E, E + setLimit);
                 }
             } else { // take m random samples
-                for (unsigned i = 0; i != mMaxMultiplexingSetSelections; ++i) {
-                    select(S.size(), mMultiplexingSetSizeLimit, mRNG() % max, element);
-                    const auto u = add_vertex(mMultiplexSetGraph);
-                    for (unsigned j = 0; j != mMultiplexingSetSizeLimit; ++j) {
-                        add_edge(u, S[element[j]], mMultiplexSetGraph);
-                    }
+                for (unsigned i = 0; i != SelectionLimit; ++i) {
+                    selectCandidateSet(S.size(), setLimit, mRNG() % max, S, E);
+                    updateCandidateSet(E, E + setLimit);
                 }
             }
         }
@@ -780,28 +893,27 @@ static inline size_t log2_plus_one(const size_t n) {
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief selectMultiplexSets
+ * @brief selectMultiplexSetsGreedy
  *
  * This algorithm is simply computes a greedy set cover. We want an exact max-weight set cover but can generate new
  * sets by taking a subset of any existing set. With a few modifications, the greedy approach seems to work well
  * enough but can be shown to produce a suboptimal solution if there are three candidate sets labelled A, B and C,
  * in which A ∩ B = ∅, |A| ≤ |B| < |C|, and C ⊂ (A ∪ B).
  ** ------------------------------------------------------------------------------------------------------------- */
-void MultiplexingPass::selectMultiplexSets() {
+void MultiplexingPass::selectMultiplexSetsGreedy() {
 
-    using SetIterator = graph_traits<MultiplexSetGraph>::in_edge_iterator;
-    using ElementIterator = graph_traits<MultiplexSetGraph>::out_edge_iterator;
-    using degree_t = MultiplexSetGraph::degree_size_type;
-    using vertex_t = MultiplexSetGraph::vertex_descriptor;
+    using AdjIterator = graph_traits<CandidateGraph>::adjacency_iterator;
+    using degree_t = CandidateGraph::degree_size_type;
+    using vertex_t = CandidateGraph::vertex_descriptor;
 
     const size_t m = num_vertices(mConstraintGraph);
-    const size_t n = num_vertices(mMultiplexSetGraph) - m;
+    const size_t n = num_vertices(mCandidateGraph) - m;
 
     degree_t remaining[n];
     vertex_t chosen_set[m];
 
     for (unsigned i = 0; i != n; ++i) {
-        remaining[i] = out_degree(i + m, mMultiplexSetGraph);
+        remaining[i] = degree(i + m, mCandidateGraph);
     }
     for (unsigned i = 0; i != m; ++i) {
         chosen_set[i] = 0;
@@ -816,11 +928,11 @@ void MultiplexingPass::selectMultiplexSets() {
             degree_t r = remaining[i];
             if (r > 2) { // if this set has at least 3 elements.
                 r *= r;
-                ElementIterator begin, end;
-                std::tie(begin, end) = out_edges(i + m, mMultiplexSetGraph);
+                AdjIterator begin, end;
+                std::tie(begin, end) = adjacent_vertices(i + m, mCandidateGraph);
                 for (auto ei = begin; ei != end; ++ei) {
                     for (auto ej = ei; ++ej != end; ) {
-                        if (edge(target(*ei, mMultiplexSetGraph), target(*ej, mMultiplexSetGraph), mUsageGraph).second) {
+                        if (edge(*ei, *ej, mUsageGraph).second) {
                             ++r;
                         }
                     }
@@ -837,12 +949,12 @@ void MultiplexingPass::selectMultiplexSets() {
             break;
         }
 
-        for (const auto ei : make_iterator_range(out_edges(k + m, mMultiplexSetGraph))) {
-            const vertex_t j = target(ei, mMultiplexSetGraph);
-            if (chosen_set[j] == 0) {
-                chosen_set[j] = (k + m);
-                for (const auto ej : make_iterator_range(in_edges(j, mMultiplexSetGraph))) {
-                    remaining[source(ej, mMultiplexSetGraph) - m]--;
+        for (const auto u : make_iterator_range(adjacent_vertices(k + m, mCandidateGraph))) {
+            if (chosen_set[u] == 0) {
+                chosen_set[u] = (k + m);
+                for (const auto v : make_iterator_range(adjacent_vertices(u, mCandidateGraph))) {
+                    assert (v >= m);
+                    remaining[v - m]--;
                 }
             }
         }
@@ -857,9 +969,9 @@ void MultiplexingPass::selectMultiplexSets() {
             for (vertex_t i = 0; i != m; ++i) {
                 if (chosen_set[i] == (k + m)) {
                     degree_t r = 1;
-                    for (const auto ej : make_iterator_range(in_edges(i, mMultiplexSetGraph))) {
+                    for (const auto u : make_iterator_range(adjacent_vertices(i, mCandidateGraph))) {
                         // strongly prefer adding weight to unvisited sets that have more remaining vertices
-                        r += std::pow(remaining[source(ej, mMultiplexSetGraph) - m], 2);
+                        r += std::pow(remaining[u - m], 2);
                     }
                     if (w < r) {
                         j = i;
@@ -869,37 +981,89 @@ void MultiplexingPass::selectMultiplexSets() {
             }
             assert (w > 0);
             chosen_set[j] = 0;
-            for (const auto ej : make_iterator_range(in_edges(j, mMultiplexSetGraph))) {
-                remaining[source(ej, mMultiplexSetGraph) - m]++;
+            for (const auto u : make_iterator_range(adjacent_vertices(j, mCandidateGraph))) {
+                assert (u >= m);
+                remaining[u - m]++;
             }
         }
+
+        // If Samples > 1 then our candidate sets were generated by more than one traversal through the constraint graph.
+        // Sets generated by differing traversals may generate a cycle in the AST if multiplex even when they are not
+        // multiplexed together. For example,
+
+        // Assume we're multiplexing set {A,B,C} and {D,E,F} and that no constraint exists between any nodes in
+        // either set. If A is dependent on D and E is dependent on B, multiplexing both sets would result in a cycle
+        // in the AST. To fix this, we'd have to remove A, D, B or E.
+
+        // This cannot occur with only one traversal (or between sets generated by the same traversal) because of the
+        // DAG traversal strategy used in "generateCandidateSets".
+
+
     }
 
     for (unsigned i = 0; i != m; ++i) {
-        SetIterator ei, ei_end;
-        std::tie(ei, ei_end) = in_edges(i, mMultiplexSetGraph);
+        AdjIterator ei, ei_end;
+        std::tie(ei, ei_end) = adjacent_vertices(i, mCandidateGraph);
         for (auto next = ei; ei != ei_end; ei = next) {
             ++next;
-            if (source(*ei, mMultiplexSetGraph) != chosen_set[i]) {
-                remove_edge(*ei, mMultiplexSetGraph);
+            if (*ei != chosen_set[i]) {
+                remove_edge(i, *ei, mCandidateGraph);
             }
         }
     }
 
     #ifndef NDEBUG
     for (unsigned i = 0; i != m; ++i) {
-        assert (in_degree(i, mMultiplexSetGraph) <= 1);
+        assert (degree(i, mCandidateGraph) <= 1);
     }
     for (unsigned i = m; i != (m + n); ++i) {
-        assert (out_degree(i, mMultiplexSetGraph) == 0 || out_degree(i, mMultiplexSetGraph) >= 3);
+        assert (degree(i, mCandidateGraph) == 0 || degree(i, mCandidateGraph) >= 3);
     }
     #endif
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief selectMultiplexSetsWorkingSet
+ ** ------------------------------------------------------------------------------------------------------------- */
+void MultiplexingPass::selectMultiplexSetsWorkingSet() {
+
+    // The inputs to each Advance must be different; otherwise the SimplificationPass would consider all but
+    // one of the Advances redundant. However, if the input is short lived, we can ignore it in favour of its
+    // operands, which *may* be shared amongst more than one of the Advances (or may be short lived themselves,
+    // in which we can consider their operands instead.) Ideally, if we can keep the set of live values small,
+    // we may be able to reduce register pressure.
+
+//    using Graph = adjacency_list<hash_setS, vecS, bidirectionalS, Statement *, unsigned>;
+//    using Map = flat_map<const Statement *, typename Graph::vertex_descriptor>;
+
+//    const size_t m = num_vertices(mConstraintGraph);
+//    const size_t n = num_vertices(mMultiplexSetGraph) - m;
+
+//    for (unsigned i = 0; i != n; ++i) {
+
+//        Map M;
+//        Graph G = construct<Graph>(block, M);
+
+
+
+
+
+
+
+//    }
+
+
+
+
+
+
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief eliminateSubsetConstraints
  ** ------------------------------------------------------------------------------------------------------------- */
 void MultiplexingPass::eliminateSubsetConstraints() {
+    using SubsetEdgeIterator = graph_traits<SubsetGraph>::edge_iterator;
     // If Ai ⊂ Aj then the subset graph will contain the arc (i, j). Remove all arcs corresponding to vertices
     // that are not elements of the same multiplexing set.
     SubsetEdgeIterator ei, ei_end, ei_next;
@@ -908,11 +1072,11 @@ void MultiplexingPass::eliminateSubsetConstraints() {
         ++ei_next;
         const auto u = source(*ei, mSubsetGraph);
         const auto v = target(*ei, mSubsetGraph);
-        if (in_degree(u, mMultiplexSetGraph) != 0 && in_degree(v, mMultiplexSetGraph) != 0) {
-            assert (in_degree(u, mMultiplexSetGraph) == 1);
-            const auto su = source(*(in_edges(u, mMultiplexSetGraph).first), mMultiplexSetGraph);
-            assert (in_degree(v, mMultiplexSetGraph) == 1);
-            const auto sv = source(*(in_edges(v, mMultiplexSetGraph).first), mMultiplexSetGraph);
+        if (degree(u, mCandidateGraph) != 0 && degree(v, mCandidateGraph) != 0) {
+            assert (degree(u, mCandidateGraph) == 1);
+            assert (degree(v, mCandidateGraph) == 1);
+            const auto su = *(adjacent_vertices(u, mCandidateGraph).first);
+            const auto sv = *(adjacent_vertices(v, mCandidateGraph).first);
             if (su == sv) {
                 continue;
             }
@@ -948,9 +1112,10 @@ void MultiplexingPass::eliminateSubsetConstraints() {
 void MultiplexingPass::multiplexSelectedSets(PabloFunction & function) {
     flat_set<PabloBlock *> modified;
     const auto first_set = num_vertices(mConstraintGraph);
-    const auto last_set = num_vertices(mMultiplexSetGraph);
+    const auto last_set = num_vertices(mCandidateGraph);
     for (auto idx = first_set; idx != last_set; ++idx) {
-        const size_t n = out_degree(idx, mMultiplexSetGraph);
+        const size_t n = degree(idx, mCandidateGraph);
+        assert (n == 0 || n > 2);
         if (n) {
             const size_t m = log2_plus_one(n);
             Advance * input[n];
@@ -1007,23 +1172,23 @@ void MultiplexingPass::multiplexSelectedSets(PabloFunction & function) {
         }
     }
     for (PabloBlock * block : modified) {
-        topologicalSort(block);
+        rewriteAST(block);
     }
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief orderMultiplexSet
  ** ------------------------------------------------------------------------------------------------------------- */
-inline MultiplexingPass::MultiplexVector MultiplexingPass::orderMultiplexSet(const MultiplexSetGraph::vertex_descriptor u) {
-    MultiplexVector set;
-    set.reserve(out_degree(u, mMultiplexSetGraph));
-    for (const auto e : make_iterator_range(out_edges(u, mMultiplexSetGraph))) {
-        set.push_back(target(e, mMultiplexSetGraph));
+inline MultiplexingPass::Candidates MultiplexingPass::orderMultiplexSet(const CandidateGraph::vertex_descriptor u) {
+    Candidates set;
+    set.reserve(degree(u, mCandidateGraph));
+    for (const auto e : make_iterator_range(adjacent_vertices(u, mCandidateGraph))) {
+        set.push_back(e);
     }
     std::sort(set.begin(), set.end());
-    MultiplexVector clique;
-    MultiplexVector result;
-    result.reserve(out_degree(u, mMultiplexSetGraph));
+    Candidates clique;
+    Candidates result;
+    result.reserve(degree(u, mCandidateGraph));
     while (set.size() > 0) {
         const auto v = *set.begin();
         clique.push_back(v);
@@ -1053,101 +1218,165 @@ inline MultiplexingPass::MultiplexVector MultiplexingPass::orderMultiplexSet(con
     return result;
 }
 
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief topologicalSort
- ** ------------------------------------------------------------------------------------------------------------- */
-void MultiplexingPass::topologicalSort(PabloBlock * const block) {
 
-    using Vertex = OrderingGraph::vertex_descriptor;
 
-    OrderingGraph G;
-    OrderingMap M;
-
-    for (Statement * stmt : *block ) {
-        const auto u = add_vertex(G);
-        G[u] = stmt;
-        M.emplace(stmt, u);
-        if (LLVM_UNLIKELY(isa<If>(stmt))) {
-            for (Assign * def : cast<If>(stmt)->getDefined()) {
-                M.emplace(def, u);
-            }
-        } else if (LLVM_UNLIKELY(isa<While>(stmt))) {
-            for (Next * var : cast<While>(stmt)->getVariants()) {
-                M.emplace(var, u);
-            }
-        }
-    }
-
-    Vertex u = 0;
-    for (Statement * stmt : *block ) {
-
-        for (unsigned i = 0; i != stmt->getNumOperands(); ++i) {
-            PabloAST * const op = stmt->getOperand(i);
-            if (isa<Statement>(op)) {
-                auto f = M.find(cast<Statement>(op));
-                if (f != M.end()) {
-                    add_edge(f->second, u, G);
-                }
-            }
-        }
-
-        if (LLVM_UNLIKELY(isa<If>(stmt))) {
-            for (Assign * def : cast<If>(stmt)->getDefined()) {
-                topologicalSort(u, block, def, G, M);
-            }
-        } else if (LLVM_UNLIKELY(isa<While>(stmt))) {
-            for (Next * var : cast<While>(stmt)->getVariants()) {
-                topologicalSort(u, block, var, G, M);
-            }
-        } else {
-            topologicalSort(u, block, stmt, G, M);
-        }
-
-        ++u;
-
-    }
-
-    circular_buffer<Vertex> Q(num_vertices(G));
-    topological_sort(G, std::back_inserter(Q));
-
-    block->setInsertPoint(nullptr);
-    while (Q.size() > 0) {
-        const Vertex u = Q.back(); Q.pop_back();
-        block->insert(G[u]);
-    }
-
-}
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief topologicalSort
+ * @brief rewriteAST
+ *
+ * Multiplexing ignores def-use ordering when muxing and demuxing the Advances; this will likely lead to an illegal
+ * ordering but, by virtue of the multiplexing algorithm, some ordering of the IR must be legal. However, an
+ * arbritary topological ordering will likely lead to poor performance due to excessive register spills; this
+ * algorithm attempts to mitigate this by using a simple bottom-up ordering scheme.
  ** ------------------------------------------------------------------------------------------------------------- */
-void MultiplexingPass::topologicalSort(const OrderingGraph::vertex_descriptor u, const PabloBlock * const block, const Statement * const stmt, OrderingGraph & G, OrderingMap & M) {
-    for (const PabloAST * user : stmt->users()) {
-        if (LLVM_LIKELY(isa<Statement>(user))) {
-            const Statement * use = cast<Statement>(user);
-            auto f = M.find(use);
-            if (LLVM_UNLIKELY(f == M.end())) {
-                const PabloBlock * parent = use->getParent();
-                for (;;) {
-                    if (parent == block) {
+void MultiplexingPass::rewriteAST(PabloBlock * const block) {
+
+    using Graph = adjacency_list<hash_setS, vecS, bidirectionalS, Statement *>;
+    using Vertex = Graph::vertex_descriptor;
+    using ReadySet = std::vector<Vertex>;
+    using TypeId = PabloAST::ClassTypeId;
+
+    Graph G = construct<Graph>(block);
+
+
+    std::vector<unsigned> rank(num_vertices(G), 0);
+
+    {
+        circular_buffer<Vertex> Q(num_vertices(G));
+        // Compute the rank of each statement
+        for (const Vertex u : make_iterator_range(vertices(G))) {
+            if (out_degree(u, G) == 0 && rank[u] == 0) {
+                Q.push_back(u);
+            }
+        }
+
+        while (Q.size() > 0) {
+
+            const Vertex u = Q.front();
+            Q.pop_front();
+
+            assert (rank[u] == 0);
+
+            unsigned work = 0;
+            switch (G[u]->getClassTypeId()) {
+                case TypeId::And:
+                case TypeId::Or:
+                case TypeId::Xor:
+                    work = 2;
+                    break;
+//                case TypeId::Not:
+                case TypeId::Assign:
+                case TypeId::Next:
+                    work = 1;
+                    break;
+                case TypeId::Sel:
+                    work = 6;
+                    break;
+                case TypeId::Advance:
+                case TypeId::ScanThru:
+                    work = 33;
+                    break;
+                case TypeId::MatchStar:
+                    work = 51;
+                    break;
+                case TypeId::If:
+                case TypeId::While:
+                case TypeId::Call:
+                    work = 10000; // <-- try to push If, While and Call nodes as high as possible
+                    break;
+                default: break;
+            }
+
+            unsigned r = 0;
+            for (const auto e : make_iterator_range(out_edges(u, G))) {
+                r = std::max(r, rank[target(e, G)]);
+            }
+
+            rank[u] = work + r;
+
+            for (const auto ei : make_iterator_range(in_edges(u, G))) {
+                const auto v = source(ei, G);
+                assert (rank[v] == 0);
+                bool ready = true;
+                for (const auto ej : make_iterator_range(out_edges(v, G))) {
+                    if (rank[target(ej, G)] == 0) {
+                        ready = false;
                         break;
                     }
-                    use = parent->getBranch();
-                    parent = parent->getParent();
-                    if (parent == nullptr) {
-                        return;
+                }
+                if (ready) {
+                    Q.push_back(v);
+                }
+            }
+
+        }
+    }
+
+    // Compute the initial ready set
+    ReadySet readySet;
+    for (const Vertex u : make_iterator_range(vertices(G))) {
+        if (in_degree(u, G) == 0) {
+            readySet.emplace_back(u);
+        }
+    }
+
+    auto by_nonincreasing_rank = [&rank](const Vertex u, const Vertex v) -> bool {
+        return rank[u] > rank[v];
+    };
+
+    std::sort(readySet.begin(), readySet.end(), by_nonincreasing_rank);
+
+    block->setInsertPoint(nullptr);
+    // Rewrite the AST using the bottom-up ordering
+    while (readySet.size() > 0) {
+        // Scan through the ready set to determine which one 'kills' the greatest number of inputs
+        double best = 0.0;
+        auto rk = readySet.begin();
+        for (auto ri = readySet.begin(); ri != readySet.end(); ++ri) {
+            double p = 0.0;
+            assert (rank[*ri] != 0);
+            for (auto ei : make_iterator_range(in_edges(*ri, G))) {
+                const auto v = source(ei, G);
+                unsigned unscheduled = 0;
+                for (auto ej : make_iterator_range(out_edges(v, G))) {
+                    if (rank[target(ej, G)] != 0) { // if this edge leads to an unscheduled statement
+                        ++unscheduled;
                     }
                 }
-                f = M.find(use);
-                assert (f != M.end());
-                M.emplace(use, f->second);
+                assert (unscheduled > 0);
+                assert (unscheduled <= out_degree(v, G));
+                const double uses = out_degree(v, G);
+                p += std::pow((uses - (double)(unscheduled - 1)) / uses, 2);
             }
-            const auto v = f->second;
-            if (LLVM_UNLIKELY(u != v)) {
-                add_edge(u, v, G);
+            if (p > best) {
+                rk = ri;
+                best = p;
+            }
+        }
+        const auto u = *rk;
+        readySet.erase(rk);
+        // Write the statement back to the AST ...
+        block->insert(G[u]);
+        // ... and mark it as written
+        rank[u] = 0;
+        // Now check whether any new statements are ready
+        for (auto ei : make_iterator_range(out_edges(u, G))) {
+            bool ready = true;
+            const auto v = target(ei, G);
+            for (auto ej : make_iterator_range(in_edges(v, G))) {
+                if (rank[source(ej, G)] != 0) {
+                    ready = false;
+                    break;
+                }
+            }
+            if (ready) {
+                assert (rank[v] != 0);
+                readySet.insert(std::lower_bound(readySet.begin(), readySet.end(), v, by_nonincreasing_rank), v);
+                assert (std::is_sorted(readySet.cbegin(), readySet.cend(), by_nonincreasing_rank));
             }
         }
     }
+
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -1283,6 +1512,113 @@ inline BDD & MultiplexingPass::get(const PabloAST * const expr) {
     auto f = mCharacterization.find(expr);
     assert (f != mCharacterization.end());
     return f->second;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief computeDAG
+ ** ------------------------------------------------------------------------------------------------------------- */
+template<typename Graph, typename Map>
+Graph construct(PabloBlock * const block, Map & M) {
+
+    using Vertex = typename Graph::vertex_descriptor;
+
+    const auto size = std::distance(block->begin(), block->end());
+
+    Graph G(size);
+    M.reserve(size);
+
+    Vertex u = 0;
+    for (Statement * stmt : *block ) {
+        G[u] = stmt;
+        M.emplace(stmt, u);
+        if (LLVM_UNLIKELY(isa<If>(stmt))) {
+            for (Assign * def : cast<If>(stmt)->getDefined()) {
+                M.emplace(def, u);
+            }
+        } else if (LLVM_UNLIKELY(isa<While>(stmt))) {
+            for (Next * var : cast<While>(stmt)->getVariants()) {
+                M.emplace(var, u);
+            }
+        }
+        ++u;
+    }
+
+    /// The following is a lamda function that adds any users of "stmt" to the graph after resolving
+    /// which vertex it maps to w.r.t. the current block.
+    auto addUsers = [&](const Vertex u, const Statement * const stmt) -> void {
+        for (const PabloAST * user : stmt->users()) {
+            if (LLVM_LIKELY(isa<Statement>(user))) {
+                const Statement * use = cast<Statement>(user);
+                auto f = M.find(use);
+                if (LLVM_UNLIKELY(f == M.end())) {
+                    const PabloBlock * parent = use->getParent();
+                    for (;;) {
+                        if (parent == block) {
+                            break;
+                        }
+                        use = parent->getBranch();
+                        parent = parent->getParent();
+                        if (parent == nullptr) {
+                            return;
+                        }
+                    }
+                    f = M.find(use);
+                    assert (f != M.end());
+                    M.emplace(use, f->second);
+                }
+                const auto v = f->second;
+                if (LLVM_UNLIKELY(u != v)) {
+                    add_edge(u, v, G);
+                }
+            }
+        }
+    };
+
+    u = 0;
+    for (Statement * stmt : *block ) {
+
+        for (unsigned i = 0; i != stmt->getNumOperands(); ++i) {
+            PabloAST * const op = stmt->getOperand(i);
+            if (isa<Statement>(op)) {
+                auto f = M.find(cast<Statement>(op));
+                if (f != M.end()) {
+                    add_edge(f->second, u, G);
+                }
+            }
+        }
+
+        if (LLVM_UNLIKELY(isa<If>(stmt))) {
+            for (Assign * def : cast<If>(stmt)->getDefined()) {
+                addUsers(u, def);
+            }
+        } else if (LLVM_UNLIKELY(isa<While>(stmt))) {
+            for (Next * var : cast<While>(stmt)->getVariants()) {
+                addUsers(u, var);
+            }
+        } else {
+            addUsers(u, stmt);
+        }
+
+        ++u;
+    }
+
+    #ifndef NDEBUG
+    std::vector<typename Graph::vertex_descriptor> nothing;
+    topological_sort(G, std::back_inserter(nothing));
+    #endif
+
+    return G;
+}
+
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief computeDAG
+ ** ------------------------------------------------------------------------------------------------------------- */
+template<typename Graph>
+Graph construct(PabloBlock * const block) {
+    using Map = flat_map<const Statement *, typename Graph::vertex_descriptor>;
+    Map M;
+    return construct<Graph, Map>(block, M);
 }
 
 } // end of namespace pablo

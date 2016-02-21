@@ -15,12 +15,12 @@ inline double getMHZ(void) {
   FILE* fp;
 
   // open proc/cpuinfo
-  if ((fp = fopen("/proc/cpuinfo", "r")) == NULL)
+  if ((fp = fopen("/proc/cpuinfo", "r")) == nullptr)
     return -1;
 
   // ignore all lines until we reach MHz information
-  while (fgets(line, 1024, fp) != NULL) {
-    if (strstr(line, search_str) != NULL) {
+  while (fgets(line, 1024, fp) != nullptr) {
+    if (strstr(line, search_str) != nullptr) {
       // ignore all characters in line up to :
       for (s = line; *s && (*s != ':'); ++s)
         ;
@@ -30,7 +30,7 @@ inline double getMHZ(void) {
     }
   }
 
-  if (fp != NULL)
+  if (fp != nullptr)
     fclose(fp);
   return mhz;
 }

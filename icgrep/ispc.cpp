@@ -439,9 +439,9 @@ public:
 
 
 Target::Target(const char *arch, const char *cpu, const char *isa, bool pic, bool printTarget, std::string genericAsSmth) :
-    m_target(NULL),
-    m_targetMachine(NULL),
-    m_dataLayout(NULL),
+    m_target(nullptr),
+    m_targetMachine(nullptr),
+    m_dataLayout(nullptr),
     m_valid(false),
     m_isa(SSE2),
     m_treatGenericAsSmth(genericAsSmth),
@@ -450,7 +450,7 @@ Target::Target(const char *arch, const char *cpu, const char *isa, bool pic, boo
     m_cpu(""),
     m_attributes(""),
 #if ISPC_LLVM_VERSION >= ISPC_LLVM_3_3 
-    m_tf_attributes(NULL),
+    m_tf_attributes(nullptr),
 #endif
     m_nativeVectorWidth(-1),
     m_nativeVectorAlignment(-1),
@@ -481,7 +481,7 @@ Target::Target(const char *arch, const char *cpu, const char *isa, bool pic, boo
         }
     }
 
-    if (isa == NULL) {
+    if (isa == nullptr) {
         // If a CPU was specified explicitly, try to pick the best
         // possible ISA based on that.
         switch (CPUID) {
@@ -554,7 +554,7 @@ Target::Target(const char *arch, const char *cpu, const char *isa, bool pic, boo
         isa = lGetSystemISA();
     }
 
-    if (arch == NULL) {
+    if (arch == nullptr) {
 #ifdef ISPC_ARM_ENABLED
         if (!strncmp(isa, "neon", 4))
             arch = "arm";
@@ -588,7 +588,7 @@ Target::Target(const char *arch, const char *cpu, const char *isa, bool pic, boo
             break;
         }
     }
-    if (this->m_target == NULL) {
+    if (this->m_target == nullptr) {
         fprintf(stderr, "Invalid architecture \"%s\"\nOptions: ", arch);
         llvm::TargetRegistry::iterator iter;
 #if ISPC_LLVM_VERSION >= ISPC_LLVM_3_7 // LLVM 3.7+
@@ -984,7 +984,7 @@ Target::Target(const char *arch, const char *cpu, const char *isa, bool pic, boo
 
     if (CPUID == CPU_None) {
 #ifndef ISPC_ARM_ENABLED
-        if (isa == NULL) {
+        if (isa == nullptr) {
 #endif
             std::string hostCPU = llvm::sys::getHostCPUName();
             if (hostCPU.size() > 0)
@@ -1039,7 +1039,7 @@ Target::Target(const char *arch, const char *cpu, const char *isa, bool pic, boo
         m_targetMachine =
             m_target->createTargetMachine(triple, m_cpu, featuresString, options,
                     relocModel);
-        Assert(m_targetMachine != NULL);
+        Assert(m_targetMachine != nullptr);
 
 #if ISPC_LLVM_VERSION <= ISPC_LLVM_3_6
         m_targetMachine->setAsmVerbosityDefault(true);
@@ -1302,17 +1302,17 @@ lGenericTypeLayoutIndeterminate(llvm::Type *type) {
 
     llvm::ArrayType *at =
         llvm::dyn_cast<llvm::ArrayType>(type);
-    if (at != NULL)
+    if (at != nullptr)
         return lGenericTypeLayoutIndeterminate(at->getElementType());
 
     llvm::PointerType *pt =
         llvm::dyn_cast<llvm::PointerType>(type);
-    if (pt != NULL)
+    if (pt != nullptr)
         return false;
 
     llvm::StructType *st =
         llvm::dyn_cast<llvm::StructType>(type);
-    if (st != NULL) {
+    if (st != nullptr) {
         for (int i = 0; i < (int)st->getNumElements(); ++i)
             if (lGenericTypeLayoutIndeterminate(st->getElementType(i)))
                 return true;
@@ -1388,13 +1388,13 @@ Target::StructOffset(llvm::Type *type, int element,
 
     llvm::StructType *structType =
         llvm::dyn_cast<llvm::StructType>(type);
-    if (structType == NULL || structType->isSized() == false) {
+    if (structType == nullptr || structType->isSized() == false) {
         Assert(m->errorCount > 0);
-        return NULL;
+        return nullptr;
     }
 
     const llvm::StructLayout *sl = getDataLayout()->getStructLayout(structType);
-    Assert(sl != NULL);
+    Assert(sl != nullptr);
 
     uint64_t offset = sl->getElementOffset(element);
     if (m_is32Bit || g->opt.force32BitAddressing)
@@ -1464,7 +1464,7 @@ Globals::Globals() {
 #ifdef ISPC_IS_WINDOWS
     _getcwd(currentDirectory, sizeof(currentDirectory));
 #else
-    if (getcwd(currentDirectory, sizeof(currentDirectory)) == NULL)
+    if (getcwd(currentDirectory, sizeof(currentDirectory)) == nullptr)
         FATAL("Current directory path too long!");
 #endif
     forceAlignment = -1;
@@ -1476,8 +1476,8 @@ Globals::Globals() {
 
 SourcePos::SourcePos(const char *n, int fl, int fc, int ll, int lc) {
     name = n;
-    if (name == NULL) {
-        if (m != NULL)
+    if (name == nullptr) {
+        if (m != nullptr)
             name = m->module->getModuleIdentifier().c_str();
         else
             name = "(unknown)";

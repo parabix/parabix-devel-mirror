@@ -70,7 +70,7 @@ PapiCounter<N>::PapiCounter(std::initializer_list<int> events) {
 template <unsigned N>
 PapiCounter<N>::~PapiCounter() {
     // Call PAPI stop on destruction
-    int rval = PAPI_stop(fEventSet, NULL);
+    int rval = PAPI_stop(fEventSet, nullptr);
     if (rval != PAPI_OK) {
         throw std::runtime_error(" PAPI code: " + std::string(PAPI_strerror(rval)));
     }

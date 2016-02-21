@@ -23,7 +23,7 @@ Value * IDISA_Builder::fwCast(unsigned fw, Value * a) {
 
 void IDISA_Builder::genPrintRegister(std::string regName, Value * bitblockValue) {
     if (mPrintRegisterFunction == nullptr) {
-        mPrintRegisterFunction = mMod->getOrInsertFunction("wrapped_print_register", Type::getVoidTy(mMod->getContext()), Type::getInt8PtrTy(mMod->getContext()), mBitBlockType, NULL);
+        mPrintRegisterFunction = mMod->getOrInsertFunction("wrapped_print_register", Type::getVoidTy(mMod->getContext()), Type::getInt8PtrTy(mMod->getContext()), mBitBlockType, nullptr);
     }
     Constant * regNameData = ConstantDataArray::getString(mMod->getContext(), regName);
     GlobalVariable *regStrVar = new GlobalVariable(*mMod,

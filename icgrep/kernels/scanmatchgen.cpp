@@ -99,7 +99,7 @@ void generateScanSegmentRoutine(Module * m, IDISA::IDISA_Builder * iBuilder, int
     Value * recordNum_input_parm = args++;
     recordNum_input_parm->setName("lineNum");
     
-    Constant * matchProcessor = m->getOrInsertFunction("wrapped_report_match", Type::getVoidTy(ctxt), T, T, T, NULL);
+    Constant * matchProcessor = m->getOrInsertFunction("wrapped_report_match", Type::getVoidTy(ctxt), T, T, T, nullptr);
 
     
     iBuilder->SetInsertPoint(BasicBlock::Create(ctxt, "entry", sFunction,0));

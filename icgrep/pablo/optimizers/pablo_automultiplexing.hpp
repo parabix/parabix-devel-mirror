@@ -23,28 +23,30 @@ class PabloFunction;
 class MultiplexingPass {
 
     using CharacterizationMap = llvm::DenseMap<const PabloAST *, BDD>;
+
     using ConstraintGraph = boost::adjacency_matrix<boost::directedS>;
     using ConstraintVertex = ConstraintGraph::vertex_descriptor;
+    using Constraints = std::vector<ConstraintVertex>;
+
     using RNG = std::mt19937;
     using IntDistribution = std::uniform_int_distribution<RNG::result_type>;
-    using MultiplexSetGraph = boost::adjacency_list<boost::hash_setS, boost::vecS, boost::bidirectionalS>;
-    using MultiplexVector = std::vector<MultiplexSetGraph::vertex_descriptor>;
+
+    using CandidateGraph = boost::adjacency_list<boost::hash_setS, boost::vecS, boost::undirectedS>;
+    using Candidates = std::vector<CandidateGraph::vertex_descriptor>;
+
     using SubsetGraph = boost::adjacency_list<boost::hash_setS, boost::vecS, boost::bidirectionalS>;
-    using SubsetEdgeIterator = boost::graph_traits<SubsetGraph>::edge_iterator;
+
     using CliqueGraph = boost::adjacency_list<boost::hash_setS, boost::vecS, boost::undirectedS>;
     using CliqueSet = boost::container::flat_set<CliqueGraph::vertex_descriptor>;
     using CliqueSets = boost::container::flat_set<std::vector<CliqueGraph::vertex_descriptor>>;
-    using OrderingGraph = boost::adjacency_list<boost::hash_setS, boost::vecS, boost::bidirectionalS, Statement *>;
-    using OrderingMap = boost::container::flat_map<const Statement *, OrderingGraph::vertex_descriptor>;
 
     using AdvanceVector = std::vector<Advance *>;
     using AdvanceDepth = std::vector<int>;
     using AdvanceVariable = std::vector<BDD>;
-    using VertexVector = std::vector<ConstraintVertex>;
 
 public:
 
-    static bool optimize(PabloFunction & function, const unsigned limit = std::numeric_limits<unsigned>::max(), const unsigned maxSelections = 100, const unsigned windowSize = 1, const bool independent = false);
+    static bool optimize(PabloFunction & function, const bool independent = false);
     #ifdef PRINT_TIMING_INFORMATION
     using seed_t = RNG::result_type;
     static seed_t SEED;
@@ -68,40 +70,37 @@ protected:
     void findMaximalCliques(const CliqueGraph & G, CliqueSet & R, CliqueSet && P, CliqueSet && X, CliqueSets & S);
 
     bool generateCandidateSets();
-    void addCandidateSet(const VertexVector & S);
-    void selectMultiplexSets();
+    void addCandidateSet(const Constraints & S);
+    void updateCandidateSet(ConstraintVertex * const begin, ConstraintVertex * const end);
+    void selectCandidateSet(const unsigned n, const unsigned k, const unsigned m, const Constraints & S, ConstraintVertex * const element);
+
+    void selectMultiplexSetsGreedy();
+    void selectMultiplexSetsWorkingSet();
 
     void eliminateSubsetConstraints();
     void doTransitiveReductionOfSubsetGraph();
 
-    MultiplexVector orderMultiplexSet(const MultiplexSetGraph::vertex_descriptor u);
+    Candidates orderMultiplexSet(const CandidateGraph::vertex_descriptor u);
     void multiplexSelectedSets(PabloFunction & function);
 
-    static void topologicalSort(PabloBlock * const block);
-    static void topologicalSort(const OrderingGraph::vertex_descriptor u, const PabloBlock * const block, const Statement * const stmt, OrderingGraph & G, OrderingMap & M);
+    static void rewriteAST(PabloBlock * const block);
 
     BDD & get(const PabloAST * const expr);
 
-    inline MultiplexingPass(const RNG::result_type seed, const unsigned limit, const unsigned maxSelections, const unsigned windowSize)
-    : mMultiplexingSetSizeLimit(limit)
-    , mMaxMultiplexingSetSelections(maxSelections)
-    , mWindowSize(windowSize)
-    , mTestConstrainedAdvances(true)
+    inline MultiplexingPass(const RNG::result_type seed)
+    : mTestConstrainedAdvances(true)
     , mSubsetImplicationsAdhereToWindowingSizeConstraint(false)
     , mVariables(0)
     , mRNG(seed)
     , mConstraintGraph(0)
     , mAdvance(0, nullptr)
-    , mAdvanceDepth(0, 0)
+    , mAdvanceRank(0, 0)
     , mAdvanceNegatedVariable(0, 0)
     {
 
     }
 
 private:
-    const unsigned              mMultiplexingSetSizeLimit;
-    const unsigned              mMaxMultiplexingSetSelections;
-    const unsigned              mWindowSize;
     const bool                  mTestConstrainedAdvances;
     const bool                  mSubsetImplicationsAdhereToWindowingSizeConstraint;
     unsigned                    mVariables;
@@ -109,11 +108,11 @@ private:
     CharacterizationMap         mCharacterization;
     ConstraintGraph             mConstraintGraph;   
     AdvanceVector               mAdvance;
-    AdvanceDepth                mAdvanceDepth;
+    AdvanceDepth                mAdvanceRank;
     AdvanceVariable             mAdvanceNegatedVariable;
     SubsetGraph                 mSubsetGraph;
     CliqueGraph                 mUsageGraph;
-    MultiplexSetGraph           mMultiplexSetGraph;
+    CandidateGraph           mCandidateGraph;
 };
 
 }
