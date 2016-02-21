@@ -48,22 +48,22 @@ imatrix* imatrixNew(int size)
     int n,m;
 
     if (!mtx)
-        return NULL;
+        return nullptr;
 
-    if ((mtx->rows=NEW(char*,size)) == NULL)
+    if ((mtx->rows=NEW(char*,size)) == nullptr)
     {
         free(mtx);
-        return NULL;
+        return nullptr;
     }
 
     for (n=0 ; n<size ; n++)
     {
-        if ((mtx->rows[n]=NEW(char,size/8+1)) == NULL)
+        if ((mtx->rows[n]=NEW(char,size/8+1)) == nullptr)
         {
             for (m=0 ; m<n ; m++)
                 free(mtx->rows[m]);
             free(mtx);
-            return NULL;
+            return nullptr;
         }
 
         memset(mtx->rows[n], 0, size/8+1);

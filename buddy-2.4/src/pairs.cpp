@@ -50,7 +50,7 @@ static bddPair* pairs;              /* List of all replacement pairs in use */
 void bdd_pairs_init(void)
 {
     pairsid = 0;
-    pairs = NULL;
+    pairs = nullptr;
 }
 
 
@@ -59,7 +59,7 @@ void bdd_pairs_done(void)
     bddPair *p = pairs;
     int n;
 
-    while (p != NULL)
+    while (p != nullptr)
     {
         bddPair *next = p->next;
         for (n=0 ; n<bddvarnum ; n++)
@@ -79,7 +79,7 @@ static int update_pairsid(void)
     {
         bddPair *p;
         pairsid = 0;
-        for (p=pairs ; p!=NULL ; p=p->next)
+        for (p=pairs ; p!=nullptr ; p=p->next)
             p->id = pairsid++;
         bdd_operator_reset();
     }
@@ -99,7 +99,7 @@ void bdd_pairs_vardown(int level)
 {
     bddPair *p;
 
-    for (p=pairs ; p!=NULL ; p=p->next)
+    for (p=pairs ; p!=nullptr ; p=p->next)
     {
         int tmp;
 
@@ -118,10 +118,10 @@ int bdd_pairs_resize(int oldsize, int newsize)
     bddPair *p;
     int n;
 
-    for (p=pairs ; p!=NULL ; p=p->next)
+    for (p=pairs ; p!=nullptr ; p=p->next)
     {
-        if ((p->result=(BDD*)realloc(p->result,sizeof(BDD)*newsize)) == NULL)
-            return bdd_error(BDD_MEMORY);
+        if ((p->result=(BDD*)realloc(p->result,sizeof(BDD)*newsize)) == nullptr)
+            bdd_error(BDD_MEMORY);
 
         for (n=oldsize ; n<newsize ; n++)
             p->result[n] = bdd_ithvar(bddlevel2var[n]);
@@ -148,17 +148,15 @@ bddPair *bdd_newpair(void)
     int n;
     bddPair *p;
 
-    if ((p=(bddPair*)malloc(sizeof(bddPair))) == NULL)
+    if ((p=(bddPair*)malloc(sizeof(bddPair))) == nullptr)
     {
         bdd_error(BDD_MEMORY);
-        return NULL;
     }
 
-    if ((p->result=(BDD*)malloc(sizeof(BDD)*bddvarnum)) == NULL)
+    if ((p->result=(BDD*)malloc(sizeof(BDD)*bddvarnum)) == nullptr)
     {
         free(p);
         bdd_error(BDD_MEMORY);
-        return NULL;
     }
 
     for (n=0 ; n<bddvarnum ; n++)
@@ -195,13 +193,13 @@ ALSO    {* bdd\_newpair, bdd\_setpairs, bdd\_resetpair, bdd\_replace, bdd\_compo
 */
 int bdd_setpair(bddPair *pair, int oldvar, int newvar)
 {
-    if (pair == NULL)
+    if (pair == nullptr)
         return 0;
 
     if (oldvar < 0  ||  oldvar > bddvarnum-1)
-        return bdd_error(BDD_VAR);
+        bdd_error(BDD_VAR);
     if (newvar < 0  ||  newvar > bddvarnum-1)
-        return bdd_error(BDD_VAR);
+        bdd_error(BDD_VAR);
 
     bdd_delref( pair->result[bddvar2level[oldvar]] );
     pair->result[bddvar2level[oldvar]] = bdd_ithvar(newvar);
@@ -218,12 +216,12 @@ int bdd_setbddpair(bddPair *pair, int oldvar, BDD newvar)
 {
     int oldlevel;
 
-    if (pair == NULL)
+    if (pair == nullptr)
         return 0;
 
     CHECK(newvar);
     if (oldvar < 0  ||  oldvar >= bddvarnum)
-        return bdd_error(BDD_VAR);
+        bdd_error(BDD_VAR);
     oldlevel = bddvar2level[oldvar];
 
     bdd_delref( pair->result[oldlevel] );
@@ -252,7 +250,7 @@ ALSO    {* bdd\_newpair, bdd\_setpair, bdd\_replace, bdd\_compose *}
 int bdd_setpairs(bddPair *pair, int *oldvar, int *newvar, int size)
 {
     int n,e;
-    if (pair == NULL)
+    if (pair == nullptr)
         return 0;
 
     for (n=0 ; n<size ; n++)
@@ -266,7 +264,7 @@ int bdd_setpairs(bddPair *pair, int *oldvar, int *newvar, int size)
 int bdd_setbddpairs(bddPair *pair, int *oldvar, BDD *newvar, int size)
 {
     int n,e;
-    if (pair == NULL)
+    if (pair == nullptr)
         return 0;
 
     for (n=0 ; n<size ; n++)
@@ -290,16 +288,16 @@ void bdd_freepair(bddPair *p)
 {
     int n;
 
-    if (p == NULL)
+    if (p == nullptr)
         return;
 
     if (pairs != p)
     {
         bddPair *bp = pairs;
-        while (bp != NULL  &&  bp->next != p)
+        while (bp != nullptr  &&  bp->next != p)
             bp = bp->next;
 
-        if (bp != NULL)
+        if (bp != nullptr)
             bp->next = p->next;
     }
     else

@@ -64,13 +64,13 @@ static void update_seq(BddTree *t)
 BddTree * bddtree_new(int id)
 {
     BddTree *t = NEW(BddTree,1);
-    if (t == NULL)
-        return NULL;
+    if (t == nullptr)
+        return nullptr;
 
     t->first = t->last = -1;
     t->fixed = 1;
-    t->next = t->prev = t->nextlevel = NULL;
-    t->seq = NULL;
+    t->next = t->prev = t->nextlevel = nullptr;
+    t->seq = nullptr;
     t->id = id;
     return t;
 }
@@ -78,12 +78,12 @@ BddTree * bddtree_new(int id)
 
 void bddtree_del(BddTree *t)
 {
-    if (t == NULL)
+    if (t == nullptr)
         return;
 
     bddtree_del(t->nextlevel);
     bddtree_del(t->next);
-    if (t->seq != NULL)
+    if (t->seq != nullptr)
         free(t->seq);
     free(t);
 }
@@ -93,13 +93,13 @@ BddTree *bddtree_addrange_rec(BddTree *t, BddTree *prev,
                               int first, int last, int fixed, int id)
 {
     if (first < 0  ||  last < 0  ||  last < first)
-        return NULL;
+        return nullptr;
 
     /* Empty tree -> build one */
-    if (t == NULL)
+    if (t == nullptr)
     {
-        if ((t=bddtree_new(id)) == NULL)
-            return NULL;
+        if ((t=bddtree_new(id)) == nullptr)
+            return nullptr;
         t->first = first;
         t->fixed = fixed;
         t->seq = NEW(int,last-first+1);
@@ -117,8 +117,8 @@ BddTree *bddtree_addrange_rec(BddTree *t, BddTree *prev,
     if (last < t->first)
     {
         BddTree *tnew = bddtree_new(id);
-        if (tnew == NULL)
-            return NULL;
+        if (tnew == nullptr)
+            return nullptr;
         tnew->first = first;
         tnew->last = last;
         tnew->fixed = fixed;
@@ -141,7 +141,7 @@ BddTree *bddtree_addrange_rec(BddTree *t, BddTree *prev,
     if (first >= t->first  &&  last <= t->last)
     {
         t->nextlevel =
-                bddtree_addrange_rec(t->nextlevel,NULL,first,last,fixed,id);
+                bddtree_addrange_rec(t->nextlevel,nullptr,first,last,fixed,id);
         return t;
     }
 
@@ -155,13 +155,13 @@ BddTree *bddtree_addrange_rec(BddTree *t, BddTree *prev,
         {
             /* Partial cover ->error */
             if (last >= current->first  &&  last < current->last)
-                return NULL;
+                return nullptr;
 
-            if (current->next == NULL  ||  last < current->next->first)
+            if (current->next == nullptr  ||  last < current->next->first)
             {
                 tnew = bddtree_new(id);
-                if (tnew == NULL)
-                    return NULL;
+                if (tnew == nullptr)
+                    return nullptr;
                 tnew->first = first;
                 tnew->last = last;
                 tnew->fixed = fixed;
@@ -170,10 +170,10 @@ BddTree *bddtree_addrange_rec(BddTree *t, BddTree *prev,
                 tnew->nextlevel = t;
                 tnew->next = current->next;
                 tnew->prev = t->prev;
-                if (current->next != NULL)
+                if (current->next != nullptr)
                     current->next->prev = tnew;
-                current->next = NULL;
-                t->prev = NULL;
+                current->next = nullptr;
+                t->prev = nullptr;
                 return tnew;
             }
 
@@ -182,20 +182,20 @@ BddTree *bddtree_addrange_rec(BddTree *t, BddTree *prev,
 
     }
 
-    return NULL;
+    return nullptr;
 }
 
 
 BddTree *bddtree_addrange(BddTree *t, int first, int last, int fixed,int id)
 {
-    return bddtree_addrange_rec(t,NULL,first,last,fixed,id);
+    return bddtree_addrange_rec(t,nullptr,first,last,fixed,id);
 }
 
 
 #if 0
 int main(void)
 {
-    BddTree *t = NULL;
+    BddTree *t = nullptr;
 
     t = bddtree_addrange(t, 8,10,1);
     printf("A\n"); bddtree_print(stdout, t, 0);

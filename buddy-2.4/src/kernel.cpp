@@ -63,7 +63,6 @@ static int minfreenodes=20;
 /*=== GLOBAL KERNEL VARIABLES ==========================================*/
 
 int          bddrunning;            /* Flag - package initialized */
-int          bdderrorcond;          /* Some error condition */
 int          bddnodesize;           /* Number of allocated nodes */
 int          bddmaxnodesize;        /* Maximum allowed number of nodes */
 int          bddmaxnodeincrease;    /* Max. # of nodes used to inc. table */
@@ -78,9 +77,6 @@ int*         bddvar2level;      /* Variable -> level table */
 int*         bddlevel2var;      /* Level -> variable table */
 int          bddresized;        /* Flag indicating a resize of the nodetable */
 
-bddCacheStat bddcachestats;
-
-
 /*=== PRIVATE KERNEL VARIABLES =========================================*/
 
 static BDD*     bddvarset;             /* Set of defined BDD variables */
@@ -89,7 +85,6 @@ static int      cachesize;             /* Size of the operator caches */
 static long int gbcclock;              /* Clock ticks used in GBC */
 static int      usednodes_nextreorder; /* When to do reorder next time */
 static bddinthandler  err_handler;     /* Error handler */
-static bddgbchandler  gbc_handler;     /* Garbage collection handler */
 static bdd2inthandler resize_handler;  /* Node-table-resize handler */
 
 
@@ -130,29 +125,35 @@ ALSO   {* bdd\_done, bdd\_resize\_hook *}
 int bdd_init(int initnodesize, int cs) {
 
     if (bddrunning)
-        return bdd_error(BDD_RUNNING);
+        bdd_error(BDD_RUNNING);
 
     bddnodesize = bdd_prime_gte(initnodesize);
 
-    if ((bddnodes=(BddNode*)malloc(sizeof(BddNode)*bddnodesize)) == NULL) {
-        return bdd_error(BDD_MEMORY);
+    if ((bddnodes=(BddNode*)malloc(sizeof(BddNode)*bddnodesize)) == nullptr) {
+        bdd_error(BDD_MEMORY);
     }
 
     bddresized = 0;
 
-    for (unsigned n = 0 ; n != bddnodesize ; n++)
-    {
-        bddnodes[n].refcou = 0;
-        LOW(n) = -1;
-        bddnodes[n].hash = 0;
-        LEVEL(n) = 0;
-        bddnodes[n].next = n+1;
+    for (unsigned i = 0 ; i != 2 ; ++i) {
+        BddNode & n = bddnodes[i];
+        n.refcount = MAXREF;
+        n.level = 0;
+        n.low = i;
+        n.high = i;
+        n.hash = 0;
+        n.next = i + 1;
     }
-    bddnodes[bddnodesize-1].next = 0;
-
-    bddnodes[0].refcou = bddnodes[1].refcou = MAXREF;
-    LOW(0) = HIGH(0) = 0;
-    LOW(1) = HIGH(1) = 1;
+    for (unsigned i = 2; i != bddnodesize ; ++i) {
+        BddNode & n = bddnodes[i];
+        n.refcount = 0;
+        n.level = 0;
+        n.low = -1;
+        n.high = -1;
+        n.hash = 0;
+        n.next = i + 1;
+    }
+    bddnodes[bddnodesize - 1].next = 0;
 
     const auto err = bdd_operator_init(cs);
     if (err < 0) {
@@ -170,29 +171,13 @@ int bdd_init(int initnodesize, int cs) {
     usednodes_nextreorder = bddnodesize;
     bddmaxnodeincrease = DEFAULTMAXNODEINC;
 
-    bdderrorcond = 0;
-
-    bddcachestats.uniqueAccess = 0;
-    bddcachestats.uniqueChain = 0;
-    bddcachestats.uniqueHit = 0;
-    bddcachestats.uniqueMiss = 0;
-    bddcachestats.opHit = 0;
-    bddcachestats.opMiss = 0;
-    bddcachestats.swapCount = 0;
-
-    bdd_error_hook(bdd_default_errhandler);
-    bdd_gbc_hook(nullptr);
     bdd_resize_hook(nullptr);
     bdd_pairs_init();
     bdd_reorder_init();
-//    bdd_fdd_init();
 
     return 0;
 }
 
-void bdd_default_errhandler(int e) {
-    throw std::runtime_error("BDD error: " + bdd_errstring(e));
-}
 
 /*
 NAME    {* bdd\_done*}
@@ -216,9 +201,9 @@ void bdd_done(void)
     free(bddvar2level);
     free(bddlevel2var);
 
-    bddnodes = NULL;
-    bddrefstack = NULL;
-    bddvarset = NULL;
+    bddnodes = nullptr;
+    bddrefstack = nullptr;
+    bddvarset = nullptr;
 
     bdd_operator_done();
 
@@ -228,9 +213,8 @@ void bdd_done(void)
     bddvarnum = 0;
     bddproduced = 0;
 
-    err_handler = NULL;
-    gbc_handler = NULL;
-    resize_handler = NULL;
+    err_handler = nullptr;
+    resize_handler = nullptr;
 }
 
 
@@ -260,44 +244,44 @@ int bdd_setvarnum(int num)
     }
 
     if (num < bddvarnum)
-        return bdd_error(BDD_DECVNUM);
+        bdd_error(BDD_DECVNUM);
     if (num == bddvarnum)
         return 0;
 
-    if (bddvarset == NULL)
+    if (bddvarset == nullptr)
     {
-        if ((bddvarset=(BDD*)malloc(sizeof(BDD)*num*2)) == NULL)
-            return bdd_error(BDD_MEMORY);
-        if ((bddlevel2var=(int*)malloc(sizeof(int)*(num+1))) == NULL)
+        if ((bddvarset=(BDD*)malloc(sizeof(BDD)*num*2)) == nullptr)
+            bdd_error(BDD_MEMORY);
+        if ((bddlevel2var=(int*)malloc(sizeof(int)*(num+1))) == nullptr)
         {
             free(bddvarset);
-            return bdd_error(BDD_MEMORY);
+            bdd_error(BDD_MEMORY);
         }
-        if ((bddvar2level=(int*)malloc(sizeof(int)*(num+1))) == NULL)
+        if ((bddvar2level=(int*)malloc(sizeof(int)*(num+1))) == nullptr)
         {
             free(bddvarset);
             free(bddlevel2var);
-            return bdd_error(BDD_MEMORY);
+            bdd_error(BDD_MEMORY);
         }
     }
     else
     {
-        if ((bddvarset=(BDD*)realloc(bddvarset,sizeof(BDD)*num*2)) == NULL)
-            return bdd_error(BDD_MEMORY);
-        if ((bddlevel2var=(int*)realloc(bddlevel2var,sizeof(int)*(num+1))) == NULL)
+        if ((bddvarset=(BDD*)realloc(bddvarset,sizeof(BDD)*num*2)) == nullptr)
+            bdd_error(BDD_MEMORY);
+        if ((bddlevel2var=(int*)realloc(bddlevel2var,sizeof(int)*(num+1))) == nullptr)
         {
             free(bddvarset);
-            return bdd_error(BDD_MEMORY);
+            bdd_error(BDD_MEMORY);
         }
-        if ((bddvar2level=(int*)realloc(bddvar2level,sizeof(int)*(num+1))) == NULL)
+        if ((bddvar2level=(int*)realloc(bddvar2level,sizeof(int)*(num+1))) == nullptr)
         {
             free(bddvarset);
             free(bddlevel2var);
-            return bdd_error(BDD_MEMORY);
+            bdd_error(BDD_MEMORY);
         }
     }
 
-    if (bddrefstack != NULL)
+    if (bddrefstack != nullptr)
         free(bddrefstack);
     bddrefstack = bddrefstacktop = (int*)malloc(sizeof(int)*(num*2+4));
 
@@ -307,20 +291,14 @@ int bdd_setvarnum(int num)
         bddvarset[bddvarnum*2+1] = bdd_makenode(bddvarnum, 1, 0);
         POPREF(1);
 
-        if (bdderrorcond)
-        {
-            bddvarnum = bdv;
-            return -bdderrorcond;
-        }
-
-        bddnodes[bddvarset[bddvarnum*2]].refcou = MAXREF;
-        bddnodes[bddvarset[bddvarnum*2+1]].refcou = MAXREF;
+        bddnodes[bddvarset[bddvarnum*2]].refcount = MAXREF;
+        bddnodes[bddvarset[bddvarnum*2+1]].refcount = MAXREF;
         bddlevel2var[bddvarnum] = bddvarnum;
         bddvar2level[bddvarnum] = bddvarnum;
     }
 
-    LEVEL(0) = num;
-    LEVEL(1) = num;
+    bddnodes[0].level = num;
+    bddnodes[1].level = num;
     bddvar2level[num] = num;
     bddlevel2var[num] = num;
 
@@ -348,105 +326,11 @@ int bdd_extvarnum(int num)
     int start = bddvarnum;
 
     if (num < 0  ||  num > 0x3FFFFFFF)
-        return bdd_error(BDD_RANGE);
+        bdd_error(BDD_RANGE);
 
     bdd_setvarnum(bddvarnum+num);
     return start;
 }
-
-
-/*
-NAME  {* bdd\_error\_hook *}
-SECTION {* kernel *}
-SHORT {* set a handler for error conditions *}
-PROTO {* bddinthandler bdd_error_hook(bddinthandler handler) *}
-DESCR {* Whenever an error occurs in the bdd package a test is done to
-        see if an error handler is supplied by the user and if such exists
-    then it will be called
-    with an error code in the variable {\tt errcode}. The handler may
-    then print any usefull information and return or exit afterwards.
-
-    This function sets the handler to be {\tt handler}. If a {\tt NULL}
-    argument is supplied then no calls are made when an error occurs.
-    Possible error codes are found in {\tt bdd.h}. The default handler
-    is {\tt bdd\_default\_errhandler} which will use {\tt exit()} to
-    terminate the program.
-
-    Any handler should be defined like this:
-    \begin{verbatim}
-void my_error_handler(int errcode)
-{
-   ...
-}
-\end{verbatim} *}
-RETURN {* The previous handler *}
-ALSO  {* bdd\_errstring *}
-*/
-bddinthandler bdd_error_hook(bddinthandler handler)
-{
-    bddinthandler tmp = err_handler;
-    err_handler = handler;
-    return tmp;
-}
-
-
-/*
-NAME    {* bdd\_clear\_error *}
-SECTION {* kernel *}
-SHORT   {* clears an error condition in the kernel *}
-PROTO   {* void bdd_clear_error(void) *}
-DESCR   {* The BuDDy kernel may at some point run out of new ROBDD nodes if
-           a maximum limit is set with {\tt bdd\_setmaxnodenum}. In this case
-       the current error handler is called and an internal error flag
-       is set. Further calls to BuDDy will always return {\tt bdd_false()}.
-       From here BuDDy must either be restarted or {\tt bdd\_clear\_error}
-       may be called after action is taken to let BuDDy continue. This may
-       not be especially usefull since the default error handler exits
-       the program - other needs may of course exist.*}
-ALSO    {* bdd\_error\_hook, bdd\_setmaxnodenum *}
-*/
-void bdd_clear_error(void)
-{
-    bdderrorcond = 0;
-    bdd_operator_reset();
-}
-
-
-/*
-NAME  {* bdd\_gbc\_hook *}
-SECTION {* kernel *}
-SHORT {* set a handler for garbage collections *}
-PROTO {* bddgbchandler bdd_gbc_hook(bddgbchandler handler) *}
-DESCR {* Whenever a garbage collection is required, a test is done to
-         see if a handler for this event is supplied by the user and if such
-     exists then it is called, both before and after the garbage collection
-     takes places. This is indicated by an integer flag {\tt pre} passed to
-     the handler, which will be one before garbage collection and zero
-     after garbage collection.
-
-     This function sets the handler to be {\tt handler}. If a {\tt
-     NULL} argument is supplied then no calls are made when a
-     garbage collection takes place. The argument {\tt pre}
-     indicates pre vs. post garbage collection and the argument
-     {\tt stat} contains information about the garbage
-     collection. The default handler is {\tt bdd\_default\_gbchandler}.
-
-     Any handler should be defined like this:
-     \begin{verbatim}
-void my_gbc_handler(int pre, bddGbcStat *stat)
-{
-   ...
-}
-\end{verbatim} *}
-RETURN {* The previous handler *}
-ALSO {* bdd\_resize\_hook, bdd\_reorder\_hook *} */
-bddgbchandler bdd_gbc_hook(bddgbchandler handler)
-{
-    bddgbchandler tmp = gbc_handler;
-    gbc_handler = handler;
-    return tmp;
-}
-
 
 /*
 NAME  {* bdd\_resize\_hook  *}
@@ -459,7 +343,7 @@ DESCR {* Whenever it is impossible to get enough free nodes by a garbage
      it is called with {\tt oldsize} being the old nodetable size and
      {\tt newsize} being the new nodetable size.
 
-     This function sets the handler to be {\tt handler}. If a {\tt NULL}
+     This function sets the handler to be {\tt handler}. If a {\tt nullptr}
      argument is supplied then no calls are made when a table resize
      is done. No default handler is supplied.
 
@@ -498,7 +382,7 @@ int bdd_setmaxincrease(int size)
     int old = bddmaxnodeincrease;
 
     if (size < 0)
-        return bdd_error(BDD_SIZE);
+        bdd_error(BDD_SIZE);
 
     bddmaxnodeincrease = size;
     return old;
@@ -523,14 +407,14 @@ ALSO   {* bdd\_setmaxincrease, bdd\_setminfreenodes *}
 */
 int bdd_setmaxnodenum(int size)
 {
-    if (size > bddnodesize  ||  size == 0)
-    {
+    if (size > bddnodesize || size == 0) {
         int old = bddmaxnodesize;
         bddmaxnodesize = size;
         return old;
     }
 
-    return bdd_error(BDD_NODES);
+    bdd_error(BDD_NODES);
+    return bddmaxnodesize;
 }
 
 
@@ -557,7 +441,7 @@ int bdd_setminfreenodes(int mf)
     int old = minfreenodes;
 
     if (mf<0 || mf>100)
-        return bdd_error(BDD_RANGE);
+        bdd_error(BDD_RANGE);
 
     minfreenodes = mf;
     return old;
@@ -576,8 +460,7 @@ DESCR   {* Returns the number of nodes in the nodetable that are
 RETURN  {* The number of nodes. *}
 ALSO    {* bdd\_getallocnum, bdd\_setmaxnodenum *}
 */
-int bdd_getnodenum(void)
-{
+int bdd_getnodenum(void) {
     return bddnodesize - bddfreenum;
 }
 
@@ -592,8 +475,7 @@ DESCR   {* Returns the number of nodes currently allocated. This includes
 RETURN  {* The number of nodes. *}
 ALSO    {* bdd\_getnodenum, bdd\_setmaxnodenum *}
 */
-int bdd_getallocnum(void)
-{
+int bdd_getallocnum(void) {
     return bddnodesize;
 }
 
@@ -608,150 +490,39 @@ DESCR   {* This function tests the internal state of the package and returns
 RETURN  {* 1 (true) if the package has been started, otherwise 0. *}
 ALSO    {* bdd\_init, bdd\_done *}
 */
-int bdd_isrunning(void)
-{
+int bdd_isrunning(void) {
     return bddrunning;
 }
-
-/*
-NAME    {* bdd\_stats *}
-SECTION {* kernel *}
-SHORT   {* returns some status information about the bdd package *}
-PROTO   {* void bdd_stats(bddStat* stat) *}
-DESCR   {* This function acquires information about the internal state of
-           the bdd package. The status information is written into the
-       {\tt stat} argument. *}
-ALSO    {* bddStat *}
-*/
-void bdd_stats(bddStat *s)
-{
-    s->produced = bddproduced;
-    s->nodenum = bddnodesize;
-    s->maxnodenum = bddmaxnodesize;
-    s->freenodes = bddfreenum;
-    s->minfreenodes = minfreenodes;
-    s->varnum = bddvarnum;
-    s->cachesize = cachesize;
-    s->gbcnum = gbcollectnum;
-}
-
-
-
-/*
-NAME    {* bdd\_cachestats *}
-SECTION {* kernel *}
-SHORT   {* Fetch cache access usage *}
-PROTO   {* void bdd_cachestats(bddCacheStat *s) *}
-DESCR   {* Fetches cache usage information and stores it in {\tt s}. The
-           fields of {\tt s} can be found in the documentaion for
-       {\tt bddCacheStat}. This function may or may not be compiled
-       into the BuDDy package - depending on the setup at compile
-       time of BuDDy. *}
-ALSO    {* bddCacheStat, bdd\_printstat *}
-*/
-void bdd_cachestats(bddCacheStat *s)
-{
-    *s = bddcachestats;
-}
-
-
-/*
-NAME    {* bdd\_printstat *}
-EXTRA   {* bdd\_fprintstat *}
-SECTION {* kernel *}
-SHORT   {* print cache statistics *}
-PROTO   {* void bdd_printstat(void)
-void bdd_fprintstat(FILE *ofile) *}
-DESCR   {* Prints information about the cache performance on standard output
-           (or the supplied file). The information contains the number of
-       accesses to the unique node table, the number of times a node
-       was (not) found there and how many times a hash chain had to
-       traversed. Hit and miss count is also given for the operator
-       caches. *}
-ALSO    {* bddCacheStat, bdd\_cachestats *}
-*/
-void bdd_fprintstat(FILE *ofile)
-{
-    bddCacheStat s;
-    bdd_cachestats(&s);
-
-    fprintf(ofile, "\nCache statistics\n");
-    fprintf(ofile, "----------------\n");
-
-    fprintf(ofile, "Unique Access:  %ld\n", s.uniqueAccess);
-    fprintf(ofile, "Unique Chain:   %ld\n", s.uniqueChain);
-    fprintf(ofile, "Unique Hit:     %ld\n", s.uniqueHit);
-    fprintf(ofile, "Unique Miss:    %ld\n", s.uniqueMiss);
-    fprintf(ofile, "=> Hit rate =   %.2f\n",
-            (s.uniqueHit+s.uniqueMiss > 0) ?
-                ((float)s.uniqueHit)/((float)s.uniqueHit+s.uniqueMiss) : 0);
-    fprintf(ofile, "Operator Hits:  %ld\n", s.opHit);
-    fprintf(ofile, "Operator Miss:  %ld\n", s.opMiss);
-    fprintf(ofile, "=> Hit rate =   %.2f\n",
-            (s.opHit+s.opMiss > 0) ?
-                ((float)s.opHit)/((float)s.opHit+s.opMiss) : 0);
-    fprintf(ofile, "Swap count =    %ld\n", s.swapCount);
-}
-
-
-void bdd_printstat(void)
-{
-    bdd_fprintstat(stdout);
-}
-
 
 /*************************************************************************
   Error handler
 *************************************************************************/
 
-/*
-NAME    {* bdd\_errstring *}
-SECTION {* kernel *}
-SHORT   {* converts an error code to a string*}
-PROTO   {* const char *bdd_errstring(int errorcode) *}
-DESCR   {* Converts a negative error code {\tt errorcode} to a descriptive
-           string that can be used for error handling. *}
-RETURN  {* An error description string if {\tt e} is known, otherwise {\tt NULL}. *}
-ALSO    {* bdd\_err\_hook *}
-*/
-std::string bdd_errstring(const int code) {
-
-    unsigned e = -code;
-
-    if (e < 1 || e > BDD_ERRNUM)
-        return "unknown error code: " + std::to_string(e);
-
-    /* Strings for all error mesages */
-    static std::string errorstrings[BDD_ERRNUM] = {
-        "Out of memory", "Unknown variable", "Value out of range",
-        "Unknown BDD root dereferenced", "bdd_init() called twice",
-        "File operation failed", "Incorrect file format",
-        "Variables not in ascending order", "User called break",
-        "Mismatch in size of variable sets",
-        "Cannot allocate fewer nodes than already in use",
-        "Unknown operator", "Illegal variable set",
-        "Bad variable block operation",
-        "Trying to decrease the number of variables",
-        "Trying to replace with variables already in the bdd",
-        "Number of nodes reached user defined maximum",
-        "Unknown BDD - was not in node table",
-        "Bad size argument",
-        "Mismatch in bitvector size",
-        "Illegal shift-left/right parameter",
-        "Division by zero"
-    };
-
-    return errorstrings[e - 1];
+void bdd_error(const unsigned code) {
+    if (code >= BDD_ERRNUM) {
+        throw std::runtime_error("Unknown error " + std::to_string(code));
+    } else {
+        static std::string errorstrings[BDD_ERRNUM] = {
+            "Out of memory", "Unknown variable", "Value out of range",
+            "Unknown BDD root dereferenced", "bdd_init() called twice",
+            "File operation failed", "Incorrect file format",
+            "Variables not in ascending order", "User called break",
+            "Mismatch in size of variable sets",
+            "Cannot allocate fewer nodes than already in use",
+            "Unknown operator", "Illegal variable set",
+            "Bad variable block operation",
+            "Trying to decrease the number of variables",
+            "Trying to replace with variables already in the bdd",
+            "Number of nodes reached user defined maximum",
+            "Unknown BDD - was not in node table",
+            "Bad size argument",
+            "Mismatch in bitvector size",
+            "Illegal shift-left/right parameter",
+            "Division by zero"
+        };
+        throw std::runtime_error(errorstrings[code]);
+    }
 }
-
-int bdd_error(int e)
-{
-    if (err_handler != NULL)
-        err_handler(e);
-
-    return e;
-}
-
 
 /*************************************************************************
   BDD primitives
@@ -774,15 +545,11 @@ DESCR   {* This function is used to get a bdd representing the I'th
        those with higher indecies. *}
 RETURN  {* The I'th variable on succes, otherwise the constant false bdd *}
 ALSO {* bdd\_setvarnum, bdd\_nithvar, bdd_true(), bdd_false() *} */
-BDD bdd_ithvar(int var)
-{
-    if (var < 0  ||  var >= bddvarnum)
-    {
+BDD bdd_ithvar(int var) {
+    if (UNLIKELY(var < 0 || var >= bddvarnum)) {
         bdd_error(BDD_VAR);
-        return bdd_zero();
     }
-
-    return bddvarset[var*2];
+    return bddvarset[var * 2];
 }
 
 
@@ -800,14 +567,10 @@ DESCR   {* This function is used to get a bdd representing the negation of
 RETURN  {* The negated I'th variable on succes, otherwise the constant false bdd *}	   
 ALSO    {* bdd\_setvarnum, bdd\_ithvar, bdd_true(), bdd_false() *}
 */
-BDD bdd_nithvar(int var)
-{
-    if (var < 0  ||  var >= bddvarnum)
-    {
+BDD bdd_nithvar(int var) {
+    if (UNLIKELY(var < 0 || var >= bddvarnum)) {
         bdd_error(BDD_VAR);
-        return bdd_zero();
     }
-
     return bddvarset[var*2+1];
 }
 
@@ -822,8 +585,7 @@ DESCR   {* This function returns the number of variables defined by
 RETURN  {* The number of defined variables *}
 ALSO    {* bdd\_setvarnum, bdd\_ithvar *}
 */
-int bdd_varnum(void)
-{
+int bdd_varnum(void) {
     return bddvarnum;
 }
 
@@ -836,11 +598,10 @@ PROTO   {* int bdd_var(BDD r) *}
 DESCR   {* Gets the variable labeling the bdd {\tt r}. *}
 RETURN  {* The variable number. *}
 */
-int bdd_var(BDD root)
-{
+int bdd_var(BDD root) {
     CHECK(root);
     if (ISCONST(root)) {
-        return bdd_error(BDD_ILLBDD);
+        bdd_error(BDD_ILLBDD);
     }
     return (bddlevel2var[LEVEL(root)]);
 }
@@ -855,11 +616,10 @@ DESCR   {* Gets the false branch of the bdd {\tt r}.  *}
 RETURN  {* The bdd of the false branch *}
 ALSO    {* bdd\_high *}
 */
-BDD bdd_low(BDD root)
-{
+BDD bdd_low(BDD root) {
     CHECK(root);
     if (ISCONST(root)) {
-        return bdd_error(BDD_ILLBDD);
+        bdd_error(BDD_ILLBDD);
     }
     return (LOW(root));
 }
@@ -874,16 +634,13 @@ DESCR   {* Gets the true branch of the bdd {\tt r}.  *}
 RETURN  {* The bdd of the true branch *}
 ALSO    {* bdd\_low *}
 */
-BDD bdd_high(BDD root)
-{
+BDD bdd_high(BDD root) {
     CHECK(root);
     if (ISCONST(root)) {
-        return bdd_error(BDD_ILLBDD);
+        bdd_error(BDD_ILLBDD);
     }
     return (HIGH(root));
 }
-
-
 
 /*************************************************************************
   Garbage collection and node referencing
@@ -900,11 +657,11 @@ static void bdd_gbc_rehash(void)
     {
         BddNode *node = &bddnodes[n];
 
-        if (LOWp(node) != -1)
+        if (LOW(node) != -1)
         {
             unsigned int hash;
 
-            hash = NODEHASH(LEVELp(node), LOWp(node), HIGHp(node));
+            hash = NODEHASH(LEVEL(node), LOW(node), HIGH(node));
             node->next = bddnodes[hash].hash;
             bddnodes[hash].hash = n;
         }
@@ -922,25 +679,13 @@ void bdd_gbc(void)
 {
     int *r;
     int n;
-    long int c2, c1 = clock();
-
-    if (gbc_handler != NULL)
-    {
-        bddGbcStat s;
-        s.nodes = bddnodesize;
-        s.freenodes = bddfreenum;
-        s.time = 0;
-        s.sumtime = gbcclock;
-        s.num = gbcollectnum;
-        gbc_handler(1, &s);
-    }
 
     for (r=bddrefstack ; r<bddrefstacktop ; r++)
         bdd_mark(*r);
 
     for (n=0 ; n<bddnodesize ; n++)
     {
-        if (bddnodes[n].refcou > 0)
+        if (bddnodes[n].refcount > 0)
             bdd_mark(n);
         bddnodes[n].hash = 0;
     }
@@ -952,18 +697,15 @@ void bdd_gbc(void)
     {
         BddNode *node = &bddnodes[n];
 
-        if ((LEVELp(node) & MARKON)  &&  LOWp(node) != -1)
-        {
-            unsigned int hash;
-
-            LEVELp(node) &= MARKOFF;
-            hash = NODEHASH(LEVELp(node), LOWp(node), HIGHp(node));
+        if (MARKED(node) && LOW(node) != -1) {
+            UNMARK(node);
+            unsigned int hash = NODEHASH(LEVEL(node), LOW(node), HIGH(node));
             node->next = bddnodes[hash].hash;
             bddnodes[hash].hash = n;
         }
         else
         {
-            LOWp(node) = -1;
+            node->low = -1;
             node->next = bddfreepos;
             bddfreepos = n;
             bddfreenum++;
@@ -972,20 +714,8 @@ void bdd_gbc(void)
 
     bdd_operator_reset();
 
-    c2 = clock();
-    gbcclock += c2-c1;
     gbcollectnum++;
 
-    if (gbc_handler != NULL)
-    {
-        bddGbcStat s;
-        s.nodes = bddnodesize;
-        s.freenodes = bddfreenum;
-        s.time = c2-c1;
-        s.sumtime = gbcclock;
-        s.num = gbcollectnum;
-        gbc_handler(0, &s);
-    }
 }
 
 /*
@@ -1006,7 +736,7 @@ BDD bdd_addref(BDD root) {
         return root;
     }
     if (LOW(root) == -1 || root >= bddnodesize) {
-        return bdd_error(BDD_ILLBDD);
+        bdd_error(BDD_ILLBDD);
     }
 
     INCREF(root);
@@ -1031,9 +761,9 @@ BDD bdd_addref(BDD root, unsigned int n) {
         return root;
     }
     if (LOW(root) == -1 || root >= bddnodesize) {
-        return bdd_error(BDD_ILLBDD);
+        bdd_error(BDD_ILLBDD);
     }
-    bddnodes[root].refcou = std::min<unsigned int>(n + bddnodes[root].refcou, MAXREF);
+    bddnodes[root].refcount = std::min<unsigned int>(n + bddnodes[root].refcount, MAXREF);
     return root;
 }
 
@@ -1055,7 +785,7 @@ BDD bdd_delref(BDD root) {
         return root;
     }
     if (LOW(root) == -1 || root >= bddnodesize) {
-        return bdd_error(BDD_ILLBDD);
+        bdd_error(BDD_ILLBDD);
     }
     /* if the following line is present, fails there much earlier */
     if (!HASREF(root)) bdd_error(BDD_BREAK); /* distinctive */
@@ -1082,14 +812,14 @@ BDD bdd_recursive_deref(BDD root) {
         return root;
     }
     if (root >= bddnodesize)
-        return bdd_error(BDD_ILLBDD);    
+        bdd_error(BDD_ILLBDD);
     BddNode * node = bddnodes + root;
     if (node->low == -1)
-        return bdd_error(BDD_ILLBDD);
-    if (node->low == -1 || node->refcou == 0) {
+        bdd_error(BDD_ILLBDD);
+    if (node->low == -1 || node->refcount == 0) {
         return root;
     }
-    if (--node->refcou == 0) {
+    if (--node->refcount == 0) {
         bdd_recursive_deref(node->low);
         bdd_recursive_deref(node->high);
     }
@@ -1107,13 +837,12 @@ void bdd_mark(int i)
         return;
 
     node = &bddnodes[i];
-    if (LEVELp(node) & MARKON  ||  LOWp(node) == -1)
+    if (MARKED(node) || LOW(node) == -1)
         return;
 
-    LEVELp(node) |= MARKON;
-
-    bdd_mark(LOWp(node));
-    bdd_mark(HIGHp(node));
+    SETMARK(node);
+    bdd_mark(LOW(node));
+    bdd_mark(HIGH(node));
 }
 
 
@@ -1124,16 +853,15 @@ void bdd_mark_upto(int i, int level)
     if (i < 2)
         return;
 
-    if (LEVELp(node) & MARKON  ||  LOWp(node) == -1)
+    if (MARKED(node) || LOW(node) == -1)
         return;
 
-    if (LEVELp(node) > level)
+    if (LEVEL(node) > level)
         return;
 
-    LEVELp(node) |= MARKON;
-
-    bdd_mark_upto(LOWp(node), level);
-    bdd_mark_upto(HIGHp(node), level);
+    SETMARK(node);
+    bdd_mark_upto(LOW(node), level);
+    bdd_mark_upto(HIGH(node), level);
 }
 
 
@@ -1145,52 +873,42 @@ void bdd_markcount(int i, int *cou)
         return;
 
     node = &bddnodes[i];
-    if (MARKEDp(node)  ||  LOWp(node) == -1)
+    if (MARKED(node)  ||  LOW(node) == -1)
         return;
 
-    SETMARKp(node);
+    SETMARK(node);
     *cou += 1;
 
-    bdd_markcount(LOWp(node), cou);
-    bdd_markcount(HIGHp(node), cou);
+    bdd_markcount(LOW(node), cou);
+    bdd_markcount(HIGH(node), cou);
 }
 
 
 void bdd_unmark(int i)
 {
-    BddNode *node;
-
     if (i < 2)
         return;
-
-    node = &bddnodes[i];
-
-    if (!MARKEDp(node)  ||  LOWp(node) == -1)
-        return;
-    UNMARKp(node);
-
-    bdd_unmark(LOWp(node));
-    bdd_unmark(HIGHp(node));
+    BddNode * node = &bddnodes[i];
+    if (MARKED(node) && LOW(node) >= 0) {
+        UNMARK(node);
+        bdd_unmark(LOW(node));
+        bdd_unmark(HIGH(node));
+    }
 }
 
 
 void bdd_unmark_upto(int i, int level)
 {
-    BddNode *node = &bddnodes[i];
-
     if (i < 2)
         return;
-
-    if (!(LEVELp(node) & MARKON))
-        return;
-
-    LEVELp(node) &= MARKOFF;
-
-    if (LEVELp(node) > level)
-        return;
-
-    bdd_unmark_upto(LOWp(node), level);
-    bdd_unmark_upto(HIGHp(node), level);
+    BddNode * node = &bddnodes[i];
+    if (MARKED(node)) {
+        UNMARK(node);
+        if (LEVEL(node) <= level) {
+            bdd_unmark_upto(LOW(node), level);
+            bdd_unmark_upto(HIGH(node), level);
+        }
+    }
 }
 
 
@@ -1198,73 +916,50 @@ void bdd_unmark_upto(int i, int level)
   Unique node table functions
 *************************************************************************/
 
-int bdd_makenode(unsigned int level, int low, int high)
-{
-    BddNode *node;
+int bdd_makenode(unsigned int level, int low, int high) {
+
     unsigned int hash;
     int res;
 
     assert (low >= 0);
     assert (high >= 0);
 
-#ifdef CACHESTATS
-    bddcachestats.uniqueAccess++;
-#endif
-
     /* check whether childs are equal */
-    if (low == high)
+    if (UNLIKELY(low == high)) {
         return low;
+    }
 
     /* Try to find an existing node of this kind */
     hash = NODEHASH(level, low, high);
     res = bddnodes[hash].hash;
 
-    while(res != 0)
-    {
-        if (LEVEL(res) == level  &&  LOW(res) == low  &&  HIGH(res) == high)
-        {
-#ifdef CACHESTATS
-            bddcachestats.uniqueHit++;
-#endif
+    while (res) {
+        if (LEVEL(res) == level && LOW(res) == low && HIGH(res) == high) {
             return res;
         }
-
         res = bddnodes[res].next;
-#ifdef CACHESTATS
-        bddcachestats.uniqueChain++;
-#endif
     }
 
     /* No existing node -> build one */
-#ifdef CACHESTATS
-    bddcachestats.uniqueMiss++;
-#endif
 
     /* Any free nodes to use ? */
-    if (bddfreepos == 0)
-    {
-        if (bdderrorcond)
-            return 0;
+    if (bddfreepos == 0) {
 
         /* Try to allocate more nodes */
         bdd_gbc();
 
         if ((bddnodesize - bddfreenum) >= usednodes_nextreorder && bdd_reorder_ready()) {
-            throw std::runtime_error("restarting without reallocation");
+            throw reordering_required();
         }
 
-        if ((bddfreenum*100) / bddnodesize <= minfreenodes)
-        {
+        if ((bddfreenum*100) / bddnodesize <= minfreenodes) {
             bdd_noderesize(1);
             hash = NODEHASH(level, low, high);
         }
 
         /* Panic if that is not possible */
-        if (bddfreepos == 0)
-        {
+        if (bddfreepos == 0) {
             bdd_error(BDD_NODENUM);
-            bdderrorcond = abs(BDD_NODENUM);
-            return 0;
         }
     }
 
@@ -1274,10 +969,10 @@ int bdd_makenode(unsigned int level, int low, int high)
     bddfreenum--;
     bddproduced++;
 
-    node = &bddnodes[res];
-    LEVELp(node) = level;
-    LOWp(node) = low;
-    HIGHp(node) = high;
+    BddNode * node = bddnodes + res;
+    node->level = level;
+    node->low = low;
+    node->high = high;
 
     /* Insert node */
     node->next = bddnodes[hash].hash;
@@ -1289,9 +984,7 @@ int bdd_makenode(unsigned int level, int low, int high)
 
 int bdd_noderesize(int doRehash)
 {
-    BddNode *newnodes;
-    int oldsize = bddnodesize;
-    int n;
+    const int oldsize = bddnodesize;
 
     if (bddnodesize >= bddmaxnodesize  &&  bddmaxnodesize > 0)
         return -1;
@@ -1306,25 +999,24 @@ int bdd_noderesize(int doRehash)
 
     bddnodesize = bdd_prime_lte(bddnodesize);
 
-    if (resize_handler != NULL)
+    if (resize_handler != nullptr)
         resize_handler(oldsize, bddnodesize);
 
-    newnodes = (BddNode*)realloc(bddnodes, sizeof(BddNode)*bddnodesize);
-    if (newnodes == NULL)
-        return bdd_error(BDD_MEMORY);
+    BddNode * newnodes = (BddNode*)realloc(bddnodes, sizeof(BddNode)*bddnodesize);
+    if (newnodes == nullptr)
+        bdd_error(BDD_MEMORY);
     bddnodes = newnodes;
 
     if (doRehash)
-        for (n=0 ; n<oldsize ; n++)
+        for (unsigned n=0 ; n<oldsize ; n++)
             bddnodes[n].hash = 0;
 
-    for (n=oldsize ; n<bddnodesize ; n++)
-    {
-        bddnodes[n].refcou = 0;
+    for (unsigned n=oldsize ; n<bddnodesize ; n++) {
+        bddnodes[n].refcount = 0;
+        bddnodes[n].level = 0;
+        bddnodes[n].low = -1;
         bddnodes[n].hash = 0;
-        LEVEL(n) = 0;
-        LOW(n) = -1;
-        bddnodes[n].next = n+1;
+        bddnodes[n].next = n + 1;
     }
     bddnodes[bddnodesize-1].next = bddfreepos;
     bddfreepos = oldsize;
@@ -1382,15 +1074,15 @@ int bdd_scanset(BDD r, int **varset, int *varnum)
     if (r < 2)
     {
         *varnum = 0;
-        *varset = NULL;
+        *varset = nullptr;
         return 0;
     }
 
     for (n=r, num=0 ; n > 1 ; n=HIGH(n))
         num++;
 
-    if (((*varset) = (int *)malloc(sizeof(int)*num)) == NULL)
-        return bdd_error(BDD_MEMORY);
+    if (((*varset) = (int *)malloc(sizeof(int)*num)) == nullptr)
+        bdd_error(BDD_MEMORY);
 
     for (n=r, num=0 ; n > 1 ; n=HIGH(n))
         (*varset)[num++] = bddlevel2var[LEVEL(n)];

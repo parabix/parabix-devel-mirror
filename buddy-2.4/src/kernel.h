@@ -41,7 +41,40 @@
 /*=== Includes =========================================================*/
 
 #include <limits.h>
+#include <stdexcept>
 #include "bdd.h"
+
+/*=== BUILT-INS ==========================================================*/
+
+#ifndef __has_builtin
+#define __has_builtin(x) 0
+#endif
+
+#ifndef __GNUC_PREREQ
+#if defined(__GNUC__) && defined(__GNUC_MINOR__)
+  #define __GNUC_PREREQ(maj, min) ((__GNUC__ << 16) + __GNUC_MINOR__ >= ((maj) << 16) + (min))
+#else
+  #define __GNUC_PREREQ(maj, min) 0
+#endif
+#endif
+
+#if __has_builtin(__builtin_expect) || __GNUC_PREREQ(4, 0)
+#define LIKELY(EXPR) __builtin_expect((bool)(EXPR), true)
+#define UNLIKELY(EXPR) __builtin_expect((bool)(EXPR), false)
+#else
+#define LIKELY(EXPR) (EXPR)
+#define UNLIKELY(EXPR) (EXPR)
+#endif
+
+#ifndef NDEBUG
+#define ALWAYS_INLINE
+#elif defined _MSC_VER
+#define ALWAYS_INLINE   __forceinline
+#elif defined __GNUC__
+#define ALWAYS_INLINE   __attribute__((always_inline)) inline
+#else
+#define ALWAYS_INLINE   inline
+#endif
 
 /*=== SANITY CHECKS ====================================================*/
 
@@ -50,38 +83,16 @@
 #error The compiler does not support 4 byte integers!
 #endif
 
-
-/* Sanity check argument and return eventual error code */
-#define CHECK(r)\
-    if (!bddrunning) return bdd_error(BDD_RUNNING);\
-    else if ((r) < 0  ||  (r) >= bddnodesize) return bdd_error(BDD_ILLBDD);\
-    else if (r >= 2 && LOW(r) == -1) return bdd_error(BDD_ILLBDD)\
-
-/* Sanity check argument and return eventually the argument 'a' */
-#define CHECKa(r,a)\
-    if (!bddrunning) { bdd_error(BDD_RUNNING); return (a); }\
-    else if ((r) < 0  ||  (r) >= bddnodesize)\
-{ bdd_error(BDD_ILLBDD); return (a); }\
-    else if (r >= 2 && LOW(r) == -1)\
-{ bdd_error(BDD_ILLBDD); return (a); }
-
-#define CHECKn(r)\
-    if (!bddrunning) { bdd_error(BDD_RUNNING); return; }\
-    else if ((r) < 0  ||  (r) >= bddnodesize)\
-{ bdd_error(BDD_ILLBDD); return; }\
-    else if (r >= 2 && LOW(r) == -1)\
-{ bdd_error(BDD_ILLBDD); return; }
-
 /*=== SEMI-INTERNAL TYPES ==============================================*/
 
 typedef struct s_BddNode /* Node table entry */
 {
-    unsigned int refcou : 10;
-    unsigned int level  : 22;
+    unsigned int refcount : 10;
+    unsigned int level : 22;
     int low;
     int high;
-    int hash;
-    int next;
+    unsigned hash;
+    unsigned next;
 } BddNode;
 
 
@@ -92,7 +103,6 @@ extern "C" {
 #endif
 
 extern int       bddrunning;         /* Flag - package initialized */
-extern int       bdderrorcond;       /* Some error condition was met */
 extern int       bddnodesize;        /* Number of allocated nodes */
 extern int       bddmaxnodesize;     /* Maximum allowed number of nodes */
 extern int       bddmaxnodeincrease; /* Max. # of nodes used to inc. table */
@@ -104,35 +114,74 @@ extern int*      bddvar2level;
 extern int*      bddlevel2var;
 extern int       bddreorderdisabled;
 extern int       bddresized;
-extern bddCacheStat bddcachestats;
 
 #ifdef CPLUSPLUS
 }
 #endif
 
+/*=== KERNEL DEFINITIONS ===============================================*/
+
+class reordering_required : public std::exception {
+public:
+reordering_required() = default;
+virtual char const * what() const  _GLIBCXX_USE_NOEXCEPT { return nullptr; }
+};
 
 /*=== KERNEL DEFINITIONS ===============================================*/
 
 #define MAXVAR 0x1FFFFF
 #define MAXREF 0x3FF
 
+static ALWAYS_INLINE void DECREF(const BDD i) {
+    BddNode & n = bddnodes[i];
+    if (LIKELY(n.refcount != 0 && n.refcount != MAXREF)) {
+        n.refcount--;
+    }
+}
+
+static ALWAYS_INLINE void INCREF(const BDD i) {
+    BddNode & n = bddnodes[i];
+    if (LIKELY(n.refcount != MAXREF)) {
+        n.refcount++;
+    }
+}
+
 /* Reference counting */
-#define DECREF(n) if (bddnodes[n].refcou!=MAXREF && bddnodes[n].refcou>0) bddnodes[n].refcou--
-#define INCREF(n) if (bddnodes[n].refcou<MAXREF) bddnodes[n].refcou++
-#define DECREFp(n) if (n->refcou!=MAXREF && n->refcou>0) n->refcou--
-#define INCREFp(n) if (n->refcou<MAXREF) n->refcou++
-#define HASREF(n) (bddnodes[n].refcou > 0)
+static ALWAYS_INLINE bool HASREF(const BDD i) {
+    return (bddnodes[i].refcount != 0);
+}
 
 /* Marking BDD nodes */
 #define MARKON   0x200000    /* Bit used to mark a node (1) */
 #define MARKOFF  0x1FFFFF    /* - unmark */
 #define MARKHIDE 0x1FFFFF
-#define SETMARK(n)  (bddnodes[n].level |= MARKON)
-#define UNMARK(n)   (bddnodes[n].level &= MARKOFF)
-#define MARKED(n)   (bddnodes[n].level & MARKON)
-#define SETMARKp(p) (node->level |= MARKON)
-#define UNMARKp(p)  (node->level &= MARKOFF)
-#define MARKEDp(p)  (node->level & MARKON)
+
+static ALWAYS_INLINE void SETMARK(BddNode * const p) {
+    p->level |= MARKON;
+}
+
+static ALWAYS_INLINE void SETMARK(const BDD i) {
+    SETMARK(bddnodes + i);
+}
+
+static ALWAYS_INLINE void UNMARK(BddNode * const p) {
+    p->level &= MARKOFF;
+}
+
+static ALWAYS_INLINE void UNMARK(const BDD i) {
+    UNMARK(bddnodes + i);
+}
+
+static ALWAYS_INLINE bool MARKED(const BddNode * const p) {
+    return (p->level & MARKON) != 0;
+}
+
+static ALWAYS_INLINE bool MARKED(const BDD i) {
+    return MARKED(bddnodes + i);
+}
+
+
+
 
 /* Hashfunctions */
 
@@ -145,18 +194,46 @@ extern bddCacheStat bddcachestats;
 #define ISNONCONST(a) ((a) >= 2)
 #define ISONE(a)   ((a) == 1)
 #define ISZERO(a)  ((a) == 0)
-#define LEVEL(a)   (bddnodes[a].level)
-#define LOW(a)     (bddnodes[a].low)
-#define HIGH(a)    (bddnodes[a].high)
-#define LEVELp(p)   ((p)->level)
-#define LOWp(p)     ((p)->low)
-#define HIGHp(p)    ((p)->high)
+
+static ALWAYS_INLINE unsigned LEVEL(const BddNode * const p) {
+    return p->level;
+}
+
+static ALWAYS_INLINE unsigned LEVEL(const BDD i) {
+    return LEVEL(bddnodes + i);
+}
+
+static ALWAYS_INLINE int LOW(const BddNode * const p) {
+    return p->low;
+}
+
+static ALWAYS_INLINE int LOW(const BDD i) {
+    return LOW(bddnodes + i);
+}
+
+static ALWAYS_INLINE int HIGH(const BddNode * const p) {
+    return p->high;
+}
+
+static ALWAYS_INLINE int HIGH(const BDD i) {
+    return HIGH(bddnodes + i);
+}
 
 /* Stacking for garbage collector */
-#define INITREF    bddrefstacktop = bddrefstack
-#define PUSHREF(a) *(bddrefstacktop++) = (a)
-#define READREF(a) *(bddrefstacktop-(a))
-#define POPREF(a)  bddrefstacktop -= (a)
+#define INITREF bddrefstacktop = bddrefstack
+
+static ALWAYS_INLINE BDD PUSHREF(const BDD n) {
+    *bddrefstacktop++ = n;
+    return n;
+}
+
+static ALWAYS_INLINE BDD READREF(const int i) {
+    return bddrefstacktop[-i];
+}
+
+static ALWAYS_INLINE void POPREF(const int i) {
+    bddrefstacktop -= i;
+}
 
 #define BDDONE 1
 #define BDDZERO 0
@@ -176,14 +253,13 @@ extern bddCacheStat bddcachestats;
 #define MAX(a,b) ((a) > (b) ? (a) : (b))
 #define NEW(t,n) ( (t*)malloc(sizeof(t)*(n)) )
 
-
 /*=== KERNEL PROTOTYPES ================================================*/
 
 #ifdef CPLUSPLUS
 extern "C" {
 #endif
 
-extern int    bdd_error(int);
+extern void   bdd_error(const unsigned code);
 extern int    bdd_makenode(unsigned int, int, int);
 extern int    bdd_noderesize(int);
 extern void   bdd_checkreorder(void);
@@ -217,6 +293,19 @@ extern void   bdd_cpp_init(void);
 #ifdef CPLUSPLUS
 }
 #endif
+
+
+/*=== INPUT VALIDATION ==================================================*/
+
+inline void CHECK(const BDD r) {
+    if (UNLIKELY(!bddrunning)) {
+        bdd_error(BDD_RUNNING);
+    } else if (UNLIKELY(r < 0 || r >= bddnodesize)) {
+        bdd_error(BDD_ILLBDD);
+    } else if (UNLIKELY(r >= 2 && LOW(r) == -1)) {
+        bdd_error(BDD_ILLBDD);
+    }
+}
 
 #endif /* _KERNEL_H */
 

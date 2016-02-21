@@ -48,8 +48,8 @@ int BddCache_init(BddCache *cache, int size)
 
     size = bdd_prime_gte(size);
 
-    if ((cache->table=NEW(BddCacheData,size)) == NULL)
-        return bdd_error(BDD_MEMORY);
+    if ((cache->table=NEW(BddCacheData,size)) == nullptr)
+        bdd_error(BDD_MEMORY);
 
     for (n=0 ; n<size ; n++)
         cache->table[n].a = -1;
@@ -62,7 +62,7 @@ int BddCache_init(BddCache *cache, int size)
 void BddCache_done(BddCache *cache)
 {
     free(cache->table);
-    cache->table = NULL;
+    cache->table = nullptr;
     cache->tablesize = 0;
 }
 
@@ -75,8 +75,8 @@ int BddCache_resize(BddCache *cache, int newsize)
 
     newsize = bdd_prime_gte(newsize);
 
-    if ((cache->table=NEW(BddCacheData,newsize)) == NULL)
-        return bdd_error(BDD_MEMORY);
+    if ((cache->table=NEW(BddCacheData,newsize)) == nullptr)
+        bdd_error(BDD_MEMORY);
 
     for (n=0 ; n<newsize ; n++)
         cache->table[n].a = -1;

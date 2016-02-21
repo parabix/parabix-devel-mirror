@@ -47,8 +47,8 @@
 /*=== Defined operators for apply calls ================================*/
 
 #define bddop_and       0
-#define bddop_xor       1
-#define bddop_or        2
+#define bddop_or        1
+#define bddop_xor       2
 #define bddop_nand      3
 #define bddop_nor       4
 #define bddop_imp       5
@@ -75,118 +75,6 @@ typedef struct s_bddPair
    struct s_bddPair *next;
 } bddPair;
 
-
-/*=== Status information ===============================================*/
-
-/*
-NAME    {* bddStat *}
-SECTION {* kernel *}
-SHORT   {* Status information about the bdd package *}
-PROTO   {* typedef struct s_bddStat
-{
-   long int produced;
-   int nodenum;
-   int maxnodenum;
-   int freenodes;
-   int minfreenodes;
-   int varnum;
-   int cachesize;
-   int gbcnum;
-} bddStat;  *}
-DESCR   {* The fields are \\[\baselineskip] \begin{tabular}{lp{10cm}}
-  {\tt produced}     & total number of new nodes ever produced \\
-  {\tt nodenum}      & currently allocated number of bdd nodes \\
-  {\tt maxnodenum}   & user defined maximum number of bdd nodes \\
-  {\tt freenodes}    & number of currently free nodes \\
-  {\tt minfreenodes} & minimum number of nodes that should be left after a
-                       garbage collection. \\
-  {\tt varnum}       & number of defined bdd variables \\
-  {\tt cachesize}    & number of entries in the internal caches \\
-  {\tt gbcnum}       & number of garbage collections done until now
-  \end{tabular} *}
-ALSO    {* bdd\_stats *}
-*/
-typedef struct s_bddStat
-{
-   long int produced;
-   int nodenum;
-   int maxnodenum;
-   int freenodes;
-   int minfreenodes;
-   int varnum;
-   int cachesize;
-   int gbcnum;
-} bddStat;
-
-
-/*
-NAME    {* bddGbcStat *}
-SECTION {* kernel *}
-SHORT   {* Status information about garbage collections *}
-PROTO   {* typedef struct s_bddGbcStat
-{
-   int nodes;
-   int freenodes;
-   long time;
-   long sumtime;
-   int num;
-} bddGbcStat;  *}
-DESCR   {* The fields are \\[\baselineskip] \begin{tabular}{ll}
-  {\tt nodes}     & Total number of allocated nodes in the nodetable \\
-  {\tt freenodes} & Number of free nodes in the nodetable \\
-  {\tt time}      & Time used for garbage collection this time \\
-  {\tt sumtime}   & Total time used for garbage collection \\
-  {\tt num}       & number of garbage collections done until now
-  \end{tabular} *}
-ALSO    {* bdd\_gbc\_hook *}
-*/
-typedef struct s_bddGbcStat
-{
-   int nodes;
-   int freenodes;
-   long time;
-   long sumtime;
-   int num;
-} bddGbcStat;
-
-
-/*
-NAME    {* bddCacheStat *}
-SECTION {* kernel *}
-SHORT   {* Status information about cache usage *}
-PROTO   {* typedef struct s_bddCacheStat
-{
-   long unsigned int uniqueAccess;
-   long unsigned int uniqueChain;
-   long unsigned int uniqueHit;
-   long unsigned int uniqueMiss;
-   long unsigned int opHit;
-   long unsigned int opMiss;
-   long unsigned int swapCount;
-} bddCacheStat; *}
-DESCR   {* The fields are \\[\baselineskip] \begin{tabular}{ll}
-  {\bf Name}         & {\bf Number of } \\
-  uniqueAccess & accesses to the unique node table \\
-  uniqueChain  & iterations through the cache chains in the unique node table\\
-  uniqueHit    & entries actually found in the the unique node table \\
-  uniqueMiss   & entries not found in the the unique node table \\
-  opHit        & entries found in the operator caches \\
-  opMiss       & entries not found in the operator caches \\
-  swapCount    & number of variable swaps in reordering \\
-\end{tabular} *}
-ALSO    {* bdd\_cachestats *}
-*/
-typedef struct s_bddCacheStat
-{
-   long unsigned int uniqueAccess;
-   long unsigned int uniqueChain;
-   long unsigned int uniqueHit;
-   long unsigned int uniqueMiss;
-   long unsigned int opHit;
-   long unsigned int opMiss;
-   long unsigned int swapCount;
-} bddCacheStat;
-
 /*=== BDD interface prototypes =========================================*/
 
 /*
@@ -210,14 +98,11 @@ extern "C" {
 #endif
 
 typedef void (*bddinthandler)(int);
-typedef void (*bddgbchandler)(int,bddGbcStat*);
 typedef void (*bdd2inthandler)(int,int);
 typedef int  (*bddsizehandler)(void);
 typedef void (*bddfilehandler)(FILE *, int);
 typedef void (*bddallsathandler)(char*, int);
    
-extern bddinthandler  bdd_error_hook(bddinthandler);
-extern bddgbchandler  bdd_gbc_hook(bddgbchandler);
 extern bdd2inthandler bdd_resize_hook(bdd2inthandler);
 extern bddinthandler  bdd_reorder_hook(bddinthandler);
 extern bddfilehandler bdd_file_hook(bddfilehandler);
@@ -232,14 +117,6 @@ extern int      bdd_setmaxincrease(int);
 extern int      bdd_setminfreenodes(int);
 extern int      bdd_getnodenum(void);
 extern int      bdd_getallocnum(void);
-extern void     bdd_stats(bddStat *);
-extern void     bdd_cachestats(bddCacheStat *);
-extern void     bdd_fprintstat(FILE *);
-extern void     bdd_printstat(void);
-extern void     bdd_default_gbchandler(int, bddGbcStat *);
-extern void     bdd_default_errhandler(int);
-extern std::string bdd_errstring(const int);
-extern void     bdd_clear_error(void);
 extern int      bdd_varnum(void);
 extern BDD      bdd_ithvar(int);
 extern BDD      bdd_nithvar(int);
@@ -267,12 +144,12 @@ extern void     bdd_freepair(bddPair*);
 extern int      bdd_setcacheratio(int);
 extern BDD      bdd_buildcube(int, int, BDD *);
 extern BDD      bdd_ibuildcube(int, int, int *);
-extern BDD      bdd_not(BDD);
-extern BDD      bdd_apply(BDD, BDD, int);
-extern BDD      bdd_ite(BDD, BDD, BDD);
-extern BDD      bdd_restrict(BDD, BDD);
-extern BDD      bdd_constrain(BDD, BDD);
-extern BDD      bdd_replace(BDD, bddPair*);
+extern BDD      bdd_not(const BDD);
+extern BDD      bdd_apply(const BDD, const BDD, const int);
+extern BDD      bdd_ite(const BDD, const BDD, const BDD);
+extern BDD      bdd_restrict(const BDD, const BDD);
+extern BDD      bdd_constrain(const BDD, const BDD);
+extern BDD      bdd_replace(const BDD, const bddPair * const);
 extern BDD      bdd_compose(BDD, BDD, BDD);
 extern BDD      bdd_veccompose(BDD, bddPair*);
 extern BDD      bdd_simplify(BDD, BDD);
@@ -345,11 +222,11 @@ extern void     bdd_fprintorder(FILE *);
 
 /*=== BDD constants ====================================================*/
 
-static inline BDD bdd_one(void) {
+static inline BDD bdd_one() {
    return 1;
 }
 
-static inline BDD bdd_zero(void) {
+static inline BDD bdd_zero() {
    return 0;
 }
 
@@ -359,27 +236,27 @@ static inline BDD bdd_constant(const BDD var) {
 
 /*=== BDD helpers ====================================================*/
 
-static inline BDD bdd_and(BDD l, BDD r) {
+static inline BDD bdd_and(const BDD l, const BDD r) {
     return bdd_apply(l, r, bddop_and);
 }
 
-static inline BDD bdd_or(BDD l, BDD r) {
+static inline BDD bdd_or(const BDD l, const BDD r) {
     return bdd_apply(l, r, bddop_or);
 }
 
-static inline BDD bdd_xor(BDD l, BDD r) {
+static inline BDD bdd_xor(const BDD l, const BDD r) {
     return bdd_apply(l, r, bddop_xor);
 }
 
-static inline BDD bdd_nor(BDD l, BDD r) {
+static inline BDD bdd_nor(const BDD l, const BDD r) {
     return bdd_apply(l, r, bddop_nor);
 }
 
-static inline BDD bdd_imp(BDD l, BDD r) {
+static inline BDD bdd_imp(const BDD l, const BDD r) {
     return bdd_apply(l, r, bddop_imp);
 }
 
-static inline BDD bdd_biimp(BDD l, BDD r) {
+static inline BDD bdd_biimp(const BDD l, const BDD r) {
     return bdd_apply(l, r, bddop_biimp);
 }
 
@@ -400,32 +277,32 @@ static inline BDD bdd_biimp(BDD l, BDD r) {
 
 /*=== Error codes ======================================================*/
 
-#define BDD_MEMORY (-1)   /* Out of memory */
-#define BDD_VAR (-2)      /* Unknown variable */
-#define BDD_RANGE (-3)    /* Variable value out of range (not in domain) */
-#define BDD_DEREF (-4)    /* Removing external reference to unknown node */
-#define BDD_RUNNING (-5)  /* Called bdd_init() twice whithout bdd_done() */
-#define BDD_FILE (-6)     /* Some file operation failed */
-#define BDD_FORMAT (-7)   /* Incorrect file format */
-#define BDD_ORDER (-8)    /* Vars. not in order for vector based functions */
-#define BDD_BREAK (-9)    /* User called break */
-#define BDD_VARNUM (-10)  /* Different number of vars. for vector pair */
-#define BDD_NODES (-11)   /* Tried to set max. number of nodes to be fewer */
+#define BDD_MEMORY (0)    /* Out of memory */
+#define BDD_VAR (1)       /* Unknown variable */
+#define BDD_RANGE (2)     /* Variable value out of range (not in domain) */
+#define BDD_DEREF (3)     /* Removing external reference to unknown node */
+#define BDD_RUNNING (4)   /* Called bdd_init() twice whithout bdd_done() */
+#define BDD_FILE (5)      /* Some file operation failed */
+#define BDD_FORMAT (6)    /* Incorrect file format */
+#define BDD_ORDER (7)     /* Vars. not in order for vector based functions */
+#define BDD_BREAK (8)     /* User called break */
+#define BDD_VARNUM (9)   /* Different number of vars. for vector pair */
+#define BDD_NODES (10)    /* Tried to set max. number of nodes to be fewer */
                           /* than there already has been allocated */
-#define BDD_OP (-12)      /* Unknown operator */
-#define BDD_VARSET (-13)  /* Illegal variable set */
-#define BDD_VARBLK (-14)  /* Bad variable block operation */
-#define BDD_DECVNUM (-15) /* Trying to decrease the number of variables */
-#define BDD_REPLACE (-16) /* Replacing to already existing variables */
-#define BDD_NODENUM (-17) /* Number of nodes reached user defined maximum */
-#define BDD_ILLBDD (-18)  /* Illegal bdd argument */
-#define BDD_SIZE (-19)    /* Illegal size argument */
+#define BDD_OP (11)       /* Unknown operator */
+#define BDD_VARSET (12)   /* Illegal variable set */
+#define BDD_VARBLK (13)   /* Bad variable block operation */
+#define BDD_DECVNUM (14)  /* Trying to decrease the number of variables */
+#define BDD_REPLACE (15)  /* Replacing to already existing variables */
+#define BDD_NODENUM (16)  /* Number of nodes reached user defined maximum */
+#define BDD_ILLBDD (17)   /* Illegal bdd argument */
+#define BDD_SIZE (18)     /* Illegal size argument */
 
-#define BVEC_SIZE (-20)    /* Mismatch in bitvector size */
-#define BVEC_SHIFT (-21)   /* Illegal shift-left/right parameter */
-#define BVEC_DIVZERO (-22) /* Division by zero */
+#define BVEC_SIZE (19)    /* Mismatch in bitvector size */
+#define BVEC_SHIFT (20)   /* Illegal shift-left/right parameter */
+#define BVEC_DIVZERO (21) /* Division by zero */
 
-#define BDD_ERRNUM 24
+#define BDD_ERRNUM 22
 
 #ifdef CPLUSPLUS
 #include <iostream>
