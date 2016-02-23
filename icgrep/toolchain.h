@@ -25,10 +25,12 @@ pablo::PabloFunction * re2pablo_compiler(const Encoding encoding, re::RE * re_as
 
 void pablo_function_passes(pablo::PabloFunction * function);
 
-
-
 ExecutionEngine * JIT_to_ExecutionEngine (Module * m);
 
 void icgrep_Linking(Module * m, ExecutionEngine * e);
+
+void PrintTotalCount();
+re::CC * getParsedCodePointSet();
+void setParsedCodePointSet();
 
 #endif

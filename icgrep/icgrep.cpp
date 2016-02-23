@@ -8,7 +8,6 @@
 #include <iostream>
 #include <fstream>
 
-#include "basis_bits.h"
 #include "toolchain.h"
 #include "utf_encoding.h"
 #include "pablo/pablo_compiler.h"
@@ -24,8 +23,6 @@
 #include <llvm/Support/TargetSelect.h>
 #include <llvm/Support/Host.h>
 #include <llvm/IR/Verifier.h>
-#include <kernels/s2p_gen.h>
-#include <kernels/scanmatchgen.h>
 
 #include <re/re_re.h>
 #include <re/parsefailure.h>
@@ -34,39 +31,33 @@
 #include <re/re_alt.h>
 #include <pablo/function.h>
 
-#include <iostream>
-
-#include <do_grep.h>
-#include <hrtime.h>
-
-#ifdef PRINT_TIMING_INFORMATION
-#include "papi_helper.hpp"
-#endif
+#include "do_grep.h"
+#include <kernels/pipeline.h>
 
 static cl::OptionCategory aRegexSourceOptions("Regular Expression Options",
                                        "These options control the regular expression source.");
 
-static cl::OptionCategory bGrepOutputOptions("Output Options",
-                                      "These options control the output.");
+// static cl::OptionCategory bGrepOutputOptions("Output Options",
+//                                       "These options control the output.");
 
 static cl::list<std::string> inputFiles(cl::Positional, cl::desc("<regex> <input file ...>"), cl::OneOrMore);
 
-static cl::opt<bool> CountOnly("c", cl::desc("Count and display the matching lines per file only."), cl::cat(bGrepOutputOptions));
-static cl::alias CountOnlyLong("count", cl::desc("Alias for -c"), cl::aliasopt(CountOnly));
-static cl::opt<bool> NormalizeLineBreaks("normalize-line-breaks", cl::desc("Normalize line breaks to std::endl."), cl::init(false),  cl::cat(bGrepOutputOptions));
+// static cl::opt<bool> CountOnly("c", cl::desc("Count and display the matching lines per file only."), cl::cat(bGrepOutputOptions));
+// static cl::alias CountOnlyLong("count", cl::desc("Alias for -c"), cl::aliasopt(CountOnly));
+// static cl::opt<bool> NormalizeLineBreaks("normalize-line-breaks", cl::desc("Normalize line breaks to std::endl."), cl::init(false),  cl::cat(bGrepOutputOptions));
 
-static cl::opt<bool> ShowFileNames("H", cl::desc("Show the file name with each matching line."), cl::cat(bGrepOutputOptions));
-static cl::alias ShowFileNamesLong("with-filename", cl::desc("Alias for -H"), cl::aliasopt(ShowFileNames));
+// static cl::opt<bool> ShowFileNames("H", cl::desc("Show the file name with each matching line."), cl::cat(bGrepOutputOptions));
+// static cl::alias ShowFileNamesLong("with-filename", cl::desc("Alias for -H"), cl::aliasopt(ShowFileNames));
 
 static cl::opt<bool> CaseInsensitive("i", cl::desc("Ignore case distinctions in the pattern and the file."), cl::cat(aRegexSourceOptions));
-static cl::opt<bool> ShowLineNumbers("n", cl::desc("Show the line number with each matching line."), cl::cat(bGrepOutputOptions));
-static cl::alias ShowLineNumbersLong("line-number", cl::desc("Alias for -n"), cl::aliasopt(ShowLineNumbers));
+// static cl::opt<bool> ShowLineNumbers("n", cl::desc("Show the line number with each matching line."), cl::cat(bGrepOutputOptions));
+// static cl::alias ShowLineNumbersLong("line-number", cl::desc("Alias for -n"), cl::aliasopt(ShowLineNumbers));
 
 static cl::list<std::string> regexVector("e", cl::desc("Regular expression"), cl::ZeroOrMore, cl::cat(aRegexSourceOptions));
 static cl::opt<std::string> RegexFilename("f", cl::desc("Take regular expressions (one per line) from a file"), cl::value_desc("regex file"), cl::init(""), cl::cat(aRegexSourceOptions));
 static cl::opt<std::string> IRFileName("precompiled", cl::desc("Use precompiled regular expression"), cl::value_desc("LLVM IR file"), cl::init(""), cl::cat(aRegexSourceOptions));
 
-using namespace llvm;
+
 
 static unsigned firstInputFile = 1;  // Normal case when first positional arg is a regex.
 
@@ -142,110 +133,39 @@ int main(int argc, char *argv[]) {
 
     cl::ParseCommandLineOptions(argc, argv);
     
-    Encoding encoding(Encoding::Type::UTF_8, 8);
-
-    llvm::Function * icgrep_IR = nullptr;
-    
     Module * M = new Module("grepcode", getGlobalContext());
     
     IDISA::IDISA_Builder * idb = GetNativeIDISA_Builder(M, VectorType::get(IntegerType::get(getGlobalContext(), 64), BLOCK_SIZE/64));
-    
-    gen_s2p_function(M, idb);
-    
-    
-    generateScanBitBlockRoutine(M, idb, 64);
-    
-    if (IRFileName == "") {        
-        re::RE * re_ast = get_icgrep_RE();
-        re_ast = regular_expression_passes(encoding, re_ast);
-        
-        #ifdef PRINT_TIMING_INFORMATION
-        const timestamp_t regex_compilation_start = read_cycle_counter();
-        #endif
-        pablo::PabloFunction * function = re2pablo_compiler(encoding, re_ast);
-        #ifdef PRINT_TIMING_INFORMATION
-        const timestamp_t regex_compilation_end = read_cycle_counter();
-        std::cerr << "REGEX COMPILATION TIME: " << (regex_compilation_end - regex_compilation_start) << std::endl;
-        #endif
 
-        pablo_function_passes(function);
-        
-        pablo::PabloCompiler pablo_compiler(M, idb);
-        try {
-            icgrep_IR = pablo_compiler.compile(function);
-            delete function;
-            releaseSlabAllocatorMemory();
-        } catch (std::runtime_error e) {
-            delete function;
-            releaseSlabAllocatorMemory();
-            std::cerr << "Runtime error: " << e.what() << std::endl;
-            exit(1);
-        }
-    } else {
-        firstInputFile = 0;  // No regexp arguments; first positional argument is a file to process.
-        SMDiagnostic ParseErr;
-        M = parseIRFile(IRFileName, ParseErr, getGlobalContext()).release();
-        if (!M) {
-            throw std::runtime_error("Error in Parsing IR File " + IRFileName);
-        }
-        icgrep_IR = M->getFunction("process_block");
-    }
-    llvm::Function * s2p_IR = M->getFunction("s2p_block");
-    
-   // llvm::Function * scanRoutine = M->getFunction("scan_matches_in_bitblock");
-    
-    if (s2p_IR == nullptr) {
-        std::cerr << "No s2p_IR!\n";
-        exit(1);
-    }
-    
+    PipelineBuilder pipelineBuilder(M, idb);
+
+    re::RE * re_ast = get_icgrep_RE();
+    Encoding encoding(Encoding::Type::UTF_8, 8);
+    re_ast = regular_expression_passes(encoding, re_ast);   
+    pablo::PabloFunction * function = re2pablo_compiler(encoding, re_ast);
+
+    pipelineBuilder.CreateKernels(function, false);
+
+    pipelineBuilder.ExecuteKernels();
+
+    llvm::Function * main_IR = M->getFunction("Main");
     llvm::ExecutionEngine * engine = JIT_to_ExecutionEngine(M);
     
     icgrep_Linking(M, engine);
     verifyModule(*M, &dbgs());
-    
-    // Ensure everything is ready to go.
     engine->finalizeObject();
-    
-    // TODO getPointerToFunction() is deprecated. Investigate getFunctionAddress(string name) instead.
-    void * icgrep_init_carry_ptr = engine->getPointerToFunction(M->getFunction("process_block_initialize_carries"));
-    void * icgrep_MCptr = engine->getPointerToFunction(icgrep_IR);
-    void * s2p_MCptr = engine->getPointerToFunction(s2p_IR);
-    // void * scan_MCptr = engine->getPointerToFunction(scanRoutine);
-    if (s2p_MCptr == nullptr) {
-        std::cerr << "No s2p_MCptr!\n";
-        exit(1);
-    }
 
-    if (icgrep_MCptr) {
-        GrepExecutor grepEngine(s2p_MCptr, icgrep_init_carry_ptr, icgrep_MCptr);
-        //GrepExecutor grepEngine(s2p_MCptr, icgrep_init_carry_ptr, icgrep_MCptr, scan_MCptr);
-        grepEngine.setCountOnlyOption(CountOnly);
-        grepEngine.setNormalizeLineBreaksOption(NormalizeLineBreaks);
-        grepEngine.setShowLineNumberOption(ShowLineNumbers);
-        if (inputFiles.size() > (firstInputFile + 1) || ShowFileNames) {
-            grepEngine.setShowFileNameOption();
-        }
-        #ifdef PRINT_TIMING_INFORMATION
-        papi::PapiCounter<4> papiCounters({PAPI_RES_STL, PAPI_STL_CCY, PAPI_FUL_CCY, PAPI_MEM_WCY});
-        #endif
+    void * main_MCptr = engine->getPointerToFunction(main_IR);
+
+    if(main_MCptr){
+        GrepExecutor grepEngine(main_MCptr);
         for (unsigned i = firstInputFile; i != inputFiles.size(); ++i) {
-            #ifdef PRINT_TIMING_INFORMATION
-            papiCounters.start();
-            const timestamp_t execution_start = read_cycle_counter();
-            #endif
             grepEngine.doGrep(inputFiles[i]);
-            #ifdef PRINT_TIMING_INFORMATION
-            const timestamp_t execution_end = read_cycle_counter();
-            papiCounters.stop();
-            std::cerr << "EXECUTION TIME: " << inputFiles[i] << ":" << "CYCLES|" << (execution_end - execution_start) << papiCounters << std::endl;
-            #endif
         }
     }
     
     //engine->freeMachineCodeForFunction(icgrep_IR); // Removed in LLVM 3.6. MC will be automatically freed in destructors.
     delete engine;
-    delete idb;
 
     return 0;
 }

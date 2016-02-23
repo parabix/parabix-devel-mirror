@@ -12,7 +12,7 @@
 #include <pablo/codegenstate.h>
 #include <pablo/carry_data.h>
 #include <llvm/IR/Constants.h>
-
+#include "../kernels/kernel.h"
 
 /* 
  * Carry Data Manager.
@@ -52,13 +52,18 @@ public:
     , mPabloCountCount(0)
     , mTotalCarryDataBitBlocks(0)
     , mCarryDataAllocationSize(0)
+    , mFilePosIdx(2)
     {
 
     }
 
     ~CarryManager();
     
-    void initialize(Module * m, PabloBlock * blk);
+    void initialize(PabloBlock * blk, KernelBuilder * kBuilder);
+
+    void initialize_setPtrs(KernelBuilder * kBuilder);
+
+    void set_BlockNo(KernelBuilder * kBuilder);
     
     void generateCarryDataInitializer(Module * m);
     
@@ -154,6 +159,9 @@ private:
     std::vector<PHINode *> mCarryOutAccumPhis;
     std::vector<Value *> mCarryOutPack;
     std::vector<Value *> mCarrySummary;
+    int mCdArrayIdx;
+    int mPcArrayIdx;
+    int mFilePosIdx;
 };
 
 inline bool CarryManager::hasCarries() const {

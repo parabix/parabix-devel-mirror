@@ -33,7 +33,7 @@ public:
 	PipelineBuilder(Module * m, IDISA::IDISA_Builder * b);
 	~PipelineBuilder();
 
-	void CreateKernels(pablo::PabloFunction * function);
+	void CreateKernels(pablo::PabloFunction * function, bool isNameExpression);
     void ExecuteKernels();
 
 private:

@@ -4,7 +4,6 @@
  *  icgrep is a trademark of International Characters.
  */
 
-#include <include/simd-lib/bitblock.hpp>
 #include <stdexcept>
 #include <pablo/carry_data.h>
 #include <pablo/codegenstate.h>
@@ -60,7 +59,7 @@ void CarryManager::generateCarryDataInitializer(Module * m) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief initialize
  ** ------------------------------------------------------------------------------------------------------------- */
-void CarryManager::initialize(Module * m, PabloBlock * pb) {
+void CarryManager::initialize(PabloBlock * pb, KernelBuilder * kBuilder) {
     mRootScope = pb;
     mCarryInfoVector.resize(doScopeCount(pb));
     mCarryPackType = mBitBlockType;
@@ -74,36 +73,41 @@ void CarryManager::initialize(Module * m, PabloBlock * pb) {
     mTotalCarryDataBitBlocks = totalCarryDataSize;
     
     ArrayType* cdArrayTy = ArrayType::get(mBitBlockType, mTotalCarryDataBitBlocks);
-    GlobalVariable* cdArray = new GlobalVariable(*m, cdArrayTy, /*isConstant=*/false, GlobalValue::CommonLinkage, /*Initializer=*/0, "process_block_carry_data");
-    cdArray->setAlignment(mBitBlockWidth / 8);
-    ConstantAggregateZero* cdInitData = ConstantAggregateZero::get(cdArrayTy);
-    cdArray->setInitializer(cdInitData);
+    mCdArrayIdx = kBuilder->extendKernelInternalStateType(cdArrayTy);
     
-    mCarryPackBasePtr = iBuilder->CreateBitCast(cdArray, PointerType::get(mCarryPackType, 0));
-    mCarryBitBlockPtr = iBuilder->CreateBitCast(cdArray, PointerType::get(mBitBlockType, 0));
-    
-    generateCarryDataInitializer(m);
-    
-    // Popcount data is stored after all the carry data.
     if (mPabloCountCount > 0) {
         ArrayType* pcArrayTy = ArrayType::get(iBuilder->getIntNTy(64), mPabloCountCount);
-        GlobalVariable* pcArray = new GlobalVariable(*m, pcArrayTy, /*isConstant=*/false, GlobalValue::CommonLinkage, 0, "popcount_data");
-        cdArray->setAlignment(mBitBlockWidth/8);
-        ConstantAggregateZero* pcInitData = ConstantAggregateZero::get(pcArrayTy);
-        pcArray->setInitializer(pcInitData);
-        mPopcountBasePtr = iBuilder->CreateBitCast(pcArray, Type::getInt64PtrTy(iBuilder->getContext()));
+        mPcArrayIdx = kBuilder->extendKernelInternalStateType(pcArrayTy);
     }
-    // Carry Data area will have one extra bit block to store the block number.
-    GlobalVariable* blkNo = new GlobalVariable(*m, iBuilder->getIntNTy(64), /*isConstant=*/false, GlobalValue::CommonLinkage, 0, "blockNo");
-    blkNo->setAlignment(16);
-    blkNo->setInitializer(iBuilder->getInt64(0));
-    mBlockNoPtr = blkNo;
-    mBlockNo = iBuilder->CreateLoad(mBlockNoPtr);
-    /*  Set the current scope to PabloRoot */
+  
     mCurrentScope = mRootScope;
     mCurrentFrameIndex = 0;
     mCarryInfo = mCarryInfoVector[0];
     mCarryOutPack[summaryPack()] = Constant::getNullValue(mCarryPackType);
+}
+
+void CarryManager::initialize_setPtrs(KernelBuilder * kBuilder) {
+    
+    Value * cdArrayPtr = kBuilder->getKernelInternalStatePtr(mCdArrayIdx);
+  
+    mCarryPackBasePtr = iBuilder->CreateBitCast(cdArrayPtr, PointerType::get(mCarryPackType, 0));
+    mCarryBitBlockPtr = iBuilder->CreateBitCast(cdArrayPtr, PointerType::get(mBitBlockType, 0));
+    
+    
+    if (mPabloCountCount > 0) {
+        Value * pcArrayPtr = kBuilder->getKernelInternalStatePtr(mPcArrayIdx);
+        mPopcountBasePtr = iBuilder->CreateBitCast(pcArrayPtr, Type::getInt64PtrTy(iBuilder->getContext()));
+    }
+  
+    mBlockNo = iBuilder->CreateUDiv(kBuilder->getKernelInternalState(mFilePosIdx), iBuilder->getInt64(mBitBlockWidth));
+    mCurrentScope = mRootScope;
+    mCurrentFrameIndex = 0;
+    mCarryInfo = mCarryInfoVector[0];
+    mCarryOutPack[summaryPack()] = Constant::getNullValue(mCarryPackType);
+}
+
+void CarryManager::set_BlockNo(KernelBuilder * kBuilder){
+    mBlockNo = iBuilder->CreateUDiv(kBuilder->getKernelInternalState(mFilePosIdx), iBuilder->getInt64(mBitBlockWidth));
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -300,7 +304,7 @@ Value * CarryManager::popCount(Value * to_count, unsigned globalIdx) {
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief blendCarrySummaryWithOuterSummary
+ * @brief addOuterSummaryToNestedSummary
  ** ------------------------------------------------------------------------------------------------------------- */
 void CarryManager::addOuterSummaryToNestedSummary() {
     if (LLVM_LIKELY(mCarrySummary.size() > 0)) {
@@ -549,9 +553,9 @@ void CarryManager::storeCarryOut(const unsigned packIndex) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief generateBlockNoIncrement
  ** ------------------------------------------------------------------------------------------------------------- */
-void CarryManager::generateBlockNoIncrement() {
-    iBuilder->CreateStore(iBuilder->CreateAdd(mBlockNo, iBuilder->getInt64(1)), mBlockNoPtr);
-}
+// void CarryManager::generateBlockNoIncrement() {
+//     iBuilder->CreateStore(iBuilder->CreateAdd(mBlockNo, iBuilder->getInt64(1)), mBlockNoPtr);
+// }
 
 /* Helper routines */
 

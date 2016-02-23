@@ -21,11 +21,12 @@
 #include <toolchain.h>
 #include "utf_encoding.h"
 #include <llvm/IR/Type.h>
-#include <kernels/s2p_gen.h>
 #include <pablo/pablo_compiler.h>
 #include <do_grep.h>
 #include <sstream>
 #include <algorithm>
+#include "../kernels/pipeline.h"
+#include "../toolchain.h"
 
 
 // It would probably be best to enforce that {}, [], () must always
@@ -511,7 +512,7 @@ RE * RE_Parser::parsePropertyExpression() {
     }
     return createName(std::move(canonicalize(start, mCursor.pos())));
 }
-
+/*
 Name * RE_Parser::parseNamePatternExpression(){
 
     ModeFlagSet outerFlags = fModeFlagSet;
@@ -569,7 +570,62 @@ Name * RE_Parser::parseNamePatternExpression(){
     }
     return nullptr;
 }
+*/
+Name * RE_Parser::parseNamePatternExpression(){
 
+    ModeFlagSet outerFlags = fModeFlagSet;
+    fModeFlagSet = 1;
+
+    bool outerNested = fNested;
+    fNested = true;
+
+    RE * nameRE = parse_RE();
+
+    // Reset outer parsing state.
+    fModeFlagSet = outerFlags;
+    fNested = outerNested;
+
+    // Embed the nameRE in ";.*$nameRE" to skip the codepoint field of Uname.txt
+    RE * embedded = makeSeq({mMemoizer.memoize(makeCC(0x3B)), makeRep(makeAny(), 0, Rep::UNBOUNDED_REP), nameRE});
+    Encoding encoding(Encoding::Type::UTF_8, 8);
+    embedded = regular_expression_passes(encoding, embedded);
+
+    pablo::PabloFunction * const nameSearchFunction = re2pablo_compiler(encoding, embedded);
+    pablo_function_passes(nameSearchFunction);
+    
+    Module * M = new Module("NamePattern", getGlobalContext());
+    IDISA::IDISA_Builder * idb = GetNativeIDISA_Builder(M, VectorType::get(IntegerType::get(getGlobalContext(), 64), BLOCK_SIZE/64));
+    
+    PipelineBuilder pipelineBuilder(M, idb);
+    pipelineBuilder.CreateKernels(nameSearchFunction, true);
+    pipelineBuilder.ExecuteKernels();
+
+    llvm::Function * main_IR = M->getFunction("Main");
+    llvm::ExecutionEngine * engine = JIT_to_ExecutionEngine(M);
+    
+    icgrep_Linking(M, engine);
+
+    engine->finalizeObject();
+
+    void * main_MCptr = engine->getPointerToFunction(main_IR);
+
+    CC * codepoints = nullptr;
+    if(main_MCptr){
+        GrepExecutor grepEngine(main_MCptr);
+        setParsedCodePointSet();
+        grepEngine.doGrep("../Uname.txt");
+        codepoints = getParsedCodePointSet();
+        assert (codepoints);
+    }
+        
+    delete engine;
+    if (codepoints) {
+        Name * const result = mMemoizer.memoize(codepoints);
+        assert (*cast<CC>(result->getDefinition()) == *codepoints);
+        return result;
+    }
+    return nullptr;
+}
 
 CharsetOperatorKind RE_Parser::getCharsetOperator() {
     switch (*mCursor) {

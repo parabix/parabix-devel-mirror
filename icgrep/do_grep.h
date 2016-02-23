@@ -8,105 +8,31 @@
 
 #include <string>
 #include <stdint.h>
-#include "basis_bits.h"
-#include "include/simd-lib/bitblock.hpp"
-#include "include/simd-lib/transpose.hpp"
-#include "include/simd-lib/bitblock_iterator.hpp"
 #include <re/re_cc.h>
 
-struct Output {
-    BitBlock matches;
-    BitBlock LF;
-};
 
-#if (BLOCK_SIZE == 128)
-#define SEGMENT_BLOCKS 7
-#endif
-
-#if (BLOCK_SIZE == 256)
-#define SEGMENT_BLOCKS 15
-#endif
-
-#define SEGMENT_SIZE (BLOCK_SIZE * SEGMENT_BLOCKS)
-
-
-#if (BLOCK_SIZE == 256)
-typedef BitStreamScanner<BitBlock, uint64_t, uint64_t, SEGMENT_BLOCKS> ScannerT;
-#endif
-
-#if (BLOCK_SIZE == 128)
-typedef BitStreamScanner<BitBlock, uint32_t, uint32_t, SEGMENT_BLOCKS> ScannerT;
-#endif
-
-typedef void (*transpose_fcn_T)(BytePack * byte_data, Basis_bits & basis_bits);
-typedef void (*process_block_initialize_carries_fcn)();
-typedef void (*process_block_fcn)(const Basis_bits & basis_bits, Output & output);
+typedef void (*main_fcn_T)(char * byte_data, int filesize, const char* filename, uint64_t finalLineUnterminated);
 
 namespace llvm { class raw_ostream; }
 
 class GrepExecutor {
 public:
 
-    GrepExecutor(void * process_block_initialize_carries, void * process_block)
-    : mCountOnlyOption(false)
-    , mGetCodePointsOption(false)
-    , mShowFileNameOption(false)
-    , mShowLineNumberingOption(false)
-    , mParsedCodePointSet(nullptr)
-    , mTransposeFcn(reinterpret_cast<transpose_fcn_T>(&s2p_do_block))
-    , mInitializeCarriesFcn(reinterpret_cast<process_block_initialize_carries_fcn>(process_block_initialize_carries))
-    , mProcessBlockFcn(reinterpret_cast<process_block_fcn>(process_block)) {
+    GrepExecutor(void * main_fnptr)
+    : mMainFcn(reinterpret_cast<main_fcn_T>(main_fnptr)) {
         
     }
-    GrepExecutor(void * s2p_fnptr, void * process_block_initialize_carries, void * process_block)
-    : mCountOnlyOption(false)
-    , mGetCodePointsOption(false)
-    , mShowFileNameOption(false)
-    , mShowLineNumberingOption(false)
-    , mParsedCodePointSet(nullptr)
-    , mTransposeFcn(reinterpret_cast<transpose_fcn_T>(s2p_fnptr))
-    , mInitializeCarriesFcn(reinterpret_cast<process_block_initialize_carries_fcn>(process_block_initialize_carries))
-    , mProcessBlockFcn(reinterpret_cast<process_block_fcn>(process_block)) {
-        
-    }
-    
-    void setCountOnlyOption(bool doCount = true) {mCountOnlyOption = doCount;}
-    void setParseCodepointsOption() {
-        mGetCodePointsOption = true;
-        mParsedCodePointSet = re::makeCC();
-    }
-    void setShowFileNameOption(bool showF = true) {mShowFileNameOption = showF;}
-    void setShowLineNumberOption(bool showN = true) {mShowLineNumberingOption = showN;}
-    void setNormalizeLineBreaksOption(bool normLB = true) {mNormalizeLineBreaksOption = normLB;}
-    
+  
     void doGrep(const std::string & fileName);
-    re::CC * getParsedCodepoints() { return mParsedCodePointSet;}
 private:
-    void write_matched_line(llvm::raw_ostream & out, const char * buffer, ssize_t line_start, ssize_t line_end);
-
-    ssize_t write_matches(llvm::raw_ostream & out, const char *buffer, ssize_t first_line_start);
-    
+   
     bool finalLineIsUnterminated() const;
-    ssize_t extract_codepoints(char * buffer, ssize_t first_line_start);
 
-    bool mCountOnlyOption;
-    bool mGetCodePointsOption;
-    bool mShowFileNameOption;
-    bool mShowLineNumberingOption;
-    bool mNormalizeLineBreaksOption;
-    
-    re::CC * mParsedCodePointSet;
-
-    transpose_fcn_T mTransposeFcn;
-    process_block_initialize_carries_fcn mInitializeCarriesFcn;
-    process_block_fcn mProcessBlockFcn;
+    main_fcn_T mMainFcn;
     
     std::string mFileName;
     size_t mFileSize;
     char * mFileBuffer;
-    ScannerT mLineBreak_scanner;
-    ScannerT mMatch_scanner;
-    size_t mLineNum;
 };
 
 

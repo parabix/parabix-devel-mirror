@@ -4,7 +4,7 @@
  *  icgrep is a trademark of International Characters.
  */
 
-#include "basis_bits.h"
+#include "toolchain.h"
 #include "do_grep.h"
 
 #include <fstream>
@@ -22,10 +22,6 @@
 #include <stdexcept>
 #include <cctype>
 
-#include "include/simd-lib/carryQ.hpp"
-#include "include/simd-lib/pabloSupport.hpp"
-#include "include/simd-lib/s2p.hpp"
-#include "include/simd-lib/buffer.hpp"
 
 #include <llvm/Support/raw_os_ostream.h>
 
@@ -56,78 +52,6 @@ using namespace boost::filesystem;
 //
 
 
-void GrepExecutor::write_matched_line(llvm::raw_ostream & out, const char * buffer, ssize_t line_start, ssize_t line_end) {
-    if (mShowFileNameOption) {
-        out << mFileName << ':';
-    }
-    if (mShowLineNumberingOption) {
-        out << mLineNum << ":";
-    }
-    if ((buffer[line_start] == 0xA) && (line_start != line_end)) {
-        // The line "starts" on the LF of a CRLF.  Really the end of the last line.
-        line_start++;
-    }
-    if (buffer + line_end == mFileBuffer + mFileSize) {
-        // The match position is at end-of-file.   We have a final unterminated line.
-        out.write(&buffer[line_start], line_end - line_start);
-        if (mNormalizeLineBreaksOption) {
-            out << '\n';  // terminate it
-        }
-        return;
-    }
-    unsigned char end_byte = (unsigned char)buffer[line_end];
-    if (mNormalizeLineBreaksOption) {
-        if (end_byte == 0x85) {
-            // Line terminated with NEL, on the second byte.  Back up 1.
-            line_end--;
-        } else if (end_byte > 0xD) {
-            // Line terminated with PS or LS, on the third byte.  Back up 2.
-            line_end -= 2;
-        }
-        out.write(&buffer[line_start], line_end - line_start);
-        out << '\n';
-    }
-    else {
-        if (end_byte == 0x0D) {
-            // Check for line_end on first byte of CRLF;  note that we don't
-            // want to access past the end of buffer.
-            if ((buffer + line_end + 1 < mFileBuffer + mFileSize) && (buffer[line_end + 1] == 0x0A)) {
-                // Found CRLF; preserve both bytes.
-                line_end++;
-            }
-        }
-        out.write(&buffer[line_start], line_end - line_start + 1);
-    }
-    
-}
-
-ssize_t GrepExecutor::write_matches(llvm::raw_ostream & out, const char * buffer, ssize_t line_start) {
-
-    ssize_t match_pos;
-    ssize_t line_end;
-    while (mMatch_scanner.has_next()) {
-        match_pos = mMatch_scanner.scan_to_next();
-        // If we found a match, it must be at a line end.
-        while (true) {
-            line_end = mLineBreak_scanner.scan_to_next();
-            if (line_end >= match_pos) {
-                break;
-            }
-            line_start = line_end + 1;
-            mLineNum++;
-        }
-        write_matched_line(out,buffer, line_start, line_end);
-        line_start = line_end + 1;
-        mLineNum++;
-    }
-    while(mLineBreak_scanner.has_next()) {
-        line_end = mLineBreak_scanner.scan_to_next();
-        line_start = line_end+1;
-        mLineNum++;
-    }
-    return line_start;
-}
-
 bool GrepExecutor::finalLineIsUnterminated() const {
     if (mFileSize == 0) return false;
     unsigned char end_byte = static_cast<unsigned char>(mFileBuffer[mFileSize-1]);
@@ -144,64 +68,9 @@ bool GrepExecutor::finalLineIsUnterminated() const {
     return (static_cast<unsigned char>(mFileBuffer[mFileSize-3]) != 0xE2) || (penult_byte != 0x80);
 }
 
-// Extracting codepoint data from UCD name data file.
-ssize_t GrepExecutor::extract_codepoints(char * buffer, ssize_t first_line_start) {
-    
-    ssize_t line_start = first_line_start;
-    size_t match_pos;
-    size_t line_end;
-    
-    while (mMatch_scanner.has_next()) {
-        match_pos = mMatch_scanner.scan_to_next();
-        // If we found a match, it must be at a line end.
-        line_end = mLineBreak_scanner.scan_to_next();
-        while (line_end < match_pos) {
-            line_start = line_end + 1;
-            mLineNum++;
-            line_end = mLineBreak_scanner.scan_to_next();
-        }
-        
-        re::codepoint_t c = 0;
-        ssize_t line_pos = line_start;
-        while (isxdigit(buffer[line_pos])) {
-            if (isdigit(buffer[line_pos])) {
-                c = (c << 4) | (buffer[line_pos] - '0');
-            }
-            else {
-                c = (c << 4) | (tolower(buffer[line_pos]) - 'a' + 10);
-            }
-            line_pos++;
-        }
-        assert(((line_pos - line_start) >= 4) && ((line_pos - line_start) <= 6)); // UCD format 4 to 6 hex digits.
-#ifndef NDEBUG
-        std::cerr << "\\N expression found codepoint " << std::hex << c << std::dec << std::endl;
-#endif
-        
-        mParsedCodePointSet->insert(c);
-        
-        line_start = line_end + 1;
-        mLineNum++;
-    }
-    while(mLineBreak_scanner.has_next()) {
-        line_end = mLineBreak_scanner.scan_to_next();
-        line_start = line_end+1;
-        mLineNum++;
-    }
-    return line_start;
-    
-}
-
-
 void GrepExecutor::doGrep(const std::string & fileName) {
 
-    Basis_bits basis_bits;
-    BitBlock match_vector = simd<1>::constant<0>();
-    size_t match_count = 0;
-    size_t chars_avail = 0;
-    ssize_t line_start = 0;
-
     mFileName = fileName;
-    mLineNum = 1;
 
 #ifdef USE_BOOST_MMAP
     const path file(mFileName);
@@ -249,7 +118,7 @@ void GrepExecutor::doGrep(const std::string & fileName) {
         mFileBuffer = nullptr;
     }
     else {
-        mFileBuffer = (char *) mmap(nullptr, mFileSize, PROT_READ, MAP_PRIVATE, fdSrc, 0);
+        mFileBuffer = (char *) mmap(NULL, mFileSize, PROT_READ, MAP_PRIVATE, fdSrc, 0);
         if (mFileBuffer == MAP_FAILED) {
             if (errno ==  ENOMEM) {
                 std::cerr << "Error:  mmap of " << mFileName << " failed: out of memory\n";
@@ -263,132 +132,17 @@ void GrepExecutor::doGrep(const std::string & fileName) {
         }
     }
 #endif
-    size_t segment = 0;
-    chars_avail = mFileSize;
 
     llvm::raw_os_ostream out(std::cout);
-    mInitializeCarriesFcn();
-    //////////////////////////////////////////////////////////////////////////////////////////
-    // Full Segments
-    //////////////////////////////////////////////////////////////////////////////////////////
 
-    while (chars_avail >= SEGMENT_SIZE) {
+    uint64_t finalLineUnterminated = 0;
+    if(finalLineIsUnterminated())
+        finalLineUnterminated = 1;
 
-        mLineBreak_scanner.init();
-        mMatch_scanner.init();
+    mMainFcn(mFileBuffer, mFileSize, fileName.c_str(), finalLineUnterminated);
 
-        for (size_t blk = 0; blk != SEGMENT_BLOCKS; ++blk) {
-            mTransposeFcn(reinterpret_cast<BytePack *>(mFileBuffer + (blk * BLOCK_SIZE) + (segment * SEGMENT_SIZE)), basis_bits);
-            Output output;
-            mProcessBlockFcn(basis_bits, output);
-            mMatch_scanner.load_block(output.matches, blk);
-            mLineBreak_scanner.load_block(output.LF, blk);
-
-            if (mCountOnlyOption) {
-                if (bitblock::any(output.matches)) {
-                    if (bitblock::any(simd_and(match_vector, output.matches))) {
-                        match_count += bitblock::popcount(match_vector);
-                        match_vector = output.matches;
-                    } else {
-                        match_vector = simd_or(match_vector, output.matches);
-                    }
-                }
-            }
-        }
-        if (!mCountOnlyOption) {
-            if (mGetCodePointsOption) {
-                line_start = extract_codepoints(mFileBuffer + (segment * SEGMENT_SIZE), line_start);
-            }
-            else {
-                line_start = write_matches(out, mFileBuffer + (segment * SEGMENT_SIZE), line_start);
-            }
-        }
-        segment++;
-        line_start -= SEGMENT_SIZE;  /* Will be negative offset for use within next segment. */
-        chars_avail -= SEGMENT_SIZE;
-    }
-
-    //////////////////////////////////////////////////////////////////////////////////////////
-    // For the Final Partial Segment.
-    //////////////////////////////////////////////////////////////////////////////////////////
-
-    size_t remaining = chars_avail;
-    size_t blk = 0;
-
-    mLineBreak_scanner.init();
-    mMatch_scanner.init();
-
-    /* Full Blocks */
-    for (; remaining >= BLOCK_SIZE; remaining -= BLOCK_SIZE, ++blk) {
-        mTransposeFcn(reinterpret_cast<BytePack *>(mFileBuffer + (blk * BLOCK_SIZE) + (segment * SEGMENT_SIZE)), basis_bits);
-        Output output;
-        mProcessBlockFcn(basis_bits, output);
-        mLineBreak_scanner.load_block(output.LF, blk);
-        mMatch_scanner.load_block(output.matches, blk);
-        if (mCountOnlyOption) {
-            if (bitblock::any(output.matches)) {
-                if (bitblock::any(simd_and(match_vector, output.matches))) {
-                    match_count += bitblock::popcount(match_vector);
-                    match_vector = output.matches;
-                } else {
-                    match_vector = simd_or(match_vector, output.matches);
-                }
-            }
-        }
-    }
-
-    //Final Partial Block (may be empty, but there could be carries pending).
+    PrintTotalCount();
     
-    
-    const auto EOF_mask = bitblock::srl(simd<1>::constant<1>(), convert(BLOCK_SIZE - remaining));
-    
-    if (remaining == 0) {  // No data, we may be at a page boundary.   Do not access memory.
-        basis_bits.bit_0 = simd<1>::constant<0>();
-        basis_bits.bit_1 = simd<1>::constant<0>();
-        basis_bits.bit_2 = simd<1>::constant<0>();
-        basis_bits.bit_3 = simd<1>::constant<0>();
-        basis_bits.bit_4 = simd<1>::constant<0>();
-        basis_bits.bit_5 = simd<1>::constant<0>();
-        basis_bits.bit_6 = simd<1>::constant<0>();
-        basis_bits.bit_7 = simd<1>::constant<0>();
-    }
-    else { // At least 1 byte, so we are not at a page boundary yet, safe to access a full block. 
-        mTransposeFcn(reinterpret_cast<BytePack *>(mFileBuffer + (blk * BLOCK_SIZE) + (segment * SEGMENT_SIZE)), basis_bits);
-    }
-
-    if (finalLineIsUnterminated()) {
-        // Add a LF at the EOF position
-        BitBlock EOF_pos = simd_not(simd_or(bitblock::slli<1>(simd_not(EOF_mask)), EOF_mask));
-        //  LF = 00001010  (bits 4 and 6 set).
-        basis_bits.bit_4 = simd_or(basis_bits.bit_4, EOF_pos);
-        basis_bits.bit_6 = simd_or(basis_bits.bit_6, EOF_pos);
-    }
-    
-    Output output;
-    mProcessBlockFcn(basis_bits, output);
-    if (mCountOnlyOption) {
-        match_count += bitblock::popcount(match_vector);
-        if (bitblock::any(output.matches)) {
-            match_count += bitblock::popcount(output.matches);
-        }
-        if (mShowFileNameOption) {
-            out << mFileName << ':';
-        }
-        out << match_count << '\n';
-    } else {
-        mLineBreak_scanner.load_block(output.LF, blk);
-        mMatch_scanner.load_block(output.matches, blk);
-        while (++blk < SEGMENT_BLOCKS) {
-            mLineBreak_scanner.load_block(simd<1>::constant<0>(), blk);
-            mMatch_scanner.load_block(simd<1>::constant<0>(), blk);
-        }
-        if (mGetCodePointsOption) {
-            line_start = extract_codepoints(mFileBuffer + (segment * SEGMENT_SIZE), line_start);
-        }
-        else {
-            line_start = write_matches(out, mFileBuffer + (segment * SEGMENT_SIZE), line_start);
-        }
-    }
 #ifdef USE_BOOST_MMAP
     mFile.close();
 #else

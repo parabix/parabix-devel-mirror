@@ -72,18 +72,24 @@ PabloCompiler::PabloCompiler(Module * m, IDISA::IDISA_Builder * b)
 , mBitBlockType(b->getBitBlockType())
 , mCarryManager(nullptr)
 , mInputType(nullptr)
+, mKBuilder(nullptr)
 , mWhileDepth(0)
 , mIfDepth(0)
 , mFunction(nullptr)
 , mInputAddressPtr(nullptr)
 , mOutputAddressPtr(nullptr)
-, mMaxWhileDepth(0) {
+, mMaxWhileDepth(0)
+, mFilePosIdx(2) {
     
 }
 
 PabloCompiler::~PabloCompiler() {
 }
-        
+ 
+void PabloCompiler::setKernel(KernelBuilder * kBuilder){
+    mKBuilder = kBuilder;   
+} 
+
 llvm::Function * PabloCompiler::compile(PabloFunction * function) {
 
     #ifdef PRINT_TIMING_INFORMATION
@@ -97,44 +103,9 @@ llvm::Function * PabloCompiler::compile(PabloFunction * function) {
     Examine(*function);
 
     mCarryManager = new CarryManager(iBuilder);
-    
-    GenerateFunction(*function);
-    
-    iBuilder->SetInsertPoint(BasicBlock::Create(mMod->getContext(), "entry", mFunction,0));
 
-    //The basis bits structure
-    for (unsigned i = 0; i != function->getNumOfParameters(); ++i) {
-        Value* indices[] = {iBuilder->getInt64(0), iBuilder->getInt32(i)};
-        Value * gep = iBuilder->CreateGEP(mInputAddressPtr, indices);
-        LoadInst * basisBit = iBuilder->CreateAlignedLoad(gep, iBuilder->getBitBlockWidth()/8, false, function->getParameter(i)->getName()->to_string());
-        mMarkerMap[function->getParameter(i)] = basisBit;
-        if (DumpTrace) {
-            iBuilder->genPrintRegister(function->getParameter(i)->getName()->to_string(), basisBit);
-        }
-    }
-     
-    //Generate the IR instructions for the function.
-    
-    mCarryManager->initialize(mMod, mainScope);
-
-    compileBlock(mainScope);
-    
-    mCarryManager->generateBlockNoIncrement();
-
-    if (DumpTrace) {
-        iBuilder->genPrintRegister("mBlockNo", iBuilder->CreateAlignedLoad(iBuilder->CreateBitCast(mCarryManager->getBlockNoPtr(), PointerType::get(mBitBlockType, 0)), iBuilder->getBitBlockWidth()/8, false));
-    }
-    
-    // Write the output values out
-    for (unsigned i = 0; i != function->getNumOfResults(); ++i) {
-        assert (function->getResult(i));
-        SetOutputValue(mMarkerMap[function->getResult(i)], i);
-    }
-
-    //Terminate the block
-    ReturnInst::Create(mMod->getContext(), iBuilder->GetInsertBlock());
-    
-    // Clean up
+    GenerateKernel(mainScope, function);
+       
     delete mCarryManager;
     mCarryManager = nullptr;
     
@@ -143,11 +114,6 @@ llvm::Function * PabloCompiler::compile(PabloFunction * function) {
     std::cerr << "PABLO COMPILATION TIME: " << (pablo_compilation_end - pablo_compilation_start) << std::endl;
     #endif
 
-//    llvm::PassManager pm;
-//    llvm::PassManagerBuilder pmb;
-//    pmb.OptLevel = 3;
-//    pmb.populateModulePassManager(pm);
-//    pm.run(*mMod);
 
     if (LLVM_UNLIKELY(DumpGeneratedIR)) {
 
@@ -166,6 +132,46 @@ llvm::Function * PabloCompiler::compile(PabloFunction * function) {
     #endif
 
     return mFunction;
+}
+
+inline void PabloCompiler::GenerateKernel(PabloBlock * mainScope, PabloFunction * function) {
+  
+    for(int i=0; i<8; i++){
+        mKBuilder->addKernelInputStream(1, "basis_bits");
+    }
+    mKBuilder->addKernelOutputStream(1);
+    mKBuilder->addKernelOutputStream(1);
+
+    mCarryManager->initialize(mainScope, mKBuilder);
+ 
+    int segBlocks = mKBuilder->getSegmentBlocks();
+    mKBuilder->PrepareDoBlockFunction();
+    struct Inputs inputs = mKBuilder->openDoBlock();
+    struct Outputs outputs;
+    mFunction = mKBuilder->getDoBlockFunction();
+
+    mCarryManager->initialize_setPtrs(mKBuilder);
+
+    valptr results[segBlocks][2];
+    for(int j=0; j<segBlocks; j++){     
+        for(int i=0; i<inputs.streams[j].size(); i++){
+            mMarkerMap[function->getParameter(i)] = inputs.streams[j][i];
+        }
+
+        compileBlock(mainScope);
+
+        Value * filePos = iBuilder->CreateAdd(mKBuilder->getKernelInternalState(mFilePosIdx), iBuilder->getInt64(iBuilder->getBitBlockWidth()));
+        mKBuilder->changeKernelInternalState(mFilePosIdx, filePos);
+
+        mCarryManager->set_BlockNo(mKBuilder);
+
+        results[j][0] = mMarkerMap[function->getResult(0)];
+        results[j][1] = mMarkerMap[function->getResult(1)];
+        outputs.streams.push_back(results[j]);
+    }    
+
+    mKBuilder->closeDoBlock(outputs);
+    mKBuilder->finalizeMethods();
 }
 
 inline void PabloCompiler::GenerateFunction(PabloFunction & function) {

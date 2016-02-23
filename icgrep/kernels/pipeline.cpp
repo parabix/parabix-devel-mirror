@@ -27,14 +27,14 @@ PipelineBuilder::PipelineBuilder(Module * m, IDISA::IDISA_Builder * b)
 PipelineBuilder::~PipelineBuilder(){
 }
 
-void PipelineBuilder::CreateKernels(pablo::PabloFunction * function){
+void PipelineBuilder::CreateKernels(pablo::PabloFunction * function, bool isNameExpression){
     mS2PKernel = new KernelBuilder("s2p", mMod, iBuilder);
     mICgrepKernel = new KernelBuilder("icgrep", mMod, iBuilder);
     mScanMatchKernel = new KernelBuilder("scanMatch", mMod, iBuilder);
 
 
     generateS2PKernel(mMod, iBuilder, mS2PKernel);
-    generateScanMatch(mMod, iBuilder, 64, mScanMatchKernel);
+    generateScanMatch(mMod, iBuilder, 64, mScanMatchKernel, isNameExpression);
 
     pablo_function_passes(function);
           

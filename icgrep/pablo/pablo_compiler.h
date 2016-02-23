@@ -28,6 +28,7 @@ static_assert(false, "Need to turn on them together.");
 #include <llvm/ADT/Twine.h>
 #include <llvm/IR/IRBuilder.h>
 #include <IDISA/idisa_builder.h>
+#include <kernels/kernel.h>
 
 namespace llvm {
     class Value;
@@ -74,7 +75,9 @@ class PabloCompiler {
 public:
     PabloCompiler(Module * m, IDISA::IDISA_Builder * b);
     ~PabloCompiler();
-    Function * compile(pablo::PabloFunction * function);
+    Function * compile(pablo::PabloFunction * function);   
+    void setKernel(KernelBuilder * kBuilder);
+    
 private:
     void GenerateFunction(PabloFunction & function);
     void Examine(PabloFunction & function);
@@ -87,6 +90,7 @@ private:
     void compileIf(const If * ifStmt);
     void compileWhile(const While * whileStmt);
     Value* compileExpression(const PabloAST * expr);
+    void GenerateKernel(PabloBlock * block, PabloFunction * function);
 
     ASTToValueMap                       mMarkerMap;
 
@@ -99,6 +103,8 @@ private:
     PointerType*                        mInputType;
 
     PabloBlock *                        mPabloBlock;
+
+    KernelBuilder *                     mKBuilder;
     
     unsigned                            mWhileDepth;
     unsigned                            mIfDepth;
@@ -108,6 +114,7 @@ private:
     Value *                             mOutputAddressPtr;
 
     unsigned                            mMaxWhileDepth;
+    int                                 mFilePosIdx;
 
 };
 
