@@ -65,11 +65,8 @@ public:
 
     void set_BlockNo(KernelBuilder * kBuilder);
     
-    void generateCarryDataInitializer(Module * m);
-    
     unsigned enumerate(PabloBlock * blk, unsigned ifDepth, unsigned whileDepth);
-    
-    void generateBlockNoIncrement();    
+       
     Value * getBlockNoPtr() const;
     
     /* Entering and leaving scopes. */

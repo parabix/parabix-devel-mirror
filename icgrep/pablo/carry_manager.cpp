@@ -4,6 +4,7 @@
  *  icgrep is a trademark of International Characters.
  */
 
+#include <include/simd-lib/bitblock.hpp>
 #include <stdexcept>
 #include <pablo/carry_data.h>
 #include <pablo/codegenstate.h>
@@ -34,26 +35,6 @@ static unsigned doScopeCount(const PabloBlock * const pb) {
         }
     }
     return count;
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief generateCarryDataInitializer
- ** ------------------------------------------------------------------------------------------------------------- */
-void CarryManager::generateCarryDataInitializer(Module * m) {
-    FunctionType * functionType = FunctionType::get(Type::getVoidTy(m->getContext()), std::vector<Type *>({}), false);
-    SmallVector<AttributeSet, 1> Attrs;
-    Attrs.push_back(AttributeSet::get(m->getContext(), ~0U, std::vector<Attribute::AttrKind>({ Attribute::NoUnwind, Attribute::UWTable })));
-    AttributeSet AttrSet = AttributeSet::get(m->getContext(), Attrs);
-    
-    // Create the function that will be generated.
-    Function * f = Function::Create(functionType, GlobalValue::ExternalLinkage, "process_block_initialize_carries", m);
-    f->setCallingConv(CallingConv::C);
-    f->setAttributes(AttrSet);
-    const auto ip = iBuilder->saveIP();
-    iBuilder->SetInsertPoint(BasicBlock::Create(m->getContext(), "entry1", f, 0));
-    iBuilder->CreateMemSet(mCarryBitBlockPtr, iBuilder->getInt8(0), mTotalCarryDataBitBlocks * mBitBlockWidth/8, 4);
-    ReturnInst::Create(m->getContext(), iBuilder->GetInsertBlock());
-    iBuilder->restoreIP(ip);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -549,13 +530,6 @@ void CarryManager::storeCarryOut(const unsigned packIndex) {
     assert (mCarryPackPtr[packIndex]);
     iBuilder->CreateAlignedStore(mCarryOutPack[packIndex], mCarryPackPtr[packIndex], mBitBlockWidth / 8);
 }
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief generateBlockNoIncrement
- ** ------------------------------------------------------------------------------------------------------------- */
-// void CarryManager::generateBlockNoIncrement() {
-//     iBuilder->CreateStore(iBuilder->CreateAdd(mBlockNo, iBuilder->getInt64(1)), mBlockNoPtr);
-// }
 
 /* Helper routines */
 
