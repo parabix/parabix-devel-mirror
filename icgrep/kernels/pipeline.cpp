@@ -149,8 +149,8 @@ void PipelineBuilder::ExecuteKernels(){
     
     iBuilder->SetInsertPoint(pipeline_Unterminated_block);
 
-    Value * remaining = iBuilder->CreateZExt(remaining_phi, iBuilder->getIntNTy(128));
-    Value * EOF_pos = iBuilder->CreateShl(ConstantInt::get(iBuilder->getIntNTy(128), 1), remaining);
+    Value * remaining = iBuilder->CreateZExt(remaining_phi, iBuilder->getIntNTy(mBlockSize));
+    Value * EOF_pos = iBuilder->CreateShl(ConstantInt::get(iBuilder->getIntNTy(mBlockSize), 1), remaining);
     EOF_pos = iBuilder->CreateBitCast(EOF_pos, mBitBlockType);
 
     Value * gep_bits4 = iBuilder->CreateGEP(basis_bits, {iBuilder->getInt32(0), iBuilder->getInt32(0), iBuilder->getInt32(4)});
