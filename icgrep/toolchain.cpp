@@ -343,11 +343,11 @@ re::CC * getParsedCodePointSet(){
     return parsedCodePointSet;
 }
 
-extern "C" {
-  void wrapped_print_register(char * regName, BitBlock bit_block) {
-      print_register<BitBlock>(regName, bit_block);
-  }
-}
+// extern "C" {
+//   void wrapped_print_register(char * regName, BitBlock bit_block) {
+//       print_register<BitBlock>(regName, bit_block);
+//   }
+// }
 
 void icgrep_Linking(Module * m, ExecutionEngine * e) {
     Module::FunctionListType & fns = m->getFunctionList();
@@ -357,9 +357,9 @@ void icgrep_Linking(Module * m, ExecutionEngine * e) {
         if (fnName == "process_block") continue;
         if (fnName == "process_block_initialize_carries") continue;
         
-        if (fnName == "wrapped_print_register") {
-            e->addGlobalMapping(cast<GlobalValue>(it), (void *)&wrapped_print_register);
-        }
+        // if (fnName == "wrapped_print_register") {
+        //     e->addGlobalMapping(cast<GlobalValue>(it), (void *)&wrapped_print_register);
+        // }
         if (fnName == "wrapped_report_match") {
             e->addGlobalMapping(cast<GlobalValue>(it), (void *)&wrapped_report_match);
         }

@@ -1,5 +1,4 @@
 #include "pablo_automultiplexing.hpp"
-#include <include/simd-lib/builtins.hpp>
 #include <pablo/builder.hpp>
 #include <pablo/function.h>
 #include <pablo/printer_pablos.h>

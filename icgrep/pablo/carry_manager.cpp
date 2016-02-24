@@ -4,7 +4,6 @@
  *  icgrep is a trademark of International Characters.
  */
 
-#include <include/simd-lib/bitblock.hpp>
 #include <stdexcept>
 #include <pablo/carry_data.h>
 #include <pablo/codegenstate.h>

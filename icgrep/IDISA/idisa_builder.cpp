@@ -9,6 +9,7 @@
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/Intrinsics.h>
 #include <llvm/IR/Function.h>
+#include <llvm/IR/TypeBuilder.h>
 
 namespace IDISA {
 
@@ -21,30 +22,68 @@ Value * IDISA_Builder::fwCast(unsigned fw, Value * a) {
     return a->getType() == fwVectorType(fw) ? a : CreateBitCast(a, fwVectorType(fw));
 }
 
-void IDISA_Builder::genPrintRegister(std::string regName, Value * bitblockValue) {
-    if (mPrintRegisterFunction == nullptr) {
-        mPrintRegisterFunction = mMod->getOrInsertFunction("wrapped_print_register", Type::getVoidTy(mMod->getContext()), Type::getInt8PtrTy(mMod->getContext()), mBitBlockType, nullptr);
-    }
-    Constant * regNameData = ConstantDataArray::getString(mMod->getContext(), regName);
-    GlobalVariable *regStrVar = new GlobalVariable(*mMod,
-                                                   ArrayType::get(IntegerType::get(mMod->getContext(), 8), regName.length()+1),
-                                                   /*isConstant=*/ true,
-                                                   /*Linkage=*/ GlobalValue::PrivateLinkage,
-                                                   /*Initializer=*/ regNameData);
-    Value * regStrPtr = CreateGEP(regStrVar, std::vector<Value *>({getInt64(0), getInt32(0)}));
-    CreateCall(mPrintRegisterFunction, std::vector<Value *>({regStrPtr, bitCast(bitblockValue)}));
+// void IDISA_Builder::genPrintRegister(std::string regName, Value * bitblockValue) {
+//     if (mPrintRegisterFunction == nullptr) {
+//         mPrintRegisterFunction = mMod->getOrInsertFunction("wrapped_print_register", Type::getVoidTy(mMod->getContext()), Type::getInt8PtrTy(mMod->getContext()), mBitBlockType, NULL);
+//     }
+//     Constant * regNameData = ConstantDataArray::getString(mMod->getContext(), regName);
+//     GlobalVariable *regStrVar = new GlobalVariable(*mMod,
+//                                                    ArrayType::get(IntegerType::get(mMod->getContext(), 8), regName.length()+1),
+//                                                    /*isConstant=*/ true,
+//                                                    /*Linkage=*/ GlobalValue::PrivateLinkage,
+//                                                    /*Initializer=*/ regNameData);
+//     Value * regStrPtr = CreateGEP(regStrVar, std::vector<Value *>({getInt64(0), getInt32(0)}));
+//     CreateCall(mPrintRegisterFunction, std::vector<Value *>({regStrPtr, bitCast(bitblockValue)}));
+// }
+
+Constant* geti8StrVal(Module& M, char const* str, Twine const& name) {
+    LLVMContext& ctx = getGlobalContext();
+    Constant* strConstant = ConstantDataArray::getString(ctx, str);
+    GlobalVariable* GVStr = new GlobalVariable(M, strConstant->getType(), true, GlobalValue::InternalLinkage, strConstant, name);
+    Constant* zero = Constant::getNullValue(IntegerType::getInt32Ty(ctx));
+    Constant* indices[] = {zero, zero};
+    Constant* strVal = ConstantExpr::getGetElementPtr(GVStr, indices, true);
+    return strVal;
 }
 
-    Constant * IDISA_Builder::simd_himask(unsigned fw) {
-        return Constant::getIntegerValue(getIntNTy(mBitBlockWidth), APInt::getSplat(mBitBlockWidth, APInt::getHighBitsSet(fw, fw/2)));
-    }
-    
-    Constant * IDISA_Builder::simd_lomask(unsigned fw) {
-        return Constant::getIntegerValue(getIntNTy(mBitBlockWidth), APInt::getSplat(mBitBlockWidth, APInt::getLowBitsSet(fw, fw/2)));
-    }
-    
-    Value * IDISA_Builder::simd_add(unsigned fw, Value * a, Value * b) {
-    return CreateAdd(fwCast(fw, a), fwCast(fw, b));
+static Function *create_printf(LLVMContext &ctx, Module *mod) {
+
+  FunctionType *printf_type =
+      TypeBuilder<int(char *, ...), false>::get(getGlobalContext());
+
+  Function *func = cast<Function>(mod->getOrInsertFunction(
+      "printf", printf_type,
+      AttributeSet().addAttribute(mod->getContext(), 1U, Attribute::NoAlias)));
+
+  return func;
+}
+
+void IDISA_Builder::genPrintRegister(std::string regName, Value * bitblockValue) {
+    Function *printf_func = create_printf(mMod->getContext(), mMod);
+    Type * printType = VectorType::get(getIntNTy(8), mBitBlockWidth/8);
+    Value * val = CreateBitCast(bitblockValue, printType);
+    std::vector<Value *> args;
+    std::string str = regName + "\t = %02X";
+    for(unsigned int i=0; i<mBitBlockWidth/8-1; i++)
+        str += ", %02X";
+    str += "\n";
+    args.push_back(geti8StrVal(*mMod, str.c_str(), regName));
+    for(unsigned int i=0; i<mBitBlockWidth/8; i++)
+        args.push_back(CreateExtractElement(val, ConstantInt::get(getIntNTy(32), i)));
+    args.push_back(val);
+    CreateCall(printf_func, args);
+}
+
+Constant * IDISA_Builder::simd_himask(unsigned fw) {
+    return Constant::getIntegerValue(getIntNTy(mBitBlockWidth), APInt::getSplat(mBitBlockWidth, APInt::getHighBitsSet(fw, fw/2)));
+}
+
+Constant * IDISA_Builder::simd_lomask(unsigned fw) {
+    return Constant::getIntegerValue(getIntNTy(mBitBlockWidth), APInt::getSplat(mBitBlockWidth, APInt::getLowBitsSet(fw, fw/2)));
+}
+
+Value * IDISA_Builder::simd_add(unsigned fw, Value * a, Value * b) {
+return CreateAdd(fwCast(fw, a), fwCast(fw, b));
 }
 
 Value * IDISA_Builder::simd_sub(unsigned fw, Value * a, Value * b) {

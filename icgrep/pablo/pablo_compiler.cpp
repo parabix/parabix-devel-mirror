@@ -12,7 +12,6 @@
 #include <pablo/function.h>
 #include <re/re_name.h>
 #include <stdexcept>
-#include <include/simd-lib/bitblock.hpp>
 #include <sstream>
 #include <IDISA/idisa_builder.h>
 #include <IDISA/idisa_avx_builder.h>
