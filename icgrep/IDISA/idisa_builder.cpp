@@ -22,19 +22,6 @@ Value * IDISA_Builder::fwCast(unsigned fw, Value * a) {
     return a->getType() == fwVectorType(fw) ? a : CreateBitCast(a, fwVectorType(fw));
 }
 
-// void IDISA_Builder::genPrintRegister(std::string regName, Value * bitblockValue) {
-//     if (mPrintRegisterFunction == nullptr) {
-//         mPrintRegisterFunction = mMod->getOrInsertFunction("wrapped_print_register", Type::getVoidTy(mMod->getContext()), Type::getInt8PtrTy(mMod->getContext()), mBitBlockType, NULL);
-//     }
-//     Constant * regNameData = ConstantDataArray::getString(mMod->getContext(), regName);
-//     GlobalVariable *regStrVar = new GlobalVariable(*mMod,
-//                                                    ArrayType::get(IntegerType::get(mMod->getContext(), 8), regName.length()+1),
-//                                                    /*isConstant=*/ true,
-//                                                    /*Linkage=*/ GlobalValue::PrivateLinkage,
-//                                                    /*Initializer=*/ regNameData);
-//     Value * regStrPtr = CreateGEP(regStrVar, std::vector<Value *>({getInt64(0), getInt32(0)}));
-//     CreateCall(mPrintRegisterFunction, std::vector<Value *>({regStrPtr, bitCast(bitblockValue)}));
-// }
 
 Constant* geti8StrVal(Module& M, char const* str, Twine const& name) {
     LLVMContext& ctx = getGlobalContext();
@@ -63,9 +50,11 @@ void IDISA_Builder::genPrintRegister(std::string regName, Value * bitblockValue)
     Type * printType = VectorType::get(getIntNTy(8), mBitBlockWidth/8);
     Value * val = CreateBitCast(bitblockValue, printType);
     std::vector<Value *> args;
-    std::string str = regName + "\t = %02X";
-    for(unsigned int i=0; i<mBitBlockWidth/8-1; i++)
-        str += ", %02X";
+    std::string str = regName;
+    for (unsigned int i = 0; i < 40 - regName.length(); i++) str += " ";
+    str += "= %02X";
+    for (unsigned int i=0; i<mBitBlockWidth/8-1; i++)
+        str += " %02X";
     str += "\n";
     args.push_back(geti8StrVal(*mMod, str.c_str(), regName));
     for(unsigned int i=0; i<mBitBlockWidth/8; i++)
