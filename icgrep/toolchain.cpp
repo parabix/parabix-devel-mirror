@@ -23,6 +23,7 @@
 
 #include <IDISA/idisa_avx_builder.h>
 #include <IDISA/idisa_sse_builder.h>
+#include <IDISA/idisa_i64_builder.h>
 #ifndef DISABLE_PREGENERATED_UCD_FUNCTIONS
 #include <UCD/precompiled_properties.h>
 #endif
@@ -217,6 +218,8 @@ IDISA::IDISA_Builder * GetNativeIDISA_Builder(Module * mod, Type * bitBlockType)
         return new IDISA::IDISA_SSE2_Builder(mod, bitBlockType);
         //std::cerr << "Generic IDISA_Builder selected\n";
     }
+#elif (BLOCK_SIZE == 64)
+    return new IDISA::IDISA_I64_Builder(mod, bitBlockType);
 #else    
     return new IDISA::IDISA_SSE2_Builder(mod, bitBlockType);
 #endif
