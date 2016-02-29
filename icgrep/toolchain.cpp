@@ -8,8 +8,6 @@
 #include <iostream>
 #include <fstream>
 
-#include "utf_encoding.h"
-#include "pablo/pablo_compiler.h"
 #include <llvm/IR/Function.h>
 #include <llvm/IR/Module.h>
 #include <llvm/ExecutionEngine/ExecutionEngine.h>
@@ -51,8 +49,6 @@
 #include <pablo/analysis/pabloverifier.hpp>
 #include <re/printer_re.h>
 #include <pablo/printer_pablos.h>
-
-#include "do_grep.h"
 
 using namespace pablo;
 
@@ -112,7 +108,12 @@ static cl::opt<bool> EnablePostDistribution("post-dist", cl::init(false),
                                          cl::cat(cPabloOptimizationsOptions));
 #endif
 
-static cl::opt<bool> DisableAVX2("disable-AVX2", cl::init(false), cl::desc("disable AVX2 instruction set."), cl::cat(cPabloOptimizationsOptions));
+static cl::OptionCategory dCodeGenOptions("Code Generation Options", "These options control code generation.");
+
+static cl::opt<bool> DisableAVX2("disable-AVX2", cl::init(false), cl::desc("disable AVX2 instruction set."), cl::cat(dCodeGenOptions));
+
+static cl::opt<int> BlockSize("BlockSize", cl::init(0), cl::desc("specify a block size (defaults to widest SIMD register width in bits)."), cl::cat(dCodeGenOptions));
+
 
 re::RE * regular_expression_passes(const Encoding encoding, re::RE * re_ast)  {
     if (PrintAllREs || PrintParsedREs) {
@@ -377,4 +378,3 @@ void icgrep_Linking(Module * m, ExecutionEngine * e) {
 #endif
     }
 }
-

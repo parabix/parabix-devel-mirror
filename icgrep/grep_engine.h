@@ -8,22 +8,29 @@
 
 #include <string>
 #include <stdint.h>
-#include <re/re_cc.h>
+#include <re/re_re.h>
+#include <llvm/ExecutionEngine/ExecutionEngine.h>
 
 
 typedef void (*main_fcn_T)(char * byte_data, int filesize, const char* filename, uint64_t finalLineUnterminated);
 
 namespace llvm { class raw_ostream; }
 
-class GrepExecutor {
+class GrepEngine {
 public:
 
-    GrepExecutor(void * main_fnptr)
-    : mMainFcn(reinterpret_cast<main_fcn_T>(main_fnptr)) {
-        
-    }
+    GrepEngine() {};
   
+    void grepCodeGen(std::string moduleName, re::RE * re_ast, bool isNameExpression = false);
+    
     void doGrep(const std::string & fileName);
+    
+    re::CC *  grepCodepoints(const std::string & UNameFile);
+
+    ~GrepEngine() {
+      delete mEngine;
+    }
+    
 private:
    
     bool finalLineIsUnterminated() const;
@@ -33,6 +40,7 @@ private:
     std::string mFileName;
     size_t mFileSize;
     char * mFileBuffer;
+    llvm::ExecutionEngine * mEngine;
 };
 
 

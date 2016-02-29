@@ -8,31 +8,20 @@
 #include <iostream>
 #include <fstream>
 
-#include "toolchain.h"
-#include "utf_encoding.h"
-#include "pablo/pablo_compiler.h"
-#include <llvm/IR/Function.h>
-#include <llvm/IR/Type.h>
-#include <llvm/IR/Module.h>
-#include <llvm/ExecutionEngine/ExecutionEngine.h>
-#include <llvm/ExecutionEngine/MCJIT.h>
-#include <llvm/IRReader/IRReader.h>
+
 #include <llvm/Support/SourceMgr.h>
 #include <llvm/Support/CommandLine.h>
 #include <llvm/Support/Debug.h>
 #include <llvm/Support/TargetSelect.h>
 #include <llvm/Support/Host.h>
-#include <llvm/IR/Verifier.h>
 
 #include <re/re_re.h>
 #include <re/parsefailure.h>
 #include <re/re_parser.h>
 #include <re/re_any.h>
 #include <re/re_alt.h>
-#include <pablo/function.h>
 
-#include "do_grep.h"
-#include <kernels/pipeline.h>
+#include <grep_engine.h>
 
 static cl::OptionCategory aRegexSourceOptions("Regular Expression Options",
                                        "These options control the regular expression source.");
@@ -133,39 +122,14 @@ int main(int argc, char *argv[]) {
 
     cl::ParseCommandLineOptions(argc, argv);
     
-    Module * M = new Module("grepcode", getGlobalContext());
-    
-    IDISA::IDISA_Builder * idb = GetNativeIDISA_Builder(M, VectorType::get(IntegerType::get(getGlobalContext(), 64), BLOCK_SIZE/64));
-
-    PipelineBuilder pipelineBuilder(M, idb);
-
     re::RE * re_ast = get_icgrep_RE();
-    Encoding encoding(Encoding::Type::UTF_8, 8);
-    re_ast = regular_expression_passes(encoding, re_ast);   
-    pablo::PabloFunction * function = re2pablo_compiler(encoding, re_ast);
-
-    pipelineBuilder.CreateKernels(function, false);
-
-    pipelineBuilder.ExecuteKernels();
-
-    llvm::Function * main_IR = M->getFunction("Main");
-    llvm::ExecutionEngine * engine = JIT_to_ExecutionEngine(M);
     
-    icgrep_Linking(M, engine);
-    verifyModule(*M, &dbgs());
-    engine->finalizeObject();
-
-    void * main_MCptr = engine->getPointerToFunction(main_IR);
-
-    if(main_MCptr){
-        GrepExecutor grepEngine(main_MCptr);
-        for (unsigned i = firstInputFile; i != inputFiles.size(); ++i) {
+    GrepEngine grepEngine;
+    grepEngine.grepCodeGen("grepcode", re_ast);
+    
+    for (unsigned i = firstInputFile; i != inputFiles.size(); ++i) {
             grepEngine.doGrep(inputFiles[i]);
-        }
     }
     
-    delete engine;
-    delete idb; 
-
     return 0;
 }

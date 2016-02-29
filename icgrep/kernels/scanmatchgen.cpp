@@ -54,6 +54,7 @@ void generateScanWordRoutine(Module * m, IDISA::IDISA_Builder * iBuilder, Kernel
     sFunction = Function::Create(functionType, GlobalValue::ExternalLinkage, "scan_matches_in_scanword", m);
     sFunction->setCallingConv(CallingConv::C);
     sFunction->setAttributes(AttrSet);
+    sFunction->addFnAttr(llvm::Attribute::AlwaysInline);
         
     Function::arg_iterator args = sFunction->arg_begin();
     Value * this_input_parm = args++;

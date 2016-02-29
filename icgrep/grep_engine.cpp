@@ -4,8 +4,18 @@
  *  icgrep is a trademark of International Characters.
  */
 
-#include "toolchain.h"
-#include "do_grep.h"
+#include <grep_engine.h>
+#include <toolchain.h>
+#include <utf_encoding.h>
+#include <pablo/pablo_compiler.h>
+#include <kernels/pipeline.h>
+#include <llvm/IR/Function.h>
+#include <llvm/IR/Type.h>
+#include <llvm/IR/Module.h>
+#include <llvm/ExecutionEngine/MCJIT.h>
+#include <llvm/IRReader/IRReader.h>
+#include <llvm/Support/Debug.h>
+#include <llvm/IR/Verifier.h>
 
 #include <fstream>
 #include <sstream>
@@ -36,23 +46,11 @@ using namespace boost::filesystem;
 #endif
 #include <fcntl.h>
 
-
-#define BUFFER_SEGMENTS 15
-#define BUFFER_SIZE (BUFFER_SEGMENTS * SEGMENT_SIZE)
-
-//
-// Write matched lines from a buffer to an output file, given segment
-// scanners for line ends and matches (where matches are a subset of line ends).
-// The buffer pointer must point to the first byte of the segment
-// corresponding to the scanner indexes.   The first_line_start is the
-// start position of the first line relative to the buffer start position.
-// It must be zero or negative;  if negative, the buffer must permit negative
-// indexing so that the lineup to the buffer start position can also be printed.
-// The start position of the final line in the processed segment is returned.
-//
+#include <kernels/kernel.h>
 
 
-bool GrepExecutor::finalLineIsUnterminated() const {
+
+bool GrepEngine::finalLineIsUnterminated() const {
     if (mFileSize == 0) return false;
     unsigned char end_byte = static_cast<unsigned char>(mFileBuffer[mFileSize-1]);
     // LF through CR are line break characters
@@ -68,7 +66,7 @@ bool GrepExecutor::finalLineIsUnterminated() const {
     return (static_cast<unsigned char>(mFileBuffer[mFileSize-3]) != 0xE2) || (penult_byte != 0x80);
 }
 
-void GrepExecutor::doGrep(const std::string & fileName) {
+void GrepEngine::doGrep(const std::string & fileName) {
 
     mFileName = fileName;
 
@@ -149,4 +147,38 @@ void GrepExecutor::doGrep(const std::string & fileName) {
     munmap((void *)mFileBuffer, mFileSize);
     close(fdSrc);
 #endif   
+}
+
+void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool isNameExpression) {
+                            
+    Module * M = new Module("moduleName", getGlobalContext());
+    
+    IDISA::IDISA_Builder * idb = GetNativeIDISA_Builder(M, VectorType::get(IntegerType::get(getGlobalContext(), 64), BLOCK_SIZE/64));
+
+    PipelineBuilder pipelineBuilder(M, idb);
+
+    Encoding encoding(Encoding::Type::UTF_8, 8);
+    re_ast = regular_expression_passes(encoding, re_ast);   
+    pablo::PabloFunction * function = re2pablo_compiler(encoding, re_ast);
+
+    pipelineBuilder.CreateKernels(function, isNameExpression);
+
+    pipelineBuilder.ExecuteKernels();
+
+    llvm::Function * main_IR = M->getFunction("Main");
+    mEngine = JIT_to_ExecutionEngine(M);
+    
+    icgrep_Linking(M, mEngine);
+    verifyModule(*M, &dbgs());
+    mEngine->finalizeObject();
+    delete idb;
+
+    mMainFcn = (main_fcn_T) mEngine->getPointerToFunction(main_IR);
+}
+
+
+re::CC *  GrepEngine::grepCodepoints(const std::string & UNameFile) {
+    setParsedCodePointSet();
+    doGrep(UNameFile);
+    return getParsedCodePointSet();
 }
