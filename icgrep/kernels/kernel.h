@@ -61,9 +61,9 @@ public:
     Type * getKernelStructType();
     Value * getKernelStructParam();
 
-    void changeKernelInternalState(int idx, Value * stateValue);
-    Value * getKernelInternalState(int idx);
-    Value * getKernelInternalStatePtr(int idx);
+    void changeKernelInternalState(Value * kernelStruct, int idx, Value * stateValue);
+    Value * getKernelInternalState(Value * kernelStruct, int idx);
+    Value * getKernelInternalStatePtr(Value * kernelStruct, int idx);
 
 private:
 	Module *                            mMod;

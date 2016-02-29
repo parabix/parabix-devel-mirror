@@ -143,21 +143,21 @@ void KernelBuilder::closeDoBlock(struct Outputs result){
     iBuilder->CreateRetVoid();
 }
 
-void KernelBuilder::changeKernelInternalState(int idx, Value * stateValue){
+void KernelBuilder::changeKernelInternalState(Value * kernelStruct, int idx, Value * stateValue){
     Value* indices[] = {iBuilder->getInt64(0), iBuilder->getInt32(0), iBuilder->getInt32(idx)};
-    Value* gep = iBuilder->CreateGEP(mKernelStructParam, indices);
+    Value* gep = iBuilder->CreateGEP(kernelStruct, indices);
     iBuilder->CreateAlignedStore(stateValue, gep, mBlockSize/8, false);
 }
 
-Value * KernelBuilder::getKernelInternalState(int idx){
+Value * KernelBuilder::getKernelInternalState(Value * kernelStruct, int idx){
     Value* indices[] = {iBuilder->getInt64(0), iBuilder->getInt32(0), iBuilder->getInt32(idx)};
-    Value* gep = iBuilder->CreateGEP(mKernelStructParam, indices);
+    Value* gep = iBuilder->CreateGEP(kernelStruct, indices);
     return iBuilder->CreateAlignedLoad(gep, mBlockSize/8, false, "state"+std::to_string(idx));
 }
 
-Value * KernelBuilder::getKernelInternalStatePtr(int idx){
+Value * KernelBuilder::getKernelInternalStatePtr(Value * kernelStruct, int idx){
     Value* indices[] = {iBuilder->getInt64(0), iBuilder->getInt32(0), iBuilder->getInt32(idx)};
-    Value* gep = iBuilder->CreateGEP(mKernelStructParam, indices);
+    Value* gep = iBuilder->CreateGEP(kernelStruct, indices);
     return gep;
 }
 

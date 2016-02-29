@@ -33,11 +33,12 @@ Value * generateResetLowestBit(IDISA::IDISA_Builder * iBuilder, Value * bits) {
 }
         
         
-void generateScanWordRoutine(Module * m, IDISA::IDISA_Builder * iBuilder, int scanwordBitWidth, Type * kernelStuctType, bool isNameExpression) {
+void generateScanWordRoutine(Module * m, IDISA::IDISA_Builder * iBuilder, KernelBuilder * kBuilder, int scanwordBitWidth, bool isNameExpression) {
     LLVMContext & ctxt = m->getContext();
     Type * T = iBuilder->getIntNTy(scanwordBitWidth);   
     Type * S = PointerType::get(iBuilder->getIntNTy(8), 0);
     Type * returnType = StructType::get(ctxt, std::vector<Type *>({T, T}));
+    Type * kernelStuctType = PointerType::get(kBuilder->getKernelStructType(), 0);
     FunctionType * functionType = FunctionType::get(returnType, std::vector<Type *>({kernelStuctType, T, T, T, T, T}), false);
     Function * sFunction;
         
@@ -140,14 +141,9 @@ void generateScanWordRoutine(Module * m, IDISA::IDISA_Builder * iBuilder, int sc
     matchRecordStart_phi->addIncoming(matchRecordStart, prior_breaks_block);
     Value * matchRecordEnd = iBuilder->CreateAdd(scanwordPos, generateCountForwardZeroes(iBuilder, matches_phi));
 
-    Value* filebuf_gep = iBuilder->CreateGEP(this_input_parm, {iBuilder->getInt64(0), iBuilder->getInt32(0), iBuilder->getInt32(7)});
-    Value* filebufptr = iBuilder->CreateLoad(filebuf_gep, "filebuf");
-
-    Value* filesize_gep = iBuilder->CreateGEP(this_input_parm, {iBuilder->getInt64(0), iBuilder->getInt32(0), iBuilder->getInt32(8)});
-    Value* filesize = iBuilder->CreateLoad(filesize_gep, "filensize");
-
-    Value* filename_gep = iBuilder->CreateGEP(this_input_parm, {iBuilder->getInt64(0), iBuilder->getInt32(0), iBuilder->getInt32(9)});
-    Value* filenameptr = iBuilder->CreateLoad(filename_gep, "filename");
+    Value* filebufptr = kBuilder->getKernelInternalState(this_input_parm, 7);
+    Value* filesize = kBuilder->getKernelInternalState(this_input_parm, 8);
+    Value* filenameptr = kBuilder->getKernelInternalState(this_input_parm, 9);
 
     if(isNameExpression)
         iBuilder->CreateCall(matchProcessor, std::vector<Value *>({matchRecordNum_phi, matchRecordStart_phi, matchRecordEnd, filebufptr}));
@@ -214,16 +210,15 @@ void generateScanMatch(Module * m, IDISA::IDISA_Builder * iBuilder, int scanword
 
     kBuilder->PrepareDoBlockFunction();
 
-    Type * kernelStuctType = PointerType::get(kBuilder->getKernelStructType(), 0);
-    generateScanWordRoutine(m, iBuilder, scanwordBitWidth, kernelStuctType, isNameExpression);
+    generateScanWordRoutine(m, iBuilder, kBuilder, scanwordBitWidth, isNameExpression);
 
     struct Inputs inputs = kBuilder->openDoBlock();
     struct Outputs outputs;   
     Value * kernelStuctParam = kBuilder->getKernelStructParam();
     
-    Value * scanwordPos = kBuilder->getKernelInternalState(blockPosIdx);
-    Value * recordStart = kBuilder->getKernelInternalState(lineStartIdx);
-    Value * recordNum = kBuilder->getKernelInternalState(lineNumIdx);
+    Value * scanwordPos = kBuilder->getKernelInternalState(kernelStuctParam, blockPosIdx);
+    Value * recordStart = kBuilder->getKernelInternalState(kernelStuctParam, lineStartIdx);
+    Value * recordNum = kBuilder->getKernelInternalState(kernelStuctParam, lineNumIdx);
     Value * wordResult = nullptr;
 
     Function * wordScanFcn = m->getFunction("scan_matches_in_scanword");
@@ -241,9 +236,9 @@ void generateScanMatch(Module * m, IDISA::IDISA_Builder * iBuilder, int scanword
         }
     }
 
-    kBuilder->changeKernelInternalState(blockPosIdx, scanwordPos);
-    kBuilder->changeKernelInternalState(lineStartIdx, recordStart);
-    kBuilder->changeKernelInternalState(lineNumIdx, recordNum);
+    kBuilder->changeKernelInternalState(kernelStuctParam, blockPosIdx, scanwordPos);
+    kBuilder->changeKernelInternalState(kernelStuctParam, lineStartIdx, recordStart);
+    kBuilder->changeKernelInternalState(kernelStuctParam, lineNumIdx, recordNum);
 
     kBuilder->closeDoBlock(outputs);
 

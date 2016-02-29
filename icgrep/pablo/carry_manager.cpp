@@ -67,19 +67,19 @@ void CarryManager::initialize(PabloBlock * pb, KernelBuilder * kBuilder) {
 }
 
 void CarryManager::initialize_setPtrs(KernelBuilder * kBuilder) {
-    
-    Value * cdArrayPtr = kBuilder->getKernelInternalStatePtr(mCdArrayIdx);
+
+    Value * kernelStuctParam = kBuilder->getKernelStructParam();
+    Value * cdArrayPtr = kBuilder->getKernelInternalStatePtr(kernelStuctParam, mCdArrayIdx);
   
     mCarryPackBasePtr = iBuilder->CreateBitCast(cdArrayPtr, PointerType::get(mCarryPackType, 0));
-    mCarryBitBlockPtr = iBuilder->CreateBitCast(cdArrayPtr, PointerType::get(mBitBlockType, 0));
-    
+    mCarryBitBlockPtr = iBuilder->CreateBitCast(cdArrayPtr, PointerType::get(mBitBlockType, 0));   
     
     if (mPabloCountCount > 0) {
-        Value * pcArrayPtr = kBuilder->getKernelInternalStatePtr(mPcArrayIdx);
+        Value * pcArrayPtr = kBuilder->getKernelInternalStatePtr(kernelStuctParam, mPcArrayIdx);
         mPopcountBasePtr = iBuilder->CreateBitCast(pcArrayPtr, Type::getInt64PtrTy(iBuilder->getContext()));
     }
   
-    mBlockNo = iBuilder->CreateUDiv(kBuilder->getKernelInternalState(mFilePosIdx), iBuilder->getInt64(mBitBlockWidth));
+    mBlockNo = iBuilder->CreateUDiv(kBuilder->getKernelInternalState(kernelStuctParam, mFilePosIdx), iBuilder->getInt64(mBitBlockWidth));
     mCurrentScope = mRootScope;
     mCurrentFrameIndex = 0;
     mCarryInfo = mCarryInfoVector[0];
@@ -87,7 +87,8 @@ void CarryManager::initialize_setPtrs(KernelBuilder * kBuilder) {
 }
 
 void CarryManager::set_BlockNo(KernelBuilder * kBuilder){
-    mBlockNo = iBuilder->CreateUDiv(kBuilder->getKernelInternalState(mFilePosIdx), iBuilder->getInt64(mBitBlockWidth));
+    Value * kernelStuctParam = kBuilder->getKernelStructParam();
+    mBlockNo = iBuilder->CreateUDiv(kBuilder->getKernelInternalState(kernelStuctParam, mFilePosIdx), iBuilder->getInt64(mBitBlockWidth));
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

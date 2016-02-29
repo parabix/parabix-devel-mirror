@@ -148,6 +148,7 @@ inline void PabloCompiler::GenerateKernel(PabloBlock * mainScope, PabloFunction 
     struct Inputs inputs = mKBuilder->openDoBlock();
     struct Outputs outputs;
     mFunction = mKBuilder->getDoBlockFunction();
+    Value * kernelStuctParam = mKBuilder->getKernelStructParam();
 
     mCarryManager->initialize_setPtrs(mKBuilder);
 
@@ -159,8 +160,8 @@ inline void PabloCompiler::GenerateKernel(PabloBlock * mainScope, PabloFunction 
 
         compileBlock(mainScope);
 
-        Value * filePos = iBuilder->CreateAdd(mKBuilder->getKernelInternalState(mFilePosIdx), iBuilder->getInt64(iBuilder->getBitBlockWidth()));
-        mKBuilder->changeKernelInternalState(mFilePosIdx, filePos);
+        Value * filePos = iBuilder->CreateAdd(mKBuilder->getKernelInternalState(kernelStuctParam, mFilePosIdx), iBuilder->getInt64(iBuilder->getBitBlockWidth()));
+        mKBuilder->changeKernelInternalState(kernelStuctParam, mFilePosIdx, filePos);
 
         mCarryManager->set_BlockNo(mKBuilder);
 

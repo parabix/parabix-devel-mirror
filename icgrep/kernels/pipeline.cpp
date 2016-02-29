@@ -90,13 +90,10 @@ void PipelineBuilder::ExecuteKernels(){
     Value * icGrepKernelStruct = mICgrepKernel->generateKernelInstance();
     Value * scanMatchKernelStruct = mScanMatchKernel->generateKernelInstance();
 
-    Value * gep = iBuilder->CreateGEP(scanMatchKernelStruct, {iBuilder->getInt32(0), iBuilder->getInt32(0), iBuilder->getInt32(mFileBufIdx)});
     Value* filebuf = iBuilder->CreateBitCast(input_param, S);
-    iBuilder->CreateStore(filebuf, gep);
-    gep = iBuilder->CreateGEP(scanMatchKernelStruct, {iBuilder->getInt32(0), iBuilder->getInt32(0), iBuilder->getInt32(mFileSizeIdx)});
-    iBuilder->CreateStore(buffersize_param, gep);
-    gep = iBuilder->CreateGEP(scanMatchKernelStruct, {iBuilder->getInt32(0), iBuilder->getInt32(0), iBuilder->getInt32(mFileNameIdx)});
-    iBuilder->CreateStore(filename_param, gep);
+    mScanMatchKernel->changeKernelInternalState(scanMatchKernelStruct, mFileBufIdx, filebuf);
+    mScanMatchKernel->changeKernelInternalState(scanMatchKernelStruct, mFileSizeIdx, buffersize_param);
+    mScanMatchKernel->changeKernelInternalState(scanMatchKernelStruct, mFileNameIdx, filename_param);
 
     Value * basis_bits = iBuilder->CreateGEP(s2pKernelStruct, {iBuilder->getInt32(0), iBuilder->getInt32(1)});
     Value * results = iBuilder->CreateGEP(icGrepKernelStruct, {iBuilder->getInt32(0), iBuilder->getInt32(1)});
@@ -114,7 +111,7 @@ void PipelineBuilder::ExecuteKernels(){
 
     iBuilder->SetInsertPoint(pipeline_do_block);
 
-    gep = iBuilder->CreateGEP(input_param, {blkNo_phi});
+    Value * gep = iBuilder->CreateGEP(input_param, {blkNo_phi});
     Value * update_blkNo = iBuilder->CreateAdd(blkNo_phi, iBuilder->getInt64(1));
     blkNo_phi->addIncoming(update_blkNo, pipeline_do_block);
 
