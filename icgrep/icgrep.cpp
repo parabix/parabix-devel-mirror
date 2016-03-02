@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2015 International Characters.
+ *  Copyright (c) 2016 International Characters.
  *  This software is licensed to the public under the Open Software License 3.0.
  *  icgrep is a trademark of International Characters.
  */
@@ -128,7 +128,9 @@ int main(int argc, char *argv[]) {
     grepEngine.grepCodeGen("grepcode", re_ast);
     
     for (unsigned i = firstInputFile; i != inputFiles.size(); ++i) {
-            grepEngine.doGrep(inputFiles[i]);
+        if (grepEngine.openMMap(inputFiles[i])) {
+            grepEngine.doGrep();
+        }
     }
     
     return 0;

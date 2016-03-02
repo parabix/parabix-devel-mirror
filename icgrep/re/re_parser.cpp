@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2015 International Characters.
+ *  Copyright (c) 2016 International Characters.
  *  This software is licensed to the public under the Open Software License 3.0.
  *  icgrep is a trademark of International Characters.
  */
@@ -526,7 +526,7 @@ Name * RE_Parser::parseNamePatternExpression(){
     GrepEngine engine;
     engine.grepCodeGen("NamePattern", embedded, true);
     
-    CC * codepoints = engine.grepCodepoints("../Uname.txt");
+    CC * codepoints = engine.grepCodepoints();
     
     if (codepoints) {
         Name * const result = mMemoizer.memoize(codepoints);

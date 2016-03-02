@@ -1,7 +1,7 @@
 #ifndef DO_GREP_H
 #define DO_GREP_H
 /*
- *  Copyright (c) 2015 International Characters.
+ *  Copyright (c) 2016 International Characters.
  *  This software is licensed to the public under the Open Software License 3.0.
  *  icgrep is a trademark of International Characters.
  */
@@ -23,9 +23,11 @@ public:
   
     void grepCodeGen(std::string moduleName, re::RE * re_ast, bool isNameExpression = false);
     
-    void doGrep(const std::string & fileName);
+    bool openMMap(const std::string & fileName);
+
+    void doGrep();
     
-    re::CC *  grepCodepoints(const std::string & UNameFile);
+    re::CC *  grepCodepoints();
 
     ~GrepEngine() {
       delete mEngine;

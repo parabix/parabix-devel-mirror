@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2014 International Characters.
+ *  Copyright (c) 2016 International Characters.
  *  This software is licensed to the public under the Open Software License 3.0.
  *  icgrep is a trademark of International Characters.
  */
@@ -66,7 +66,7 @@ bool GrepEngine::finalLineIsUnterminated() const {
     return (static_cast<unsigned char>(mFileBuffer[mFileSize-3]) != 0xE2) || (penult_byte != 0x80);
 }
 
-void GrepEngine::doGrep(const std::string & fileName) {
+bool GrepEngine::openMMap(const std::string & fileName) {
 
     mFileName = fileName;
 
@@ -74,11 +74,11 @@ void GrepEngine::doGrep(const std::string & fileName) {
     const path file(mFileName);
     if (exists(file)) {
         if (is_directory(file)) {
-            return;
+            return false;
         }
     } else {
         std::cerr << "Error: cannot open " << mFileName << " for processing. Skipped.\n";
-        return;
+        return false;
     }
 
     mFileSize = file_size(file);
@@ -91,7 +91,7 @@ void GrepEngine::doGrep(const std::string & fileName) {
             mFile.open(mFileName, mapped_file::priv, mFileSize, 0);
         } catch (std::ios_base::failure e) {
             std::cerr << "Error: Boost mmap of " << mFileName << ": " << e.what() << std::endl;
-            return;
+            return false;
         }
         mFileBuffer = mFile.data();
     }
@@ -100,16 +100,16 @@ void GrepEngine::doGrep(const std::string & fileName) {
     const int fdSrc = open(mFileName.c_str(), O_RDONLY);
     if (fdSrc == -1) {
         std::cerr << "Error: cannot open " << mFileName << " for processing. Skipped.\n";
-        return;
+        return false;
     }
     if (fstat(fdSrc, &infile_sb) == -1) {
         std::cerr << "Error: cannot stat " << mFileName << " for processing. Skipped.\n";
         close (fdSrc);
-        return;
+        return false;
     }
     if (S_ISDIR(infile_sb.st_mode)) {
         close (fdSrc);
-        return;
+        return false;
     }
     mFileSize = infile_sb.st_size;
     if (mFileSize == 0) {
@@ -126,28 +126,35 @@ void GrepEngine::doGrep(const std::string & fileName) {
                 std::cerr << "Error: mmap of " << mFileName << " failed with errno " << errno << ". Skipped.\n";
                 close (fdSrc);
             }
-            return;
+            return false;
         }
     }
+    close(fdSrc);
+
 #endif
+    return true;  // success
+}
 
+
+void GrepEngine::doGrep() {
+        
     llvm::raw_os_ostream out(std::cout);
-
+    
     uint64_t finalLineUnterminated = 0;
     if(finalLineIsUnterminated())
         finalLineUnterminated = 1;
-
-    mMainFcn(mFileBuffer, mFileSize, fileName.c_str(), finalLineUnterminated);
-
+    
+    mMainFcn(mFileBuffer, mFileSize, mFileName.c_str(), finalLineUnterminated);
+    
     PrintTotalCount();
     
 #ifdef USE_BOOST_MMAP
     mFile.close();
 #else
     munmap((void *)mFileBuffer, mFileSize);
-    close(fdSrc);
 #endif   
 }
+
 
 void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool isNameExpression) {
                             
@@ -177,8 +184,10 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool isNam
 }
 
 
-re::CC *  GrepEngine::grepCodepoints(const std::string & UNameFile) {
+re::CC *  GrepEngine::grepCodepoints() {
     setParsedCodePointSet();
-    doGrep(UNameFile);
+    if (openMMap("../UName.txt")) {
+        doGrep();
+    }
     return getParsedCodePointSet();
 }
