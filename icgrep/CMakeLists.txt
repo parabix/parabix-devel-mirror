@@ -7,18 +7,6 @@ enable_testing()
 set (icgrep_VERSION_MAJOR 1)
 set (icgrep_VERSION_MINOR 0)
 
-option(BLOCK_SIZE_256 "Compiling with BLOCK_SIZE=256")
-if (BLOCK_SIZE_256)
-  message("-- Build with BLOCK_SIZE=256")
-elseif (NOT BLOCK_SIZE_64)
-  message("-- Build with BLOCK_SIZE=128")
-endif()
-
-option(BLOCK_SIZE_64 "Compiling with BLOCK_SIZE=64")
-if (BLOCK_SIZE_64)
-  message("-- Build with BLOCK_SIZE=64")
-endif()
-
 option(ENABLE_MULTIPLEXING "Compiling the Multiplexing Module")
 option(USE_BOOST_MMAP "Using mmap from Boost.Iostreams")
 option(ENABLE_PREGENERATED_UCD_FUNCTIONS "Enable compiling the pregenerated UCD functions")
@@ -188,148 +176,13 @@ ENDIF()
 #Enable all warnings
 SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall")
 
-#Check compiler and system architecture support for SSE or AVX
-include(CheckCXXSourceRuns)
-
-set(SSE1_CODE "
-#include <xmmintrin.h>
-int main()
-{
-__m128 a;
-float vals[4] = {0,0,0,0};
-a = _mm_loadu_ps(vals);
-return 0;
-}")
-
-set(SSE2_CODE "
-#include <emmintrin.h>
-int main()
-{
-__m128d a;
-double vals[2] = {0,0};
-a = _mm_loadu_pd(vals);
-return 0;
-}")
-
-set(SSE3_CODE "
-#include <pmmintrin.h>
-int main( )
-{
-const int vals[4] = {0,0,0,0};
-__m128i a;
-a = _mm_lddqu_si128( (const __m128i*)vals );
-return 0;
-}")
-
-set(SSE4_1_CODE "
-#include <smmintrin.h>
-int main ()
-{
-__m128i a, b;
-__m128i res = _mm_max_epi8(a, b);
-return 0;
-}")
-
-set(SSE4_2_CODE "
-#include <nmmintrin.h>
-int main()
-{
-__m128i a, b, c;
-c = _mm_cmpgt_epi64(a, b);
-return 0;
-}")
-
-set(AVX1_CODE "
-#include <immintrin.h>
-int main()
-{
-__m256* a=(__m256*)_mm_malloc(4, 32);
-__m256 b = _mm256_load_ps((float*)a);
-b = _mm256_or_ps(b, b);
-_mm_free(a);
-return 0;
-}")
-
-set(AVX2_CODE "
-#include <immintrin.h>
-int main()
-{
-__m256i* a = (__m256i*)_mm_malloc(4, 32);
-__m256i b = _mm256_load_si256(a);
-b = _mm256_or_si256(b, b);
-_mm_free(a);
-return 0;
-}")
-
-IF (MSVC) # using Visual Studio C++ 
-  SET(ENABLE_SSE1 "/arch:SSE")
-  SET(ENABLE_SSE2 "/arch:SSE2")
-  SET(ENABLE_SSE3 "/arch:SSE3")
-  SET(ENABLE_SSE4_1 "/arch:SSE4")
-  SET(ENABLE_SSE4_2 "/arch:SSE4")
-  SET(ENABLE_AVX1 "/arch:AVX1")
-  SET(ENABLE_AVX2 "/arch:AVX2")
-ELSE() # using Clang, GCC, Intel C++, etc  
-  SET(ENABLE_SSE1 "-msse")
-  SET(ENABLE_SSE2 "-msse2")
-  SET(ENABLE_SSE3 "-msse3")
-  SET(ENABLE_SSE4_1 "-msse4.1")
-  SET(ENABLE_SSE4_2 "-msse4.2")
-  IF ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
-    SET(ENABLE_AVX1 "-mavx -fabi-version=6")
-    SET(ENABLE_AVX2 "-mavx2 -fabi-version=6")  
-  ELSE()
-    SET(ENABLE_AVX1 "-mavx")
-    SET(ENABLE_AVX2 "-mavx2")
-  ENDIF()
-ENDIF()
 
 SET(CMAKE_REQUIRED_FLAGS)
-
-MACRO(CHECK_SIMD_SUPPORT SIMD_TYPE RESULT)
-  IF(NOT RESULT)  
-    SET(CMAKE_REQUIRED_FLAGS_SAVE ${CMAKE_REQUIRED_FLAGS})
-    SET(CMAKE_REQUIRED_FLAGS ${ENABLE_${SIMD_TYPE}})
-    SET(SUCCESS "${SIMD_TYPE}")
-    check_cxx_source_runs("${${SIMD_TYPE}_CODE}" ${SUCCESS})    
-    IF(${SUCCESS})
-      SET(${RESULT} "${SIMD_TYPE}")
-    ENDIF()
-    SET(CMAKE_REQUIRED_FLAGS ${CMAKE_REQUIRED_FLAGS_SAVE})
-  ENDIF()
-ENDMACRO()
-
-IF(NOT SIMD_SUPPORT)
-SET(RESULT)
-CHECK_SIMD_SUPPORT("AVX2" RESULT)
-CHECK_SIMD_SUPPORT("AVX1" RESULT)
-CHECK_SIMD_SUPPORT("SSE4_2" RESULT)
-CHECK_SIMD_SUPPORT("SSE4_1" RESULT)
-CHECK_SIMD_SUPPORT("SSE3" RESULT)
-CHECK_SIMD_SUPPORT("SSE2" RESULT)
-CHECK_SIMD_SUPPORT("SSE1" RESULT)
-SET(SIMD_SUPPORT ${RESULT} CACHE STRING "SSE2")
-ENDIF()
-#message("SIMD_SUPPORT=" ${SIMD_SUPPORT})
-SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${ENABLE_${SIMD_SUPPORT}}")
 
 # detect LLVM version and add compiler flags.
 IF (${LLVM_PACKAGE_VERSION} MATCHES "3.5")
   SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DUSE_LLVM_3_5")
 ENDIF()
-
-IF (BLOCK_SIZE_256)
-    IF ("${SIMD_SUPPORT}" STREQUAL "AVX1")
-        SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DUSE_S2P_AVX -DUSE_AVX -DBLOCK_SIZE=256 -mavx -m64")
-    ELSEIF ("${SIMD_SUPPORT}" STREQUAL "AVX2")
-        SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DUSE_S2P_AVX2 -DBLOCK_SIZE=256 -march=core-avx2 -m64")
-    ENDIF()
-ELSEIF(BLOCK_SIZE_64)
-    SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DBLOCK_SIZE=64")
-ELSE ()
-    SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DBLOCK_SIZE=128")
-ENDIF()
-
 
 IF (PRINT_TIMING_INFORMATION)   
     SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DPRINT_TIMING_INFORMATION")
