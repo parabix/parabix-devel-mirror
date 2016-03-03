@@ -205,11 +205,19 @@ void pablo_function_passes(PabloFunction * function) {
 }
 
 
-IDISA::IDISA_Builder * GetNativeIDISA_Builder(Module * mod, Type * bitBlockType) {
-
+IDISA::IDISA_Builder * GetIDISA_Builder(Module * mod) {
+    bool hasAVX2 = (strncmp(lGetSystemISA(), "avx2", 4) == 0);
+    
+    unsigned theBlockSize = BlockSize;  // from command line
+    
+    if (theBlockSize == 0) {  // No BlockSize override: use processor SIMD width
+        theBlockSize = hasAVX2 ? 256 : 128;
+    }
+    Type * bitBlockType = VectorType::get(IntegerType::get(getGlobalContext(), 64), theBlockSize/64);
+    
     int blockSize = bitBlockType->isIntegerTy() ? cast<IntegerType>(bitBlockType)->getIntegerBitWidth() : cast<VectorType>(bitBlockType)->getBitWidth();
     if (blockSize == 256) {
-        if ((strncmp(lGetSystemISA(), "avx2", 4) == 0)) {
+        if (hasAVX2) {
             return new IDISA::IDISA_AVX2_Builder(mod, bitBlockType);
         }
         else{

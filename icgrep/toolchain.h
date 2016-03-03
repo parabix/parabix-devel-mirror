@@ -17,7 +17,7 @@
 #include <pablo/function.h>
 #include <IDISA/idisa_builder.h>
 
-IDISA::IDISA_Builder * GetNativeIDISA_Builder(Module * m, Type * bitBlockType);
+IDISA::IDISA_Builder * GetIDISA_Builder(Module * m);
 
 re::RE * regular_expression_passes(const Encoding encoding, re::RE * re_ast);
 

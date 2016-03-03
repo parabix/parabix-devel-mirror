@@ -162,7 +162,7 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool isNam
                             
     Module * M = new Module("moduleName", getGlobalContext());
     
-    IDISA::IDISA_Builder * idb = GetNativeIDISA_Builder(M, VectorType::get(IntegerType::get(getGlobalContext(), 64), BLOCK_SIZE/64));
+    IDISA::IDISA_Builder * idb = GetIDISA_Builder(M);
 
     PipelineBuilder pipelineBuilder(M, idb);
 
