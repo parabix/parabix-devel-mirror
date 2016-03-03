@@ -130,6 +130,7 @@ int main(int argc, char *argv[]) {
     for (unsigned i = firstInputFile; i != inputFiles.size(); ++i) {
         if (grepEngine.openMMap(inputFiles[i])) {
             grepEngine.doGrep();
+            grepEngine.closeMMap();
         }
     }
     

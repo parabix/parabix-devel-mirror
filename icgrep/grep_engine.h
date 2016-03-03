@@ -24,6 +24,8 @@ public:
     void grepCodeGen(std::string moduleName, re::RE * re_ast, bool isNameExpression = false);
     
     bool openMMap(const std::string & fileName);
+    
+    void closeMMap();
 
     void doGrep();
     
@@ -39,6 +41,7 @@ private:
 
     main_fcn_T mMainFcn;
     
+    bool mIsNameExpression;
     std::string mFileName;
     size_t mFileSize;
     char * mFileBuffer;

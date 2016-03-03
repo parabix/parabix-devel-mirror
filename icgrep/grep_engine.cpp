@@ -16,6 +16,7 @@
 #include <llvm/IRReader/IRReader.h>
 #include <llvm/Support/Debug.h>
 #include <llvm/IR/Verifier.h>
+#include <UCD/UnicodeNameData.h>
 
 #include <fstream>
 #include <sstream>
@@ -135,6 +136,14 @@ bool GrepEngine::openMMap(const std::string & fileName) {
     return true;  // success
 }
 
+void GrepEngine::closeMMap() {
+#ifdef USE_BOOST_MMAP
+    mFile.close();
+#else
+    munmap((void *)mFileBuffer, mFileSize);
+#endif   
+
+}
 
 void GrepEngine::doGrep() {
         
@@ -146,15 +155,8 @@ void GrepEngine::doGrep() {
     
     mMainFcn(mFileBuffer, mFileSize, mFileName.c_str(), finalLineUnterminated);
     
-    PrintTotalCount();
-    
-#ifdef USE_BOOST_MMAP
-    mFile.close();
-#else
-    munmap((void *)mFileBuffer, mFileSize);
-#endif   
+    if (!mIsNameExpression) PrintTotalCount();
 }
-
 
 void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool isNameExpression) {
                             
@@ -165,6 +167,7 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool isNam
     PipelineBuilder pipelineBuilder(M, idb);
 
     Encoding encoding(Encoding::Type::UTF_8, 8);
+    mIsNameExpression = isNameExpression;
     re_ast = regular_expression_passes(encoding, re_ast);   
     pablo::PabloFunction * function = re2pablo_compiler(encoding, re_ast);
 
@@ -186,8 +189,9 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool isNam
 
 re::CC *  GrepEngine::grepCodepoints() {
     setParsedCodePointSet();
-    if (openMMap("../UName.txt")) {
-        doGrep();
-    }
+    mFileBuffer = getUnicodeNameDataPtr();
+    mFileSize = getUnicodeNameDataSize();
+    mFileName = "Uname.txt";
+    doGrep();
     return getParsedCodePointSet();
 }
