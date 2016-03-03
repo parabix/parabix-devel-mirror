@@ -216,7 +216,7 @@ IDISA::IDISA_Builder * GetIDISA_Builder(Module * mod) {
     Type * bitBlockType = VectorType::get(IntegerType::get(getGlobalContext(), 64), theBlockSize/64);
     
     int blockSize = bitBlockType->isIntegerTy() ? cast<IntegerType>(bitBlockType)->getIntegerBitWidth() : cast<VectorType>(bitBlockType)->getBitWidth();
-    if (blockSize == 256) {
+    if (blockSize >= 256) {
         if (hasAVX2) {
             return new IDISA::IDISA_AVX2_Builder(mod, bitBlockType);
         }

@@ -130,7 +130,7 @@ Value * CarryManager::addCarryInCarryOut(const unsigned localIndex, Value * cons
         sum = iBuilder->simd_add(64, partial, iBuilder->CreateBitCast(mid_carry_in, mBitBlockType));
         Value * carry_out_strm = iBuilder->simd_or(carrygen, iBuilder->simd_and(carryprop, iBuilder->CreateNot(sum)));
         setCarryOut(localIndex, carry_out_strm);
-    } else if (mBitBlockWidth == 256) {
+    } else if (mBitBlockWidth >= 256) {
         // using LONG_ADD
         Value * carryq_value = getCarryIn(localIndex);
         Value * carryin = iBuilder->mvmd_extract(32, carryq_value, 0);
