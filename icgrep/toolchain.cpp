@@ -49,6 +49,9 @@
 #include <pablo/analysis/pabloverifier.hpp>
 #include <re/printer_re.h>
 #include <pablo/printer_pablos.h>
+// Dynamic processor detection
+#define ISPC_LLVM_VERSION ISPC_LLVM_3_6
+#include "ispc.cpp"
 
 using namespace pablo;
 
@@ -201,29 +204,21 @@ void pablo_function_passes(PabloFunction * function) {
     }
 }
 
-// Dynamic AVX2 confirmation
-#if (BLOCK_SIZE == 256)
-#define ISPC_LLVM_VERSION ISPC_LLVM_3_6
-#include "ispc.cpp"
-#endif
-
 
 IDISA::IDISA_Builder * GetNativeIDISA_Builder(Module * mod, Type * bitBlockType) {
 
-#if (BLOCK_SIZE == 256)
-    if ((strncmp(lGetSystemISA(), "avx2", 4) == 0)) {
-        return new IDISA::IDISA_AVX2_Builder(mod, bitBlockType);
-        //std::cerr << "IDISA_AVX2_Builder selected\n";
+    int blockSize = bitBlockType->isIntegerTy() ? cast<IntegerType>(bitBlockType)->getIntegerBitWidth() : cast<VectorType>(bitBlockType)->getBitWidth();
+    if (blockSize == 256) {
+        if ((strncmp(lGetSystemISA(), "avx2", 4) == 0)) {
+            return new IDISA::IDISA_AVX2_Builder(mod, bitBlockType);
+        }
+        else{
+            return new IDISA::IDISA_SSE2_Builder(mod, bitBlockType);
+        }
     }
-    else{
-        return new IDISA::IDISA_SSE2_Builder(mod, bitBlockType);
-        //std::cerr << "Generic IDISA_Builder selected\n";
-    }
-#elif (BLOCK_SIZE == 64)
-    return new IDISA::IDISA_I64_Builder(mod, bitBlockType);
-#else    
+    else if (blockSize == 64)
+        return new IDISA::IDISA_I64_Builder(mod, bitBlockType);  
     return new IDISA::IDISA_SSE2_Builder(mod, bitBlockType);
-#endif
 }
 
 
@@ -240,14 +235,12 @@ ExecutionEngine * JIT_to_ExecutionEngine (Module * m) {
     builder.setMCPU(sys::getHostCPUName());
     builder.setOptLevel(CodeGenOpt::Level::None);
 
-#if (BLOCK_SIZE == 256)
     if (!DisableAVX2 && (strncmp(lGetSystemISA(), "avx2", 4) == 0)) {
             std::vector<std::string> attrs;
             attrs.push_back("avx2");
             builder.setMAttrs(attrs);
-    //std::cerr << "+avx2 set" << std::endl;
     }
-#endif
+
     //builder.setOptLevel(mMaxWhileDepth ? CodeGenOpt::Level::Less : CodeGenOpt::Level::None);
     ExecutionEngine * engine = builder.create();
     if (engine == nullptr) {
