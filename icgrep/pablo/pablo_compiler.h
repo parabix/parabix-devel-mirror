@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2014 International Characters.
+ *  Copyright (c) 2016 International Characters.
  *  This software is licensed to the public under the Open Software License 3.0.
  *  icgrep is a trademark of International Characters.
  */
@@ -7,16 +7,7 @@
 #ifndef PABLO_COMPILER_H
 #define PABLO_COMPILER_H
 
-//indicates that we use llvm.uadd.with.overflow.carryin for genAddWithCarry
-//#define USE_UADD_OVERFLOW
-//#define USE_LONG_INTEGER_SHIFT
-//#define USE_TWO_UADD_OVERFLOW
 
-#if defined(USE_TWO_UADD_OVERFLOW) && !defined(USE_UADD_OVERFLOW)
-static_assert(false, "Need to turn on them together.");
-#endif
-
-//Pablo Expressions
 #include <string>
 #include <list>
 #include <vector>
@@ -57,18 +48,7 @@ class StatementList;
 class If;
 class While;
 
-#if (BLOCK_SIZE==256)
-#define USE_UADD_OVERFLOW
-#define USE_TWO_UADD_OVERFLOW
-#endif
-
 class PabloCompiler {
-    #ifdef USE_UADD_OVERFLOW
-    struct SumWithOverflowPack {
-        Value * sum;
-        Value * obit;
-    };
-    #endif
 
     typedef std::unordered_map<const pablo::PabloAST *, Value *>   ASTToValueMap;
 
@@ -120,4 +100,4 @@ private:
 
 }
 
-#endif // LLVM_GENERATOR_H
+#endif // PABLO_COMPILER_H

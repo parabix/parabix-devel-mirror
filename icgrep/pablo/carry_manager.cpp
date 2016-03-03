@@ -14,9 +14,6 @@
 #include <llvm/IR/CallingConv.h>
 #include <llvm/IR/Function.h>
 
-#if (BLOCK_SIZE==256)
-#define USING_LONG_ADD
-#endif
 #define DSSLI_FIELDWIDTH 64
 
 namespace pablo {
@@ -133,15 +130,8 @@ Value * CarryManager::addCarryInCarryOut(const unsigned localIndex, Value * cons
         sum = iBuilder->simd_add(64, partial, iBuilder->CreateBitCast(mid_carry_in, mBitBlockType));
         Value * carry_out_strm = iBuilder->simd_or(carrygen, iBuilder->simd_and(carryprop, iBuilder->CreateNot(sum)));
         setCarryOut(localIndex, carry_out_strm);
-    } else {
-        #ifndef USING_LONG_ADD
-        Value * carryq_value = getCarryIn(localIndex);
-        Value * carrygen = iBuilder->simd_and(e1, e2);
-        Value * carryprop = iBuilder->simd_or(e1, e2);
-        sum = iBuilder->simd_add(mBitBlockWidth, iBuilder->simd_add(mBitBlockWidth, e1, e2), carryq_value);
-        Value * carry_out_strm = iBuilder->simd_or(carrygen, iBuilder->simd_and(carryprop, iBuilder->CreateNot(sum)));
-        setCarryOut(localIndex, carry_out_strm);
-        #else
+    } else if (mBitBlockWidth == 256) {
+        // using LONG_ADD
         Value * carryq_value = getCarryIn(localIndex);
         Value * carryin = iBuilder->mvmd_extract(32, carryq_value, 0);
         Value * carrygen = iBuilder->simd_and(e1, e2);
@@ -157,7 +147,14 @@ Value * CarryManager::addCarryInCarryOut(const unsigned localIndex, Value * cons
         sum = iBuilder->simd_add(64, digitsum, increments);
         Value * carry_out_strm = iBuilder->CreateZExt(iBuilder->CreateLShr(incrementMask, mBitBlockWidth / 64), iBuilder->getIntNTy(mBitBlockWidth));
         setCarryOut(localIndex, iBuilder->bitCast(carry_out_strm));
-        #endif
+    }
+    else {
+        Value * carryq_value = getCarryIn(localIndex);
+        Value * carrygen = iBuilder->simd_and(e1, e2);
+        Value * carryprop = iBuilder->simd_or(e1, e2);
+        sum = iBuilder->simd_add(mBitBlockWidth, iBuilder->simd_add(mBitBlockWidth, e1, e2), carryq_value);
+        Value * carry_out_strm = iBuilder->simd_or(carrygen, iBuilder->simd_and(carryprop, iBuilder->CreateNot(sum)));
+        setCarryOut(localIndex, carry_out_strm);
     }
     return sum;
 }
@@ -401,10 +398,10 @@ Value * CarryManager::getCarryIn(const unsigned localIndex) {
  ** ------------------------------------------------------------------------------------------------------------- */
 void CarryManager::setCarryOut(const unsigned localIndex, Value * carryOut) {
     const unsigned index = addPosition(localIndex);
-    #ifndef USING_LONG_ADD
-    Value * carry_bit = iBuilder->CreateLShr(iBuilder->CreateBitCast(carryOut, iBuilder->getIntNTy(mBitBlockWidth)), mBitBlockWidth-1);
-    carryOut = iBuilder->CreateBitCast(carry_bit, mBitBlockType);
-    #endif
+    if (mBitBlockWidth < 256) { // #ifndef USING_LONG_ADD
+        Value * carry_bit = iBuilder->CreateLShr(iBuilder->CreateBitCast(carryOut, iBuilder->getIntNTy(mBitBlockWidth)), mBitBlockWidth-1);
+        carryOut = iBuilder->CreateBitCast(carry_bit, mBitBlockType);
+    }
     mCarryOutPack[index] = carryOut;
     if (LLVM_LIKELY(hasSummary())) {
         addToSummary(carryOut);
@@ -419,7 +416,7 @@ void CarryManager::setCarryOut(const unsigned localIndex, Value * carryOut) {
  ** ------------------------------------------------------------------------------------------------------------- */
 unsigned CarryManager::enumerate(PabloBlock * blk, unsigned ifDepth, unsigned whileDepth) {
     unsigned idx = blk->getScopeIndex();
-    CarryData * cd = new CarryData(blk, mBitBlockWidth, 1);
+    CarryData * cd = new CarryData(blk, mBitBlockWidth, 1, mBitBlockWidth);
     mCarryInfoVector[idx] = cd;
 
     cd->setIfDepth(ifDepth);

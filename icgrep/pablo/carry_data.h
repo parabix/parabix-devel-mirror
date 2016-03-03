@@ -47,10 +47,11 @@ class PabloBlock;
 class CarryData {
 public:
 
-    CarryData(PabloBlock * b, unsigned PACK_SIZE, unsigned ITEMS_PER_PACK):
-       mPackSize(PACK_SIZE),
-       mItemsPerPack(ITEMS_PER_PACK),
-       mPositionsPerBlock(mItemsPerPack * (BLOCK_SIZE/mPackSize)),
+    CarryData(PabloBlock * b, unsigned packSize, unsigned itemsPerPack, unsigned blockSize):
+       mPackSize(packSize),
+       mItemsPerPack(itemsPerPack),
+       mBlockSize(blockSize),
+       mPositionsPerBlock(mItemsPerPack * (blockSize/mPackSize)),
        theScope(b),
        framePosition(0),
        ifDepth(0),
@@ -102,7 +103,7 @@ public:
     }
     
     unsigned longAdvanceEntries(unsigned shift_amount) const {
-        return fullOrPartialBlocks(shift_amount, BLOCK_SIZE);
+        return fullOrPartialBlocks(shift_amount, mBlockSize);
     }
     
     unsigned longAdvanceBufferSize(unsigned shift_amount)  const {
@@ -131,7 +132,7 @@ public:
     
 protected:
 
-    unsigned mPackSize, mItemsPerPack, mPositionsPerBlock;
+    unsigned mPackSize, mItemsPerPack, mBlockSize, mPositionsPerBlock;
     
     PabloBlock * theScope;
     
