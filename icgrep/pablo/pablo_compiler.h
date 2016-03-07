@@ -7,14 +7,10 @@
 #ifndef PABLO_COMPILER_H
 #define PABLO_COMPILER_H
 
-
+//Pablo Expressions
 #include <string>
-#include <list>
 #include <vector>
-#include <map>
-#include <algorithm>
 #include <unordered_map>
-#include <pablo/pe_string.h>
 #include <pablo/carry_manager.h>
 #include <llvm/ADT/Twine.h>
 #include <llvm/IR/IRBuilder.h>
@@ -36,8 +32,6 @@ namespace llvm {
 
 namespace pablo {
 
-using namespace llvm;
-
 class PabloAST;
 class PabloBlock;
 class PabloFunction;
@@ -50,29 +44,27 @@ class While;
 
 class PabloCompiler {
 
-    typedef std::unordered_map<const pablo::PabloAST *, Value *>   ASTToValueMap;
+    using MarkerMap = std::unordered_map<const PabloAST *, Value *>;
 
 public:
     PabloCompiler(Module * m, IDISA::IDISA_Builder * b);
-    ~PabloCompiler();
-    Function * compile(pablo::PabloFunction * function);   
+
+    llvm::Function * compile(PabloFunction * function);
     void setKernel(KernelBuilder * kBuilder);
-    
+
 private:
-    void GenerateFunction(PabloFunction & function);
+
     void Examine(PabloFunction & function);
     void Examine(PabloBlock * block);
-
-    void SetOutputValue(Value * marker, const unsigned index);
 
     void compileBlock(PabloBlock * block);
     void compileStatement(const Statement * stmt);
     void compileIf(const If * ifStmt);
     void compileWhile(const While * whileStmt);
-    Value* compileExpression(const PabloAST * expr);
-    void GenerateKernel(PabloBlock * block, PabloFunction * function);
+    Value * compileExpression(const PabloAST * expr);
+    void GenerateKernel(PabloFunction * const function);
 
-    ASTToValueMap                       mMarkerMap;
+    MarkerMap                           mMarkerMap;
 
     Module *                            mMod;
     IDISA::IDISA_Builder *              iBuilder;
@@ -80,22 +72,18 @@ private:
 
     CarryManager *                      mCarryManager;
 
-    PointerType*                        mInputType;
-
+    PabloFunction *                     mPabloFunction;
     PabloBlock *                        mPabloBlock;
 
     KernelBuilder *                     mKBuilder;
-    
+
     unsigned                            mWhileDepth;
     unsigned                            mIfDepth;
 
-    Function *                          mFunction;
-    Value *                             mInputAddressPtr;
-    Value *                             mOutputAddressPtr;
+    llvm::Function *                    mFunction;
 
     unsigned                            mMaxWhileDepth;
     int                                 mFilePosIdx;
-
 };
 
 }

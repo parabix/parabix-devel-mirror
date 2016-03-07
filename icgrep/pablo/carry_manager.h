@@ -47,7 +47,6 @@ public:
     , mCarryPackBasePtr(nullptr)
     , mCarryBitBlockPtr(nullptr)
     , mPopcountBasePtr(nullptr)
-    , mBlockNoPtr(nullptr)
     , mBlockNo(nullptr)
     , mPabloCountCount(0)
     , mTotalCarryDataBitBlocks(0)
@@ -59,16 +58,15 @@ public:
 
     ~CarryManager();
     
-    void initialize(PabloBlock * blk, KernelBuilder * kBuilder);
+    void initialize(PabloFunction * const function, KernelBuilder * const kBuilder);
 
-    void initialize_setPtrs(KernelBuilder * kBuilder);
+    void initialize_setPtrs(KernelBuilder * const kBuilder);
 
-    void set_BlockNo(KernelBuilder * kBuilder);
+    void setBlockNo(KernelBuilder * kBuilder);
+    Value * getBlockNo() const;
     
     unsigned enumerate(PabloBlock * blk, unsigned ifDepth, unsigned whileDepth);
-       
-    Value * getBlockNoPtr() const;
-    
+          
     /* Entering and leaving scopes. */
     
     void enterScope(PabloBlock * const scope);
@@ -144,7 +142,6 @@ private:
     Type * mCarryPackType;
     Value * mCarryBitBlockPtr;
     Value * mPopcountBasePtr;
-    Value * mBlockNoPtr;
     Value * mBlockNo;
     unsigned mPabloCountCount; // Number of Pablo "Count" operations
     unsigned mTotalCarryDataBitBlocks;
@@ -165,8 +162,8 @@ inline bool CarryManager::hasCarries() const {
     return mCarryInfo->hasCarries();
 }
 
-inline Value * CarryManager::getBlockNoPtr() const {
-    return mBlockNoPtr;
+inline Value * CarryManager::getBlockNo() const {
+    return mBlockNo;
 }
 
 }

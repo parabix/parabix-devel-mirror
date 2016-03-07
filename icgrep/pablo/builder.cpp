@@ -81,6 +81,16 @@ PabloAST * PabloBuilder::createAdvance(PabloAST * expr, PabloAST * shiftAmount, 
     return result;
 }
 
+PabloAST * PabloBuilder::createLookahead(PabloAST * expr, PabloAST * shiftAmount) {
+    MAKE_BINARY(createLookahead, PabloAST::ClassTypeId::Lookahead, expr, shiftAmount);
+    return result;
+}
+
+PabloAST * PabloBuilder::createLookahead(PabloAST * expr, PabloAST * shiftAmount, const std::string prefix) {
+    MAKE_BINARY(createLookahead, PabloAST::ClassTypeId::Lookahead, expr, shiftAmount, prefix);
+    return result;
+}
+
 PabloAST * PabloBuilder::createMod64Advance(PabloAST * expr, PabloAST * shiftAmount) {
     MAKE_BINARY(createMod64Advance, PabloAST::ClassTypeId::Mod64Advance, expr, shiftAmount);
     return result;
@@ -88,6 +98,16 @@ PabloAST * PabloBuilder::createMod64Advance(PabloAST * expr, PabloAST * shiftAmo
 
 PabloAST * PabloBuilder::createMod64Advance(PabloAST * expr, PabloAST * shiftAmount, const std::string prefix) {
     MAKE_BINARY(createMod64Advance, PabloAST::ClassTypeId::Mod64Advance, expr, shiftAmount, prefix);
+    return result;
+}
+
+PabloAST * PabloBuilder::createMod64Lookahead(PabloAST * expr, PabloAST * shiftAmount) {
+    MAKE_BINARY(createMod64Lookahead, PabloAST::ClassTypeId::Mod64Lookahead, expr, shiftAmount);
+    return result;
+}
+
+PabloAST * PabloBuilder::createMod64Lookahead(PabloAST * expr, PabloAST * shiftAmount, const std::string prefix) {
+    MAKE_BINARY(createMod64Lookahead, PabloAST::ClassTypeId::Mod64Lookahead, expr, shiftAmount, prefix);
     return result;
 }
 

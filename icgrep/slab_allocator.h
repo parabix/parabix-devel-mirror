@@ -5,32 +5,6 @@
 
 using LLVMAllocator = llvm::BumpPtrAllocator;
 
-namespace {
-
-class __BumpPtrAllocatorProxy {
-public:
-    template <typename T>
-    static inline T * Allocate(const size_t n) {
-        return static_cast<T*>(mAllocator.Allocate(n * sizeof(T), sizeof(void*)));
-    }
-    template <typename T>
-    static inline void Deallocate(const T * pointer) {
-        mAllocator.Deallocate(pointer);
-    }
-    static inline void Reset() {
-        mAllocator.Reset();
-    }
-    static LLVMAllocator & get_allocator() {
-        return mAllocator;
-    }
-private:
-    static LLVMAllocator mAllocator;
-};
-
-LLVMAllocator __BumpPtrAllocatorProxy::mAllocator;
-
-}
-
 template <typename T>
 class SlabAllocator {
 public:
@@ -49,11 +23,11 @@ public:
     };
 
     inline pointer allocate(size_type n, const_pointer = nullptr) noexcept {
-        return mAllocator.Allocate<T>(n);
+        return static_cast<T*>(mAllocator.Allocate(n * sizeof(T), sizeof(void*)));
     }
 
     inline void deallocate(pointer p, size_type = 0) noexcept {
-        mAllocator.Deallocate<T>(p);
+        mAllocator.Deallocate(p);
     }
 
     inline size_type max_size() const {
@@ -61,7 +35,11 @@ public:
     }
 
     inline LLVMAllocator & get_allocator() {
-        return mAllocator.get_allocator();
+        return mAllocator;
+    }
+
+    void Reset() {
+        mAllocator.Reset();
     }
 
     inline bool operator==(SlabAllocator<T> const&) { return true; }
@@ -72,11 +50,14 @@ public:
     template <class U> inline SlabAllocator (const std::allocator<U>&) noexcept {}
     inline ~SlabAllocator() { }
 private:
-    __BumpPtrAllocatorProxy mAllocator;
+    static LLVMAllocator mAllocator;
 };
 
+template <typename T> LLVMAllocator SlabAllocator<T>::mAllocator;
+
 inline void releaseSlabAllocatorMemory() {
-    __BumpPtrAllocatorProxy::Reset();
+    SlabAllocator<void *> T;
+    T.Reset();
 }
 
 template <typename T>

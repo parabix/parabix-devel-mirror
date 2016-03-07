@@ -10,6 +10,7 @@
 #include <pablo/pabloAST.h>
 #include <pablo/symbol_generator.h>
 #include <pablo/pe_advance.h>
+#include <pablo/pe_lookahead.h>
 #include <pablo/pe_and.h>
 #include <pablo/pe_call.h>
 #include <pablo/pe_matchstar.h>
@@ -70,6 +71,14 @@ public:
 
     PabloAST * createAdvance(PabloAST * expr, PabloAST * shiftAmount, const std::string prefix);
 
+    PabloAST * createLookahead(PabloAST * expr, const Integer::Type shiftAmount);
+
+    PabloAST * createLookahead(PabloAST * expr, PabloAST * shiftAmount);
+
+    PabloAST * createLookahead(PabloAST * expr, const Integer::Type shiftAmount, const std::string prefix);
+
+    PabloAST * createLookahead(PabloAST * expr, PabloAST * shiftAmount, const std::string prefix);
+
     static inline Zeroes * createZeroes() {
         return &mZeroes;
     }
@@ -92,7 +101,7 @@ public:
         return createCall(static_cast<PabloAST *>(prototype), args);
     }
 
-    Assign * createAssign(const std::string && prefix, PabloAST * expr);
+    Assign * createAssign(const std::string && prefix, PabloAST * const expr);
 
     inline Var * createVar(const std::string name) {
         return createVar(getName(name, false));
@@ -191,6 +200,14 @@ public:
     PabloAST * createMod64Advance(PabloAST * expr, const Integer::Type shiftAmount, const std::string prefix);
 
     PabloAST * createMod64Advance(PabloAST * expr, PabloAST * shiftAmount, const std::string prefix);
+
+    PabloAST * createMod64Lookahead(PabloAST * expr, const Integer::Type shiftAmount);
+
+    PabloAST * createMod64Lookahead(PabloAST * expr, PabloAST * shiftAmount);
+
+    PabloAST * createMod64Lookahead(PabloAST * expr, const Integer::Type shiftAmount, const std::string prefix);
+
+    PabloAST * createMod64Lookahead(PabloAST * expr, PabloAST * shiftAmount, const std::string prefix);
 
     PabloAST * createMod64MatchStar(PabloAST * marker, PabloAST * charclass);
 

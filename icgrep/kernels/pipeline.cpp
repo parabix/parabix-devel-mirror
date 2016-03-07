@@ -13,6 +13,7 @@
 #include <pablo/function.h>
 #include <pablo/pablo_compiler.h>
 
+using namespace pablo;
 
 PipelineBuilder::PipelineBuilder(Module * m, IDISA::IDISA_Builder * b)
 : mMod(m)
@@ -24,21 +25,24 @@ PipelineBuilder::PipelineBuilder(Module * m, IDISA::IDISA_Builder * b)
 , mBlockSize(b->getBitBlockWidth()){
 
 }
+
 PipelineBuilder::~PipelineBuilder(){
+    delete mS2PKernel;
+    delete mICgrepKernel;
+    delete mScanMatchKernel;
 }
 
-void PipelineBuilder::CreateKernels(pablo::PabloFunction * function, bool isNameExpression){
+void PipelineBuilder::CreateKernels(PabloFunction * function, bool isNameExpression){
     mS2PKernel = new KernelBuilder("s2p", mMod, iBuilder);
     mICgrepKernel = new KernelBuilder("icgrep", mMod, iBuilder);
     mScanMatchKernel = new KernelBuilder("scanMatch", mMod, iBuilder);
-
 
     generateS2PKernel(mMod, iBuilder, mS2PKernel);
     generateScanMatch(mMod, iBuilder, 64, mScanMatchKernel, isNameExpression);
 
     pablo_function_passes(function);
-          
-    pablo::PabloCompiler pablo_compiler(mMod, iBuilder);
+
+    PabloCompiler pablo_compiler(mMod, iBuilder);
     try {
         pablo_compiler.setKernel(mICgrepKernel);
         pablo_compiler.compile(function);
@@ -50,19 +54,15 @@ void PipelineBuilder::CreateKernels(pablo::PabloFunction * function, bool isName
         std::cerr << "Runtime error: " << e.what() << std::endl;
         exit(1);
     }
-
 }
 
 void PipelineBuilder::ExecuteKernels(){
     Type * T = iBuilder->getIntNTy(64);   
     Type * S = PointerType::get(iBuilder->getIntNTy(8), 0);
-    Type * inputType = PointerType::get(ArrayType::get(StructType::get(mMod->getContext(), std::vector<Type *>({ArrayType::get(mBitBlockType, 8)})), 1), 0);
- 
-    Constant* c = mMod->getOrInsertFunction("Main", Type::getVoidTy(mMod->getContext()), inputType, T, S, T, NULL);
-    Function* mMainFunction = cast<Function>(c);
-    mMainFunction->setCallingConv(CallingConv::C);
-    Function::arg_iterator args = mMainFunction->arg_begin();
-
+    Type * inputType = PointerType::get(ArrayType::get(StructType::get(mMod->getContext(), std::vector<Type *>({ArrayType::get(mBitBlockType, 8)})), 1), 0); 
+    Function * const main = cast<Function>(mMod->getOrInsertFunction("Main", Type::getVoidTy(mMod->getContext()), inputType, T, S, T, nullptr));
+    main->setCallingConv(CallingConv::C);
+    Function::arg_iterator args = main->arg_begin();
 
     Value* input_param = args++;
     input_param->setName("input");
@@ -73,27 +73,29 @@ void PipelineBuilder::ExecuteKernels(){
     Value* finalLineUnterminated_param = args++;
     finalLineUnterminated_param->setName("finalLineUnterminated");
 
-    iBuilder->SetInsertPoint(BasicBlock::Create(mMod->getContext(), "entry", mMainFunction,0));
-
+    iBuilder->SetInsertPoint(BasicBlock::Create(mMod->getContext(), "entry", main,0));
 
     BasicBlock * entry_block = iBuilder->GetInsertBlock();
-    BasicBlock * pipeline_test_block = BasicBlock::Create(mMod->getContext(), "pipeline_test_block", mMainFunction, 0);
-    BasicBlock * pipeline_do_block = BasicBlock::Create(mMod->getContext(), "pipeline_do_block", mMainFunction, 0);
-    BasicBlock * pipeline_final_block = BasicBlock::Create(mMod->getContext(), "pipeline_final_block", mMainFunction, 0);
-    BasicBlock * pipeline_partial_block = BasicBlock::Create(mMod->getContext(), "pipeline_partial_block", mMainFunction, 0);
-    BasicBlock * pipeline_empty_block = BasicBlock::Create(mMod->getContext(), "pipeline_empty_block", mMainFunction, 0);
-    BasicBlock * pipeline_end_block = BasicBlock::Create(mMod->getContext(), "pipeline_end_block", mMainFunction, 0);    
-    BasicBlock * pipeline_Unterminated_block = BasicBlock::Create(mMod->getContext(), "pipeline_Unterminated_block", mMainFunction, 0);
-    BasicBlock * pipeline_return_block = BasicBlock::Create(mMod->getContext(), "pipeline_return_block", mMainFunction, 0);
+    BasicBlock * pipeline_test_block = BasicBlock::Create(mMod->getContext(), "pipeline_test_block", main, 0);
+    BasicBlock * pipeline_do_block = BasicBlock::Create(mMod->getContext(), "pipeline_do_block", main, 0);
+    BasicBlock * pipeline_final_block = BasicBlock::Create(mMod->getContext(), "pipeline_final_block", main, 0);
+    BasicBlock * pipeline_partial_block = BasicBlock::Create(mMod->getContext(), "pipeline_partial_block", main, 0);
+    BasicBlock * pipeline_empty_block = BasicBlock::Create(mMod->getContext(), "pipeline_empty_block", main, 0);
+    BasicBlock * pipeline_end_block = BasicBlock::Create(mMod->getContext(), "pipeline_end_block", main, 0);
+    BasicBlock * pipeline_Unterminated_block = BasicBlock::Create(mMod->getContext(), "pipeline_Unterminated_block", main, 0);
+    BasicBlock * pipeline_return_block = BasicBlock::Create(mMod->getContext(), "pipeline_return_block", main, 0);
 
     Value * s2pKernelStruct = mS2PKernel->generateKernelInstance();
     Value * icGrepKernelStruct = mICgrepKernel->generateKernelInstance();
     Value * scanMatchKernelStruct = mScanMatchKernel->generateKernelInstance();
 
+    Value * gep = iBuilder->CreateGEP(scanMatchKernelStruct, {iBuilder->getInt32(0), iBuilder->getInt32(0), iBuilder->getInt32(mFileBufIdx)});
     Value* filebuf = iBuilder->CreateBitCast(input_param, S);
-    mScanMatchKernel->changeKernelInternalState(scanMatchKernelStruct, mFileBufIdx, filebuf);
-    mScanMatchKernel->changeKernelInternalState(scanMatchKernelStruct, mFileSizeIdx, buffersize_param);
-    mScanMatchKernel->changeKernelInternalState(scanMatchKernelStruct, mFileNameIdx, filename_param);
+    iBuilder->CreateStore(filebuf, gep);
+    gep = iBuilder->CreateGEP(scanMatchKernelStruct, {iBuilder->getInt32(0), iBuilder->getInt32(0), iBuilder->getInt32(mFileSizeIdx)});
+    iBuilder->CreateStore(buffersize_param, gep);
+    gep = iBuilder->CreateGEP(scanMatchKernelStruct, {iBuilder->getInt32(0), iBuilder->getInt32(0), iBuilder->getInt32(mFileNameIdx)});
+    iBuilder->CreateStore(filename_param, gep);
 
     Value * basis_bits = iBuilder->CreateGEP(s2pKernelStruct, {iBuilder->getInt32(0), iBuilder->getInt32(1)});
     Value * results = iBuilder->CreateGEP(icGrepKernelStruct, {iBuilder->getInt32(0), iBuilder->getInt32(1)});
@@ -111,7 +113,7 @@ void PipelineBuilder::ExecuteKernels(){
 
     iBuilder->SetInsertPoint(pipeline_do_block);
 
-    Value * gep = iBuilder->CreateGEP(input_param, {blkNo_phi});
+    gep = iBuilder->CreateGEP(input_param, {blkNo_phi});
     Value * update_blkNo = iBuilder->CreateAdd(blkNo_phi, iBuilder->getInt64(1));
     blkNo_phi->addIncoming(update_blkNo, pipeline_do_block);
 
@@ -168,6 +170,3 @@ void PipelineBuilder::ExecuteKernels(){
     iBuilder->CreateRetVoid();
 
 }
-
-
-

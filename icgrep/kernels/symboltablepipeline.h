@@ -1,10 +1,10 @@
-#ifndef PIPELINE_H
-#define PIPELINE_H
 /*
  *  Copyright (c) 2016 International Characters.
  *  This software is licensed to the public under the Open Software License 3.0.
  */
 
+#ifndef SYMBOLTABLEPIPELINE_H
+#define SYMBOLTABLEPIPELINE_H
 
 #include <IDISA/idisa_builder.h>
 #include <llvm/IR/Function.h>
@@ -28,20 +28,24 @@ namespace pablo { class PabloFunction; class PabloBlock; }
 
 using namespace llvm;
 
-class PipelineBuilder{
+class SymbolTableBuilder {
 public:
-	PipelineBuilder(Module * m, IDISA::IDISA_Builder * b);
-	~PipelineBuilder();
-
-	void CreateKernels(pablo::PabloFunction * function, bool isNameExpression);
+    SymbolTableBuilder(Module * m, IDISA::IDISA_Builder * b);
+    void createKernels();
     void ExecuteKernels();
+protected:
+
+    pablo::PabloFunction * generateLeadingFunction(const std::vector<unsigned> & endpoints);
+    pablo::PabloFunction * generateLookaheadFunction(const pablo::PabloFunction * const leading, const std::vector<unsigned> & endpoints);
+    pablo::PabloFunction * generateSortingFunction(const pablo::PabloFunction * const lookahead);
 
 private:
-	Module *                            mMod;
+    Module *                            mMod;
     IDISA::IDISA_Builder *              iBuilder;
     KernelBuilder *                     mS2PKernel;
-    KernelBuilder *                     mICgrepKernel;   
-    KernelBuilder *                     mScanMatchKernel;
+    KernelBuilder *                     mLeadingKernel;
+    KernelBuilder *                     mLookaheadKernel;
+    KernelBuilder *                     mSortingKernel;
     int                                 mFileBufIdx;
     int                                 mFileSizeIdx;
     int                                 mFileNameIdx;
@@ -49,4 +53,4 @@ private:
     int                                 mBlockSize;
 };
 
-#endif // PIPELINE_H
+#endif // SYMBOLTABLEPIPELINE_H

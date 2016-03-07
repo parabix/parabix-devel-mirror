@@ -165,6 +165,11 @@ static Graph construct(PabloBlock * const block, Map & M);
 
 bool MultiplexingPass::optimize(PabloFunction & function, const bool independent) {
 
+    if (LLVM_UNLIKELY(Samples < 1)) {
+        return false;
+    }
+
+
     LOG("Seed:                    " << Seed);
 
     #ifdef PRINT_TIMING_INFORMATION
@@ -394,12 +399,12 @@ inline void MultiplexingPass::initializeBaseConstraintGraph(PabloBlock * const b
     for (unsigned i = 0; i != advances; ++i) {
         for (unsigned j = 0; j < i; ++j) {
             if (G(i, j)) {
-                add_edge(j, i, mConstraintGraph);
+                add_edge(j, i, true, mConstraintGraph);
             }
         }
         for (unsigned j = i + 1; j < advances; ++j) {
             if (G(i, j)) {
-                add_edge(j, i, mConstraintGraph);
+                add_edge(j, i, true, mConstraintGraph);
             }
         }
     }
@@ -604,7 +609,7 @@ inline BDD MultiplexingPass::characterize(Advance * const adv, const BDD Ik) {
     }
 
     BDD Ak = bdd_ithvar(mVariables++);
-    const BDD Nk = bdd_addref(bdd_not(Ak));
+    const BDD Nk = bdd_addref(bdd_not(Ak));    
     for (unsigned i = 0; i != k; ++i) {
         if (unconstrained[i]) {
             // This algorithm deems two streams mutually exclusive if and only if the conjuntion of their BDDs is a contradiction.
@@ -624,7 +629,7 @@ inline BDD MultiplexingPass::characterize(Advance * const adv, const BDD Ik) {
                 continue;
             }
         }
-        add_edge(i, k, mConstraintGraph);
+        add_edge(i, k, false, mConstraintGraph);
     }
     // To minimize the number of BDD computations, we store the negated variable instead of negating it each time.
     mAdvanceNegatedVariable.emplace_back(Nk);
@@ -636,7 +641,7 @@ inline BDD MultiplexingPass::characterize(Advance * const adv, const BDD Ik) {
  ** ------------------------------------------------------------------------------------------------------------- */
 inline bool MultiplexingPass::independent(const ConstraintVertex i, const ConstraintVertex j) const {
     assert (i < num_vertices(mConstraintGraph) && j < num_vertices(mConstraintGraph));
-    return (mConstraintGraph.get_edge(i, j) == 0);
+    return mConstraintGraph.get_edge(i, j).first == false;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -716,7 +721,7 @@ bool MultiplexingPass::generateCandidateSets() {
 
     mCandidateGraph = CandidateGraph(num_vertices(mConstraintGraph));
 
-    for (unsigned iteration = 0; iteration < Samples; ++iteration) {
+    for (unsigned r = Samples; r; --r) {
 
         // Push all source nodes into the (initial) independent set S
         for (const auto v : make_iterator_range(vertices(mConstraintGraph))) {
@@ -764,6 +769,18 @@ bool MultiplexingPass::generateCandidateSets() {
 
         S.clear();
     }
+
+    #ifdef PRINT_DEBUG_OUTPUT
+    const auto n = num_vertices(mConstraintGraph);
+    const auto m = num_vertices(mCandidateGraph);
+    unsigned sets = 0;
+    for (auto i = n; i < m; ++i) {
+        if (degree(i, mCandidateGraph) > 0) {
+            ++sets;
+        }
+    }
+    LOG("Unique Candidate Sets:    " << (sets));
+    #endif
 
     return num_vertices(mCandidateGraph) > num_vertices(mConstraintGraph);
 }
@@ -908,27 +925,21 @@ void MultiplexingPass::selectMultiplexSetsGreedy() {
     const size_t m = num_vertices(mConstraintGraph);
     const size_t n = num_vertices(mCandidateGraph) - m;
 
-    degree_t remaining[n];
-    vertex_t chosen_set[m];
-
-    for (unsigned i = 0; i != n; ++i) {
-        remaining[i] = degree(i + m, mCandidateGraph);
-    }
-    for (unsigned i = 0; i != m; ++i) {
-        chosen_set[i] = 0;
-    }
+    std::vector<bool> chosen(n, false);
 
     for (;;) {
 
         // Choose the set with the greatest number of vertices not already included in some other set.
-        vertex_t k = 0;
+        vertex_t u = 0;
         degree_t w = 0;
         for (vertex_t i = 0; i != n; ++i) {
-            degree_t r = remaining[i];
-            if (r > 2) { // if this set has at least 3 elements.
+            if (chosen[i]) continue;
+            const auto t = i + m;
+            degree_t r = degree(t, mCandidateGraph);
+            if (LLVM_LIKELY(r >= 3)) { // if this set has at least 3 elements.
                 r *= r;
                 AdjIterator begin, end;
-                std::tie(begin, end) = adjacent_vertices(i + m, mCandidateGraph);
+                std::tie(begin, end) = adjacent_vertices(t, mCandidateGraph);
                 for (auto ei = begin; ei != end; ++ei) {
                     for (auto ej = ei; ++ej != end; ) {
                         if (edge(*ei, *ej, mUsageGraph).second) {
@@ -937,77 +948,45 @@ void MultiplexingPass::selectMultiplexSetsGreedy() {
                     }
                 }
                 if (w < r) {
-                    k = i;
+                    u = t;
                     w = r;
                 }
+            } else if (r) {
+                clear_vertex(t, mCandidateGraph);
             }
         }
 
         // Multiplexing requires 3 or more elements; if no set contains at least 3, abort.
-        if (w == 0) {
+        if (LLVM_UNLIKELY(w == 0)) {
             break;
         }
 
-        for (const auto u : make_iterator_range(adjacent_vertices(k + m, mCandidateGraph))) {
-            if (chosen_set[u] == 0) {
-                chosen_set[u] = (k + m);
-                for (const auto v : make_iterator_range(adjacent_vertices(u, mCandidateGraph))) {
-                    assert (v >= m);
-                    remaining[v - m]--;
-                }
-            }
-        }
-
-        assert (remaining[k] == 0);
+        chosen[u - m] = true;
 
         // If this contains 2^n elements for any n, discard the member that is most likely to be added
         // to some future set.
-        if (LLVM_UNLIKELY(is_power_of_2(w))) {
-            vertex_t j = 0;
+        if (LLVM_UNLIKELY(is_power_of_2(degree(u, mCandidateGraph)))) {
+            vertex_t x = 0;
             degree_t w = 0;
-            for (vertex_t i = 0; i != m; ++i) {
-                if (chosen_set[i] == (k + m)) {
-                    degree_t r = 1;
-                    for (const auto u : make_iterator_range(adjacent_vertices(i, mCandidateGraph))) {
-                        // strongly prefer adding weight to unvisited sets that have more remaining vertices
-                        r += std::pow(remaining[u - m], 2);
-                    }
-                    if (w < r) {
-                        j = i;
-                        w = r;
-                    }
+            for (const auto v : make_iterator_range(adjacent_vertices(u, mCandidateGraph))) {
+                if (degree(v, mCandidateGraph) > w) {
+                    x = v;
+                    w = degree(v, mCandidateGraph);
                 }
             }
-            assert (w > 0);
-            chosen_set[j] = 0;
-            for (const auto u : make_iterator_range(adjacent_vertices(j, mCandidateGraph))) {
-                assert (u >= m);
-                remaining[u - m]++;
-            }
+            remove_edge(u, x, mCandidateGraph);
         }
 
-        // If Samples > 1 then our candidate sets were generated by more than one traversal through the constraint graph.
-        // Sets generated by differing traversals may generate a cycle in the AST if multiplex even when they are not
-        // multiplexed together. For example,
+        AdjIterator begin, end;
+        std::tie(begin, end) = adjacent_vertices(u, mCandidateGraph);
+        for (auto vi = begin; vi != end; ) {
+            const auto v = *vi++;
+            clear_vertex(v, mCandidateGraph);
+            add_edge(v, u, mCandidateGraph);
+        }
 
-        // Assume we're multiplexing set {A,B,C} and {D,E,F} and that no constraint exists between any nodes in
-        // either set. If A is dependent on D and E is dependent on B, multiplexing both sets would result in a cycle
-        // in the AST. To fix this, we'd have to remove A, D, B or E.
-
-        // This cannot occur with only one traversal (or between sets generated by the same traversal) because of the
-        // DAG traversal strategy used in "generateCandidateSets".
-
-
-    }
-
-    for (unsigned i = 0; i != m; ++i) {
-        AdjIterator ei, ei_end;
-        std::tie(ei, ei_end) = adjacent_vertices(i, mCandidateGraph);
-        for (auto next = ei; ei != ei_end; ei = next) {
-            ++next;
-            if (*ei != chosen_set[i]) {
-                remove_edge(i, *ei, mCandidateGraph);
-            }
+        if (Samples > 1) {
+            removePotentialCycles(u);
         }
     }
 
@@ -1056,6 +1035,60 @@ void MultiplexingPass::selectMultiplexSetsWorkingSet() {
 
 
 
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief removePotentialCycles
+ *
+ * If Samples > 1, our candidate sets were generated by more than one traversal through the constraint DAG.
+ * Multiplexing disjoint sets generated by differing traversals can induce a cycle in the AST. For example,
+ * suppose sets {A,B} and {C,D} and A is dependent on C and D on B; multiplexing both will result in a cycle.
+ *
+ * Eliminating all potential cycles will likely lead to the removal of many candidate sets. Instead we "fix"
+ * the candidate sets after the selection of a particular candidate set.
+ ** ------------------------------------------------------------------------------------------------------------- */
+void MultiplexingPass::removePotentialCycles(const CandidateGraph::vertex_descriptor i) {
+
+    using AdjIterator = graph_traits<CandidateGraph>::adjacency_iterator;
+
+    const auto m = num_vertices(mConstraintGraph);
+    const auto n = num_vertices(mCandidateGraph);
+
+    // Suppose we construct a graph G that indicates whether selecting candidate set V will induce a cycle, given
+    // that we've already chosen candidate set U. This can occur here only because some elements of V are dependent
+    // on U and vice versa.
+
+    // We want the minimal minimum weight feedback arc set of G; however, we also know any edge will either have
+    //
+
+    for (auto j = m; j < n; ++j) {
+        if (LLVM_UNLIKELY(i == j)) continue;
+        AdjIterator begin, end;
+        std::tie(begin, end) = adjacent_vertices(j, mCandidateGraph);
+        for (auto ui = begin; ui != end; )  {
+            const auto u = *ui++;
+            unsigned outgoing = 0;
+            unsigned incoming = 0;
+            for (auto v : make_iterator_range(adjacent_vertices(i, mCandidateGraph)))  {
+                if (dependent(u, v)) {
+                    ++outgoing;
+                } else if (dependent(v, u)) {
+                    ++incoming;
+                }
+            }
+            if (LLVM_UNLIKELY(outgoing > 0 && incoming > 0)) {
+                remove_edge(j, u, mCandidateGraph);
+            }
+        }
+    }
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief dependent
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline bool MultiplexingPass::dependent(const ConstraintVertex i, const ConstraintVertex j) const {
+    const auto e = mConstraintGraph.get_edge(i, j);
+    return (e.second && e.first);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -1263,7 +1296,7 @@ void MultiplexingPass::rewriteAST(PabloBlock * const block) {
                 case TypeId::Xor:
                     work = 2;
                     break;
-//                case TypeId::Not:
+                case TypeId::Not:
                 case TypeId::Assign:
                 case TypeId::Next:
                     work = 1;
@@ -1362,6 +1395,7 @@ void MultiplexingPass::rewriteAST(PabloBlock * const block) {
         for (auto ei : make_iterator_range(out_edges(u, G))) {
             bool ready = true;
             const auto v = target(ei, G);
+            assert (rank[v] != 0);
             for (auto ej : make_iterator_range(in_edges(v, G))) {
                 if (rank[source(ej, G)] != 0) {
                     ready = false;
@@ -1369,7 +1403,6 @@ void MultiplexingPass::rewriteAST(PabloBlock * const block) {
                 }
             }
             if (ready) {
-                assert (rank[v] != 0);
                 readySet.insert(std::lower_bound(readySet.begin(), readySet.end(), v, by_nonincreasing_rank), v);
                 assert (std::is_sorted(readySet.cbegin(), readySet.cend(), by_nonincreasing_rank));
             }
@@ -1602,7 +1635,7 @@ Graph construct(PabloBlock * const block, Map & M) {
     }
 
     #ifndef NDEBUG
-    std::vector<typename Graph::vertex_descriptor> nothing;
+    std::vector<Vertex> nothing;
     topological_sort(G, std::back_inserter(nothing));
     #endif
 

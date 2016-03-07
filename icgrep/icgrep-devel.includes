@@ -14,3 +14,9 @@ pablo/passes
 ../llvm-build/lib
 kernels
 IDISA
+pablo/symbol-table
+include/simd-lib/idisa_cpp
+CMakeFiles/3.2.2/CompilerIdC
+include/simd-lib
+CMakeFiles
+CMakeFiles/3.2.2/CompilerIdCXX

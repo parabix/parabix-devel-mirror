@@ -19,73 +19,52 @@
 namespace pablo {
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief doScopeCount
- ** ------------------------------------------------------------------------------------------------------------- */
-static unsigned doScopeCount(const PabloBlock * const pb) {
-    unsigned count = 1;
-    for (const Statement * stmt : *pb) {
-        if (LLVM_UNLIKELY(isa<If>(stmt))) {
-            count += doScopeCount(cast<If>(stmt)->getBody());
-        } else if (LLVM_UNLIKELY(isa<While>(stmt))) {
-            count += doScopeCount(cast<While>(stmt)->getBody());
-        }
-    }
-    return count;
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
  * @brief initialize
  ** ------------------------------------------------------------------------------------------------------------- */
-void CarryManager::initialize(PabloBlock * pb, KernelBuilder * kBuilder) {
-    mRootScope = pb;
-    mCarryInfoVector.resize(doScopeCount(pb));
+void CarryManager::initialize(PabloFunction * const function, KernelBuilder * const kBuilder) {
+    mRootScope = function->getEntryBlock();
+    mCarryInfoVector.resize(mRootScope->enumerateScopes(0) + 1);
     mCarryPackType = mBitBlockType;
-
-    const unsigned totalCarryDataSize = enumerate(pb, 0, 0);
-
+    const unsigned totalCarryDataSize = std::max<unsigned>(enumerate(mRootScope, 0, 0), 1);
     mCarryPackPtr.resize(totalCarryDataSize, nullptr);
     mCarryInPack.resize(totalCarryDataSize, nullptr);
     mCarryOutPack.resize(totalCarryDataSize, nullptr);
-
     mTotalCarryDataBitBlocks = totalCarryDataSize;
-    
     ArrayType* cdArrayTy = ArrayType::get(mBitBlockType, mTotalCarryDataBitBlocks);
-    mCdArrayIdx = kBuilder->extendKernelInternalStateType(cdArrayTy);
-    
+    mCdArrayIdx = kBuilder->addInternalStateType(cdArrayTy);
     if (mPabloCountCount > 0) {
         ArrayType* pcArrayTy = ArrayType::get(iBuilder->getIntNTy(64), mPabloCountCount);
-        mPcArrayIdx = kBuilder->extendKernelInternalStateType(pcArrayTy);
+        mPcArrayIdx = kBuilder->addInternalStateType(pcArrayTy);
     }
-  
     mCurrentScope = mRootScope;
     mCurrentFrameIndex = 0;
     mCarryInfo = mCarryInfoVector[0];
     mCarryOutPack[summaryPack()] = Constant::getNullValue(mCarryPackType);
 }
 
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief initialize_setPtrs
+ ** ------------------------------------------------------------------------------------------------------------- */
 void CarryManager::initialize_setPtrs(KernelBuilder * kBuilder) {
-
-    Value * kernelStuctParam = kBuilder->getKernelStructParam();
-    Value * cdArrayPtr = kBuilder->getKernelInternalStatePtr(kernelStuctParam, mCdArrayIdx);
-  
+    Value * cdArrayPtr = kBuilder->getInternalState(mCdArrayIdx);
     mCarryPackBasePtr = iBuilder->CreateBitCast(cdArrayPtr, PointerType::get(mCarryPackType, 0));
-    mCarryBitBlockPtr = iBuilder->CreateBitCast(cdArrayPtr, PointerType::get(mBitBlockType, 0));   
-    
+    mCarryBitBlockPtr = iBuilder->CreateBitCast(cdArrayPtr, PointerType::get(mBitBlockType, 0));
     if (mPabloCountCount > 0) {
-        Value * pcArrayPtr = kBuilder->getKernelInternalStatePtr(kernelStuctParam, mPcArrayIdx);
+        Value * pcArrayPtr = kBuilder->getInternalState(mPcArrayIdx);
         mPopcountBasePtr = iBuilder->CreateBitCast(pcArrayPtr, Type::getInt64PtrTy(iBuilder->getContext()));
     }
-  
-    mBlockNo = iBuilder->CreateUDiv(kBuilder->getKernelInternalState(kernelStuctParam, mFilePosIdx), iBuilder->getInt64(mBitBlockWidth));
+    setBlockNo(kBuilder);
     mCurrentScope = mRootScope;
     mCurrentFrameIndex = 0;
     mCarryInfo = mCarryInfoVector[0];
     mCarryOutPack[summaryPack()] = Constant::getNullValue(mCarryPackType);
 }
 
-void CarryManager::set_BlockNo(KernelBuilder * kBuilder){
-    Value * kernelStuctParam = kBuilder->getKernelStructParam();
-    mBlockNo = iBuilder->CreateUDiv(kBuilder->getKernelInternalState(kernelStuctParam, mFilePosIdx), iBuilder->getInt64(mBitBlockWidth));
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief setBlockNo
+ ** ------------------------------------------------------------------------------------------------------------- */
+void CarryManager::setBlockNo(KernelBuilder * kBuilder) {
+    mBlockNo = iBuilder->CreateUDiv(iBuilder->CreateBlockAlignedLoad(kBuilder->getInternalState(mFilePosIdx)), iBuilder->getInt64(mBitBlockWidth));
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

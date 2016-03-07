@@ -42,6 +42,13 @@ public:
     Constant * simd_himask(unsigned fw);
     Constant * simd_lomask(unsigned fw);
         
+    LoadInst * CreateBlockAlignedLoad(Value * const ptr);
+    LoadInst * CreateBlockAlignedLoad(Value * const ptr, Value * const index);
+    LoadInst * CreateBlockAlignedLoad(Value * const ptr, std::initializer_list<Value *> indicies);
+    void CreateBlockAlignedStore(Value * const value, Value * const ptr);
+    void CreateBlockAlignedStore(Value * const value, Value * const ptr, Value * const index);
+    void CreateBlockAlignedStore(Value * const value, Value * const ptr, std::initializer_list<Value *> indicies);
+
     virtual Value * simd_add(unsigned fw, Value * a, Value * b);
     virtual Value * simd_sub(unsigned fw, Value * a, Value * b);
     virtual Value * simd_mult(unsigned fw, Value * a, Value * b);
@@ -96,6 +103,30 @@ protected:
     
     VectorType * fwVectorType(unsigned fw);
 };
+
+inline LoadInst * IDISA_Builder::CreateBlockAlignedLoad(Value * const ptr) {
+    return CreateAlignedLoad(ptr, mBitBlockWidth / 8);
+}
+
+inline LoadInst * IDISA_Builder::CreateBlockAlignedLoad(Value * const ptr, Value * const index) {
+    return CreateBlockAlignedLoad(CreateGEP(ptr, index));
+}
+
+inline LoadInst * IDISA_Builder::CreateBlockAlignedLoad(Value * const ptr, std::initializer_list<Value *> indicies) {
+    return CreateBlockAlignedLoad(CreateGEP(ptr, indicies));
+}
+
+inline void IDISA_Builder::CreateBlockAlignedStore(Value * const value, Value * const ptr) {
+    CreateAlignedStore(value, ptr, mBitBlockWidth / 8);
+}
+
+inline void IDISA_Builder::CreateBlockAlignedStore(Value * const value, Value * const ptr, Value * const index) {
+    CreateBlockAlignedStore(value, CreateGEP(ptr, index));
+}
+
+inline void IDISA_Builder::CreateBlockAlignedStore(Value * const value, Value * const ptr, std::initializer_list<Value *> indicies) {
+    CreateBlockAlignedStore(value, CreateGEP(ptr, indicies));
+}
 
 }
 #endif // IDISA_BUILDER_H

@@ -24,7 +24,7 @@ class MultiplexingPass {
 
     using CharacterizationMap = llvm::DenseMap<const PabloAST *, BDD>;
 
-    using ConstraintGraph = boost::adjacency_matrix<boost::directedS>;
+    using ConstraintGraph = boost::adjacency_matrix<boost::directedS, boost::no_property, bool>;
     using ConstraintVertex = ConstraintGraph::vertex_descriptor;
     using Constraints = std::vector<ConstraintVertex>;
 
@@ -41,7 +41,7 @@ class MultiplexingPass {
     using CliqueSets = boost::container::flat_set<std::vector<CliqueGraph::vertex_descriptor>>;
 
     using AdvanceVector = std::vector<Advance *>;
-    using AdvanceDepth = std::vector<int>;
+    using AdvanceRank = std::vector<int>;
     using AdvanceVariable = std::vector<BDD>;
 
 public:
@@ -77,6 +77,9 @@ protected:
     void selectMultiplexSetsGreedy();
     void selectMultiplexSetsWorkingSet();
 
+    void removePotentialCycles(const CandidateGraph::vertex_descriptor u);
+    bool dependent(const ConstraintVertex i, const ConstraintVertex j) const;
+
     void eliminateSubsetConstraints();
     void doTransitiveReductionOfSubsetGraph();
 
@@ -108,11 +111,11 @@ private:
     CharacterizationMap         mCharacterization;
     ConstraintGraph             mConstraintGraph;   
     AdvanceVector               mAdvance;
-    AdvanceDepth                mAdvanceRank;
+    AdvanceRank                 mAdvanceRank;
     AdvanceVariable             mAdvanceNegatedVariable;
     SubsetGraph                 mSubsetGraph;
     CliqueGraph                 mUsageGraph;
-    CandidateGraph           mCandidateGraph;
+    CandidateGraph              mCandidateGraph;
 };
 
 }

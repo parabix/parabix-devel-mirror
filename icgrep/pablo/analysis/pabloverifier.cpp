@@ -217,7 +217,7 @@ static void throwReflexiveIfConditionError(const PabloAST * const ifNode) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief verifyProgramStructure
  ** ------------------------------------------------------------------------------------------------------------- */
-void verifyProgramStructure(const PabloBlock * block) {
+void verifyProgramStructure(const PabloBlock * block, unsigned & nestingDepth) {
     const Statement * prev = nullptr;
     for (const Statement * stmt : *block) {
         if (LLVM_UNLIKELY(stmt->getPrevNode() != prev)) {
@@ -278,13 +278,21 @@ void verifyProgramStructure(const PabloBlock * block) {
                     }
                 }
             }
-            verifyProgramStructure(nested);
+            ++nestingDepth;
+            verifyProgramStructure(nested, nestingDepth);
+            --nestingDepth;
         }
-    }
+    }    
 }
 
 inline void verifyProgramStructure(const PabloFunction & function) {
-    verifyProgramStructure(function.getEntryBlock());
+    unsigned nestingDepth = 0;
+    verifyProgramStructure(function.getEntryBlock(), nestingDepth);
+    if (LLVM_UNLIKELY(nestingDepth != 0)) {
+        // This error isn't actually possible to occur with the current AST structure but that could change
+        // in the future. Leaving this test in for a reminder to check for it.
+        throw std::runtime_error("PabloVerifier: unbalanced If or While nesting depth.");
+    }
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

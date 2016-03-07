@@ -4,8 +4,8 @@
  *  icgrep is a trademark of International Characters.
  */
 
-#ifndef PE_ADVANCE_H
-#define PE_ADVANCE_H
+#ifndef PE_LOOKAHEAD_H
+#define PE_LOOKAHEAD_H
 
 #include <pablo/pabloAST.h>
 #include <pablo/symbol_generator.h>
@@ -13,16 +13,16 @@
 
 namespace pablo {
 
-class Advance : public Statement {
+class Lookahead : public Statement {
     friend class PabloBlock;
 public:
     static inline bool classof(const PabloAST * e) {
-        return e->getClassTypeId() == ClassTypeId::Advance;
+        return e->getClassTypeId() == ClassTypeId::Lookahead;
     }
     static inline bool classof(const void *) {
         return false;
     }
-    virtual ~Advance() {
+    virtual ~Lookahead() {
     }
     inline PabloAST * getExpr() const {
         return getOperand(0);
@@ -31,31 +31,31 @@ public:
         return cast<Integer>(getOperand(1))->value();
     }
     inline void setLocalIndex(const unsigned idx) {
-        localAdvanceIndex = idx;
+        localLookaheadIndex = idx;
     }
     inline unsigned getLocalIndex() const {
-        return localAdvanceIndex;
+        return localLookaheadIndex;
     }
 protected:
-    Advance(PabloAST * expr, PabloAST * shiftAmount, String * name)
-    : Statement(ClassTypeId::Advance, {expr, shiftAmount}, name)
+    Lookahead(PabloAST * expr, PabloAST * shiftAmount, String * name)
+    : Statement(ClassTypeId::Lookahead, {expr, shiftAmount}, name)
     {
         assert(isa<Integer>(shiftAmount));
     }
 private:
-    unsigned localAdvanceIndex;
+    unsigned localLookaheadIndex;
 };
 
-class Mod64Advance : public Statement {
+class Mod64Lookahead : public Statement {
     friend class PabloBlock;
 public:
     static inline bool classof(const PabloAST * e) {
-        return e->getClassTypeId() == ClassTypeId::Mod64Advance;
+        return e->getClassTypeId() == ClassTypeId::Mod64Lookahead;
     }
     static inline bool classof(const void *) {
         return false;
     }
-    virtual ~Mod64Advance() {
+    virtual ~Mod64Lookahead() {
     }
     inline PabloAST * getExpr() const {
         return getOperand(0);
@@ -64,8 +64,8 @@ public:
         return cast<Integer>(getOperand(1))->value();
     }
 protected:
-    Mod64Advance(PabloAST * expr, PabloAST * shiftAmount, String * name)
-    : Statement(ClassTypeId::Mod64Advance, {expr, shiftAmount}, name)
+    Mod64Lookahead(PabloAST * expr, PabloAST * shiftAmount, String * name)
+    : Statement(ClassTypeId::Mod64Lookahead, {expr, shiftAmount}, name)
     {
         assert(isa<Integer>(shiftAmount));
     }
@@ -73,7 +73,7 @@ protected:
 
 }
 
-#endif // PE_ADVANCE_H
+#endif // PE_LOOKAHEAD_H
 
 
 

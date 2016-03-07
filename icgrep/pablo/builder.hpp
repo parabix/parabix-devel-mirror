@@ -86,6 +86,24 @@ public:
 
     PabloAST * createAdvance(PabloAST * expr, PabloAST * shiftAmount, const std::string prefix);
 
+    inline PabloAST * createLookahead(PabloAST * expr, const Integer::Type shiftAmount) {
+        if (shiftAmount == 0) {
+            return expr;
+        }
+        return createLookahead(expr, mPb->getInteger(shiftAmount));
+    }
+
+    PabloAST * createLookahead(PabloAST * expr, PabloAST * shiftAmount);
+
+    inline PabloAST * createLookahead(PabloAST * expr, const Integer::Type shiftAmount, const std::string prefix) {
+        if (shiftAmount == 0) {
+            return expr;
+        }
+        return createLookahead(expr, mPb->getInteger(shiftAmount), prefix);
+    }
+
+    PabloAST * createLookahead(PabloAST * expr, PabloAST * shiftAmount, const std::string prefix);
+
     inline Next * createNext(Assign * assign, PabloAST * expr) {
         return mPb->createNext(assign, expr);
     }
@@ -133,6 +151,8 @@ public:
         return createMod64Advance(expr, mPb->getInteger(shiftAmount));
     }
 
+    PabloAST * createMod64Advance(PabloAST * expr, PabloAST * shiftAmount, const std::string prefix);
+
     inline PabloAST * createMod64Advance(PabloAST * expr, const Integer::Type shiftAmount, const std::string prefix) {
         if (shiftAmount == 0) {
             return expr;
@@ -140,7 +160,23 @@ public:
         return createMod64Advance(expr, mPb->getInteger(shiftAmount), prefix);
     }
 
-    PabloAST * createMod64Advance(PabloAST * expr, PabloAST * shiftAmount, const std::string prefix);
+    PabloAST * createMod64Lookahead(PabloAST * expr, PabloAST * shiftAmount);
+
+    inline PabloAST * createMod64Lookahead(PabloAST * expr, const Integer::Type shiftAmount) {
+        if (shiftAmount == 0) {
+            return expr;
+        }
+        return createMod64Lookahead(expr, mPb->getInteger(shiftAmount));
+    }
+
+    PabloAST * createMod64Lookahead(PabloAST * expr, PabloAST * shiftAmount, const std::string prefix);
+
+    inline PabloAST * createMod64Lookahead(PabloAST * expr, const Integer::Type shiftAmount, const std::string prefix) {
+        if (shiftAmount == 0) {
+            return expr;
+        }
+        return createMod64Lookahead(expr, mPb->getInteger(shiftAmount), prefix);
+    }
 
     PabloAST * createMod64MatchStar(PabloAST * marker, PabloAST * charclass);
 

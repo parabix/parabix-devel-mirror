@@ -524,16 +524,30 @@ void Simplifier::redundancyElimination(PabloBlock * const block, ExpressionTable
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
+ * @brief unused
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline static bool unused(const Statement * const stmt) {
+    if (LLVM_UNLIKELY(stmt->getNumUses() == 0)) {
+        // TODO: prototypes ought to state whether they have side effects.
+        if (LLVM_UNLIKELY(isa<Call>(stmt) && cast<Call>(stmt)->getPrototype()->getNumOfResults() == 0)) {
+            return false;
+        }
+        return true;
+    }
+    return false;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
  * @brief deadCodeElimination
  ** ------------------------------------------------------------------------------------------------------------- */
 void Simplifier::deadCodeElimination(PabloBlock * const block) {
     Statement * stmt = block->front();
     while (stmt) {
-        if (isa<If>(stmt)) {
+        if (LLVM_UNLIKELY(isa<If>(stmt))) {
             deadCodeElimination(cast<If>(stmt)->getBody());
-        } else if (isa<While>(stmt)) {
+        } else if (LLVM_UNLIKELY(isa<While>(stmt))) {
             deadCodeElimination(cast<While>(stmt)->getBody());
-        } else if (stmt->getNumUses() == 0){
+        } else if (LLVM_UNLIKELY(unused(stmt))){
             stmt = stmt->eraseFromParent(true);
             continue;
         }
@@ -561,7 +575,7 @@ void Simplifier::strengthReduction(PabloBlock * const block) {
                 Advance * op = cast<Advance>(stmt->getOperand(0));
                 if (LLVM_UNLIKELY(op->getNumUses() == 1)) {
                     adv->setOperand(0, op->getOperand(0));
-                    adv->setOperand(1, block->getInteger(adv->getAdvanceAmount() + op->getAdvanceAmount()));
+                    adv->setOperand(1, block->getInteger(adv->getAmount() + op->getAmount()));
                     op->eraseFromParent(false);
                 }
             }
@@ -572,7 +586,7 @@ void Simplifier::strengthReduction(PabloBlock * const block) {
                 Advance * op = cast<Advance>(stmt->getOperand(0));
                 if (LLVM_UNLIKELY(op->getNumUses() == 1)) {
                     block->setInsertPoint(scanThru->getPrevNode());
-                    PabloAST * expr = block->createAdvance(op->getOperand(0), op->getAdvanceAmount() - 1);
+                    PabloAST * expr = block->createAdvance(op->getOperand(0), op->getAmount() - 1);
                     scanThru->setOperand(0, expr);
                     scanThru->setOperand(1, block->createOr(scanThru->getOperand(1), expr));
                     op->eraseFromParent(false);

@@ -19,7 +19,7 @@ namespace llvm { class raw_ostream; }
 class GrepEngine {
 public:
 
-    GrepEngine() {};
+    GrepEngine() {}
   
     void grepCodeGen(std::string moduleName, re::RE * re_ast, bool isNameExpression = false);
     

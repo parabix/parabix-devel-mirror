@@ -40,9 +40,11 @@ void PabloPrinter::print(const Statement * stmt, llvm::raw_ostream & out, const 
         if (expandNested) {
             out << ":\n";
             print(ifNode->getBody(), out, true, indent + BlockIndenting);
-            out.indent(indent);
-            out << "Else:\n";
-            print_vars(ifNode->getDefined(), out, indent + BlockIndenting);
+            if (ifNode->getDefined().size() > 0) {
+                out.indent(indent);
+                out << "Else:\n";
+                print_vars(ifNode->getDefined(), out, indent + BlockIndenting);
+            }
         }
     } else if (const While * whileNode = dyn_cast<const While>(stmt)) {
         out << "While ";
@@ -52,7 +54,14 @@ void PabloPrinter::print(const Statement * stmt, llvm::raw_ostream & out, const 
             print(whileNode->getBody(), out, true, indent + BlockIndenting);
         }
     } else if (const Call * call = dyn_cast<const Call>(stmt)) {
-        out << " = " << call->getCallee() << "()";
+        if (call->getPrototype()->getNumOfResults() > 0) {
+            out << " = ";
+        }
+        out << call->getCallee() << "(";
+        for (unsigned i = 0; i != call->getNumOperands(); ++i) {
+            print(call->getOperand(i), out);
+        }
+        out << ")";
     } else if (const And * andNode = dyn_cast<const And>(stmt)) {
         out << andNode->getName() << " = (";
         for (unsigned i = 0; i != andNode->getNumOperands(); ++i) {
@@ -89,7 +98,11 @@ void PabloPrinter::print(const Statement * stmt, llvm::raw_ostream & out, const 
     } else if (const Advance * adv = dyn_cast<const Advance>(stmt)) {
         out << adv->getName() << " = pablo.Advance(";
         print(adv->getExpr(), out);
-        out << ", " << std::to_string(adv->getAdvanceAmount()) << ")";
+        out << ", " << std::to_string(adv->getAmount()) << ")";
+    } else if (const Lookahead * adv = dyn_cast<const Lookahead>(stmt)) {
+        out << adv->getName() << " = pablo.Lookahead(";
+        print(adv->getExpr(), out);
+        out << ", " << std::to_string(adv->getAmount()) << ")";
     } else if (const MatchStar * mstar = dyn_cast<const MatchStar>(stmt)) {
         out << mstar->getName() << " = pablo.MatchStar(";
         print(mstar->getMarker(), out);
@@ -105,7 +118,11 @@ void PabloPrinter::print(const Statement * stmt, llvm::raw_ostream & out, const 
     } else if (const Mod64Advance * adv = dyn_cast<const Mod64Advance>(stmt)) {
         out << adv->getName() << " = pablo.Mod64Advance(";
         print(adv->getExpr(), out);
-        out << ", " << std::to_string(adv->getAdvanceAmount()) << ")";
+        out << ", " << std::to_string(adv->getAmount()) << ")";
+    } else if (const Mod64Lookahead * adv = dyn_cast<const Mod64Lookahead>(stmt)) {
+        out << adv->getName() << " = pablo.Mod64Lookahead(";
+        print(adv->getExpr(), out);
+        out << ", " << std::to_string(adv->getAmount()) << ")";
     } else if (const Mod64MatchStar * mstar = dyn_cast<const Mod64MatchStar>(stmt)) {
         out << mstar->getName() << " = pablo.Mod64MatchStar(";
         print(mstar->getMarker(), out);

@@ -14,9 +14,9 @@ namespace pablo {
 void CarryData::enumerateLocal() {
     for (Statement * stmt : *theScope) {
         if (Advance * adv = dyn_cast<Advance>(stmt)) {
-            unsigned shift_amount = adv->getAdvanceAmount();
+            unsigned shift_amount = adv->getAmount();
             if (shift_amount == 1) {
-                adv->setLocalAdvanceIndex(unitAdvance.entries);
+                adv->setLocalIndex(unitAdvance.entries);
                 unitAdvance.entries++;                
             }
             else if (shift_amount < LongAdvanceBase) {
@@ -28,16 +28,16 @@ void CarryData::enumerateLocal() {
                         // Start a new pack.
                         shortAdvance.allocatedBits = alignCeiling(shortAdvance.allocatedBits, mPackSize);
                     }
-                    adv->setLocalAdvanceIndex(shortAdvance.allocatedBits);
+                    adv->setLocalIndex(shortAdvance.allocatedBits);
                 }
                 else {
-                    adv->setLocalAdvanceIndex(shortAdvance.entries);
+                    adv->setLocalIndex(shortAdvance.entries);
                 }
                 shortAdvance.entries++;
                 shortAdvance.allocatedBits += shift_amount;
             }
             else {
-                adv->setLocalAdvanceIndex(longAdvance.allocatedBitBlocks);
+                adv->setLocalIndex(longAdvance.allocatedBitBlocks);
                 longAdvance.entries++;
                 longAdvance.allocatedBitBlocks += longAdvanceBufferSize(shift_amount);
             }

@@ -43,7 +43,8 @@ void PabloBlock::insert(Statement * const statement) {
 
 /// UNARY CREATE FUNCTIONS
 
-Assign * PabloBlock::createAssign(const std::string && prefix, PabloAST * expr)  {
+Assign * PabloBlock::createAssign(const std::string && prefix, PabloAST * const expr)  {
+    assert ("Assign expression cannot be null!" && expr);
     return insertAtInsertionPoint(new Assign(expr, makeName(prefix, false)));
 }
 
@@ -71,8 +72,36 @@ PabloAST * PabloBlock::createAdvance(PabloAST * expr, const Integer::Type shiftA
 PabloAST * PabloBlock::createAdvance(PabloAST * expr, const Integer::Type shiftAmount, const std::string prefix) {
     if (isa<Zeroes>(expr) || shiftAmount == 0) {
         return renameNonNamedNode(expr, std::move(prefix));
-    }    
+    }
     return insertAtInsertionPoint(new Advance(expr, getInteger(shiftAmount), makeName(prefix, false)));
+}
+
+PabloAST * PabloBlock::createLookahead(PabloAST * expr, PabloAST * shiftAmount) {
+    if (isa<Zeroes>(expr) || cast<Integer>(shiftAmount)->value() == 0) {
+        return expr;
+    }
+    return insertAtInsertionPoint(new Lookahead(expr, shiftAmount, makeName("lookahead")));
+}
+
+PabloAST * PabloBlock::createLookahead(PabloAST * expr, PabloAST * shiftAmount, const std::string prefix) {
+    if (isa<Zeroes>(expr) || cast<Integer>(shiftAmount)->value() == 0) {
+        return expr;
+    }
+    return insertAtInsertionPoint(new Lookahead(expr, shiftAmount, makeName(prefix, false)));
+}
+
+PabloAST * PabloBlock::createLookahead(PabloAST * expr, const Integer::Type shiftAmount) {
+    if (isa<Zeroes>(expr) || shiftAmount == 0) {
+        return expr;
+    }
+    return insertAtInsertionPoint(new Lookahead(expr, getInteger(shiftAmount), makeName("lookahead")));
+}
+
+PabloAST * PabloBlock::createLookahead(PabloAST * expr, const Integer::Type shiftAmount, const std::string prefix) {
+    if (isa<Zeroes>(expr) || shiftAmount == 0) {
+        return renameNonNamedNode(expr, std::move(prefix));
+    }
+    return insertAtInsertionPoint(new Lookahead(expr, getInteger(shiftAmount), makeName(prefix, false)));
 }
 
 Call * PabloBlock::createCall(PabloAST * prototype, const std::vector<PabloAST *> &) {
@@ -140,6 +169,34 @@ PabloAST * PabloBlock::createMod64Advance(PabloAST * expr, const Integer::Type s
         return renameNonNamedNode(expr, std::move(prefix));
     }    
     return insertAtInsertionPoint(new Mod64Advance(expr, getInteger(shiftAmount), makeName(prefix, false)));
+}
+
+PabloAST * PabloBlock::createMod64Lookahead(PabloAST * expr, PabloAST * shiftAmount) {
+    if (isa<Zeroes>(expr) || cast<Integer>(shiftAmount)->value() == 0) {
+        return expr;
+    }
+    return insertAtInsertionPoint(new Mod64Lookahead(expr, shiftAmount, makeName("advance")));
+}
+
+PabloAST * PabloBlock::createMod64Lookahead(PabloAST * expr, PabloAST * shiftAmount, const std::string prefix) {
+    if (isa<Zeroes>(expr) || cast<Integer>(shiftAmount)->value() == 0) {
+        return expr;
+    }
+    return insertAtInsertionPoint(new Mod64Lookahead(expr, shiftAmount, makeName(prefix, false)));
+}
+
+PabloAST * PabloBlock::createMod64Lookahead(PabloAST * expr, const Integer::Type shiftAmount) {
+    if (isa<Zeroes>(expr) || shiftAmount == 0) {
+        return expr;
+    }
+    return insertAtInsertionPoint(new Mod64Lookahead(expr, getInteger(shiftAmount), makeName("advance")));
+}
+
+PabloAST * PabloBlock::createMod64Lookahead(PabloAST * expr, const Integer::Type shiftAmount, const std::string prefix) {
+    if (isa<Zeroes>(expr) || shiftAmount == 0) {
+        return renameNonNamedNode(expr, std::move(prefix));
+    }
+    return insertAtInsertionPoint(new Mod64Lookahead(expr, getInteger(shiftAmount), makeName(prefix, false)));
 }
 
 PabloAST * PabloBlock::createCount(PabloAST * expr) {
