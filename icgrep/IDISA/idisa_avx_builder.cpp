@@ -69,8 +69,7 @@ Value * IDISA_AVX2_Builder::hsimd_packh(unsigned fw, Value * a, Value * b) {
         }
         Value * shufa = CreateShuffleVector(aVec, aVec, ConstantVector::get(Idxs));
         Value * shufb = CreateShuffleVector(bVec, bVec, ConstantVector::get(Idxs));
-        Value * pk = hsimd_packh(128, shufa, shufb);
-        return pk;
+        return hsimd_packh(mBitBlockWidth/2, shufa, shufb);
     }
     else {
         std::vector<Constant*> Idxs;
@@ -101,7 +100,7 @@ Value * IDISA_AVX2_Builder::hsimd_packl(unsigned fw, Value * a, Value * b) {
         }
         Value * shufa = CreateShuffleVector(aVec, aVec, ConstantVector::get(Idxs));
         Value * shufb = CreateShuffleVector(bVec, bVec, ConstantVector::get(Idxs));
-        return hsimd_packl(128, shufa, shufb);
+        return hsimd_packl(mBitBlockWidth/2, shufa, shufb);
     }
     else {
         std::vector<Constant*> Idxs;
@@ -111,4 +110,91 @@ Value * IDISA_AVX2_Builder::hsimd_packl(unsigned fw, Value * a, Value * b) {
         return CreateShuffleVector(aVec, bVec, ConstantVector::get(Idxs));
     }
 }
+    
+Value * IDISA_AVX2_Builder::esimd_mergeh(unsigned fw, Value * a, Value * b) {
+    if ((fw == 128) && (mBitBlockWidth == 256)) {
+        Value * vperm2i128func = Intrinsic::getDeclaration(mMod, Intrinsic::x86_avx2_vperm2i128);
+        return CreateCall3(vperm2i128func, fwCast(64, a), fwCast(64, b), getInt8(0x31));
+    }
+    unsigned field_count = mBitBlockWidth/fw;
+    Value * aVec = fwCast(fw, a);
+    Value * bVec = fwCast(fw, b);
+    std::vector<Constant*> Idxs;
+    for (unsigned i = field_count/2; i < field_count; i++) {
+        Idxs.push_back(getInt32(i));    // selects elements from first reg.
+        Idxs.push_back(getInt32(i + field_count)); // selects elements from second reg.
+    }
+    return CreateShuffleVector(aVec, bVec, ConstantVector::get(Idxs));
+}
+
+Value * IDISA_AVX2_Builder::esimd_mergel(unsigned fw, Value * a, Value * b) {
+    if ((fw == 128) && (mBitBlockWidth == 256)) {
+        Value * vperm2i128func = Intrinsic::getDeclaration(mMod, Intrinsic::x86_avx2_vperm2i128);
+        return CreateCall3(vperm2i128func, fwCast(64, a), fwCast(64, b), getInt8(0x20));
+    }
+    unsigned field_count = mBitBlockWidth/fw;
+    Value * aVec = fwCast(fw, a);
+    Value * bVec = fwCast(fw, b);
+    std::vector<Constant*> Idxs;
+    for (unsigned i = 0; i < field_count/2; i++) {
+        Idxs.push_back(getInt32(i));    // selects elements from first reg.
+        Idxs.push_back(getInt32(i + field_count)); // selects elements from second reg.
+    }
+    return CreateShuffleVector(aVec, bVec, ConstantVector::get(Idxs));
+}
+
+Value * IDISA_AVX2_Builder::hsimd_packl_in_lanes(unsigned lanes, unsigned fw, Value * a, Value * b) {
+    if ((fw == 16)  && (lanes == 2)) {
+        Value * vpackuswbfunc = Intrinsic::getDeclaration(mMod, Intrinsic::x86_avx2_packuswb);
+        Value * a_low = fwCast(16, simd_and(a, simd_lomask(fw)));
+        Value * b_low = fwCast(16, simd_and(b, simd_lomask(fw)));
+        Value * pack = CreateCall2(vpackuswbfunc, a_low, b_low);
+        return pack;
+    }
+    unsigned fw_out = fw/2;
+    unsigned fields_per_lane = mBitBlockWidth/(fw_out * lanes);
+    unsigned field_offset_for_b = mBitBlockWidth/fw_out;
+    Value * aVec = fwCast(fw_out, a);
+    Value * bVec = fwCast(fw_out, b);
+    std::vector<Constant*> Idxs;
+    for (unsigned lane = 0; lane < lanes; lane++) {
+        unsigned first_field_in_lane = lane * fields_per_lane; // every second field
+        for (unsigned i = 0; i < fields_per_lane/2; i++) {
+            Idxs.push_back(getInt32(first_field_in_lane + 2*i));
+        }
+        for (unsigned i = 0; i < fields_per_lane/2; i++) {
+            Idxs.push_back(getInt32(field_offset_for_b + first_field_in_lane + 2*i));
+        }
+    }
+    Value * pack = CreateShuffleVector(aVec, bVec, ConstantVector::get(Idxs));
+    return pack;
+}
+
+Value * IDISA_AVX2_Builder::hsimd_packh_in_lanes(unsigned lanes, unsigned fw, Value * a, Value * b) {
+    if ((fw == 16)  && (lanes == 2)) {
+        Value * vpackuswbfunc = Intrinsic::getDeclaration(mMod, Intrinsic::x86_avx2_packuswb);
+        Value * a_low = simd_srli(fw, a, fw/2);
+        Value * b_low = simd_srli(fw, b, fw/2);
+        Value * pack = CreateCall2(vpackuswbfunc, a_low, b_low);
+        return pack;
+    }
+    unsigned fw_out = fw/2;
+    unsigned fields_per_lane = mBitBlockWidth/(fw_out * lanes);
+    unsigned field_offset_for_b = mBitBlockWidth/fw_out;
+    Value * aVec = fwCast(fw_out, a);
+    Value * bVec = fwCast(fw_out, b);
+    std::vector<Constant*> Idxs;
+    for (unsigned lane = 0; lane < lanes; lane++) {
+        unsigned first_field_in_lane = lane * fields_per_lane; // every second field
+        for (unsigned i = 0; i < fields_per_lane/2; i++) {
+            Idxs.push_back(getInt32(first_field_in_lane + 2*i));
+        }
+        for (unsigned i = 0; i < fields_per_lane/2; i++) {
+            Idxs.push_back(getInt32(field_offset_for_b + first_field_in_lane + 2*i));
+        }
+    }
+    Value * pack = CreateShuffleVector(aVec, bVec, ConstantVector::get(Idxs));
+    return pack;
+}
+    
 }

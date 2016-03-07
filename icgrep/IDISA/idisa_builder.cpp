@@ -153,8 +153,10 @@ Value * IDISA_Builder::simd_popcount(unsigned fw, Value * a) {
 
 Value * IDISA_Builder::simd_if(unsigned fw, Value * cond, Value * a, Value * b) {
     if (fw == 1) {
+        Value * a1 = bitCast(a);
+        Value * b1 = bitCast(b);
         Value * c = bitCast(cond);
-        return CreateOr(CreateAnd(c, bitCast(a)), CreateAnd(CreateNot(c), bitCast(b)));
+        return CreateOr(CreateAnd(a1, c), CreateAnd(CreateXor(c, b1), b1));
     }
     else {
         Value * aVec = fwCast(fw, a);
@@ -233,6 +235,48 @@ Value * IDISA_Builder::hsimd_packl(unsigned fw, Value * a, Value * b) {
     return CreateShuffleVector(aVec, bVec, ConstantVector::get(Idxs));
 }
 
+    
+Value * IDISA_Builder::hsimd_packh_in_lanes(unsigned lanes, unsigned fw, Value * a, Value * b) {
+    unsigned fw_out = fw/2;
+    unsigned fields_per_lane = mBitBlockWidth/(fw_out * lanes);
+    unsigned field_offset_for_b = mBitBlockWidth/fw_out;
+    Value * aVec = fwCast(fw_out, a);
+    Value * bVec = fwCast(fw_out, b);
+    std::vector<Constant*> Idxs;
+    for (unsigned lane = 0; lane < lanes; lane++) {
+        unsigned first_field_in_lane = lane * fields_per_lane; // every second field
+        for (unsigned i = 0; i < fields_per_lane/2; i++) {
+            Idxs.push_back(getInt32(first_field_in_lane + 2*i + 1));
+        }
+        for (unsigned i = 0; i < fields_per_lane/2; i++) {
+            Idxs.push_back(getInt32(field_offset_for_b + first_field_in_lane + 2*i + 1));
+        }
+    }
+    Value * pack = CreateShuffleVector(aVec, bVec, ConstantVector::get(Idxs));
+    return pack;
+}
+
+Value * IDISA_Builder::hsimd_packl_in_lanes(unsigned lanes, unsigned fw, Value * a, Value * b) {
+    unsigned fw_out = fw/2;
+    unsigned fields_per_lane = mBitBlockWidth/(fw_out * lanes);
+    unsigned field_offset_for_b = mBitBlockWidth/fw_out;
+    Value * aVec = fwCast(fw_out, a);
+    Value * bVec = fwCast(fw_out, b);
+    std::vector<Constant*> Idxs;
+    for (unsigned lane = 0; lane < lanes; lane++) {
+        unsigned first_field_in_lane = lane * fields_per_lane; // every second field
+        for (unsigned i = 0; i < fields_per_lane/2; i++) {
+            Idxs.push_back(getInt32(first_field_in_lane + 2*i));
+        }
+        for (unsigned i = 0; i < fields_per_lane/2; i++) {
+            Idxs.push_back(getInt32(field_offset_for_b + first_field_in_lane + 2*i));
+        }
+    }
+    Value * pack = CreateShuffleVector(aVec, bVec, ConstantVector::get(Idxs));
+    return pack;
+}
+
+    
 Value * IDISA_Builder::hsimd_signmask(unsigned fw, Value * a) {
     Value * mask = CreateICmpSLT(fwCast(fw, a), ConstantAggregateZero::get(fwVectorType(fw)));
     return CreateZExt(CreateBitCast(mask, getIntNTy(mBitBlockWidth/fw)), getInt32Ty());

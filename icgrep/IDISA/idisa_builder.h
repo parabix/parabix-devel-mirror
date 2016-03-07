@@ -69,6 +69,9 @@ public:
     
     virtual Value * hsimd_packh(unsigned fw, Value * a, Value * b);
     virtual Value * hsimd_packl(unsigned fw, Value * a, Value * b);
+    virtual Value * hsimd_packh_in_lanes(unsigned lanes, unsigned fw, Value * a, Value * b);
+    virtual Value * hsimd_packl_in_lanes(unsigned lanes, unsigned fw, Value * a, Value * b);
+
     virtual Value * hsimd_signmask(unsigned fw, Value * a);
 
     

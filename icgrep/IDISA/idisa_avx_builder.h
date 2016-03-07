@@ -29,6 +29,11 @@ public:
     }
     Value * hsimd_packh(unsigned fw, Value * a, Value * b) override;
     Value * hsimd_packl(unsigned fw, Value * a, Value * b) override;
+    Value * esimd_mergeh(unsigned fw, Value * a, Value * b) override;
+    Value * esimd_mergel(unsigned fw, Value * a, Value * b) override;
+    Value * hsimd_packh_in_lanes(unsigned lanes, unsigned fw, Value * a, Value * b) override;
+    Value * hsimd_packl_in_lanes(unsigned lanes, unsigned fw, Value * a, Value * b) override;
+
     ~IDISA_AVX2_Builder() {};
 };
     
