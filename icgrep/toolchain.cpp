@@ -459,9 +459,9 @@ ExecutionEngine * JIT_to_ExecutionEngine (Module * m) {
     }
 
     if (EnableObjectCache) {
-        // TODO a better default cache diretory (HOME expansion?)
         if (ObjectCacheDir.empty())
-            cache = new ICGrepObjectCache(".icgrep-cache/");
+            // Default is $HOME/.cache/icgrep
+            cache = new ICGrepObjectCache();
         else
             cache = new ICGrepObjectCache(ObjectCacheDir);
         engine->setObjectCache(cache);

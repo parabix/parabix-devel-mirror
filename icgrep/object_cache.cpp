@@ -17,41 +17,38 @@ using namespace llvm;
 // This object cache implementation writes cached objects to disk to the
 // directory specified by CacheDir, using a filename provided in the module
 // descriptor. The cache tries to load a saved object using that path if the
-// file exists. CacheDir defaults to "", in which case objects are cached
-// alongside their originating bitcodes.
+// file exists.
 //
-ICGrepObjectCache::ICGrepObjectCache(const std::string& CacheDir) : CacheDir(CacheDir) {
-    // Add trailing '/' to cache dir if necessary.
-    if (!this->CacheDir.empty() &&
-            this->CacheDir[this->CacheDir.size() - 1] != '/')
-        this->CacheDir += '/';
+ICGrepObjectCache::ICGrepObjectCache(const std::string &dir): CacheDir(dir) {}
+
+ICGrepObjectCache::ICGrepObjectCache() {
+    // $HOME/.cache/icgrep
+    // TODO use path::user_cache_directory once we have llvm >= 3.7.
+    sys::path::home_directory(CacheDir);
+    sys::path::append(CacheDir, ".cache", "icgrep");
 }
 
 ICGrepObjectCache::~ICGrepObjectCache() {}
 
 void ICGrepObjectCache::notifyObjectCompiled(const Module *M, MemoryBufferRef Obj) {
-    const std::string ModuleID = M->getModuleIdentifier();
-    std::string CacheName;
+    const std::string &ModuleID = M->getModuleIdentifier();
+    Path CacheName(CacheDir);
     if (!getCacheFilename(ModuleID, CacheName))
         return;
-    // TODO use a cleaner, more universal fs API
-    if (!CacheDir.empty()) { // Create user-defined cache dir.
-        SmallString<128> dir(CacheName);
-        sys::path::remove_filename(dir);
-        sys::fs::create_directories(Twine(dir));
-    }
+    if (!CacheDir.empty())      // Re-creating an existing directory is fine.
+        sys::fs::create_directories(Twine(CacheDir));
     std::error_code EC;
     raw_fd_ostream outfile(CacheName, EC, sys::fs::F_None);
     outfile.write(Obj.getBufferStart(), Obj.getBufferSize());
     outfile.close();
 #ifdef OBJECT_CACHE_DEBUG
-    std::cerr << "Cache created: " << CacheName << std::endl;
+    std::cerr << "Cache created: " << CacheName.c_str() << std::endl;
 #endif
 }
 
 std::unique_ptr<MemoryBuffer> ICGrepObjectCache::getObject(const Module* M) {
-    const std::string ModuleID = M->getModuleIdentifier();
-    std::string CacheName;
+    const std::string &ModuleID = M->getModuleIdentifier();
+    Path CacheName(CacheDir);
     if (!getCacheFilename(ModuleID, CacheName))
         return nullptr;
     // Load the object from the cache filename
@@ -70,27 +67,19 @@ std::unique_ptr<MemoryBuffer> ICGrepObjectCache::getObject(const Module* M) {
     return MemoryBuffer::getMemBufferCopy(IRObjectBuffer.get()->getBuffer());
 }
 
-bool ICGrepObjectCache::getCacheFilename(const std::string &ModID, std::string &CacheName) {
+bool ICGrepObjectCache::getCacheFilename(const std::string &ModID, Path &CacheName) {
 #ifdef OBJECT_CACHE_DEBUG
     std::cerr << "ModuleID: " << ModID << std::endl;
 #endif
-    const static std::string Prefix("grepcode:");
+    const std::string Prefix("grepcode:");
     size_t PrefixLength = Prefix.length();
     if (ModID.substr(0, PrefixLength) != Prefix)
         return false;
-/*
-//TODO
-#if defined(_WIN32)
-    // Transform "X:\foo" => "/X\foo" for convenience.
-    if (isalpha(CacheSubdir[0]) && CacheSubdir[1] == ':') {
-        CacheSubdir[1] = CacheSubdir[0];
-        CacheSubdir[0] = '/';
-    }
-#endif
-*/
-    CacheName = CacheDir + ModID.substr(PrefixLength) + ".o";
+
+    CacheName = CacheDir;
+    sys::path::append(CacheName, ModID.substr(PrefixLength) + ".o");
 #ifdef OBJECT_CACHE_DEBUG
-    std::cerr << "CacheName: " << CacheName << std::endl;
+    std::cerr << "CacheName: " << CacheName.c_str() << std::endl;
 #endif
     return true;
 }
