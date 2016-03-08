@@ -45,3 +45,14 @@ cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER:FILEPATH=/usr/bin/clang++ 
 LLVM files are governed by the LLVM Release License in LLVM-LICENSE.txt.
 icgrep is governed by Open Software License 3.0 in OSL-3.0.txt.
 
+NOTES on G++
+
+Currently, icgrep cannot be compiled with g++.
+
+One major issue is caused by LLVM headers (templates). ArrayRef has a
+constructor overload for initializer lists, which is only enabled if the
+compiler supports initializer lists. The detection mechanism, however, only
+works for clang, rendering this overload unavailable in g++. Yet we use this
+overload heavily especially when calling CreateGEP.
+
+This issue is resolved in LLVM 3.7.
