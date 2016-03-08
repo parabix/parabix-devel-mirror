@@ -7,6 +7,7 @@
 #include <string>
 #include <iostream>
 #include <fstream>
+#include <cstdio>
 
 
 #include <llvm/Support/SourceMgr.h>
@@ -22,6 +23,8 @@
 #include <re/re_alt.h>
 
 #include <grep_engine.h>
+
+#include <boost/uuid/sha1.hpp>
 
 static cl::OptionCategory aRegexSourceOptions("Regular Expression Options",
                                        "These options control the regular expression source.");
@@ -49,6 +52,7 @@ static cl::opt<std::string> IRFileName("precompiled", cl::desc("Use precompiled 
 
 
 static unsigned firstInputFile = 1;  // Normal case when first positional arg is a regex.
+static std::string allREs;
 
 re::RE * get_icgrep_RE() {
   
@@ -84,12 +88,25 @@ re::RE * get_icgrep_RE() {
     for (unsigned i = 0; i < regexVector.size(); i++) {
         re_ast = re::RE_Parser::parse(regexVector[i], globalFlags);
         REs.push_back(re_ast);
+        allREs += regexVector[i] + "\n";
     }
     if (REs.size() > 1) {
         re_ast = re::makeAlt(REs.begin(), REs.end());
     }
     
     return re_ast;
+}
+
+std::string sha1sum(const std::string & str) {
+    char buffer[41];    // 40 hex-digits and the terminating null
+    unsigned int digest[5];     // 160 bits in total
+
+    boost::uuids::detail::sha1 sha1;
+    sha1.process_bytes(str.c_str(), str.size());
+    sha1.get_digest(digest);
+    snprintf(buffer, sizeof(buffer), "%.8x%.8x%.8x%.8x%.8x",
+             digest[0], digest[1], digest[2], digest[3], digest[4]);
+    return std::string(buffer);
 }
 
 
@@ -123,9 +140,10 @@ int main(int argc, char *argv[]) {
     cl::ParseCommandLineOptions(argc, argv);
     
     re::RE * re_ast = get_icgrep_RE();
+    std::string module_name = "grepcode:" + sha1sum(allREs);
     
     GrepEngine grepEngine;
-    grepEngine.grepCodeGen("grepcode", re_ast);
+    grepEngine.grepCodeGen(module_name, re_ast);
     
     for (unsigned i = firstInputFile; i != inputFiles.size(); ++i) {
         if (grepEngine.openMMap(inputFiles[i])) {

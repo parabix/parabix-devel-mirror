@@ -160,7 +160,7 @@ void GrepEngine::doGrep() {
 
 void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool isNameExpression) {
                             
-    Module * M = new Module("moduleName", getGlobalContext());
+    Module * M = new Module(moduleName, getGlobalContext());
     
     IDISA::IDISA_Builder * idb = GetIDISA_Builder(M);
 
