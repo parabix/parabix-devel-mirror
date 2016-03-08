@@ -49,6 +49,7 @@
 #include <pablo/analysis/pabloverifier.hpp>
 #include <re/printer_re.h>
 #include <pablo/printer_pablos.h>
+#include <object_cache.h>
 // Dynamic processor detection
 #define ISPC_LLVM_VERSION ISPC_LLVM_3_6
 #include "ispc.cpp"
@@ -131,6 +132,12 @@ static cl::opt<bool> DisableAVX2("disable-AVX2", cl::init(false), cl::desc("disa
 
 static cl::opt<int> BlockSize("BlockSize", cl::init(0), cl::desc("specify a block size (defaults to widest SIMD register width in bits)."), cl::cat(dCodeGenOptions));
 
+
+static cl::OptionCategory cObjectCache("Object Caching", "These options control back-end object caching behaviours.");
+
+static cl::opt<bool> EnableObjectCache("enable-object-cache", cl::init(false), cl::desc("Enable object caching"), cl::cat(cObjectCache));
+
+static cl::opt<std::string> ObjectCacheDir("object-cache-dir", cl::init(""), cl::desc("Path to the object cache diretory"), cl::cat(cObjectCache));
 
 re::RE * regular_expression_passes(const Encoding encoding, re::RE * re_ast)  {
     if (PrintAllREs || PrintParsedREs) {
@@ -446,10 +453,19 @@ ExecutionEngine * JIT_to_ExecutionEngine (Module * m) {
 
     //builder.setOptLevel(mMaxWhileDepth ? CodeGenOpt::Level::Less : CodeGenOpt::Level::None);
     ExecutionEngine * engine = builder.create();
+    ICGrepObjectCache * cache = nullptr;
     if (engine == nullptr) {
         throw std::runtime_error("Could not create ExecutionEngine: " + errMessage);
     }
 
+    if (EnableObjectCache) {
+        // TODO a better default cache diretory (HOME expansion?)
+        if (ObjectCacheDir.empty())
+            cache = new ICGrepObjectCache(".icgrep-cache/");
+        else
+            cache = new ICGrepObjectCache(ObjectCacheDir);
+        engine->setObjectCache(cache);
+    }
     return engine;
 }
 
