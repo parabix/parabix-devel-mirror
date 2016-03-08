@@ -53,6 +53,7 @@ static cl::opt<std::string> IRFileName("precompiled", cl::desc("Use precompiled 
 
 static unsigned firstInputFile = 1;  // Normal case when first positional arg is a regex.
 static std::string allREs;
+static re::ModeFlagSet globalFlags = 0;
 
 re::RE * get_icgrep_RE() {
   
@@ -79,7 +80,6 @@ re::RE * get_icgrep_RE() {
         firstInputFile = 0;
     }
     
-    re::ModeFlagSet globalFlags = 0;
     if (CaseInsensitive) globalFlags |= re::CASE_INSENSITIVE_MODE_FLAG;
 
   
@@ -140,7 +140,7 @@ int main(int argc, char *argv[]) {
     cl::ParseCommandLineOptions(argc, argv);
     
     re::RE * re_ast = get_icgrep_RE();
-    std::string module_name = "grepcode:" + sha1sum(allREs);
+    std::string module_name = "grepcode:" + sha1sum(allREs) + ":" + std::to_string(globalFlags);
     
     GrepEngine grepEngine;
     grepEngine.grepCodeGen(module_name, re_ast);
