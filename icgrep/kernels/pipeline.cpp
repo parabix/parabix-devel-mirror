@@ -113,7 +113,7 @@ void PipelineBuilder::ExecuteKernels(){
 
     iBuilder->SetInsertPoint(pipeline_do_block);
 
-    gep = iBuilder->CreateGEP(input_param, {blkNo_phi});
+    gep = iBuilder->CreateGEP(input_param, blkNo_phi);
     Value * update_blkNo = iBuilder->CreateAdd(blkNo_phi, iBuilder->getInt64(1));
     blkNo_phi->addIncoming(update_blkNo, pipeline_do_block);
 
@@ -132,7 +132,7 @@ void PipelineBuilder::ExecuteKernels(){
 
     iBuilder->SetInsertPoint(pipeline_partial_block);
 
-    gep = iBuilder->CreateGEP(input_param, {blkNo_phi});
+    gep = iBuilder->CreateGEP(input_param, blkNo_phi);
     mS2PKernel->generateDoBlockCall(gep);
     iBuilder->CreateBr(pipeline_end_block);
 
