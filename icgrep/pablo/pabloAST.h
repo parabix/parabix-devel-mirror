@@ -240,7 +240,7 @@ protected:
     , mParent(nullptr)
     , mOperands(0)
     , mOperand(reinterpret_cast<PabloAST**>(mAllocator.allocate(reserved * sizeof(PabloAST *)))) {
-        std::memset(mOperand, reserved * sizeof(PabloAST *), 0);
+        std::memset(mOperand, 0, reserved * sizeof(PabloAST *));
     }
     template<typename iterator>
     explicit Statement(const ClassTypeId id, iterator begin, iterator end, const String * const name)
