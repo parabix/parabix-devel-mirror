@@ -25,12 +25,16 @@ pablo::PabloFunction * re2pablo_compiler(const Encoding encoding, re::RE * re_as
 
 void pablo_function_passes(pablo::PabloFunction * function);
 
+Module * grepIRGen(std::string moduleName, re::RE * re_ast, bool isNameExpression = false);
+
 ExecutionEngine * JIT_to_ExecutionEngine (Module * m);
 
 void icgrep_Linking(Module * m, ExecutionEngine * e);
 
-void PrintTotalCount();
 re::CC * getParsedCodePointSet();
 void setParsedCodePointSet();
+
+void initResult(std::vector<std::string> filenames, const int n);
+void PrintResult();
 
 #endif

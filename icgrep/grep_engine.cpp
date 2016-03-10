@@ -51,7 +51,7 @@ using namespace boost::filesystem;
 
 
 
-bool GrepEngine::finalLineIsUnterminated() const {
+bool GrepEngine::finalLineIsUnterminated(char * mFileBuffer, int mFileSize) const {
     if (mFileSize == 0) return false;
     unsigned char end_byte = static_cast<unsigned char>(mFileBuffer[mFileSize-1]);
     // LF through CR are line break characters
@@ -67,9 +67,10 @@ bool GrepEngine::finalLineIsUnterminated() const {
     return (static_cast<unsigned char>(mFileBuffer[mFileSize-3]) != 0xE2) || (penult_byte != 0x80);
 }
 
-bool GrepEngine::openMMap(const std::string & fileName) {
-
-    mFileName = fileName;
+void GrepEngine::doGrep(const std::string & fileName) {
+    std::string mFileName = fileName;
+    int mFileSize;
+    char * mFileBuffer;
 
 #ifdef USE_BOOST_MMAP
     const path file(mFileName);
@@ -92,7 +93,7 @@ bool GrepEngine::openMMap(const std::string & fileName) {
             mFile.open(mFileName, mapped_file::priv, mFileSize, 0);
         } catch (std::ios_base::failure e) {
             std::cerr << "Error: Boost mmap of " << mFileName << ": " << e.what() << std::endl;
-            return false;
+            return;
         }
         mFileBuffer = mFile.data();
     }
@@ -101,16 +102,16 @@ bool GrepEngine::openMMap(const std::string & fileName) {
     const int fdSrc = open(mFileName.c_str(), O_RDONLY);
     if (fdSrc == -1) {
         std::cerr << "Error: cannot open " << mFileName << " for processing. Skipped.\n";
-        return false;
+        return;
     }
     if (fstat(fdSrc, &infile_sb) == -1) {
         std::cerr << "Error: cannot stat " << mFileName << " for processing. Skipped.\n";
         close (fdSrc);
-        return false;
+        return;
     }
     if (S_ISDIR(infile_sb.st_mode)) {
         close (fdSrc);
-        return false;
+        return;
     }
     mFileSize = infile_sb.st_size;
     if (mFileSize == 0) {
@@ -127,40 +128,31 @@ bool GrepEngine::openMMap(const std::string & fileName) {
                 std::cerr << "Error: mmap of " << mFileName << " failed with errno " << errno << ". Skipped.\n";
                 close (fdSrc);
             }
-            return false;
+            return;
         }
     }
     close(fdSrc);
 
 #endif
-    return true;  // success
-}
+    
+    uint64_t finalLineUnterminated = 0;
+    if(finalLineIsUnterminated(mFileBuffer, mFileSize))
+        finalLineUnterminated = 1;
+    
+    mMainFcn(mFileBuffer, mFileSize, mFileName.c_str(), finalLineUnterminated);
 
-void GrepEngine::closeMMap() {
 #ifdef USE_BOOST_MMAP
     mFile.close();
 #else
     munmap((void *)mFileBuffer, mFileSize);
-#endif   
+#endif 
 
 }
 
-void GrepEngine::doGrep() {
-        
-    llvm::raw_os_ostream out(std::cout);
-    
-    uint64_t finalLineUnterminated = 0;
-    if(finalLineIsUnterminated())
-        finalLineUnterminated = 1;
-    
-    mMainFcn(mFileBuffer, mFileSize, mFileName.c_str(), finalLineUnterminated);
-    
-    if (!mIsNameExpression) PrintTotalCount();
-}
 
 void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool isNameExpression) {
                             
-    Module * M = new Module(moduleName, getGlobalContext());
+    Module * M = new Module("moduleName", getGlobalContext());
     
     IDISA::IDISA_Builder * idb = GetIDISA_Builder(M);
 
@@ -189,9 +181,14 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool isNam
 
 re::CC *  GrepEngine::grepCodepoints() {
     setParsedCodePointSet();
-    mFileBuffer = getUnicodeNameDataPtr();
-    mFileSize = getUnicodeNameDataSize();
-    mFileName = "Uname.txt";
-    doGrep();
+    char * mFileBuffer = getUnicodeNameDataPtr();
+    int mFileSize = getUnicodeNameDataSize();
+    std::string mFileName = "Uname.txt";
+
+    uint64_t finalLineUnterminated = 0;
+    if(finalLineIsUnterminated(mFileBuffer, mFileSize))
+        finalLineUnterminated = 1;    
+    mMainFcn(mFileBuffer, mFileSize, mFileName.c_str(), finalLineUnterminated);
+
     return getParsedCodePointSet();
 }

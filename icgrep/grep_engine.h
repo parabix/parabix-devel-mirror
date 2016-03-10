@@ -23,11 +23,7 @@ public:
   
     void grepCodeGen(std::string moduleName, re::RE * re_ast, bool isNameExpression = false);
     
-    bool openMMap(const std::string & fileName);
-    
-    void closeMMap();
-
-    void doGrep();
+    void doGrep(const std::string & fileName);
     
     re::CC *  grepCodepoints();
 
@@ -37,14 +33,11 @@ public:
     
 private:
    
-    bool finalLineIsUnterminated() const;
+    bool finalLineIsUnterminated(char * fileBuffer, int fileSize) const;
 
     main_fcn_T mMainFcn;
     
     bool mIsNameExpression;
-    std::string mFileName;
-    size_t mFileSize;
-    char * mFileBuffer;
     llvm::ExecutionEngine * mEngine;
 };
 

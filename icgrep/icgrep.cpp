@@ -25,6 +25,8 @@
 #include <grep_engine.h>
 
 #include <boost/uuid/sha1.hpp>
+#include <toolchain.h>
+#include <atomic>
 
 static cl::OptionCategory aRegexSourceOptions("Regular Expression Options",
                                        "These options control the regular expression source.");
@@ -48,6 +50,8 @@ static cl::opt<bool> CaseInsensitive("i", cl::desc("Ignore case distinctions in 
 static cl::list<std::string> regexVector("e", cl::desc("Regular expression"), cl::ZeroOrMore, cl::cat(aRegexSourceOptions));
 static cl::opt<std::string> RegexFilename("f", cl::desc("Take regular expressions (one per line) from a file"), cl::value_desc("regex file"), cl::init(""), cl::cat(aRegexSourceOptions));
 static cl::opt<std::string> IRFileName("precompiled", cl::desc("Use precompiled regular expression"), cl::value_desc("LLVM IR file"), cl::init(""), cl::cat(aRegexSourceOptions));
+
+static cl::opt<int> Threads("t", cl::desc("Total number of threads."), cl::init(1));
 
 
 
@@ -109,6 +113,18 @@ std::string sha1sum(const std::string & str) {
     return std::string(buffer);
 }
 
+GrepEngine grepEngine;
+std::atomic<int> fileCount;
+
+void *DoGrep(void *threadid)
+{
+    long tid;
+    tid = (long)threadid;
+    if (tid+1 < inputFiles.size())
+        grepEngine.doGrep(inputFiles[tid+1]);
+
+    pthread_exit(NULL);
+}
 
 int main(int argc, char *argv[]) {
     StringMap<cl::Option*> Map;
@@ -142,15 +158,44 @@ int main(int argc, char *argv[]) {
     re::RE * re_ast = get_icgrep_RE();
     std::string module_name = "grepcode:" + sha1sum(allREs) + ":" + std::to_string(globalFlags);
     
-    GrepEngine grepEngine;
     grepEngine.grepCodeGen(module_name, re_ast);
-    
-    for (unsigned i = firstInputFile; i != inputFiles.size(); ++i) {
-        if (grepEngine.openMMap(inputFiles[i])) {
-            grepEngine.doGrep();
-            grepEngine.closeMMap();
+
+
+    initResult(inputFiles, inputFiles.size());
+
+    if(Threads == 1){
+        for (unsigned i = firstInputFile; i != inputFiles.size(); ++i) {
+            grepEngine.doGrep(inputFiles[i]);
+        }        
+    }
+    else if (Threads > 1) {
+
+        pthread_t threads[100];
+        int rc;
+        long t;
+        void *status;
+
+        for(t=0; t<Threads; t++){
+          rc = pthread_create(&threads[t], NULL, DoGrep, (void *)t);
+          if (rc){
+             printf("ERROR; return code from pthread_create() is %d\n", rc);
+             exit(-1);
+          }
+        }
+
+        for(t=0; t<Threads; t++) {
+            rc = pthread_join(threads[t], &status);
+            if (rc) {
+                printf("ERROR; return code from pthread_join() is %d\n", rc);
+                exit(-1);
+            }
         }
     }
+    else {
+        std::cerr << "Invalid number of threads :" << Threads << std::endl;
+    }
+
+    PrintResult();   
     
     return 0;
 }

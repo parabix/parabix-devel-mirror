@@ -469,21 +469,48 @@ ExecutionEngine * JIT_to_ExecutionEngine (Module * m) {
     return engine;
 }
 
-int total_count = 0;
+
+
+int * total_count;
+std::stringstream * resultStrs;
+std::vector<std::string> inputFiles;
+
+void initResult(std::vector<std::string> filenames, const int n){
+
+    inputFiles = filenames;
+
+    std::stringstream * ss = new std::stringstream[n];
+    resultStrs = ss;
+
+    int * c = new int[n];
+    total_count = c;
+    for (int i=1; i<inputFiles.size(); i++){
+        total_count[i-1] = 0;
+    }
+
+}
 
 extern "C" {
     void wrapped_report_match(uint64_t lineNum, uint64_t line_start, uint64_t line_end, const char * buffer, int filesize, char * filename) {
+        
+        int idx = 0;
+        for (int i=1; i<inputFiles.size(); i++){
+            if (inputFiles[i] == filename){
+                idx = i-1;
+                break;
+            }
+        }
+
         if(CountOnly){
-            total_count++;
+            total_count[idx]++;
             return;
         }
 
-        llvm::raw_os_ostream out(std::cout);
         if (ShowFileNames) {
-            out << filename << ':';
+            resultStrs[idx] << filename << ':';
         }
         if (ShowLineNumbers) {
-            out << lineNum << ":";
+            resultStrs[idx] << lineNum << ":";
         }
 
         if ((buffer[line_start] == 0xA) && (line_start != line_end)) {
@@ -492,9 +519,9 @@ extern "C" {
         }
         if (line_end == filesize) {
             // The match position is at end-of-file.   We have a final unterminated line.
-            out.write(&buffer[line_start], line_end - line_start);
+            resultStrs[idx].write(&buffer[line_start], line_end - line_start);
             if (NormalizeLineBreaks) {
-                out << '\n';  // terminate it
+                resultStrs[idx] << '\n';  // terminate it
             }
             return;
         }
@@ -507,8 +534,8 @@ extern "C" {
                 // Line terminated with PS or LS, on the third byte.  Back up 2.
                 line_end -= 2;
             }
-            out.write(&buffer[line_start], line_end - line_start);
-            out << '\n';
+            resultStrs[idx].write(&buffer[line_start], line_end - line_start);
+            resultStrs[idx] << '\n';
         }
         else{   
             if (end_byte == 0x0D) {
@@ -519,15 +546,22 @@ extern "C" {
                     line_end++;
                 }
             }
-            out.write(&buffer[line_start], line_end - line_start + 1);
+            resultStrs[idx].write(&buffer[line_start], line_end - line_start + 1);
         }
     }
 }
 
-
-void PrintTotalCount(){
+void PrintResult(){
     if(CountOnly){
-        std::cout << total_count << std::endl;
+        for (int i=1; i<inputFiles.size(); i++){
+            std::cout << total_count[i-1] << std::endl;
+        }
+        return;
+    }
+
+    std::string out;
+    for (int i=1; i<inputFiles.size(); i++){
+        std::cout << resultStrs[i-1].str();
     }
 }
 
