@@ -51,7 +51,7 @@ using namespace boost::filesystem;
 
 
 
-bool GrepEngine::finalLineIsUnterminated(char * mFileBuffer, int mFileSize) const {
+bool GrepEngine::finalLineIsUnterminated(char * mFileBuffer, size_t mFileSize) const {
     if (mFileSize == 0) return false;
     unsigned char end_byte = static_cast<unsigned char>(mFileBuffer[mFileSize-1]);
     // LF through CR are line break characters
@@ -69,18 +69,18 @@ bool GrepEngine::finalLineIsUnterminated(char * mFileBuffer, int mFileSize) cons
 
 void GrepEngine::doGrep(const std::string & fileName) {
     std::string mFileName = fileName;
-    int mFileSize;
+    size_t mFileSize;
     char * mFileBuffer;
 
 #ifdef USE_BOOST_MMAP
     const path file(mFileName);
     if (exists(file)) {
         if (is_directory(file)) {
-            return false;
+            return;
         }
     } else {
         std::cerr << "Error: cannot open " << mFileName << " for processing. Skipped.\n";
-        return false;
+        return;
     }
 
     mFileSize = file_size(file);
@@ -152,7 +152,7 @@ void GrepEngine::doGrep(const std::string & fileName) {
 
 void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool isNameExpression) {
                             
-    Module * M = new Module("moduleName", getGlobalContext());
+    Module * M = new Module(moduleName, getGlobalContext());
     
     IDISA::IDISA_Builder * idb = GetIDISA_Builder(M);
 
@@ -183,7 +183,7 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool isNam
 re::CC *  GrepEngine::grepCodepoints() {
     setParsedCodePointSet();
     char * mFileBuffer = getUnicodeNameDataPtr();
-    int mFileSize = getUnicodeNameDataSize();
+    size_t mFileSize = getUnicodeNameDataSize();
     std::string mFileName = "Uname.txt";
 
     uint64_t finalLineUnterminated = 0;
