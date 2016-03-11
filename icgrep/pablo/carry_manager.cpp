@@ -189,8 +189,8 @@ Value * CarryManager::longAdvanceCarryInCarryOut(const unsigned index, const uns
     if (shiftAmount <= mBitBlockWidth) {
         // special case using a single buffer entry and the carry_out value.
         Value * advanceDataPtr = iBuilder->CreateGEP(mCarryBitBlockPtr, advBaseIndex);
-        Value * carry_block0 = iBuilder->CreateAlignedLoad(advanceDataPtr, mBitBlockWidth/8);
-        iBuilder->CreateAlignedStore(value, advanceDataPtr, mBitBlockWidth/8);
+        Value * carry_block0 = iBuilder->CreateBlockAlignedLoad(advanceDataPtr);
+        iBuilder->CreateBlockAlignedStore(value, advanceDataPtr);
         /* Very special case - no combine */
         if (shiftAmount == mBitBlockWidth) {
             return carry_block0;
@@ -206,19 +206,19 @@ Value * CarryManager::longAdvanceCarryInCarryOut(const unsigned index, const uns
     Value * indexMask = iBuilder->getInt64(bufsize - 1);  // A mask to implement circular buffer indexing
     Value * loadIndex0 = iBuilder->CreateAdd(iBuilder->CreateAnd(iBuilder->CreateSub(mBlockNo, iBuilder->getInt64(advanceEntries)), indexMask), advBaseIndex);
     Value * storeIndex = iBuilder->CreateAdd(iBuilder->CreateAnd(mBlockNo, indexMask), advBaseIndex);
-    Value * carry_block0 = iBuilder->CreateAlignedLoad(iBuilder->CreateGEP(mCarryBitBlockPtr, loadIndex0), mBitBlockWidth/8);
+    Value * carry_block0 = iBuilder->CreateBlockAlignedLoad(iBuilder->CreateGEP(mCarryBitBlockPtr, loadIndex0));
     // If the long advance is an exact multiple of mBITBLOCK_WIDTH, we simply return the oldest 
     // block in the long advance carry data area.  
     if (block_shift == 0) {
-        iBuilder->CreateAlignedStore(value, iBuilder->CreateGEP(mCarryBitBlockPtr, storeIndex), mBitBlockWidth/8);
+        iBuilder->CreateBlockAlignedStore(value, iBuilder->CreateGEP(mCarryBitBlockPtr, storeIndex));
         return carry_block0;
     }
     // Otherwise we need to combine data from the two oldest blocks.
     Value * loadIndex1 = iBuilder->CreateAdd(iBuilder->CreateAnd(iBuilder->CreateSub(mBlockNo, iBuilder->getInt64(advanceEntries-1)), indexMask), advBaseIndex);
-    Value * carry_block1 = iBuilder->CreateAlignedLoad(iBuilder->CreateGEP(mCarryBitBlockPtr, loadIndex1), mBitBlockWidth/8);
+    Value * carry_block1 = iBuilder->CreateBlockAlignedLoad(iBuilder->CreateGEP(mCarryBitBlockPtr, loadIndex1));
     Value* block0_shr = iBuilder->CreateLShr(iBuilder->CreateBitCast(carry_block0, iBuilder->getIntNTy(mBitBlockWidth)), mBitBlockWidth - block_shift);
     Value* block1_shl = iBuilder->CreateShl(iBuilder->CreateBitCast(carry_block1, iBuilder->getIntNTy(mBitBlockWidth)), block_shift);
-    iBuilder->CreateAlignedStore(value, iBuilder->CreateGEP(mCarryBitBlockPtr, storeIndex), mBitBlockWidth/8);
+    iBuilder->CreateBlockAlignedStore(value, iBuilder->CreateGEP(mCarryBitBlockPtr, storeIndex));
     return iBuilder->CreateBitCast(iBuilder->CreateOr(block1_shl, block0_shr), mBitBlockType);
 }
 
@@ -493,7 +493,7 @@ Value * CarryManager::getCarryPack(const unsigned packIndex) {
     if (mCarryInPack[packIndex] == nullptr) {
         Value * const packPtr = iBuilder->CreateGEP(mCarryPackBasePtr, iBuilder->getInt64(packIndex));
         mCarryPackPtr[packIndex] = packPtr;
-        mCarryInPack[packIndex] = iBuilder->CreateAlignedLoad(packPtr, mBitBlockWidth / 8);
+        mCarryInPack[packIndex] = iBuilder->CreateBlockAlignedLoad(packPtr);
     }
     return mCarryInPack[packIndex];
 }
@@ -504,7 +504,7 @@ Value * CarryManager::getCarryPack(const unsigned packIndex) {
 void CarryManager::storeCarryOut(const unsigned packIndex) {
     assert (mCarryOutPack[packIndex]);
     assert (mCarryPackPtr[packIndex]);
-    iBuilder->CreateAlignedStore(mCarryOutPack[packIndex], mCarryPackPtr[packIndex], mBitBlockWidth / 8);
+    iBuilder->CreateBlockAlignedStore(mCarryOutPack[packIndex], mCarryPackPtr[packIndex]);
 }
 
 /* Helper routines */

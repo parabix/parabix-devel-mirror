@@ -35,6 +35,7 @@ SymbolTableBuilder::SymbolTableBuilder(Module * m, IDISA::IDISA_Builder * b)
 , mFileBufIdx(7)
 , mFileSizeIdx(8)
 , mFileNameIdx(9)
+, mLongestLookahead(0)
 , mBitBlockType(b->getBitBlockType())
 , mBlockSize(b->getBitBlockWidth()){
 
@@ -80,58 +81,39 @@ PabloFunction * SymbolTableBuilder::generateLeadingFunction(const std::vector<un
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief generateLookaheadFunction
+ * @brief generateSortingFunction
  ** ------------------------------------------------------------------------------------------------------------- */
-PabloFunction * SymbolTableBuilder::generateLookaheadFunction(const PabloFunction * const leading, const std::vector<unsigned> & endpoints) {
-    PabloFunction * const function = PabloFunction::Create("lookahead", leading->getNumOfResults(), leading->getNumOfResults());
+PabloFunction * SymbolTableBuilder::generateSortingFunction(const PabloFunction * const leading, const std::vector<unsigned> & endpoints) {
+    PabloFunction * const function = PabloFunction::Create("sorting", leading->getNumOfResults(), leading->getNumOfResults() * 2);
     PabloBlock * const entry = function->getEntryBlock();
     function->setParameter(0, entry->createVar("S"));
     function->setParameter(1, entry->createVar("E"));
     for (unsigned i = 2; i < leading->getNumOfResults(); ++i) {
         function->setParameter(i, entry->createVar("M" + std::to_string(i - 2)));
     }
-    function->setResult(0, entry->createAssign("S", function->getParameter(0)));
-    function->setResult(1, entry->createAssign("E", function->getParameter(1)));
+    PabloAST * R = function->getParameter(0);
+    PabloAST * const E = entry->createNot(function->getParameter(1));
     unsigned i = 1;
     unsigned lowerbound = 0;
     for (unsigned endpoint : endpoints) {
         PabloAST * const M = function->getParameter(i + 1);
         PabloAST * const L = entry->createLookahead(M, endpoint);
-        function->setResult(i + 1, entry->createAssign("L" + std::to_string(i), L));
+        PabloAST * S = entry->createAnd(L, R);
+        Assign * Si = entry->createAssign("S_" + std::to_string(i), S);
+        R = entry->createXor(R, S);
+        PabloAST * F = entry->createScanThru(R, E);
+        Assign * Ei = entry->createAssign("E_" + std::to_string(i), F);
+        function->setResult(i * 2, Si);
+        function->setResult(i * 2 + 1, Ei);
         ++i;
         lowerbound = endpoint;
     }
-    return function;
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief generateSortingFunction
- ** ------------------------------------------------------------------------------------------------------------- */
-PabloFunction * SymbolTableBuilder::generateSortingFunction(const PabloFunction * const lookahead) {
-    PabloFunction * const function = PabloFunction::Create("sorting", lookahead->getNumOfResults(), 0);
-    PabloBlock * const entry = function->getEntryBlock();
-    function->setParameter(0, entry->createVar("S"));
-    function->setParameter(1, entry->createVar("E"));
-    for (unsigned i = 2; i < lookahead->getNumOfResults(); ++i) {
-        function->setParameter(i, entry->createVar("L" + std::to_string(i - 1)));
-    }
-
-    PabloAST * R = function->getParameter(0);
-    PabloAST * const E = entry->createNot(function->getParameter(1));
-    for (unsigned i = 2; i < lookahead->getNumOfResults(); ++i) {
-        PabloAST * const L = function->getParameter(i);
-        PabloAST * S = entry->createAnd(L, R);
-        R = entry->createXor(R, S);
-        PabloBlock * const block = PabloBlock::Create(entry);
-        PabloAST * F = block->createScanThru(R, E);
-        block->createCall(Prototype::Create("length_group_" + std::to_string(i - 1), 2, 0, nullptr), std::vector<PabloAST *>{S, F});
-        entry->createIf(S, {}, block);
-    }
-    PabloBlock * const block = PabloBlock::Create(entry);
-    PabloAST * F = block->createScanThru(R, E);
-    block->createCall(Prototype::Create("unknown_length_group", 2, 0, nullptr), std::vector<PabloAST *>{R, F});
-    entry->createIf(R, {}, block);
-
+    Assign * Si = entry->createAssign("S_n", R);
+    PabloAST * F = entry->createScanThru(R, E);
+    Assign * Ei = entry->createAssign("E_n", F);
+    function->setResult(i * 2, Si);
+    function->setResult(i * 2 + 1, Ei);
+    mLongestLookahead = lowerbound;
     return function;
 }
 
@@ -147,13 +129,6 @@ void SymbolTableBuilder::createKernels() {
     endpoints.push_back(8);
     endpoints.push_back(16);
 
-    mS2PKernel = new KernelBuilder("s2p", mMod, iBuilder);
-    mLeadingKernel = new KernelBuilder("leading", mMod, iBuilder);
-    mLookaheadKernel = new KernelBuilder("lookahead", mMod, iBuilder);
-    mSortingKernel = new KernelBuilder("sorting", mMod, iBuilder);
-
-    generateS2PKernel(mMod, iBuilder, mS2PKernel);
-
     PabloCompiler pablo_compiler(mMod, iBuilder);
 
     raw_os_ostream out(std::cerr);
@@ -162,51 +137,59 @@ void SymbolTableBuilder::createKernels() {
     PabloFunction * const leading = generateLeadingFunction(endpoints);
     PabloPrinter::print(*leading, out);
 
-//    out << "\n\nLOOKAHEAD:\n";
-//    PabloFunction * const lookahead = generateLookaheadFunction(leading, endpoints);
-//    PabloPrinter::print(*lookahead, out);
-
-//    out << "\n\nSORTING:\n";
-//    PabloFunction * const sorting = generateSortingFunction(lookahead);
-//    PabloPrinter::print(*sorting, out);
+    out << "\n\nSORTING:\n";
+    PabloFunction * const sorting = generateSortingFunction(leading, endpoints);
+    PabloPrinter::print(*sorting, out);
 
     out.flush();
 
+    mS2PKernel = new KernelBuilder("s2p", mMod, iBuilder);
+    mLeadingKernel = new KernelBuilder("leading", mMod, iBuilder);
+    mSortingKernel = new KernelBuilder("sorting", mMod, iBuilder);
+
+    mLeadingKernel->setLongestLookaheadAmount(mLongestLookahead);
+    mSortingKernel->setLongestLookaheadAmount(mLongestLookahead);
+
+    generateS2PKernel(mMod, iBuilder, mS2PKernel);
+
     pablo_compiler.setKernel(mLeadingKernel);
     pablo_compiler.compile(leading);
-//    pablo_compiler.setKernel(mLookaheadKernel);
-//    pablo_compiler.compile(lookahead);
-//    pablo_compiler.setKernel(mSortingKernel);
-//    pablo_compiler.compile(sorting);
+    pablo_compiler.setKernel(mSortingKernel);
+    pablo_compiler.compile(sorting);
 
     delete leading;
-//    delete lookahead;
-//    delete sorting;
-    releaseSlabAllocatorMemory();
+    delete sorting;
 
+    releaseSlabAllocatorMemory();
 }
 
 void SymbolTableBuilder::ExecuteKernels(){
 
-//    Type * T = iBuilder->getIntNTy(64);
-//    Type * S = PointerType::get(iBuilder->getIntNTy(8), 0);
-//    Type * inputType = PointerType::get(ArrayType::get(StructType::get(mMod->getContext(), std::vector<Type *>({ArrayType::get(mBitBlockType, 8)})), 1), 0);
-//    Function * const main = cast<Function>(mMod->getOrInsertFunction("Main", Type::getVoidTy(mMod->getContext()), inputType, T, S, T, nullptr));
-//    main->setCallingConv(CallingConv::C);
-//    Function::arg_iterator args = main->arg_begin();
+    Type * T = iBuilder->getIntNTy(64);
+    Type * S = PointerType::get(iBuilder->getIntNTy(8), 0);
+    Type * inputType = PointerType::get(ArrayType::get(StructType::get(mMod->getContext(), std::vector<Type *>({ArrayType::get(mBitBlockType, 8)})), 1), 0);
+    Function * const main = cast<Function>(mMod->getOrInsertFunction("Main", Type::getVoidTy(mMod->getContext()), inputType, T, nullptr));
+    main->setCallingConv(CallingConv::C);
+    Function::arg_iterator args = main->arg_begin();
 
-//    Value* input_param = args++;
-//    input_param->setName("input");
-//    Value* buffersize_param = args++;
-//    buffersize_param->setName("buffersize");
-//    Value* filename_param = args++;
-//    filename_param->setName("filename");
-//    Value* finalLineUnterminated_param = args++;
-//    finalLineUnterminated_param->setName("finalLineUnterminated");
+    Value * const input_param = args++;
+    input_param->setName("input");
 
-//    iBuilder->SetInsertPoint(BasicBlock::Create(mMod->getContext(), "entry", main,0));
+    Value * const bufferSize = args++;
+    bufferSize->setName("buffersize");
 
-//    BasicBlock * entry_block = iBuilder->GetInsertBlock();
+    iBuilder->SetInsertPoint(BasicBlock::Create(mMod->getContext(), "entry", main,0));
+
+    BasicBlock * entryBlock = iBuilder->GetInsertBlock();
+
+    BasicBlock * leadingTestBlock = BasicBlock::Create(mMod->getContext(), "ltb", main, 0);
+    BasicBlock * leadingBodyBlock = BasicBlock::Create(mMod->getContext(), "lbb", main, 0);
+    BasicBlock * leadingExitBlock = BasicBlock::Create(mMod->getContext(), "leb", main, 0);
+
+    BasicBlock * regularTestBlock = BasicBlock::Create(mMod->getContext(), "rtb", main, 0);
+    BasicBlock * regularBodyBlock = BasicBlock::Create(mMod->getContext(), "rbb", main, 0);
+    BasicBlock * regularExitBlock = BasicBlock::Create(mMod->getContext(), "reb", main, 0);
+
 //    BasicBlock * pipeline_test_block = BasicBlock::Create(mMod->getContext(), "pipeline_test_block", main, 0);
 //    BasicBlock * pipeline_do_block = BasicBlock::Create(mMod->getContext(), "pipeline_do_block", main, 0);
 //    BasicBlock * pipeline_final_block = BasicBlock::Create(mMod->getContext(), "pipeline_final_block", main, 0);
@@ -216,22 +199,70 @@ void SymbolTableBuilder::ExecuteKernels(){
 //    BasicBlock * pipeline_Unterminated_block = BasicBlock::Create(mMod->getContext(), "pipeline_Unterminated_block", main, 0);
 //    BasicBlock * pipeline_return_block = BasicBlock::Create(mMod->getContext(), "pipeline_return_block", main, 0);
 
-//    Value * s2pKernelStruct = mS2PKernel->generateKernelInstance();
-//    Value * icGrepKernelStruct = mICgrepKernel->generateKernelInstance();
-//    Value * scanMatchKernelStruct = mScanMatchKernel->generateKernelInstance();
+    Value * s2pKernelStruct = mS2PKernel->generateKernelInstance();
+    Value * leadingKernelStruct = mLeadingKernel->generateKernelInstance();
+    Value * sortingKernelStruct = mSortingKernel->generateKernelInstance();
 
-//    Value * gep = iBuilder->CreateGEP(scanMatchKernelStruct, {iBuilder->getInt32(0), iBuilder->getInt32(0), iBuilder->getInt32(mFileBufIdx)});
+    Value * basis_bits = iBuilder->CreateGEP(s2pKernelStruct, {iBuilder->getInt32(0), iBuilder->getInt32(1)});
+    Value * leadingData = iBuilder->CreateGEP(leadingKernelStruct, {iBuilder->getInt32(0), iBuilder->getInt32(1)});
+
+
+    const unsigned leadingBlocks = (mLongestLookahead + iBuilder->getBitBlockWidth() - 1) / iBuilder->getBitBlockWidth();
+
+    // If the buffer size is smaller than our largest length group, only check up to the buffer size.
+    Value * safetyCheck = iBuilder->CreateICmpSLT(bufferSize, iBuilder->getInt64(leadingBlocks * iBuilder->getBitBlockWidth()));
+    iBuilder->CreateCondBr(safetyCheck, regularExitBlock, leadingTestBlock);
+
+    // Now process the leading blocks ...
+    iBuilder->SetInsertPoint(leadingTestBlock);
+    PHINode * remainingBytes = iBuilder->CreatePHI(T, 2, "remainingBytes");
+    PHINode * leadingOffset = iBuilder->CreatePHI(T, 2, "blockIndex");
+    remainingBytes->addIncoming(bufferSize, entryBlock);
+    leadingOffset->addIncoming(iBuilder->getInt64(0), entryBlock);
+    Value * remainingLeadingBlocksCond = iBuilder->CreateICmpULT(leadingOffset, iBuilder->getInt64(leadingBlocks));
+    iBuilder->CreateCondBr(remainingLeadingBlocksCond, leadingBodyBlock, leadingExitBlock);
+    iBuilder->SetInsertPoint(leadingBodyBlock);
+    Value * gep = iBuilder->CreateGEP(input_param, leadingOffset);
+    mS2PKernel->generateDoBlockCall(gep);
+    mLeadingKernel->generateDoBlockCall(basis_bits);
+    leadingOffset->addIncoming(iBuilder->CreateAdd(leadingOffset, iBuilder->getInt64(1)), leadingBodyBlock);
+    remainingBytes->addIncoming(iBuilder->CreateSub(remainingBytes, iBuilder->getInt64(mBlockSize)), leadingBodyBlock);
+    iBuilder->CreateBr(leadingTestBlock);
+    iBuilder->SetInsertPoint(leadingExitBlock);
+
+    // Now process the leading blocks ...
+    iBuilder->CreateBr(regularTestBlock);
+    iBuilder->SetInsertPoint(regularTestBlock);
+    PHINode * remainingBytes2 = iBuilder->CreatePHI(T, 2, "remainingBytes");
+    PHINode * leadingOffset2 = iBuilder->CreatePHI(T, 2, "blockIndex");
+    remainingBytes2->addIncoming(remainingBytes, leadingExitBlock);
+    leadingOffset2->addIncoming(leadingOffset, leadingExitBlock);
+    Value * remainingBytesCond = iBuilder->CreateICmpUGE(remainingBytes2, iBuilder->getInt64(mBlockSize));
+    iBuilder->CreateCondBr(remainingBytesCond, regularBodyBlock, regularExitBlock);
+    iBuilder->SetInsertPoint(regularBodyBlock);
+    Value * gep2 = iBuilder->CreateGEP(input_param, leadingOffset2);
+    mS2PKernel->generateDoBlockCall(gep2);
+    mLeadingKernel->generateDoBlockCall(basis_bits);
+    leadingOffset2->addIncoming(iBuilder->CreateAdd(leadingOffset2, iBuilder->getInt64(1)), regularBodyBlock);
+    remainingBytes2->addIncoming(iBuilder->CreateSub(remainingBytes2, iBuilder->getInt64(mBlockSize)), regularBodyBlock);
+    mSortingKernel->generateDoBlockCall(leadingData);
+    iBuilder->CreateBr(regularTestBlock);
+    iBuilder->SetInsertPoint(regularExitBlock);
+
+
+
+//    Value * gep = iBuilder->CreateGEP(sortingKernelStruct, {iBuilder->getInt32(0), iBuilder->getInt32(0), iBuilder->getInt32(mFileBufIdx)});
 //    Value* filebuf = iBuilder->CreateBitCast(input_param, S);
 //    iBuilder->CreateStore(filebuf, gep);
 
-//    gep = iBuilder->CreateGEP(scanMatchKernelStruct, {iBuilder->getInt32(0), iBuilder->getInt32(0), iBuilder->getInt32(mFileSizeIdx)});
+//    gep = iBuilder->CreateGEP(sortingKernelStruct, {iBuilder->getInt32(0), iBuilder->getInt32(0), iBuilder->getInt32(mFileSizeIdx)});
 //    iBuilder->CreateStore(buffersize_param, gep);
 
-//    gep = iBuilder->CreateGEP(scanMatchKernelStruct, {iBuilder->getInt32(0), iBuilder->getInt32(0), iBuilder->getInt32(mFileNameIdx)});
+//    gep = iBuilder->CreateGEP(sortingKernelStruct, {iBuilder->getInt32(0), iBuilder->getInt32(0), iBuilder->getInt32(mFileNameIdx)});
 //    iBuilder->CreateStore(filename_param, gep);
 
 //    Value * basis_bits = iBuilder->CreateGEP(s2pKernelStruct, {iBuilder->getInt32(0), iBuilder->getInt32(1)});
-//    Value * results = iBuilder->CreateGEP(icGrepKernelStruct, {iBuilder->getInt32(0), iBuilder->getInt32(1)});
+//    Value * results = iBuilder->CreateGEP(leadingKernelStruct, {iBuilder->getInt32(0), iBuilder->getInt32(1)});
 
 //    iBuilder->CreateBr(pipeline_test_block);
 
@@ -300,6 +331,14 @@ void SymbolTableBuilder::ExecuteKernels(){
 
 //    mICgrepKernel->generateDoBlockCall(basis_bits);
 //    mScanMatchKernel->generateDoBlockCall(results);
-//    iBuilder->CreateRetVoid();
+    iBuilder->CreateRetVoid();
 
+
+    mMod->dump();
+}
+
+SymbolTableBuilder::~SymbolTableBuilder() {
+    delete mS2PKernel;
+    delete mLeadingKernel;
+    delete mSortingKernel;
 }

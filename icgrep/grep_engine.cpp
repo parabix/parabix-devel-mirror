@@ -171,13 +171,14 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool isNam
     mEngine = JIT_to_ExecutionEngine(M);
     
     icgrep_Linking(M, mEngine);
+    #ifndef NDEBUG
     verifyModule(*M, &dbgs());
+    #endif
     mEngine->finalizeObject();
     delete idb;
 
-    mMainFcn = (main_fcn_T) mEngine->getPointerToFunction(main_IR);
+    mMainFcn = reinterpret_cast<GrepFunctionType>(mEngine->getPointerToFunction(main_IR));
 }
-
 
 re::CC *  GrepEngine::grepCodepoints() {
     setParsedCodePointSet();
@@ -191,4 +192,8 @@ re::CC *  GrepEngine::grepCodepoints() {
     mMainFcn(mFileBuffer, mFileSize, mFileName.c_str(), finalLineUnterminated);
 
     return getParsedCodePointSet();
+}
+
+GrepEngine::~GrepEngine() {
+    delete mEngine;
 }

@@ -12,30 +12,27 @@
 #include <llvm/ExecutionEngine/ExecutionEngine.h>
 
 
-typedef void (*main_fcn_T)(char * byte_data, int filesize, const char* filename, uint64_t finalLineUnterminated);
-
 namespace llvm { class raw_ostream; }
 
 class GrepEngine {
+    typedef void (*GrepFunctionType)(char * byte_data, int filesize, const char* filename, uint64_t finalLineUnterminated);
 public:
 
     GrepEngine() {}
+
+    ~GrepEngine();
   
     void grepCodeGen(std::string moduleName, re::RE * re_ast, bool isNameExpression = false);
     
     void doGrep(const std::string & fileName);
     
     re::CC *  grepCodepoints();
-
-    ~GrepEngine() {
-      delete mEngine;
-    }
     
 private:
    
     bool finalLineIsUnterminated(char * fileBuffer, int fileSize) const;
 
-    main_fcn_T mMainFcn;
+    GrepFunctionType mMainFcn;
     
     bool mIsNameExpression;
     llvm::ExecutionEngine * mEngine;

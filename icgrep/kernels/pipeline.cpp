@@ -89,11 +89,15 @@ void PipelineBuilder::ExecuteKernels(){
     Value * icGrepKernelStruct = mICgrepKernel->generateKernelInstance();
     Value * scanMatchKernelStruct = mScanMatchKernel->generateKernelInstance();
 
+
     Value * gep = iBuilder->CreateGEP(scanMatchKernelStruct, {iBuilder->getInt32(0), iBuilder->getInt32(0), iBuilder->getInt32(mFileBufIdx)});
-    Value* filebuf = iBuilder->CreateBitCast(input_param, S);
+    Value * filebuf = iBuilder->CreateBitCast(input_param, S);
     iBuilder->CreateStore(filebuf, gep);
+
     gep = iBuilder->CreateGEP(scanMatchKernelStruct, {iBuilder->getInt32(0), iBuilder->getInt32(0), iBuilder->getInt32(mFileSizeIdx)});
     iBuilder->CreateStore(buffersize_param, gep);
+
+
     gep = iBuilder->CreateGEP(scanMatchKernelStruct, {iBuilder->getInt32(0), iBuilder->getInt32(0), iBuilder->getInt32(mFileNameIdx)});
     iBuilder->CreateStore(filename_param, gep);
 

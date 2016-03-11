@@ -53,6 +53,7 @@
 // Dynamic processor detection
 #define ISPC_LLVM_VERSION ISPC_LLVM_3_6
 #include "ispc.cpp"
+#include <sstream>
 
 using namespace pablo;
 
@@ -431,6 +432,11 @@ ExecutionEngine * JIT_to_ExecutionEngine (Module * m) {
     InitializeNativeTargetAsmPrinter();
     InitializeNativeTargetAsmParser();
 
+    PassRegistry * Registry = PassRegistry::getPassRegistry();
+    initializeCore(*Registry);
+    initializeCodeGen(*Registry);
+    initializeLowerIntrinsicsPass(*Registry);
+
     std::string errMessage;
     EngineBuilder builder(std::move(std::unique_ptr<Module>(m)));
     builder.setErrorStr(&errMessage);
@@ -451,13 +457,14 @@ ExecutionEngine * JIT_to_ExecutionEngine (Module * m) {
             builder.setMAttrs(attrs);
     }
 
+    // builder.selectTarget();
+
     //builder.setOptLevel(mMaxWhileDepth ? CodeGenOpt::Level::Less : CodeGenOpt::Level::None);
     ExecutionEngine * engine = builder.create();
     ICGrepObjectCache * cache = nullptr;
     if (engine == nullptr) {
         throw std::runtime_error("Could not create ExecutionEngine: " + errMessage);
     }
-
     if (EnableObjectCache) {
         if (ObjectCacheDir.empty())
             // Default is $HOME/.cache/icgrep
@@ -471,19 +478,15 @@ ExecutionEngine * JIT_to_ExecutionEngine (Module * m) {
 
 
 
-int * total_count;
-std::stringstream * resultStrs;
-std::vector<std::string> inputFiles;
+static int * total_count;
+static std::stringstream * resultStrs = nullptr;
+static std::vector<std::string> inputFiles;
 
 void initResult(std::vector<std::string> filenames, const int n){
 
     inputFiles = filenames;
-
-    std::stringstream * ss = new std::stringstream[n];
-    resultStrs = ss;
-
-    int * c = new int[n];
-    total_count = c;
+    resultStrs = new std::stringstream[n];
+    total_count = new int[n];
     for (int i=1; i<inputFiles.size(); i++){
         total_count[i-1] = 0;
     }

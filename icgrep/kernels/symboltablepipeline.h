@@ -31,21 +31,23 @@ using namespace llvm;
 class SymbolTableBuilder {
 public:
     SymbolTableBuilder(Module * m, IDISA::IDISA_Builder * b);
+    ~SymbolTableBuilder();
     void createKernels();
     void ExecuteKernels();
 protected:
 
     pablo::PabloFunction * generateLeadingFunction(const std::vector<unsigned> & endpoints);
-    pablo::PabloFunction * generateLookaheadFunction(const pablo::PabloFunction * const leading, const std::vector<unsigned> & endpoints);
-    pablo::PabloFunction * generateSortingFunction(const pablo::PabloFunction * const lookahead);
+    pablo::PabloFunction * generateSortingFunction(const pablo::PabloFunction * const leading, const std::vector<unsigned> & endpoints);
+
+    void generateLLVMParser();
 
 private:
     Module *                            mMod;
     IDISA::IDISA_Builder *              iBuilder;
     KernelBuilder *                     mS2PKernel;
     KernelBuilder *                     mLeadingKernel;
-    KernelBuilder *                     mLookaheadKernel;
     KernelBuilder *                     mSortingKernel;
+    unsigned                            mLongestLookahead;
     int                                 mFileBufIdx;
     int                                 mFileSizeIdx;
     int                                 mFileNameIdx;

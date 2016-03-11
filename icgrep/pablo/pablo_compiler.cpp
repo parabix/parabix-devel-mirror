@@ -115,11 +115,6 @@ llvm::Function * PabloCompiler::compile(PabloFunction * function) {
             mMod->print(out, nullptr);
         }
     }
-
-    #ifndef NDEBUG
-    verifyModule(*mMod, &errs());
-    #endif
-
     return mFunction;
 }
 
@@ -377,7 +372,7 @@ void PabloCompiler::compileStatement(const Statement * stmt) {
 //        iBuilder->CreateCall2(externalFunction, mInputAddressPtr, outputStruct);
 //        Value * outputPtr = iBuilder->CreateGEP(outputStruct, std::vector<Value *>({ iBuilder->getInt32(0), iBuilder->getInt32(0) }));
 
-//        expr = iBuilder->CreateAlignedLoad(outputPtr, iBuilder->getBitBlockWidth() / 8, false);
+//        expr = iBuilder->CreateBlockAlignedLoad(outputPtr);
     } else if (const And * pablo_and = dyn_cast<And>(stmt)) {
         expr = iBuilder->simd_and(compileExpression(pablo_and->getOperand(0)), compileExpression(pablo_and->getOperand(1)));
     } else if (const Or * pablo_or = dyn_cast<Or>(stmt)) {

@@ -4,25 +4,14 @@
  *  icgrep is a trademark of International Characters.
  */
 
-#include <string>
-#include <iostream>
-#include <fstream>
 #include <cstdio>
 
-
-#include <llvm/Support/SourceMgr.h>
 #include <llvm/Support/CommandLine.h>
-#include <llvm/Support/Debug.h>
-#include <llvm/Support/TargetSelect.h>
-#include <llvm/Support/Host.h>
-
-#include <re/re_re.h>
-#include <re/parsefailure.h>
-#include <re/re_parser.h>
-#include <re/re_any.h>
 #include <re/re_alt.h>
-
+#include <re/re_parser.h>
 #include <grep_engine.h>
+#include <fstream>
+#include <string>
 
 #include <boost/uuid/sha1.hpp>
 #include <toolchain.h>
@@ -160,41 +149,30 @@ int main(int argc, char *argv[]) {
     
     grepEngine.grepCodeGen(module_name, re_ast);
 
-
     initResult(inputFiles, inputFiles.size());
-
-    if(Threads == 1){
+    if (Threads <= 1) {
         for (unsigned i = firstInputFile; i != inputFiles.size(); ++i) {
             grepEngine.doGrep(inputFiles[i]);
         }        
-    }
-    else if (Threads > 1) {
+    } else if (Threads > 1) {
+        const unsigned numOfThreads = Threads; // <- convert the command line value into an integer to allow stack allocation
+        pthread_t threads[numOfThreads];
 
-        pthread_t threads[100];
-        int rc;
-        long t;
-        void *status;
-
-        for(t=0; t<Threads; t++){
-          rc = pthread_create(&threads[t], NULL, DoGrep, (void *)t);
-          if (rc){
-             printf("ERROR; return code from pthread_create() is %d\n", rc);
-             exit(-1);
-          }
+        for(unsigned long i = 0; i < numOfThreads; ++i){
+            const int rc = pthread_create(&threads[i], NULL, DoGrep, (void *)i);
+            if (rc) {
+                throw std::runtime_error("Failed to create thread: code " + std::to_string(rc));
+            }
         }
 
-        for(t=0; t<Threads; t++) {
-            rc = pthread_join(threads[t], &status);
+        for(unsigned i = 0; i < numOfThreads; ++i) {
+            void * status = nullptr;
+            const int rc = pthread_join(threads[i], &status);
             if (rc) {
-                printf("ERROR; return code from pthread_join() is %d\n", rc);
-                exit(-1);
+                throw std::runtime_error("Failed to join thread: code " + std::to_string(rc));
             }
         }
     }
-    else {
-        std::cerr << "Invalid number of threads :" << Threads << std::endl;
-    }
-
     PrintResult();   
     
     return 0;

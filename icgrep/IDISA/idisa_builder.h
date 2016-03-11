@@ -80,7 +80,6 @@ public:
     virtual Value * hsimd_packl_in_lanes(unsigned lanes, unsigned fw, Value * a, Value * b);
 
     virtual Value * hsimd_signmask(unsigned fw, Value * a);
-
     
     virtual Value * mvmd_extract(unsigned fw, Value * a, unsigned fieldIndex);
     virtual Value * mvmd_insert(unsigned fw, Value * blk, Value * elt, unsigned fieldIndex);
