@@ -4,6 +4,7 @@
  *  icgrep is a trademark of International Characters.
  */
 
+#include "re_assertion.h"
 #include "re_rep.h"
 #include "re_seq.h"
 
@@ -32,6 +33,10 @@ RE * makeRep(RE * re, const int lb, const int ub) {
         else if ((rep->getUB() * lb) >= (rep->getLB() * (lb + 1) - 1)) {
             return new Rep(rep->getRE(), rep->getUB() * lb, ubCombine(rep->getUB(), ub));
         }
+    }
+    else if (isa<Assertion>(re)) {
+        if (lb > 0) return re;
+        else return makeSeq();
     }
     else {
         if (Seq * seq = dyn_cast<Seq>(re)) {
