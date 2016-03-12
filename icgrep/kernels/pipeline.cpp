@@ -18,9 +18,6 @@ using namespace pablo;
 PipelineBuilder::PipelineBuilder(Module * m, IDISA::IDISA_Builder * b)
 : mMod(m)
 , iBuilder(b)
-, mFileBufIdx(7)
-, mFileSizeIdx(8)
-, mFileNameIdx(9)
 , mBitBlockType(b->getBitBlockType())
 , mBlockSize(b->getBitBlockWidth()){
 
@@ -38,6 +35,7 @@ void PipelineBuilder::CreateKernels(PabloFunction * function, bool isNameExpress
     mScanMatchKernel = new KernelBuilder("scanMatch", mMod, iBuilder);
 
     generateS2PKernel(mMod, iBuilder, mS2PKernel);
+
     generateScanMatch(mMod, iBuilder, 64, mScanMatchKernel, isNameExpression);
 
     pablo_function_passes(function);
@@ -56,7 +54,7 @@ void PipelineBuilder::CreateKernels(PabloFunction * function, bool isNameExpress
     }
 }
 
-void PipelineBuilder::ExecuteKernels(){
+void PipelineBuilder::ExecuteKernels() {
     Type * T = iBuilder->getIntNTy(64);   
     Type * S = PointerType::get(iBuilder->getIntNTy(8), 0);
     Type * inputType = PointerType::get(ArrayType::get(StructType::get(mMod->getContext(), std::vector<Type *>({ArrayType::get(mBitBlockType, 8)})), 1), 0); 
@@ -90,15 +88,16 @@ void PipelineBuilder::ExecuteKernels(){
     Value * scanMatchKernelStruct = mScanMatchKernel->generateKernelInstance();
 
 
-    Value * gep = iBuilder->CreateGEP(scanMatchKernelStruct, {iBuilder->getInt32(0), iBuilder->getInt32(0), iBuilder->getInt32(mFileBufIdx)});
+    Value * gep = mScanMatchKernel->getInternalState("FileBuf", scanMatchKernelStruct);
     Value * filebuf = iBuilder->CreateBitCast(input_param, S);
     iBuilder->CreateStore(filebuf, gep);
 
-    gep = iBuilder->CreateGEP(scanMatchKernelStruct, {iBuilder->getInt32(0), iBuilder->getInt32(0), iBuilder->getInt32(mFileSizeIdx)});
+
+    gep = mScanMatchKernel->getInternalState("FileSize", scanMatchKernelStruct);
     iBuilder->CreateStore(buffersize_param, gep);
 
 
-    gep = iBuilder->CreateGEP(scanMatchKernelStruct, {iBuilder->getInt32(0), iBuilder->getInt32(0), iBuilder->getInt32(mFileNameIdx)});
+    gep = mScanMatchKernel->getInternalState("FileName", scanMatchKernelStruct);
     iBuilder->CreateStore(filename_param, gep);
 
     Value * basis_bits = iBuilder->CreateGEP(s2pKernelStruct, {iBuilder->getInt32(0), iBuilder->getInt32(1)});
@@ -112,7 +111,9 @@ void PipelineBuilder::ExecuteKernels(){
     remaining_phi->addIncoming(buffersize_param, entry_block);
     blkNo_phi->addIncoming(iBuilder->getInt64(0), entry_block);
 
-    Value * final_block_cond = iBuilder->CreateICmpSLT(remaining_phi, ConstantInt::get(T, mBlockSize));
+    Constant * step = ConstantInt::get(T, mBlockSize * mS2PKernel->getSegmentBlocks());
+
+    Value * final_block_cond = iBuilder->CreateICmpSLT(remaining_phi, step);
     iBuilder->CreateCondBr(final_block_cond, pipeline_final_block, pipeline_do_block);
 
     iBuilder->SetInsertPoint(pipeline_do_block);
@@ -125,7 +126,7 @@ void PipelineBuilder::ExecuteKernels(){
     mICgrepKernel->generateDoBlockCall(basis_bits);
     mScanMatchKernel->generateDoBlockCall(results);
 
-    Value * update_remaining = iBuilder->CreateSub(remaining_phi, iBuilder->getInt64(mBlockSize));
+    Value * update_remaining = iBuilder->CreateSub(remaining_phi, step);
     remaining_phi->addIncoming(update_remaining, pipeline_do_block);
     iBuilder->CreateBr(pipeline_test_block);
 

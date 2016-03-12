@@ -36,7 +36,7 @@ Value * generateResetLowestBit(IDISA::IDISA_Builder * iBuilder, Value * bits) {
     return iBuilder->CreateAnd(bits_minus1, bits);
 }
 
-Function * generateScanWordRoutine(Module * m, IDISA::IDISA_Builder * iBuilder, unsigned scanwordBitWidth, Type * kernelStuctType, bool isNameExpression) {
+Function * generateScanWordRoutine(Module * m, IDISA::IDISA_Builder * iBuilder, unsigned scanwordBitWidth, KernelBuilder * const kBuilder, bool isNameExpression) {
 
     Function * function = m->getFunction("scan_matches_in_scanword");
     if (LLVM_UNLIKELY(function != nullptr)) {
@@ -47,7 +47,7 @@ Function * generateScanWordRoutine(Module * m, IDISA::IDISA_Builder * iBuilder, 
     Type * T = iBuilder->getIntNTy(scanwordBitWidth);
     Type * S = PointerType::get(iBuilder->getIntNTy(8), 0);
     Type * returnType = StructType::get(ctxt, std::vector<Type *>({T, T}));
-    FunctionType * functionType = FunctionType::get(returnType, std::vector<Type *>({kernelStuctType, T, T, T, T, T}), false);
+    FunctionType * functionType = FunctionType::get(returnType, std::vector<Type *>({PointerType::get(kBuilder->getKernelStructType(), 0), T, T, T, T, T}), false);
 
     SmallVector<AttributeSet, 6> Attrs;
     Attrs.push_back(AttributeSet::get(ctxt, ~0U, std::vector<Attribute::AttrKind>({ Attribute::NoUnwind, Attribute::UWTable })));
@@ -76,12 +76,13 @@ Function * generateScanWordRoutine(Module * m, IDISA::IDISA_Builder * iBuilder, 
     recordStart_input_parm->setName("pendingLineStart");
     Value * recordNum_input_parm = args++;
     recordNum_input_parm->setName("lineNum");
-    Constant * matchProcessor;
-    if(isNameExpression)
-        matchProcessor = m->getOrInsertFunction("insert_codepoints", Type::getVoidTy(ctxt), T, T, T, S, nullptr);
-    else
-        matchProcessor = m->getOrInsertFunction("wrapped_report_match", Type::getVoidTy(ctxt), T, T, T, S, T, S, nullptr);
 
+    Constant * matchProcessor;
+    if (isNameExpression) {
+        matchProcessor = m->getOrInsertFunction("insert_codepoints", Type::getVoidTy(ctxt), T, T, T, S, nullptr);
+    } else {
+        matchProcessor = m->getOrInsertFunction("wrapped_report_match", Type::getVoidTy(ctxt), T, T, T, S, T, S, nullptr);
+    }
     iBuilder->SetInsertPoint(BasicBlock::Create(ctxt, "entry", function,0));
 
     BasicBlock * entry_block = iBuilder->GetInsertBlock();
@@ -146,22 +147,24 @@ Function * generateScanWordRoutine(Module * m, IDISA::IDISA_Builder * iBuilder, 
     matchRecordNum_phi->addIncoming(recordNum_phi, process_matches_loop_entry);
     matchRecordNum_phi->addIncoming(matchRecordNum, prior_breaks_block);
     matchRecordStart_phi->addIncoming(recordStart_phi, process_matches_loop_entry);
-    matchRecordStart_phi->addIncoming(matchRecordStart, prior_breaks_block);
+    matchRecordStart_phi->addIncoming(matchRecordStart, prior_breaks_block);    
     Value * matchRecordEnd = iBuilder->CreateAdd(scanwordPos, generateCountForwardZeroes(iBuilder, matches_phi));
 
-    Value* filebuf_gep = iBuilder->CreateGEP(this_input_parm, {iBuilder->getInt64(0), iBuilder->getInt32(0), iBuilder->getInt32(7)});
+    Value* filebuf_gep = kBuilder->getInternalState("FileBuf", this_input_parm);
     Value* filebufptr = iBuilder->CreateLoad(filebuf_gep, "filebuf");
 
-    Value* filesize_gep = iBuilder->CreateGEP(this_input_parm, {iBuilder->getInt64(0), iBuilder->getInt32(0), iBuilder->getInt32(8)});
-    Value* filesize = iBuilder->CreateLoad(filesize_gep, "filensize");
-
-    Value* filename_gep = iBuilder->CreateGEP(this_input_parm, {iBuilder->getInt64(0), iBuilder->getInt32(0), iBuilder->getInt32(9)});
-    Value* filenameptr = iBuilder->CreateLoad(filename_gep, "filename");
-
-    if(isNameExpression)
+    if (isNameExpression) {
         iBuilder->CreateCall(matchProcessor, std::vector<Value *>({matchRecordNum_phi, matchRecordStart_phi, matchRecordEnd, filebufptr}));
-    else
+    } else {
+        Value * filesize_gep = kBuilder->getInternalState("FileSize", this_input_parm);
+        Value * filesize = iBuilder->CreateLoad(filesize_gep, "filesize");
+
+        Value * filename_gep = kBuilder->getInternalState("FileName", this_input_parm);
+        Value * filenameptr = iBuilder->CreateLoad(filename_gep, "filename");
+
         iBuilder->CreateCall(matchProcessor, std::vector<Value *>({matchRecordNum_phi, matchRecordStart_phi, matchRecordEnd, filebufptr, filesize, filenameptr}));
+    }
+
     Value * remaining_matches = generateResetLowestBit(iBuilder, matches_phi);
     Value * remaining_breaks = iBuilder->CreateXor(record_breaks_phi, prior_breaks);
     matches_phi->addIncoming(remaining_matches, loop_final_block);
@@ -202,7 +205,7 @@ Function * generateScanWordRoutine(Module * m, IDISA::IDISA_Builder * iBuilder, 
 }
 
 
-void generateScanMatch(Module * m, IDISA::IDISA_Builder * iBuilder, unsigned scanWordBitWidth, KernelBuilder * kBuilder, bool isNameExpression){
+void generateScanMatch(Module * m, IDISA::IDISA_Builder * iBuilder, unsigned scanWordBitWidth, KernelBuilder * kBuilder, bool isNameExpression) {
 
 
     Type * T = iBuilder->getIntNTy(scanWordBitWidth);
@@ -213,36 +216,35 @@ void generateScanMatch(Module * m, IDISA::IDISA_Builder * iBuilder, unsigned sca
     kBuilder->addInputStream(1, "matches");
     kBuilder->addInputStream(1, "breaks");
     //use index
-    unsigned blockPosIdx = kBuilder->addInternalStateType(T);
-    unsigned lineStartIdx = kBuilder->addInternalStateType(T);
-    unsigned lineNumIdx = kBuilder->addInternalStateType(T);
-    kBuilder->addInternalStateType(S);
-    kBuilder->addInternalStateType(T);
-    kBuilder->addInternalStateType(S);
+    const unsigned lineStart = kBuilder->addInternalState(T, "LineStart");
+    const unsigned lineNum = kBuilder->addInternalState(T, "LineNum");
+    kBuilder->addInternalState(S, "FileBuf");
+    kBuilder->addInternalState(T, "FileSize");
+    kBuilder->addInternalState(S, "FileName");
 
     Function * function = kBuilder->prepareFunction();
 
-    Type * kernelStuctType = PointerType::get(kBuilder->getKernelStructType(), 0);
+    // Type * kernelStuctType = PointerType::get(kBuilder->getKernelStructType(), 0);
 
-    Function * scanWordFunction = generateScanWordRoutine(m, iBuilder, scanWordBitWidth, kernelStuctType, isNameExpression);
+    Function * scanWordFunction = generateScanWordRoutine(m, iBuilder, scanWordBitWidth, kBuilder, isNameExpression);
 
     iBuilder->SetInsertPoint(&function->getEntryBlock());
 
     Value * kernelStuctParam = kBuilder->getKernelStructParam();
 
-    Value * scanwordPos = iBuilder->CreateBlockAlignedLoad(kBuilder->getInternalState(blockPosIdx));
-    Value * recordStart = iBuilder->CreateBlockAlignedLoad(kBuilder->getInternalState(lineStartIdx));
-    Value * recordNum = iBuilder->CreateBlockAlignedLoad(kBuilder->getInternalState(lineNumIdx));
+    Value * scanwordPos = iBuilder->CreateBlockAlignedLoad(kBuilder->getInternalState("BlockNo"));
+    scanwordPos = iBuilder->CreateMul(scanwordPos, ConstantInt::get(scanwordPos->getType(), iBuilder->getBitBlockWidth()));
+
+    Value * recordStart = iBuilder->CreateBlockAlignedLoad(kBuilder->getInternalState(lineStart));
+    Value * recordNum = iBuilder->CreateBlockAlignedLoad(kBuilder->getInternalState(lineNum));
+
     Value * wordResult = nullptr;
 
     const unsigned segmentBlocks = kBuilder->getSegmentBlocks();
     const unsigned scanWordBlocks =  segmentBlocks * fieldCount;
-
     for(unsigned j = 0; j < segmentBlocks; ++j) {
-
         Value * matchWordVector = iBuilder->CreateBitCast(iBuilder->CreateBlockAlignedLoad(kBuilder->getInputStream(0)), scanwordVectorType);
         Value * breakWordVector = iBuilder->CreateBitCast(iBuilder->CreateBlockAlignedLoad(kBuilder->getInputStream(1)), scanwordVectorType);
-
         for(unsigned i = 0; i < scanWordBlocks; ++i){
             Value * matchWord = iBuilder->CreateExtractElement(matchWordVector, ConstantInt::get(T, i));
             Value * recordBreaksWord = iBuilder->CreateExtractElement(breakWordVector, ConstantInt::get(T, i));
@@ -253,10 +255,7 @@ void generateScanMatch(Module * m, IDISA::IDISA_Builder * iBuilder, unsigned sca
         }
         kBuilder->increment();
     }
-
-    kBuilder->setInternalState(blockPosIdx, scanwordPos);
-    kBuilder->setInternalState(lineStartIdx, recordStart);
-    kBuilder->setInternalState(lineNumIdx, recordNum);
-
+    kBuilder->setInternalState(lineStart, recordStart);
+    kBuilder->setInternalState(lineNum, recordNum);
     kBuilder->finalize();
 }

@@ -27,44 +27,35 @@ void CarryManager::initialize(PabloFunction * const function, KernelBuilder * co
     mCarryPackType = mBitBlockType;
     const unsigned totalCarryDataSize = std::max<unsigned>(enumerate(mRootScope, 0, 0), 1);
     mCarryPackPtr.resize(totalCarryDataSize, nullptr);
-    mCarryInPack.resize(totalCarryDataSize, nullptr);
+    mCarryInPack.resize(totalCarryDataSize);
     mCarryOutPack.resize(totalCarryDataSize, nullptr);
     mTotalCarryDataBitBlocks = totalCarryDataSize;
     ArrayType* cdArrayTy = ArrayType::get(mBitBlockType, mTotalCarryDataBitBlocks);
-    mCdArrayIdx = kBuilder->addInternalStateType(cdArrayTy);
+    mCdArrayIdx = kBuilder->addInternalState(cdArrayTy);
     if (mPabloCountCount > 0) {
         ArrayType* pcArrayTy = ArrayType::get(iBuilder->getIntNTy(64), mPabloCountCount);
-        mPcArrayIdx = kBuilder->addInternalStateType(pcArrayTy);
+        mPcArrayIdx = kBuilder->addInternalState(pcArrayTy);
     }
-    mCurrentScope = mRootScope;
-    mCurrentFrameIndex = 0;
-    mCarryInfo = mCarryInfoVector[0];
-    mCarryOutPack[summaryPack()] = Constant::getNullValue(mCarryPackType);
+    mKernelBuilder = kBuilder;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief initialize_setPtrs
+ * @brief reset
  ** ------------------------------------------------------------------------------------------------------------- */
-void CarryManager::initialize_setPtrs(KernelBuilder * kBuilder) {
-    Value * cdArrayPtr = kBuilder->getInternalState(mCdArrayIdx);
+void CarryManager::reset() {
+    Value * cdArrayPtr = mKernelBuilder->getInternalState(mCdArrayIdx);
     mCarryPackBasePtr = iBuilder->CreateBitCast(cdArrayPtr, PointerType::get(mCarryPackType, 0));
     mCarryBitBlockPtr = iBuilder->CreateBitCast(cdArrayPtr, PointerType::get(mBitBlockType, 0));
     if (mPabloCountCount > 0) {
-        Value * pcArrayPtr = kBuilder->getInternalState(mPcArrayIdx);
+        Value * pcArrayPtr = mKernelBuilder->getInternalState(mPcArrayIdx);
         mPopcountBasePtr = iBuilder->CreateBitCast(pcArrayPtr, Type::getInt64PtrTy(iBuilder->getContext()));
     }
-    setBlockNo(kBuilder);
     mCurrentScope = mRootScope;
     mCurrentFrameIndex = 0;
     mCarryInfo = mCarryInfoVector[0];
     mCarryOutPack[summaryPack()] = Constant::getNullValue(mCarryPackType);
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief setBlockNo
- ** ------------------------------------------------------------------------------------------------------------- */
-void CarryManager::setBlockNo(KernelBuilder * kBuilder) {
-    mBlockNo = iBuilder->CreateUDiv(iBuilder->CreateBlockAlignedLoad(kBuilder->getInternalState(mFilePosIdx)), iBuilder->getInt64(mBitBlockWidth));
+    assert (mCarrySummary.empty());
+    std::fill(mCarryInPack.begin(), mCarryInPack.end(), nullptr);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -204,8 +195,9 @@ Value * CarryManager::longAdvanceCarryInCarryOut(const unsigned index, const uns
     const unsigned advanceEntries = mCarryInfo->longAdvanceEntries(shiftAmount);
     const unsigned bufsize = mCarryInfo->longAdvanceBufferSize(shiftAmount);
     Value * indexMask = iBuilder->getInt64(bufsize - 1);  // A mask to implement circular buffer indexing
-    Value * loadIndex0 = iBuilder->CreateAdd(iBuilder->CreateAnd(iBuilder->CreateSub(mBlockNo, iBuilder->getInt64(advanceEntries)), indexMask), advBaseIndex);
-    Value * storeIndex = iBuilder->CreateAdd(iBuilder->CreateAnd(mBlockNo, indexMask), advBaseIndex);
+    Value * blockIndex = iBuilder->CreateBlockAlignedLoad(mKernelBuilder->getBlockIndexScalar());
+    Value * loadIndex0 = iBuilder->CreateAdd(iBuilder->CreateAnd(iBuilder->CreateSub(blockIndex, iBuilder->getInt64(advanceEntries)), indexMask), advBaseIndex);
+    Value * storeIndex = iBuilder->CreateAdd(iBuilder->CreateAnd(blockIndex, indexMask), advBaseIndex);
     Value * carry_block0 = iBuilder->CreateBlockAlignedLoad(iBuilder->CreateGEP(mCarryBitBlockPtr, loadIndex0));
     // If the long advance is an exact multiple of mBITBLOCK_WIDTH, we simply return the oldest 
     // block in the long advance carry data area.  
@@ -214,7 +206,7 @@ Value * CarryManager::longAdvanceCarryInCarryOut(const unsigned index, const uns
         return carry_block0;
     }
     // Otherwise we need to combine data from the two oldest blocks.
-    Value * loadIndex1 = iBuilder->CreateAdd(iBuilder->CreateAnd(iBuilder->CreateSub(mBlockNo, iBuilder->getInt64(advanceEntries-1)), indexMask), advBaseIndex);
+    Value * loadIndex1 = iBuilder->CreateAdd(iBuilder->CreateAnd(iBuilder->CreateSub(blockIndex, iBuilder->getInt64(advanceEntries-1)), indexMask), advBaseIndex);
     Value * carry_block1 = iBuilder->CreateBlockAlignedLoad(iBuilder->CreateGEP(mCarryBitBlockPtr, loadIndex1));
     Value* block0_shr = iBuilder->CreateLShr(iBuilder->CreateBitCast(carry_block0, iBuilder->getIntNTy(mBitBlockWidth)), mBitBlockWidth - block_shift);
     Value* block1_shl = iBuilder->CreateShl(iBuilder->CreateBitCast(carry_block1, iBuilder->getIntNTy(mBitBlockWidth)), block_shift);

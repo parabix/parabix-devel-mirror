@@ -12,7 +12,7 @@
 #include <pablo/codegenstate.h>
 #include <pablo/carry_data.h>
 #include <llvm/IR/Constants.h>
-#include "../kernels/kernel.h"
+#include <kernels/kernel.h>
 
 /* 
  * Carry Data Manager.
@@ -47,7 +47,7 @@ public:
     , mCarryPackBasePtr(nullptr)
     , mCarryBitBlockPtr(nullptr)
     , mPopcountBasePtr(nullptr)
-    , mBlockNo(nullptr)
+    , mKernelBuilder(nullptr)
     , mPabloCountCount(0)
     , mTotalCarryDataBitBlocks(0)
     , mCarryDataAllocationSize(0)
@@ -60,11 +60,8 @@ public:
     
     void initialize(PabloFunction * const function, KernelBuilder * const kBuilder);
 
-    void initialize_setPtrs(KernelBuilder * const kBuilder);
+    void reset();
 
-    void setBlockNo(KernelBuilder * kBuilder);
-    Value * getBlockNo() const;
-    
     unsigned enumerate(PabloBlock * blk, unsigned ifDepth, unsigned whileDepth);
           
     /* Entering and leaving scopes. */
@@ -142,7 +139,7 @@ private:
     Type * mCarryPackType;
     Value * mCarryBitBlockPtr;
     Value * mPopcountBasePtr;
-    Value * mBlockNo;
+    KernelBuilder * mKernelBuilder;
     unsigned mPabloCountCount; // Number of Pablo "Count" operations
     unsigned mTotalCarryDataBitBlocks;
     unsigned mCarryDataAllocationSize;
@@ -160,10 +157,6 @@ private:
 
 inline bool CarryManager::hasCarries() const {
     return mCarryInfo->hasCarries();
-}
-
-inline Value * CarryManager::getBlockNo() const {
-    return mBlockNo;
 }
 
 }

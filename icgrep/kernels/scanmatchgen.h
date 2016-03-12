@@ -5,6 +5,8 @@
 #ifndef SCANMATCHGEN_H
 #define SCANMATCHGEN_H
 
+#include <tuple>
+
 class KernelBuilder;
 
 namespace llvm { class Module; }

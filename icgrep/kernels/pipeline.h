@@ -42,9 +42,6 @@ private:
     KernelBuilder *                     mS2PKernel;
     KernelBuilder *                     mICgrepKernel;   
     KernelBuilder *                     mScanMatchKernel;
-    int                                 mFileBufIdx;
-    int                                 mFileSizeIdx;
-    int                                 mFileNameIdx;
     Type*                               mBitBlockType;
     int                                 mBlockSize;
 };

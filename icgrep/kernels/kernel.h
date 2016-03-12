@@ -7,6 +7,7 @@
 
 #include <string>
 #include <vector>
+#include <boost/container/flat_map.hpp>
 
 namespace llvm {
     class Value;
@@ -31,26 +32,38 @@ namespace IDISA {
 }
 
 class KernelBuilder {
-
+    using NameMap = boost::container::flat_map<std::string, unsigned>;
 public:
     // sets name & sets internal state to the kernel superclass state
     KernelBuilder(std::string name, llvm::Module * m, IDISA::IDISA_Builder * b);
 
-    unsigned addInternalStateType(llvm::Type * const type);
-    void addOutputStream(const unsigned fields);
-    void addOutputAccum(llvm::Type * const type);
+    unsigned addInternalState(llvm::Type * const type);
+    unsigned addInternalState(llvm::Type * const type, std::string name);
+
+    void addInputStream(const unsigned fields);
     void addInputStream(const unsigned fields, std::string name);
+
+    void addInputScalar(llvm::Type * const type);
     void addInputScalar(llvm::Type * const type, std::string name);
+
+
+    void addOutputStream(const unsigned fields);
+    void addOutputScalar(llvm::Type * const type);
 
     llvm::Function * prepareFunction();
 
     void increment();
-    void incrementCircularBuffer();
 
     llvm::Value * getInputStream(const unsigned index, const unsigned streamOffset = 0);
+
     llvm::Value * getInputScalar(const unsigned index);
-    llvm::Value * getKernelState(const unsigned index, const unsigned streamOffset = 0);
+
+    llvm::Value * getInternalState(const std::string & name, llvm::Value * const inputStruct = nullptr);
+
+    llvm::Value * getInternalState(const unsigned index, llvm::Value * const inputStruct = nullptr);
+
     llvm::Value * getOutputStream(const unsigned index, const unsigned streamOffset = 0);
+
     llvm::Value * getOutputScalar(const unsigned index);
 
     void finalize();
@@ -68,7 +81,8 @@ public:
     void setBlocksPerSegment(const unsigned blocks);
 
     void setInternalState(const unsigned index, llvm::Value * const value);
-    llvm::Value * getInternalState(const unsigned index);
+
+    llvm::Value * getBlockIndexScalar();
 
 protected:
 
@@ -83,7 +97,7 @@ private:
     std::vector<llvm::Type *>           mInputStreams;
     std::vector<llvm::Type *>           mOutputStreams;
     std::vector<llvm::Type *>           mInputScalars;
-    std::vector<llvm::Type *>           mOutputAccums;
+    std::vector<llvm::Type *>           mOutputScalar;
     std::vector<std::string>            mInputStreamNames;
     std::vector<std::string>            mInputScalarNames;
     llvm::Function* 					mConstructor;
@@ -99,7 +113,11 @@ private:
     llvm::Value *                       mKernelStruct;
     llvm::Value *                       mKernelParam;
     unsigned                            mSegmentIndex;
-    unsigned                            mStartIndex;
+    unsigned                            mBlockIndex;
+
+
+    NameMap                             mStateNameMap;
+
 };
 
 inline unsigned KernelBuilder::getSegmentBlocks() const {
@@ -124,6 +142,10 @@ inline void KernelBuilder::setBlocksPerSegment(const unsigned blocks) {
 
 inline void KernelBuilder::increment() {
     ++mSegmentIndex;
+}
+
+inline llvm::Value * KernelBuilder::getBlockIndexScalar() {
+    return getInternalState(mBlockIndex);
 }
 
 #endif // KERNEL_H

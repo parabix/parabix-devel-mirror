@@ -57,7 +57,7 @@ private:
     void Examine(PabloFunction & function);
     void Examine(PabloBlock * block);
 
-    void compileBlock(PabloBlock * block);
+    void compileBlock(const PabloBlock * const block);
     void compileStatement(const Statement * stmt);
     void compileIf(const If * ifStmt);
     void compileWhile(const While * whileStmt);
@@ -72,10 +72,10 @@ private:
 
     CarryManager *                      mCarryManager;
 
-    PabloFunction *                     mPabloFunction;
-    PabloBlock *                        mPabloBlock;
+    const PabloFunction *               mPabloFunction;
+    const PabloBlock *                  mPabloBlock;
 
-    KernelBuilder *                     mKBuilder;
+    KernelBuilder *                     mKernelBuilder;
 
     unsigned                            mWhileDepth;
     unsigned                            mIfDepth;
@@ -83,7 +83,6 @@ private:
     llvm::Function *                    mFunction;
 
     unsigned                            mMaxWhileDepth;
-    int                                 mFilePosIdx;
 };
 
 }

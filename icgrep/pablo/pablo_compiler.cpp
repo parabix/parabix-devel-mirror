@@ -72,17 +72,16 @@ PabloCompiler::PabloCompiler(Module * m, IDISA::IDISA_Builder * b)
 , mCarryManager(nullptr)
 , mPabloFunction(nullptr)
 , mPabloBlock(nullptr)
-, mKBuilder(nullptr)
+, mKernelBuilder(nullptr)
 , mWhileDepth(0)
 , mIfDepth(0)
 , mFunction(nullptr)
-, mMaxWhileDepth(0)
-, mFilePosIdx(2) {
+, mMaxWhileDepth(0) {
     
 }
 
 void PabloCompiler::setKernel(KernelBuilder * kBuilder){
-    mKBuilder = kBuilder;   
+    mKernelBuilder = kBuilder;
 } 
 
 llvm::Function * PabloCompiler::compile(PabloFunction * function) {
@@ -123,34 +122,27 @@ inline void PabloCompiler::GenerateKernel(PabloFunction * const function) {
     mPabloFunction = function;
 
     for (unsigned i = 0; i < function->getNumOfParameters(); ++i) {
-        mKBuilder->addInputStream(1, function->getParameter(i)->getName()->to_string());
+        mKernelBuilder->addInputStream(1, function->getParameter(i)->getName()->to_string());
     }
     for (unsigned i = 0; i < function->getNumOfResults(); ++i) {
-        mKBuilder->addOutputStream(1);
+        mKernelBuilder->addOutputStream(1);
     }
 
-    mCarryManager->initialize(function, mKBuilder);
+    mCarryManager->initialize(function, mKernelBuilder);
 
-    mKBuilder->prepareFunction();
+    mKernelBuilder->prepareFunction();
 
-    mFunction = mKBuilder->getDoBlockFunction();
+    mFunction = mKernelBuilder->getDoBlockFunction();
 
-    mCarryManager->initialize_setPtrs(mKBuilder);
+    for(unsigned i = 0; i < mKernelBuilder->getSegmentBlocks(); ++i){
 
-    for(unsigned i = 0; i < mKBuilder->getSegmentBlocks(); i++){
+        mCarryManager->reset();
 
         for (unsigned j = 0; j < function->getNumOfParameters(); ++j) {
-            mMarkerMap.insert(std::make_pair(function->getParameter(j), mKBuilder->getInputStream(j)));
+            mMarkerMap.insert(std::make_pair(function->getParameter(j), mKernelBuilder->getInputStream(j)));
         }
 
         compileBlock(function->getEntryBlock());
-
-        Value * filePos = mKBuilder->getInternalState(mFilePosIdx);
-        filePos = iBuilder->CreateBlockAlignedLoad(filePos);
-        filePos = iBuilder->CreateAdd(filePos, iBuilder->getInt64(iBuilder->getBitBlockWidth()));
-        mKBuilder->setInternalState(mFilePosIdx, filePos);
-
-        mCarryManager->setBlockNo(mKBuilder);
 
         for (unsigned j = 0; j < function->getNumOfResults(); ++j) {
             const auto f = mMarkerMap.find(function->getResult(j));
@@ -160,15 +152,15 @@ inline void PabloCompiler::GenerateKernel(PabloFunction * const function) {
             } else {
                 result = f->second;
             }
-            iBuilder->CreateBlockAlignedStore(result, mKBuilder->getOutputStream(j));
+            iBuilder->CreateBlockAlignedStore(result, mKernelBuilder->getOutputStream(j));
         }
 
         mMarkerMap.clear();
 
-        mKBuilder->increment();
+        mKernelBuilder->increment();
     }    
 
-    mKBuilder->finalize();
+    mKernelBuilder->finalize();
 }
 
 inline void PabloCompiler::Examine(PabloFunction & function) {
@@ -177,7 +169,6 @@ inline void PabloCompiler::Examine(PabloFunction & function) {
     mMaxWhileDepth = 0;
     Examine(function.getEntryBlock());
 }
-
 
 void PabloCompiler::Examine(PabloBlock * block) {
     for (Statement * stmt : *block) {
@@ -191,7 +182,7 @@ void PabloCompiler::Examine(PabloBlock * block) {
     }
 }
 
-void PabloCompiler::compileBlock(PabloBlock * block) {
+void PabloCompiler::compileBlock(const PabloBlock * const block) {
     mPabloBlock = block;
     for (const Statement * statement : *block) {
         compileStatement(statement);
@@ -435,8 +426,8 @@ void PabloCompiler::compileStatement(const Statement * stmt) {
         Type * const streamType = iBuilder->getIntNTy(iBuilder->getBitBlockWidth());
         const unsigned offset = l->getAmount() / iBuilder->getBitBlockWidth();
         const unsigned shift = (l->getAmount() % iBuilder->getBitBlockWidth());
-        Value * const b0 = iBuilder->CreateBitCast(iBuilder->CreateBlockAlignedLoad(mKBuilder->getInputStream(offset), index), streamType);
-        Value * const b1 = iBuilder->CreateBitCast(iBuilder->CreateBlockAlignedLoad(mKBuilder->getInputStream(offset + 1), index), streamType);
+        Value * const b0 = iBuilder->CreateBitCast(iBuilder->CreateBlockAlignedLoad(mKernelBuilder->getInputStream(offset), index), streamType);
+        Value * const b1 = iBuilder->CreateBitCast(iBuilder->CreateBlockAlignedLoad(mKernelBuilder->getInputStream(offset + 1), index), streamType);
         Value * result = iBuilder->CreateOr(iBuilder->CreateLShr(b0, shift), iBuilder->CreateShl(b1, iBuilder->getBitBlockWidth() - shift), "lookahead");
         expr = iBuilder->CreateBitCast(result, iBuilder->getBitBlockType());
     } else {
