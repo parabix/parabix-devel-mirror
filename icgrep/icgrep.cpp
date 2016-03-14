@@ -15,7 +15,7 @@
 
 #include <boost/uuid/sha1.hpp>
 #include <toolchain.h>
-#include <atomic>
+#include <mutex>
 
 static cl::OptionCategory aRegexSourceOptions("Regular Expression Options",
                                        "These options control the regular expression source.");
@@ -103,14 +103,28 @@ std::string sha1sum(const std::string & str) {
 }
 
 GrepEngine grepEngine;
-std::atomic<int> fileCount;
+std::mutex count_mutex;
 
+size_t fileCount;
 void *DoGrep(void *threadid)
 {
     long tid;
     tid = (long)threadid;
-    if (tid+1 < inputFiles.size())
-        grepEngine.doGrep(inputFiles[tid+1]);
+    size_t fileIdx;
+
+    count_mutex.lock();
+    fileCount++;
+    fileIdx = fileCount;
+    count_mutex.unlock();
+    
+    while (fileIdx < inputFiles.size()){
+        grepEngine.doGrep(inputFiles[fileIdx]);
+        
+        count_mutex.lock();
+        fileCount++;
+        fileIdx = fileCount;
+        count_mutex.unlock();
+    }
 
     pthread_exit(NULL);
 }
