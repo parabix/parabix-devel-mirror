@@ -494,8 +494,8 @@ void initResult(std::vector<std::string> filenames, const int n){
 }
 
 extern "C" {
-    void wrapped_report_match(uint64_t lineNum, uint64_t line_start, uint64_t line_end, const char * buffer, int filesize, char * filename) {
-        
+    void wrapped_report_match(uint64_t lineNum, uint64_t line_start, uint64_t line_end, const char * buffer, uint64_t filesize, char * filename) {
+
         int idx = 0;
         for (int i=1; i<inputFiles.size(); i++){
             if (inputFiles[i] == filename){

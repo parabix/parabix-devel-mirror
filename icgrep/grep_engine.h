@@ -15,7 +15,7 @@
 namespace llvm { class raw_ostream; }
 
 class GrepEngine {
-    typedef void (*GrepFunctionType)(char * byte_data, int filesize, const char* filename, uint64_t finalLineUnterminated);
+    typedef void (*GrepFunctionType)(char * byte_data, size_t filesize, const char* filename, uint64_t finalLineUnterminated);
 public:
 
     GrepEngine() {}
