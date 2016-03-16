@@ -39,7 +39,7 @@ Value * IDISA_I64_Builder::hsimd_packl(unsigned fw, Value * a, Value * b) {
 }
 */
 
-Value * IDISA_I64_Builder::hsimd_packh(unsigned fw, Value * a, Value * b) {
+/*Value * IDISA_I64_Builder::hsimd_packh(unsigned fw, Value * a, Value * b) {
     Value * mask02 = getInt64(0xFF000000FF000000);
     Value * mask13 = getInt64(0x0000FF000000FF00);
 
@@ -54,21 +54,32 @@ Value * IDISA_I64_Builder::hsimd_packh(unsigned fw, Value * a, Value * b) {
 
     return simd_or(b2, a2);
 }
-
-Value * IDISA_I64_Builder::hsimd_packl(unsigned fw, Value * a, Value * b) {
-    Value * mask02 = getInt64(0x00FF000000FF0000);
-    Value * mask13 = getInt64(0x000000FF000000FF);
-
-    Value * b1 = simd_or(simd_srli(64, simd_and(b, mask02), 8), simd_and(b, mask13));
-    Value * a1 = simd_or(simd_srli(64, simd_and(a, mask02), 8), simd_and(a, mask13));
-
-    Value * mask01 = getInt64(0x0000FFFF00000000);
-    Value * mask23 = getInt64(0x000000000000FFFF);
-
-    Value * b2 = simd_or(simd_slli(64, simd_and(b1, mask01), 16), simd_slli(64, simd_and(b1, mask23), 32));
-    Value * a2 = simd_or(simd_srli(64, simd_and(a1, mask01), 16), simd_and(a1, mask23));
-
-    return simd_or(b2, a2);
-}
+*/
+    Value * IDISA_I64_Builder::hsimd_packh(unsigned fw, Value * a, Value * b) {
+        Value * a_ = a;
+        Value * b_ = b;
+        for (unsigned w = fw; w < mBitBlockWidth; w *= 2) {
+            Value * himask_odd = simd_and(simd_himask(w), simd_himask(2*w));  // high half of odd fields
+            Value * himask_even = simd_and(simd_himask(w), simd_lomask(2*w));  // high half of even fields
+            b_ = simd_or(simd_and(b_, himask_odd), simd_slli(mBitBlockWidth, simd_and(b_, himask_even), w/2));
+            a_ = simd_or(simd_and(a_, himask_odd), simd_slli(mBitBlockWidth, simd_and(a_, himask_even), w/2));
+        }
+        Value * pk = simd_or(b_, simd_srli(mBitBlockWidth, a_, mBitBlockWidth/2));
+        return pk;
+    }
+    
+    
+    Value * IDISA_I64_Builder::hsimd_packl(unsigned fw, Value * a, Value * b) {
+        Value * a_ = a;
+        Value * b_ = b;
+        for (unsigned w = fw; w < mBitBlockWidth; w *= 2) {
+            Value * lomask_odd = simd_and(simd_lomask(w), simd_himask(2*w));  // high half of odd fields
+            Value * lomask_even = simd_and(simd_lomask(w), simd_lomask(2*w));  // high half of even fields
+            b_ = simd_or(simd_and(b_, lomask_even), simd_srli(mBitBlockWidth, simd_and(b_, lomask_odd), w/2));
+            a_ = simd_or(simd_and(a_, lomask_even), simd_srli(mBitBlockWidth, simd_and(a_, lomask_odd), w/2));
+        }
+        Value * pk = simd_or(simd_slli(mBitBlockWidth, b_, mBitBlockWidth/2), a_);
+        return pk;
+    }
 
 }
