@@ -35,6 +35,9 @@
 #include <unordered_set>
 
 static cl::OptionCategory fREcompilationOptions("Regex Compilation Options", "These options control the compilation of regular expressions to Pablo.");
+static cl::opt<bool> InvertMatches("v", cl::init(false),
+                     cl::desc("select non-matching lines"), cl::cat(fREcompilationOptions));
+static cl::alias InvertMatchesLong("invert-matches", cl::desc("Alias for -v"), cl::aliasopt(InvertMatches));
 
 static cl::opt<bool> DisableLog2BoundedRepetition("disable-log2-bounded-repetition", cl::init(false),
                      cl::desc("disable log2 optimizations for bounded repetition of bytes"), cl::cat(fREcompilationOptions));
@@ -376,7 +379,11 @@ Name * RE_Compiler::generateGraphemeClusterBoundaryRule() {
 }
 
 void RE_Compiler::finalizeMatchResult(MarkerType match_result) {
-    mFunction.setResult(0, mPB.createAssign("matches", mPB.createAnd(mPB.createMatchStar(markerVar(match_result), mAny), UNICODE_LINE_BREAK ? mUnicodeLineBreak : mLineFeed)));
+    PabloAST * match_follow = mPB.createMatchStar(markerVar(match_result), mAny);
+    if (InvertMatches) {
+        match_follow = mPB.createNot(match_follow);
+    }
+    mFunction.setResult(0, mPB.createAssign("matches", mPB.createAnd(match_follow, UNICODE_LINE_BREAK ? mUnicodeLineBreak : mLineFeed)));
 }
 
 MarkerType RE_Compiler::compile(RE * re, PabloBuilder & pb) {
