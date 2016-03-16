@@ -175,5 +175,4 @@ void PipelineBuilder::ExecuteKernels() {
     scanMatchInstance->call(results);
     iBuilder->CreateRetVoid();
 
-    mMod->dump();
 }
