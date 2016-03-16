@@ -37,14 +37,11 @@
 #include <llvm/Support/raw_os_ostream.h>
 
 // mmap system
-#ifdef USE_BOOST_MMAP
 #include <boost/filesystem.hpp>
 #include <boost/iostreams/device/mapped_file.hpp>
 using namespace boost::iostreams;
 using namespace boost::filesystem;
-#else
-#include <sys/mman.h>
-#endif
+
 #include <fcntl.h>
 
 #include <kernels/kernel.h>
@@ -72,7 +69,6 @@ void GrepEngine::doGrep(const std::string & fileName) {
     size_t mFileSize;
     char * mFileBuffer;
 
-#ifdef USE_BOOST_MMAP
     const path file(mFileName);
     if (exists(file)) {
         if (is_directory(file)) {
@@ -97,43 +93,6 @@ void GrepEngine::doGrep(const std::string & fileName) {
         }
         mFileBuffer = mFile.data();
     }
-#else
-    struct stat infile_sb;
-    const int fdSrc = open(mFileName.c_str(), O_RDONLY);
-    if (fdSrc == -1) {
-        std::cerr << "Error: cannot open " << mFileName << " for processing. Skipped.\n";
-        return;
-    }
-    if (fstat(fdSrc, &infile_sb) == -1) {
-        std::cerr << "Error: cannot stat " << mFileName << " for processing. Skipped.\n";
-        close (fdSrc);
-        return;
-    }
-    if (S_ISDIR(infile_sb.st_mode)) {
-        close (fdSrc);
-        return;
-    }
-    mFileSize = infile_sb.st_size;
-    if (mFileSize == 0) {
-        mFileBuffer = nullptr;
-    }
-    else {
-        mFileBuffer = (char *) mmap(NULL, mFileSize, PROT_READ, MAP_PRIVATE, fdSrc, 0);
-        if (mFileBuffer == MAP_FAILED) {
-            if (errno ==  ENOMEM) {
-                std::cerr << "Error:  mmap of " << mFileName << " failed: out of memory\n";
-                close (fdSrc);
-            }
-            else {
-                std::cerr << "Error: mmap of " << mFileName << " failed with errno " << errno << ". Skipped.\n";
-                close (fdSrc);
-            }
-            return;
-        }
-    }
-    close(fdSrc);
-
-#endif
     
     uint64_t finalLineUnterminated = 0;
     if(finalLineIsUnterminated(mFileBuffer, mFileSize))
@@ -141,11 +100,8 @@ void GrepEngine::doGrep(const std::string & fileName) {
     
     mMainFcn(mFileBuffer, mFileSize, mFileName.c_str(), finalLineUnterminated);
 
-#ifdef USE_BOOST_MMAP
+
     mFile.close();
-#else
-    munmap((void *)mFileBuffer, mFileSize);
-#endif 
 
 }
 
@@ -156,7 +112,7 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool isNam
     
     IDISA::IDISA_Builder * idb = GetIDISA_Builder(M);
 
-    PipelineBuilder pipelineBuilder(M, idb);
+    kernel::PipelineBuilder pipelineBuilder(M, idb);
 
     Encoding encoding(Encoding::Type::UTF_8, 8);
     mIsNameExpression = isNameExpression;
@@ -181,6 +137,7 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool isNam
 }
 
 re::CC *  GrepEngine::grepCodepoints() {
+
     setParsedCodePointSet();
     char * mFileBuffer = getUnicodeNameDataPtr();
     size_t mFileSize = getUnicodeNameDataSize();

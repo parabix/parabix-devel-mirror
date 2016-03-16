@@ -21,13 +21,13 @@ namespace pablo {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief initialize
  ** ------------------------------------------------------------------------------------------------------------- */
-void CarryManager::initialize(PabloFunction * const function, KernelBuilder * const kBuilder) {
+void CarryManager::initialize(PabloFunction * const function, kernel::KernelBuilder * const kBuilder) {
     mRootScope = function->getEntryBlock();
     mCarryInfoVector.resize(mRootScope->enumerateScopes(0) + 1);
     mCarryPackType = mBitBlockType;
     const unsigned totalCarryDataSize = std::max<unsigned>(enumerate(mRootScope, 0, 0), 1);
     mCarryPackPtr.resize(totalCarryDataSize, nullptr);
-    mCarryInPack.resize(totalCarryDataSize);
+    mCarryInPack.resize(totalCarryDataSize, nullptr);
     mCarryOutPack.resize(totalCarryDataSize, nullptr);
     mTotalCarryDataBitBlocks = totalCarryDataSize;
     ArrayType* cdArrayTy = ArrayType::get(mBitBlockType, mTotalCarryDataBitBlocks);
@@ -55,7 +55,6 @@ void CarryManager::reset() {
     mCarryInfo = mCarryInfoVector[0];
     mCarryOutPack[summaryPack()] = Constant::getNullValue(mCarryPackType);
     assert (mCarrySummary.empty());
-    std::fill(mCarryInPack.begin(), mCarryInPack.end(), nullptr);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -152,14 +151,11 @@ Value * CarryManager::shortAdvanceCarryInCarryOut(const unsigned index, const un
     if (mCarryInfo->getWhileDepth() == 0) {
         storeCarryOut(index);
     }
-    if (LLVM_LIKELY(shiftAmount == 1)) {
-        Value * ahead = iBuilder->mvmd_dslli(DSSLI_FIELDWIDTH, value, carryIn, iBuilder->getBitBlockWidth()/DSSLI_FIELDWIDTH -1);
-        result = iBuilder->simd_or(iBuilder->simd_srli(DSSLI_FIELDWIDTH, ahead, DSSLI_FIELDWIDTH-1), iBuilder->simd_slli(DSSLI_FIELDWIDTH, value, 1));
-    } else if (shiftAmount % 8 == 0) { // Use a single whole-byte shift, if possible.
+    if (LLVM_UNLIKELY((shiftAmount % 8) == 0)) { // Use a single whole-byte shift, if possible.
         result = iBuilder->mvmd_dslli(8, value, carryIn, (iBuilder->getBitBlockWidth() / 8) - (shiftAmount / 8));
-    } else if (shiftAmount < DSSLI_FIELDWIDTH) {
-        Value * ahead = iBuilder->mvmd_dslli(DSSLI_FIELDWIDTH, value, carryIn, iBuilder->getBitBlockWidth()/DSSLI_FIELDWIDTH - 1);
-        result = iBuilder->simd_or(iBuilder->simd_srli(DSSLI_FIELDWIDTH, ahead, DSSLI_FIELDWIDTH-shiftAmount), iBuilder->simd_slli(DSSLI_FIELDWIDTH, value, shiftAmount));
+    } else if (LLVM_LIKELY(shiftAmount < DSSLI_FIELDWIDTH)) {
+        Value * ahead = iBuilder->mvmd_dslli(DSSLI_FIELDWIDTH, value, carryIn, iBuilder->getBitBlockWidth() / DSSLI_FIELDWIDTH - 1);
+        result = iBuilder->simd_or(iBuilder->simd_srli(DSSLI_FIELDWIDTH, ahead, DSSLI_FIELDWIDTH - shiftAmount), iBuilder->simd_slli(DSSLI_FIELDWIDTH, value, shiftAmount));
     } else {
         Value* advanceq_longint = iBuilder->CreateBitCast(carryIn, iBuilder->getIntNTy(mBitBlockWidth));
         Value* strm_longint = iBuilder->CreateBitCast(value, iBuilder->getIntNTy(mBitBlockWidth));
@@ -195,7 +191,7 @@ Value * CarryManager::longAdvanceCarryInCarryOut(const unsigned index, const uns
     const unsigned advanceEntries = mCarryInfo->longAdvanceEntries(shiftAmount);
     const unsigned bufsize = mCarryInfo->longAdvanceBufferSize(shiftAmount);
     Value * indexMask = iBuilder->getInt64(bufsize - 1);  // A mask to implement circular buffer indexing
-    Value * blockIndex = iBuilder->CreateBlockAlignedLoad(mKernelBuilder->getBlockIndexScalar());
+    Value * blockIndex = iBuilder->CreateBlockAlignedLoad(mKernelBuilder->getBlockNo());
     Value * loadIndex0 = iBuilder->CreateAdd(iBuilder->CreateAnd(iBuilder->CreateSub(blockIndex, iBuilder->getInt64(advanceEntries)), indexMask), advBaseIndex);
     Value * storeIndex = iBuilder->CreateAdd(iBuilder->CreateAnd(blockIndex, indexMask), advBaseIndex);
     Value * carry_block0 = iBuilder->CreateBlockAlignedLoad(iBuilder->CreateGEP(mCarryBitBlockPtr, loadIndex0));

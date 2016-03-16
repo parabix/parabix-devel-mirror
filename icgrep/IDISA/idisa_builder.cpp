@@ -10,6 +10,7 @@
 #include <llvm/IR/Intrinsics.h>
 #include <llvm/IR/Function.h>
 #include <llvm/IR/TypeBuilder.h>
+#include <llvm/Support/raw_ostream.h>
 
 namespace IDISA {
 
@@ -33,34 +34,50 @@ Constant* geti8StrVal(Module& M, char const* str, Twine const& name) {
     return strVal;
 }
 
-static Function *create_printf(LLVMContext &ctx, Module *mod) {
-
-  FunctionType *printf_type =
-      TypeBuilder<int(char *, ...), false>::get(getGlobalContext());
-
-  Function *func = cast<Function>(mod->getOrInsertFunction(
-      "printf", printf_type,
-      AttributeSet().addAttribute(mod->getContext(), 1U, Attribute::NoAlias)));
-
-  return func;
+static Function * create_printf(Module * const mod) {
+    Function * printf = mod->getFunction("printf");
+    if (printf == nullptr) {
+        FunctionType *printf_type =
+            TypeBuilder<int(char *, ...), false>::get(mod->getContext());
+        printf = cast<Function>(mod->getOrInsertFunction("printf", printf_type,
+            AttributeSet().addAttribute(mod->getContext(), 1U, Attribute::NoAlias)));
+    }
+    return printf;
 }
 
-void IDISA_Builder::genPrintRegister(std::string regName, Value * bitblockValue) {
-    Function *printf_func = create_printf(mMod->getContext(), mMod);
-    Type * printType = VectorType::get(getIntNTy(8), mBitBlockWidth/8);
-    Value * val = CreateBitCast(bitblockValue, printType);
-    std::vector<Value *> args;
-    std::string str = regName;
-    for (unsigned int i = 0; i < 40 - regName.length(); i++) str += " ";
-    str += "= %02X";
-    for (unsigned int i=0; i<mBitBlockWidth/8-1; i++)
-        str += " %02X";
-    str += "\n";
-    args.push_back(geti8StrVal(*mMod, str.c_str(), regName));
-    for(unsigned int i=0; i<mBitBlockWidth/8; i++)
-        args.push_back(CreateExtractElement(val, ConstantInt::get(getIntNTy(32), i)));
-    args.push_back(val);
-    CreateCall(printf_func, args);
+void IDISA_Builder::CallPrintRegister(const std::string & name, Value * const value) {
+    Constant * printRegister = mMod->getFunction("PrintRegister");
+    if (LLVM_UNLIKELY(printRegister == nullptr)) {
+        FunctionType *FT = FunctionType::get(getVoidTy(), { PointerType::get(getInt8Ty(), 0), mBitBlockType }, false);
+        Function * function = Function::Create(FT, Function::InternalLinkage, "PrintRegister", mMod);
+        auto arg = function->arg_begin();
+        std::string tmp;
+        raw_string_ostream out(tmp);
+        out << "%-40s =";
+        for(unsigned i = 0; i < (mBitBlockWidth / 8); ++i) {
+            out << " %02x";
+        }
+        out << '\n';
+        BasicBlock * entry = BasicBlock::Create(mMod->getContext(), "entry", function);
+        IRBuilder<> builder(entry);
+        std::vector<Value *> args;
+        args.push_back(geti8StrVal(*mMod, out.str().c_str(), ""));
+        Value * const name = arg++;
+        name->setName("name");
+        args.push_back(name);
+        Value * value = arg;
+        value->setName("value");
+        Type * const byteVectorType = VectorType::get(getInt8Ty(), (mBitBlockWidth / 8));
+        value = builder.CreateBitCast(value, byteVectorType);
+        for(unsigned i = (mBitBlockWidth / 8); i != 0; --i) {
+            args.push_back(builder.CreateExtractElement(value, builder.getInt32(i - 1)));
+        }
+        builder.CreateCall(create_printf(mMod), args);
+        builder.CreateRetVoid();
+
+        printRegister = function;
+    }
+    CreateCall2(printRegister, geti8StrVal(*mMod, name.c_str(), name), CreateBitCast(value, mBitBlockType));
 }
 
 Constant * IDISA_Builder::simd_himask(unsigned fw) {

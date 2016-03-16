@@ -11,6 +11,8 @@
 
 using namespace llvm;
 
+namespace kernel {
+
 Value * generateForwardZeroesMask(IDISA::IDISA_Builder * iBuilder, Value * bits) {
     Value * bits_minus1 = iBuilder->CreateSub(bits, ConstantInt::get(bits->getType(), 1));
     return iBuilder->CreateAnd(bits_minus1, iBuilder->CreateNot(bits));
@@ -47,7 +49,7 @@ Function * generateScanWordRoutine(Module * m, IDISA::IDISA_Builder * iBuilder, 
     Type * T = iBuilder->getIntNTy(scanwordBitWidth);
     Type * S = PointerType::get(iBuilder->getIntNTy(8), 0);
     Type * returnType = StructType::get(ctxt, std::vector<Type *>({T, T}));
-    FunctionType * functionType = FunctionType::get(returnType, std::vector<Type *>({PointerType::get(kBuilder->getKernelStructType(), 0), T, T, T, T, T}), false);
+    FunctionType * functionType = FunctionType::get(returnType, std::vector<Type *>({PointerType::get(kBuilder->getKernelStateType(), 0), T, T, T, T, T}), false);
 
     SmallVector<AttributeSet, 6> Attrs;
     Attrs.push_back(AttributeSet::get(ctxt, ~0U, std::vector<Attribute::AttrKind>({ Attribute::NoUnwind, Attribute::UWTable })));
@@ -64,8 +66,8 @@ Function * generateScanWordRoutine(Module * m, IDISA::IDISA_Builder * iBuilder, 
     function->addFnAttr(llvm::Attribute::AlwaysInline);
 
     Function::arg_iterator args = function->arg_begin();
-    Value * this_input_parm = args++;
-    this_input_parm->setName("this");
+    Value * instance = args++;
+    instance->setName("this");
     Value * matches_input_parm = args++;
     matches_input_parm->setName("matches");
     Value * record_breaks_input_parm = args++;
@@ -150,19 +152,13 @@ Function * generateScanWordRoutine(Module * m, IDISA::IDISA_Builder * iBuilder, 
     matchRecordStart_phi->addIncoming(matchRecordStart, prior_breaks_block);    
     Value * matchRecordEnd = iBuilder->CreateAdd(scanwordPos, generateCountForwardZeroes(iBuilder, matches_phi));
 
-    Value* filebuf_gep = kBuilder->getInternalState("FileBuf", this_input_parm);
-    Value* filebufptr = iBuilder->CreateLoad(filebuf_gep, "filebuf");
-
+    Value * fileBuf = iBuilder->CreateLoad(kBuilder->getInternalState(instance, "FileBuf"));
     if (isNameExpression) {
-        iBuilder->CreateCall(matchProcessor, std::vector<Value *>({matchRecordNum_phi, matchRecordStart_phi, matchRecordEnd, filebufptr}));
+        iBuilder->CreateCall(matchProcessor, std::vector<Value *>({matchRecordNum_phi, matchRecordStart_phi, matchRecordEnd, fileBuf}));
     } else {
-        Value * filesize_gep = kBuilder->getInternalState("FileSize", this_input_parm);
-        Value * filesize = iBuilder->CreateLoad(filesize_gep, "filesize");
-
-        Value * filename_gep = kBuilder->getInternalState("FileName", this_input_parm);
-        Value * filenameptr = iBuilder->CreateLoad(filename_gep, "filename");
-
-        iBuilder->CreateCall(matchProcessor, std::vector<Value *>({matchRecordNum_phi, matchRecordStart_phi, matchRecordEnd, filebufptr, filesize, filenameptr}));
+        Value * fileSize = iBuilder->CreateLoad(kBuilder->getInternalState(instance, "FileSize"));
+        Value * fileName = iBuilder->CreateLoad(kBuilder->getInternalState(instance, "FileName"));
+        iBuilder->CreateCall(matchProcessor, std::vector<Value *>({matchRecordNum_phi, matchRecordStart_phi, matchRecordEnd, fileBuf, fileSize, fileName}));
     }
 
     Value * remaining_matches = generateResetLowestBit(iBuilder, matches_phi);
@@ -224,38 +220,30 @@ void generateScanMatch(Module * m, IDISA::IDISA_Builder * iBuilder, unsigned sca
 
     Function * function = kBuilder->prepareFunction();
 
-    // Type * kernelStuctType = PointerType::get(kBuilder->getKernelStructType(), 0);
-
     Function * scanWordFunction = generateScanWordRoutine(m, iBuilder, scanWordBitWidth, kBuilder, isNameExpression);
 
     iBuilder->SetInsertPoint(&function->getEntryBlock());
 
-    Value * kernelStuctParam = kBuilder->getKernelStructParam();
+    Value * kernelStuctParam = kBuilder->getKernelState();
 
     Value * scanwordPos = iBuilder->CreateBlockAlignedLoad(kBuilder->getInternalState("BlockNo"));
     scanwordPos = iBuilder->CreateMul(scanwordPos, ConstantInt::get(scanwordPos->getType(), iBuilder->getBitBlockWidth()));
 
     Value * recordStart = iBuilder->CreateBlockAlignedLoad(kBuilder->getInternalState(lineStart));
     Value * recordNum = iBuilder->CreateBlockAlignedLoad(kBuilder->getInternalState(lineNum));
-
-    Value * wordResult = nullptr;
-
-    const unsigned segmentBlocks = kBuilder->getSegmentBlocks();
-    const unsigned scanWordBlocks =  segmentBlocks * fieldCount;
-    for(unsigned j = 0; j < segmentBlocks; ++j) {
-        Value * matchWordVector = iBuilder->CreateBitCast(iBuilder->CreateBlockAlignedLoad(kBuilder->getInputStream(0)), scanwordVectorType);
-        Value * breakWordVector = iBuilder->CreateBitCast(iBuilder->CreateBlockAlignedLoad(kBuilder->getInputStream(1)), scanwordVectorType);
-        for(unsigned i = 0; i < scanWordBlocks; ++i){
-            Value * matchWord = iBuilder->CreateExtractElement(matchWordVector, ConstantInt::get(T, i));
-            Value * recordBreaksWord = iBuilder->CreateExtractElement(breakWordVector, ConstantInt::get(T, i));
-            wordResult = iBuilder->CreateCall(scanWordFunction, std::vector<Value *>({kernelStuctParam, matchWord, recordBreaksWord, scanwordPos, recordStart, recordNum}));
-            scanwordPos = iBuilder->CreateAdd(scanwordPos, ConstantInt::get(T, scanWordBitWidth));
-            recordStart = iBuilder->CreateExtractValue(wordResult, std::vector<unsigned>({0}));
-            recordNum = iBuilder->CreateExtractValue(wordResult, std::vector<unsigned>({1}));
-        }
-        kBuilder->increment();
+    Value * matchWordVector = iBuilder->CreateBitCast(iBuilder->CreateBlockAlignedLoad(kBuilder->getInputStream(0)), scanwordVectorType);
+    Value * breakWordVector = iBuilder->CreateBitCast(iBuilder->CreateBlockAlignedLoad(kBuilder->getInputStream(1)), scanwordVectorType);
+    for(unsigned i = 0; i < fieldCount; ++i){
+        Value * matchWord = iBuilder->CreateExtractElement(matchWordVector, ConstantInt::get(T, i));
+        Value * recordBreaksWord = iBuilder->CreateExtractElement(breakWordVector, ConstantInt::get(T, i));
+        Value * wordResult = wordResult = iBuilder->CreateCall(scanWordFunction, std::vector<Value *>({kernelStuctParam, matchWord, recordBreaksWord, scanwordPos, recordStart, recordNum}));
+        scanwordPos = iBuilder->CreateAdd(scanwordPos, ConstantInt::get(T, scanWordBitWidth));
+        recordStart = iBuilder->CreateExtractValue(wordResult, std::vector<unsigned>({0}));
+        recordNum = iBuilder->CreateExtractValue(wordResult, std::vector<unsigned>({1}));
     }
     kBuilder->setInternalState(lineStart, recordStart);
     kBuilder->setInternalState(lineNum, recordNum);
     kBuilder->finalize();
+}
+
 }

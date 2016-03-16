@@ -6,6 +6,8 @@
 #include <kernels/kernel.h>
 #include <IDISA/idisa_builder.h>
 
+namespace kernel {
+
 const int PACK_LANES = 1;
 
 void s2p_step(IDISA::IDISA_Builder * iBuilder, Value * s0, Value * s1, Value * hi_mask, unsigned shift, Value * &p0, Value * &p1) {
@@ -55,25 +57,12 @@ void generateS2PKernel(Module *, IDISA::IDISA_Builder * iBuilder, KernelBuilder 
         kBuilder->addOutputStream(1);
     }
     kBuilder->prepareFunction();
-    for(unsigned i = 0; i < kBuilder->getSegmentBlocks(); ++i){
-        Value * output[8];
-        s2p(iBuilder, kBuilder->getInputStream(0), output);
-        for (unsigned j = 0; j < 8; ++j) {
-            iBuilder->CreateBlockAlignedStore(output[j], kBuilder->getOutputStream(j));
-        }
-        kBuilder->increment();
+    Value * output[8];
+    s2p(iBuilder, kBuilder->getInputStream(0), output);
+    for (unsigned j = 0; j < 8; ++j) {
+        iBuilder->CreateBlockAlignedStore(output[j], kBuilder->getOutputStream(j));
     }
     kBuilder->finalize();
 }
 
-
-
-
-
-
-
-
-
-
-
-
+}

@@ -58,7 +58,7 @@ public:
 
     ~CarryManager();
     
-    void initialize(PabloFunction * const function, KernelBuilder * const kBuilder);
+    void initialize(PabloFunction * const function, kernel::KernelBuilder * const kBuilder);
 
     void reset();
 
@@ -139,7 +139,7 @@ private:
     Type * mCarryPackType;
     Value * mCarryBitBlockPtr;
     Value * mPopcountBasePtr;
-    KernelBuilder * mKernelBuilder;
+    kernel::KernelBuilder * mKernelBuilder;
     unsigned mPabloCountCount; // Number of Pablo "Count" operations
     unsigned mTotalCarryDataBitBlocks;
     unsigned mCarryDataAllocationSize;

@@ -8,7 +8,6 @@ set (icgrep_VERSION_MAJOR 1)
 set (icgrep_VERSION_MINOR 0)
 
 option(ENABLE_MULTIPLEXING "Compiling the Multiplexing Module")
-option(USE_BOOST_MMAP "Using mmap from Boost.Iostreams")
 option(ENABLE_PREGENERATED_UCD_FUNCTIONS "Enable compiling the pregenerated UCD functions")
 option(PRINT_TIMING_INFORMATION "Write compilation and execution timing information to standard error stream")
 
@@ -49,11 +48,8 @@ message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
 set(Boost_USE_STATIC_LIBS ON)
 set(Boost_USE_MULTITHREADED OFF)
 set(Boost_USE_STATIC_RUNTIME ON)
-SET(REQ_BOOST_COMPONENTS ${REQ_BOOST_COMPONENTS} system)
-if(USE_BOOST_MMAP)
-  SET(REQ_BOOST_COMPONENTS ${REQ_BOOST_COMPONENTS} iostreams filesystem)
-endif()
-find_package(Boost COMPONENTS ${REQ_BOOST_COMPONENTS} REQUIRED)
+
+find_package(Boost 1.46 COMPONENTS system iostreams filesystem REQUIRED)
 
 SET(PABLO_SRC pablo/pabloAST.cpp pablo/ps_if.cpp pablo/ps_while.cpp pablo/function.cpp pablo/codegenstate.cpp pablo/builder.cpp pablo/symbol_generator.cpp pablo/printer_pablos.cpp)
 SET(PABLO_SRC ${PABLO_SRC} pablo/pablo_compiler.cpp pablo/carry_manager.cpp pablo/carry_data.cpp IDISA/idisa_builder.cpp IDISA/idisa_avx_builder.cpp IDISA/idisa_i64_builder.cpp IDISA/idisa_sse_builder.cpp kernels/s2p_kernel.cpp kernels/scanmatchgen.cpp kernels/kernel.cpp kernels/pipeline.cpp)
@@ -125,11 +121,6 @@ ENDIF()
 
 
 target_link_libraries (icgrep UCDlib PabloADT RegExpCompiler CCADT ${REQ_LLVM_LIBRARIES})
-
-IF(USE_BOOST_MMAP)
-  SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DUSE_BOOST_MMAP")
-ENDIF()
-
 
 IF(ENABLE_MULTIPLEXING)
 message(STATUS "Enabling Multiplexing")

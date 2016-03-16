@@ -7,6 +7,7 @@
 #include <pablo/function.h>
 #include <IDISA/idisa_builder.h>
 #include <llvm/Support/CommandLine.h>
+#include <kernels/instance.h>
 
 using namespace llvm;
 using namespace pablo;
@@ -16,6 +17,8 @@ static cl::opt<unsigned> SegmentSize("segment-size", cl::desc("Segment Size"), c
 inline bool isPowerOfTwo(const unsigned x) {
     return (x != 0) && (x & (x - 1)) == 0;
 }
+
+namespace kernel {
 
 // sets name & sets internal state to the kernel superclass state
 KernelBuilder::KernelBuilder(std::string name, Module * m, IDISA::IDISA_Builder * b)
@@ -32,110 +35,59 @@ KernelBuilder::KernelBuilder(std::string name, Module * m, IDISA::IDISA_Builder 
     mBlockIndex = addInternalState(b->getInt64Ty(), "BlockNo");
 }
 
+SlabAllocator<Instance> Instance::mAllocator; // static allocator declaration; should probably be in a "instance.cpp"
+
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief addInternalState
  ** ------------------------------------------------------------------------------------------------------------- */
 unsigned KernelBuilder::addInternalState(Type * const type) {
     assert (type);
-    const unsigned index = mStates.size();
-    mStates.push_back(type);
+    const unsigned index = mInternalState.size();
+    mInternalState.push_back(type);
     return index;
 }
 
-unsigned KernelBuilder::addInternalState(llvm::Type * const type, std::string name) {
-    if (LLVM_UNLIKELY(mStateNameMap.count(name) != 0)) {
+unsigned KernelBuilder::addInternalState(llvm::Type * const type, std::string && name) {
+    if (LLVM_UNLIKELY(mInternalStateNameMap.count(name) != 0)) {
         throw std::runtime_error("Kernel already contains internal state " + name);
     }
     const unsigned index = addInternalState(type);
-    mStateNameMap.emplace(name, index);
+    mInternalStateNameMap.emplace(name, index);
     return index;
 }
 
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief addOutputStream
- ** ------------------------------------------------------------------------------------------------------------- */
-void KernelBuilder::addOutputStream(const unsigned fields) {
-    assert (fields > 0);
-    mOutputStreams.push_back((fields == 1) ? mBitBlockType : ArrayType::get(mBitBlockType, fields));
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief addOutputScalar
- ** ------------------------------------------------------------------------------------------------------------- */
-void KernelBuilder::addOutputScalar(Type * const type) {
-    assert (type);
-    mOutputScalar.push_back(type);
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief addInputStream
- ** ------------------------------------------------------------------------------------------------------------- */
-void KernelBuilder::addInputStream(const unsigned fields, std::string name) {
-    assert (fields > 0 && !name.empty());
-    mInputStreamNames.push_back(name);
-    if (fields == 1){
-        mInputStreams.push_back(mBitBlockType);
-    } else {
-        mInputStreams.push_back(ArrayType::get(mBitBlockType, fields));
-    }
-}
-
-void KernelBuilder::addInputStream(const unsigned fields) {
-    addInputStream(fields, std::move(mKernelName + "_inputstream_" + std::to_string(mInputStreams.size())));
-}
-
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief getInputStream
- ** ------------------------------------------------------------------------------------------------------------- */
-Value * KernelBuilder::getInputStream(const unsigned index, const unsigned streamOffset) {
-    Value * const indices[] = {getOffset(streamOffset), iBuilder->getInt32(index)};
-    return iBuilder->CreateGEP(mInputParam, indices);
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief getInputScalar
- ** ------------------------------------------------------------------------------------------------------------- */
-Value * KernelBuilder::getInputScalar(const unsigned) {
-    throw std::runtime_error("currently not supported!");
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief getOutputStream
- ** ------------------------------------------------------------------------------------------------------------- */
-Value * KernelBuilder::getOutputStream(const unsigned index, const unsigned streamOffset) {
-    Value * const indices[] = {iBuilder->getInt32(0), iBuilder->getInt32(1), getOffset(streamOffset), iBuilder->getInt32(index)};
-    return iBuilder->CreateGEP(mKernelParam, indices);
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief getOutputScalar
- ** ------------------------------------------------------------------------------------------------------------- */
-Value * KernelBuilder::getOutputScalar(const unsigned) {
-    throw std::runtime_error("currently not supported!");
-}
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getInternalState
  ** ------------------------------------------------------------------------------------------------------------- */
-Value * KernelBuilder::getInternalState(const unsigned index, Value * const inputStruct) {
+Value * KernelBuilder::getInternalState(Value * const instance, const unsigned index) {
     Value* indices[] = {iBuilder->getInt64(0), iBuilder->getInt32(0), iBuilder->getInt32(index)};
-    return iBuilder->CreateGEP(inputStruct ? inputStruct : mKernelParam, indices);
+    return iBuilder->CreateGEP(instance ? instance : mKernelParam, indices);
 }
 
-Value * KernelBuilder::getInternalState(const std::string & name, Value * const inputStruct) {
-    const auto f = mStateNameMap.find(name);
-    if (LLVM_UNLIKELY(f == mStateNameMap.end())) {
+Value * KernelBuilder::getInternalState(Value * const instance, const std::string & name) {
+    const auto f = mInternalStateNameMap.find(name);
+    if (LLVM_UNLIKELY(f == mInternalStateNameMap.end())) {
         throw std::runtime_error("Kernel does not contain internal state " + name);
     }
-    return getInternalState(f->second, inputStruct);
+    return getInternalState(instance, f->second);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief setInternalState
  ** ------------------------------------------------------------------------------------------------------------- */
-void KernelBuilder::setInternalState(const unsigned index, Value * const value) {
-    Value * ptr = getInternalState(index);
+void KernelBuilder::setInternalState(Value * const instance, const std::string & name, Value * const value) {
+    Value * ptr = getInternalState(instance, name);
+    assert (ptr->getType()->getPointerElementType() == value->getType());
+    if (value->getType() == iBuilder->getBitBlockType()) {
+        iBuilder->CreateBlockAlignedStore(value, ptr);
+    } else {
+        iBuilder->CreateStore(value, ptr);
+    }
+}
+
+void KernelBuilder::setInternalState(Value * const instance, const unsigned index, Value * const value) {
+    Value * ptr = getInternalState(instance, index);
     assert (ptr->getType()->getPointerElementType() == value->getType());
     if (value->getType() == iBuilder->getBitBlockType()) {
         iBuilder->CreateBlockAlignedStore(value, ptr);
@@ -145,16 +97,94 @@ void KernelBuilder::setInternalState(const unsigned index, Value * const value) 
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
+ * @brief addInputStream
+ ** ------------------------------------------------------------------------------------------------------------- */
+void KernelBuilder::addInputStream(const unsigned fields, std::string && name) {
+    assert (fields > 0 && !name.empty());
+    mInputStreamName.push_back(name);
+    if (fields == 1){
+        mInputStream.push_back(mBitBlockType);
+    } else {
+        mInputStream.push_back(ArrayType::get(mBitBlockType, fields));
+    }
+}
+
+void KernelBuilder::addInputStream(const unsigned fields) {
+    addInputStream(fields, std::move(mKernelName + "_inputstream_" + std::to_string(mInputStream.size())));
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief getInputStream
+ ** ------------------------------------------------------------------------------------------------------------- */
+Value * KernelBuilder::getInputStream(llvm::Value * const instance, const unsigned index, const unsigned streamOffset) {
+    assert (instance);
+    Value * const indices[] = {getOffset(instance, streamOffset), iBuilder->getInt32(index)};
+    return iBuilder->CreateGEP(instance, indices);
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
  * @brief addInputScalar
  ** ------------------------------------------------------------------------------------------------------------- */
-void KernelBuilder::addInputScalar(Type * const type, std::string name) {
+void KernelBuilder::addInputScalar(Type * const type, std::string && name) {
     assert (type && !name.empty());
-    mInputScalarNames.push_back(name);
-    mInputScalars.push_back(type);
+    mInputScalarName.push_back(name);
+    mInputScalar.push_back(type);
 }
 
 void KernelBuilder::addInputScalar(Type * const type) {
-    addInputScalar(type, std::move(mKernelName + "_inputscalar_" + std::to_string(mInputScalars.size())));
+    addInputScalar(type, std::move(mKernelName + "_inputscalar_" + std::to_string(mInputScalar.size())));
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief getInputScalar
+ ** ------------------------------------------------------------------------------------------------------------- */
+Value * KernelBuilder::getInputScalar(Value * const instance, const unsigned) {
+    throw std::runtime_error("currently not supported!");
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief addOutputStream
+ ** ------------------------------------------------------------------------------------------------------------- */
+unsigned KernelBuilder::addOutputStream(const unsigned fields) {
+    assert (fields > 0);
+    const unsigned index = mOutputStream.size();
+    mOutputStream.push_back((fields == 1) ? mBitBlockType : ArrayType::get(mBitBlockType, fields));
+    return index;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief addOutputScalar
+ ** ------------------------------------------------------------------------------------------------------------- */
+unsigned KernelBuilder::addOutputScalar(Type * const type) {
+    assert (type);
+    const unsigned index = mOutputScalar.size();
+    mOutputScalar.push_back(type);
+    return index;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief getOutputStream
+ ** ------------------------------------------------------------------------------------------------------------- */
+Value * KernelBuilder::getOutputStream(Value * const instance, const unsigned index, const unsigned streamOffset) {
+    assert (instance);
+    Value * const indices[] = {getOffset(instance, streamOffset), iBuilder->getInt32(1), iBuilder->getInt32(0), iBuilder->getInt32(index)};
+    return iBuilder->CreateGEP(instance, indices);
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief getOutputStreams
+ ** ------------------------------------------------------------------------------------------------------------- */
+Value * KernelBuilder::getOutputStreamSet(Value * const instance, const unsigned streamOffset) {
+    assert (instance);
+    Value * const indices[] = {getOffset(instance, streamOffset), iBuilder->getInt32(1)};
+    return iBuilder->CreateGEP(instance, indices);
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief getOutputScalar
+ ** ------------------------------------------------------------------------------------------------------------- */
+Value * KernelBuilder::getOutputScalar(Value * const instance, const unsigned) {
+    throw std::runtime_error("currently not supported!");
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -166,11 +196,11 @@ Function * KernelBuilder::prepareFunction() {
     }
     const unsigned capacity = mBlocksPerSegment + mCircularBufferModulo - 1;
 
-    mInputStreamType = PointerType::get(StructType::get(mMod->getContext(), mInputStreams), 0);
-    mInputScalarType = PointerType::get(StructType::get(mMod->getContext(), mInputScalars), 0);
-    Type * outputStreamType = ArrayType::get(StructType::get(mMod->getContext(), mOutputStreams), capacity);
+    mInputStreamType = PointerType::get(StructType::get(mMod->getContext(), mInputStream), 0);
+    mInputScalarType = PointerType::get(StructType::get(mMod->getContext(), mInputScalar), 0);
+    Type * outputStreamType = ArrayType::get(StructType::get(mMod->getContext(), mOutputStream), capacity);
     Type * outputAccumType = StructType::get(mMod->getContext(), mOutputScalar);
-    Type * internalStateType = StructType::create(mMod->getContext(), mStates, mKernelName);
+    Type * internalStateType = StructType::create(mMod->getContext(), mInternalState, mKernelName);
     mKernelStructType = StructType::create(mMod->getContext(),std::vector<Type *>({internalStateType, outputStreamType, outputAccumType}), "KernelStruct_"+ mKernelName);
 
     FunctionType * functionType = FunctionType::get(Type::getVoidTy(mMod->getContext()),
@@ -204,22 +234,21 @@ void KernelBuilder::finalize() {
     iBuilder->CreateBlockAlignedStore(value, startIdx);
     iBuilder->CreateRetVoid();
 
+    Type * const int64Ty = iBuilder->getInt64Ty(); // TODO: should call getIntPtrTy() instead but we don't have the data layout here.
+
     // Generate the zero initializer
-    Function * initializer = cast<Function>(mMod->getOrInsertFunction(mKernelName + "_Init", Type::getVoidTy(mMod->getContext()), PointerType::get(mKernelStructType, 0), nullptr));
-    initializer->setCallingConv(CallingConv::C);
-    Function::arg_iterator args = initializer->arg_begin();
+    mConstructor = cast<Function>(mMod->getOrInsertFunction(mKernelName + "_Constructor", Type::getVoidTy(mMod->getContext()), PointerType::get(mKernelStructType, 0), nullptr));
+    mConstructor->setCallingConv(CallingConv::C);
+    auto args = mConstructor->arg_begin();
     mKernelParam = args++;
     mKernelParam->setName("this");
-
-    iBuilder->SetInsertPoint(BasicBlock::Create(mMod->getContext(), "entry", initializer, 0));
-
-    Type * const int64Ty = iBuilder->getInt64Ty(); // TODO: should call getIntPtrTy() instead but we don't have the data layout here.
-    for (unsigned i = 0; i < mStates.size(); ++i) {
+    iBuilder->SetInsertPoint(BasicBlock::Create(mMod->getContext(), "entry", mConstructor, 0));
+    for (unsigned i = 0; i < mInternalState.size(); ++i) {
         Value * const gep = getInternalState(i);
         Type * const type = gep->getType();
         if (type->isIntegerTy() || type->isArrayTy() || type->isVectorTy()) {
             setInternalState(i, Constant::getNullValue(type));
-        } else {            
+        } else {
             Value * gep_next = iBuilder->CreateGEP(gep, iBuilder->getInt32(1));
             Value * get_int = iBuilder->CreatePtrToInt(gep, int64Ty);
             Value * get_next_int = iBuilder->CreatePtrToInt(gep_next, int64Ty);
@@ -227,47 +256,30 @@ void KernelBuilder::finalize() {
             iBuilder->CreateMemSet(gep, iBuilder->getInt8(0), state_size, 4);
         }
     }
-
     iBuilder->CreateRetVoid();
 
-    // and then the constructor
-    mConstructor = cast<Function>(mMod->getOrInsertFunction(mKernelName+"_Create_Default", Type::getVoidTy(mMod->getContext()), PointerType::get(mKernelStructType, 0), int64Ty, int64Ty, nullptr));
-    mConstructor->setCallingConv(CallingConv::C);
-    args = mConstructor->arg_begin();
+    iBuilder->ClearInsertionPoint();
 
-    mKernelParam = args++;
-    mKernelParam->setName("this");
-
-    iBuilder->SetInsertPoint(BasicBlock::Create(mMod->getContext(), "entry", mConstructor, 0));
-    iBuilder->CreateCall(initializer, mKernelParam);
-    iBuilder->CreateRetVoid();
+    mSegmentIndex = 0;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief generateKernelInstance
+ * @brief instantiate
+ *
+ * Generate a new instance of this kernel and call the default constructor to initialize it
  ** ------------------------------------------------------------------------------------------------------------- */
-Value * KernelBuilder::generateKernelInstance() {
-    mKernelStruct = iBuilder->CreateAlloca(mKernelStructType);
-    iBuilder->CreateCall3(mConstructor, mKernelStruct,
-        ConstantInt::get(iBuilder->getIntNTy(64), mBlockSize),
-        ConstantInt::get(iBuilder->getIntNTy(64), (mBlocksPerSegment + mCircularBufferModulo - 1) * mBlockSize));
-    return mKernelStruct;
+Instance * KernelBuilder::instantiate() {
+    AllocaInst * const memory = iBuilder->CreateAlloca(mKernelStructType);
+    iBuilder->CreateCall(mConstructor, memory);
+    return new Instance(this, memory);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief generateDoBlockCall
+ * @brief call
  ** ------------------------------------------------------------------------------------------------------------- */
-void KernelBuilder::generateInitCall() {
-    assert (mInitFunction && mKernelStruct);
-    iBuilder->CreateCall(mInitFunction, mKernelStruct);
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief generateDoBlockCall
- ** ------------------------------------------------------------------------------------------------------------- */
-void KernelBuilder::generateDoBlockCall(Value * inputStreams) {
-    assert (mFunction && mKernelStruct);
-    iBuilder->CreateCall2(mFunction, mKernelStruct, iBuilder->CreatePointerCast(inputStreams, mInputStreamType));
+void KernelBuilder::call(llvm::Value * const instance, Value * inputStreams) {
+    assert (mFunction && instance && inputStreams);
+    iBuilder->CreateCall2(mFunction, instance, iBuilder->CreatePointerCast(inputStreams, mInputStreamType));
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -275,24 +287,24 @@ void KernelBuilder::generateDoBlockCall(Value * inputStreams) {
  *
  * Compute the stream index of the given offset value.
  ** ------------------------------------------------------------------------------------------------------------- */
-Value * KernelBuilder::getOffset(const unsigned value) {
+Value * KernelBuilder::getOffset(Value * const instance, const unsigned value) {
     const unsigned adjustedOffset = (mSegmentIndex + value);
-    Value * offset = iBuilder->getInt32(adjustedOffset);
     if (mBlockIndex) {
-        Value * index = iBuilder->CreateBlockAlignedLoad(getInternalState(mBlockIndex));
+        Value * offset = iBuilder->CreateBlockAlignedLoad(getBlockNo(instance));
         if (adjustedOffset) {
-            index = iBuilder->CreateAdd(index, offset);
+            offset = iBuilder->CreateAdd(offset, ConstantInt::get(offset->getType(), adjustedOffset));
         }
         const unsigned bufferSize = (mBlocksPerSegment + mCircularBufferModulo - 1); assert (bufferSize > 1);
         if (isPowerOfTwo(bufferSize)) {
-            index = iBuilder->CreateAnd(index, ConstantInt::get(index->getType(), bufferSize - 1));
+            offset = iBuilder->CreateAnd(offset, ConstantInt::get(offset->getType(), bufferSize - 1));
         } else {
-            index = iBuilder->CreateURem(index, ConstantInt::get(index->getType(), bufferSize));
+            offset = iBuilder->CreateURem(offset, ConstantInt::get(offset->getType(), bufferSize));
         }
         // TODO: generate branch / phi node when it's sufficiently unlikely that we'll wrap around.
-        offset = index;
+        return offset;
+    } else {
+        return iBuilder->getInt32(adjustedOffset);
     }
-    return offset;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -303,3 +315,5 @@ void KernelBuilder::setLongestLookaheadAmount(const unsigned bits) {
     const unsigned lookaheadBlocks = (bits + blockWidth - 1) / blockWidth;
     mCircularBufferModulo = (lookaheadBlocks + 1);
 }
+
+} // end of namespace kernel

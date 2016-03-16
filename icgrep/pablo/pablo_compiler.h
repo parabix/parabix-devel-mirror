@@ -50,7 +50,7 @@ public:
     PabloCompiler(Module * m, IDISA::IDISA_Builder * b);
 
     llvm::Function * compile(PabloFunction * function);
-    void setKernel(KernelBuilder * kBuilder);
+    void setKernel(kernel::KernelBuilder * kBuilder);
 
 private:
 
@@ -75,7 +75,7 @@ private:
     const PabloFunction *               mPabloFunction;
     const PabloBlock *                  mPabloBlock;
 
-    KernelBuilder *                     mKernelBuilder;
+    kernel::KernelBuilder *             mKernelBuilder;
 
     unsigned                            mWhileDepth;
     unsigned                            mIfDepth;

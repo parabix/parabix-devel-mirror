@@ -7,33 +7,25 @@
 #define SYMBOLTABLEPIPELINE_H
 
 #include <IDISA/idisa_builder.h>
-#include <llvm/IR/Function.h>
-#include <llvm/IR/Module.h>
 #include "kernel.h"
 
 namespace llvm {
-    class Value;
     class Module;
-    class ExecutionEngine;
-    class VectorType;
-    class PointerType;
-    class Constant;
-    class FunctionType;
     class Function;
-    class BasicBlock;
     class Type;
 }
 
 namespace pablo { class PabloFunction; class PabloBlock; }
 
-using namespace llvm;
+namespace kernel {
 
 class SymbolTableBuilder {
 public:
-    SymbolTableBuilder(Module * m, IDISA::IDISA_Builder * b);
+    SymbolTableBuilder(llvm::Module * m, IDISA::IDISA_Builder * b);
     ~SymbolTableBuilder();
     void createKernels();
-    void ExecuteKernels();
+    llvm::Function * ExecuteKernels();
+
 protected:
 
     pablo::PabloFunction * generateLeadingFunction(const std::vector<unsigned> & endpoints);
@@ -42,17 +34,16 @@ protected:
     void generateLLVMParser();
 
 private:
-    Module *                            mMod;
+    llvm::Module *                      mMod;
     IDISA::IDISA_Builder *              iBuilder;
     KernelBuilder *                     mS2PKernel;
     KernelBuilder *                     mLeadingKernel;
     KernelBuilder *                     mSortingKernel;
     unsigned                            mLongestLookahead;
-    int                                 mFileBufIdx;
-    int                                 mFileSizeIdx;
-    int                                 mFileNameIdx;
-    Type*                               mBitBlockType;
+    llvm::Type *                        mBitBlockType;
     int                                 mBlockSize;
 };
+
+}
 
 #endif // SYMBOLTABLEPIPELINE_H

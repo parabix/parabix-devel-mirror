@@ -19,7 +19,8 @@ namespace IDISA {
 class IDISA_Builder : public IRBuilder<> {
 public:
 
-    IDISA_Builder(Module * m, Type * bitBlockType) : IRBuilder<>(m->getContext())
+    IDISA_Builder(Module * m, Type * bitBlockType)
+    : IRBuilder<>(m->getContext())
     , mMod(m)
     , mBitBlockType(bitBlockType)
     , mBitBlockWidth(bitBlockType->isIntegerTy() ? cast<IntegerType>(bitBlockType)->getIntegerBitWidth() : cast<VectorType>(bitBlockType)->getBitWidth())
@@ -28,26 +29,45 @@ public:
     , mPrintRegisterFunction(nullptr) {
 
     }
+
     virtual ~IDISA_Builder() {}
     
-    Type * getBitBlockType() { return mBitBlockType;}
-    Value * bitCast(Value * a) {return a->getType() == mBitBlockType ? a : CreateBitCast(a, mBitBlockType);}
-    int getBitBlockWidth() { return mBitBlockWidth;}
-    Module * getModule() {return mMod;}
-    void genPrintRegister(std::string regName, Value * bitblockValue);
+    Type * getBitBlockType() const {
+        return mBitBlockType;
+    }
+
+    Value * bitCast(Value * a) {
+        return a->getType() == mBitBlockType ? a : CreateBitCast(a, mBitBlockType);
+    }
+
+    unsigned getBitBlockWidth() const {
+        return mBitBlockWidth;
+    }
+
+    Module * getModule() const {
+        return mMod;
+    }
     
-    
-    Constant * allZeroes() {return mZeroInitializer;}
-    Constant * allOnes() {return mOneInitializer;}
-    Constant * simd_himask(unsigned fw);
-    Constant * simd_lomask(unsigned fw);
-        
+    Constant * allZeroes() const {
+        return mZeroInitializer;
+    }
+
+    Constant * allOnes() const {
+        return mOneInitializer;
+    }
+
     LoadInst * CreateBlockAlignedLoad(Value * const ptr);
     LoadInst * CreateBlockAlignedLoad(Value * const ptr, Value * const index);
     LoadInst * CreateBlockAlignedLoad(Value * const ptr, std::initializer_list<Value *> indicies);
+
     void CreateBlockAlignedStore(Value * const value, Value * const ptr);
     void CreateBlockAlignedStore(Value * const value, Value * const ptr, Value * const index);
     void CreateBlockAlignedStore(Value * const value, Value * const ptr, std::initializer_list<Value *> indicies);
+
+    void CallPrintRegister(const std::string & regName, Value * const value);
+
+    Constant * simd_himask(unsigned fw);
+    Constant * simd_lomask(unsigned fw);
 
     virtual Value * simd_add(unsigned fw, Value * a, Value * b);
     virtual Value * simd_sub(unsigned fw, Value * a, Value * b);

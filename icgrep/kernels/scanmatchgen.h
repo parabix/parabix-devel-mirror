@@ -5,14 +5,16 @@
 #ifndef SCANMATCHGEN_H
 #define SCANMATCHGEN_H
 
-#include <tuple>
-
-class KernelBuilder;
-
 namespace llvm { class Module; }
 
 namespace IDISA { class IDISA_Builder; }
 
+namespace kernel {
+
+class KernelBuilder;
+
 void generateScanMatch(llvm::Module * m, IDISA::IDISA_Builder * iBuilder, unsigned scanWordBitWidth, KernelBuilder * kBuilder, bool isNameExpression);
+
+}
 
 #endif // SCANMATCHGEN_H

@@ -65,6 +65,8 @@ static cl::opt<bool> DumpTrace("dump-trace", cl::init(false), cl::desc("Generate
 
 namespace pablo {
 
+#define DSSLI_FIELDWIDTH 64
+
 PabloCompiler::PabloCompiler(Module * m, IDISA::IDISA_Builder * b)
 : mMod(m)
 , iBuilder(b)
@@ -80,7 +82,7 @@ PabloCompiler::PabloCompiler(Module * m, IDISA::IDISA_Builder * b)
     
 }
 
-void PabloCompiler::setKernel(KernelBuilder * kBuilder){
+void PabloCompiler::setKernel(kernel::KernelBuilder * kBuilder){
     mKernelBuilder = kBuilder;
 } 
 
@@ -130,35 +132,26 @@ inline void PabloCompiler::GenerateKernel(PabloFunction * const function) {
 
     mCarryManager->initialize(function, mKernelBuilder);
 
-    mKernelBuilder->prepareFunction();
+    mFunction = mKernelBuilder->prepareFunction();
 
-    mFunction = mKernelBuilder->getDoBlockFunction();
+    mCarryManager->reset();
 
-    for(unsigned i = 0; i < mKernelBuilder->getSegmentBlocks(); ++i){
+    for (unsigned j = 0; j < function->getNumOfParameters(); ++j) {
+        mMarkerMap.insert(std::make_pair(function->getParameter(j), mKernelBuilder->getInputStream(j)));
+    }
 
-        mCarryManager->reset();
+    compileBlock(function->getEntryBlock());
 
-        for (unsigned j = 0; j < function->getNumOfParameters(); ++j) {
-            mMarkerMap.insert(std::make_pair(function->getParameter(j), mKernelBuilder->getInputStream(j)));
+    for (unsigned j = 0; j < function->getNumOfResults(); ++j) {
+        const auto f = mMarkerMap.find(function->getResult(j));
+        Value * result = nullptr;
+        if (LLVM_UNLIKELY(f == mMarkerMap.end())) {
+            result = iBuilder->allZeroes();
+        } else {
+            result = f->second;
         }
-
-        compileBlock(function->getEntryBlock());
-
-        for (unsigned j = 0; j < function->getNumOfResults(); ++j) {
-            const auto f = mMarkerMap.find(function->getResult(j));
-            Value * result = nullptr;
-            if (LLVM_UNLIKELY(f == mMarkerMap.end())) {
-                result = iBuilder->allZeroes();
-            } else {
-                result = f->second;
-            }
-            iBuilder->CreateBlockAlignedStore(result, mKernelBuilder->getOutputStream(j));
-        }
-
-        mMarkerMap.clear();
-
-        mKernelBuilder->increment();
-    }    
+        iBuilder->CreateBlockAlignedStore(result, mKernelBuilder->getOutputStream(j));
+    }
 
     mKernelBuilder->finalize();
 }
@@ -413,23 +406,33 @@ void PabloCompiler::compileStatement(const Statement * stmt) {
         if (LLVM_UNLIKELY(!isa<Var>(var))) {
             throw std::runtime_error("Lookahead input type must be a Var object");
         }
-        Value * index = nullptr;
-        for (unsigned i = 0; i < mPabloFunction->getNumOfParameters(); ++i) {
-            if (mPabloFunction->getParameter(i) == var) {
-                index = iBuilder->getInt32(i);
+        unsigned index = 0;
+        for (; index < mPabloFunction->getNumOfParameters(); ++index) {
+            if (mPabloFunction->getParameter(index) == var) {
                 break;
             }
         }
-        if (LLVM_UNLIKELY(index == nullptr)) {
+        if (LLVM_UNLIKELY(index >= mPabloFunction->getNumOfParameters())) {
             throw std::runtime_error("Lookahead has an illegal Var operand");
         }
-        Type * const streamType = iBuilder->getIntNTy(iBuilder->getBitBlockWidth());
         const unsigned offset = l->getAmount() / iBuilder->getBitBlockWidth();
         const unsigned shift = (l->getAmount() % iBuilder->getBitBlockWidth());
-        Value * const b0 = iBuilder->CreateBitCast(iBuilder->CreateBlockAlignedLoad(mKernelBuilder->getInputStream(offset), index), streamType);
-        Value * const b1 = iBuilder->CreateBitCast(iBuilder->CreateBlockAlignedLoad(mKernelBuilder->getInputStream(offset + 1), index), streamType);
-        Value * result = iBuilder->CreateOr(iBuilder->CreateLShr(b0, shift), iBuilder->CreateShl(b1, iBuilder->getBitBlockWidth() - shift), "lookahead");
-        expr = iBuilder->CreateBitCast(result, iBuilder->getBitBlockType());
+        Value * const v0 = iBuilder->CreateBlockAlignedLoad(mKernelBuilder->getInputStream(index, offset));
+        Value * const v1 = iBuilder->CreateBlockAlignedLoad(mKernelBuilder->getInputStream(index, offset + 1));
+        if (LLVM_UNLIKELY((shift % 8) == 0)) { // Use a single whole-byte shift, if possible.
+            expr = iBuilder->mvmd_dslli(8, v1, v0, (shift / 8));
+        } else if (LLVM_LIKELY(shift < DSSLI_FIELDWIDTH)) {
+            Value * ahead = iBuilder->mvmd_dslli(DSSLI_FIELDWIDTH, v1, v0, 1);
+            ahead = iBuilder->simd_slli(DSSLI_FIELDWIDTH, ahead, DSSLI_FIELDWIDTH - shift);
+            Value * value = iBuilder->simd_srli(DSSLI_FIELDWIDTH, v0, shift);
+            expr = iBuilder->simd_or(value, ahead);
+        } else {
+            Type  * const streamType = iBuilder->getIntNTy(iBuilder->getBitBlockWidth());
+            Value * b0 = iBuilder->CreateBitCast(v0, streamType);
+            Value * b1 = iBuilder->CreateBitCast(v1, streamType);
+            Value * result = iBuilder->CreateOr(iBuilder->CreateShl(b1, iBuilder->getBitBlockWidth() - shift), iBuilder->CreateLShr(b0, shift));
+            expr = iBuilder->CreateBitCast(result, mBitBlockType);
+        }
     } else {
         std::string tmp;
         llvm::raw_string_ostream msg(tmp);
@@ -440,7 +443,7 @@ void PabloCompiler::compileStatement(const Statement * stmt) {
     }
     mMarkerMap[stmt] = expr;
     if (DumpTrace) {
-        iBuilder->genPrintRegister(stmt->getName()->to_string(), expr);
+        iBuilder->CallPrintRegister(stmt->getName()->to_string(), expr);
     }
     
 }

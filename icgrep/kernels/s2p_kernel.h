@@ -5,13 +5,16 @@
 #ifndef S2P_KERNEL_H
 #define S2P_KERNEL_H
 
-class KernelBuilder;
-
 namespace llvm { class Module; }
 
 namespace IDISA { class IDISA_Builder; }
 
+namespace kernel {
+
+class KernelBuilder;
 
 void generateS2PKernel(llvm::Module *, IDISA::IDISA_Builder * iBuilder, KernelBuilder * kBuilder);
+
+}
 
 #endif
