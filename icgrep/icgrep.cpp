@@ -102,23 +102,20 @@ std::string sha1sum(const std::string & str) {
     return std::string(buffer);
 }
 
-GrepEngine grepEngine;
 std::mutex count_mutex;
-
 size_t fileCount;
-void *DoGrep(void *threadid)
+void *DoGrep(void *args)
 {
-    long tid;
-    tid = (long)threadid;
     size_t fileIdx;
+    GrepEngine * grepEngine = (GrepEngine *)args;
 
     count_mutex.lock();
     fileCount++;
     fileIdx = fileCount;
     count_mutex.unlock();
-    
+
     while (fileIdx < inputFiles.size()){
-        grepEngine.doGrep(inputFiles[fileIdx]);
+        grepEngine->doGrep(inputFiles[fileIdx]);
         
         count_mutex.lock();
         fileCount++;
@@ -161,6 +158,7 @@ int main(int argc, char *argv[]) {
     re::RE * re_ast = get_icgrep_RE();
     std::string module_name = "grepcode:" + sha1sum(allREs) + ":" + std::to_string(globalFlags);
     
+    GrepEngine grepEngine;
     grepEngine.grepCodeGen(module_name, re_ast);
 
     initResult(inputFiles, inputFiles.size());
@@ -173,7 +171,7 @@ int main(int argc, char *argv[]) {
         pthread_t threads[numOfThreads];
 
         for(unsigned long i = 0; i < numOfThreads; ++i){
-            const int rc = pthread_create(&threads[i], NULL, DoGrep, (void *)i);
+            const int rc = pthread_create(&threads[i], NULL, DoGrep, (void *)&grepEngine);
             if (rc) {
                 throw std::runtime_error("Failed to create thread: code " + std::to_string(rc));
             }
