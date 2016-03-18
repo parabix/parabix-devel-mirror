@@ -67,11 +67,6 @@ public:
         , ScanThru
         , Lookahead
         , MatchStar
-        // Mod 64 approximate stream operations
-        , Mod64Advance
-        , Mod64ScanThru
-        , Mod64Lookahead
-        , Mod64MatchStar
         // Statistics operations
         , Count
         // Variable assignments

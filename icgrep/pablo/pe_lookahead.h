@@ -46,31 +46,6 @@ private:
     unsigned localLookaheadIndex;
 };
 
-class Mod64Lookahead : public Statement {
-    friend class PabloBlock;
-public:
-    static inline bool classof(const PabloAST * e) {
-        return e->getClassTypeId() == ClassTypeId::Mod64Lookahead;
-    }
-    static inline bool classof(const void *) {
-        return false;
-    }
-    virtual ~Mod64Lookahead() {
-    }
-    inline PabloAST * getExpr() const {
-        return getOperand(0);
-    }
-    inline Integer::Type getAmount() const {
-        return cast<Integer>(getOperand(1))->value();
-    }
-protected:
-    Mod64Lookahead(PabloAST * expr, PabloAST * shiftAmount, String * name)
-    : Statement(ClassTypeId::Mod64Lookahead, {expr, shiftAmount}, name)
-    {
-        assert(isa<Integer>(shiftAmount));
-    }
-};
-
 }
 
 #endif // PE_LOOKAHEAD_H

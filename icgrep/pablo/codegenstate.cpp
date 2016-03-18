@@ -143,62 +143,6 @@ Var * PabloBlock::createVar(PabloAST * name) {
     return new Var(name);
 }
 
-PabloAST * PabloBlock::createMod64Advance(PabloAST * expr, PabloAST * shiftAmount) {
-    if (isa<Zeroes>(expr) || cast<Integer>(shiftAmount)->value() == 0) {
-        return expr;
-    }
-    return insertAtInsertionPoint(new Mod64Advance(expr, shiftAmount, makeName("advance")));
-}
-
-PabloAST * PabloBlock::createMod64Advance(PabloAST * expr, PabloAST * shiftAmount, const std::string prefix) {
-    if (isa<Zeroes>(expr) || cast<Integer>(shiftAmount)->value() == 0) {
-        return expr;
-    }
-    return insertAtInsertionPoint(new Mod64Advance(expr, shiftAmount, makeName(prefix, false)));
-}
-
-PabloAST * PabloBlock::createMod64Advance(PabloAST * expr, const Integer::Type shiftAmount) {
-    if (isa<Zeroes>(expr) || shiftAmount == 0) {
-        return expr;
-    }
-    return insertAtInsertionPoint(new Mod64Advance(expr, getInteger(shiftAmount), makeName("advance")));
-}
-
-PabloAST * PabloBlock::createMod64Advance(PabloAST * expr, const Integer::Type shiftAmount, const std::string prefix) {
-    if (isa<Zeroes>(expr) || shiftAmount == 0) {
-        return renameNonNamedNode(expr, std::move(prefix));
-    }    
-    return insertAtInsertionPoint(new Mod64Advance(expr, getInteger(shiftAmount), makeName(prefix, false)));
-}
-
-PabloAST * PabloBlock::createMod64Lookahead(PabloAST * expr, PabloAST * shiftAmount) {
-    if (isa<Zeroes>(expr) || cast<Integer>(shiftAmount)->value() == 0) {
-        return expr;
-    }
-    return insertAtInsertionPoint(new Mod64Lookahead(expr, shiftAmount, makeName("advance")));
-}
-
-PabloAST * PabloBlock::createMod64Lookahead(PabloAST * expr, PabloAST * shiftAmount, const std::string prefix) {
-    if (isa<Zeroes>(expr) || cast<Integer>(shiftAmount)->value() == 0) {
-        return expr;
-    }
-    return insertAtInsertionPoint(new Mod64Lookahead(expr, shiftAmount, makeName(prefix, false)));
-}
-
-PabloAST * PabloBlock::createMod64Lookahead(PabloAST * expr, const Integer::Type shiftAmount) {
-    if (isa<Zeroes>(expr) || shiftAmount == 0) {
-        return expr;
-    }
-    return insertAtInsertionPoint(new Mod64Lookahead(expr, getInteger(shiftAmount), makeName("advance")));
-}
-
-PabloAST * PabloBlock::createMod64Lookahead(PabloAST * expr, const Integer::Type shiftAmount, const std::string prefix) {
-    if (isa<Zeroes>(expr) || shiftAmount == 0) {
-        return renameNonNamedNode(expr, std::move(prefix));
-    }
-    return insertAtInsertionPoint(new Mod64Lookahead(expr, getInteger(shiftAmount), makeName(prefix, false)));
-}
-
 PabloAST * PabloBlock::createCount(PabloAST * expr) {
     assert (expr);
     return insertAtInsertionPoint(new Count(expr, makeName("count_")));
@@ -247,38 +191,6 @@ PabloAST * PabloBlock::createScanThru(PabloAST * from, PabloAST * thru, const st
         return renameNonNamedNode(from, std::move(prefix));
     }
     return insertAtInsertionPoint(new ScanThru(from, thru, makeName(prefix, false)));
-}
-
-PabloAST * PabloBlock::createMod64MatchStar(PabloAST * marker, PabloAST * charclass) {
-    assert (marker && charclass);
-    if (isa<Zeroes>(marker) || isa<Zeroes>(charclass)) {
-        return marker;
-    }
-    return insertAtInsertionPoint(new Mod64MatchStar(marker, charclass, makeName("matchstar")));
-}
-
-PabloAST * PabloBlock::createMod64MatchStar(PabloAST * marker, PabloAST * charclass, const std::string prefix) {
-    assert (marker && charclass);
-    if (isa<Zeroes>(marker) || isa<Zeroes>(charclass)) {
-        return renameNonNamedNode(marker, std::move(prefix));
-    }
-    return insertAtInsertionPoint(new Mod64MatchStar(marker, charclass, makeName(prefix, false)));
-}
-
-PabloAST * PabloBlock::createMod64ScanThru(PabloAST * from, PabloAST * thru) {
-    assert (from && thru);
-    if (isa<Zeroes>(from) || isa<Zeroes>(thru)) {
-        return from;
-    }
-    return insertAtInsertionPoint(new Mod64ScanThru(from, thru, makeName("scanthru")));
-}
-
-PabloAST * PabloBlock::createMod64ScanThru(PabloAST * from, PabloAST * thru, const std::string prefix) {
-    assert (from && thru);
-    if (isa<Zeroes>(from) || isa<Zeroes>(thru)) {        
-        return renameNonNamedNode(from, std::move(prefix));
-    }
-    return insertAtInsertionPoint(new Mod64ScanThru(from, thru, makeName(prefix, false)));
 }
 
 template<typename Type>

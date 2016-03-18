@@ -115,26 +115,6 @@ void PabloPrinter::print(const Statement * stmt, llvm::raw_ostream & out, const 
         out << ", ";
         print(sthru->getScanThru(), out);
         out << ")";
-    } else if (const Mod64Advance * adv = dyn_cast<const Mod64Advance>(stmt)) {
-        out << adv->getName() << " = pablo.Mod64Advance(";
-        print(adv->getExpr(), out);
-        out << ", " << std::to_string(adv->getAmount()) << ")";
-    } else if (const Mod64Lookahead * adv = dyn_cast<const Mod64Lookahead>(stmt)) {
-        out << adv->getName() << " = pablo.Mod64Lookahead(";
-        print(adv->getExpr(), out);
-        out << ", " << std::to_string(adv->getAmount()) << ")";
-    } else if (const Mod64MatchStar * mstar = dyn_cast<const Mod64MatchStar>(stmt)) {
-        out << mstar->getName() << " = pablo.Mod64MatchStar(";
-        print(mstar->getMarker(), out);
-        out << ", ";
-        print(mstar->getCharClass(), out);
-        out << ")";
-    } else if (const Mod64ScanThru * sthru = dyn_cast<const Mod64ScanThru>(stmt)) {
-        out << sthru->getName() << " = pablo.Mod64ScanThru(";
-        print(sthru->getScanFrom(), out);
-        out << ", ";
-        print(sthru->getScanThru(), out);
-        out << ")";
     } else if (const Count * count = dyn_cast<const Count>(stmt)) {
         out << count->getName() << " = pablo.Count(";
         print(count->getExpr(), out);

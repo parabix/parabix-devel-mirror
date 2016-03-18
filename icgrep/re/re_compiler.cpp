@@ -50,8 +50,6 @@ static cl::opt<bool> DisableUnicodeMatchStar("disable-unicode-matchstar", cl::in
                      cl::desc("disable Unicode MatchStar optimization"), cl::cat(fREcompilationOptions));
 static cl::opt<bool> DisableUnicodeLineBreak("disable-unicode-linebreak", cl::init(false),
                      cl::desc("disable Unicode line breaks - use LF only"), cl::cat(fREcompilationOptions));
-static cl::opt<bool> SetMod64Approximation("mod64-approximate", cl::init(false),
-                     cl::desc("set mod64 approximate mode"), cl::cat(fREcompilationOptions));
 
 #ifndef DISABLE_PREGENERATED_UCD_FUNCTIONS
 static cl::opt<bool> UsePregeneratedUnicode("use-pregenerated-unicode", cl::init(false),
@@ -660,11 +658,7 @@ MarkerType RE_Compiler::processUnboundedRep(RE * repeated, MarkerType marker, Pa
     if (!mGraphemeBoundaryRule && isByteLength(repeated)  && !DisableMatchStar) {
         PabloAST * cc = markerVar(compile(repeated, pb));
         PabloAST * mstar = nullptr;
-        if (SetMod64Approximation) {
-            mstar = pb.createMod64MatchStar(base, cc, "unbounded");
-        } else {
-            mstar = pb.createMatchStar(base, cc, "unbounded");
-        }
+        mstar = pb.createMatchStar(base, cc, "unbounded");
         return makeMarker(MarkerPosition::InitialPostPositionByte, mstar);
     } else if (isUnicodeUnitLength(repeated) && !DisableMatchStar && !DisableUnicodeMatchStar) {
         PabloAST * cc = markerVar(compile(repeated, pb));
@@ -674,11 +668,7 @@ MarkerType RE_Compiler::processUnboundedRep(RE * repeated, MarkerType marker, Pa
             nonFinal = pb.createOr(nonFinal, pb.createNot(mGraphemeBoundaryRule, "gext"));
         }
         cc = pb.createOr(cc, nonFinal);
-        if (SetMod64Approximation) {
-            mstar = pb.createMod64MatchStar(base, cc);
-        } else {
-            mstar = pb.createMatchStar(base, cc);
-        }
+        mstar = pb.createMatchStar(base, cc);
         PabloAST * final = mFinal;
         if (mGraphemeBoundaryRule) {
             final = mGraphemeBoundaryRule;

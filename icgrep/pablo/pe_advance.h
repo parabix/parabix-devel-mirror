@@ -46,31 +46,6 @@ private:
     unsigned localAdvanceIndex;
 };
 
-class Mod64Advance : public Statement {
-    friend class PabloBlock;
-public:
-    static inline bool classof(const PabloAST * e) {
-        return e->getClassTypeId() == ClassTypeId::Mod64Advance;
-    }
-    static inline bool classof(const void *) {
-        return false;
-    }
-    virtual ~Mod64Advance() {
-    }
-    inline PabloAST * getExpr() const {
-        return getOperand(0);
-    }
-    inline Integer::Type getAmount() const {
-        return cast<Integer>(getOperand(1))->value();
-    }
-protected:
-    Mod64Advance(PabloAST * expr, PabloAST * shiftAmount, String * name)
-    : Statement(ClassTypeId::Mod64Advance, {expr, shiftAmount}, name)
-    {
-        assert(isa<Integer>(shiftAmount));
-    }
-};
-
 }
 
 #endif // PE_ADVANCE_H

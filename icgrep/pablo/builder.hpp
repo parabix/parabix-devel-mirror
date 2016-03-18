@@ -139,53 +139,6 @@ public:
     PabloAST * createCount(PabloAST * expr);
     
     PabloAST * createCount(PabloAST * expr, const std::string prefix);
-    
-    /// Mod64 approximate function wrappers.
-    
-    PabloAST * createMod64Advance(PabloAST * expr, PabloAST * shiftAmount);
-
-    inline PabloAST * createMod64Advance(PabloAST * expr, const Integer::Type shiftAmount) {
-        if (shiftAmount == 0) {
-            return expr;
-        }
-        return createMod64Advance(expr, mPb->getInteger(shiftAmount));
-    }
-
-    PabloAST * createMod64Advance(PabloAST * expr, PabloAST * shiftAmount, const std::string prefix);
-
-    inline PabloAST * createMod64Advance(PabloAST * expr, const Integer::Type shiftAmount, const std::string prefix) {
-        if (shiftAmount == 0) {
-            return expr;
-        }
-        return createMod64Advance(expr, mPb->getInteger(shiftAmount), prefix);
-    }
-
-    PabloAST * createMod64Lookahead(PabloAST * expr, PabloAST * shiftAmount);
-
-    inline PabloAST * createMod64Lookahead(PabloAST * expr, const Integer::Type shiftAmount) {
-        if (shiftAmount == 0) {
-            return expr;
-        }
-        return createMod64Lookahead(expr, mPb->getInteger(shiftAmount));
-    }
-
-    PabloAST * createMod64Lookahead(PabloAST * expr, PabloAST * shiftAmount, const std::string prefix);
-
-    inline PabloAST * createMod64Lookahead(PabloAST * expr, const Integer::Type shiftAmount, const std::string prefix) {
-        if (shiftAmount == 0) {
-            return expr;
-        }
-        return createMod64Lookahead(expr, mPb->getInteger(shiftAmount), prefix);
-    }
-
-    PabloAST * createMod64MatchStar(PabloAST * marker, PabloAST * charclass);
-
-    PabloAST * createMod64MatchStar(PabloAST * marker, PabloAST * charclass, const std::string prefix);
-
-    PabloAST * createMod64ScanThru(PabloAST * from, PabloAST * thru);
-
-    PabloAST * createMod64ScanThru(PabloAST * from, PabloAST * thru, const std::string prefix);
-
 
     /// CreateIf Wrappers
 

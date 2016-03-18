@@ -44,31 +44,6 @@ private:
     unsigned localCarryIndex;
 };
 
-class Mod64ScanThru : public Statement {
-    friend class PabloBlock;
-public:
-    static inline bool classof(const PabloAST * e) {
-        return e->getClassTypeId() == ClassTypeId::Mod64ScanThru;
-    }
-    static inline bool classof(const void *) {
-        return false;
-    }
-    virtual ~Mod64ScanThru() {
-    }
-    PabloAST * getScanFrom() const {
-        return getOperand(0);
-    }
-    PabloAST * getScanThru() const {
-        return getOperand(1);
-    }
-protected:
-    Mod64ScanThru(PabloAST * from, PabloAST * thru, String * name)
-    : Statement(ClassTypeId::Mod64ScanThru, {from, thru}, name)
-    {
-
-    }
-};
-
 }
 
 #endif // PS_SCANTHRU_H
