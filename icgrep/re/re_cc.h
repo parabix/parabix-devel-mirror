@@ -12,7 +12,7 @@
 #include <string>
 #include <vector>
 #include <UCD/unicode_set.h>
-#include <slab_allocator.h>
+#include <util/slab_allocator.h>
 
 namespace re {
 

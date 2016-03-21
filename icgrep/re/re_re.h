@@ -10,7 +10,7 @@
 #include <vector>
 #include <assert.h>
 #include <llvm/Support/Casting.h>
-#include <slab_allocator.h>
+#include <util/slab_allocator.h>
 
 using namespace llvm;
 

@@ -3,7 +3,7 @@
 
 #include <llvm/IR/Instructions.h>
 #include <kernels/kernel.h>
-#include <slab_allocator.h>
+#include <util/slab_allocator.h>
 
 namespace kernel {
 

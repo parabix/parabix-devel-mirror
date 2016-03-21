@@ -11,7 +11,7 @@
 #include <llvm/Support/Compiler.h>
 #include <boost/iterator/iterator_facade.hpp>
 #include <iterator>
-#include <slab_allocator.h>
+#include <util/slab_allocator.h>
 #include <type_traits>
 #include <unordered_map>
 #include <vector>

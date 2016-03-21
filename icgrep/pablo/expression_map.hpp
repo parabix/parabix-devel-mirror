@@ -2,7 +2,7 @@
 #define EXPRESSION_MAP_HPP
 
 #include <pablo/pabloAST.h>
-#include <slab_allocator.h>
+#include <util/slab_allocator.h>
 #include <map>
 
 namespace pablo {

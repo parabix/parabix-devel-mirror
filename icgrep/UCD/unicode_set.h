@@ -3,7 +3,7 @@
 #include <stdint.h>
 #include <vector>
 #include <boost/iterator/iterator_facade.hpp>
-#include <slab_allocator.h>
+#include <util/slab_allocator.h>
 
 //
 // unicode_set.h - representing and manipulating sets of Unicode

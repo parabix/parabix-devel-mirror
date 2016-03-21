@@ -52,7 +52,7 @@
 #include <object_cache.h>
 // Dynamic processor detection
 #define ISPC_LLVM_VERSION ISPC_LLVM_3_6
-#include "ispc.cpp"
+#include <util/ispc.cpp>
 #include <sstream>
 
 using namespace pablo;

@@ -2,7 +2,7 @@
 #define PABLO_AUTOMULTIPLEXING_HPP
 
 #include <pablo/codegenstate.h>
-#include <slab_allocator.h>
+#include <util/slab_allocator.h>
 #include <boost/graph/adjacency_list.hpp>
 #include <boost/graph/adjacency_matrix.hpp>
 #include <boost/container/flat_set.hpp>
