@@ -22,7 +22,6 @@
 #include <string>
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/Support/Format.h>
-#include <include/simd-lib/builtins.hpp>
 #include <array>
 
 namespace UCD {
@@ -31,6 +30,16 @@ using bitquad_t = UnicodeSet::bitquad_t;
 using run_t = UnicodeSet::run_t;
 using interval_t = UnicodeSet::interval_t;
 using codepoint_t = UnicodeSet::codepoint_t;
+
+//
+// Select the correct built-in scan function, dependent on whatever
+// bitquad_t resolves to, when scan_forwrad_zeroes<bitquad_t> is called.
+template <typename T> int scan_forward_zeroes(T x);
+template <> inline int scan_forward_zeroes<unsigned int>(unsigned int x){return __builtin_ctz(x);}
+template <> inline int scan_forward_zeroes<unsigned long>(unsigned long x){return __builtin_ctzl(x);}
+template <> inline int scan_forward_zeroes<unsigned long long>(unsigned long long x){return __builtin_ctzll(x);}
+
+
 
 UnicodeSet::Allocator UnicodeSet::mAllocator;
 
@@ -665,7 +674,7 @@ void UnicodeSet::iterator::advance(const unsigned n) {
                 // If we found a marker in m, it marks the beginning of our current interval.
                 // Find it and break out of the loop.
                 if (m) {
-                    mQuadOffset = scan_forward_zeroes(m);
+                    mQuadOffset = scan_forward_zeroes<bitquad_t>(m);
                     mMinCodePoint = mBaseCodePoint + mQuadOffset;
                     found = true;
                     break;
@@ -712,7 +721,7 @@ void UnicodeSet::iterator::advance(const unsigned n) {
                 // If we found a marker in m, it marks the end of our current interval.
                 // Find it and break out of the loop.
                 if (m) {
-                    mQuadOffset = scan_forward_zeroes(m);
+                    mQuadOffset = scan_forward_zeroes<bitquad_t>(m);
                     mMaxCodePoint = mBaseCodePoint + mQuadOffset - 1;
                     found = true;
                     break;
