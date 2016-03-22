@@ -4,7 +4,6 @@
  */
 
 #include "pipeline.h"
-#include "toolchain.h"
 #include "utf_encoding.h"
 
 #include <kernels/scanmatchgen.h>
@@ -13,6 +12,7 @@
 
 #include <pablo/function.h>
 #include <pablo/pablo_compiler.h>
+#include <pablo/pablo_toolchain.h>
 
 
 using namespace pablo;
