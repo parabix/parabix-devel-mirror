@@ -51,8 +51,8 @@ set(Boost_USE_STATIC_RUNTIME ON)
 
 find_package(Boost 1.46 COMPONENTS system iostreams filesystem REQUIRED)
 
-SET(PABLO_SRC pablo/pabloAST.cpp pablo/ps_if.cpp pablo/ps_while.cpp pablo/function.cpp pablo/codegenstate.cpp pablo/builder.cpp pablo/symbol_generator.cpp pablo/printer_pablos.cpp)
-SET(PABLO_SRC ${PABLO_SRC} pablo/pablo_compiler.cpp pablo/carry_manager.cpp pablo/carry_data.cpp IDISA/idisa_builder.cpp IDISA/idisa_avx_builder.cpp IDISA/idisa_i64_builder.cpp IDISA/idisa_sse_builder.cpp kernels/s2p_kernel.cpp kernels/scanmatchgen.cpp kernels/kernel.cpp kernels/pipeline.cpp)
+SET(PABLO_SRC pablo/pabloAST.cpp pablo/ps_if.cpp pablo/ps_while.cpp pablo/function.cpp pablo/codegenstate.cpp pablo/builder.cpp pablo/symbol_generator.cpp pablo/printer_pablos.cpp pablo/pablo_toolchain.cpp)
+SET(PABLO_SRC ${PABLO_SRC} pablo/pablo_compiler.cpp pablo/carry_manager.cpp pablo/carry_data.cpp IDISA/idisa_builder.cpp IDISA/idisa_avx_builder.cpp IDISA/idisa_i64_builder.cpp IDISA/idisa_sse_builder.cpp IDISA/idisa_target.cpp kernels/s2p_kernel.cpp kernels/scanmatchgen.cpp kernels/kernel.cpp kernels/pipeline.cpp)
 SET(PABLO_SRC ${PABLO_SRC} pablo/analysis/pabloverifier.cpp)
 SET(PABLO_SRC ${PABLO_SRC} pablo/optimizers/pablo_simplifier.cpp pablo/optimizers/codemotionpass.cpp)
 IF(ENABLE_MULTIPLEXING)
@@ -62,7 +62,7 @@ ENDIF()
 
 add_library(PabloADT ${PABLO_SRC})
 add_library(RegExpADT re/re_re.cpp re/re_cc.cpp re/re_rep.cpp re/re_diff.cpp re/re_intersect.cpp re/printer_re.cpp)
-add_library(RegExpCompiler re/re_parser.cpp re/parsefailure.cpp re/re_nullable.cpp re/re_simplifier.cpp re/re_compiler.cpp re/re_analysis.cpp)
+add_library(RegExpCompiler re/re_parser.cpp re/parsefailure.cpp re/re_nullable.cpp re/re_simplifier.cpp re/re_compiler.cpp re/re_analysis.cpp re/re_toolchain.cpp)
 add_library(CCADT cc/cc_compiler.cpp utf8_encoder.cpp UCD/CaseFolding_txt.cpp)
 add_library(UCDlib UCD/unicode_set.cpp UCD/ucd_compiler.cpp UCD/PropertyObjects.cpp UCD/resolve_properties.cpp UCD/UnicodeNameData.cpp)
 

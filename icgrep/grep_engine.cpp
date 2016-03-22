@@ -5,6 +5,10 @@
  */
 
 #include <grep_engine.h>
+#include <IDISA/idisa_builder.h>
+#include <IDISA/idisa_target.h>
+#include <re/re_toolchain.h>
+#include <pablo/pablo_toolchain.h>
 #include <toolchain.h>
 #include <utf_encoding.h>
 #include <pablo/pablo_compiler.h>
@@ -118,6 +122,7 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool isNam
     mIsNameExpression = isNameExpression;
     re_ast = regular_expression_passes(encoding, re_ast);   
     pablo::PabloFunction * function = re2pablo_compiler(encoding, re_ast);
+    
 
     pipelineBuilder.CreateKernels(function, isNameExpression);
 
