@@ -102,7 +102,7 @@ void GrepEngine::doGrep(const std::string & fileName) {
     if(finalLineIsUnterminated(mFileBuffer, mFileSize))
         finalLineUnterminated = 1;
     
-    mMainFcn(mFileBuffer, mFileSize, mFileName.c_str(), finalLineUnterminated);
+    mGrepFunction(mFileBuffer, mFileSize, mFileName.c_str(), finalLineUnterminated);
 
 
     mFile.close();
@@ -126,9 +126,8 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool isNam
 
     pipelineBuilder.CreateKernels(function, isNameExpression);
 
-    pipelineBuilder.ExecuteKernels();
+    llvm::Function * grepIR = pipelineBuilder.ExecuteKernels();
 
-    llvm::Function * main_IR = M->getFunction("Main");
     mEngine = JIT_to_ExecutionEngine(M);
     
     icgrep_Linking(M, mEngine);
@@ -138,7 +137,7 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool isNam
     mEngine->finalizeObject();
     delete idb;
 
-    mMainFcn = reinterpret_cast<GrepFunctionType>(mEngine->getPointerToFunction(main_IR));
+    mGrepFunction = reinterpret_cast<GrepFunctionType>(mEngine->getPointerToFunction(grepIR));
 }
 
 re::CC *  GrepEngine::grepCodepoints() {
@@ -151,7 +150,7 @@ re::CC *  GrepEngine::grepCodepoints() {
     uint64_t finalLineUnterminated = 0;
     if(finalLineIsUnterminated(mFileBuffer, mFileSize))
         finalLineUnterminated = 1;    
-    mMainFcn(mFileBuffer, mFileSize, mFileName.c_str(), finalLineUnterminated);
+    mGrepFunction(mFileBuffer, mFileSize, mFileName.c_str(), finalLineUnterminated);
 
     return getParsedCodePointSet();
 }

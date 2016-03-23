@@ -80,6 +80,31 @@ void IDISA_Builder::CallPrintRegister(const std::string & name, Value * const va
     CreateCall2(printRegister, geti8StrVal(*mMod, name.c_str(), name), CreateBitCast(value, mBitBlockType));
 }
 
+void IDISA_Builder::CallPrintInt(const std::string & name, Value * const value) {
+    Constant * printRegister = mMod->getFunction("PrintInt");
+    if (LLVM_UNLIKELY(printRegister == nullptr)) {
+        FunctionType *FT = FunctionType::get(getVoidTy(), { PointerType::get(getInt8Ty(), 0), getInt64Ty() }, false);
+        Function * function = Function::Create(FT, Function::InternalLinkage, "PrintInt", mMod);
+        auto arg = function->arg_begin();
+        std::string out = "%-40s = %i\n";
+        BasicBlock * entry = BasicBlock::Create(mMod->getContext(), "entry", function);
+        IRBuilder<> builder(entry);
+        std::vector<Value *> args;
+        args.push_back(geti8StrVal(*mMod, out.c_str(), ""));
+        Value * const name = arg++;
+        name->setName("name");
+        args.push_back(name);
+        Value * value = arg;
+        value->setName("value");
+        args.push_back(value);
+        builder.CreateCall(create_printf(mMod), args);
+        builder.CreateRetVoid();
+
+        printRegister = function;
+    }
+    CreateCall2(printRegister, geti8StrVal(*mMod, name.c_str(), name), CreateBitCast(value, getInt64Ty()));
+}
+
 Constant * IDISA_Builder::simd_himask(unsigned fw) {
     return Constant::getIntegerValue(getIntNTy(mBitBlockWidth), APInt::getSplat(mBitBlockWidth, APInt::getHighBitsSet(fw, fw/2)));
 }

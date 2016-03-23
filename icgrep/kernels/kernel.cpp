@@ -6,13 +6,10 @@
 #include "kernel.h"
 #include <pablo/function.h>
 #include <IDISA/idisa_builder.h>
-#include <llvm/Support/CommandLine.h>
 #include <kernels/instance.h>
 
 using namespace llvm;
 using namespace pablo;
-
-static cl::opt<unsigned> SegmentSize("segment-size", cl::desc("Segment Size"), cl::value_desc("positive integer"), cl::init(1));
 
 inline bool isPowerOfTwo(const unsigned x) {
     return (x != 0) && (x & (x - 1)) == 0;
@@ -20,19 +17,23 @@ inline bool isPowerOfTwo(const unsigned x) {
 
 namespace kernel {
 
+enum : unsigned {
+    INTERNAL_STATE = 0
+    , INPUT_STREAM_SET = 1
+    , OUTPUT_STREAM_SET = 2
+    , OUTPUT_SCALAR_SET = 3
+};
+
 // sets name & sets internal state to the kernel superclass state
-KernelBuilder::KernelBuilder(std::string name, Module * m, IDISA::IDISA_Builder * b)
+KernelBuilder::KernelBuilder(std::string name, Module * m, IDISA::IDISA_Builder * b, const unsigned bufferSize)
 : mMod(m)
 , iBuilder(b)
 , mKernelName(name)
 , mBitBlockType(b->getBitBlockType())
-, mBlockSize(b->getBitBlockWidth())
-, mBlocksPerSegment(SegmentSize)
-, mCircularBufferModulo(1)
-, mSegmentIndex(0)
-, mBlockIndex(0) {
-    assert (mBlocksPerSegment > 0);
-    mBlockIndex = addInternalState(b->getInt64Ty(), "BlockNo");
+, mBufferSize(bufferSize)
+, mBlockNoIndex(0) {
+    assert (mBufferSize > 0);
+    mBlockNoIndex = addInternalState(b->getInt64Ty(), "BlockNo");
 }
 
 SlabAllocator<Instance> Instance::mAllocator; // static allocator declaration; should probably be in a "instance.cpp"
@@ -56,13 +57,14 @@ unsigned KernelBuilder::addInternalState(llvm::Type * const type, std::string &&
     return index;
 }
 
-
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getInternalState
  ** ------------------------------------------------------------------------------------------------------------- */
 Value * KernelBuilder::getInternalState(Value * const instance, const unsigned index) {
-    Value* indices[] = {iBuilder->getInt64(0), iBuilder->getInt32(0), iBuilder->getInt32(index)};
-    return iBuilder->CreateGEP(instance ? instance : mKernelParam, indices);
+    Value* indices[] = {iBuilder->getInt64(0),
+                        iBuilder->getInt32(INTERNAL_STATE),
+                        iBuilder->getInt32(index)};
+    return iBuilder->CreateGEP(instance, indices);
 }
 
 Value * KernelBuilder::getInternalState(Value * const instance, const std::string & name) {
@@ -102,7 +104,7 @@ void KernelBuilder::setInternalState(Value * const instance, const unsigned inde
 void KernelBuilder::addInputStream(const unsigned fields, std::string && name) {
     assert (fields > 0 && !name.empty());
     mInputStreamName.push_back(name);
-    if (fields == 1){
+    if (fields == 1) {
         mInputStream.push_back(mBitBlockType);
     } else {
         mInputStream.push_back(ArrayType::get(mBitBlockType, fields));
@@ -110,16 +112,24 @@ void KernelBuilder::addInputStream(const unsigned fields, std::string && name) {
 }
 
 void KernelBuilder::addInputStream(const unsigned fields) {
-    addInputStream(fields, std::move(mKernelName + "_inputstream_" + std::to_string(mInputStream.size())));
+    addInputStream(fields, std::move(mKernelName + "_InputStream_" + std::to_string(mInputStream.size())));
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getInputStream
  ** ------------------------------------------------------------------------------------------------------------- */
-Value * KernelBuilder::getInputStream(llvm::Value * const instance, const unsigned index, const unsigned streamOffset) {
+Value * KernelBuilder::getInputStream(Value * const instance, const unsigned index, const unsigned streamOffset) {
     assert (instance);
-    Value * const indices[] = {getOffset(instance, streamOffset), iBuilder->getInt32(index)};
-    return iBuilder->CreateGEP(instance, indices);
+    Value * inputStream = iBuilder->CreateLoad(iBuilder->CreateGEP(instance,
+        {iBuilder->getInt32(0), iBuilder->getInt32(INPUT_STREAM_SET), iBuilder->getInt32(0)}));
+    Value * modFunction = iBuilder->CreateLoad(iBuilder->CreateGEP(instance,
+        {iBuilder->getInt32(0), iBuilder->getInt32(INPUT_STREAM_SET), iBuilder->getInt32(1)}));
+    Value * offset = iBuilder->CreateLoad(getBlockNo(instance));
+    if (streamOffset) {
+        offset = iBuilder->CreateAdd(offset, ConstantInt::get(offset->getType(), streamOffset));
+    }   
+    offset = iBuilder->CreateCall(modFunction, offset, "offset");
+    return iBuilder->CreateGEP(inputStream, { offset, iBuilder->getInt32(index) });
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -132,7 +142,7 @@ void KernelBuilder::addInputScalar(Type * const type, std::string && name) {
 }
 
 void KernelBuilder::addInputScalar(Type * const type) {
-    addInputScalar(type, std::move(mKernelName + "_inputscalar_" + std::to_string(mInputScalar.size())));
+    addInputScalar(type, std::move(mKernelName + "_InputScalar_" + std::to_string(mInputScalar.size())));
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -167,16 +177,8 @@ unsigned KernelBuilder::addOutputScalar(Type * const type) {
  ** ------------------------------------------------------------------------------------------------------------- */
 Value * KernelBuilder::getOutputStream(Value * const instance, const unsigned index, const unsigned streamOffset) {
     assert (instance);
-    Value * const indices[] = {getOffset(instance, streamOffset), iBuilder->getInt32(1), iBuilder->getInt32(0), iBuilder->getInt32(index)};
-    return iBuilder->CreateGEP(instance, indices);
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief getOutputStreams
- ** ------------------------------------------------------------------------------------------------------------- */
-Value * KernelBuilder::getOutputStreamSet(Value * const instance, const unsigned streamOffset) {
-    assert (instance);
-    Value * const indices[] = {getOffset(instance, streamOffset), iBuilder->getInt32(1)};
+    Value * offset = getOffset(instance, streamOffset);
+    Value * const indices[] = {iBuilder->getInt32(0), iBuilder->getInt32(OUTPUT_STREAM_SET), offset, iBuilder->getInt32(index)};
     return iBuilder->CreateGEP(instance, indices);
 }
 
@@ -190,36 +192,41 @@ Value * KernelBuilder::getOutputScalar(Value * const instance, const unsigned) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief prepareFunction
  ** ------------------------------------------------------------------------------------------------------------- */
-Function * KernelBuilder::prepareFunction() {    
-    if (mCircularBufferModulo > 1) {
-        mBlockIndex = addInternalState(iBuilder->getInt32Ty());
-    }
-    const unsigned capacity = mBlocksPerSegment + mCircularBufferModulo - 1;
+Function * KernelBuilder::prepareFunction() {
 
+    PointerType * modFunctionType = PointerType::get(FunctionType::get(iBuilder->getInt64Ty(), {iBuilder->getInt64Ty()}, false), 0);
     mInputStreamType = PointerType::get(StructType::get(mMod->getContext(), mInputStream), 0);
     mInputScalarType = PointerType::get(StructType::get(mMod->getContext(), mInputScalar), 0);
-    Type * outputStreamType = ArrayType::get(StructType::get(mMod->getContext(), mOutputStream), capacity);
-    Type * outputAccumType = StructType::get(mMod->getContext(), mOutputScalar);
-    Type * internalStateType = StructType::create(mMod->getContext(), mInternalState, mKernelName);
-    mKernelStructType = StructType::create(mMod->getContext(),std::vector<Type *>({internalStateType, outputStreamType, outputAccumType}), "KernelStruct_"+ mKernelName);
+    mOutputStreamType = StructType::get(mMod->getContext(), mOutputStream);
+    Type * outputScalarType = StructType::get(mMod->getContext(), mOutputScalar);
+    Type * internalStateType = StructType::create(mMod->getContext(), mInternalState);
+    Type * inputStateType = StructType::create(mMod->getContext(), { mInputStreamType, modFunctionType});
 
-    FunctionType * functionType = FunctionType::get(Type::getVoidTy(mMod->getContext()),
-        std::vector<Type *>({PointerType::get(mKernelStructType, 0), mInputStreamType}), false);
+    Type * outputBufferType = ArrayType::get(mOutputStreamType, mBufferSize);
+    mKernelStateType = StructType::create(mMod->getContext(), {internalStateType, inputStateType, outputBufferType, outputScalarType}, mKernelName);
 
-    mFunction = Function::Create(functionType, GlobalValue::ExternalLinkage, mKernelName + "_DoBlock", mMod);
-    mFunction->setCallingConv(CallingConv::C);
+    FunctionType * const functionType = FunctionType::get(iBuilder->getVoidTy(), {PointerType::get(mKernelStateType, 0)}, false);
+    mDoBlock = Function::Create(functionType, GlobalValue::ExternalLinkage, mKernelName + "_DoBlock", mMod);
+    mDoBlock->setCallingConv(CallingConv::C);
+    mDoBlock->addAttribute(1, Attribute::NoCapture);
+    mDoBlock->addAttribute(AttributeSet::FunctionIndex, Attribute::ReadNone);
+    mDoBlock->addAttribute(AttributeSet::FunctionIndex, Attribute::NoUnwind);
 
-    Function::arg_iterator args = mFunction->arg_begin();
+    Function::arg_iterator args = mDoBlock->arg_begin();
     mKernelParam = args++;
     mKernelParam->setName("this");
-    mInputParam = args++;
-    mInputParam->setName("input_stream");
 
-    iBuilder->SetInsertPoint(BasicBlock::Create(mMod->getContext(), "entry", mFunction, 0));
+    iBuilder->SetInsertPoint(BasicBlock::Create(mMod->getContext(), "entry", mDoBlock, 0));
 
-    mSegmentIndex = 0;
+//    mLocalBlockNo = iBuilder->CreateLoad(getBlockNo());
+//    Value * blockNo = iBuilder->CreateLoad(getBlockNo());
+//    iBuilder->CallPrintInt(mKernelName + "_BlockNo", blockNo);
+//    Value * modFunction = iBuilder->CreateLoad(iBuilder->CreateGEP(mKernelParam, {iBuilder->getInt32(0), iBuilder->getInt32(INPUT_STREAM_SET), iBuilder->getInt32(1)}));
+//    blockNo = iBuilder->CreateCall(modFunction, blockNo);
+//    iBuilder->CallPrintInt(mKernelName + "_Offset", blockNo);
 
-    return mFunction;
+
+    return mDoBlock;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -228,39 +235,75 @@ Function * KernelBuilder::prepareFunction() {
 void KernelBuilder::finalize() {
 
     // Finish the actual function
-    Value * startIdx = getInternalState(mBlockIndex);
-    Value * value = iBuilder->CreateBlockAlignedLoad(startIdx);
+    Value * blockNo = getBlockNo();
+    Value * value = iBuilder->CreateLoad(blockNo);
     value = iBuilder->CreateAdd(value, ConstantInt::get(value->getType(), 1));
-    iBuilder->CreateBlockAlignedStore(value, startIdx);
+    iBuilder->CreateStore(value, blockNo);
     iBuilder->CreateRetVoid();
 
-    Type * const int64Ty = iBuilder->getInt64Ty(); // TODO: should call getIntPtrTy() instead but we don't have the data layout here.
-
     // Generate the zero initializer
-    mConstructor = cast<Function>(mMod->getOrInsertFunction(mKernelName + "_Constructor", Type::getVoidTy(mMod->getContext()), PointerType::get(mKernelStructType, 0), nullptr));
+    PointerType * modFunctionType = PointerType::get(FunctionType::get(iBuilder->getInt64Ty(), {iBuilder->getInt64Ty()}, false), 0);
+    FunctionType * constructorType = FunctionType::get(iBuilder->getVoidTy(), {PointerType::get(mKernelStateType, 0), mInputStreamType, modFunctionType}, false);
+
+    mConstructor = Function::Create(constructorType, GlobalValue::ExternalLinkage, mKernelName + "_Constructor", mMod);
     mConstructor->setCallingConv(CallingConv::C);
+    mConstructor->addAttribute(1, Attribute::NoCapture);
+    mConstructor->addAttribute(AttributeSet::FunctionIndex, Attribute::InlineHint);
+    mConstructor->addAttribute(AttributeSet::FunctionIndex, Attribute::ReadNone);
+    mConstructor->addAttribute(AttributeSet::FunctionIndex, Attribute::NoUnwind);
     auto args = mConstructor->arg_begin();
     mKernelParam = args++;
     mKernelParam->setName("this");
+    Value * const inputStream = args++;
+    inputStream->setName("inputStream");
+    Value * const modFunction = args++;
+    modFunction->setName("modFunction");
+
     iBuilder->SetInsertPoint(BasicBlock::Create(mMod->getContext(), "entry", mConstructor, 0));
     for (unsigned i = 0; i < mInternalState.size(); ++i) {
-        Value * const gep = getInternalState(i);
-        Type * const type = gep->getType();
+        Type * const type = mInternalState[i];
         if (type->isIntegerTy() || type->isArrayTy() || type->isVectorTy()) {
             setInternalState(i, Constant::getNullValue(type));
         } else {
-            Value * gep_next = iBuilder->CreateGEP(gep, iBuilder->getInt32(1));
-            Value * get_int = iBuilder->CreatePtrToInt(gep, int64Ty);
-            Value * get_next_int = iBuilder->CreatePtrToInt(gep_next, int64Ty);
-            Value * state_size = iBuilder->CreateSub(get_next_int, get_int);
-            iBuilder->CreateMemSet(gep, iBuilder->getInt8(0), state_size, 4);
+            Value * const ptr = getInternalState(i);
+            Value * const size = iBuilder->CreatePtrDiff(iBuilder->CreateGEP(ptr, iBuilder->getInt32(1)), ptr);
+            iBuilder->CreateMemSet(ptr, iBuilder->getInt8(0), size, 4);
         }
     }
+
+    Value * const input = iBuilder->CreateGEP(mKernelParam, {iBuilder->getInt32(0), iBuilder->getInt32(INPUT_STREAM_SET)});
+    iBuilder->CreateStore(inputStream, iBuilder->CreateGEP(input, {iBuilder->getInt32(0), iBuilder->getInt32(0)}));
+    iBuilder->CreateStore(modFunction, iBuilder->CreateGEP(input, {iBuilder->getInt32(0), iBuilder->getInt32(1)}));
     iBuilder->CreateRetVoid();
 
-    iBuilder->ClearInsertionPoint();
+//    if (mOutputStreamType->getStructNumElements()) {
+//        PointerType * outputStreamType = PointerType::get(mOutputStreamType, 0);
+//        FunctionType * type = FunctionType::get(outputStreamType, {outputStreamType, PointerType::get(blockNo->getType(), 0)}, false);
+//        mStreamSetFunction = Function::Create(type, Function::ExternalLinkage, mKernelName + "_StreamSet", mMod);
+//        auto arg = mStreamSetFunction->arg_begin();
+//        Value * stream = arg++;
+//        stream->setName("stream");
+//        mStreamSetFunction->addAttribute(1, Attribute::NoCapture);
+//        mStreamSetFunction->addAttribute(2, Attribute::NoCapture);
+//        mStreamSetFunction->addAttribute(AttributeSet::FunctionIndex, Attribute::InlineHint);
+//        mStreamSetFunction->addAttribute(AttributeSet::FunctionIndex, Attribute::ReadNone);
+//        mStreamSetFunction->addAttribute(AttributeSet::FunctionIndex, Attribute::NoUnwind);
+//        Value * offset = arg;
+//        BasicBlock * entry = BasicBlock::Create(mMod->getContext(), "entry", mStreamSetFunction);
+//        iBuilder->SetInsertPoint(entry);
+//        if (mBufferSize != 1) {
+//            offset = iBuilder->CreateLoad(offset);
+//            if (isPowerOfTwo(mBufferSize)) {
+//                offset = iBuilder->CreateAnd(offset, iBuilder->getInt64(mBufferSize - 1));
+//            } else if (mBufferSize > 2) {
+//                offset = iBuilder->CreateURem(offset, iBuilder->getInt64(mBufferSize));
+//            }
+//            stream = iBuilder->CreateGEP(stream, offset);
+//        }
+//        iBuilder->CreateRet(stream);
+//    }
 
-    mSegmentIndex = 0;
+    iBuilder->ClearInsertionPoint();
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -268,18 +311,45 @@ void KernelBuilder::finalize() {
  *
  * Generate a new instance of this kernel and call the default constructor to initialize it
  ** ------------------------------------------------------------------------------------------------------------- */
-Instance * KernelBuilder::instantiate() {
-    AllocaInst * const memory = iBuilder->CreateAlloca(mKernelStructType);
-    iBuilder->CreateCall(mConstructor, memory);
+Instance * KernelBuilder::instantiate(std::pair<Value *, unsigned> && inputStream) {
+    AllocaInst * const memory = iBuilder->CreateAlloca(mKernelStateType);
+    Value * const indices[] = {iBuilder->getInt32(0), iBuilder->getInt32(OUTPUT_STREAM_SET)};
+    Value * ptr = iBuilder->CreateGEP(std::get<0>(inputStream), indices);
+    iBuilder->CreateCall3(mConstructor, memory, iBuilder->CreatePointerCast(ptr, mInputStreamType), CreateModFunction(std::get<1>(inputStream)));
     return new Instance(this, memory);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief call
+ * @brief instantiate
+ *
+ * Generate a new instance of this kernel and call the default constructor to initialize it
  ** ------------------------------------------------------------------------------------------------------------- */
-void KernelBuilder::call(llvm::Value * const instance, Value * inputStreams) {
-    assert (mFunction && instance && inputStreams);
-    iBuilder->CreateCall2(mFunction, instance, iBuilder->CreatePointerCast(inputStreams, mInputStreamType));
+Instance * KernelBuilder::instantiate(llvm::Value * const inputStream) {
+    AllocaInst * const memory = iBuilder->CreateAlloca(mKernelStateType);
+    Value * ptr = inputStream;
+    iBuilder->CreateCall3(mConstructor, memory, iBuilder->CreatePointerCast(ptr, mInputStreamType), CreateModFunction(0));
+    return new Instance(this, memory);
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief CreateDoBlockCall
+ ** ------------------------------------------------------------------------------------------------------------- */
+void KernelBuilder::CreateDoBlockCall(Value * const instance) {
+    assert (mDoBlock && instance);
+    iBuilder->CreateCall(mDoBlock, instance);
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief clearOutputStream
+ ** ------------------------------------------------------------------------------------------------------------- */
+void KernelBuilder::clearOutputStream(Value * const instance, const unsigned streamOffset) {
+    Value * const indices[] = {iBuilder->getInt32(0), iBuilder->getInt32(OUTPUT_STREAM_SET), getOffset(instance, streamOffset)};
+    Value * ptr = iBuilder->CreateGEP(instance, indices, "ptr");
+    unsigned size = 0;
+    for (unsigned i = 0; i < mOutputStreamType->getStructNumElements(); ++i) {
+        size += mOutputStreamType->getStructElementType(i)->getPrimitiveSizeInBits();
+    }
+    iBuilder->CreateMemSet(ptr, iBuilder->getInt8(0), size / 8, 4);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -288,23 +358,53 @@ void KernelBuilder::call(llvm::Value * const instance, Value * inputStreams) {
  * Compute the stream index of the given offset value.
  ** ------------------------------------------------------------------------------------------------------------- */
 Value * KernelBuilder::getOffset(Value * const instance, const unsigned value) {
-    const unsigned adjustedOffset = (mSegmentIndex + value);
-    if (mBlockIndex) {
-        Value * offset = iBuilder->CreateBlockAlignedLoad(getBlockNo(instance));
-        if (adjustedOffset) {
-            offset = iBuilder->CreateAdd(offset, ConstantInt::get(offset->getType(), adjustedOffset));
+    Value * offset = nullptr;
+    if (mBufferSize > 1) {
+        offset = iBuilder->CreateLoad(getBlockNo(instance));
+        if (value) {
+            offset = iBuilder->CreateAdd(offset, iBuilder->getInt64(value));
         }
-        const unsigned bufferSize = (mBlocksPerSegment + mCircularBufferModulo - 1); assert (bufferSize > 1);
-        if (isPowerOfTwo(bufferSize)) {
-            offset = iBuilder->CreateAnd(offset, ConstantInt::get(offset->getType(), bufferSize - 1));
+        if (isPowerOfTwo(mBufferSize)) {
+            offset = iBuilder->CreateAnd(offset, iBuilder->getInt64(mBufferSize - 1));
         } else {
-            offset = iBuilder->CreateURem(offset, ConstantInt::get(offset->getType(), bufferSize));
+            offset = iBuilder->CreateURem(offset, iBuilder->getInt64(mBufferSize));
         }
-        // TODO: generate branch / phi node when it's sufficiently unlikely that we'll wrap around.
-        return offset;
     } else {
-        return iBuilder->getInt32(adjustedOffset);
+        offset = iBuilder->getInt64(value);
     }
+    return offset;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief CreateModFunction
+ *
+ * Generate a "modulo" function that dictates the local offset of a given blockNo
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline Function * KernelBuilder::CreateModFunction(const unsigned size) {
+    const std::string name((size == 0) ? "continuous" : "finite" + std::to_string(size));
+    Function * function = mMod->getFunction(name);
+    if (function) {
+        return function;
+    }
+    const auto ip = iBuilder->saveIP();
+    FunctionType * type = FunctionType::get(iBuilder->getInt64Ty(), {iBuilder->getInt64Ty()}, false);
+    function = Function::Create(type, Function::ExternalLinkage, name, mMod);
+    Value * offset = function->arg_begin();
+    offset->setName("index");
+    BasicBlock * entry = BasicBlock::Create(mMod->getContext(), "entry", function);
+    iBuilder->SetInsertPoint(entry);
+    if (size) {
+        if (size == 1) {
+            offset = iBuilder->getInt64(0);
+        } else if (isPowerOfTwo(size)) {
+            offset = iBuilder->CreateAnd(offset, iBuilder->getInt64(size - 1));
+        } else {
+            offset = iBuilder->CreateURem(offset, iBuilder->getInt64(size));
+        }
+    }
+    iBuilder->CreateRet(offset);
+    iBuilder->restoreIP(ip);
+    return function;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -313,7 +413,7 @@ Value * KernelBuilder::getOffset(Value * const instance, const unsigned value) {
 void KernelBuilder::setLongestLookaheadAmount(const unsigned bits) {
     const unsigned blockWidth = iBuilder->getBitBlockWidth();
     const unsigned lookaheadBlocks = (bits + blockWidth - 1) / blockWidth;
-    mCircularBufferModulo = (lookaheadBlocks + 1);
+    mBufferSize = (lookaheadBlocks + 1);
 }
 
 } // end of namespace kernel

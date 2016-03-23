@@ -32,7 +32,7 @@ private:
    
     bool finalLineIsUnterminated(char * fileBuffer, size_t fileSize) const;
 
-    GrepFunctionType mMainFcn;
+    GrepFunctionType mGrepFunction;
     
     bool mIsNameExpression;
     llvm::ExecutionEngine * mEngine;

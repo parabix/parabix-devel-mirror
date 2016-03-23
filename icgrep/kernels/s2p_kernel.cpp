@@ -30,7 +30,8 @@ void s2p_step(IDISA::IDISA_Builder * iBuilder, Value * s0, Value * s1, Value * h
 inline void s2p(IDISA::IDISA_Builder * iBuilder, Value * input, Value * output[]) {
     Value * bit00224466[4];
     Value * bit11335577[4];
-    for (unsigned i = 0; i<4; i++) {
+
+    for (unsigned i = 0; i < 4; i++) {
         Value * s0 = iBuilder->CreateBlockAlignedLoad(input, {iBuilder->getInt32(0), iBuilder->getInt32(2 * i)});
         Value * s1 = iBuilder->CreateBlockAlignedLoad(input, {iBuilder->getInt32(0), iBuilder->getInt32(2 * i + 1)});
         s2p_step(iBuilder, s0, s1, iBuilder->simd_himask(2), 1, bit00224466[i], bit11335577[i]);
@@ -58,8 +59,12 @@ void generateS2PKernel(Module *, IDISA::IDISA_Builder * iBuilder, KernelBuilder 
     }
     kBuilder->prepareFunction();
     Value * output[8];
-    s2p(iBuilder, kBuilder->getInputStream(0), output);
+
+    Value * ptr = kBuilder->getInputStream(0);
+    //iBuilder->CallPrintInt("ptr", iBuilder->CreatePtrToInt(ptr, iBuilder->getInt64Ty()));
+    s2p(iBuilder, ptr, output);
     for (unsigned j = 0; j < 8; ++j) {
+        //iBuilder->CallPrintRegister("bit" + std::to_string(j + 1), output[j]);
         iBuilder->CreateBlockAlignedStore(output[j], kBuilder->getOutputStream(j));
     }
     kBuilder->finalize();

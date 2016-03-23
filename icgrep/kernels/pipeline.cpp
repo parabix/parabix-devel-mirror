@@ -14,6 +14,9 @@
 #include <pablo/pablo_compiler.h>
 #include <pablo/pablo_toolchain.h>
 
+#include <llvm/Support/CommandLine.h>
+
+static cl::opt<unsigned> SegmentSize("segment-size", cl::desc("Segment Size"), cl::value_desc("positive integer"), cl::init(1));
 
 using namespace pablo;
 using namespace kernel;
@@ -22,27 +25,23 @@ PipelineBuilder::PipelineBuilder(Module * m, IDISA::IDISA_Builder * b)
 : mMod(m)
 , iBuilder(b)
 , mBitBlockType(b->getBitBlockType())
-, mBlockSize(b->getBitBlockWidth()){
+, mBlockSize(b->getBitBlockWidth()) {
 
 }
 
-PipelineBuilder::~PipelineBuilder(){
+PipelineBuilder::~PipelineBuilder() {
     delete mS2PKernel;
     delete mICgrepKernel;
     delete mScanMatchKernel;
 }
 
 void PipelineBuilder::CreateKernels(PabloFunction * function, bool isNameExpression){
-    mS2PKernel = new KernelBuilder("s2p", mMod, iBuilder);
-    mICgrepKernel = new KernelBuilder("icgrep", mMod, iBuilder);
-    mScanMatchKernel = new KernelBuilder("scanMatch", mMod, iBuilder);
-
+    mS2PKernel = new KernelBuilder("s2p", mMod, iBuilder, SegmentSize);
+    mICgrepKernel = new KernelBuilder("icgrep", mMod, iBuilder, SegmentSize);
+    mScanMatchKernel = new KernelBuilder("scanMatch", mMod, iBuilder, SegmentSize);
     generateS2PKernel(mMod, iBuilder, mS2PKernel);
-
     generateScanMatch(mMod, iBuilder, 64, mScanMatchKernel, isNameExpression);
-
     pablo_function_passes(function);
-
     PabloCompiler pablo_compiler(mMod, iBuilder);
     try {
         pablo_compiler.setKernel(mICgrepKernel);
@@ -57,122 +56,143 @@ void PipelineBuilder::CreateKernels(PabloFunction * function, bool isNameExpress
     }
 }
 
-void PipelineBuilder::ExecuteKernels() {
-    Type * T = iBuilder->getIntNTy(64);   
-    Type * S = PointerType::get(iBuilder->getIntNTy(8), 0);
-    Type * inputType = PointerType::get(ArrayType::get(StructType::get(mMod->getContext(), std::vector<Type *>({ArrayType::get(mBitBlockType, 8)})), 1), 0); 
-    Function * const main = cast<Function>(mMod->getOrInsertFunction("Main", Type::getVoidTy(mMod->getContext()), inputType, T, S, T, nullptr));
+Function * PipelineBuilder::ExecuteKernels() {
+    Type * const int64ty = iBuilder->getInt64Ty();
+    Type * const int8PtrTy = iBuilder->getInt8PtrTy();
+    Type * const inputType = PointerType::get(ArrayType::get(StructType::get(mMod->getContext(), std::vector<Type *>({ArrayType::get(mBitBlockType, 8)})), 1), 0);
+
+    Function * const main = cast<Function>(mMod->getOrInsertFunction("Main", Type::getVoidTy(mMod->getContext()), inputType, int64ty, int8PtrTy, int64ty, nullptr));
     main->setCallingConv(CallingConv::C);
     Function::arg_iterator args = main->arg_begin();
 
     Value * const inputStream = args++;
     inputStream->setName("input");
-    Value* buffersize_param = args++;
-    buffersize_param->setName("buffersize");   
-    Value* filename_param = args++;
-    filename_param->setName("filename");      
-    Value* finalLineUnterminated_param = args++;
-    finalLineUnterminated_param->setName("finalLineUnterminated");
+    Value * const bufferSize = args++;
+    bufferSize->setName("bufferSize");
+    Value * const fileName = args++;
+    fileName->setName("fileName");
+    Value * const finalLineUnterminated = args++;
+    finalLineUnterminated->setName("finalLineUnterminated");
 
     iBuilder->SetInsertPoint(BasicBlock::Create(mMod->getContext(), "entry", main,0));
 
-    BasicBlock * entry_block = iBuilder->GetInsertBlock();
-    BasicBlock * pipeline_test_block = BasicBlock::Create(mMod->getContext(), "pipeline_test_block", main, 0);
-    BasicBlock * pipeline_do_block = BasicBlock::Create(mMod->getContext(), "pipeline_do_block", main, 0);
-    BasicBlock * pipeline_final_block = BasicBlock::Create(mMod->getContext(), "pipeline_final_block", main, 0);
-    BasicBlock * pipeline_partial_block = BasicBlock::Create(mMod->getContext(), "pipeline_partial_block", main, 0);
-    BasicBlock * pipeline_empty_block = BasicBlock::Create(mMod->getContext(), "pipeline_empty_block", main, 0);
-    BasicBlock * pipeline_end_block = BasicBlock::Create(mMod->getContext(), "pipeline_end_block", main, 0);
-    BasicBlock * pipeline_Unterminated_block = BasicBlock::Create(mMod->getContext(), "pipeline_Unterminated_block", main, 0);
-    BasicBlock * pipeline_return_block = BasicBlock::Create(mMod->getContext(), "pipeline_return_block", main, 0);
+    BasicBlock * entryBlock = iBuilder->GetInsertBlock();
+    BasicBlock * segmentCondBlock = nullptr;
+    BasicBlock * segmentBodyBlock = nullptr;
+    const unsigned segmentSize = SegmentSize;
+    if (segmentSize > 1) {
+        segmentCondBlock = BasicBlock::Create(mMod->getContext(), "segmentCond", main, 0);
+        segmentBodyBlock = BasicBlock::Create(mMod->getContext(), "segmentBody", main, 0);
+    }
+    BasicBlock * fullCondBlock = BasicBlock::Create(mMod->getContext(), "fullCond", main, 0);
+    BasicBlock * fullBodyBlock = BasicBlock::Create(mMod->getContext(), "fullBody", main, 0);
+    BasicBlock * finalBlock = BasicBlock::Create(mMod->getContext(), "final", main, 0);
+    BasicBlock * finalPartialBlock = BasicBlock::Create(mMod->getContext(), "partial", main, 0);
+    BasicBlock * finalEmptyBlock = BasicBlock::Create(mMod->getContext(), "empty", main, 0);
+    BasicBlock * endBlock = BasicBlock::Create(mMod->getContext(), "end", main, 0);
+    BasicBlock * unterminatedBlock = BasicBlock::Create(mMod->getContext(), "unterminated", main, 0);
+    BasicBlock * exitBlock = BasicBlock::Create(mMod->getContext(), "exit", main, 0);
 
-    Instance * s2pInstance = mS2PKernel->instantiate();
-    Instance * icGrepInstance = mICgrepKernel->instantiate();
-    Instance * scanMatchInstance = mScanMatchKernel->instantiate();
+    Instance * s2pInstance = mS2PKernel->instantiate(inputStream);
+    Instance * icGrepInstance = mICgrepKernel->instantiate(s2pInstance->getOutputStreamSet());
+    Instance * scanMatchInstance = mScanMatchKernel->instantiate(icGrepInstance->getOutputStreamSet());
+
+    Value * ptr = iBuilder->CreateBitCast(inputStream, int8PtrTy);
+
+    scanMatchInstance->setInternalState("FileBuf", ptr);
+    scanMatchInstance->setInternalState("FileSize", bufferSize);
+    scanMatchInstance->setInternalState("FileName", fileName);
+
+    // iBuilder->CallPrintInt("source", iBuilder->CreatePtrToInt(ptr, iBuilder->getInt64Ty()));
+
+    Value * initialBufferSize = nullptr;
+    BasicBlock * initialBlock = nullptr;
+
+    if (segmentSize > 1) {
+        iBuilder->CreateBr(segmentCondBlock);
+        iBuilder->SetInsertPoint(segmentCondBlock);
+        PHINode * remainingBytes = iBuilder->CreatePHI(int64ty, 2, "remainingBytes");
+        remainingBytes->addIncoming(bufferSize, entryBlock);
+        Constant * const step = ConstantInt::get(int64ty, mBlockSize * segmentSize);
+        Value * segmentCondTest = iBuilder->CreateICmpULT(remainingBytes, step);
+        iBuilder->CreateCondBr(segmentCondTest, fullCondBlock, segmentBodyBlock);
+        iBuilder->SetInsertPoint(segmentBodyBlock);
+        for (unsigned i = 0; i < segmentSize; ++i) {
+            s2pInstance->CreateDoBlockCall();
+        }
+        for (unsigned i = 0; i < segmentSize; ++i) {
+            icGrepInstance->CreateDoBlockCall();
+        }
+        for (unsigned i = 0; i < segmentSize; ++i) {
+            scanMatchInstance->CreateDoBlockCall();
+        }
+        remainingBytes->addIncoming(iBuilder->CreateSub(remainingBytes, step), segmentBodyBlock);
+        iBuilder->CreateBr(segmentCondBlock);
+        initialBufferSize = remainingBytes;
+        initialBlock = segmentCondBlock;
+    } else {
+        initialBufferSize = bufferSize;
+        initialBlock = entryBlock;
+        iBuilder->CreateBr(fullCondBlock);
+    }
+
+    iBuilder->SetInsertPoint(fullCondBlock);
+    PHINode * remainingBytes = iBuilder->CreatePHI(int64ty, 2, "remainingBytes");
+    remainingBytes->addIncoming(initialBufferSize, initialBlock);
+
+    Constant * const step = ConstantInt::get(int64ty, mBlockSize);
+    Value * fullCondTest = iBuilder->CreateICmpULT(remainingBytes, step);
+    iBuilder->CreateCondBr(fullCondTest, finalBlock, fullBodyBlock);
+
+    iBuilder->SetInsertPoint(fullBodyBlock);
+    s2pInstance->CreateDoBlockCall();
+    icGrepInstance->CreateDoBlockCall();
+    scanMatchInstance->CreateDoBlockCall();
+
+    remainingBytes->addIncoming(iBuilder->CreateSub(remainingBytes, step), fullBodyBlock);
+    iBuilder->CreateBr(fullCondBlock);
+
+    iBuilder->SetInsertPoint(finalBlock);
+    Value * const b4 = s2pInstance->getOutputStream(4);
+    Value * const b6 = s2pInstance->getOutputStream(6);
+    Value * emptyBlockCond = iBuilder->CreateICmpEQ(remainingBytes, ConstantInt::get(int64ty, 0));
+    iBuilder->CreateCondBr(emptyBlockCond, finalEmptyBlock, finalPartialBlock);
 
 
-    Value * gep = scanMatchInstance->getInternalState("FileBuf");
-    Value * filebuf = iBuilder->CreateBitCast(inputStream, S);
-    iBuilder->CreateStore(filebuf, gep);
+    iBuilder->SetInsertPoint(finalPartialBlock);
+    s2pInstance->CreateDoBlockCall();
+    iBuilder->CreateBr(endBlock);
 
-    gep = scanMatchInstance->getInternalState("FileSize");
-    iBuilder->CreateStore(buffersize_param, gep);
+    iBuilder->SetInsertPoint(finalEmptyBlock);
+    s2pInstance->clearOutputStream();
+    iBuilder->CreateBr(endBlock);
 
-    gep = scanMatchInstance->getInternalState("FileName");
-    iBuilder->CreateStore(filename_param, gep);
-
-    Value * basis_bits = s2pInstance->getOutputStreamSet();
-
-    Value * results = icGrepInstance->getOutputStreamSet();
-
-    iBuilder->CreateBr(pipeline_test_block);
-
-    iBuilder->SetInsertPoint(pipeline_test_block);
-    PHINode * blockNo = iBuilder->CreatePHI(T, 2, "blockNo");
-    blockNo->addIncoming(iBuilder->getInt64(0), entry_block);
-    PHINode * remainingBytes = iBuilder->CreatePHI(T, 2, "remainingBytes");
-    remainingBytes->addIncoming(buffersize_param, entry_block);
-
-    Constant * step = ConstantInt::get(T, mBlockSize * mS2PKernel->getSegmentBlocks());
-
-    Value * final_block_cond = iBuilder->CreateICmpSLT(remainingBytes, step);
-    iBuilder->CreateCondBr(final_block_cond, pipeline_final_block, pipeline_do_block);
-
-    iBuilder->SetInsertPoint(pipeline_do_block);
-
-    s2pInstance->call(iBuilder->CreateGEP(inputStream, blockNo));
-
-    icGrepInstance->call(basis_bits);
-    scanMatchInstance->call(results);
-
-    blockNo->addIncoming(iBuilder->CreateAdd(blockNo, iBuilder->getInt64(1)), pipeline_do_block);
-    Value * update_remaining = iBuilder->CreateSub(remainingBytes, step);
-    remainingBytes->addIncoming(update_remaining, pipeline_do_block);
-    iBuilder->CreateBr(pipeline_test_block);
-
-    iBuilder->SetInsertPoint(pipeline_final_block);
-
-    Value * empty_block_cond = iBuilder->CreateICmpEQ(remainingBytes, ConstantInt::get(T, 0));
-    iBuilder->CreateCondBr(empty_block_cond, pipeline_empty_block, pipeline_partial_block);
-
-    iBuilder->SetInsertPoint(pipeline_partial_block);
-
-    s2pInstance->call(iBuilder->CreateGEP(inputStream, blockNo));
-
-    iBuilder->CreateBr(pipeline_end_block);
-
-    iBuilder->SetInsertPoint(pipeline_empty_block);
-
-    iBuilder->CreateMemSet(basis_bits, iBuilder->getInt8(0), mBlockSize, 4);
-    iBuilder->CreateBr(pipeline_end_block);
-
-    iBuilder->SetInsertPoint(pipeline_end_block);
-
-    Value * return_block_cond = iBuilder->CreateICmpEQ(finalLineUnterminated_param, ConstantInt::get(T, 0));
-    iBuilder->CreateCondBr(return_block_cond, pipeline_return_block, pipeline_Unterminated_block);
+    iBuilder->SetInsertPoint(endBlock);
+    Value * isFinalLineUnterminated = iBuilder->CreateICmpEQ(finalLineUnterminated, ConstantInt::get(int64ty, 0));
+    iBuilder->CreateCondBr(isFinalLineUnterminated, exitBlock, unterminatedBlock);
     
-    iBuilder->SetInsertPoint(pipeline_Unterminated_block);
+    iBuilder->SetInsertPoint(unterminatedBlock);
 
     Value * remaining = iBuilder->CreateZExt(remainingBytes, iBuilder->getIntNTy(mBlockSize));
     Value * EOF_pos = iBuilder->CreateShl(ConstantInt::get(iBuilder->getIntNTy(mBlockSize), 1), remaining);
     EOF_pos = iBuilder->CreateBitCast(EOF_pos, mBitBlockType);
 
-    Value * gep_bits4 = s2pInstance->getOutputStream(4);
-    Value * bits4 = iBuilder->CreateBlockAlignedLoad(gep_bits4);
-    bits4 = iBuilder->CreateOr(bits4, EOF_pos);
-    iBuilder->CreateBlockAlignedStore(bits4, gep_bits4);
 
-    Value * gep_bits6 = s2pInstance->getOutputStream(6);
-    Value * bits6 = iBuilder->CreateBlockAlignedLoad(gep_bits6);
-    bits6 = iBuilder->CreateOr(bits6, EOF_pos);
-    iBuilder->CreateBlockAlignedStore(bits6, gep_bits6);
+    Value * b4val = iBuilder->CreateBlockAlignedLoad(b4);
+    b4val = iBuilder->CreateOr(b4val, EOF_pos);
+    iBuilder->CreateBlockAlignedStore(b4val, b4);
 
-    iBuilder->CreateBr(pipeline_return_block);
+    Value * b6val = iBuilder->CreateBlockAlignedLoad(b6);
+    b6val = iBuilder->CreateOr(b6val, EOF_pos);
+    iBuilder->CreateBlockAlignedStore(b6val, b6);
 
-    iBuilder->SetInsertPoint(pipeline_return_block);
+    iBuilder->CreateBr(exitBlock);
 
-    icGrepInstance->call(basis_bits);
-    scanMatchInstance->call(results);
+    iBuilder->SetInsertPoint(exitBlock);
+
+    icGrepInstance->CreateDoBlockCall();
+    scanMatchInstance->CreateDoBlockCall();
     iBuilder->CreateRetVoid();
 
+    return main;
 }

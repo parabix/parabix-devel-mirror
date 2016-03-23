@@ -30,7 +30,7 @@ public:
 	~PipelineBuilder();
 
 	void CreateKernels(pablo::PabloFunction * function, bool isNameExpression);
-    void ExecuteKernels();
+    llvm::Function * ExecuteKernels();
 
 private:
     llvm::Module *                      mMod;
@@ -38,7 +38,7 @@ private:
     KernelBuilder *                     mS2PKernel;
     KernelBuilder *                     mICgrepKernel;   
     KernelBuilder *                     mScanMatchKernel;
-    llvm::Type*                         mBitBlockType;
+    llvm::Type *                        mBitBlockType;
     int                                 mBlockSize;
 };
 

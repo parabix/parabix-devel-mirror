@@ -12,9 +12,8 @@ class Instance {
     using Allocator = SlabAllocator<Instance>;
 public:
 
-    void call(llvm::Value * inputStreams) {
-        assert (inputStreams);
-        return mDefinition->call(mMemory, inputStreams);
+    void CreateDoBlockCall() {
+        mDefinition->CreateDoBlockCall(mMemory);
     }
 
     llvm::Value * getInternalState(const std::string & name) {
@@ -49,8 +48,12 @@ public:
         return mDefinition->getOutputStream(mMemory, index, streamOffset);
     }
 
-    llvm::Value * getOutputStreamSet(const unsigned streamOffset = 0) {
-        return mDefinition->getOutputStreamSet(mMemory, streamOffset);
+    void clearOutputStream(const unsigned streamOffset = 0) {
+        mDefinition->clearOutputStream(mMemory, streamOffset);
+    }
+
+    inline std::pair<llvm::Value *, unsigned> getOutputStreamSet() const {
+        return std::make_pair(mMemory, mDefinition->getBufferSize());
     }
 
     llvm::Value * getOutputScalar(const unsigned index) {
@@ -59,6 +62,10 @@ public:
 
     llvm::Value * getBlockNo() {
         return mDefinition->getBlockNo(mMemory);
+    }
+
+    unsigned getBufferSize() const {
+        return mDefinition->getBufferSize();
     }
 
     void* operator new (std::size_t size) noexcept {

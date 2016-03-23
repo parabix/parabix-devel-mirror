@@ -185,12 +185,9 @@ Function * SymbolTableBuilder::ExecuteKernels(){
 
     BasicBlock * exitBlock = BasicBlock::Create(mMod->getContext(), "exit", main, 0);
 
-    Instance * s2pInstance = mS2PKernel->instantiate();
-    Instance * leadingInstance = mLeadingKernel->instantiate();
-    Instance * sortingInstance = mSortingKernel->instantiate();
-
-    Value * basisBits = s2pInstance->getOutputStreamSet();
-    Value * leadingData = leadingInstance->getOutputStreamSet();
+    Instance * s2pInstance = mS2PKernel->instantiate(inputStream);
+    Instance * leadingInstance = mLeadingKernel->instantiate(s2pInstance->getOutputStreamSet());
+    Instance * sortingInstance = mSortingKernel->instantiate(leadingInstance->getOutputStreamSet());
 
     const unsigned leadingBlocks = (mLongestLookahead + iBuilder->getBitBlockWidth() - 1) / iBuilder->getBitBlockWidth();
 
@@ -215,8 +212,8 @@ Function * SymbolTableBuilder::ExecuteKernels(){
     Value * leadingBlocksCond = iBuilder->CreateICmpULT(blockNo, iBuilder->getInt64(leadingBlocks));
     iBuilder->CreateCondBr(leadingBlocksCond, leadingBodyBlock, regularTestBlock);
     iBuilder->SetInsertPoint(leadingBodyBlock);
-    s2pInstance->call(iBuilder->CreateGEP(inputStream, blockNo));
-    leadingInstance->call(basisBits);
+    s2pInstance->CreateDoBlockCall();
+    leadingInstance->CreateDoBlockCall();
     blockNo->addIncoming(iBuilder->CreateAdd(blockNo, iBuilder->getInt64(1)), leadingBodyBlock);
     remainingBytes->addIncoming(iBuilder->CreateSub(remainingBytes, blockSize), leadingBodyBlock);
     iBuilder->CreateBr(leadingTestBlock);
@@ -230,9 +227,9 @@ Function * SymbolTableBuilder::ExecuteKernels(){
     Value * remainingBytesCond = iBuilder->CreateICmpUGE(remainingBytes2, requiredBytes);
     iBuilder->CreateCondBr(remainingBytesCond, regularBodyBlock, regularExitBlock);
     iBuilder->SetInsertPoint(regularBodyBlock);
-    s2pInstance->call(iBuilder->CreateGEP(inputStream, blockNo2));
-    leadingInstance->call(basisBits);
-    sortingInstance->call(leadingData);
+    s2pInstance->CreateDoBlockCall();
+    leadingInstance->CreateDoBlockCall();
+    sortingInstance->CreateDoBlockCall();
     blockNo2->addIncoming(iBuilder->CreateAdd(blockNo2, iBuilder->getInt64(1)), regularBodyBlock);
     remainingBytes2->addIncoming(iBuilder->CreateSub(remainingBytes2, blockSize), regularBodyBlock);
     iBuilder->CreateBr(regularTestBlock);
@@ -245,12 +242,12 @@ Function * SymbolTableBuilder::ExecuteKernels(){
 
     // If we do, process it and mask out the data
     iBuilder->SetInsertPoint(partialBlock);
-    s2pInstance->call(iBuilder->CreateGEP(inputStream, blockNo2));
+    s2pInstance->CreateDoBlockCall();
     Value * partialLeadingData[2];
     for (unsigned i = 0; i < 2; ++i) {
         partialLeadingData[i] = leadingInstance->getOutputStream(i);
     }
-    leadingInstance->call(basisBits);
+    leadingInstance->CreateDoBlockCall();
     Type * fullBitBlockType = iBuilder->getIntNTy(mBlockSize);
     Value * remaining = iBuilder->CreateZExt(iBuilder->CreateSub(blockSize, remainingBytes2), fullBitBlockType);
     Value * eofMask = iBuilder->CreateLShr(ConstantInt::getAllOnesValue(fullBitBlockType), remaining);
@@ -262,7 +259,7 @@ Function * SymbolTableBuilder::ExecuteKernels(){
     for (unsigned i = 0; i < 2; ++i) {
         iBuilder->CreateBlockAlignedStore(ConstantInt::getNullValue(mBitBlockType), leadingInstance->getOutputStream(i));
     }
-    sortingInstance->call(leadingData);
+    sortingInstance->CreateDoBlockCall();
     iBuilder->CreateBr(finalTestBlock);
 
     // Now clear the leading data and test the final blocks
@@ -282,7 +279,7 @@ Function * SymbolTableBuilder::ExecuteKernels(){
     blockNoValue = iBuilder->CreateAdd(blockNoValue, ConstantInt::get(blockNoValue->getType(), 1));
     iBuilder->CreateStore(blockNoValue, blockNoPtr);
 
-    sortingInstance->call(leadingData);
+    sortingInstance->CreateDoBlockCall();
 
     remainingFullBlocks->addIncoming(iBuilder->CreateSub(remainingFullBlocks, iBuilder->getInt64(1)), finalBodyBlock);
 

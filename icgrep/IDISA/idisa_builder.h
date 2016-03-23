@@ -65,6 +65,7 @@ public:
     void CreateBlockAlignedStore(Value * const value, Value * const ptr, std::initializer_list<Value *> indicies);
 
     void CallPrintRegister(const std::string & regName, Value * const value);
+    void CallPrintInt(const std::string & name, Value * const value);
 
     Constant * simd_himask(unsigned fw);
     Constant * simd_lomask(unsigned fw);

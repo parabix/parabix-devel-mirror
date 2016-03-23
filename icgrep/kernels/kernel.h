@@ -41,7 +41,7 @@ class KernelBuilder {
     using NameMap = boost::container::flat_map<std::string, unsigned>;
 public:
     // sets name & sets internal state to the kernel superclass state
-    KernelBuilder(std::string name, llvm::Module * m, IDISA::IDISA_Builder * b);
+    KernelBuilder(std::string name, llvm::Module * m, IDISA::IDISA_Builder * b, const unsigned bufferSize = 1);
 
     unsigned addInternalState(llvm::Type * const type);
     unsigned addInternalState(llvm::Type * const type, std::string && name);
@@ -57,14 +57,12 @@ public:
 
     llvm::Function * prepareFunction();
 
-    void increment();
-
     inline llvm::Value * getInputStream(const unsigned index, const unsigned streamOffset = 0) {
-        return getInputStream(mInputParam, index, streamOffset);
+        return getInputStream(mKernelParam, index, streamOffset);
     }
 
     inline llvm::Value * getInputScalar(const unsigned index) {
-        return getInputScalar(mInputParam, index);
+        return getInputScalar(mKernelParam, index);
     }
 
     llvm::Value * getInternalState(const std::string & name) {
@@ -86,12 +84,17 @@ public:
     llvm::Value * getOutputStream(const unsigned index, const unsigned streamOffset = 0) {
         return getOutputStream(mKernelParam, index, streamOffset);
     }
-    llvm::Value * getOutputStreamSet(const unsigned streamOffset = 0) {
-        return getOutputStreamSet(mKernelParam, streamOffset);
+
+    inline unsigned getNumOfOutputStreams() const {
+        return mOutputStream.size();
     }
 
     llvm::Value * getOutputScalar(const unsigned index) {
         return getOutputScalar(mKernelParam, index);
+    }
+
+    inline unsigned getNumOfOutputScalars() const {
+        return mOutputScalar.size();
     }
 
     llvm::Value * getBlockNo() {
@@ -100,11 +103,17 @@ public:
 
     llvm::Type * getInputStreamType() const;
 
+    void setInputBufferSize(const unsigned bufferSize);
+
+    unsigned getInputBufferSize() const;
+
+    unsigned getBufferSize() const;
+
     void finalize();
 
-    kernel::Instance * instantiate();
+    kernel::Instance * instantiate(llvm::Value * const inputStream);
 
-    unsigned getSegmentBlocks() const;
+    kernel::Instance * instantiate(std::pair<llvm::Value *, unsigned> &&inputStream);
 
     llvm::Type * getKernelStateType() const;
 
@@ -112,9 +121,9 @@ public:
 
     llvm::Function * getDoBlockFunction() const;
 
-    void setLongestLookaheadAmount(const unsigned bits);
+    void clearOutputStream(llvm::Value * const instance, const unsigned streamOffset = 0);
 
-    void setBlocksPerSegment(const unsigned blocks);
+    void setLongestLookaheadAmount(const unsigned bits);
 
 protected:
 
@@ -132,73 +141,69 @@ protected:
 
     llvm::Value * getOutputStream(llvm::Value * const instance, const unsigned index, const unsigned streamOffset);
 
-    llvm::Value * getOutputStreamSet(llvm::Value * const instance, const unsigned streamOffset);
-
     llvm::Value * getOutputScalar(llvm::Value * const instance, const unsigned index);
 
     llvm::Value * getOffset(llvm::Value * const instance, const unsigned value);
 
     llvm::Value * getBlockNo(llvm::Value * const instance);
 
-    void call(llvm::Value * const instance, llvm::Value * inputStreams);
+    llvm::Function * getOutputStreamSetFunction() const;
+
+    void CreateDoBlockCall(llvm::Value * const instance);
+
+    llvm::Function * CreateModFunction(const unsigned size);
 
 private:
     llvm::Module *                      mMod;
     IDISA::IDISA_Builder *              iBuilder;
     std::string							mKernelName;
     llvm::Type *                        mBitBlockType;
-    llvm::Function* 					mConstructor;
-    llvm::Function*						mFunction;
-    unsigned                            mBlockSize;
-    unsigned                            mBlocksPerSegment;
-    unsigned                            mCircularBufferModulo;
-    llvm::Type *                        mKernelStructType;
+    llvm::Function * 					mConstructor;
+    llvm::Function *					mDoBlock;
+
+    unsigned                            mBufferSize;
+
+    llvm::Type *                        mKernelStateType;
     llvm::Type *                        mInputStreamType;
     llvm::Type *                        mInputScalarType;
+    llvm::Type *                        mOutputStreamType;
+
     llvm::Value *                       mInputParam;
     llvm::Value *                       mKernelParam;
-    unsigned                            mSegmentIndex;
-    unsigned                            mBlockIndex;
+    unsigned                            mBlockNoIndex;
+
     std::vector<llvm::Type *>           mInputStream;
     std::vector<std::string>            mInputStreamName;
     std::vector<llvm::Type *>           mInputScalar;
-    std::vector<std::string>            mInputScalarName;
+    std::vector<std::string>            mInputScalarName;    
     std::vector<llvm::Type *>           mOutputStream;
     std::vector<llvm::Type *>           mOutputScalar;
     std::vector<llvm::Type *> 			mInternalState;
     NameMap                             mInternalStateNameMap;
 };
 
-inline unsigned KernelBuilder::getSegmentBlocks() const {
-    return mBlocksPerSegment;
-}
-
 inline llvm::Function * KernelBuilder::getDoBlockFunction() const {
-    return mFunction;
+    return mDoBlock;
 }
 
 inline llvm::Type * KernelBuilder::getKernelStateType() const{
-    return mKernelStructType;
+    return mKernelStateType;
 }
 
 inline llvm::Value * KernelBuilder::getKernelState() const {
     return mKernelParam;
 }
 
-inline void KernelBuilder::setBlocksPerSegment(const unsigned blocks) {
-    mBlocksPerSegment = blocks;
-}
-
 inline llvm::Type * KernelBuilder::getInputStreamType() const {
     return mInputStreamType;
 }
 
-inline void KernelBuilder::increment() {
-    ++mSegmentIndex;
+inline llvm::Value * KernelBuilder::getBlockNo(llvm::Value * const instance) {
+    return getInternalState(instance, mBlockNoIndex);
 }
 
-inline llvm::Value * KernelBuilder::getBlockNo(llvm::Value * const instance) {
-    return getInternalState(instance, mBlockIndex);
+inline unsigned KernelBuilder::getBufferSize() const {
+    return mBufferSize;
 }
 
 } // end of namespace kernel
