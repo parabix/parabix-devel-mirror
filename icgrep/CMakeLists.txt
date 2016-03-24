@@ -104,6 +104,8 @@ add_dependencies(RegExpCompiler run_generate_predefined_ucd_functions)
 ENDIF()
 
 add_executable(icgrep icgrep.cpp toolchain.cpp grep_engine.cpp object_cache.cpp ${PRECOMPILED_FILES})
+add_executable(casefold casefold.cpp kernels/p2s_kernel.cpp kernels/stdout_kernel.cpp kernels/casefold_pipeline.cpp)
+
 IF(ENABLE_PREGENERATED_UCD_FUNCTIONS)
 add_dependencies(icgrep run_generate_predefined_ucd_functions)
 ENDIF()
@@ -112,6 +114,7 @@ IF(Boost_FOUND)
     link_directories(${Boost_LIBRARY_DIR})
     SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DUSE_BOOST")
     target_link_libraries(icgrep ${Boost_LIBRARIES})
+    target_link_libraries(casefold ${Boost_LIBRARIES})
 ENDIF()
 IF (PRINT_TIMING_INFORMATION)
     find_package(PAPI REQUIRED)
@@ -121,6 +124,7 @@ ENDIF()
 
 
 target_link_libraries (icgrep UCDlib PabloADT RegExpCompiler CCADT ${REQ_LLVM_LIBRARIES})
+target_link_libraries (casefold UCDlib PabloADT RegExpCompiler CCADT ${REQ_LLVM_LIBRARIES})
 
 IF(ENABLE_MULTIPLEXING)
 message(STATUS "Enabling Multiplexing")

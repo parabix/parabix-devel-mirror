@@ -208,9 +208,9 @@ Function * KernelBuilder::prepareFunction() {
     FunctionType * const functionType = FunctionType::get(iBuilder->getVoidTy(), {PointerType::get(mKernelStateType, 0)}, false);
     mDoBlock = Function::Create(functionType, GlobalValue::ExternalLinkage, mKernelName + "_DoBlock", mMod);
     mDoBlock->setCallingConv(CallingConv::C);
-    mDoBlock->addAttribute(1, Attribute::NoCapture);
-    mDoBlock->addAttribute(AttributeSet::FunctionIndex, Attribute::ReadNone);
-    mDoBlock->addAttribute(AttributeSet::FunctionIndex, Attribute::NoUnwind);
+  //  mDoBlock->addAttribute(1, Attribute::NoCapture);
+ //   mDoBlock->addAttribute(AttributeSet::FunctionIndex, Attribute::ReadNone);
+ //   mDoBlock->addAttribute(AttributeSet::FunctionIndex, Attribute::NoUnwind);
 
     Function::arg_iterator args = mDoBlock->arg_begin();
     mKernelParam = args++;
@@ -248,9 +248,9 @@ void KernelBuilder::finalize() {
     mConstructor = Function::Create(constructorType, GlobalValue::ExternalLinkage, mKernelName + "_Constructor", mMod);
     mConstructor->setCallingConv(CallingConv::C);
     mConstructor->addAttribute(1, Attribute::NoCapture);
-    mConstructor->addAttribute(AttributeSet::FunctionIndex, Attribute::InlineHint);
-    mConstructor->addAttribute(AttributeSet::FunctionIndex, Attribute::ReadNone);
-    mConstructor->addAttribute(AttributeSet::FunctionIndex, Attribute::NoUnwind);
+    //mConstructor->addAttribute(AttributeSet::FunctionIndex, Attribute::InlineHint);
+   // mConstructor->addAttribute(AttributeSet::FunctionIndex, Attribute::ReadNone);
+    //mConstructor->addAttribute(AttributeSet::FunctionIndex, Attribute::NoUnwind);
     auto args = mConstructor->arg_begin();
     mKernelParam = args++;
     mKernelParam->setName("this");
