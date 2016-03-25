@@ -110,7 +110,12 @@ pablo::PabloFunction * casefold2pablo(const Encoding encoding) {
     
     pablo::PabloBuilder pBuilder(cc_compiler.getBuilder().getPabloBlock(), cc_compiler.getBuilder());
     const std::vector<pablo::Var *> basis_bits = cc_compiler.getBasisBits();
-    pablo::PabloAST * alpha = cc_compiler.compileCC(re::makeCC(0x41, 0x5A));  // ASCII A-Z
+    
+    
+    pablo::PabloAST * alpha = cc_compiler.compileCC(re::makeCC(re::makeCC(0x41, 0x5A), re::makeCC(0x61,0x7A)));  // ASCII A-Z
+    
+    
+    
     function->setResult(0, pBuilder.createAssign("b0", basis_bits[0]));
     function->setResult(1, pBuilder.createAssign("b1", basis_bits[1]));
     function->setResult(2, pBuilder.createAssign("b2", pBuilder.createXor(basis_bits[2], alpha)));

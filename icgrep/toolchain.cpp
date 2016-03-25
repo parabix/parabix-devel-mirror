@@ -134,8 +134,8 @@ static int * total_count;
 static std::stringstream * resultStrs = nullptr;
 static std::vector<std::string> inputFiles;
 
-void initResult(std::vector<std::string> filenames, const int n){
-    if (n > 1) {
+void initResult(std::vector<std::string> filenames, const int firstName, const int n){
+    if (n - firstName > 1) {
         ShowFileNames = true;
     }
     inputFiles = filenames;

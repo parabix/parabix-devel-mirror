@@ -161,7 +161,7 @@ int main(int argc, char *argv[]) {
     GrepEngine grepEngine;
     grepEngine.grepCodeGen(module_name, re_ast);
 
-    initResult(inputFiles, inputFiles.size());
+    initResult(inputFiles, firstInputFile, inputFiles.size());
     if (Threads <= 1) {
         for (unsigned i = firstInputFile; i != inputFiles.size(); ++i) {
             grepEngine.doGrep(inputFiles[i]);
