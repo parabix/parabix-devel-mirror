@@ -3,11 +3,7 @@
 
 #include <re/re_cc.h>
 #include <vector>
-#ifdef USE_BOOST
 #include <boost/container/flat_map.hpp>
-#else
-#include <unordered_map>
-#endif
 
 namespace cc {
     class CC_Compiler;
@@ -33,11 +29,7 @@ class UCDCompiler {
     using PabloAST = pablo::PabloAST;
     using codepoint_t = re::codepoint_t;
     using RangeList = std::vector<re::interval_t>;
-    #ifdef USE_BOOST
     using TargetMap = boost::container::flat_map<const UnicodeSet *, PabloAST *>;
-    #else
-    using TargetMap = std::unordered_map<const UnicodeSet *, PabloAST *>;
-    #endif
     using Target = std::pair<const UnicodeSet *, PabloAST *>;
     using TargetVector = std::vector<Target>;
 
@@ -46,11 +38,7 @@ class UCDCompiler {
 
 public:
 
-    #ifdef USE_BOOST
     using NameMap = boost::container::flat_map<re::Name *, PabloAST *>;
-    #else
-    using NameMap = std::unordered_map<re::Name *, PabloAST *>;
-    #endif
 
     UCDCompiler(cc::CC_Compiler & ccCompiler);
 

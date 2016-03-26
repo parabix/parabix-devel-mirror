@@ -48,8 +48,8 @@ public:
         return mDefinition->getOutputStream(mMemory, index, streamOffset);
     }
 
-    void clearOutputStream(const unsigned streamOffset = 0) {
-        mDefinition->clearOutputStream(mMemory, streamOffset);
+    void clearOutputStreamSet(const unsigned streamOffset = 0) {
+        mDefinition->clearOutputStreamSet(mMemory, streamOffset);
     }
 
     inline std::pair<llvm::Value *, unsigned> getOutputStreamSet() const {

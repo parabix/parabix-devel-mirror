@@ -140,7 +140,6 @@ Function *  PipelineBuilder::ExecuteKernels() {
     iBuilder->SetInsertPoint(fullCondBlock);
     PHINode * remainingBytes = iBuilder->CreatePHI(int64ty, 2, "remainingBytes");
     remainingBytes->addIncoming(initialBufferSize, initialBlock);
-    //iBuilder->CallPrintInt("remainingBytes", iBuilder->CreatePtrToInt(remainingBytes, iBuilder->getInt64Ty()));
 
     Constant * const step = ConstantInt::get(int64ty, mBlockSize);
     Value * fullCondTest = iBuilder->CreateICmpULT(remainingBytes, step);
@@ -168,7 +167,7 @@ Function *  PipelineBuilder::ExecuteKernels() {
     iBuilder->CreateBr(endBlock);
     
     iBuilder->SetInsertPoint(finalEmptyBlock);
-    s2pInstance->clearOutputStream();
+    s2pInstance->clearOutputStreamSet();
     iBuilder->CreateBr(endBlock);
     
     iBuilder->SetInsertPoint(endBlock);

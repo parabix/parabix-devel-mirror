@@ -58,31 +58,31 @@ public:
     llvm::Function * prepareFunction();
 
     inline llvm::Value * getInputStream(const unsigned index, const unsigned streamOffset = 0) {
-        return getInputStream(mKernelParam, index, streamOffset);
+        return getInputStream(mKernelState, index, streamOffset);
     }
 
     inline llvm::Value * getInputScalar(const unsigned index) {
-        return getInputScalar(mKernelParam, index);
+        return getInputScalar(mKernelState, index);
     }
 
     llvm::Value * getInternalState(const std::string & name) {
-        return getInternalState(mKernelParam, name);
+        return getInternalState(mKernelState, name);
     }
 
     void setInternalState(const std::string & name, llvm::Value * value) {
-        setInternalState(mKernelParam, name, value);
+        setInternalState(mKernelState, name, value);
     }
 
     llvm::Value * getInternalState(const unsigned index) {
-        return getInternalState(mKernelParam, index);
+        return getInternalState(mKernelState, index);
     }
 
     void setInternalState(const unsigned index, llvm::Value * value) {
-        setInternalState(mKernelParam, index, value);
+        setInternalState(mKernelState, index, value);
     }
 
     llvm::Value * getOutputStream(const unsigned index, const unsigned streamOffset = 0) {
-        return getOutputStream(mKernelParam, index, streamOffset);
+        return getOutputStream(mKernelState, index, streamOffset);
     }
 
     inline unsigned getNumOfOutputStreams() const {
@@ -90,7 +90,7 @@ public:
     }
 
     llvm::Value * getOutputScalar(const unsigned index) {
-        return getOutputScalar(mKernelParam, index);
+        return getOutputScalar(mKernelState, index);
     }
 
     inline unsigned getNumOfOutputScalars() const {
@@ -98,7 +98,7 @@ public:
     }
 
     llvm::Value * getBlockNo() {
-        return getBlockNo(mKernelParam);
+        return getBlockNo(mKernelState);
     }
 
     llvm::Type * getInputStreamType() const;
@@ -113,7 +113,9 @@ public:
 
     kernel::Instance * instantiate(llvm::Value * const inputStream);
 
-    kernel::Instance * instantiate(std::pair<llvm::Value *, unsigned> &&inputStream);
+    kernel::Instance * instantiate(std::initializer_list<llvm::Value *> inputStreams);
+
+    kernel::Instance * instantiate(std::pair<llvm::Value *, unsigned> && inputStream);
 
     llvm::Type * getKernelStateType() const;
 
@@ -121,9 +123,7 @@ public:
 
     llvm::Function * getDoBlockFunction() const;
 
-    void clearOutputStream(llvm::Value * const instance, const unsigned streamOffset = 0);
-
-    void setLongestLookaheadAmount(const unsigned bits);
+    void clearOutputStreamSet(llvm::Value * const instance, const unsigned streamOffset = 0);
 
 protected:
 
@@ -153,6 +153,8 @@ protected:
 
     llvm::Function * CreateModFunction(const unsigned size);
 
+    void eliminateRedundantMemoryOperations(llvm::Function * const function);
+
 private:
     llvm::Module *                      mMod;
     IDISA::IDISA_Builder *              iBuilder;
@@ -168,8 +170,7 @@ private:
     llvm::Type *                        mInputScalarType;
     llvm::Type *                        mOutputStreamType;
 
-    llvm::Value *                       mInputParam;
-    llvm::Value *                       mKernelParam;
+    llvm::Value *                       mKernelState;
     unsigned                            mBlockNoIndex;
 
     std::vector<llvm::Type *>           mInputStream;
@@ -191,7 +192,7 @@ inline llvm::Type * KernelBuilder::getKernelStateType() const{
 }
 
 inline llvm::Value * KernelBuilder::getKernelState() const {
-    return mKernelParam;
+    return mKernelState;
 }
 
 inline llvm::Type * KernelBuilder::getInputStreamType() const {

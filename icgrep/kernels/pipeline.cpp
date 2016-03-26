@@ -103,8 +103,6 @@ Function * PipelineBuilder::ExecuteKernels() {
     scanMatchInstance->setInternalState("FileSize", bufferSize);
     scanMatchInstance->setInternalState("FileName", fileName);
 
-    // iBuilder->CallPrintInt("source", iBuilder->CreatePtrToInt(ptr, iBuilder->getInt64Ty()));
-
     Value * initialBufferSize = nullptr;
     BasicBlock * initialBlock = nullptr;
 
@@ -164,7 +162,7 @@ Function * PipelineBuilder::ExecuteKernels() {
     iBuilder->CreateBr(endBlock);
 
     iBuilder->SetInsertPoint(finalEmptyBlock);
-    s2pInstance->clearOutputStream();
+    s2pInstance->clearOutputStreamSet();
     iBuilder->CreateBr(endBlock);
 
     iBuilder->SetInsertPoint(endBlock);

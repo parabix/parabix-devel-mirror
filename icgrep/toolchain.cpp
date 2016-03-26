@@ -72,15 +72,6 @@ ExecutionEngine * JIT_to_ExecutionEngine (Module * m) {
     initializeCodeGen(*Registry);
     initializeLowerIntrinsicsPass(*Registry);
 
-//    llvm::PassManager pm;
-//    pm.add(createBasicAliasAnalysisPass());
-//    pm.add(createEarlyCSEPass());
-//    pm.add(createPromoteMemoryToRegisterPass());
-//    pm.add(createInstructionCombiningPass());
-//    pm.add(createConstantPropagationPass());
-//    pm.add(createDeadCodeEliminationPass());
-//    pm.run(*m);
-
     std::string errMessage;
     EngineBuilder builder(std::move(std::unique_ptr<Module>(m)));
     builder.setErrorStr(&errMessage);

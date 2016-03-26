@@ -226,7 +226,7 @@ void generateScanMatch(Module * m, IDISA::IDISA_Builder * iBuilder, unsigned sca
 
     Value * kernelStuctParam = kBuilder->getKernelState();
 
-    Value * scanwordPos = iBuilder->CreateBlockAlignedLoad(kBuilder->getInternalState("BlockNo"));
+    Value * scanwordPos = iBuilder->CreateLoad(kBuilder->getInternalState("BlockNo"));
     scanwordPos = iBuilder->CreateMul(scanwordPos, ConstantInt::get(scanwordPos->getType(), iBuilder->getBitBlockWidth()));
 
     Value * recordStart = iBuilder->CreateBlockAlignedLoad(kBuilder->getInternalState(lineStart));

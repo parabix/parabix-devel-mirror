@@ -3,23 +3,14 @@
 #include <pablo/codegenstate.h>
 #include <pablo/printer_pablos.h>
 #include <iostream>
-#ifdef USE_BOOST
 #include <boost/container/flat_set.hpp>
-#else
-#include <unordered_set>
-#endif
 #include <queue>
 
 
 namespace pablo {
 
-#ifdef USE_BOOST
 template <typename Type>
 using SmallSet = boost::container::flat_set<Type>;
-#else
-template <typename Type>
-using SmallSet = std::unordered_set<Type>;
-#endif
 
 using ScopeSet = SmallSet<const PabloBlock *>;
 

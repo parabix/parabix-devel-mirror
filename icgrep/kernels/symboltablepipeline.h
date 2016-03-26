@@ -31,6 +31,12 @@ protected:
     pablo::PabloFunction * generateLeadingFunction(const std::vector<unsigned> & endpoints);
     pablo::PabloFunction * generateSortingFunction(const pablo::PabloFunction * const leading, const std::vector<unsigned> & endpoints);
 
+    void generateScannerKernel(KernelBuilder * kBuilder, const unsigned minKeyLength, const unsigned maxKeyLength, const unsigned scanWordBitWidth = 64);
+    Function * generateScanWordRoutine(KernelBuilder * const kBuilder, const unsigned scanWordBitWidth);
+
+    Value * generateGather(Value * const base, Value * const vindex);
+    Value * generateMaskedGather(Value * const base, Value * const vindex, Value * const mask);
+
     void generateLLVMParser();
 
 private:
@@ -39,6 +45,8 @@ private:
     KernelBuilder *                     mS2PKernel;
     KernelBuilder *                     mLeadingKernel;
     KernelBuilder *                     mSortingKernel;
+    KernelBuilder *                     mScannerKernel;
+
     unsigned                            mLongestLookahead;
     llvm::Type *                        mBitBlockType;
     int                                 mBlockSize;
