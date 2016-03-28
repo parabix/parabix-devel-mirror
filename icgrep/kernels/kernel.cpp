@@ -64,10 +64,13 @@ unsigned KernelBuilder::addInternalState(llvm::Type * const type, std::string &&
  * @brief getInternalState
  ** ------------------------------------------------------------------------------------------------------------- */
 Value * KernelBuilder::getInternalState(Value * const instance, const unsigned index) {
-    Value* indices[] = {iBuilder->getInt64(0),
-                        iBuilder->getInt32(INTERNAL_STATE),
-                        iBuilder->getInt32(index)};
-    return iBuilder->CreateGEP(instance, indices);
+    assert (index < mInternalState.size());
+    return getInternalState(instance, iBuilder->getInt32(index));
+}
+
+Value * KernelBuilder::getInternalState(Value * const instance, disable_implicit_conversion<Value *> index) {
+    assert (index->getType() == iBuilder->getInt32Ty());
+    return iBuilder->CreateGEP(instance, {iBuilder->getInt64(0), iBuilder->getInt32(INTERNAL_STATE), index});
 }
 
 Value * KernelBuilder::getInternalState(Value * const instance, const std::string & name) {
@@ -92,6 +95,11 @@ void KernelBuilder::setInternalState(Value * const instance, const std::string &
 }
 
 void KernelBuilder::setInternalState(Value * const instance, const unsigned index, Value * const value) {
+    assert (index < mInternalState.size());
+    return setInternalState(instance, iBuilder->getInt32(index), value);
+}
+
+void KernelBuilder::setInternalState(Value * const instance, disable_implicit_conversion<Value *> index, Value * const value) {
     Value * ptr = getInternalState(instance, index);
     assert (ptr->getType()->getPointerElementType() == value->getType());
     if (value->getType() == iBuilder->getBitBlockType()) {
@@ -122,8 +130,12 @@ void KernelBuilder::addInputStream(const unsigned fields) {
  * @brief getInputStream
  ** ------------------------------------------------------------------------------------------------------------- */
 Value * KernelBuilder::getInputStream(Value * const instance, const unsigned index, const unsigned streamOffset) {
-    assert (instance);
     assert (index < mInputStream.size());
+    return getInputStream(instance, iBuilder->getInt32(index), streamOffset);
+}
+
+Value * KernelBuilder::getInputStream(Value * const instance, disable_implicit_conversion<Value *> index, const unsigned streamOffset) {
+    assert (instance && index);
     Value * inputStream = iBuilder->CreateLoad(iBuilder->CreateGEP(instance,
         {iBuilder->getInt32(0), iBuilder->getInt32(INPUT_STREAM_SET), iBuilder->getInt32(0)}));
     Value * modFunction = iBuilder->CreateLoad(iBuilder->CreateGEP(instance,
@@ -131,8 +143,9 @@ Value * KernelBuilder::getInputStream(Value * const instance, const unsigned ind
     Value * offset = iBuilder->CreateLoad(getBlockNo(instance));
     if (streamOffset) {
         offset = iBuilder->CreateAdd(offset, ConstantInt::get(offset->getType(), streamOffset));
-    }   
-    return iBuilder->CreateGEP(inputStream, { iBuilder->CreateCall(modFunction, offset), iBuilder->getInt32(index) });
+    }
+    assert (index->getType() == iBuilder->getInt32Ty());
+    return iBuilder->CreateGEP(inputStream, { iBuilder->CreateCall(modFunction, offset), index });
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -152,6 +165,12 @@ void KernelBuilder::addInputScalar(Type * const type) {
  * @brief getInputScalar
  ** ------------------------------------------------------------------------------------------------------------- */
 Value * KernelBuilder::getInputScalar(Value * const instance, const unsigned) {
+    assert (instance);
+    throw std::runtime_error("currently not supported!");
+}
+
+Value * KernelBuilder::getInputScalar(Value * const instance, disable_implicit_conversion<Value *>) {
+    assert (instance);
     throw std::runtime_error("currently not supported!");
 }
 
@@ -179,16 +198,24 @@ unsigned KernelBuilder::addOutputScalar(Type * const type) {
  * @brief getOutputStream
  ** ------------------------------------------------------------------------------------------------------------- */
 Value * KernelBuilder::getOutputStream(Value * const instance, const unsigned index, const unsigned streamOffset) {
-    assert (instance);
-    Value * const offset = getOffset(instance, streamOffset);
-    Value * const indices[] = {iBuilder->getInt32(0), iBuilder->getInt32(OUTPUT_STREAM_SET), offset, iBuilder->getInt32(index)};
-    return iBuilder->CreateGEP(instance, indices);
+    assert (index < mOutputStream.size());
+    return getOutputStream(instance, iBuilder->getInt32(index), streamOffset);
+}
+
+Value * KernelBuilder::getOutputStream(Value * const instance, disable_implicit_conversion<Value *> index, const unsigned streamOffset) {
+    assert (instance && index);
+    assert (index->getType() == iBuilder->getInt32Ty());
+    return iBuilder->CreateGEP(instance, {iBuilder->getInt32(0), iBuilder->getInt32(OUTPUT_STREAM_SET), getStreamOffset(instance, streamOffset), index});
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getOutputScalar
  ** ------------------------------------------------------------------------------------------------------------- */
 Value * KernelBuilder::getOutputScalar(Value * const instance, const unsigned) {
+    throw std::runtime_error("currently not supported!");
+}
+
+Value * KernelBuilder::getOutputScalar(Value * const instance, disable_implicit_conversion<Value *> ) {
     throw std::runtime_error("currently not supported!");
 }
 
@@ -368,7 +395,7 @@ void KernelBuilder::CreateDoBlockCall(Value * const instance) {
  * Zero out the i + streamOffset stream set memory, where i is the current stream set indicated by the BlockNo.
  ** ------------------------------------------------------------------------------------------------------------- */
 void KernelBuilder::clearOutputStreamSet(Value * const instance, const unsigned streamOffset) {
-    Value * const indices[] = {iBuilder->getInt32(0), iBuilder->getInt32(OUTPUT_STREAM_SET), getOffset(instance, streamOffset)};
+    Value * const indices[] = {iBuilder->getInt32(0), iBuilder->getInt32(OUTPUT_STREAM_SET), getStreamOffset(instance, streamOffset)};
     Value * ptr = iBuilder->CreateGEP(instance, indices);
     unsigned size = 0;
     for (unsigned i = 0; i < mOutputStreamType->getStructNumElements(); ++i) {
@@ -382,12 +409,12 @@ void KernelBuilder::clearOutputStreamSet(Value * const instance, const unsigned 
  *
  * Compute the stream index of the given offset value.
  ** ------------------------------------------------------------------------------------------------------------- */
-Value * KernelBuilder::getOffset(Value * const instance, const unsigned value) {
+Value * KernelBuilder::getStreamOffset(Value * const instance, const unsigned index) {
     Value * offset = nullptr;
     if (mBufferSize > 1) {
         offset = iBuilder->CreateLoad(getBlockNo(instance));
-        if (value) {
-            offset = iBuilder->CreateAdd(offset, iBuilder->getInt64(value));
+        if (index) {
+            offset = iBuilder->CreateAdd(offset, iBuilder->getInt64(index));
         }
         if (isPowerOfTwo(mBufferSize)) {
             offset = iBuilder->CreateAnd(offset, iBuilder->getInt64(mBufferSize - 1));
@@ -395,7 +422,7 @@ Value * KernelBuilder::getOffset(Value * const instance, const unsigned value) {
             offset = iBuilder->CreateURem(offset, iBuilder->getInt64(mBufferSize));
         }
     } else {
-        offset = iBuilder->getInt64(value);
+        offset = iBuilder->getInt64(index);
     }
     return offset;
 }

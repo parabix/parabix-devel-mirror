@@ -43,6 +43,17 @@ public:
     // sets name & sets internal state to the kernel superclass state
     KernelBuilder(std::string name, llvm::Module * m, IDISA::IDISA_Builder * b, const unsigned bufferSize = 1);
 
+    template<typename T>
+    struct disable_implicit_conversion {
+        inline disable_implicit_conversion(T const value) : _value(value) {}
+        inline disable_implicit_conversion(std::nullptr_t) = delete;
+        inline disable_implicit_conversion(unsigned) = delete;
+        operator T() { return _value; }
+        T operator -> () { return _value; }
+    private:
+        T const  _value;
+    };
+
     unsigned addInternalState(llvm::Type * const type);
     unsigned addInternalState(llvm::Type * const type, std::string && name);
 
@@ -61,7 +72,15 @@ public:
         return getInputStream(mKernelState, index, streamOffset);
     }
 
+    inline llvm::Value * getInputStream(disable_implicit_conversion<llvm::Value *> index, const unsigned streamOffset = 0) {
+        return getInputStream(mKernelState, index, streamOffset);
+    }
+
     inline llvm::Value * getInputScalar(const unsigned index) {
+        return getInputScalar(mKernelState, index);
+    }
+
+    inline llvm::Value * getInputScalar(disable_implicit_conversion<llvm::Value *> const index) {
         return getInputScalar(mKernelState, index);
     }
 
@@ -77,11 +96,23 @@ public:
         return getInternalState(mKernelState, index);
     }
 
+    llvm::Value * getInternalState(disable_implicit_conversion<llvm::Value *> const index) {
+        return getInternalState(mKernelState, index);
+    }
+
     void setInternalState(const unsigned index, llvm::Value * value) {
         setInternalState(mKernelState, index, value);
     }
 
+    void setInternalState(disable_implicit_conversion<llvm::Value *> const index, llvm::Value * value) {
+        setInternalState(mKernelState, index, value);
+    }
+
     llvm::Value * getOutputStream(const unsigned index, const unsigned streamOffset = 0) {
+        return getOutputStream(mKernelState, index, streamOffset);
+    }
+
+    llvm::Value * getOutputStream(disable_implicit_conversion<llvm::Value *> const index, const unsigned streamOffset = 0) {
         return getOutputStream(mKernelState, index, streamOffset);
     }
 
@@ -90,6 +121,10 @@ public:
     }
 
     llvm::Value * getOutputScalar(const unsigned index) {
+        return getOutputScalar(mKernelState, index);
+    }
+
+    llvm::Value * getOutputScalar(disable_implicit_conversion<llvm::Value *> const index) {
         return getOutputScalar(mKernelState, index);
     }
 
@@ -129,7 +164,11 @@ protected:
 
     llvm::Value * getInputStream(llvm::Value * const instance, const unsigned index, const unsigned streamOffset);
 
+    llvm::Value * getInputStream(llvm::Value * const instance, disable_implicit_conversion<llvm::Value *> index, const unsigned streamOffset);
+
     llvm::Value * getInputScalar(llvm::Value * const instance, const unsigned index);
+
+    llvm::Value * getInputScalar(llvm::Value * const instance, disable_implicit_conversion<llvm::Value *> index);
 
     llvm::Value * getInternalState(llvm::Value * const instance, const std::string & name);
 
@@ -137,13 +176,21 @@ protected:
 
     llvm::Value * getInternalState(llvm::Value * const instance, const unsigned index);
 
+    llvm::Value * getInternalState(llvm::Value * const instance, disable_implicit_conversion<llvm::Value *> index);
+
     void setInternalState(llvm::Value * const instance, const unsigned index, llvm::Value * const value);
+
+    void setInternalState(llvm::Value * const instance, disable_implicit_conversion<llvm::Value *> index, llvm::Value * const value);
 
     llvm::Value * getOutputStream(llvm::Value * const instance, const unsigned index, const unsigned streamOffset);
 
+    llvm::Value * getOutputStream(llvm::Value * const instance, disable_implicit_conversion<llvm::Value *> index, const unsigned streamOffset);
+
     llvm::Value * getOutputScalar(llvm::Value * const instance, const unsigned index);
 
-    llvm::Value * getOffset(llvm::Value * const instance, const unsigned value);
+    llvm::Value * getOutputScalar(llvm::Value * const instance, disable_implicit_conversion<llvm::Value *> index);
+
+    llvm::Value * getStreamOffset(llvm::Value * const instance, const unsigned index);
 
     llvm::Value * getBlockNo(llvm::Value * const instance);
 

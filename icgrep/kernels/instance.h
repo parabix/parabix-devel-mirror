@@ -28,11 +28,23 @@ public:
         return mDefinition->getInternalState(mMemory, index);
     }
 
+    llvm::Value * getInternalState(llvm::Value * const index) {
+        return mDefinition->getInternalState(mMemory, index);
+    }
+
     void setInternalState(const unsigned index, llvm::Value * value) {
         mDefinition->setInternalState(mMemory, index, value);
     }
 
+    void setInternalState(llvm::Value * const index, llvm::Value * value) {
+        mDefinition->setInternalState(mMemory, index, value);
+    }
+
     llvm::Value * getInputStream(const unsigned index, const unsigned streamOffset = 0) {
+        return mDefinition->getInputStream(mMemory, index, streamOffset);
+    }
+
+    llvm::Value * getInputStream(llvm::Value * const index, const unsigned streamOffset = 0) {
         return mDefinition->getInputStream(mMemory, index, streamOffset);
     }
 
@@ -44,7 +56,15 @@ public:
         return mDefinition->getInputScalar(mMemory, index);
     }
 
+    llvm::Value * getInputScalar(llvm::Value * const index) {
+        return mDefinition->getInputScalar(mMemory, index);
+    }
+
     llvm::Value * getOutputStream(const unsigned index, const unsigned streamOffset = 0) {
+        return mDefinition->getOutputStream(mMemory, index, streamOffset);
+    }
+
+    llvm::Value * getOutputStream(llvm::Value * const index, const unsigned streamOffset = 0) {
         return mDefinition->getOutputStream(mMemory, index, streamOffset);
     }
 
@@ -57,6 +77,10 @@ public:
     }
 
     llvm::Value * getOutputScalar(const unsigned index) {
+        return mDefinition->getOutputScalar(mMemory, index);
+    }
+
+    llvm::Value * getOutputScalar(llvm::Value * const index) {
         return mDefinition->getOutputScalar(mMemory, index);
     }
 
