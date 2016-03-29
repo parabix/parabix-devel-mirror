@@ -101,25 +101,20 @@ ExecutionEngine * JIT_to_ExecutionEngine (Module * m) {
 
 
 //
-//  Function replacing re2pablo_compiler.
+//  Generate Pablo code for case folding.
 //
 
 pablo::PabloFunction * casefold2pablo(const Encoding encoding) {
     pablo::PabloFunction * function = pablo::PabloFunction::Create("casefold_block", 8, 8);
     cc::CC_Compiler cc_compiler(*function, encoding);
-    
     pablo::PabloBuilder pBuilder(cc_compiler.getBuilder().getPabloBlock(), cc_compiler.getBuilder());
     const std::vector<pablo::Var *> basis_bits = cc_compiler.getBasisBits();
     
-    
-    pablo::PabloAST * alpha = cc_compiler.compileCC(re::makeCC(re::makeCC(0x41, 0x5A), re::makeCC(0x61,0x7A)));  // ASCII A-Z
-    
-    
+    pablo::PabloAST * alpha = cc_compiler.compileCC(re::makeCC(0x41, 0x5A));  // ASCII A-Z
     
     function->setResult(0, pBuilder.createAssign("b0", basis_bits[0]));
     function->setResult(1, pBuilder.createAssign("b1", basis_bits[1]));
     function->setResult(2, pBuilder.createAssign("b2", pBuilder.createXor(basis_bits[2], alpha)));
-    //function->setResult(2, pBuilder.createAssign("b2", basis_bits[2]));
     function->setResult(3, pBuilder.createAssign("b3", basis_bits[3]));
     function->setResult(4, pBuilder.createAssign("b4", basis_bits[4]));
     function->setResult(5, pBuilder.createAssign("b5", basis_bits[5]));
@@ -232,7 +227,6 @@ int main(int argc, char *argv[]) {
     casefoldFunctionType fn_ptr = caseFoldCodeGen();
 
     for (unsigned i = 0; i != inputFiles.size(); ++i) {
-        std::cerr << inputFiles[i] << " beginning\n";
         doCaseFold(fn_ptr, inputFiles[i]);
     }
 

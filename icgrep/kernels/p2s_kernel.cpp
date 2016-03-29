@@ -50,7 +50,6 @@ void generateP2SKernel(Module * m, IDISA::IDISA_Builder * iBuilder, KernelBuilde
         iBuilder->CreateBlockAlignedStore(output[j], iBuilder->CreateGEP(output_ptr, std::vector<Value *>({ iBuilder->getInt32(0), iBuilder->getInt32(j) })));
     }
     kBuilder->finalize();
-    m->dump();
 }
 
 }
