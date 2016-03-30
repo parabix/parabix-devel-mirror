@@ -201,8 +201,15 @@ extern "C" {
 
 void PrintResult(){
     if(CountOnly){
-        for (int i=1; i<inputFiles.size(); i++){
-            std::cout << total_count[i-1] << std::endl;
+        if (!ShowFileNames) {
+           for (int i=1; i<inputFiles.size(); i++){
+               std::cout << total_count[i-1] << std::endl;
+           }
+        }
+        else {
+            for (int i=1; i<inputFiles.size(); i++){
+                std::cout << inputFiles[i] << ':' << total_count[i-1] << std::endl;
+            };
         }
         return;
     }
