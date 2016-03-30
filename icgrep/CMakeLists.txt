@@ -109,7 +109,7 @@ ENDIF()
 
 add_executable(icgrep icgrep.cpp toolchain.cpp grep_engine.cpp object_cache.cpp ${PRECOMPILED_FILES})
 add_executable(casefold casefold.cpp kernels/p2s_kernel.cpp kernels/stdout_kernel.cpp kernels/casefold_pipeline.cpp)
-add_executable(symtbl symboltable.cpp kernels/symboltablepipeline.cpp toolchain.cpp grep_engine.cpp object_cache.cpp ${PRECOMPILED_FILES})
+add_executable(symtbl symboltable.cpp kernels/symboltablepipeline.cpp kernels/stdout_kernel.cpp toolchain.cpp grep_engine.cpp object_cache.cpp ${PRECOMPILED_FILES})
 
 IF(ENABLE_PREGENERATED_UCD_FUNCTIONS)
 add_dependencies(icgrep run_generate_predefined_ucd_functions)

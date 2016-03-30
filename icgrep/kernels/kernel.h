@@ -48,8 +48,9 @@ public:
         inline disable_implicit_conversion(T const value) : _value(value) {}
         inline disable_implicit_conversion(std::nullptr_t) = delete;
         inline disable_implicit_conversion(unsigned) = delete;
-        operator T() { return _value; }
-        T operator -> () { return _value; }
+        operator T() const { return _value; }
+        T operator-> () const { return _value; }
+        T get() const { return _value; }
     private:
         T const  _value;
     };
@@ -161,6 +162,8 @@ public:
     void clearOutputStreamSet(llvm::Value * const instance, const unsigned streamOffset = 0);
 
 protected:
+
+    llvm::Type * packDataTypes(const std::vector<llvm::Type *> & types);
 
     llvm::Value * getInputStream(llvm::Value * const instance, const unsigned index, const unsigned streamOffset);
 

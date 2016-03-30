@@ -34,10 +34,7 @@ protected:
     void generateGatherKernel(KernelBuilder * kBuilder, const std::vector<unsigned> & endpoints, const unsigned scanWordBitWidth = 64);
     Function * generateGatherFunction(Type * const transposedVectorType, const unsigned minCount, const unsigned maxCount);
 
-    Value * generateGather(Value * const base, Value * const vindex);
     Value * generateMaskedGather(Value * const base, Value * const vindex, Value * const mask);
-
-    void generateLLVMParser();
 
 private:
     llvm::Module *                      mMod;
@@ -46,6 +43,7 @@ private:
     KernelBuilder *                     mLeadingKernel;
     KernelBuilder *                     mSortingKernel;
     KernelBuilder *                     mGatherKernel;
+    KernelBuilder *                     mStdOutKernel;
 
     unsigned                            mLongestLookahead;
     llvm::Type *                        mBitBlockType;

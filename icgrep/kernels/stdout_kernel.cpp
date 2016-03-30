@@ -15,7 +15,7 @@ namespace kernel {
             FunctionType *write_type =
             TypeBuilder<long(int, char *, long), false>::get(mod->getContext());
             write = cast<Function>(mod->getOrInsertFunction("write", write_type,
-                                                             AttributeSet().addAttribute(mod->getContext(), 1U, Attribute::NoAlias)));
+                                                             AttributeSet().addAttribute(mod->getContext(), 2U, Attribute::NoAlias)));
         }
         return write;
     }

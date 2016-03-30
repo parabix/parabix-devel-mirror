@@ -129,13 +129,10 @@ inline void PabloCompiler::GenerateKernel(PabloFunction * const function) {
 
     for (unsigned j = 0; j < function->getNumOfResults(); ++j) {
         const auto f = mMarkerMap.find(function->getResult(j));
-        Value * result = nullptr;
         if (LLVM_UNLIKELY(f == mMarkerMap.end())) {
-            result = iBuilder->allZeroes();
-        } else {
-            result = f->second;
+            throw std::runtime_error("PabloCompiler: result " + std::to_string(j) + " was not assigned a value!");
         }
-        iBuilder->CreateBlockAlignedStore(result, mKernelBuilder->getOutputStream(j));
+        iBuilder->CreateBlockAlignedStore(f->second, mKernelBuilder->getOutputStream(j));
     }
 
     mKernelBuilder->finalize();

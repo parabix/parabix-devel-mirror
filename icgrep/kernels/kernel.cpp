@@ -69,7 +69,7 @@ Value * KernelBuilder::getInternalState(Value * const instance, const unsigned i
 }
 
 Value * KernelBuilder::getInternalState(Value * const instance, disable_implicit_conversion<Value *> index) {
-    assert (index->getType() == iBuilder->getInt32Ty());
+    assert (index->getType()->isIntegerTy());
     return iBuilder->CreateGEP(instance, {iBuilder->getInt64(0), iBuilder->getInt32(INTERNAL_STATE), index});
 }
 
@@ -136,7 +136,8 @@ Value * KernelBuilder::getInputStream(Value * const instance, const unsigned ind
 
 Value * KernelBuilder::getInputStream(Value * const instance, disable_implicit_conversion<Value *> index, const unsigned streamOffset) {
     assert (instance && index);
-    Value * inputStream = iBuilder->CreateLoad(iBuilder->CreateGEP(instance,
+    assert (index->getType()->isIntegerTy());
+    Value * const inputStreamSet = iBuilder->CreateLoad(iBuilder->CreateGEP(instance,
         {iBuilder->getInt32(0), iBuilder->getInt32(INPUT_STREAM_SET), iBuilder->getInt32(0)}));
     Value * modFunction = iBuilder->CreateLoad(iBuilder->CreateGEP(instance,
         {iBuilder->getInt32(0), iBuilder->getInt32(INPUT_STREAM_SET), iBuilder->getInt32(1)}));
@@ -144,8 +145,11 @@ Value * KernelBuilder::getInputStream(Value * const instance, disable_implicit_c
     if (streamOffset) {
         offset = iBuilder->CreateAdd(offset, ConstantInt::get(offset->getType(), streamOffset));
     }
-    assert (index->getType() == iBuilder->getInt32Ty());
-    return iBuilder->CreateGEP(inputStream, { iBuilder->CreateCall(modFunction, offset), index });
+    if (LLVM_LIKELY(isa<ConstantInt>(index.get()) || inputStreamSet->getType()->getPointerElementType()->isArrayTy())) {
+        return iBuilder->CreateGEP(inputStreamSet, { iBuilder->CreateCall(modFunction, offset), index });
+    } else {
+        throw std::runtime_error("Cannot access the input stream with a non-constant value unless all input stream types are identical!");
+    }
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -204,8 +208,16 @@ Value * KernelBuilder::getOutputStream(Value * const instance, const unsigned in
 
 Value * KernelBuilder::getOutputStream(Value * const instance, disable_implicit_conversion<Value *> index, const unsigned streamOffset) {
     assert (instance && index);
-    assert (index->getType() == iBuilder->getInt32Ty());
-    return iBuilder->CreateGEP(instance, {iBuilder->getInt32(0), iBuilder->getInt32(OUTPUT_STREAM_SET), getStreamOffset(instance, streamOffset), index});
+    assert (index->getType()->isIntegerTy());
+    if (LLVM_LIKELY(isa<ConstantInt>(index.get()))) {
+        return iBuilder->CreateGEP(instance, {iBuilder->getInt32(0), iBuilder->getInt32(OUTPUT_STREAM_SET), getStreamOffset(instance, streamOffset), index});
+    } else {
+        Value * const outputStreamSet = iBuilder->CreateGEP(instance, {iBuilder->getInt32(0), iBuilder->getInt32(OUTPUT_STREAM_SET)});
+        if (LLVM_LIKELY(outputStreamSet->getType()->getPointerElementType()->isArrayTy())) {
+            return iBuilder->CreateGEP(outputStreamSet, {getStreamOffset(instance, streamOffset), index});
+        }
+    }
+    throw std::runtime_error("Cannot access the output stream with a non-constant value unless all output stream types are identical!");
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -220,18 +232,35 @@ Value * KernelBuilder::getOutputScalar(Value * const instance, disable_implicit_
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
+ * @brief packDataTypes
+ ** ------------------------------------------------------------------------------------------------------------- */
+llvm::Type * KernelBuilder::packDataTypes(const std::vector<llvm::Type *> & types) {
+    bool canPackIntoArray = !types.empty();
+    for (Type * type : types) {
+        if (type != types.front()) { // use canLosslesslyBitcastInto ?
+            canPackIntoArray = false;
+            break;
+        }
+    }
+    if (canPackIntoArray) {
+        return ArrayType::get(types.front(), types.size());
+    } else {
+        return StructType::get(mMod->getContext(), types);
+    }
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
  * @brief prepareFunction
  ** ------------------------------------------------------------------------------------------------------------- */
 Function * KernelBuilder::prepareFunction() {
 
     PointerType * modFunctionType = PointerType::get(FunctionType::get(iBuilder->getInt64Ty(), {iBuilder->getInt64Ty()}, false), 0);
-    mInputStreamType = PointerType::get(StructType::get(mMod->getContext(), mInputStream), 0);
-    mInputScalarType = PointerType::get(StructType::get(mMod->getContext(), mInputScalar), 0);
-    mOutputStreamType = StructType::get(mMod->getContext(), mOutputStream);
-    Type * outputScalarType = StructType::get(mMod->getContext(), mOutputScalar);
-    Type * internalStateType = StructType::create(mMod->getContext(), mInternalState);
+    mInputStreamType = PointerType::get(packDataTypes(mInputStream), 0);
+    mInputScalarType = PointerType::get(packDataTypes(mInputScalar), 0);
+    mOutputStreamType = packDataTypes(mOutputStream);
+    Type * outputScalarType = packDataTypes(mOutputScalar);
+    Type * internalStateType = packDataTypes(mInternalState);
     Type * inputStateType = StructType::create(mMod->getContext(), { mInputStreamType, modFunctionType});
-
     Type * outputBufferType = ArrayType::get(mOutputStreamType, mBufferSize);
     mKernelStateType = StructType::create(mMod->getContext(), {internalStateType, inputStateType, outputBufferType, outputScalarType}, mKernelName);
 
@@ -285,11 +314,12 @@ void KernelBuilder::finalize() {
     iBuilder->SetInsertPoint(BasicBlock::Create(mMod->getContext(), "entry", mConstructor, 0));
     for (unsigned i = 0; i < mInternalState.size(); ++i) {
         Type * const type = mInternalState[i];
-        if (type->isIntegerTy() || type->isArrayTy() || type->isVectorTy()) {
+        if (type->isSized()) {
             setInternalState(i, Constant::getNullValue(type));
         } else {
             Value * const ptr = getInternalState(i);
             Value * const size = iBuilder->CreatePtrDiff(iBuilder->CreateGEP(ptr, iBuilder->getInt32(1)), ptr);
+            iBuilder->CallPrintInt(mKernelName + "_zeroinit_" + std::to_string(i), size);
             iBuilder->CreateMemSet(ptr, iBuilder->getInt8(0), size, 4);
         }
     }
