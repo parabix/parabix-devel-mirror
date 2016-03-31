@@ -57,16 +57,16 @@ Value * IDISA_AVX2_Builder::hsimd_packh(unsigned fw, Value * a, Value * b) {
     if (fw <= 64) {
         std::vector<Constant*> Idxs;
         for (unsigned i = 0; i < field_count/4; i++) {
-            Idxs.push_back(getInt32(2*i + 1));
-        }
-        for (unsigned i = 0; i < field_count/4; i++) {
             Idxs.push_back(getInt32(2*i));
         }
         for (unsigned i = 0; i < field_count/4; i++) {
-            Idxs.push_back(getInt32(field_count/2 + 2*i + 1));
+            Idxs.push_back(getInt32(2*i + 1));
         }
         for (unsigned i = 0; i < field_count/4; i++) {
             Idxs.push_back(getInt32(field_count/2 + 2*i));
+        }
+        for (unsigned i = 0; i < field_count/4; i++) {
+            Idxs.push_back(getInt32(field_count/2 + 2*i + 1));
         }
         Value * shufa = CreateShuffleVector(aVec, aVec, ConstantVector::get(Idxs));
         Value * shufb = CreateShuffleVector(bVec, bVec, ConstantVector::get(Idxs));
@@ -83,16 +83,16 @@ Value * IDISA_AVX2_Builder::hsimd_packl(unsigned fw, Value * a, Value * b) {
     if (fw <= 64) {
         std::vector<Constant*> Idxs;
         for (unsigned i = 0; i < field_count/4; i++) {
-            Idxs.push_back(getInt32(2*i + 1));
-        }
-        for (unsigned i = 0; i < field_count/4; i++) {
             Idxs.push_back(getInt32(2*i));
         }
         for (unsigned i = 0; i < field_count/4; i++) {
-            Idxs.push_back(getInt32(field_count/2 + 2*i + 1));
+            Idxs.push_back(getInt32(2*i + 1));
         }
         for (unsigned i = 0; i < field_count/4; i++) {
             Idxs.push_back(getInt32(field_count/2 + 2*i));
+        }
+        for (unsigned i = 0; i < field_count/4; i++) {
+            Idxs.push_back(getInt32(field_count/2 + 2*i + 1));
         }
         Value * shufa = CreateShuffleVector(aVec, aVec, ConstantVector::get(Idxs));
         Value * shufb = CreateShuffleVector(bVec, bVec, ConstantVector::get(Idxs));
