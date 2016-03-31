@@ -21,6 +21,7 @@ public:
   
     IDISA_SSE_Builder(Module * m, Type * bitBlockType) : IDISA_Builder(m, bitBlockType) {
     }
+    Value * hsimd_signmask(unsigned fw, Value * a) override;
     ~IDISA_SSE_Builder() {};
 
 };
@@ -30,6 +31,7 @@ public:
   
     IDISA_SSE2_Builder(Module * m, Type * bitBlockType) : IDISA_SSE_Builder(m, bitBlockType) {
     }
+    Value * hsimd_signmask(unsigned fw, Value * a) override;
     Value * hsimd_packh(unsigned fw, Value * a, Value * b) override;
     Value * hsimd_packl(unsigned fw, Value * a, Value * b) override;
     ~IDISA_SSE2_Builder() {};
