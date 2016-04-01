@@ -42,6 +42,27 @@ Value * IDISA_SSE2_Builder::hsimd_signmask(unsigned fw, Value * a) {
             Value * mask = CreateCall(signmask_f64func, a_as_pd);
             return mask;
         }
+        if (fw == 8) {
+            Value * pmovmskb_func = Intrinsic::getDeclaration(mMod, Intrinsic::x86_sse2_pmovmskb_128);
+            Value * mask = CreateCall(pmovmskb_func, fwCast(8, a));
+            return mask;
+        }
+    }
+    int fieldCount = mBitBlockWidth/fw;
+    if ((fieldCount > 4) && (fieldCount <= 16)) {
+        Value * pmovmskb_func = Intrinsic::getDeclaration(mMod, Intrinsic::x86_sse2_pmovmskb_128);
+        int fieldBytes = fw/8;
+        int hiByte = fieldBytes - 1;
+        std::vector<Constant*> Idxs;
+        for (unsigned i = 0; i < fieldCount; i++) {
+            Idxs.push_back(getInt32(fieldBytes*i+hiByte));
+        }
+        for (unsigned i = fieldCount; i < 16; i++) {
+            Idxs.push_back(getInt32(mBitBlockWidth/8));
+        }
+        Value * packh = CreateShuffleVector(fwCast(8, a), fwCast(8, allZeroes()), ConstantVector::get(Idxs));
+        Value * mask = CreateCall(pmovmskb_func, packh);
+        return mask;
     }
     // Otherwise use default SSE logic.
     return IDISA_SSE_Builder::hsimd_signmask(fw, a);
