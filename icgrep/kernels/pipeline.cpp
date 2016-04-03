@@ -36,9 +36,9 @@ PipelineBuilder::~PipelineBuilder() {
 }
 
 void PipelineBuilder::CreateKernels(PabloFunction * function, bool isNameExpression){
-    mS2PKernel = new KernelBuilder("s2p", mMod, iBuilder, SegmentSize);
-    mICgrepKernel = new KernelBuilder("icgrep", mMod, iBuilder, SegmentSize);
-    mScanMatchKernel = new KernelBuilder("scanMatch", mMod, iBuilder, SegmentSize);
+    mS2PKernel = new KernelBuilder(iBuilder, "s2p", SegmentSize);
+    mICgrepKernel = new KernelBuilder(iBuilder, "icgrep", SegmentSize);
+    mScanMatchKernel = new KernelBuilder(iBuilder, "scanMatch", SegmentSize);
     generateS2PKernel(mMod, iBuilder, mS2PKernel);
     generateScanMatch(mMod, iBuilder, 64, mScanMatchKernel, isNameExpression);
     pablo_function_passes(function);
@@ -94,8 +94,8 @@ Function * PipelineBuilder::ExecuteKernels() {
     BasicBlock * exitBlock = BasicBlock::Create(mMod->getContext(), "exit", main, 0);
 
     Instance * s2pInstance = mS2PKernel->instantiate(inputStream);
-    Instance * icGrepInstance = mICgrepKernel->instantiate(s2pInstance->getOutputStreamSet());
-    Instance * scanMatchInstance = mScanMatchKernel->instantiate(icGrepInstance->getOutputStreamSet());
+    Instance * icGrepInstance = mICgrepKernel->instantiate(s2pInstance->getResultSet());
+    Instance * scanMatchInstance = mScanMatchKernel->instantiate(icGrepInstance->getResultSet());
 
     Value * ptr = iBuilder->CreateBitCast(inputStream, int8PtrTy);
 

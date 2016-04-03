@@ -16,6 +16,7 @@
 #include <llvm/IR/IRBuilder.h>
 #include <IDISA/idisa_builder.h>
 #include <kernels/kernel.h>
+#include <boost/container/flat_set.hpp>
 
 namespace llvm {
     class Value;
@@ -23,7 +24,6 @@ namespace llvm {
     class ExecutionEngine;
     class VectorType;
     class PointerType;
-    class ConstantAggregateZero;
     class Constant;
     class FunctionType;
     class Function;
@@ -43,9 +43,9 @@ class If;
 class While;
 
 class PabloCompiler {
-
+    using IntSet = boost::container::flat_set<unsigned>;
     using MarkerMap = std::unordered_map<const PabloAST *, Value *>;
-
+    using LookaheadOffsetMap = std::unordered_map<const PabloAST *, IntSet>;
 public:
     PabloCompiler(Module * m, IDISA::IDISA_Builder * b);
 
@@ -54,8 +54,8 @@ public:
 
 private:
 
-    void Examine(PabloFunction & function);
-    void Examine(PabloBlock * block);
+    void Examine(const PabloFunction * const function);
+    void Examine(const PabloBlock * const block, LookaheadOffsetMap & offsetMap);
 
     void compileBlock(const PabloBlock * const block);
     void compileStatement(const Statement * stmt);
@@ -65,7 +65,7 @@ private:
     void GenerateKernel(PabloFunction * const function);
 
     MarkerMap                           mMarkerMap;
-
+    IntSet                              mInputStreamOffset;
     Module *                            mMod;
     IDISA::IDISA_Builder *              iBuilder;
     Type* const                         mBitBlockType;

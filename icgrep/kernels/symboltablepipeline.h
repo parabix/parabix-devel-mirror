@@ -32,7 +32,7 @@ protected:
     pablo::PabloFunction * generateSortingFunction(const pablo::PabloFunction * const leading, const std::vector<unsigned> & endpoints);
 
     void generateGatherKernel(KernelBuilder * kBuilder, const std::vector<unsigned> & endpoints, const unsigned scanWordBitWidth = 64);
-    Function * generateGatherFunction(Type * const transposedVectorType, const unsigned minCount, const unsigned maxCount);
+    Function * generateGatherFunction(const unsigned minKeyLength, const unsigned maxKeyLength, Type * const resultType);
 
     Value * generateMaskedGather(Value * const base, Value * const vindex, Value * const mask);
 
@@ -46,6 +46,9 @@ private:
     KernelBuilder *                     mStdOutKernel;
 
     unsigned                            mLongestLookahead;
+
+    std::vector<Function *>             mGatherFunction;
+
     llvm::Type *                        mBitBlockType;
     int                                 mBlockSize;
 };

@@ -56,7 +56,7 @@ SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DUSE_BOOST")
 
 SET(PABLO_SRC pablo/pabloAST.cpp pablo/ps_if.cpp pablo/ps_while.cpp pablo/function.cpp pablo/codegenstate.cpp pablo/builder.cpp pablo/symbol_generator.cpp pablo/printer_pablos.cpp pablo/pablo_toolchain.cpp)
 SET(PABLO_SRC ${PABLO_SRC} pablo/pablo_compiler.cpp pablo/carry_manager.cpp pablo/carry_data.cpp IDISA/idisa_builder.cpp IDISA/idisa_avx_builder.cpp IDISA/idisa_i64_builder.cpp IDISA/idisa_sse_builder.cpp IDISA/idisa_target.cpp)
-SET(PABLO_SRC ${PABLO_SRC} kernels/s2p_kernel.cpp kernels/scanmatchgen.cpp kernels/kernel.cpp kernels/pipeline.cpp)
+SET(PABLO_SRC ${PABLO_SRC} kernels/s2p_kernel.cpp kernels/kernel.cpp kernels/instance.cpp)
 SET(PABLO_SRC ${PABLO_SRC} pablo/analysis/pabloverifier.cpp)
 SET(PABLO_SRC ${PABLO_SRC} pablo/optimizers/pablo_simplifier.cpp pablo/optimizers/codemotionpass.cpp)
 IF(ENABLE_MULTIPLEXING)
@@ -66,7 +66,7 @@ ENDIF()
 
 add_library(PabloADT ${PABLO_SRC})
 add_library(RegExpADT re/re_re.cpp re/re_cc.cpp re/re_rep.cpp re/re_diff.cpp re/re_intersect.cpp re/printer_re.cpp)
-add_library(RegExpCompiler re/re_parser.cpp re/parsefailure.cpp re/re_nullable.cpp re/re_simplifier.cpp re/re_compiler.cpp re/re_analysis.cpp re/re_toolchain.cpp)
+add_library(RegExpCompiler re/re_parser.cpp re/parsefailure.cpp grep_engine.cpp kernels/pipeline.cpp kernels/scanmatchgen.cpp re/re_nullable.cpp re/re_simplifier.cpp re/re_compiler.cpp re/re_analysis.cpp re/re_toolchain.cpp)
 add_library(CCADT cc/cc_compiler.cpp utf8_encoder.cpp UCD/CaseFolding_txt.cpp)
 add_library(UCDlib UCD/unicode_set.cpp UCD/ucd_compiler.cpp UCD/PropertyObjects.cpp UCD/resolve_properties.cpp UCD/UnicodeNameData.cpp)
 
@@ -107,7 +107,7 @@ add_custom_target(run_generate_predefined_ucd_functions DEPENDS ${PRECOMPILED_FI
 add_dependencies(RegExpCompiler run_generate_predefined_ucd_functions)
 ENDIF()
 
-add_executable(icgrep icgrep.cpp toolchain.cpp grep_engine.cpp object_cache.cpp ${PRECOMPILED_FILES})
+add_executable(icgrep icgrep.cpp toolchain.cpp grep_engine.cpp object_cache.cpp kernels/pipeline.cpp kernels/scanmatchgen.cpp ${PRECOMPILED_FILES})
 add_executable(casefold casefold.cpp kernels/p2s_kernel.cpp kernels/stdout_kernel.cpp kernels/casefold_pipeline.cpp)
 add_executable(symtbl symboltable.cpp kernels/symboltablepipeline.cpp kernels/stdout_kernel.cpp toolchain.cpp grep_engine.cpp object_cache.cpp ${PRECOMPILED_FILES})
 

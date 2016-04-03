@@ -83,7 +83,7 @@ llvm::Function * PabloCompiler::compile(PabloFunction * function) {
     const timestamp_t pablo_compilation_start = read_cycle_counter();
     #endif
   
-    Examine(*function);
+    Examine(function);
 
     mCarryManager = new CarryManager(iBuilder);
 
@@ -113,16 +113,17 @@ inline void PabloCompiler::GenerateKernel(PabloFunction * const function) {
 
     mCarryManager->initialize(function, mKernelBuilder);
 
-    mFunction = mKernelBuilder->prepareFunction();
+    mFunction = mKernelBuilder->prepareFunction({mInputStreamOffset.begin(), mInputStreamOffset.end()});
 
     mCarryManager->reset();
 
     for (unsigned j = 0; j < function->getNumOfParameters(); ++j) {
         Value * inputVal = mKernelBuilder->getInputStream(j);
+        const Var * const var = function->getParameter(j);
         if (DumpTrace) {
-            iBuilder->CallPrintRegister("param" + std::to_string(j + 1), iBuilder->CreateBlockAlignedLoad(inputVal));
+            iBuilder->CallPrintRegister(var->getName()->to_string(), iBuilder->CreateBlockAlignedLoad(inputVal));
         }
-        mMarkerMap.insert(std::make_pair(function->getParameter(j), inputVal));
+        mMarkerMap.insert(std::make_pair(var, inputVal));
     }
 
     compileBlock(function->getEntryBlock());
@@ -138,22 +139,49 @@ inline void PabloCompiler::GenerateKernel(PabloFunction * const function) {
     mKernelBuilder->finalize();
 }
 
-inline void PabloCompiler::Examine(PabloFunction & function) {
+inline void PabloCompiler::Examine(const PabloFunction * const function) {
     mWhileDepth = 0;
     mIfDepth = 0;
     mMaxWhileDepth = 0;
-    Examine(function.getEntryBlock());
+    LookaheadOffsetMap offsetMap;
+    Examine(function->getEntryBlock(), offsetMap);
+    mInputStreamOffset.clear();
+    for (const auto & oi : offsetMap) {
+        for (const auto offset : oi.second) {
+            mInputStreamOffset.insert(offset / iBuilder->getBitBlockWidth());
+        }
+    }
 }
 
-void PabloCompiler::Examine(PabloBlock * block) {
-    for (Statement * stmt : *block) {
-        if (LLVM_UNLIKELY(isa<If>(stmt))) {
-            Examine(cast<If>(stmt)->getBody());
-        } else if (LLVM_UNLIKELY(isa<While>(stmt))) {
-            mMaxWhileDepth = std::max(mMaxWhileDepth, ++mWhileDepth);
-            Examine(cast<While>(stmt)->getBody());
-            --mWhileDepth;
+void PabloCompiler::Examine(const PabloBlock * const block, LookaheadOffsetMap & offsetMap) {
+    for (const Statement * stmt : *block) {
+         boost::container::flat_set<unsigned> offsets;
+        if (LLVM_UNLIKELY(isa<Lookahead>(stmt))) {
+            const Lookahead * const la = cast<Lookahead>(stmt);
+            assert (isa<Var>(la->getExpr()));
+            offsets.insert(la->getAmount());
+            offsets.insert(la->getAmount() + iBuilder->getBitBlockWidth() - 1);
+        } else {
+            for (unsigned i = 0; i < stmt->getNumOperands(); ++i) {
+                const PabloAST * expr = stmt->getOperand(i);
+                if (isa<Var>(expr)) {
+                    offsets.insert(0);
+                } else if (LLVM_LIKELY(isa<Statement>(expr) && !isa<Assign>(expr) && !isa<Next>(expr))) {
+                    const auto f = offsetMap.find(expr);
+                    assert (f != offsetMap.end());
+                    const auto & o = f->second;
+                    offsets.insert(o.begin(), o.end());
+                }
+            }
+            if (LLVM_UNLIKELY(isa<If>(stmt))) {
+                Examine(cast<If>(stmt)->getBody(), offsetMap);
+            } else if (LLVM_UNLIKELY(isa<While>(stmt))) {
+                mMaxWhileDepth = std::max(mMaxWhileDepth, ++mWhileDepth);
+                Examine(cast<While>(stmt)->getBody(), offsetMap);
+                --mWhileDepth;
+            }
         }
+        offsetMap.emplace(stmt, offsets);
     }
 }
 
@@ -383,10 +411,11 @@ void PabloCompiler::compileStatement(const Statement * stmt) {
         if (LLVM_UNLIKELY(index >= mPabloFunction->getNumOfParameters())) {
             throw std::runtime_error("Lookahead has an illegal Var operand");
         }
-        const unsigned offset = l->getAmount() / iBuilder->getBitBlockWidth();
+        const unsigned offset0 = (l->getAmount() / iBuilder->getBitBlockWidth());
+        const unsigned offset1 = ((l->getAmount() + iBuilder->getBitBlockWidth() - 1) / iBuilder->getBitBlockWidth());
         const unsigned shift = (l->getAmount() % iBuilder->getBitBlockWidth());
-        Value * const v0 = iBuilder->CreateBlockAlignedLoad(mKernelBuilder->getInputStream(index, offset));
-        Value * const v1 = iBuilder->CreateBlockAlignedLoad(mKernelBuilder->getInputStream(index, offset + 1));
+        Value * const v0 = iBuilder->CreateBlockAlignedLoad(mKernelBuilder->getInputStream(index, offset0));
+        Value * const v1 = iBuilder->CreateBlockAlignedLoad(mKernelBuilder->getInputStream(index, offset1));
         if (LLVM_UNLIKELY((shift % 8) == 0)) { // Use a single whole-byte shift, if possible.
             expr = iBuilder->mvmd_dslli(8, v1, v0, (shift / 8));
         } else if (LLVM_LIKELY(shift < DSSLI_FIELDWIDTH)) {

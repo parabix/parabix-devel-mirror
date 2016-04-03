@@ -913,3 +913,7 @@ kernels/lane_pipeline.cpp
 kernels/lane_pipeline.h
 kernels/lane_s2p_kernel.cpp
 kernels/lane_s2p_kernel.h
+lane_icgrep.cpp
+lane_grep_engine.h
+lane_grep_engine.cpp
+kernels/instance.cpp

@@ -37,10 +37,10 @@ PipelineBuilder::~PipelineBuilder(){
 }
 
 void PipelineBuilder::CreateKernels(PabloFunction * function){
-    mS2PKernel = new KernelBuilder("s2p", mMod, iBuilder, SegmentSize);
-    mP2SKernel = new KernelBuilder("p2s", mMod, iBuilder, SegmentSize);
-    mCaseFoldKernel = new KernelBuilder("casefold", mMod, iBuilder, SegmentSize);
-    mStdOutKernel = new KernelBuilder("stddout", mMod, iBuilder, SegmentSize);
+    mS2PKernel = new KernelBuilder(iBuilder, "s2p", SegmentSize);
+    mP2SKernel = new KernelBuilder(iBuilder, "p2s", SegmentSize);
+    mCaseFoldKernel = new KernelBuilder(iBuilder, "casefold", SegmentSize);
+    mStdOutKernel = new KernelBuilder(iBuilder, "stddout", SegmentSize);
 
     generateS2PKernel(mMod, iBuilder, mS2PKernel);
     generateP2SKernel(mMod, iBuilder, mP2SKernel);
@@ -65,7 +65,6 @@ void PipelineBuilder::CreateKernels(PabloFunction * function){
 
 Function *  PipelineBuilder::ExecuteKernels() {
     Type * const int64ty = iBuilder->getInt64Ty();
-    Type * const int8PtrTy = iBuilder->getInt8PtrTy();
     Type * const inputType = PointerType::get(ArrayType::get(StructType::get(mMod->getContext(), std::vector<Type *>({ArrayType::get(mBitBlockType, 8)})), 1), 0);
     
     Function * const main = cast<Function>(mMod->getOrInsertFunction("Main", Type::getVoidTy(mMod->getContext()), inputType, int64ty, nullptr));
@@ -96,9 +95,9 @@ Function *  PipelineBuilder::ExecuteKernels() {
     BasicBlock * endBlock = BasicBlock::Create(mMod->getContext(), "end", main, 0);
 
     Instance * s2pInstance = mS2PKernel->instantiate(inputStream);
-    Instance * caseFoldInstance = mCaseFoldKernel->instantiate(s2pInstance->getOutputStreamSet());
-    Instance * p2sInstance = mP2SKernel->instantiate(caseFoldInstance->getOutputStreamSet());
-    Instance * stdOutInstance = mStdOutKernel->instantiate(p2sInstance->getOutputStreamSet());
+    Instance * caseFoldInstance = mCaseFoldKernel->instantiate(s2pInstance->getResultSet());
+    Instance * p2sInstance = mP2SKernel->instantiate(caseFoldInstance->getResultSet());
+    Instance * stdOutInstance = mStdOutKernel->instantiate(p2sInstance->getResultSet());
 
     stdOutInstance->setInternalState("RemainingBytes", bufferSize);  // The total number of bytes to be sent to stdout.
 
