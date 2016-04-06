@@ -24,7 +24,6 @@ KernelBuilder::KernelBuilder(IDISA::IDISA_Builder * builder, std::string && name
 , mBitBlockType(builder->getBitBlockType())
 , mBlockNoIndex(0) {
     assert (mDefaultBufferSize > 0);
-    mBlockNoIndex = iBuilder->getInt32(addInternalState(builder->getInt64Ty(), "BlockNo"));
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -113,9 +112,6 @@ Value * KernelBuilder::getInputStream(Value * const inputStreamSet, disable_impl
     if (LLVM_LIKELY(isa<ConstantInt>(index.get()) || getInputStreamType()->isArrayTy())) {
         return iBuilder->CreateGEP(inputStreamSet, { iBuilder->getInt32(0), index });
     }
-    #ifndef NDEBUG
-    iBuilder->getModule()->dump();
-    #endif
     throw std::runtime_error("Cannot access the input stream with a non-constant value unless all input stream types are identical!");
 }
 
@@ -199,6 +195,8 @@ Type * KernelBuilder::packDataTypes(const std::vector<llvm::Type *> & types) {
  * @brief prepareFunction
  ** ------------------------------------------------------------------------------------------------------------- */
 Function * KernelBuilder::prepareFunction(std::vector<unsigned> && inputStreamOffsets) {
+
+    mBlockNoIndex = iBuilder->getInt32(addInternalState(iBuilder->getInt64Ty(), "BlockNo"));
 
     mKernelStateType = StructType::create(iBuilder->getContext(), mInternalState, mKernelName);
     mInputScalarType = packDataTypes(mInputScalar);
@@ -305,14 +303,13 @@ Instance * KernelBuilder::instantiate(std::pair<Value *, unsigned> && inputStrea
  * Generate a new instance of this kernel and call the default constructor to initialize it
  ** ------------------------------------------------------------------------------------------------------------- */
 Instance * KernelBuilder::instantiate(std::initializer_list<llvm::Value *> inputStreams) {   
-    throw std::runtime_error("Not supported!");
-//    AllocaInst * inputStruct = iBuilder->CreateAlloca(mInputStreamType);
-//    unsigned i = 0;
-//    for (Value * inputStream : inputStreams) {
-//        Value * ptr = iBuilder->CreateGEP(inputStruct, { iBuilder->getInt32(0), iBuilder->getInt32(i++)});
-//        iBuilder->CreateStore(iBuilder->CreatePointerCast(inputStream, ptr);
-//    }
-//    return instantiate(std::make_pair(inputStruct, 0));
+    AllocaInst * inputStruct = iBuilder->CreateAlloca(mInputStreamType);
+    unsigned i = 0;
+    for (Value * inputStream : inputStreams) {
+        Value * ptr = iBuilder->CreateGEP(inputStruct, { iBuilder->getInt32(0), iBuilder->getInt32(i++)});
+        iBuilder->CreateStore(inputStream, ptr);
+    }
+    return instantiate(std::make_pair(inputStruct, 0));
 }
 
 } // end of namespace kernel

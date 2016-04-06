@@ -61,7 +61,7 @@ Function * PipelineBuilder::ExecuteKernels() {
     Type * const int8PtrTy = iBuilder->getInt8PtrTy();
     Type * const inputType = PointerType::get(ArrayType::get(StructType::get(mMod->getContext(), std::vector<Type *>({ArrayType::get(mBitBlockType, 8)})), 1), 0);
 
-    Function * const main = cast<Function>(mMod->getOrInsertFunction("Main", Type::getVoidTy(mMod->getContext()), inputType, int64ty, int8PtrTy, int64ty, nullptr));
+    Function * const main = cast<Function>(mMod->getOrInsertFunction("Main", Type::getVoidTy(mMod->getContext()), inputType, int64ty, int8PtrTy, iBuilder->getInt1Ty(), nullptr));
     main->setCallingConv(CallingConv::C);
     Function::arg_iterator args = main->arg_begin();
 
@@ -75,6 +75,7 @@ Function * PipelineBuilder::ExecuteKernels() {
     finalLineUnterminated->setName("finalLineUnterminated");
 
     iBuilder->SetInsertPoint(BasicBlock::Create(mMod->getContext(), "entry", main,0));
+
 
     BasicBlock * entryBlock = iBuilder->GetInsertBlock();
     BasicBlock * segmentCondBlock = nullptr;
@@ -97,9 +98,7 @@ Function * PipelineBuilder::ExecuteKernels() {
     Instance * icGrepInstance = mICgrepKernel->instantiate(s2pInstance->getResultSet());
     Instance * scanMatchInstance = mScanMatchKernel->instantiate(icGrepInstance->getResultSet());
 
-    Value * ptr = iBuilder->CreateBitCast(inputStream, int8PtrTy);
-
-    scanMatchInstance->setInternalState("FileBuf", ptr);
+    scanMatchInstance->setInternalState("FileBuf", iBuilder->CreateBitCast(inputStream, int8PtrTy));
     scanMatchInstance->setInternalState("FileSize", bufferSize);
     scanMatchInstance->setInternalState("FileName", fileName);
 
@@ -166,7 +165,7 @@ Function * PipelineBuilder::ExecuteKernels() {
     iBuilder->CreateBr(endBlock);
 
     iBuilder->SetInsertPoint(endBlock);
-    Value * isFinalLineUnterminated = iBuilder->CreateICmpEQ(finalLineUnterminated, ConstantInt::get(int64ty, 0));
+    Value * isFinalLineUnterminated = iBuilder->CreateICmpEQ(finalLineUnterminated, ConstantInt::getNullValue(finalLineUnterminated->getType()));
     iBuilder->CreateCondBr(isFinalLineUnterminated, exitBlock, unterminatedBlock);
     
     iBuilder->SetInsertPoint(unterminatedBlock);

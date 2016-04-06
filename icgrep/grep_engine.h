@@ -30,7 +30,7 @@ public:
     
 private:
    
-    bool finalLineIsUnterminated(char * fileBuffer, size_t fileSize) const;
+    static bool finalLineIsUnterminated(const char * const fileBuffer, const size_t fileSize);
 
     GrepFunctionType mGrepFunction;
     

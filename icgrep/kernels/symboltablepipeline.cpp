@@ -11,7 +11,6 @@
 
 #include <kernels/s2p_kernel.h>
 #include <kernels/instance.h>
-#include <kernels/stdout_kernel.h>
 
 #include <pablo/function.h>
 #include <pablo/pablo_compiler.h>
@@ -180,7 +179,6 @@ void SymbolTableBuilder::generateGatherKernel(KernelBuilder * kBuilder, const st
     Type * const scanWordVectorType = VectorType::get(intScanWordTy, fieldCount);
     const unsigned vectorWidth = iBuilder->getBitBlockWidth() / 32;
     const unsigned gatherCount = vectorWidth * 4;
-    Type * const transposedVectorType = VectorType::get(iBuilder->getInt8Ty(), iBuilder->getBitBlockWidth() / 8);
 
     Type * startArrayType = ArrayType::get(iBuilder->getInt32Ty(), iBuilder->getBitBlockWidth() + gatherCount);
     Type * endArrayType = ArrayType::get(iBuilder->getInt32Ty(), gatherCount);
@@ -229,7 +227,7 @@ void SymbolTableBuilder::generateGatherKernel(KernelBuilder * kBuilder, const st
     unsigned i = 0;
     unsigned minKeyLength = 0;
     for (unsigned maxKeyLength : endpoints) {
-        Function * f = generateGatherFunction(minKeyLength, maxKeyLength, transposedVectorType);
+        Function * f = generateGatherFunction(minKeyLength, maxKeyLength);
         mGatherFunction.push_back(f);
         iBuilder->CreateStore(f, iBuilder->CreateGEP(gatherFunctionPtrArray, iBuilder->getInt32(i++)));
         minKeyLength = maxKeyLength;
@@ -278,7 +276,7 @@ void SymbolTableBuilder::generateGatherKernel(KernelBuilder * kBuilder, const st
     iBuilder->SetInsertPoint(startOuterCond);
     PHINode * startBlockOffset = iBuilder->CreatePHI(iBuilder->getInt64Ty(), 2);
     startBlockOffset->addIncoming(blockPos, groupBody);
-    PHINode * startIndexPhi1 = iBuilder->CreatePHI(startIndex->getType(), 2);
+    PHINode * startIndexPhi1 = iBuilder->CreatePHI(startIndex->getType(), 2, "startIndexPhi1");
     startIndexPhi1->addIncoming(startIndex, groupBody);
     PHINode * startIV = iBuilder->CreatePHI(iBuilder->getInt64Ty(), 2);
     startIV->addIncoming(iBuilder->getInt64(0), groupBody);
@@ -294,9 +292,9 @@ void SymbolTableBuilder::generateGatherKernel(KernelBuilder * kBuilder, const st
 
     // START INNER COND
     iBuilder->SetInsertPoint(startInnerCond);
-    PHINode * startIndexPhi3 = iBuilder->CreatePHI(startIndex->getType(), 2);
-    startIndexPhi3->addIncoming(startIndexPhi1, startOuterBody);
-    startIndexPhi1->addIncoming(startIndexPhi3, startInnerCond);
+    PHINode * startIndexPhi2 = iBuilder->CreatePHI(startIndex->getType(), 2, "startIndexPhi2");
+    startIndexPhi2->addIncoming(startIndexPhi1, startOuterBody);
+    startIndexPhi1->addIncoming(startIndexPhi2, startInnerCond);
     PHINode * startFieldPhi = iBuilder->CreatePHI(intScanWordTy, 2);
     startFieldPhi->addIncoming(startField, startOuterBody);
     Value * test = iBuilder->CreateICmpNE(startFieldPhi, ConstantInt::getNullValue(intScanWordTy));
@@ -307,8 +305,8 @@ void SymbolTableBuilder::generateGatherKernel(KernelBuilder * kBuilder, const st
     Value * startPos = generateCountForwardZeroes(iBuilder, startFieldPhi);
     startFieldPhi->addIncoming(generateResetLowestBit(iBuilder, startFieldPhi), startInnerBody);
     startPos = iBuilder->CreateTruncOrBitCast(iBuilder->CreateOr(startPos, startBlockOffset), iBuilder->getInt32Ty());
-    iBuilder->CreateStore(startPos, iBuilder->CreateGEP(startArray, {iBuilder->getInt32(0), startIndexPhi3}));
-    startIndexPhi3->addIncoming(iBuilder->CreateAdd(startIndexPhi3, ConstantInt::get(startIndexPhi3->getType(), 1)), startInnerBody);
+    iBuilder->CreateStore(startPos, iBuilder->CreateGEP(startArray, {iBuilder->getInt32(0), startIndexPhi2}));
+    startIndexPhi2->addIncoming(iBuilder->CreateAdd(startIndexPhi2, ConstantInt::get(startIndexPhi2->getType(), 1)), startInnerBody);
     iBuilder->CreateBr(startInnerCond);
 
     // END POINT OUTER COND
@@ -317,8 +315,8 @@ void SymbolTableBuilder::generateGatherKernel(KernelBuilder * kBuilder, const st
     endBlockOffset->addIncoming(blockPos, startOuterCond);
     PHINode * endIndexPhi1 = iBuilder->CreatePHI(endIndex->getType(), 2);
     endIndexPhi1->addIncoming(endIndex, startOuterCond);
-    PHINode * startIndexPhi2 = iBuilder->CreatePHI(startIndex->getType(), 2);
-    startIndexPhi2->addIncoming(startIndexPhi1, startOuterCond);
+    PHINode * startIndexPhi3 = iBuilder->CreatePHI(startIndex->getType(), 2, "startIndexPhi3");
+    startIndexPhi3->addIncoming(startIndexPhi1, startOuterCond);
     PHINode * endIV = iBuilder->CreatePHI(iBuilder->getInt64Ty(), 2);
     endIV->addIncoming(iBuilder->getInt64(0), startOuterCond);
     Value * endOuterTest = iBuilder->CreateICmpNE(endIV, iBuilder->getInt64(fieldCount));
@@ -333,10 +331,10 @@ void SymbolTableBuilder::generateGatherKernel(KernelBuilder * kBuilder, const st
 
     // END POINT INNER COND
     iBuilder->SetInsertPoint(endInnerCond);
-    startIndexPhi3 = iBuilder->CreatePHI(startIndexPhi2->getType(), 3);
-    startIndexPhi3->addIncoming(startIndexPhi2, endOuterBody);
-    startIndexPhi3->addIncoming(startIndexPhi3, endInnerBody);
-    startIndexPhi2->addIncoming(startIndexPhi3, endInnerCond);
+    PHINode * startIndexPhi4 = iBuilder->CreatePHI(startIndexPhi3->getType(), 3, "startIndexPhi4");
+    startIndexPhi4->addIncoming(startIndexPhi3, endOuterBody);
+    startIndexPhi4->addIncoming(startIndexPhi4, endInnerBody);
+    startIndexPhi3->addIncoming(startIndexPhi4, endInnerCond);
     PHINode * endIndexPhi2 = iBuilder->CreatePHI(endIndex->getType(), 3);
     endIndexPhi2->addIncoming(endIndexPhi1, endOuterBody);
     endIndexPhi1->addIncoming(endIndexPhi2, endInnerCond);
@@ -369,14 +367,15 @@ void SymbolTableBuilder::generateGatherKernel(KernelBuilder * kBuilder, const st
     iBuilder->CreateCall5(gatherFunctionPtr, base, startArrayPtr, endArrayPtr, iBuilder->getInt32(32), outputBuffer);
 
     Value * remainingArrayPtr = iBuilder->CreateGEP(startArrayPtr, iBuilder->getInt32(gatherCount));
-    Value * remainingCount = iBuilder->CreateSub(startIndexPhi3, iBuilder->getInt32(gatherCount));
-    iBuilder->CreateMemCpy(startArrayPtr, remainingArrayPtr, remainingCount, 4);
-    startIndexPhi3->addIncoming(remainingCount, gather);
+    Value * remainingCount = iBuilder->CreateSub(startIndexPhi4, iBuilder->getInt32(gatherCount));
+    Value * remainingBytes = iBuilder->CreateMul(remainingCount, iBuilder->getInt32(4));
+    iBuilder->CreateMemMove(startArrayPtr, remainingArrayPtr, remainingBytes, 4);
+    startIndexPhi4->addIncoming(remainingCount, gather);
     iBuilder->CreateBr(endInnerCond);
 
     // NEXT GROUP
     iBuilder->SetInsertPoint(nextGroup);
-    iBuilder->CreateStore(startIndexPhi2, startIndexPtr);
+    iBuilder->CreateStore(startIndexPhi3, startIndexPtr);
     iBuilder->CreateStore(endIndexPhi1, endIndexPtr);
     groupIV->addIncoming(iBuilder->CreateAdd(groupIV, ConstantInt::get(groupIV->getType(), 1)), nextGroup);
     iBuilder->CreateBr(groupCond);
@@ -388,7 +387,7 @@ void SymbolTableBuilder::generateGatherKernel(KernelBuilder * kBuilder, const st
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief generateGatherFunction
  ** ------------------------------------------------------------------------------------------------------------- */
-Function * SymbolTableBuilder::generateGatherFunction(const unsigned minKeyLength, const unsigned maxKeyLength, Type * const resultType) {
+Function * SymbolTableBuilder::generateGatherFunction(const unsigned minKeyLength, const unsigned maxKeyLength) {
 
     assert (minKeyLength < maxKeyLength);
 
@@ -403,7 +402,10 @@ Function * SymbolTableBuilder::generateGatherFunction(const unsigned minKeyLengt
 
         const unsigned vectorWidth = iBuilder->getBitBlockWidth() / 32;
         Type * const gatherVectorType =  VectorType::get(iBuilder->getInt32Ty(), vectorWidth);
-        Type * const gatherVectorArrayType = ArrayType::get(gatherVectorType, maxCount);
+        const unsigned gatherByteWidth = gatherVectorType->getPrimitiveSizeInBits() / 8;
+        Type * const transposedVectorType = VectorType::get(iBuilder->getInt8Ty(), iBuilder->getBitBlockWidth() / 8);
+        const unsigned transposedByteWidth = transposedVectorType->getPrimitiveSizeInBits() / 8;
+
 
         Type * const int32PtrTy = PointerType::get(iBuilder->getInt32Ty(), 0);
         FunctionType * const functionType = FunctionType::get(iBuilder->getVoidTy(), {iBuilder->getInt8PtrTy(), int32PtrTy, int32PtrTy, iBuilder->getInt32Ty(), iBuilder->getInt8PtrTy()}, false);
@@ -439,69 +441,77 @@ Function * SymbolTableBuilder::generateGatherFunction(const unsigned minKeyLengt
 
         // ENTRY
         iBuilder->SetInsertPoint(entry);
-        AllocaInst * const buffer = iBuilder->CreateAlloca(resultType, iBuilder->getInt32(maxCount * 4), "buffer");
-        iBuilder->CreateStore(Constant::getNullValue(buffer->getAllocatedType()), buffer);
-        AllocaInst * const untransposedBuffer = iBuilder->CreateAlloca(gatherVectorArrayType, iBuilder->getInt32(4), "tmp");
-        iBuilder->CreateStore(Constant::getNullValue(untransposedBuffer->getAllocatedType()), untransposedBuffer);
+
+        AllocaInst * const buffer = iBuilder->CreateAlloca(gatherVectorType, iBuilder->getInt32(maxCount * 4), "buffer");
+        Value * end = iBuilder->CreateGEP(buffer, {iBuilder->getInt32(maxCount * 4)});
+        Value * size = iBuilder->CreateSub(iBuilder->CreatePtrToInt(end, iBuilder->getInt64Ty()), iBuilder->CreatePtrToInt(buffer, iBuilder->getInt64Ty()));
+        iBuilder->CreateMemSet(buffer, iBuilder->getInt8(0), size, 4);
+        Value * const transposed = iBuilder->CreateBitCast(buffer, transposedVectorType->getPointerTo(), "transposed");
+
+        startArray = iBuilder->CreateBitCast(startArray, gatherVectorType->getPointerTo());
+        endArray = iBuilder->CreateBitCast(endArray, gatherVectorType->getPointerTo());
+
+        iBuilder->CallPrintInt(functionName + ".numOfKeys", numOfKeys);
+
         iBuilder->CreateBr(gatherCond);
 
         // FULL GATHER COND
         iBuilder->SetInsertPoint(gatherCond);
         PHINode * remainingLanes = iBuilder->CreatePHI(iBuilder->getInt32Ty(), 2);
         remainingLanes->addIncoming(numOfKeys, entry);
+
         PHINode * gatherIV = iBuilder->CreatePHI(iBuilder->getInt32Ty(), 2);
         gatherIV->addIncoming(iBuilder->getInt32(0), entry);
-        Value * gatherLoopTest = iBuilder->CreateICmpNE(gatherIV, iBuilder->getInt32(4));
-        iBuilder->CreateCondBr(gatherLoopTest, partialGatherCond, transposeCond);
+
+        Value * gatherLoopTest = iBuilder->CreateICmpSGE(remainingLanes, iBuilder->getInt32(vectorWidth));
+        iBuilder->CreateCondBr(gatherLoopTest, gatherBody, partialGatherCond);
 
         // PARTIAL GATHER COND
         iBuilder->SetInsertPoint(partialGatherCond);
-        Value * partialGatherLoopTest = iBuilder->CreateICmpUGE(remainingLanes, iBuilder->getInt32(vectorWidth));
-        iBuilder->CreateCondBr(partialGatherLoopTest, gatherBody, partialGatherBody);
+        Value * partialGatherLoopTest = iBuilder->CreateICmpSLE(remainingLanes, iBuilder->getInt32(0));
+        iBuilder->CreateCondBr(partialGatherLoopTest, transposeCond, partialGatherBody);
 
         // PARTIAL GATHER BODY
         iBuilder->SetInsertPoint(partialGatherBody);
-        iBuilder->CallPrintInt(functionName + ".remainingLanes", remainingLanes);
         Type * registerType = iBuilder->getIntNTy(iBuilder->getBitBlockWidth());
-        Value * maskedLanes = iBuilder->CreateSub(iBuilder->getInt32(vectorWidth), remainingLanes);
+        Value * maskedLanes = iBuilder->CreateSub(iBuilder->getInt32(vectorWidth), remainingLanes);       
         maskedLanes = iBuilder->CreateMul(maskedLanes, iBuilder->getInt32(32));
         maskedLanes = iBuilder->CreateZExt(maskedLanes, registerType);
         maskedLanes = iBuilder->CreateLShr(Constant::getAllOnesValue(registerType), maskedLanes);
         maskedLanes = iBuilder->CreateBitCast(maskedLanes, gatherVectorType);
-
         iBuilder->CreateBr(gatherBody);
 
         // FULL GATHER BODY
         iBuilder->SetInsertPoint(gatherBody);
         PHINode * activeLanes = iBuilder->CreatePHI(gatherVectorType, 2, "activeLanes");
-        activeLanes->addIncoming(Constant::getAllOnesValue(gatherVectorType), partialGatherCond);
+        activeLanes->addIncoming(Constant::getAllOnesValue(gatherVectorType), gatherCond);
         activeLanes->addIncoming(maskedLanes, partialGatherBody);
 
-        iBuilder->CallPrintRegister(functionName + ".activeLanes", activeLanes);
 
-        startArray = iBuilder->CreateBitCast(startArray, PointerType::get(gatherVectorType, 0));
         Value * startPos = iBuilder->CreateAlignedLoad(iBuilder->CreateGEP(startArray, gatherIV), 4);
+        Value * const endPos = iBuilder->CreateAlignedLoad(iBuilder->CreateGEP(endArray, gatherIV), 4);
+
         for (unsigned blockCount = 0; blockCount < minCount; ++blockCount) {
             Value * tokenData = generateMaskedGather(base, startPos, activeLanes);
+            Value * ptr = iBuilder->CreateOr(buffer, iBuilder->CreateOr(gatherIV, iBuilder->getInt32(blockCount * 4)));
+            iBuilder->CreateAlignedStore(tokenData, ptr, transposedByteWidth);
             startPos = iBuilder->CreateAdd(startPos, four);
-            iBuilder->CreateAlignedStore(tokenData, iBuilder->CreateGEP(untransposedBuffer, {iBuilder->getInt32(blockCount), gatherIV}), 4);
         }
 
-        endArray = iBuilder->CreateBitCast(endArray, PointerType::get(gatherVectorType, 0));
-        Value * const endPos = iBuilder->CreateAlignedLoad(iBuilder->CreateGEP(endArray, gatherIV), 4);
         for (unsigned blockCount = minCount; blockCount < maxCount; ++blockCount) {
 
             // if we have not fully gathered the data for this key
-            Value * atLeastOneByte = iBuilder->CreateSExt(iBuilder->CreateICmpULT(startPos, endPos), startPos->getType());
-            atLeastOneByte = iBuilder->CreateAnd(atLeastOneByte, activeLanes);
+            Value * atLeastOneByte = iBuilder->CreateSExt(iBuilder->CreateICmpSLT(startPos, endPos), startPos->getType());
+            atLeastOneByte = iBuilder->CreateAnd(atLeastOneByte, activeLanes, "atLeastOneByte");
 
             // gather it ...
             Value * tokenData = generateMaskedGather(base, startPos, atLeastOneByte);
+
             // and compute how much data is remaining.
             Value * remaining = iBuilder->CreateSub(endPos, startPos);
 
             // if this token only has 1 to 3 bytes remaining ...
-            Value * atLeastFourBytes = iBuilder->CreateSExt(iBuilder->CreateICmpUGE(remaining, four), remaining->getType());
+            Value * atLeastFourBytes = iBuilder->CreateSExt(iBuilder->CreateICmpUGE(remaining, four), remaining->getType(), "atLeastFourBytes");
 
             // determine how many bits do *not* belong to the token
             remaining = iBuilder->CreateSub(four, remaining);
@@ -510,14 +520,13 @@ Function * SymbolTableBuilder::generateGatherFunction(const unsigned minKeyLengt
             // then mask them out prior to storing the value
             Value * partialTokenMask = iBuilder->CreateLShr(ConstantInt::getAllOnesValue(remaining->getType()), remaining);
             partialTokenMask = iBuilder->CreateOr(partialTokenMask, atLeastFourBytes);
-
             tokenData = iBuilder->CreateAnd(partialTokenMask, tokenData);
-            Value * untransposedBufferPtr = iBuilder->CreateGEP(untransposedBuffer, {iBuilder->getInt32(blockCount), gatherIV});
-            iBuilder->CreateAlignedStore(tokenData, untransposedBufferPtr, 4);
-            if (blockCount < (maxCount - 1)) {
-                startPos = iBuilder->CreateAdd(startPos, four);
-            }
+            Value * ptr = iBuilder->CreateGEP(buffer, iBuilder->CreateOr(gatherIV, iBuilder->getInt32(blockCount * 4)));
+            iBuilder->CreateAlignedStore(tokenData, ptr, transposedByteWidth);
+
+            startPos = iBuilder->CreateAdd(startPos, four);
         }
+
         gatherIV->addIncoming(iBuilder->CreateAdd(gatherIV, iBuilder->getInt32(1)), gatherBody);
         remainingLanes->addIncoming(iBuilder->CreateSub(remainingLanes, iBuilder->getInt32(vectorWidth)), gatherBody);
         iBuilder->CreateBr(gatherCond);
@@ -525,60 +534,67 @@ Function * SymbolTableBuilder::generateGatherFunction(const unsigned minKeyLengt
         // TRANSPOSE COND
         iBuilder->SetInsertPoint(transposeCond);
         PHINode * transposeIV = iBuilder->CreatePHI(iBuilder->getInt32Ty(), 2);
-        transposeIV->addIncoming(iBuilder->getInt32(0), gatherCond);
+        transposeIV->addIncoming(iBuilder->getInt32(0), partialGatherCond);
         Value * transposeLoopTest = iBuilder->CreateICmpNE(transposeIV, iBuilder->getInt32(maxCount));
         iBuilder->CreateCondBr(transposeLoopTest, transposeBody, exit);
 
         // TRANSPOSE BODY
         iBuilder->SetInsertPoint(transposeBody);
 
+        Value * offset = iBuilder->CreateMul(transposeIV, iBuilder->getInt32(4));
+
         Value * value[4];
-        Value * temporary[4];
         for (unsigned i = 0; i < 4; ++i) {
-            Value * const ptr = iBuilder->CreateGEP(untransposedBuffer, {transposeIV, iBuilder->getInt32(i)});
-            value[i] = iBuilder->CreateAlignedLoad(ptr, 4);
+            Value * const ptr = iBuilder->CreateGEP(buffer, iBuilder->CreateAdd(offset, iBuilder->getInt32(i)));
+            value[i] = iBuilder->CreateLoad(ptr);
         }
-        for (unsigned fieldWidth = 16; fieldWidth != 4; fieldWidth /= 2) {
+
+        for (unsigned byteWidth = 2; byteWidth; --byteWidth) {
+            const unsigned fieldWidth = (byteWidth * 8);
             const unsigned fieldCount = iBuilder->getBitBlockWidth() / fieldWidth;
-            VectorType * const vecType = VectorType::get(IntegerType::get(mMod->getContext(), fieldWidth), fieldCount);
-            std::vector<Constant *> lowFields(fieldCount);
-            std::vector<Constant *> highFields(fieldCount);
+            VectorType * const type = VectorType::get(Type::getIntNTy(iBuilder->getContext(), fieldWidth), fieldCount);
+            std::vector<Constant *> even(fieldCount);
+            std::vector<Constant *> odd(fieldCount);
             for (unsigned j = 0; j < fieldCount; ++j) {
-                lowFields[j] = iBuilder->getInt32(j * 2);
-                highFields[j] = iBuilder->getInt32(j * 2 + 1);
+                even[j] = iBuilder->getInt32(j * 2);
+                odd[j] = iBuilder->getInt32(j * 2 + 1);
             }
-            Constant * const lowVector = ConstantVector::get(lowFields);
-            Constant * const highVector = ConstantVector::get(highFields);
+            Constant * const evenVector = ConstantVector::get(even);
+            Constant * const oddVector = ConstantVector::get(odd);
+            Value * result[4];
             for (unsigned i = 0; i < 4; i += 2) {
-                value[i] = iBuilder->CreateBitCast(value[i], vecType);
-                value[i + 1] = iBuilder->CreateBitCast(value[i + 1], vecType);
-                temporary[i / 2] = iBuilder->CreateShuffleVector(value[i], value[i + 1], lowVector);
-                temporary[(i / 2) + 2] = iBuilder->CreateShuffleVector(value[i], value[i + 1], highVector);
+                value[i] = iBuilder->CreateBitCast(value[i], type);
+                value[i + 1] = iBuilder->CreateBitCast(value[i + 1], type);
+                result[(i / byteWidth)] = iBuilder->CreateShuffleVector(value[i], value[i + 1], evenVector);
+                result[(i / byteWidth) + byteWidth] = iBuilder->CreateShuffleVector(value[i], value[i + 1], oddVector);
             }
-            std::swap(value, temporary);
+            for (unsigned i = 0; i < 4; ++i) {
+                value[i] = result[i];
+            }
         }
-        Value * offset = iBuilder->CreateShl(transposeIV, ConstantInt::get(transposeIV->getType(), 2));
-        transposeIV->addIncoming(iBuilder->CreateAdd(transposeIV, iBuilder->getInt32(1)), transposeBody);
 
         for (unsigned i = 0; i < 4; ++i) {
-            Value * index = offset;
-            if (i) {
-                index = iBuilder->CreateAdd(offset, iBuilder->getInt32(i));
-            }
-            iBuilder->CallPrintRegister(functionName, value[i]);
-            iBuilder->CreateAlignedStore(value[i], iBuilder->CreateGEP(buffer, index), 4);
+            Value * ptr = iBuilder->CreateGEP(transposed, iBuilder->CreateAdd(offset, iBuilder->getInt32(i)));
+            iBuilder->CreateAlignedStore(value[i], ptr, gatherByteWidth);
         }
 
-        Value * emptyGatherTest = iBuilder->CreateICmpUGT(remainingLanes, iBuilder->getInt32(0));
-        iBuilder->CreateCondBr(emptyGatherTest, transposeCond, exit);
+        transposeIV->addIncoming(iBuilder->CreateAdd(transposeIV, iBuilder->getInt32(1)), transposeBody);
+        iBuilder->CreateBr(transposeCond);
 
         // EXIT
         iBuilder->SetInsertPoint(exit);
 
         // ... call hashing function ...
 
+        for (unsigned i = 0; i < maxKeyLength; ++i) {
+            Value * ptr = iBuilder->CreateGEP(transposed, iBuilder->getInt32(i));
+            Value * value = iBuilder->CreateAlignedLoad(ptr, gatherByteWidth);
+            iBuilder->CallPrintRegister(functionName + ".output" + std::to_string(i), value);
+        }
 
         iBuilder->CreateRetVoid();
+
+        function->dump();
 
         iBuilder->restoreIP(ip);
     }
@@ -593,11 +609,9 @@ Function * SymbolTableBuilder::generateGatherFunction(const unsigned minKeyLengt
 void SymbolTableBuilder::createKernels() {
 
     std::vector<unsigned> endpoints;
-    endpoints.push_back(1);
-    endpoints.push_back(2);
-    endpoints.push_back(4);
     endpoints.push_back(8);
-    endpoints.push_back(16);
+    endpoints.push_back(17);
+    endpoints.push_back(27);
 
     PabloCompiler pablo_compiler(mMod, iBuilder);
     PabloFunction * const leading = generateLeadingFunction(endpoints);
@@ -609,7 +623,6 @@ void SymbolTableBuilder::createKernels() {
     mLeadingKernel = new KernelBuilder(iBuilder, "leading", bufferSize);
     mSortingKernel = new KernelBuilder(iBuilder, "sorting", bufferSize);
     mGatherKernel = new KernelBuilder(iBuilder, "gathering", 1);
-    mStdOutKernel = new KernelBuilder(iBuilder, "stddout", 1);
 
     generateS2PKernel(mMod, iBuilder, mS2PKernel);
 
@@ -624,7 +637,6 @@ void SymbolTableBuilder::createKernels() {
     releaseSlabAllocatorMemory();
 
     generateGatherKernel(mGatherKernel, endpoints, 64);
-    generateStdOutKernel(mMod, iBuilder, mStdOutKernel);
 }
 
 Function * SymbolTableBuilder::ExecuteKernels(){
@@ -665,11 +677,8 @@ Function * SymbolTableBuilder::ExecuteKernels(){
     Instance * leadingInstance = mLeadingKernel->instantiate(s2pInstance->getResultSet());
     Instance * sortingInstance = mSortingKernel->instantiate(leadingInstance->getResultSet());
     Instance * gatheringInstance = mGatherKernel->instantiate(sortingInstance->getResultSet());
-    Instance * stdOutInstance = mStdOutKernel->instantiate(gatheringInstance->getResultSet());
 
     gatheringInstance->setInternalState("Base", iBuilder->CreateBitCast(inputStream, iBuilder->getInt8PtrTy()));
-
-    stdOutInstance->setInternalState("RemainingBytes", bufferSize);  // The total number of bytes to be sent to stdout.
 
     const unsigned leadingBlocks = (mLongestLookahead + iBuilder->getBitBlockWidth() - 1) / iBuilder->getBitBlockWidth();
 
@@ -719,7 +728,7 @@ Function * SymbolTableBuilder::ExecuteKernels(){
     leadingInstance->CreateDoBlockCall();
     sortingInstance->CreateDoBlockCall();
     gatheringInstance->CreateDoBlockCall();
-//    stdOutInstance->CreateDoBlockCall();
+
     remainingBytes2->addIncoming(iBuilder->CreateSub(remainingBytes2, blockSize), regularBodyBlock);
     iBuilder->CreateBr(regularTestBlock);
 
@@ -738,7 +747,7 @@ Function * SymbolTableBuilder::ExecuteKernels(){
     leadingInstance->clearOutputStreamSet();
     sortingInstance->CreateDoBlockCall();
     gatheringInstance->CreateDoBlockCall();
-//    stdOutInstance->CreateDoBlockCall();
+
     iBuilder->CreateBr(finalTestBlock);
 
     // Now clear the leading data and test the final blocks
@@ -754,7 +763,7 @@ Function * SymbolTableBuilder::ExecuteKernels(){
     leadingInstance->clearOutputStreamSet();
     sortingInstance->CreateDoBlockCall();
     gatheringInstance->CreateDoBlockCall();
-//    stdOutInstance->CreateDoBlockCall();
+
     remainingFullBlocks->addIncoming(iBuilder->CreateSub(remainingFullBlocks, iBuilder->getInt64(1)), finalBodyBlock);
 
 
@@ -799,7 +808,6 @@ SymbolTableBuilder::~SymbolTableBuilder() {
     delete mLeadingKernel;
     delete mSortingKernel;
     delete mGatherKernel;
-    delete mStdOutKernel;
 }
 
 

@@ -38,7 +38,7 @@ IDISA::IDISA_Builder * GetIDISA_Builder(Module * mod) {
         }
     }
     else if (blockSize == 64)
-        return new IDISA::IDISA_I64_Builder(mod, bitBlockType);  
+        return new IDISA::IDISA_I64_Builder(mod, bitBlockType);
     return new IDISA::IDISA_SSE2_Builder(mod, bitBlockType);
 }
 

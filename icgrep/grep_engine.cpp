@@ -52,61 +52,45 @@ using namespace boost::filesystem;
 
 
 
-bool GrepEngine::finalLineIsUnterminated(char * mFileBuffer, size_t mFileSize) const {
-    if (mFileSize == 0) return false;
-    unsigned char end_byte = static_cast<unsigned char>(mFileBuffer[mFileSize-1]);
+bool GrepEngine::finalLineIsUnterminated(const char * const fileBuffer, const size_t fileSize) {
+    if (fileSize == 0) return false;
+    unsigned char end_byte = static_cast<unsigned char>(fileBuffer[fileSize-1]);
     // LF through CR are line break characters
     if ((end_byte >= 0xA) && (end_byte <= 0xD)) return false;
     // Other line breaks require at least two bytes.
-    if (mFileSize == 1) return true;
+    if (fileSize == 1) return true;
     // NEL
-    unsigned char penult_byte = static_cast<unsigned char>(mFileBuffer[mFileSize-2]);
+    unsigned char penult_byte = static_cast<unsigned char>(fileBuffer[fileSize-2]);
     if ((end_byte == 0x85) && (penult_byte == 0xC2)) return false;
-    if (mFileSize == 2) return true;
+    if (fileSize == 2) return true;
     // LS and PS
     if ((end_byte < 0xA8) || (end_byte > 0xA9)) return true;
-    return (static_cast<unsigned char>(mFileBuffer[mFileSize-3]) != 0xE2) || (penult_byte != 0x80);
+    return (static_cast<unsigned char>(fileBuffer[fileSize-3]) != 0xE2) || (penult_byte != 0x80);
 }
 
 void GrepEngine::doGrep(const std::string & fileName) {
-    std::string mFileName = fileName;
-    size_t mFileSize;
-    char * mFileBuffer;
-
-    const path file(mFileName);
+    const path file(fileName);
     if (exists(file)) {
         if (is_directory(file)) {
             return;
         }
     } else {
-        std::cerr << "Error: cannot open " << mFileName << " for processing. Skipped.\n";
+        std::cerr << "Error: cannot open " << fileName << " for processing. Skipped.\n";
         return;
     }
 
-    mFileSize = file_size(file);
-    mapped_file mFile;
-    if (mFileSize == 0) {
-        mFileBuffer = nullptr;
-    }
-    else {
+    const size_t fileSize = file_size(file);
+    if (fileSize > 0) {
+        mapped_file file;
         try {
-            mFile.open(mFileName, mapped_file::priv, mFileSize, 0);
+            file.open(fileName, mapped_file::priv, fileSize, 0);
         } catch (std::ios_base::failure e) {
-            std::cerr << "Error: Boost mmap of " << mFileName << ": " << e.what() << std::endl;
-            return;
+            throw std::runtime_error("Boost mmap error: " + fileName + ": " + e.what());
         }
-        mFileBuffer = mFile.data();
+        char * const fileBuffer = file.data();
+        mGrepFunction(fileBuffer, fileSize, fileName.c_str(), finalLineIsUnterminated(fileBuffer, fileSize));
+        file.close();
     }
-    
-    uint64_t finalLineUnterminated = 0;
-    if(finalLineIsUnterminated(mFileBuffer, mFileSize))
-        finalLineUnterminated = 1;
-    
-    mGrepFunction(mFileBuffer, mFileSize, mFileName.c_str(), finalLineUnterminated);
-
-
-    mFile.close();
-
 }
 
 

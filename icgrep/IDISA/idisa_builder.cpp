@@ -77,7 +77,7 @@ void IDISA_Builder::CallPrintRegister(const std::string & name, Value * const va
 
         printRegister = function;
     }
-    assert (value->getType()->isVectorTy());
+    assert (value->getType()->canLosslesslyBitCastTo(mBitBlockType));
     CreateCall2(printRegister, geti8StrVal(*mMod, name.c_str(), name), CreateBitCast(value, mBitBlockType));
 }
 
