@@ -109,6 +109,7 @@ ENDIF()
 
 add_executable(icgrep icgrep.cpp toolchain.cpp grep_engine.cpp object_cache.cpp kernels/pipeline.cpp kernels/scanmatchgen.cpp ${PRECOMPILED_FILES})
 add_executable(casefold casefold.cpp kernels/p2s_kernel.cpp kernels/stdout_kernel.cpp kernels/casefold_pipeline.cpp)
+add_executable(u8u16 u8u16.cpp kernels/p2s_kernel.cpp kernels/stdout_kernel.cpp kernels/u8u16_pipeline.cpp kernels/deletion.cpp)
 add_executable(symtbl symboltable.cpp kernels/symboltablepipeline.cpp kernels/stdout_kernel.cpp toolchain.cpp grep_engine.cpp object_cache.cpp ${PRECOMPILED_FILES})
 
 IF(ENABLE_PREGENERATED_UCD_FUNCTIONS)
@@ -124,10 +125,12 @@ ENDIF()
 target_link_libraries(icgrep ${Boost_LIBRARIES})
 target_link_libraries(symtbl ${Boost_LIBRARIES})
 target_link_libraries(casefold ${Boost_LIBRARIES})
+target_link_libraries(u8u16 ${Boost_LIBRARIES})
 
 target_link_libraries (icgrep UCDlib PabloADT RegExpCompiler CCADT ${REQ_LLVM_LIBRARIES})
 target_link_libraries (symtbl UCDlib PabloADT RegExpCompiler CCADT ${REQ_LLVM_LIBRARIES})
 target_link_libraries (casefold UCDlib PabloADT RegExpCompiler CCADT ${REQ_LLVM_LIBRARIES})
+target_link_libraries (u8u16 UCDlib PabloADT RegExpCompiler CCADT ${REQ_LLVM_LIBRARIES})
 
 IF(ENABLE_MULTIPLEXING)
 message(STATUS "Enabling Multiplexing")
