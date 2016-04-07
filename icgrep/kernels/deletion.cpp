@@ -3,6 +3,12 @@
  *  This software is licensed to the public under the Open Software License 3.0.
  */
 
+#include <kernels/kernel.h>
+#include <kernels/deletion.h>
+#include <IDISA/idisa_builder.h>
+#include <llvm/IR/Value.h>
+
+namespace kernel {
 
 std::vector<Value *> parallel_prefix_deletion_masks(IDISA::IDISA_Builder * iBuilder, unsigned fw, Value * del_mask) {
     Value * m = iBuilder->simd_not(del_mask);
@@ -31,4 +37,25 @@ Value * apply_parallel_prefix_deletion(IDISA::IDISA_Builder * iBuilder, unsigned
     return s;
 }
 
-
+// Apply deletion to a set of stream_count input streams to produce a set of output streams.
+// Kernel inputs: stream_count data streams plus one del_mask stream
+void generateDeletionKernel(Module * m, IDISA::IDISA_Builder * iBuilder, unsigned fw, unsigned stream_count, KernelBuilder * kBuilder) {
+    
+    for(unsigned i = 0; i < stream_count; ++i) {
+        kBuilder->addInputStream(1);
+        kBuilder->addOutputStream(1);
+    }
+    kBuilder->addInputStream(1, "del_mask");
+    kBuilder->prepareFunction();
+    
+    Value * del_mask = iBuilder->CreateBlockAlignedLoad(kBuilder->getInputStream(stream_count));
+    
+    std::vector<Value *> move_masks = parallel_prefix_deletion_masks(iBuilder, fw, del_mask);
+    for (unsigned j = 0; j < stream_count; ++j) {
+        Value * input = iBuilder->CreateBlockAlignedLoad(kBuilder->getInputStream(j));
+        Value * output = apply_parallel_prefix_deletion(iBuilder, fw, del_mask, move_masks, input);
+        iBuilder->CreateBlockAlignedStore(output, kBuilder->getOutputStream(j));
+    }
+    kBuilder->finalize();
+}
+}
