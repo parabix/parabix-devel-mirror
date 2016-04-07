@@ -52,4 +52,34 @@ void generateP2SKernel(Module * m, IDISA::IDISA_Builder * iBuilder, KernelBuilde
     kBuilder->finalize();
 }
 
+void generateP2S_16Kernel(Module * m, IDISA::IDISA_Builder * iBuilder, KernelBuilder * kBuilder) {
+    for (unsigned i = 0; i < 16; ++i) {
+        kBuilder->addInputStream(1);
+    }
+    kBuilder->addOutputStream(16);
+    kBuilder->prepareFunction();
+    Value * hi_input[8];
+    for (unsigned j = 0; j < 8; ++j) {
+        hi_input[j] = iBuilder->CreateBlockAlignedLoad(kBuilder->getInputStream(j));
+    }
+    Value * hi_bytes[8];
+    p2s(iBuilder, hi_input, hi_bytes);
+    
+    Value * lo_input[8];
+    for (unsigned j = 0; j < 8; ++j) {
+        lo_input[j] = iBuilder->CreateBlockAlignedLoad(kBuilder->getInputStream(j+8));
+    }
+    Value * lo_bytes[8];
+    p2s(iBuilder, lo_input, lo_bytes);
+    
+    Value * output_ptr = kBuilder->getOutputStream(0);
+    for (unsigned j = 0; j < 8; ++j) {
+        Value * merge0 = iBuilder->esimd_mergel(8, hi_bytes[j], lo_bytes[j]);
+        Value * merge1 = iBuilder->esimd_mergeh(8, hi_bytes[j], lo_bytes[j]);
+        iBuilder->CreateBlockAlignedStore(merge0, iBuilder->CreateGEP(output_ptr, std::vector<Value *>({ iBuilder->getInt32(0), iBuilder->getInt32(2*j) })));
+        iBuilder->CreateBlockAlignedStore(merge1, iBuilder->CreateGEP(output_ptr, std::vector<Value *>({ iBuilder->getInt32(0), iBuilder->getInt32(2*j+1) })));
+    }
+    kBuilder->finalize();
+}
+
 }

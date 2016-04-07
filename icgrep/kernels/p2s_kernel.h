@@ -15,6 +15,8 @@ class KernelBuilder;
 
     void generateP2SKernel(llvm::Module *, IDISA::IDISA_Builder * iBuilder, KernelBuilder * kBuilder);
 
+    void generateP2S_16Kernel(llvm::Module *, IDISA::IDISA_Builder * iBuilder, KernelBuilder * kBuilder);
+
 }
 
 #endif
