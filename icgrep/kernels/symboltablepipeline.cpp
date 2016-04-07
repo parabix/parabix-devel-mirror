@@ -222,7 +222,7 @@ void SymbolTableBuilder::generateGatherKernel(KernelBuilder * kBuilder, const st
     iBuilder->SetInsertPoint(entry);
     Type * const int32PtrTy = PointerType::get(iBuilder->getInt32Ty(), 0);
     FunctionType * const gatherFunctionType = FunctionType::get(iBuilder->getVoidTy(), {iBuilder->getInt8PtrTy(), int32PtrTy, int32PtrTy, iBuilder->getInt32Ty(), iBuilder->getInt8PtrTy()}, false);
-    Value * const gatherFunctionPtrArray = iBuilder->CreateAlloca(PointerType::get(gatherFunctionType, 0), iBuilder->getInt32(endpoints.size()));
+    Value * const gatherFunctionPtrArray = iBuilder->CreateAlloca(PointerType::get(gatherFunctionType, 0), iBuilder->getInt32(endpoints.size()), "gatherFunctionPtrArray");
 
     unsigned i = 0;
     unsigned minKeyLength = 0;
@@ -493,7 +493,7 @@ Function * SymbolTableBuilder::generateGatherFunction(const unsigned minKeyLengt
 
         for (unsigned blockCount = 0; blockCount < minCount; ++blockCount) {
             Value * tokenData = generateMaskedGather(base, startPos, activeLanes);
-            Value * ptr = iBuilder->CreateOr(buffer, iBuilder->CreateOr(gatherIV, iBuilder->getInt32(blockCount * 4)));
+            Value * ptr = iBuilder->CreateGEP(buffer, iBuilder->CreateOr(gatherIV, iBuilder->getInt32(blockCount * 4)));
             iBuilder->CreateAlignedStore(tokenData, ptr, transposedByteWidth);
             startPos = iBuilder->CreateAdd(startPos, four);
         }
@@ -594,8 +594,6 @@ Function * SymbolTableBuilder::generateGatherFunction(const unsigned minKeyLengt
 
         iBuilder->CreateRetVoid();
 
-        function->dump();
-
         iBuilder->restoreIP(ip);
     }
 
@@ -612,6 +610,11 @@ void SymbolTableBuilder::createKernels() {
     endpoints.push_back(8);
     endpoints.push_back(17);
     endpoints.push_back(27);
+    endpoints.push_back(39);
+    endpoints.push_back(77);
+    endpoints.push_back(124);
+    endpoints.push_back(178);
+    endpoints.push_back(278);
 
     PabloCompiler pablo_compiler(mMod, iBuilder);
     PabloFunction * const leading = generateLeadingFunction(endpoints);
@@ -658,20 +661,18 @@ Function * SymbolTableBuilder::ExecuteKernels(){
 
     BasicBlock * entryBlock = iBuilder->GetInsertBlock();
 
-    BasicBlock * leadingTestBlock = BasicBlock::Create(mMod->getContext(), "leadingCond", main, 0);
-    BasicBlock * safetyCheckBlock = BasicBlock::Create(mMod->getContext(), "safetyCheck", main, 0);
-    BasicBlock * leadingBodyBlock = BasicBlock::Create(mMod->getContext(), "leadingBody", main, 0);
+    BasicBlock * leadingBlock = BasicBlock::Create(mMod->getContext(), "leadingBody", main, 0);
 
-    BasicBlock * regularTestBlock = BasicBlock::Create(mMod->getContext(), "fullCond", main, 0);
-    BasicBlock * regularBodyBlock = BasicBlock::Create(mMod->getContext(), "fullBody", main, 0);
-    BasicBlock * regularExitBlock = BasicBlock::Create(mMod->getContext(), "fullExit", main, 0);
+    BasicBlock * partialLeadingCond = BasicBlock::Create(mMod->getContext(), "partialLeadingCond", main, 0);
+    BasicBlock * partialLeadingBody = BasicBlock::Create(mMod->getContext(), "partialLeadingBody", main, 0);
 
-    BasicBlock * partialBlock = BasicBlock::Create(mMod->getContext(),  "partialBlock", main, 0);
+    BasicBlock * regularCondBlock = BasicBlock::Create(mMod->getContext(), "regularCond", main, 0);
+    BasicBlock * regularBodyBlock = BasicBlock::Create(mMod->getContext(), "regularBody", main, 0);
 
-    BasicBlock * finalTestBlock = BasicBlock::Create(mMod->getContext(),  "finalCond", main, 0);
-    BasicBlock * finalBodyBlock = BasicBlock::Create(mMod->getContext(),  "finalBody", main, 0);
+    BasicBlock * partialCondBlock = BasicBlock::Create(mMod->getContext(), "partialCond", main, 0);
+    BasicBlock * partialBodyBlock = BasicBlock::Create(mMod->getContext(),  "partialBody", main, 0);
 
-    BasicBlock * remainingBlock = BasicBlock::Create(mMod->getContext(), "remaining", main, 0);
+    BasicBlock * flushLengthGroupsBlock = BasicBlock::Create(mMod->getContext(), "flushLengthGroups", main, 0);
 
     Instance * s2pInstance = mS2PKernel->instantiate(inputStream);
     Instance * leadingInstance = mLeadingKernel->instantiate(s2pInstance->getResultSet());
@@ -685,99 +686,71 @@ Function * SymbolTableBuilder::ExecuteKernels(){
     Value * const requiredBytes = iBuilder->getInt64(mBlockSize * leadingBlocks);
     Value * const blockSize = iBuilder->getInt64(mBlockSize);
 
-    // If the buffer size is smaller than our largest length group, only check up to the buffer size.
-    Value * safetyCheck = iBuilder->CreateICmpUGE(bufferSize, blockSize);
-    if (blockSize == requiredBytes) {
-        iBuilder->CreateCondBr(safetyCheck, leadingTestBlock, remainingBlock); // fix this to be a special case
-    } else {
-        throw std::runtime_error("Not supported yet!");
-    }
-
     // First compute any necessary leading blocks to allow the sorting kernel access to the "future" data produced by
     // the leading kernel ...
-    iBuilder->SetInsertPoint(leadingTestBlock);
-    PHINode * blockNo = iBuilder->CreatePHI(intType, 2);
-    blockNo->addIncoming(iBuilder->getInt64(0), entryBlock);
-    PHINode * remainingBytes = iBuilder->CreatePHI(intType, 2);
-    remainingBytes->addIncoming(bufferSize, entryBlock);
-    Value * leadingBlocksCond = iBuilder->CreateICmpULT(blockNo, iBuilder->getInt64(leadingBlocks));
-    iBuilder->CreateCondBr(leadingBlocksCond, safetyCheckBlock, regularTestBlock);
 
-    iBuilder->SetInsertPoint(safetyCheckBlock);
-    Value * safetyCheckCond = iBuilder->CreateICmpULT(remainingBytes, blockSize);
-    iBuilder->CreateCondBr(safetyCheckCond, regularExitBlock, leadingBodyBlock);
+    Value * enoughDataForLookaheadCond = iBuilder->CreateICmpUGE(bufferSize, requiredBytes);
+    iBuilder->CreateCondBr(enoughDataForLookaheadCond, leadingBlock, partialLeadingCond);
 
-    iBuilder->SetInsertPoint(leadingBodyBlock);
+    iBuilder->SetInsertPoint(leadingBlock);
+    for (unsigned i = 0; i < leadingBlocks; ++i) {
+        s2pInstance->CreateDoBlockCall();
+        leadingInstance->CreateDoBlockCall();
+    }
+    iBuilder->CreateBr(regularCondBlock);
 
+    iBuilder->SetInsertPoint(partialLeadingCond);
+    PHINode * remainingBytes1 = iBuilder->CreatePHI(intType, 2);
+    remainingBytes1->addIncoming(bufferSize, entryBlock);
+    Value * remainingCond = iBuilder->CreateICmpUGT(remainingBytes1, blockSize);
+    iBuilder->CreateCondBr(remainingCond, partialLeadingBody, partialCondBlock);
+
+    iBuilder->SetInsertPoint(partialLeadingBody);
     s2pInstance->CreateDoBlockCall();
     leadingInstance->CreateDoBlockCall();
-    blockNo->addIncoming(iBuilder->CreateAdd(blockNo, iBuilder->getInt64(1)), leadingBodyBlock);
-    remainingBytes->addIncoming(iBuilder->CreateSub(remainingBytes, blockSize), leadingBodyBlock);
-    iBuilder->CreateBr(leadingTestBlock);
+    remainingBytes1->addIncoming(iBuilder->CreateSub(remainingBytes1, blockSize), partialLeadingBody);
+    iBuilder->CreateBr(partialLeadingCond);
 
     // Now all the data for which we can produce and consume a full leading block...
-    iBuilder->SetInsertPoint(regularTestBlock);
+    iBuilder->SetInsertPoint(regularCondBlock);
     PHINode * remainingBytes2 = iBuilder->CreatePHI(intType, 2);
-    remainingBytes2->addIncoming(remainingBytes, leadingTestBlock);
-    Value * remainingBytesCond = iBuilder->CreateICmpULT(remainingBytes2, requiredBytes);
-    iBuilder->CreateCondBr(remainingBytesCond, regularExitBlock, regularBodyBlock);
+    remainingBytes2->addIncoming(bufferSize, leadingBlock);
+    Value * remainingBytesCond = iBuilder->CreateICmpUGT(remainingBytes2, requiredBytes);
+    iBuilder->CreateCondBr(remainingBytesCond, regularBodyBlock, partialCondBlock);
 
     iBuilder->SetInsertPoint(regularBodyBlock);
-
     s2pInstance->CreateDoBlockCall();
     leadingInstance->CreateDoBlockCall();
     sortingInstance->CreateDoBlockCall();
     gatheringInstance->CreateDoBlockCall();
-
     remainingBytes2->addIncoming(iBuilder->CreateSub(remainingBytes2, blockSize), regularBodyBlock);
-    iBuilder->CreateBr(regularTestBlock);
+    iBuilder->CreateBr(regularCondBlock);
 
     // Check if we have a partial blocks worth of leading data remaining
-    iBuilder->SetInsertPoint(regularExitBlock);
-    PHINode * remainingBytes3 = iBuilder->CreatePHI(intType, 2);
-    remainingBytes3->addIncoming(remainingBytes, safetyCheckBlock);
-    remainingBytes3->addIncoming(remainingBytes2, regularTestBlock);
-    Value * partialBlockCond = iBuilder->CreateICmpNE(remainingBytes3, ConstantInt::getNullValue(intType));
-    iBuilder->CreateCondBr(partialBlockCond, finalTestBlock, partialBlock);
+    iBuilder->SetInsertPoint(partialCondBlock);
+    PHINode * remainingBytes3 = iBuilder->CreatePHI(intType, 3);
+    remainingBytes3->addIncoming(bufferSize, partialLeadingCond);
+    remainingBytes3->addIncoming(remainingBytes2, regularCondBlock);
+    Value * partialBlockCond = iBuilder->CreateICmpSGT(remainingBytes3, iBuilder->getInt64(0));
+    iBuilder->CreateCondBr(partialBlockCond, partialBodyBlock, flushLengthGroupsBlock);
 
     // If we do, process it and mask out the data
-    iBuilder->SetInsertPoint(partialBlock);
-    s2pInstance->CreateDoBlockCall();
-    leadingInstance->CreateDoBlockCall();
-    leadingInstance->clearOutputStreamSet();
+    iBuilder->SetInsertPoint(partialBodyBlock);
+    s2pInstance->clearOutputStreamSet();
+    leadingInstance->CreateDoBlockCall();    
     sortingInstance->CreateDoBlockCall();
     gatheringInstance->CreateDoBlockCall();
-
-    iBuilder->CreateBr(finalTestBlock);
-
-    // Now clear the leading data and test the final blocks
-    iBuilder->SetInsertPoint(finalTestBlock);
-    PHINode * remainingFullBlocks = iBuilder->CreatePHI(iBuilder->getInt64Ty(), 3);
-    remainingFullBlocks->addIncoming(iBuilder->getInt64(leadingBlocks), regularExitBlock);
-    remainingFullBlocks->addIncoming(iBuilder->getInt64(leadingBlocks), partialBlock);
-    Value * remainingFullBlocksCond = iBuilder->CreateICmpUGT(remainingFullBlocks, ConstantInt::getNullValue(intType));
-    iBuilder->CreateCondBr(remainingFullBlocksCond, finalBodyBlock, remainingBlock);
-
-    iBuilder->SetInsertPoint(finalBodyBlock);
-
-    leadingInstance->clearOutputStreamSet();
-    sortingInstance->CreateDoBlockCall();
-    gatheringInstance->CreateDoBlockCall();
-
-    remainingFullBlocks->addIncoming(iBuilder->CreateSub(remainingFullBlocks, iBuilder->getInt64(1)), finalBodyBlock);
-
-
-    iBuilder->CreateBr(finalTestBlock);
-
+    remainingBytes3->addIncoming(iBuilder->CreateSub(remainingBytes3, blockSize), partialBodyBlock);
+    iBuilder->CreateBr(partialCondBlock);
 
     // perform a final partial gather on all length groups ...
-    iBuilder->SetInsertPoint(remainingBlock);
+    iBuilder->SetInsertPoint(flushLengthGroupsBlock);
 
     Value * const base = iBuilder->CreateLoad(gatheringInstance->getInternalState("Base"));
     Value * positionArray = gatheringInstance->getInternalState("Positions");
 
     for (unsigned i = 0; i < mGatherFunction.size(); ++i) {
-        BasicBlock * nonEmptyGroup = BasicBlock::Create(mMod->getContext(), "", main, 0);
+        BasicBlock * nonEmptyGroup = BasicBlock::Create(mMod->getContext(), "flushLengthGroup" + std::to_string(i), main, 0);
 
         BasicBlock * nextNonEmptyGroup = BasicBlock::Create(mMod->getContext(), "", main, 0);
 

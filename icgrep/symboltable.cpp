@@ -34,7 +34,7 @@ using namespace boost::filesystem;
 
 typedef void (*SymTableFunctionType)(char * byte_data, size_t filesize);
 
-static cl::list<std::string> files(cl::Positional, cl::desc("<input file ...>"), cl::OneOrMore);
+static cl::list<std::string> files(cl::Positional, cl::desc("<input file ...>"), cl::ZeroOrMore);
 
 void process(const std::string & fileName, SymTableFunctionType function) {
     const path filePath(fileName);
