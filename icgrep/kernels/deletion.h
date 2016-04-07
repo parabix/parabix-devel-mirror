@@ -5,6 +5,12 @@
 #ifndef DELETION_H
 #define DELETION_H
 
+
+
+namespace llvm { class Module; class Value;}
+
+namespace IDISA { class IDISA_Builder; }
+
 //
 // Parallel Prefix Deletion 
 // see Parallel Prefix Compress in Henry S. Warren, Hacker's Delight, Chapter 7
@@ -17,12 +23,18 @@
 //
 // Deletion Mask Calculation
 
-std::vector<Value *> parallel_prefix_deletion_masks(IDISA::IDISA_Builder * iBuilder, unsigned fw, Value * del_mask);
+std::vector<llvm::Value *> parallel_prefix_deletion_masks(IDISA::IDISA_Builder * iBuilder, unsigned fw, llvm::Value * del_mask);
 
 // Applying Deletion Masks to a Stream
 
-Value * apply_parallel_prefix_deletion(IDISA::IDISA_Builder * iBuilder, unsigned fw, Value * del_mask, std::vector<Value *> mv, Value * strm);
+llvm::Value * apply_parallel_prefix_deletion(IDISA::IDISA_Builder * iBuilder, unsigned fw, llvm::Value * del_mask, std::vector<llvm::Value *> mv, llvm::Value * strm);
 
+namespace kernel {
+  
+    class KernelBuilder;
 
+    void generateDeletionKernel(llvm::Module * m, IDISA::IDISA_Builder * iBuilder, unsigned fw, unsigned stream_count, KernelBuilder * kBuilder);
+
+}
 #endif
 
