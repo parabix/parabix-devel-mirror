@@ -13,7 +13,7 @@ namespace kernel {
 
 class KernelBuilder;
 
-    void generateStdOutKernel(llvm::Module *, IDISA::IDISA_Builder * iBuilder, KernelBuilder * kBuilder);
+    void generateStdOutKernel(llvm::Module *, IDISA::IDISA_Builder * iBuilder, KernelBuilder * kBuilder, unsigned fw = 8);
 }
 
 #endif

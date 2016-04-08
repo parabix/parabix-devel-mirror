@@ -74,8 +74,8 @@ void generateP2S_16Kernel(Module * m, IDISA::IDISA_Builder * iBuilder, KernelBui
     
     Value * output_ptr = kBuilder->getOutputStream(0);
     for (unsigned j = 0; j < 8; ++j) {
-        Value * merge0 = iBuilder->esimd_mergel(8, hi_bytes[j], lo_bytes[j]);
-        Value * merge1 = iBuilder->esimd_mergeh(8, hi_bytes[j], lo_bytes[j]);
+        Value * merge0 = iBuilder->bitCast(iBuilder->esimd_mergel(8, hi_bytes[j], lo_bytes[j]));
+        Value * merge1 = iBuilder->bitCast(iBuilder->esimd_mergeh(8, hi_bytes[j], lo_bytes[j]));
         iBuilder->CreateBlockAlignedStore(merge0, iBuilder->CreateGEP(output_ptr, std::vector<Value *>({ iBuilder->getInt32(0), iBuilder->getInt32(2*j) })));
         iBuilder->CreateBlockAlignedStore(merge1, iBuilder->CreateGEP(output_ptr, std::vector<Value *>({ iBuilder->getInt32(0), iBuilder->getInt32(2*j+1) })));
     }

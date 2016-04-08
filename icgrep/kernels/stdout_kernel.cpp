@@ -21,7 +21,7 @@ namespace kernel {
     }
     
 
-void generateStdOutKernel(Module * m, IDISA::IDISA_Builder * iBuilder, KernelBuilder * kBuilder) {
+void generateStdOutKernel(Module * m, IDISA::IDISA_Builder * iBuilder, KernelBuilder * kBuilder, unsigned fw) {
     LLVMContext & ctxt = m->getContext();
 
     Type * i32 = iBuilder->getIntNTy(32);
@@ -29,7 +29,7 @@ void generateStdOutKernel(Module * m, IDISA::IDISA_Builder * iBuilder, KernelBui
     
     // Insert this declaration in the module (if necessary):  declare i64 @write(i32, i8*, i64) 
     Function * writefn = create_write(m);
-    kBuilder->addInputStream(8, "byte_pack");
+    kBuilder->addInputStream(fw, "byte_pack");
     // No output streams.
     kBuilder->addInternalState(i64, "RemainingBytes");
 
@@ -38,9 +38,7 @@ void generateStdOutKernel(Module * m, IDISA::IDISA_Builder * iBuilder, KernelBui
     BasicBlock * full_block_write = BasicBlock::Create(ctxt, "full_block_write", function, 0);
     BasicBlock * final_block_write = BasicBlock::Create(ctxt, "final_block_write", function, 0);
     BasicBlock * exit_block = BasicBlock::Create(ctxt, "exit_stdout", function, 0);
-
     Value * bytes = iBuilder->CreateLoad(kBuilder->getInternalState("RemainingBytes"));
-    //iBuilder->CallPrintInt("bytes", iBuilder->CreatePtrToInt(bytes, iBuilder->getInt64Ty()));
 
     Value * input = iBuilder->CreateBitCast(kBuilder->getInputStream(0), iBuilder->getInt8PtrTy());
     Value * blockSize = ConstantInt::get(i64, iBuilder->getBitBlockWidth());
@@ -49,16 +47,16 @@ void generateStdOutKernel(Module * m, IDISA::IDISA_Builder * iBuilder, KernelBui
     iBuilder->CreateCondBr(fullblock_cond, final_block_write, full_block_write);
     
     iBuilder->SetInsertPoint(full_block_write);
-    iBuilder->CreateCall(writefn, std::vector<Value *>({ConstantInt::get(i32, 1), input, blockSize}));
+    Value * outputBytes = ConstantInt::get(i64, iBuilder->getBitBlockWidth() * fw/8);
+    iBuilder->CreateCall(writefn, std::vector<Value *>({ConstantInt::get(i32, 1), input, outputBytes}));
     Value * remain = iBuilder->CreateSub(bytes, blockSize);
     kBuilder->setInternalState("RemainingBytes", remain);
-    //iBuilder->CallPrintInt("remain", iBuilder->CreatePtrToInt(remain, iBuilder->getInt64Ty()));
-                  
+    iBuilder->CreatePtrToInt(remain, iBuilder->getInt64Ty());
     iBuilder->CreateBr(exit_block);
     
-    
     iBuilder->SetInsertPoint(final_block_write);
-    iBuilder->CreateCall(writefn, std::vector<Value *>({ConstantInt::get(i32, 1), input, bytes}));
+    outputBytes = iBuilder->CreateMul(bytes, ConstantInt::get(i64, fw/8));
+    iBuilder->CreateCall(writefn, std::vector<Value *>({ConstantInt::get(i32, 1), input, outputBytes}));
     kBuilder->setInternalState("RemainingBytes", ConstantInt::getNullValue(i64));
     iBuilder->CreateBr(exit_block);
 
@@ -67,5 +65,7 @@ void generateStdOutKernel(Module * m, IDISA::IDISA_Builder * iBuilder, KernelBui
     
     kBuilder->finalize();
 }
+
+
     
 }

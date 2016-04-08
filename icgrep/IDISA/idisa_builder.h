@@ -58,11 +58,11 @@ public:
 
     LoadInst * CreateBlockAlignedLoad(Value * const ptr);
     LoadInst * CreateBlockAlignedLoad(Value * const ptr, Value * const index);
-    LoadInst * CreateBlockAlignedLoad(Value * const ptr, std::initializer_list<Value *> indicies);
+    LoadInst * CreateBlockAlignedLoad(Value * const ptr, std::initializer_list<Value *> indices);
 
     void CreateBlockAlignedStore(Value * const value, Value * const ptr);
     void CreateBlockAlignedStore(Value * const value, Value * const ptr, Value * const index);
-    void CreateBlockAlignedStore(Value * const value, Value * const ptr, std::initializer_list<Value *> indicies);
+    void CreateBlockAlignedStore(Value * const value, Value * const ptr, std::initializer_list<Value *> indices);
 
     void CallPrintRegister(const std::string & regName, Value * const value);
     void CallPrintInt(const std::string & name, Value * const value);
@@ -104,6 +104,8 @@ public:
     
     virtual Value * mvmd_extract(unsigned fw, Value * a, unsigned fieldIndex);
     virtual Value * mvmd_insert(unsigned fw, Value * blk, Value * elt, unsigned fieldIndex);
+    virtual Value * mvmd_slli(unsigned fw, Value * a, unsigned shift);
+    virtual Value * mvmd_srli(unsigned fw, Value * a, unsigned shift);
     virtual Value * mvmd_dslli(unsigned fw, Value * a, Value * b, unsigned shift);
     
     virtual Value * bitblock_any(Value * a);

@@ -38,16 +38,16 @@ PipelineBuilder::~PipelineBuilder(){
 }
 
 void PipelineBuilder::CreateKernels(PabloFunction * function){
-    mS2PKernel = new KernelBuilder("s2p", mMod, iBuilder, SegmentSize);
-    mU8U16Kernel = new KernelBuilder("u8u16", mMod, iBuilder, SegmentSize);
-    mDelKernel = new KernelBuilder("del", mMod, iBuilder, SegmentSize);
-    mP2SKernel = new KernelBuilder("p2s", mMod, iBuilder, SegmentSize);    
-    mStdOutKernel = new KernelBuilder("stdout", mMod, iBuilder, SegmentSize);
+    mS2PKernel = new KernelBuilder(iBuilder, "s2p", SegmentSize);
+    mU8U16Kernel = new KernelBuilder(iBuilder, "u8u16", SegmentSize);
+    mDelKernel = new KernelBuilder(iBuilder, "del", SegmentSize);
+    mP2SKernel = new KernelBuilder(iBuilder, "p2s", SegmentSize);    
+    mStdOutKernel = new KernelBuilder(iBuilder, "stdout", SegmentSize);
 
     generateS2PKernel(mMod, iBuilder, mS2PKernel);
-    generateP2SKernel(mMod, iBuilder, mP2SKernel);
+    generateP2S_16Kernel(mMod, iBuilder, mP2SKernel);
     generateDeletionKernel(mMod, iBuilder, /*fw=*/8, /*stream_count=*/16, mDelKernel);
-    generateStdOutKernel(mMod, iBuilder, mStdOutKernel);
+    generateStdOutKernel(mMod, iBuilder, mStdOutKernel, 16);
 
     pablo_function_passes(function);
 
@@ -68,7 +68,6 @@ void PipelineBuilder::CreateKernels(PabloFunction * function){
 
 Function *  PipelineBuilder::ExecuteKernels() {
     Type * const int64ty = iBuilder->getInt64Ty();
-    Type * const int8PtrTy = iBuilder->getInt8PtrTy();
     Type * const inputType = PointerType::get(ArrayType::get(StructType::get(mMod->getContext(), std::vector<Type *>({ArrayType::get(mBitBlockType, 8)})), 1), 0);
     
     Function * const main = cast<Function>(mMod->getOrInsertFunction("Main", Type::getVoidTy(mMod->getContext()), inputType, int64ty, nullptr));
@@ -104,7 +103,7 @@ Function *  PipelineBuilder::ExecuteKernels() {
     Instance * p2sInstance = mP2SKernel->instantiate(delInstance->getOutputStreamSet());
     Instance * stdOutInstance = mStdOutKernel->instantiate(p2sInstance->getOutputStreamSet());
 
-    stdOutInstance->setInternalState("RemainingBytes", bufferSize);  // The total number of bytes to be sent to stdout.
+    stdOutInstance->setInternalState("RemainingBytes", bufferSize);  // The total number of bytes remaining in input.
 
     
     Value * initialBufferSize = nullptr;

@@ -342,6 +342,16 @@ Value * IDISA_Builder::mvmd_insert(unsigned fw, Value * blk, Value * elt, unsign
     return CreateInsertElement(vec, elt, getInt32(fieldIndex));
 }
 
+Value * IDISA_Builder::mvmd_slli(unsigned fw, Value * a, unsigned shift) {
+    unsigned field_count = mBitBlockWidth/fw;
+    return mvmd_dslli(fw, a, Constant::getNullValue(fwVectorType(fw)), field_count - shift);
+}
+
+Value * IDISA_Builder::mvmd_srli(unsigned fw, Value * a, unsigned shift) {
+    unsigned field_count = mBitBlockWidth/fw;
+    return mvmd_dslli(fw, Constant::getNullValue(fwVectorType(fw)), a, shift);
+}
+
 Value * IDISA_Builder::mvmd_dslli(unsigned fw, Value * a, Value * b, unsigned shift) {
     unsigned field_count = mBitBlockWidth/fw;
     Value * aVec = fwCast(fw, a);

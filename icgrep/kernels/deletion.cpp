@@ -37,8 +37,17 @@ Value * apply_parallel_prefix_deletion(IDISA::IDISA_Builder * iBuilder, unsigned
     return s;
 }
 
+Value * partial_sum_popcount(IDISA::IDISA_Builder * iBuilder, unsigned fw, Value * mask) {
+    Value * per_field = iBuilder->simd_popcount(fw, mask);
+    for (unsigned move = 1; move < iBuilder->getBitBlockWidth()/fw; move *= 2) {
+        per_field = iBuilder->simd_add(fw, per_field, iBuilder->mvmd_slli(fw, per_field, move));
+    }
+    return per_field;
+}
+
 // Apply deletion to a set of stream_count input streams to produce a set of output streams.
 // Kernel inputs: stream_count data streams plus one del_mask stream
+// Outputs: the deleted streams, plus a partial sum popcount
 void generateDeletionKernel(Module * m, IDISA::IDISA_Builder * iBuilder, unsigned fw, unsigned stream_count, KernelBuilder * kBuilder) {
     
     for(unsigned i = 0; i < stream_count; ++i) {
@@ -46,6 +55,7 @@ void generateDeletionKernel(Module * m, IDISA::IDISA_Builder * iBuilder, unsigne
         kBuilder->addOutputStream(1);
     }
     kBuilder->addInputStream(1, "del_mask");
+    kBuilder->addOutputStream(1);  // partial_sum popcount
     kBuilder->prepareFunction();
     
     Value * del_mask = iBuilder->CreateBlockAlignedLoad(kBuilder->getInputStream(stream_count));
@@ -56,6 +66,11 @@ void generateDeletionKernel(Module * m, IDISA::IDISA_Builder * iBuilder, unsigne
         Value * output = apply_parallel_prefix_deletion(iBuilder, fw, del_mask, move_masks, input);
         iBuilder->CreateBlockAlignedStore(output, kBuilder->getOutputStream(j));
     }
+    Value * counts = partial_sum_popcount(iBuilder, fw, del_mask);
+    
+    iBuilder->CreateBlockAlignedStore(iBuilder->bitCast(counts), kBuilder->getOutputStream(stream_count));
+
     kBuilder->finalize();
 }
 }
+
