@@ -17,27 +17,27 @@ public:
     llvm::Value * CreateDoBlockCall();
 
     llvm::Value * getInternalState(const std::string & name) {
-        return mDefinition->getInternalState(mKernelState, name);
+        return mDefinition->getInternalStateInternal(mKernelState, name);
     }
 
     void setInternalState(const std::string & name, llvm::Value * value) {
-        mDefinition->setInternalState(mKernelState, name, value);
+        mDefinition->setInternalStateInternal(mKernelState, name, value);
     }
 
     llvm::Value * getInternalState(const unsigned index) {
-        return getInternalState(iBuilder->getInt32(index));
+        return mDefinition->getInternalStateInternal(mKernelState, iBuilder->getInt32(index));
     }
 
     llvm::Value * getInternalState(llvm::Value * const index) {
-        return mDefinition->getInternalState(mKernelState, index);
+        return mDefinition->getInternalStateInternal(mKernelState, index);
     }
 
     void setInternalState(const unsigned index, llvm::Value * value) {
-        setInternalState(iBuilder->getInt32(index), value);
+        mDefinition->setInternalStateInternal(mKernelState, iBuilder->getInt32(index), value);
     }
 
     void setInternalState(llvm::Value * const index, llvm::Value * value) {
-        mDefinition->setInternalState(mKernelState, index, value);
+        mDefinition->setInternalStateInternal(mKernelState, index, value);
     }
 
     inline llvm::Value * getInputStreamSet(const unsigned streamOffset = 0) {
@@ -45,11 +45,11 @@ public:
     }
 
     llvm::Value * getInputStream(const unsigned index, const unsigned streamOffset = 0) {
-        return getInputStream(iBuilder->getInt32(index), streamOffset);
+        return mDefinition->getInputStreamInternal(getInputStreamSet(streamOffset), iBuilder->getInt32(index));
     }
 
     llvm::Value * getInputStream(llvm::Value * const index, const unsigned streamOffset = 0) {
-        return mDefinition->getInputStream(getInputStreamSet(streamOffset), index);
+        return mDefinition->getInputStreamInternal(getInputStreamSet(streamOffset), index);
     }
 
     llvm::Type * getInputStreamType() const {
@@ -57,11 +57,11 @@ public:
     }
 
     llvm::Value * getInputScalar(const unsigned index) {
-        return getInputScalar(iBuilder->getInt32(index));
+        return mDefinition->getInputScalarInternal(mInputScalarSet, iBuilder->getInt32(index));
     }
 
     llvm::Value * getInputScalar(llvm::Value * const index) {
-        return mDefinition->getInputScalar(mInputScalarSet, index);
+        return mDefinition->getInputScalarInternal(mInputScalarSet, index);
     }
 
     llvm::Type * getInputScalarType() const {
@@ -73,25 +73,25 @@ public:
     }
 
     llvm::Value * getOutputStream(const unsigned index, const unsigned streamOffset = 0) {
-        return getOutputStream(iBuilder->getInt32(index), streamOffset);
+        return mDefinition->getOutputStreamInternal(getOutputStreamSet(streamOffset), iBuilder->getInt32(index));
     }
 
     llvm::Value * getOutputStream(llvm::Value * const index, const unsigned streamOffset = 0) {
-        return mDefinition->getOutputStream(getOutputStreamSet(streamOffset), index);
+        return mDefinition->getOutputStreamInternal(getOutputStreamSet(streamOffset), index);
     }
 
     void clearOutputStreamSet();
 
     llvm::Value * getOutputScalar(const unsigned index) {
-        return getOutputScalar(iBuilder->getInt32(index));
+        return mDefinition->getOutputScalarInternal(mOutputScalarSet, iBuilder->getInt32(index));
     }
 
     llvm::Value * getOutputScalar(llvm::Value * const index) {
-        return mDefinition->getOutputScalar(mOutputScalarSet, index);
+        return mDefinition->getOutputScalarInternal(mOutputScalarSet, index);
     }
 
     llvm::Value * getBlockNo() {
-        return mDefinition->getBlockNo(mKernelState);
+        return mDefinition->getBlockNoInternal(mKernelState);
     }
 
     inline std::pair<llvm::Value *, unsigned> getResultSet() const {

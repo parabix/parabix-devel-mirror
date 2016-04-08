@@ -72,45 +72,41 @@ public:
     llvm::Function * prepareFunction(std::vector<unsigned> && inputStreamOffsets);
 
     inline llvm::Value * getInternalState(const std::string & name) {
-        return getInternalState(mKernelStateParam, name);
+        return getInternalStateInternal(mKernelStateParam, name);
     }
 
     inline void setInternalState(const std::string & name, llvm::Value * value) {
-        setInternalState(mKernelStateParam, name, value);
+        setInternalStateInternal(mKernelStateParam, name, value);
     }
 
     inline llvm::Value * getInternalState(const unsigned index) {
         assert (index < mInternalState.size());
-        return getInternalState(mKernelStateParam, iBuilder->getInt32(index));
+        return getInternalStateInternal(mKernelStateParam, iBuilder->getInt32(index));
     }
 
     inline llvm::Value * getInternalState(disable_implicit_conversion<llvm::Value *> const index) {
-        return getInternalState(mKernelStateParam, index);
+        return getInternalStateInternal(mKernelStateParam, index);
     }
 
     void setInternalState(const unsigned index, llvm::Value * value) {
         assert (index < mInternalState.size());
-        setInternalState(mKernelStateParam, iBuilder->getInt32(index), value);
+        setInternalStateInternal(mKernelStateParam, iBuilder->getInt32(index), value);
     }
 
     void setInternalState(disable_implicit_conversion<llvm::Value *> const index, llvm::Value * value) {
-        setInternalState(mKernelStateParam, index, value);
+        setInternalStateInternal(mKernelStateParam, index, value);
     }
+
     inline llvm::Type * getKernelStateType() const{
         return mKernelStateType;
     }
 
     inline llvm::Value * getInputStream(const unsigned index, const unsigned streamOffset = 0) {
-        assert (index < getNumOfInputStreams());
-        return getInputStream(iBuilder->getInt32(index), streamOffset);
+        return getInputStreamInternal(getInputStreamParam(streamOffset), iBuilder->getInt32(index));
     }
 
     inline llvm::Value * getInputStream(disable_implicit_conversion<llvm::Value *> index, const unsigned streamOffset = 0) {
-        const auto f = mInputStreamParam.find(streamOffset);
-        if (LLVM_UNLIKELY(f == mInputStreamParam.end())) {
-            throw std::runtime_error("Kernel compilation error: No input stream parameter for stream offset " + std::to_string(streamOffset));
-        }
-        return getInputStream(f->second, index);
+        return getInputStreamInternal(getInputStreamParam(streamOffset), index);
     }
 
     inline unsigned getNumOfInputStreams() const {
@@ -123,11 +119,11 @@ public:
 
     inline llvm::Value * getInputScalar(const unsigned index) {
         assert (index < getNumOfInputScalars());
-        return getInputScalar(iBuilder->getInt32(index));
+        return getInputScalarInternal(mInputScalarParam, iBuilder->getInt32(index));
     }
 
     inline llvm::Value * getInputScalar(disable_implicit_conversion<llvm::Value *> const index) {
-        return getInputScalar(mInputScalarParam, index);
+        return getInputScalarInternal(mInputScalarParam, index);
     }
 
     inline unsigned getNumOfInputScalars() const {
@@ -140,11 +136,11 @@ public:
 
     inline llvm::Value * getOutputStream(const unsigned index) {
         assert (index < getNumOfOutputStreams());
-        return getOutputStream(mOutputStreamParam, iBuilder->getInt32(index));
+        return getOutputStreamInternal(mOutputStreamParam, iBuilder->getInt32(index));
     }
 
     inline llvm::Value * getOutputStream(disable_implicit_conversion<llvm::Value *> const index) {
-        return getOutputStream(mOutputStreamParam, index);
+        return getOutputStreamInternal(mOutputStreamParam, index);
     }
 
     inline unsigned getNumOfOutputStreams() const {
@@ -157,11 +153,11 @@ public:
 
     inline llvm::Value * getOutputScalar(const unsigned index) {
         assert (index < getNumOfOutputScalars());
-        return getOutputScalar(mOutputScalarParam, iBuilder->getInt32(index));
+        return getOutputScalarInternal(mOutputScalarParam, iBuilder->getInt32(index));
     }
 
     inline llvm::Value * getOutputScalar(disable_implicit_conversion<llvm::Value *> const index) {
-        return getOutputScalar(mOutputScalarParam, index);
+        return getOutputScalarInternal(mOutputScalarParam, index);
     }
 
     inline unsigned getNumOfOutputScalars() const {
@@ -173,7 +169,7 @@ public:
     }
 
     inline llvm::Value * getBlockNo() {
-        return getBlockNo(mKernelStateParam);
+        return getBlockNoInternal(mKernelStateParam);
     }
 
     unsigned getDefaultBufferSize() const;
@@ -200,27 +196,31 @@ protected:
 
     Type * packDataTypes(const std::vector<llvm::Type *> & types);
 
-    llvm::Value * getInputStream(llvm::Value * const inputStreamSet, disable_implicit_conversion<llvm::Value *> index);
+    llvm::Value * getInputStreamInternal(llvm::Value * const inputStreamSet, disable_implicit_conversion<llvm::Value *> index);
 
-    llvm::Value * getInputScalar(llvm::Value * const inputScalarSet, disable_implicit_conversion<llvm::Value *> index);
+    llvm::Value * getInputScalarInternal(llvm::Value * const inputScalarSet, disable_implicit_conversion<llvm::Value *> index);
 
-    llvm::Value * getInternalState(llvm::Value * const kernelState, const std::string & name);
+    llvm::Value * getInternalStateInternal(llvm::Value * const kernelState, const std::string & name);
 
-    void setInternalState(llvm::Value * const kernelState, const std::string & name, llvm::Value * const value);
+    void setInternalStateInternal(llvm::Value * const kernelState, const std::string & name, llvm::Value * const value);
 
-    llvm::Value * getInternalState(llvm::Value * const kernelState, disable_implicit_conversion<llvm::Value *> index);
+    llvm::Value * getInternalStateInternal(llvm::Value * const kernelState, disable_implicit_conversion<llvm::Value *> index);
 
-    void setInternalState(llvm::Value * const kernelState, const unsigned index, llvm::Value * const value);
+    void setInternalStateInternal(llvm::Value * const kernelState, const unsigned index, llvm::Value * const value);
 
-    void setInternalState(llvm::Value * const kernelState, disable_implicit_conversion<llvm::Value *> index, llvm::Value * const value);
+    void setInternalStateInternal(llvm::Value * const kernelState, disable_implicit_conversion<llvm::Value *> index, llvm::Value * const value);
 
-    llvm::Value * getOutputStream(llvm::Value * const outputStreamSet, disable_implicit_conversion<llvm::Value *> index);
+    llvm::Value * getOutputStreamInternal(llvm::Value * const outputStreamSet, disable_implicit_conversion<llvm::Value *> index);
 
-    llvm::Value * getOutputScalar(llvm::Value * const outputScalarSet, disable_implicit_conversion<llvm::Value *> index);
+    llvm::Value * getOutputScalarInternal(llvm::Value * const outputScalarSet, disable_implicit_conversion<llvm::Value *> index);
 
-    llvm::Value * getBlockNo(llvm::Value * const instance);
+    llvm::Value * getBlockNoInternal(llvm::Value * const instance) {
+        return getInternalStateInternal(instance, mBlockNoIndex);
+    }
 
     llvm::Function * getOutputStreamSetFunction() const;
+
+    llvm::Value * getInputStreamParam(const unsigned streamOffset) const;
 
     const std::vector<unsigned> & getInputStreamOffsets() const {
         return mInputStreamOffsets;
@@ -266,10 +266,6 @@ inline llvm::Function * KernelBuilder::getDoBlockFunction() const {
 
 inline llvm::Value * KernelBuilder::getKernelState() const {
     return mKernelStateParam;
-}
-
-inline llvm::Value * KernelBuilder::getBlockNo(llvm::Value * const instance) {
-    return getInternalState(instance, mBlockNoIndex);
 }
 
 inline unsigned KernelBuilder::getDefaultBufferSize() const {

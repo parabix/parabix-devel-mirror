@@ -48,25 +48,25 @@ unsigned KernelBuilder::addInternalState(llvm::Type * const type, std::string &&
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getInternalState
  ** ------------------------------------------------------------------------------------------------------------- */
-Value * KernelBuilder::getInternalState(Value * const kernelState, disable_implicit_conversion<Value *> index) {
-    assert (index->getType()->isIntegerTy());    
-    assert (kernelState->getType()->getPointerElementType() == mKernelStateType);
-    return iBuilder->CreateGEP(kernelState, {iBuilder->getInt32(0), index});
-}
-
-Value * KernelBuilder::getInternalState(Value * const kernelState, const std::string & name) {
+Value * KernelBuilder::getInternalStateInternal(Value * const kernelState, const std::string & name) {
     const auto f = mInternalStateNameMap.find(name);
     if (LLVM_UNLIKELY(f == mInternalStateNameMap.end())) {
         throw std::runtime_error("Kernel does not contain internal state " + name);
     }
-    return getInternalState(kernelState, f->second);
+    return getInternalStateInternal(kernelState, f->second);
+}
+
+Value * KernelBuilder::getInternalStateInternal(Value * const kernelState, disable_implicit_conversion<Value *> index) {
+    assert (index->getType()->isIntegerTy());
+    assert (kernelState->getType()->getPointerElementType() == mKernelStateType);
+    return iBuilder->CreateGEP(kernelState, {iBuilder->getInt32(0), index});
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief setInternalState
  ** ------------------------------------------------------------------------------------------------------------- */
-void KernelBuilder::setInternalState(Value * const kernelState, const std::string & name, Value * const value) {
-    Value * ptr = getInternalState(kernelState, name);
+void KernelBuilder::setInternalStateInternal(Value * const kernelState, const std::string & name, Value * const value) {
+    Value * ptr = getInternalStateInternal(kernelState, name);
     assert (ptr->getType()->getPointerElementType() == value->getType());
     if (value->getType() == iBuilder->getBitBlockType()) {
         iBuilder->CreateBlockAlignedStore(value, ptr);
@@ -75,8 +75,8 @@ void KernelBuilder::setInternalState(Value * const kernelState, const std::strin
     }
 }
 
-void KernelBuilder::setInternalState(Value * const kernelState, disable_implicit_conversion<Value *> index, Value * const value) {
-    Value * ptr = getInternalState(kernelState, index);
+void KernelBuilder::setInternalStateInternal(Value * const kernelState, disable_implicit_conversion<Value *> index, Value * const value) {
+    Value * ptr = getInternalStateInternal(kernelState, index);
     assert (ptr->getType()->getPointerElementType() == value->getType());
     if (value->getType() == iBuilder->getBitBlockType()) {
         iBuilder->CreateBlockAlignedStore(value, ptr);
@@ -105,7 +105,7 @@ void KernelBuilder::addInputStream(const unsigned fields) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getInputStream
  ** ------------------------------------------------------------------------------------------------------------- */
-Value * KernelBuilder::getInputStream(Value * const inputStreamSet, disable_implicit_conversion<Value *> index) {
+Value * KernelBuilder::getInputStreamInternal(Value * const inputStreamSet, disable_implicit_conversion<Value *> index) {
     assert ("Parameters cannot be null!" && (inputStreamSet != nullptr && index != nullptr));
     assert ("Stream index must be an integer!" && index->getType()->isIntegerTy());
     assert ("Illegal input stream set provided!" && inputStreamSet->getType()->getPointerElementType() == mInputStreamType);
@@ -131,7 +131,7 @@ void KernelBuilder::addInputScalar(Type * const type) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getInputScalar
  ** ------------------------------------------------------------------------------------------------------------- */
-Value * KernelBuilder::getInputScalar(Value * const inputScalarSet, disable_implicit_conversion<Value *>) {
+Value * KernelBuilder::getInputScalarInternal(Value * const inputScalarSet, disable_implicit_conversion<Value *>) {
     assert (inputScalarSet);
     throw std::runtime_error("currently not supported!");
 }
@@ -159,7 +159,7 @@ unsigned KernelBuilder::addOutputScalar(Type * const type) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getOutputStream
  ** ------------------------------------------------------------------------------------------------------------- */
-Value * KernelBuilder::getOutputStream(Value * const outputStreamSet, disable_implicit_conversion<Value *> index) {
+Value * KernelBuilder::getOutputStreamInternal(Value * const outputStreamSet, disable_implicit_conversion<Value *> index) {
     assert ("Parameters cannot be null!" && (outputStreamSet != nullptr && index != nullptr));
     assert ("Stream index must be an integer!" && index->getType()->isIntegerTy());
     assert ("Illegal output stream set provided!" && outputStreamSet->getType()->getPointerElementType() == getOutputStreamType());
@@ -172,7 +172,7 @@ Value * KernelBuilder::getOutputStream(Value * const outputStreamSet, disable_im
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getOutputScalar
  ** ------------------------------------------------------------------------------------------------------------- */
-Value * KernelBuilder::getOutputScalar(Value * const outputScalarSet, disable_implicit_conversion<Value *> ) {
+Value * KernelBuilder::getOutputScalarInternal(Value * const, disable_implicit_conversion<Value *> ) {
     throw std::runtime_error("currently not supported!");
 }
 
@@ -310,6 +310,14 @@ Instance * KernelBuilder::instantiate(std::initializer_list<llvm::Value *> input
         iBuilder->CreateStore(inputStream, ptr);
     }
     return instantiate(std::make_pair(inputStruct, 0));
+}
+
+Value * KernelBuilder::getInputStreamParam(const unsigned streamOffset) const {
+    const auto f = mInputStreamParam.find(streamOffset);
+    if (LLVM_UNLIKELY(f == mInputStreamParam.end())) {
+        throw std::runtime_error("Kernel compilation error: No input stream parameter for stream offset " + std::to_string(streamOffset));
+    }
+    return f->second;
 }
 
 } // end of namespace kernel

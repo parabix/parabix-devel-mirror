@@ -152,12 +152,12 @@ Function * generateScanWordRoutine(Module * m, IDISA::IDISA_Builder * iBuilder, 
     matchRecordStart_phi->addIncoming(matchRecordStart, prior_breaks_block);    
     Value * matchRecordEnd = iBuilder->CreateAdd(scanwordPos, generateCountForwardZeroes(iBuilder, matches_phi));
 
-    Value * fileBuf = iBuilder->CreateLoad(kBuilder->getInternalState(instance, "FileBuf"));
+    Value * fileBuf = iBuilder->CreateLoad(kBuilder->getInternalStateInternal(instance, "FileBuf"));
     if (isNameExpression) {
         iBuilder->CreateCall(matchProcessor, std::vector<Value *>({matchRecordNum_phi, matchRecordStart_phi, matchRecordEnd, fileBuf}));
     } else {
-        Value * fileSize = iBuilder->CreateLoad(kBuilder->getInternalState(instance, "FileSize"));
-        Value * fileName = iBuilder->CreateLoad(kBuilder->getInternalState(instance, "FileName"));
+        Value * fileSize = iBuilder->CreateLoad(kBuilder->getInternalStateInternal(instance, "FileSize"));
+        Value * fileName = iBuilder->CreateLoad(kBuilder->getInternalStateInternal(instance, "FileName"));
         iBuilder->CreateCall(matchProcessor, std::vector<Value *>({matchRecordNum_phi, matchRecordStart_phi, matchRecordEnd, fileBuf, fileSize, fileName}));
     }
 

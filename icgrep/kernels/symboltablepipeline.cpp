@@ -263,12 +263,12 @@ void SymbolTableBuilder::generateGatherKernel(KernelBuilder * kBuilder, const st
     Value * endStream = iBuilder->CreateBlockAlignedLoad(endStreamPtr);
     endStream = iBuilder->CreateBitCast(endStream, scanWordVectorType, "endStream");
 
-    Value * startIndexPtr = iBuilder->CreateGEP(positionArray, {iBuilder->getInt32(0), groupIV, iBuilder->getInt32(0)}, "startIndexPtr");
+    Value * startIndexPtr = iBuilder->CreateGEP(positionArray, {iBuilder->getInt32(0), groupIV, iBuilder->getInt32(0)});
     Value * startIndex = iBuilder->CreateLoad(startIndexPtr, "startIndex");
-    Value * startArray = iBuilder->CreateGEP(positionArray, {iBuilder->getInt32(0), groupIV, iBuilder->getInt32(1)}, "startArray");
+    Value * startPosArray = iBuilder->CreateGEP(positionArray, {iBuilder->getInt32(0), groupIV, iBuilder->getInt32(1)}, "startPosArray");
     Value * endIndexPtr = iBuilder->CreateGEP(positionArray, {iBuilder->getInt32(0), groupIV, iBuilder->getInt32(2)}, "endIndexPtr");
     Value * endIndex = iBuilder->CreateLoad(endIndexPtr, "endIndex");
-    Value * endArray = iBuilder->CreateGEP(positionArray, {iBuilder->getInt32(0), groupIV, iBuilder->getInt32(3)}, "endArray");
+    Value * endPosArray = iBuilder->CreateGEP(positionArray, {iBuilder->getInt32(0), groupIV, iBuilder->getInt32(3)}, "endPosArray");
 
     iBuilder->CreateBr(startOuterCond);
 
@@ -305,7 +305,7 @@ void SymbolTableBuilder::generateGatherKernel(KernelBuilder * kBuilder, const st
     Value * startPos = generateCountForwardZeroes(iBuilder, startFieldPhi);
     startFieldPhi->addIncoming(generateResetLowestBit(iBuilder, startFieldPhi), startInnerBody);
     startPos = iBuilder->CreateTruncOrBitCast(iBuilder->CreateOr(startPos, startBlockOffset), iBuilder->getInt32Ty());
-    iBuilder->CreateStore(startPos, iBuilder->CreateGEP(startArray, {iBuilder->getInt32(0), startIndexPhi2}));
+    iBuilder->CreateStore(startPos, iBuilder->CreateGEP(startPosArray, {iBuilder->getInt32(0), startIndexPhi2}));
     startIndexPhi2->addIncoming(iBuilder->CreateAdd(startIndexPhi2, ConstantInt::get(startIndexPhi2->getType(), 1)), startInnerBody);
     iBuilder->CreateBr(startInnerCond);
 
@@ -351,7 +351,7 @@ void SymbolTableBuilder::generateGatherKernel(KernelBuilder * kBuilder, const st
     endFieldPhi->addIncoming(updatedEndFieldPhi, endInnerBody);
     endFieldPhi->addIncoming(updatedEndFieldPhi, gather);
     endPos = iBuilder->CreateTruncOrBitCast(iBuilder->CreateOr(endPos, endBlockOffset), iBuilder->getInt32Ty());
-    iBuilder->CreateStore(endPos, iBuilder->CreateGEP(endArray, {iBuilder->getInt32(0), endIndexPhi2}));
+    iBuilder->CreateStore(endPos, iBuilder->CreateGEP(endPosArray, {iBuilder->getInt32(0), endIndexPhi2}));
     Value * updatedEndIndexPhi = iBuilder->CreateAdd(endIndexPhi2, ConstantInt::get(endIndexPhi2->getType(), 1));
     endIndexPhi2->addIncoming(updatedEndIndexPhi, endInnerBody);
     Value * filledEndPosBufferTest = iBuilder->CreateICmpEQ(updatedEndIndexPhi, ConstantInt::get(updatedEndIndexPhi->getType(), gatherCount));
@@ -360,12 +360,12 @@ void SymbolTableBuilder::generateGatherKernel(KernelBuilder * kBuilder, const st
     // GATHER
     iBuilder->SetInsertPoint(gather);
 
-    Value * startArrayPtr = iBuilder->CreatePointerCast(startArray, PointerType::get(iBuilder->getInt32Ty(), 0));
-    Value * endArrayPtr = iBuilder->CreatePointerCast(endArray, PointerType::get(iBuilder->getInt32Ty(), 0));
+    Value * startArrayPtr = iBuilder->CreatePointerCast(startPosArray, PointerType::get(iBuilder->getInt32Ty(), 0));
+    Value * endArrayPtr = iBuilder->CreatePointerCast(endPosArray, PointerType::get(iBuilder->getInt32Ty(), 0));
     Value * gatherFunctionPtr = iBuilder->CreateLoad(iBuilder->CreateGEP(gatherFunctionPtrArray, groupIV));
     Value * outputBuffer = iBuilder->CreatePointerCast(kBuilder->getOutputStream(groupIV), iBuilder->getInt8PtrTy());
     iBuilder->CreateCall5(gatherFunctionPtr, base, startArrayPtr, endArrayPtr, iBuilder->getInt32(32), outputBuffer);
-
+    // Copy the unused start positions to the front of the start position array and adjust the start index
     Value * remainingArrayPtr = iBuilder->CreateGEP(startArrayPtr, iBuilder->getInt32(gatherCount));
     Value * remainingCount = iBuilder->CreateSub(startIndexPhi4, iBuilder->getInt32(gatherCount));
     Value * remainingBytes = iBuilder->CreateMul(remainingCount, iBuilder->getInt32(4));
@@ -510,7 +510,7 @@ Function * SymbolTableBuilder::generateGatherFunction(const unsigned minKeyLengt
             // and compute how much data is remaining.
             Value * remaining = iBuilder->CreateSub(endPos, startPos);
 
-            // if this token only has 1 to 3 bytes remaining ...
+            // if this token has at least 4 bytes remaining ...
             Value * atLeastFourBytes = iBuilder->CreateSExt(iBuilder->CreateICmpUGE(remaining, four), remaining->getType(), "atLeastFourBytes");
 
             // determine how many bits do *not* belong to the token
