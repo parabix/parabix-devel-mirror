@@ -66,7 +66,7 @@ void generateDeletionKernel(Module * m, IDISA::IDISA_Builder * iBuilder, unsigne
         Value * output = apply_parallel_prefix_deletion(iBuilder, fw, del_mask, move_masks, input);
         iBuilder->CreateBlockAlignedStore(output, kBuilder->getOutputStream(j));
     }
-    Value * counts = partial_sum_popcount(iBuilder, fw, del_mask);
+    Value * counts = partial_sum_popcount(iBuilder, fw, iBuilder->simd_not(del_mask));
     
     iBuilder->CreateBlockAlignedStore(iBuilder->bitCast(counts), kBuilder->getOutputStream(stream_count));
 

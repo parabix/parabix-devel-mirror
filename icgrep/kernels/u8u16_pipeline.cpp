@@ -33,8 +33,9 @@ PipelineBuilder::PipelineBuilder(Module * m, IDISA::IDISA_Builder * b)
 PipelineBuilder::~PipelineBuilder(){
     delete mS2PKernel;
     delete mU8U16Kernel;
+    delete mDelKernel;
     delete mP2SKernel;
-    delete mStdOutKernel;
+    //delete mStdOutKernel;
 }
 
 void PipelineBuilder::CreateKernels(PabloFunction * function){
@@ -42,12 +43,12 @@ void PipelineBuilder::CreateKernels(PabloFunction * function){
     mU8U16Kernel = new KernelBuilder(iBuilder, "u8u16", SegmentSize);
     mDelKernel = new KernelBuilder(iBuilder, "del", SegmentSize);
     mP2SKernel = new KernelBuilder(iBuilder, "p2s", SegmentSize);    
-    mStdOutKernel = new KernelBuilder(iBuilder, "stdout", SegmentSize);
+    //mStdOutKernel = new KernelBuilder(iBuilder, "stdout", SegmentSize);
 
     generateS2PKernel(mMod, iBuilder, mS2PKernel);
-    generateP2S_16Kernel(mMod, iBuilder, mP2SKernel);
-    generateDeletionKernel(mMod, iBuilder, /*fw=*/8, /*stream_count=*/16, mDelKernel);
-    generateStdOutKernel(mMod, iBuilder, mStdOutKernel, 16);
+    generateP2S_16_withCompressedOutputKernel(mMod, iBuilder, mP2SKernel);
+    generateDeletionKernel(mMod, iBuilder, iBuilder->getBitBlockWidth()/16, /*stream_count=*/16, mDelKernel);
+    //generateStdOutKernel(mMod, iBuilder, mStdOutKernel, 16);
 
     pablo_function_passes(function);
 
@@ -101,9 +102,6 @@ Function *  PipelineBuilder::ExecuteKernels() {
     Instance * u8u16Instance = mU8U16Kernel->instantiate(s2pInstance->getOutputStreamSet());
     Instance * delInstance = mDelKernel->instantiate(u8u16Instance->getOutputStreamSet());
     Instance * p2sInstance = mP2SKernel->instantiate(delInstance->getOutputStreamSet());
-    Instance * stdOutInstance = mStdOutKernel->instantiate(p2sInstance->getOutputStreamSet());
-
-    stdOutInstance->setInternalState("RemainingBytes", bufferSize);  // The total number of bytes remaining in input.
 
     
     Value * initialBufferSize = nullptr;
@@ -130,9 +128,6 @@ Function *  PipelineBuilder::ExecuteKernels() {
         for (unsigned i = 0; i < segmentSize; ++i) {
             p2sInstance->CreateDoBlockCall();
         }
-        for (unsigned i = 0; i < segmentSize; ++i) {
-            stdOutInstance->CreateDoBlockCall();
-        }
         remainingBytes->addIncoming(iBuilder->CreateSub(remainingBytes, step), segmentBodyBlock);
         iBuilder->CreateBr(segmentCondBlock);
         initialBufferSize = remainingBytes;
@@ -157,7 +152,6 @@ Function *  PipelineBuilder::ExecuteKernels() {
     u8u16Instance->CreateDoBlockCall();
     delInstance->CreateDoBlockCall();
     p2sInstance->CreateDoBlockCall();
-    stdOutInstance->CreateDoBlockCall();
 
     Value * diff = iBuilder->CreateSub(remainingBytes, step);
 
@@ -180,9 +174,12 @@ Function *  PipelineBuilder::ExecuteKernels() {
     iBuilder->SetInsertPoint(endBlock);
 
     u8u16Instance->CreateDoBlockCall();
+    Value * remaining = iBuilder->CreateZExt(remainingBytes, iBuilder->getIntNTy(mBlockSize));
+    Value * EOF_del = iBuilder->bitCast(iBuilder->CreateShl(Constant::getAllOnesValue(iBuilder->getIntNTy(mBlockSize)), remaining));
+    Value * const delmask = u8u16Instance->getOutputStream(16);
+    iBuilder->CreateBlockAlignedStore(iBuilder->CreateOr(EOF_del, iBuilder->CreateBlockAlignedLoad(delmask)), delmask);
     delInstance->CreateDoBlockCall();
     p2sInstance->CreateDoBlockCall();
-    stdOutInstance->CreateDoBlockCall();
     iBuilder->CreateRetVoid();
     return main;
 }
