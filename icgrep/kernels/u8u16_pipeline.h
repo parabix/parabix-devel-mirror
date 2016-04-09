@@ -39,7 +39,7 @@ private:
     KernelBuilder *                     mU8U16Kernel;
     KernelBuilder *                     mDelKernel;
     KernelBuilder *                     mP2SKernel;
-    KernelBuilder *                     mStdOutKernel;
+    //KernelBuilder *                     mStdOutKernel;
     llvm::Type*                         mBitBlockType;
     int                                 mBlockSize;
 };

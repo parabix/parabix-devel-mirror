@@ -95,8 +95,8 @@ Function * PipelineBuilder::ExecuteKernels() {
     BasicBlock * exitBlock = BasicBlock::Create(mMod->getContext(), "exit", main, 0);
 
     Instance * s2pInstance = mS2PKernel->instantiate(inputStream);
-    Instance * icGrepInstance = mICgrepKernel->instantiate(s2pInstance->getResultSet());
-    Instance * scanMatchInstance = mScanMatchKernel->instantiate(icGrepInstance->getResultSet());
+    Instance * icGrepInstance = mICgrepKernel->instantiate(s2pInstance->getOutputStreamBuffer());
+    Instance * scanMatchInstance = mScanMatchKernel->instantiate(icGrepInstance->getOutputStreamBuffer());
 
     scanMatchInstance->setInternalState("FileBuf", iBuilder->CreateBitCast(inputStream, int8PtrTy));
     scanMatchInstance->setInternalState("FileSize", bufferSize);

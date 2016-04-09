@@ -95,9 +95,9 @@ Function *  PipelineBuilder::ExecuteKernels() {
     BasicBlock * endBlock = BasicBlock::Create(mMod->getContext(), "end", main, 0);
 
     Instance * s2pInstance = mS2PKernel->instantiate(inputStream);
-    Instance * caseFoldInstance = mCaseFoldKernel->instantiate(s2pInstance->getResultSet());
-    Instance * p2sInstance = mP2SKernel->instantiate(caseFoldInstance->getResultSet());
-    Instance * stdOutInstance = mStdOutKernel->instantiate(p2sInstance->getResultSet());
+    Instance * caseFoldInstance = mCaseFoldKernel->instantiate(s2pInstance->getOutputStreamBuffer());
+    Instance * p2sInstance = mP2SKernel->instantiate(caseFoldInstance->getOutputStreamBuffer());
+    Instance * stdOutInstance = mStdOutKernel->instantiate(p2sInstance->getOutputStreamBuffer());
 
     stdOutInstance->setInternalState("RemainingBytes", bufferSize);  // The total number of bytes to be sent to stdout.
 

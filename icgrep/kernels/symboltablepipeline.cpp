@@ -675,9 +675,9 @@ Function * SymbolTableBuilder::ExecuteKernels(){
     BasicBlock * flushLengthGroupsBlock = BasicBlock::Create(mMod->getContext(), "flushLengthGroups", main, 0);
 
     Instance * s2pInstance = mS2PKernel->instantiate(inputStream);
-    Instance * leadingInstance = mLeadingKernel->instantiate(s2pInstance->getResultSet());
-    Instance * sortingInstance = mSortingKernel->instantiate(leadingInstance->getResultSet());
-    Instance * gatheringInstance = mGatherKernel->instantiate(sortingInstance->getResultSet());
+    Instance * leadingInstance = mLeadingKernel->instantiate(s2pInstance->getOutputStreamBuffer());
+    Instance * sortingInstance = mSortingKernel->instantiate(leadingInstance->getOutputStreamBuffer());
+    Instance * gatheringInstance = mGatherKernel->instantiate(sortingInstance->getOutputStreamBuffer());
 
     gatheringInstance->setInternalState("Base", iBuilder->CreateBitCast(inputStream, iBuilder->getInt8PtrTy()));
 

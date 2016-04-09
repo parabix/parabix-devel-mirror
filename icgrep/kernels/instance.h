@@ -68,7 +68,9 @@ public:
         return mDefinition->getInputScalarType();
     }
 
+
     inline llvm::Value * getOutputStreamSet(const unsigned streamOffset = 0) {
+        // do not pass the result of this into an instantiate method; instead call getOutputStreamBuffer.
         return getStreamSet(mDefinition->getOutputStreamType(), mOutputStreamSet, streamOffset, mOutputBufferSize);
     }
 
@@ -94,7 +96,7 @@ public:
         return mDefinition->getBlockNoInternal(mKernelState);
     }
 
-    inline std::pair<llvm::Value *, unsigned> getResultSet() const {
+    inline std::pair<llvm::Value *, unsigned> getOutputStreamBuffer() const {
         return std::make_pair(mOutputStreamSet, mOutputBufferSize);
     }
 

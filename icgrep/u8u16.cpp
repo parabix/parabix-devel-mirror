@@ -276,6 +276,8 @@ PabloFunction * u8u16_pablo(const Encoding encoding) {
 
 typedef void (*u8u16FunctionType)(char * byte_data, size_t filesize);
 
+static ExecutionEngine * u8u16Engine = nullptr;
+
 u8u16FunctionType u8u16CodeGen(void) {
                             
     Module * M = new Module("u8u16", getGlobalContext());
@@ -299,13 +301,13 @@ u8u16FunctionType u8u16CodeGen(void) {
     
     verifyModule(*M, &dbgs());
     //std::cerr << "ExecuteKernels(); done\n";
-    ExecutionEngine * mEngine = JIT_to_ExecutionEngine(M);
+    u8u16Engine = JIT_to_ExecutionEngine(M);
     
-    mEngine->finalizeObject();
+    u8u16Engine->finalizeObject();
     //std::cerr << "finalizeObject(); done\n";
 
     delete idb;
-    return reinterpret_cast<u8u16FunctionType>(mEngine->getPointerToFunction(main_IR));
+    return reinterpret_cast<u8u16FunctionType>(u8u16Engine->getPointerToFunction(main_IR));
 }
 
 void u8u16(u8u16FunctionType fn_ptr, const std::string & fileName) {
@@ -381,6 +383,8 @@ int main(int argc, char *argv[]) {
     for (unsigned i = 0; i != inputFiles.size(); ++i) {
         u8u16(fn_ptr, inputFiles[i]);
     }
+
+    delete u8u16Engine;
 
     return 0;
 }

@@ -99,9 +99,9 @@ Function *  PipelineBuilder::ExecuteKernels() {
     BasicBlock * endBlock = BasicBlock::Create(mMod->getContext(), "end", main, 0);
 
     Instance * s2pInstance = mS2PKernel->instantiate(inputStream);
-    Instance * u8u16Instance = mU8U16Kernel->instantiate(s2pInstance->getOutputStreamSet());
-    Instance * delInstance = mDelKernel->instantiate(u8u16Instance->getOutputStreamSet());
-    Instance * p2sInstance = mP2SKernel->instantiate(delInstance->getOutputStreamSet());
+    Instance * u8u16Instance = mU8U16Kernel->instantiate(s2pInstance->getOutputStreamBuffer());
+    Instance * delInstance = mDelKernel->instantiate(u8u16Instance->getOutputStreamBuffer());
+    Instance * p2sInstance = mP2SKernel->instantiate(delInstance->getOutputStreamBuffer());
 
     
     Value * initialBufferSize = nullptr;
@@ -173,11 +173,12 @@ Function *  PipelineBuilder::ExecuteKernels() {
     
     iBuilder->SetInsertPoint(endBlock);
 
+    Value * const delmaskPtr = u8u16Instance->getOutputStream(16);
     u8u16Instance->CreateDoBlockCall();
     Value * remaining = iBuilder->CreateZExt(remainingBytes, iBuilder->getIntNTy(mBlockSize));
     Value * EOF_del = iBuilder->bitCast(iBuilder->CreateShl(Constant::getAllOnesValue(iBuilder->getIntNTy(mBlockSize)), remaining));
-    Value * const delmask = u8u16Instance->getOutputStream(16);
-    iBuilder->CreateBlockAlignedStore(iBuilder->CreateOr(EOF_del, iBuilder->CreateBlockAlignedLoad(delmask)), delmask);
+    Value * const delmaskVal = iBuilder->CreateBlockAlignedLoad(delmaskPtr);
+    iBuilder->CreateBlockAlignedStore(iBuilder->CreateOr(EOF_del, delmaskVal), delmaskPtr);
     delInstance->CreateDoBlockCall();
     p2sInstance->CreateDoBlockCall();
     iBuilder->CreateRetVoid();
