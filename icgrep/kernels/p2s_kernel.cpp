@@ -127,6 +127,9 @@ void generateP2S_16_withCompressedOutputKernel(Module * m, IDISA::IDISA_Builder 
     unsigned UTF_16_units_per_register = iBuilder->getBitBlockWidth()/16;
     
     Value * partial_counts = iBuilder->fwCast(UTF_16_units_per_register, iBuilder->CreateBlockAlignedLoad(kBuilder->getInputStream(16)));
+    if (UTF_16_units_per_register < 16) {
+        partial_counts = iBuilder->CreateZExt(partial_counts, VectorType::get(iBuilder->getIntNTy(16), iBuilder->getBitBlockWidth()/UTF_16_units_per_register));
+    }
     Value * byte_counts = iBuilder->CreateAdd(partial_counts, partial_counts); // double the code unit count to get byte counts
     
     Value * output_ptr = iBuilder->CreateBitCast(kBuilder->getOutputStream(0), i8PtrTy);
