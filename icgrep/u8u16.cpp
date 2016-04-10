@@ -216,7 +216,7 @@ PabloFunction * u8u16_pablo(const Encoding encoding) {
     u16_hi[1] = p34b.createAssign("u16_hi1", p34b.createOr(p34b.createAnd(u8scope33, bit5a2), surrogate));
     u16_hi[2] = p34b.createAssign("u16_hi2", p34b.createAnd(u8scope33, bit6a2));
     u16_hi[3] = p34b.createAssign("u16_hi3", p34b.createOr(p34b.createAnd(u8scope33, bit7a2), surrogate));
-    u16_hi[4] = p34b.createAssign("u16_hi4", p34b.createOr(p34b.createAnd(u8scope33, bit4a1), surrogate));
+    u16_hi[4] = p34b.createAssign("u16_hi4", p34b.createOr(p34b.createAnd(u8scope33, bit2a1), surrogate));
     
     //
     nAb.createIf(pfx34, 
