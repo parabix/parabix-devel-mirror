@@ -16,7 +16,7 @@ namespace IDISA {
 Value * IDISA_SSE2_Builder::hsimd_packh(unsigned fw, Value * a, Value * b) {
     if ((fw == 16) && (mBitBlockWidth == 128)) {
         Value * packuswb_func = Intrinsic::getDeclaration(mMod, Intrinsic::x86_sse2_packuswb_128);
-        return CreateCall2(packuswb_func, simd_srli(16, a, 8), simd_srli(16, b, 8));
+        return CreateCall(packuswb_func, {simd_srli(16, a, 8), simd_srli(16, b, 8)});
     }
     // Otherwise use default logic.
     return IDISA_Builder::hsimd_packh(fw, a, b);
@@ -26,7 +26,7 @@ Value * IDISA_SSE2_Builder::hsimd_packl(unsigned fw, Value * a, Value * b) {
     if ((fw == 16) && (mBitBlockWidth == 128)) {
         Value * packuswb_func = Intrinsic::getDeclaration(mMod, Intrinsic::x86_sse2_packuswb_128);
         Value * mask = simd_lomask(16);
-        return CreateCall2(packuswb_func, fwCast(16, simd_and(a, mask)), fwCast(16, simd_and(b, mask)));
+        return CreateCall(packuswb_func, {fwCast(16, simd_and(a, mask)), fwCast(16, simd_and(b, mask))});
     }
     // Otherwise use default logic.
     return IDISA_Builder::hsimd_packl(fw, a, b);

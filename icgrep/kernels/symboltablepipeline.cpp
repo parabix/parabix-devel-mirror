@@ -364,7 +364,7 @@ void SymbolTableBuilder::generateGatherKernel(KernelBuilder * kBuilder, const st
     Value * endArrayPtr = iBuilder->CreatePointerCast(endPosArray, PointerType::get(iBuilder->getInt32Ty(), 0));
     Value * gatherFunctionPtr = iBuilder->CreateLoad(iBuilder->CreateGEP(gatherFunctionPtrArray, groupIV));
     Value * outputBuffer = iBuilder->CreatePointerCast(kBuilder->getOutputStream(groupIV), iBuilder->getInt8PtrTy());
-    iBuilder->CreateCall5(gatherFunctionPtr, base, startArrayPtr, endArrayPtr, iBuilder->getInt32(32), outputBuffer);
+    iBuilder->CreateCall(gatherFunctionPtr, {base, startArrayPtr, endArrayPtr, iBuilder->getInt32(32), outputBuffer});
     // Copy the unused start positions to the front of the start position array and adjust the start index
     Value * remainingArrayPtr = iBuilder->CreateGEP(startArrayPtr, iBuilder->getInt32(gatherCount));
     Value * remainingCount = iBuilder->CreateSub(startIndexPhi4, iBuilder->getInt32(gatherCount));
@@ -417,15 +417,15 @@ Function * SymbolTableBuilder::generateGatherFunction(const unsigned minKeyLengt
         function->setDoesNotThrow();
 
         Function::arg_iterator args = function->arg_begin();
-        Value * const base = args++;
+        Value * const base = &*(args++);
         base->setName("base");
-        Value * startArray = args++;
+        Value * startArray = &*(args++);
         startArray->setName("startArray");
-        Value * endArray = args++;
+        Value * endArray = &*(args++);
         endArray->setName("endArray");
-        Value * const numOfKeys = args++;
+        Value * const numOfKeys = &*(args++);
         numOfKeys->setName("numOfKeys");
-        Value * result = args++;
+        Value * result = &*(args++);
         result->setName("result");
 
         BasicBlock * entry = BasicBlock::Create(mMod->getContext(), "entry", function, 0);
@@ -651,10 +651,10 @@ Function * SymbolTableBuilder::ExecuteKernels(){
     main->setCallingConv(CallingConv::C);
     Function::arg_iterator args = main->arg_begin();
 
-    Value * const inputStream = args++;
+    Value * const inputStream = &*(args++);
     inputStream->setName("inputStream");
 
-    Value * const bufferSize = args++;
+    Value * const bufferSize = &*(args++);
     bufferSize->setName("bufferSize");
 
     iBuilder->SetInsertPoint(BasicBlock::Create(mMod->getContext(), "entry", main,0));
@@ -766,7 +766,7 @@ Function * SymbolTableBuilder::ExecuteKernels(){
         Value * endArray = iBuilder->CreateGEP(positionArray, {iBuilder->getInt32(0), groupIV, iBuilder->getInt32(3)}, "endArray");
         Value * endArrayPtr = iBuilder->CreatePointerCast(endArray, PointerType::get(iBuilder->getInt32Ty(), 0));
         Value * outputBuffer = iBuilder->CreatePointerCast(gatheringInstance->getOutputStream(groupIV), iBuilder->getInt8PtrTy());
-        iBuilder->CreateCall5(mGatherFunction.at(i), base, startArrayPtr, endArrayPtr, startIndex, outputBuffer);
+        iBuilder->CreateCall(mGatherFunction.at(i), {base, startArrayPtr, endArrayPtr, startIndex, outputBuffer});
         iBuilder->CreateBr(nextNonEmptyGroup);
 
         iBuilder->SetInsertPoint(nextNonEmptyGroup);

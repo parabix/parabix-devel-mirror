@@ -234,25 +234,25 @@ Function * KernelBuilder::prepareFunction(std::vector<unsigned> && inputStreamOf
     }
     mDoBlock->setDoesNotThrow();
     Function::arg_iterator args = mDoBlock->arg_begin();
-    mKernelStateParam = args++;
+    mKernelStateParam = &*(args++);
     mKernelStateParam->setName("this");
     if (mInputScalarType) {
-        mInputScalarParam = args++;
+        mInputScalarParam = &*(args++);
         mInputScalarParam->setName("inputScalars");
     }
     if (mInputStreamType) {
         for (const unsigned offset : mInputStreamOffsets) {
-            Value * const inputStreamSet = args++;
+            Value * const inputStreamSet = &*(args++);
             inputStreamSet->setName("inputStreamSet" + std::to_string(offset));
             mInputStreamParam.emplace(offset, inputStreamSet);
         }
     }
     if (mOutputScalarType) {
-        mOutputScalarParam = args++;
+        mOutputScalarParam = &*(args++);
         mOutputScalarParam->setName("outputScalars");
     }
     if (mOutputStreamType) {
-        mOutputStreamParam = args;
+        mOutputStreamParam = &*args;
         mOutputStreamParam->setName("outputStreamSet");
     }
     iBuilder->SetInsertPoint(BasicBlock::Create(iBuilder->getContext(), "entry", mDoBlock, 0));

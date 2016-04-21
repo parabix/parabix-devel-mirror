@@ -71,9 +71,9 @@ Function *  PipelineBuilder::ExecuteKernels() {
     main->setCallingConv(CallingConv::C);
     Function::arg_iterator args = main->arg_begin();
     
-    Value * const inputStream = args++;
+    Value * const inputStream = &*(args++);
     inputStream->setName("input");
-    Value * const bufferSize = args++;
+    Value * const bufferSize = &*(args++);
     bufferSize->setName("bufferSize");
     
     iBuilder->SetInsertPoint(BasicBlock::Create(mMod->getContext(), "entry", main,0));

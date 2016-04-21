@@ -66,17 +66,17 @@ Function * generateScanWordRoutine(Module * m, IDISA::IDISA_Builder * iBuilder, 
     function->addFnAttr(llvm::Attribute::AlwaysInline);
 
     Function::arg_iterator args = function->arg_begin();
-    Value * instance = args++;
+    Value * instance = &*(args++);
     instance->setName("this");
-    Value * matches_input_parm = args++;
+    Value * matches_input_parm = &*(args++);
     matches_input_parm->setName("matches");
-    Value * record_breaks_input_parm = args++;
+    Value * record_breaks_input_parm = &*(args++);
     record_breaks_input_parm->setName("breaks");
-    Value * scanwordPos = args++;
+    Value * scanwordPos = &*(args++);
     scanwordPos->setName("scanwordPos");
-    Value * recordStart_input_parm = args++;
+    Value * recordStart_input_parm = &*(args++);
     recordStart_input_parm->setName("pendingLineStart");
-    Value * recordNum_input_parm = args++;
+    Value * recordNum_input_parm = &*(args++);
     recordNum_input_parm->setName("lineNum");
 
     Constant * matchProcessor;

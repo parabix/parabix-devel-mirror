@@ -65,13 +65,13 @@ Function * PipelineBuilder::ExecuteKernels() {
     main->setCallingConv(CallingConv::C);
     Function::arg_iterator args = main->arg_begin();
 
-    Value * const inputStream = args++;
+    Value * const inputStream = &*(args++);
     inputStream->setName("input");
-    Value * const bufferSize = args++;
+    Value * const bufferSize = &*(args++);
     bufferSize->setName("bufferSize");
-    Value * const fileName = args++;
+    Value * const fileName = &*(args++);
     fileName->setName("fileName");
-    Value * const finalLineUnterminated = args++;
+    Value * const finalLineUnterminated = &*(args++);
     finalLineUnterminated->setName("finalLineUnterminated");
 
     iBuilder->SetInsertPoint(BasicBlock::Create(mMod->getContext(), "entry", main,0));

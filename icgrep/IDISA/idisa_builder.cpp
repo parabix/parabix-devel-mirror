@@ -62,10 +62,10 @@ void IDISA_Builder::CallPrintRegister(const std::string & name, Value * const va
         IRBuilder<> builder(entry);
         std::vector<Value *> args;
         args.push_back(geti8StrVal(*mMod, out.str().c_str(), ""));
-        Value * const name = arg++;
+        Value * const name = &*(arg++);
         name->setName("name");
         args.push_back(name);
-        Value * value = arg;
+        Value * value = &*arg;
         value->setName("value");
         Type * const byteVectorType = VectorType::get(getInt8Ty(), (mBitBlockWidth / 8));
         value = builder.CreateBitCast(value, byteVectorType);
@@ -78,7 +78,7 @@ void IDISA_Builder::CallPrintRegister(const std::string & name, Value * const va
         printRegister = function;
     }
     assert (value->getType()->canLosslesslyBitCastTo(mBitBlockType));
-    CreateCall2(printRegister, geti8StrVal(*mMod, name.c_str(), name), CreateBitCast(value, mBitBlockType));
+    CreateCall(printRegister, {geti8StrVal(*mMod, name.c_str(), name), CreateBitCast(value, mBitBlockType)});
 }
 
 void IDISA_Builder::CallPrintInt(const std::string & name, Value * const value) {
@@ -92,10 +92,10 @@ void IDISA_Builder::CallPrintInt(const std::string & name, Value * const value) 
         IRBuilder<> builder(entry);
         std::vector<Value *> args;
         args.push_back(geti8StrVal(*mMod, out.c_str(), ""));
-        Value * const name = arg++;
+        Value * const name = &*(arg++);
         name->setName("name");
         args.push_back(name);
-        Value * value = arg;
+        Value * value = &*arg;
         value->setName("value");
         args.push_back(value);
         builder.CreateCall(create_printf(mMod), args);
@@ -110,7 +110,7 @@ void IDISA_Builder::CallPrintInt(const std::string & name, Value * const value) 
         num = CreateZExtOrBitCast(value, getInt64Ty());
     }
     assert (num->getType()->isIntegerTy());
-    CreateCall2(printRegister, geti8StrVal(*mMod, name.c_str(), name), num);
+    CreateCall(printRegister, {geti8StrVal(*mMod, name.c_str(), name), num});
 }
 
 Constant * IDISA_Builder::simd_himask(unsigned fw) {
@@ -348,7 +348,6 @@ Value * IDISA_Builder::mvmd_slli(unsigned fw, Value * a, unsigned shift) {
 }
 
 Value * IDISA_Builder::mvmd_srli(unsigned fw, Value * a, unsigned shift) {
-    unsigned field_count = mBitBlockWidth/fw;
     return mvmd_dslli(fw, Constant::getNullValue(fwVectorType(fw)), a, shift);
 }
 

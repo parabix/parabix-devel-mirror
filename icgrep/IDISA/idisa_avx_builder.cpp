@@ -105,7 +105,7 @@ Value * IDISA_AVX2_Builder::hsimd_packl(unsigned fw, Value * a, Value * b) {
 Value * IDISA_AVX2_Builder::esimd_mergeh(unsigned fw, Value * a, Value * b) {
     if ((fw == 128) && (mBitBlockWidth == 256)) {
         Value * vperm2i128func = Intrinsic::getDeclaration(mMod, Intrinsic::x86_avx2_vperm2i128);
-        return CreateCall3(vperm2i128func, fwCast(64, a), fwCast(64, b), getInt8(0x31));
+        return CreateCall(vperm2i128func, {fwCast(64, a), fwCast(64, b), getInt8(0x31)});
     }
     // Otherwise use default SSE logic.
     return IDISA_SSE_Builder::esimd_mergeh(fw, a, b);
@@ -114,7 +114,7 @@ Value * IDISA_AVX2_Builder::esimd_mergeh(unsigned fw, Value * a, Value * b) {
 Value * IDISA_AVX2_Builder::esimd_mergel(unsigned fw, Value * a, Value * b) {
     if ((fw == 128) && (mBitBlockWidth == 256)) {
         Value * vperm2i128func = Intrinsic::getDeclaration(mMod, Intrinsic::x86_avx2_vperm2i128);
-        return CreateCall3(vperm2i128func, fwCast(64, a), fwCast(64, b), getInt8(0x20));
+        return CreateCall(vperm2i128func, {fwCast(64, a), fwCast(64, b), getInt8(0x20)});
     }
     // Otherwise use default SSE logic.
     return IDISA_SSE_Builder::esimd_mergel(fw, a, b);
@@ -125,7 +125,7 @@ Value * IDISA_AVX2_Builder::hsimd_packl_in_lanes(unsigned lanes, unsigned fw, Va
         Value * vpackuswbfunc = Intrinsic::getDeclaration(mMod, Intrinsic::x86_avx2_packuswb);
         Value * a_low = fwCast(16, simd_and(a, simd_lomask(fw)));
         Value * b_low = fwCast(16, simd_and(b, simd_lomask(fw)));
-        Value * pack = CreateCall2(vpackuswbfunc, a_low, b_low);
+        Value * pack = CreateCall(vpackuswbfunc, {a_low, b_low});
         return pack;
     }
     // Otherwise use default SSE logic.
@@ -137,7 +137,7 @@ Value * IDISA_AVX2_Builder::hsimd_packh_in_lanes(unsigned lanes, unsigned fw, Va
         Value * vpackuswbfunc = Intrinsic::getDeclaration(mMod, Intrinsic::x86_avx2_packuswb);
         Value * a_low = simd_srli(fw, a, fw/2);
         Value * b_low = simd_srli(fw, b, fw/2);
-        Value * pack = CreateCall2(vpackuswbfunc, a_low, b_low);
+        Value * pack = CreateCall(vpackuswbfunc, {a_low, b_low});
         return pack;
     }
     // Otherwise use default SSE logic.
