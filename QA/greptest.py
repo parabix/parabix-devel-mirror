@@ -114,7 +114,7 @@ if __name__ == '__main__':
 	QA_dir = os.path.dirname(sys.argv[0])
 	option_parser = optparse.OptionParser(usage='python %prog [options] <grep_executable>', version='1.0')
 	option_parser.add_option('-d', '--datafile_dir',
-                          dest = 'datafile_dir', type='string', default='/tmp',
+                          dest = 'datafile_dir', type='string', default='testfiles',
                           help = 'directory for test files.')
 	option_parser.add_option('-t', '--testcases',
                           dest = 'testcases', type='string', default='greptest.xml',
@@ -128,11 +128,18 @@ if __name__ == '__main__':
 	options, args = option_parser.parse_args(sys.argv[1:])
 	if len(args) != 1:
 		option_parser.print_usage()
-		sys.exit()
+		sys.exit(1)
+
+        if not os.path.exists(options.datafile_dir):
+            os.mkdir(options.datafile_dir)
+        if not os.path.isdir(options.datafile_dir):
+            print "Cannot use %s as working test file directory.\n" % options.datafile_dir
+            sys.exit(1) 
 	grep_program_under_test = args[0]
 	grep_test_file = open(os.path.join(QA_dir,options.testcases), 'r')
 	grep_test_spec = grep_test_file.read()
 	grep_test_file.close()
+
 	make_data_files(grep_test_spec)
 	run_tests(grep_test_spec)
 
