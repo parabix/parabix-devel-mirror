@@ -130,15 +130,16 @@ static int * total_count;
 static std::stringstream * resultStrs = nullptr;
 static std::vector<std::string> inputFiles;
 
-void initResult(std::vector<std::string> filenames, const int firstName, const int n){
-    if (n - firstName > 1) {
+void initResult(std::vector<std::string> filenames){
+    const int n = filenames.size();
+    if (n > 1) {
         ShowFileNames = true;
     }
     inputFiles = filenames;
     resultStrs = new std::stringstream[n];
     total_count = new int[n];
-    for (int i=1; i<inputFiles.size(); i++){
-        total_count[i-1] = 0;
+    for (int i=0; i<inputFiles.size(); i++){
+        total_count[i] = 0;
     }
 
 }
@@ -147,9 +148,9 @@ extern "C" {
     void wrapped_report_match(uint64_t lineNum, uint64_t line_start, uint64_t line_end, const char * buffer, uint64_t filesize, char * filename) {
 
         int idx = 0;
-        for (int i=1; i<inputFiles.size(); i++){
+        for (int i=0; i<inputFiles.size(); i++){
             if (inputFiles[i] == filename){
-                idx = i-1;
+                idx = i;
                 break;
             }
         }
@@ -207,21 +208,21 @@ extern "C" {
 void PrintResult(){
     if(CountOnly){
         if (!ShowFileNames) {
-           for (int i=1; i<inputFiles.size(); i++){
-               std::cout << total_count[i-1] << std::endl;
+           for (int i=0; i<inputFiles.size(); i++){
+               std::cout << total_count[i] << std::endl;
            }
         }
         else {
-            for (int i=1; i<inputFiles.size(); i++){
-                std::cout << inputFiles[i] << ':' << total_count[i-1] << std::endl;
+            for (int i=0; i<inputFiles.size(); i++){
+                std::cout << inputFiles[i] << ':' << total_count[i] << std::endl;
             };
         }
         return;
     }
 
     std::string out;
-    for (int i=1; i<inputFiles.size(); i++){
-        std::cout << resultStrs[i-1].str();
+    for (int i=0; i<inputFiles.size(); i++){
+        std::cout << resultStrs[i].str();
     }
 }
 

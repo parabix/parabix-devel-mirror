@@ -30,7 +30,6 @@ static cl::opt<std::string> IRFileName("precompiled", cl::desc("Use precompiled 
 
 static cl::opt<int> Threads("t", cl::desc("Total number of threads."), cl::init(1));
 
-static unsigned firstInputFile = 1;  // Normal case when first positional arg is a regex.
 static std::string allREs;
 static re::ModeFlagSet globalFlags = 0;
 
@@ -53,12 +52,8 @@ re::RE * get_icgrep_RE() {
     
     if (regexVector.size() == 0) {
         regexVector.push_back(inputFiles[0]);
-        firstInputFile = 1;
+        inputFiles.erase(inputFiles.begin());
     }
-    else {
-        firstInputFile = 0;
-    }
-    
     if (CaseInsensitive) globalFlags |= re::CASE_INSENSITIVE_MODE_FLAG;
 
   
@@ -147,9 +142,9 @@ int main(int argc, char *argv[]) {
     GrepEngine grepEngine;
     grepEngine.grepCodeGen(module_name, re_ast);
 
-    initResult(inputFiles, firstInputFile, inputFiles.size());
+    initResult(inputFiles);
     if (Threads <= 1) {
-        for (unsigned i = firstInputFile; i != inputFiles.size(); ++i) {
+        for (unsigned i = 0; i != inputFiles.size(); ++i) {
             grepEngine.doGrep(inputFiles[i]);
         }        
     } else if (Threads > 1) {

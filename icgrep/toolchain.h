@@ -21,7 +21,7 @@ void icgrep_Linking(Module * m, ExecutionEngine * e);
 re::CC * getParsedCodePointSet();
 void setParsedCodePointSet();
 
-void initResult(std::vector<std::string> filenames, const int firstName, const int n);
+void initResult(std::vector<std::string> filenames);
 void PrintResult();
 
 #endif
