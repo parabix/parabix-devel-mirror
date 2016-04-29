@@ -68,7 +68,7 @@ bool GrepEngine::finalLineIsUnterminated(const char * const fileBuffer, const si
     return (static_cast<unsigned char>(fileBuffer[fileSize-3]) != 0xE2) || (penult_byte != 0x80);
 }
 
-void GrepEngine::doGrep(const std::string & fileName) {
+void GrepEngine::doGrep(const std::string & fileName, const int fileIdx) {
     const path file(fileName);
     if (exists(file)) {
         if (is_directory(file)) {
@@ -88,7 +88,7 @@ void GrepEngine::doGrep(const std::string & fileName) {
             throw std::runtime_error("Boost mmap error: " + fileName + ": " + e.what());
         }
         char * const fileBuffer = file.data();
-        mGrepFunction(fileBuffer, fileSize, fileName.c_str(), finalLineIsUnterminated(fileBuffer, fileSize));
+        mGrepFunction(fileBuffer, fileSize, fileIdx, finalLineIsUnterminated(fileBuffer, fileSize));
         file.close();
     }
 }
@@ -134,7 +134,7 @@ re::CC *  GrepEngine::grepCodepoints() {
     uint64_t finalLineUnterminated = 0;
     if(finalLineIsUnterminated(mFileBuffer, mFileSize))
         finalLineUnterminated = 1;    
-    mGrepFunction(mFileBuffer, mFileSize, mFileName.c_str(), finalLineUnterminated);
+    mGrepFunction(mFileBuffer, mFileSize, 0, finalLineUnterminated);
 
     return getParsedCodePointSet();
 }

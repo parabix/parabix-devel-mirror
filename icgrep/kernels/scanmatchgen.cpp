@@ -83,7 +83,7 @@ Function * generateScanWordRoutine(Module * m, IDISA::IDISA_Builder * iBuilder, 
     if (isNameExpression) {
         matchProcessor = m->getOrInsertFunction("insert_codepoints", Type::getVoidTy(ctxt), T, T, T, S, nullptr);
     } else {
-        matchProcessor = m->getOrInsertFunction("wrapped_report_match", Type::getVoidTy(ctxt), T, T, T, S, T, S, nullptr);
+        matchProcessor = m->getOrInsertFunction("wrapped_report_match", Type::getVoidTy(ctxt), T, T, T, S, T, T, nullptr);
     }
     iBuilder->SetInsertPoint(BasicBlock::Create(ctxt, "entry", function,0));
 
@@ -157,8 +157,8 @@ Function * generateScanWordRoutine(Module * m, IDISA::IDISA_Builder * iBuilder, 
         iBuilder->CreateCall(matchProcessor, std::vector<Value *>({matchRecordNum_phi, matchRecordStart_phi, matchRecordEnd, fileBuf}));
     } else {
         Value * fileSize = iBuilder->CreateLoad(kBuilder->getInternalStateInternal(instance, "FileSize"));
-        Value * fileName = iBuilder->CreateLoad(kBuilder->getInternalStateInternal(instance, "FileName"));
-        iBuilder->CreateCall(matchProcessor, std::vector<Value *>({matchRecordNum_phi, matchRecordStart_phi, matchRecordEnd, fileBuf, fileSize, fileName}));
+        Value * fileIdx = iBuilder->CreateLoad(kBuilder->getInternalStateInternal(instance, "FileIdx"));
+        iBuilder->CreateCall(matchProcessor, std::vector<Value *>({matchRecordNum_phi, matchRecordStart_phi, matchRecordEnd, fileBuf, fileSize, fileIdx}));
     }
 
     Value * remaining_matches = generateResetLowestBit(iBuilder, matches_phi);
@@ -216,7 +216,7 @@ void generateScanMatch(Module * m, IDISA::IDISA_Builder * iBuilder, unsigned sca
     const unsigned lineNum = kBuilder->addInternalState(T, "LineNum");
     kBuilder->addInternalState(S, "FileBuf");
     kBuilder->addInternalState(T, "FileSize");
-    kBuilder->addInternalState(S, "FileName");
+    kBuilder->addInternalState(T, "FileIdx");
 
     Function * function = kBuilder->prepareFunction();
 

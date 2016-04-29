@@ -145,15 +145,9 @@ void initResult(std::vector<std::string> filenames){
 }
 
 extern "C" {
-    void wrapped_report_match(uint64_t lineNum, uint64_t line_start, uint64_t line_end, const char * buffer, uint64_t filesize, char * filename) {
+    void wrapped_report_match(uint64_t lineNum, uint64_t line_start, uint64_t line_end, const char * buffer, uint64_t filesize, int fileIdx) {
 
-        int idx = 0;
-        for (int i=0; i<inputFiles.size(); i++){
-            if (inputFiles[i] == filename){
-                idx = i;
-                break;
-            }
-        }
+        int idx = fileIdx;
 
         if(CountOnly){
             total_count[idx]++;
@@ -161,7 +155,7 @@ extern "C" {
         }
 
         if (ShowFileNames) {
-            resultStrs[idx] << filename << ':';
+            resultStrs[idx] << inputFiles[idx] << ':';
         }
         if (ShowLineNumbers) {
             resultStrs[idx] << lineNum << ":";

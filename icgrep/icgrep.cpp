@@ -103,7 +103,7 @@ void *DoGrep(void *args)
     count_mutex.unlock();
 
     while (fileIdx < inputFiles.size()){
-        grepEngine->doGrep(inputFiles[fileIdx]);
+        grepEngine->doGrep(inputFiles[fileIdx], fileIdx);
         
         count_mutex.lock();
         fileCount++;
@@ -240,7 +240,7 @@ int main(int argc, char *argv[]) {
     initResult(inputFiles);
     if (Threads <= 1) {
         for (unsigned i = 0; i != inputFiles.size(); ++i) {
-            grepEngine.doGrep(inputFiles[i]);
+            grepEngine.doGrep(inputFiles[i], i);
         }        
     } else if (Threads > 1) {
         const unsigned numOfThreads = Threads; // <- convert the command line value into an integer to allow stack allocation

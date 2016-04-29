@@ -15,7 +15,7 @@
 namespace llvm { class raw_ostream; }
 
 class GrepEngine {
-    typedef void (*GrepFunctionType)(char * byte_data, size_t filesize, const char* filename, uint64_t finalLineUnterminated);
+    typedef void (*GrepFunctionType)(char * byte_data, size_t filesize, const int fileIdx, uint64_t finalLineUnterminated);
 public:
 
     GrepEngine() {}
@@ -24,7 +24,7 @@ public:
   
     void grepCodeGen(std::string moduleName, re::RE * re_ast, bool isNameExpression = false);
     
-    void doGrep(const std::string & fileName);
+    void doGrep(const std::string & fileName, const int fileIdx);
     
     re::CC *  grepCodepoints();
     

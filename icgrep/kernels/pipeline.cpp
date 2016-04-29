@@ -61,7 +61,7 @@ Function * PipelineBuilder::ExecuteKernels() {
     Type * const int8PtrTy = iBuilder->getInt8PtrTy();
     Type * const inputType = PointerType::get(ArrayType::get(StructType::get(mMod->getContext(), std::vector<Type *>({ArrayType::get(mBitBlockType, 8)})), 1), 0);
 
-    Function * const main = cast<Function>(mMod->getOrInsertFunction("Main", Type::getVoidTy(mMod->getContext()), inputType, int64ty, int8PtrTy, iBuilder->getInt1Ty(), nullptr));
+    Function * const main = cast<Function>(mMod->getOrInsertFunction("Main", Type::getVoidTy(mMod->getContext()), inputType, int64ty, int64ty, iBuilder->getInt1Ty(), nullptr));
     main->setCallingConv(CallingConv::C);
     Function::arg_iterator args = main->arg_begin();
 
@@ -69,8 +69,8 @@ Function * PipelineBuilder::ExecuteKernels() {
     inputStream->setName("input");
     Value * const bufferSize = &*(args++);
     bufferSize->setName("bufferSize");
-    Value * const fileName = &*(args++);
-    fileName->setName("fileName");
+    Value * const fileIdx = &*(args++);
+    fileIdx->setName("fileIdx");
     Value * const finalLineUnterminated = &*(args++);
     finalLineUnterminated->setName("finalLineUnterminated");
 
@@ -100,7 +100,7 @@ Function * PipelineBuilder::ExecuteKernels() {
 
     scanMatchInstance->setInternalState("FileBuf", iBuilder->CreateBitCast(inputStream, int8PtrTy));
     scanMatchInstance->setInternalState("FileSize", bufferSize);
-    scanMatchInstance->setInternalState("FileName", fileName);
+    scanMatchInstance->setInternalState("FileIdx", fileIdx);
 
     Value * initialBufferSize = nullptr;
     BasicBlock * initialBlock = nullptr;
