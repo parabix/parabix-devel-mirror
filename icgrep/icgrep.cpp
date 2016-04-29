@@ -17,6 +17,8 @@
 #include <toolchain.h>
 #include <mutex>
 
+#include <iostream> // MEEE
+
 static cl::OptionCategory aRegexSourceOptions("Regular Expression Options",
                                        "These options control the regular expression source.");
 
@@ -24,11 +26,16 @@ static cl::list<std::string> inputFiles(cl::Positional, cl::desc("<regex> <input
 
 static cl::opt<bool> CaseInsensitive("i", cl::desc("Ignore case distinctions in the pattern and the file."), cl::cat(aRegexSourceOptions));
 
+
 static cl::list<std::string> regexVector("e", cl::desc("Regular expression"), cl::ZeroOrMore, cl::cat(aRegexSourceOptions));
 static cl::opt<std::string> RegexFilename("f", cl::desc("Take regular expressions (one per line) from a file"), cl::value_desc("regex file"), cl::init(""), cl::cat(aRegexSourceOptions));
 static cl::opt<std::string> IRFileName("precompiled", cl::desc("Use precompiled regular expression"), cl::value_desc("LLVM IR file"), cl::init(""), cl::cat(aRegexSourceOptions));
 
 static cl::opt<int> Threads("t", cl::desc("Total number of threads."), cl::init(1));
+
+static cl::opt<bool> GrepSupport("gs", cl::desc("Grep support. Pipe the output of icgrep into grep. \
+         Gives you colored output + back-referencing capability."), cl::cat(aRegexSourceOptions));
+
 
 static std::string allREs;
 static re::ModeFlagSet globalFlags = 0;
@@ -107,6 +114,89 @@ void *DoGrep(void *args)
     pthread_exit(NULL);
 }
 
+
+// Returns true if the command line argument shouldn't be passed to icGrep or Grep.
+bool isArgUnwantedForAll(char *argument) {
+
+    bool isUnwated = false;
+    std::vector<std::string> unwantedFlags = {"-gs"};
+
+    for (int i=0; i<unwantedFlags.size(); i++){    
+        if (strcmp(argument, unwantedFlags[i].c_str()) == 0) {
+            isUnwated = true;
+        }
+    }
+
+    return isUnwated;
+}
+// Filters out the command line strings that shouldn't be passed on to Grep
+bool isArgUnwantedForGrep(char *argument) {
+    bool isUnwated = false;
+    std::vector<std::string> unwantedFlags = {"-n"};
+
+    for (int i = 0; i < unwantedFlags.size(); i++){
+        if (strcmp(argument, unwantedFlags[i].c_str()) == 0) {
+            isUnwated = true;
+        }
+    }
+
+    for (int i = 0; i < inputFiles.size(); i++){    // filter out input content files.
+        if (strcmp(argument, inputFiles[i].c_str()) == 0) {
+            isUnwated = true;
+        }
+    }
+
+    return isUnwated;
+}
+// Filters out the command line strings that shouldn't be passed on to IcGrep
+bool isArgUnwantedForIcGrep(char *argument) {
+    bool isUnwated = false;
+    std::vector<std::string> unwantedFlags = {"-c"};
+
+    for (int i=0; i<unwantedFlags.size(); i++){
+        if (strcmp(argument, unwantedFlags[i].c_str()) == 0) {
+            isUnwated = true;
+        }
+    }
+
+    return isUnwated;
+}
+
+/*
+* Constructs a shell command that calls icgrep and then pipes the output to grep.
+* Then executs this shell command using the "system()" function.
+* This allows the output to be colored since all output is piped to grep.
+*/ 
+void pipeIcGrepOutputToGrep(int argc, char *argv[]) {
+    std::string icGrepArguments = "";
+    std::string grepArguments = "";
+
+    // Construct the shell arguments for icgrep and grep 
+    // by filtering out the command line arguments passed into this process.
+    for (int i=1; i< argc; i++) {
+        if (!isArgUnwantedForAll(argv[i])) {
+
+            if (!isArgUnwantedForIcGrep(argv[i])) {
+                icGrepArguments.append(argv[i]);
+                icGrepArguments.append(" ");
+            }
+
+            if (!isArgUnwantedForGrep(argv[i])) {
+                grepArguments.append(argv[i]);
+                grepArguments.append(" ");
+            }
+        }
+    }
+
+    std::string systemCall = "./icgrep ";
+    systemCall.append(icGrepArguments);
+    systemCall.append(" ");
+    systemCall.append(" | grep --color=always -P ");
+    systemCall.append(grepArguments);
+    system(systemCall.c_str());
+}
+
+
 int main(int argc, char *argv[]) {
     StringMap<cl::Option*> Map;
     cl::getRegisteredOptions(Map);
@@ -138,6 +228,11 @@ int main(int argc, char *argv[]) {
     
     re::RE * re_ast = get_icgrep_RE();
     std::string module_name = "grepcode:" + sha1sum(allREs) + ":" + std::to_string(globalFlags);
+
+    if (GrepSupport) {  // Calls icgrep again on command line and passes output to grep.
+        pipeIcGrepOutputToGrep(argc, argv);
+        return 0;   // icgrep is called again, so we need to end this process.
+    }
     
     GrepEngine grepEngine;
     grepEngine.grepCodeGen(module_name, re_ast);
