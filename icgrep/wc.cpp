@@ -71,7 +71,12 @@ static cl::opt<char> OptLevel("O", cl::desc("Optimization level. [-O0, -O1, -O2,
 static cl::opt<unsigned> SegmentSize("segment-size", cl::desc("Segment Size"), cl::value_desc("positive integer"), cl::init(1));
 
 
-static int fieldWidth = 9;  // default field width
+static int defaultFieldWidth = 7;  // default field width
+
+std::vector<uint64_t> lineCount;
+std::vector<uint64_t> wordCount;
+std::vector<uint64_t> charCount;
+std::vector<uint64_t> byteCount;
 
 uint64_t TotalLines = 0;
 uint64_t TotalWords = 0;
@@ -82,24 +87,14 @@ uint64_t TotalBytes = 0;
 //
 extern "C" {
     void report_counts(uint64_t lines, uint64_t words, uint64_t chars, uint64_t bytes, uint64_t fileIdx) {
-        if (CountLines) {
-            std::cout << std::setw(fieldWidth) << lines;
-            TotalLines += lines;
-        }
-        // FIXME Temporary Hack because null bytes at EOF are considered word chars.
-        if (CountWords) {
-            std::cout << std::setw(fieldWidth) << words - 1;
-            TotalWords += words - 1;
-        }
-        if (CountChars) {
-            std::cout << std::setw(fieldWidth) << chars ;
-            TotalChars += chars;
-        }
-        if (CountBytes) {
-            std::cout << std::setw(fieldWidth) << bytes;
-            TotalBytes += bytes;
-        }
-        std::cout << " " << inputFiles[fileIdx] << std::endl;
+        lineCount[fileIdx] = lines;
+        wordCount[fileIdx] = words;
+        charCount[fileIdx] = chars;
+        byteCount[fileIdx] = bytes;
+        TotalLines += lines;
+        TotalWords += words;
+        TotalChars += chars;
+        TotalBytes += bytes;
     }
 }
 
@@ -480,12 +475,42 @@ int main(int argc, char *argv[]) {
     
     wcFunctionType fn_ptr = wcCodeGen();
 
-    for (unsigned i = 0; i != inputFiles.size(); ++i) {
+    int fileCount = inputFiles.size();
+    lineCount.resize(fileCount);
+    wordCount.resize(fileCount);
+    charCount.resize(fileCount);
+    byteCount.resize(fileCount);
+    
+    for (unsigned i = 0; i < inputFiles.size(); ++i) {
         wc(fn_ptr, i);
     }
     
     delete wcEngine;
     
+    int maxCount = 0;
+    if (CountLines) maxCount = TotalLines;
+    if (CountWords) maxCount = TotalWords;
+    if (CountChars) maxCount = TotalChars;
+    if (CountBytes) maxCount = TotalBytes;
+    
+    int fieldWidth = std::to_string(maxCount).size() + 1;
+    if (fieldWidth < defaultFieldWidth) fieldWidth = defaultFieldWidth;
+
+    for (unsigned i = 0; i < inputFiles.size(); ++i) {
+        if (CountLines) {
+            std::cout << std::setw(fieldWidth) << lineCount[i];
+        }
+        if (CountWords) {
+            std::cout << std::setw(fieldWidth) << wordCount[i];
+        }
+        if (CountChars) {
+            std::cout << std::setw(fieldWidth) << charCount[i];
+        }
+        if (CountBytes) {
+            std::cout << std::setw(fieldWidth) << byteCount[i];
+        }
+        std::cout << " " << inputFiles[i] << std::endl;
+    }
     if (inputFiles.size() > 1) {
         if (CountLines) {
             std::cout << std::setw(fieldWidth) << TotalLines;
