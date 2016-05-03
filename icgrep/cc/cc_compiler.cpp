@@ -50,6 +50,7 @@ PabloAST * CC_Compiler::charset_expr(const CC * cc, PabloBlockOrBuilder & pb) {
     if (cc->empty()) {
         return pb.createZeroes();
     }
+    bool includes_codepoint_zero = lo_codepoint(cc->begin()) == 0;
     if (cc->size() > 2) {
         bool combine = true;
         for (const interval_t & i : *cc) {
@@ -86,7 +87,12 @@ PabloAST * CC_Compiler::charset_expr(const CC * cc, PabloBlockOrBuilder & pb) {
         PabloAST * temp = char_or_range_expr(lo_codepoint(i), hi_codepoint(i), pb);
         expr = (expr == nullptr) ? temp : pb.createOr(expr, temp);
     }
-    return expr;
+    if (includes_codepoint_zero) {
+        return pb.createInFile(expr);
+    }
+    else {
+        return expr;
+    }
 }
 
 template<typename PabloBlockOrBuilder>

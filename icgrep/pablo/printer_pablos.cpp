@@ -119,6 +119,10 @@ void PabloPrinter::print(const Statement * stmt, llvm::raw_ostream & out, const 
         out << count->getName() << " = pablo.Count(";
         print(count->getExpr(), out);
         out << ")";
+    } else if (const InFile * e = dyn_cast<const InFile>(stmt)) {
+        out << e->getName() << " = pablo.InFile(";
+        print(e->getExpr(), out);
+        out << ")";
     } else {
         out << "???";
     }

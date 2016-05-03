@@ -20,6 +20,7 @@
 #include <pablo/pe_or.h>
 #include <pablo/pe_scanthru.h>
 #include <pablo/pe_sel.h>
+#include <pablo/pe_infile.h>
 #include <pablo/pe_integer.h>
 #include <pablo/pe_string.h>
 #include <pablo/pe_var.h>
@@ -180,6 +181,10 @@ public:
     PabloAST * createCount(PabloAST * expr);
     
     PabloAST * createCount(PabloAST * expr, const std::string prefix);
+    
+    PabloAST * createInFile(PabloAST * expr);
+    
+    PabloAST * createInFile(PabloAST * expr, const std::string prefix);
     
     If * createIf(PabloAST * condition, const std::initializer_list<Assign *> definedVars, PabloBlock * body);
 

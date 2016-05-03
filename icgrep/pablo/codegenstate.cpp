@@ -153,7 +153,17 @@ PabloAST * PabloBlock::createCount(PabloAST * expr, const std::string prefix) {
     return insertAtInsertionPoint(new Count(expr, makeName(prefix, false)));
 }
 
-    
+PabloAST * PabloBlock::createInFile(PabloAST * expr) {
+    assert (expr);
+    return insertAtInsertionPoint(new InFile(expr, makeName("count_")));
+}
+
+PabloAST * PabloBlock::createInFile(PabloAST * expr, const std::string prefix) {
+    assert (expr);
+    return insertAtInsertionPoint(new InFile(expr, makeName(prefix, false)));
+}
+
+
 /// BINARY CREATE FUNCTIONS
 
 Next * PabloBlock::createNext(Assign * assign, PabloAST * expr) {

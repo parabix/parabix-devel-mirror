@@ -67,6 +67,7 @@ public:
         , ScanThru
         , Lookahead
         , MatchStar
+        , InFile
         // Statistics operations
         , Count
         // Variable assignments

@@ -139,7 +139,11 @@ public:
     PabloAST * createCount(PabloAST * expr);
     
     PabloAST * createCount(PabloAST * expr, const std::string prefix);
-
+    
+    PabloAST * createInFile(PabloAST * expr);
+    
+    PabloAST * createInFile(PabloAST * expr, const std::string prefix);
+    
     /// CreateIf Wrappers
 
     inline If * createIf(PabloAST * condition, std::initializer_list<Assign *> definedVars, PabloBlock * body) {

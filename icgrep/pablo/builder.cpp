@@ -161,6 +161,16 @@ PabloAST * PabloBuilder::createXor(PabloAST * expr1, PabloAST * expr2, const std
     return result;
 }
 
+PabloAST * PabloBuilder::createInFile(PabloAST * expr) {
+    MAKE_UNARY(createInFile, PabloAST::ClassTypeId::InFile, expr);
+    return result;
+}
+
+PabloAST * PabloBuilder::createInFile(PabloAST * expr, const std::string prefix) {
+    MAKE_UNARY(createInFile, PabloAST::ClassTypeId::InFile, expr, prefix);
+    return result;
+}
+    
 PabloAST * PabloBuilder::createMatchStar(PabloAST * marker, PabloAST * charclass) {
     MAKE_BINARY(createMatchStar, PabloAST::ClassTypeId::MatchStar, marker, charclass);
     return result;

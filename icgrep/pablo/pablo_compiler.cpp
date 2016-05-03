@@ -394,6 +394,9 @@ void PabloCompiler::compileStatement(const Statement * stmt) {
         Value * const  cc_expr = compileExpression(sthru->getScanThru());
         Value * const  sum = mCarryManager->addCarryInCarryOut(sthru->getLocalCarryIndex(), marker_expr, cc_expr);
         expr = iBuilder->simd_and(sum, iBuilder->simd_not(cc_expr));
+    } else if (const InFile * e = dyn_cast<InFile>(stmt)) {
+        // Currently InFile(x) => x;  a no-op
+        expr = compileExpression(e->getExpr());
     } else if (const Count * c = dyn_cast<Count>(stmt)) {
         Value * const to_count = compileExpression(c->getExpr());
         expr = mCarryManager->popCount(to_count, c->getGlobalCountIndex());
