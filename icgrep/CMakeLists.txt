@@ -66,7 +66,7 @@ ENDIF()
 
 add_library(PabloADT ${PABLO_SRC})
 add_library(RegExpADT re/re_re.cpp re/re_cc.cpp re/re_rep.cpp re/re_diff.cpp re/re_intersect.cpp re/printer_re.cpp)
-add_library(RegExpCompiler re/re_parser.cpp re/parsefailure.cpp grep_engine.cpp kernels/pipeline.cpp kernels/scanmatchgen.cpp re/re_nullable.cpp re/re_simplifier.cpp re/re_compiler.cpp re/re_analysis.cpp re/re_toolchain.cpp)
+add_library(RegExpCompiler re/re_parser.cpp re/parsefailure.cpp re/re_nullable.cpp re/re_simplifier.cpp re/re_compiler.cpp re/re_analysis.cpp re/re_toolchain.cpp)
 add_library(CCADT cc/cc_compiler.cpp utf8_encoder.cpp UCD/CaseFolding_txt.cpp)
 add_library(UCDlib UCD/unicode_set.cpp UCD/ucd_compiler.cpp UCD/PropertyObjects.cpp UCD/resolve_properties.cpp UCD/UnicodeNameData.cpp)
 
@@ -110,7 +110,7 @@ ENDIF()
 add_executable(icgrep icgrep.cpp toolchain.cpp grep_engine.cpp object_cache.cpp kernels/pipeline.cpp kernels/scanmatchgen.cpp ${PRECOMPILED_FILES})
 add_executable(casefold casefold.cpp kernels/p2s_kernel.cpp kernels/stdout_kernel.cpp kernels/casefold_pipeline.cpp)
 add_executable(u8u16 u8u16.cpp kernels/p2s_kernel.cpp kernels/stdout_kernel.cpp kernels/u8u16_pipeline.cpp kernels/deletion.cpp)
-add_executable(symtbl symboltable.cpp kernels/symboltablepipeline.cpp kernels/stdout_kernel.cpp toolchain.cpp grep_engine.cpp object_cache.cpp ${PRECOMPILED_FILES})
+add_executable(symtbl symboltable.cpp grep_engine.cpp kernels/pipeline.cpp kernels/scanmatchgen.cpp kernels/symboltablepipeline.cpp kernels/stdout_kernel.cpp toolchain.cpp grep_engine.cpp object_cache.cpp ${PRECOMPILED_FILES})
 add_executable(wc wc.cpp ${PRECOMPILED_FILES})
 
 IF(ENABLE_PREGENERATED_UCD_FUNCTIONS)
