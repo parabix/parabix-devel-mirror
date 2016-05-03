@@ -101,13 +101,9 @@ extern "C" {
 
 
 //
-//  Functions taken from toolchain.cpp and modified for casefold 
-//  JIT_t_ExecutionEngine : remove object cache
-//  icgrep_Linking:   unneeded?
-//  all others: definitely unneeded
 //
 
-ExecutionEngine * JIT_to_ExecutionEngine (Module * m) {
+ExecutionEngine * wcJIT_to_ExecutionEngine (Module * m) {
 
     InitializeNativeTarget();
     InitializeNativeTargetAsmPrinter();
@@ -191,11 +187,11 @@ pablo::PabloFunction * wc_gen(Encoding encoding) {
 using namespace kernel;
 
 
-class PipelineBuilder {
+class wcPipelineBuilder {
 public:
-    PipelineBuilder(llvm::Module * m, IDISA::IDISA_Builder * b);
+    wcPipelineBuilder(llvm::Module * m, IDISA::IDISA_Builder * b);
     
-    ~PipelineBuilder();
+    ~wcPipelineBuilder();
     
     void CreateKernels(pablo::PabloFunction * function);
     llvm::Function * ExecuteKernels();
@@ -210,7 +206,49 @@ private:
 };
 
 
-Function *  PipelineBuilder::ExecuteKernels() {
+using namespace pablo;
+using namespace kernel;
+
+wcPipelineBuilder::wcPipelineBuilder(Module * m, IDISA::IDISA_Builder * b)
+: mMod(m)
+, iBuilder(b)
+, mBitBlockType(b->getBitBlockType())
+, mBlockSize(b->getBitBlockWidth()){
+    
+}
+
+wcPipelineBuilder::~wcPipelineBuilder(){
+    delete mS2PKernel;
+    delete mWC_Kernel;
+}
+
+void wcPipelineBuilder::CreateKernels(PabloFunction * function){
+    mS2PKernel = new KernelBuilder(iBuilder, "s2p", SegmentSize);
+    mWC_Kernel = new KernelBuilder(iBuilder, "wc", SegmentSize);
+    
+    generateS2PKernel(mMod, iBuilder, mS2PKernel);
+    
+    pablo_function_passes(function);
+    
+    PabloCompiler pablo_compiler(mMod, iBuilder);
+    try {
+        pablo_compiler.setKernel(mWC_Kernel);
+        pablo_compiler.compile(function);
+        delete function;
+        releaseSlabAllocatorMemory();
+    } catch (std::runtime_error e) {
+        delete function;
+        releaseSlabAllocatorMemory();
+        std::cerr << "Runtime error: " << e.what() << std::endl;
+        exit(1);
+    }
+    
+}
+
+
+
+
+Function * wcPipelineBuilder::ExecuteKernels() {
     Constant * report_counts_routine;
     Type * const int64ty = iBuilder->getInt64Ty();
     Type * const voidTy = Type::getVoidTy(mMod->getContext());
@@ -334,7 +372,7 @@ wcFunctionType wcCodeGen(void) {
     
     IDISA::IDISA_Builder * idb = GetIDISA_Builder(M);
 
-    PipelineBuilder pipelineBuilder(M, idb);
+    wcPipelineBuilder pipelineBuilder(M, idb);
 
     Encoding encoding(Encoding::Type::UTF_8, 8);
     
@@ -351,7 +389,7 @@ wcFunctionType wcCodeGen(void) {
     
     //verifyModule(*M, &dbgs());
     //std::cerr << "ExecuteKernels(); done\n";
-    wcEngine = JIT_to_ExecutionEngine(M);
+    wcEngine = wcJIT_to_ExecutionEngine(M);
     
     wcEngine->finalizeObject();
     //std::cerr << "finalizeObject(); done\n";
@@ -376,22 +414,19 @@ void wc(wcFunctionType fn_ptr, const int64_t fileIdx) {
     }
     
     fileSize = file_size(file);
-    mapped_file mappedFile;
+    mapped_file_source mappedFile;
     if (fileSize == 0) {
         fileBuffer = nullptr;
     }
     else {
         try {
-            mappedFile.open(fileName, mapped_file::priv, fileSize, 0);
-        } catch (std::ios_base::failure e) {
+            mappedFile.open(fileName);
+        } catch (std::exception &e) {
             std::cerr << "Error: Boost mmap of " << fileName << ": " << e.what() << std::endl;
             return;
         }
-        fileBuffer = mappedFile.data();
+        fileBuffer = const_cast<char *>(mappedFile.data());
     }
-    //std::cerr << "mFileSize =" << mFileSize << "\n";
-    //std::cerr << "fn_ptr =" << std::hex << reinterpret_cast<intptr_t>(fn_ptr) << "\n";
-
     fn_ptr(fileBuffer, fileSize, fileIdx);
 
     mappedFile.close();
@@ -399,44 +434,6 @@ void wc(wcFunctionType fn_ptr, const int64_t fileIdx) {
 }
 
 
-using namespace pablo;
-using namespace kernel;
-
-PipelineBuilder::PipelineBuilder(Module * m, IDISA::IDISA_Builder * b)
-: mMod(m)
-, iBuilder(b)
-, mBitBlockType(b->getBitBlockType())
-, mBlockSize(b->getBitBlockWidth()){
-
-}
-
-PipelineBuilder::~PipelineBuilder(){
-    delete mS2PKernel;
-    delete mWC_Kernel;
-}
-
-void PipelineBuilder::CreateKernels(PabloFunction * function){
-    mS2PKernel = new KernelBuilder(iBuilder, "s2p", SegmentSize);
-    mWC_Kernel = new KernelBuilder(iBuilder, "wc", SegmentSize);
-
-    generateS2PKernel(mMod, iBuilder, mS2PKernel);
-
-    pablo_function_passes(function);
-
-    PabloCompiler pablo_compiler(mMod, iBuilder);
-    try {
-        pablo_compiler.setKernel(mWC_Kernel);
-        pablo_compiler.compile(function);
-        delete function;
-        releaseSlabAllocatorMemory();
-    } catch (std::runtime_error e) {
-        delete function;
-        releaseSlabAllocatorMemory();
-        std::cerr << "Runtime error: " << e.what() << std::endl;
-        exit(1);
-    }
-    
-}
 
 
 int main(int argc, char *argv[]) {
@@ -487,7 +484,7 @@ int main(int argc, char *argv[]) {
     
     delete wcEngine;
     
-    int maxCount = 0;
+    size_t maxCount = 0;
     if (CountLines) maxCount = TotalLines;
     if (CountWords) maxCount = TotalWords;
     if (CountChars) maxCount = TotalChars;

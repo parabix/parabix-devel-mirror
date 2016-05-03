@@ -81,15 +81,18 @@ void GrepEngine::doGrep(const std::string & fileName, const int fileIdx) {
 
     const size_t fileSize = file_size(file);
     if (fileSize > 0) {
-        mapped_file file;
+        mapped_file_source file;
         try {
-            file.open(fileName, mapped_file::priv, fileSize, 0);
-        } catch (std::ios_base::failure e) {
+            file.open(fileName);
+        } catch (std::exception &e) {
             throw std::runtime_error("Boost mmap error: " + fileName + ": " + e.what());
         }
-        char * const fileBuffer = file.data();
+        char * fileBuffer = const_cast<char *>(file.data());
         mGrepFunction(fileBuffer, fileSize, fileIdx, finalLineIsUnterminated(fileBuffer, fileSize));
         file.close();
+    }
+    else {
+        mGrepFunction(nullptr, 0, fileIdx, false);
     }
 }
 

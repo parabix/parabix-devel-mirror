@@ -326,18 +326,18 @@ void u8u16(u8u16FunctionType fn_ptr, const std::string & fileName) {
     }
     
     mFileSize = file_size(file);
-    mapped_file mFile;
+    mapped_file_source mFile;
     if (mFileSize == 0) {
         mFileBuffer = nullptr;
     }
     else {
         try {
-            mFile.open(mFileName, mapped_file::priv, mFileSize, 0);
-        } catch (std::ios_base::failure e) {
+            mFile.open(mFileName);
+        } catch (std::exception &e) {
             std::cerr << "Error: Boost mmap of " << mFileName << ": " << e.what() << std::endl;
             return;
         }
-        mFileBuffer = mFile.data();
+        mFileBuffer = const_cast<char *>(mFile.data());
     }
     //std::cerr << "mFileSize =" << mFileSize << "\n";
     //std::cerr << "fn_ptr =" << std::hex << reinterpret_cast<intptr_t>(fn_ptr) << "\n";
