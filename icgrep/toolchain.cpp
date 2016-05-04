@@ -31,8 +31,6 @@
 static cl::OptionCategory bGrepOutputOptions("Output Options",
                                       "These options control the output.");
 
-static cl::opt<bool> CountOnly("c", cl::desc("Count and display the matching lines per file only."), cl::cat(bGrepOutputOptions));
-static cl::alias CountOnlyLong("count", cl::desc("Alias for -c"), cl::aliasopt(CountOnly));
 static cl::opt<bool> NormalizeLineBreaks("normalize-line-breaks", cl::desc("Normalize line breaks to std::endl."), cl::init(false),  cl::cat(bGrepOutputOptions));
 
 static cl::opt<bool> ShowFileNames("H", cl::desc("Show the file name with each matching line."), cl::cat(bGrepOutputOptions));
@@ -149,11 +147,6 @@ extern "C" {
 
         int idx = fileIdx;
 
-        if(CountOnly){
-            total_count[idx]++;
-            return;
-        }
-
         if (ShowFileNames) {
             resultStrs[idx] << inputFiles[idx] << ':';
         }
@@ -199,16 +192,16 @@ extern "C" {
     }
 }
 
-void PrintResult(){
+void PrintResult(bool CountOnly, std::vector<int> & total_CountOnly){
     if(CountOnly){
         if (!ShowFileNames) {
            for (int i=0; i<inputFiles.size(); i++){
-               std::cout << total_count[i] << std::endl;
+               std::cout << total_CountOnly[i] << std::endl;
            }
         }
         else {
             for (int i=0; i<inputFiles.size(); i++){
-                std::cout << inputFiles[i] << ':' << total_count[i] << std::endl;
+                std::cout << inputFiles[i] << ':' << total_CountOnly[i] << std::endl;
             };
         }
         return;

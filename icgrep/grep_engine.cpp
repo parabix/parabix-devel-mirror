@@ -68,7 +68,7 @@ bool GrepEngine::finalLineIsUnterminated(const char * const fileBuffer, const si
     return (static_cast<unsigned char>(fileBuffer[fileSize-3]) != 0xE2) || (penult_byte != 0x80);
 }
 
-void GrepEngine::doGrep(const std::string & fileName, const int fileIdx) {
+void GrepEngine::doGrep(const std::string & fileName, const int fileIdx, bool CountOnly, std::vector<int> & total_CountOnly) {
     const path file(fileName);
     if (exists(file)) {
         if (is_directory(file)) {
@@ -88,17 +88,26 @@ void GrepEngine::doGrep(const std::string & fileName, const int fileIdx) {
             throw std::runtime_error("Boost mmap error: " + fileName + ": " + e.what());
         }
         char * fileBuffer = const_cast<char *>(file.data());
-        mGrepFunction(fileBuffer, fileSize, fileIdx, finalLineIsUnterminated(fileBuffer, fileSize));
+	if(CountOnly){
+	    total_CountOnly[fileIdx] = mGrepFunction_CountOnly(fileBuffer, fileSize, fileIdx, finalLineIsUnterminated(fileBuffer, fileSize));
+	}
+	else{
+            mGrepFunction(fileBuffer, fileSize, fileIdx, finalLineIsUnterminated(fileBuffer, fileSize));
+	}
         file.close();
     }
     else {
-        mGrepFunction(nullptr, 0, fileIdx, false);
+	if(CountOnly) {
+            mGrepFunction_CountOnly(nullptr, 0, fileIdx, false);
+	}
+	else{
+	    mGrepFunction(nullptr, 0, fileIdx, false);
+	}
     }
 }
 
 
-void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool isNameExpression) {
-                            
+void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool CountOnly, bool isNameExpression) {
     Module * M = new Module(moduleName, getGlobalContext());
     
     IDISA::IDISA_Builder * idb = GetIDISA_Builder(M);
@@ -113,7 +122,7 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool isNam
 
     pipelineBuilder.CreateKernels(function, isNameExpression);
 
-    llvm::Function * grepIR = pipelineBuilder.ExecuteKernels();
+    llvm::Function * grepIR = pipelineBuilder.ExecuteKernels(CountOnly);
 
     mEngine = JIT_to_ExecutionEngine(M);
     
@@ -124,7 +133,13 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool isNam
     mEngine->finalizeObject();
     delete idb;
 
-    mGrepFunction = reinterpret_cast<GrepFunctionType>(mEngine->getPointerToFunction(grepIR));
+    if(CountOnly){
+        mGrepFunction_CountOnly = reinterpret_cast<GrepFunctionType_CountOnly>(mEngine->getPointerToFunction(grepIR));
+    }
+    else{
+        mGrepFunction = reinterpret_cast<GrepFunctionType>(mEngine->getPointerToFunction(grepIR));
+    }
+
 }
 
 re::CC *  GrepEngine::grepCodepoints() {

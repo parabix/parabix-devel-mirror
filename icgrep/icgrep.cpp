@@ -5,7 +5,7 @@
  */
 
 #include <cstdio>
-
+#include <vector>
 #include <llvm/Support/CommandLine.h>
 #include <re/re_alt.h>
 #include <re/re_parser.h>
@@ -18,6 +18,10 @@
 #include <mutex>
 
 #include <iostream> // MEEE
+static cl::OptionCategory CountOnlyOptions("CountOnly Option",
+                                       "This option controls the output.");
+static cl::opt<bool> CountOnly("c", cl::desc("Count and display the matching lines per file only."), cl::cat(CountOnlyOptions));
+static cl::alias CountOnlyLong("count", cl::desc("Alias for -c"), cl::aliasopt(CountOnly));
 
 static cl::OptionCategory aRegexSourceOptions("Regular Expression Options",
                                        "These options control the regular expression source.");
@@ -90,6 +94,7 @@ std::string sha1sum(const std::string & str) {
     return std::string(buffer);
 }
 
+std::vector<int> total_CountOnly;
 std::mutex count_mutex;
 size_t fileCount;
 void *DoGrep(void *args)
@@ -103,7 +108,7 @@ void *DoGrep(void *args)
     count_mutex.unlock();
 
     while (fileIdx < inputFiles.size()){
-        grepEngine->doGrep(inputFiles[fileIdx], fileIdx);
+        grepEngine->doGrep(inputFiles[fileIdx], fileIdx, CountOnly, total_CountOnly);
         
         count_mutex.lock();
         fileCount++;
@@ -235,12 +240,16 @@ int main(int argc, char *argv[]) {
     }
     
     GrepEngine grepEngine;
-    grepEngine.grepCodeGen(module_name, re_ast);
-
+    grepEngine.grepCodeGen(module_name, re_ast, CountOnly);
+   
     initResult(inputFiles);
+    for (int i=0; i<inputFiles.size(); i++){
+        total_CountOnly.push_back(0);
+    }
+
     if (Threads <= 1) {
         for (unsigned i = 0; i != inputFiles.size(); ++i) {
-            grepEngine.doGrep(inputFiles[i], i);
+            grepEngine.doGrep(inputFiles[i], i, CountOnly, total_CountOnly);
         }        
     } else if (Threads > 1) {
         const unsigned numOfThreads = Threads; // <- convert the command line value into an integer to allow stack allocation
@@ -261,7 +270,7 @@ int main(int argc, char *argv[]) {
             }
         }
     }
-    PrintResult();   
+    PrintResult(CountOnly, total_CountOnly);
     
     return 0;
 }

@@ -30,7 +30,7 @@ public:
 	~PipelineBuilder();
 
 	void CreateKernels(pablo::PabloFunction * function, bool isNameExpression);
-    llvm::Function * ExecuteKernels();
+    llvm::Function * ExecuteKernels(bool CountOnly);
 
 private:
     llvm::Module *                      mMod;

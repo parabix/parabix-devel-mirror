@@ -22,6 +22,6 @@ re::CC * getParsedCodePointSet();
 void setParsedCodePointSet();
 
 void initResult(std::vector<std::string> filenames);
-void PrintResult();
+void PrintResult(bool CountOnly, std::vector<int> & total_CountOnly);
 
 #endif

@@ -15,6 +15,7 @@
 #include <pablo/pablo_toolchain.h>
 
 #include <llvm/Support/CommandLine.h>
+#include <llvm/IR/Intrinsics.h>
 
 static cl::opt<unsigned> SegmentSize("segment-size", cl::desc("Segment Size"), cl::value_desc("positive integer"), cl::init(1));
 
@@ -56,7 +57,22 @@ void PipelineBuilder::CreateKernels(PabloFunction * function, bool isNameExpress
     }
 }
 
-Function * PipelineBuilder::ExecuteKernels() {
+Value * generatePopcount(IDISA::IDISA_Builder * iBuilder, Value * bits) {
+    Value * ctpopFunc = Intrinsic::getDeclaration(iBuilder->getModule(), Intrinsic::ctpop, bits->getType());
+    return iBuilder->CreateCall(ctpopFunc, std::vector<Value *>({bits}));
+}
+
+Value * Cal_Count(Instance * icGrepInstance, IDISA::IDISA_Builder * iBuilder, int mBlockSize) {
+    const unsigned index = 0;
+    const unsigned streamOffset = 0;
+    Value * match = (icGrepInstance->getOutputStream(index, streamOffset));
+    Value * temp = iBuilder->CreateLoad(match);
+    Value * matches = iBuilder->CreateBitCast(temp, iBuilder->getIntNTy(mBlockSize));
+    Value * popcount = generatePopcount(iBuilder, matches);
+    return popcount;
+}
+
+Function * PipelineBuilder::ExecuteKernels(bool CountOnly) {
     Type * const int64ty = iBuilder->getInt64Ty();
     Type * const int8PtrTy = iBuilder->getInt8PtrTy();
     Type * const inputType = PointerType::get(ArrayType::get(StructType::get(mMod->getContext(), std::vector<Type *>({ArrayType::get(mBitBlockType, 8)})), 1), 0);
@@ -94,14 +110,19 @@ Function * PipelineBuilder::ExecuteKernels() {
     BasicBlock * unterminatedBlock = BasicBlock::Create(mMod->getContext(), "unterminated", main, 0);
     BasicBlock * exitBlock = BasicBlock::Create(mMod->getContext(), "exit", main, 0);
 
+    Value * count = iBuilder->CreateAlloca (Type::getIntNTy(mMod->getContext(), mBlockSize), nullptr, "count");
+    Value * num = ConstantInt::get(iBuilder->getIntNTy(mBlockSize), 0);
+    iBuilder->CreateStore(num, count, false);
+
     Instance * s2pInstance = mS2PKernel->instantiate(inputStream);
     Instance * icGrepInstance = mICgrepKernel->instantiate(s2pInstance->getOutputStreamBuffer());
     Instance * scanMatchInstance = mScanMatchKernel->instantiate(icGrepInstance->getOutputStreamBuffer());
-
-    scanMatchInstance->setInternalState("FileBuf", iBuilder->CreateBitCast(inputStream, int8PtrTy));
-    scanMatchInstance->setInternalState("FileSize", bufferSize);
-    scanMatchInstance->setInternalState("FileIdx", fileIdx);
-
+    
+    if(!CountOnly) {
+	scanMatchInstance->setInternalState("FileBuf", iBuilder->CreateBitCast(inputStream, int8PtrTy));
+	scanMatchInstance->setInternalState("FileSize", bufferSize);
+	scanMatchInstance->setInternalState("FileIdx", fileIdx);
+    }
     Value * initialBufferSize = nullptr;
     BasicBlock * initialBlock = nullptr;
 
@@ -119,10 +140,18 @@ Function * PipelineBuilder::ExecuteKernels() {
         }
         for (unsigned i = 0; i < segmentSize; ++i) {
             icGrepInstance->CreateDoBlockCall();
+	    if(CountOnly){
+		Value * popcount_for = Cal_Count(icGrepInstance, iBuilder, mBlockSize);
+		Value * temp_countfor = iBuilder->CreateLoad(count);
+		Value * add_for = iBuilder->CreateAdd(temp_countfor, popcount_for);
+		iBuilder->CreateStore(add_for, count);
+	    }
         }
-        for (unsigned i = 0; i < segmentSize; ++i) {
-            scanMatchInstance->CreateDoBlockCall();
-        }
+	if(!CountOnly) {
+	    for (unsigned i = 0; i < segmentSize; ++i) {
+	        scanMatchInstance->CreateDoBlockCall();
+	    }
+	}
         remainingBytes->addIncoming(iBuilder->CreateSub(remainingBytes, step), segmentBodyBlock);
         iBuilder->CreateBr(segmentCondBlock);
         initialBufferSize = remainingBytes;
@@ -144,7 +173,16 @@ Function * PipelineBuilder::ExecuteKernels() {
     iBuilder->SetInsertPoint(fullBodyBlock);
     s2pInstance->CreateDoBlockCall();
     icGrepInstance->CreateDoBlockCall();
-    scanMatchInstance->CreateDoBlockCall();
+    if(CountOnly){
+	Value * popcount = Cal_Count(icGrepInstance, iBuilder, mBlockSize);    
+	Value * temp_count = iBuilder->CreateLoad(count);
+	Value * add = iBuilder->CreateAdd(temp_count, popcount);
+	iBuilder->CreateStore(add, count);
+    }
+
+    if(!CountOnly) {
+	scanMatchInstance->CreateDoBlockCall();
+    }
 
     remainingBytes->addIncoming(iBuilder->CreateSub(remainingBytes, step), fullBodyBlock);
     iBuilder->CreateBr(fullCondBlock);
@@ -188,8 +226,23 @@ Function * PipelineBuilder::ExecuteKernels() {
     iBuilder->SetInsertPoint(exitBlock);
 
     icGrepInstance->CreateDoBlockCall();
-    scanMatchInstance->CreateDoBlockCall();
-    iBuilder->CreateRetVoid();
+    if(CountOnly){
+	Value * popcount1 = Cal_Count(icGrepInstance, iBuilder, mBlockSize);    
+	Value * temp_count1 = iBuilder->CreateLoad(count);
+	Value * add1 = iBuilder->CreateAdd(temp_count1, popcount1);
+	iBuilder->CreateStore(add1, count);
+    }
+    if(!CountOnly) {
+	scanMatchInstance->CreateDoBlockCall();
+    }
+    if(CountOnly){
+	Value * Ret = iBuilder->CreateLoad(count);
+	iBuilder->CreateRet(Ret);
+    }
+    else{
+	iBuilder->CreateRetVoid();
+    }
+
 
     return main;
 }
