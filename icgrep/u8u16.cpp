@@ -350,32 +350,6 @@ void u8u16(u8u16FunctionType fn_ptr, const std::string & fileName) {
 
 
 int main(int argc, char *argv[]) {
-    StringMap<cl::Option*> Map;
-    cl::getRegisteredOptions(Map);
-    Map["time-passes"]->setHiddenFlag(cl::Hidden);
-    Map["disable-spill-fusing"]->setHiddenFlag(cl::Hidden);
-    Map["enable-misched"]->setHiddenFlag(cl::Hidden);
-    Map["enable-tbaa"]->setHiddenFlag(cl::Hidden);
-    Map["exhaustive-register-search"]->setHiddenFlag(cl::Hidden);
-    Map["join-liveintervals"]->setHiddenFlag(cl::Hidden);
-    Map["limit-float-precision"]->setHiddenFlag(cl::Hidden);
-    Map["mc-x86-disable-arith-relaxation"]->setHiddenFlag(cl::Hidden);
-    Map["limit-float-precision"]->setHiddenFlag(cl::Hidden);
-    Map["print-after-all"]->setHiddenFlag(cl::Hidden);
-    Map["print-before-all"]->setHiddenFlag(cl::Hidden);
-    Map["print-machineinstrs"]->setHiddenFlag(cl::Hidden);
-    Map["regalloc"]->setHiddenFlag(cl::Hidden);
-    Map["rng-seed"]->setHiddenFlag(cl::Hidden);
-    Map["stackmap-version"]->setHiddenFlag(cl::Hidden);
-    Map["x86-asm-syntax"]->setHiddenFlag(cl::Hidden);
-    Map["verify-debug-info"]->setHiddenFlag(cl::Hidden);
-    Map["verify-dom-info"]->setHiddenFlag(cl::Hidden);
-    Map["verify-loop-info"]->setHiddenFlag(cl::Hidden);
-    Map["verify-regalloc"]->setHiddenFlag(cl::Hidden);
-    Map["verify-scev"]->setHiddenFlag(cl::Hidden);
-    Map["x86-recip-refinement-steps"]->setHiddenFlag(cl::Hidden);
-    Map["rewrite-map-file"]->setHiddenFlag(cl::Hidden);
-
     cl::ParseCommandLineOptions(argc, argv);
 
     u8u16FunctionType fn_ptr = u8u16CodeGen();

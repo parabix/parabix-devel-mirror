@@ -24,16 +24,6 @@ Value * IDISA_Builder::fwCast(unsigned fw, Value * a) {
 }
 
 
-Constant* geti8StrVal(Module& M, char const* str, Twine const& name) {
-    LLVMContext& ctx = getGlobalContext();
-    Constant* strConstant = ConstantDataArray::getString(ctx, str);
-    GlobalVariable* GVStr = new GlobalVariable(M, strConstant->getType(), true, GlobalValue::InternalLinkage, strConstant, name);
-    Constant* zero = Constant::getNullValue(IntegerType::getInt32Ty(ctx));
-    Constant* indices[] = {zero, zero};
-    Constant* strVal = ConstantExpr::getGetElementPtr(GVStr, indices, true);
-    return strVal;
-}
-
 static Function * create_printf(Module * const mod) {
     Function * printf = mod->getFunction("printf");
     if (printf == nullptr) {
@@ -61,7 +51,7 @@ void IDISA_Builder::CallPrintRegister(const std::string & name, Value * const va
         BasicBlock * entry = BasicBlock::Create(mMod->getContext(), "entry", function);
         IRBuilder<> builder(entry);
         std::vector<Value *> args;
-        args.push_back(geti8StrVal(*mMod, out.str().c_str(), ""));
+        args.push_back(CreateGlobalStringPtr(out.str().c_str()));
         Value * const name = &*(arg++);
         name->setName("name");
         args.push_back(name);
@@ -78,7 +68,7 @@ void IDISA_Builder::CallPrintRegister(const std::string & name, Value * const va
         printRegister = function;
     }
     assert (value->getType()->canLosslesslyBitCastTo(mBitBlockType));
-    CreateCall(printRegister, {geti8StrVal(*mMod, name.c_str(), name), CreateBitCast(value, mBitBlockType)});
+    CreateCall(printRegister, {CreateGlobalStringPtr(name.c_str()), CreateBitCast(value, mBitBlockType)});
 }
 
 void IDISA_Builder::CallPrintInt(const std::string & name, Value * const value) {
@@ -91,7 +81,7 @@ void IDISA_Builder::CallPrintInt(const std::string & name, Value * const value) 
         BasicBlock * entry = BasicBlock::Create(mMod->getContext(), "entry", function);
         IRBuilder<> builder(entry);
         std::vector<Value *> args;
-        args.push_back(geti8StrVal(*mMod, out.c_str(), ""));
+        args.push_back(CreateGlobalStringPtr(out.c_str()));
         Value * const name = &*(arg++);
         name->setName("name");
         args.push_back(name);
@@ -110,7 +100,7 @@ void IDISA_Builder::CallPrintInt(const std::string & name, Value * const value) 
         num = CreateZExtOrBitCast(value, getInt64Ty());
     }
     assert (num->getType()->isIntegerTy());
-    CreateCall(printRegister, {geti8StrVal(*mMod, name.c_str(), name), num});
+    CreateCall(printRegister, {CreateGlobalStringPtr(name.c_str()), num});
 }
 
 Constant * IDISA_Builder::simd_himask(unsigned fw) {
