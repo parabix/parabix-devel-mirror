@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2015 International Characters.
+ *  Copyright (c) 2016 International Characters.
  *  This software is licensed to the public under the Open Software License 3.0.
  *  icgrep is a trademark of International Characters.
  */
@@ -11,9 +11,28 @@
 
 #include <re/re_re.h>
 #include <pablo/function.h>
+#include <llvm/Support/CommandLine.h>
 
-re::RE * regular_expression_passes(const Encoding encoding, re::RE * re_ast);
+namespace re {
 
-pablo::PabloFunction * re2pablo_compiler(const Encoding encoding, re::RE * re_ast);
+enum RE_PrintFlags {
+    PrintAllREs, PrintParsedREs, PrintStrippedREs, PrintSimplifiedREs
+};
+    
+enum RE_AlgorithmFlags {
+    DisableLog2BoundedRepetition, DisableIfHierarchy, DisableMatchStar, DisableUnicodeMatchStar, 
+    DisableUnicodeLineBreak, InvertMatches, UsePregeneratedUnicode
+};
+    
+bool AlgorithmOptionIsSet(RE_AlgorithmFlags flag);
+    
+extern int IfInsertionGap;
 
+const cl::OptionCategory * re_toolchain_flags();
+
+RE * regular_expression_passes(const Encoding encoding, RE * re_ast);
+
+pablo::PabloFunction * re2pablo_compiler(const Encoding encoding, RE * re_ast);
+    
+}
 #endif

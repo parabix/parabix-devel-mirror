@@ -59,7 +59,7 @@ enum CountOptions {
     LineOption, WordOption, CharOption, ByteOption
 };
 
-static cl::list<CountOptions> wcOptions(cl::desc("Counting options."),
+static cl::list<CountOptions> wcOptions(
   cl::values(clEnumValN(LineOption, "l", "Report the number of lines in each input file."),
              clEnumValN(WordOption, "w", "Report the number of words in each input file."),
              clEnumValN(CharOption, "m", "Report the number of characters in each input file (override -c)."),

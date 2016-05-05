@@ -54,7 +54,7 @@ public:
     RE_Compiler(pablo::PabloFunction & function, cc::CC_Compiler & ccCompiler);
     void initializeRequiredStreams();
     void compileUnicodeNames(RE *& re);
-    void finalizeMatchResult(MarkerType match_result);
+    void finalizeMatchResult(MarkerType match_result, bool InvertMatches = false);
     MarkerType compile(RE * re) {
         return compile(re, mPB);
     }

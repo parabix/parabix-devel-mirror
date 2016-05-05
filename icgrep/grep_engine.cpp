@@ -116,8 +116,8 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool Count
 
     Encoding encoding(Encoding::Type::UTF_8, 8);
     mIsNameExpression = isNameExpression;
-    re_ast = regular_expression_passes(encoding, re_ast);   
-    pablo::PabloFunction * function = re2pablo_compiler(encoding, re_ast);
+    re_ast = re::regular_expression_passes(encoding, re_ast);   
+    pablo::PabloFunction * function = re::re2pablo_compiler(encoding, re_ast);
     
 
     pipelineBuilder.CreateKernels(function, isNameExpression);

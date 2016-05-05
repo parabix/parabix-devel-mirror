@@ -4,6 +4,7 @@
  *  icgrep is a trademark of International Characters.
  */
 #include <re/re_compiler.h>
+#include <re/re_toolchain.h>
 //Regular Expressions
 #include <re/re_name.h>
 #include <re/re_any.h>
@@ -34,29 +35,8 @@
 #include <sstream>
 #include <unordered_set>
 
-static cl::OptionCategory fREcompilationOptions("Regex Compilation Options", "These options control the compilation of regular expressions to Pablo.");
-static cl::opt<bool> InvertMatches("v", cl::init(false),
-                     cl::desc("select non-matching lines"), cl::cat(fREcompilationOptions));
-static cl::alias InvertMatchesLong("invert-matches", cl::desc("Alias for -v"), cl::aliasopt(InvertMatches));
 
-static cl::opt<bool> DisableLog2BoundedRepetition("disable-log2-bounded-repetition", cl::init(false),
-                     cl::desc("disable log2 optimizations for bounded repetition of bytes"), cl::cat(fREcompilationOptions));
-static cl::opt<bool> DisableIfHierarchy("disable-if-hierarchy-strategy", cl::init(false),
-                     cl::desc("disable nested if hierarchy for generated Unicode classes (not recommended)"), cl::cat(fREcompilationOptions));
-static cl::opt<int> IfInsertionGap("if-insertion-gap", cl::init(3), cl::desc("minimum number of nonempty elements between inserted if short-circuit tests"), cl::cat(fREcompilationOptions));
-static cl::opt<bool> DisableMatchStar("disable-matchstar", cl::init(false),
-                     cl::desc("disable MatchStar optimization"), cl::cat(fREcompilationOptions));
-static cl::opt<bool> DisableUnicodeMatchStar("disable-unicode-matchstar", cl::init(false),
-                     cl::desc("disable Unicode MatchStar optimization"), cl::cat(fREcompilationOptions));
-static cl::opt<bool> DisableUnicodeLineBreak("disable-unicode-linebreak", cl::init(false),
-                     cl::desc("disable Unicode line breaks - use LF only"), cl::cat(fREcompilationOptions));
-
-#ifndef DISABLE_PREGENERATED_UCD_FUNCTIONS
-static cl::opt<bool> UsePregeneratedUnicode("use-pregenerated-unicode", cl::init(false),
-                     cl::desc("use fixed pregenerated Unicode character class sets instead"), cl::cat(fREcompilationOptions));
-#endif
-
-#define UNICODE_LINE_BREAK (!DisableUnicodeLineBreak)
+#define UNICODE_LINE_BREAK (!AlgorithmOptionIsSet(DisableUnicodeLineBreak))
 
 using namespace pablo;
 
@@ -172,7 +152,7 @@ RE * RE_Compiler::resolveUnicodeProperties(RE * re) {
                         resolve(name->getDefinition());
                     } else {
                         #ifndef DISABLE_PREGENERATED_UCD_FUNCTIONS
-                        if (UsePregeneratedUnicode) {
+                        if (AlgorithmOptionIsSet(UsePregeneratedUnicode)) {
                             const std::string functionName = UCD::resolvePropertyFunction(name);
                             const UCD::ExternalProperty & ep = UCD::resolveExternalProperty(functionName);
                             Call * call = mPB.createCall(Prototype::Create(functionName, std::get<1>(ep), std::get<2>(ep), std::get<0>(ep)), mCCCompiler.getBasisBits());
@@ -306,7 +286,7 @@ RE * RE_Compiler::resolveUnicodeProperties(RE * re) {
 
     if (LLVM_LIKELY(nameMap.size() > 0)) {
         UCD::UCDCompiler ucdCompiler(mCCCompiler);
-        if (LLVM_UNLIKELY(DisableIfHierarchy)) {
+        if (LLVM_UNLIKELY(AlgorithmOptionIsSet(DisableIfHierarchy))) {
             ucdCompiler.generateWithoutIfHierarchy(nameMap, mPB);
         } else {
             ucdCompiler.generateWithDefaultIfHierarchy(nameMap, mPB);
@@ -376,7 +356,7 @@ Name * RE_Compiler::generateGraphemeClusterBoundaryRule() {
     return gcb;
 }
 
-void RE_Compiler::finalizeMatchResult(MarkerType match_result) {
+void RE_Compiler::finalizeMatchResult(MarkerType match_result, bool InvertMatches) {
     PabloAST * match_follow = mPB.createMatchStar(markerVar(match_result), mAny);
     if (InvertMatches) {
         match_follow = mPB.createNot(match_follow);
@@ -612,7 +592,7 @@ inline PabloAST * RE_Compiler::reachable(PabloAST * repeated, int length, int re
 }
 
 MarkerType RE_Compiler::processLowerBound(RE * repeated, int lb, MarkerType marker, PabloBuilder & pb) {
-    if (!mGraphemeBoundaryRule && isByteLength(repeated) && !DisableLog2BoundedRepetition) {
+    if (!mGraphemeBoundaryRule && isByteLength(repeated) && !AlgorithmOptionIsSet(DisableLog2BoundedRepetition)) {
         PabloAST * cc = markerVar(compile(repeated, pb));
         PabloAST * cc_lb = consecutive_matches(cc, 1, lb, pb);
         PabloAST * marker_fwd = pb.createAdvance(markerVar(marker), markerPos(marker) == MarkerPosition::FinalMatchByte ? lb : lb - 1);
@@ -629,7 +609,7 @@ MarkerType RE_Compiler::processLowerBound(RE * repeated, int lb, MarkerType mark
 }
 
 MarkerType RE_Compiler::processBoundedRep(RE * repeated, int ub, MarkerType marker, PabloBuilder & pb) {
-    if (!mGraphemeBoundaryRule && isByteLength(repeated) && ub > 1 && !DisableLog2BoundedRepetition) {
+    if (!mGraphemeBoundaryRule && isByteLength(repeated) && ub > 1 && !AlgorithmOptionIsSet(DisableLog2BoundedRepetition)) {
         // log2 upper bound for fixed length (=1) class
         // Create a mask of positions reachable within ub from current marker.
         // Use matchstar, then apply filter.
@@ -655,12 +635,12 @@ MarkerType RE_Compiler::processBoundedRep(RE * repeated, int ub, MarkerType mark
 MarkerType RE_Compiler::processUnboundedRep(RE * repeated, MarkerType marker, PabloBuilder & pb) {
     // always use PostPosition markers for unbounded repetition.
     PabloAST * base = markerVar(AdvanceMarker(marker, MarkerPosition::InitialPostPositionByte, pb));
-    if (!mGraphemeBoundaryRule && isByteLength(repeated)  && !DisableMatchStar) {
+    if (!mGraphemeBoundaryRule && isByteLength(repeated)  && !AlgorithmOptionIsSet(DisableMatchStar)) {
         PabloAST * cc = markerVar(compile(repeated, pb));
         PabloAST * mstar = nullptr;
         mstar = pb.createMatchStar(base, cc, "unbounded");
         return makeMarker(MarkerPosition::InitialPostPositionByte, mstar);
-    } else if (isUnicodeUnitLength(repeated) && !DisableMatchStar && !DisableUnicodeMatchStar) {
+    } else if (isUnicodeUnitLength(repeated) && !AlgorithmOptionIsSet(DisableMatchStar) && !AlgorithmOptionIsSet(DisableUnicodeMatchStar)) {
         PabloAST * cc = markerVar(compile(repeated, pb));
         PabloAST * mstar = nullptr;
         PabloAST * nonFinal = mNonFinal;
