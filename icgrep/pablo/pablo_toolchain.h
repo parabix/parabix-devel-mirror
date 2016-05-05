@@ -8,7 +8,24 @@
 #define PABLO_TOOLCHAIN_H
 
 #include <pablo/function.h>
+#include <llvm/Support/CommandLine.h>
 
-void pablo_function_passes(pablo::PabloFunction * function);
+namespace pablo {
+    
+enum PabloDebugFlags {
+    PrintOptimizedREcode, PrintCompiledCCcode, PrintCompiledREcode, DumpTrace, PrintUnloweredCode
+};
 
+enum PabloCompilationFlags {
+    DisableSimplification, PabloSinkingPass, 
+    EnableMultiplexing, EnableLowering, EnablePreDistribution, EnablePostDistribution, EnablePrePassScheduling
+};
+    
+const cl::OptionCategory * pablo_toolchain_flags();
+
+bool DebugOptionIsSet(PabloDebugFlags flag);
+
+void pablo_function_passes(PabloFunction * function);
+
+}
 #endif

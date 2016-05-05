@@ -8,6 +8,7 @@
 #include <iostream>
 #include <fstream>
 
+#include <pablo/pablo_toolchain.h>
 #include <pablo/pablo_compiler.h>
 #include <pablo/optimizers/pablo_simplifier.hpp>
 #include <pablo/optimizers/codemotionpass.h>
@@ -27,52 +28,39 @@
 #include <llvm/Support/FileSystem.h>
 
 
-using namespace pablo;
+namespace pablo {
 
 
-static cl::OptionCategory dPabloDumpOptions("Pablo Dump Options", "These options control printing of intermediate Pablo code.");
+static cl::OptionCategory PabloOptions("Pablo Options", "These options control printing, generation and instrumentation of Pablo intermediate code.");
+const cl::OptionCategory * pablo_toolchain_flags() {return &PabloOptions;};
+    
+    
+static cl::bits<PabloDebugFlags> 
+DebugOptions(cl::values(clEnumVal(PrintOptimizedREcode, "print final optimized Pablo code"),
+                        clEnumVal(PrintCompiledCCcode, "print Pablo output from character class compiler"),
+                        clEnumVal(PrintCompiledREcode, "print Pablo output from the regular expression compiler"),
+                        clEnumVal(DumpTrace, "Generate dynamic traces of executed Pablo assignments."),
+                        clEnumVal(PrintUnloweredCode, "print Pablo output prior to lowering."),
+                        clEnumValEnd), cl::cat(PabloOptions));
+    
+static cl::opt<std::string> PabloOutputFilename("print-pablo-output", cl::init(""), cl::desc("output Pablo filename"), cl::cat(PabloOptions));
 
-static cl::opt<bool> PrintOptimizedREcode("print-pablo", cl::init(false), cl::desc("print final optimized Pablo code"), cl::cat(dPabloDumpOptions));
-static cl::opt<bool> PrintCompiledCCcode("print-CC-pablo", cl::init(false), cl::desc("print Pablo output from character class compiler"), cl::cat(dPabloDumpOptions));
-static cl::opt<bool> PrintCompiledREcode("print-RE-pablo", cl::init(false), cl::desc("print Pablo output from the regular expression compiler"), cl::cat(dPabloDumpOptions));
-static cl::opt<std::string> PabloOutputFilename("print-pablo-output", cl::init(""), cl::desc("output Pablo filename"), cl::cat(dPabloDumpOptions));
-
-
-static cl::OptionCategory cPabloOptimizationsOptions("Pablo Optimizations", "These options control Pablo optimization passes.");
-
-static cl::opt<bool> DisableSimplification("disable-simplification", cl::init(false),
-                                     cl::desc("Disable Pablo Simplification pass (not recommended)"),
-                                     cl::cat(cPabloOptimizationsOptions));
-
-static cl::opt<bool> PabloSinkingPass("sinking", cl::init(false),
-                                      cl::desc("Moves all instructions into the innermost legal If-scope so that they are only executed when needed."),
-                                      cl::cat(cPabloOptimizationsOptions));
-
+static cl::bits<PabloCompilationFlags> 
+    PabloOptimizationsOptions(cl::values(clEnumVal(DisableSimplification, "Disable Pablo Simplification pass (not recommended)"),
+                                         clEnumVal(PabloSinkingPass, "Moves all instructions into the innermost legal If-scope so that they are only executed when needed."),
 #ifdef ENABLE_MULTIPLEXING
-static cl::opt<bool> PrintUnloweredCode("print-unlowered-pablo", cl::init(false), cl::desc("print Pablo output prior to lowering. "), cl::cat(dPabloDumpOptions));
+                                         clEnumVal(EnableMultiplexing, "combine Advances whose inputs are mutual exclusive into the fewest number of advances possible (expensive)."),
+                                         clEnumVal(EnableLowering, "coalesce associative functions prior to optimization passes."),
+                                         clEnumVal(EnablePreDistribution, "apply distribution law optimization prior to multiplexing."),
+                                         clEnumVal(EnablePostDistribution, "apply distribution law optimization after multiplexing."),
+                                         clEnumVal(EnablePrePassScheduling, "apply pre-pass scheduling prior to LLVM IR generation."),
+#endif                                         
+                            clEnumValEnd), cl::cat(PabloOptions));
 
-static cl::opt<bool> EnableMultiplexing("multiplexing", cl::init(false),
-                                        cl::desc("combine Advances whose inputs are mutual exclusive into the fewest number of advances possible (expensive)."),
-                                        cl::cat(cPabloOptimizationsOptions));
-
-static cl::opt<bool> EnableLowering("lowering", cl::init(false),
-                                         cl::desc("coalesce associative functions prior to optimization passes."),
-                                         cl::cat(cPabloOptimizationsOptions));
-
-static cl::opt<bool> EnablePreDistribution("pre-dist", cl::init(false),
-                                         cl::desc("apply distribution law optimization prior to multiplexing."),
-                                         cl::cat(cPabloOptimizationsOptions));
-
-static cl::opt<bool> EnablePostDistribution("post-dist", cl::init(false),
-                                         cl::desc("apply distribution law optimization after multiplexing."),
-                                         cl::cat(cPabloOptimizationsOptions));
-
-static cl::opt<bool> EnablePrePassScheduling("pre-pass-scheduling", cl::init(false),
-                                         cl::desc("apply pre-pass scheduling prior to LLVM IR generation."),
-                                         cl::cat(cPabloOptimizationsOptions));
-#endif
-
-
+bool DebugOptionIsSet(PabloDebugFlags flag) {return DebugOptions.isSet(flag);}
+    
+    
+    
 #ifdef PRINT_TIMING_INFORMATION
 #define READ_CYCLE_COUNTER(name) name = read_cycle_counter();
 #else
@@ -177,7 +165,7 @@ DistributionMap SUMMARIZE_VARIADIC_DISTRIBUTION(const PabloFunction * const entr
 
 void pablo_function_passes(PabloFunction * function) {
     
-    if (PrintCompiledREcode) {
+    if (DebugOptions.isSet(PrintCompiledREcode)) {
         //Print to the terminal the AST that was generated by the pararallel bit-stream compiler.
         llvm::raw_os_ostream cerr(std::cerr);
         cerr << "Initial Pablo AST:\n";
@@ -202,43 +190,43 @@ void pablo_function_passes(PabloFunction * function) {
     DistributionMap distribution;
     const timestamp_t optimization_start = read_cycle_counter();
 #endif
-    if (!DisableSimplification) {
+    if (!PabloOptimizationsOptions.isSet(DisableSimplification)) {
         READ_CYCLE_COUNTER(simplification_start);
         Simplifier::optimize(*function);
         READ_CYCLE_COUNTER(simplification_end);
     }
 #ifdef ENABLE_MULTIPLEXING
-    if (EnableLowering || EnablePreDistribution || EnablePostDistribution) {
+    if (PabloOptimizationsOptions.isSet(EnableLowering) || PabloOptimizationsOptions.isSet(EnablePreDistribution) || PabloOptimizationsOptions.isSet(EnablePostDistribution)) {
         READ_CYCLE_COUNTER(coalescing_start);
         CanonicalizeDFG::transform(*function);
         READ_CYCLE_COUNTER(coalescing_end);
     }
-    if (EnablePreDistribution) {
+    if (PabloOptimizationsOptions.isSet(EnablePreDistribution)) {
         READ_CYCLE_COUNTER(pre_distribution_start);
         DistributivePass::optimize(*function);
         READ_CYCLE_COUNTER(pre_distribution_end);
     }
-    if (EnableMultiplexing) {
+    if (PabloOptimizationsOptions.isSet(EnableMultiplexing)) {
         READ_CYCLE_COUNTER(multiplexing_start);
         MultiplexingPass::optimize(*function);
         READ_CYCLE_COUNTER(multiplexing_end);
-        if (EnableLowering || EnablePreDistribution || EnablePostDistribution) {
+        if (PabloOptimizationsOptions.isSet(EnableLowering) || PabloOptimizationsOptions.isSet(EnablePreDistribution) || PabloOptimizationsOptions.isSet(EnablePostDistribution)) {
             CanonicalizeDFG::transform(*function);
         }
     }
-    if (EnablePostDistribution) {
+    if (PabloOptimizationsOptions.isSet(EnablePostDistribution)) {
         READ_CYCLE_COUNTER(post_distribution_start);
         DistributivePass::optimize(*function);
         READ_CYCLE_COUNTER(post_distribution_end);
     }
 #endif
-    if (PabloSinkingPass) {
+    if (PabloOptimizationsOptions.isSet(PabloSinkingPass)) {
         READ_CYCLE_COUNTER(sinking_start);
         CodeMotionPass::optimize(*function);
         READ_CYCLE_COUNTER(sinking_end);
     }
 #ifdef ENABLE_MULTIPLEXING
-    if (PrintUnloweredCode) {
+    if (DebugOptions.isSet(PrintUnloweredCode)) {
         //Print to the terminal the AST that was generated by the pararallel bit-stream compiler.
         llvm::raw_os_ostream cerr(std::cerr);
         cerr << "Unlowered Pablo AST:\n";
@@ -247,12 +235,12 @@ void pablo_function_passes(PabloFunction * function) {
     #ifdef PRINT_TIMING_INFORMATION
     distribution = SUMMARIZE_VARIADIC_DISTRIBUTION(function);
     #endif
-    if (EnableLowering || EnablePreDistribution || EnablePostDistribution) {
+    if (PabloOptimizationsOptions.isSet(EnableLowering) || PabloOptimizationsOptions.isSet(EnablePreDistribution) || PabloOptimizationsOptions.isSet(EnablePostDistribution)) {
         READ_CYCLE_COUNTER(lowering_start);
         FactorizeDFG::transform(*function);
         READ_CYCLE_COUNTER(lowering_end);
     }
-    if (EnablePrePassScheduling) {
+    if (PabloOptimizationsOptions.isSet(EnablePrePassScheduling)) {
         READ_CYCLE_COUNTER(scheduling_start);
         SchedulingPrePass::optimize(*function);
         READ_CYCLE_COUNTER(scheduling_end);
@@ -261,7 +249,7 @@ void pablo_function_passes(PabloFunction * function) {
 #ifdef PRINT_TIMING_INFORMATION
     const timestamp_t optimization_end = read_cycle_counter();
 #endif
-    if (PrintOptimizedREcode) {
+    if (DebugOptions.isSet(PrintOptimizedREcode)) {
         if (PabloOutputFilename.empty()) {
             //Print to the terminal the AST that was generated by the pararallel bit-stream compiler.
             llvm::raw_os_ostream cerr(std::cerr);
@@ -301,3 +289,4 @@ void pablo_function_passes(PabloFunction * function) {
 #endif
 }
 
+}

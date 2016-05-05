@@ -16,6 +16,7 @@
 #include <boost/uuid/sha1.hpp>
 #include <toolchain.h>
 #include <re/re_toolchain.h>
+#include <pablo/pablo_toolchain.h>
 #include <mutex>
 
 #include <iostream> // MEEE
@@ -203,7 +204,7 @@ void pipeIcGrepOutputToGrep(int argc, char *argv[]) {
 
 
 int main(int argc, char *argv[]) {
-    cl::HideUnrelatedOptions(ArrayRef<const cl::OptionCategory *>{&LegacyGrepOptions, &EnhancedGrepOptions, re::re_toolchain_flags()});
+    cl::HideUnrelatedOptions(ArrayRef<const cl::OptionCategory *>{&LegacyGrepOptions, &EnhancedGrepOptions, re::re_toolchain_flags(), pablo::pablo_toolchain_flags()});
     cl::ParseCommandLineOptions(argc, argv);
     
     re::RE * re_ast = get_icgrep_RE();

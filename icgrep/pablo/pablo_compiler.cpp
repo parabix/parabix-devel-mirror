@@ -5,6 +5,7 @@
  */
 
 #include <pablo/pablo_compiler.h>
+#include <pablo/pablo_toolchain.h>
 #include <pablo/codegenstate.h>
 #include <pablo/carry_data.h>
 #include <pablo/carry_manager.h>
@@ -51,8 +52,6 @@
 #endif
 #include <hrtime.h>
 
-static cl::OptionCategory fTracingOptions("Run-time Tracing Options", "These options control execution traces.");
-static cl::opt<bool> DumpTrace("dump-trace", cl::init(false), cl::desc("Generate dynamic traces of executed assignments."), cl::cat(fTracingOptions));
 
 namespace pablo {
 
@@ -120,7 +119,7 @@ inline void PabloCompiler::GenerateKernel(PabloFunction * const function) {
     for (unsigned j = 0; j < function->getNumOfParameters(); ++j) {
         Value * inputVal = mKernelBuilder->getInputStream(j);
         const Var * const var = function->getParameter(j);
-        if (DumpTrace) {
+        if (DebugOptionIsSet(DumpTrace)) {
             iBuilder->CallPrintRegister(var->getName()->to_string(), iBuilder->CreateBlockAlignedLoad(inputVal));
         }
         mMarkerMap.insert(std::make_pair(var, inputVal));
@@ -442,7 +441,7 @@ void PabloCompiler::compileStatement(const Statement * stmt) {
         throw std::runtime_error(msg.str());
     }
     mMarkerMap[stmt] = expr;
-    if (DumpTrace) {
+    if (DebugOptionIsSet(DumpTrace)) {
         iBuilder->CallPrintRegister(stmt->getName()->to_string(), expr);
     }
     
