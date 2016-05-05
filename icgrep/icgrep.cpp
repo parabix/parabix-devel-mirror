@@ -102,16 +102,16 @@ void *DoGrep(void *args)
     GrepEngine * grepEngine = (GrepEngine *)args;
 
     count_mutex.lock();
-    fileCount++;
     fileIdx = fileCount;
+    fileCount++;
     count_mutex.unlock();
 
     while (fileIdx < inputFiles.size()){
         grepEngine->doGrep(inputFiles[fileIdx], fileIdx, CountOnly, total_CountOnly);
         
         count_mutex.lock();
-        fileCount++;
         fileIdx = fileCount;
+        fileCount++;
         count_mutex.unlock();
     }
 
