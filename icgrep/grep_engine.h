@@ -14,6 +14,8 @@
 
 namespace llvm { class raw_ostream; }
 
+
+
 class GrepEngine {
     typedef void (*GrepFunctionType)(char * byte_data, size_t filesize, const int fileIdx, uint64_t finalLineUnterminated);
     typedef int64_t (*GrepFunctionType_CountOnly)(char * byte_data, size_t filesize, const int fileIdx, uint64_t finalLineUnterminated);
@@ -40,5 +42,13 @@ private:
     llvm::ExecutionEngine * mEngine;
 };
 
+void icgrep_Linking(Module * m, ExecutionEngine * e);
+
+
+re::CC * getParsedCodePointSet();
+void setParsedCodePointSet();
+
+void initResult(std::vector<std::string> filenames);
+void PrintResult(bool CountOnly, std::vector<int> & total_CountOnly);
 
 #endif

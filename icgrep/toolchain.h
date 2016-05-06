@@ -7,21 +7,22 @@
 #ifndef TOOLCHAIN_H
 #define TOOLCHAIN_H
 
-#include <re/re_re.h>
 #include <llvm/IR/Module.h>
 #include <llvm/ExecutionEngine/ExecutionEngine.h>
+#include <llvm/Support/CommandLine.h>
 
+namespace codegen {
+const llvm::cl::OptionCategory * codegen_flags();
 
-Module * grepIRGen(std::string moduleName, re::RE * re_ast, bool isNameExpression = false);
+// Command Parameters
+extern char OptLevel;  // set from command line
+extern int BlockSize;  // set from command line
+extern int SegmentSize;  // set from command line
 
-ExecutionEngine * JIT_to_ExecutionEngine (Module * m);
+}
 
-void icgrep_Linking(Module * m, ExecutionEngine * e);
+llvm::ExecutionEngine * JIT_to_ExecutionEngine (llvm::Module * m);
 
-re::CC * getParsedCodePointSet();
-void setParsedCodePointSet();
-
-void initResult(std::vector<std::string> filenames);
-void PrintResult(bool CountOnly, std::vector<int> & total_CountOnly);
+void ApplyObjectCache(llvm::ExecutionEngine * e);
 
 #endif

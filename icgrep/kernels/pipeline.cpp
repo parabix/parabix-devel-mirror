@@ -3,6 +3,8 @@
  *  This software is licensed to the public under the Open Software License 3.0.
  */
 
+
+#include <toolchain.h>
 #include "pipeline.h"
 #include "utf_encoding.h"
 
@@ -14,10 +16,7 @@
 #include <pablo/pablo_compiler.h>
 #include <pablo/pablo_toolchain.h>
 
-#include <llvm/Support/CommandLine.h>
 #include <llvm/IR/Intrinsics.h>
-
-static cl::opt<unsigned> SegmentSize("segment-size", cl::desc("Segment Size"), cl::value_desc("positive integer"), cl::init(1));
 
 using namespace pablo;
 using namespace kernel;
@@ -37,9 +36,9 @@ PipelineBuilder::~PipelineBuilder() {
 }
 
 void PipelineBuilder::CreateKernels(PabloFunction * function, bool isNameExpression){
-    mS2PKernel = new KernelBuilder(iBuilder, "s2p", SegmentSize);
-    mICgrepKernel = new KernelBuilder(iBuilder, "icgrep", SegmentSize);
-    mScanMatchKernel = new KernelBuilder(iBuilder, "scanMatch", SegmentSize);
+    mS2PKernel = new KernelBuilder(iBuilder, "s2p", codegen::SegmentSize);
+    mICgrepKernel = new KernelBuilder(iBuilder, "icgrep", codegen::SegmentSize);
+    mScanMatchKernel = new KernelBuilder(iBuilder, "scanMatch", codegen::SegmentSize);
     generateS2PKernel(mMod, iBuilder, mS2PKernel);
     generateScanMatch(mMod, iBuilder, 64, mScanMatchKernel, isNameExpression);
     pablo_function_passes(function);
@@ -96,7 +95,7 @@ Function * PipelineBuilder::ExecuteKernels(bool CountOnly) {
     BasicBlock * entryBlock = iBuilder->GetInsertBlock();
     BasicBlock * segmentCondBlock = nullptr;
     BasicBlock * segmentBodyBlock = nullptr;
-    const unsigned segmentSize = SegmentSize;
+    const unsigned segmentSize = codegen::SegmentSize;
     if (segmentSize > 1) {
         segmentCondBlock = BasicBlock::Create(mMod->getContext(), "segmentCond", main, 0);
         segmentBodyBlock = BasicBlock::Create(mMod->getContext(), "segmentBody", main, 0);

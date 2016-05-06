@@ -10,6 +10,10 @@
 #include <llvm/IR/Type.h>
 #include <IDISA/idisa_builder.h>
 
+namespace IDISA {
+    
 IDISA::IDISA_Builder * GetIDISA_Builder(Module * m);
+
+}
 
 #endif

@@ -56,7 +56,7 @@ int main(int argc, char *argv[]) {
 
     Module * M = new Module("symboltable", getGlobalContext());
 
-    IDISA::IDISA_Builder * idb = GetIDISA_Builder(M);
+    IDISA::IDISA_Builder * idb = IDISA::GetIDISA_Builder(M);
 
     kernel::SymbolTableBuilder pipelineBuilder(M, idb);
 

@@ -10,19 +10,14 @@
 #include <fstream>
 #include <sstream>
 
+
+#include <toolchain.h>
 #include <llvm/IR/Function.h>
 #include <llvm/IR/Module.h>
 #include <llvm/ExecutionEngine/ExecutionEngine.h>
 #include <llvm/ExecutionEngine/MCJIT.h>
-#include <llvm/IRReader/IRReader.h>
-#include <llvm/IR/Verifier.h>
-#include <llvm/Support/Debug.h>
 
 #include <llvm/Support/CommandLine.h>
-#include <llvm/CodeGen/CommandFlags.h>
-#include <llvm/Support/SourceMgr.h>
-#include <llvm/Support/TargetSelect.h>
-#include <llvm/Support/Host.h>
 #include <llvm/Support/raw_ostream.h>
 
 #include <utf_encoding.h>
@@ -38,9 +33,6 @@
 #include <pablo/pablo_compiler.h>
 #include <pablo/pablo_toolchain.h>
 
-// Dynamic processor detection
-#define ISPC_LLVM_VERSION ISPC_LLVM_3_6
-#include <util/ispc.cpp>
 
 #include <utf_encoding.h>
 
@@ -113,48 +105,6 @@ extern "C" {
 
 //
 //
-
-ExecutionEngine * wcJIT_to_ExecutionEngine (Module * m) {
-
-    InitializeNativeTarget();
-    InitializeNativeTargetAsmPrinter();
-    InitializeNativeTargetAsmParser();
-
-    PassRegistry * Registry = PassRegistry::getPassRegistry();
-    initializeCore(*Registry);
-    initializeCodeGen(*Registry);
-    initializeLowerIntrinsicsPass(*Registry);
-
-    std::string errMessage;
-    EngineBuilder builder(std::move(std::unique_ptr<Module>(m)));
-    builder.setErrorStr(&errMessage);
-    builder.setMCPU(sys::getHostCPUName());
-    CodeGenOpt::Level optLevel = CodeGenOpt::Level::None;
-    switch (OptLevel) {
-        case '0': optLevel = CodeGenOpt::None; break;
-        case '1': optLevel = CodeGenOpt::Less; break;
-        case '2': optLevel = CodeGenOpt::Default; break;
-        case '3': optLevel = CodeGenOpt::Aggressive; break;
-        default: errs() << OptLevel << " is an invalid optimization level.\n";
-    }
-    builder.setOptLevel(optLevel);
-
-    if ((strncmp(lGetSystemISA(), "avx2", 4) == 0)) {
-            std::vector<std::string> attrs;
-            attrs.push_back("avx2");
-            builder.setMAttrs(attrs);
-    }
-
-    // builder.selectTarget();
-
-    //builder.setOptLevel(mMaxWhileDepth ? CodeGenOpt::Level::Less : CodeGenOpt::Level::None);
-    ExecutionEngine * engine = builder.create();
-    if (engine == nullptr) {
-        throw std::runtime_error("Could not create ExecutionEngine: " + errMessage);
-    }
-    return engine;
-}
-
 
 pablo::PabloFunction * wc_gen(Encoding encoding) {
     //  input: 8 basis bit streams
@@ -381,7 +331,7 @@ wcFunctionType wcCodeGen(void) {
                             
     Module * M = new Module("wc", getGlobalContext());
     
-    IDISA::IDISA_Builder * idb = GetIDISA_Builder(M);
+    IDISA::IDISA_Builder * idb = IDISA::GetIDISA_Builder(M);
 
     wcPipelineBuilder pipelineBuilder(M, idb);
 
@@ -400,7 +350,7 @@ wcFunctionType wcCodeGen(void) {
     
     //verifyModule(*M, &dbgs());
     //std::cerr << "ExecuteKernels(); done\n";
-    wcEngine = wcJIT_to_ExecutionEngine(M);
+    wcEngine = JIT_to_ExecutionEngine(M);
     
     wcEngine->finalizeObject();
     //std::cerr << "finalizeObject(); done\n";

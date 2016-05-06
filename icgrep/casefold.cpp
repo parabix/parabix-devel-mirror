@@ -9,28 +9,17 @@
 #include <fstream>
 #include <sstream>
 
+#include <toolchain.h>
 #include <llvm/IR/Function.h>
 #include <llvm/IR/Module.h>
 #include <llvm/ExecutionEngine/ExecutionEngine.h>
-#include <llvm/ExecutionEngine/MCJIT.h>
-#include <llvm/IRReader/IRReader.h>
 #include <llvm/Support/CommandLine.h>
-#include <llvm/CodeGen/CommandFlags.h>
-#include <llvm/Support/SourceMgr.h>
-#include <llvm/Support/TargetSelect.h>
-#include <llvm/Support/Host.h>
-#include <llvm/Support/raw_ostream.h>
-
 #include <re/re_cc.h>
 #include <cc/cc_compiler.h>
 #include <pablo/function.h>
 #include <IDISA/idisa_builder.h>
 #include <IDISA/idisa_target.h>
 #include <kernels/casefold_pipeline.h>
-
-// Dynamic processor detection
-#define ISPC_LLVM_VERSION ISPC_LLVM_3_6
-#include <util/ispc.cpp>
 
 #include <utf_encoding.h>
 
@@ -44,60 +33,6 @@ using namespace boost::filesystem;
 
 static cl::list<std::string> inputFiles(cl::Positional, cl::desc("<input file ...>"), cl::OneOrMore);
 
-
-static cl::OptionCategory cMachineCodeOptimization("Machine Code Optimizations", "These options control back-end compilier optimization levels.");
-
-static cl::opt<char> OptLevel("O", cl::desc("Optimization level. [-O0, -O1, -O2, or -O3] (default = '-O0')"),
-                              cl::cat(cMachineCodeOptimization), cl::Prefix, cl::ZeroOrMore, cl::init('0'));
-
-
-//
-//  Functions taken from toolchain.cpp and modified for casefold 
-//  JIT_t_ExecutionEngine : remove object cache
-//  icgrep_Linking:   unneeded?
-//  all others: definitely unneeded
-//
-
-ExecutionEngine * JIT_to_ExecutionEngine (Module * m) {
-
-    InitializeNativeTarget();
-    InitializeNativeTargetAsmPrinter();
-    InitializeNativeTargetAsmParser();
-
-    PassRegistry * Registry = PassRegistry::getPassRegistry();
-    initializeCore(*Registry);
-    initializeCodeGen(*Registry);
-    initializeLowerIntrinsicsPass(*Registry);
-
-    std::string errMessage;
-    EngineBuilder builder(std::move(std::unique_ptr<Module>(m)));
-    builder.setErrorStr(&errMessage);
-    builder.setMCPU(sys::getHostCPUName());
-    CodeGenOpt::Level optLevel = CodeGenOpt::Level::None;
-    switch (OptLevel) {
-        case '0': optLevel = CodeGenOpt::None; break;
-        case '1': optLevel = CodeGenOpt::Less; break;
-        case '2': optLevel = CodeGenOpt::Default; break;
-        case '3': optLevel = CodeGenOpt::Aggressive; break;
-        default: errs() << OptLevel << " is an invalid optimization level.\n";
-    }
-    builder.setOptLevel(optLevel);
-
-    if ((strncmp(lGetSystemISA(), "avx2", 4) == 0)) {
-            std::vector<std::string> attrs;
-            attrs.push_back("avx2");
-            builder.setMAttrs(attrs);
-    }
-
-    // builder.selectTarget();
-
-    //builder.setOptLevel(mMaxWhileDepth ? CodeGenOpt::Level::Less : CodeGenOpt::Level::None);
-    ExecutionEngine * engine = builder.create();
-    if (engine == nullptr) {
-        throw std::runtime_error("Could not create ExecutionEngine: " + errMessage);
-    }
-    return engine;
-}
 
 
 //
@@ -131,7 +66,7 @@ casefoldFunctionType caseFoldCodeGen(void) {
                             
     Module * M = new Module("casefold", getGlobalContext());
     
-    IDISA::IDISA_Builder * idb = GetIDISA_Builder(M);
+    IDISA::IDISA_Builder * idb = IDISA::GetIDISA_Builder(M);
 
     kernel::PipelineBuilder pipelineBuilder(M, idb);
 

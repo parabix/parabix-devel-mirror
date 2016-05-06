@@ -3,6 +3,7 @@
  *  This software is licensed to the public under the Open Software License 3.0.
  */
 
+#include <toolchain.h>
 #include <kernels/casefold_pipeline.h>
 #include <utf_encoding.h>
 
@@ -14,8 +15,6 @@
 #include <pablo/function.h>
 #include <pablo/pablo_compiler.h>
 #include <pablo/pablo_toolchain.h>
-
-static cl::opt<unsigned> SegmentSize("segment-size", cl::desc("Segment Size"), cl::value_desc("positive integer"), cl::init(1));
 
 
 using namespace pablo;
@@ -37,10 +36,10 @@ PipelineBuilder::~PipelineBuilder(){
 }
 
 void PipelineBuilder::CreateKernels(PabloFunction * function){
-    mS2PKernel = new KernelBuilder(iBuilder, "s2p", SegmentSize);
-    mP2SKernel = new KernelBuilder(iBuilder, "p2s", SegmentSize);
-    mCaseFoldKernel = new KernelBuilder(iBuilder, "casefold", SegmentSize);
-    mStdOutKernel = new KernelBuilder(iBuilder, "stddout", SegmentSize);
+    mS2PKernel = new KernelBuilder(iBuilder, "s2p", codegen::SegmentSize);
+    mP2SKernel = new KernelBuilder(iBuilder, "p2s", codegen::SegmentSize);
+    mCaseFoldKernel = new KernelBuilder(iBuilder, "casefold", codegen::SegmentSize);
+    mStdOutKernel = new KernelBuilder(iBuilder, "stddout", codegen::SegmentSize);
 
     generateS2PKernel(mMod, iBuilder, mS2PKernel);
     generateP2SKernel(mMod, iBuilder, mP2SKernel);
@@ -82,7 +81,7 @@ Function *  PipelineBuilder::ExecuteKernels() {
 
     BasicBlock * segmentCondBlock = nullptr;
     BasicBlock * segmentBodyBlock = nullptr;
-    const unsigned segmentSize = SegmentSize;
+    const unsigned segmentSize = codegen::SegmentSize;
     if (segmentSize > 1) {
         segmentCondBlock = BasicBlock::Create(mMod->getContext(), "segmentCond", main, 0);
         segmentBodyBlock = BasicBlock::Create(mMod->getContext(), "segmentBody", main, 0);

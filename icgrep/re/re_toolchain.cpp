@@ -43,13 +43,13 @@ static cl::bits<RE_AlgorithmFlags>
                               clEnumVal(DisableMatchStar, "disable MatchStar optimization"), 
                               clEnumVal(DisableUnicodeMatchStar, "disable Unicode MatchStar optimization"),
                               clEnumVal(DisableUnicodeLineBreak, "disable Unicode line breaks - use LF only"),
-                              clEnumVal(InvertMatches, "select non-matching lines"),
+                              clEnumValN(InvertMatches, "v", "select non-matching lines"),
 #ifndef DISABLE_PREGENERATED_UCD_FUNCTIONS
                               clEnumVal(UsePregeneratedUnicode, "use fixed pregenerated Unicode character class sets instead"),
 #endif
                               clEnumValEnd), 
                    cl::cat(RegexOptions));
-    
+
 bool AlgorithmOptionIsSet(RE_AlgorithmFlags flag) {
     return AlgorithmOptions.isSet(flag);
 }
