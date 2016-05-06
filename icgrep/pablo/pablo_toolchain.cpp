@@ -13,6 +13,7 @@
 #include <pablo/optimizers/pablo_simplifier.hpp>
 #include <pablo/optimizers/codemotionpass.h>
 #include <pablo/passes/flattenassociativedfg.h>
+#include <pablo/passes/flattenif.hpp>
 #include <pablo/passes/factorizedfg.h>
 #ifdef ENABLE_MULTIPLEXING
 #include <pablo/optimizers/pablo_automultiplexing.hpp>
@@ -44,6 +45,7 @@ DebugOptions(cl::values(clEnumVal(PrintOptimizedREcode, "print final optimized P
                         clEnumValEnd), cl::cat(PabloOptions));
     
 static cl::opt<std::string> PabloOutputFilename("print-pablo-output", cl::init(""), cl::desc("output Pablo filename"), cl::cat(PabloOptions));
+static cl::opt<bool> Flatten("flatten-if", cl::init(false), cl::desc("Flatten all the Ifs in the Pablo AST"), cl::cat(PabloOptions));
 
 static cl::bits<PabloCompilationFlags> 
     PabloOptimizationsOptions(cl::values(clEnumVal(DisableSimplification, "Disable Pablo Simplification pass (not recommended)"),
@@ -180,6 +182,7 @@ void pablo_function_passes(PabloFunction * function) {
 
 #ifdef PRINT_TIMING_INFORMATION
     timestamp_t simplification_start = 0, simplification_end = 0;
+    timestamp_t flattenif_start = 0, flattenif_end = 0;
     timestamp_t coalescing_start = 0, coalescing_end = 0;
     timestamp_t sinking_start = 0, sinking_end = 0;
     timestamp_t pre_distribution_start = 0, pre_distribution_end = 0;
@@ -194,6 +197,11 @@ void pablo_function_passes(PabloFunction * function) {
         READ_CYCLE_COUNTER(simplification_start);
         Simplifier::optimize(*function);
         READ_CYCLE_COUNTER(simplification_end);
+    }
+    if (Flatten){
+        READ_CYCLE_COUNTER(flattenif_start);
+        FlattenIf::transform(*function);
+        READ_CYCLE_COUNTER(flattenif_end);
     }
 #ifdef ENABLE_MULTIPLEXING
     if (PabloOptimizationsOptions.isSet(EnableLowering) || PabloOptimizationsOptions.isSet(EnablePreDistribution) || PabloOptimizationsOptions.isSet(EnablePostDistribution)) {
@@ -272,6 +280,7 @@ void pablo_function_passes(PabloFunction * function) {
     std::cerr << "  MULTIPLEXING NODES USED: " << MultiplexingPass::NODES_USED << std::endl;
     std::cerr << "  MULTIPLEXING NODES ALLOCATED: " << MultiplexingPass::NODES_ALLOCATED << std::endl;
     std::cerr << "  LOWERING TIME: " << (lowering_end - lowering_start) << std::endl;
+    std::cerr << "  FLATTENIF TIME: " << (flattenif_end - flattenif_start) << std::endl;
     std::cerr << "  POST-DISTRIBUTION TIME: " << (post_distribution_end - post_distribution_start) << std::endl;
     std::cerr << "  SCHEDULING TIME: " << (scheduling_end - scheduling_start) << std::endl;
     std::cerr << "PABLO STATEMENTS: " << COUNT_STATEMENTS(function) << std::endl;
