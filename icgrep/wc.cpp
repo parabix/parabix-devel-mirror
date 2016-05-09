@@ -112,15 +112,14 @@ pablo::PabloFunction * wc_gen(Encoding encoding) {
         function->setResult(0, pBuilder.createAssign("lineCount", pBuilder.createCount(LF)));
     }
     else function->setResult(0, pBuilder.createAssign("lineCount", pBuilder.createZeroes()));
-    // FIXME - we need to limit this to pablo.inFile() because null bytes past EOF are matched by wordChar
     if (CountWords) {
         pablo::PabloAST * WS = ccc.compileCC(re::makeCC(re::makeCC(0x09, 0x0D), re::makeCC(0x20)));
         
-        pablo::PabloAST * wordChar = ccc.compileCC(re::makeCC(re::makeCC(re::makeCC(0x00, 0x08), re::makeCC(0xE, 0x1F)), re::makeCC(0x21, 0xFF)));
+        pablo::PabloAST * wordChar = pBuilder.createNot(WS);
         // WS_follow_or_start = 1 past WS or at start of file
-        pablo::PabloAST * WS_follow_or_start = pBuilder.createNot(pBuilder.createAdvance(pBuilder.createNot(WS), 1));
+        pablo::PabloAST * WS_follow_or_start = pBuilder.createNot(pBuilder.createAdvance(wordChar, 1));
         //
-        pablo::PabloAST * wordStart = pBuilder.createAnd(wordChar, WS_follow_or_start);
+        pablo::PabloAST * wordStart = pBuilder.createInFile(pBuilder.createAnd(wordChar, WS_follow_or_start));
         function->setResult(1, pBuilder.createAssign("wordCount", pBuilder.createCount(wordStart)));
     }
     else function->setResult(1, pBuilder.createAssign("wordCount", pBuilder.createZeroes()));
@@ -286,12 +285,16 @@ Function * wcPipelineBuilder::ExecuteKernels() {
     iBuilder->CreateBr(fullCondBlock);
     
     iBuilder->SetInsertPoint(finalBlock);
+    Value * EOF_mask = iBuilder->CreateShl(Constant::getAllOnesValue(iBuilder->getIntNTy(mBlockSize)), remainingBytes);
+	wcInstance->setInternalState("EOFmask", iBuilder->CreateBitCast(EOF_mask, mBitBlockType));
+    
     Value * emptyBlockCond = iBuilder->CreateICmpEQ(remainingBytes, ConstantInt::get(int64ty, 0));
     iBuilder->CreateCondBr(emptyBlockCond, finalEmptyBlock, finalPartialBlock);
     
     
     iBuilder->SetInsertPoint(finalPartialBlock);
     s2pInstance->CreateDoBlockCall();
+
     iBuilder->CreateBr(endBlock);
     
     iBuilder->SetInsertPoint(finalEmptyBlock);

@@ -210,6 +210,8 @@ Function * PipelineBuilder::ExecuteKernels(bool CountOnly) {
     Value * remaining = iBuilder->CreateZExt(remainingBytes, iBuilder->getIntNTy(mBlockSize));
     Value * EOF_pos = iBuilder->CreateShl(ConstantInt::get(iBuilder->getIntNTy(mBlockSize), 1), remaining);
     EOF_pos = iBuilder->CreateBitCast(EOF_pos, mBitBlockType);
+    Value * EOF_mask = iBuilder->CreateShl(Constant::getAllOnesValue(iBuilder->getIntNTy(mBlockSize)), remaining);
+	icGrepInstance->setInternalState("EOFmask", iBuilder->CreateBitCast(EOF_mask, mBitBlockType));
 
 
     Value * b4val = iBuilder->CreateBlockAlignedLoad(b4);

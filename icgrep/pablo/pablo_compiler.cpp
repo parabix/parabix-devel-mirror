@@ -111,7 +111,9 @@ inline void PabloCompiler::GenerateKernel(PabloFunction * const function) {
     }
 
     mCarryManager->initialize(function, mKernelBuilder);
-
+    
+    mKernelBuilder->addInternalState(mBitBlockType, "EOFmask");
+    
     mFunction = mKernelBuilder->prepareFunction({mInputStreamOffset.begin(), mInputStreamOffset.end()});
 
     mCarryManager->reset();
@@ -395,7 +397,8 @@ void PabloCompiler::compileStatement(const Statement * stmt) {
         expr = iBuilder->simd_and(sum, iBuilder->simd_not(cc_expr));
     } else if (const InFile * e = dyn_cast<InFile>(stmt)) {
         // Currently InFile(x) => x;  a no-op
-        expr = compileExpression(e->getExpr());
+        Value * EOFmask = iBuilder->CreateLoad(mKernelBuilder->getInternalState("EOFmask"));
+        expr = iBuilder->simd_and(compileExpression(e->getExpr()), iBuilder->simd_not(EOFmask));
     } else if (const Count * c = dyn_cast<Count>(stmt)) {
         Value * const to_count = compileExpression(c->getExpr());
         expr = mCarryManager->popCount(to_count, c->getGlobalCountIndex());

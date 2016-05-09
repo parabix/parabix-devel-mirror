@@ -45,12 +45,16 @@ Assign * CC_Compiler::compileCC(const std::string && canonicalName, const CC *cc
     return builder.createAssign(std::move(canonicalName), charset_expr(cc, builder));
 }
 
+
+    
 template<typename PabloBlockOrBuilder>
 PabloAST * CC_Compiler::charset_expr(const CC * cc, PabloBlockOrBuilder & pb) {
     if (cc->empty()) {
         return pb.createZeroes();
     }
+#ifdef CC_COMPILER_ENFORCES_INFILE
     bool includes_codepoint_zero = lo_codepoint(cc->begin()) == 0;
+#endif
     if (cc->size() > 2) {
         bool combine = true;
         for (const interval_t & i : *cc) {
@@ -87,12 +91,17 @@ PabloAST * CC_Compiler::charset_expr(const CC * cc, PabloBlockOrBuilder & pb) {
         PabloAST * temp = char_or_range_expr(lo_codepoint(i), hi_codepoint(i), pb);
         expr = (expr == nullptr) ? temp : pb.createOr(expr, temp);
     }
+#ifdef CC_COMPILER_ENFORCES_INFILE
     if (includes_codepoint_zero) {
         return pb.createInFile(expr);
     }
     else {
         return expr;
     }
+#else
+    return expr;
+#endif
+    
 }
 
 template<typename PabloBlockOrBuilder>
