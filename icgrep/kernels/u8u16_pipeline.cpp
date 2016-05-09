@@ -5,6 +5,7 @@
 
 #include <kernels/u8u16_pipeline.h>
 #include <utf_encoding.h>
+#include <toolchain.h>
 
 #include <kernels/s2p_kernel.h>
 #include <kernels/deletion.h>
@@ -16,7 +17,6 @@
 #include <pablo/pablo_compiler.h>
 #include <pablo/pablo_toolchain.h>
 
-static cl::opt<unsigned> SegmentSize("segment-size", cl::desc("Segment Size"), cl::value_desc("positive integer"), cl::init(1));
 
 
 using namespace pablo;
@@ -39,11 +39,11 @@ PipelineBuilder::~PipelineBuilder(){
 }
 
 void PipelineBuilder::CreateKernels(PabloFunction * function){
-    mS2PKernel = new KernelBuilder(iBuilder, "s2p", SegmentSize);
-    mU8U16Kernel = new KernelBuilder(iBuilder, "u8u16", SegmentSize);
-    mDelKernel = new KernelBuilder(iBuilder, "del", SegmentSize);
-    mP2SKernel = new KernelBuilder(iBuilder, "p2s", SegmentSize);    
-    //mStdOutKernel = new KernelBuilder(iBuilder, "stdout", SegmentSize);
+    mS2PKernel = new KernelBuilder(iBuilder, "s2p", codegen::SegmentSize);
+    mU8U16Kernel = new KernelBuilder(iBuilder, "u8u16", codegen::SegmentSize);
+    mDelKernel = new KernelBuilder(iBuilder, "del", codegen::SegmentSize);
+    mP2SKernel = new KernelBuilder(iBuilder, "p2s", codegen::SegmentSize);    
+    //mStdOutKernel = new KernelBuilder(iBuilder, "stdout", codegen::SegmentSize);
 
     generateS2PKernel(mMod, iBuilder, mS2PKernel);
     generateP2S_16_withCompressedOutputKernel(mMod, iBuilder, mP2SKernel);
@@ -86,7 +86,7 @@ Function *  PipelineBuilder::ExecuteKernels() {
 
     BasicBlock * segmentCondBlock = nullptr;
     BasicBlock * segmentBodyBlock = nullptr;
-    const unsigned segmentSize = SegmentSize;
+    const unsigned segmentSize = codegen::SegmentSize;
     if (segmentSize > 1) {
         segmentCondBlock = BasicBlock::Create(mMod->getContext(), "segmentCond", main, 0);
         segmentBodyBlock = BasicBlock::Create(mMod->getContext(), "segmentBody", main, 0);

@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2015 International Characters.
+ *  Copyright (c) 2016 International Characters.
  *  This software is licensed to the public under the Open Software License 3.0.
  *  icgrep is a trademark of International Characters.
  */
@@ -22,6 +22,7 @@
 #include <toolchain.h>
 #include <re/re_cc.h>
 #include <cc/cc_compiler.h>
+#include <pablo/pablo_toolchain.h>
 #include <pablo/function.h>
 #include <IDISA/idisa_builder.h>
 #include <IDISA/idisa_target.h>
@@ -36,10 +37,10 @@ using namespace boost::iostreams;
 using namespace boost::filesystem;
 
 #include <fcntl.h>
+static cl::OptionCategory u8u16Options("u8u16 Options",
+                                            "Transcoding control options.");
 
-static cl::list<std::string> inputFiles(cl::Positional, cl::desc("<input file ...>"), cl::OneOrMore);
-
-
+static cl::list<std::string> inputFiles(cl::Positional, cl::desc("<input file ...>"), cl::OneOrMore, cl::cat(u8u16Options));
 
 //
 //
@@ -282,6 +283,7 @@ void u8u16(u8u16FunctionType fn_ptr, const std::string & fileName) {
 
 
 int main(int argc, char *argv[]) {
+    cl::HideUnrelatedOptions(ArrayRef<const cl::OptionCategory *>{&u8u16Options, pablo::pablo_toolchain_flags(), codegen::codegen_flags()});
     cl::ParseCommandLineOptions(argc, argv);
 
     u8u16FunctionType fn_ptr = u8u16CodeGen();

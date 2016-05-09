@@ -204,7 +204,7 @@ void pipeIcGrepOutputToGrep(int argc, char *argv[]) {
 
 
 int main(int argc, char *argv[]) {
-    cl::HideUnrelatedOptions(ArrayRef<const cl::OptionCategory *>{&LegacyGrepOptions, &EnhancedGrepOptions, re::re_toolchain_flags(), pablo::pablo_toolchain_flags()});
+    cl::HideUnrelatedOptions(ArrayRef<const cl::OptionCategory *>{&LegacyGrepOptions, &EnhancedGrepOptions, re::re_toolchain_flags(), pablo::pablo_toolchain_flags(), codegen::codegen_flags()});
     cl::ParseCommandLineOptions(argc, argv);
     
     re::RE * re_ast = get_icgrep_RE();

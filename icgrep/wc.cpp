@@ -12,6 +12,7 @@
 
 
 #include <toolchain.h>
+#include <pablo/pablo_toolchain.h>
 #include <llvm/IR/Function.h>
 #include <llvm/IR/Module.h>
 #include <llvm/ExecutionEngine/ExecutionEngine.h>
@@ -379,8 +380,7 @@ void wc(wcFunctionType fn_ptr, const int64_t fileIdx) {
 
 
 int main(int argc, char *argv[]) {
-    HideUnrelatedOptions(wcFlags);
-
+    cl::HideUnrelatedOptions(ArrayRef<const cl::OptionCategory *>{&wcFlags, pablo::pablo_toolchain_flags(), codegen::codegen_flags()});
     cl::ParseCommandLineOptions(argc, argv);
     if (wcOptions.size() == 0) {
         CountLines = true;
