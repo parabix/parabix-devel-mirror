@@ -137,13 +137,17 @@ Function * PipelineBuilder::ExecuteKernels(bool CountOnly) {
             s2pInstance->CreateDoBlockCall();
         }
         for (unsigned i = 0; i < segmentSize; ++i) {
-            icGrepInstance->CreateDoBlockCall();
-            if (CountOnly) {
-                Value * popcount_for = Cal_Count(icGrepInstance, iBuilder);
-                Value * temp_countfor = iBuilder->CreateLoad(count);
-                Value * add_for = iBuilder->CreateAdd(temp_countfor, popcount_for);
-                iBuilder->CreateStore(add_for, count);
-            }
+	    Value * match = (icGrepInstance->getOutputStream(0, 0)); 
+	    icGrepInstance->CreateDoBlockCall();
+	    Value * temp = iBuilder->CreateLoad(match);
+	    Value * matches = iBuilder->CreateBitCast(temp, iBuilder->getIntNTy(mBlockSize));
+	    Value * popcount_for = generatePopcount(iBuilder, matches);
+	    if(CountOnly){
+		Value * temp_count = iBuilder->CreateLoad(count);
+		Value * prev_count = iBuilder->CreateBitCast(temp_count, iBuilder->getIntNTy(mBlockSize));
+		Value * add_for = iBuilder->CreateAdd(prev_count, popcount_for);
+		iBuilder->CreateStore(add_for, count);
+	    }
         }
         if (!CountOnly) {
             for (unsigned i = 0; i < segmentSize; ++i) {
