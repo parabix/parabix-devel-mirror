@@ -42,7 +42,7 @@ add_definitions( ${LLVM_DEFINITIONS} )
 # binary code (no interpreter):
 llvm_map_components_to_libnames(REQ_LLVM_LIBRARIES mcjit native IRReader) # ipo
 
-message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
+message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION} in ${LLVM_ROOT_DIR}")
 
 # Check if boost has been installed on this system.
 set(Boost_USE_STATIC_LIBS ON)
@@ -175,7 +175,7 @@ else()
 endif()
 
 #Disable RunTime Type Information
-IF (MSVC) # using Visual Studio C++ 
+IF (MSVC) # using Visual Studio C++
   SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /GR-")
 ELSE() # using Clang, GCC, Intel C++, etc
   SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-rtti")
@@ -183,7 +183,6 @@ ENDIF()
 
 #Enable all warnings
 SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall")
-
 
 SET(CMAKE_REQUIRED_FLAGS)
 
@@ -197,9 +196,7 @@ IF (PRINT_TIMING_INFORMATION)
 ENDIF()
 
 SET(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS} -O3 -DNDEBUG")
-IF (${CMAKE_SYSTEM} MATCHES "Linux")
-    SET(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS} -g -fsanitize=address -fno-omit-frame-pointer")
-ENDIF()
+SET(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS} -g -fsanitize=address -fno-omit-frame-pointer")
 
 add_test(
   NAME greptest

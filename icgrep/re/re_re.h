@@ -38,7 +38,7 @@ class GraphemeBoundary;
 class RE {
 public:
     using Allocator = SlabAllocator<u_int8_t>;
-    using VectorAllocator = Allocator::rebind<RE *>::other;
+    using VectorAllocator = SlabAllocator<RE *>;
     enum class ClassTypeId : unsigned {
         Alt
         , Any
@@ -71,6 +71,7 @@ protected:
     const ClassTypeId mClassTypeId;
 
     static Allocator mAllocator;
+    static VectorAllocator mVectorAllocator;
 };
 
 class Vector : public RE, public std::vector<RE*, RE::VectorAllocator> {
@@ -81,13 +82,13 @@ public:
 protected:
     inline Vector(const ClassTypeId id)
     : RE(id)
-    , std::vector<RE*, RE::VectorAllocator>(reinterpret_cast<VectorAllocator &>(mAllocator))
+    , std::vector<RE*, RE::VectorAllocator>(mVectorAllocator)
     {
 
     }
     inline Vector(const ClassTypeId id, const iterator begin, const iterator end)
     : RE(id)
-    , std::vector<RE*, RE::VectorAllocator>(begin, end, reinterpret_cast<VectorAllocator &>(mAllocator)) {
+    , std::vector<RE*, RE::VectorAllocator>(begin, end, mVectorAllocator) {
 
     }
 };

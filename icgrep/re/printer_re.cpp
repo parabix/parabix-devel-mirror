@@ -147,5 +147,5 @@ const std::string Printer_RE::PrintRE(const RE * re)
     {
         retVal = "???";
     }
-    return std::move(retVal);
+    return retVal;
 }

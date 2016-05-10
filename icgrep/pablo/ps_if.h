@@ -19,7 +19,7 @@ class If : public Statement {
     friend class Statement;
     friend class Simplifier;
 public:
-    using DefinedAllocator = VectorAllocator::rebind<Assign *>::other;
+    using DefinedAllocator = SlabAllocator<Assign *>;
     using DefinedVars = std::vector<Assign *, DefinedAllocator>;
 
     static inline bool classof(const PabloAST * e) {
@@ -53,8 +53,9 @@ protected:
     If(PabloAST * expr, const std::initializer_list<Assign *> definedVars, PabloBlock * body);
     If(PabloAST * expr, const std::vector<Assign *> & definedVars, PabloBlock * body);
 private:
-    PabloBlock *    mBody;
-    DefinedVars     mDefined;
+    PabloBlock *            mBody;
+    DefinedVars             mDefined;
+    static DefinedAllocator mDefinedAllocator;
 };
 
 }

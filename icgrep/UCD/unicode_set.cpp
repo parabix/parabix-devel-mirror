@@ -41,7 +41,8 @@ template <> inline int scan_forward_zeroes<unsigned long long>(unsigned long lon
 
 
 
-UnicodeSet::Allocator UnicodeSet::mAllocator;
+UnicodeSet::RunAllocator UnicodeSet::mRunAllocator;
+UnicodeSet::QuadAllocator UnicodeSet::mQuadAllocator;
 
 const size_t QUAD_BITS = (8 * sizeof(bitquad_t));
 const size_t MOD_QUAD_BIT_MASK = QUAD_BITS - 1;
@@ -477,6 +478,8 @@ void UnicodeSet::insert_range(const codepoint_t lo, const codepoint_t hi)  {
         throw std::runtime_error(std::to_string(hi) + " exceeds maximum code point.");
     }
 
+    //this->dump(llvm::errs()); llvm::errs() << " + [" << lo << ',' << hi << "]\n"; llvm::errs().flush();
+
     // Create a temporary run and quad set for the given range
     std::vector<run_t> runs;
     std::vector<bitquad_t> quads;
@@ -489,13 +492,17 @@ void UnicodeSet::insert_range(const codepoint_t lo, const codepoint_t hi)  {
 
     length_t length = 0;
     run_type_t type = Empty;
+
     // Advance past any full runs prior to the lo_index
     for (;;) {
+        assert (ri != mRuns.cend());
         std::tie(type, length) = *ri;
+        //llvm::errs() << std::distance(mRuns.cbegin(), ri) << ") type=" << (int)(type) << ", length=" << length << ", lo_index=" << lo_index << ", hi_index=" << hi_index << "\n"; llvm::errs().flush();
         if (lo_index < length) {
             break;
         }
         if (type == Mixed) {
+            assert (std::distance(qi, mQuads.cend()) >= length);
             qi += length;
         }
         lo_index -= length;
@@ -503,11 +510,14 @@ void UnicodeSet::insert_range(const codepoint_t lo, const codepoint_t hi)  {
         ++ri;
     }
 
+    //llvm::errs() << "* " << std::distance(mRuns.cbegin(), ri) << ") type=" << (int)(type) << ", length=" << length << ", lo_index=" << lo_index << ", hi_index=" << hi_index << "\n"; llvm::errs().flush();
+
     // Now record the runs and any quads prior to lo_index
-    runs.assign(mRuns.cbegin(), ri);
+    runs.assign(mRuns.cbegin(), ri++);
     if (lo_index) {
         runs.push_back(std::make_pair(type, lo_index));
         if (type == Mixed) {
+            assert (std::distance(qi, mQuads.cend()) >= lo_index);
             qi += lo_index;
         }
         hi_index -= lo_index;
@@ -527,11 +537,14 @@ void UnicodeSet::insert_range(const codepoint_t lo, const codepoint_t hi)  {
             lo_quad &= hi_quad;
         }
         if (type == Mixed) {
+            assert (std::distance(qi, mQuads.cend()) > 0);
             lo_quad |= *qi++;
         }
         append_quad(lo_quad, quads, runs);
     }
     --length;
+
+    //llvm::errs() << "* " << std::distance(mRuns.cbegin(), ri) << ") type=" << (int)(type) << ", length=" << length << ", lo_index=" << lo_index << ", hi_index=" << hi_index << "\n"; llvm::errs().flush();
 
     // Now check if we need to write out any Full blocks between the lo and hi code points; adjust our position
     // in the original quad to suit.
@@ -539,11 +552,13 @@ void UnicodeSet::insert_range(const codepoint_t lo, const codepoint_t hi)  {
         // Add in any full runs between the lo and hi quads
         append_run(Full, hi_index - 1, runs);
         // Advance past original quads that were filled in
-        for (;;) {
+        while (ri != mRuns.cend()) {
             if (type == Mixed) {
+                assert (std::distance(qi, mQuads.cend()) >= length);
                 qi += length;
             }
-            std::tie(type, length) = *++ri;
+            std::tie(type, length) = *ri++;
+            //llvm::errs() << std::distance(mRuns.cbegin(), ri) << ") type=" << (int)(type) << ", length=" << length << ", lo_index=" << lo_index << ", hi_index=" << hi_index << "\n"; llvm::errs().flush();
             if (hi_index < length) {
                 break;
             }
@@ -555,6 +570,7 @@ void UnicodeSet::insert_range(const codepoint_t lo, const codepoint_t hi)  {
             append_run(Full, 1, runs);
         } else {
             if (type == Mixed) {
+                assert (std::distance(qi, mQuads.cend()) > hi_index);
                 qi += hi_index;
                 hi_quad |= *qi++;
             }
@@ -562,11 +578,17 @@ void UnicodeSet::insert_range(const codepoint_t lo, const codepoint_t hi)  {
         }
     }
 
+    //llvm::errs() << "* " << std::distance(mRuns.cbegin(), ri) << ") type=" << (int)(type) << ", length=" << length << ", lo_index=" << lo_index << ", hi_index=" << hi_index << "\n";
+
+    //llvm::errs() << "* remaining=" << std::distance(ri, mRuns.cend()) << "\n";
+
+    //llvm::errs().flush();
+
     // And append any remaining values from the original data
     append_run(type, length - hi_index, runs);
-    runs.insert(runs.end(), ++ri, mRuns.cend());
+    assert ("We wrote all the runs but still have remaining quads?" && (ri != mRuns.cend() || qi == mQuads.cend()));
+    runs.insert(runs.end(), ri, mRuns.cend());
     quads.insert(quads.end(), qi, mQuads.cend());
-
     assert (verify(runs, quads));
 
     mRuns.assign(runs.cbegin(), runs.cend());
@@ -750,8 +772,8 @@ void UnicodeSet::iterator::advance(const unsigned n) {
  * @brief Empty Set Constructor
  ** ------------------------------------------------------------------------------------------------------------- */
 UnicodeSet::UnicodeSet()
-: mRuns(reinterpret_cast<RunAllocator &>(mAllocator))
-, mQuads(reinterpret_cast<QuadAllocator &>(mAllocator))
+: mRuns(mRunAllocator)
+, mQuads(mQuadAllocator)
 {
     append_run(Empty, UNICODE_QUAD_COUNT, mRuns);
     assert (verify(mRuns, mQuads));
@@ -761,8 +783,8 @@ UnicodeSet::UnicodeSet()
  * @brief Singleton Set Constructor
  ** ------------------------------------------------------------------------------------------------------------- */
 UnicodeSet::UnicodeSet(const codepoint_t codepoint)
-: mRuns(reinterpret_cast<RunAllocator &>(mAllocator))
-, mQuads(reinterpret_cast<QuadAllocator &>(mAllocator))
+: mRuns(mRunAllocator)
+, mQuads(mQuadAllocator)
 {
     const codepoint_t quad_no = codepoint / QUAD_BITS;
     append_run(Empty, quad_no, mRuns);
@@ -775,8 +797,8 @@ UnicodeSet::UnicodeSet(const codepoint_t codepoint)
  * @brief Range Set Constructor
  ** ------------------------------------------------------------------------------------------------------------- */
 UnicodeSet::UnicodeSet(const codepoint_t lo, const codepoint_t hi)
-: mRuns(reinterpret_cast<RunAllocator &>(mAllocator))
-, mQuads(reinterpret_cast<QuadAllocator &>(mAllocator))
+: mRuns(mRunAllocator)
+, mQuads(mQuadAllocator)
 {
     const codepoint_t lo_index = lo / QUAD_BITS;
     const codepoint_t hi_index = hi / QUAD_BITS;
@@ -856,8 +878,8 @@ void convertIntervalRangesToSparseSet(const itr begin, const itr end, UnicodeSet
  * @brief Interval Range Constructor
  ** ------------------------------------------------------------------------------------------------------------- */
 UnicodeSet::UnicodeSet(std::initializer_list<interval_t>::iterator begin, std::initializer_list<interval_t>::iterator end)
-: mRuns(0, {Empty, 0}, reinterpret_cast<RunAllocator &>(mAllocator))
-, mQuads(0, 0, reinterpret_cast<QuadAllocator &>(mAllocator))
+: mRuns(0, {Empty, 0}, mRunAllocator)
+, mQuads(0, 0, mQuadAllocator)
 {
     convertIntervalRangesToSparseSet(begin, end, mRuns, mQuads);
 }
@@ -866,8 +888,8 @@ UnicodeSet::UnicodeSet(std::initializer_list<interval_t>::iterator begin, std::i
  * @brief Interval Range Constructor
  ** ------------------------------------------------------------------------------------------------------------- */
 UnicodeSet::UnicodeSet(const std::vector<interval_t>::iterator begin, const std::vector<interval_t>::iterator end)
-: mRuns(0, {Empty, 0}, reinterpret_cast<RunAllocator &>(mAllocator))
-, mQuads(0, 0, reinterpret_cast<QuadAllocator &>(mAllocator))
+: mRuns(0, {Empty, 0}, mRunAllocator)
+, mQuads(0, 0, mQuadAllocator)
 {
     convertIntervalRangesToSparseSet(begin, end, mRuns, mQuads);
 }
@@ -876,8 +898,8 @@ UnicodeSet::UnicodeSet(const std::vector<interval_t>::iterator begin, const std:
  * @brief Copy Constructor
  ** ------------------------------------------------------------------------------------------------------------- */
 UnicodeSet::UnicodeSet(const UnicodeSet & other)
-: mRuns(other.mRuns, reinterpret_cast<RunAllocator &>(mAllocator))
-, mQuads(other.mQuads, reinterpret_cast<QuadAllocator &>(mAllocator))
+: mRuns(other.mRuns, mRunAllocator)
+, mQuads(other.mQuads, mQuadAllocator)
 {
     assert (verify(mRuns, mQuads));
 }
@@ -886,8 +908,8 @@ UnicodeSet::UnicodeSet(const UnicodeSet & other)
  * @brief Initializer Constructor
  ** ------------------------------------------------------------------------------------------------------------- */
 UnicodeSet::UnicodeSet(std::initializer_list<run_t> r, std::initializer_list<bitquad_t> q)
-: mRuns(r.begin(), r.end(), reinterpret_cast<RunAllocator &>(mAllocator))
-, mQuads(q.begin(), q.end(), reinterpret_cast<QuadAllocator &>(mAllocator))
+: mRuns(r.begin(), r.end(), mRunAllocator)
+, mQuads(q.begin(), q.end(), mQuadAllocator)
 {
     assert (verify(mRuns, mQuads));
 }
@@ -896,8 +918,8 @@ UnicodeSet::UnicodeSet(std::initializer_list<run_t> r, std::initializer_list<bit
  * @brief Internal Vector Constructor
  ** ------------------------------------------------------------------------------------------------------------- */
 inline UnicodeSet::UnicodeSet(std::vector<run_t> && r, std::vector<bitquad_t> && q)
-: mRuns(r.begin(), r.end(), reinterpret_cast<RunAllocator &>(mAllocator))
-, mQuads(q.begin(), q.end(), reinterpret_cast<QuadAllocator &>(mAllocator))
+: mRuns(r.begin(), r.end(), mRunAllocator)
+, mQuads(q.begin(), q.end(), mQuadAllocator)
 {
     assert (verify(mRuns, mQuads));
 }

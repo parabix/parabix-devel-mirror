@@ -36,25 +36,27 @@
 */
 
 #include "ispc.h"
-#include <stdlib.h>
+#include <stdexcept>
 
 ///////////////////////////////////////////////////////////////////////////
 // Target
 
 #if !defined(ISPC_IS_WINDOWS) && !defined(__arm__)
-static void __cpuid(int info[4], int infoType) {
-    __asm__ __volatile__ ("cpuid"
-                          : "=a" (info[0]), "=b" (info[1]), "=c" (info[2]), "=d" (info[3])
-                          : "0" (infoType));
+#include <cpuid.h> // supplied by clang and gcc
+static inline void cpuid(int info[4], int level) {
+    __cpuid(level, info[0], info[1], info[2], info[3]);
 }
 
-/* Save %ebx in case it's the PIC register */
-static void __cpuidex(int info[4], int level, int count) {
-  __asm__ __volatile__ ("xchg{l}\t{%%}ebx, %1\n\t"
-                        "cpuid\n\t"
-                        "xchg{l}\t{%%}ebx, %1\n\t"
-                        : "=a" (info[0]), "=r" (info[1]), "=c" (info[2]), "=d" (info[3])
-                        : "0" (level), "2" (count));
+static void cpuid_count(int info[4], int level, int count) {
+    __cpuid_count(level, count, info[0], info[1], info[2], info[3]);
+}
+#else
+static inline void cpuid(int info[4], int level) {
+    __cpuid(info, level);
+}
+
+static void cpuid_count(int info[4], int level, int count) {
+    __cpuidex(info, level, count);
 }
 #endif // !ISPC_IS_WINDOWS && !__ARM__
 
@@ -97,11 +99,11 @@ lGetSystemISA() {
     return "neon-i32x4";
 #else
     int info[4];
-    __cpuid(info, 1);
+    cpuid(info, 1);
 
     int info2[4];
     // Call cpuid with eax=7, ecx=0
-    __cpuidex(info2, 7, 0);
+    cpuid_count(info2, 7, 0);
 
     if ((info[2] & (1 << 27)) != 0 &&  // OSXSAVE
         (info2[1] & (1 <<  5)) != 0 && // AVX2
@@ -147,9 +149,7 @@ lGetSystemISA() {
     else if ((info[3] & (1 << 26)) != 0)
         return "sse2-i32x4";
     else {
-        //Error(SourcePos(), "Unable to detect supported SSE/AVX ISA.  Exiting.");
-        
-        exit(1);
+        throw std::runtime_error("Unable to detect supported SSE/AVX ISA.");
     }
 #endif
 }

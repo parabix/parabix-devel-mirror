@@ -56,27 +56,23 @@ void PipelineBuilder::CreateKernels(PabloFunction * function, bool isNameExpress
     }
 }
 
-Value * generatePopcount(IDISA::IDISA_Builder * iBuilder, Value * bits) {
+inline Value * generatePopcount(IDISA::IDISA_Builder * iBuilder, Value * bits) {
     Value * ctpopFunc = Intrinsic::getDeclaration(iBuilder->getModule(), Intrinsic::ctpop, bits->getType());
-    return iBuilder->CreateCall(ctpopFunc, std::vector<Value *>({bits}));
+    return iBuilder->CreateCall(ctpopFunc, {bits});
 }
 
-Value * Cal_Count(Instance * icGrepInstance, IDISA::IDISA_Builder * iBuilder, int mBlockSize) {
-    const unsigned index = 0;
-    const unsigned streamOffset = 0;
-    Value * match = (icGrepInstance->getOutputStream(index, streamOffset));
-    Value * temp = iBuilder->CreateLoad(match);
-    Value * matches = iBuilder->CreateBitCast(temp, iBuilder->getIntNTy(mBlockSize));
-    Value * popcount = generatePopcount(iBuilder, matches);
-    return popcount;
+inline Value * Cal_Count(Instance * icGrepInstance, IDISA::IDISA_Builder * iBuilder) {
+    Value * match = icGrepInstance->getOutputStream(0, 0);
+    Value * matches = iBuilder->CreateLoad(match, false, "match");
+    return generatePopcount(iBuilder, matches);
 }
 
 Function * PipelineBuilder::ExecuteKernels(bool CountOnly) {
     Type * const int64ty = iBuilder->getInt64Ty();
     Type * const int8PtrTy = iBuilder->getInt8PtrTy();
     Type * const inputType = PointerType::get(ArrayType::get(StructType::get(mMod->getContext(), std::vector<Type *>({ArrayType::get(mBitBlockType, 8)})), 1), 0);
-
-    Function * const main = cast<Function>(mMod->getOrInsertFunction("Main", Type::getVoidTy(mMod->getContext()), inputType, int64ty, int64ty, iBuilder->getInt1Ty(), nullptr));
+    Type * const resultTy = CountOnly ? int64ty : iBuilder->getVoidTy();
+    Function * const main = cast<Function>(mMod->getOrInsertFunction("Main", resultTy, inputType, int64ty, int64ty, iBuilder->getInt1Ty(), nullptr));
     main->setCallingConv(CallingConv::C);
     Function::arg_iterator args = main->arg_begin();
 
@@ -109,18 +105,21 @@ Function * PipelineBuilder::ExecuteKernels(bool CountOnly) {
     BasicBlock * unterminatedBlock = BasicBlock::Create(mMod->getContext(), "unterminated", main, 0);
     BasicBlock * exitBlock = BasicBlock::Create(mMod->getContext(), "exit", main, 0);
 
-    Value * count = iBuilder->CreateAlloca (Type::getIntNTy(mMod->getContext(), mBlockSize), nullptr, "count");
-    Value * num = ConstantInt::get(iBuilder->getIntNTy(mBlockSize), 0);
-    iBuilder->CreateStore(num, count, false);
+    Value * count = nullptr;
+    if (CountOnly) {
+        count = iBuilder->CreateAlloca(mBitBlockType, nullptr, "count");
+        iBuilder->CreateStore(ConstantInt::getNullValue(mBitBlockType), count);
+    }
 
     Instance * s2pInstance = mS2PKernel->instantiate(inputStream);
     Instance * icGrepInstance = mICgrepKernel->instantiate(s2pInstance->getOutputStreamBuffer());
-    Instance * scanMatchInstance = mScanMatchKernel->instantiate(icGrepInstance->getOutputStreamBuffer());
+    Instance * scanMatchInstance = nullptr;
     
-    if(!CountOnly) {
-	scanMatchInstance->setInternalState("FileBuf", iBuilder->CreateBitCast(inputStream, int8PtrTy));
-	scanMatchInstance->setInternalState("FileSize", bufferSize);
-	scanMatchInstance->setInternalState("FileIdx", fileIdx);
+    if (!CountOnly) {
+        scanMatchInstance = mScanMatchKernel->instantiate(icGrepInstance->getOutputStreamBuffer());
+        scanMatchInstance->setInternalState("FileBuf", iBuilder->CreateBitCast(inputStream, int8PtrTy));
+        scanMatchInstance->setInternalState("FileSize", bufferSize);
+        scanMatchInstance->setInternalState("FileIdx", fileIdx);
     }
     Value * initialBufferSize = nullptr;
     BasicBlock * initialBlock = nullptr;
@@ -139,18 +138,18 @@ Function * PipelineBuilder::ExecuteKernels(bool CountOnly) {
         }
         for (unsigned i = 0; i < segmentSize; ++i) {
             icGrepInstance->CreateDoBlockCall();
-	    if(CountOnly){
-		Value * popcount_for = Cal_Count(icGrepInstance, iBuilder, mBlockSize);
-		Value * temp_countfor = iBuilder->CreateLoad(count);
-		Value * add_for = iBuilder->CreateAdd(temp_countfor, popcount_for);
-		iBuilder->CreateStore(add_for, count);
-	    }
+            if (CountOnly) {
+                Value * popcount_for = Cal_Count(icGrepInstance, iBuilder);
+                Value * temp_countfor = iBuilder->CreateLoad(count);
+                Value * add_for = iBuilder->CreateAdd(temp_countfor, popcount_for);
+                iBuilder->CreateStore(add_for, count);
+            }
         }
-	if(!CountOnly) {
-	    for (unsigned i = 0; i < segmentSize; ++i) {
-	        scanMatchInstance->CreateDoBlockCall();
-	    }
-	}
+        if (!CountOnly) {
+            for (unsigned i = 0; i < segmentSize; ++i) {
+                scanMatchInstance->CreateDoBlockCall();
+            }
+        }
         remainingBytes->addIncoming(iBuilder->CreateSub(remainingBytes, step), segmentBodyBlock);
         iBuilder->CreateBr(segmentCondBlock);
         initialBufferSize = remainingBytes;
@@ -172,15 +171,13 @@ Function * PipelineBuilder::ExecuteKernels(bool CountOnly) {
     iBuilder->SetInsertPoint(fullBodyBlock);
     s2pInstance->CreateDoBlockCall();
     icGrepInstance->CreateDoBlockCall();
-    if(CountOnly){
-	Value * popcount = Cal_Count(icGrepInstance, iBuilder, mBlockSize);    
-	Value * temp_count = iBuilder->CreateLoad(count);
-	Value * add = iBuilder->CreateAdd(temp_count, popcount);
-	iBuilder->CreateStore(add, count);
-    }
-
-    if(!CountOnly) {
-	scanMatchInstance->CreateDoBlockCall();
+    if (CountOnly) {
+        Value * popcount = Cal_Count(icGrepInstance, iBuilder);
+        Value * temp_count = iBuilder->CreateLoad(count);
+        Value * add = iBuilder->CreateAdd(temp_count, popcount);
+        iBuilder->CreateStore(add, count);
+    } else {
+        scanMatchInstance->CreateDoBlockCall();
     }
 
     remainingBytes->addIncoming(iBuilder->CreateSub(remainingBytes, step), fullBodyBlock);
@@ -227,23 +224,27 @@ Function * PipelineBuilder::ExecuteKernels(bool CountOnly) {
     iBuilder->SetInsertPoint(exitBlock);
 
     icGrepInstance->CreateDoBlockCall();
-    if(CountOnly){
-	Value * popcount1 = Cal_Count(icGrepInstance, iBuilder, mBlockSize);    
-	Value * temp_count1 = iBuilder->CreateLoad(count);
-	Value * add1 = iBuilder->CreateAdd(temp_count1, popcount1);
-	iBuilder->CreateStore(add1, count);
+    if (CountOnly) {
+        Value * popcount1 = Cal_Count(icGrepInstance, iBuilder);
+        Value * temp_count1 = iBuilder->CreateLoad(count);
+        Value * result = iBuilder->CreateAdd(temp_count1, popcount1);
+        for (unsigned width = (mBlockSize / 64); width > 1; width /= 2) {
+            std::vector<Constant *> mask(width / 2);
+            for (unsigned i = 0; i < (width / 2); ++i) {
+                mask[i] = iBuilder->getInt32(i);
+            }
+            Value * const undef = UndefValue::get(VectorType::get(int64ty, width));
+            Value * const lh = iBuilder->CreateShuffleVector(result, undef, ConstantVector::get(mask));
+            for (unsigned i = 0; i < (width / 2); ++i) {
+                mask[i] = iBuilder->getInt32(i + (width / 2));
+            }
+            Value * const rh = iBuilder->CreateShuffleVector(result, undef, ConstantVector::get(mask));
+            result = iBuilder->CreateAdd(lh, rh);
+        }
+        iBuilder->CreateRet(iBuilder->CreateExtractElement(result, iBuilder->getInt32(0)));
+    } else {
+        scanMatchInstance->CreateDoBlockCall();
+        iBuilder->CreateRetVoid();
     }
-    if(!CountOnly) {
-	scanMatchInstance->CreateDoBlockCall();
-    }
-    if(CountOnly){
-	Value * Ret = iBuilder->CreateLoad(count);
-	iBuilder->CreateRet(Ret);
-    }
-    else{
-	iBuilder->CreateRetVoid();
-    }
-
-
     return main;
 }

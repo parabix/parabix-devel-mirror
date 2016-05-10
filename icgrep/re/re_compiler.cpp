@@ -159,7 +159,7 @@ RE * RE_Compiler::resolveUnicodeProperties(RE * re) {
                             name->setCompiled(call);
                         } else {
                         #endif
-                            name->setDefinition(makeCC(std::move(UCD::resolveUnicodeSet(name))));
+                            name->setDefinition(makeCC(UCD::resolveUnicodeSet(name)));
                         #ifndef DISABLE_PREGENERATED_UCD_FUNCTIONS
                         }
                         #endif

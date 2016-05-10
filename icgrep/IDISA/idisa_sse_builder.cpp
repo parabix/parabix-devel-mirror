@@ -48,7 +48,7 @@ Value * IDISA_SSE2_Builder::hsimd_signmask(unsigned fw, Value * a) {
             return mask;
         }
     }
-    int fieldCount = mBitBlockWidth/fw;
+    const unsigned fieldCount = mBitBlockWidth / fw;
     if ((fieldCount > 4) && (fieldCount <= 16)) {
         Value * pmovmskb_func = Intrinsic::getDeclaration(mMod, Intrinsic::x86_sse2_pmovmskb_128);
         int fieldBytes = fw/8;

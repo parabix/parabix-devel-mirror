@@ -95,7 +95,7 @@ std::string sha1sum(const std::string & str) {
     return std::string(buffer);
 }
 
-std::vector<int> total_CountOnly;
+std::vector<uint64_t> total_CountOnly;
 std::mutex count_mutex;
 size_t fileCount;
 void *DoGrep(void *args)
@@ -123,43 +123,38 @@ void *DoGrep(void *args)
 
 // Returns true if the command line argument shouldn't be passed to icGrep or Grep.
 bool isArgUnwantedForAll(char *argument) {
-
-    bool isUnwated = false;
     std::vector<std::string> unwantedFlags = {"-gs"};
-
-    for (int i=0; i<unwantedFlags.size(); i++){    
+    for (unsigned i = 0; i < unwantedFlags.size(); ++i){
         if (strcmp(argument, unwantedFlags[i].c_str()) == 0) {
-            isUnwated = true;
+            return true;
         }
     }
-
-    return isUnwated;
+    return false;
 }
 // Filters out the command line strings that shouldn't be passed on to Grep
 bool isArgUnwantedForGrep(char *argument) {
-    bool isUnwated = false;
     std::vector<std::string> unwantedFlags = {"-n"};
 
-    for (int i = 0; i < unwantedFlags.size(); i++){
+    for (unsigned i = 0; i < inputFiles.size(); ++i){
         if (strcmp(argument, unwantedFlags[i].c_str()) == 0) {
-            isUnwated = true;
+            return true;
         }
     }
 
-    for (int i = 0; i < inputFiles.size(); i++){    // filter out input content files.
+    for (unsigned i = 0; i < inputFiles.size(); ++i){    // filter out input content files.
         if (strcmp(argument, inputFiles[i].c_str()) == 0) {
-            isUnwated = true;
+            return true;
         }
     }
 
-    return isUnwated;
+    return false;
 }
 // Filters out the command line strings that shouldn't be passed on to IcGrep
 bool isArgUnwantedForIcGrep(char *argument) {
     bool isUnwated = false;
     std::vector<std::string> unwantedFlags = {"-c"};
 
-    for (int i=0; i<unwantedFlags.size(); i++){
+    for (unsigned i = 0; i < unwantedFlags.size(); ++i){
         if (strcmp(argument, unwantedFlags[i].c_str()) == 0) {
             isUnwated = true;
         }
@@ -179,7 +174,7 @@ void pipeIcGrepOutputToGrep(int argc, char *argv[]) {
 
     // Construct the shell arguments for icgrep and grep 
     // by filtering out the command line arguments passed into this process.
-    for (int i=1; i< argc; i++) {
+    for (int i = 1; i < argc; i++) {
         if (!isArgUnwantedForAll(argv[i])) {
 
             if (!isArgUnwantedForIcGrep(argv[i])) {
@@ -219,7 +214,7 @@ int main(int argc, char *argv[]) {
     grepEngine.grepCodeGen(module_name, re_ast, CountOnly);
    
     initResult(inputFiles);
-    for (int i=0; i<inputFiles.size(); i++){
+    for (unsigned i=0; i<inputFiles.size(); ++i){
         total_CountOnly.push_back(0);
     }
 

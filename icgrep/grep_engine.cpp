@@ -83,8 +83,8 @@ bool GrepEngine::finalLineIsUnterminated(const char * const fileBuffer, const si
     return (static_cast<unsigned char>(fileBuffer[fileSize-3]) != 0xE2) || (penult_byte != 0x80);
 }
 
-void GrepEngine::doGrep(const std::string & fileName, const int fileIdx, bool CountOnly, std::vector<int> & total_CountOnly) {
-    const path file(fileName);
+void GrepEngine::doGrep(const std::string & fileName, const int fileIdx, bool CountOnly, std::vector<uint64_t> & total_CountOnly) {
+    path file(fileName);
     if (exists(file)) {
         if (is_directory(file)) {
             return;
@@ -94,30 +94,26 @@ void GrepEngine::doGrep(const std::string & fileName, const int fileIdx, bool Co
         return;
     }
 
-    const size_t fileSize = file_size(file);
+    const auto fileSize = file_size(file);
     if (fileSize > 0) {
-        mapped_file_source file;
         try {
-            file.open(fileName);
-        } catch (std::exception &e) {
+            mapped_file_source source(fileName, fileSize, 0);
+            char * fileBuffer = const_cast<char *>(source.data());
+            if (CountOnly) {
+                total_CountOnly[fileIdx] = mGrepFunction_CountOnly(fileBuffer, fileSize, fileIdx, finalLineIsUnterminated(fileBuffer, fileSize));
+            } else {
+                mGrepFunction(fileBuffer, fileSize, fileIdx, finalLineIsUnterminated(fileBuffer, fileSize));
+            }
+            source.close();
+        } catch (std::exception & e) {
             throw std::runtime_error("Boost mmap error: " + fileName + ": " + e.what());
         }
-        char * fileBuffer = const_cast<char *>(file.data());
-	if(CountOnly){
-	    total_CountOnly[fileIdx] = mGrepFunction_CountOnly(fileBuffer, fileSize, fileIdx, finalLineIsUnterminated(fileBuffer, fileSize));
-	}
-	else{
-            mGrepFunction(fileBuffer, fileSize, fileIdx, finalLineIsUnterminated(fileBuffer, fileSize));
-	}
-        file.close();
-    }
-    else {
-	if(CountOnly) {
+    } else {
+        if(CountOnly) {
             mGrepFunction_CountOnly(nullptr, 0, fileIdx, false);
-	}
-	else{
-	    mGrepFunction(nullptr, 0, fileIdx, false);
-	}
+        } else {
+            mGrepFunction(nullptr, 0, fileIdx, false);
+        }
     }
 }
 
@@ -146,13 +142,13 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool Count
     #ifndef NDEBUG
     verifyModule(*M, &dbgs());
     #endif
+
     mEngine->finalizeObject();
     delete idb;
 
-    if(CountOnly){
+    if (CountOnly) {
         mGrepFunction_CountOnly = reinterpret_cast<GrepFunctionType_CountOnly>(mEngine->getPointerToFunction(grepIR));
-    }
-    else{
+    } else {
         mGrepFunction = reinterpret_cast<GrepFunctionType>(mEngine->getPointerToFunction(grepIR));
     }
 
@@ -192,7 +188,7 @@ void initResult(std::vector<std::string> filenames){
     inputFiles = filenames;
     resultStrs = new std::stringstream[n];
     total_count = new int[n];
-    for (int i=0; i<inputFiles.size(); i++){
+    for (unsigned i = 0; i < inputFiles.size(); ++i){
         total_count[i] = 0;
     }
     
@@ -248,23 +244,22 @@ extern "C" {
     }
 }
 
-void PrintResult(bool CountOnly, std::vector<int> & total_CountOnly){
+void PrintResult(bool CountOnly, std::vector<uint64_t> & total_CountOnly){
     if(CountOnly){
         if (!ShowFileNames) {
-            for (int i=0; i<inputFiles.size(); i++){
+            for (unsigned i = 0; i < inputFiles.size(); ++i){
                 std::cout << total_CountOnly[i] << std::endl;
             }
         }
         else {
-            for (int i=0; i<inputFiles.size(); i++){
+            for (unsigned i = 0; i < inputFiles.size(); ++i){
                 std::cout << inputFiles[i] << ':' << total_CountOnly[i] << std::endl;
             };
         }
         return;
     }
     
-    std::string out;
-    for (int i=0; i<inputFiles.size(); i++){
+    for (unsigned i = 0; i < inputFiles.size(); ++i){
         std::cout << resultStrs[i].str();
     }
 }

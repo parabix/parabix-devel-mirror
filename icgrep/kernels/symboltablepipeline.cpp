@@ -443,7 +443,7 @@ Function * SymbolTableBuilder::generateGatherFunction(const unsigned minKeyLengt
         iBuilder->SetInsertPoint(entry);
 
         AllocaInst * const buffer = iBuilder->CreateAlloca(gatherVectorType, iBuilder->getInt32(maxCount * 4), "buffer");
-        Value * end = iBuilder->CreateGEP(buffer, {iBuilder->getInt32(maxCount * 4)});
+        Value * end = iBuilder->CreateGEP(buffer, iBuilder->getInt32(maxCount * 4));
         Value * size = iBuilder->CreateSub(iBuilder->CreatePtrToInt(end, iBuilder->getInt64Ty()), iBuilder->CreatePtrToInt(buffer, iBuilder->getInt64Ty()));
         iBuilder->CreateMemSet(buffer, iBuilder->getInt8(0), size, 4);
         Value * const transposed = iBuilder->CreateBitCast(buffer, transposedVectorType->getPointerTo(), "transposed");

@@ -501,9 +501,9 @@ RE * RE_Parser::parsePropertyExpression() {
             ++mCursor;
         }
         // We have a property-name = value expression
-        return createName(std::move(canonicalize(start, prop_end)), std::move(canonicalize(val_start, mCursor.pos())));
+        return createName(canonicalize(start, prop_end), canonicalize(val_start, mCursor.pos()));
     }
-    return createName(std::move(canonicalize(start, mCursor.pos())));
+    return createName(canonicalize(start, mCursor.pos()));
 }
 
 Name * RE_Parser::parseNamePatternExpression(){
@@ -588,11 +588,11 @@ RE * RE_Parser::parse_charset() {
     // a following hyphen can indicate a range.   When the last item is a set subexpression,
     // a following hyphen can indicate set subtraction.
     enum {NoItem, CodepointItem, RangeItem, SetItem, BrackettedSetItem} lastItemKind = NoItem;
-    codepoint_t lastCodepointItem;
 
+    codepoint_t lastCodepointItem = 0;
     bool havePendingOperation = false;
-    CharsetOperatorKind pendingOperationKind;
-    RE * pendingOperand;
+    CharsetOperatorKind pendingOperationKind = intersectOp;
+    RE * pendingOperand = nullptr;
 
     // If the first character after the [ is a ^ (caret) then the matching character class is complemented.
     bool negated = false;
@@ -864,7 +864,7 @@ codepoint_t RE_Parser::parse_hex_codepoint(int mindigits, int maxdigits) {
             value = (value * 16) | (t - '0');
         }
         else {
-            value = (value * 16) | ((t | 32) - 'a') + 10;
+            value = ((value * 16) | ((t | 32) - 'a')) + 10;
         }
         ++mCursor;
         ++count;

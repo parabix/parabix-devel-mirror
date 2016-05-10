@@ -13,6 +13,7 @@
 namespace pablo {
 
 PabloAST::Allocator PabloAST::mAllocator;
+PabloAST::VectorAllocator PabloAST::mVectorAllocator;
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief equals

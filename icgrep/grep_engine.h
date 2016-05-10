@@ -18,7 +18,7 @@ namespace llvm { class raw_ostream; }
 
 class GrepEngine {
     typedef void (*GrepFunctionType)(char * byte_data, size_t filesize, const int fileIdx, uint64_t finalLineUnterminated);
-    typedef int64_t (*GrepFunctionType_CountOnly)(char * byte_data, size_t filesize, const int fileIdx, uint64_t finalLineUnterminated);
+    typedef uint64_t (*GrepFunctionType_CountOnly)(char * byte_data, size_t filesize, const int fileIdx, uint64_t finalLineUnterminated);
 public:
 
     GrepEngine() {}
@@ -27,7 +27,7 @@ public:
   
     void grepCodeGen(std::string moduleName, re::RE * re_ast, bool CountOnly, bool isNameExpression = false);
     
-    void doGrep(const std::string & fileName, const int fileIdx, bool CountOnly, std::vector<int> & total_CountOnly);
+    void doGrep(const std::string & fileName, const int fileIdx, bool CountOnly, std::vector<uint64_t> &total_CountOnly);
     
     re::CC *  grepCodepoints();
     
@@ -49,6 +49,6 @@ re::CC * getParsedCodePointSet();
 void setParsedCodePointSet();
 
 void initResult(std::vector<std::string> filenames);
-void PrintResult(bool CountOnly, std::vector<int> & total_CountOnly);
+void PrintResult(bool CountOnly, std::vector<uint64_t> & total_CountOnly);
 
 #endif

@@ -68,13 +68,10 @@ ExecutionEngine * JIT_to_ExecutionEngine (Module * m) {
     initializeLowerIntrinsicsPass(*Registry);
 
     std::string errMessage;
-    EngineBuilder builder(std::move(std::unique_ptr<Module>(m)));
+    EngineBuilder builder{std::unique_ptr<Module>(m)};
     builder.setErrorStr(&errMessage);
     builder.setMCPU(sys::getHostCPUName());
     TargetOptions opts = InitTargetOptionsFromCodeGenFlags();
-    #ifndef NDEBUG
-    opts.JITEmitDebugInfo = 1;
-    #endif
     builder.setTargetOptions(opts);
     CodeGenOpt::Level optLevel = CodeGenOpt::Level::None;
     switch (codegen::OptLevel) {

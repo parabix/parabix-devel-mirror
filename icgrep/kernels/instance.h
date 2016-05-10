@@ -48,7 +48,7 @@ public:
         return mDefinition->getInputStreamInternal(getInputStreamSet(streamOffset), iBuilder->getInt32(index));
     }
 
-    llvm::Value * getInputStream(llvm::Value * const index, const unsigned streamOffset = 0) {
+    llvm::Value * getInputStream(disable_implicit_conversion<llvm::Value *> index, const unsigned streamOffset = 0) {
         return mDefinition->getInputStreamInternal(getInputStreamSet(streamOffset), index);
     }
 
@@ -60,7 +60,7 @@ public:
         return mDefinition->getInputScalarInternal(mInputScalarSet, iBuilder->getInt32(index));
     }
 
-    llvm::Value * getInputScalar(llvm::Value * const index) {
+    llvm::Value * getInputScalar(disable_implicit_conversion<llvm::Value *> index) {
         return mDefinition->getInputScalarInternal(mInputScalarSet, index);
     }
 
@@ -78,7 +78,7 @@ public:
         return mDefinition->getOutputStreamInternal(getOutputStreamSet(streamOffset), iBuilder->getInt32(index));
     }
 
-    llvm::Value * getOutputStream(llvm::Value * const index, const unsigned streamOffset = 0) {
+    llvm::Value * getOutputStream(disable_implicit_conversion<llvm::Value *> index, const unsigned streamOffset = 0) {
         return mDefinition->getOutputStreamInternal(getOutputStreamSet(streamOffset), index);
     }
 
@@ -88,7 +88,7 @@ public:
         return mDefinition->getOutputScalarInternal(mOutputScalarSet, iBuilder->getInt32(index));
     }
 
-    llvm::Value * getOutputScalar(llvm::Value * const index) {
+    llvm::Value * getOutputScalar(disable_implicit_conversion<llvm::Value *> index) {
         return mDefinition->getOutputScalarInternal(mOutputScalarSet, index);
     }
 

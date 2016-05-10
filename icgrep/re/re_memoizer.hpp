@@ -6,8 +6,6 @@
 
 namespace re {
 
-namespace {
-
 struct MemoizerComparator {
     inline bool operator() (const RE * lh, const RE * rh) const{
         if (LLVM_LIKELY(isa<Name>(lh) && isa<Name>(rh))) {
@@ -18,8 +16,6 @@ struct MemoizerComparator {
         return *cast<Name>(rh) > *cast<CC>(lh);
     }
 };
-
-}
 
 struct Memoizer : public std::set<RE *, MemoizerComparator> {
 

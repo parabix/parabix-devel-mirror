@@ -158,11 +158,11 @@ inline CC * makeCC(UCD::UnicodeSet && set) {
 }
 
 inline CC * subtractCC(const CC * a, const CC * b) {
-    return new CC(std::move(*a - *b));
+    return new CC(*a - *b);
 }
 
 inline CC * intersectCC(const CC * a, const CC * b) {
-    return new CC(std::move(*a & *b));
+    return new CC(*a & *b);
 }
 
 CC * caseInsensitize(const CC * cc);

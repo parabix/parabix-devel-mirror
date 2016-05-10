@@ -38,7 +38,7 @@ class PabloAST {
 public:
 
     using Allocator = SlabAllocator<u_int8_t>;
-    using VectorAllocator = Allocator::rebind<PabloAST *>::other;
+    using VectorAllocator = SlabAllocator<PabloAST *>;
     using Users = std::vector<PabloAST *, VectorAllocator>;
     using user_iterator = Users::iterator;
     using const_user_iterator = Users::const_iterator;
@@ -124,7 +124,7 @@ public:
 protected:
     inline PabloAST(const ClassTypeId id)
     : mClassTypeId(id)
-    , mUsers(reinterpret_cast<VectorAllocator &>(mAllocator))
+    , mUsers(mVectorAllocator)
     {
 
     }
@@ -134,6 +134,7 @@ protected:
         mUsers.clear();
     }
     static Allocator        mAllocator;
+    static VectorAllocator  mVectorAllocator;
 private:
     const ClassTypeId       mClassTypeId;
     Users                   mUsers;

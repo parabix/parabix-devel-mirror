@@ -4,10 +4,12 @@
 
 namespace pablo {
 
+If::DefinedAllocator If::mDefinedAllocator;
+
 If::If(PabloAST * expr, const std::initializer_list<Assign *> definedVars, PabloBlock * body)
 : Statement(ClassTypeId::If, {expr}, nullptr)
 , mBody(body)
-, mDefined(definedVars.begin(), definedVars.end(), reinterpret_cast<DefinedAllocator &>(mAllocator)) {
+, mDefined(definedVars.begin(), definedVars.end(), mDefinedAllocator) {
     // Conceptually, having a defined var X is identical to having:
     //
     // Assign(X, 0)
@@ -29,7 +31,7 @@ If::If(PabloAST * expr, const std::initializer_list<Assign *> definedVars, Pablo
 If::If(PabloAST * expr, const std::vector<Assign *> & definedVars, PabloBlock * body)
 : Statement(ClassTypeId::If, {expr}, nullptr)
 , mBody(body)
-, mDefined(definedVars.begin(), definedVars.end(), reinterpret_cast<DefinedAllocator &>(mAllocator)) {
+, mDefined(definedVars.begin(), definedVars.end(), mDefinedAllocator) {
     mBody->setBranch(this);
     mBody->setParent(getParent());
     for (Assign * def : mDefined) {

@@ -236,7 +236,7 @@ void generateScanMatch(Module * m, IDISA::IDISA_Builder * iBuilder, unsigned sca
     for(unsigned i = 0; i < fieldCount; ++i){
         Value * matchWord = iBuilder->CreateExtractElement(matchWordVector, ConstantInt::get(T, i));
         Value * recordBreaksWord = iBuilder->CreateExtractElement(breakWordVector, ConstantInt::get(T, i));
-        Value * wordResult = wordResult = iBuilder->CreateCall(scanWordFunction, std::vector<Value *>({kernelStuctParam, matchWord, recordBreaksWord, scanwordPos, recordStart, recordNum}));
+        Value * wordResult = iBuilder->CreateCall(scanWordFunction, {kernelStuctParam, matchWord, recordBreaksWord, scanwordPos, recordStart, recordNum});
         scanwordPos = iBuilder->CreateAdd(scanwordPos, ConstantInt::get(T, scanWordBitWidth));
         recordStart = iBuilder->CreateExtractValue(wordResult, std::vector<unsigned>({0}));
         recordNum = iBuilder->CreateExtractValue(wordResult, std::vector<unsigned>({1}));

@@ -45,7 +45,7 @@ public:
     }
 
 private:
-    pablo::Var * getBasisVar(const int n) const;
+    pablo::Var * getBasisVar(const unsigned n) const;
     template<typename PabloBlockOrBuilder>
     pablo::PabloAST * bit_pattern_expr(const unsigned pattern, unsigned selected_bits, PabloBlockOrBuilder & pb);
     template<typename PabloBlockOrBuilder>

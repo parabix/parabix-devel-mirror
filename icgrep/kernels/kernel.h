@@ -28,6 +28,18 @@ namespace pablo {
     class PabloFunction;
 }
 
+template<typename T>
+struct disable_implicit_conversion {
+    inline disable_implicit_conversion(T const value) : _value(value) { assert(_value); }
+    inline disable_implicit_conversion(std::nullptr_t) = delete;
+    inline disable_implicit_conversion(unsigned) = delete;
+    operator T() const { return _value; }
+    T operator-> () const { return _value; }
+    T get() const { return _value; }
+private:
+    T const  _value;
+};
+
 namespace kernel {
 
 class Instance;
@@ -40,18 +52,6 @@ class KernelBuilder {
 public:
 
     KernelBuilder(IDISA::IDISA_Builder * builder, std::string && name, const unsigned defaultBufferSize);
-
-    template<typename T>
-    struct disable_implicit_conversion {
-        inline disable_implicit_conversion(T const value) : _value(value) { assert(_value); }
-        inline disable_implicit_conversion(std::nullptr_t) = delete;
-        inline disable_implicit_conversion(unsigned) = delete;
-        operator T() const { return _value; }
-        T operator-> () const { return _value; }
-        T get() const { return _value; }
-    private:
-        T const  _value;
-    };
 
     unsigned addInternalState(llvm::Type * const type);
     unsigned addInternalState(llvm::Type * const type, std::string && name);

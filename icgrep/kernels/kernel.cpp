@@ -99,7 +99,7 @@ void KernelBuilder::addInputStream(const unsigned fields, std::string && name) {
 }
 
 void KernelBuilder::addInputStream(const unsigned fields) {
-    addInputStream(fields, std::move(mKernelName + "_InputStream_" + std::to_string(mInputStream.size())));
+    addInputStream(fields, mKernelName + "_InputStream_" + std::to_string(mInputStream.size()));
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -125,7 +125,7 @@ void KernelBuilder::addInputScalar(Type * const type, std::string && name) {
 }
 
 void KernelBuilder::addInputScalar(Type * const type) {
-    addInputScalar(type, std::move(mKernelName + "_InputScalar_" + std::to_string(mInputScalar.size())));
+    addInputScalar(type, mKernelName + "_InputScalar_" + std::to_string(mInputScalar.size()));
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

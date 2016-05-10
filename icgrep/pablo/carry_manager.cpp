@@ -241,7 +241,7 @@ Value * CarryManager::popCount(Value * to_count, unsigned globalIdx) {
     Value * countPtr = iBuilder->CreateGEP(mPopcountBasePtr, iBuilder->getInt64(globalIdx));
     Value * countSoFar = iBuilder->CreateAlignedLoad(countPtr, 8);
     Value * fieldCounts = iBuilder->simd_popcount(64, to_count);
-    for (int i = 0; i < mBitBlockWidth/64; i++) {
+    for (unsigned i = 0; i < mBitBlockWidth/64; ++i) {
         countSoFar = iBuilder->CreateAdd(countSoFar, iBuilder->mvmd_extract(64, fieldCounts, i));
     }
     iBuilder->CreateAlignedStore(countSoFar, countPtr, 8);

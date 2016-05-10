@@ -160,7 +160,7 @@ std::string resolvePropertyFunction(Name * const property) {
         }
     }
     assert (functionName.length() > 0);
-    return std::move(functionName);
+    return functionName;
 }
 
 UnicodeSet resolveUnicodeSet(Name * const name) {

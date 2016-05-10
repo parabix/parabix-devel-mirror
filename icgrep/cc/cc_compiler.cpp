@@ -217,7 +217,7 @@ PabloAST * CC_Compiler::LE_Range(const unsigned N, const unsigned n, PabloBlockO
       If an N-bit pattern is all ones, then it is always true that any n-bit value is LE this pattern.
       Handling this as a special case avoids an overflow issue with n+1 requiring more than N bits.
     */
-    if ((n + 1) == (1 << N)) {
+    if ((n + 1) == (1UL << N)) {
         return pb.createOnes(); //True.
     }
     else {
@@ -236,8 +236,8 @@ inline PabloAST * CC_Compiler::char_or_range_expr(const codepoint_t lo, const co
     throw std::runtime_error(std::string("Invalid Character Set Range: [") + std::to_string(lo) + "," + std::to_string(hi) + "]");
 }
 
-inline Var * CC_Compiler::getBasisVar(const int i) const {
-    assert (i >= 0 && i < mEncoding.getBits());
+inline Var * CC_Compiler::getBasisVar(const unsigned i) const {
+    assert (i < mEncoding.getBits());
     return mBasisBit[mEncoding.getBits() - i - 1];
 }
 

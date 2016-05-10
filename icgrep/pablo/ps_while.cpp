@@ -3,10 +3,12 @@
 
 namespace pablo {
 
+While::VariantAllocator While::mVariantAllocator;
+
 While::While(PabloAST * expr, const std::initializer_list<Next *> nextVars, PabloBlock * body)
 : Statement(ClassTypeId::While, {expr}, nullptr)
 , mBody(body)
-, mVariant(nextVars.begin(), nextVars.end(), reinterpret_cast<NextAllocator &>(mAllocator)) {
+, mVariant(nextVars.begin(), nextVars.end(), mVariantAllocator) {
     mBody->setBranch(this);
     mBody->setParent(getParent());
     for (Next * variant : nextVars) {
@@ -18,7 +20,7 @@ While::While(PabloAST * expr, const std::initializer_list<Next *> nextVars, Pabl
 While::While(PabloAST * expr, const std::vector<Next *> & nextVars, PabloBlock * body)
 : Statement(ClassTypeId::While, {expr}, nullptr)
 , mBody(body)
-, mVariant(nextVars.begin(), nextVars.end(), reinterpret_cast<NextAllocator &>(mAllocator)) {
+, mVariant(nextVars.begin(), nextVars.end(), mVariantAllocator) {
     mBody->setBranch(this);
     mBody->setParent(getParent());
     for (Next * variant : nextVars) {

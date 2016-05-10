@@ -48,9 +48,8 @@ public:
     using codepoint_t = unsigned;
     using interval_t = std::pair<codepoint_t, codepoint_t>;
 
-    using Allocator = SlabAllocator<uint32_t>;
-    using RunAllocator = Allocator::rebind<run_t>::other;
-    using QuadAllocator = Allocator::rebind<bitquad_t>::other;
+    using RunAllocator = SlabAllocator<run_t>;
+    using QuadAllocator = SlabAllocator<bitquad_t>;
 
     using RunVector = std::vector<run_t, RunAllocator>;
     using QuadVector = std::vector<bitquad_t, QuadAllocator>;
@@ -195,9 +194,10 @@ protected:
 
 private:
 
-    RunVector           mRuns;
-    QuadVector          mQuads;
-    static Allocator    mAllocator;
+    RunVector               mRuns;
+    QuadVector              mQuads;
+    static RunAllocator     mRunAllocator;
+    static QuadAllocator    mQuadAllocator;
 };
 
 enum : UnicodeSet::codepoint_t { UNICODE_MAX = 0x10FFFF };

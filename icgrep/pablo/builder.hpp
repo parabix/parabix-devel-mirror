@@ -31,11 +31,11 @@ public:
     using const_iterator = PabloBlock::const_iterator;
 
     inline static PabloBuilder Create(PabloBlock * block) noexcept {
-        return std::move(PabloBuilder(block));
+        return PabloBuilder(block);
     }
 
     inline static PabloBuilder Create(PabloBuilder & builder) noexcept {
-        return std::move(PabloBuilder(new PabloBlock(builder.mPb->mSymbolGenerator), builder));
+        return PabloBuilder(new PabloBlock(builder.mPb->mSymbolGenerator), builder);
     }
 
     static inline Zeroes * createZeroes() {
