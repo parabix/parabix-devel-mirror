@@ -17,7 +17,6 @@
 #include <IDISA/idisa_builder.h>
 #include <IDISA/idisa_avx_builder.h>
 #include <llvm/Pass.h>
-#include <llvm/PassManager.h>
 #include <llvm/ADT/SmallVector.h>
 #include <llvm/Analysis/Passes.h>
 #include <llvm/IR/BasicBlock.h>
