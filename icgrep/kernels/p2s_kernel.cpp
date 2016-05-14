@@ -4,6 +4,17 @@
 #include <llvm/IR/TypeBuilder.h>
 #include <llvm/IR/Type.h>
 #include <iostream>
+#include <stdint.h>
+#include <llvm/Support/FileSystem.h>
+#include <llvm/Support/raw_ostream.h>
+
+
+
+extern "C" {
+    void buffered_write(const char * ptr, size_t bytes) {
+        outs().write(ptr, bytes);
+    }
+};
 
 namespace kernel{
 	
@@ -96,7 +107,10 @@ Function * create_write(Module * const mod) {
     return write;
 }
 
+const size_t OutputBufferSize=65536;
+
 void generateP2S_16_withCompressedOutputKernel(Module * m, IDISA::IDISA_Builder * iBuilder, KernelBuilder * kBuilder) {
+    outs().SetBufferSize(OutputBufferSize);
     for (unsigned i = 0; i < 16; ++i) {
         kBuilder->addInputStream(1);
     }        
@@ -104,11 +118,12 @@ void generateP2S_16_withCompressedOutputKernel(Module * m, IDISA::IDISA_Builder 
     kBuilder->addOutputStream(16);
 
     kBuilder->prepareFunction();
-    Function * writefn = create_write(m);
     
     Type * i8PtrTy = iBuilder->getInt8PtrTy(); 
     Type * i64 = iBuilder->getIntNTy(64); 
     Type * bitBlockPtrTy = llvm::PointerType::get(iBuilder->getBitBlockType(), 0); 
+    
+    Function * writefn = cast<Function>(m->getOrInsertFunction("buffered_write", iBuilder->getVoidTy(), i8PtrTy, i64, nullptr));
     
     Value * hi_input[8];
     for (unsigned j = 0; j < 8; ++j) {
@@ -147,7 +162,7 @@ void generateP2S_16_withCompressedOutputKernel(Module * m, IDISA::IDISA_Builder 
         byte_offset = iBuilder->CreateZExt(iBuilder->CreateExtractElement(byte_counts, iBuilder->getInt32(2*j+1)), i64);
         //iBuilder->CallPrintInt("byte_offset", byte_offset);
     }
-    iBuilder->CreateCall(writefn, std::vector<Value *>({iBuilder->getInt32(1), output_ptr, byte_offset}));
+    iBuilder->CreateCall(writefn, std::vector<Value *>({output_ptr, byte_offset}));
     
     kBuilder->finalize();
 }
