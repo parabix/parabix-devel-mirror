@@ -1,0 +1,28 @@
+hello world
+abc ABC
+abc123
+
+.ja?
+ss.dd
+
+[0-9][a-z]
+
+
+
+.jk??.jk??.jk??
+??.jk??.jk??
+!@#$%^&()[]Z
+
+lolw haz lolw haz lolw
+ha lol ha lol ha
+
+γεια μπανάνα 你好香蕉 γεια μπανάνα 你好香蕉
+你好香蕉 γεια μπανάνα你好香蕉 γεια μπανάνα
+
+
+Greek stuff: αβγδεζηθικλμνξοπρςστυφχψωZ
+
+http://unix.stackexchange.com/questions/18318/regex-how-to-verify-that-there-are-13-greek-letters-with-an-odd-number-of-cons
+Historically these switches were provided in separate binaries. On some really old Unix systems you will find that you need to call the separate binaries, but on all modern systems the switches are preferred. The man page for grep has details about this. Z
+
+
