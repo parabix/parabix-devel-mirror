@@ -111,7 +111,7 @@ inline void PabloCompiler::GenerateKernel(PabloFunction * const function) {
 
     mCarryManager->initialize(function, mKernelBuilder);
     
-    mKernelBuilder->addInternalState(mBitBlockType, "EOFmask");
+    mKernelBuilder->addInternalState(mBitBlockType, "EOFmark");
     
     mFunction = mKernelBuilder->prepareFunction({mInputStreamOffset.begin(), mInputStreamOffset.end()});
 
@@ -395,9 +395,12 @@ void PabloCompiler::compileStatement(const Statement * stmt) {
         Value * const  sum = mCarryManager->addCarryInCarryOut(sthru->getLocalCarryIndex(), marker_expr, cc_expr);
         expr = iBuilder->simd_and(sum, iBuilder->simd_not(cc_expr));
     } else if (const InFile * e = dyn_cast<InFile>(stmt)) {
-        // Currently InFile(x) => x;  a no-op
-        Value * EOFmask = iBuilder->CreateLoad(mKernelBuilder->getInternalState("EOFmask"));
-        expr = iBuilder->simd_and(compileExpression(e->getExpr()), iBuilder->simd_not(EOFmask));
+        Value * EOFmark = iBuilder->CreateLoad(mKernelBuilder->getInternalState("EOFmark"));
+        Value * infileMask = iBuilder->simd_add(iBuilder->getBitBlockWidth(), EOFmark, iBuilder->allOnes());
+        expr = iBuilder->simd_and(compileExpression(e->getExpr()), infileMask);
+    } else if (const AtEOF * e = dyn_cast<AtEOF>(stmt)) {
+        Value * EOFmark = iBuilder->CreateLoad(mKernelBuilder->getInternalState("EOFmark"));
+        expr = iBuilder->simd_and(compileExpression(e->getExpr()), EOFmark);
     } else if (const Count * c = dyn_cast<Count>(stmt)) {
         Value * const to_count = compileExpression(c->getExpr());
         expr = mCarryManager->popCount(to_count, c->getGlobalCountIndex());

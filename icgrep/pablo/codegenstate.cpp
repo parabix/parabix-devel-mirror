@@ -155,7 +155,7 @@ PabloAST * PabloBlock::createCount(PabloAST * expr, const std::string prefix) {
 
 PabloAST * PabloBlock::createInFile(PabloAST * expr) {
     assert (expr);
-    return insertAtInsertionPoint(new InFile(expr, makeName("count_")));
+    return insertAtInsertionPoint(new InFile(expr, makeName("inFile_")));
 }
 
 PabloAST * PabloBlock::createInFile(PabloAST * expr, const std::string prefix) {
@@ -164,7 +164,18 @@ PabloAST * PabloBlock::createInFile(PabloAST * expr, const std::string prefix) {
 }
 
 
-/// BINARY CREATE FUNCTIONS
+PabloAST * PabloBlock::createAtEOF(PabloAST * expr) {
+    assert (expr);
+    return insertAtInsertionPoint(new AtEOF(expr, makeName("atEOF_")));
+}
+
+PabloAST * PabloBlock::createAtEOF(PabloAST * expr, const std::string prefix) {
+    assert (expr);
+    return insertAtInsertionPoint(new AtEOF(expr, makeName(prefix, false)));
+}
+    
+    
+    /// BINARY CREATE FUNCTIONS
 
 Next * PabloBlock::createNext(Assign * assign, PabloAST * expr) {
     assert (assign && expr);

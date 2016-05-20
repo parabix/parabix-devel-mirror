@@ -68,6 +68,7 @@ public:
         , Lookahead
         , MatchStar
         , InFile
+        , AtEOF
         // Statistics operations
         , Count
         // Variable assignments

@@ -144,6 +144,10 @@ public:
     
     PabloAST * createInFile(PabloAST * expr, const std::string prefix);
     
+    PabloAST * createAtEOF(PabloAST * expr);
+    
+    PabloAST * createAtEOF(PabloAST * expr, const std::string prefix);
+    
     /// CreateIf Wrappers
 
     inline If * createIf(PabloAST * condition, std::initializer_list<Assign *> definedVars, PabloBlock * body) {

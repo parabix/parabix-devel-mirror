@@ -45,7 +45,6 @@ namespace re {
 void RE_Compiler::initializeRequiredStreams() {
 
     Assign * LF = mPB.createAssign("LF", mCCCompiler.compileCC(makeCC(0x0A)));
-    mLineFeed = LF;
     PabloAST * CR = mCCCompiler.compileCC(makeCC(0x0D));
     PabloAST * LF_VT_FF_CR = mCCCompiler.compileCC(makeCC(0x0A, 0x0D));
 
@@ -120,10 +119,12 @@ void RE_Compiler::initializeRequiredStreams() {
     PabloAST * u8single = mPB.createAnd(mCCCompiler.compileCC(makeCC(0x00, 0x7F)), mPB.createNot(u8invalid));
     mInitial = mPB.createOr(u8single, valid_pfx, "initial");
     mFinal = mPB.createNot(mPB.createOr(mNonFinal, u8invalid), "final");
-    mUnicodeLineBreak = mPB.createAnd(LB_chars, mPB.createNot(mCRLF));  // count the CR, but not CRLF
-    PabloAST * const lb = UNICODE_LINE_BREAK ? mUnicodeLineBreak : mLineFeed;
+    PabloAST * UnicodeLineBreak = mPB.createAnd(LB_chars, mPB.createNot(mCRLF));  // count the CR, but not CRLF
+    PabloAST * lb = UNICODE_LINE_BREAK ? UnicodeLineBreak : LF;
+    PabloAST * unterminatedLineAtEOF = mPB.createAtEOF(mPB.createAdvance(mPB.createNot(LB_chars), 1));
+    mLineBreak = mPB.createOr(lb, unterminatedLineAtEOF);
     mAny = mPB.createNot(lb, "any");
-    mFunction.setResult(1, mPB.createAssign("lf", mPB.createAnd(lb, mPB.createNot(mCRLF))));
+    mFunction.setResult(1, mPB.createAssign("lf", mLineBreak));
 }
 
 static inline CC * getDefinitionIfCC(RE * re) {
@@ -361,7 +362,7 @@ void RE_Compiler::finalizeMatchResult(MarkerType match_result, bool InvertMatche
     if (InvertMatches) {
         match_follow = mPB.createNot(match_follow);
     }
-    mFunction.setResult(0, mPB.createAssign("matches", mPB.createAnd(match_follow, UNICODE_LINE_BREAK ? mUnicodeLineBreak : mLineFeed)));
+    mFunction.setResult(0, mPB.createAssign("matches", mPB.createAnd(match_follow, mLineBreak)));
 }
 
 MarkerType RE_Compiler::compile(RE * re, PabloBuilder & pb) {
@@ -397,9 +398,9 @@ MarkerType RE_Compiler::process(RE * re, MarkerType marker, PabloBuilder & pb) {
 
 inline MarkerType RE_Compiler::compileAny(const MarkerType m, PabloBuilder & pb) {
     PabloAST * nextFinalByte = markerVar(AdvanceMarker(m, MarkerPosition::FinalPostPositionByte, pb));
-    PabloAST * lb = mLineFeed;
+    PabloAST * lb = mLineBreak;
     if (UNICODE_LINE_BREAK) {
-        lb = pb.createOr(mUnicodeLineBreak, mCRLF);
+        lb = pb.createOr(mLineBreak, mCRLF);
     }
     return makeMarker(MarkerPosition::FinalMatchByte, pb.createAnd(nextFinalByte, pb.createNot(lb), "dot"));
 }
@@ -697,11 +698,11 @@ MarkerType RE_Compiler::processUnboundedRep(RE * repeated, MarkerType marker, Pa
 inline MarkerType RE_Compiler::compileStart(const MarkerType marker, pablo::PabloBuilder & pb) {
     MarkerType m = AdvanceMarker(marker, MarkerPosition::InitialPostPositionByte, pb);
     if (UNICODE_LINE_BREAK) {
-        PabloAST * line_end = mPB.createOr(mUnicodeLineBreak, mCRLF);
+        PabloAST * line_end = mPB.createOr(mLineBreak, mCRLF);
         PabloAST * sol = pb.createNot(pb.createOr(pb.createAdvance(pb.createNot(line_end), 1), mCRLF));
         return makeMarker(MarkerPosition::InitialPostPositionByte, pb.createAnd(markerVar(m), sol, "sol"));
     } else {
-        PabloAST * sol = pb.createNot(pb.createAdvance(pb.createNot(mLineFeed), 1));
+        PabloAST * sol = pb.createNot(pb.createAdvance(pb.createNot(mLineBreak), 1));
         return makeMarker(MarkerPosition::FinalPostPositionByte, pb.createAnd(markerVar(m), sol, "sol"));
     }
 }
@@ -709,10 +710,10 @@ inline MarkerType RE_Compiler::compileStart(const MarkerType marker, pablo::Pabl
 inline MarkerType RE_Compiler::compileEnd(const MarkerType marker, pablo::PabloBuilder & pb) {
     if (UNICODE_LINE_BREAK) {
         PabloAST * nextPos = markerVar(AdvanceMarker(marker, MarkerPosition::FinalPostPositionByte, pb));
-        return makeMarker(MarkerPosition::FinalPostPositionByte, pb.createAnd(nextPos, mUnicodeLineBreak, "eol"));
+        return makeMarker(MarkerPosition::FinalPostPositionByte, pb.createAnd(nextPos, mLineBreak, "eol"));
     } else {
         PabloAST * nextPos = markerVar(AdvanceMarker(marker, MarkerPosition::InitialPostPositionByte, pb));  // For LF match
-        return makeMarker(MarkerPosition::FinalPostPositionByte, pb.createAnd(nextPos, mLineFeed, "eol"));
+        return makeMarker(MarkerPosition::FinalPostPositionByte, pb.createAnd(nextPos, mLineBreak, "eol"));
     }
 }
 
@@ -764,9 +765,8 @@ inline void RE_Compiler::AlignMarkers(MarkerType & m1, MarkerType & m2, PabloBui
 
 RE_Compiler::RE_Compiler(pablo::PabloFunction & function, cc::CC_Compiler & ccCompiler)
 : mCCCompiler(ccCompiler)
-, mLineFeed(nullptr)
+, mLineBreak(nullptr)
 , mCRLF(nullptr)
-, mUnicodeLineBreak(nullptr)
 , mAny(nullptr)
 , mGraphemeBoundaryRule(nullptr)
 , mInitial(nullptr)

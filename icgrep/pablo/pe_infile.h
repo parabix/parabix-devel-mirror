@@ -29,6 +29,24 @@ protected:
     InFile(PabloAST * expr, String * name) : Statement(ClassTypeId::InFile, {expr}, name) { }
 };
 
+class AtEOF : public Statement {
+    friend class PabloBlock;
+public:
+    static inline bool classof(const PabloAST * e) {
+        return e->getClassTypeId() == ClassTypeId::AtEOF;
+    }
+    static inline bool classof(const void *) {
+        return false;
+    }
+    virtual ~AtEOF(){
+    }
+    PabloAST * getExpr() const {
+        return getOperand(0);
+    }
+protected:
+    AtEOF(PabloAST * expr, String * name) : Statement(ClassTypeId::AtEOF, {expr}, name) { }
+};
+    
 }
 
 #endif // PE_INFILE_H

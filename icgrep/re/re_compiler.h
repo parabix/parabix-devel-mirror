@@ -93,9 +93,8 @@ private:
 private:
 
     cc::CC_Compiler &                               mCCCompiler;
-    pablo::Assign *                                 mLineFeed;
+    pablo::PabloAST *                                 mLineBreak;
     pablo::PabloAST *                               mCRLF;
-    pablo::PabloAST *                               mUnicodeLineBreak;
     pablo::PabloAST *                               mAny;
     pablo::PabloAST *                               mGraphemeBoundaryRule;
     pablo::PabloAST *                               mInitial;

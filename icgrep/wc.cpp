@@ -286,8 +286,8 @@ Function * wcPipelineBuilder::ExecuteKernels() {
     iBuilder->CreateBr(fullCondBlock);
     
     iBuilder->SetInsertPoint(finalBlock);
-    Value * EOF_mask = iBuilder->CreateShl(Constant::getAllOnesValue(iBuilder->getIntNTy(mBlockSize)), remainingBytes);
-	wcInstance->setInternalState("EOFmask", iBuilder->CreateBitCast(EOF_mask, mBitBlockType));
+    Value * EOFmark = iBuilder->CreateShl(ConstantInt::get(iBuilder->getIntNTy(mBlockSize), 1), remainingBytes);
+	wcInstance->setInternalState("EOFmark", iBuilder->CreateBitCast(EOFmark, mBitBlockType));
     
     Value * emptyBlockCond = iBuilder->CreateICmpEQ(remainingBytes, ConstantInt::get(int64ty, 0));
     iBuilder->CreateCondBr(emptyBlockCond, finalEmptyBlock, finalPartialBlock);

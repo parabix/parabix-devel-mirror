@@ -101,8 +101,6 @@ Function * PipelineBuilder::ExecuteKernels(bool CountOnly) {
     BasicBlock * finalBlock = BasicBlock::Create(mMod->getContext(), "final", main, 0);
     BasicBlock * finalPartialBlock = BasicBlock::Create(mMod->getContext(), "partial", main, 0);
     BasicBlock * finalEmptyBlock = BasicBlock::Create(mMod->getContext(), "empty", main, 0);
-    BasicBlock * endBlock = BasicBlock::Create(mMod->getContext(), "end", main, 0);
-    BasicBlock * unterminatedBlock = BasicBlock::Create(mMod->getContext(), "unterminated", main, 0);
     BasicBlock * exitBlock = BasicBlock::Create(mMod->getContext(), "exit", main, 0);
 
     Value * count = nullptr;
@@ -188,44 +186,23 @@ Function * PipelineBuilder::ExecuteKernels(bool CountOnly) {
     iBuilder->CreateBr(fullCondBlock);
 
     iBuilder->SetInsertPoint(finalBlock);
-    Value * const b4 = s2pInstance->getOutputStream(4);
-    Value * const b6 = s2pInstance->getOutputStream(6);
     Value * emptyBlockCond = iBuilder->CreateICmpEQ(remainingBytes, ConstantInt::get(int64ty, 0));
     iBuilder->CreateCondBr(emptyBlockCond, finalEmptyBlock, finalPartialBlock);
 
 
     iBuilder->SetInsertPoint(finalPartialBlock);
     s2pInstance->CreateDoBlockCall();
-    iBuilder->CreateBr(endBlock);
+    iBuilder->CreateBr(exitBlock);
 
     iBuilder->SetInsertPoint(finalEmptyBlock);
     s2pInstance->clearOutputStreamSet();
-    iBuilder->CreateBr(endBlock);
-
-    iBuilder->SetInsertPoint(endBlock);
-    Value * isFinalLineUnterminated = iBuilder->CreateICmpEQ(finalLineUnterminated, ConstantInt::getNullValue(finalLineUnterminated->getType()));
-    iBuilder->CreateCondBr(isFinalLineUnterminated, exitBlock, unterminatedBlock);
-    
-    iBuilder->SetInsertPoint(unterminatedBlock);
-
-    Value * remaining = iBuilder->CreateZExt(remainingBytes, iBuilder->getIntNTy(mBlockSize));
-    Value * EOF_pos = iBuilder->CreateShl(ConstantInt::get(iBuilder->getIntNTy(mBlockSize), 1), remaining);
-    EOF_pos = iBuilder->CreateBitCast(EOF_pos, mBitBlockType);
-    Value * EOF_mask = iBuilder->CreateShl(Constant::getAllOnesValue(iBuilder->getIntNTy(mBlockSize)), remaining);
-	icGrepInstance->setInternalState("EOFmask", iBuilder->CreateBitCast(EOF_mask, mBitBlockType));
-
-
-    Value * b4val = iBuilder->CreateBlockAlignedLoad(b4);
-    b4val = iBuilder->CreateOr(b4val, EOF_pos);
-    iBuilder->CreateBlockAlignedStore(b4val, b4);
-
-    Value * b6val = iBuilder->CreateBlockAlignedLoad(b6);
-    b6val = iBuilder->CreateOr(b6val, EOF_pos);
-    iBuilder->CreateBlockAlignedStore(b6val, b6);
-
     iBuilder->CreateBr(exitBlock);
 
     iBuilder->SetInsertPoint(exitBlock);
+
+    Value * remaining = iBuilder->CreateZExt(remainingBytes, iBuilder->getIntNTy(mBlockSize));
+    Value * EOFmark = iBuilder->CreateShl(ConstantInt::get(iBuilder->getIntNTy(mBlockSize), 1), remaining);
+	icGrepInstance->setInternalState("EOFmark", iBuilder->CreateBitCast(EOFmark, mBitBlockType));
 
     icGrepInstance->CreateDoBlockCall();
     if (CountOnly) {

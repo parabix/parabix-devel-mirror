@@ -34,6 +34,8 @@ bool equals(const PabloAST * expr1, const PabloAST * expr2) {
             return equals(cast<Not>(expr1)->getOperand(0), cast<Not>(expr2)->getOperand(0));
         } else if (isa<InFile>(expr1)) {
             return equals(cast<InFile>(expr1)->getOperand(0), cast<InFile>(expr2)->getOperand(0));
+        } else if (isa<AtEOF>(expr1)) {
+            return equals(cast<AtEOF>(expr1)->getOperand(0), cast<AtEOF>(expr2)->getOperand(0));
         } else if (isa<Variadic>(expr1)) {
             const Variadic * const var1 = cast<Variadic>(expr1);
             const Variadic * const var2 = cast<Variadic>(expr2);

@@ -186,6 +186,10 @@ public:
     
     PabloAST * createInFile(PabloAST * expr, const std::string prefix);
     
+    PabloAST * createAtEOF(PabloAST * expr);
+    
+    PabloAST * createAtEOF(PabloAST * expr, const std::string prefix);
+    
     If * createIf(PabloAST * condition, const std::initializer_list<Assign *> definedVars, PabloBlock * body);
 
     If * createIf(PabloAST * condition, const std::vector<Assign *> & definedVars, PabloBlock * body);
