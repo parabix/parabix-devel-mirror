@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2014-15 International Characters.
+ *  Copyright (c) 2014-16 International Characters.
  *  This software is licensed to the public under the Open Software License 3.0.
  *  icgrep is a trademark of International Characters.
  */
@@ -7,7 +7,6 @@
 #include <pablo/pablo_compiler.h>
 #include <pablo/pablo_toolchain.h>
 #include <pablo/codegenstate.h>
-#include <pablo/carry_data.h>
 #include <pablo/carry_manager.h>
 #include <pablo/printer_pablos.h>
 #include <pablo/function.h>
@@ -15,40 +14,9 @@
 #include <stdexcept>
 #include <sstream>
 #include <IDISA/idisa_builder.h>
-#include <IDISA/idisa_avx_builder.h>
-#include <llvm/Pass.h>
-#include <llvm/ADT/SmallVector.h>
-#include <llvm/Analysis/Passes.h>
-#include <llvm/IR/BasicBlock.h>
-#include <llvm/IR/CallingConv.h>
-#include <llvm/IR/DataLayout.h>
-#include <llvm/IR/DerivedTypes.h>
-#include <llvm/IR/Function.h>
-#include <llvm/IR/GlobalVariable.h>
-#include <llvm/IR/InlineAsm.h>
-#include <llvm/IR/Instructions.h>
-#include <llvm/IR/LLVMContext.h>
 #include <llvm/IR/Module.h>
-#include <llvm/Support/FormattedStream.h>
-#include <llvm/Support/MathExtras.h>
-#include <llvm/Support/Casting.h>
-#include <llvm/Support/Compiler.h>
-#include <llvm/Support/Debug.h>
-#include <llvm/Support/TargetSelect.h>
-#include <llvm/Support/Host.h>
-#include <llvm/Transforms/Scalar.h>
-#include <llvm/IRReader/IRReader.h>
-#include <llvm/Bitcode/ReaderWriter.h>
-#include <llvm/Support/MemoryBuffer.h>
 #include <llvm/IR/IRBuilder.h>
-#include <llvm/Support/CommandLine.h>
-#include <llvm/ADT/Twine.h>
 #include <iostream>
-#include <llvm/Support/raw_ostream.h>
-#include <llvm/Support/FileSystem.h>
-#ifndef NDEBUG
-#include <llvm/IR/Verifier.h>
-#endif
 #include <hrtime.h>
 
 

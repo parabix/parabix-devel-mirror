@@ -123,6 +123,10 @@ void PabloPrinter::print(const Statement * stmt, llvm::raw_ostream & out, const 
         out << e->getName() << " = pablo.InFile(";
         print(e->getExpr(), out);
         out << ")";
+    } else if (const AtEOF * e = dyn_cast<const AtEOF>(stmt)) {
+        out << e->getName() << " = pablo.AtEOF(";
+        print(e->getExpr(), out);
+        out << ")";
     } else {
         out << "???";
     }

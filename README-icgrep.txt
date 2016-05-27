@@ -29,6 +29,10 @@ To build icgrep, you need an installed LLVM system providing the
 core libraries.  The distribution includes a suitable source
 code version of LLVM.   
 
+Boost development libraries are required.  Install via a suitable 
+command for your OS, for example"
+sudo apt-get install libboost-all-dev
+
 To build LLVM,
 (L1) open a terminal window and cd to the llvm-build directory
 (L2) enter the following command to build the makefiles
@@ -45,14 +49,3 @@ cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER:FILEPATH=/usr/bin/clang++ 
 LLVM files are governed by the LLVM Release License in LLVM-LICENSE.txt.
 icgrep is governed by Open Software License 3.0 in OSL-3.0.txt.
 
-NOTES on G++
-
-Currently, icgrep cannot be compiled with g++.
-
-One major issue is caused by LLVM headers (templates). ArrayRef has a
-constructor overload for initializer lists, which is only enabled if the
-compiler supports initializer lists. The detection mechanism, however, only
-works for clang, rendering this overload unavailable in g++. Yet we use this
-overload heavily especially when calling CreateGEP.
-
-This issue is resolved in LLVM 3.7.
