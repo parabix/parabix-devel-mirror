@@ -14,7 +14,7 @@ namespace cc {
 struct UTF16_Encoder {
     static bool isHi_Surrogate(const re::codepoint_t cp);
     static bool isLo_Surrogate(const re::codepoint_t cp);
-	static unsigned length(const re::codepoint_t cp);
+    static unsigned length(const re::codepoint_t cp);
     static re::codepoint_t maxCodePoint(const unsigned length);
     static re::codepoint_t encodingByte(const re::codepoint_t cp, const unsigned n);
     static bool isLowCodePointAfterByte(const re::codepoint_t cp, const unsigned n);

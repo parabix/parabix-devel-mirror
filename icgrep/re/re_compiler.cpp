@@ -43,12 +43,12 @@ using namespace pablo;
 namespace re {
 
 void RE_Compiler::initializeRequiredStreams(Encoding encoding) {
-	if (encoding.getType() == Encoding::Type::UTF_8) {
-		RE_Compiler::initializeRequiredStreams_utf8();
-	}
-	else if (encoding.getType() == Encoding::Type::UTF_16) {
-		RE_Compiler::initializeRequiredStreams_utf16();
-	}
+    if (encoding.getType() == Encoding::Type::UTF_8) {
+	    RE_Compiler::initializeRequiredStreams_utf8();
+    }
+    else if (encoding.getType() == Encoding::Type::UTF_16) {
+	    RE_Compiler::initializeRequiredStreams_utf16();
+    }
 }
 		
 void RE_Compiler::initializeRequiredStreams_utf16() {
@@ -63,21 +63,21 @@ void RE_Compiler::initializeRequiredStreams_utf16() {
     Assign * acrlf = mPB.createAssign("crlf", mPB.createAnd(cr1, LF));
     mCRLF = acrlf;
 
-	PabloAST * hi_surrogate = mCCCompiler.compileCC(makeCC(0xD800, 0xDBFF));
-	//PabloAST * lo_surrogate = mCCCompiler.compileCC(makeCC(0xDC00, 0xDFFF));
-	PabloAST * u16hi_hi_surrogate = mCCCompiler.compileCC(makeCC(0xD800, 0xDB00));    //u16hi_hi_surrogate = [\xD8-\xDB]
-	PabloAST * u16hi_lo_surrogate = mCCCompiler.compileCC(makeCC(0xDC00, 0xDF00));    //u16hi_lo_surrogate = [\xDC-\xDF]
+    PabloAST * hi_surrogate = mCCCompiler.compileCC(makeCC(0xD800, 0xDBFF));
+    //PabloAST * lo_surrogate = mCCCompiler.compileCC(makeCC(0xDC00, 0xDFFF));
+    PabloAST * u16hi_hi_surrogate = mCCCompiler.compileCC(makeCC(0xD800, 0xDB00));    //u16hi_hi_surrogate = [\xD8-\xDB]
+    PabloAST * u16hi_lo_surrogate = mCCCompiler.compileCC(makeCC(0xDC00, 0xDF00));    //u16hi_lo_surrogate = [\xDC-\xDF]
 
-	PabloAST * invalidTemp = mPB.createAdvance(u16hi_hi_surrogate, 1, "InvalidTemp");
+    PabloAST * invalidTemp = mPB.createAdvance(u16hi_hi_surrogate, 1, "InvalidTemp");
     Assign * u16invalid = mPB.createAssign("u16invalid", mPB.createXor(invalidTemp, u16hi_lo_surrogate));//errors.Unicode=pablo.Advance(u16hi_hi_surrogate) ^ u16hi_lo_surrogate
     Assign * u16valid = mPB.createAssign("u16valid", mPB.createNot(u16invalid));
 
     PabloAST * u16single_temp = mPB.createOr(mCCCompiler.compileCC(makeCC(0x0000, 0xD7FF)), mCCCompiler.compileCC(makeCC(0xE000, 0xFFFF)));
-	PabloAST * u16single = mPB.createAnd(u16single_temp, mPB.createNot(u16invalid));
+    PabloAST * u16single = mPB.createAnd(u16single_temp, mPB.createNot(u16invalid));
     
     mNonFinal = mPB.createAssign("nonfinal", mPB.createAnd(hi_surrogate, u16valid));
     mFinal = mPB.createNot(mPB.createOr(mNonFinal, u16invalid), "final");
-	mInitial = mPB.createOr(u16single, hi_surrogate, "initial");
+    mInitial = mPB.createOr(u16single, hi_surrogate, "initial");
     
     PabloAST * LB_chars = mPB.createOr(LF_VT_FF_CR, NEL_LS_PS);
     PabloAST * UnicodeLineBreak = mPB.createAnd(LB_chars, mPB.createNot(mCRLF));  // count the CR, but not CRLF
@@ -86,7 +86,7 @@ void RE_Compiler::initializeRequiredStreams_utf16() {
     mLineBreak = mPB.createOr(lb, unterminatedLineAtEOF);
     mAny = mPB.createNot(lb, "any");
     mFunction.setResult(1, mPB.createAssign("lf", mLineBreak));
-	return;
+    return;
 }
 void RE_Compiler::initializeRequiredStreams_utf8() {
     Assign * LF = mPB.createAssign("LF", mCCCompiler.compileCC(makeCC(0x0A)));

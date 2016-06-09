@@ -79,11 +79,11 @@ void generateS2PKernel(Module *, IDISA::IDISA_Builder * iBuilder, KernelBuilder 
 }
 
 void generateS2P_16Kernel(Module *, IDISA::IDISA_Builder * iBuilder, KernelBuilder * kBuilder) {
-	kBuilder->addInputStream(16, "unit_pack");
-	for(unsigned i = 0; i < 16; i++) {
-		kBuilder->addOutputStream(1);
-	}
-	kBuilder->prepareFunction();
+    kBuilder->addInputStream(16, "unit_pack");
+    for(unsigned i = 0; i < 16; i++) {
+	    kBuilder->addOutputStream(1);
+    }
+    kBuilder->prepareFunction();
 
     Value * ptr = kBuilder->getInputStream(0);
 

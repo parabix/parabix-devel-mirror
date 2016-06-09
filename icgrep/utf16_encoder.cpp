@@ -18,43 +18,43 @@ bool UTF16_Encoder::isHi_Surrogate(const codepoint_t cp) {
 }
 
 bool UTF16_Encoder::isLo_Surrogate(const codepoint_t cp) {
-	return (cp >= 0xDC00) && (cp <= 0xDFFF);
+    return (cp >= 0xDC00) && (cp <= 0xDFFF);
 }
 
 codepoint_t UTF16_Encoder::encodingByte(const codepoint_t cp, const unsigned n) {
     codepoint_t retVal = 0;
     const unsigned len = length(cp);
-	if (len == 1) {
-		retVal = cp;
+    if (len == 1) {
+	retVal = cp;
+    }
+    else {
+	codepoint_t code = cp - 0x010000;
+	if (n == 1) {
+		retVal = (code >> 10) | 0xD800;
 	}
-	else {
-		codepoint_t code = cp - 0x010000;
-		if (n == 1) {
-			retVal = (code >> 10) | 0xD800;
-		}
-		if (n == 2) {
-			retVal = (code & 0x3FF) | 0xDC00;
-		}
+	if (n == 2) {
+		retVal = (code & 0x3FF) | 0xDC00;
 	}
-	return retVal;
+    }
+    return retVal;
 }
 
 unsigned UTF16_Encoder::length(const codepoint_t cp) {
-	if (cp <= 0xFFFF) {
-		return 1;
-	}
-	else {
-		return 2;
-	}
+    if (cp <= 0xFFFF) {
+	return 1;
+    }
+    else {
+	return 2;
+    }
 }
 
 codepoint_t UTF16_Encoder::maxCodePoint(const unsigned length) {
-	if (length == 1) {
-		return 0xFFFF;
-	}
-	else if (length == 2) {
-		return 0x10FFFF;
-	} 
+    if (length == 1) {
+	return 0xFFFF;
+    }
+    else if (length == 2) {
+	return 0x10FFFF;
+    } 
     throw std::runtime_error("Unexpected UTF16 Length: " + std::to_string(length));
 }
 

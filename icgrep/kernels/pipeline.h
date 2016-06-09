@@ -27,9 +27,9 @@ class PipelineBuilder {
 public:
     PipelineBuilder(llvm::Module * m, IDISA::IDISA_Builder * b);
 
-	~PipelineBuilder();
+    ~PipelineBuilder();
 
-	void CreateKernels(pablo::PabloFunction * function, bool UTF_16, bool isNameExpression);
+    void CreateKernels(pablo::PabloFunction * function, bool UTF_16, bool isNameExpression);
     llvm::Function * ExecuteKernels(bool CountOnly, bool UTF_16);
 
 private:

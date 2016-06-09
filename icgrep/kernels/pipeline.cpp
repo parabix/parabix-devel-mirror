@@ -39,12 +39,12 @@ void PipelineBuilder::CreateKernels(PabloFunction * function, bool UTF_16, bool 
     mS2PKernel = new KernelBuilder(iBuilder, "s2p", codegen::SegmentSize);
     mICgrepKernel = new KernelBuilder(iBuilder, "icgrep", codegen::SegmentSize);
     mScanMatchKernel = new KernelBuilder(iBuilder, "scanMatch", codegen::SegmentSize);
-	if (UTF_16) {
-		generateS2P_16Kernel(mMod, iBuilder, mS2PKernel);
-	}
-	else {
-		generateS2PKernel(mMod, iBuilder, mS2PKernel);
-	}
+    if (UTF_16) {
+	generateS2P_16Kernel(mMod, iBuilder, mS2PKernel);
+    }
+    else {
+	generateS2PKernel(mMod, iBuilder, mS2PKernel);
+    }
     generateScanMatch(mMod, iBuilder, 64, mScanMatchKernel, isNameExpression);
     pablo_function_passes(function);
     PabloCompiler pablo_compiler(mMod, iBuilder);
@@ -207,9 +207,9 @@ Function * PipelineBuilder::ExecuteKernels(bool CountOnly, bool UTF_16) {
     iBuilder->SetInsertPoint(exitBlock);
 
     Value * remainingByte = iBuilder->CreateZExt(remainingBytes, iBuilder->getIntNTy(mBlockSize));
-	Value * remainingUnit = iBuilder->CreateLShr(remainingByte, ConstantInt::get(iBuilder->getIntNTy(mBlockSize), 1));
+    Value * remainingUnit = iBuilder->CreateLShr(remainingByte, ConstantInt::get(iBuilder->getIntNTy(mBlockSize), 1));
     Value * EOFmark = iBuilder->CreateShl(ConstantInt::get(iBuilder->getIntNTy(mBlockSize), 1), UTF_16 ? remainingUnit : remainingByte);
-	icGrepInstance->setInternalState("EOFmark", iBuilder->CreateBitCast(EOFmark, mBitBlockType));
+    icGrepInstance->setInternalState("EOFmark", iBuilder->CreateBitCast(EOFmark, mBitBlockType));
 
     icGrepInstance->CreateDoBlockCall();
     if (CountOnly) {

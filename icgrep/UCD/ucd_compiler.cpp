@@ -16,28 +16,28 @@ namespace UCD {
  * @brief UTF_16 UTF_8
  ** ------------------------------------------------------------------------------------------------------------- */
 inline codepoint_t encodingByte(const codepoint_t cp, const unsigned n, bool UTF_16) {
-	return UTF_16 ? UTF16_Encoder::encodingByte(cp, n) : UTF8_Encoder::encodingByte(cp, n);
+    return UTF_16 ? UTF16_Encoder::encodingByte(cp, n) : UTF8_Encoder::encodingByte(cp, n);
 }
 
 inline unsigned length(const codepoint_t cp, bool UTF_16) {
-	return UTF_16 ? UTF16_Encoder::length(cp) : UTF8_Encoder::length(cp);
+    return UTF_16 ? UTF16_Encoder::length(cp) : UTF8_Encoder::length(cp);
 }
 
 inline codepoint_t maxCodePoint(const unsigned length, bool UTF_16) {
-	return UTF_16 ?  UTF16_Encoder::maxCodePoint(length) : UTF8_Encoder::maxCodePoint(length);
+    return UTF_16 ?  UTF16_Encoder::maxCodePoint(length) : UTF8_Encoder::maxCodePoint(length);
 }
 
 inline bool isLowCodePointAfterByte(const codepoint_t cp, const unsigned n, bool UTF_16) {
-	return UTF_16 ? UTF16_Encoder::isLowCodePointAfterByte(cp, n) : UTF8_Encoder::isLowCodePointAfterByte(cp, n);
+    return UTF_16 ? UTF16_Encoder::isLowCodePointAfterByte(cp, n) : UTF8_Encoder::isLowCodePointAfterByte(cp, n);
 }
 inline bool isHighCodePointAfterByte(const codepoint_t cp, const unsigned n, bool UTF_16) {
-	return UTF_16 ? UTF16_Encoder::isHighCodePointAfterByte(cp, n) : UTF8_Encoder::isHighCodePointAfterByte(cp, n);
+    return UTF_16 ? UTF16_Encoder::isHighCodePointAfterByte(cp, n) : UTF8_Encoder::isHighCodePointAfterByte(cp, n);
 }
 inline codepoint_t minCodePointWithCommonBytes(const re::codepoint_t cp, const unsigned n, bool UTF_16) {
-	return UTF_16 ? UTF16_Encoder::minCodePointWithCommonBytes(cp, n) : UTF8_Encoder::minCodePointWithCommonBytes(cp, n);
+    return UTF_16 ? UTF16_Encoder::minCodePointWithCommonBytes(cp, n) : UTF8_Encoder::minCodePointWithCommonBytes(cp, n);
 }
 inline codepoint_t maxCodePointWithCommonBytes(const re::codepoint_t cp, const unsigned n, bool UTF_16) {
-	return UTF_16 ? UTF16_Encoder::maxCodePointWithCommonBytes(cp, n) : UTF8_Encoder::maxCodePointWithCommonBytes(cp, n);
+    return UTF_16 ? UTF16_Encoder::maxCodePointWithCommonBytes(cp, n) : UTF8_Encoder::maxCodePointWithCommonBytes(cp, n);
 }
 
 const UCDCompiler::RangeList UCDCompiler::defaultIfHierachy = {
@@ -270,9 +270,8 @@ PabloAST * UCDCompiler::sequenceGenerator(const RangeList && ranges, const unsig
                 std::tie(lo, hi) = rg;
                 const auto lo_byte = encodingByte(lo, byte_no, isUTF_16);
                 const auto hi_byte = encodingByte(hi, byte_no, isUTF_16);
-                //std::cout << "lo_byte: " << std::hex << lo_byte << " hi_byte: " << std::hex << hi_byte << std::endl;
-				if (lo_byte != hi_byte) {
-					unsigned num = isUTF_16 ? 10 : 6;
+		if (lo_byte != hi_byte) {
+		    unsigned num = isUTF_16 ? 10 : 6;
                     if (!isLowCodePointAfterByte(lo, byte_no, isUTF_16)) {
                         const codepoint_t mid = lo | ((1 << (num * (min - byte_no))) - 1);
                         target = sequenceGenerator(lo, mid, byte_no, builder, target, prefix);
@@ -333,12 +332,12 @@ PabloAST * UCDCompiler::ifTestCompiler(const codepoint_t lo, const codepoint_t h
     const bool at_hi_boundary = (hi == 0x10FFFF || encodingByte(hi + 1, byte_no, isUTF_16) != hi_byte);
 
     if (at_lo_boundary && at_hi_boundary) {
-		if (!isUTF_16) {
-			if (lo_byte != hi_byte) {
-				if (lo == 0x80) lo_byte = 0xC0;
-				if (hi == 0x10FFFF) hi_byte = 0xFF;
-			}
-		}
+	if (!isUTF_16) {
+	    if (lo_byte != hi_byte) {
+		if (lo == 0x80) lo_byte = 0xC0;
+		if (hi == 0x10FFFF) hi_byte = 0xFF;
+	    }
+	}
         PabloAST * cc = mCharacterClassCompiler.compileCC(makeCC(lo_byte, hi_byte), builder);
         target = builder.createAnd(cc, target);
     } else if (lo_byte == hi_byte) {
@@ -370,7 +369,7 @@ PabloAST * UCDCompiler::ifTestCompiler(const codepoint_t lo, const codepoint_t h
 PabloAST * UCDCompiler::makePrefix(const codepoint_t cp, const unsigned byte_no, PabloBuilder & builder, PabloAST * prefix) {
     assert (byte_no >= 1 && byte_no <= 4);
     assert (byte_no == 1 || prefix != nullptr);
-	bool isUTF_16 = mCharacterClassCompiler.isUTF_16();
+    bool isUTF_16 = mCharacterClassCompiler.isUTF_16();
     for (unsigned i = 1; i != byte_no; ++i) {
         const CC * const cc = makeCC(encodingByte(cp, i, isUTF_16));
         PabloAST * var = mCharacterClassCompiler.compileCC(cc, builder);

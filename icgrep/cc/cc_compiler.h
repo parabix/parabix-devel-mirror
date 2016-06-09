@@ -44,9 +44,9 @@ public:
         return mBasisBit;
     }
 
-	bool isUTF_16() {
-		return mEncoding.getBits() == 16;
-	}
+    bool isUTF_16() {
+	return mEncoding.getBits() == 16;
+    }
 
 private:
     pablo::Var * getBasisVar(const unsigned n) const;
