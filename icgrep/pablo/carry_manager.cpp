@@ -25,10 +25,13 @@ void CarryManager::initialize(PabloFunction * const function, kernel::KernelBuil
     mRootScope = function->getEntryBlock();
     mCarryInfoVector.resize(mRootScope->enumerateScopes(0) + 1);
     mCarryPackType = mBitBlockType;
-    const unsigned totalCarryDataSize = std::max<unsigned>(enumerate(mRootScope, 0, 0), 1);
-    mCarryPackPtr.resize(totalCarryDataSize, nullptr);
-    mCarryInPack.resize(totalCarryDataSize, nullptr);
-    mCarryOutPack.resize(totalCarryDataSize, nullptr);
+    const unsigned totalCarryDataSize = enumerate(mRootScope, 0, 0);
+
+
+    mCarryPackPtr.resize(totalCarryDataSize + 1, nullptr);
+    mCarryInPack.resize(totalCarryDataSize + 1, nullptr);
+    mCarryOutPack.resize(totalCarryDataSize + 1, nullptr);
+
     mTotalCarryDataBitBlocks = totalCarryDataSize;
     ArrayType* cdArrayTy = ArrayType::get(mBitBlockType, mTotalCarryDataBitBlocks);
     mCdArrayIdx = kBuilder->addInternalState(cdArrayTy);
@@ -52,7 +55,9 @@ void CarryManager::reset() {
     }
     mCurrentScope = mRootScope;
     mCurrentFrameIndex = 0;
+    assert(mCarryInfoVector.size() > 0);
     mCarryInfo = mCarryInfoVector[0];
+    assert(summaryPack() < mCarryOutPack.size());
     mCarryOutPack[summaryPack()] = Constant::getNullValue(mCarryPackType);
     assert (mCarrySummary.empty());
 }
@@ -61,11 +66,13 @@ void CarryManager::reset() {
  * @brief enterScope
  ** ------------------------------------------------------------------------------------------------------------- */
 void CarryManager::enterScope(PabloBlock * const scope) {
+    assert(summaryPack() < mCarryOutPack.size());
     Value * summaryCarry = mCarryOutPack[summaryPack()];
     mCarrySummary.push_back(summaryCarry);
     mCurrentScope = scope;
     mCarryInfo = mCarryInfoVector[scope->getScopeIndex()];
     mCurrentFrameIndex += mCarryInfo->getFrameIndex();
+    assert(summaryPack() < mCarryOutPack.size());
     mCarryOutPack[summaryPack()] = Constant::getNullValue(mCarryPackType);
 }
 
@@ -73,11 +80,13 @@ void CarryManager::enterScope(PabloBlock * const scope) {
  * @brief leaveScope
  ** ------------------------------------------------------------------------------------------------------------- */
 void CarryManager::leaveScope() {
+    assert(summaryPack() < mCarryOutPack.size());
     Value * summaryCarry = mCarryOutPack[summaryPack()];
     assert (mCurrentScope != mRootScope);
     mCurrentFrameIndex -= mCarryInfo->getFrameIndex();
     mCurrentScope = mCurrentScope->getParent();
     mCarryInfo = mCarryInfoVector[mCurrentScope->getScopeIndex()];
+    assert(summaryPack() < mCarryOutPack.size());
     mCarryOutPack[summaryPack()] = summaryCarry;
     mCarrySummary.pop_back();
 }
@@ -228,6 +237,7 @@ void CarryManager::storeCarryOutSummary() {
     if (LLVM_LIKELY(mCarryInfo->explicitSummaryRequired())) {
         const unsigned carrySummaryIndex = summaryPack();
         if (LLVM_UNLIKELY(mCarryInfo->hasLongAdvances())) { // Force if entry
+            assert (carrySummaryIndex < mCarryOutPack.size());
             mCarryOutPack[carrySummaryIndex] = Constant::getAllOnesValue(mCarryPackType);
         }
         storeCarryOut(carrySummaryIndex);
@@ -266,6 +276,7 @@ void CarryManager::buildCarryDataPhisAfterIfBody(BasicBlock * const entry, Basic
         const unsigned scopeBaseOffset = scopeBasePack();
         const unsigned scopeCarryPacks = mCarryInfo->getScopeCarryPackCount();
         for (unsigned i = scopeBaseOffset; i < scopeBaseOffset + scopeCarryPacks; ++i) {
+            assert (i < mCarryOutPack.size());
             Type * const type = mCarryOutPack[i]->getType();
             PHINode * phi = iBuilder->CreatePHI(type, 2);
             phi->addIncoming(Constant::getNullValue(type), entry);
@@ -275,6 +286,7 @@ void CarryManager::buildCarryDataPhisAfterIfBody(BasicBlock * const entry, Basic
     }
     if (LLVM_LIKELY(mCarrySummary.size() > 0)) {
         const unsigned summaryIndex = summaryPack();
+        assert (summaryIndex < mCarryOutPack.size());
         Value * carrySummary = mCarryOutPack[summaryIndex];
         if (mCarrySummary.back() != carrySummary) {
             Value * outerCarrySummary = mCarrySummary.back();
@@ -306,6 +318,7 @@ void CarryManager::initializeWhileEntryCarryDataPhis(BasicBlock * const end) {
         #endif
         PHINode * phi_out = iBuilder->CreatePHI(mCarryPackType, 2);
         phi_out->addIncoming(Constant::getNullValue(mCarryPackType), end);
+        assert (index < mCarryOutAccumPhis.size());
         mCarryOutAccumPhis[index] = phi_out;
     }
 }
@@ -320,6 +333,7 @@ void CarryManager::finalizeWhileBlockCarryDataPhis(BasicBlock * const end) {
         #ifdef SET_WHILE_CARRY_IN_TO_ZERO_AFTER_FIRST_ITERATION
         mCarryInPhis[index]->addIncoming(Constant::getNullValue(mCarryPackType), whileBodyFinalBlock);
         #endif
+        assert (index < mCarryOutAccumPhis.size());
         PHINode * phi = mCarryOutAccumPhis[index];
         Value * carryOut = iBuilder->CreateOr(phi, mCarryOutPack[currentScopeBase + index]);
         phi->addIncoming(carryOut, end);
@@ -369,6 +383,7 @@ void CarryManager::setCarryOut(const unsigned localIndex, Value * carryOut) {
         Value * carry_bit = iBuilder->CreateLShr(iBuilder->CreateBitCast(carryOut, iBuilder->getIntNTy(mBitBlockWidth)), mBitBlockWidth-1);
         carryOut = iBuilder->CreateBitCast(carry_bit, mBitBlockType);
     }
+    assert (index < mCarryOutPack.size());
     mCarryOutPack[index] = carryOut;
     if (LLVM_LIKELY(hasSummary())) {
         addToSummary(carryOut);
@@ -447,6 +462,7 @@ unsigned CarryManager::enumerate(PabloBlock * blk, unsigned ifDepth, unsigned wh
  ** ------------------------------------------------------------------------------------------------------------- */
 inline Value * CarryManager::addToSummary(Value * const value) {
     const unsigned summaryIndex = summaryPack();
+    assert (summaryIndex < mCarryInPack.size());
     Value * summary = mCarryOutPack[summaryIndex];
     assert (summary);
     assert (value);
@@ -478,6 +494,7 @@ return_result:
  * @brief getCarryPack
  ** ------------------------------------------------------------------------------------------------------------- */
 Value * CarryManager::getCarryPack(const unsigned packIndex) {
+    assert (packIndex < mCarryInPack.size());
     if (mCarryInPack[packIndex] == nullptr) {
         Value * const packPtr = iBuilder->CreateGEP(mCarryPackBasePtr, iBuilder->getInt64(packIndex));
         mCarryPackPtr[packIndex] = packPtr;
@@ -490,6 +507,7 @@ Value * CarryManager::getCarryPack(const unsigned packIndex) {
  * @brief storeCarryOut
  ** ------------------------------------------------------------------------------------------------------------- */
 void CarryManager::storeCarryOut(const unsigned packIndex) {
+    assert (packIndex < mCarryInPack.size());
     assert (mCarryOutPack[packIndex]);
     assert (mCarryPackPtr[packIndex]);
     iBuilder->CreateBlockAlignedStore(mCarryOutPack[packIndex], mCarryPackPtr[packIndex]);

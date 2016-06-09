@@ -22,19 +22,19 @@ class UnicodeSet;
 
 /*   Marker streams represent the results of matching steps.
      Three types of marker streams are used internally.
-     FinalMatchByte markers are used for character classes and
+     FinalMatchUnit markers are used for character classes and
      other strings identified by a one bit at their final position.
-     InitialPostPositionByte markers are used to mark matches with
-     a 1 bit immediately after a match.   InitialPostPositionByte markers
+     InitialPostPositionUnit markers are used to mark matches with
+     a 1 bit immediately after a match.   InitialPostPositionUnit markers
      are generally required whenever a regular expression element
      can match the empty string (e.g., * and ? repeated items).
-     FinalPostPositionByte markers are used for single code unit
+     FinalPostPositionUnit markers are used for single code unit
      lookahead assertions.  
 */
 
 namespace re {
 
-enum MarkerPosition {FinalMatchByte, InitialPostPositionByte, FinalPostPositionByte};
+enum MarkerPosition {FinalMatchUnit, InitialPostPositionUnit, FinalPostPositionUnit};
 
 struct MarkerType { 
     MarkerPosition pos;
@@ -52,7 +52,7 @@ class RE_Compiler {
 public:
 
     RE_Compiler(pablo::PabloFunction & function, cc::CC_Compiler & ccCompiler);
-    void initializeRequiredStreams();
+    void initializeRequiredStreams(Encoding encoding);
     void compileUnicodeNames(RE *& re);
     void finalizeMatchResult(MarkerType match_result, bool InvertMatches = false);
     MarkerType compile(RE * re) {
@@ -61,6 +61,8 @@ public:
 
 private:
 
+    void initializeRequiredStreams_utf8();
+    void initializeRequiredStreams_utf16();
     MarkerType compile(RE * re, pablo::PabloBuilder & cg);
 
     MarkerType process(RE * re, MarkerType marker, pablo::PabloBuilder & pb);

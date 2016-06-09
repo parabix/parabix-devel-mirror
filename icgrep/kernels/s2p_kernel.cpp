@@ -27,13 +27,13 @@ void s2p_step(IDISA::IDISA_Builder * iBuilder, Value * s0, Value * s1, Value * h
     p1 = iBuilder->simd_if(1, hi_mask, iBuilder->simd_slli(16, t0, shift), t1);
 }
 
-inline void s2p(IDISA::IDISA_Builder * iBuilder, Value * input, Value * output[]) {
+void s2p(IDISA::IDISA_Builder * iBuilder, Value * input[], Value * output[]) {
     Value * bit00224466[4];
     Value * bit11335577[4];
 
     for (unsigned i = 0; i < 4; i++) {
-        Value * s0 = iBuilder->CreateBlockAlignedLoad(input, {iBuilder->getInt32(0), iBuilder->getInt32(2 * i)});
-        Value * s1 = iBuilder->CreateBlockAlignedLoad(input, {iBuilder->getInt32(0), iBuilder->getInt32(2 * i + 1)});
+        Value * s0 = input[2 * i];
+        Value * s1 = input[2 * i + 1];
         s2p_step(iBuilder, s0, s1, iBuilder->simd_himask(2), 1, bit00224466[i], bit11335577[i]);
     }
     Value * bit00004444[2];
@@ -50,6 +50,14 @@ inline void s2p(IDISA::IDISA_Builder * iBuilder, Value * input, Value * output[]
     s2p_step(iBuilder, bit11115555[0], bit11115555[1], iBuilder->simd_himask(8), 4, output[1], output[5]);
     s2p_step(iBuilder, bit22226666[0], bit22226666[1], iBuilder->simd_himask(8), 4, output[2], output[6]);
     s2p_step(iBuilder, bit33337777[0], bit33337777[1], iBuilder->simd_himask(8), 4, output[3], output[7]);
+}
+
+void s2p(IDISA::IDISA_Builder * iBuilder, Value * input, Value * output[]) {
+    Value * bit[8];
+    for (unsigned i = 0; i < 8; i++) {
+        bit[i] = iBuilder->CreateBlockAlignedLoad(input, {iBuilder->getInt32(0), iBuilder->getInt32(i)});
+    }
+    s2p(iBuilder, bit, output);
 }
 
 void generateS2PKernel(Module *, IDISA::IDISA_Builder * iBuilder, KernelBuilder * kBuilder) {
@@ -70,6 +78,33 @@ void generateS2PKernel(Module *, IDISA::IDISA_Builder * iBuilder, KernelBuilder 
     kBuilder->finalize();
 }
 
+void generateS2P_16Kernel(Module *, IDISA::IDISA_Builder * iBuilder, KernelBuilder * kBuilder) {
+	kBuilder->addInputStream(16, "unit_pack");
+	for(unsigned i = 0; i < 16; i++) {
+		kBuilder->addOutputStream(1);
+	}
+	kBuilder->prepareFunction();
+
+    Value * ptr = kBuilder->getInputStream(0);
+
+    Value * lo[8];
+    Value * hi[8];
+    for (unsigned i = 0; i < 8; i++) {
+        Value * s0 = iBuilder->CreateBlockAlignedLoad(ptr, {iBuilder->getInt32(0), iBuilder->getInt32(2 * i)});
+        Value * s1 = iBuilder->CreateBlockAlignedLoad(ptr, {iBuilder->getInt32(0), iBuilder->getInt32(2 * i + 1)});
+        lo[i] = iBuilder->hsimd_packl(16, s0, s1);
+        hi[i] = iBuilder->hsimd_packh(16, s0, s1);
+    }
+
+    Value * output[16];
+    s2p(iBuilder, lo, output);
+    s2p(iBuilder, hi, output + 8);
+    for (unsigned j = 0; j < 16; j++) {
+        iBuilder->CreateBlockAlignedStore(output[j], kBuilder->getOutputStream(j));
+    }
+    kBuilder->finalize();
+}
+	
 void generateS2P_idealKernel(Module *, IDISA::IDISA_Builder * iBuilder, KernelBuilder * kBuilder) {
     kBuilder->addInputStream(8, "byte_pack");
     for(unsigned i = 0; i < 8; ++i) {

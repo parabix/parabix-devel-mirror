@@ -68,7 +68,7 @@ protected:
 
     PabloAST * makePrefix(const codepoint_t cp, const unsigned byte_no, PabloBuilder & builder, PabloAST * prefix);
 
-    static RangeList byteDefinitions(const RangeList & list, const unsigned byte_no);
+    static RangeList byteDefinitions(const RangeList & list, const unsigned byte_no, bool isUTF_16);
 
     template <typename RangeListOrUnicodeSet>
     static RangeList rangeIntersect(const RangeListOrUnicodeSet & list, const codepoint_t lo, const codepoint_t hi);

@@ -22,6 +22,7 @@
 #include <iostream> // MEEE
 static cl::OptionCategory LegacyGrepOptions("A. Standard Grep Options",
                                        "These are standard grep options intended for compatibility with typical grep usage.");
+static cl::opt<bool> UTF_16("UTF-16", cl::desc("Regular expressions over the UTF-16 representation of Unicode."), cl::cat(LegacyGrepOptions));
 static cl::OptionCategory EnhancedGrepOptions("B. Enhanced Grep Options",
                                        "These are additional options for icgrep functionality and performance.");
 static cl::opt<bool> CountOnly("c", cl::desc("Count and display the matching lines per file only."), cl::cat(LegacyGrepOptions));
@@ -109,7 +110,7 @@ void *DoGrep(void *args)
     count_mutex.unlock();
 
     while (fileIdx < inputFiles.size()){
-        grepEngine->doGrep(inputFiles[fileIdx], fileIdx, CountOnly, total_CountOnly);
+        grepEngine->doGrep(inputFiles[fileIdx], fileIdx, CountOnly, total_CountOnly, UTF_16);
         
         count_mutex.lock();
         fileIdx = fileCount;
@@ -211,7 +212,7 @@ int main(int argc, char *argv[]) {
     }
     
     GrepEngine grepEngine;
-    grepEngine.grepCodeGen(module_name, re_ast, CountOnly);
+    grepEngine.grepCodeGen(module_name, re_ast, CountOnly, UTF_16);
    
     initResult(inputFiles);
     for (unsigned i=0; i<inputFiles.size(); ++i){
@@ -220,7 +221,7 @@ int main(int argc, char *argv[]) {
 
     if (Threads <= 1) {
         for (unsigned i = 0; i != inputFiles.size(); ++i) {
-            grepEngine.doGrep(inputFiles[i], i, CountOnly, total_CountOnly);
+            grepEngine.doGrep(inputFiles[i], i, CountOnly, total_CountOnly, UTF_16);
         }        
     } else if (Threads > 1) {
         const unsigned numOfThreads = Threads; // <- convert the command line value into an integer to allow stack allocation

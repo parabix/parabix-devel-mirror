@@ -368,7 +368,7 @@ void PabloCompiler::compileStatement(const Statement * stmt) {
         expr = iBuilder->simd_and(compileExpression(e->getExpr()), infileMask);
     } else if (const AtEOF * e = dyn_cast<AtEOF>(stmt)) {
         Value * EOFmark = iBuilder->CreateLoad(mKernelBuilder->getInternalState("EOFmark"));
-        expr = iBuilder->simd_and(compileExpression(e->getExpr()), EOFmark);
+		expr = iBuilder->simd_and(compileExpression(e->getExpr()), EOFmark);
     } else if (const Count * c = dyn_cast<Count>(stmt)) {
         Value * const to_count = compileExpression(c->getExpr());
         expr = mCarryManager->popCount(to_count, c->getGlobalCountIndex());

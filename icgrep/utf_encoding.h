@@ -17,6 +17,7 @@ public:
     enum class Type {
         ASCII
         , UTF_8
+		, UTF_16
     };
 
     Encoding(Type type, unsigned bits);

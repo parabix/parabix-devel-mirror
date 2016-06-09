@@ -25,15 +25,15 @@ public:
 
     ~GrepEngine();
   
-    void grepCodeGen(std::string moduleName, re::RE * re_ast, bool CountOnly, bool isNameExpression = false);
+    void grepCodeGen(std::string moduleName, re::RE * re_ast, bool CountOnly, bool UTF_16 = false, bool isNameExpression = false);
     
-    void doGrep(const std::string & fileName, const int fileIdx, bool CountOnly, std::vector<uint64_t> &total_CountOnly);
+    void doGrep(const std::string & fileName, const int fileIdx, bool CountOnly, std::vector<uint64_t> &total_CountOnly, bool UTF_16);
     
     re::CC *  grepCodepoints();
     
 private:
    
-    static bool finalLineIsUnterminated(const char * const fileBuffer, const size_t fileSize);
+    static bool finalLineIsUnterminated(const char * const fileBuffer, const size_t fileSize, bool UTF_16);
 
     GrepFunctionType mGrepFunction;
     GrepFunctionType_CountOnly mGrepFunction_CountOnly;

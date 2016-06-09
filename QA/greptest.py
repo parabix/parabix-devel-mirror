@@ -42,7 +42,8 @@ def start_element_open_file(name, attrs):
 			print "Expecting id attribute for datafile, but none found."
 			exit(-1)
                 outfpath = os.path.join(options.datafile_dir, filename)
-		outf = codecs.open(outfpath, encoding='utf-8', mode='w')
+		if options.utf16: outf = codecs.open(outfpath, encoding='utf-16BE', mode='w')
+		else: outf = codecs.open(outfpath, encoding='utf-8', mode='w')
 		in_datafile = True
 
 def char_data_write_contents(data):
@@ -125,6 +126,9 @@ if __name__ == '__main__':
 	option_parser.add_option('-v', '--verbose',
                           dest = 'verbose', action='store_true', default=False,
                           help = 'verbose output: show successful tests')
+	option_parser.add_option('-U', '--UTF-16',
+                          dest = 'utf16', action='store_true', default=False,
+                          help = 'test UTF-16 processing')
 	options, args = option_parser.parse_args(sys.argv[1:])
 	if len(args) != 1:
 		option_parser.print_usage()

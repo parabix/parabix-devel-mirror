@@ -86,10 +86,10 @@ RE * regular_expression_passes(const Encoding encoding, RE * re_ast)  {
 }
     
 PabloFunction * re2pablo_compiler(const Encoding encoding, RE * re_ast) {
-    PabloFunction * function = PabloFunction::Create("process_block", 8, 2);
+    PabloFunction * function = PabloFunction::Create("process_block", encoding.getBits(), 2);
     cc::CC_Compiler cc_compiler(*function, encoding);
     re::RE_Compiler re_compiler(*function, cc_compiler);
-    re_compiler.initializeRequiredStreams();
+    re_compiler.initializeRequiredStreams(encoding);
     re_compiler.compileUnicodeNames(re_ast);
     re_compiler.finalizeMatchResult(re_compiler.compile(re_ast), AlgorithmOptions.isSet(InvertMatches));
     return function;

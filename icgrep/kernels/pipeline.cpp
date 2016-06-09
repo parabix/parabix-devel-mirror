@@ -35,11 +35,16 @@ PipelineBuilder::~PipelineBuilder() {
     delete mScanMatchKernel;
 }
 
-void PipelineBuilder::CreateKernels(PabloFunction * function, bool isNameExpression){
+void PipelineBuilder::CreateKernels(PabloFunction * function, bool UTF_16, bool isNameExpression){
     mS2PKernel = new KernelBuilder(iBuilder, "s2p", codegen::SegmentSize);
     mICgrepKernel = new KernelBuilder(iBuilder, "icgrep", codegen::SegmentSize);
     mScanMatchKernel = new KernelBuilder(iBuilder, "scanMatch", codegen::SegmentSize);
-    generateS2PKernel(mMod, iBuilder, mS2PKernel);
+	if (UTF_16) {
+		generateS2P_16Kernel(mMod, iBuilder, mS2PKernel);
+	}
+	else {
+		generateS2PKernel(mMod, iBuilder, mS2PKernel);
+	}
     generateScanMatch(mMod, iBuilder, 64, mScanMatchKernel, isNameExpression);
     pablo_function_passes(function);
     PabloCompiler pablo_compiler(mMod, iBuilder);
@@ -67,10 +72,10 @@ inline Value * Cal_Count(Instance * icGrepInstance, IDISA::IDISA_Builder * iBuil
     return generatePopcount(iBuilder, matches);
 }
 
-Function * PipelineBuilder::ExecuteKernels(bool CountOnly) {
+Function * PipelineBuilder::ExecuteKernels(bool CountOnly, bool UTF_16) {
     Type * const int64ty = iBuilder->getInt64Ty();
     Type * const int8PtrTy = iBuilder->getInt8PtrTy();
-    Type * const inputType = PointerType::get(ArrayType::get(StructType::get(mMod->getContext(), std::vector<Type *>({ArrayType::get(mBitBlockType, 8)})), 1), 0);
+    Type * const inputType = PointerType::get(ArrayType::get(StructType::get(mMod->getContext(), std::vector<Type *>({ArrayType::get(mBitBlockType, (UTF_16 ? 16 : 8))})), 1), 0);
     Type * const resultTy = CountOnly ? int64ty : iBuilder->getVoidTy();
     Function * const main = cast<Function>(mMod->getOrInsertFunction("Main", resultTy, inputType, int64ty, int64ty, iBuilder->getInt1Ty(), nullptr));
     main->setCallingConv(CallingConv::C);
@@ -127,7 +132,7 @@ Function * PipelineBuilder::ExecuteKernels(bool CountOnly) {
         iBuilder->SetInsertPoint(segmentCondBlock);
         PHINode * remainingBytes = iBuilder->CreatePHI(int64ty, 2, "remainingBytes");
         remainingBytes->addIncoming(bufferSize, entryBlock);
-        Constant * const step = ConstantInt::get(int64ty, mBlockSize * segmentSize);
+        Constant * const step = ConstantInt::get(int64ty, mBlockSize * segmentSize * (UTF_16 ? 2 : 1));
         Value * segmentCondTest = iBuilder->CreateICmpULT(remainingBytes, step);
         iBuilder->CreateCondBr(segmentCondTest, fullCondBlock, segmentBodyBlock);
         iBuilder->SetInsertPoint(segmentBodyBlock);
@@ -144,7 +149,8 @@ Function * PipelineBuilder::ExecuteKernels(bool CountOnly) {
 		Value * temp_count = iBuilder->CreateLoad(count);
 		Value * prev_count = iBuilder->CreateBitCast(temp_count, iBuilder->getIntNTy(mBlockSize));
 		Value * add_for = iBuilder->CreateAdd(prev_count, popcount_for);
-		iBuilder->CreateStore(add_for, count);
+		Value * add = iBuilder->CreateBitCast(add_for, mBitBlockType);
+		iBuilder->CreateStore(add, count);
 	    }
         }
         if (!CountOnly) {
@@ -166,7 +172,7 @@ Function * PipelineBuilder::ExecuteKernels(bool CountOnly) {
     PHINode * remainingBytes = iBuilder->CreatePHI(int64ty, 2, "remainingBytes");
     remainingBytes->addIncoming(initialBufferSize, initialBlock);
 
-    Constant * const step = ConstantInt::get(int64ty, mBlockSize);
+    Constant * const step = ConstantInt::get(int64ty, mBlockSize * (UTF_16 ? 2 : 1));
     Value * fullCondTest = iBuilder->CreateICmpULT(remainingBytes, step);
     iBuilder->CreateCondBr(fullCondTest, finalBlock, fullBodyBlock);
 
@@ -200,8 +206,9 @@ Function * PipelineBuilder::ExecuteKernels(bool CountOnly) {
 
     iBuilder->SetInsertPoint(exitBlock);
 
-    Value * remaining = iBuilder->CreateZExt(remainingBytes, iBuilder->getIntNTy(mBlockSize));
-    Value * EOFmark = iBuilder->CreateShl(ConstantInt::get(iBuilder->getIntNTy(mBlockSize), 1), remaining);
+    Value * remainingByte = iBuilder->CreateZExt(remainingBytes, iBuilder->getIntNTy(mBlockSize));
+	Value * remainingUnit = iBuilder->CreateLShr(remainingByte, ConstantInt::get(iBuilder->getIntNTy(mBlockSize), 1));
+    Value * EOFmark = iBuilder->CreateShl(ConstantInt::get(iBuilder->getIntNTy(mBlockSize), 1), UTF_16 ? remainingUnit : remainingByte);
 	icGrepInstance->setInternalState("EOFmark", iBuilder->CreateBitCast(EOFmark, mBitBlockType));
 
     icGrepInstance->CreateDoBlockCall();

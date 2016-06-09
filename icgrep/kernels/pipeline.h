@@ -29,8 +29,8 @@ public:
 
 	~PipelineBuilder();
 
-	void CreateKernels(pablo::PabloFunction * function, bool isNameExpression);
-    llvm::Function * ExecuteKernels(bool CountOnly);
+	void CreateKernels(pablo::PabloFunction * function, bool UTF_16, bool isNameExpression);
+    llvm::Function * ExecuteKernels(bool CountOnly, bool UTF_16);
 
 private:
     llvm::Module *                      mMod;
