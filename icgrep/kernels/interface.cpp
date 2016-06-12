@@ -19,7 +19,6 @@ KernelInterface::KernelInterface(IDISA::IDISA_Builder * builder,
                                  std::vector<ScalarBinding> scalar_parameters,
                                  std::vector<ScalarBinding> scalar_outputs,
                                  std::vector<ScalarBinding> internal_scalars) {
-    llvm::errs() << "0\n";
     iBuilder = builder;
     mKernelName = kernelName;
     mStreamSetInputs = stream_inputs;
@@ -27,7 +26,6 @@ KernelInterface::KernelInterface(IDISA::IDISA_Builder * builder,
     mScalarInputs = scalar_parameters;
     mScalarOutputs = scalar_outputs;
     mInternalScalars = internal_scalars;
-    llvm::errs() << "1\n";
     std::vector<Type *> kernelFields;
     for (auto binding : scalar_parameters) {
         unsigned index = kernelFields.size();
@@ -45,22 +43,20 @@ KernelInterface::KernelInterface(IDISA::IDISA_Builder * builder,
         mInternalStateNameMap.emplace(binding.scalarName, iBuilder->getInt32(index));
     }
     mKernelStateType = StructType::create(getGlobalContext(), kernelFields, kernelName);
-    llvm::errs() << "2\n";
-
 }
 
 void KernelInterface::addKernelDeclarations(Module * client) {
     
     Type * selfType = PointerType::getUnqual(mKernelStateType);
-    llvm::errs() << "3\n";
-    
     // Create the accumulator get function prototypes
     for (auto binding : mScalarOutputs) {
         FunctionType * accumFnType = FunctionType::get(binding.scalarType, {selfType}, false);
-        Function::Create(accumFnType, GlobalValue::ExternalLinkage, mKernelName + "_get_" + binding.scalarName, client);
+        Function * accumFn = Function::Create(accumFnType, GlobalValue::ExternalLinkage, mKernelName + "_get_" + binding.scalarName, client);
+        accumFn->setCallingConv(CallingConv::C);
+        accumFn->setDoesNotThrow();
+        Value * self = &*(accumFn->arg_begin());
+        self->setName("self");        
     }
-    llvm::errs() << "4\n";
-
     // Create the initialization function prototype
 
     std::vector<Type *> initParameters = {selfType};
@@ -68,11 +64,16 @@ void KernelInterface::addKernelDeclarations(Module * client) {
         initParameters.push_back(binding.scalarType);
     }
     FunctionType * initFunctionType = FunctionType::get(iBuilder->getVoidTy(), initParameters, false);
-    Function::Create(initFunctionType, GlobalValue::ExternalLinkage, mKernelName + "_Init", client);
-    
-    
-
-    llvm::errs() << "5\n";
+    Function * initFn = Function::Create(initFunctionType, GlobalValue::ExternalLinkage, mKernelName + "_Init", client);
+    initFn->setCallingConv(CallingConv::C);
+    initFn->setDoesNotThrow();
+    Function::arg_iterator initArgs = initFn->arg_begin();
+    Value * initArg = &*(initArgs++);
+    initArg->setName("self");
+    for (auto binding : mScalarInputs) {
+        initArg = &*(initArgs++);
+        initArg->setName(binding.scalarName);
+    }
 
     // Create the doBlock and finalBlock function prototypes
     
@@ -89,9 +90,44 @@ void KernelInterface::addKernelDeclarations(Module * client) {
         finalBlockParameters.push_back(outputSetParmType);
     }
     FunctionType * doBlockFunctionType = FunctionType::get(iBuilder->getVoidTy(), doBlockParameters, false);
-    Function::Create(doBlockFunctionType, GlobalValue::ExternalLinkage, mKernelName + "_DoBlock", client);
+    Function * doBlockFn = Function::Create(doBlockFunctionType, GlobalValue::ExternalLinkage, mKernelName + "_DoBlock", client);
+    doBlockFn->setCallingConv(CallingConv::C);
+    doBlockFn->setDoesNotThrow();
+    for (int i = 1; i <= doBlockParameters.size(); i++) {
+        doBlockFn->setDoesNotCapture(i);
+    }
+    
     FunctionType * finalBlockFunctionType = FunctionType::get(iBuilder->getVoidTy(), finalBlockParameters, false);
-    Function::Create(finalBlockFunctionType, GlobalValue::ExternalLinkage, mKernelName + "_FinalBlock", client);
+    Function * finalBlockFn = Function::Create(finalBlockFunctionType, GlobalValue::ExternalLinkage, mKernelName + "_FinalBlock", client);
+    finalBlockFn->setCallingConv(CallingConv::C);
+    finalBlockFn->setDoesNotThrow();
+    finalBlockFn->setDoesNotCapture(1);
+    // Parameter #2 is not a pointer; nocapture is irrelevant
+    for (int i = 3; i <= finalBlockParameters.size(); i++) {
+        finalBlockFn->setDoesNotCapture(i);
+    }
+    
+    Function::arg_iterator doBlockArgs = doBlockFn->arg_begin();
+    Function::arg_iterator finalBlockArgs = finalBlockFn->arg_begin();
+    Value * doBlockArg = &*(doBlockArgs++);
+    doBlockArg->setName("self");
+    Value * finalBlockArg = &*(finalBlockArgs++);
+    finalBlockArg->setName("self");
+    finalBlockArg = &*(finalBlockArgs++);
+    finalBlockArg->setName("remainingBytes");
+
+    for (auto inputSet : mStreamSetInputs) {
+        doBlockArg = &*(doBlockArgs++);
+        finalBlockArg = &*(finalBlockArgs++);
+        doBlockArg->setName(inputSet.ssName);
+        finalBlockArg->setName(inputSet.ssName);
+    }
+    for (auto outputSet : mStreamSetOutputs) {
+        doBlockArg = &*(doBlockArgs++);
+        finalBlockArg = &*(finalBlockArgs++);
+        doBlockArg->setName(outputSet.ssName);
+        finalBlockArg->setName(outputSet.ssName);
+    }
 }
 
 
@@ -121,15 +157,7 @@ std::unique_ptr<Module> KernelInterface::createKernelModule() {
     
     Function::arg_iterator args = initFunction->arg_begin();
     Value * self = &*(args++);
-    self->setName("self");
-    for (auto binding : mScalarInputs) {
-        Value * parm = &*(args++);
-        parm->setName(binding.scalarName);
-    }
-
     iBuilder->CreateStore(Constant::getNullValue(mKernelStateType), self);
-    args = initFunction->arg_begin();
-    args++;   // skip self argument.
     for (auto binding : mScalarInputs) {
         Value * parm = &*(args++);
         const auto f = mInternalStateNameMap.find(binding.scalarName);
