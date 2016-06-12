@@ -17,8 +17,8 @@ namespace llvm { class raw_ostream; }
 
 
 class GrepEngine {
-    typedef void (*GrepFunctionType)(char * byte_data, size_t filesize, const int fileIdx, uint64_t finalLineUnterminated);
-    typedef uint64_t (*GrepFunctionType_CountOnly)(char * byte_data, size_t filesize, const int fileIdx, uint64_t finalLineUnterminated);
+    typedef void (*GrepFunctionType)(char * byte_data, size_t filesize, const int fileIdx);
+    typedef uint64_t (*GrepFunctionType_CountOnly)(char * byte_data, size_t filesize, const int fileIdx);
 public:
 
     GrepEngine() {}
@@ -33,8 +33,6 @@ public:
     
 private:
    
-    static bool finalLineIsUnterminated(const char * const fileBuffer, const size_t fileSize, bool UTF_16);
-
     GrepFunctionType mGrepFunction;
     GrepFunctionType_CountOnly mGrepFunction_CountOnly;
 

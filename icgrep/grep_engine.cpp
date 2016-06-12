@@ -67,27 +67,6 @@ static cl::alias ShowLineNumbersLong("line-number", cl::desc("Alias for -n"), cl
 
 bool isUTF_16 = false;
 
-bool GrepEngine::finalLineIsUnterminated(const char * const fileBuffer, const size_t fileSize, bool UTF_16) {
-    if (fileSize == 0) return false;
-    unsigned char end_byte = static_cast<unsigned char>(fileBuffer[fileSize-1]);
-    // LF through CR are line break characters
-    if ((end_byte >= 0xA) && (end_byte <= 0xD)) return false;
-    // Other line breaks require at least two bytes.
-    if (fileSize == 1) return true;
-    // NEL
-    unsigned char penult_byte = static_cast<unsigned char>(fileBuffer[fileSize-2]);
-    if ((end_byte == 0x85) && (penult_byte == (UTF_16 ? 0x00 : 0xC2))) return false;
-    if (fileSize == 2) return true;
-    // LS and PS
-    if ((end_byte < 0xA8) || (end_byte > 0xA9)) return true;
-	if (!UTF_16) {
-	    return (static_cast<unsigned char>(fileBuffer[fileSize-3]) != 0xE2) || (penult_byte != 0x80);
-	}
-	else {// UTF_16
-	    return (penult_byte != 0x20);
-	}
-}
-
 void GrepEngine::doGrep(const std::string & fileName, const int fileIdx, bool CountOnly, std::vector<uint64_t> & total_CountOnly, bool UTF_16) {
     path file(fileName);
     if (exists(file)) {
@@ -105,19 +84,19 @@ void GrepEngine::doGrep(const std::string & fileName, const int fileIdx, bool Co
             mapped_file_source source(fileName, fileSize, 0);
             char * fileBuffer = const_cast<char *>(source.data());
             if (CountOnly) {
-                total_CountOnly[fileIdx] = mGrepFunction_CountOnly(fileBuffer, fileSize, fileIdx, finalLineIsUnterminated(fileBuffer, fileSize, UTF_16));
+                total_CountOnly[fileIdx] = mGrepFunction_CountOnly(fileBuffer, fileSize, fileIdx);
             } else {
-                mGrepFunction(fileBuffer, fileSize, fileIdx, finalLineIsUnterminated(fileBuffer, fileSize, UTF_16));
+                mGrepFunction(fileBuffer, fileSize, fileIdx);
             }
             source.close();
         } catch (std::exception & e) {
             throw std::runtime_error("Boost mmap error: " + fileName + ": " + e.what());
         }
     } else {
-        if(CountOnly) {
-            mGrepFunction_CountOnly(nullptr, 0, fileIdx, false);
+        if (CountOnly) {
+            mGrepFunction_CountOnly(nullptr, 0, fileIdx);
         } else {
-            mGrepFunction(nullptr, 0, fileIdx, false);
+            mGrepFunction(nullptr, 0, fileIdx);
         }
     }
 }
@@ -175,10 +154,7 @@ re::CC *  GrepEngine::grepCodepoints() {
     size_t mFileSize = getUnicodeNameDataSize();
     std::string mFileName = "Uname.txt";
 
-    uint64_t finalLineUnterminated = 0;
-    if(finalLineIsUnterminated(mFileBuffer, mFileSize, isUTF_16))
-    finalLineUnterminated = 1;    
-    mGrepFunction(mFileBuffer, mFileSize, 0, finalLineUnterminated);
+    mGrepFunction(mFileBuffer, mFileSize, 0);
 
     return getParsedCodePointSet();
 }
@@ -208,9 +184,9 @@ void initResult(std::vector<std::string> filenames){
 
 extern "C" {
     void wrapped_report_match(uint64_t lineNum, uint64_t line_start, uint64_t line_end, const char * buffer, uint64_t filesize, int fileIdx) {
-	int index = isUTF_16 ? 2 : 1;
-	int idx = fileIdx;
-      
+        int index = isUTF_16 ? 2 : 1;
+        int idx = fileIdx;
+          
         if (ShowFileNames) {
             resultStrs[idx] << inputFiles[idx] << ':';
         }
@@ -235,7 +211,7 @@ extern "C" {
             return;
         }
         unsigned char end_byte = (unsigned char)buffer[line_end]; 
-	unsigned char penult_byte = (unsigned char)(buffer[line_end - 1]);
+        unsigned char penult_byte = (unsigned char)(buffer[line_end - 1]);
         if (NormalizeLineBreaks) {
             if (end_byte == 0x85) {
                 // Line terminated with NEL, on the second byte.  Back up 1.
@@ -247,20 +223,20 @@ extern "C" {
             resultStrs[idx].write(&buffer[line_start * index], (line_end - line_start) * index);
             resultStrs[idx] << '\n';
         }
-        else{   
+        else {   
             if ((!isUTF_16 && end_byte == 0x0D) || (isUTF_16 && (end_byte == 0x0D && penult_byte == 0x0))) {
                 // Check for line_end on first byte of CRLF;  note that we don't
                 // want to access past the end of buffer.
-		if (line_end + 1 < filesize) {
-		    if (!isUTF_16 && buffer[line_end + 1] == 0x0A) {
-		    // Found CRLF; preserve both bytes.
-			line_end++;;
-		    }
-		    if (isUTF_16 && buffer[line_end + 1] == 0x0 && buffer[line_end + 2] == 0x0A) {
-		    // Found CRLF; preserve both bytes.
-			line_end += 2;
-		    }
-		}
+                if (line_end + 1 < filesize) {
+                    if (!isUTF_16 && buffer[line_end + 1] == 0x0A) {
+                        // Found CRLF; preserve both bytes.
+                        line_end++;
+                    }
+                    if (isUTF_16 && buffer[line_end + 1] == 0x0 && buffer[line_end + 2] == 0x0A) {
+                        // Found CRLF; preserve both bytes.
+                        line_end += 2;
+                    }
+                }
             }
             resultStrs[idx].write(&buffer[line_start * index], (line_end - line_start + 1) * index);
         }

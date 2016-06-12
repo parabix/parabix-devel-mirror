@@ -77,7 +77,7 @@ Function * PipelineBuilder::ExecuteKernels(bool CountOnly, bool UTF_16) {
     Type * const int8PtrTy = iBuilder->getInt8PtrTy();
     Type * const inputType = PointerType::get(ArrayType::get(StructType::get(mMod->getContext(), std::vector<Type *>({ArrayType::get(mBitBlockType, (UTF_16 ? 16 : 8))})), 1), 0);
     Type * const resultTy = CountOnly ? int64ty : iBuilder->getVoidTy();
-    Function * const main = cast<Function>(mMod->getOrInsertFunction("Main", resultTy, inputType, int64ty, int64ty, iBuilder->getInt1Ty(), nullptr));
+    Function * const main = cast<Function>(mMod->getOrInsertFunction("Main", resultTy, inputType, int64ty, int64ty, nullptr));
     main->setCallingConv(CallingConv::C);
     Function::arg_iterator args = main->arg_begin();
 
@@ -87,8 +87,6 @@ Function * PipelineBuilder::ExecuteKernels(bool CountOnly, bool UTF_16) {
     bufferSize->setName("bufferSize");
     Value * const fileIdx = &*(args++);
     fileIdx->setName("fileIdx");
-    Value * const finalLineUnterminated = &*(args++);
-    finalLineUnterminated->setName("finalLineUnterminated");
 
     iBuilder->SetInsertPoint(BasicBlock::Create(mMod->getContext(), "entry", main,0));
 
