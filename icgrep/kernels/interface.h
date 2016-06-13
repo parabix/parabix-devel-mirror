@@ -42,16 +42,14 @@ public:
     // Create a module for the kernel, including the kernel state type and
     // all required methods.  The init and accumulator output methods will be
     // defined, while the doBlock and finalBlock methods will initially be empty.
-    std::unique_ptr<llvm::Module> createKernelModule();
+    virtual std::unique_ptr<llvm::Module> createKernelModule();
     
 protected:
     // Get the index of a named scalar within the kernel state struct.
-    llvm::Value * getInputStreamSetIndex(std::string);
-    llvm::Value * getOutputStreamSetIndex(std::string);
     llvm::Value * getScalarIndex(std::string);
-    
-    
-private:
+    // Get a parameter by name.
+    llvm::Value * getParameter(Function * f, std::string paramName);
+
     IDISA::IDISA_Builder * iBuilder;
     std::string mKernelName;
     std::vector<StreamSetBinding> mStreamSetInputs;
@@ -62,7 +60,7 @@ private:
     std::vector<ScalarBinding> mInternalScalars;
     llvm::Type *               mKernelStateType;
     NameMap                    mInternalStateNameMap;
-
+    NameMap                    mStreamSetNameMap;
 };
 
 

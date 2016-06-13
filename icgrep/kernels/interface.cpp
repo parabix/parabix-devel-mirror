@@ -141,12 +141,7 @@ std::unique_ptr<Module> KernelInterface::createKernelModule() {
         Function * accumFn = theModule->getFunction(fnName);
         iBuilder->SetInsertPoint(BasicBlock::Create(iBuilder->getContext(), "get_" + binding.scalarName, accumFn, 0));
         Value * self = &*(accumFn->arg_begin());
-        const auto f = mInternalStateNameMap.find(binding.scalarName);
-        if (LLVM_UNLIKELY(f == mInternalStateNameMap.end())) {
-            throw std::runtime_error("Kernel does not contain internal state " + binding.scalarName);
-        }
-        Value * idx = f->second;
-        Value * ptr = iBuilder->CreateGEP(self, {iBuilder->getInt32(0), idx});
+        Value * ptr = iBuilder->CreateGEP(self, {iBuilder->getInt32(0), getScalarIndex(binding.scalarName)});
         Value * retVal = iBuilder->CreateLoad(ptr);
         iBuilder->CreateRet(retVal);
     }
@@ -160,14 +155,27 @@ std::unique_ptr<Module> KernelInterface::createKernelModule() {
     iBuilder->CreateStore(Constant::getNullValue(mKernelStateType), self);
     for (auto binding : mScalarInputs) {
         Value * parm = &*(args++);
-        const auto f = mInternalStateNameMap.find(binding.scalarName);
-        if (LLVM_UNLIKELY(f == mInternalStateNameMap.end())) {
-            throw std::runtime_error("Kernel does not contain internal state " + binding.scalarName);
-        }
-        Value * idx = f->second;
-        Value * ptr = iBuilder->CreateGEP(self, {iBuilder->getInt32(0), idx});
+        Value * ptr = iBuilder->CreateGEP(self, {iBuilder->getInt32(0), getScalarIndex(binding.scalarName)});
         iBuilder->CreateStore(ptr, parm);
     }
     iBuilder->CreateRetVoid();
     return theModule;
 }
+
+llvm::Value * KernelInterface::getScalarIndex(std::string fieldName) {
+    const auto f = mInternalStateNameMap.find(fieldName);
+    if (LLVM_UNLIKELY(f == mInternalStateNameMap.end())) {
+        throw std::runtime_error("Kernel does not contain internal state: " + fieldName);
+    }
+    return f->second;
+}
+
+
+llvm::Value * KernelInterface::getParameter(Function * f, std::string paramName) {
+    for (Function::arg_iterator argIter = f->arg_begin(), end = f->arg_end(); argIter != end; argIter++) {
+        Value * arg = &*argIter;
+        if (arg->getName() == paramName) return arg;
+    }
+    throw std::runtime_error("Method does not have parameter: " + paramName);
+}
+
