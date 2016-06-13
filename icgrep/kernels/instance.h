@@ -16,10 +16,14 @@ public:
 
     llvm::Value * CreateDoBlockCall();
 
+    llvm::Value * getKernelState() {
+        return mKernelState;
+    }
+    
     llvm::Value * getInternalState(const std::string & name) {
         return mDefinition->getInternalStateInternal(mKernelState, name);
     }
-
+    
     void setInternalState(const std::string & name, llvm::Value * value) {
         mDefinition->setInternalStateInternal(mKernelState, name, value);
     }
@@ -56,18 +60,6 @@ public:
         return mDefinition->getInputStreamType();
     }
 
-    llvm::Value * getInputScalar(const unsigned index) {
-        return mDefinition->getInputScalarInternal(mInputScalarSet, iBuilder->getInt32(index));
-    }
-
-    llvm::Value * getInputScalar(disable_implicit_conversion<llvm::Value *> index) {
-        return mDefinition->getInputScalarInternal(mInputScalarSet, index);
-    }
-
-    llvm::Type * getInputScalarType() const {
-        return mDefinition->getInputScalarType();
-    }
-
 
     inline llvm::Value * getOutputStreamSet(const unsigned streamOffset = 0) {
         // do not pass the result of this into an instantiate method; instead call getOutputStreamBuffer.
@@ -83,14 +75,6 @@ public:
     }
 
     void clearOutputStreamSet();
-
-    llvm::Value * getOutputScalar(const unsigned index) {
-        return mDefinition->getOutputScalarInternal(mOutputScalarSet, iBuilder->getInt32(index));
-    }
-
-    llvm::Value * getOutputScalar(disable_implicit_conversion<llvm::Value *> index) {
-        return mDefinition->getOutputScalarInternal(mOutputScalarSet, index);
-    }
 
     llvm::Value * getBlockNo() {
         return mDefinition->getBlockNoInternal(mKernelState);
@@ -111,15 +95,13 @@ public:
 protected:
 
     Instance(KernelBuilder * const definition, llvm::Value * const kernelState,
-             llvm::Value * const inputScalarSet, llvm::Value * const inputStreamSet, const unsigned inputBufferSize,
-             llvm::Value * const outputScalarSet, llvm::Value * const outputStreamSet, const unsigned outputBufferSize)
+             llvm::Value * const inputStreamSet, const unsigned inputBufferSize,
+             llvm::Value * const outputStreamSet, const unsigned outputBufferSize)
     : mDefinition(definition)
     , iBuilder(definition->iBuilder)
     , mKernelState(kernelState)
-    , mInputScalarSet(inputScalarSet)
     , mInputStreamSet(inputStreamSet)
     , mInputBufferSize(inputBufferSize)
-    , mOutputScalarSet(outputScalarSet)
     , mOutputStreamSet(outputStreamSet)
     , mOutputBufferSize(outputBufferSize) {
 
@@ -131,10 +113,8 @@ private:
     KernelBuilder * const                           mDefinition;
     IDISA::IDISA_Builder * const                    iBuilder;
     llvm::Value * const                             mKernelState;
-    llvm::Value * const                             mInputScalarSet;
     llvm::Value * const                             mInputStreamSet;
     const unsigned                                  mInputBufferSize;
-    llvm::Value * const                             mOutputScalarSet;
     llvm::Value * const                             mOutputStreamSet;
     const unsigned                                  mOutputBufferSize;
     static Allocator                                mAllocator;

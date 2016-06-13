@@ -123,18 +123,22 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool Count
     
 
     pipelineBuilder.CreateKernels(function, UTF_16, isNameExpression);
+    std::cerr << "CreateKernels complete\n";
 
     llvm::Function * grepIR = pipelineBuilder.ExecuteKernels(CountOnly, UTF_16);
+    std::cerr << "ExecuteKernels complete\n";
 
     mEngine = JIT_to_ExecutionEngine(M);
     ApplyObjectCache(mEngine);
     icgrep_Linking(M, mEngine);
-    
-    #ifndef NDEBUG
+    std::cerr << "icgrep_Linking complete\n";
+
+    //#ifndef NDEBUG
     verifyModule(*M, &dbgs());
-    #endif
+    //#endif
 
     mEngine->finalizeObject();
+    std::cerr << "finalizeObject complete\n";
     delete idb;
 
     if (CountOnly) {

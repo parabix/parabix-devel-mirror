@@ -46,16 +46,10 @@ Value * Instance::CreateDoBlockCall() {
     assert (mDefinition->getDoBlockFunction());
     std::vector<Value *> params;
     params.push_back(mKernelState);
-    if (mInputScalarSet) {
-        params.push_back(mKernelState);
-    }
     if (mInputStreamSet) {
         for (unsigned offset : mDefinition->getInputStreamOffsets()) {
             params.push_back(getInputStreamSet(offset));
         }
-    }
-    if (mOutputScalarSet) {
-        params.push_back(mOutputScalarSet);
     }
     if (mOutputStreamSet) {
         params.push_back(getOutputStreamSet());

@@ -22,7 +22,8 @@ KernelBuilder::KernelBuilder(IDISA::IDISA_Builder * builder, std::string && name
 , mKernelName(name)
 , mDefaultBufferSize(defaultBufferSize)
 , mBitBlockType(builder->getBitBlockType())
-, mBlockNoIndex(0) {
+, mBlockNoIndex(0)
+, mKernelStateType(nullptr) {
     assert (mDefaultBufferSize > 0);
 }
 
@@ -36,15 +37,15 @@ unsigned KernelBuilder::addInternalState(Type * const type) {
     return index;
 }
 
-unsigned KernelBuilder::addInternalState(llvm::Type * const type, std::string && name) {
-    if (LLVM_UNLIKELY(mInternalStateNameMap.count(name) != 0)) {
-        throw std::runtime_error("Kernel already contains internal state '" + name + "'");
+    unsigned KernelBuilder::addInternalState(llvm::Type * const type, std::string name) {
+        if (LLVM_UNLIKELY(mInternalStateNameMap.count(name) != 0)) {
+            throw std::runtime_error("Kernel already contains internal state '" + name + "'");
+        }
+        const unsigned index = addInternalState(type);
+        mInternalStateNameMap.emplace(name, iBuilder->getInt32(index));
+        return index;
     }
-    const unsigned index = addInternalState(type);
-    mInternalStateNameMap.emplace(name, iBuilder->getInt32(index));
-    return index;
-}
-
+    
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getInternalState
  ** ------------------------------------------------------------------------------------------------------------- */
@@ -115,26 +116,6 @@ Value * KernelBuilder::getInputStreamInternal(Value * const inputStreamSet, disa
     throw std::runtime_error("Cannot access the input stream with a non-constant value unless all input stream types are identical!");
 }
 
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief addInputScalar
- ** ------------------------------------------------------------------------------------------------------------- */
-void KernelBuilder::addInputScalar(Type * const type, std::string && name) {
-    assert (type && !name.empty());
-    mInputScalarName.push_back(name);
-    mInputScalar.push_back(type);
-}
-
-void KernelBuilder::addInputScalar(Type * const type) {
-    addInputScalar(type, mKernelName + "_InputScalar_" + std::to_string(mInputScalar.size()));
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief getInputScalar
- ** ------------------------------------------------------------------------------------------------------------- */
-Value * KernelBuilder::getInputScalarInternal(Value * const inputScalarSet, disable_implicit_conversion<Value *>) {
-    assert (inputScalarSet);
-    throw std::runtime_error("currently not supported!");
-}
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief addOutputStream
@@ -143,16 +124,6 @@ unsigned KernelBuilder::addOutputStream(const unsigned fields) {
     assert (fields > 0);
     const unsigned index = mOutputStream.size();
     mOutputStream.push_back((fields == 1) ? mBitBlockType : ArrayType::get(mBitBlockType, fields));
-    return index;
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief addOutputScalar
- ** ------------------------------------------------------------------------------------------------------------- */
-unsigned KernelBuilder::addOutputScalar(Type * const type) {
-    assert (type);
-    const unsigned index = mOutputScalar.size();
-    mOutputScalar.push_back(type);
     return index;
 }
 
@@ -167,13 +138,6 @@ Value * KernelBuilder::getOutputStreamInternal(Value * const outputStreamSet, di
         return iBuilder->CreateGEP(outputStreamSet, { iBuilder->getInt32(0), index });
     }
     throw std::runtime_error("Cannot access the output stream with a non-constant value unless all output stream types are identical!");
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief getOutputScalar
- ** ------------------------------------------------------------------------------------------------------------- */
-Value * KernelBuilder::getOutputScalarInternal(Value * const, disable_implicit_conversion<Value *> ) {
-    throw std::runtime_error("currently not supported!");
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -198,25 +162,19 @@ Function * KernelBuilder::prepareFunction(std::vector<unsigned> && inputStreamOf
 
     mBlockNoIndex = iBuilder->getInt32(addInternalState(iBuilder->getInt64Ty(), "BlockNo"));
 
-    mKernelStateType = StructType::create(iBuilder->getContext(), mInternalState, mKernelName);
-    mInputScalarType = packDataTypes(mInputScalar);
+    if (!mKernelStateType) {
+        mKernelStateType = StructType::create(iBuilder->getContext(), mInternalState, mKernelName);
+    }
     mInputStreamType = packDataTypes(mInputStream);
-    mOutputScalarType = packDataTypes(mInputScalar);
     mOutputStreamType = packDataTypes(mOutputStream);
     mInputStreamOffsets = inputStreamOffsets;
 
     std::vector<Type *> params;
     params.push_back(mKernelStateType->getPointerTo());
-    if (mInputScalarType) {
-        params.push_back(mInputScalarType->getPointerTo());
-    }
     if (mInputStreamType) {
         for (unsigned i = 0; i < mInputStreamOffsets.size(); ++i) {
             params.push_back(mInputStreamType->getPointerTo());
         }
-    }
-    if (mOutputScalarType) {
-        params.push_back(mOutputScalarType->getPointerTo());
     }
     if (mOutputStreamType) {
         params.push_back(mOutputStreamType->getPointerTo());
@@ -236,20 +194,12 @@ Function * KernelBuilder::prepareFunction(std::vector<unsigned> && inputStreamOf
     Function::arg_iterator args = mDoBlock->arg_begin();
     mKernelStateParam = &*(args++);
     mKernelStateParam->setName("this");
-    if (mInputScalarType) {
-        mInputScalarParam = &*(args++);
-        mInputScalarParam->setName("inputScalars");
-    }
     if (mInputStreamType) {
         for (const unsigned offset : mInputStreamOffsets) {
             Value * const inputStreamSet = &*(args++);
             inputStreamSet->setName("inputStreamSet" + std::to_string(offset));
             mInputStreamParam.emplace(offset, inputStreamSet);
         }
-    }
-    if (mOutputScalarType) {
-        mOutputScalarParam = &*(args++);
-        mOutputScalarParam->setName("outputScalars");
     }
     if (mOutputStreamType) {
         mOutputStreamParam = &*args;
@@ -258,6 +208,51 @@ Function * KernelBuilder::prepareFunction(std::vector<unsigned> && inputStreamOf
     iBuilder->SetInsertPoint(BasicBlock::Create(iBuilder->getContext(), "entry", mDoBlock, 0));
     return mDoBlock;
 }
+
+void KernelBuilder::setInstanceParameters(std::vector<ParameterBinding> parms) {
+    mInstanceParameters = parms;
+    mInstanceParametersOffset = mInternalState.size();
+    for (auto binding : mInstanceParameters) {
+        addInternalState(binding.parameterType, binding.parameterName);
+    }
+}
+
+
+Function *  KernelBuilder::createInitMethod() {
+    if (!mKernelStateType) {
+        mKernelStateType = StructType::create(iBuilder->getContext(), mInternalState, mKernelName);
+    }
+    std::vector<Type *> initParameters = {PointerType::getUnqual(mKernelStateType)};
+    for (auto binding : mInstanceParameters) {
+        initParameters.push_back(binding.parameterType);
+    }
+    FunctionType * mInitFunctionType = FunctionType::get(iBuilder->getVoidTy(), initParameters, false);
+    Function * mInitFunction = Function::Create(mInitFunctionType, GlobalValue::ExternalLinkage, mKernelName + "_Init", iBuilder->getModule());
+    iBuilder->SetInsertPoint(BasicBlock::Create(iBuilder->getContext(), "Init_entry", mInitFunction, 0));
+
+    Function::arg_iterator args = mInitFunction->arg_begin();
+    Value * self = &*(args++);
+    self->setName("self");
+    for (auto binding : mInstanceParameters) {
+        Value * parm = &*(args++);
+        parm->setName(binding.parameterName);
+    }
+
+    iBuilder->CreateStore(Constant::getNullValue(mKernelStateType), self);
+    args = mInitFunction->arg_begin();
+    args++;   // skip self argument.
+    for (auto binding : mInstanceParameters) {
+        Value * parm = &*(args++);
+        setInternalStateInternal(self, binding.parameterName, parm);
+    }
+    iBuilder->CreateRetVoid();
+    return mInitFunction;
+}
+
+
+
+
+
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief finalize
@@ -271,9 +266,7 @@ void KernelBuilder::finalize() {
     iBuilder->CreateRetVoid();
 
     mKernelStateParam = nullptr;
-    mInputScalarParam = nullptr;
     mInputStreamParam.clear();
-    mOutputScalarParam = nullptr;
     mOutputStreamParam = nullptr;
     iBuilder->ClearInsertionPoint();
 }
@@ -286,15 +279,11 @@ void KernelBuilder::finalize() {
 Instance * KernelBuilder::instantiate(std::pair<Value *, unsigned> && inputStreamSet, const unsigned outputBufferSize) {
     AllocaInst * const kernelState = iBuilder->CreateAlloca(mKernelStateType);
     iBuilder->CreateStore(Constant::getNullValue(mKernelStateType), kernelState);
-    AllocaInst * outputScalars = nullptr;
-    if (mOutputScalarType) {
-        outputScalars = iBuilder->CreateAlloca(mOutputScalarType);
-    }
     AllocaInst * outputStreamSets = nullptr;
     if (mOutputStreamType) {
         outputStreamSets = iBuilder->CreateAlloca(mOutputStreamType, iBuilder->getInt32(outputBufferSize));
     }
-    return new Instance(this, kernelState, nullptr, std::get<0>(inputStreamSet), std::get<1>(inputStreamSet), outputScalars, outputStreamSets, outputBufferSize);
+    return new Instance(this, kernelState, std::get<0>(inputStreamSet), std::get<1>(inputStreamSet), outputStreamSets, outputBufferSize);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -319,5 +308,46 @@ Value * KernelBuilder::getInputStreamParam(const unsigned streamOffset) const {
     }
     return f->second;
 }
+    
+llvm::Value * make_New(IDISA::IDISA_Builder * iBuilder, std::string kernel_name, std::vector<Value *> args) {
+    Module * m = iBuilder->getModule();
+    Type * kernelType = m->getTypeByName(kernel_name);
+    if (!kernelType) {
+        throw std::runtime_error("Cannot find kernel type " + kernel_name);
+    }
+    Value * kernelInstance = iBuilder->CreateAlloca(kernelType);
+    std::vector<Value *> init_args = {kernelInstance};
+    for (auto a : args) {
+        init_args.push_back(a);
+    }
+    //iBuilder->CreateStore(Constant::getNullValue(kernelType), kernelInstance);
+    Function * initMethod = m->getFunction(kernel_name + "_Init");
+    if (!initMethod) {
+        //throw std::runtime_error("Cannot find " + kernel_name + "_Init");
+        iBuilder->CreateStore(Constant::getNullValue(kernelType), kernelInstance);
+        return kernelInstance;
+    }
+    iBuilder->CreateCall(initMethod, init_args);
+    return kernelInstance;
+}
+    llvm::Value * make_DoBlock_Call(IDISA::IDISA_Builder * iBuilder, std::string kernel_name, std::vector<Value *> args) {
+        Module * m = iBuilder->getModule();
+        Function * doBlockMethod = m->getFunction(kernel_name + "_DoBlock");
+        if (!doBlockMethod) {
+            throw std::runtime_error("Cannot find " + kernel_name + "_DoBlock");
+        }
+        return iBuilder->CreateCall(doBlockMethod, args);
+    }
+    
+    llvm::Value * make_FinalBlock_Call(IDISA::IDISA_Builder * iBuilder, std::string kernel_name, std::vector<Value *> args) {
+        Module * m = iBuilder->getModule();
+        Function * finalBlockMethod = m->getFunction(kernel_name + "_FinalBlock");
+        if (!finalBlockMethod) {
+            throw std::runtime_error("Cannot find " + kernel_name + "_FinalBlock");
+        }
+        return iBuilder->CreateCall(finalBlockMethod, args);
+    }
+    
+    
 
 } // end of namespace kernel

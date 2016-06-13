@@ -147,6 +147,61 @@ void generateS2P_idealKernel(Module *, IDISA::IDISA_Builder * iBuilder, KernelBu
     kBuilder->finalize();
 }
     
+std::unique_ptr<llvm::Module> s2pKernel::createKernelModule() {
+    std::unique_ptr<llvm::Module> theModule = KernelInterface::createKernelModule();
     
+    /***********************
+     WARNING iBuilder has a different module than theModule at this point.
+    ***********************/
+    Function * doBlockFunction = theModule.get()->getFunction(mKernelName + "_DoBlock");
+    
+    iBuilder->SetInsertPoint(BasicBlock::Create(iBuilder->getContext(), "entry", doBlockFunction, 0));
+    
+    Value * byteStreamBlock_ptr = getParameter(doBlockFunction, "byteStream");
+    Value * basisBitsBlock_ptr = getParameter(doBlockFunction, "basisBits");
+    Value * s_bytepack[8];
+    for (unsigned i = 0; i < 8; i++) {
+        s_bytepack[i] = iBuilder->CreateBlockAlignedLoad(byteStreamBlock_ptr, {iBuilder->getInt32(0), iBuilder->getInt32(0), iBuilder->getInt32(i)});
+    }
+    Value * p_bitblock[8];
+    s2p(iBuilder, s_bytepack, p_bitblock);
+    for (unsigned j = 0; j < 8; ++j) {
+        iBuilder->CreateBlockAlignedStore(p_bitblock[j], basisBitsBlock_ptr, {iBuilder->getInt32(0), iBuilder->getInt32(j)});
+    }
+    iBuilder->CreateRetVoid();
+
+    /* Now the prepare the s2p final block function:
+     assumption: if remaining bytes is greater than 0, it is safe to read a full block of bytes.
+     if remaining bytes is zero, no read should be performed (e.g. for mmapped buffer).
+     */
+    Function * finalBlockFunction = theModule.get()->getFunction(mKernelName + "_FinalBlock");
+    iBuilder->SetInsertPoint(BasicBlock::Create(iBuilder->getContext(), "fb_entry", finalBlockFunction, 0));
+
+    Value * self = getParameter(finalBlockFunction, "self");
+    Value * remainingBytes = getParameter(finalBlockFunction, "remainingBytes");
+    byteStreamBlock_ptr = getParameter(finalBlockFunction, "byteStream");
+    basisBitsBlock_ptr = getParameter(finalBlockFunction, "basisBits");
+    
+    BasicBlock * finalPartialBlock = BasicBlock::Create(iBuilder->getContext(), "partial", finalBlockFunction, 0);
+    BasicBlock * finalEmptyBlock = BasicBlock::Create(iBuilder->getContext(), "empty", finalBlockFunction, 0);
+    BasicBlock * exitBlock = BasicBlock::Create(iBuilder->getContext(), "exit", finalBlockFunction, 0);
+    
+    Value * emptyBlockCond = iBuilder->CreateICmpEQ(remainingBytes, ConstantInt::get(iBuilder->getInt64Ty(), 0));
+    iBuilder->CreateCondBr(emptyBlockCond, finalEmptyBlock, finalPartialBlock);
+    iBuilder->SetInsertPoint(finalPartialBlock);
+    iBuilder->CreateCall(doBlockFunction, {self, byteStreamBlock_ptr, basisBitsBlock_ptr});
+    
+    iBuilder->CreateBr(exitBlock);
+    
+    iBuilder->SetInsertPoint(finalEmptyBlock);
+    iBuilder->CreateStore(Constant::getNullValue(basisBitsBlock_ptr->getType()->getPointerElementType()), basisBitsBlock_ptr);
+    iBuilder->CreateBr(exitBlock);
+    
+    iBuilder->SetInsertPoint(exitBlock);
+    iBuilder->CreateRetVoid();
+
+    return theModule;
+}
+
     
 }
