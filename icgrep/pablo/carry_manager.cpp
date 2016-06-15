@@ -27,7 +27,6 @@ void CarryManager::initialize(PabloFunction * const function, kernel::KernelBuil
     mCarryPackType = mBitBlockType;
     const unsigned totalCarryDataSize = enumerate(mRootScope, 0, 0);
 
-
     mCarryPackPtr.resize(totalCarryDataSize + 1, nullptr);
     mCarryInPack.resize(totalCarryDataSize + 1, nullptr);
     mCarryOutPack.resize(totalCarryDataSize + 1, nullptr);
@@ -156,6 +155,7 @@ Value * CarryManager::advanceCarryInCarryOut(const unsigned localIndex, const un
 Value * CarryManager::shortAdvanceCarryInCarryOut(const unsigned index, const unsigned shiftAmount, Value * const value) {
     Value * result = nullptr;
     Value * const carryIn = getCarryPack(index);
+    assert (index < mCarryOutPack.size());
     mCarryOutPack[index] = value;
     if (mCarryInfo->getWhileDepth() == 0) {
         storeCarryOut(index);
@@ -497,6 +497,7 @@ Value * CarryManager::getCarryPack(const unsigned packIndex) {
     assert (packIndex < mCarryInPack.size());
     if (mCarryInPack[packIndex] == nullptr) {
         Value * const packPtr = iBuilder->CreateGEP(mCarryPackBasePtr, iBuilder->getInt64(packIndex));
+        assert (packIndex < mCarryPackPtr.size());
         mCarryPackPtr[packIndex] = packPtr;
         mCarryInPack[packIndex] = iBuilder->CreateBlockAlignedLoad(packPtr);
     }
@@ -507,10 +508,14 @@ Value * CarryManager::getCarryPack(const unsigned packIndex) {
  * @brief storeCarryOut
  ** ------------------------------------------------------------------------------------------------------------- */
 void CarryManager::storeCarryOut(const unsigned packIndex) {
-    assert (packIndex < mCarryInPack.size());
+    assert (packIndex < mCarryOutPack.size());
     assert (mCarryOutPack[packIndex]);
-    assert (mCarryPackPtr[packIndex]);
-    iBuilder->CreateBlockAlignedStore(mCarryOutPack[packIndex], mCarryPackPtr[packIndex]);
+    assert (packIndex < mCarryPackPtr.size());
+    Value * const ptr = mCarryPackPtr[packIndex];
+    assert (ptr);
+    assert (cast<PointerType>(ptr->getType())->getElementType() == mBitBlockType);
+    Value * const value = iBuilder->CreateBitCast(mCarryOutPack[packIndex], mBitBlockType);
+    iBuilder->CreateBlockAlignedStore(value, ptr);
 }
 
 /* Helper routines */
@@ -520,22 +525,27 @@ inline unsigned CarryManager::relativeFrameOffset(const unsigned frameOffset, co
 }
 
 inline unsigned CarryManager::addPosition(const unsigned localIndex) const {
+    assert (mCarryInfo);
     return relativeFrameOffset(mCarryInfo->addWithCarry.frameOffset, localIndex);
 }
 
 inline unsigned CarryManager::unitAdvancePosition(const unsigned localIndex) const {
+    assert (mCarryInfo);
     return relativeFrameOffset(mCarryInfo->unitAdvance.frameOffset, localIndex);
 }
 
 inline unsigned CarryManager::shortAdvancePosition(const unsigned localIndex) const {
+    assert (mCarryInfo);
     return relativeFrameOffset(mCarryInfo->shortAdvance.frameOffset, localIndex);
 }
 
 inline unsigned CarryManager::longAdvancePosition(const unsigned localIndex) const {
+    assert (mCarryInfo);
     return (mCurrentFrameIndex + mCarryInfo->longAdvance.frameOffset) + localIndex;
 }
 
 inline unsigned CarryManager::localBasePack() const {
+    assert (mCarryInfo);
     return (mCurrentFrameIndex + mCarryInfo->shortAdvance.frameOffset);
 }
 
@@ -544,10 +554,12 @@ inline unsigned CarryManager::scopeBasePack() const {
 }
 
 inline unsigned CarryManager::summaryPack() const {
+    assert (mCarryInfo);
     return relativeFrameOffset(mCarryInfo->summary.frameOffset, 0);
 }
 
 inline bool CarryManager::hasSummary() const {
+    assert (mCarryInfo);
     return mCarryInfo->explicitSummaryRequired() && !(mCarryInfo->hasLongAdvances());
 }
 
