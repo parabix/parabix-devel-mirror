@@ -205,7 +205,6 @@ void generateScanMatch(Module * m, IDISA::IDISA_Builder * iBuilder, unsigned sca
     
     Type * T = iBuilder->getIntNTy(scanWordBitWidth);
     Type * S = PointerType::get(iBuilder->getIntNTy(8), 0);
-    kBuilder->setInstanceParameters({{S, "FileBuf"}, {T, "FileSize"}, {T, "FileIdx"}});
 
     const unsigned fieldCount = iBuilder->getBitBlockWidth() / scanWordBitWidth;
     Type * scanwordVectorType =  VectorType::get(T, fieldCount);
@@ -215,8 +214,9 @@ void generateScanMatch(Module * m, IDISA::IDISA_Builder * iBuilder, unsigned sca
     //use index
     const unsigned lineStart = kBuilder->addInternalState(T, "LineStart");
     const unsigned lineNum = kBuilder->addInternalState(T, "LineNum");
-    
-    kBuilder->createInitMethod();
+    kBuilder->addInternalState(S, "FileBuf");
+    kBuilder->addInternalState(T, "FileSize");
+    kBuilder->addInternalState(T, "FileIdx");
     Function * function = kBuilder->prepareFunction();
 
 
