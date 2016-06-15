@@ -173,7 +173,7 @@ std::unique_ptr<Module> KernelInterface::createKernelModule() {
     for (auto binding : mScalarInputs) {
         Value * parm = &*(args++);
         Value * ptr = iBuilder->CreateGEP(self, {iBuilder->getInt32(0), getScalarIndex(binding.scalarName)});
-        iBuilder->CreateStore(ptr, parm);
+        iBuilder->CreateStore(parm, ptr);
     }
     iBuilder->CreateRetVoid();
     return theModule;
@@ -195,7 +195,7 @@ Value * KernelInterface::getScalarField(Value * self, std::string fieldName) {
 
 void KernelInterface::setScalarField(Value * self, std::string fieldName, Value * newFieldVal) {
     Value * ptr = iBuilder->CreateGEP(self, {iBuilder->getInt32(0), getScalarIndex(fieldName)});
-    iBuilder->CreateStore(ptr, newFieldVal);
+    iBuilder->CreateStore(newFieldVal, ptr);
 }
 
 
