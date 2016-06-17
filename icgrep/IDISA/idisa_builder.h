@@ -48,6 +48,10 @@ public:
         return mMod;
     }
     
+    void setModule(Module * m)  {
+        mMod = m;
+    }
+    
     Constant * allZeroes() const {
         return mZeroInitializer;
     }

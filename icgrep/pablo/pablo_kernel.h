@@ -11,15 +11,16 @@
 #include <IDISA/idisa_builder.h>
 #include <pablo/function.h>
 
+class PabloCompiler;
 
 namespace pablo {
 
-class PabloKernel : KernelSignature {
+class PabloKernel : public KernelInterface {
 public:
     PabloKernel(IDISA::IDISA_Builder * builder,
                     std::string kernelName,
                     PabloFunction * function,
-                    std::vector<string> accumulators);
+                    std::vector<std::string> accumulators);
 // At present only population count accumulator are supported,
 // using the pablo.Count operation.
 
@@ -30,7 +31,12 @@ protected:
     // EOFmark bit and then calls the standard DoBlock function.
     // This may be overridden for specialized processing.
     virtual void addFinalBlockMethod(Module * m);
+    
+    PabloFunction * mPabloFunction;
 
+    std::vector<ScalarBinding> accumBindings(std::vector<std::string> accum_names);
+
+    friend class PabloCompiler;
 };
 }
 #endif // PABLO_KERNEL_H
