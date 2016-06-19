@@ -12,54 +12,14 @@
 using namespace llvm;
 using namespace kernel;
 
-KernelInterface::KernelInterface(IDISA::IDISA_Builder * builder,
-                                 std::string kernelName,
-                                 std::vector<StreamSetBinding> stream_inputs,
-                                 std::vector<StreamSetBinding> stream_outputs,
-                                 std::vector<ScalarBinding> scalar_parameters,
-                                 std::vector<ScalarBinding> scalar_outputs,
-                                 std::vector<ScalarBinding> internal_scalars) :
-                iBuilder(builder),
-                mKernelName(kernelName),
-                mStreamSetInputs(stream_inputs),
-                mStreamSetOutputs(stream_outputs),
-                mScalarInputs(scalar_parameters),
-                mScalarOutputs(scalar_outputs),
-                mInternalScalars(internal_scalars),
-                mKernelStateType(nullptr) {
-    
-    for (auto binding : scalar_parameters) {
-        addScalar(binding.scalarType, binding.scalarName);
-    }
-    for (auto binding : scalar_outputs) {
-        addScalar(binding.scalarType, binding.scalarName);
-    }
-    for (auto binding : internal_scalars) {
-        addScalar(binding.scalarType, binding.scalarName);
-    }
-}
-
-const std::string init_suffix = "_Init";
-const std::string doBlock_suffix = "_DoBlock";
-const std::string finalBlock_suffix = "_FinalBlock";
-const std::string accumulator_infix = "_get_";
-
-
-void KernelInterface::addScalar(Type * t, std::string scalarName) {
-    if (LLVM_UNLIKELY(mKernelStateType != nullptr)) {
-        throw std::runtime_error("Illegal addition of kernel field after kernel state finalized: " + scalarName);
-    }
-    unsigned index = mKernelFields.size();
-    mKernelFields.push_back(t);
-    mInternalStateNameMap.emplace(scalarName, iBuilder->getInt32(index));
-}
-
-void KernelInterface::finalizeKernelStateType() {
-    mKernelStateType = StructType::create(getGlobalContext(), mKernelFields, mKernelName);
-}
-
 void KernelInterface::addKernelDeclarations(Module * client) {
-    finalizeKernelStateType();
+    errs() << "KernelInterface::addKernelDeclarations\n";
+    Module * saveModule = iBuilder->getModule();
+    IDISA::IDISA_Builder::InsertPoint savePoint = iBuilder->saveIP();
+    iBuilder->setModule(client);
+    if (mKernelStateType == nullptr) {
+        throw std::runtime_error("Kernel interface " + mKernelName + " not yet finalized.");
+    }
     Type * selfType = PointerType::getUnqual(mKernelStateType);
     // Create the accumulator get function prototypes
     for (auto binding : mScalarOutputs) {
@@ -145,66 +105,8 @@ void KernelInterface::addKernelDeclarations(Module * client) {
         doBlockArg->setName(outputSet.ssName);
         finalBlockArg->setName(outputSet.ssName);
     }
-}
-
-
-std::unique_ptr<Module> KernelInterface::createKernelModule() {
-    std::unique_ptr<Module> theModule = make_unique<Module>(mKernelName, getGlobalContext());
-    addKernelDeclarations(theModule.get());
-    
-    // Implement the accumulator get functions
-    for (auto binding : mScalarOutputs) {
-        auto fnName = mKernelName + "_get_" + binding.scalarName;
-        Function * accumFn = theModule->getFunction(fnName);
-        iBuilder->SetInsertPoint(BasicBlock::Create(iBuilder->getContext(), "get_" + binding.scalarName, accumFn, 0));
-        Value * self = &*(accumFn->arg_begin());
-        Value * ptr = iBuilder->CreateGEP(self, {iBuilder->getInt32(0), getScalarIndex(binding.scalarName)});
-        Value * retVal = iBuilder->CreateLoad(ptr);
-        iBuilder->CreateRet(retVal);
-    }
-    
-    // Implement the initializer function
-    Function * initFunction = theModule->getFunction(mKernelName + "_Init");
-    iBuilder->SetInsertPoint(BasicBlock::Create(iBuilder->getContext(), "Init_entry", initFunction, 0));
-    
-    Function::arg_iterator args = initFunction->arg_begin();
-    Value * self = &*(args++);
-    iBuilder->CreateStore(Constant::getNullValue(mKernelStateType), self);
-    for (auto binding : mScalarInputs) {
-        Value * parm = &*(args++);
-        Value * ptr = iBuilder->CreateGEP(self, {iBuilder->getInt32(0), getScalarIndex(binding.scalarName)});
-        iBuilder->CreateStore(parm, ptr);
-    }
-    iBuilder->CreateRetVoid();
-    return theModule;
-}
-
-Value * KernelInterface::getScalarIndex(std::string fieldName) {
-    const auto f = mInternalStateNameMap.find(fieldName);
-    if (LLVM_UNLIKELY(f == mInternalStateNameMap.end())) {
-        throw std::runtime_error("Kernel does not contain internal state: " + fieldName);
-    }
-    return f->second;
-}
-
-
-Value * KernelInterface::getScalarField(Value * self, std::string fieldName) {
-    Value * ptr = iBuilder->CreateGEP(self, {iBuilder->getInt32(0), getScalarIndex(fieldName)});
-    return iBuilder->CreateLoad(ptr);
-}
-
-void KernelInterface::setScalarField(Value * self, std::string fieldName, Value * newFieldVal) {
-    Value * ptr = iBuilder->CreateGEP(self, {iBuilder->getInt32(0), getScalarIndex(fieldName)});
-    iBuilder->CreateStore(newFieldVal, ptr);
-}
-
-
-Value * KernelInterface::getParameter(Function * f, std::string paramName) {
-    for (Function::arg_iterator argIter = f->arg_begin(), end = f->arg_end(); argIter != end; argIter++) {
-        Value * arg = &*argIter;
-        if (arg->getName() == paramName) return arg;
-    }
-    throw std::runtime_error("Method does not have parameter: " + paramName);
+    iBuilder->setModule(saveModule);
+    iBuilder->restoreIP(savePoint);
 }
 
 
