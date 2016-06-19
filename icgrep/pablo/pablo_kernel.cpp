@@ -20,7 +20,8 @@ PabloKernel::PabloKernel(IDISA::IDISA_Builder * builder,
                     {},
                     {},
                     {},
-                    {ScalarBinding{builder->getBitBlockType(), "EOFmark"}}),
+                    {ScalarBinding{builder->getInt64Ty(), "BlockNo"},
+                     ScalarBinding{builder->getBitBlockType(), "EOFmark"}}),
     mPabloFunction(function) {
     unsigned output_streams = function->getNumOfResults();
     if (output_streams > 0) {

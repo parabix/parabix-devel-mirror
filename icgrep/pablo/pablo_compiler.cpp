@@ -87,6 +87,7 @@ void PabloCompiler::compile(Function * doBlockFunction) {
         }
         iBuilder->CreateBlockAlignedStore(f->second, outputSet_ptr, {iBuilder->getInt32(0), iBuilder->getInt32(j)});
     }
+    mKernelBuilder->setScalarField(mSelf, "BlockNo", iBuilder->CreateAdd(mKernelBuilder->getScalarField(mSelf, "BlockNo"), iBuilder->getInt64(1)));
     iBuilder->CreateRetVoid();
 
     
