@@ -6,25 +6,30 @@
 #ifndef PABLO_KERNEL_H
 #define PABLO_KERNEL_H
 
-#include <kernels/interface.h>
-#include <kernels/streamset.h>
+#include <kernels/kernel.h>
 #include <IDISA/idisa_builder.h>
 #include <pablo/function.h>
 
-class PabloCompiler;
-
 namespace pablo {
+    
+class PabloCompiler; class CarryManager;
 
-class PabloKernel : public KernelInterface {
+
+class PabloKernel : public kernel::KernelBuilder {
 public:
     PabloKernel(IDISA::IDISA_Builder * builder,
                     std::string kernelName,
                     PabloFunction * function,
                     std::vector<std::string> accumulators);
-// At present only population count accumulator are supported,
-// using the pablo.Count operation.
+    // At present only population count accumulator are supported,
+    // using the pablo.Count operation.
+    
+    // A custom method for preparing kernel declarations is needed,
+    // so that the carry data requirements may be accommodated before
+    // finalizing the KernelStateType.
+    void prepareKernel();
 
-    std::unique_ptr<llvm::Module> createKernelModule() override;
+    void generateKernel() override;
     
 protected:
     // The default method for Pablo final block processing sets the
@@ -35,8 +40,12 @@ protected:
     PabloFunction * mPabloFunction;
 
     std::vector<ScalarBinding> accumBindings(std::vector<std::string> accum_names);
+    
+    //std::unique_ptr<pablo::PabloCompiler> pablo_compiler;
+    PabloCompiler * pablo_compiler;
 
     friend class PabloCompiler;
+    friend class CarryManager;
 };
 }
 #endif // PABLO_KERNEL_H

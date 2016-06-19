@@ -3,7 +3,6 @@
  *  This software is licensed to the public under the Open Software License 3.0.
  */
 
-#include <kernels/streamset.h>
 #include <pablo/pablo_kernel.h>
 #include <pablo/pablo_compiler.h>
 #include <llvm/Support/Debug.h>
@@ -14,18 +13,18 @@ using namespace kernel;
 
 PabloKernel::PabloKernel(IDISA::IDISA_Builder * builder,
                          std::string kernelName,
-                         PabloFunction * pf,
+                         PabloFunction * function,
                          std::vector<std::string> accumulators) :
-    KernelInterface(builder, kernelName,
-                    {StreamSetBinding{StreamSetType(pf->getNumOfParameters(), 1), "inputs"}},
-                    {StreamSetBinding{StreamSetType(pf->getNumOfResults(), 1), "outputs"}},
+    KernelBuilder(builder, kernelName,
+                    {StreamSetBinding{StreamSetType(function->getNumOfParameters(), 1), "inputs"}},
+                    {StreamSetBinding{StreamSetType(function->getNumOfResults(), 1), "outputs"}},
                     {},
                     {},
                     {ScalarBinding{builder->getBitBlockType(), "EOFmark"}}),
-    mPabloFunction(pf) {
+    mPabloFunction(function) {
     mScalarOutputs = accumBindings(accumulators);
+    pablo_compiler = new PabloCompiler(builder, this, function);
 }
-
 
 std::vector<ScalarBinding> PabloKernel::accumBindings(std::vector<std::string> accum_names) {
     std::vector<ScalarBinding> vec;
@@ -36,21 +35,23 @@ std::vector<ScalarBinding> PabloKernel::accumBindings(std::vector<std::string> a
     return vec;
 }
 
-std::unique_ptr<llvm::Module> PabloKernel::createKernelModule() {
-    std::unique_ptr<llvm::Module> theModule = KernelInterface::createKernelModule();
+void PabloKernel::prepareKernel() {
+    errs() << "PabloKernel::prepareKernel\n";
+    Type * carryDataType = pablo_compiler->initializeCarryData();
+    addScalar(carryDataType, "carries");
+    finalizeKernelStateType();
+}
 
-    Module * m = theModule.get();
+void PabloKernel::generateKernel() {
+    KernelBuilder::generateKernel();
+    Module * m = iBuilder->getModule();
     addFinalBlockMethod(m);
-    iBuilder->setModule(m);
-    PabloCompiler pablo_compiler(iBuilder);
-    pablo_compiler.setKernel(this);
-    pablo_compiler.compile(mPabloFunction, m->getFunction(mKernelName + "_DoBlock"));
-    return theModule;
+    pablo_compiler->compile(m->getFunction(mKernelName + doBlock_suffix));
 }
 
 void PabloKernel::addFinalBlockMethod(Module * m) {
-    Function * doBlockFunction = m->getFunction(mKernelName + "_DoBlock");
-    Function * finalBlockFunction = m->getFunction(mKernelName + "_FinalBlock");
+    Function * doBlockFunction = m->getFunction(mKernelName + doBlock_suffix);
+    Function * finalBlockFunction = m->getFunction(mKernelName + finalBlock_suffix);
     iBuilder->SetInsertPoint(BasicBlock::Create(iBuilder->getContext(), "fb_entry", finalBlockFunction, 0));
     // Final Block arguments: self, remaining, then the standard DoBlock args.
     Function::arg_iterator args = finalBlockFunction->arg_begin();
