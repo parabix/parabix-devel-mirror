@@ -25,9 +25,10 @@
 #include <re/re_cc.h>
 #include <cc/cc_compiler.h>
 #include <pablo/function.h>
+#include <pablo/pablo_kernel.h>
 #include <IDISA/idisa_builder.h>
 #include <IDISA/idisa_target.h>
-#include <kernels/instance.h>
+#include <kernels/interface.h>
 #include <kernels/kernel.h>
 #include <kernels/s2p_kernel.h>
 
@@ -100,9 +101,9 @@ extern "C" {
 
 pablo::PabloFunction * wc_gen(Encoding encoding) {
     //  input: 8 basis bit streams
-    //  output: 3 count streams
+    //  output: 3 counters
     
-    pablo::PabloFunction * function = pablo::PabloFunction::Create("wc", 8, 3);
+    pablo::PabloFunction * function = pablo::PabloFunction::Create("wc", 8, 0);
     cc::CC_Compiler ccc(*function, encoding);
     
     pablo::PabloBuilder pBuilder(ccc.getBuilder().getPabloBlock(), ccc.getBuilder());
@@ -110,9 +111,8 @@ pablo::PabloFunction * wc_gen(Encoding encoding) {
 
     if (CountLines) {
         pablo::PabloAST * LF = ccc.compileCC(re::makeCC(0x0A));
-        function->setResult(0, pBuilder.createAssign("lineCount", pBuilder.createCount(LF)));
+        function->setResultCount(pBuilder.createCount("lineCount", LF));
     }
-    else function->setResult(0, pBuilder.createAssign("lineCount", pBuilder.createZeroes()));
     if (CountWords) {
         pablo::PabloAST * WS = ccc.compileCC(re::makeCC(re::makeCC(0x09, 0x0D), re::makeCC(0x20)));
         
@@ -121,18 +121,16 @@ pablo::PabloFunction * wc_gen(Encoding encoding) {
         pablo::PabloAST * WS_follow_or_start = pBuilder.createNot(pBuilder.createAdvance(wordChar, 1));
         //
         pablo::PabloAST * wordStart = pBuilder.createInFile(pBuilder.createAnd(wordChar, WS_follow_or_start));
-        function->setResult(1, pBuilder.createAssign("wordCount", pBuilder.createCount(wordStart)));
+        function->setResultCount(pBuilder.createCount("wordCount", wordStart));
     }
-    else function->setResult(1, pBuilder.createAssign("wordCount", pBuilder.createZeroes()));
     if (CountChars) {
         //
         // FIXME: This correctly counts characters assuming valid UTF-8 input.  But what if input is
         // not UTF-8, or is not valid?
         //
         pablo::PabloAST * u8Begin = ccc.compileCC(re::makeCC(re::makeCC(0, 0x7F), re::makeCC(0xC2, 0xF4)));
-        function->setResult(2, pBuilder.createAssign("charCount", pBuilder.createCount(u8Begin)));
+        function->setResultCount(pBuilder.createCount("charCount", u8Begin));
     }
-    else function->setResult(2, pBuilder.createAssign("charCount", pBuilder.createZeroes()));
     return function;
 }
 
@@ -145,14 +143,11 @@ public:
     
     ~wcPipelineBuilder();
     
-    void CreateKernels(pablo::PabloFunction * function);
-    llvm::Function * ExecuteKernels();
+    llvm::Function * ExecuteKernels(pablo::PabloFunction * function);
     
 private:
     llvm::Module *                      mMod;
     IDISA::IDISA_Builder *              iBuilder;
-    KernelBuilder *                     mS2PKernel;
-    KernelBuilder *                     mWC_Kernel;
     llvm::Type *                        mBitBlockType;
     int                                 mBlockSize;
 };
@@ -170,37 +165,18 @@ wcPipelineBuilder::wcPipelineBuilder(Module * m, IDISA::IDISA_Builder * b)
 }
 
 wcPipelineBuilder::~wcPipelineBuilder(){
-    delete mS2PKernel;
-    delete mWC_Kernel;
 }
 
-void wcPipelineBuilder::CreateKernels(PabloFunction * function){
-    mS2PKernel = new KernelBuilder(iBuilder, "s2p", codegen::SegmentSize);
-    mWC_Kernel = new KernelBuilder(iBuilder, "wc", codegen::SegmentSize);
-    
-    generateS2PKernel(mMod, iBuilder, mS2PKernel);
+
+Function * wcPipelineBuilder::ExecuteKernels(PabloFunction * function) {
+    s2pKernel  s2pk(iBuilder);
+    s2pk.generateKernel();
     
     pablo_function_passes(function);
-    
-    PabloCompiler pablo_compiler(mMod, iBuilder);
-    try {
-        pablo_compiler.setKernel(mWC_Kernel);
-        pablo_compiler.compile(function);
-        delete function;
-        releaseSlabAllocatorMemory();
-    } catch (std::runtime_error e) {
-        delete function;
-        releaseSlabAllocatorMemory();
-        std::cerr << "Runtime error: " << e.what() << std::endl;
-        exit(1);
-    }
-    
-}
+    PabloKernel  wck(iBuilder, "wc", function, {"lineCount", "wordCount", "charCount"});
+    wck.prepareKernel();
+    wck.generateKernel();
 
-
-
-
-Function * wcPipelineBuilder::ExecuteKernels() {
     Constant * record_counts_routine;
     Type * const int64ty = iBuilder->getInt64Ty();
     Type * const voidTy = Type::getVoidTy(mMod->getContext());
@@ -222,54 +198,30 @@ Function * wcPipelineBuilder::ExecuteKernels() {
     
     BasicBlock * entryBlock = iBuilder->GetInsertBlock();
 
-    BasicBlock * segmentCondBlock = nullptr;
-    BasicBlock * segmentBodyBlock = nullptr;
-    const unsigned segmentSize = codegen::SegmentSize;
-    if (segmentSize > 1) {
-        segmentCondBlock = BasicBlock::Create(mMod->getContext(), "segmentCond", main, 0);
-        segmentBodyBlock = BasicBlock::Create(mMod->getContext(), "segmentBody", main, 0);
-    }
     BasicBlock * fullCondBlock = BasicBlock::Create(mMod->getContext(), "fullCond", main, 0);
     BasicBlock * fullBodyBlock = BasicBlock::Create(mMod->getContext(), "fullBody", main, 0);
     BasicBlock * finalBlock = BasicBlock::Create(mMod->getContext(), "final", main, 0);
-    BasicBlock * finalPartialBlock = BasicBlock::Create(mMod->getContext(), "partial", main, 0);
-    BasicBlock * finalEmptyBlock = BasicBlock::Create(mMod->getContext(), "empty", main, 0);
-    BasicBlock * endBlock = BasicBlock::Create(mMod->getContext(), "end", main, 0);
 
-    Instance * s2pInstance = mS2PKernel->instantiate(inputStream);
-    Instance * wcInstance = mWC_Kernel->instantiate(s2pInstance->getOutputStreamBuffer());
+    StreamSetBuffer ByteStream(iBuilder, StreamSetType(1, 8), 0);
+    StreamSetBuffer BasisBits(iBuilder, StreamSetType(8, 1), 1);
+    ByteStream.setStreamSetBuffer(inputStream);
+    Value * basisBits = BasisBits.allocateBuffer();
 
-    Value * initialBufferSize = nullptr;
-    BasicBlock * initialBlock = nullptr;
+    Value * s2pInstance = s2pk.createInstance({});
+    Value * wcInstance = wck.createInstance({});
     
-    if (segmentSize > 1) {
-        iBuilder->CreateBr(segmentCondBlock);
-        iBuilder->SetInsertPoint(segmentCondBlock);
-        PHINode * remainingBytes = iBuilder->CreatePHI(int64ty, 2, "remainingBytes");
-        remainingBytes->addIncoming(bufferSize, entryBlock);
-        Constant * const step = ConstantInt::get(int64ty, mBlockSize * segmentSize);
-        Value * segmentCondTest = iBuilder->CreateICmpULT(remainingBytes, step);
-        iBuilder->CreateCondBr(segmentCondTest, fullCondBlock, segmentBodyBlock);
-        iBuilder->SetInsertPoint(segmentBodyBlock);
-        for (unsigned i = 0; i < segmentSize; ++i) {
-            s2pInstance->CreateDoBlockCall();
-        }
-        for (unsigned i = 0; i < segmentSize; ++i) {
-            wcInstance->CreateDoBlockCall();
-        }
-        remainingBytes->addIncoming(iBuilder->CreateSub(remainingBytes, step), segmentBodyBlock);
-        iBuilder->CreateBr(segmentCondBlock);
-        initialBufferSize = remainingBytes;
-        initialBlock = segmentCondBlock;
-    } else {
-        initialBufferSize = bufferSize;
-        initialBlock = entryBlock;
-        iBuilder->CreateBr(fullCondBlock);
-    }
+    Value * initialBufferSize = bufferSize;
+    BasicBlock * initialBlock = entryBlock;
+    Value * initialBlockNo = iBuilder->getInt64(0);
 
+    iBuilder->CreateBr(fullCondBlock);
+
+    
     iBuilder->SetInsertPoint(fullCondBlock);
     PHINode * remainingBytes = iBuilder->CreatePHI(int64ty, 2, "remainingBytes");
     remainingBytes->addIncoming(initialBufferSize, initialBlock);
+    PHINode * blockNo = iBuilder->CreatePHI(int64ty, 2, "blockNo");
+    blockNo->addIncoming(initialBlockNo, initialBlock);
 
     Constant * const step = ConstantInt::get(int64ty, mBlockSize);
     Value * fullCondTest = iBuilder->CreateICmpULT(remainingBytes, step);
@@ -277,43 +229,26 @@ Function * wcPipelineBuilder::ExecuteKernels() {
     
     iBuilder->SetInsertPoint(fullBodyBlock);
 
-    s2pInstance->CreateDoBlockCall();
-    wcInstance->CreateDoBlockCall();
+    s2pk.createDoBlockCall(s2pInstance, {ByteStream.getBlockPointer(blockNo), basisBits});
+    wck.createDoBlockCall(wcInstance, {basisBits});
 
     Value * diff = iBuilder->CreateSub(remainingBytes, step);
 
     remainingBytes->addIncoming(diff, fullBodyBlock);
+    blockNo->addIncoming(iBuilder->CreateAdd(blockNo, iBuilder->getInt64(1)), fullBodyBlock);
     iBuilder->CreateBr(fullCondBlock);
     
     iBuilder->SetInsertPoint(finalBlock);
-    Value * EOFmark = iBuilder->CreateShl(ConstantInt::get(iBuilder->getIntNTy(mBlockSize), 1), remainingBytes);
-	wcInstance->setInternalState("EOFmark", iBuilder->CreateBitCast(EOFmark, mBitBlockType));
+    s2pk.createFinalBlockCall(s2pInstance, remainingBytes, {ByteStream.getBlockPointer(blockNo), basisBits});
+    wck.createFinalBlockCall(wcInstance, remainingBytes, {basisBits});
     
-    Value * emptyBlockCond = iBuilder->CreateICmpEQ(remainingBytes, ConstantInt::get(int64ty, 0));
-    iBuilder->CreateCondBr(emptyBlockCond, finalEmptyBlock, finalPartialBlock);
-    
-    
-    iBuilder->SetInsertPoint(finalPartialBlock);
-    s2pInstance->CreateDoBlockCall();
+    Value * lineCount = wck.createGetAccumulatorCall(wcInstance, "lineCount");
+    Value * wordCount = wck.createGetAccumulatorCall(wcInstance, "wordCount");
+    Value * charCount = wck.createGetAccumulatorCall(wcInstance, "charCount");;
 
-    iBuilder->CreateBr(endBlock);
-    
-    iBuilder->SetInsertPoint(finalEmptyBlock);
-    s2pInstance->clearOutputStreamSet();
-    iBuilder->CreateBr(endBlock);
-    
-    iBuilder->SetInsertPoint(endBlock);
-
-    wcInstance->CreateDoBlockCall();
-    
-    Value * lineCount = iBuilder->CreateExtractElement(iBuilder->CreateBlockAlignedLoad(wcInstance->getOutputStream((int) 0)), iBuilder->getInt32(0));
-    Value * wordCount = iBuilder->CreateExtractElement(iBuilder->CreateBlockAlignedLoad(wcInstance->getOutputStream(1)), iBuilder->getInt32(0));
-    Value * charCount = iBuilder->CreateExtractElement(iBuilder->CreateBlockAlignedLoad(wcInstance->getOutputStream(2)), iBuilder->getInt32(0));
-    
     iBuilder->CreateCall(record_counts_routine, std::vector<Value *>({lineCount, wordCount, charCount, bufferSize, fileIdx}));
     
     iBuilder->CreateRetVoid();
-    
     return main;
 }
 
@@ -330,8 +265,7 @@ wcFunctionType wcCodeGen(void) {
     wcPipelineBuilder pipelineBuilder(M, idb);
     Encoding encoding(Encoding::Type::UTF_8, 8);
     pablo::PabloFunction * function = wc_gen(encoding);
-    pipelineBuilder.CreateKernels(function);
-    llvm::Function * main_IR = pipelineBuilder.ExecuteKernels();
+    llvm::Function * main_IR = pipelineBuilder.ExecuteKernels(function);
 
     wcEngine = JIT_to_ExecutionEngine(M);
     

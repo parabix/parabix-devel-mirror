@@ -13,7 +13,6 @@ using namespace llvm;
 using namespace kernel;
 
 void KernelInterface::addKernelDeclarations(Module * client) {
-    errs() << "KernelInterface::addKernelDeclarations\n";
     Module * saveModule = iBuilder->getModule();
     IDISA::IDISA_Builder::InsertPoint savePoint = iBuilder->saveIP();
     iBuilder->setModule(client);

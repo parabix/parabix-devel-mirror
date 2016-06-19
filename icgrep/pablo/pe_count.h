@@ -29,7 +29,6 @@ protected:
     explicit Count(PabloAST * expr, String * counter)
     : Statement(ClassTypeId::Count, {expr}, counter)
     {
-
     }
 private:
 };

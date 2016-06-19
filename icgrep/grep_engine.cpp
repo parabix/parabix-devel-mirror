@@ -121,30 +121,17 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool Count
     re_ast = re::regular_expression_passes(encoding, re_ast);   
     pablo::PabloFunction * function = re::re2pablo_compiler(encoding, re_ast);
     
-
-    pipelineBuilder.CreateKernels(function, UTF_16, isNameExpression);
-    #ifndef NDEBUG
-    std::cerr << "CreateKernels complete\n";
-    #endif
-
-    llvm::Function * grepIR = pipelineBuilder.ExecuteKernels(CountOnly, UTF_16);
-    #ifndef NDEBUG
-    std::cerr << "ExecuteKernels complete\n";
-    #endif
+    llvm::Function * grepIR = pipelineBuilder.ExecuteKernels(function, isNameExpression, CountOnly, UTF_16);
 
     mEngine = JIT_to_ExecutionEngine(M);
     ApplyObjectCache(mEngine);
     icgrep_Linking(M, mEngine);
 
-    #ifndef NDEBUG
-    std::cerr << "icgrep_Linking complete\n";
+#ifndef NDEBUG
     verifyModule(*M, &dbgs());
-    #endif
+#endif
 
     mEngine->finalizeObject();
-    #ifndef NDEBUG
-    std::cerr << "finalizeObject complete\n";
-    #endif
     delete idb;
 
     if (CountOnly) {

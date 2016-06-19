@@ -58,7 +58,7 @@ SET(IDISA_SRC IDISA/idisa_builder.cpp IDISA/idisa_avx_builder.cpp IDISA/idisa_i6
 
 SET(PABLO_SRC pablo/pabloAST.cpp pablo/ps_if.cpp pablo/ps_while.cpp pablo/function.cpp pablo/codegenstate.cpp pablo/builder.cpp pablo/symbol_generator.cpp pablo/printer_pablos.cpp pablo/pablo_toolchain.cpp pablo/passes/flattenif.cpp)
 SET(PABLO_SRC ${PABLO_SRC} pablo/pablo_compiler.cpp pablo/carry_manager.cpp pablo/carry_data.cpp pablo/pablo_kernel.cpp)
-SET(PABLO_SRC ${PABLO_SRC} kernels/s2p_kernel.cpp kernels/kernel.cpp kernels/instance.cpp kernels/streamset.cpp kernels/interface.cpp)
+SET(PABLO_SRC ${PABLO_SRC} kernels/s2p_kernel.cpp kernels/kernel.cpp kernels/streamset.cpp kernels/interface.cpp)
 SET(PABLO_SRC ${PABLO_SRC} pablo/analysis/pabloverifier.cpp)
 SET(PABLO_SRC ${PABLO_SRC} pablo/optimizers/pablo_simplifier.cpp pablo/optimizers/codemotionpass.cpp)
 IF(ENABLE_MULTIPLEXING)

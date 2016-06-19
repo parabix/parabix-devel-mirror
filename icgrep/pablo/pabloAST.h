@@ -35,6 +35,7 @@ class PabloAST {
     friend class Prototype;
     friend class PabloFunction;
     friend class SymbolGenerator;
+    friend class Count;
 public:
 
     using Allocator = SlabAllocator<u_int8_t>;

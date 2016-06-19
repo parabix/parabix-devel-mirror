@@ -18,20 +18,21 @@
 #include <llvm/IR/IRBuilder.h>
 #include <iostream>
 #include <hrtime.h>
+#include <llvm/Support/Debug.h>
 
 
 namespace pablo {
 
 #define DSSLI_FIELDWIDTH 64
 
-PabloCompiler::PabloCompiler(Module * m, IDISA::IDISA_Builder * b)
-: mMod(m)
+PabloCompiler::PabloCompiler(IDISA::IDISA_Builder * b, PabloKernel * k, PabloFunction * const function)
+: mMod(b->getModule())
 , iBuilder(b)
 , mBitBlockType(b->getBitBlockType())
 , mCarryManager(nullptr)
-, mPabloFunction(nullptr)
+, mPabloFunction(function)
 , mPabloBlock(nullptr)
-, mKernelBuilder(nullptr)
+, mKernelBuilder(k)
 , mWhileDepth(0)
 , mIfDepth(0)
 , mFunction(nullptr)
@@ -39,72 +40,61 @@ PabloCompiler::PabloCompiler(Module * m, IDISA::IDISA_Builder * b)
     
 }
 
-void PabloCompiler::setKernel(kernel::KernelBuilder * kBuilder){
-    mKernelBuilder = kBuilder;
-} 
 
-llvm::Function * PabloCompiler::compile(PabloFunction * function) {
-
+Type * PabloCompiler::initializeCarryData() {
+    mCarryManager = make_unique<CarryManager>(iBuilder);
+    Type * carryDataType = mCarryManager->initializeCarryData(mPabloFunction);
+    return carryDataType;
+}
+    
+void PabloCompiler::compile(Function * doBlockFunction) {
+    // Make sure that we generate code into the right module.
+    mMod = iBuilder->getModule();
+    mFunction = doBlockFunction;
     #ifdef PRINT_TIMING_INFORMATION
     const timestamp_t pablo_compilation_start = read_cycle_counter();
     #endif
-  
-    Examine(function);
 
-    mCarryManager = new CarryManager(iBuilder);
+    Examine(mPabloFunction);
+    
+    //Generate Kernel//
+    iBuilder->SetInsertPoint(BasicBlock::Create(iBuilder->getContext(), "entry", doBlockFunction, 0));
+    mSelf = mKernelBuilder->getParameter(doBlockFunction, "self");
+    mCarryManager->initializeCodeGen(mKernelBuilder, mSelf);
+      
+    Value * inputSet_ptr = mKernelBuilder->getParameter(doBlockFunction, "inputs");
+    
+    Value * outputSet_ptr = nullptr;
+    if (mPabloFunction->getNumOfResults() > 0) {
+        outputSet_ptr = mKernelBuilder->getParameter(doBlockFunction, "outputs");
+    }
+    for (unsigned j = 0; j < mPabloFunction->getNumOfParameters(); ++j) {
+        Value * inputVal = iBuilder->CreateGEP(inputSet_ptr, {iBuilder->getInt32(0), iBuilder->getInt32(j)}); 
+        //Value * inputVal = iBuilder->CreateBlockAlignedLoad(inputSet_ptr, {iBuilder->getInt32(0), iBuilder->getInt32(j)});
+        const Var * const var = mPabloFunction->getParameter(j);
+        if (DebugOptionIsSet(DumpTrace)) {
+            iBuilder->CallPrintRegister(var->getName()->to_string(), iBuilder->CreateBlockAlignedLoad(inputVal));
+        }
+        mMarkerMap.insert(std::make_pair(var, inputVal));
+    }
+    
+    compileBlock(mPabloFunction->getEntryBlock());
+    
+    for (unsigned j = 0; j < mPabloFunction->getNumOfResults(); ++j) {
+        const auto f = mMarkerMap.find(mPabloFunction->getResult(j));
+        if (LLVM_UNLIKELY(f == mMarkerMap.end())) {
+            throw std::runtime_error("PabloCompiler: result " + std::to_string(j) + " was not assigned a value!");
+        }
+        iBuilder->CreateBlockAlignedStore(f->second, outputSet_ptr, {iBuilder->getInt32(0), iBuilder->getInt32(j)});
+    }
+    iBuilder->CreateRetVoid();
 
-    GenerateKernel(function);
-       
-    delete mCarryManager;
-    mCarryManager = nullptr;
     
     #ifdef PRINT_TIMING_INFORMATION
     const timestamp_t pablo_compilation_end = read_cycle_counter();
     std::cerr << "PABLO COMPILATION TIME: " << (pablo_compilation_end - pablo_compilation_start) << std::endl;
     #endif
 
-    return mFunction;
-}
-
-inline void PabloCompiler::GenerateKernel(PabloFunction * const function) {
-  
-    mPabloFunction = function;
-
-    for (unsigned i = 0; i < function->getNumOfParameters(); ++i) {
-        mKernelBuilder->addInputStream(1, function->getParameter(i)->getName()->to_string());
-    }
-    for (unsigned i = 0; i < function->getNumOfResults(); ++i) {
-        mKernelBuilder->addOutputStream(1);
-    }
-
-    mCarryManager->initialize(function, mKernelBuilder);
-    
-    mKernelBuilder->addInternalState(mBitBlockType, "EOFmark");
-    
-    mFunction = mKernelBuilder->prepareFunction({mInputStreamOffset.begin(), mInputStreamOffset.end()});
-
-    mCarryManager->reset();
-
-    for (unsigned j = 0; j < function->getNumOfParameters(); ++j) {
-        Value * inputVal = mKernelBuilder->getInputStream(j);
-        const Var * const var = function->getParameter(j);
-        if (DebugOptionIsSet(DumpTrace)) {
-            iBuilder->CallPrintRegister(var->getName()->to_string(), iBuilder->CreateBlockAlignedLoad(inputVal));
-        }
-        mMarkerMap.insert(std::make_pair(var, inputVal));
-    }
-
-    compileBlock(function->getEntryBlock());
-
-    for (unsigned j = 0; j < function->getNumOfResults(); ++j) {
-        const auto f = mMarkerMap.find(function->getResult(j));
-        if (LLVM_UNLIKELY(f == mMarkerMap.end())) {
-            throw std::runtime_error("PabloCompiler: result " + std::to_string(j) + " was not assigned a value!");
-        }
-        iBuilder->CreateBlockAlignedStore(f->second, mKernelBuilder->getOutputStream(j));
-    }
-
-    mKernelBuilder->finalize();
 }
 
 inline void PabloCompiler::Examine(const PabloFunction * const function) {
@@ -363,15 +353,22 @@ void PabloCompiler::compileStatement(const Statement * stmt) {
         Value * const  sum = mCarryManager->addCarryInCarryOut(sthru->getLocalCarryIndex(), marker_expr, cc_expr);
         expr = iBuilder->simd_and(sum, iBuilder->simd_not(cc_expr));
     } else if (const InFile * e = dyn_cast<InFile>(stmt)) {
-        Value * EOFmark = iBuilder->CreateLoad(mKernelBuilder->getInternalState("EOFmark"));
+        Value * EOFmark = mKernelBuilder->getScalarField(mSelf, "EOFmark");
         Value * infileMask = iBuilder->simd_add(iBuilder->getBitBlockWidth(), EOFmark, iBuilder->allOnes());
         expr = iBuilder->simd_and(compileExpression(e->getExpr()), infileMask);
     } else if (const AtEOF * e = dyn_cast<AtEOF>(stmt)) {
-        Value * EOFmark = iBuilder->CreateLoad(mKernelBuilder->getInternalState("EOFmark"));
+        Value * EOFmark = mKernelBuilder->getScalarField(mSelf, "EOFmark");
 		expr = iBuilder->simd_and(compileExpression(e->getExpr()), EOFmark);
     } else if (const Count * c = dyn_cast<Count>(stmt)) {
         Value * const to_count = compileExpression(c->getExpr());
-        expr = mCarryManager->popCount(to_count, c->getGlobalCountIndex());
+        std::string counter = c->getName()->to_string();
+        Value * countSoFar = mKernelBuilder->getScalarField(mSelf, counter);
+        Value * fieldCounts = iBuilder->simd_popcount(64, to_count);
+        for (unsigned i = 0; i < iBuilder->getBitBlockWidth()/64; ++i) {
+            countSoFar = iBuilder->CreateAdd(countSoFar, iBuilder->mvmd_extract(64, fieldCounts, i));
+        }
+        mKernelBuilder->setScalarField(mSelf, counter, countSoFar);
+        expr = iBuilder->bitCast(iBuilder->CreateZExt(countSoFar, iBuilder->getIntNTy(iBuilder->getBitBlockWidth())));
     } else if (const Lookahead * l = dyn_cast<Lookahead>(stmt)) {
         PabloAST * const var = l->getExpr();
         if (LLVM_UNLIKELY(!isa<Var>(var))) {
@@ -389,8 +386,8 @@ void PabloCompiler::compileStatement(const Statement * stmt) {
         const unsigned offset0 = (l->getAmount() / iBuilder->getBitBlockWidth());
         const unsigned offset1 = ((l->getAmount() + iBuilder->getBitBlockWidth() - 1) / iBuilder->getBitBlockWidth());
         const unsigned shift = (l->getAmount() % iBuilder->getBitBlockWidth());
-        Value * const v0 = iBuilder->CreateBlockAlignedLoad(mKernelBuilder->getInputStream(index, offset0));
-        Value * const v1 = iBuilder->CreateBlockAlignedLoad(mKernelBuilder->getInputStream(index, offset1));
+        Value * const v0 = nullptr;//iBuilder->CreateBlockAlignedLoad(mKernelBuilder->getInputStream(index, offset0));
+        Value * const v1 = nullptr;//iBuilder->CreateBlockAlignedLoad(mKernelBuilder->getInputStream(index, offset1));
         if (LLVM_UNLIKELY((shift % 8) == 0)) { // Use a single whole-byte shift, if possible.
             expr = iBuilder->mvmd_dslli(8, v1, v0, (shift / 8));
         } else if (LLVM_LIKELY(shift < DSSLI_FIELDWIDTH)) {

@@ -4,6 +4,7 @@
 #include <pablo/pabloAST.h>
 #include <pablo/pe_var.h>
 #include <pablo/ps_assign.h>
+#include <pablo/pe_count.h>
 #include <pablo/symbol_generator.h>
 
 namespace pablo {
@@ -138,6 +139,10 @@ public:
         else throwInvalidResultIndex(index);
     }
 
+    void setResultCount(Count * value) {
+        value->addUser(this);
+    }
+    
     void setFunctionPtr(void * functionPtr) {
         mFunctionPtr = functionPtr;
     }

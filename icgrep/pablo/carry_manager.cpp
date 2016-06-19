@@ -19,9 +19,9 @@
 namespace pablo {
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief initialize
+ * @brief initializeCarryData
  ** ------------------------------------------------------------------------------------------------------------- */
-void CarryManager::initialize(PabloFunction * const function, kernel::KernelBuilder * const kBuilder) {
+Type * CarryManager::initializeCarryData(PabloFunction * const function) {
     mRootScope = function->getEntryBlock();
     mCarryInfoVector.resize(mRootScope->enumerateScopes(0) + 1);
     mCarryPackType = mBitBlockType;
@@ -33,25 +33,22 @@ void CarryManager::initialize(PabloFunction * const function, kernel::KernelBuil
 
     mTotalCarryDataBitBlocks = totalCarryDataSize;
     ArrayType* cdArrayTy = ArrayType::get(mBitBlockType, mTotalCarryDataBitBlocks);
-    mCdArrayIdx = kBuilder->addInternalState(cdArrayTy);
-    if (mPabloCountCount > 0) {
-        ArrayType* pcArrayTy = ArrayType::get(iBuilder->getIntNTy(64), mPabloCountCount);
-        mPcArrayIdx = kBuilder->addInternalState(pcArrayTy);
-    }
-    mKernelBuilder = kBuilder;
+    return cdArrayTy;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief reset
+ * @brief initializeCodeGen
  ** ------------------------------------------------------------------------------------------------------------- */
-void CarryManager::reset() {
-    Value * cdArrayPtr = mKernelBuilder->getInternalState(mCdArrayIdx);
+void CarryManager::initializeCodeGen(PabloKernel * const kBuilder, Value * selfPtr) {
+    mKernelBuilder = kBuilder;
+    mSelf = selfPtr;
+    
+    Value * cdArrayPtr = iBuilder->CreateGEP(mSelf, {iBuilder->getInt64(0), mKernelBuilder->getScalarIndex("carries")});
+#ifndef NDEBUG
+    iBuilder->CallPrintInt("cdArrayPtr", iBuilder->CreatePtrToInt(cdArrayPtr, iBuilder->getInt64Ty()));
+#endif
     mCarryPackBasePtr = iBuilder->CreateBitCast(cdArrayPtr, PointerType::get(mCarryPackType, 0));
     mCarryBitBlockPtr = iBuilder->CreateBitCast(cdArrayPtr, PointerType::get(mBitBlockType, 0));
-    if (mPabloCountCount > 0) {
-        Value * pcArrayPtr = mKernelBuilder->getInternalState(mPcArrayIdx);
-        mPopcountBasePtr = iBuilder->CreateBitCast(pcArrayPtr, Type::getInt64PtrTy(iBuilder->getContext()));
-    }
     mCurrentScope = mRootScope;
     mCurrentFrameIndex = 0;
     assert(mCarryInfoVector.size() > 0);
@@ -200,7 +197,7 @@ Value * CarryManager::longAdvanceCarryInCarryOut(const unsigned index, const uns
     const unsigned advanceEntries = mCarryInfo->longAdvanceEntries(shiftAmount);
     const unsigned bufsize = mCarryInfo->longAdvanceBufferSize(shiftAmount);
     Value * indexMask = iBuilder->getInt64(bufsize - 1);  // A mask to implement circular buffer indexing
-    Value * blockIndex = iBuilder->CreateBlockAlignedLoad(mKernelBuilder->getBlockNo());
+    Value * blockIndex = mKernelBuilder->getScalarField(mSelf, "BlockNo");
     Value * loadIndex0 = iBuilder->CreateAdd(iBuilder->CreateAnd(iBuilder->CreateSub(blockIndex, iBuilder->getInt64(advanceEntries)), indexMask), advBaseIndex);
     Value * storeIndex = iBuilder->CreateAdd(iBuilder->CreateAnd(blockIndex, indexMask), advBaseIndex);
     Value * carry_block0 = iBuilder->CreateBlockAlignedLoad(iBuilder->CreateGEP(mCarryBitBlockPtr, loadIndex0));
@@ -242,20 +239,6 @@ void CarryManager::storeCarryOutSummary() {
         }
         storeCarryOut(carrySummaryIndex);
     }
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief popCount
- ** ------------------------------------------------------------------------------------------------------------- */
-Value * CarryManager::popCount(Value * to_count, unsigned globalIdx) {
-    Value * countPtr = iBuilder->CreateGEP(mPopcountBasePtr, iBuilder->getInt64(globalIdx));
-    Value * countSoFar = iBuilder->CreateAlignedLoad(countPtr, 8);
-    Value * fieldCounts = iBuilder->simd_popcount(64, to_count);
-    for (unsigned i = 0; i < mBitBlockWidth/64; ++i) {
-        countSoFar = iBuilder->CreateAdd(countSoFar, iBuilder->mvmd_extract(64, fieldCounts, i));
-    }
-    iBuilder->CreateAlignedStore(countSoFar, countPtr, 8);
-    return iBuilder->bitCast(iBuilder->CreateZExt(countSoFar, iBuilder->getIntNTy(mBitBlockWidth)));
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -406,10 +389,7 @@ unsigned CarryManager::enumerate(PabloBlock * blk, unsigned ifDepth, unsigned wh
     unsigned nestedOffset = cd->nested.frameOffset;
 
     for (Statement * stmt : *blk) {
-        if (Count * c = dyn_cast<Count>(stmt)) {
-            c->setGlobalCountIndex(mPabloCountCount);
-            mPabloCountCount++;
-        } else if (If * ifStatement = dyn_cast<If>(stmt)) {
+        if (If * ifStatement = dyn_cast<If>(stmt)) {
             const unsigned ifCarryDataBits = enumerate(ifStatement->getBody(), ifDepth + 1, whileDepth);
             CarryData * nestedBlockData = mCarryInfoVector[ifStatement->getBody()->getScopeIndex()];
             if (1 == mBitBlockWidth) {  // PACKING

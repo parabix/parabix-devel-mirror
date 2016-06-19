@@ -406,7 +406,9 @@ void RE_Compiler::finalizeMatchResult(MarkerType match_result, bool InvertMatche
     if (InvertMatches) {
         match_follow = mPB.createNot(match_follow);
     }
-    mFunction.setResult(0, mPB.createAssign("matches", mPB.createAnd(match_follow, mLineBreak)));
+    Assign * matches = mPB.createAssign("matches", mPB.createAnd(match_follow, mLineBreak));
+    mFunction.setResultCount(mPB.createCount("matchedLineCount", matches));
+    mFunction.setResult(0, matches);
 }
 
 MarkerType RE_Compiler::compile(RE * re, PabloBuilder & pb) {

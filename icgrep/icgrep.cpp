@@ -242,6 +242,7 @@ int main(int argc, char *argv[]) {
             }
         }
     }
+    
     PrintResult(CountOnly, total_CountOnly);
     
     return 0;

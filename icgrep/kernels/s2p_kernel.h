@@ -7,6 +7,7 @@
 
 #include "streamset.h"
 #include "interface.h"
+#include "kernel.h"
 
 namespace llvm { class Module; }
 
@@ -16,22 +17,24 @@ namespace kernel {
 
 class KernelBuilder;
 
-void generateS2PKernel(llvm::Module *, IDISA::IDISA_Builder * iBuilder, KernelBuilder * kBuilder);
-void generateS2P_16Kernel(llvm::Module *, IDISA::IDISA_Builder * iBuilder, KernelBuilder * kBuilder);
-void generateS2P_idealKernel(llvm::Module *, IDISA::IDISA_Builder * iBuilder, KernelBuilder * kBuilder);
+//void generateS2P_16Kernel(llvm::Module *, IDISA::IDISA_Builder * iBuilder, KernelBuilder * kBuilder);
 
 
 
-class s2pKernel : public KernelInterface {
+class s2pKernel : public KernelBuilder {
 public:
     s2pKernel(IDISA::IDISA_Builder * iBuilder) :
-    KernelInterface(iBuilder, "s2p",
-                    {StreamSetBinding{StreamSetType(1, 8), "byteStream"}}, 
-                    {StreamSetBinding{StreamSetType(8, 1), "basisBits"}}, 
-                    {}, {}, {}) {}
+    KernelBuilder(iBuilder, "s2p",
+                  {StreamSetBinding{StreamSetType(1, 8), "byteStream"}},
+                  {StreamSetBinding{StreamSetType(8, 1), "basisBits"}},
+                  {}, {}, {}) {}
     
-    std::unique_ptr<llvm::Module> createKernelModule() override;
-
+    void generateFinalBlockMethod();
+    void generateKernel() override;
+    
 };
+
+    
+
 }
 #endif

@@ -6,7 +6,7 @@
 #define PIPELINE_H
 
 #include <IDISA/idisa_builder.h>
-#include "kernel.h"
+#include <kernels/kernel.h>
 
 namespace llvm {
     class Module;
@@ -17,6 +17,7 @@ namespace llvm {
 namespace pablo {
     class PabloFunction;
     class PabloBlock;
+    class PabloKernel;
 }
 
 using namespace llvm;
@@ -29,15 +30,11 @@ public:
 
     ~PipelineBuilder();
 
-    void CreateKernels(pablo::PabloFunction * function, bool UTF_16, bool isNameExpression);
-    llvm::Function * ExecuteKernels(bool CountOnly, bool UTF_16);
+    llvm::Function * ExecuteKernels(pablo::PabloFunction * function, bool isNameExpression, bool CountOnly, bool UTF_16);
 
 private:
     llvm::Module *                      mMod;
     IDISA::IDISA_Builder *              iBuilder;
-    KernelBuilder *                     mS2PKernel;
-    KernelBuilder *                     mICgrepKernel;   
-    KernelBuilder *                     mScanMatchKernel;
     llvm::Type *                        mBitBlockType;
     int                                 mBlockSize;
 };

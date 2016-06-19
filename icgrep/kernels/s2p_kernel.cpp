@@ -5,8 +5,10 @@
 #include "s2p_kernel.h"
 #include <kernels/kernel.h>
 #include <IDISA/idisa_builder.h>
+#include <llvm/Support/raw_ostream.h>
 
 namespace kernel {
+using namespace llvm;
 
 const int PACK_LANES = 1;
 
@@ -52,31 +54,41 @@ void s2p(IDISA::IDISA_Builder * iBuilder, Value * input[], Value * output[]) {
     s2p_step(iBuilder, bit33337777[0], bit33337777[1], iBuilder->simd_himask(8), 4, output[3], output[7]);
 }
 
-void s2p(IDISA::IDISA_Builder * iBuilder, Value * input, Value * output[]) {
-    Value * bit[8];
-    for (unsigned i = 0; i < 8; i++) {
-        bit[i] = iBuilder->CreateBlockAlignedLoad(input, {iBuilder->getInt32(0), iBuilder->getInt32(i)});
+/* Alternative transposition model, but small field width packs are problematic. */
+#if 0
+void s2p_ideal(IDISA::IDISA_Builder * iBuilder, Value * input[], Value * output[]) {
+    Value * hi_nybble[4];
+    Value * lo_nybble[4];
+    for (unsigned i = 0; i<4; i++) {
+        Value * s0 = input[2*i];
+        Value * s1 = input[2*i+1];
+        hi_nybble[i] = iBuilder->hsimd_packh(8, s0, s1);
+        lo_nybble[i] = iBuilder->hsimd_packl(8, s0, s1);
     }
-    s2p(iBuilder, bit, output);
+    Value * pair01[2];
+    Value * pair23[2];
+    Value * pair45[2];
+    Value * pair67[2];
+    for (unsigned i = 0; i<2; i++) {
+        pair01[i] = iBuilder->hsimd_packh(4, hi_nybble[2*i], hi_nybble[2*i+1]);
+        pair23[i] = iBuilder->hsimd_packl(4, hi_nybble[2*i], hi_nybble[2*i+1]);
+        pair45[i] = iBuilder->hsimd_packh(4, lo_nybble[2*i], lo_nybble[2*i+1]);
+        pair67[i] = iBuilder->hsimd_packl(4, lo_nybble[2*i], lo_nybble[2*i+1]);
+    }
+    output[0] = iBuilder->hsimd_packh(2, pair01[0], pair01[1]);
+    output[1] = iBuilder->hsimd_packl(2, pair01[0], pair01[1]);
+    output[2] = iBuilder->hsimd_packh(2, pair23[0], pair23[1]);
+    output[3] = iBuilder->hsimd_packl(2, pair23[0], pair23[1]);
+    output[4] = iBuilder->hsimd_packh(2, pair45[0], pair45[1]);
+    output[5] = iBuilder->hsimd_packl(2, pair45[0], pair45[1]);
+    output[6] = iBuilder->hsimd_packh(2, pair67[0], pair67[1]);
+    output[7] = iBuilder->hsimd_packl(2, pair67[0], pair67[1]);
 }
+#endif
+    
+    
+#if 0
 
-void generateS2PKernel(Module *, IDISA::IDISA_Builder * iBuilder, KernelBuilder * kBuilder) {
-    kBuilder->addInputStream(8, "byte_pack");
-    for(unsigned i = 0; i < 8; ++i) {
-        kBuilder->addOutputStream(1);
-    }
-    kBuilder->prepareFunction();
-    Value * output[8];
-
-    Value * ptr = kBuilder->getInputStream(0);
-    //iBuilder->CallPrintInt("ptr", iBuilder->CreatePtrToInt(ptr, iBuilder->getInt64Ty()));
-    s2p(iBuilder, ptr, output);
-    for (unsigned j = 0; j < 8; ++j) {
-        //iBuilder->CallPrintRegister("bit" + std::to_string(j + 1), output[j]);
-        iBuilder->CreateBlockAlignedStore(output[j], kBuilder->getOutputStream(j));
-    }
-    kBuilder->finalize();
-}
 
 void generateS2P_16Kernel(Module *, IDISA::IDISA_Builder * iBuilder, KernelBuilder * kBuilder) {
     kBuilder->addInputStream(16, "unit_pack");
@@ -104,83 +116,24 @@ void generateS2P_16Kernel(Module *, IDISA::IDISA_Builder * iBuilder, KernelBuild
     }
     kBuilder->finalize();
 }
-	
-void generateS2P_idealKernel(Module *, IDISA::IDISA_Builder * iBuilder, KernelBuilder * kBuilder) {
-    kBuilder->addInputStream(8, "byte_pack");
-    for(unsigned i = 0; i < 8; ++i) {
-        kBuilder->addOutputStream(1);
-    }
-    kBuilder->prepareFunction();
-    Value * input = kBuilder->getInputStream(0);
-    Value * output[8];
-    Value * hi_nybble[4];
-    Value * lo_nybble[4];
-    for (unsigned i = 0; i<4; i++) {
-        Value * s0 = iBuilder->CreateBlockAlignedLoad(input, {iBuilder->getInt32(0), iBuilder->getInt32(2 * i)});
-        Value * s1 = iBuilder->CreateBlockAlignedLoad(input, {iBuilder->getInt32(0), iBuilder->getInt32(2 * i + 1)});
-        hi_nybble[i] = iBuilder->hsimd_packh(8, s0, s1);
-        lo_nybble[i] = iBuilder->hsimd_packl(8, s0, s1);
-    }
-    Value * pair01[2];
-    Value * pair23[2];
-    Value * pair45[2];
-    Value * pair67[2];
-    for (unsigned i = 0; i<2; i++) {
-        pair01[i] = iBuilder->hsimd_packh(4, hi_nybble[2*i], hi_nybble[2*i+1]);
-        pair23[i] = iBuilder->hsimd_packl(4, hi_nybble[2*i], hi_nybble[2*i+1]);
-        pair45[i] = iBuilder->hsimd_packh(4, lo_nybble[2*i], lo_nybble[2*i+1]);
-        pair67[i] = iBuilder->hsimd_packl(4, lo_nybble[2*i], lo_nybble[2*i+1]);
-    }
-    output[0] = iBuilder->hsimd_packh(2, pair01[0], pair01[1]);
-    output[1] = iBuilder->hsimd_packl(2, pair01[0], pair01[1]);
-    output[2] = iBuilder->hsimd_packh(2, pair23[0], pair23[1]);
-    output[3] = iBuilder->hsimd_packl(2, pair23[0], pair23[1]);
-    output[4] = iBuilder->hsimd_packh(2, pair45[0], pair45[1]);
-    output[5] = iBuilder->hsimd_packl(2, pair45[0], pair45[1]);
-    output[6] = iBuilder->hsimd_packh(2, pair67[0], pair67[1]);
-    output[7] = iBuilder->hsimd_packl(2, pair67[0], pair67[1]);
-
-    s2p(iBuilder, kBuilder->getInputStream(0), output);
-    for (unsigned j = 0; j < 8; ++j) {
-        iBuilder->CreateBlockAlignedStore(output[j], kBuilder->getOutputStream(j));
-    }
-    kBuilder->finalize();
-}
     
-std::unique_ptr<llvm::Module> s2pKernel::createKernelModule() {
-    std::unique_ptr<llvm::Module> theModule = KernelInterface::createKernelModule();
+#endif
     
-    /***********************
-     WARNING iBuilder has a different module than theModule at this point.
-    ***********************/
-    Function * doBlockFunction = theModule.get()->getFunction(mKernelName + "_DoBlock");
-    
-    iBuilder->SetInsertPoint(BasicBlock::Create(iBuilder->getContext(), "entry", doBlockFunction, 0));
-    
-    Value * byteStreamBlock_ptr = getParameter(doBlockFunction, "byteStream");
-    Value * basisBitsBlock_ptr = getParameter(doBlockFunction, "basisBits");
-    Value * s_bytepack[8];
-    for (unsigned i = 0; i < 8; i++) {
-        s_bytepack[i] = iBuilder->CreateBlockAlignedLoad(byteStreamBlock_ptr, {iBuilder->getInt32(0), iBuilder->getInt32(0), iBuilder->getInt32(i)});
-    }
-    Value * p_bitblock[8];
-    s2p(iBuilder, s_bytepack, p_bitblock);
-    for (unsigned j = 0; j < 8; ++j) {
-        iBuilder->CreateBlockAlignedStore(p_bitblock[j], basisBitsBlock_ptr, {iBuilder->getInt32(0), iBuilder->getInt32(j)});
-    }
-    iBuilder->CreateRetVoid();
-
+void s2pKernel::generateFinalBlockMethod() {
     /* Now the prepare the s2p final block function:
      assumption: if remaining bytes is greater than 0, it is safe to read a full block of bytes.
      if remaining bytes is zero, no read should be performed (e.g. for mmapped buffer).
      */
-    Function * finalBlockFunction = theModule.get()->getFunction(mKernelName + "_FinalBlock");
+    IDISA::IDISA_Builder::InsertPoint savePoint = iBuilder->saveIP();
+    Module * m = iBuilder->getModule();
+    Function * doBlockFunction = m->getFunction(mKernelName + doBlock_suffix);
+    Function * finalBlockFunction = m->getFunction(mKernelName + finalBlock_suffix);
     iBuilder->SetInsertPoint(BasicBlock::Create(iBuilder->getContext(), "fb_entry", finalBlockFunction, 0));
-
+    
     Value * self = getParameter(finalBlockFunction, "self");
     Value * remainingBytes = getParameter(finalBlockFunction, "remainingBytes");
-    byteStreamBlock_ptr = getParameter(finalBlockFunction, "byteStream");
-    basisBitsBlock_ptr = getParameter(finalBlockFunction, "basisBits");
+    Value * byteStreamBlock_ptr = getParameter(finalBlockFunction, "byteStream");
+    Value * basisBitsBlock_ptr = getParameter(finalBlockFunction, "basisBits");
     
     BasicBlock * finalPartialBlock = BasicBlock::Create(iBuilder->getContext(), "partial", finalBlockFunction, 0);
     BasicBlock * finalEmptyBlock = BasicBlock::Create(iBuilder->getContext(), "empty", finalBlockFunction, 0);
@@ -199,8 +152,33 @@ std::unique_ptr<llvm::Module> s2pKernel::createKernelModule() {
     
     iBuilder->SetInsertPoint(exitBlock);
     iBuilder->CreateRetVoid();
+    iBuilder->restoreIP(savePoint);
+}
 
-    return theModule;
+void s2pKernel::generateKernel() {
+    IDISA::IDISA_Builder::InsertPoint savePoint = iBuilder->saveIP();
+    if (mKernelStateType == nullptr) finalizeKernelStateType();
+    KernelBuilder::generateKernel();
+    generateFinalBlockMethod();
+
+    Module * m = iBuilder->getModule();
+    Function * doBlockFunction = m->getFunction(mKernelName + doBlock_suffix);
+    
+    iBuilder->SetInsertPoint(BasicBlock::Create(iBuilder->getContext(), "entry", doBlockFunction, 0));
+    
+    Value * byteStreamBlock_ptr = getParameter(doBlockFunction, "byteStream");
+    Value * basisBitsBlock_ptr = getParameter(doBlockFunction, "basisBits");
+    Value * s_bytepack[8];
+    for (unsigned i = 0; i < 8; i++) {
+        s_bytepack[i] = iBuilder->CreateBlockAlignedLoad(byteStreamBlock_ptr, {iBuilder->getInt32(0), iBuilder->getInt32(0), iBuilder->getInt32(i)});
+    }
+    Value * p_bitblock[8];
+    s2p(iBuilder, s_bytepack, p_bitblock);
+    for (unsigned j = 0; j < 8; ++j) {
+        iBuilder->CreateBlockAlignedStore(p_bitblock[j], basisBitsBlock_ptr, {iBuilder->getInt32(0), iBuilder->getInt32(j)});
+    }
+    iBuilder->CreateRetVoid();
+    iBuilder->restoreIP(savePoint);
 }
 
     

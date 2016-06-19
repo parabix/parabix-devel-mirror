@@ -9,6 +9,7 @@
 #include <llvm/IR/IRBuilder.h>
 #include <llvm/IR/Module.h>
 #include <IDISA/idisa_builder.h>
+#include <pablo/pablo_kernel.h>
 #include <pablo/codegenstate.h>
 #include <pablo/carry_data.h>
 #include <llvm/IR/Constants.h>
@@ -38,6 +39,8 @@ public:
   
     CarryManager(IDISA::IDISA_Builder * idb)
     : iBuilder(idb)
+    , mKernelBuilder(nullptr)
+    , mSelf(nullptr)
     , mBitBlockType(idb->getBitBlockType())
     , mBitBlockWidth(idb->getBitBlockWidth())
     , mRootScope(nullptr)
@@ -46,9 +49,6 @@ public:
     , mCurrentFrameIndex(0)
     , mCarryPackBasePtr(nullptr)
     , mCarryBitBlockPtr(nullptr)
-    , mPopcountBasePtr(nullptr)
-    , mKernelBuilder(nullptr)
-    , mPabloCountCount(0)
     , mTotalCarryDataBitBlocks(0)
     , mCarryDataAllocationSize(0)
     , mFilePosIdx(2)
@@ -58,7 +58,8 @@ public:
 
     ~CarryManager();
     
-    void initialize(PabloFunction * const function, kernel::KernelBuilder * const kBuilder);
+    Type * initializeCarryData(PabloFunction * const function);
+    void initializeCodeGen(PabloKernel * const kBuilder, Value * selfPtr);
 
     void reset();
 
@@ -97,8 +98,6 @@ public:
 
     void ensureCarriesStoredRecursive();
     
-    Value * popCount(Value * to_count, unsigned globalIdx);
-    
     Value * declareCarryDataArray(Module * m);
 
 protected:
@@ -129,6 +128,8 @@ protected:
 
 private:
     IDISA::IDISA_Builder * const iBuilder;
+    PabloKernel * mKernelBuilder;
+    Value * mSelf;
     Type * const mBitBlockType;
     const unsigned mBitBlockWidth;
     PabloBlock * mRootScope;
@@ -138,9 +139,6 @@ private:
     Value * mCarryPackBasePtr;
     Type * mCarryPackType;
     Value * mCarryBitBlockPtr;
-    Value * mPopcountBasePtr;
-    kernel::KernelBuilder * mKernelBuilder;
-    unsigned mPabloCountCount; // Number of Pablo "Count" operations
     unsigned mTotalCarryDataBitBlocks;
     unsigned mCarryDataAllocationSize;
     std::vector<CarryData *> mCarryInfoVector;
@@ -151,7 +149,6 @@ private:
     std::vector<Value *> mCarryOutPack;
     std::vector<Value *> mCarrySummary;
     int mCdArrayIdx;
-    int mPcArrayIdx;
     int mFilePosIdx;
 };
 

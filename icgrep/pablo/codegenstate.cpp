@@ -76,6 +76,11 @@ PabloAST * PabloBlock::createAdvance(PabloAST * expr, const Integer::Type shiftA
     return insertAtInsertionPoint(new Advance(expr, getInteger(shiftAmount), makeName(prefix, false)));
 }
 
+Count * PabloBlock::createCount(const std::string counterName, PabloAST * const expr)  {
+    return insertAtInsertionPoint(new Count(expr, makeName(counterName, false)));
+}
+    
+
 PabloAST * PabloBlock::createLookahead(PabloAST * expr, PabloAST * shiftAmount) {
     if (isa<Zeroes>(expr) || cast<Integer>(shiftAmount)->value() == 0) {
         return expr;

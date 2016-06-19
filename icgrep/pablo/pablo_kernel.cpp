@@ -17,11 +17,15 @@ PabloKernel::PabloKernel(IDISA::IDISA_Builder * builder,
                          std::vector<std::string> accumulators) :
     KernelBuilder(builder, kernelName,
                     {StreamSetBinding{StreamSetType(function->getNumOfParameters(), 1), "inputs"}},
-                    {StreamSetBinding{StreamSetType(function->getNumOfResults(), 1), "outputs"}},
+                    {},
                     {},
                     {},
                     {ScalarBinding{builder->getBitBlockType(), "EOFmark"}}),
     mPabloFunction(function) {
+    unsigned output_streams = function->getNumOfResults();
+    if (output_streams > 0) {
+        mStreamSetOutputs = {StreamSetBinding{StreamSetType(output_streams, 1), "outputs"}};
+    }
     mScalarOutputs = accumBindings(accumulators);
     pablo_compiler = new PabloCompiler(builder, this, function);
 }
@@ -31,25 +35,30 @@ std::vector<ScalarBinding> PabloKernel::accumBindings(std::vector<std::string> a
     Type * accum_t = iBuilder->getInt64Ty();
     for (auto a : accum_names) {
         vec.push_back(ScalarBinding{accum_t, a});
+        addScalar(accum_t, a);
     }
     return vec;
 }
 
 void PabloKernel::prepareKernel() {
-    errs() << "PabloKernel::prepareKernel\n";
     Type * carryDataType = pablo_compiler->initializeCarryData();
     addScalar(carryDataType, "carries");
     finalizeKernelStateType();
 }
 
 void PabloKernel::generateKernel() {
+    IDISA::IDISA_Builder::InsertPoint savePoint = iBuilder->saveIP();
     KernelBuilder::generateKernel();
     Module * m = iBuilder->getModule();
     addFinalBlockMethod(m);
     pablo_compiler->compile(m->getFunction(mKernelName + doBlock_suffix));
+    iBuilder->restoreIP(savePoint);
 }
 
 void PabloKernel::addFinalBlockMethod(Module * m) {
+    IDISA::IDISA_Builder::InsertPoint savePoint = iBuilder->saveIP();
+    Module * saveModule = iBuilder->getModule();
+    iBuilder->setModule(m);
     Function * doBlockFunction = m->getFunction(mKernelName + doBlock_suffix);
     Function * finalBlockFunction = m->getFunction(mKernelName + finalBlock_suffix);
     iBuilder->SetInsertPoint(BasicBlock::Create(iBuilder->getContext(), "fb_entry", finalBlockFunction, 0));
@@ -68,5 +77,7 @@ void PabloKernel::addFinalBlockMethod(Module * m) {
     setScalarField(self, "EOFmark", iBuilder->CreateBitCast(EOFmark, iBuilder->getBitBlockType()));
     iBuilder->CreateCall(doBlockFunction, doBlockArgs);
     iBuilder->CreateRetVoid();
+    iBuilder->setModule(saveModule);
+    iBuilder->restoreIP(savePoint);
 }
 

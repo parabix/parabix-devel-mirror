@@ -12,6 +12,7 @@
 #include <vector>
 #include <unordered_map>
 #include <pablo/carry_manager.h>
+#include <pablo/pablo_kernel.h>
 #include <llvm/ADT/Twine.h>
 #include <llvm/IR/IRBuilder.h>
 #include <IDISA/idisa_builder.h>
@@ -47,10 +48,9 @@ class PabloCompiler {
     using MarkerMap = std::unordered_map<const PabloAST *, Value *>;
     using LookaheadOffsetMap = std::unordered_map<const PabloAST *, IntSet>;
 public:
-    PabloCompiler(Module * m, IDISA::IDISA_Builder * b);
-
-    llvm::Function * compile(PabloFunction * function);
-    void setKernel(kernel::KernelBuilder * kBuilder);
+    PabloCompiler(IDISA::IDISA_Builder * b, PabloKernel * k, PabloFunction * function);
+    Type * initializeCarryData();
+    void compile(Function * doBlockFunction);
 
 private:
 
@@ -70,12 +70,13 @@ private:
     IDISA::IDISA_Builder *              iBuilder;
     Type* const                         mBitBlockType;
 
-    CarryManager *                      mCarryManager;
+    std::unique_ptr<CarryManager>       mCarryManager;
 
-    const PabloFunction *               mPabloFunction;
+    PabloFunction *  const             mPabloFunction;
     const PabloBlock *                  mPabloBlock;
 
-    kernel::KernelBuilder *             mKernelBuilder;
+    PabloKernel *                       mKernelBuilder;
+    Value *                             mSelf;
 
     unsigned                            mWhileDepth;
     unsigned                            mIfDepth;

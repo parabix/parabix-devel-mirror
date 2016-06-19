@@ -6,24 +6,18 @@
 #define SCANMATCHGEN_H
 
 #include "streamset.h"
-#include "interface.h"
+#include "kernel.h"
 
 namespace llvm { class Module; class Function;}
 
 namespace IDISA { class IDISA_Builder; }
 
 namespace kernel {
-
-class KernelBuilder;
-
-void generateScanMatch(llvm::Module * m, IDISA::IDISA_Builder * iBuilder, unsigned scanWordBitWidth, KernelBuilder * kBuilder, bool isNameExpression);
-
     
-    
-class scanMatchKernel : public KernelInterface {
+class scanMatchKernel : public KernelBuilder {
 public:
     scanMatchKernel(IDISA::IDISA_Builder * iBuilder, unsigned scanwordBitWidth, bool isNameExpression) :
-    KernelInterface(iBuilder, "scanMatch",
+    KernelBuilder(iBuilder, "scanMatch",
                     {StreamSetBinding{StreamSetType(2, 1), "matchResults"}}, 
                     {}, 
                     {ScalarBinding{iBuilder->getInt8PtrTy(), "FileBuf"}, ScalarBinding{iBuilder->getInt64Ty(), "FileSize"}, ScalarBinding{iBuilder->getInt64Ty(), "FileIdx"}}, 
@@ -33,7 +27,7 @@ public:
     mScanwordBitWidth(scanwordBitWidth),
     mIsNameExpression(isNameExpression) {}
         
-    std::unique_ptr<llvm::Module> createKernelModule() override;
+    void generateKernel() override;
 
 private:
     llvm::Function * generateScanWordRoutine(llvm::Module * m);
