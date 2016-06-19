@@ -25,20 +25,13 @@ public:
     inline PabloAST * getExpr() const {
         return getOperand(0);
     }
-    inline void setGlobalCountIndex(const unsigned idx) {
-        globalCountIndex = idx;
-    }
-    inline unsigned getGlobalCountIndex() const {
-        return globalCountIndex;
-    }
 protected:
-    Count(PabloAST * expr, String * name)
-    : Statement(ClassTypeId::Count, {expr}, name)
+    explicit Count(PabloAST * expr, String * counter)
+    : Statement(ClassTypeId::Count, {expr}, counter)
     {
 
     }
 private:
-    unsigned globalCountIndex;
 };
 
 }

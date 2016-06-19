@@ -143,16 +143,6 @@ Var * PabloBlock::createVar(PabloAST * name) {
     return new Var(name);
 }
 
-PabloAST * PabloBlock::createCount(PabloAST * expr) {
-    assert (expr);
-    return insertAtInsertionPoint(new Count(expr, makeName("count_")));
-}
-
-PabloAST * PabloBlock::createCount(PabloAST * expr, const std::string prefix) {
-    assert (expr);
-    return insertAtInsertionPoint(new Count(expr, makeName(prefix, false)));
-}
-
 PabloAST * PabloBlock::createInFile(PabloAST * expr) {
     assert (expr);
     return insertAtInsertionPoint(new InFile(expr, makeName("inFile_")));

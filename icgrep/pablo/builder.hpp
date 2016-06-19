@@ -136,9 +136,9 @@ public:
 
     PabloAST * createSel(PabloAST * condition, PabloAST * trueExpr, PabloAST * falseExpr, const std::string prefix);
     
-    PabloAST * createCount(PabloAST * expr);
-    
-    PabloAST * createCount(PabloAST * expr, const std::string prefix);
+    Count * createCount(const std::string counter, PabloAST * expr) {
+        return mPb->createCount(counter, expr);
+    }
     
     PabloAST * createInFile(PabloAST * expr);
     

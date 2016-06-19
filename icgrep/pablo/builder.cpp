@@ -212,14 +212,4 @@ PabloAST * PabloBuilder::createSel(PabloAST * condition, PabloAST * trueExpr, Pa
     return result;
 }
 
-PabloAST * PabloBuilder::createCount(PabloAST * expr) {
-    MAKE_UNARY(createCount, PabloAST::ClassTypeId::Count, expr);
-    return result;
-}
-
-PabloAST * PabloBuilder::createCount(PabloAST * expr, const std::string prefix) {
-    MAKE_UNARY(createCount, PabloAST::ClassTypeId::Count, expr, prefix);
-    return result;
-}
-
 }
