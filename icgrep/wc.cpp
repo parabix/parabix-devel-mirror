@@ -181,7 +181,7 @@ Function * wcPipelineBuilder::ExecuteKernels(PabloFunction * function) {
     Type * const int64ty = iBuilder->getInt64Ty();
     Type * const voidTy = Type::getVoidTy(mMod->getContext());
     record_counts_routine = mMod->getOrInsertFunction("record_counts", voidTy, int64ty, int64ty, int64ty, int64ty, int64ty, nullptr);
-    Type * const inputType = PointerType::get(ArrayType::get(StructType::get(mMod->getContext(), std::vector<Type *>({ArrayType::get(mBitBlockType, 8)})), 1), 0);
+    Type * const inputType = PointerType::get(ArrayType::get(ArrayType::get(mBitBlockType, 8), 1), 0);
     
     Function * const main = cast<Function>(mMod->getOrInsertFunction("Main", voidTy, inputType, int64ty, int64ty, nullptr));
     main->setCallingConv(CallingConv::C);
