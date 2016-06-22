@@ -137,35 +137,14 @@ pablo::PabloFunction * wc_gen(Encoding encoding) {
 using namespace kernel;
 
 
-
-class wcPipelineBuilder {
-public:
-    wcPipelineBuilder(llvm::Module * m, IDISA::IDISA_Builder * b);
-    
-    ~wcPipelineBuilder();
-    
-    llvm::Function * ExecuteKernels(pablo::PabloFunction * function);
-    
-private:
-    llvm::Module *                      mMod;
-    IDISA::IDISA_Builder *              iBuilder;
-    llvm::Type *                        mBitBlockType;
-    int                                 mBlockSize;
-};
-
-
-using namespace pablo;
-using namespace kernel;
-
-
-Function * wcPipeline(Module * mMod, IDISA::IDISA_Builder * iBuilder, PabloFunction * function) {
+Function * wcPipeline(Module * mMod, IDISA::IDISA_Builder * iBuilder, pablo::PabloFunction * function) {
     Type * mBitBlockType = iBuilder->getBitBlockType();
     unsigned mBlockSize = iBuilder->getBitBlockWidth();
     s2pKernel  s2pk(iBuilder);
     s2pk.generateKernel();
     
     pablo_function_passes(function);
-    PabloKernel  wck(iBuilder, "wc", function, {"lineCount", "wordCount", "charCount"});
+    pablo::PabloKernel  wck(iBuilder, "wc", function, {"lineCount", "wordCount", "charCount"});
     wck.prepareKernel();
     wck.generateKernel();
 
