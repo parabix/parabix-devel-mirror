@@ -70,7 +70,6 @@ ExecutionEngine * JIT_to_ExecutionEngine (Module * m) {
     std::string errMessage;
     EngineBuilder builder{std::unique_ptr<Module>(m)};
     builder.setErrorStr(&errMessage);
-    builder.setMCPU(sys::getHostCPUName());
     TargetOptions opts = InitTargetOptionsFromCodeGenFlags();
     builder.setTargetOptions(opts);
     CodeGenOpt::Level optLevel = CodeGenOpt::Level::None;
