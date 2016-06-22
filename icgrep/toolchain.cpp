@@ -56,6 +56,21 @@ const cl::OptionCategory * codegen_flags() {return &CodeGenOptions;}
 
 }
 
+
+void setAllFeatures(EngineBuilder &builder) {
+    llvm::StringMap<bool> HostCPUFeatures;
+    if (llvm::sys::getHostCPUFeatures(HostCPUFeatures)) {
+        std::vector<std::string> attrs;
+        for (auto &flag : HostCPUFeatures) {
+            auto enabled = flag.second ? "+" : "-";
+            attrs.push_back(enabled + flag.first().str());
+        }
+        builder.setMAttrs(attrs);
+    }
+}
+
+
+
 ExecutionEngine * JIT_to_ExecutionEngine (Module * m) {
 
     InitializeNativeTarget();
@@ -82,12 +97,7 @@ ExecutionEngine * JIT_to_ExecutionEngine (Module * m) {
     }
     builder.setOptLevel(optLevel);
 
-    if ((strncmp(lGetSystemISA(), "avx2", 4) == 0)) {
-        std::vector<std::string> attrs;
-        attrs.push_back("avx2");
-        builder.setMAttrs(attrs);
-    }
-    // builder.selectTarget();
+    setAllFeatures(builder);
 
     if (LLVM_UNLIKELY(codegen::DumpGeneratedIR)) {
         if (codegen::IROutputFilename.empty()) {
