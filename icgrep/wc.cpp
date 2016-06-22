@@ -137,6 +137,7 @@ pablo::PabloFunction * wc_gen(Encoding encoding) {
 using namespace kernel;
 
 
+
 class wcPipelineBuilder {
 public:
     wcPipelineBuilder(llvm::Module * m, IDISA::IDISA_Builder * b);
@@ -156,19 +157,10 @@ private:
 using namespace pablo;
 using namespace kernel;
 
-wcPipelineBuilder::wcPipelineBuilder(Module * m, IDISA::IDISA_Builder * b)
-: mMod(m)
-, iBuilder(b)
-, mBitBlockType(b->getBitBlockType())
-, mBlockSize(b->getBitBlockWidth()){
-    
-}
 
-wcPipelineBuilder::~wcPipelineBuilder(){
-}
-
-
-Function * wcPipelineBuilder::ExecuteKernels(PabloFunction * function) {
+Function * wcPipeline(Module * mMod, IDISA::IDISA_Builder * iBuilder, PabloFunction * function) {
+    Type * mBitBlockType = iBuilder->getBitBlockType();
+    unsigned mBlockSize = iBuilder->getBitBlockWidth();
     s2pKernel  s2pk(iBuilder);
     s2pk.generateKernel();
     
@@ -262,10 +254,9 @@ wcFunctionType wcCodeGen(void) {
     Module * M = new Module("wc", getGlobalContext());
     IDISA::IDISA_Builder * idb = IDISA::GetIDISA_Builder(M);
 
-    wcPipelineBuilder pipelineBuilder(M, idb);
     Encoding encoding(Encoding::Type::UTF_8, 8);
     pablo::PabloFunction * function = wc_gen(encoding);
-    llvm::Function * main_IR = pipelineBuilder.ExecuteKernels(function);
+    llvm::Function * main_IR = wcPipeline(M, idb, function);
 
     wcEngine = JIT_to_ExecutionEngine(M);
     
@@ -309,7 +300,6 @@ void wc(wcFunctionType fn_ptr, const int64_t fileIdx) {
     mappedFile.close();
     
 }
-
 
 
 
