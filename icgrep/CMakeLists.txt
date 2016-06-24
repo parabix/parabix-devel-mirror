@@ -112,8 +112,8 @@ add_dependencies(RegExpCompiler run_generate_predefined_ucd_functions)
 ENDIF()
 
 add_executable(icgrep icgrep.cpp toolchain.cpp grep_engine.cpp kernels/pipeline.cpp kernels/scanmatchgen.cpp ${PRECOMPILED_FILES})
-add_executable(u8u16 u8u16.cpp toolchain.cpp kernels/p2s_kernel.cpp kernels/stdout_kernel.cpp kernels/u8u16_pipeline.cpp kernels/deletion.cpp)
-add_executable(symtbl symboltable.cpp toolchain.cpp kernels/symboltablepipeline.cpp kernels/stdout_kernel.cpp grep_engine.cpp kernels/pipeline.cpp kernels/scanmatchgen.cpp ${PRECOMPILED_FILES})
+add_executable(u8u16 u8u16.cpp toolchain.cpp kernels/p2s_kernel.cpp kernels/deletion.cpp)
+#add_executable(symtbl symboltable.cpp toolchain.cpp kernels/symboltablepipeline.cpp kernels/stdout_kernel.cpp grep_engine.cpp kernels/pipeline.cpp kernels/scanmatchgen.cpp ${PRECOMPILED_FILES})
 add_executable(wc wc.cpp toolchain.cpp)
 
 IF(ENABLE_PREGENERATED_UCD_FUNCTIONS)
@@ -127,12 +127,12 @@ IF (PRINT_TIMING_INFORMATION)
 ENDIF()
 
 target_link_libraries(icgrep ${Boost_LIBRARIES})
-target_link_libraries(symtbl ${Boost_LIBRARIES})
+#target_link_libraries(symtbl ${Boost_LIBRARIES})
 target_link_libraries(u8u16 ${Boost_LIBRARIES})
 target_link_libraries(wc ${Boost_LIBRARIES})
 
 target_link_libraries (icgrep UCDlib PabloADT RegExpCompiler CCADT CodeGen ${REQ_LLVM_LIBRARIES})
-target_link_libraries (symtbl UCDlib PabloADT RegExpCompiler CCADT CodeGen ${REQ_LLVM_LIBRARIES})
+#target_link_libraries (symtbl UCDlib PabloADT RegExpCompiler CCADT CodeGen ${REQ_LLVM_LIBRARIES})
 target_link_libraries (u8u16 UCDlib PabloADT RegExpCompiler CCADT CodeGen ${REQ_LLVM_LIBRARIES})
 target_link_libraries (wc UCDlib PabloADT RegExpCompiler CCADT CodeGen ${REQ_LLVM_LIBRARIES})
 

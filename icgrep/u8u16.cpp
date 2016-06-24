@@ -23,10 +23,15 @@
 #include <re/re_cc.h>
 #include <cc/cc_compiler.h>
 #include <pablo/pablo_toolchain.h>
+#include <pablo/pablo_kernel.h>
 #include <pablo/function.h>
 #include <IDISA/idisa_builder.h>
 #include <IDISA/idisa_target.h>
-#include <kernels/u8u16_pipeline.h>
+#include <kernels/interface.h>
+#include <kernels/kernel.h>
+#include <kernels/s2p_kernel.h>
+#include <kernels/p2s_kernel.h>
+#include <kernels/deletion.h>
 
 #include <utf_encoding.h>
 
@@ -211,6 +216,112 @@ PabloFunction * u8u16_pablo(const Encoding encoding) {
 }
 
 
+
+using namespace kernel;
+
+
+Function * u8u16Pipeline(Module * mMod, IDISA::IDISA_Builder * iBuilder, pablo::PabloFunction * function) {
+    Type * mBitBlockType = iBuilder->getBitBlockType();
+    unsigned mBlockSize = iBuilder->getBitBlockWidth();
+    s2pKernel  s2pk(iBuilder);
+    s2pk.generateKernel();
+    
+    pablo_function_passes(function);
+    pablo::PabloKernel  u8u16k(iBuilder, "u8u16", function, {});
+    u8u16k.prepareKernel();
+    u8u16k.generateKernel();
+    
+    deletionKernel delK(iBuilder, iBuilder->getBitBlockWidth()/16, 16);
+    delK.generateKernel();
+    
+    p2s_16Kernel_withCompressedOutputKernel p2sk(iBuilder);    
+    p2sk.generateKernel();
+    
+    Type * const int64ty = iBuilder->getInt64Ty();
+    Type * const voidTy = Type::getVoidTy(mMod->getContext());
+    Type * const inputType = PointerType::get(ArrayType::get(ArrayType::get(mBitBlockType, 8), 1), 0);
+    
+    Function * const main = cast<Function>(mMod->getOrInsertFunction("Main", Type::getVoidTy(mMod->getContext()), inputType, int64ty, nullptr));
+    main->setCallingConv(CallingConv::C);
+    Function::arg_iterator args = main->arg_begin();
+    
+    Value * const inputStream = &*(args++);
+    inputStream->setName("input");
+    Value * const bufferSize = &*(args++);
+    bufferSize->setName("bufferSize");
+    
+    iBuilder->SetInsertPoint(BasicBlock::Create(mMod->getContext(), "entry", main,0));
+    
+    BasicBlock * entryBlock = iBuilder->GetInsertBlock();
+    
+    BasicBlock * fullCondBlock = BasicBlock::Create(mMod->getContext(), "fullCond", main, 0);
+    BasicBlock * fullBodyBlock = BasicBlock::Create(mMod->getContext(), "fullBody", main, 0);
+    BasicBlock * finalBlock = BasicBlock::Create(mMod->getContext(), "final", main, 0);
+    
+    StreamSetBuffer ByteStream(iBuilder, StreamSetType(1, 8), 0);
+    StreamSetBuffer BasisBits(iBuilder, StreamSetType(8, 1), 1);
+    StreamSetBuffer U8u16Bits(iBuilder, StreamSetType(18, 1), 1);
+    StreamSetBuffer U16Bits(iBuilder, StreamSetType(16, 1), 1);
+    StreamSetBuffer DeletionCounts(iBuilder, StreamSetType(1, 1), 1);
+    StreamSetBuffer U16out(iBuilder, StreamSetType(1, 16), 1);
+
+    ByteStream.setStreamSetBuffer(inputStream);
+    Value * basisBits = BasisBits.allocateBuffer();
+    Value * u8u16Bits = U8u16Bits.allocateBuffer();
+    Value * u16Bits = U16Bits.allocateBuffer();
+    Value * delCounts = DeletionCounts.allocateBuffer();
+    Value * u16out = U16out.allocateBuffer();
+    
+    Value * s2pInstance = s2pk.createInstance({});
+    Value * u8u16Instance = u8u16k.createInstance({});
+    Value * delInstance = delK.createInstance({});
+    Value * p2sInstance = p2sk.createInstance({});
+    
+    Value * initialBufferSize = bufferSize;
+    BasicBlock * initialBlock = entryBlock;
+    Value * initialBlockNo = iBuilder->getInt64(0);
+    
+    iBuilder->CreateBr(fullCondBlock);
+    
+    
+    iBuilder->SetInsertPoint(fullCondBlock);
+    PHINode * remainingBytes = iBuilder->CreatePHI(int64ty, 2, "remainingBytes");
+    remainingBytes->addIncoming(initialBufferSize, initialBlock);
+    PHINode * blockNo = iBuilder->CreatePHI(int64ty, 2, "blockNo");
+    blockNo->addIncoming(initialBlockNo, initialBlock);
+    
+    Constant * const step = ConstantInt::get(int64ty, mBlockSize);
+    Value * fullCondTest = iBuilder->CreateICmpULT(remainingBytes, step);
+    iBuilder->CreateCondBr(fullCondTest, finalBlock, fullBodyBlock);
+    
+    iBuilder->SetInsertPoint(fullBodyBlock);
+    
+    s2pk.createDoBlockCall(s2pInstance, {ByteStream.getBlockPointer(blockNo), basisBits});
+    u8u16k.createDoBlockCall(u8u16Instance, {basisBits, u8u16Bits});
+    delK.createDoBlockCall(delInstance, {u8u16Bits, u16Bits, delCounts});
+    p2sk.createDoBlockCall(p2sInstance, {u16Bits, delCounts, u16out});
+    
+    Value * diff = iBuilder->CreateSub(remainingBytes, step);
+    
+    remainingBytes->addIncoming(diff, fullBodyBlock);
+    blockNo->addIncoming(iBuilder->CreateAdd(blockNo, iBuilder->getInt64(1)), fullBodyBlock);
+    iBuilder->CreateBr(fullCondBlock);
+    
+    iBuilder->SetInsertPoint(finalBlock);
+    s2pk.createFinalBlockCall(s2pInstance, remainingBytes, {ByteStream.getBlockPointer(blockNo), basisBits});
+    u8u16k.createFinalBlockCall(u8u16Instance, remainingBytes, {basisBits, u8u16Bits});
+    delK.createFinalBlockCall(delInstance, remainingBytes, {u8u16Bits, u16Bits, delCounts});
+    p2sk.createFinalBlockCall(p2sInstance, remainingBytes, {u16Bits, delCounts, u16out});
+    
+    
+    iBuilder->CreateRetVoid();
+    return main;
+}
+
+
+
+
+
 typedef void (*u8u16FunctionType)(char * byte_data, size_t filesize);
 
 static ExecutionEngine * u8u16Engine = nullptr;
@@ -218,19 +329,12 @@ static ExecutionEngine * u8u16Engine = nullptr;
 u8u16FunctionType u8u16CodeGen(void) {
                             
     Module * M = new Module("u8u16", getGlobalContext());
-    
     IDISA::IDISA_Builder * idb = IDISA::GetIDISA_Builder(M);
 
-    kernel::PipelineBuilder pipelineBuilder(M, idb);
-
     Encoding encoding(Encoding::Type::UTF_8, 8);
-    
     pablo::PabloFunction * function = pablo::u8u16_pablo(encoding);
     
-
-    pipelineBuilder.CreateKernels(function);
-
-    llvm::Function * main_IR = pipelineBuilder.ExecuteKernels();
+    llvm::Function * main_IR = u8u16Pipeline(M, idb, function);
     
     verifyModule(*M, &dbgs());
     //std::cerr << "ExecuteKernels(); done\n";

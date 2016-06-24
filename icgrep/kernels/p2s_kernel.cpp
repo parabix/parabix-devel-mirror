@@ -46,55 +46,70 @@ inline void p2s(IDISA::IDISA_Builder * iBuilder, Value * p[], Value * s[]) {
     }
 }
     		
-void generateP2SKernel(Module * m, IDISA::IDISA_Builder * iBuilder, KernelBuilder * kBuilder) {
-    for (unsigned i = 0; i < 8; ++i) {
-        kBuilder->addInputStream(1);
-    }
-    kBuilder->addOutputStream(8);
-    kBuilder->prepareFunction();
-    Value * input[8];
-    for (unsigned j = 0; j < 8; ++j) {
-        input[j] = iBuilder->CreateBlockAlignedLoad(kBuilder->getInputStream(j));
-    }
-    Value * output[8];
-    p2s(iBuilder, input, output);
-    Value * output_ptr = kBuilder->getOutputStream(0);
-    for (unsigned j = 0; j < 8; ++j) {
+void p2sKernel::generateKernel() {
+    IDISA::IDISA_Builder::InsertPoint savePoint = iBuilder->saveIP();
+    if (mKernelStateType == nullptr) finalizeKernelStateType();
+    KernelBuilder::generateKernel();
 
-        iBuilder->CreateBlockAlignedStore(output[j], iBuilder->CreateGEP(output_ptr, std::vector<Value *>({ iBuilder->getInt32(0), iBuilder->getInt32(j) })));
+    Module * m = iBuilder->getModule();
+    addTrivialFinalBlockMethod(m);
+    Function * doBlockFunction = m->getFunction(mKernelName + doBlock_suffix);
+    
+    iBuilder->SetInsertPoint(BasicBlock::Create(iBuilder->getContext(), "entry", doBlockFunction, 0));
+    
+    Value * basisBitsBlock_ptr = getParameter(doBlockFunction, "basisBits");  // input
+    Value * byteStreamBlock_ptr = getParameter(doBlockFunction, "byteStream"); // output
+    Value * p_bitblock[8];
+    for (unsigned i = 0; i < 8; i++) {
+        p_bitblock[i] = iBuilder->CreateBlockAlignedLoad(basisBitsBlock_ptr, {iBuilder->getInt32(0), iBuilder->getInt32(i)});
     }
-    kBuilder->finalize();
+    Value * s_bytepack[8];
+    p2s(iBuilder, p_bitblock, s_bytepack);
+    for (unsigned j = 0; j < 8; ++j) {
+        iBuilder->CreateBlockAlignedStore(s_bytepack[j], byteStreamBlock_ptr, {iBuilder->getInt32(0), iBuilder->getInt32(0), iBuilder->getInt32(j)});
+    }
+    iBuilder->CreateRetVoid();
+    iBuilder->restoreIP(savePoint);
 }
+	
+void p2s_16Kernel::generateKernel() {
+    IDISA::IDISA_Builder::InsertPoint savePoint = iBuilder->saveIP();
+    if (mKernelStateType == nullptr) finalizeKernelStateType();
+    KernelBuilder::generateKernel();
 
-void generateP2S_16Kernel(Module * m, IDISA::IDISA_Builder * iBuilder, KernelBuilder * kBuilder) {
-    for (unsigned i = 0; i < 16; ++i) {
-        kBuilder->addInputStream(1);
-    }
-    kBuilder->addOutputStream(16);
-    kBuilder->prepareFunction();
+    Module * m = iBuilder->getModule();
+    addTrivialFinalBlockMethod(m);
+    Function * doBlockFunction = m->getFunction(mKernelName + doBlock_suffix);
+    
+    iBuilder->SetInsertPoint(BasicBlock::Create(iBuilder->getContext(), "entry", doBlockFunction, 0));
+    
+    Value * basisBitsBlock_ptr = getParameter(doBlockFunction, "basisBits");  // input
+    Value * i16StreamBlock_ptr = getParameter(doBlockFunction, "i16Stream"); // output
+    
     Value * hi_input[8];
     for (unsigned j = 0; j < 8; ++j) {
-        hi_input[j] = iBuilder->CreateBlockAlignedLoad(kBuilder->getInputStream(j));
+        hi_input[j] = iBuilder->CreateBlockAlignedLoad(basisBitsBlock_ptr, {iBuilder->getInt32(0), iBuilder->getInt32(j)});
     }
     Value * hi_bytes[8];
     p2s(iBuilder, hi_input, hi_bytes);
     
     Value * lo_input[8];
     for (unsigned j = 0; j < 8; ++j) {
-        lo_input[j] = iBuilder->CreateBlockAlignedLoad(kBuilder->getInputStream(j+8));
+        lo_input[j] = iBuilder->CreateBlockAlignedLoad(basisBitsBlock_ptr, {iBuilder->getInt32(0), iBuilder->getInt32(j+8)});
     }
     Value * lo_bytes[8];
     p2s(iBuilder, lo_input, lo_bytes);
     
-    Value * output_ptr = kBuilder->getOutputStream(0);
     for (unsigned j = 0; j < 8; ++j) {
         Value * merge0 = iBuilder->bitCast(iBuilder->esimd_mergel(8, hi_bytes[j], lo_bytes[j]));
         Value * merge1 = iBuilder->bitCast(iBuilder->esimd_mergeh(8, hi_bytes[j], lo_bytes[j]));
-        iBuilder->CreateBlockAlignedStore(merge0, iBuilder->CreateGEP(output_ptr, std::vector<Value *>({ iBuilder->getInt32(0), iBuilder->getInt32(2*j) })));
-        iBuilder->CreateBlockAlignedStore(merge1, iBuilder->CreateGEP(output_ptr, std::vector<Value *>({ iBuilder->getInt32(0), iBuilder->getInt32(2*j+1) })));
+        iBuilder->CreateBlockAlignedStore(merge0, i16StreamBlock_ptr, {iBuilder->getInt32(0), iBuilder->getInt32(0), iBuilder->getInt32(2*j)});
+        iBuilder->CreateBlockAlignedStore(merge1, i16StreamBlock_ptr, {iBuilder->getInt32(0), iBuilder->getInt32(0), iBuilder->getInt32(2*j+1)});
     }
-    kBuilder->finalize();
+    iBuilder->CreateRetVoid();
+    iBuilder->restoreIP(savePoint);
 }
+        
     
 Function * create_write(Module * const mod) {
     Function * write = mod->getFunction("write");
@@ -109,62 +124,66 @@ Function * create_write(Module * const mod) {
 
 const size_t OutputBufferSize=65536;
 
-void generateP2S_16_withCompressedOutputKernel(Module * m, IDISA::IDISA_Builder * iBuilder, KernelBuilder * kBuilder) {
+void p2s_16Kernel_withCompressedOutputKernel::generateKernel() {
     outs().SetBufferSize(OutputBufferSize);
-    for (unsigned i = 0; i < 16; ++i) {
-        kBuilder->addInputStream(1);
-    }        
-    kBuilder->addInputStream(1);  // partial popcounts
-    kBuilder->addOutputStream(16);
+    IDISA::IDISA_Builder::InsertPoint savePoint = iBuilder->saveIP();
+    if (mKernelStateType == nullptr) finalizeKernelStateType();
+    KernelBuilder::generateKernel();
 
-    kBuilder->prepareFunction();
     
+    Module * m = iBuilder->getModule();
     Type * i8PtrTy = iBuilder->getInt8PtrTy(); 
     Type * i64 = iBuilder->getIntNTy(64); 
     Type * bitBlockPtrTy = llvm::PointerType::get(iBuilder->getBitBlockType(), 0); 
     
     Function * writefn = cast<Function>(m->getOrInsertFunction("buffered_write", iBuilder->getVoidTy(), i8PtrTy, i64, nullptr));
+
+    addTrivialFinalBlockMethod(m);
+    Function * doBlockFunction = m->getFunction(mKernelName + doBlock_suffix);
     
+    iBuilder->SetInsertPoint(BasicBlock::Create(iBuilder->getContext(), "entry", doBlockFunction, 0));
+    
+    Value * basisBitsBlock_ptr = getParameter(doBlockFunction, "basisBits");  // input
+    Value * delCountBlock_ptr = getParameter(doBlockFunction, "deletionCounts");
+    Value * i16StreamBlock_ptr = getParameter(doBlockFunction, "i16Stream"); // output
+
     Value * hi_input[8];
     for (unsigned j = 0; j < 8; ++j) {
-        hi_input[j] = iBuilder->CreateBlockAlignedLoad(kBuilder->getInputStream(j));
+        hi_input[j] = iBuilder->CreateBlockAlignedLoad(basisBitsBlock_ptr, {iBuilder->getInt32(0), iBuilder->getInt32(j)});
     }
     Value * hi_bytes[8];
     p2s(iBuilder, hi_input, hi_bytes);
     
     Value * lo_input[8];
     for (unsigned j = 0; j < 8; ++j) {
-        lo_input[j] = iBuilder->CreateBlockAlignedLoad(kBuilder->getInputStream(j+8));
+        lo_input[j] = iBuilder->CreateBlockAlignedLoad(basisBitsBlock_ptr, {iBuilder->getInt32(0), iBuilder->getInt32(j+8)});
     }
     Value * lo_bytes[8];
     p2s(iBuilder, lo_input, lo_bytes);
     
     unsigned UTF_16_units_per_register = iBuilder->getBitBlockWidth()/16;
     
-    Value * partial_counts = iBuilder->fwCast(UTF_16_units_per_register, iBuilder->CreateBlockAlignedLoad(kBuilder->getInputStream(16)));
-    if (UTF_16_units_per_register < 16) {
-        partial_counts = iBuilder->CreateZExt(partial_counts, VectorType::get(iBuilder->getIntNTy(16), iBuilder->getBitBlockWidth()/UTF_16_units_per_register));
-    }
-    Value * byte_counts = iBuilder->CreateAdd(partial_counts, partial_counts); // double the code unit count to get byte counts
+    Value * unit_counts = iBuilder->fwCast(UTF_16_units_per_register, iBuilder->CreateBlockAlignedLoad(delCountBlock_ptr, {iBuilder->getInt32(0), iBuilder->getInt32(0)}));
     
-    Value * output_ptr = iBuilder->CreateBitCast(kBuilder->getOutputStream(0), i8PtrTy);
-    Value * byte_offset = ConstantInt::get(i64, 0);
+    Value * u16_output_ptr = iBuilder->CreateBitCast(i16StreamBlock_ptr, PointerType::get(iBuilder->getInt16Ty(), 0));
+    Value * offset = ConstantInt::get(i64, 0);
     
     for (unsigned j = 0; j < 8; ++j) {
         Value * merge0 = iBuilder->bitCast(iBuilder->esimd_mergel(8, hi_bytes[j], lo_bytes[j]));
         Value * merge1 = iBuilder->bitCast(iBuilder->esimd_mergeh(8, hi_bytes[j], lo_bytes[j]));
         //iBuilder->CallPrintRegister("merge0", merge0);
-        iBuilder->CreateAlignedStore(merge0, iBuilder->CreateBitCast(iBuilder->CreateGEP(output_ptr, byte_offset), bitBlockPtrTy), 1);
-        byte_offset = iBuilder->CreateZExt(iBuilder->CreateExtractElement(byte_counts, iBuilder->getInt32(2*j)), i64);
-        //iBuilder->CallPrintInt("byte_offset", byte_offset);
-        iBuilder->CreateAlignedStore(merge1, iBuilder->CreateBitCast(iBuilder->CreateGEP(output_ptr, byte_offset), bitBlockPtrTy), 1);
+        iBuilder->CreateAlignedStore(merge0, iBuilder->CreateBitCast(iBuilder->CreateGEP(u16_output_ptr, offset), bitBlockPtrTy), 1);
+        offset = iBuilder->CreateZExt(iBuilder->CreateExtractElement(unit_counts, iBuilder->getInt32(2*j)), i64);
+        //iBuilder->CallPrintInt("offset", offset);
+        iBuilder->CreateAlignedStore(merge1, iBuilder->CreateBitCast(iBuilder->CreateGEP(u16_output_ptr, offset), bitBlockPtrTy), 1);
         //iBuilder->CallPrintRegister("merge1", merge1);
-        byte_offset = iBuilder->CreateZExt(iBuilder->CreateExtractElement(byte_counts, iBuilder->getInt32(2*j+1)), i64);
-        //iBuilder->CallPrintInt("byte_offset", byte_offset);
+        offset = iBuilder->CreateZExt(iBuilder->CreateExtractElement(unit_counts, iBuilder->getInt32(2*j+1)), i64);
+        //iBuilder->CallPrintInt("offset", offset);
     }
-    iBuilder->CreateCall(writefn, std::vector<Value *>({output_ptr, byte_offset}));
-    
-    kBuilder->finalize();
+    Value * byte_offset = iBuilder->CreateAdd(offset, offset);
+    iBuilder->CreateCall(writefn, std::vector<Value *>({iBuilder->CreateBitCast(i16StreamBlock_ptr, i8PtrTy), byte_offset}));
+    iBuilder->CreateRetVoid();
+    iBuilder->restoreIP(savePoint);
 }
-
+        
 }

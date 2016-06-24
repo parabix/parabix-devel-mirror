@@ -5,6 +5,9 @@
 #ifndef DELETION_H
 #define DELETION_H
 
+#include "streamset.h"
+#include "interface.h"
+#include "kernel.h"
 
 
 namespace llvm { class Module; class Value;}
@@ -29,12 +32,23 @@ std::vector<llvm::Value *> parallel_prefix_deletion_masks(IDISA::IDISA_Builder *
 
 llvm::Value * apply_parallel_prefix_deletion(IDISA::IDISA_Builder * iBuilder, unsigned fw, llvm::Value * del_mask, std::vector<llvm::Value *> mv, llvm::Value * strm);
 
-namespace kernel {
-  
-    class KernelBuilder;
+using namespace kernel;
 
-    void generateDeletionKernel(llvm::Module * m, IDISA::IDISA_Builder * iBuilder, unsigned fw, unsigned stream_count, KernelBuilder * kBuilder);
-
-}
+class deletionKernel : public kernel::KernelBuilder {
+public:
+    deletionKernel(IDISA::IDISA_Builder * iBuilder, unsigned fw, unsigned stream_count) :
+    KernelBuilder(iBuilder, "del",
+                  {StreamSetBinding{StreamSetType(stream_count + 2, 1), "inputStreamSet"}},
+                  {StreamSetBinding{StreamSetType(stream_count, 1), "outputStreamSet"}, StreamSetBinding{StreamSetType(1, 1), "deletionCounts"}},
+                  {}, {}, {}),
+    mDeletionFieldWidth(fw),
+    mStreamCount(stream_count) {}
+    
+    void generateKernel() override;
+private:
+    unsigned mDeletionFieldWidth;
+    unsigned mStreamCount;
+};
+    
 #endif
 
