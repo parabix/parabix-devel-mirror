@@ -31,7 +31,8 @@ public:
                   {StreamSetBinding{StreamSetType(1, 8), "byteStream"}},
                   {}, {}, {}) {}
     
-    void generateKernel() override;
+private:
+    void generateDoBlockMethod() override;
     
 };
 
@@ -43,7 +44,8 @@ public:
                   {StreamSetBinding{StreamSetType(1, 16), "i16Stream"}},
                   {}, {}, {}) {}
     
-    void generateKernel() override;
+private:
+    void generateDoBlockMethod() override;
     
 };
 
@@ -56,7 +58,8 @@ public:
                   {StreamSetBinding{StreamSetType(1, 16), "i16Stream"}},
                   {}, {}, {}) {}
         
-    void generateKernel() override;
+private:
+    void generateDoBlockMethod() override;
 };
     
 }

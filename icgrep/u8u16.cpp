@@ -228,7 +228,6 @@ Function * u8u16Pipeline(Module * mMod, IDISA::IDISA_Builder * iBuilder, pablo::
     
     pablo_function_passes(function);
     pablo::PabloKernel  u8u16k(iBuilder, "u8u16", function, {});
-    u8u16k.prepareKernel();
     u8u16k.generateKernel();
     
     deletionKernel delK(iBuilder, iBuilder->getBitBlockWidth()/16, 16);

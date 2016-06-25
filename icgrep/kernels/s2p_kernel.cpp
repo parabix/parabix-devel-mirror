@@ -120,7 +120,7 @@ void generateS2P_16Kernel(Module *, IDISA::IDISA_Builder * iBuilder, KernelBuild
 #endif
     
 void s2pKernel::generateFinalBlockMethod() {
-    /* Now the prepare the s2p final block function:
+    /* Prepare the s2p final block function:
      assumption: if remaining bytes is greater than 0, it is safe to read a full block of bytes.
      if remaining bytes is zero, no read should be performed (e.g. for mmapped buffer).
      */
@@ -155,13 +155,11 @@ void s2pKernel::generateFinalBlockMethod() {
     iBuilder->restoreIP(savePoint);
 }
 
-void s2pKernel::generateKernel() {
+    
+void s2pKernel::generateDoBlockMethod() {
     IDISA::IDISA_Builder::InsertPoint savePoint = iBuilder->saveIP();
-    if (mKernelStateType == nullptr) finalizeKernelStateType();
-    KernelBuilder::generateKernel();
-    generateFinalBlockMethod();
-
     Module * m = iBuilder->getModule();
+
     Function * doBlockFunction = m->getFunction(mKernelName + doBlock_suffix);
     
     iBuilder->SetInsertPoint(BasicBlock::Create(iBuilder->getContext(), "entry", doBlockFunction, 0));

@@ -28,9 +28,10 @@ public:
                   {StreamSetBinding{StreamSetType(1, 8), "byteStream"}},
                   {StreamSetBinding{StreamSetType(8, 1), "basisBits"}},
                   {}, {}, {}) {}
-    
-    void generateFinalBlockMethod();
-    void generateKernel() override;
+
+private:
+    void generateDoBlockMethod() override;
+    void generateFinalBlockMethod() override;
     
 };
 

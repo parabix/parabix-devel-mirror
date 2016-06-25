@@ -44,8 +44,9 @@ public:
     mDeletionFieldWidth(fw),
     mStreamCount(stream_count) {}
     
-    void generateKernel() override;
 private:
+    void generateDoBlockMethod() override;
+    void generateFinalBlockMethod() override;
     unsigned mDeletionFieldWidth;
     unsigned mStreamCount;
 };

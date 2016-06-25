@@ -41,27 +41,31 @@ void KernelBuilder::addScalar(Type * t, std::string scalarName) {
     mInternalStateNameMap.emplace(scalarName, iBuilder->getInt32(index));
 }
 
-void KernelBuilder::finalizeKernelStateType() {
+void KernelBuilder::prepareKernelStateType() {
     mKernelStateType = StructType::create(getGlobalContext(), mKernelFields, mKernelName);
 }
 
 std::unique_ptr<Module> KernelBuilder::createKernelModule() {
     Module * saveModule = iBuilder->getModule();
     IDISA::IDISA_Builder::InsertPoint savePoint = iBuilder->saveIP();
-    if (mKernelStateType == nullptr) finalizeKernelStateType();
     std::unique_ptr<Module> theModule = make_unique<Module>(mKernelName + "_" + iBuilder->getBitBlockTypeName(), getGlobalContext());
     Module * m = theModule.get();
     iBuilder->setModule(m);
-    KernelBuilder::generateKernel();
+    generateKernel();
     iBuilder->setModule(saveModule);
     iBuilder->restoreIP(savePoint);
     return theModule;
 }
 
 void KernelBuilder::generateKernel() {
-    Module * m = iBuilder->getModule();
     IDISA::IDISA_Builder::InsertPoint savePoint = iBuilder->saveIP();
-    addKernelDeclarations(m);
+    Module * m = iBuilder->getModule();
+
+    prepareKernelStateType();  // possibly overriden by the KernelBuilder subtype
+    KernelInterface::addKernelDeclarations(m);
+    generateDoBlockMethod();     // must be implemented by the KernelBuilder subtype
+    generateFinalBlockMethod();  // possibly overriden by the KernelBuilder subtype
+
     // Implement the accumulator get functions
     for (auto binding : mScalarOutputs) {
         auto fnName = mKernelName + accumulator_infix + binding.scalarName;
@@ -88,10 +92,10 @@ void KernelBuilder::generateKernel() {
     iBuilder->restoreIP(savePoint);
 }
 
-void KernelBuilder::addTrivialFinalBlockMethod(Module * m) {
+//  The default finalBlock method simply dispatches to the doBlock routine.
+void KernelBuilder::generateFinalBlockMethod() {
     IDISA::IDISA_Builder::InsertPoint savePoint = iBuilder->saveIP();
-    Module * saveModule = iBuilder->getModule();
-    iBuilder->setModule(m);
+    Module * m = iBuilder->getModule();
     Function * doBlockFunction = m->getFunction(mKernelName + doBlock_suffix);
     Function * finalBlockFunction = m->getFunction(mKernelName + finalBlock_suffix);
     iBuilder->SetInsertPoint(BasicBlock::Create(iBuilder->getContext(), "fb_entry", finalBlockFunction, 0));
@@ -105,7 +109,6 @@ void KernelBuilder::addTrivialFinalBlockMethod(Module * m) {
     }
     iBuilder->CreateCall(doBlockFunction, doBlockArgs);
     iBuilder->CreateRetVoid();
-    iBuilder->setModule(saveModule);
     iBuilder->restoreIP(savePoint);
 }
 

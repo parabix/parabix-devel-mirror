@@ -46,13 +46,10 @@ inline void p2s(IDISA::IDISA_Builder * iBuilder, Value * p[], Value * s[]) {
     }
 }
     		
-void p2sKernel::generateKernel() {
+void p2sKernel::generateDoBlockMethod() {
     IDISA::IDISA_Builder::InsertPoint savePoint = iBuilder->saveIP();
-    if (mKernelStateType == nullptr) finalizeKernelStateType();
-    KernelBuilder::generateKernel();
-
     Module * m = iBuilder->getModule();
-    addTrivialFinalBlockMethod(m);
+    
     Function * doBlockFunction = m->getFunction(mKernelName + doBlock_suffix);
     
     iBuilder->SetInsertPoint(BasicBlock::Create(iBuilder->getContext(), "entry", doBlockFunction, 0));
@@ -72,13 +69,10 @@ void p2sKernel::generateKernel() {
     iBuilder->restoreIP(savePoint);
 }
 	
-void p2s_16Kernel::generateKernel() {
+void p2s_16Kernel::generateDoBlockMethod() {
     IDISA::IDISA_Builder::InsertPoint savePoint = iBuilder->saveIP();
-    if (mKernelStateType == nullptr) finalizeKernelStateType();
-    KernelBuilder::generateKernel();
-
     Module * m = iBuilder->getModule();
-    addTrivialFinalBlockMethod(m);
+    
     Function * doBlockFunction = m->getFunction(mKernelName + doBlock_suffix);
     
     iBuilder->SetInsertPoint(BasicBlock::Create(iBuilder->getContext(), "entry", doBlockFunction, 0));
@@ -124,13 +118,9 @@ Function * create_write(Module * const mod) {
 
 const size_t OutputBufferSize=65536;
 
-void p2s_16Kernel_withCompressedOutputKernel::generateKernel() {
+void p2s_16Kernel_withCompressedOutputKernel::generateDoBlockMethod() {
     outs().SetBufferSize(OutputBufferSize);
     IDISA::IDISA_Builder::InsertPoint savePoint = iBuilder->saveIP();
-    if (mKernelStateType == nullptr) finalizeKernelStateType();
-    KernelBuilder::generateKernel();
-
-    
     Module * m = iBuilder->getModule();
     Type * i8PtrTy = iBuilder->getInt8PtrTy(); 
     Type * i64 = iBuilder->getIntNTy(64); 
@@ -138,7 +128,6 @@ void p2s_16Kernel_withCompressedOutputKernel::generateKernel() {
     
     Function * writefn = cast<Function>(m->getOrInsertFunction("buffered_write", iBuilder->getVoidTy(), i8PtrTy, i64, nullptr));
 
-    addTrivialFinalBlockMethod(m);
     Function * doBlockFunction = m->getFunction(mKernelName + doBlock_suffix);
     
     iBuilder->SetInsertPoint(BasicBlock::Create(iBuilder->getContext(), "entry", doBlockFunction, 0));

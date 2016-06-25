@@ -62,7 +62,6 @@ Function * PipelineBuilder::ExecuteKernels(PabloFunction * function, bool isName
 
     pablo_function_passes(function);
     PabloKernel  icgrepK(iBuilder, "icgrep", function, {"matchedLineCount"});
-    icgrepK.prepareKernel();
     icgrepK.generateKernel();
 
     //std::unique_ptr<Module> icgrepM = icgrepK.createKernelModule();

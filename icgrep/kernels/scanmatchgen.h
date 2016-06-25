@@ -27,9 +27,8 @@ public:
     mScanwordBitWidth(scanwordBitWidth),
     mIsNameExpression(isNameExpression) {}
         
-    void generateKernel() override;
-
 private:
+    void generateDoBlockMethod() override;
     llvm::Function * generateScanWordRoutine(llvm::Module * m);
         
     unsigned mScanwordBitWidth;

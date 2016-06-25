@@ -28,25 +28,45 @@ public:
                     std::vector<ScalarBinding> scalar_outputs,
                     std::vector<ScalarBinding> internal_scalars);
     
+    // Create a module for the kernel, including the kernel state type declaration and
+    // the full implementation of all required methods.     
+    //
+    std::unique_ptr<llvm::Module> createKernelModule();
+    
+    // Generate the Kernel to the current module (iBuilder->getModule()).
+    void generateKernel();
+    
+protected:
+    //
+    // Kernel builder subtypes define their logic of kernel construction
+    // in terms of 3 virtual methods for
+    // (a) preparing the Kernel state data structure
+    // (b) defining the logic of the doBlock function, and
+    // (c) defining the logic of the finalBlock function.
+    //
+    // Note: the kernel state data structure must only be finalized after
+    // all scalar fields have been added.   If there are no fields to
+    // be added, the default method for preparing kernel state may be used.
+    
+    virtual void prepareKernelStateType();
+    
+    // Each kernel builder subtype must provide its own logic for generating
+    // doBlock calls.
+    virtual void generateDoBlockMethod() = 0;
+    
+    // Each kernel builder subtypre must also specify the logic for processing the
+    // final block of stream data, if there is any special processing required
+    // beyond simply calling the doBlock function.   In the case that the final block
+    // processing may be trivially implemented by dispatching to the doBlock method
+    // without additional preparation, the default generateFinalBlockMethod need
+    // not be overridden.
+    
+    virtual void generateFinalBlockMethod();
+    
     // Add an additional scalar field to the KernelState struct.
     // Must occur before any call to addKernelDeclarations or createKernelModule.
     void addScalar(llvm::Type * t, std::string scalarName);
-    
-    void finalizeKernelStateType();
-    
-    // Create a module for the kernel, including the kernel state type and
-    // all required methods.  The init and accumulator output methods will be
-    // defined, while the doBlock and finalBlock methods will initially be empty.
-    //
-    virtual std::unique_ptr<llvm::Module> createKernelModule();
-    
-    // Generate Kernel to the current module.
-    virtual void generateKernel();
-    
-    // Add a FinalBlock method that simply calls DoBlock without additional
-    // preparation.
-    void addTrivialFinalBlockMethod(Module * m);
-    
+        
     // Run-time access of Kernel State and parameters of methods for
     // use in implementing kernels.
     

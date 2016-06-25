@@ -17,6 +17,7 @@
 #include <llvm/IR/Module.h>
 #include <llvm/ExecutionEngine/ExecutionEngine.h>
 #include <llvm/ExecutionEngine/MCJIT.h>
+#include "llvm/Linker/Linker.h"
 
 #include <llvm/Support/CommandLine.h>
 #include <llvm/Support/raw_ostream.h>
@@ -141,12 +142,13 @@ Function * wcPipeline(Module * mMod, IDISA::IDISA_Builder * iBuilder, pablo::Pab
     Type * mBitBlockType = iBuilder->getBitBlockType();
     unsigned mBlockSize = iBuilder->getBitBlockWidth();
     s2pKernel  s2pk(iBuilder);
-    s2pk.generateKernel();
-    
+    std::unique_ptr<Module> s2pM = s2pk.createKernelModule();
     pablo_function_passes(function);
     pablo::PabloKernel  wck(iBuilder, "wc", function, {"lineCount", "wordCount", "charCount"});
-    wck.prepareKernel();
-    wck.generateKernel();
+    std::unique_ptr<Module> wcM = wck.createKernelModule();
+    
+    s2pk.addKernelDeclarations(mMod);
+    wck.addKernelDeclarations(mMod);
 
     Constant * record_counts_routine;
     Type * const int64ty = iBuilder->getInt64Ty();
@@ -220,6 +222,11 @@ Function * wcPipeline(Module * mMod, IDISA::IDISA_Builder * iBuilder, pablo::Pab
     iBuilder->CreateCall(record_counts_routine, std::vector<Value *>({lineCount, wordCount, charCount, bufferSize, fileIdx}));
     
     iBuilder->CreateRetVoid();
+    
+    Linker L(*mMod);
+    L.linkInModule(std::move(s2pM));
+    L.linkInModule(std::move(wcM));
+    
     return main;
 }
 

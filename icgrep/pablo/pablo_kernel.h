@@ -24,18 +24,18 @@ public:
     // At present only population count accumulator are supported,
     // using the pablo.Count operation.
     
+protected:
     // A custom method for preparing kernel declarations is needed,
     // so that the carry data requirements may be accommodated before
     // finalizing the KernelStateType.
-    void prepareKernel();
+    void prepareKernelStateType() override;
 
-    void generateKernel() override;
+    void generateDoBlockMethod() override;
     
-protected:
     // The default method for Pablo final block processing sets the
     // EOFmark bit and then calls the standard DoBlock function.
     // This may be overridden for specialized processing.
-    virtual void addFinalBlockMethod(Module * m);
+    virtual void generateFinalBlockMethod() override;
     
     PabloFunction * mPabloFunction;
 

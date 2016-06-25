@@ -39,12 +39,9 @@ Value * generateResetLowestBit(IDISA::IDISA_Builder * iBuilder, Value * bits) {
 }
 
         
-void scanMatchKernel::generateKernel() {
+void scanMatchKernel::generateDoBlockMethod() {
     IDISA::IDISA_Builder::InsertPoint savePoint = iBuilder->saveIP();
-    if (mKernelStateType == nullptr) finalizeKernelStateType();
-    KernelBuilder::generateKernel();
     Module * m = iBuilder->getModule();
-    
     Function * scanWordFunction = generateScanWordRoutine(m);
     const unsigned fieldCount = iBuilder->getBitBlockWidth() / mScanwordBitWidth;
     Type * T = iBuilder->getIntNTy(mScanwordBitWidth);
@@ -76,9 +73,6 @@ void scanMatchKernel::generateKernel() {
     setScalarField(kernelStuctParam, "LineNum", recordNum);
     setScalarField(kernelStuctParam, "BlockNo", iBuilder->CreateAdd(getScalarField(kernelStuctParam, "BlockNo"), iBuilder->getInt64(1)));
     iBuilder -> CreateRetVoid();
-    
-    // scanMatch FinalBlock function simply dispatches to the DoBlock function
-    addTrivialFinalBlockMethod(m);
     iBuilder->restoreIP(savePoint);
 }
 
