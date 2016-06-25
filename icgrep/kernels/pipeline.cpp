@@ -84,12 +84,18 @@ Function * PipelineBuilder::ExecuteKernels(PabloFunction * function, bool isName
 
     iBuilder->SetInsertPoint(BasicBlock::Create(mMod->getContext(), "entry", main,0));
     BasicBlock * entryBlock = iBuilder->GetInsertBlock();
+    BasicBlock * segmentCondBlock = nullptr;
+    BasicBlock * segmentBodyBlock = nullptr;
+    const unsigned segmentSize = codegen::SegmentSize;
+    
+    if (segmentSize > 1) {
+        segmentCondBlock = BasicBlock::Create(mMod->getContext(), "segmentCond", main, 0);
+        segmentBodyBlock = BasicBlock::Create(mMod->getContext(), "segmentBody", main, 0);
+    }
     BasicBlock * fullCondBlock = BasicBlock::Create(mMod->getContext(), "fullCond", main, 0);
     BasicBlock * fullBodyBlock = BasicBlock::Create(mMod->getContext(), "fullBody", main, 0);
     BasicBlock * finalBlock = BasicBlock::Create(mMod->getContext(), "final", main, 0);
 
-    
-    const unsigned segmentSize = 1;// or codegen::SegmentSize
     
     StreamSetBuffer ByteStream(iBuilder, StreamSetType(1, (UTF_16 ? 16 : 8)), 0);
     StreamSetBuffer BasisBits(iBuilder, StreamSetType((UTF_16 ? 16 : 8), 1), segmentSize);
@@ -98,10 +104,6 @@ Function * PipelineBuilder::ExecuteKernels(PabloFunction * function, bool isName
     ByteStream.setStreamSetBuffer(inputStream);
     BasisBits.allocateBuffer();
     MatchResults.allocateBuffer();
-
-    Value * initialBufferSize = bufferSize;
-    Value * initialBlockNo = iBuilder->getInt64(0);
-    BasicBlock * initialBlock = entryBlock;
     
     Value * s2pInstance = s2pk.createInstance({});
     Value * icgrepInstance = icgrepK.createInstance({});
@@ -109,8 +111,52 @@ Function * PipelineBuilder::ExecuteKernels(PabloFunction * function, bool isName
     if (!CountOnly) {
         scanMatchInstance = scanMatchK.createInstance({iBuilder->CreateBitCast(inputStream, int8PtrTy), bufferSize, fileIdx});
     }
-    iBuilder->CreateBr(fullCondBlock);
+
     
+    Value * initialBufferSize = nullptr;
+    Value * initialBlockNo = nullptr;
+    BasicBlock * initialBlock = nullptr;
+
+    if (segmentSize > 1) {
+        iBuilder->CreateBr(segmentCondBlock);
+        iBuilder->SetInsertPoint(segmentCondBlock);
+        PHINode * remainingBytes = iBuilder->CreatePHI(int64ty, 2, "remainingBytes");
+        remainingBytes->addIncoming(bufferSize, entryBlock);
+        PHINode * blockNo = iBuilder->CreatePHI(int64ty, 2, "blockNo");
+        blockNo->addIncoming(iBuilder->getInt64(0), entryBlock);
+
+        Constant * const step = ConstantInt::get(int64ty, mBlockSize * segmentSize);
+        Value * segmentCondTest = iBuilder->CreateICmpULT(remainingBytes, step);
+        iBuilder->CreateCondBr(segmentCondTest, fullCondBlock, segmentBodyBlock);
+        iBuilder->SetInsertPoint(segmentBodyBlock);
+        for (unsigned i = 0; i < segmentSize; ++i) {
+            Value * blkNo = iBuilder->CreateAdd(blockNo, iBuilder->getInt64(i));
+            s2pk.createDoBlockCall(s2pInstance, {ByteStream.getBlockPointer(blkNo), BasisBits.getBlockPointer(blkNo)});
+        }
+        for (unsigned i = 0; i < segmentSize; ++i) {
+            Value * blkNo = iBuilder->CreateAdd(blockNo, iBuilder->getInt64(i));
+            icgrepK.createDoBlockCall(icgrepInstance, {BasisBits.getBlockPointer(blkNo), MatchResults.getBlockPointer(blkNo)});
+        }
+        if (!CountOnly) {
+            for (unsigned i = 0; i < segmentSize; ++i) {
+                Value * blkNo = iBuilder->CreateAdd(blockNo, iBuilder->getInt64(i));
+                scanMatchK.createDoBlockCall(scanMatchInstance, {MatchResults.getBlockPointer(blkNo)});
+            }
+        }
+        remainingBytes->addIncoming(iBuilder->CreateSub(remainingBytes, step), segmentBodyBlock);
+        blockNo->addIncoming(iBuilder->CreateAdd(blockNo, iBuilder->getInt64(segmentSize)), segmentBodyBlock);
+
+        iBuilder->CreateBr(segmentCondBlock);
+        initialBufferSize = remainingBytes;
+        initialBlockNo = blockNo;
+        initialBlock = segmentCondBlock;
+    } else {
+        initialBufferSize = bufferSize;
+        initialBlockNo = iBuilder->getInt64(0);
+        initialBlock = entryBlock;
+        iBuilder->CreateBr(fullCondBlock);
+    }
+
     iBuilder->SetInsertPoint(fullCondBlock);
     PHINode * remainingBytes = iBuilder->CreatePHI(int64ty, 2, "remainingBytes");
     remainingBytes->addIncoming(initialBufferSize, initialBlock);
