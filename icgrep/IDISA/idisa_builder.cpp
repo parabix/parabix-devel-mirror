@@ -5,6 +5,7 @@
  */
 
 #include "idisa_builder.h"
+#include <string> 
 #include <llvm/IR/IRBuilder.h>
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/Intrinsics.h>
@@ -23,7 +24,14 @@ Value * IDISA_Builder::fwCast(unsigned fw, Value * a) {
     return a->getType() == fwVectorType(fw) ? a : CreateBitCast(a, fwVectorType(fw));
 }
 
+std::string IDISA_Builder::getBitBlockTypeName() {
+    if (mBitBlockType->isIntegerTy()) return "i" + std::to_string(mBitBlockWidth);
+    assert(mBitBlockType->isVectorType() || "BitBlockType is neither integer nor vector");
+    unsigned fw = mBitBlockType->getScalarSizeInBits();
+    return "v" + std::to_string(mBitBlockWidth/fw) + "i" + std::to_string(fw);
+}
 
+    
 static Function * create_printf(Module * const mod) {
     Function * printf = mod->getFunction("printf");
     if (printf == nullptr) {

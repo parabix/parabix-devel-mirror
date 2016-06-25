@@ -36,6 +36,8 @@ public:
         return mBitBlockType;
     }
 
+    std::string getBitBlockTypeName();  // A short string such as v4i64 or i256.
+
     Value * bitCast(Value * a) {
         return a->getType() == mBitBlockType ? a : CreateBitCast(a, mBitBlockType);
     }

@@ -49,10 +49,10 @@ std::unique_ptr<Module> KernelBuilder::createKernelModule() {
     Module * saveModule = iBuilder->getModule();
     IDISA::IDISA_Builder::InsertPoint savePoint = iBuilder->saveIP();
     if (mKernelStateType == nullptr) finalizeKernelStateType();
-    std::unique_ptr<Module> theModule = make_unique<Module>(mKernelName, getGlobalContext());
+    std::unique_ptr<Module> theModule = make_unique<Module>(mKernelName + "_" + iBuilder->getBitBlockTypeName(), getGlobalContext());
     Module * m = theModule.get();
     iBuilder->setModule(m);
-    generateKernel();
+    KernelBuilder::generateKernel();
     iBuilder->setModule(saveModule);
     iBuilder->restoreIP(savePoint);
     return theModule;
