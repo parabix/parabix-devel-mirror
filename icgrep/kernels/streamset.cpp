@@ -37,6 +37,6 @@ llvm::Value * StreamSetBuffer::getBlockPointer(llvm::Value * blockNo) {
     if (mSegmentSize == 0) return
         iBuilder->CreateGEP(getStreamSetBlockType(), mStreamSetBufferPtr, {blockNo});
     Value * offset = iBuilder->CreateURem(blockNo, iBuilder->getInt64(mSegmentSize));
-    return iBuilder->CreateGEP(getStreamSetBlockType(), mStreamSetBufferPtr, {iBuilder->getInt64(0), offset});
+    return iBuilder->CreateGEP(getStreamSetBlockType(), mStreamSetBufferPtr, {offset});
 }
 
