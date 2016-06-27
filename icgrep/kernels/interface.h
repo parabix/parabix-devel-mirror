@@ -45,6 +45,7 @@ public:
     mScalarInputs(scalar_parameters),
     mScalarOutputs(scalar_outputs),
     mInternalScalars(internal_scalars),
+    mDoBlockReturnType(nullptr),
     mKernelStateType(nullptr) {}
     
     
@@ -65,6 +66,7 @@ protected:
     std::vector<ScalarBinding> mScalarInputs;
     std::vector<ScalarBinding> mScalarOutputs;
     std::vector<ScalarBinding> mInternalScalars;
+    llvm::Type * mDoBlockReturnType;
     llvm::Type * mKernelStateType;
 };
 

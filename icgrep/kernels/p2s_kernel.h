@@ -59,6 +59,7 @@ public:
                   {}, {}, {}) {}
         
 private:
+    void prepareKernel() override;
     void generateDoBlockMethod() override;
 };
     

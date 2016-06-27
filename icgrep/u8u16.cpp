@@ -32,6 +32,7 @@
 #include <kernels/s2p_kernel.h>
 #include <kernels/p2s_kernel.h>
 #include <kernels/deletion.h>
+#include <kernels/stdout_kernel.h>
 
 #include <utf_encoding.h>
 
@@ -219,6 +220,7 @@ PabloFunction * u8u16_pablo(const Encoding encoding) {
 
 using namespace kernel;
 
+const unsigned u16OutputBlocks = 16;
 
 Function * u8u16Pipeline(Module * mMod, IDISA::IDISA_Builder * iBuilder, pablo::PabloFunction * function) {
     Type * mBitBlockType = iBuilder->getBitBlockType();
@@ -236,7 +238,11 @@ Function * u8u16Pipeline(Module * mMod, IDISA::IDISA_Builder * iBuilder, pablo::
     p2s_16Kernel_withCompressedOutputKernel p2sk(iBuilder);    
     p2sk.generateKernel();
     
+    stdOutKernel stdOutK(iBuilder, 16);
+    stdOutK.generateKernel();
+    
     Type * const int64ty = iBuilder->getInt64Ty();
+    Type * i16PtrTy = PointerType::get(iBuilder->getInt16Ty(), 0);
     Type * const voidTy = Type::getVoidTy(mMod->getContext());
     Type * const inputType = PointerType::get(ArrayType::get(ArrayType::get(mBitBlockType, 8), 1), 0);
     
@@ -262,7 +268,7 @@ Function * u8u16Pipeline(Module * mMod, IDISA::IDISA_Builder * iBuilder, pablo::
     StreamSetBuffer U8u16Bits(iBuilder, StreamSetType(18, 1), 1);
     StreamSetBuffer U16Bits(iBuilder, StreamSetType(16, 1), 1);
     StreamSetBuffer DeletionCounts(iBuilder, StreamSetType(1, 1), 1);
-    StreamSetBuffer U16out(iBuilder, StreamSetType(1, 16), 1);
+    StreamSetBuffer U16out(iBuilder, StreamSetType(1, 16), u16OutputBlocks);
 
     ByteStream.setStreamSetBuffer(inputStream);
     Value * basisBits = BasisBits.allocateBuffer();
@@ -275,6 +281,7 @@ Function * u8u16Pipeline(Module * mMod, IDISA::IDISA_Builder * iBuilder, pablo::
     Value * u8u16Instance = u8u16k.createInstance({});
     Value * delInstance = delK.createInstance({});
     Value * p2sInstance = p2sk.createInstance({});
+    Value * stdOutInstance = stdOutK.createInstance({u16out, iBuilder->CreateGEP(u16out, {iBuilder->getInt32(u16OutputBlocks-2)})});
     
     Value * initialBufferSize = bufferSize;
     BasicBlock * initialBlock = entryBlock;
@@ -288,6 +295,8 @@ Function * u8u16Pipeline(Module * mMod, IDISA::IDISA_Builder * iBuilder, pablo::
     remainingBytes->addIncoming(initialBufferSize, initialBlock);
     PHINode * blockNo = iBuilder->CreatePHI(int64ty, 2, "blockNo");
     blockNo->addIncoming(initialBlockNo, initialBlock);
+    PHINode * outputBuffer = iBuilder->CreatePHI(PointerType::get(U16out.getStreamSetBlockType(), 0), 2, "outputBuffer");
+    outputBuffer->addIncoming(u16out, initialBlock);
     
     Constant * const step = ConstantInt::get(int64ty, mBlockSize);
     Value * fullCondTest = iBuilder->CreateICmpULT(remainingBytes, step);
@@ -298,21 +307,25 @@ Function * u8u16Pipeline(Module * mMod, IDISA::IDISA_Builder * iBuilder, pablo::
     s2pk.createDoBlockCall(s2pInstance, {ByteStream.getBlockPointer(blockNo), basisBits});
     u8u16k.createDoBlockCall(u8u16Instance, {basisBits, u8u16Bits});
     delK.createDoBlockCall(delInstance, {u8u16Bits, u16Bits, delCounts});
-    p2sk.createDoBlockCall(p2sInstance, {u16Bits, delCounts, u16out});
+    Value * units_generated = p2sk.createDoBlockCall(p2sInstance, {u16Bits, delCounts, outputBuffer});
+    Value * u16out_next = iBuilder->CreateBitCast(iBuilder->CreateGEP(iBuilder->CreateBitCast(outputBuffer, i16PtrTy), units_generated), outputBuffer->getType());
+    u16out_next = stdOutK.createDoBlockCall(stdOutInstance, {u16out_next});
     
     Value * diff = iBuilder->CreateSub(remainingBytes, step);
     
     remainingBytes->addIncoming(diff, fullBodyBlock);
     blockNo->addIncoming(iBuilder->CreateAdd(blockNo, iBuilder->getInt64(1)), fullBodyBlock);
+    outputBuffer->addIncoming(u16out_next, fullBodyBlock);
     iBuilder->CreateBr(fullCondBlock);
     
     iBuilder->SetInsertPoint(finalBlock);
     s2pk.createFinalBlockCall(s2pInstance, remainingBytes, {ByteStream.getBlockPointer(blockNo), basisBits});
     u8u16k.createFinalBlockCall(u8u16Instance, remainingBytes, {basisBits, u8u16Bits});
     delK.createFinalBlockCall(delInstance, remainingBytes, {u8u16Bits, u16Bits, delCounts});
-    p2sk.createFinalBlockCall(p2sInstance, remainingBytes, {u16Bits, delCounts, u16out});
-    
-    
+    units_generated = p2sk.createFinalBlockCall(p2sInstance, remainingBytes, {u16Bits, delCounts, outputBuffer});
+    u16out_next = iBuilder->CreateBitCast(iBuilder->CreateGEP(iBuilder->CreateBitCast(outputBuffer, i16PtrTy), units_generated), outputBuffer->getType());
+    stdOutK.createFinalBlockCall(stdOutInstance, remainingBytes, {u16out_next});
+
     iBuilder->CreateRetVoid();
     return main;
 }

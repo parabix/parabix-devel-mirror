@@ -28,7 +28,7 @@ protected:
     // A custom method for preparing kernel declarations is needed,
     // so that the carry data requirements may be accommodated before
     // finalizing the KernelStateType.
-    void prepareKernelStateType() override;
+    void prepareKernel() override;
 
     void generateDoBlockMethod() override;
     

@@ -63,7 +63,7 @@ void KernelInterface::addKernelDeclarations(Module * client) {
         doBlockParameters.push_back(outputSetParmType);
         finalBlockParameters.push_back(outputSetParmType);
     }
-    FunctionType * doBlockFunctionType = FunctionType::get(iBuilder->getVoidTy(), doBlockParameters, false);
+    FunctionType * doBlockFunctionType = FunctionType::get(mDoBlockReturnType, doBlockParameters, false);
     std::string doBlockName = mKernelName + doBlock_suffix;
     Function * doBlockFn = Function::Create(doBlockFunctionType, GlobalValue::ExternalLinkage, doBlockName, client);
     doBlockFn->setCallingConv(CallingConv::C);
@@ -72,7 +72,7 @@ void KernelInterface::addKernelDeclarations(Module * client) {
         doBlockFn->setDoesNotCapture(i);
     }
     
-    FunctionType * finalBlockType = FunctionType::get(iBuilder->getVoidTy(), finalBlockParameters, false);
+    FunctionType * finalBlockType = FunctionType::get(mDoBlockReturnType, finalBlockParameters, false);
     std::string finalBlockName = mKernelName + finalBlock_suffix;
     Function * finalBlockFn = Function::Create(finalBlockType, GlobalValue::ExternalLinkage, finalBlockName, client);
     finalBlockFn->setCallingConv(CallingConv::C);

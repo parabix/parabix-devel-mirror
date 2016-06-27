@@ -5,15 +5,30 @@
 #ifndef STDOUT_KERNEL_H
 #define STDOUT_KERNEL_H
 
-namespace llvm { class Module; }
+#include "streamset.h"
+#include "kernel.h"
+#include <llvm/IR/Type.h>
 
 namespace IDISA { class IDISA_Builder; }
 
 namespace kernel {
 
-class KernelBuilder;
-
-    void generateStdOutKernel(llvm::Module *, IDISA::IDISA_Builder * iBuilder, KernelBuilder * kBuilder, unsigned fw = 8);
+class stdOutKernel : public KernelBuilder {
+public:
+    stdOutKernel(IDISA::IDISA_Builder * iBuilder, unsigned codeUnitWidth) :
+    KernelBuilder(iBuilder, "stdout",
+                  {StreamSetBinding{StreamSetType(1, codeUnitWidth), "bufferPtr"}}, {}, {}, {}, {}) {
+        mStreamType = PointerType::get(StreamSetType(1, codeUnitWidth).getStreamSetBlockType(iBuilder), 0);
+        mScalarInputs = {ScalarBinding{mStreamType , "bufferBasePtr"}, ScalarBinding{mStreamType, "bufferFinalBlockPtr"}};
+    }
+    
+private:
+    void prepareKernel() override;
+    void generateDoBlockMethod() override;
+    void generateFinalBlockMethod() override;
+    
+    llvm::Type * mStreamType;
+};
 }
 
 #endif

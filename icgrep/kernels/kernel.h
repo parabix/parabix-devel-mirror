@@ -48,7 +48,7 @@ protected:
     // all scalar fields have been added.   If there are no fields to
     // be added, the default method for preparing kernel state may be used.
     
-    virtual void prepareKernelStateType();
+    virtual void prepareKernel();
     
     // Each kernel builder subtype must provide its own logic for generating
     // doBlock calls.
@@ -66,6 +66,10 @@ protected:
     // Add an additional scalar field to the KernelState struct.
     // Must occur before any call to addKernelDeclarations or createKernelModule.
     void addScalar(llvm::Type * t, std::string scalarName);
+    
+    // Set a specific _DoBlock return type;
+    
+    void setDoBlockReturnType(llvm::Type * t);
         
     // Run-time access of Kernel State and parameters of methods for
     // use in implementing kernels.

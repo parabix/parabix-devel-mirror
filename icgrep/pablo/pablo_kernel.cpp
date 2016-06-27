@@ -41,10 +41,10 @@ std::vector<ScalarBinding> PabloKernel::accumBindings(std::vector<std::string> a
     return vec;
 }
 
-void PabloKernel::prepareKernelStateType() {
+void PabloKernel::prepareKernel() {
     Type * carryDataType = pablo_compiler->initializeCarryData();
     addScalar(carryDataType, "carries");
-    KernelBuilder::prepareKernelStateType();
+    KernelBuilder::prepareKernel();
 }
 
 void PabloKernel::generateDoBlockMethod() {

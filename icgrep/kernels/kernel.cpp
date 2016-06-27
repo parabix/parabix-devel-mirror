@@ -19,18 +19,7 @@ KernelBuilder::KernelBuilder(IDISA::IDISA_Builder * builder,
                                  std::vector<ScalarBinding> scalar_parameters,
                                  std::vector<ScalarBinding> scalar_outputs,
                                  std::vector<ScalarBinding> internal_scalars) :
-    KernelInterface(builder, kernelName, stream_inputs, stream_outputs, scalar_parameters, scalar_outputs, internal_scalars) {
-    
-    for (auto binding : scalar_parameters) {
-        addScalar(binding.scalarType, binding.scalarName);
-    }
-    for (auto binding : scalar_outputs) {
-        addScalar(binding.scalarType, binding.scalarName);
-    }
-    for (auto binding : internal_scalars) {
-        addScalar(binding.scalarType, binding.scalarName);
-    }
-}
+    KernelInterface(builder, kernelName, stream_inputs, stream_outputs, scalar_parameters, scalar_outputs, internal_scalars) {}
 
 void KernelBuilder::addScalar(Type * t, std::string scalarName) {
     if (LLVM_UNLIKELY(mKernelStateType != nullptr)) {
@@ -41,7 +30,21 @@ void KernelBuilder::addScalar(Type * t, std::string scalarName) {
     mInternalStateNameMap.emplace(scalarName, iBuilder->getInt32(index));
 }
 
-void KernelBuilder::prepareKernelStateType() {
+void KernelBuilder::setDoBlockReturnType(llvm::Type * t) {
+    mDoBlockReturnType = t;
+}
+
+void KernelBuilder::prepareKernel() {
+    if (!mDoBlockReturnType) mDoBlockReturnType = iBuilder->getVoidTy();
+    for (auto binding : mScalarInputs) {
+        addScalar(binding.scalarType, binding.scalarName);
+    }
+    for (auto binding : mScalarOutputs) {
+        addScalar(binding.scalarType, binding.scalarName);
+    }
+    for (auto binding : mInternalScalars) {
+        addScalar(binding.scalarType, binding.scalarName);
+    }
     mKernelStateType = StructType::create(getGlobalContext(), mKernelFields, mKernelName);
 }
 
@@ -61,7 +64,7 @@ void KernelBuilder::generateKernel() {
     IDISA::IDISA_Builder::InsertPoint savePoint = iBuilder->saveIP();
     Module * m = iBuilder->getModule();
 
-    prepareKernelStateType();  // possibly overriden by the KernelBuilder subtype
+    prepareKernel();  // possibly overriden by the KernelBuilder subtype
     KernelInterface::addKernelDeclarations(m);
     generateDoBlockMethod();     // must be implemented by the KernelBuilder subtype
     generateFinalBlockMethod();  // possibly overriden by the KernelBuilder subtype
@@ -107,8 +110,13 @@ void KernelBuilder::generateFinalBlockMethod() {
     while (args != finalBlockFunction->arg_end()){
         doBlockArgs.push_back(&*args++);
     }
-    iBuilder->CreateCall(doBlockFunction, doBlockArgs);
-    iBuilder->CreateRetVoid();
+    Value * rslt = iBuilder->CreateCall(doBlockFunction, doBlockArgs);
+    if (mDoBlockReturnType->isVoidTy()) {
+        iBuilder->CreateRetVoid();
+    }
+    else {
+        iBuilder->CreateRet(rslt);
+    }
     iBuilder->restoreIP(savePoint);
 }
 

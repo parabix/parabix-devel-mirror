@@ -26,7 +26,7 @@ Value * IDISA_Builder::fwCast(unsigned fw, Value * a) {
 
 std::string IDISA_Builder::getBitBlockTypeName() {
     if (mBitBlockType->isIntegerTy()) return "i" + std::to_string(mBitBlockWidth);
-    assert(mBitBlockType->isVectorType() || "BitBlockType is neither integer nor vector");
+    assert(mBitBlockType->isVectorTy() || "BitBlockType is neither integer nor vector");
     unsigned fw = mBitBlockType->getScalarSizeInBits();
     return "v" + std::to_string(mBitBlockWidth/fw) + "i" + std::to_string(fw);
 }

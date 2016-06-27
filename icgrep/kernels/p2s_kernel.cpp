@@ -10,12 +10,6 @@
 
 
 
-extern "C" {
-    void buffered_write(const char * ptr, size_t bytes) {
-        outs().write(ptr, bytes);
-    }
-};
-
 namespace kernel{
 	
 void p2s_step(IDISA::IDISA_Builder * iBuilder, Value * p0, Value * p1, Value * hi_mask, unsigned shift, Value * &s1, Value * &s0) {
@@ -105,29 +99,18 @@ void p2s_16Kernel::generateDoBlockMethod() {
 }
         
     
-Function * create_write(Module * const mod) {
-    Function * write = mod->getFunction("write");
-    if (write == nullptr) {
-        FunctionType *write_type =
-        TypeBuilder<long(int, char *, long), false>::get(mod->getContext());
-        write = cast<Function>(mod->getOrInsertFunction("write", write_type,
-                                                        AttributeSet().addAttribute(mod->getContext(), 2U, Attribute::NoAlias)));
-    }
-    return write;
+void p2s_16Kernel_withCompressedOutputKernel::prepareKernel() {
+    setDoBlockReturnType(iBuilder->getInt32Ty());
+    KernelBuilder::prepareKernel();
 }
-
-const size_t OutputBufferSize=65536;
-
+    
 void p2s_16Kernel_withCompressedOutputKernel::generateDoBlockMethod() {
-    outs().SetBufferSize(OutputBufferSize);
     IDISA::IDISA_Builder::InsertPoint savePoint = iBuilder->saveIP();
     Module * m = iBuilder->getModule();
     Type * i8PtrTy = iBuilder->getInt8PtrTy(); 
-    Type * i64 = iBuilder->getIntNTy(64); 
+    Type * i32 = iBuilder->getIntNTy(32); 
     Type * bitBlockPtrTy = llvm::PointerType::get(iBuilder->getBitBlockType(), 0); 
     
-    Function * writefn = cast<Function>(m->getOrInsertFunction("buffered_write", iBuilder->getVoidTy(), i8PtrTy, i64, nullptr));
-
     Function * doBlockFunction = m->getFunction(mKernelName + doBlock_suffix);
     
     iBuilder->SetInsertPoint(BasicBlock::Create(iBuilder->getContext(), "entry", doBlockFunction, 0));
@@ -155,23 +138,21 @@ void p2s_16Kernel_withCompressedOutputKernel::generateDoBlockMethod() {
     Value * unit_counts = iBuilder->fwCast(UTF_16_units_per_register, iBuilder->CreateBlockAlignedLoad(delCountBlock_ptr, {iBuilder->getInt32(0), iBuilder->getInt32(0)}));
     
     Value * u16_output_ptr = iBuilder->CreateBitCast(i16StreamBlock_ptr, PointerType::get(iBuilder->getInt16Ty(), 0));
-    Value * offset = ConstantInt::get(i64, 0);
+    Value * offset = ConstantInt::get(i32, 0);
     
     for (unsigned j = 0; j < 8; ++j) {
         Value * merge0 = iBuilder->bitCast(iBuilder->esimd_mergel(8, hi_bytes[j], lo_bytes[j]));
         Value * merge1 = iBuilder->bitCast(iBuilder->esimd_mergeh(8, hi_bytes[j], lo_bytes[j]));
         //iBuilder->CallPrintRegister("merge0", merge0);
         iBuilder->CreateAlignedStore(merge0, iBuilder->CreateBitCast(iBuilder->CreateGEP(u16_output_ptr, offset), bitBlockPtrTy), 1);
-        offset = iBuilder->CreateZExt(iBuilder->CreateExtractElement(unit_counts, iBuilder->getInt32(2*j)), i64);
+        offset = iBuilder->CreateZExt(iBuilder->CreateExtractElement(unit_counts, iBuilder->getInt32(2*j)), i32);
         //iBuilder->CallPrintInt("offset", offset);
         iBuilder->CreateAlignedStore(merge1, iBuilder->CreateBitCast(iBuilder->CreateGEP(u16_output_ptr, offset), bitBlockPtrTy), 1);
         //iBuilder->CallPrintRegister("merge1", merge1);
-        offset = iBuilder->CreateZExt(iBuilder->CreateExtractElement(unit_counts, iBuilder->getInt32(2*j+1)), i64);
+        offset = iBuilder->CreateZExt(iBuilder->CreateExtractElement(unit_counts, iBuilder->getInt32(2*j+1)), i32);
         //iBuilder->CallPrintInt("offset", offset);
     }
-    Value * byte_offset = iBuilder->CreateAdd(offset, offset);
-    iBuilder->CreateCall(writefn, std::vector<Value *>({iBuilder->CreateBitCast(i16StreamBlock_ptr, i8PtrTy), byte_offset}));
-    iBuilder->CreateRetVoid();
+    iBuilder->CreateRet(offset);
     iBuilder->restoreIP(savePoint);
 }
         

@@ -112,7 +112,7 @@ add_dependencies(RegExpCompiler run_generate_predefined_ucd_functions)
 ENDIF()
 
 add_executable(icgrep icgrep.cpp toolchain.cpp grep_engine.cpp kernels/pipeline.cpp kernels/scanmatchgen.cpp ${PRECOMPILED_FILES})
-add_executable(u8u16 u8u16.cpp toolchain.cpp kernels/p2s_kernel.cpp kernels/deletion.cpp)
+add_executable(u8u16 u8u16.cpp toolchain.cpp kernels/p2s_kernel.cpp kernels/deletion.cpp kernels/stdout_kernel.cpp)
 #add_executable(symtbl symboltable.cpp toolchain.cpp kernels/symboltablepipeline.cpp kernels/stdout_kernel.cpp grep_engine.cpp kernels/pipeline.cpp kernels/scanmatchgen.cpp ${PRECOMPILED_FILES})
 add_executable(wc wc.cpp toolchain.cpp)
 
