@@ -220,7 +220,7 @@ PabloFunction * u8u16_pablo(const Encoding encoding) {
 
 using namespace kernel;
 
-const unsigned u16OutputBlocks = 16;
+const unsigned u16OutputBlocks = 256;
 
 Function * u8u16Pipeline(Module * mMod, IDISA::IDISA_Builder * iBuilder, pablo::PabloFunction * function) {
     Type * mBitBlockType = iBuilder->getBitBlockType();
