@@ -36,6 +36,20 @@ private:
     
 };
 
+class p2sKernel_withCompressedOutput : public KernelBuilder {
+public:
+    p2sKernel_withCompressedOutput(IDISA::IDISA_Builder * iBuilder) :
+    KernelBuilder(iBuilder, "p2s_compress",
+                  {StreamSetBinding{StreamSetType(8, 1), "basisBits"}, StreamSetBinding{StreamSetType(1, 1), "deletionCounts"}},
+                  {StreamSetBinding{StreamSetType(1, 8), "byteStream"}},
+                  {}, {}, {}) {}
+    
+private:
+    void prepareKernel() override;
+    void generateDoBlockMethod() override;
+};
+    
+
 class p2s_16Kernel : public KernelBuilder {
 public:
     p2s_16Kernel(IDISA::IDISA_Builder * iBuilder) :
@@ -50,9 +64,9 @@ private:
 };
 
     
-class p2s_16Kernel_withCompressedOutputKernel : public KernelBuilder {
+class p2s_16Kernel_withCompressedOutput : public KernelBuilder {
 public:
-    p2s_16Kernel_withCompressedOutputKernel(IDISA::IDISA_Builder * iBuilder) :
+    p2s_16Kernel_withCompressedOutput(IDISA::IDISA_Builder * iBuilder) :
     KernelBuilder(iBuilder, "p2s_16_compress",
                   {StreamSetBinding{StreamSetType(16, 1), "basisBits"}, StreamSetBinding{StreamSetType(1, 1), "deletionCounts"}},
                   {StreamSetBinding{StreamSetType(1, 16), "i16Stream"}},

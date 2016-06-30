@@ -220,7 +220,7 @@ PabloFunction * u8u16_pablo(const Encoding encoding) {
 
 using namespace kernel;
 
-const unsigned u16OutputBlocks = 256;
+const unsigned u16OutputBlocks = 64;
 
 Function * u8u16Pipeline(Module * mMod, IDISA::IDISA_Builder * iBuilder, pablo::PabloFunction * function) {
     Type * mBitBlockType = iBuilder->getBitBlockType();
@@ -235,7 +235,7 @@ Function * u8u16Pipeline(Module * mMod, IDISA::IDISA_Builder * iBuilder, pablo::
     deletionKernel delK(iBuilder, iBuilder->getBitBlockWidth()/16, 16);
     delK.generateKernel();
     
-    p2s_16Kernel_withCompressedOutputKernel p2sk(iBuilder);    
+    p2s_16Kernel_withCompressedOutput p2sk(iBuilder);    
     p2sk.generateKernel();
     
     stdOutKernel stdOutK(iBuilder, 16);
@@ -246,7 +246,7 @@ Function * u8u16Pipeline(Module * mMod, IDISA::IDISA_Builder * iBuilder, pablo::
     Type * const voidTy = Type::getVoidTy(mMod->getContext());
     Type * const inputType = PointerType::get(ArrayType::get(ArrayType::get(mBitBlockType, 8), 1), 0);
     
-    Function * const main = cast<Function>(mMod->getOrInsertFunction("Main", Type::getVoidTy(mMod->getContext()), inputType, int64ty, nullptr));
+    Function * const main = cast<Function>(mMod->getOrInsertFunction("Main", voidTy, inputType, int64ty, nullptr));
     main->setCallingConv(CallingConv::C);
     Function::arg_iterator args = main->arg_begin();
     
