@@ -20,6 +20,8 @@
 #include <UCD/CaseFolding_txt.h>
 #include <grep_engine.h>
 #include <sstream>
+#include <iostream>
+#include <string>
 #include <algorithm>
 
 // It would probably be best to enforce that {}, [], () must always
@@ -36,6 +38,7 @@ RE * RE_Parser::parse(const std::string & regular_expression, ModeFlagSet initia
     RE_Parser parser(regular_expression);
     parser.fModeFlagSet = initialFlags;
     parser.fNested = false;
+    parser.mCaptureGroupCount = 0;
     RE * re = parser.parse_RE();
     if (re == nullptr) {
         throw ParseFailure("An unexpected parsing error occurred!");
@@ -44,9 +47,10 @@ RE * RE_Parser::parse(const std::string & regular_expression, ModeFlagSet initia
 }
 
 inline RE_Parser::RE_Parser(const std::string & regular_expression)
-    : mCursor(regular_expression)
-    , fModeFlagSet(0)
+    : fModeFlagSet(0)
     , fNested(false)
+    , mCursor(regular_expression)
+    , mCaptureGroupCount(0)
     {
 
     }
@@ -219,8 +223,14 @@ RE * RE_Parser::parse_group() {
             default:
                 throw ParseFailure("Illegal (? syntax.");
         }
-    } else { // Capturing paren group, but ignore capture in icgrep.
-        group_expr = parse_alt();
+    } else { // Capturing paren group.
+        RE * captured = parse_alt();
+        mCaptureGroupCount++;
+        std::string captureName = "\\" + std::to_string(mCaptureGroupCount);
+        Name * const capture  = mMemoizer.memoize(makeCapture(captureName, captured));
+        auto key = std::make_pair("", captureName);
+        mNameMap.insert(std::make_pair(std::move(key), capture));
+        group_expr = capture;
     }
     if (*mCursor != ')') {
         throw ParseFailure("Closing parenthesis required.");
@@ -315,10 +325,24 @@ const uint64_t setEscapeCharacters = bit40('b') | bit40('p') | bit40('q') | bit4
 inline bool isSetEscapeChar(char c) {
     return c >= 0x40 && c <= 0x7F && ((setEscapeCharacters >> (c - 0x40)) & 1) == 1;
 }
+                                 
 
 inline RE * RE_Parser::parse_escaped() {
+    
     if (isSetEscapeChar(*mCursor)) {
         return parseEscapedSet();
+    }
+    else if (isdigit(*mCursor)) {
+        mCursor++;
+        std::string backref = std::string(mCursor.pos()-2, mCursor.pos());
+        auto key = std::make_pair("", backref);
+        auto f = mNameMap.find(key);
+        if (f != mNameMap.end()) {
+            return makeReference(backref, f->second);
+        }
+        else {
+            throw ParseFailure("Back reference " + backref + " without prior capture group.");
+        }
     }
     else {
         return createCC(parse_escaped_codepoint());
@@ -945,7 +969,7 @@ Name * RE_Parser::createName(std::string && value) {
     Name * const property = mMemoizer.memoize(makeName(value, Name::Type::UnicodeProperty));
     mNameMap.insert(std::make_pair(std::move(key), property));
     return property;
-}
+    }
 
 Name * RE_Parser::createName(std::string && prop, std::string && value) {
     auto key = std::make_pair(prop, value);

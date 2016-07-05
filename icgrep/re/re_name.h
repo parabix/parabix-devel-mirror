@@ -24,6 +24,8 @@ public:
         Byte
         , Unicode
         , UnicodeProperty
+        , Capture
+        , Reference
         , Unknown
     };
     std::string getNamespace() const;
@@ -38,6 +40,8 @@ public:
     virtual ~Name() {}
 protected:
     friend Name * makeName(const std::string & name, RE * cc);
+    friend Name * makeCapture(const std::string & name, RE * captured);
+    friend Name * makeReference(const std::string & name, RE * captureName);
     friend Name * makeName(CC * const cc);
     friend Name * makeName(const std::string &, const Type);
     friend Name * makeName(const std::string &, const std::string &, const Type);
@@ -153,6 +157,14 @@ inline Name * makeName(CC * const cc) {
     const bool ascii = cc->max_codepoint() <= 0x7F;
     const std::string name = cc->canonicalName(ascii ? CC_type::ByteClass : CC_type::UnicodeClass);
     return new Name(nullptr, 0, name.c_str(), name.length(), ascii ? Name::Type::Byte : Name::Type::Unicode, cc);
+}
+
+inline Name * makeCapture(const std::string & name, RE * captured) {
+    return new Name(nullptr, 0, name.c_str(), name.length(), Name::Type::Capture, captured);
+}
+    
+inline Name * makeReference(const std::string & name, RE * captureName) {
+    return new Name(nullptr, 0, name.c_str(), name.length(), Name::Type::Reference, captureName);
 }
 
 }

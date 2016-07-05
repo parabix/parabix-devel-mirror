@@ -452,17 +452,22 @@ inline MarkerType RE_Compiler::compileAny(const MarkerType m, PabloBuilder & pb)
 }
 
 inline MarkerType RE_Compiler::compileName(Name * name, MarkerType marker, PabloBuilder & pb) {
-    MarkerType nameMarker = compileName(name, pb);
-    MarkerType nextPos;
-    if (markerPos(marker) == MarkerPosition::FinalPostPositionUnit) {
-        nextPos = marker;
-    } else if (name->getType() == Name::Type::Byte) {
-        nextPos = AdvanceMarker(marker, MarkerPosition::InitialPostPositionUnit, pb);
-    } else {
-        nextPos = AdvanceMarker(marker, MarkerPosition::FinalPostPositionUnit, pb);
+    if (isUnicodeUnitLength(name)) {
+        MarkerType nameMarker = compileName(name, pb);
+        MarkerType nextPos;
+        if (markerPos(marker) == MarkerPosition::FinalPostPositionUnit) {
+            nextPos = marker;
+        } else if (name->getType() == Name::Type::Byte) {
+            nextPos = AdvanceMarker(marker, MarkerPosition::InitialPostPositionUnit, pb);
+        } else {
+            nextPos = AdvanceMarker(marker, MarkerPosition::FinalPostPositionUnit, pb);
+        }
+        nameMarker.stream = pb.createAnd(markerVar(nextPos), markerVar(nameMarker), name->getName());
+        return nameMarker;
     }
-    nameMarker.stream = pb.createAnd(markerVar(nextPos), markerVar(nameMarker), name->getName());
-    return nameMarker;
+    else {
+        return process(name->getDefinition(), marker, pb);
+    }
 }
 
 inline MarkerType RE_Compiler::compileName(Name * name, PabloBuilder & pb) {

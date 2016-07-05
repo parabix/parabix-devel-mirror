@@ -170,9 +170,10 @@ private:
 
 private:
 
-    Cursor                      mCursor;
     ModeFlagSet                 fModeFlagSet;
     bool                        fNested;
+    Cursor                      mCursor;
+    unsigned                    mCaptureGroupCount;
     NameMap                     mNameMap;
     Memoizer                    mMemoizer;
 };

@@ -34,7 +34,13 @@ bool isByteLength(const RE * re) {
     } else if (const Intersect * e = dyn_cast<Intersect>(re)) {
         return isByteLength(e->getLH()) && isByteLength(e->getRH());
     } else if (const Name * n = dyn_cast<Name>(re)) {
-        return (n->getType() == Name::Type::Byte);
+        if (n->getType() == Name::Type::Byte) {
+            return true;
+        }
+        else if (n->getType() == Name::Type::Capture || n->getType() == Name::Type::Reference) {
+            return isByteLength(n->getDefinition());
+        }
+        return false;
     }
     return false; // otherwise
 }
@@ -61,7 +67,13 @@ bool isUnicodeUnitLength(const RE * re) {
         return true;
     } else if (const Name * n = dyn_cast<Name>(re)) {
         // Eventually names might be set up for not unit length items.
-        return (n->getType() == Name::Type::Unicode || n->getType() == Name::Type::UnicodeProperty || n->getType() == Name::Type::Byte);
+        if (n->getType() == Name::Type::Unicode || n->getType() == Name::Type::UnicodeProperty || n->getType() == Name::Type::Byte) {
+            return true;
+        }
+        else if (n->getType() == Name::Type::Capture || n->getType() == Name::Type::Reference) {
+            return isUnicodeUnitLength(n->getDefinition());
+        }
+        return false;
     }
     return false; // otherwise
 }
@@ -121,6 +133,9 @@ std::pair<int, int> getUnicodeUnitLengthRange(const RE * re) {
             case Name::Type::Unicode:
             case Name::Type::UnicodeProperty:
                 return std::make_pair(1, 1);
+            case Name::Type::Capture:
+            case Name::Type::Reference:
+                return getUnicodeUnitLengthRange(n->getDefinition());
             case Name::Type::Unknown:
                 return std::make_pair(0, std::numeric_limits<int>::max());
         }
@@ -164,8 +179,19 @@ int minMatchLength(RE * re) {
     else if (isa<Any>(re)) {
         return 1;
     }
-    else if (isa<Name>(re)) {
-        return 1;
+    else if (const Name * n = dyn_cast<Name>(re)) {
+    // Eventually names might be set up for not unit length items.
+        switch (n->getType()) {
+            case Name::Type::Byte:
+            case Name::Type::Unicode:
+            case Name::Type::UnicodeProperty:
+                return 1;
+            case Name::Type::Capture:
+            case Name::Type::Reference:
+                return minMatchLength(n->getDefinition());
+            case Name::Type::Unknown:
+                return 0;
+        }
     }
     return 0; // otherwise
 }
