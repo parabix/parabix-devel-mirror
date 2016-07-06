@@ -385,7 +385,7 @@ inline void DistributivePass::distribute(Variadic * const var) {
 
     std::vector<Variadic *> Q = {var};
 
-    while (!Q.empty() {
+    while (!Q.empty()) {
         Variadic * expr = CanonicalizeDFG::canonicalize(Q.back()); Q.pop_back();
         PabloAST * const replacement = Simplifier::fold(expr, expr->getParent());
         if (LLVM_UNLIKELY(replacement != nullptr)) {

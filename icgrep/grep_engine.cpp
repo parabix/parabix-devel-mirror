@@ -149,7 +149,6 @@ re::CC *  GrepEngine::grepCodepoints() {
     setParsedCodePointSet();
     char * mFileBuffer = getUnicodeNameDataPtr();
     size_t mFileSize = getUnicodeNameDataSize();
-    std::string mFileName = "Uname.txt";
 
     mGrepFunction(mFileBuffer, mFileSize, 0);
 

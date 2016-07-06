@@ -390,7 +390,7 @@ void PabloVerifier::verify(const PabloFunction & function, const std::string loc
         verifyProgramStructure(function);
         verifyUseDefInformation(function);
         isTopologicallyOrdered(function);
-    } catch(std::runtime_error err) {
+    } catch(std::runtime_error & err) {
         raw_os_ostream out(std::cerr);
         PabloPrinter::print(function, out);
         out.flush();

@@ -1439,7 +1439,7 @@ void MultiplexingPass::doTransitiveReductionOfSubsetGraph() {
                 Q.push_back(v);
             }
         }
-    } while (Q.size() > 0);
+    } while (!Q.empty());
 }
 
 
