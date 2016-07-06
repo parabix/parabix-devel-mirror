@@ -198,7 +198,7 @@ void UCDCompiler::generateRange(const RangeList & ifRanges, const codepoint_t lo
             }
 
             // If this range is empty, just skip creating the if block
-            if (targets.size() > 0) {
+            if (!targets.empty()) {
                 builder.createIf(ifTestCompiler(range.first, range.second, builder), std::move(targets), inner_block);
                 for (const auto ti : intersectingTargets) {
                     auto f = mTargetMap.find(ti.first);

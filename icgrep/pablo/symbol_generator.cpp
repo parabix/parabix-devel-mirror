@@ -42,12 +42,11 @@ Integer * SymbolGenerator::getInteger(const integer_t value) {
 
 String * SymbolGenerator::make(const std::string prefix, const bool generated) {
     auto f = mPrefixMap.find(prefix);
-    unsigned count = 0;
     if (f == mPrefixMap.end()) {
         mPrefixMap.insert(std::make_pair(prefix, 1));
         return get(prefix, generated);
     } else {
-        count = f->second++;
+        unsigned count = f->second++;
         return get(prefix + std::to_string(count), generated);
     }
 }

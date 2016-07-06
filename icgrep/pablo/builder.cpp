@@ -7,7 +7,7 @@ struct __##NAME { \
     inline PabloAST * operator()(PabloAST * arg) { \
         return mPb->NAME(arg); \
     } \
-    inline PabloAST * operator()(PabloAST * arg, const std::string name) { \
+    inline PabloAST * operator()(PabloAST * arg, const std::string & name) { \
         return mPb->NAME(arg, name); \
     } \
     inline __##NAME(PabloBlock * pb) : mPb(pb) {} \
@@ -22,7 +22,7 @@ struct __##NAME { \
     inline PabloAST * operator()(PabloAST * arg1, PabloAST * arg2) { \
         return mPb->NAME(arg1, arg2); \
     } \
-    inline PabloAST * operator()(PabloAST * arg1, PabloAST * arg2, const std::string name) { \
+    inline PabloAST * operator()(PabloAST * arg1, PabloAST * arg2, const std::string & name) { \
         return mPb->NAME(arg1, arg2, name); \
     } \
     inline __##NAME(PabloBlock * pb) : mPb(pb) {} \
@@ -38,7 +38,7 @@ struct __##NAME { \
     inline PabloAST * operator()(PabloAST * arg1, PabloAST * arg2, PabloAST * arg3) { \
         return mPb->NAME(arg1, arg2, arg3); \
     } \
-    inline PabloAST * operator()(PabloAST * arg1, PabloAST * arg2, PabloAST * arg3, const std::string name) { \
+    inline PabloAST * operator()(PabloAST * arg1, PabloAST * arg2, PabloAST * arg3, const std::string & name) { \
         return mPb->NAME(arg1, arg2, arg3, name); \
     } \
     inline __##NAME(PabloBlock * pb) : mPb(pb) {} \

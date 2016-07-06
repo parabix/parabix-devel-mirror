@@ -574,7 +574,7 @@ void eliminateUnecessaryDependencies(ScopeDependencyGraph & G) {
             Q.push(u);
         }
     }
-    while (Q.size() > 0) {
+    while (!Q.empty()) {
         const auto u = Q.front(); Q.pop();
         visited[u] = true;
         for (auto e : make_iterator_range(in_edges(u, G))) {
