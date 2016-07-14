@@ -85,7 +85,7 @@ void IDISA_Builder::CallPrintInt(const std::string & name, Value * const value) 
         FunctionType *FT = FunctionType::get(getVoidTy(), { PointerType::get(getInt8Ty(), 0), getInt64Ty() }, false);
         Function * function = Function::Create(FT, Function::InternalLinkage, "PrintInt", mMod);
         auto arg = function->arg_begin();
-        std::string out = "%-40s = %" PRIi64 "\n";
+        std::string out = "%-40s = %" PRIx64 "\n";
         BasicBlock * entry = BasicBlock::Create(mMod->getContext(), "entry", function);
         IRBuilder<> builder(entry);
         std::vector<Value *> args;
