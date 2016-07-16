@@ -552,6 +552,7 @@ A plain line.
 <grepcase regexp="^\u{4F60}$" datafile="codepoints" grepcount="1"/>
 <grepcase regexp="(?g)^\u{4F60}$" datafile="codepoints" grepcount="1"/> 
 <grepcase regexp="^ক$" datafile="codepoints" grepcount="1"/> 
+<!-- Bad tests:
 <grepcase regexp="(?g)^ক$" datafile="codepoints" grepcount="2"/>
 <grepcase regexp="^ক$" datafile="codepoints" grepcount="1"/> 
 <grepcase regexp="(?g)^ক+$" datafile="codepoints" grepcount="6"/>  
@@ -559,6 +560,7 @@ A plain line.
 <grepcase regexp="(?g)^ক{1,27}$" datafile="codepoints" grepcount="6"/>  
 <grepcase regexp="(^ক{1,2}$)|(^ক{4,6}$)" datafile="codepoints" grepcount="1"/> 
 <grepcase regexp="(?g)(^ক{1,2}$)|(^ক{4,6}$)" datafile="codepoints" grepcount="6"/> 
+-->
 <datafile id = "EmptyFile"/>
 <grepcase regexp="ab" datafile="EmptyFile" grepcount="0"/> 
 <datafile id = "LineBreaking">CRLF1&#13;&#10;CRLF2&#13;&#10;CRLF3&#13;&#10;
