@@ -10,7 +10,7 @@ header_match_RE3 = re.compile('^ *header .* ([-A-Za-z0-9:]+) *=~ *m([^A-Za-z0-9]
 header_nomatch_RE1 = re.compile('^ *header .* ([-A-Za-z0-9:]+) *=!')
 
 
-pattern_RE1 = re.compile('.*(/)(.*)/([misx]*) *(?:#.*)?$')
+pattern_RE1 = re.compile(r"""[^\\]*(/)(.*)/([misx]*) *(?:#.*)?$""")
 pattern_RE2 = re.compile('.*m([{])(.*)[}]([misx]*) *(?:#.*)?$')
 pattern_RE3 = re.compile('.*m([^A-Za-z0-9])(.*)\1([misx]*) *(?:#.*)?$')
 
