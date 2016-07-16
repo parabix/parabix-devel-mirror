@@ -29,7 +29,11 @@ private:
 class StreamSetBuffer {
 public:
     StreamSetBuffer(IDISA::IDISA_Builder * b, StreamSetType ss_type, unsigned SegmentSize) :
-    iBuilder(b), mStreamSetType(ss_type), mSegmentSize(SegmentSize), mStreamSetBufferPtr(nullptr) {}
+    iBuilder(b), mStreamSetType(ss_type), mSegmentSize(SegmentSize), mStreamSetBufferPtr(nullptr) {
+        if (((SegmentSize - 1) & SegmentSize) != 0) {
+            throw std::runtime_error("Segment size must be a power of 2!");
+        }
+    }
 
     llvm::Type * getStreamSetBlockType();
     
@@ -39,7 +43,12 @@ public:
     
     llvm::Value * allocateBuffer();
     
+    llvm::Value * getStreamSetBufferPtr() {return mStreamSetBufferPtr;}
+    
+    unsigned getSegmentSize() { return mSegmentSize; }
+
     llvm::Value * getBlockPointer(llvm::Value * blockNo);
+    
 private:
     IDISA::IDISA_Builder * iBuilder;
     StreamSetType mStreamSetType;
