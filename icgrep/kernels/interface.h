@@ -13,6 +13,7 @@
 #include <IDISA/idisa_builder.h>
 #include "streamset.h"
 
+    
 struct ScalarBinding {
     llvm::Type * scalarType;
     std::string scalarName;
@@ -25,6 +26,7 @@ struct StreamSetBinding {
    
 const std::string init_suffix = "_Init";
 const std::string doBlock_suffix = "_DoBlock";
+const std::string doSegment_suffix = "_DoSegment";
 const std::string finalBlock_suffix = "_FinalBlock";
 const std::string accumulator_infix = "_get_";
 
@@ -53,11 +55,13 @@ public:
     void addKernelDeclarations(Module * client);
     
     llvm::Value * createInstance(std::vector<llvm::Value *> initialParameters);
+    llvm::Value * createInstance(std::vector<llvm::Value *> initialParameters, std::vector<kernel::StreamSetBuffer *> inputs, std::vector<kernel::StreamSetBuffer *> outputBuffers);
     llvm::Value * createDoBlockCall(llvm::Value * kernelInstance, std::vector<Value *> streamSets);
+    llvm::Value * createDoSegmentCall(llvm::Value * kernelInstance, llvm::Value * blkCount);
     llvm::Value * createFinalBlockCall(llvm::Value * kernelInstance, llvm::Value * remainingBytes, std::vector<llvm::Value *> streamSets);
     llvm::Value * createGetAccumulatorCall(llvm::Value * kernelInstance, std::string accumName);
     
-protected:
+//protected:
     
     IDISA::IDISA_Builder * iBuilder;
     std::string mKernelName;
@@ -69,5 +73,4 @@ protected:
     llvm::Type * mDoBlockReturnType;
     llvm::Type * mKernelStateType;
 };
-
 #endif 

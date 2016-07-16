@@ -36,6 +36,17 @@ void KernelBuilder::setDoBlockReturnType(llvm::Type * t) {
 
 void KernelBuilder::prepareKernel() {
     if (!mDoBlockReturnType) mDoBlockReturnType = iBuilder->getVoidTy();
+    addScalar(iBuilder->getInt64Ty(), blockNoScalar);
+    for (auto sSet : mStreamSetInputs) {
+        mScalarInputs.push_back(ScalarBinding{PointerType::get(sSet.ssType.getStreamSetBlockType(iBuilder), 0), sSet.ssName + basePtrSuffix});
+        mScalarInputs.push_back(ScalarBinding{iBuilder->getInt64Ty(), sSet.ssName + blkMaskSuffix});
+        //Or possibly add as internal state, with code in init function:  addScalar(iBuilder->getInt64Ty(), sSet.ssName + blkMaskSuffix);
+    }
+    for (auto sSet : mStreamSetOutputs) {
+        mScalarInputs.push_back(ScalarBinding{PointerType::get(sSet.ssType.getStreamSetBlockType(iBuilder), 0), sSet.ssName + basePtrSuffix});
+        mScalarInputs.push_back(ScalarBinding{iBuilder->getInt64Ty(), sSet.ssName + blkMaskSuffix});
+        //Or possibly add as internal state, with code in init function:  addScalar(iBuilder->getInt64Ty(), sSet.ssName + blkMaskSuffix);
+    }
     for (auto binding : mScalarInputs) {
         addScalar(binding.scalarType, binding.scalarName);
     }
@@ -68,6 +79,7 @@ void KernelBuilder::generateKernel() {
     KernelInterface::addKernelDeclarations(m);
     generateDoBlockMethod();     // must be implemented by the KernelBuilder subtype
     generateFinalBlockMethod();  // possibly overriden by the KernelBuilder subtype
+    generateDoSegmentMethod();
 
     // Implement the accumulator get functions
     for (auto binding : mScalarOutputs) {
@@ -119,6 +131,64 @@ void KernelBuilder::generateFinalBlockMethod() {
     }
     iBuilder->restoreIP(savePoint);
 }
+
+//  The default doSegment method simply dispatches to the doBlock routine.
+void KernelBuilder::generateDoSegmentMethod() {
+    IDISA::IDISA_Builder::InsertPoint savePoint = iBuilder->saveIP();
+    Module * m = iBuilder->getModule();
+    Function * doBlockFunction = m->getFunction(mKernelName + doBlock_suffix);
+    Function * doSegmentFunction = m->getFunction(mKernelName + doSegment_suffix);
+    iBuilder->SetInsertPoint(BasicBlock::Create(iBuilder->getContext(), "entry", doSegmentFunction, 0));
+    BasicBlock * entryBlock = iBuilder->GetInsertBlock();
+    BasicBlock * blockLoop = BasicBlock::Create(iBuilder->getContext(), "blockLoop", doSegmentFunction, 0);
+    BasicBlock * blocksDone = BasicBlock::Create(iBuilder->getContext(), "blocksDone", doSegmentFunction, 0);
+
+    
+    Function::arg_iterator args = doSegmentFunction->arg_begin();
+    Value * self = &*(args++);
+    Value * blocksToDo = &*(args);
+    
+    std::vector<Value *> basePtrs;
+    std::vector<Value *> blockMasks;
+    for (auto sSet : mStreamSetInputs) {
+        basePtrs.push_back(getScalarField(self, sSet.ssName + basePtrSuffix));
+        blockMasks.push_back(getScalarField(self, sSet.ssName + blkMaskSuffix));
+    }
+    for (auto sSet : mStreamSetOutputs) {
+        basePtrs.push_back(getScalarField(self, sSet.ssName + basePtrSuffix));
+        blockMasks.push_back(getScalarField(self, sSet.ssName + blkMaskSuffix));
+    }
+    
+    iBuilder->CreateBr(blockLoop);
+    
+    iBuilder->SetInsertPoint(blockLoop);
+    PHINode * blocksRemaining = iBuilder->CreatePHI(iBuilder->getInt64Ty(), 2, "blocksRemaining");
+    blocksRemaining->addIncoming(blocksToDo, entryBlock);
+    
+    Value * blockNo = getScalarField(self, blockNoScalar);
+    std::vector<Value *> doBlockArgs = {self};
+
+    for (unsigned i = 0; i < basePtrs.size(); i++) {
+        doBlockArgs.push_back(iBuilder->CreateGEP(basePtrs[i], iBuilder->CreateAnd(blockNo, blockMasks[i])));
+    }
+    Value * rslt = iBuilder->CreateCall(doBlockFunction, doBlockArgs);
+    setScalarField(self, blockNoScalar, iBuilder->CreateAdd(blockNo, iBuilder->getInt64(1)));
+    blocksToDo = iBuilder->CreateSub(blocksRemaining, iBuilder->getInt64(1));
+    blocksRemaining->addIncoming(blocksToDo, blockLoop);
+    Value * notDone = iBuilder->CreateICmpUGT(blocksToDo, iBuilder->getInt64(0));
+    iBuilder->CreateCondBr(notDone, blockLoop, blocksDone);
+    
+    iBuilder->SetInsertPoint(blocksDone);
+    if (mDoBlockReturnType->isVoidTy()) {
+        iBuilder->CreateRetVoid();
+    }
+    else {
+        iBuilder->CreateRet(rslt);
+    }
+    iBuilder->restoreIP(savePoint);
+}
+
+
 
 Value * KernelBuilder::getScalarIndex(std::string fieldName) {
     const auto f = mInternalStateNameMap.find(fieldName);

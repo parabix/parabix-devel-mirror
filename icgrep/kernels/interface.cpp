@@ -104,6 +104,17 @@ void KernelInterface::addKernelDeclarations(Module * client) {
         doBlockArg->setName(outputSet.ssName);
         finalBlockArg->setName(outputSet.ssName);
     }
+    
+    // Create the doSegment function prototype.
+    std::vector<Type *> doSegmentParameters = {selfType, iBuilder->getInt64Ty()};
+    FunctionType * doSegmentFunctionType = FunctionType::get(mDoBlockReturnType, doSegmentParameters, false);
+    std::string doSegmentName = mKernelName + doSegment_suffix;
+    Function * doSegmentFn = Function::Create(doSegmentFunctionType, GlobalValue::ExternalLinkage, doSegmentName, client);
+    doSegmentFn->setCallingConv(CallingConv::C);
+    doSegmentFn->setDoesNotThrow();
+    for (int i = 1; i <= doBlockParameters.size(); i++) {
+        doSegmentFn->setDoesNotCapture(i);
+    }
     iBuilder->setModule(saveModule);
     iBuilder->restoreIP(savePoint);
 }
@@ -127,6 +138,35 @@ Value * KernelInterface::createInstance(std::vector<Value *> args) {
     iBuilder->CreateCall(initMethod, init_args);
     return kernelInstance;
 }
+
+Value * KernelInterface::createInstance(std::vector<Value *> args, 
+                                        std::vector<StreamSetBuffer *> inputBuffers,
+                                        std::vector<StreamSetBuffer *> outputBuffers) {
+    Value * kernelInstance = iBuilder->CreateAlloca(mKernelStateType);
+    Module * m = iBuilder->getModule();
+    std::vector<Value *> init_args = {kernelInstance};
+    for (auto a : args) {
+        init_args.push_back(a);
+    }
+    for (auto b : inputBuffers) { 
+        init_args.push_back(b->getStreamSetBufferPtr());
+        init_args.push_back(iBuilder->getInt64(b->getSegmentSize() - 1));
+    }
+    for (auto b : outputBuffers) { 
+        init_args.push_back(b->getStreamSetBufferPtr());
+        init_args.push_back(iBuilder->getInt64(b->getSegmentSize() - 1));
+    }
+    std::string initFnName = mKernelName + init_suffix;
+    Function * initMethod = m->getFunction(initFnName);
+    if (!initMethod) {
+        throw std::runtime_error("Cannot find " + initFnName);
+    }
+    iBuilder->CreateCall(initMethod, init_args);
+    return kernelInstance;
+}
+
+
+
 
 Value * KernelInterface::createDoBlockCall(Value * self, std::vector<Value *> streamSets) {
     Module * m = iBuilder->getModule();
@@ -154,6 +194,17 @@ Value * KernelInterface::createFinalBlockCall(Value * self, Value * remainingByt
         args.push_back(ss);
     }
     return iBuilder->CreateCall(finalBlockMethod, args);
+}
+
+Value * KernelInterface::createDoSegmentCall(Value * self, Value * blksToDo) {
+    Module * m = iBuilder->getModule();
+    std::string fnName = mKernelName + doSegment_suffix;
+    Function * method = m->getFunction(fnName);
+    if (!method) {
+        throw std::runtime_error("Cannot find " + fnName);
+    }
+    std::vector<Value *> args = {self, blksToDo};
+    return iBuilder->CreateCall(method, args);
 }
 
 Value * KernelInterface::createGetAccumulatorCall(Value * self, std::string accumName) {

@@ -13,6 +13,10 @@
 #include <IDISA/idisa_builder.h>
 #include <boost/container/flat_map.hpp>
 
+const std::string blockNoScalar = "blockNo";
+const std::string basePtrSuffix = "_basePtr";
+const std::string blkMaskSuffix = "_blkMask";
+
 
 namespace kernel {
     
@@ -36,7 +40,7 @@ public:
     // Generate the Kernel to the current module (iBuilder->getModule()).
     void generateKernel();
     
-protected:
+//protected:
     //
     // Kernel builder subtypes define their logic of kernel construction
     // in terms of 3 virtual methods for
@@ -63,6 +67,8 @@ protected:
     
     virtual void generateFinalBlockMethod();
     
+    void generateDoSegmentMethod();
+    
     // Add an additional scalar field to the KernelState struct.
     // Must occur before any call to addKernelDeclarations or createKernelModule.
     void addScalar(llvm::Type * t, std::string scalarName);
@@ -86,7 +92,7 @@ protected:
     // Get a parameter by name.
     llvm::Value * getParameter(llvm::Function * f, std::string paramName);
 
-protected:
+//protected:
 
     std::vector<llvm::Type *>  mKernelFields;
     NameMap                    mInternalStateNameMap;

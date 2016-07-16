@@ -8,201 +8,109 @@
 #include "pipeline.h"
 #include "utf_encoding.h"
 
-#include <kernels/scanmatchgen.h>
+#include <IDISA/idisa_builder.h>
+
+#include <kernels/interface.h>
+#include <kernels/kernel.h>
 #include <kernels/s2p_kernel.h>
 
-#include <pablo/function.h>
-#include <pablo/pablo_kernel.h>
-#include <pablo/pablo_toolchain.h>
 
-#include <llvm/IR/Intrinsics.h>
-#include "llvm/Support/SourceMgr.h"
-#include "llvm/IRReader/IRReader.h"
-#include "llvm/Linker/Linker.h"
-
-
-
-using namespace pablo;
 using namespace kernel;
 
-PipelineBuilder::PipelineBuilder(Module * m, IDISA::IDISA_Builder * b)
-: mMod(m)
-, iBuilder(b)
-, mBitBlockType(b->getBitBlockType())
-, mBlockSize(b->getBitBlockWidth()) {
 
-}
-
-PipelineBuilder::~PipelineBuilder() {
-}
-
-inline Value * generatePopcount(IDISA::IDISA_Builder * iBuilder, Value * bits) {
-    Value * ctpopFunc = Intrinsic::getDeclaration(iBuilder->getModule(), Intrinsic::ctpop, bits->getType());
-    return iBuilder->CreateCall(ctpopFunc, {bits});
-}
-
-inline Value * Cal_Count(Value * match_ptr, IDISA::IDISA_Builder * iBuilder) {
-    Value * matches = iBuilder->CreateLoad(match_ptr, false, "match");
-    return generatePopcount(iBuilder, matches);
-}
-
-Function * PipelineBuilder::ExecuteKernels(PabloFunction * function, bool isNameExpression, bool CountOnly, bool UTF_16) {
+void generatePipelineLoop(IDISA::IDISA_Builder * iBuilder, std::vector<KernelBuilder *> kernels, std::vector<Value *> instances, Value * fileSize) {
     
-    s2pKernel  s2pk(iBuilder);
-    scanMatchKernel scanMatchK(iBuilder, 64, false);
-
-    s2pk.generateKernel();
-    scanMatchK.generateKernel();
-    
-    //std::unique_ptr<Module> s2pM = s2pk.createKernelModule();
-    //std::unique_ptr<Module> scanMatchM = scanMatchK.createKernelModule();
-    
-    //s2pk.addKernelDeclarations(mMod);
-    //scanMatchK.addKernelDeclarations(mMod);
-
-    pablo_function_passes(function);
-    PabloKernel  icgrepK(iBuilder, "icgrep", function, {"matchedLineCount"});
-    icgrepK.generateKernel();
-
-    //std::unique_ptr<Module> icgrepM = icgrepK.createKernelModule();
-    //icgrepK.addKernelDeclarations(mMod);
-    
-    Type * const int64ty = iBuilder->getInt64Ty();
-    Type * const int8PtrTy = iBuilder->getInt8PtrTy();
-    Type * const inputType = PointerType::get(ArrayType::get(ArrayType::get(mBitBlockType, (UTF_16 ? 16 : 8)), 1), 0);
-    Type * const resultTy = CountOnly ? int64ty : iBuilder->getVoidTy();
-    Function * const main = cast<Function>(mMod->getOrInsertFunction("Main", resultTy, inputType, int64ty, int64ty, nullptr));
-    main->setCallingConv(CallingConv::C);
-    Function::arg_iterator args = main->arg_begin();
-
-    Value * const inputStream = &*(args++);
-    inputStream->setName("input");
-    Value * const bufferSize = &*(args++);
-    bufferSize->setName("bufferSize");
-    Value * const fileIdx = &*(args++);
-    fileIdx->setName("fileIdx");
-
-    iBuilder->SetInsertPoint(BasicBlock::Create(mMod->getContext(), "entry", main,0));
     BasicBlock * entryBlock = iBuilder->GetInsertBlock();
+    Function * main = entryBlock->getParent();
+        
+    const unsigned segmentSize = codegen::SegmentSize;
+    Type * const int64ty = iBuilder->getInt64Ty();
+
+    // Create the basic blocks for the loop.
     BasicBlock * segmentCondBlock = nullptr;
     BasicBlock * segmentBodyBlock = nullptr;
-    const unsigned segmentSize = codegen::SegmentSize;
-    
     if (segmentSize > 1) {
-        segmentCondBlock = BasicBlock::Create(mMod->getContext(), "segmentCond", main, 0);
-        segmentBodyBlock = BasicBlock::Create(mMod->getContext(), "segmentBody", main, 0);
+        segmentCondBlock = BasicBlock::Create(iBuilder->getContext(), "segmentCond", main, 0);
+        segmentBodyBlock = BasicBlock::Create(iBuilder->getContext(), "segmentBody", main, 0);
     }
-    BasicBlock * fullCondBlock = BasicBlock::Create(mMod->getContext(), "fullCond", main, 0);
-    BasicBlock * fullBodyBlock = BasicBlock::Create(mMod->getContext(), "fullBody", main, 0);
-    BasicBlock * finalBlock = BasicBlock::Create(mMod->getContext(), "final", main, 0);
-
+    BasicBlock * fullCondBlock = BasicBlock::Create(iBuilder->getContext(), "fullCond", main, 0);
+    BasicBlock * fullBodyBlock = BasicBlock::Create(iBuilder->getContext(), "fullBody", main, 0);
+    BasicBlock * finalBlock = BasicBlock::Create(iBuilder->getContext(), "final", main, 0);
     
-    StreamSetBuffer ByteStream(iBuilder, StreamSetType(1, (UTF_16 ? 16 : 8)), 0);
-    StreamSetBuffer BasisBits(iBuilder, StreamSetType((UTF_16 ? 16 : 8), 1), segmentSize);
-    StreamSetBuffer MatchResults(iBuilder, StreamSetType(2, 1), segmentSize);
-    
-    ByteStream.setStreamSetBuffer(inputStream);
-    BasisBits.allocateBuffer();
-    MatchResults.allocateBuffer();
-    
-    Value * s2pInstance = s2pk.createInstance({});
-    Value * icgrepInstance = icgrepK.createInstance({});
-    Value * scanMatchInstance = nullptr;
-    if (!CountOnly) {
-        scanMatchInstance = scanMatchK.createInstance({iBuilder->CreateBitCast(inputStream, int8PtrTy), bufferSize, fileIdx});
-    }
-
     
     Value * initialBufferSize = nullptr;
     Value * initialBlockNo = nullptr;
     BasicBlock * initialBlock = nullptr;
-
+    
     if (segmentSize > 1) {
         iBuilder->CreateBr(segmentCondBlock);
         iBuilder->SetInsertPoint(segmentCondBlock);
         PHINode * remainingBytes = iBuilder->CreatePHI(int64ty, 2, "remainingBytes");
-        remainingBytes->addIncoming(bufferSize, entryBlock);
+        remainingBytes->addIncoming(fileSize, entryBlock);
         PHINode * blockNo = iBuilder->CreatePHI(int64ty, 2, "blockNo");
         blockNo->addIncoming(iBuilder->getInt64(0), entryBlock);
-
-        Constant * const step = ConstantInt::get(int64ty, mBlockSize * segmentSize);
+        
+        Constant * const step = ConstantInt::get(int64ty, iBuilder->getBitBlockWidth() * segmentSize);
         Value * segmentCondTest = iBuilder->CreateICmpULT(remainingBytes, step);
         iBuilder->CreateCondBr(segmentCondTest, fullCondBlock, segmentBodyBlock);
+        
         iBuilder->SetInsertPoint(segmentBodyBlock);
-        for (unsigned i = 0; i < segmentSize; ++i) {
-            Value * blkNo = iBuilder->CreateAdd(blockNo, iBuilder->getInt64(i));
-            s2pk.createDoBlockCall(s2pInstance, {ByteStream.getBlockPointer(blkNo), BasisBits.getBlockPointer(blkNo)});
-        }
-        for (unsigned i = 0; i < segmentSize; ++i) {
-            Value * blkNo = iBuilder->CreateAdd(blockNo, iBuilder->getInt64(i));
-            icgrepK.createDoBlockCall(icgrepInstance, {BasisBits.getBlockPointer(blkNo), MatchResults.getBlockPointer(blkNo)});
-        }
-        if (!CountOnly) {
-            for (unsigned i = 0; i < segmentSize; ++i) {
-                Value * blkNo = iBuilder->CreateAdd(blockNo, iBuilder->getInt64(i));
-                scanMatchK.createDoBlockCall(scanMatchInstance, {MatchResults.getBlockPointer(blkNo)});
-            }
+        Value * segBlocks = ConstantInt::get(int64ty, segmentSize);
+        for (unsigned i = 0; i < kernels.size(); i++) {
+            kernels[i]->createDoSegmentCall(instances[i], segBlocks);
         }
         remainingBytes->addIncoming(iBuilder->CreateSub(remainingBytes, step), segmentBodyBlock);
-        blockNo->addIncoming(iBuilder->CreateAdd(blockNo, iBuilder->getInt64(segmentSize)), segmentBodyBlock);
-
+        blockNo->addIncoming(iBuilder->CreateAdd(blockNo, segBlocks), segmentBodyBlock);
+        
         iBuilder->CreateBr(segmentCondBlock);
         initialBufferSize = remainingBytes;
         initialBlockNo = blockNo;
         initialBlock = segmentCondBlock;
     } else {
-        initialBufferSize = bufferSize;
-        initialBlockNo = iBuilder->getInt64(0);
+        initialBufferSize = fileSize;
+        initialBlockNo = ConstantInt::get(int64ty, 0);
         initialBlock = entryBlock;
         iBuilder->CreateBr(fullCondBlock);
     }
-
+    
     iBuilder->SetInsertPoint(fullCondBlock);
     PHINode * remainingBytes = iBuilder->CreatePHI(int64ty, 2, "remainingBytes");
     remainingBytes->addIncoming(initialBufferSize, initialBlock);
     PHINode * blockNo = iBuilder->CreatePHI(int64ty, 2, "blockNo");
     blockNo->addIncoming(initialBlockNo, initialBlock);
     
-    Constant * const step = ConstantInt::get(int64ty, mBlockSize * (UTF_16 ? 2 : 1));
+    Constant * const step = ConstantInt::get(int64ty, iBuilder->getBitBlockWidth());
     Value * fullCondTest = iBuilder->CreateICmpULT(remainingBytes, step);
     iBuilder->CreateCondBr(fullCondTest, finalBlock, fullBodyBlock);
-
+    
     // Full Block Pipeline loop
     iBuilder->SetInsertPoint(fullBodyBlock);
     
-    Value * byteStreamPtr = ByteStream.getBlockPointer(blockNo);
-    Value * basisBitsPtr = BasisBits.getBlockPointer(blockNo);
-    Value * matchResultsPtr = MatchResults.getBlockPointer(blockNo);
-    s2pk.createDoBlockCall(s2pInstance, {byteStreamPtr, basisBitsPtr});
-    icgrepK.createDoBlockCall(icgrepInstance, {basisBitsPtr, matchResultsPtr});
-    if (!CountOnly) {
-
-        scanMatchK.createDoBlockCall(scanMatchInstance, {matchResultsPtr});
+    for (unsigned i = 0; i < kernels.size(); i++) {
+        kernels[i]->createDoSegmentCall(instances[i], ConstantInt::get(int64ty, 1));
     }
+    
     remainingBytes->addIncoming(iBuilder->CreateSub(remainingBytes, step), fullBodyBlock);
     blockNo->addIncoming(iBuilder->CreateAdd(blockNo, iBuilder->getInt64(1)), fullBodyBlock);
     iBuilder->CreateBr(fullCondBlock);
-
-    iBuilder->SetInsertPoint(finalBlock);
-    byteStreamPtr = ByteStream.getBlockPointer(blockNo);
-    basisBitsPtr = BasisBits.getBlockPointer(blockNo);
-    matchResultsPtr = MatchResults.getBlockPointer(blockNo);
-    s2pk.createFinalBlockCall(s2pInstance, remainingBytes, {byteStreamPtr, basisBitsPtr});
-    icgrepK.createFinalBlockCall(icgrepInstance, remainingBytes, {basisBitsPtr, matchResultsPtr});
-    if (CountOnly) {
-        Value * matchCount = icgrepK.createGetAccumulatorCall(icgrepInstance, "matchedLineCount");
-        iBuilder->CreateRet(matchCount);
-    }
-    else {
-        scanMatchK.createFinalBlockCall(scanMatchInstance, remainingBytes, {matchResultsPtr});
-        iBuilder->CreateRetVoid();
-    }
     
-    //Linker L(*mMod);
-    //L.linkInModule(std::move(s2pM));
-    //L.linkInModule(std::move(scanMatchM));
-    //L.linkInModule(std::move(icgrepM));
-
-
-    return main;
+    iBuilder->SetInsertPoint(finalBlock);
+    
+    for (unsigned i = 0; i < kernels.size(); i++) {
+        std::vector<Value *> basePtrs;
+        std::vector<Value *> blockMasks;
+        for (auto sSet : kernels[i]->mStreamSetInputs) {
+            basePtrs.push_back(kernels[i]->getScalarField(instances[i], sSet.ssName + basePtrSuffix));
+            blockMasks.push_back(kernels[i]->getScalarField(instances[i], sSet.ssName + blkMaskSuffix));
+        }
+        for (auto sSet : kernels[i]->mStreamSetOutputs) {
+            basePtrs.push_back(kernels[i]->getScalarField(instances[i], sSet.ssName + basePtrSuffix));
+            blockMasks.push_back(kernels[i]->getScalarField(instances[i], sSet.ssName + blkMaskSuffix));
+        }
+        std::vector<Value *> args;
+        for (unsigned i = 0; i < basePtrs.size(); i++) {
+            args.push_back(iBuilder->CreateGEP(basePtrs[i], iBuilder->CreateAnd(blockNo, blockMasks[i])));
+        }
+        kernels[i]->createFinalBlockCall(instances[i], remainingBytes, args);
+    }
 }
