@@ -32,6 +32,7 @@
 #include <kernels/interface.h>
 #include <kernels/kernel.h>
 #include <kernels/s2p_kernel.h>
+#include <kernels/pipeline.h>
 
 #include <pablo/pablo_compiler.h>
 #include <pablo/pablo_toolchain.h>
@@ -140,7 +141,7 @@ using namespace kernel;
 
 Function * wcPipeline(Module * mMod, IDISA::IDISA_Builder * iBuilder, pablo::PabloFunction * function) {
     Type * mBitBlockType = iBuilder->getBitBlockType();
-    unsigned mBlockSize = iBuilder->getBitBlockWidth();
+    
     s2pKernel  s2pk(iBuilder);
     std::unique_ptr<Module> s2pM = s2pk.createKernelModule();
     pablo_function_passes(function);
@@ -162,64 +163,28 @@ Function * wcPipeline(Module * mMod, IDISA::IDISA_Builder * iBuilder, pablo::Pab
     
     Value * const inputStream = &*(args++);
     inputStream->setName("input");
-    Value * const bufferSize = &*(args++);
-    bufferSize->setName("bufferSize");
+    Value * const fileSize = &*(args++);
+    fileSize->setName("fileSize");
     Value * const fileIdx = &*(args++);
     fileIdx->setName("fileIdx");
     
     iBuilder->SetInsertPoint(BasicBlock::Create(mMod->getContext(), "entry", main,0));
-    
-    BasicBlock * entryBlock = iBuilder->GetInsertBlock();
+    kernel::StreamSetBuffer ByteStream(iBuilder, kernel::StreamSetType(1, 8), 0);
+    kernel::StreamSetBuffer BasisBits(iBuilder, kernel::StreamSetType(8, 1), codegen::SegmentSize);
 
-    BasicBlock * fullCondBlock = BasicBlock::Create(mMod->getContext(), "fullCond", main, 0);
-    BasicBlock * fullBodyBlock = BasicBlock::Create(mMod->getContext(), "fullBody", main, 0);
-    BasicBlock * finalBlock = BasicBlock::Create(mMod->getContext(), "final", main, 0);
-
-    StreamSetBuffer ByteStream(iBuilder, StreamSetType(1, 8), 0);
-    StreamSetBuffer BasisBits(iBuilder, StreamSetType(8, 1), 1);
     ByteStream.setStreamSetBuffer(inputStream);
-    Value * basisBits = BasisBits.allocateBuffer();
-
-    Value * s2pInstance = s2pk.createInstance({});
-    Value * wcInstance = wck.createInstance({});
+    BasisBits.allocateBuffer();
     
-    Value * initialBufferSize = bufferSize;
-    BasicBlock * initialBlock = entryBlock;
-    Value * initialBlockNo = iBuilder->getInt64(0);
-
-    iBuilder->CreateBr(fullCondBlock);
-
+    Value * s2pInstance = s2pk.createInstance({}, {&ByteStream}, {&BasisBits});;
+    Value * wcInstance = wck.createInstance({}, {&BasisBits}, {});
     
-    iBuilder->SetInsertPoint(fullCondBlock);
-    PHINode * remainingBytes = iBuilder->CreatePHI(int64ty, 2, "remainingBytes");
-    remainingBytes->addIncoming(initialBufferSize, initialBlock);
-    PHINode * blockNo = iBuilder->CreatePHI(int64ty, 2, "blockNo");
-    blockNo->addIncoming(initialBlockNo, initialBlock);
-
-    Constant * const step = ConstantInt::get(int64ty, mBlockSize);
-    Value * fullCondTest = iBuilder->CreateICmpULT(remainingBytes, step);
-    iBuilder->CreateCondBr(fullCondTest, finalBlock, fullBodyBlock);
-    
-    iBuilder->SetInsertPoint(fullBodyBlock);
-
-    s2pk.createDoBlockCall(s2pInstance, {ByteStream.getBlockPointer(blockNo), basisBits});
-    wck.createDoBlockCall(wcInstance, {basisBits});
-
-    Value * diff = iBuilder->CreateSub(remainingBytes, step);
-
-    remainingBytes->addIncoming(diff, fullBodyBlock);
-    blockNo->addIncoming(iBuilder->CreateAdd(blockNo, iBuilder->getInt64(1)), fullBodyBlock);
-    iBuilder->CreateBr(fullCondBlock);
-    
-    iBuilder->SetInsertPoint(finalBlock);
-    s2pk.createFinalBlockCall(s2pInstance, remainingBytes, {ByteStream.getBlockPointer(blockNo), basisBits});
-    wck.createFinalBlockCall(wcInstance, remainingBytes, {basisBits});
+    generatePipelineLoop(iBuilder, {&s2pk, &wck}, {s2pInstance, wcInstance}, fileSize);
     
     Value * lineCount = wck.createGetAccumulatorCall(wcInstance, "lineCount");
     Value * wordCount = wck.createGetAccumulatorCall(wcInstance, "wordCount");
     Value * charCount = wck.createGetAccumulatorCall(wcInstance, "charCount");;
 
-    iBuilder->CreateCall(record_counts_routine, std::vector<Value *>({lineCount, wordCount, charCount, bufferSize, fileIdx}));
+    iBuilder->CreateCall(record_counts_routine, std::vector<Value *>({lineCount, wordCount, charCount, fileSize, fileIdx}));
     
     iBuilder->CreateRetVoid();
     
