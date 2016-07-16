@@ -18,7 +18,6 @@
 #include <re/re_diff.h>
 #include <re/re_intersect.h>
 #include <re/re_assertion.h>
-#include <re/re_grapheme_boundary.hpp>
 #include <re/re_analysis.h>
 #include <re/re_memoizer.hpp>
 #include <re/printer_re.h>
@@ -175,10 +174,10 @@ void RE_Compiler::initializeRequiredStreams_utf8() {
 
 
 RE * RE_Compiler::resolveUnicodeProperties(RE * re) {
-    Name * graphemeClusterRule = nullptr;
+    Name * ZeroWidth = nullptr;
     UCD::UCDCompiler::NameMap nameMap;
     std::unordered_set<Name *> visited;
-    nameMap = resolveNames(re, graphemeClusterRule);
+    nameMap = resolveNames(re, ZeroWidth);
     
     if (LLVM_LIKELY(nameMap.size() > 0)) {
         UCD::UCDCompiler ucdCompiler(mCCCompiler);
@@ -195,9 +194,9 @@ RE * RE_Compiler::resolveUnicodeProperties(RE * re) {
     }
 
     // Now precompile any grapheme segmentation rules
-    if (graphemeClusterRule) {
-        auto gcb = compileName(graphemeClusterRule, mPB);
-        mCompiledName.insert(std::make_pair(graphemeClusterRule, gcb));
+    if (ZeroWidth) {
+        auto gcb = compileName(ZeroWidth, mPB);
+        mCompiledName.insert(std::make_pair(ZeroWidth, gcb));
     }
     return re;
 }
@@ -241,8 +240,6 @@ MarkerType RE_Compiler::process(RE * re, MarkerType marker, PabloBuilder & pb) {
         return compileStart(marker, pb);
     } else if (isa<End>(re)) {
         return compileEnd(marker, pb);
-    } else if (isa<GraphemeBoundary>(re)) {
-        return compileGraphemeBoundary(cast<GraphemeBoundary>(re), marker, pb);
     }
     throw std::runtime_error("RE Compiler failed to process " + Printer_RE::PrintRE(re));
 }
@@ -269,8 +266,17 @@ inline MarkerType RE_Compiler::compileName(Name * name, MarkerType marker, Pablo
         }
         nameMarker.stream = pb.createAnd(markerVar(nextPos), markerVar(nameMarker), name->getName());
         return nameMarker;
-    }
-    else {
+    } else if (name->getType() == Name::Type::ZeroWidth) {
+        RE * zerowidth = name->getDefinition();
+        MarkerType zero = compile(zerowidth, pb);
+        AlignMarkers(marker, zero, pb);
+        PabloAST * ze = markerVar(zero);
+        const std::string value = name->getName();
+        if (value == "NonGCB") {
+            ze = pb.createNot(ze);
+        }
+        return makeMarker(markerPos(marker), pb.createAnd(markerVar(marker), ze, "zerowidth"));
+    } else {
         return process(name->getDefinition(), marker, pb);
     }
 }
@@ -573,7 +579,7 @@ inline MarkerType RE_Compiler::compileEnd(const MarkerType marker, pablo::PabloB
     }
 }
 
-inline MarkerType RE_Compiler::compileGraphemeBoundary(GraphemeBoundary * gb, MarkerType marker, pablo::PabloBuilder & pb) {
+/*inline MarkerType RE_Compiler::compileGraphemeBoundary(GraphemeBoundary * gb, MarkerType marker, pablo::PabloBuilder & pb) {
     auto f = mCompiledName.find(gb->getBoundaryRule());
     assert ("Internal error: failed to locate grapheme boundary rule!" && (f != mCompiledName.end()));
     if (gb->getExpression()) {
@@ -591,7 +597,7 @@ inline MarkerType RE_Compiler::compileGraphemeBoundary(GraphemeBoundary * gb, Ma
         marker = makeMarker(MarkerPosition::FinalPostPositionUnit, pb.createAnd(markerVar(marker), rule, "gb"));
     }
     return marker;
-}
+}*/
 
 inline MarkerType RE_Compiler::AdvanceMarker(MarkerType marker, const MarkerPosition newpos, PabloBuilder & pb) {
     if (marker.pos != newpos) {

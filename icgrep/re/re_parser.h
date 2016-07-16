@@ -145,7 +145,7 @@ private:
     Name * makeAlphaNumeric();
     Name * makeWhitespaceSet();
     Name * makeWordSet();
-
+   
     Name * createName(std::string && value);
     Name * createName(std::string && prop, std::string && value);
 
@@ -172,6 +172,7 @@ private:
 
     ModeFlagSet                 fModeFlagSet;
     bool                        fNested;
+    bool                        fGraphemeBoundaryPending;
     Cursor                      mCursor;
     unsigned                    mCaptureGroupCount;
     NameMap                     mNameMap;

@@ -20,6 +20,7 @@ private:
     const std::string _msg;
 };
 
+void generateGraphemeClusterBoundaryRule(re::Name * const &property);
 bool resolvePropertyDefinition(re::Name * const property);
 std::string resolvePropertyFunction(re::Name * const property);
 UCD::UnicodeSet resolveUnicodeSet(re::Name * const name);

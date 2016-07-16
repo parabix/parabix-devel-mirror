@@ -26,6 +26,7 @@ public:
         , UnicodeProperty
         , Capture
         , Reference
+        , ZeroWidth
         , Unknown
     };
     std::string getNamespace() const;
@@ -42,6 +43,7 @@ protected:
     friend Name * makeName(const std::string & name, RE * cc);
     friend Name * makeCapture(const std::string & name, RE * captured);
     friend Name * makeReference(const std::string & name, RE * captureName);
+    friend Name * makeZeroWidth(const std::string & name, RE * zerowidth);
     friend Name * makeName(CC * const cc);
     friend Name * makeName(const std::string &, const Type);
     friend Name * makeName(const std::string &, const std::string &, const Type);
@@ -167,6 +169,9 @@ inline Name * makeReference(const std::string & name, RE * captureName) {
     return new Name(nullptr, 0, name.c_str(), name.length(), Name::Type::Reference, captureName);
 }
 
+inline Name * makeZeroWidth(const std::string & name, RE * zerowidth = NULL) {
+    return new Name(nullptr, 0, name.c_str(), name.length(), Name::Type::ZeroWidth, zerowidth);
+}
 }
 
 #endif // RE_NAME_H

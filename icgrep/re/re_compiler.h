@@ -82,12 +82,10 @@ private:
     MarkerType processBoundedRep(RE * repeated, int ub, MarkerType marker, pablo::PabloBuilder & pb);
     RE * resolveUnicodeProperties(RE * re);
 
-    Name * generateGraphemeClusterBoundaryRule();
     MarkerType compileName(Name * name, pablo::PabloBuilder & pb);
     MarkerType compileAny(const MarkerType m, pablo::PabloBuilder & pb);
     MarkerType compileStart(const MarkerType marker, pablo::PabloBuilder & pb);
     MarkerType compileEnd(const MarkerType marker, pablo::PabloBuilder & pb);
-    MarkerType compileGraphemeBoundary(GraphemeBoundary *gb, MarkerType marker, pablo::PabloBuilder & pb);
 
     MarkerType AdvanceMarker(MarkerType marker, const MarkerPosition newpos, pablo::PabloBuilder & pb);
     void AlignMarkers(MarkerType & m1, MarkerType & m2, pablo::PabloBuilder & pb);
@@ -95,7 +93,7 @@ private:
 private:
 
     cc::CC_Compiler &                               mCCCompiler;
-    pablo::PabloAST *                                 mLineBreak;
+    pablo::PabloAST *                               mLineBreak;
     pablo::PabloAST *                               mCRLF;
     pablo::PabloAST *                               mAny;
     pablo::PabloAST *                               mGraphemeBoundaryRule;

@@ -10,7 +10,6 @@
 #include <re/re_diff.h>
 #include <re/re_intersect.h>
 #include <re/re_assertion.h>
-#include <re/re_grapheme_boundary.hpp>
 #include <iostream>
 #include <re/printer_re.h>
 #include <limits.h>
@@ -136,15 +135,12 @@ std::pair<int, int> getUnicodeUnitLengthRange(const RE * re) {
             case Name::Type::Capture:
             case Name::Type::Reference:
                 return getUnicodeUnitLengthRange(n->getDefinition());
+            case Name::Type::ZeroWidth:
+                return std::make_pair(0, 0);
             case Name::Type::Unknown:
                 return std::make_pair(0, std::numeric_limits<int>::max());
         }
-    } else if (const GraphemeBoundary * gp = dyn_cast<GraphemeBoundary>(re)) {
-        if (gp->getExpression()) {
-            return getUnicodeUnitLengthRange(gp->getExpression());
-        }
-        return std::make_pair(0, 0);
-    }
+    } 
     return std::make_pair(1, 1);
 }
    

@@ -14,7 +14,6 @@
 #include <re/re_diff.h>
 #include <re/re_intersect.h>
 #include <re/re_assertion.h>
-#include <re/re_grapheme_boundary.hpp>
 #include <re/printer_re.h>
 #include <UCD/resolve_properties.h>
 #include <UCD/CaseFolding_txt.h>
@@ -38,6 +37,7 @@ RE * RE_Parser::parse(const std::string & regular_expression, ModeFlagSet initia
     RE_Parser parser(regular_expression);
     parser.fModeFlagSet = initialFlags;
     parser.fNested = false;
+    parser.fGraphemeBoundaryPending = false;
     parser.mCaptureGroupCount = 0;
     RE * re = parser.parse_RE();
     if (re == nullptr) {
@@ -49,6 +49,7 @@ RE * RE_Parser::parse(const std::string & regular_expression, ModeFlagSet initia
 inline RE_Parser::RE_Parser(const std::string & regular_expression)
     : fModeFlagSet(0)
     , fNested(false)
+    , fGraphemeBoundaryPending(false)
     , mCursor(regular_expression)
     , mCaptureGroupCount(0)
     {
@@ -89,6 +90,10 @@ inline RE * RE_Parser::parse_seq() {
     for (;;) {
         RE * re = parse_next_item();
         if (re == nullptr) {
+            if (fGraphemeBoundaryPending == true) {
+                seq.push_back(makeZeroWidth("GCB"));
+                fGraphemeBoundaryPending = false;
+            }
             break;
         }
         re = extend_item(re);
@@ -98,6 +103,7 @@ inline RE * RE_Parser::parse_seq() {
 }
 
 RE * RE_Parser::parse_next_item() {
+    RE * re = nullptr;
     if (mCursor.more()) {        
         switch (*mCursor) {
             case '(':
@@ -127,7 +133,11 @@ RE * RE_Parser::parse_next_item() {
                 throw ParseFailure("Use \\} for literal }.");
             case '[':
                 mCursor++;
-                return parse_charset();
+                re = parse_charset();
+                if ((fModeFlagSet & ModeFlagType::GRAPHEME_CLUSTER_MODE) != 0) {
+                    re = makeSeq({re, makeZeroWidth("GCB")});
+                }
+                return re;
             case '.': // the 'any' metacharacter
                 mCursor++;
                 return makeAny();
@@ -135,7 +145,11 @@ RE * RE_Parser::parse_next_item() {
                 ++mCursor;
                 return parse_escaped();
             default:
-                return createCC(parse_utf8_codepoint());
+                re = createCC(parse_utf8_codepoint());
+                if ((fModeFlagSet & ModeFlagType::GRAPHEME_CLUSTER_MODE) != 0) {
+                    fGraphemeBoundaryPending = true;
+                }
+                return re;
         }
     }
     return nullptr;
@@ -280,9 +294,6 @@ inline RE * RE_Parser::extend_item(RE * re) {
             re = makeRep(re, lb, ub);
         }
     }
-    if ((fModeFlagSet & ModeFlagType::GRAPHEME_CLUSTER_MODE) != 0) {
-        re = makeGraphemeClusterBoundary(GraphemeBoundary::Sense::Positive, re);
-    }
     return re;
 }
 
@@ -360,7 +371,7 @@ RE * RE_Parser::parseEscapedSet() {
             } else {
                 switch (*++mCursor) {
                     case 'g':
-                        re = makeGraphemeClusterBoundary(complemented ? GraphemeBoundary::Sense::Negative : GraphemeBoundary::Sense::Positive);
+                        re = complemented ? makeZeroWidth("NonGCB") : makeZeroWidth("GCB"); 
                         break;
                     case 'w': throw ParseFailure("\\b{w} not yet supported.");
                     case 'l': throw ParseFailure("\\b{l} not yet supported.");
@@ -421,8 +432,7 @@ RE * RE_Parser::parseEscapedSet() {
             // \X is equivalent to ".+?\b{g}"; proceed the minimal number of characters (but at least one)
             // to get to the next extended grapheme cluster boundary.
             ++mCursor;
-            // return makeSeq({makeRep(makeAny(), 1, Rep::UNBOUNDED_REP), makeGraphemeClusterBoundary()});
-            return makeGraphemeClusterBoundary(GraphemeBoundary::Sense::Positive, makeAny());
+            return makeSeq({makeAny(), makeRep(makeSeq({makeZeroWidth("NonGCB"), makeAny()}), 0, Rep::UNBOUNDED_REP), makeZeroWidth("GCB")});
         case 'N':
             if (*++mCursor != '{') {
                 throw ParseFailure("Malformed \\N expression");

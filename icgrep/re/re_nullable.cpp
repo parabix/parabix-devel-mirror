@@ -4,7 +4,6 @@
 #include <re/re_end.h>
 #include <re/re_alt.h>
 #include <re/re_rep.h>
-#include <re/re_grapheme_boundary.hpp>
 #include <re/re_name.h>
 
 /*

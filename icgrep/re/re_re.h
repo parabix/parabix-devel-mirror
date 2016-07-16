@@ -33,7 +33,6 @@ class Seq;
 class Start;
 class SymDiff;
 class Union;
-class GraphemeBoundary;
 
 class RE {
 public:
@@ -54,7 +53,6 @@ public:
         , Start
         , SymDiff
         , Union
-        , GraphemeBoundary
     };
     inline ClassTypeId getClassTypeId() const {
         return mClassTypeId;

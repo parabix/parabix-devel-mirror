@@ -10,7 +10,6 @@
 #include <re/re_diff.h>
 #include <re/re_intersect.h>
 #include <re/re_assertion.h>
-#include <re/re_grapheme_boundary.hpp>
 #include <re/re_analysis.h>
 #include <algorithm>
 #include <memory>
@@ -37,23 +36,12 @@ RE * RE_Simplifier::simplify(RE * re) {
         re = makeAssertion(simplify(a->getAsserted()), a->getKind(), a->getSense());
     } else if (Rep * rep = dyn_cast<Rep>(re)) {
         RE * expr = simplify(rep->getRE());
-        if (GraphemeBoundary * gp = dyn_cast<GraphemeBoundary>(expr)) {
-            if (gp->getExpression() && isUnicodeUnitLength(gp->getExpression())) {
-                rep->setRE(gp->getExpression());
-                gp->setExpression(rep);
-                return gp;
-            }
-        }
         re = makeRep(expr, rep->getLB(), rep->getUB());
     } else if (Diff * diff = dyn_cast<Diff>(re)) {
         re = makeDiff(simplify(diff->getLH()), diff->getRH());
     } else if (Intersect * e = dyn_cast<Intersect>(re)) {
         re = makeIntersect(simplify(e->getLH()), e->getRH());
-    } else if (GraphemeBoundary * gp = dyn_cast<GraphemeBoundary>(re)) {
-        if (gp->getExpression() && isa<GraphemeBoundary>(gp->getExpression())) {
-            re = gp->getExpression();
-        }
-    }
+    } 
     return re;
 }
 

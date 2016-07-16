@@ -9,7 +9,6 @@
 #include <re/re_diff.h>
 #include <re/re_intersect.h>
 #include <re/re_assertion.h>
-#include <re/re_grapheme_boundary.hpp>
 #include <re/re_analysis.h>
 #include <re/re_memoizer.hpp>
 #include <UCD/ucd_compiler.hpp>
@@ -29,53 +28,7 @@ static inline CC * getDefinitionIfCC(RE * re) {
     return nullptr;
 }
 
-Name * generateGraphemeClusterBoundaryRule() {
-    // 3.1.1 Grapheme Cluster Boundary Rules
-    #define Behind(x) makeLookBehindAssertion(x)
-    #define Ahead(x) makeLookAheadAssertion(x)
-
-    RE * GCB_Control = makeName("gcb", "cn", Name::Type::UnicodeProperty);
-    RE * GCB_CR = makeName("gcb", "cr", Name::Type::UnicodeProperty);
-    RE * GCB_LF = makeName("gcb", "lf", Name::Type::UnicodeProperty);
-    RE * GCB_Control_CR_LF = makeAlt({GCB_CR, GCB_LF});
-
-    // Break at the start and end of text.
-    RE * GCB_1 = makeStart();
-    RE * GCB_2 = makeEnd();
-    // Do not break between a CR and LF.
-    RE * GCB_3 = makeSeq({Behind(GCB_CR), Ahead(GCB_LF)});
-    // Otherwise, break before and after controls.
-    RE * GCB_4 = Behind(GCB_Control_CR_LF);
-    RE * GCB_5 = Ahead(GCB_Control_CR_LF);
-    RE * GCB_1_5 = makeAlt({GCB_1, GCB_2, makeDiff(makeAlt({GCB_4, GCB_5}), GCB_3)});
-
-    RE * GCB_L = makeName("gcb", "l", Name::Type::UnicodeProperty);
-    RE * GCB_V = makeName("gcb", "v", Name::Type::UnicodeProperty);
-    RE * GCB_LV = makeName("gcb", "lv", Name::Type::UnicodeProperty);
-    RE * GCB_LVT = makeName("gcb", "lvt", Name::Type::UnicodeProperty);
-    RE * GCB_T = makeName("gcb", "t", Name::Type::UnicodeProperty);
-    RE * GCB_RI = makeName("gcb", "ri", Name::Type::UnicodeProperty);
-    // Do not break Hangul syllable sequences.
-    RE * GCB_6 = makeSeq({Behind(GCB_L), Ahead(makeAlt({GCB_L, GCB_V, GCB_LV, GCB_LVT}))});
-    RE * GCB_7 = makeSeq({Behind(makeAlt({GCB_LV, GCB_V})), Ahead(makeAlt({GCB_V, GCB_T}))});
-    RE * GCB_8 = makeSeq({Behind(makeAlt({GCB_LVT, GCB_T})), Ahead(GCB_T)});
-    // Do not break between regional indicator symbols.
-    RE * GCB_8a = makeSeq({Behind(GCB_RI), Ahead(GCB_RI)});
-    // Do not break before extending characters.
-    RE * GCB_9 = Ahead(makeName("gcb", "ex", Name::Type::UnicodeProperty));
-    // Do not break before SpacingMarks, or after Prepend characters.
-    RE * GCB_9a = Ahead(makeName("gcb", "sm", Name::Type::UnicodeProperty));
-    RE * GCB_9b = Behind(makeName("gcb", "pp", Name::Type::UnicodeProperty));
-    RE * GCB_6_9b = makeAlt({GCB_6, GCB_7, GCB_8, GCB_8a, GCB_9, GCB_9a, GCB_9b});
-    // Otherwise, break everywhere.
-    RE * GCB_10 = makeSeq({Behind(makeAny()), Ahead(makeAny())});
-
-    Name * gcb = makeName("gcb", Name::Type::UnicodeProperty);
-    gcb->setDefinition(makeAlt({GCB_1_5, makeDiff(GCB_10, GCB_6_9b)}));
-    return gcb;
-}
-
-Name * graphemeClusterRule = nullptr;
+Name * ZeroWidth = nullptr;
 
 RE * resolve(RE * re) {
     Memoizer memoizer;
@@ -84,9 +37,12 @@ RE * resolve(RE * re) {
 	if (f == memoizer.end()) {
 	    if (LLVM_LIKELY(name->getDefinition() != nullptr)) {
 		name->setDefinition(resolve(name->getDefinition()));
-	    } else if (LLVM_LIKELY(name->getType() == Name::Type::UnicodeProperty)) {
+	    } else if (LLVM_LIKELY(name->getType() == Name::Type::UnicodeProperty || name->getType() == Name::Type::ZeroWidth)) {
 		if (UCD::resolvePropertyDefinition(name)) {
-		    resolve(name->getDefinition());
+		    if (name->getType() == Name::Type::ZeroWidth) {
+                        ZeroWidth = name;
+                    }
+                    resolve(name->getDefinition());
 		} else {
 		    #ifndef DISABLE_PREGENERATED_UCD_FUNCTIONS
 		    if (AlgorithmOptionIsSet(UsePregeneratedUnicode)) {
@@ -159,22 +115,6 @@ RE * resolve(RE * re) {
 	if (lh && rh) {
 	    return resolve(makeName("intersect", intersectCC(lh, rh)));
 	}
-    } else if (GraphemeBoundary * gb = dyn_cast<GraphemeBoundary>(re)) {
-	if (LLVM_LIKELY(gb->getBoundaryRule() == nullptr)) {
-	    switch (gb->getType()) {
-		case GraphemeBoundary::Type::ClusterBoundary:
-		    if (graphemeClusterRule == nullptr) {
-			graphemeClusterRule = cast<Name>(resolve(generateGraphemeClusterBoundaryRule()));
-		    }
-		    gb->setBoundaryRule(graphemeClusterRule);
-		    break;
-		default:
-		    throw std::runtime_error("Only grapheme cluster boundary rules are supported in icGrep 1.0");
-	    }
-	}
-	if (gb->getExpression()) {
-	    resolve(gb->getExpression());
-	}
     }
     return re;
 }
@@ -210,20 +150,15 @@ void gather(RE * re) {
     } else if (isa<Intersect>(re)) {
 	gather(cast<Intersect>(re)->getLH());
 	gather(cast<Intersect>(re)->getRH());
-    } else if (isa<GraphemeBoundary>(re)) {
-	if (cast<GraphemeBoundary>(re)->getExpression()) {
-	    gather(cast<GraphemeBoundary>(re)->getExpression());
-	}
-	gather(cast<GraphemeBoundary>(re)->getBoundaryRule());
-    }
+    } 
 }
     
-UCD::UCDCompiler::NameMap resolveNames(RE * re, Name * &Rule) {
+UCD::UCDCompiler::NameMap resolveNames(RE * re, Name * &zerowidth) {
 
-    graphemeClusterRule = nullptr;
+    ZeroWidth = nullptr;
     re = resolve(re);
     gather(re);
-    Rule = graphemeClusterRule;
+    zerowidth = ZeroWidth;
     
     return nameMap;
     
