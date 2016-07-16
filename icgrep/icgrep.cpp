@@ -214,6 +214,8 @@ int main(int argc, char *argv[]) {
     GrepEngine grepEngine;
     grepEngine.grepCodeGen(module_name, re_ast, CountOnly, UTF_16);
     //std::cerr << "grepCodeGen complete";
+
+    releaseSlabAllocatorMemory();
     initResult(inputFiles);
     for (unsigned i=0; i<inputFiles.size(); ++i){
         total_CountOnly.push_back(0);

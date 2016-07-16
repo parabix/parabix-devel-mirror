@@ -25,6 +25,22 @@
 #include <llvm/IR/Verifier.h>
 #include <UCD/UnicodeNameData.h>
 
+
+#include <kernels/streamset.h>
+#include <kernels/scanmatchgen.h>
+#include <kernels/s2p_kernel.h>
+#include <kernels/pipeline.h>
+
+#include <pablo/function.h>
+#include <pablo/pablo_kernel.h>
+#include <pablo/pablo_toolchain.h>
+
+#include <llvm/IR/Intrinsics.h>
+#include "llvm/Support/SourceMgr.h"
+#include "llvm/IRReader/IRReader.h"
+#include "llvm/Linker/Linker.h"
+
+
 #include <fstream>
 #include <sstream>
 #include <iostream>
@@ -106,9 +122,8 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool Count
     isUTF_16 = UTF_16; 
     Module * M = new Module(moduleName, getGlobalContext());
     
-    IDISA::IDISA_Builder * idb = IDISA::GetIDISA_Builder(M);
+    IDISA::IDISA_Builder * iBuilder = IDISA::GetIDISA_Builder(M);
 
-    kernel::PipelineBuilder pipelineBuilder(M, idb);
 
     Encoding::Type type;
     type = UTF_16 ? Encoding::Type::UTF_16 : Encoding::Type::UTF_8;
@@ -121,8 +136,71 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool Count
     re_ast = re::regular_expression_passes(encoding, re_ast);   
     pablo::PabloFunction * function = re::re2pablo_compiler(encoding, re_ast);
     
-    llvm::Function * grepIR = pipelineBuilder.ExecuteKernels(function, isNameExpression, CountOnly, UTF_16);
+    kernel::s2pKernel  s2pk(iBuilder);
+    kernel::scanMatchKernel scanMatchK(iBuilder, 64, false);
+    
+    s2pk.generateKernel();
+    scanMatchK.generateKernel();
+    
+    //std::unique_ptr<Module> s2pM = s2pk.createKernelModule();
+    //std::unique_ptr<Module> scanMatchM = scanMatchK.createKernelModule();
+    
+    //s2pk.addKernelDeclarations(mMod);
+    //scanMatchK.addKernelDeclarations(mMod);
+    
+    pablo_function_passes(function);
+    pablo::PabloKernel  icgrepK(iBuilder, "icgrep", function, {"matchedLineCount"});
+    icgrepK.generateKernel();
+    
+    //std::unique_ptr<Module> icgrepM = icgrepK.createKernelModule();
+    //icgrepK.addKernelDeclarations(mMod);
+    
+    Type * const int64ty = iBuilder->getInt64Ty();
+    Type * const int8PtrTy = iBuilder->getInt8PtrTy();
+    Type * const inputType = PointerType::get(ArrayType::get(ArrayType::get(iBuilder->getBitBlockType(), (UTF_16 ? 16 : 8)), 1), 0);
+    Type * const resultTy = CountOnly ? int64ty : iBuilder->getVoidTy();
+    Function * const mainFn = cast<Function>(M->getOrInsertFunction("Main", resultTy, inputType, int64ty, int64ty, nullptr));
+    mainFn->setCallingConv(CallingConv::C);
+    iBuilder->SetInsertPoint(BasicBlock::Create(M->getContext(), "entry", mainFn, 0));
+    Function::arg_iterator args = mainFn->arg_begin();
+    
+    Value * const inputStream = &*(args++);
+    inputStream->setName("input");
+    Value * const fileSize = &*(args++);
+    fileSize->setName("fileSize");
+    Value * const fileIdx = &*(args++);
+    fileIdx->setName("fileIdx");
 
+    const unsigned segmentSize = codegen::SegmentSize;
+
+    kernel::StreamSetBuffer ByteStream(iBuilder, kernel::StreamSetType(1, (UTF_16 ? 16 : 8)), 0);
+    kernel::StreamSetBuffer BasisBits(iBuilder, kernel::StreamSetType((UTF_16 ? 16 : 8), 1), segmentSize);
+    ByteStream.setStreamSetBuffer(inputStream);
+    BasisBits.allocateBuffer();
+
+    if (CountOnly) {
+        Value * s2pInstance = s2pk.createInstance({}, {&ByteStream}, {&BasisBits});
+        Value * icgrepInstance = icgrepK.createInstance({}, {&BasisBits}, {});
+        
+        generatePipelineLoop(iBuilder, {&s2pk, &icgrepK}, {s2pInstance, icgrepInstance}, fileSize);
+        Value * matchCount = icgrepK.createGetAccumulatorCall(icgrepInstance, "matchedLineCount");
+        iBuilder->CreateRet(matchCount);
+    }
+    else {
+        kernel::StreamSetBuffer MatchResults(iBuilder, kernel::StreamSetType(2, 1), segmentSize);
+        ByteStream.setStreamSetBuffer(inputStream);
+        BasisBits.allocateBuffer();
+        MatchResults.allocateBuffer();
+        
+        
+        Value * s2pInstance = s2pk.createInstance({}, {&ByteStream}, {&BasisBits});
+        Value * icgrepInstance = icgrepK.createInstance({}, {&BasisBits}, {&MatchResults});
+        Value * scanMatchInstance = scanMatchK.createInstance({iBuilder->CreateBitCast(inputStream, int8PtrTy), fileSize, fileIdx}, {&MatchResults}, {});
+        
+        generatePipelineLoop(iBuilder, {&s2pk, &icgrepK, &scanMatchK}, {s2pInstance, icgrepInstance, scanMatchInstance}, fileSize);
+        iBuilder->CreateRetVoid();
+    }
+    
     mEngine = JIT_to_ExecutionEngine(M);
     ApplyObjectCache(mEngine);
     icgrep_Linking(M, mEngine);
@@ -132,12 +210,12 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool Count
 #endif
 
     mEngine->finalizeObject();
-    delete idb;
-
+    delete iBuilder;
+    
     if (CountOnly) {
-        mGrepFunction_CountOnly = reinterpret_cast<GrepFunctionType_CountOnly>(mEngine->getPointerToFunction(grepIR));
+        mGrepFunction_CountOnly = reinterpret_cast<GrepFunctionType_CountOnly>(mEngine->getPointerToFunction(mainFn));
     } else {
-        mGrepFunction = reinterpret_cast<GrepFunctionType>(mEngine->getPointerToFunction(grepIR));
+        mGrepFunction = reinterpret_cast<GrepFunctionType>(mEngine->getPointerToFunction(mainFn));
     }
 
 }
