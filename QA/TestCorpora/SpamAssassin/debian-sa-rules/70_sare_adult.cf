@@ -1,0 +1,913 @@
+# SARE "Adult" Ruleset for SpamAssassin
+# Version:  01.02.08 # The Adult set has been renamed to match SARE's updated standards, the new name is 70_sare_adult.cf
+# Created:  2004-03-23
+# Modified: 2007-05-21
+# Changes: Fixed broken meta
+# License: Artistic - see http://www.rulesemporium.com/license.txt
+# Current Maintainer: Matt Yackley - adult@rulesemporium.com
+# Maintainer: Doc Schneider - maddoc@maddoc.net
+# Current Home: http://www.rulesemporium.com/rules/70_sare_adult.cf
+#
+####
+
+
+###############################
+#       subject rules         #
+###############################
+
+
+header  SARE_SUBJ_SLUT			Subject =~ /\bslut\b/i
+score   SARE_SUBJ_SLUT			1.66
+#counts SARE_SUBJ_SLUT			89s/0h of 42056 corpus (34127s/7929h FVGT) 04/19/06
+#counts SARE_SUBJ_SLUT			5s/0h of 140226 corpus (90162s/50064h DOC) 04/19/06
+
+
+header   __FPS_BREAST		Subject =~ /\bbreasts?\b/i
+header   __FPS_COCK		Subject =~ /\bcock\b/i
+header   __FPS_FUCK		Subject =~ /\bfuck/i
+header   __FPS_GIRLS		Subject =~ /\bgirls\b/i
+header   __FPS_HARDCORE		Subject =~ /\bhard.?core\b/i
+header   __FPS_LITTLE		Subject =~ /\blittle\b/i
+header   __FPS_MODEL		Subject =~ /\bmodels?\b/i
+header   __FPS_NAKED		Subject =~ /\bnaked\b/i
+header   __FPS_PENETRAT		Subject =~ /\bpenetration\b/i
+header   __FPS_SEX		Subject =~ /\bsex\b/i
+header   __FPS_SLUT		Subject =~ /\bslut\b/i
+header   __FPS_TEEN		Subject =~ /\bteen\b/i
+header   __FPS_VIRGIN		Subject =~ /\bvirgins?\b/i
+meta     __COUNT_FPORN2		(__FPS_BREAST + __FPS_COCK + __FPS_FUCK + __FPS_GIRLS + __FPS_HARDCORE + __FPS_LITTLE + __FPS_MODEL + __FPS_NAKED + __FPS_PENETRAT + __FPS_SEX + __FPS_SLUT + __FPS_TEEN + __FPS_VIRGIN) > 1
+meta     __COUNT_FPORN3		(__FPS_BREAST + __FPS_COCK + __FPS_FUCK + __FPS_GIRLS + __FPS_HARDCORE + __FPS_LITTLE + __FPS_MODEL + __FPS_NAKED + __FPS_PENETRAT + __FPS_SEX + __FPS_SLUT + __FPS_TEEN + __FPS_VIRGIN) > 2
+meta     __COUNT_FPORN4		(__FPS_BREAST + __FPS_COCK + __FPS_FUCK + __FPS_GIRLS + __FPS_HARDCORE + __FPS_LITTLE + __FPS_MODEL + __FPS_NAKED + __FPS_PENETRAT + __FPS_SEX + __FPS_SLUT + __FPS_TEEN + __FPS_VIRGIN) > 3
+
+
+meta    SARE_SUB_MULTI_PRN2	(__COUNT_FPORN2 && !__COUNT_FPORN3)
+score   SARE_SUB_MULTI_PRN2	1.66
+#counts SARE_SUB_MULTI_PRN2	455s/0h of 42056 corpus (34127s/7929h FVGT) 04/19/06
+#counts SARE_SUB_MULTI_PRN2	93s/5h of 140226 corpus (90162s/50064h DOC) 04/19/06
+
+
+meta    SARE_SUB_MULTI_PRN3	(__COUNT_FPORN3 && !__COUNT_FPORN4)
+score   SARE_SUB_MULTI_PRN3	1.66
+#counts SARE_SUB_MULTI_PRN3	93s/0h of 42056 corpus (34127s/7929h FVGT) 04/19/06
+#counts SARE_SUB_MULTI_PRN3	9s/0h of 140226 corpus (90162s/50064h DOC) 04/19/06
+
+
+#meta    SARE_SUB_MULTI_PRN4	(__COUNT_FPORN4)
+#score   SARE_SUB_MULTI_PRN4	3.333
+#counts SARE_SUB_MULTI_PRN4	4s/0h of 42056 corpus (34127s/7929h FVGT) 04/19/06
+#counts SARE_SUB_MULTI_PRN4	0s/0h of 140226 corpus (90162s/50064h DOC) 04/19/06
+
+
+
+
+
+
+
+header   SARE_ADLTSUB1 Subject =~ /\b(?:adu?1t|amb[1!]en|b0y|bl0w|c0cks?|c0re|ejaculation|f?r0+m|g(?:[1!]r[1l]|ir[!1])|h0t|ntercourse|jerk off|l1ttle|m0vie|manh00d|[0o]rg\@sm|p1ct|pen[1!]s|(?:ph|f)(?:[0\@]t|ot[0\@])|secks|sm00th|t1ny|t1ts|v(?:irg1|1rgi|1rg1)n|v[i1]de0|violenced|y0ung)/i
+describe SARE_ADLTSUB1 Contains OBFU and "strong" adult words
+score    SARE_ADLTSUB1 1.66
+# Combined from M_K_PORN_BOGOSITY_SUBJ, L_s_porn, SUBJECT_XXX, RM_swp_porn4, RM_swp_porn5
+#  266s/0h of 119325 corpus (98981s/20344h) 03/21/04
+#  45s/0h of 15929 corpus (13729s/2200h) 03/23/04
+#counts   SARE_ADLTSUB1            503s/0h of 42056 corpus (34127s/7929h FVGT) 04/19/06
+#counts   SARE_ADLTSUB1            145s/0h of 140226 corpus (90162s/50064h DOC) 04/19/06
+
+
+header   SARE_ADLTSUB2 Subject =~ /\b(?:blow|climax|enlarg(e|ment)|fuck|inter+acial|lick|porn|penis|pervert|pussy|tits|tight|vagina|virgins?)\b/i
+describe SARE_ADLTSUB2 Contains possible adult words
+score    SARE_ADLTSUB2 1.23
+# Combined from SUBJECT_XXX_2, L_s_porn, RM_swp_pervert, RM_swp_porn1, RM_swp_porn2
+#  519s/1h of 119325 corpus (98981s/20344h) 03/21/04
+#  58s/0h of 15929 corpus (13729s/2200h) 03/23/04
+#counts   SARE_ADLTSUB2            1967s/2h of 42056 corpus (34127s/7929h FVGT) 04/19/06
+#counts   SARE_ADLTSUB2            514s/0h of 140226 corpus (90162s/50064h DOC) 04/19/06
+
+
+header   SARE_ADLTSUB3 Subject =~ /(?!\bporn)(?:\bp|\B(?:[\xDE]|\xCE\xA1|\xCF\x81|\xD0\xA0|\xD1\x80))[\x01-\x2F\\\^_`\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:[o0\*\xB0\xBA\xD8\xF8\xD2-\xD6\xF2-\xF6]|\(\)|\[\]|\xC5[\x8C-\x91]|\xC6[\xA0-\xA1]|\xC7[\x91-\x92]|\xC7[\xBE-\xBF]|\xCE\x8C|\xCE\x98|\xCE\x9F|\xCE\xB8|\xCE\xBF|\xCF\x8C|\xD0\x9E|\xD0\xBE|\xD5\x95)[\x01-\x2F\\\^_`\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:[r\xAE]|\xC5[\x94-\x99]|\xD1\x93)[\x01-\x2F\\\^_`\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:[n\xD1\xF1]|\|\\\||\xC5[\x83-\x8B]|\xCE\x9D|\xCE\xA0|\xCE\xAE|\xCE\xB7|\xD5\xB2|\xD5\xB8)/i
+describe SARE_ADLTSUB3 Apparent spam seems to contain porn subject
+score    SARE_ADLTSUB3 1.66  # type=obfu
+# Original name: RM_swp_porn1o1
+#  58s/0h of 119325 corpus (98981s/20344h) 03/21/04
+#  11s/0h of 15929 corpus (13729s/2200h) 03/23/04
+#counts   SARE_ADLTSUB3            11s/0h of 42056 corpus (34127s/7929h FVGT) 04/19/06
+#counts   SARE_ADLTSUB3            15s/0h of 140226 corpus (90162s/50064h DOC) 04/19/06
+
+
+header   SARE_ADLTSUB4 Subject =~ /(?!\bpo(?:rn|ur))\bp.?o.?r.?n/i
+describe SARE_ADLTSUB4 Apparent spam seems to contain porn subject
+score    SARE_ADLTSUB4 0.89  # type=obfu
+# Original name: RM_swp_porn1o2
+#  26s/0h of 119325 corpus (98981s/20344h) 03/21/04
+#  3s/0h of 15929 corpus (13729s/2200h) 03/23/04
+#counts   SARE_ADLTSUB4            5s/0h of 42056 corpus (34127s/7929h FVGT) 04/19/06
+#counts   SARE_ADLTSUB4            5s/0h of 140226 corpus (90162s/50064h DOC) 04/19/06
+
+
+header   SARE_ADLTSUB5 Subject =~ /(?!\bfuck)(?:\bf|\B(?:\xC5\xBF|\xC6\x92|\xD2[\x92-\x93]))[\x01-\x2F\\\^_`\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:[uv\*\xB5\xD9-\xDC\xF9-\xFC]|\xC5[\xA8-\xB3]|\xC6[\xAF-\xB0]|\xC7[\x93-\x9C]|\xCE\xB0|\xCE\xBC|\xCF\x8B|\xCF\x8D|\xD4\xB1|\xD5\x84|\xD5\x8D)[\x01-\x2F\\\^_`\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:[c\*\xC7\xE7\xA2\xA9]|\xC4[\x86-\x8D]|\xD0\xA1|\xD1\x81)[\x01-\x2F\\\^_`\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:k|\xC4[\xB6-\xB8]|\xCE\x9A|\xCE\xBA|\xD0\x8C|\xD0\x9A|\xD0\xBA|\xD1\x9C|\xD2[\x9A-\x9D]])/i
+describe SARE_ADLTSUB5 Apparent spam seems to contain porn subject
+score    SARE_ADLTSUB5 1.66  # type=obfu
+# Original name: RM_swp_porn2o1
+#  8s/0h of 119325 corpus (98981s/20344h) 03/21/04
+#  4s/0h of 15929 corpus (13729s/2200h) 03/23/04
+#counts   SARE_ADLTSUB5            12s/0h of 42056 corpus (34127s/7929h FVGT) 04/19/06
+#counts   SARE_ADLTSUB5            0s/0h of 140226 corpus (90162s/50064h DOC) 04/19/06
+
+
+header   SARE_ADLTSUB6 Subject =~ /(?!\bfuck)\bf.?u.?c.?k/i
+describe SARE_ADLTSUB6 Apparent spam seems to contain porn subject
+score    SARE_ADLTSUB6 1.51  # type=obfu
+# Original name: RM_swp_porn2o2
+#  3s/0h of 119325 corpus (98981s/20344h) 03/21/04
+#  5s/0h of 15929 corpus (13729s/2200h) 03/23/04
+#counts   SARE_ADLTSUB6            32s/0h of 42056 corpus (34127s/7929h FVGT) 04/19/06
+#counts   SARE_ADLTSUB6            13s/0h of 140226 corpus (90162s/50064h DOC) 04/19/06
+
+
+header   SARE_ADLTSUB7 Subject =~ /(?!\bpuss(?:y|ies)\b)(?:\bp|\B(?:[\xDE]|\xCE\xA1|\xCF\x81|\xD0\xA0|\xD1\x80))[\x01-\x2F\\\^_`\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:[uv\*\xB5\xD9-\xDC\xF9-\xFC]|\xC5[\xA8-\xB3]|\xC6[\xAF-\xB0]|\xC7[\x93-\x9C]|\xCE\xB0|\xCE\xBC|\xCF\x8B|\xCF\x8D|\xD4\xB1|\xD5\x84|\xD5\x8D)[\x01-\x2F\\\^_`\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:[s5\$\xA7]|\xC5[\x9A-\xA1]|\xD0\x85|\xD1\x95|\xD5\x8F)[\x01-\x2F\\\^_`\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:[s5\$\xA7]|\xC5[\x9A-\xA1]|\xD0\x85|\xD1\x95|\xD5\x8F)(?:(?:[y\xA5\xDD\xFD]|\xC5[\xB6-\xB8]|\xCE\x8E|\xCE\xA5|\xCE\xA8|\xCE\xAB|\xCE\xB3|\xD0\xA3|\xD1\x83|\xD1\x9E|\xD2[\xAE-\xB1])|(?:[il1:\|\*\xCC-\xCF\xEC-\xEF\xA6]|\xC4[\xA8-\xB0]|\xC4\xBA|\xC4\xBC|\xC4\xBE|\xC5\x80|\xC5\x82|\xC7[\x8F-\x90]|\xD0[\x86-\x87]|\xD1[\x96-\x97]|\xCE\x8A|\xCE\x90|\xCE\x99|\xCE\xAA|\xCE\xAF|\xCE\xB9|\xCF\x8A)[\x01-\x2F\\\^_`\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:[e3\*\xC8-\xCB\xE8-\xEB]|\xC4[\x92-\x9B]|\xCE\x88|\xCE\x95|\xCE\xA3|\xCE\xAD|\xCE\xB5|\xD0\x81|\xD0\x95|\xD0\xB5|\xD1\x91)[\x01-\x2F\\\^_`\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:[s5\$\xA7]|\xC5[\x9A-\xA1]|\xD0\x85|\xD1\x95|\xD5\x8F))\b/i
+describe SARE_ADLTSUB7 Apparent spam seems to contain porn subject
+score    SARE_ADLTSUB7 1.66  # type=obfu
+# Original name: RM_swp_porn5o1
+#  4s/0h of 119325 corpus (98981s/20344h) 03/21/04
+#  2s/0h of 15929 corpus (13729s/2200h) 03/23/04
+#counts   SARE_ADLTSUB7            0s/0h of 42056 corpus (34127s/7929h FVGT) 04/19/06
+#counts   SARE_ADLTSUB7            0s/0h of 140226 corpus (90162s/50064h DOC) 04/19/06
+
+
+header   SARE_ADLTSUB8 Subject =~ /(?!\bpuss(?:y|ies)\b)\bp.?u.?s.?s.?(?:y|i.?e.?s)\b/i
+describe SARE_ADLTSUB8 Apparent spam seems to contain porn subject
+score    SARE_ADLTSUB8 1.66  # type=obfu
+# Original name: RM_swp_porn5o2
+# FPS SARE_ADLTSUB8="plus sizes"
+#  7s/0h of 119325 corpus (98981s/20344h) 03/21/04
+#  0s/0h of 15929 corpus (13729s/2200h) 03/23/04
+#counts   SARE_ADLTSUB8            6s/0h of 42056 corpus (34127s/7929h FVGT) 04/19/06
+#counts   SARE_ADLTSUB8            6s/2h of 140226 corpus (90162s/50064h DOC) 04/19/06
+
+
+#header   SARE_ADLTSUB10 Subject =~ /(?!\b(?:rap(?:e[sd]?|ing|pel)|reaping)\b)\br.?a.?p.?(?:e.?[sd]?|i.?n.?g)\b/i
+#describe SARE_ADLTSUB10 Apparent spam seems to contain porn subject
+#score    SARE_ADLTSUB10 2.500  # type=obfu
+# Original name: RM_swp_Rapeo2
+#  20s/0h of 119325 corpus (98981s/20344h) 03/21/04
+#  0s/0h of 15929 corpus (13729s/2200h) 03/23/04
+#counts   SARE_ADLTSUB10           5s/0h of 42056 corpus (34127s/7929h FVGT) 04/19/06
+#counts   SARE_ADLTSUB10           6s/0h of 140226 corpus (90162s/50064h DOC) 04/19/06
+
+
+#header   SARE_BEDROOMSEC Subject =~ /bedroom secret/i
+#describe SARE_BEDROOMSEC Common spammer phrasing
+#score    SARE_BEDROOMSEC 0.611
+# Original name: RM_spp_BedroomSec
+#  10s/0h of 125078 corpus (104890s/20188h) 03/29/04
+#  0s/0h of 15929 corpus (13729s/2200h) 03/29/04
+#counts   SARE_BEDROOMSEC          0s/0h of 42056 corpus (34127s/7929h FVGT) 04/19/06
+#counts   SARE_BEDROOMSEC          0s/0h of 140226 corpus (90162s/50064h DOC) 04/19/06
+
+
+###############################
+#         body rules          #
+###############################
+
+
+body      FB_SEXOHOL		/sexoholics/i
+score     FB_SEXOHOL		1.66
+#counts   FB_SEXOHOL               7s/0h of 32370 corpus (24496s/7874h ML) 12/12/05
+#counts   FB_SEXOHOL               37s/0h of 40658 corpus (35364s/5294h MY) 12/12/05
+#counts   FB_SEXOHOL               33s/0h of 207630 corpus (200121s/7509h FT) 12/13/05
+#counts   FB_SEXOHOL               3s/0h of 9809 corpus (4905s/4904h FT) 12/12/05
+#counts   FB_SEXOHOL               11s/0h of 11532 corpus (6163s/5369h CT) 12/12/05
+#counts   FB_SEXOHOL               4s/0h of 70031 corpus (30720s/39311h DOC) 12/12/05
+#counts   FB_SEXOHOL               0s/0h of 42056 corpus (34127s/7929h FVGT) 04/19/06
+#counts   FB_SEXOHOL               18s/0h of 140226 corpus (90162s/50064h DOC) 04/19/06
+
+
+body   FB_XUAL		/\bxual\b/
+score  FB_XUAL		0.68
+#counts   FB_XUAL                  20s/0h of 6871 corpus (5500s/1371h AxB) 12/15/05
+#counts   FB_XUAL                  67s/0h of 34342 corpus (25865s/8477h ML) 12/15/05
+#counts   FB_XUAL                  22s/0h of 40631 corpus (35338s/5293h MY) 12/15/05
+#counts   FB_XUAL                  62s/0h of 70858 corpus (31544s/39314h DOC) 12/15/05
+#counts   FB_XUAL                  855s/0h of 107818 corpus (99658s/8160h FVGT) 03/11/06
+#counts   FB_XUAL                  100s/0h of 42056 corpus (34127s/7929h FVGT) 04/19/06
+#counts   FB_XUAL                  360s/0h of 140226 corpus (90162s/50064h DOC) 04/19/06
+
+
+#body  FB_NOT_SEX	/ s[^afeiloprsuw]x\b/i
+#score FB_NOT_SEX	1.003
+#counts   FB_NOT_SEX               7s/7h of 37297 corpus (31824s/5473h MY) 02/07/06
+#counts   FB_NOT_SEX               4s/4h of 6866 corpus (4638s/2228h AxB) 02/07/06
+#counts   FB_NOT_SEX               4s/5h of 11694 corpus (6132s/5562h CT) 02/07/06
+#counts   FB_NOT_SEX               204s/4h of 345244 corpus (337372s/7872h FT) 02/07/06
+#counts   FB_NOT_SEX               110s/0h of 107818 corpus (99658s/8160h FVGT) 03/11/06
+#counts   FB_NOT_SEX               23s/0h of 42056 corpus (34127s/7929h FVGT) 04/19/06
+#counts   FB_NOT_SEX               108s/2h of 140226 corpus (90162s/50064h DOC) 04/19/06
+
+
+#body  FB_GIRLS_DOLLAR	/girl\$/i
+#score FB_GIRLS_DOLLAR	1.992
+#counts   FB_GIRLS_DOLLAR          0s/0h of 37297 corpus (31824s/5473h MY) 02/07/06
+#counts   FB_GIRLS_DOLLAR          0s/0h of 6866 corpus (4638s/2228h AxB) 02/07/06
+#counts   FB_GIRLS_DOLLAR          0s/0h of 11694 corpus (6132s/5562h CT) 02/07/06
+#counts   FB_GIRLS_DOLLAR          36s/0h of 345244 corpus (337372s/7872h FT) 02/07/06
+#counts   FB_GIRLS_DOLLAR          8s/0h of 42056 corpus (34127s/7929h FVGT) 04/19/06
+#counts   FB_GIRLS_DOLLAR          2s/0h of 140226 corpus (90162s/50064h DOC) 04/19/06
+
+
+# 1as$e$
+#body     FB_DOLLAR_ASS2		/(?:\b|[0-9])(?!ass)a[s\$][s\$](?:\b|e)/i
+#score    FB_DOLLAR_ASS2		0.361
+#counts   FB_DOLLAR_ASS2           2s/1h of 9374 corpus (7151s/2223h AxB) 03/01/06
+#counts   FB_DOLLAR_ASS2           6s/0h of 12244 corpus (6572s/5672h CT) 03/01/06
+#counts   FB_DOLLAR_ASS2           0s/2h of 27495 corpus (21848s/5647h MY) 03/01/06
+#counts   FB_DOLLAR_ASS2           13s/0h of 34977 corpus (27086s/7891h FT) 03/01/06
+#counts   FB_DOLLAR_ASS2           10s/2h of 84470 corpus (67306s/17164h ML) 03/01/06
+#counts   FB_DOLLAR_ASS2           10s/1h of 103116 corpus (63731s/39385h DOC) 03/01/06
+#counts   FB_DOLLAR_ASS2           58s/0h of 107818 corpus (99658s/8160h FVGT) 03/11/06
+#counts   FB_DOLLAR_ASS2           21s/0h of 42056 corpus (34127s/7929h FVGT) 04/19/06
+#counts   FB_DOLLAR_ASS2           13s/1h of 140226 corpus (90162s/50064h DOC) 04/19/06
+
+
+body     FB_HARD_ERECTION  /hard(?:er)? (?:erection|penis)/i
+score    FB_HARD_ERECTION  1.66
+#counts  FB_HARD_ERECTION  2728s/0h of 211356 corpus (203977s/7379h FT) 11/23/05
+#counts   FB_HARD_ERECTION         393s/0h of 42056 corpus (34127s/7929h FVGT) 04/19/06
+#counts   FB_HARD_ERECTION         573s/0h of 140226 corpus (90162s/50064h DOC) 04/19/06
+
+
+#body     FB_JACKRABBIT     /Jack Rabbit Vibrat[o0]r/i
+#score    FB_JACKRABBIT     3.599
+#counts  FB_JACKRABBIT     640s/0h of 211356 corpus (203977s/7379h FT) 11/23/05
+#counts   FB_JACKRABBIT            0s/0h of 42056 corpus (34127s/7929h FVGT) 04/19/06
+#counts   FB_JACKRABBIT            47s/0h of 140226 corpus (90162s/50064h DOC) 04/19/06
+
+
+body     FB_PENIS          /\b(?!penis)p[3e]n[i1!][s5]\b/i
+score    FB_PENIS          1.66
+#counts   FB_PENIS                 170s/0h of 42056 corpus (34127s/7929h FVGT) 04/19/06
+#counts   FB_PENIS                 386s/0h of 140226 corpus (90162s/50064h DOC) 04/19/06
+
+
+body   FB_FEMALE_EJACU		/female ejaculation/i
+score  FB_FEMALE_EJACU		1.66
+#counts   FB_FEMALE_EJACU          4s/0h of 42056 corpus (34127s/7929h FVGT) 04/19/06
+#counts   FB_FEMALE_EJACU          1s/0h of 140226 corpus (90162s/50064h DOC) 04/19/06
+
+
+body   FB_INNOCENT		/innocent (?:boy|girl|child)/i
+score  FB_INNOCENT		0.40
+#counts   FB_INNOCENT              14s/1h of 42056 corpus (34127s/7929h FVGT) 04/19/06
+#counts   FB_INNOCENT              7s/1h of 140226 corpus (90162s/50064h DOC) 04/19/06
+
+
+#body		LW_PORN_PHOTO		/Tell our photographers what to do in their next photo session our video/
+#score		LW_PORN_PHOTO		5
+#describe	LW_PORN_PHOTO		Standard 'hot chicks' line
+#counts   LW_PORN_PHOTO            0s/0h of 42056 corpus (34127s/7929h FVGT) 04/19/06
+#counts   LW_PORN_PHOTO            3s/0h of 140226 corpus (90162s/50064h DOC) 04/19/06
+
+
+#body		LW_PORN_ONLINE		/high quality photo's online/
+#score		LW_PORN_ONLINE		2
+#describe	LW_PORN_ONLINE		Standard 'hot chicks' line
+#counts   LW_PORN_ONLINE           0s/0h of 42056 corpus (34127s/7929h FVGT) 04/19/06
+#counts   LW_PORN_ONLINE           4s/0h of 140226 corpus (90162s/50064h DOC) 04/19/06
+
+
+#body		LW_PORN_MODELS		/models getting nasty/
+#score		LW_PORN_MODELS		5
+#describe	LW_PORN_MODELS		Standard 'hot chicks' line
+#counts   LW_PORN_MODELS           0s/0h of 42056 corpus (34127s/7929h FVGT) 04/19/06
+#counts   LW_PORN_MODELS           0s/0h of 140226 corpus (90162s/50064h DOC) 04/19/06
+
+
+body		LW_PORN_HELLO		/(?:Hey baby|Hello, stranger!) :\)/
+score		LW_PORN_HELLO		1.66	
+describe	LW_PORN_HELLO		Standard 'hot chicks' line
+#counts   LW_PORN_HELLO            2s/0h of 42056 corpus (34127s/7929h FVGT) 04/19/06
+#counts   LW_PORN_HELLO            5s/0h of 140226 corpus (90162s/50064h DOC) 04/19/06
+
+
+
+
+#$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+# set of porn keywords / when these words appear, it's more likely porn. SET A.
+body     __FVGT_BREASTS		/\bbreasts?\b/i
+body     __FVGT_FUCK		/\bfuck/i
+body     __FVGT_RAPE		/\braped?\b/i
+body     __FVGT_HORNY		/\bhorny\b/i
+body     __FVGT_VIRGIN		/\bvirgins?\b/i
+body     __FVGT_COCK		/\bcock\b/i
+body     __FVGT_LOLITA		/\blolita\b/i
+body     __FVGT_YOUNGGIRL	/Young(?:est)? (?:girl|chick)/i
+body     __FVGT_PUSSY		/\bpuss(?:y|ies)/i
+body     __FVGT_ASS		/\sass\s/i
+body     __FVGT_SLUT		/\bslut\b/i
+
+# meta's to count how many porn words from Set A.
+meta     FM_PORN_A_4		((__FVGT_BREASTS + __FVGT_FUCK + __FVGT_RAPE + __FVGT_HORNY + __FVGT_VIRGIN + __FVGT_COCK + __FVGT_LOLITA + __FVGT_YOUNGGIRL + __FVGT_PUSSY + __FVGT_ASS + __FVGT_SLUT) > 2)
+meta     FM_PORN_A_5		((__FVGT_BREASTS + __FVGT_FUCK + __FVGT_RAPE + __FVGT_HORNY + __FVGT_VIRGIN + __FVGT_COCK + __FVGT_LOLITA + __FVGT_YOUNGGIRL + __FVGT_PUSSY + __FVGT_ASS + __FVGT_SLUT) > 3)
+
+score    FM_PORN_A_4		1.09
+#counts   FM_PORN_A_4              796s/2h of 42056 corpus (34127s/7929h FVGT) 04/19/06
+#counts   FM_PORN_A_4              243s/0h of 140226 corpus (90162s/50064h DOC) 04/19/06
+
+
+
+score    FM_PORN_A_5		0.98
+#counts   FM_PORN_A_5              358s/0h of 42056 corpus (34127s/7929h FVGT) 04/19/06
+#counts   FM_PORN_A_5              172s/0h of 140226 corpus (90162s/50064h DOC) 04/19/06
+
+
+
+
+
+
+body  __HAS_COLLECTION			/\bcollection\b/i
+body  __HAS_HARDCORE			/\bhardcore\b/i
+body  __HAS_YOUNGGIRL			/\byoung\s?girls?\b/i
+body  __HAS_ADOLESCENT			/\badolescents?\b/i
+body  __HAS_CHICKS			/\bchicks?\b/i
+
+meta  FP_MIXED_PORN3			((__HAS_COLLECTION + __HAS_HARDCORE + __HAS_YOUNGGIRL + __HAS_ADOLESCENT + __HAS_CHICKS) > 2)
+score FP_MIXED_PORN3			1.66
+#counts   FP_MIXED_PORN3           4s/0h of 42056 corpus (34127s/7929h FVGT) 04/19/06
+#counts   FP_MIXED_PORN3           5s/0h of 140226 corpus (90162s/50064h DOC) 04/19/06
+
+
+
+body     SARE_ADULT1 /(?:suck|l[i1]ck).{1,30}(c[o0]ck|d[i1]ck)/i
+describe SARE_ADULT1 Contains adult material
+score    SARE_ADULT1 1.47
+# Original name: FVGT_b_ADULT02
+#  55s/2h of 119325 corpus (98981s/20344h) 03/21/04
+#  18s/0h of 15929 corpus (13729s/2200h) 03/23/04
+#counts   SARE_ADULT1              512s/1h of 42056 corpus (34127s/7929h FVGT) 04/19/06
+#counts   SARE_ADULT1              129s/1h of 140226 corpus (90162s/50064h DOC) 04/19/06
+
+
+body     SARE_ADULT2 /\b(?:sorority|rock hard|(adu?(l|1)t|XXX) movies?|climatique|orgas(mic|ims?|ms?)|climax|ejactulate|penis|pussy|cunt|blowjob|intercourse|lubricate)\b/i
+describe SARE_ADULT2 Contains adult material
+score    SARE_ADULT2 1.42
+# Original name: MY_XXX_BODY, was rawbody
+#  9985s/30h of 119325 corpus (98981s/20344h) 03/21/04
+#  683s/2h of 15929 corpus (13729s/2200h) 03/23/04
+#counts   SARE_ADULT2              4729s/9h of 42056 corpus (34127s/7929h FVGT) 04/19/06
+#counts   SARE_ADULT2              2685s/34h of 140226 corpus (90162s/50064h DOC) 04/19/06
+
+
+body     SARE_BETTERORG /(?:boost|magnify|multipl[ey]|increase|frequent|intense|intensify).{1,15}orgasm/i
+describe SARE_BETTERORG Talks about getting better orgasms
+score    SARE_BETTERORG 1.66
+# Original name: YM_B_BETTER_ORG, RM_bpm_MultipleOrgasms
+#  592s/2h of 119325 corpus (98981s/20344h) 03/21/04
+#  29s/0h of 15929 corpus (13729s/2200h) 03/23/04
+#counts   SARE_BETTERORG           249s/0h of 42056 corpus (34127s/7929h FVGT) 04/19/06
+#counts   SARE_BETTERORG           111s/0h of 140226 corpus (90162s/50064h DOC) 04/19/06
+
+
+body     SARE_ENLRGYOUR /enlarge your/i
+describe SARE_ENLRGYOUR Talks about "enlarging" something
+score    SARE_ENLRGYOUR 1.02
+# Original name: MY_EN_PENIS, was rawbody, RE_bpm_EnlargeYour
+#  1735s/0h of 119325 corpus (98981s/20344h) 03/21/04
+#  91s/0h of 15929 corpus (13729s/2200h) 03/23/04
+#counts   SARE_ENLRGYOUR           537s/0h of 42056 corpus (34127s/7929h FVGT) 04/19/06
+#counts   SARE_ENLRGYOUR           279s/1h of 140226 corpus (90162s/50064h DOC) 04/19/06
+
+
+body     SARE_LRGPNS /(?:bigger|larger|increase your) (?:member\b|rod)/i
+describe SARE_LRGPNS Talks about a "bigger" appendage
+score    SARE_LRGPNS 1.66
+# Original name: MY_MEMBER combined with MY_LRGROD
+#  50s/0h of 119325 corpus (98981s/20344h) 03/21/04
+#  0s/0h of 15929 corpus (13729s/2200h) 03/23/04
+#counts   SARE_LRGPNS              0s/0h of 42056 corpus (34127s/7929h FVGT) 04/19/06
+#counts   SARE_LRGPNS              0s/0h of 140226 corpus (90162s/50064h DOC) 04/19/06
+
+
+body     SARE_PNSSIZE /inch(?:es)? .{0,10}(?:cock|dick)/i
+describe SARE_PNSSIZE Talks about the size of male body part
+score    SARE_PNSSIZE 1.66
+# Original name: YM_B_BODYPART_1
+#  3s/0h of 119325 corpus (98981s/20344h) 03/21/04
+#  6s/0h of 15929 corpus (13729s/2200h) 03/23/04
+#counts   SARE_PNSSIZE             5s/0h of 42056 corpus (34127s/7929h FVGT) 04/19/06
+#counts   SARE_PNSSIZE             2s/0h of 140226 corpus (90162s/50064h DOC) 04/19/06
+
+
+body     SARE_SXLIFE /(?:are you single|sex life|youre? partner)/i
+describe SARE_SXLIFE Talks about your sex life
+score    SARE_SXLIFE 1.07
+#  695s/15h of 119325 corpus (98981s/20344h) 03/21/04
+#  212s/1h of 15929 corpus (13729s/2200h) 03/23/04
+#counts   SARE_SXLIFE              991s/12h of 42056 corpus (34127s/7929h FVGT) 04/19/06
+#counts   SARE_SXLIFE              637s/54h of 140226 corpus (90162s/50064h DOC) 04/19/06
+
+
+body     SARE_BEASTUD /be a stud/i
+describe SARE_BEASTUD common spammer phrasing
+score    SARE_BEASTUD 0.26
+# Original name: RM_bpm_BeAStud
+#  53s/0h of 119325 corpus (98981s/20344h) 03/21/04
+#  7s/0h of 15929 corpus (13729s/2200h) 03/23/04
+#counts   SARE_BEASTUD             73s/2h of 42056 corpus (34127s/7929h FVGT) 04/19/06
+#counts   SARE_BEASTUD             20s/1h of 140226 corpus (90162s/50064h DOC) 04/19/06
+
+
+body     SARE_BIGRMEMBER /B.?i.?g.?g.?e.?r.{0,5}M.?e.?m.?b.?e.?r/i 
+describe SARE_BIGRMEMBER mentions bigger body part
+score    SARE_BIGRMEMBER 1.66
+# Original name: RM_bpm_BiggerMember
+#  17s/0h of 119325 corpus (98981s/20344h) 03/21/04
+#  0s/0h of 15929 corpus (13729s/2200h) 03/23/04
+#counts   SARE_BIGRMEMBER          0s/0h of 42056 corpus (34127s/7929h FVGT) 04/19/06
+#counts   SARE_BIGRMEMBER          0s/0h of 140226 corpus (90162s/50064h DOC) 04/19/06
+
+
+body     SARE_INLENGTH /increase.? my length/i
+describe SARE_INLENGTH common spammer phrasing
+score    SARE_INLENGTH 1.66
+# Original name: RM_bpm_IncreaseLength
+#  40s/0h of 119325 corpus (98981s/20344h) 03/21/04
+#  8s/0h of 15929 corpus (13729s/2200h) 03/23/04
+#counts   SARE_INLENGTH            60s/0h of 42056 corpus (34127s/7929h FVGT) 04/19/06
+#counts   SARE_INLENGTH            20s/0h of 140226 corpus (90162s/50064h DOC) 04/19/06
+
+
+#body     SARE_LADYINLIFE /lady in your life/i 
+#describe SARE_LADYINLIFE Contains phrasing used by spammers
+#score    SARE_LADYINLIFE 0.166
+# Original name: RM_bpm_LadyInLife
+#  3s/0h of 119325 corpus (98981s/20344h) 03/21/04
+#  0s/0h of 15929 corpus (13729s/2200h) 03/23/04
+#counts   SARE_LADYINLIFE          0s/0h of 42056 corpus (34127s/7929h FVGT) 04/19/06
+#counts   SARE_LADYINLIFE          0s/0h of 140226 corpus (90162s/50064h DOC) 04/19/06
+
+
+#body     SARE_MAGICLUBE /"Magic Lubricant"/i 
+#describe SARE_MAGICLUBE Spammer phrasing in body of email
+#score    SARE_MAGICLUBE 2.222 # type=spamgg
+# Original name: RM_bpm_MagicLubricant
+#  704s/0h of 119325 corpus (98981s/20344h) 03/21/04
+#  12s/0h of 15929 corpus (13729s/2200h) 03/23/04
+#counts   SARE_MAGICLUBE           0s/0h of 42056 corpus (34127s/7929h FVGT) 04/19/06
+#counts   SARE_MAGICLUBE           0s/0h of 140226 corpus (90162s/50064h DOC) 04/19/06
+
+
+body     SARE_NOEMBARRASS /no embarrassing/i
+describe SARE_NOEMBARRASS Wow, I won't be embarrassed anymore!
+score    SARE_NOEMBARRASS 1.66
+# Original name: RM_bpm_NoEmbarrassing
+#  30s/0h of 119325 corpus (98981s/20344h) 03/21/04
+#  6s/0h of 15929 corpus (13729s/2200h) 03/23/04
+#counts   SARE_NOEMBARRASS         0s/0h of 42056 corpus (34127s/7929h FVGT) 04/19/06
+#counts   SARE_NOEMBARRASS         1s/0h of 140226 corpus (90162s/50064h DOC) 04/19/06
+
+
+body     SARE_PLEASEPARTNR /Pleasure.{1,10}partner/i
+describe SARE_PLEASEPARTNR common spammer phrasing
+score    SARE_PLEASEPARTNR 1.66
+# Original name: RM_bpm_PleasurePartnr
+#  51s/0h of 119325 corpus (98981s/20344h) 03/21/04
+#  6s/0h of 15929 corpus (13729s/2200h) 03/23/04
+#counts   SARE_PLEASEPARTNR        60s/0h of 42056 corpus (34127s/7929h FVGT) 04/19/06
+#counts   SARE_PLEASEPARTNR        20s/0h of 140226 corpus (90162s/50064h DOC) 04/19/06
+
+
+#body     SARE_POWERBOTTLE /"Power Bottle"/i 
+#describe SARE_POWERBOTTLE Spammer phrasing in body of email
+#	score    SARE_POWERBOTTLE 2.222 # type=spamgg
+# Original name: RM_bpm_PowerBottle
+#  708s/0h of 119325 corpus (98981s/20344h) 03/21/04
+#  12s/0h of 15929 corpus (13729s/2200h) 03/23/04
+#counts   SARE_POWERBOTTLE         0s/0h of 42056 corpus (34127s/7929h FVGT) 04/19/06
+#counts   SARE_POWERBOTTLE         0s/0h of 140226 corpus (90162s/50064h DOC) 04/19/06
+
+
+#body     SARE_PRODEREC /produce erections/i
+#describe SARE_PRODEREC Contains medical spam phrasing
+#score    SARE_PRODEREC 0.055
+# Original name: RE_bpm_ProdErec
+#  1s/0h of 119325 corpus (98981s/20344h) 03/21/04
+#  0s/0h of 15929 corpus (13729s/2200h) 03/23/04
+#counts   SARE_PRODEREC            0s/0h of 42056 corpus (34127s/7929h FVGT) 04/19/06
+#counts   SARE_PRODEREC            0s/0h of 140226 corpus (90162s/50064h DOC) 04/19/06
+
+
+body     SARE_SUPERVIAGRA /(?:super|weekend)[- ]viagra/i
+describe SARE_SUPERVIAGRA mentions drug which is often subject of spam
+score    SARE_SUPERVIAGRA 1.66 # type=spamgg
+# Original name: RM_bpm_SuperViagra, RM_bpm_WeekendViagra
+#  299s/0h of 119325 corpus (98981s/20344h) 03/21/04
+#  11s/0h of 15929 corpus (13729s/2200h) 03/23/04
+#counts   SARE_SUPERVIAGRA         136s/0h of 42056 corpus (34127s/7929h FVGT) 04/19/06
+#counts   SARE_SUPERVIAGRA         704s/0h of 140226 corpus (90162s/50064h DOC) 04/19/06
+
+
+body     SARE_ADLTDATING /adult dating/i
+describe SARE_ADLTDATING Contains phrasing used by spammers
+score    SARE_ADLTDATING 0.32
+# Original name: RM_bpp_Adultdating
+#  3s/0h of 119325 corpus (98981s/20344h) 03/21/04
+#  0s/0h of 15929 corpus (13729s/2200h) 03/23/04
+#counts   SARE_ADLTDATING          1s/0h of 42056 corpus (34127s/7929h FVGT) 04/19/06
+#counts   SARE_ADLTDATING          32s/0h of 140226 corpus (90162s/50064h DOC) 04/19/06
+
+
+body     SARE_ADLTPRSNLS /adult personals/i 
+describe SARE_ADLTPRSNLS Contains phrasing used by spammers
+score    SARE_ADLTPRSNLS 1.66
+# Original name: RM_bpp_AdultPersonals
+#  3s/0h of 119325 corpus (98981s/20344h) 03/21/04
+#  2s/0h of 15929 corpus (13729s/2200h) 03/23/04
+#counts   SARE_ADLTPRSNLS          1s/0h of 42056 corpus (34127s/7929h FVGT) 04/19/06
+#counts   SARE_ADLTPRSNLS          13s/0h of 140226 corpus (90162s/50064h DOC) 04/19/06
+
+
+#body     SARE_AREUBORED /Are you bored of/i 
+#describe SARE_AREUBORED Contains phrasing used by spammers
+#score    SARE_AREUBORED 0.111
+# Original name: RM_bpp_AreYouBored
+#  2s/0h of 119325 corpus (98981s/20344h) 03/21/04
+#  3s/0h of 15929 corpus (13729s/2200h) 03/23/04
+#counts   SARE_AREUBORED           0s/0h of 42056 corpus (34127s/7929h FVGT) 04/19/06
+#counts   SARE_AREUBORED           0s/0h of 140226 corpus (90162s/50064h DOC) 04/19/06
+
+
+body     SARE_CHILDPRN1 /child porn/i 
+describe SARE_CHILDPRN1 contains reference to child porn 
+score    SARE_CHILDPRN1 1.15  # ham: news, FBI auto-responder
+# Original name: ChildPorn
+#  64s/3h of 119325 corpus (98981s/20344h) 03/21/04
+#  5s/0h of 15929 corpus (13729s/2200h) 03/23/04
+#counts   SARE_CHILDPRN1           0s/0h of 42056 corpus (34127s/7929h FVGT) 04/19/06
+#counts   SARE_CHILDPRN1           1s/1h of 140226 corpus (90162s/50064h DOC) 04/19/06
+
+
+#body     SARE_CHILDPRN2 /child pornography webmaster/i
+#describe SARE_CHILDPRN2 contains reference to a child porn webmaster
+#score    SARE_CHILDPRN2 2.222 # type=spamg
+# Original name: RM_bpp_ChildPorn2
+#  9s/0h of 119325 corpus (98981s/20344h) 03/21/04
+#  0s/0h of 15929 corpus (13729s/2200h) 03/23/04
+#counts   SARE_CHILDPRN2           0s/0h of 42056 corpus (34127s/7929h FVGT) 04/19/06
+#counts   SARE_CHILDPRN2           0s/0h of 140226 corpus (90162s/50064h DOC) 04/19/06
+
+
+#body     SARE_CHILDPRN3 /underage porn/i
+#describe SARE_CHILDPRN3 contains reference to child porn 
+#score    SARE_CHILDPRN3 2.222  # type=spamg 
+# Original name: RM_bpp_ChildPorn3
+#  28s/0h of 119325 corpus (98981s/20344h) 03/21/04
+#  5s/0h of 15929 corpus (13729s/2200h) 03/23/04
+#counts   SARE_CHILDPRN3           0s/0h of 42056 corpus (34127s/7929h FVGT) 04/19/06
+#counts   SARE_CHILDPRN3           0s/0h of 140226 corpus (90162s/50064h DOC) 04/19/06
+
+
+body     SARE_TOWRITE /decided to write/i 
+describe SARE_TOWRITE Contains phrasing used by spammers
+score    SARE_TOWRITE 1.05
+# Original name: RM_bpp_DecidedToWrite
+#  41s/2h of 119325 corpus (98981s/20344h) 03/21/04
+#  2s/0h of 15929 corpus (13729s/2200h) 03/23/04
+#counts   SARE_TOWRITE             6s/0h of 42056 corpus (34127s/7929h FVGT) 04/19/06
+#counts   SARE_TOWRITE             11s/3h of 140226 corpus (90162s/50064h DOC) 04/19/06
+
+
+#body     SARE_DRMWOMAN /your dream woman/i 
+#describe SARE_DRMWOMAN Contains phrasing used by spammers
+#score    SARE_DRMWOMAN 0.055
+# Original name: RM_bpp_DreamWoman
+#  1s/0h of 119325 corpus (98981s/20344h) 03/21/04
+#  0s/0h of 15929 corpus (13729s/2200h) 03/23/04
+#counts   SARE_DRMWOMAN            0s/0h of 42056 corpus (34127s/7929h FVGT) 04/19/06
+#counts   SARE_DRMWOMAN            0s/0h of 140226 corpus (90162s/50064h DOC) 04/19/06
+
+
+body     SARE_GETFCK /get fuck/i 
+describe SARE_GETFCK Contains phrasing used by spammers
+score    SARE_GETFCK 1.66 # type=spamp
+# Original name: RM_bpp_GetFucked
+#  22s/0h of 119325 corpus (98981s/20344h) 03/21/04
+#  8s/0h of 15929 corpus (13729s/2200h) 03/23/04
+#counts   SARE_GETFCK              71s/0h of 42056 corpus (34127s/7929h FVGT) 04/19/06
+#counts   SARE_GETFCK              32s/0h of 140226 corpus (90162s/50064h DOC) 04/19/06
+
+
+#body     SARE_GIRLSDOANY /girls will do anything/i 
+#describe SARE_GIRLSDOANY Contains phrasing used by spammers
+#score    SARE_GIRLSDOANY 0.166
+# Original name: RM_bpp_GirlsDoAny
+#  3s/0h of 119325 corpus (98981s/20344h) 03/21/04
+#  3s/0h of 15929 corpus (13729s/2200h) 03/23/04
+#counts   SARE_GIRLSDOANY          1s/0h of 42056 corpus (34127s/7929h FVGT) 04/19/06
+#counts   SARE_GIRLSDOANY          0s/0h of 140226 corpus (90162s/50064h DOC) 04/19/06
+
+
+#body     SARE_HORNY2 /horny as hell/i 
+#describe SARE_HORNY2 Contains phrasing used by spammers
+#score    SARE_HORNY2 0.222
+# Original name: RM_bpp_HornyAsHell
+#  4s/0h of 119325 corpus (98981s/20344h) 03/21/04
+#  3s/0h of 15929 corpus (13729s/2200h) 03/23/04
+#counts   SARE_HORNY2              0s/0h of 42056 corpus (34127s/7929h FVGT) 04/19/06
+#counts   SARE_HORNY2              0s/0h of 140226 corpus (90162s/50064h DOC) 04/19/06
+
+
+#body     SARE_MOMBLOW /mother blows/i
+#describe SARE_MOMBLOW textual phrase implies porn spam 
+#score    SARE_MOMBLOW 0.111
+# Original name: RM_bpp_MotherBlows
+#  2s/0h of 119325 corpus (98981s/20344h) 03/21/04
+#  0s/0h of 15929 corpus (13729s/2200h) 03/23/04
+#counts   SARE_MOMBLOW             0s/0h of 42056 corpus (34127s/7929h FVGT) 04/19/06
+#counts   SARE_MOMBLOW             0s/0h of 140226 corpus (90162s/50064h DOC) 04/19/06
+
+
+body     SARE_BADGIRLS /(?:amateur|horny|asian) girls/i 
+describe SARE_BADGIRLS Contains phrasing used by spammers
+score    SARE_BADGIRLS 0.52
+# Original name: RM_bpp_PornGirls
+#  12s/0h of 119325 corpus (98981s/20344h) 03/21/04
+#  9s/0h of 15929 corpus (13729s/2200h) 03/23/04
+#counts   SARE_BADGIRLS            21s/0h of 42056 corpus (34127s/7929h FVGT) 04/19/06
+#counts   SARE_BADGIRLS            5s/0h of 140226 corpus (90162s/50064h DOC) 04/19/06
+
+
+body     SARE_QLTYSINGLES /quality singles/i 
+describe SARE_QLTYSINGLES Contains phrasing seen in spam 
+score    SARE_QLTYSINGLES 1.66
+# Original name: RM_bpp_QualitySingles
+#  3s/0h of 119325 corpus (98981s/20344h) 03/21/04
+#  0s/0h of 15929 corpus (13729s/2200h) 03/23/04
+#counts   SARE_QLTYSINGLES         0s/0h of 42056 corpus (34127s/7929h FVGT) 04/19/06
+#counts   SARE_QLTYSINGLES         1s/0h of 140226 corpus (90162s/50064h DOC) 04/19/06
+
+
+#body     SARE_HORNY1 /so hoo+rny/i 
+#describe SARE_HORNY1 Contains phrasing used by spammers
+#score    SARE_HORNY1 1.000  # type=spamp
+# Original name: SoHorny
+#  1s/0h of 119325 corpus (98981s/20344h) 03/21/04
+#  0s/0h of 15929 corpus (13729s/2200h) 03/23/04
+#counts   SARE_HORNY1              0s/0h of 42056 corpus (34127s/7929h FVGT) 04/19/06
+#counts   SARE_HORNY1              0s/0h of 140226 corpus (90162s/50064h DOC) 04/19/06
+
+
+#body     SARE_SONSDICK /son's dick/i
+#describe SARE_SONSDICK textual phrase implies porn spam 
+#score    SARE_SONSDICK 1.000  # type=spamp
+# Original name: SonsDick
+#  2s/0h of 119325 corpus (98981s/20344h) 03/21/04
+#  0s/0h of 15929 corpus (13729s/2200h) 03/23/04
+#counts   SARE_SONSDICK            0s/0h of 42056 corpus (34127s/7929h FVGT) 04/19/06
+#counts   SARE_SONSDICK            0s/0h of 140226 corpus (90162s/50064h DOC) 04/19/06
+
+
+body     SARE_STILLSINGLE /still single/i 
+describe SARE_STILLSINGLE Contains phrasing used by spammers
+score    SARE_STILLSINGLE 1.66
+# Original name: RM_bpp_StillSingle
+#  11s/0h of 119325 corpus (98981s/20344h) 03/21/04
+#  5s/0h of 15929 corpus (13729s/2200h) 03/23/04
+#counts   SARE_STILLSINGLE         0s/0h of 42056 corpus (34127s/7929h FVGT) 04/19/06
+#counts   SARE_STILLSINGLE         71s/1h of 140226 corpus (90162s/50064h DOC) 04/19/06
+
+
+#body     SARE_UNDRESSMTHR /undressed mother/i
+#describe SARE_UNDRESSMTHR textual phrase implies porn spam 
+#score    SARE_UNDRESSMTHR 0.200
+# Original name: RM_bpp_UndressedMother
+#  2s/0h of 119325 corpus (98981s/20344h) 03/21/04
+#  0s/0h of 15929 corpus (13729s/2200h) 03/23/04
+#counts   SARE_UNDRESSMTHR         0s/0h of 42056 corpus (34127s/7929h FVGT) 04/19/06
+#counts   SARE_UNDRESSMTHR         0s/0h of 140226 corpus (90162s/50064h DOC) 04/19/06
+
+
+body     SARE_HOUSEWIVES /housewives/i
+describe SARE_HOUSEWIVES Mentions housewives, as in porn or in-home biz
+score    SARE_HOUSEWIVES 0.99
+# Original name: RM_bwp_housewives
+#  138s/0h of 119325 corpus (98981s/20344h) 03/21/04
+#  18s/0h of 15929 corpus (13729s/2200h) 03/23/04
+#counts   SARE_HOUSEWIVES          13s/3h of 42056 corpus (34127s/7929h FVGT) 04/19/06
+#counts   SARE_HOUSEWIVES          37s/6h of 140226 corpus (90162s/50064h DOC) 04/19/06
+
+
+body     SARE_SCHLGRL /schoolgirls/i
+describe SARE_SCHLGRL mentions schoolgirls, as in porn 
+score    SARE_SCHLGRL 1.29
+# Original name: RM_bwp_schoolgirls
+#  11s/0h of 119325 corpus (98981s/20344h) 03/21/04
+#  6s/0h of 15929 corpus (13729s/2200h) 03/23/04
+#counts   SARE_SCHLGRL             15s/0h of 42056 corpus (34127s/7929h FVGT) 04/19/06
+#counts   SARE_SCHLGRL             19s/0h of 140226 corpus (90162s/50064h DOC) 04/19/06
+
+
+###############################
+#      OBFU body rules        #
+###############################
+
+body     SARE_ADLTOBFU /\b(?:adu?1t|amb[1!]en|b0y|bl0w|c0cks?|c0re|d0main|f?r0m|g(?:[1!]r[1l]|ir[!1])|[1!]ntercourse|l1ttle|l0se|mai1|manh00d|m0vie|[0o]rg\@sm|p[0\@]rn|p1ct|pen[1!]s|(?:ph|f)(?:[0\@]t|ot[0\@])|pu[s5]{1,2}[1!]e[s5]|secks|sm00th|t1ny|t1ts|v(?:irg1|1rgi|1rg1)n|v[i1]de0|y0ung|y0ur)/i
+describe SARE_ADLTOBFU Contains OBFU adult material
+score    SARE_ADLTOBFU 0.68
+# Combined from FVGT_b_N0N0_WORDS, OACYS_DISGUISED_P0RN, M_K_N0N0_WORDS_BODY
+#  768s/1h of 119325 corpus (98981s/20344h) 03/21/04
+#  89s/0h of 15929 corpus (13729s/2200h) 03/23/04
+#counts   SARE_ADLTOBFU            930s/0h of 42056 corpus (34127s/7929h FVGT) 04/19/06
+#counts   SARE_ADLTOBFU            663s/10h of 140226 corpus (90162s/50064h DOC) 04/19/06
+
+
+body     SARE_OBFUENLARGE /\b(?!enlarge)e.?n.?l.?a.?r.?g.?e/i
+describe SARE_OBFUENLARGE masked spam word(s)
+score    SARE_OBFUENLARGE 1.66 # type=obfu
+# Original name: RM_bwo_Enlarge
+#  478s/0h of 119325 corpus (98981s/20344h) 03/21/04
+#  18s/0h of 15929 corpus (13729s/2200h) 03/23/04
+#counts   SARE_OBFUENLARGE         15s/0h of 42056 corpus (34127s/7929h FVGT) 04/19/06
+#counts   SARE_OBFUENLARGE         466s/0h of 140226 corpus (90162s/50064h DOC) 04/19/06
+
+
+#body     SARE_OBFUFCK1 /(?!\bfuck)(?:\bf|\B(?:\xC5\xBF|\xC6\x92|\xD2[\x92-\x93]))[\x01-\x2F\\\^_`\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:[uv\xB5\xD9-\xDC\xF9-\xFC]|\xC5[\xA8-\xB3]|\xC6[\xAF-\xB0]|\xC7[\x93-\x9C]|\xCE\xB0|\xCE\xBC|\xCF\x8B|\xCF\x8D|\xD4\xB1|\xD5\x84|\xD5\x8D)[\x01-\x2F\\\^_`\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:[c\xC7\xE7\xA2\xA9]|\xC4[\x86-\x8D]|\xD0\xA1|\xD1\x81)[\x01-\x2F\\\^_`\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:k|\xC4[\xB6-\xB8]|\xCE\x9A|\xCE\xBA|\xD0\x8C|\xD0\x9A|\xD0\xBA|\xD1\x9C|\xD2[\x9A-\x9D]])/i
+#describe SARE_OBFUFCK1 Apparent spam seems to contain porn subject
+#score    SARE_OBFUFCK1 1.666 # type=obfu
+# Original name: RM_bwo_Fucko1
+#  42s/0h of 119325 corpus (98981s/20344h) 03/21/04
+#  23s/0h of 15929 corpus (13729s/2200h) 03/23/04
+#counts   SARE_OBFUFCK1            19s/0h of 42056 corpus (34127s/7929h FVGT) 04/19/06
+#counts   SARE_OBFUFCK1            35s/0h of 140226 corpus (90162s/50064h DOC) 04/19/06
+
+
+body     SARE_OBFUFCK2 /(?!\bfun?ck)\bf.?u.?c.?k/i
+describe SARE_OBFUFCK2 Apparent spam seems to contain porn subject
+score    SARE_OBFUFCK2 1.00 # type=obfu
+# Original name: RM_bwo_Fucko2
+#  70s/1h of 119325 corpus (98981s/20344h) 03/21/04
+#  29s/0h of 15929 corpus (13729s/2200h) 03/23/04
+#counts   SARE_OBFUFCK2            56s/0h of 42056 corpus (34127s/7929h FVGT) 04/19/06
+#counts   SARE_OBFUFCK2            73s/3h of 140226 corpus (90162s/50064h DOC) 04/19/06
+
+
+#body     SARE_OBFUGNGBNG /(?!\bgangbang(ed)?\b)(?:\b[g6]|\B(?:\xC4[\x9C-\xA3]))[\x01-\x2F\\\^_`\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:[a4\*\@\xC0-\xC5\xAA\xE0-\xE5]|\/\\|\xC4[\x80-\x85]|\xC7[\x8D-\x8E]|\xC7[\xBA-\xBB]|\xCE\x86|\xCE\x91|\xCE\x94|\xCE\x9B|\xCE\xAC|\xCE\xB1|\xD0\x90|\xD0\xB0)[\x01-\x2F\\\^_`\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:[n\xD1\xF1]|\|\\\||\xC5[\x83-\x8B]|\xCE\x9D|\xCE\xA0|\xCE\xAE|\xCE\xB7|\xD5\xB2|\xD5\xB8)[\x01-\x2F\\\^_`\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:[g6]|\xC4[\x9C-\xA3]])[\x01-\x2F\\\^_`\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:[b8\xDF]|\xCE\x92|\xCE\xB2|\xD0\x92|\xD0\xB2)[\x01-\x2F\\\^_`\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:[a4\*\@\xC0-\xC5\xAA\xE0-\xE5]|\/\\|\xC4[\x80-\x85]|\xC7[\x8D-\x8E]|\xC7[\xBA-\xBB]|\xCE\x86|\xCE\x91|\xCE\x94|\xCE\x9B|\xCE\xAC|\xCE\xB1|\xD0\x90|\xD0\xB0)[\x01-\x2F\\\^_`\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:[n\xD1\xF1]|\|\\\||\xC5[\x83-\x8B]|\xCE\x9D|\xCE\xA0|\xCE\xAE|\xCE\xB7|\xD5\xB2|\xD5\xB8)[\x01-\x2F\\\^_`\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:[g6]|\xC4[\x9C-\xA3]])((?:[e3\*\xC8-\xCB\xE8-\xEB]|\xC4[\x92-\x9B]|\xCE\x88|\xCE\x95|\xCE\xA3|\xCE\xAD|\xCE\xB5|\xD0\x81|\xD0\x95|\xD0\xB5|\xD1\x91)[\x01-\x2F\\\^_`\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:[d\xD0]|\xC4[\x8E-\x91]))?\b/i
+#describe SARE_OBFUGNGBNG masked spam word(s)
+#score    SARE_OBFUGNGBNG 2.5 # type=obfu
+# Original name: RM_bwo_Gangbang
+#  2s/0h of 15929 corpus (13729s/2200h) 03/23/04
+#  3s/0h of 119325 corpus (98981s/20344h) 03/21/04
+#counts   SARE_OBFUGNGBNG          11s/0h of 42056 corpus (34127s/7929h FVGT) 04/19/06
+#counts   SARE_OBFUGNGBNG          1s/0h of 140226 corpus (90162s/50064h DOC) 04/19/06
+
+
+#body     SARE_OBFUGIRLS /(?!\bgirls?\b)(?:\b[g6]|\B(?:\xC4[\x9C-\xA3]))[\x01-\x2F\\\^_`\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:[il1:\|\*\xCC-\xCF\xEC-\xEF\xA6]|\xC4[\xA8-\xB0]|\xC4\xBA|\xC4\xBC|\xC4\xBE|\xC5\x80|\xC5\x82|\xC7[\x8F-\x90]|\xD0[\x86-\x87]|\xD1[\x96-\x97]|\xCE\x8A|\xCE\x90|\xCE\x99|\xCE\xAA|\xCE\xAF|\xCE\xB9|\xCF\x8A)[\x01-\x2F\\\^_`\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:[r\xAE]|\xC5[\x94-\x99]|\xD1\x93)[\x01-\x2F\\\^_`\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:[l1I\|\xA3]|(?:\xC5[\x80-\x82]|\xC4[\xB9-\xBF]))[\x01-\x2F\\\^_`\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:[s5\$\xA7]|\xC5[\x9A-\xA1]|\xD0\x85|\xD1\x95|\xD5\x8F)?\b/i
+#describe SARE_OBFUGIRLS masked spam word(s)
+#score    SARE_OBFUGIRLS 3.222 # type=obfu # ham: jpg
+# Original name: RM_bwo_Girls
+#  25s/1h of 15929 corpus (13729s/2200h) 03/23/04
+#  318s/1h of 119325 corpus (98981s/20344h) 03/21/04
+#counts   SARE_OBFUGIRLS           112s/0h of 42056 corpus (34127s/7929h FVGT) 04/19/06
+#counts   SARE_OBFUGIRLS           13s/0h of 140226 corpus (90162s/50064h DOC) 04/19/06
+
+
+#body     SARE_OBFUPENIS /(?!\bpen ?is\b)(?:\bp|\B(?:[\xDE]|\xCE\xA1|\xCF\x81|\xD0\xA0|\xD1\x80))[\x01-\x2F\\\^_`\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:[e3\*\xC8-\xCB\xE8-\xEB]|\xC4[\x92-\x9B]|\xCE\x88|\xCE\x95|\xCE\xA3|\xCE\xAD|\xCE\xB5|\xD0\x81|\xD0\x95|\xD0\xB5|\xD1\x91)[\x01-\x2F\\\^_`\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:[n\xD1\xF1]|\|\\\||\xC5[\x83-\x8B]|\xCE\x9D|\xCE\xA0|\xCE\xAE|\xCE\xB7|\xD5\xB2|\xD5\xB8)[\x01-\x2F\\\^_`\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:[il1:\|\*\xCC-\xCF\xEC-\xEF\xA6]|\xC4[\xA8-\xB0]|\xC4\xBA|\xC4\xBC|\xC4\xBE|\xC5\x80|\xC5\x82|\xC7[\x8F-\x90]|\xD0[\x86-\x87]|\xD1[\x96-\x97]|\xCE\x8A|\xCE\x90|\xCE\x99|\xCE\xAA|\xCE\xAF|\xCE\xB9|\xCF\x8A)[\x01-\x2F\\\^_`\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:[s5]\b|(?:[\$\xA7]|\xC5[\x9A-\xA1]|\xD0\x85|\xD1\x95|\xD5\x8F)\B)/i
+#describe SARE_OBFUPENIS masked spam word(s)
+#score    SARE_OBFUPENIS 2.333 # type=obfu
+# Original name: RM_bwo_Penis
+#  1027s/0h of 119325 corpus (98981s/20344h) 03/21/04
+#  91s/1h of 15929 corpus (13729s/2200h) 03/23/04
+#counts   SARE_OBFUPENIS           516s/0h of 42056 corpus (34127s/7929h FVGT) 04/19/06
+#counts   SARE_OBFUPENIS           578s/0h of 140226 corpus (90162s/50064h DOC) 04/19/06
+
+
+#body     SARE_OBFUPORNO /(?!\bporno?\b)(?:\bp|\B(?:[\xDE]|\xCE\xA1|\xCF\x81|\xD0\xA0|\xD1\x80))[\x01-\x2F\\\^_`\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:[o0\*\xB0\xBA\xD8\xF8\xD2-\xD6\xF2-\xF6]|\(\)|\[\]|\xC5[\x8C-\x91]|\xC6[\xA0-\xA1]|\xC7[\x91-\x92]|\xC7[\xBE-\xBF]|\xCE\x8C|\xCE\x98|\xCE\x9F|\xCE\xB8|\xCE\xBF|\xCF\x8C|\xD0\x9E|\xD0\xBE|\xD5\x95)[\x01-\x2F\\\^_`\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:[r\xAE]|\xC5[\x94-\x99]|\xD1\x93)[\x01-\x2F\\\^_`\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:[n\xD1\xF1]|\|\\\||\xC5[\x83-\x8B]|\xCE\x9D|\xCE\xA0|\xCE\xAE|\xCE\xB7|\xD5\xB2|\xD5\xB8)[\x01-\x2F\\\^_`\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:[o0\*\xB0\xBA\xD8\xF8\xD2-\xD6\xF2-\xF6]|\(\)|\[\]|\xC5[\x8C-\x91]|\xC6[\xA0-\xA1]|\xC7[\x91-\x92]|\xC7[\xBE-\xBF]|\xCE\x8C|\xCE\x98|\xCE\x9F|\xCE\xB8|\xCE\xBF|\xCF\x8C|\xD0\x9E|\xD0\xBE|\xD5\x95)?\b/i
+#describe SARE_OBFUPORNO masked spam word(s)
+#	score    SARE_OBFUPORNO 2.500 # type=obfu
+# Original name: RM_bwo_Porno
+#  266s/0h of 119325 corpus (98981s/20344h) 03/21/04
+#  36s/0h of 15929 corpus (13729s/2200h) 03/23/04
+#counts   SARE_OBFUPORNO           43s/0h of 42056 corpus (34127s/7929h FVGT) 04/19/06
+#counts   SARE_OBFUPORNO           22s/0h of 140226 corpus (90162s/50064h DOC) 04/19/06
+
+
+#body     SARE_OBFUPUSS /(?!\bpussies\b)(?:\bp|\B(?:[\xDE]|\xCE\xA1|\xCF\x81|\xD0\xA0|\xD1\x80))[\x01-\x2F\\\^_`\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:[uv\*\xB5\xD9-\xDC\xF9-\xFC]|\xC5[\xA8-\xB3]|\xC6[\xAF-\xB0]|\xC7[\x93-\x9C]|\xCE\xB0|\xCE\xBC|\xCF\x8B|\xCF\x8D|\xD4\xB1|\xD5\x84|\xD5\x8D)[\x01-\x2F\\\^_`\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:[s5\$\xA7]|\xC5[\x9A-\xA1]|\xD0\x85|\xD1\x95|\xD5\x8F)[\x01-\x2F\\\^_`\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:[s5\$\xA7]|\xC5[\x9A-\xA1]|\xD0\x85|\xD1\x95|\xD5\x8F)[\x01-\x2F\\\^_`\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:[il1:\|\*\xCC-\xCF\xEC-\xEF\xA6]|\xC4[\xA8-\xB0]|\xC4\xBA|\xC4\xBC|\xC4\xBE|\xC5\x80|\xC5\x82|\xC7[\x8F-\x90]|\xD0[\x86-\x87]|\xD1[\x96-\x97]|\xCE\x8A|\xCE\x90|\xCE\x99|\xCE\xAA|\xCE\xAF|\xCE\xB9|\xCF\x8A)[\x01-\x2F\\\^_`\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:[e3\*\xC8-\xCB\xE8-\xEB]|\xC4[\x92-\x9B]|\xCE\x88|\xCE\x95|\xCE\xA3|\xCE\xAD|\xCE\xB5|\xD0\x81|\xD0\x95|\xD0\xB5|\xD1\x91)[\x01-\x2F\\\^_`\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:[s5]\b|(?:[\$\xA7]|\xC5[\x9A-\xA1]|\xD0\x85|\xD1\x95|\xD5\x8F)\B)/i
+#describe SARE_OBFUPUSS masked spam word(s)
+#score    SARE_OBFUPUSS 2.500 # type=obfu
+# Original name: RM_bwo_Pussies
+#  28s/0h of 119325 corpus (98981s/20344h) 03/21/04
+#  27s/0h of 15929 corpus (13729s/2200h) 03/23/04
+#counts   SARE_OBFUPUSS            0s/0h of 42056 corpus (34127s/7929h FVGT) 04/19/06
+#counts   SARE_OBFUPUSS            0s/0h of 140226 corpus (90162s/50064h DOC) 04/19/06
+
+
+body     SARE_OBFUSEXUAL /\b(?!Sexual)S.?e.?x.?u.?a.?l/i
+describe SARE_OBFUSEXUAL masked spam word(s)
+score    SARE_OBFUSEXUAL 1.66 # type=obfu 
+# Original name: 
+#  409s/0h of 119325 corpus (98981s/20344h) 03/21/04
+#  27s/0h of 15929 corpus (13729s/2200h) 03/23/04
+#counts   SARE_OBFUSEXUAL          676s/0h of 42056 corpus (34127s/7929h FVGT) 04/19/06
+#counts   SARE_OBFUSEXUAL          373s/0h of 140226 corpus (90162s/50064h DOC) 04/19/06
+
+
+#body     SARE_OBFUTEENS /(?!\bteens?\b)(?:\bt|\B(?:[\+]|\xC5[\xA2-\xA7]|\xCE\xA4|\xCF\x84|\xD0\xA2|\xD1\x82))[\x01-\x2F\\\^_`\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:[e3\*\xC8-\xCB\xE8-\xEB]|\xC4[\x92-\x9B]|\xCE\x88|\xCE\x95|\xCE\xA3|\xCE\xAD|\xCE\xB5|\xD0\x81|\xD0\x95|\xD0\xB5|\xD1\x91)[\x01-\x2F\\\^_`\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:[e3\*\xC8-\xCB\xE8-\xEB]|\xC4[\x92-\x9B]|\xCE\x88|\xCE\x95|\xCE\xA3|\xCE\xAD|\xCE\xB5|\xD0\x81|\xD0\x95|\xD0\xB5|\xD1\x91)[\x01-\x2F\\\^_`\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:[n\xD1\xF1]|\|\\\||\xC5[\x83-\x8B]|\xCE\x9D|\xCE\xA0|\xCE\xAE|\xCE\xB7|\xD5\xB2|\xD5\xB8)[\x01-\x2F\\\^_`\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:[s5\$\xA7]|\xC5[\x9A-\xA1]|\xD0\x85|\xD1\x95|\xD5\x8F)?\b/i
+#describe SARE_OBFUTEENS masked spam word(s)
+#score    SARE_OBFUTEENS 2.500 # type=obfu
+# Original name: RM_bwo_Teens
+#  28s/0h of 119325 corpus (98981s/20344h) 03/21/04
+#  4s/0h of 15929 corpus (13729s/2200h) 03/23/04
+#counts   SARE_OBFUTEENS           1s/0h of 42056 corpus (34127s/7929h FVGT) 04/19/06
+#counts   SARE_OBFUTEENS           1s/0h of 140226 corpus (90162s/50064h DOC) 04/19/06
+
+
+body     SARE_OBFUTESTO /\b(?!testosterone)t.?e.?s.?t.?o.?s.?t.?e.?r.?o.?n.?e/i
+describe SARE_OBFUTESTO masked spam word(s)
+score    SARE_OBFUTESTO 1.66 # type=obfu
+# Original name: RM_bwo_Testosterone
+#  10s/0h of 119325 corpus (98981s/20344h) 03/21/04
+#  0s/0h of 15929 corpus (13729s/2200h) 03/23/04
+#counts   SARE_OBFUTESTO           0s/0h of 42056 corpus (34127s/7929h FVGT) 04/19/06
+#counts   SARE_OBFUTESTO           0s/0h of 140226 corpus (90162s/50064h DOC) 04/19/06
+
+
+#body     SARE_OBFUVRGN /(?!\bvirgins?\b)(?:\b[vu]|\B(?:\\\/|\xCE\xBD))[\x01-\x2F\\\^_`\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:[il1:\|\*\xCC-\xCF\xEC-\xEF\xA6]|\xC4[\xA8-\xB0]|\xC4\xBA|\xC4\xBC|\xC4\xBE|\xC5\x80|\xC5\x82|\xC7[\x8F-\x90]|\xD0[\x86-\x87]|\xD1[\x96-\x97]|\xCE\x8A|\xCE\x90|\xCE\x99|\xCE\xAA|\xCE\xAF|\xCE\xB9|\xCF\x8A)[\x01-\x2F\\\^_`\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:[r\xAE]|\xC5[\x94-\x99]|\xD1\x93)[\x01-\x2F\\\^_`\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:[g6]|\xC4[\x9C-\xA3]])[\x01-\x2F\\\^_`\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:[il1:\|\*\xCC-\xCF\xEC-\xEF\xA6]|\xC4[\xA8-\xB0]|\xC4\xBA|\xC4\xBC|\xC4\xBE|\xC5\x80|\xC5\x82|\xC7[\x8F-\x90]|\xD0[\x86-\x87]|\xD1[\x96-\x97]|\xCE\x8A|\xCE\x90|\xCE\x99|\xCE\xAA|\xCE\xAF|\xCE\xB9|\xCF\x8A)[\x01-\x2F\\\^_`\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:[n\xD1\xF1]|\|\\\||\xC5[\x83-\x8B]|\xCE\x9D|\xCE\xA0|\xCE\xAE|\xCE\xB7|\xD5\xB2|\xD5\xB8)[\x01-\x2F\\\^_`\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:[s5\$\xA7]|\xC5[\x9A-\xA1]|\xD0\x85|\xD1\x95|\xD5\x8F)?\b/i
+#describe SARE_OBFUVRGN masked spam word(s)
+#score    SARE_OBFUVRGN 2.500 # type=obfu
+# Original name: RM_bwo_Virgins
+#  25s/0h of 119325 corpus (98981s/20344h) 03/21/04
+#  16s/0h of 15929 corpus (13729s/2200h) 03/23/04
+#counts   SARE_OBFUVRGN            0s/0h of 42056 corpus (34127s/7929h FVGT) 04/19/06
+#counts   SARE_OBFUVRGN            0s/0h of 140226 corpus (90162s/50064h DOC) 04/19/06
+
+
+#body     SARE_SPRDLGS /spread(?:ing)? their leg/i
+#describe SARE_SPRDLGS Contains possible adult phrase
+#score    SARE_SPRDLGS 0.222
+#  4s/0h of 125078 corpus (104890s/20188h) 03/29/04
+#  0s/0h of 15929 corpus (13729s/2200h) 03/29/04
+#counts   SARE_SPRDLGS             0s/0h of 42056 corpus (34127s/7929h FVGT) 04/19/06
+#counts   SARE_SPRDLGS             2s/0h of 140226 corpus (90162s/50064h DOC) 04/19/06
+
+
+body     SARE_RPTLETTERS /(?!\b(?:ass|cock|pussy)\b)\b(?:a+s+s+|c+o+c+k+|p+u+s+s+y+)\b/i
+describe SARE_RPTLETTERS Contains mis-spelled adult phrase(s)
+score    SARE_RPTLETTERS 1.66
+#  5s/0h of 125078 corpus (104890s/20188h) 03/29/04
+#  2s/0h of 15929 corpus (13729s/2200h) 03/29/04
+#counts   SARE_RPTLETTERS          15s/0h of 42056 corpus (34127s/7929h FVGT) 04/19/06
+#counts   SARE_RPTLETTERS          1s/1h of 140226 corpus (90162s/50064h DOC) 04/19/06
+
+
+body     SARE_SEXDRIVE /\bSex(?:ual)? Drive/i
+describe SARE_SEXDRIVE Talks about sex drive
+score    SARE_SEXDRIVE 1.66
+# Original name: RM_bpm_SexDrive
+#  589s/0h of 125078 corpus (104890s/20188h) 03/29/04
+#  141s/0h of 15929 corpus (13729s/2200h) 03/29/04
+#counts   SARE_SEXDRIVE            239s/0h of 42056 corpus (34127s/7929h FVGT) 04/19/06
+#counts   SARE_SEXDRIVE            531s/5h of 140226 corpus (90162s/50064h DOC) 04/19/06
+
+
+body     SARE_BETTERSEX /better sex/i
+describe SARE_BETTERSEX Spammer phrasing in body of email
+score    SARE_BETTERSEX 1.66
+# Original name: RM_bpm_BetterSex
+#  157s/0h of 125078 corpus (104890s/20188h) 03/29/04
+#  8s/0h of 15929 corpus (13729s/2200h) 03/29/04
+#counts   SARE_BETTERSEX           292s/0h of 42056 corpus (34127s/7929h FVGT) 04/19/06
+#counts   SARE_BETTERSEX           262s/0h of 140226 corpus (90162s/50064h DOC) 04/19/06
+
+
+body     SARE_SEXENHANCER /sex(?:ual)? enhancer/i
+describe SARE_SEXENHANCER mentions spam topic
+score    SARE_SEXENHANCER 1.66  # type=spamp
+# Original name: RM_bpm_SexEnhancer
+#  11s/0h of 125078 corpus (104890s/20188h) 03/29/04
+#  11s/0h of 15929 corpus (13729s/2200h) 03/29/04
+#counts   SARE_SEXENHANCER         0s/0h of 42056 corpus (34127s/7929h FVGT) 04/19/06
+#counts   SARE_SEXENHANCER         7s/0h of 140226 corpus (90162s/50064h DOC) 04/19/06
+
+
+#body     SARE_OBFUHARDCORE /(?!hard[ -]?core)(?:\bh|\B(?:\xC4[\xA4-\xA7]|\xCE\x89|\xCE\x97|\xD0\x9D|\xD0\xBD|\xD1\x92|\xD2[\xA2-\xA3]|\xD2[\xBA-\xBB]|\xD5\xB0))[\x01-\x2F\\\^_`\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:[a4\*\@\xC0-\xC5\xAA\xE0-\xE5]|\/\\|\xC4[\x80-\x85]|\xC7[\x8D-\x8E]|\xC7[\xBA-\xBB]|\xCE\x86|\xCE\x91|\xCE\x94|\xCE\x9B|\xCE\xAC|\xCE\xB1|\xD0\x90|\xD0\xB0)[\x01-\x2F\\\^_`\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:[r\xAE]|\xC5[\x94-\x99]|\xD1\x93)[\x01-\x2F\\\^_`\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:[d\xD0]|\xC4[\x8E-\x91])[\x01-\x2F\\\^_`\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:[c\*\xC7\xE7\xA2\xA9]|\xC4[\x86-\x8D]|\xD0\xA1|\xD1\x81)[\x01-\x2F\\\^_`\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:[o0\*\xB0\xBA\xD8\xF8\xD2-\xD6\xF2-\xF6]|\(\)|\[\]|\xC5[\x8C-\x91]|\xC6[\xA0-\xA1]|\xC7[\x91-\x92]|\xC7[\xBE-\xBF]|\xCE\x8C|\xCE\x98|\xCE\x9F|\xCE\xB8|\xCE\xBF|\xCF\x8C|\xD0\x9E|\xD0\xBE|\xD5\x95)[\x01-\x2F\\\^_`\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:[r\xAE]|\xC5[\x94-\x99]|\xD1\x93)[\x01-\x2F\\\^_`\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:[e3]\b|(?:[\*\xC8-\xCB\xE8-\xEB]|\xC4[\x92-\x9B]|\xCE\x88|\xCE\x95|\xCE\xA3|\xCE\xAD|\xCE\xB5|\xD0\x81|\xD0\x95|\xD0\xB5|\xD1\x91)\B)/i
+#describe SARE_OBFUHARDCORE masked spam word(s)
+#score    SARE_OBFUHARDCORE 1.433  # type=obfu 
+# Original name: RM_bwo_hardcore
+#  32s/0h of 98440 corpus (76828s/21612h) 05/09/04
+#counts   SARE_OBFUHARDCORE        4s/0h of 42056 corpus (34127s/7929h FVGT) 04/19/06
+#counts   SARE_OBFUHARDCORE        3s/0h of 140226 corpus (90162s/50064h DOC) 04/19/06
+
+
+
+###############################
+#         uri rules           #
+###############################
+
+#uri      SARE_PNSPTCH /\bbolik34\b/i
+#describe SARE_PNSPTCH Terra.es penil patch spammer
+#score    SARE_PNSPTCH 1.5 # was .33
+# Original name: MAKEPENIBIG
+#  277s/0h of 119325 corpus (98981s/20344h) 03/21/04
+#  0s/0h of 15929 corpus (13729s/2200h) 03/23/04
+#counts   SARE_PNSPTCH             0s/0h of 42056 corpus (34127s/7929h FVGT) 04/19/06
+#counts   SARE_PNSPTCH             0s/0h of 140226 corpus (90162s/50064h DOC) 04/19/06
+
+
+# EOF

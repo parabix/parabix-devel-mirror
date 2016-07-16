@@ -1,0 +1,384 @@
+# SARE HTML Ruleset for SpamAssassin - ruleset 0 
+# Version: 01.03.10
+# Created: 2004-03-31 
+# Modified: 2006-06-03
+# Usage instructions, documentation, and change history in 70_sare_html0.cf 
+
+#@@# Revision History:  Full Revision History stored in 70_sare_html.log
+#@@# 01.03.09: May 31 2006
+#@@#           Minor score tweaks based on recent mass-checks
+#@@#           Moved file 0 to file 2:   SARE_HTML_EHTML_OBFU
+#@@#           Moved file 0 to file 2:   SARE_HTML_HEAD_AFFIL
+#@@#           Moved file 0 to file 2:   SARE_HTML_LEAKTHRU1
+#@@#           Moved file 0 to file 2:   SARE_HTML_LEAKTHRU2
+#@@#           Moved file 0 to file 2:   SARE_HTML_ONE_LINE3
+#@@#           Moved file 0 to file 2:   SARE_HTML_POB1200
+#@@#           Moved file 0 to file 2:   SARE_HTML_URI_HIDADD
+#@@#           Moved file 0 to file 2:   SARE_HTML_URI_LOGOGEN
+#@@#           Moved file 0 to file 2:   SARE_HTML_URI_OFF
+#@@#           Moved file 0 to file 2:   SARE_HTML_USL_B7
+#@@#           Moved file 0 to file 2:   SARE_HTML_USL_B9
+#@@#           Moved file 0 to file 2:   SARE_PHISH_HTML_01
+#@@#           Added file 0:             SARE_HTML_FLOAT1
+#@@# 01.03.10: June 3 2006
+#@@#           Minor score tweaks based on recent mass-checks
+#@@#           Added file 0              SARE_HTML_LINKWARN
+#@@#           Added file 0              SARE_HTML_SPANNER
+
+# License: Artistic - see http://www.rulesemporium.com/license.txt 
+# Current Maintainer: Bob Menschel - RMSA@Menschel.net
+# Current Home: http://www.rulesemporium.com/rules/70_sare_html0.cf 
+#
+# Usage:  This family of files, 70_sare_html*.cf, contain rules that test HTML strings within emails
+#         (except URIs, which are handled in the 70_sare_uri*.cf family of files).
+#
+# File 0: 70_sare_html0.cf -- These are html rules that hit at least 10 spam and no ham. 
+#         While SARE cannot guarantee they never will hit ham, they have not hit ham in any SARE mass-check, against tens of thousands of ham.
+#         This is a rules file we expect any/all email systems using SpamAssassin to benefit from. 
+#
+# File 1: 70_sare_html1.cf -- These are html rules that meet one of the follow criteria: 
+#         a) Rules that do, or in the past have hit ham during SARE mass-check tests 
+#         b) Rules that hit no ham and currently do not hit more than 10 spam in any single mass-check run. 
+#         If the rules hit ham, they hit at last 10 spam to each 1 ham. 
+#         If the rules hit ham, they hit fewer than 100 ham 
+#         With few exceptions these rules score significantly less than the rules in file 0. 
+#         Systems which are very sensitive to false positives and/or need to be very careful about resource use may want to exclude this ruleset, 
+#         pick and choose among its rules, or lower their scores.
+#         Systems that use this file 1 should ALSO use file 0. 
+#
+# File 2: 70_sare_html2.cf -- These html rules hit no spam at this time, but they are considered "safe" rules that should never hit ham.
+#         These are primarily rules that test for specific html seen only in spam, or similar types of "pretty darn sure" rules. 
+#         Systems which are very sensitive to SpamAssassin overhead may want to exclude this ruleset file to avoid its overhead, 
+#         but systems with plenty of resources that want to be aggressive against spam may benefit from this ruleset file.
+#
+# File 3: 70_sare_html3.cf -- These are html rules that hit a significant amount of ham during SARE mass-check tests. 
+#         Systems which are very sensitive to false positives or to SA resource usage should NOT install this ruleset. 
+#
+# File 4: 70_sare_html4.cf -- These are html rules that meet one of the following criteria: 
+#         a) They hit over 100 ham during SARE mass-check tests, but still hit enough spam to be worth while to aggressively anti-spam systems. 
+#         b) They hit no emails at this time, but have been recommended by anti-spam sources.
+#         Again, systems which are very sensitive to false positives or to SA resource usage should NOT install this ruleset. 
+#
+# eng:    70_sare_html_eng.cf -- These are html rules which work well within the English language, but are liable to cause false
+#         positives in other languages. They include rules which test for letter combinations. Systems that
+#         receive ham in languages other than English should NOT use this file. 
+#
+# x30:    70_sare_html_x30.cf -- These are html rules which have been incorporated into SpamAssassin 3.0.x, 
+#         or which duplicate or greatly overlap 3.0.x rules. 
+#         Systems which have installed SpamAssassin 3.0.x should therefore NOT use this file.
+#
+# arc:    70_sare_html_arc.cf -- These are html rules that once were published in other files, but which have since lost all value.
+#         They either hit too much ham (without hitting enough spam to make it worth while), or they don't hit any spam. 
+#         SARE regularly runs mass-checks on these rules to see if any of them are worth reviving, but 
+#         we expect that nobody will be running these rules in any production system. 
+#
+########  ######################   ##################################################
+
+########  ######################   ##################################################
+#         Rules renamed or moved
+########  ######################   ##################################################
+
+meta      SARE_HTML_ALT_WAIT2      __SARE_HEAD_FALSE
+meta      SARE_HTML_BADOPEN        __SARE_HEAD_FALSE
+meta      SARE_HTML_BAD_FG_CLR     __SARE_HEAD_FALSE
+meta      SARE_HTML_COLOR_B        __SARE_HEAD_FALSE
+meta      SARE_HTML_COLOR_NWHT3    __SARE_HEAD_FALSE
+meta      SARE_HTML_FONT_INVIS2    __SARE_HEAD_FALSE
+meta      SARE_HTML_FSIZE_1ALL     __SARE_HEAD_FALSE
+meta      SARE_HTML_GIF_DIM        __SARE_HEAD_FALSE
+meta      SARE_HTML_HTML_AFTER     __SARE_HEAD_FALSE
+meta      SARE_HTML_HTML_DBL       __SARE_HEAD_FALSE
+meta      SARE_HTML_HTML_TBL       __SARE_HEAD_FALSE
+meta      SARE_HTML_IMG_ONLY       __SARE_HEAD_FALSE
+meta      SARE_HTML_JVS_HREF       __SARE_HEAD_FALSE
+meta      SARE_HTML_MANY_BR10      __SARE_HEAD_FALSE
+meta      SARE_HTML_MANY_BR10      __SARE_HEAD_FALSE
+meta      SARE_HTML_NO_BODY        __SARE_HEAD_FALSE
+meta      SARE_HTML_NO_HTML1       __SARE_HEAD_FALSE
+meta      SARE_HTML_P_JUSTIFY      __SARE_HEAD_FALSE
+meta      SARE_HTML_TITLE_SEX      __SARE_HEAD_FALSE
+meta      SARE_HTML_URI_2SLASH     __SARE_HEAD_FALSE
+meta      SARE_HTML_URI_AXEL       __SARE_HEAD_FALSE
+meta      SARE_HTML_URI_BADQRY     __SARE_HEAD_FALSE
+meta      SARE_HTML_URI_FORMPHP    __SARE_HEAD_FALSE
+meta      SARE_HTML_URI_HREF       __SARE_HEAD_FALSE
+meta      SARE_HTML_URI_MANYP2     __SARE_HEAD_FALSE
+meta      SARE_HTML_URI_MANYP3     __SARE_HEAD_FALSE
+meta      SARE_HTML_URI_NUMPHP3    __SARE_HEAD_FALSE
+meta      SARE_HTML_URI_OBFU4      __SARE_HEAD_FALSE
+meta      SARE_HTML_URI_OBFU4a     __SARE_HEAD_FALSE
+meta      SARE_HTML_URI_PARTID     __SARE_HEAD_FALSE
+meta      SARE_HTML_URI_RID        __SARE_HEAD_FALSE
+meta      SARE_HTML_USL_MULT       __SARE_HEAD_FALSE
+meta      SARE_HTML_FONT_EBEF      __SARE_HEAD_FALSE
+meta      SARE_HTML_URI_DEFASP     __SARE_HEAD_FALSE
+meta      SARE_HTML_INV_TAGA       __SARE_HEAD_FALSE
+meta      SARE_HTML_EHTML_OBFU     __SARE_HEAD_FALSE
+meta      SARE_HTML_HEAD_AFFIL     __SARE_HEAD_FALSE
+meta      SARE_HTML_LEAKTHRU1      __SARE_HEAD_FALSE
+meta      SARE_HTML_LEAKTHRU2      __SARE_HEAD_FALSE
+meta      SARE_HTML_ONE_LINE3      __SARE_HEAD_FALSE
+meta      SARE_HTML_POB1200        __SARE_HEAD_FALSE
+meta      SARE_HTML_URI_HIDADD     __SARE_HEAD_FALSE
+meta      SARE_HTML_URI_LOGOGEN    __SARE_HEAD_FALSE
+meta      SARE_HTML_URI_OFF        __SARE_HEAD_FALSE
+meta      SARE_HTML_USL_B7         __SARE_HEAD_FALSE
+meta      SARE_HTML_USL_B9         __SARE_HEAD_FALSE
+meta      SARE_PHISH_HTML_01       __SARE_HEAD_FALSE
+
+########  ######################   ##################################################
+
+rawbody   __SARE_HTML_HAS_A        eval:html_tag_exists('a')
+rawbody   __SARE_HTML_HAS_BR       eval:html_tag_exists('br')
+rawbody   __SARE_HTML_HAS_DIV      eval:html_tag_exists('div')
+rawbody   __SARE_HTML_HAS_FONT     eval:html_tag_exists('font')
+rawbody   __SARE_HTML_HAS_IMG      eval:html_tag_exists('img')
+rawbody   __SARE_HTML_HAS_P        eval:html_tag_exists('p')
+rawbody   __SARE_HTML_HAS_PRE      eval:html_tag_exists('pre')
+rawbody   __SARE_HTML_HAS_TITLE    eval:html_tag_exists('title')
+
+rawbody   __SARE_HTML_HBODY        m'<html><body>'i
+rawbody   __SARE_HTML_BEHTML       m'<body></html>'i
+rawbody   __SARE_HTML_BEHTML2      m'^</?body></html>'i
+rawbody   __SARE_HTML_EFONT        m'^</font>'i
+rawbody   __SARE_HTML_EHEB         m'^</html></body>'i
+rawbody   __SARE_HTML_CMT_CNTR     /<center><!--/
+
+# JH: These rules test for strange color combinations. There migth be even more powerful combinations, but I haven't had time to check them all
+rawbody   __SARE_LIGHT_FG_COLOR    /[^\-a-z]color\s{0,10}(?::|=(?:3d)?(?!3d))(?:[\s\'\"]){0,10}(?![\s\'\"])(?:\#?(?!\#)(?!fff\W|ffffff)(?:[e-f]{3}\W|(?:[e-f][0-9a-f]){3})|rgb(?:\((?!\s{0,10}255\s{0,10},\s{0,10}255\s{0,10},\s{0,10}255)\s{0,10}2[2-5][0-9]\s{0,10},\s{0,10}2[2-5][0-9]\s{0,10},\s{0,10}2[2-5][0-9]\s{0,10}\)|\((?!\s{0,10}100\s{0,10}%\s{0,10},\s{0,10}100\s{0,10}%\s{0,10},\s{0,10}100\s{0,10}%)\s{0,10}(?:100|9[0-9]|8[6-9])\s{0,10}%\s{0,10},\s{0,10}(?:100|9[0-9]|8[6-9])\s{0,10}%\s{0,10},\s{0,10}(?:100|9[0-9]|8[6-9])\s{0,10}%\s{0,10}\))|(?:Light(?:Cyan|Yellow)|(?:Ghost|Floral)White|WhiteSmoke|LemonChiffon|AliceBlue|Cornsilk|Seashell|Honeydew|Azure|MintCream|Snow|Ivory|OldLace|LavenderBlush|Linen|MistyRose))/i
+rawbody   __SARE_WHITE_FG_COLOR    /[^\-a-z]color\s{0,10}(?::|=(?:3d)?(?!3d))(?:[\s\'\"]){0,10}(?![\s\'\"])(?:\#?(?!\#)(?:fff\W|ffffff)|rgb(?:\(\s{0,10}255\s{0,10},\s{0,10}255\s{0,10},\s{0,10}255\s{0,10}\)|\\s{0,10}100\s{0,10}%\s{0,10},\s{0,10}100\s{0,10}%\s{0,10},\s{0,10}100\s{0,10}%\s{0,10}\))|white)/i
+rawbody   __SARE_DARK_FG_COLOR     /[^\-a-z]color\s{0,10}(?::|=(?:3d)?(?!3d))(?:[\s\'\"]){0,10}(?![\s\'\"])(?:\#?(?!\#)(?!000\W|000000)(?:[01]{3}\W|(?:[01][0-9a-f]){3})|rgb(?:\((?!\s{0,10}0\s{0,10},\s{0,10}0\s{0,10},\s{0,10}0\D)\s{0,10}[0-3]?[0-9]\s{0,10},\s{0,10}[0-3]?[0-9]\s{0,10},\s{0,10}[0-3]?[0-9]\s{0,10}\)|\((?!\s{0,10}0\s{0,10}%\s{0,10},\s{0,10}0\s{0,10}%\s{0,10},\s{0,10}0\s{0,10}%)\s{0,10}(?:[1-3]?[0-9])\s{0,10}%\s{0,10},\s{0,10}(?:[1-3]?[0-9])\s{0,10}%\s{0,10},\s{0,10}(?:[1-3]?[0-9])\s{0,10}%\s{0,10}\)))/i
+rawbody   __SARE_BLACK_FG_COLOR    /[^\-a-z]color\s{0,10}(?::|=(?:3d)?(?!3d))(?:[\s\'\"]){0,10}(?![\s\'\"])(?:\#?(?!\#)(?:000\W|000000)|rgb\s{0,10}\(\s{0,10}0\s{0,10},\s{0,10}0\s{0,10},\s{0,10}0\s{0,10}\)|rgb\s{0,10}\(\s{0,10}0\s{0,10}%\s{0,10},\s{0,10}0\s{0,10}%\s{0,10},\s{0,10}0\s{0,10}%\s{0,10}\)|black)/i
+rawbody   __SARE_LIGHT_BG_COLOR    /(?:bg|background\-)color\s{0,10}(?::|=(?:3d)?(?!3d))(?:[\s\'\"]){0,10}(?![\s\'\"])(?:\#?(?!\#)(?!ffffff|fff\W)(?:[e-f]{3}\W|(?:[e-f][0-9a-f]){3})|rgb(?:\((?!\s{0,10}255\s{0,10},\s{0,10}255\s{0,10},\s{0,10}255)\s{0,10}2[2-5][0-9]\s{0,10},\s{0,10}2[2-5][0-9]\s{0,10},\s{0,10}2[2-5][0-9]\s{0,10}\)|\((?!\s{0,10}100\s{0,10}%\s{0,10},\s{0,10}100\s{0,10}%\s{0,10},\s{0,10}100\s{0,10}%)\s{0,10}(?:100|9[0-9]|8[6-9])\s{0,10}%\s{0,10},\s{0,10}(?:100|9[0-9]|8[6-9])\s{0,10}%\s{0,10},\s{0,10}(?:100|9[0-9]|8[6-9])\s{0,10}%\s{0,10}\))|(?:Light(?:Cyan|Yellow)|(?:Ghost|Floral)White|WhiteSmoke|LemonChiffon|AliceBlue|Cornsilk|Seashell|Honeydew|Azure|MintCream|Snow|Ivory|OldLace|LavenderBlush|Linen|MistyRose))/i
+rawbody   __SARE_WHITE_BG_COLOR    /(?:bg|background\-)color\s{0,10}(?::|=(?:3d)?(?!3d))(?:[\s\'\"]){0,10}(?![\s\'\"])(?:\#?(?!\#)(?:fff\W|ffffff)|rgb(?:\(\s{0,10}255\s{0,10},\s{0,10}255\s{0,10},\s{0,10}255\s{0,10}\)|\(\s{0,10}100\s{0,10}%\s{0,10},\s{0,10}100\s{0,10}%\s{0,10},\s{0,10}100\s{0,10}%\s{0,10}\))|white)/i
+rawbody   __SARE_DARK_BG_COLOR     /(?:bg|background\-)color\s{0,10}(?::|=(?:3d)?(?!3d))(?:[\s\'\"]){0,10}(?![\s\'\"])(?:\#?(?!\#)(?!000\W|000000)(?:[01]{3}\W|(?:[01][0-9a-f]){3})|rgb(?:\((?!\s{0,10}0\s{0,10},\s{0,10}0\s{0,10},\s{0,10}0\D)\s{0,10}[0-3]?[0-9]\s{0,10},\s{0,10}[0-3]?[0-9]\s{0,10},\s{0,10}[0-3]?[0-9]\s{0,10}\)|\((?!\s{0,10}0\s{0,10}%\s{0,10},\s{0,10}0\s{0,10}%\s{0,10},\s{0,10}0\s{0,10}%)\s{0,10}(?:[1-3]?[0-9])\s{0,10}%\s{0,10},\s{0,10}(?:[1-3]?[0-9])\s{0,10}%\s{0,10},\s{0,10}(?:[1-3]?[0-9])\s{0,10}%\s{0,10}\)))/i
+rawbody   __SARE_BLACK_BG_COLOR    /(?:bg|background\-)color\s{0,10}(?::|=(?:3d)?(?!3d))(?:[\s\'\"]){0,10}(?![\s\'\"])(?:\#?(?!\#)(?:000\W|000000)|rgb\s{0,10}\(\s{0,10}0\s{0,10},\s{0,10}0\s{0,10},\s{0,10}0\s{0,10}\)|rgb\s{0,10}\(\s{0,10}0\s{0,10}%\s{0,10},\s{0,10}0\s{0,10}%\s{0,10},\s{0,10}0\s{0,10}%\s{0,10}\)|black)/i
+rawbody   __SARE_HAS_BG_COLOR      /(?:bg|background\-)color\s{0,10}(?::|=)/i
+rawbody   __SARE_HAS_FG_COLOR      /[^\-a-z]color\s{0,10}(?::|=)/i
+
+########  ######################   ##################################################
+#   <HTML> and <BODY> tag spamsign
+########  ######################   ##################################################
+
+########  ######################   ##################################################
+#   <A> and HREF rules          
+########  ######################   ##################################################
+
+rawbody   SARE_HTML_A_INV          /href\w*href/i
+describe  SARE_HTML_A_INV          HTML has malformed anchor/href tag
+score     SARE_HTML_A_INV          3.333 
+#stype    SARE_HTML_A_INV          spamg
+#wasalso  SARE_HTML_A_INV          /href[a-z]*href/i
+#wasalso  SARE_HTML_A_INV          Fred's FR_FUNNY_HREF
+#wasalso  SARE_HTML_A_INV          /\w\whref=http:/i  from  David B Funk <dbfunk@engineering.uiowa.edu> Wed, 17 Mar 2004 04:04:58 -0600 (CST)
+#counts   SARE_HTML_A_INV          8s/0h of 333405 corpus (262498s/70907h RM) 05/12/06
+#max      SARE_HTML_A_INV          628s/0h of 66351 corpus (40971s/25380h RM) 08/21/04
+#counts   SARE_HTML_A_INV          7s/0h of 9987 corpus (5656s/4331h AxB) 05/14/06
+#counts   SARE_HTML_A_INV          38s/0h of 155327 corpus (103716s/51611h DOC) 05/14/06
+#counts   SARE_HTML_A_INV          4s/0h of 13290 corpus (7418s/5872h CT) 05/14/06
+#max      SARE_HTML_A_INV          23s/0h of 6944 corpus (3188s/3756h CT) 05/19/04
+#counts   SARE_HTML_A_INV          2s/0h of 42447 corpus (34332s/8115h FVGT) 05/15/06
+#counts   SARE_HTML_A_INV          8s/0h of 54067 corpus (16890s/37177h JH-3.01) 06/18/05
+#max      SARE_HTML_A_INV          101s/0h of 38858 corpus (15368s/23490h JH-SA3.0rc1) 08/22/04
+#counts   SARE_HTML_A_INV          3s/0h of 106350 corpus (72966s/33384h ML) 05/15/06
+#counts   SARE_HTML_A_INV          0s/0h of 23068 corpus (17346s/5722h MY) 05/14/06
+#max      SARE_HTML_A_INV          2s/0h of 31513 corpus (27912s/3601h MY) 03/09/05
+
+rawbody   SARE_HTML_LINKWARN       /\bShowLinkWarning\b/
+score     SARE_HTML_LINKWARN       1.133
+describe  SARE_HTML_LINKWARN       Possible spam sign in HTML
+#hist     SARE_HTML_LINKWARN       Loren Wilton, April 2006
+#counts   SARE_HTML_LINKWARN       126s/0h of 333405 corpus (262498s/70907h RM) 05/12/06
+#counts   SARE_HTML_LINKWARN       5s/0h of 55981 corpus (51658s/4323h AxB2) 05/15/06
+#counts   SARE_HTML_LINKWARN       17s/0h of 13285 corpus (7413s/5872h CT) 05/14/06
+#counts   SARE_HTML_LINKWARN       60s/0h of 155481 corpus (103930s/51551h DOC) 05/15/06
+#counts   SARE_HTML_LINKWARN       168s/0h of 42253 corpus (34139s/8114h FVGT) 05/15/06
+#counts   SARE_HTML_LINKWARN       12s/0h of 106183 corpus (72941s/33242h ML) 05/14/06
+#counts   SARE_HTML_LINKWARN       26s/0h of 22939 corpus (17232s/5707h MY) 05/14/06
+
+########  ######################   ##################################################
+#   Spamsign character sets and fonts 
+########  ######################   ##################################################
+
+rawbody   SARE_HTML_FONT_LWORD     m'^<font style=font-size:1px>[a-z]{30,}\.</font><br>'i
+describe  SARE_HTML_FONT_LWORD     unusual document format
+score     SARE_HTML_FONT_LWORD     1.666
+#hist     SARE_HTML_FONT_LWORD     Loren Wilton: LW_SPAMFERSURE
+#counts   SARE_HTML_FONT_LWORD     0s/0h of 333405 corpus (262498s/70907h RM) 05/12/06
+#max      SARE_HTML_FONT_LWORD     194s/0h of 400504 corpus (178155s/222349h RM) 03/31/05
+#counts   SARE_HTML_FONT_LWORD     2s/0h of 155327 corpus (103716s/51611h DOC) 05/14/06
+#counts   SARE_HTML_FONT_LWORD     81s/0h of 54969 corpus (17793s/37176h JH-3.01) 03/13/05
+#counts   SARE_HTML_FONT_LWORD     0s/0h of 31513 corpus (27912s/3601h MY) 03/09/05
+#counts   SARE_HTML_FONT_LWORD     0s/0h of 10629 corpus (5847s/4782h CT) 09/18/05
+#max      SARE_HTML_FONT_LWORD     2s/0h of 10826 corpus (6364s/4462h CT) 05/28/05
+
+full      SARE_HTML_FONT_SPLIT     /<font color=\n\n"?\#[a-f]\w[a-f]\w[a-f]\w"?>/i
+describe  SARE_HTML_FONT_SPLIT     HTML bright font color tag split by blank lines
+score     SARE_HTML_FONT_SPLIT     1.666
+#hist     SARE_HTML_FONT_SPLIT     David B Funk <dbfunk@engineering.uiowa.edu> Wed, 17 Mar 2004 04:04:58 -0600 (CST)
+#overlap  SARE_HTML_FONT_SPLIT     Overlaps strongly with SARE_HTML_A_INV, though there's no regex overlap
+#overlap  SARE_HTML_FONT_SPLIT     Overlaps strongly with SARE_HTML_FONT_SPL for obvious reasons, but not enough to warrant dropping one.
+#counts   SARE_HTML_FONT_SPLIT     5s/0h of 333405 corpus (262498s/70907h RM) 05/12/06
+#max      SARE_HTML_FONT_SPLIT     431s/0h of 85073 corpus (62478s/22595h RM) 06/07/04
+#counts   SARE_HTML_FONT_SPLIT     5s/0h of 9987 corpus (5656s/4331h AxB) 05/14/06
+#counts   SARE_HTML_FONT_SPLIT     1s/0h of 13290 corpus (7418s/5872h CT) 05/14/06
+#max      SARE_HTML_FONT_SPLIT     14s/0h of 6944 corpus (3188s/3756h CT) 05/19/04
+#counts   SARE_HTML_FONT_SPLIT     31s/0h of 155327 corpus (103716s/51611h DOC) 05/14/06
+#counts   SARE_HTML_FONT_SPLIT     6s/0h of 54067 corpus (16890s/37177h JH-3.01) 06/18/05
+#max      SARE_HTML_FONT_SPLIT     65s/0h of 38858 corpus (15368s/23490h JH-SA3.0rc1) 08/22/04
+#counts   SARE_HTML_FONT_SPLIT     3s/0h of 106350 corpus (72966s/33384h ML) 05/15/06
+#counts   SARE_HTML_FONT_SPLIT     0s/0h of 26326 corpus (22886s/3440h MY) 02/15/05
+
+########  ######################   ##################################################
+#   <TITLE> Tag Tests
+########  ######################   ##################################################
+
+########  ######################   ##################################################
+#  Obviously invalid html tag
+########  ######################   ##################################################
+
+########  ######################   ##################################################
+#   Invalid or Suspicious URI Tests
+########  ######################   ##################################################
+
+########  ######################   ##################################################
+#  <!-- Comment tag tests
+########  ######################   ##################################################
+
+########  ######################   ##################################################
+#   Image tag tests
+########  ######################   ##################################################
+
+rawbody   SARE_HTML_IMG_CID2       /\"cid:(?:[A-Z]{8}\.){3}[A-Z]{8}_csseditor\"/ # no /i
+describe  SARE_HTML_IMG_CID2       table spam image
+score     SARE_HTML_IMG_CID2       2.222
+#hist     SARE_HTML_IMG_CID2       Loren Wilton, May 2005
+#counts   SARE_HTML_IMG_CID2       0s/0h of 333405 corpus (262498s/70907h RM) 05/12/06
+#max      SARE_HTML_IMG_CID2       1224s/0h of 689155 corpus (348140s/341015h RM) 09/18/05
+#counts   SARE_HTML_IMG_CID2       66s/0h of 13290 corpus (7418s/5872h CT) 05/14/06
+#max      SARE_HTML_IMG_CID2       114s/0h of 10629 corpus (5847s/4782h CT) 09/18/05
+#counts   SARE_HTML_IMG_CID2       63s/0h of 155327 corpus (103716s/51611h DOC) 05/14/06
+#counts   SARE_HTML_IMG_CID2       2s/0h of 7500 corpus (1767s/5733h ft) 09/18/05
+#counts   SARE_HTML_IMG_CID2       45s/0h of 54067 corpus (16890s/37177h JH-3.01) 06/18/05
+#counts   SARE_HTML_IMG_CID2       8s/0h of 106350 corpus (72966s/33384h ML) 05/15/06
+#counts   SARE_HTML_IMG_CID2       4s/0h of 23068 corpus (17346s/5722h MY) 05/14/06
+#max      SARE_HTML_IMG_CID2       37s/0h of 57287 corpus (52272s/5015h MY) 09/22/05
+
+########  ######################   ##################################################
+#   Javascript and object tests     
+########  ######################   ##################################################
+
+########  ######################   ##################################################
+#   Header tags
+########  ######################   ##################################################
+
+########  ######################   ##################################################
+#   Paragraphs, breaks, and spacings
+########  ######################   ##################################################
+
+rawbody   __SARE_HTML_FLOAT1A      /^\s*(?:=(?:3[Dd])?\s*\"\s*)?float\s*(?:\:\s*)?$/i
+rawbody   __SARE_HTML_FLOAT1B      /^(?:\s*|=(?:3D)?")?float:?\s*$/i
+meta      SARE_HTML_FLOAT1         __SARE_HTML_FLOAT1A || __SARE_HTML_FLOAT1B
+describe  SARE_HTML_FLOAT1         Contains HTML formatting used in spam 
+score     SARE_HTML_FLOAT1         2.666
+#counts   SARE_HTML_FLOAT1         574s/0h of 192466 corpus (93270s/99196h RM) 05/31/06
+#counts   SARE_HTML_FLOAT1         21s/0h of 26358 corpus (22027s/4331h AxB2) 06/01/06
+#counts   SARE_HTML_FLOAT1         125s/0h of 13285 corpus (7412s/5873h CT) 05/31/06
+#counts   SARE_HTML_FLOAT1         1645s/0h of 162350 corpus (110752s/51598h DOC) 05/31/06
+#counts   SARE_HTML_FLOAT1         40s/0h of 15726 corpus (7781s/7945h FT) 05/31/06
+#counts   SARE_HTML_FLOAT1         3054s/0h of 119967 corpus (84310s/35657h ML) 05/31/06
+#counts   SARE_HTML_FLOAT1         17s/0h of 22937 corpus (17232s/5705h MY) 05/31/06
+
+rawbody   SARE_HTML_ORIG_MSG       /^-----original message-----<br>$/
+describe  SARE_HTML_ORIG_MSG       Fake replied message?
+score     SARE_HTML_ORIG_MSG       1.666
+#hist     SARE_HTML_ORIG_MSG       Tim Jackson, May 12, 2005
+#counts   SARE_HTML_ORIG_MSG       65s/0h of 333405 corpus (262498s/70907h RM) 05/12/06
+#counts   SARE_HTML_ORIG_MSG       6s/0h of 13290 corpus (7418s/5872h CT) 05/14/06
+#max      SARE_HTML_ORIG_MSG       12s/0h of 10826 corpus (6364s/4462h CT) 05/28/05
+#counts   SARE_HTML_ORIG_MSG       14s/0h of 9987 corpus (5656s/4331h AxB) 05/14/06
+#counts   SARE_HTML_ORIG_MSG       38s/0h of 155327 corpus (103716s/51611h DOC) 05/14/06
+#counts   SARE_HTML_ORIG_MSG       22s/1h of 54067 corpus (16890s/37177h JH-3.01) 06/18/05
+#counts   SARE_HTML_ORIG_MSG       119s/0h of 106350 corpus (72966s/33384h ML) 05/15/06
+#counts   SARE_HTML_ORIG_MSG       10s/0h of 23068 corpus (17346s/5722h MY) 05/14/06
+#max      SARE_HTML_ORIG_MSG       154s/0h of 47221 corpus (42968s/4253h MY) 06/18/05
+
+rawbody   SARE_HTML_SPANNER        /> [a-z] <\/span>[a-z]<span/i
+describe  SARE_HTML_SPANNER        spammer is a SARE_HTML_SPANNER
+score     SARE_HTML_SPANNER        2.222
+#hist     SARE_HTML_SPANNER        variation apparently scheduled for SA distribution in 3.2
+#hist     SARE_HTML_SPANNER        Robert Brooks, March 2006
+#counts   SARE_HTML_SPANNER        1849s/0h of 333405 corpus (262498s/70907h RM) 05/12/06
+#counts   SARE_HTML_SPANNER        7s/0h of 9982 corpus (5652s/4330h AxB) 05/14/06
+#counts   SARE_HTML_SPANNER        108s/0h of 13285 corpus (7413s/5872h CT) 05/14/06
+#counts   SARE_HTML_SPANNER        959s/0h of 155481 corpus (103930s/51551h DOC) 05/15/06
+#counts   SARE_HTML_SPANNER        31s/0h of 42253 corpus (34139s/8114h FVGT) 05/15/06
+#counts   SARE_HTML_SPANNER        3027s/0h of 106183 corpus (72941s/33242h ML) 05/14/06
+#counts   SARE_HTML_SPANNER        9s/0h of 22939 corpus (17232s/5707h MY) 05/14/06
+
+########  ######################   ##################################################
+#  Suspicious tag combinations
+########  ######################   ##################################################
+
+full      SARE_HTML_CALL_ME        m'\nPhone:\s+\d{3}-[\d\-<BR>]+\nMobile:\s+\d{3}-[\d\-<BR>]+\nEmail:\s+<A href.{1,100}</A>\n</DIV></BODY></HTML>'
+describe  SARE_HTML_CALL_ME        spammer sign in text
+score     SARE_HTML_CALL_ME        2.222
+#hist     SARE_HTML_CALL_ME        Loren Wilton: LW_CALLME
+#counts   SARE_HTML_CALL_ME        1s/0h of 333405 corpus (262498s/70907h RM) 05/12/06
+#max      SARE_HTML_CALL_ME        1964s/0h of 400504 corpus (178155s/222349h RM) 03/31/05
+#counts   SARE_HTML_CALL_ME        270s/0h of 155327 corpus (103716s/51611h DOC) 05/14/06
+#counts   SARE_HTML_CALL_ME        0s/0h of 54969 corpus (17793s/37176h JH-3.01) 03/13/05
+#counts   SARE_HTML_CALL_ME        0s/0h of 31513 corpus (27912s/3601h MY) 03/09/05
+#counts   SARE_HTML_CALL_ME        0s/0h of 11260 corpus (6568s/4692h CT) 06/17/05
+
+########  ######################   ##################################################
+#   Miscellaneous tag tests
+########  ######################   ##################################################
+
+########  ######################   ##################################################
+#  Useless tags (tag structures that do nothing) 
+#  Largely submitted by Matt Yackley, with contributions by 
+#  Carl Friend, Jennifer Wheeler, Scott Sprunger, Larry Gilson
+########  ######################   ##################################################
+
+########  ######################   ##################################################
+#   Tests destined for other rule sets
+########  ######################   ##################################################
+
+rawbody   __SARE_PHISH_HTML_02a    m'<a[\s\w=\.]+href=\"https?://\d+[^>]+>https://[^\d]'i
+full      __SARE_PHISH_HTML_02b    m'<a[\s\w=\.]+href=\"https?://\d+[^>]+>https://[^\d]'i
+meta      SARE_PHISH_HTML_02       __SARE_PHISH_HTML_02a || __SARE_PHISH_HTML_02b
+score     SARE_PHISH_HTML_02       2.500 
+#stype    SARE_PHISH_HTML_02       spamgg # phish 
+#hist     SARE_PHISH_HTML_02       Loren Wilton: SARE_PHISH_HTML_03
+describe  SARE_PHISH_HTML_02       numeric href with https description
+#counts   SARE_PHISH_HTML_02       49s/0h of 333405 corpus (262498s/70907h RM) 05/12/06
+#max      SARE_PHISH_HTML_02       90s/0h of 689155 corpus (348140s/341015h RM) 09/18/05
+#counts   SARE_PHISH_HTML_02       3s/0h of 56039 corpus (51703s/4336h AxB2) 05/15/06
+#counts   SARE_PHISH_HTML_02       6s/0h of 13290 corpus (7418s/5872h CT) 05/14/06
+#counts   SARE_PHISH_HTML_02       18s/0h of 155327 corpus (103716s/51611h DOC) 05/14/06
+#counts   SARE_PHISH_HTML_02       34s/0h of 42447 corpus (34332s/8115h FVGT) 05/15/06
+#counts   SARE_PHISH_HTML_02       5s/0h of 54969 corpus (17793s/37176h JH-3.01) 03/13/05
+#counts   SARE_PHISH_HTML_02       3s/0h of 106350 corpus (72966s/33384h ML) 05/15/06
+#counts   SARE_PHISH_HTML_02       2s/0h of 23068 corpus (17346s/5722h MY) 05/14/06
+
+rawbody   __SARE_PHISH_HTML_03     m'<a\s+[\s\w=\.]*href=\"https?://\d+[^>]+>https://[^\d]'is
+full      __SARE_PHISH_HTML_03a    m'<a\s+[\s\w=\.]*href=\"https?://\d+[^>]+>https://[^\d]'is
+meta      SARE_PHISH_HTML_03       __SARE_PHISH_HTML_03 || __SARE_PHISH_HTML_03a
+describe  SARE_PHISH_HTML_03       numeric href with https description
+score     SARE_PHISH_HTML_03       1.666
+#stype    SARE_PHISH_HTML_03       spamg
+#hist     SARE_PHISH_HTML_03       Loren Wilton, Feb 28 2005
+#counts   SARE_PHISH_HTML_03       49s/0h of 333405 corpus (262498s/70907h RM) 05/12/06
+#max      SARE_PHISH_HTML_03       90s/0h of 689155 corpus (348140s/341015h RM) 09/18/05
+#counts   SARE_PHISH_HTML_03       3s/0h of 56039 corpus (51703s/4336h AxB2) 05/15/06
+#counts   SARE_PHISH_HTML_03       6s/0h of 13290 corpus (7418s/5872h CT) 05/14/06
+#counts   SARE_PHISH_HTML_03       18s/0h of 155327 corpus (103716s/51611h DOC) 05/14/06
+#counts   SARE_PHISH_HTML_03       34s/0h of 42447 corpus (34332s/8115h FVGT) 05/15/06
+#counts   SARE_PHISH_HTML_03       5s/0h of 54806 corpus (17633s/37173h JH-3.01) 03/13/05
+#counts   SARE_PHISH_HTML_03       3s/0h of 106350 corpus (72966s/33384h ML) 05/15/06
+#counts   SARE_PHISH_HTML_03       2s/0h of 23068 corpus (17346s/5722h MY) 05/14/06
+
+# EOF
+
+

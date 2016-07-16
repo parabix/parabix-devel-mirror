@@ -1,0 +1,460 @@
+# SARE Spoof Ruleset for SpamAssassin
+# Version: 1.09.21
+# Created: 2004-03-01
+# Modified: 2007-01-15
+# Changes:  Various Updates
+# License:  Artistic - see http://www.rulesemporium.com/license.txt
+# Current Maintainer: Fred Tarasevicius - tech2@i-is.com
+# Current Home: http://www.rulesemporium.com/rules/70_sare_spoof.cf
+# Comments: To counter whitelists, some rules have extra meta rules to score 100 to override whitelist_from's.
+
+# META RULES USED BY MULTIPLE RULES:
+uri      __URI_IS_IP		/\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\//
+
+
+# The following NICE rules can be enabled if you choose, it works for me, adjust scores as needed.
+meta     SARE_LEGIT_PAYPAL	(__FROM_PAYPAL && __URI_PAYPAL && __RCVD_PAYPAL)
+describe SARE_LEGIT_PAYPAL	Has signs it's from paypal, from, headers, uri
+score    SARE_LEGIT_PAYPAL	-0.01
+
+
+#meta     SARE_LEGIT_EBAY	(__FROM_EBAY && __URI_EBAY && __RCVD_EBAY)
+#describe SARE_LEGIT_EBAY	Has signs it's from ebay, from, headers, uri
+#score    SARE_LEGIT_EBAY	-0.01
+
+
+# Simple test recommended by jdow from SA-users list.
+header __EBAY_FRM_NAME    From:name =~ /\bebay\b/i
+header __EBAY_ADDRESS     From:addr =~ /[\@\.]ebay\.(?:com(?:\.au|\.cn|\.hk|\.my|\.sg)?|co\.uk|at|be|ca|fr|de|in|ie|it|nl|ph|pl|es|se|ch)/i
+meta   SARE_EBAY_SPOOF_NAME (__EBAY_FRM_NAME && !__EBAY_ADDRESS)
+score  SARE_EBAY_SPOOF_NAME 0.94
+# NEEDS MORE TESTING
+
+
+
+
+
+header  __SARE_NAME_VISA	From:name =~ /visa/i
+header  __SARE_ADDR_VISA	From:addr =~ /visa/i
+meta   SARE_FORGE_NAME_VISA	(__SARE_NAME_VISA && !__SARE_ADDR_VISA)
+score  SARE_FORGE_NAME_VISA	0.399
+#counts   FM_NAME_VISA_FORGE       1s/0h of 12260 corpus (6588s/5672h CT) 03/17/06
+#counts   FM_NAME_VISA_FORGE       18s/0h of 22976 corpus (17263s/5713h MY) 03/17/06
+#counts   FM_NAME_VISA_FORGE       3s/0h of 103688 corpus (96287s/7401h FVGT) 03/17/06
+#counts   FM_NAME_VISA_FORGE       43s/0h of 108996 corpus (71372s/37624h DOC) 03/17/06
+
+
+
+
+
+
+
+
+uri     __SPOOF_FLAGS		/flagstar\.com/i
+header  __FROM_FLAGSTAR		From =~ /\bflagstar\.com/i
+header  __RCVD_FLAGSTAR		Received =~ /\bflagstar\.com/i
+meta    SARE_SPOOF_FLAGSTAR	(__SPOOF_FLAGS && __FROM_FLAGSTAR && !__RCVD_FLAGSTAR)
+score   SARE_SPOOF_FLAGSTAR	3.667
+#counts   SARE_SPOOF_FLAGSTAR      1s/0h of 42564 corpus (34322s/8242h FVGT) 05/26/06
+
+
+
+
+
+# Try to identify USBank.com e-mail
+header   __RCVD_USBANK		Received =~ /usbank\.com/i
+header   __FROM_USBANK		From =~ /usbank\.com/i
+uri      __URI_USBANK		/usbank\.com/i
+meta     SARE_FORGED_USBANK	(__FROM_USBANK && __URI_USBANK && !__RCVD_USBANK)
+score    SARE_FORGED_USBANK	4.4
+
+#--------------------------------------------------------------------------------------------------#
+## THESE RULES HAVE VERY LARGE SCORES, PLEASE ADJUST TO YOUR NEEDS, I NEED TO OVERRIDE WHITELIST. ##
+#--------------------------------------------------------------------------------------------------#
+
+# Try to identify PAYPAL spoofs by looking for elements which should always appear.
+# If we have a From and an URL of one of these guys, we should also have a received line to match!
+header   __RCVD_PAYPAL		Received =~ /\.(?:paypal|postdirect)\.com/i
+header   __FROM_PAYPAL		From =~ /[\@\.]paypa[l1i]\.co[mn]/i
+uri      __URI_PAYPAL		/[^\@]paypa[lI1]\.com/i
+
+meta     SARE_FORGED_PAYPAL	(__FROM_PAYPAL && __URI_PAYPAL && !__RCVD_PAYPAL)
+describe SARE_FORGED_PAYPAL	Message appears to be forged, (paypal.com)
+score    SARE_FORGED_PAYPAL	4.0
+
+# If the message is whitelisted, add 100 points to over-ride whitelist.
+meta     SARE_FPP_BLOCKER	(SARE_FORGED_PAYPAL && USER_IN_WHITELIST)
+score    SARE_FPP_BLOCKER	100
+
+
+
+# Try to identify EBAY spoofs by looking for elements which should always appear.
+# If we have a From and an URL of one of these guys, we should also have a received line to match!
+header   __RCVD_EBAY1		Received =~ /(?:email)?[^\s@]ebay\.(?:com(?:\.au|\.cn|\.hk|\.my|\.sg)?|co\.uk|at|be|ca|fr|de|in|ie|it|nl|ph|pl|es|se|ch)/i
+header   __RCVD_EBAY2		Received =~ /ebay\.(?:easynet\.de|emarsys\.net)/
+header   __RCVD_EBAY3		Received =~ /sjc\.liveworld\.com/
+meta     __RCVD_EBAY		(__RCVD_EBAY1 || __RCVD_EBAY2 || __RCVD_EBAY3)
+header   __FROM_EBAY		From =~ /\@(?:e?mail.?)?ebay\.c/i
+uri      __URI_EBAY		/\.ebay(?:static)?\.com/i
+
+meta     SARE_FORGED_EBAY	(__FROM_EBAY && __URI_EBAY && !__RCVD_EBAY)
+describe SARE_FORGED_EBAY	Message appears to be forged, (ebay.com)
+score    SARE_FORGED_EBAY	4.0
+
+meta     SARE_FEB_BLOCKER	(SARE_FORGED_EBAY && USER_IN_WHITELIST)
+score    SARE_FEB_BLOCKER	100
+
+
+
+# Try to identify SUNTRUST spoofs by looking for elements which should always appear.
+# If we have a From and an URL of one of these guys, we should also have a received line to match!
+header   __RCVD_SUNTRUST	Received =~ /\.suntrust\.com/i
+header   __FROM_SUNTRUST	From =~ /[\@\.]suntrust\.com/i
+uri      __URI_SUNTRUST		/suntrust[a-z0-9-]{0,25}\.com/i
+meta     SARE_FORGED_SUNTRUST	(__FROM_SUNTRUST && __URI_SUNTRUST && !__RCVD_SUNTRUST)
+describe SARE_FORGED_SUNTRUST	Message appears to be forged, (suntrust.com)
+score    SARE_FORGED_SUNTRUST	4.0
+
+meta     SARE_SUN_BLOCKER	(SARE_FORGED_SUNTRUST && USER_IN_WHITELIST)
+score    SARE_SUN_BLOCKER	100
+
+
+
+
+header   __RCVD_WACHOVIA	Received =~ /wachovia\.com[^\)]/i
+header   __FROM_WACHOVIA	From =~ /\@wachovia\.com/i
+uri      __URI_WACHOVIA		/\bwachovia\.com/i
+meta     SARE_FORGED_WACHOVIA	(__FROM_WACHOVIA && __URI_WACHOVIA && !__RCVD_WACHOVIA)
+score    SARE_FORGED_WACHOVIA	3.0
+#counts   SARE_FORGED_WACHOVIA     0s/0h of 82118 corpus (57948s/24170h ML) 04/03/06
+#counts   SARE_FORGED_WACHOVIA     0s/0h of 12246 corpus (6574s/5672h CT) 04/03/06
+#counts   SARE_FORGED_WACHOVIA     0s/0h of 10377 corpus (7302s/3075h ) 04/03/06
+#counts   SARE_FORGED_WACHOVIA     0s/0h of 22951 corpus (17237s/5714h MY) 04/03/06
+#counts   SARE_FORGED_WACHOVIA     2s/0h of 41810 corpus (34135s/7675h FVGT) 04/03/06
+
+
+
+
+
+# Try to identify CHASEBANK spoofs by looking for elements which should always appear.
+# If we have a From and an URL of one of these guys, we should also have a received line to match!
+header   __RCVD_CHASE_A		Received =~ /[^@]\bchase\.com/i
+header   __RCVD_CHASE_B		Received =~ /\bbigfootinteractive\.com/i
+meta     __RCVD_CHASE		(__RCVD_CHASE_A || __RCVD_CHASE_B)
+header   __FROM_CHASE		From =~ /\bchase\.com/i
+uri      __URI_CHASE		m'(?:\.chase\.com|http://chase)'i
+meta     SARE_FORGED_CHASE	(__FROM_CHASE && __URI_CHASE && (!__RCVD_CHASE && !__RCVD_BANKONE))
+describe SARE_FORGED_CHASE	Message appears to be forged, (chase.com)
+score    SARE_FORGED_CHASE	3.4
+
+header   __RCVD_BANKONE		Received =~ /\bbankone\.com/i
+header   __FROM_BANKONE		From =~ /\bbankone\.com/i
+uri      __URI_BANKONE		/\.bankone\.com/i
+meta     SARE_FORGED_BANK1	(__FROM_BANKONE && __URI_BANKONE && (!__RCVD_CHASE && !__RCVD_BANKONE))
+score    SARE_FORGED_BANK1	3.0
+
+
+
+
+# Try to identify CITIBANK spoofs by looking for elements which should always appear.
+# If we have a From and an URL of one of these guys, we should also have a received line to match!
+header   __RCVD_CITIBNK_A	Received =~ /(?:citi(?:bank(?:cards)?|cards|corp|bankcards)|acxiom|c2it)\.com/i
+header   __RCVD_CITIBNK_B	Received =~ /bridgetrack\.com/i
+meta     __RCVD_CITIBNK		(__RCVD_CITIBNK_A || __RCVD_CITIBNK_B || __RCVD_CHASE_B)
+header   __FROM_CITIBNK		From =~ /\bciti(?:bank)?(?:cards)?\.com/i
+uri      __URI_CITIBNK		/\bciti(?:bank)?\.com/i
+meta     SARE_FORGED_CITI	(__FROM_CITIBNK && __URI_CITIBNK && !__RCVD_CITIBNK)
+describe SARE_FORGED_CITI	Message appears to be forged, (citibank.com)
+score    SARE_FORGED_CITI	4.0
+
+meta     SARE_CIT_BLOCKER	(SARE_FORGED_CITI && USER_IN_WHITELIST)
+score    SARE_CIT_BLOCKER	100
+
+
+
+
+
+
+
+
+# I'm testing a few new variations of these rules, trying to find people just spoofing the from headers.
+meta     SARE_FORGED_PAYPAL_C	(__FROM_PAYPAL && !__RCVD_PAYPAL)
+describe SARE_FORGED_PAYPAL_C	Has Paypal from, no Paypal received header.
+score    SARE_FORGED_PAYPAL_C	1.3
+
+# About.com has plenty of spams which spoof their address.  Here's a set of rules just for them ;)
+header   __RCVD_ABOUT_COM	Received =~ /\.about\.com/i
+header   __FROM_ABOUT_COM	From =~ /\babout\.com/i
+uri      __URI_ABOUT_COM	/\.about\.com/i
+meta     SARE_FORGED_ABOUT	(!__RCVD_ABOUT_COM && __FROM_ABOUT_COM && !__URI_ABOUT_COM)
+describe SARE_FORGED_ABOUT	Message appears to be forged, (about.com)
+score    SARE_FORGED_ABOUT	2.879
+
+
+# another spoof using forms
+rawbody  __FHAS_HTML_FORM     /<form/i
+rawbody  __FHAS_EBAY_FORM     /<form (?:name="\w{4,20}"\s)?(?:method="?post"?\s)?action="?http:\/\/[^.]{3,7}\.ebay\.com[^>]{4,125}>/i
+meta     __HASFORM_NOT_EBAY   (__FHAS_HTML_FORM && !__FHAS_EBAY_FORM)
+meta     SARE_SPOOF_EBAYFORM  (__FROM_EBAY && __HASFORM_NOT_EBAY)
+score    SARE_SPOOF_EBAYFORM  1.495
+
+
+# New set for spoofs
+
+header   __RCVD_2CHECKOUT	Received =~ /\.2checkout\.com/i
+header   __FROM_2CHECKOUT	From =~ /\@2checkout\.com/i
+uri      __URI_2CHECKOUT	/\b2checkout\.com/i
+meta     SARE_FORGED_2CHK	(__FROM_2CHECKOUT && __URI_2CHECKOUT && !__RCVD_2CHECKOUT)
+score    SARE_FORGED_2CHK	3.0
+
+header   __RCVD_2CO		Received =~ /\.2co\.com/i
+header   __FROM_2CO		From =~ /\@2co\.com/i
+uri      __URI_2CO		/\b2co\.com/i
+meta     SARE_FORGED_2CO	(__FROM_2CO && __URI_2CO && !__RCVD_2CO)
+score    SARE_FORGED_2CO	3.0
+
+header   __RCVD_53		Received =~ /\.53\.com/i
+header   __FROM_53		From =~ /\@53\.com/i
+uri      __URI_53		/\b53\.com/i
+meta     SARE_FORGED_53		(__FROM_53 && __URI_53 && !__RCVD_53)
+score    SARE_FORGED_53		3.0
+
+header   __RCVD_AMAZON		Received =~ /\.amazon\.com/i
+header   __FROM_AMAZON		From =~ /\@amazon\.com/i
+uri      __URI_AMAZON		/\bamazon\.com/i
+meta     SARE_FORGED_AMAZON	(__FROM_AMAZON && __URI_AMAZON && !__RCVD_AMAZON)
+score    SARE_FORGED_AMAZON	3.0
+
+header   __RCVD_AMERITR		Received =~ /\.ameritrade\.com/i
+header   __FROM_AMERITR		From =~ /\@ameritrade\.com/i
+uri      __URI_AMERITR		/\bameritrade\.com/i
+meta     SARE_FORGED_AMERIT	(__FROM_AMERITR && __URI_AMERITR && !__RCVD_AMERITR)
+score    SARE_FORGED_AMERIT	3.0
+
+header   __RCVD_AMEX		Received =~ /\.americanexpress\.com/i
+header   __FROM_AMEX		From =~ /\@americanexpress\.com/i
+uri      __URI_AMEX		/\bamericanexpress\.com/i
+meta     SARE_FORGED_AMEX	(__FROM_AMEX && __URI_AMEX && !__RCVD_AMEX)
+score    SARE_FORGED_AMEX	3.0
+
+header   __RCVD_BANKNORTH	Received =~ /\.banknorth\.com/i
+header   __FROM_BANKNORTH	From =~ /\@banknorth\.com/i
+uri      __URI_BANKNORTH	/\bbanknorth\.com/i
+meta     SARE_FORGED_BANK_N	(__FROM_BANKNORTH && __URI_BANKNORTH && !__RCVD_BANKNORTH)
+score    SARE_FORGED_BANK_N	3.0
+
+header   __RCVD_BANKOFA1	Received =~ /\.bankofamerica\.com/i
+header   __RCVD_BANKOFA2	Received =~ /\.customercenter\.net/i
+meta     __RCVD_BANKOFA		(__RCVD_BANKOFA1 || __RCVD_BANKOFA2)
+header   __FROM_BANKOFA		From =~ /[\@\.]bankofamerica\.com/i
+uri      __URI_BANKOFA		/\bbankofamerica\.com/i
+meta     SARE_FORGED_BANKOFA	(__FROM_BANKOFA && __URI_BANKOFA && !__RCVD_BANKOFA)
+score    SARE_FORGED_BANKOFA	3.0
+
+
+header   __RCVD_BANKOFO		Received =~ /\.bankofoklahoma\.com/i
+header   __FROM_BANKOFO		From =~ /\@bankofoklahoma\.com/i
+uri      __URI_BANKOFO		/\bbankofoklahoma\.com/i
+meta     SARE_FORGED_BANKOFO	(__FROM_BANKOFO && __URI_BANKOFO && !__RCVD_BANKOFO)
+score    SARE_FORGED_BANKOFO	3.0
+
+header   __RCVD_BANKOFW		Received =~ /\.bankofthewest\.com/i
+header   __FROM_BANKOFW		From =~ /\@bankofthewest\.com/i
+uri      __URI_BANKOFW		/\bbankofthewest\.com/i
+meta     SARE_FORGED_BANKOFW	(__FROM_BANKOFW && __URI_BANKOFW && !__RCVD_BANKOFW)
+score    SARE_FORGED_BANKOFW	3.0
+
+header   __RCVD_CAPITAL1	Received =~ /\.capitalone\.com/i
+header   __FROM_CAPITAL1	From =~ /\@capitalone\.com/i
+uri      __URI_CAPITAL1		/\bcapitalone\.com/i
+meta     SARE_FORGED_CAPITAL	(__FROM_CAPITAL1 && __URI_CAPITAL1 && !__RCVD_CAPITAL1)
+score    SARE_FORGED_CAPITAL	3.0
+
+header   __RCVD_CFSBANK		Received =~ /\.citizensfirstbank\.com/i
+header   __FROM_CFSBANK		From =~ /\@citizensfirstbank\.com/i
+uri      __URI_CFSBANK		/\bcitizensfirstbank\.com/i
+meta     SARE_FORGED_CFSBANK	(__FROM_CFSBANK && __URI_CFSBANK && !__RCVD_CFSBANK)
+score    SARE_FORGED_CFSBANK	3.0
+
+header   __RCVD_CHARTER1	Received =~ /\.charterone(?:bank)?\.com/i
+header   __FROM_CHARTER1	From =~ /\@charterone(?:bank)?\.com/i
+uri      __URI_CHARTER1		/\bcharterone(?:bank)?\.com/i
+meta     SARE_FORGED_CHARTER	(__FROM_CHARTER1 && __URI_CHARTER1 && !__RCVD_CHARTER1)
+score    SARE_FORGED_CHARTER	3.0
+
+header   __RCVD_CITIZENS	Received =~ /\.citizensbank\.com/i
+header   __FROM_CITIZENS	From =~ /\@citizensbank\.com/i
+uri      __URI_CITIZENS		/\bcitizensbank\.com/i
+meta     SARE_FORGED_CITIZEN	(__FROM_CITIZENS && __URI_CITIZENS && !__RCVD_CITIZENS)
+score    SARE_FORGED_CITIZEN	3.0
+
+header   __RCVD_COMFED		Received =~ /\.comfedbank\.com/i
+header   __FROM_COMFED		From =~ /\@comfedbank\.com/i
+uri      __URI_COMFED		/\bcomfedbank\.com/i
+meta     SARE_FORGED_COMFED	(__FROM_COMFED && __URI_COMFED && !__RCVD_COMFED)
+score    SARE_FORGED_COMFED	3.0
+
+header   __RCVD_COMMERCE	Received =~ /\.commercebank\.com/i
+header   __FROM_COMMERCE	From =~ /\@commercebank\.com/i
+uri      __URI_COMMERCE		/\bcommercebank\.com/i
+meta     SARE_FORGED_COMMERCE	(__FROM_COMMERCE && __URI_COMMERCE && !__RCVD_COMMERCE)
+score    SARE_FORGED_COMMERCE	3.0
+
+header   __RCVD_DISCOVER	Received =~ /\.discovercard\.com/i
+header   __FROM_DISCOVER	From =~ /\@discovercard\.com/i
+uri      __URI_DISCOVER		/\bdiscovercard\.com/i
+meta     SARE_FORGED_DISCOVER	(__FROM_DISCOVER && __URI_DISCOVER && !__RCVD_DISCOVER)
+score    SARE_FORGED_DISCOVER	3.0
+
+header   __RCVD_EGOLD		Received =~ /\.e-goldk\.com/i
+header   __FROM_EGOLD		From =~ /\@e-gold\.com/i
+uri      __URI_EGOLD		/\be-gold\.com/i
+meta     SARE_FORGED_EGOLD	(__FROM_EGOLD && __URI_EGOLD && !__RCVD_EGOLD)
+score    SARE_FORGED_EGOLD	3.0
+
+header   __RCVD_FDIC		Received =~ /\.fdic\.gov/i
+header   __FROM_FDIC		From =~ /\@fdic\.gov/i
+uri      __URI_FDIC		/\bfdic\.gov/i
+meta     SARE_FORGED_FDIC	(__FROM_FDIC && __URI_FDIC && !__RCVD_FDIC)
+score    SARE_FORGED_FDIC	3.0
+
+header   __RCVD_FLEET		Received =~ /\.fleet(?:bank)?\.com/i
+header   __FROM_FLEET		From =~ /\@fleet(?:bank)?\.com/i
+uri      __URI_FLEET		/\bfleet(?:bank)?\.com/i
+meta     SARE_FORGED_FLEET	(__FROM_FLEET && __URI_FLEET && !__RCVD_FLEET)
+score    SARE_FORGED_FLEET	3.0
+
+header   __RCVD_HUNTINGTON	Received =~ /\.(?:exacttarget|huntington)\.com/i
+header   __FROM_HUNTINGTON	From =~ /\@huntington\.com/i
+uri      __URI_HUNTINGTON	/\bhuntington\.com/i
+meta     SARE_FORGED_HUNTIN	(__FROM_HUNTINGTON && __URI_HUNTINGTON && !__RCVD_HUNTINGTON)
+score    SARE_FORGED_HUNTIN	3.0
+
+header   __RCVD_KEYBANK		Received =~ /\.keybank\.com/i
+header   __FROM_KEYBANK		From =~ /\@keybank\.com/i
+uri      __URI_KEYBANK		/\bkeybank\.com/i
+meta     SARE_FORGED_KEY	(__FROM_KEYBANK && __URI_KEYBANK && !__RCVD_KEYBANK)
+score    SARE_FORGED_KEY	3.0
+
+header   __RCVD_LASALLE		Received =~ /\.lasallebank\.com/i
+header   __FROM_LASALLE		From =~ /\@lasallebank\.com/i
+uri      __URI_LASALLE		/\blasallebank\.com/i
+meta     SARE_FORGED_LASAL	(__FROM_LASALLE && __URI_LASALLE && !__RCVD_LASALLE)
+score    SARE_FORGED_LASAL	3.0
+
+header   __RCVD_MIBANK		Received =~ /\.mibank\.com/i
+header   __FROM_MIBANK		From =~ /\@mibank\.com/i
+uri      __URI_MIBANK		/\bmibank\.com/i
+meta     SARE_FORGED_MIBANK	(__FROM_MIBANK && __URI_MIBANK && !__RCVD_MIBANK)
+score    SARE_FORGED_MIBANK	3.0
+
+header   __RCVD_MBNA		Received =~ /\.mbna\.com/i
+header   __FROM_MBNA		From =~ /\@mbna\.com/i
+uri      __URI_MBNA		/\bmbna\.com/i
+meta     SARE_FORGED_MBNA	(__FROM_MBNA && __URI_MBNA && !__RCVD_MBNA)
+score    SARE_FORGED_MBNA	3.0
+
+header   __RCVD_NCUA		Received =~ /\.ncua\.gov/i
+header   __FROM_NCUA		From =~ /\@ncua\.gov/i
+uri      __URI_NCUA		/\bncua\.gov/i
+meta     SARE_FORGED_NCUA	(__FROM_NCUA && __URI_NCUA && !__RCVD_NCUA)
+score    SARE_FORGED_NCUA	3.0
+
+header   __RCVD_REGIONS		Received =~ /\.regionsbank\.com/i
+header   __FROM_REGIONS		From =~ /\@regionsbank\.com/i
+uri      __URI_REGIONS		/\bregionsbank\.com/i
+meta     SARE_FORGED_REGION	(__FROM_REGIONS && __URI_REGIONS && !__RCVD_REGIONS)
+score    SARE_FORGED_REGION	3.0
+
+header   __RCVD_SKYBANK		Received =~ /\.sky(?:-bank|fi)\.com/i
+header   __FROM_SKYBANK		From =~ /\@sky(?:-bank|fi)\.com/i
+uri      __URI_SKYBANK		/\bsky(?:-bank|fi)\.com/i
+meta     SARE_FORGED_SKY	(__FROM_SKYBANK && __URI_SKYBANK && !__RCVD_SKYBANK)
+score    SARE_FORGED_SKY	3.0
+
+header   __RCVD_STRUST		Received =~ /\.southtrust\.com/i
+header   __FROM_STRUST		From =~ /\@southtrust\.com/i
+uri      __URI_STRUST		/\bsouthtrust\.com/i
+meta     SARE_FORGED_STRUST	(__FROM_STRUST && __URI_STRUST && !__RCVD_STRUST)
+score    SARE_FORGED_STRUST	3.0
+
+header   __RCVD_TCFBANK		Received =~ /\.tcfbank\.com/i
+header   __FROM_TCFBANK		From =~ /\@tcfbank\.com/i
+uri      __URI_TCFBANK		/\btcfbank\.com/i
+meta     SARE_FORGED_TCF	(__FROM_TCFBANK && __URI_TCFBANK && !__RCVD_TCFBANK)
+score    SARE_FORGED_TCF	3.0
+
+header   __RCVD_VISA		Received =~ /\.visa\.com/i
+header   __FROM_VISA		From =~ /\@visa\.com/i
+uri      __URI_VISA		/visa/i
+meta     SARE_FORGED_VISA	(__FROM_VISA && __URI_VISA && !__RCVD_VISA)
+score    SARE_FORGED_VISA	3.0
+
+header   __RCVD_WELLS		Received =~ /\.wellsfargo\.com/i
+header   __FROM_WELLS		From =~ /\@wellsfargo\.com/i
+uri      __URI_WELLS		/\bwellsfargo\.com/i
+meta     SARE_FORGED_WELLS	(__FROM_WELLS && __URI_WELLS && !__RCVD_WELLS)
+score    SARE_FORGED_WELLS	4.209
+
+header   __RCVD_WESTERN		Received =~ /\.westernunion\.com/i
+header   __FROM_WESTERN		From =~ /\@westernunion\.com/i
+uri      __URI_WESTERN		/\bwesternunion\.com/i
+meta     SARE_FORGED_WESTERN	(__FROM_WESTERN && __URI_WESTERN && !__RCVD_WESTERN)
+score    SARE_FORGED_WESTERN	3.0
+
+
+
+
+
+
+
+
+# Catch Common banks with IP address for URL.
+meta     __POPULAR_BANKS	(__URI_PAYPAL || __URI_EBAY || __URI_CITIBNK || __URI_SUNTRUST || __URI_CHASE || __URI_BANKONE || __URI_ABOUT_COM || __URI_2CHECKOUT || __URI_2CO || __URI_53 || __URI_AMAZON || __URI_AMERITR || __URI_AMEX || __URI_BANKNORTH || __URI_BANKOFA || __URI_BANKOFO || __URI_BANKOFW || __URI_CAPITAL1 || __URI_CFSBANK || __URI_CHARTER1 || __URI_CITIZENS || __URI_COMFED || __URI_COMMERCE || __URI_DISCOVER || __URI_EGOLD || __URI_FDIC || __URI_FLEET || __URI_HUNTINGTON || __URI_KEYBANK || __URI_LASALLE || __URI_MIBANK || __URI_MBNA || __URI_NCUA || __URI_REGIONS || __URI_SKYBANK || __URI_STRUST || __URI_TCFBANK || __URI_VISA || __URI_WELLS || __URI_WESTERN)
+meta     SARE_BANK_URI_IP	(__POPULAR_BANKS && __URI_IS_IP)
+score    SARE_BANK_URI_IP	0.653
+
+
+
+
+
+
+
+
+# Added 22-4-2004 by Jesse Houwing
+uri      SARE_SPOOF_COM2COM 	m{^https?://(?:\w+\.)+?com\.(?:\w+\.){2,}}i
+describe SARE_SPOOF_COM2COM 	a.com.b.com
+score    SARE_SPOOF_COM2COM 	2.536
+
+uri      SARE_SPOOF_COM2OTH	 m{^https?://(?:\w+\.)+?com\.(?:\w+\.)+?com}i
+describe SARE_SPOOF_COM2OTH	 a.com.b.c
+score    SARE_SPOOF_COM2OTH	 2.536
+
+uri      SARE_SPOOF_OURI         m{^(?:h|%68|%48)(?:t|%74|%54)(?:t|%74|%54)(?:p|%70|%50)(?:s|%73|%53)?(?::|%3a)(?:/|%2f){0,2}(?:[^@]+@)*?(?:a-z0-9_%-]+?(?:\.|%2e)){2,}(?:org|com|www)(?!\.edgesuite\.net)(?:(?:\.|%2e)[a-z0-9_%-]+?){2,}(?:(?::|%3a)\d+)?}i
+describe SARE_SPOOF_OURI         URL has items in odd places
+score    SARE_SPOOF_OURI         2.536
+
+
+# Added 07/28/2005 submitted by e-mail
+header __LOCAL_PP_ISFROMPP      From:addr =~ /\@(?:paypal|ebay)\.com$/i
+header __LOCAL_PP_S_UPD Subject: =~ m'(?:confirm|update) (?:your|the) (?:billing)?(?:records?|information|account)'i
+header __LOCAL_PP_S_AUT Subject: =~ m'unauthori[sz]ed access'i
+body __LOCAL_PP_B_UPD  m'(?:confirm|updated?|verify|restore) (?:your|the) (?:account|current|billing|personal)? ?(?:records?|information|account|identity|access|data)'i
+body __LOCAL_PP_B_ATT  m'one or more attempts'i
+body __LOCAL_PP_B_ACT  m'unusual activity'i
+uri __LOCAL_PP_PPCGIURL m'https?://www\.paypal\.com/([A-Za-z0-9-_]+/)?cgi-bin/webscr\?'i
+uri __LOCAL_PP_NONPPURL m'https?://(?:[A-Za-z0-9-_]+)\.(?!(paypal|ebay)\.com)(?:[A-Za-z0-9-_\.]+)'i
+
+meta SARE_SPOOF_BADURL (__LOCAL_PP_ISFROMPP && ((__LOCAL_PP_S_AUT || __LOCAL_PP_B_ATT || __LOCAL_PP_B_ACT || __LOCAL_PP_B_UPD || __LOCAL_PP_S_UPD) || __LOCAL_PP_PPCGIURL) && __LOCAL_PP_NONPPURL)
+meta SARE_SPOOF_BADADDR (!__LOCAL_PP_ISFROMPP && ((__LOCAL_PP_S_AUT || __LOCAL_PP_B_ATT || __LOCAL_PP_B_ACT || __LOCAL_PP_B_UPD || __LOCAL_PP_S_UPD) && __LOCAL_PP_PPCGIURL))
+
+score SARE_SPOOF_BADURL  1.059
+score SARE_SPOOF_BADADDR 1.059
+
+
+# Describe length test for 3.0 requirements:
+# 12345678901234567890123456789012345678901234567890
+#          1         2         3         4         5
+# 
+
+# EOF

@@ -1,0 +1,265 @@
+# SARE HTML Ruleset for SpamAssassin - ruleset 3
+# Version: 01.03.10
+# Created: 2004-03-31 
+# Modified: 2006-06-03
+# Usage instructions, documentation, and change history in 70_sare_html0.cf 
+
+#@@# Revision History:  Full Revision History stored in 70_sare_html.log
+#@@# 01.03.10: June 3 2006
+#@@#           Minor score tweaks based on recent mass-checks
+#@@#           Modified "rule has been moved" meta flags 
+#@@#           Archive:             SARE_HTML_URI_OPTPHP
+#@@#           Moved file 1 to 3:   SARE_HTML_URI_DEFASP
+
+# License: Artistic - see http://www.rulesemporium.com/license.txt 
+# Current Maintainer: Bob Menschel - RMSA@Menschel.net
+# Current Home: http://www.rulesemporium.com/rules/70_sare_html3.cf 
+#
+########  ######################   ##################################################
+########  ######################   ##################################################
+#         Rules renamed or moved
+########  ######################   ##################################################
+
+meta      __SARE_HEAD_FALSE        __FROM_AOL_COM && !__FROM_AOL_COM
+meta      SARE_HTML_URI_OPTPHP     __SARE_HEAD_FALSE
+
+########  ######################   ##################################################
+
+body      __NONEMPTY_BODY          /\S/
+header    __TOCC_EXISTS            exists:ToCc
+
+rawbody   __SARE_HTML_HAS_A        eval:html_tag_exists('a')
+rawbody   __SARE_HTML_HAS_BR       eval:html_tag_exists('br')
+rawbody   __SARE_HTML_HAS_DIV      eval:html_tag_exists('div')
+rawbody   __SARE_HTML_HAS_FONT     eval:html_tag_exists('font')
+rawbody   __SARE_HTML_HAS_IMG      eval:html_tag_exists('img')
+rawbody   __SARE_HTML_HAS_P        eval:html_tag_exists('p')
+rawbody   __SARE_HTML_HAS_PRE      eval:html_tag_exists('pre')
+rawbody   __SARE_HTML_HAS_TITLE    eval:html_tag_exists('title')
+
+rawbody   __SARE_HTML_HBODY        m'<html><body>'i
+rawbody   __SARE_HTML_BEHTML       m'<body></html>'i
+rawbody   __SARE_HTML_BEHTML2      m'^</?body></html>'i
+rawbody   __SARE_HTML_EFONT        m'^</font>'i
+rawbody   __SARE_HTML_EHEB         m'^</html></body>'i
+rawbody   __SARE_HTML_CMT_CNTR     /<center><!--/
+
+########  ######################   ##################################################
+#   Is there a message? 
+########  ######################   ##################################################
+
+meta      SARE_HTML_EMPTY          __CTYPE_HTML && !( __SARE_HTML_HAS_TITLE ||  __TAG_EXISTS_HTML || __SARE_HTML_HAS_FONT || __TAG_EXISTS_BODY || __SARE_HTML_HAS_PRE || __SARE_HTML_HAS_DIV || __SARE_HTML_HAS_P || __SARE_HTML_HAS_A || __SARE_HTML_HAS_BR )
+describe  SARE_HTML_EMPTY          Email is HTML format, but common tags not found
+score     SARE_HTML_EMPTY          0.681
+#ham      SARE_HTML_EMPTY          An "html" format email, 30 Oct 2002, Microsoft Outlook Express 6.00.2600.0000, that used no tags, just one long textual paragraph
+#counts   SARE_HTML_EMPTY          226s/7h of 333405 corpus (262498s/70907h RM) 05/12/06
+#max      SARE_HTML_EMPTY          506s/33h of 689155 corpus (348140s/341015h RM) 09/18/05
+#counts   SARE_HTML_EMPTY          28s/1h of 54067 corpus (16890s/37177h JH-3.01) 06/18/05
+#max      SARE_HTML_EMPTY          32s/2h of 54283 corpus (17106s/37177h JH-3.01) 02/13/05
+#counts   SARE_HTML_EMPTY          0s/0h of 57287 corpus (52272s/5015h MY) 09/22/05
+#max      SARE_HTML_EMPTY          132s/2h of 26326 corpus (22886s/3440h MY) 02/15/05
+#counts   SARE_HTML_EMPTY          0s/0h of 13284 corpus (7412s/5872h CT) 05/14/06
+#max      SARE_HTML_EMPTY          12s/0h of 10826 corpus (6364s/4462h CT) 05/28/05
+#counts   SARE_HTML_EMPTY          1s/173h of 7500 corpus (1767s/5733h ft) 09/18/05
+
+########  ######################   ##################################################
+#   <HTML> and <BODY> tag spamsign
+########  ######################   ##################################################
+
+rawbody   __SARE_HTML_BODY_END2    m'</body[^>]*>.*</body[^>]*>'i
+meta      SARE_HTML_BODY_END2      __SARE_HTML_BODY_END2 
+describe  SARE_HTML_BODY_END2      Double </body>
+score     SARE_HTML_BODY_END2      0.444
+#hist     SARE_HTML_BODY_END2      Contrib by Matt Keller June 7 2004
+#note     SARE_HTML_BODY_END2      Add/remove HTML_MESSAGE test has no effect
+#counts   SARE_HTML_BODY_END2      15s/1h of 333405 corpus (262498s/70907h RM) 05/12/06
+#max      SARE_HTML_BODY_END2      163s/13h of 281655 corpus (110173s/171482h RM) 05/05/05
+#counts   SARE_HTML_BODY_END2      2s/1h of 9988 corpus (5657s/4331h AxB) 05/14/06
+#counts   SARE_HTML_BODY_END2      1s/1h of 13284 corpus (7412s/5872h CT) 05/14/06
+#max      SARE_HTML_BODY_END2      6s/0h of 10826 corpus (6364s/4462h CT) 05/28/05
+#counts   SARE_HTML_BODY_END2      6s/0h of 155408 corpus (103805s/51603h DOC) 05/15/06
+#counts   SARE_HTML_BODY_END2      0s/7h of 42328 corpus (34212s/8116h FVGT) 05/15/06
+#counts   SARE_HTML_BODY_END2      15s/0h of 54067 corpus (16890s/37177h JH-3.01) 06/18/05
+#max      SARE_HTML_BODY_END2      63s/0h of 38858 corpus (15368s/23490h JH-SA3.0rc1) 08/22/04
+#counts   SARE_HTML_BODY_END2      13s/0h of 106399 corpus (73151s/33248h ML) 05/14/06
+#counts   SARE_HTML_BODY_END2      52s/2h of 23053 corpus (17334s/5719h MY) 05/14/06
+#max      SARE_HTML_BODY_END2      69s/2h of 57287 corpus (52272s/5015h MY) 09/22/05
+
+rawbody   SARE_HTML_HTML_DBL       /<html[^>]*><html[^>]*>/i
+describe  SARE_HTML_HTML_DBL       Message body has very strange HTML sequence
+score     SARE_HTML_HTML_DBL       0.639
+#ham      SARE_HTML_HTML_DBL       Verified (several), common to various opt-in lists.
+#hist     SARE_HTML_HTML_DBL       Fred T: FR_HTML_HTML
+#hist     SARE_HTML_HTML_DBL       2004-06-11: [^>]* added by Bob Menschel
+#counts   SARE_HTML_HTML_DBL       7s/1h of 333405 corpus (262498s/70907h RM) 05/12/06
+#max      SARE_HTML_HTML_DBL       168s/0h of 65984 corpus (40739s/25245h RM) 08/21/04
+#counts   SARE_HTML_HTML_DBL       1s/0h of 9988 corpus (5657s/4331h AxB) 05/14/06
+#counts   SARE_HTML_HTML_DBL       0s/0h of 13284 corpus (7412s/5872h CT) 05/14/06
+#max      SARE_HTML_HTML_DBL       9s/0h of 6944 corpus (3188s/3756h CT) 05/19/04
+#counts   SARE_HTML_HTML_DBL       3s/0h of 155408 corpus (103805s/51603h DOC) 05/15/06
+#counts   SARE_HTML_HTML_DBL       25s/0h of 54283 corpus (17106s/37177h JH-3.01) 02/13/05
+#max      SARE_HTML_HTML_DBL       75s/0h of 32906 corpus (9660s/23246h JH) 05/24/04
+#counts   SARE_HTML_HTML_DBL       1s/0h of 106399 corpus (73151s/33248h ML) 05/14/06
+#counts   SARE_HTML_HTML_DBL       8s/1h of 23053 corpus (17334s/5719h MY) 05/14/06
+#max      SARE_HTML_HTML_DBL       10s/0h of 57287 corpus (52272s/5015h MY) 09/22/05
+
+########  ######################   ##################################################
+#   <TITLE> Tag Tests
+########  ######################   ##################################################
+
+#              Moved file 1 to 3:   SARE_HTML_TITLE_MNY
+rawbody   SARE_HTML_TITLE_MNY      /<title>.{0,25}Money.{0,25}<\/title>/i
+describe  SARE_HTML_TITLE_MNY      HTML Title implies this may be spam
+score     SARE_HTML_TITLE_MNY      0.458
+#ham      SARE_HTML_TITLE_MNY      confirmed
+#hist     SARE_HTML_TITLE_MNY      Fred T: FR_TITLE_MONEY
+#counts   SARE_HTML_TITLE_MNY      16s/2h of 333405 corpus (262498s/70907h RM) 05/12/06
+#max      SARE_HTML_TITLE_MNY      260s/11h of 689155 corpus (348140s/341015h RM) 09/18/05
+#counts   SARE_HTML_TITLE_MNY      0s/0h of 13287 corpus (7414s/5873h CT) 05/14/06
+#max      SARE_HTML_TITLE_MNY      0s/1h of 6944 corpus (3188s/3756h CT) 05/19/04
+#counts   SARE_HTML_TITLE_MNY      0s/0h of 54283 corpus (17106s/37177h JH-3.01) 02/13/05
+#max      SARE_HTML_TITLE_MNY      7s/0h of 38858 corpus (15368s/23490h JH-SA3.0rc1) 08/22/04
+#counts   SARE_HTML_TITLE_MNY      2s/0h of 105856 corpus (72598s/33258h ML) 05/14/06
+#counts   SARE_HTML_TITLE_MNY      15s/0h of 23074 corpus (17350s/5724h MY) 05/14/06
+#max      SARE_HTML_TITLE_MNY      120s/0h of 57287 corpus (52272s/5015h MY) 09/22/05
+
+########  ######################   ##################################################
+#   <A> and HREF rules          
+########  ######################   ##################################################
+
+########  ######################   ##################################################
+#   Spamsign character sets and fonts 
+########  ######################   ##################################################
+
+rawbody   SARE_HTML_COLOR_B        /(?:style="?|<style[^>]*>)[^>"]*[^-]color\s*:\s*rgb\(\s*2[2-5][0-9]\s*,\s*2[2-5][0-9]\s*,\s*2[2-5][0-9]\s*\)[^>]*>/i
+describe  SARE_HTML_COLOR_B        BAD STYLE: color: too light (rgb(n))
+score     SARE_HTML_COLOR_B        0.621
+#ham      SARE_HTML_COLOR_B        Tickemaster ticket confirmation emails
+#hist     SARE_HTML_COLOR_B        From Jesse Houwing May 14 2004
+#counts   SARE_HTML_COLOR_B        20s/4h of 333405 corpus (262498s/70907h RM) 05/12/06
+#counts   SARE_HTML_COLOR_B        2s/8h of 9988 corpus (5657s/4331h AxB) 05/14/06
+#counts   SARE_HTML_COLOR_B        1s/1h of 13284 corpus (7412s/5872h CT) 05/14/06
+#counts   SARE_HTML_COLOR_B        47s/0h of 155408 corpus (103805s/51603h DOC) 05/15/06
+#counts   SARE_HTML_COLOR_B        0s/1h of 42328 corpus (34212s/8116h FVGT) 05/15/06
+#counts   SARE_HTML_COLOR_B        3s/0h of 54067 corpus (16890s/37177h JH-3.01) 06/18/05
+#max      SARE_HTML_COLOR_B        5s/0h of 54283 corpus (17106s/37177h JH-3.01) 02/13/05
+#counts   SARE_HTML_COLOR_B        12s/0h of 106399 corpus (73151s/33248h ML) 05/14/06
+#counts   SARE_HTML_COLOR_B        8s/0h of 23053 corpus (17334s/5719h MY) 05/14/06
+
+rawbody   SARE_HTML_LANG_PTBR      /lang=(?:3D)?PT-BR/
+describe  SARE_HTML_LANG_PTBR      Odd language
+score     SARE_HTML_LANG_PTBR      0.189
+#hist     SARE_HTML_LANG_PTBR      LW_PT_BR, Loren Wilton
+#counts   SARE_HTML_LANG_PTBR      11s/0h of 333405 corpus (262498s/70907h RM) 05/12/06
+#max      SARE_HTML_LANG_PTBR      213s/0h of 70693 corpus (43127s/27566h RM) 10/02/04
+#counts   SARE_HTML_LANG_PTBR      0s/1h of 56020 corpus (51687s/4333h AxB2) 05/15/06
+#counts   SARE_HTML_LANG_PTBR      9s/25h of 13284 corpus (7412s/5872h CT) 05/14/06
+#counts   SARE_HTML_LANG_PTBR      1s/0h of 155408 corpus (103805s/51603h DOC) 05/15/06
+#counts   SARE_HTML_LANG_PTBR      69s/0h of 54067 corpus (16890s/37177h JH-3.01) 06/18/05
+#counts   SARE_HTML_LANG_PTBR      2s/0h of 106399 corpus (73151s/33248h ML) 05/14/06
+#counts   SARE_HTML_LANG_PTBR      0s/0h of 47221 corpus (42968s/4253h MY) 06/18/05
+#max      SARE_HTML_LANG_PTBR      10s/0h of 19448 corpus (16863s/2585h MY) 10/05/04
+
+########  ######################   ##################################################
+#   Invalid or Suspicious URI Tests
+########  ######################   ##################################################
+
+uri       SARE_HTML_URI_DEFASP     m'/default.asp\?id='i
+describe  SARE_HTML_URI_DEFASP     URI to page name which suggests spammer's page
+score     SARE_HTML_URI_DEFASP     0.093
+#hist     SARE_HTML_URI_DEFASP     Deleted SARE_HTML_URI_X1 = LW_URI_ID due to complete overlap: /\?id\x10\x30\x34\x35/i
+#counts   SARE_HTML_URI_DEFASP     0s/8h of 333405 corpus (262498s/70907h RM) 05/12/06
+#max      SARE_HTML_URI_DEFASP     130s/27h of 689155 corpus (348140s/341015h RM) 09/18/05
+#counts   SARE_HTML_URI_DEFASP     0s/5h of 13287 corpus (7414s/5873h CT) 05/14/06
+#max      SARE_HTML_URI_DEFASP     44s/0h of 6944 corpus (3188s/3756h CT) 05/19/04
+#counts   SARE_HTML_URI_DEFASP     1s/1h of 42454 corpus (34336s/8118h FVGT) 05/15/06
+#counts   SARE_HTML_URI_DEFASP     0s/0h of 54067 corpus (16890s/37177h JH-3.01) 06/18/05
+#max      SARE_HTML_URI_DEFASP     361s/0h of 38858 corpus (15368s/23490h JH-SA3.0rc1) 08/22/04
+#counts   SARE_HTML_URI_DEFASP     24s/0h of 23074 corpus (17350s/5724h MY) 05/14/06
+#max      SARE_HTML_URI_DEFASP     24s/0h of 57287 corpus (52272s/5015h MY) 09/22/05
+
+########  ######################   ##################################################
+#   Image tag tests
+########  ######################   ##################################################
+
+########  ######################   ##################################################
+#   Paragraphs, breaks, and spacings
+########  ######################   ##################################################
+
+rawbody   SARE_HTML_P_MANY3        /<P><P><P>/i
+describe  SARE_HTML_P_MANY3        Too many empty paragraph tags in a row
+score     SARE_HTML_P_MANY3        1.108
+#hist     SARE_HTML_P_MANY3        04/02/2004 http://www.rulesemporium.com/rules/99_FVGT_rawbody.cf
+#overlap  SARE_HTML_P_MANY3        Total overlap within SARE_HTML_URI_MANYP2, but no ham hits here (until Feb 2005)
+#ham      SARE_HTML_P_MANY3        From: Ticketmaster <support@reply.ticketmaster.com>, Tuesday, January 25, 2005, 4:00:27 PM
+#counts   SARE_HTML_P_MANY3        78s/6h of 333405 corpus (262498s/70907h RM) 05/12/06
+#max      SARE_HTML_P_MANY3        458s/28h of 689155 corpus (348140s/341015h RM) 09/18/05
+#counts   SARE_HTML_P_MANY3        143s/0h of 56020 corpus (51687s/4333h AxB2) 05/15/06
+#counts   SARE_HTML_P_MANY3        0s/0h of 11260 corpus (6568s/4692h CT) 06/17/05
+#max      SARE_HTML_P_MANY3        9s/0h of 6944 corpus (3188s/3756h CT) 05/19/04
+#counts   SARE_HTML_P_MANY3        412s/0h of 155408 corpus (103805s/51603h DOC) 05/15/06
+#counts   SARE_HTML_P_MANY3        50s/0h of 42328 corpus (34212s/8116h FVGT) 05/15/06
+#counts   SARE_HTML_P_MANY3        4s/0h of 54067 corpus (16890s/37177h JH-3.01) 06/18/05
+#max      SARE_HTML_P_MANY3        15s/0h of 32260 corpus (8983s/23277h JH) 05/14/04
+#counts   SARE_HTML_P_MANY3        9s/0h of 23053 corpus (17334s/5719h MY) 05/14/06
+#max      SARE_HTML_P_MANY3        41s/0h of 57287 corpus (52272s/5015h MY) 09/22/05
+
+########  ######################   ##################################################
+#   Javascript and object tests     
+########  ######################   ##################################################
+
+########  ######################   ##################################################
+#  Useless tags (tag structures that do nothing) 
+#  Largely submitted by Matt Yackley, with contributions by 
+#  Carl Friend, Jennifer Wheeler, Scott Sprunger, Larry Gilson
+########  ######################   ##################################################
+
+rawbody   SARE_HTML_USL_1CHAR      m'(?!<[biopu]></[biopu]>)<([a-z])></\1>'i 
+describe  SARE_HTML_USL_1CHAR      Invalid and empty 1-char tag - /tag combination
+score     SARE_HTML_USL_1CHAR      0.029
+#counts   SARE_HTML_USL_1CHAR      6s/14h of 333405 corpus (262498s/70907h RM) 05/12/06
+#max      SARE_HTML_USL_1CHAR      46s/6h of 196718 corpus (96193s/100525h RM) 02/22/05
+#counts   SARE_HTML_USL_1CHAR      3s/0h of 56020 corpus (51687s/4333h AxB2) 05/15/06
+#counts   SARE_HTML_USL_1CHAR      0s/0h of 10826 corpus (6364s/4462h CT) 05/28/05
+#max      SARE_HTML_USL_1CHAR      3s/0h of 6944 corpus (3188s/3756h CT) 05/19/04
+#counts   SARE_HTML_USL_1CHAR      8s/30h of 155408 corpus (103805s/51603h DOC) 05/15/06
+#counts   SARE_HTML_USL_1CHAR      2s/1h of 42328 corpus (34212s/8116h FVGT) 05/15/06
+#counts   SARE_HTML_USL_1CHAR      3s/0h of 54067 corpus (16890s/37177h JH-3.01) 06/18/05
+#max      SARE_HTML_USL_1CHAR      6s/0h of 54283 corpus (17106s/37177h JH-3.01) 02/13/05
+#counts   SARE_HTML_USL_1CHAR      2s/0h of 23053 corpus (17334s/5719h MY) 05/14/06
+
+########  ######################   ##################################################
+#   Miscellaneous tag tests
+########  ######################   ##################################################
+
+rawbody   SARE_HTML_BODY_2SP       /<body  /i
+describe  SARE_HTML_BODY_2SP       HTML tag is strangely formed
+score     SARE_HTML_BODY_2SP       0.665
+#hist     SARE_HTML_BODY_2SP       FR_BODY_2SPACES
+#counts   SARE_HTML_BODY_2SP       682s/152h of 333405 corpus (262498s/70907h RM) 05/12/06
+#counts   SARE_HTML_BODY_2SP       678s/2h of 9988 corpus (5657s/4331h AxB) 05/14/06
+#counts   SARE_HTML_BODY_2SP       48s/0h of 13284 corpus (7412s/5872h CT) 05/14/06
+#counts   SARE_HTML_BODY_2SP       215s/0h of 155408 corpus (103805s/51603h DOC) 05/15/06
+#counts   SARE_HTML_BODY_2SP       1455s/8h of 42328 corpus (34212s/8116h FVGT) 05/15/06
+#counts   SARE_HTML_BODY_2SP       62s/5h of 54067 corpus (16890s/37177h JH-3.01) 06/18/05
+#max      SARE_HTML_BODY_2SP       94s/0h of 38858 corpus (15368s/23490h JH-SA3.0rc1) 08/22/04
+#counts   SARE_HTML_BODY_2SP       361s/2h of 106399 corpus (73151s/33248h ML) 05/14/06
+#counts   SARE_HTML_BODY_2SP       21s/2h of 23053 corpus (17334s/5719h MY) 05/14/06
+#max      SARE_HTML_BODY_2SP       66s/2h of 47221 corpus (42968s/4253h MY) 06/18/05
+
+full      SARE_HTML_TD_BR          m'<td.{10,400}<br>.{1,7}<br>.{1,7}<br>.{1,7}<br>.{0,400}</td>'is
+describe  SARE_HTML_TD_BR          Multiple line breaks in spammer pattern
+score     SARE_HTML_TD_BR          0.934
+#hist     SARE_HTML_TD_BR          Fred T: FR_WICKED_SPAM_??
+#counts   SARE_HTML_TD_BR          2757s/33h of 333405 corpus (262498s/70907h RM) 05/12/06
+#counts   SARE_HTML_TD_BR          368s/0h of 56020 corpus (51687s/4333h AxB2) 05/15/06
+#counts   SARE_HTML_TD_BR          40s/10h of 13284 corpus (7412s/5872h CT) 05/14/06
+#counts   SARE_HTML_TD_BR          471s/0h of 155408 corpus (103805s/51603h DOC) 05/15/06
+#counts   SARE_HTML_TD_BR          190s/10h of 42328 corpus (34212s/8116h FVGT) 05/15/06
+#counts   SARE_HTML_TD_BR          36s/0h of 54067 corpus (16890s/37177h JH-3.01) 06/18/05
+#max      SARE_HTML_TD_BR          182s/0h of 38858 corpus (15368s/23490h JH-SA3.0rc1) 08/22/04
+#counts   SARE_HTML_TD_BR          700s/0h of 106399 corpus (73151s/33248h ML) 05/14/06
+#counts   SARE_HTML_TD_BR          68s/14h of 23053 corpus (17334s/5719h MY) 05/14/06
+#max      SARE_HTML_TD_BR          184s/15h of 47221 corpus (42968s/4253h MY) 06/18/05
+
+# EOF

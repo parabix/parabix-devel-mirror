@@ -1,0 +1,1187 @@
+# SARE Specific Ruleset for SpamAssassin 
+# Version: 01.03.13
+# Created: 2004-05-28
+# Modified: 2006-05-27
+#@@# Revision History: 
+#    01.00.00 - Created new rule set 
+#    01.00.01 - Shortened some descriptions for version 3.0 lint
+#    01.01.00 - Added rules for Word of Mouth / Shared Experiences spammer
+#    01.01.01 - Removed rules duplicated elsewhere
+#             - Minor score tweaks based on recent mass-check
+#    01.01.02 - Migrated some rules here from HTML rule set
+#             - Minor score tweaks based on recent mass-check
+#    01.02.00 - Added a rule
+#             - Removed some obsolete rules (spam nolonger hitting)
+#    01.02.01 - Improved WoM rules. 
+#               Moved ANUMA rule to new uri.cf file
+#    01.02.02 - Added SARE_SPEC_FROM_WOMR
+#               Added exclusion to SARE_SPEC_URI_WOMR
+#    01.02.03 - Added __SARE_SPEC_BDY_WOMR8
+#    01.02.04 - Added SARE_STRIPE
+#    01.02.05 - Archived SARE_SPEC_MOOSQ, SARE_HTML_PILL3, SARE_HTML_PILL4
+#    01.03.00 - Added Rolex rules
+#    01.03.01 - Added SARE_SPEC_ROLEX_BRANDS and SARE_LOTTO rules
+#    01.03.02 - Added SARE_SPEC_HDR_WOMR2 and SARE_SPEC_URI_WOMR2
+#    01.03.03: May 26 2005
+#              Minor score updates based on additional mass-check
+#              Added "rawlex" intentional misspelling to rolex rules
+#              Added SARE_SPEC_URI_GGFF
+#              Added SARE_BODY_URI_STOCK
+#    01.03.04: May 27 2005
+#              No rule changes; simply correcting revision history. 
+#    01.03.05: May 27 2005
+#              Added SARE_SPEC_BODY_NONEED
+#    01.03.06: Sept 22 2005
+#              Modified WOMR From, Header, and URI rules. 
+#              Added file 0:           SARE_SPEC_LEO_CHEM
+#              Added file 0:           SARE_SPEC_LEO_COST
+#              Added file 0:           SARE_SPEC_LEO_DOLLARS
+#              Added file 0:           SARE_SPEC_LEO_DRUGS
+#              Added file 0:           SARE_SPEC_LEO_LINE02
+#              Added file 0:           SARE_SPEC_LEO_LINE03
+#              Added file 0:           SARE_SPEC_LEO_LINE04
+#              Added file 0:           SARE_SPEC_LEO_LINE04d
+#              Added file 0:           SARE_SPEC_LEO_LINE06
+#              Added file 0:           SARE_SPEC_LEO_MEDS
+#              Added file 0:           SARE_SPEC_LEO_PHARM
+#              Added file 0:           SARE_SPEC_LEO_PHARM2
+#              Added file 0:           SARE_SPEC_SPAMIS_FROM
+#              Added file 0:           SARE_SPEC_SPAMIS_RECV
+#    01.03.07: Oct 1 2005
+#              Added:           SARE_SPEC_SPAMIS_BDY1, _BDY2
+#    01.03.08: Oct 13 2005
+#              Added SARE_SPEC_LRD_COST_M1 and SARE_SPEC_LRD_COST_M2
+#    01.03.09: Nov 18 2005
+#              Minor score tweaks based on recent mass-check
+#              Added SARE_SPEC_CLIENT_TOS
+#              Added SARE_SPEC_CLIENT_TOS2
+#              Added SARE_SPEC_DIPLOMA
+#              Added SARE_SPEC_GETITFREE
+#              Added SARE_SPEC_LEO_BORD
+#              Added SARE_SPEC_LEO_PIE2
+#              Added SARE_SPEC_PLEASEDOTHIS
+#              Added SARE_SPEC_PROLEO_M1
+#              Added SARE_SPEC_PROLEO_M1, M2, M2a
+#              Added SARE_SPEC_REALLY_WORKS, WORK2, WORK3, WORK4
+#              Added SARE_SPEC_ROLEX_HIQLT
+#              Added SARE_SPEC_ROLEX_NOV5A
+#              Added SARE_SPEC_XXGEOCITIES
+#              Archive Aruba rules
+#              Archive SARE_SPEC_BANNEDCD
+#              Archive SARE_SPEC_DIRMEDIA
+#              Archive SARE_SPEC_FROM_BOB
+#              Archive SARE_SPEC_LEO_LINE06
+#              Archive SARE_SPEC_URI_GGFF
+#              Archive WOMR rules
+#    01.03.10: Nov 18 2005
+#              Added SARE_SPEC_ROLEX_NOV5B
+#    01.03.11: Nov 24 2005
+#              Minor score tweaks based on recent mass-check
+#              Enhanced SARE_SPEC_XXGEOCITIES
+#              Modified SARE_SPEC_PROLEO_M1 subrules
+#              Added SARE_SPEC_ROLEX_NOV5C, NOV5D, NOV5E
+#              Added SARE_SPEC_REPL_OBFU1, OBFU2, OBFU3, OBFU4, OBFU5, OBFU6
+#              Added SARE_SPEC_REPLICA     
+#              Added SARE_SPEC_SHORTQ      
+#              Added SARE_SPEC_SPAMARREST  
+#    01.03.12: Nov 25 2005
+#              Improved SARE_SPEC_SPAMARREST to key only on spamarrest bounces
+#              Expanded watch spam tests 
+#@@# 01.03.13: May 27 2006
+#@@#           Modified repetition counts for efficiency
+#@@#           Minor score tweaks based on recent mass-check
+#@@#           Added SARE_SPEC_XXGEOCITIE5
+#@@#           Archived SARE_SPEC_CLIENT_TOS, SARE_SPEC_CLIENT_TOS2
+#@@#           Archived SARE_SPEC_PLEASEDOTHIS
+#@@#           Archived SARE_SPEC_GETITFREE
+#@@#           Archived SARE_SPEC_GETITFREE2
+#@@#           Archived SARE_SPEC_XXGEOCITIES
+#@@#           Archived SARE_STRIPE
+#@@#           Archived SARE_LOTTO_GREENCARD
+#@@#           Archived SARE_SPEC_SHORTQ
+#@@#           Archived SARE_SPEC_ROLEX_SUB2
+#@@#           Archived SARE_SPEC_ROLEX_NOV5C
+
+# License: Artistic - see http://www.rulesemporium.com/license.txt 
+# Current Maintainer: Bob Menschel - RMSA@Menschel.net
+# Current Home: http://www.rulesemporium.com/rules/70_sare_specific.cf 
+#
+# This rule set is intended to catch the M.O. of specific spammers and/or
+# specific spam that might otherwise elude more general-purpose rules. 
+# Our intent is that this rule set should not hit any non-spam. 
+# Because of the nature of the specific spams this rules file aims for, 
+# we cannot avoid ALL non-spam. However, any rule that hits ham hits 
+# spam/ham by at least 1000:1. 
+#
+# Note that __subrules used within this rule set will frequently hit ham, 
+# but the meta tests or other tests with scores should NOT hit any ham. 
+
+body      __SARE_SPEC_SPAMARR_UR   m'http://(?:www\.)?spamarrest\.com/\w'
+header    __SARE_SPEC_SPAMARR_SB   Subject =~ /Spam Arrest Verification Confirmation/
+meta      SARE_SPEC_SPAMARREST     __SARE_SPEC_SPAMARR_UR && !__SARE_SPEC_SPAMARR_SB
+describe  SARE_SPEC_SPAMARREST     probable invalid spam bounce 
+score     SARE_SPEC_SPAMARREST     0.822
+#ham      SARE_SPEC_SPAMARREST     confirmed
+#hist     SARE_SPEC_SPAMARREST     Bob Menschel, Nov 2005
+#note     SARE_SPEC_SPAMARREST     Since SpamArrest bounces contain only the headers of the original message, it's extremely 
+#note     SARE_SPEC_SPAMARREST     difficult to get a false positive on them. We use a high score, so that subject tests can flag emails as spam.
+#note     SARE_SPEC_SPAMARREST     We do require at least a 1.666 score from other rule(s), to avoid false positives
+#counts   SARE_SPEC_SPAMARREST     45s/0h of 173230 corpus (99061s/74169h RM) 05/11/06
+#max      SARE_SPEC_SPAMARREST     403s/6h of 366082 corpus (108301s/257781h RM) 11/25/05
+#counts   SARE_SPEC_SPAMARREST     3s/0h of 106098 corpus (72789s/33309h ML) 05/14/06
+
+########  ######################   ##################################################
+#  Rolex Rules
+########  ######################   ##################################################
+
+header    __SARE_SPEC_ROLEX_SUBJ   Subject =~ /\b(?:r(?:[0o@]|aw)[1l|][3e]x|[g6]ucc[1l|])/i
+describe  __SARE_SPEC_ROLEX_SUBJ   Subject: mentions a Rolex/Gucci/etc.
+body      __SARE_SPEC_ROLEX_BODY   /\b(?:r(?:[0o@]|aw)[1l|][3e]x|[g6]ucc[1l|])/i
+describe  __SARE_SPEC_ROLEX_BODY   Body: mentions a Rolex/Gucci/etc.
+header    __SARE_SPEC_WATCH_SUBJ   Subject =~ /\b(?:w[a@]tch|h[a@]ndb[a@][g6])/i
+describe  __SARE_SPEC_WATCH_SUBJ   Subject: mentions watch/handbag/etc.
+body      __SARE_SPEC_WATCH_BODY   /\b(?:w[a@]tch|h[a@]ndb[a@][g6])/i
+describe  __SARE_SPEC_WATCH_BODY   Body: mentions watch/handbag/etc.
+
+meta      SARE_SPEC_ROLEX          ( ( __SARE_SPEC_WATCH_SUBJ && __SARE_SPEC_ROLEX_BODY ) || ( __SARE_SPEC_ROLEX_SUBJ && __SARE_SPEC_WATCH_BODY ) || ( __SARE_SPEC_ROLEX_SUBJ && __SARE_SPEC_ROLEX_BODY ) )
+describe  SARE_SPEC_ROLEX          Rolex watch spam
+score     SARE_SPEC_ROLEX          1.666
+#ham      SARE_SPEC_ROLEX          confirmed (2)
+#hist     SARE_SPEC_ROLEX          Brent J. Nordquist -- b-nordquist at bethel.edu
+#counts   SARE_SPEC_ROLEX          890s/0h of 173230 corpus (99061s/74169h RM) 05/11/06
+#max      SARE_SPEC_ROLEX          4335s/1h of 689155 corpus (348140s/341015h RM) 09/18/05
+#counts   SARE_SPEC_ROLEX          115s/0h of 36686 corpus (32345s/4341h AxB2) 05/14/06
+#counts   SARE_SPEC_ROLEX          15s/0h of 682 corpus (290s/392h CRF) 02/20/05
+#counts   SARE_SPEC_ROLEX          93s/0h of 13339 corpus (7462s/5877h CT) 05/14/06
+#max      SARE_SPEC_ROLEX          151s/0h of 10801 corpus (6349s/4452h CT) 05/24/05
+#counts   SARE_SPEC_ROLEX          611s/0h of 155610 corpus (103978s/51632h DOC) 05/14/06
+#counts   SARE_SPEC_ROLEX          434s/0h of 42419 corpus (34292s/8127h FVGT) 05/15/06
+#max      SARE_SPEC_ROLEX          680s/0h of 139999 corpus (133260s/6739h ft) 10/09/05
+#counts   SARE_SPEC_ROLEX          556s/0h of 54874 corpus (17700s/37174h JH-3.01) 03/13/05
+#counts   SARE_SPEC_ROLEX          298s/0h of 106098 corpus (72789s/33309h ML) 05/14/06
+#counts   SARE_SPEC_ROLEX          76s/0h of 23026 corpus (17290s/5736h MY) 05/14/06
+#max      SARE_SPEC_ROLEX          250s/0h of 57287 corpus (52272s/5015h MY) 09/22/05
+
+rawbody   SARE_SPEC_WANT_ROLEX     /^\s{0,30}(?:do\s{1,30})?(?:you\s{1,30})?(?:want|need)\s{1,30}(?:a\s{1,30})?(?:(?:cheap|non.?(?:expensive|pricey))s{1,30})?(R(?:[0o@]|aw)lex\s{1,30})?watch\s{0,30}\?/i
+describe  SARE_SPEC_WANT_ROLEX     Body: asks if we want/need a Rolex
+score     SARE_SPEC_WANT_ROLEX     2.333
+#hist     SARE_SPEC_WANT_ROLEX     Brent J. Nordquist -- b-nordquist at bethel.edu
+#counts   SARE_SPEC_WANT_ROLEX     0s/0h of 173230 corpus (99061s/74169h RM) 05/11/06
+#max      SARE_SPEC_WANT_ROLEX     2038s/0h of 238467 corpus (112478s/125989h RM) 02/28/05
+#counts   SARE_SPEC_WANT_ROLEX     1s/0h of 682 corpus (290s/392h CRF) 02/20/05
+#counts   SARE_SPEC_WANT_ROLEX     4s/0h of 13339 corpus (7462s/5877h CT) 05/14/06
+#max      SARE_SPEC_WANT_ROLEX     51s/0h of 11002 corpus (6572s/4430h CT) 03/10/05
+#counts   SARE_SPEC_WANT_ROLEX     39s/0h of 155610 corpus (103978s/51632h DOC) 05/14/06
+#max      SARE_SPEC_WANT_ROLEX     169s/0h of 90468 corpus (40568s/49900h DOC) 11/18/05
+#counts   SARE_SPEC_WANT_ROLEX     0s/0h of 4358 corpus (754s/3604h ft) 05/24/05
+#counts   SARE_SPEC_WANT_ROLEX     264s/0h of 54874 corpus (17700s/37174h JH-3.01) 03/13/05
+#counts   SARE_SPEC_WANT_ROLEX     4s/0h of 106098 corpus (72789s/33309h ML) 05/14/06
+#counts   SARE_SPEC_WANT_ROLEX     0s/0h of 57287 corpus (52272s/5015h MY) 09/22/05
+#max      SARE_SPEC_WANT_ROLEX     6s/0h of 27712 corpus (24263s/3449h MY) 02/27/05
+
+body      __SARE_SPEC_ROLEX_REP1   /r(?:[0o@]|aw)lex.{1,30}replica/i
+body      __SARE_SPEC_ROLEX_REP2   /replica.{1,30}r(?:[0o@]|aw)lex/i
+meta      SARE_SPEC_ROLEX_REP      (__SARE_SPEC_ROLEX_REP1 || __SARE_SPEC_ROLEX_REP2)
+describe  SARE_SPEC_ROLEX_REP      Rolex Replica
+score     SARE_SPEC_ROLEX_REP      1.666
+#ham      SARE_SPEC_ROLEX_REP      Actual watch dealer / repair shop who occasionally fixes replicas
+#hist     SARE_SPEC_ROLEX_REP      ninjaz -at- webexpress.com
+#counts   SARE_SPEC_ROLEX_REP      383s/0h of 173230 corpus (99061s/74169h RM) 05/11/06
+#max      SARE_SPEC_ROLEX_REP      6436s/0h of 494544 corpus (223913s/270631h RM) 10/08/05
+#counts   SARE_SPEC_ROLEX_REP      191s/0h of 36686 corpus (32345s/4341h AxB2) 05/14/06
+#counts   SARE_SPEC_ROLEX_REP      1s/0h of 682 corpus (290s/392h CRF) 02/20/05
+#counts   SARE_SPEC_ROLEX_REP      83s/0h of 13339 corpus (7462s/5877h CT) 05/14/06
+#max      SARE_SPEC_ROLEX_REP      128s/0h of 11588 corpus (6361s/5227h CT) 11/18/05
+#counts   SARE_SPEC_ROLEX_REP      714s/0h of 155610 corpus (103978s/51632h DOC) 05/14/06
+#counts   SARE_SPEC_ROLEX_REP      392s/0h of 42419 corpus (34292s/8127h FVGT) 05/15/06
+#max      SARE_SPEC_ROLEX_REP      537s/0h of 139999 corpus (133260s/6739h ft) 10/09/05
+#counts   SARE_SPEC_ROLEX_REP      255s/0h of 54874 corpus (17700s/37174h JH-3.01) 03/13/05
+#counts   SARE_SPEC_ROLEX_REP      310s/0h of 106098 corpus (72789s/33309h ML) 05/14/06
+#counts   SARE_SPEC_ROLEX_REP      25s/0h of 23026 corpus (17290s/5736h MY) 05/14/06
+#max      SARE_SPEC_ROLEX_REP      112s/0h of 57287 corpus (52272s/5015h MY) 09/22/05
+
+body      SARE_SPEC_ROLEX_SEL      /\bselection\b.{1,5}\bof\b.{1,30}\br(?:[0o@]|aw)lex/i
+describe  SARE_SPEC_ROLEX_SEL      Large selection of Rolex
+score     SARE_SPEC_ROLEX_SEL      2.222
+#hist     SARE_SPEC_ROLEX_SEL      ninjaz -at- webexpress.com
+#counts   SARE_SPEC_ROLEX_SEL      56s/0h of 173230 corpus (99061s/74169h RM) 05/11/06
+#max      SARE_SPEC_ROLEX_SEL      1411s/0h of 174352 corpus (98963s/75389h RM) 02/18/05
+#counts   SARE_SPEC_ROLEX_SEL      17s/0h of 36686 corpus (32345s/4341h AxB2) 05/14/06
+#counts   SARE_SPEC_ROLEX_SEL      2s/0h of 682 corpus (290s/392h CRF) 02/20/05
+#counts   SARE_SPEC_ROLEX_SEL      6s/0h of 13339 corpus (7462s/5877h CT) 05/14/06
+#max      SARE_SPEC_ROLEX_SEL      27s/0h of 10801 corpus (6349s/4452h CT) 05/24/05
+#counts   SARE_SPEC_ROLEX_SEL      7s/0h of 155610 corpus (103978s/51632h DOC) 05/14/06
+#max      SARE_SPEC_ROLEX_SEL      42s/0h of 90468 corpus (40568s/49900h DOC) 11/18/05
+#counts   SARE_SPEC_ROLEX_SEL      12s/0h of 42419 corpus (34292s/8127h FVGT) 05/15/06
+#counts   SARE_SPEC_ROLEX_SEL      65s/0h of 54874 corpus (17700s/37174h JH-3.01) 03/13/05
+#counts   SARE_SPEC_ROLEX_SEL      23s/0h of 106098 corpus (72789s/33309h ML) 05/14/06
+#counts   SARE_SPEC_ROLEX_SEL      0s/0h of 23026 corpus (17290s/5736h MY) 05/14/06
+#max      SARE_SPEC_ROLEX_SEL      4s/0h of 57287 corpus (52272s/5015h MY) 09/22/05
+
+body      SARE_SPEC_ROLEX_ORD      /\border\b.{1,30}\br(?:[0o@]|aw)lex/i
+describe  SARE_SPEC_ROLEX_ORD      Order rolex
+score     SARE_SPEC_ROLEX_ORD      2.222
+#hist     SARE_SPEC_ROLEX_ORD      ninjaz -at- webexpress.com
+#counts   SARE_SPEC_ROLEX_ORD      1s/0h of 173230 corpus (99061s/74169h RM) 05/11/06
+#max      SARE_SPEC_ROLEX_ORD      1166s/0h of 174352 corpus (98963s/75389h RM) 02/18/05
+#counts   SARE_SPEC_ROLEX_ORD      1s/0h of 682 corpus (290s/392h CRF) 02/20/05
+#counts   SARE_SPEC_ROLEX_ORD      0s/0h of 11588 corpus (6361s/5227h CT) 11/18/05
+#max      SARE_SPEC_ROLEX_ORD      5s/0h of 11002 corpus (6572s/4430h CT) 03/10/05
+#counts   SARE_SPEC_ROLEX_ORD      7s/0h of 155610 corpus (103978s/51632h DOC) 05/14/06
+#max      SARE_SPEC_ROLEX_ORD      51s/0h of 90468 corpus (40568s/49900h DOC) 11/18/05
+#counts   SARE_SPEC_ROLEX_ORD      0s/0h of 9823 corpus (4931s/4892h FT) 11/18/05
+#max      SARE_SPEC_ROLEX_ORD      1s/0h of 139999 corpus (133260s/6739h ft) 10/09/05
+#counts   SARE_SPEC_ROLEX_ORD      67s/0h of 54131 corpus (16957s/37174h JH-3.01) 03/02/05
+#counts   SARE_SPEC_ROLEX_ORD      2s/0h of 106098 corpus (72789s/33309h ML) 05/14/06
+#counts   SARE_SPEC_ROLEX_ORD      0s/0h of 57287 corpus (52272s/5015h MY) 09/22/05
+#max      SARE_SPEC_ROLEX_ORD      7s/0h of 27712 corpus (24263s/3449h MY) 02/27/05
+
+body      SARE_SPEC_ROLEX_ITAL     /\bitalian\b.{1,30}\bcrafted\b.{1,30}\br(?:[0o@]|aw)lex/i
+describe  SARE_SPEC_ROLEX_ITAL     Italian Crafted Rolex
+score     SARE_SPEC_ROLEX_ITAL     2.222
+#hist     SARE_SPEC_ROLEX_ITAL     ninjaz -at- webexpress.com
+#counts   SARE_SPEC_ROLEX_ITAL     56s/0h of 173230 corpus (99061s/74169h RM) 05/11/06
+#max      SARE_SPEC_ROLEX_ITAL     118s/0h of 689155 corpus (348140s/341015h RM) 09/18/05
+#counts   SARE_SPEC_ROLEX_ITAL     17s/0h of 36686 corpus (32345s/4341h AxB2) 05/14/06
+#counts   SARE_SPEC_ROLEX_ITAL     2s/0h of 682 corpus (290s/392h CRF) 02/20/05
+#counts   SARE_SPEC_ROLEX_ITAL     2s/0h of 13339 corpus (7462s/5877h CT) 05/14/06
+#max      SARE_SPEC_ROLEX_ITAL     33s/0h of 11002 corpus (6572s/4430h CT) 03/10/05
+#counts   SARE_SPEC_ROLEX_ITAL     12s/0h of 155610 corpus (103978s/51632h DOC) 05/14/06
+#max      SARE_SPEC_ROLEX_ITAL     83s/0h of 90468 corpus (40568s/49900h DOC) 11/18/05
+#counts   SARE_SPEC_ROLEX_ITAL     12s/0h of 42419 corpus (34292s/8127h FVGT) 05/15/06
+#counts   SARE_SPEC_ROLEX_ITAL     150s/0h of 54874 corpus (17700s/37174h JH-3.01) 03/13/05
+#counts   SARE_SPEC_ROLEX_ITAL     24s/0h of 106098 corpus (72789s/33309h ML) 05/14/06
+#counts   SARE_SPEC_ROLEX_ITAL     1s/0h of 42678 corpus (37399s/5279h MY) 11/18/05
+#max      SARE_SPEC_ROLEX_ITAL     12s/0h of 27712 corpus (24263s/3449h MY) 02/27/05
+
+body      SARE_SPEC_ROLEX_PRICE    /r(?:[0o@]|aw)le.?x.{1,30}\bfrom\b.{1,30}\$\d{1,30}/i
+describe  SARE_SPEC_ROLEX_PRICE    Rolex for only...
+score     SARE_SPEC_ROLEX_PRICE    1.666
+#hist     SARE_SPEC_ROLEX_PRICE    ninjaz -at- webexpress.com
+#counts   SARE_SPEC_ROLEX_PRICE    1s/0h of 173230 corpus (99061s/74169h RM) 05/11/06
+#max      SARE_SPEC_ROLEX_PRICE    638s/0h of 174352 corpus (98963s/75389h RM) 02/18/05
+#counts   SARE_SPEC_ROLEX_PRICE    0s/0h of 682 corpus (290s/392h CRF) 02/20/05
+#counts   SARE_SPEC_ROLEX_PRICE    0s/0h of 10629 corpus (5847s/4782h CT) 09/18/05
+#max      SARE_SPEC_ROLEX_PRICE    2s/0h of 11002 corpus (6572s/4430h CT) 03/10/05
+#counts   SARE_SPEC_ROLEX_PRICE    5s/0h of 155610 corpus (103978s/51632h DOC) 05/14/06
+#max      SARE_SPEC_ROLEX_PRICE    42s/0h of 90468 corpus (40568s/49900h DOC) 11/18/05
+#counts   SARE_SPEC_ROLEX_PRICE    0s/0h of 9823 corpus (4931s/4892h FT) 11/18/05
+#max      SARE_SPEC_ROLEX_PRICE    9s/0h of 139999 corpus (133260s/6739h ft) 10/09/05
+#counts   SARE_SPEC_ROLEX_PRICE    72s/0h of 54131 corpus (16957s/37174h JH-3.01) 03/02/05
+#counts   SARE_SPEC_ROLEX_PRICE    0s/0h of 106098 corpus (72789s/33309h ML) 05/14/06
+#max      SARE_SPEC_ROLEX_PRICE    7s/0h of 19215 corpus (15849s/3366h ML) 11/18/05
+#counts   SARE_SPEC_ROLEX_PRICE    1s/0h of 57287 corpus (52272s/5015h MY) 09/22/05
+#max      SARE_SPEC_ROLEX_PRICE    8s/0h of 27712 corpus (24263s/3449h MY) 02/27/05
+
+body      SARE_SPEC_ROLEX_BUY      /\bbuy\b.{1,30}\br(?:[0o@]|aw)lex/i
+describe  SARE_SPEC_ROLEX_BUY      Buy rolex
+score     SARE_SPEC_ROLEX_BUY      1.666
+#ham      SARE_SPEC_ROLEX_BUY      confirmed (3) 
+#hist     SARE_SPEC_ROLEX_BUY      ninjaz -at- webexpress.com
+#counts   SARE_SPEC_ROLEX_BUY      191s/0h of 173230 corpus (99061s/74169h RM) 05/11/06
+#max      SARE_SPEC_ROLEX_BUY      5938s/0h of 494544 corpus (223913s/270631h RM) 10/08/05
+#counts   SARE_SPEC_ROLEX_BUY      54s/0h of 36686 corpus (32345s/4341h AxB2) 05/14/06
+#counts   SARE_SPEC_ROLEX_BUY      2s/0h of 682 corpus (290s/392h CRF) 02/20/05
+#counts   SARE_SPEC_ROLEX_BUY      28s/0h of 13339 corpus (7462s/5877h CT) 05/14/06
+#max      SARE_SPEC_ROLEX_BUY      55s/0h of 11588 corpus (6361s/5227h CT) 11/18/05
+#counts   SARE_SPEC_ROLEX_BUY      355s/0h of 155610 corpus (103978s/51632h DOC) 05/14/06
+#counts   SARE_SPEC_ROLEX_BUY      26s/0h of 42419 corpus (34292s/8127h FVGT) 05/15/06
+#max      SARE_SPEC_ROLEX_BUY      174s/0h of 139999 corpus (133260s/6739h ft) 10/09/05
+#counts   SARE_SPEC_ROLEX_BUY      130s/0h of 54874 corpus (17700s/37174h JH-3.01) 03/13/05
+#counts   SARE_SPEC_ROLEX_BUY      91s/0h of 106098 corpus (72789s/33309h ML) 05/14/06
+#counts   SARE_SPEC_ROLEX_BUY      1s/0h of 23026 corpus (17290s/5736h MY) 05/14/06
+#max      SARE_SPEC_ROLEX_BUY      23s/0h of 47717 corpus (43727s/3990h MY) 05/25/05
+
+body      __SARE_SPEC_GENU_REPL    /\bgenuine\b.{1,30}\breplica/i
+meta      SARE_SPEC_ROLEX_GENREP   ( __SARE_SPEC_GENU_REPL && SARE_SPEC_ROLEX )
+describe  SARE_SPEC_ROLEX_GENREP   Genuine Replica Rolex!
+score     SARE_SPEC_ROLEX_GENREP   1.666
+#hist     SARE_SPEC_ROLEX_GENREP   ninjaz -at- webexpress.com
+#counts   SARE_SPEC_ROLEX_GENREP   0s/0h of 173230 corpus (99061s/74169h RM) 05/11/06
+#max      SARE_SPEC_ROLEX_GENREP   243s/0h of 400503 corpus (178160s/222343h RM) 03/31/05
+#counts   SARE_SPEC_ROLEX_GENREP   2s/0h of 682 corpus (290s/392h CRF) 02/20/05
+#counts   SARE_SPEC_ROLEX_GENREP   2s/0h of 13339 corpus (7462s/5877h CT) 05/14/06
+#max      SARE_SPEC_ROLEX_GENREP   25s/0h of 11002 corpus (6572s/4430h CT) 03/10/05
+#counts   SARE_SPEC_ROLEX_GENREP   3s/0h of 155610 corpus (103978s/51632h DOC) 05/14/06
+#max      SARE_SPEC_ROLEX_GENREP   20s/0h of 90468 corpus (40568s/49900h DOC) 11/18/05
+#counts   SARE_SPEC_ROLEX_GENREP   24s/0h of 42419 corpus (34292s/8127h FVGT) 05/15/06
+#counts   SARE_SPEC_ROLEX_GENREP   83s/0h of 54874 corpus (17700s/37174h JH-3.01) 03/13/05
+#counts   SARE_SPEC_ROLEX_GENREP   2s/0h of 106098 corpus (72789s/33309h ML) 05/14/06
+#counts   SARE_SPEC_ROLEX_GENREP   0s/0h of 53432 corpus (48386s/5046h MY) 10/08/05
+#max      SARE_SPEC_ROLEX_GENREP   12s/0h of 31513 corpus (27912s/3601h MY) 03/09/05
+
+body      SARE_SPEC_ROLEX_CHEAP    /(?:cheap|non.?expensive){1,30}r(?:[0o@]|aw)le.?x/i
+describe  SARE_SPEC_ROLEX_CHEAP    Cheap Rolex!
+score     SARE_SPEC_ROLEX_CHEAP    1.178
+#hist     SARE_SPEC_ROLEX_CHEAP    ninjaz -at- webexpress.com
+#ham      SARE_SPEC_ROLEX_CHEAP    Spam statement quoted from NBC Universal CEO Bob Wright on electronic newsletter
+#counts   SARE_SPEC_ROLEX_CHEAP    0s/0h of 173230 corpus (99061s/74169h RM) 05/11/06
+#max      SARE_SPEC_ROLEX_CHEAP    81s/0h of 174380 corpus (98964s/75416h RM) 02/19/05
+#counts   SARE_SPEC_ROLEX_CHEAP    0s/0h of 682 corpus (290s/392h CRF) 02/20/05
+#counts   SARE_SPEC_ROLEX_CHEAP    0s/0h of 10629 corpus (5847s/4782h CT) 09/18/05
+#max      SARE_SPEC_ROLEX_CHEAP    5s/0h of 11002 corpus (6572s/4430h CT) 03/10/05
+#counts   SARE_SPEC_ROLEX_CHEAP    0s/0h of 155610 corpus (103978s/51632h DOC) 05/14/06
+#max      SARE_SPEC_ROLEX_CHEAP    2s/0h of 90468 corpus (40568s/49900h DOC) 11/18/05
+#counts   SARE_SPEC_ROLEX_CHEAP    0s/0h of 4358 corpus (754s/3604h ft) 05/24/05
+#counts   SARE_SPEC_ROLEX_CHEAP    15s/0h of 54131 corpus (16957s/37174h JH-3.01) 03/02/05
+#counts   SARE_SPEC_ROLEX_CHEAP    0s/0h of 106098 corpus (72789s/33309h ML) 05/14/06
+#max      SARE_SPEC_ROLEX_CHEAP    6s/0h of 19215 corpus (15849s/3366h ML) 11/18/05
+#counts   SARE_SPEC_ROLEX_CHEAP    0s/0h of 42678 corpus (37399s/5279h MY) 11/18/05
+#max      SARE_SPEC_ROLEX_CHEAP    3s/0h of 47717 corpus (43727s/3990h MY) 05/25/05
+
+body      SARE_SPEC_REPLICA_OBFU   /\b(?:rep[l|]i[ck]a|rep lica|watach|wacth)\b/i
+describe  SARE_SPEC_REPLICA_OBFU   Rolex with obfuscated replica
+score     SARE_SPEC_REPLICA_OBFU   1.812
+#stype    SARE_SPEC_REPLICA_OBFU   obfu
+#ham      SARE_SPEC_REPLICA_OBFU   Replika in non-English emails
+#hist     SARE_SPEC_REPLICA_OBFU   Robert Brooks, Feb 18 2005; Fred Taresevicius, Nov 2005
+#counts   SARE_SPEC_REPLICA_OBFU   821s/4h of 173230 corpus (99061s/74169h RM) 05/11/06
+#counts   SARE_SPEC_REPLICA_OBFU   1s/0h of 9999 corpus (5651s/4348h AxB) 05/14/06
+#counts   SARE_SPEC_REPLICA_OBFU   0s/0h of 682 corpus (290s/392h CRF) 02/20/05
+#counts   SARE_SPEC_REPLICA_OBFU   31s/0h of 13339 corpus (7462s/5877h CT) 05/14/06
+#counts   SARE_SPEC_REPLICA_OBFU   58s/0h of 155610 corpus (103978s/51632h DOC) 05/14/06
+#counts   SARE_SPEC_REPLICA_OBFU   61s/0h of 42419 corpus (34292s/8127h FVGT) 05/15/06
+#counts   SARE_SPEC_REPLICA_OBFU   4s/0h of 54131 corpus (16957s/37174h JH-3.01) 03/02/05
+#counts   SARE_SPEC_REPLICA_OBFU   143s/0h of 106098 corpus (72789s/33309h ML) 05/14/06
+#counts   SARE_SPEC_REPLICA_OBFU   12s/0h of 23026 corpus (17290s/5736h MY) 05/14/06
+
+header    SARE_SPEC_ROLEX_AFFRD    Subject =~ /\bafford\b.{1,30}\br(?:[0o@]|aw)lex\b/i
+describe  SARE_SPEC_ROLEX_AFFRD    Can you afford a rolex?
+score     SARE_SPEC_ROLEX_AFFRD    0.867
+#hist     SARE_SPEC_ROLEX_AFFRD    Robert Brooks, Feb 18 2005
+#counts   SARE_SPEC_ROLEX_AFFRD    0s/0h of 173230 corpus (99061s/74169h RM) 05/11/06
+#max      SARE_SPEC_ROLEX_AFFRD    47s/0h of 400503 corpus (178160s/222343h RM) 03/31/05
+#counts   SARE_SPEC_ROLEX_AFFRD    0s/0h of 682 corpus (290s/392h CRF) 02/20/05
+#counts   SARE_SPEC_ROLEX_AFFRD    0s/0h of 10629 corpus (5847s/4782h CT) 09/18/05
+#max      SARE_SPEC_ROLEX_AFFRD    1s/0h of 11002 corpus (6572s/4430h CT) 03/10/05
+#counts   SARE_SPEC_ROLEX_AFFRD    1s/0h of 90468 corpus (40568s/49900h DOC) 11/18/05
+#counts   SARE_SPEC_ROLEX_AFFRD    3s/0h of 42419 corpus (34292s/8127h FVGT) 05/15/06
+#max      SARE_SPEC_ROLEX_AFFRD    4s/0h of 139999 corpus (133260s/6739h ft) 10/09/05
+#counts   SARE_SPEC_ROLEX_AFFRD    3s/0h of 54131 corpus (16957s/37174h JH-3.01) 03/02/05
+#counts   SARE_SPEC_ROLEX_AFFRD    0s/0h of 27712 corpus (24263s/3449h MY) 02/27/05
+
+header    SARE_SPEC_ROLEX_BRANDS   Subject =~ /(\b(cartier|piaget|omega|longines|vuitton|r(?:[0o@]|aw)lex)\b.{0,30}){3,}/i
+describe  SARE_SPEC_ROLEX_BRANDS   Spammer subject - multiple brands
+score     SARE_SPEC_ROLEX_BRANDS   1.111
+#stype    SARE_SPEC_ROLEX_BRANDS   spamp
+#hist     SARE_SPEC_ROLEX_BRANDS   Robert Brooks, Feb 21 2005
+#counts   SARE_SPEC_ROLEX_BRANDS   25s/0h of 173230 corpus (99061s/74169h RM) 05/11/06
+#max      SARE_SPEC_ROLEX_BRANDS   48s/0h of 400503 corpus (178160s/222343h RM) 03/31/05
+#counts   SARE_SPEC_ROLEX_BRANDS   1s/0h of 36686 corpus (32345s/4341h AxB2) 05/14/06
+#counts   SARE_SPEC_ROLEX_BRANDS   0s/0h of 11002 corpus (6572s/4430h CT) 03/10/05
+#counts   SARE_SPEC_ROLEX_BRANDS   1s/0h of 90468 corpus (40568s/49900h DOC) 11/18/05
+#counts   SARE_SPEC_ROLEX_BRANDS   26s/0h of 42419 corpus (34292s/8127h FVGT) 05/15/06
+#counts   SARE_SPEC_ROLEX_BRANDS   20s/0h of 106098 corpus (72789s/33309h ML) 05/14/06
+#counts   SARE_SPEC_ROLEX_BRANDS   0s/0h of 27712 corpus (24263s/3449h MY) 02/27/05
+#counts   SARE_SPEC_ROLEX_BRANDS   0s/0h of 54131 corpus (16957s/37174h JH-3.01) 03/02/05
+
+header    SARE_SPEC_ROLEX_BRAND2   Subject =~ /(?:yearn for|want) (?:cartier|piaget|omega|longines|vuitton|r(?:[0o@]|aw)lex)/i
+describe  SARE_SPEC_ROLEX_BRAND2   Spammer subject - multiple brands
+score     SARE_SPEC_ROLEX_BRAND2   1.111
+#stype    SARE_SPEC_ROLEX_BRAND2   spamp
+#hist     SARE_SPEC_ROLEX_BRAND2   Bob Menschel, Nov 2005
+#counts   SARE_SPEC_ROLEX_BRAND2   8s/0h of 173230 corpus (99061s/74169h RM) 05/11/06
+#counts   SARE_SPEC_ROLEX_BRAND2   4s/0h of 106098 corpus (72789s/33309h ML) 05/14/06
+#counts   SARE_SPEC_ROLEX_BRAND2   2s/0h of 36686 corpus (32345s/4341h AxB2) 05/14/06
+#counts   SARE_SPEC_ROLEX_BRAND2   2s/0h of 13339 corpus (7462s/5877h CT) 05/14/06
+#counts   SARE_SPEC_ROLEX_BRAND2   3s/0h of 155610 corpus (103978s/51632h DOC) 05/14/06
+
+body      SARE_SPEC_ROLEX_HIQLT    m'high(?:est)?[- ]qualit(?:y|ies) (:?rep[|l]i[ck]a|reproduction|dup[l|]i[ck]ate|look)'i
+describe  SARE_SPEC_ROLEX_HIQLT    replica watch spam sign
+score     SARE_SPEC_ROLEX_HIQLT    1.666
+#ham      SARE_SPEC_ROLEX_HIQLT    confirmation pending
+#hist     SARE_SPEC_ROLEX_HIQLT    Bob Menschel, Nov 2005
+#counts   SARE_SPEC_ROLEX_HIQLT    366s/0h of 173230 corpus (99061s/74169h RM) 05/11/06
+#max      SARE_SPEC_ROLEX_HIQLT    1051s/0h of 386238 corpus (131050s/255188h RM) 11/17/05
+#counts   SARE_SPEC_ROLEX_HIQLT    63s/0h of 36686 corpus (32345s/4341h AxB2) 05/14/06
+#counts   SARE_SPEC_ROLEX_HIQLT    37s/0h of 13339 corpus (7462s/5877h CT) 05/14/06
+#max      SARE_SPEC_ROLEX_HIQLT    53s/0h of 11588 corpus (6361s/5227h CT) 11/18/05
+#counts   SARE_SPEC_ROLEX_HIQLT    325s/0h of 155610 corpus (103978s/51632h DOC) 05/14/06
+#counts   SARE_SPEC_ROLEX_HIQLT    13s/0h of 42419 corpus (34292s/8127h FVGT) 05/15/06
+#counts   SARE_SPEC_ROLEX_HIQLT    16s/1h of 23026 corpus (17290s/5736h MY) 05/14/06
+#counts   SARE_SPEC_ROLEX_HIQLT    79s/0h of 106098 corpus (72789s/33309h ML) 05/14/06
+
+body      SARE_SPEC_ROLEX_NOV5A    /(?!want, watch)(?!(?:see|want)(?:[,s]|ed|ing)? (?:> )?(?:(?:me|you|him|her|them|us|--) )?(?:> )?(?:and|it|to|the|your) (?:> )?(?:clock|watch))(?:too many|see your|present of|replicas?|reproductions?|imitations?|duplicates?|look.?alike|decent|producing|acquire|(?:want|do not blow).{1,10}|solid(?:ly.?built)|wear.{1,10}new.{1,10}|(?:retail|consignment|Fair buys|fashionable|(?:gift|treat) for you|swiss.?(?:made|style)|be (?:trendy|visible) with).{1,25}) \b(?:(wrist(?:wear)? ?)?(?:watch(es)?|clocks?)|chrono(?:meter|piece|keeper)s?|time.?(?:piece|keeper)s?)\b/i
+describe  SARE_SPEC_ROLEX_NOV5A    replica watch spam sign
+score     SARE_SPEC_ROLEX_NOV5A    1.062
+#hist     SARE_SPEC_ROLEX_NOV5A    Bob Menschel, Nov 2005
+#counts   SARE_SPEC_ROLEX_NOV5A    142s/1h of 173230 corpus (99061s/74169h RM) 05/11/06
+#max      SARE_SPEC_ROLEX_NOV5A    392s/7h of 386802 corpus (130807s/255995h RM) 11/13/05
+#counts   SARE_SPEC_ROLEX_NOV5A    200s/0h of 36686 corpus (32345s/4341h AxB2) 05/14/06
+#counts   SARE_SPEC_ROLEX_NOV5A    45s/4h of 13339 corpus (7462s/5877h CT) 05/14/06
+#counts   SARE_SPEC_ROLEX_NOV5A    138s/3h of 42419 corpus (34292s/8127h FVGT) 05/15/06
+#counts   SARE_SPEC_ROLEX_NOV5A    288s/4h of 155610 corpus (103978s/51632h DOC) 05/14/06
+#counts   SARE_SPEC_ROLEX_NOV5A    305s/0h of 106098 corpus (72789s/33309h ML) 05/14/06
+#counts   SARE_SPEC_ROLEX_NOV5A    67s/0h of 23026 corpus (17290s/5736h MY) 05/14/06
+#max      SARE_SPEC_ROLEX_NOV5A    71s/0h of 42678 corpus (37399s/5279h MY) 11/18/05
+
+body      SARE_SPEC_ROLEX_NOV5B    /(?:appearance|brand.?name) at (?:a )?(?:dis[ck]ount|reasonable|sensible|(?:quarter|fra[ck]tion).{1,15}(?:[ck]ost|price|fee))|noteworthy variety|[ck]oveted provider|deluxe masterpiece|(?:more than|over) \d{4}.{1,15}(?:brands|styles)|Shopper gratifi[ck]ation|[ck]hronomaster|(?:sele[ck]tion of|solid(?:ly.?build|superb)) (?:repli[ck]as?|reprodu[ck]tions?|dupli[ck]ates?|look.?alikes?)|noteworthy [ck]onsignments?|(?:repli[ck]as?|reprodu[ck]tions?|dupli[ck]ates?|look.?alikes?) trade|fusion of craftmanship and affordability/i
+describe  SARE_SPEC_ROLEX_NOV5B    replica watch spam sign
+score     SARE_SPEC_ROLEX_NOV5B    1.111
+#stype    SARE_SPEC_ROLEX_NOV5B    spamp
+#hist     SARE_SPEC_ROLEX_NOV5B    Bob Menschel, Nov 2005
+#counts   SARE_SPEC_ROLEX_NOV5B    0s/0h of 173230 corpus (99061s/74169h RM) 05/11/06
+#max      SARE_SPEC_ROLEX_NOV5B    16s/0h of 330817 corpus (115576s/215241h RM) 11/19/05
+#counts   SARE_SPEC_ROLEX_NOV5B    5s/0h of 4891 corpus (3546s/1345h AxB) 11/20/05
+#counts   SARE_SPEC_ROLEX_NOV5B    0s/0h of 36686 corpus (32345s/4341h AxB2) 05/14/06
+#counts   SARE_SPEC_ROLEX_NOV5B    0s/0h of 13339 corpus (7462s/5877h CT) 05/14/06
+#counts   SARE_SPEC_ROLEX_NOV5B    1s/0h of 74875 corpus (25026s/49849h DOC) 11/19/05
+#counts   SARE_SPEC_ROLEX_NOV5B    0s/0h of 42419 corpus (34292s/8127h FVGT) 05/15/06
+#max      SARE_SPEC_ROLEX_NOV5B    2s/0h of 9802 corpus (4922s/4880h FT) 11/20/05
+#counts   SARE_SPEC_ROLEX_NOV5B    12s/0h of 42567 corpus (37305s/5262h MY) 11/19/05
+#counts   SARE_SPEC_ROLEX_NOV5B    1s/0h of 106098 corpus (72789s/33309h ML) 05/14/06
+
+body      SARE_SPEC_ROLEX_NOV5D    /online.{1,20}purchase.{1,20}watch|purchase.{1,20}watch.{1,20}online|purchase.{1,20}online.{1,20}watch|watch.{1,10}purchase.{1,20}online|Online trailing system/i
+describe  SARE_SPEC_ROLEX_NOV5D    replica watch spam sign
+score     SARE_SPEC_ROLEX_NOV5D    1.111
+#stype    SARE_SPEC_ROLEX_NOV5D    spamp
+#hist     SARE_SPEC_ROLEX_NOV5D    Bob Menschel, Nov 2005
+#counts   SARE_SPEC_ROLEX_NOV5D    0s/0h of 173230 corpus (99061s/74169h RM) 05/11/06
+#max      SARE_SPEC_ROLEX_NOV5D    4s/0h of 366082 corpus (108301s/257781h RM) 11/25/05
+#counts   SARE_SPEC_ROLEX_NOV5D    1s/0h of 9999 corpus (5651s/4348h AxB) 05/14/06
+#counts   SARE_SPEC_ROLEX_NOV5D    2s/0h of 106098 corpus (72789s/33309h ML) 05/14/06
+
+body      SARE_SPEC_ROLEX_NOV5E    /(?!watch(?:ed|ing)?.{1,15}for you)\b(?:(wrist(?:wear)? ?)?(?:watch(es)?|clocks?)|chrono(?:meter|piece|keeper)s?|time.?(?:piece|keeper)s?).{1,15}for you\b/i
+describe  SARE_SPEC_ROLEX_NOV5E    replica watch spam sign
+score     SARE_SPEC_ROLEX_NOV5E    0.500
+#hist     SARE_SPEC_ROLEX_NOV5E    Bob Menschel, Nov 2005
+#stype    SARE_SPEC_ROLEX_NOV5E    spamp
+#counts   SARE_SPEC_ROLEX_NOV5E    0s/0h of 173230 corpus (99061s/74169h RM) 05/11/06
+#max      SARE_SPEC_ROLEX_NOV5E    6s/3h of 366109 corpus (108323s/257786h RM) 11/25/05
+#counts   SARE_SPEC_ROLEX_NOV5E    1s/0h of 155610 corpus (103978s/51632h DOC) 05/14/06
+#counts   SARE_SPEC_ROLEX_NOV5E    1s/0h of 23026 corpus (17290s/5736h MY) 05/14/06
+
+body      SARE_SPEC_ROLEX_NOV5F    /(?:decadent|brand.?name).{1,15}\b(?:(wrist(?:wear)? ?)?(?:watch(es)?|clocks?)|chrono(?:meter|piece|keeper)s?|time.?(?:piece|keeper)s?)\b/i
+describe  SARE_SPEC_ROLEX_NOV5F    replica watch spam sign
+score     SARE_SPEC_ROLEX_NOV5F    0.666
+#stype    SARE_SPEC_ROLEX_NOV5F    spamp
+#ham      SARE_SPEC_ROLEX_NOV5F    valid watch/clock importer/wholesaler
+#hist     SARE_SPEC_ROLEX_NOV5F    Bob Menschel, Nov 2005
+#counts   SARE_SPEC_ROLEX_NOV5F    0s/0h of 173230 corpus (99061s/74169h RM) 05/11/06
+#max      SARE_SPEC_ROLEX_NOV5F    11s/2h of 366082 corpus (108301s/257781h RM) 11/25/05
+#counts   SARE_SPEC_ROLEX_NOV5F    8s/0h of 155610 corpus (103978s/51632h DOC) 05/14/06
+#counts   SARE_SPEC_ROLEX_NOV5F    2s/0h of 23026 corpus (17290s/5736h MY) 05/14/06
+
+body      SARE_SPEC_REPL_OBFU1     /(?!watches)(?!watch \* ?s)(?:w|\\\/\\\/|VV|[\xC5][\xB4-\xB5]|[\xCF][\x88-\x89]|[\xCF]\x8E])[\x01-\x2F\x3A-\x40\x5B-\x60\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:[a4\*\@\xC0-\xC5\xAA\xE0-\xE5]|\/\\|[\xC4][\x80-\x85]|[\xC7][\x8D-\x8E]|[\xC7][\xBA-\xBB]|[\xCE][\x86]|[\xCE][\x91]|[\xCE][\x94]|[\xCE][\x9B]|[\xCE][\xAC]|[\xCE][\xB1]|[\xD0][\x90]|[\xD0]\xB0)[\x01-\x2F\x3A-\x40\x5B-\x60\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:[t\+]|[\xC5][\xA2-\xA7]|[\xCE][\xA4]|[\xCF][\x84]|[\xD0][\xA2]|[\xD1]\x82)[\x01-\x2F\x3A-\x40\x5B-\x60\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:[c\*\xC7\xE7\xA2\xA9]|[\xC4][\x86-\x8D]|[\xD0][\xA1]|[\xD1]\x81)[\x01-\x2F\x3A-\x40\x5B-\x60\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:h|[\xC4][\xA4-\xA7]|[\xCE][\x89]|[\xCE][\x97]|[\xD0][\x9D]|[\xD0][\xBD]|[\xD1][\x92]|[\xD2][\xA2-\xA3]|[\xD2][\xBA-\xBB]|[\xD5]\xB0])[\x01-\x2F\x3A-\x40\x5B-\x60\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:[e3\*\xC8-\xCB\xE8-\xEB]|[\xC4][\x92-\x9B]|[\xCE][\x88]|[\xCE][\x95]|[\xCE][\xA3]|[\xCE][\xAD]|[\xCE][\xB5]|[\xD0][\x81]|[\xD0][\x95]|[\xD0][\xB5]|[\xD1]\x91)[\x01-\x2F\x3A-\x40\x5B-\x60\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:[s5\$\xA7]|[\xC5][\x9A-\xA1]|[\xD0][\x85]|[\xD1][\x95]|[\xD5]\x8F)\b/i 
+body      SARE_SPEC_REPL_OBFU2     /(?!wrist.?watch)(?:w|\\\/\\\/|VV|[\xC5][\xB4-\xB5]|[\xCF][\x88-\x89]|[\xCF]\x8E])[\x01-\x2F\x3A-\x40\x5B-\x60\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:[r\xAE]|[\xC5][\x94-\x99]|[\xD1]\x93)[\x01-\x2F\x3A-\x40\x5B-\x60\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:[il1:\|\*\xCC-\xCF\xEC-\xEF\xA6]|[\xC4][\xA8-\xB0]|[\xC4][\xBA]|[\xC4][\xBC]|[\xC4][\xBE]|[\xC5][\x80]|[\xC5][\x82]|[\xC7][\x8F-\x90]|[\xD0][\x86-\x87]|[\xD1][\x96-\x97]|[\xCE][\x8A]|[\xCE][\x90]|[\xCE][\x99]|[\xCE][\xAA]|[\xCE][\xAF]|[\xCE][\xB9]|[\xCF]\x8A)[\x01-\x2F\x3A-\x40\x5B-\x60\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:[s5\$\xA7]|[\xC5][\x9A-\xA1]|[\xD0][\x85]|[\xD1][\x95]|[\xD5]\x8F)[\x01-\x2F\x3A-\x40\x5B-\x60\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:[t\+]|[\xC5][\xA2-\xA7]|[\xCE][\xA4]|[\xCF][\x84]|[\xD0][\xA2]|[\xD1]\x82)[\x01-\x2F\x3A-\x40\x5B-\x60\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:w|\\\/\\\/|VV|[\xC5][\xB4-\xB5]|[\xCF][\x88-\x89]|[\xCF]\x8E])[\x01-\x2F\x3A-\x40\x5B-\x60\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:[a4\*\@\xC0-\xC5\xAA\xE0-\xE5]|\/\\|[\xC4][\x80-\x85]|[\xC7][\x8D-\x8E]|[\xC7][\xBA-\xBB]|[\xCE][\x86]|[\xCE][\x91]|[\xCE][\x94]|[\xCE][\x9B]|[\xCE][\xAC]|[\xCE][\xB1]|[\xD0][\x90]|[\xD0]\xB0)[\x01-\x2F\x3A-\x40\x5B-\x60\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:[t\+]|[\xC5][\xA2-\xA7]|[\xCE][\xA4]|[\xCF][\x84]|[\xD0][\xA2]|[\xD1]\x82)[\x01-\x2F\x3A-\x40\x5B-\x60\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:[c\*\xC7\xE7\xA2\xA9]|[\xC4][\x86-\x8D]|[\xD0][\xA1]|[\xD1]\x81)[\x01-\x2F\x3A-\x40\x5B-\x60\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:h|[\xC4][\xA4-\xA7]|[\xCE][\x89]|[\xCE][\x97]|[\xD0][\x9D]|[\xD0][\xBD]|[\xD1][\x92]|[\xD2][\xA2-\xA3]|[\xD2][\xBA-\xBB]|[\xD5]\xB0])/i
+body      SARE_SPEC_REPL_OBFU3     /(?:w|\\\/\\\/|VV|[\xC5][\xB4-\xB5]|[\xCF][\x88-\x89]|[\xCF\x8E])[\x01-\x2F\x3A-\x40\x5B-\x60\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:[r\xAE]|[\xC5][\x94-\x99]|[\xD1\x93])[\x01-\x2F\x3A-\x40\x5B-\x60\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:[il1:\|\*\xCC-\xCF\xEC-\xEF\xA6]|[\xC4][\xA8-\xB0]|[\xC4][\xBA]|[\xC4][\xBC]|[\xC4][\xBE]|[\xC5][\x80]|[\xC5][\x82]|[\xC7][\x8F-\x90]|[\xD0][\x86-\x87]|[\xD1][\x96-\x97]|[\xCE][\x8A]|[\xCE][\x90]|[\xCE][\x99]|[\xCE][\xAA]|[\xCE][\xAF]|[\xCE][\xB9]|[\xCF\x8A])[\x01-\x2F\x3A-\x40\x5B-\x60\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:[s5\$\xA7]|[\xC5][\x9A-\xA1]|[\xD0][\x85]|[\xD1][\x95]|[\xD5]\x8F)[\x01-\x2F\x3A-\x40\x5B-\x60\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:[t\+]|[\xC5][\xA2-\xA7]|[\xCE][\xA4]|[\xCF][\x84]|[\xD0][\xA2]|[\xD1]\x82)[\x01-\x2F\x3A-\x40\x5B-\x60\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:[c\*\xC7\xE7\xA2\xA9]|[\xC4][\x86-\x8D]|[\xD0][\xA1]|[\xD1]\x81)[\x01-\x2F\x3A-\x40\x5B-\x60\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:[l1I\|\xA3]|(?:\xC5[\x80-\x82]|[\xC4][\xB9-\xBF]))[\x01-\x2F\x3A-\x40\x5B-\x60\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:[o0\*\xB0\xBA\xD8\xF8\xD2-\xD6\xF2-\xF6]|\(\)|\[\]|[\xC5][\x8C-\x91]|[\xC6][\xA0-\xA1]|[\xC7][\x91-\x92]|[\xC7][\xBE-\xBF]|[\xCE][\x8C]|[\xCE][\x98]|[\xCE][\x9F]|[\xCE][\xB8]|[\xCE][\xBF]|[\xCF][\x8C]|[\xD0][\x9E]|[\xD0][\xBE]|[\xD5]\x95)[\x01-\x2F\x3A-\x40\x5B-\x60\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:[c\*\xC7\xE7\xA2\xA9]|[\xC4][\x86-\x8D]|[\xD0][\xA1]|[\xD1\x81])[\x01-\x2F\x3A-\x40\x5B-\x60\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:k|[\xC4][\xB6-\xB8]|[\xCE][\x9A]|[\xCE][\xBA]|[\xD0][\x8C]|[\xD0][\x9A]|[\xD0][\xBA]|[\xD1][\x9C]|[\xD2][\x9A-\x9D]])/i
+body      SARE_SPEC_REPL_OBFU4     /(?!chronometer)(?:[c\*\xC7\xE7\xA2\xA9]|[\xC4][\x86-\x8D]|[\xD0][\xA1]|[\xD1]\x81)[\x01-\x2F\x3A-\x40\x5B-\x60\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:h|[\xC4][\xA4-\xA7]|[\xCE][\x89]|[\xCE][\x97]|[\xD0][\x9D]|[\xD0][\xBD]|[\xD1][\x92]|[\xD2][\xA2-\xA3]|[\xD2][\xBA-\xBB]|[\xD5]\xB0])[\x01-\x2F\x3A-\x40\x5B-\x60\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:[r\xAE]|[\xC5][\x94-\x99]|[\xD1]\x93)[\x01-\x2F\x3A-\x40\x5B-\x60\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:[o0\*\xB0\xBA\xD8\xF8\xD2-\xD6\xF2-\xF6]|\(\)|\[\]|[\xC5][\x8C-\x91]|[\xC6][\xA0-\xA1]|[\xC7][\x91-\x92]|[\xC7][\xBE-\xBF]|[\xCE][\x8C]|[\xCE][\x98]|[\xCE][\x9F]|[\xCE][\xB8]|[\xCE][\xBF]|[\xCF][\x8C]|[\xD0][\x9E]|[\xD0][\xBE]|[\xD5]\x95)[\x01-\x2F\x3A-\x40\x5B-\x60\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:[n\xD1\xF1]|\|\\\||[\xC5][\x83-\x8B]|[\xCE][\x9D]|[\xCE][\xA0]|[\xCE][\xAE]|[\xCE][\xB7]|[\xD5][\xB2]|[\xD5]\xB8)[\x01-\x2F\x3A-\x40\x5B-\x60\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:[o0\*\xB0\xBA\xD8\xF8\xD2-\xD6\xF2-\xF6]|\(\)|\[\]|[\xC5][\x8C-\x91]|[\xC6][\xA0-\xA1]|[\xC7][\x91-\x92]|[\xC7][\xBE-\xBF]|[\xCE][\x8C]|[\xCE][\x98]|[\xCE][\x9F]|[\xCE][\xB8]|[\xCE][\xBF]|[\xCF][\x8C]|[\xD0][\x9E]|[\xD0][\xBE]|[\xD5]\x95)[\x01-\x2F\x3A-\x40\x5B-\x60\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:m|rn|\/V\\|\/\\\/\\|[\xCE][\x9C]|[\xD0][\x9C]|[\xD0]\xBC])[\x01-\x2F\x3A-\x40\x5B-\x60\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:[e3\*\xC8-\xCB\xE8-\xEB]|[\xC4][\x92-\x9B]|[\xCE][\x88]|[\xCE][\x95]|[\xCE][\xA3]|[\xCE][\xAD]|[\xCE][\xB5]|[\xD0][\x81]|[\xD0][\x95]|[\xD0][\xB5]|[\xD1]\x91)[\x01-\x2F\x3A-\x40\x5B-\x60\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:[t\+]|[\xC5][\xA2-\xA7]|[\xCE][\xA4]|[\xCF][\x84]|[\xD0][\xA2]|[\xD1]\x82)[\x01-\x2F\x3A-\x40\x5B-\x60\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:[e3\*\xC8-\xCB\xE8-\xEB]|[\xC4][\x92-\x9B]|[\xCE][\x88]|[\xCE][\x95]|[\xCE][\xA3]|[\xCE][\xAD]|[\xCE][\xB5]|[\xD0][\x81]|[\xD0][\x95]|[\xD0][\xB5]|[\xD1\x91])[\x01-\x2F\x3A-\x40\x5B-\x60\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:[r\xAE]|[\xC5][\x94-\x99]|[\xD1\x93])/i
+body      SARE_SPEC_REPL_OBFU5     /(?!time.?piece)(?:[t\+]|[\xC5][\xA2-\xA7]|[\xCE][\xA4]|[\xCF][\x84]|[\xD0][\xA2]|[\xD1]\x82)[\x01-\x2F\x3A-\x40\x5B-\x60\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:[il1:\|\*\xCC-\xCF\xEC-\xEF\xA6]|[\xC4][\xA8-\xB0]|[\xC4][\xBA]|[\xC4][\xBC]|[\xC4][\xBE]|[\xC5][\x80]|[\xC5][\x82]|[\xC7][\x8F-\x90]|[\xD0][\x86-\x87]|[\xD1][\x96-\x97]|[\xCE][\x8A]|[\xCE][\x90]|[\xCE][\x99]|[\xCE][\xAA]|[\xCE][\xAF]|[\xCE][\xB9]|[\xCF]\x8A)[\x01-\x2F\x3A-\x40\x5B-\x60\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:m|rn|\/V\\|\/\\\/\\|[\xCE][\x9C]|[\xD0][\x9C]|[\xD0]\xBC])[\x01-\x2F\x3A-\x40\x5B-\x60\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:[e3\*\xC8-\xCB\xE8-\xEB]|[\xC4][\x92-\x9B]|[\xCE][\x88]|[\xCE][\x95]|[\xCE][\xA3]|[\xCE][\xAD]|[\xCE][\xB5]|[\xD0][\x81]|[\xD0][\x95]|[\xD0][\xB5]|[\xD1]\x91)[\x01-\x2F\x3A-\x40\x5B-\x60\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:[p\xDE]|[\xCE][\xA1]|[\xCF][\x81]|[\xD0][\xA0]|[\xD1]\x80)[\x01-\x2F\x3A-\x40\x5B-\x60\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:[il1:\|\*\xCC-\xCF\xEC-\xEF\xA6]|[\xC4][\xA8-\xB0]|[\xC4][\xBA]|[\xC4][\xBC]|[\xC4][\xBE]|[\xC5][\x80]|[\xC5][\x82]|[\xC7][\x8F-\x90]|[\xD0][\x86-\x87]|[\xD1][\x96-\x97]|[\xCE][\x8A]|[\xCE][\x90]|[\xCE][\x99]|[\xCE][\xAA]|[\xCE][\xAF]|[\xCE][\xB9]|[\xCF]\x8A)[\x01-\x2F\x3A-\x40\x5B-\x60\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:[e3\*\xC8-\xCB\xE8-\xEB]|[\xC4][\x92-\x9B]|[\xCE][\x88]|[\xCE][\x95]|[\xCE][\xA3]|[\xCE][\xAD]|[\xCE][\xB5]|[\xD0][\x81]|[\xD0][\x95]|[\xD0][\xB5]|[\xD1]\x91)[\x01-\x2F\x3A-\x40\x5B-\x60\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:[c\*\xC7\xE7\xA2\xA9]|[\xC4][\x86-\x8D]|[\xD0][\xA1]|[\xD1]\x81)[\x01-\x2F\x3A-\x40\x5B-\x60\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:[e3\*\xC8-\xCB\xE8-\xEB]|[\xC4][\x92-\x9B]|[\xCE][\x88]|[\xCE][\x95]|[\xCE][\xA3]|[\xCE][\xAD]|[\xCE][\xB5]|[\xD0][\x81]|[\xD0][\x95]|[\xD0][\xB5]|[\xD1]\x91)/i
+body      SARE_SPEC_REPL_OBFU6     /(?!time.?keeper)(?:[t\+]|[\xC5][\xA2-\xA7]|[\xCE][\xA4]|[\xCF][\x84]|[\xD0][\xA2]|[\xD1]\x82)[\x01-\x2F\x3A-\x40\x5B-\x60\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:[il1:\|\*\xCC-\xCF\xEC-\xEF\xA6]|[\xC4][\xA8-\xB0]|[\xC4][\xBA]|[\xC4][\xBC]|[\xC4][\xBE]|[\xC5][\x80]|[\xC5][\x82]|[\xC7][\x8F-\x90]|[\xD0][\x86-\x87]|[\xD1][\x96-\x97]|[\xCE][\x8A]|[\xCE][\x90]|[\xCE][\x99]|[\xCE][\xAA]|[\xCE][\xAF]|[\xCE][\xB9]|[\xCF]\x8A)[\x01-\x2F\x3A-\x40\x5B-\x60\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:m|rn|\/V\\|\/\\\/\\|[\xCE][\x9C]|[\xD0][\x9C]|[\xD0]\xBC])[\x01-\x2F\x3A-\x40\x5B-\x60\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:[e3\*\xC8-\xCB\xE8-\xEB]|[\xC4][\x92-\x9B]|[\xCE][\x88]|[\xCE][\x95]|[\xCE][\xA3]|[\xCE][\xAD]|[\xCE][\xB5]|[\xD0][\x81]|[\xD0][\x95]|[\xD0][\xB5]|[\xD1]\x91)[\x01-\x2F\x3A-\x40\x5B-\x60\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:k|[\xC4][\xB6-\xB8]|[\xCE][\x9A]|[\xCE][\xBA]|[\xD0][\x8C]|[\xD0][\x9A]|[\xD0][\xBA]|[\xD1][\x9C]|[\xD2][\x9A-\x9D]])[\x01-\x2F\x3A-\x40\x5B-\x60\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:[e3\*\xC8-\xCB\xE8-\xEB]|[\xC4][\x92-\x9B]|[\xCE][\x88]|[\xCE][\x95]|[\xCE][\xA3]|[\xCE][\xAD]|[\xCE][\xB5]|[\xD0][\x81]|[\xD0][\x95]|[\xD0][\xB5]|[\xD1]\x91)[\x01-\x2F\x3A-\x40\x5B-\x60\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:[e3\*\xC8-\xCB\xE8-\xEB]|[\xC4][\x92-\x9B]|[\xCE][\x88]|[\xCE][\x95]|[\xCE][\xA3]|[\xCE][\xAD]|[\xCE][\xB5]|[\xD0][\x81]|[\xD0][\x95]|[\xD0][\xB5]|[\xD1]\x91)[\x01-\x2F\x3A-\x40\x5B-\x60\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:[p\xDE]|[\xCE][\xA1]|[\xCF][\x81]|[\xD0][\xA0]|[\xD1]\x80)[\x01-\x2F\x3A-\x40\x5B-\x60\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:[e3\*\xC8-\xCB\xE8-\xEB]|[\xC4][\x92-\x9B]|[\xCE][\x88]|[\xCE][\x95]|[\xCE][\xA3]|[\xCE][\xAD]|[\xCE][\xB5]|[\xD0][\x81]|[\xD0][\x95]|[\xD0][\xB5]|[\xD1]\x91)[\x01-\x2F\x3A-\x40\x5B-\x60\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:[r\xAE]|[\xC5][\x94-\x99]|[\xD1]\x93)/i
+score     SARE_SPEC_REPL_OBFU1     1.666
+score     SARE_SPEC_REPL_OBFU2     1.666
+score     SARE_SPEC_REPL_OBFU3     1.666
+score     SARE_SPEC_REPL_OBFU4     1.666
+score     SARE_SPEC_REPL_OBFU5     1.666
+score     SARE_SPEC_REPL_OBFU6     1.666
+#stype    SARE_SPEC_REPL_OBFU1     obfu
+#stype    SARE_SPEC_REPL_OBFU2     obfu
+#stype    SARE_SPEC_REPL_OBFU3     obfu
+#stype    SARE_SPEC_REPL_OBFU4     obfu
+#stype    SARE_SPEC_REPL_OBFU5     obfu
+#stype    SARE_SPEC_REPL_OBFU6     obfu
+#hist     SARE_SPEC_REPL_OBFU1     Bob Menschel, Nov 2005
+#hist     SARE_SPEC_REPL_OBFU2     Bob Menschel, Nov 2005
+#hist     SARE_SPEC_REPL_OBFU3     Bob Menschel, Nov 2005
+#hist     SARE_SPEC_REPL_OBFU4     Bob Menschel, Nov 2005
+#hist     SARE_SPEC_REPL_OBFU5     Bob Menschel, Nov 2005
+#hist     SARE_SPEC_REPL_OBFU6     Bob Menschel, Nov 2005
+#counts   SARE_SPEC_REPL_OBFU1     0s/0h of 173230 corpus (99061s/74169h RM) 05/11/06
+#counts   SARE_SPEC_REPL_OBFU1     8s/0h of 36686 corpus (32345s/4341h AxB2) 05/14/06
+#counts   SARE_SPEC_REPL_OBFU1     1s/0h of 13339 corpus (7462s/5877h CT) 05/14/06
+#counts   SARE_SPEC_REPL_OBFU1     10s/0h of 155610 corpus (103978s/51632h DOC) 05/14/06
+#counts   SARE_SPEC_REPL_OBFU1     37s/0h of 42419 corpus (34292s/8127h FVGT) 05/15/06
+#counts   SARE_SPEC_REPL_OBFU1     7s/0h of 106098 corpus (72789s/33309h ML) 05/14/06
+#counts   SARE_SPEC_REPL_OBFU1     2s/0h of 23026 corpus (17290s/5736h MY) 05/14/06
+#counts   SARE_SPEC_REPL_OBFU2     0s/0h of 173230 corpus (99061s/74169h RM) 05/11/06
+#counts   SARE_SPEC_REPL_OBFU2     1s/0h of 155610 corpus (103978s/51632h DOC) 05/14/06
+#counts   SARE_SPEC_REPL_OBFU3     0s/0h of 173230 corpus (99061s/74169h RM) 05/11/06
+#counts   SARE_SPEC_REPL_OBFU3     4s/0h of 23026 corpus (17290s/5736h MY) 05/14/06
+#counts   SARE_SPEC_REPL_OBFU3     1s/0h of 155610 corpus (103978s/51632h DOC) 05/14/06
+#counts   SARE_SPEC_REPL_OBFU4     0s/0h of 173230 corpus (99061s/74169h RM) 05/11/06
+#counts   SARE_SPEC_REPL_OBFU5     0s/0h of 173230 corpus (99061s/74169h RM) 05/11/06
+#counts   SARE_SPEC_REPL_OBFU5     6s/0h of 23026 corpus (17290s/5736h MY) 05/14/06
+#counts   SARE_SPEC_REPL_OBFU6     0s/0h of 173230 corpus (99061s/74169h RM) 05/11/06
+#max      SARE_SPEC_REPL_OBFU1     8s/0h of 366109 corpus (108323s/257786h RM) 11/25/05
+#max      SARE_SPEC_REPL_OBFU2     6s/0h of 366109 corpus (108323s/257786h RM) 11/25/05
+#max      SARE_SPEC_REPL_OBFU3     22s/0h of 366109 corpus (108323s/257786h RM) 11/25/05
+#max      SARE_SPEC_REPL_OBFU4     1s/0h of 366109 corpus (108323s/257786h RM) 11/25/05
+#max      SARE_SPEC_REPL_OBFU5     0s/0h of 366109 corpus (108323s/257786h RM) 11/25/05
+#max      SARE_SPEC_REPL_OBFU6     0s/0h of 366109 corpus (108323s/257786h RM) 11/25/05
+
+########  ######################   ##################################################
+#  Lottery spam
+########  ######################   ##################################################
+
+body      __SARE_LOTTO_LOTTERY     /\blott(?:o|ery)/i
+body      __SARE_LOTTO_BATCH       /batch number/i
+body      __SARE_LOTTO_SERIAL      /serial number/i
+body      __SARE_LOTTO_TICKET      /ticket number/i
+body      __SARE_LOTTO_LUCKY       /lucky number/i
+body      __SARE_LOTTO_CATEGORY    /categor(?:y|ies)/i
+body      __SARE_LOTTO_CONGRAT     /congratulation/i
+
+meta      SARE_LOTTO_SPAM          __SARE_LOTTO_LOTTERY && __SARE_LOTTO_SERIAL && __SARE_LOTTO_TICKET && __SARE_LOTTO_CATEGORY && __SARE_LOTTO_CONGRAT
+describe  SARE_LOTTO_SPAM          Lottery Spam
+score     SARE_LOTTO_SPAM          2.444
+#hist     SARE_LOTTO_SPAM          Robert Brooks, Feb 18 2005
+#stype    SARE_LOTTO_SPAM          spamg
+#counts   SARE_LOTTO_SPAM          111s/0h of 173230 corpus (99061s/74169h RM) 05/11/06
+#max      SARE_LOTTO_SPAM          3270s/0h of 689155 corpus (348140s/341015h RM) 09/18/05
+#counts   SARE_LOTTO_SPAM          60s/0h of 36686 corpus (32345s/4341h AxB2) 05/14/06
+#counts   SARE_LOTTO_SPAM          3s/0h of 13339 corpus (7462s/5877h CT) 05/14/06
+#max      SARE_LOTTO_SPAM          3s/0h of 10629 corpus (5847s/4782h CT) 09/18/05
+#counts   SARE_LOTTO_SPAM          200s/0h of 155610 corpus (103978s/51632h DOC) 05/14/06
+#counts   SARE_LOTTO_SPAM          120s/0h of 42419 corpus (34292s/8127h FVGT) 05/15/06
+#max      SARE_LOTTO_SPAM          160s/0h of 139999 corpus (133260s/6739h ft) 10/09/05
+#counts   SARE_LOTTO_SPAM          44s/0h of 54874 corpus (17700s/37174h JH-3.01) 03/13/05
+#counts   SARE_LOTTO_SPAM          134s/0h of 106098 corpus (72789s/33309h ML) 05/14/06
+#counts   SARE_LOTTO_SPAM          6s/0h of 23026 corpus (17290s/5736h MY) 05/14/06
+#max      SARE_LOTTO_SPAM          24s/0h of 31513 corpus (27912s/3601h MY) 03/09/05
+
+meta      SARE_LOTTO_SPAM2         __SARE_LOTTO_LOTTERY && __SARE_LOTTO_BATCH
+describe  SARE_LOTTO_SPAM2         Lottery Spam
+score     SARE_LOTTO_SPAM2         2.444
+#hist     SARE_LOTTO_SPAM2         Robert Brooks, Feb 18 2005
+#stype    SARE_LOTTO_SPAM2         spamg
+#counts   SARE_LOTTO_SPAM2         178s/0h of 173230 corpus (99061s/74169h RM) 05/11/06
+#max      SARE_LOTTO_SPAM2         3607s/0h of 689155 corpus (348140s/341015h RM) 09/18/05
+#counts   SARE_LOTTO_SPAM2         114s/0h of 36686 corpus (32345s/4341h AxB2) 05/14/06
+#counts   SARE_LOTTO_SPAM2         25s/0h of 682 corpus (290s/392h CRF) 03/11/05
+#counts   SARE_LOTTO_SPAM2         3s/0h of 13339 corpus (7462s/5877h CT) 05/14/06
+#counts   SARE_LOTTO_SPAM2         238s/0h of 155610 corpus (103978s/51632h DOC) 05/14/06
+#counts   SARE_LOTTO_SPAM2         145s/0h of 42419 corpus (34292s/8127h FVGT) 05/15/06
+#max      SARE_LOTTO_SPAM2         180s/0h of 139999 corpus (133260s/6739h ft) 10/09/05
+#counts   SARE_LOTTO_SPAM2         54s/0h of 54874 corpus (17700s/37174h JH-3.01) 03/13/05
+#counts   SARE_LOTTO_SPAM2         166s/0h of 106098 corpus (72789s/33309h ML) 05/14/06
+#counts   SARE_LOTTO_SPAM2         4s/0h of 23026 corpus (17290s/5736h MY) 05/14/06
+#max      SARE_LOTTO_SPAM2         27s/0h of 31513 corpus (27912s/3601h MY) 03/09/05
+
+########  ######################   ##################################################
+#  Spammers who identify themselves or their specific product in message body
+########  ######################   ##################################################
+
+body      SARE_BODY_URI_STOCK      /st[0o]ck\s{0,30}\d{1,30}\s{0,30}\@\s{0,30}yahoo.com/i 
+describe  SARE_BODY_URI_STOCK      Signature of stock market spammer
+score     SARE_BODY_URI_STOCK      1.666
+#hist     SARE_BODY_URI_STOCK      Bob Menschel, Apr 17 2005, from a variety of suggestions
+#counts   SARE_BODY_URI_STOCK      0s/0h of 494544 corpus (223913s/270631h RM) 10/08/05
+#max      SARE_BODY_URI_STOCK      400s/0h of 281295 corpus (109907s/171388h RM) 05/06/05
+#counts   SARE_BODY_URI_STOCK      0s/0h of 13339 corpus (7462s/5877h CT) 05/14/06
+#max      SARE_BODY_URI_STOCK      4s/0h of 10801 corpus (6349s/4452h CT) 05/24/05
+#counts   SARE_BODY_URI_STOCK      172s/0h of 155610 corpus (103978s/51632h DOC) 05/14/06
+#counts   SARE_BODY_URI_STOCK      0s/0h of 9823 corpus (4931s/4892h FT) 11/18/05
+#max      SARE_BODY_URI_STOCK      26s/0h of 4358 corpus (754s/3604h ft) 05/24/05
+#counts   SARE_BODY_URI_STOCK      0s/0h of 42678 corpus (37399s/5279h MY) 11/18/05
+#max      SARE_BODY_URI_STOCK      2s/0h of 47717 corpus (43727s/3990h MY) 05/25/05
+
+body      SARE_SPEC_BODY_NONEED    /\b(?:noneed|st0ck)\d{2,4}/
+describe  SARE_SPEC_BODY_NONEED    No need to spam us!
+score     SARE_SPEC_BODY_NONEED    1.666
+#hist     SARE_SPEC_BODY_NONEED    Robert Brooks, May 27 2005
+#counts   SARE_SPEC_BODY_NONEED    0s/0h of 173230 corpus (99061s/74169h RM) 05/11/06
+#max      SARE_SPEC_BODY_NONEED    313s/0h of 256964 corpus (112869s/144095h RM) 05/27/05
+#counts   SARE_SPEC_BODY_NONEED    0s/0h of 13339 corpus (7462s/5877h CT) 05/14/06
+#max      SARE_SPEC_BODY_NONEED    5s/0h of 10629 corpus (5847s/4782h CT) 09/18/05
+#counts   SARE_SPEC_BODY_NONEED    222s/0h of 155610 corpus (103978s/51632h DOC) 05/14/06
+#counts   SARE_SPEC_BODY_NONEED    0s/0h of 9823 corpus (4931s/4892h FT) 11/18/05
+#max      SARE_SPEC_BODY_NONEED    34s/0h of 4359 corpus (759s/3600h ft) 05/27/05
+#counts   SARE_SPEC_BODY_NONEED    0s/0h of 23026 corpus (17290s/5736h MY) 05/14/06
+#max      SARE_SPEC_BODY_NONEED    4s/0h of 57287 corpus (52272s/5015h MY) 09/22/05
+
+header    SARE_SPEC_DIPLOMA        Subject =~ m'\bd.?iplomas?\b'i
+describe  SARE_SPEC_DIPLOMA        educational spam subject
+score     SARE_SPEC_DIPLOMA        1.094
+#hist     SARE_SPEC_DIPLOMA        Bob Menschel, Nov 2005
+#counts   SARE_SPEC_DIPLOMA        117s/0h of 173230 corpus (99061s/74169h RM) 05/11/06
+#counts   SARE_SPEC_DIPLOMA        0s/0h of 36686 corpus (32345s/4341h AxB2) 05/14/06
+#max      SARE_SPEC_DIPLOMA        1s/0h of 4676 corpus (3324s/1352h AxB) 11/18/05
+#counts   SARE_SPEC_DIPLOMA        10s/0h of 13339 corpus (7462s/5877h CT) 05/14/06
+#counts   SARE_SPEC_DIPLOMA        46s/0h of 155610 corpus (103978s/51632h DOC) 05/14/06
+#counts   SARE_SPEC_DIPLOMA        8s/0h of 42419 corpus (34292s/8127h FVGT) 05/15/06
+#counts   SARE_SPEC_DIPLOMA        196s/0h of 106098 corpus (72789s/33309h ML) 05/14/06
+#counts   SARE_SPEC_DIPLOMA        4s/0h of 23026 corpus (17290s/5736h MY) 05/14/06
+#max      SARE_SPEC_DIPLOMA        6s/0h of 42678 corpus (37399s/5279h MY) 11/18/05
+
+body      SARE_SPEC_ANTIDOTE       /(?:"The Antidote"|Health Monthly Newsletter|Kills all Known|full-guarantee)/i
+describe  SARE_SPEC_ANTIDOTE       Antidote spammer
+score     SARE_SPEC_ANTIDOTE       1.666
+#hist     SARE_SPEC_ANTIDOTE       Loren Wilton, May 29 2005
+#ham      SARE_SPEC_ANTIDOTE       mentions book with title "The Antidote" avail from amazon.com
+#counts   SARE_SPEC_ANTIDOTE       0s/0h of 173230 corpus (99061s/74169h RM) 05/11/06
+#max      SARE_SPEC_ANTIDOTE       329s/0h of 273328 corpus (132835s/140493h RM) 05/30/05
+#counts   SARE_SPEC_ANTIDOTE       0s/0h of 13339 corpus (7462s/5877h CT) 05/14/06
+#max      SARE_SPEC_ANTIDOTE       26s/0h of 10629 corpus (5847s/4782h CT) 09/18/05
+#counts   SARE_SPEC_ANTIDOTE       3s/0h of 155610 corpus (103978s/51632h DOC) 05/14/06
+#max      SARE_SPEC_ANTIDOTE       10s/0h of 90468 corpus (40568s/49900h DOC) 11/18/05
+#counts   SARE_SPEC_ANTIDOTE       0s/0h of 9823 corpus (4931s/4892h FT) 11/18/05
+#max      SARE_SPEC_ANTIDOTE       82s/0h of 139999 corpus (133260s/6739h ft) 10/09/05
+#counts   SARE_SPEC_ANTIDOTE       0s/0h of 106098 corpus (72789s/33309h ML) 05/14/06
+#max      SARE_SPEC_ANTIDOTE       1s/0h of 19215 corpus (15849s/3366h ML) 11/18/05
+#counts   SARE_SPEC_ANTIDOTE       0s/0h of 23026 corpus (17290s/5736h MY) 05/14/06
+#max      SARE_SPEC_ANTIDOTE       227s/0h of 57287 corpus (52272s/5015h MY) 09/22/05
+
+header    SARE_SPEC_SPAMIS_FROM    From =~ /\bspamis\b/i 
+describe  SARE_SPEC_SPAMIS_FROM    Possibly from or via spammer system
+score     SARE_SPEC_SPAMIS_FROM    1.666
+#stype    SARE_SPEC_SPAMIS_FROM    spamg
+#hist     SARE_SPEC_SPAMIS_FROM    Bob Menschel, Aug 07 2005
+#counts   SARE_SPEC_SPAMIS_FROM    0s/0h of 173230 corpus (99061s/74169h RM) 05/11/06
+#max      SARE_SPEC_SPAMIS_FROM    79s/0h of 689155 corpus (348140s/341015h RM) 09/18/05
+#counts   SARE_SPEC_SPAMIS_FROM    0s/0h of 13339 corpus (7462s/5877h CT) 05/14/06
+#max      SARE_SPEC_SPAMIS_FROM    15s/0h of 11588 corpus (6361s/5227h CT) 11/18/05
+#counts   SARE_SPEC_SPAMIS_FROM    0s/0h of 23026 corpus (17290s/5736h MY) 05/14/06
+#max      SARE_SPEC_SPAMIS_FROM    1s/0h of 57287 corpus (52272s/5015h MY) 09/22/05
+
+header    SARE_SPEC_SPAMIS_RECV    Received =~ /\bspamis\b/i 
+describe  SARE_SPEC_SPAMIS_RECV    Possibly from or via spammer system
+score     SARE_SPEC_SPAMIS_RECV    1.666
+#stype    SARE_SPEC_SPAMIS_RECV    spamg
+#hist     SARE_SPEC_SPAMIS_RECV    Bob Menschel, Aug 07 2005
+#counts   SARE_SPEC_SPAMIS_RECV    0s/0h of 173230 corpus (99061s/74169h RM) 05/11/06
+#max      SARE_SPEC_SPAMIS_RECV    80s/0h of 689155 corpus (348140s/341015h RM) 09/18/05
+#counts   SARE_SPEC_SPAMIS_RECV    0s/0h of 13339 corpus (7462s/5877h CT) 05/14/06
+#max      SARE_SPEC_SPAMIS_RECV    15s/0h of 11588 corpus (6361s/5227h CT) 11/18/05
+#counts   SARE_SPEC_SPAMIS_RECV    0s/0h of 23026 corpus (17290s/5736h MY) 05/14/06
+#max      SARE_SPEC_SPAMIS_RECV    1s/0h of 57287 corpus (52272s/5015h MY) 09/22/05
+
+body      SARE_SPEC_SPAMIS_BDY1    /\b(?:spamis|s p a m i s)\b/i 
+describe  SARE_SPEC_SPAMIS_BDY1    Possibly from or via spammer system
+score     SARE_SPEC_SPAMIS_BDY1    1.666
+#stype    SARE_SPEC_SPAMIS_BDY1    spamg
+#hist     SARE_SPEC_SPAMIS_BDY1    Bob Menschel, Sep 26 2005
+#counts   SARE_SPEC_SPAMIS_BDY1    0s/0h of 173230 corpus (99061s/74169h RM) 05/11/06
+#max      SARE_SPEC_SPAMIS_BDY1    93s/0h of 646449 corpus (258764s/387685h RM) 09/30/05
+#counts   SARE_SPEC_SPAMIS_BDY1    0s/0h of 36686 corpus (32345s/4341h AxB2) 05/14/06
+#counts   SARE_SPEC_SPAMIS_BDY1    5s/0h of 3327 corpus (2029s/1298h AXB) 10/02/05
+#counts   SARE_SPEC_SPAMIS_BDY1    0s/0h of 13339 corpus (7462s/5877h CT) 05/14/06
+#max      SARE_SPEC_SPAMIS_BDY1    21s/0h of 11588 corpus (6361s/5227h CT) 11/18/05
+#counts   SARE_SPEC_SPAMIS_BDY1    3s/0h of 23026 corpus (17290s/5736h MY) 05/14/06
+#max      SARE_SPEC_SPAMIS_BDY1    4s/0h of 54753 corpus (49767s/4986h MY) 10/01/05
+#counts   SARE_SPEC_SPAMIS_BDY1    0s/0h of 9823 corpus (4931s/4892h FT) 11/18/05
+#max      SARE_SPEC_SPAMIS_BDY1    13s/0h of 139999 corpus (133260s/6739h ft) 10/09/05
+
+body      SARE_SPEC_SPAMIS_BDY2    /P\s?O\s?B\s?o\s?x\s?1\s?2\s?5\s?9\s?,\s?S\s?e\s?a\s?t\s?t\s?l\s?e\s?,\s?W\s?A\s?9\s?8\s?1\s?0\s?1/i 
+describe  SARE_SPEC_SPAMIS_BDY2    Possibly from or via spammer system
+score     SARE_SPEC_SPAMIS_BDY2    1.666
+#stype    SARE_SPEC_SPAMIS_BDY2    spamg
+#hist     SARE_SPEC_SPAMIS_BDY2    Bob Menschel, Sep 26 2005
+#counts   SARE_SPEC_SPAMIS_BDY2    0s/0h of 173230 corpus (99061s/74169h RM) 05/11/06
+#counts   SARE_SPEC_SPAMIS_BDY2    0s/0h of 36686 corpus (32345s/4341h AxB2) 05/14/06
+#max      SARE_SPEC_SPAMIS_BDY2    5s/0h of 3327 corpus (2029s/1298h AXB) 10/02/05
+#counts   SARE_SPEC_SPAMIS_BDY2    15s/0h of 13339 corpus (7462s/5877h CT) 05/14/06
+#max      SARE_SPEC_SPAMIS_BDY2    27s/0h of 11588 corpus (6361s/5227h CT) 11/18/05
+#counts   SARE_SPEC_SPAMIS_BDY2    0s/0h of 106098 corpus (72789s/33309h ML) 05/14/06
+#max      SARE_SPEC_SPAMIS_BDY2    10s/0h of 19215 corpus (15849s/3366h ML) 11/18/05
+#counts   SARE_SPEC_SPAMIS_BDY2    5s/0h of 42678 corpus (37399s/5279h MY) 11/18/05
+#counts   SARE_SPEC_SPAMIS_BDY2    0s/0h of 9823 corpus (4931s/4892h FT) 11/18/05
+#max      SARE_SPEC_SPAMIS_BDY2    203s/0h of 139999 corpus (133260s/6739h ft) 10/09/05
+#counts   SARE_SPEC_SPAMIS_BDY2    6s/0h of 90468 corpus (40568s/49900h DOC) 11/18/05
+
+body      SARE_SPEC_LEO_DOLLARS    /(?:\$[13]\s){3}/
+score     SARE_SPEC_LEO_DOLLARS    2.444
+describe  SARE_SPEC_LEO_DOLLARS    Leo table drug spam
+#hist     SARE_SPEC_LEO_DOLLARS    Loren Wilton, Sept 07, 2005
+#counts   SARE_SPEC_LEO_DOLLARS    0s/0h of 173230 corpus (99061s/74169h RM) 05/11/06
+#max      SARE_SPEC_LEO_DOLLARS    3095s/0h of 494544 corpus (223913s/270631h RM) 10/08/05
+#counts   SARE_SPEC_LEO_DOLLARS    3s/0h of 13339 corpus (7462s/5877h CT) 05/14/06
+#max      SARE_SPEC_LEO_DOLLARS    12s/0h of 11588 corpus (6361s/5227h CT) 11/18/05
+#counts   SARE_SPEC_LEO_DOLLARS    24s/0h of 155610 corpus (103978s/51632h DOC) 05/14/06
+#counts   SARE_SPEC_LEO_DOLLARS    0s/0h of 9823 corpus (4931s/4892h FT) 11/18/05
+#max      SARE_SPEC_LEO_DOLLARS    59s/0h of 139999 corpus (133260s/6739h ft) 10/09/05
+#counts   SARE_SPEC_LEO_DOLLARS    0s/0h of 106098 corpus (72789s/33309h ML) 05/14/06
+#max      SARE_SPEC_LEO_DOLLARS    122s/0h of 19215 corpus (15849s/3366h ML) 11/18/05
+#counts   SARE_SPEC_LEO_DOLLARS    11s/0h of 53432 corpus (48386s/5046h MY) 10/08/05
+
+body      SARE_SPEC_LEO_DOLLARSa   /(?:\$\s?[123]\s){3}/
+score     SARE_SPEC_LEO_DOLLARSa   1.666
+describe  SARE_SPEC_LEO_DOLLARSa   Leo table drug spam
+#ham      SARE_SPEC_LEO_DOLLARSa   source code, list of $n parameters
+#hist     SARE_SPEC_LEO_DOLLARSa   Loren Wilton, Sept 07, 2005, mod Oct 8 2005
+#counts   SARE_SPEC_LEO_DOLLARSa   0s/0h of 173230 corpus (99061s/74169h RM) 05/11/06
+#max      SARE_SPEC_LEO_DOLLARSa   3095s/1h of 494544 corpus (223913s/270631h RM) 10/08/05
+#counts   SARE_SPEC_LEO_DOLLARSa   3s/0h of 13339 corpus (7462s/5877h CT) 05/14/06
+#max      SARE_SPEC_LEO_DOLLARSa   12s/0h of 11588 corpus (6361s/5227h CT) 11/18/05
+#counts   SARE_SPEC_LEO_DOLLARSa   25s/0h of 155610 corpus (103978s/51632h DOC) 05/14/06
+#counts   SARE_SPEC_LEO_DOLLARSa   0s/0h of 9823 corpus (4931s/4892h FT) 11/18/05
+#max      SARE_SPEC_LEO_DOLLARSa   59s/0h of 139999 corpus (133260s/6739h ft) 10/09/05
+#counts   SARE_SPEC_LEO_DOLLARSa   0s/0h of 106098 corpus (72789s/33309h ML) 05/14/06
+#max      SARE_SPEC_LEO_DOLLARSa   122s/0h of 19215 corpus (15849s/3366h ML) 11/18/05
+#counts   SARE_SPEC_LEO_DOLLARSa   11s/0h of 53432 corpus (48386s/5046h MY) 10/08/05
+
+body      SARE_SPEC_LEO_COST       /(?:\s\$[13]){3}\s(?:(?:21|75|33)[\.\s]){3}/
+score     SARE_SPEC_LEO_COST       2.222
+describe  SARE_SPEC_LEO_COST       Table drug cost
+#hist     SARE_SPEC_LEO_COST       Loren Wilton, Sept 07, 2005
+#counts   SARE_SPEC_LEO_COST       0s/0h of 173230 corpus (99061s/74169h RM) 05/11/06
+#max      SARE_SPEC_LEO_COST       1595s/0h of 494544 corpus (223913s/270631h RM) 10/08/05
+#counts   SARE_SPEC_LEO_COST       0s/0h of 13339 corpus (7462s/5877h CT) 05/14/06
+#max      SARE_SPEC_LEO_COST       7s/0h of 11588 corpus (6361s/5227h CT) 11/18/05
+#counts   SARE_SPEC_LEO_COST       0s/0h of 9823 corpus (4931s/4892h FT) 11/18/05
+#max      SARE_SPEC_LEO_COST       8s/0h of 139999 corpus (133260s/6739h ft) 10/09/05
+#counts   SARE_SPEC_LEO_COST       0s/0h of 57287 corpus (52272s/5015h MY) 09/22/05
+#counts   SARE_SPEC_LEO_COST       0s/0h of 106098 corpus (72789s/33309h ML) 05/14/06
+#max      SARE_SPEC_LEO_COST       48s/0h of 19215 corpus (15849s/3366h ML) 11/18/05
+#counts   SARE_SPEC_LEO_COST       5s/0h of 90468 corpus (40568s/49900h DOC) 11/18/05
+
+body      SARE_SPEC_LEO_COSTa      /(?:\s\$\s?[123]){3}\s(?:\d\d[\.\s]){3}/
+score     SARE_SPEC_LEO_COSTa      2.222
+describe  SARE_SPEC_LEO_COSTa      Table drug cost
+#hist     SARE_SPEC_LEO_COSTa      Loren Wilton, Sept 07, 2005, mod Oct 8 2005
+#counts   SARE_SPEC_LEO_COSTa      0s/0h of 173230 corpus (99061s/74169h RM) 05/11/06
+#max      SARE_SPEC_LEO_COSTa      1612s/0h of 494544 corpus (223913s/270631h RM) 10/08/05
+#counts   SARE_SPEC_LEO_COSTa      1s/0h of 13339 corpus (7462s/5877h CT) 05/14/06
+#max      SARE_SPEC_LEO_COSTa      8s/0h of 11588 corpus (6361s/5227h CT) 11/18/05
+#counts   SARE_SPEC_LEO_COSTa      0s/0h of 53432 corpus (48386s/5046h MY) 10/08/05
+#counts   SARE_SPEC_LEO_COSTa      0s/0h of 9823 corpus (4931s/4892h FT) 11/18/05
+#max      SARE_SPEC_LEO_COSTa      8s/0h of 139999 corpus (133260s/6739h ft) 10/09/05
+#counts   SARE_SPEC_LEO_COSTa      0s/0h of 106098 corpus (72789s/33309h ML) 05/14/06
+#max      SARE_SPEC_LEO_COSTa      54s/0h of 19215 corpus (15849s/3366h ML) 11/18/05
+#counts   SARE_SPEC_LEO_COSTa      5s/0h of 90468 corpus (40568s/49900h DOC) 11/18/05
+
+body      __SARE_SPEC_LRD_COST1    /3\.75/
+body      __SARE_SPEC_LRD_COST2    /1\.21/
+body      __SARE_SPEC_LRD_COST3    /3\.33/
+meta      SARE_SPEC_LRD_COST_M1    __SARE_SPEC_LRD_COST1 && __SARE_SPEC_LRD_COST2 && __SARE_SPEC_LRD_COST3
+describe  SARE_SPEC_LRD_COST_M1    LEO drug pricing variations
+score     SARE_SPEC_LRD_COST_M1    0.698
+#ham      SARE_SPEC_LRD_COST_M1    firewall logs emailed 
+#hist     SARE_SPEC_LRD_COST_M1    Raymond Dijkxhoorn, Oct 2005
+#counts   SARE_SPEC_LRD_COST_M1    0s/2h of 173230 corpus (99061s/74169h RM) 05/11/06
+#max      SARE_SPEC_LRD_COST_M1    4374s/32h of 494544 corpus (223913s/270631h RM) 10/08/05
+#counts   SARE_SPEC_LRD_COST_M1    0s/0h of 36686 corpus (32345s/4341h AxB2) 05/14/06
+#max      SARE_SPEC_LRD_COST_M1    3s/0h of 4676 corpus (3324s/1352h AxB) 11/18/05
+#counts   SARE_SPEC_LRD_COST_M1    17s/0h of 13339 corpus (7462s/5877h CT) 05/14/06
+#counts   SARE_SPEC_LRD_COST_M1    101s/0h of 155610 corpus (103978s/51632h DOC) 05/14/06
+#counts   SARE_SPEC_LRD_COST_M1    0s/0h of 42419 corpus (34292s/8127h FVGT) 05/15/06
+#max      SARE_SPEC_LRD_COST_M1    589s/0h of 139999 corpus (133260s/6739h ft) 10/09/05
+#counts   SARE_SPEC_LRD_COST_M1    55s/0h of 23026 corpus (17290s/5736h MY) 05/14/06
+#counts   SARE_SPEC_LRD_COST_M1    5s/0h of 106098 corpus (72789s/33309h ML) 05/14/06
+#max      SARE_SPEC_LRD_COST_M1    189s/0h of 19215 corpus (15849s/3366h ML) 11/18/05
+
+body      __SARE_SPEC_PROLEO1      /85(\,|\.)45|1(\,|\.)(20|21|22|56)/
+body      __SARE_SPEC_PROLEO2      /69(\,|\.)95|2(\,|\.)78|3(\,|\.)(32|33|70)/
+body      __SARE_SPEC_PROLEO3      /99(\,|\.)95|3(\,|\.)(00|35|75)/
+uri       __SARE_SPEC_PROLEO4      /http:\/\/.{0,30}\.tripod\.com/
+body      __SARE_SPEC_PROLEO5      /http:\/\/www\.\b/
+meta      SARE_SPEC_PROLEO_M1      (__SARE_SPEC_PROLEO1 && __SARE_SPEC_PROLEO2 && __SARE_SPEC_PROLEO3 && __SARE_SPEC_PROLEO4)
+describe  SARE_SPEC_PROLEO_M1      Leo drug spam signs
+score     SARE_SPEC_PROLEO_M1      4.000
+#stype    SARE_SPEC_PROLEO_M1      spamg 
+#hist     SARE_SPEC_PROLEO_M1      Raymond Dijkxhoorn, Nov 2005
+#counts   SARE_SPEC_PROLEO_M1      0s/0h of 173230 corpus (99061s/74169h RM) 05/11/06
+#counts   SARE_SPEC_PROLEO_M1      0s/0h of 36686 corpus (32345s/4341h AxB2) 05/14/06
+#max      SARE_SPEC_PROLEO_M1      248s/0h of 4676 corpus (3324s/1352h AxB) 11/18/05
+#counts   SARE_SPEC_PROLEO_M1      18s/0h of 23026 corpus (17290s/5736h MY) 05/14/06
+#counts   SARE_SPEC_PROLEO_M1      6s/0h of 13339 corpus (7462s/5877h CT) 05/14/06
+#counts   SARE_SPEC_PROLEO_M1      27s/0h of 90468 corpus (40568s/49900h DOC) 11/18/05
+#counts   SARE_SPEC_PROLEO_M1      0s/0h of 42419 corpus (34292s/8127h FVGT) 05/15/06
+#max      SARE_SPEC_PROLEO_M1      84s/0h of 9823 corpus (4931s/4892h FT) 11/18/05
+#counts   SARE_SPEC_PROLEO_M1      0s/0h of 106098 corpus (72789s/33309h ML) 05/14/06
+#max      SARE_SPEC_PROLEO_M1      316s/0h of 19215 corpus (15849s/3366h ML) 11/18/05
+
+meta      SARE_SPEC_PROLEO_M2      (__SARE_SPEC_PROLEO1 && __SARE_SPEC_PROLEO2 && __SARE_SPEC_PROLEO3 && __SARE_SPEC_PROLEO5 && !SARE_SPEC_PROLEO_M2a)
+describe  SARE_SPEC_PROLEO_M2      Leo drug spam signs
+score     SARE_SPEC_PROLEO_M2      0.692
+#hist     SARE_SPEC_PROLEO_M2      Raymond Dijkxhoorn, Nov 2005
+#counts   SARE_SPEC_PROLEO_M2      1s/5h of 173230 corpus (99061s/74169h RM) 05/11/06
+#max      SARE_SPEC_PROLEO_M2      108s/20h of 366082 corpus (108301s/257781h RM) 11/25/05
+#counts   SARE_SPEC_PROLEO_M2      42s/0h of 23026 corpus (17290s/5736h MY) 05/14/06
+#counts   SARE_SPEC_PROLEO_M2      0s/3h of 36686 corpus (32345s/4341h AxB2) 05/14/06
+#max      SARE_SPEC_PROLEO_M2      4s/0h of 4178 corpus (2833s/1345h AxB) 11/12/05
+#counts   SARE_SPEC_PROLEO_M2      27s/0h of 13339 corpus (7462s/5877h CT) 05/14/06
+#counts   SARE_SPEC_PROLEO_M2      142s/0h of 155610 corpus (103978s/51632h DOC) 05/14/06
+#counts   SARE_SPEC_PROLEO_M2      0s/0h of 42419 corpus (34292s/8127h FVGT) 05/15/06
+#max      SARE_SPEC_PROLEO_M2      1s/0h of 9823 corpus (4931s/4892h FT) 11/18/05
+#counts   SARE_SPEC_PROLEO_M2      9s/0h of 106098 corpus (72789s/33309h ML) 05/14/06
+#max      SARE_SPEC_PROLEO_M2      10s/0h of 19215 corpus (15849s/3366h ML) 11/18/05
+
+meta      SARE_SPEC_PROLEO_M2a     (__SARE_SPEC_PROLEO1 && __SARE_SPEC_PROLEO2 && __SARE_SPEC_PROLEO3 && __SARE_SPEC_PROLEO5 && MIME_QP_LONG_LINE)
+describe  SARE_SPEC_PROLEO_M2a     Leo drug spam signs
+score     SARE_SPEC_PROLEO_M2a     3.333
+#stype    SARE_SPEC_PROLEO_M2a     spamg 
+rawbody   MIME_QP_LONG_LINE        eval:check_for_mime('mime_qp_long_line')
+#hist     SARE_SPEC_PROLEO_M2a     Raymond Dijkxhoorn, Nov 2005
+#counts   SARE_SPEC_PROLEO_M2a     0s/0h of 173230 corpus (99061s/74169h RM) 05/11/06
+#max      SARE_SPEC_PROLEO_M2a     255s/0h of 366082 corpus (108301s/257781h RM) 11/25/05
+#counts   SARE_SPEC_PROLEO_M2a     0s/0h of 36686 corpus (32345s/4341h AxB2) 05/14/06
+#max      SARE_SPEC_PROLEO_M2a     4s/0h of 4676 corpus (3324s/1352h AxB) 11/18/05
+#counts   SARE_SPEC_PROLEO_M2a     5s/0h of 13339 corpus (7462s/5877h CT) 05/14/06
+#max      SARE_SPEC_PROLEO_M2a     7s/0h of 11588 corpus (6361s/5227h CT) 11/18/05
+#counts   SARE_SPEC_PROLEO_M2a     25s/0h of 155610 corpus (103978s/51632h DOC) 05/14/06
+#counts   SARE_SPEC_PROLEO_M2a     0s/0h of 42419 corpus (34292s/8127h FVGT) 05/15/06
+#max      SARE_SPEC_PROLEO_M2a     13s/0h of 9823 corpus (4931s/4892h FT) 11/18/05
+#counts   SARE_SPEC_PROLEO_M2a     0s/0h of 106098 corpus (72789s/33309h ML) 05/14/06
+#max      SARE_SPEC_PROLEO_M2a     134s/0h of 19215 corpus (15849s/3366h ML) 11/18/05
+#counts   SARE_SPEC_PROLEO_M2a     0s/0h of 42678 corpus (37399s/5279h MY) 11/18/05
+
+body      __SARE_SPEC_LRD_COST4    /134/                                                              
+body      __SARE_SPEC_LRD_COST5    /169/                                                              
+body      __SARE_SPEC_LRD_COST6    /218/                                                              
+header    __SARE_SPEC_LRD_COST7    Subject =~ /ceutical/i                                             
+meta      SARE_SPEC_LRD_COST_M2    __SARE_SPEC_LRD_COST4 && __SARE_SPEC_LRD_COST5 && __SARE_SPEC_LRD_COST6 && __SARE_SPEC_LRD_COST7
+describe  SARE_SPEC_LRD_COST_M2    LEO drug pricing variations
+score     SARE_SPEC_LRD_COST_M2    1.111
+#stype    SARE_SPEC_LRD_COST_M2    spamp
+#hist     SARE_SPEC_LRD_COST_M2    Raymond Dijkxhoorn, Oct 2005
+#counts   SARE_SPEC_LRD_COST_M2    0s/0h of 173230 corpus (99061s/74169h RM) 05/11/06
+#max      SARE_SPEC_LRD_COST_M2    36s/0h of 366109 corpus (108323s/257786h RM) 11/25/05
+#counts   SARE_SPEC_LRD_COST_M2    1s/0h of 11588 corpus (6361s/5227h CT) 11/18/05
+#counts   SARE_SPEC_LRD_COST_M2    0s/0h of 53432 corpus (48386s/5046h MY) 10/08/05
+#counts   SARE_SPEC_LRD_COST_M2    0s/0h of 139999 corpus (133260s/6739h ft) 10/09/05
+#counts   SARE_SPEC_LRD_COST_M2    0s/0h of 106098 corpus (72789s/33309h ML) 05/14/06
+#max      SARE_SPEC_LRD_COST_M2    17s/0h of 19215 corpus (15849s/3366h ML) 11/18/05
+#counts   SARE_SPEC_LRD_COST_M2    4s/0h of 90468 corpus (40568s/49900h DOC) 11/18/05
+
+body      __SARE_SPEC_LEO_DRGS     /^(?:Am|Me|Pr|Le|Xa|Ci|Ce|Vi|Ul|Va){3,}\s(?:bi|ri|op|vi|na|al|le|ag|tr|li){3,}\s(?:en|dia|ecia|tra|x|is|brex|ra|am|um){3,}\s/   # no /i
+body      __SARE_SPEC_LEO_DRGS5a   /\b(?:(?:Am|AM|Me|ME|Pr|PR|Le|LE|Xa|XA|Ci|CI|Ce|CE|Vi|VI|Ul|UL|Va|VA)(?:$|\s{1,30})){10}/
+body      __SARE_SPEC_LEO_DRGS5b   /\b(?:(?:bi|ri|op|vi|na|al|le|ag|tr|li)(?:$|\s{1,30})){10}/i
+body      __SARE_SPEC_LEO_DRGS5c   /\b(?:(?:am|di|dia|br|brex|ra|en|x|um|ec|ecia|is|tr|tra)(?:$|\s{1,30})){10}/i
+body      __SARE_SPEC_LEO_DRGS6a   /\b(?:(?:M|L|A|P|C|V|V|X|U|C)(?:$|\s{1,30})){10}/
+body      __SARE_SPEC_LEO_DRGS6b   /\b(?:(?:e|e|m|r|I|I|A|a|l|e)(?:$|\s{1,30})){10}/i
+body      __SARE_SPEC_LEO_DRGS6c   /\b(?:(?:r|v|b|o|A|A|L|n|t|l)(?:$|\s{1,30})){10}/i
+body      __SARE_SPEC_LEO_DRGS6d   /\b(?:(?:d|t|e|e|I|R|U|x|a|b)(?:$|\s{1,30})){10}/i
+
+meta      SARE_SPEC_LEO_DRUGS      __SARE_SPEC_LEO_DRGS || (__SARE_SPEC_LEO_DRGS5a && __SARE_SPEC_LEO_DRGS5b && __SARE_SPEC_LEO_DRGS5c) || (__SARE_SPEC_LEO_DRGS6a && __SARE_SPEC_LEO_DRGS6b && __SARE_SPEC_LEO_DRGS6c && __SARE_SPEC_LEO_DRGS6d)
+score     SARE_SPEC_LEO_DRUGS      2.888
+describe  SARE_SPEC_LEO_DRUGS      Vertical table drug spam
+#hist     SARE_SPEC_LEO_DRUGS      Loren Wilton, Sept 07, 2005
+#counts   SARE_SPEC_LEO_DRUGS      0s/0h of 173230 corpus (99061s/74169h RM) 05/11/06
+#max      SARE_SPEC_LEO_DRUGS      6734s/0h of 494544 corpus (223913s/270631h RM) 10/08/05
+#counts   SARE_SPEC_LEO_DRUGS      230s/0h of 42678 corpus (37399s/5279h MY) 11/18/05
+#counts   SARE_SPEC_LEO_DRUGS      0s/1h of 13339 corpus (7462s/5877h CT) 05/14/06
+#max      SARE_SPEC_LEO_DRUGS      27s/0h of 11588 corpus (6361s/5227h CT) 11/18/05
+#counts   SARE_SPEC_LEO_DRUGS      0s/0h of 9823 corpus (4931s/4892h FT) 11/18/05
+#max      SARE_SPEC_LEO_DRUGS      48s/0h of 139999 corpus (133260s/6739h ft) 10/09/05
+#counts   SARE_SPEC_LEO_DRUGS      0s/0h of 106098 corpus (72789s/33309h ML) 05/14/06
+#max      SARE_SPEC_LEO_DRUGS      238s/0h of 19215 corpus (15849s/3366h ML) 11/18/05
+#counts   SARE_SPEC_LEO_DRUGS      21s/0h of 90468 corpus (40568s/49900h DOC) 11/18/05
+
+body      SARE_SPEC_LEO_MEDS       /(?!medications?)\b(?:m|rn|\/V\\|\/\\\/\\]).?(?:[e3\*\xC8-\xCB\xE8-\xEB]).?(?:[d\xD0]).?(?:[il1:\|\*\xCC-\xCF\xEC-\xEF\xA6]).?(?:[c\*\xC7\xE7\xA2\xA9]).?(?:[a4\*\@\xC0-\xC5\xAA\xE0-\xE5]|\/\\).?(?:[t\+]).?(?:[il1:\|\*\xCC-\xCF\xEC-\xEF\xA6]).?(?:[o0\*\xB0\xBA\xD8\xF8\xD2-\xD6\xF2-\xF6]|\(\)|\[\]).?(?:[n\xD1\xF1]|\|\\\|).?(?:[s5\$\xA7])?/i
+describe  SARE_SPEC_LEO_MEDS       obfuscated subject body  
+score     SARE_SPEC_LEO_MEDS       1.666
+#hist     SARE_SPEC_LEO_MEDS       Bob Menschel, Sept 11, 2005
+#ham      SARE_SPEC_LEO_MEDS       misspelling
+#counts   SARE_SPEC_LEO_MEDS       263s/1h of 173230 corpus (99061s/74169h RM) 05/11/06
+#max      SARE_SPEC_LEO_MEDS       6780s/0h of 689155 corpus (348140s/341015h RM) 09/18/05
+#counts   SARE_SPEC_LEO_MEDS       34s/0h of 36686 corpus (32345s/4341h AxB2) 05/14/06
+#counts   SARE_SPEC_LEO_MEDS       12s/0h of 13339 corpus (7462s/5877h CT) 05/14/06
+#max      SARE_SPEC_LEO_MEDS       40s/0h of 10629 corpus (5847s/4782h CT) 09/18/05
+#counts   SARE_SPEC_LEO_MEDS       191s/0h of 155610 corpus (103978s/51632h DOC) 05/14/06
+#max      SARE_SPEC_LEO_MEDS       240s/0h of 90468 corpus (40568s/49900h DOC) 11/18/05
+#counts   SARE_SPEC_LEO_MEDS       46s/0h of 42419 corpus (34292s/8127h FVGT) 05/15/06
+#max      SARE_SPEC_LEO_MEDS       722s/0h of 139999 corpus (133260s/6739h ft) 10/09/05
+#counts   SARE_SPEC_LEO_MEDS       67s/0h of 23026 corpus (17290s/5736h MY) 05/14/06
+#max      SARE_SPEC_LEO_MEDS       452s/0h of 57287 corpus (52272s/5015h MY) 09/22/05
+#counts   SARE_SPEC_LEO_MEDS       307s/0h of 106098 corpus (72789s/33309h ML) 05/14/06
+#max      SARE_SPEC_LEO_MEDS       355s/0h of 19215 corpus (15849s/3366h ML) 11/18/05
+
+body      SARE_SPEC_LEO_PHARM      /(?!pharmac(?:y|ies))\b(?:[p\xDE]).?h.?(?:[a4\*\@\xC0-\xC5\xAA\xE0-\xE5]|\/\\).?(?:[r\xAE]).?(?:[a4\*\@\xC0-\xC5\xAA\xE0-\xE5]|\/\\)?(?:m|rn|\/V\\|\/\\\/\\]).?(?:[a4\*\@\xC0-\xC5\xAA\xE0-\xE5]|\/\\)?(?:[c\*\xC7\xE7\xA2\xA9])(?:(?:[y\xA5\xDD\xFD])|(?:[il1:\|\*\xCC-\xCF\xEC-\xEF\xA6]).?(?:[e3\*\xC8-\xCB\xE8-\xEB]).?(?:[s5\$\xA7]))/i
+describe  SARE_SPEC_LEO_PHARM      obfuscated subject body  
+score     SARE_SPEC_LEO_PHARM      1.666
+#hist     SARE_SPEC_LEO_PHARM      Bob Menschel, Sept 11, 2005
+#ham      SARE_SPEC_LEO_PHARM      misspelling (2)
+#counts   SARE_SPEC_LEO_PHARM      413s/0h of 173230 corpus (99061s/74169h RM) 05/11/06
+#max      SARE_SPEC_LEO_PHARM      3205s/3h of 679260 corpus (323056s/356204h RM) 09/13/05
+#counts   SARE_SPEC_LEO_PHARM      87s/0h of 36686 corpus (32345s/4341h AxB2) 05/14/06
+#counts   SARE_SPEC_LEO_PHARM      167s/2h of 13339 corpus (7462s/5877h CT) 05/14/06
+#counts   SARE_SPEC_LEO_PHARM      1000s/0h of 155610 corpus (103978s/51632h DOC) 05/14/06
+#counts   SARE_SPEC_LEO_PHARM      45s/0h of 42419 corpus (34292s/8127h FVGT) 05/15/06
+#max      SARE_SPEC_LEO_PHARM      692s/0h of 139999 corpus (133260s/6739h ft) 10/09/05
+#counts   SARE_SPEC_LEO_PHARM      105s/0h of 23026 corpus (17290s/5736h MY) 05/14/06
+#max      SARE_SPEC_LEO_PHARM      462s/0h of 53432 corpus (48386s/5046h MY) 10/08/05
+#counts   SARE_SPEC_LEO_PHARM      1996s/0h of 106098 corpus (72789s/33309h ML) 05/14/06
+
+body      SARE_SPEC_LEO_PHARM2     /(?!Pharmaceuticals?)\b(?:[p\xDE]).?h.?(?:[a4\*\@\xC0-\xC5\xAA\xE0-\xE5]|\/\\).?(?:[r\xAE]).?(?:[a4\*\@\xC0-\xC5\xAA\xE0-\xE5]|\/\\)?(?:m|rn|\/V\\|\/\\\/\\]).?(?:[a4\*\@\xC0-\xC5\xAA\xE0-\xE5]|\/\\).?(?:[c\*\xC7\xE7\xA2\xA9]).?(?:[e3\*\xC8-\xCB\xE8-\xEB]).?(?:[uv\*\xB5\xD9-\xDC\xF9-\xFC]).?(?:[t\+]).?(?:[il1:\|\*\xCC-\xCF\xEC-\xEF\xA6]).?(?:[c\*\xC7\xE7\xA2\xA9]).?(?:[a4\*\@\xC0-\xC5\xAA\xE0-\xE5]|\/\\).?(?:[l1I\|\xA3]).?(?:[s5\$\xA7])?/i
+describe  SARE_SPEC_LEO_PHARM2     obfuscated subject body  
+score     SARE_SPEC_LEO_PHARM2     1.666
+#hist     SARE_SPEC_LEO_PHARM2     Bob Menschel, Sept 11, 2005
+#ham      SARE_SPEC_LEO_PHARM2     Intentional strange spacing
+#counts   SARE_SPEC_LEO_PHARM2     30s/0h of 173230 corpus (99061s/74169h RM) 05/11/06
+#max      SARE_SPEC_LEO_PHARM2     5774s/2h of 494544 corpus (223913s/270631h RM) 10/08/05
+#counts   SARE_SPEC_LEO_PHARM2     23s/0h of 13339 corpus (7462s/5877h CT) 05/14/06
+#counts   SARE_SPEC_LEO_PHARM2     188s/0h of 155610 corpus (103978s/51632h DOC) 05/14/06
+#counts   SARE_SPEC_LEO_PHARM2     27s/0h of 42419 corpus (34292s/8127h FVGT) 05/15/06
+#max      SARE_SPEC_LEO_PHARM2     467s/0h of 139999 corpus (133260s/6739h ft) 10/09/05
+#counts   SARE_SPEC_LEO_PHARM2     134s/0h of 23026 corpus (17290s/5736h MY) 05/14/06
+#max      SARE_SPEC_LEO_PHARM2     167s/0h of 53432 corpus (48386s/5046h MY) 10/08/05
+#counts   SARE_SPEC_LEO_PHARM2     9s/0h of 106098 corpus (72789s/33309h ML) 05/14/06
+#max      SARE_SPEC_LEO_PHARM2     137s/0h of 19215 corpus (15849s/3366h ML) 11/18/05
+
+body      SARE_SPEC_LEO_CHEM       /(?!chemist)\b(?:[c\*\xC7\xE7\xA2\xA9]).?h.?(?:[e3\*\xC8-\xCB\xE8-\xEB]).?(?:m|rn|\/V\\|\/\\\/\\]).?(?:[il1:\|\*\xCC-\xCF\xEC-\xEF\xA6]).?(?:[s5\$\xA7]).?(?:[t\+])/i
+describe  SARE_SPEC_LEO_CHEM       obfuscated subject body  
+score     SARE_SPEC_LEO_CHEM       0.992
+#hist     SARE_SPEC_LEO_CHEM       Bob Menschel, Sept 11, 2005
+#counts   SARE_SPEC_LEO_CHEM       1s/0h of 173230 corpus (99061s/74169h RM) 05/11/06
+#max      SARE_SPEC_LEO_CHEM       50s/0h of 689155 corpus (348140s/341015h RM) 09/18/05
+#counts   SARE_SPEC_LEO_CHEM       0s/0h of 36686 corpus (32345s/4341h AxB2) 05/14/06
+#max      SARE_SPEC_LEO_CHEM       1s/0h of 4676 corpus (3324s/1352h AxB) 11/18/05
+#counts   SARE_SPEC_LEO_CHEM       0s/0h of 10629 corpus (5847s/4782h CT) 09/18/05
+#counts   SARE_SPEC_LEO_CHEM       0s/0h of 9823 corpus (4931s/4892h FT) 11/18/05
+#max      SARE_SPEC_LEO_CHEM       1s/0h of 7500 corpus (1767s/5733h ft) 09/18/05
+#counts   SARE_SPEC_LEO_CHEM       3s/0h of 23026 corpus (17290s/5736h MY) 05/14/06
+#max      SARE_SPEC_LEO_CHEM       152s/0h of 42678 corpus (37399s/5279h MY) 11/18/05
+#counts   SARE_SPEC_LEO_CHEM       0s/0h of 106098 corpus (72789s/33309h ML) 05/14/06
+#max      SARE_SPEC_LEO_CHEM       2s/0h of 19215 corpus (15849s/3366h ML) 11/18/05
+
+body      SARE_SPEC_LEO_LINE02     m'(?:[A-Z][a-z]{1,2}){5}\w{1,30}\s[a-z]{10}'
+describe  SARE_SPEC_LEO_LINE02     common Leo body text
+score     SARE_SPEC_LEO_LINE02     2.666
+#hist     SARE_SPEC_LEO_LINE02     Bob Menschel, Sept 11, 2005
+#counts   SARE_SPEC_LEO_LINE02     3s/0h of 173230 corpus (99061s/74169h RM) 05/11/06
+#max      SARE_SPEC_LEO_LINE02     5058s/0h of 494544 corpus (223913s/270631h RM) 10/08/05
+#counts   SARE_SPEC_LEO_LINE02     1s/0h of 13339 corpus (7462s/5877h CT) 05/14/06
+#max      SARE_SPEC_LEO_LINE02     20s/0h of 11588 corpus (6361s/5227h CT) 11/18/05
+#counts   SARE_SPEC_LEO_LINE02     27s/0h of 155610 corpus (103978s/51632h DOC) 05/14/06
+#counts   SARE_SPEC_LEO_LINE02     0s/0h of 42419 corpus (34292s/8127h FVGT) 05/15/06
+#max      SARE_SPEC_LEO_LINE02     72s/0h of 139999 corpus (133260s/6739h ft) 10/09/05
+#counts   SARE_SPEC_LEO_LINE02     0s/0h of 106098 corpus (72789s/33309h ML) 05/14/06
+#max      SARE_SPEC_LEO_LINE02     205s/0h of 19215 corpus (15849s/3366h ML) 11/18/05
+
+rawbody   SARE_SPEC_LEO_LINE03a    m'<DIV[^>]{0,40}style=[^>]{0,40}FLOAT: left;'i
+describe  SARE_SPEC_LEO_LINE03a    common Leo body text
+score     SARE_SPEC_LEO_LINE03a    0.408
+#hist     SARE_SPEC_LEO_LINE03a    Bob Menschel, Sept 11, 2005, modified Oct 8 2005
+#counts   SARE_SPEC_LEO_LINE03a    3s/19h of 173230 corpus (99061s/74169h RM) 05/11/06
+#max      SARE_SPEC_LEO_LINE03a    11045s/41h of 494544 corpus (223913s/270631h RM) 10/08/05
+#counts   SARE_SPEC_LEO_LINE03a    43s/0h of 36686 corpus (32345s/4341h AxB2) 05/14/06
+#counts   SARE_SPEC_LEO_LINE03a    26s/0h of 13339 corpus (7462s/5877h CT) 05/14/06
+#max      SARE_SPEC_LEO_LINE03a    36s/0h of 11588 corpus (6361s/5227h CT) 11/18/05
+#counts   SARE_SPEC_LEO_LINE03a    153s/42h of 155610 corpus (103978s/51632h DOC) 05/14/06
+#counts   SARE_SPEC_LEO_LINE03a    0s/1h of 42419 corpus (34292s/8127h FVGT) 05/15/06
+#max      SARE_SPEC_LEO_LINE03a    860s/0h of 139999 corpus (133260s/6739h ft) 10/09/05
+#counts   SARE_SPEC_LEO_LINE03a    0s/0h of 106098 corpus (72789s/33309h ML) 05/14/06
+#max      SARE_SPEC_LEO_LINE03a    368s/0h of 19215 corpus (15849s/3366h ML) 11/18/05
+#counts   SARE_SPEC_LEO_LINE03a    260s/4h of 23026 corpus (17290s/5736h MY) 05/14/06
+
+rawbody   SARE_SPEC_LEO_LINE03b    m'<DIV[^>]{0,40}style=[^>]{0,40}(?:BORDER|MARGIN|PADDING)-(?:BOTTOM|LEFT|RIGHT|TOP)-WIDTH: 0px;'i
+describe  SARE_SPEC_LEO_LINE03b    common Leo body text
+score     SARE_SPEC_LEO_LINE03b    2.222
+#hist     SARE_SPEC_LEO_LINE03b    Bob Menschel, Oct 8 2005
+#counts   SARE_SPEC_LEO_LINE03b    81s/0h of 173230 corpus (99061s/74169h RM) 05/11/06
+#max      SARE_SPEC_LEO_LINE03b    380s/0h of 366082 corpus (108301s/257781h RM) 11/25/05
+#counts   SARE_SPEC_LEO_LINE03b    8s/0h of 36686 corpus (32345s/4341h AxB2) 05/14/06
+#counts   SARE_SPEC_LEO_LINE03b    38s/0h of 13339 corpus (7462s/5877h CT) 05/14/06
+#counts   SARE_SPEC_LEO_LINE03b    303s/0h of 155610 corpus (103978s/51632h DOC) 05/14/06
+#counts   SARE_SPEC_LEO_LINE03b    46s/0h of 42419 corpus (34292s/8127h FVGT) 05/15/06
+#counts   SARE_SPEC_LEO_LINE03b    7s/0h of 23026 corpus (17290s/5736h MY) 05/14/06
+#counts   SARE_SPEC_LEO_LINE03b    134s/0h of 106098 corpus (72789s/33309h ML) 05/14/06
+
+rawbody   SARE_SPEC_LEO_LINE03e    m'<TABLE[^>]{0,40}style=[^>]{0,40}(?:BORDER|MARGIN|PADDING)-(?:BOTTOM|LEFT|RIGHT|TOP)-WIDTH: 0px;'i
+describe  SARE_SPEC_LEO_LINE03e    common Leo body text
+score     SARE_SPEC_LEO_LINE03e    0.635
+#ham      SARE_SPEC_LEO_LINE03e    confirmed (3)
+#hist     SARE_SPEC_LEO_LINE03e    Bob Menschel, Oct 8 2005
+#counts   SARE_SPEC_LEO_LINE03e    2s/1h of 173230 corpus (99061s/74169h RM) 05/11/06
+#max      SARE_SPEC_LEO_LINE03e    759s/5h of 366082 corpus (108301s/257781h RM) 11/25/05
+#counts   SARE_SPEC_LEO_LINE03e    1s/1h of 9999 corpus (5651s/4348h AxB) 05/14/06
+#max      SARE_SPEC_LEO_LINE03e    25s/0h of 4676 corpus (3324s/1352h AxB) 11/18/05
+#counts   SARE_SPEC_LEO_LINE03e    4s/0h of 13339 corpus (7462s/5877h CT) 05/14/06
+#max      SARE_SPEC_LEO_LINE03e    5s/0h of 11588 corpus (6361s/5227h CT) 11/18/05
+#counts   SARE_SPEC_LEO_LINE03e    33s/0h of 155610 corpus (103978s/51632h DOC) 05/14/06
+#counts   SARE_SPEC_LEO_LINE03e    0s/0h of 42419 corpus (34292s/8127h FVGT) 05/15/06
+#max      SARE_SPEC_LEO_LINE03e    55s/0h of 139999 corpus (133260s/6739h ft) 10/09/05
+#counts   SARE_SPEC_LEO_LINE03e    17s/0h of 42678 corpus (37399s/5279h MY) 11/18/05
+#counts   SARE_SPEC_LEO_LINE03e    0s/1h of 106098 corpus (72789s/33309h ML) 05/14/06
+#max      SARE_SPEC_LEO_LINE03e    162s/1h of 19215 corpus (15849s/3366h ML) 11/18/05
+
+rawbody   SARE_SPEC_LEO_LINE03f    m'<TABLE[^>]{0,40}style=[^>]{0,40}(?:BORDER|MARGIN|PADDING)-(?:BOTTOM|LEFT|RIGHT|TOP): 0px;'i
+describe  SARE_SPEC_LEO_LINE03f    common Leo body text
+score     SARE_SPEC_LEO_LINE03f    0.612
+#hist     SARE_SPEC_LEO_LINE03f    Bob Menschel, Oct 8 2005
+#counts   SARE_SPEC_LEO_LINE03f    0s/1h of 173230 corpus (99061s/74169h RM) 05/11/06
+#max      SARE_SPEC_LEO_LINE03f    2134s/22h of 366082 corpus (108301s/257781h RM) 11/25/05
+#counts   SARE_SPEC_LEO_LINE03f    0s/3h of 36686 corpus (32345s/4341h AxB2) 05/14/06
+#max      SARE_SPEC_LEO_LINE03f    47s/0h of 4676 corpus (3324s/1352h AxB) 11/18/05
+#counts   SARE_SPEC_LEO_LINE03f    11s/2h of 13339 corpus (7462s/5877h CT) 05/14/06
+#max      SARE_SPEC_LEO_LINE03f    15s/0h of 11588 corpus (6361s/5227h CT) 11/18/05
+#counts   SARE_SPEC_LEO_LINE03f    68s/0h of 155610 corpus (103978s/51632h DOC) 05/14/06
+#counts   SARE_SPEC_LEO_LINE03f    0s/4h of 42419 corpus (34292s/8127h FVGT) 05/15/06
+#max      SARE_SPEC_LEO_LINE03f    144s/0h of 139999 corpus (133260s/6739h ft) 10/09/05
+#counts   SARE_SPEC_LEO_LINE03f    43s/0h of 23026 corpus (17290s/5736h MY) 05/14/06
+#counts   SARE_SPEC_LEO_LINE03f    0s/1h of 106098 corpus (72789s/33309h ML) 05/14/06
+#max      SARE_SPEC_LEO_LINE03f    436s/1h of 19215 corpus (15849s/3366h ML) 11/18/05
+
+rawbody   SARE_SPEC_LEO_LINE04     m'(?:(?:<BR>+)+(?:<B>)?[a-z]{1,3}(?:<\B>)?){5}'i
+describe  SARE_SPEC_LEO_LINE04     common Leo body text
+score     SARE_SPEC_LEO_LINE04     1.666
+#hist     SARE_SPEC_LEO_LINE04     Bob Menschel, Sept 11, 2005
+#ham      SARE_SPEC_LEO_LINE04     S P O I L E R spelled vertically to give people a chance to not scroll down to the spoiler.
+#counts   SARE_SPEC_LEO_LINE04     0s/0h of 173230 corpus (99061s/74169h RM) 05/11/06
+#max      SARE_SPEC_LEO_LINE04     8643s/2h of 494544 corpus (223913s/270631h RM) 10/08/05
+#counts   SARE_SPEC_LEO_LINE04     0s/0h of 36686 corpus (32345s/4341h AxB2) 05/14/06
+#max      SARE_SPEC_LEO_LINE04     50s/0h of 4676 corpus (3324s/1352h AxB) 11/18/05
+#counts   SARE_SPEC_LEO_LINE04     42s/0h of 13339 corpus (7462s/5877h CT) 05/14/06
+#counts   SARE_SPEC_LEO_LINE04     179s/0h of 155610 corpus (103978s/51632h DOC) 05/14/06
+#counts   SARE_SPEC_LEO_LINE04     185s/1h of 42419 corpus (34292s/8127h FVGT) 05/15/06
+#max      SARE_SPEC_LEO_LINE04     815s/1h of 139999 corpus (133260s/6739h ft) 10/09/05
+#counts   SARE_SPEC_LEO_LINE04     198s/0h of 23026 corpus (17290s/5736h MY) 05/14/06
+#counts   SARE_SPEC_LEO_LINE04     16s/0h of 106098 corpus (72789s/33309h ML) 05/14/06
+#max      SARE_SPEC_LEO_LINE04     398s/0h of 19215 corpus (15849s/3366h ML) 11/18/05
+
+rawbody   SARE_SPEC_LEO_LINE04d    m'(?:(?:<BR>+)(?:<B>)?[a-z]{1,3}(?:<\B>)?){9}'i
+describe  SARE_SPEC_LEO_LINE04d    common Leo body text
+score     SARE_SPEC_LEO_LINE04d    1.666
+#ham      SARE_SPEC_LEO_LINE04d    confirmed 
+#hist     SARE_SPEC_LEO_LINE04d    Bob Menschel, Sept 11, 2005
+#counts   SARE_SPEC_LEO_LINE04d    0s/0h of 173230 corpus (99061s/74169h RM) 05/11/06
+#max      SARE_SPEC_LEO_LINE04d    3605s/0h of 494544 corpus (223913s/270631h RM) 10/08/05
+#counts   SARE_SPEC_LEO_LINE04d    1s/0h of 13339 corpus (7462s/5877h CT) 05/14/06
+#max      SARE_SPEC_LEO_LINE04d    19s/0h of 11588 corpus (6361s/5227h CT) 11/18/05
+#counts   SARE_SPEC_LEO_LINE04d    26s/0h of 155610 corpus (103978s/51632h DOC) 05/14/06
+#counts   SARE_SPEC_LEO_LINE04d    0s/0h of 9823 corpus (4931s/4892h FT) 11/18/05
+#max      SARE_SPEC_LEO_LINE04d    39s/0h of 139999 corpus (133260s/6739h ft) 10/09/05
+#counts   SARE_SPEC_LEO_LINE04d    134s/0h of 42678 corpus (37399s/5279h MY) 11/18/05
+#counts   SARE_SPEC_LEO_LINE04d    16s/0h of 106098 corpus (72789s/33309h ML) 05/14/06
+#max      SARE_SPEC_LEO_LINE04d    206s/0h of 19215 corpus (15849s/3366h ML) 11/18/05
+
+full      SARE_SPEC_LEO_PIE2       />(?:[a-z]\s){3,7}[a-z]<.{4,50}>(?:[a-z]\s){3,7}[a-z]<.{4,50}>(?:[a-z]\s){3,5}[a-z]/is
+describe  SARE_SPEC_LEO_PIE2       pseudo-table-format spam
+score     SARE_SPEC_LEO_PIE2       4.000
+#stype    SARE_SPEC_LEO_PIE2       spamg
+#hist     SARE_SPEC_LEO_PIE2       Fred Tarasevicius, Nov 2005
+#counts   SARE_SPEC_LEO_PIE2       0s/0h of 173230 corpus (99061s/74169h RM) 05/11/06
+#max      SARE_SPEC_LEO_PIE2       1462s/0h of 366109 corpus (108323s/257786h RM) 11/25/05
+#counts   SARE_SPEC_LEO_PIE2       0s/0h of 36686 corpus (32345s/4341h AxB2) 05/14/06
+#max      SARE_SPEC_LEO_PIE2       304s/0h of 4676 corpus (3324s/1352h AxB) 11/18/05
+#counts   SARE_SPEC_LEO_PIE2       8s/0h of 13339 corpus (7462s/5877h CT) 05/14/06
+#counts   SARE_SPEC_LEO_PIE2       36s/0h of 155610 corpus (103978s/51632h DOC) 05/14/06
+#counts   SARE_SPEC_LEO_PIE2       0s/0h of 42419 corpus (34292s/8127h FVGT) 05/15/06
+#max      SARE_SPEC_LEO_PIE2       102s/0h of 9823 corpus (4931s/4892h FT) 11/18/05
+#counts   SARE_SPEC_LEO_PIE2       12s/0h of 23026 corpus (17290s/5736h MY) 05/14/06
+#counts   SARE_SPEC_LEO_PIE2       1s/0h of 106098 corpus (72789s/33309h ML) 05/14/06
+#counts   SARE_SPEC_LEO_PIE2       425s/0h of 19215 corpus (15849s/3366h ML) 11/18/05
+
+header    __SARE_SPEC_SUBJ_LEO     Subject =~ /^(?:Re:\s?)?(?:\w{4,20}\s){2,4}\s?$/
+rawbody   __SARE_SPEC_BORDER_W0    /BORDER-(?:RIGHT|TOP)-WIDTH: 0/
+meta      SARE_SPEC_LEO_BORD       (__SARE_SPEC_SUBJ_LEO && __SARE_SPEC_BORDER_W0)
+score     SARE_SPEC_LEO_BORD       0.639
+#stype    SARE_SPEC_LEO_BORD       spamg
+#hist     SARE_SPEC_LEO_BORD       Fred Tarasevicius, Nov 2005
+#counts   SARE_SPEC_LEO_BORD       6s/1h of 173230 corpus (99061s/74169h RM) 05/11/06
+#max      SARE_SPEC_LEO_BORD       410s/6h of 366082 corpus (108301s/257781h RM) 11/25/05
+#counts   SARE_SPEC_LEO_BORD       0s/1h of 36686 corpus (32345s/4341h AxB2) 05/14/06
+#counts   SARE_SPEC_LEO_BORD       1s/0h of 11588 corpus (6361s/5227h CT) 11/18/05
+#counts   SARE_SPEC_LEO_BORD       19s/0h of 155610 corpus (103978s/51632h DOC) 05/14/06
+#counts   SARE_SPEC_LEO_BORD       0s/0h of 42419 corpus (34292s/8127h FVGT) 05/15/06
+#max      SARE_SPEC_LEO_BORD       16s/0h of 9823 corpus (4931s/4892h FT) 11/18/05
+#counts   SARE_SPEC_LEO_BORD       0s/0h of 106098 corpus (72789s/33309h ML) 05/14/06
+#max      SARE_SPEC_LEO_BORD       4s/0h of 8121 corpus (6866s/1255h ML) 11/04/05
+#counts   SARE_SPEC_LEO_BORD       19s/0h of 23026 corpus (17290s/5736h MY) 05/14/06
+
+header    SARE_SPEC_REALLY_WORKS   Subject =~ m'really works (?:wonder|excellent|good|amazing|great|fine|very)'i
+describe  SARE_SPEC_REALLY_WORKS   spamsign for specific drug spammer
+score     SARE_SPEC_REALLY_WORKS   1.666
+#hist     SARE_SPEC_REALLY_WORKS   Bob Menschel, Nov 2005
+#counts   SARE_SPEC_REALLY_WORKS   0s/0h of 173230 corpus (99061s/74169h RM) 05/11/06
+#max      SARE_SPEC_REALLY_WORKS   478s/0h of 386238 corpus (131050s/255188h RM) 11/17/05
+#counts   SARE_SPEC_REALLY_WORKS   0s/0h of 36686 corpus (32345s/4341h AxB2) 05/14/06
+#max      SARE_SPEC_REALLY_WORKS   6s/0h of 4676 corpus (3324s/1352h AxB) 11/18/05
+#counts   SARE_SPEC_REALLY_WORKS   1s/0h of 13339 corpus (7462s/5877h CT) 05/14/06
+#max      SARE_SPEC_REALLY_WORKS   2s/0h of 11588 corpus (6361s/5227h CT) 11/18/05
+#counts   SARE_SPEC_REALLY_WORKS   6s/0h of 155610 corpus (103978s/51632h DOC) 05/14/06
+#counts   SARE_SPEC_REALLY_WORKS   0s/0h of 42419 corpus (34292s/8127h FVGT) 05/15/06
+#max      SARE_SPEC_REALLY_WORKS   10s/0h of 9823 corpus (4931s/4892h FT) 11/18/05
+#counts   SARE_SPEC_REALLY_WORKS   0s/0h of 106098 corpus (72789s/33309h ML) 05/14/06
+#max      SARE_SPEC_REALLY_WORKS   48s/0h of 19215 corpus (15849s/3366h ML) 11/18/05
+#counts   SARE_SPEC_REALLY_WORKS   17s/0h of 23026 corpus (17290s/5736h MY) 05/14/06
+#max      SARE_SPEC_REALLY_WORKS   24s/0h of 42678 corpus (37399s/5279h MY) 11/18/05
+
+header    SARE_SPEC_REALLY_WORK2   Subject =~ m'works wonders?$'i 
+describe  SARE_SPEC_REALLY_WORK2   spamsign for specific drug spammer
+score     SARE_SPEC_REALLY_WORK2   0.617
+#hist     SARE_SPEC_REALLY_WORK2   Bob Menschel, Nov 2005
+#counts   SARE_SPEC_REALLY_WORK2   0s/0h of 173230 corpus (99061s/74169h RM) 05/11/06
+#max      SARE_SPEC_REALLY_WORK2   118s/1h of 386238 corpus (131050s/255188h RM) 11/17/05
+#counts   SARE_SPEC_REALLY_WORK2   0s/0h of 36686 corpus (32345s/4341h AxB2) 05/14/06
+#max      SARE_SPEC_REALLY_WORK2   5s/0h of 4676 corpus (3324s/1352h AxB) 11/18/05
+#counts   SARE_SPEC_REALLY_WORK2   0s/0h of 13339 corpus (7462s/5877h CT) 05/14/06
+#max      SARE_SPEC_REALLY_WORK2   1s/0h of 11588 corpus (6361s/5227h CT) 11/18/05
+#counts   SARE_SPEC_REALLY_WORK2   1s/0h of 90468 corpus (40568s/49900h DOC) 11/18/05
+#counts   SARE_SPEC_REALLY_WORK2   0s/0h of 42419 corpus (34292s/8127h FVGT) 05/15/06
+#max      SARE_SPEC_REALLY_WORK2   6s/0h of 9823 corpus (4931s/4892h FT) 11/18/05
+#counts   SARE_SPEC_REALLY_WORK2   0s/0h of 106098 corpus (72789s/33309h ML) 05/14/06
+#max      SARE_SPEC_REALLY_WORK2   13s/0h of 19215 corpus (15849s/3366h ML) 11/18/05
+#counts   SARE_SPEC_REALLY_WORK2   5s/0h of 23026 corpus (17290s/5736h MY) 05/14/06
+#max      SARE_SPEC_REALLY_WORK2   13s/0h of 42678 corpus (37399s/5279h MY) 11/18/05
+
+header    SARE_SPEC_REALLY_WORK3   Subject =~ m'really works\!$'i 
+describe  SARE_SPEC_REALLY_WORK3   spamsign for specific drug spammer
+score     SARE_SPEC_REALLY_WORK3   1.017
+#hist     SARE_SPEC_REALLY_WORK3   Bob Menschel, Nov 2005
+#counts   SARE_SPEC_REALLY_WORK3   0s/0h of 173230 corpus (99061s/74169h RM) 05/11/06
+#max      SARE_SPEC_REALLY_WORK3   54s/0h of 386238 corpus (131050s/255188h RM) 11/17/05
+#counts   SARE_SPEC_REALLY_WORK3   0s/0h of 11588 corpus (6361s/5227h CT) 11/18/05
+#counts   SARE_SPEC_REALLY_WORK3   23s/0h of 155610 corpus (103978s/51632h DOC) 05/14/06
+#counts   SARE_SPEC_REALLY_WORK3   6s/0h of 106098 corpus (72789s/33309h ML) 05/14/06
+
+header    SARE_SPEC_REALLY_WORK4   Subject =~ m'(?:\b(?:you|u) (?:could|might|do|maybe)? ?need it|(?:useful|interesting) information|don\'t (?:miss (?:the|a good) chance|miss it)|good proposal|just (?:do|think about) it|very good news|to let you know|(?:upi|u) can (?:do|ride) it|just have a look|(?:new|good) offr)\W{0,30}$'i
+describe  SARE_SPEC_REALLY_WORK4   spamsign for specific drug spammer
+score     SARE_SPEC_REALLY_WORK4   0.665
+#hist     SARE_SPEC_REALLY_WORK4   Bob Menschel, Nov 2005
+#counts   SARE_SPEC_REALLY_WORK4   14s/10h of 173230 corpus (99061s/74169h RM) 05/11/06
+#max      SARE_SPEC_REALLY_WORK4   2566s/11h of 366082 corpus (108301s/257781h RM) 11/25/05
+#counts   SARE_SPEC_REALLY_WORK4   12s/0h of 36686 corpus (32345s/4341h AxB2) 05/14/06
+#max      SARE_SPEC_REALLY_WORK4   130s/0h of 4676 corpus (3324s/1352h AxB) 11/18/05
+#counts   SARE_SPEC_REALLY_WORK4   11s/0h of 13339 corpus (7462s/5877h CT) 05/14/06
+#counts   SARE_SPEC_REALLY_WORK4   101s/0h of 155610 corpus (103978s/51632h DOC) 05/14/06
+#counts   SARE_SPEC_REALLY_WORK4   34s/0h of 42419 corpus (34292s/8127h FVGT) 05/15/06
+#counts   SARE_SPEC_REALLY_WORK4   29s/0h of 106098 corpus (72789s/33309h ML) 05/14/06
+#max      SARE_SPEC_REALLY_WORK4   254s/0h of 19215 corpus (15849s/3366h ML) 11/18/05
+#counts   SARE_SPEC_REALLY_WORK4   16s/0h of 23026 corpus (17290s/5736h MY) 05/14/06
+#max      SARE_SPEC_REALLY_WORK4   31s/0h of 42678 corpus (37399s/5279h MY) 11/18/05
+
+########  ######################   ##################################################
+#         Spammers identified by their web site or "service"
+########  ######################   ##################################################
+
+uri       __SARE_SPEC_XXGEOCITIE   m'\b(?:(?!www)[a-z]{2,3})\.(?:geocities|tripod)\.com/\w{1,30}/\?'i
+uri       __SARE_SPEC_XX2GEOCIT    /\b[a-z]{2}\.geocities\.com/i
+
+meta      SARE_SPEC_XXGEOCITIES2   !__SARE_SPEC_XXGEOCITIE &&  __SARE_SPEC_XX2GEOCIT
+describe  SARE_SPEC_XXGEOCITIES2   spamsign pointing to free webhost spam site
+score     SARE_SPEC_XXGEOCITIES2   1.666
+#hist     SARE_SPEC_XXGEOCITIES2   Fred Tarasevicius, Nov 2005
+#counts   SARE_SPEC_XXGEOCITIES2   497s/18h of 173230 corpus (99061s/74169h RM) 05/11/06
+#max      SARE_SPEC_XXGEOCITIES2   1237s/2h of 369947 corpus (112058s/257889h RM) 11/24/05
+#counts   SARE_SPEC_XXGEOCITIES2   66s/2h of 9999 corpus (5651s/4348h AxB) 05/14/06
+#counts   SARE_SPEC_XXGEOCITIES2   238s/0h of 13339 corpus (7462s/5877h CT) 05/14/06
+#counts   SARE_SPEC_XXGEOCITIES2   698s/0h of 155610 corpus (103978s/51632h DOC) 05/14/06
+#counts   SARE_SPEC_XXGEOCITIES2   1251s/0h of 42419 corpus (34292s/8127h FVGT) 05/15/06
+#counts   SARE_SPEC_XXGEOCITIES2   2881s/0h of 106098 corpus (72789s/33309h ML) 05/14/06
+#counts   SARE_SPEC_XXGEOCITIES2   62s/0h of 23026 corpus (17290s/5736h MY) 05/14/06
+
+meta      SARE_SPEC_XXGEOCITIES3   __SARE_SPEC_XXGEOCITIE  &&  __SARE_SPEC_XX2GEOCIT
+describe  SARE_SPEC_XXGEOCITIES3   spamsign pointing to free webhost spam site
+score     SARE_SPEC_XXGEOCITIES3   1.666
+#hist     SARE_SPEC_XXGEOCITIES3   Fred Tarasevicius, Nov 2005
+#ham      SARE_SPEC_XXGEOCITIES3   confirmed (1) 
+#counts   SARE_SPEC_XXGEOCITIES3   0s/0h of 173230 corpus (99061s/74169h RM) 05/11/06
+#max      SARE_SPEC_XXGEOCITIES3   499s/0h of 366082 corpus (108301s/257781h RM) 11/25/05
+#counts   SARE_SPEC_XXGEOCITIES3   8s/0h of 9999 corpus (5651s/4348h AxB) 05/14/06
+#counts   SARE_SPEC_XXGEOCITIES3   27s/0h of 13339 corpus (7462s/5877h CT) 05/14/06
+#counts   SARE_SPEC_XXGEOCITIES3   23s/0h of 155610 corpus (103978s/51632h DOC) 05/14/06
+#counts   SARE_SPEC_XXGEOCITIES3   168s/0h of 42419 corpus (34292s/8127h FVGT) 05/15/06
+#counts   SARE_SPEC_XXGEOCITIES3   75s/0h of 106098 corpus (72789s/33309h ML) 05/14/06
+#counts   SARE_SPEC_XXGEOCITIES3   916s/0h of 23026 corpus (17290s/5736h MY) 05/14/06
+
+uri       __SARE_SPEC_XXGEOCIT5    m'\bgeocities\.yahoo\.com\b'i
+meta      SARE_SPEC_XXGEOCITIE5    __SARE_SPEC_XXGEOCIT5
+describe  SARE_SPEC_XXGEOCITIE5    spamsign pointing to free webhost spam site
+score     SARE_SPEC_XXGEOCITIE5    0.667
+#hist     SARE_SPEC_XXGEOCITIE5    Bob Menschel, Dec 2005
+#counts   SARE_SPEC_XXGEOCITIE5    31s/12h of 173230 corpus (99061s/74169h RM) 05/11/06
+#counts   SARE_SPEC_XXGEOCITIE5    6s/0h of 9999 corpus (5651s/4348h AxB) 05/14/06
+#counts   SARE_SPEC_XXGEOCITIE5    11s/1h of 13339 corpus (7462s/5877h CT) 05/14/06
+#counts   SARE_SPEC_XXGEOCITIE5    14s/0h of 155610 corpus (103978s/51632h DOC) 05/14/06
+#counts   SARE_SPEC_XXGEOCITIE5    16s/1h of 42419 corpus (34292s/8127h FVGT) 05/15/06
+#counts   SARE_SPEC_XXGEOCITIE5    5s/0h of 23026 corpus (17290s/5736h MY) 05/14/06
+#counts   SARE_SPEC_XXGEOCITIE5    197s/0h of 106098 corpus (72789s/33309h ML) 05/14/06
+
+########  ######################   ##################################################
+#         Other specific spammers
+########  ######################   ##################################################
+
+# EOF
+
+

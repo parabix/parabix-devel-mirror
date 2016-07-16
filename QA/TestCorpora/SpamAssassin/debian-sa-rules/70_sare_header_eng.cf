@@ -1,0 +1,122 @@
+# SARE Header Abuse Ruleset for SpamAssassin -- English
+# Version:  01.03.16 / 01.03.17
+# Created:  2004-04-25
+# Modified: 2005-10-28 / 2006-05-??
+# Usage instructions and documentation in 70_sare_header0.cf 
+
+# Full Revision History / Change Log in 70_sare_header.log
+#@@# 01.03.17  May ?? 2006
+#@@#           Minor score updates based on additional mass-check
+#@@#           Modified "rule has been moved" meta flags 
+
+#####################################################################################
+#         SARE Content-Type and Boundary rules
+########  ######################   ##################################################
+
+header    __SARE_CHARSET_W1251     Content-Type =~ /charset="Windows-1251"/i
+meta      SARE_CHARSET_W1251       __SARE_CHARSET_W1251 && !__SARE_FROM_CHAR_W1251
+describe  SARE_CHARSET_W1251       Non-English character set
+score     SARE_CHARSET_W1251       1.656
+#hist     SARE_CHARSET_W1251       Created by Bob Menschel May 31 2004
+#counts   SARE_CHARSET_W1251       2574s/3h of 173032 corpus (99056s/73976h RM) 05/11/06
+#counts   SARE_CHARSET_W1251       364s/0h of 55979 corpus (51646s/4333h AxB2) 05/14/06
+#counts   SARE_CHARSET_W1251       27s/1h of 13295 corpus (7421s/5874h CT) 05/14/06
+#counts   SARE_CHARSET_W1251       770s/16h of 155345 corpus (103798s/51547h DOC) 05/15/06
+#counts   SARE_CHARSET_W1251       196s/0h of 42246 corpus (34129s/8117h FVGT) 05/15/06
+#counts   SARE_CHARSET_W1251       185s/2h of 54176 corpus (16997s/37179h JH-3.01) 02/01/05
+#counts   SARE_CHARSET_W1251       438s/0h of 106284 corpus (73045s/33239h ML) 05/14/06
+#counts   SARE_CHARSET_W1251       0s/0h of 47809 corpus (43224s/4585h MY) 07/27/05
+#max      SARE_CHARSET_W1251       174s/0h of 17050 corpus (14617s/2433h MY) 08/08/04
+
+#####################################################################################
+#         SARE From Rules 
+########  ######################   ##################################################
+
+header    __SARE_FROM_CHAR_W1251   From:raw =~ /\=\?Windows-1251\?/i
+meta      SARE_FROM_CHAR_W1251     __SARE_FROM_CHAR_W1251 
+describe  SARE_FROM_CHAR_W1251     Displays in unexpected charset
+score     SARE_FROM_CHAR_W1251     1.175
+#ham      SARE_FROM_CHAR_W1251     Found in some Russian ham 
+#hist     SARE_FROM_CHAR_W1251     Created by Bob Menschel May 17 2004
+#counts   SARE_FROM_CHAR_W1251     43s/8h of 173032 corpus (99056s/73976h RM) 05/11/06
+#max      SARE_FROM_CHAR_W1251     613s/8h of 689155 corpus (348140s/341015h RM) 09/18/05
+#counts   SARE_FROM_CHAR_W1251     26s/0h of 9983 corpus (5649s/4334h AxB) 05/14/06
+#counts   SARE_FROM_CHAR_W1251     144s/0h of 155345 corpus (103798s/51547h DOC) 05/15/06
+#counts   SARE_FROM_CHAR_W1251     640s/0h of 54176 corpus (16997s/37179h JH-3.01) 02/01/05
+#counts   SARE_FROM_CHAR_W1251     147s/0h of 106284 corpus (73045s/33239h ML) 05/14/06
+#counts   SARE_FROM_CHAR_W1251     0s/0h of 17050 corpus (14617s/2433h MY) 08/08/04
+#counts   SARE_FROM_CHAR_W1251     0s/0h of 10853 corpus (6391s/4462h CT) 05/16/05
+#counts   SARE_FROM_CHAR_W1251     3s/0h of 42246 corpus (34129s/8117h FVGT) 05/15/06
+
+header    SARE_FROM_CODE_KS5601    From:raw =~ /\=\?ks_c_5601\-1987\?/i
+describe  SARE_FROM_CODE_KS5601    From header specifies display in code
+score     SARE_FROM_CODE_KS5601    0.306  
+#ham      SARE_FROM_CODE_KS5601    confirmed
+#counts   SARE_FROM_CODE_KS5601    1s/0h of 173032 corpus (99056s/73976h RM) 05/11/06
+#max      SARE_FROM_CODE_KS5601    55s/0h of 259338 corpus (110116s/149222h RM) 05/16/05
+#counts   SARE_FROM_CODE_KS5601    1s/0h of 9983 corpus (5649s/4334h AxB) 05/14/06
+#counts   SARE_FROM_CODE_KS5601    5s/1h of 155345 corpus (103798s/51547h DOC) 05/15/06
+#counts   SARE_FROM_CODE_KS5601    3s/0h of 106284 corpus (73045s/33239h ML) 05/14/06
+#counts   SARE_FROM_CODE_KS5601    1s/0h of 22938 corpus (17229s/5709h MY) 05/14/06
+#counts   SARE_FROM_CODE_KS5601    0s/0h of 54176 corpus (16997s/37179h JH-3.01) 02/01/05
+#counts   SARE_FROM_CODE_KS5601    0s/0h of 13295 corpus (7421s/5874h CT) 05/14/06
+#max      SARE_FROM_CODE_KS5601    1s/0h of 10590 corpus (5819s/4771h CT) 07/26/05
+
+header    SARE_FROM_CONS6S         From =~ /\b[bcghjklmnpqrtvwxz]{6,20}\b/
+describe  SARE_FROM_CONS6S         From address has too many seq consonants
+score     SARE_FROM_CONS6S         0.616
+#hist     SARE_FROM_CONS6S         Originally submitted by Bob Menschel
+#ham      SARE_FROM_CONS6S         mrktmgr, bpmllp.com
+#counts   SARE_FROM_CONS6S         351s/152h of 173032 corpus (99056s/73976h RM) 05/11/06
+#max      SARE_FROM_CONS6S         1430s/208h of 689155 corpus (348140s/341015h RM) 09/18/05
+#counts   SARE_FROM_CONS6S         373s/3h of 55979 corpus (51646s/4333h AxB2) 05/14/06
+#counts   SARE_FROM_CONS6S         291s/0h of 155345 corpus (103798s/51547h DOC) 05/15/06
+#counts   SARE_FROM_CONS6S         121s/2h of 54176 corpus (16997s/37179h JH-3.01) 02/01/05
+#counts   SARE_FROM_CONS6S         306s/1h of 106284 corpus (73045s/33239h ML) 05/14/06
+#counts   SARE_FROM_CONS6S         32s/2h of 22938 corpus (17229s/5709h MY) 05/14/06
+#max      SARE_FROM_CONS6S         107s/2h of 47809 corpus (43224s/4585h MY) 07/27/05
+#counts   SARE_FROM_CONS6S         40s/0h of 13295 corpus (7421s/5874h CT) 05/14/06
+#max      SARE_FROM_CONS6S         49s/0h of 10853 corpus (6391s/4462h CT) 05/16/05
+#counts   SARE_FROM_CONS6S         280s/3h of 42246 corpus (34129s/8117h FVGT) 05/15/06
+
+header    SARE_FROM_CONS9          From =~ /\b[bcghjklmnpqrstvwxz]{9,20}\b/
+describe  SARE_FROM_CONS9          From address has way too many seq consonants
+score     SARE_FROM_CONS9          1.000
+#stype    SARE_FROM_CONS9          max:1
+#ham      SARE_FRMO_CONS9          confirmed 
+#hist     SARE_FROM_CONS9          Originally submitted by Bob Menschel
+#addsto   SARE_FROM_CONS9          SARE_FROM_CONS6S
+#counts   SARE_FROM_CONS9          219s/0h of 173032 corpus (99056s/73976h RM) 05/11/06
+#counts   SARE_FROM_CONS9          20s/0h of 9983 corpus (5649s/4334h AxB) 05/14/06
+#counts   SARE_FROM_CONS9          117s/0h of 155345 corpus (103798s/51547h DOC) 05/15/06
+#counts   SARE_FROM_CONS9          46s/0h of 54176 corpus (16997s/37179h JH-3.01) 02/01/05
+#counts   SARE_FROM_CONS9          155s/0h of 106284 corpus (73045s/33239h ML) 05/14/06
+#counts   SARE_FROM_CONS9          3s/0h of 22938 corpus (17229s/5709h MY) 05/14/06
+#max      SARE_FROM_CONS9          69s/0h of 45478 corpus (41529s/3949h MY) 05/16/05
+#counts   SARE_FROM_CONS9          9s/0h of 13295 corpus (7421s/5874h CT) 05/14/06
+#max      SARE_FROM_CONS9          22s/0h of 10853 corpus (6391s/4462h CT) 05/16/05
+#counts   SARE_FROM_CONS9          195s/0h of 42246 corpus (34129s/8117h FVGT) 05/15/06
+
+#####################################################################################
+#         SARE TO & CC Rules  
+########  ######################   ##################################################
+
+header    SARE_TOCC_CONS6s         ToCc =~ /\b[bcghjklmnpqrtvwxz]{6,}\b/
+describe  SARE_TOCC_CONS6s         Excessive consecutive consonants in To/Cc
+score     SARE_TOCC_CONS6s         0.141
+#addsto   SARE_TOCC_CONS6s         SARE_TOCC_CONS6 
+#ham      SARE_TOCC_CONS6s         "xcvbxcvb"
+#counts   SARE_TOCC_CONS6s         14s/8h of 173032 corpus (99056s/73976h RM) 05/11/06
+#max      SARE_TOCC_CONS6s         230s/100h of 689155 corpus (348140s/341015h RM) 09/18/05
+#counts   SARE_TOCC_CONS6s         42s/9h of 55979 corpus (51646s/4333h AxB2) 05/14/06
+#counts   SARE_TOCC_CONS6s         15s/0h of 155345 corpus (103798s/51547h DOC) 05/15/06
+#counts   SARE_TOCC_CONS6s         5s/1h of 54176 corpus (16997s/37179h JH-3.01) 02/01/05
+#counts   SARE_TOCC_CONS6s         2s/0h of 106284 corpus (73045s/33239h ML) 05/14/06
+#counts   SARE_TOCC_CONS6s         0s/1h of 22938 corpus (17229s/5709h MY) 05/14/06
+#max      SARE_TOCC_CONS6s         6s/1h of 20489 corpus (17189s/3300h MY) 01/30/05
+#counts   SARE_TOCC_CONS6s         1s/2h of 10590 corpus (5819s/4771h CT) 07/26/05
+#max      SARE_TOCC_CONS6s         3s/2h of 10853 corpus (6391s/4462h CT) 05/16/05
+#counts   SARE_TOCC_CONS6s         5s/11h of 42246 corpus (34129s/8117h FVGT) 05/15/06
+
+# EOF
+

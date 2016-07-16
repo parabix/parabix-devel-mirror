@@ -1,0 +1,1199 @@
+# SARE Header Abuse Ruleset for SpamAssassin -- file 3
+# Version:  01.03.21
+# Created:  2004-04-25
+# Modified: 2006-05-21
+# Usage instructions and documentation in 70_sare_header0.cf 
+
+# Full Revision History / Change Log in 70_sare_header.log
+#@@# 01.03.20  May 20 2005 
+#@@#           Minor score updates based on additional mass-check
+#@@#           Archived from file 3:     SARE_MSGID_LONG40
+#@@# 01.03.21  May 21 2005 
+#@@#           Minor repairs to "downgraded rule" metas. 
+
+# License: Artistic - see http://www.rulesemporium.com/license.txt 
+# Current Maintainer: Bob Menschel - RMSA@Menschel.net
+# Current Home: http://www.rulesemporium.com/rules/70_sare_header3.cf 
+
+########  ######################   ##################################################
+#    Meta rules used to prevent --lint errors after moving/changing rules
+########  ######################   ##################################################
+
+meta      __SARE_HEAD_FALSE        __FROM_AOL_COM && !__FROM_AOL_COM
+meta      SARE_MSGID_LONG40        __SARE_HEAD_FALSE
+
+########  ######################   ##################################################
+#    Component rules used within meta rules 
+########  ######################   ##################################################
+
+header    __SARE_HEAD_8BIT_SUBJ    Subject =~ /[\x80-\xff]{3,}/
+
+#####################################################################################
+#         SARE Header-Exists rules
+########  ######################   ##################################################
+
+header    SARE_HEAD_HDR_XKRNL      exists:X-Kernel
+describe  SARE_HEAD_HDR_XKRNL      fingerprint
+score     SARE_HEAD_HDR_XKRNL      1.405
+#hist     SARE_HEAD_HDR_XKRNL      Alex Broens, June 30, 2005
+#counts   SARE_HEAD_HDR_XKRNL      33s/0h of 173032 corpus (99056s/73976h RM) 05/11/06
+#max      SARE_HEAD_HDR_XKRNL      63s/19h of 689155 corpus (348140s/341015h RM) 09/18/05
+#counts   SARE_HEAD_HDR_XKRNL      7s/0h of 55978 corpus (51650s/4328h AxB2) 05/14/06
+#counts   SARE_HEAD_HDR_XKRNL      10s/0h of 13285 corpus (7414s/5871h CT) 05/14/06
+#max      SARE_HEAD_HDR_XKRNL      43s/0h of 10629 corpus (5847s/4782h CT) 09/18/05
+#counts   SARE_HEAD_HDR_XKRNL      100s/0h of 155354 corpus (103809s/51545h DOC) 05/15/06
+#counts   SARE_HEAD_HDR_XKRNL      54s/0h of 42268 corpus (34150s/8118h FVGT) 05/15/06
+#counts   SARE_HEAD_HDR_XKRNL      158s/0h of 106014 corpus (72769s/33245h ML) 05/14/06
+#counts   SARE_HEAD_HDR_XKRNL      200s/0h of 12846 corpus (4657s/8189h MM) 06/30/05
+
+header    SARE_HEAD_HDR_XSEQ       exists:X-Sequence
+describe  SARE_HEAD_HDR_XSEQ       Rarely abused email header 
+score     SARE_HEAD_HDR_XSEQ       -0.699
+#stype    SARE_HEAD_HDR_XSEQ       ham
+tflags    SARE_HEAD_HDR_XSEQ       nice
+#hist     SARE_HEAD_HDR_XSEQ       Loren Wilton, July 29 2005
+#counts   SARE_HEAD_HDR_XSEQ       2s/17h of 173032 corpus (99056s/73976h RM) 05/11/06
+#max      SARE_HEAD_HDR_XSEQ       42s/1113h of 689155 corpus (348140s/341015h RM) 09/18/05
+#counts   SARE_HEAD_HDR_XSEQ       1s/2h of 55978 corpus (51650s/4328h AxB2) 05/14/06
+#counts   SARE_HEAD_HDR_XSEQ       10s/0h of 13285 corpus (7414s/5871h CT) 05/14/06
+#counts   SARE_HEAD_HDR_XSEQ       8s/39h of 155354 corpus (103809s/51545h DOC) 05/15/06
+#counts   SARE_HEAD_HDR_XSEQ       10s/0h of 106014 corpus (72769s/33245h ML) 05/14/06
+
+header    SARE_HEAD_HDR_XCCDIAG    exists:X-CC-Diagnostic
+describe  SARE_HEAD_HDR_XCCDIAG    Message headers used which identify spam
+score     SARE_HEAD_HDR_XCCDIAG    0.100
+#ham      SARE_HEAD_HDR_XCCDIAG    confirmed (1)
+#counts   SARE_HEAD_HDR_XCCDIAG    0s/0h of 173032 corpus (99056s/73976h RM) 05/11/06
+#max      SARE_HEAD_HDR_XCCDIAG    4s/0h of 268479 corpus (127479s/141000h RM) 06/17/05
+#counts   SARE_HEAD_HDR_XCCDIAG    0s/0h of 10853 corpus (6391s/4462h CT) 05/16/05
+#counts   SARE_HEAD_HDR_XCCDIAG    1s/0h of 155354 corpus (103809s/51545h DOC) 05/15/06
+#counts   SARE_HEAD_HDR_XCCDIAG    1s/0h of 42268 corpus (34150s/8118h FVGT) 05/15/06
+#counts   SARE_HEAD_HDR_XCCDIAG    0s/0h of 54176 corpus (16997s/37179h JH-3.01) 02/01/05
+#counts   SARE_HEAD_HDR_XCCDIAG    1s/0h of 106014 corpus (72769s/33245h ML) 05/14/06
+#counts   SARE_HEAD_HDR_XCCDIAG    0s/0h of 18196 corpus (15673s/2523h MY) 08/16/04
+
+header    __SARE_HEAD_HDR_XCNTRY   exists:X-country
+header    __SARE_HEAD_HDR_XLANG    exists:X-language
+meta      SARE_HEAD_HDR_XCNTRY     __SARE_HEAD_HDR_XCNTRY || __SARE_HEAD_HDR_XLANG
+describe  SARE_HEAD_HDR_XCNTRY     Message headers used which identify spam
+score     SARE_HEAD_HDR_XCNTRY     0.250
+#ham      SARE_HEAD_HDR_XCNTRY     confirmed (1, valid paypal email to user)
+#counts   SARE_HEAD_HDR_XCNTRY     2s/4h of 173032 corpus (99056s/73976h RM) 05/11/06
+#max      SARE_HEAD_HDR_XCNTRY     153s/0h of 69632 corpus (42598s/27034h RM) 09/26/04
+#counts   SARE_HEAD_HDR_XCNTRY     1s/0h of 106014 corpus (72769s/33245h ML) 05/14/06
+#counts   SARE_HEAD_HDR_XCNTRY     0s/0h of 20489 corpus (17189s/3300h MY) 01/30/05
+#max      SARE_HEAD_HDR_XCNTRY     1s/0h of 18196 corpus (15673s/2523h MY) 08/16/04
+#counts   SARE_HEAD_HDR_XCNTRY     1s/0h of 9984 corpus (5649s/4335h AxB) 05/14/06
+#counts   SARE_HEAD_HDR_XCNTRY     0s/0h of 13285 corpus (7414s/5871h CT) 05/14/06
+#max      SARE_HEAD_HDR_XCNTRY     12s/0h of 11052 corpus (6614s/4438h CT) 03/10/05
+#counts   SARE_HEAD_HDR_XCNTRY     1s/2h of 155354 corpus (103809s/51545h DOC) 05/15/06
+#counts   SARE_HEAD_HDR_XCNTRY     3s/2h of 42268 corpus (34150s/8118h FVGT) 05/15/06
+#counts   SARE_HEAD_HDR_XCNTRY     53s/0h of 54176 corpus (16997s/37179h JH-3.01) 02/01/05
+
+header    SARE_HEAD_HDR_XKASPAV    exists:X-Kaspersky-Antivirus
+describe  SARE_HEAD_HDR_XKASPAV    Message headers used which identify spam
+score     SARE_HEAD_HDR_XKASPAV    1.136
+#ham      SARE_HEAD_HDR_XKASPAV    Can be found in ham from Europe/Asia, esp. Russia
+#note     SARE_HEAD_HDR_XKASPAV    Keep in file 3 because "
+#counts   SARE_HEAD_HDR_XKASPAV    141s/2h of 173032 corpus (99056s/73976h RM) 05/11/06
+#max      SARE_HEAD_HDR_XKASPAV    200s/1h of 689155 corpus (348140s/341015h RM) 09/18/05
+#counts   SARE_HEAD_HDR_XKASPAV    284s/0h of 106014 corpus (72769s/33245h ML) 05/14/06
+#counts   SARE_HEAD_HDR_XKASPAV    0s/0h of 20489 corpus (17189s/3300h MY) 01/30/05
+#max      SARE_HEAD_HDR_XKASPAV    37s/0h of 18196 corpus (15673s/2523h MY) 08/16/04
+#counts   SARE_HEAD_HDR_XKASPAV    11s/0h of 9984 corpus (5649s/4335h AxB) 05/14/06
+#counts   SARE_HEAD_HDR_XKASPAV    29s/0h of 13285 corpus (7414s/5871h CT) 05/14/06
+#counts   SARE_HEAD_HDR_XKASPAV    517s/0h of 155354 corpus (103809s/51545h DOC) 05/15/06
+#counts   SARE_HEAD_HDR_XKASPAV    31s/0h of 42268 corpus (34150s/8118h FVGT) 05/15/06
+#counts   SARE_HEAD_HDR_XKASPAV    5s/0h of 54176 corpus (16997s/37179h JH-3.01) 02/01/05
+
+header    SARE_HEAD_HDR_XMAILTH    exists:X-Mailer-Thread
+describe  SARE_HEAD_HDR_XMAILTH    Message headers used which identify spam
+score     SARE_HEAD_HDR_XMAILTH    0.338 
+#ham      SARE_HEAD_HDR_XMAILTH    verified (1), likely (7)
+#counts   SARE_HEAD_HDR_XMAILTH    2s/5h of 173032 corpus (99056s/73976h RM) 05/11/06
+#max      SARE_HEAD_HDR_XMAILTH    67s/10h of 689155 corpus (348140s/341015h RM) 09/18/05
+#counts   SARE_HEAD_HDR_XMAILTH    0s/0h of 18196 corpus (15673s/2523h MY) 08/16/04
+#counts   SARE_HEAD_HDR_XMAILTH    0s/0h of 54176 corpus (16997s/37179h JH-3.01) 02/01/05
+#counts   SARE_HEAD_HDR_XMAILTH    0s/0h of 10853 corpus (6391s/4462h CT) 05/16/05
+#counts   SARE_HEAD_HDR_XMAILTH    84s/0h of 155354 corpus (103809s/51545h DOC) 05/15/06
+#counts   SARE_HEAD_HDR_XMAILTH    0s/0h of 2500 corpus (531s/1969h ft) 05/17/05
+
+header    SARE_HEAD_HDR_XMSGID     exists:X-MSGID
+describe  SARE_HEAD_HDR_XMSGID     Message headers used which identify spam
+score     SARE_HEAD_HDR_XMSGID     0.696
+#ham      SARE_HEAD_HDR_XMSGID     bankofamerica.com, also X-Mailer: Supernova
+#counts   SARE_HEAD_HDR_XMSGID     36s/2h of 173032 corpus (99056s/73976h RM) 05/11/06
+#max      SARE_HEAD_HDR_XMSGID     126s/4h of 689155 corpus (348140s/341015h RM) 09/18/05
+#counts   SARE_HEAD_HDR_XMSGID     1s/0h of 106014 corpus (72769s/33245h ML) 05/14/06
+#counts   SARE_HEAD_HDR_XMSGID     0s/0h of 18196 corpus (15673s/2523h MY) 08/16/04
+#counts   SARE_HEAD_HDR_XMSGID     0s/0h of 54176 corpus (16997s/37179h JH-3.01) 02/01/05
+#counts   SARE_HEAD_HDR_XMSGID     132s/4h of 55978 corpus (51650s/4328h AxB2) 05/14/06
+#counts   SARE_HEAD_HDR_XMSGID     0s/0h of 10853 corpus (6391s/4462h CT) 05/16/05
+#counts   SARE_HEAD_HDR_XMSGID     4s/0h of 155354 corpus (103809s/51545h DOC) 05/15/06
+#counts   SARE_HEAD_HDR_XMSGID     0s/0h of 2500 corpus (531s/1969h ft) 05/17/05
+
+header    SARE_HEAD_HDR_XRETURN    exists:X-Return
+describe  SARE_HEAD_HDR_XRETURN    Message headers used which identify spam
+score     SARE_HEAD_HDR_XRETURN    0.119
+#ham      SARE_HEAD_HDR_XRETURN    confirmed (1), Freelance Work Exchange
+#counts   SARE_HEAD_HDR_XRETURN    9s/3h of 173032 corpus (99056s/73976h RM) 05/11/06
+#max      SARE_HEAD_HDR_XRETURN    64s/29h of 689155 corpus (348140s/341015h RM) 09/18/05
+#counts   SARE_HEAD_HDR_XRETURN    0s/0h of 18196 corpus (15673s/2523h MY) 08/16/04
+#counts   SARE_HEAD_HDR_XRETURN    0s/0h of 54176 corpus (16997s/37179h JH-3.01) 02/01/05
+#counts   SARE_HEAD_HDR_XRETURN    17s/1h of 55978 corpus (51650s/4328h AxB2) 05/14/06
+#counts   SARE_HEAD_HDR_XRETURN    0s/0h of 10853 corpus (6391s/4462h CT) 05/16/05
+#counts   SARE_HEAD_HDR_XRETURN    2s/0h of 155354 corpus (103809s/51545h DOC) 05/15/06
+#counts   SARE_HEAD_HDR_XRETURN    2s/0h of 6924 corpus (1403s/5521h ft) 07/27/05
+
+header    SARE_HEAD_HDR_XSMTPSV    exists:X-SMTP-Server
+describe  SARE_HEAD_HDR_XSMTPSV    Message headers used which identify spam
+score     SARE_HEAD_HDR_XSMTPSV    0.338 
+#ham      SARE_HEAD_HDR_XSMTPSV    verified (1) 
+#counts   SARE_HEAD_HDR_XSMTPSV    2s/5h of 173032 corpus (99056s/73976h RM) 05/11/06
+#max      SARE_HEAD_HDR_XSMTPSV    67s/10h of 689155 corpus (348140s/341015h RM) 09/18/05
+#counts   SARE_HEAD_HDR_XSMTPSV    0s/0h of 18196 corpus (15673s/2523h MY) 08/16/04
+#counts   SARE_HEAD_HDR_XSMTPSV    0s/0h of 54176 corpus (16997s/37179h JH-3.01) 02/01/05
+#counts   SARE_HEAD_HDR_XSMTPSV    0s/0h of 10853 corpus (6391s/4462h CT) 05/16/05
+#counts   SARE_HEAD_HDR_XSMTPSV    84s/0h of 155354 corpus (103809s/51545h DOC) 05/15/06
+#counts   SARE_HEAD_HDR_XSMTPSV    0s/0h of 2500 corpus (531s/1969h ft) 05/17/05
+
+header    SARE_HEAD_HDR_XSYSTEM    exists:X-System
+describe  SARE_HEAD_HDR_XSYSTEM    Message headers used which identify spam
+score     SARE_HEAD_HDR_XSYSTEM    0.625
+#ham      SARE_HEAD_HDR_XSYSTEM    X-System: Linux hell 2.6.8 i686
+#counts   SARE_HEAD_HDR_XSYSTEM    0s/0h of 173032 corpus (99056s/73976h RM) 05/11/06
+#max      SARE_HEAD_HDR_XSYSTEM    25s/1h of 689155 corpus (348140s/341015h RM) 09/18/05
+#counts   SARE_HEAD_HDR_XSYSTEM    18s/0h of 55978 corpus (51650s/4328h AxB2) 05/14/06
+#counts   SARE_HEAD_HDR_XSYSTEM    0s/0h of 10853 corpus (6391s/4462h CT) 05/16/05
+#counts   SARE_HEAD_HDR_XSYSTEM    1s/1h of 42268 corpus (34150s/8118h FVGT) 05/15/06
+#counts   SARE_HEAD_HDR_XSYSTEM    0s/0h of 54176 corpus (16997s/37179h JH-3.01) 02/01/05
+#counts   SARE_HEAD_HDR_XSYSTEM    0s/2h of 106014 corpus (72769s/33245h ML) 05/14/06
+#counts   SARE_HEAD_HDR_XSYSTEM    0s/0h of 18196 corpus (15673s/2523h MY) 08/16/04
+
+header    SARE_HEAD_HDR_XUMAIL     exists:X-UMail
+describe  SARE_HEAD_HDR_XUMAIL     Message headers used which identify spam
+score     SARE_HEAD_HDR_XUMAIL     0.338
+#ham      SARE_HEAD_HDR_XUMAIL     verified (1) 
+#counts   SARE_HEAD_HDR_XUMAIL     0s/5h of 173032 corpus (99056s/73976h RM) 05/11/06
+#max      SARE_HEAD_HDR_XUMAIL     67s/10h of 689155 corpus (348140s/341015h RM) 09/18/05
+#counts   SARE_HEAD_HDR_XUMAIL     0s/0h of 18196 corpus (15673s/2523h MY) 08/16/04
+#counts   SARE_HEAD_HDR_XUMAIL     0s/0h of 54176 corpus (16997s/37179h JH-3.01) 02/01/05
+#counts   SARE_HEAD_HDR_XUMAIL     0s/0h of 10853 corpus (6391s/4462h CT) 05/16/05
+#counts   SARE_HEAD_HDR_XUMAIL     68s/0h of 155354 corpus (103809s/51545h DOC) 05/15/06
+#counts   SARE_HEAD_HDR_XUMAIL     0s/0h of 2500 corpus (531s/1969h ft) 05/17/05
+
+header    SARE_HEAD_HDR_XUNOLOOK   exists:X-unolookiehere
+describe  SARE_HEAD_HDR_XUNOLOOK   Unique X-header found in email
+score     SARE_HEAD_HDR_XUNOLOOK   -1.000
+#stype    SARE_HEAD_HDR_XUNOLOOK   ham 
+tflags    SARE_HEAD_HDR_XUNOLOOK   nice
+#counts   SARE_HEAD_HDR_XUNOLOOK   0s/222h of 173032 corpus (99056s/73976h RM) 05/11/06
+#max      SARE_HEAD_HDR_XUNOLOOK   0s/267h of 689155 corpus (348140s/341015h RM) 09/18/05
+#counts   SARE_HEAD_HDR_XUNOLOOK   2s/0h of 55978 corpus (51650s/4328h AxB2) 05/14/06
+#counts   SARE_HEAD_HDR_XUNOLOOK   0s/0h of 10853 corpus (6391s/4462h CT) 05/16/05
+#counts   SARE_HEAD_HDR_XUNOLOOK   8s/0h of 155354 corpus (103809s/51545h DOC) 05/15/06
+#counts   SARE_HEAD_HDR_XUNOLOOK   0s/0h of 32586 corpus (9341s/23245h JH) 06/10/04
+#counts   SARE_HEAD_HDR_XUNOLOOK   0s/0h of 17050 corpus (14617s/2433h MY) 08/08/04
+
+header    SARE_HEAD_HDR_XUNSUB     exists:X-Unsubscribe
+describe  SARE_HEAD_HDR_XUNSUB     Message headers used which identify spam
+score     SARE_HEAD_HDR_XUNSUB     -0.694
+tflags    SARE_HEAD_HDR_XUNSUB     nice
+#stype    SARE_HEAD_HDR_XUNSUB     ham
+#ham      SARE_HEAD_HDR_XUNSUB     Used by valid newsletters or lists
+#counts   SARE_HEAD_HDR_XUNSUB     0s/0h of 173032 corpus (99056s/73976h RM) 05/11/06
+#max      SARE_HEAD_HDR_XUNSUB     15s/94h of 238550 corpus (112525s/126025h RM) 02/28/05
+#counts   SARE_HEAD_HDR_XUNSUB     0s/0h of 18196 corpus (15673s/2523h MY) 08/16/04
+#counts   SARE_HEAD_HDR_XUNSUB     0s/0h of 54176 corpus (16997s/37179h JH-3.01) 02/01/05
+#counts   SARE_HEAD_HDR_XUNSUB     0s/0h of 10853 corpus (6391s/4462h CT) 05/16/05
+#counts   SARE_HEAD_HDR_XUNSUB     0s/0h of 2500 corpus (531s/1969h ft) 05/17/05
+
+header    __HAS_RCVD               exists:Received
+header    __SARE_HEAD_MOZ_DRAFT    exists:X-Mozilla-Draft-Info
+meta      SARE_HEAD_MOZ_DRAFT      __SARE_HEAD_MOZ_DRAFT  && __HAS_RCVD
+score     SARE_HEAD_MOZ_DRAFT      0.646
+#ham      SARE_HEAD_MOZ_DRAFT      ham seems to be only on mails added to corpus from "sent" folders
+#ham      SARE_HEAD_MOZ_DRAFT      Seen in ham starting 4/23/05. Update to Mozilla email client? 
+#counts   SARE_HEAD_MOZ_DRAFT      0s/0h of 173032 corpus (99056s/73976h RM) 05/11/06
+#max      SARE_HEAD_MOZ_DRAFT      195s/0h of 120459 corpus (71363s/49096h RM) 02/12/05
+#counts   SARE_HEAD_MOZ_DRAFT      48s/1h of 54176 corpus (16997s/37179h JH-3.01) 02/01/05
+#counts   SARE_HEAD_MOZ_DRAFT      0s/0h of 20489 corpus (17189s/3300h MY) 01/30/05
+#counts   SARE_HEAD_MOZ_DRAFT      0s/0h of 13285 corpus (7414s/5871h CT) 05/14/06
+#max      SARE_HEAD_MOZ_DRAFT      5s/0h of 11052 corpus (6614s/4438h CT) 03/10/05
+#counts   SARE_HEAD_MOZ_DRAFT      0s/0h of 2500 corpus (531s/1969h ft) 05/17/05
+
+#####################################################################################
+#         SARE Content-Type and Boundary rules
+########  ######################   ##################################################
+
+header    SARE_BOUNDARY_MULTB      Content-Type =~ /boundary="= Multipart Boundary /i
+describe  SARE_BOUNDARY_MULTB      Content type boundary used in spam and viruses
+score     SARE_BOUNDARY_MULTB      0.229
+#ham      SARE_BOUNDARY_MULTB      confirmed(2), moveon.org, bordc.org
+#hist     SARE_BOUNDARY_MULTB      Created by Bob Menschel Aug 24 2004
+#counts   SARE_BOUNDARY_MULTB      6s/1h of 173032 corpus (99056s/73976h RM) 05/11/06
+#max      SARE_BOUNDARY_MULTB      216s/53h of 689155 corpus (348140s/341015h RM) 09/18/05
+#counts   SARE_BOUNDARY_MULTB      17s/0h of 106014 corpus (72769s/33245h ML) 05/14/06
+#counts   SARE_BOUNDARY_MULTB      0s/0h of 18651 corpus (16120s/2531h MY) 08/29/04
+#counts   SARE_BOUNDARY_MULTB      8s/7h of 55978 corpus (51650s/4328h AxB2) 05/14/06
+#counts   SARE_BOUNDARY_MULTB      0s/0h of 13285 corpus (7414s/5871h CT) 05/14/06
+#max      SARE_BOUNDARY_MULTB      6s/0h of 10590 corpus (5819s/4771h CT) 07/26/05
+#counts   SARE_BOUNDARY_MULTB      19s/0h of 155354 corpus (103809s/51545h DOC) 05/15/06
+#counts   SARE_BOUNDARY_MULTB      1s/0h of 42268 corpus (34150s/8118h FVGT) 05/15/06
+#counts   SARE_BOUNDARY_MULTB      5s/1h of 54176 corpus (16997s/37179h JH-3.01) 02/01/05
+
+#####################################################################################
+#         SARE From Rules 
+########  ######################   ##################################################
+
+header    SARE_FROM_DEBT           From =~ m'debt'i
+describe  SARE_FROM_DEBT           From debt spammer
+score     SARE_FROM_DEBT           0.736
+#ham      SARE_FROM_DEBT           ffcdebthelp.com
+#hist     SARE_FROM_DEBT           Created by Fred Tarasevicius Sep 14 2004
+#counts   SARE_FROM_DEBT           174s/1h of 173032 corpus (99056s/73976h RM) 05/11/06
+#max      SARE_FROM_DEBT           858s/30h of 689155 corpus (348140s/341015h RM) 09/18/05
+#counts   SARE_FROM_DEBT           3s/0h of 54176 corpus (16997s/37179h JH-3.01) 02/01/05
+#counts   SARE_FROM_DEBT           78s/0h of 106014 corpus (72769s/33245h ML) 05/14/06
+#counts   SARE_FROM_DEBT           25s/0h of 22938 corpus (17228s/5710h MY) 05/14/06
+#max      SARE_FROM_DEBT           93s/0h of 27758 corpus (24297s/3461h MY) 02/27/05
+#counts   SARE_FROM_DEBT           72s/0h of 55978 corpus (51650s/4328h AxB2) 05/14/06
+#counts   SARE_FROM_DEBT           1s/0h of 13285 corpus (7414s/5871h CT) 05/14/06
+#max      SARE_FROM_DEBT           24s/0h of 10590 corpus (5819s/4771h CT) 07/26/05
+#counts   SARE_FROM_DEBT           550s/0h of 155354 corpus (103809s/51545h DOC) 05/15/06
+#counts   SARE_FROM_DEBT           2s/0h of 42268 corpus (34150s/8118h FVGT) 05/15/06
+#max      SARE_FROM_DEBT           37s/0h of 7500 corpus (1767s/5733h ft) 09/18/05
+
+header    SARE_FROM_DLL            From =~ m'\b\d[a-z][a-z]\.(?:com|net|biz|info)\b'i
+describe  SARE_FROM_DLL            Via a digit-letter-letter domain 
+score     SARE_FROM_DLL            0.473
+#ham      SARE_FROM_DLL            verified (3) 
+#hist     SARE_FROM_DLL            Created by Bob Menschel Aug 23 2004
+#counts   SARE_FROM_DLL            47s/3h of 173032 corpus (99056s/73976h RM) 05/11/06
+#max      SARE_FROM_DLL            156s/22h of 689155 corpus (348140s/341015h RM) 09/18/05
+#counts   SARE_FROM_DLL            52s/1h of 106014 corpus (72769s/33245h ML) 05/14/06
+#counts   SARE_FROM_DLL            6s/0h of 22938 corpus (17228s/5710h MY) 05/14/06
+#max      SARE_FROM_DLL            6s/0h of 18651 corpus (16120s/2531h MY) 08/29/04
+#counts   SARE_FROM_DLL            9s/2h of 54176 corpus (16997s/37179h JH-3.01) 02/01/05
+#counts   SARE_FROM_DLL            28s/0h of 9984 corpus (5649s/4335h AxB) 05/14/06
+#counts   SARE_FROM_DLL            6s/0h of 13285 corpus (7414s/5871h CT) 05/14/06
+#counts   SARE_FROM_DLL            19s/3h of 155354 corpus (103809s/51545h DOC) 05/15/06
+#counts   SARE_FROM_DLL            2s/0h of 42268 corpus (34150s/8118h FVGT) 05/15/06
+
+#              Moved from file 1 to 3: SARE_FROM_DVDCOPY
+header    SARE_FROM_DVDCOPY        From =~ m'(?:DVD.*cop[iy]|\bdvd\b)'i
+describe  SARE_FROM_DVDCOPY        From DVD abuse address
+score     SARE_FROM_DVDCOPY        0.230
+#ham      SARE_FROM_DVDCOPY        Columbia House DVD Club <columbiahouse@mail.columbiahouse.com>
+#hist     SARE_FROM_DVDCOPY        Created by Bob Menschel Sep 04 2004
+#counts   SARE_FROM_DVDCOPY        8s/40h of 173032 corpus (99056s/73976h RM) 05/11/06
+#max      SARE_FROM_DVDCOPY        243s/28h of 689155 corpus (348140s/341015h RM) 09/18/05
+#counts   SARE_FROM_DVDCOPY        2s/1h of 9991 corpus (5650s/4341h AxB) 05/14/06
+#counts   SARE_FROM_DVDCOPY        24s/0h of 55848 corpus (18671s/37177h JH-3.01) 06/10/05
+#max      SARE_FROM_DVDCOPY        31s/0h of 44754 corpus (16523s/28231h JH-SA3.0rc1) 09/06/04
+#counts   SARE_FROM_DVDCOPY        13s/0h of 22942 corpus (17234s/5708h MY) 05/14/06
+#max      SARE_FROM_DVDCOPY        98s/0h of 47809 corpus (43224s/4585h MY) 07/27/05
+#counts   SARE_FROM_DVDCOPY        3s/0h of 13313 corpus (7438s/5875h CT) 05/14/06
+#max      SARE_FROM_DVDCOPY        24s/0h of 10590 corpus (5819s/4771h CT) 07/26/05
+#counts   SARE_FROM_DVDCOPY        113s/0h of 155430 corpus (103881s/51549h DOC) 05/15/06
+#counts   SARE_FROM_DVDCOPY        3s/0h of 42275 corpus (34158s/8117h FVGT) 05/15/06
+
+header    SARE_FROM_MULTI_DASH     From =~ /\@.*--/
+describe  SARE_FROM_MULTI_DASH     From domain has multiple consecutive hyphens
+score     SARE_FROM_MULTI_DASH     0.934
+#hist     SARE_FROM_MULTI_DASH     Tim Jackson, May 12 2005
+#ham      SARE_FROM_MULTI_DASH     Valid email seen from gs at g--s dot de
+#counts   SARE_FROM_MULTI_DASH     7s/0h of 173032 corpus (99056s/73976h RM) 05/11/06
+#max      SARE_FROM_MULTI_DASH     29s/2h of 689155 corpus (348140s/341015h RM) 09/18/05
+#counts   SARE_FROM_MULTI_DASH     3s/0h of 55978 corpus (51650s/4328h AxB2) 05/14/06
+#counts   SARE_FROM_MULTI_DASH     0s/0h of 10853 corpus (6391s/4462h CT) 05/16/05
+#counts   SARE_FROM_MULTI_DASH     8s/0h of 155354 corpus (103809s/51545h DOC) 05/15/06
+#counts   SARE_FROM_MULTI_DASH     1s/0h of 42268 corpus (34150s/8118h FVGT) 05/15/06
+#counts   SARE_FROM_MULTI_DASH     0s/0h of 45478 corpus (41529s/3949h MY) 05/16/05
+
+header    SARE_FROM_NONAME         From =~ /"" </
+describe  SARE_FROM_NONAME         from has no name on purpose
+score     SARE_FROM_NONAME         0.648
+#hist     SARE_FROM_NONAME         Originally submitted by Fred Tarasevicius
+#counts   SARE_FROM_NONAME         256s/2h of 173032 corpus (99056s/73976h RM) 05/11/06
+#max      SARE_FROM_NONAME         1874s/99h of 689155 corpus (348140s/341015h RM) 09/18/05
+#counts   SARE_FROM_NONAME         76s/1h of 55978 corpus (51650s/4328h AxB2) 05/14/06
+#counts   SARE_FROM_NONAME         11s/0h of 13285 corpus (7414s/5871h CT) 05/14/06
+#max      SARE_FROM_NONAME         28s/4h of 10590 corpus (5819s/4771h CT) 07/26/05
+#counts   SARE_FROM_NONAME         225s/9h of 155354 corpus (103809s/51545h DOC) 05/15/06
+#counts   SARE_FROM_NONAME         160s/2h of 42268 corpus (34150s/8118h FVGT) 05/15/06
+#counts   SARE_FROM_NONAME         15s/11h of 55848 corpus (18671s/37177h JH-3.01) 06/10/05
+#max      SARE_FROM_NONAME         17s/11h of 54176 corpus (16997s/37179h JH-3.01) 02/01/05
+#counts   SARE_FROM_NONAME         69s/9h of 106014 corpus (72769s/33245h ML) 05/14/06
+#counts   SARE_FROM_NONAME         0s/0h of 17050 corpus (14617s/2433h MY) 08/08/04
+
+header    SARE_FROM_NUM_HOTML      From =~ /\b[a-z]+\d{6,}\@hotmail.com/i
+describe  SARE_FROM_NUM_HOTML      Apparent spammer email address pattern
+score     SARE_FROM_NUM_HOTML      1.156
+#hist     SARE_FROM_NUM_HOTML      Created by Bob Menschel May 24 2004
+#counts   SARE_FROM_NUM_HOTML      0s/2h of 173032 corpus (99056s/73976h RM) 05/11/06
+#max      SARE_FROM_NUM_HOTML      740s/6h of 689155 corpus (348140s/341015h RM) 09/18/05
+#counts   SARE_FROM_NUM_HOTML      16s/0h of 54176 corpus (16997s/37179h JH-3.01) 02/01/05
+#max      SARE_FROM_NUM_HOTML      19s/0h of 38398 corpus (14914s/23484h JH) 08/14/04 TM2 SA3.0-pre2
+#counts   SARE_FROM_NUM_HOTML      1s/0h of 106014 corpus (72769s/33245h ML) 05/14/06
+#counts   SARE_FROM_NUM_HOTML      0s/0h of 20489 corpus (17189s/3300h MY) 01/30/05
+#max      SARE_FROM_NUM_HOTML      6s/0h of 17050 corpus (14617s/2433h MY) 08/08/04
+#counts   SARE_FROM_NUM_HOTML      2s/0h of 55978 corpus (51650s/4328h AxB2) 05/14/06
+#counts   SARE_FROM_NUM_HOTML      0s/0h of 10853 corpus (6391s/4462h CT) 05/16/05
+#counts   SARE_FROM_NUM_HOTML      6s/0h of 155354 corpus (103809s/51545h DOC) 05/15/06
+#counts   SARE_FROM_NUM_HOTML      0s/1h of 6924 corpus (1403s/5521h ft) 07/27/05
+
+# being refined. low score until we get better
+header    SARE_FROM_PHRASE         From =~ /(?!P?lease_Do_Not_Reply_To_This_)\b\w+_\w+_\w+_\w+_/i
+describe  SARE_FROM_PHRASE         Sender name appears to be phrase rather than name
+score     SARE_FROM_PHRASE         0.078
+#hist     SARE_FROM_PHRASE         Originally submitted by Bob Menschel
+#ham      SARE_FROM_PHRASE         The Owner Center at My GMLink <The_Owner_Center_at_My_GMLink.UM.A.5.1302@www.imail.imrsvcs.com>
+#counts   SARE_FROM_PHRASE         18s/4h of 173032 corpus (99056s/73976h RM) 05/11/06
+#max      SARE_FROM_PHRASE         222s/88h of 689155 corpus (348140s/341015h RM) 09/18/05
+#counts   SARE_FROM_PHRASE         3s/0h of 54176 corpus (16997s/37179h JH-3.01) 02/01/05
+#max      SARE_FROM_PHRASE         10s/0h of 38398 corpus (14914s/23484h JH) 08/14/04 TM2 SA3.0-pre2
+#counts   SARE_FROM_PHRASE         39s/2h of 106014 corpus (72769s/33245h ML) 05/14/06
+#counts   SARE_FROM_PHRASE         14s/6h of 22938 corpus (17228s/5710h MY) 05/14/06
+#max      SARE_FROM_PHRASE         17s/5h of 45478 corpus (41529s/3949h MY) 05/16/05
+#counts   SARE_FROM_PHRASE         5s/0h of 55978 corpus (51650s/4328h AxB2) 05/14/06
+#counts   SARE_FROM_PHRASE         6s/0h of 13285 corpus (7414s/5871h CT) 05/14/06
+#counts   SARE_FROM_PHRASE         53s/0h of 155354 corpus (103809s/51545h DOC) 05/15/06
+#counts   SARE_FROM_PHRASE         3s/0h of 42268 corpus (34150s/8118h FVGT) 05/15/06
+
+header    SARE_FROM_PRINTER        From =~ /\bprinter\b/i
+describe  SARE_FROM_PRINTER        From user address seems to contain spam topic
+score     SARE_FROM_PRINTER        0.444
+#counts   SARE_FROM_PRINTER        8s/0h of 173032 corpus (99056s/73976h RM) 05/11/06
+#max      SARE_FROM_PRINTER        98s/4h of 238550 corpus (112525s/126025h RM) 02/28/05
+#counts   SARE_FROM_PRINTER        2s/0h of 54176 corpus (16997s/37179h JH-3.01) 02/01/05
+#counts   SARE_FROM_PRINTER        3s/0h of 106014 corpus (72769s/33245h ML) 05/14/06
+#counts   SARE_FROM_PRINTER        0s/0h of 45478 corpus (41529s/3949h MY) 05/16/05
+#max      SARE_FROM_PRINTER        1s/0h of 20489 corpus (17189s/3300h MY) 01/30/05
+#counts   SARE_FROM_PRINTER        190s/0h of 55978 corpus (51650s/4328h AxB2) 05/14/06
+#counts   SARE_FROM_PRINTER        0s/0h of 13285 corpus (7414s/5871h CT) 05/14/06
+#max      SARE_FROM_PRINTER        1s/0h of 10590 corpus (5819s/4771h CT) 07/26/05
+#counts   SARE_FROM_PRINTER        20s/0h of 155354 corpus (103809s/51545h DOC) 05/15/06
+#counts   SARE_FROM_PRINTER        0s/0h of 2500 corpus (531s/1969h ft) 05/17/05
+
+header    SARE_FROM_QUOTE          From =~ /quote/i
+describe  SARE_FROM_QUOTE          From name/address has "quote" as part of it
+score     SARE_FROM_QUOTE          0.473
+#hist     SARE_FROM_QUOTE          Fred Tarasevicius, FH_FROM_QUOTE 
+#ham      SARE_FROM_QUOTE          resume from email account at intelliquote.com, hostquote@webhostdir.com
+#ham      SARE_FROM_QUOTE          WisdomToday.com <xquotes@WisdomToday.com>
+#counts   SARE_FROM_QUOTE          268s/0h of 173032 corpus (99056s/73976h RM) 05/11/06
+#max      SARE_FROM_QUOTE          419s/83h of 689155 corpus (348140s/341015h RM) 09/18/05
+#counts   SARE_FROM_QUOTE          84s/17h of 55978 corpus (51650s/4328h AxB2) 05/14/06
+#counts   SARE_FROM_QUOTE          8s/0h of 13285 corpus (7414s/5871h CT) 05/14/06
+#max      SARE_FROM_QUOTE          16s/0h of 10590 corpus (5819s/4771h CT) 07/26/05
+#counts   SARE_FROM_QUOTE          374s/0h of 155354 corpus (103809s/51545h DOC) 05/15/06
+#counts   SARE_FROM_QUOTE          70s/3h of 42268 corpus (34150s/8118h FVGT) 05/15/06
+#counts   SARE_FROM_QUOTE          11s/0h of 54176 corpus (16997s/37179h JH-3.01) 02/01/05
+#counts   SARE_FROM_QUOTE          28s/0h of 106014 corpus (72769s/33245h ML) 05/14/06
+#counts   SARE_FROM_QUOTE          69s/1h of 22938 corpus (17228s/5710h MY) 05/14/06
+#max      SARE_FROM_QUOTE          282s/0h of 47809 corpus (43224s/4585h MY) 07/27/05
+
+header    SARE_FROM_SPAM_CHAR0a    From =~ /^\?/i
+describe  SARE_FROM_SPAM_CHAR0a    Sender name has unexpected or invalid characters
+score     SARE_FROM_SPAM_CHAR0a    0.636
+#counts   SARE_FROM_SPAM_CHAR0a    0s/0h of 173032 corpus (99056s/73976h RM) 05/11/06
+#max      SARE_FROM_SPAM_CHAR0a    1408s/105h of 689155 corpus (348140s/341015h RM) 09/18/05
+#counts   SARE_FROM_SPAM_CHAR0a    54s/0h of 55848 corpus (18671s/37177h JH-3.01) 06/10/05
+#max      SARE_FROM_SPAM_CHAR0a    55s/0h of 54176 corpus (16997s/37179h JH-3.01) 02/01/05
+#counts   SARE_FROM_SPAM_CHAR0a    0s/0h of 22938 corpus (17228s/5710h MY) 05/14/06
+#max      SARE_FROM_SPAM_CHAR0a    45s/0h of 47809 corpus (43224s/4585h MY) 07/27/05
+#counts   SARE_FROM_SPAM_CHAR0a    0s/0h of 13285 corpus (7414s/5871h CT) 05/14/06
+#max      SARE_FROM_SPAM_CHAR0a    22s/0h of 10590 corpus (5819s/4771h CT) 07/26/05
+#counts   SARE_FROM_SPAM_CHAR0a    0s/0h of 2500 corpus (531s/1969h ft) 05/17/05
+ 
+header    SARE_FROM_SPAM_CHAR0b    From =~ /^\$/i
+describe  SARE_FROM_SPAM_CHAR0b    Sender name has unexpected or invalid characters
+score     SARE_FROM_SPAM_CHAR0b    0.636
+#counts   SARE_FROM_SPAM_CHAR0b    25s/0h of 173032 corpus (99056s/73976h RM) 05/11/06
+#max      SARE_FROM_SPAM_CHAR0b    1408s/105h of 689155 corpus (348140s/341015h RM) 09/18/05
+#counts   SARE_FROM_SPAM_CHAR0b    10s/0h of 55978 corpus (51650s/4328h AxB2) 05/14/06
+#counts   SARE_FROM_SPAM_CHAR0b    0s/0h of 13285 corpus (7414s/5871h CT) 05/14/06
+#max      SARE_FROM_SPAM_CHAR0b    22s/0h of 10590 corpus (5819s/4771h CT) 07/26/05
+#counts   SARE_FROM_SPAM_CHAR0b    102s/0h of 155354 corpus (103809s/51545h DOC) 05/15/06
+#counts   SARE_FROM_SPAM_CHAR0b    1s/0h of 42268 corpus (34150s/8118h FVGT) 05/15/06
+#counts   SARE_FROM_SPAM_CHAR0b    54s/0h of 55848 corpus (18671s/37177h JH-3.01) 06/10/05
+#max      SARE_FROM_SPAM_CHAR0b    55s/0h of 54176 corpus (16997s/37179h JH-3.01) 02/01/05
+#counts   SARE_FROM_SPAM_CHAR0b    0s/0h of 22938 corpus (17228s/5710h MY) 05/14/06
+#max      SARE_FROM_SPAM_CHAR0b    45s/0h of 47809 corpus (43224s/4585h MY) 07/27/05
+ 
+header    SARE_FROM_SPAM_CHAR5     From =~ /zzz/i
+describe  SARE_FROM_SPAM_CHAR5     Sender name has unlikely character string
+score     SARE_FROM_SPAM_CHAR5     0.640
+#ham      SARE_FROM_SPAM_CHAR5     Postmaster <postmaster@mail.zzzip.net> (valid bounce)
+#counts   SARE_FROM_SPAM_CHAR5     7s/1h of 173032 corpus (99056s/73976h RM) 05/11/06
+#max      SARE_FROM_SPAM_CHAR5     114s/5h of 689155 corpus (348140s/341015h RM) 09/18/05
+#counts   SARE_FROM_SPAM_CHAR5     7s/0h of 55978 corpus (51650s/4328h AxB2) 05/14/06
+#counts   SARE_FROM_SPAM_CHAR5     2s/0h of 13285 corpus (7414s/5871h CT) 05/14/06
+#counts   SARE_FROM_SPAM_CHAR5     16s/0h of 155354 corpus (103809s/51545h DOC) 05/15/06
+#counts   SARE_FROM_SPAM_CHAR5     6s/1h of 42268 corpus (34150s/8118h FVGT) 05/15/06
+#counts   SARE_FROM_SPAM_CHAR5     4s/1h of 54176 corpus (16997s/37179h JH-3.01) 02/01/05
+#max      SARE_FROM_SPAM_CHAR5     30s/0h of 32586 corpus (9341s/23245h JH) 06/10/04
+#counts   SARE_FROM_SPAM_CHAR5     9s/0h of 106014 corpus (72769s/33245h ML) 05/14/06
+#counts   SARE_FROM_SPAM_CHAR5     1s/0h of 22938 corpus (17228s/5710h MY) 05/14/06
+#max      SARE_FROM_SPAM_CHAR5     9s/0h of 17050 corpus (14617s/2433h MY) 08/08/04
+
+header    SARE_FROM_SUPPORT_DIG    From =~ /\bsupport\d/i
+describe  SARE_FROM_SUPPORT_DIG    From user address is used by spammer
+score     SARE_FROM_SUPPORT_DIG    0.135
+#ham      SARE_FROM_SUPPORT_DIG    support1 @ $10domains.com
+#hist     SARE_FROM_SUPPORT_DIG    Created by Bob Menschel Oct 07 2004
+#counts   SARE_FROM_SUPPORT_DIG    0s/0h of 173032 corpus (99056s/73976h RM) 05/11/06
+#max      SARE_FROM_SUPPORT_DIG    25s/0h of 115509 corpus (81073s/34436h RM) 01/16/05
+#counts   SARE_FROM_SUPPORT_DIG    0s/0h of 13285 corpus (7414s/5871h CT) 05/14/06
+#max      SARE_FROM_SUPPORT_DIG    1s/0h of 10590 corpus (5819s/4771h CT) 07/26/05
+#counts   SARE_FROM_SUPPORT_DIG    1s/0h of 155354 corpus (103809s/51545h DOC) 05/15/06
+#counts   SARE_FROM_SUPPORT_DIG    0s/2h of 42268 corpus (34150s/8118h FVGT) 05/15/06
+#max      SARE_FROM_SUPPORT_DIG    5s/1h of 6924 corpus (1403s/5521h ft) 07/27/05
+#counts   SARE_FROM_SUPPORT_DIG    1s/0h of 54176 corpus (16997s/37179h JH-3.01) 02/01/05
+#counts   SARE_FROM_SUPPORT_DIG    1s/4h of 47809 corpus (43224s/4585h MY) 07/27/05
+
+#####################################################################################
+#         SARE From Rules -- Emails coming from free webmail accounts
+#         Since spam from these can vary depending upon country of origin, 
+#         country of destination, policies, and enforcement of policies, 
+#         most of these are kept as separate rules rather than combined. 
+########  ######################   ##################################################
+
+header    SARE_FREE_WEBM_123       From =~ /\b123\.com/i
+describe  SARE_FREE_WEBM_123       Sender used free email account - may be spammer
+score     SARE_FREE_WEBM_123       0.389
+#ham      SARE_FREE_WEBM_123       confirmed: 1, anonymous response via feedback page
+#counts   SARE_FREE_WEBM_123       0s/0h of 173032 corpus (99056s/73976h RM) 05/11/06
+#max      SARE_FREE_WEBM_123       62s/0h of 97268 corpus (79437s/17831h RM) 01/24/04
+#counts   SARE_FREE_WEBM_123       1s/0h of 9984 corpus (5649s/4335h AxB) 05/14/06
+#counts   SARE_FREE_WEBM_123       0s/0h of 54179 corpus (17002s/37177h JH-3.01) 03/01/05
+#max      SARE_FREE_WEBM_123       5s/0h of 38398 corpus (14914s/23484h JH) 08/14/04 TM2 SA3.0-pre2
+#counts   SARE_FREE_WEBM_123       0s/0h of 27758 corpus (24297s/3461h MY) 02/27/05
+#max      SARE_FREE_WEBM_123       10s/0h of 20489 corpus (17189s/3300h MY) 01/30/05
+#counts   SARE_FREE_WEBM_123       0s/0h of 10853 corpus (6391s/4462h CT) 05/16/05
+#counts   SARE_FREE_WEBM_123       0s/0h of 2500 corpus (531s/1969h ft) 05/17/05
+
+header    SARE_FREE_WEBM_CZSEZNA   From =~ /\@seznam\.cz/i
+describe  SARE_FREE_WEBM_CZSEZNA   Sender used free email account - may be spammer 
+score     SARE_FREE_WEBM_CZSEZNA   0.248
+#hist     SARE_FREE_WEBM_CZSEZNA   Created by Bob Menschel May 31 2004
+#ham      SARE_FREE_WEBM_CZSEZNA   Confirmed (2) by JH
+#counts   SARE_FREE_WEBM_CZSEZNA   0s/0h of 173032 corpus (99056s/73976h RM) 05/11/06
+#counts   SARE_FREE_WEBM_CZSEZNA   1s/0h of 106014 corpus (72769s/33245h ML) 05/14/06
+#counts   SARE_FREE_WEBM_CZSEZNA   2s/0h of 45478 corpus (41529s/3949h MY) 05/16/05
+#max      SARE_FREE_WEBM_CZSEZNA   12s/0h of 17050 corpus (14617s/2433h MY) 08/08/04
+#counts   SARE_FREE_WEBM_CZSEZNA   91s/2h of 55848 corpus (18671s/37177h JH-3.01) 06/10/05
+#max      SARE_FREE_WEBM_CZSEZNA   186s/0h of 38398 corpus (14914s/23484h JH) 08/14/04 TM2 SA3.0-pre2
+#counts   SARE_FREE_WEBM_CZSEZNA   1s/1h of 9984 corpus (5649s/4335h AxB) 05/14/06
+#counts   SARE_FREE_WEBM_CZSEZNA   2s/0h of 13285 corpus (7414s/5871h CT) 05/14/06
+#max      SARE_FREE_WEBM_CZSEZNA   7s/0h of 11052 corpus (6614s/4438h CT) 03/10/05
+#counts   SARE_FREE_WEBM_CZSEZNA   1s/2h of 155354 corpus (103809s/51545h DOC) 05/15/06
+#counts   SARE_FREE_WEBM_CZSEZNA   0s/0h of 2500 corpus (531s/1969h ft) 05/17/05
+
+header    SARE_FREE_WEBM_LAPOSTE   From =~ /\@laposte\.net/i
+describe  SARE_FREE_WEBM_LAPOSTE   Maybe spammer with free email
+score     SARE_FREE_WEBM_LAPOSTE   0.721
+#hist     SARE_FREE_WEBM_LAPOSTE   Created by Bob Menschel May 31 2004
+#counts   SARE_FREE_WEBM_LAPOSTE   27s/3h of 173032 corpus (99056s/73976h RM) 05/11/06
+#max      SARE_FREE_WEBM_LAPOSTE   108s/2h of 689155 corpus (348140s/341015h RM) 09/18/05
+#counts   SARE_FREE_WEBM_LAPOSTE   4s/0h of 9984 corpus (5649s/4335h AxB) 05/14/06
+#counts   SARE_FREE_WEBM_LAPOSTE   0s/0h of 13285 corpus (7414s/5871h CT) 05/14/06
+#max      SARE_FREE_WEBM_LAPOSTE   1s/0h of 11052 corpus (6614s/4438h CT) 03/10/05
+#counts   SARE_FREE_WEBM_LAPOSTE   10s/0h of 155354 corpus (103809s/51545h DOC) 05/15/06
+#counts   SARE_FREE_WEBM_LAPOSTE   8s/0h of 42268 corpus (34150s/8118h FVGT) 05/15/06
+#counts   SARE_FREE_WEBM_LAPOSTE   1s/1h of 54176 corpus (16997s/37179h JH-3.01) 02/01/05
+#counts   SARE_FREE_WEBM_LAPOSTE   11s/49h of 106014 corpus (72769s/33245h ML) 05/14/06
+#counts   SARE_FREE_WEBM_LAPOSTE   9s/0h of 47809 corpus (43224s/4585h MY) 07/27/05
+
+header    SARE_FREE_WEBM_Purin     From =~ /\bpurinmail\.com/i
+describe  SARE_FREE_WEBM_Purin     Sender used free email account - may be spammer
+score     SARE_FREE_WEBM_Purin     0.650
+#hist     SARE_FREE_WEBM_Purin     Created by Bob Menschel Mar 26 2004
+#counts   SARE_FREE_WEBM_Purin     1s/0h of 173032 corpus (99056s/73976h RM) 05/11/06
+#max      SARE_FREE_WEBM_Purin     15s/0h of 125163 corpus (104972s/20191h) 03/28/04
+#counts   SARE_FREE_WEBM_Purin     6s/0h of 9984 corpus (5649s/4335h AxB) 05/14/06
+#counts   SARE_FREE_WEBM_Purin     0s/0h of 13285 corpus (7414s/5871h CT) 05/14/06
+#max      SARE_FREE_WEBM_Purin     1s/0h of 10590 corpus (5819s/4771h CT) 07/26/05
+#counts   SARE_FREE_WEBM_Purin     12s/0h of 155354 corpus (103809s/51545h DOC) 05/15/06
+#counts   SARE_FREE_WEBM_Purin     23s/0h of 42268 corpus (34150s/8118h FVGT) 05/15/06
+#counts   SARE_FREE_WEBM_Purin     1s/0h of 54176 corpus (16997s/37179h JH-3.01) 02/01/05
+#counts   SARE_FREE_WEBM_Purin     27s/0h of 106014 corpus (72769s/33245h ML) 05/14/06
+#counts   SARE_FREE_WEBM_Purin     0s/0h of 45478 corpus (41529s/3949h MY) 05/16/05
+#max      SARE_FREE_WEBM_Purin     1s/0h of 20489 corpus (17189s/3300h MY) 01/30/05
+
+header    SARE_FREE_WEBM_RuMail    From =~ /\@mail\.ru/i
+describe  SARE_FREE_WEBM_RuMail    Sender used free email account - may be spammer 
+score     SARE_FREE_WEBM_RuMail    0.671
+#counts   SARE_FREE_WEBM_RuMail    239s/21h of 173032 corpus (99056s/73976h RM) 05/11/06
+#max      SARE_FREE_WEBM_RuMail    740s/36h of 689155 corpus (348140s/341015h RM) 09/18/05
+#counts   SARE_FREE_WEBM_RuMail    8s/4h of 9984 corpus (5649s/4335h AxB) 05/14/06
+#counts   SARE_FREE_WEBM_RuMail    12s/0h of 13285 corpus (7414s/5871h CT) 05/14/06
+#counts   SARE_FREE_WEBM_RuMail    149s/2h of 155354 corpus (103809s/51545h DOC) 05/15/06
+#counts   SARE_FREE_WEBM_RuMail    92s/2h of 42268 corpus (34150s/8118h FVGT) 05/15/06
+#counts   SARE_FREE_WEBM_RuMail    15s/0h of 54176 corpus (16997s/37179h JH-3.01) 02/01/05
+#max      SARE_FREE_WEBM_RuMail    19s/0h of 38398 corpus (14914s/23484h JH) 08/14/04 TM2 SA3.0-pre2
+#counts   SARE_FREE_WEBM_RuMail    199s/84h of 106014 corpus (72769s/33245h ML) 05/14/06
+#counts   SARE_FREE_WEBM_RuMail    6s/0h of 22938 corpus (17228s/5710h MY) 05/14/06
+#max      SARE_FREE_WEBM_RuMail    27s/0h of 17050 corpus (14617s/2433h MY) 08/08/04
+
+header    SARE_FREE_WEBM_Smapxsm   From =~ /\bsmapxsmap\.net/i
+describe  SARE_FREE_WEBM_Smapxsm   Sender used free email account - may be spammer
+score     SARE_FREE_WEBM_Smapxsm   0.667
+#counts   SARE_FREE_WEBM_Smapxsm   2s/0h of 173032 corpus (99056s/73976h RM) 05/11/06
+#max      SARE_FREE_WEBM_Smapxsm   12s/0h of 689155 corpus (348140s/341015h RM) 09/18/05
+#counts   SARE_FREE_WEBM_Smapxsm   2s/0h of 9984 corpus (5649s/4335h AxB) 05/14/06
+#counts   SARE_FREE_WEBM_Smapxsm   2s/0h of 13285 corpus (7414s/5871h CT) 05/14/06
+#counts   SARE_FREE_WEBM_Smapxsm   23s/0h of 155354 corpus (103809s/51545h DOC) 05/15/06
+#counts   SARE_FREE_WEBM_Smapxsm   22s/0h of 42268 corpus (34150s/8118h FVGT) 05/15/06
+#counts   SARE_FREE_WEBM_Smapxsm   7s/0h of 54176 corpus (16997s/37179h JH-3.01) 02/01/05
+#counts   SARE_FREE_WEBM_Smapxsm   27s/0h of 106014 corpus (72769s/33245h ML) 05/14/06
+#counts   SARE_FREE_WEBM_Smapxsm   1s/0h of 45478 corpus (41529s/3949h MY) 05/16/05
+#max      SARE_FREE_WEBM_Smapxsm   5s/0h of 17050 corpus (14617s/2433h MY) 08/08/04
+
+header    SARE_FREE_WEBM_SURIML    From =~ /\bsurimail\.com/i
+describe  SARE_FREE_WEBM_SURIML    Sender used free email account - may be spammer 
+score     SARE_FREE_WEBM_SURIML    0.555
+#hist     SARE_FREE_WEBM_SURIML    Created by Bob Menschel June 12 2004
+#counts   SARE_FREE_WEBM_SURIML    0s/0h of 173032 corpus (99056s/73976h RM) 05/11/06
+#max      SARE_FREE_WEBM_SURIML    2s/0h of 689155 corpus (348140s/341015h RM) 09/18/05
+#counts   SARE_FREE_WEBM_SURIML    0s/0h of 38398 corpus (14914s/23484h JH) 08/14/04 TM2 SA3.0-pre2
+#counts   SARE_FREE_WEBM_SURIML    2s/0h of 106014 corpus (72769s/33245h ML) 05/14/06
+#counts   SARE_FREE_WEBM_SURIML    0s/0h of 22938 corpus (17228s/5710h MY) 05/14/06
+#max      SARE_FREE_WEBM_SURIML    7s/0h of 45478 corpus (41529s/3949h MY) 05/16/05
+#counts   SARE_FREE_WEBM_SURIML    0s/0h of 10853 corpus (6391s/4462h CT) 05/16/05
+#counts   SARE_FREE_WEBM_SURIML    3s/0h of 155354 corpus (103809s/51545h DOC) 05/15/06
+#counts   SARE_FREE_WEBM_SURIML    0s/0h of 2500 corpus (531s/1969h ft) 05/17/05
+
+#####################################################################################
+#         SARE Message-ID rules
+########  ######################   ##################################################
+
+header    SARE_MSGID_LONG          MESSAGEID =~ /<.{135,}>/
+describe  SARE_MSGID_LONG          Message ID is too long.
+score     SARE_MSGID_LONG          0.202
+#ham      SARE_MSGID_LONG          confirmed (1)
+#hist     SARE_MSGID_LONG          Jesse Houwing, August 20 2004
+#counts   SARE_MSGID_LONG          4s/5h of 173032 corpus (99056s/73976h RM) 05/11/06
+#max      SARE_MSGID_LONG          97s/0h of 114271 corpus (81068s/33203h RM) 01/15/05
+#counts   SARE_MSGID_LONG          1s/3h of 55978 corpus (51650s/4328h AxB2) 05/14/06
+#counts   SARE_MSGID_LONG          2s/0h of 13285 corpus (7414s/5871h CT) 05/14/06
+#max      SARE_MSGID_LONG          8s/0h of 10853 corpus (6391s/4462h CT) 05/16/05
+#counts   SARE_MSGID_LONG          7s/0h of 155354 corpus (103809s/51545h DOC) 05/15/06
+#counts   SARE_MSGID_LONG          11s/0h of 42268 corpus (34150s/8118h FVGT) 05/15/06
+#counts   SARE_MSGID_LONG          29s/0h of 54176 corpus (16997s/37179h JH-3.01) 02/01/05
+#counts   SARE_MSGID_LONG          2s/0h of 106014 corpus (72769s/33245h ML) 05/14/06
+#counts   SARE_MSGID_LONG          1s/0h of 22938 corpus (17228s/5710h MY) 05/14/06
+#max      SARE_MSGID_LONG          7s/0h of 34763 corpus (18647s/16116h MY) 08/25/04
+
+header    __SARE_MSGID_LONG45        MESSAGEID =~ /[a-z0-9\$]{45}/
+meta      SARE_MSGID_LONG45        __SARE_MSGID_LONG45 && !__SARE_MSGID_LONG50 && !__SARE_MSGID_LONG55 && !__SARE_MSGID_LONG65 && !__SARE_MSGID_LONG75
+describe  SARE_MSGID_LONG45        Message ID has suspicious length
+score     SARE_MSGID_LONG45        0.893
+#hist     SARE_MSGID_LONG45        Created by Frederic Tarasevicius
+#counts   SARE_MSGID_LONG45        79s/0h of 173032 corpus (99056s/73976h RM) 05/11/06
+#max      SARE_MSGID_LONG45        450s/6h of 689155 corpus (348140s/341015h RM) 09/18/05
+#counts   SARE_MSGID_LONG45        4s/0h of 55978 corpus (51650s/4328h AxB2) 05/14/06
+#counts   SARE_MSGID_LONG45        2s/0h of 13285 corpus (7414s/5871h CT) 05/14/06
+#max      SARE_MSGID_LONG45        4s/0h of 10853 corpus (6391s/4462h CT) 05/16/05
+#counts   SARE_MSGID_LONG45        32s/0h of 155354 corpus (103809s/51545h DOC) 05/15/06
+#counts   SARE_MSGID_LONG45        14s/0h of 42268 corpus (34150s/8118h FVGT) 05/15/06
+#counts   SARE_MSGID_LONG45        7s/1h of 54179 corpus (17002s/37177h JH-3.01) 03/01/05
+#counts   SARE_MSGID_LONG45        52s/0h of 106014 corpus (72769s/33245h ML) 05/14/06
+#counts   SARE_MSGID_LONG45        15s/5h of 22938 corpus (17228s/5710h MY) 05/14/06
+#max      SARE_MSGID_LONG45        28s/0h of 47809 corpus (43224s/4585h MY) 07/27/05
+
+#####################################################################################
+#         SARE Received Header Rules
+########  ######################   ##################################################
+
+header    SARE_HELO_EQ_CUST        X-Spam-Relays-Untrusted =~ /helo=\S*\.customer/i
+score     SARE_HELO_EQ_CUST        0.122
+#ham      SARE_HELO_EQ_CUST        MyCheckFree, billpay@billpay.bankofamerica.com, 
+#hist     SARE_HELO_EQ_CUST        Frederic Tarasevicius, Feb 22 2005
+#counts   SARE_HELO_EQ_CUST        15s/57h of 173032 corpus (99056s/73976h RM) 05/11/06
+#max      SARE_HELO_EQ_CUST        108s/42h of 689155 corpus (348140s/341015h RM) 09/18/05
+#counts   SARE_HELO_EQ_CUST        66s/2h of 55978 corpus (51650s/4328h AxB2) 05/14/06
+#counts   SARE_HELO_EQ_CUST        4s/0h of 13285 corpus (7414s/5871h CT) 05/14/06
+#max      SARE_HELO_EQ_CUST        12s/0h of 10590 corpus (5819s/4771h CT) 07/26/05
+#counts   SARE_HELO_EQ_CUST        45s/0h of 155354 corpus (103809s/51545h DOC) 05/15/06
+#counts   SARE_HELO_EQ_CUST        12s/1h of 42268 corpus (34150s/8118h FVGT) 05/15/06
+#counts   SARE_HELO_EQ_CUST        27s/0h of 54179 corpus (17002s/37177h JH-3.01) 03/01/05
+#counts   SARE_HELO_EQ_CUST        0s/3h of 106014 corpus (72769s/33245h ML) 05/14/06
+#counts   SARE_HELO_EQ_CUST        11s/6h of 22938 corpus (17228s/5710h MY) 05/14/06
+#max      SARE_HELO_EQ_CUST        23s/6h of 47809 corpus (43224s/4585h MY) 07/27/05
+
+header    SARE_HELO_SENDER         Received =~ /helo=sender/i
+describe  SARE_HELO_SENDER         Received header has possible spamsign
+score     SARE_HELO_SENDER         0.486
+#hist     SARE_HELO_SENDER         Originally submitted by Bob Menschel. RM.hr_HeloSender
+#ham      SARE_HELO_SENDER         American Express email to online business accepting their cards
+#counts   SARE_HELO_SENDER         4s/0h of 173032 corpus (99056s/73976h RM) 05/11/06
+#max      SARE_HELO_SENDER         33s/3h of 60630 corpus (35509s/25121h RM) 08/11/04
+#counts   SARE_HELO_SENDER         2s/0h of 54176 corpus (16997s/37179h JH-3.01) 02/01/05
+#counts   SARE_HELO_SENDER         0s/0h of 17050 corpus (14617s/2433h MY) 08/08/04
+#counts   SARE_HELO_SENDER         0s/0h of 10590 corpus (5819s/4771h CT) 07/26/05
+#max      SARE_HELO_SENDER         1s/0h of 11052 corpus (6614s/4438h CT) 03/10/05
+#counts   SARE_HELO_SENDER         0s/0h of 2500 corpus (531s/1969h ft) 05/17/05
+
+header    SARE_HELO_SERVER         Received =~ /\(helo=server\)/i
+describe  SARE_HELO_SERVER         Received header has possible spamsign
+score     SARE_HELO_SERVER         0.722
+#ham      SARE_HELO_SERVER         confirmed (4): "opt-in" messages from Canon, ASDS Computer Co. software registration confirmation
+#counts   SARE_HELO_SERVER         22s/0h of 173032 corpus (99056s/73976h RM) 05/11/06
+#max      SARE_HELO_SERVER         104s/0h of 97268 corpus (79437s/17831h RM) 01/24/04
+#counts   SARE_HELO_SERVER         2s/0h of 55848 corpus (18671s/37177h JH-3.01) 06/10/05
+#counts   SARE_HELO_SERVER         0s/0h of 17050 corpus (14617s/2433h MY) 08/08/04
+#counts   SARE_HELO_SERVER         0s/4h of 55978 corpus (51650s/4328h AxB2) 05/14/06
+#counts   SARE_HELO_SERVER         0s/0h of 13285 corpus (7414s/5871h CT) 05/14/06
+#max      SARE_HELO_SERVER         8s/3h of 11052 corpus (6614s/4438h CT) 03/10/05
+#counts   SARE_HELO_SERVER         0s/0h of 2500 corpus (531s/1969h ft) 05/17/05
+
+#@@#           Moved file 0 to file 3           SARE_RECV_ADDR5
+header    SARE_RECV_ADDR5          Received =~ /^from \(HELO \w+\) \[\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\] by /
+describe  SARE_RECV_ADDR5          RCVD header has no FQDN and a HELO.
+score     SARE_RECV_ADDR5          0.100
+#counts   SARE_RECV_ADDR5          0s/0h of 89541 corpus (67467s/22074h RM) 05/28/04
+#counts   SARE_RECV_ADDR5          0s/0h of 10853 corpus (6391s/4462h CT) 05/16/05
+#counts   SARE_RECV_ADDR5          1s/0h of 155106 corpus (103557s/51549h DOC) 05/14/06
+#counts   SARE_RECV_ADDR5          0s/0h of 2500 corpus (531s/1969h ft) 05/17/05
+#counts   SARE_RECV_ADDR5          0s/0h of 32586 corpus (9341s/23245h JH) 06/10/04
+
+header    SARE_RECV_CHAR_CARAT     Received =~ /\^/
+describe  SARE_RECV_CHAR_CARAT     Received header has apparently invalid character
+score     SARE_RECV_CHAR_CARAT     0.619
+#ham      SARE_RECV_CHAR_CARAT     confirmed (1) 
+#hist     SARE_RECV_CHAR_CARAT     Created by Bob Menschel May 3 2004
+#counts   SARE_RECV_CHAR_CARAT     0s/0h of 173032 corpus (99056s/73976h RM) 05/11/06
+#max      SARE_RECV_CHAR_CARAT     23s/1h of 689155 corpus (348140s/341015h RM) 09/18/05
+#counts   SARE_RECV_CHAR_CARAT     0s/0h of 10853 corpus (6391s/4462h CT) 05/16/05
+#counts   SARE_RECV_CHAR_CARAT     2s/0h of 155354 corpus (103809s/51545h DOC) 05/15/06
+#counts   SARE_RECV_CHAR_CARAT     4s/0h of 42268 corpus (34150s/8118h FVGT) 05/15/06
+#counts   SARE_RECV_CHAR_CARAT     0s/0h of 54176 corpus (16997s/37179h JH-3.01) 02/01/05
+#max      SARE_RECV_CHAR_CARAT     2s/0h of 32586 corpus (9341s/23245h JH) 06/10/04
+#counts   SARE_RECV_CHAR_CARAT     0s/0h of 17050 corpus (14617s/2433h MY) 08/08/04
+
+#              Moved from file 1 to 3: SARE_RECV_FREESERVE
+header    SARE_RECV_FREESERVE      Received =~ /\bfreeserve\.com/
+describe  SARE_RECV_FREESERVE      spam passed through system used by spammers
+score     SARE_RECV_FREESERVE      0.551
+#ham      SARE_RECV_FREESERVE      confirmed (1)
+#ham      SARE_RECV_FREESERVE      userid@hurrel.freeserve.co.uk, valid email sent to Yahoo groups list by subscriber
+#counts   SARE_RECV_FREESERVE      195s/14h of 173032 corpus (99056s/73976h RM) 05/11/06
+#counts   SARE_RECV_FREESERVE      2s/3h of 55929 corpus (51589s/4340h AxB2) 05/14/06
+#counts   SARE_RECV_FREESERVE      1s/0h of 54176 corpus (16997s/37179h JH-3.01) 02/01/05
+#counts   SARE_RECV_FREESERVE      0s/0h of 22942 corpus (17234s/5708h MY) 05/14/06
+#max      SARE_RECV_FREESERVE      1s/0h of 45478 corpus (41529s/3949h MY) 05/16/05
+#counts   SARE_RECV_FREESERVE      3s/0h of 13313 corpus (7438s/5875h CT) 05/14/06
+#counts   SARE_RECV_FREESERVE      14s/7h of 155430 corpus (103881s/51549h DOC) 05/15/06
+#counts   SARE_RECV_FREESERVE      3s/0h of 42275 corpus (34158s/8117h FVGT) 05/15/06
+
+header    SARE_RECV_INFOSAT        Received =~ /\binfosat\.(?:com|net)/
+describe  SARE_RECV_INFOSAT        Email passed through apparent spammer domain 
+score     SARE_RECV_INFOSAT        0.618
+#counts   SARE_RECV_INFOSAT        0s/1h of 173032 corpus (99056s/73976h RM) 05/11/06
+#max      SARE_RECV_INFOSAT        484s/35h of 238550 corpus (112525s/126025h RM) 02/28/05
+#counts   SARE_RECV_INFOSAT        18s/0h of 54176 corpus (16997s/37179h JH-3.01) 02/01/05
+#counts   SARE_RECV_INFOSAT        0s/0h of 22938 corpus (17228s/5710h MY) 05/14/06
+#max      SARE_RECV_INFOSAT        17s/0h of 45478 corpus (41529s/3949h MY) 05/16/05
+#counts   SARE_RECV_INFOSAT        0s/0h of 13285 corpus (7414s/5871h CT) 05/14/06
+#max      SARE_RECV_INFOSAT        5s/0h of 10629 corpus (5847s/4782h CT) 09/18/05
+#counts   SARE_RECV_INFOSAT        0s/1h of 42268 corpus (34150s/8118h FVGT) 05/15/06
+#max      SARE_RECV_INFOSAT        2s/1h of 6924 corpus (1403s/5521h ft) 07/27/05
+
+header    SARE_RECV_SPAM_DOMN03    Received =~ /\b(?:takas)\.lt/
+describe  SARE_RECV_SPAM_DOMN03    Email passed through apparent spammer domain 
+score     SARE_RECV_SPAM_DOMN03    0.646
+#counts   SARE_RECV_SPAM_DOMN03    29s/0h of 173032 corpus (99056s/73976h RM) 05/11/06
+#max      SARE_RECV_SPAM_DOMN03    56s/3h of 689155 corpus (348140s/341015h RM) 09/18/05
+#counts   SARE_RECV_SPAM_DOMN03    0s/1h of 55978 corpus (51650s/4328h AxB2) 05/14/06
+#counts   SARE_RECV_SPAM_DOMN03    1s/0h of 13285 corpus (7414s/5871h CT) 05/14/06
+#max      SARE_RECV_SPAM_DOMN03    2s/0h of 11052 corpus (6614s/4438h CT) 03/10/05
+#counts   SARE_RECV_SPAM_DOMN03    45s/0h of 155354 corpus (103809s/51545h DOC) 05/15/06
+#counts   SARE_RECV_SPAM_DOMN03    14s/0h of 42268 corpus (34150s/8118h FVGT) 05/15/06
+#counts   SARE_RECV_SPAM_DOMN03    4s/0h of 54176 corpus (16997s/37179h JH-3.01) 02/01/05
+#max      SARE_RECV_SPAM_DOMN03    7s/0h of 38398 corpus (14914s/23484h JH) 08/14/04 TM2 SA3.0-pre2
+#counts   SARE_RECV_SPAM_DOMN03    8s/1h of 106014 corpus (72769s/33245h ML) 05/14/06
+#counts   SARE_RECV_SPAM_DOMN03    3s/0h of 47283 corpus (43206s/4077h MY) 06/05/05
+
+header    SARE_RECV_SPAM_DOMN07    Received =~ /\bnoos\.fr/
+describe  SARE_RECV_SPAM_DOMN07    Spam passed through noos.fr relay
+score     SARE_RECV_SPAM_DOMN07    0.615
+#counts   SARE_RECV_SPAM_DOMN07    99s/0h of 173032 corpus (99056s/73976h RM) 05/11/06
+#max      SARE_RECV_SPAM_DOMN07    370s/44h of 689155 corpus (348140s/341015h RM) 09/18/05
+#counts   SARE_RECV_SPAM_DOMN07    58s/0h of 55978 corpus (51650s/4328h AxB2) 05/14/06
+#counts   SARE_RECV_SPAM_DOMN07    16s/0h of 13285 corpus (7414s/5871h CT) 05/14/06
+#max      SARE_RECV_SPAM_DOMN07    18s/0h of 10590 corpus (5819s/4771h CT) 07/26/05
+#counts   SARE_RECV_SPAM_DOMN07    209s/0h of 155354 corpus (103809s/51545h DOC) 05/15/06
+#counts   SARE_RECV_SPAM_DOMN07    32s/0h of 42268 corpus (34150s/8118h FVGT) 05/15/06
+#counts   SARE_RECV_SPAM_DOMN07    40s/0h of 54176 corpus (16997s/37179h JH-3.01) 02/01/05
+#counts   SARE_RECV_SPAM_DOMN07    47s/9h of 106014 corpus (72769s/33245h ML) 05/14/06
+#counts   SARE_RECV_SPAM_DOMN07    16s/1h of 22938 corpus (17228s/5710h MY) 05/14/06
+#max      SARE_RECV_SPAM_DOMN07    55s/1h of 47809 corpus (43224s/4585h MY) 07/27/05
+
+header    SARE_RECV_SPAM_NAME1     Received =~ /\bHINET-IP/i 
+describe  SARE_RECV_SPAM_NAME1     Email passed through probable spammer relay
+score     SARE_RECV_SPAM_NAME1     0.614
+#counts   SARE_RECV_SPAM_NAME1     79s/0h of 173032 corpus (99056s/73976h RM) 05/11/06
+#max      SARE_RECV_SPAM_NAME1     349s/35h of 689155 corpus (348140s/341015h RM) 09/18/05
+#counts   SARE_RECV_SPAM_NAME1     30s/0h of 55978 corpus (51650s/4328h AxB2) 05/14/06
+#counts   SARE_RECV_SPAM_NAME1     8s/0h of 10590 corpus (5819s/4771h CT) 07/26/05
+#max      SARE_RECV_SPAM_NAME1     8s/0h of 11052 corpus (6614s/4438h CT) 03/10/05
+#counts   SARE_RECV_SPAM_NAME1     149s/0h of 155354 corpus (103809s/51545h DOC) 05/15/06
+#counts   SARE_RECV_SPAM_NAME1     69s/0h of 42268 corpus (34150s/8118h FVGT) 05/15/06
+#counts   SARE_RECV_SPAM_NAME1     12s/0h of 54176 corpus (16997s/37179h JH-3.01) 02/01/05
+#counts   SARE_RECV_SPAM_NAME1     17s/0h of 106014 corpus (72769s/33245h ML) 05/14/06
+#counts   SARE_RECV_SPAM_NAME1     13s/0h of 22938 corpus (17228s/5710h MY) 05/14/06
+#max      SARE_RECV_SPAM_NAME1     15s/0h of 17050 corpus (14617s/2433h MY) 08/08/04
+
+header    SARE_RECV_SPAM_NAME2     Received =~ /\bnetvigator\.com/
+describe  SARE_RECV_SPAM_NAME2     Spam passed through netvigator.com system
+score     SARE_RECV_SPAM_NAME2     0.393
+#hist     SARE_RECV_SPAM_NAME2     Created by Bob Menschel June 9 2004
+#ham      SARE_RECV_SPAM_NAME2     Appropriate (probably not spam) UCE via TradeEasy to CW.com, 3 in 2003, 1 in 2004
+#counts   SARE_RECV_SPAM_NAME2     25s/2h of 173032 corpus (99056s/73976h RM) 05/11/06
+#max      SARE_RECV_SPAM_NAME2     155s/24h of 689155 corpus (348140s/341015h RM) 09/18/05
+#counts   SARE_RECV_SPAM_NAME2     4s/0h of 55978 corpus (51650s/4328h AxB2) 05/14/06
+#counts   SARE_RECV_SPAM_NAME2     4s/0h of 13285 corpus (7414s/5871h CT) 05/14/06
+#max      SARE_RECV_SPAM_NAME2     5s/0h of 11052 corpus (6614s/4438h CT) 03/10/05
+#counts   SARE_RECV_SPAM_NAME2     50s/1h of 155354 corpus (103809s/51545h DOC) 05/15/06
+#counts   SARE_RECV_SPAM_NAME2     5s/0h of 42268 corpus (34150s/8118h FVGT) 05/15/06
+#counts   SARE_RECV_SPAM_NAME2     19s/1h of 54176 corpus (16997s/37179h JH-3.01) 02/01/05
+#counts   SARE_RECV_SPAM_NAME2     23s/5h of 106014 corpus (72769s/33245h ML) 05/14/06
+#counts   SARE_RECV_SPAM_NAME2     7s/0h of 22938 corpus (17228s/5710h MY) 05/14/06
+
+#####################################################################################
+#         SARE Received Header IP Address Rules
+########  ######################   ##################################################
+
+#@@#           Moved file 1 to file 3           SARE_RECV_IP_063106130
+header    SARE_RECV_IP_063106130   Received =~ /\[63\.106\.130\.\d{1,3}\]/
+describe  SARE_RECV_IP_063106130   Spam passed through possible spammer relay
+score     SARE_RECV_IP_063106130   0.278  
+#ham      SARE_RECV_IP_063106130   Confirmed (3) 
+#hist     SARE_RECV_IP_063106130   Created by Bob Menschel May 14 2005
+#note     SARE_RECV_IP_063106130   Data Depot LLC
+#counts   SARE_RECV_IP_063106130   5s/0h of 298277 corpus (136400s/161877h RM) 06/06/05
+#max      SARE_RECV_IP_063106130   15s/0h of 272483 corpus (108035s/164448h RM) 05/15/05
+#counts   SARE_RECV_IP_063106130   0s/0h of 10853 corpus (6391s/4462h CT) 05/16/05
+#counts   SARE_RECV_IP_063106130   0s/0h of 2500 corpus (531s/1969h ft) 05/17/05
+#counts   SARE_RECV_IP_063106130   0s/0h of 55848 corpus (18671s/37177h JH-3.01) 06/10/05
+#counts   SARE_RECV_IP_063106130   0s/0h of 22942 corpus (17234s/5708h MY) 05/14/06
+#max      SARE_RECV_IP_063106130   1s/0h of 47809 corpus (43224s/4585h MY) 07/27/05
+
+#@@#           Moved file 1 to file 3           SARE_RECV_IP_064034
+header    SARE_RECV_IP_064034      Received =~ /\[64\.34\.(?:\d{1,2}|1(?:[01]|2[0-7]))\.\d{1,3}\]/
+describe  SARE_RECV_IP_064034      Spam passed through possible spammer relay
+score     SARE_RECV_IP_064034      0.532  
+#stype    SARE_RECV_IP_064034      spamp 
+#hist     SARE_RECV_IP_064034      Created by Bob Menschel Aug 07 2005
+#counts   SARE_RECV_IP_064034      4s/1h of 173032 corpus (99056s/73976h RM) 05/11/06
+#max      SARE_RECV_IP_064034      144s/9h of 689155 corpus (348140s/341015h RM) 09/18/05
+#counts   SARE_RECV_IP_064034      0s/0h of 13313 corpus (7438s/5875h CT) 05/14/06
+#max      SARE_RECV_IP_064034      2s/0h of 10629 corpus (5847s/4782h CT) 09/18/05
+#counts   SARE_RECV_IP_064034      47s/0h of 155430 corpus (103881s/51549h DOC) 05/15/06
+#counts   SARE_RECV_IP_064034      4s/0h of 7500 corpus (1767s/5733h ft) 09/18/05
+#counts   SARE_RECV_IP_064034      12s/5h of 22942 corpus (17234s/5708h MY) 05/14/06
+
+header    SARE_RECV_IP_066111      Received =~ /\[66\.111\.(?:19[2-9]|2\d\d)\.\d{1,3}\]/
+describe  SARE_RECV_IP_066111      Passed through possible spammer relay or source
+score     SARE_RECV_IP_066111      0.347
+#ham      SARE_RECV_IP_066111      confirmed (1) 
+#note     SARE_RECV_IP_066111      WebHostPlus
+#hist     SARE_RECV_IP_066111      Created by Bob Menschel Nov 27 2004
+#counts   SARE_RECV_IP_066111      24s/0h of 173032 corpus (99056s/73976h RM) 05/11/06
+#max      SARE_RECV_IP_066111      38s/7h of 689155 corpus (348140s/341015h RM) 09/18/05
+#counts   SARE_RECV_IP_066111      0s/0h of 54176 corpus (16997s/37179h JH-3.01) 02/01/05
+#counts   SARE_RECV_IP_066111      10s/0h of 22938 corpus (17228s/5710h MY) 05/14/06
+#max      SARE_RECV_IP_066111      90s/0h of 45478 corpus (41529s/3949h MY) 05/16/05
+#counts   SARE_RECV_IP_066111      0s/0h of 10853 corpus (6391s/4462h CT) 05/16/05
+#counts   SARE_RECV_IP_066111      1s/0h of 155354 corpus (103809s/51545h DOC) 05/15/06
+#counts   SARE_RECV_IP_066111      0s/0h of 2500 corpus (531s/1969h ft) 05/17/05
+
+header    SARE_RECV_IP_069194      Received =~ /from \[62\.19[45]\.\d{1,3}\.\d{1,3}\]/
+describe  SARE_RECV_IP_069194      Spam passed through possible spammer relay
+score     SARE_RECV_IP_069194      1.666
+#stype    SARE_RECV_IP_069194      spamp
+#counts   SARE_RECV_IP_069194      6s/0h of 173032 corpus (99056s/73976h RM) 05/11/06
+#max      SARE_RECV_IP_069194      213s/0h of 106584 corpus (86917s/19667h) 03/13/04
+#counts   SARE_RECV_IP_069194      2s/0h of 54176 corpus (16997s/37179h JH-3.01) 02/01/05
+#counts   SARE_RECV_IP_069194      1s/0h of 106014 corpus (72769s/33245h ML) 05/14/06
+#counts   SARE_RECV_IP_069194      1s/0h of 47809 corpus (43224s/4585h MY) 07/27/05
+#counts   SARE_RECV_IP_069194      1s/0h of 55978 corpus (51650s/4328h AxB2) 05/14/06
+#counts   SARE_RECV_IP_069194      0s/0h of 10853 corpus (6391s/4462h CT) 05/16/05
+#counts   SARE_RECV_IP_069194      0s/0h of 2500 corpus (531s/1969h ft) 05/17/05
+
+header    SARE_RECV_IP_080032      Received =~ /\[80\.32\.\d{1,3}\.\d{1,3}\]/
+describe  SARE_RECV_IP_080032      Spam passed through possible spammer relay
+score     SARE_RECV_IP_080032      0.615
+#ham      SARE_RECV_IP_080032      confirmed (1) 
+#hist     SARE_RECV_IP_080032      Created by Bob Menschel Apr 28 2004
+#counts   SARE_RECV_IP_080032      15s/0h of 173032 corpus (99056s/73976h RM) 05/11/06
+#max      SARE_RECV_IP_080032      30s/2h of 689155 corpus (348140s/341015h RM) 09/18/05
+#counts   SARE_RECV_IP_080032      28s/0h of 55978 corpus (51650s/4328h AxB2) 05/14/06
+#counts   SARE_RECV_IP_080032      2s/0h of 13285 corpus (7414s/5871h CT) 05/14/06
+#max      SARE_RECV_IP_080032      2s/0h of 11052 corpus (6614s/4438h CT) 03/10/05
+#counts   SARE_RECV_IP_080032      34s/0h of 155354 corpus (103809s/51545h DOC) 05/15/06
+#counts   SARE_RECV_IP_080032      6s/0h of 42268 corpus (34150s/8118h FVGT) 05/15/06
+#counts   SARE_RECV_IP_080032      1s/0h of 54176 corpus (16997s/37179h JH-3.01) 02/01/05
+#max      SARE_RECV_IP_080032      2s/0h of 38398 corpus (14914s/23484h JH) 08/14/04 TM2 SA3.0-pre2
+#counts   SARE_RECV_IP_080032      1s/0h of 106014 corpus (72769s/33245h ML) 05/14/06
+#counts   SARE_RECV_IP_080032      0s/0h of 17050 corpus (14617s/2433h MY) 08/08/04
+
+header    SARE_RECV_IP_080040      Received =~ /\[80\.4[1-7]\.\d{1,3}\.\d{1,3}\]/
+describe  SARE_RECV_IP_080040      Spam passed through possible spammer relay 
+score     SARE_RECV_IP_080040      0.456
+#ham      SARE_RECV_IP_080040      confirmed (6) 
+#hist     SARE_RECV_IP_080040      Created by Bob Menschel June 7 2004
+#counts   SARE_RECV_IP_080040      55s/1h of 173032 corpus (99056s/73976h RM) 05/11/06
+#max      SARE_RECV_IP_080040      298s/21h of 689155 corpus (348140s/341015h RM) 09/18/05
+#counts   SARE_RECV_IP_080040      16s/0h of 55978 corpus (51650s/4328h AxB2) 05/14/06
+#counts   SARE_RECV_IP_080040      0s/0h of 13285 corpus (7414s/5871h CT) 05/14/06
+#max      SARE_RECV_IP_080040      5s/0h of 11052 corpus (6614s/4438h CT) 03/10/05
+#counts   SARE_RECV_IP_080040      32s/4h of 155354 corpus (103809s/51545h DOC) 05/15/06
+#counts   SARE_RECV_IP_080040      7s/0h of 42268 corpus (34150s/8118h FVGT) 05/15/06
+#counts   SARE_RECV_IP_080040      11s/18h of 54176 corpus (16997s/37179h JH-3.01) 02/01/05
+#counts   SARE_RECV_IP_080040      1s/5h of 106014 corpus (72769s/33245h ML) 05/14/06
+#counts   SARE_RECV_IP_080040      1s/0h of 22938 corpus (17228s/5710h MY) 05/14/06
+#max      SARE_RECV_IP_080040      14s/0h of 47809 corpus (43224s/4585h MY) 07/27/05
+
+header    SARE_RECV_IP_080178      Received =~ /\[80\.17[89]\.\d{1,3}\.\d{1,3}\]/
+describe  SARE_RECV_IP_080178      Spam passed through possible spammer relay
+score     SARE_RECV_IP_080178      0.391
+#ham      SARE_RECV_IP_080178      Family email from Israel
+#counts   SARE_RECV_IP_080178      130s/3h of 173032 corpus (99056s/73976h RM) 05/11/06
+#max      SARE_RECV_IP_080178      409s/60h of 689155 corpus (348140s/341015h RM) 09/18/05
+#counts   SARE_RECV_IP_080178      40s/1h of 55978 corpus (51650s/4328h AxB2) 05/14/06
+#counts   SARE_RECV_IP_080178      6s/0h of 13285 corpus (7414s/5871h CT) 05/14/06
+#counts   SARE_RECV_IP_080178      27s/0h of 155354 corpus (103809s/51545h DOC) 05/15/06
+#counts   SARE_RECV_IP_080178      18s/1h of 42268 corpus (34150s/8118h FVGT) 05/15/06
+#counts   SARE_RECV_IP_080178      11s/0h of 55848 corpus (18671s/37177h JH-3.01) 06/10/05
+#max      SARE_RECV_IP_080178      21s/0h of 38398 corpus (14914s/23484h JH) 08/14/04 TM2 SA3.0-pre2
+#counts   SARE_RECV_IP_080178      5s/0h of 106014 corpus (72769s/33245h ML) 05/14/06
+#counts   SARE_RECV_IP_080178      3s/0h of 22938 corpus (17228s/5710h MY) 05/14/06
+#max      SARE_RECV_IP_080178      11s/0h of 17050 corpus (14617s/2433h MY) 08/08/04
+
+header    SARE_RECV_IP_222126      Received =~ /\[222\.126\.(?:\d{1,2}|1[01]\d|12[0-7])\.\d{1,3}\]/
+describe  SARE_RECV_IP_222126      Passed through possible spammer relay or source
+score     SARE_RECV_IP_222126      0.612
+#note     SARE_RECV_IP_222126      Infocom, Makati City, PH
+#hist     SARE_RECV_IP_222126      Created by Bob Menschel Dec 01 2004
+#counts   SARE_RECV_IP_222126      13s/0h of 173032 corpus (99056s/73976h RM) 05/11/06
+#max      SARE_RECV_IP_222126      37s/3h of 689155 corpus (348140s/341015h RM) 09/18/05
+#counts   SARE_RECV_IP_222126      1s/0h of 55978 corpus (51650s/4328h AxB2) 05/14/06
+#counts   SARE_RECV_IP_222126      0s/0h of 10590 corpus (5819s/4771h CT) 07/26/05
+#max      SARE_RECV_IP_222126      1s/0h of 10853 corpus (6391s/4462h CT) 05/16/05
+#counts   SARE_RECV_IP_222126      9s/0h of 42268 corpus (34150s/8118h FVGT) 05/15/06
+#counts   SARE_RECV_IP_222126      3s/0h of 54176 corpus (16997s/37179h JH-3.01) 02/01/05
+#counts   SARE_RECV_IP_222126      2s/0h of 106014 corpus (72769s/33245h ML) 05/14/06
+#counts   SARE_RECV_IP_222126      1s/0h of 47809 corpus (43224s/4585h MY) 07/27/05
+
+#####################################################################################
+#         SARE Reply-To Rules 
+########  ######################   ##################################################
+
+header    SARE_REPLY_SPAMWORD2     Reply-To =~ /(?:amateur|funny|interacia)/i
+describe  SARE_REPLY_SPAMWORD2     Reply-To email addr incl spam indicator word
+score     SARE_REPLY_SPAMWORD2     0.486
+#ham      SARE_REPLY_SPAMWORD2     confrmed (1)
+#counts   SARE_REPLY_SPAMWORD2     11s/0h of 173032 corpus (99056s/73976h RM) 05/11/06
+#counts   SARE_REPLY_SPAMWORD2     9s/0h of 55978 corpus (51650s/4328h AxB2) 05/14/06
+#counts   SARE_REPLY_SPAMWORD2     1s/0h of 13285 corpus (7414s/5871h CT) 05/14/06
+#counts   SARE_REPLY_SPAMWORD2     6s/0h of 155354 corpus (103809s/51545h DOC) 05/15/06
+#counts   SARE_REPLY_SPAMWORD2     1s/0h of 42268 corpus (34150s/8118h FVGT) 05/15/06
+#counts   SARE_REPLY_SPAMWORD2     0s/0h of 54176 corpus (16997s/37179h JH-3.01) 02/01/05
+#max      SARE_REPLY_SPAMWORD2     1s/0h of 32586 corpus (9341s/23245h JH) 06/10/04
+#counts   SARE_REPLY_SPAMWORD2     2s/0h of 106014 corpus (72769s/33245h ML) 05/14/06
+#counts   SARE_REPLY_SPAMWORD2     3s/0h of 22938 corpus (17228s/5710h MY) 05/14/06
+#max      SARE_REPLY_SPAMWORD2     25s/0h of 45478 corpus (41529s/3949h MY) 05/16/05
+
+#####################################################################################
+#         SARE TO & CC Rules  
+########  ######################   ##################################################
+
+header    SARE_TOCC_SLASHES        ToCc =~ m'//'
+describe  SARE_TOCC_SLASHES        Spam sign: double slashes in To/Cc headers
+score     SARE_TOCC_SLASHES        0.111
+#counts   SARE_TOCC_SLASHES        8s/0h of 173032 corpus (99056s/73976h RM) 05/11/06
+#max      SARE_TOCC_SLASHES        9s/0h of 85901 corpus (63701s/22200h RM) 06/05/04
+#counts   SARE_TOCC_SLASHES        1s/0h of 54176 corpus (16997s/37179h JH-3.01) 02/01/05
+#counts   SARE_TOCC_SLASHES        6s/0h of 106014 corpus (72769s/33245h ML) 05/14/06
+#counts   SARE_TOCC_SLASHES        0s/0h of 22938 corpus (17228s/5710h MY) 05/14/06
+#max      SARE_TOCC_SLASHES        1s/0h of 20489 corpus (17189s/3300h MY) 01/30/05
+#counts   SARE_TOCC_SLASHES        0s/1h of 55978 corpus (51650s/4328h AxB2) 05/14/06
+#counts   SARE_TOCC_SLASHES        0s/0h of 10853 corpus (6391s/4462h CT) 05/16/05
+#counts   SARE_TOCC_SLASHES        2s/0h of 155354 corpus (103809s/51545h DOC) 05/15/06
+#counts   SARE_TOCC_SLASHES        0s/0h of 2500 corpus (531s/1969h ft) 05/17/05
+
+#####################################################################################
+#         SARE X-Mailer Rules
+########  ######################   ##################################################
+
+header    SARE_XMAIL_BULK3a        X-Mailer =~ /Foxmail/i
+describe  SARE_XMAIL_BULK3a        Uses bulk mailer used by spammers
+score     SARE_XMAIL_BULK3a        0.735
+#ham      SARE_XMAIL_BULK3a        ham from 2003 from China, "Foxmail 4.[12] \[cn\]", same as found in spam
+#hist     SARE_XMAIL_BULK3a        Bob Menschel: PSS Bulk Mailer, Calypso
+#counts   SARE_XMAIL_BULK3a        584s/14h of 173032 corpus (99056s/73976h RM) 05/11/06
+#max      SARE_XMAIL_BULK3a        2166s/65h of 689155 corpus (348140s/341015h RM) 09/18/05
+#counts   SARE_XMAIL_BULK3a        27s/4h of 9984 corpus (5649s/4335h AxB) 05/14/06
+#counts   SARE_XMAIL_BULK3a        2s/0h of 13285 corpus (7414s/5871h CT) 05/14/06
+#counts   SARE_XMAIL_BULK3a        59s/1h of 155354 corpus (103809s/51545h DOC) 05/15/06
+#counts   SARE_XMAIL_BULK3a        458s/0h of 42268 corpus (34150s/8118h FVGT) 05/15/06
+#counts   SARE_XMAIL_BULK3a        4s/0h of 54176 corpus (16997s/37179h JH-3.01) 02/01/05
+#max      SARE_XMAIL_BULK3a        5s/0h of 38398 corpus (14914s/23484h JH) 08/14/04 TM2 SA3.0-pre2
+#counts   SARE_XMAIL_BULK3a        330s/7h of 106014 corpus (72769s/33245h ML) 05/14/06
+#counts   SARE_XMAIL_BULK3a        0s/1h of 20489 corpus (17189s/3300h MY) 01/30/05
+#max      SARE_XMAIL_BULK3a        4s/1h of 17050 corpus (14617s/2433h MY) 08/08/04
+
+#todo     SARE_XMAIL_BULK5         Add test for BSP-Trusted.
+header    SARE_XMAIL_BULK5         X-Mailer =~ /(?:Roving Constant Contact)/i
+describe  SARE_XMAIL_BULK5         Uses ham mailer, sometimes abused
+score     SARE_XMAIL_BULK5         0.648
+#hist     SARE_XMAIL_BULK5         Bob Menschel: Roving Constant Contact
+#counts   SARE_XMAIL_BULK5         1s/6h of 173032 corpus (99056s/73976h RM) 05/11/06
+#max      SARE_XMAIL_BULK5         1900s/67h of 327690 corpus (159737s/167953h RM) 07/27/05
+#counts   SARE_XMAIL_BULK5         9s/1h of 55978 corpus (51650s/4328h AxB2) 05/14/06
+#counts   SARE_XMAIL_BULK5         3s/9h of 13285 corpus (7414s/5871h CT) 05/14/06
+#max      SARE_XMAIL_BULK5         3s/3h of 10853 corpus (6391s/4462h CT) 05/16/05
+#counts   SARE_XMAIL_BULK5         1s/0h of 155354 corpus (103809s/51545h DOC) 05/15/06
+#counts   SARE_XMAIL_BULK5         0s/13h of 42268 corpus (34150s/8118h FVGT) 05/15/06
+#counts   SARE_XMAIL_BULK5         0s/0h of 32586 corpus (9341s/23245h JH) 06/10/04
+#counts   SARE_XMAIL_BULK5         8s/0h of 106014 corpus (72769s/33245h ML) 05/14/06
+#counts   SARE_XMAIL_BULK5         0s/3h of 17050 corpus (14617s/2433h MY) 08/08/04
+
+#@@#           Moved file 1 to file 3           SARE_XMAIL_GOMAIL
+header    SARE_XMAIL_GOMAIL        X-Mailer =~ /GoMail/i
+describe  SARE_XMAIL_GOMAIL        Apparently uses spam/bulk mailer
+score     SARE_XMAIL_GOMAIL        0.296
+#hist     SARE_XMAIL_GOMAIL        Bob Menschel, Mar 4 2005, from suggestion by Alex Broens
+#counts   SARE_XMAIL_GOMAIL        0s/0h of 173032 corpus (99056s/73976h RM) 05/11/06
+#max      SARE_XMAIL_GOMAIL        1319s/0h of 689155 corpus (348140s/341015h RM) 09/18/05
+#counts   SARE_XMAIL_GOMAIL        0s/0h of 10590 corpus (5819s/4771h CT) 07/26/05
+#max      SARE_XMAIL_GOMAIL        1s/0h of 10995 corpus (6568s/4427h CT) 03/10/05
+#counts   SARE_XMAIL_GOMAIL        1s/0h of 155430 corpus (103881s/51549h DOC) 05/15/06
+#counts   SARE_XMAIL_GOMAIL        15s/0h of 54806 corpus (17633s/37173h JH-3.01) 03/14/05
+#counts   SARE_XMAIL_GOMAIL        0s/0h of 31513 corpus (27912s/3601h MY) 03/09/05
+#counts   SARE_XMAIL_GOMAIL        0s/2h of 6924 corpus (1403s/5521h ft) 07/27/05
+
+header    SARE_XMAIL_LCDD          X-Mailer=~/^[a-z]+ \d\.\d$/
+describe  SARE_XMAIL_LCDD          Ratware mailer
+score     SARE_XMAIL_LCDD          0.642
+#ham      SARE_XMAIL_LCDD          X-Mailer: reportbug 3.8, tlmpmail 0.9
+#counts   SARE_XMAIL_LCDD          0s/0h of 173032 corpus (99056s/73976h RM) 05/11/06
+#max      SARE_XMAIL_LCDD          172s/0h of 33004 corpus (9761s/23243h RM) 05/21/04
+#counts   SARE_XMAIL_LCDD          5s/0h of 54176 corpus (16997s/37179h JH-3.01) 02/01/05
+#max      SARE_XMAIL_LCDD          31s/0h of 38374 corpus (14893s/23481h JH-SA3.0rc1) 08/18/04
+#counts   SARE_XMAIL_LCDD          0s/0h of 20489 corpus (17189s/3300h MY) 01/30/05
+#counts   SARE_XMAIL_LCDD          0s/0h of 10853 corpus (6391s/4462h CT) 05/16/05
+#counts   SARE_XMAIL_LCDD          13s/0h of 155354 corpus (103809s/51545h DOC) 05/15/06
+#counts   SARE_XMAIL_LCDD          1s/0h of 2500 corpus (531s/1969h ft) 05/17/05
+
+header    __SARE_XMAIL_SUSP3       X-Mailer=~ /^(?:[a-z\-]+\s+[a-z\-]+(?:,\s+[a-z\-]+)?|[a-z\-]+ \d\.\d)$/
+meta      SARE_XMAIL_SUSP3         __SARE_XMAIL_SUSP3 && !SARE_XMAIL_LCDD
+describe  SARE_XMAIL_SUSP3         Contains a suspicious X-Mailer header
+score     SARE_XMAIL_SUSP3         1.208
+#hist     SARE_XMAIL_SUSP3         Jesse Houwing, SARE_TM2_RW_XM
+#hist     SARE_XMAIL_SUSP3         Modified to meta to avoid overlap with SARE_XMAIL_LCDD; must be in same file as LCDD
+#ham      SARE_XMAIL_SUSP3         "a script" from macromedia.com
+#counts   SARE_XMAIL_SUSP3         2s/0h of 173032 corpus (99056s/73976h RM) 05/11/06
+#max      SARE_XMAIL_SUSP3         505s/1h of 85084 corpus (62489s/22595h RM) 06/08/04
+#counts   SARE_XMAIL_SUSP3         2s/2h of 55978 corpus (51650s/4328h AxB2) 05/14/06
+#counts   SARE_XMAIL_SUSP3         0s/0h of 13285 corpus (7414s/5871h CT) 05/14/06
+#max      SARE_XMAIL_SUSP3         10s/0h of 11052 corpus (6614s/4438h CT) 03/10/05
+#counts   SARE_XMAIL_SUSP3         23s/0h of 155354 corpus (103809s/51545h DOC) 05/15/06
+#counts   SARE_XMAIL_SUSP3         4s/0h of 42268 corpus (34150s/8118h FVGT) 05/15/06
+#counts   SARE_XMAIL_SUSP3         97s/0h of 55848 corpus (18671s/37177h JH-3.01) 06/10/05
+#max      SARE_XMAIL_SUSP3         291s/0h of 38398 corpus (14914s/23484h JH) 08/14/04 TM2 SA3.0-pre2
+#counts   SARE_XMAIL_SUSP3         19s/0h of 106014 corpus (72769s/33245h ML) 05/14/06
+#counts   SARE_XMAIL_SUSP3         0s/0h of 20489 corpus (17189s/3300h MY) 01/30/05
+#max      SARE_XMAIL_SUSP3         49s/0h of 17050 corpus (14617s/2433h MY) 08/08/04
+
+#@@#           Moved file 1 to file 3           SARE_XMAIL_TOLMAIL
+header    SARE_XMAIL_TOLMAIL       X-Mailer =~ /\bTOL Mailer\b/
+describe  SARE_XMAIL_TOLMAIL       X-Mailer used by spammer
+score     SARE_XMAIL_TOLMAIL       0.278
+#ham      SARE_XMAIL_TOLMAIL       possible (1) 
+#hist     SARE_XMAIL_TOLMAIL       Alex Broens, July 29 2005
+#counts   SARE_XMAIL_TOLMAIL       5s/0h of 173032 corpus (99056s/73976h RM) 05/11/06
+#max      SARE_XMAIL_TOLMAIL       36s/0h of 325151 corpus (158002s/167149h RM) 07/31/05
+#counts   SARE_XMAIL_TOLMAIL       0s/0h of 10629 corpus (5847s/4782h CT) 09/18/05
+
+#####################################################################################
+#         SARE Miscellaneous and X-Header header rules 
+########  ######################   ##################################################
+
+header    SARE_HEAD_DATE39         Date =~ /^.{39}$/
+describe  SARE_HEAD_DATE39         Date header suggests this is spam
+score     SARE_HEAD_DATE39         0.660
+#counts   SARE_HEAD_DATE39         0s/2h of 173032 corpus (99056s/73976h RM) 05/11/06
+#max      SARE_HEAD_DATE39         264s/3h of 238550 corpus (112525s/126025h RM) 02/28/05
+#counts   SARE_HEAD_DATE39         5s/0h of 55978 corpus (51650s/4328h AxB2) 05/14/06
+#counts   SARE_HEAD_DATE39         0s/0h of 10853 corpus (6391s/4462h CT) 05/16/05
+#counts   SARE_HEAD_DATE39         10s/0h of 155354 corpus (103809s/51545h DOC) 05/15/06
+#counts   SARE_HEAD_DATE39         6s/0h of 42268 corpus (34150s/8118h FVGT) 05/15/06
+#counts   SARE_HEAD_DATE39         0s/0h of 54179 corpus (17002s/37177h JH-3.01) 03/01/05
+#counts   SARE_HEAD_DATE39         30s/0h of 106014 corpus (72769s/33245h ML) 05/14/06
+#counts   SARE_HEAD_DATE39         0s/0h of 27758 corpus (24297s/3461h MY) 02/27/05
+
+#@@#           Moved file 1 to file 3           SARE_HEAD_DATE_5L
+header    SARE_HEAD_DATE_5L        Date =~ /[a-z]{5}\s*$/i
+describe  SARE_HEAD_DATE_5L        Date header ends in 5+ letters
+score     SARE_HEAD_DATE_5L        0.278
+#ham      SARE_HEAD_DATE_5L        confirmed (5)
+#hist     SARE_HEAD_DATE_5L        Tim Jackson, May 12 2005
+#counts   SARE_HEAD_DATE_5L        6s/0h of 173032 corpus (99056s/73976h RM) 05/11/06
+#max      SARE_HEAD_DATE_5L        395s/6h of 689155 corpus (348140s/341015h RM) 09/18/05
+#counts   SARE_HEAD_DATE_5L        7s/0h of 55929 corpus (51589s/4340h AxB2) 05/14/06
+#counts   SARE_HEAD_DATE_5L        0s/3h of 10853 corpus (6391s/4462h CT) 05/16/05
+#counts   SARE_HEAD_DATE_5L        6s/0h of 155430 corpus (103881s/51549h DOC) 05/15/06
+#counts   SARE_HEAD_DATE_5L        0s/0h of 2500 corpus (531s/1969h ft) 05/17/05
+#counts   SARE_HEAD_DATE_5L        1s/0h of 55848 corpus (18671s/37177h JH-3.01) 06/10/05
+
+header    SARE_HEAD_DATE61         Date =~ /^.{57,61}$/
+score     SARE_HEAD_DATE61         -1.000
+tflags    SARE_HEAD_DATE61         nice
+#stype    SARE_HEAD_DATE61         ham
+#counts   SARE_HEAD_DATE61         1s/32h of 173032 corpus (99056s/73976h RM) 05/11/06
+#max      SARE_HEAD_DATE61         0s/72h of 689155 corpus (348140s/341015h RM) 09/18/05
+#counts   SARE_HEAD_DATE61         0s/5h of 54072 corpus (16898s/37174h JH-3.01) 02/18/05
+#counts   SARE_HEAD_DATE61         0s/0h of 27758 corpus (24297s/3461h MY) 02/27/05
+#counts   SARE_HEAD_DATE61         1s/20h of 9984 corpus (5649s/4335h AxB) 05/14/06
+#counts   SARE_HEAD_DATE61         0s/0h of 10853 corpus (6391s/4462h CT) 05/16/05
+#counts   SARE_HEAD_DATE61         0s/1h of 6924 corpus (1403s/5521h ft) 07/27/05
+
+header    SARE_HEAD_DATE_ADDED     Date =~ /\(added by/
+describe  SARE_HEAD_DATE_ADDED     Original email had no date - added by later system
+score     SARE_HEAD_DATE_ADDED     0.139
+#ham      SARE_HEAD_DATE_ADDED     technical notification email from att.com
+#counts   SARE_HEAD_DATE_ADDED     0s/0h of 173032 corpus (99056s/73976h RM) 05/11/06
+#max      SARE_HEAD_DATE_ADDED     21s/0h of 115509 corpus (81073s/34436h RM) 01/16/05
+#counts   SARE_HEAD_DATE_ADDED     2s/0h of 55848 corpus (18671s/37177h JH-3.01) 06/10/05
+#counts   SARE_HEAD_DATE_ADDED     0s/1h of 17050 corpus (14617s/2433h MY) 08/08/04
+#counts   SARE_HEAD_DATE_ADDED     140s/1h of 9984 corpus (5649s/4335h AxB) 05/14/06
+#counts   SARE_HEAD_DATE_ADDED     0s/0h of 10853 corpus (6391s/4462h CT) 05/16/05
+#counts   SARE_HEAD_DATE_ADDED     0s/0h of 2500 corpus (531s/1969h ft) 05/17/05
+
+header    __SARE_HEAD_DATE_L1a     Date =~ /.{50}/
+header    __SARE_HEAD_DATE_L1b     Date =~ /added by/
+meta      SARE_HEAD_DATE_LONG1     __SARE_HEAD_DATE_L1a && !__SARE_HEAD_DATE_L1b
+describe  SARE_HEAD_DATE_LONG1     Date header has interesting length
+score     SARE_HEAD_DATE_LONG1     -0.500
+tflags    SARE_HEAD_DATE_LONG1     nice
+#stype    SARE_HEAD_DATE_LONG1     ham
+#hist     SARE_HEAD_DATE_LONG1     Developed by Bob Menschel from rule by Frederic Tarasevicius
+#hist     SARE_HEAD_DATE_LONG1     Reduce spam hits, Oct 13 2005, Bob Menschel
+#counts   SARE_HEAD_DATE_LONG1     4s/2235h of 173032 corpus (99056s/73976h RM) 05/11/06
+#max      SARE_HEAD_DATE_LONG1     97s/3020h of 689155 corpus (348140s/341015h RM) 09/18/05
+#counts   SARE_HEAD_DATE_LONG1     32s/34h of 55978 corpus (51650s/4328h AxB2) 05/14/06
+#counts   SARE_HEAD_DATE_LONG1     0s/3h of 11052 corpus (6614s/4438h CT) 03/10/05
+#counts   SARE_HEAD_DATE_LONG1     2s/265h of 155354 corpus (103809s/51545h DOC) 05/15/06
+#counts   SARE_HEAD_DATE_LONG1     2s/76h of 42268 corpus (34150s/8118h FVGT) 05/15/06
+#counts   SARE_HEAD_DATE_LONG1     2s/25h of 54176 corpus (16997s/37179h JH-3.01) 02/01/05
+#counts   SARE_HEAD_DATE_LONG1     1s/0h of 106014 corpus (72769s/33245h ML) 05/14/06
+#counts   SARE_HEAD_DATE_LONG1     0s/0h of 22938 corpus (17228s/5710h MY) 05/14/06
+#max      SARE_HEAD_DATE_LONG1     0s/1h of 20489 corpus (17189s/3300h MY) 01/30/05
+
+header    SARE_HEAD_XCOM_RFCMIN    X-Comment =~ /Sending client does not conform to RFC822 minimum requirements/i
+describe  SARE_HEAD_XCOM_RFCMIN    AT&T Maillennium does not like this email
+score     SARE_HEAD_XCOM_RFCMIN    0.555
+#ham      SARE_HEAD_XCOM_RFCMIN    confirmed (2) 
+#hist     SARE_HEAD_XCOM_RFCMIN    Created by Bob Menschel Sep 05 2004
+#counts   SARE_HEAD_XCOM_RFCMIN    0s/0h of 173032 corpus (99056s/73976h RM) 05/11/06
+#max      SARE_HEAD_XCOM_RFCMIN    3s/5h of 689155 corpus (348140s/341015h RM) 09/18/05
+#counts   SARE_HEAD_XCOM_RFCMIN    3s/0h of 273595 corpus (108821s/164774h RM) 05/13/05
+#counts   SARE_HEAD_XCOM_RFCMIN    0s/0h of 19447 corpus (16862s/2585h MY) 09/05/04
+#counts   SARE_HEAD_XCOM_RFCMIN    0s/0h of 44754 corpus (16523s/28231h JH-SA3.0rc1) 09/06/04
+#counts   SARE_HEAD_XCOM_RFCMIN    0s/0h of 10853 corpus (6391s/4462h CT) 05/16/05
+#counts   SARE_HEAD_XCOM_RFCMIN    166s/0h of 155354 corpus (103809s/51545h DOC) 05/15/06
+#counts   SARE_HEAD_XCOM_RFCMIN    0s/0h of 2500 corpus (531s/1969h ft) 05/17/05
+
+#@@#           Moved file 1 to file 3           SARE_HEAD_XWORD
+header    SARE_HEAD_XWORD          ALL =~ /\n(?!(?:X-Scanned|X-Windows|X-Emacs|X-Note))X-[A-Z][a-z\d]+:\s+(?:[a-z]{2,20}\s){5,}/
+describe  SARE_HEAD_XWORD          Spam tool
+score     SARE_HEAD_XWORD          0.278
+#ham      SARE_HEAD_XWORD          verified (1)
+#hist     SARE_HEAD_XWORD          Loren Wilton, June 2005
+#hist     SARE_HEAD_XWORD          Added X-Scanned exclusion Sep 24 2005
+#counts   SARE_HEAD_XWORD          1s/0h of 173032 corpus (99056s/73976h RM) 05/11/06
+#max      SARE_HEAD_XWORD          114s/6h of 689155 corpus (348140s/341015h RM) 09/18/05
+#counts   SARE_HEAD_XWORD          1s/0h of 55929 corpus (51589s/4340h AxB2) 05/14/06
+#counts   SARE_HEAD_XWORD          0s/0h of 10629 corpus (5847s/4782h CT) 09/18/05
+#counts   SARE_HEAD_XWORD          3s/0h of 155430 corpus (103881s/51549h DOC) 05/15/06
+
+#####################################################################################
+#         SARE Rules which examine multiple header types
+########  ######################   ##################################################
+
+header    __SARE_HEAD_8BIT_HDRS    ALL =~ /[\x80-\xff]{3,}/
+header    SUBJ_ILLEGAL_CHARS       eval:check_illegal_chars('Subject','0.00','2')
+#note     SUBJ_ILLEGAL_CHARS       Standard SpamAssassin rule/test
+#counts   __SARE_HEAD_8BIT_HDRS    14742s/63h of 238550 corpus (112525s/126025h RM) 02/28/05
+#counts   __SARE_HEAD_8BIT_HDRS    1297s/1h of 54179 corpus (17002s/37177h JH-3.01) 03/01/05
+#counts   __SARE_HEAD_8BIT_HDRS    0s/0h of 26190 corpus (22790s/3400h MY) 02/15/05
+header    __SARE_HEAD_8BIT_RPLY    Reply-To =~ /[\x80-\xff]{3,}/
+#counts   __SARE_HEAD_8BIT_RPLY    6259s/9h of 238550 corpus (112525s/126025h RM) 02/28/05
+#counts   __SARE_HEAD_8BIT_RPLY    728s/0h of 54179 corpus (17002s/37177h JH-3.01) 03/01/05
+#counts   __SARE_HEAD_8BIT_RPLY    0s/0h of 26190 corpus (22790s/3400h MY) 02/15/05
+header    __SARE_HEAD_8BIT_FROM    From =~ /[\x80-\xff]{3,}/
+#counts   __SARE_HEAD_8BIT_FROM    8565s/23h of 238550 corpus (112525s/126025h RM) 02/28/05
+#counts   __SARE_HEAD_8BIT_FROM    1823s/0h of 54179 corpus (17002s/37177h JH-3.01) 03/01/05
+#counts   __SARE_HEAD_8BIT_FROM    2s/0h of 26190 corpus (22790s/3400h MY) 02/15/05
+
+meta      SARE_HEAD_8BIT_NOSPM     __SARE_HEAD_8BIT_HDRS && !__SARE_HEAD_8BIT_DATE && !__SARE_HEAD_8BIT_RECV && !__SARE_HEAD_8BIT_SUBJ
+describe  SARE_HEAD_8BIT_NOSPM     Header with 8-bit char suggests spam
+score     SARE_HEAD_8BIT_NOSPM     0.385
+#hist     SARE_HEAD_8BIT_NOSPM     June 18 2005, Bob Menschel: Added exclusion for subject header
+#counts   SARE_HEAD_8BIT_NOSPM     103s/76h of 173032 corpus (99056s/73976h RM) 05/11/06
+#max      SARE_HEAD_8BIT_NOSPM     593s/85h of 689155 corpus (348140s/341015h RM) 09/18/05
+#counts   SARE_HEAD_8BIT_NOSPM     126s/1h of 55978 corpus (51650s/4328h AxB2) 05/14/06
+#counts   SARE_HEAD_8BIT_NOSPM     12s/0h of 13285 corpus (7414s/5871h CT) 05/14/06
+#counts   SARE_HEAD_8BIT_NOSPM     78s/0h of 155354 corpus (103809s/51545h DOC) 05/15/06
+#counts   SARE_HEAD_8BIT_NOSPM     38s/0h of 42268 corpus (34150s/8118h FVGT) 05/15/06
+#counts   SARE_HEAD_8BIT_NOSPM     93s/0h of 106014 corpus (72769s/33245h ML) 05/14/06
+
+meta      SARE_HEAD_8BIT_SPAM      __SARE_HEAD_8BIT_HDRS && !__SARE_HEAD_8BIT_NOSPM && !SARE_HEAD_8BIT_DATE && !SARE_HEAD_8BIT_RECV && !__SARE_HEAD_8BIT_SUBJ
+describe  SARE_HEAD_8BIT_SPAM      High-ascii characters found in strange header
+score     SARE_HEAD_8BIT_SPAM      1.666
+#hist     SARE_HEAD_8BIT_SPAM      From Bugzilla # 2243
+#hist     SARE_HEAD_8BIT_SPAM      June 18 2005, Bob Menschel: Added exclusion for subject header
+#todo%%%  SARE_HEAD_8BIT_SPAM      Analysis on avoiding the ham 
+
+meta      SARE_HEAD_8BIT_SPAM      __SARE_HEAD_8BIT_SUBJ && !SUBJ_ILLEGAL_CHARS
+describe  SARE_HEAD_8BIT_SPAM      High-ascii characters found in subject header
+score     SARE_HEAD_8BIT_SPAM      0.888
+#hist     SARE_HEAD_8BIT_SPAM      Bob Menschel implementation, June 17 2005
+#counts   SARE_HEAD_8BIT_SPAM      565s/94h of 173032 corpus (99056s/73976h RM) 05/11/06
+#max      SARE_HEAD_8BIT_SPAM      7948s/130h of 689155 corpus (348140s/341015h RM) 09/18/05
+#counts   SARE_HEAD_8BIT_SPAM      206s/13h of 9984 corpus (5649s/4335h AxB) 05/14/06
+#counts   SARE_HEAD_8BIT_SPAM      20s/0h of 13285 corpus (7414s/5871h CT) 05/14/06
+#counts   SARE_HEAD_8BIT_SPAM      674s/19h of 155354 corpus (103809s/51545h DOC) 05/15/06
+#counts   SARE_HEAD_8BIT_SPAM      98s/0h of 42268 corpus (34150s/8118h FVGT) 05/15/06
+#counts   SARE_HEAD_8BIT_SPAM      642s/3h of 106014 corpus (72769s/33245h ML) 05/14/06
+#counts   SARE_HEAD_8BIT_SPAM      13s/7h of 22938 corpus (17228s/5710h MY) 05/14/06
+
+#@@#           Moved file 2 to file 3           SARE_MULT_RATW_03
+header    __SARE_MULT_RATW_03A     MESSAGEID =~ /^<[A-Z]{20,26}\@[\w\d\.]+>/
+header    __SARE_MULT_RATW_03B     Received =~ /\bfrom \d{1,3}\.\d{1,3}\.\d{1.3}\.\d{1.3} by \d{1,3}\.\d{1,3}\.\d{1.3}\.\d{1.3};/
+header    __SARE_MULT_RATW_03C     Received =~ /\bfrom \d{1,3}\.\d{1,3}\.\d{1.3}\.\d{1.3} by ;/
+header    __SARE_MULT_RATW_03D     Received =~ /\bfrom \d{1,3}\.\d{1,3}\.\d{1.3}\.\d{1.3} by web\d{1,4}\.mail\.yahoo\.com;/
+header    __SARE_MULT_RATW_03F     Received =~ /\bfrom ([A-Z][\w\.]+) by \1$/
+header    __SARE_MULT_RATW_03G     Received =~ /\%HEAD_RND_DOM/
+header    __SARE_MULT_RATW_03H     Received =~ /\(qmail 14413 invoked from network\);/
+header    __SARE_MULT_RATW_03I     ALL =~ /\bX-Mailer: [a-z]+ [a-z]+\n[a-z]+\-[a-z]+: [a-z]+ [a-z]+ [a-z]+\n/s
+meta      SARE_MULT_RATW_03        (__SARE_MULT_RATW_03A && (__SARE_MULT_RATW_03B || __SARE_MULT_RATW_03C || __SARE_MULT_RATW_03D || __SARE_MULT_RATW_03E || __SARE_MULT_RATW_03F || __SARE_MULT_RATW_03G || __SARE_MULT_RATW_03H || __SARE_MULT_RATW_03I))
+describe  SARE_MULT_RATW_03        Spammer sign in headers
+score     SARE_MULT_RATW_03        1.666
+#hist     SARE_MULT_RATW_03        LW_RATWARE4
+#counts   SARE_MULT_RATW_03        0s/0h of 196708 corpus (96197s/100511h RM) 02/21/05
+#max      SARE_MULT_RATW_03        321s/0h of 85084 corpus (62489s/22595h RM) 06/08/04
+#counts   SARE_MULT_RATW_03        0s/0h of 10853 corpus (6391s/4462h CT) 05/16/05
+#counts   SARE_MULT_RATW_03        1s/0h of 155106 corpus (103557s/51549h DOC) 05/14/06
+#counts   SARE_MULT_RATW_03        0s/0h of 2500 corpus (531s/1969h ft) 05/17/05
+#counts   SARE_MULT_RATW_03        57s/0h of 54176 corpus (16997s/37179h JH-3.01) 02/01/05
+#max      SARE_MULT_RATW_03        172s/0h of 38398 corpus (14914s/23484h JH) 08/14/04 TM2 SA3.0-pre2
+#counts   SARE_MULT_RATW_03        0s/0h of 20489 corpus (17189s/3300h MY) 01/30/05
+#max      SARE_MULT_RATW_03        1s/0h of 17050 corpus (14617s/2433h MY) 08/08/04
+
+# EOF
+

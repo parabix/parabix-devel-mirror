@@ -1,0 +1,285 @@
+# SARE "Biz_Market_Learn" Ruleset for SpamAssassin 2.5x and higher
+# Version:  01.02.03 # The BML set has been renamed to match SARE's updated standards, the new name is 72_sare_bml_post25x.cf
+# Created:  2004-03-21
+# Modified: 2007-05-21
+# Changes: Fixed date format and a small typo in the college scam rules
+# License:  Artistic - see http://www.rulesemporium.com/license.txt
+# Current Maintainer: Matt Yackley - bml@rulesemporium.com
+# Current Home: http://www.rulesemporium.com/rules/72_sare_bml_post25x.cf
+# Requirements: SpamAssassin 2.5x or higher
+# SA 3.0 compliant: Yes
+#
+####
+
+###############################
+#       header rules          #
+###############################
+
+header   SARE_ALC ALL =~ /improve your/i
+describe SARE_ALC Some header matches /improve your/i
+score    SARE_ALC 1.405
+# Original name: ALC_2
+# 153s/0h of 119325 corpus (98981s/20344h) 03/21/04
+# 6s/1h of 15929 corpus (13729s/2200h) 03/21/04
+
+header   SARE_SUBLRNMR Subject =~ /learn more/i
+describe SARE_SUBLRNMR Learn more in Subject
+score    SARE_SUBLRNMR 0.638
+# Original name: MY_S_LRNMR
+# 15s/0h of 119325 corpus (98981s/20344h) 03/21/04
+# 1s/0h of 15929 corpus (13729s/2200h) 03/21/04
+
+header   SARE_SUBRATES Subject =~ /low rates/i
+describe SARE_SUBRATES The Subject line talks about low rates
+score    SARE_SUBRATES 0.636
+# Original name: MY_RATES_SUBJ
+# 29s/1h of 119325 corpus (98981s/20344h) 03/21/04
+# 0s/0h of 15929 corpus (13729s/2200h) 03/21/04
+
+header   SARE_SUBSTOCK Subject =~ /\bstock.?market\b/i
+describe SARE_SUBSTOCK Stock Market Spam
+score    SARE_SUBSTOCK 1.666
+# Original name: STOCK_SPAM
+# 365s/0h of 119325 corpus (98981s/20344h) 03/21/04
+# 11s/0h of 15929 corpus (13729s/2200h) 03/21/04
+
+
+###############################
+#        body rules           #
+###############################
+
+body     SARE_FWDLOOK /\bforward.?looking\b/i
+describe SARE_FWDLOOK Forward looking statements about stocks
+score    SARE_FWDLOOK 1.666
+# Original name: FWD_STOCK
+# 1146s/2h of 119325 corpus (98981s/20344h) 03/21/04
+# 68s/0h of 15929 corpus (13729s/2200h) 03/21/04
+
+body     SARE_XPNDMRKT /expand.{0,20}your.{0,20}market/i
+describe SARE_XPNDMRKT Talks about expanding your market
+score    SARE_XPNDMRKT 0.375
+# Original name: FVGT_b_EXPANDMARKET
+# 36s/0h of 119325 corpus (98981s/20344h) 03/21/04
+# 0s/1h of 15929 corpus (13729s/2200h) 03/21/04
+
+body     SARE_SELLYOUR /SELL.{0,20}YOUR/
+describe SARE_SELLYOUR SELL * YOUR in caps
+score    SARE_SELLYOUR 0.333
+# Original name: FVGT_b_SELLYOUR
+# 6s/0h of 119325 corpus (98981s/20344h) 03/21/04
+# 0s/0h of 15929 corpus (13729s/2200h) 03/21/0
+
+body     SARE_URGBIZ /urgent.{0,16}(?:assistance|business|buy|confidential|notice|proposal|reply| request|respon(?:se|d))/i
+describe SARE_URGBIZ Contains urgent matter
+score    SARE_URGBIZ 1.5
+# Original name: FVGT_b_URGENT_BIZ
+# 468s/7h of 119325 corpus (98981s/20344h) 03/21/04
+# 61s/1h of 15929 corpus (13729s/2200h) 03/21/04
+
+body     SARE_ONDEAL /on this deal/i
+describe SARE_ONDEAL Phrase, On this deal
+score    SARE_ONDEAL 0.222
+# Original name: MY_ON_DEAL
+# 8s/0h of 119325 corpus (98981s/20344h) 03/21/04
+# 1s/0h of 15929 corpus (13729s/2200h) 03/21/04
+
+body     SARE_NETPROD /internet product/i
+describe SARE_NETPROD Phrase, Internet Product.
+score    SARE_NETPROD 0.111
+# Original name: MY_INT_PROD
+# 2s/0h of 119325 corpus (98981s/20344h) 03/21/04
+# 2s/0h of 15929 corpus (13729s/2200h) 03/21/04
+
+body     SARE_GENUINEOP /genuine .{0,10}.?opportunity/i
+describe SARE_GENUINEOP Genuine oppurtunity
+score    SARE_GENUINEOP 0.055
+# Original name: MY_GENUINE
+# 1s/0h of 119325 corpus (98981s/20344h) 03/21/04
+# 0s/0h of 15929 corpus (13729s/2200h) 03/21/04
+
+body     SARE_WEOFFER /we offer/i
+describe SARE_WEOFFER Offers Something
+score    SARE_WEOFFER 0.300
+# Original name: MY_WE_OFFER
+# 1737s/90h of 119325 corpus (98981s/20344h) 03/21/04
+# 175s/18h of 15929 corpus (13729s/2200h) 03/21/04
+
+body     SARE_LOANOFF /loan officers?/i
+describe SARE_LOANOFF No one needs Loan officers anymore
+score    SARE_LOANOFF 0.611
+# Original name: MY_LOANOFF
+# 10s/0h of 119325 corpus (98981s/20344h) 03/21/04
+# 17s/0h of 15929 corpus (13729s/2200h) 03/21/04
+
+body     SARE_DIPLOMA2 /your diploma|online degrees?|degrees? online/i
+describe SARE_DIPLOMA2 Talks about online degrees or diplomas
+score    SARE_DIPLOMA2 0.900
+# Original name: MY_DIPLOMA
+# 280s/2h of 119325 corpus (98981s/20344h) 03/21/04
+# 89s/2h of 15929 corpus (13729s/2200h) 03/21/04
+
+body     SARE_FINCLOP /(?:internet|financial) (?:success|opportunit(?:y|ies))/i
+describe SARE_FINCLOP Talks about financial or internet opportunity.
+score    SARE_FINCLOP 0.633
+# Original name: MY_FINCL_OP
+# 58s/3h of 119325 corpus (98981s/20344h) 03/21/04
+# 72s/0h of 15929 corpus (13729s/2200h) 03/21/04
+
+body     SARE_MILLIONSOF /\bmillions of\b/i
+describe SARE_MILLIONSOF Millions of something.
+score    SARE_MILLIONSOF 0.315
+# Original name: MY_MILLIONS
+# 879s/62h of 119325 corpus (98981s/20344h) 03/21/04
+# 129s/9h of 15929 corpus (13729s/2200h) 03/21/04
+
+body     SARE_MONEYTERMS /(?:financing available|bankruptcy|(?:build(ing)?|increase|more).{1,10}wealth|(?:fast|concerning) (the )?(?:cash|money)|unclaimed|your dept|money you need)/i
+describe SARE_MONEYTERMS Talks about money in some way.
+score    SARE_MONEYTERMS 0.681
+# Original name: MY_MONEY_TERMS
+# 1505s/17h of 119325 corpus (98981s/20344h) 03/21/04
+# 227s/9h of 15929 corpus (13729s/2200h) 03/21/04
+
+body     SARE_VALOFFR /valuable offers?/i
+describe SARE_VALOFFR Talks about valuable offers.
+score    SARE_VALOFFR 1.666
+# Original name: MY_VAL_OFR
+# 497s/0h of 119325 corpus (98981s/20344h) 03/21/04
+# 233s/0h of 15929 corpus (13729s/2200h) 03/21/04
+
+body     SARE_FASTAPPRV /(?:instant|immediate|fast) approval/i
+describe SARE_FASTAPPRV Talks about quick approval
+score    SARE_FASTAPPRV 0.325
+# Original name: MY_INSTANT
+# 70s/3h of 119325 corpus (98981s/20344h) 03/21/04
+# 21s/0h of 15929 corpus (13729s/2200h) 03/21/04
+
+body     SARE_HOMELOAN /(?:refi|home) (equity|loan)/i
+describe SARE_HOMELOAN Home mortgage stuff
+score    SARE_HOMELOAN 0.415
+# Original name: MY_HOME
+# 649s/13h of 119325 corpus (98981s/20344h) 03/21/04
+# 147s/3h of 15929 corpus (13729s/2200h) 03/21/04
+
+body     SARE_PRODUCT /product offerings?/i
+describe SARE_PRODUCT Talks about product offerings.
+score    SARE_PRODUCT 0.333
+# Original name: MY_PRODUCTS
+# 23s/2h of 119325 corpus (98981s/20344h) 03/21/04
+# 45s/1h of 15929 corpus (13729s/2200h) 03/21/04
+
+body     SARE_NTWKMRKT /network marketing/i
+describe SARE_NTWKMRKT Network marketing, pyramid scheme. 
+score    SARE_NTWKMRKT 0.691
+# Original name: MY_NETMARK
+# 49s/1h of 119325 corpus (98981s/20344h) 03/21/04
+# 55s/2h of 15929 corpus (13729s/2200h) 03/21/04
+
+body     SARE_BIZOP /business opportunit(ies|y)/i
+describe SARE_BIZOP Biz op could be legit, but often isn't.
+score    SARE_BIZOP 0.700
+# Original name: MY_BIZOP
+# 213s/6h of 119325 corpus (98981s/20344h) 03/21/04
+# 81s/5h of 15929 corpus (13729s/2200h) 03/21/04
+
+body     SARE_UNQBIZ /unique business/i
+describe SARE_UNQBIZ Talks about unique business
+score    SARE_UNQBIZ 0.315
+# Original name: MY_UNQBIZ
+# 2s/0h of 119325 corpus (98981s/20344h) 03/21/04
+# 1s/0h of 15929 corpus (13729s/2200h) 03/21/04
+
+body     SARE_DEGREETALK /legitimate.{1,35}(associate|bachelor|master|doctor).{1,35}degree/i
+describe SARE_DEGREETALK Yaps about "legitimate" college degrees
+score    SARE_DEGREETALK 1.000
+# 4s/0h of 119325 corpus (98981s/20344h) 03/21/04
+# 0s/0h of 15929 corpus (13729s/2200h) 03/21/04
+
+###############################
+#         uri rules           #
+###############################
+
+uri      SARE_SNAPSHUT /www\.(?:snapshut|contra)\.info/
+describe SARE_SNAPSHUT An open-and-shut case of Spam!
+score    SARE_SNAPSHUT 2.0
+# 32s/0h of 119325 corpus (98981s/20344h) 03/21/04
+# 0s/0h of 15929 corpus (13729s/2200h) 03/21/04
+
+
+###############################
+#     OBFU body rules         #
+###############################
+
+#body     SARE_OBFUAUCTION /(?!\bauctions?\b)(?:\b[a4]|\B(?:[\*\@\xC0-\xC5\xAA\xE0-\xE5]|\/\\|\xC4[\x80-\x85]|\xC7[\x8D-\x8E]|\xC7[\xBA-\xBB]|\xCE\x86|\xCE\x91|\xCE\x94|\xCE\x9B|\xCE\xAC|\xCE\xB1|\xD0\x90|\xD0\xB0))[\x01-\x2F\\\^_`\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:[uv\*\xB5\xD9-\xDC\xF9-\xFC]|\xC5[\xA8-\xB3]|\xC6[\xAF-\xB0]|\xC7[\x93-\x9C]|\xCE\xB0|\xCE\xBC|\xCF\x8B|\xCF\x8D|\xD4\xB1|\xD5\x84|\xD5\x8D)[\x01-\x2F\\\^_`\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:[c\*\xC7\xE7\xA2\xA9]|\xC4[\x86-\x8D]|\xD0\xA1|\xD1\x81)[\x01-\x2F\\\^_`\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:[t\+]|\xC5[\xA2-\xA7]|\xCE\xA4|\xCF\x84|\xD0\xA2|\xD1\x82)[\x01-\x2F\\\^_`\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:[il1:\|\*\xCC-\xCF\xEC-\xEF\xA6]|\xC4[\xA8-\xB0]|\xC4\xBA|\xC4\xBC|\xC4\xBE|\xC5\x80|\xC5\x82|\xC7[\x8F-\x90]|\xD0[\x86-\x87]|\xD1[\x96-\x97]|\xCE\x8A|\xCE\x90|\xCE\x99|\xCE\xAA|\xCE\xAF|\xCE\xB9|\xCF\x8A)[\x01-\x2F\\\^_`\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:[o0\*\xB0\xBA\xD8\xF8\xD2-\xD6\xF2-\xF6]|\(\)|\[\]|\xC5[\x8C-\x91]|\xC6[\xA0-\xA1]|\xC7[\x91-\x92]|\xC7[\xBE-\xBF]|\xCE\x8C|\xCE\x98|\xCE\x9F|\xCE\xB8|\xCE\xBF|\xCF\x8C|\xD0\x9E|\xD0\xBE|\xD5\x95)[\x01-\x2F\\\^_`\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:[n\xD1\xF1]|\|\\\||\xC5[\x83-\x8B]|\xCE\x9D|\xCE\xA0|\xCE\xAE|\xCE\xB7|\xD5\xB2|\xD5\xB8)[\x01-\x2F\\\^_`\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:[s5\$\xA7]|\xC5[\x9A-\xA1]|\xD0\x85|\xD1\x95|\xD5\x8F)?\b/i
+#describe SARE_OBFUAUCTION masked spam word(s)
+#score    SARE_OBFUAUCTION 1.666 
+# Original name: RM_bwo_Auction
+# 51s/0h of 119325 corpus (98981s/20344h) 03/21/04
+# 6s/0h of 15929 corpus (13729s/2200h) 03/21/04
+
+#body     SARE_OBFUMONEY1 /(?!\bMoney\b)(?:\bm|\B(?:rn|\/V\\|\/\\\/\\|\xCE\x9C|\xD0\x9C|\xD0\xBC))[\x01-\x2F\\\^_;`\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:[o0\*\xB0\xBA\xD8\xF8\xD2-\xD6\xF2-\xF6]|\(\)|\[\]|\xC5[\x8C-\x91]|\xC6[\xA0-\xA1]|\xC7[\x91-\x92]|\xC7[\xBE-\xBF]|\xCE\x8C|\xCE\x98|\xCE\x9F|\xCE\xB8|\xCE\xBF|\xCF\x8C|\xD0\x9E|\xD0\xBE|\xD5\x95)[\x01-\x2F\\\^_`\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:[n\xD1\xF1]|\|\\\||\xC5[\x83-\x8B]|\xCE\x9D|\xCE\xA0|\xCE\xAE|\xCE\xB7|\xD5\xB2|\xD5\xB8)[\x01-\x2F\\\^_`\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:[e3\*\xC8-\xCB\xE8-\xEB]|\xC4[\x92-\x9B]|\xCE\x88|\xCE\x95|\xCE\xA3|\xCE\xAD|\xCE\xB5|\xD0\x81|\xD0\x95|\xD0\xB5|\xD1\x91)[\x01-\x2F\\\^_;`\|\x7F-\xA1\xA4-\xA8\xAB-\xAD\xAF-\xB1\xB4\xB7-\xBB\xBF\xF7]?(?:y\b|(?:[\xA5\xDD\xFD]|\xC5[\xB6-\xB8]|\xCE\x8E|\xCE\xA5|\xCE\xA8|\xCE\xAB|\xCE\xB3|\xD0\xA3|\xD1\x83|\xD1\x9E|\xD2[\xAE-\xB1])\B)/i
+#describe SARE_OBFUMONEY1 masked spam word(s)
+#score    SARE_OBFUMONEY1 2.222 
+# Original name: RM_bwo_Money
+# 1145s/0h of 119325 corpus (98981s/20344h) 03/21/04
+# 66s/0h of 15929 corpus (13729s/2200h) 03/21/04
+
+body     SARE_OBFUMONEY2 /\b(?!mo(?:nk?|on)ey)m.?o.?n.?e.?y\b/i
+describe SARE_OBFUMONEY2 masked spam word(s)
+score    SARE_OBFUMONEY2 1.000
+# Original name: RM_bwo_Money2
+# 836s/0h of 119325 corpus (98981s/20344h) 03/21/04
+# 51s/0h of 15929 corpus (13729s/2200h) 03/21/04
+
+
+###############################
+#        meta rules           #
+###############################
+
+body     SARE_NONACCRED /non.{1,4}accredited/i
+describe SARE_NONACCRED Talks about a non-accredited something
+score    SARE_NONACCRED 0.388
+# 180s/0h of 119325 corpus (98981s/20344h) 03/21/04
+# 7s/0h of 15929 corpus (13729s/2200h) 03/21/04
+
+body     __SARE_PRESTIGE /get (?:the )?prestige/i
+describe __SARE_PRESTIGE Talks about "getting prestige"
+
+body     __SARE_ADMIR /benefits (?:and )?admiration/i
+describe __SARE_ADMIR Talks about "benefits and admiration"
+
+body     __SARE_DIPLOMA /university (?:diploma|degree)/i
+describe __SARE_DIPLOMA Talks about "university diplomas"
+
+body     __SARE_DEGREES /(?:\bmba\b|\bmasters?\b|\bbachelors?\b|\bdoctor(?:al|ate)\b|\bphd\b)/i
+describe __SARE_DEGREES Enumerates or mentions degree types.
+
+body     __SARE_LIFE_EXP /\blife experience\b/i
+describe __SARE_LIFE_EXP Talks about "life experience"
+
+body     __SARE_NOTESTS /no (?:required )?tests[\. ,!]/i
+describe __SARE_NOTESTS No testing required
+
+body     __SARE_PHONE_NUM /\(?\d\d\d\)?\D\d\d\d\D\d\d\d\d/i
+describe __SARE_PHONE_NUM Contains a telephone number
+
+body     __SARE_NOREJECT /no ?one (?:is )?turned down/i
+describe __SARE_NOREJECT No one is turned down!
+
+meta     SARE_COLLEGE_SCAM ((SARE_NONACCRED + __SARE_PRESTIGE + __SARE_LIFE_EXP + __SARE_DIPLOMA + __SARE_ADMIR + __SARE_NOTESTS + __SARE_PHONE_NUM + __SARE_NOREJECT + __SARE_DEGREES) > 2)
+describe SARE_COLLEGE_SCAM Tries to sell you a "degree"
+score    SARE_COLLEGE_SCAM 3.5
+# 831s/0h of 119325 corpus (98981s/20344h) 03/21/04
+# 34s/0h of 15929 corpus (13729s/2200h) 03/21/04
+
+
+header __SARE_TOSALESAT To =~ /^sales\@/
+body   __SARE_BADLOGOS /\bIo[gq]o(?:s)?\b/i
+body   __SARE_POORQUAL /gua[lI]ity/
+meta     SARE_SNAPPYLOGOS (__SARE_TOSALESAT && (__SARE_BADLOGOS || __SARE_POORQUAL))
+describe SARE_SNAPPYLOGOS Get your free logos here!  Only $49.95 each!!
+score    SARE_SNAPPYLOGOS 3.0
+# 29s/0h of 119325 corpus (98981s/20344h) 03/21/04
+# 0s/0h of 15929 corpus (13729s/2200h) 03/21/04
+
+# EOF
+

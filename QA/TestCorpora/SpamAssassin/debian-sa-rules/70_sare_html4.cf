@@ -1,0 +1,412 @@
+# SARE HTML Ruleset for SpamAssassin - ruleset 4
+# Version: 01.03.10
+# Created: 2004-03-31 
+# Modified: 2006-06-03
+# Usage instructions, documentation, and change history in 70_sare_html0.cf 
+
+#@@# Revision History:  Full Revision History stored in 70_sare_html.log
+#@@# 01.03.10: June 3 2006
+#@@#           Minor score tweaks based on recent mass-checks
+#@@#           Modified "rule has been moved" meta flags 
+#@@#           Corrected __SARE_WHITE_FG_COLOR as suggested by Thomas Szukala 
+#@@#           Archive:             SARE_HTML_FONT_INVIS2
+#@@#           Archive:             SARE_HTML_FSIZE6
+#@@#           Archive:             SARE_HTML_GIF_DIM
+#@@#           Archive:             SARE_HTML_URI_HREF
+#@@#           Archive:             SARE_HTML_URI_IP
+#@@#           Archive:             SARE_HTML_URI_JOKNG
+#@@#           Archive:             SARE_HTML_URI_NUMPHP3
+#@@#           Archive:             SARE_HTML_URI_UNSUB
+
+# License: Artistic - see http://www.rulesemporium.com/license.txt 
+# Current Maintainer: Bob Menschel - RMSA@Menschel.net
+# Current Home: http://www.rulesemporium.com/rules/70_sare_html4.cf 
+#
+########  ######################   ##################################################
+
+body      __NONEMPTY_BODY          /\S/
+#body     __SARE_HTML_HAS_MSG      /./
+
+rawbody   __SARE_HTML_HAS_A        eval:html_tag_exists('a')
+rawbody   __SARE_HTML_HAS_BR       eval:html_tag_exists('br')
+rawbody   __SARE_HTML_HAS_DIV      eval:html_tag_exists('div')
+rawbody   __SARE_HTML_HAS_FONT     eval:html_tag_exists('font')
+rawbody   __SARE_HTML_HAS_IMG      eval:html_tag_exists('img')
+rawbody   __SARE_HTML_HAS_P        eval:html_tag_exists('p')
+rawbody   __SARE_HTML_HAS_PRE      eval:html_tag_exists('pre')
+rawbody   __SARE_HTML_HAS_TITLE    eval:html_tag_exists('title')
+
+rawbody   __SARE_HTML_HBODY        m'<html><body>'i
+rawbody   __SARE_HTML_BEHTML       m'<body></html>'i
+rawbody   __SARE_HTML_BEHTML2      m'^</?body></html>'i
+rawbody   __SARE_HTML_EFONT        m'^</font>'i
+rawbody   __SARE_HTML_EHEB         m'^</html></body>'i
+rawbody   __SARE_HTML_CMT_CNTR     /<center><!--/
+
+########  ######################   ##################################################
+#   Is there a message? 
+########  ######################   ##################################################
+
+meta      SARE_HTML_NO_BODY        ( !__NONEMPTY_BODY ) 
+describe  SARE_HTML_NO_BODY        Message is empty
+score     SARE_HTML_NO_BODY        0.687
+#counts   SARE_HTML_NO_BODY        1768s/55h of 333405 corpus (262498s/70907h RM) 05/12/06
+#counts   SARE_HTML_NO_BODY        12s/9h of 56053 corpus (51711s/4342h AxB2) 05/15/06
+#counts   SARE_HTML_NO_BODY        60s/1h of 155688 corpus (104077s/51611h DOC) 05/15/06
+#counts   SARE_HTML_NO_BODY        132s/3h of 54067 corpus (16890s/37177h JH-3.01) 06/18/05
+#max      SARE_HTML_NO_BODY        151s/3h of 54283 corpus (17106s/37177h JH-3.01) 02/13/05
+#counts   SARE_HTML_NO_BODY        1s/3h of 11260 corpus (6568s/4692h CT) 06/17/05
+#counts   SARE_HTML_NO_BODY        97s/5h of 6804 corpus (1336s/5468h ft) 06/17/05
+#counts   SARE_HTML_NO_BODY        30s/12h of 23099 corpus (17359s/5740h MY) 05/14/06
+#max      SARE_HTML_NO_BODY        417s/8h of 47221 corpus (42968s/4253h MY) 06/18/05
+
+meta      SARE_HTML_NO_BODY_TO     ( !__NONEMPTY_BODY && !__TOCC_EXISTS ) 
+describe  SARE_HTML_NO_BODY_TO     Message is empty and has no To destination
+score     SARE_HTML_NO_BODY_TO     0.720
+#ham      SARE_HTML_NO_BODY_TO     verified (1) 
+#AddsTo   SARE_HTML_NO_BODY_TO     SARE_HTML_NO_BODY 
+#counts   SARE_HTML_NO_BODY_TO     1727s/38h of 333405 corpus (262498s/70907h RM) 05/12/06
+#counts   SARE_HTML_NO_BODY_TO     12s/9h of 56053 corpus (51711s/4342h AxB2) 05/15/06
+#counts   SARE_HTML_NO_BODY_TO     60s/1h of 155688 corpus (104077s/51611h DOC) 05/15/06
+#counts   SARE_HTML_NO_BODY_TO     18s/2h of 54067 corpus (16890s/37177h JH-3.01) 06/18/05
+#counts   SARE_HTML_NO_BODY_TO     50s/1h of 10629 corpus (5847s/4782h CT) 09/18/05
+#counts   SARE_HTML_NO_BODY_TO     0s/1h of 7500 corpus (1767s/5733h ft) 09/18/05
+#counts   SARE_HTML_NO_BODY_TO     30s/12h of 23099 corpus (17359s/5740h MY) 05/14/06
+#max      SARE_HTML_NO_BODY_TO     60s/1h of 26326 corpus (22886s/3440h MY) 02/15/05
+
+########  ######################   ##################################################
+#   <HTML> and <BODY> tag spamsign
+########  ######################   ##################################################
+
+rawbody   SARE_HTML_HTML_AFTER     m{(?!.+Get more from the Web.)(?!</html>(?:\s+|=20|=0D|\r))</html>.+}i
+describe  SARE_HTML_HTML_AFTER     Message has text after /HTML tag
+score     SARE_HTML_HTML_AFTER     0.411
+#hist     SARE_HTML_HTML_AFTER     Fred T
+#counts   SARE_HTML_HTML_AFTER     3287s/618h of 333405 corpus (262498s/70907h RM) 05/12/06
+#max      SARE_HTML_HTML_AFTER     5747s/392h of 269462 corpus (128310s/141152h RM) 06/17/05
+#counts   SARE_HTML_HTML_AFTER     389s/79h of 56053 corpus (51711s/4342h AxB2) 05/15/06
+#counts   SARE_HTML_HTML_AFTER     689s/7h of 155688 corpus (104077s/51611h DOC) 05/15/06
+#counts   SARE_HTML_HTML_AFTER     535s/22h of 54067 corpus (16890s/37177h JH-3.01) 06/18/05
+#max      SARE_HTML_HTML_AFTER     691s/17h of 38858 corpus (15368s/23490h JH-SA3.0rc1) 08/22/04
+#counts   SARE_HTML_HTML_AFTER     278s/6h of 11260 corpus (6568s/4692h CT) 06/17/05
+#max      SARE_HTML_HTML_AFTER     327s/6h of 10826 corpus (6364s/4462h CT) 05/28/05
+#counts   SARE_HTML_HTML_AFTER     9s/7h of 6804 corpus (1336s/5468h ft) 06/17/05
+#counts   SARE_HTML_HTML_AFTER     583s/34h of 23099 corpus (17359s/5740h MY) 05/14/06
+#max      SARE_HTML_HTML_AFTER     1740s/23h of 47221 corpus (42968s/4253h MY) 06/18/05
+
+rawbody   SARE_HTML_HTML_BEFORE    m{(?!<html><html>)(?!<\!doctype .+)(?!<meta .+)(?!\s+<html>)(?!\w{0,3}> <HTML>)(?!(<HTML>)?<FONT [^>]+><HTML>)^.+<html>}i
+describe  SARE_HTML_HTML_BEFORE    Message has text before HTML tag
+score     SARE_HTML_HTML_BEFORE    0.216
+#overlap  SARE_HTML_HTML_BEFORE    Exclude SARE_HTML_HTML_DBL to avoid double-scoring these. 
+#ham      SARE_HTML_HTML_BEFORE    <!doctype html public "-//w3c//dtd html 4.0 transitional//en"><html>
+#ham      SARE_HTML_HTML_BEFORE    <meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1"><meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1"><html>
+#ham      SARE_HTML_HTML_BEFORE    any text which discusses HTML language and tags
+#ham      SARE_HTML_HTML_BEFORE    "^ +<html>"
+#ham      SARE_HTML_HTML_BEFORE    <FONT FACE=arial,helvetica><HTML>
+#ham      SARE_HTML_HTML_BEFORE    <!-- saved from url=(0022)http://internet.e-mail --> <html>
+#ham      SARE_HTML_HTML_BEFORE    > <HTML>  and II> <HTML>  (quoted emails, with HTML tag after the > quote indicator)
+#counts   SARE_HTML_HTML_BEFORE    2203s/811h of 333405 corpus (262498s/70907h RM) 05/12/06
+#counts   SARE_HTML_HTML_BEFORE    360s/28h of 56053 corpus (51711s/4342h AxB2) 05/15/06
+#counts   SARE_HTML_HTML_BEFORE    751s/38h of 155688 corpus (104077s/51611h DOC) 05/15/06
+#counts   SARE_HTML_HTML_BEFORE    27s/45h of 54067 corpus (16890s/37177h JH-3.01) 06/18/05
+#max      SARE_HTML_HTML_BEFORE    40s/45h of 54283 corpus (17106s/37177h JH-3.01) 02/13/05
+#counts   SARE_HTML_HTML_BEFORE    43s/5h of 11260 corpus (6568s/4692h CT) 06/17/05
+#counts   SARE_HTML_HTML_BEFORE    0s/27h of 6804 corpus (1336s/5468h ft) 06/17/05
+#counts   SARE_HTML_HTML_BEFORE    353s/17h of 23099 corpus (17359s/5740h MY) 05/14/06
+#max      SARE_HTML_HTML_BEFORE    762s/14h of 47221 corpus (42968s/4253h MY) 06/18/05
+
+########  ######################   ##################################################
+#   Spamsign character sets and fonts 
+########  ######################   ##################################################
+
+rawbody   SARE_HTML_BAD_FG_CLR     /[^\-a-z]color\s{0,10}(?::|=(?:3d)?(?!3d))(?:[\s\'\"]){0,10}(?![\s\'\">])(?!$|&quot;|\#?(?!\#)(?:[a-f0-9]{3}(?:['";\s><}&]|$)|[a-f0-9]{6}0?(?:['";\s><}&]|$))|rgb\(\s{0,10}(?:25[0-5]|2[0-4][0-9]|1?[0-9]?[0-9])\s{0,10},\s{0,10}(?:25[0-5]|2[0-4][0-9]|1?[0-9]?[0-9])\s{0,10},\s{0,10}(?:25[0-5]|2[0-4][0-9]|1?[0-9]?[0-9])\s{0,10}\)|rgb\(\s{0,10}1?[0-9]?[0-9]%\s{0,10},\s{0,10}1?[0-9]?[0-9]%\s{0,10},\s{0,10}1?[0-9]?[0-9]%\)|transparent|Black|White|Red|Yellow|Lime|Aqua|Blue|Fuchsia|Gr[ae]y|Silver|Maroon|Olive|Green|Teal|Navy|Purple|AliceBlue|AliceBlue|AntiqueWhite|Aqua|Aquamarine|Azure|Beige|Bisque|Black|BlanchedAlmond|Blue|BlueViolet|Brown|BurlyWood|CadetBlue|Chartreuse|Chocolate|Coral|CornflowerBlue|Cornsilk|Crimson|Cyan|DarkBlue|DarkCyan|DarkGoldenrod|DarkGr[ae]y|DarkGreen|DarkKhaki|DarkMagenta|DarkOliveGreen|DarkOrange|DarkOrchid|DarkRed|DarkSalmon|DarkSeaGreen|DarkSlateBlue|DarkSlateGray|DarkTurquoise|DarkViolet|DeepPink|DeepSkyBlue|DimGray|DodgerBlue|FireBrick|FloralWhite|ForestGreen|Fuchsia|Gainsboro|GhostWhite|Gold|Goldenrod|Gr[ae]y|Green|GreenYellow|Honeydew|HotPink|IndianRed|Indigo|Ivory|Khaki|Lavender|LavenderBlush|LawnGreen|LemonChiffon|LightBlue|LightCoral|LightCyan|LightGoldenrodYellow|LightGreen|LightGrey|LightPink|LightSalmon|LightSeaGreen|LightSkyBlue|LightSlateGray|LightSteelBlue|LightYellow|Lime|LimeGreen|Linen|Magenta|Maroon|MediumAquamarine|MediumBlue|MediumOrchid|MediumPurple|MediumSeaGreen|MediumSlateBlue|MediumSpringGreen|MediumTurquoise|MediumVioletRed|MidnightBlue|MintCream|MistyRose|Moccasin|NavajoWhite|Navy|OldLace|Olive|OliveDrab|Orange|OrangeRed|Orchid|PaleGoldenrod|PaleGreen|PaleTurquoise|PaleVioletRed|PapayaWhip|PeachPuff|Peru|Pink|Plum|PowderBlue|Purple|Red|RosyBrown|RoyalBlue|SaddleBrown|Salmon|SandyBrown|SeaGreen|Seashell|Sienna|Silver|SkyBlue|SlateBlue|SlateGray|Snow|SpringGreen|SteelBlue|Tan|Teal|Thistle|Tomato|Turquoise|Violet|Wheat|White|WhiteSmoke|Yellow|YellowGreen|ActiveBorder|ActiveCaption|AppWorkspace|Background|Buttonface|ButtonHighlight|ButtonShadow|ButtonText|CaptionText|GrayText|Highlight|HighlightText|InactiveBorder|InactiveCaption|InactiveCaptionText|InfoBackground|InfoText|Menu|MenuText|Scrollbar|ThreeDDarkShadow|ThreeDFace|ThreeDHighlight|ThreeDLightShadow|ThreeDShadow|Window(?:Frame|WindowText)?).{1,15}/i
+score     SARE_HTML_BAD_FG_CLR     0.188
+describe  SARE_HTML_BAD_FG_CLR     Uses illegal color code
+#counts   SARE_HTML_BAD_FG_CLR     1253s/470h of 333405 corpus (262498s/70907h RM) 05/12/06
+#counts   SARE_HTML_BAD_FG_CLR     206s/7h of 56053 corpus (51711s/4342h AxB2) 05/15/06
+#counts   SARE_HTML_BAD_FG_CLR     37s/5h of 11260 corpus (6568s/4692h CT) 06/17/05
+#counts   SARE_HTML_BAD_FG_CLR     253s/98h of 155688 corpus (104077s/51611h DOC) 05/15/06
+#counts   SARE_HTML_BAD_FG_CLR     0s/25h of 6804 corpus (1336s/5468h ft) 06/17/05
+#counts   SARE_HTML_BAD_FG_CLR     52s/11h of 54067 corpus (16890s/37177h JH-3.01) 06/18/05
+#max      SARE_HTML_BAD_FG_CLR     156s/1h of 38858 corpus (15368s/23490h JH-SA3.0rc1) 08/22/04
+#counts   SARE_HTML_BAD_FG_CLR     124s/32h of 23099 corpus (17359s/5740h MY) 05/14/06
+
+rawbody   SARE_HTML_COLOR_A        /(?:style="?|<style[^>]*>)[^>"]*[^-]color\s*:\s*(?!\#ffffff)\#(?:[e-f]{3}\b|(?:[e-f][0-9a-f]){3})[^>]*>/i
+describe  SARE_HTML_COLOR_A        BAD STYLE: color: too light (rgb)
+score     SARE_HTML_COLOR_A        0.150
+#hist     SARE_HTML_COLOR_A        From Jesse Houwing May 14 2004
+#overlap  SARE_HTML_COLOR_A        Spam overlaps SARE_HTML_FSIZE_1ALL (ham does not)
+#counts   SARE_HTML_COLOR_A        79s/109h of 333405 corpus (262498s/70907h RM) 05/12/06
+#max      SARE_HTML_COLOR_A        149s/306h of 258858 corpus (114246s/144612h RM) 05/27/05
+#counts   SARE_HTML_COLOR_A        4s/12h of 56053 corpus (51711s/4342h AxB2) 05/15/06
+#counts   SARE_HTML_COLOR_A        38s/0h of 155688 corpus (104077s/51611h DOC) 05/15/06
+#counts   SARE_HTML_COLOR_A        283s/1h of 54067 corpus (16890s/37177h JH-3.01) 06/18/05
+#counts   SARE_HTML_COLOR_A        16s/13h of 23099 corpus (17359s/5740h MY) 05/14/06
+#max      SARE_HTML_COLOR_A        137s/5h of 26326 corpus (22886s/3440h MY) 02/15/05
+#counts   SARE_HTML_COLOR_A        11s/0h of 11260 corpus (6568s/4692h CT) 06/17/05
+#max      SARE_HTML_COLOR_A        33s/0h of 10826 corpus (6364s/4462h CT) 05/28/05
+#counts   SARE_HTML_COLOR_A        0s/25h of 6804 corpus (1336s/5468h ft) 06/17/05
+
+meta      SARE_HTML_COLOR_NWHT     ( __SARE_HTML_COLOR_NWH || __SARE_HTML_COLOR_NWH2 ) && !__SARE_HTML_COLOR_WH && !__SARE_BLACK_BG_COLOR 
+describe  SARE_HTML_COLOR_NWHT     HTML contains nearly white color (F.F.F.)
+score     SARE_HTML_COLOR_NWHT     0.623
+#hist     SARE_HTML_COLOR_NWHT     Contrib by Matt Keller June 7 2004
+#counts   SARE_HTML_COLOR_NWHT     1453s/174h of 333405 corpus (262498s/70907h RM) 05/12/06
+#max      SARE_HTML_COLOR_NWHT     3678s/637h of 689155 corpus (348140s/341015h RM) 09/18/05
+#counts   SARE_HTML_COLOR_NWHT     406s/30h of 56053 corpus (51711s/4342h AxB2) 05/15/06
+#counts   SARE_HTML_COLOR_NWHT     876s/61h of 155688 corpus (104077s/51611h DOC) 05/15/06
+#counts   SARE_HTML_COLOR_NWHT     725s/12h of 54067 corpus (16890s/37177h JH-3.01) 06/18/05
+#max      SARE_HTML_COLOR_NWHT     835s/12h of 54283 corpus (17106s/37177h JH-3.01) 02/13/05
+#counts   SARE_HTML_COLOR_NWHT     36s/3h of 23099 corpus (17359s/5740h MY) 05/14/06
+#max      SARE_HTML_COLOR_NWHT     214s/0h of 26326 corpus (22886s/3440h MY) 02/15/05
+#counts   SARE_HTML_COLOR_NWHT     3s/4h of 7500 corpus (1767s/5733h ft) 09/18/05
+#counts   SARE_HTML_COLOR_NWHT     60s/0h of 10629 corpus (5847s/4782h CT) 09/18/05
+#max      SARE_HTML_COLOR_NWHT     106s/0h of 10826 corpus (6364s/4462h CT) 05/28/05
+
+meta      SARE_HTML_COLOR_NWHT2    ( __SARE_LIGHT_FG_COLOR && !__SARE_WHITE_FG_COLOR && !__SARE_BLACK_BG_COLOR && !SARE_HTML_COLOR_NWHT )
+describe  SARE_HTML_COLOR_NWHT2    Light color on a white background
+score     SARE_HTML_COLOR_NWHT2    0.630
+#hist     SARE_HTML_COLOR_NWHT2    Jesse Houwing
+#counts   SARE_HTML_COLOR_NWHT2    91s/39h of 333405 corpus (262498s/70907h RM) 05/12/06
+#max      SARE_HTML_COLOR_NWHT2    950s/17h of 269462 corpus (128310s/141152h RM) 06/17/05
+#counts   SARE_HTML_COLOR_NWHT2    44s/1h of 56053 corpus (51711s/4342h AxB2) 05/15/06
+#counts   SARE_HTML_COLOR_NWHT2    225s/0h of 155688 corpus (104077s/51611h DOC) 05/15/06
+#counts   SARE_HTML_COLOR_NWHT2    282s/8h of 54067 corpus (16890s/37177h JH-3.01) 06/18/05
+#counts   SARE_HTML_COLOR_NWHT2    37s/9h of 23099 corpus (17359s/5740h MY) 05/14/06
+#max      SARE_HTML_COLOR_NWHT2    621s/2h of 47221 corpus (42968s/4253h MY) 06/18/05
+#counts   SARE_HTML_COLOR_NWHT2    0s/2h of 4676 corpus (808s/3868h ft) 05/28/05
+#counts   SARE_HTML_COLOR_NWHT2    120s/0h of 10629 corpus (5847s/4782h CT) 09/18/05
+#max      SARE_HTML_COLOR_NWHT2    159s/0h of 11260 corpus (6568s/4692h CT) 06/17/05
+
+rawbody   __SARE_LIGHT_FG_COLOR    /[^\-a-z]color\s{0,10}(?::|=(?:3d)?(?!3d))(?:[\s\'\"]){0,10}(?![\s\'\"])(?:\#?(?!\#)(?!fff\W|ffffff)(?:[e-f]{3}\W|(?:[e-f][0-9a-f]){3})|rgb(?:\((?!\s{0,10}255\s{0,10},\s{0,10}255\s{0,10},\s{0,10}255)\s{0,10}2[2-5][0-9]\s{0,10},\s{0,10}2[2-5][0-9]\s{0,10},\s{0,10}2[2-5][0-9]\s{0,10}\)|\((?!\s{0,10}100\s{0,10}%\s{0,10},\s{0,10}100\s{0,10}%\s{0,10},\s{0,10}100\s{0,10}%)\s{0,10}(?:100|9[0-9]|8[6-9])\s{0,10}%\s{0,10},\s{0,10}(?:100|9[0-9]|8[6-9])\s{0,10}%\s{0,10},\s{0,10}(?:100|9[0-9]|8[6-9])\s{0,10}%\s{0,10}\))|(?:Light(?:Cyan|Yellow)|(?:Ghost|Floral)White|WhiteSmoke|LemonChiffon|AliceBlue|Cornsilk|Seashell|Honeydew|Azure|MintCream|Snow|Ivory|OldLace|LavenderBlush|Linen|MistyRose))/i
+rawbody   __SARE_WHITE_FG_COLOR    /[^\-a-z]color\s{0,10}(?::|=(?:3d)?(?!3d))(?:[\s\'\"]){0,10}(?![\s\'\"])(?:\#?(?!\#)(?:fff\W|ffffff)|rgb(?:\(\s{0,10}255\s{0,10},\s{0,10}255\s{0,10},\s{0,10}255\s{0,10}\)|\(\s{0,10}100\s{0,10}%\s{0,10},\s{0,10}100\s{0,10}%\s{0,10},\s{0,10}100\s{0,10}%\s{0,10}\))|white)/i
+rawbody   __SARE_DARK_FG_COLOR     /[^\-a-z]color\s{0,10}(?::|=(?:3d)?(?!3d))(?:[\s\'\"]){0,10}(?![\s\'\"])(?:\#?(?!\#)(?!000\W|000000)(?:[01]{3}\W|(?:[01][0-9a-f]){3})|rgb(?:\((?!\s{0,10}0\s{0,10},\s{0,10}0\s{0,10},\s{0,10}0\D)\s{0,10}[0-3]?[0-9]\s{0,10},\s{0,10}[0-3]?[0-9]\s{0,10},\s{0,10}[0-3]?[0-9]\s{0,10}\)|\((?!\s{0,10}0\s{0,10}%\s{0,10},\s{0,10}0\s{0,10}%\s{0,10},\s{0,10}0\s{0,10}%)\s{0,10}(?:[1-3]?[0-9])\s{0,10}%\s{0,10},\s{0,10}(?:[1-3]?[0-9])\s{0,10}%\s{0,10},\s{0,10}(?:[1-3]?[0-9])\s{0,10}%\s{0,10}\)))/i
+rawbody   __SARE_BLACK_FG_COLOR    /[^\-a-z]color\s{0,10}(?::|=(?:3d)?(?!3d))(?:[\s\'\"]){0,10}(?![\s\'\"])(?:\#?(?!\#)(?:000\W|000000)|rgb\s{0,10}\(\s{0,10}0\s{0,10},\s{0,10}0\s{0,10},\s{0,10}0\s{0,10}\)|rgb\s{0,10}\(\s{0,10}0\s{0,10}%\s{0,10},\s{0,10}0\s{0,10}%\s{0,10},\s{0,10}0\s{0,10}%\s{0,10}\)|black)/i
+rawbody   __SARE_LIGHT_BG_COLOR    /(?:bg|background\-)color\s{0,10}(?::|=(?:3d)?(?!3d))(?:[\s\'\"]){0,10}(?![\s\'\"])(?:\#?(?!\#)(?!ffffff|fff\W)(?:[e-f]{3}\W|(?:[e-f][0-9a-f]){3})|rgb(?:\((?!\s{0,10}255\s{0,10},\s{0,10}255\s{0,10},\s{0,10}255)\s{0,10}2[2-5][0-9]\s{0,10},\s{0,10}2[2-5][0-9]\s{0,10},\s{0,10}2[2-5][0-9]\s{0,10}\)|\((?!\s{0,10}100\s{0,10}%\s{0,10},\s{0,10}100\s{0,10}%\s{0,10},\s{0,10}100\s{0,10}%)\s{0,10}(?:100|9[0-9]|8[6-9])\s{0,10}%\s{0,10},\s{0,10}(?:100|9[0-9]|8[6-9])\s{0,10}%\s{0,10},\s{0,10}(?:100|9[0-9]|8[6-9])\s{0,10}%\s{0,10}\))|(?:Light(?:Cyan|Yellow)|(?:Ghost|Floral)White|WhiteSmoke|LemonChiffon|AliceBlue|Cornsilk|Seashell|Honeydew|Azure|MintCream|Snow|Ivory|OldLace|LavenderBlush|Linen|MistyRose))/i
+rawbody   __SARE_WHITE_BG_COLOR    /(?:bg|background\-)color\s{0,10}(?::|=(?:3d)?(?!3d))(?:[\s\'\"]){0,10}(?![\s\'\"])(?:\#?(?!\#)(?:fff\W|ffffff)|rgb(?:\(\s{0,10}255\s{0,10},\s{0,10}255\s{0,10},\s{0,10}255\s{0,10}\)|\(\s{0,10}100\s{0,10}%\s{0,10},\s{0,10}100\s{0,10}%\s{0,10},\s{0,10}100\s{0,10}%\s{0,10}\))|white)/i
+rawbody   __SARE_DARK_BG_COLOR     /(?:bg|background\-)color\s{0,10}(?::|=(?:3d)?(?!3d))(?:[\s\'\"]){0,10}(?![\s\'\"])(?:\#?(?!\#)(?!000\W|000000)(?:[01]{3}\W|(?:[01][0-9a-f]){3})|rgb(?:\((?!\s{0,10}0\s{0,10},\s{0,10}0\s{0,10},\s{0,10}0\D)\s{0,10}[0-3]?[0-9]\s{0,10},\s{0,10}[0-3]?[0-9]\s{0,10},\s{0,10}[0-3]?[0-9]\s{0,10}\)|\((?!\s{0,10}0\s{0,10}%\s{0,10},\s{0,10}0\s{0,10}%\s{0,10},\s{0,10}0\s{0,10}%)\s{0,10}(?:[1-3]?[0-9])\s{0,10}%\s{0,10},\s{0,10}(?:[1-3]?[0-9])\s{0,10}%\s{0,10},\s{0,10}(?:[1-3]?[0-9])\s{0,10}%\s{0,10}\)))/i
+rawbody   __SARE_BLACK_BG_COLOR    /(?:bg|background\-)color\s{0,10}(?::|=(?:3d)?(?!3d))(?:[\s\'\"]){0,10}(?![\s\'\"])(?:\#?(?!\#)(?:000\W|000000)|rgb\s{0,10}\(\s{0,10}0\s{0,10},\s{0,10}0\s{0,10},\s{0,10}0\s{0,10}\)|rgb\s{0,10}\(\s{0,10}0\s{0,10}%\s{0,10},\s{0,10}0\s{0,10}%\s{0,10},\s{0,10}0\s{0,10}%\s{0,10}\)|black)/i
+rawbody   __SARE_HAS_BG_COLOR      /(?:bg|background\-)color\s{0,10}(?::|=)/i
+rawbody   __SARE_HAS_FG_COLOR      /[^\-a-z]color\s{0,10}(?::|=)/i
+rawbody   __SARE_HTML_COLOR_WH     /<[^>]+\Wcolor(:|=(3d)?)[\s\"\']*(white|\#?FFFFFF)\b/i
+rawbody   __SARE_HTML_COLOR_NWH    /<[^>]+\Wcolor(:|=(3d)?)[\s\"\']*\#?F.F.F./i
+rawbody   __SARE_HTML_COLOR_NWH2   /<[^>]+\Wcolor(:|=(3d)?)[\s\"\']*\#?(E.F.F.|F.E.F.|F.F.E.)/i
+
+meta      SARE_HTML_COLOR_NWHT3    ( __SARE_LIGHT_FG_COLOR && __SARE_LIGHT_BG_COLOR && !SARE_HTML_COLOR_NWHT )
+describe  SARE_HTML_COLOR_NWHT3    Light color on a light background
+score     SARE_HTML_COLOR_NWHT3    0.254
+#hist     SARE_HTML_COLOR_NWHT3    Jesse Houwing
+#counts   SARE_HTML_COLOR_NWHT3    172s/74h of 333405 corpus (262498s/70907h RM) 05/12/06
+#max      SARE_HTML_COLOR_NWHT3    253s/347h of 258858 corpus (114246s/144612h RM) 05/27/05
+#counts   SARE_HTML_COLOR_NWHT3    58s/9h of 56053 corpus (51711s/4342h AxB2) 05/15/06
+#counts   SARE_HTML_COLOR_NWHT3    113s/0h of 155688 corpus (104077s/51611h DOC) 05/15/06
+#counts   SARE_HTML_COLOR_NWHT3    108s/0h of 54067 corpus (16890s/37177h JH-3.01) 06/18/05
+#counts   SARE_HTML_COLOR_NWHT3    0s/4h of 6804 corpus (1336s/5468h ft) 06/17/05
+#counts   SARE_HTML_COLOR_NWHT3    8s/1h of 11260 corpus (6568s/4692h CT) 06/17/05
+#counts   SARE_HTML_COLOR_NWHT3    21s/16h of 23099 corpus (17359s/5740h MY) 05/14/06
+#max      SARE_HTML_COLOR_NWHT3    33s/7h of 47221 corpus (42968s/4253h MY) 06/18/05
+
+rawbody   SARE_HTML_FONT_INVIS1    /color="\#FFFFF[0-9A-E]"/i
+describe  SARE_HTML_FONT_INVIS1    Message contains nearly white color text
+score     SARE_HTML_FONT_INVIS1    1.242
+#overlap  SARE_HTML_FONT_INVIS1    Significant overlap with SARE_HTML_COLOR_NWH1
+#counts   SARE_HTML_FONT_INVIS1    914s/17h of 333405 corpus (262498s/70907h RM) 05/12/06
+#max      SARE_HTML_FONT_INVIS1    3891s/239h of 689155 corpus (348140s/341015h RM) 09/18/05
+#counts   SARE_HTML_FONT_INVIS1    441s/0h of 56053 corpus (51711s/4342h AxB2) 05/15/06
+#counts   SARE_HTML_FONT_INVIS1    474s/0h of 155688 corpus (104077s/51611h DOC) 05/15/06
+#counts   SARE_HTML_FONT_INVIS1    570s/0h of 54067 corpus (16890s/37177h JH-3.01) 06/18/05
+#counts   SARE_HTML_FONT_INVIS1    4s/0h of 23099 corpus (17359s/5740h MY) 05/14/06
+#max      SARE_HTML_FONT_INVIS1    26s/0h of 26326 corpus (22886s/3440h MY) 02/15/05
+#counts   SARE_HTML_FONT_INVIS1    65s/0h of 10629 corpus (5847s/4782h CT) 09/18/05
+#counts   SARE_HTML_FONT_INVIS1    3s/2h of 7500 corpus (1767s/5733h ft) 09/18/05
+
+rawbody   SARE_HTML_FSIZE_1ALL     /(?:style=(?:3d)?"?|<style[^>]*>)[^>"]*font(?:-size)?\s{0,10}:[\s'"]*\b(?:-?0*([0-5](?:\.\d+)?\s{0,10}(?:(?!px|pt|%|em|in|mm|cm|pc|px|pt)[^\d\s]|(?:px|pt))|(?:[0-4]0|[0-9])?(?:\.\d+)?\s{0,10}%|(?:\.[0-4]\d*)\s{0,10}em|0(?:\.\d*)?\s{0,10}(?:ex|mm)|(?:\.0\d*)?\s{0,10}in|0\.(?:[01]\d*)?\s{0,10}cm|\.0(?:[0-3]\d*)?\s{0,10}pc)|xx-small)[^>]*>/i
+describe  SARE_HTML_FSIZE_1ALL     BAD STYLE: font(?:-size) too small
+score     SARE_HTML_FSIZE_1ALL     0.217
+#hist     SARE_HTML_FSIZE_1ALL     Performance & reliability improvements by Jesse Houwing
+#counts   SARE_HTML_FSIZE_1ALL     652s/414h of 333405 corpus (262498s/70907h RM) 05/12/06
+#max      SARE_HTML_FSIZE_1ALL     3040s/133h of 196718 corpus (96193s/100525h RM) 02/22/05
+#counts   SARE_HTML_FSIZE_1ALL     47s/33h of 56053 corpus (51711s/4342h AxB2) 05/15/06
+#counts   SARE_HTML_FSIZE_1ALL     679s/105h of 155688 corpus (104077s/51611h DOC) 05/15/06
+#counts   SARE_HTML_FSIZE_1ALL     722s/0h of 54067 corpus (16890s/37177h JH-3.01) 06/18/05
+#max      SARE_HTML_FSIZE_1ALL     1214s/0h of 38858 corpus (15368s/23490h JH-SA3.0rc1) 08/22/04
+#counts   SARE_HTML_FSIZE_1ALL     112s/11h of 23099 corpus (17359s/5740h MY) 05/14/06
+#max      SARE_HTML_FSIZE_1ALL     415s/7h of 47221 corpus (42968s/4253h MY) 06/18/05
+#counts   SARE_HTML_FSIZE_1ALL     6s/44h of 6804 corpus (1336s/5468h ft) 06/17/05
+#counts   SARE_HTML_FSIZE_1ALL     174s/6h of 11260 corpus (6568s/4692h CT) 06/17/05
+#max      SARE_HTML_FSIZE_1ALL     232s/5h of 10826 corpus (6364s/4462h CT) 05/28/05
+
+rawbody   SARE_HTML_INV_CHARSET    /charset=(?:3D)?(?!3D)(?:["']|&quot;|\s)*(?!['"]|&quot;|\s)(?!$|x-euc-jp|Cp1252|iso-8851-15|windows-874|ansi|unicode|437|8(?:5[01257]|6[0123569])|904|a(?:dobe\-s(?:tandard|ymbol)\-encoding|mi(?:ga\-?|\-)?1251|nsi_x3\.(?:110\-1983|4\-19(?:68|86))|rabic7?|s(?:cii|mo(?:\-708|_449)))|b(?:ig5(?:\-hkscs)?|ocu\-1|s_(?:4730|viewdata))|c(?:csid0(?:0(?:858|924)|114[0123456789])|esu\-8|hinese|p(?:0(?:0(?:858|924)|114[0123456789]|3[78])|1(?:026|54)|2(?:7[3458]|8[0145]|9[07])|367|4(?:2[034]|37)|500|775|8(?:19|5[01257]|6\d|7[01]|80|91)|9(?:0[345]|18|36)|\-(?:ar|gr|is))|s(?:a(?:7\-[12]|_(?:t500\-1983|z243\.4\-1985\-(?:gr|[12]))|dobestandardencoding|scii)|b(?:ig5|ocu\-1)|cesu\-8|d(?:ecmc|ku)s|e(?:bcdic(?:atdea|cafr|dknoa?|es[as]?|f(?:isea?|r)|it|pt|u[ks])|uc(?:fixwidjapanese|kr|pkdfmtjapanese))|gb2312|h(?:alfwidthkatakana|p(?:desktop|legal|math8|p(?:ifont|smath)|roman8))|i(?:b(?:bm904|m(?:03[78]|1026|2(?:7[34578]|8[0145]|9[07])|42[034]|500|8(?:5[157]|6[01345689]|7[01]|80|91)|9(?:0[35]|18)|ebcdicatde|symbols|thai))|nvariant|so(?:1(?:0(?:2t617bit|3(?:67box|t618bit)|646utf1|swedish)|1(?:1ecmacyrillic|swedishfornames)|2(?:1canadian1|2canadian2|3csaz24341985gr|8t101g2)|3(?:9csn369103|jisc6220jp)|4(?:1jusib1002|3iecp271|6serbian|7macedonian|jisc6220ro)|5(?:0greekccitt|1cuba|3gost1976874|8lap|9jisx02121990|italian|0)|6portuguese|7spanish|8greek7old|9latingreek)|2(?:0(?:22(?:jp2?|kr)|33)|1german|5french|7latingreek1|intlrefversion)|4(?:2jisc62261978|7bsviewdata|9inis|unitedkingdom)|5(?:0inis8|1iniscyrillic|42(?:7cyrillic|8greek)|7gb1988|8gb231280)|6(?:0(?:danishnorwegian|norwegian1)|1norwegian2|46(?:basic1983|danish)|9(?:37add|french))|70videotexsupp1|8(?:4portuguese2|5spanish2|6hungarian|7jisx0208|8(?:59(?:6[ei]|8[ei]|supp)|greek7)|9asmo449)|9(?:1jisc62291984a|2jisc62991984b|3jis62291984badd|4jis62291984hand|5jis62291984handadd|6jisc62291984kana|9naplps|0)|latin(?:arabic|cyrillic|greek|hebrew|[123456])|textcomm))|jisencoding|k(?:oi8r|sc56(?:011987|36))|m(?:acintosh|icrosoftpublishing|nem(?:onic)?)|n(?:_369103|ats(?:dano(?:add)?|sefi(?:add)?))|p(?:c(?:775baltic|8(?:50multilingual|62latinhebrew|codepage437|danishnorwegian|turkish)|p852)|tcp154)|shiftjis|u(?:cs4|n(?:icode(?:11(?:utf7)?|ascii|ibm12(?:6[1458]|76)|latin1)?|known8bit)|sdk)|v(?:entura(?:international|math|us)|i(?:qr|scii))|windows3(?:0latin1|1(?:latin[125]|j)))|uba|yrillic(?:\-asian)?|[an])|d(?:ec(?:\-mcs)?|in_66003|k\-us|s_?2089|[ek])|e(?:13b|bcdic\-(?:at\-de(?:\-a)?|b[er]|c(?:a\-fr|p\-(?:ar[12]|be|c[ah]|dk|es|f[ir]|g[br]|he|i[st]|n[lo]|roece|se|tr|us|wt|yu)|yrillic)|d(?:e\-273\+euro|k\-(?:277\+euro|no(?:\-a)?))|es(?:\-(?:284\+euro|[as]))?|f(?:i\-(?:278\+euro|se(?:\-a)?)|r\-297\+euro|r)|gb\-285\+euro|i(?:nt(?:ernational\-500\+euro)?|s\-871\+euro|t\-280\+euro|t)|jp\-(?:kana|e)|latin9\-\-euro|no\-277\+euro|pt|se\-278\+euro|u(?:s\-37\+euro|[ks]))|cma\-(?:11[48]|cyrillic)|lot_928|s2|uc\-(?:jp|kr)|xtended_unix_code_(?:fixed_width|packed_format)_for_japanese|s)|f[ir]|g(?:b(?:18030|2312|_(?:1988|2312)\-80|k)|ost_19768\-74|reek(?:7\-old|\-ccitt|[78])?|b)|h(?:ebrew|p\-(?:desktop|legal|math8|pi\-font|roman8)|z\-gb\-2312|u)|i(?:bm(?:0(?:0(?:858|924)|114[0123456789]|3[78])|10(?:26|47)|2(?:7[34578]|8[0145]|9[07])|367|4(?:2[034]|37)|500|775|8(?:19|5[01257]|6\d|7[01]|80|91)|9(?:0[345]|18)|\-(?:1047|symbols|thai))|ec_p27\-1|n(?:is(?:\-(?:cyrillic|8))?|variant)|rv|so(?:5427cyrillic1981|646\-(?:c(?:a2|[anu])|d[ek]|es2?|f(?:r1|[ir])|gb|hu|it|jp(?:\-ocr\-b)?|kr|no2?|pt2?|se2?|us|yu)|\-(?:10646(?:\-(?:j\-1|u(?:cs\-(?:basic|[24])|nicode\-latin1|tf\-1)))?|2022\-(?:cn(?:\-ext)?|jp(?:\-2)?|kr)|8859\-(?:1(?:\-windows\-3\.[01]\-latin\-1|[03456])|2\-windows\-latin\-2|6\-[ei]|8\-[ei]|9\-windows\-latin\-5|[123456789])|celtic|ir\-(?:1(?:0[01239]|1[01]|2[123678]|3[89]|4[12346789]|5[012345789]|99|[013456789])|2(?:26|[157])|37|4[279]|5[014578]|6[019]|70|8(?:\-[12]|[456789])|9(?:\-[12]|\d)|[246])|unicode\-ibm\-12(?:6[1458]|76))|_(?:10367\-box|2033\-1983|542(?:7\:1981|8\:1980|7)|6(?:46\.(?:basic\:1983|irv\:19(?:83|91))|937\-2\-(?:25|add))|8859\-(?:1(?:0\:1992|4\:1998|6\:2001|\:1987|[456])|2\:1987|3\:1988|4\:1988|5\:1988|6(?:\-[ei]|\:1987)|7\:1987|8(?:\-[ei]|\:1988)|9\:1989|supp|[123456789])|9036))|t)|j(?:is_(?:c622(?:0\-1969(?:\-(?:jp|ro))?|6\-19(?:78|83)|9\-1984\-(?:b\-add|hand(?:\-add)?|kana|[ab]))|encoding|x02(?:0(?:8\-1983|1)|12\-1990))|p\-ocr\-(?:b\-add|hand(?:\-add)?|[ab])|us_i\.b1\.00(?:3\-(?:mac|serb)|2)|[ps])|k(?:atakana|o(?:i(?:7\-switched|8\-[eru])|rean)|s(?:_c_5601\-198[79]|c(?:5636|_5601)))|l(?:10|a(?:tin(?:1(?:\-2\-5|0)|\-(?:greek(?:\-1)?|lap|9)|[1234568])|p)|[1234568])|m(?:ac(?:edonian|intosh)?|icrosoft\-publishing|nem(?:onic)?|s(?:936|_kanji|z_7795\.3))|n(?:a(?:plps|ts\-(?:dano(?:\-add)?|sefi(?:\-add)?))|c_nc00\-10\:81|f_z_62\-010(?:_\(1973\))?|o2|s_4551\-[12]|o)|osd_ebcdic_df0(?:3_irv|4_15?)|p(?:c(?:8\-(?:danish\-norwegian|turkish)|\-multilingual\-850\+euro)|t(?:154|cp154|2)|t)|r(?:ef|oman8|8)|s(?:csu|e(?:n_850200_[bc]|rbian|2)|hift_jis|t_sev_358\-88|e)|t(?:\.(?:101\-g2|61(?:\-[78]bit)?)|is\-620)|u(?:n(?:icode\-1\-1(?:\-utf\-7)?|known\-8bit)|s\-(?:ascii|dk)|tf\-(?:16(?:be|le)?|32(?:be|le)?|[78])|[ks])|v(?:entura\-(?:international|math|us)|i(?:deotex\-suppl|qr|scii))|windows\-(?:125[012345678]|31j|936)|x02(?:0(?:1\-7|[18])|12)|yu)[a-z0-9._-]*(?![a-z0-9._-])(?!=)/i
+describe  SARE_HTML_INV_CHARSET    Illegal chracterset in message
+score     SARE_HTML_INV_CHARSET    0.554
+#counts   SARE_HTML_INV_CHARSET    188s/10h of 333405 corpus (262498s/70907h RM) 05/12/06
+#max      SARE_HTML_INV_CHARSET    340s/214h of 689155 corpus (348140s/341015h RM) 09/18/05
+#counts   SARE_HTML_INV_CHARSET    3s/12h of 56053 corpus (51711s/4342h AxB2) 05/15/06
+#counts   SARE_HTML_INV_CHARSET    58s/14h of 155688 corpus (104077s/51611h DOC) 05/15/06
+#counts   SARE_HTML_INV_CHARSET    111s/0h of 54067 corpus (16890s/37177h JH-3.01) 06/18/05
+#max      SARE_HTML_INV_CHARSET    130s/0h of 54283 corpus (17106s/37177h JH-3.01) 02/13/05
+#counts   SARE_HTML_INV_CHARSET    18s/1h of 23099 corpus (17359s/5740h MY) 05/14/06
+#max      SARE_HTML_INV_CHARSET    35s/1h of 47221 corpus (42968s/4253h MY) 06/18/05
+#counts   SARE_HTML_INV_CHARSET    1s/0h of 11260 corpus (6568s/4692h CT) 06/17/05
+#max      SARE_HTML_INV_CHARSET    4s/0h of 10826 corpus (6364s/4462h CT) 05/28/05
+
+########  ######################   ##################################################
+#   <TITLE> Tag Tests
+########  ######################   ##################################################
+
+rawbody   SARE_HTML_TITLE_EMAIL    /<TITLE>.*\@[\w.]+\.(?:com|info|net|org)<\/title>/i
+describe  SARE_HTML_TITLE_EMAIL    HTML Title seems to include email address
+score     SARE_HTML_TITLE_EMAIL    0.346
+#ham      SARE_HTML_TITLE_EMAIL    service@payscale.com
+#counts   SARE_HTML_TITLE_EMAIL    11s/19h of 333405 corpus (262498s/70907h RM) 05/12/06
+#max      SARE_HTML_TITLE_EMAIL    82s/11h of 175738 corpus (98979s/76759h RM) 02/14/05
+#counts   SARE_HTML_TITLE_EMAIL    0s/0h of 56053 corpus (51711s/4342h AxB2) 05/15/06
+#counts   SARE_HTML_TITLE_EMAIL    3s/0h of 155688 corpus (104077s/51611h DOC) 05/15/06
+#counts   SARE_HTML_TITLE_EMAIL    0s/0h of 32903 corpus (9660s/23243h JH) 05/24/04
+#counts   SARE_HTML_TITLE_EMAIL    14s/0h of 10826 corpus (6364s/4462h CT) 05/28/05
+#counts   SARE_HTML_TITLE_EMAIL    109s/2h of 23099 corpus (17359s/5740h MY) 05/14/06
+
+########  ######################   ##################################################
+#   <A> and HREF rules          
+########  ######################   ##################################################
+
+rawbody   __SARE_HTML_INCREDML     m{content=3D"IncrediMail}
+rawbody   __SARE_HTML_A_HIDE       m{<A HREF=3D\".+}i
+meta      SARE_HTML_A_HIDE         __SARE_HTML_A_HIDE && !__SARE_HTML_INCREDML
+describe  SARE_HTML_A_HIDE         contains HTML anchor href with = hidden
+score     SARE_HTML_A_HIDE         0.700
+#ham      SARE_HTML_A_HIDE         forward of a forward, strangely wrapped mail.
+#counts   SARE_HTML_A_HIDE         154s/6h of 333405 corpus (262498s/70907h RM) 05/12/06
+#max      SARE_HTML_A_HIDE         373s/174h of 689155 corpus (348140s/341015h RM) 09/18/05
+#counts   SARE_HTML_A_HIDE         12s/0h of 56053 corpus (51711s/4342h AxB2) 05/15/06
+#counts   SARE_HTML_A_HIDE         27s/1h of 155688 corpus (104077s/51611h DOC) 05/15/06
+#counts   SARE_HTML_A_HIDE         128s/1h of 54067 corpus (16890s/37177h JH-3.01) 06/18/05
+#max      SARE_HTML_A_HIDE         152s/0h of 32900 corpus (9656s/23244h JH) 05/24/04
+#counts   SARE_HTML_A_HIDE         0s/4h of 57287 corpus (52272s/5015h MY) 09/22/05
+#max      SARE_HTML_A_HIDE         30s/2h of 26326 corpus (22886s/3440h MY) 02/15/05
+#counts   SARE_HTML_A_HIDE         17s/0h of 10629 corpus (5847s/4782h CT) 09/18/05
+#max      SARE_HTML_A_HIDE         68s/0h of 10826 corpus (6364s/4462h CT) 05/28/05
+
+########  ######################   ##################################################
+#   Invalid or Suspicious URI Tests
+########  ######################   ##################################################
+
+uri       SARE_HTML_URI_2SLASH     m{\//..{20,80}(?<!http:)//}i 
+describe  SARE_HTML_URI_2SLASH     URI has additional double slash within it
+score     SARE_HTML_URI_2SLASH     0.209
+#counts   SARE_HTML_URI_2SLASH     1121s/661h of 333405 corpus (262498s/70907h RM) 05/12/06
+#counts   SARE_HTML_URI_2SLASH     299s/50h of 56053 corpus (51711s/4342h AxB2) 05/15/06
+#counts   SARE_HTML_URI_2SLASH     1616s/27h of 155688 corpus (104077s/51611h DOC) 05/15/06
+#counts   SARE_HTML_URI_2SLASH     27s/8h of 54067 corpus (16890s/37177h JH-3.01) 06/18/05
+#max      SARE_HTML_URI_2SLASH     50s/3h of 38858 corpus (15368s/23490h JH-SA3.0rc1) 08/22/04
+#counts   SARE_HTML_URI_2SLASH     108s/21h of 23099 corpus (17359s/5740h MY) 05/14/06
+#max      SARE_HTML_URI_2SLASH     418s/15h of 47221 corpus (42968s/4253h MY) 06/18/05
+#counts   SARE_HTML_URI_2SLASH     1s/74h of 6804 corpus (1336s/5468h ft) 06/17/05
+#counts   SARE_HTML_URI_2SLASH     19s/6h of 11260 corpus (6568s/4692h CT) 06/17/05
+
+rawbody   __SARE_HTML_URR_OBFU3    /(&\#\d{1,3};){4}/i
+describe  __SARE_HTML_URR_OBFU3    URI with obfuscated destination 
+#hist     __SARE_HTML_URR_OBFU3    Mike Kuentz 
+#hist     __SARE_HTML_URR_OBFU3    Generalization/expansion suggested by Loren Wilton 
+rawbody   __SARE_HTML_URR_MAILTO   m'(?:mailto|\&\#109;\&\#97;\&\#105;\&\#108;\&\#116;\&\#111;)(?:\&\#58;|:)'
+rawbody   __SARE_HTML_URR_OBMAIL   /\&\#109;\&\#97;\&\#105;\&\#108;\&\#116;\&\#111;/
+meta      SARE_HTML_URR_OBFU3B     __SARE_HTML_URR_OBFU3 && !__SARE_HTML_URR_MAILTO && !__SARE_HTML_URR_OBMAIL
+describe  SARE_HTML_URR_OBFU3B     URI with obfuscated destination 
+score     SARE_HTML_URR_OBFU3B     0.257
+#overlap  SARE_HTML_URR_OBFU3B     Removed SARE_HTML_URR_OBFU6 and SARE_HTML_URR_OBFU2 due to overlap: m'\&\#104;\&\#116;\&\#116;\&\#112;' and /(&\#119;){3}/
+#counts   SARE_HTML_URR_OBFU3B     86s/40h of 333405 corpus (262498s/70907h RM) 05/12/06
+#max      SARE_HTML_URR_OBFU3B     169s/109h of 689155 corpus (348140s/341015h RM) 09/18/05
+#counts   SARE_HTML_URR_OBFU3B     5s/5h of 56053 corpus (51711s/4342h AxB2) 05/15/06
+#counts   SARE_HTML_URR_OBFU3B     118s/3h of 155688 corpus (104077s/51611h DOC) 05/15/06
+#counts   SARE_HTML_URR_OBFU3B     7s/0h of 23099 corpus (17359s/5740h MY) 05/14/06
+#max      SARE_HTML_URR_OBFU3B     62s/0h of 13451 corpus (11340s/2111h MY) 06/02/04
+#counts   SARE_HTML_URR_OBFU3B     2s/1h of 54067 corpus (16890s/37177h JH-3.01) 06/18/05
+#max      SARE_HTML_URR_OBFU3B     106s/0h of 38858 corpus (15368s/23490h JH-SA3.0rc1) 08/22/04
+#counts   SARE_HTML_URR_OBFU3B     13s/0h of 10629 corpus (5847s/4782h CT) 09/18/05
+
+########  ######################   ##################################################
+#   Image tag tests
+########  ######################   ##################################################
+
+########  ######################   ##################################################
+#   Paragraphs, breaks, and spacings
+########  ######################   ##################################################
+
+full      SARE_HTML_MANY_BR10      /(:?<br>\s?){10}/is
+describe  SARE_HTML_MANY_BR10      Multiple consecutive line breaks within HTML 
+score     SARE_HTML_MANY_BR10      0.648
+#hist     SARE_HTML_MANY_BR10      Submitted as LW_BR (sequence of 8)
+#counts   SARE_HTML_MANY_BR10      2003s/201h of 333405 corpus (262498s/70907h RM) 05/12/06
+#counts   SARE_HTML_MANY_BR10      477s/4h of 56053 corpus (51711s/4342h AxB2) 05/15/06
+#counts   SARE_HTML_MANY_BR10      980s/21h of 155688 corpus (104077s/51611h DOC) 05/15/06
+#counts   SARE_HTML_MANY_BR10      517s/9h of 54067 corpus (16890s/37177h JH-3.01) 06/18/05
+#max      SARE_HTML_MANY_BR10      797s/9h of 54283 corpus (17106s/37177h JH-3.01) 02/13/05
+#counts   SARE_HTML_MANY_BR10      43s/4h of 23099 corpus (17359s/5740h MY) 05/14/06
+#max      SARE_HTML_MANY_BR10      538s/2h of 13454 corpus (11339s/2115h MY) 06/02/04
+#counts   SARE_HTML_MANY_BR10      0s/10h of 6804 corpus (1336s/5468h ft) 06/17/05
+#counts   SARE_HTML_MANY_BR10      178s/1h of 11260 corpus (6568s/4692h CT) 06/17/05
+
+rawbody   SARE_HTML_P_JUSTIFY      /p align=justify/i
+describe  SARE_HTML_P_JUSTIFY      uses align=justify paragraph
+score     SARE_HTML_P_JUSTIFY      0.409
+#counts   SARE_HTML_P_JUSTIFY      90s/42h of 333405 corpus (262498s/70907h RM) 05/12/06
+#max      SARE_HTML_P_JUSTIFY      208s/128h of 258858 corpus (114246s/144612h RM) 05/27/05
+#counts   SARE_HTML_P_JUSTIFY      45s/9h of 56053 corpus (51711s/4342h AxB2) 05/15/06
+#counts   SARE_HTML_P_JUSTIFY      109s/0h of 155688 corpus (104077s/51611h DOC) 05/15/06
+#counts   SARE_HTML_P_JUSTIFY      118s/11h of 54067 corpus (16890s/37177h JH-3.01) 06/18/05
+#counts   SARE_HTML_P_JUSTIFY      16s/1h of 23099 corpus (17359s/5740h MY) 05/14/06
+#max      SARE_HTML_P_JUSTIFY      56s/1h of 47221 corpus (42968s/4253h MY) 06/18/05
+#counts   SARE_HTML_P_JUSTIFY      0s/2h of 6804 corpus (1336s/5468h ft) 06/17/05
+#counts   SARE_HTML_P_JUSTIFY      44s/0h of 11260 corpus (6568s/4692h CT) 06/17/05
+#max      SARE_HTML_P_JUSTIFY      58s/0h of 10826 corpus (6364s/4462h CT) 05/28/05
+
+########  ######################   ##################################################
+#  Suspicious tag combinations
+########  ######################   ##################################################
+
+########  ######################   ##################################################
+#   Paragraphs, breaks, and spacings
+########  ######################   ##################################################
+
+########  ######################   ##################################################
+#  Useless tags (tag structures that do nothing) 
+#  Largely submitted by Matt Yackley, with contributions by 
+#  Carl Friend, Jennifer Wheeler, Scott Sprunger, Larry Gilson
+########  ######################   ##################################################
+
+########  ######################   ##################################################
+#   Miscellaneous tag tests
+########  ######################   ##################################################
+
+rawbody   SARE_HTML_LEFT           /<left>/i
+describe  SARE_HTML_LEFT           HTML has strange tag
+score     SARE_HTML_LEFT           0.194
+#counts   SARE_HTML_LEFT           16s/5h of 333405 corpus (262498s/70907h RM) 05/12/06
+#max      SARE_HTML_LEFT           29s/2h of 114422 corpus (81069s/33353h RM) 01/16/05
+#counts   SARE_HTML_LEFT           0s/0h of 56053 corpus (51711s/4342h AxB2) 05/15/06
+#counts   SARE_HTML_LEFT           2s/0h of 155688 corpus (104077s/51611h DOC) 05/15/06
+#counts   SARE_HTML_LEFT           2s/0h of 54283 corpus (17106s/37177h JH-3.01) 02/13/05
+#max      SARE_HTML_LEFT           4s/0h of 38858 corpus (15368s/23490h JH-SA3.0rc1) 08/22/04
+#counts   SARE_HTML_LEFT           1s/0h of 23099 corpus (17359s/5740h MY) 05/14/06
+#max      SARE_HTML_LEFT           2s/0h of 47221 corpus (42968s/4253h MY) 06/18/05
+#counts   SARE_HTML_LEFT           0s/0h of 10629 corpus (5847s/4782h CT) 09/18/05
+#max      SARE_HTML_LEFT           1s/0h of 10826 corpus (6364s/4462h CT) 05/28/05
+
+body      __TAG_EXISTS_BODY        eval:html_tag_exists('body')
+body      __TAG_EXISTS_HTML        eval:html_tag_exists('html')
+meta      SARE_HTML_NO_HTML1       ( __TAG_EXISTS_BODY && !__TAG_EXISTS_HTML)
+describe  SARE_HTML_NO_HTML1       No body tag found in HTML email 
+score     SARE_HTML_NO_HTML1       0.732
+#counts   SARE_HTML_NO_HTML1       8421s/226h of 333405 corpus (262498s/70907h RM) 05/12/06
+#max      SARE_HTML_NO_HTML1       11805s/1335h of 689155 corpus (348140s/341015h RM) 09/18/05
+#counts   SARE_HTML_NO_HTML1       189s/30h of 56053 corpus (51711s/4342h AxB2) 05/15/06
+#counts   SARE_HTML_NO_HTML1       709s/16h of 155688 corpus (104077s/51611h DOC) 05/15/06
+#counts   SARE_HTML_NO_HTML1       239s/9h of 54067 corpus (16890s/37177h JH-3.01) 06/18/05
+#max      SARE_HTML_NO_HTML1       139s/7h of 38858 corpus (15368s/23490h JH-SA3.0rc1) 08/22/04
+#counts   SARE_HTML_NO_HTML1       163s/10h of 23099 corpus (17359s/5740h MY) 05/14/06
+#max      SARE_HTML_NO_HTML1       391s/7h of 57287 corpus (52272s/5015h MY) 09/22/05
+#counts   SARE_HTML_NO_HTML1       9s/3h of 10629 corpus (5847s/4782h CT) 09/18/05
+#max      SARE_HTML_NO_HTML1       47s/2h of 6944 corpus (3188s/3756h CT) 05/19/04
+#counts   SARE_HTML_NO_HTML1       21s/12h of 7500 corpus (1767s/5733h ft) 09/18/05
+
+# EOF

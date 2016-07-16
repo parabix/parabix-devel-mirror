@@ -1,0 +1,294 @@
+# SARE OEM Ruleset for SpamAssassin 2.5x and higher
+# Version:  1.05.14
+# Created:  2004-04-14
+# Modified: 2005-12-27
+# Changes:  
+# License:  Artistic - see http://www.rulesemporium.com/license.txt
+# Current Maintainer: Fred Tarasevicius tech2@i-is.com w/ Additions by Jesse Houwing j.houwing@rulesemporium.com
+# Current Home: http://www.rulesemporium.com/rules/70_sare_oem.cf
+# Requirements: SpamAssassin 2.5x or higher
+# SA 3.0 compliant: Yes
+# RULES TO CATCH PEOPLE TRYING TO SELL OEM SOFTWARE TO CONSUMERS.
+#
+#
+#
+## ADDED TO RULESET
+# Microsoft Windows 2000 Professional
+# Microsoft Windows 2003 Server
+# Microsoft Windows XP Media Center Edition
+# Microsoft Windows XP PRO/HOME
+# Microsoft Windows Small Business Server 2003 Standard Edition
+# Microsoft Office XP
+# Microsoft Office 2003
+# Microsoft Office Publisher
+# Microsoft Project 2002
+# Microsoft SQL Server 2000 Enterprise Edition
+# Microsoft Visual Studio
+# Microsoft Visio 2004
+# Microsoft Money 2004
+# Microsoft FrontPage 2003
+# Norton System Works 2003 Deluxe
+# Norton Antivirus Corporate Edition 2003
+# Adobe Acrobat 6.0 Pro
+# Adobe Creative Suite
+# Adobe Illustrator 10
+# Adobe In Design 2.0
+# Adobe InDesign 2
+# Adobe PageMaker 7.01
+# Adobe Photoshop 7
+# Adobe Photoshop Elements 2
+# Adobe Premiere
+# 3D Studio Max
+# AutoCAD 2005
+# Chief Architect 9.0
+# Cool Edit Pro v2.1
+# Corel Draw 12 Graphic Suite
+# Corel Draw 11 Graphic Suite
+# Corel Painter 8
+# Dragon Naturally Speaking
+# DVDXCopy Platinum 4.0.38
+# DVDXCopy Platinum v3.2.1
+# EasyRecovery
+# Macromedia Dreamweaver MX
+# Macromedia Fireworks MX
+# Macromedia Flash MX
+# Macromedia Studio MX
+# Mathematica 5.0
+# Nero Burning ROM 6 Ultra Edition
+# Nero 6 Ultra
+# PowerQuest Drive Image 7
+# QuarkXPress 5.01
+# QuarkXpress 6
+# Sonic Foundry DVD Architect 1.0c
+# Winfax PRO 10
+# WordPerfect Office 10
+#
+##
+
+
+
+# Popular sets.
+body  __OEM_ADOBE_1 /Ad[o0]b[e3] In ?Design/i
+body  __OEM_ADOBE_2 /Ph[o0]t[o0]sh[o0]{1,2}p (?:[5678]|CS|Elements)/i
+body  __OEM_ADOBE_3 /Ad[o0]b[e3] Acrobat \d\.?\d? Pro/i
+body  __OEM_ADOBE_4 /Ad[o0]b[e3] Creative Suite/i
+body  __OEM_ADOBE_5 /Ad[o0]b[e3] Illustrator \d\d/i
+body  __OEM_ADOBE_6 /Ad[o0]b[e3] Premiere/i
+body  __OEM_ADOBE_7 /Ad[o0]b[e3] PageMaker \d/i
+body  __OEM_MACROMED_1  /Macromedia Dreamwe?aver MX/i
+body  __OEM_MACROMED_2  /Fireworks MX/i
+body  __OEM_MACROMED_3  /Macromedia Flash MX/i
+body  __OEM_MACROMED_4  /Macromedia Studio MX/i
+body  __OEM_MACROMED_5	/Studio MX \d{4}/i
+body  __OEM_MS_1    /W[i|]nd[o0]ws (?:NT 4\.0|98 Second|2[0O]{2}3 Server|2[0O]{3} Pr[o0]|XP Media Center|XP (?:Pr[o0]|H[o0]me|C[o0]rp)|Small)/i
+body  __OEM_MS_2    /[O0]ff[i|]ce (?:XP|2[0O][0O]\d|Small|Publisher|System Pro)/i
+body  __OEM_MS_3    /(?:M[i|]cr[o0][s5\$][o0]ft|M[S\$]) Visual Studio/i
+body  __OEM_MS_4    /(?:M[i|]cr[o0][s5\$][o0]ft|M[S\$]) Visio 200\d/i
+body  __OEM_MS_5    /(?:M[i|]cr[o0][s5\$][o0]ft|M[S\$]) Money 200\d/i
+body  __OEM_MS_6    /(?:M[i|]cr[o0][s5\$][o0]ft|M[S\$]) Project 200\d/i
+body  __OEM_MS_7    /(?:M[i|]cr[o0][s5\$][o0]ft|M[S\$]) SQL Server (?:2000|7)/i
+body  __OEM_MS_8    /W[i|]nd[o0]w(?:XP|2[0o][0o]3)/i
+body  __OEM_MS_9    /(?:M[i|]cr[o0][s5\$][o0]ft|M[S\$]) FrontPage 2003/i
+body  __OEM_NORTON_1    /N[o0]rt[o0]n Ant[i|](?:\s*)?v[i|]rus (?:Corporate|200\d|Pr[o0])/i
+body  __OEM_NORTON_2    /System ?Works (?:Pro)? ?2[0O][0O][34]/i
+
+# Used in the final meta to check if at least one of this companies prod's were listed.
+meta  __ONE_PLUS_ADOBE  (__OEM_ADOBE_1 || __OEM_ADOBE_2 || __OEM_ADOBE_3 || __OEM_ADOBE_4 || __OEM_ADOBE_5 || __OEM_ADOBE_6 || __OEM_ADOBE_7)
+meta  __ONE_PLUS_MACROM (__OEM_MACROMED_1 || __OEM_MACROMED_2 || __OEM_MACROMED_3 || __OEM_MACROMED_4 || __OEM_MACROMED_5)
+meta  __ONE_PLUS_MSOFT  (__OEM_MS_1 || __OEM_MS_2 || __OEM_MS_3 || __OEM_MS_4 || __OEM_MS_5 || __OEM_MS_6 || __OEM_MS_7 || __OEM_MS_8 || __OEM_MS_9)
+meta  __ONE_PLUS_NORTON (__OEM_NORTON_1 || __OEM_NORTON_2)
+
+meta  __MANY_ADOBE_1    ((__OEM_ADOBE_1 + __OEM_ADOBE_2 + __OEM_ADOBE_3 + __OEM_ADOBE_4 + __OEM_ADOBE_5 + __OEM_ADOBE_6 + __OEM_ADOBE_7) > 1)
+meta  __MANY_MACROM_1   ((__OEM_MACROMED_1 + __OEM_MACROMED_2 + __OEM_MACROMED_3 + __OEM_MACROMED_4 + __OEM_MACROMED_5) > 1)
+meta  __MANY_MSOFT_1    ((__OEM_MS_1 + __OEM_MS_2 + __OEM_MS_3 + __OEM_MS_4 + __OEM_MS_5 + __OEM_MS_6 + __OEM_MS_7 + __OEM_MS_8 + __OEM_MS_9) > 1)
+
+meta  __MANY_ADOBE_2    ((__OEM_ADOBE_1 + __OEM_ADOBE_2 + __OEM_ADOBE_3 + __OEM_ADOBE_4 + __OEM_ADOBE_5 + __OEM_ADOBE_6 + __OEM_ADOBE_7) > 2)
+meta  __MANY_MACROM_2   ((__OEM_MACROMED_1 + __OEM_MACROMED_2 + __OEM_MACROMED_3 + __OEM_MACROMED_4 + __OEM_MACROMED_5) > 2)
+meta  __MANY_MSOFT_2    ((__OEM_MS_1 + __OEM_MS_2 + __OEM_MS_3 + __OEM_MS_4 + __OEM_MS_5 + __OEM_MS_6 + __OEM_MS_7 + __OEM_MS_8 + __OEM_MS_9) > 2)
+
+
+# Catch OEM style price lines
+body   __WINDOWS_PRICE	/windows.{4,40}\$\s?\d\d/i
+body   __PHOTOSH_PRICE	/Photoshop.{4,40}\$\s?\d\d/i
+body   __CREATIV_PRICE	/Creative.{4,40}\$\s?\d\d/i
+body   __ACROBAT_PRICE	/Acrobat.{4,40}\$\s?\d\d/i
+body   __ILLUSTR_PRICE	/Illustrator.{4,40}\$\s?\d\d/i
+
+meta   __POPULAR_PRICES2 ((__WINDOWS_PRICE + __PHOTOSH_PRICE + __CREATIV_PRICE + __ACROBAT_PRICE + __ILLUSTR_PRICE) > 1)
+meta   SARE_OEM_POP_PRICES3 ((__WINDOWS_PRICE + __PHOTOSH_PRICE + __CREATIV_PRICE + __ACROBAT_PRICE + __ILLUSTR_PRICE) > 2)
+score  SARE_OEM_POP_PRICES3 1.931
+
+meta SARE_OEM_PRODS_FEW ((__ONE_PLUS_ADOBE + __ONE_PLUS_MACROM + __ONE_PLUS_MSOFT + __ONE_PLUS_NORTON + __POPULAR_PRICES2) > 1)
+meta SARE_OEM_PRODS_1   ((__MANY_ADOBE_1 + __MANY_MACROM_1 + __MANY_MSOFT_1 + __ONE_PLUS_NORTON + __POPULAR_PRICES2) > 1)
+meta SARE_OEM_PRODS_2   ((__MANY_ADOBE_1 + __MANY_ADOBE_2 + __MANY_MACROM_1 + __MANY_MACROM_2 + __MANY_MSOFT_1 + __MANY_MSOFT_2 + __ONE_PLUS_NORTON + __POPULAR_PRICES2) > 3)
+meta SARE_OEM_PRODS_3   ((__MANY_ADOBE_1 + __MANY_ADOBE_2 + __MANY_MACROM_1 + __MANY_MACROM_2 + __MANY_MSOFT_1 + __MANY_MSOFT_2 + __ONE_PLUS_NORTON + __POPULAR_PRICES2) > 4)
+
+
+
+
+
+
+
+
+# MISC others
+body  __OEM_3DSTUDIO    /3D Studio Max/i
+body  __OEM_AUTOCAD     /AutoCAD \d{2,4}/i
+body  __OEM_CHIEF_ARCH  /Chief Architect \d/
+body  __OEM_COOLEDIT    /Cool Edit Pro/i
+body  __OEM_COREL_1     /Corel ?Draw (?:\d{1,2}|Graphic)/i
+body  __OEM_COREL_2	/Corel ?Painter 8/i
+body  __OEM_DRAGON      /Dragon Naturally Speaking/i
+body  __OEM_DVDXCOPY    /DVDXCopy Platinum (?:\d|v)/i
+body  __OEM_EASYRECOVER /EasyRecovery/i
+body  __OEM_MATHEMATICA /Mathematica \d/i
+body  __OEM_NEROBURNING /Nero (?:Burning (?:Rom)?\s*\d|6 ultra)/i
+body  __OEM_POWERQU     /PowerQuest Drive Image \d/i
+body  __OEM_QUARKXPRESS /QuarkXpress \d/i
+body  __OEM_QUICKBOOKS	/QuickBooks Pro 200\d/i
+body  __OEM_SONIC_FOUND /Sonic Foundry DVD/i
+body  __OEM_ULEAD_1     /Ulead DVD Workshop/i
+body  __OEM_WINFAX      /Winfax PRO \d\d/i
+body  __OEM_WORDPERF	/WordPerfect (?:\d{2}|Office)/i
+
+meta  __OEM_OTHERS_AM   (__OEM_3DSTUDIO || __OEM_AUTOCAD || __OEM_CHIEF_ARCH || __OEM_COREL_1 || __OEM_COREL_2 || __OEM_DRAGON || __OEM_DVDXCOPY || __OEM_EASYRECOVER || __OEM_MATHEMATICA)
+meta  __OEM_OTHERS_NP   (__OEM_NEROBURNING || __OEM_POWERQU)
+meta  __OEM_OTHERS_QZ   (__OEM_QUARKXPRESS || __OEM_QUICKBOOKS || __OEM_SONIC_FOUND || __OEM_ULEAD_1 || __OEM_WINFAX || __OEM_WORDPERF)
+meta  __OEM_OTHERS_ALL  (__OEM_OTHERS_AM || __OEM_OTHERS_NP || __OEM_OTHERS_QZ)
+
+
+
+# If we found some of the big players, look for some other guys, and add more points if found.
+meta  SARE_OEM_AND_OTHER    (SARE_OEM_PRODS_1 && __OEM_OTHERS_ALL)
+
+
+# A combined meta test to count overall number of products listed.
+meta  SARE_PRODUCTS_02  ((__ONE_PLUS_ADOBE + __ONE_PLUS_MACROM + __ONE_PLUS_MSOFT + __ONE_PLUS_NORTON + __OEM_OTHERS_AM + __OEM_OTHERS_NP + __OEM_OTHERS_QZ) > 1)
+meta  SARE_PRODUCTS_03  ((__ONE_PLUS_ADOBE + __ONE_PLUS_MACROM + __ONE_PLUS_MSOFT + __ONE_PLUS_NORTON + __OEM_OTHERS_AM + __OEM_OTHERS_NP + __OEM_OTHERS_QZ) > 2)
+meta  SARE_PRODUCTS_04  ((__ONE_PLUS_ADOBE + __ONE_PLUS_MACROM + __ONE_PLUS_MSOFT + __ONE_PLUS_NORTON + __OEM_OTHERS_AM + __OEM_OTHERS_NP + __OEM_OTHERS_QZ) > 3)
+
+
+score  SARE_OEM_PRODS_FEW   0.879
+score  SARE_OEM_PRODS_1     0.753
+score  SARE_OEM_PRODS_2     0.897
+score  SARE_OEM_PRODS_3     0.951
+score  SARE_OEM_AND_OTHER   1.259
+score  SARE_PRODUCTS_02     0.375
+score  SARE_PRODUCTS_03     0.875
+score  SARE_PRODUCTS_04     1.75
+
+
+
+meta  SARE_PRODS_LOTS	((SARE_PRODUCTS_02 + SARE_PRODUCTS_03 + SARE_PRODUCTS_04) > 2)
+score SARE_PRODS_LOTS	1.9
+
+
+# Added for Fake years like 2OO3 note, that is not: 2003.
+body  SARE_OEM_FAKE_YEAR    /\b2(?!00)[O0]{2}\d\b/
+score SARE_OEM_FAKE_YEAR    1.70
+
+
+body  SARE_OEM_PRO_DOL	/Professional .{0,3}\$\s?\d\d/i
+score SARE_OEM_PRO_DOL	0.75
+
+body  SARE_OEM_WIN_DOL /Windows.{1,9}\$\s?\d\d/i
+score SARE_OEM_WIN_DOL 0.75
+
+body  SARE_OEM_NEW_TITLES	/NEW TITLES/
+score SARE_OEM_NEW_TITLES	0.75
+
+body  SARE_OEM_MONEY_ADOBE	/\$\d\d\d?\s?Adobe/i
+score SARE_OEM_MONEY_ADOBE	0.75
+
+body  SARE_OEM_MONEY_OFFIC	/\$\d\d\d?\s?Office/i
+score SARE_OEM_MONEY_OFFIC	0.75
+
+body  SARE_OEM_MONEY_MS	/\$\d\d\d?\s?Microsoft/i
+score SARE_OEM_MONEY_MS	0.75
+
+body  SARE_OEM_MONEY_WIN	/\$\d\d\d?\s?Windows/i
+score SARE_OEM_MONEY_WIN	0.75
+
+uri   SARE_OEM_UPPER_EYE	/eyebrow-upper-left-corner/
+score SARE_OEM_UPPER_EYE	0.95
+
+# .oem in URL
+uri         SARE_OEM_DOT_URI		/\.oem/i
+score       SARE_OEM_DOT_URI		0.094
+#counts   SARE_OEM_DOT_URI               0s/0h of 40645 corpus (35355s/5290h MY) 12/26/05
+#counts   SARE_OEM_DOT_URI               5s/0h of 9789 corpus (4888s/4901h FT) 12/26/05
+#counts   SARE_OEM_DOT_URI               71s/0h of 40795 corpus (31049s/9746h ML) 12/26/05
+
+
+
+##############################################################################
+# Common phrases in OEM spam
+#
+# Added by Jesse Houwing
+# j.houwing@rulesemporium.com
+
+body __SARE_OEM_1A       /(?:normal|r.?e.?t.?a.?i.?l)\s*(?:p.?r.?i.?c.?e)?:?\s*(?:\$\s*)?\d/i
+body __SARE_OEM_1B       /(?:our|my)(?:\s*(?:low|online))?\s*p.?r.?i.?c.?e:?\s*(?:\$\s*)?\d/i
+body __SARE_OEM_1C       /you\s*s.?a.?v.?e:?\s*(?:\$\s*)?\d/i
+
+body __SARE_OEM_2A       /(?:normal|r.?e.?t.?a.?i.?l)\s*(?:p.?r.?i.?c.?e)/i
+body __SARE_OEM_2B       /(?:our|my)(?:\s*(?:l[o0]w|online))?\s*p.?r.?i.?c.?e/i
+body __SARE_OEM_2C       /you\s*s.?a.?v.?e/i
+
+body SARE_OEM_OEMCD      /\boem.?cd/i
+body SARE_OEM_REDPR      /reduced our prices/i
+body SARE_OEM_BRC        /\(OEM\)/i
+body SARE_OEM_SOFT_IS    /\b(?:\bsoftware\b.{1,15}\b[OQ0]EM\b|\b[OQ0]EM\b.{1,15}\bsoftware\b)\b/i
+
+body SARE_OEM_OBFU       /(?:(?!oem)\b[o0][e3]m\b|(?!soft ?wares?)\b[s5$].?[o0].?f.?t.?w.?[\@a].?r.?[e3].?[s5]?\b)/
+rawbody SARE_OEM_S_DOL   m{(?:<s>[^\$]*?\$.*?</s>|<s>.*?\d+\.\d+.*?</s>|text-decoration:\sline-through[^\$]{0,40}?\$|text-decoration:\sline-through.{0,40}\d+\.\d+)}i
+rawbody SARE_OEM_S_PRICE /\.\w*price\s*{/i
+
+meta SARE_OEM_A_1        __SARE_OEM_1A + __SARE_OEM_1B + __SARE_OEM_1C > 1
+meta SARE_OEM_A_2        __SARE_OEM_1A + __SARE_OEM_1B + __SARE_OEM_1C > 2
+meta SARE_OEM_B_3        __SARE_OEM_2A && __SARE_OEM_2B && __SARE_OEM_2C && !SARE_OEM_A_2
+
+score SARE_OEM_OBFU      1.0
+score SARE_OEM_B_3       2.0
+score SARE_OEM_SOFT_IS   1.0
+score SARE_OEM_BRC       1.0
+score SARE_OEM_S_DOL     1.2
+score SARE_OEM_OEMCD     0.8
+score SARE_OEM_REDPR     0.8
+score SARE_OEM_A_1       2.0
+score SARE_OEM_A_2       1.5
+score SARE_OEM_S_PRICE   1.0
+
+describe SARE_OEM_OBFU    Obfuscated OEM terms
+describe SARE_OEM_BRC     OEM in braces
+describe SARE_OEM_SOFT_IS Software that is OEM
+describe SARE_OEM_S_DOL   One strike, you're out
+describe SARE_OEM_OEMCD   Mentions a OEM cd
+describe SARE_OEM_REDPR   Mentions lower prices
+describe SARE_OEM_A_1     Common OEM spam phrases
+describe SARE_OEM_A_2     More common OEM spam phrases
+describe SARE_OEM_B_3     More common OEM spam phrases
+describe SARE_OEM_S_PRICE CSS style that ends with price
+
+##############################################################################
+
+# Bob Menschel's Contributions.
+
+body      RM_bpoem_InstantDL       /instant download/i 
+describe  RM_bpoem_InstantDL       Contains spammer phrasing - oem s/w 
+score     RM_bpoem_InstantDL       1.820
+#hist     RM_bpoem_InstantDL       Created by Bob Menschel Sep 10 2004
+#counts   RM_bpoem_InstantDL       82s/0h of 66096 corpus (40118s/25978h RM) 09/12/04
+
+body      RM_bpc_OpenNewSite       /opened a NEW site/i
+describe  RM_bpc_OpenNewSite       common spammer phrasing
+score     RM_bpc_OpenNewSite       1.210
+#hist     RM_bpc_OpenNewSite       Created by Bob Menschel Sep 10 2004
+#counts   RM_bpc_OpenNewSite       21s/0h of 66096 corpus (40118s/25978h RM) 09/12/04
+
+body      RM_bpc_WorldBestSW       /WORLD'?s? BEST software/i
+describe  RM_bpc_WorldBestSW       common spammer phrasing
+score     RM_bpc_WorldBestSW       1.200
+#hist     RM_bpc_WorldBestSW       Created by Bob Menschel Sep 10 2004
+#counts   RM_bpc_WorldBestSW       20s/0h of 66096 corpus (40118s/25978h RM) 09/12/04
+
+# EOF

@@ -1,0 +1,916 @@
+# SARE Stocks Ruleset for SpamAssassin
+# Version: 01.01.02
+# Created: 2005-12-18
+# Modified: 2007-08-18
+# License: Artistic -  http://www.rulesemporium.com/license.txt
+# Current Maintainer: Sare Ninja - maddoc@maddoc.net
+# Current Home: http://www.rulesemporium.com/rules/70_sare_stocks.cf
+# Changes: 
+# 00.01.00 Created First Release
+# 00.01.01 Removed some rules not belonging to this set.
+# 00.01.02 Changed SARE_MLH_Stock2 t different regex pattern and 
+# 00.01.03 Added masschecker results.
+# 00.01.04 Adjusted scores and redid some of Loren and Mikes rules. 
+# 00.01.05 Fixed Rule score typo
+# 00.01.06 Adjusted Lorens rules and fixed overlaps
+# 00.01.07 Adjusted some of Mikes rules
+# 00.01.08 Redid a lot of the rules. Added Freds stock rules. Removed Docs rules. Added More Loren rules. Added Bob and Mike rules
+# 00.01.09 Removed dupe rules
+# 00.01.10 Added new Loren rules and adjusted scoring.
+# 01.00.00 Rescored and final masschecked. 
+# 01.00.01 Tweaked some FP scores. Removed some overlap rules.
+# 01.00.02 Rescored.
+# 01.00.03 Added counts and some new rules.
+# 01.00.04 Added new rule.
+# 01.00.05 Added multiple rules from Loren and Chris S. Fixed one rule.
+# 01.00.06 Added and replaced rules from Mike.
+# 01.00.07 Fixed rules so they will now lint correctly with SA 3.2. Made changes to some rules to catch new stock spam.
+# 01.00.08 Removed some low scoring rules which were hitting hams. Removed a couple reduntant Loren rules. Updated one of Mikes rules. 
+# 01.00.09 Updated one of Mikes rules.
+# 01.00.10 Updated Mikes rules.
+# 01.00.11 Updated Mikes obf rules.
+# 01.00.12 Updated Mikes obf rules. Added new gif only stock rules from Dallas.
+# 01.00.13 Added Freds counts from his other masschecker. Fixed Modified date.
+# 01.00.14 Removed Dupe rules. Updated Raymonds rules. Updated Mikes obf rules.
+# 01.00.15 Added more stock rules from Mike. Fixed Dallas's gif catcher to catch UPPER case. Updated Mike's obf rules.
+# 01.00.16 Updated Mikes obf rules.
+# 01.00.17 Updated Mikes obf rules. Updated Raymonds rules. Tweaked Dallas's gif catcher.
+# 01.00.18 Updated Mikes obf rules. More tweaks of gif catcher.
+# 01.00.19 Updated Mikes obf rules.
+# 01.00.20 Updated Mikes obf rules.
+# 01.00.21 Updated Mikes obf rules.
+# 01.00.22 Updated Mikes obf rules. Updated Raymonds rules.
+# 01.00.23 Updated Mikes obf rules.
+# 01.00.24 Updated Mikes obf rules.
+# 01.00.25 Updated Mikes obf rules.
+# 01.00.26 Updated Mikes obf rules and SARE_MLH_Stock1 rule.
+# 01.00.27 Updated Mikes obf rules. Updated Raymonds rules.
+# 01.00.28 Tweeked GIF catcher rule.
+# 01.00.29 Updated Mikes obf rules.
+# 01.00.30 Updated Mikes obf rules.
+# 01.00.31 Updated Mikes obf rules.
+# 01.00.32 Updated Mikes obf rules.
+# 01.00.33 Updated Mikes obf rules.
+# 01.00.34 Updated Mikes obf rules.
+# 01.00.35 Updated Mikes obf rules.
+# 01.00.36 Fixed Updated Mikes obf rules.
+# 01.00.37 Added Chris S. Rules to the mix.
+# 01.00.38 Updated Mikes obf rules.
+# 01.00.39 Updated Mikes obf rules.
+# 01.00.40 Fixed error
+# 01.00.41 Update Mikes obf rules.
+# 01.00.42 Added new rule from Mike.
+# 01.00.43 Added new rule from Mike. Update Raymonds rules.
+# 01.00.44 Commented out some extra rules not being used.
+# 01.00.45 Update Raymonds rules.
+# 01.01.01 Massive updates. Removed some rules and re-scoring of others.
+# 01.01.02 Updated PROLOSTOCK rules / Added SARE_AXBSTOCK_* rules [AXB]
+# Comments are:
+# This file is for catching pump and dump stock scam/spams
+
+# 2005-12-18
+# Contributed by Mike
+header   SARE_MLH_Stock1    Subject =~ /(penny )?st[o0]cks?|cribsheet|marcket|stox|small[ -]?cap|stock report/i 
+describe SARE_MLH_Stock1    Subject mentions stock or stock related words
+score    SARE_MLH_Stock1    0.87
+##counts   SARE_MLH_Stock1          150s/6h of 5645 corpus (3421s/2224h AxB) 01/26/06
+##counts   SARE_MLH_Stock1          1635s/4h of 59166 corpus (45647s/13519h ML) 01/25/06
+##counts   SARE_MLH_Stock1          1698s/9h of 86182 corpus (46804s/39378h DOC) 01/25/06
+##counts   SARE_MLH_Stock1          216s/6h of 11519 corpus (6151s/5368h CT) 01/25/06
+##counts   SARE_MLH_Stock1          468s/11h of 17497 corpus (9723s/7774h FT) 01/25/06
+##counts   SARE_MLH_Stock1          597s/4h of 37304 corpus (31827s/5477h MY) 01/25/06
+##counts   SARE_MLH_Stock1          6169s/765h of 508570 corpus (180270s/328300h RM) 01/25/06
+
+header   SARE_MLH_Stock2    Subject =~ /micr[qw]?o-?caa?pk?s?/i
+describe SARE_MLH_Stock2    Subject mentions microcap
+score    SARE_MLH_Stock2    1.66
+##counts   SARE_MLH_Stock2          16s/0h of 5645 corpus (3421s/2224h AxB) 01/26/06
+##counts   SARE_MLH_Stock2          181s/0h of 59166 corpus (45647s/13519h ML) 01/25/06
+##counts   SARE_MLH_Stock2          204s/0h of 86182 corpus (46804s/39378h DOC) 01/25/06
+##counts   SARE_MLH_Stock2          25s/0h of 11519 corpus (6151s/5368h CT) 01/25/06
+##counts   SARE_MLH_Stock2          35s/0h of 17497 corpus (9723s/7774h FT) 01/25/06
+##counts   SARE_MLH_Stock2          74s/0h of 37304 corpus (31827s/5477h MY) 01/25/06
+##counts   SARE_MLH_Stock2          800s/0h of 508570 corpus (180270s/328300h RM) 01/25/06
+
+
+body     SARE_MLB_Stock1     /(?:Opening|Current|Target|Projected)[ _-]Price[ :;-]/i
+score    SARE_MLB_Stock1     1.48
+##counts   SARE_MLB_Stock1          1903s/0h of 59166 corpus (45647s/13519h ML) 01/25/06
+##counts   SARE_MLB_Stock1          2146s/0h of 86182 corpus (46804s/39378h DOC) 01/25/06
+##counts   SARE_MLB_Stock1          314s/0h of 11519 corpus (6151s/5368h CT) 01/25/06
+##counts   SARE_MLB_Stock1          46s/0h of 5645 corpus (3421s/2224h AxB) 01/26/06
+##counts   SARE_MLB_Stock1          550s/96h of 17497 corpus (9723s/7774h FT) 01/25/06
+##counts   SARE_MLB_Stock1          6900s/465h of 508570 corpus (180270s/328300h RM) 01/25/06
+##counts   SARE_MLB_Stock1          884s/4h of 37304 corpus (31827s/5477h MY) 01/25/06
+
+body     SARE_MLB_Stock2     /Short Term Target(?::| Price:)/i
+score    SARE_MLB_Stock2     1.66
+##counts   SARE_MLB_Stock2          135s/0h of 59166 corpus (45647s/13519h ML) 01/25/06
+##counts   SARE_MLB_Stock2          268s/0h of 17497 corpus (9723s/7774h FT) 01/25/06
+##counts   SARE_MLB_Stock2          29s/0h of 11519 corpus (6151s/5368h CT) 01/25/06
+##counts   SARE_MLB_Stock2          2s/0h of 5645 corpus (3421s/2224h AxB) 01/26/06
+##counts   SARE_MLB_Stock2          330s/0h of 86182 corpus (46804s/39378h DOC) 01/25/06
+##counts   SARE_MLB_Stock2          623s/0h of 508570 corpus (180270s/328300h RM) 01/25/06
+##counts   SARE_MLB_Stock2          86s/0h of 37304 corpus (31827s/5477h MY) 01/25/06
+
+body     SARE_MLB_Stock3     /Last[ _](?:Trade|Price)[ :]/i
+score    SARE_MLB_Stock3     1.58
+##counts   SARE_MLB_Stock3          0s/0h of 5645 corpus (3421s/2224h AxB) 01/26/06
+##counts   SARE_MLB_Stock3          14s/0h of 37304 corpus (31827s/5477h MY) 01/25/06
+##counts   SARE_MLB_Stock3          172s/0h of 59166 corpus (45647s/13519h ML) 01/25/06
+##counts   SARE_MLB_Stock3          181s/0h of 86182 corpus (46804s/39378h DOC) 01/25/06
+##counts   SARE_MLB_Stock3          1s/0h of 17497 corpus (9723s/7774h FT) 01/25/06
+##counts   SARE_MLB_Stock3          5s/0h of 11519 corpus (6151s/5368h CT) 01/25/06
+##counts   SARE_MLB_Stock3          95s/24h of 508570 corpus (180270s/328300h RM) 01/25/06
+
+body     SARE_MLB_Stock4     /[0-9][ -]Day Target[(:?_| )Price]?: /i
+score    SARE_MLB_Stock4    1.66
+##counts   SARE_MLB_Stock4          0s/0h of 17497 corpus (9723s/7774h FT) 01/25/06
+##counts   SARE_MLB_Stock4          0s/0h of 5645 corpus (3421s/2224h AxB) 01/26/06
+##counts   SARE_MLB_Stock4          124s/0h of 86182 corpus (46804s/39378h DOC) 01/25/06
+##counts   SARE_MLB_Stock4          127s/0h of 37304 corpus (31827s/5477h MY) 01/25/06
+##counts   SARE_MLB_Stock4          274s/0h of 508570 corpus (180270s/328300h RM) 01/25/06
+##counts   SARE_MLB_Stock4          46s/0h of 11519 corpus (6151s/5368h CT) 01/25/06
+##counts   SARE_MLB_Stock4          72s/0h of 59166 corpus (45647s/13519h ML) 01/25/06
+
+body      SARE_MLB_Stock5     /^(?:St[o0]ck[_]Symb[o0]l|Symb[o0]l|S\s?y\s?m\s?b\s?[o0]\s?l|Ticker|OTC):/i
+describe  SARE_MLB_Stock5     Mentions stock symbol, tickers, or OTC.
+score     SARE_MLB_Stock5     1.66
+#counts   SARE_MLB_Stock5          182s/0h of 11694 corpus (6133s/5561h CT) 02/15/06
+#counts   SARE_MLB_Stock5          80s/0h of 7686 corpus (5464s/2222h AxB) 02/16/06
+#counts   SARE_MLB_Stock5          287s/0h of 27454 corpus (21822s/5632h MY) 02/15/06
+#counts   SARE_MLB_Stock5          1556s/0h of 95397 corpus(56017s/39380h DOC) 02/15/06
+#counts   SARE_MLB_Stock5          261s/0h of 27175 corpus (19315s/7860h FT) 02/15/06
+#counts   SARE_MLB_Stock5          1421s/0h of 71535 corpus(56115s/15420h ML) 02/15/06
+
+
+# SARE_MLB_Stock6.cf  --  autogenerated rule
+# generated -- Thu Jan 18 04:26:53 2007
+# Currently contains 109 obfu stock tickers
+
+
+body      SARE_MLB_Stock6    /\b(?:(E\.GL\.y)|(Eg \|_ y)|(e g \| y)|(egly)|.P.\s+.P.\s+.?\s+.T.\s+.L.|.P.\s+.P.\s+.T.\s+.L.|A B S Y|A D\s+Y E|A G.A-O|A M S N|A.?E.?T.?R|A.?G.?A.?O|A.?L.?V.?N|A.?S.?I.?Q|A.?U.?N.?I|A.D.Y.E|B.?C.?L.?C|B.?M.?S.?N|C T X E|C.?F.?S.?C|C.?G.?D.?C|C.?N.?H.?C|C.?T.?F.?E|C.?V.?N.?.?I|C.?W.?T.?D|C.?Y.?H.?D|D K D Y|D M S I|E  G  L  Y|E . G . \|_ . Y|E = G = L = Y|E.?R.?U.?G|E.G.L.Y|E.X.T.I|E.q.t.d|F C P G|F.?C.?Y.?I|G APJ|G.?C.?M.?E|G.?D.?K.?I|G.?G.?T.?S|G.?L.?X.?I|G.A.R.S|GA PJ|H N S T|H.?Y.?W.?I|I G A M|I Z O N|I.?N.?F.?X|I.?V.?A.?Y|I.?V.?H.?N|I.L.K.G|I\s*?F\s*?N\s*X|K K P T|K\.  m  A   g|L I T L|M.?B.?W.?C|N . S . \|_ . T|N.~.S.~.\|__ .~.T|N N F C|N S \|_ T|N ~ S ~ \|__ ~ T|N.?H.?L.?G|N.M.E.N|N\s.{1,3}\sS\s.{1,3}\sL\s.{1,3}\sT|P P T \|_|P S U D|P.?I.?F.?R|P.P.T.L|Q.?E.?G.?Y|R  C H  N|R . T . C . I|R K  L C|R T C [I\|]|R _~_ T _~_ C _~_ I |R.?R.?E.?F|R.K.L.C|R.T.C.I|S B B D|S R V N|S.?B.?N.?S|T.?Q.?W.?W|U M S Y|U S T A|V  N  B  L|V.?G.?Y.?I|V.?M.?C.?I|W T A F|W.?B.?R.?S|W.?E.?X.?E|W.N.C.P|[Cc].?[Dd].?[Pp].?[Nn]|[Hh][Ll][Vv][Cc]|[Pp] [Gg] [Cc] [Nn]|[Pp]\s*[Pp]\s*[Tt]\s*[Ll\|]|\(PPT\|_\)|\(pptl\)|\bn.s.?l.t\b|\|\\\| .~. S .~. \|_ .~. T|_N S L T_|__ \|\\\| S L T|`P...`P...`T...`L|cgdc|e g !_ y|f.?c.?y.?i|hlun|r . t . c . i|r\s{1,3}t\s{1,3}c\s{1,3}i|v n b \||vnb\|)\b/
+describe  SARE_MLB_Stock6    ML obfuscated ticker symbols
+score     SARE_MLB_Stock6    1.56
+#counts   SARE_MLB_Stock6       33s/3h of 5376 corpus (1407s/3969h AxB) 09/11/06
+#counts   SARE_MLB_Stock6       911s/0h of 20229 corpus (13902s/6327h CT) 09/10/06
+#counts   SARE_MLB_Stock6       271s/3h of 44285 corpus (40325s/3960h AxB2) 09/11/06
+#counts   SARE_MLB_Stock6       10378s/0h of 220512 corpus (170427s/50085h ML) 09/10/06
+#counts   SARE_MLB_Stock6       4712s/1h of 230718 corpus (160414s/70304h DOC) 09/10/06
+
+header   SARE_MLH_Stock7    Subject =~ /\b(?:maven|savvy|aggressive) (?:investors?|newsletter|microcap|pinksheet)/i
+describe SARE_MLH_Stock7    Various common stock subjects
+score    SARE_MLH_Stock7    1.66
+#counts   SARE_MLH_Stock7          12s/0h of 22943 corpus (17230s/5713h MY) 03/09/06
+#counts   SARE_MLH_Stock7          1s/0h of 8715 corpus (6489s/2226h AxB) 03/10/06
+#counts   SARE_MLH_Stock7          2s/0h of 12237 corpus (6565s/5672h CT) 03/09/06
+#counts   SARE_MLH_Stock7          4s/0h of 15635 corpus (7818s/7817h FT) 03/10/06
+#counts   SARE_MLH_Stock7          60s/0h of 106455 corpus (67078s/39377h DOC) 03/09/06
+#counts   SARE_MLH_Stock7          80s/0h of 104557 corpus (96562s/7995h FVGT) 03/10/06
+#counts   SARE_MLH_Stock7          84s/0h of 92299 corpus (73883s/18416h ML) 03/09/06
+
+header   SARE_MLH_Stock8    Subject =~ /platinum report|platinum stock (?:report|newsletter)/i
+describe SARE_MLH_Stock8    Platinum !!
+score    SARE_MLH_Stock8    1.66
+#counts   SARE_MLH_Stock8          0s/0h of 8715 corpus (6489s/2226h AxB) 03/10/06
+#counts   SARE_MLH_Stock8          25s/0h of 106455 corpus (67078s/39377h DOC) 03/09/06
+#counts   SARE_MLH_Stock8          2s/0h of 15635 corpus (7818s/7817h FT) 03/10/06
+#counts   SARE_MLH_Stock8          3s/0h of 22943 corpus (17230s/5713h MY) 03/09/06
+#counts   SARE_MLH_Stock8          42s/0h of 92299 corpus (73883s/18416h ML) 03/09/06
+#counts   SARE_MLH_Stock8          4s/0h of 12237 corpus (6565s/5672h CT) 03/09/06
+#counts   SARE_MLH_Stock8          73s/0h of 104557 corpus (96562s/7995h FVGT) 03/10/06
+
+header   SARE_MLH_Stock9    Subject =~ /attention (?:all|all penny|- |investors|penny|small)/i
+describe SARE_MLH_Stock9    Do I have your attention?
+score    SARE_MLH_Stock9    1.66
+#counts   SARE_MLH_Stock9          13s/0h of 12237 corpus (6565s/5672h CT) 03/09/06
+#counts   SARE_MLH_Stock9          182s/0h of 92299 corpus (73883s/18416h ML) 03/09/06
+#counts   SARE_MLH_Stock9          215s/0h of 106455 corpus (67078s/39377h DOC) 03/09/06
+#counts   SARE_MLH_Stock9          232s/0h of 104557 corpus (96562s/7995h FVGT) 03/10/06
+#counts   SARE_MLH_Stock9          3s/0h of 15635 corpus (7818s/7817h FT) 03/10/06
+#counts   SARE_MLH_Stock9          4s/0h of 8715 corpus (6489s/2226h AxB) 03/10/06
+#counts   SARE_MLH_Stock9          9s/0h of 22943 corpus (17230s/5713h MY) 03/09/06
+
+header   SARE_MLH_Stock10    Subject =~ /bull'?s?\s?(?:market|stock|is back|eye|today|stocks?|hunter|rally)/i
+describe SARE_MLH_Stock10    Yup, it's bull alright.
+score    SARE_MLH_Stock10    1.66
+#counts   SARE_MLH_Stock10         10s/0h of 22943 corpus (17230s/5713h MY) 03/09/06
+#counts   SARE_MLH_Stock10         1s/0h of 8715 corpus (6489s/2226h AxB) 03/10/06
+#counts   SARE_MLH_Stock10         6s/0h of 15635 corpus (7818s/7817h FT) 03/10/06
+#counts   SARE_MLH_Stock10         71s/0h of 106455 corpus (67078s/39377h DOC) 03/09/06
+#counts   SARE_MLH_Stock10         7s/0h of 12237 corpus (6565s/5672h CT) 03/09/06
+#counts   SARE_MLH_Stock10         92s/0h of 92299 corpus (73883s/18416h ML) 03/09/06
+#counts   SARE_MLH_Stock10         99s/0h of 104557 corpus (96562s/7995h FVGT) 03/10/06
+
+body     SARE_MLB_Stock11    /TRADE OUT THE TOP/
+describe SARE_MLB_Stock11    GOOD LUCK & TRADE OUT THE TOP
+score    SARE_MLB_Stock11    2.22 
+#counts   SARE_MLB_Stock11         121s/0h of 15635 corpus (7818s/7817h FT) 03/10/06
+#counts   SARE_MLB_Stock11         1s/0h of 22943 corpus (17230s/5713h MY) 03/09/06
+#counts   SARE_MLB_Stock11         49s/0h of 12237 corpus (6565s/5672h CT) 03/09/06
+#counts   SARE_MLB_Stock11         5s/0h of 8715 corpus (6489s/2226h AxB) 03/10/06
+#counts   SARE_MLB_Stock11         638s/0h of 92299 corpus (73883s/18416h ML) 03/09/06
+#counts   SARE_MLB_Stock11         730s/0h of 106455 corpus (67078s/39377h DOC) 03/09/06
+#counts   SARE_MLB_Stock11         769s/0h of 104557 corpus (96562s/7995h FVGT) 03/10/06
+
+
+header          SARE_STOCK_MSG_ID2            Message-Id =~ m'thebat.net'
+describe        SARE_STOCK_MSG_ID2            Msg ID 'thebat.net'
+score           SARE_STOCK_MSG_ID2            1.66
+#counts         SARE_STOCK_MSG_ID2           5154s/0h of 343238 corpus (252868s/90370h DOC) 01/07/07
+#counts         SARE_STOCK_MSG_ID2           464s/0h of 20458 corpus (13941s/6517h CT) 01/07/07
+#counts         SARE_STOCK_MSG_ID2           18s/0h of 9851 corpus (4594s/5257h AxB) 01/07/07
+#counts         SARE_STOCK_MSG_ID2           2340s/0h of 95973 corpus (91391s/4582h AxB2) 01/07/07
+#counts         SARE_STOCK_MSG_ID2           10154s/0h of 341479 corpus (263508s/77971h ML) 01/07/07
+
+
+#-----------------------------------------------------------------------------------
+        # 12/18/05
+## Contributed by Loren
+# more stock spam goodies
+
+header          SARE_LWMICROCAP         Subject =~ /Miv?cr[o0][ _-]?(?:ca|ac)u?p/i
+score           SARE_LWMICROCAP         1.66
+##counts   SARE_LWMICROCAP          16s/0h of 5645 corpus (3421s/2224h AxB) 01/26/06
+##counts   SARE_LWMICROCAP          186s/0h of 59166 corpus (45647s/13519h ML) 01/25/06
+##counts   SARE_LWMICROCAP          210s/0h of 86182 corpus (46804s/39378h DOC) 01/25/06
+##counts   SARE_LWMICROCAP          26s/0h of 11519 corpus (6151s/5368h CT) 01/25/06
+##counts   SARE_LWMICROCAP          38s/0h of 17497 corpus (9723s/7774h FT) 01/25/06
+##counts   SARE_LWMICROCAP          75s/0h of 37304 corpus (31827s/5477h MY) 01/25/06
+##counts   SARE_LWMICROCAP          808s/0h of 508570 corpus (180270s/328300h RM) 01/25/06
+
+body            SARE_LWSYMFMT           /\b[A-Z0-9]{4,5}\s?\.\s?(?i:PK|[O0]B)\b/        # no /i
+score           SARE_LWSYMFMT           1.64
+##counts   SARE_LWSYMFMT            143s/1h of 5645 corpus (3421s/2224h AxB) 01/26/06
+##counts   SARE_LWSYMFMT            1927s/0h of 59166 corpus (45647s/13519h ML) 01/25/06
+##counts   SARE_LWSYMFMT            2316s/0h of 86182 corpus (46804s/39378h DOC) 01/25/06
+##counts   SARE_LWSYMFMT            240s/0h of 11519 corpus (6151s/5368h CT) 01/25/06
+##counts   SARE_LWSYMFMT            567s/0h of 17497 corpus (9723s/7774h FT) 01/25/06
+##counts   SARE_LWSYMFMT            622s/0h of 37304 corpus (31827s/5477h MY) 01/25/06
+##counts   SARE_LWSYMFMT            9380s/11h of 508570 corpus (180270s/328300h RM) 01/25/06
+
+# 02/19/06
+#       More crappy obfuscation in the stock discaimer.  Use @ for a and * for e.
+
+body            SARE_LW1933                     /[S\$]\s?[e3\*]\s?c\s?u\s?r\s?[i1!]\s?t\s?[i1!]\s?[e3\*]\s?[s\$]\s+(?:[E3\*]\s?x\s?c\s?h\s?[a4\@]\s?n\s?g\s?[e3\*]\s+)?[A4\@]?\s?c\s?t\s+[o0]f\s+(?:[1l|]933|n\s?[i1]\s?n\s?[e3\*]\s?t\s?[e3\*]\s?[e3\*]\s?n t\s?h\s?[i1!]\s?r\s?t\s?y t\s?h\s?r\s?[e3\*]\s?[e3\*])/is
+score           SARE_LW1933                     1.41
+describe        SARE_LW1933                     Reference to Securities Act
+#counts   SARE_LW1933                  1308s/0h of 97511 corpus (58134s/39377h DOC) 02/19/06
+#counts   SARE_LW1933                  1321s/0h of 74735 corpus (58806s/15929h ML) 02/19/06
+#counts   SARE_LW1933                  153s/0h of 27462 corpus (21821s/5641h MY) 02/19/06
+#counts   SARE_LW1933                  181s/0h of 11695 corpus (6133s/5562h CT) 02/19/06
+#counts   SARE_LW1933                  911s/0h of 27185 corpus (19320s/7865h FT) 02/20/06
+#counts   SARE_LW1933                  9s/0h of 7765 corpus (5542s/2223h AxB) 02/20/06
+
+body            SARE_LWWATCHIT          /Watch\s+this\s+one\s+(?:on [mtwf]|trade|ALL\s+WEEK)/i
+score           SARE_LWWATCHIT          1.66
+##counts   SARE_LWWATCHIT           1261s/0h of 86182 corpus (46804s/39378h DOC) 01/25/06
+##counts   SARE_LWWATCHIT           1263s/0h of 59166 corpus (45647s/13519h ML) 01/25/06
+##counts   SARE_LWWATCHIT           141s/0h of 11519 corpus (6151s/5368h CT) 01/25/06
+##counts   SARE_LWWATCHIT           303s/0h of 17497 corpus (9723s/7774h FT) 01/25/06
+##counts   SARE_LWWATCHIT           382s/0h of 37304 corpus (31827s/5477h MY) 01/25/06
+##counts   SARE_LWWATCHIT           5426s/0h of 508570 corpus (180270s/328300h RM) 01/25/06
+##counts   SARE_LWWATCHIT           83s/0h of 5645 corpus (3421s/2224h AxB) 01/26/06
+
+body            SARE_LWTARGETP          /target[ _-]price:/i
+score           SARE_LWTARGETP          1.66
+##counts   SARE_LWTARGETP           2527s/0h of 508570 corpus (180270s/328300h RM) 01/25/06
+##counts   SARE_LWTARGETP           39s/0h of 11519 corpus (6151s/5368h CT) 01/25/06
+##counts   SARE_LWTARGETP           507s/0h of 59166 corpus (45647s/13519h ML) 01/25/06
+##counts   SARE_LWTARGETP           509s/0h of 17497 corpus (9723s/7774h FT) 01/25/06
+##counts   SARE_LWTARGETP           537s/0h of 86182 corpus (46804s/39378h DOC) 01/25/06
+##counts   SARE_LWTARGETP           75s/0h of 37304 corpus (31827s/5477h MY) 01/25/06
+##counts   SARE_LWTARGETP           8s/0h of 5645 corpus (3421s/2224h AxB) 01/26/06
+
+body            SARE_LWSAFEH            /Safe Harbor Statement:/i
+score           SARE_LWSAFEH            1.66
+##counts   SARE_LWSAFEH             1170s/2h of 508570 corpus (180270s/328300h RM) 01/25/06
+##counts   SARE_LWSAFEH             14s/0h of 5645 corpus (3421s/2224h AxB) 01/26/06
+##counts   SARE_LWSAFEH             1s/0h of 11519 corpus (6151s/5368h CT) 01/25/06
+##counts   SARE_LWSAFEH             1s/0h of 37304 corpus (31827s/5477h MY) 01/25/06
+##counts   SARE_LWSAFEH             4s/0h of 17497 corpus (9723s/7774h FT) 01/25/06
+##counts   SARE_LWSAFEH             4s/0h of 86182 corpus (46804s/39378h DOC) 01/25/06
+##counts   SARE_LWSAFEH             53s/0h of 59166 corpus (45647s/13519h ML) 01/25/06
+
+# body          SARE_LWREDHOT           /red hot homeland/i
+# score         SARE_LWREDHOT           1.66
+##counts   SARE_LWREDHOT            0s/0h of 17497 corpus (9723s/7774h FT) 01/25/06
+##counts   SARE_LWREDHOT            12s/0h of 11519 corpus (6151s/5368h CT) 01/25/06
+##counts   SARE_LWREDHOT            13s/0h of 5645 corpus (3421s/2224h AxB) 01/26/06
+##counts   SARE_LWREDHOT            18s/0h of 37304 corpus (31827s/5477h MY) 01/25/06
+##counts   SARE_LWREDHOT            253s/0h of 86182 corpus (46804s/39378h DOC) 01/25/06
+##counts   SARE_LWREDHOT            263s/0h of 59166 corpus (45647s/13519h ML) 01/25/06
+##counts   SARE_LWREDHOT            952s/0h of 508570 corpus (180270s/328300h RM) 01/25/06
+
+body            SARE_LWPINK             /\bPINK\s*SHEETS\b/i
+score           SARE_LWPINK             1.59
+##counts   SARE_LWPINK              125s/0h of 37304 corpus (31827s/5477h MY) 01/25/06
+##counts   SARE_LWPINK              1498s/9h of 508570 corpus (180270s/328300h RM) 01/25/06
+##counts   SARE_LWPINK              14s/0h of 17497 corpus (9723s/7774h FT) 01/25/06
+##counts   SARE_LWPINK              194s/0h of 86182 corpus (46804s/39378h DOC) 01/25/06
+##counts   SARE_LWPINK              205s/0h of 59166 corpus (45647s/13519h ML) 01/25/06
+##counts   SARE_LWPINK              2s/0h of 5645 corpus (3421s/2224h AxB) 01/26/06
+##counts   SARE_LWPINK              31s/0h of 11519 corpus (6151s/5368h CT) 01/25/06
+
+body            SARE_LWEMERGE           /\bemerging .{0,40}company\b/i
+score           SARE_LWEMERGE           0.92
+##counts   SARE_LWEMERGE            0s/0h of 11519 corpus (6151s/5368h CT) 01/25/06
+##counts   SARE_LWEMERGE            1463s/5h of 508570 corpus (180270s/328300h RM) 01/25/06
+##counts   SARE_LWEMERGE            23s/1h of 37304 corpus (31827s/5477h MY) 01/25/06
+##counts   SARE_LWEMERGE            2s/0h of 17497 corpus (9723s/7774h FT) 01/25/06
+##counts   SARE_LWEMERGE            2s/0h of 5645 corpus (3421s/2224h AxB) 01/26/06
+##counts   SARE_LWEMERGE            86s/0h of 59166 corpus (45647s/13519h ML) 01/25/06
+##counts   SARE_LWEMERGE            92s/1h of 86182 corpus (46804s/39378h DOC) 01/25/06
+
+body            SARE_LWOILCO            /(?:oil|gas)\s+company/i
+score           SARE_LWOILCO            1.13
+##counts   SARE_LWOILCO             120s/2h of 59166 corpus (45647s/13519h ML) 01/25/06
+##counts   SARE_LWOILCO             151s/3h of 86182 corpus (46804s/39378h DOC) 01/25/06
+##counts   SARE_LWOILCO             1748s/313h of 508570 corpus (180270s/328300h RM) 01/25/06
+##counts   SARE_LWOILCO             1s/16h of 17497 corpus (9723s/7774h FT) 01/25/06
+##counts   SARE_LWOILCO             2s/0h of 5645 corpus (3421s/2224h AxB) 01/26/06
+##counts   SARE_LWOILCO             39s/2h of 37304 corpus (31827s/5477h MY) 01/25/06
+##counts   SARE_LWOILCO             7s/0h of 11519 corpus (6151s/5368h CT) 01/25/06
+
+body            SARE_LWCURTRADE         /currently trading/i
+score           SARE_LWCURTRADE         1.61
+##counts   SARE_LWCURTRADE          0s/0h of 17497 corpus (9723s/7774h FT) 01/25/06
+##counts   SARE_LWCURTRADE          1857s/5h of 508570 corpus (180270s/328300h RM) 01/25/06
+##counts   SARE_LWCURTRADE          194s/0h of 59166 corpus (45647s/13519h ML) 01/25/06
+##counts   SARE_LWCURTRADE          200s/0h of 86182 corpus (46804s/39378h DOC) 01/25/06
+##counts   SARE_LWCURTRADE          31s/1h of 37304 corpus (31827s/5477h MY) 01/25/06
+##counts   SARE_LWCURTRADE          3s/0h of 5645 corpus (3421s/2224h AxB) 01/26/06
+##counts   SARE_LWCURTRADE          9s/0h of 11519 corpus (6151s/5368h CT) 01/25/06
+
+header          SARE_LWSKY              Subject =~ /skyr[o0]cket/i
+score           SARE_LWSKY              1.66
+##counts   SARE_LWSKY               0s/0h of 11519 corpus (6151s/5368h CT) 01/25/06
+##counts   SARE_LWSKY               0s/0h of 5645 corpus (3421s/2224h AxB) 01/26/06
+##counts   SARE_LWSKY               146s/0h of 508570 corpus (180270s/328300h RM) 01/25/06
+##counts   SARE_LWSKY               28s/0h of 86182 corpus (46804s/39378h DOC) 01/25/06
+##counts   SARE_LWSKY               2s/0h of 37304 corpus (31827s/5477h MY) 01/25/06
+##counts   SARE_LWSKY               3s/0h of 17497 corpus (9723s/7774h FT) 01/25/06
+##counts   SARE_LWSKY               95s/0h of 59166 corpus (45647s/13519h ML) 01/25/06
+
+# body          SARE_LWSHORT            /(?:short|long|covering)\s+position/i
+# score         SARE_LWSHORT            0.833
+##counts   SARE_LWSHORT             0s/0h of 11519 corpus (6151s/5368h CT) 01/25/06
+##counts   SARE_LWSHORT             0s/0h of 17497 corpus (9723s/7774h FT) 01/25/06
+##counts   SARE_LWSHORT             0s/1h of 5645 corpus (3421s/2224h AxB) 01/26/06
+##counts   SARE_LWSHORT             16s/24h of 508570 corpus (180270s/328300h RM) 01/25/06
+##counts   SARE_LWSHORT             1s/0h of 86182 corpus (46804s/39378h DOC) 01/25/06
+##counts   SARE_LWSHORT             35s/0h of 59166 corpus (45647s/13519h ML) 01/25/06
+##counts   SARE_LWSHORT             4s/1h of 37304 corpus (31827s/5477h MY) 01/25/06
+
+body            SARE_LWDRIVE            /drive (?:the|these|this) stock/i
+score           SARE_LWDRIVE            1.66
+##counts   SARE_LWDRIVE             0s/0h of 11519 corpus (6151s/5368h CT) 01/25/06
+##counts   SARE_LWDRIVE             0s/0h of 5645 corpus (3421s/2224h AxB) 01/26/06
+##counts   SARE_LWDRIVE             0s/0h of 86182 corpus (46804s/39378h DOC) 01/25/06
+##counts   SARE_LWDRIVE             17s/0h of 59166 corpus (45647s/13519h ML) 01/25/06
+##counts   SARE_LWDRIVE             1s/0h of 17497 corpus (9723s/7774h FT) 01/25/06
+##counts   SARE_LWDRIVE             1s/5h of 508570 corpus (180270s/328300h RM) 01/25/06
+##counts   SARE_LWDRIVE             3s/0h of 37304 corpus (31827s/5477h MY) 01/25/06
+
+body            SARE_LWSHARES           /(?i:shares of)\s+[A-Z0-9]{4}/  # no /i
+score           SARE_LWSHARES           0.39
+##counts   SARE_LWSHARES            0s/0h of 11519 corpus (6151s/5368h CT) 01/25/06
+##counts   SARE_LWSHARES            0s/0h of 5645 corpus (3421s/2224h AxB) 01/26/06
+##counts   SARE_LWSHARES            13s/0h of 86182 corpus (46804s/39378h DOC) 01/25/06
+##counts   SARE_LWSHARES            1s/0h of 17497 corpus (9723s/7774h FT) 01/25/06
+##counts   SARE_LWSHARES            27s/0h of 59166 corpus (45647s/13519h ML) 01/25/06
+##counts   SARE_LWSHARES            32s/26h of 508570 corpus (180270s/328300h RM) 01/25/06
+##counts   SARE_LWSHARES            7s/0h of 37304 corpus (31827s/5477h MY) 01/25/06
+
+body            SARE_LWSHORTT           /\bshort\s*term\b/i
+score           SARE_LWSHORTT           1.24
+##counts   SARE_LWSHORTT            1026s/14h of 86182 corpus (46804s/39378h DOC) 01/25/06
+##counts   SARE_LWSHORTT            179s/10h of 37304 corpus (31827s/5477h MY) 01/25/06
+##counts   SARE_LWSHORTT            20s/0h of 5645 corpus (3421s/2224h AxB) 01/26/06
+##counts   SARE_LWSHORTT            291s/5h of 17497 corpus (9723s/7774h FT) 01/25/06
+##counts   SARE_LWSHORTT            58s/10h of 11519 corpus (6151s/5368h CT) 01/25/06
+##counts   SARE_LWSHORTT            846s/1h of 59166 corpus (45647s/13519h ML) 01/25/06
+##counts   SARE_LWSHORTT            849s/465h of 508570 corpus (180270s/328300h RM) 01/25/06
+
+body            SARE_LWPROJECTION       /projection:?\s+\$/i
+score           SARE_LWPROJECTION       1.66
+##counts   SARE_LWPROJECTION        0s/0h of 17497 corpus (9723s/7774h FT) 01/25/06
+##counts   SARE_LWPROJECTION        0s/0h of 5645 corpus (3421s/2224h AxB) 01/26/06
+##counts   SARE_LWPROJECTION        22s/0h of 37304 corpus (31827s/5477h MY) 01/25/06
+##counts   SARE_LWPROJECTION        49s/0h of 508570 corpus (180270s/328300h RM) 01/25/06
+##counts   SARE_LWPROJECTION        68s/0h of 86182 corpus (46804s/39378h DOC) 01/25/06
+##counts   SARE_LWPROJECTION        89s/0h of 59166 corpus (45647s/13519h ML) 01/25/06
+##counts   SARE_LWPROJECTION        9s/0h of 11519 corpus (6151s/5368h CT) 01/25/06
+
+# body          SARE_LWPOISED           /poised (?:to fly|for Big (?:gains|returns))/is
+# score         SARE_LWPOISED           1.66
+##counts   SARE_LWPOISED            1081s/0h of 508570 corpus (180270s/328300h RM) 01/25/06
+##counts   SARE_LWPOISED            128s/0h of 59166 corpus (45647s/13519h ML) 01/25/06
+##counts   SARE_LWPOISED            172s/0h of 86182 corpus (46804s/39378h DOC) 01/25/06
+##counts   SARE_LWPOISED            2s/0h of 37304 corpus (31827s/5477h MY) 01/25/06
+##counts   SARE_LWPOISED            2s/0h of 5645 corpus (3421s/2224h AxB) 01/26/06
+##counts   SARE_LWPOISED            303s/0h of 17497 corpus (9723s/7774h FT) 01/25/06
+##counts   SARE_LWPOISED            9s/0h of 11519 corpus (6151s/5368h CT) 01/25/06
+
+body            SARE_LWFORWARD          /(?:4r?|f[o0]r)w[a4\@]?rd[ _-]?[l|][o0][o0]k[il1]ng[ _-]?[s\$]t[a4\@]?t[e3\*]m[e3\*]nt[s\$]/is
+score           SARE_LWFORWARD          1.11
+#counts   SARE_LWFORWARD               183s/0h of 27462 corpus (21821s/5641h MY) 02/19/06
+#counts   SARE_LWFORWARD               2026s/0h of 97511 corpus (58134s/39377h DOC) 02/19/06
+#counts   SARE_LWFORWARD               2031s/0h of 74735 corpus (58806s/15929h ML) 02/19/06
+#counts   SARE_LWFORWARD               255s/0h of 11695 corpus (6133s/5562h CT) 02/19/06
+#counts   SARE_LWFORWARD               83s/1h of 7765 corpus (5542s/2223h AxB) 02/20/06
+#counts   SARE_LWFORWARD               906s/0h of 27185 corpus (19320s/7865h FT) 02/20/06
+
+body            SARE_LWHUGE             /huge (?:buy|growth|revenues|oppo|trade|pr\s)/i
+score           SARE_LWHUGE             1.54
+##counts   SARE_LWHUGE              108s/0h of 37290 corpus (31815s/5475h MY) 02/02/06
+##counts   SARE_LWHUGE              118s/0h of 11691 corpus (6130s/5561h CT) 02/02/06
+##counts   SARE_LWHUGE              35s/0h of 26935 corpus (19146s/7789h FT) 02/03/06
+##counts   SARE_LWHUGE              78s/0h of 3248 corpus (1027s/2221h AxB) 02/03/06
+##counts   SARE_LWHUGE              876s/0h of 89538 corpus (50161s/39377h DOC) 02/02/06
+##counts   SARE_LWHUGE              889s/0h of 59013 corpus (45512s/13501h ML) 02/03/06
+##counts   SARE_LWHUGE              3317s/58h of 500113 corpus (227198s/272915h RM) 01/10/06
+
+body  SARE_LWACT_QUICKLY /\bact\s+quick(?:ly)?/i
+describe SARE_LWACT_QUICKLY Spammer thinks you should hurry.
+score  SARE_LWACT_QUICKLY 1.17
+#counts   SARE_LWACT_QUICKLY       26s/11h of 27479 corpus (21834s/5645h MY) 02/13/06
+#counts   SARE_LWACT_QUICKLY       3s/0h of 7663 corpus (5437s/2226h AxB) 02/13/06
+#counts   SARE_LWACT_QUICKLY       51s/4h of 27181 corpus (19321s/7860h FT) 02/13/06
+#counts   SARE_LWACT_QUICKLY       637s/0h of 68401 corpus (53647s/14754h ML) 02/13/06
+#counts   SARE_LWACT_QUICKLY       66s/0h of 11699 corpus (6139s/5560h CT) 02/13/06
+#counts   SARE_LWACT_QUICKLY       733s/0h of 94330 corpus (54945s/39385h DOC) 02/13/06
+
+#2006-02-19
+
+## header      __RATWR19_MESSID         Message-ID =~ /<[A-Z]{21,38}(?:\.[a-z_]+)?\@/
+## describe    __RATWR19_MESSID         Message-ID: rat patrn (XXXXXXXXXXXX[.xxxxxx]@)
+
+# header                __RATWARE_0_TZ_DATE             Date =~ /\s\+0000$/
+
+## header               __SARE_MULT_RATW_02A    ALL =~ m'\bMessage-ID: <[A-Z]{28}\.([^>]+)>\n.*\bFrom: \"[^\"]+\" <\1>\n's
+## header               __SARE_MULT_RATW_02B    ALL =~ m'\bFrom: \"[^\"]+\" <([^>]+)>\n.*\bMessage-ID: <[A-Z]{28}\.\1>\n's
+
+## header      __RATWR20_MESSID Message-ID =~ /<[A-Z]{21,38}[^\@>]*\@/
+
+# meta          LW_STOCK_SPAM4          __RATWARE_0_TZ_DATE && MIME_BASE64_TEXT
+# score         LW_STOCK_SPAM4          1.66
+# describe      LW_STOCK_SPAM4          Yup, its a spam!
+#counts   LW_STOCK_SPAM4           0s/0h of 27462 corpus (21821s/5641h MY) 02/19/06
+#counts   LW_STOCK_SPAM4           193s/0h of 11695 corpus (6133s/5562h CT) 02/19/06
+#counts   LW_STOCK_SPAM4           2014s/0h of 74735 corpus (58806s/15929h ML) 02/19/06
+#counts   LW_STOCK_SPAM4           2s/0h of 7765 corpus (5542s/2223h AxB) 02/20/06
+#counts   LW_STOCK_SPAM4           353s/0h of 97511 corpus (58134s/39377h DOC) 02/19/06
+#counts   LW_STOCK_SPAM4           509s/0h of 27185 corpus (19320s/7865h FT) 02/20/06
+
+
+# 2005-12-27
+# Contributed by Raymond
+# Updated by AXB 8/18/2007
+
+body            SARE_PROLOSTOCK_SYM1            /\b(?:EXMT|PRTH|SZSN|WWNG|ERMX|SPHM|SGXI|TVEN|GPSI|A0LB1T|FDEG|QMMG|DPWI|BVYH|NWVM|FBVG|CDYV|EXVG|NNYR|OPLO|VYEY|UTEV|MHII|MGOA|KRXR|CBFE|QCPC|MBWC|TGVI|XNYH|HXPN|PGGG|VSUS|BLNM|NXSF|UDTT|TFZP|MXXR|NHVP|VGYI|CRSVF|CYHD|MXXR|ALVN|TMXO|HLUN|CDPN|KMAG|EQTD|QEGY|SRVN|WYPH|ILKG|HNST|DIAAF|FCYI|CTBG|LITL|HYWI|MGMX|SYNI|DGKO|AVCP|TGLE|TKTJF|CTXE|CTFE|HYBT|RKLC|KDNG|PNAMF|FPPL|FCPG|PHDTF|HWYI|ZLDV|WDCV|ILKG|AMMX|UMSY|PZFC|RWGI|IFNX|IPKL|CHMS|VNBL|PPTL|CDGT|XMON|STWG|APWL|TEDG|SPZI|TOTG|WWBP|CWTD|MWIS|CGKY|CDVM|GFCI|SLVG|WNWG|AXCP|WNWG|JCDS|HLVC|WNWG|CYI0|KKPT|GFPE|WSRA|CHNW|SPMP|DTGP|PGCN|KLGE|DKDY|RMVN|KSWJ|CTKR|NSLT|RLYC|PFNC)\b/
+score           SARE_PROLOSTOCK_SYM1            1.63
+describe        SARE_PROLOSTOCK_SYM1            Last week's hot stock scam
+
+body            SARE_PROLOSTOCK_SYM2            /\b(?:P R T H|C H V C|N W V M|C E O A|C T C X|C N H C|A D D L|T J S S|A E T R|T X H E|C R S V F|W B R S|S S U F|H L V C|G D K I|A G A 0|C G D C|H Y W I|I N F X|A B S Y|H L U N|F C Y I|A M S N|W T A F|H Y W I|C T X E|U S T A|I Z O N|I L K G|R T C I|P P T L|S B B D|E  G  L Y|A X C P|D K D Y|P G C N| M W I S|I G A M|F C P G|D M S I)\b/
+score           SARE_PROLOSTOCK_SYM2            1.01
+describe        SARE_PROLOSTOCK_SYM2            Last week's hot stock scam
+
+body            SARE_PROLOSTOCK_SYM3            /\b(?:SYGT|CYTV|LTDI|MM1|OTLK|MRMT|SREA|VPSN|SGXI|MGOA|COPI|ONCO|UTEV|DSI|UTEV|TRDX|CHVC|ASVP|CPMM|TMMG|PLMA|CCTI|PPTM|SCPT|CBRP|MRDY|SGDS|NNCP|ACEN|LOMJ|CTCX|BLRS|IWRS|CBFE|SHMM|LOMJ|CBRJ|ARSS|HPGI|USSG|NNSR|VTSS|AFML|WDSC|MISJ|ADYN|TTEN|IDSM|PHYA|AMSN|FCNK|LVCC|HEGP|CNHC|CFSC|ADDL|GAMN|CNPM|PRGJ|BMSN|RREF|GSNH|TNEN|GITH|AGGI|AUNI|MPRG|DFSE|WBRS|KGBC|HBID|TXHE|BCLC|SBNS|WLON|TERX|XTPT|AETR|EGLY|SMKG|HMGP|SSUF|AGAO|DGTL|GDKI|NCSH|COSCO|PSUD|VNGP|ISMN|DBSJ|VMCI|BWEB|VMCI|HRRP|KMAG|EPLJ|ABSY|IBTY|NPWS|NNLX|SBRX|APPM|INFX|CGDC|DPER|VMCI|HBSC|DPGP|TAOL|SIKY|RTCI|NNPC|SWNM|pptl|AAPM|MDBF|ADYE|SPSY|NMEN|WNCP|IZON|MDEX|SNVH|IVHN|NNFC|FEKY|ADYE|ADCS|PFNC|CBIO|CRHI|SBBD|UBTA|EPRT|ADNL|ANDL|IGTS|EQSE|CEOA|RYNL|CFRI|NHLG|EXTI|CIVX|GAPJ|BCSM|SGWV|PDSC|IGAM|PIFR)\b/
+score           SARE_PROLOSTOCK_SYM3            1.63
+describe        SARE_PROLOSTOCK_SYM3            Last week's hot stock scam
+
+body            SARE_PROLOSTOCK_SYM4            /\b(?:LTDI\.PK|PAYI\.OB|GDVM\.PK|ETMO\.PK|SPHM\.PK|ADOV\.OB|PHYA\.PK|DIAAF\.OB|RRGI\.PK|MRDY\.PK|GAMT\.OB|CBRP\.PK|NNCP\.PK|AMXG\.OB|SHDG\.PK|TAMG\.OB|PBOF\.OB|TICLF\.PK|MHII\.OB|PHYH\.PK|MISJ\.PK|QCPC\.PK|BMGP\.PK|WEXE\.PK|AGWS\.PK|LOMJ\.PK|ATVR\.PK|BLTA\.OB|CBFE\.PK|HSFI\.PK|MHII\.OB|BMOD\.OB|WDSC\.PK|NNYG\.PK|SRRL\.OB|FPMC\.PK|AMSN\.PK|Axtg\.pk|FCNK\.PK|THRI\.PK|MAKU\.OB|WHKA\.PK|BLNM\.OB|TORA\.OB|CNHC\.PK|IFLT\.PK|NHVP\.PK|AVLN\.OB|SGDS\.PK|FCTOA\.OB|SGDS\.PK|TERX\.OB|BMSN\.OB|TQWW\.PK|FTRM\.PK|SORD\.OB|TXHE\.PK|IVAYY\.PK|IVAY\.PK|VGYI\.PK|PGCN\.OB|GYI\.PK|AG HG|HLUN\.PK|WBRS\.PK|GDKI\.PK|ILKG\.PK|VNGP\.PK|DPER\.PK|FCYI\.PK|KMAG\.PK|DPEK\.PK|EPLJ\.PK|KFTG\.PK|HYW I|FCYI\.PK|LITL\.PK|TGVI\.PK|VMCI\.PK|AGHG\.PK|DPGP\.PK|AVCP\.PK|FPPL\.PK|CTFE\.PK|UBTA\.PK|Mhpt.pk|BDWH\.PK|BIGN.PK|CRHI\.OB|CBIO\.PK|SWNM.PK)\.?\b/
+score           SARE_PROLOSTOCK_SYM4            1.66
+describe        SARE_PROLOSTOCK_SYM4            Last week's hot stock scam
+
+# Added by AXB 8/18/2007
+
+body    SARE_AXBSTOCK_EXMT   /\bE\s?\W?X\s?\W?M\s?\W?T\b/
+score   SARE_AXBSTOCK_EXMT   1.66
+
+body    SARE_AXBSTOCK_EXMTPK   /\bE\s?\W?X\s?\W?M\s?\W?T\s?\.\s?\W?P\s?\W?K\b/
+score   SARE_AXBSTOCK_EXMTPK   1.66
+
+
+# 2005-12-27
+# ------FREDS STOCK RULESET--------
+body      __SYMBOL_XXXX         /\b(?:[sS][yY][mM][bB][o0O][lL1]|[Tt][iI1][cC][kK][eE][rR]):(?:\s|_)?[A-Z]{4}\b/
+body      __STOCK_NAME          /St[0O]ck Name:(?:\s|_)?[A-Z]{4}\b/
+body      __WORD_STOCK_F        /\bst[o0]cks?\b/i
+meta      STOCK_NAME_FVGT1      ((__SYMBOL_XXXX || __STOCK_NAME) && __WORD_STOCK_F)
+score     STOCK_NAME_FVGT1      1.66
+##counts   STOCK_NAME_FVGT1         1637s/0h of 59166 corpus (45647s/13519h ML) 01/25/06
+##counts   STOCK_NAME_FVGT1         1984s/0h of 86182 corpus (46804s/39378h DOC) 01/25/06
+##counts   STOCK_NAME_FVGT1         218s/0h of 11519 corpus (6151s/5368h CT) 01/25/06
+##counts   STOCK_NAME_FVGT1         21s/0h of 5645 corpus (3421s/2224h AxB) 01/26/06
+##counts   STOCK_NAME_FVGT1         2963s/6h of 508570 corpus (180270s/328300h RM) 01/25/06
+##counts   STOCK_NAME_FVGT1         426s/0h of 37304 corpus (31827s/5477h MY) 01/25/06
+##counts   STOCK_NAME_FVGT1         483s/0h of 17497 corpus (9723s/7774h FT) 01/25/06
+
+# 2005-12-28
+# Contributed by Bob and Mike
+body    SARE_RMML_Stock1        /0tc/i
+score   SARE_RMML_Stock1        0.21    
+##counts   SARE_RMML_Stock1         0s/1h of 11519 corpus (6151s/5368h CT) 01/25/06
+##counts   SARE_RMML_Stock1         14s/4h of 37304 corpus (31827s/5477h MY) 01/25/06
+##counts   SARE_RMML_Stock1         15s/0h of 86182 corpus (46804s/39378h DOC) 01/25/06
+##counts   SARE_RMML_Stock1         1s/0h of 5645 corpus (3421s/2224h AxB) 01/26/06
+##counts   SARE_RMML_Stock1         232s/96h of 508570 corpus (180270s/328300h RM) 01/25/06
+##counts   SARE_RMML_Stock1         26s/5h of 59166 corpus (45647s/13519h ML) 01/25/06
+##counts   SARE_RMML_Stock1         38s/6h of 17497 corpus (9723s/7774h FT) 01/25/06
+
+body    SARE_RMML_Stock2        /0pportunity/i
+score   SARE_RMML_Stock2        1.66
+##counts   SARE_RMML_Stock2         118s/0h of 508570 corpus (180270s/328300h RM) 01/25/06
+##counts   SARE_RMML_Stock2         1s/0h of 5645 corpus (3421s/2224h AxB) 01/26/06
+##counts   SARE_RMML_Stock2         9s/0h of 11519 corpus (6151s/5368h CT) 01/25/06
+##counts   SARE_RMML_Stock2         2s/0h of 17497 corpus (9723s/7774h FT) 01/25/06
+##counts   SARE_RMML_Stock2         35s/0h of 86182 corpus (46804s/39378h DOC) 01/25/06
+##counts   SARE_RMML_Stock2         41s/0h of 59166 corpus (45647s/13519h ML) 01/25/06
+##counts   SARE_RMML_Stock2         44s/0h of 37304 corpus (31827s/5477h MY) 01/25/06
+
+# body  SARE_RMML_Stock3        /more stock/i
+# score SARE_RMML_Stock3        0.027
+##counts   SARE_RMML_Stock3         0s/0h of 17497 corpus (9723s/7774h FT) 01/25/06
+##counts   SARE_RMML_Stock3         0s/0h of 37304 corpus (31827s/5477h MY) 01/25/06
+##counts   SARE_RMML_Stock3         0s/0h of 5645 corpus (3421s/2224h AxB) 01/26/06
+##counts   SARE_RMML_Stock3         0s/0h of 59166 corpus (45647s/13519h ML) 01/25/06
+##counts   SARE_RMML_Stock3         1s/0h of 11519 corpus (6151s/5368h CT) 01/25/06
+##counts   SARE_RMML_Stock3         1s/0h of 86182 corpus (46804s/39378h DOC) 01/25/06
+##counts   SARE_RMML_Stock3         4s/28h of 508570 corpus (180270s/328300h RM) 01/25/06
+
+body    SARE_RMML_Stock4        /stock (?:pick|trading)/i
+score   SARE_RMML_Stock4        1.54
+##counts   SARE_RMML_Stock4         0s/0h of 5645 corpus (3421s/2224h AxB) 01/26/06
+##counts   SARE_RMML_Stock4         22s/0h of 11519 corpus (6151s/5368h CT) 01/25/06
+##counts   SARE_RMML_Stock4         325s/86h of 508570 corpus (180270s/328300h RM) 01/25/06
+##counts   SARE_RMML_Stock4         40s/1h of 86182 corpus (46804s/39378h DOC) 01/25/06
+##counts   SARE_RMML_Stock4         42s/0h of 59166 corpus (45647s/13519h ML) 01/25/06
+##counts   SARE_RMML_Stock4         4s/1h of 17497 corpus (9723s/7774h FT) 01/25/06
+##counts   SARE_RMML_Stock4         61s/0h of 37304 corpus (31827s/5477h MY) 01/25/06
+
+body    SARE_RMML_Stock5        /trading gains/i
+score   SARE_RMML_Stock5        1.66
+##counts   SARE_RMML_Stock5         0s/0h of 11519 corpus (6151s/5368h CT) 01/25/06
+##counts   SARE_RMML_Stock5         0s/0h of 17497 corpus (9723s/7774h FT) 01/25/06
+##counts   SARE_RMML_Stock5         0s/0h of 5645 corpus (3421s/2224h AxB) 01/26/06
+##counts   SARE_RMML_Stock5         0s/0h of 59166 corpus (45647s/13519h ML) 01/25/06
+##counts   SARE_RMML_Stock5         26s/1h of 508570 corpus (180270s/328300h RM) 01/25/06
+##counts   SARE_RMML_Stock5         2s/0h of 37304 corpus (31827s/5477h MY) 01/25/06
+##counts   SARE_RMML_Stock5         8s/0h of 86182 corpus (46804s/39378h DOC) 01/25/06
+
+body    SARE_RMML_Stock6        /1nvest/i
+score   SARE_RMML_Stock6        1.66
+##counts   SARE_RMML_Stock6         0s/0h of 5645 corpus (3421s/2224h AxB) 01/26/06
+##counts   SARE_RMML_Stock6         126s/0h of 86182 corpus (46804s/39378h DOC) 01/25/06
+##counts   SARE_RMML_Stock6         15s/0h of 11519 corpus (6151s/5368h CT) 01/25/06
+##counts   SARE_RMML_Stock6         166s/0h of 508570 corpus (180270s/328300h RM) 01/25/06
+##counts   SARE_RMML_Stock6         64s/0h of 59166 corpus (45647s/13519h ML) 01/25/06
+##counts   SARE_RMML_Stock6         8s/0h of 17497 corpus (9723s/7774h FT) 01/25/06
+##counts   SARE_RMML_Stock6         9s/0h of 37304 corpus (31827s/5477h MY) 01/25/06
+
+body    SARE_RMML_Stock7        /(?:investor|trading) alert/i
+score   SARE_RMML_Stock7        1.64
+##counts   SARE_RMML_Stock7         1s/1h of 17497 corpus (9723s/7774h FT) 01/25/06
+##counts   SARE_RMML_Stock7         217s/0h of 37304 corpus (31827s/5477h MY) 01/25/06
+##counts   SARE_RMML_Stock7         242s/0h of 59166 corpus (45647s/13519h ML) 01/25/06
+##counts   SARE_RMML_Stock7         24s/0h of 5645 corpus (3421s/2224h AxB) 01/26/06
+##counts   SARE_RMML_Stock7         372s/0h of 86182 corpus (46804s/39378h DOC) 01/25/06
+##counts   SARE_RMML_Stock7         48s/0h of 11519 corpus (6151s/5368h CT) 01/25/06
+##counts   SARE_RMML_Stock7         553s/87h of 508570 corpus (180270s/328300h RM) 01/25/06
+
+body    SARE_RMML_Stock8        /stocks? (?:to|2) watch/i
+score   SARE_RMML_Stock8        1.66
+##counts   SARE_RMML_Stock8         0s/0h of 5645 corpus (3421s/2224h AxB) 01/26/06
+##counts   SARE_RMML_Stock8         16s/0h of 86182 corpus (46804s/39378h DOC) 01/25/06
+##counts   SARE_RMML_Stock8         1s/0h of 11519 corpus (6151s/5368h CT) 01/25/06
+##counts   SARE_RMML_Stock8         31s/0h of 59166 corpus (45647s/13519h ML) 01/25/06
+##counts   SARE_RMML_Stock8         5s/0h of 17497 corpus (9723s/7774h FT) 01/25/06
+##counts   SARE_RMML_Stock8         81s/4h of 508570 corpus (180270s/328300h RM) 01/25/06
+##counts   SARE_RMML_Stock8         8s/0h of 37304 corpus (31827s/5477h MY) 01/25/06
+
+body    SARE_RMML_Stock9        /0il/i
+score   SARE_RMML_Stock9        0.13
+##counts   SARE_RMML_Stock9         12s/9h of 17497 corpus (9723s/7774h FT) 01/25/06
+##counts   SARE_RMML_Stock9         16s/2h of 37304 corpus (31827s/5477h MY) 01/25/06
+##counts   SARE_RMML_Stock9         1s/1h of 5645 corpus (3421s/2224h AxB) 01/26/06
+##counts   SARE_RMML_Stock9         23s/1h of 86182 corpus (46804s/39378h DOC) 01/25/06
+##counts   SARE_RMML_Stock9         39s/3h of 59166 corpus (45647s/13519h ML) 01/25/06
+##counts   SARE_RMML_Stock9         4s/1h of 11519 corpus (6151s/5368h CT) 01/25/06
+##counts   SARE_RMML_Stock9         782s/64h of 508570 corpus (180270s/328300h RM) 01/25/06
+
+body    SARE_RMML_Stock10       /buy-in/i
+score   SARE_RMML_Stock10       0.13
+##counts   SARE_RMML_Stock10        0s/0h of 17497 corpus (9723s/7774h FT) 01/25/06
+##counts   SARE_RMML_Stock10        0s/0h of 5645 corpus (3421s/2224h AxB) 01/26/06
+##counts   SARE_RMML_Stock10        0s/1h of 11519 corpus (6151s/5368h CT) 01/25/06
+##counts   SARE_RMML_Stock10        1s/16h of 37304 corpus (31827s/5477h MY) 01/25/06
+##counts   SARE_RMML_Stock10        2s/3h of 86182 corpus (46804s/39378h DOC) 01/25/06
+##counts   SARE_RMML_Stock10        34s/72h of 508570 corpus (180270s/328300h RM) 01/25/06
+##counts   SARE_RMML_Stock10        35s/0h of 59166 corpus (45647s/13519h ML) 01/25/06
+
+# body  SARE_RMML_Stock15       /(?:rise|jump).{1,20}in the first/i
+# score SARE_RMML_Stock15       0.027
+##counts   SARE_RMML_Stock15        0s/0h of 11519 corpus (6151s/5368h CT) 01/25/06
+##counts   SARE_RMML_Stock15        0s/0h of 17497 corpus (9723s/7774h FT) 01/25/06
+##counts   SARE_RMML_Stock15        0s/0h of 5645 corpus (3421s/2224h AxB) 01/26/06
+##counts   SARE_RMML_Stock15        1s/0h of 59166 corpus (45647s/13519h ML) 01/25/06
+##counts   SARE_RMML_Stock15        1s/1h of 86182 corpus (46804s/39378h DOC) 01/25/06
+##counts   SARE_RMML_Stock15        33s/12h of 508570 corpus (180270s/328300h RM) 01/25/06
+##counts   SARE_RMML_Stock15        3s/0h of 37304 corpus (31827s/5477h MY) 01/25/06
+
+# body  SARE_RMML_Stock16       /make invest/i
+# score SARE_RMML_Stock16       0.027
+##counts   SARE_RMML_Stock16        0s/0h of 11519 corpus (6151s/5368h CT) 01/25/06
+##counts   SARE_RMML_Stock16        0s/0h of 17497 corpus (9723s/7774h FT) 01/25/06
+##counts   SARE_RMML_Stock16        0s/0h of 5645 corpus (3421s/2224h AxB) 01/26/06
+##counts   SARE_RMML_Stock16        0s/0h of 86182 corpus (46804s/39378h DOC) 01/25/06
+##counts   SARE_RMML_Stock16        10s/0h of 59166 corpus (45647s/13519h ML) 01/25/06
+##counts   SARE_RMML_Stock16        19s/28h of 508570 corpus (180270s/328300h RM) 01/25/06
+##counts   SARE_RMML_Stock16        1s/0h of 37304 corpus (31827s/5477h MY) 01/25/06
+
+body    SARE_RMML_Stock17       /(?:poised|positioned) to (?:make|double|move|jump)/i
+score   SARE_RMML_Stock17       0.64
+##counts   SARE_RMML_Stock17        0s/0h of 17497 corpus (9723s/7774h FT) 01/25/06
+##counts   SARE_RMML_Stock17        0s/0h of 5645 corpus (3421s/2224h AxB) 01/26/06
+##counts   SARE_RMML_Stock17        102s/39h of 508570 corpus (180270s/328300h RM) 01/25/06
+##counts   SARE_RMML_Stock17        3s/0h of 11519 corpus (6151s/5368h CT) 01/25/06
+##counts   SARE_RMML_Stock17        6s/0h of 37304 corpus (31827s/5477h MY) 01/25/06
+##counts   SARE_RMML_Stock17        6s/0h of 59166 corpus (45647s/13519h ML) 01/25/06
+##counts   SARE_RMML_Stock17        6s/3h of 86182 corpus (46804s/39378h DOC) 01/25/06
+
+# body  SARE_RMML_Stock18       /(?:investors|reach).{1,20}illion/i
+# score SARE_RMML_Stock18       0.222
+##counts   SARE_RMML_Stock18        0s/0h of 5645 corpus (3421s/2224h AxB) 01/26/06
+##counts   SARE_RMML_Stock18        11s/0h of 59166 corpus (45647s/13519h ML) 01/25/06
+##counts   SARE_RMML_Stock18        24s/5h of 17497 corpus (9723s/7774h FT) 01/25/06
+##counts   SARE_RMML_Stock18        39s/10h of 86182 corpus (46804s/39378h DOC) 01/25/06
+##counts   SARE_RMML_Stock18        56s/5h of 37304 corpus (31827s/5477h MY) 01/25/06
+##counts   SARE_RMML_Stock18        5s/2h of 11519 corpus (6151s/5368h CT) 01/25/06
+##counts   SARE_RMML_Stock18        685s/922h of 508570 corpus (180270s/328300h RM) 01/25/06
+
+body    SARE_RMML_Stock19       /illion.{0,500}investor/i
+score   SARE_RMML_Stock19       0.22
+##counts   SARE_RMML_Stock19        14s/0h of 11519 corpus (6151s/5368h CT) 01/25/06
+##counts   SARE_RMML_Stock19        232s/531h of 508570 corpus (180270s/328300h RM) 01/25/06
+##counts   SARE_RMML_Stock19        48s/0h of 86182 corpus (46804s/39378h DOC) 01/25/06
+##counts   SARE_RMML_Stock19        6s/0h of 5645 corpus (3421s/2224h AxB) 01/26/06
+##counts   SARE_RMML_Stock19        73s/0h of 37304 corpus (31827s/5477h MY) 01/25/06
+##counts   SARE_RMML_Stock19        7s/1h of 17497 corpus (9723s/7774h FT) 01/25/06
+##counts   SARE_RMML_Stock19        82s/0h of 59166 corpus (45647s/13519h ML) 01/25/06
+
+body    SARE_RMML_Stock20       /winning trade/i
+score   SARE_RMML_Stock20       0.43
+##counts   SARE_RMML_Stock20        0s/0h of 5645 corpus (3421s/2224h AxB) 01/26/06
+##counts   SARE_RMML_Stock20        1s/0h of 11519 corpus (6151s/5368h CT) 01/25/06
+##counts   SARE_RMML_Stock20        1s/1h of 17497 corpus (9723s/7774h FT) 01/25/06
+##counts   SARE_RMML_Stock20        2s/0h of 86182 corpus (46804s/39378h DOC) 01/25/06
+##counts   SARE_RMML_Stock20        5s/0h of 37304 corpus (31827s/5477h MY) 01/25/06
+##counts   SARE_RMML_Stock20        7s/0h of 59166 corpus (45647s/13519h ML) 01/25/06
+##counts   SARE_RMML_Stock20        9s/17h of 508570 corpus (180270s/328300h RM) 01/25/06
+
+body    SARE_RMML_Stock21       /will th(?:is *(?:stock|small)|ese share)/i
+score   SARE_RMML_Stock21       1.66
+##counts   SARE_RMML_Stock21        0s/0h of 5645 corpus (3421s/2224h AxB) 01/26/06
+##counts   SARE_RMML_Stock21        2s/0h of 17497 corpus (9723s/7774h FT) 01/25/06
+##counts   SARE_RMML_Stock21        37s/0h of 59166 corpus (45647s/13519h ML) 01/25/06
+##counts   SARE_RMML_Stock21        3s/0h of 11519 corpus (6151s/5368h CT) 01/25/06
+##counts   SARE_RMML_Stock21        4s/0h of 37304 corpus (31827s/5477h MY) 01/25/06
+##counts   SARE_RMML_Stock21        55s/0h of 86182 corpus (46804s/39378h DOC) 01/25/06
+##counts   SARE_RMML_Stock21        68s/0h of 508570 corpus (180270s/328300h RM) 01/25/06
+
+body    SARE_RMML_Stock22       /\b(?:m.icro|mi.cro|mic.ro|micr.o).{0,5}cap/i
+score   SARE_RMML_Stock22       1.66
+##counts   SARE_RMML_Stock22        0s/0h of 11519 corpus (6151s/5368h CT) 01/25/06
+##counts   SARE_RMML_Stock22        0s/0h of 17497 corpus (9723s/7774h FT) 01/25/06
+##counts   SARE_RMML_Stock22        144s/0h of 508570 corpus (180270s/328300h RM) 01/25/06
+##counts   SARE_RMML_Stock22        2s/0h of 37304 corpus (31827s/5477h MY) 01/25/06
+##counts   SARE_RMML_Stock22        45s/0h of 86182 corpus (46804s/39378h DOC) 01/25/06
+##counts   SARE_RMML_Stock22        78s/0h of 59166 corpus (45647s/13519h ML) 01/25/06
+##counts   SARE_RMML_Stock22        8s/0h of 5645 corpus (3421s/2224h AxB) 01/26/06
+
+body    SARE_RMML_Stock23       /market (?:watch alert|wizard)/i
+score   SARE_RMML_Stock23       1.66
+##counts   SARE_RMML_Stock23        0s/0h of 11519 corpus (6151s/5368h CT) 01/25/06
+##counts   SARE_RMML_Stock23        0s/0h of 17497 corpus (9723s/7774h FT) 01/25/06
+##counts   SARE_RMML_Stock23        1s/0h of 5645 corpus (3421s/2224h AxB) 01/26/06
+##counts   SARE_RMML_Stock23        3s/0h of 59166 corpus (45647s/13519h ML) 01/25/06
+##counts   SARE_RMML_Stock23        40s/9h of 508570 corpus (180270s/328300h RM) 01/25/06
+##counts   SARE_RMML_Stock23        6s/0h of 37304 corpus (31827s/5477h MY) 01/25/06
+##counts   SARE_RMML_Stock23        9s/0h of 86182 corpus (46804s/39378h DOC) 01/25/06
+
+body    SARE_RMML_Stock24       /\bs.?t.?0.?c.?k.?s?\b/i
+score   SARE_RMML_Stock24       1.66
+##counts   SARE_RMML_Stock24        1588s/0h of 86182 corpus (46804s/39378h DOC) 01/25/06
+##counts   SARE_RMML_Stock24        1653s/0h of 59166 corpus (45647s/13519h ML) 01/25/06
+##counts   SARE_RMML_Stock24        187s/0h of 11519 corpus (6151s/5368h CT) 01/25/06
+##counts   SARE_RMML_Stock24        235s/0h of 37304 corpus (31827s/5477h MY) 01/25/06
+##counts   SARE_RMML_Stock24        347s/0h of 17497 corpus (9723s/7774h FT) 01/25/06
+##counts   SARE_RMML_Stock24        4378s/0h of 508570 corpus (180270s/328300h RM) 01/25/06
+##counts   SARE_RMML_Stock24        81s/0h of 5645 corpus (3421s/2224h AxB) 01/26/06
+
+body    SARE_RMML_Stock25       /undervalue/i
+score   SARE_RMML_Stock25       0.80
+##counts   SARE_RMML_Stock25        110s/0h of 37304 corpus (31827s/5477h MY) 01/25/06
+##counts   SARE_RMML_Stock25        11s/2h of 17497 corpus (9723s/7774h FT) 01/25/06
+##counts   SARE_RMML_Stock25        2147s/167h of 508570 corpus (180270s/328300h RM) 01/25/06
+##counts   SARE_RMML_Stock25        34s/0h of 5645 corpus (3421s/2224h AxB) 01/26/06
+##counts   SARE_RMML_Stock25        650s/0h of 59166 corpus (45647s/13519h ML) 01/25/06
+##counts   SARE_RMML_Stock25        723s/0h of 86182 corpus (46804s/39378h DOC) 01/25/06
+##counts   SARE_RMML_Stock25        74s/0h of 11519 corpus (6151s/5368h CT) 01/25/06
+
+body    SARE_RMML_Stock26       /hot (?:pick|penny|shot stock|stock)/i
+score   SARE_RMML_Stock26       1.49
+##counts   SARE_RMML_Stock26        185s/0h of 37304 corpus (31827s/5477h MY) 01/25/06
+##counts   SARE_RMML_Stock26        206s/1h of 86182 corpus (46804s/39378h DOC) 01/25/06
+##counts   SARE_RMML_Stock26        264s/3h of 59166 corpus (45647s/13519h ML) 01/25/06
+##counts   SARE_RMML_Stock26        33s/1h of 17497 corpus (9723s/7774h FT) 01/25/06
+##counts   SARE_RMML_Stock26        46s/0h of 11519 corpus (6151s/5368h CT) 01/25/06
+##counts   SARE_RMML_Stock26        64s/0h of 5645 corpus (3421s/2224h AxB) 01/26/06
+##counts   SARE_RMML_Stock26        953s/37h of 508570 corpus (180270s/328300h RM) 01/25/06
+
+body    SARE_RMML_Stock27       /g.?[0o].?l.?d.? c.?[o0].?m.?p.?a.?n.?y/i
+score   SARE_RMML_Stock27       1.66
+##counts   SARE_RMML_Stock27        0s/0h of 11519 corpus (6151s/5368h CT) 01/25/06
+##counts   SARE_RMML_Stock27        10s/0h of 37304 corpus (31827s/5477h MY) 01/25/06
+##counts   SARE_RMML_Stock27        22s/0h of 59166 corpus (45647s/13519h ML) 01/25/06
+##counts   SARE_RMML_Stock27        2s/0h of 86182 corpus (46804s/39378h DOC) 01/25/06
+##counts   SARE_RMML_Stock27        363s/4h of 508570 corpus (180270s/328300h RM) 01/25/06
+##counts   SARE_RMML_Stock27        3s/0h of 17497 corpus (9723s/7774h FT) 01/25/06
+##counts   SARE_RMML_Stock27        3s/0h of 5645 corpus (3421s/2224h AxB) 01/26/06
+
+#-----------------------------------------------------------------------------------
+# 03/07/2006
+## Contributed by Dallas
+
+meta     __IMG_ONLY     ( HTML_IMAGE_ONLY_04 || HTML_IMAGE_ONLY_08 || HTML_IMAGE_ONLY_12 || HTML_IMAGE_ONLY_16 || HTML_IMAGE_ONLY_20 || HTML_IMAGE_ONLY_24 || HTML_IMAGE_ONLY_28 )
+
+full     SARE_GIF_ATTACH   /name=\"?[0-9a-z._\-]{3,18}\.gif\"?/i
+describe SARE_GIF_ATTACH   Email has a inline gif
+score    SARE_GIF_ATTACH   1.42
+#counts   SARE_GIF_ATTACH          107s/7h of 22956 corpus (17243s/5713h MY) 03/07/06
+#counts   SARE_GIF_ATTACH          171s/7h of 12239 corpus (6565s/5674h CT) 03/07/06
+#counts   SARE_GIF_ATTACH          1881s/7h of 105448 corpus (66068s/39380h DOC) 03/07/06
+#counts   SARE_GIF_ATTACH          2743s/1h of 89274 corpus (71419s/17855h ML) 03/07/06
+#counts   SARE_GIF_ATTACH          530s/5h of 15560 corpus (7747s/7813h FT) 03/07/06
+#counts   SARE_GIF_ATTACH          736s/9h of 7196 corpus (4970s/2226h AxB) 03/08/06
+#counts   SARE_GIF_ATTACH          1825s/5h of 50435 corpus (42435s/8000h FVGT) 03/08/06
+
+meta     SARE_GIF_STOX     ( SARE_GIF_ATTACH && __IMG_ONLY )
+describe SARE_GIF_STOX     Inline Gif with little HTML
+score    SARE_GIF_STOX     1.66
+#counts   SARE_GIF_STOX            1603s/0h of 105448 corpus (66068s/39380h DOC) 03/07/06
+#counts   SARE_GIF_STOX            166s/0h of 12239 corpus (6565s/5674h CT) 03/07/06
+#counts   SARE_GIF_STOX            174s/0h of 7196 corpus (4970s/2226h AxB) 03/08/06
+#counts   SARE_GIF_STOX            2326s/1h of 89274 corpus (71419s/17855h ML) 03/07/06
+#counts   SARE_GIF_STOX            486s/2h of 15560 corpus (7747s/7813h FT) 03/07/06
+#counts   SARE_GIF_STOX            82s/1h of 22956 corpus (17243s/5713h MY) 03/07/06
+#counts   SARE_GIF_STOX            1634s/2h of 50435 corpus (42435s/8000h FVGT) 03/08/06
+
+# contributed by Chris S.
+# 02/14/06
+body            SARE_CSBIG              /(?:explosive|huge|big|increased|great|incredible).(?:gains|returns)/is
+describe        SARE_CSBIG              Only Spicy food gives me an Explosive Gain. 
+score           SARE_CSBIG              1.65
+#counts   SARE_CSBIG              345s/0h of 27181 corpus (19321s/7860h FT) 02/13/06
+#counts   SARE_CSBIG              654s/0h of 94330 corpus (54945s/39385h DOC) 02/13/06
+#counts   SARE_CSBIG              68s/0h of 11699 corpus (6139s/5560h CT) 02/13/06
+#counts   SARE_CSBIG              775s/0h of 68401 corpus (53647s/14754h ML) 02/13/06
+#counts   SARE_CSBIG              81s/0h of 27479 corpus (21834s/5645h MY) 02/13/06
+#counts   SARE_CSBIG              86s/0h of 7663 corpus (5437s/2226h AxB) 02/13/06
+
+header   SARE_CSNUMTAG    Received =~ /from \-\d{5,}/
+describe SARE_CSNUMTAG    Spamsign in header
+score    SARE_CSNUMTAG    1.66
+#counts   SARE_CSNUMTAG        0s/0h of 11699 corpus (6139s/5560h CT) 02/13/06
+#counts   SARE_CSNUMTAG        145s/0h of 27181 corpus (19321s/7860h FT) 02/13/06
+#counts   SARE_CSNUMTAG        1s/0h of 27479 corpus (21834s/5645h MY) 02/13/06
+#counts   SARE_CSNUMTAG        2429s/0h of 94330 corpus (54945s/39385h DOC) 02/13/06
+#counts   SARE_CSNUMTAG        30s/0h of 7663 corpus (5437s/2226h AxB) 02/13/06
+#counts   SARE_CSNUMTAG        9s/0h of 68401 corpus (53647s/14754h ML) 02/13/06
+
+rawbody         __SARE_CSTRADE2         /trading/i
+rawbody         __SARE_CSTRADE3         /(?:all|next|this).?(month|week)/i
+rawbody         __SARE_CSTRADE4         /src\="cid/i
+
+meta            SARE_CSTRADE5           (__SARE_CSTRADE2 && __SARE_CSTRADE3 && __SARE_CSTRADE4)
+describe        SARE_CSTRADE5           STOCK Attachments.
+score           SARE_CSTRADE5           0.52
+#counts   SARE_CSTRADE5             0s/0h of 27479 corpus (21834s/5645h MY) 02/13/06
+#counts   SARE_CSTRADE5             1s/0h of 7663 corpus (5437s/2226h AxB) 02/13/06
+#counts   SARE_CSTRADE5             288s/0h of 27181 corpus (19321s/7860h FT) 02/13/06
+#counts   SARE_CSTRADE5             39s/0h of 94330 corpus (54945s/39385h DOC) 02/13/06
+#counts   SARE_CSTRADE5             3s/0h of 11699 corpus (6139s/5560h CT) 02/13/06
+#counts   SARE_CSTRADE5             58s/0h of 68401 corpus (53647s/14754h ML) 02/13/06
+
+body            SARE_CSSM               /smart m.ney equ.{3}es/is
+describe        SARE_CSSM               Smart Money Equities
+score           SARE_CSSM               1.66
+
+#counts   SARE_CSSM                383s/0h of 92359 corpus (52980s/39379h DOC) 02/09/06
+#counts   SARE_CSSM                367s/0h of 27121 corpus (19266s/7855h FT) 02/09/06
+#counts   SARE_CSSM                198s/0h of 60808 corpus (47084s/13724h ML) 02/11/06
+#counts   SARE_CSSM                23s/0h of 11691 corpus (6130s/5561h CT) 02/09/06
+#counts   SARE_CSSM                7s/0h of 6901 corpus (4676s/2225h AxB) 02/09/06
+#counts   SARE_CSSM                0s/0h of 37286 corpus (31814s/5472h MY) 02/09/06 
+
+# Chris Santerre
+# SpamAssassin RulesEmporium (SARE)
+#
+# Salty Stock Rules
+# 10/18/06
+# Version: 2.51
+#
+# These rules have been tested.
+# They are meant to catch stock spams with inline gifs
+# 
+# chris@uribl.com
+
+rawbody __MY_CID        /src\=\"cid\:/i
+describe __MY_CID       SARE inline attached image
+# avg S/O .85
+
+rawbody __MY_CLOSING /\<\/FONT\>\<\/DIV\>\<\/BODY\>\<\/HTML\>/i
+describe __MY_CLOSING font,div,body,html closing
+# avg S/O .70
+
+rawbody __MY_EMPTY_FONT /face\=Arial size\=.\>\<\/FONT\>\<\/DIV\>/i
+describe __MY_EMPTY_FONT SARE Empty font tag
+# avg S/O .78
+
+rawbody __MY_ARIAL2 /face\=Arial size\=2\>/i
+describe __MY_ARIAL2 SARE Arial font size 2
+# avg S/O .74
+
+rawbody __MY_STYLE /\<STYLE\>\<\/STYLE\>/
+describe __MY_STYLE SARE Empty STYLE tags
+# avg S/O Not tested seperetly. 
+
+meta MY_CID_AND_ARIAL2 (__MY_CID && __MY_ARIAL2)
+describe MY_CID_AND_ARIAL2 SARE CID and Arial2
+score MY_CID_AND_ARIAL2 1.46
+#counts   MY_CID_AND_ARIAL2        27444s/94h of 89314 corpus (85178s/4136h AxB2) 10/16/06
+#counts   MY_CID_AND_ARIAL2        13423s/0h of 256437 corpus (192643s/63794h ML) 10/16/06
+#counts   MY_CID_AND_ARIAL2        6665s/139h of 250718 corpus (180406s/70312h DOC) 10/16/06
+#counts   MY_CID_AND_ARIAL2        276s/98h of 8722 corpus (4334s/4388h AxB) 10/16/06
+#counts   MY_CID_AND_ARIAL2        1513s/5h of 23589 corpus (16994s/6595h CT) 10/16/06
+#counts   MY_CID_AND_ARIAL2        3004s/43h of 43545 corpus (34574s/8971h FVGT) 10/17/06
+# avg S/O 0.905
+
+meta MY_CID_AND_CLOSING (__MY_CID && __MY_CLOSING)
+describe MY_CID_AND_CLOSING SARE cid and closing
+score MY_CID_AND_CLOSING 1.60
+#counts   MY_CID_AND_CLOSING       6701s/27h of 89314 corpus (85178s/4136h AxB2) 10/16/06
+#counts   MY_CID_AND_CLOSING       4864s/0h of 256437 corpus (192643s/63794h ML) 10/16/06
+#counts   MY_CID_AND_CLOSING       4333s/31h of 250718 corpus (180406s/70312h DOC) 10/16/06
+#counts   MY_CID_AND_CLOSING       117s/27h of 8722 corpus (4334s/4388h AxB) 10/16/06
+#counts   MY_CID_AND_CLOSING       717s/1h of 23589 corpus (16994s/6595h CT) 10/16/06
+#counts   MY_CID_AND_CLOSING       2531s/5h of 43545 corpus (34574s/8971h FVGT) 10/17/06
+# avg S/O 0.929
+
+meta MY_CID_AND_STYLE (__MY_CID && __MY_STYLE)
+describe MY_CID_AND_STYLE SARE cid and style
+score MY_CID_AND_STYLE 1.54
+#counts   MY_CID_AND_STYLE         41863s/84h of 89314 corpus (85178s/4136h AxB2) 10/16/06
+#counts   MY_CID_AND_STYLE         20759s/0h of 256437 corpus (192643s/63794h ML) 10/16/06
+#counts   MY_CID_AND_STYLE         10930s/278h of 250718 corpus (180406s/70312h DOC) 10/16/06
+#counts   MY_CID_AND_STYLE         296s/87h of 8722 corpus (4334s/4388h AxB) 10/16/06
+#counts   MY_CID_AND_STYLE         1800s/2h of 23589 corpus (16994s/6595h CT) 10/16/06
+#counts   MY_CID_AND_STYLE         4453s/59h of 43545 corpus (34574s/8971h FVGT) 10/17/06
+# avg S/O 0.918
+
+meta MY_CID_FONT (__MY_CID && __MY_EMPTY_FONT)
+describe MY_CID_FONT SARE cid and empty font
+score MY_CID_FONT 0.92
+#counts   MY_CID_FONT              269s/1h of 23587 corpus (16993s/6594h CT) 10/16/06
+#counts   MY_CID_FONT              147s/1h of 8726 corpus (4336s/4390h AxB) 10/16/06
+#counts   MY_CID_FONT              592s/1h of 89712 corpus (85572s/4140h AxB2) 10/16/06
+#counts   MY_CID_FONT              3273s/0h of 256375 corpus (192586s/63789h ML) 10/16/06
+#counts   MY_CID_FONT              116s/1h of 250747 corpus (180440s/70307h DOC) 10/16/06
+# avg S/O 0.984
+
+meta MY_CID_ARIAL2_CLOSING (__MY_CID && __MY_ARIAL2 && __MY_CLOSING)
+describe MY_CID_ARIAL2_CLOSING SARE cid arial2 closing
+score MY_CID_ARIAL2_CLOSING 1.63
+#counts   MY_CID_ARIAL2_CLOSING    6554s/14h of 89314 corpus (85178s/4136h AxB2) 10/16/06
+#counts   MY_CID_ARIAL2_CLOSING    4065s/0h of 256437 corpus (192643s/63794h ML) 10/16/06
+#counts   MY_CID_ARIAL2_CLOSING    3969s/2h of 250718 corpus (180406s/70312h DOC) 10/16/06
+#counts   MY_CID_ARIAL2_CLOSING    116s/14h of 8722 corpus (4334s/4388h AxB) 10/16/06
+#counts   MY_CID_ARIAL2_CLOSING    600s/1h of 23589 corpus (16994s/6595h CT) 10/16/06
+#counts   MY_CID_ARIAL2_CLOSING    1614s/0h of 43545 corpus (34574s/8971h FVGT) 10/17/06
+# avg S/O 0.962
+
+meta MY_CID_ARIAL_STYLE (__MY_CID && __MY_ARIAL2 && __MY_STYLE)
+describe MY_CID_ARIAL_STYLE SARE cid arial2 style
+score MY_CID_ARIAL_STYLE 1.58
+#counts   MY_CID_ARIAL_STYLE       27427s/39h of 89314 corpus (85178s/4136h AxB2) 10/16/06
+#counts   MY_CID_ARIAL_STYLE       12497s/0h of 256437 corpus (192643s/63794h ML) 10/16/06
+#counts   MY_CID_ARIAL_STYLE       6470s/97h of 250718 corpus (180406s/70312h DOC) 10/16/06
+#counts   MY_CID_ARIAL_STYLE       276s/41h of 8722 corpus (4334s/4388h AxB) 10/16/06
+#counts   MY_CID_ARIAL_STYLE       1489s/1h of 23589 corpus (16994s/6595h CT) 10/16/06
+#counts   MY_CID_ARIAL_STYLE       2222s/28h of 43545 corpus (34574s/8971h FVGT) 10/17/06
+# avg S/O 0.951
+
+#EOF
+
