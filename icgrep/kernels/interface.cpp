@@ -112,9 +112,12 @@ void KernelInterface::addKernelDeclarations(Module * client) {
     Function * doSegmentFn = Function::Create(doSegmentFunctionType, GlobalValue::ExternalLinkage, doSegmentName, client);
     doSegmentFn->setCallingConv(CallingConv::C);
     doSegmentFn->setDoesNotThrow();
-    for (int i = 1; i <= doBlockParameters.size(); i++) {
-        doSegmentFn->setDoesNotCapture(i);
-    }
+    Function::arg_iterator args = doSegmentFn->arg_begin();
+    Value * arg = &*(args++);
+    arg->setName("self");
+    arg = &*(args++);
+    arg->setName("blockCnt");
+    doSegmentFn->setDoesNotCapture(1); // for self parameter only.
     iBuilder->setModule(saveModule);
     iBuilder->restoreIP(savePoint);
 }

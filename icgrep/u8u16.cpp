@@ -27,6 +27,7 @@
 #include <pablo/function.h>
 #include <IDISA/idisa_builder.h>
 #include <IDISA/idisa_target.h>
+#include <kernels/pipeline.h>
 #include <kernels/interface.h>
 #include <kernels/kernel.h>
 #include <kernels/s2p_kernel.h>
@@ -224,7 +225,6 @@ const unsigned u16OutputBlocks = 64;
 
 Function * u8u16Pipeline(Module * mMod, IDISA::IDISA_Builder * iBuilder, pablo::PabloFunction * function) {
     Type * mBitBlockType = iBuilder->getBitBlockType();
-    unsigned mBlockSize = iBuilder->getBitBlockWidth();
     s2pKernel  s2pk(iBuilder);
     s2pk.generateKernel();
     
@@ -252,80 +252,33 @@ Function * u8u16Pipeline(Module * mMod, IDISA::IDISA_Builder * iBuilder, pablo::
     
     Value * const inputStream = &*(args++);
     inputStream->setName("input");
-    Value * const bufferSize = &*(args++);
-    bufferSize->setName("bufferSize");
+    Value * const fileSize = &*(args++);
+    fileSize->setName("fileSize");
     
     iBuilder->SetInsertPoint(BasicBlock::Create(mMod->getContext(), "entry", main,0));
-    
-    BasicBlock * entryBlock = iBuilder->GetInsertBlock();
-    
-    BasicBlock * fullCondBlock = BasicBlock::Create(mMod->getContext(), "fullCond", main, 0);
-    BasicBlock * fullBodyBlock = BasicBlock::Create(mMod->getContext(), "fullBody", main, 0);
-    BasicBlock * finalBlock = BasicBlock::Create(mMod->getContext(), "final", main, 0);
-    
-    StreamSetBuffer ByteStream(iBuilder, StreamSetType(1, 8), 0);
-    StreamSetBuffer BasisBits(iBuilder, StreamSetType(8, 1), 1);
-    StreamSetBuffer U8u16Bits(iBuilder, StreamSetType(18, 1), 1);
-    StreamSetBuffer U16Bits(iBuilder, StreamSetType(16, 1), 1);
-    StreamSetBuffer DeletionCounts(iBuilder, StreamSetType(1, 1), 1);
-    StreamSetBuffer U16out(iBuilder, StreamSetType(1, 16), u16OutputBlocks);
+        
+    kernel::StreamSetBuffer ByteStream(iBuilder, StreamSetType(1, 8), 0);
+    kernel::StreamSetBuffer BasisBits(iBuilder, StreamSetType(8, 1), 1);
+    kernel::StreamSetBuffer U8u16Bits(iBuilder, StreamSetType(18, 1), 1);
+    kernel::StreamSetBuffer U16Bits(iBuilder, StreamSetType(16, 1), 1);
+    kernel::StreamSetBuffer DeletionCounts(iBuilder, StreamSetType(1, 1), 1);
+    kernel::StreamSetBuffer U16out(iBuilder, StreamSetType(1, 16), u16OutputBlocks);
 
     ByteStream.setStreamSetBuffer(inputStream);
-    Value * basisBits = BasisBits.allocateBuffer();
-    Value * u8u16Bits = U8u16Bits.allocateBuffer();
-    Value * u16Bits = U16Bits.allocateBuffer();
-    Value * delCounts = DeletionCounts.allocateBuffer();
+    BasisBits.allocateBuffer();
+    U8u16Bits.allocateBuffer();
+    U16Bits.allocateBuffer();
+    DeletionCounts.allocateBuffer();
     Value * u16out = U16out.allocateBuffer();
     
-    Value * s2pInstance = s2pk.createInstance({});
-    Value * u8u16Instance = u8u16k.createInstance({});
-    Value * delInstance = delK.createInstance({});
-    Value * p2sInstance = p2sk.createInstance({});
-    Value * stdOutInstance = stdOutK.createInstance({u16out, iBuilder->CreateGEP(u16out, {iBuilder->getInt32(u16OutputBlocks-2)})});
+    Value * s2pInstance = s2pk.createInstance({}, {&ByteStream}, {&BasisBits});
+    Value * u8u16Instance = u8u16k.createInstance({}, {&BasisBits}, {&U8u16Bits});
+    Value * delInstance = delK.createInstance({}, {&U8u16Bits}, {&U16Bits, &DeletionCounts});
+    Value * p2sInstance = p2sk.createInstance({}, {&U16Bits, &DeletionCounts}, {&U16out});
+    Value * stdOutInstance = stdOutK.createInstance({u16out, iBuilder->CreateGEP(u16out, {iBuilder->getInt32(u16OutputBlocks-2)})}, {&U16out}, {});
     
-    Value * initialBufferSize = bufferSize;
-    BasicBlock * initialBlock = entryBlock;
-    Value * initialBlockNo = iBuilder->getInt64(0);
+    generatePipelineLoop(iBuilder, {&s2pk, &u8u16k, &delK, &p2sk, &stdOutK}, {s2pInstance, u8u16Instance, delInstance, p2sInstance, stdOutInstance}, fileSize);
     
-    iBuilder->CreateBr(fullCondBlock);
-    
-    
-    iBuilder->SetInsertPoint(fullCondBlock);
-    PHINode * remainingBytes = iBuilder->CreatePHI(int64ty, 2, "remainingBytes");
-    remainingBytes->addIncoming(initialBufferSize, initialBlock);
-    PHINode * blockNo = iBuilder->CreatePHI(int64ty, 2, "blockNo");
-    blockNo->addIncoming(initialBlockNo, initialBlock);
-    PHINode * outputBuffer = iBuilder->CreatePHI(PointerType::get(U16out.getStreamSetBlockType(), 0), 2, "outputBuffer");
-    outputBuffer->addIncoming(u16out, initialBlock);
-    
-    Constant * const step = ConstantInt::get(int64ty, mBlockSize);
-    Value * fullCondTest = iBuilder->CreateICmpULT(remainingBytes, step);
-    iBuilder->CreateCondBr(fullCondTest, finalBlock, fullBodyBlock);
-    
-    iBuilder->SetInsertPoint(fullBodyBlock);
-    
-    s2pk.createDoBlockCall(s2pInstance, {ByteStream.getBlockPointer(blockNo), basisBits});
-    u8u16k.createDoBlockCall(u8u16Instance, {basisBits, u8u16Bits});
-    delK.createDoBlockCall(delInstance, {u8u16Bits, u16Bits, delCounts});
-    Value * units_generated = p2sk.createDoBlockCall(p2sInstance, {u16Bits, delCounts, outputBuffer});
-    Value * u16out_next = iBuilder->CreateBitCast(iBuilder->CreateGEP(iBuilder->CreateBitCast(outputBuffer, i16PtrTy), units_generated), outputBuffer->getType());
-    u16out_next = stdOutK.createDoBlockCall(stdOutInstance, {u16out_next});
-    
-    Value * diff = iBuilder->CreateSub(remainingBytes, step);
-    
-    remainingBytes->addIncoming(diff, fullBodyBlock);
-    blockNo->addIncoming(iBuilder->CreateAdd(blockNo, iBuilder->getInt64(1)), fullBodyBlock);
-    outputBuffer->addIncoming(u16out_next, fullBodyBlock);
-    iBuilder->CreateBr(fullCondBlock);
-    
-    iBuilder->SetInsertPoint(finalBlock);
-    s2pk.createFinalBlockCall(s2pInstance, remainingBytes, {ByteStream.getBlockPointer(blockNo), basisBits});
-    u8u16k.createFinalBlockCall(u8u16Instance, remainingBytes, {basisBits, u8u16Bits});
-    delK.createFinalBlockCall(delInstance, remainingBytes, {u8u16Bits, u16Bits, delCounts});
-    units_generated = p2sk.createFinalBlockCall(p2sInstance, remainingBytes, {u16Bits, delCounts, outputBuffer});
-    u16out_next = iBuilder->CreateBitCast(iBuilder->CreateGEP(iBuilder->CreateBitCast(outputBuffer, i16PtrTy), units_generated), outputBuffer->getType());
-    stdOutK.createFinalBlockCall(stdOutInstance, remainingBytes, {u16out_next});
-
     iBuilder->CreateRetVoid();
     return main;
 }
