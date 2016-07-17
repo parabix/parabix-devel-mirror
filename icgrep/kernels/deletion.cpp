@@ -56,9 +56,12 @@ void deletionKernel::generateDoBlockMethod() {
     
     iBuilder->SetInsertPoint(BasicBlock::Create(iBuilder->getContext(), "entry", doBlockFunction, 0));
     
-    Value * inputStreamBlock = getParameter(doBlockFunction, "inputStreamSet");
-    Value * outputStreamBlock = getParameter(doBlockFunction, "outputStreamSet");
-    Value * delCountBlock = getParameter(doBlockFunction, "deletionCounts");
+    Value * self = getParameter(doBlockFunction, "self");
+    
+    Value * blockNo = getScalarField(self, blockNoScalar);
+    Value * inputStreamBlock = getCircularBufferBlockPointer(self, "inputStreamSet", blockNo);
+    Value * outputStreamBlock = getCircularBufferBlockPointer(self, "outputStreamSet", blockNo);
+    Value * delCountBlock = getCircularBufferBlockPointer(self, "deletionCounts", blockNo);
     
     Value * del_mask = iBuilder->CreateBlockAlignedLoad(inputStreamBlock, {iBuilder->getInt32(0), iBuilder->getInt32(mStreamCount)});
     
@@ -86,20 +89,15 @@ void deletionKernel::generateFinalBlockMethod() {
 
     iBuilder->SetInsertPoint(BasicBlock::Create(iBuilder->getContext(), "entry", finalBlockFunction, 0));
     Value * remainingBytes = getParameter(finalBlockFunction, "remainingBytes");
-    Value * inputStreamBlock = getParameter(finalBlockFunction, "inputStreamSet");
+    Value * self = getParameter(doBlockFunction, "self");
+    Value * blockNo = getScalarField(self, blockNoScalar);
+    Value * inputStreamBlock = getCircularBufferBlockPointer(self, "inputStreamSet", blockNo);
     Value * remaining = iBuilder->CreateZExt(remainingBytes, iBuilder->getIntNTy(blockSize));
     Value * EOF_del = iBuilder->bitCast(iBuilder->CreateShl(Constant::getAllOnesValue(iBuilder->getIntNTy(blockSize)), remaining));
     Value * const delmaskPtr = iBuilder->CreateGEP(inputStreamBlock, {iBuilder->getInt32(0), iBuilder->getInt32(16)});
     Value * const delmaskVal = iBuilder->CreateBlockAlignedLoad(delmaskPtr);
     iBuilder->CreateBlockAlignedStore(iBuilder->CreateOr(EOF_del, delmaskVal), delmaskPtr);
-    Function::arg_iterator args = finalBlockFunction->arg_begin();
-    Value * self = &*(args++);
-    /* Skip "remaining" arg */ args++;
-    std::vector<Value *> doBlockArgs = {self};
-    while (args != finalBlockFunction->arg_end()){
-        doBlockArgs.push_back(&*args++);
-    }
-    iBuilder->CreateCall(doBlockFunction, doBlockArgs);    
+    iBuilder->CreateCall(doBlockFunction, {self});
     iBuilder->CreateRetVoid();
     iBuilder->restoreIP(savePoint);
 }

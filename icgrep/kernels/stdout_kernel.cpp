@@ -37,6 +37,9 @@ void stdOutKernel::generateDoBlockMethod() {
     iBuilder->SetInsertPoint(BasicBlock::Create(iBuilder->getContext(), "entry", doBlockFunction, 0));
 
     Value * self = getParameter(doBlockFunction, "self");
+    Value * blockNo = getScalarField(self, blockNoScalar);
+    Value * inputStreamBlock = getCircularBufferBlockPointer(self, "inputStreamSet", blockNo);
+
     Value * bufferPtr = getParameter(doBlockFunction, "bufferPtr");
     Value * bufferFinalBlockPtr = getScalarField(self, "bufferFinalBlockPtr");
     //iBuilder->CallPrintInt("bufferPtr", iBuilder->CreatePtrToInt(bufferPtr, iBuilder->getInt64Ty()));

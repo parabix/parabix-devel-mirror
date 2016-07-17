@@ -40,7 +40,7 @@ public:
     // Generate the Kernel to the current module (iBuilder->getModule()).
     void generateKernel();
     
-//protected:
+protected:
     //
     // Kernel builder subtypes define their logic of kernel construction
     // in terms of 3 virtual methods for
@@ -96,7 +96,7 @@ public:
     Value * getCircularBufferBlockPointer(llvm::Value * self, std::string streamName, llvm::Value * blockNo);
 
 
-//protected:
+protected:
 
     std::vector<llvm::Type *>  mKernelFields;
     NameMap                    mInternalStateNameMap;

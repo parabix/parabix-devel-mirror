@@ -61,7 +61,7 @@ public:
     llvm::Value * createFinalBlockCall(llvm::Value * kernelInstance, llvm::Value * remainingBytes);
     llvm::Value * createGetAccumulatorCall(llvm::Value * kernelInstance, std::string accumName);
     
-//protected:
+protected:
     
     IDISA::IDISA_Builder * iBuilder;
     std::string mKernelName;

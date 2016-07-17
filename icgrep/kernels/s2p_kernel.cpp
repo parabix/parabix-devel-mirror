@@ -165,7 +165,6 @@ void s2pKernel::generateDoBlockMethod() {
     iBuilder->SetInsertPoint(BasicBlock::Create(iBuilder->getContext(), "entry", doBlockFunction, 0));
     
     Value * self = getParameter(doBlockFunction, "self");
-
     Value * blockNo = getScalarField(self, blockNoScalar);
     Value * byteStreamBlock_ptr = getCircularBufferBlockPointer(self, mStreamSetInputs[0].ssName, blockNo);
     Value * basisBitsBlock_ptr = getCircularBufferBlockPointer(self, mStreamSetOutputs[0].ssName, blockNo);    
