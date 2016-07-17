@@ -150,14 +150,14 @@ void KernelBuilder::generateDoSegmentMethod() {
     
     std::vector<Value *> basePtrs;
     std::vector<Value *> blockMasks;
-    for (auto sSet : mStreamSetInputs) {
+/*    for (auto sSet : mStreamSetInputs) {
         basePtrs.push_back(getScalarField(self, sSet.ssName + basePtrSuffix));
         blockMasks.push_back(getScalarField(self, sSet.ssName + blkMaskSuffix));
     }
     for (auto sSet : mStreamSetOutputs) {
         basePtrs.push_back(getScalarField(self, sSet.ssName + basePtrSuffix));
         blockMasks.push_back(getScalarField(self, sSet.ssName + blkMaskSuffix));
-    }
+    }*/
     
     iBuilder->CreateBr(blockLoop);
     
@@ -168,9 +168,15 @@ void KernelBuilder::generateDoSegmentMethod() {
     Value * blockNo = getScalarField(self, blockNoScalar);
     std::vector<Value *> doBlockArgs = {self};
 
-    for (unsigned i = 0; i < basePtrs.size(); i++) {
-        doBlockArgs.push_back(iBuilder->CreateGEP(basePtrs[i], iBuilder->CreateAnd(blockNo, blockMasks[i])));
+    for (auto sSet : mStreamSetInputs) {
+        doBlockArgs.push_back(getCircularBufferBlockPointer(self, sSet.ssName, blockNo));
     }
+    for (auto sSet : mStreamSetOutputs) {
+        doBlockArgs.push_back(getCircularBufferBlockPointer(self, sSet.ssName, blockNo));
+    }
+//    for (unsigned i = 0; i < basePtrs.size(); i++) {
+//        doBlockArgs.push_back(iBuilder->CreateGEP(basePtrs[i], iBuilder->CreateAnd(blockNo, blockMasks[i])));
+//    }
     Value * rslt = iBuilder->CreateCall(doBlockFunction, doBlockArgs);
     setScalarField(self, blockNoScalar, iBuilder->CreateAdd(blockNo, iBuilder->getInt64(1)));
     blocksToDo = iBuilder->CreateSub(blocksRemaining, iBuilder->getInt64(1));
@@ -215,6 +221,12 @@ Value * KernelBuilder::getParameter(Function * f, std::string paramName) {
         if (arg->getName() == paramName) return arg;
     }
     throw std::runtime_error("Method does not have parameter: " + paramName);
+}
+
+Value * KernelBuilder::getCircularBufferBlockPointer(Value * self, std::string streamName, Value * blockNo) {
+    Value * bufferBase = getScalarField(self, streamName + basePtrSuffix);
+    Value * blockMask = getScalarField(self, streamName + blkMaskSuffix);
+    return iBuilder->CreateGEP(bufferBase, iBuilder->CreateAnd(blockNo, blockMask));
 }
 
 

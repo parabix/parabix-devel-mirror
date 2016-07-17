@@ -97,20 +97,6 @@ void generatePipelineLoop(IDISA::IDISA_Builder * iBuilder, std::vector<KernelBui
     iBuilder->SetInsertPoint(finalBlock);
     
     for (unsigned i = 0; i < kernels.size(); i++) {
-        std::vector<Value *> basePtrs;
-        std::vector<Value *> blockMasks;
-        for (auto sSet : kernels[i]->mStreamSetInputs) {
-            basePtrs.push_back(kernels[i]->getScalarField(instances[i], sSet.ssName + basePtrSuffix));
-            blockMasks.push_back(kernels[i]->getScalarField(instances[i], sSet.ssName + blkMaskSuffix));
-        }
-        for (auto sSet : kernels[i]->mStreamSetOutputs) {
-            basePtrs.push_back(kernels[i]->getScalarField(instances[i], sSet.ssName + basePtrSuffix));
-            blockMasks.push_back(kernels[i]->getScalarField(instances[i], sSet.ssName + blkMaskSuffix));
-        }
-        std::vector<Value *> args;
-        for (unsigned i = 0; i < basePtrs.size(); i++) {
-            args.push_back(iBuilder->CreateGEP(basePtrs[i], iBuilder->CreateAnd(blockNo, blockMasks[i])));
-        }
-        kernels[i]->createFinalBlockCall(instances[i], remainingBytes, args);
+        kernels[i]->createFinalBlockCall(instances[i], remainingBytes);
     }
 }

@@ -132,8 +132,6 @@ void s2pKernel::generateFinalBlockMethod() {
     
     Value * self = getParameter(finalBlockFunction, "self");
     Value * remainingBytes = getParameter(finalBlockFunction, "remainingBytes");
-    Value * byteStreamBlock_ptr = getParameter(finalBlockFunction, "byteStream");
-    Value * basisBitsBlock_ptr = getParameter(finalBlockFunction, "basisBits");
     
     BasicBlock * finalPartialBlock = BasicBlock::Create(iBuilder->getContext(), "partial", finalBlockFunction, 0);
     BasicBlock * finalEmptyBlock = BasicBlock::Create(iBuilder->getContext(), "empty", finalBlockFunction, 0);
@@ -142,11 +140,13 @@ void s2pKernel::generateFinalBlockMethod() {
     Value * emptyBlockCond = iBuilder->CreateICmpEQ(remainingBytes, ConstantInt::get(iBuilder->getInt64Ty(), 0));
     iBuilder->CreateCondBr(emptyBlockCond, finalEmptyBlock, finalPartialBlock);
     iBuilder->SetInsertPoint(finalPartialBlock);
-    iBuilder->CreateCall(doBlockFunction, {self, byteStreamBlock_ptr, basisBitsBlock_ptr});
+    iBuilder->CreateCall(doBlockFunction, {self});
     
     iBuilder->CreateBr(exitBlock);
     
     iBuilder->SetInsertPoint(finalEmptyBlock);
+    Value * blockNo = getScalarField(self, blockNoScalar);
+    Value * basisBitsBlock_ptr = getCircularBufferBlockPointer(self, mStreamSetOutputs[0].ssName, blockNo);    
     iBuilder->CreateStore(Constant::getNullValue(basisBitsBlock_ptr->getType()->getPointerElementType()), basisBitsBlock_ptr);
     iBuilder->CreateBr(exitBlock);
     
@@ -164,8 +164,12 @@ void s2pKernel::generateDoBlockMethod() {
     
     iBuilder->SetInsertPoint(BasicBlock::Create(iBuilder->getContext(), "entry", doBlockFunction, 0));
     
-    Value * byteStreamBlock_ptr = getParameter(doBlockFunction, "byteStream");
-    Value * basisBitsBlock_ptr = getParameter(doBlockFunction, "basisBits");
+    Value * self = getParameter(doBlockFunction, "self");
+
+    Value * blockNo = getScalarField(self, blockNoScalar);
+    Value * byteStreamBlock_ptr = getCircularBufferBlockPointer(self, mStreamSetInputs[0].ssName, blockNo);
+    Value * basisBitsBlock_ptr = getCircularBufferBlockPointer(self, mStreamSetOutputs[0].ssName, blockNo);    
+    
     Value * s_bytepack[8];
     for (unsigned i = 0; i < 8; i++) {
         s_bytepack[i] = iBuilder->CreateBlockAlignedLoad(byteStreamBlock_ptr, {iBuilder->getInt32(0), iBuilder->getInt32(0), iBuilder->getInt32(i)});

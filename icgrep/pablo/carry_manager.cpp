@@ -197,7 +197,7 @@ Value * CarryManager::longAdvanceCarryInCarryOut(const unsigned index, const uns
     const unsigned advanceEntries = mCarryInfo->longAdvanceEntries(shiftAmount);
     const unsigned bufsize = mCarryInfo->longAdvanceBufferSize(shiftAmount);
     Value * indexMask = iBuilder->getInt64(bufsize - 1);  // A mask to implement circular buffer indexing
-    Value * blockIndex = mKernelBuilder->getScalarField(mSelf, "BlockNo");
+    Value * blockIndex = mKernelBuilder->getScalarField(mSelf, blockNoScalar);
     Value * loadIndex0 = iBuilder->CreateAdd(iBuilder->CreateAnd(iBuilder->CreateSub(blockIndex, iBuilder->getInt64(advanceEntries)), indexMask), advBaseIndex);
     Value * storeIndex = iBuilder->CreateAdd(iBuilder->CreateAnd(blockIndex, indexMask), advBaseIndex);
     Value * carry_block0 = iBuilder->CreateBlockAlignedLoad(iBuilder->CreateGEP(mCarryBitBlockPtr, loadIndex0));

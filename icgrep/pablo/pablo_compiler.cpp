@@ -62,15 +62,15 @@ void PabloCompiler::compile(Function * doBlockFunction) {
     mSelf = mKernelBuilder->getParameter(doBlockFunction, "self");
     mCarryManager->initializeCodeGen(mKernelBuilder, mSelf);
       
-    Value * inputSet_ptr = mKernelBuilder->getParameter(doBlockFunction, "inputs");
+    Value * blockNo = mKernelBuilder->getScalarField(mSelf, blockNoScalar);
+    Value * inputSet_ptr = mKernelBuilder->getCircularBufferBlockPointer(mSelf, "inputs", blockNo);
     
     Value * outputSet_ptr = nullptr;
     if (mPabloFunction->getNumOfResults() > 0) {
-        outputSet_ptr = mKernelBuilder->getParameter(doBlockFunction, "outputs");
+        outputSet_ptr = mKernelBuilder->getCircularBufferBlockPointer(mSelf, mKernelBuilder->mStreamSetOutputs[0].ssName, blockNo);
     }
     for (unsigned j = 0; j < mPabloFunction->getNumOfParameters(); ++j) {
         Value * inputVal = iBuilder->CreateGEP(inputSet_ptr, {iBuilder->getInt32(0), iBuilder->getInt32(j)}); 
-        //Value * inputVal = iBuilder->CreateBlockAlignedLoad(inputSet_ptr, {iBuilder->getInt32(0), iBuilder->getInt32(j)});
         const Var * const var = mPabloFunction->getParameter(j);
         if (DebugOptionIsSet(DumpTrace)) {
             iBuilder->CallPrintRegister(var->getName()->to_string(), iBuilder->CreateBlockAlignedLoad(inputVal));
@@ -87,7 +87,6 @@ void PabloCompiler::compile(Function * doBlockFunction) {
         }
         iBuilder->CreateBlockAlignedStore(f->second, outputSet_ptr, {iBuilder->getInt32(0), iBuilder->getInt32(j)});
     }
-    mKernelBuilder->setScalarField(mSelf, "BlockNo", iBuilder->CreateAdd(mKernelBuilder->getScalarField(mSelf, "BlockNo"), iBuilder->getInt64(1)));
     iBuilder->CreateRetVoid();
 
     

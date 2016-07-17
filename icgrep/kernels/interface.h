@@ -56,9 +56,9 @@ public:
     
     llvm::Value * createInstance(std::vector<llvm::Value *> initialParameters);
     llvm::Value * createInstance(std::vector<llvm::Value *> initialParameters, std::vector<kernel::StreamSetBuffer *> inputs, std::vector<kernel::StreamSetBuffer *> outputBuffers);
-    llvm::Value * createDoBlockCall(llvm::Value * kernelInstance, std::vector<Value *> streamSets);
+    llvm::Value * createDoBlockCall(llvm::Value * kernelInstance);
     llvm::Value * createDoSegmentCall(llvm::Value * kernelInstance, llvm::Value * blkCount);
-    llvm::Value * createFinalBlockCall(llvm::Value * kernelInstance, llvm::Value * remainingBytes, std::vector<llvm::Value *> streamSets);
+    llvm::Value * createFinalBlockCall(llvm::Value * kernelInstance, llvm::Value * remainingBytes);
     llvm::Value * createGetAccumulatorCall(llvm::Value * kernelInstance, std::string accumName);
     
 //protected:

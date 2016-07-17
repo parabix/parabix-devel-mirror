@@ -47,16 +47,18 @@ void scanMatchKernel::generateDoBlockMethod() {
     Type * T = iBuilder->getIntNTy(mScanwordBitWidth);
     Type * scanwordVectorType =  VectorType::get(T, fieldCount);
 
-    Function * doBlockFunction = m->getFunction(mKernelName + "_DoBlock");
+    Function * doBlockFunction = m->getFunction(mKernelName + doBlock_suffix);
 
     iBuilder->SetInsertPoint(BasicBlock::Create(iBuilder->getContext(), "entry", doBlockFunction, 0));
     Value * kernelStuctParam = getParameter(doBlockFunction, "self");
-    Value * scanwordPos = getScalarField(kernelStuctParam, "BlockNo");
-    scanwordPos = iBuilder->CreateMul(scanwordPos, ConstantInt::get(scanwordPos->getType(), iBuilder->getBitBlockWidth()));
+    Value * blockNo = getScalarField(kernelStuctParam, blockNoScalar);
+    Value * scanwordPos = iBuilder->CreateMul(blockNo, ConstantInt::get(blockNo->getType(), iBuilder->getBitBlockWidth()));
     
     Value * recordStart = getScalarField(kernelStuctParam, "LineStart");
     Value * recordNum = getScalarField(kernelStuctParam, "LineNum");
-    Value * matchResultsPtr = getParameter(doBlockFunction, "matchResults");
+    
+    Value * matchResultsPtr = getCircularBufferBlockPointer(kernelStuctParam, "matchResults", blockNo);
+    
     Value * matches = iBuilder->CreateBlockAlignedLoad(matchResultsPtr, {iBuilder->getInt32(0), iBuilder->getInt32(0)});
     Value * linebreaks = iBuilder->CreateBlockAlignedLoad(matchResultsPtr, {iBuilder->getInt32(0), iBuilder->getInt32(1)});
     Value * matchWordVector = iBuilder->CreateBitCast(matches, scanwordVectorType);
@@ -71,7 +73,6 @@ void scanMatchKernel::generateDoBlockMethod() {
     }
     setScalarField(kernelStuctParam, "LineStart", recordStart);
     setScalarField(kernelStuctParam, "LineNum", recordNum);
-    setScalarField(kernelStuctParam, "BlockNo", iBuilder->CreateAdd(getScalarField(kernelStuctParam, "BlockNo"), iBuilder->getInt64(1)));
     iBuilder -> CreateRetVoid();
     iBuilder->restoreIP(savePoint);
 }

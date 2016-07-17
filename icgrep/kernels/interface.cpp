@@ -53,6 +53,7 @@ void KernelInterface::addKernelDeclarations(Module * client) {
     
     std::vector<Type *> doBlockParameters = {selfType};
     std::vector<Type *> finalBlockParameters = {selfType, iBuilder->getInt64Ty()};
+    /*
     for (auto inputSet : mStreamSetInputs) {
         Type * inputSetParmType = PointerType::getUnqual(inputSet.ssType.getStreamSetBlockType(iBuilder));
         doBlockParameters.push_back(inputSetParmType);
@@ -63,6 +64,7 @@ void KernelInterface::addKernelDeclarations(Module * client) {
         doBlockParameters.push_back(outputSetParmType);
         finalBlockParameters.push_back(outputSetParmType);
     }
+     */
     FunctionType * doBlockFunctionType = FunctionType::get(mDoBlockReturnType, doBlockParameters, false);
     std::string doBlockName = mKernelName + doBlock_suffix;
     Function * doBlockFn = Function::Create(doBlockFunctionType, GlobalValue::ExternalLinkage, doBlockName, client);
@@ -92,7 +94,7 @@ void KernelInterface::addKernelDeclarations(Module * client) {
     finalBlockArg = &*(finalBlockArgs++);
     finalBlockArg->setName("remainingBytes");
 
-    for (auto inputSet : mStreamSetInputs) {
+/*    for (auto inputSet : mStreamSetInputs) {
         doBlockArg = &*(doBlockArgs++);
         finalBlockArg = &*(finalBlockArgs++);
         doBlockArg->setName(inputSet.ssName);
@@ -104,7 +106,7 @@ void KernelInterface::addKernelDeclarations(Module * client) {
         doBlockArg->setName(outputSet.ssName);
         finalBlockArg->setName(outputSet.ssName);
     }
-    
+    */
     // Create the doSegment function prototype.
     std::vector<Type *> doSegmentParameters = {selfType, iBuilder->getInt64Ty()};
     FunctionType * doSegmentFunctionType = FunctionType::get(mDoBlockReturnType, doSegmentParameters, false);
@@ -168,10 +170,7 @@ Value * KernelInterface::createInstance(std::vector<Value *> args,
     return kernelInstance;
 }
 
-
-
-
-Value * KernelInterface::createDoBlockCall(Value * self, std::vector<Value *> streamSets) {
+Value * KernelInterface::createDoBlockCall(Value * self) {
     Module * m = iBuilder->getModule();
     std::string doBlockName = mKernelName + doBlock_suffix;
     Function * doBlockMethod = m->getFunction(doBlockName);
@@ -179,13 +178,10 @@ Value * KernelInterface::createDoBlockCall(Value * self, std::vector<Value *> st
         throw std::runtime_error("Cannot find " + doBlockName);
     }
     std::vector<Value *> args = {self};
-    for (auto ss : streamSets) {
-        args.push_back(ss);
-    }
     return iBuilder->CreateCall(doBlockMethod, args);
 }
 
-Value * KernelInterface::createFinalBlockCall(Value * self, Value * remainingBytes, std::vector<Value *> streamSets) {
+Value * KernelInterface::createFinalBlockCall(Value * self, Value * remainingBytes) {
     Module * m = iBuilder->getModule();
     std::string finalBlockName = mKernelName + finalBlock_suffix;
     Function * finalBlockMethod = m->getFunction(finalBlockName);
@@ -193,11 +189,9 @@ Value * KernelInterface::createFinalBlockCall(Value * self, Value * remainingByt
         throw std::runtime_error("Cannot find " + finalBlockName);
     }
     std::vector<Value *> args = {self, remainingBytes};
-    for (auto ss : streamSets) {
-        args.push_back(ss);
-    }
     return iBuilder->CreateCall(finalBlockMethod, args);
 }
+
 
 Value * KernelInterface::createDoSegmentCall(Value * self, Value * blksToDo) {
     Module * m = iBuilder->getModule();
