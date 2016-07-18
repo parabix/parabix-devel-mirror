@@ -67,7 +67,7 @@ protected:
     
     virtual void generateFinalBlockMethod();
     
-    void generateDoSegmentMethod();
+    virtual void generateDoSegmentMethod();
     
     // Add an additional scalar field to the KernelState struct.
     // Must occur before any call to addKernelDeclarations or createKernelModule.

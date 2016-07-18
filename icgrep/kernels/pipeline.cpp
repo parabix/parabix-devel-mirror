@@ -41,6 +41,7 @@ void generatePipelineLoop(IDISA::IDISA_Builder * iBuilder, std::vector<KernelBui
     Value * initialBufferSize = nullptr;
     Value * initialBlockNo = nullptr;
     BasicBlock * initialBlock = nullptr;
+    Value * rslt = nullptr;
     
     if (segmentSize > 1) {
         iBuilder->CreateBr(segmentCondBlock);
@@ -56,8 +57,9 @@ void generatePipelineLoop(IDISA::IDISA_Builder * iBuilder, std::vector<KernelBui
         
         iBuilder->SetInsertPoint(segmentBodyBlock);
         Value * segBlocks = ConstantInt::get(int64ty, segmentSize);
-        for (unsigned i = 0; i < kernels.size(); i++) {
-            kernels[i]->createDoSegmentCall(instances[i], segBlocks);
+        Value * rslt = kernels[0]->createDoSegmentCall(instances[0], segBlocks);
+        for (unsigned i = 1; i < kernels.size(); i++) {
+            rslt = kernels[i]->createDoSegmentCall(instances[i], rslt->getType()->isVoidTy() ? segBlocks : rslt);
         }
         remainingBytes->addIncoming(iBuilder->CreateSub(remainingBytes, step), segmentBodyBlock);
         blockNo->addIncoming(iBuilder->CreateAdd(blockNo, segBlocks), segmentBodyBlock);
@@ -85,9 +87,9 @@ void generatePipelineLoop(IDISA::IDISA_Builder * iBuilder, std::vector<KernelBui
     
     // Full Block Pipeline loop
     iBuilder->SetInsertPoint(fullBodyBlock);
-    
-    for (unsigned i = 0; i < kernels.size(); i++) {
-        kernels[i]->createDoSegmentCall(instances[i], ConstantInt::get(int64ty, 1));
+    rslt = kernels[0]->createDoSegmentCall(instances[0], ConstantInt::get(int64ty, 1));
+    for (unsigned i = 1; i < kernels.size(); i++) {
+        rslt = kernels[i]->createDoSegmentCall(instances[i], rslt->getType()->isVoidTy() ? ConstantInt::get(int64ty, 1) : rslt);
     }
     
     remainingBytes->addIncoming(iBuilder->CreateSub(remainingBytes, step), fullBodyBlock);
@@ -95,8 +97,8 @@ void generatePipelineLoop(IDISA::IDISA_Builder * iBuilder, std::vector<KernelBui
     iBuilder->CreateBr(fullCondBlock);
     
     iBuilder->SetInsertPoint(finalBlock);
-    
-    for (unsigned i = 0; i < kernels.size(); i++) {
-        kernels[i]->createFinalBlockCall(instances[i], remainingBytes);
+    rslt = kernels[0]-> createFinalBlockCall(instances[0], remainingBytes);
+    for (unsigned i = 1; i < kernels.size(); i++) {
+        kernels[i]->createFinalBlockCall(instances[i], rslt->getType()->isVoidTy() ? remainingBytes : rslt);
     }
 }

@@ -151,27 +151,45 @@ void KernelBuilder::generateDoSegmentMethod() {
     iBuilder->CreateBr(blockLoop);
     
     iBuilder->SetInsertPoint(blockLoop);
-    PHINode * blocksRemaining = iBuilder->CreatePHI(iBuilder->getInt64Ty(), 2, "blocksRemaining");
-    blocksRemaining->addIncoming(blocksToDo, entryBlock);
-    
-    Value * blockNo = getScalarField(self, blockNoScalar);
-    std::vector<Value *> doBlockArgs = {self};
-
-    Value * rslt = iBuilder->CreateCall(doBlockFunction, doBlockArgs);
-    setScalarField(self, blockNoScalar, iBuilder->CreateAdd(blockNo, iBuilder->getInt64(1)));
-    blocksToDo = iBuilder->CreateSub(blocksRemaining, iBuilder->getInt64(1));
-    blocksRemaining->addIncoming(blocksToDo, blockLoop);
-    Value * notDone = iBuilder->CreateICmpUGT(blocksToDo, iBuilder->getInt64(0));
-    iBuilder->CreateCondBr(notDone, blockLoop, blocksDone);
-    
-    iBuilder->SetInsertPoint(blocksDone);
     if (mDoBlockReturnType->isVoidTy()) {
+        PHINode * blocksRemaining = iBuilder->CreatePHI(iBuilder->getInt64Ty(), 2, "blocksRemaining");
+        blocksRemaining->addIncoming(blocksToDo, entryBlock);
+        
+        Value * blockNo = getScalarField(self, blockNoScalar);
+        
+        iBuilder->CreateCall(doBlockFunction, {self});
+        setScalarField(self, blockNoScalar, iBuilder->CreateAdd(blockNo, iBuilder->getInt64(1)));
+        blocksToDo = iBuilder->CreateSub(blocksRemaining, iBuilder->getInt64(1));
+        blocksRemaining->addIncoming(blocksToDo, blockLoop);
+        Value * notDone = iBuilder->CreateICmpUGT(blocksToDo, iBuilder->getInt64(0));
+        iBuilder->CreateCondBr(notDone, blockLoop, blocksDone);
+        
+        iBuilder->SetInsertPoint(blocksDone);
         iBuilder->CreateRetVoid();
     }
     else {
+        PHINode * blocksRemaining = iBuilder->CreatePHI(iBuilder->getInt64Ty(), 2, "blocksRemaining");
+        blocksRemaining->addIncoming(blocksToDo, entryBlock);
+        PHINode * total = iBuilder->CreatePHI(mDoBlockReturnType, 2, "resultTotal");
+        total->addIncoming(ConstantInt::getNullValue(mDoBlockReturnType), entryBlock);
+
+        Value * blockNo = getScalarField(self, blockNoScalar);
+        std::vector<Value *> doBlockArgs = {self};
+        
+        Value * rslt = iBuilder->CreateCall(doBlockFunction, {self});
+        setScalarField(self, blockNoScalar, iBuilder->CreateAdd(blockNo, iBuilder->getInt64(1)));
+        blocksToDo = iBuilder->CreateSub(blocksRemaining, iBuilder->getInt64(1));
+        blocksRemaining->addIncoming(blocksToDo, blockLoop);
+        Value * notDone = iBuilder->CreateICmpUGT(blocksToDo, iBuilder->getInt64(0));
+        Value * totalSoFar = iBuilder->CreateAdd(total, rslt);
+        total->addIncoming(totalSoFar, blockLoop);
+        iBuilder->CreateCondBr(notDone, blockLoop, blocksDone);
+        
+        iBuilder->SetInsertPoint(blocksDone);
         iBuilder->CreateRet(rslt);
     }
     iBuilder->restoreIP(savePoint);
+    doSegmentFunction->dump();
 }
 
 
