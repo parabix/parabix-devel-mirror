@@ -117,6 +117,7 @@ void GrepEngine::doGrep(const std::string & fileName, const int fileIdx, bool Co
     }
 }
 
+using namespace parabix;
 
 void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool CountOnly, bool UTF_16, bool isNameExpression) {
     isUTF_16 = UTF_16; 
@@ -124,6 +125,7 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool Count
     
     IDISA::IDISA_Builder * iBuilder = IDISA::GetIDISA_Builder(M);
 
+    const unsigned segmentSize = codegen::SegmentSize;
 
     Encoding::Type type;
     type = UTF_16 ? Encoding::Type::UTF_16 : Encoding::Type::UTF_8;
@@ -132,11 +134,14 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool Count
 
     Encoding encoding(type, bits);
 
+    ExternalUnboundedBuffer ByteStream(iBuilder, StreamSetType(1, i8));
+    CircularBuffer BasisBits(iBuilder, StreamSetType(8, i1), segmentSize);
+
     mIsNameExpression = isNameExpression;
     re_ast = re::regular_expression_passes(encoding, re_ast);   
     pablo::PabloFunction * function = re::re2pablo_compiler(encoding, re_ast);
     
-    kernel::s2pKernel  s2pk(iBuilder);
+    kernel::s2pKernel  s2pk(iBuilder, ByteStream, BasisBits);
     kernel::scanMatchKernel scanMatchK(iBuilder, 64, false);
     
     s2pk.generateKernel();
@@ -171,10 +176,7 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool Count
     Value * const fileIdx = &*(args++);
     fileIdx->setName("fileIdx");
 
-    const unsigned segmentSize = codegen::SegmentSize;
 
-    kernel::StreamSetBuffer ByteStream(iBuilder, kernel::StreamSetType(1, (UTF_16 ? 16 : 8)), 0);
-    kernel::StreamSetBuffer BasisBits(iBuilder, kernel::StreamSetType((UTF_16 ? 16 : 8), 1), segmentSize);
     ByteStream.setStreamSetBuffer(inputStream);
     BasisBits.allocateBuffer();
 
@@ -187,7 +189,8 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool Count
         iBuilder->CreateRet(matchCount);
     }
     else {
-        kernel::StreamSetBuffer MatchResults(iBuilder, kernel::StreamSetType(2, 1), segmentSize);
+        
+        CircularBuffer MatchResults(iBuilder, StreamSetType(2, i1), segmentSize);
         ByteStream.setStreamSetBuffer(inputStream);
         BasisBits.allocateBuffer();
         MatchResults.allocateBuffer();

@@ -10,6 +10,7 @@
 
 using namespace pablo;
 using namespace kernel;
+using namespace parabix;
 
 PabloKernel::PabloKernel(IDISA::IDISA_Builder * builder,
                          std::string kernelName,

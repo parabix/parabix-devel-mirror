@@ -29,6 +29,7 @@
 #include <pablo/pablo_kernel.h>
 #include <IDISA/idisa_builder.h>
 #include <IDISA/idisa_target.h>
+#include <kernels/streamset.h>
 #include <kernels/interface.h>
 #include <kernels/kernel.h>
 #include <kernels/s2p_kernel.h>
@@ -137,12 +138,16 @@ pablo::PabloFunction * wc_gen(Encoding encoding) {
 }
 
 using namespace kernel;
+using namespace parabix;
 
 
 Function * wcPipeline(Module * mMod, IDISA::IDISA_Builder * iBuilder, pablo::PabloFunction * function) {
     Type * mBitBlockType = iBuilder->getBitBlockType();
     
-    s2pKernel  s2pk(iBuilder);
+    ExternalUnboundedBuffer ByteStream(iBuilder, StreamSetType(1, i8));
+    SingleBlockBuffer BasisBits(iBuilder, StreamSetType(8, i1));
+    
+    s2pKernel  s2pk(iBuilder, ByteStream, BasisBits);
     std::unique_ptr<Module> s2pM = s2pk.createKernelModule();
     pablo_function_passes(function);
     pablo::PabloKernel  wck(iBuilder, "wc", function, {"lineCount", "wordCount", "charCount"});
@@ -169,8 +174,6 @@ Function * wcPipeline(Module * mMod, IDISA::IDISA_Builder * iBuilder, pablo::Pab
     fileIdx->setName("fileIdx");
     
     iBuilder->SetInsertPoint(BasicBlock::Create(mMod->getContext(), "entry", main,0));
-    kernel::StreamSetBuffer ByteStream(iBuilder, kernel::StreamSetType(1, 8), 0);
-    kernel::StreamSetBuffer BasisBits(iBuilder, kernel::StreamSetType(8, 1), codegen::SegmentSize);
 
     ByteStream.setStreamSetBuffer(inputStream);
     BasisBits.allocateBuffer();

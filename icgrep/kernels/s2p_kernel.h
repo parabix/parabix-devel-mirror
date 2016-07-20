@@ -23,13 +23,17 @@ class KernelBuilder;
 
 class s2pKernel : public KernelBuilder {
 public:
-    s2pKernel(IDISA::IDISA_Builder * iBuilder) :
+    
+    s2pKernel(IDISA::IDISA_Builder * iBuilder, parabix::StreamSetBuffer& byteStream, parabix::StreamSetBuffer& basisBits) :
     KernelBuilder(iBuilder, "s2p",
-                  {StreamSetBinding{StreamSetType(1, 8), "byteStream"}},
-                  {StreamSetBinding{StreamSetType(8, 1), "basisBits"}},
-                  {}, {}, {}) {}
-
+                  {StreamSetBinding{parabix::StreamSetType(1, parabix::i8), "byteStream"}},
+                  {StreamSetBinding{parabix::StreamSetType(8, parabix::i1), "basisBits"}},
+                  {}, {}, {}), mByteStream(byteStream), mBasisBits(basisBits) {}
+    
+    
 private:
+    parabix::StreamSetBuffer& mByteStream;
+    parabix::StreamSetBuffer& mBasisBits;
     void generateDoBlockMethod() override;
     void generateFinalBlockMethod() override;
     

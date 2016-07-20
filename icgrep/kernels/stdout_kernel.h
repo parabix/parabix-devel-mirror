@@ -17,15 +17,16 @@ class stdOutKernel : public KernelBuilder {
 public:
     stdOutKernel(IDISA::IDISA_Builder * iBuilder, unsigned codeUnitWidth) :
     KernelBuilder(iBuilder, "stdout",
-                  {StreamSetBinding{StreamSetType(1, codeUnitWidth), "bufferPtr"}}, {}, {}, {}, {}) {
+                  {StreamSetBinding{StreamSetType(1, codeUnitWidth), "codeUnitBuffer"}}, {}, {}, {}, {}) {
         mStreamType = PointerType::get(StreamSetType(1, codeUnitWidth).getStreamSetBlockType(iBuilder), 0);
-        mScalarInputs = {ScalarBinding{mStreamType , "bufferBasePtr"}, ScalarBinding{mStreamType, "bufferFinalBlockPtr"}};
+        mScalarInputs = {ScalarBinding{mStreamType , "bufferPtr"}};
     }
     
 private:
     void prepareKernel() override;
     void generateDoBlockMethod() override;
     void generateFinalBlockMethod() override;
+    void generateDoSegmentMethod() override;
     
     llvm::Type * mStreamType;
 };

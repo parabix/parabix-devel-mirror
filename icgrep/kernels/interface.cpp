@@ -10,7 +10,7 @@
 #include <llvm/Support/raw_ostream.h>
 
 using namespace llvm;
-using namespace kernel;
+using namespace parabix;
 
 void KernelInterface::addKernelDeclarations(Module * client) {
     Module * saveModule = iBuilder->getModule();
@@ -154,12 +154,12 @@ Value * KernelInterface::createInstance(std::vector<Value *> args,
         init_args.push_back(a);
     }
     for (auto b : inputBuffers) { 
-        init_args.push_back(b->getStreamSetBufferPtr());
-        init_args.push_back(iBuilder->getInt64(b->getSegmentSize() - 1));
+        init_args.push_back(b->getStreamSetBasePtr());
+        init_args.push_back(iBuilder->getInt64(b->getBufferSize() - 1));
     }
     for (auto b : outputBuffers) { 
-        init_args.push_back(b->getStreamSetBufferPtr());
-        init_args.push_back(iBuilder->getInt64(b->getSegmentSize() - 1));
+        init_args.push_back(b->getStreamSetBasePtr());
+        init_args.push_back(iBuilder->getInt64(b->getBufferSize() - 1));
     }
     std::string initFnName = mKernelName + init_suffix;
     Function * initMethod = m->getFunction(initFnName);

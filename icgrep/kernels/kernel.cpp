@@ -189,7 +189,7 @@ void KernelBuilder::generateDoSegmentMethod() {
         iBuilder->CreateRet(rslt);
     }
     iBuilder->restoreIP(savePoint);
-    doSegmentFunction->dump();
+    //doSegmentFunction->dump();
 }
 
 

@@ -20,7 +20,7 @@ struct ScalarBinding {
 };
 
 struct StreamSetBinding {
-    kernel::StreamSetType ssType;
+    parabix::StreamSetType ssType;
     std::string ssName;
 };
    
@@ -55,7 +55,7 @@ public:
     void addKernelDeclarations(Module * client);
     
     llvm::Value * createInstance(std::vector<llvm::Value *> initialParameters);
-    llvm::Value * createInstance(std::vector<llvm::Value *> initialParameters, std::vector<kernel::StreamSetBuffer *> inputs, std::vector<kernel::StreamSetBuffer *> outputBuffers);
+    llvm::Value * createInstance(std::vector<llvm::Value *> initialParameters, std::vector<parabix::StreamSetBuffer *> inputs, std::vector<parabix::StreamSetBuffer *> outputBuffers);
     llvm::Value * createDoBlockCall(llvm::Value * kernelInstance);
     llvm::Value * createDoSegmentCall(llvm::Value * kernelInstance, llvm::Value * blkCount);
     llvm::Value * createFinalBlockCall(llvm::Value * kernelInstance, llvm::Value * remainingBytes);

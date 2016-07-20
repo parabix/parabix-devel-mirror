@@ -40,7 +40,7 @@ void stdOutKernel::generateDoBlockMethod() {
     Value * blockNo = getScalarField(self, blockNoScalar);
     Value * inputStreamBlock = getCircularBufferBlockPointer(self, "inputStreamSet", blockNo);
 
-    Value * bufferPtr = getParameter(doBlockFunction, "bufferPtr");
+    Value * bufferPtr = getScalarField(self, "bufferPtr");
     Value * bufferFinalBlockPtr = getScalarField(self, "bufferFinalBlockPtr");
     //iBuilder->CallPrintInt("bufferPtr", iBuilder->CreatePtrToInt(bufferPtr, iBuilder->getInt64Ty()));
     //iBuilder->CallPrintInt("bufferFinalBlockPtr", iBuilder->CreatePtrToInt(bufferFinalBlockPtr, iBuilder->getInt64Ty()));

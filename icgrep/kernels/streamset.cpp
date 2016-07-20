@@ -9,7 +9,7 @@
 #include <IDISA/idisa_builder.h>
 #include <llvm/IR/Type.h>
     
-using namespace kernel;
+using namespace parabix;
 
 llvm::Type * StreamSetType::getStreamSetBlockType(IDISA::IDISA_Builder * iBuilder) {
     llvm::Type * streamType = mFieldWidth == 1 ? iBuilder->getBitBlockType() : ArrayType::get(iBuilder->getBitBlockType(), mFieldWidth);
@@ -20,23 +20,50 @@ llvm::Type * StreamSetBuffer::getStreamSetBlockType() {
     return mStreamSetType.getStreamSetBlockType(iBuilder);
 }
 
-llvm::Type * StreamSetBuffer::getStreamSetBufferType() {
-    if (mSegmentSize == 1) return getStreamSetBlockType();
-    return ArrayType::get(getStreamSetBlockType(), mSegmentSize);
+// Single Block Buffer
+
+uint64_t SingleBlockBuffer::getBufferSize() {
+    return 1; //iBuilder->getBitBlockWidth();
 }
 
-llvm::Value * StreamSetBuffer::allocateBuffer() {
-    if (mStreamSetBufferPtr == nullptr) {
-        mStreamSetBufferPtr = iBuilder->CreateAlloca(getStreamSetBlockType(), iBuilder->getInt32(mSegmentSize));
-    }
+llvm::Value * SingleBlockBuffer::allocateBuffer() {
+    mStreamSetBufferPtr = iBuilder->CreateAlloca(getStreamSetBlockType());
     return mStreamSetBufferPtr;
 }
 
-llvm::Value * StreamSetBuffer::getBlockPointer(llvm::Value * blockNo) {
-    if (mSegmentSize == 1) return mStreamSetBufferPtr;
-    if (mSegmentSize == 0) return
-        iBuilder->CreateGEP(getStreamSetBlockType(), mStreamSetBufferPtr, {blockNo});
-    Value * offset = iBuilder->CreateURem(blockNo, iBuilder->getInt64(mSegmentSize));
-    return iBuilder->CreateGEP(getStreamSetBlockType(), mStreamSetBufferPtr, {offset});
+// For a single block buffer, the block pointer is always the buffer base pointer.
+llvm::Value * SingleBlockBuffer::getStreamSetBlockPointer(llvm::Value * bufferBasePtr, llvm::Value * blockNo) {
+    return bufferBasePtr;
+}
+
+
+// External Unbounded Buffer
+
+uint64_t ExternalUnboundedBuffer::getBufferSize() {
+    return 0;
+}
+
+llvm::Value * ExternalUnboundedBuffer::allocateBuffer() {
+    throw std::runtime_error("External buffers cannot be allocated.");
+}
+
+llvm::Value * ExternalUnboundedBuffer::getStreamSetBlockPointer(llvm::Value * bufferBasePtr, llvm::Value * blockNo) {
+    return iBuilder->CreateGEP(getStreamSetBlockType(), bufferBasePtr, {blockNo});
+}
+
+
+// Circular Stack Allocated Buffer
+
+uint64_t CircularBuffer::getBufferSize() {
+    return mBufferBlocks; // * iBuilder->getBitBlockWidth();
+}
+
+llvm::Value * CircularBuffer::allocateBuffer() {
+    mStreamSetBufferPtr = iBuilder->CreateAlloca(getStreamSetBlockType(), iBuilder->getInt64(mBufferBlocks));
+    return mStreamSetBufferPtr;
+}
+
+llvm::Value * CircularBuffer::getStreamSetBlockPointer(llvm::Value * bufferBasePtr, llvm::Value * blockNo) {
+    return iBuilder->CreateGEP(getStreamSetBlockType(), bufferBasePtr, {iBuilder->CreateAnd(blockNo, iBuilder->getInt64(mBufferBlocks-1))});
 }
 
