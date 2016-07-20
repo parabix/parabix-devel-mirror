@@ -29,20 +29,18 @@
 // mmap system
 #include <boost/filesystem.hpp>
 #include <boost/iostreams/device/mapped_file.hpp>
-using namespace boost::iostreams;
-using namespace boost::filesystem;
 
 typedef void (*SymTableFunctionType)(char * byte_data, size_t filesize);
 
 static cl::list<std::string> files(cl::Positional, cl::desc("<input file ...>"), cl::ZeroOrMore);
 
 void process(const std::string & fileName, SymTableFunctionType function) {
-    const path filePath(fileName);
+    const boost::filesystem::path filePath(fileName);
     if (exists(filePath) && !is_directory(filePath)) {
         size_t fileSize = file_size(filePath);
         if (fileSize > 0) {
-            mapped_file file;
-            file.open(fileName, mapped_file::priv, fileSize, 0);
+            boost::iostreams::mapped_file file;
+            file.open(fileName, boost::iostreams::mapped_file::priv, fileSize, 0);
             char * data = file.data();
             assert (data);
             function(data, fileSize);

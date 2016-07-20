@@ -62,8 +62,6 @@
 // mmap system
 #include <boost/filesystem.hpp>
 #include <boost/iostreams/device/mapped_file.hpp>
-using namespace boost::iostreams;
-using namespace boost::filesystem;
 
 #include <fcntl.h>
 
@@ -84,7 +82,7 @@ static cl::alias ShowLineNumbersLong("line-number", cl::desc("Alias for -n"), cl
 bool isUTF_16 = false;
 
 void GrepEngine::doGrep(const std::string & fileName, const int fileIdx, bool CountOnly, std::vector<uint64_t> & total_CountOnly, bool UTF_16) {
-    path file(fileName);
+    boost::filesystem::path file(fileName);
     if (exists(file)) {
         if (is_directory(file)) {
             return;
@@ -97,7 +95,7 @@ void GrepEngine::doGrep(const std::string & fileName, const int fileIdx, bool Co
     const auto fileSize = file_size(file);
     if (fileSize > 0) {
         try {
-            mapped_file_source source(fileName, fileSize, 0);
+            boost::iostreams::mapped_file_source source(fileName, fileSize, 0);
             char * fileBuffer = const_cast<char *>(source.data());
             if (CountOnly) {
                 total_CountOnly[fileIdx] = mGrepFunction_CountOnly(fileBuffer, fileSize, fileIdx);

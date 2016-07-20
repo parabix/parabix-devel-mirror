@@ -44,8 +44,6 @@
 // mmap system
 #include <boost/filesystem.hpp>
 #include <boost/iostreams/device/mapped_file.hpp>
-using namespace boost::iostreams;
-using namespace boost::filesystem;
 
 #include <fcntl.h>
 static cl::OptionCategory wcFlags("Command Flags", "wc options");
@@ -225,7 +223,7 @@ void wc(wcFunctionType fn_ptr, const int64_t fileIdx) {
     size_t fileSize;
     char * fileBuffer;
     
-    const path file(fileName);
+    const boost::filesystem::path file(fileName);
     if (exists(file)) {
         if (is_directory(file)) {
             return;
@@ -236,7 +234,7 @@ void wc(wcFunctionType fn_ptr, const int64_t fileIdx) {
     }
     
     fileSize = file_size(file);
-    mapped_file_source mappedFile;
+    boost::iostreams::mapped_file_source mappedFile;
     if (fileSize == 0) {
         fileBuffer = nullptr;
     }

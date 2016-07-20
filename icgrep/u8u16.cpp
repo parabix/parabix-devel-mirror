@@ -40,8 +40,6 @@
 // mmap system
 #include <boost/filesystem.hpp>
 #include <boost/iostreams/device/mapped_file.hpp>
-using namespace boost::iostreams;
-using namespace boost::filesystem;
 
 #include <fcntl.h>
 static cl::OptionCategory u8u16Options("u8u16 Options",
@@ -317,7 +315,7 @@ void u8u16(u8u16FunctionType fn_ptr, const std::string & fileName) {
     size_t mFileSize;
     char * mFileBuffer;
     
-    const path file(mFileName);
+    const boost::filesystem::path file(mFileName);
     if (exists(file)) {
         if (is_directory(file)) {
             return;
@@ -328,7 +326,7 @@ void u8u16(u8u16FunctionType fn_ptr, const std::string & fileName) {
     }
     
     mFileSize = file_size(file);
-    mapped_file_source mFile;
+    boost::iostreams::mapped_file_source mFile;
     if (mFileSize == 0) {
         mFileBuffer = nullptr;
     }
