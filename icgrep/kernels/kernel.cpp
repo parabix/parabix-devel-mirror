@@ -39,13 +39,9 @@ void KernelBuilder::prepareKernel() {
     addScalar(iBuilder->getInt64Ty(), blockNoScalar);
     for (auto sSet : mStreamSetInputs) {
         mScalarInputs.push_back(ScalarBinding{PointerType::get(sSet.ssType.getStreamSetBlockType(), 0), sSet.ssName + basePtrSuffix});
-        mScalarInputs.push_back(ScalarBinding{iBuilder->getInt64Ty(), sSet.ssName + blkMaskSuffix});
-        //Or possibly add as internal state, with code in init function:  addScalar(iBuilder->getInt64Ty(), sSet.ssName + blkMaskSuffix);
     }
     for (auto sSet : mStreamSetOutputs) {
         mScalarInputs.push_back(ScalarBinding{PointerType::get(sSet.ssType.getStreamSetBlockType(), 0), sSet.ssName + basePtrSuffix});
-        mScalarInputs.push_back(ScalarBinding{iBuilder->getInt64Ty(), sSet.ssName + blkMaskSuffix});
-        //Or possibly add as internal state, with code in init function:  addScalar(iBuilder->getInt64Ty(), sSet.ssName + blkMaskSuffix);
     }
     for (auto binding : mScalarInputs) {
         addScalar(binding.scalarType, binding.scalarName);
@@ -189,10 +185,7 @@ void KernelBuilder::generateDoSegmentMethod() {
         iBuilder->CreateRet(rslt);
     }
     iBuilder->restoreIP(savePoint);
-    //doSegmentFunction->dump();
 }
-
-
 
 Value * KernelBuilder::getScalarIndex(std::string fieldName) {
     const auto f = mInternalStateNameMap.find(fieldName);
@@ -220,12 +213,5 @@ Value * KernelBuilder::getParameter(Function * f, std::string paramName) {
     }
     throw std::runtime_error("Method does not have parameter: " + paramName);
 }
-
-Value * KernelBuilder::getCircularBufferBlockPointer(Value * self, std::string streamName, Value * blockNo) {
-    Value * bufferBase = getScalarField(self, streamName + basePtrSuffix);
-    Value * blockMask = getScalarField(self, streamName + blkMaskSuffix);
-    return iBuilder->CreateGEP(bufferBase, iBuilder->CreateAnd(blockNo, blockMask));
-}
-
 
 

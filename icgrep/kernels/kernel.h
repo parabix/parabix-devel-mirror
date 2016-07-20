@@ -91,10 +91,6 @@ protected:
     
     // Get a parameter by name.
     llvm::Value * getParameter(llvm::Function * f, std::string paramName);
-    
-    // Helper.
-    Value * getCircularBufferBlockPointer(llvm::Value * self, std::string streamName, llvm::Value * blockNo);
-
 
 protected:
 

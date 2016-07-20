@@ -146,7 +146,8 @@ void s2pKernel::generateFinalBlockMethod() {
     
     iBuilder->SetInsertPoint(finalEmptyBlock);
     Value * blockNo = getScalarField(self, blockNoScalar);
-    Value * basisBitsBlock_ptr = getCircularBufferBlockPointer(self, mStreamSetOutputs[0].ssName, blockNo);    
+    Value * basisBitsBase_ptr = getScalarField(self, mStreamSetOutputs[0].ssName + basePtrSuffix);
+    Value * basisBitsBlock_ptr = mStreamSetOutputs[0].ssType.getStreamSetBlockPointer(basisBitsBase_ptr, blockNo);
     iBuilder->CreateStore(Constant::getNullValue(basisBitsBlock_ptr->getType()->getPointerElementType()), basisBitsBlock_ptr);
     iBuilder->CreateBr(exitBlock);
     

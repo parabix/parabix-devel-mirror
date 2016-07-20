@@ -155,11 +155,9 @@ Value * KernelInterface::createInstance(std::vector<Value *> args,
     }
     for (auto b : inputBuffers) { 
         init_args.push_back(b->getStreamSetBasePtr());
-        init_args.push_back(iBuilder->getInt64(b->getBufferSize() - 1));
     }
     for (auto b : outputBuffers) { 
         init_args.push_back(b->getStreamSetBasePtr());
-        init_args.push_back(iBuilder->getInt64(b->getBufferSize() - 1));
     }
     std::string initFnName = mKernelName + init_suffix;
     Function * initMethod = m->getFunction(initFnName);
