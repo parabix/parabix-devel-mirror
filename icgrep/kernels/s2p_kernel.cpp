@@ -170,8 +170,8 @@ void s2pKernel::generateDoBlockMethod() {
     Value * blockNo = getScalarField(self, blockNoScalar);
     
     
-    Value * byteStreamBlock_ptr = mByteStream.getStreamSetBlockPointer(byteStreamBase_ptr, blockNo);
-    Value * basisBitsBlock_ptr = mBasisBits.getStreamSetBlockPointer(basisBitsBase_ptr, blockNo);
+    Value * byteStreamBlock_ptr = mStreamSetInputs[0].ssType.getStreamSetBlockPointer(byteStreamBase_ptr, blockNo);
+    Value * basisBitsBlock_ptr = mStreamSetOutputs[0].ssType.getStreamSetBlockPointer(basisBitsBase_ptr, blockNo);
     
     Value * s_bytepack[8];
     for (unsigned i = 0; i < 8; i++) {

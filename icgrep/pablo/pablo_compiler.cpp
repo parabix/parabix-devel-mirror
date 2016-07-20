@@ -63,11 +63,13 @@ void PabloCompiler::compile(Function * doBlockFunction) {
     mCarryManager->initializeCodeGen(mKernelBuilder, mSelf);
       
     Value * blockNo = mKernelBuilder->getScalarField(mSelf, blockNoScalar);
-    Value * inputSet_ptr = mKernelBuilder->getCircularBufferBlockPointer(mSelf, "inputs", blockNo);
-    
+    Value * inputBase_ptr = mKernelBuilder->getScalarField(mSelf, mKernelBuilder->mStreamSetInputs[0].ssName + basePtrSuffix);
+    Value * inputSet_ptr  = mKernelBuilder->mStreamSetInputs[0].ssType.getStreamSetBlockPointer(inputBase_ptr, blockNo);
+
     Value * outputSet_ptr = nullptr;
     if (mPabloFunction->getNumOfResults() > 0) {
-        outputSet_ptr = mKernelBuilder->getCircularBufferBlockPointer(mSelf, mKernelBuilder->mStreamSetOutputs[0].ssName, blockNo);
+        Value * outputBase_ptr = mKernelBuilder->getScalarField(mSelf, mKernelBuilder->mStreamSetOutputs[0].ssName + basePtrSuffix);
+        outputSet_ptr = mKernelBuilder->mStreamSetOutputs[0].ssType.getStreamSetBlockPointer(outputBase_ptr, blockNo);
     }
     for (unsigned j = 0; j < mPabloFunction->getNumOfParameters(); ++j) {
         Value * inputVal = iBuilder->CreateGEP(inputSet_ptr, {iBuilder->getInt32(0), iBuilder->getInt32(j)}); 

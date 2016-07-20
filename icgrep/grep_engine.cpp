@@ -131,33 +131,8 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool Count
     bits = UTF_16 ? 16 : 8;
 
     Encoding encoding(type, bits);
-
-    ExternalUnboundedBuffer ByteStream(iBuilder, StreamSetType(1, i8));
-    CircularBuffer BasisBits(iBuilder, StreamSetType(8, i1), segmentSize);
-
     mIsNameExpression = isNameExpression;
-    re_ast = re::regular_expression_passes(encoding, re_ast);   
-    pablo::PabloFunction * function = re::re2pablo_compiler(encoding, re_ast);
-    
-    kernel::s2pKernel  s2pk(iBuilder, ByteStream, BasisBits);
-    kernel::scanMatchKernel scanMatchK(iBuilder, 64, false);
-    
-    s2pk.generateKernel();
-    scanMatchK.generateKernel();
-    
-    //std::unique_ptr<Module> s2pM = s2pk.createKernelModule();
-    //std::unique_ptr<Module> scanMatchM = scanMatchK.createKernelModule();
-    
-    //s2pk.addKernelDeclarations(mMod);
-    //scanMatchK.addKernelDeclarations(mMod);
-    
-    pablo_function_passes(function);
-    pablo::PabloKernel  icgrepK(iBuilder, "icgrep", function, {"matchedLineCount"});
-    icgrepK.generateKernel();
-    
-    //std::unique_ptr<Module> icgrepM = icgrepK.createKernelModule();
-    //icgrepK.addKernelDeclarations(mMod);
-    
+
     Type * const int64ty = iBuilder->getInt64Ty();
     Type * const int8PtrTy = iBuilder->getInt8PtrTy();
     Type * const inputType = PointerType::get(ArrayType::get(ArrayType::get(iBuilder->getBitBlockType(), (UTF_16 ? 16 : 8)), 1), 0);
@@ -174,28 +149,36 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool Count
     Value * const fileIdx = &*(args++);
     fileIdx->setName("fileIdx");
 
+        
+    ExternalUnboundedBuffer ByteStream(iBuilder, StreamSetType(1, i8));
+    CircularBuffer BasisBits(iBuilder, StreamSetType(8, i1), segmentSize);
+    CircularBuffer MatchResults(iBuilder, StreamSetType(2, i1), segmentSize);
+
+    kernel::s2pKernel  s2pk(iBuilder, ByteStream, BasisBits);
+    s2pk.generateKernel();
+
+    re_ast = re::regular_expression_passes(encoding, re_ast);   
+    pablo::PabloFunction * function = re::re2pablo_compiler(encoding, re_ast);
+    pablo_function_passes(function);
+    pablo::PabloKernel  icgrepK(iBuilder, "icgrep", function, BasisBits, MatchResults, {"matchedLineCount"});
+    icgrepK.generateKernel();
 
     ByteStream.setStreamSetBuffer(inputStream);
     BasisBits.allocateBuffer();
-
+    MatchResults.allocateBuffer();
+    
+    Value * s2pInstance = s2pk.createInstance({}, {&ByteStream}, {&BasisBits});
+    Value * icgrepInstance = icgrepK.createInstance({}, {&BasisBits}, {&MatchResults});
+    
     if (CountOnly) {
-        Value * s2pInstance = s2pk.createInstance({}, {&ByteStream}, {&BasisBits});
-        Value * icgrepInstance = icgrepK.createInstance({}, {&BasisBits}, {});
-        
         generatePipelineLoop(iBuilder, {&s2pk, &icgrepK}, {s2pInstance, icgrepInstance}, fileSize);
         Value * matchCount = icgrepK.createGetAccumulatorCall(icgrepInstance, "matchedLineCount");
         iBuilder->CreateRet(matchCount);
     }
     else {
-        
-        CircularBuffer MatchResults(iBuilder, StreamSetType(2, i1), segmentSize);
-        ByteStream.setStreamSetBuffer(inputStream);
-        BasisBits.allocateBuffer();
-        MatchResults.allocateBuffer();
-        
-        
-        Value * s2pInstance = s2pk.createInstance({}, {&ByteStream}, {&BasisBits});
-        Value * icgrepInstance = icgrepK.createInstance({}, {&BasisBits}, {&MatchResults});
+        kernel::scanMatchKernel scanMatchK(iBuilder, MatchResults, 64, false);
+        scanMatchK.generateKernel();
+                
         Value * scanMatchInstance = scanMatchK.createInstance({iBuilder->CreateBitCast(inputStream, int8PtrTy), fileSize, fileIdx}, {&MatchResults}, {});
         
         generatePipelineLoop(iBuilder, {&s2pk, &icgrepK, &scanMatchK}, {s2pInstance, icgrepInstance, scanMatchInstance}, fileSize);

@@ -26,14 +26,12 @@ public:
     
     s2pKernel(IDISA::IDISA_Builder * iBuilder, parabix::StreamSetBuffer& byteStream, parabix::StreamSetBuffer& basisBits) :
     KernelBuilder(iBuilder, "s2p",
-                  {StreamSetBinding{parabix::StreamSetType(1, parabix::i8), "byteStream"}},
-                  {StreamSetBinding{parabix::StreamSetType(8, parabix::i1), "basisBits"}},
-                  {}, {}, {}), mByteStream(byteStream), mBasisBits(basisBits) {}
+                  {StreamSetBinding{byteStream, "byteStream"}},
+                  {StreamSetBinding{basisBits, "basisBits"}},
+                  {}, {}, {}) {}
     
     
 private:
-    parabix::StreamSetBuffer& mByteStream;
-    parabix::StreamSetBuffer& mBasisBits;
     void generateDoBlockMethod() override;
     void generateFinalBlockMethod() override;
     

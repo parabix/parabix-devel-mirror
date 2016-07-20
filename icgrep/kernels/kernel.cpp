@@ -38,12 +38,12 @@ void KernelBuilder::prepareKernel() {
     if (!mDoBlockReturnType) mDoBlockReturnType = iBuilder->getVoidTy();
     addScalar(iBuilder->getInt64Ty(), blockNoScalar);
     for (auto sSet : mStreamSetInputs) {
-        mScalarInputs.push_back(ScalarBinding{PointerType::get(sSet.ssType.getStreamSetBlockType(iBuilder), 0), sSet.ssName + basePtrSuffix});
+        mScalarInputs.push_back(ScalarBinding{PointerType::get(sSet.ssType.getStreamSetBlockType(), 0), sSet.ssName + basePtrSuffix});
         mScalarInputs.push_back(ScalarBinding{iBuilder->getInt64Ty(), sSet.ssName + blkMaskSuffix});
         //Or possibly add as internal state, with code in init function:  addScalar(iBuilder->getInt64Ty(), sSet.ssName + blkMaskSuffix);
     }
     for (auto sSet : mStreamSetOutputs) {
-        mScalarInputs.push_back(ScalarBinding{PointerType::get(sSet.ssType.getStreamSetBlockType(iBuilder), 0), sSet.ssName + basePtrSuffix});
+        mScalarInputs.push_back(ScalarBinding{PointerType::get(sSet.ssType.getStreamSetBlockType(), 0), sSet.ssName + basePtrSuffix});
         mScalarInputs.push_back(ScalarBinding{iBuilder->getInt64Ty(), sSet.ssName + blkMaskSuffix});
         //Or possibly add as internal state, with code in init function:  addScalar(iBuilder->getInt64Ty(), sSet.ssName + blkMaskSuffix);
     }

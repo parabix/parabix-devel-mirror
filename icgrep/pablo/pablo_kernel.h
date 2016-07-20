@@ -20,6 +20,16 @@ public:
     PabloKernel(IDISA::IDISA_Builder * builder,
                     std::string kernelName,
                     PabloFunction * function,
+                    parabix::StreamSetBuffer & inputBuffer,
+                    parabix::StreamSetBuffer & outputBuffer,
+                    std::vector<std::string> accumulators);
+    // At present only population count accumulator are supported,
+    // using the pablo.Count operation.
+    
+    PabloKernel(IDISA::IDISA_Builder * builder,
+                    std::string kernelName,
+                    PabloFunction * function,
+                    parabix::StreamSetBuffer & inputBuffer,
                     std::vector<std::string> accumulators);
     // At present only population count accumulator are supported,
     // using the pablo.Count operation.

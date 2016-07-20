@@ -16,9 +16,9 @@ namespace kernel {
     
 class scanMatchKernel : public KernelBuilder {
 public:
-    scanMatchKernel(IDISA::IDISA_Builder * iBuilder, unsigned scanwordBitWidth, bool isNameExpression) :
+    scanMatchKernel(IDISA::IDISA_Builder * iBuilder, parabix::StreamSetBuffer& matchResults, unsigned scanwordBitWidth, bool isNameExpression) :
     KernelBuilder(iBuilder, "scanMatch",
-                  {StreamSetBinding{parabix::StreamSetType(2, parabix::i1), "matchResults"}}, 
+                  {StreamSetBinding{matchResults, "matchResults"}}, 
                     {}, 
                     {ScalarBinding{iBuilder->getInt8PtrTy(), "FileBuf"}, ScalarBinding{iBuilder->getInt64Ty(), "FileSize"}, ScalarBinding{iBuilder->getInt64Ty(), "FileIdx"}}, 
                     {}, 

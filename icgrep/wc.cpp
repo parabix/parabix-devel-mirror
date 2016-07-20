@@ -147,8 +147,10 @@ Function * wcPipeline(Module * mMod, IDISA::IDISA_Builder * iBuilder, pablo::Pab
     
     s2pKernel  s2pk(iBuilder, ByteStream, BasisBits);
     std::unique_ptr<Module> s2pM = s2pk.createKernelModule();
+    
     pablo_function_passes(function);
-    pablo::PabloKernel  wck(iBuilder, "wc", function, {"lineCount", "wordCount", "charCount"});
+    pablo::PabloKernel  wck(iBuilder, "wc", function, BasisBits, {"lineCount", "wordCount", "charCount"});
+    
     std::unique_ptr<Module> wcM = wck.createKernelModule();
     
     s2pk.addKernelDeclarations(mMod);

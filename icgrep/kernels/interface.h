@@ -20,7 +20,7 @@ struct ScalarBinding {
 };
 
 struct StreamSetBinding {
-    parabix::StreamSetType ssType;
+    parabix::StreamSetBuffer & ssType;
     std::string ssName;
 };
    
