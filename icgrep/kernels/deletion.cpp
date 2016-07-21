@@ -57,12 +57,11 @@ void deletionKernel::generateDoBlockMethod() {
     iBuilder->SetInsertPoint(BasicBlock::Create(iBuilder->getContext(), "entry", doBlockFunction, 0));
     
     Value * self = getParameter(doBlockFunction, "self");
-    
     Value * blockNo = getScalarField(self, blockNoScalar);
-    Value * inputStreamBlock = getCircularBufferBlockPointer(self, "inputStreamSet", blockNo);
-    Value * outputStreamBlock = getCircularBufferBlockPointer(self, "outputStreamSet", blockNo);
-    Value * delCountBlock = getCircularBufferBlockPointer(self, "deletionCounts", blockNo);
-    
+    Value * inputStreamBlock = getStreamSetBlockPtr(self, "inputStreamSet", blockNo);
+    Value * outputStreamBlock = getStreamSetBlockPtr(self, "outputStreamSet", blockNo);
+    Value * delCountBlock = getStreamSetBlockPtr(self, "deletionCounts", blockNo);
+
     Value * del_mask = iBuilder->CreateBlockAlignedLoad(inputStreamBlock, {iBuilder->getInt32(0), iBuilder->getInt32(mStreamCount)});
     
     std::vector<Value *> move_masks = parallel_prefix_deletion_masks(iBuilder, mDeletionFieldWidth, del_mask);
@@ -91,7 +90,7 @@ void deletionKernel::generateFinalBlockMethod() {
     Value * remainingBytes = getParameter(finalBlockFunction, "remainingBytes");
     Value * self = getParameter(doBlockFunction, "self");
     Value * blockNo = getScalarField(self, blockNoScalar);
-    Value * inputStreamBlock = getCircularBufferBlockPointer(self, "inputStreamSet", blockNo);
+    Value * inputStreamBlock = getStreamSetBlockPtr(self, "inputStreamSet", blockNo);
     Value * remaining = iBuilder->CreateZExt(remainingBytes, iBuilder->getIntNTy(blockSize));
     Value * EOF_del = iBuilder->bitCast(iBuilder->CreateShl(Constant::getAllOnesValue(iBuilder->getIntNTy(blockSize)), remaining));
     Value * const delmaskPtr = iBuilder->CreateGEP(inputStreamBlock, {iBuilder->getInt32(0), iBuilder->getInt32(16)});

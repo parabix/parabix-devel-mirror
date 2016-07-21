@@ -146,8 +146,7 @@ void s2pKernel::generateFinalBlockMethod() {
     
     iBuilder->SetInsertPoint(finalEmptyBlock);
     Value * blockNo = getScalarField(self, blockNoScalar);
-    Value * basisBitsBase_ptr = getScalarField(self, mStreamSetOutputs[0].ssName + basePtrSuffix);
-    Value * basisBitsBlock_ptr = mStreamSetOutputs[0].ssType.getStreamSetBlockPointer(basisBitsBase_ptr, blockNo);
+    Value * basisBitsBlock_ptr = getStreamSetBlockPtr(self, "basisBits", blockNo);
     iBuilder->CreateStore(Constant::getNullValue(basisBitsBlock_ptr->getType()->getPointerElementType()), basisBitsBlock_ptr);
     iBuilder->CreateBr(exitBlock);
     
@@ -166,13 +165,9 @@ void s2pKernel::generateDoBlockMethod() {
     iBuilder->SetInsertPoint(BasicBlock::Create(iBuilder->getContext(), "entry", doBlockFunction, 0));
     
     Value * self = getParameter(doBlockFunction, "self");
-    Value * byteStreamBase_ptr = getScalarField(self, mStreamSetInputs[0].ssName + basePtrSuffix);
-    Value * basisBitsBase_ptr = getScalarField(self, mStreamSetOutputs[0].ssName + basePtrSuffix);
     Value * blockNo = getScalarField(self, blockNoScalar);
-    
-    
-    Value * byteStreamBlock_ptr = mStreamSetInputs[0].ssType.getStreamSetBlockPointer(byteStreamBase_ptr, blockNo);
-    Value * basisBitsBlock_ptr = mStreamSetOutputs[0].ssType.getStreamSetBlockPointer(basisBitsBase_ptr, blockNo);
+    Value * byteStreamBlock_ptr = getStreamSetBlockPtr(self, "byteStream", blockNo);
+    Value * basisBitsBlock_ptr = getStreamSetBlockPtr(self, "basisBits", blockNo);
     
     Value * s_bytepack[8];
     for (unsigned i = 0; i < 8; i++) {

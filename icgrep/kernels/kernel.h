@@ -21,7 +21,7 @@ const std::string blkMaskSuffix = "_blkMask";
 namespace kernel {
     
 class KernelBuilder : public KernelInterface {
-    using NameMap = boost::container::flat_map<std::string, llvm::ConstantInt *>;
+    using NameMap = boost::container::flat_map<std::string, unsigned>;
 
 public:
     KernelBuilder(IDISA::IDISA_Builder * builder,
@@ -91,11 +91,19 @@ protected:
     
     // Get a parameter by name.
     llvm::Value * getParameter(llvm::Function * f, std::string paramName);
-
+    
+    // Stream set helpers.
+    unsigned getStreamSetIndex(std::string ssName);
+    
+    llvm::Value * getStreamSetBasePtr(Value * self, std::string ssName);
+    
+    llvm::Value * getStreamSetBlockPtr(Value * self, std::string ssName, Value * blockNo);
+        
 protected:
 
     std::vector<llvm::Type *>  mKernelFields;
     NameMap                    mInternalStateNameMap;
+    NameMap                    mStreamSetNameMap;
 };
 }
 #endif 

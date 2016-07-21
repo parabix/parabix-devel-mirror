@@ -27,7 +27,7 @@ void KernelBuilder::addScalar(Type * t, std::string scalarName) {
     }
     unsigned index = mKernelFields.size();
     mKernelFields.push_back(t);
-    mInternalStateNameMap.emplace(scalarName, iBuilder->getInt32(index));
+    mInternalStateNameMap.emplace(scalarName, index);
 }
 
 void KernelBuilder::setDoBlockReturnType(llvm::Type * t) {
@@ -37,11 +37,16 @@ void KernelBuilder::setDoBlockReturnType(llvm::Type * t) {
 void KernelBuilder::prepareKernel() {
     if (!mDoBlockReturnType) mDoBlockReturnType = iBuilder->getVoidTy();
     addScalar(iBuilder->getInt64Ty(), blockNoScalar);
+    int streamSetNo = 0;
     for (auto sSet : mStreamSetInputs) {
         mScalarInputs.push_back(ScalarBinding{PointerType::get(sSet.ssType.getStreamSetBlockType(), 0), sSet.ssName + basePtrSuffix});
+        mStreamSetNameMap.emplace(sSet.ssName, streamSetNo);
+        streamSetNo++;
     }
     for (auto sSet : mStreamSetOutputs) {
         mScalarInputs.push_back(ScalarBinding{PointerType::get(sSet.ssType.getStreamSetBlockType(), 0), sSet.ssName + basePtrSuffix});
+        mStreamSetNameMap.emplace(sSet.ssName, streamSetNo);
+        streamSetNo++;
     }
     for (auto binding : mScalarInputs) {
         addScalar(binding.scalarType, binding.scalarName);
@@ -192,7 +197,7 @@ Value * KernelBuilder::getScalarIndex(std::string fieldName) {
     if (LLVM_UNLIKELY(f == mInternalStateNameMap.end())) {
         throw std::runtime_error("Kernel does not contain internal state: " + fieldName);
     }
-    return f->second;
+    return iBuilder->getInt32(f->second);
 }
 
 Value * KernelBuilder::getScalarField(Value * self, std::string fieldName) {
@@ -213,5 +218,30 @@ Value * KernelBuilder::getParameter(Function * f, std::string paramName) {
     }
     throw std::runtime_error("Method does not have parameter: " + paramName);
 }
+
+unsigned KernelBuilder::getStreamSetIndex(std::string ssName) {
+    const auto f = mStreamSetNameMap.find(ssName);
+    if (LLVM_UNLIKELY(f == mStreamSetNameMap.end())) {
+        throw std::runtime_error("Kernel does not contain stream set: " + ssName);
+    }
+    return f->second;
+}
+
+Value * KernelBuilder::getStreamSetBasePtr(Value * self, std::string ssName) {
+    return getScalarField(self, ssName + basePtrSuffix);
+}
+
+Value * KernelBuilder::getStreamSetBlockPtr(Value * self, std::string ssName, Value * blockNo) {
+    Value * basePtr = getStreamSetBasePtr(self, ssName);
+    unsigned ssIndex = getStreamSetIndex(ssName);
+    if (ssIndex < mStreamSetInputs.size()) {
+        return mStreamSetInputs[ssIndex].ssType.getStreamSetBlockPointer(basePtr, blockNo);
+    }
+    else {
+        return mStreamSetOutputs[ssIndex - mStreamSetInputs.size()].ssType.getStreamSetBlockPointer(basePtr, blockNo);
+    }
+}
+
+
 
 

@@ -63,13 +63,13 @@ void PabloCompiler::compile(Function * doBlockFunction) {
     mCarryManager->initializeCodeGen(mKernelBuilder, mSelf);
       
     Value * blockNo = mKernelBuilder->getScalarField(mSelf, blockNoScalar);
-    Value * inputBase_ptr = mKernelBuilder->getScalarField(mSelf, mKernelBuilder->mStreamSetInputs[0].ssName + basePtrSuffix);
-    Value * inputSet_ptr  = mKernelBuilder->mStreamSetInputs[0].ssType.getStreamSetBlockPointer(inputBase_ptr, blockNo);
+    std::string inputName = mKernelBuilder->mStreamSetInputs[0].ssName;
+    Value * inputSet_ptr  = mKernelBuilder->getStreamSetBlockPtr(mSelf, inputName, blockNo);
 
     Value * outputSet_ptr = nullptr;
     if (mPabloFunction->getNumOfResults() > 0) {
-        Value * outputBase_ptr = mKernelBuilder->getScalarField(mSelf, mKernelBuilder->mStreamSetOutputs[0].ssName + basePtrSuffix);
-        outputSet_ptr = mKernelBuilder->mStreamSetOutputs[0].ssType.getStreamSetBlockPointer(outputBase_ptr, blockNo);
+        std::string outputName = mKernelBuilder->mStreamSetOutputs[0].ssName;
+        outputSet_ptr = mKernelBuilder->getStreamSetBlockPtr(mSelf, outputName, blockNo);
     }
     for (unsigned j = 0; j < mPabloFunction->getNumOfParameters(); ++j) {
         Value * inputVal = iBuilder->CreateGEP(inputSet_ptr, {iBuilder->getInt32(0), iBuilder->getInt32(j)}); 

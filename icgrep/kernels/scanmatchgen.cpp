@@ -56,8 +56,7 @@ void scanMatchKernel::generateDoBlockMethod() {
     
     Value * recordStart = getScalarField(kernelStuctParam, "LineStart");
     Value * recordNum = getScalarField(kernelStuctParam, "LineNum");
-    Value * matchResultsBase_ptr = getScalarField(kernelStuctParam, "matchResults" + basePtrSuffix);
-    Value * matchResultsPtr = mStreamSetInputs[0].ssType.getStreamSetBlockPointer(matchResultsBase_ptr, blockNo);    
+    Value * matchResultsPtr = getStreamSetBlockPtr(kernelStuctParam, "matchResults", blockNo);    
     Value * matches = iBuilder->CreateBlockAlignedLoad(matchResultsPtr, {iBuilder->getInt32(0), iBuilder->getInt32(0)});
     Value * linebreaks = iBuilder->CreateBlockAlignedLoad(matchResultsPtr, {iBuilder->getInt32(0), iBuilder->getInt32(1)});
     Value * matchWordVector = iBuilder->CreateBitCast(matches, scanwordVectorType);

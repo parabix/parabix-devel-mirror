@@ -50,8 +50,8 @@ void p2sKernel::generateDoBlockMethod() {
     
     Value * self = getParameter(doBlockFunction, "self");
     Value * blockNo = getScalarField(self, blockNoScalar);
-    Value * basisBitsBlock_ptr = getCircularBufferBlockPointer(self, "basisBits", blockNo);
-    Value * byteStreamBlock_ptr = getCircularBufferBlockPointer(self, "byteStream", blockNo);
+    Value * basisBitsBlock_ptr = getStreamSetBlockPtr(self, "basisBits", blockNo);
+    Value * byteStreamBlock_ptr = getStreamSetBlockPtr(self, "byteStream", blockNo);
 
     Value * p_bitblock[8];
     for (unsigned i = 0; i < 8; i++) {
@@ -82,14 +82,12 @@ void p2sKernel_withCompressedOutput::generateDoBlockMethod() {
     Function * doBlockFunction = m->getFunction(mKernelName + doBlock_suffix);
     
     iBuilder->SetInsertPoint(BasicBlock::Create(iBuilder->getContext(), "entry", doBlockFunction, 0));
-    
-    
     Value * self = getParameter(doBlockFunction, "self");
     Value * blockNo = getScalarField(self, blockNoScalar);
-    Value * basisBitsBlock_ptr = getCircularBufferBlockPointer(self, "basisBits", blockNo);
-    Value * delCountBlock_ptr = getCircularBufferBlockPointer(self, "deletionCounts", blockNo);
-    Value * byteStreamBlock_ptr = getCircularBufferBlockPointer(self, "byteStream", blockNo);
-
+    Value * basisBitsBlock_ptr = getStreamSetBlockPtr(self, "basisBits", blockNo);
+    Value * delCountBlock_ptr = getStreamSetBlockPtr(self, "deletionCounts", blockNo);
+    Value * byteStreamBlock_ptr = getStreamSetBlockPtr(self, "byteStream", blockNo);
+    
     Value * p_bitblock[8];
     for (unsigned i = 0; i < 8; i++) {
         p_bitblock[i] = iBuilder->CreateBlockAlignedLoad(basisBitsBlock_ptr, {iBuilder->getInt32(0), iBuilder->getInt32(i)});
@@ -120,11 +118,10 @@ void p2s_16Kernel::generateDoBlockMethod() {
     Function * doBlockFunction = m->getFunction(mKernelName + doBlock_suffix);
     
     iBuilder->SetInsertPoint(BasicBlock::Create(iBuilder->getContext(), "entry", doBlockFunction, 0));
-    
     Value * self = getParameter(doBlockFunction, "self");
     Value * blockNo = getScalarField(self, blockNoScalar);
-    Value * basisBitsBlock_ptr = getCircularBufferBlockPointer(self, "basisBits", blockNo);
-    Value * i16StreamBlock_ptr = getCircularBufferBlockPointer(self, "i16Stream", blockNo);
+    Value * basisBitsBlock_ptr = getStreamSetBlockPtr(self, "basisBits", blockNo);
+    Value * i16StreamBlock_ptr = getStreamSetBlockPtr(self, "i16Stream", blockNo);
     
     Value * hi_input[8];
     for (unsigned j = 0; j < 8; ++j) {
@@ -165,13 +162,12 @@ void p2s_16Kernel_withCompressedOutput::generateDoBlockMethod() {
     Function * doBlockFunction = m->getFunction(mKernelName + doBlock_suffix);
     
     iBuilder->SetInsertPoint(BasicBlock::Create(iBuilder->getContext(), "entry", doBlockFunction, 0));
-    
     Value * self = getParameter(doBlockFunction, "self");
     Value * blockNo = getScalarField(self, blockNoScalar);
-    Value * basisBitsBlock_ptr = getCircularBufferBlockPointer(self, "basisBits", blockNo);
-    Value * delCountBlock_ptr = getCircularBufferBlockPointer(self, "deletionCounts", blockNo);
-    Value * i16StreamBlock_ptr = getCircularBufferBlockPointer(self, "i16Stream", blockNo);
-
+    Value * basisBitsBlock_ptr = getStreamSetBlockPtr(self, "basisBits", blockNo);
+    Value * delCountBlock_ptr = getStreamSetBlockPtr(self, "deletionCounts", blockNo);
+    Value * i16StreamBlock_ptr = getStreamSetBlockPtr(self, "i16Stream", blockNo);
+    
     Value * hi_input[8];
     for (unsigned j = 0; j < 8; ++j) {
         hi_input[j] = iBuilder->CreateBlockAlignedLoad(basisBitsBlock_ptr, {iBuilder->getInt32(0), iBuilder->getInt32(j)});
