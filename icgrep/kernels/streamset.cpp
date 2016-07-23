@@ -22,7 +22,7 @@ llvm::Type * StreamSetBuffer::getStreamSetBlockType() {
 
 // Single Block Buffer
 
-uint64_t SingleBlockBuffer::getBufferSize() {
+size_t SingleBlockBuffer::getBufferSize() {
     return 1; //iBuilder->getBitBlockWidth();
 }
 
@@ -39,7 +39,7 @@ llvm::Value * SingleBlockBuffer::getStreamSetBlockPointer(llvm::Value * bufferBa
 
 // External Unbounded Buffer
 
-uint64_t ExternalUnboundedBuffer::getBufferSize() {
+size_t ExternalUnboundedBuffer::getBufferSize() {
     return 0;
 }
 
@@ -54,16 +54,16 @@ llvm::Value * ExternalUnboundedBuffer::getStreamSetBlockPointer(llvm::Value * bu
 
 // Circular Stack Allocated Buffer
 
-uint64_t CircularBuffer::getBufferSize() {
+size_t CircularBuffer::getBufferSize() {
     return mBufferBlocks; // * iBuilder->getBitBlockWidth();
 }
 
 llvm::Value * CircularBuffer::allocateBuffer() {
-    mStreamSetBufferPtr = iBuilder->CreateAlloca(getStreamSetBlockType(), iBuilder->getInt64(mBufferBlocks));
+    mStreamSetBufferPtr = iBuilder->CreateAlloca(getStreamSetBlockType(), ConstantInt::get(iBuilder->getSizeTy(), mBufferBlocks));
     return mStreamSetBufferPtr;
 }
 
 llvm::Value * CircularBuffer::getStreamSetBlockPointer(llvm::Value * bufferBasePtr, llvm::Value * blockNo) {
-    return iBuilder->CreateGEP(getStreamSetBlockType(), bufferBasePtr, {iBuilder->CreateAnd(blockNo, iBuilder->getInt64(mBufferBlocks-1))});
+    return iBuilder->CreateGEP(getStreamSetBlockType(), bufferBasePtr, {iBuilder->CreateAnd(blockNo, ConstantInt::get(iBuilder->getSizeTy(), mBufferBlocks-1))});
 }
 

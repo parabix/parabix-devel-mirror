@@ -15,10 +15,10 @@ namespace kernel {
 
 class stdOutKernel : public KernelBuilder {
 public:
-    stdOutKernel(IDISA::IDISA_Builder * iBuilder, unsigned codeUnitWidth) :
+    stdOutKernel(IDISA::IDISA_Builder * iBuilder, unsigned codeUnitWidth, parabix::StreamSetBuffer & codeUnitBuffer) :
     KernelBuilder(iBuilder, "stdout",
-                  {StreamSetBinding{StreamSetType(1, codeUnitWidth), "codeUnitBuffer"}}, {}, {}, {}, {}) {
-        mStreamType = PointerType::get(StreamSetType(1, codeUnitWidth).getStreamSetBlockType(iBuilder), 0);
+                  {StreamSetBinding{codeUnitBuffer, "codeUnitBuffer"}}, {}, {}, {}, {}) {
+        mStreamType = PointerType::get(parabix::StreamSetType(1, codeUnitWidth).getStreamSetBlockType(iBuilder), 0);
         mScalarInputs = {ScalarBinding{mStreamType , "bufferPtr"}};
     }
     

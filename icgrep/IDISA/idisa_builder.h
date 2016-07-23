@@ -11,6 +11,8 @@
 #include <llvm/IR/Type.h>
 #include <llvm/IR/Value.h>
 #include <llvm/IR/IRBuilder.h>
+#include <llvm/Support/Host.h>
+#include <llvm/ADT/Triple.h>
 
 using namespace llvm;
 
@@ -61,6 +63,7 @@ public:
     Constant * allOnes() const {
         return mOneInitializer;
     }
+    
 
     LoadInst * CreateBlockAlignedLoad(Value * const ptr);
     LoadInst * CreateBlockAlignedLoad(Value * const ptr, Value * const index);
@@ -121,6 +124,8 @@ public:
     Value * simd_not(Value * a);
     Value * fwCast(unsigned fw, Value * a);
     
+    inline llvm::Type * getSizeTy() {return Triple(llvm::sys::getProcessTriple()).isArch32Bit() ? getInt32Ty() : getInt64Ty();}
+    
 protected:
     Module * mMod;
     Type * mBitBlockType;
@@ -155,6 +160,7 @@ inline void IDISA_Builder::CreateBlockAlignedStore(Value * const value, Value * 
 inline void IDISA_Builder::CreateBlockAlignedStore(Value * const value, Value * const ptr, std::initializer_list<Value *> indicies) {
     CreateBlockAlignedStore(value, CreateGEP(ptr, indicies));
 }
+    
 
 }
 #endif // IDISA_BUILDER_H

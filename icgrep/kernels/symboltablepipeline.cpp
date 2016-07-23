@@ -238,7 +238,7 @@ void SymbolTableBuilder::generateGatherKernel(KernelBuilder * kBuilder, const st
     Value * const positionArray = kBuilder->getInternalState(gatherPositionArrayIdx);
 
     Value * blockPos = iBuilder->CreateLoad(kBuilder->getBlockNo());
-    blockPos = iBuilder->CreateMul(blockPos, iBuilder->getInt64(iBuilder->getBitBlockWidth()));
+    blockPos = iBuilder->CreateMul(blockPos, ConstantInt::get(iBuilder->getSizeTy(), iBuilder->getBitBlockWidth()));
 
     iBuilder->CreateBr(groupCond);
 
@@ -274,20 +274,20 @@ void SymbolTableBuilder::generateGatherKernel(KernelBuilder * kBuilder, const st
 
     // START OUTER COND
     iBuilder->SetInsertPoint(startOuterCond);
-    PHINode * startBlockOffset = iBuilder->CreatePHI(iBuilder->getInt64Ty(), 2);
+    PHINode * startBlockOffset = iBuilder->CreatePHI(iBuilder->getSizeTy(), 2);
     startBlockOffset->addIncoming(blockPos, groupBody);
     PHINode * startIndexPhi1 = iBuilder->CreatePHI(startIndex->getType(), 2, "startIndexPhi1");
     startIndexPhi1->addIncoming(startIndex, groupBody);
-    PHINode * startIV = iBuilder->CreatePHI(iBuilder->getInt64Ty(), 2);
-    startIV->addIncoming(iBuilder->getInt64(0), groupBody);
-    Value * startOuterTest = iBuilder->CreateICmpNE(startIV, iBuilder->getInt64(fieldCount));
+    PHINode * startIV = iBuilder->CreatePHI(iBuilder->getSizeTy(), 2);
+    startIV->addIncoming(ConstantInt::get(iBuilder->getSizeTy(), 0), groupBody);
+    Value * startOuterTest = iBuilder->CreateICmpNE(startIV, ConstantInt::get(iBuilder->getSizeTy(), fieldCount));
     iBuilder->CreateCondBr(startOuterTest, startOuterBody, endOuterCond);
 
     // START OUTER BODY
     iBuilder->SetInsertPoint(startOuterBody);
     Value * startField = iBuilder->CreateExtractElement(startStream, startIV);
-    startIV->addIncoming(iBuilder->CreateAdd(startIV, iBuilder->getInt64(1)), startInnerCond);
-    startBlockOffset->addIncoming(iBuilder->CreateAdd(startBlockOffset, iBuilder->getInt64(scanWordBitWidth)), startInnerCond);
+    startIV->addIncoming(iBuilder->CreateAdd(startIV, ConstantInt::get(iBuilder->getSizeTy(), 1)), startInnerCond);
+    startBlockOffset->addIncoming(iBuilder->CreateAdd(startBlockOffset, ConstantInt::get(iBuilder->getSizeTy(), scanWordBitWidth)), startInnerCond);
     iBuilder->CreateBr(startInnerCond);
 
     // START INNER COND
@@ -311,22 +311,22 @@ void SymbolTableBuilder::generateGatherKernel(KernelBuilder * kBuilder, const st
 
     // END POINT OUTER COND
     iBuilder->SetInsertPoint(endOuterCond);
-    PHINode * endBlockOffset = iBuilder->CreatePHI(iBuilder->getInt64Ty(), 2);
+    PHINode * endBlockOffset = iBuilder->CreatePHI(iBuilder->getSizeTy(), 2);
     endBlockOffset->addIncoming(blockPos, startOuterCond);
     PHINode * endIndexPhi1 = iBuilder->CreatePHI(endIndex->getType(), 2);
     endIndexPhi1->addIncoming(endIndex, startOuterCond);
     PHINode * startIndexPhi3 = iBuilder->CreatePHI(startIndex->getType(), 2, "startIndexPhi3");
     startIndexPhi3->addIncoming(startIndexPhi1, startOuterCond);
-    PHINode * endIV = iBuilder->CreatePHI(iBuilder->getInt64Ty(), 2);
-    endIV->addIncoming(iBuilder->getInt64(0), startOuterCond);
-    Value * endOuterTest = iBuilder->CreateICmpNE(endIV, iBuilder->getInt64(fieldCount));
+    PHINode * endIV = iBuilder->CreatePHI(iBuilder->getSizeTy(), 2);
+    endIV->addIncoming(ConstantInt::get(iBuilder->getSizeTy(), 0), startOuterCond);
+    Value * endOuterTest = iBuilder->CreateICmpNE(endIV, ConstantInt::get(iBuilder->getSizeTy(), fieldCount));
     iBuilder->CreateCondBr(endOuterTest, endOuterBody, nextGroup);
 
     // END POINT OUTER BODY
     iBuilder->SetInsertPoint(endOuterBody);
     Value * endField = iBuilder->CreateExtractElement(endStream, endIV);
-    endIV->addIncoming(iBuilder->CreateAdd(endIV, iBuilder->getInt64(1)), endInnerCond);
-    endBlockOffset->addIncoming(iBuilder->CreateAdd(endBlockOffset, iBuilder->getInt64(scanWordBitWidth)), endInnerCond);
+    endIV->addIncoming(iBuilder->CreateAdd(endIV, ConstantInt::get(iBuilder->getSizeTy(), 1)), endInnerCond);
+    endBlockOffset->addIncoming(iBuilder->CreateAdd(endBlockOffset, ConstantInt::get(iBuilder->getSizeTy(), scanWordBitWidth)), endInnerCond);
     iBuilder->CreateBr(endInnerCond);
 
     // END POINT INNER COND
@@ -444,7 +444,7 @@ Function * SymbolTableBuilder::generateGatherFunction(const unsigned minKeyLengt
 
         AllocaInst * const buffer = iBuilder->CreateAlloca(gatherVectorType, iBuilder->getInt32(maxCount * 4), "buffer");
         Value * end = iBuilder->CreateGEP(buffer, iBuilder->getInt32(maxCount * 4));
-        Value * size = iBuilder->CreateSub(iBuilder->CreatePtrToInt(end, iBuilder->getInt64Ty()), iBuilder->CreatePtrToInt(buffer, iBuilder->getInt64Ty()));
+        Value * size = iBuilder->CreateSub(iBuilder->CreatePtrToInt(end, iBuilder->getSizeTy()), iBuilder->CreatePtrToInt(buffer, iBuilder->getSizeTy()));
         iBuilder->CreateMemSet(buffer, iBuilder->getInt8(0), size, 4);
         Value * const transposed = iBuilder->CreateBitCast(buffer, transposedVectorType->getPointerTo(), "transposed");
 
@@ -644,7 +644,7 @@ void SymbolTableBuilder::createKernels() {
 
 Function * SymbolTableBuilder::ExecuteKernels(){
 
-    Type * intType = iBuilder->getInt64Ty();
+    Type * intType = iBuilder->getSizeTy();
 
     Type * inputType = PointerType::get(ArrayType::get(StructType::get(mMod->getContext(), std::vector<Type *>({ArrayType::get(mBitBlockType, 8)})), 1), 0);
     Function * const main = cast<Function>(mMod->getOrInsertFunction("Main", Type::getVoidTy(mMod->getContext()), inputType, intType, nullptr));
@@ -683,8 +683,8 @@ Function * SymbolTableBuilder::ExecuteKernels(){
 
     const unsigned leadingBlocks = (mLongestLookahead + iBuilder->getBitBlockWidth() - 1) / iBuilder->getBitBlockWidth();
 
-    Value * const requiredBytes = iBuilder->getInt64(mBlockSize * leadingBlocks);
-    Value * const blockSize = iBuilder->getInt64(mBlockSize);
+    Value * const requiredBytes = ConstantInt::get(iBuilder->getSizeTy(), mBlockSize * leadingBlocks);
+    Value * const blockSize = ConstantInt::get(iBuilder->getSizeTy(), mBlockSize);
 
     // First compute any necessary leading blocks to allow the sorting kernel access to the "future" data produced by
     // the leading kernel ...
@@ -731,7 +731,7 @@ Function * SymbolTableBuilder::ExecuteKernels(){
     PHINode * remainingBytes3 = iBuilder->CreatePHI(intType, 3);
     remainingBytes3->addIncoming(bufferSize, partialLeadingCond);
     remainingBytes3->addIncoming(remainingBytes2, regularCondBlock);
-    Value * partialBlockCond = iBuilder->CreateICmpSGT(remainingBytes3, iBuilder->getInt64(0));
+    Value * partialBlockCond = iBuilder->CreateICmpSGT(remainingBytes3, ConstantInt::get(iBuilder->getSizeTy(), 0));
     iBuilder->CreateCondBr(partialBlockCond, partialBodyBlock, flushLengthGroupsBlock);
 
     // If we do, process it and mask out the data

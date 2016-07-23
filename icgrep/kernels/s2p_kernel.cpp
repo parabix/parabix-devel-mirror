@@ -137,7 +137,7 @@ void s2pKernel::generateFinalBlockMethod() {
     BasicBlock * finalEmptyBlock = BasicBlock::Create(iBuilder->getContext(), "empty", finalBlockFunction, 0);
     BasicBlock * exitBlock = BasicBlock::Create(iBuilder->getContext(), "exit", finalBlockFunction, 0);
     
-    Value * emptyBlockCond = iBuilder->CreateICmpEQ(remainingBytes, ConstantInt::get(iBuilder->getInt64Ty(), 0));
+    Value * emptyBlockCond = iBuilder->CreateICmpEQ(remainingBytes, ConstantInt::get(iBuilder->getSizeTy(), 0));
     iBuilder->CreateCondBr(emptyBlockCond, finalEmptyBlock, finalPartialBlock);
     iBuilder->SetInsertPoint(finalPartialBlock);
     iBuilder->CreateCall(doBlockFunction, {self});

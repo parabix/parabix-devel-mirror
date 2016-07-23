@@ -81,7 +81,7 @@ static cl::alias ShowLineNumbersLong("line-number", cl::desc("Alias for -n"), cl
 
 bool isUTF_16 = false;
 
-void GrepEngine::doGrep(const std::string & fileName, const int fileIdx, bool CountOnly, std::vector<uint64_t> & total_CountOnly, bool UTF_16) {
+void GrepEngine::doGrep(const std::string & fileName, const int fileIdx, bool CountOnly, std::vector<size_t> & total_CountOnly, bool UTF_16) {
     boost::filesystem::path file(fileName);
     if (exists(file)) {
         if (is_directory(file)) {
@@ -108,7 +108,7 @@ void GrepEngine::doGrep(const std::string & fileName, const int fileIdx, bool Co
         }
     } else {
         if (CountOnly) {
-            mGrepFunction_CountOnly(nullptr, 0, fileIdx);
+            total_CountOnly[fileIdx] = mGrepFunction_CountOnly(nullptr, 0, fileIdx);
         } else {
             mGrepFunction(nullptr, 0, fileIdx);
         }
@@ -133,11 +133,11 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool Count
     Encoding encoding(type, bits);
     mIsNameExpression = isNameExpression;
 
-    Type * const int64ty = iBuilder->getInt64Ty();
+    Type * const size_ty = iBuilder->getSizeTy();
     Type * const int8PtrTy = iBuilder->getInt8PtrTy();
     Type * const inputType = PointerType::get(ArrayType::get(ArrayType::get(iBuilder->getBitBlockType(), (UTF_16 ? 16 : 8)), 1), 0);
-    Type * const resultTy = CountOnly ? int64ty : iBuilder->getVoidTy();
-    Function * const mainFn = cast<Function>(M->getOrInsertFunction("Main", resultTy, inputType, int64ty, int64ty, nullptr));
+    Type * const resultTy = CountOnly ? size_ty : iBuilder->getVoidTy();
+    Function * const mainFn = cast<Function>(M->getOrInsertFunction("Main", resultTy, inputType, size_ty, size_ty, nullptr));
     mainFn->setCallingConv(CallingConv::C);
     iBuilder->SetInsertPoint(BasicBlock::Create(M->getContext(), "entry", mainFn, 0));
     Function::arg_iterator args = mainFn->arg_begin();
@@ -176,7 +176,7 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool Count
         iBuilder->CreateRet(matchCount);
     }
     else {
-        kernel::scanMatchKernel scanMatchK(iBuilder, MatchResults, 64, false);
+        kernel::scanMatchKernel scanMatchK(iBuilder, MatchResults, false);
         scanMatchK.generateKernel();
                 
         Value * scanMatchInstance = scanMatchK.createInstance({iBuilder->CreateBitCast(inputStream, int8PtrTy), fileSize, fileIdx}, {&MatchResults}, {});
@@ -241,7 +241,7 @@ void initResult(std::vector<std::string> filenames){
 }
 
 extern "C" {
-    void wrapped_report_match(uint64_t lineNum, uint64_t line_start, uint64_t line_end, const char * buffer, uint64_t filesize, int fileIdx) {
+    void wrapped_report_match(size_t lineNum, size_t line_start, size_t line_end, const char * buffer, size_t filesize, int fileIdx) {
         int index = isUTF_16 ? 2 : 1;
         int idx = fileIdx;
           
@@ -301,7 +301,7 @@ extern "C" {
     }
 }
 
-void PrintResult(bool CountOnly, std::vector<uint64_t> & total_CountOnly){
+void PrintResult(bool CountOnly, std::vector<size_t> & total_CountOnly){
     if(CountOnly){
         if (!ShowFileNames) {
             for (unsigned i = 0; i < inputFiles.size(); ++i){
@@ -324,7 +324,7 @@ void PrintResult(bool CountOnly, std::vector<uint64_t> & total_CountOnly){
 re::CC * parsedCodePointSet;
 
 extern "C" {
-    void insert_codepoints(uint64_t lineNum, uint64_t line_start, uint64_t line_end, const char * buffer) {
+    void insert_codepoints(size_t lineNum, size_t line_start, size_t line_end, const char * buffer) {
         re::codepoint_t c = 0;
         ssize_t line_pos = line_start;
         while (isxdigit(buffer[line_pos])) {

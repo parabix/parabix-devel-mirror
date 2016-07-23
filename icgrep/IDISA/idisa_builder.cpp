@@ -82,7 +82,7 @@ void IDISA_Builder::CallPrintRegister(const std::string & name, Value * const va
 void IDISA_Builder::CallPrintInt(const std::string & name, Value * const value) {
     Constant * printRegister = mMod->getFunction("PrintInt");
     if (LLVM_UNLIKELY(printRegister == nullptr)) {
-        FunctionType *FT = FunctionType::get(getVoidTy(), { PointerType::get(getInt8Ty(), 0), getInt64Ty() }, false);
+        FunctionType *FT = FunctionType::get(getVoidTy(), { PointerType::get(getInt8Ty(), 0), getSizeTy() }, false);
         Function * function = Function::Create(FT, Function::InternalLinkage, "PrintInt", mMod);
         auto arg = function->arg_begin();
         std::string out = "%-40s = %" PRIx64 "\n";
@@ -103,9 +103,9 @@ void IDISA_Builder::CallPrintInt(const std::string & name, Value * const value) 
     }
     Value * num = nullptr;
     if (value->getType()->isPointerTy()) {
-        num = CreatePtrToInt(value, getInt64Ty());
+        num = CreatePtrToInt(value, getSizeTy());
     } else {
-        num = CreateZExtOrBitCast(value, getInt64Ty());
+        num = CreateZExtOrBitCast(value, getSizeTy());
     }
     assert (num->getType()->isIntegerTy());
     CreateCall(printRegister, {CreateGlobalStringPtr(name.c_str()), num});

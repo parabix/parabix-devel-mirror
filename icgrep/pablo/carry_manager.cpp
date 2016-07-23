@@ -43,9 +43,9 @@ void CarryManager::initializeCodeGen(PabloKernel * const kBuilder, Value * selfP
     mKernelBuilder = kBuilder;
     mSelf = selfPtr;
     
-    Value * cdArrayPtr = iBuilder->CreateGEP(mSelf, {iBuilder->getInt64(0), mKernelBuilder->getScalarIndex("carries")});
+    Value * cdArrayPtr = iBuilder->CreateGEP(mSelf, {ConstantInt::get(iBuilder->getSizeTy(), 0), mKernelBuilder->getScalarIndex("carries")});
 #ifndef NDEBUG
-    iBuilder->CallPrintInt("cdArrayPtr", iBuilder->CreatePtrToInt(cdArrayPtr, iBuilder->getInt64Ty()));
+    iBuilder->CallPrintInt("cdArrayPtr", iBuilder->CreatePtrToInt(cdArrayPtr, iBuilder->getSizeTy()));
 #endif
     mCarryPackBasePtr = iBuilder->CreateBitCast(cdArrayPtr, PointerType::get(mCarryPackType, 0));
     mCarryBitBlockPtr = iBuilder->CreateBitCast(cdArrayPtr, PointerType::get(mBitBlockType, 0));
@@ -178,7 +178,7 @@ Value * CarryManager::shortAdvanceCarryInCarryOut(const unsigned index, const un
  * @brief longAdvanceCarryInCarryOut
  ** ------------------------------------------------------------------------------------------------------------- */
 Value * CarryManager::longAdvanceCarryInCarryOut(const unsigned index, const unsigned shiftAmount, Value * const value) {
-    Value * advBaseIndex = iBuilder->getInt64(index);
+    Value * advBaseIndex = ConstantInt::get(iBuilder->getSizeTy(), index);
     if (shiftAmount <= mBitBlockWidth) {
         // special case using a single buffer entry and the carry_out value.
         Value * advanceDataPtr = iBuilder->CreateGEP(mCarryBitBlockPtr, advBaseIndex);
@@ -196,9 +196,9 @@ Value * CarryManager::longAdvanceCarryInCarryOut(const unsigned index, const uns
     const unsigned block_shift = shiftAmount % mBitBlockWidth;
     const unsigned advanceEntries = mCarryInfo->longAdvanceEntries(shiftAmount);
     const unsigned bufsize = mCarryInfo->longAdvanceBufferSize(shiftAmount);
-    Value * indexMask = iBuilder->getInt64(bufsize - 1);  // A mask to implement circular buffer indexing
+    Value * indexMask = ConstantInt::get(iBuilder->getSizeTy(), bufsize - 1);  // A mask to implement circular buffer indexing
     Value * blockIndex = mKernelBuilder->getScalarField(mSelf, blockNoScalar);
-    Value * loadIndex0 = iBuilder->CreateAdd(iBuilder->CreateAnd(iBuilder->CreateSub(blockIndex, iBuilder->getInt64(advanceEntries)), indexMask), advBaseIndex);
+    Value * loadIndex0 = iBuilder->CreateAdd(iBuilder->CreateAnd(iBuilder->CreateSub(blockIndex, ConstantInt::get(iBuilder->getSizeTy(), advanceEntries)), indexMask), advBaseIndex);
     Value * storeIndex = iBuilder->CreateAdd(iBuilder->CreateAnd(blockIndex, indexMask), advBaseIndex);
     Value * carry_block0 = iBuilder->CreateBlockAlignedLoad(iBuilder->CreateGEP(mCarryBitBlockPtr, loadIndex0));
     // If the long advance is an exact multiple of mBITBLOCK_WIDTH, we simply return the oldest 
@@ -208,7 +208,7 @@ Value * CarryManager::longAdvanceCarryInCarryOut(const unsigned index, const uns
         return carry_block0;
     }
     // Otherwise we need to combine data from the two oldest blocks.
-    Value * loadIndex1 = iBuilder->CreateAdd(iBuilder->CreateAnd(iBuilder->CreateSub(blockIndex, iBuilder->getInt64(advanceEntries-1)), indexMask), advBaseIndex);
+    Value * loadIndex1 = iBuilder->CreateAdd(iBuilder->CreateAnd(iBuilder->CreateSub(blockIndex, ConstantInt::get(iBuilder->getSizeTy(), advanceEntries-1)), indexMask), advBaseIndex);
     Value * carry_block1 = iBuilder->CreateBlockAlignedLoad(iBuilder->CreateGEP(mCarryBitBlockPtr, loadIndex1));
     Value* block0_shr = iBuilder->CreateLShr(iBuilder->CreateBitCast(carry_block0, iBuilder->getIntNTy(mBitBlockWidth)), mBitBlockWidth - block_shift);
     Value* block1_shl = iBuilder->CreateShl(iBuilder->CreateBitCast(carry_block1, iBuilder->getIntNTy(mBitBlockWidth)), block_shift);
@@ -476,7 +476,7 @@ return_result:
 Value * CarryManager::getCarryPack(const unsigned packIndex) {
     assert (packIndex < mCarryInPack.size());
     if (mCarryInPack[packIndex] == nullptr) {
-        Value * const packPtr = iBuilder->CreateGEP(mCarryPackBasePtr, iBuilder->getInt64(packIndex));
+        Value * const packPtr = iBuilder->CreateGEP(mCarryPackBasePtr, ConstantInt::get(iBuilder->getSizeTy(), packIndex));
         assert (packIndex < mCarryPackPtr.size());
         mCarryPackPtr[packIndex] = packPtr;
         mCarryInPack[packIndex] = iBuilder->CreateBlockAlignedLoad(packPtr);

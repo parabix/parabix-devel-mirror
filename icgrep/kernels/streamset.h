@@ -35,7 +35,7 @@ public:
     
     llvm::Type * getStreamSetBlockType();
 
-    virtual uint64_t getBufferSize() = 0;
+    virtual size_t getBufferSize() = 0;
     
     virtual llvm::Value * allocateBuffer() = 0;
     
@@ -53,7 +53,7 @@ protected:
     const BufferKind       mBufferKind;
     IDISA::IDISA_Builder * iBuilder;
     StreamSetType mStreamSetType;
-    uint64_t mBufferBlocks;
+    size_t mBufferBlocks;
     int mAddrSpace;
     llvm::Value * mStreamSetBufferPtr;
 
@@ -67,7 +67,7 @@ public:
     SingleBlockBuffer(IDISA::IDISA_Builder * b, StreamSetType ss_type) :
     StreamSetBuffer(BufferKind::BlockBuffer, b, ss_type) {}
     
-    uint64_t getBufferSize() override;
+    size_t getBufferSize() override;
     llvm::Value * allocateBuffer() override;
     llvm::Value * getStreamSetBlockPointer(llvm::Value * bufferBasePtr, llvm::Value * blockNo) override;
 };
@@ -83,7 +83,7 @@ public:
     
     void setStreamSetBuffer(llvm::Value * ptr) {mStreamSetBufferPtr = ptr;}
     
-    uint64_t getBufferSize() override;
+    size_t getBufferSize() override;
     // Can't allocate - raise an error. */
     llvm::Value * allocateBuffer() override;
     llvm::Value * getStreamSetBlockPointer(llvm::Value * bufferBasePtr, llvm::Value * blockNo) override;
@@ -93,7 +93,7 @@ class CircularBuffer : public StreamSetBuffer {
 public:
     static inline bool classof(const StreamSetBuffer * b) {return b->getBufferKind() == BufferKind::CircularBuffer;}
   
-    CircularBuffer(IDISA::IDISA_Builder * b, StreamSetType ss_type, uint64_t bufferBlocks) :
+    CircularBuffer(IDISA::IDISA_Builder * b, StreamSetType ss_type, size_t bufferBlocks) :
         StreamSetBuffer(BufferKind::CircularBuffer, b, ss_type) {
             mBufferBlocks = bufferBlocks;
             if (((bufferBlocks - 1) & bufferBlocks) != 0) {
@@ -101,7 +101,7 @@ public:
             }
         }
 
-    uint64_t getBufferSize() override;
+    size_t getBufferSize() override;
     llvm::Value * allocateBuffer() override;
     llvm::Value * getStreamSetBlockPointer(llvm::Value * bufferBasePtr, llvm::Value * blockNo) override;
 };

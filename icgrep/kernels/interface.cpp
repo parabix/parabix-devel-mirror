@@ -52,7 +52,7 @@ void KernelInterface::addKernelDeclarations(Module * client) {
     // Create the doBlock and finalBlock function prototypes
     
     std::vector<Type *> doBlockParameters = {selfType};
-    std::vector<Type *> finalBlockParameters = {selfType, iBuilder->getInt64Ty()};
+    std::vector<Type *> finalBlockParameters = {selfType, iBuilder->getSizeTy()};
     /*
     for (auto inputSet : mStreamSetInputs) {
         Type * inputSetParmType = PointerType::getUnqual(inputSet.ssType.getStreamSetBlockType(iBuilder));
@@ -108,7 +108,7 @@ void KernelInterface::addKernelDeclarations(Module * client) {
     }
     */
     // Create the doSegment function prototype.
-    std::vector<Type *> doSegmentParameters = {selfType, iBuilder->getInt64Ty()};
+    std::vector<Type *> doSegmentParameters = {selfType, iBuilder->getSizeTy()};
     FunctionType * doSegmentFunctionType = FunctionType::get(mDoBlockReturnType, doSegmentParameters, false);
     std::string doSegmentName = mKernelName + doSegment_suffix;
     Function * doSegmentFn = Function::Create(doSegmentFunctionType, GlobalValue::ExternalLinkage, doSegmentName, client);

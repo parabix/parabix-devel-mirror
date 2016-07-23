@@ -38,7 +38,7 @@ void stdOutKernel::generateDoBlockMethod() {
 
     Value * self = getParameter(doBlockFunction, "self");
     Value * blockNo = getScalarField(self, blockNoScalar);
-    Value * inputStreamBlock = getCircularBufferBlockPointer(self, "inputStreamSet", blockNo);
+    Value * inputStreamBlock = getStreamSetBlockPtr(self, "inputStreamSet", blockNo);
 
     Value * bufferPtr = getScalarField(self, "bufferPtr");
     Value * bufferFinalBlockPtr = getScalarField(self, "bufferFinalBlockPtr");

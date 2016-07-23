@@ -36,7 +36,7 @@ void KernelBuilder::setDoBlockReturnType(llvm::Type * t) {
 
 void KernelBuilder::prepareKernel() {
     if (!mDoBlockReturnType) mDoBlockReturnType = iBuilder->getVoidTy();
-    addScalar(iBuilder->getInt64Ty(), blockNoScalar);
+    addScalar(iBuilder->getSizeTy(), blockNoScalar);
     int streamSetNo = 0;
     for (auto sSet : mStreamSetInputs) {
         mScalarInputs.push_back(ScalarBinding{PointerType::get(sSet.ssType.getStreamSetBlockType(), 0), sSet.ssName + basePtrSuffix});
@@ -153,23 +153,23 @@ void KernelBuilder::generateDoSegmentMethod() {
     
     iBuilder->SetInsertPoint(blockLoop);
     if (mDoBlockReturnType->isVoidTy()) {
-        PHINode * blocksRemaining = iBuilder->CreatePHI(iBuilder->getInt64Ty(), 2, "blocksRemaining");
+        PHINode * blocksRemaining = iBuilder->CreatePHI(iBuilder->getSizeTy(), 2, "blocksRemaining");
         blocksRemaining->addIncoming(blocksToDo, entryBlock);
         
         Value * blockNo = getScalarField(self, blockNoScalar);
         
         iBuilder->CreateCall(doBlockFunction, {self});
-        setScalarField(self, blockNoScalar, iBuilder->CreateAdd(blockNo, iBuilder->getInt64(1)));
-        blocksToDo = iBuilder->CreateSub(blocksRemaining, iBuilder->getInt64(1));
+        setScalarField(self, blockNoScalar, iBuilder->CreateAdd(blockNo, ConstantInt::get(iBuilder->getSizeTy(), 1)));
+        blocksToDo = iBuilder->CreateSub(blocksRemaining, ConstantInt::get(iBuilder->getSizeTy(), 1));
         blocksRemaining->addIncoming(blocksToDo, blockLoop);
-        Value * notDone = iBuilder->CreateICmpUGT(blocksToDo, iBuilder->getInt64(0));
+        Value * notDone = iBuilder->CreateICmpUGT(blocksToDo, ConstantInt::get(iBuilder->getSizeTy(), 0));
         iBuilder->CreateCondBr(notDone, blockLoop, blocksDone);
         
         iBuilder->SetInsertPoint(blocksDone);
         iBuilder->CreateRetVoid();
     }
     else {
-        PHINode * blocksRemaining = iBuilder->CreatePHI(iBuilder->getInt64Ty(), 2, "blocksRemaining");
+        PHINode * blocksRemaining = iBuilder->CreatePHI(iBuilder->getSizeTy(), 2, "blocksRemaining");
         blocksRemaining->addIncoming(blocksToDo, entryBlock);
         PHINode * total = iBuilder->CreatePHI(mDoBlockReturnType, 2, "resultTotal");
         total->addIncoming(ConstantInt::getNullValue(mDoBlockReturnType), entryBlock);
@@ -178,10 +178,10 @@ void KernelBuilder::generateDoSegmentMethod() {
         std::vector<Value *> doBlockArgs = {self};
         
         Value * rslt = iBuilder->CreateCall(doBlockFunction, {self});
-        setScalarField(self, blockNoScalar, iBuilder->CreateAdd(blockNo, iBuilder->getInt64(1)));
-        blocksToDo = iBuilder->CreateSub(blocksRemaining, iBuilder->getInt64(1));
+        setScalarField(self, blockNoScalar, iBuilder->CreateAdd(blockNo, ConstantInt::get(iBuilder->getSizeTy(), 1)));
+        blocksToDo = iBuilder->CreateSub(blocksRemaining, ConstantInt::get(iBuilder->getSizeTy(), 1));
         blocksRemaining->addIncoming(blocksToDo, blockLoop);
-        Value * notDone = iBuilder->CreateICmpUGT(blocksToDo, iBuilder->getInt64(0));
+        Value * notDone = iBuilder->CreateICmpUGT(blocksToDo, ConstantInt::get(iBuilder->getSizeTy(), 0));
         Value * totalSoFar = iBuilder->CreateAdd(total, rslt);
         total->addIncoming(totalSoFar, blockLoop);
         iBuilder->CreateCondBr(notDone, blockLoop, blocksDone);

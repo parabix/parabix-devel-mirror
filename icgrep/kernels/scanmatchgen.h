@@ -7,6 +7,8 @@
 
 #include "streamset.h"
 #include "kernel.h"
+#include <llvm/Support/Host.h>
+#include <llvm/ADT/Triple.h>
 
 namespace llvm { class Module; class Function;}
 
@@ -16,15 +18,15 @@ namespace kernel {
     
 class scanMatchKernel : public KernelBuilder {
 public:
-    scanMatchKernel(IDISA::IDISA_Builder * iBuilder, parabix::StreamSetBuffer& matchResults, unsigned scanwordBitWidth, bool isNameExpression) :
+    scanMatchKernel(IDISA::IDISA_Builder * iBuilder, parabix::StreamSetBuffer& matchResults, bool isNameExpression) :
     KernelBuilder(iBuilder, "scanMatch",
                   {StreamSetBinding{matchResults, "matchResults"}}, 
                     {}, 
-                    {ScalarBinding{iBuilder->getInt8PtrTy(), "FileBuf"}, ScalarBinding{iBuilder->getInt64Ty(), "FileSize"}, ScalarBinding{iBuilder->getInt64Ty(), "FileIdx"}}, 
+                    {ScalarBinding{iBuilder->getInt8PtrTy(), "FileBuf"}, ScalarBinding{iBuilder->getSizeTy(), "FileSize"}, ScalarBinding{iBuilder->getSizeTy(), "FileIdx"}}, 
                     {}, 
-                    {ScalarBinding{iBuilder->getInt64Ty(), "BlockNo"}, ScalarBinding{iBuilder->getInt64Ty(), "LineStart"}, ScalarBinding{iBuilder->getInt64Ty(), "LineNum"}}),
+                    {ScalarBinding{iBuilder->getSizeTy(), "BlockNo"}, ScalarBinding{iBuilder->getSizeTy(), "LineStart"}, ScalarBinding{iBuilder->getSizeTy(), "LineNum"}}),
 
-    mScanwordBitWidth(scanwordBitWidth),
+    mScanwordBitWidth(Triple(llvm::sys::getProcessTriple()).isArch32Bit() ? 32 : 64),
     mIsNameExpression(isNameExpression) {}
         
 private:

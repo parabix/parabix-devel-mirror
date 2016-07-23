@@ -24,7 +24,7 @@ void generatePipelineLoop(IDISA::IDISA_Builder * iBuilder, std::vector<KernelBui
     Function * main = entryBlock->getParent();
         
     const unsigned segmentSize = codegen::SegmentSize;
-    Type * const int64ty = iBuilder->getInt64Ty();
+    Type * const size_ty = iBuilder->getSizeTy();
 
     // Create the basic blocks for the loop.
     BasicBlock * segmentCondBlock = nullptr;
@@ -46,17 +46,17 @@ void generatePipelineLoop(IDISA::IDISA_Builder * iBuilder, std::vector<KernelBui
     if (segmentSize > 1) {
         iBuilder->CreateBr(segmentCondBlock);
         iBuilder->SetInsertPoint(segmentCondBlock);
-        PHINode * remainingBytes = iBuilder->CreatePHI(int64ty, 2, "remainingBytes");
+        PHINode * remainingBytes = iBuilder->CreatePHI(size_ty, 2, "remainingBytes");
         remainingBytes->addIncoming(fileSize, entryBlock);
-        PHINode * blockNo = iBuilder->CreatePHI(int64ty, 2, "blockNo");
-        blockNo->addIncoming(iBuilder->getInt64(0), entryBlock);
+        PHINode * blockNo = iBuilder->CreatePHI(size_ty, 2, "blockNo");
+        blockNo->addIncoming(ConstantInt::get(size_ty, 0), entryBlock);
         
-        Constant * const step = ConstantInt::get(int64ty, iBuilder->getBitBlockWidth() * segmentSize);
+        Constant * const step = ConstantInt::get(size_ty, iBuilder->getBitBlockWidth() * segmentSize);
         Value * segmentCondTest = iBuilder->CreateICmpULT(remainingBytes, step);
         iBuilder->CreateCondBr(segmentCondTest, fullCondBlock, segmentBodyBlock);
         
         iBuilder->SetInsertPoint(segmentBodyBlock);
-        Value * segBlocks = ConstantInt::get(int64ty, segmentSize);
+        Value * segBlocks = ConstantInt::get(size_ty, segmentSize);
         Value * rslt = kernels[0]->createDoSegmentCall(instances[0], segBlocks);
         for (unsigned i = 1; i < kernels.size(); i++) {
             rslt = kernels[i]->createDoSegmentCall(instances[i], rslt->getType()->isVoidTy() ? segBlocks : rslt);
@@ -70,30 +70,30 @@ void generatePipelineLoop(IDISA::IDISA_Builder * iBuilder, std::vector<KernelBui
         initialBlock = segmentCondBlock;
     } else {
         initialBufferSize = fileSize;
-        initialBlockNo = ConstantInt::get(int64ty, 0);
+        initialBlockNo = ConstantInt::get(size_ty, 0);
         initialBlock = entryBlock;
         iBuilder->CreateBr(fullCondBlock);
     }
     
     iBuilder->SetInsertPoint(fullCondBlock);
-    PHINode * remainingBytes = iBuilder->CreatePHI(int64ty, 2, "remainingBytes");
+    PHINode * remainingBytes = iBuilder->CreatePHI(size_ty, 2, "remainingBytes");
     remainingBytes->addIncoming(initialBufferSize, initialBlock);
-    PHINode * blockNo = iBuilder->CreatePHI(int64ty, 2, "blockNo");
+    PHINode * blockNo = iBuilder->CreatePHI(size_ty, 2, "blockNo");
     blockNo->addIncoming(initialBlockNo, initialBlock);
     
-    Constant * const step = ConstantInt::get(int64ty, iBuilder->getBitBlockWidth());
+    Constant * const step = ConstantInt::get(size_ty, iBuilder->getBitBlockWidth());
     Value * fullCondTest = iBuilder->CreateICmpULT(remainingBytes, step);
     iBuilder->CreateCondBr(fullCondTest, finalBlock, fullBodyBlock);
     
     // Full Block Pipeline loop
     iBuilder->SetInsertPoint(fullBodyBlock);
-    rslt = kernels[0]->createDoSegmentCall(instances[0], ConstantInt::get(int64ty, 1));
+    rslt = kernels[0]->createDoSegmentCall(instances[0], ConstantInt::get(size_ty, 1));
     for (unsigned i = 1; i < kernels.size(); i++) {
-        rslt = kernels[i]->createDoSegmentCall(instances[i], rslt->getType()->isVoidTy() ? ConstantInt::get(int64ty, 1) : rslt);
+        rslt = kernels[i]->createDoSegmentCall(instances[i], rslt->getType()->isVoidTy() ? ConstantInt::get(size_ty, 1) : rslt);
     }
     
     remainingBytes->addIncoming(iBuilder->CreateSub(remainingBytes, step), fullBodyBlock);
-    blockNo->addIncoming(iBuilder->CreateAdd(blockNo, iBuilder->getInt64(1)), fullBodyBlock);
+    blockNo->addIncoming(iBuilder->CreateAdd(blockNo, ConstantInt::get(size_ty, 1)), fullBodyBlock);
     iBuilder->CreateBr(fullCondBlock);
     
     iBuilder->SetInsertPoint(finalBlock);

@@ -52,7 +52,7 @@ PabloKernel::PabloKernel(IDISA::IDISA_Builder * builder,
 
 std::vector<ScalarBinding> PabloKernel::accumBindings(std::vector<std::string> accum_names) {
     std::vector<ScalarBinding> vec;
-    Type * accum_t = iBuilder->getInt64Ty();
+    Type * accum_t = iBuilder->getSizeTy();
     for (auto a : accum_names) {
         vec.push_back(ScalarBinding{accum_t, a});
         addScalar(accum_t, a);
