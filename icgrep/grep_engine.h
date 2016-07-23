@@ -27,7 +27,7 @@ public:
   
     void grepCodeGen(std::string moduleName, re::RE * re_ast, bool CountOnly, bool UTF_16 = false, bool isNameExpression = false);
     
-    void doGrep(const std::string & fileName, const int fileIdx, bool CountOnly, std::vector<uint64_t> &total_CountOnly, bool UTF_16);
+    void doGrep(const std::string & fileName, const int fileIdx, bool CountOnly, std::vector<size_t> &total_CountOnly, bool UTF_16);
     
     re::CC *  grepCodepoints();
     
@@ -47,6 +47,6 @@ re::CC * getParsedCodePointSet();
 void setParsedCodePointSet();
 
 void initResult(std::vector<std::string> filenames);
-void PrintResult(bool CountOnly, std::vector<uint64_t> & total_CountOnly);
+void PrintResult(bool CountOnly, std::vector<size_t> & total_CountOnly);
 
 #endif

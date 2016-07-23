@@ -96,7 +96,7 @@ std::string sha1sum(const std::string & str) {
     return std::string(buffer);
 }
 
-std::vector<uint64_t> total_CountOnly;
+std::vector<size_t> total_CountOnly;
 std::mutex count_mutex;
 size_t fileCount;
 void *DoGrep(void *args)
