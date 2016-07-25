@@ -21,6 +21,8 @@ extern int SegmentSize;  // set from command line
 
 }
 
+bool AVX2_available();
+
 llvm::ExecutionEngine * JIT_to_ExecutionEngine (llvm::Module * m);
 
 void ApplyObjectCache(llvm::ExecutionEngine * e);

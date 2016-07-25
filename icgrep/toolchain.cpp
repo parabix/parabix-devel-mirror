@@ -24,8 +24,6 @@
 #include <llvm/Support/Host.h>
 #include <llvm/Support/raw_ostream.h>
 
-#include <util/ispc.h>
-
 #include <object_cache.h>
 
 using namespace llvm;
@@ -71,6 +69,16 @@ void setAllFeatures(EngineBuilder &builder) {
         builder.setMAttrs(attrs);
     }
 }
+
+bool AVX2_available() {
+    llvm::StringMap<bool> HostCPUFeatures;
+    if (llvm::sys::getHostCPUFeatures(HostCPUFeatures)) {
+        auto f = HostCPUFeatures.find("avx2");
+        return ((f != HostCPUFeatures.end()) && f->second);
+    }
+    return false;
+}
+
 
 void WriteAssembly (llvm::TargetMachine *TM, Module * m) {
     llvm::legacy::PassManager PM;

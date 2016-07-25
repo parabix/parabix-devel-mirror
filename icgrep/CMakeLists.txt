@@ -72,7 +72,7 @@ add_library(RegExpCompiler re/re_parser.cpp re/parsefailure.cpp re/re_nullable.c
 add_library(CCADT cc/cc_compiler.cpp utf8_encoder.cpp utf16_encoder.cpp UCD/CaseFolding_txt.cpp)
 add_library(UCDlib UCD/unicode_set.cpp UCD/ucd_compiler.cpp UCD/PropertyObjects.cpp UCD/resolve_properties.cpp UCD/UnicodeNameData.cpp)
 
-add_library(CodeGen object_cache.cpp util/ispc.cpp ${IDISA_SRC})
+add_library(CodeGen object_cache.cpp ${IDISA_SRC})
 
 # add the executable
 target_link_libraries (PabloADT CodeGen ${REQ_LLVM_LIBRARIES})

@@ -8,16 +8,12 @@
 #include <IDISA/idisa_sse_builder.h>
 #include <IDISA/idisa_i64_builder.h>
 
-// Dynamic processor detection
-//#define ISPC_LLVM_VERSION ISPC_LLVM_3_6
-#include <util/ispc.h>
-
 namespace IDISA {
     
 
 
 IDISA_Builder * GetIDISA_Builder(Module * mod) {
-    bool hasAVX2 = (strncmp(lGetSystemISA(), "avx2", 4) == 0);
+    bool hasAVX2 = AVX2_available();
     unsigned theBlockSize = codegen::BlockSize;  // from command line
     
     if (theBlockSize == 0) {  // No BlockSize override: use processor SIMD width
