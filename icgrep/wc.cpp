@@ -157,12 +157,12 @@ Function * wcPipeline(Module * mMod, IDISA::IDISA_Builder * iBuilder, pablo::Pab
     wck.addKernelDeclarations(mMod);
 
     Constant * record_counts_routine;
-    Type * const int64ty = iBuilder->getInt64Ty();
+    Type * const size_ty = iBuilder->getSizeTy();
     Type * const voidTy = Type::getVoidTy(mMod->getContext());
-    record_counts_routine = mMod->getOrInsertFunction("record_counts", voidTy, int64ty, int64ty, int64ty, int64ty, int64ty, nullptr);
+    record_counts_routine = mMod->getOrInsertFunction("record_counts", voidTy, size_ty, size_ty, size_ty, size_ty, size_ty, nullptr);
     Type * const inputType = PointerType::get(ArrayType::get(ArrayType::get(mBitBlockType, 8), 1), 0);
     
-    Function * const main = cast<Function>(mMod->getOrInsertFunction("Main", voidTy, inputType, int64ty, int64ty, nullptr));
+    Function * const main = cast<Function>(mMod->getOrInsertFunction("Main", voidTy, inputType, size_ty, size_ty, nullptr));
     main->setCallingConv(CallingConv::C);
     Function::arg_iterator args = main->arg_begin();
     

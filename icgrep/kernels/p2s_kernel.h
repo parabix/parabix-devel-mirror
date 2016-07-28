@@ -15,13 +15,6 @@ namespace IDISA { class IDISA_Builder; }
 
 namespace kernel {
 
-
-//    void generateP2SKernel(llvm::Module *, IDISA::IDISA_Builder * iBuilder, KernelBuilder * kBuilder);
-
-//    void generateP2S_16Kernel(llvm::Module *, IDISA::IDISA_Builder * iBuilder, KernelBuilder * kBuilder);
-
-//    void generateP2S_16_withCompressedOutputKernel(llvm::Module *, IDISA::IDISA_Builder * iBuilder, KernelBuilder * kBuilder);
-    
    
 class p2sKernel : public KernelBuilder {
 public:
@@ -70,11 +63,14 @@ public:
     KernelBuilder(iBuilder, "p2s_16_compress",
                   {StreamSetBinding{basisBits, "basisBits"}, StreamSetBinding{deletionCounts, "deletionCounts"}},
                   {StreamSetBinding{i16Stream, "i16Stream"}},
-                  {}, {}, {}) {}
+                  {},
+                  {},
+                  {ScalarBinding{iBuilder->getSizeTy(), "unitsGenerated"}, ScalarBinding{iBuilder->getSizeTy(), "unitsWritten"}}) {}
         
 private:
     void prepareKernel() override;
     void generateDoBlockMethod() override;
+    void generateFinalBlockMethod() override;
 };
     
 }

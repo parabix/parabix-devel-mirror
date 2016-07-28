@@ -96,7 +96,8 @@ protected:
     unsigned getStreamSetIndex(std::string ssName);
     
     llvm::Value * getStreamSetBasePtr(Value * self, std::string ssName);
-    
+    size_t getStreamSetBufferSize(Value * self, std::string ssName);
+
     llvm::Value * getStreamSetBlockPtr(Value * self, std::string ssName, Value * blockNo);
         
 protected:

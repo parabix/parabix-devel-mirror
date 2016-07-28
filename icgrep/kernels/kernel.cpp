@@ -200,6 +200,8 @@ Value * KernelBuilder::getScalarIndex(std::string fieldName) {
     return iBuilder->getInt32(f->second);
 }
 
+
+
 Value * KernelBuilder::getScalarField(Value * self, std::string fieldName) {
     Value * ptr = iBuilder->CreateGEP(self, {iBuilder->getInt32(0), getScalarIndex(fieldName)});
     return iBuilder->CreateLoad(ptr);
@@ -225,6 +227,16 @@ unsigned KernelBuilder::getStreamSetIndex(std::string ssName) {
         throw std::runtime_error("Kernel does not contain stream set: " + ssName);
     }
     return f->second;
+}
+
+size_t KernelBuilder::getStreamSetBufferSize(Value * self, std::string ssName) {
+    unsigned ssIndex = getStreamSetIndex(ssName);
+    if (ssIndex < mStreamSetInputs.size()) {
+        return mStreamSetInputs[ssIndex].ssType.getBufferSize();
+    }
+    else {
+        return mStreamSetOutputs[ssIndex - mStreamSetInputs.size()].ssType.getBufferSize();
+    }
 }
 
 Value * KernelBuilder::getStreamSetBasePtr(Value * self, std::string ssName) {

@@ -88,7 +88,7 @@ void deletionKernel::generateFinalBlockMethod() {
 
     iBuilder->SetInsertPoint(BasicBlock::Create(iBuilder->getContext(), "entry", finalBlockFunction, 0));
     Value * remainingBytes = getParameter(finalBlockFunction, "remainingBytes");
-    Value * self = getParameter(doBlockFunction, "self");
+    Value * self = getParameter(finalBlockFunction, "self");
     Value * blockNo = getScalarField(self, blockNoScalar);
     Value * inputStreamBlock = getStreamSetBlockPtr(self, "inputStreamSet", blockNo);
     Value * remaining = iBuilder->CreateZExt(remainingBytes, iBuilder->getIntNTy(blockSize));

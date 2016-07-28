@@ -149,16 +149,31 @@ void p2s_16Kernel::generateDoBlockMethod() {
         
 
 void p2s_16Kernel_withCompressedOutput::prepareKernel() {
-    setDoBlockReturnType(iBuilder->getInt32Ty());
     KernelBuilder::prepareKernel();
 }
+    
+    static Function * create_write(Module * const mod) {
+        Function * write = mod->getFunction("write");
+        if (write == nullptr) {
+            FunctionType *write_type =
+            TypeBuilder<long(int, char *, long), false>::get(mod->getContext());
+            write = cast<Function>(mod->getOrInsertFunction("write", write_type,
+                                                            AttributeSet().addAttribute(mod->getContext(), 2U, Attribute::NoAlias)));
+        }
+        return write;
+    }
+    
+    
     
 void p2s_16Kernel_withCompressedOutput::generateDoBlockMethod() {
     IDISA::IDISA_Builder::InsertPoint savePoint = iBuilder->saveIP();
     Module * m = iBuilder->getModule();
     Type * i32 = iBuilder->getIntNTy(32); 
     Type * bitBlockPtrTy = llvm::PointerType::get(iBuilder->getBitBlockType(), 0); 
-    
+    Type * i8PtrTy = iBuilder->getInt8PtrTy();
+
+    Function * writefn = create_write(m);
+
     Function * doBlockFunction = m->getFunction(mKernelName + doBlock_suffix);
     
     iBuilder->SetInsertPoint(BasicBlock::Create(iBuilder->getContext(), "entry", doBlockFunction, 0));
@@ -166,7 +181,12 @@ void p2s_16Kernel_withCompressedOutput::generateDoBlockMethod() {
     Value * blockNo = getScalarField(self, blockNoScalar);
     Value * basisBitsBlock_ptr = getStreamSetBlockPtr(self, "basisBits", blockNo);
     Value * delCountBlock_ptr = getStreamSetBlockPtr(self, "deletionCounts", blockNo);
-    Value * i16StreamBlock_ptr = getStreamSetBlockPtr(self, "i16Stream", blockNo);
+    Value * i16UnitsGenerated = getScalarField(self, "unitsGenerated");  // units generated to buffer
+    Value * i16UnitsWritten = getScalarField(self, "unitsWritten");  // units written to stdout
+    
+    Value * i16StreamBase_ptr = iBuilder->CreateBitCast(getStreamSetBasePtr(self, "i16Stream"), PointerType::get(iBuilder->getInt16Ty(), 0));
+    Value * u16_output_ptr = iBuilder->CreateGEP(i16StreamBase_ptr, iBuilder->CreateSub(i16UnitsGenerated, i16UnitsWritten));
+
     
     Value * hi_input[8];
     for (unsigned j = 0; j < 8; ++j) {
@@ -186,7 +206,6 @@ void p2s_16Kernel_withCompressedOutput::generateDoBlockMethod() {
     
     Value * unit_counts = iBuilder->fwCast(UTF_16_units_per_register, iBuilder->CreateBlockAlignedLoad(delCountBlock_ptr, {iBuilder->getInt32(0), iBuilder->getInt32(0)}));
     
-    Value * u16_output_ptr = iBuilder->CreateBitCast(i16StreamBlock_ptr, PointerType::get(iBuilder->getInt16Ty(), 0));
     Value * offset = ConstantInt::get(i32, 0);
     
     for (unsigned j = 0; j < 8; ++j) {
@@ -201,8 +220,64 @@ void p2s_16Kernel_withCompressedOutput::generateDoBlockMethod() {
         offset = iBuilder->CreateZExt(iBuilder->CreateExtractElement(unit_counts, iBuilder->getInt32(2*j+1)), i32);
         //iBuilder->CallPrintInt("offset", offset);
     }
-    iBuilder->CreateRet(offset);
+    
+    i16UnitsGenerated = iBuilder->CreateAdd(i16UnitsGenerated, iBuilder->CreateZExt(offset, iBuilder->getSizeTy()));
+    setScalarField(self, "unitsGenerated", i16UnitsGenerated);
+    
+    Value * unitsInBuffer = iBuilder->CreateSub(i16UnitsGenerated, i16UnitsWritten);
+    Value * lessThanABlockRemaining = iBuilder->CreateICmpUGT(unitsInBuffer, ConstantInt::get(iBuilder->getSizeTy(), (getStreamSetBufferSize(self, "i16Stream") - 1) * iBuilder->getBitBlockWidth()));
+    BasicBlock * flushStmts = BasicBlock::Create(iBuilder->getContext(), "flush", doBlockFunction, 0);
+    BasicBlock * exitStmts = BasicBlock::Create(iBuilder->getContext(), "exit", doBlockFunction, 0);
+    iBuilder->CreateCondBr(lessThanABlockRemaining, flushStmts, exitStmts);
+    
+    iBuilder->SetInsertPoint(flushStmts);
+    iBuilder->CreateCall(writefn, std::vector<Value *>({iBuilder->getInt32(1), iBuilder->CreateBitCast(i16StreamBase_ptr, i8PtrTy), iBuilder->CreateAdd(unitsInBuffer, unitsInBuffer)}));
+    setScalarField(self, "unitsWritten", i16UnitsGenerated); // Everything generated has now been written.
+    iBuilder->CreateBr(exitStmts);
+    
+    iBuilder->SetInsertPoint(exitStmts);
+    iBuilder->CreateRetVoid();
     iBuilder->restoreIP(savePoint);
 }
-        
+
+void p2s_16Kernel_withCompressedOutput::generateFinalBlockMethod() {
+    IDISA::IDISA_Builder::InsertPoint savePoint = iBuilder->saveIP();
+    Module * m = iBuilder->getModule();
+    Type * i32 = iBuilder->getIntNTy(32); 
+    Type * bitBlockPtrTy = llvm::PointerType::get(iBuilder->getBitBlockType(), 0); 
+    Type * i8PtrTy = iBuilder->getInt8PtrTy();
+    Function * writefn = create_write(m);
+    Function * doBlockFunction = m->getFunction(mKernelName + doBlock_suffix);
+    Function * finalBlockFunction = m->getFunction(mKernelName + finalBlock_suffix);
+    iBuilder->SetInsertPoint(BasicBlock::Create(iBuilder->getContext(), "fb_entry", finalBlockFunction, 0));
+    // Final Block arguments: self, remaining, then the standard DoBlock args.
+    Function::arg_iterator args = finalBlockFunction->arg_begin();
+    Value * self = &*(args++);
+    /* Skip "remaining" arg */ args++;
+    std::vector<Value *> doBlockArgs = {self};
+    while (args != finalBlockFunction->arg_end()){
+        doBlockArgs.push_back(&*args++);
+    }
+    iBuilder->CreateCall(doBlockFunction, doBlockArgs);
+    Value * i16UnitsGenerated = getScalarField(self, "unitsGenerated");  // units generated to buffer
+    Value * i16UnitsWritten = getScalarField(self, "unitsWritten");  // units written to stdout
+    Value * unitsInBuffer = iBuilder->CreateSub(i16UnitsGenerated, i16UnitsWritten);
+    Value * mustFlush = iBuilder->CreateICmpUGT(unitsInBuffer, ConstantInt::get(iBuilder->getSizeTy(), 0));
+    
+    BasicBlock * flushStmts = BasicBlock::Create(iBuilder->getContext(), "flush", finalBlockFunction, 0);
+    BasicBlock * exitStmts = BasicBlock::Create(iBuilder->getContext(), "exit", finalBlockFunction, 0);
+    iBuilder->CreateCondBr(mustFlush, flushStmts, exitStmts);
+    
+    iBuilder->SetInsertPoint(flushStmts);
+    Value * i16StreamBase_ptr = iBuilder->CreateBitCast(getStreamSetBasePtr(self, "i16Stream"), PointerType::get(iBuilder->getInt16Ty(), 0));
+    iBuilder->CreateCall(writefn, std::vector<Value *>({iBuilder->getInt32(1), iBuilder->CreateBitCast(i16StreamBase_ptr, i8PtrTy), iBuilder->CreateAdd(unitsInBuffer, unitsInBuffer)}));
+    setScalarField(self, "unitsWritten", i16UnitsGenerated); // Everything generated has now been written.
+    iBuilder->CreateBr(exitStmts);
+    
+    iBuilder->SetInsertPoint(exitStmts);
+    iBuilder->CreateRetVoid();
+    iBuilder->restoreIP(savePoint);
+}
+    
+    
 }

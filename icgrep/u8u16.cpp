@@ -218,33 +218,40 @@ PabloFunction * u8u16_pablo(const Encoding encoding) {
 
 
 using namespace kernel;
+using namespace parabix;
 
 const unsigned u16OutputBlocks = 64;
 
 Function * u8u16Pipeline(Module * mMod, IDISA::IDISA_Builder * iBuilder, pablo::PabloFunction * function) {
     Type * mBitBlockType = iBuilder->getBitBlockType();
-    s2pKernel  s2pk(iBuilder);
+
+    
+    ExternalUnboundedBuffer ByteStream(iBuilder, StreamSetType(1, i8));
+    SingleBlockBuffer BasisBits(iBuilder, StreamSetType(8, i1));
+    SingleBlockBuffer U8u16Bits(iBuilder, StreamSetType(18, i1));
+    SingleBlockBuffer U16Bits(iBuilder, StreamSetType(16, i1));
+    SingleBlockBuffer DeletionCounts(iBuilder, StreamSetType(1, i1));
+    CircularBuffer U16out(iBuilder, StreamSetType(1, i16), u16OutputBlocks);
+
+    s2pKernel  s2pk(iBuilder, ByteStream, BasisBits);
     s2pk.generateKernel();
     
     pablo_function_passes(function);
-    pablo::PabloKernel  u8u16k(iBuilder, "u8u16", function, {});
+    pablo::PabloKernel  u8u16k(iBuilder, "u8u16", function, BasisBits, U8u16Bits, {});
     u8u16k.generateKernel();
     
-    deletionKernel delK(iBuilder, iBuilder->getBitBlockWidth()/16, 16);
+    deletionKernel delK(iBuilder, iBuilder->getBitBlockWidth()/16, 16, U8u16Bits, U16Bits, DeletionCounts);
     delK.generateKernel();
     
-    p2s_16Kernel_withCompressedOutput p2sk(iBuilder);    
+    p2s_16Kernel_withCompressedOutput p2sk(iBuilder, U16Bits, DeletionCounts, U16out);
     p2sk.generateKernel();
     
-    stdOutKernel stdOutK(iBuilder, 16);
-    stdOutK.generateKernel();
-    
-    Type * const int64ty = iBuilder->getInt64Ty();
+    Type * const size_ty = iBuilder->getSizeTy();
     Type * i16PtrTy = PointerType::get(iBuilder->getInt16Ty(), 0);
     Type * const voidTy = Type::getVoidTy(mMod->getContext());
     Type * const inputType = PointerType::get(ArrayType::get(ArrayType::get(mBitBlockType, 8), 1), 0);
     
-    Function * const main = cast<Function>(mMod->getOrInsertFunction("Main", voidTy, inputType, int64ty, nullptr));
+    Function * const main = cast<Function>(mMod->getOrInsertFunction("Main", voidTy, inputType, size_ty, nullptr));
     main->setCallingConv(CallingConv::C);
     Function::arg_iterator args = main->arg_begin();
     
@@ -255,27 +262,20 @@ Function * u8u16Pipeline(Module * mMod, IDISA::IDISA_Builder * iBuilder, pablo::
     
     iBuilder->SetInsertPoint(BasicBlock::Create(mMod->getContext(), "entry", main,0));
         
-    kernel::StreamSetBuffer ByteStream(iBuilder, StreamSetType(1, 8), 0);
-    kernel::StreamSetBuffer BasisBits(iBuilder, StreamSetType(8, 1), 1);
-    kernel::StreamSetBuffer U8u16Bits(iBuilder, StreamSetType(18, 1), 1);
-    kernel::StreamSetBuffer U16Bits(iBuilder, StreamSetType(16, 1), 1);
-    kernel::StreamSetBuffer DeletionCounts(iBuilder, StreamSetType(1, 1), 1);
-    kernel::StreamSetBuffer U16out(iBuilder, StreamSetType(1, 16), u16OutputBlocks);
 
     ByteStream.setStreamSetBuffer(inputStream);
     BasisBits.allocateBuffer();
     U8u16Bits.allocateBuffer();
     U16Bits.allocateBuffer();
     DeletionCounts.allocateBuffer();
-    Value * u16out = U16out.allocateBuffer();
-    
+    U16out.allocateBuffer();
+
     Value * s2pInstance = s2pk.createInstance({}, {&ByteStream}, {&BasisBits});
     Value * u8u16Instance = u8u16k.createInstance({}, {&BasisBits}, {&U8u16Bits});
     Value * delInstance = delK.createInstance({}, {&U8u16Bits}, {&U16Bits, &DeletionCounts});
     Value * p2sInstance = p2sk.createInstance({}, {&U16Bits, &DeletionCounts}, {&U16out});
-    Value * stdOutInstance = stdOutK.createInstance({u16out, iBuilder->CreateGEP(u16out, {iBuilder->getInt32(u16OutputBlocks-2)})}, {&U16out}, {});
     
-    generatePipelineLoop(iBuilder, {&s2pk, &u8u16k, &delK, &p2sk, &stdOutK}, {s2pInstance, u8u16Instance, delInstance, p2sInstance, stdOutInstance}, fileSize);
+    generatePipelineLoop(iBuilder, {&s2pk, &u8u16k, &delK, &p2sk}, {s2pInstance, u8u16Instance, delInstance, p2sInstance}, fileSize);
     
     iBuilder->CreateRetVoid();
     return main;
