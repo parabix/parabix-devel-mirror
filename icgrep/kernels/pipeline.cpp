@@ -57,9 +57,8 @@ void generatePipelineLoop(IDISA::IDISA_Builder * iBuilder, std::vector<KernelBui
         
         iBuilder->SetInsertPoint(segmentBodyBlock);
         Value * segBlocks = ConstantInt::get(size_ty, segmentSize);
-        Value * rslt = kernels[0]->createDoSegmentCall(instances[0], segBlocks);
-        for (unsigned i = 1; i < kernels.size(); i++) {
-            rslt = kernels[i]->createDoSegmentCall(instances[i], rslt->getType()->isVoidTy() ? segBlocks : rslt);
+        for (unsigned i = 0; i < kernels.size(); i++) {
+            kernels[i]->createDoSegmentCall(instances[i], segBlocks);
         }
         remainingBytes->addIncoming(iBuilder->CreateSub(remainingBytes, step), segmentBodyBlock);
         blockNo->addIncoming(iBuilder->CreateAdd(blockNo, segBlocks), segmentBodyBlock);
@@ -87,9 +86,8 @@ void generatePipelineLoop(IDISA::IDISA_Builder * iBuilder, std::vector<KernelBui
     
     // Full Block Pipeline loop
     iBuilder->SetInsertPoint(fullBodyBlock);
-    rslt = kernels[0]->createDoSegmentCall(instances[0], ConstantInt::get(size_ty, 1));
-    for (unsigned i = 1; i < kernels.size(); i++) {
-        rslt = kernels[i]->createDoSegmentCall(instances[i], rslt->getType()->isVoidTy() ? ConstantInt::get(size_ty, 1) : rslt);
+    for (unsigned i = 0; i < kernels.size(); i++) {
+        kernels[i]->createDoSegmentCall(instances[i], ConstantInt::get(size_ty, 1));
     }
     
     remainingBytes->addIncoming(iBuilder->CreateSub(remainingBytes, step), fullBodyBlock);

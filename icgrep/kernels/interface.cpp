@@ -53,19 +53,7 @@ void KernelInterface::addKernelDeclarations(Module * client) {
     
     std::vector<Type *> doBlockParameters = {selfType};
     std::vector<Type *> finalBlockParameters = {selfType, iBuilder->getSizeTy()};
-    /*
-    for (auto inputSet : mStreamSetInputs) {
-        Type * inputSetParmType = PointerType::getUnqual(inputSet.ssType.getStreamSetBlockType(iBuilder));
-        doBlockParameters.push_back(inputSetParmType);
-        finalBlockParameters.push_back(inputSetParmType);
-    }
-    for (auto outputSet : mStreamSetOutputs) {
-        Type * outputSetParmType = PointerType::getUnqual(outputSet.ssType.getStreamSetBlockType(iBuilder));
-        doBlockParameters.push_back(outputSetParmType);
-        finalBlockParameters.push_back(outputSetParmType);
-    }
-     */
-    FunctionType * doBlockFunctionType = FunctionType::get(mDoBlockReturnType, doBlockParameters, false);
+    FunctionType * doBlockFunctionType = FunctionType::get(iBuilder->getVoidTy(), doBlockParameters, false);
     std::string doBlockName = mKernelName + doBlock_suffix;
     Function * doBlockFn = Function::Create(doBlockFunctionType, GlobalValue::ExternalLinkage, doBlockName, client);
     doBlockFn->setCallingConv(CallingConv::C);
@@ -74,7 +62,7 @@ void KernelInterface::addKernelDeclarations(Module * client) {
         doBlockFn->setDoesNotCapture(i);
     }
     
-    FunctionType * finalBlockType = FunctionType::get(mDoBlockReturnType, finalBlockParameters, false);
+    FunctionType * finalBlockType = FunctionType::get(iBuilder->getVoidTy(), finalBlockParameters, false);
     std::string finalBlockName = mKernelName + finalBlock_suffix;
     Function * finalBlockFn = Function::Create(finalBlockType, GlobalValue::ExternalLinkage, finalBlockName, client);
     finalBlockFn->setCallingConv(CallingConv::C);
@@ -94,22 +82,9 @@ void KernelInterface::addKernelDeclarations(Module * client) {
     finalBlockArg = &*(finalBlockArgs++);
     finalBlockArg->setName("remainingBytes");
 
-/*    for (auto inputSet : mStreamSetInputs) {
-        doBlockArg = &*(doBlockArgs++);
-        finalBlockArg = &*(finalBlockArgs++);
-        doBlockArg->setName(inputSet.ssName);
-        finalBlockArg->setName(inputSet.ssName);
-    }
-    for (auto outputSet : mStreamSetOutputs) {
-        doBlockArg = &*(doBlockArgs++);
-        finalBlockArg = &*(finalBlockArgs++);
-        doBlockArg->setName(outputSet.ssName);
-        finalBlockArg->setName(outputSet.ssName);
-    }
-    */
     // Create the doSegment function prototype.
     std::vector<Type *> doSegmentParameters = {selfType, iBuilder->getSizeTy()};
-    FunctionType * doSegmentFunctionType = FunctionType::get(mDoBlockReturnType, doSegmentParameters, false);
+    FunctionType * doSegmentFunctionType = FunctionType::get(iBuilder->getVoidTy(), doSegmentParameters, false);
     std::string doSegmentName = mKernelName + doSegment_suffix;
     Function * doSegmentFn = Function::Create(doSegmentFunctionType, GlobalValue::ExternalLinkage, doSegmentName, client);
     doSegmentFn->setCallingConv(CallingConv::C);
@@ -136,9 +111,6 @@ Value * KernelInterface::createInstance(std::vector<Value *> args) {
     Function * initMethod = m->getFunction(initFnName);
     if (!initMethod) {
         throw std::runtime_error("Cannot find " + initFnName);
-        //Or just zero-initialize???
-        //iBuilder->CreateStore(Constant::getNullValue(mKernelStateType), kernelInstance);
-        //return kernelInstance;
     }
     iBuilder->CreateCall(initMethod, init_args);
     return kernelInstance;

@@ -68,7 +68,6 @@ void p2sKernel::generateDoBlockMethod() {
 	
     
 void p2sKernel_withCompressedOutput::prepareKernel() {
-    setDoBlockReturnType(iBuilder->getInt32Ty());
     KernelBuilder::prepareKernel();
 }
 
@@ -106,7 +105,7 @@ void p2sKernel_withCompressedOutput::generateDoBlockMethod() {
         iBuilder->CreateAlignedStore(s_bytepack[j], iBuilder->CreateBitCast(iBuilder->CreateGEP(output_ptr, offset), bitBlockPtrTy), 1);
         offset = iBuilder->CreateZExt(iBuilder->CreateExtractElement(unit_counts, iBuilder->getInt32(j)), i32);
     }
-    iBuilder->CreateRet(offset);
+    iBuilder->CreateRetVoid();
     iBuilder->restoreIP(savePoint);
 }
     
@@ -152,16 +151,16 @@ void p2s_16Kernel_withCompressedOutput::prepareKernel() {
     KernelBuilder::prepareKernel();
 }
     
-    static Function * create_write(Module * const mod) {
-        Function * write = mod->getFunction("write");
-        if (write == nullptr) {
-            FunctionType *write_type =
-            TypeBuilder<long(int, char *, long), false>::get(mod->getContext());
-            write = cast<Function>(mod->getOrInsertFunction("write", write_type,
-                                                            AttributeSet().addAttribute(mod->getContext(), 2U, Attribute::NoAlias)));
-        }
-        return write;
+static Function * create_write(Module * const mod) {
+    Function * write = mod->getFunction("write");
+    if (write == nullptr) {
+        FunctionType *write_type =
+        TypeBuilder<long(int, char *, long), false>::get(mod->getContext());
+        write = cast<Function>(mod->getOrInsertFunction("write", write_type,
+                                                        AttributeSet().addAttribute(mod->getContext(), 2U, Attribute::NoAlias)));
     }
+    return write;
+}
     
     
     
@@ -243,7 +242,6 @@ void p2s_16Kernel_withCompressedOutput::generateDoBlockMethod() {
 void p2s_16Kernel_withCompressedOutput::generateFinalBlockMethod() {
     IDISA::IDISA_Builder::InsertPoint savePoint = iBuilder->saveIP();
     Module * m = iBuilder->getModule();
-    Type * i32 = iBuilder->getIntNTy(32); 
     Type * bitBlockPtrTy = llvm::PointerType::get(iBuilder->getBitBlockType(), 0); 
     Type * i8PtrTy = iBuilder->getInt8PtrTy();
     Function * writefn = create_write(m);
