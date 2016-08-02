@@ -4,6 +4,7 @@
 #include <pablo/codegenstate.h>
 #include <util/slab_allocator.h>
 #include <boost/graph/adjacency_list.hpp>
+#include <boost/type_traits/ice.hpp>
 #include <boost/graph/adjacency_matrix.hpp>
 #include <boost/container/flat_set.hpp>
 #include <boost/container/flat_map.hpp>
@@ -12,8 +13,9 @@
 #include <stdint.h>
 #include <llvm/ADT/DenseMap.h>
 #include <llvm/ADT/DenseSet.h>
-
-typedef int BDD;
+#include <llvm/ADT/SmallVector.h>
+#include <z3.h>
+#include <stack>
 
 namespace pablo {
 
@@ -22,11 +24,13 @@ class PabloFunction;
 
 class MultiplexingPass {
 
-    using CharacterizationMap = llvm::DenseMap<const PabloAST *, BDD>;
+    using CharacterizationRef = std::pair<Z3_ast, unsigned>;
+    using CharacterizationMap = llvm::DenseMap<const PabloAST *, CharacterizationRef>;
 
-    using ConstraintGraph = boost::adjacency_matrix<boost::directedS, boost::no_property, bool>;
+    using ConstraintGraph = boost::adjacency_matrix<boost::directedS, Advance *>;
     using ConstraintVertex = ConstraintGraph::vertex_descriptor;
     using Constraints = std::vector<ConstraintVertex>;
+    using ConstraintMap = boost::container::flat_map<Advance *, ConstraintVertex>;
 
     using RNG = std::mt19937;
     using IntDistribution = std::uniform_int_distribution<RNG::result_type>;
@@ -42,32 +46,24 @@ class MultiplexingPass {
 
     using AdvanceVector = std::vector<Advance *>;
     using AdvanceRank = std::vector<int>;
-    using AdvanceVariable = std::vector<BDD>;
+    using AdvanceVariable = std::vector<Z3_ast>;
 
 public:
 
-    static bool optimize(PabloFunction & function, const bool independent = false);
-    #ifdef PRINT_TIMING_INFORMATION
-    using seed_t = RNG::result_type;
-    static seed_t SEED;
-    static unsigned NODES_ALLOCATED;
-    static unsigned NODES_USED;
-    #endif
+    static bool optimize(PabloFunction & function);
+
 protected:
 
-    unsigned initialize(PabloFunction & function, const bool independent);
-    void initializeBaseConstraintGraph(PabloBlock * const block, const unsigned statements, const unsigned advances);
-    void initializeAdvanceDepth(PabloBlock * const block, const unsigned advances) ;
+    unsigned initialize(PabloFunction & function);
+    Statement * initialize(Statement * const initial);
 
+    void reset();
+
+    void characterize(PabloFunction & function);
     void characterize(PabloBlock * const block);
-    BDD characterize(Statement * const stmt);
-    BDD characterize(Advance * const adv, const BDD Ik);
-    bool independent(const ConstraintVertex i, const ConstraintVertex j) const;
-    bool exceedsWindowSize(const ConstraintVertex i, const ConstraintVertex j) const;
-
-    void generateUsageWeightingGraph();
-    CliqueSets findMaximalCliques(const CliqueGraph & G);
-    void findMaximalCliques(const CliqueGraph & G, CliqueSet & R, CliqueSet && P, CliqueSet && X, CliqueSets & S);
+    Z3_ast characterize(Statement * const stmt);
+    Z3_ast characterize(Advance * const adv, Z3_ast Ik);
+    void multiplex(PabloBlock * const block);
 
     bool generateCandidateSets();
     void addCandidateSet(const Constraints & S);
@@ -77,44 +73,31 @@ protected:
     void selectMultiplexSetsGreedy();
     void selectMultiplexSetsWorkingSet();
 
-    void removePotentialCycles(const CandidateGraph::vertex_descriptor u);
-    bool dependent(const ConstraintVertex i, const ConstraintVertex j) const;
-
     void eliminateSubsetConstraints();
     void doTransitiveReductionOfSubsetGraph();
 
-    Candidates orderMultiplexSet(const CandidateGraph::vertex_descriptor u);
-    void multiplexSelectedSets(PabloFunction & function);
+    void multiplexSelectedSets(PabloBlock * const block);
 
-    static void rewriteAST(PabloBlock * const block);
 
-    BDD & get(const PabloAST * const expr);
+    Z3_ast make(const PabloAST * const expr);
+    Z3_ast add(const PabloAST * const expr, Z3_ast node);
+    Z3_ast & get(const PabloAST * const expr, const bool deref = false);
+    bool equals(Z3_ast a, Z3_ast b);
 
-    inline MultiplexingPass(const RNG::result_type seed)
-    : mTestConstrainedAdvances(true)
-    , mSubsetImplicationsAdhereToWindowingSizeConstraint(false)
-    , mVariables(0)
-    , mRNG(seed)
-    , mConstraintGraph(0)
-    , mAdvance(0, nullptr)
-    , mAdvanceRank(0, 0)
-    , mAdvanceNegatedVariable(0, 0)
-    {
-
-    }
+    MultiplexingPass(PabloFunction & f, const RNG::result_type seed, Z3_context context, Z3_solver solver);
 
 private:
-    const bool                  mTestConstrainedAdvances;
-    const bool                  mSubsetImplicationsAdhereToWindowingSizeConstraint;
-    unsigned                    mVariables;
+
+    Z3_context                  mContext;
+    Z3_solver                   mSolver;
+    PabloFunction &             mFunction;
     RNG                         mRNG;
+
     CharacterizationMap         mCharacterization;
-    ConstraintGraph             mConstraintGraph;   
-    AdvanceVector               mAdvance;
-    AdvanceRank                 mAdvanceRank;
+    ConstraintGraph             mConstraintGraph;
+
     AdvanceVariable             mAdvanceNegatedVariable;
     SubsetGraph                 mSubsetGraph;
-    CliqueGraph                 mUsageGraph;
     CandidateGraph              mCandidateGraph;
 };
 

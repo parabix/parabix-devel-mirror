@@ -13,9 +13,7 @@
 #include <stack>
 #include <queue>
 #include <unordered_set>
-#include <bdd.h>
 #include <functional>
-
 #include <llvm/Support/CommandLine.h>
 
 using namespace llvm;
@@ -70,430 +68,133 @@ static cl::opt<SelectionStrategy> Strategy(cl::desc("Choose set selection strate
                                            cl::init(Greedy),
                                            cl::cat(MultiplexingOptions));
 
-// #define PRINT_DEBUG_OUTPUT
-
-#if !defined(NDEBUG) && !defined(PRINT_DEBUG_OUTPUT)
-#define PRINT_DEBUG_OUTPUT
-#endif
-
-#ifdef PRINT_DEBUG_OUTPUT
-
-#include <iostream>
-
-using namespace pablo;
-typedef uint64_t timestamp_t;
-
-static inline timestamp_t read_cycle_counter() {
-#ifdef __GNUC__
-timestamp_t ts;
-#ifdef __x86_64__
-  unsigned int eax, edx;
-  asm volatile("rdtsc" : "=a" (eax), "=d" (edx));
-  ts = ((timestamp_t) eax) | (((timestamp_t) edx) << 32);
-#else
-  asm volatile("rdtsc\n" : "=A" (ts));
-#endif
-  return(ts);
-#endif
-#ifdef _MSC_VER
-  return __rdtsc();
-#endif
-}
-
-#define LOG(x) std::cerr << x << std::endl;
-#define RECORD_TIMESTAMP(Name) const timestamp_t Name = read_cycle_counter()
-#define LOG_GRAPH(Name, G) \
-    LOG(Name << " |V|=" << num_vertices(G) << ", |E|="  << num_edges(G) << \
-                " (" << (((double)num_edges(G)) / ((double)(num_vertices(G) * (num_vertices(G) - 1) / 2))) << ')')
-
-unsigned __count_advances(const PabloBlock * const entry) {
-
-    std::stack<const Statement *> scope;
-    unsigned advances = 0;
-
-    // Scan through and collect all the advances, calls, scanthrus and matchstars ...
-    for (const Statement * stmt = entry->front(); ; ) {
-        while ( stmt ) {
-            if (isa<Advance>(stmt)) {
-                ++advances;
-            }
-            else if (LLVM_UNLIKELY(isa<If>(stmt) || isa<While>(stmt))) {
-                // Set the next statement to be the first statement of the inner scope and push the
-                // next statement of the current statement into the scope stack.
-                const PabloBlock * const nested = isa<If>(stmt) ? cast<If>(stmt)->getBody() : cast<While>(stmt)->getBody();
-                scope.push(stmt->getNextNode());
-                stmt = nested->front();
-                assert (stmt);
-                continue;
-            }
-            stmt = stmt->getNextNode();
-        }
-        if (scope.empty()) {
-            break;
-        }
-        stmt = scope.top();
-        scope.pop();
-    }
-    return advances;
-}
-
-#define LOG_NUMBER_OF_ADVANCES(entry) LOG("|Advances|=" << __count_advances(entry))
-
-#else
-#define LOG(x)
-#define RECORD_TIMESTAMP(Name)
-#define LOG_GRAPH(Name, G)
-#define LOG_NUMBER_OF_ADVANCES(entry)
-#endif
-
-
 namespace pablo {
-
-#ifdef PRINT_TIMING_INFORMATION
-MultiplexingPass::seed_t MultiplexingPass::SEED = 0;
-unsigned MultiplexingPass::NODES_ALLOCATED = 0;
-unsigned MultiplexingPass::NODES_USED = 0;
-#endif
 
 using TypeId = PabloAST::ClassTypeId;
 
-template<typename Graph>
-static Graph construct(PabloBlock * const block);
-
-template<typename Graph, typename Map>
-static Graph construct(PabloBlock * const block, Map & M);
-
-bool MultiplexingPass::optimize(PabloFunction & function, const bool independent) {
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief optimize
+ * @param function the function to optimize
+ ** ------------------------------------------------------------------------------------------------------------- */
+bool MultiplexingPass::optimize(PabloFunction & function) {
 
     if (LLVM_UNLIKELY(Samples < 1)) {
         return false;
     }
 
+    PabloVerifier::verify(function, "pre-multiplexing");
 
-    LOG("Seed:                    " << Seed);
+    Z3_config cfg = Z3_mk_config();
+    Z3_context ctx = Z3_mk_context_rc(cfg);
+    Z3_del_config(cfg);
+    Z3_solver solver = Z3_mk_solver(ctx);
+    Z3_solver_inc_ref(ctx, solver);
 
-    #ifdef PRINT_TIMING_INFORMATION
-    MultiplexingPass::SEED = Seed;
-    MultiplexingPass::NODES_ALLOCATED = 0;
-    MultiplexingPass::NODES_USED = 0;
-    #endif
+    MultiplexingPass mp(function, Seed, ctx, solver);
 
-    MultiplexingPass mp(Seed);
-    RECORD_TIMESTAMP(start_initialize);
-    const unsigned advances = mp.initialize(function, independent);
-    RECORD_TIMESTAMP(end_initialize);
+    mp.characterize(function);
 
-    LOG("Initialize:              " << (end_initialize - start_initialize));
+    Z3_solver_dec_ref(ctx, solver);
+    Z3_del_context(ctx);
 
-    LOG_NUMBER_OF_ADVANCES(function.getEntryBlock());
+    PabloVerifier::verify(function, "post-multiplexing");
 
-    if (advances == 0) {
-        return false;
-    }
-
-    RECORD_TIMESTAMP(start_characterize);
-    mp.characterize(function.getEntryBlock());
-    RECORD_TIMESTAMP(end_characterize);
-
-    LOG("Characterize:             " << (end_characterize - start_characterize));
-
-    LOG("Nodes in BDD:             " << bdd_getnodenum() << " of " << bdd_getallocnum());
-
-    #ifdef PRINT_TIMING_INFORMATION
-    MultiplexingPass::NODES_ALLOCATED = bdd_getallocnum();
-    MultiplexingPass::NODES_USED = bdd_getnodenum();
-    #endif
-
-    RECORD_TIMESTAMP(start_shutdown);
-    bdd_done();
-    RECORD_TIMESTAMP(end_shutdown);
-    LOG("Shutdown:                 " << (end_shutdown - start_shutdown));
-
-    RECORD_TIMESTAMP(start_create_multiplex_graph);
-    const bool multiplex = mp.generateCandidateSets();
-    RECORD_TIMESTAMP(end_create_multiplex_graph);
-    LOG("GenerateCandidateSets:    " << (end_create_multiplex_graph - start_create_multiplex_graph));
-
-    if (multiplex) {
-
-        RECORD_TIMESTAMP(start_usage_weighting);
-        mp.generateUsageWeightingGraph();
-        RECORD_TIMESTAMP(end_usage_weighting);
-        LOG("GenerateUsageWeighting:   " << (end_usage_weighting - start_usage_weighting));
-
-        RECORD_TIMESTAMP(start_select_multiplex_sets);
-        if (Strategy == SelectionStrategy::Greedy) {
-            mp.selectMultiplexSetsGreedy();
-        } else if (Strategy == SelectionStrategy::WorkingSet) {
-            mp.selectMultiplexSetsWorkingSet();
-        }
-        RECORD_TIMESTAMP(end_select_multiplex_sets);
-        LOG("SelectMultiplexSets:      " << (end_select_multiplex_sets - start_select_multiplex_sets));
-
-        RECORD_TIMESTAMP(start_subset_constraints);
-        mp.eliminateSubsetConstraints();
-        RECORD_TIMESTAMP(end_subset_constraints);
-        LOG("ApplySubsetConstraints:   " << (end_subset_constraints - start_subset_constraints));
-
-        RECORD_TIMESTAMP(start_select_independent_sets);
-        mp.multiplexSelectedSets(function);
-        RECORD_TIMESTAMP(end_select_independent_sets);
-        LOG("MultiplexSelectedSets:    " << (end_select_independent_sets - start_select_independent_sets));
-
-        #ifndef NDEBUG
-        PabloVerifier::verify(function, "post-multiplexing");
-        #endif
-
-        Simplifier::optimize(function);
-    }
-
-    LOG_NUMBER_OF_ADVANCES(function.getEntryBlock());
-
-    return multiplex;
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief initialize
- * @param function the function to optimize
- * @returns true if there are fewer than three advances in this function
- *
- * Scan through the program to identify any advances and calls then initialize the BDD engine with
- * the proper variable ordering.
- ** ------------------------------------------------------------------------------------------------------------- */
-unsigned MultiplexingPass::initialize(PabloFunction & function, const bool independent) {
-
-    std::stack<Statement *> scope;
-    unsigned variableCount = 0; // number of statements that cannot always be categorized without generating a new variable
-
-    // Scan through and collect all the advances, calls, scanthrus and matchstars ...
-    unsigned statements = 0, advances = 0;
-    for (Statement * stmt = function.getEntryBlock()->front(); ; ) {
-        while ( stmt ) {
-            ++statements;
-            if (LLVM_UNLIKELY(isa<If>(stmt) || isa<While>(stmt))) {
-                scope.push(stmt->getNextNode());
-                const PabloBlock * const nested = isa<If>(stmt) ? cast<If>(stmt)->getBody() : cast<While>(stmt)->getBody();                
-                stmt = nested->front();
-                assert (stmt);
-                continue;
-            }
-            switch (stmt->getClassTypeId()) {
-                case TypeId::Advance:
-                    ++advances;
-                case TypeId::ScanThru:
-                case TypeId::Call:
-                case TypeId::MatchStar:
-                    ++variableCount;
-                    break;
-                default:
-                    break;
-            }
-            stmt = stmt->getNextNode();
-        }
-        if (scope.empty()) {
-            break;
-        }
-        stmt = scope.top();
-        scope.pop();
-    }
-
-    // If there are fewer than three Advances in this program, just abort. We cannot reduce it.
-    if (advances < 3) {
-        return 0;
-    }
-
-    initializeBaseConstraintGraph(function.getEntryBlock(), statements, advances);
-
-    mSubsetGraph = SubsetGraph(advances);
-
-    initializeAdvanceDepth(function.getEntryBlock(), advances);
-
-    // Initialize the BDD engine ...
-    bdd_init(10000000, 100000);
-    bdd_setvarnum(variableCount + function.getNumOfParameters());
-    bdd_setcacheratio(64);
-    bdd_setmaxincrease(10000000);
-    bdd_autoreorder(BDD_REORDER_SIFT); // BDD_REORDER_SIFT
-
-    // Map the constants and input variables
-    mCharacterization[PabloBlock::createZeroes()] = bdd_zero();
-    mCharacterization[PabloBlock::createOnes()] = bdd_one();
-    mVariables = function.getNumOfParameters();
-
-    // TODO: record information in the function to indicate which pairs of input variables are independent
-    if (independent) {
-        for (unsigned i = 0; i != mVariables; ++i) {
-            BDD Vi = bdd_ithvar(i);
-            BDD Ni = bdd_zero();
-            for (unsigned j = 0; j != i; ++j) {
-                Ni = bdd_addref(bdd_or(Ni, bdd_ithvar(j)));
-            }
-            for (unsigned j = i + 1; j != mVariables; ++j) {
-                Ni = bdd_addref(bdd_or(Ni, bdd_ithvar(j)));
-            }
-            Ni = bdd_addref(bdd_not(Ni));
-            mCharacterization[function.getParameter(i)] = bdd_addref(bdd_imp(Vi, Ni));
-        }
-    } else {
-        for (unsigned i = 0; i != mVariables; ++i) {
-            mCharacterization[function.getParameter(i)] = bdd_ithvar(i);
-        }
-    }
-
-    return advances;
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief initializeBaseConstraintGraph
- ** ------------------------------------------------------------------------------------------------------------- */
-inline void MultiplexingPass::initializeBaseConstraintGraph(PabloBlock * const block, const unsigned statements, const unsigned advances) {
-
-    std::stack<Statement *> scope;
-    flat_map<const PabloAST *, unsigned> M;
-    M.reserve(statements);
-    matrix<bool> G(statements, advances, false);
-    for (unsigned i = 0; i != advances; ++i) {
-        G(i, i) = true;
-    }
-
-    unsigned n = advances;
-    unsigned k = 0;
-    for (const Statement * stmt = block->front();;) {
-        while ( stmt ) {
-            unsigned u = 0;
-            if (LLVM_UNLIKELY(isa<Advance>(stmt))) {
-                u = k++;
-            } else {
-                u = n++;
-            }
-            M.emplace(stmt, u);
-            for (unsigned i = 0; i != stmt->getNumOperands(); ++i) {
-                const PabloAST * const op = stmt->getOperand(i);
-                if (LLVM_LIKELY(isa<Statement>(op))) {
-                    const unsigned v = M[op];
-                    for (unsigned w = 0; w != k; ++w) {
-                        G(u, w) |= G(v, w);
-                    }
-                }
-            }
-            if (LLVM_UNLIKELY(isa<If>(stmt) || isa<While>(stmt))) {
-                scope.push(stmt->getNextNode());
-                const PabloBlock * const nested = isa<If>(stmt) ? cast<If>(stmt)->getBody() : cast<While>(stmt)->getBody();
-                stmt = nested->front();
-                assert (stmt);
-                continue;
-            }
-            stmt = stmt->getNextNode();
-        }
-        if (scope.empty()) {
-            break;
-        }
-        stmt = scope.top();
-        scope.pop();
-    }
-
-    assert (k == advances);
-
-    // Initialize the base constraint graph by effectively transposing G and removing reflective loops
-    mConstraintGraph = ConstraintGraph(advances);
-    for (unsigned i = 0; i != advances; ++i) {
-        for (unsigned j = 0; j < i; ++j) {
-            if (G(i, j)) {
-                add_edge(j, i, true, mConstraintGraph);
-            }
-        }
-        for (unsigned j = i + 1; j < advances; ++j) {
-            if (G(i, j)) {
-                add_edge(j, i, true, mConstraintGraph);
-            }
-        }
-    }
-
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief initializeAdvanceDepth
- ** ------------------------------------------------------------------------------------------------------------- */
-inline void MultiplexingPass::initializeAdvanceDepth(PabloBlock * const entryBlock, const unsigned advances) {
-
-    std::stack<Statement *> scope;
-    unsigned k = 0;
-    int maxDepth = 0;
-    const PabloBlock * advanceScope[advances];
-    mAdvance.resize(advances, nullptr);
-    mAdvanceRank.resize(advances, 0);
-    mAdvanceNegatedVariable.reserve(advances);
-    for (Statement * stmt = entryBlock->front(); ; ) {
-        while ( stmt ) {
-            if (LLVM_UNLIKELY(isa<If>(stmt) || isa<While>(stmt))) {
-                scope.push(stmt->getNextNode());
-                const PabloBlock * const nested = isa<If>(stmt) ? cast<If>(stmt)->getBody() : cast<While>(stmt)->getBody();
-                stmt = nested->front();
-                assert (stmt);
-                continue;
-            } else if (LLVM_UNLIKELY(isa<Advance>(stmt))) {
-                int depth = 0;
-                mAdvance[k] = cast<Advance>(stmt);
-                advanceScope[k] = cast<Advance>(stmt)->getParent();
-                for (unsigned i = 0; i != k; ++i) {
-                    if (edge(i, k, mConstraintGraph).second || (advanceScope[i] != advanceScope[k])) {
-                        depth = std::max<int>(depth, mAdvanceRank[i]);
-                    }
-                }
-                mAdvanceRank[k++] = ++depth;
-                maxDepth = std::max(maxDepth, depth);
-            }
-            stmt = stmt->getNextNode();
-        }
-        if (scope.empty()) {
-            break;
-        }
-        stmt = scope.top();
-        scope.pop();
-    }
-    assert (k == advances);
-
-    LOG("Window Size / Max Depth: " << WindowSize << " of " << maxDepth);
+    return true;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief characterize
- * @param vars the input vars for this program
- *
- * Scan through the program and iteratively compute the BDDs for each statement.
+ * @param function the function to optimize
+ ** ------------------------------------------------------------------------------------------------------------- */
+void MultiplexingPass::characterize(PabloFunction & function) {
+    // Map the constants and input variables
+    Z3_sort boolTy = Z3_mk_bool_sort(mContext);
+
+    Z3_ast F = Z3_mk_const(mContext, Z3_mk_int_symbol(mContext, 0), boolTy);
+    Z3_inc_ref(mContext, F);
+    add(PabloBlock::createZeroes(), F);
+
+    Z3_ast T = Z3_mk_const(mContext, Z3_mk_int_symbol(mContext, 1), boolTy);
+    Z3_inc_ref(mContext, T);
+    add(PabloBlock::createOnes(), T);
+
+    for (unsigned i = 0; i < function.getNumOfParameters(); ++i) {
+        make(function.getParameter(i));
+    }
+
+    characterize(function.getEntryBlock());
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief characterize
  ** ------------------------------------------------------------------------------------------------------------- */
 void MultiplexingPass::characterize(PabloBlock * const block) {
+    Statement * end = initialize(block->front());
     for (Statement * stmt : *block) {
-        if (LLVM_UNLIKELY(isa<If>(stmt))) {
-            characterize(cast<If>(stmt)->getBody());
-            for (const Assign * def : cast<If>(stmt)->getDefined()) {
-                if (LLVM_LIKELY(escapes(def))) {
-                    bdd_addref(get(def));
+        if (LLVM_UNLIKELY(stmt == end)) {
+            Statement * const next = stmt->getNextNode();
+            multiplex(block);
+            if (isa<If>(stmt)) {
+                characterize(cast<If>(stmt)->getBody());
+            } else if (isa<While>(stmt)) {
+                for (const Next * var : cast<While>(stmt)->getVariants()) {
+                    Z3_inc_ref(mContext, get(var->getInitial()));
+                }
+                characterize(cast<While>(stmt)->getBody());
+                // since we cannot be certain that we'll always execute at least one iteration of a loop, we must
+                // assume that the variants could either be their initial value or their resulting value.
+                for (const Next * var : cast<While>(stmt)->getVariants()) {
+                    Z3_ast v0 = get(var->getInitial());
+                    Z3_ast & v1 = get(var);
+                    Z3_ast merge[2] = { v0, v1 };
+                    Z3_ast r = Z3_mk_or(mContext, 2, merge);
+                    Z3_inc_ref(mContext, r);
+                    Z3_dec_ref(mContext, v0);
+                    Z3_dec_ref(mContext, v1);
+                    v1 = r;
+                    assert (get(var) == r);
                 }
             }
-        } else if (LLVM_UNLIKELY(isa<While>(stmt))) {
-            characterize(cast<While>(stmt)->getBody());
-            for (const Next * var : cast<While>(stmt)->getVariants()) {
-                if (LLVM_LIKELY(escapes(var))) {
-                    BDD & initial = get(var->getInitial());
-                    BDD & escaped = get(var);
-                    initial = bdd_addref(bdd_or(initial, escaped));
-                    escaped = initial;
-                }
-            }
+            end = initialize(next);
         } else {
-            mCharacterization.insert(std::make_pair(stmt, characterize(stmt)));
+            characterize(stmt);
         }
+    }
+    multiplex(block);
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief multiplex
+ ** ------------------------------------------------------------------------------------------------------------- */
+void MultiplexingPass::multiplex(PabloBlock * const block) {
+    if (generateCandidateSets()) {
+        selectMultiplexSetsGreedy();
+        eliminateSubsetConstraints();
+        multiplexSelectedSets(block);
     }
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief throwUnexpectedStatementTypeError
+ * @brief equals
  ** ------------------------------------------------------------------------------------------------------------- */
-static void throwUnexpectedStatementTypeError(const Statement * const stmt) {
+inline bool MultiplexingPass::equals(Z3_ast a, Z3_ast b) {
+    Z3_solver_push(mContext, mSolver);
+    Z3_ast test = Z3_mk_eq(mContext, a, b);
+    Z3_inc_ref(mContext, test);
+    Z3_solver_assert(mContext, mSolver, test);
+    const auto r = Z3_solver_check(mContext, mSolver);
+    Z3_dec_ref(mContext, test);
+    Z3_solver_pop(mContext, mSolver, 1);
+    return (r == Z3_L_TRUE);
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief handle_unexpected_statement
+ ** ------------------------------------------------------------------------------------------------------------- */
+static void handle_unexpected_statement(Statement * const stmt) {
     std::string tmp;
     raw_string_ostream err(tmp);
-    err << "Unexpected statement type ";
+    err << "Unexpected statement type: ";
     PabloPrinter::print(stmt, err);
     throw std::runtime_error(err.str());
 }
@@ -501,82 +202,101 @@ static void throwUnexpectedStatementTypeError(const Statement * const stmt) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief characterize
  ** ------------------------------------------------------------------------------------------------------------- */
-inline BDD MultiplexingPass::characterize(Statement * const stmt) {
-    assert (stmt->getNumOperands() > 0);
-    BDD bdd = get(stmt->getOperand(0));
+inline Z3_ast MultiplexingPass::characterize(Statement * const stmt) {
+
+    const size_t n = stmt->getNumOperands(); assert (n > 0);
+    Z3_ast operands[n] = {};
+    for (size_t i = 0; i < n; ++i) {
+        PabloAST * op = stmt->getOperand(i);
+        if (LLVM_LIKELY(isa<Statement>(op) || isa<Var>(op))) {
+            operands[i] = get(op, true);
+        }
+    }
+
+    Z3_ast node = operands[0];
     switch (stmt->getClassTypeId()) {
         case TypeId::Assign:
         case TypeId::Next:
-            break;
+        case TypeId::AtEOF:
+        case TypeId::InFile:
+            node = operands[0]; break;
         case TypeId::And:
-            for (unsigned i = 1; i != stmt->getNumOperands(); ++i) {
-                bdd = bdd_and(bdd, get(stmt->getOperand(i)));
-            }
-            break;
+            node = Z3_mk_and(mContext, n, operands); break;
         case TypeId::Or:
-            for (unsigned i = 1; i != stmt->getNumOperands(); ++i) {
-                bdd = bdd_or(bdd, get(stmt->getOperand(i)));
-            }
-            break;
+            node = Z3_mk_or(mContext, n, operands); break;
         case TypeId::Xor:
-            for (unsigned i = 1; i != stmt->getNumOperands(); ++i) {
-                bdd = bdd_xor(bdd, get(stmt->getOperand(i)));
+            node = Z3_mk_xor(mContext, operands[0], operands[1]);
+            Z3_inc_ref(mContext, node);
+            for (unsigned i = 2; LLVM_UNLIKELY(i < n); ++i) {
+                Z3_ast temp = Z3_mk_xor(mContext, node, operands[i]);
+                Z3_inc_ref(mContext, temp);
+                Z3_dec_ref(mContext, node);
+                node = temp;
             }
-            break;
+            return add(stmt, node);
         case TypeId::Not:
-            bdd = bdd_not(bdd);
+            node = Z3_mk_not(mContext, node);
             break;
         case TypeId::Sel:
-            bdd = bdd_ite(bdd, get(stmt->getOperand(1)), get(stmt->getOperand(2)));
+            node = Z3_mk_ite(mContext, operands[0], operands[1], operands[2]);
             break;
+        case TypeId::Advance:
+            return characterize(cast<Advance>(stmt), operands[0]);
         case TypeId::ScanThru:
             // ScanThru(c, m) := (c + m) ∧ ¬m. Thus we can conservatively represent this statement using the BDD
             // for ¬m --- provided no derivative of this statement is negated in any fashion.
         case TypeId::MatchStar:
-        case TypeId::Call:
-            return bdd_ithvar(mVariables++);
-        case TypeId::Advance:
-            return characterize(cast<Advance>(stmt), bdd);
+        case TypeId::Count:
+            return make(stmt);
         default:
-            throwUnexpectedStatementTypeError(stmt);
+            handle_unexpected_statement(stmt);
     }
-    return bdd_addref(bdd);
+    Z3_inc_ref(mContext, node);
+    return add(stmt, node);
 }
+
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief characterize
  ** ------------------------------------------------------------------------------------------------------------- */
-inline BDD MultiplexingPass::characterize(Advance * const adv, const BDD Ik) {
+inline Z3_ast MultiplexingPass::characterize(Advance * const adv, Z3_ast Ik) {
     const auto k = mAdvanceNegatedVariable.size();
-    assert (mAdvance[k] == adv);
-    std::vector<bool> unconstrained(k , false);
-    for (unsigned i = 0; i != k; ++i) {
 
-        // Are we interested in testing these streams to see whether they are mutually exclusive?
-        if (exceedsWindowSize(i, k)) continue;
+    assert (adv);
+    assert (mConstraintGraph[k] == adv);
+
+    bool unconstrained[k] = {};
+
+    Z3_solver_push(mContext, mSolver);
+
+    for (size_t i = 0; i < k; ++i) {
 
         // Have we already proven that they are unconstrained by their subset relationship?
         if (unconstrained[i]) continue;
 
         // If these Advances are mutually exclusive, in the same scope, transitively independent, and shift their
         // values by the same amount, we can safely multiplex them. Otherwise mark the constraint in the graph.
-        const Advance * const ithAdv = mAdvance[i];
-        if ((mTestConstrainedAdvances || independent(i, k)) && (ithAdv->getOperand(1) == adv->getOperand(1))) {
-            const BDD Ii = get(ithAdv->getOperand(0));
-            const BDD IiIk = bdd_addref(bdd_and(Ii, Ik));
+        const Advance * const ithAdv = mConstraintGraph[i];
+        if (ithAdv->getOperand(1) == adv->getOperand(1)) {
+
+            Z3_ast Ii = get(ithAdv->getOperand(0));
+
             // Is there any satisfying truth assignment? If not, these streams are mutually exclusive.
-            if (bdd_satone(IiIk) == bdd_zero()) {
+
+            Z3_solver_push(mContext, mSolver);
+            Z3_ast conj[2] = { Ii, Ik };
+            Z3_ast IiIk = Z3_mk_and(mContext, 2, conj);
+            Z3_inc_ref(mContext, IiIk);
+            Z3_solver_assert(mContext, mSolver, IiIk);
+            if (Z3_solver_check(mContext, mSolver) == Z3_L_FALSE) {
                 // If Ai ∩ Ak = ∅ and Aj ⊂ Ai, Aj ∩ Ak = ∅.
                 for (auto e : make_iterator_range(in_edges(i, mSubsetGraph))) {
-                    const auto j = source(e, mSubsetGraph);
-                    if (mSubsetImplicationsAdhereToWindowingSizeConstraint && exceedsWindowSize(j, k)) {
-                        continue;
-                    }
-                    unconstrained[j] = true;
+                    unconstrained[source(e, mSubsetGraph)] = true;
                 }
                 unconstrained[i] = true;
-            } else if (Ii == IiIk) {
-                // If Ii = Ii ∩ Ik then Ii ⊂ Ik. Record this in the subset graph with the arc (i, k).
+
+            } else if (equals(Ii, IiIk)) {
+                // If Ii = Ii ∩ Ik then Ii ⊆ Ik. Record this in the subset graph with the arc (i, k).
                 // Note: the AST will be modified to make these mutually exclusive if Ai and Ak end up in
                 // the same multiplexing set.
                 add_edge(i, k, mSubsetGraph);
@@ -584,35 +304,41 @@ inline BDD MultiplexingPass::characterize(Advance * const adv, const BDD Ik) {
                 for (auto e : make_iterator_range(in_edges(i, mSubsetGraph))) {
                     const auto j = source(e, mSubsetGraph);
                     add_edge(j, k, mSubsetGraph);
-                    if (mSubsetImplicationsAdhereToWindowingSizeConstraint && exceedsWindowSize(j, k)) {
-                        continue;
-                    }
                     unconstrained[j] = true;
                 }
                 unconstrained[i] = true;
-            } else if (Ik == IiIk) {
-                // If Ik = Ii ∩ Ik then Ik ⊂ Ii. Record this in the subset graph with the arc (k, i).
+
+            } else if (equals(Ik, IiIk)) {
+                // If Ik = Ii ∩ Ik then Ik ⊆ Ii. Record this in the subset graph with the arc (k, i).
                 add_edge(k, i, mSubsetGraph);
                 // If Ak ⊂ Ai and Ai ⊂ Aj, Ak ⊂ Aj.
                 for (auto e : make_iterator_range(out_edges(i, mSubsetGraph))) {
                     const auto j = target(e, mSubsetGraph);
                     add_edge(k, j, mSubsetGraph);
-                    if (mSubsetImplicationsAdhereToWindowingSizeConstraint && exceedsWindowSize(j, k)) {
-                        continue;
-                    }
                     unconstrained[j] = true;
                 }
                 unconstrained[i] = true;
             }
-            bdd_delref(IiIk);
+
+            Z3_dec_ref(mContext, IiIk);
+            Z3_solver_pop(mContext, mSolver, 1);
         }
     }
 
-    BDD Ak = bdd_ithvar(mVariables++);
-    const BDD Nk = bdd_addref(bdd_not(Ak));    
-    for (unsigned i = 0; i != k; ++i) {
+    Z3_solver_pop(mContext, mSolver, 1);
+
+    Z3_ast Ak0 = make(adv);
+    Z3_inc_ref(mContext, Ak0);
+    Z3_ast Nk = Z3_mk_not(mContext, Ak0);
+    Z3_inc_ref(mContext, Nk);
+
+    Z3_ast vars[k + 1];
+    vars[0] = Ak0;
+
+    unsigned m = 1;
+    for (unsigned i = 0; i < k; ++i) {
         if (unconstrained[i]) {
-            // This algorithm deems two streams mutually exclusive if and only if the conjuntion of their BDDs is a contradiction.
+            // This algorithm deems two streams mutually exclusive if and only if their conjuntion is a contradiction.
             // To generate a contradiction when comparing Advances, the BDD of each Advance is represented by the conjunction of
             // variables representing the k-th Advance and the negation of all variables for the Advances whose inputs are mutually
             // exclusive with the k-th input.
@@ -621,35 +347,119 @@ inline BDD MultiplexingPass::characterize(Advance * const adv, const BDD Ik) {
             // BDD of the i-th Advance is Ai ∧ ¬Aj ∧ ¬Ak. Similarly, the j- and k-th Advance is Aj ∧ ¬Ai and Ak ∧ ¬Ai, respectively
             // (assuming that the j-th and k-th Advance are not mutually exclusive.)
 
-            const BDD Ni = mAdvanceNegatedVariable[i];
-            BDD & Ai = get(mAdvance[i]);
-            Ai = bdd_addref(bdd_and(Ai, Nk));
-            Ak = bdd_addref(bdd_and(Ak, Ni));
-            if (independent(i, k) && (adv->getParent() == mAdvance[i]->getParent())) {
-                continue;
-            }
+            Z3_ast & Ai0 = get(mConstraintGraph[i]);
+            Z3_ast conj[2] = { Ai0, Nk };
+            Z3_ast Ai = Z3_mk_and(mContext, 2, conj);
+            Z3_inc_ref(mContext, Ai);
+            Z3_dec_ref(mContext, Ai0); // if this doesn't work, we'll have to scan from the output variables.
+            Ai0 = Ai;
+            assert (get(mConstraintGraph[i]) == Ai);
+
+            vars[m++] = mAdvanceNegatedVariable[i];
+
+            continue; // note: if these Advances aren't transtively independent, an edge will still exist.
         }
-        add_edge(i, k, false, mConstraintGraph);
+        add_edge(i, k, mConstraintGraph);
     }
     // To minimize the number of BDD computations, we store the negated variable instead of negating it each time.
     mAdvanceNegatedVariable.emplace_back(Nk);
-    return Ak;
+    Z3_ast Ak = Z3_mk_and(mContext, m, vars);
+    if (LLVM_UNLIKELY(Ak != Ak0)) {
+        Z3_inc_ref(mContext, Ak);
+        Z3_dec_ref(mContext, Ak0);
+    }
+    return add(adv, Ak);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief independent
+ * @brief initialize
  ** ------------------------------------------------------------------------------------------------------------- */
-inline bool MultiplexingPass::independent(const ConstraintVertex i, const ConstraintVertex j) const {
-    assert (i < num_vertices(mConstraintGraph) && j < num_vertices(mConstraintGraph));
-    return mConstraintGraph.get_edge(i, j).first == false;
-}
+Statement * MultiplexingPass::initialize(Statement * const initial) {
 
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief exceedsWindowSize
- ** ------------------------------------------------------------------------------------------------------------- */
-inline bool MultiplexingPass::exceedsWindowSize(const ConstraintVertex i, const ConstraintVertex j) const {
-    assert (i < mAdvanceRank.size() && j < mAdvanceRank.size());
-    return (std::abs<int>(mAdvanceRank[i] - mAdvanceRank[j]) > WindowSize);
+    // clean up any unneeded refs / characterizations.
+    for (auto i = mCharacterization.begin(); i != mCharacterization.end(); ) {
+        const CharacterizationRef & r = std::get<1>(*i);
+        if (LLVM_UNLIKELY(std::get<1>(r) == 0)) {
+            Z3_dec_ref(mContext, std::get<0>(r));
+            auto j = i++;
+            mCharacterization.erase(j);
+        } else {
+            ++i;
+        }
+    }
+
+    for (Z3_ast var : mAdvanceNegatedVariable) {
+        Z3_dec_ref(mContext, var);
+    }
+    mAdvanceNegatedVariable.clear();
+
+    // Scan through and count all the advances and statements ...
+    unsigned statements = 0, advances = 0;
+    Statement * last = nullptr;
+    for (Statement * stmt = initial; stmt; stmt = stmt->getNextNode()) {
+        if (LLVM_UNLIKELY(isa<If>(stmt) || isa<While>(stmt))) {
+            last = stmt;
+            break;
+        } else if (LLVM_UNLIKELY(isa<Advance>(stmt))) {
+            ++advances;
+        }
+        ++statements;
+    }
+
+    flat_map<const PabloAST *, unsigned> M;
+    M.reserve(statements);
+    matrix<bool> G(statements, advances, false);
+    for (unsigned i = 0; i != advances; ++i) {
+        G(i, i) = true;
+    }
+
+    mConstraintGraph = ConstraintGraph(advances);
+    unsigned n = advances;
+    unsigned k = 0;
+    for (Statement * stmt = initial; stmt != last; stmt = stmt->getNextNode()) {
+        assert (!isa<If>(stmt) && !isa<While>(stmt));
+        unsigned u = 0;
+        if (LLVM_UNLIKELY(isa<Advance>(stmt))) {
+            mConstraintGraph[k] = cast<Advance>(stmt);
+            u = k++;
+        } else {
+            u = n++;
+        }
+        for (unsigned i = 0; i != stmt->getNumOperands(); ++i) {
+            const PabloAST * const op = stmt->getOperand(i);
+            if (LLVM_LIKELY(isa<Statement>(op))) {
+                auto f = M.find(op);
+                if (f != M.end()) {
+                    const unsigned v = std::get<1>(*f);
+                    for (unsigned w = 0; w != k; ++w) {
+                        G(u, w) |= G(v, w);
+                    }
+                }
+            }
+        }
+        M.emplace(stmt, u);
+    }
+
+    assert (k == advances);
+
+    // Initialize the base constraint graph by transposing G and removing reflective loops
+    for (unsigned i = 0; i != advances; ++i) {
+        for (unsigned j = 0; j < i; ++j) {
+            if (G(i, j)) {
+                add_edge(j, i, mConstraintGraph);
+            }
+        }
+        for (unsigned j = i + 1; j < advances; ++j) {
+            if (G(i, j)) {
+                add_edge(j, i, mConstraintGraph);
+            }
+        }
+    }
+
+    mSubsetGraph = SubsetGraph(advances);
+    mAdvanceNegatedVariable.reserve(advances);
+
+    return last;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -661,65 +471,21 @@ static inline bool is_power_of_2(const size_t n) {
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief generateUsageWeightingGraph
- *
- * Prior to generating our candidate sets, scan through the constraint graph and generate a clique in the usage
- * weighting graph each set of constraint-free Advance nodes that have the same users. We may be able optimize
- * the demultiplexing calculations using range expressions.
- *
- * Note: it'd be preferable to contract vertices in the constraint graph prior to scanning through it but that
- * leaves us with a more difficult problem. Namely, Advance nodes may belong to more than one clique but it'd be
- * useless to compute a value twice; furthermore, we want to avoid generating a multiplexing set whose size is 2^n
- * for any n ∈ ℤ* but don't want to needlessly limit the size of any clique. Look into this further later.
- ** ------------------------------------------------------------------------------------------------------------- */
-void MultiplexingPass::generateUsageWeightingGraph() {
-    const auto n = num_vertices(mConstraintGraph); assert (n > 2);
-    // Let G be the complement of the constraint graph ∪ the subset graph restricted to only the edges corresponding
-    // to pairs of Advances with the same users.
-    CliqueGraph G(n);
-    for (unsigned i = 0; i != (n - 1); ++i) {
-        const Advance * const advI = mAdvance[i];
-        for (unsigned j = i + 1; j != n; ++j) {
-            const Advance * const advJ = mAdvance[j];
-            if (LLVM_UNLIKELY(advI->getNumUses() == advJ->getNumUses()) && independent(i, j)) {
-                if (LLVM_UNLIKELY(std::equal(advI->user_begin(), advI->user_end(), advJ->user_begin()))) {
-                    // INVESTIGATE: we should be able to ignore subset relations if these are going to become a
-                    // range expression. Look into making a proof for it once the range expression calculation
-                    // is finished.
-                    if (!(edge(i, j, mSubsetGraph).second || edge(j, i, mSubsetGraph).second)) {
-                        add_edge(i, j, G);
-                    }
-                }
-            }
-        }
-    }
-    if (num_edges(G) > 0) {
-        const CliqueSets S = findMaximalCliques(G);
-        for (unsigned i = 0; i != n; ++i) {
-            clear_vertex(i, G);
-        }
-        for (const std::vector<CliqueGraph::vertex_descriptor> & C : S) {
-            const unsigned m = C.size(); assert (m > 1);
-            for (unsigned i = 1; i != m; ++i) {
-                for (unsigned j = 0; j != i; ++j) {
-                    add_edge(C[j], C[i], G);
-                }
-            }
-        }
-    }
-    mUsageGraph = G;
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
  * @brief generateCandidateSets
  ** ------------------------------------------------------------------------------------------------------------- */
 bool MultiplexingPass::generateCandidateSets() {
 
+    const auto n = mAdvanceNegatedVariable.size();
+    if (n < 3) {
+        return false;
+    }
+    assert (num_vertices(mConstraintGraph) == n);
+
     Constraints S;
 
-    ConstraintGraph::degree_size_type D[num_vertices(mConstraintGraph)];
+    ConstraintGraph::degree_size_type D[n];
 
-    mCandidateGraph = CandidateGraph(num_vertices(mConstraintGraph));
+    mCandidateGraph = CandidateGraph(n);
 
     for (unsigned r = Samples; r; --r) {
 
@@ -769,18 +535,6 @@ bool MultiplexingPass::generateCandidateSets() {
 
         S.clear();
     }
-
-    #ifdef PRINT_DEBUG_OUTPUT
-    const auto n = num_vertices(mConstraintGraph);
-    const auto m = num_vertices(mCandidateGraph);
-    unsigned sets = 0;
-    for (auto i = n; i < m; ++i) {
-        if (degree(i, mCandidateGraph) > 0) {
-            ++sets;
-        }
-    }
-    LOG("Unique Candidate Sets:    " << (sets));
-    #endif
 
     return num_vertices(mCandidateGraph) > num_vertices(mConstraintGraph);
 }
@@ -925,7 +679,7 @@ void MultiplexingPass::selectMultiplexSetsGreedy() {
     const size_t m = num_vertices(mConstraintGraph);
     const size_t n = num_vertices(mCandidateGraph) - m;
 
-    std::vector<bool> chosen(n, false);
+    bool chosen[n] = {};
 
     for (;;) {
 
@@ -938,15 +692,6 @@ void MultiplexingPass::selectMultiplexSetsGreedy() {
             degree_t r = degree(t, mCandidateGraph);
             if (LLVM_LIKELY(r >= 3)) { // if this set has at least 3 elements.
                 r *= r;
-                AdjIterator begin, end;
-                std::tie(begin, end) = adjacent_vertices(t, mCandidateGraph);
-                for (auto ei = begin; ei != end; ++ei) {
-                    for (auto ej = ei; ++ej != end; ) {
-                        if (edge(*ei, *ej, mUsageGraph).second) {
-                            ++r;
-                        }
-                    }
-                }
                 if (w < r) {
                     u = t;
                     w = r;
@@ -985,9 +730,6 @@ void MultiplexingPass::selectMultiplexSetsGreedy() {
             add_edge(v, u, mCandidateGraph);
         }
 
-        if (Samples > 1) {
-            removePotentialCycles(u);
-        }
     }
 
     #ifndef NDEBUG
@@ -1011,84 +753,7 @@ void MultiplexingPass::selectMultiplexSetsWorkingSet() {
     // in which we can consider their operands instead.) Ideally, if we can keep the set of live values small,
     // we may be able to reduce register pressure.
 
-//    using Graph = adjacency_list<hash_setS, vecS, bidirectionalS, Statement *, unsigned>;
-//    using Map = flat_map<const Statement *, typename Graph::vertex_descriptor>;
 
-//    const size_t m = num_vertices(mConstraintGraph);
-//    const size_t n = num_vertices(mMultiplexSetGraph) - m;
-
-//    for (unsigned i = 0; i != n; ++i) {
-
-//        Map M;
-//        Graph G = construct<Graph>(block, M);
-
-
-
-
-
-
-
-//    }
-
-
-
-
-
-
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief removePotentialCycles
- *
- * If Samples > 1, our candidate sets were generated by more than one traversal through the constraint DAG.
- * Multiplexing disjoint sets generated by differing traversals can induce a cycle in the AST. For example,
- * suppose sets {A,B} and {C,D} and A is dependent on C and D on B; multiplexing both will result in a cycle.
- *
- * Eliminating all potential cycles will likely lead to the removal of many candidate sets. Instead we "fix"
- * the candidate sets after the selection of a particular candidate set.
- ** ------------------------------------------------------------------------------------------------------------- */
-void MultiplexingPass::removePotentialCycles(const CandidateGraph::vertex_descriptor i) {
-
-    using AdjIterator = graph_traits<CandidateGraph>::adjacency_iterator;
-
-    const auto m = num_vertices(mConstraintGraph);
-    const auto n = num_vertices(mCandidateGraph);
-
-    // Suppose we construct a graph G that indicates whether selecting candidate set V will induce a cycle, given
-    // that we've already chosen candidate set U. This can occur here only because some elements of V are dependent
-    // on U and vice versa.
-
-    // We want the minimal minimum weight feedback arc set of G; however, we also know any edge will either have
-    //
-
-    for (auto j = m; j < n; ++j) {
-        if (LLVM_UNLIKELY(i == j)) continue;
-        AdjIterator begin, end;
-        std::tie(begin, end) = adjacent_vertices(j, mCandidateGraph);
-        for (auto ui = begin; ui != end; )  {
-            const auto u = *ui++;
-            unsigned outgoing = 0;
-            unsigned incoming = 0;
-            for (auto v : make_iterator_range(adjacent_vertices(i, mCandidateGraph)))  {
-                if (dependent(u, v)) {
-                    ++outgoing;
-                } else if (dependent(v, u)) {
-                    ++incoming;
-                }
-            }
-            if (LLVM_UNLIKELY(outgoing > 0 && incoming > 0)) {
-                remove_edge(j, u, mCandidateGraph);
-            }
-        }
-    }
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief dependent
- ** ------------------------------------------------------------------------------------------------------------- */
-inline bool MultiplexingPass::dependent(const ConstraintVertex i, const ConstraintVertex j) const {
-    const auto e = mConstraintGraph.get_edge(i, j);
-    return (e.second && e.first);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -1125,8 +790,8 @@ void MultiplexingPass::eliminateSubsetConstraints() {
 
         // Afterwards modify the AST to ensure that multiplexing algorithm can ignore any subset constraints
         for (auto e : make_iterator_range(edges(mSubsetGraph))) {
-            Advance * const adv1 = mAdvance[source(e, mSubsetGraph)];
-            Advance * const adv2 = mAdvance[target(e, mSubsetGraph)];
+            Advance * const adv1 = mConstraintGraph[source(e, mSubsetGraph)];
+            Advance * const adv2 = mConstraintGraph[target(e, mSubsetGraph)];
             assert (adv1->getParent() == adv2->getParent());
             PabloBlock * const pb = adv1->getParent();
             pb->setInsertPoint(adv2->getPrevNode());
@@ -1139,10 +804,59 @@ void MultiplexingPass::eliminateSubsetConstraints() {
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
+ * @brief dominates
+ *
+ * does Statement a dominate Statement b?
+ ** ------------------------------------------------------------------------------------------------------------- */
+bool dominates(const Statement * const a, const Statement * const b) {
+
+    if (LLVM_UNLIKELY(b == nullptr)) {
+        return true;
+    } else if (LLVM_UNLIKELY(a == nullptr)) {
+        return false;
+    }
+
+    assert (a->getParent());
+    assert (b->getParent());
+
+    const PabloBlock * const parent = a->getParent();
+    if (LLVM_LIKELY(parent == b->getParent())) {
+        for (const Statement * t : *parent) {
+            if (t == a) {
+                return true;
+            } else if (t == b) {
+                break;
+            }
+        }
+        return false;
+    } else {
+        const PabloBlock * block = b->getParent();
+        for (;;) {
+            Statement * br = block->getBranch();
+            if (br == nullptr) {
+                return dominates(parent->getBranch(), b);
+            }
+            block = br->getParent();
+            if (block == parent) {
+                return dominates(a, br);
+            }
+        }
+    }
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
  * @brief multiplexSelectedSets
  ** ------------------------------------------------------------------------------------------------------------- */
-void MultiplexingPass::multiplexSelectedSets(PabloFunction & function) {
-    flat_set<PabloBlock *> modified;
+inline void MultiplexingPass::multiplexSelectedSets(PabloBlock * const block) {
+
+
+//    Z3_config cfg = Z3_mk_config();
+//    Z3_context ctx = Z3_mk_context_rc(cfg);
+//    Z3_del_config(cfg);
+//    Z3_solver solver = Z3_mk_solver(ctx);
+//    Z3_solver_inc_ref(ctx, solver);
+
+
     const auto first_set = num_vertices(mConstraintGraph);
     const auto last_set = num_vertices(mCandidateGraph);
     for (auto idx = first_set; idx != last_set; ++idx) {
@@ -1155,12 +869,11 @@ void MultiplexingPass::multiplexSelectedSets(PabloFunction & function) {
             PabloAST * muxed_n[m];
             // The multiplex set graph is a DAG with edges denoting the set relationships of our independent sets.
             unsigned i = 0;
-            for (const auto u : orderMultiplexSet(idx)) {
-                input[i++] = mAdvance[u];
+            for (const auto u : make_iterator_range(adjacent_vertices(idx, mCandidateGraph))) { // orderMultiplexSet(idx)) {
+                input[i++] = mConstraintGraph[u];
             }
             Advance * const adv = input[0];
-            PabloBlock * const block = adv->getParent(); assert (block);
-            modified.insert(block);
+            assert (block == adv->getParent());
 
             circular_buffer<PabloAST *> Q(n);
 
@@ -1203,211 +916,64 @@ void MultiplexingPass::multiplexSelectedSets(PabloFunction & function) {
             }
         }
     }
-    for (PabloBlock * block : modified) {
-        rewriteAST(block);
-    }
-}
 
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief orderMultiplexSet
- ** ------------------------------------------------------------------------------------------------------------- */
-inline MultiplexingPass::Candidates MultiplexingPass::orderMultiplexSet(const CandidateGraph::vertex_descriptor u) {
-    Candidates set;
-    set.reserve(degree(u, mCandidateGraph));
-    for (const auto e : make_iterator_range(adjacent_vertices(u, mCandidateGraph))) {
-        set.push_back(e);
-    }
-    std::sort(set.begin(), set.end());
-    Candidates clique;
-    Candidates result;
-    result.reserve(degree(u, mCandidateGraph));
-    while (set.size() > 0) {
-        const auto v = *set.begin();
-        clique.push_back(v);
-        set.erase(set.begin());
-        for (const auto w : make_iterator_range(adjacent_vertices(v, mUsageGraph))) {
-            auto f = std::lower_bound(set.begin(), set.end(), w);
-            // Is w in our multiplexing set?
-            if (f == set.end() || *f != w) {
-                continue;
-            }
-            // Is our subgraph still a clique after adding w to it?
-            bool valid = true;
-            for (const auto y : clique) {
-                if (!edge(w, y, mUsageGraph).second) {
-                    valid = false;
-                    break;
+    flat_set<PabloAST *> encountered;
+    for (Statement * stmt = block->front(); stmt; ) {
+
+        assert (stmt->getParent() == block);
+        Statement * const next = stmt->getNextNode();
+
+        bool unmoved = true;
+        for (unsigned i = 0; i != stmt->getNumOperands(); ++i) {
+            PabloAST * const op = stmt->getOperand(i);
+            if (isa<Statement>(op)) {
+                Statement * ip = cast<Statement>(op);
+                if (ip->getParent() != block) {
+                    // If we haven't already encountered the Assign or Next node, it must come from a If or
+                    // While node that we haven't processed yet. Scan ahead and try to locate it.
+                    if (isa<Assign>(op)) {
+                        for (PabloAST * user : cast<Assign>(op)->users()) {
+                            if (isa<If>(user) && cast<If>(user)->getParent() == block) {
+                                const auto & defs = cast<If>(user)->getDefined();
+                                if (LLVM_LIKELY(std::find(defs.begin(), defs.end(), op) != defs.end())) {
+                                    ip = cast<If>(user);
+                                    break;
+                                }
+                            }
+                        }
+                    } else if (isa<Next>(op)) {
+                        for (PabloAST * user : cast<Next>(op)->users()) {
+                            if (isa<While>(user) && cast<While>(user)->getParent() == block) {
+                                const auto & vars = cast<While>(user)->getVariants();
+                                if (LLVM_LIKELY(std::find(vars.begin(), vars.end(), op) != vars.end())) {
+                                    ip = cast<While>(user);
+                                    break;
+                                }
+                            }
+                        }
+                    }
                 }
-            }
-            if (valid) {
-                clique.push_back(w);
-                set.erase(f);
-            }
-        }
-        result.insert(result.end(), clique.begin(), clique.end());
-        clique.clear();
-    }
-    return result;
-}
-
-
-
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief rewriteAST
- *
- * Multiplexing ignores def-use ordering when muxing and demuxing the Advances; this will likely lead to an illegal
- * ordering but, by virtue of the multiplexing algorithm, some ordering of the IR must be legal. However, an
- * arbritary topological ordering will likely lead to poor performance due to excessive register spills; this
- * algorithm attempts to mitigate this by using a simple bottom-up ordering scheme.
- ** ------------------------------------------------------------------------------------------------------------- */
-void MultiplexingPass::rewriteAST(PabloBlock * const block) {
-
-    using Graph = adjacency_list<hash_setS, vecS, bidirectionalS, Statement *>;
-    using Vertex = Graph::vertex_descriptor;
-    using ReadySet = std::vector<Vertex>;
-    using TypeId = PabloAST::ClassTypeId;
-
-    Graph G = construct<Graph>(block);
-
-
-    std::vector<unsigned> rank(num_vertices(G), 0);
-
-    {
-        circular_buffer<Vertex> Q(num_vertices(G));
-        // Compute the rank of each statement
-        for (const Vertex u : make_iterator_range(vertices(G))) {
-            if (out_degree(u, G) == 0 && rank[u] == 0) {
-                Q.push_back(u);
-            }
-        }
-
-        while (Q.size() > 0) {
-
-            const Vertex u = Q.front();
-            Q.pop_front();
-
-            assert (rank[u] == 0);
-
-            unsigned work = 0;
-            switch (G[u]->getClassTypeId()) {
-                case TypeId::And:
-                case TypeId::Or:
-                case TypeId::Xor:
-                    work = 2;
-                    break;
-                case TypeId::Not:
-                case TypeId::Assign:
-                case TypeId::Next:
-                    work = 1;
-                    break;
-                case TypeId::Sel:
-                    work = 6;
-                    break;
-                case TypeId::Advance:
-                case TypeId::ScanThru:
-                    work = 33;
-                    break;
-                case TypeId::MatchStar:
-                    work = 51;
-                    break;
-                case TypeId::If:
-                case TypeId::While:
-                case TypeId::Call:
-                    work = 10000; // <-- try to push If, While and Call nodes as high as possible
-                    break;
-                default: break;
-            }
-
-            unsigned r = 0;
-            for (const auto e : make_iterator_range(out_edges(u, G))) {
-                r = std::max(r, rank[target(e, G)]);
-            }
-
-            rank[u] = work + r;
-
-            for (const auto ei : make_iterator_range(in_edges(u, G))) {
-                const auto v = source(ei, G);
-                assert (rank[v] == 0);
-                bool ready = true;
-                for (const auto ej : make_iterator_range(out_edges(v, G))) {
-                    if (rank[target(ej, G)] == 0) {
-                        ready = false;
+                if (encountered.count(ip) == 0) {
+                    if (dominates(ip, stmt)) {
+                        encountered.insert(ip);
+                    } else {
+                        assert (ip->getParent() == block);
+                        stmt->insertAfter(ip);
+                        unmoved = false;
                         break;
                     }
                 }
-                if (ready) {
-                    Q.push_back(v);
-                }
             }
-
         }
+        if (unmoved) {
+            encountered.insert(stmt);
+        }
+        stmt = next;
     }
 
-    // Compute the initial ready set
-    ReadySet readySet;
-    for (const Vertex u : make_iterator_range(vertices(G))) {
-        if (in_degree(u, G) == 0) {
-            readySet.emplace_back(u);
-        }
-    }
+//    Z3_solver_dec_ref(ctx, solver);
+//    Z3_del_context(ctx);
 
-    auto by_nonincreasing_rank = [&rank](const Vertex u, const Vertex v) -> bool {
-        return rank[u] > rank[v];
-    };
-
-    std::sort(readySet.begin(), readySet.end(), by_nonincreasing_rank);
-
-    block->setInsertPoint(nullptr);
-    // Rewrite the AST using the bottom-up ordering
-    while (readySet.size() > 0) {
-        // Scan through the ready set to determine which one 'kills' the greatest number of inputs
-        double best = 0.0;
-        auto rk = readySet.begin();
-        for (auto ri = readySet.begin(); ri != readySet.end(); ++ri) {
-            double p = 0.0;
-            assert (rank[*ri] != 0);
-            for (auto ei : make_iterator_range(in_edges(*ri, G))) {
-                const auto v = source(ei, G);
-                unsigned unscheduled = 0;
-                for (auto ej : make_iterator_range(out_edges(v, G))) {
-                    if (rank[target(ej, G)] != 0) { // if this edge leads to an unscheduled statement
-                        ++unscheduled;
-                    }
-                }
-                assert (unscheduled > 0);
-                assert (unscheduled <= out_degree(v, G));
-                const double uses = out_degree(v, G);
-                p += std::pow((uses - (double)(unscheduled - 1)) / uses, 2);
-            }
-            if (p > best) {
-                rk = ri;
-                best = p;
-            }
-        }
-        const auto u = *rk;
-        readySet.erase(rk);
-        // Write the statement back to the AST ...
-        block->insert(G[u]);
-        // ... and mark it as written
-        rank[u] = 0;
-        // Now check whether any new statements are ready
-        for (auto ei : make_iterator_range(out_edges(u, G))) {
-            bool ready = true;
-            const auto v = target(ei, G);
-            assert (rank[v] != 0);
-            for (auto ej : make_iterator_range(in_edges(v, G))) {
-                if (rank[source(ej, G)] != 0) {
-                    ready = false;
-                    break;
-                }
-            }
-            if (ready) {
-                readySet.insert(std::lower_bound(readySet.begin(), readySet.end(), v, by_nonincreasing_rank), v);
-                assert (std::is_sorted(readySet.cbegin(), readySet.cend(), by_nonincreasing_rank));
-            }
-        }
-    }
 
 }
 
@@ -1442,215 +1008,54 @@ void MultiplexingPass::doTransitiveReductionOfSubsetGraph() {
     } while (!Q.empty());
 }
 
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief findMaximalCliques
- *
- * Adaptation of the Bron-Kerbosch algorithm.
- ** ------------------------------------------------------------------------------------------------------------- */
-inline MultiplexingPass::CliqueSets MultiplexingPass::findMaximalCliques(const CliqueGraph & G) {
-    CliqueSets S;
-    const auto n = num_vertices(G);
-    std::vector<CliqueGraph::vertex_descriptor> ordering;
-    ordering.reserve(n);
-    for (auto u : make_iterator_range(vertices(G))) {
-        if (degree(u, G)) {
-            ordering.push_back(u);
-        }
-    }
-    CliqueSet R;
-    CliqueSet P(ordering.begin(), ordering.end());    
-    CliqueSet X;
-    X.reserve(ordering.size());
-    // compute a degeneracy ordering of G
-    std::sort(ordering.begin(), ordering.end(), [&G](const CliqueGraph::vertex_descriptor i, const CliqueGraph::vertex_descriptor j){ return degree(i, G) < degree(j, G); });
-    for (auto v : ordering) {
-        R.insert(v);
-        CliqueSet PN, XN;
-        for (const auto u : make_iterator_range(adjacent_vertices(v, G))) {
-            if (P.count(u)) PN.insert(u);
-            if (X.count(u)) XN.insert(u);
-        }
-        findMaximalCliques(G, R, std::move(PN), std::move(XN), S); // ({v}, P ∩ N(v), X ∩ N(v))
-        R.clear();
-        P.erase(v);
-        X.insert(v);
-    }
-    return S;
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief findMaximalCliques
- ** ------------------------------------------------------------------------------------------------------------- */
-void MultiplexingPass::findMaximalCliques(const CliqueGraph & G, CliqueSet & R, CliqueSet && P, CliqueSet && X, CliqueSets & S) {
-    if (LLVM_UNLIKELY(P.empty() && X.empty())) { // Report R as a maximal clique
-        S.emplace(R.begin(), R.end());
-    } else {
-        // choose the pivot vertex u in P ∪ X as the vertex with the highest number of neighbors in P (Tomita et al. 2006.)
-        CliqueSet N;
-        CliqueGraph::degree_size_type size = 0;
-        for (const CliqueGraph::vertex_descriptor u : P) {
-            if (degree(u, G) >= size) {
-                CliqueGraph::degree_size_type neighbours = 0;
-                for (const CliqueGraph::vertex_descriptor v : make_iterator_range(adjacent_vertices(u, G))) {
-                    neighbours += P.count(v);
-                }
-                if (size <= neighbours) {
-                    if (size < neighbours) {
-                        size = neighbours;
-                        N.clear();
-                    }
-                    N.insert(u);
-                }
-            }
-        }
-        for (const CliqueGraph::vertex_descriptor u : X) {
-            if (degree(u, G) >= size) {
-                CliqueGraph::degree_size_type neighbours = 0;
-                for (const CliqueGraph::vertex_descriptor v : make_iterator_range(adjacent_vertices(u, G))) {
-                    neighbours += P.count(v);
-                }
-                if (size <= neighbours) {
-                    if (size < neighbours) {
-                        size = neighbours;
-                        N.clear();
-                    }
-                    N.insert(u);
-                }
-            }
-        }
-        const CliqueGraph::vertex_descriptor u = *(N.nth(IntDistribution(0, N.size() - 1)(mRNG)));
-        // for each vertex v in P \ N(u):
-        for (auto v = P.begin(); v != P.end(); v = P.erase(v)) {
-            if (edge(u, *v, G).second) continue;
-            const bool added = R.insert(*v).second;
-            CliqueSet PN, XN;
-            for (const CliqueGraph::vertex_descriptor u : make_iterator_range(adjacent_vertices(*v, G))) {
-                if (P.count(u)) PN.insert(u);
-                if (X.count(u)) XN.insert(u);
-            }
-            findMaximalCliques(G, R, std::move(PN), std::move(XN), S); // (R ∪ {v}, P ∩ N(v), X ∩ N(v))
-            if (LLVM_LIKELY(added)) R.erase(*v);
-            X.insert(*v);
-        }
-    }
-}
-
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief get
  ** ------------------------------------------------------------------------------------------------------------- */
-inline BDD & MultiplexingPass::get(const PabloAST * const expr) {
+inline Z3_ast & MultiplexingPass::get(const PabloAST * const expr, const bool deref) {
     assert (expr);
     auto f = mCharacterization.find(expr);
     assert (f != mCharacterization.end());
-    return f->second;
+    auto & val = f->second;
+    if (deref) {
+        unsigned & refs = std::get<1>(val);
+        assert (refs > 0);
+        --refs;
+    }
+    return std::get<0>(val);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief computeDAG
+ * @brief make
  ** ------------------------------------------------------------------------------------------------------------- */
-template<typename Graph, typename Map>
-Graph construct(PabloBlock * const block, Map & M) {
-
-    using Vertex = typename Graph::vertex_descriptor;
-
-    const auto size = std::distance(block->begin(), block->end());
-
-    Graph G(size);
-    M.reserve(size);
-
-    Vertex u = 0;
-    for (Statement * stmt : *block ) {
-        G[u] = stmt;
-        M.emplace(stmt, u);
-        if (LLVM_UNLIKELY(isa<If>(stmt))) {
-            for (Assign * def : cast<If>(stmt)->getDefined()) {
-                M.emplace(def, u);
-            }
-        } else if (LLVM_UNLIKELY(isa<While>(stmt))) {
-            for (Next * var : cast<While>(stmt)->getVariants()) {
-                M.emplace(var, u);
-            }
-        }
-        ++u;
-    }
-
-    /// The following is a lamda function that adds any users of "stmt" to the graph after resolving
-    /// which vertex it maps to w.r.t. the current block.
-    auto addUsers = [&](const Vertex u, const Statement * const stmt) -> void {
-        for (const PabloAST * user : stmt->users()) {
-            if (LLVM_LIKELY(isa<Statement>(user))) {
-                const Statement * use = cast<Statement>(user);
-                auto f = M.find(use);
-                if (LLVM_UNLIKELY(f == M.end())) {
-                    const PabloBlock * parent = use->getParent();
-                    for (;;) {
-                        if (parent == block) {
-                            break;
-                        }
-                        use = parent->getBranch();
-                        parent = parent->getParent();
-                        if (parent == nullptr) {
-                            return;
-                        }
-                    }
-                    f = M.find(use);
-                    assert (f != M.end());
-                    M.emplace(use, f->second);
-                }
-                const auto v = f->second;
-                if (LLVM_UNLIKELY(u != v)) {
-                    add_edge(u, v, G);
-                }
-            }
-        }
-    };
-
-    u = 0;
-    for (Statement * stmt : *block ) {
-
-        for (unsigned i = 0; i != stmt->getNumOperands(); ++i) {
-            PabloAST * const op = stmt->getOperand(i);
-            if (isa<Statement>(op)) {
-                auto f = M.find(cast<Statement>(op));
-                if (f != M.end()) {
-                    add_edge(f->second, u, G);
-                }
-            }
-        }
-
-        if (LLVM_UNLIKELY(isa<If>(stmt))) {
-            for (Assign * def : cast<If>(stmt)->getDefined()) {
-                addUsers(u, def);
-            }
-        } else if (LLVM_UNLIKELY(isa<While>(stmt))) {
-            for (Next * var : cast<While>(stmt)->getVariants()) {
-                addUsers(u, var);
-            }
-        } else {
-            addUsers(u, stmt);
-        }
-
-        ++u;
-    }
-
-    #ifndef NDEBUG
-    std::vector<Vertex> nothing;
-    topological_sort(G, std::back_inserter(nothing));
-    #endif
-
-    return G;
+inline Z3_ast MultiplexingPass::make(const PabloAST * const expr) {
+    assert (expr);
+    Z3_sort ty = Z3_mk_bool_sort(mContext);
+    Z3_symbol s = Z3_mk_string_symbol(mContext, nullptr); // expr->getName()->to_string().c_str()
+    Z3_ast node = Z3_mk_const(mContext, s, ty);
+    Z3_inc_ref(mContext, node);
+    return add(expr, node);
 }
-
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief computeDAG
+ * @brief add
  ** ------------------------------------------------------------------------------------------------------------- */
-template<typename Graph>
-Graph construct(PabloBlock * const block) {
-    using Map = flat_map<const Statement *, typename Graph::vertex_descriptor>;
-    Map M;
-    return construct<Graph, Map>(block, M);
+inline Z3_ast MultiplexingPass::add(const PabloAST * const expr, Z3_ast node) {    
+    mCharacterization.insert(std::make_pair(expr, std::make_pair(node, expr->getNumUses())));
+    return node;
 }
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief constructor
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline MultiplexingPass::MultiplexingPass(PabloFunction & f, const RNG::result_type seed, Z3_context context, Z3_solver solver)
+: mContext(context)
+, mSolver(solver)
+, mFunction(f)
+, mRNG(seed)
+, mConstraintGraph(0)
+{
+
+}
+
 
 } // end of namespace pablo
