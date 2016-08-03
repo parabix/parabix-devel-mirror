@@ -59,11 +59,11 @@ protected:
 
     void reset();
 
-    void characterize(PabloFunction & function);
-    void characterize(PabloBlock * const block);
+    void optimize();
+    void optimize(PabloBlock * const block);
     Z3_ast characterize(Statement * const stmt);
     Z3_ast characterize(Advance * const adv, Z3_ast Ik);
-    void multiplex(PabloBlock * const block);
+    void multiplex(PabloBlock * const block, Statement * const begin, Statement * const end);
 
     bool generateCandidateSets();
     void addCandidateSet(const Constraints & S);
@@ -76,7 +76,7 @@ protected:
     void eliminateSubsetConstraints();
     void doTransitiveReductionOfSubsetGraph();
 
-    void multiplexSelectedSets(PabloBlock * const block);
+    void multiplexSelectedSets(PabloBlock * const block, Statement * const begin, Statement * const end);
 
 
     Z3_ast make(const PabloAST * const expr);

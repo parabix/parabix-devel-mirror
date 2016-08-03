@@ -78,11 +78,9 @@ using TypeId = PabloAST::ClassTypeId;
  ** ------------------------------------------------------------------------------------------------------------- */
 bool MultiplexingPass::optimize(PabloFunction & function) {
 
-    if (LLVM_UNLIKELY(Samples < 1)) {
-        return false;
-    }
-
+    #ifndef NDEBUG
     PabloVerifier::verify(function, "pre-multiplexing");
+    #endif
 
     Z3_config cfg = Z3_mk_config();
     Z3_context ctx = Z3_mk_context_rc(cfg);
@@ -92,12 +90,16 @@ bool MultiplexingPass::optimize(PabloFunction & function) {
 
     MultiplexingPass mp(function, Seed, ctx, solver);
 
-    mp.characterize(function);
+    mp.optimize();
 
     Z3_solver_dec_ref(ctx, solver);
     Z3_del_context(ctx);
 
+    #ifndef NDEBUG
     PabloVerifier::verify(function, "post-multiplexing");
+    #endif
+
+    Simplifier::optimize(function);
 
     return true;
 }
@@ -106,43 +108,37 @@ bool MultiplexingPass::optimize(PabloFunction & function) {
  * @brief characterize
  * @param function the function to optimize
  ** ------------------------------------------------------------------------------------------------------------- */
-void MultiplexingPass::characterize(PabloFunction & function) {
+void MultiplexingPass::optimize() {
     // Map the constants and input variables
-    Z3_sort boolTy = Z3_mk_bool_sort(mContext);
 
-    Z3_ast F = Z3_mk_const(mContext, Z3_mk_int_symbol(mContext, 0), boolTy);
-    Z3_inc_ref(mContext, F);
-    add(PabloBlock::createZeroes(), F);
-
-    Z3_ast T = Z3_mk_const(mContext, Z3_mk_int_symbol(mContext, 1), boolTy);
-    Z3_inc_ref(mContext, T);
-    add(PabloBlock::createOnes(), T);
-
-    for (unsigned i = 0; i < function.getNumOfParameters(); ++i) {
-        make(function.getParameter(i));
+    add(PabloBlock::createZeroes(), Z3_mk_false(mContext));
+    add(PabloBlock::createOnes(), Z3_mk_true(mContext));
+    for (unsigned i = 0; i < mFunction.getNumOfParameters(); ++i) {
+        make(mFunction.getParameter(i));
     }
 
-    characterize(function.getEntryBlock());
+    optimize(mFunction.getEntryBlock());
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief characterize
  ** ------------------------------------------------------------------------------------------------------------- */
-void MultiplexingPass::characterize(PabloBlock * const block) {
-    Statement * end = initialize(block->front());
+void MultiplexingPass::optimize(PabloBlock * const block) {
+    Statement * begin = block->front();
+    Statement * end = initialize(begin);
     for (Statement * stmt : *block) {
         if (LLVM_UNLIKELY(stmt == end)) {
             Statement * const next = stmt->getNextNode();
-            multiplex(block);
+            multiplex(block, begin, stmt);
             if (isa<If>(stmt)) {
-                characterize(cast<If>(stmt)->getBody());
+                optimize(cast<If>(stmt)->getBody());
             } else if (isa<While>(stmt)) {
                 for (const Next * var : cast<While>(stmt)->getVariants()) {
                     Z3_inc_ref(mContext, get(var->getInitial()));
                 }
-                characterize(cast<While>(stmt)->getBody());
+                optimize(cast<While>(stmt)->getBody());
                 // since we cannot be certain that we'll always execute at least one iteration of a loop, we must
-                // assume that the variants could either be their initial value or their resulting value.
+                // assume that the variants could either be their initial or resulting value.
                 for (const Next * var : cast<While>(stmt)->getVariants()) {
                     Z3_ast v0 = get(var->getInitial());
                     Z3_ast & v1 = get(var);
@@ -155,22 +151,22 @@ void MultiplexingPass::characterize(PabloBlock * const block) {
                     assert (get(var) == r);
                 }
             }
-            end = initialize(next);
+            end = initialize(begin = next);
         } else {
             characterize(stmt);
         }
     }
-    multiplex(block);
+    multiplex(block, begin, nullptr);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief multiplex
  ** ------------------------------------------------------------------------------------------------------------- */
-void MultiplexingPass::multiplex(PabloBlock * const block) {
+void MultiplexingPass::multiplex(PabloBlock * const block, Statement * const begin, Statement * const end) {
     if (generateCandidateSets()) {
         selectMultiplexSetsGreedy();
         eliminateSubsetConstraints();
-        multiplexSelectedSets(block);
+        multiplexSelectedSets(block, begin, end);
     }
 }
 
@@ -379,12 +375,10 @@ Statement * MultiplexingPass::initialize(Statement * const initial) {
     // clean up any unneeded refs / characterizations.
     for (auto i = mCharacterization.begin(); i != mCharacterization.end(); ) {
         const CharacterizationRef & r = std::get<1>(*i);
+        const auto e = i++;
         if (LLVM_UNLIKELY(std::get<1>(r) == 0)) {
             Z3_dec_ref(mContext, std::get<0>(r));
-            auto j = i++;
-            mCharacterization.erase(j);
-        } else {
-            ++i;
+            mCharacterization.erase(e);
         }
     }
 
@@ -803,83 +797,205 @@ void MultiplexingPass::eliminateSubsetConstraints() {
     }
 }
 
+///** ------------------------------------------------------------------------------------------------------------- *
+// * Fu & Malik procedure for MaxSAT. This procedure is based on unsat core extraction and the at-most-one constraint.
+// ** ------------------------------------------------------------------------------------------------------------- */
+//inline bool fu_malik_maxsat_step(Z3_context ctx, Z3_solver s, const std::vector<Z3_ast> & soft)
+//{
+//    // create assumptions
+//    const auto n = soft.size();
+//    Z3_ast assumptions[n];
+//    for (size_t i = 0; i < n; ++i) {
+//        assumptions[i] = Z3_mk_not(ctx, soft[i]);
+//    }
+
+//    if (Z3_solver_check_assumptions(ctx, s, n, assumptions) != Z3_L_FALSE) {
+//        return true; // done
+//    }
+
+//    const auto core = Z3_solver_get_unsat_core(ctx, s);
+//    const auto m = Z3_ast_vector_size(ctx, core);
+//    Z3_ast block_vars[m];
+//    unsigned k = 0;
+//    // update soft-constraints and aux_vars
+//    for (unsigned i = 0; i < num_soft_cnstrs; i++) {
+//        // check whether assumption[i] is in the core or not
+//        for (unsigned j = 0; j < m; j++) {
+//            if (assumptions[i] == Z3_ast_vector_get(ctx, core, j)) {
+//                // assumption[i] is in the unsat core... so soft_cnstrs[i] is in the unsat core
+//                Z3_ast block_var   = Z3_mk_fresh_const(ctx, nullptr, Z3_mk_bool_sort(ctx));
+//                Z3_ast new_aux_var = Z3_mk_fresh_const(ctx, nullptr, Z3_mk_bool_sort(ctx));
+//                soft_cnstrs[i]     = mk_binary_or(ctx, soft_cnstrs[i], block_var);
+//                aux_vars[i]        = new_aux_var;
+//                block_vars[k]      = block_var;
+//                k++;
+//                // Add new constraint containing the block variable.
+//                // Note that we are using the new auxiliary variable to be able to use it as an assumption.
+//                Z3_solver_assert(ctx, s, mk_binary_or(ctx, soft_cnstrs[i], new_aux_var));
+//                break;
+//            }
+//        }
+//    }
+
+
+//    assert_at_most_one(ctx, s, k, block_vars);
+//    return 0; // not done.
+
+//}
+
+///** ------------------------------------------------------------------------------------------------------------- *
+// * Fu & Malik procedure for MaxSAT. This procedure is based on unsat core extraction and the at-most-one constraint.
+// ** ------------------------------------------------------------------------------------------------------------- */
+//inline bool fu_malik_maxsat(Z3_context ctx, Z3_solver s, const std::vector<Z3_ast> & soft) {
+//    assert(Z3_solver_check(ctx, s) != Z3_L_FALSE);
+//    for (size_t k = 0; k < soft.size(); ++k) {
+//        if (fu_malik_maxsat_step(ctx, s, soft)) {
+//            return true;
+//        }
+//    }
+//    return false;
+//}
+
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief addWithHardConstraints
+ ** ------------------------------------------------------------------------------------------------------------- */
+Z3_ast addWithHardConstraints(Z3_context ctx, Z3_solver solver, PabloBlock * const block, Statement * stmt, flat_map<Statement *, Z3_ast> & M) {
+    assert (M.count(stmt) == 0 && stmt->getParent() == block);
+    // compute the hard dependency constraints
+    Z3_symbol symbol = Z3_mk_string_symbol(ctx, stmt->getName()->value().data()); assert (symbol);
+    Z3_ast node = Z3_mk_const(ctx, symbol, Z3_mk_int_sort(ctx)); assert (node);
+    for (unsigned i = 0; i != stmt->getNumOperands(); ++i) {
+        PabloAST * const op = stmt->getOperand(i);
+        if (isa<Statement>(op) && cast<Statement>(op)->getParent() == block) {
+            const auto f = M.find(cast<Statement>(op));
+            if (f != M.end()) {
+                Z3_ast depedency = Z3_mk_lt(ctx, f->second, node);
+                Z3_solver_assert(ctx, solver, depedency);
+            }
+        }
+    }
+    M.emplace(stmt, node);
+    return node;
+
+}
+
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief dominates
  *
  * does Statement a dominate Statement b?
  ** ------------------------------------------------------------------------------------------------------------- */
 bool dominates(const Statement * const a, const Statement * const b) {
-
+    assert (a);
     if (LLVM_UNLIKELY(b == nullptr)) {
-        return true;
-    } else if (LLVM_UNLIKELY(a == nullptr)) {
         return false;
     }
-
-    assert (a->getParent());
-    assert (b->getParent());
-
-    const PabloBlock * const parent = a->getParent();
-    if (LLVM_LIKELY(parent == b->getParent())) {
-        for (const Statement * t : *parent) {
-            if (t == a) {
-                return true;
-            } else if (t == b) {
-                break;
-            }
+    assert (a->getParent() == b->getParent());
+    for (const Statement * t : *a->getParent()) {
+        if (t == a) {
+            return true;
+        } else if (t == b) {
+            return false;
         }
-        return false;
-    } else {
-        const PabloBlock * block = b->getParent();
-        for (;;) {
-            Statement * br = block->getBranch();
-            if (br == nullptr) {
-                return dominates(parent->getBranch(), b);
-            }
-            block = br->getParent();
-            if (block == parent) {
-                return dominates(a, br);
+    }
+    llvm_unreachable("Neither a nor b are in their reported block!");
+    return false;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief addWithHardConstraints
+ ** ------------------------------------------------------------------------------------------------------------- */
+Z3_ast addWithHardConstraints(Z3_context ctx, Z3_solver solver, PabloBlock * const block, PabloAST * expr, flat_map<Statement *, Z3_ast> & M, Statement * const ip) {
+    if (isa<Statement>(expr)) {
+        Statement * const stmt = cast<Statement>(expr);
+        if (stmt->getParent() == block) {
+            const auto f = M.find(stmt);
+            if (LLVM_UNLIKELY(f != M.end())) {
+                return f->second;
+            } else if (!dominates(stmt, ip)) {
+                for (unsigned i = 0; i != stmt->getNumOperands(); ++i) {
+                    addWithHardConstraints(ctx, solver, block, stmt->getOperand(i), M, ip);
+                }
+                return addWithHardConstraints(ctx, solver, block, stmt, M);
             }
         }
     }
+    return nullptr;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief multiplexSelectedSets
  ** ------------------------------------------------------------------------------------------------------------- */
-inline void MultiplexingPass::multiplexSelectedSets(PabloBlock * const block) {
+inline void MultiplexingPass::multiplexSelectedSets(PabloBlock * const block, Statement * const begin, Statement * const end) {
 
+    assert ("begin cannot be null!" && begin);
+    assert (begin->getParent() == block);
+    assert (!end || end->getParent() == block);
+    assert (!end || isa<If>(end) || isa<While>(end));
 
-//    Z3_config cfg = Z3_mk_config();
-//    Z3_context ctx = Z3_mk_context_rc(cfg);
-//    Z3_del_config(cfg);
-//    Z3_solver solver = Z3_mk_solver(ctx);
-//    Z3_solver_inc_ref(ctx, solver);
+    Statement * const ip = begin->getPrevNode(); // save our insertion point prior to modifying the AST
 
+    Z3_config cfg = Z3_mk_config();
+    // Z3_set_param_value(cfg, "MODEL", "true");
+    Z3_context ctx = Z3_mk_context(cfg);
+    Z3_del_config(cfg);
+    Z3_solver solver = Z3_mk_solver(ctx);
 
     const auto first_set = num_vertices(mConstraintGraph);
     const auto last_set = num_vertices(mCandidateGraph);
+
+    // Compute the hard and soft constraints for any part of the AST that we are not intending to modify.
+    flat_map<Statement *, Z3_ast> M;
+
+//    Z3_ast prior = nullptr;
+
+//    Z3_ast one = Z3_mk_int(ctx, 1, Z3_mk_int_sort(ctx));
+
+//    std::vector<Z3_ast> soft; // call check_with_assumptions!!!
+
+    for (Statement * stmt = begin; stmt != end; stmt = stmt->getNextNode()) {
+        Z3_ast node = addWithHardConstraints(ctx, solver, block, stmt, M);
+//        // add in the soft ordering constraints
+//        if (prior) {
+//            Z3_ast constraint[2];
+//            if (gap) {
+//                constraint[0] = Z3_mk_lt(ctx, prior, node);
+//                gap = false;
+//            } else {
+//                Z3_ast prior_plus_one[2] = { prior, one };
+//                Z3_ast num = Z3_mk_add(ctx, 2, prior_plus_one);
+//                constraint[0] = Z3_mk_eq(ctx, node, num);
+//            }
+//            Z3_ast ordering = Z3_mk_fresh_const(ctx, nullptr, Z3_mk_bool_sort(ctx));
+//            constraint[1] = ordering;
+//            Z3_solver_assert(ctx, solver, Z3_mk_or(ctx, 2, constraint));
+//            soft.push_back(ordering);
+//        }
+//        prior = node;
+    }
+
+
+    block->setInsertPoint(block->back());
+
     for (auto idx = first_set; idx != last_set; ++idx) {
         const size_t n = degree(idx, mCandidateGraph);
-        assert (n == 0 || n > 2);
         if (n) {
-            const size_t m = log2_plus_one(n);
+            const size_t m = log2_plus_one(n); assert (n > 2 && m < n);
             Advance * input[n];
             PabloAST * muxed[m];
             PabloAST * muxed_n[m];
             // The multiplex set graph is a DAG with edges denoting the set relationships of our independent sets.
             unsigned i = 0;
-            for (const auto u : make_iterator_range(adjacent_vertices(idx, mCandidateGraph))) { // orderMultiplexSet(idx)) {
-                input[i++] = mConstraintGraph[u];
+            for (const auto u : make_iterator_range(adjacent_vertices(idx, mCandidateGraph))) {
+                input[i] = mConstraintGraph[u];
+                assert ("Algorithm failure! not all inputs are in the same block!" && (input[i]->getParent() == block));
+                assert ("Algorithm failure! not all inputs advance by the same amount!" && (input[i]->getOperand(1) == input[0]->getOperand(1)));
+                ++i;
             }
-            Advance * const adv = input[0];
-            assert (block == adv->getParent());
 
             circular_buffer<PabloAST *> Q(n);
 
-            PabloBuilder builder(block);
-            block->setInsertPoint(nullptr);
-            /// Perform n-to-m Multiplexing            
+            /// Perform n-to-m Multiplexing
             for (size_t j = 0; j != m; ++j) {                
                 std::ostringstream prefix;
                 prefix << "mux" << n << "to" << m << '.' << (j);
@@ -892,87 +1008,78 @@ inline void MultiplexingPass::multiplexSelectedSets(PabloBlock * const block) {
                 while (Q.size() > 1) {
                     PabloAST * a = Q.front(); Q.pop_front();
                     PabloAST * b = Q.front(); Q.pop_front();
-                    Q.push_back(builder.createOr(a, b));
+                    PabloAST * expr = block->createOr(a, b);
+                    addWithHardConstraints(ctx, solver, block, expr, M, ip);
+                    Q.push_back(expr);
                 }
-                PabloAST * const muxing =  Q.front(); Q.clear();
-                muxed[j] = builder.createAdvance(muxing, adv->getOperand(1), prefix.str());
-                muxed_n[j] = builder.createNot(muxed[j]);
+                PabloAST * const muxing = Q.front(); Q.clear();
+                muxed[j] = block->createAdvance(muxing, input[0]->getOperand(1), prefix.str());
+                addWithHardConstraints(ctx, solver, block, muxed[j], M, ip);
+                muxed_n[j] = block->createNot(muxed[j]);
+                addWithHardConstraints(ctx, solver, block, muxed_n[j], M, ip);
             }
+
             /// Perform m-to-n Demultiplexing
-            block->setInsertPoint(block->back());
             for (size_t i = 0; i != n; ++i) {
                 // Construct the demuxed values and replaces all the users of the original advances with them.
                 assert (Q.empty());
                 for (size_t j = 0; j != m; ++j) {
                     Q.push_back((((i + 1) & (1UL << j)) != 0) ? muxed[j] : muxed_n[j]);
                 }
+                Z3_ast replacement = nullptr;
                 while (Q.size() > 1) {
                     PabloAST * const a = Q.front(); Q.pop_front();
                     PabloAST * const b = Q.front(); Q.pop_front();
-                    Q.push_back(builder.createAnd(a, b));
+                    PabloAST * expr = block->createAnd(a, b);
+                    replacement = addWithHardConstraints(ctx, solver, block, expr, M, ip);
+                    Q.push_back(expr);
                 }
-                PabloAST * const demuxed =  Q.front(); Q.clear();
-                input[i]->replaceWith(demuxed, true, true);
+                assert (replacement);
+                PabloAST * const demuxed = Q.front(); Q.clear();
+
+                const auto f = M.find(input[i]);
+                assert (f != M.end());
+                Z3_solver_assert(ctx, solver, Z3_mk_eq(ctx, f->second, replacement));
+                M.erase(f);
+
+                input[i]->replaceWith(demuxed);
+                assert (M.count(input[i]) == 0);
             }
         }
     }
 
-    flat_set<PabloAST *> encountered;
-    for (Statement * stmt = block->front(); stmt; ) {
+    assert (M.count(ip) == 0);
 
-        assert (stmt->getParent() == block);
-        Statement * const next = stmt->getNextNode();
-
-        bool unmoved = true;
-        for (unsigned i = 0; i != stmt->getNumOperands(); ++i) {
-            PabloAST * const op = stmt->getOperand(i);
-            if (isa<Statement>(op)) {
-                Statement * ip = cast<Statement>(op);
-                if (ip->getParent() != block) {
-                    // If we haven't already encountered the Assign or Next node, it must come from a If or
-                    // While node that we haven't processed yet. Scan ahead and try to locate it.
-                    if (isa<Assign>(op)) {
-                        for (PabloAST * user : cast<Assign>(op)->users()) {
-                            if (isa<If>(user) && cast<If>(user)->getParent() == block) {
-                                const auto & defs = cast<If>(user)->getDefined();
-                                if (LLVM_LIKELY(std::find(defs.begin(), defs.end(), op) != defs.end())) {
-                                    ip = cast<If>(user);
-                                    break;
-                                }
-                            }
-                        }
-                    } else if (isa<Next>(op)) {
-                        for (PabloAST * user : cast<Next>(op)->users()) {
-                            if (isa<While>(user) && cast<While>(user)->getParent() == block) {
-                                const auto & vars = cast<While>(user)->getVariants();
-                                if (LLVM_LIKELY(std::find(vars.begin(), vars.end(), op) != vars.end())) {
-                                    ip = cast<While>(user);
-                                    break;
-                                }
-                            }
-                        }
-                    }
-                }
-                if (encountered.count(ip) == 0) {
-                    if (dominates(ip, stmt)) {
-                        encountered.insert(ip);
-                    } else {
-                        assert (ip->getParent() == block);
-                        stmt->insertAfter(ip);
-                        unmoved = false;
-                        break;
-                    }
-                }
-            }
-        }
-        if (unmoved) {
-            encountered.insert(stmt);
-        }
-        stmt = next;
+    if (LLVM_UNLIKELY(Z3_solver_check(ctx, solver) == Z3_L_FALSE)) {
+        throw std::runtime_error("Unexpected Z3 failure when attempting to topologically sort the AST!");
     }
 
-//    Z3_solver_dec_ref(ctx, solver);
-//    Z3_del_context(ctx);
+    Z3_model m = Z3_solver_get_model(ctx, solver);
+    Z3_model_inc_ref(ctx, m);
+
+    std::vector<std::pair<long long int, Statement *>> Q;
+
+    for (const auto i : M) {
+        Z3_ast value;
+        if (Z3_model_eval(ctx, m, std::get<1>(i), Z3_L_TRUE, &value) != Z3_L_TRUE) {
+            throw std::runtime_error("Unexpected Z3 error when attempting to obtain value from model!");
+        }
+        long long int line;
+        if (Z3_get_numeral_int64(ctx, value, &line) != Z3_L_TRUE) {
+            throw std::runtime_error("Unexpected Z3 error when attempting to convert model value to integer!");
+        }
+        Q.emplace_back(line, std::get<0>(i));
+    }
+
+    Z3_model_dec_ref(ctx, m);
+    Z3_del_context(ctx);
+
+    std::sort(Q.begin(), Q.end());
+
+    block->setInsertPoint(ip);
+    for (auto i : Q) {
+        block->insert(std::get<1>(i));
+    }
 
 
 }
@@ -1030,7 +1137,14 @@ inline Z3_ast & MultiplexingPass::get(const PabloAST * const expr, const bool de
 inline Z3_ast MultiplexingPass::make(const PabloAST * const expr) {
     assert (expr);
     Z3_sort ty = Z3_mk_bool_sort(mContext);
-    Z3_symbol s = Z3_mk_string_symbol(mContext, nullptr); // expr->getName()->to_string().c_str()
+    const String * name = nullptr;
+    if (LLVM_LIKELY(isa<Statement>(expr))) {
+        name = cast<Statement>(expr)->getName();
+    } else if (LLVM_UNLIKELY(isa<Var>(expr))) {
+        name = cast<Var>(expr)->getName();
+    }
+    assert (name);
+    Z3_symbol s = Z3_mk_string_symbol(mContext, name->value().data());
     Z3_ast node = Z3_mk_const(mContext, s, ty);
     Z3_inc_ref(mContext, node);
     return add(expr, node);
