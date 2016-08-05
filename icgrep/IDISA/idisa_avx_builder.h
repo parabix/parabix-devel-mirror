@@ -34,6 +34,7 @@ public:
     Value * esimd_mergel(unsigned fw, Value * a, Value * b) override;
     Value * hsimd_packh_in_lanes(unsigned lanes, unsigned fw, Value * a, Value * b) override;
     Value * hsimd_packl_in_lanes(unsigned lanes, unsigned fw, Value * a, Value * b) override;
+    std::pair<Value *, Value *> bitblock_add_with_carry(Value * a, Value * b, Value * carryin) override;
 
     ~IDISA_AVX2_Builder() {};
 };

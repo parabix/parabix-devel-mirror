@@ -114,7 +114,7 @@ protected:
     Value * getCarryPack(const unsigned packIndex);
     void storeCarryOut(const unsigned packIndex);
     
-    Value * addToSummary(Value * const value);
+    void addToSummary(Value * const value);
 
     bool hasSummary() const;
     unsigned relativeFrameOffset(const unsigned frameOffset, const unsigned index) const;

@@ -91,46 +91,9 @@ void CarryManager::leaveScope() {
  * @brief addCarryInCarryOut
  ** ------------------------------------------------------------------------------------------------------------- */
 Value * CarryManager::addCarryInCarryOut(const unsigned localIndex, Value * const e1, Value * const e2) {
-    Value * sum = nullptr;
-    if (mBitBlockWidth == 128) {
-        Value * carryq_value = getCarryIn(localIndex);
-        //calculate carry through logical ops
-        Value * carrygen = iBuilder->simd_and(e1, e2);
-        Value * carryprop = iBuilder->simd_or(e1, e2);
-        Value * digitsum = iBuilder->simd_add(64, e1, e2);
-        Value * partial = iBuilder->simd_add(64, digitsum, carryq_value);
-        Value * digitcarry = iBuilder->simd_or(carrygen, iBuilder->simd_and(carryprop, iBuilder->CreateNot(partial)));
-        Value * mid_carry_in = iBuilder->simd_slli(128, iBuilder->CreateLShr(digitcarry, 63), 64);
-        sum = iBuilder->simd_add(64, partial, iBuilder->CreateBitCast(mid_carry_in, mBitBlockType));
-        Value * carry_out_strm = iBuilder->simd_or(carrygen, iBuilder->simd_and(carryprop, iBuilder->CreateNot(sum)));
-        setCarryOut(localIndex, carry_out_strm);
-    } else if (mBitBlockWidth >= 256) {
-        // using LONG_ADD
-        Value * carryq_value = getCarryIn(localIndex);
-        Value * carryin = iBuilder->mvmd_extract(32, carryq_value, 0);
-        Value * carrygen = iBuilder->simd_and(e1, e2);
-        Value * carryprop = iBuilder->simd_or(e1, e2);
-        Value * digitsum = iBuilder->simd_add(64, e1, e2);
-        Value * digitcarry = iBuilder->simd_or(carrygen, iBuilder->simd_and(carryprop, iBuilder->CreateNot(digitsum)));
-        Value * carryMask = iBuilder->hsimd_signmask(64, digitcarry);
-        Value * carryMask2 = iBuilder->CreateOr(iBuilder->CreateAdd(carryMask, carryMask), carryin);
-        Value * bubble = iBuilder->simd_eq(64, digitsum, iBuilder->allOnes());
-        Value * bubbleMask = iBuilder->hsimd_signmask(64, bubble);
-        Value * incrementMask = iBuilder->CreateXor(iBuilder->CreateAdd(bubbleMask, carryMask2), bubbleMask);
-        Value * increments = iBuilder->esimd_bitspread(64,incrementMask);
-        sum = iBuilder->simd_add(64, digitsum, increments);
-        Value * carry_out_strm = iBuilder->CreateZExt(iBuilder->CreateLShr(incrementMask, mBitBlockWidth / 64), iBuilder->getIntNTy(mBitBlockWidth));
-        setCarryOut(localIndex, iBuilder->bitCast(carry_out_strm));
-    }
-    else {
-        Value * carryq_value = getCarryIn(localIndex);
-        Value * carrygen = iBuilder->simd_and(e1, e2);
-        Value * carryprop = iBuilder->simd_or(e1, e2);
-        sum = iBuilder->simd_add(mBitBlockWidth, iBuilder->simd_add(mBitBlockWidth, e1, e2), carryq_value);
-        Value * carry_out_strm = iBuilder->simd_or(carrygen, iBuilder->simd_and(carryprop, iBuilder->CreateNot(sum)));
-        setCarryOut(localIndex, carry_out_strm);
-    }
-    return sum;
+    std::pair<Value *, Value *> fullAdd = iBuilder->bitblock_add_with_carry(e1, e2, getCarryIn(localIndex));
+    setCarryOut(localIndex, std::get<0>(fullAdd));
+    return std::get<1>(fullAdd);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -362,10 +325,6 @@ Value * CarryManager::getCarryIn(const unsigned localIndex) {
  ** ------------------------------------------------------------------------------------------------------------- */
 void CarryManager::setCarryOut(const unsigned localIndex, Value * carryOut) {
     const unsigned index = addPosition(localIndex);
-    if (mBitBlockWidth < 256) { // #ifndef USING_LONG_ADD
-        Value * carry_bit = iBuilder->CreateLShr(iBuilder->CreateBitCast(carryOut, iBuilder->getIntNTy(mBitBlockWidth)), mBitBlockWidth-1);
-        carryOut = iBuilder->CreateBitCast(carry_bit, mBitBlockType);
-    }
     assert (index < mCarryOutPack.size());
     mCarryOutPack[index] = carryOut;
     if (LLVM_LIKELY(hasSummary())) {
@@ -440,34 +399,43 @@ unsigned CarryManager::enumerate(PabloBlock * blk, unsigned ifDepth, unsigned wh
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief addToSummary
  ** ------------------------------------------------------------------------------------------------------------- */
-inline Value * CarryManager::addToSummary(Value * const value) {
+void CarryManager::addToSummary(Value * const value) {
     const unsigned summaryIndex = summaryPack();
     assert (summaryIndex < mCarryInPack.size());
     Value * summary = mCarryOutPack[summaryIndex];
     assert (summary);
     assert (value);
+    if (LLVM_UNLIKELY(summary == value)) return;  //Nothing to add.
+    
+    Type * summaryTy = summary->getType();
+    Type * valueTy = value->getType();
+    if (LLVM_UNLIKELY(isa<Constant>(value))) {
+        if (LLVM_LIKELY(cast<Constant>(value)->isZeroValue())) return;
+        if (cast<Constant>(value)->isAllOnesValue()) {
+            mCarryOutPack[summaryIndex] = Constant::getAllOnesValue(summaryTy);
+            return;
+        }
+    }
+    Value * v = value;
+    if (valueTy != summaryTy) {
+        // valueTy must be an integer type.
+        unsigned summaryWidth = summaryTy->isIntegerTy() ? summaryTy->getIntegerBitWidth() : cast<VectorType>(summaryTy)->getBitWidth();        
+        if (valueTy->getIntegerBitWidth() != summaryWidth) {
+            v = iBuilder->CreateZExt(v, iBuilder->getIntNTy(summaryWidth));
+        }
+        if (!(summaryTy->isIntegerTy())) {
+            v = iBuilder->CreateBitCast(v, summaryTy);
+        }
+    }
     if (LLVM_UNLIKELY(isa<Constant>(summary))) {
         if (LLVM_LIKELY(cast<Constant>(summary)->isZeroValue())) {
-            summary = value;
-            goto return_result;
+            mCarryOutPack[summaryIndex] = v;
+            return;
         } else if (cast<Constant>(summary)->isAllOnesValue()) {
-            goto return_result;
+            return;
         }
     }
-    if (LLVM_UNLIKELY(isa<Constant>(value))) {
-        if (LLVM_LIKELY(cast<Constant>(value)->isZeroValue())) {
-            goto return_result;
-        } else if (cast<Constant>(summary)->isAllOnesValue()) {
-            summary = value;
-            goto return_result;
-        }
-    }
-    if (LLVM_LIKELY(summary != value)) {
-        summary = iBuilder->CreateOr(summary, value, "summary");
-    }
-return_result:
-    mCarryOutPack[summaryIndex] = summary;
-    return summary;
+    mCarryOutPack[summaryIndex] = iBuilder->CreateOr(summary, v, "summary");
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

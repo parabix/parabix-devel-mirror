@@ -120,7 +120,7 @@ public:
     
     virtual Value * bitblock_any(Value * a);
     // full add producing {carryout, sum}
-    virtual std::pair<Value *, Value *> bitblock_add(Value * a, Value * b, Value * carryin);
+    virtual std::pair<Value *, Value *> bitblock_add_with_carry(Value * a, Value * b, Value * carryin);
     // full shift producing {shiftout, shifted}
     virtual std::pair<Value *, Value *> bitblock_advance(Value * a, Value * shiftin, unsigned shift);
     

@@ -9,6 +9,7 @@
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/Intrinsics.h>
 #include <llvm/IR/Function.h>
+#include <iostream>
 
 namespace IDISA {
 
@@ -142,6 +143,30 @@ Value * IDISA_AVX2_Builder::hsimd_packh_in_lanes(unsigned lanes, unsigned fw, Va
     }
     // Otherwise use default SSE logic.
     return IDISA_SSE_Builder::hsimd_packh_in_lanes(lanes, fw, a, b);
+}
+    
+std::pair<Value *, Value *> IDISA_AVX2_Builder::bitblock_add_with_carry(Value * e1, Value * e2, Value * carryin) {
+    // using LONG_ADD
+    Type * carryTy = carryin->getType();
+    if (carryTy == mBitBlockType) {
+        carryin = mvmd_extract(32, carryin, 0);
+    }
+    Value * carrygen = simd_and(e1, e2);
+    Value * carryprop = simd_or(e1, e2);
+    Value * digitsum = simd_add(64, e1, e2);
+    Value * digitcarry = simd_or(carrygen, simd_and(carryprop, CreateNot(digitsum)));
+    Value * carryMask = hsimd_signmask(64, digitcarry);
+    Value * carryMask2 = CreateOr(CreateAdd(carryMask, carryMask), carryin);
+    Value * bubble = simd_eq(64, digitsum, allOnes());
+    Value * bubbleMask = hsimd_signmask(64, bubble);
+    Value * incrementMask = CreateXor(CreateAdd(bubbleMask, carryMask2), bubbleMask);
+    Value * increments = esimd_bitspread(64,incrementMask);
+    Value * sum = simd_add(64, digitsum, increments);
+    Value * carry_out = CreateLShr(incrementMask, mBitBlockWidth / 64);
+    if (carryTy == mBitBlockType) {
+        carry_out = bitCast(CreateZExt(carry_out, getIntNTy(mBitBlockWidth)));
+    }
+    return std::pair<Value *, Value *>(carry_out, bitCast(sum));
 }
     
 }

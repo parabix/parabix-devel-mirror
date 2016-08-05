@@ -118,7 +118,7 @@ void KernelBuilder::generateFinalBlockMethod() {
     while (args != finalBlockFunction->arg_end()){
         doBlockArgs.push_back(&*args++);
     }
-    Value * rslt = iBuilder->CreateCall(doBlockFunction, doBlockArgs);
+    iBuilder->CreateCall(doBlockFunction, doBlockArgs);
     iBuilder->CreateRetVoid();
     iBuilder->restoreIP(savePoint);
 }

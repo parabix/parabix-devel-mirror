@@ -366,7 +366,7 @@ Value * IDISA_Builder::bitblock_any(Value * a) {
 }
 
 // full add producing {carryout, sum}
-std::pair<Value *, Value *> IDISA_Builder::bitblock_add(Value * a, Value * b, Value * carryin) {
+std::pair<Value *, Value *> IDISA_Builder::bitblock_add_with_carry(Value * a, Value * b, Value * carryin) {
     Value * carrygen = simd_and(a, b);
     Value * carryprop = simd_or(a, b);
     Value * sum = simd_add(mBitBlockWidth, simd_add(mBitBlockWidth, a, b), carryin);
