@@ -374,15 +374,56 @@ std::pair<Value *, Value *> IDISA_Builder::bitblock_add_with_carry(Value * a, Va
     return std::pair<Value *, Value *>(bitCast(simd_srli(mBitBlockWidth, carryout, mBitBlockWidth - 1)), bitCast(sum));
 }
 
+#define SHIFT_FIELDWIDTH 64
 // full shift producing {shiftout, shifted}
 std::pair<Value *, Value *> IDISA_Builder::bitblock_advance(Value * a, Value * shiftin, unsigned shift) {
+    Value * shifted = nullptr;
+    Value * shiftout = nullptr;
+#ifdef USE_SIMPLE_BITBLOCK_ADVANCE
     Value * shiftin_bitblock = CreateBitCast(shiftin, getIntNTy(mBitBlockWidth));
     Value * a_bitblock = CreateBitCast(a, getIntNTy(mBitBlockWidth));
-    Value * shifted = bitCast(CreateOr(CreateShl(a_bitblock, shift), shiftin_bitblock));
-    Value * shiftout = bitCast(CreateLShr(a_bitblock, mBitBlockWidth - shift));
+    shifted = bitCast(CreateOr(CreateShl(a_bitblock, shift), shiftin_bitblock));
+    shiftout = bitCast(CreateLShr(a_bitblock, mBitBlockWidth - shift));
+#endif
+#ifndef USE_SIMPLE_BITBLOCK_ADVANCE
+    Type * shiftTy = shiftin->getType();
+    if (LLVM_UNLIKELY(shift == 0)) {
+        return std::pair<Value *, Value *>(Constant::getNullValue(shiftTy), a);
+    }
+    Value * si = shiftin;
+    if (shiftTy != mBitBlockType) {
+        si = bitCast(CreateZExt(shiftin, getIntNTy(mBitBlockWidth)));
+    }
+    if (LLVM_UNLIKELY(shift == mBitBlockWidth)) {
+        return std::pair<Value *, Value *>(CreateBitCast(a, shiftTy), si);
+    }
+    if (LLVM_UNLIKELY((shift % 8) == 0)) { // Use a single whole-byte shift, if possible.
+        shifted = simd_or(mvmd_slli(8, a, shift / 8), si);
+        shiftout = mvmd_srli(8, a, (mBitBlockWidth - shift) / 8);
+        return std::pair<Value *, Value *>(shiftout, shifted);
+    } 
+    Value * shiftback = simd_srli(SHIFT_FIELDWIDTH, a, SHIFT_FIELDWIDTH - (shift % SHIFT_FIELDWIDTH));
+    Value * shiftfwd = simd_slli(SHIFT_FIELDWIDTH, a, shift % SHIFT_FIELDWIDTH);
+    if (LLVM_LIKELY(shift < SHIFT_FIELDWIDTH)) {
+        shiftout = mvmd_srli(SHIFT_FIELDWIDTH, shiftback, mBitBlockWidth/SHIFT_FIELDWIDTH - 1);
+        shifted = simd_or(simd_or(shiftfwd, si), mvmd_slli(SHIFT_FIELDWIDTH, shiftback, 1));
+    }
+    else {
+        shiftout = simd_or(shiftback, mvmd_srli(SHIFT_FIELDWIDTH, shiftfwd, 1));
+        shifted = simd_or(si, mvmd_slli(SHIFT_FIELDWIDTH, shiftfwd, (mBitBlockWidth - shift) / SHIFT_FIELDWIDTH));
+        if (shift < mBitBlockWidth - SHIFT_FIELDWIDTH) {
+            shiftout = mvmd_srli(SHIFT_FIELDWIDTH, shiftout, (mBitBlockWidth - shift) / SHIFT_FIELDWIDTH);
+            shifted = simd_or(shifted, mvmd_slli(SHIFT_FIELDWIDTH, shiftback, shift/SHIFT_FIELDWIDTH + 1));
+        }
+    }
+    if (shiftTy != mBitBlockType) {
+        shiftout = CreateBitCast(shiftout, shiftTy);
+    }
+#endif
     return std::pair<Value *, Value *>(shiftout, shifted);
 }
 
+                 
 Value * IDISA_Builder::simd_and(Value * a, Value * b) {
     return a->getType() == b->getType() ? CreateAnd(a, b) : CreateAnd(bitCast(a), bitCast(b));
 }
