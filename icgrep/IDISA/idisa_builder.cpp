@@ -365,6 +365,24 @@ Value * IDISA_Builder::bitblock_any(Value * a) {
     return CreateICmpNE(CreateBitCast(a, iBitBlock),  ConstantInt::get(iBitBlock, 0));
 }
 
+// full add producing {carryout, sum}
+std::pair<Value *, Value *> IDISA_Builder::bitblock_add(Value * a, Value * b, Value * carryin) {
+    Value * carrygen = simd_and(a, b);
+    Value * carryprop = simd_or(a, b);
+    Value * sum = simd_add(mBitBlockWidth, simd_add(mBitBlockWidth, a, b), carryin);
+    Value * carryout = CreateBitCast(simd_or(carrygen, simd_and(carryprop, CreateNot(sum))), getIntNTy(mBitBlockWidth));
+    return std::pair<Value *, Value *>(bitCast(simd_srli(mBitBlockWidth, carryout, mBitBlockWidth - 1)), bitCast(sum));
+}
+
+// full shift producing {shiftout, shifted}
+std::pair<Value *, Value *> IDISA_Builder::bitblock_advance(Value * a, Value * shiftin, unsigned shift) {
+    Value * shiftin_bitblock = CreateBitCast(shiftin, getIntNTy(mBitBlockWidth));
+    Value * a_bitblock = CreateBitCast(a, getIntNTy(mBitBlockWidth));
+    Value * shifted = bitCast(CreateOr(CreateShl(a_bitblock, shift), shiftin_bitblock));
+    Value * shiftout = bitCast(CreateLShr(a_bitblock, mBitBlockWidth - shift));
+    return std::pair<Value *, Value *>(shiftout, shifted);
+}
+
 Value * IDISA_Builder::simd_and(Value * a, Value * b) {
     return a->getType() == b->getType() ? CreateAnd(a, b) : CreateAnd(bitCast(a), bitCast(b));
 }

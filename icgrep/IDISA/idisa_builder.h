@@ -117,7 +117,14 @@ public:
     virtual Value * mvmd_srli(unsigned fw, Value * a, unsigned shift);
     virtual Value * mvmd_dslli(unsigned fw, Value * a, Value * b, unsigned shift);
     
+    
     virtual Value * bitblock_any(Value * a);
+    // full add producing {carryout, sum}
+    virtual std::pair<Value *, Value *> bitblock_add(Value * a, Value * b, Value * carryin);
+    // full shift producing {shiftout, shifted}
+    virtual std::pair<Value *, Value *> bitblock_advance(Value * a, Value * shiftin, unsigned shift);
+    
+    
     Value * simd_and(Value * a, Value * b);
     Value * simd_or(Value * a, Value * b);
     Value * simd_xor(Value * a, Value * b);
