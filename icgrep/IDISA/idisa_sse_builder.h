@@ -34,6 +34,8 @@ public:
     Value * hsimd_signmask(unsigned fw, Value * a) override;
     Value * hsimd_packh(unsigned fw, Value * a, Value * b) override;
     Value * hsimd_packl(unsigned fw, Value * a, Value * b) override;
+    std::pair<Value *, Value *> bitblock_advance(Value * a, Value * shiftin, unsigned shift) override;
+
     ~IDISA_SSE2_Builder() {};
 
 };

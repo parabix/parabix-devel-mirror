@@ -13,8 +13,8 @@
 #include <llvm/IR/BasicBlock.h>
 #include <llvm/IR/CallingConv.h>
 #include <llvm/IR/Function.h>
+#include <iostream>
 
-#define DSSLI_FIELDWIDTH 64
 
 namespace pablo {
 
@@ -116,25 +116,15 @@ Value * CarryManager::shortAdvanceCarryInCarryOut(const unsigned index, const un
     Value * result = nullptr;
     Value * const carryIn = getCarryPack(index);
     assert (index < mCarryOutPack.size());
-    mCarryOutPack[index] = value;
+    std::pair<Value *, Value *> adv = iBuilder->bitblock_advance(value, carryIn, shiftAmount);
+    mCarryOutPack[index] = std::get<0>(adv);
     if (mCarryInfo->getWhileDepth() == 0) {
         storeCarryOut(index);
-    }
-    if (LLVM_UNLIKELY((shiftAmount % 8) == 0)) { // Use a single whole-byte shift, if possible.
-        result = iBuilder->mvmd_dslli(8, value, carryIn, (iBuilder->getBitBlockWidth() / 8) - (shiftAmount / 8));
-    } else if (LLVM_LIKELY(shiftAmount < DSSLI_FIELDWIDTH)) {
-        Value * ahead = iBuilder->mvmd_dslli(DSSLI_FIELDWIDTH, value, carryIn, iBuilder->getBitBlockWidth() / DSSLI_FIELDWIDTH - 1);
-        result = iBuilder->simd_or(iBuilder->simd_srli(DSSLI_FIELDWIDTH, ahead, DSSLI_FIELDWIDTH - shiftAmount), iBuilder->simd_slli(DSSLI_FIELDWIDTH, value, shiftAmount));
-    } else {
-        Value* advanceq_longint = iBuilder->CreateBitCast(carryIn, iBuilder->getIntNTy(mBitBlockWidth));
-        Value* strm_longint = iBuilder->CreateBitCast(value, iBuilder->getIntNTy(mBitBlockWidth));
-        Value* adv_longint = iBuilder->CreateOr(iBuilder->CreateShl(strm_longint, shiftAmount), iBuilder->CreateLShr(advanceq_longint, mBitBlockWidth - shiftAmount), "advance");
-        result = iBuilder->CreateBitCast(adv_longint, mBitBlockType);
     }
     if (LLVM_LIKELY(hasSummary())) {
         addToSummary(value);
     }
-    return result;
+    return std::get<1>(adv);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

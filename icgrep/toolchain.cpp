@@ -115,6 +115,7 @@ ExecutionEngine * JIT_to_ExecutionEngine (Module * m) {
     opts.MCOptions.AsmVerbose = codegen::AsmVerbose;
 
     builder.setTargetOptions(opts);
+    builder.setVerifyModules(true);
     CodeGenOpt::Level optLevel = CodeGenOpt::Level::None;
     switch (codegen::OptLevel) {
         case '0': optLevel = CodeGenOpt::None; break;
