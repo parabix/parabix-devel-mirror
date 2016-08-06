@@ -98,7 +98,7 @@ Value * IDISA_SSE_Builder::hsimd_signmask(unsigned fw, Value * a) {
 }
 
 #define SHIFT_FIELDWIDTH 64
-#define LEAVE_CARRY_UNNORMALIZED
+//#define LEAVE_CARRY_UNNORMALIZED
 
 // full shift producing {shiftout, shifted}
 std::pair<Value *, Value *> IDISA_SSE2_Builder::bitblock_advance(Value * a, Value * shiftin, unsigned shift) {

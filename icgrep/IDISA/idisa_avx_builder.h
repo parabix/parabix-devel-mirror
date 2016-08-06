@@ -13,10 +13,10 @@ using namespace llvm;
 
 namespace IDISA {
 
-class IDISA_AVX_Builder : public IDISA_SSE_Builder {
+class IDISA_AVX_Builder : public IDISA_SSE2_Builder {
 public:
     
-    IDISA_AVX_Builder(Module * m, Type * bitBlockType) : IDISA_SSE_Builder(m, bitBlockType) {
+    IDISA_AVX_Builder(Module * m, Type * bitBlockType) : IDISA_SSE2_Builder(m, bitBlockType) {
     }
     Value * hsimd_signmask(unsigned fw, Value * a) override;
     ~IDISA_AVX_Builder() {};
