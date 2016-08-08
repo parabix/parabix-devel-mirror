@@ -27,7 +27,7 @@ class MultiplexingPass {
     using CharacterizationRef = std::pair<Z3_ast, unsigned>;
     using CharacterizationMap = llvm::DenseMap<const PabloAST *, CharacterizationRef>;
 
-    using ConstraintGraph = boost::adjacency_matrix<boost::directedS, Advance *>;
+    using ConstraintGraph = boost::adjacency_matrix<boost::undirectedS, Advance *>;
     using ConstraintVertex = ConstraintGraph::vertex_descriptor;
     using Constraints = std::vector<ConstraintVertex>;
     using ConstraintMap = boost::container::flat_map<Advance *, ConstraintVertex>;
@@ -35,7 +35,7 @@ class MultiplexingPass {
     using RNG = std::mt19937;
     using IntDistribution = std::uniform_int_distribution<RNG::result_type>;
 
-    using CandidateGraph = boost::adjacency_list<boost::hash_setS, boost::vecS, boost::undirectedS>;
+    using CandidateGraph = boost::adjacency_list<boost::setS, boost::vecS, boost::undirectedS>;
     using Candidates = std::vector<CandidateGraph::vertex_descriptor>;
 
     using SubsetGraph = boost::adjacency_list<boost::hash_setS, boost::vecS, boost::bidirectionalS>;
@@ -65,13 +65,10 @@ protected:
     Z3_ast characterize(Advance * const adv, Z3_ast Ik);
     void multiplex(PabloBlock * const block, Statement * const begin, Statement * const end);
 
-    bool generateCandidateSets();
-    void addCandidateSet(const Constraints & S);
-    void updateCandidateSet(ConstraintVertex * const begin, ConstraintVertex * const end);
-    void selectCandidateSet(const unsigned n, const unsigned k, const unsigned m, const Constraints & S, ConstraintVertex * const element);
+    bool generateCandidateSets(Statement * const begin, Statement * const end);
+    void generateCandidateSets(Z3_context ctx, Z3_solver solver, const std::vector<std::pair<unsigned, unsigned>> & S, const std::vector<Z3_ast> & N);
 
     void selectMultiplexSetsGreedy();
-    void selectMultiplexSetsWorkingSet();
 
     void eliminateSubsetConstraints();
     void doTransitiveReductionOfSubsetGraph();
@@ -96,7 +93,7 @@ private:
     CharacterizationMap         mCharacterization;
     ConstraintGraph             mConstraintGraph;
 
-    AdvanceVariable             mAdvanceNegatedVariable;
+    AdvanceVariable             mNegatedAdvance;
     SubsetGraph                 mSubsetGraph;
     CandidateGraph              mCandidateGraph;
 };
