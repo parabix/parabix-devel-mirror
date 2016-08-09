@@ -8,6 +8,7 @@
 #include <vector>
 #include <IDISA/idisa_builder.h>
 #include <llvm/IR/Type.h>
+#include <iostream>
     
 using namespace parabix;
 
@@ -43,12 +44,20 @@ size_t ExternalUnboundedBuffer::getBufferSize() {
     return 0;
 }
 
+void ExternalUnboundedBuffer::setStreamSetBuffer(llvm::Value * ptr) {
+    PointerType * t = PointerType::get(getStreamSetBlockType(), mAddrSpace);
+    
+    mStreamSetBufferPtr = iBuilder->CreatePointerBitCastOrAddrSpaceCast(ptr, t);
+    std::cerr << "mStreamSetBufferPtr\n";
+}
+
 llvm::Value * ExternalUnboundedBuffer::allocateBuffer() {
     throw std::runtime_error("External buffers cannot be allocated.");
 }
 
 llvm::Value * ExternalUnboundedBuffer::getStreamSetBlockPointer(llvm::Value * bufferBasePtr, llvm::Value * blockNo) {
-    return iBuilder->CreateGEP(getStreamSetBlockType(), bufferBasePtr, {blockNo});
+    PointerType * t = PointerType::get(getStreamSetBlockType(), mAddrSpace);
+    return iBuilder->CreateGEP(iBuilder->CreatePointerBitCastOrAddrSpaceCast(bufferBasePtr, t), {blockNo});
 }
 
 

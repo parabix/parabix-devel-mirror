@@ -76,17 +76,21 @@ class ExternalUnboundedBuffer : public StreamSetBuffer {
 public:
     static inline bool classof(const StreamSetBuffer * b) {return b->getBufferKind() == BufferKind::ExternalUnboundedBuffer;}
     
-    ExternalUnboundedBuffer(IDISA::IDISA_Builder * b, StreamSetType ss_type) :
+    ExternalUnboundedBuffer(IDISA::IDISA_Builder * b, StreamSetType ss_type, unsigned AddressSpace = 0) :
         StreamSetBuffer(BufferKind::ExternalUnboundedBuffer, b, ss_type) {
             mBufferBlocks = 0;
+            mAddrSpace = AddressSpace;
         }
     
-    void setStreamSetBuffer(llvm::Value * ptr) {mStreamSetBufferPtr = ptr;}
+    void setStreamSetBuffer(llvm::Value * ptr);
     
     size_t getBufferSize() override;
     // Can't allocate - raise an error. */
     llvm::Value * allocateBuffer() override;
     llvm::Value * getStreamSetBlockPointer(llvm::Value * bufferBasePtr, llvm::Value * blockNo) override;
+
+private:
+    unsigned mAddrSpace;
 };
 
 class CircularBuffer : public StreamSetBuffer {
