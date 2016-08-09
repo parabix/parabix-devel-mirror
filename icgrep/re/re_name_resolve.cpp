@@ -153,7 +153,7 @@ void gather(RE * re) {
     } 
 }
     
-UCD::UCDCompiler::NameMap resolveNames(RE * re, Name * &zerowidth) {
+UCD::UCDCompiler::NameMap resolveNames(RE * &re, Name * &zerowidth) {
 
     ZeroWidth = nullptr;
     re = resolve(re);

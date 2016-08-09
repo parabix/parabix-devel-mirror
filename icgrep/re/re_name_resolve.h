@@ -6,7 +6,7 @@
 #include <re/re_name.h>
 #include <UCD/ucd_compiler.hpp>
 namespace re {
-    UCD::UCDCompiler::NameMap resolveNames(RE * re, Name * &zerowidth);
+    UCD::UCDCompiler::NameMap resolveNames(RE * &re, Name * &zerowidth);
     Name * resolveOtherNames(RE * re);
     Name * generateGraphemeClusterBoundaryRule();
 }
