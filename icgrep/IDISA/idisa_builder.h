@@ -123,7 +123,8 @@ public:
     virtual std::pair<Value *, Value *> bitblock_add_with_carry(Value * a, Value * b, Value * carryin);
     // full shift producing {shiftout, shifted}
     virtual std::pair<Value *, Value *> bitblock_advance(Value * a, Value * shiftin, unsigned shift);
-    
+    virtual Value * bitblock_mask_from(Value * pos);
+    virtual Value * bitblock_set_bit(Value * pos);
     
     Value * simd_and(Value * a, Value * b);
     Value * simd_or(Value * a, Value * b);

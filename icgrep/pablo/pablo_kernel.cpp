@@ -23,7 +23,7 @@ PabloKernel::PabloKernel(IDISA::IDISA_Builder * builder,
                     {StreamSetBinding{outputBuffer, "outputs"}},
                     {},
                     {},
-                    {ScalarBinding{builder->getBitBlockType(), "EOFmark"}}),
+                    {ScalarBinding{builder->getBitBlockType(), "EOFbit"}, ScalarBinding{builder->getBitBlockType(), "EOFmask"}}),
     mPabloFunction(function) {
     unsigned output_streams = function->getNumOfResults();
     assert (output_streams > 0);
@@ -41,7 +41,7 @@ PabloKernel::PabloKernel(IDISA::IDISA_Builder * builder,
                     {},
                     {},
                     {},
-                    {ScalarBinding{builder->getBitBlockType(), "EOFmark"}}),
+                    {ScalarBinding{builder->getBitBlockType(), "EOFbit"}, ScalarBinding{builder->getBitBlockType(), "EOFmask"}}),
     mPabloFunction(function) {
     unsigned output_streams = function->getNumOfResults();
     assert (output_streams == 0);
@@ -88,10 +88,9 @@ void PabloKernel::generateFinalBlockMethod() {
         doBlockArgs.push_back(&*args++);
     }
     // Standard Pablo convention for final block processing: set a bit marking
-    // the position just past EOF.
-    Type * bitBlockInt = iBuilder->getIntNTy(iBuilder->getBitBlockWidth());
-    Value * EOFmark = iBuilder->CreateShl(ConstantInt::get(bitBlockInt, 1), iBuilder->CreateZExt(remaining, bitBlockInt));
-    setScalarField(self, "EOFmark", iBuilder->CreateBitCast(EOFmark, iBuilder->getBitBlockType()));
+    // the position just past EOF, as well as a mask marking all positions past EOF.
+    setScalarField(self, "EOFbit", iBuilder->bitblock_set_bit(remaining));
+    setScalarField(self, "EOFmask", iBuilder->bitblock_mask_from(remaining));
     iBuilder->CreateCall(doBlockFunction, doBlockArgs);
     iBuilder->CreateRetVoid();
     iBuilder->restoreIP(savePoint);

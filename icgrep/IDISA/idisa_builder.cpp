@@ -384,6 +384,17 @@ std::pair<Value *, Value *> IDISA_Builder::bitblock_advance(Value * a, Value * s
     return std::pair<Value *, Value *>(shiftout, shifted);
 }
 
+Value * IDISA_Builder::bitblock_mask_from(Value * pos) {
+    Type * bitBlockInt = getIntNTy(getBitBlockWidth());
+    return bitCast(CreateShl(ConstantInt::getAllOnesValue(bitBlockInt), CreateZExt(pos, bitBlockInt)));
+    
+}
+Value * IDISA_Builder::bitblock_set_bit(Value * pos) {
+    Type * bitBlockInt = getIntNTy(getBitBlockWidth());
+    return bitCast(CreateShl(ConstantInt::get(bitBlockInt, 1), CreateZExt(pos, bitBlockInt)));
+}
+
+
 Value * IDISA_Builder::simd_and(Value * a, Value * b) {
     return a->getType() == b->getType() ? CreateAnd(a, b) : CreateAnd(bitCast(a), bitCast(b));
 }

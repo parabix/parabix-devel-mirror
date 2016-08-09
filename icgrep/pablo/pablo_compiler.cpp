@@ -355,12 +355,11 @@ void PabloCompiler::compileStatement(const Statement * stmt) {
         Value * const  sum = mCarryManager->addCarryInCarryOut(sthru->getLocalCarryIndex(), marker_expr, cc_expr);
         expr = iBuilder->simd_and(sum, iBuilder->simd_not(cc_expr));
     } else if (const InFile * e = dyn_cast<InFile>(stmt)) {
-        Value * EOFmark = mKernelBuilder->getScalarField(mSelf, "EOFmark");
-        Value * infileMask = iBuilder->simd_add(iBuilder->getBitBlockWidth(), EOFmark, iBuilder->allOnes());
-        expr = iBuilder->simd_and(compileExpression(e->getExpr()), infileMask);
+        Value * EOFmask = mKernelBuilder->getScalarField(mSelf, "EOFmask");
+        expr = iBuilder->simd_xor(compileExpression(e->getExpr()), EOFmask);
     } else if (const AtEOF * e = dyn_cast<AtEOF>(stmt)) {
-        Value * EOFmark = mKernelBuilder->getScalarField(mSelf, "EOFmark");
-		expr = iBuilder->simd_and(compileExpression(e->getExpr()), EOFmark);
+        Value * EOFbit = mKernelBuilder->getScalarField(mSelf, "EOFbit");
+		expr = iBuilder->simd_and(compileExpression(e->getExpr()), EOFbit);
     } else if (const Count * c = dyn_cast<Count>(stmt)) {
         Value * const to_count = compileExpression(c->getExpr());
         std::string counter = c->getName()->to_string();
