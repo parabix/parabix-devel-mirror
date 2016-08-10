@@ -33,7 +33,7 @@ public:
     enum class BufferKind : unsigned {BlockBuffer, ExternalUnboundedBuffer, CircularBuffer, ExpandingBuffer};
     inline BufferKind getBufferKind() const {return mBufferKind;}
     
-    llvm::Type * getStreamSetBlockType();
+    virtual llvm::PointerType * getStreamBufferPointerType();
 
     virtual size_t getBufferSize() = 0;
     
@@ -81,7 +81,8 @@ public:
             mBufferBlocks = 0;
             mAddrSpace = AddressSpace;
         }
-    
+    llvm::PointerType * getStreamBufferPointerType() override;
+
     void setStreamSetBuffer(llvm::Value * ptr);
     
     size_t getBufferSize() override;

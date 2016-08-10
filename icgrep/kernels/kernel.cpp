@@ -34,12 +34,12 @@ void KernelBuilder::prepareKernel() {
     addScalar(iBuilder->getSizeTy(), blockNoScalar);
     int streamSetNo = 0;
     for (auto sSet : mStreamSetInputs) {
-        mScalarInputs.push_back(ScalarBinding{PointerType::get(sSet.ssType.getStreamSetBlockType(), 0), sSet.ssName + basePtrSuffix});
+        mScalarInputs.push_back(ScalarBinding{sSet.ssType.getStreamBufferPointerType(), sSet.ssName + basePtrSuffix});
         mStreamSetNameMap.emplace(sSet.ssName, streamSetNo);
         streamSetNo++;
     }
     for (auto sSet : mStreamSetOutputs) {
-        mScalarInputs.push_back(ScalarBinding{PointerType::get(sSet.ssType.getStreamSetBlockType(), 0), sSet.ssName + basePtrSuffix});
+        mScalarInputs.push_back(ScalarBinding{sSet.ssType.getStreamBufferPointerType(), sSet.ssName + basePtrSuffix});
         mStreamSetNameMap.emplace(sSet.ssName, streamSetNo);
         streamSetNo++;
     }

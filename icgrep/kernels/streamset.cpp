@@ -17,8 +17,8 @@ llvm::Type * StreamSetType::getStreamSetBlockType(IDISA::IDISA_Builder * iBuilde
     return ArrayType::get(streamType, mStreamCount);
 }
 
-llvm::Type * StreamSetBuffer::getStreamSetBlockType() {
-    return mStreamSetType.getStreamSetBlockType(iBuilder);
+llvm::PointerType * StreamSetBuffer::getStreamBufferPointerType() {
+    return PointerType::get(mStreamSetType.getStreamSetBlockType(iBuilder), 0);
 }
 
 // Single Block Buffer
@@ -28,7 +28,7 @@ size_t SingleBlockBuffer::getBufferSize() {
 }
 
 llvm::Value * SingleBlockBuffer::allocateBuffer() {
-    mStreamSetBufferPtr = iBuilder->CreateAlloca(getStreamSetBlockType());
+    mStreamSetBufferPtr = iBuilder->CreateAlloca(mStreamSetType.getStreamSetBlockType(iBuilder));
     return mStreamSetBufferPtr;
 }
 
@@ -45,10 +45,14 @@ size_t ExternalUnboundedBuffer::getBufferSize() {
 }
 
 void ExternalUnboundedBuffer::setStreamSetBuffer(llvm::Value * ptr) {
-    PointerType * t = PointerType::get(getStreamSetBlockType(), mAddrSpace);
+    PointerType * t = PointerType::get(mStreamSetType.getStreamSetBlockType(iBuilder), mAddrSpace);
     
     mStreamSetBufferPtr = iBuilder->CreatePointerBitCastOrAddrSpaceCast(ptr, t);
     std::cerr << "mStreamSetBufferPtr\n";
+}
+
+llvm::PointerType * ExternalUnboundedBuffer::getStreamBufferPointerType() {
+    return PointerType::get(mStreamSetType.getStreamSetBlockType(iBuilder), mAddrSpace);
 }
 
 llvm::Value * ExternalUnboundedBuffer::allocateBuffer() {
@@ -56,7 +60,7 @@ llvm::Value * ExternalUnboundedBuffer::allocateBuffer() {
 }
 
 llvm::Value * ExternalUnboundedBuffer::getStreamSetBlockPointer(llvm::Value * bufferBasePtr, llvm::Value * blockNo) {
-    PointerType * t = PointerType::get(getStreamSetBlockType(), mAddrSpace);
+    PointerType * t = getStreamBufferPointerType();
     return iBuilder->CreateGEP(iBuilder->CreatePointerBitCastOrAddrSpaceCast(bufferBasePtr, t), {blockNo});
 }
 
@@ -68,11 +72,11 @@ size_t CircularBuffer::getBufferSize() {
 }
 
 llvm::Value * CircularBuffer::allocateBuffer() {
-    mStreamSetBufferPtr = iBuilder->CreateAlloca(getStreamSetBlockType(), ConstantInt::get(iBuilder->getSizeTy(), mBufferBlocks));
+    mStreamSetBufferPtr = iBuilder->CreateAlloca(mStreamSetType.getStreamSetBlockType(iBuilder), ConstantInt::get(iBuilder->getSizeTy(), mBufferBlocks));
     return mStreamSetBufferPtr;
 }
 
 llvm::Value * CircularBuffer::getStreamSetBlockPointer(llvm::Value * bufferBasePtr, llvm::Value * blockNo) {
-    return iBuilder->CreateGEP(getStreamSetBlockType(), bufferBasePtr, {iBuilder->CreateAnd(blockNo, ConstantInt::get(iBuilder->getSizeTy(), mBufferBlocks-1))});
+    return iBuilder->CreateGEP(mStreamSetType.getStreamSetBlockType(iBuilder), bufferBasePtr, {iBuilder->CreateAnd(blockNo, ConstantInt::get(iBuilder->getSizeTy(), mBufferBlocks-1))});
 }
 
