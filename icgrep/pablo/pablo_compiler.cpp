@@ -364,9 +364,10 @@ void PabloCompiler::compileStatement(const Statement * stmt) {
         Value * const to_count = compileExpression(c->getExpr());
         std::string counter = c->getName()->to_string();
         Value * countSoFar = mKernelBuilder->getScalarField(mSelf, counter);
-        Value * fieldCounts = iBuilder->simd_popcount(64, to_count);
-        for (unsigned i = 0; i < iBuilder->getBitBlockWidth()/64; ++i) {
-            countSoFar = iBuilder->CreateAdd(countSoFar, iBuilder->mvmd_extract(64, fieldCounts, i));
+        unsigned counterSize = countSoFar->getType()->getIntegerBitWidth();
+        Value * fieldCounts = iBuilder->simd_popcount(counterSize, to_count);
+        for (unsigned i = 0; i < iBuilder->getBitBlockWidth()/counterSize; ++i) {
+            countSoFar = iBuilder->CreateAdd(countSoFar, iBuilder->mvmd_extract(counterSize, fieldCounts, i));
         }
         mKernelBuilder->setScalarField(mSelf, counter, countSoFar);
         expr = iBuilder->bitCast(iBuilder->CreateZExt(countSoFar, iBuilder->getIntNTy(iBuilder->getBitBlockWidth())));
