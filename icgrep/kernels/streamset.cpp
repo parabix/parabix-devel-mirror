@@ -48,7 +48,6 @@ void ExternalUnboundedBuffer::setStreamSetBuffer(llvm::Value * ptr) {
     PointerType * t = PointerType::get(mStreamSetType.getStreamSetBlockType(iBuilder), mAddrSpace);
     
     mStreamSetBufferPtr = iBuilder->CreatePointerBitCastOrAddrSpaceCast(ptr, t);
-    std::cerr << "mStreamSetBufferPtr\n";
 }
 
 llvm::PointerType * ExternalUnboundedBuffer::getStreamBufferPointerType() {
