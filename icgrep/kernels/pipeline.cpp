@@ -51,7 +51,7 @@ void generatePipelineLoop(IDISA::IDISA_Builder * iBuilder, std::vector<KernelBui
         PHINode * blockNo = iBuilder->CreatePHI(size_ty, 2, "blockNo");
         blockNo->addIncoming(ConstantInt::get(size_ty, 0), entryBlock);
         
-        Constant * const step = ConstantInt::get(size_ty, iBuilder->getBitBlockWidth() * segmentSize);
+        Constant * const step = ConstantInt::get(size_ty, iBuilder->getStride() * segmentSize);
         Value * segmentCondTest = iBuilder->CreateICmpULT(remainingBytes, step);
         iBuilder->CreateCondBr(segmentCondTest, fullCondBlock, segmentBodyBlock);
         
@@ -80,7 +80,7 @@ void generatePipelineLoop(IDISA::IDISA_Builder * iBuilder, std::vector<KernelBui
     PHINode * blockNo = iBuilder->CreatePHI(size_ty, 2, "blockNo");
     blockNo->addIncoming(initialBlockNo, initialBlock);
     
-    Constant * const step = ConstantInt::get(size_ty, iBuilder->getBitBlockWidth());
+    Constant * const step = ConstantInt::get(size_ty, iBuilder->getStride());
     Value * fullCondTest = iBuilder->CreateICmpULT(remainingBytes, step);
     iBuilder->CreateCondBr(fullCondTest, finalBlock, fullBodyBlock);
     
@@ -95,8 +95,7 @@ void generatePipelineLoop(IDISA::IDISA_Builder * iBuilder, std::vector<KernelBui
     iBuilder->CreateBr(fullCondBlock);
     
     iBuilder->SetInsertPoint(finalBlock);
-    rslt = kernels[0]-> createFinalBlockCall(instances[0], remainingBytes);
-    for (unsigned i = 1; i < kernels.size(); i++) {
-        kernels[i]->createFinalBlockCall(instances[i], rslt->getType()->isVoidTy() ? remainingBytes : rslt);
+    for (unsigned i = 0; i < kernels.size(); i++) {
+        kernels[i]->createFinalBlockCall(instances[i], remainingBytes);
     }
 }

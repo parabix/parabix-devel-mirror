@@ -26,6 +26,7 @@ public:
     , mMod(m)
     , mBitBlockType(bitBlockType)
     , mBitBlockWidth(bitBlockType->isIntegerTy() ? cast<IntegerType>(bitBlockType)->getIntegerBitWidth() : cast<VectorType>(bitBlockType)->getBitWidth())
+    , mStride(mBitBlockWidth)
     , mZeroInitializer(Constant::getNullValue(bitBlockType)) 
     , mOneInitializer(Constant::getAllOnesValue(bitBlockType))
     , mPrintRegisterFunction(nullptr) {
@@ -46,6 +47,10 @@ public:
 
     unsigned getBitBlockWidth() const {
         return mBitBlockWidth;
+    }
+
+    unsigned getStride() const {
+        return mStride;
     }
 
     Module * getModule() const {
@@ -138,6 +143,7 @@ protected:
     Module * mMod;
     Type * mBitBlockType;
     unsigned mBitBlockWidth;
+    unsigned mStride;
     Constant * mZeroInitializer;
     Constant * mOneInitializer;
     Constant * mPrintRegisterFunction;
