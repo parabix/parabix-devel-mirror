@@ -148,7 +148,7 @@ void KernelBuilder::generateDoSegmentMethod() {
     Value * blockNo = getScalarField(self, blockNoScalar);
     
     iBuilder->CreateCall(doBlockFunction, {self});
-    setScalarField(self, blockNoScalar, iBuilder->CreateAdd(blockNo, ConstantInt::get(iBuilder->getSizeTy(), 1)));
+    setScalarField(self, blockNoScalar, iBuilder->CreateAdd(blockNo, ConstantInt::get(iBuilder->getSizeTy(), iBuilder->getStride() / iBuilder->getBitBlockWidth())));
     blocksToDo = iBuilder->CreateSub(blocksRemaining, ConstantInt::get(iBuilder->getSizeTy(), 1));
     blocksRemaining->addIncoming(blocksToDo, blockLoop);
     Value * notDone = iBuilder->CreateICmpUGT(blocksToDo, ConstantInt::get(iBuilder->getSizeTy(), 0));
