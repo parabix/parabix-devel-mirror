@@ -70,7 +70,7 @@ int RunPTX(std::string PTXFilename, char * fileBuffer, ulong filesize) {
   checkCudaErrors(cuMemAlloc(&devBufferOutput, sizeof(ulong)*GROUPTHREADS));
 
   //Copy from host to device
-  checkCudaErrors(cuMemcpyHtoD(devBufferInput, fileBuffer, filesize));
+  checkCudaErrors(cuMemcpyHtoD(devBufferInput, fileBuffer, bufferSize));
   checkCudaErrors(cuMemcpyHtoD(devBufferSize, &filesize, sizeof(ulong)));
 
   unsigned blockSizeX = GROUPTHREADS;
