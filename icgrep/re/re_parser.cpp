@@ -558,8 +558,7 @@ Name * RE_Parser::parseNamePatternExpression(){
     RE * embedded = makeSeq({mMemoizer.memoize(makeCC(0x3B)), makeRep(makeAny(), 0, Rep::UNBOUNDED_REP), nameRE});
     
     GrepEngine engine;
-    engine.grepCodeGen("NamePattern", embedded, true);
-    
+    engine.grepCodeGen("NamePattern", embedded, false, false, true);
     CC * codepoints = engine.grepCodepoints();
     
     if (codepoints) {

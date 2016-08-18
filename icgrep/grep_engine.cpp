@@ -176,7 +176,7 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool Count
         iBuilder->CreateRet(matchCount);
     }
     else {
-        kernel::scanMatchKernel scanMatchK(iBuilder, MatchResults, false);
+        kernel::scanMatchKernel scanMatchK(iBuilder, MatchResults, mIsNameExpression);
         scanMatchK.generateKernel();
                 
         Value * scanMatchInstance = scanMatchK.createInstance({iBuilder->CreateBitCast(inputStream, int8PtrTy), fileSize, fileIdx}, {&MatchResults}, {});

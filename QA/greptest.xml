@@ -807,4 +807,5 @@ Unterminated</datafile>
 <grepcase regexp="\b{g}\x{308}" datafile="graphemebreaktest" grepcount="0"/>
 <grepcase regexp="\B{g}\x{308}" datafile="graphemebreaktest" grepcount="100"/>
 
+<grepcase regexp="\N{AIRPLANE}" datafile="../All_good" grepcount="8"/>
 </greptest>
