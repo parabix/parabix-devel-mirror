@@ -329,12 +329,12 @@ unsigned RE_Parser::parse_int() {
 }
 
 
-#define bit40(x) (1ULL << ((x) - 0x40))
-const uint64_t setEscapeCharacters = bit40('b') | bit40('p') | bit40('q') | bit40('d') | bit40('w') | bit40('s') |
-                                     bit40('B') | bit40('P') | bit40('Q') | bit40('D') | bit40('W') | bit40('S') | bit40('N') | bit40('X');
+#define bit3C(x) (1ULL << ((x) - 0x3C))
+const uint64_t setEscapeCharacters = bit3C('b') | bit3C('p') | bit3C('q') | bit3C('d') | bit3C('w') | bit3C('s') | bit3C('<') | bit3C('>') |
+                                     bit3C('B') | bit3C('P') | bit3C('Q') | bit3C('D') | bit3C('W') | bit3C('S') | bit3C('N') | bit3C('X');
 
 inline bool isSetEscapeChar(char c) {
-    return c >= 0x40 && c <= 0x7F && ((setEscapeCharacters >> (c - 0x40)) & 1) == 1;
+    return c >= 0x3C && c <= 0x7B && ((setEscapeCharacters >> (c - 0x3C)) & 1) == 1;
 }
                                  
 
@@ -445,6 +445,12 @@ RE * RE_Parser::parseEscapedSet() {
             ++mCursor;
             assert (re);
             return re;
+        case '<':
+            ++mCursor;
+            return makeWordBegin();
+        case '>':
+            ++mCursor;
+            return makeWordEnd();
         default:
             throw ParseFailure("Internal error");
     }
@@ -951,6 +957,16 @@ RE * RE_Parser::makeWordNonBoundary() {
     Name * wordC = makeWordSet();
     return makeAlt({makeSeq({makeNegativeLookBehindAssertion(wordC), makeNegativeLookAheadAssertion(wordC)}),
                     makeSeq({makeLookBehindAssertion(wordC), makeLookAheadAssertion(wordC)})});
+}
+
+RE * RE_Parser::makeWordBegin() {
+    Name * wordC = makeWordSet();
+    return makeNegativeLookBehindAssertion(wordC);
+}
+
+RE * RE_Parser::makeWordEnd() {
+    Name * wordC = makeWordSet();
+    return makeNegativeLookAheadAssertion(wordC);
 }
 
 inline Name * RE_Parser::makeDigitSet() {
