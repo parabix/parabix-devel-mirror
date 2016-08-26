@@ -85,7 +85,7 @@ void RE_Compiler::initializeRequiredStreams_utf16() {
     PabloAST * unterminatedLineAtEOF = mPB.createAtEOF(mPB.createAdvance(mPB.createNot(LB_chars), 1));
     mLineBreak = mPB.createOr(lb, unterminatedLineAtEOF);
     mAny = mPB.createNot(lb, "any");
-    mFunction.setResult(1, mPB.createAssign("lf", mLineBreak));
+    if (!mCountOnly) mFunction.setResult(1, mPB.createAssign("lf", mLineBreak));
     return;
 }
 void RE_Compiler::initializeRequiredStreams_utf8() {
@@ -169,7 +169,7 @@ void RE_Compiler::initializeRequiredStreams_utf8() {
     PabloAST * unterminatedLineAtEOF = mPB.createAtEOF(mPB.createAdvance(mPB.createNot(LB_chars), 1));
     mLineBreak = mPB.createOr(lb, unterminatedLineAtEOF);
     mAny = mPB.createNot(lb, "any");
-    mFunction.setResult(1, mPB.createAssign("lf", mLineBreak));
+    if (!mCountOnly) mFunction.setResult(1, mPB.createAssign("lf", mLineBreak));
 }
 
 
@@ -211,8 +211,12 @@ void RE_Compiler::finalizeMatchResult(MarkerType match_result, bool InvertMatche
         match_follow = mPB.createNot(match_follow);
     }
     Assign * matches = mPB.createAssign("matches", mPB.createAnd(match_follow, mLineBreak));
-    mFunction.setResultCount(mPB.createCount("matchedLineCount", matches));
-    mFunction.setResult(0, matches);
+    if (mCountOnly) {
+        mFunction.setResultCount(mPB.createCount("matchedLineCount", matches));
+    }
+    else {
+        mFunction.setResult(0, matches);
+    }
 }
 
 MarkerType RE_Compiler::compile(RE * re, PabloBuilder & pb) {
@@ -625,8 +629,9 @@ inline void RE_Compiler::AlignMarkers(MarkerType & m1, MarkerType & m2, PabloBui
     }
 }
 
-RE_Compiler::RE_Compiler(pablo::PabloFunction & function, cc::CC_Compiler & ccCompiler)
-: mCCCompiler(ccCompiler)
+RE_Compiler::RE_Compiler(pablo::PabloFunction & function, cc::CC_Compiler & ccCompiler, bool CountOnly)
+: mCountOnly(CountOnly)
+, mCCCompiler(ccCompiler)
 , mLineBreak(nullptr)
 , mCRLF(nullptr)
 , mAny(nullptr)

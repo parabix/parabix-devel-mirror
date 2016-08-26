@@ -32,7 +32,7 @@ const cl::OptionCategory * re_toolchain_flags();
 
 RE * regular_expression_passes(const Encoding encoding, RE * re_ast);
 
-pablo::PabloFunction * re2pablo_compiler(const Encoding encoding, RE * re_ast);
+pablo::PabloFunction * re2pablo_compiler(const Encoding encoding, RE * re_ast, bool CountOnly = false);
     
 }
 #endif

@@ -152,30 +152,39 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool Count
         
     ExternalUnboundedBuffer ByteStream(iBuilder, StreamSetType(1, i8));
     CircularBuffer BasisBits(iBuilder, StreamSetType(8, i1), segmentSize);
-    CircularBuffer MatchResults(iBuilder, StreamSetType(2, i1), segmentSize);
 
     kernel::s2pKernel  s2pk(iBuilder);
     s2pk.generateKernel({&ByteStream}, {&BasisBits});
 
     re_ast = re::regular_expression_passes(encoding, re_ast);   
-    pablo::PabloFunction * function = re::re2pablo_compiler(encoding, re_ast);
+    pablo::PabloFunction * function = re::re2pablo_compiler(encoding, re_ast, CountOnly);
     pablo_function_passes(function);
-    pablo::PabloKernel  icgrepK(iBuilder, "icgrep", function, {"matchedLineCount"});
-    icgrepK.generateKernel({&BasisBits}, {&MatchResults});
-
-    ByteStream.setStreamSetBuffer(inputStream);
-    BasisBits.allocateBuffer();
-    MatchResults.allocateBuffer();
-    
-    Value * s2pInstance = s2pk.createInstance({});
-    Value * icgrepInstance = icgrepK.createInstance({});
     
     if (CountOnly) {
+        pablo::PabloKernel  icgrepK(iBuilder, "icgrep", function, {"matchedLineCount"});
+        icgrepK.generateKernel({&BasisBits}, {});
+
+        ByteStream.setStreamSetBuffer(inputStream);
+        BasisBits.allocateBuffer();
+        
+        Value * s2pInstance = s2pk.createInstance({});
+        Value * icgrepInstance = icgrepK.createInstance({});
+        
         generatePipelineLoop(iBuilder, {&s2pk, &icgrepK}, {s2pInstance, icgrepInstance}, fileSize);
         Value * matchCount = icgrepK.createGetAccumulatorCall(icgrepInstance, "matchedLineCount");
         iBuilder->CreateRet(matchCount);
     }
     else {
+        CircularBuffer MatchResults(iBuilder, StreamSetType(2, i1), segmentSize);
+        pablo::PabloKernel  icgrepK(iBuilder, "icgrep", function, {});
+        icgrepK.generateKernel({&BasisBits},  {&MatchResults});
+
+        ByteStream.setStreamSetBuffer(inputStream);
+        BasisBits.allocateBuffer();
+        MatchResults.allocateBuffer();
+        
+        Value * s2pInstance = s2pk.createInstance({});
+        Value * icgrepInstance = icgrepK.createInstance({});
         kernel::scanMatchKernel scanMatchK(iBuilder, mIsNameExpression);
         scanMatchK.generateKernel({&MatchResults}, {});
                 

@@ -51,7 +51,7 @@ inline MarkerType makeMarker(MarkerPosition newpos, pablo::PabloAST * strm) {ret
 class RE_Compiler {
 public:
 
-    RE_Compiler(pablo::PabloFunction & function, cc::CC_Compiler & ccCompiler);
+    RE_Compiler(pablo::PabloFunction & function, cc::CC_Compiler & ccCompiler, bool CountOnly = false);
     void initializeRequiredStreams(Encoding encoding);
     void compileUnicodeNames(RE *& re);
     void finalizeMatchResult(MarkerType match_result, bool InvertMatches = false);
@@ -92,6 +92,7 @@ private:
 
 private:
 
+    bool                                            mCountOnly;
     cc::CC_Compiler &                               mCCCompiler;
     pablo::PabloAST *                               mLineBreak;
     pablo::PabloAST *                               mCRLF;
