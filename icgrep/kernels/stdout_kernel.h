@@ -15,9 +15,9 @@ namespace kernel {
 
 class stdOutKernel : public KernelBuilder {
 public:
-    stdOutKernel(IDISA::IDISA_Builder * iBuilder, unsigned codeUnitWidth, parabix::StreamSetBuffer & codeUnitBuffer) :
+    stdOutKernel(IDISA::IDISA_Builder * iBuilder, unsigned codeUnitWidth) :
     KernelBuilder(iBuilder, "stdout",
-                  {StreamSetBinding{codeUnitBuffer, "codeUnitBuffer"}}, {}, {}, {}, {}) {
+                  {StreamSetBinding{parabix::StreamSetType(1, codeUnitWidth), "codeUnitBuffer"}}, {}, {}, {}, {}) {
         mStreamType = PointerType::get(parabix::StreamSetType(1, codeUnitWidth).getStreamSetBlockType(iBuilder), 0);
         mScalarInputs = {ScalarBinding{mStreamType , "bufferPtr"}};
     }

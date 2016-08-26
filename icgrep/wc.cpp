@@ -145,13 +145,13 @@ Function * wcPipeline(Module * mMod, IDISA::IDISA_Builder * iBuilder, pablo::Pab
     ExternalUnboundedBuffer ByteStream(iBuilder, StreamSetType(1, i8));
     SingleBlockBuffer BasisBits(iBuilder, StreamSetType(8, i1));
     
-    s2pKernel  s2pk(iBuilder, ByteStream, BasisBits);
-    std::unique_ptr<Module> s2pM = s2pk.createKernelModule();
+    s2pKernel  s2pk(iBuilder);
+    std::unique_ptr<Module> s2pM = s2pk.createKernelModule({&ByteStream}, {&BasisBits});
     
     pablo_function_passes(function);
-    pablo::PabloKernel  wck(iBuilder, "wc", function, BasisBits, {"lineCount", "wordCount", "charCount"});
+    pablo::PabloKernel  wck(iBuilder, "wc", function, {"lineCount", "wordCount", "charCount"});
     
-    std::unique_ptr<Module> wcM = wck.createKernelModule();
+    std::unique_ptr<Module> wcM = wck.createKernelModule({&BasisBits}, {});
     
     s2pk.addKernelDeclarations(mMod);
     wck.addKernelDeclarations(mMod);
@@ -178,8 +178,8 @@ Function * wcPipeline(Module * mMod, IDISA::IDISA_Builder * iBuilder, pablo::Pab
     ByteStream.setStreamSetBuffer(inputStream);
     BasisBits.allocateBuffer();
     
-    Value * s2pInstance = s2pk.createInstance({}, {&ByteStream}, {&BasisBits});;
-    Value * wcInstance = wck.createInstance({}, {&BasisBits}, {});
+    Value * s2pInstance = s2pk.createInstance({});
+    Value * wcInstance = wck.createInstance({});
     
     generatePipelineLoop(iBuilder, {&s2pk, &wck}, {s2pInstance, wcInstance}, fileSize);
     

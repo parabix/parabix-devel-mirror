@@ -15,40 +15,21 @@ using namespace parabix;
 PabloKernel::PabloKernel(IDISA::IDISA_Builder * builder,
                          std::string kernelName,
                          PabloFunction * function,
-                         StreamSetBuffer & inputBuffer,
-                         StreamSetBuffer & outputBuffer,
                          std::vector<std::string> accumulators) :
     KernelBuilder(builder, kernelName,
-                    {StreamSetBinding{inputBuffer, "inputs"}},
-                    {StreamSetBinding{outputBuffer, "outputs"}},
-                    {},
-                    {},
-                    {ScalarBinding{builder->getBitBlockType(), "EOFbit"}, ScalarBinding{builder->getBitBlockType(), "EOFmask"}}),
-    mPabloFunction(function) {
-    unsigned output_streams = function->getNumOfResults();
-    assert (output_streams > 0);
-    mScalarOutputs = accumBindings(accumulators);
-    pablo_compiler = new PabloCompiler(builder, this, function);
-}
-
-PabloKernel::PabloKernel(IDISA::IDISA_Builder * builder,
-                         std::string kernelName,
-                         PabloFunction * function,
-                         StreamSetBuffer & inputBuffer,
-                         std::vector<std::string> accumulators) :
-    KernelBuilder(builder, kernelName,
-                    {StreamSetBinding{inputBuffer, "inputs"}},
+                    {StreamSetBinding{StreamSetType(function->getNumOfParameters(), 1), "inputs"}},
                     {},
                     {},
                     {},
                     {ScalarBinding{builder->getBitBlockType(), "EOFbit"}, ScalarBinding{builder->getBitBlockType(), "EOFmask"}}),
     mPabloFunction(function) {
     unsigned output_streams = function->getNumOfResults();
-    assert (output_streams == 0);
+    if (output_streams > 0) {
+        mStreamSetOutputs.push_back(StreamSetBinding{StreamSetType(output_streams, 1), "outputs"});
+    }
     mScalarOutputs = accumBindings(accumulators);
     pablo_compiler = new PabloCompiler(builder, this, function);
 }
-
 
 std::vector<ScalarBinding> PabloKernel::accumBindings(std::vector<std::string> accum_names) {
     std::vector<ScalarBinding> vec;

@@ -31,16 +31,28 @@ void KernelBuilder::addScalar(Type * t, std::string scalarName) {
 }
 
 void KernelBuilder::prepareKernel() {
+    if (mStreamSetInputs.size() != mStreamSetInputBuffers.size()) {
+        throw std::runtime_error("Kernel preparation: Incorrect number of input buffers");
+    }
+    if (mStreamSetOutputs.size() != mStreamSetOutputBuffers.size()) {
+        throw std::runtime_error("Kernel preparation: Incorrect number of input buffers");
+    }
     addScalar(iBuilder->getSizeTy(), blockNoScalar);
     int streamSetNo = 0;
-    for (auto sSet : mStreamSetInputs) {
-        mScalarInputs.push_back(ScalarBinding{sSet.ssType.getStreamBufferPointerType(), sSet.ssName + basePtrSuffix});
-        mStreamSetNameMap.emplace(sSet.ssName, streamSetNo);
+    for (unsigned i = 0; i < mStreamSetInputs.size(); i++) {
+        if (!(mStreamSetInputBuffers[i]->getBufferStreamSetType() == mStreamSetInputs[i].ssType)) {
+             throw std::runtime_error("Kernel preparation: Incorrect input buffer type");
+        }
+        mScalarInputs.push_back(ScalarBinding{mStreamSetInputBuffers[i]->getStreamBufferPointerType(), mStreamSetInputs[i].ssName + basePtrSuffix});
+        mStreamSetNameMap.emplace(mStreamSetInputs[i].ssName, streamSetNo);
         streamSetNo++;
     }
-    for (auto sSet : mStreamSetOutputs) {
-        mScalarInputs.push_back(ScalarBinding{sSet.ssType.getStreamBufferPointerType(), sSet.ssName + basePtrSuffix});
-        mStreamSetNameMap.emplace(sSet.ssName, streamSetNo);
+    for (unsigned i = 0; i < mStreamSetOutputs.size(); i++) {
+        if (!(mStreamSetOutputBuffers[i]->getBufferStreamSetType() == mStreamSetOutputs[i].ssType)) {
+             throw std::runtime_error("Kernel preparation: Incorrect input buffer type");
+        }
+        mScalarInputs.push_back(ScalarBinding{mStreamSetOutputBuffers[i]->getStreamBufferPointerType(), mStreamSetOutputs[i].ssName + basePtrSuffix});
+        mStreamSetNameMap.emplace(mStreamSetOutputs[i].ssName, streamSetNo);
         streamSetNo++;
     }
     for (auto binding : mScalarInputs) {
@@ -55,22 +67,23 @@ void KernelBuilder::prepareKernel() {
     mKernelStateType = StructType::create(getGlobalContext(), mKernelFields, mKernelName);
 }
 
-std::unique_ptr<Module> KernelBuilder::createKernelModule() {
+std::unique_ptr<Module> KernelBuilder::createKernelModule(std::vector<StreamSetBuffer *> input_buffers, std::vector<StreamSetBuffer *> output_buffers) {
     Module * saveModule = iBuilder->getModule();
     IDISA::IDISA_Builder::InsertPoint savePoint = iBuilder->saveIP();
     std::unique_ptr<Module> theModule = make_unique<Module>(mKernelName + "_" + iBuilder->getBitBlockTypeName(), getGlobalContext());
     Module * m = theModule.get();
     iBuilder->setModule(m);
-    generateKernel();
+    generateKernel(input_buffers, output_buffers);
     iBuilder->setModule(saveModule);
     iBuilder->restoreIP(savePoint);
     return theModule;
 }
 
-void KernelBuilder::generateKernel() {
+void KernelBuilder::generateKernel(std::vector<StreamSetBuffer *> input_buffers, std::vector<StreamSetBuffer*> output_buffers) {
     IDISA::IDISA_Builder::InsertPoint savePoint = iBuilder->saveIP();
     Module * m = iBuilder->getModule();
-
+    mStreamSetInputBuffers = input_buffers;
+    mStreamSetOutputBuffers = output_buffers;
     prepareKernel();  // possibly overriden by the KernelBuilder subtype
     KernelInterface::addKernelDeclarations(m);
     generateDoBlockMethod();     // must be implemented by the KernelBuilder subtype
@@ -199,10 +212,10 @@ unsigned KernelBuilder::getStreamSetIndex(std::string ssName) {
 size_t KernelBuilder::getStreamSetBufferSize(Value * self, std::string ssName) {
     unsigned ssIndex = getStreamSetIndex(ssName);
     if (ssIndex < mStreamSetInputs.size()) {
-        return mStreamSetInputs[ssIndex].ssType.getBufferSize();
+        return mStreamSetInputBuffers[ssIndex]->getBufferSize();
     }
     else {
-        return mStreamSetOutputs[ssIndex - mStreamSetInputs.size()].ssType.getBufferSize();
+        return mStreamSetOutputBuffers[ssIndex - mStreamSetInputs.size()]->getBufferSize();
     }
 }
 
@@ -214,11 +227,33 @@ Value * KernelBuilder::getStreamSetBlockPtr(Value * self, std::string ssName, Va
     Value * basePtr = getStreamSetBasePtr(self, ssName);
     unsigned ssIndex = getStreamSetIndex(ssName);
     if (ssIndex < mStreamSetInputs.size()) {
-        return mStreamSetInputs[ssIndex].ssType.getStreamSetBlockPointer(basePtr, blockNo);
+        return mStreamSetInputBuffers[ssIndex]->getStreamSetBlockPointer(basePtr, blockNo);
     }
     else {
-        return mStreamSetOutputs[ssIndex - mStreamSetInputs.size()].ssType.getStreamSetBlockPointer(basePtr, blockNo);
+        return mStreamSetOutputBuffers[ssIndex - mStreamSetInputs.size()]->getStreamSetBlockPointer(basePtr, blockNo);
     }
+}
+
+Value * KernelBuilder::createInstance(std::vector<Value *> args) {
+    Value * kernelInstance = iBuilder->CreateAlloca(mKernelStateType);
+    Module * m = iBuilder->getModule();
+    std::vector<Value *> init_args = {kernelInstance};
+    for (auto a : args) {
+        init_args.push_back(a);
+    }
+    for (auto b : mStreamSetInputBuffers) { 
+        init_args.push_back(b->getStreamSetBasePtr());
+    }
+    for (auto b : mStreamSetOutputBuffers) { 
+        init_args.push_back(b->getStreamSetBasePtr());
+    }
+    std::string initFnName = mKernelName + init_suffix;
+    Function * initMethod = m->getFunction(initFnName);
+    if (!initMethod) {
+        throw std::runtime_error("Cannot find " + initFnName);
+    }
+    iBuilder->CreateCall(initMethod, init_args);
+    return kernelInstance;
 }
 
 

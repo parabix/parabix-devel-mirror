@@ -18,10 +18,10 @@ namespace kernel {
    
 class p2sKernel : public KernelBuilder {
 public:
-    p2sKernel(IDISA::IDISA_Builder * iBuilder, parabix::StreamSetBuffer& basisBits, parabix::StreamSetBuffer& byteStream) :
+    p2sKernel(IDISA::IDISA_Builder * iBuilder) :
     KernelBuilder(iBuilder, "p2s",
-                  {StreamSetBinding{basisBits, "basisBits"}},
-                  {StreamSetBinding{byteStream, "byteStream"}},
+                  {StreamSetBinding{StreamSetType(8, 1), "basisBits"}},
+                  {StreamSetBinding{StreamSetType(1, 8), "byteStream"}},
                   {}, {}, {}) {}
     
 private:
@@ -31,10 +31,10 @@ private:
 
 class p2sKernel_withCompressedOutput : public KernelBuilder {
 public:
-    p2sKernel_withCompressedOutput(IDISA::IDISA_Builder * iBuilder, parabix::StreamSetBuffer& basisBits, parabix::StreamSetBuffer& deletionCounts, parabix::StreamSetBuffer& byteStream) :
+    p2sKernel_withCompressedOutput(IDISA::IDISA_Builder * iBuilder) :
     KernelBuilder(iBuilder, "p2s_compress",
-                  {StreamSetBinding{basisBits, "basisBits"}, StreamSetBinding{deletionCounts, "deletionCounts"}},
-                  {StreamSetBinding{byteStream, "byteStream"}},
+                  {StreamSetBinding{StreamSetType(8, 1), "basisBits"}, StreamSetBinding{StreamSetType(1, 1), "deletionCounts"}},
+                  {StreamSetBinding{StreamSetType(1, 8), "byteStream"}},
                   {}, {}, {}) {}
     
 private:
@@ -45,10 +45,10 @@ private:
 
 class p2s_16Kernel : public KernelBuilder {
 public:
-    p2s_16Kernel(IDISA::IDISA_Builder * iBuilder, parabix::StreamSetBuffer& basisBits, parabix::StreamSetBuffer& i16Stream) :
+    p2s_16Kernel(IDISA::IDISA_Builder * iBuilder) :
     KernelBuilder(iBuilder, "p2s_16",
-                  {StreamSetBinding{basisBits, "basisBits"}},
-                  {StreamSetBinding{i16Stream, "i16Stream"}},
+                  {StreamSetBinding{StreamSetType(16, 1), "basisBits"}},
+                  {StreamSetBinding{StreamSetType(1, 16), "i16Stream"}},
                   {}, {}, {}) {}
     
 private:
@@ -59,10 +59,10 @@ private:
     
 class p2s_16Kernel_withCompressedOutput : public KernelBuilder {
 public:
-    p2s_16Kernel_withCompressedOutput(IDISA::IDISA_Builder * iBuilder, parabix::StreamSetBuffer& basisBits, parabix::StreamSetBuffer& deletionCounts, parabix::StreamSetBuffer& i16Stream) :
+    p2s_16Kernel_withCompressedOutput(IDISA::IDISA_Builder * iBuilder) :
     KernelBuilder(iBuilder, "p2s_16_compress",
-                  {StreamSetBinding{basisBits, "basisBits"}, StreamSetBinding{deletionCounts, "deletionCounts"}},
-                  {StreamSetBinding{i16Stream, "i16Stream"}},
+                  {StreamSetBinding{StreamSetType(16, 1), "basisBits"}, StreamSetBinding{StreamSetType(1, 1), "deletionCounts"}},
+                  {StreamSetBinding{StreamSetType(1, 16), "i16Stream"}},
                   {},
                   {},
                   {ScalarBinding{iBuilder->getSizeTy(), "unitsGenerated"}, ScalarBinding{iBuilder->getSizeTy(), "unitsWritten"}}) {}

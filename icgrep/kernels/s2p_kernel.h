@@ -24,10 +24,10 @@ class KernelBuilder;
 class s2pKernel : public KernelBuilder {
 public:
     
-    s2pKernel(IDISA::IDISA_Builder * iBuilder, parabix::StreamSetBuffer& byteStream, parabix::StreamSetBuffer& basisBits) :
+    s2pKernel(IDISA::IDISA_Builder * iBuilder) :
     KernelBuilder(iBuilder, "s2p",
-                  {StreamSetBinding{byteStream, "byteStream"}},
-                  {StreamSetBinding{basisBits, "basisBits"}},
+                  {StreamSetBinding{parabix::StreamSetType(1, parabix::i8), "byteStream"}},
+                  {StreamSetBinding{parabix::StreamSetType(8, parabix::i1), "basisBits"}},
                   {}, {}, {}) {}
     
     

@@ -7,6 +7,7 @@
 #define KERNEL_BUILDER_H
 
 
+#include "streamset.h"
 #include "interface.h"
 #include <vector>
 #include <llvm/IR/Type.h>
@@ -17,7 +18,7 @@ const std::string blockNoScalar = "blockNo";
 const std::string basePtrSuffix = "_basePtr";
 const std::string blkMaskSuffix = "_blkMask";
 
-
+using namespace parabix;
 namespace kernel {
     
 class KernelBuilder : public KernelInterface {
@@ -35,10 +36,12 @@ public:
     // Create a module for the kernel, including the kernel state type declaration and
     // the full implementation of all required methods.     
     //
-    std::unique_ptr<llvm::Module> createKernelModule();
+    std::unique_ptr<llvm::Module> createKernelModule(std::vector<StreamSetBuffer *> input_buffers, std::vector<StreamSetBuffer *> output_buffers);
     
     // Generate the Kernel to the current module (iBuilder->getModule()).
-    void generateKernel();
+    void generateKernel(std::vector<StreamSetBuffer *> input_buffers, std::vector<StreamSetBuffer *> output_buffers);
+    
+    llvm::Value * createInstance(std::vector<Value *> args) override;
     
 protected:
     //
@@ -95,12 +98,16 @@ protected:
     size_t getStreamSetBufferSize(Value * self, std::string ssName);
 
     llvm::Value * getStreamSetBlockPtr(Value * self, std::string ssName, Value * blockNo);
+
         
 protected:
 
     std::vector<llvm::Type *>  mKernelFields;
     NameMap                    mInternalStateNameMap;
     NameMap                    mStreamSetNameMap;
+    std::vector<StreamSetBuffer *> mStreamSetInputBuffers;
+    std::vector<StreamSetBuffer *> mStreamSetOutputBuffers;
+
 };
 }
 #endif 

@@ -233,18 +233,18 @@ Function * u8u16Pipeline(Module * mMod, IDISA::IDISA_Builder * iBuilder, pablo::
     SingleBlockBuffer DeletionCounts(iBuilder, StreamSetType(1, i1));
     CircularBuffer U16out(iBuilder, StreamSetType(1, i16), u16OutputBlocks);
 
-    s2pKernel  s2pk(iBuilder, ByteStream, BasisBits);
-    s2pk.generateKernel();
-    
+    s2pKernel  s2pk(iBuilder);
+    s2pk.generateKernel({&ByteStream}, {&BasisBits});
+
     pablo_function_passes(function);
-    pablo::PabloKernel  u8u16k(iBuilder, "u8u16", function, BasisBits, U8u16Bits, {});
-    u8u16k.generateKernel();
+    pablo::PabloKernel  u8u16k(iBuilder, "u8u16", function, {});
+    u8u16k.generateKernel({&BasisBits}, {&U8u16Bits});
     
-    deletionKernel delK(iBuilder, iBuilder->getBitBlockWidth()/16, 16, U8u16Bits, U16Bits, DeletionCounts);
-    delK.generateKernel();
+    deletionKernel delK(iBuilder, iBuilder->getBitBlockWidth()/16, 16);
+    delK.generateKernel({&U8u16Bits}, {&U16Bits, &DeletionCounts});
     
-    p2s_16Kernel_withCompressedOutput p2sk(iBuilder, U16Bits, DeletionCounts, U16out);
-    p2sk.generateKernel();
+    p2s_16Kernel_withCompressedOutput p2sk(iBuilder);
+    p2sk.generateKernel({&U16Bits, &DeletionCounts}, {&U16out});
     
     Type * const size_ty = iBuilder->getSizeTy();
     Type * i16PtrTy = PointerType::get(iBuilder->getInt16Ty(), 0);
@@ -270,10 +270,10 @@ Function * u8u16Pipeline(Module * mMod, IDISA::IDISA_Builder * iBuilder, pablo::
     DeletionCounts.allocateBuffer();
     U16out.allocateBuffer();
 
-    Value * s2pInstance = s2pk.createInstance({}, {&ByteStream}, {&BasisBits});
-    Value * u8u16Instance = u8u16k.createInstance({}, {&BasisBits}, {&U8u16Bits});
-    Value * delInstance = delK.createInstance({}, {&U8u16Bits}, {&U16Bits, &DeletionCounts});
-    Value * p2sInstance = p2sk.createInstance({}, {&U16Bits, &DeletionCounts}, {&U16out});
+    Value * s2pInstance = s2pk.createInstance({});
+    Value * u8u16Instance = u8u16k.createInstance({});
+    Value * delInstance = delK.createInstance({});
+    Value * p2sInstance = p2sk.createInstance({});
     
     generatePipelineLoop(iBuilder, {&s2pk, &u8u16k, &delK, &p2sk}, {s2pInstance, u8u16Instance, delInstance, p2sInstance}, fileSize);
     

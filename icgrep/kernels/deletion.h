@@ -37,14 +37,11 @@ using namespace parabix;
 
 class deletionKernel : public kernel::KernelBuilder {
 public:
-    deletionKernel(IDISA::IDISA_Builder * iBuilder, unsigned fw, unsigned streamCount,
-                   StreamSetBuffer & inputStreamSet,
-                   StreamSetBuffer & outputStreamSet,
-                   StreamSetBuffer & deletionCounts) :
+    deletionKernel(IDISA::IDISA_Builder * iBuilder, unsigned fw, unsigned streamCount) :
     KernelBuilder(iBuilder, "del",
-                  {StreamSetBinding{inputStreamSet, "inputStreamSet"}},
-                  {StreamSetBinding{outputStreamSet, "outputStreamSet"},
-                   StreamSetBinding{deletionCounts, "deletionCounts"}},
+                  {StreamSetBinding{StreamSetType(streamCount + 2, 1), "inputStreamSet"}},
+                  {StreamSetBinding{StreamSetType(streamCount, 1), "outputStreamSet"},
+                   StreamSetBinding{StreamSetType(1, 1), "deletionCounts"}},
                   {}, {}, {}),
     mDeletionFieldWidth(fw),
     mStreamCount(streamCount) {}

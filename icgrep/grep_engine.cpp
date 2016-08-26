@@ -154,21 +154,21 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool Count
     CircularBuffer BasisBits(iBuilder, StreamSetType(8, i1), segmentSize);
     CircularBuffer MatchResults(iBuilder, StreamSetType(2, i1), segmentSize);
 
-    kernel::s2pKernel  s2pk(iBuilder, ByteStream, BasisBits);
-    s2pk.generateKernel();
+    kernel::s2pKernel  s2pk(iBuilder);
+    s2pk.generateKernel({&ByteStream}, {&BasisBits});
 
     re_ast = re::regular_expression_passes(encoding, re_ast);   
     pablo::PabloFunction * function = re::re2pablo_compiler(encoding, re_ast);
     pablo_function_passes(function);
-    pablo::PabloKernel  icgrepK(iBuilder, "icgrep", function, BasisBits, MatchResults, {"matchedLineCount"});
-    icgrepK.generateKernel();
+    pablo::PabloKernel  icgrepK(iBuilder, "icgrep", function, {"matchedLineCount"});
+    icgrepK.generateKernel({&BasisBits}, {&MatchResults});
 
     ByteStream.setStreamSetBuffer(inputStream);
     BasisBits.allocateBuffer();
     MatchResults.allocateBuffer();
     
-    Value * s2pInstance = s2pk.createInstance({}, {&ByteStream}, {&BasisBits});
-    Value * icgrepInstance = icgrepK.createInstance({}, {&BasisBits}, {&MatchResults});
+    Value * s2pInstance = s2pk.createInstance({});
+    Value * icgrepInstance = icgrepK.createInstance({});
     
     if (CountOnly) {
         generatePipelineLoop(iBuilder, {&s2pk, &icgrepK}, {s2pInstance, icgrepInstance}, fileSize);
@@ -176,10 +176,10 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool Count
         iBuilder->CreateRet(matchCount);
     }
     else {
-        kernel::scanMatchKernel scanMatchK(iBuilder, MatchResults, mIsNameExpression);
-        scanMatchK.generateKernel();
+        kernel::scanMatchKernel scanMatchK(iBuilder, mIsNameExpression);
+        scanMatchK.generateKernel({&MatchResults}, {});
                 
-        Value * scanMatchInstance = scanMatchK.createInstance({iBuilder->CreateBitCast(inputStream, int8PtrTy), fileSize, fileIdx}, {&MatchResults}, {});
+        Value * scanMatchInstance = scanMatchK.createInstance({iBuilder->CreateBitCast(inputStream, int8PtrTy), fileSize, fileIdx});
         
         generatePipelineLoop(iBuilder, {&s2pk, &icgrepK, &scanMatchK}, {s2pInstance, icgrepInstance, scanMatchInstance}, fileSize);
         iBuilder->CreateRetVoid();

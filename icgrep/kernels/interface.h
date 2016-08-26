@@ -13,14 +13,13 @@
 #include <IDISA/idisa_builder.h>
 #include "streamset.h"
 
-    
 struct ScalarBinding {
     llvm::Type * scalarType;
     std::string scalarName;
 };
 
 struct StreamSetBinding {
-    parabix::StreamSetBuffer & ssType;
+    parabix::StreamSetType ssType;
     std::string ssName;
 };
    
@@ -53,7 +52,7 @@ public:
     // Add ExternalLinkage method declarations for the kernel to a given client module.
     void addKernelDeclarations(Module * client);
     
-    llvm::Value * createInstance(std::vector<llvm::Value *> initialParameters);
+    virtual llvm::Value * createInstance(std::vector<llvm::Value *> initialParameters);
     llvm::Value * createInstance(std::vector<llvm::Value *> initialParameters, std::vector<parabix::StreamSetBuffer *> inputs, std::vector<parabix::StreamSetBuffer *> outputBuffers);
     llvm::Value * createDoBlockCall(llvm::Value * kernelInstance);
     llvm::Value * createDoSegmentCall(llvm::Value * kernelInstance, llvm::Value * blkCount);

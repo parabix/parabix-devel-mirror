@@ -20,6 +20,7 @@ public:
     StreamSetType(int count, int width) : mStreamCount(count), mFieldWidth(width) {}
     int StreamCount() { return mStreamCount;}
     int StreamFieldWidth() { return mFieldWidth;}
+    bool operator== (StreamSetType& other) {return (mStreamCount == other.mStreamCount) && (mFieldWidth == other.mFieldWidth);}
     
     llvm::Type * getStreamSetBlockType(IDISA::IDISA_Builder * iBuilder);
     
@@ -32,7 +33,8 @@ class StreamSetBuffer {
 public:
     enum class BufferKind : unsigned {BlockBuffer, ExternalUnboundedBuffer, CircularBuffer, ExpandingBuffer};
     inline BufferKind getBufferKind() const {return mBufferKind;}
-    
+    inline StreamSetType& getBufferStreamSetType() {return mStreamSetType;}
+
     virtual llvm::PointerType * getStreamBufferPointerType();
 
     virtual size_t getBufferSize() = 0;
