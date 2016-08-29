@@ -13,7 +13,6 @@
 
 #include <pablo/pablo_toolchain.h>
 #include <toolchain.h>
-#include <utf_encoding.h>
 #include <pablo/pablo_compiler.h>
 #include <kernels/pipeline.h>
 #include <llvm/IR/Function.h>
@@ -129,12 +128,8 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool Count
     const unsigned segmentSize = codegen::SegmentSize;
     const unsigned bufferSegments = codegen::BufferSegments;
 
-    Encoding::Type type;
-    type = UTF_16 ? Encoding::Type::UTF_16 : Encoding::Type::UTF_8;
-    unsigned bits;
-    bits = UTF_16 ? 16 : 8;
+    unsigned encodingBits = UTF_16 ? 16 : 8;
 
-    Encoding encoding(type, bits);
     mIsNameExpression = isNameExpression;
 
     Type * const int64ty = iBuilder->getInt64Ty();
@@ -163,8 +158,8 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool Count
     kernel::s2pKernel  s2pk(iBuilder);
     s2pk.generateKernel({&ByteStream}, {&BasisBits});
 
-    re_ast = re::regular_expression_passes(encoding, re_ast);   
-    pablo::PabloFunction * function = re::re2pablo_compiler(encoding, re_ast, CountOnly);
+    re_ast = re::regular_expression_passes(re_ast);   
+    pablo::PabloFunction * function = re::re2pablo_compiler(encodingBits, re_ast, CountOnly);
     pablo_function_passes(function);
 
     ByteStream.setStreamSetBuffer(inputStream);

@@ -62,7 +62,7 @@ static cl::opt<int, true>
 
 
 
-RE * regular_expression_passes(const Encoding encoding, RE * re_ast)  {
+RE * regular_expression_passes(RE * re_ast)  {
     if (PrintOptions.isSet(PrintAllREs) || PrintOptions.isSet(PrintParsedREs)) {
         std::cerr << "Parser:" << std::endl << Printer_RE::PrintRE(re_ast) << std::endl;
     }
@@ -85,11 +85,11 @@ RE * regular_expression_passes(const Encoding encoding, RE * re_ast)  {
     return re_ast;
 }
     
-PabloFunction * re2pablo_compiler(const Encoding encoding, RE * re_ast, bool CountOnly) {
-    PabloFunction * function = PabloFunction::Create("process_block", encoding.getBits(), CountOnly ? 0 : 2);
-    cc::CC_Compiler cc_compiler(*function, encoding);
+PabloFunction * re2pablo_compiler(const unsigned encodingBits, RE * re_ast, bool CountOnly) {
+    PabloFunction * function = PabloFunction::Create("process_block", encodingBits, CountOnly ? 0 : 2);
+    cc::CC_Compiler cc_compiler(*function, encodingBits);
     re::RE_Compiler re_compiler(*function, cc_compiler, CountOnly);
-    re_compiler.initializeRequiredStreams(encoding);
+    re_compiler.initializeRequiredStreams(encodingBits);
     re_compiler.compileUnicodeNames(re_ast);
     re_compiler.finalizeMatchResult(re_compiler.compile(re_ast), AlgorithmOptions.isSet(InvertMatches));
     return function;

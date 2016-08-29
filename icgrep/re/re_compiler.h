@@ -52,7 +52,7 @@ class RE_Compiler {
 public:
 
     RE_Compiler(pablo::PabloFunction & function, cc::CC_Compiler & ccCompiler, bool CountOnly = false);
-    void initializeRequiredStreams(Encoding encoding);
+    void initializeRequiredStreams(const unsigned encodingBits);
     void compileUnicodeNames(RE *& re);
     void finalizeMatchResult(MarkerType match_result, bool InvertMatches = false);
     MarkerType compile(RE * re) {

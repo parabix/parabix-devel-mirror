@@ -6,7 +6,6 @@
 
 #include <toolchain.h>
 #include "pipeline.h"
-#include "utf_encoding.h"
 
 #include <IDISA/idisa_builder.h>
 

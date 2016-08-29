@@ -7,8 +7,6 @@
 #ifndef RE_TOOLCHAIN_H
 #define RE_TOOLCHAIN_H
 
-#include "utf_encoding.h"
-
 #include <re/re_re.h>
 #include <pablo/function.h>
 #include <llvm/Support/CommandLine.h>
@@ -30,9 +28,9 @@ extern int IfInsertionGap;
 
 const cl::OptionCategory * re_toolchain_flags();
 
-RE * regular_expression_passes(const Encoding encoding, RE * re_ast);
+RE * regular_expression_passes(RE * re_ast);
 
-pablo::PabloFunction * re2pablo_compiler(const Encoding encoding, RE * re_ast, bool CountOnly = false);
+pablo::PabloFunction * re2pablo_compiler(const unsigned encodingBits, RE * re_ast, bool CountOnly = false);
     
 }
 #endif

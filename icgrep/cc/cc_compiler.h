@@ -9,7 +9,6 @@
 
 #include <re/re_cc.h>
 #include <pablo/builder.hpp>
-#include "utf_encoding.h"
 #include <string>
 
 
@@ -26,7 +25,7 @@ public:
 
     using Vars = std::vector<pablo::Var *>;
 
-    CC_Compiler(pablo::PabloFunction & function, const Encoding & encoding, const std::string prefix = "basis");
+    CC_Compiler(pablo::PabloFunction & function, const unsigned encodingBits = 8, const std::string prefix = "basis");
 
     pablo::Assign * compileCC(const re::CC *cc);
 
@@ -45,7 +44,7 @@ public:
     }
 
     bool isUTF_16() {
-	return mEncoding.getBits() == 16;
+	return mEncodingBits == 16;
     }
 
 private:
@@ -67,7 +66,8 @@ private:
 private:    
     pablo::PabloBuilder         mBuilder;
     std::vector<pablo::Var *>   mBasisBit;
-    const Encoding &            mEncoding;
+    const unsigned              mEncodingBits;
+    unsigned                    mEncodingMask;
 };
 
 inline pablo::Assign * CC_Compiler::compileCC(const re::CC *cc) {

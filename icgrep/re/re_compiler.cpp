@@ -42,11 +42,11 @@ using namespace pablo;
 
 namespace re {
 
-void RE_Compiler::initializeRequiredStreams(Encoding encoding) {
-    if (encoding.getType() == Encoding::Type::UTF_8) {
+void RE_Compiler::initializeRequiredStreams(const unsigned encodingBits) {
+    if (encodingBits == 8) {
       RE_Compiler::initializeRequiredStreams_utf8();
     }
-    else if (encoding.getType() == Encoding::Type::UTF_16) {
+    else if (encodingBits == 16) {
       RE_Compiler::initializeRequiredStreams_utf16();
     }
 }

@@ -35,7 +35,6 @@
 #include <kernels/deletion.h>
 #include <kernels/stdout_kernel.h>
 
-#include <utf_encoding.h>
 
 // mmap system
 #include <boost/filesystem.hpp>
@@ -52,11 +51,11 @@ static cl::list<std::string> inputFiles(cl::Positional, cl::desc("<input file ..
 //
 namespace pablo {
 
-PabloFunction * u8u16_pablo(const Encoding encoding) {
+PabloFunction * u8u16_pablo() {
     //  input: 8 basis bit streams
     //  output: 16 u8-indexed streams, + delmask stream + error stream
     PabloFunction * function = PabloFunction::Create("u8u16", 8, 18);
-    cc::CC_Compiler ccc(*function, encoding);
+    cc::CC_Compiler ccc(*function);
     
     PabloBuilder pBuilder(ccc.getBuilder().getPabloBlock(), ccc.getBuilder());
     const std::vector<Var *> u8_bits = ccc.getBasisBits();
@@ -294,8 +293,7 @@ u8u16FunctionType u8u16CodeGen(void) {
     Module * M = new Module("u8u16", getGlobalContext());
     IDISA::IDISA_Builder * idb = IDISA::GetIDISA_Builder(M);
 
-    Encoding encoding(Encoding::Type::UTF_8, 8);
-    pablo::PabloFunction * function = pablo::u8u16_pablo(encoding);
+    pablo::PabloFunction * function = pablo::u8u16_pablo();
     
     llvm::Function * main_IR = u8u16Pipeline(M, idb, function);
     

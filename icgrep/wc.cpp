@@ -22,7 +22,6 @@
 #include <llvm/Support/CommandLine.h>
 #include <llvm/Support/raw_ostream.h>
 
-#include <utf_encoding.h>
 #include <re/re_cc.h>
 #include <cc/cc_compiler.h>
 #include <pablo/function.h>
@@ -37,9 +36,6 @@
 
 #include <pablo/pablo_compiler.h>
 #include <pablo/pablo_toolchain.h>
-
-
-#include <utf_encoding.h>
 
 // mmap system
 #include <boost/filesystem.hpp>
@@ -100,12 +96,12 @@ extern "C" {
 //
 //
 
-pablo::PabloFunction * wc_gen(Encoding encoding) {
+pablo::PabloFunction * wc_gen() {
     //  input: 8 basis bit streams
     //  output: 3 counters
     
     pablo::PabloFunction * function = pablo::PabloFunction::Create("wc", 8, 0);
-    cc::CC_Compiler ccc(*function, encoding);
+    cc::CC_Compiler ccc(*function);
     
     pablo::PabloBuilder pBuilder(ccc.getBuilder().getPabloBlock(), ccc.getBuilder());
     const std::vector<pablo::Var *> u8_bits = ccc.getBasisBits();
@@ -208,8 +204,7 @@ wcFunctionType wcCodeGen(void) {
     Module * M = new Module("wc", getGlobalContext());
     IDISA::IDISA_Builder * idb = IDISA::GetIDISA_Builder(M);
 
-    Encoding encoding(Encoding::Type::UTF_8, 8);
-    pablo::PabloFunction * function = wc_gen(encoding);
+    pablo::PabloFunction * function = wc_gen();
     llvm::Function * main_IR = wcPipeline(M, idb, function);
 
     wcEngine = JIT_to_ExecutionEngine(M);

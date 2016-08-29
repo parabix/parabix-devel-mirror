@@ -5,7 +5,6 @@
  */
 
 #include "cc_compiler.h"
-#include "utf_encoding.h"
 
 //Pablo Expressions
 #include <re/re_alt.h>
@@ -26,15 +25,16 @@ using namespace pablo;
 
 namespace cc {
 
-CC_Compiler::CC_Compiler(PabloFunction & function, const Encoding & encoding, const std::string prefix)
+CC_Compiler::CC_Compiler(PabloFunction & function, const unsigned encodingBits, const std::string prefix)
 : mBuilder(function.getEntryBlock())
-, mBasisBit(encoding.getBits())
-, mEncoding(encoding) {
-    for (unsigned i = 0; i != encoding.getBits(); i++) {
+, mBasisBit(encodingBits)
+, mEncodingBits(encodingBits) {
+    for (unsigned i = 0; i != mEncodingBits; i++) {
         Var * var = mBuilder.createVar(prefix + std::to_string(i));
         function.setParameter(i, var);
         mBasisBit[i] = var;
     }
+    mEncodingMask = (static_cast<unsigned>(1) << encodingBits) - static_cast<unsigned>(1);
 }
 
 Assign * CC_Compiler::compileCC(const std::string && canonicalName, const CC *cc, PabloBlock & block) {
@@ -52,9 +52,6 @@ PabloAST * CC_Compiler::charset_expr(const CC * cc, PabloBlockOrBuilder & pb) {
     if (cc->empty()) {
         return pb.createZeroes();
     }
-#ifdef CC_COMPILER_ENFORCES_INFILE
-    bool includes_codepoint_zero = lo_codepoint(cc->begin()) == 0;
-#endif
     if (cc->size() > 2) {
         bool combine = true;
         for (const interval_t & i : *cc) {
@@ -74,9 +71,8 @@ PabloAST * CC_Compiler::charset_expr(const CC * cc, PabloBlockOrBuilder & pb) {
             if (combine) {
                 codepoint_t lo = lo_codepoint(cc->front());
                 codepoint_t hi = lo_codepoint(cc->back());
-                const codepoint_t mask = mEncoding.getMask();
-                lo &= (mask - 1);
-                hi |= (mask ^ (mask - 1));
+                lo &= (mEncodingMask - 1);
+                hi |= (mEncodingMask ^ (mEncodingMask - 1));
                 PabloAST * expr = make_range(lo, hi, pb);
                 PabloAST * bit0 = getBasisVar(0);
                 if ((lo & 1) == 0) {
@@ -91,16 +87,7 @@ PabloAST * CC_Compiler::charset_expr(const CC * cc, PabloBlockOrBuilder & pb) {
         PabloAST * temp = char_or_range_expr(lo_codepoint(i), hi_codepoint(i), pb);
         expr = (expr == nullptr) ? temp : pb.createOr(expr, temp);
     }
-#ifdef CC_COMPILER_ENFORCES_INFILE
-    if (includes_codepoint_zero) {
-        return pb.createInFile(expr);
-    }
-    else {
-        return expr;
-    }
-#else
     return expr;
-#endif
     
 }
 
@@ -145,7 +132,7 @@ PabloAST * CC_Compiler::bit_pattern_expr(const unsigned pattern, unsigned select
 
 template<typename PabloBlockOrBuilder>
 inline PabloAST * CC_Compiler::char_test_expr(const codepoint_t ch, PabloBlockOrBuilder &pb) {
-    return bit_pattern_expr(ch, mEncoding.getMask(), pb);
+    return bit_pattern_expr(ch, mEncodingMask, pb);
 }
 
 template<typename PabloBlockOrBuilder>
@@ -154,14 +141,14 @@ PabloAST * CC_Compiler::make_range(const codepoint_t n1, const codepoint_t n2, P
 
     for (codepoint_t diff_bits = n1 ^ n2; diff_bits; diff_count++, diff_bits >>= 1);
 
-    if ((n2 < n1) || (diff_count > mEncoding.getBits()))
+    if ((n2 < n1) || (diff_count > mEncodingBits))
     {
         throw std::runtime_error("Bad Range: [" + std::to_string(n1) + "," + std::to_string(n2) + "]");
     }
 
     const codepoint_t mask0 = (static_cast<codepoint_t>(1) << diff_count) - 1;
 
-    PabloAST * common = bit_pattern_expr(n1 & ~mask0, mEncoding.getMask() ^ mask0, pb);
+    PabloAST * common = bit_pattern_expr(n1 & ~mask0, mEncodingMask ^ mask0, pb);
 
     if (diff_count == 0) return common;
 
@@ -237,8 +224,8 @@ inline PabloAST * CC_Compiler::char_or_range_expr(const codepoint_t lo, const co
 }
 
 inline Var * CC_Compiler::getBasisVar(const unsigned i) const {
-    assert (i < mEncoding.getBits());
-    return mBasisBit[mEncoding.getBits() - i - 1];
+    assert (i < mEncodingBits);
+    return mBasisBit[mEncodingBits - i - 1];
 }
 
 } // end of namespace cc
