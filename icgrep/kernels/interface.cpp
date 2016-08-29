@@ -126,10 +126,10 @@ Value * KernelInterface::createInstance(std::vector<Value *> args,
         init_args.push_back(a);
     }
     for (auto b : inputBuffers) { 
-        init_args.push_back(b->getStreamSetBasePtr());
+        init_args.push_back(b->getStreamSetStructPtr());
     }
     for (auto b : outputBuffers) { 
-        init_args.push_back(b->getStreamSetBasePtr());
+        init_args.push_back(b->getStreamSetStructPtr());
     }
     std::string initFnName = mKernelName + init_suffix;
     Function * initMethod = m->getFunction(initFnName);

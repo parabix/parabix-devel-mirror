@@ -9,7 +9,9 @@
 #include <kernels/interface.h>
 #include <kernels/kernel.h>
 
+
 void generatePipelineLoop(IDISA::IDISA_Builder * iBuilder, std::vector<kernel::KernelBuilder *> kernels, std::vector<llvm::Value *> instances, llvm::Value * totalBytes);
 
+void generatePipelineParallel(IDISA::IDISA_Builder * iBuilder, std::vector<kernel::KernelBuilder *> kernels, std::vector<llvm::Value *> instances);
 
 #endif // PIPELINE_H

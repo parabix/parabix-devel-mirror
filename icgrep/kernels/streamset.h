@@ -46,7 +46,21 @@ public:
     // Get the buffer pointer for a given block of the stream.
     virtual llvm::Value * getStreamSetBlockPointer(llvm::Value * bufferBasePtr, llvm::Value * blockNo) = 0;
     
-    
+    virtual llvm::Value * getProducerPosPtr(Value * ptr);
+
+    virtual void setProducerPos(Value * ptr, Value * pos);
+
+    virtual llvm::Value * getComsumerPosPtr(Value * ptr);
+
+    virtual void setConsumerPos(Value * ptr, Value * pos);
+
+    virtual llvm::Value * hasEndOfInputPtr(Value * ptr);
+
+    virtual void setEndOfInput(Value * ptr);
+
+    virtual llvm::PointerType * getStreamSetStructPointerType();
+
+    virtual llvm::Value * getStreamSetStructPtr();
     
 protected:
     StreamSetBuffer(BufferKind k, IDISA::IDISA_Builder * b, StreamSetType ss_type) :
@@ -58,6 +72,8 @@ protected:
     size_t mBufferBlocks;
     int mAddrSpace;
     llvm::Value * mStreamSetBufferPtr;
+    llvm::Value * mStreamSetStructPtr;
+    llvm::Type * mStreamSetStructType;
 
 };   
     
@@ -67,7 +83,14 @@ public:
     static inline bool classof(const StreamSetBuffer * b) {return b->getBufferKind() == BufferKind::BlockBuffer;}
     
     SingleBlockBuffer(IDISA::IDISA_Builder * b, StreamSetType ss_type) :
-    StreamSetBuffer(BufferKind::BlockBuffer, b, ss_type) {}
+    StreamSetBuffer(BufferKind::BlockBuffer, b, ss_type) {
+        mStreamSetStructType = StructType::get(getGlobalContext(),
+                                               std::vector<Type *>({iBuilder->getInt64Ty(), 
+                                                                    iBuilder->getInt64Ty(), 
+                                                                    iBuilder->getInt8Ty(), 
+                                                                    mStreamSetType.getStreamSetBlockType(iBuilder)}));
+
+    }
     
     size_t getBufferSize() override;
     llvm::Value * allocateBuffer() override;
@@ -82,6 +105,11 @@ public:
         StreamSetBuffer(BufferKind::ExternalUnboundedBuffer, b, ss_type) {
             mBufferBlocks = 0;
             mAddrSpace = AddressSpace;
+            mStreamSetStructType = StructType::get(getGlobalContext(),
+                                                   std::vector<Type *>({iBuilder->getInt64Ty(), 
+                                                                        iBuilder->getInt64Ty(), 
+                                                                        iBuilder->getInt8Ty(), 
+                                                                        getStreamBufferPointerType()}));
         }
     llvm::PointerType * getStreamBufferPointerType() override;
 
@@ -106,6 +134,12 @@ public:
             if (((bufferBlocks - 1) & bufferBlocks) != 0) {
                 throw std::runtime_error("CircularStreamSetBuffer: number of blocks must be a power of 2!");
             }
+            mStreamSetStructType = StructType::get(getGlobalContext(), 
+                                                   std::vector<Type *>({iBuilder->getInt64Ty(), 
+                                                                        iBuilder->getInt64Ty(), 
+                                                                        iBuilder->getInt8Ty(), 
+                                                                        getStreamBufferPointerType()}));
+ 
         }
 
     size_t getBufferSize() override;

@@ -12,6 +12,8 @@
     
 using namespace parabix;
 
+enum SS_struct_index {iProducer_pos = 0, iConsumer_pos = 1, iEnd_of_input = 2, iBuffer_ptr = 3};
+
 llvm::Type * StreamSetType::getStreamSetBlockType(IDISA::IDISA_Builder * iBuilder) {
     llvm::Type * streamType = mFieldWidth == 1 ? iBuilder->getBitBlockType() : ArrayType::get(iBuilder->getBitBlockType(), mFieldWidth);
     return ArrayType::get(streamType, mStreamCount);
@@ -21,6 +23,37 @@ llvm::PointerType * StreamSetBuffer::getStreamBufferPointerType() {
     return PointerType::get(mStreamSetType.getStreamSetBlockType(iBuilder), 0);
 }
 
+llvm::PointerType * StreamSetBuffer::getStreamSetStructPointerType() {
+    return PointerType::get(mStreamSetStructType, 0);
+}
+
+llvm::Value * StreamSetBuffer::getProducerPosPtr(Value * ptr) {
+    return iBuilder->CreateGEP(ptr, {iBuilder->getInt32(0), iBuilder->getInt32(iProducer_pos)});
+}
+
+void StreamSetBuffer::setProducerPos(Value * ptr, llvm::Value * pos){
+    iBuilder->CreateStore(pos, iBuilder->CreateGEP(ptr, {iBuilder->getInt32(0), iBuilder->getInt32(iProducer_pos)}));
+}
+
+llvm::Value * StreamSetBuffer::getComsumerPosPtr(Value * ptr) {
+    return iBuilder->CreateGEP(ptr, {iBuilder->getInt32(0), iBuilder->getInt32(iConsumer_pos)});
+}
+
+void StreamSetBuffer::setConsumerPos(Value * ptr, Value * pos){
+    iBuilder->CreateStore(pos, iBuilder->CreateGEP(ptr, {iBuilder->getInt32(0), iBuilder->getInt32(iConsumer_pos)}));
+}
+
+llvm::Value * StreamSetBuffer::hasEndOfInputPtr(Value * ptr) {
+    return iBuilder->CreateGEP(ptr, {iBuilder->getInt32(0), iBuilder->getInt32(iEnd_of_input)});
+}
+
+void StreamSetBuffer::setEndOfInput(Value * ptr){
+    iBuilder->CreateStore(ConstantInt::get(iBuilder->getInt8Ty(), 1), iBuilder->CreateGEP(ptr, {iBuilder->getInt32(0), iBuilder->getInt32(iEnd_of_input)}));
+}
+
+llvm::Value * StreamSetBuffer::getStreamSetStructPtr(){
+    return mStreamSetStructPtr;
+}
 // Single Block Buffer
 
 size_t SingleBlockBuffer::getBufferSize() {
@@ -28,13 +61,19 @@ size_t SingleBlockBuffer::getBufferSize() {
 }
 
 llvm::Value * SingleBlockBuffer::allocateBuffer() {
-    mStreamSetBufferPtr = iBuilder->CreateAlloca(mStreamSetType.getStreamSetBlockType(iBuilder));
+    Type * const int64ty = iBuilder->getInt64Ty();
+    Type * const int8ty = iBuilder->getInt8Ty();
+    mStreamSetStructPtr = iBuilder->CreateAlloca(mStreamSetStructType);
+    iBuilder->CreateStore(ConstantInt::get(int64ty, 0), iBuilder->CreateGEP(mStreamSetStructPtr, {iBuilder->getInt32(0), iBuilder->getInt32(iProducer_pos)}));
+    iBuilder->CreateStore(ConstantInt::get(int64ty, 0), iBuilder->CreateGEP(mStreamSetStructPtr, {iBuilder->getInt32(0), iBuilder->getInt32(iConsumer_pos)}));
+    iBuilder->CreateStore(ConstantInt::get(int8ty, 0), iBuilder->CreateGEP(mStreamSetStructPtr, {iBuilder->getInt32(0), iBuilder->getInt32(iEnd_of_input)}));
+    mStreamSetBufferPtr = iBuilder->CreateGEP(mStreamSetStructPtr, {iBuilder->getInt32(0), iBuilder->getInt32(iBuffer_ptr)});
     return mStreamSetBufferPtr;
 }
 
 // For a single block buffer, the block pointer is always the buffer base pointer.
-llvm::Value * SingleBlockBuffer::getStreamSetBlockPointer(llvm::Value * bufferBasePtr, llvm::Value * blockNo) {
-    return bufferBasePtr;
+llvm::Value * SingleBlockBuffer::getStreamSetBlockPointer(llvm::Value * basePtr, llvm::Value * blockNo) {
+    return iBuilder->CreateGEP(mStreamSetType.getStreamSetBlockType(iBuilder), basePtr, {iBuilder->getInt32(0), iBuilder->getInt32(3)});
 }
 
 
@@ -45,22 +84,32 @@ size_t ExternalUnboundedBuffer::getBufferSize() {
 }
 
 void ExternalUnboundedBuffer::setStreamSetBuffer(llvm::Value * ptr) {
-    PointerType * t = PointerType::get(mStreamSetType.getStreamSetBlockType(iBuilder), mAddrSpace);
-    
+
+    Type * const int64ty = iBuilder->getInt64Ty();
+    Type * const int8ty = iBuilder->getInt8Ty();
+
+    PointerType * t = getStreamBufferPointerType();    
     mStreamSetBufferPtr = iBuilder->CreatePointerBitCastOrAddrSpaceCast(ptr, t);
+
+    mStreamSetStructPtr = iBuilder->CreateAlloca(mStreamSetStructType);
+    iBuilder->CreateStore(ConstantInt::get(int64ty, 0), iBuilder->CreateGEP(mStreamSetStructPtr, {iBuilder->getInt32(0), iBuilder->getInt32(iProducer_pos)}));
+    iBuilder->CreateStore(ConstantInt::get(int64ty, 0), iBuilder->CreateGEP(mStreamSetStructPtr, {iBuilder->getInt32(0), iBuilder->getInt32(iConsumer_pos)}));
+    iBuilder->CreateStore(ConstantInt::get(int8ty, 1), iBuilder->CreateGEP(mStreamSetStructPtr, {iBuilder->getInt32(0), iBuilder->getInt32(iEnd_of_input)}));
+    iBuilder->CreateStore(mStreamSetBufferPtr, iBuilder->CreateGEP(mStreamSetStructPtr, {iBuilder->getInt32(0), iBuilder->getInt32(iBuffer_ptr)}));
+
 }
 
 llvm::PointerType * ExternalUnboundedBuffer::getStreamBufferPointerType() {
     return PointerType::get(mStreamSetType.getStreamSetBlockType(iBuilder), mAddrSpace);
 }
 
-llvm::Value * ExternalUnboundedBuffer::allocateBuffer() {
+llvm::Value * ExternalUnboundedBuffer::allocateBuffer() { 
     throw std::runtime_error("External buffers cannot be allocated.");
 }
 
-llvm::Value * ExternalUnboundedBuffer::getStreamSetBlockPointer(llvm::Value * bufferBasePtr, llvm::Value * blockNo) {
-    PointerType * t = getStreamBufferPointerType();
-    return iBuilder->CreateGEP(iBuilder->CreatePointerBitCastOrAddrSpaceCast(bufferBasePtr, t), {blockNo});
+llvm::Value * ExternalUnboundedBuffer::getStreamSetBlockPointer(llvm::Value * basePtr, llvm::Value * blockNo) {
+    Value * handle = iBuilder->CreateGEP(basePtr, {iBuilder->getInt32(0), iBuilder->getInt32(iBuffer_ptr)});
+    return iBuilder->CreateGEP(iBuilder->CreateLoad(handle), {blockNo});
 }
 
 
@@ -71,11 +120,20 @@ size_t CircularBuffer::getBufferSize() {
 }
 
 llvm::Value * CircularBuffer::allocateBuffer() {
+    Type * const int64ty = iBuilder->getInt64Ty();
+    Type * const int8ty = iBuilder->getInt8Ty();
     mStreamSetBufferPtr = iBuilder->CreateAlloca(mStreamSetType.getStreamSetBlockType(iBuilder), ConstantInt::get(iBuilder->getSizeTy(), mBufferBlocks));
+    mStreamSetStructPtr = iBuilder->CreateAlloca(mStreamSetStructType);
+    iBuilder->CreateStore(ConstantInt::get(int64ty, 0), iBuilder->CreateGEP(mStreamSetStructPtr, {iBuilder->getInt32(0), iBuilder->getInt32(iProducer_pos)}));
+    iBuilder->CreateStore(ConstantInt::get(int64ty, 0), iBuilder->CreateGEP(mStreamSetStructPtr, {iBuilder->getInt32(0), iBuilder->getInt32(iConsumer_pos)}));
+    iBuilder->CreateStore(ConstantInt::get(int8ty, 0), iBuilder->CreateGEP(mStreamSetStructPtr, {iBuilder->getInt32(0), iBuilder->getInt32(iEnd_of_input)}));
+    iBuilder->CreateStore(mStreamSetBufferPtr, iBuilder->CreateGEP(mStreamSetStructPtr, {iBuilder->getInt32(0), iBuilder->getInt32(iBuffer_ptr)}));
+
     return mStreamSetBufferPtr;
 }
 
-llvm::Value * CircularBuffer::getStreamSetBlockPointer(llvm::Value * bufferBasePtr, llvm::Value * blockNo) {
-    return iBuilder->CreateGEP(mStreamSetType.getStreamSetBlockType(iBuilder), bufferBasePtr, {iBuilder->CreateAnd(blockNo, ConstantInt::get(iBuilder->getSizeTy(), mBufferBlocks-1))});
+llvm::Value * CircularBuffer::getStreamSetBlockPointer(llvm::Value * basePtr, llvm::Value * blockNo) {
+    Value * handle = iBuilder->CreateGEP(basePtr, {iBuilder->getInt32(0), iBuilder->getInt32(iBuffer_ptr)});
+    return iBuilder->CreateGEP(iBuilder->CreateLoad(handle), {iBuilder->CreateAnd(blockNo, ConstantInt::get(iBuilder->getSizeTy(), mBufferBlocks-1))});
 }
 

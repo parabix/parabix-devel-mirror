@@ -23,6 +23,7 @@
 #include <llvm/IRReader/IRReader.h>
 #include <llvm/Support/Debug.h>
 #include <llvm/IR/Verifier.h>
+#include <llvm/IR/TypeBuilder.h>
 #include <UCD/UnicodeNameData.h>
 
 
@@ -78,6 +79,8 @@ static cl::alias ShowFileNamesLong("with-filename", cl::desc("Alias for -H"), cl
 static cl::opt<bool> ShowLineNumbers("n", cl::desc("Show the line number with each matching line."), cl::cat(bGrepOutputOptions));
 static cl::alias ShowLineNumbersLong("line-number", cl::desc("Alias for -n"), cl::aliasopt(ShowLineNumbers));
 
+static cl::opt<bool> pipelineParallel("enable-pipeline-parallel", cl::desc("Enable multithreading with pipeline parallelism."), cl::cat(bGrepOutputOptions));
+
 
 bool isUTF_16 = false;
 
@@ -116,7 +119,7 @@ void GrepEngine::doGrep(const std::string & fileName, const int fileIdx, bool Co
 }
 
 using namespace parabix;
-
+/*
 void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool CountOnly, bool UTF_16, bool isNameExpression) {
     isUTF_16 = UTF_16; 
     Module * M = new Module(moduleName, getGlobalContext());
@@ -212,8 +215,181 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool Count
     }
 
 }
+*/
+void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool CountOnly, bool UTF_16, bool isNameExpression) {
+    isUTF_16 = UTF_16; 
+    Module * M = new Module(moduleName, getGlobalContext());
+    
+    IDISA::IDISA_Builder * iBuilder = IDISA::GetIDISA_Builder(M);
 
+    const unsigned segmentSize = codegen::SegmentSize;
+    const unsigned bufferSegments = codegen::BufferSegments;
 
+    Encoding::Type type;
+    type = UTF_16 ? Encoding::Type::UTF_16 : Encoding::Type::UTF_8;
+    unsigned bits;
+    bits = UTF_16 ? 16 : 8;
+
+    Encoding encoding(type, bits);
+    mIsNameExpression = isNameExpression;
+
+    Type * const int64ty = iBuilder->getInt64Ty();
+    Type * const int32ty = iBuilder->getInt32Ty();
+    Type * const size_ty = iBuilder->getSizeTy();
+    Type * const int8PtrTy = iBuilder->getInt8PtrTy();
+    Type * const voidTy = Type::getVoidTy(M->getContext());    
+    Type * const voidPtrTy = TypeBuilder<void *, false>::get(M->getContext());
+    Type * const inputType = PointerType::get(ArrayType::get(ArrayType::get(iBuilder->getBitBlockType(), (UTF_16 ? 16 : 8)), 1), 0);
+    Type * const resultTy = CountOnly ? size_ty : iBuilder->getVoidTy();
+    Function * const mainFn = cast<Function>(M->getOrInsertFunction("Main", resultTy, inputType, size_ty, size_ty, nullptr));
+    mainFn->setCallingConv(CallingConv::C);
+    iBuilder->SetInsertPoint(BasicBlock::Create(M->getContext(), "entry", mainFn, 0));
+    Function::arg_iterator args = mainFn->arg_begin();
+    
+    Value * const inputStream = &*(args++);
+    inputStream->setName("input");
+    Value * const fileSize = &*(args++);
+    fileSize->setName("fileSize");
+    Value * const fileIdx = &*(args++);
+    fileIdx->setName("fileIdx");
+       
+    ExternalUnboundedBuffer ByteStream(iBuilder, StreamSetType(1, i8));
+    CircularBuffer BasisBits(iBuilder, StreamSetType(8, i1), segmentSize * bufferSegments);
+
+    kernel::s2pKernel  s2pk(iBuilder);
+    s2pk.generateKernel({&ByteStream}, {&BasisBits});
+
+    re_ast = re::regular_expression_passes(encoding, re_ast);   
+    pablo::PabloFunction * function = re::re2pablo_compiler(encoding, re_ast, CountOnly);
+    pablo_function_passes(function);
+
+    ByteStream.setStreamSetBuffer(inputStream);
+    BasisBits.allocateBuffer();
+
+    Value * producerPtr = ByteStream.getProducerPosPtr(ByteStream.getStreamSetStructPtr());
+    iBuilder->CreateAlignedStore(fileSize, producerPtr, 8)->setOrdering(Release);
+
+    Value * s2pInstance = s2pk.createInstance({});
+ 
+    Type * pthreadTy = int64ty; //Pthread Type for 64-bit machine.
+    FunctionType * funVoidPtrVoidTy = FunctionType::get(voidTy, int8PtrTy, false);   
+    
+    Function * pthreadCreateFunc = cast<Function>(M->getOrInsertFunction("pthread_create",
+                                        int32ty, 
+                                        pthreadTy->getPointerTo(), 
+                                        voidPtrTy, 
+                                        static_cast<Type *>(funVoidPtrVoidTy)->getPointerTo(),
+                                        voidPtrTy, nullptr));
+    pthreadCreateFunc->setCallingConv(llvm::CallingConv::C);
+    Function * pthreadJoinFunc = cast<Function>(M->getOrInsertFunction("pthread_join", 
+                                        int32ty, 
+                                        pthreadTy, 
+                                        PointerType::get(int8PtrTy, 0), nullptr));
+    pthreadJoinFunc->setCallingConv(llvm::CallingConv::C);
+
+    Function * pthreadExitFunc = cast<Function>(M->getOrInsertFunction("pthread_exit", 
+                                        voidTy, 
+                                        voidPtrTy, nullptr));
+    pthreadExitFunc->addFnAttr(llvm::Attribute::NoReturn);
+    pthreadExitFunc->setCallingConv(llvm::CallingConv::C);
+    
+    // Type * const pthreadsTy = ArrayType::get(pthreadTy, 3);
+    // AllocaInst * const pthreads = iBuilder->CreateAlloca(pthreadsTy);
+    // Value * pthreadsPtr1 = iBuilder->CreateGEP(pthreads, {iBuilder->getInt32(0), iBuilder->getInt32(0)});
+    // Value * pthreadsPtr2 = iBuilder->CreateGEP(pthreads, {iBuilder->getInt32(0), iBuilder->getInt32(1)});
+    // Value * pthreadsPtr3 = iBuilder->CreateGEP(pthreads, {iBuilder->getInt32(0), iBuilder->getInt32(2)});
+    // Value * nullVal = Constant::getNullValue(voidPtrTy);
+    // AllocaInst * const status = iBuilder->CreateAlloca(int8PtrTy);
+
+    if (CountOnly) {
+        pablo::PabloKernel  icgrepK(iBuilder, "icgrep", function, {"matchedLineCount"});
+        icgrepK.generateKernel({&BasisBits}, {});       
+        Value * icgrepInstance = icgrepK.createInstance({});
+
+        if (pipelineParallel){
+            // const auto ip = iBuilder->saveIP();
+            // Function * s2p_func = s2pk.generateThreadFunction("s2p");
+            // Function * icgrep_func = icgrepK.generateThreadFunction("icgrep"); 
+            // iBuilder->restoreIP(ip);
+
+            // iBuilder->CreateCall(pthreadCreateFunc, std::vector<Value *>({pthreadsPtr1, nullVal, s2p_func, iBuilder->CreateBitCast(s2pInstance, int8PtrTy)}));
+            // iBuilder->CreateCall(pthreadCreateFunc, std::vector<Value *>({pthreadsPtr2, nullVal, icgrep_func, iBuilder->CreateBitCast(icgrepInstance, int8PtrTy)}));
+         
+            // Value * threadID1 = iBuilder->CreateLoad(pthreadsPtr1);
+            // Value * threadID2 = iBuilder->CreateLoad(pthreadsPtr2);
+
+            // iBuilder->CreateCall(pthreadJoinFunc, std::vector<Value *>({threadID1, status}));
+            // iBuilder->CreateCall(pthreadJoinFunc, std::vector<Value *>({threadID2, status}));
+            generatePipelineParallel(iBuilder, {&s2pk, &icgrepK}, {s2pInstance, icgrepInstance});
+
+        }
+        else{
+            generatePipelineLoop(iBuilder, {&s2pk, &icgrepK}, {s2pInstance, icgrepInstance}, fileSize);
+
+        }
+        
+        Value * matchCount = icgrepK.createGetAccumulatorCall(icgrepInstance, "matchedLineCount");
+        iBuilder->CreateRet(matchCount);
+
+    }
+    else {
+        CircularBuffer MatchResults(iBuilder, StreamSetType(2, i1), segmentSize * bufferSegments);
+        MatchResults.allocateBuffer();
+
+        pablo::PabloKernel  icgrepK(iBuilder, "icgrep", function, {});
+        icgrepK.generateKernel({&BasisBits},  {&MatchResults});
+        Value * icgrepInstance = icgrepK.createInstance({});
+
+        kernel::scanMatchKernel scanMatchK(iBuilder, mIsNameExpression);
+        scanMatchK.generateKernel({&MatchResults}, {});                
+        Value * scanMatchInstance = scanMatchK.createInstance({iBuilder->CreateBitCast(inputStream, int8PtrTy), fileSize, fileIdx});
+
+        if (pipelineParallel){
+            generatePipelineParallel(iBuilder, {&s2pk, &icgrepK, &scanMatchK}, {s2pInstance, icgrepInstance, scanMatchInstance});
+
+        }
+        else{
+            generatePipelineLoop(iBuilder, {&s2pk, &icgrepK, &scanMatchK}, {s2pInstance, icgrepInstance, scanMatchInstance}, fileSize);
+        }
+        // const auto ip = iBuilder->saveIP();
+        // Function * s2p_func = s2pk.generateThreadFunction("s2p");
+        // Function * icgrep_func = icgrepK.generateThreadFunction("icgrep");   
+        // Function * scan_func = scanMatchK.generateThreadFunction("scanMatch");
+        // iBuilder->restoreIP(ip);
+        
+        // iBuilder->CreateCall(pthreadCreateFunc, std::vector<Value *>({pthreadsPtr1, nullVal, s2p_func, iBuilder->CreateBitCast(s2pInstance, int8PtrTy)}));
+        // iBuilder->CreateCall(pthreadCreateFunc, std::vector<Value *>({pthreadsPtr2, nullVal, icgrep_func, iBuilder->CreateBitCast(icgrepInstance, int8PtrTy)}));
+        // iBuilder->CreateCall(pthreadCreateFunc, std::vector<Value *>({pthreadsPtr3, nullVal, scan_func, iBuilder->CreateBitCast(scanMatchInstance, int8PtrTy)}));
+
+        // Value * threadID1 = iBuilder->CreateLoad(pthreadsPtr1);
+        // Value * threadID2 = iBuilder->CreateLoad(pthreadsPtr2);
+        // Value * threadID3 = iBuilder->CreateLoad(pthreadsPtr3);
+      
+        // iBuilder->CreateCall(pthreadJoinFunc, std::vector<Value *>({threadID1, status}));
+        // iBuilder->CreateCall(pthreadJoinFunc, std::vector<Value *>({threadID2, status}));
+        // iBuilder->CreateCall(pthreadJoinFunc, std::vector<Value *>({threadID3, status}));
+        iBuilder->CreateRetVoid();
+
+    }
+     
+    mEngine = JIT_to_ExecutionEngine(M);
+    ApplyObjectCache(mEngine);
+    icgrep_Linking(M, mEngine);
+
+#ifndef NDEBUG
+    verifyModule(*M, &dbgs());
+#endif
+
+    mEngine->finalizeObject();
+    delete iBuilder;
+    
+    if (CountOnly) {
+        mGrepFunction_CountOnly = reinterpret_cast<GrepFunctionType_CountOnly>(mEngine->getPointerToFunction(mainFn));
+    } else {
+        mGrepFunction = reinterpret_cast<GrepFunctionType>(mEngine->getPointerToFunction(mainFn));
+    }
+
+}
 
 re::CC *  GrepEngine::grepCodepoints() {
 

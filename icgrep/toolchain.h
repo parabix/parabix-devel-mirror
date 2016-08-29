@@ -18,6 +18,7 @@ const llvm::cl::OptionCategory * codegen_flags();
 extern char OptLevel;  // set from command line
 extern int BlockSize;  // set from command line
 extern int SegmentSize;  // set from command line
+extern int BufferSegments;
 
 }
 
