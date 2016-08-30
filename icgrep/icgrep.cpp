@@ -179,13 +179,16 @@ void pipeIcGrepOutputToGrep(int argc, char *argv[]) {
         if (!isArgUnwantedForAll(argv[i])) {
 
             if (!isArgUnwantedForIcGrep(argv[i])) {
+                // Wrap everything in quotes since the arguments passed into this program had them stripped by bash.
+                icGrepArguments.append("\"");       
                 icGrepArguments.append(argv[i]);
-                icGrepArguments.append(" ");
+                icGrepArguments.append("\" ");
             }
 
             if (!isArgUnwantedForGrep(argv[i])) {
+                grepArguments.append("\"");
                 grepArguments.append(argv[i]);
-                grepArguments.append(" ");
+                grepArguments.append("\" ");
             }
         }
     }
@@ -195,6 +198,7 @@ void pipeIcGrepOutputToGrep(int argc, char *argv[]) {
     systemCall.append(" ");
     systemCall.append(" | grep --color=always -P ");
     systemCall.append(grepArguments);
+
     system(systemCall.c_str());
 }
 
