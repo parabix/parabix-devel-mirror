@@ -21,7 +21,7 @@ void generatePipelineParallel(IDISA::IDISA_Builder * iBuilder, std::vector<Kerne
  
     Module * m = iBuilder->getModule();
 
-    Type * pthreadTy = iBuilder->getInt64Ty(); //Pthread Type for 64-bit machine.      
+    Type * pthreadTy = iBuilder->getSizeTy(); //Pthread Type for 64-bit machine.      
     Type * const voidPtrTy = TypeBuilder<void *, false>::get(m->getContext());
     Type * const int8PtrTy = iBuilder->getInt8PtrTy();
 

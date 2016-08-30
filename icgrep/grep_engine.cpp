@@ -132,7 +132,6 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool Count
 
     mIsNameExpression = isNameExpression;
 
-    Type * const int64ty = iBuilder->getInt64Ty();
     Type * const int32ty = iBuilder->getInt32Ty();
     Type * const size_ty = iBuilder->getSizeTy();
     Type * const int8PtrTy = iBuilder->getInt8PtrTy();
@@ -170,7 +169,7 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool Count
 
     Value * s2pInstance = s2pk.createInstance({});
  
-    Type * pthreadTy = int64ty; //Pthread Type for 64-bit machine.
+    Type * pthreadTy = size_ty;
     FunctionType * funVoidPtrVoidTy = FunctionType::get(voidTy, int8PtrTy, false);   
     
     Function * pthreadCreateFunc = cast<Function>(M->getOrInsertFunction("pthread_create",

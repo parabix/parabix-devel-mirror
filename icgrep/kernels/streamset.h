@@ -85,8 +85,8 @@ public:
     SingleBlockBuffer(IDISA::IDISA_Builder * b, StreamSetType ss_type) :
     StreamSetBuffer(BufferKind::BlockBuffer, b, ss_type) {
         mStreamSetStructType = StructType::get(getGlobalContext(),
-                                               std::vector<Type *>({iBuilder->getInt64Ty(), 
-                                                                    iBuilder->getInt64Ty(), 
+                                               std::vector<Type *>({iBuilder->getSizeTy(), 
+                                                                    iBuilder->getSizeTy(), 
                                                                     iBuilder->getInt8Ty(), 
                                                                     mStreamSetType.getStreamSetBlockType(iBuilder)}));
 
@@ -106,8 +106,8 @@ public:
             mBufferBlocks = 0;
             mAddrSpace = AddressSpace;
             mStreamSetStructType = StructType::get(getGlobalContext(),
-                                                   std::vector<Type *>({iBuilder->getInt64Ty(), 
-                                                                        iBuilder->getInt64Ty(), 
+                                                   std::vector<Type *>({iBuilder->getSizeTy(), 
+                                                                        iBuilder->getSizeTy(), 
                                                                         iBuilder->getInt8Ty(), 
                                                                         getStreamBufferPointerType()}));
         }
@@ -135,8 +135,8 @@ public:
                 throw std::runtime_error("CircularStreamSetBuffer: number of blocks must be a power of 2!");
             }
             mStreamSetStructType = StructType::get(getGlobalContext(), 
-                                                   std::vector<Type *>({iBuilder->getInt64Ty(), 
-                                                                        iBuilder->getInt64Ty(), 
+                                                   std::vector<Type *>({iBuilder->getSizeTy(), 
+                                                                        iBuilder->getSizeTy(), 
                                                                         iBuilder->getInt8Ty(), 
                                                                         getStreamBufferPointerType()}));
  
