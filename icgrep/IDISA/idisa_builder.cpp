@@ -120,8 +120,15 @@ Constant * IDISA_Builder::simd_lomask(unsigned fw) {
     return Constant::getIntegerValue(getIntNTy(mBitBlockWidth), APInt::getSplat(mBitBlockWidth, APInt::getLowBitsSet(fw, fw/2)));
 }
 
+Value * IDISA_Builder::simd_fill(unsigned fw, Value * a) {
+    unsigned field_count = mBitBlockWidth/fw;
+    Type * singleFieldVecTy = VectorType::get(getIntNTy(fw), 1);
+    Value * aVec = CreateBitCast(a, singleFieldVecTy);
+    return CreateShuffleVector(aVec, UndefValue::get(singleFieldVecTy), Constant::getNullValue(VectorType::get(getInt32Ty(), field_count)));
+}
+
 Value * IDISA_Builder::simd_add(unsigned fw, Value * a, Value * b) {
-return CreateAdd(fwCast(fw, a), fwCast(fw, b));
+    return CreateAdd(fwCast(fw, a), fwCast(fw, b));
 }
 
 Value * IDISA_Builder::simd_sub(unsigned fw, Value * a, Value * b) {

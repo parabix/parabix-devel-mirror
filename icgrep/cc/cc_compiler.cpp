@@ -227,5 +227,19 @@ inline Var * CC_Compiler::getBasisVar(const unsigned i) const {
     assert (i < mEncodingBits);
     return mBasisBit[mEncodingBits - i - 1];
 }
+    
+pablo::PabloFunction * ParabixCharacterClassFunction(std::string ccSetName, std::vector<re::CC *> charClasses, unsigned basisBitsCount) {
+        
+    pablo::PabloFunction * cc_function = pablo::PabloFunction::Create(ccSetName + "_fn", basisBitsCount, charClasses.size());
+    CC_Compiler ccc(* cc_function, basisBitsCount);
+    
+    pablo::PabloBuilder pBuilder(ccc.getBuilder().getPabloBlock(), ccc.getBuilder());
+    const std::vector<pablo::Var *> bits = ccc.getBasisBits();
+    
+    for (unsigned i = 0; i < charClasses.size(); i++) {
+        cc_function->setResult(i, ccc.compileCC(charClasses[i]));
+    }
+    return cc_function;
+}
 
 } // end of namespace cc

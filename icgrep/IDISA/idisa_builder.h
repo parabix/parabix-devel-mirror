@@ -83,6 +83,8 @@ public:
 
     Constant * simd_himask(unsigned fw);
     Constant * simd_lomask(unsigned fw);
+    
+    virtual Value * simd_fill(unsigned fw, Value * a);
 
     virtual Value * simd_add(unsigned fw, Value * a, Value * b);
     virtual Value * simd_sub(unsigned fw, Value * a, Value * b);

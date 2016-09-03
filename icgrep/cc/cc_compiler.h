@@ -7,10 +7,10 @@
 #ifndef CC_COMPILER_H
 #define CC_COMPILER_H
 
+
 #include <re/re_cc.h>
 #include <pablo/builder.hpp>
 #include <string>
-
 
 namespace pablo {
     class PabloFunction;
@@ -85,6 +85,8 @@ inline pablo::Assign * CC_Compiler::compileCC(const re::CC *cc, pablo::PabloBuil
 inline pablo::PabloBuilder & CC_Compiler::getBuilder() {
     return mBuilder;
 }
+
+pablo::PabloFunction * ParabixCharacterClassFunction(std::string ccSetName, std::vector<re::CC *> charClasses, unsigned basisBitsCount);
 
 
 }
