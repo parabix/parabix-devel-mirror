@@ -225,7 +225,7 @@ Function * u8u16Pipeline(Module * mMod, IDISA::IDISA_Builder * iBuilder, pablo::
     Type * mBitBlockType = iBuilder->getBitBlockType();
 
     
-    ExternalUnboundedBuffer ByteStream(iBuilder, StreamSetType(1, i8));
+    ExternalFileBuffer ByteStream(iBuilder, StreamSetType(1, i8));
     SingleBlockBuffer BasisBits(iBuilder, StreamSetType(8, i1));
     SingleBlockBuffer U8u16Bits(iBuilder, StreamSetType(18, i1));
     SingleBlockBuffer U16Bits(iBuilder, StreamSetType(16, i1));
@@ -261,7 +261,7 @@ Function * u8u16Pipeline(Module * mMod, IDISA::IDISA_Builder * iBuilder, pablo::
     iBuilder->SetInsertPoint(BasicBlock::Create(mMod->getContext(), "entry", main,0));
         
 
-    ByteStream.setStreamSetBuffer(inputStream);
+    ByteStream.setStreamSetBuffer(inputStream, fileSize);
     BasisBits.allocateBuffer();
     U8u16Bits.allocateBuffer();
     U16Bits.allocateBuffer();

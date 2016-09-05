@@ -31,7 +31,7 @@ private:
 
 class StreamSetBuffer {
 public:
-    enum class BufferKind : unsigned {BlockBuffer, ExternalUnboundedBuffer, CircularBuffer, ExpandingBuffer};
+    enum class BufferKind : unsigned {BlockBuffer, ExternalFileBuffer, CircularBuffer, ExpandingBuffer};
     inline BufferKind getBufferKind() const {return mBufferKind;}
     inline StreamSetType& getBufferStreamSetType() {return mStreamSetType;}
 
@@ -88,7 +88,7 @@ public:
                                                std::vector<Type *>({iBuilder->getSizeTy(), 
                                                                     iBuilder->getSizeTy(), 
                                                                     iBuilder->getInt8Ty(), 
-                                                                    mStreamSetType.getStreamSetBlockType(iBuilder)}));
+                                                                    getStreamBufferPointerType()}));
 
     }
     
@@ -97,12 +97,12 @@ public:
     llvm::Value * getStreamSetBlockPointer(llvm::Value * bufferBasePtr, llvm::Value * blockNo) override;
 };
     
-class ExternalUnboundedBuffer : public StreamSetBuffer {
+class ExternalFileBuffer : public StreamSetBuffer {
 public:
-    static inline bool classof(const StreamSetBuffer * b) {return b->getBufferKind() == BufferKind::ExternalUnboundedBuffer;}
+    static inline bool classof(const StreamSetBuffer * b) {return b->getBufferKind() == BufferKind::ExternalFileBuffer;}
     
-    ExternalUnboundedBuffer(IDISA::IDISA_Builder * b, StreamSetType ss_type, unsigned AddressSpace = 0) :
-        StreamSetBuffer(BufferKind::ExternalUnboundedBuffer, b, ss_type) {
+    ExternalFileBuffer(IDISA::IDISA_Builder * b, StreamSetType ss_type, unsigned AddressSpace = 0) :
+        StreamSetBuffer(BufferKind::ExternalFileBuffer, b, ss_type) {
             mBufferBlocks = 0;
             mAddrSpace = AddressSpace;
             mStreamSetStructType = StructType::get(getGlobalContext(),
@@ -113,7 +113,7 @@ public:
         }
     llvm::PointerType * getStreamBufferPointerType() override;
 
-    void setStreamSetBuffer(llvm::Value * ptr);
+    void setStreamSetBuffer(llvm::Value * ptr, llvm::Value * fileSize);
     
     size_t getBufferSize() override;
     // Can't allocate - raise an error. */

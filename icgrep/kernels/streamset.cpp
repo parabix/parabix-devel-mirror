@@ -63,27 +63,29 @@ size_t SingleBlockBuffer::getBufferSize() {
 llvm::Value * SingleBlockBuffer::allocateBuffer() {
     Type * const size_ty = iBuilder->getSizeTy();
     Type * const int8ty = iBuilder->getInt8Ty();
+    mStreamSetBufferPtr = iBuilder->CreateAlloca(mStreamSetType.getStreamSetBlockType(iBuilder));
     mStreamSetStructPtr = iBuilder->CreateAlloca(mStreamSetStructType);
     iBuilder->CreateStore(ConstantInt::get(size_ty, 0), iBuilder->CreateGEP(mStreamSetStructPtr, {iBuilder->getInt32(0), iBuilder->getInt32(iProducer_pos)}));
     iBuilder->CreateStore(ConstantInt::get(size_ty, 0), iBuilder->CreateGEP(mStreamSetStructPtr, {iBuilder->getInt32(0), iBuilder->getInt32(iConsumer_pos)}));
     iBuilder->CreateStore(ConstantInt::get(int8ty, 0), iBuilder->CreateGEP(mStreamSetStructPtr, {iBuilder->getInt32(0), iBuilder->getInt32(iEnd_of_input)}));
-    mStreamSetBufferPtr = iBuilder->CreateGEP(mStreamSetStructPtr, {iBuilder->getInt32(0), iBuilder->getInt32(iBuffer_ptr)});
+    iBuilder->CreateStore(mStreamSetBufferPtr, iBuilder->CreateGEP(mStreamSetStructPtr, {iBuilder->getInt32(0), iBuilder->getInt32(iBuffer_ptr)}));
     return mStreamSetBufferPtr;
 }
 
 // For a single block buffer, the block pointer is always the buffer base pointer.
 llvm::Value * SingleBlockBuffer::getStreamSetBlockPointer(llvm::Value * basePtr, llvm::Value * blockNo) {
-    return iBuilder->CreateGEP(mStreamSetType.getStreamSetBlockType(iBuilder), basePtr, {iBuilder->getInt32(0), iBuilder->getInt32(3)});
+    Value * handle = iBuilder->CreateGEP(basePtr, {iBuilder->getInt32(0), iBuilder->getInt32(iBuffer_ptr)});
+    return iBuilder->CreateLoad(handle);
 }
 
 
 // External Unbounded Buffer
 
-size_t ExternalUnboundedBuffer::getBufferSize() {
+size_t ExternalFileBuffer::getBufferSize() {
     return 0;
 }
 
-void ExternalUnboundedBuffer::setStreamSetBuffer(llvm::Value * ptr) {
+void ExternalFileBuffer::setStreamSetBuffer(llvm::Value * ptr, Value * fileSize) {
 
     Type * const size_ty = iBuilder->getSizeTy();
     Type * const int8ty = iBuilder->getInt8Ty();
@@ -92,22 +94,21 @@ void ExternalUnboundedBuffer::setStreamSetBuffer(llvm::Value * ptr) {
     mStreamSetBufferPtr = iBuilder->CreatePointerBitCastOrAddrSpaceCast(ptr, t);
 
     mStreamSetStructPtr = iBuilder->CreateAlloca(mStreamSetStructType);
-    iBuilder->CreateStore(ConstantInt::get(size_ty, 0), iBuilder->CreateGEP(mStreamSetStructPtr, {iBuilder->getInt32(0), iBuilder->getInt32(iProducer_pos)}));
+    iBuilder->CreateStore(fileSize, iBuilder->CreateGEP(mStreamSetStructPtr, {iBuilder->getInt32(0), iBuilder->getInt32(iProducer_pos)}));
     iBuilder->CreateStore(ConstantInt::get(size_ty, 0), iBuilder->CreateGEP(mStreamSetStructPtr, {iBuilder->getInt32(0), iBuilder->getInt32(iConsumer_pos)}));
     iBuilder->CreateStore(ConstantInt::get(int8ty, 1), iBuilder->CreateGEP(mStreamSetStructPtr, {iBuilder->getInt32(0), iBuilder->getInt32(iEnd_of_input)}));
     iBuilder->CreateStore(mStreamSetBufferPtr, iBuilder->CreateGEP(mStreamSetStructPtr, {iBuilder->getInt32(0), iBuilder->getInt32(iBuffer_ptr)}));
-
 }
 
-llvm::PointerType * ExternalUnboundedBuffer::getStreamBufferPointerType() {
+llvm::PointerType * ExternalFileBuffer::getStreamBufferPointerType() {
     return PointerType::get(mStreamSetType.getStreamSetBlockType(iBuilder), mAddrSpace);
 }
 
-llvm::Value * ExternalUnboundedBuffer::allocateBuffer() { 
+llvm::Value * ExternalFileBuffer::allocateBuffer() {
     throw std::runtime_error("External buffers cannot be allocated.");
 }
 
-llvm::Value * ExternalUnboundedBuffer::getStreamSetBlockPointer(llvm::Value * basePtr, llvm::Value * blockNo) {
+llvm::Value * ExternalFileBuffer::getStreamSetBlockPointer(llvm::Value * basePtr, llvm::Value * blockNo) {
     Value * handle = iBuilder->CreateGEP(basePtr, {iBuilder->getInt32(0), iBuilder->getInt32(iBuffer_ptr)});
     return iBuilder->CreateGEP(iBuilder->CreateLoad(handle), {blockNo});
 }

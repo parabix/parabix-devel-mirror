@@ -138,9 +138,10 @@ using namespace parabix;
 Function * wcPipeline(Module * mMod, IDISA::IDISA_Builder * iBuilder, pablo::PabloFunction * function) {
     Type * mBitBlockType = iBuilder->getBitBlockType();
     
-    ExternalUnboundedBuffer ByteStream(iBuilder, StreamSetType(1, i8));
+    ExternalFileBuffer ByteStream(iBuilder, StreamSetType(1, i8));
     SingleBlockBuffer BasisBits(iBuilder, StreamSetType(8, i1));
-    
+    //CircularBuffer BasisBits(iBuilder, StreamSetType(8, i1), codegen::SegmentSize * codegen::BufferSegments);
+
     s2pKernel  s2pk(iBuilder);
     std::unique_ptr<Module> s2pM = s2pk.createKernelModule({&ByteStream}, {&BasisBits});
     
@@ -171,7 +172,7 @@ Function * wcPipeline(Module * mMod, IDISA::IDISA_Builder * iBuilder, pablo::Pab
     
     iBuilder->SetInsertPoint(BasicBlock::Create(mMod->getContext(), "entry", main,0));
 
-    ByteStream.setStreamSetBuffer(inputStream);
+    ByteStream.setStreamSetBuffer(inputStream, fileSize);
     BasisBits.allocateBuffer();
     
     Value * s2pInstance = s2pk.createInstance({});

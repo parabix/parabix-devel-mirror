@@ -113,7 +113,6 @@ Value * CarryManager::advanceCarryInCarryOut(const unsigned localIndex, const un
  * @brief shortAdvanceCarryInCarryOut
  ** ------------------------------------------------------------------------------------------------------------- */
 Value * CarryManager::shortAdvanceCarryInCarryOut(const unsigned index, const unsigned shiftAmount, Value * const value) {
-    Value * result = nullptr;
     Value * const carryIn = getCarryPack(index);
     assert (index < mCarryOutPack.size());
     std::pair<Value *, Value *> adv = iBuilder->bitblock_advance(value, carryIn, shiftAmount);

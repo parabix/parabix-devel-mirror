@@ -29,6 +29,7 @@
 #include <kernels/streamset.h>
 #include <kernels/scanmatchgen.h>
 #include <kernels/s2p_kernel.h>
+#include <kernels/cc_kernel.h>
 #include <kernels/pipeline.h>
 
 #include <pablo/function.h>
@@ -151,21 +152,18 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool Count
     Value * const fileIdx = &*(args++);
     fileIdx->setName("fileIdx");
        
-    ExternalUnboundedBuffer ByteStream(iBuilder, StreamSetType(1, i8));
+    ExternalFileBuffer ByteStream(iBuilder, StreamSetType(1, i8));
     CircularBuffer BasisBits(iBuilder, StreamSetType(8, i1), segmentSize * bufferSegments);
 
     kernel::s2pKernel  s2pk(iBuilder);
     s2pk.generateKernel({&ByteStream}, {&BasisBits});
-
-    re_ast = re::regular_expression_passes(re_ast);   
+    
+    re_ast = re::regular_expression_passes(re_ast);
     pablo::PabloFunction * function = re::re2pablo_compiler(encodingBits, re_ast, CountOnly);
     pablo_function_passes(function);
 
-    ByteStream.setStreamSetBuffer(inputStream);
+    ByteStream.setStreamSetBuffer(inputStream, fileSize);
     BasisBits.allocateBuffer();
-
-    Value * producerPtr = ByteStream.getProducerPosPtr(ByteStream.getStreamSetStructPtr());
-    iBuilder->CreateAlignedStore(fileSize, producerPtr, 8)->setOrdering(Release);
 
     Value * s2pInstance = s2pk.createInstance({});
  

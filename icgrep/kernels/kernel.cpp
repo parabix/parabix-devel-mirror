@@ -33,6 +33,7 @@ void KernelBuilder::addScalar(Type * t, std::string scalarName) {
 }
 
 void KernelBuilder::prepareKernel() {
+    unsigned blockSize = iBuilder->getBitBlockWidth();
     if (mStreamSetInputs.size() != mStreamSetInputBuffers.size()) {
         throw std::runtime_error("Kernel preparation: Incorrect number of input buffers");
     }
@@ -42,9 +43,15 @@ void KernelBuilder::prepareKernel() {
     addScalar(iBuilder->getSizeTy(), blockNoScalar);
     int streamSetNo = 0;
     for (unsigned i = 0; i < mStreamSetInputs.size(); i++) {
+        size_t bufferSize = mStreamSetInputBuffers[i]->getBufferSize() * blockSize;
         if (!(mStreamSetInputBuffers[i]->getBufferStreamSetType() == mStreamSetInputs[i].ssType)) {
              throw std::runtime_error("Kernel preparation: Incorrect input buffer type");
         }
+        if ((bufferSize > 0) && (bufferSize < codegen::SegmentSize + (blockSize + mLookAheadPositions - 1)/blockSize)) {
+             errs() << "buffer size = " << mStreamSetInputBuffers[i]->getBufferSize() << "\n";
+             throw std::runtime_error("Kernel preparation: Buffer size too small.");
+        }
+
         mScalarInputs.push_back(ScalarBinding{mStreamSetInputBuffers[i]->getStreamSetStructPointerType(), mStreamSetInputs[i].ssName + basePtrSuffix});
         mStreamSetNameMap.emplace(mStreamSetInputs[i].ssName, streamSetNo);
         streamSetNo++;
