@@ -46,16 +46,15 @@ class While;
 class PabloCompiler {
     using IntSet = boost::container::flat_set<unsigned>;
     using MarkerMap = std::unordered_map<const PabloAST *, Value *>;
-    using LookaheadOffsetMap = std::unordered_map<const PabloAST *, IntSet>;
 public:
     PabloCompiler(IDISA::IDISA_Builder * b, PabloKernel * k, PabloFunction * function);
-    Type * initializeCarryData();
+    Type * initializeKernelData();
     void compile(Function * doBlockFunction);
 
 private:
 
     void Examine(const PabloFunction * const function);
-    void Examine(const PabloBlock * const block, LookaheadOffsetMap & offsetMap);
+    void Examine(const PabloBlock * const block);
 
     void compileBlock(const PabloBlock * const block);
     void compileStatement(const Statement * stmt);

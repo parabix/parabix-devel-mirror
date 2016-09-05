@@ -246,7 +246,6 @@ Function * u8u16Pipeline(Module * mMod, IDISA::IDISA_Builder * iBuilder, pablo::
     p2sk.generateKernel({&U16Bits, &DeletionCounts}, {&U16out});
     
     Type * const size_ty = iBuilder->getSizeTy();
-    Type * i16PtrTy = PointerType::get(iBuilder->getInt16Ty(), 0);
     Type * const voidTy = Type::getVoidTy(mMod->getContext());
     Type * const inputType = PointerType::get(ArrayType::get(ArrayType::get(mBitBlockType, 8), 1), 0);
     

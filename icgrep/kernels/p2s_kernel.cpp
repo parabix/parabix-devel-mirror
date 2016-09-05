@@ -242,7 +242,6 @@ void p2s_16Kernel_withCompressedOutput::generateDoBlockMethod() {
 void p2s_16Kernel_withCompressedOutput::generateFinalBlockMethod() {
     IDISA::IDISA_Builder::InsertPoint savePoint = iBuilder->saveIP();
     Module * m = iBuilder->getModule();
-    Type * bitBlockPtrTy = llvm::PointerType::get(iBuilder->getBitBlockType(), 0); 
     Type * i8PtrTy = iBuilder->getInt8PtrTy();
     Function * writefn = create_write(m);
     Function * doBlockFunction = m->getFunction(mKernelName + doBlock_suffix);

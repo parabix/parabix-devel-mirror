@@ -23,8 +23,6 @@
 
 namespace pablo {
 
-#define DSSLI_FIELDWIDTH 64
-
 PabloCompiler::PabloCompiler(IDISA::IDISA_Builder * b, PabloKernel * k, PabloFunction * const function)
 : mMod(b->getModule())
 , iBuilder(b)
@@ -41,7 +39,9 @@ PabloCompiler::PabloCompiler(IDISA::IDISA_Builder * b, PabloKernel * k, PabloFun
 }
 
 
-Type * PabloCompiler::initializeCarryData() {
+Type * PabloCompiler::initializeKernelData() {
+    Examine(mPabloFunction);
+    
     mCarryManager = make_unique<CarryManager>(iBuilder);
     Type * carryDataType = mCarryManager->initializeCarryData(mPabloFunction);
     return carryDataType;
@@ -55,8 +55,6 @@ void PabloCompiler::compile(Function * doBlockFunction) {
     const timestamp_t pablo_compilation_start = read_cycle_counter();
     #endif
 
-    Examine(mPabloFunction);
-    
     //Generate Kernel//
     iBuilder->SetInsertPoint(BasicBlock::Create(iBuilder->getContext(), "entry", doBlockFunction, 0));
     mSelf = mKernelBuilder->getParameter(doBlockFunction, "self");
@@ -103,45 +101,27 @@ inline void PabloCompiler::Examine(const PabloFunction * const function) {
     mWhileDepth = 0;
     mIfDepth = 0;
     mMaxWhileDepth = 0;
-    LookaheadOffsetMap offsetMap;
-    Examine(function->getEntryBlock(), offsetMap);
-    mInputStreamOffset.clear();
-    for (const auto & oi : offsetMap) {
-        for (const auto offset : oi.second) {
-            mInputStreamOffset.insert(offset / iBuilder->getBitBlockWidth());
-        }
-    }
+    Examine(function->getEntryBlock());
 }
 
-void PabloCompiler::Examine(const PabloBlock * const block, LookaheadOffsetMap & offsetMap) {
+void PabloCompiler::Examine(const PabloBlock * const block) {
+    unsigned maxOffset = 0;
     for (const Statement * stmt : *block) {
          boost::container::flat_set<unsigned> offsets;
         if (LLVM_UNLIKELY(isa<Lookahead>(stmt))) {
             const Lookahead * const la = cast<Lookahead>(stmt);
             assert (isa<Var>(la->getExpr()));
-            offsets.insert(la->getAmount());
-            offsets.insert(la->getAmount() + iBuilder->getBitBlockWidth() - 1);
+            if (la->getAmount() > maxOffset) maxOffset = la->getAmount();
         } else {
-            for (unsigned i = 0; i < stmt->getNumOperands(); ++i) {
-                const PabloAST * expr = stmt->getOperand(i);
-                if (isa<Var>(expr)) {
-                    offsets.insert(0);
-                } else if (LLVM_LIKELY(isa<Statement>(expr) && !isa<Assign>(expr) && !isa<Next>(expr))) {
-                    const auto f = offsetMap.find(expr);
-                    assert (f != offsetMap.end());
-                    const auto & o = f->second;
-                    offsets.insert(o.begin(), o.end());
-                }
-            }
             if (LLVM_UNLIKELY(isa<If>(stmt))) {
-                Examine(cast<If>(stmt)->getBody(), offsetMap);
+                Examine(cast<If>(stmt)->getBody());
             } else if (LLVM_UNLIKELY(isa<While>(stmt))) {
                 mMaxWhileDepth = std::max(mMaxWhileDepth, ++mWhileDepth);
-                Examine(cast<While>(stmt)->getBody(), offsetMap);
+                Examine(cast<While>(stmt)->getBody());
                 --mWhileDepth;
             }
         }
-        offsetMap.emplace(stmt, offsets);
+        mKernelBuilder->setLookAhead(maxOffset);
     }
 }
 
@@ -374,7 +354,7 @@ void PabloCompiler::compileStatement(const Statement * stmt) {
     } else if (const Lookahead * l = dyn_cast<Lookahead>(stmt)) {
         PabloAST * const var = l->getExpr();
         if (LLVM_UNLIKELY(!isa<Var>(var))) {
-            throw std::runtime_error("Lookahead input type must be a Var object");
+            throw std::runtime_error("Lookahead operations may only be applied to input streams");
         }
         unsigned index = 0;
         for (; index < mPabloFunction->getNumOfParameters(); ++index) {
@@ -385,24 +365,30 @@ void PabloCompiler::compileStatement(const Statement * stmt) {
         if (LLVM_UNLIKELY(index >= mPabloFunction->getNumOfParameters())) {
             throw std::runtime_error("Lookahead has an illegal Var operand");
         }
-        const unsigned offset0 = (l->getAmount() / iBuilder->getBitBlockWidth());
-        const unsigned offset1 = ((l->getAmount() + iBuilder->getBitBlockWidth() - 1) / iBuilder->getBitBlockWidth());
-        const unsigned shift = (l->getAmount() % iBuilder->getBitBlockWidth());
-        Value * const v0 = nullptr;//iBuilder->CreateBlockAlignedLoad(mKernelBuilder->getInputStream(index, offset0));
-        Value * const v1 = nullptr;//iBuilder->CreateBlockAlignedLoad(mKernelBuilder->getInputStream(index, offset1));
-        if (LLVM_UNLIKELY((shift % 8) == 0)) { // Use a single whole-byte shift, if possible.
-            expr = iBuilder->mvmd_dslli(8, v1, v0, (shift / 8));
-        } else if (LLVM_LIKELY(shift < DSSLI_FIELDWIDTH)) {
-            Value * ahead = iBuilder->mvmd_dslli(DSSLI_FIELDWIDTH, v1, v0, 1);
-            ahead = iBuilder->simd_slli(DSSLI_FIELDWIDTH, ahead, DSSLI_FIELDWIDTH - shift);
-            Value * value = iBuilder->simd_srli(DSSLI_FIELDWIDTH, v0, shift);
-            expr = iBuilder->simd_or(value, ahead);
-        } else {
-            Type  * const streamType = iBuilder->getIntNTy(iBuilder->getBitBlockWidth());
-            Value * b0 = iBuilder->CreateBitCast(v0, streamType);
-            Value * b1 = iBuilder->CreateBitCast(v1, streamType);
-            Value * result = iBuilder->CreateOr(iBuilder->CreateShl(b1, iBuilder->getBitBlockWidth() - shift), iBuilder->CreateLShr(b0, shift));
-            expr = iBuilder->CreateBitCast(result, mBitBlockType);
+        const unsigned bit_shift = (l->getAmount() % iBuilder->getBitBlockWidth());
+        const unsigned block_shift = (l->getAmount() / iBuilder->getBitBlockWidth());
+        std::string inputName = mKernelBuilder->mStreamSetInputs[0].ssName;
+        Value * blockNo = mKernelBuilder->getScalarField(mSelf, blockNoScalar);
+        Value * lookAhead_blockPtr  = mKernelBuilder->getStreamSetBlockPtr(mSelf, inputName, iBuilder->CreateAdd(blockNo, ConstantInt::get(iBuilder->getSizeTy(), block_shift)));
+        Value * lookAhead_inputPtr = iBuilder->CreateGEP(lookAhead_blockPtr, {iBuilder->getInt32(0), iBuilder->getInt32(index)});
+        Value * lookAhead = iBuilder->CreateBlockAlignedLoad(lookAhead_inputPtr);
+        if (bit_shift == 0) {  // Simple case with no intra-block shifting.
+            expr = lookAhead;  
+        }
+        else { // Need to form shift result from two adjacent blocks.
+            Value * lookAhead_blockPtr1  = mKernelBuilder->getStreamSetBlockPtr(mSelf, inputName, iBuilder->CreateAdd(blockNo, ConstantInt::get(iBuilder->getSizeTy(), block_shift + 1)));
+            Value * lookAhead_inputPtr1 = iBuilder->CreateGEP(lookAhead_blockPtr1, {iBuilder->getInt32(0), iBuilder->getInt32(index)});
+            Value * lookAhead1 = iBuilder->CreateBlockAlignedLoad(lookAhead_inputPtr1);
+            if (LLVM_UNLIKELY((bit_shift % 8) == 0)) { // Use a single whole-byte shift, if possible.
+                expr = iBuilder->mvmd_dslli(8, lookAhead1, lookAhead, (bit_shift / 8));
+            }
+            else {
+                Type  * const streamType = iBuilder->getIntNTy(iBuilder->getBitBlockWidth());
+                Value * b1 = iBuilder->CreateBitCast(lookAhead1, streamType);
+                Value * b0 = iBuilder->CreateBitCast(lookAhead, streamType);
+                Value * result = iBuilder->CreateOr(iBuilder->CreateShl(b1, iBuilder->getBitBlockWidth() - bit_shift), iBuilder->CreateLShr(b0, bit_shift));
+                expr = iBuilder->CreateBitCast(result, mBitBlockType);
+            }
         }
     } else {
         std::string tmp;

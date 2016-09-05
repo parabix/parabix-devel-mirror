@@ -42,7 +42,7 @@ std::vector<ScalarBinding> PabloKernel::accumBindings(std::vector<std::string> a
 }
 
 void PabloKernel::prepareKernel() {
-    Type * carryDataType = pablo_compiler->initializeCarryData();
+    Type * carryDataType = pablo_compiler->initializeKernelData();
     addScalar(carryDataType, "carries");
     KernelBuilder::prepareKernel();
 }

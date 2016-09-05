@@ -82,7 +82,6 @@ void generatePipelineLoop(IDISA::IDISA_Builder * iBuilder, std::vector<KernelBui
     Value * initialBufferSize = nullptr;
     Value * initialBlockNo = nullptr;
     BasicBlock * initialBlock = nullptr;
-    Value * rslt = nullptr;
     
     if (segmentSize > 1) {
         iBuilder->CreateBr(segmentCondBlock);

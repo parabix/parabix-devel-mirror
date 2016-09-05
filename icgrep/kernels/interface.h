@@ -46,8 +46,10 @@ public:
     mScalarInputs(scalar_parameters),
     mScalarOutputs(scalar_outputs),
     mInternalScalars(internal_scalars),
-    mKernelStateType(nullptr) {}
+    mKernelStateType(nullptr),
+    mLookAheadPositions(0) {}
     
+    unsigned getLookAhead() { return mLookAheadPositions; }
     
     // Add ExternalLinkage method declarations for the kernel to a given client module.
     void addKernelDeclarations(Module * client);
@@ -59,6 +61,7 @@ public:
     llvm::Value * createFinalBlockCall(llvm::Value * kernelInstance, llvm::Value * remainingBytes);
     llvm::Value * createGetAccumulatorCall(llvm::Value * kernelInstance, std::string accumName);
     
+    
 protected:
     
     IDISA::IDISA_Builder * iBuilder;
@@ -69,5 +72,9 @@ protected:
     std::vector<ScalarBinding> mScalarOutputs;
     std::vector<ScalarBinding> mInternalScalars;
     llvm::Type * mKernelStateType;
+    unsigned mLookAheadPositions;
+    
+    void setLookAhead(unsigned lookAheadPositions) {mLookAheadPositions = lookAheadPositions;}
+
 };
 #endif 
