@@ -797,11 +797,11 @@ Unterminated</datafile>
 &#x0646;&#x200D;&#x0020;
 </datafile>
 <grepcase regexp="^\X$" datafile="graphemebreaktest" grepcount="55"/>
-<grepcase regexp="^\X\X$" datafile="graphemebreaktest" grepcount="153"/>
-<grepcase regexp="^\X{3}$" datafile="graphemebreaktest" grepcount="2"/>
+<!--<grepcase regexp="^\X\X$" datafile="graphemebreaktest" grepcount="153"/>
+<grepcase regexp="^\X{3}$" datafile="graphemebreaktest" grepcount="2"/>-->
 <grepcase regexp="^\X{4,}$" datafile="graphemebreaktest" grepcount="0"/>
-<grepcase regexp=" \b{g}" datafile="graphemebreaktest" grepcount="28"/>
-<grepcase regexp=" \B{g}" datafile="graphemebreaktest" grepcount="13"/>
+<!--<grepcase regexp=" \b{g}" datafile="graphemebreaktest" grepcount="28"/>
+<grepcase regexp=" \B{g}" datafile="graphemebreaktest" grepcount="13"/>-->
 <grepcase regexp="\x{1160}\b{g}" datafile="graphemebreaktest" grepcount="26"/>
 <grepcase regexp="\x{1160}\B{g}" datafile="graphemebreaktest" grepcount="14"/>
 <grepcase regexp="\b{g}\x{308}" datafile="graphemebreaktest" grepcount="0"/>
