@@ -1,7 +1,7 @@
 #ifndef DERIVEDDECOMPOSITIONTYPE_H
 #define DERIVEDDECOMPOSITIONTYPE_H
 /*
- *  Copyright (c) 2015 International Characters, Inc.
+ *  Copyright (c) 2016 International Characters, Inc.
  *  This software is licensed to the public under the Open Software License 3.0.
  *  icgrep is a trademark of International Characters, Inc.
  *
@@ -407,7 +407,7 @@ namespace UCD {
     [126579, 126579], [126584, 126584], [126589, 126589], [126591, 126591],
     [126602, 126602], [126620, 126624], [126628, 126628], [126634, 126634],
     [126652, 127231], [127243, 127247], [127279, 127279], [127312, 127337],
-    [127340, 127375], [127377, 127487], [127491, 127503], [127547, 127551],
+    [127340, 127375], [127377, 127487], [127491, 127503], [127548, 127551],
     [127561, 127567], [127570, 194559], [195102, 1114111]**/
     const UnicodeSet none_Set 
         {{{Full, 5}, {Mixed, 7}, {Full, 1}, {Mixed, 5}, {Full, 3},
@@ -479,7 +479,7 @@ namespace UCD {
           0x000203a0, 0x000000c0, 0x00003000, 0x00000010, 0xf5080169,
           0x5569157b, 0xa1080869, 0xf0000400, 0xf0000411, 0x0000f800,
           0x00008000, 0xffff0000, 0xfffff3ff, 0xfffeffff, 0x0000fff8,
-          0xf8000000, 0xfffcfe00, 0xc0000000}};
+          0xf0000000, 0xfffcfe00, 0xc0000000}};
     /** Code Point Ranges for Sml
     [65104, 65106], [65108, 65126], [65128, 65131]**/
     const UnicodeSet sml_Set 
@@ -488,14 +488,14 @@ namespace UCD {
     /** Code Point Ranges for Sqr
     [12880, 12880], [13004, 13007], [13056, 13143], [13169, 13279],
     [13311, 13311], [127280, 127311], [127376, 127376], [127488, 127490],
-    [127504, 127546]**/
+    [127504, 127547]**/
     const UnicodeSet sqr_Set 
         {{{Empty, 402}, {Mixed, 1}, {Empty, 3}, {Mixed, 1}, {Empty, 1},
           {Full, 2}, {Mixed, 2}, {Full, 3}, {Mixed, 1}, {Empty, 3561},
           {Mixed, 2}, {Empty, 1}, {Mixed, 1}, {Empty, 3}, {Mixed, 2},
           {Empty, 30830}},
          {0x00010000, 0x0000f000, 0x00ffffff, 0xfffe0000, 0x80000000,
-          0xffff0000, 0x0000ffff, 0x00010000, 0xffff0007, 0x07ffffff}};
+          0xffff0000, 0x0000ffff, 0x00010000, 0xffff0007, 0x0fffffff}};
     /** Code Point Ranges for Sub
     [7522, 7530], [8320, 8334], [8336, 8348], [11388, 11388]**/
     const UnicodeSet sub_Set 

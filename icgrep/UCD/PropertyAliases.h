@@ -1,7 +1,7 @@
 #ifndef PROPERTYALIASES_H
 #define PROPERTYALIASES_H
 /*
- *  Copyright (c) 2015 International Characters, Inc.
+ *  Copyright (c) 2016 International Characters, Inc.
  *  This software is licensed to the public under the Open Software License 3.0.
  *  icgrep is a trademark of International Characters, Inc.
  *
@@ -25,9 +25,9 @@ namespace UCD {
         Comp_Ex, CWCF, CWCM, CWKCF, CWL, CWT, CWU, Dash, Dep, DI, Dia, Ext,
         Gr_Base, Gr_Ext, Gr_Link, Hex, Hyphen, IDC, Ideo, IDS, IDSB, IDST,
         Join_C, LOE, Lower, Math, NChar, OAlpha, ODI, OGr_Ext, OIDC, OIDS,
-        OLower, OMath, OUpper, Pat_Syn, Pat_WS, QMark, Radical, SD, STerm,
-        Term, UIdeo, Upper, VS, WSpace, XIDC, XIDS, XO_NFC, XO_NFD, XO_NFKC,
-        XO_NFKD};
+        OLower, OMath, OUpper, Pat_Syn, Pat_WS, PCM, QMark, Radical, SD,
+        STerm, Term, UIdeo, Upper, VS, WSpace, XIDC, XIDS, XO_NFC, XO_NFD,
+        XO_NFKC, XO_NFKD};
     const static std::vector<std::string> property_enum_name = {
         "cjkAccountingNumeric", "cjkOtherNumeric", "cjkPrimaryNumeric",
         "nv", "cf", "cjkCompatibilityVariant", "dm", "FC_NFKC", "lc",
@@ -44,7 +44,7 @@ namespace UCD {
         "Gr_Ext", "Gr_Link", "Hex", "Hyphen", "IDC", "Ideo", "IDS", "IDSB",
         "IDST", "Join_C", "LOE", "Lower", "Math", "NChar", "OAlpha", "ODI",
         "OGr_Ext", "OIDC", "OIDS", "OLower", "OMath", "OUpper", "Pat_Syn",
-        "Pat_WS", "QMark", "Radical", "SD", "STerm", "Term", "UIdeo",
+        "Pat_WS", "PCM", "QMark", "Radical", "SD", "STerm", "Term", "UIdeo",
         "Upper", "VS", "WSpace", "XIDC", "XIDS", "XO_NFC", "XO_NFD",
         "XO_NFKC", "XO_NFKD"};
     const static std::vector<std::string> property_full_name = {
@@ -81,8 +81,9 @@ namespace UCD {
         "Other_Default_Ignorable_Code_Point", "Other_Grapheme_Extend",
         "Other_ID_Continue", "Other_ID_Start", "Other_Lowercase",
         "Other_Math", "Other_Uppercase", "Pattern_Syntax",
-        "Pattern_White_Space", "Quotation_Mark", "Radical", "Soft_Dotted",
-        "STerm", "Terminal_Punctuation", "Unified_Ideograph", "Uppercase",
+        "Pattern_White_Space", "Prepended_Concatenation_Mark",
+        "Quotation_Mark", "Radical", "Soft_Dotted", "Sentence_Terminal",
+        "Terminal_Punctuation", "Unified_Ideograph", "Uppercase",
         "Variation_Selector", "White_Space", "XID_Continue", "XID_Start",
         "Expands_On_NFC", "Expands_On_NFD", "Expands_On_NFKC",
         "Expands_On_NFKD"};
@@ -166,10 +167,12 @@ namespace UCD {
         {"otheridstart", OIDS}, {"otherlowercase", OLower},
         {"othermath", OMath}, {"otheruppercase", OUpper},
         {"oupper", OUpper}, {"patsyn", Pat_Syn}, {"patternsyntax", Pat_Syn},
-        {"patternwhitespace", Pat_WS}, {"patws", Pat_WS}, {"qmark", QMark},
+        {"patternwhitespace", Pat_WS}, {"patws", Pat_WS}, {"pcm", PCM},
+        {"prependedconcatenationmark", PCM}, {"qmark", QMark},
         {"quotationmark", QMark}, {"radical", Radical}, {"sb", SB},
         {"sc", sc}, {"scf", scf}, {"script", sc}, {"scriptextensions", scx},
-        {"scx", scx}, {"sd", SD}, {"sentencebreak", SB}, {"sfc", scf},
+        {"scx", scx}, {"sd", SD}, {"sentencebreak", SB},
+        {"sentenceterminal", STerm}, {"sfc", scf},
         {"simplecasefolding", scf}, {"simplelowercasemapping", slc},
         {"simpletitlecasemapping", stc}, {"simpleuppercasemapping", suc},
         {"slc", slc}, {"softdotted", SD}, {"space", WSpace}, {"stc", stc},

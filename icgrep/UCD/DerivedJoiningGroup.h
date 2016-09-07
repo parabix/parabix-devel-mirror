@@ -1,7 +1,7 @@
 #ifndef DERIVEDJOININGGROUP_H
 #define DERIVEDJOININGGROUP_H
 /*
- *  Copyright (c) 2015 International Characters, Inc.
+ *  Copyright (c) 2016 International Characters, Inc.
  *  This software is licensed to the public under the Open Software License 3.0.
  *  icgrep is a trademark of International Characters, Inc.
  *
@@ -14,6 +14,21 @@
 
 namespace UCD {
     namespace JG_ns {
+    /** Code Point Ranges for African_Feh
+    [2235, 2235]**/
+    const UnicodeSet african_feh_Set 
+        {{{Empty, 69}, {Mixed, 1}, {Empty, 34746}},
+         {0x08000000}};
+    /** Code Point Ranges for African_Noon
+    [2237, 2237]**/
+    const UnicodeSet african_noon_Set 
+        {{{Empty, 69}, {Mixed, 1}, {Empty, 34746}},
+         {0x20000000}};
+    /** Code Point Ranges for African_Qaf
+    [2236, 2236]**/
+    const UnicodeSet african_qaf_Set 
+        {{{Empty, 69}, {Mixed, 1}, {Empty, 34746}},
+         {0x10000000}};
     /** Code Point Ranges for Ain
     [1593, 1594], [1696, 1696], [1788, 1788], [1885, 1887], [2227, 2227]**/
     const UnicodeSet ain_Set 
@@ -35,11 +50,11 @@ namespace UCD {
          {0x000000ac, 0x002e0000, 0x00180000}};
     /** Code Point Ranges for Beh
     [1576, 1576], [1578, 1579], [1646, 1646], [1657, 1664], [1872, 1878],
-    [2208, 2209]**/
+    [2208, 2209], [2230, 2232]**/
     const UnicodeSet beh_Set 
         {{{Empty, 49}, {Mixed, 1}, {Empty, 1}, {Mixed, 2}, {Empty, 5},
           {Mixed, 1}, {Empty, 10}, {Mixed, 1}, {Empty, 34746}},
-         {0x00000d00, 0xfe004000, 0x00000001, 0x007f0000, 0x00000003}};
+         {0x00000d00, 0xfe004000, 0x00000001, 0x007f0000, 0x01c00003}};
     /** Code Point Ranges for Beth
     [1810, 1810], [1837, 1837]**/
     const UnicodeSet beth_Set 
@@ -311,13 +326,13 @@ namespace UCD {
     [0, 1567], [1569, 1569], [1600, 1600], [1611, 1645], [1648, 1648],
     [1652, 1652], [1748, 1748], [1750, 1773], [1776, 1785], [1789, 1790],
     [1792, 1807], [1809, 1809], [1840, 1868], [1920, 2207], [2221, 2221],
-    [2229, 68287], [68294, 68294], [68296, 68296], [68299, 68300],
-    [68322, 68323], [68325, 68330], [68336, 1114111]**/
+    [2229, 2229], [2238, 68287], [68294, 68294], [68296, 68296],
+    [68299, 68300], [68322, 68323], [68325, 68330], [68336, 1114111]**/
     const UnicodeSet no_joining_group_Set 
         {{{Full, 49}, {Mixed, 3}, {Empty, 2}, {Mixed, 5}, {Empty, 1},
           {Full, 9}, {Mixed, 1}, {Full, 2064}, {Mixed, 2}, {Full, 32680}},
          {0x00000002, 0xfffff801, 0x00113fff, 0xffd00000, 0x63ff3fff,
-          0x0002ffff, 0xffff0000, 0x00001fff, 0xffe02000, 0x00001940,
+          0x0002ffff, 0xffff0000, 0x00001fff, 0xc0202000, 0x00001940,
           0xffff07ec}};
     /** Code Point Ranges for Noon
     [1606, 1606], [1721, 1724], [1895, 1897]**/
@@ -353,13 +368,13 @@ namespace UCD {
          {0x00000200}};
     /** Code Point Ranges for Reh
     [1585, 1586], [1681, 1689], [1775, 1775], [1883, 1883], [1899, 1900],
-    [1905, 1905], [2218, 2218], [2226, 2226]**/
+    [1905, 1905], [2218, 2218], [2226, 2226], [2233, 2233]**/
     const UnicodeSet reh_Set 
         {{{Empty, 49}, {Mixed, 1}, {Empty, 2}, {Mixed, 1}, {Empty, 2},
           {Mixed, 1}, {Empty, 2}, {Mixed, 2}, {Empty, 9}, {Mixed, 1},
           {Empty, 34746}},
          {0x00060000, 0x03fe0000, 0x00008000, 0x08000000, 0x00021800,
-          0x00040400}};
+          0x02040400}};
     /** Code Point Ranges for Reversed_Pe
     [1831, 1831]**/
     const UnicodeSet reversed_pe_Set 
@@ -449,12 +464,12 @@ namespace UCD {
           0x00000800}};
     /** Code Point Ranges for Yeh
     [1568, 1568], [1574, 1574], [1609, 1610], [1656, 1656], [1744, 1745],
-    [1911, 1911], [2216, 2217]**/
+    [1911, 1911], [2216, 2217], [2234, 2234]**/
     const UnicodeSet yeh_Set 
         {{{Empty, 49}, {Mixed, 3}, {Empty, 2}, {Mixed, 1}, {Empty, 4},
           {Mixed, 1}, {Empty, 9}, {Mixed, 1}, {Empty, 34746}},
          {0x00000041, 0x00000600, 0x01000000, 0x00030000, 0x00800000,
-          0x00000300}};
+          0x04000300}};
     /** Code Point Ranges for Yeh_Barree
     [1746, 1747]**/
     const UnicodeSet yeh_barree_Set 
@@ -490,7 +505,8 @@ namespace UCD {
          JG_ns::enum_names,
          JG_ns::value_names,
          JG_ns::aliases_only_map,
-         {&ain_Set, &alaph_Set, &alef_Set, &beh_Set, &beth_Set,
+         {&african_feh_Set, &african_noon_Set, &african_qaf_Set, &ain_Set,
+        &alaph_Set, &alef_Set, &beh_Set, &beth_Set,
         &burushaski_yeh_barree_Set, &dal_Set, &dalath_rish_Set, &e_Set,
         &farsi_yeh_Set, &fe_Set, &feh_Set, &final_semkath_Set, &gaf_Set,
         &gamal_Set, &hah_Set, &he_Set, &heh_Set, &heh_goal_Set, &heth_Set,
