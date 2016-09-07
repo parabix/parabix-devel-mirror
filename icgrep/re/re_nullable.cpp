@@ -4,6 +4,10 @@
 #include <re/re_end.h>
 #include <re/re_alt.h>
 #include <re/re_rep.h>
+#include <re/re_any.h>
+#include <re/re_diff.h>
+#include <re/re_intersect.h>
+#include <re/re_assertion.h>
 #include <re/re_name.h>
 
 /*
@@ -86,6 +90,81 @@ RE * RE_Nullable::removeNullableSuffix(RE * re) {
     return re;
 }
 
+// Deal with case: R1 (Assertion R2) R3
+// If R2 is nullable, then R1 R3. 
+RE * RE_Nullable::removeNullableAssertion(RE * re) {
+    if (Assertion * a = dyn_cast<Assertion>(re)) {
+        if (isNullable(a->getAsserted())) {
+	    std::vector<RE *> seq;
+	    return makeSeq(seq.begin(), seq.end());
+        } else {
+            return re;
+        }
+    } else if (Seq * seq = dyn_cast<Seq>(re)) {
+        std::vector<RE*> list;
+        for (auto i = seq->begin(); i != seq->end(); ++i) {
+            list.push_back(removeNullableAssertion(*i));
+        }
+        re = makeSeq(list.begin(), list.end());
+    } else if (Alt * alt = dyn_cast<Alt>(re)) {
+        std::vector<RE*> list;
+        for (auto i = alt->begin(); i != alt->end(); ++i) {
+            list.push_back(removeNullableAssertion(*i));
+        }
+        re = makeAlt(list.begin(), list.end());
+    } 
+    return re;
+}
+
+// Deal with case: R1 (Assertion R2) R3 
+// If R3 is nullable, then R1 R2.
+RE * RE_Nullable::removeNullableAfterAssertion(RE * re) {
+    if (isNullableAfterAssertion(re)) {
+	re = removeNullableAfterAssertion_helper(re);
+    }
+    return re;
+}
+
+bool RE_Nullable::isNullableAfterAssertion(const RE * re) {
+    bool nullable = false;
+    if (const Seq * seq = dyn_cast<const Seq>(re)) {
+        nullable = isa<Assertion>(seq->back()) ? true : isNullableAfterAssertion(seq->back());
+    } else if (const Alt * alt = dyn_cast<const Alt>(re)) {
+        for (const RE * re : *alt) {
+            if (isNullableAfterAssertion(re)) {
+                nullable = true;
+                break;
+            }
+        }
+    }   
+    return nullable;
+}
+
+RE * RE_Nullable::removeNullableAfterAssertion_helper(RE * re) {
+    if (Assertion * a = dyn_cast<Assertion>(re)) {
+        if (a->getSense() == Assertion::Sense::Positive) {
+            return a->getAsserted();
+        } else {
+            return makeDiff(makeAny(), a->getAsserted());
+        }
+    } else if (Seq * seq = dyn_cast<Seq>(re)) {
+        std::vector<RE*> list;
+        auto i = seq->begin();
+        for (; i != seq->end() - 1; ++i) {
+            list.push_back(*i);
+        }
+        list.push_back(removeNullableAfterAssertion_helper(*i));
+        re = makeSeq(list.begin(), list.end());
+    } else if (Alt * alt = dyn_cast<Alt>(re)) {
+        std::vector<RE*> list;
+        for (auto i = alt->begin(); i != alt->end(); ++i) {
+            list.push_back(removeNullableAfterAssertion_helper(*i));
+        }
+        re = makeAlt(list.begin(), list.end());
+    } 
+    return re;
+}
+
 bool RE_Nullable::isNullable(const RE * re) {
     if (const Seq * re_seq = dyn_cast<const Seq>(re)) {
         for (const RE * re : *re_seq) {
@@ -102,7 +181,11 @@ bool RE_Nullable::isNullable(const RE * re) {
         }
     } else if (const Rep* re_rep = dyn_cast<const Rep>(re)) {
         return re_rep->getLB() == 0 ? true : isNullable(re_rep->getRE());
-    }
+    } else if (const Diff * diff = dyn_cast<const Diff>(re)) {
+        return isNullable(diff->getLH()) && !isNullable(diff->getRH());
+    } else if (const Intersect * e = dyn_cast<const Intersect>(re)) {
+        return isNullable(e->getLH()) && isNullable(e->getRH());
+    } 
     return false;
 }
 
