@@ -372,6 +372,7 @@ alshat@emirates.net.ae
 
 <grepcase regexp="^$" datafile="CRLF" grepcount="1"/>
 <grepcase regexp="^.*$" datafile="CRLF" grepcount="4"/>
+<grepcase regexp="" datafile="CRLF" grepcount="4"/>
 
  <datafile id = "LU_test">
 The following line has LATIN CAPITAL LETTER G WITH MACRON in single quotes.

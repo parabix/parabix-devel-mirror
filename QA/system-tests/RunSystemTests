@@ -132,7 +132,7 @@ while [  $TEST_NUM -lt $tLen ]; do
 	# echo Test \#$((TEST_NUM / NumOfParametersPerTest))
 
 	# Generate the valid output using the "correct" GNU grep program.
-	validOutputFile="ExpectedOutputFiles/ValidOutputNum_$((TEST_NUM/NumOfParametersPerTest)).txt"
+	validOutputFile="ExpectedOutputFiles/OutputNum_$((TEST_NUM/NumOfParametersPerTest)).txt"
 	if [ "${Tests[$((TEST_NUM+2))]}" == "" ]; then
 		touch $validOutputFile			# GNU grep goes into interactive mode if no file are provided. So just make an empty valid file.
 	else
@@ -140,7 +140,7 @@ while [  $TEST_NUM -lt $tLen ]; do
 	fi
 
 	# Create the icGrep output file.
-	outputFile="OutputFiles/TestOutputNum_$((TEST_NUM/NumOfParametersPerTest)).txt"
+	outputFile="OutputFiles/OutputNum_$((TEST_NUM/NumOfParametersPerTest)).txt"
 	$1 ${Tests[$TEST_NUM]} "${Tests[$((TEST_NUM+1))]}" ${Tests[$((TEST_NUM+2))]} > $outputFile
 
 	# Compare the icGrep output with the valid GNU Grep output.
