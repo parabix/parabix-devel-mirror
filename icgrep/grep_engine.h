@@ -19,6 +19,7 @@ namespace llvm { class raw_ostream; }
 class GrepEngine {
     typedef void (*GrepFunctionType)(char * byte_data, size_t filesize, const int fileIdx);
     typedef uint64_t (*GrepFunctionType_CountOnly)(char * byte_data, size_t filesize, const int fileIdx);
+    typedef void (*GrepFunctionType_CPU)(char * rslt, char * byte_data, size_t filesize, const int fileIdx);
 public:
 
     GrepEngine() {}
@@ -35,6 +36,7 @@ private:
    
     GrepFunctionType mGrepFunction;
     GrepFunctionType_CountOnly mGrepFunction_CountOnly;
+    GrepFunctionType_CPU mGrepFunction_CPU;
 
     bool mIsNameExpression;
     llvm::ExecutionEngine * mEngine;

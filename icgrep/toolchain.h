@@ -19,8 +19,15 @@ extern char OptLevel;  // set from command line
 extern int BlockSize;  // set from command line
 extern int SegmentSize;  // set from command line
 extern int BufferSegments;
-
+#ifdef CUDA_ENABLED
+extern bool NVPTX;
+#endif
 }
+
+#ifdef CUDA_ENABLED
+void setNVPTXOption();
+void Compile2PTX (llvm::Module * m, std::string IRFilename, std::string PTXFilename);
+#endif
 
 bool AVX2_available();
 

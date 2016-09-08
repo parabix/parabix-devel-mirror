@@ -14,7 +14,7 @@ void checkCudaErrors(CUresult err) {
 }
 
 /// main - Program entry point
-int RunPTX(std::string PTXFilename, char * fileBuffer, ulong filesize) {
+ulong * RunPTX(std::string PTXFilename, char * fileBuffer, ulong filesize, bool CountOnly) {
   
   CUdevice    device;
   CUmodule    cudaModule;
@@ -36,7 +36,7 @@ int RunPTX(std::string PTXFilename, char * fileBuffer, ulong filesize) {
   // std::cout << "Device Compute Capability: " << devMajor << "." << devMinor << "\n";
   if (devMajor < 2) {
     std::cerr << "ERROR: Device 0 is not SM 2.0 or greater\n";
-    return 1;
+    exit(-1);
   }
 
   std::ifstream t(PTXFilename);
@@ -54,7 +54,7 @@ int RunPTX(std::string PTXFilename, char * fileBuffer, ulong filesize) {
   checkCudaErrors(cuModuleLoadDataEx(&cudaModule, ptx_str.c_str(), 0, 0, 0));
 
   // Get kernel function
-  checkCudaErrors(cuModuleGetFunction(&function, cudaModule, "kernel"));
+  checkCudaErrors(cuModuleGetFunction(&function, cudaModule, "GPU_Main"));
 
   // Device data
   CUdeviceptr devBufferInput;
@@ -62,12 +62,20 @@ int RunPTX(std::string PTXFilename, char * fileBuffer, ulong filesize) {
   CUdeviceptr devBufferOutput;
 
   int groupSize = GROUPTHREADS * sizeof(ulong) * 8;
-  int bufferSize = (filesize/groupSize + 1) * groupSize;
+  int groups = filesize/groupSize + 1;
+  int bufferSize = groups * groupSize;
+  int outputSize = 0;
 
   checkCudaErrors(cuMemAlloc(&devBufferInput, bufferSize));
-  // checkCudaErrors(cuMemsetD8(devBufferInput, 0, bufferSize));
   checkCudaErrors(cuMemAlloc(&devBufferSize, sizeof(ulong)));
-  checkCudaErrors(cuMemAlloc(&devBufferOutput, sizeof(ulong)*GROUPTHREADS));
+  if (CountOnly){
+    outputSize = sizeof(ulong) * GROUPTHREADS;
+  }
+  else{
+    outputSize = sizeof(ulong) * 2 * GROUPTHREADS * groups;
+  }
+
+  checkCudaErrors(cuMemAlloc(&devBufferOutput, outputSize));
 
   //Copy from host to device
   checkCudaErrors(cuMemcpyHtoD(devBufferInput, fileBuffer, bufferSize));
@@ -91,15 +99,17 @@ int RunPTX(std::string PTXFilename, char * fileBuffer, ulong filesize) {
                                  0, NULL, KernelParams, NULL));
   // std::cout << "kernel success.\n";
   // Retrieve device data
-  ulong * matchCount = (ulong *) malloc(sizeof(ulong)*GROUPTHREADS);
-  checkCudaErrors(cuMemcpyDtoH(matchCount, devBufferOutput, sizeof(ulong)*GROUPTHREADS));
 
-  int count = 0;
-  for (unsigned i = 0; i < GROUPTHREADS; ++i) {
-    count += matchCount[i];
-    // std::cout << i << ":" << matchCount[i] << "\n";
+  ulong * matchRslt = (ulong *) malloc(outputSize);
+  checkCudaErrors(cuMemcpyDtoH(matchRslt, devBufferOutput, outputSize));
+  if (CountOnly){
+    int count = 0;
+    for (unsigned i = 0; i < GROUPTHREADS; ++i) {
+      count += matchRslt[i];
+    }
+    std::cout << count << "\n";
   }
-  std::cout << count << "\n";
+
 
   // Clean-up
   checkCudaErrors(cuMemFree(devBufferInput));
@@ -108,5 +118,5 @@ int RunPTX(std::string PTXFilename, char * fileBuffer, ulong filesize) {
   checkCudaErrors(cuModuleUnload(cudaModule));
   checkCudaErrors(cuCtxDestroy(context));
 
-  return 0;
+  return matchRslt;
 }

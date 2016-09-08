@@ -14,6 +14,8 @@ namespace IDISA {
     
 IDISA::IDISA_Builder * GetIDISA_Builder(Module * m);
 
+IDISA::IDISA_Builder * GetIDISA_GPU_Builder(Module * m);
+
 }
 
 #endif

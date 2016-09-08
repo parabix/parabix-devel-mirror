@@ -25,7 +25,8 @@
 #include <llvm/Support/raw_ostream.h>
 
 #include <object_cache.h>
-
+#include <IDISA/llvm2ptx.h>
+ 
 using namespace llvm;
 
 namespace codegen {
@@ -60,7 +61,42 @@ static cl::opt<int, true> BufferSegmentsOption("buffer-segments", cl::location(B
 
 const cl::OptionCategory * codegen_flags() {return &CodeGenOptions;}
 
+#ifdef CUDA_ENABLED
+bool NVPTX;
+static cl::opt<bool> USENVPTX("NVPTX", cl::desc("Run on GPU only."), cl::init(false));
+#endif
+
 }
+
+
+#ifdef CUDA_ENABLED
+void setNVPTXOption(){
+    codegen::NVPTX = codegen::USENVPTX;
+}
+
+void Compile2PTX (Module * m, std::string IRFilename, std::string PTXFilename) {
+    InitializeAllTargets();
+    InitializeAllTargetMCs();
+    InitializeAllAsmPrinters();
+    InitializeAllAsmParsers();
+
+    PassRegistry *Registry = PassRegistry::getPassRegistry();
+    initializeCore(*Registry);
+    initializeCodeGen(*Registry);
+    initializeLoopStrengthReducePass(*Registry);
+    initializeLowerIntrinsicsPass(*Registry);
+    initializeUnreachableBlockElimPass(*Registry);
+
+    std::error_code error;
+    llvm::raw_fd_ostream out(IRFilename, error, sys::fs::OpenFlags::F_None);
+    m->print(out, nullptr);
+
+    if (LLVM_UNLIKELY(codegen::DumpGeneratedIR))
+            m->dump();
+
+    llvm2ptx(IRFilename, PTXFilename);
+}
+#endif
 
 
 void setAllFeatures(EngineBuilder &builder) {

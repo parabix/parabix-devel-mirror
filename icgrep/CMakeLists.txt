@@ -38,9 +38,22 @@ include_directories( ${LLVM_INCLUDE_DIRS} )
 link_directories( ${LLVM_LIBRARY_DIRS} )
 add_definitions( ${LLVM_DEFINITIONS} )
 
+option(ENABLE_CUDA_COMPILE "Compiling with CUDA")
+set(CUDA_LIB "")
+if(ENABLE_CUDA_COMPILE)
+  find_package(CUDA)
+  if(CUDA_FOUND)
+    set(CUDA_INCLUDE ${CUDA_INCLUDE} "/usr/local/cuda-7.5/include")
+    include_directories(${CUDA_INCLUDE})
+    SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DCUDA_ENABLED")
+    SET(CUDA_LIB "cuda")
+  endif(CUDA_FOUND)
+endif()
+
 # Let's suppose we want to build a JIT compiler with support for
 # binary code (no interpreter):
-llvm_map_components_to_libnames(REQ_LLVM_LIBRARIES mcjit native IRReader Linker) # ipo
+set(LLVM_ALL_TARGETS AArch64 AMDGPU ARM BPF CppBackend Hexagon Mips MSP430 NVPTX PowerPC Sparc SystemZ X86 XCore)
+llvm_map_components_to_libnames(REQ_LLVM_LIBRARIES ${LLVM_ALL_TARGETS} mcjit native IRReader Linker)
 
 message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION} in ${LLVM_ROOT_DIR}")
 
@@ -54,7 +67,7 @@ include_directories("${Boost_INCLUDE_DIRS}")
 link_directories(${Boost_LIBRARY_DIR})
 SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DUSE_BOOST")
 
-SET(IDISA_SRC IDISA/idisa_builder.cpp IDISA/idisa_avx_builder.cpp IDISA/idisa_i64_builder.cpp IDISA/idisa_sse_builder.cpp IDISA/idisa_target.cpp)
+SET(IDISA_SRC IDISA/idisa_builder.cpp IDISA/idisa_avx_builder.cpp IDISA/idisa_i64_builder.cpp IDISA/idisa_sse_builder.cpp IDISA/idisa_nvptx_builder.cpp IDISA/idisa_target.cpp)
 
 SET(PABLO_SRC pablo/pabloAST.cpp pablo/ps_if.cpp pablo/ps_while.cpp pablo/function.cpp pablo/codegenstate.cpp pablo/builder.cpp pablo/symbol_generator.cpp pablo/printer_pablos.cpp pablo/pablo_toolchain.cpp pablo/passes/flattenif.cpp)
 SET(PABLO_SRC ${PABLO_SRC} pablo/pablo_compiler.cpp pablo/carry_manager.cpp pablo/carry_data.cpp pablo/pablo_kernel.cpp)
@@ -131,10 +144,10 @@ target_link_libraries(icgrep ${Boost_LIBRARIES})
 target_link_libraries(u8u16 ${Boost_LIBRARIES})
 target_link_libraries(wc ${Boost_LIBRARIES})
 
-target_link_libraries (icgrep UCDlib PabloADT RegExpCompiler CCADT CodeGen ${REQ_LLVM_LIBRARIES})
-#target_link_libraries (symtbl UCDlib PabloADT RegExpCompiler CCADT CodeGen ${REQ_LLVM_LIBRARIES})
-target_link_libraries (u8u16 UCDlib PabloADT RegExpCompiler CCADT CodeGen ${REQ_LLVM_LIBRARIES})
-target_link_libraries (wc UCDlib PabloADT RegExpCompiler CCADT CodeGen ${REQ_LLVM_LIBRARIES})
+target_link_libraries (icgrep UCDlib PabloADT RegExpCompiler CCADT CodeGen ${REQ_LLVM_LIBRARIES} ${CUDA_LIB})
+#target_link_libraries (symtbl UCDlib PabloADT RegExpCompiler CCADT CodeGen ${REQ_LLVM_LIBRARIES} ${CUDA_LIB})
+target_link_libraries (u8u16 UCDlib PabloADT RegExpCompiler CCADT CodeGen ${REQ_LLVM_LIBRARIES} ${CUDA_LIB})
+target_link_libraries (wc UCDlib PabloADT RegExpCompiler CCADT CodeGen ${REQ_LLVM_LIBRARIES} ${CUDA_LIB})
 
 IF(ENABLE_MULTIPLEXING)
 message(STATUS "Enabling Multiplexing")
@@ -208,7 +221,7 @@ add_test(
 add_test(
   NAME abc_test
   WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA
-  COMMAND ./run_abc ../icgrep-build/icgrep)
+  COMMAND ./run_abc ${CMAKE_BINARY_DIR}/icgrep)
 
 add_custom_target (abc_test
   COMMAND python2 abc_testgen.py
