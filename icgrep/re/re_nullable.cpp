@@ -103,9 +103,7 @@ RE * RE_Nullable::removeNullableAssertion(RE * re) {
     } else if (Seq * seq = dyn_cast<Seq>(re)) {
         std::vector<RE*> list;
         for (auto i = seq->begin(); i != seq->end(); ++i) {
-            if (!isNullable(*i)) {
-                list.push_back(removeNullableAssertion(*i));
-            }
+            list.push_back(removeNullableAssertion(*i));
         }
         re = makeSeq(list.begin(), list.end());
     } else if (Alt * alt = dyn_cast<Alt>(re)) {
