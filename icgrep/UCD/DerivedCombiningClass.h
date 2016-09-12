@@ -367,16 +367,6 @@ namespace UCD {
     const UnicodeSet ccc132_Set 
         {{{Empty, 123}, {Mixed, 1}, {Empty, 34692}},
          {0x00100000}};
-    /** Code Point Ranges for CCC133
-    **/
-    const UnicodeSet ccc133_Set 
-        {{{Empty, 34816}},
-         {}};
-    /** Code Point Ranges for ATBL
-    **/
-    const UnicodeSet atbl_Set 
-        {{{Empty, 34816}},
-         {}};
     /** Code Point Ranges for ATB
     [801, 802], [807, 808], [7632, 7632]**/
     const UnicodeSet atb_Set 
@@ -531,6 +521,16 @@ namespace UCD {
     const UnicodeSet is_Set 
         {{{Empty, 26}, {Mixed, 1}, {Empty, 34789}},
          {0x00000020}};
+    /** Code Point Ranges for CCC133
+    **/
+    const UnicodeSet ccc133_Set 
+        {{{Empty, 34816}},
+         {}};
+    /** Code Point Ranges for ATBL
+    **/
+    const UnicodeSet atbl_Set 
+        {{{Empty, 34816}},
+         {}};
     static EnumeratedPropertyObject property_object
         {ccc,
          CCC_ns::enum_names,
@@ -543,9 +543,10 @@ namespace UCD {
         &ccc27_Set, &ccc28_Set, &ccc29_Set, &ccc30_Set, &ccc31_Set,
         &ccc32_Set, &ccc33_Set, &ccc34_Set, &ccc35_Set, &ccc36_Set,
         &ccc84_Set, &ccc91_Set, &ccc103_Set, &ccc107_Set, &ccc118_Set,
-        &ccc122_Set, &ccc129_Set, &ccc130_Set, &ccc132_Set, &ccc133_Set,
-        &atbl_Set, &atb_Set, &ata_Set, &atar_Set, &bl_Set, &b_Set, &br_Set,
-        &l_Set, &r_Set, &al_Set, &a_Set, &ar_Set, &db_Set, &da_Set, &is_Set
+        &ccc122_Set, &ccc129_Set, &ccc130_Set, &ccc132_Set, &atb_Set,
+        &ata_Set, &atar_Set, &bl_Set, &b_Set, &br_Set, &l_Set, &r_Set,
+        &al_Set, &a_Set, &ar_Set, &db_Set, &da_Set, &is_Set, &ccc133_Set,
+        &atbl_Set
          }};
     }
 }

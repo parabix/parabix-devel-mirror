@@ -14,67 +14,6 @@
 
 namespace UCD {
     namespace NT_ns {
-    /** Code Point Ranges for De
-    [48, 57], [1632, 1641], [1776, 1785], [1984, 1993], [2406, 2415],
-    [2534, 2543], [2662, 2671], [2790, 2799], [2918, 2927], [3046, 3055],
-    [3174, 3183], [3302, 3311], [3430, 3439], [3558, 3567], [3664, 3673],
-    [3792, 3801], [3872, 3881], [4160, 4169], [4240, 4249], [6112, 6121],
-    [6160, 6169], [6470, 6479], [6608, 6617], [6784, 6793], [6800, 6809],
-    [6992, 7001], [7088, 7097], [7232, 7241], [7248, 7257], [42528, 42537],
-    [43216, 43225], [43264, 43273], [43472, 43481], [43504, 43513],
-    [43600, 43609], [44016, 44025], [65296, 65305], [66720, 66729],
-    [69734, 69743], [69872, 69881], [69942, 69951], [70096, 70105],
-    [70384, 70393], [70736, 70745], [70864, 70873], [71248, 71257],
-    [71360, 71369], [71472, 71481], [71904, 71913], [72784, 72793],
-    [92768, 92777], [93008, 93017], [120782, 120831], [125264, 125273]**/
-    const UnicodeSet de_Set 
-        {{{Empty, 1}, {Mixed, 1}, {Empty, 49}, {Mixed, 1}, {Empty, 3},
-          {Mixed, 1}, {Empty, 6}, {Mixed, 1}, {Empty, 12}, {Mixed, 1},
-          {Empty, 3}, {Mixed, 1}, {Empty, 3}, {Mixed, 1}, {Empty, 3},
-          {Mixed, 1}, {Empty, 3}, {Mixed, 1}, {Empty, 3}, {Mixed, 1},
-          {Empty, 3}, {Mixed, 1}, {Empty, 3}, {Mixed, 1}, {Empty, 3},
-          {Mixed, 1}, {Empty, 3}, {Mixed, 1}, {Empty, 2}, {Mixed, 1},
-          {Empty, 3}, {Mixed, 1}, {Empty, 2}, {Mixed, 1}, {Empty, 8},
-          {Mixed, 1}, {Empty, 1}, {Mixed, 1}, {Empty, 58}, {Mixed, 2},
-          {Empty, 9}, {Mixed, 1}, {Empty, 3}, {Mixed, 1}, {Empty, 5},
-          {Mixed, 1}, {Empty, 5}, {Mixed, 1}, {Empty, 2}, {Mixed, 1},
-          {Empty, 4}, {Mixed, 1}, {Empty, 1102}, {Mixed, 1}, {Empty, 20},
-          {Mixed, 1}, {Empty, 1}, {Mixed, 1}, {Empty, 5}, {Mixed, 2},
-          {Empty, 2}, {Mixed, 1}, {Empty, 12}, {Mixed, 1}, {Empty, 664},
-          {Mixed, 1}, {Empty, 44}, {Mixed, 1}, {Empty, 93}, {Mixed, 1},
-          {Empty, 3}, {Mixed, 1}, {Empty, 1}, {Mixed, 1}, {Empty, 4},
-          {Mixed, 1}, {Empty, 8}, {Mixed, 1}, {Empty, 10}, {Mixed, 1},
-          {Empty, 3}, {Mixed, 1}, {Empty, 11}, {Mixed, 1}, {Empty, 3},
-          {Mixed, 1}, {Empty, 2}, {Mixed, 1}, {Empty, 13}, {Mixed, 1},
-          {Empty, 26}, {Mixed, 1}, {Empty, 624}, {Mixed, 1}, {Empty, 6},
-          {Mixed, 1}, {Empty, 867}, {Mixed, 1}, {Full, 1}, {Empty, 138},
-          {Mixed, 1}, {Empty, 30901}},
-         {0x03ff0000, 0x000003ff, 0x03ff0000, 0x000003ff, 0x0000ffc0,
-          0x0000ffc0, 0x0000ffc0, 0x0000ffc0, 0x0000ffc0, 0x0000ffc0,
-          0x0000ffc0, 0x0000ffc0, 0x0000ffc0, 0x0000ffc0, 0x03ff0000,
-          0x03ff0000, 0x000003ff, 0x000003ff, 0x03ff0000, 0x000003ff,
-          0x03ff0000, 0x0000ffc0, 0x03ff0000, 0x03ff03ff, 0x03ff0000,
-          0x03ff0000, 0x03ff03ff, 0x000003ff, 0x03ff0000, 0x000003ff,
-          0x03ff0000, 0x03ff0000, 0x03ff0000, 0x03ff0000, 0x03ff0000,
-          0x000003ff, 0x0000ffc0, 0x03ff0000, 0xffc00000, 0x03ff0000,
-          0x03ff0000, 0x03ff0000, 0x03ff0000, 0x03ff0000, 0x000003ff,
-          0x03ff0000, 0x000003ff, 0x03ff0000, 0x000003ff, 0x03ff0000,
-          0xffffc000, 0x03ff0000}};
-    /** Code Point Ranges for Di
-    [178, 179], [185, 185], [4969, 4977], [6618, 6618], [8304, 8304],
-    [8308, 8313], [8320, 8329], [9312, 9320], [9332, 9340], [9352, 9360],
-    [9450, 9450], [9461, 9469], [9471, 9471], [10102, 10110],
-    [10112, 10120], [10122, 10130], [68160, 68163], [69216, 69224],
-    [69714, 69722], [127232, 127242]**/
-    const UnicodeSet di_Set 
-        {{{Empty, 5}, {Mixed, 1}, {Empty, 149}, {Mixed, 1}, {Empty, 50},
-          {Mixed, 1}, {Empty, 52}, {Mixed, 2}, {Empty, 30}, {Mixed, 2},
-          {Empty, 2}, {Mixed, 1}, {Empty, 19}, {Mixed, 2}, {Empty, 1813},
-          {Mixed, 1}, {Empty, 32}, {Mixed, 1}, {Empty, 14}, {Mixed, 1},
-          {Empty, 1797}, {Mixed, 1}, {Empty, 30839}},
-         {0x020c0000, 0x0003fe00, 0x04000000, 0x03f10000, 0x000003ff,
-          0x1ff001ff, 0x0001ff00, 0xbfe00400, 0x7fc00000, 0x0007fdff,
-          0x0000000f, 0x000001ff, 0x07fc0000, 0x000007ff}};
     /** Code Point Ranges for None
     [0, 47], [58, 177], [180, 184], [186, 187], [191, 1631], [1642, 1775],
     [1786, 1983], [1994, 2405], [2416, 2533], [2544, 2547], [2554, 2661],
@@ -304,12 +243,73 @@ namespace UCD {
           0x00000002, 0x00000010, 0x00000004, 0x00000002, 0x00000400,
           0x10001008, 0x20000400, 0x02000000, 0x00010000, 0x01000000,
           0x08000000, 0x00002000, 0x00010000}};
+    /** Code Point Ranges for Di
+    [178, 179], [185, 185], [4969, 4977], [6618, 6618], [8304, 8304],
+    [8308, 8313], [8320, 8329], [9312, 9320], [9332, 9340], [9352, 9360],
+    [9450, 9450], [9461, 9469], [9471, 9471], [10102, 10110],
+    [10112, 10120], [10122, 10130], [68160, 68163], [69216, 69224],
+    [69714, 69722], [127232, 127242]**/
+    const UnicodeSet di_Set 
+        {{{Empty, 5}, {Mixed, 1}, {Empty, 149}, {Mixed, 1}, {Empty, 50},
+          {Mixed, 1}, {Empty, 52}, {Mixed, 2}, {Empty, 30}, {Mixed, 2},
+          {Empty, 2}, {Mixed, 1}, {Empty, 19}, {Mixed, 2}, {Empty, 1813},
+          {Mixed, 1}, {Empty, 32}, {Mixed, 1}, {Empty, 14}, {Mixed, 1},
+          {Empty, 1797}, {Mixed, 1}, {Empty, 30839}},
+         {0x020c0000, 0x0003fe00, 0x04000000, 0x03f10000, 0x000003ff,
+          0x1ff001ff, 0x0001ff00, 0xbfe00400, 0x7fc00000, 0x0007fdff,
+          0x0000000f, 0x000001ff, 0x07fc0000, 0x000007ff}};
+    /** Code Point Ranges for De
+    [48, 57], [1632, 1641], [1776, 1785], [1984, 1993], [2406, 2415],
+    [2534, 2543], [2662, 2671], [2790, 2799], [2918, 2927], [3046, 3055],
+    [3174, 3183], [3302, 3311], [3430, 3439], [3558, 3567], [3664, 3673],
+    [3792, 3801], [3872, 3881], [4160, 4169], [4240, 4249], [6112, 6121],
+    [6160, 6169], [6470, 6479], [6608, 6617], [6784, 6793], [6800, 6809],
+    [6992, 7001], [7088, 7097], [7232, 7241], [7248, 7257], [42528, 42537],
+    [43216, 43225], [43264, 43273], [43472, 43481], [43504, 43513],
+    [43600, 43609], [44016, 44025], [65296, 65305], [66720, 66729],
+    [69734, 69743], [69872, 69881], [69942, 69951], [70096, 70105],
+    [70384, 70393], [70736, 70745], [70864, 70873], [71248, 71257],
+    [71360, 71369], [71472, 71481], [71904, 71913], [72784, 72793],
+    [92768, 92777], [93008, 93017], [120782, 120831], [125264, 125273]**/
+    const UnicodeSet de_Set 
+        {{{Empty, 1}, {Mixed, 1}, {Empty, 49}, {Mixed, 1}, {Empty, 3},
+          {Mixed, 1}, {Empty, 6}, {Mixed, 1}, {Empty, 12}, {Mixed, 1},
+          {Empty, 3}, {Mixed, 1}, {Empty, 3}, {Mixed, 1}, {Empty, 3},
+          {Mixed, 1}, {Empty, 3}, {Mixed, 1}, {Empty, 3}, {Mixed, 1},
+          {Empty, 3}, {Mixed, 1}, {Empty, 3}, {Mixed, 1}, {Empty, 3},
+          {Mixed, 1}, {Empty, 3}, {Mixed, 1}, {Empty, 2}, {Mixed, 1},
+          {Empty, 3}, {Mixed, 1}, {Empty, 2}, {Mixed, 1}, {Empty, 8},
+          {Mixed, 1}, {Empty, 1}, {Mixed, 1}, {Empty, 58}, {Mixed, 2},
+          {Empty, 9}, {Mixed, 1}, {Empty, 3}, {Mixed, 1}, {Empty, 5},
+          {Mixed, 1}, {Empty, 5}, {Mixed, 1}, {Empty, 2}, {Mixed, 1},
+          {Empty, 4}, {Mixed, 1}, {Empty, 1102}, {Mixed, 1}, {Empty, 20},
+          {Mixed, 1}, {Empty, 1}, {Mixed, 1}, {Empty, 5}, {Mixed, 2},
+          {Empty, 2}, {Mixed, 1}, {Empty, 12}, {Mixed, 1}, {Empty, 664},
+          {Mixed, 1}, {Empty, 44}, {Mixed, 1}, {Empty, 93}, {Mixed, 1},
+          {Empty, 3}, {Mixed, 1}, {Empty, 1}, {Mixed, 1}, {Empty, 4},
+          {Mixed, 1}, {Empty, 8}, {Mixed, 1}, {Empty, 10}, {Mixed, 1},
+          {Empty, 3}, {Mixed, 1}, {Empty, 11}, {Mixed, 1}, {Empty, 3},
+          {Mixed, 1}, {Empty, 2}, {Mixed, 1}, {Empty, 13}, {Mixed, 1},
+          {Empty, 26}, {Mixed, 1}, {Empty, 624}, {Mixed, 1}, {Empty, 6},
+          {Mixed, 1}, {Empty, 867}, {Mixed, 1}, {Full, 1}, {Empty, 138},
+          {Mixed, 1}, {Empty, 30901}},
+         {0x03ff0000, 0x000003ff, 0x03ff0000, 0x000003ff, 0x0000ffc0,
+          0x0000ffc0, 0x0000ffc0, 0x0000ffc0, 0x0000ffc0, 0x0000ffc0,
+          0x0000ffc0, 0x0000ffc0, 0x0000ffc0, 0x0000ffc0, 0x03ff0000,
+          0x03ff0000, 0x000003ff, 0x000003ff, 0x03ff0000, 0x000003ff,
+          0x03ff0000, 0x0000ffc0, 0x03ff0000, 0x03ff03ff, 0x03ff0000,
+          0x03ff0000, 0x03ff03ff, 0x000003ff, 0x03ff0000, 0x000003ff,
+          0x03ff0000, 0x03ff0000, 0x03ff0000, 0x03ff0000, 0x03ff0000,
+          0x000003ff, 0x0000ffc0, 0x03ff0000, 0xffc00000, 0x03ff0000,
+          0x03ff0000, 0x03ff0000, 0x03ff0000, 0x03ff0000, 0x000003ff,
+          0x03ff0000, 0x000003ff, 0x03ff0000, 0x000003ff, 0x03ff0000,
+          0xffffc000, 0x03ff0000}};
     static EnumeratedPropertyObject property_object
         {nt,
          NT_ns::enum_names,
          NT_ns::value_names,
          NT_ns::aliases_only_map,
-         {&de_Set, &di_Set, &none_Set, &nu_Set
+         {&none_Set, &nu_Set, &di_Set, &de_Set
          }};
     }
 }

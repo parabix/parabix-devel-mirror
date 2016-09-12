@@ -193,7 +193,8 @@ void pipeIcGrepOutputToGrep(int argc, char *argv[]) {
         }
     }
 
-    std::string systemCall = "./icgrep ";
+    std::string systemCall = argv[0];
+    systemCall.append(" ");
     systemCall.append(icGrepArguments);
     systemCall.append(" ");
     systemCall.append(" | grep --color=always -P ");

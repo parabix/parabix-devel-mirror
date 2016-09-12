@@ -14,21 +14,18 @@
 
 namespace UCD {
     namespace JG_ns {
-    /** Code Point Ranges for African_Feh
-    [2235, 2235]**/
-    const UnicodeSet african_feh_Set 
-        {{{Empty, 69}, {Mixed, 1}, {Empty, 34746}},
-         {0x08000000}};
-    /** Code Point Ranges for African_Noon
-    [2237, 2237]**/
-    const UnicodeSet african_noon_Set 
-        {{{Empty, 69}, {Mixed, 1}, {Empty, 34746}},
-         {0x20000000}};
-    /** Code Point Ranges for African_Qaf
-    [2236, 2236]**/
-    const UnicodeSet african_qaf_Set 
-        {{{Empty, 69}, {Mixed, 1}, {Empty, 34746}},
-         {0x10000000}};
+    /** Code Point Ranges for No_Joining_Group
+    [0, 1567], [1569, 1569], [1600, 1600], [1611, 1645], [1648, 1648],
+    [1652, 1652], [1748, 1748], [1750, 1773], [1776, 1785], [1789, 1790],
+    [1792, 1807], [1809, 1809], [1840, 1868], [1920, 2207], [2221, 2221],
+    [2229, 2229], [2238, 68287], [68294, 68294], [68296, 68296],
+    [68299, 68300], [68322, 68323], [68325, 68330], [68336, 1114111]**/
+    const UnicodeSet no_joining_group_Set 
+        {{{Full, 49}, {Mixed, 3}, {Empty, 2}, {Mixed, 5}, {Empty, 1},
+          {Full, 9}, {Mixed, 1}, {Full, 2064}, {Mixed, 2}, {Full, 32680}},
+         {0x00000002, 0xfffff801, 0x00113fff, 0xffd00000, 0x63ff3fff,
+          0x0002ffff, 0xffff0000, 0x00001fff, 0xc0202000, 0x00001940,
+          0xffff07ec}};
     /** Code Point Ranges for Ain
     [1593, 1594], [1696, 1696], [1788, 1788], [1885, 1887], [2227, 2227]**/
     const UnicodeSet ain_Set 
@@ -60,11 +57,6 @@ namespace UCD {
     const UnicodeSet beth_Set 
         {{{Empty, 56}, {Mixed, 2}, {Empty, 34758}},
          {0x00040000, 0x00002000}};
-    /** Code Point Ranges for Burushaski_Yeh_Barree
-    [1914, 1915]**/
-    const UnicodeSet burushaski_yeh_barree_Set 
-        {{{Empty, 59}, {Mixed, 1}, {Empty, 34756}},
-         {0x0c000000}};
     /** Code Point Ranges for Dal
     [1583, 1584], [1672, 1680], [1774, 1774], [1881, 1882], [2222, 2222]**/
     const UnicodeSet dal_Set 
@@ -82,17 +74,6 @@ namespace UCD {
     const UnicodeSet e_Set 
         {{{Empty, 57}, {Mixed, 1}, {Empty, 34758}},
          {0x00000020}};
-    /** Code Point Ranges for Farsi_Yeh
-    [1597, 1599], [1740, 1740], [1742, 1742], [1909, 1910]**/
-    const UnicodeSet farsi_yeh_Set 
-        {{{Empty, 49}, {Mixed, 1}, {Empty, 4}, {Mixed, 1}, {Empty, 4},
-          {Mixed, 1}, {Empty, 34756}},
-         {0xe0000000, 0x00005000, 0x00600000}};
-    /** Code Point Ranges for Fe
-    [1871, 1871]**/
-    const UnicodeSet fe_Set 
-        {{{Empty, 58}, {Mixed, 1}, {Empty, 34757}},
-         {0x00008000}};
     /** Code Point Ranges for Feh
     [1601, 1601], [1697, 1702], [1888, 1889], [2212, 2212]**/
     const UnicodeSet feh_Set 
@@ -124,6 +105,11 @@ namespace UCD {
           {Mixed, 2}, {Empty, 9}, {Mixed, 1}, {Empty, 34746}},
          {0x00007000, 0x000000fe, 0x80000000, 0x01800000, 0x1004c000,
           0x00000004}};
+    /** Code Point Ranges for Teh_Marbuta_Goal
+    [1731, 1731]**/
+    const UnicodeSet teh_marbuta_goal_Set 
+        {{{Empty, 54}, {Mixed, 1}, {Empty, 34761}},
+         {0x00000008}};
     /** Code Point Ranges for He
     [1815, 1815]**/
     const UnicodeSet he_Set 
@@ -155,11 +141,6 @@ namespace UCD {
     const UnicodeSet kaph_Set 
         {{{Empty, 56}, {Mixed, 1}, {Empty, 34759}},
          {0x80000000}};
-    /** Code Point Ranges for Khaph
-    [1870, 1870]**/
-    const UnicodeSet khaph_Set 
-        {{{Empty, 58}, {Mixed, 1}, {Empty, 34757}},
-         {0x00004000}};
     /** Code Point Ranges for Knotted_Heh
     [1726, 1726], [1791, 1791]**/
     const UnicodeSet knotted_heh_Set 
@@ -176,6 +157,199 @@ namespace UCD {
     const UnicodeSet lamadh_Set 
         {{{Empty, 57}, {Mixed, 1}, {Empty, 34758}},
          {0x00000001}};
+    /** Code Point Ranges for Meem
+    [1605, 1605], [1893, 1894], [2215, 2215]**/
+    const UnicodeSet meem_Set 
+        {{{Empty, 50}, {Mixed, 1}, {Empty, 8}, {Mixed, 1}, {Empty, 9},
+          {Mixed, 1}, {Empty, 34746}},
+         {0x00000020, 0x00000060, 0x00000080}};
+    /** Code Point Ranges for Mim
+    [1825, 1825]**/
+    const UnicodeSet mim_Set 
+        {{{Empty, 57}, {Mixed, 1}, {Empty, 34758}},
+         {0x00000002}};
+    /** Code Point Ranges for Noon
+    [1606, 1606], [1721, 1724], [1895, 1897]**/
+    const UnicodeSet noon_Set 
+        {{{Empty, 50}, {Mixed, 1}, {Empty, 2}, {Mixed, 1}, {Empty, 5},
+          {Mixed, 1}, {Empty, 34756}},
+         {0x00000040, 0x1e000000, 0x00000380}};
+    /** Code Point Ranges for Nun
+    [1826, 1826]**/
+    const UnicodeSet nun_Set 
+        {{{Empty, 57}, {Mixed, 1}, {Empty, 34758}},
+         {0x00000004}};
+    /** Code Point Ranges for Pe
+    [1830, 1830]**/
+    const UnicodeSet pe_Set 
+        {{{Empty, 57}, {Mixed, 1}, {Empty, 34758}},
+         {0x00000040}};
+    /** Code Point Ranges for Qaf
+    [1602, 1602], [1647, 1647], [1703, 1704], [2213, 2213]**/
+    const UnicodeSet qaf_Set 
+        {{{Empty, 50}, {Mixed, 2}, {Empty, 1}, {Mixed, 1}, {Empty, 15},
+          {Mixed, 1}, {Empty, 34746}},
+         {0x00000004, 0x00008000, 0x00000180, 0x00000020}};
+    /** Code Point Ranges for Qaph
+    [1833, 1833]**/
+    const UnicodeSet qaph_Set 
+        {{{Empty, 57}, {Mixed, 1}, {Empty, 34758}},
+         {0x00000200}};
+    /** Code Point Ranges for Reh
+    [1585, 1586], [1681, 1689], [1775, 1775], [1883, 1883], [1899, 1900],
+    [1905, 1905], [2218, 2218], [2226, 2226], [2233, 2233]**/
+    const UnicodeSet reh_Set 
+        {{{Empty, 49}, {Mixed, 1}, {Empty, 2}, {Mixed, 1}, {Empty, 2},
+          {Mixed, 1}, {Empty, 2}, {Mixed, 2}, {Empty, 9}, {Mixed, 1},
+          {Empty, 34746}},
+         {0x00060000, 0x03fe0000, 0x00008000, 0x08000000, 0x00021800,
+          0x02040400}};
+    /** Code Point Ranges for Reversed_Pe
+    [1831, 1831]**/
+    const UnicodeSet reversed_pe_Set 
+        {{{Empty, 57}, {Mixed, 1}, {Empty, 34758}},
+         {0x00000080}};
+    /** Code Point Ranges for Sad
+    [1589, 1590], [1693, 1694], [1787, 1787], [2223, 2223]**/
+    const UnicodeSet sad_Set 
+        {{{Empty, 49}, {Mixed, 1}, {Empty, 2}, {Mixed, 1}, {Empty, 2},
+          {Mixed, 1}, {Empty, 13}, {Mixed, 1}, {Empty, 34746}},
+         {0x00600000, 0x60000000, 0x08000000, 0x00008000}};
+    /** Code Point Ranges for Sadhe
+    [1832, 1832]**/
+    const UnicodeSet sadhe_Set 
+        {{{Empty, 57}, {Mixed, 1}, {Empty, 34758}},
+         {0x00000100}};
+    /** Code Point Ranges for Seen
+    [1587, 1588], [1690, 1692], [1786, 1786], [1884, 1884], [1901, 1901],
+    [1904, 1904], [1917, 1918]**/
+    const UnicodeSet seen_Set 
+        {{{Empty, 49}, {Mixed, 1}, {Empty, 2}, {Mixed, 1}, {Empty, 2},
+          {Mixed, 1}, {Empty, 2}, {Mixed, 2}, {Empty, 34756}},
+         {0x00180000, 0x1c000000, 0x04000000, 0x10000000, 0x60012000}};
+    /** Code Point Ranges for Semkath
+    [1827, 1827]**/
+    const UnicodeSet semkath_Set 
+        {{{Empty, 57}, {Mixed, 1}, {Empty, 34758}},
+         {0x00000008}};
+    /** Code Point Ranges for Shin
+    [1835, 1835]**/
+    const UnicodeSet shin_Set 
+        {{{Empty, 57}, {Mixed, 1}, {Empty, 34758}},
+         {0x00000800}};
+    /** Code Point Ranges for Swash_Kaf
+    [1706, 1706]**/
+    const UnicodeSet swash_kaf_Set 
+        {{{Empty, 53}, {Mixed, 1}, {Empty, 34762}},
+         {0x00000400}};
+    /** Code Point Ranges for Tah
+    [1591, 1592], [1695, 1695], [2211, 2211]**/
+    const UnicodeSet tah_Set 
+        {{{Empty, 49}, {Mixed, 1}, {Empty, 2}, {Mixed, 1}, {Empty, 16},
+          {Mixed, 1}, {Empty, 34746}},
+         {0x01800000, 0x80000000, 0x00000008}};
+    /** Code Point Ranges for Taw
+    [1836, 1836]**/
+    const UnicodeSet taw_Set 
+        {{{Empty, 57}, {Mixed, 1}, {Empty, 34758}},
+         {0x00001000}};
+    /** Code Point Ranges for Teh_Marbuta
+    [1577, 1577], [1728, 1728], [1749, 1749]**/
+    const UnicodeSet teh_marbuta_Set 
+        {{{Empty, 49}, {Mixed, 1}, {Empty, 4}, {Mixed, 1}, {Empty, 34761}},
+         {0x00000200, 0x00200001}};
+    /** Code Point Ranges for Teth
+    [1819, 1820]**/
+    const UnicodeSet teth_Set 
+        {{{Empty, 56}, {Mixed, 1}, {Empty, 34759}},
+         {0x18000000}};
+    /** Code Point Ranges for Waw
+    [1572, 1572], [1608, 1608], [1654, 1655], [1732, 1739], [1743, 1743],
+    [1912, 1913], [2219, 2219]**/
+    const UnicodeSet waw_Set 
+        {{{Empty, 49}, {Mixed, 3}, {Empty, 2}, {Mixed, 1}, {Empty, 4},
+          {Mixed, 1}, {Empty, 9}, {Mixed, 1}, {Empty, 34746}},
+         {0x00000010, 0x00000100, 0x00c00000, 0x00008ff0, 0x03000000,
+          0x00000800}};
+    /** Code Point Ranges for Syriac_Waw
+    [1816, 1816]**/
+    const UnicodeSet syriac_waw_Set 
+        {{{Empty, 56}, {Mixed, 1}, {Empty, 34759}},
+         {0x01000000}};
+    /** Code Point Ranges for Yeh
+    [1568, 1568], [1574, 1574], [1609, 1610], [1656, 1656], [1744, 1745],
+    [1911, 1911], [2216, 2217], [2234, 2234]**/
+    const UnicodeSet yeh_Set 
+        {{{Empty, 49}, {Mixed, 3}, {Empty, 2}, {Mixed, 1}, {Empty, 4},
+          {Mixed, 1}, {Empty, 9}, {Mixed, 1}, {Empty, 34746}},
+         {0x00000041, 0x00000600, 0x01000000, 0x00030000, 0x00800000,
+          0x04000300}};
+    /** Code Point Ranges for Yeh_Barree
+    [1746, 1747]**/
+    const UnicodeSet yeh_barree_Set 
+        {{{Empty, 54}, {Mixed, 1}, {Empty, 34761}},
+         {0x000c0000}};
+    /** Code Point Ranges for Yeh_With_Tail
+    [1741, 1741]**/
+    const UnicodeSet yeh_with_tail_Set 
+        {{{Empty, 54}, {Mixed, 1}, {Empty, 34761}},
+         {0x00002000}};
+    /** Code Point Ranges for Yudh
+    [1821, 1821]**/
+    const UnicodeSet yudh_Set 
+        {{{Empty, 56}, {Mixed, 1}, {Empty, 34759}},
+         {0x20000000}};
+    /** Code Point Ranges for Yudh_He
+    [1822, 1822]**/
+    const UnicodeSet yudh_he_Set 
+        {{{Empty, 56}, {Mixed, 1}, {Empty, 34759}},
+         {0x40000000}};
+    /** Code Point Ranges for Zain
+    [1817, 1817]**/
+    const UnicodeSet zain_Set 
+        {{{Empty, 56}, {Mixed, 1}, {Empty, 34759}},
+         {0x02000000}};
+    /** Code Point Ranges for Zhain
+    [1869, 1869]**/
+    const UnicodeSet zhain_Set 
+        {{{Empty, 58}, {Mixed, 1}, {Empty, 34757}},
+         {0x00002000}};
+    /** Code Point Ranges for Khaph
+    [1870, 1870]**/
+    const UnicodeSet khaph_Set 
+        {{{Empty, 58}, {Mixed, 1}, {Empty, 34757}},
+         {0x00004000}};
+    /** Code Point Ranges for Fe
+    [1871, 1871]**/
+    const UnicodeSet fe_Set 
+        {{{Empty, 58}, {Mixed, 1}, {Empty, 34757}},
+         {0x00008000}};
+    /** Code Point Ranges for Burushaski_Yeh_Barree
+    [1914, 1915]**/
+    const UnicodeSet burushaski_yeh_barree_Set 
+        {{{Empty, 59}, {Mixed, 1}, {Empty, 34756}},
+         {0x0c000000}};
+    /** Code Point Ranges for Farsi_Yeh
+    [1597, 1599], [1740, 1740], [1742, 1742], [1909, 1910]**/
+    const UnicodeSet farsi_yeh_Set 
+        {{{Empty, 49}, {Mixed, 1}, {Empty, 4}, {Mixed, 1}, {Empty, 4},
+          {Mixed, 1}, {Empty, 34756}},
+         {0xe0000000, 0x00005000, 0x00600000}};
+    /** Code Point Ranges for Nya
+    [1725, 1725]**/
+    const UnicodeSet nya_Set 
+        {{{Empty, 53}, {Mixed, 1}, {Empty, 34762}},
+         {0x20000000}};
+    /** Code Point Ranges for Rohingya_Yeh
+    [2220, 2220]**/
+    const UnicodeSet rohingya_yeh_Set 
+        {{{Empty, 69}, {Mixed, 1}, {Empty, 34746}},
+         {0x00001000}};
+    /** Code Point Ranges for Straight_Waw
+    [2225, 2225]**/
+    const UnicodeSet straight_waw_Set 
+        {{{Empty, 69}, {Mixed, 1}, {Empty, 34746}},
+         {0x00020000}};
     /** Code Point Ranges for Manichaean_Aleph
     [68288, 68288]**/
     const UnicodeSet manichaean_aleph_Set 
@@ -311,208 +485,40 @@ namespace UCD {
     const UnicodeSet manichaean_zayin_Set 
         {{{Empty, 2134}, {Mixed, 1}, {Empty, 32681}},
          {0x00000600}};
-    /** Code Point Ranges for Meem
-    [1605, 1605], [1893, 1894], [2215, 2215]**/
-    const UnicodeSet meem_Set 
-        {{{Empty, 50}, {Mixed, 1}, {Empty, 8}, {Mixed, 1}, {Empty, 9},
-          {Mixed, 1}, {Empty, 34746}},
-         {0x00000020, 0x00000060, 0x00000080}};
-    /** Code Point Ranges for Mim
-    [1825, 1825]**/
-    const UnicodeSet mim_Set 
-        {{{Empty, 57}, {Mixed, 1}, {Empty, 34758}},
-         {0x00000002}};
-    /** Code Point Ranges for No_Joining_Group
-    [0, 1567], [1569, 1569], [1600, 1600], [1611, 1645], [1648, 1648],
-    [1652, 1652], [1748, 1748], [1750, 1773], [1776, 1785], [1789, 1790],
-    [1792, 1807], [1809, 1809], [1840, 1868], [1920, 2207], [2221, 2221],
-    [2229, 2229], [2238, 68287], [68294, 68294], [68296, 68296],
-    [68299, 68300], [68322, 68323], [68325, 68330], [68336, 1114111]**/
-    const UnicodeSet no_joining_group_Set 
-        {{{Full, 49}, {Mixed, 3}, {Empty, 2}, {Mixed, 5}, {Empty, 1},
-          {Full, 9}, {Mixed, 1}, {Full, 2064}, {Mixed, 2}, {Full, 32680}},
-         {0x00000002, 0xfffff801, 0x00113fff, 0xffd00000, 0x63ff3fff,
-          0x0002ffff, 0xffff0000, 0x00001fff, 0xc0202000, 0x00001940,
-          0xffff07ec}};
-    /** Code Point Ranges for Noon
-    [1606, 1606], [1721, 1724], [1895, 1897]**/
-    const UnicodeSet noon_Set 
-        {{{Empty, 50}, {Mixed, 1}, {Empty, 2}, {Mixed, 1}, {Empty, 5},
-          {Mixed, 1}, {Empty, 34756}},
-         {0x00000040, 0x1e000000, 0x00000380}};
-    /** Code Point Ranges for Nun
-    [1826, 1826]**/
-    const UnicodeSet nun_Set 
-        {{{Empty, 57}, {Mixed, 1}, {Empty, 34758}},
-         {0x00000004}};
-    /** Code Point Ranges for Nya
-    [1725, 1725]**/
-    const UnicodeSet nya_Set 
-        {{{Empty, 53}, {Mixed, 1}, {Empty, 34762}},
-         {0x20000000}};
-    /** Code Point Ranges for Pe
-    [1830, 1830]**/
-    const UnicodeSet pe_Set 
-        {{{Empty, 57}, {Mixed, 1}, {Empty, 34758}},
-         {0x00000040}};
-    /** Code Point Ranges for Qaf
-    [1602, 1602], [1647, 1647], [1703, 1704], [2213, 2213]**/
-    const UnicodeSet qaf_Set 
-        {{{Empty, 50}, {Mixed, 2}, {Empty, 1}, {Mixed, 1}, {Empty, 15},
-          {Mixed, 1}, {Empty, 34746}},
-         {0x00000004, 0x00008000, 0x00000180, 0x00000020}};
-    /** Code Point Ranges for Qaph
-    [1833, 1833]**/
-    const UnicodeSet qaph_Set 
-        {{{Empty, 57}, {Mixed, 1}, {Empty, 34758}},
-         {0x00000200}};
-    /** Code Point Ranges for Reh
-    [1585, 1586], [1681, 1689], [1775, 1775], [1883, 1883], [1899, 1900],
-    [1905, 1905], [2218, 2218], [2226, 2226], [2233, 2233]**/
-    const UnicodeSet reh_Set 
-        {{{Empty, 49}, {Mixed, 1}, {Empty, 2}, {Mixed, 1}, {Empty, 2},
-          {Mixed, 1}, {Empty, 2}, {Mixed, 2}, {Empty, 9}, {Mixed, 1},
-          {Empty, 34746}},
-         {0x00060000, 0x03fe0000, 0x00008000, 0x08000000, 0x00021800,
-          0x02040400}};
-    /** Code Point Ranges for Reversed_Pe
-    [1831, 1831]**/
-    const UnicodeSet reversed_pe_Set 
-        {{{Empty, 57}, {Mixed, 1}, {Empty, 34758}},
-         {0x00000080}};
-    /** Code Point Ranges for Rohingya_Yeh
-    [2220, 2220]**/
-    const UnicodeSet rohingya_yeh_Set 
+    /** Code Point Ranges for African_Feh
+    [2235, 2235]**/
+    const UnicodeSet african_feh_Set 
         {{{Empty, 69}, {Mixed, 1}, {Empty, 34746}},
-         {0x00001000}};
-    /** Code Point Ranges for Sad
-    [1589, 1590], [1693, 1694], [1787, 1787], [2223, 2223]**/
-    const UnicodeSet sad_Set 
-        {{{Empty, 49}, {Mixed, 1}, {Empty, 2}, {Mixed, 1}, {Empty, 2},
-          {Mixed, 1}, {Empty, 13}, {Mixed, 1}, {Empty, 34746}},
-         {0x00600000, 0x60000000, 0x08000000, 0x00008000}};
-    /** Code Point Ranges for Sadhe
-    [1832, 1832]**/
-    const UnicodeSet sadhe_Set 
-        {{{Empty, 57}, {Mixed, 1}, {Empty, 34758}},
-         {0x00000100}};
-    /** Code Point Ranges for Seen
-    [1587, 1588], [1690, 1692], [1786, 1786], [1884, 1884], [1901, 1901],
-    [1904, 1904], [1917, 1918]**/
-    const UnicodeSet seen_Set 
-        {{{Empty, 49}, {Mixed, 1}, {Empty, 2}, {Mixed, 1}, {Empty, 2},
-          {Mixed, 1}, {Empty, 2}, {Mixed, 2}, {Empty, 34756}},
-         {0x00180000, 0x1c000000, 0x04000000, 0x10000000, 0x60012000}};
-    /** Code Point Ranges for Semkath
-    [1827, 1827]**/
-    const UnicodeSet semkath_Set 
-        {{{Empty, 57}, {Mixed, 1}, {Empty, 34758}},
-         {0x00000008}};
-    /** Code Point Ranges for Shin
-    [1835, 1835]**/
-    const UnicodeSet shin_Set 
-        {{{Empty, 57}, {Mixed, 1}, {Empty, 34758}},
-         {0x00000800}};
-    /** Code Point Ranges for Straight_Waw
-    [2225, 2225]**/
-    const UnicodeSet straight_waw_Set 
+         {0x08000000}};
+    /** Code Point Ranges for African_Qaf
+    [2236, 2236]**/
+    const UnicodeSet african_qaf_Set 
         {{{Empty, 69}, {Mixed, 1}, {Empty, 34746}},
-         {0x00020000}};
-    /** Code Point Ranges for Swash_Kaf
-    [1706, 1706]**/
-    const UnicodeSet swash_kaf_Set 
-        {{{Empty, 53}, {Mixed, 1}, {Empty, 34762}},
-         {0x00000400}};
-    /** Code Point Ranges for Syriac_Waw
-    [1816, 1816]**/
-    const UnicodeSet syriac_waw_Set 
-        {{{Empty, 56}, {Mixed, 1}, {Empty, 34759}},
-         {0x01000000}};
-    /** Code Point Ranges for Tah
-    [1591, 1592], [1695, 1695], [2211, 2211]**/
-    const UnicodeSet tah_Set 
-        {{{Empty, 49}, {Mixed, 1}, {Empty, 2}, {Mixed, 1}, {Empty, 16},
-          {Mixed, 1}, {Empty, 34746}},
-         {0x01800000, 0x80000000, 0x00000008}};
-    /** Code Point Ranges for Taw
-    [1836, 1836]**/
-    const UnicodeSet taw_Set 
-        {{{Empty, 57}, {Mixed, 1}, {Empty, 34758}},
-         {0x00001000}};
-    /** Code Point Ranges for Teh_Marbuta
-    [1577, 1577], [1728, 1728], [1749, 1749]**/
-    const UnicodeSet teh_marbuta_Set 
-        {{{Empty, 49}, {Mixed, 1}, {Empty, 4}, {Mixed, 1}, {Empty, 34761}},
-         {0x00000200, 0x00200001}};
-    /** Code Point Ranges for Teh_Marbuta_Goal
-    [1731, 1731]**/
-    const UnicodeSet teh_marbuta_goal_Set 
-        {{{Empty, 54}, {Mixed, 1}, {Empty, 34761}},
-         {0x00000008}};
-    /** Code Point Ranges for Teth
-    [1819, 1820]**/
-    const UnicodeSet teth_Set 
-        {{{Empty, 56}, {Mixed, 1}, {Empty, 34759}},
-         {0x18000000}};
-    /** Code Point Ranges for Waw
-    [1572, 1572], [1608, 1608], [1654, 1655], [1732, 1739], [1743, 1743],
-    [1912, 1913], [2219, 2219]**/
-    const UnicodeSet waw_Set 
-        {{{Empty, 49}, {Mixed, 3}, {Empty, 2}, {Mixed, 1}, {Empty, 4},
-          {Mixed, 1}, {Empty, 9}, {Mixed, 1}, {Empty, 34746}},
-         {0x00000010, 0x00000100, 0x00c00000, 0x00008ff0, 0x03000000,
-          0x00000800}};
-    /** Code Point Ranges for Yeh
-    [1568, 1568], [1574, 1574], [1609, 1610], [1656, 1656], [1744, 1745],
-    [1911, 1911], [2216, 2217], [2234, 2234]**/
-    const UnicodeSet yeh_Set 
-        {{{Empty, 49}, {Mixed, 3}, {Empty, 2}, {Mixed, 1}, {Empty, 4},
-          {Mixed, 1}, {Empty, 9}, {Mixed, 1}, {Empty, 34746}},
-         {0x00000041, 0x00000600, 0x01000000, 0x00030000, 0x00800000,
-          0x04000300}};
-    /** Code Point Ranges for Yeh_Barree
-    [1746, 1747]**/
-    const UnicodeSet yeh_barree_Set 
-        {{{Empty, 54}, {Mixed, 1}, {Empty, 34761}},
-         {0x000c0000}};
-    /** Code Point Ranges for Yeh_With_Tail
-    [1741, 1741]**/
-    const UnicodeSet yeh_with_tail_Set 
-        {{{Empty, 54}, {Mixed, 1}, {Empty, 34761}},
-         {0x00002000}};
-    /** Code Point Ranges for Yudh
-    [1821, 1821]**/
-    const UnicodeSet yudh_Set 
-        {{{Empty, 56}, {Mixed, 1}, {Empty, 34759}},
+         {0x10000000}};
+    /** Code Point Ranges for African_Noon
+    [2237, 2237]**/
+    const UnicodeSet african_noon_Set 
+        {{{Empty, 69}, {Mixed, 1}, {Empty, 34746}},
          {0x20000000}};
-    /** Code Point Ranges for Yudh_He
-    [1822, 1822]**/
-    const UnicodeSet yudh_he_Set 
-        {{{Empty, 56}, {Mixed, 1}, {Empty, 34759}},
-         {0x40000000}};
-    /** Code Point Ranges for Zain
-    [1817, 1817]**/
-    const UnicodeSet zain_Set 
-        {{{Empty, 56}, {Mixed, 1}, {Empty, 34759}},
-         {0x02000000}};
-    /** Code Point Ranges for Zhain
-    [1869, 1869]**/
-    const UnicodeSet zhain_Set 
-        {{{Empty, 58}, {Mixed, 1}, {Empty, 34757}},
-         {0x00002000}};
     static EnumeratedPropertyObject property_object
         {jg,
          JG_ns::enum_names,
          JG_ns::value_names,
          JG_ns::aliases_only_map,
-         {&african_feh_Set, &african_noon_Set, &african_qaf_Set, &ain_Set,
-        &alaph_Set, &alef_Set, &beh_Set, &beth_Set,
-        &burushaski_yeh_barree_Set, &dal_Set, &dalath_rish_Set, &e_Set,
-        &farsi_yeh_Set, &fe_Set, &feh_Set, &final_semkath_Set, &gaf_Set,
-        &gamal_Set, &hah_Set, &he_Set, &heh_Set, &heh_goal_Set, &heth_Set,
-        &kaf_Set, &kaph_Set, &khaph_Set, &knotted_heh_Set, &lam_Set,
-        &lamadh_Set, &manichaean_aleph_Set, &manichaean_ayin_Set,
-        &manichaean_beth_Set, &manichaean_daleth_Set,
+         {&no_joining_group_Set, &ain_Set, &alaph_Set, &alef_Set, &beh_Set,
+        &beth_Set, &dal_Set, &dalath_rish_Set, &e_Set, &feh_Set,
+        &final_semkath_Set, &gaf_Set, &gamal_Set, &hah_Set,
+        &teh_marbuta_goal_Set, &he_Set, &heh_Set, &heh_goal_Set, &heth_Set,
+        &kaf_Set, &kaph_Set, &knotted_heh_Set, &lam_Set, &lamadh_Set,
+        &meem_Set, &mim_Set, &noon_Set, &nun_Set, &pe_Set, &qaf_Set,
+        &qaph_Set, &reh_Set, &reversed_pe_Set, &sad_Set, &sadhe_Set,
+        &seen_Set, &semkath_Set, &shin_Set, &swash_kaf_Set, &tah_Set,
+        &taw_Set, &teh_marbuta_Set, &teth_Set, &waw_Set, &syriac_waw_Set,
+        &yeh_Set, &yeh_barree_Set, &yeh_with_tail_Set, &yudh_Set,
+        &yudh_he_Set, &zain_Set, &zhain_Set, &khaph_Set, &fe_Set,
+        &burushaski_yeh_barree_Set, &farsi_yeh_Set, &nya_Set,
+        &rohingya_yeh_Set, &straight_waw_Set, &manichaean_aleph_Set,
+        &manichaean_ayin_Set, &manichaean_beth_Set, &manichaean_daleth_Set,
         &manichaean_dhamedh_Set, &manichaean_five_Set,
         &manichaean_gimel_Set, &manichaean_heth_Set,
         &manichaean_hundred_Set, &manichaean_kaph_Set,
@@ -522,13 +528,7 @@ namespace UCD {
         &manichaean_taw_Set, &manichaean_ten_Set, &manichaean_teth_Set,
         &manichaean_thamedh_Set, &manichaean_twenty_Set,
         &manichaean_waw_Set, &manichaean_yodh_Set, &manichaean_zayin_Set,
-        &meem_Set, &mim_Set, &no_joining_group_Set, &noon_Set, &nun_Set,
-        &nya_Set, &pe_Set, &qaf_Set, &qaph_Set, &reh_Set, &reversed_pe_Set,
-        &rohingya_yeh_Set, &sad_Set, &sadhe_Set, &seen_Set, &semkath_Set,
-        &shin_Set, &straight_waw_Set, &swash_kaf_Set, &syriac_waw_Set,
-        &tah_Set, &taw_Set, &teh_marbuta_Set, &teh_marbuta_goal_Set,
-        &teth_Set, &waw_Set, &yeh_Set, &yeh_barree_Set, &yeh_with_tail_Set,
-        &yudh_Set, &yudh_he_Set, &zain_Set, &zhain_Set
+        &african_feh_Set, &african_qaf_Set, &african_noon_Set
          }};
     }
 }

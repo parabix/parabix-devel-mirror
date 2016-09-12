@@ -14,12 +14,31 @@
 
 namespace UCD {
     namespace HST_ns {
+    /** Code Point Ranges for NA
+    [0, 4351], [4608, 43359], [43389, 44031], [55204, 55215],
+    [55239, 55242], [55292, 1114111]**/
+    const UnicodeSet na_Set 
+        {{{Full, 136}, {Empty, 8}, {Full, 1211}, {Mixed, 1}, {Full, 20},
+          {Empty, 349}, {Mixed, 3}, {Full, 33088}},
+         {0xe0000000, 0x0000fff0, 0x00000780, 0xf0000000}};
     /** Code Point Ranges for L
     [4352, 4447], [43360, 43388]**/
     const UnicodeSet l_Set 
         {{{Empty, 136}, {Full, 3}, {Empty, 1216}, {Mixed, 1},
           {Empty, 33460}},
          {0x1fffffff}};
+    /** Code Point Ranges for V
+    [4448, 4519], [55216, 55238]**/
+    const UnicodeSet v_Set 
+        {{{Empty, 139}, {Full, 2}, {Mixed, 1}, {Empty, 1583}, {Mixed, 2},
+          {Empty, 33089}},
+         {0x000000ff, 0xffff0000, 0x0000007f}};
+    /** Code Point Ranges for T
+    [4520, 4607], [55243, 55291]**/
+    const UnicodeSet t_Set 
+        {{{Empty, 141}, {Mixed, 1}, {Full, 2}, {Empty, 1582}, {Mixed, 2},
+          {Empty, 33088}},
+         {0xffffff00, 0xfffff800, 0x0fffffff}};
     /** Code Point Ranges for LV
     [44032, 44032], [44060, 44060], [44088, 44088], [44116, 44116],
     [44144, 44144], [44172, 44172], [44200, 44200], [44228, 44228],
@@ -366,31 +385,12 @@ namespace UCD {
           0xffffffef, 0xeffffffe, 0xfeffffff, 0xffefffff, 0xfffeffff,
           0xffffefff, 0xfffffeff, 0xffffffef, 0xeffffffe, 0xfeffffff,
           0xffefffff, 0xfffeffff, 0xffffefff, 0xfffffeff, 0x0000000f}};
-    /** Code Point Ranges for NA
-    [0, 4351], [4608, 43359], [43389, 44031], [55204, 55215],
-    [55239, 55242], [55292, 1114111]**/
-    const UnicodeSet na_Set 
-        {{{Full, 136}, {Empty, 8}, {Full, 1211}, {Mixed, 1}, {Full, 20},
-          {Empty, 349}, {Mixed, 3}, {Full, 33088}},
-         {0xe0000000, 0x0000fff0, 0x00000780, 0xf0000000}};
-    /** Code Point Ranges for T
-    [4520, 4607], [55243, 55291]**/
-    const UnicodeSet t_Set 
-        {{{Empty, 141}, {Mixed, 1}, {Full, 2}, {Empty, 1582}, {Mixed, 2},
-          {Empty, 33088}},
-         {0xffffff00, 0xfffff800, 0x0fffffff}};
-    /** Code Point Ranges for V
-    [4448, 4519], [55216, 55238]**/
-    const UnicodeSet v_Set 
-        {{{Empty, 139}, {Full, 2}, {Mixed, 1}, {Empty, 1583}, {Mixed, 2},
-          {Empty, 33089}},
-         {0x000000ff, 0xffff0000, 0x0000007f}};
     static EnumeratedPropertyObject property_object
         {hst,
          HST_ns::enum_names,
          HST_ns::value_names,
          HST_ns::aliases_only_map,
-         {&l_Set, &lv_Set, &lvt_Set, &na_Set, &t_Set, &v_Set
+         {&na_Set, &l_Set, &v_Set, &t_Set, &lv_Set, &lvt_Set
          }};
     }
 }

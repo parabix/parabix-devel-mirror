@@ -124,7 +124,7 @@ add_custom_target(run_generate_predefined_ucd_functions DEPENDS ${PRECOMPILED_FI
 add_dependencies(RegExpCompiler run_generate_predefined_ucd_functions)
 ENDIF()
 
-add_executable(icgrep icgrep.cpp toolchain.cpp grep_engine.cpp kernels/pipeline.cpp kernels/scanmatchgen.cpp ${PRECOMPILED_FILES})
+add_executable(icgrep icgrep.cpp toolchain.cpp grep_engine.cpp kernels/pipeline.cpp kernels/scanmatchgen.cpp kernels/cc_kernel.cpp ${PRECOMPILED_FILES})
 add_executable(u8u16 u8u16.cpp toolchain.cpp kernels/p2s_kernel.cpp kernels/pipeline.cpp kernels/deletion.cpp)
 #add_executable(symtbl symboltable.cpp toolchain.cpp kernels/symboltablepipeline.cpp kernels/stdout_kernel.cpp grep_engine.cpp kernels/pipeline.cpp kernels/scanmatchgen.cpp ${PRECOMPILED_FILES})
 add_executable(wc wc.cpp toolchain.cpp kernels/pipeline.cpp)

@@ -34,6 +34,7 @@
 #include <kernels/p2s_kernel.h>
 #include <kernels/deletion.h>
 #include <kernels/stdout_kernel.h>
+#include <llvm/IR/TypeBuilder.h>
 
 
 // mmap system
@@ -45,6 +46,8 @@ static cl::OptionCategory u8u16Options("u8u16 Options",
                                             "Transcoding control options.");
 
 static cl::list<std::string> inputFiles(cl::Positional, cl::desc("<input file ...>"), cl::OneOrMore, cl::cat(u8u16Options));
+
+static cl::opt<bool> pipelineParallel("enable-pipeline-parallel", cl::desc("Enable multithreading with pipeline parallelism."), cl::cat(u8u16Options));
 
 //
 //
@@ -224,12 +227,22 @@ const unsigned u16OutputBlocks = 64;
 Function * u8u16Pipeline(Module * mMod, IDISA::IDISA_Builder * iBuilder, pablo::PabloFunction * function) {
     Type * mBitBlockType = iBuilder->getBitBlockType();
 
+    const unsigned segmentSize = codegen::SegmentSize;
+    const unsigned bufferSegments = codegen::BufferSegments;
     
     ExternalFileBuffer ByteStream(iBuilder, StreamSetType(1, i8));
-    SingleBlockBuffer BasisBits(iBuilder, StreamSetType(8, i1));
-    SingleBlockBuffer U8u16Bits(iBuilder, StreamSetType(18, i1));
-    SingleBlockBuffer U16Bits(iBuilder, StreamSetType(16, i1));
-    SingleBlockBuffer DeletionCounts(iBuilder, StreamSetType(1, i1));
+    //SingleBlockBuffer BasisBits(iBuilder, StreamSetType(8, i1));
+    CircularBuffer BasisBits(iBuilder, StreamSetType(8, i1), segmentSize * bufferSegments);
+
+    //SingleBlockBuffer U8u16Bits(iBuilder, StreamSetType(18, i1));
+    CircularBuffer U8u16Bits(iBuilder, StreamSetType(18, i1), segmentSize * bufferSegments);
+
+    //SingleBlockBuffer U16Bits(iBuilder, StreamSetType(16, i1));
+    CircularBuffer U16Bits(iBuilder, StreamSetType(16, i1), segmentSize * bufferSegments);
+    
+    //SingleBlockBuffer DeletionCounts(iBuilder, StreamSetType(1, i1));
+    CircularBuffer DeletionCounts(iBuilder, StreamSetType(1, i1), segmentSize * bufferSegments);
+    
     CircularBuffer U16out(iBuilder, StreamSetType(1, i16), u16OutputBlocks);
 
     s2pKernel  s2pk(iBuilder);
@@ -248,6 +261,10 @@ Function * u8u16Pipeline(Module * mMod, IDISA::IDISA_Builder * iBuilder, pablo::
     Type * const size_ty = iBuilder->getSizeTy();
     Type * const voidTy = Type::getVoidTy(mMod->getContext());
     Type * const inputType = PointerType::get(ArrayType::get(ArrayType::get(mBitBlockType, 8), 1), 0);
+    Type * const int32ty = iBuilder->getInt32Ty();
+    Type * const int8PtrTy = iBuilder->getInt8PtrTy();
+    Type * const voidPtrTy = TypeBuilder<void *, false>::get(mMod->getContext());
+
     
     Function * const main = cast<Function>(mMod->getOrInsertFunction("Main", voidTy, inputType, size_ty, nullptr));
     main->setCallingConv(CallingConv::C);
@@ -273,8 +290,35 @@ Function * u8u16Pipeline(Module * mMod, IDISA::IDISA_Builder * iBuilder, pablo::
     Value * delInstance = delK.createInstance({});
     Value * p2sInstance = p2sk.createInstance({});
     
-    generatePipelineLoop(iBuilder, {&s2pk, &u8u16k, &delK, &p2sk}, {s2pInstance, u8u16Instance, delInstance, p2sInstance}, fileSize);
+    Type * pthreadTy = size_ty;
+    FunctionType * funVoidPtrVoidTy = FunctionType::get(voidTy, int8PtrTy, false);
     
+    Function * pthreadCreateFunc = cast<Function>(mMod->getOrInsertFunction("pthread_create",
+                                                                         int32ty,
+                                                                         pthreadTy->getPointerTo(),
+                                                                         voidPtrTy,
+                                                                         static_cast<Type *>(funVoidPtrVoidTy)->getPointerTo(),
+                                                                         voidPtrTy, nullptr));
+    pthreadCreateFunc->setCallingConv(llvm::CallingConv::C);
+    Function * pthreadJoinFunc = cast<Function>(mMod->getOrInsertFunction("pthread_join",
+                                                                       int32ty,
+                                                                       pthreadTy,
+                                                                       PointerType::get(int8PtrTy, 0), nullptr));
+    pthreadJoinFunc->setCallingConv(llvm::CallingConv::C);
+    
+    Function * pthreadExitFunc = cast<Function>(mMod->getOrInsertFunction("pthread_exit",
+                                                                       voidTy, 
+                                                                       voidPtrTy, nullptr));
+    pthreadExitFunc->addFnAttr(llvm::Attribute::NoReturn);
+    pthreadExitFunc->setCallingConv(llvm::CallingConv::C);
+
+    if (pipelineParallel){
+        generatePipelineParallel(iBuilder, {&s2pk, &u8u16k, &delK, &p2sk}, {s2pInstance, u8u16Instance, delInstance, p2sInstance});
+    }
+    else{
+        generatePipelineLoop(iBuilder, {&s2pk, &u8u16k, &delK, &p2sk}, {s2pInstance, u8u16Instance, delInstance, p2sInstance}, fileSize);
+    }
+
     iBuilder->CreateRetVoid();
     return main;
 }

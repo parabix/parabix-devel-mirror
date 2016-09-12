@@ -14,961 +14,6 @@
 
 namespace UCD {
     namespace SC_ns {
-    /** Code Point Ranges for Adlm
-    [125184, 125258], [125264, 125273], [125278, 125279]**/
-    const UnicodeSet adlm_Set 
-        {{{Empty, 3912}, {Full, 2}, {Mixed, 1}, {Empty, 30901}},
-         {0xc3ff07ff}};
-    /** Code Point Ranges for Aghb
-    [66864, 66915], [66927, 66927]**/
-    const UnicodeSet aghb_Set 
-        {{{Empty, 2089}, {Mixed, 1}, {Full, 1}, {Mixed, 1}, {Empty, 32724}},
-         {0xffff0000, 0x0000800f}};
-    /** Code Point Ranges for Ahom
-    [71424, 71449], [71453, 71467], [71472, 71487]**/
-    const UnicodeSet ahom_Set 
-        {{{Empty, 2232}, {Mixed, 2}, {Empty, 32582}},
-         {0xe3ffffff, 0xffff0fff}};
-    /** Code Point Ranges for Arab
-    [1536, 1540], [1542, 1547], [1549, 1562], [1566, 1566], [1568, 1599],
-    [1601, 1610], [1622, 1647], [1649, 1756], [1758, 1791], [1872, 1919],
-    [2208, 2228], [2230, 2237], [2260, 2273], [2275, 2303], [64336, 64449],
-    [64467, 64829], [64848, 64911], [64914, 64967], [65008, 65021],
-    [65136, 65140], [65142, 65276], [69216, 69246], [126464, 126467],
-    [126469, 126495], [126497, 126498], [126500, 126500], [126503, 126503],
-    [126505, 126514], [126516, 126519], [126521, 126521], [126523, 126523],
-    [126530, 126530], [126535, 126535], [126537, 126537], [126539, 126539],
-    [126541, 126543], [126545, 126546], [126548, 126548], [126551, 126551],
-    [126553, 126553], [126555, 126555], [126557, 126557], [126559, 126559],
-    [126561, 126562], [126564, 126564], [126567, 126570], [126572, 126578],
-    [126580, 126583], [126585, 126588], [126590, 126590], [126592, 126601],
-    [126603, 126619], [126625, 126627], [126629, 126633], [126635, 126651],
-    [126704, 126705]**/
-    const UnicodeSet arab_Set 
-        {{{Empty, 48}, {Mixed, 1}, {Full, 1}, {Mixed, 2}, {Full, 2},
-          {Mixed, 1}, {Full, 1}, {Empty, 2}, {Mixed, 1}, {Full, 1},
-          {Empty, 9}, {Mixed, 3}, {Empty, 1938}, {Mixed, 1}, {Full, 3},
-          {Mixed, 1}, {Full, 10}, {Mixed, 2}, {Full, 1}, {Mixed, 1},
-          {Full, 1}, {Mixed, 2}, {Empty, 3}, {Mixed, 1}, {Full, 3},
-          {Mixed, 1}, {Empty, 123}, {Mixed, 1}, {Empty, 1788}, {Mixed, 6},
-          {Empty, 1}, {Mixed, 1}, {Empty, 30856}},
-         {0x47ffefdf, 0xffc007fe, 0xfffeffff, 0xdfffffff, 0xffff0000,
-          0x3fdfffff, 0xfff00000, 0xfffffffb, 0xffff0000, 0xfff80003,
-          0x3fffffff, 0xffff0000, 0xfffcffff, 0x000000ff, 0x3fff0000,
-          0xffdf0000, 0x1fffffff, 0x7fffffff, 0xffffffef, 0x0af7fe96,
-          0xaa96ea84, 0x5ef7f796, 0x0ffffbff, 0x0ffffbee, 0x00030000}};
-    /** Code Point Ranges for Armi
-    [67648, 67669], [67671, 67679]**/
-    const UnicodeSet armi_Set 
-        {{{Empty, 2114}, {Mixed, 1}, {Empty, 32701}},
-         {0xffbfffff}};
-    /** Code Point Ranges for Armn
-    [1329, 1366], [1369, 1375], [1377, 1415], [1418, 1418], [1421, 1423],
-    [64275, 64279]**/
-    const UnicodeSet armn_Set 
-        {{{Empty, 41}, {Mixed, 4}, {Empty, 1963}, {Mixed, 1},
-          {Empty, 32807}},
-         {0xfffe0000, 0xfe7fffff, 0xfffffffe, 0x0000e4ff, 0x00f80000}};
-    /** Code Point Ranges for Avst
-    [68352, 68405], [68409, 68415]**/
-    const UnicodeSet avst_Set 
-        {{{Empty, 2136}, {Full, 1}, {Mixed, 1}, {Empty, 32678}},
-         {0xfe3fffff}};
-    /** Code Point Ranges for Bali
-    [6912, 6987], [6992, 7036]**/
-    const UnicodeSet bali_Set 
-        {{{Empty, 216}, {Full, 2}, {Mixed, 2}, {Empty, 34596}},
-         {0xffff0fff, 0x1fffffff}};
-    /** Code Point Ranges for Bamu
-    [42656, 42743], [92160, 92728]**/
-    const UnicodeSet bamu_Set 
-        {{{Empty, 1333}, {Full, 2}, {Mixed, 1}, {Empty, 1544}, {Full, 17},
-          {Mixed, 1}, {Empty, 31918}},
-         {0x00ffffff, 0x01ffffff}};
-    /** Code Point Ranges for Bass
-    [92880, 92909], [92912, 92917]**/
-    const UnicodeSet bass_Set 
-        {{{Empty, 2902}, {Mixed, 2}, {Empty, 31912}},
-         {0xffff0000, 0x003f3fff}};
-    /** Code Point Ranges for Batk
-    [7104, 7155], [7164, 7167]**/
-    const UnicodeSet batk_Set 
-        {{{Empty, 222}, {Full, 1}, {Mixed, 1}, {Empty, 34592}},
-         {0xf00fffff}};
-    /** Code Point Ranges for Beng
-    [2432, 2435], [2437, 2444], [2447, 2448], [2451, 2472], [2474, 2480],
-    [2482, 2482], [2486, 2489], [2492, 2500], [2503, 2504], [2507, 2510],
-    [2519, 2519], [2524, 2525], [2527, 2531], [2534, 2555]**/
-    const UnicodeSet beng_Set 
-        {{{Empty, 76}, {Mixed, 4}, {Empty, 34736}},
-         {0xfff99fef, 0xf3c5fdff, 0xb080799f, 0x0fffffcf}};
-    /** Code Point Ranges for Bhks
-    [72704, 72712], [72714, 72758], [72760, 72773], [72784, 72812]**/
-    const UnicodeSet bhks_Set 
-        {{{Empty, 2272}, {Mixed, 4}, {Empty, 32540}},
-         {0xfffffdff, 0xff7fffff, 0xffff003f, 0x00001fff}};
-    /** Code Point Ranges for Bopo
-    [746, 747], [12549, 12589], [12704, 12730]**/
-    const UnicodeSet bopo_Set 
-        {{{Empty, 23}, {Mixed, 1}, {Empty, 368}, {Mixed, 2}, {Empty, 3},
-          {Mixed, 1}, {Empty, 34418}},
-         {0x00000c00, 0xffffffe0, 0x00003fff, 0x07ffffff}};
-    /** Code Point Ranges for Brah
-    [69632, 69709], [69714, 69743], [69759, 69759]**/
-    const UnicodeSet brah_Set 
-        {{{Empty, 2176}, {Full, 2}, {Mixed, 2}, {Empty, 32636}},
-         {0xfffc3fff, 0x8000ffff}};
-    /** Code Point Ranges for Brai
-    [10240, 10495]**/
-    const UnicodeSet brai_Set 
-        {{{Empty, 320}, {Full, 8}, {Empty, 34488}},
-         {}};
-    /** Code Point Ranges for Bugi
-    [6656, 6683], [6686, 6687]**/
-    const UnicodeSet bugi_Set 
-        {{{Empty, 208}, {Mixed, 1}, {Empty, 34607}},
-         {0xcfffffff}};
-    /** Code Point Ranges for Buhd
-    [5952, 5971]**/
-    const UnicodeSet buhd_Set 
-        {{{Empty, 186}, {Mixed, 1}, {Empty, 34629}},
-         {0x000fffff}};
-    /** Code Point Ranges for Cakm
-    [69888, 69940], [69942, 69955]**/
-    const UnicodeSet cakm_Set 
-        {{{Empty, 2184}, {Full, 1}, {Mixed, 2}, {Empty, 32629}},
-         {0xffdfffff, 0x0000000f}};
-    /** Code Point Ranges for Cans
-    [5120, 5759], [6320, 6389]**/
-    const UnicodeSet cans_Set 
-        {{{Empty, 160}, {Full, 20}, {Empty, 17}, {Mixed, 1}, {Full, 1},
-          {Mixed, 1}, {Empty, 34616}},
-         {0xffff0000, 0x003fffff}};
-    /** Code Point Ranges for Cari
-    [66208, 66256]**/
-    const UnicodeSet cari_Set 
-        {{{Empty, 2069}, {Full, 1}, {Mixed, 1}, {Empty, 32745}},
-         {0x0001ffff}};
-    /** Code Point Ranges for Cham
-    [43520, 43574], [43584, 43597], [43600, 43609], [43612, 43615]**/
-    const UnicodeSet cham_Set 
-        {{{Empty, 1360}, {Full, 1}, {Mixed, 2}, {Empty, 33453}},
-         {0x007fffff, 0xf3ff3fff}};
-    /** Code Point Ranges for Cher
-    [5024, 5109], [5112, 5117], [43888, 43967]**/
-    const UnicodeSet cher_Set 
-        {{{Empty, 157}, {Full, 2}, {Mixed, 1}, {Empty, 1211}, {Mixed, 1},
-          {Full, 2}, {Empty, 33442}},
-         {0x3f3fffff, 0xffff0000}};
-    /** Code Point Ranges for Copt
-    [994, 1007], [11392, 11507], [11513, 11519]**/
-    const UnicodeSet copt_Set 
-        {{{Empty, 31}, {Mixed, 1}, {Empty, 324}, {Full, 3}, {Mixed, 1},
-          {Empty, 34456}},
-         {0x0000fffc, 0xfe0fffff}};
-    /** Code Point Ranges for Cprt
-    [67584, 67589], [67592, 67592], [67594, 67637], [67639, 67640],
-    [67644, 67644], [67647, 67647]**/
-    const UnicodeSet cprt_Set 
-        {{{Empty, 2112}, {Mixed, 2}, {Empty, 32702}},
-         {0xfffffd3f, 0x91bfffff}};
-    /** Code Point Ranges for Cyrl
-    [1024, 1156], [1159, 1327], [7296, 7304], [7467, 7467], [7544, 7544],
-    [11744, 11775], [42560, 42655], [65070, 65071]**/
-    const UnicodeSet cyrl_Set 
-        {{{Empty, 32}, {Full, 4}, {Mixed, 1}, {Full, 4}, {Mixed, 1},
-          {Empty, 186}, {Mixed, 1}, {Empty, 4}, {Mixed, 1}, {Empty, 1},
-          {Mixed, 1}, {Empty, 131}, {Full, 1}, {Empty, 962}, {Full, 3},
-          {Empty, 700}, {Mixed, 1}, {Empty, 32782}},
-         {0xffffff9f, 0x0000ffff, 0x000001ff, 0x00000800, 0x01000000,
-          0x0000c000}};
-    /** Code Point Ranges for Deva
-    [2304, 2384], [2387, 2403], [2406, 2431], [43232, 43261]**/
-    const UnicodeSet deva_Set 
-        {{{Empty, 72}, {Full, 2}, {Mixed, 2}, {Empty, 1275}, {Mixed, 1},
-          {Empty, 33464}},
-         {0xfff9ffff, 0xffffffcf, 0x3fffffff}};
-    /** Code Point Ranges for Dsrt
-    [66560, 66639]**/
-    const UnicodeSet dsrt_Set 
-        {{{Empty, 2080}, {Full, 2}, {Mixed, 1}, {Empty, 32733}},
-         {0x0000ffff}};
-    /** Code Point Ranges for Dupl
-    [113664, 113770], [113776, 113788], [113792, 113800], [113808, 113817],
-    [113820, 113823]**/
-    const UnicodeSet dupl_Set 
-        {{{Empty, 3552}, {Full, 3}, {Mixed, 2}, {Empty, 31259}},
-         {0x1fff07ff, 0xf3ff01ff}};
-    /** Code Point Ranges for Egyp
-    [77824, 78894]**/
-    const UnicodeSet egyp_Set 
-        {{{Empty, 2432}, {Full, 33}, {Mixed, 1}, {Empty, 32350}},
-         {0x00007fff}};
-    /** Code Point Ranges for Elba
-    [66816, 66855]**/
-    const UnicodeSet elba_Set 
-        {{{Empty, 2088}, {Full, 1}, {Mixed, 1}, {Empty, 32726}},
-         {0x000000ff}};
-    /** Code Point Ranges for Ethi
-    [4608, 4680], [4682, 4685], [4688, 4694], [4696, 4696], [4698, 4701],
-    [4704, 4744], [4746, 4749], [4752, 4784], [4786, 4789], [4792, 4798],
-    [4800, 4800], [4802, 4805], [4808, 4822], [4824, 4880], [4882, 4885],
-    [4888, 4954], [4957, 4988], [4992, 5017], [11648, 11670],
-    [11680, 11686], [11688, 11694], [11696, 11702], [11704, 11710],
-    [11712, 11718], [11720, 11726], [11728, 11734], [11736, 11742],
-    [43777, 43782], [43785, 43790], [43793, 43798], [43808, 43814],
-    [43816, 43822]**/
-    const UnicodeSet ethi_Set 
-        {{{Empty, 144}, {Full, 2}, {Mixed, 1}, {Full, 1}, {Mixed, 3},
-          {Full, 1}, {Mixed, 1}, {Full, 1}, {Mixed, 3}, {Empty, 207},
-          {Mixed, 3}, {Empty, 1001}, {Mixed, 2}, {Empty, 33446}},
-         {0x3d7f3dff, 0xffff3dff, 0x7f3dffff, 0xff7fff3d, 0xff3dffff,
-          0xe7ffffff, 0x1fffffff, 0x03ffffff, 0x007fffff, 0x7f7f7f7f,
-          0x7f7f7f7f, 0x007e7e7e, 0x00007f7f}};
-    /** Code Point Ranges for Geor
-    [4256, 4293], [4295, 4295], [4301, 4301], [4304, 4346], [4348, 4351],
-    [11520, 11557], [11559, 11559], [11565, 11565]**/
-    const UnicodeSet geor_Set 
-        {{{Empty, 133}, {Full, 1}, {Mixed, 2}, {Empty, 224}, {Full, 1},
-          {Mixed, 1}, {Empty, 34454}},
-         {0xffff20bf, 0xf7ffffff, 0x000020bf}};
-    /** Code Point Ranges for Glag
-    [11264, 11310], [11312, 11358], [122880, 122886], [122888, 122904],
-    [122907, 122913], [122915, 122916], [122918, 122922]**/
-    const UnicodeSet glag_Set 
-        {{{Empty, 352}, {Full, 1}, {Mixed, 2}, {Empty, 3485}, {Mixed, 2},
-          {Empty, 30974}},
-         {0xffff7fff, 0x7fffffff, 0xf9ffff7f, 0x000007db}};
-    /** Code Point Ranges for Goth
-    [66352, 66378]**/
-    const UnicodeSet goth_Set 
-        {{{Empty, 2073}, {Mixed, 2}, {Empty, 32741}},
-         {0xffff0000, 0x000007ff}};
-    /** Code Point Ranges for Gran
-    [70400, 70403], [70405, 70412], [70415, 70416], [70419, 70440],
-    [70442, 70448], [70450, 70451], [70453, 70457], [70460, 70468],
-    [70471, 70472], [70475, 70477], [70480, 70480], [70487, 70487],
-    [70493, 70499], [70502, 70508], [70512, 70516]**/
-    const UnicodeSet gran_Set 
-        {{{Empty, 2200}, {Mixed, 4}, {Empty, 32612}},
-         {0xfff99fef, 0xf3edfdff, 0xe081399f, 0x001f1fcf}};
-    /** Code Point Ranges for Grek
-    [880, 883], [885, 887], [890, 893], [895, 895], [900, 900], [902, 902],
-    [904, 906], [908, 908], [910, 929], [931, 993], [1008, 1023],
-    [7462, 7466], [7517, 7521], [7526, 7530], [7615, 7615], [7936, 7957],
-    [7960, 7965], [7968, 8005], [8008, 8013], [8016, 8023], [8025, 8025],
-    [8027, 8027], [8029, 8029], [8031, 8061], [8064, 8116], [8118, 8132],
-    [8134, 8147], [8150, 8155], [8157, 8175], [8178, 8180], [8182, 8190],
-    [8486, 8486], [43877, 43877], [65856, 65934], [65952, 65952],
-    [119296, 119365]**/
-    const UnicodeSet grek_Set 
-        {{{Empty, 27}, {Mixed, 3}, {Full, 1}, {Mixed, 1}, {Empty, 201},
-          {Mixed, 3}, {Empty, 1}, {Mixed, 1}, {Empty, 10}, {Mixed, 1},
-          {Full, 1}, {Mixed, 2}, {Full, 1}, {Mixed, 3}, {Empty, 9},
-          {Mixed, 1}, {Empty, 1105}, {Mixed, 1}, {Empty, 686}, {Full, 2},
-          {Mixed, 2}, {Empty, 1666}, {Full, 2}, {Mixed, 1}, {Empty, 31085}},
-         {0xbcef0000, 0xffffd750, 0xfffffffb, 0xffff0003, 0x000007c0,
-          0xe0000000, 0x000007c3, 0x80000000, 0x3f3fffff, 0xaaff3f3f,
-          0x3fffffff, 0xffdfffff, 0xefcfffdf, 0x7fdcffff, 0x00000040,
-          0x00000020, 0x00007fff, 0x00000001, 0x0000003f}};
-    /** Code Point Ranges for Gujr
-    [2689, 2691], [2693, 2701], [2703, 2705], [2707, 2728], [2730, 2736],
-    [2738, 2739], [2741, 2745], [2748, 2757], [2759, 2761], [2763, 2765],
-    [2768, 2768], [2784, 2787], [2790, 2801], [2809, 2809]**/
-    const UnicodeSet gujr_Set 
-        {{{Empty, 84}, {Mixed, 4}, {Empty, 34728}},
-         {0xfffbbfee, 0xf3edfdff, 0x00013bbf, 0x0203ffcf}};
-    /** Code Point Ranges for Guru
-    [2561, 2563], [2565, 2570], [2575, 2576], [2579, 2600], [2602, 2608],
-    [2610, 2611], [2613, 2614], [2616, 2617], [2620, 2620], [2622, 2626],
-    [2631, 2632], [2635, 2637], [2641, 2641], [2649, 2652], [2654, 2654],
-    [2662, 2677]**/
-    const UnicodeSet guru_Set 
-        {{{Empty, 80}, {Mixed, 4}, {Empty, 34732}},
-         {0xfff987ee, 0xd36dfdff, 0x5e023987, 0x003fffc0}};
-    /** Code Point Ranges for Hang
-    [4352, 4607], [12334, 12335], [12593, 12686], [12800, 12830],
-    [12896, 12926], [43360, 43388], [44032, 55203], [55216, 55238],
-    [55243, 55291], [65440, 65470], [65474, 65479], [65482, 65487],
-    [65490, 65495], [65498, 65500]**/
-    const UnicodeSet hang_Set 
-        {{{Empty, 136}, {Full, 8}, {Empty, 241}, {Mixed, 1}, {Empty, 7},
-          {Mixed, 1}, {Full, 2}, {Mixed, 1}, {Empty, 3}, {Mixed, 1},
-          {Empty, 2}, {Mixed, 1}, {Empty, 951}, {Mixed, 1}, {Empty, 20},
-          {Full, 349}, {Mixed, 3}, {Empty, 317}, {Mixed, 2}, {Empty, 32769}},
-         {0x0000c000, 0xfffe0000, 0x00007fff, 0x7fffffff, 0x7fffffff,
-          0x1fffffff, 0xffff000f, 0xfffff87f, 0x0fffffff, 0x7fffffff,
-          0x1cfcfcfc}};
-    /** Code Point Ranges for Hani
-    [11904, 11929], [11931, 12019], [12032, 12245], [12293, 12293],
-    [12295, 12295], [12321, 12329], [12344, 12347], [13312, 19893],
-    [19968, 40917], [63744, 64109], [64112, 64217], [131072, 173782],
-    [173824, 177972], [177984, 178205], [178208, 183969], [194560, 195101]**/
-    const UnicodeSet hani_Set 
-        {{{Empty, 372}, {Mixed, 1}, {Full, 2}, {Mixed, 1}, {Full, 6},
-          {Mixed, 1}, {Empty, 1}, {Mixed, 2}, {Empty, 30}, {Full, 205},
-          {Mixed, 1}, {Empty, 2}, {Full, 654}, {Mixed, 1}, {Empty, 713},
-          {Full, 11}, {Mixed, 1}, {Full, 2}, {Mixed, 1}, {Empty, 2089},
-          {Full, 1334}, {Mixed, 1}, {Empty, 1}, {Full, 129}, {Mixed, 1},
-          {Full, 6}, {Mixed, 1}, {Full, 180}, {Mixed, 1}, {Empty, 330},
-          {Full, 16}, {Mixed, 1}, {Empty, 28719}},
-         {0xfbffffff, 0x000fffff, 0x003fffff, 0x000000a0, 0x0f0003fe,
-          0x003fffff, 0x003fffff, 0xffff3fff, 0x03ffffff, 0x007fffff,
-          0x001fffff, 0x3fffffff, 0x00000003, 0x3fffffff}};
-    /** Code Point Ranges for Hano
-    [5920, 5940]**/
-    const UnicodeSet hano_Set 
-        {{{Empty, 185}, {Mixed, 1}, {Empty, 34630}},
-         {0x001fffff}};
-    /** Code Point Ranges for Hatr
-    [67808, 67826], [67828, 67829], [67835, 67839]**/
-    const UnicodeSet hatr_Set 
-        {{{Empty, 2119}, {Mixed, 1}, {Empty, 32696}},
-         {0xf837ffff}};
-    /** Code Point Ranges for Hebr
-    [1425, 1479], [1488, 1514], [1520, 1524], [64285, 64310],
-    [64312, 64316], [64318, 64318], [64320, 64321], [64323, 64324],
-    [64326, 64335]**/
-    const UnicodeSet hebr_Set 
-        {{{Empty, 44}, {Mixed, 1}, {Full, 1}, {Mixed, 2}, {Empty, 1960},
-          {Mixed, 3}, {Empty, 32805}},
-         {0xfffe0000, 0xffff00ff, 0x001f07ff, 0xe0000000, 0x5f7fffff,
-          0x0000ffdb}};
-    /** Code Point Ranges for Hira
-    [12353, 12438], [12445, 12447], [110593, 110593], [127488, 127488]**/
-    const UnicodeSet hira_Set 
-        {{{Empty, 386}, {Mixed, 1}, {Full, 1}, {Mixed, 1}, {Empty, 3067},
-          {Mixed, 1}, {Empty, 527}, {Mixed, 1}, {Empty, 30831}},
-         {0xfffffffe, 0xe07fffff, 0x00000002, 0x00000001}};
-    /** Code Point Ranges for Hluw
-    [82944, 83526]**/
-    const UnicodeSet hluw_Set 
-        {{{Empty, 2592}, {Full, 18}, {Mixed, 1}, {Empty, 32205}},
-         {0x0000007f}};
-    /** Code Point Ranges for Hmng
-    [92928, 92997], [93008, 93017], [93019, 93025], [93027, 93047],
-    [93053, 93071]**/
-    const UnicodeSet hmng_Set 
-        {{{Empty, 2904}, {Full, 2}, {Mixed, 3}, {Empty, 31907}},
-         {0xfbff003f, 0xe0fffffb, 0x0000ffff}};
-    /** Code Point Ranges for Hrkt
-    **/
-    const UnicodeSet hrkt_Set 
-        {{{Empty, 34816}},
-         {}};
-    /** Code Point Ranges for Hung
-    [68736, 68786], [68800, 68850], [68858, 68863]**/
-    const UnicodeSet hung_Set 
-        {{{Empty, 2148}, {Full, 1}, {Mixed, 1}, {Full, 1}, {Mixed, 1},
-          {Empty, 32664}},
-         {0x0007ffff, 0xfc07ffff}};
-    /** Code Point Ranges for Ital
-    [66304, 66339]**/
-    const UnicodeSet ital_Set 
-        {{{Empty, 2072}, {Full, 1}, {Mixed, 1}, {Empty, 32742}},
-         {0x0000000f}};
-    /** Code Point Ranges for Java
-    [43392, 43469], [43472, 43481], [43486, 43487]**/
-    const UnicodeSet java_Set 
-        {{{Empty, 1356}, {Full, 2}, {Mixed, 1}, {Empty, 33457}},
-         {0xc3ff3fff}};
-    /** Code Point Ranges for Kali
-    [43264, 43309], [43311, 43311]**/
-    const UnicodeSet kali_Set 
-        {{{Empty, 1352}, {Full, 1}, {Mixed, 1}, {Empty, 33462}},
-         {0x0000bfff}};
-    /** Code Point Ranges for Kana
-    [12449, 12538], [12541, 12543], [12784, 12799], [13008, 13054],
-    [13056, 13143], [65382, 65391], [65393, 65437], [110592, 110592]**/
-    const UnicodeSet kana_Set 
-        {{{Empty, 389}, {Mixed, 1}, {Full, 1}, {Mixed, 1}, {Empty, 7},
-          {Mixed, 1}, {Empty, 6}, {Mixed, 2}, {Full, 2}, {Mixed, 1},
-          {Empty, 1632}, {Mixed, 2}, {Empty, 1411}, {Mixed, 1},
-          {Empty, 31359}},
-         {0xfffffffe, 0xe7ffffff, 0xffff0000, 0xffff0000, 0x7fffffff,
-          0x00ffffff, 0xfffeffc0, 0x3fffffff, 0x00000001}};
-    /** Code Point Ranges for Khar
-    [68096, 68099], [68101, 68102], [68108, 68115], [68117, 68119],
-    [68121, 68147], [68152, 68154], [68159, 68167], [68176, 68184]**/
-    const UnicodeSet khar_Set 
-        {{{Empty, 2128}, {Mixed, 3}, {Empty, 32685}},
-         {0xfeeff06f, 0x870fffff, 0x01ff00ff}};
-    /** Code Point Ranges for Khmr
-    [6016, 6109], [6112, 6121], [6128, 6137], [6624, 6655]**/
-    const UnicodeSet khmr_Set 
-        {{{Empty, 188}, {Full, 2}, {Mixed, 2}, {Empty, 15}, {Full, 1},
-          {Empty, 34608}},
-         {0x3fffffff, 0x03ff03ff}};
-    /** Code Point Ranges for Khoj
-    [70144, 70161], [70163, 70206]**/
-    const UnicodeSet khoj_Set 
-        {{{Empty, 2192}, {Mixed, 2}, {Empty, 32622}},
-         {0xfffbffff, 0x7fffffff}};
-    /** Code Point Ranges for Knda
-    [3200, 3203], [3205, 3212], [3214, 3216], [3218, 3240], [3242, 3251],
-    [3253, 3257], [3260, 3268], [3270, 3272], [3274, 3277], [3285, 3286],
-    [3294, 3294], [3296, 3299], [3302, 3311], [3313, 3314]**/
-    const UnicodeSet knda_Set 
-        {{{Empty, 100}, {Mixed, 4}, {Empty, 34712}},
-         {0xfffddfef, 0xf3effdff, 0x40603ddf, 0x0006ffcf}};
-    /** Code Point Ranges for Kthi
-    [69760, 69825]**/
-    const UnicodeSet kthi_Set 
-        {{{Empty, 2180}, {Full, 2}, {Mixed, 1}, {Empty, 32633}},
-         {0x00000003}};
-    /** Code Point Ranges for Lana
-    [6688, 6750], [6752, 6780], [6783, 6793], [6800, 6809], [6816, 6829]**/
-    const UnicodeSet lana_Set 
-        {{{Empty, 209}, {Full, 1}, {Mixed, 4}, {Empty, 34602}},
-         {0x7fffffff, 0x9fffffff, 0x03ff03ff, 0x00003fff}};
-    /** Code Point Ranges for Laoo
-    [3713, 3714], [3716, 3716], [3719, 3720], [3722, 3722], [3725, 3725],
-    [3732, 3735], [3737, 3743], [3745, 3747], [3749, 3749], [3751, 3751],
-    [3754, 3755], [3757, 3769], [3771, 3773], [3776, 3780], [3782, 3782],
-    [3784, 3789], [3792, 3801], [3804, 3807]**/
-    const UnicodeSet laoo_Set 
-        {{{Empty, 116}, {Mixed, 3}, {Empty, 34697}},
-         {0xfef02596, 0x3bffecae, 0xf3ff3f5f}};
-    /** Code Point Ranges for Latn
-    [65, 90], [97, 122], [170, 170], [186, 186], [192, 214], [216, 246],
-    [248, 696], [736, 740], [7424, 7461], [7468, 7516], [7522, 7525],
-    [7531, 7543], [7545, 7614], [7680, 7935], [8305, 8305], [8319, 8319],
-    [8336, 8348], [8490, 8491], [8498, 8498], [8526, 8526], [8544, 8584],
-    [11360, 11391], [42786, 42887], [42891, 42926], [42928, 42935],
-    [42999, 43007], [43824, 43866], [43868, 43876], [64256, 64262],
-    [65313, 65338], [65345, 65370]**/
-    const UnicodeSet latn_Set 
-        {{{Empty, 2}, {Mixed, 2}, {Empty, 1}, {Mixed, 3}, {Full, 13},
-          {Mixed, 1}, {Empty, 1}, {Mixed, 1}, {Empty, 208}, {Full, 1},
-          {Mixed, 3}, {Full, 1}, {Mixed, 1}, {Empty, 2}, {Full, 8},
-          {Empty, 11}, {Mixed, 2}, {Empty, 4}, {Mixed, 2}, {Full, 1},
-          {Mixed, 1}, {Empty, 86}, {Full, 1}, {Empty, 981}, {Mixed, 1},
-          {Full, 2}, {Mixed, 2}, {Empty, 1}, {Mixed, 1}, {Empty, 25},
-          {Mixed, 3}, {Empty, 636}, {Mixed, 1}, {Empty, 32}, {Mixed, 2},
-          {Empty, 32773}},
-         {0x07fffffe, 0x07fffffe, 0x04000400, 0xff7fffff, 0xff7fffff,
-          0x01ffffff, 0x0000001f, 0xfffff03f, 0x1fffffff, 0xfefff83c,
-          0x7fffffff, 0x80020000, 0x1fff0000, 0x00040c00, 0x00004000,
-          0x000001ff, 0xfffffffc, 0xfffff8ff, 0x00ff7fff, 0xff800000,
-          0xffff0000, 0xf7ffffff, 0x0000001f, 0x0000007f, 0x07fffffe,
-          0x07fffffe}};
-    /** Code Point Ranges for Lepc
-    [7168, 7223], [7227, 7241], [7245, 7247]**/
-    const UnicodeSet lepc_Set 
-        {{{Empty, 224}, {Full, 1}, {Mixed, 2}, {Empty, 34589}},
-         {0xf8ffffff, 0x0000e3ff}};
-    /** Code Point Ranges for Limb
-    [6400, 6430], [6432, 6443], [6448, 6459], [6464, 6464], [6468, 6479]**/
-    const UnicodeSet limb_Set 
-        {{{Empty, 200}, {Mixed, 3}, {Empty, 34613}},
-         {0x7fffffff, 0x0fff0fff, 0x0000fff1}};
-    /** Code Point Ranges for Lina
-    [67072, 67382], [67392, 67413], [67424, 67431]**/
-    const UnicodeSet lina_Set 
-        {{{Empty, 2096}, {Full, 9}, {Mixed, 3}, {Empty, 32708}},
-         {0x007fffff, 0x003fffff, 0x000000ff}};
-    /** Code Point Ranges for Linb
-    [65536, 65547], [65549, 65574], [65576, 65594], [65596, 65597],
-    [65599, 65613], [65616, 65629], [65664, 65786]**/
-    const UnicodeSet linb_Set 
-        {{{Empty, 2048}, {Mixed, 3}, {Empty, 1}, {Full, 3}, {Mixed, 1},
-          {Empty, 32760}},
-         {0xffffefff, 0xb7ffff7f, 0x3fff3fff, 0x07ffffff}};
-    /** Code Point Ranges for Lisu
-    [42192, 42239]**/
-    const UnicodeSet lisu_Set 
-        {{{Empty, 1318}, {Mixed, 1}, {Full, 1}, {Empty, 33496}},
-         {0xffff0000}};
-    /** Code Point Ranges for Lyci
-    [66176, 66204]**/
-    const UnicodeSet lyci_Set 
-        {{{Empty, 2068}, {Mixed, 1}, {Empty, 32747}},
-         {0x1fffffff}};
-    /** Code Point Ranges for Lydi
-    [67872, 67897], [67903, 67903]**/
-    const UnicodeSet lydi_Set 
-        {{{Empty, 2121}, {Mixed, 1}, {Empty, 32694}},
-         {0x83ffffff}};
-    /** Code Point Ranges for Mahj
-    [69968, 70006]**/
-    const UnicodeSet mahj_Set 
-        {{{Empty, 2186}, {Mixed, 2}, {Empty, 32628}},
-         {0xffff0000, 0x007fffff}};
-    /** Code Point Ranges for Mand
-    [2112, 2139], [2142, 2142]**/
-    const UnicodeSet mand_Set 
-        {{{Empty, 66}, {Mixed, 1}, {Empty, 34749}},
-         {0x4fffffff}};
-    /** Code Point Ranges for Mani
-    [68288, 68326], [68331, 68342]**/
-    const UnicodeSet mani_Set 
-        {{{Empty, 2134}, {Full, 1}, {Mixed, 1}, {Empty, 32680}},
-         {0x007ff87f}};
-    /** Code Point Ranges for Marc
-    [72816, 72847], [72850, 72871], [72873, 72886]**/
-    const UnicodeSet marc_Set 
-        {{{Empty, 2275}, {Mixed, 3}, {Empty, 32538}},
-         {0xffff0000, 0xfffcffff, 0x007ffeff}};
-    /** Code Point Ranges for Mend
-    [124928, 125124], [125127, 125142]**/
-    const UnicodeSet mend_Set 
-        {{{Empty, 3904}, {Full, 6}, {Mixed, 1}, {Empty, 30905}},
-         {0x007fff9f}};
-    /** Code Point Ranges for Merc
-    [68000, 68023], [68028, 68047], [68050, 68095]**/
-    const UnicodeSet merc_Set 
-        {{{Empty, 2125}, {Mixed, 2}, {Full, 1}, {Empty, 32688}},
-         {0xf0ffffff, 0xfffcffff}};
-    /** Code Point Ranges for Mero
-    [67968, 67999]**/
-    const UnicodeSet mero_Set 
-        {{{Empty, 2124}, {Full, 1}, {Empty, 32691}},
-         {}};
-    /** Code Point Ranges for Mlym
-    [3329, 3331], [3333, 3340], [3342, 3344], [3346, 3386], [3389, 3396],
-    [3398, 3400], [3402, 3407], [3412, 3427], [3430, 3455]**/
-    const UnicodeSet mlym_Set 
-        {{{Empty, 104}, {Mixed, 4}, {Empty, 34708}},
-         {0xfffddfee, 0xe7ffffff, 0xfff0fddf, 0xffffffcf}};
-    /** Code Point Ranges for Modi
-    [71168, 71236], [71248, 71257]**/
-    const UnicodeSet modi_Set 
-        {{{Empty, 2224}, {Full, 2}, {Mixed, 1}, {Empty, 32589}},
-         {0x03ff001f}};
-    /** Code Point Ranges for Mong
-    [6144, 6145], [6148, 6148], [6150, 6158], [6160, 6169], [6176, 6263],
-    [6272, 6314], [71264, 71276]**/
-    const UnicodeSet mong_Set 
-        {{{Empty, 192}, {Mixed, 1}, {Full, 2}, {Mixed, 1}, {Full, 1},
-          {Mixed, 1}, {Empty, 2029}, {Mixed, 1}, {Empty, 32588}},
-         {0x03ff7fd3, 0x00ffffff, 0x000007ff, 0x00001fff}};
-    /** Code Point Ranges for Mroo
-    [92736, 92766], [92768, 92777], [92782, 92783]**/
-    const UnicodeSet mroo_Set 
-        {{{Empty, 2898}, {Mixed, 2}, {Empty, 31916}},
-         {0x7fffffff, 0x0000c3ff}};
-    /** Code Point Ranges for Mtei
-    [43744, 43766], [43968, 44013], [44016, 44025]**/
-    const UnicodeSet mtei_Set 
-        {{{Empty, 1367}, {Mixed, 1}, {Empty, 6}, {Full, 1}, {Mixed, 1},
-          {Empty, 33440}},
-         {0x007fffff, 0x03ff3fff}};
-    /** Code Point Ranges for Mult
-    [70272, 70278], [70280, 70280], [70282, 70285], [70287, 70301],
-    [70303, 70313]**/
-    const UnicodeSet mult_Set 
-        {{{Empty, 2196}, {Mixed, 2}, {Empty, 32618}},
-         {0xbfffbd7f, 0x000003ff}};
-    /** Code Point Ranges for Mymr
-    [4096, 4255], [43488, 43518], [43616, 43647]**/
-    const UnicodeSet mymr_Set 
-        {{{Empty, 128}, {Full, 5}, {Empty, 1226}, {Mixed, 1}, {Empty, 3},
-          {Full, 1}, {Empty, 33452}},
-         {0x7fffffff}};
-    /** Code Point Ranges for Narb
-    [68224, 68255]**/
-    const UnicodeSet narb_Set 
-        {{{Empty, 2132}, {Full, 1}, {Empty, 32683}},
-         {}};
-    /** Code Point Ranges for Nbat
-    [67712, 67742], [67751, 67759]**/
-    const UnicodeSet nbat_Set 
-        {{{Empty, 2116}, {Mixed, 2}, {Empty, 32698}},
-         {0x7fffffff, 0x0000ff80}};
-    /** Code Point Ranges for Newa
-    [70656, 70745], [70747, 70747], [70749, 70749]**/
-    const UnicodeSet newa_Set 
-        {{{Empty, 2208}, {Full, 2}, {Mixed, 1}, {Empty, 32605}},
-         {0x2bffffff}};
-    /** Code Point Ranges for Nkoo
-    [1984, 2042]**/
-    const UnicodeSet nkoo_Set 
-        {{{Empty, 62}, {Full, 1}, {Mixed, 1}, {Empty, 34752}},
-         {0x07ffffff}};
-    /** Code Point Ranges for Ogam
-    [5760, 5788]**/
-    const UnicodeSet ogam_Set 
-        {{{Empty, 180}, {Mixed, 1}, {Empty, 34635}},
-         {0x1fffffff}};
-    /** Code Point Ranges for Olck
-    [7248, 7295]**/
-    const UnicodeSet olck_Set 
-        {{{Empty, 226}, {Mixed, 1}, {Full, 1}, {Empty, 34588}},
-         {0xffff0000}};
-    /** Code Point Ranges for Orkh
-    [68608, 68680]**/
-    const UnicodeSet orkh_Set 
-        {{{Empty, 2144}, {Full, 2}, {Mixed, 1}, {Empty, 32669}},
-         {0x000001ff}};
-    /** Code Point Ranges for Orya
-    [2817, 2819], [2821, 2828], [2831, 2832], [2835, 2856], [2858, 2864],
-    [2866, 2867], [2869, 2873], [2876, 2884], [2887, 2888], [2891, 2893],
-    [2902, 2903], [2908, 2909], [2911, 2915], [2918, 2935]**/
-    const UnicodeSet orya_Set 
-        {{{Empty, 88}, {Mixed, 4}, {Empty, 34724}},
-         {0xfff99fee, 0xf3edfdff, 0xb0c0399f, 0x00ffffcf}};
-    /** Code Point Ranges for Osge
-    [66736, 66771], [66776, 66811]**/
-    const UnicodeSet osge_Set 
-        {{{Empty, 2085}, {Mixed, 3}, {Empty, 32728}},
-         {0xffff0000, 0xff0fffff, 0x0fffffff}};
-    /** Code Point Ranges for Osma
-    [66688, 66717], [66720, 66729]**/
-    const UnicodeSet osma_Set 
-        {{{Empty, 2084}, {Mixed, 2}, {Empty, 32730}},
-         {0x3fffffff, 0x000003ff}};
-    /** Code Point Ranges for Palm
-    [67680, 67711]**/
-    const UnicodeSet palm_Set 
-        {{{Empty, 2115}, {Full, 1}, {Empty, 32700}},
-         {}};
-    /** Code Point Ranges for Pauc
-    [72384, 72440]**/
-    const UnicodeSet pauc_Set 
-        {{{Empty, 2262}, {Full, 1}, {Mixed, 1}, {Empty, 32552}},
-         {0x01ffffff}};
-    /** Code Point Ranges for Perm
-    [66384, 66426]**/
-    const UnicodeSet perm_Set 
-        {{{Empty, 2074}, {Mixed, 2}, {Empty, 32740}},
-         {0xffff0000, 0x07ffffff}};
-    /** Code Point Ranges for Phag
-    [43072, 43127]**/
-    const UnicodeSet phag_Set 
-        {{{Empty, 1346}, {Full, 1}, {Mixed, 1}, {Empty, 33468}},
-         {0x00ffffff}};
-    /** Code Point Ranges for Phli
-    [68448, 68466], [68472, 68479]**/
-    const UnicodeSet phli_Set 
-        {{{Empty, 2139}, {Mixed, 1}, {Empty, 32676}},
-         {0xff07ffff}};
-    /** Code Point Ranges for Phlp
-    [68480, 68497], [68505, 68508], [68521, 68527]**/
-    const UnicodeSet phlp_Set 
-        {{{Empty, 2140}, {Mixed, 2}, {Empty, 32674}},
-         {0x1e03ffff, 0x0000fe00}};
-    /** Code Point Ranges for Phnx
-    [67840, 67867], [67871, 67871]**/
-    const UnicodeSet phnx_Set 
-        {{{Empty, 2120}, {Mixed, 1}, {Empty, 32695}},
-         {0x8fffffff}};
-    /** Code Point Ranges for Plrd
-    [93952, 94020], [94032, 94078], [94095, 94111]**/
-    const UnicodeSet plrd_Set 
-        {{{Empty, 2936}, {Full, 2}, {Mixed, 3}, {Empty, 31875}},
-         {0xffff001f, 0x7fffffff, 0xffff8000}};
-    /** Code Point Ranges for Prti
-    [68416, 68437], [68440, 68447]**/
-    const UnicodeSet prti_Set 
-        {{{Empty, 2138}, {Mixed, 1}, {Empty, 32677}},
-         {0xff3fffff}};
-    /** Code Point Ranges for Rjng
-    [43312, 43347], [43359, 43359]**/
-    const UnicodeSet rjng_Set 
-        {{{Empty, 1353}, {Mixed, 2}, {Empty, 33461}},
-         {0xffff0000, 0x800fffff}};
-    /** Code Point Ranges for Runr
-    [5792, 5866], [5870, 5880]**/
-    const UnicodeSet runr_Set 
-        {{{Empty, 181}, {Full, 2}, {Mixed, 1}, {Empty, 34632}},
-         {0x01ffc7ff}};
-    /** Code Point Ranges for Samr
-    [2048, 2093], [2096, 2110]**/
-    const UnicodeSet samr_Set 
-        {{{Empty, 64}, {Full, 1}, {Mixed, 1}, {Empty, 34750}},
-         {0x7fff3fff}};
-    /** Code Point Ranges for Sarb
-    [68192, 68223]**/
-    const UnicodeSet sarb_Set 
-        {{{Empty, 2131}, {Full, 1}, {Empty, 32684}},
-         {}};
-    /** Code Point Ranges for Saur
-    [43136, 43205], [43214, 43225]**/
-    const UnicodeSet saur_Set 
-        {{{Empty, 1348}, {Full, 2}, {Mixed, 1}, {Empty, 33465}},
-         {0x03ffc03f}};
-    /** Code Point Ranges for Sgnw
-    [120832, 121483], [121499, 121503], [121505, 121519]**/
-    const UnicodeSet sgnw_Set 
-        {{{Empty, 3776}, {Full, 20}, {Mixed, 2}, {Empty, 31018}},
-         {0xf8000fff, 0x0000fffe}};
-    /** Code Point Ranges for Shaw
-    [66640, 66687]**/
-    const UnicodeSet shaw_Set 
-        {{{Empty, 2082}, {Mixed, 1}, {Full, 1}, {Empty, 32732}},
-         {0xffff0000}};
-    /** Code Point Ranges for Shrd
-    [70016, 70093], [70096, 70111]**/
-    const UnicodeSet shrd_Set 
-        {{{Empty, 2188}, {Full, 2}, {Mixed, 1}, {Empty, 32625}},
-         {0xffff3fff}};
-    /** Code Point Ranges for Sidd
-    [71040, 71093], [71096, 71133]**/
-    const UnicodeSet sidd_Set 
-        {{{Empty, 2220}, {Full, 1}, {Mixed, 2}, {Empty, 32593}},
-         {0xff3fffff, 0x3fffffff}};
-    /** Code Point Ranges for Sind
-    [70320, 70378], [70384, 70393]**/
-    const UnicodeSet sind_Set 
-        {{{Empty, 2197}, {Mixed, 1}, {Full, 1}, {Mixed, 1}, {Empty, 32616}},
-         {0xffff0000, 0x03ff07ff}};
-    /** Code Point Ranges for Sinh
-    [3458, 3459], [3461, 3478], [3482, 3505], [3507, 3515], [3517, 3517],
-    [3520, 3526], [3530, 3530], [3535, 3540], [3542, 3542], [3544, 3551],
-    [3558, 3567], [3570, 3572], [70113, 70132]**/
-    const UnicodeSet sinh_Set 
-        {{{Empty, 108}, {Mixed, 4}, {Empty, 2079}, {Mixed, 1},
-          {Empty, 32624}},
-         {0xfc7fffec, 0x2ffbffff, 0xff5f847f, 0x001cffc0, 0x001ffffe}};
-    /** Code Point Ranges for Sora
-    [69840, 69864], [69872, 69881]**/
-    const UnicodeSet sora_Set 
-        {{{Empty, 2182}, {Mixed, 2}, {Empty, 32632}},
-         {0xffff0000, 0x03ff01ff}};
-    /** Code Point Ranges for Sund
-    [7040, 7103], [7360, 7367]**/
-    const UnicodeSet sund_Set 
-        {{{Empty, 220}, {Full, 2}, {Empty, 8}, {Mixed, 1}, {Empty, 34585}},
-         {0x000000ff}};
-    /** Code Point Ranges for Sylo
-    [43008, 43051]**/
-    const UnicodeSet sylo_Set 
-        {{{Empty, 1344}, {Full, 1}, {Mixed, 1}, {Empty, 33470}},
-         {0x00000fff}};
-    /** Code Point Ranges for Syrc
-    [1792, 1805], [1807, 1866], [1869, 1871]**/
-    const UnicodeSet syrc_Set 
-        {{{Empty, 56}, {Mixed, 1}, {Full, 1}, {Mixed, 1}, {Empty, 34757}},
-         {0xffffbfff, 0x0000e7ff}};
-    /** Code Point Ranges for Tagb
-    [5984, 5996], [5998, 6000], [6002, 6003]**/
-    const UnicodeSet tagb_Set 
-        {{{Empty, 187}, {Mixed, 1}, {Empty, 34628}},
-         {0x000ddfff}};
-    /** Code Point Ranges for Takr
-    [71296, 71351], [71360, 71369]**/
-    const UnicodeSet takr_Set 
-        {{{Empty, 2228}, {Full, 1}, {Mixed, 2}, {Empty, 32585}},
-         {0x00ffffff, 0x000003ff}};
-    /** Code Point Ranges for Tale
-    [6480, 6509], [6512, 6516]**/
-    const UnicodeSet tale_Set 
-        {{{Empty, 202}, {Mixed, 2}, {Empty, 34612}},
-         {0xffff0000, 0x001f3fff}};
-    /** Code Point Ranges for Talu
-    [6528, 6571], [6576, 6601], [6608, 6618], [6622, 6623]**/
-    const UnicodeSet talu_Set 
-        {{{Empty, 204}, {Full, 1}, {Mixed, 2}, {Empty, 34609}},
-         {0xffff0fff, 0xc7ff03ff}};
-    /** Code Point Ranges for Taml
-    [2946, 2947], [2949, 2954], [2958, 2960], [2962, 2965], [2969, 2970],
-    [2972, 2972], [2974, 2975], [2979, 2980], [2984, 2986], [2990, 3001],
-    [3006, 3010], [3014, 3016], [3018, 3021], [3024, 3024], [3031, 3031],
-    [3046, 3066]**/
-    const UnicodeSet taml_Set 
-        {{{Empty, 92}, {Mixed, 4}, {Empty, 34720}},
-         {0xd63dc7ec, 0xc3ffc718, 0x00813dc7, 0x07ffffc0}};
-    /** Code Point Ranges for Tang
-    [94176, 94176], [94208, 100332], [100352, 101106]**/
-    const UnicodeSet tang_Set 
-        {{{Empty, 2943}, {Mixed, 1}, {Full, 191}, {Mixed, 1}, {Full, 23},
-          {Mixed, 1}, {Empty, 31656}},
-         {0x00000001, 0x00001fff, 0x0007ffff}};
-    /** Code Point Ranges for Tavt
-    [43648, 43714], [43739, 43743]**/
-    const UnicodeSet tavt_Set 
-        {{{Empty, 1364}, {Full, 2}, {Mixed, 1}, {Empty, 33449}},
-         {0xf8000007}};
-    /** Code Point Ranges for Telu
-    [3072, 3075], [3077, 3084], [3086, 3088], [3090, 3112], [3114, 3129],
-    [3133, 3140], [3142, 3144], [3146, 3149], [3157, 3158], [3160, 3162],
-    [3168, 3171], [3174, 3183], [3192, 3199]**/
-    const UnicodeSet telu_Set 
-        {{{Empty, 96}, {Mixed, 4}, {Empty, 34716}},
-         {0xfffddfef, 0xe3fffdff, 0x07603ddf, 0xff00ffcf}};
-    /** Code Point Ranges for Tfng
-    [11568, 11623], [11631, 11632], [11647, 11647]**/
-    const UnicodeSet tfng_Set 
-        {{{Empty, 361}, {Mixed, 1}, {Full, 1}, {Mixed, 1}, {Empty, 34452}},
-         {0xffff0000, 0x800180ff}};
-    /** Code Point Ranges for Tglg
-    [5888, 5900], [5902, 5908]**/
-    const UnicodeSet tglg_Set 
-        {{{Empty, 184}, {Mixed, 1}, {Empty, 34631}},
-         {0x001fdfff}};
-    /** Code Point Ranges for Thaa
-    [1920, 1969]**/
-    const UnicodeSet thaa_Set 
-        {{{Empty, 60}, {Full, 1}, {Mixed, 1}, {Empty, 34754}},
-         {0x0003ffff}};
-    /** Code Point Ranges for Thai
-    [3585, 3642], [3648, 3675]**/
-    const UnicodeSet thai_Set 
-        {{{Empty, 112}, {Mixed, 3}, {Empty, 34701}},
-         {0xfffffffe, 0x07ffffff, 0x0fffffff}};
-    /** Code Point Ranges for Tibt
-    [3840, 3911], [3913, 3948], [3953, 3991], [3993, 4028], [4030, 4044],
-    [4046, 4052], [4057, 4058]**/
-    const UnicodeSet tibt_Set 
-        {{{Empty, 120}, {Full, 2}, {Mixed, 5}, {Empty, 34689}},
-         {0xfffffeff, 0xfffe1fff, 0xfeffffff, 0xdfffffff, 0x061fdfff}};
-    /** Code Point Ranges for Tirh
-    [70784, 70855], [70864, 70873]**/
-    const UnicodeSet tirh_Set 
-        {{{Empty, 2212}, {Full, 2}, {Mixed, 1}, {Empty, 32601}},
-         {0x03ff00ff}};
-    /** Code Point Ranges for Ugar
-    [66432, 66461], [66463, 66463]**/
-    const UnicodeSet ugar_Set 
-        {{{Empty, 2076}, {Mixed, 1}, {Empty, 32739}},
-         {0xbfffffff}};
-    /** Code Point Ranges for Vaii
-    [42240, 42539]**/
-    const UnicodeSet vaii_Set 
-        {{{Empty, 1320}, {Full, 9}, {Mixed, 1}, {Empty, 33486}},
-         {0x00000fff}};
-    /** Code Point Ranges for Wara
-    [71840, 71922], [71935, 71935]**/
-    const UnicodeSet wara_Set 
-        {{{Empty, 2245}, {Full, 2}, {Mixed, 1}, {Empty, 32568}},
-         {0x8007ffff}};
-    /** Code Point Ranges for Xpeo
-    [66464, 66499], [66504, 66517]**/
-    const UnicodeSet xpeo_Set 
-        {{{Empty, 2077}, {Full, 1}, {Mixed, 1}, {Empty, 32737}},
-         {0x003fff0f}};
-    /** Code Point Ranges for Xsux
-    [73728, 74649], [74752, 74862], [74864, 74868], [74880, 75075]**/
-    const UnicodeSet xsux_Set 
-        {{{Empty, 2304}, {Full, 28}, {Mixed, 1}, {Empty, 3}, {Full, 3},
-          {Mixed, 1}, {Full, 6}, {Mixed, 1}, {Empty, 32469}},
-         {0x03ffffff, 0x001f7fff, 0x0000000f}};
-    /** Code Point Ranges for Yiii
-    [40960, 42124], [42128, 42182]**/
-    const UnicodeSet yiii_Set 
-        {{{Empty, 1280}, {Full, 36}, {Mixed, 1}, {Full, 1}, {Mixed, 1},
-          {Empty, 33497}},
-         {0xffff1fff, 0x0000007f}};
-    /** Code Point Ranges for Zinh
-    [768, 879], [1157, 1158], [1611, 1621], [1648, 1648], [2385, 2386],
-    [6832, 6846], [7376, 7378], [7380, 7392], [7394, 7400], [7405, 7405],
-    [7412, 7412], [7416, 7417], [7616, 7669], [7675, 7679], [8204, 8205],
-    [8400, 8432], [12330, 12333], [12441, 12442], [65024, 65039],
-    [65056, 65069], [66045, 66045], [66272, 66272], [119143, 119145],
-    [119163, 119170], [119173, 119179], [119210, 119213], [917760, 917999]**/
-    const UnicodeSet zinh_Set 
-        {{{Empty, 24}, {Full, 3}, {Mixed, 1}, {Empty, 8}, {Mixed, 1},
-          {Empty, 13}, {Mixed, 2}, {Empty, 22}, {Mixed, 1}, {Empty, 138},
-          {Mixed, 1}, {Empty, 16}, {Mixed, 2}, {Empty, 6}, {Full, 1},
-          {Mixed, 1}, {Empty, 16}, {Mixed, 1}, {Empty, 5}, {Mixed, 2},
-          {Empty, 121}, {Mixed, 1}, {Empty, 2}, {Mixed, 1}, {Empty, 1643},
-          {Mixed, 2}, {Empty, 29}, {Mixed, 1}, {Empty, 7}, {Mixed, 1},
-          {Empty, 1651}, {Mixed, 3}, {Empty, 24954}, {Full, 7}, {Mixed, 1},
-          {Empty, 6128}},
-         {0x0000ffff, 0x00000060, 0x003ff800, 0x00010000, 0x00060000,
-          0x7fff0000, 0xfff70000, 0x031021fd, 0xf83fffff, 0x00003000,
-          0xffff0000, 0x0001ffff, 0x00003c00, 0x06000000, 0x0000ffff,
-          0x00003fff, 0x20000000, 0x00000001, 0xf8000380, 0x00000fe7,
-          0x00003c00, 0x0000ffff}};
-    /** Code Point Ranges for Zyyy
-    [0, 64], [91, 96], [123, 169], [171, 185], [187, 191], [215, 215],
-    [247, 247], [697, 735], [741, 745], [748, 767], [884, 884], [894, 894],
-    [901, 901], [903, 903], [1417, 1417], [1541, 1541], [1548, 1548],
-    [1563, 1564], [1567, 1567], [1600, 1600], [1757, 1757], [2274, 2274],
-    [2404, 2405], [3647, 3647], [4053, 4056], [4347, 4347], [5867, 5869],
-    [5941, 5942], [6146, 6147], [6149, 6149], [7379, 7379], [7393, 7393],
-    [7401, 7404], [7406, 7411], [7413, 7414], [8192, 8203], [8206, 8292],
-    [8294, 8304], [8308, 8318], [8320, 8334], [8352, 8382], [8448, 8485],
-    [8487, 8489], [8492, 8497], [8499, 8525], [8527, 8543], [8585, 8587],
-    [8592, 9214], [9216, 9254], [9280, 9290], [9312, 10239], [10496, 11123],
-    [11126, 11157], [11160, 11193], [11197, 11208], [11210, 11217],
-    [11244, 11247], [11776, 11844], [12272, 12283], [12288, 12292],
-    [12294, 12294], [12296, 12320], [12336, 12343], [12348, 12351],
-    [12443, 12444], [12448, 12448], [12539, 12540], [12688, 12703],
-    [12736, 12771], [12832, 12895], [12927, 13007], [13144, 13311],
-    [19904, 19967], [42752, 42785], [42888, 42890], [43056, 43065],
-    [43310, 43310], [43471, 43471], [43867, 43867], [64830, 64831],
-    [65040, 65049], [65072, 65106], [65108, 65126], [65128, 65131],
-    [65279, 65279], [65281, 65312], [65339, 65344], [65371, 65381],
-    [65392, 65392], [65438, 65439], [65504, 65510], [65512, 65518],
-    [65529, 65533], [65792, 65794], [65799, 65843], [65847, 65855],
-    [65936, 65947], [66000, 66044], [66273, 66299], [113824, 113827],
-    [118784, 119029], [119040, 119078], [119081, 119142], [119146, 119162],
-    [119171, 119172], [119180, 119209], [119214, 119272], [119552, 119638],
-    [119648, 119665], [119808, 119892], [119894, 119964], [119966, 119967],
-    [119970, 119970], [119973, 119974], [119977, 119980], [119982, 119993],
-    [119995, 119995], [119997, 120003], [120005, 120069], [120071, 120074],
-    [120077, 120084], [120086, 120092], [120094, 120121], [120123, 120126],
-    [120128, 120132], [120134, 120134], [120138, 120144], [120146, 120485],
-    [120488, 120779], [120782, 120831], [126976, 127019], [127024, 127123],
-    [127136, 127150], [127153, 127167], [127169, 127183], [127185, 127221],
-    [127232, 127244], [127248, 127278], [127280, 127339], [127344, 127404],
-    [127462, 127487], [127489, 127490], [127504, 127547], [127552, 127560],
-    [127568, 127569], [127744, 128722], [128736, 128748], [128752, 128758],
-    [128768, 128883], [128896, 128980], [129024, 129035], [129040, 129095],
-    [129104, 129113], [129120, 129159], [129168, 129197], [129296, 129310],
-    [129312, 129319], [129328, 129328], [129331, 129342], [129344, 129355],
-    [129360, 129374], [129408, 129425], [129472, 129472], [917505, 917505],
-    [917536, 917631]**/
-    const UnicodeSet zyyy_Set 
-        {{{Full, 2}, {Mixed, 2}, {Full, 1}, {Mixed, 3}, {Empty, 13},
-          {Mixed, 1}, {Full, 1}, {Mixed, 1}, {Empty, 3}, {Mixed, 2},
-          {Empty, 15}, {Mixed, 1}, {Empty, 3}, {Mixed, 1}, {Empty, 1},
-          {Mixed, 1}, {Empty, 3}, {Mixed, 1}, {Empty, 16}, {Mixed, 1},
-          {Empty, 3}, {Mixed, 1}, {Empty, 37}, {Mixed, 1}, {Empty, 12},
-          {Mixed, 1}, {Empty, 8}, {Mixed, 1}, {Empty, 47}, {Mixed, 1},
-          {Empty, 1}, {Mixed, 1}, {Empty, 6}, {Mixed, 1}, {Empty, 37},
-          {Mixed, 2}, {Empty, 24}, {Mixed, 1}, {Full, 2}, {Mixed, 3},
-          {Empty, 2}, {Full, 1}, {Mixed, 2}, {Empty, 1}, {Mixed, 1},
-          {Full, 18}, {Mixed, 1}, {Full, 1}, {Mixed, 2}, {Full, 29},
-          {Empty, 8}, {Full, 19}, {Mixed, 5}, {Empty, 16}, {Full, 2},
-          {Mixed, 1}, {Empty, 12}, {Mixed, 3}, {Empty, 2}, {Mixed, 2},
-          {Empty, 1}, {Mixed, 1}, {Empty, 4}, {Mixed, 1}, {Empty, 1},
-          {Full, 1}, {Mixed, 1}, {Empty, 1}, {Full, 2}, {Mixed, 1},
-          {Full, 2}, {Mixed, 1}, {Empty, 3}, {Mixed, 1}, {Full, 5},
-          {Empty, 206}, {Full, 2}, {Empty, 712}, {Full, 1}, {Mixed, 1},
-          {Empty, 2}, {Mixed, 1}, {Empty, 4}, {Mixed, 1}, {Empty, 7},
-          {Mixed, 1}, {Empty, 4}, {Mixed, 1}, {Empty, 11}, {Mixed, 1},
-          {Empty, 654}, {Mixed, 1}, {Empty, 6}, {Mixed, 4}, {Empty, 3},
-          {Mixed, 6}, {Empty, 2}, {Mixed, 1}, {Empty, 8}, {Mixed, 2},
-          {Empty, 2}, {Mixed, 1}, {Empty, 1}, {Mixed, 2}, {Empty, 7},
-          {Mixed, 1}, {Empty, 1485}, {Mixed, 1}, {Empty, 154}, {Full, 7},
-          {Mixed, 1}, {Full, 1}, {Mixed, 1}, {Full, 1}, {Mixed, 3},
-          {Full, 1}, {Mixed, 1}, {Empty, 8}, {Full, 2}, {Mixed, 2},
-          {Empty, 4}, {Full, 2}, {Mixed, 1}, {Full, 1}, {Mixed, 3},
-          {Full, 1}, {Mixed, 3}, {Full, 10}, {Mixed, 1}, {Full, 8},
-          {Mixed, 1}, {Full, 1}, {Empty, 192}, {Full, 1}, {Mixed, 1},
-          {Full, 2}, {Mixed, 6}, {Full, 1}, {Mixed, 1}, {Full, 1},
-          {Mixed, 1}, {Empty, 1}, {Mixed, 4}, {Empty, 5}, {Full, 30},
-          {Mixed, 2}, {Full, 3}, {Mixed, 1}, {Full, 2}, {Mixed, 1},
-          {Empty, 1}, {Mixed, 1}, {Full, 1}, {Mixed, 1}, {Full, 1},
-          {Mixed, 2}, {Empty, 2}, {Mixed, 3}, {Empty, 1}, {Mixed, 1},
-          {Empty, 1}, {Mixed, 1}, {Empty, 24625}, {Mixed, 1}, {Full, 3},
-          {Empty, 6140}},
-         {0xf8000001, 0xf8000001, 0xfbfffbff, 0x00800000, 0x00800000,
-          0xfe000000, 0xfffff3e0, 0x40100000, 0x000000a0, 0x00000200,
-          0x98001020, 0x00000001, 0x20000000, 0x00000004, 0x00000030,
-          0x80000000, 0x01e00000, 0x08000000, 0x00003800, 0x00600000,
-          0x0000002c, 0x00080000, 0x006fde02, 0xffffcfff, 0x7ff1ffdf,
-          0x00007fff, 0x7fffffff, 0xfffbf3bf, 0xffffbfff, 0xffff0e00,
-          0x7fffffff, 0x0000007f, 0x000007ff, 0xffcfffff, 0xff3fffff,
-          0xe3ffffff, 0x0003fdff, 0x0000f000, 0x0000001f, 0x0fff0000,
-          0xffffff5f, 0xf0ff0001, 0x18000000, 0x00000001, 0x18000000,
-          0xffff0000, 0x0000000f, 0x80000000, 0x0000ffff, 0xff000000,
-          0x00000003, 0x00000700, 0x03ff0000, 0x00004000, 0x00008000,
-          0x08000000, 0xc0000000, 0x03ff0000, 0xffff0000, 0xfff7ffff,
-          0x00000f7f, 0x80000000, 0xfffffffe, 0xf8000001, 0xf8000001,
-          0x0001003f, 0xc0000000, 0x3e007f7f, 0xffffff87, 0xff8fffff,
-          0x0fff0000, 0xffff0000, 0x1fffffff, 0x0ffffffe, 0x0000000f,
-          0x003fffff, 0xfffffe7f, 0x07fffc7f, 0xfffff018, 0xffffc3ff,
-          0x000001ff, 0x007fffff, 0x0003ffff, 0xffdfffff, 0xdfffffff,
-          0xebffde64, 0xffffffef, 0xdfdfe7bf, 0x7bffffff, 0xfffdfc5f,
-          0xffffff3f, 0xffffcfff, 0xffff0fff, 0x000fffff, 0xfffe7fff,
-          0xfffefffe, 0x003fffff, 0xffff1fff, 0xffff7fff, 0xffff0fff,
-          0x00001fff, 0xffffffc0, 0xffff0006, 0x0fffffff, 0x000301ff,
-          0x0007ffff, 0x007f1fff, 0x000fffff, 0x001fffff, 0xffff0fff,
-          0x03ff00ff, 0xffff00ff, 0x00003fff, 0x7fff0000, 0x7ff900ff,
-          0x7fff0fff, 0x0003ffff, 0x00000001, 0x00000002}};
     /** Code Point Ranges for Zzzz
     [888, 889], [896, 899], [907, 907], [909, 909], [930, 930],
     [1328, 1328], [1367, 1368], [1376, 1376], [1416, 1416], [1419, 1420],
@@ -1266,35 +311,990 @@ namespace UCD {
           0x0000ff00, 0xffffc000, 0x8000ffff, 0x8006ff00, 0x8000f000,
           0xfffc0000, 0xfffffffe, 0xff800000, 0xffe00000, 0xc0000000,
           0xfffffffc, 0xc0000000, 0xfffffffd, 0xffff0000}};
+    /** Code Point Ranges for Zyyy
+    [0, 64], [91, 96], [123, 169], [171, 185], [187, 191], [215, 215],
+    [247, 247], [697, 735], [741, 745], [748, 767], [884, 884], [894, 894],
+    [901, 901], [903, 903], [1417, 1417], [1541, 1541], [1548, 1548],
+    [1563, 1564], [1567, 1567], [1600, 1600], [1757, 1757], [2274, 2274],
+    [2404, 2405], [3647, 3647], [4053, 4056], [4347, 4347], [5867, 5869],
+    [5941, 5942], [6146, 6147], [6149, 6149], [7379, 7379], [7393, 7393],
+    [7401, 7404], [7406, 7411], [7413, 7414], [8192, 8203], [8206, 8292],
+    [8294, 8304], [8308, 8318], [8320, 8334], [8352, 8382], [8448, 8485],
+    [8487, 8489], [8492, 8497], [8499, 8525], [8527, 8543], [8585, 8587],
+    [8592, 9214], [9216, 9254], [9280, 9290], [9312, 10239], [10496, 11123],
+    [11126, 11157], [11160, 11193], [11197, 11208], [11210, 11217],
+    [11244, 11247], [11776, 11844], [12272, 12283], [12288, 12292],
+    [12294, 12294], [12296, 12320], [12336, 12343], [12348, 12351],
+    [12443, 12444], [12448, 12448], [12539, 12540], [12688, 12703],
+    [12736, 12771], [12832, 12895], [12927, 13007], [13144, 13311],
+    [19904, 19967], [42752, 42785], [42888, 42890], [43056, 43065],
+    [43310, 43310], [43471, 43471], [43867, 43867], [64830, 64831],
+    [65040, 65049], [65072, 65106], [65108, 65126], [65128, 65131],
+    [65279, 65279], [65281, 65312], [65339, 65344], [65371, 65381],
+    [65392, 65392], [65438, 65439], [65504, 65510], [65512, 65518],
+    [65529, 65533], [65792, 65794], [65799, 65843], [65847, 65855],
+    [65936, 65947], [66000, 66044], [66273, 66299], [113824, 113827],
+    [118784, 119029], [119040, 119078], [119081, 119142], [119146, 119162],
+    [119171, 119172], [119180, 119209], [119214, 119272], [119552, 119638],
+    [119648, 119665], [119808, 119892], [119894, 119964], [119966, 119967],
+    [119970, 119970], [119973, 119974], [119977, 119980], [119982, 119993],
+    [119995, 119995], [119997, 120003], [120005, 120069], [120071, 120074],
+    [120077, 120084], [120086, 120092], [120094, 120121], [120123, 120126],
+    [120128, 120132], [120134, 120134], [120138, 120144], [120146, 120485],
+    [120488, 120779], [120782, 120831], [126976, 127019], [127024, 127123],
+    [127136, 127150], [127153, 127167], [127169, 127183], [127185, 127221],
+    [127232, 127244], [127248, 127278], [127280, 127339], [127344, 127404],
+    [127462, 127487], [127489, 127490], [127504, 127547], [127552, 127560],
+    [127568, 127569], [127744, 128722], [128736, 128748], [128752, 128758],
+    [128768, 128883], [128896, 128980], [129024, 129035], [129040, 129095],
+    [129104, 129113], [129120, 129159], [129168, 129197], [129296, 129310],
+    [129312, 129319], [129328, 129328], [129331, 129342], [129344, 129355],
+    [129360, 129374], [129408, 129425], [129472, 129472], [917505, 917505],
+    [917536, 917631]**/
+    const UnicodeSet zyyy_Set 
+        {{{Full, 2}, {Mixed, 2}, {Full, 1}, {Mixed, 3}, {Empty, 13},
+          {Mixed, 1}, {Full, 1}, {Mixed, 1}, {Empty, 3}, {Mixed, 2},
+          {Empty, 15}, {Mixed, 1}, {Empty, 3}, {Mixed, 1}, {Empty, 1},
+          {Mixed, 1}, {Empty, 3}, {Mixed, 1}, {Empty, 16}, {Mixed, 1},
+          {Empty, 3}, {Mixed, 1}, {Empty, 37}, {Mixed, 1}, {Empty, 12},
+          {Mixed, 1}, {Empty, 8}, {Mixed, 1}, {Empty, 47}, {Mixed, 1},
+          {Empty, 1}, {Mixed, 1}, {Empty, 6}, {Mixed, 1}, {Empty, 37},
+          {Mixed, 2}, {Empty, 24}, {Mixed, 1}, {Full, 2}, {Mixed, 3},
+          {Empty, 2}, {Full, 1}, {Mixed, 2}, {Empty, 1}, {Mixed, 1},
+          {Full, 18}, {Mixed, 1}, {Full, 1}, {Mixed, 2}, {Full, 29},
+          {Empty, 8}, {Full, 19}, {Mixed, 5}, {Empty, 16}, {Full, 2},
+          {Mixed, 1}, {Empty, 12}, {Mixed, 3}, {Empty, 2}, {Mixed, 2},
+          {Empty, 1}, {Mixed, 1}, {Empty, 4}, {Mixed, 1}, {Empty, 1},
+          {Full, 1}, {Mixed, 1}, {Empty, 1}, {Full, 2}, {Mixed, 1},
+          {Full, 2}, {Mixed, 1}, {Empty, 3}, {Mixed, 1}, {Full, 5},
+          {Empty, 206}, {Full, 2}, {Empty, 712}, {Full, 1}, {Mixed, 1},
+          {Empty, 2}, {Mixed, 1}, {Empty, 4}, {Mixed, 1}, {Empty, 7},
+          {Mixed, 1}, {Empty, 4}, {Mixed, 1}, {Empty, 11}, {Mixed, 1},
+          {Empty, 654}, {Mixed, 1}, {Empty, 6}, {Mixed, 4}, {Empty, 3},
+          {Mixed, 6}, {Empty, 2}, {Mixed, 1}, {Empty, 8}, {Mixed, 2},
+          {Empty, 2}, {Mixed, 1}, {Empty, 1}, {Mixed, 2}, {Empty, 7},
+          {Mixed, 1}, {Empty, 1485}, {Mixed, 1}, {Empty, 154}, {Full, 7},
+          {Mixed, 1}, {Full, 1}, {Mixed, 1}, {Full, 1}, {Mixed, 3},
+          {Full, 1}, {Mixed, 1}, {Empty, 8}, {Full, 2}, {Mixed, 2},
+          {Empty, 4}, {Full, 2}, {Mixed, 1}, {Full, 1}, {Mixed, 3},
+          {Full, 1}, {Mixed, 3}, {Full, 10}, {Mixed, 1}, {Full, 8},
+          {Mixed, 1}, {Full, 1}, {Empty, 192}, {Full, 1}, {Mixed, 1},
+          {Full, 2}, {Mixed, 6}, {Full, 1}, {Mixed, 1}, {Full, 1},
+          {Mixed, 1}, {Empty, 1}, {Mixed, 4}, {Empty, 5}, {Full, 30},
+          {Mixed, 2}, {Full, 3}, {Mixed, 1}, {Full, 2}, {Mixed, 1},
+          {Empty, 1}, {Mixed, 1}, {Full, 1}, {Mixed, 1}, {Full, 1},
+          {Mixed, 2}, {Empty, 2}, {Mixed, 3}, {Empty, 1}, {Mixed, 1},
+          {Empty, 1}, {Mixed, 1}, {Empty, 24625}, {Mixed, 1}, {Full, 3},
+          {Empty, 6140}},
+         {0xf8000001, 0xf8000001, 0xfbfffbff, 0x00800000, 0x00800000,
+          0xfe000000, 0xfffff3e0, 0x40100000, 0x000000a0, 0x00000200,
+          0x98001020, 0x00000001, 0x20000000, 0x00000004, 0x00000030,
+          0x80000000, 0x01e00000, 0x08000000, 0x00003800, 0x00600000,
+          0x0000002c, 0x00080000, 0x006fde02, 0xffffcfff, 0x7ff1ffdf,
+          0x00007fff, 0x7fffffff, 0xfffbf3bf, 0xffffbfff, 0xffff0e00,
+          0x7fffffff, 0x0000007f, 0x000007ff, 0xffcfffff, 0xff3fffff,
+          0xe3ffffff, 0x0003fdff, 0x0000f000, 0x0000001f, 0x0fff0000,
+          0xffffff5f, 0xf0ff0001, 0x18000000, 0x00000001, 0x18000000,
+          0xffff0000, 0x0000000f, 0x80000000, 0x0000ffff, 0xff000000,
+          0x00000003, 0x00000700, 0x03ff0000, 0x00004000, 0x00008000,
+          0x08000000, 0xc0000000, 0x03ff0000, 0xffff0000, 0xfff7ffff,
+          0x00000f7f, 0x80000000, 0xfffffffe, 0xf8000001, 0xf8000001,
+          0x0001003f, 0xc0000000, 0x3e007f7f, 0xffffff87, 0xff8fffff,
+          0x0fff0000, 0xffff0000, 0x1fffffff, 0x0ffffffe, 0x0000000f,
+          0x003fffff, 0xfffffe7f, 0x07fffc7f, 0xfffff018, 0xffffc3ff,
+          0x000001ff, 0x007fffff, 0x0003ffff, 0xffdfffff, 0xdfffffff,
+          0xebffde64, 0xffffffef, 0xdfdfe7bf, 0x7bffffff, 0xfffdfc5f,
+          0xffffff3f, 0xffffcfff, 0xffff0fff, 0x000fffff, 0xfffe7fff,
+          0xfffefffe, 0x003fffff, 0xffff1fff, 0xffff7fff, 0xffff0fff,
+          0x00001fff, 0xffffffc0, 0xffff0006, 0x0fffffff, 0x000301ff,
+          0x0007ffff, 0x007f1fff, 0x000fffff, 0x001fffff, 0xffff0fff,
+          0x03ff00ff, 0xffff00ff, 0x00003fff, 0x7fff0000, 0x7ff900ff,
+          0x7fff0fff, 0x0003ffff, 0x00000001, 0x00000002}};
+    /** Code Point Ranges for Latn
+    [65, 90], [97, 122], [170, 170], [186, 186], [192, 214], [216, 246],
+    [248, 696], [736, 740], [7424, 7461], [7468, 7516], [7522, 7525],
+    [7531, 7543], [7545, 7614], [7680, 7935], [8305, 8305], [8319, 8319],
+    [8336, 8348], [8490, 8491], [8498, 8498], [8526, 8526], [8544, 8584],
+    [11360, 11391], [42786, 42887], [42891, 42926], [42928, 42935],
+    [42999, 43007], [43824, 43866], [43868, 43876], [64256, 64262],
+    [65313, 65338], [65345, 65370]**/
+    const UnicodeSet latn_Set 
+        {{{Empty, 2}, {Mixed, 2}, {Empty, 1}, {Mixed, 3}, {Full, 13},
+          {Mixed, 1}, {Empty, 1}, {Mixed, 1}, {Empty, 208}, {Full, 1},
+          {Mixed, 3}, {Full, 1}, {Mixed, 1}, {Empty, 2}, {Full, 8},
+          {Empty, 11}, {Mixed, 2}, {Empty, 4}, {Mixed, 2}, {Full, 1},
+          {Mixed, 1}, {Empty, 86}, {Full, 1}, {Empty, 981}, {Mixed, 1},
+          {Full, 2}, {Mixed, 2}, {Empty, 1}, {Mixed, 1}, {Empty, 25},
+          {Mixed, 3}, {Empty, 636}, {Mixed, 1}, {Empty, 32}, {Mixed, 2},
+          {Empty, 32773}},
+         {0x07fffffe, 0x07fffffe, 0x04000400, 0xff7fffff, 0xff7fffff,
+          0x01ffffff, 0x0000001f, 0xfffff03f, 0x1fffffff, 0xfefff83c,
+          0x7fffffff, 0x80020000, 0x1fff0000, 0x00040c00, 0x00004000,
+          0x000001ff, 0xfffffffc, 0xfffff8ff, 0x00ff7fff, 0xff800000,
+          0xffff0000, 0xf7ffffff, 0x0000001f, 0x0000007f, 0x07fffffe,
+          0x07fffffe}};
+    /** Code Point Ranges for Grek
+    [880, 883], [885, 887], [890, 893], [895, 895], [900, 900], [902, 902],
+    [904, 906], [908, 908], [910, 929], [931, 993], [1008, 1023],
+    [7462, 7466], [7517, 7521], [7526, 7530], [7615, 7615], [7936, 7957],
+    [7960, 7965], [7968, 8005], [8008, 8013], [8016, 8023], [8025, 8025],
+    [8027, 8027], [8029, 8029], [8031, 8061], [8064, 8116], [8118, 8132],
+    [8134, 8147], [8150, 8155], [8157, 8175], [8178, 8180], [8182, 8190],
+    [8486, 8486], [43877, 43877], [65856, 65934], [65952, 65952],
+    [119296, 119365]**/
+    const UnicodeSet grek_Set 
+        {{{Empty, 27}, {Mixed, 3}, {Full, 1}, {Mixed, 1}, {Empty, 201},
+          {Mixed, 3}, {Empty, 1}, {Mixed, 1}, {Empty, 10}, {Mixed, 1},
+          {Full, 1}, {Mixed, 2}, {Full, 1}, {Mixed, 3}, {Empty, 9},
+          {Mixed, 1}, {Empty, 1105}, {Mixed, 1}, {Empty, 686}, {Full, 2},
+          {Mixed, 2}, {Empty, 1666}, {Full, 2}, {Mixed, 1}, {Empty, 31085}},
+         {0xbcef0000, 0xffffd750, 0xfffffffb, 0xffff0003, 0x000007c0,
+          0xe0000000, 0x000007c3, 0x80000000, 0x3f3fffff, 0xaaff3f3f,
+          0x3fffffff, 0xffdfffff, 0xefcfffdf, 0x7fdcffff, 0x00000040,
+          0x00000020, 0x00007fff, 0x00000001, 0x0000003f}};
+    /** Code Point Ranges for Cyrl
+    [1024, 1156], [1159, 1327], [7296, 7304], [7467, 7467], [7544, 7544],
+    [11744, 11775], [42560, 42655], [65070, 65071]**/
+    const UnicodeSet cyrl_Set 
+        {{{Empty, 32}, {Full, 4}, {Mixed, 1}, {Full, 4}, {Mixed, 1},
+          {Empty, 186}, {Mixed, 1}, {Empty, 4}, {Mixed, 1}, {Empty, 1},
+          {Mixed, 1}, {Empty, 131}, {Full, 1}, {Empty, 962}, {Full, 3},
+          {Empty, 700}, {Mixed, 1}, {Empty, 32782}},
+         {0xffffff9f, 0x0000ffff, 0x000001ff, 0x00000800, 0x01000000,
+          0x0000c000}};
+    /** Code Point Ranges for Armn
+    [1329, 1366], [1369, 1375], [1377, 1415], [1418, 1418], [1421, 1423],
+    [64275, 64279]**/
+    const UnicodeSet armn_Set 
+        {{{Empty, 41}, {Mixed, 4}, {Empty, 1963}, {Mixed, 1},
+          {Empty, 32807}},
+         {0xfffe0000, 0xfe7fffff, 0xfffffffe, 0x0000e4ff, 0x00f80000}};
+    /** Code Point Ranges for Hebr
+    [1425, 1479], [1488, 1514], [1520, 1524], [64285, 64310],
+    [64312, 64316], [64318, 64318], [64320, 64321], [64323, 64324],
+    [64326, 64335]**/
+    const UnicodeSet hebr_Set 
+        {{{Empty, 44}, {Mixed, 1}, {Full, 1}, {Mixed, 2}, {Empty, 1960},
+          {Mixed, 3}, {Empty, 32805}},
+         {0xfffe0000, 0xffff00ff, 0x001f07ff, 0xe0000000, 0x5f7fffff,
+          0x0000ffdb}};
+    /** Code Point Ranges for Arab
+    [1536, 1540], [1542, 1547], [1549, 1562], [1566, 1566], [1568, 1599],
+    [1601, 1610], [1622, 1647], [1649, 1756], [1758, 1791], [1872, 1919],
+    [2208, 2228], [2230, 2237], [2260, 2273], [2275, 2303], [64336, 64449],
+    [64467, 64829], [64848, 64911], [64914, 64967], [65008, 65021],
+    [65136, 65140], [65142, 65276], [69216, 69246], [126464, 126467],
+    [126469, 126495], [126497, 126498], [126500, 126500], [126503, 126503],
+    [126505, 126514], [126516, 126519], [126521, 126521], [126523, 126523],
+    [126530, 126530], [126535, 126535], [126537, 126537], [126539, 126539],
+    [126541, 126543], [126545, 126546], [126548, 126548], [126551, 126551],
+    [126553, 126553], [126555, 126555], [126557, 126557], [126559, 126559],
+    [126561, 126562], [126564, 126564], [126567, 126570], [126572, 126578],
+    [126580, 126583], [126585, 126588], [126590, 126590], [126592, 126601],
+    [126603, 126619], [126625, 126627], [126629, 126633], [126635, 126651],
+    [126704, 126705]**/
+    const UnicodeSet arab_Set 
+        {{{Empty, 48}, {Mixed, 1}, {Full, 1}, {Mixed, 2}, {Full, 2},
+          {Mixed, 1}, {Full, 1}, {Empty, 2}, {Mixed, 1}, {Full, 1},
+          {Empty, 9}, {Mixed, 3}, {Empty, 1938}, {Mixed, 1}, {Full, 3},
+          {Mixed, 1}, {Full, 10}, {Mixed, 2}, {Full, 1}, {Mixed, 1},
+          {Full, 1}, {Mixed, 2}, {Empty, 3}, {Mixed, 1}, {Full, 3},
+          {Mixed, 1}, {Empty, 123}, {Mixed, 1}, {Empty, 1788}, {Mixed, 6},
+          {Empty, 1}, {Mixed, 1}, {Empty, 30856}},
+         {0x47ffefdf, 0xffc007fe, 0xfffeffff, 0xdfffffff, 0xffff0000,
+          0x3fdfffff, 0xfff00000, 0xfffffffb, 0xffff0000, 0xfff80003,
+          0x3fffffff, 0xffff0000, 0xfffcffff, 0x000000ff, 0x3fff0000,
+          0xffdf0000, 0x1fffffff, 0x7fffffff, 0xffffffef, 0x0af7fe96,
+          0xaa96ea84, 0x5ef7f796, 0x0ffffbff, 0x0ffffbee, 0x00030000}};
+    /** Code Point Ranges for Syrc
+    [1792, 1805], [1807, 1866], [1869, 1871]**/
+    const UnicodeSet syrc_Set 
+        {{{Empty, 56}, {Mixed, 1}, {Full, 1}, {Mixed, 1}, {Empty, 34757}},
+         {0xffffbfff, 0x0000e7ff}};
+    /** Code Point Ranges for Thaa
+    [1920, 1969]**/
+    const UnicodeSet thaa_Set 
+        {{{Empty, 60}, {Full, 1}, {Mixed, 1}, {Empty, 34754}},
+         {0x0003ffff}};
+    /** Code Point Ranges for Deva
+    [2304, 2384], [2387, 2403], [2406, 2431], [43232, 43261]**/
+    const UnicodeSet deva_Set 
+        {{{Empty, 72}, {Full, 2}, {Mixed, 2}, {Empty, 1275}, {Mixed, 1},
+          {Empty, 33464}},
+         {0xfff9ffff, 0xffffffcf, 0x3fffffff}};
+    /** Code Point Ranges for Beng
+    [2432, 2435], [2437, 2444], [2447, 2448], [2451, 2472], [2474, 2480],
+    [2482, 2482], [2486, 2489], [2492, 2500], [2503, 2504], [2507, 2510],
+    [2519, 2519], [2524, 2525], [2527, 2531], [2534, 2555]**/
+    const UnicodeSet beng_Set 
+        {{{Empty, 76}, {Mixed, 4}, {Empty, 34736}},
+         {0xfff99fef, 0xf3c5fdff, 0xb080799f, 0x0fffffcf}};
+    /** Code Point Ranges for Guru
+    [2561, 2563], [2565, 2570], [2575, 2576], [2579, 2600], [2602, 2608],
+    [2610, 2611], [2613, 2614], [2616, 2617], [2620, 2620], [2622, 2626],
+    [2631, 2632], [2635, 2637], [2641, 2641], [2649, 2652], [2654, 2654],
+    [2662, 2677]**/
+    const UnicodeSet guru_Set 
+        {{{Empty, 80}, {Mixed, 4}, {Empty, 34732}},
+         {0xfff987ee, 0xd36dfdff, 0x5e023987, 0x003fffc0}};
+    /** Code Point Ranges for Gujr
+    [2689, 2691], [2693, 2701], [2703, 2705], [2707, 2728], [2730, 2736],
+    [2738, 2739], [2741, 2745], [2748, 2757], [2759, 2761], [2763, 2765],
+    [2768, 2768], [2784, 2787], [2790, 2801], [2809, 2809]**/
+    const UnicodeSet gujr_Set 
+        {{{Empty, 84}, {Mixed, 4}, {Empty, 34728}},
+         {0xfffbbfee, 0xf3edfdff, 0x00013bbf, 0x0203ffcf}};
+    /** Code Point Ranges for Orya
+    [2817, 2819], [2821, 2828], [2831, 2832], [2835, 2856], [2858, 2864],
+    [2866, 2867], [2869, 2873], [2876, 2884], [2887, 2888], [2891, 2893],
+    [2902, 2903], [2908, 2909], [2911, 2915], [2918, 2935]**/
+    const UnicodeSet orya_Set 
+        {{{Empty, 88}, {Mixed, 4}, {Empty, 34724}},
+         {0xfff99fee, 0xf3edfdff, 0xb0c0399f, 0x00ffffcf}};
+    /** Code Point Ranges for Taml
+    [2946, 2947], [2949, 2954], [2958, 2960], [2962, 2965], [2969, 2970],
+    [2972, 2972], [2974, 2975], [2979, 2980], [2984, 2986], [2990, 3001],
+    [3006, 3010], [3014, 3016], [3018, 3021], [3024, 3024], [3031, 3031],
+    [3046, 3066]**/
+    const UnicodeSet taml_Set 
+        {{{Empty, 92}, {Mixed, 4}, {Empty, 34720}},
+         {0xd63dc7ec, 0xc3ffc718, 0x00813dc7, 0x07ffffc0}};
+    /** Code Point Ranges for Telu
+    [3072, 3075], [3077, 3084], [3086, 3088], [3090, 3112], [3114, 3129],
+    [3133, 3140], [3142, 3144], [3146, 3149], [3157, 3158], [3160, 3162],
+    [3168, 3171], [3174, 3183], [3192, 3199]**/
+    const UnicodeSet telu_Set 
+        {{{Empty, 96}, {Mixed, 4}, {Empty, 34716}},
+         {0xfffddfef, 0xe3fffdff, 0x07603ddf, 0xff00ffcf}};
+    /** Code Point Ranges for Knda
+    [3200, 3203], [3205, 3212], [3214, 3216], [3218, 3240], [3242, 3251],
+    [3253, 3257], [3260, 3268], [3270, 3272], [3274, 3277], [3285, 3286],
+    [3294, 3294], [3296, 3299], [3302, 3311], [3313, 3314]**/
+    const UnicodeSet knda_Set 
+        {{{Empty, 100}, {Mixed, 4}, {Empty, 34712}},
+         {0xfffddfef, 0xf3effdff, 0x40603ddf, 0x0006ffcf}};
+    /** Code Point Ranges for Mlym
+    [3329, 3331], [3333, 3340], [3342, 3344], [3346, 3386], [3389, 3396],
+    [3398, 3400], [3402, 3407], [3412, 3427], [3430, 3455]**/
+    const UnicodeSet mlym_Set 
+        {{{Empty, 104}, {Mixed, 4}, {Empty, 34708}},
+         {0xfffddfee, 0xe7ffffff, 0xfff0fddf, 0xffffffcf}};
+    /** Code Point Ranges for Sinh
+    [3458, 3459], [3461, 3478], [3482, 3505], [3507, 3515], [3517, 3517],
+    [3520, 3526], [3530, 3530], [3535, 3540], [3542, 3542], [3544, 3551],
+    [3558, 3567], [3570, 3572], [70113, 70132]**/
+    const UnicodeSet sinh_Set 
+        {{{Empty, 108}, {Mixed, 4}, {Empty, 2079}, {Mixed, 1},
+          {Empty, 32624}},
+         {0xfc7fffec, 0x2ffbffff, 0xff5f847f, 0x001cffc0, 0x001ffffe}};
+    /** Code Point Ranges for Thai
+    [3585, 3642], [3648, 3675]**/
+    const UnicodeSet thai_Set 
+        {{{Empty, 112}, {Mixed, 3}, {Empty, 34701}},
+         {0xfffffffe, 0x07ffffff, 0x0fffffff}};
+    /** Code Point Ranges for Laoo
+    [3713, 3714], [3716, 3716], [3719, 3720], [3722, 3722], [3725, 3725],
+    [3732, 3735], [3737, 3743], [3745, 3747], [3749, 3749], [3751, 3751],
+    [3754, 3755], [3757, 3769], [3771, 3773], [3776, 3780], [3782, 3782],
+    [3784, 3789], [3792, 3801], [3804, 3807]**/
+    const UnicodeSet laoo_Set 
+        {{{Empty, 116}, {Mixed, 3}, {Empty, 34697}},
+         {0xfef02596, 0x3bffecae, 0xf3ff3f5f}};
+    /** Code Point Ranges for Tibt
+    [3840, 3911], [3913, 3948], [3953, 3991], [3993, 4028], [4030, 4044],
+    [4046, 4052], [4057, 4058]**/
+    const UnicodeSet tibt_Set 
+        {{{Empty, 120}, {Full, 2}, {Mixed, 5}, {Empty, 34689}},
+         {0xfffffeff, 0xfffe1fff, 0xfeffffff, 0xdfffffff, 0x061fdfff}};
+    /** Code Point Ranges for Mymr
+    [4096, 4255], [43488, 43518], [43616, 43647]**/
+    const UnicodeSet mymr_Set 
+        {{{Empty, 128}, {Full, 5}, {Empty, 1226}, {Mixed, 1}, {Empty, 3},
+          {Full, 1}, {Empty, 33452}},
+         {0x7fffffff}};
+    /** Code Point Ranges for Geor
+    [4256, 4293], [4295, 4295], [4301, 4301], [4304, 4346], [4348, 4351],
+    [11520, 11557], [11559, 11559], [11565, 11565]**/
+    const UnicodeSet geor_Set 
+        {{{Empty, 133}, {Full, 1}, {Mixed, 2}, {Empty, 224}, {Full, 1},
+          {Mixed, 1}, {Empty, 34454}},
+         {0xffff20bf, 0xf7ffffff, 0x000020bf}};
+    /** Code Point Ranges for Hang
+    [4352, 4607], [12334, 12335], [12593, 12686], [12800, 12830],
+    [12896, 12926], [43360, 43388], [44032, 55203], [55216, 55238],
+    [55243, 55291], [65440, 65470], [65474, 65479], [65482, 65487],
+    [65490, 65495], [65498, 65500]**/
+    const UnicodeSet hang_Set 
+        {{{Empty, 136}, {Full, 8}, {Empty, 241}, {Mixed, 1}, {Empty, 7},
+          {Mixed, 1}, {Full, 2}, {Mixed, 1}, {Empty, 3}, {Mixed, 1},
+          {Empty, 2}, {Mixed, 1}, {Empty, 951}, {Mixed, 1}, {Empty, 20},
+          {Full, 349}, {Mixed, 3}, {Empty, 317}, {Mixed, 2}, {Empty, 32769}},
+         {0x0000c000, 0xfffe0000, 0x00007fff, 0x7fffffff, 0x7fffffff,
+          0x1fffffff, 0xffff000f, 0xfffff87f, 0x0fffffff, 0x7fffffff,
+          0x1cfcfcfc}};
+    /** Code Point Ranges for Ethi
+    [4608, 4680], [4682, 4685], [4688, 4694], [4696, 4696], [4698, 4701],
+    [4704, 4744], [4746, 4749], [4752, 4784], [4786, 4789], [4792, 4798],
+    [4800, 4800], [4802, 4805], [4808, 4822], [4824, 4880], [4882, 4885],
+    [4888, 4954], [4957, 4988], [4992, 5017], [11648, 11670],
+    [11680, 11686], [11688, 11694], [11696, 11702], [11704, 11710],
+    [11712, 11718], [11720, 11726], [11728, 11734], [11736, 11742],
+    [43777, 43782], [43785, 43790], [43793, 43798], [43808, 43814],
+    [43816, 43822]**/
+    const UnicodeSet ethi_Set 
+        {{{Empty, 144}, {Full, 2}, {Mixed, 1}, {Full, 1}, {Mixed, 3},
+          {Full, 1}, {Mixed, 1}, {Full, 1}, {Mixed, 3}, {Empty, 207},
+          {Mixed, 3}, {Empty, 1001}, {Mixed, 2}, {Empty, 33446}},
+         {0x3d7f3dff, 0xffff3dff, 0x7f3dffff, 0xff7fff3d, 0xff3dffff,
+          0xe7ffffff, 0x1fffffff, 0x03ffffff, 0x007fffff, 0x7f7f7f7f,
+          0x7f7f7f7f, 0x007e7e7e, 0x00007f7f}};
+    /** Code Point Ranges for Cher
+    [5024, 5109], [5112, 5117], [43888, 43967]**/
+    const UnicodeSet cher_Set 
+        {{{Empty, 157}, {Full, 2}, {Mixed, 1}, {Empty, 1211}, {Mixed, 1},
+          {Full, 2}, {Empty, 33442}},
+         {0x3f3fffff, 0xffff0000}};
+    /** Code Point Ranges for Cans
+    [5120, 5759], [6320, 6389]**/
+    const UnicodeSet cans_Set 
+        {{{Empty, 160}, {Full, 20}, {Empty, 17}, {Mixed, 1}, {Full, 1},
+          {Mixed, 1}, {Empty, 34616}},
+         {0xffff0000, 0x003fffff}};
+    /** Code Point Ranges for Ogam
+    [5760, 5788]**/
+    const UnicodeSet ogam_Set 
+        {{{Empty, 180}, {Mixed, 1}, {Empty, 34635}},
+         {0x1fffffff}};
+    /** Code Point Ranges for Runr
+    [5792, 5866], [5870, 5880]**/
+    const UnicodeSet runr_Set 
+        {{{Empty, 181}, {Full, 2}, {Mixed, 1}, {Empty, 34632}},
+         {0x01ffc7ff}};
+    /** Code Point Ranges for Khmr
+    [6016, 6109], [6112, 6121], [6128, 6137], [6624, 6655]**/
+    const UnicodeSet khmr_Set 
+        {{{Empty, 188}, {Full, 2}, {Mixed, 2}, {Empty, 15}, {Full, 1},
+          {Empty, 34608}},
+         {0x3fffffff, 0x03ff03ff}};
+    /** Code Point Ranges for Mong
+    [6144, 6145], [6148, 6148], [6150, 6158], [6160, 6169], [6176, 6263],
+    [6272, 6314], [71264, 71276]**/
+    const UnicodeSet mong_Set 
+        {{{Empty, 192}, {Mixed, 1}, {Full, 2}, {Mixed, 1}, {Full, 1},
+          {Mixed, 1}, {Empty, 2029}, {Mixed, 1}, {Empty, 32588}},
+         {0x03ff7fd3, 0x00ffffff, 0x000007ff, 0x00001fff}};
+    /** Code Point Ranges for Hira
+    [12353, 12438], [12445, 12447], [110593, 110593], [127488, 127488]**/
+    const UnicodeSet hira_Set 
+        {{{Empty, 386}, {Mixed, 1}, {Full, 1}, {Mixed, 1}, {Empty, 3067},
+          {Mixed, 1}, {Empty, 527}, {Mixed, 1}, {Empty, 30831}},
+         {0xfffffffe, 0xe07fffff, 0x00000002, 0x00000001}};
+    /** Code Point Ranges for Kana
+    [12449, 12538], [12541, 12543], [12784, 12799], [13008, 13054],
+    [13056, 13143], [65382, 65391], [65393, 65437], [110592, 110592]**/
+    const UnicodeSet kana_Set 
+        {{{Empty, 389}, {Mixed, 1}, {Full, 1}, {Mixed, 1}, {Empty, 7},
+          {Mixed, 1}, {Empty, 6}, {Mixed, 2}, {Full, 2}, {Mixed, 1},
+          {Empty, 1632}, {Mixed, 2}, {Empty, 1411}, {Mixed, 1},
+          {Empty, 31359}},
+         {0xfffffffe, 0xe7ffffff, 0xffff0000, 0xffff0000, 0x7fffffff,
+          0x00ffffff, 0xfffeffc0, 0x3fffffff, 0x00000001}};
+    /** Code Point Ranges for Bopo
+    [746, 747], [12549, 12589], [12704, 12730]**/
+    const UnicodeSet bopo_Set 
+        {{{Empty, 23}, {Mixed, 1}, {Empty, 368}, {Mixed, 2}, {Empty, 3},
+          {Mixed, 1}, {Empty, 34418}},
+         {0x00000c00, 0xffffffe0, 0x00003fff, 0x07ffffff}};
+    /** Code Point Ranges for Hani
+    [11904, 11929], [11931, 12019], [12032, 12245], [12293, 12293],
+    [12295, 12295], [12321, 12329], [12344, 12347], [13312, 19893],
+    [19968, 40917], [63744, 64109], [64112, 64217], [131072, 173782],
+    [173824, 177972], [177984, 178205], [178208, 183969], [194560, 195101]**/
+    const UnicodeSet hani_Set 
+        {{{Empty, 372}, {Mixed, 1}, {Full, 2}, {Mixed, 1}, {Full, 6},
+          {Mixed, 1}, {Empty, 1}, {Mixed, 2}, {Empty, 30}, {Full, 205},
+          {Mixed, 1}, {Empty, 2}, {Full, 654}, {Mixed, 1}, {Empty, 713},
+          {Full, 11}, {Mixed, 1}, {Full, 2}, {Mixed, 1}, {Empty, 2089},
+          {Full, 1334}, {Mixed, 1}, {Empty, 1}, {Full, 129}, {Mixed, 1},
+          {Full, 6}, {Mixed, 1}, {Full, 180}, {Mixed, 1}, {Empty, 330},
+          {Full, 16}, {Mixed, 1}, {Empty, 28719}},
+         {0xfbffffff, 0x000fffff, 0x003fffff, 0x000000a0, 0x0f0003fe,
+          0x003fffff, 0x003fffff, 0xffff3fff, 0x03ffffff, 0x007fffff,
+          0x001fffff, 0x3fffffff, 0x00000003, 0x3fffffff}};
+    /** Code Point Ranges for Yiii
+    [40960, 42124], [42128, 42182]**/
+    const UnicodeSet yiii_Set 
+        {{{Empty, 1280}, {Full, 36}, {Mixed, 1}, {Full, 1}, {Mixed, 1},
+          {Empty, 33497}},
+         {0xffff1fff, 0x0000007f}};
+    /** Code Point Ranges for Ital
+    [66304, 66339]**/
+    const UnicodeSet ital_Set 
+        {{{Empty, 2072}, {Full, 1}, {Mixed, 1}, {Empty, 32742}},
+         {0x0000000f}};
+    /** Code Point Ranges for Goth
+    [66352, 66378]**/
+    const UnicodeSet goth_Set 
+        {{{Empty, 2073}, {Mixed, 2}, {Empty, 32741}},
+         {0xffff0000, 0x000007ff}};
+    /** Code Point Ranges for Dsrt
+    [66560, 66639]**/
+    const UnicodeSet dsrt_Set 
+        {{{Empty, 2080}, {Full, 2}, {Mixed, 1}, {Empty, 32733}},
+         {0x0000ffff}};
+    /** Code Point Ranges for Zinh
+    [768, 879], [1157, 1158], [1611, 1621], [1648, 1648], [2385, 2386],
+    [6832, 6846], [7376, 7378], [7380, 7392], [7394, 7400], [7405, 7405],
+    [7412, 7412], [7416, 7417], [7616, 7669], [7675, 7679], [8204, 8205],
+    [8400, 8432], [12330, 12333], [12441, 12442], [65024, 65039],
+    [65056, 65069], [66045, 66045], [66272, 66272], [119143, 119145],
+    [119163, 119170], [119173, 119179], [119210, 119213], [917760, 917999]**/
+    const UnicodeSet zinh_Set 
+        {{{Empty, 24}, {Full, 3}, {Mixed, 1}, {Empty, 8}, {Mixed, 1},
+          {Empty, 13}, {Mixed, 2}, {Empty, 22}, {Mixed, 1}, {Empty, 138},
+          {Mixed, 1}, {Empty, 16}, {Mixed, 2}, {Empty, 6}, {Full, 1},
+          {Mixed, 1}, {Empty, 16}, {Mixed, 1}, {Empty, 5}, {Mixed, 2},
+          {Empty, 121}, {Mixed, 1}, {Empty, 2}, {Mixed, 1}, {Empty, 1643},
+          {Mixed, 2}, {Empty, 29}, {Mixed, 1}, {Empty, 7}, {Mixed, 1},
+          {Empty, 1651}, {Mixed, 3}, {Empty, 24954}, {Full, 7}, {Mixed, 1},
+          {Empty, 6128}},
+         {0x0000ffff, 0x00000060, 0x003ff800, 0x00010000, 0x00060000,
+          0x7fff0000, 0xfff70000, 0x031021fd, 0xf83fffff, 0x00003000,
+          0xffff0000, 0x0001ffff, 0x00003c00, 0x06000000, 0x0000ffff,
+          0x00003fff, 0x20000000, 0x00000001, 0xf8000380, 0x00000fe7,
+          0x00003c00, 0x0000ffff}};
+    /** Code Point Ranges for Tglg
+    [5888, 5900], [5902, 5908]**/
+    const UnicodeSet tglg_Set 
+        {{{Empty, 184}, {Mixed, 1}, {Empty, 34631}},
+         {0x001fdfff}};
+    /** Code Point Ranges for Hano
+    [5920, 5940]**/
+    const UnicodeSet hano_Set 
+        {{{Empty, 185}, {Mixed, 1}, {Empty, 34630}},
+         {0x001fffff}};
+    /** Code Point Ranges for Buhd
+    [5952, 5971]**/
+    const UnicodeSet buhd_Set 
+        {{{Empty, 186}, {Mixed, 1}, {Empty, 34629}},
+         {0x000fffff}};
+    /** Code Point Ranges for Tagb
+    [5984, 5996], [5998, 6000], [6002, 6003]**/
+    const UnicodeSet tagb_Set 
+        {{{Empty, 187}, {Mixed, 1}, {Empty, 34628}},
+         {0x000ddfff}};
+    /** Code Point Ranges for Limb
+    [6400, 6430], [6432, 6443], [6448, 6459], [6464, 6464], [6468, 6479]**/
+    const UnicodeSet limb_Set 
+        {{{Empty, 200}, {Mixed, 3}, {Empty, 34613}},
+         {0x7fffffff, 0x0fff0fff, 0x0000fff1}};
+    /** Code Point Ranges for Tale
+    [6480, 6509], [6512, 6516]**/
+    const UnicodeSet tale_Set 
+        {{{Empty, 202}, {Mixed, 2}, {Empty, 34612}},
+         {0xffff0000, 0x001f3fff}};
+    /** Code Point Ranges for Linb
+    [65536, 65547], [65549, 65574], [65576, 65594], [65596, 65597],
+    [65599, 65613], [65616, 65629], [65664, 65786]**/
+    const UnicodeSet linb_Set 
+        {{{Empty, 2048}, {Mixed, 3}, {Empty, 1}, {Full, 3}, {Mixed, 1},
+          {Empty, 32760}},
+         {0xffffefff, 0xb7ffff7f, 0x3fff3fff, 0x07ffffff}};
+    /** Code Point Ranges for Ugar
+    [66432, 66461], [66463, 66463]**/
+    const UnicodeSet ugar_Set 
+        {{{Empty, 2076}, {Mixed, 1}, {Empty, 32739}},
+         {0xbfffffff}};
+    /** Code Point Ranges for Shaw
+    [66640, 66687]**/
+    const UnicodeSet shaw_Set 
+        {{{Empty, 2082}, {Mixed, 1}, {Full, 1}, {Empty, 32732}},
+         {0xffff0000}};
+    /** Code Point Ranges for Osma
+    [66688, 66717], [66720, 66729]**/
+    const UnicodeSet osma_Set 
+        {{{Empty, 2084}, {Mixed, 2}, {Empty, 32730}},
+         {0x3fffffff, 0x000003ff}};
+    /** Code Point Ranges for Cprt
+    [67584, 67589], [67592, 67592], [67594, 67637], [67639, 67640],
+    [67644, 67644], [67647, 67647]**/
+    const UnicodeSet cprt_Set 
+        {{{Empty, 2112}, {Mixed, 2}, {Empty, 32702}},
+         {0xfffffd3f, 0x91bfffff}};
+    /** Code Point Ranges for Brai
+    [10240, 10495]**/
+    const UnicodeSet brai_Set 
+        {{{Empty, 320}, {Full, 8}, {Empty, 34488}},
+         {}};
+    /** Code Point Ranges for Bugi
+    [6656, 6683], [6686, 6687]**/
+    const UnicodeSet bugi_Set 
+        {{{Empty, 208}, {Mixed, 1}, {Empty, 34607}},
+         {0xcfffffff}};
+    /** Code Point Ranges for Copt
+    [994, 1007], [11392, 11507], [11513, 11519]**/
+    const UnicodeSet copt_Set 
+        {{{Empty, 31}, {Mixed, 1}, {Empty, 324}, {Full, 3}, {Mixed, 1},
+          {Empty, 34456}},
+         {0x0000fffc, 0xfe0fffff}};
+    /** Code Point Ranges for Talu
+    [6528, 6571], [6576, 6601], [6608, 6618], [6622, 6623]**/
+    const UnicodeSet talu_Set 
+        {{{Empty, 204}, {Full, 1}, {Mixed, 2}, {Empty, 34609}},
+         {0xffff0fff, 0xc7ff03ff}};
+    /** Code Point Ranges for Glag
+    [11264, 11310], [11312, 11358], [122880, 122886], [122888, 122904],
+    [122907, 122913], [122915, 122916], [122918, 122922]**/
+    const UnicodeSet glag_Set 
+        {{{Empty, 352}, {Full, 1}, {Mixed, 2}, {Empty, 3485}, {Mixed, 2},
+          {Empty, 30974}},
+         {0xffff7fff, 0x7fffffff, 0xf9ffff7f, 0x000007db}};
+    /** Code Point Ranges for Tfng
+    [11568, 11623], [11631, 11632], [11647, 11647]**/
+    const UnicodeSet tfng_Set 
+        {{{Empty, 361}, {Mixed, 1}, {Full, 1}, {Mixed, 1}, {Empty, 34452}},
+         {0xffff0000, 0x800180ff}};
+    /** Code Point Ranges for Sylo
+    [43008, 43051]**/
+    const UnicodeSet sylo_Set 
+        {{{Empty, 1344}, {Full, 1}, {Mixed, 1}, {Empty, 33470}},
+         {0x00000fff}};
+    /** Code Point Ranges for Xpeo
+    [66464, 66499], [66504, 66517]**/
+    const UnicodeSet xpeo_Set 
+        {{{Empty, 2077}, {Full, 1}, {Mixed, 1}, {Empty, 32737}},
+         {0x003fff0f}};
+    /** Code Point Ranges for Khar
+    [68096, 68099], [68101, 68102], [68108, 68115], [68117, 68119],
+    [68121, 68147], [68152, 68154], [68159, 68167], [68176, 68184]**/
+    const UnicodeSet khar_Set 
+        {{{Empty, 2128}, {Mixed, 3}, {Empty, 32685}},
+         {0xfeeff06f, 0x870fffff, 0x01ff00ff}};
+    /** Code Point Ranges for Bali
+    [6912, 6987], [6992, 7036]**/
+    const UnicodeSet bali_Set 
+        {{{Empty, 216}, {Full, 2}, {Mixed, 2}, {Empty, 34596}},
+         {0xffff0fff, 0x1fffffff}};
+    /** Code Point Ranges for Xsux
+    [73728, 74649], [74752, 74862], [74864, 74868], [74880, 75075]**/
+    const UnicodeSet xsux_Set 
+        {{{Empty, 2304}, {Full, 28}, {Mixed, 1}, {Empty, 3}, {Full, 3},
+          {Mixed, 1}, {Full, 6}, {Mixed, 1}, {Empty, 32469}},
+         {0x03ffffff, 0x001f7fff, 0x0000000f}};
+    /** Code Point Ranges for Phnx
+    [67840, 67867], [67871, 67871]**/
+    const UnicodeSet phnx_Set 
+        {{{Empty, 2120}, {Mixed, 1}, {Empty, 32695}},
+         {0x8fffffff}};
+    /** Code Point Ranges for Phag
+    [43072, 43127]**/
+    const UnicodeSet phag_Set 
+        {{{Empty, 1346}, {Full, 1}, {Mixed, 1}, {Empty, 33468}},
+         {0x00ffffff}};
+    /** Code Point Ranges for Nkoo
+    [1984, 2042]**/
+    const UnicodeSet nkoo_Set 
+        {{{Empty, 62}, {Full, 1}, {Mixed, 1}, {Empty, 34752}},
+         {0x07ffffff}};
+    /** Code Point Ranges for Sund
+    [7040, 7103], [7360, 7367]**/
+    const UnicodeSet sund_Set 
+        {{{Empty, 220}, {Full, 2}, {Empty, 8}, {Mixed, 1}, {Empty, 34585}},
+         {0x000000ff}};
+    /** Code Point Ranges for Lepc
+    [7168, 7223], [7227, 7241], [7245, 7247]**/
+    const UnicodeSet lepc_Set 
+        {{{Empty, 224}, {Full, 1}, {Mixed, 2}, {Empty, 34589}},
+         {0xf8ffffff, 0x0000e3ff}};
+    /** Code Point Ranges for Olck
+    [7248, 7295]**/
+    const UnicodeSet olck_Set 
+        {{{Empty, 226}, {Mixed, 1}, {Full, 1}, {Empty, 34588}},
+         {0xffff0000}};
+    /** Code Point Ranges for Vaii
+    [42240, 42539]**/
+    const UnicodeSet vaii_Set 
+        {{{Empty, 1320}, {Full, 9}, {Mixed, 1}, {Empty, 33486}},
+         {0x00000fff}};
+    /** Code Point Ranges for Saur
+    [43136, 43205], [43214, 43225]**/
+    const UnicodeSet saur_Set 
+        {{{Empty, 1348}, {Full, 2}, {Mixed, 1}, {Empty, 33465}},
+         {0x03ffc03f}};
+    /** Code Point Ranges for Kali
+    [43264, 43309], [43311, 43311]**/
+    const UnicodeSet kali_Set 
+        {{{Empty, 1352}, {Full, 1}, {Mixed, 1}, {Empty, 33462}},
+         {0x0000bfff}};
+    /** Code Point Ranges for Rjng
+    [43312, 43347], [43359, 43359]**/
+    const UnicodeSet rjng_Set 
+        {{{Empty, 1353}, {Mixed, 2}, {Empty, 33461}},
+         {0xffff0000, 0x800fffff}};
+    /** Code Point Ranges for Lyci
+    [66176, 66204]**/
+    const UnicodeSet lyci_Set 
+        {{{Empty, 2068}, {Mixed, 1}, {Empty, 32747}},
+         {0x1fffffff}};
+    /** Code Point Ranges for Cari
+    [66208, 66256]**/
+    const UnicodeSet cari_Set 
+        {{{Empty, 2069}, {Full, 1}, {Mixed, 1}, {Empty, 32745}},
+         {0x0001ffff}};
+    /** Code Point Ranges for Lydi
+    [67872, 67897], [67903, 67903]**/
+    const UnicodeSet lydi_Set 
+        {{{Empty, 2121}, {Mixed, 1}, {Empty, 32694}},
+         {0x83ffffff}};
+    /** Code Point Ranges for Cham
+    [43520, 43574], [43584, 43597], [43600, 43609], [43612, 43615]**/
+    const UnicodeSet cham_Set 
+        {{{Empty, 1360}, {Full, 1}, {Mixed, 2}, {Empty, 33453}},
+         {0x007fffff, 0xf3ff3fff}};
+    /** Code Point Ranges for Lana
+    [6688, 6750], [6752, 6780], [6783, 6793], [6800, 6809], [6816, 6829]**/
+    const UnicodeSet lana_Set 
+        {{{Empty, 209}, {Full, 1}, {Mixed, 4}, {Empty, 34602}},
+         {0x7fffffff, 0x9fffffff, 0x03ff03ff, 0x00003fff}};
+    /** Code Point Ranges for Tavt
+    [43648, 43714], [43739, 43743]**/
+    const UnicodeSet tavt_Set 
+        {{{Empty, 1364}, {Full, 2}, {Mixed, 1}, {Empty, 33449}},
+         {0xf8000007}};
+    /** Code Point Ranges for Avst
+    [68352, 68405], [68409, 68415]**/
+    const UnicodeSet avst_Set 
+        {{{Empty, 2136}, {Full, 1}, {Mixed, 1}, {Empty, 32678}},
+         {0xfe3fffff}};
+    /** Code Point Ranges for Egyp
+    [77824, 78894]**/
+    const UnicodeSet egyp_Set 
+        {{{Empty, 2432}, {Full, 33}, {Mixed, 1}, {Empty, 32350}},
+         {0x00007fff}};
+    /** Code Point Ranges for Samr
+    [2048, 2093], [2096, 2110]**/
+    const UnicodeSet samr_Set 
+        {{{Empty, 64}, {Full, 1}, {Mixed, 1}, {Empty, 34750}},
+         {0x7fff3fff}};
+    /** Code Point Ranges for Lisu
+    [42192, 42239]**/
+    const UnicodeSet lisu_Set 
+        {{{Empty, 1318}, {Mixed, 1}, {Full, 1}, {Empty, 33496}},
+         {0xffff0000}};
+    /** Code Point Ranges for Bamu
+    [42656, 42743], [92160, 92728]**/
+    const UnicodeSet bamu_Set 
+        {{{Empty, 1333}, {Full, 2}, {Mixed, 1}, {Empty, 1544}, {Full, 17},
+          {Mixed, 1}, {Empty, 31918}},
+         {0x00ffffff, 0x01ffffff}};
+    /** Code Point Ranges for Java
+    [43392, 43469], [43472, 43481], [43486, 43487]**/
+    const UnicodeSet java_Set 
+        {{{Empty, 1356}, {Full, 2}, {Mixed, 1}, {Empty, 33457}},
+         {0xc3ff3fff}};
+    /** Code Point Ranges for Mtei
+    [43744, 43766], [43968, 44013], [44016, 44025]**/
+    const UnicodeSet mtei_Set 
+        {{{Empty, 1367}, {Mixed, 1}, {Empty, 6}, {Full, 1}, {Mixed, 1},
+          {Empty, 33440}},
+         {0x007fffff, 0x03ff3fff}};
+    /** Code Point Ranges for Armi
+    [67648, 67669], [67671, 67679]**/
+    const UnicodeSet armi_Set 
+        {{{Empty, 2114}, {Mixed, 1}, {Empty, 32701}},
+         {0xffbfffff}};
+    /** Code Point Ranges for Sarb
+    [68192, 68223]**/
+    const UnicodeSet sarb_Set 
+        {{{Empty, 2131}, {Full, 1}, {Empty, 32684}},
+         {}};
+    /** Code Point Ranges for Prti
+    [68416, 68437], [68440, 68447]**/
+    const UnicodeSet prti_Set 
+        {{{Empty, 2138}, {Mixed, 1}, {Empty, 32677}},
+         {0xff3fffff}};
+    /** Code Point Ranges for Phli
+    [68448, 68466], [68472, 68479]**/
+    const UnicodeSet phli_Set 
+        {{{Empty, 2139}, {Mixed, 1}, {Empty, 32676}},
+         {0xff07ffff}};
+    /** Code Point Ranges for Orkh
+    [68608, 68680]**/
+    const UnicodeSet orkh_Set 
+        {{{Empty, 2144}, {Full, 2}, {Mixed, 1}, {Empty, 32669}},
+         {0x000001ff}};
+    /** Code Point Ranges for Kthi
+    [69760, 69825]**/
+    const UnicodeSet kthi_Set 
+        {{{Empty, 2180}, {Full, 2}, {Mixed, 1}, {Empty, 32633}},
+         {0x00000003}};
+    /** Code Point Ranges for Batk
+    [7104, 7155], [7164, 7167]**/
+    const UnicodeSet batk_Set 
+        {{{Empty, 222}, {Full, 1}, {Mixed, 1}, {Empty, 34592}},
+         {0xf00fffff}};
+    /** Code Point Ranges for Brah
+    [69632, 69709], [69714, 69743], [69759, 69759]**/
+    const UnicodeSet brah_Set 
+        {{{Empty, 2176}, {Full, 2}, {Mixed, 2}, {Empty, 32636}},
+         {0xfffc3fff, 0x8000ffff}};
+    /** Code Point Ranges for Mand
+    [2112, 2139], [2142, 2142]**/
+    const UnicodeSet mand_Set 
+        {{{Empty, 66}, {Mixed, 1}, {Empty, 34749}},
+         {0x4fffffff}};
+    /** Code Point Ranges for Cakm
+    [69888, 69940], [69942, 69955]**/
+    const UnicodeSet cakm_Set 
+        {{{Empty, 2184}, {Full, 1}, {Mixed, 2}, {Empty, 32629}},
+         {0xffdfffff, 0x0000000f}};
+    /** Code Point Ranges for Merc
+    [68000, 68023], [68028, 68047], [68050, 68095]**/
+    const UnicodeSet merc_Set 
+        {{{Empty, 2125}, {Mixed, 2}, {Full, 1}, {Empty, 32688}},
+         {0xf0ffffff, 0xfffcffff}};
+    /** Code Point Ranges for Mero
+    [67968, 67999]**/
+    const UnicodeSet mero_Set 
+        {{{Empty, 2124}, {Full, 1}, {Empty, 32691}},
+         {}};
+    /** Code Point Ranges for Plrd
+    [93952, 94020], [94032, 94078], [94095, 94111]**/
+    const UnicodeSet plrd_Set 
+        {{{Empty, 2936}, {Full, 2}, {Mixed, 3}, {Empty, 31875}},
+         {0xffff001f, 0x7fffffff, 0xffff8000}};
+    /** Code Point Ranges for Shrd
+    [70016, 70093], [70096, 70111]**/
+    const UnicodeSet shrd_Set 
+        {{{Empty, 2188}, {Full, 2}, {Mixed, 1}, {Empty, 32625}},
+         {0xffff3fff}};
+    /** Code Point Ranges for Sora
+    [69840, 69864], [69872, 69881]**/
+    const UnicodeSet sora_Set 
+        {{{Empty, 2182}, {Mixed, 2}, {Empty, 32632}},
+         {0xffff0000, 0x03ff01ff}};
+    /** Code Point Ranges for Takr
+    [71296, 71351], [71360, 71369]**/
+    const UnicodeSet takr_Set 
+        {{{Empty, 2228}, {Full, 1}, {Mixed, 2}, {Empty, 32585}},
+         {0x00ffffff, 0x000003ff}};
+    /** Code Point Ranges for Aghb
+    [66864, 66915], [66927, 66927]**/
+    const UnicodeSet aghb_Set 
+        {{{Empty, 2089}, {Mixed, 1}, {Full, 1}, {Mixed, 1}, {Empty, 32724}},
+         {0xffff0000, 0x0000800f}};
+    /** Code Point Ranges for Bass
+    [92880, 92909], [92912, 92917]**/
+    const UnicodeSet bass_Set 
+        {{{Empty, 2902}, {Mixed, 2}, {Empty, 31912}},
+         {0xffff0000, 0x003f3fff}};
+    /** Code Point Ranges for Dupl
+    [113664, 113770], [113776, 113788], [113792, 113800], [113808, 113817],
+    [113820, 113823]**/
+    const UnicodeSet dupl_Set 
+        {{{Empty, 3552}, {Full, 3}, {Mixed, 2}, {Empty, 31259}},
+         {0x1fff07ff, 0xf3ff01ff}};
+    /** Code Point Ranges for Elba
+    [66816, 66855]**/
+    const UnicodeSet elba_Set 
+        {{{Empty, 2088}, {Full, 1}, {Mixed, 1}, {Empty, 32726}},
+         {0x000000ff}};
+    /** Code Point Ranges for Gran
+    [70400, 70403], [70405, 70412], [70415, 70416], [70419, 70440],
+    [70442, 70448], [70450, 70451], [70453, 70457], [70460, 70468],
+    [70471, 70472], [70475, 70477], [70480, 70480], [70487, 70487],
+    [70493, 70499], [70502, 70508], [70512, 70516]**/
+    const UnicodeSet gran_Set 
+        {{{Empty, 2200}, {Mixed, 4}, {Empty, 32612}},
+         {0xfff99fef, 0xf3edfdff, 0xe081399f, 0x001f1fcf}};
+    /** Code Point Ranges for Hmng
+    [92928, 92997], [93008, 93017], [93019, 93025], [93027, 93047],
+    [93053, 93071]**/
+    const UnicodeSet hmng_Set 
+        {{{Empty, 2904}, {Full, 2}, {Mixed, 3}, {Empty, 31907}},
+         {0xfbff003f, 0xe0fffffb, 0x0000ffff}};
+    /** Code Point Ranges for Khoj
+    [70144, 70161], [70163, 70206]**/
+    const UnicodeSet khoj_Set 
+        {{{Empty, 2192}, {Mixed, 2}, {Empty, 32622}},
+         {0xfffbffff, 0x7fffffff}};
+    /** Code Point Ranges for Lina
+    [67072, 67382], [67392, 67413], [67424, 67431]**/
+    const UnicodeSet lina_Set 
+        {{{Empty, 2096}, {Full, 9}, {Mixed, 3}, {Empty, 32708}},
+         {0x007fffff, 0x003fffff, 0x000000ff}};
+    /** Code Point Ranges for Mahj
+    [69968, 70006]**/
+    const UnicodeSet mahj_Set 
+        {{{Empty, 2186}, {Mixed, 2}, {Empty, 32628}},
+         {0xffff0000, 0x007fffff}};
+    /** Code Point Ranges for Mani
+    [68288, 68326], [68331, 68342]**/
+    const UnicodeSet mani_Set 
+        {{{Empty, 2134}, {Full, 1}, {Mixed, 1}, {Empty, 32680}},
+         {0x007ff87f}};
+    /** Code Point Ranges for Mend
+    [124928, 125124], [125127, 125142]**/
+    const UnicodeSet mend_Set 
+        {{{Empty, 3904}, {Full, 6}, {Mixed, 1}, {Empty, 30905}},
+         {0x007fff9f}};
+    /** Code Point Ranges for Modi
+    [71168, 71236], [71248, 71257]**/
+    const UnicodeSet modi_Set 
+        {{{Empty, 2224}, {Full, 2}, {Mixed, 1}, {Empty, 32589}},
+         {0x03ff001f}};
+    /** Code Point Ranges for Mroo
+    [92736, 92766], [92768, 92777], [92782, 92783]**/
+    const UnicodeSet mroo_Set 
+        {{{Empty, 2898}, {Mixed, 2}, {Empty, 31916}},
+         {0x7fffffff, 0x0000c3ff}};
+    /** Code Point Ranges for Narb
+    [68224, 68255]**/
+    const UnicodeSet narb_Set 
+        {{{Empty, 2132}, {Full, 1}, {Empty, 32683}},
+         {}};
+    /** Code Point Ranges for Nbat
+    [67712, 67742], [67751, 67759]**/
+    const UnicodeSet nbat_Set 
+        {{{Empty, 2116}, {Mixed, 2}, {Empty, 32698}},
+         {0x7fffffff, 0x0000ff80}};
+    /** Code Point Ranges for Palm
+    [67680, 67711]**/
+    const UnicodeSet palm_Set 
+        {{{Empty, 2115}, {Full, 1}, {Empty, 32700}},
+         {}};
+    /** Code Point Ranges for Pauc
+    [72384, 72440]**/
+    const UnicodeSet pauc_Set 
+        {{{Empty, 2262}, {Full, 1}, {Mixed, 1}, {Empty, 32552}},
+         {0x01ffffff}};
+    /** Code Point Ranges for Perm
+    [66384, 66426]**/
+    const UnicodeSet perm_Set 
+        {{{Empty, 2074}, {Mixed, 2}, {Empty, 32740}},
+         {0xffff0000, 0x07ffffff}};
+    /** Code Point Ranges for Phlp
+    [68480, 68497], [68505, 68508], [68521, 68527]**/
+    const UnicodeSet phlp_Set 
+        {{{Empty, 2140}, {Mixed, 2}, {Empty, 32674}},
+         {0x1e03ffff, 0x0000fe00}};
+    /** Code Point Ranges for Sidd
+    [71040, 71093], [71096, 71133]**/
+    const UnicodeSet sidd_Set 
+        {{{Empty, 2220}, {Full, 1}, {Mixed, 2}, {Empty, 32593}},
+         {0xff3fffff, 0x3fffffff}};
+    /** Code Point Ranges for Sind
+    [70320, 70378], [70384, 70393]**/
+    const UnicodeSet sind_Set 
+        {{{Empty, 2197}, {Mixed, 1}, {Full, 1}, {Mixed, 1}, {Empty, 32616}},
+         {0xffff0000, 0x03ff07ff}};
+    /** Code Point Ranges for Tirh
+    [70784, 70855], [70864, 70873]**/
+    const UnicodeSet tirh_Set 
+        {{{Empty, 2212}, {Full, 2}, {Mixed, 1}, {Empty, 32601}},
+         {0x03ff00ff}};
+    /** Code Point Ranges for Wara
+    [71840, 71922], [71935, 71935]**/
+    const UnicodeSet wara_Set 
+        {{{Empty, 2245}, {Full, 2}, {Mixed, 1}, {Empty, 32568}},
+         {0x8007ffff}};
+    /** Code Point Ranges for Ahom
+    [71424, 71449], [71453, 71467], [71472, 71487]**/
+    const UnicodeSet ahom_Set 
+        {{{Empty, 2232}, {Mixed, 2}, {Empty, 32582}},
+         {0xe3ffffff, 0xffff0fff}};
+    /** Code Point Ranges for Hluw
+    [82944, 83526]**/
+    const UnicodeSet hluw_Set 
+        {{{Empty, 2592}, {Full, 18}, {Mixed, 1}, {Empty, 32205}},
+         {0x0000007f}};
+    /** Code Point Ranges for Hatr
+    [67808, 67826], [67828, 67829], [67835, 67839]**/
+    const UnicodeSet hatr_Set 
+        {{{Empty, 2119}, {Mixed, 1}, {Empty, 32696}},
+         {0xf837ffff}};
+    /** Code Point Ranges for Mult
+    [70272, 70278], [70280, 70280], [70282, 70285], [70287, 70301],
+    [70303, 70313]**/
+    const UnicodeSet mult_Set 
+        {{{Empty, 2196}, {Mixed, 2}, {Empty, 32618}},
+         {0xbfffbd7f, 0x000003ff}};
+    /** Code Point Ranges for Hung
+    [68736, 68786], [68800, 68850], [68858, 68863]**/
+    const UnicodeSet hung_Set 
+        {{{Empty, 2148}, {Full, 1}, {Mixed, 1}, {Full, 1}, {Mixed, 1},
+          {Empty, 32664}},
+         {0x0007ffff, 0xfc07ffff}};
+    /** Code Point Ranges for Sgnw
+    [120832, 121483], [121499, 121503], [121505, 121519]**/
+    const UnicodeSet sgnw_Set 
+        {{{Empty, 3776}, {Full, 20}, {Mixed, 2}, {Empty, 31018}},
+         {0xf8000fff, 0x0000fffe}};
+    /** Code Point Ranges for Adlm
+    [125184, 125258], [125264, 125273], [125278, 125279]**/
+    const UnicodeSet adlm_Set 
+        {{{Empty, 3912}, {Full, 2}, {Mixed, 1}, {Empty, 30901}},
+         {0xc3ff07ff}};
+    /** Code Point Ranges for Bhks
+    [72704, 72712], [72714, 72758], [72760, 72773], [72784, 72812]**/
+    const UnicodeSet bhks_Set 
+        {{{Empty, 2272}, {Mixed, 4}, {Empty, 32540}},
+         {0xfffffdff, 0xff7fffff, 0xffff003f, 0x00001fff}};
+    /** Code Point Ranges for Marc
+    [72816, 72847], [72850, 72871], [72873, 72886]**/
+    const UnicodeSet marc_Set 
+        {{{Empty, 2275}, {Mixed, 3}, {Empty, 32538}},
+         {0xffff0000, 0xfffcffff, 0x007ffeff}};
+    /** Code Point Ranges for Newa
+    [70656, 70745], [70747, 70747], [70749, 70749]**/
+    const UnicodeSet newa_Set 
+        {{{Empty, 2208}, {Full, 2}, {Mixed, 1}, {Empty, 32605}},
+         {0x2bffffff}};
+    /** Code Point Ranges for Osge
+    [66736, 66771], [66776, 66811]**/
+    const UnicodeSet osge_Set 
+        {{{Empty, 2085}, {Mixed, 3}, {Empty, 32728}},
+         {0xffff0000, 0xff0fffff, 0x0fffffff}};
+    /** Code Point Ranges for Tang
+    [94176, 94176], [94208, 100332], [100352, 101106]**/
+    const UnicodeSet tang_Set 
+        {{{Empty, 2943}, {Mixed, 1}, {Full, 191}, {Mixed, 1}, {Full, 23},
+          {Mixed, 1}, {Empty, 31656}},
+         {0x00000001, 0x00001fff, 0x0007ffff}};
+    /** Code Point Ranges for Hrkt
+    **/
+    const UnicodeSet hrkt_Set 
+        {{{Empty, 34816}},
+         {}};
     static EnumeratedPropertyObject property_object
         {sc,
          SC_ns::enum_names,
          SC_ns::value_names,
          SC_ns::aliases_only_map,
-         {&adlm_Set, &aghb_Set, &ahom_Set, &arab_Set, &armi_Set, &armn_Set,
-        &avst_Set, &bali_Set, &bamu_Set, &bass_Set, &batk_Set, &beng_Set,
-        &bhks_Set, &bopo_Set, &brah_Set, &brai_Set, &bugi_Set, &buhd_Set,
-        &cakm_Set, &cans_Set, &cari_Set, &cham_Set, &cher_Set, &copt_Set,
-        &cprt_Set, &cyrl_Set, &deva_Set, &dsrt_Set, &dupl_Set, &egyp_Set,
-        &elba_Set, &ethi_Set, &geor_Set, &glag_Set, &goth_Set, &gran_Set,
-        &grek_Set, &gujr_Set, &guru_Set, &hang_Set, &hani_Set, &hano_Set,
-        &hatr_Set, &hebr_Set, &hira_Set, &hluw_Set, &hmng_Set, &hrkt_Set,
-        &hung_Set, &ital_Set, &java_Set, &kali_Set, &kana_Set, &khar_Set,
-        &khmr_Set, &khoj_Set, &knda_Set, &kthi_Set, &lana_Set, &laoo_Set,
-        &latn_Set, &lepc_Set, &limb_Set, &lina_Set, &linb_Set, &lisu_Set,
-        &lyci_Set, &lydi_Set, &mahj_Set, &mand_Set, &mani_Set, &marc_Set,
-        &mend_Set, &merc_Set, &mero_Set, &mlym_Set, &modi_Set, &mong_Set,
-        &mroo_Set, &mtei_Set, &mult_Set, &mymr_Set, &narb_Set, &nbat_Set,
-        &newa_Set, &nkoo_Set, &ogam_Set, &olck_Set, &orkh_Set, &orya_Set,
-        &osge_Set, &osma_Set, &palm_Set, &pauc_Set, &perm_Set, &phag_Set,
-        &phli_Set, &phlp_Set, &phnx_Set, &plrd_Set, &prti_Set, &rjng_Set,
-        &runr_Set, &samr_Set, &sarb_Set, &saur_Set, &sgnw_Set, &shaw_Set,
-        &shrd_Set, &sidd_Set, &sind_Set, &sinh_Set, &sora_Set, &sund_Set,
-        &sylo_Set, &syrc_Set, &tagb_Set, &takr_Set, &tale_Set, &talu_Set,
-        &taml_Set, &tang_Set, &tavt_Set, &telu_Set, &tfng_Set, &tglg_Set,
-        &thaa_Set, &thai_Set, &tibt_Set, &tirh_Set, &ugar_Set, &vaii_Set,
-        &wara_Set, &xpeo_Set, &xsux_Set, &yiii_Set, &zinh_Set, &zyyy_Set,
-        &zzzz_Set
+         {&zzzz_Set, &zyyy_Set, &latn_Set, &grek_Set, &cyrl_Set, &armn_Set,
+        &hebr_Set, &arab_Set, &syrc_Set, &thaa_Set, &deva_Set, &beng_Set,
+        &guru_Set, &gujr_Set, &orya_Set, &taml_Set, &telu_Set, &knda_Set,
+        &mlym_Set, &sinh_Set, &thai_Set, &laoo_Set, &tibt_Set, &mymr_Set,
+        &geor_Set, &hang_Set, &ethi_Set, &cher_Set, &cans_Set, &ogam_Set,
+        &runr_Set, &khmr_Set, &mong_Set, &hira_Set, &kana_Set, &bopo_Set,
+        &hani_Set, &yiii_Set, &ital_Set, &goth_Set, &dsrt_Set, &zinh_Set,
+        &tglg_Set, &hano_Set, &buhd_Set, &tagb_Set, &limb_Set, &tale_Set,
+        &linb_Set, &ugar_Set, &shaw_Set, &osma_Set, &cprt_Set, &brai_Set,
+        &bugi_Set, &copt_Set, &talu_Set, &glag_Set, &tfng_Set, &sylo_Set,
+        &xpeo_Set, &khar_Set, &bali_Set, &xsux_Set, &phnx_Set, &phag_Set,
+        &nkoo_Set, &sund_Set, &lepc_Set, &olck_Set, &vaii_Set, &saur_Set,
+        &kali_Set, &rjng_Set, &lyci_Set, &cari_Set, &lydi_Set, &cham_Set,
+        &lana_Set, &tavt_Set, &avst_Set, &egyp_Set, &samr_Set, &lisu_Set,
+        &bamu_Set, &java_Set, &mtei_Set, &armi_Set, &sarb_Set, &prti_Set,
+        &phli_Set, &orkh_Set, &kthi_Set, &batk_Set, &brah_Set, &mand_Set,
+        &cakm_Set, &merc_Set, &mero_Set, &plrd_Set, &shrd_Set, &sora_Set,
+        &takr_Set, &aghb_Set, &bass_Set, &dupl_Set, &elba_Set, &gran_Set,
+        &hmng_Set, &khoj_Set, &lina_Set, &mahj_Set, &mani_Set, &mend_Set,
+        &modi_Set, &mroo_Set, &narb_Set, &nbat_Set, &palm_Set, &pauc_Set,
+        &perm_Set, &phlp_Set, &sidd_Set, &sind_Set, &tirh_Set, &wara_Set,
+        &ahom_Set, &hluw_Set, &hatr_Set, &mult_Set, &hung_Set, &sgnw_Set,
+        &adlm_Set, &bhks_Set, &marc_Set, &newa_Set, &osge_Set, &tang_Set,
+        &hrkt_Set
          }};
     }
 }
