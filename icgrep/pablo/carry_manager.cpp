@@ -44,9 +44,9 @@ void CarryManager::initializeCodeGen(PabloKernel * const kBuilder, Value * selfP
     mSelf = selfPtr;
     
     Value * cdArrayPtr = iBuilder->CreateGEP(mSelf, {ConstantInt::get(iBuilder->getSizeTy(), 0), mKernelBuilder->getScalarIndex("carries")});
-#ifndef NDEBUG
-    iBuilder->CallPrintInt("cdArrayPtr", iBuilder->CreatePtrToInt(cdArrayPtr, iBuilder->getSizeTy()));
-#endif
+//#ifndef NDEBUG
+//    iBuilder->CallPrintInt("cdArrayPtr", iBuilder->CreatePtrToInt(cdArrayPtr, iBuilder->getSizeTy()));
+//#endif
     mCarryPackBasePtr = iBuilder->CreateBitCast(cdArrayPtr, PointerType::get(mCarryPackType, 0));
     mCarryBitBlockPtr = iBuilder->CreateBitCast(cdArrayPtr, PointerType::get(mBitBlockType, 0));
     mCurrentScope = mRootScope;

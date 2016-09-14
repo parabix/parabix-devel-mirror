@@ -13,13 +13,13 @@ class Simplifier {
     friend class FactorizeDFG;
 public:
     static bool optimize(PabloFunction & function);
+    static void dce(PabloBlock * const block);
 protected:
     Simplifier() = default;
 private:
-    static void redundancyElimination(PabloBlock * const block, ExpressionTable * predecessor = nullptr);
+    static void redundancyElimination(PabloFunction & function, PabloBlock * const block, ExpressionTable * predecessor = nullptr);
     static PabloAST * fold(Variadic * var, PabloBlock * const block);
     static PabloAST * fold(Statement * const stmt, PabloBlock * const block);
-    static void deadCodeElimination(PabloBlock * const block);
     static void strengthReduction(PabloBlock * const block);
     static bool isSuperfluous(const Assign * const assign);
 };

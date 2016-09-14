@@ -30,6 +30,7 @@ While::While(PabloAST * expr, const std::vector<Next *> & nextVars, PabloBlock *
 }
 
 PabloBlock * While::setBody(PabloBlock * body) {
+    body->setBranch(this);
     body->setParent(mBody->getParent());
     std::swap(mBody, body);
     body->setParent(nullptr);

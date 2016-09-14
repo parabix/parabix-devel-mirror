@@ -75,8 +75,8 @@ SET(PABLO_SRC ${PABLO_SRC} kernels/s2p_kernel.cpp kernels/kernel.cpp kernels/str
 SET(PABLO_SRC ${PABLO_SRC} pablo/analysis/pabloverifier.cpp)
 SET(PABLO_SRC ${PABLO_SRC} pablo/optimizers/pablo_simplifier.cpp pablo/optimizers/codemotionpass.cpp)
 IF(ENABLE_MULTIPLEXING)
-SET(PABLO_SRC ${PABLO_SRC} pablo/optimizers/distributivepass.cpp pablo/passes/flattenassociativedfg.cpp pablo/passes/factorizedfg.cpp)
-SET(PABLO_SRC ${PABLO_SRC} pablo/optimizers/schedulingprepass.cpp pablo/optimizers/pablo_automultiplexing.cpp pablo/optimizers/pablo_bddminimization.cpp)
+SET(PABLO_SRC ${PABLO_SRC} pablo/optimizers/booleanreassociationpass.cpp pablo/optimizers/distributivepass.cpp pablo/passes/flattenassociativedfg.cpp pablo/passes/factorizedfg.cpp)
+SET(PABLO_SRC ${PABLO_SRC} pablo/optimizers/schedulingprepass.cpp pablo/optimizers/pablo_automultiplexing.cpp)
 ENDIF()
 
 add_library(PabloADT ${PABLO_SRC})
@@ -150,15 +150,13 @@ target_link_libraries (u8u16 UCDlib PabloADT RegExpCompiler CCADT CodeGen ${REQ_
 target_link_libraries (wc UCDlib PabloADT RegExpCompiler CCADT CodeGen ${REQ_LLVM_LIBRARIES} ${CUDA_LIB})
 
 IF(ENABLE_MULTIPLEXING)
-message(STATUS "Enabling Multiplexing")
-SET(BUDDY_ROOT "${CMAKE_SOURCE_DIR}/../buddy-2.4/src")
-SET(BUDDY_SOURCES ${BUDDY_ROOT}/bddop.cpp ${BUDDY_ROOT}/cache.cpp ${BUDDY_ROOT}/imatrix.cpp ${BUDDY_ROOT}/kernel.cpp)
-SET(BUDDY_SOURCES ${BUDDY_SOURCES} ${BUDDY_ROOT}/prime.cpp ${BUDDY_ROOT}/pairs.cpp ${BUDDY_ROOT}/reorder.cpp ${BUDDY_ROOT}/tree.cpp)
-add_library(BUDDY ${BUDDY_SOURCES})
-include_directories(${BUDDY_ROOT})
-target_link_libraries (PabloADT BUDDY)
-SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DENABLE_MULTIPLEXING")
+    message(STATUS "Enabling Multiplexing")
+    find_package(Z3 REQUIRED)
+    include_directories(${Z3_INCLUDE_DIRS})
+    target_link_libraries(PabloADT ${Z3_LIBRARIES})
+    SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DENABLE_MULTIPLEXING")
 ENDIF()
+
 
 include_directories("${PROJECT_SOURCE_DIR}")
 
@@ -175,8 +173,8 @@ else()
     CHECK_CXX_COMPILER_FLAG("-std=gnu++11" COMPILER_SUPPORTS_GNU11)
     if(COMPILER_SUPPORTS_GNU11)
       set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=gnu++11")
-    else()  
-      CHECK_CXX_COMPILER_FLAG("-std=gnu++0x" COMPILER_SUPPORTS_GNU0X)    
+    else()
+      CHECK_CXX_COMPILER_FLAG("-std=gnu++0x" COMPILER_SUPPORTS_GNU0X)
       if(COMPILER_SUPPORTS_GNU0X)
         set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=gnu++0x")
       endif()
@@ -201,12 +199,12 @@ IF (${LLVM_PACKAGE_VERSION} MATCHES "3.5")
   SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DUSE_LLVM_3_5")
 ENDIF()
 
-IF (PRINT_TIMING_INFORMATION)   
+IF (PRINT_TIMING_INFORMATION)
     SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DPRINT_TIMING_INFORMATION")
 ENDIF()
 
 SET(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS} -O3 -DNDEBUG")
-SET(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS} -g -fsanitize=address -fno-omit-frame-pointer")
+SET(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS} -g") # -fsanitize=address -fno-omit-frame-pointer
 
 add_test(
   NAME greptest

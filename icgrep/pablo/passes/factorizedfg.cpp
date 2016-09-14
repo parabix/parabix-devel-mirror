@@ -7,6 +7,7 @@
 #include <boost/container/flat_set.hpp>
 #include <boost/circular_buffer.hpp>
 #include <boost/graph/adjacency_list.hpp>
+#include <boost/type_traits/ice.hpp>
 #include <boost/graph/adjacency_matrix.hpp>
 #include <queue>
 #include <llvm/Support/CommandLine.h>

@@ -74,17 +74,21 @@ PabloAST * Simplifier::fold(Variadic * var, PabloBlock * const block) {
 
     if (LLVM_LIKELY(isa<And>(var) || isa<Or>(var))) {
         // Apply an implicit distribution + identity law whenever possible
-        //    (P ∧ Q) ∨ (P ∧ ¬Q) = P ∨ (Q ∧ ¬Q) ⇔ (P ∨ Q) ∧ (P ∨ ¬Q) = P ∧ (Q ∨ ¬Q) ⇔ P
+        //    (P ∧ Q) ∨ (P ∧ ¬Q) = P ∨ (Q ∧ ¬Q) ⇔ P
         const TypeId typeId = isa<And>(var) ? TypeId::Or : TypeId::And;
         for (unsigned i = 1; i < var->getNumOperands(); ++i) {
             if (var->getOperand(i)->getClassTypeId() == typeId) {
                 Variadic * const Vi = cast<Variadic>(var->getOperand(i));
-                assert (std::is_sorted(Vi->begin(), Vi->end()));
+                if (LLVM_UNLIKELY(!std::is_sorted(Vi->begin(), Vi->end()))) {
+                    std::sort(Vi->begin(), Vi->end());
+                }
                 for (unsigned j = 0; j < i; ++j) {
                     assert (var->getOperand(i) == Vi);
                     if (var->getOperand(j)->getClassTypeId() == typeId) {
                         Variadic * const Vj = cast<Variadic>(var->getOperand(j));
-                        assert (std::is_sorted(Vj->begin(), Vj->end()));
+                        if (LLVM_UNLIKELY(!std::is_sorted(Vj->begin(), Vj->end()))) {
+                            std::sort(Vj->begin(), Vj->end());
+                        }
                         if (Vi->getNumOperands() == Vj->getNumOperands()) {
                             // If vi and vj differ by precisely one operand, say di and dj, and di ⇔ ¬dj, we can apply this rule.
                             unsigned vi = 0, vj = 0;
@@ -307,16 +311,18 @@ inline PabloAST * Simplifier::fold(Statement * stmt, PabloBlock * const block) {
  * @brief isSuperfluous
  ** ------------------------------------------------------------------------------------------------------------- */
 inline bool Simplifier::isSuperfluous(const Assign * const assign) {
-    for (const PabloAST * user : assign->users()) {
-        if (LLVM_UNLIKELY(isa<PabloFunction>(user) || isa<Next>(user))) {
-            return false;
-        } else if (isa<If>(user)) {
-            if (LLVM_UNLIKELY(cast<If>(user)->getCondition() == assign)) {
-                continue;
-            } else if (isa<Assign>(assign->getExpression())) {
-                continue;
+    if (LLVM_LIKELY(isa<Statement>(assign->getExpression()))) {
+        for (const PabloAST * user : assign->users()) {
+            if (LLVM_UNLIKELY(isa<PabloFunction>(user) || isa<Next>(user))) {
+                return false;
+            } else if (isa<If>(user)) {
+                if (LLVM_UNLIKELY(cast<If>(user)->getCondition() == assign)) {
+                    continue;
+                } else if (isa<Assign>(assign->getExpression())) {
+                    continue;
+                }
+                return false;
             }
-            return false;
         }
     }
     return true;
@@ -420,12 +426,11 @@ inline void removeIdenticalEscapedValues(ValueList & list) {
  * Note: Do not recursively delete statements in this function. The ExpressionTable could use deleted statements
  * as replacements. Let the DCE remove the unnecessary statements with the finalized Def-Use information.
  ** ------------------------------------------------------------------------------------------------------------- */
-void Simplifier::redundancyElimination(PabloBlock * const block, ExpressionTable * predecessor) {
+void Simplifier::redundancyElimination(PabloFunction & function, PabloBlock * const block, ExpressionTable * predecessor) {
     ExpressionTable encountered(predecessor);
     Statement * stmt = block->front();
 
     while (stmt) {
-
         if (Assign * assign = dyn_cast<Assign>(stmt)) {
             // If we have an Assign whose users do not contain an If or Next node, we can replace its users with
             // the Assign's expression directly.
@@ -455,7 +460,7 @@ void Simplifier::redundancyElimination(PabloBlock * const block, ExpressionTable
             }
 
             // Process the If body
-            redundancyElimination(cast<If>(stmt)->getBody(), &encountered);
+            redundancyElimination(function, cast<If>(stmt)->getBody(), &encountered);
 
             // If we ended up removing all of the defined variables, delete the If node.
             if (LLVM_UNLIKELY(defs.empty())) {
@@ -494,7 +499,7 @@ void Simplifier::redundancyElimination(PabloBlock * const block, ExpressionTable
                 stmt = stmt->eraseFromParent();
                 continue;
             }
-            redundancyElimination(whileNode->getBody(), &encountered);
+            redundancyElimination(function, whileNode->getBody(), &encountered);
             removeIdenticalEscapedValues(whileNode->getVariants());
             // If the condition's Next state is Zero, we can eliminate the loop after copying the internal
             // statements into the body.
@@ -540,13 +545,13 @@ inline static bool unused(const Statement * const stmt) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief deadCodeElimination
  ** ------------------------------------------------------------------------------------------------------------- */
-void Simplifier::deadCodeElimination(PabloBlock * const block) {
+void Simplifier::dce(PabloBlock * const block) {
     Statement * stmt = block->front();
     while (stmt) {
         if (LLVM_UNLIKELY(isa<If>(stmt))) {
-            deadCodeElimination(cast<If>(stmt)->getBody());
+            dce(cast<If>(stmt)->getBody());
         } else if (LLVM_UNLIKELY(isa<While>(stmt))) {
-            deadCodeElimination(cast<While>(stmt)->getBody());
+            dce(cast<While>(stmt)->getBody());
         } else if (LLVM_UNLIKELY(unused(stmt))){
             stmt = stmt->eraseFromParent(true);
             continue;
@@ -614,17 +619,11 @@ void Simplifier::strengthReduction(PabloBlock * const block) {
  * @brief optimize
  ** ------------------------------------------------------------------------------------------------------------- */
 bool Simplifier::optimize(PabloFunction & function) {
-    redundancyElimination(function.getEntryBlock());
-    #ifndef NDEBUG
-    PabloVerifier::verify(function, "post-eliminate-redundant-code");
-    #endif
+    redundancyElimination(function, function.getEntryBlock());
     strengthReduction(function.getEntryBlock());
+    dce(function.getEntryBlock());
     #ifndef NDEBUG
-    PabloVerifier::verify(function, "post-strength-reduction");
-    #endif
-    deadCodeElimination(function.getEntryBlock());
-    #ifndef NDEBUG
-    PabloVerifier::verify(function, "post-dead-code-elimination");
+    PabloVerifier::verify(function, "post-simplification");
     #endif
     return true;
 }

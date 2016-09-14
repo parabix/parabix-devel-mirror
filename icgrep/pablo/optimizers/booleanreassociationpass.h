@@ -32,6 +32,7 @@ protected:
         iterator end() const { return mForward.cend(); }
         inline CharacterizationMap() : mPredecessor(nullptr) {}
         inline CharacterizationMap(CharacterizationMap & predecessor) : mPredecessor(&predecessor) {}
+        CharacterizationMap * predecessor() const { return mPredecessor; }
     private:
         CharacterizationMap * const     mPredecessor;
         ForwardMap                      mForward;
@@ -40,17 +41,18 @@ protected:
 
 protected:
 
-    BooleanReassociationPass(Z3_context ctx, Z3_solver solver, PabloFunction & f);
+    BooleanReassociationPass(Z3_context ctx, Z3_params params, Z3_tactic tactic, PabloFunction & f);
     bool processScopes(PabloFunction & function);
     void processScopes(PabloBlock * const block, CharacterizationMap & map);
-    void distributeScope(PabloBlock * const block, CharacterizationMap & map);
+    void distributeScope(PabloBlock * const block, CharacterizationMap & C);
 
-    void transformAST(PabloBlock * const block, CharacterizationMap & C, Graph & G);
-    void resolveNestedUsages(PabloBlock * const block, PabloAST * const expr, const Vertex u, CharacterizationMap &C, StatementMap & S, Graph & G, const Statement * const ignoreIfThis = nullptr) const;
+    void transformAST(CharacterizationMap & C, Graph & G);
+    void resolveNestedUsages(PabloAST * const expr, const Vertex u, CharacterizationMap &C, StatementMap & S, Graph & G, const Statement * const ignoreIfThis = nullptr) const;
 
-    bool contractGraph(StatementMap & M, Graph & G) const;
+    bool contractGraph(Graph & G) const;
 
-    bool reduceGraph(CharacterizationMap & C, StatementMap & S, Graph & G) const;
+    bool reduceVertex(const Vertex u, CharacterizationMap & C, VertexMap & M, Graph & G, const bool use_expensive_simplification) const;
+    bool reduceGraph(CharacterizationMap & C, VertexMap & M, Graph & G) const;
 
     bool factorGraph(const PabloAST::ClassTypeId typeId, Graph & G, std::vector<Vertex> & factors) const;
     bool factorGraph(Graph & G) const;
@@ -61,17 +63,21 @@ protected:
     void removeVertex(const Vertex u, StatementMap & M, Graph & G) const;
     void removeVertex(const Vertex u, Graph & G) const;
 
-    bool redistributeGraph(CharacterizationMap & C, StatementMap & M, Graph & G) const;
+    bool redistributeGraph(CharacterizationMap & C, VertexMap & M, Graph & G) const;
 
-    void rewriteAST(PabloBlock * const block, Graph & G);
+    bool rewriteAST(CharacterizationMap & C, VertexMap &M, Graph & G);
 
     Statement * characterize(Statement * const stmt, CharacterizationMap & map);
+
+    Z3_ast simplify(Z3_ast node, bool use_expensive_minimization = false) const;
 
     Z3_ast makeVar() const;
 
 private:
+    PabloBlock *                mBlock;
     Z3_context const            mContext;
-    Z3_solver const             mSolver;
+    Z3_params const             mParams;
+    Z3_tactic const             mTactic;
     Z3_ast                      mInFile;
     PabloFunction &             mFunction;
     bool                        mModified;

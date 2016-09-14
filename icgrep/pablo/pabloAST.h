@@ -142,7 +142,9 @@ private:
     Users                   mUsers;
 };
 
-bool equals(const PabloAST * expr1, const PabloAST *expr2);
+bool equals(const PabloAST * const expr1, const PabloAST * const expr2);
+
+bool dominates(const PabloAST * const expr1, const PabloAST * const expr2);
 
 class StatementList;
 
@@ -600,25 +602,6 @@ private:
     Statement   * mFirst;
     Statement   * mLast;    
 };
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief addUser
- ** ------------------------------------------------------------------------------------------------------------- */
-inline void PabloAST::addUser(PabloAST * const user) {
-    assert (user);    
-    // Note: for the rare situation that this node is used multiple times by the same statement, duplicates are allowed.
-    mUsers.insert(std::lower_bound(mUsers.begin(), mUsers.end(), user), user);
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief removeUser
- ** ------------------------------------------------------------------------------------------------------------- */
-inline void PabloAST::removeUser(PabloAST * const user) {
-    assert (user);
-    const auto pos = std::lower_bound(mUsers.begin(), mUsers.end(), user);
-    assert ("Could not find user to remove!" && (pos != mUsers.end() && *pos == user));
-    mUsers.erase(pos);
-}
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief deleteOperand

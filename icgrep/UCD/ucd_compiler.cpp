@@ -127,7 +127,7 @@ const UCDCompiler::RangeList UCDCompiler::defaultIfHierachy = {
 
     {0x10000, 0x10FFFF}};
 
-const UCDCompiler::RangeList UCDCompiler::noIfHierachy = {{0x10000, 0x10FFFF}};
+const UCDCompiler::RangeList UCDCompiler::noIfHierachy = {{0x80, 0x10FFFF}};
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief generateRange

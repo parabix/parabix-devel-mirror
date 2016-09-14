@@ -9,6 +9,9 @@
 #include <llvm/Support/Compiler.h>
 #include <pablo/printer_pablos.h>
 #include <llvm/ADT/SmallVector.h>
+#include <boost/container/flat_set.hpp>
+
+using namespace boost::container;
 
 namespace pablo {
 
@@ -21,7 +24,7 @@ PabloAST::VectorAllocator PabloAST::mVectorAllocator;
  *  Return true if expr1 and expr2 can be proven equivalent according to some rules, false otherwise.  Note that
  *  false may be returned i some cases when the exprs are equivalent.
  ** ------------------------------------------------------------------------------------------------------------- */
-bool equals(const PabloAST * expr1, const PabloAST * expr2) {
+bool equals(const PabloAST * const expr1, const PabloAST * const expr2) {
     assert (expr1 && expr2);
     if (expr1 == expr2) {
         return true;
@@ -102,21 +105,59 @@ void PabloAST::replaceAllUsesWith(PabloAST * const expr) {
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
+ * @brief addUser
+ ** ------------------------------------------------------------------------------------------------------------- */
+void PabloAST::addUser(PabloAST * const user) {
+    assert (user);
+    // Note: for the rare situation that this node is used multiple times by the same statement, duplicates are allowed.
+    mUsers.insert(std::lower_bound(mUsers.begin(), mUsers.end(), user), user);
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief removeUser
+ ** ------------------------------------------------------------------------------------------------------------- */
+void PabloAST::removeUser(PabloAST * const user) {
+    assert (user);
+    const auto pos = std::lower_bound(mUsers.begin(), mUsers.end(), user);
+    if (LLVM_UNLIKELY(pos == mUsers.end() || *pos != user)) {
+        std::string tmp;
+        raw_string_ostream out(tmp);
+        out << "Cannot remove user ";
+        PabloPrinter::print(user, out);
+        out << " from ";
+        PabloPrinter::print(this, out);
+        out << " because it's not in its user list!";
+        throw std::runtime_error(out.str());
+    }
+    mUsers.erase(pos);
+}
+
+
+/** ------------------------------------------------------------------------------------------------------------- *
  * @brief checkEscapedValueList
  ** ------------------------------------------------------------------------------------------------------------- */
 template <class ValueType, class ValueList>
 inline void Statement::checkEscapedValueList(Statement * const branch, PabloAST * const from, PabloAST * const to, ValueList & list) {
     if (LLVM_LIKELY(isa<ValueType>(from))) {
-        auto f = std::find(list.begin(), list.end(), cast<ValueType>(from));
+        const auto f = std::find(list.begin(), list.end(), cast<ValueType>(from));
         if (LLVM_LIKELY(f != list.end())) {
             branch->removeUser(from);
             from->removeUser(branch);
-            if (LLVM_LIKELY(isa<ValueType>(to))) {
-                if (std::count(list.begin(), list.end(), cast<ValueType>(to)) == 0) {
-                    *f = cast<ValueType>(to);
-                    branch->addUser(to);
-                    to->addUser(branch);
-                    return;
+            if (LLVM_UNLIKELY(isa<ValueType>(to))) {
+                if (LLVM_LIKELY(std::find(list.begin(), list.end(), cast<ValueType>(to)) == list.end())) {
+                    PabloBlock * parent = cast<ValueType>(to)->getParent();
+                    for (;;) {
+                        if (parent == cast<ValueType>(from)->getParent()) {
+                            *f = cast<ValueType>(to);
+                            branch->addUser(to);
+                            to->addUser(branch);
+                            return;
+                        }
+                        parent = parent->getParent();
+                        if (parent == nullptr) {
+                            break;
+                        }
+                    }
                 }
             }
             list.erase(f);
@@ -253,10 +294,7 @@ Statement * Statement::removeFromParent() {
  * @brief eraseFromParent
  ** ------------------------------------------------------------------------------------------------------------- */
 Statement * Statement::eraseFromParent(const bool recursively) {
-    // remove this statement from its operands' users list
-    for (unsigned i = 0; i != mOperands; ++i) {
-        mOperand[i]->removeUser(this);
-    }
+
     SmallVector<Statement *, 1> redundantBranches;
     // If this is an If or While statement, we'll have to remove the statements within the
     // body or we'll lose track of them.
@@ -299,12 +337,12 @@ Statement * Statement::eraseFromParent(const bool recursively) {
 
     if (recursively) {
         for (unsigned i = 0; i != mOperands; ++i) {
-            PabloAST * const op = mOperand[i];
-            if (LLVM_LIKELY(isa<Statement>(op))) {
-                if (op->getNumUses() == 0) {
-                    cast<Statement>(op)->eraseFromParent(true);
-                }
+            PabloAST * const op = mOperand[i]; assert (op);
+            op->removeUser(this);
+            if (LLVM_UNLIKELY(op->getNumUses() == 0 && isa<Statement>(op))) {
+                cast<Statement>(op)->eraseFromParent(true);
             }
+            mOperand[i] = nullptr;
         }
         if (LLVM_UNLIKELY(redundantBranches.size() != 0)) {
             // By eliminating this redundant branch, we may inadvertantly delete the scope block this statement
@@ -320,6 +358,12 @@ Statement * Statement::eraseFromParent(const bool recursively) {
             if (eliminatedScope) {
                 return nullptr;
             }
+        }
+    } else { // just remove this statement from its operands' users list
+        for (unsigned i = 0; i != mOperands; ++i) {
+            PabloAST * const op = mOperand[i]; assert (op);
+            op->removeUser(this);
+            mOperand[i] = nullptr;
         }
     }
     Statement * const next = removeFromParent();
@@ -411,5 +455,99 @@ bool escapes(const Statement * statement) {
     }
     return false;
 }
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief dominates
+ *
+ * Does a precede (dominate) b?
+ ** ------------------------------------------------------------------------------------------------------------- */
+bool dominates(const PabloAST * const expr1, const PabloAST * const expr2) {
+    if (LLVM_UNLIKELY(expr1 == nullptr || expr2 == nullptr)) {
+        return (expr2 == nullptr);
+    } else if (LLVM_LIKELY(isa<Statement>(expr1))) {
+        const Statement * stmt1 = cast<Statement>(expr1);
+        assert ("expr1 is not in any block!" && stmt1->getParent());
+        if (isa<Statement>(expr2)) {
+            const Statement * stmt2 = cast<Statement>(expr2);
+            assert ("expr2 is not in any block!" && stmt2->getParent());
+
+            while (stmt1->getParent() != stmt2->getParent()) {
+
+                // Statement 1 preceeds Statement 2 if the branch leading to Statement 2
+                // succeeds Statement 1.
+
+                // But if Statement 1 escapes its block, it may still succeed Statement 2
+                // if and only if Statement 1 is an Assign or Next node whose outermost
+                // branch succeeds Statement 1. It is not enough to simply traverse back
+                // arbritarily. Test.
+
+                if (LLVM_UNLIKELY(isa<Assign>(stmt1))) {
+                    for (const PabloAST * user : stmt1->users()) {
+                        if (isa<If>(user)) {
+                            for (const Assign * def : cast<If>(user)->getDefined()) {
+                                if (def == stmt1) {
+                                    const Statement * test = stmt1;
+                                    for (;;) {
+                                        if (test->getParent() == stmt2->getParent()) {
+                                            stmt1 = test;
+                                            goto check;
+                                        }
+                                        test = test->getParent()->getBranch();
+                                        if (test == nullptr) {
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } else if (LLVM_UNLIKELY(isa<Next>(stmt1))) {
+                    for (const PabloAST * user : stmt1->users()) {
+                        if (isa<While>(user)) {
+                            for (const Next * var : cast<While>(user)->getVariants()) {
+                                if (var == stmt1) {
+                                    const Statement * test = stmt1;
+                                    for (;;) {
+                                        if (test->getParent() == stmt2->getParent()) {
+                                            stmt1 = test;
+                                            goto check;
+                                        }
+                                        test = test->getParent()->getBranch();
+                                        if (test == nullptr) {
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                stmt2 = stmt2->getParent()->getBranch();
+                if (stmt2 == nullptr) {
+                    return false;
+                }
+
+            }
+
+check:      assert(stmt1->getParent() == stmt2->getParent());
+
+            const Statement * temp1 = stmt1, * temp2 = stmt2;
+            while (temp1 && temp2) {
+                if (temp1 == stmt2) {
+                    return true;
+                } else if (temp2 == stmt1) {
+                    return false;
+                }
+                temp1 = temp1->getNextNode();
+                temp2 = temp2->getNextNode();
+            }
+            return (temp2 == nullptr);
+        }
+        return false;
+    }
+    return true;
+}
+
 
 }

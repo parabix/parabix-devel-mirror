@@ -14,6 +14,8 @@
 #include <llvm/Support/CommandLine.h>
 #include "maxsat.hpp"
 
+//  noif-dist-mult-dist-50 \p{Cham}(?<!\p{Mc})
+
 using namespace boost;
 using namespace boost::container;
 
@@ -272,14 +274,23 @@ bool BooleanReassociationPass::optimize(PabloFunction & function) {
     Z3_config cfg = Z3_mk_config();
     Z3_context ctx = Z3_mk_context(cfg);
     Z3_del_config(cfg);
-    Z3_solver solver = Z3_mk_solver(ctx);
-    Z3_solver_inc_ref(ctx, solver);
 
-    BooleanReassociationPass brp(ctx, solver, function);
+    Z3_params params = Z3_mk_params(ctx);
+    Z3_params_inc_ref(ctx, params);
+    Z3_params_set_bool(ctx, params, Z3_mk_string_symbol(ctx, "pull_cheap_ite"), true);
+    Z3_params_set_bool(ctx, params, Z3_mk_string_symbol(ctx, "local_ctx"), true);
+
+    Z3_tactic ctx_solver_simplify = Z3_mk_tactic(ctx, "ctx-solver-simplify");
+    Z3_tactic_inc_ref(ctx, ctx_solver_simplify);
+
+    BooleanReassociationPass brp(ctx, params, ctx_solver_simplify, function);
     brp.processScopes(function);
 
-    Z3_solver_dec_ref(ctx, solver);
+    Z3_params_dec_ref(ctx, params);
+    Z3_tactic_dec_ref(ctx, ctx_solver_simplify);
     Z3_del_context(ctx);
+
+    PabloVerifier::verify(function, "post-reassociation");
 
     Simplifier::optimize(function);
 
@@ -307,7 +318,6 @@ inline bool BooleanReassociationPass::processScopes(PabloFunction & function) {
  * @brief processScopes
  ** ------------------------------------------------------------------------------------------------------------- */
 void BooleanReassociationPass::processScopes(PabloBlock * const block, CharacterizationMap & map) {
-    Z3_solver_push(mContext, mSolver);
     for (Statement * stmt = block->front(); stmt; ) {
         if (LLVM_UNLIKELY(isa<If>(stmt))) {
             if (LLVM_UNLIKELY(isa<Zeroes>(cast<If>(stmt)->getCondition()))) {
@@ -334,9 +344,8 @@ void BooleanReassociationPass::processScopes(PabloBlock * const block, Character
         } else { // characterize this statement then check whether it is equivalent to any existing one.
             stmt = characterize(stmt, map);
         }
-    }
+    }    
     distributeScope(block, map);
-    Z3_solver_pop(mContext, mSolver, 1);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -384,7 +393,7 @@ inline Statement * BooleanReassociationPass::characterize(Statement * const stmt
         }
         return stmt->getNextNode();
     }
-    node = Z3_simplify(mContext, node); assert (node);
+    node = simplify(node); assert (node);
     PabloAST * const replacement = map.findKey(node);
     if (LLVM_LIKELY(replacement == nullptr)) {
         map.add(stmt, node);
@@ -398,12 +407,16 @@ inline Statement * BooleanReassociationPass::characterize(Statement * const stmt
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief processScope
  ** ------------------------------------------------------------------------------------------------------------- */
-inline void BooleanReassociationPass::distributeScope(PabloBlock * const block, CharacterizationMap & map) {
+inline void BooleanReassociationPass::distributeScope(PabloBlock * const block, CharacterizationMap & C) {
     Graph G;
     try {
-        transformAST(block, map, G);
+        mBlock = block;
+        transformAST(C, G);
     } catch (std::runtime_error err) {
-        printGraph(G, "G");
+        printGraph(G, "E");
+        throw err;
+    } catch (std::exception err) {
+        printGraph(G, "E");
         throw err;
     }
 }
@@ -414,10 +427,12 @@ inline void BooleanReassociationPass::distributeScope(PabloBlock * const block, 
  * This function scans through a scope block and computes a DAG G in which any sequences of AND, OR or XOR functions
  * are "flattened" (i.e., allowed to have any number of inputs.)
  ** ------------------------------------------------------------------------------------------------------------- */
-void BooleanReassociationPass::transformAST(PabloBlock * const block, CharacterizationMap & C, Graph & G) {
+void BooleanReassociationPass::transformAST(CharacterizationMap & C, Graph & G) {
+
     StatementMap S;
+
     // Compute the base def-use graph ...
-    for (Statement * stmt : *block) {
+    for (Statement * stmt : *mBlock) {
 
         const Vertex u = makeVertex(stmt->getClassTypeId(), stmt, S, G, C.get(stmt));
 
@@ -432,7 +447,7 @@ void BooleanReassociationPass::transformAST(PabloBlock * const block, Characteri
             for (Assign * def : cast<const If>(stmt)->getDefined()) {
                 const Vertex v = makeVertex(TypeId::Var, def, C, S, G);
                 add_edge(def, u, v, G);
-                resolveNestedUsages(block, def, v, C, S, G, stmt);
+                resolveNestedUsages(def, v, C, S, G, stmt);
             }
         } else if (LLVM_UNLIKELY(isa<While>(stmt))) {
             // To keep G a DAG, we need to do a bit of surgery on loop variants because
@@ -446,16 +461,22 @@ void BooleanReassociationPass::transformAST(PabloBlock * const block, Characteri
                 add_edge(G[e], source(e, G), u, G);
                 remove_edge(v, u, G);
                 add_edge(var, u, v, G);
-                resolveNestedUsages(block, var, v, C, S, G, stmt);
+                resolveNestedUsages(var, v, C, S, G, stmt);
             }
-        } else {            
-            resolveNestedUsages(block, stmt, u, C, S, G, stmt);
+        } else {
+            resolveNestedUsages(stmt, u, C, S, G, stmt);
         }
     }
 
-    if (redistributeGraph(C, S, G)) {
+//    printGraph(G, "G");
+
+    VertexMap M;
+    if (redistributeGraph(C, M, G)) {
         factorGraph(G);
-        rewriteAST(block, G);
+
+//        printGraph(G, "H");
+
+        rewriteAST(C, M, G);
         mModified = true;
     }
 
@@ -464,16 +485,16 @@ void BooleanReassociationPass::transformAST(PabloBlock * const block, Characteri
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief resolveNestedUsages
  ** ------------------------------------------------------------------------------------------------------------- */
-void BooleanReassociationPass::resolveNestedUsages(PabloBlock * const block, PabloAST * const expr, const Vertex u,
+void BooleanReassociationPass::resolveNestedUsages(PabloAST * const expr, const Vertex u,
                                                    CharacterizationMap & C, StatementMap & S, Graph & G,
                                                    const Statement * const ignoreIfThis) const {
     assert ("Cannot resolve nested usages of a null expression!" && expr);
     for (PabloAST * user : expr->users()) { assert (user);
         if (LLVM_LIKELY(user != expr && isa<Statement>(user))) {
             PabloBlock * parent = cast<Statement>(user)->getParent(); assert (parent);
-            if (LLVM_UNLIKELY(parent != block)) {
+            if (LLVM_UNLIKELY(parent != mBlock)) {
                 for (;;) {
-                    if (parent->getParent() == block) {
+                    if (parent->getParent() == mBlock) {
                         Statement * const branch = parent->getBranch();
                         if (LLVM_UNLIKELY(branch != ignoreIfThis)) {
                             // Add in a Var denoting the user of this expression so that it can be updated if expr changes.
@@ -756,13 +777,13 @@ void generateDistributionGraph(const Graph & G, DistributionGraph & H) {
  *
  * Apply the distribution law to reduce computations whenever possible.
  ** ------------------------------------------------------------------------------------------------------------- */
-bool BooleanReassociationPass::redistributeGraph(CharacterizationMap & C, StatementMap & M, Graph & G) const {
+bool BooleanReassociationPass::redistributeGraph(CharacterizationMap & C, VertexMap & M, Graph & G) const {
 
     bool modified = false;
 
     DistributionGraph H;
 
-    contractGraph(M, G);
+    contractGraph(G);
 
     for (;;) {
 
@@ -828,13 +849,13 @@ bool BooleanReassociationPass::redistributeGraph(CharacterizationMap & C, Statem
 
             H.clear();
 
-            contractGraph(M, G);
+            contractGraph(G);
         }
 
         // Although exceptionally unlikely, it's possible that if we can reduce the graph, we could
         // further simplify it. Restart the process if and only if we succeed.
-        if (LLVM_UNLIKELY(reduceGraph(C, M, G))) {
-            if (LLVM_UNLIKELY(contractGraph(M, G))) {
+        if (reduceGraph(C, M, G)) {
+            if (LLVM_UNLIKELY(contractGraph(G))) {
                 H.clear();
                 continue;
             }
@@ -864,9 +885,46 @@ inline bool isNonEscaping(const VertexData & data) {
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
+ * @brief unique_source
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline bool has_unique_source(const Vertex u, const Graph & G) {
+    if (in_degree(u, G) > 0) {
+        graph_traits<Graph>::in_edge_iterator i, end;
+        std::tie(i, end) = in_edges(u, G);
+        const Vertex v = source(*i, G);
+        while (++i != end) {
+            if (source(*i, G) != v) {
+                return false;
+            }
+        }
+        return true;
+    }
+    return false;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief unique_target
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline bool has_unique_target(const Vertex u, const Graph & G) {
+    if (out_degree(u, G) > 0) {
+        graph_traits<Graph>::out_edge_iterator i, end;
+        std::tie(i, end) = out_edges(u, G);
+        const Vertex v = target(*i, G);
+        while (++i != end) {
+            if (target(*i, G) != v) {
+                return false;
+            }
+        }
+        return true;
+    }
+    return false;
+}
+
+
+/** ------------------------------------------------------------------------------------------------------------- *
  * @brief contractGraph
  ** ------------------------------------------------------------------------------------------------------------- */
-bool BooleanReassociationPass::contractGraph(StatementMap & M, Graph & G) const {
+bool BooleanReassociationPass::contractGraph(Graph & G) const {
 
     bool contracted = false;
 
@@ -880,19 +938,21 @@ bool BooleanReassociationPass::contractGraph(StatementMap & M, Graph & G) const 
             continue;
         } else if (LLVM_LIKELY(out_degree(u, G) > 0)) {
             if (isAssociative(G[u])) {
-                if (LLVM_UNLIKELY(in_degree(u, G) == 1)) {
+                if (LLVM_UNLIKELY(has_unique_source(u, G))) {
                     // We have a redundant node here that'll simply end up being a duplicate
                     // of the input value. Remove it and add any of its outgoing edges to its
                     // input node.
                     const auto ei = first(in_edges(u, G));
                     const Vertex v = source(ei, G);
                     for (auto ej : make_iterator_range(out_edges(u, G))) {
-                        const Vertex w = target(ej, G);
-                        add_edge(G[ei], v, w, G);
+                        add_edge(G[ej], v, target(ej, G), G);
                     }
-                    removeVertex(u, M, G);
+//                    if (LLVM_UNLIKELY(getValue(G[v]) == nullptr && getValue(G[u]) != nullptr)) {
+//                        getValue(G[v]) = getValue(G[u]);
+//                    }
+                    removeVertex(u, G);
                     contracted = true;
-                } else if (LLVM_UNLIKELY(out_degree(u, G) == 1)) {
+                } else if (LLVM_UNLIKELY(has_unique_target(u, G))) {
                     // Otherwise if we have a single user, we have a similar case as above but
                     // we can only merge this vertex into the outgoing instruction if they are
                     // of the same type.
@@ -900,15 +960,18 @@ bool BooleanReassociationPass::contractGraph(StatementMap & M, Graph & G) const 
                     const Vertex v = target(ei, G);
                     if (LLVM_UNLIKELY(getType(G[v]) == getType(G[u]))) {
                         for (auto ej : make_iterator_range(in_edges(u, G))) {
-                            add_edge(G[ei], source(ej, G), v, G);
+                            add_edge(G[ej], source(ej, G), v, G);
                         }
-                        removeVertex(u, M, G);
+                        if (LLVM_UNLIKELY(getValue(G[v]) == nullptr && getValue(G[u]) != nullptr)) {
+                            getValue(G[v]) = getValue(G[u]);
+                        }
+                        removeVertex(u, G);
                         contracted = true;
-                    }                    
+                    }
                 }
             }
         } else if (LLVM_UNLIKELY(isNonEscaping(G[u]))) {
-            removeVertex(u, M, G);
+            removeVertex(u, G);
             contracted = true;
         }
     }
@@ -932,131 +995,141 @@ inline bool isReducible(const VertexData & data) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief reduceGraph
  ** ------------------------------------------------------------------------------------------------------------- */
-bool BooleanReassociationPass::reduceGraph(CharacterizationMap & C, StatementMap & S, Graph & G) const {
+bool BooleanReassociationPass::reduceVertex(const Vertex u, CharacterizationMap & C, VertexMap & M, Graph & G, const bool use_expensive_simplification) const {
 
     bool reduced = false;
 
-    VertexMap M;
+    assert (isReducible(G[u]));
+
+    Z3_ast node = getDefinition(G[u]);
+    if (isAssociative(G[u])) {
+        const TypeId typeId = getType(G[u]);
+        if (node == nullptr) {
+            const auto n = in_degree(u, G); assert (n > 1);
+            Z3_ast operands[n];
+            unsigned i = 0;
+            for (auto e : make_iterator_range(in_edges(u, G))) {
+                const Vertex v = source(e, G);
+                assert (getDefinition(G[v]));
+                operands[i++] = getDefinition(G[v]);
+            }
+            switch (typeId) {
+                case TypeId::And:
+                    node = Z3_mk_and(mContext, n, operands);
+                    break;
+                case TypeId::Or:
+                    node = Z3_mk_or(mContext, n, operands);
+                    break;
+                case TypeId::Xor:
+                    node = Z3_mk_xor(mContext, operands[0], operands[1]);
+                    for (unsigned i = 2; LLVM_UNLIKELY(i < n); ++i) {
+                        node = Z3_mk_xor(mContext, node, operands[i]);
+                    }
+                    break;
+                default: llvm_unreachable("unexpected type id");
+            }
+            assert (node);
+            getDefinition(G[u]) = node;
+        }
+
+        graph_traits<Graph>::in_edge_iterator begin, end;
+restart:if (in_degree(u, G) > 1) {
+            std::tie(begin, end) = in_edges(u, G);
+            for (auto i = begin; ++i != end; ) {
+                const auto v = source(*i, G);
+                for (auto j = begin; j != i; ++j) {
+                    const auto w = source(*j, G);
+                    Z3_ast operands[2] = { getDefinition(G[v]), getDefinition(G[w]) };
+                    Z3_ast test = nullptr;
+                    switch (typeId) {
+                        case TypeId::And:
+                            test = Z3_mk_and(mContext, 2, operands); break;
+                        case TypeId::Or:
+                            test = Z3_mk_or(mContext, 2, operands); break;
+                        case TypeId::Xor:
+                            test = Z3_mk_xor(mContext, operands[0], operands[1]); break;
+                        default:
+                            llvm_unreachable("impossible type id");
+                    }
+                    assert (test);
+                    test = simplify(test, use_expensive_simplification);
+
+                    bool replacement = false;
+                    Vertex x = 0;
+                    const auto f = M.find(test);
+                    if (LLVM_UNLIKELY(f != M.end())) {
+                        x = f->second;
+                        assert (getDefinition(G[x]) == test);
+                        replacement = true;
+                    } else {
+                        PabloAST * const factor = C.findKey(test);
+                        if (LLVM_UNLIKELY(!inCurrentBlock(factor, mBlock))) {
+                            x = makeVertex(TypeId::Var, factor, G, test);
+                            M.emplace(test, x);
+                            replacement = true;
+                        }
+                    }
+
+                    if (LLVM_UNLIKELY(replacement)) {
+
+                        // note: unless both edges carry an Pablo AST replacement value, they will converge into a single edge.
+                        PabloAST * const r1 = G[*i];
+                        PabloAST * const r2 = G[*j];
+
+                        remove_edge(*i, G);
+                        remove_edge(*j, G);
+
+                        if (LLVM_UNLIKELY(r1 && r2)) {
+                            add_edge(r1, x, u, G);
+                            add_edge(r2, x, u, G);
+                        } else {
+                            add_edge(r1 ? r1 : r2, x, u, G);
+                        }
+
+                        reduced = true;
+                        goto restart;
+                    }
+                }
+            }
+        }
+    }
+
+    if (LLVM_UNLIKELY(node == nullptr)) {
+        throw std::runtime_error("No Z3 characterization for vertex " + std::to_string(u));
+    }
+
+    auto f = M.find(node);
+    if (LLVM_LIKELY(f == M.end())) {
+        M.emplace(node, u);
+    } else if (isAssociative(G[u])) {
+        const Vertex v = f->second;
+        for (auto e : make_iterator_range(out_edges(u, G))) {
+            add_edge(G[e], v, target(e, G), G);
+        }
+        removeVertex(u, G);
+        reduced = true;
+    }
+
+    return reduced;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief reduceGraph
+ ** ------------------------------------------------------------------------------------------------------------- */
+bool BooleanReassociationPass::reduceGraph(CharacterizationMap & C, VertexMap & M, Graph & G) const {
+
+    bool reduced = false;
+
     circular_buffer<Vertex> ordering(num_vertices(G));
 
     topological_sort(G, std::front_inserter(ordering)); // topological ordering
 
+    M.clear();
+
     // first contract the graph
     for (const Vertex u : ordering) {
         if (isReducible(G[u])) {
-            Z3_ast & node = getDefinition(G[u]);
-            if (isAssociative(G[u])) {
-                const TypeId typeId = getType(G[u]);
-                if (node == nullptr) {
-                    const auto n = in_degree(u, G); assert (n > 1);
-                    Z3_ast operands[n];
-                    unsigned i = 0;
-                    for (auto e : make_iterator_range(in_edges(u, G))) {
-                        const Vertex v = source(e, G);
-                        assert (getDefinition(G[v]));
-                        operands[i++] = getDefinition(G[v]);
-                    }
-                    switch (typeId) {
-                        case TypeId::And:
-                            node = Z3_mk_and(mContext, n, operands);
-                            break;
-                        case TypeId::Or:
-                            node = Z3_mk_or(mContext, n, operands);
-                            break;
-                        case TypeId::Xor:
-                            node = Z3_mk_xor(mContext, operands[0], operands[1]);
-                            for (unsigned i = 2; LLVM_UNLIKELY(i < n); ++i) {
-                                node = Z3_mk_xor(mContext, node, operands[i]);
-                            }
-                            break;
-                        default: llvm_unreachable("unexpected type id");
-                    }
-
-                    assert (node);
-                    node = Z3_simplify(mContext, node);
-                }
-                graph_traits<Graph>::in_edge_iterator begin, end;
-restart:        if (in_degree(u, G) > 1) {
-                    std::tie(begin, end) = in_edges(u, G);
-                    for (auto i = begin; ++i != end; ) {
-                        const auto v = source(*i, G);
-                        for (auto j = begin; j != i; ++j) {
-                            const auto w = source(*j, G);
-                            Z3_ast operands[2] = { getDefinition(G[v]), getDefinition(G[w]) };
-                            assert (operands[0]);
-                            assert (operands[1]);
-                            Z3_ast test = nullptr;
-                            switch (typeId) {
-                                case TypeId::And:
-                                    test = Z3_mk_and(mContext, 2, operands); break;
-                                case TypeId::Or:
-                                    test = Z3_mk_or(mContext, 2, operands); break;
-                                case TypeId::Xor:
-                                    test = Z3_mk_xor(mContext, operands[0], operands[1]); break;
-                                default:
-                                    llvm_unreachable("impossible type id");
-                            }
-                            assert (test);
-                            test = Z3_simplify(mContext, test);
-                            PabloAST * const factor = C.findKey(test);
-                            if (LLVM_UNLIKELY(factor != nullptr)) {
-                                const Vertex a = makeVertex(TypeId::Var, factor, S, G, test);
-                                // note: unless both edges carry an Pablo AST replacement value, they will converge into a single edge.
-                                PabloAST * const r1 = G[*i];
-                                PabloAST * const r2 = G[*j];
-
-                                remove_edge(*i, G);
-                                remove_edge(*j, G);
-
-                                if (LLVM_UNLIKELY(r1 && r2)) {
-                                    add_edge(r1, a, u, G);
-                                    add_edge(r2, a, u, G);
-                                } else {
-                                    add_edge(r1 ? r1 : r2, a, u, G);
-                                }
-
-//                                errs() << " -- subsituting (" << a << ',' << u << ")=" << Z3_ast_to_string(mContext, test)
-//                                       << " for (" << v << ',' << u << ")=" << Z3_ast_to_string(mContext, getDefinition(G[v]));
-
-//                                switch (typeId) {
-//                                    case TypeId::And:
-//                                        errs() << " ∧ "; break;
-//                                    case TypeId::Or:
-//                                        errs() << " ∨ ";  break;
-//                                    case TypeId::Xor:
-//                                        errs() << " ⊕ ";  break;
-//                                    default:
-//                                        llvm_unreachable("impossible type id");
-//                                }
-
-//                                errs() << "(" << w << ',' << u << ")=" << Z3_ast_to_string(mContext, getDefinition(G[w]))
-//                                       << "\n";
-
-                                reduced = true;
-                                goto restart;
-                            }
-                        }
-                    }
-                }
-            }
-
-            if (LLVM_UNLIKELY(node == nullptr)) {
-                throw std::runtime_error("No Z3 characterization for vertex " + std::to_string(u));
-            }
-
-            auto f = M.find(node);
-            if (LLVM_LIKELY(f == M.end())) {
-                M.emplace(node, u);
-            } else if (isAssociative(G[u])) {
-                const Vertex v = f->second;
-
-//                errs() << " -- subsituting " << u << ":=\n" << Z3_ast_to_string(mContext, getDefinition(G[u]))
-//                       << "\n for " << v << ":=\n" << Z3_ast_to_string(mContext, getDefinition(G[v])) << "\n";
-
-                for (auto e : make_iterator_range(out_edges(u, G))) {
-                    add_edge(G[e], v, target(e, G), G);
-                }
-                removeVertex(u, S, G);
+            if (reduceVertex(u, C, M, G, false)) {
                 reduced = true;
             }
         }
@@ -1077,14 +1150,14 @@ bool BooleanReassociationPass::factorGraph(const TypeId typeId, Graph & G, std::
 
     bool modified = false;
 
-    for (auto i = factors.begin(); ++i != factors.end(); ) {
-        assert (getType(G[*i]) == typeId);
-        for (auto ei : make_iterator_range(in_edges(*i, G))) {
+    for (unsigned i = 1; i < factors.size(); ++i) {
+        assert (getType(G[factors[i]]) == typeId);
+        for (auto ei : make_iterator_range(in_edges(factors[i], G))) {
             I.push_back(source(ei, G));
         }
         std::sort(I.begin(), I.end());
-        for (auto j = factors.begin(); j != i; ++j) {
-            for (auto ej : make_iterator_range(in_edges(*j, G))) {
+        for (unsigned j = 0; j < i; ++j) {
+            for (auto ej : make_iterator_range(in_edges(factors[j], G))) {
                 J.push_back(source(ej, G));
             }
             std::sort(J.begin(), J.end());
@@ -1094,8 +1167,8 @@ bool BooleanReassociationPass::factorGraph(const TypeId typeId, Graph & G, std::
             // if the intersection contains at least two elements
             const auto n = K.size();
             if (n > 1) {
-                Vertex a = *i;
-                Vertex b = *j;
+                Vertex a = factors[i];
+                Vertex b = factors[j];
                 if (LLVM_UNLIKELY(in_degree(a, G) == n || in_degree(b, G) == n)) {
                     if (in_degree(a, G) != n) {
                         assert (in_degree(b, G) == n);
@@ -1164,14 +1237,14 @@ inline bool isMutable(const Vertex u, const Graph & G) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief rewriteAST
  ** ------------------------------------------------------------------------------------------------------------- */
-void BooleanReassociationPass::rewriteAST(PabloBlock * const block, Graph & G) {
+bool BooleanReassociationPass::rewriteAST(CharacterizationMap & C, VertexMap & M, Graph & G) {
 
     using line_t = long long int;
 
     enum : line_t { MAX_INT = std::numeric_limits<line_t>::max() };
 
     Z3_config cfg = Z3_mk_config();
-    Z3_set_param_value(cfg, "MODEL", "true");
+    Z3_set_param_value(cfg, "model", "true");
     Z3_context ctx = Z3_mk_context(cfg);
     Z3_del_config(cfg);
     Z3_solver solver = Z3_mk_solver(ctx);
@@ -1179,7 +1252,7 @@ void BooleanReassociationPass::rewriteAST(PabloBlock * const block, Graph & G) {
 
     std::vector<Z3_ast> mapping(num_vertices(G), nullptr);
 
-    flat_map<PabloAST *, Z3_ast> M;
+    flat_map<PabloAST *, Z3_ast> V;
 
     // Generate the variables
     const auto ty = Z3_mk_int_sort(ctx);
@@ -1188,17 +1261,13 @@ void BooleanReassociationPass::rewriteAST(PabloBlock * const block, Graph & G) {
     for (const Vertex u : make_iterator_range(vertices(G))) {
         const auto var = Z3_mk_fresh_const(ctx, nullptr, ty);
         Z3_ast constraint = nullptr;
-        if (in_degree(u, G) == 0) {
-            constraint = Z3_mk_eq(ctx, var, ZERO);
-        } else {
+        if (in_degree(u, G) > 0) {
             constraint = Z3_mk_gt(ctx, var, ZERO);
-        }
-        Z3_solver_assert(ctx, solver, constraint);
-
+            Z3_solver_assert(ctx, solver, constraint);
+        }        
         PabloAST * const expr = getValue(G[u]);
-        if (expr) {
-            const bool added = M.emplace(expr, var).second;
-            assert ("G contains duplicate vertices for the same statement!" && added);
+        if (inCurrentBlock(expr, mBlock)) {
+            V.emplace(expr, var);
         }
         mapping[u] = var;
     }
@@ -1214,21 +1283,20 @@ void BooleanReassociationPass::rewriteAST(PabloBlock * const block, Graph & G) {
 
     // Compute the soft ordering constraints
     std::vector<Z3_ast> ordering(0);
-    ordering.reserve(2 * M.size() - 1);
+    ordering.reserve(V.size() - 1);
 
     Z3_ast prior = nullptr;
     unsigned gap = 1;
-    for (Statement * stmt : *block) {
-        auto f = M.find(stmt);
-        if (f != M.end()) {
+    for (Statement * stmt : *mBlock) {
+        auto f = V.find(stmt);
+        if (f != V.end()) {
             Z3_ast const node = f->second;
             if (prior) {
-                ordering.push_back(Z3_mk_lt(ctx, prior, node));
+//                ordering.push_back(Z3_mk_lt(ctx, prior, node)); // increases the cost by 6 - 10x
                 Z3_ast ops[2] = { node, prior };
                 ordering.push_back(Z3_mk_le(ctx, Z3_mk_sub(ctx, 2, ops), Z3_mk_int(ctx, gap, ty)));
             } else {
                 ordering.push_back(Z3_mk_eq(ctx, node, Z3_mk_int(ctx, gap, ty)));
-
             }
             prior = node;
             gap = 0;
@@ -1269,7 +1337,7 @@ void BooleanReassociationPass::rewriteAST(PabloBlock * const block, Graph & G) {
 
     std::sort(S.begin(), S.end(), [&L](const Vertex u, const Vertex v){ return L[u] < L[v]; });
 
-    block->setInsertPoint(nullptr);
+    mBlock->setInsertPoint(nullptr);
 
     std::vector<Vertex> T;
 
@@ -1287,78 +1355,95 @@ void BooleanReassociationPass::rewriteAST(PabloBlock * const block, Graph & G) {
                 throw std::runtime_error("Vertex " + std::to_string(u) + " is either a source or sink node but marked as associative!");
             }
 
-            Statement * ip = block->getInsertPoint();
-            ip = ip ? ip->getNextNode() : block->front();
+            Statement * ip = mBlock->getInsertPoint();
+            ip = ip ? ip->getNextNode() : mBlock->front();
 
             const auto typeId = getType(G[u]);
 
-            T.reserve(in_degree(u, G));
-            for (const auto e : make_iterator_range(in_edges(u, G))) {
-                T.push_back(source(e, G));
-            }
+            PabloAST * expr = nullptr;
 
-            // Then sort them by their line position (noting any incoming value will either be 0 or MAX_INT)
-            std::sort(T.begin(), T.end(), [&L](const Vertex u, const Vertex v){ return L[u] < L[v]; });
-            if (LoadEarly) {
-                block->setInsertPoint(nullptr);
-            }
+            for (;;) {
 
-            circular_buffer<PabloAST *> Q(2); // in_degree(u, G));
-            for (auto u : T) {
-                PabloAST * expr = getValue(G[u]);
-                if (LLVM_UNLIKELY(expr == nullptr)) {
-                    throw std::runtime_error("Vertex " + std::to_string(u) + " does not have an expression!");
+                T.reserve(in_degree(u, G));
+                for (const auto e : make_iterator_range(in_edges(u, G))) {
+                    T.push_back(source(e, G));
                 }
-                Q.push_back(expr);
-                if (Q.size() > 1) {
 
-                    PabloAST * e1 = Q.front(); Q.pop_front();
-                    PabloAST * e2 = Q.front(); Q.pop_front();
+                // Then sort them by their line position (noting any incoming value will either be 0 or MAX_INT)
+                std::sort(T.begin(), T.end(), [&L](const Vertex u, const Vertex v){ return L[u] < L[v]; });
 
-                    if (in_degree(u, G) > 0) {
-                        if (LLVM_UNLIKELY(!dominates(e1, e2))) {
-                            std::string tmp;
-                            raw_string_ostream out(tmp);
-                            out << "e1: ";
-                            PabloPrinter::print(e1, out);
-                            out << " does not dominate e2: ";
-                            PabloPrinter::print(e2, out);
-                            throw std::runtime_error(out.str());
+                if (LoadEarly) {
+                    mBlock->setInsertPoint(nullptr);
+                }
+
+                bool done = true;
+
+                PabloAST * join = nullptr;
+
+                for (auto v : T) {
+                    expr = getValue(G[v]);
+                    if (LLVM_UNLIKELY(expr == nullptr)) {
+                        throw std::runtime_error("Vertex " + std::to_string(v) + " does not have an expression!");
+                    }
+                    if (join) {
+
+                        if (in_degree(v, G) > 0) {
+
+                            assert (L[v] > 0 && L[v] < MAX_INT);
+
+                            Statement * dom = cast<Statement>(expr);
+                            for (;;) {
+                                PabloBlock * const parent = dom->getParent();
+                                if (parent == mBlock) {
+                                    break;
+                                }
+                                dom = parent->getBranch(); assert(dom);
+                            }
+                            mBlock->setInsertPoint(dom);
+
+                            assert (dominates(join, expr));
+                            assert (dominates(expr, ip));
+                            assert (dominates(dom, ip));
                         }
-                        assert (dominates(e1, e2));
-                        assert (dominates(e2, ip));
-                        Statement * dom = cast<Statement>(expr);
-                        for (;;) {
-                            PabloBlock * const parent = dom->getParent();
-                            if (parent == block) {
-                                block->setInsertPoint(dom);
+
+                        Statement * const currIP = mBlock->getInsertPoint();
+
+                        switch (typeId) {
+                            case TypeId::And:
+                                expr = mBlock->createAnd(join, expr); break;
+                            case TypeId::Or:
+                                expr = mBlock->createOr(join, expr); break;
+                            case TypeId::Xor:
+                                expr = mBlock->createXor(join, expr); break;
+                            default:
+                                llvm_unreachable("Invalid TypeId!");
+                        }
+
+                        // If the insertion point hasn't "moved" then we didn't make a new statement
+                        // and thus must have unexpectidly reused a prior statement (or Var.)
+                        if (LLVM_UNLIKELY(currIP == mBlock->getInsertPoint())) {
+                            if (LLVM_LIKELY(reduceVertex(u, C, M, G, true))) {
+                                done = false;
                                 break;
                             }
-                            dom = parent->getBranch(); assert(dom);
+                            throw std::runtime_error("Unable to reduce vertex " + std::to_string(u));
                         }
-                        assert (dominates(dom, ip));
                     }
+                    join = expr;
+                }
 
-                    switch (typeId) {
-                        case TypeId::And:
-                            expr = block->createAnd(e1, e2); break;
-                        case TypeId::Or:
-                            expr = block->createOr(e1, e2); break;
-                        case TypeId::Xor:
-                            expr = block->createXor(e1, e2); break;
-                        default: break;
-                    }
-                    Q.push_front(expr);
+                T.clear();
+
+                if (done) {
+                    break;
                 }
             }
 
-            assert (Q.size() == 1);
 
-            T.clear();
+            PabloAST * const replacement = expr; assert (replacement);
 
-            block->setInsertPoint(ip->getPrevNode());
+            mBlock->setInsertPoint(ip->getPrevNode());
 
-            PabloAST * const replacement = Q.front(); assert (replacement);
             for (auto e : make_iterator_range(out_edges(u, G))) {
                 if (G[e]) {
                     if (PabloAST * user = getValue(G[target(e, G)])) {
@@ -1371,7 +1456,6 @@ void BooleanReassociationPass::rewriteAST(PabloBlock * const block, Graph & G) {
         }
 
         assert (stmt);
-        assert (inCurrentBlock(stmt, block));
 
         if (LLVM_UNLIKELY(isa<If>(stmt) || isa<While>(stmt))) {
             for (auto e : make_iterator_range(out_edges(u, G))) {
@@ -1381,26 +1465,41 @@ void BooleanReassociationPass::rewriteAST(PabloBlock * const block, Graph & G) {
             }
         }
 
-        block->insert(cast<Statement>(stmt));
+        mBlock->insert(cast<Statement>(stmt));
         L[u] = count++; // update the line count with the actual one.
     }
 
     Z3_solver_dec_ref(ctx, solver);
     Z3_del_context(ctx);
 
-    Statement * const end = block->getInsertPoint(); assert (end);
+    Statement * const end = mBlock->getInsertPoint(); assert (end);
     for (;;) {
         Statement * const next = end->getNextNode();
         if (next == nullptr) {
             break;
         }
+
+        #ifndef NDEBUG
+        for (PabloAST * user : next->users()) {
+            if (isa<Statement>(user) && dominates(user, next)) {
+                std::string tmp;
+                raw_string_ostream out(tmp);
+                out << "Erasing ";
+                PabloPrinter::print(next, out);
+                out << " erroneously modifies live statement ";
+                PabloPrinter::print(cast<Statement>(user), out);
+                throw std::runtime_error(out.str());
+            }
+        }
+        #endif
         next->eraseFromParent(true);
     }
 
     #ifndef NDEBUG
-    PabloVerifier::verify(mFunction, "post-reassociation");
+    PabloVerifier::verify(mFunction, "mid-reassociation");
     #endif
 
+    return true;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -1481,6 +1580,46 @@ inline Z3_ast BooleanReassociationPass::makeVar() const {
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
+ * @brief simplify
+ ** ------------------------------------------------------------------------------------------------------------- */
+Z3_ast BooleanReassociationPass::simplify(Z3_ast node, bool use_expensive_minimization) const {
+
+    assert (node);
+
+    node = Z3_simplify_ex(mContext, node, mParams);
+
+    if (use_expensive_minimization) {
+
+        Z3_goal g = Z3_mk_goal(mContext, true, false, false);
+        Z3_goal_inc_ref(mContext, g);
+
+        Z3_goal_assert(mContext, g, node);
+
+        Z3_apply_result r = Z3_tactic_apply(mContext, mTactic, g);
+        Z3_apply_result_inc_ref(mContext, r);
+
+        assert (Z3_apply_result_get_num_subgoals(mContext, r) == 1);
+
+        Z3_goal h = Z3_apply_result_get_subgoal(mContext, r, 0);
+        Z3_goal_inc_ref(mContext, h);
+
+        const unsigned n = Z3_goal_size(mContext, h);
+
+        if (n == 1) {
+            node = Z3_goal_formula(mContext, h, 0);
+        } else if (n > 1) {
+            Z3_ast operands[n];
+            for (unsigned i = 0; i < n; ++i) {
+                operands[i] = Z3_goal_formula(mContext, h, i);
+            }
+            node = Z3_mk_and(mContext, n, operands);
+        }
+        Z3_goal_dec_ref(mContext, h);
+    }
+    return node;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
  * @brief add
  ** ------------------------------------------------------------------------------------------------------------- */
 inline Z3_ast BooleanReassociationPass::CharacterizationMap::add(PabloAST * const expr, Z3_ast node, const bool forwardOnly) {
@@ -1525,9 +1664,10 @@ inline PabloAST * BooleanReassociationPass::CharacterizationMap::findKey(Z3_ast 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief constructor
  ** ------------------------------------------------------------------------------------------------------------- */
-inline BooleanReassociationPass::BooleanReassociationPass(Z3_context ctx, Z3_solver solver, PabloFunction & f)
+inline BooleanReassociationPass::BooleanReassociationPass(Z3_context ctx, Z3_params params, Z3_tactic tactic, PabloFunction & f)
 : mContext(ctx)
-, mSolver(solver)
+, mParams(params)
+, mTactic(tactic)
 , mFunction(f)
 , mModified(false) {
 

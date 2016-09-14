@@ -153,6 +153,10 @@ void PabloPrinter::print(const PabloAST * expr, llvm::raw_ostream & out) {
         out << stmt->getName();
     } else if (isa<Integer>(expr)) {
         out << cast<Integer>(expr)->value();
+    } else if (isa<Prototype>(expr)) {
+        out << cast<Prototype>(expr)->getName();
+    } else if (isa<PabloFunction>(expr)) {
+        out << cast<PabloFunction>(expr)->getName();
     } else {
         out << "???";
     }

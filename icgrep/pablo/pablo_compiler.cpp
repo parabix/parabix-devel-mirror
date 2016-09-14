@@ -20,7 +20,6 @@
 #include <hrtime.h>
 #include <llvm/Support/Debug.h>
 
-
 namespace pablo {
 
 PabloCompiler::PabloCompiler(IDISA::IDISA_Builder * b, PabloKernel * k, PabloFunction * const function)
@@ -48,6 +47,7 @@ Type * PabloCompiler::initializeKernelData() {
 }
     
 void PabloCompiler::compile(Function * doBlockFunction) {
+
     // Make sure that we generate code into the right module.
     mMod = iBuilder->getModule();
     mFunction = doBlockFunction;
@@ -69,6 +69,9 @@ void PabloCompiler::compile(Function * doBlockFunction) {
         std::string outputName = mKernelBuilder->mStreamSetOutputs[0].ssName;
         outputSet_ptr = mKernelBuilder->getStreamSetBlockPtr(mSelf, outputName, blockNo);
     }
+
+    mMarkerMap.emplace(PabloBlock::createZeroes(), iBuilder->allZeroes());
+    mMarkerMap.emplace(PabloBlock::createOnes(), iBuilder->allOnes());
     for (unsigned j = 0; j < mPabloFunction->getNumOfParameters(); ++j) {
         Value * inputVal = iBuilder->CreateGEP(inputSet_ptr, {iBuilder->getInt32(0), iBuilder->getInt32(j)}); 
         const Var * const var = mPabloFunction->getParameter(j);
@@ -88,13 +91,11 @@ void PabloCompiler::compile(Function * doBlockFunction) {
         iBuilder->CreateBlockAlignedStore(f->second, outputSet_ptr, {iBuilder->getInt32(0), iBuilder->getInt32(j)});
     }
     iBuilder->CreateRetVoid();
-
     
     #ifdef PRINT_TIMING_INFORMATION
     const timestamp_t pablo_compilation_end = read_cycle_counter();
     std::cerr << "PABLO COMPILATION TIME: " << (pablo_compilation_end - pablo_compilation_start) << std::endl;
     #endif
-
 }
 
 inline void PabloCompiler::Examine(const PabloFunction * const function) {
@@ -224,7 +225,7 @@ void PabloCompiler::compileWhile(const While * whileStatement) {
     // for any Next nodes in the loop body, initialize to (a) pre-loop value.
     for (const Next * n : nextNodes) {
         PHINode * phi = iBuilder->CreatePHI(mBitBlockType, 2, n->getName()->value());
-        auto f = mMarkerMap.find(n->getInitial());
+        auto f = mMarkerMap.find(n->getInitial());        
         assert (f != mMarkerMap.end());
         phi->addIncoming(f->second, whileEntryBlock);
         mMarkerMap[n->getInitial()] = phi;

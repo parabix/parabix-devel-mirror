@@ -18,19 +18,25 @@ using ScopeSet = SmallSet<const PabloBlock *>;
  * @brief verifyUseDefInformation
  ** ------------------------------------------------------------------------------------------------------------- */
 template<typename VectorType>
-bool checkVector(const Statement * value, const VectorType & vector) {
+inline bool checkVector(const PabloAST * const value, const VectorType & vector, size_t & uses) {
     for (auto escapedValue : vector) {
         if (escapedValue == value) {
+            ++uses;
             return false;
         }
     }
     return true;
 }
 
-void verifyUseDefInformation(const PabloBlock * block, const ScopeSet & validScopes) {
-    for (const Statement * stmt : *block) {
-        for (const PabloAST * use : stmt->users()) {
-            if (LLVM_LIKELY(isa<Statement>(use))) {
+void testUsers(const PabloAST * expr, const ScopeSet & validScopes) {
+    if (isa<Count>(expr)) { // !! matchedLineCount is not being correctly added to the function !!
+        return;
+    }
+    size_t uses = 0;
+    SmallSet<const PabloAST *> verified;
+    for (const PabloAST * use : expr->users()) {
+        if (LLVM_LIKELY(isa<Statement>(use))) {
+            if (LLVM_LIKELY(verified.count(use) == 0)) {
                 const Statement * const user = cast<Statement>(use);
                 // test whether this user is in a block in the program
                 if (LLVM_UNLIKELY(validScopes.count(user->getParent()) == 0)) {
@@ -39,7 +45,7 @@ void verifyUseDefInformation(const PabloBlock * block, const ScopeSet & validSco
                     str << "PabloVerifier: use-def error: ";
                     PabloPrinter::print(user, str);
                     str << " is a user of ";
-                    PabloPrinter::print(stmt, str);
+                    PabloPrinter::print(expr, str);
                     if (user->getParent() == nullptr) {
                         str << " but is not in any scope.";
                     } else {
@@ -47,57 +53,117 @@ void verifyUseDefInformation(const PabloBlock * block, const ScopeSet & validSco
                     }
                     throw std::runtime_error(str.str());
                 }
+                // expr may be used more than once by the same user.
                 bool notFound = true;
                 for (unsigned i = 0; i != user->getNumOperands(); ++i) {
-                    if (user->getOperand(i) == stmt) {
+                    if (user->getOperand(i) == expr) {
                         notFound = false;
+                        ++uses;
+                    }
+                }
+                if (const If * ifNode = dyn_cast<If>(expr)) {
+                    notFound &= checkVector(user, ifNode->getDefined(), uses);
+                } else if (const If * ifNode = dyn_cast<If>(user)) {
+                    notFound &= checkVector(expr, ifNode->getDefined(), uses);
+                } else if (const While * whileNode = dyn_cast<While>(expr)) {
+                    notFound &= checkVector(user, whileNode->getVariants(), uses);
+                } else if (const While * whileNode = dyn_cast<While>(user)) {
+                    notFound &= checkVector(expr, whileNode->getVariants(), uses);
+                } else if (isa<Next>(expr) && isa<Assign>(use)) {
+                    notFound &= (use != cast<Next>(expr)->getInitial());
+                }
+                if (LLVM_UNLIKELY(notFound)) {
+                    std::string tmp;
+                    raw_string_ostream str(tmp);
+                    str << "PabloVerifier: use-def error: ";
+                    PabloPrinter::print(expr, str);
+                    str << " is not a definition of ";
+                    PabloPrinter::print(use, str);
+                    throw std::runtime_error(str.str());
+                }
+                verified.insert(use);
+            }
+        } else if (LLVM_UNLIKELY(isa<PabloFunction>(use))) {
+            if (LLVM_LIKELY(verified.count(use) == 0)) {
+                const PabloFunction * f = cast<PabloFunction>(use);
+                bool isParameter = false;
+                bool isResult = false;
+                for (unsigned i = 0; i != f->getNumOfParameters(); ++i) {
+                    if (f->getParameter(i) == expr) {
+                        isParameter = true;
                         break;
                     }
                 }
-                if (LLVM_UNLIKELY(notFound)) {
-                    if (const If * ifNode = dyn_cast<If>(stmt)) {
-                        notFound = checkVector(user, ifNode->getDefined());
-                    } else if (const If * ifNode = dyn_cast<If>(user)) {
-                        notFound = checkVector(stmt, ifNode->getDefined());
-                    } else if (const While * whileNode = dyn_cast<While>(stmt)) {
-                        notFound = checkVector(user, whileNode->getVariants());
-                    } else if (const While * whileNode = dyn_cast<While>(user)) {
-                        notFound = checkVector(stmt, whileNode->getVariants());
-                    } else if (isa<Next>(stmt) && isa<Assign>(use)) {
-                        notFound = (use != cast<Next>(stmt)->getInitial());
-                    }
-                    if (LLVM_UNLIKELY(notFound)) {
-                        std::string tmp;
-                        raw_string_ostream str(tmp);
-                        str << "PabloVerifier: use-def error: ";
-                        PabloPrinter::print(stmt, str);
-                        str << " is not a definition of ";
-                        PabloPrinter::print(use, str);
-                        throw std::runtime_error(str.str());
+                for (unsigned i = 0; i != f->getNumOfResults(); ++i) {
+                    if (f->getResult(i) == expr) {
+                        isResult = true;
+                        break;
                     }
                 }
-            }
-        }
-        for (unsigned i = 0; i != stmt->getNumOperands(); ++i) {
-            const PabloAST * const def = stmt->getOperand(i);
-            bool notFound = true;
-            for (const PabloAST * use : def->users()) {
-                if (use == stmt) {
-                    notFound = false;
-                    break;
+                if (LLVM_UNLIKELY(!(isParameter ^ isResult))) {
+                    std::string tmp;
+                    raw_string_ostream str(tmp);
+                    str << "PabloVerifier: use-def error: ";
+                    PabloPrinter::print(expr, str);
+                    if (isParameter && isResult) {
+                        str << " is both a parameter and result of ";
+                    } else {
+                        str << " is not a parameter or result of ";
+                    }
+                    PabloPrinter::print(f, str);
+                    throw std::runtime_error(str.str());
                 }
+                ++uses;
+                verified.insert(use);
             }
-            if (LLVM_UNLIKELY(notFound)) {
-                std::string tmp;
-                raw_string_ostream str(tmp);
-                str << "PabloVerifier: def-use error: ";
-                PabloPrinter::print(stmt, str);
-                str << " is not recorded in ";
-                PabloPrinter::print(def, str);
-                str << "'s user list";
-                throw std::runtime_error(str.str());
+        } else {
+            std::string tmp;
+            raw_string_ostream str(tmp);
+            str << "PabloVerifier: use-def error: expression ";
+            PabloPrinter::print(use, str);
+            str << " is incorrectly reported as a user of ";
+            PabloPrinter::print(expr, str);
+            throw std::runtime_error(str.str());
+        }
+    }
+    if (LLVM_UNLIKELY(uses != expr->getNumUses())) {
+        std::string tmp;
+        raw_string_ostream str(tmp);
+        str << "PabloVerifier: use-def error: ";
+        PabloPrinter::print(expr, str);
+        str << " is reported having " << expr->getNumUses() << " user(s)"
+            << " but was observed having " << uses << " user(s)";
+        throw std::runtime_error(str.str());
+    }
+}
+
+void testDefs(const Statement * stmt) {
+    for (unsigned i = 0; i != stmt->getNumOperands(); ++i) {
+        const PabloAST * const def = stmt->getOperand(i);
+        bool notFound = true;
+        for (const PabloAST * use : def->users()) {
+            if (use == stmt) {
+                notFound = false;
+                break;
             }
         }
+        if (LLVM_UNLIKELY(notFound)) {
+            std::string tmp;
+            raw_string_ostream str(tmp);
+            str << "PabloVerifier: def-use error: ";
+            PabloPrinter::print(stmt, str);
+            str << " is not recorded in ";
+            PabloPrinter::print(def, str);
+            str << "'s user list";
+            throw std::runtime_error(str.str());
+        }
+    }
+}
+
+void verifyUseDefInformation(const PabloBlock * block, const ScopeSet & validScopes) {
+    for (const Statement * stmt : *block) {
+        testUsers(stmt, validScopes);
+        testDefs(stmt);
         if (LLVM_UNLIKELY(isa<If>(stmt) || isa<While>(stmt))) {
             verifyUseDefInformation(isa<If>(stmt) ? cast<If>(stmt)->getBody() : cast<While>(stmt)->getBody(), validScopes);
         }
@@ -116,6 +182,12 @@ void gatherValidScopes(const PabloBlock * block, ScopeSet & validScopes) {
 void verifyUseDefInformation(const PabloFunction & function) {
     ScopeSet validScopes;
     gatherValidScopes(function.getEntryBlock(), validScopes);
+    for (unsigned i = 0; i < function.getNumOfParameters(); ++i) {
+        testUsers(function.getParameter(i), validScopes);
+    }
+    for (unsigned i = 0; i < function.getNumOfResults(); ++i) {
+        testDefs(function.getResult(i));
+    }
     verifyUseDefInformation(function.getEntryBlock(), validScopes);
 }
 
@@ -188,7 +260,7 @@ static void throwMisreportedBranchError(const Statement * const stmt, const Stat
     str << "PabloVerifier: structure error: ";
     PabloPrinter::print(stmt, str);
     str << " branches into a scope block that reports ";
-    PabloPrinter::print(stmt, str);
+    PabloPrinter::print(branch, str);
     str << " as its branching statement.";
     throw std::runtime_error(str.str());
 }

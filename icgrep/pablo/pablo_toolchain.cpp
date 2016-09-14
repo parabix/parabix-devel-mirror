@@ -18,6 +18,7 @@
 #ifdef ENABLE_MULTIPLEXING
 #include <pablo/optimizers/pablo_automultiplexing.hpp>
 #include <pablo/optimizers/pablo_bddminimization.h>
+#include <pablo/optimizers/booleanreassociationpass.h>
 #include <pablo/optimizers/distributivepass.h>
 #include <pablo/optimizers/schedulingprepass.h>
 #endif
@@ -27,13 +28,18 @@
 #include <sstream>
 #include <llvm/Support/CommandLine.h>
 #include <llvm/Support/FileSystem.h>
-
+#ifdef PRINT_TIMING_INFORMATION
+#include <hrtime.h>
+#endif
 
 namespace pablo {
 
 
 static cl::OptionCategory PabloOptions("Pablo Options", "These options control printing, generation and instrumentation of Pablo intermediate code.");
-const cl::OptionCategory * pablo_toolchain_flags() {return &PabloOptions;};
+
+const cl::OptionCategory * pablo_toolchain_flags() {
+    return &PabloOptions;
+}
     
     
 static cl::bits<PabloDebugFlags> 
@@ -204,27 +210,27 @@ void pablo_function_passes(PabloFunction * function) {
         READ_CYCLE_COUNTER(flattenif_end);
     }
 #ifdef ENABLE_MULTIPLEXING
-    if (PabloOptimizationsOptions.isSet(EnableLowering) || PabloOptimizationsOptions.isSet(EnablePreDistribution) || PabloOptimizationsOptions.isSet(EnablePostDistribution)) {
-        READ_CYCLE_COUNTER(coalescing_start);
-        CanonicalizeDFG::transform(*function);
-        READ_CYCLE_COUNTER(coalescing_end);
-    }
+//    if (PabloOptimizationsOptions.isSet(EnableLowering) || PabloOptimizationsOptions.isSet(EnablePreDistribution) || PabloOptimizationsOptions.isSet(EnablePostDistribution)) {
+//        READ_CYCLE_COUNTER(coalescing_start);
+//        CanonicalizeDFG::transform(*function);
+//        READ_CYCLE_COUNTER(coalescing_end);
+//    }
     if (PabloOptimizationsOptions.isSet(EnablePreDistribution)) {
         READ_CYCLE_COUNTER(pre_distribution_start);
-        DistributivePass::optimize(*function);
+        BooleanReassociationPass::optimize(*function);
         READ_CYCLE_COUNTER(pre_distribution_end);
     }
     if (PabloOptimizationsOptions.isSet(EnableMultiplexing)) {
         READ_CYCLE_COUNTER(multiplexing_start);
         MultiplexingPass::optimize(*function);
         READ_CYCLE_COUNTER(multiplexing_end);
-        if (PabloOptimizationsOptions.isSet(EnableLowering) || PabloOptimizationsOptions.isSet(EnablePreDistribution) || PabloOptimizationsOptions.isSet(EnablePostDistribution)) {
-            CanonicalizeDFG::transform(*function);
-        }
+//        if (PabloOptimizationsOptions.isSet(EnableLowering) || PabloOptimizationsOptions.isSet(EnablePreDistribution) || PabloOptimizationsOptions.isSet(EnablePostDistribution)) {
+//            CanonicalizeDFG::transform(*function);
+//        }
     }
     if (PabloOptimizationsOptions.isSet(EnablePostDistribution)) {
         READ_CYCLE_COUNTER(post_distribution_start);
-        DistributivePass::optimize(*function);
+        BooleanReassociationPass::optimize(*function);
         READ_CYCLE_COUNTER(post_distribution_end);
     }
 #endif
@@ -243,16 +249,16 @@ void pablo_function_passes(PabloFunction * function) {
     #ifdef PRINT_TIMING_INFORMATION
     distribution = SUMMARIZE_VARIADIC_DISTRIBUTION(function);
     #endif
-    if (PabloOptimizationsOptions.isSet(EnableLowering) || PabloOptimizationsOptions.isSet(EnablePreDistribution) || PabloOptimizationsOptions.isSet(EnablePostDistribution)) {
-        READ_CYCLE_COUNTER(lowering_start);
-        FactorizeDFG::transform(*function);
-        READ_CYCLE_COUNTER(lowering_end);
-    }
-    if (PabloOptimizationsOptions.isSet(EnablePrePassScheduling)) {
-        READ_CYCLE_COUNTER(scheduling_start);
-        SchedulingPrePass::optimize(*function);
-        READ_CYCLE_COUNTER(scheduling_end);
-    }
+//    if (PabloOptimizationsOptions.isSet(EnableLowering) || PabloOptimizationsOptions.isSet(EnablePreDistribution) || PabloOptimizationsOptions.isSet(EnablePostDistribution)) {
+//        READ_CYCLE_COUNTER(lowering_start);
+//        FactorizeDFG::transform(*function);
+//        READ_CYCLE_COUNTER(lowering_end);
+//    }
+//    if (PabloOptimizationsOptions.isSet(EnablePrePassScheduling)) {
+//        READ_CYCLE_COUNTER(scheduling_start);
+//        SchedulingPrePass::optimize(*function);
+//        READ_CYCLE_COUNTER(scheduling_end);
+//    }
 #endif
 #ifdef PRINT_TIMING_INFORMATION
     const timestamp_t optimization_end = read_cycle_counter();
@@ -276,9 +282,6 @@ void pablo_function_passes(PabloFunction * function) {
     std::cerr << "  SINKING TIME: " << (sinking_end - sinking_start) << std::endl;
     std::cerr << "  PRE-DISTRIBUTION TIME: " << (pre_distribution_end - pre_distribution_start) << std::endl;
     std::cerr << "  MULTIPLEXING TIME: " << (multiplexing_end - multiplexing_start) << std::endl;
-    std::cerr << "  MULTIPLEXING SEED: " << MultiplexingPass::SEED << std::endl;
-    std::cerr << "  MULTIPLEXING NODES USED: " << MultiplexingPass::NODES_USED << std::endl;
-    std::cerr << "  MULTIPLEXING NODES ALLOCATED: " << MultiplexingPass::NODES_ALLOCATED << std::endl;
     std::cerr << "  LOWERING TIME: " << (lowering_end - lowering_start) << std::endl;
     std::cerr << "  FLATTENIF TIME: " << (flattenif_end - flattenif_start) << std::endl;
     std::cerr << "  POST-DISTRIBUTION TIME: " << (post_distribution_end - post_distribution_start) << std::endl;

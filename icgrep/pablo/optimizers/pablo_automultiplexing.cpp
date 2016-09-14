@@ -3,6 +3,7 @@
 #include <pablo/function.h>
 #include <pablo/printer_pablos.h>
 #include <boost/container/flat_set.hpp>
+#include <boost/container/flat_map.hpp>
 #include <boost/numeric/ublas/matrix.hpp>
 #include <boost/circular_buffer.hpp>
 #include <boost/graph/topological_sort.hpp>
@@ -15,6 +16,7 @@
 #include <unordered_set>
 #include <functional>
 #include <llvm/Support/CommandLine.h>
+#include "maxsat.hpp"
 
 using namespace llvm;
 using namespace boost;
@@ -23,26 +25,12 @@ using namespace boost::numeric::ublas;
 
 static cl::OptionCategory MultiplexingOptions("Multiplexing Optimization Options", "These options control the Pablo Multiplexing optimization pass.");
 
-#ifdef NDEBUG
-#define INITIAL_SEED_VALUE (std::random_device()())
-#else
-#define INITIAL_SEED_VALUE (83234827342)
-#endif
-
-static cl::opt<std::mt19937::result_type> Seed("multiplexing-seed", cl::init(INITIAL_SEED_VALUE),
-                                        cl::desc("randomization seed used when performing any non-deterministic operations."),
-                                        cl::cat(MultiplexingOptions));
-
-#undef INITIAL_SEED_VALUE
-
 static cl::opt<unsigned> WindowSize("multiplexing-window-size", cl::init(100),
                                         cl::desc("maximum sequence distance to consider for candidate set."),
                                         cl::cat(MultiplexingOptions));
 
 
 namespace pablo {
-
-Z3_bool maxsat(Z3_context ctx, Z3_solver solver, std::vector<Z3_ast> & soft);
 
 using TypeId = PabloAST::ClassTypeId;
 
@@ -52,10 +40,6 @@ using TypeId = PabloAST::ClassTypeId;
  ** ------------------------------------------------------------------------------------------------------------- */
 bool MultiplexingPass::optimize(PabloFunction & function) {
 
-    PabloVerifier::verify(function, "pre-multiplexing");
-
-    errs() << "PRE-MULTIPLEXING\n==============================================\n";
-    PabloPrinter::print(function, errs());
 
     Z3_config cfg = Z3_mk_config();
     Z3_context ctx = Z3_mk_context_rc(cfg);
@@ -63,19 +47,18 @@ bool MultiplexingPass::optimize(PabloFunction & function) {
     Z3_solver solver = Z3_mk_solver(ctx);
     Z3_solver_inc_ref(ctx, solver);
 
-    MultiplexingPass mp(function, Seed, ctx, solver);
+    MultiplexingPass mp(function, ctx, solver);
 
     mp.optimize();
 
     Z3_solver_dec_ref(ctx, solver);
     Z3_del_context(ctx);
 
+    #ifndef NDEBUG
     PabloVerifier::verify(function, "post-multiplexing");
+    #endif
 
     Simplifier::optimize(function);
-
-    errs() << "POST-MULTIPLEXING\n==============================================\n";
-    PabloPrinter::print(function, errs());
 
     return true;
 }
@@ -86,13 +69,11 @@ bool MultiplexingPass::optimize(PabloFunction & function) {
  ** ------------------------------------------------------------------------------------------------------------- */
 void MultiplexingPass::optimize() {
     // Map the constants and input variables
-
-    add(PabloBlock::createZeroes(), Z3_mk_false(mContext));
-    add(PabloBlock::createOnes(), Z3_mk_true(mContext));
+    add(PabloBlock::createZeroes(), Z3_mk_false(mContext), -1);
+    add(PabloBlock::createOnes(), Z3_mk_true(mContext), -1);
     for (unsigned i = 0; i < mFunction.getNumOfParameters(); ++i) {
-        make(mFunction.getParameter(i));
+        add(mFunction.getParameter(i), makeVar(), -1);
     }
-
     optimize(mFunction.getEntryBlock());
 }
 
@@ -141,7 +122,7 @@ void MultiplexingPass::optimize(PabloBlock * const block) {
 void MultiplexingPass::multiplex(PabloBlock * const block, Statement * const begin, Statement * const end) {
     if (generateCandidateSets(begin, end)) {
         selectMultiplexSetsGreedy();
-        eliminateSubsetConstraints();
+        // eliminateSubsetConstraints();
         multiplexSelectedSets(block, begin, end);
     }
 }
@@ -151,7 +132,7 @@ void MultiplexingPass::multiplex(PabloBlock * const block, Statement * const beg
  ** ------------------------------------------------------------------------------------------------------------- */
 inline bool MultiplexingPass::equals(Z3_ast a, Z3_ast b) {
     Z3_solver_push(mContext, mSolver);
-    Z3_ast test = Z3_mk_eq(mContext, a, b); // try using check assumption instead?
+    Z3_ast test = Z3_mk_eq(mContext, a, b);
     Z3_inc_ref(mContext, test);
     Z3_solver_assert(mContext, mSolver, test);
     const auto r = Z3_solver_check(mContext, mSolver);
@@ -163,7 +144,7 @@ inline bool MultiplexingPass::equals(Z3_ast a, Z3_ast b) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief handle_unexpected_statement
  ** ------------------------------------------------------------------------------------------------------------- */
-static void handle_unexpected_statement(Statement * const stmt) {
+static void handle_unexpected_statement(const Statement * const stmt) {
     std::string tmp;
     raw_string_ostream err(tmp);
     err << "Unexpected statement type: ";
@@ -174,15 +155,16 @@ static void handle_unexpected_statement(Statement * const stmt) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief characterize
  ** ------------------------------------------------------------------------------------------------------------- */
-inline Z3_ast MultiplexingPass::characterize(Statement * const stmt) {
+Z3_ast MultiplexingPass::characterize(const Statement * const stmt, const bool deref) {
 
     const size_t n = stmt->getNumOperands(); assert (n > 0);
-    Z3_ast operands[n] = {};
+    Z3_ast operands[n];
     for (size_t i = 0; i < n; ++i) {
         PabloAST * op = stmt->getOperand(i);
-        if (LLVM_LIKELY(isa<Statement>(op) || isa<Var>(op))) {
-            operands[i] = get(op, true);
+        if (LLVM_UNLIKELY(isa<Integer>(op) || isa<String>(op))) {
+            continue;
         }
+        operands[i] = get(op, deref);
     }
 
     Z3_ast node = operands[0];
@@ -205,7 +187,7 @@ inline Z3_ast MultiplexingPass::characterize(Statement * const stmt) {
                 Z3_dec_ref(mContext, node);
                 node = temp;
             }
-            return add(stmt, node);
+            return add(stmt, node, stmt->getNumUses());
         case TypeId::Not:
             node = Z3_mk_not(mContext, node);
             break;
@@ -219,25 +201,25 @@ inline Z3_ast MultiplexingPass::characterize(Statement * const stmt) {
             // for ¬m --- provided no derivative of this statement is negated in any fashion.
         case TypeId::MatchStar:
         case TypeId::Count:
-            return make(stmt);
+            node = makeVar();
+            break;
         default:
             handle_unexpected_statement(stmt);
     }
     Z3_inc_ref(mContext, node);
-    return add(stmt, node);
+    return add(stmt, node, stmt->getNumUses());
 }
 
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief characterize
  ** ------------------------------------------------------------------------------------------------------------- */
-inline Z3_ast MultiplexingPass::characterize(Advance * const adv, Z3_ast Ik) {
+inline Z3_ast MultiplexingPass::characterize(const Advance * const adv, Z3_ast Ik) {
     const auto k = mNegatedAdvance.size();
 
     assert (adv);
     assert (mConstraintGraph[k] == adv);
-
-    bool unconstrained[k] = {};
+    std::vector<bool> unconstrained(k);
 
     Z3_solver_push(mContext, mSolver);
 
@@ -262,11 +244,11 @@ inline Z3_ast MultiplexingPass::characterize(Advance * const adv, Z3_ast Ik) {
             Z3_solver_assert(mContext, mSolver, IiIk);
             if (Z3_solver_check(mContext, mSolver) == Z3_L_FALSE) {
                 // If Ai ∩ Ak = ∅ and Aj ⊂ Ai, Aj ∩ Ak = ∅.
-                for (auto e : make_iterator_range(in_edges(i, mSubsetGraph))) {
-                    unconstrained[source(e, mSubsetGraph)] = true;
-                }
+//                for (auto e : make_iterator_range(in_edges(i, mSubsetGraph))) {
+//                    unconstrained[source(e, mSubsetGraph)] = true;
+//                }
                 unconstrained[i] = true;
-            } else if (equals(Ii, IiIk)) {
+            }/* else if (equals(Ii, IiIk)) {
                 // If Ii = Ii ∩ Ik then Ii ⊆ Ik. Record this in the subset graph with the arc (i, k).
                 // Note: the AST will be modified to make these mutually exclusive if Ai and Ak end up in
                 // the same multiplexing set.
@@ -288,7 +270,7 @@ inline Z3_ast MultiplexingPass::characterize(Advance * const adv, Z3_ast Ik) {
                     unconstrained[j] = true;
                 }
                 unconstrained[i] = true;
-            }
+            }*/
             Z3_dec_ref(mContext, IiIk);
             Z3_solver_pop(mContext, mSolver, 1);
         }
@@ -296,7 +278,7 @@ inline Z3_ast MultiplexingPass::characterize(Advance * const adv, Z3_ast Ik) {
 
     Z3_solver_pop(mContext, mSolver, 1);
 
-    Z3_ast Ak0 = make(adv);
+    Z3_ast Ak0 = makeVar();
     Z3_inc_ref(mContext, Ak0);
     Z3_ast Nk = Z3_mk_not(mContext, Ak0);
     Z3_inc_ref(mContext, Nk);
@@ -328,7 +310,11 @@ inline Z3_ast MultiplexingPass::characterize(Advance * const adv, Z3_ast Ik) {
 
             continue; // note: if these Advances are transitively dependent, an edge will still exist.
         }
-        add_edge(i, k, mConstraintGraph);
+        const auto ei = add_edge(i, k, mConstraintGraph);
+        // if this is not a new edge, it must have a dependency constraint.
+        if (ei.second) {
+            mConstraintGraph[ei.first] = ConstraintType::Inclusive;
+        }
     }
     // To minimize the number of BDD computations, we store the negated variable instead of negating it each time.
     mNegatedAdvance.emplace_back(Nk);
@@ -337,7 +323,7 @@ inline Z3_ast MultiplexingPass::characterize(Advance * const adv, Z3_ast Ik) {
         Z3_inc_ref(mContext, Ak);
         Z3_dec_ref(mContext, Ak0);
     }
-    return add(adv, Ak);
+    return add(adv, Ak, -1);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -347,14 +333,15 @@ Statement * MultiplexingPass::initialize(Statement * const initial) {
 
     // clean up any unneeded refs / characterizations.
     for (auto i = mCharacterization.begin(); i != mCharacterization.end(); ) {
-        const CharacterizationRef & r = std::get<1>(*i);
-        const auto e = i++;
-        if (LLVM_UNLIKELY(std::get<1>(r) == 0)) {
-            Z3_dec_ref(mContext, std::get<0>(r));
-            mCharacterization.erase(e);
+        const auto ref = i->second;
+        auto next = i; ++next;
+        if (LLVM_UNLIKELY(ref.second == 0)) {
+            assert (isa<Statement>(i->first));
+            Z3_dec_ref(mContext, ref.first);
+            mCharacterization.erase(i);
         }
+        i = next;
     }
-
     for (Z3_ast var : mNegatedAdvance) {
         Z3_dec_ref(mContext, var);
     }
@@ -413,12 +400,12 @@ Statement * MultiplexingPass::initialize(Statement * const initial) {
     for (unsigned i = 0; i != advances; ++i) {
         for (unsigned j = 0; j < i; ++j) {
             if (G(i, j)) {
-                add_edge(j, i, mConstraintGraph);
+                mConstraintGraph[add_edge(j, i, mConstraintGraph).first] = ConstraintType::Dependency;
             }
         }
         for (unsigned j = i + 1; j < advances; ++j) {
             if (G(i, j)) {
-                add_edge(j, i, mConstraintGraph);
+                mConstraintGraph[add_edge(j, i, mConstraintGraph).first] = ConstraintType::Dependency;
             }
         }
     }
@@ -428,7 +415,6 @@ Statement * MultiplexingPass::initialize(Statement * const initial) {
 
     return last;
 }
-
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief generateCandidateSets
@@ -441,40 +427,6 @@ bool MultiplexingPass::generateCandidateSets(Statement * const begin, Statement 
     }
     assert (num_vertices(mConstraintGraph) == n);
 
-    // The naive way to handle this would be to compute a DNF formula consisting of the
-    // powerset of all independent (candidate) sets of G, assign a weight to each, and
-    // try to maximally satisfy the clauses. However, this would be extremely costly to
-    // compute let alone solve as we could easily generate O(2^100) clauses for a complex
-    // problem. Further the vast majority of clauses would be false in the end.
-
-    // Moreover, for every set that can Advance is contained in would need a unique
-    // variable and selector. In other words:
-
-    // Suppose Advance A has a selector variable I. If I is true, then A must be in ONE set.
-    // Assume A could be in m sets. To enforce this, there are m(m - 1)/2 clauses:
-
-    //   (¬A_1 ∨ ¬A_2 ∨ ¬I), (¬A_1 ∨ ¬A_3 ∨ ¬I), ..., (¬A_m-1 ∨ ¬A_m ∨ ¬I)
-
-    // m here is be equivalent to number of independent sets in the constraint graph G
-    // that contains A.
-
-    // If two sets have a DEPENDENCY constraint between them, it will introduce a cyclic
-    // relationship even if those sets are legal on their own. Thus we'd also need need
-    // hard constraints between all constrained variables related to the pair of Advances.
-
-    // Instead, we only try to solve for one set at a time. This eliminate the need for
-    // the above constraints and computing m but this process to be closer to a simple
-    // greedy search.
-
-    // We do want to weight whether to include or exclude an item in a set but what should
-    // this be? The weight must be related to the elements already in the set. If our goal
-    // is to balance the perturbation of the AST with the reduction in # of Advances, the
-    // cost of inclusion / exclusion could be proportional to the # of instructions that
-    // it increases / decreases the span by --- but how many statements is an Advance worth?
-
-    // What if instead we maintain a queue of advances and discard any that are outside of
-    // the current window?
-
     mCandidateGraph = CandidateGraph(n);
 
     Z3_config cfg = Z3_mk_config();
@@ -483,9 +435,10 @@ bool MultiplexingPass::generateCandidateSets(Statement * const begin, Statement 
     Z3_del_config(cfg);
     Z3_solver solver = Z3_mk_solver(ctx);
     Z3_solver_inc_ref(ctx, solver);
-    std::vector<Z3_ast> N(n);
+
+    std::vector<Z3_ast> V(n);
     for (unsigned i = 0; i < n; ++i) {
-        N[i] = Z3_mk_fresh_const(ctx, nullptr, Z3_mk_bool_sort(ctx)); assert (N[i]);
+        V[i] = Z3_mk_fresh_const(ctx, nullptr, Z3_mk_bool_sort(ctx)); assert (V[i]);
     }
     std::vector<std::pair<unsigned, unsigned>> S;
     S.reserve(n);
@@ -499,18 +452,15 @@ bool MultiplexingPass::generateCandidateSets(Statement * const begin, Statement 
             if (S.size() > 0 && (line - std::get<0>(S.front())) > WindowSize) {
                 // try to compute a maximal set for this given set of Advances
                 if (S.size() > 2) {
-                    generateCandidateSets(ctx, solver, S, N);
+                    generateCandidateSets(ctx, solver, S, V);
                 }
                 // erase any that preceed our window
-                for (auto i = S.begin();;) {
-                    if (++i == S.end() || (line - std::get<0>(*i)) <= WindowSize) {
-                        S.erase(S.begin(), i);
-                        break;
-                    }
-                }
+                auto end = S.begin();
+                while (++end != S.end() && ((line - std::get<0>(*end)) > WindowSize));
+                S.erase(S.begin(), end);
             }
             for (unsigned j : make_iterator_range(adjacent_vertices(i, mConstraintGraph))) {
-                Z3_ast disj[2] = { Z3_mk_not(ctx, N[j]), Z3_mk_not(ctx, N[i]) };
+                Z3_ast disj[2] = { Z3_mk_not(ctx, V[j]), Z3_mk_not(ctx, V[i]) };
                 Z3_solver_assert(ctx, solver, Z3_mk_or(ctx, 2, disj));
             }
             S.emplace_back(line, i++);
@@ -518,7 +468,7 @@ bool MultiplexingPass::generateCandidateSets(Statement * const begin, Statement 
         ++line;
     }
     if (S.size() > 2) {
-        generateCandidateSets(ctx, solver, S, N);
+        generateCandidateSets(ctx, solver, S, V);
     }
 
     Z3_solver_dec_ref(ctx, solver);
@@ -530,39 +480,58 @@ bool MultiplexingPass::generateCandidateSets(Statement * const begin, Statement 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief generateCandidateSets
  ** ------------------------------------------------------------------------------------------------------------- */
-void MultiplexingPass::generateCandidateSets(Z3_context ctx, Z3_solver solver, const std::vector<std::pair<unsigned, unsigned>> & S, const std::vector<Z3_ast> & N) {
+void MultiplexingPass::generateCandidateSets(Z3_context ctx, Z3_solver solver, const std::vector<std::pair<unsigned, unsigned>> & S, const std::vector<Z3_ast> & V) {
     assert (S.size() > 2);
     assert (std::get<0>(S.front()) < std::get<0>(S.back()));
     assert ((std::get<0>(S.back()) - std::get<0>(S.front())) <= WindowSize);
+
     Z3_solver_push(ctx, solver);
-    const auto n = N.size();
-    std::vector<Z3_ast> assumptions(S.size());
-    for (unsigned i = 0, j = 0; i < n; ++i) {
-        if (LLVM_UNLIKELY(j < S.size() && std::get<1>(S[j]) == i)) { // in our window range
-            assumptions[j++] = N[i];
-        } else {
-            Z3_solver_assert(ctx, solver, Z3_mk_not(ctx, N[i]));
-        }
+
+    const auto n = V.size();
+    std::vector<unsigned> M(S.size());
+    for (unsigned i = 0; i < S.size(); ++i) {
+        M[i] = std::get<1>(S[i]);
     }
-    if (maxsat(ctx, solver, assumptions) != Z3_L_FALSE) {
-        Z3_model m = Z3_solver_get_model(ctx, solver);
-        Z3_model_inc_ref(ctx, m);
-        const auto k = add_vertex(mCandidateGraph); assert(k >= N.size());
-        Z3_ast TRUE = Z3_mk_true(ctx);
-        Z3_ast FALSE = Z3_mk_false(ctx);
-        for (const auto i : S) {
-            Z3_ast value;
-            if (LLVM_UNLIKELY(Z3_model_eval(ctx, m, N[std::get<1>(i)], 1, &value) != Z3_TRUE)) {
-                throw std::runtime_error("Unexpected Z3 error when attempting to obtain value from constraint model!");
-            }
-            if (value == TRUE) {
-                add_edge(std::get<1>(i), k, mCandidateGraph);
-            } else if (LLVM_UNLIKELY(value != FALSE)) {
-                throw std::runtime_error("Unexpected Z3 error constraint model value is a non-terminal!");
+
+    for (;;) {
+
+        std::vector<Z3_ast> assumptions(M.size());
+        unsigned j = 0;
+        for (unsigned i = 0; i < n; ++i) {
+            if (LLVM_UNLIKELY((j < M.size()) && (M[j] == i))) { // in our window range
+                assumptions[j++] = V[i]; assert (V[i]);
+            } else {
+                Z3_solver_assert(ctx, solver, Z3_mk_not(ctx, V[i]));
             }
         }
-        Z3_model_dec_ref(ctx, m);
+        assert (j == M.size());
+
+        if (maxsat(ctx, solver, assumptions) >= 0) {
+            Z3_model m = Z3_solver_get_model(ctx, solver);
+            Z3_model_inc_ref(ctx, m);
+            const auto k = add_vertex(mCandidateGraph); assert(k >= V.size());
+            Z3_ast TRUE = Z3_mk_true(ctx);
+            for (auto i = M.begin(); i != M.end(); ) {
+                Z3_ast value;
+                if (LLVM_UNLIKELY(Z3_model_eval(ctx, m, V[*i], 1, &value) != Z3_TRUE)) {
+                    throw std::runtime_error("Unexpected Z3 error when attempting to obtain value from constraint model!");
+                }
+                if (value == TRUE) {
+                    add_edge(*i, k, mCandidateGraph);
+                    Z3_solver_assert(ctx, solver, Z3_mk_not(ctx, V[*i]));
+                    i = M.erase(i);
+                } else {
+                    ++i;
+                }
+            }
+            Z3_model_dec_ref(ctx, m);
+            if (M.size() > 2) {
+                continue;
+            }
+        }
+        break;
     }
+
     Z3_solver_pop(ctx, solver, 1);
 }
 
@@ -598,7 +567,7 @@ void MultiplexingPass::selectMultiplexSetsGreedy() {
     const size_t m = num_vertices(mConstraintGraph);
     const size_t n = num_vertices(mCandidateGraph) - m;
 
-    bool chosen[n] = {};
+    std::vector<bool> chosen(n);
 
     for (;;) {
 
@@ -707,161 +676,6 @@ void MultiplexingPass::eliminateSubsetConstraints() {
     }
 }
 
-///** ------------------------------------------------------------------------------------------------------------- *
-// * Topologically sort the sequence of instructions whilst trying to adhere as best as possible to the original
-// * program sequence.
-// ** ------------------------------------------------------------------------------------------------------------- */
-//inline bool topologicalSort(Z3_context ctx, Z3_solver solver, const std::vector<Z3_ast> & nodes, const int limit) {
-//    const auto n = nodes.size();
-//    if (LLVM_UNLIKELY(n == 0)) {
-//        return true;
-//    }
-//    if (LLVM_UNLIKELY(Z3_solver_check(ctx, solver) == Z3_L_FALSE)) {
-//        return false;
-//    }
-
-//    Z3_ast aux_vars[n];
-//    Z3_ast assumptions[n];
-//    Z3_ast ordering[n];
-//    int increments[n];
-
-//    Z3_sort boolTy = Z3_mk_bool_sort(ctx);
-//    Z3_sort intTy = Z3_mk_int_sort(ctx);
-//    Z3_ast one = Z3_mk_int(ctx, 1, intTy);
-
-//    for (unsigned i = 0; i < n; ++i) {
-//        aux_vars[i] = Z3_mk_fresh_const(ctx, nullptr, boolTy);
-//        assumptions[i] = Z3_mk_not(ctx, aux_vars[i]);
-//        Z3_ast num = one;
-//        if (i > 0) {
-//            Z3_ast prior_plus_one[2] = { nodes[i - 1], one };
-//            num = Z3_mk_add(ctx, 2, prior_plus_one);
-//        }
-//        ordering[i] = Z3_mk_eq(ctx, nodes[i], num);
-//        increments[i] = 1;
-//    }
-
-//    unsigned unsat = 0;
-
-//    for (;;) {
-//        Z3_solver_push(ctx, solver);
-//        for (unsigned i = 0; i < n; ++i) {
-//            Z3_ast constraint[2] = {ordering[i], aux_vars[i]};
-//            Z3_solver_assert(ctx, solver, Z3_mk_or(ctx, 2, constraint));
-//        }
-//        if (LLVM_UNLIKELY(Z3_solver_check_assumptions(ctx, solver, n, assumptions) != Z3_L_FALSE)) {
-//            errs() << " SATISFIABLE!  (" << unsat << " of " << n << ")\n";
-//            return true; // done
-//        }
-//        Z3_ast_vector core = Z3_solver_get_unsat_core(ctx, solver); assert (core);
-//        unsigned m = Z3_ast_vector_size(ctx, core); assert (m > 0);
-
-//        errs() << " UNSATISFIABLE " << m << "  (" << unsat << " of " << n <<")\n";
-
-//        for (unsigned j = 0; j < m; j++) {
-//            // check whether assumption[i] is in the core or not
-//            bool not_found = true;
-//            for (unsigned i = 0; i < n; i++) {
-//                if (assumptions[i] == Z3_ast_vector_get(ctx, core, j)) {
-
-//                    const auto k = increments[i];
-
-//                    errs() << " -- " << i << " @k=" << k << "\n";
-
-//                    if (k < limit) {
-//                        Z3_ast gap = Z3_mk_int(ctx, 1UL << k, intTy);
-//                        Z3_ast num = gap;
-//                        if (LLVM_LIKELY(i > 0)) {
-//                            Z3_ast prior_plus_gap[2] = { nodes[i - 1], gap };
-//                            num = Z3_mk_add(ctx, 2, prior_plus_gap);
-//                        }
-//                        Z3_dec_ref(ctx, ordering[i]);
-//                        ordering[i] = Z3_mk_le(ctx, num, nodes[i]);
-//                    } else if (k == limit && i > 0) {
-//                        ordering[i] = Z3_mk_le(ctx, nodes[i - 1], nodes[i]);
-//                    } else {
-//                        assumptions[i] = aux_vars[i]; // <- trivially satisfiable
-//                        ++unsat;
-//                    }
-//                    increments[i] = k + 1;
-//                    not_found = false;
-//                    break;
-//                }
-//            }
-//            if (LLVM_UNLIKELY(not_found)) {
-//                throw std::runtime_error("Unexpected Z3 failure when attempting to locate unsatisfiable ordering constraint!");
-//            }
-//        }
-//        Z3_solver_pop(ctx, solver, 1);
-//    }
-//    llvm_unreachable("maxsat wrongly reported this being unsatisfiable despite being able to satisfy the hard constraints!");
-//    return false;
-//}
-
-///** ------------------------------------------------------------------------------------------------------------- *
-// * Topologically sort the sequence of instructions whilst trying to adhere as best as possible to the original
-// * program sequence.
-// ** ------------------------------------------------------------------------------------------------------------- */
-//inline bool topologicalSort(Z3_context ctx, Z3_solver solver, const std::vector<Z3_ast> & nodes, const int limit) {
-//    const auto n = nodes.size();
-//    if (LLVM_UNLIKELY(n == 0)) {
-//        return true;
-//    }
-//    if (LLVM_UNLIKELY(Z3_solver_check(ctx, solver) == Z3_L_FALSE)) {
-//        return false;
-//    }
-
-//    Z3_ast aux_vars[n];
-//    Z3_ast assumptions[n];
-
-//    Z3_sort boolTy = Z3_mk_bool_sort(ctx);
-//    Z3_ast one = Z3_mk_int(ctx, 1, Z3_mk_int_sort(ctx));
-
-//    for (unsigned i = 0; i < n; ++i) {
-//        aux_vars[i] = Z3_mk_fresh_const(ctx, nullptr, boolTy);
-//        assumptions[i] = Z3_mk_not(ctx, aux_vars[i]);
-//        Z3_ast num = one;
-//        if (i > 0) {
-//            Z3_ast prior_plus_one[2] = { nodes[i - 1], one };
-//            num = Z3_mk_add(ctx, 2, prior_plus_one);
-//        }
-//        Z3_ast ordering = Z3_mk_eq(ctx, nodes[i], num);
-//        Z3_ast constraint[2] = {ordering, aux_vars[i]};
-//        Z3_solver_assert(ctx, solver, Z3_mk_or(ctx, 2, constraint));
-//    }
-
-//    for (unsigned k = 0; k < n; ) {
-//        if (LLVM_UNLIKELY(Z3_solver_check_assumptions(ctx, solver, n, assumptions) != Z3_L_FALSE)) {
-//            errs() << " SATISFIABLE!\n";
-//            return true; // done
-//        }
-//        Z3_ast_vector core = Z3_solver_get_unsat_core(ctx, solver); assert (core);
-//        unsigned m = Z3_ast_vector_size(ctx, core); assert (m > 0);
-
-//        k += m;
-
-//        errs() << " UNSATISFIABLE " << m << " (" << k << ")\n";
-
-//        for (unsigned j = 0; j < m; j++) {
-//            // check whether assumption[i] is in the core or not
-//            bool not_found = true;
-//            for (unsigned i = 0; i < n; i++) {
-//                if (assumptions[i] == Z3_ast_vector_get(ctx, core, j)) {
-//                    assumptions[i] = aux_vars[i];
-//                    not_found = false;
-//                    break;
-//                }
-//            }
-//            if (LLVM_UNLIKELY(not_found)) {
-//                throw std::runtime_error("Unexpected Z3 failure when attempting to locate unsatisfiable ordering constraint!");
-//            }
-//        }
-//    }
-//    llvm_unreachable("maxsat wrongly reported this being unsatisfiable despite being able to satisfy the hard constraints!");
-//    return false;
-//}
-
-
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief addWithHardConstraints
  ** ------------------------------------------------------------------------------------------------------------- */
@@ -938,6 +752,8 @@ inline void MultiplexingPass::multiplexSelectedSets(PabloBlock * const block, St
     assert (!end || end->getParent() == block);
     assert (!end || isa<If>(end) || isa<While>(end));
 
+    // TODO: should we test whether sets overlap and merge the computations together?
+
     Z3_config cfg = Z3_mk_config();
     Z3_set_param_value(cfg, "MODEL", "true");
     Z3_context ctx = Z3_mk_context(cfg);
@@ -955,6 +771,7 @@ inline void MultiplexingPass::multiplexSelectedSets(PabloBlock * const block, St
             Advance * input[n];
             PabloAST * muxed[m];
             PabloAST * muxed_n[m];
+            PabloAST * demuxed[n];
 
             // The multiplex set graph is a DAG with edges denoting the set relationships of our independent sets.
             unsigned i = 0;
@@ -962,14 +779,27 @@ inline void MultiplexingPass::multiplexSelectedSets(PabloBlock * const block, St
                 input[i] = mConstraintGraph[u];
                 assert ("Not all inputs are in the same block!" && (input[i]->getParent() == block));
                 assert ("Not all inputs advance by the same amount!" && (input[i]->getOperand(1) == input[0]->getOperand(1)));
-                assert ("Inputs are not in sequential order!" && (i == 0 || (i > 0 && dominates(input[i - 1], input[i]))));
                 ++i;
             }
 
-            Statement * const A1 = input[0];
-            Statement * const An = input[n - 1]->getNextNode();
+            // We can't trust the AST will be in the original order as we can multiplex a region of the program
+            // more than once.
+            Statement * initial = nullptr, * sentinal = nullptr;
+            for (Statement * stmt : *block) {
+                if (isa<Advance>(stmt)) {
+                    for (unsigned i = 0; i < n; ++i) {
+                        if (stmt == input[i]) {
+                            initial = initial ? initial : stmt;
+                            sentinal = stmt;
+                            break;
+                        }
+                    }
+                }
+            }
+            assert (initial);
 
-            Statement * const ip = A1->getPrevNode(); // save our insertion point prior to modifying the AST
+            Statement * const ip = initial->getPrevNode(); // save our insertion point prior to modifying the AST
+            sentinal = sentinal->getNextNode();
 
             Z3_solver_push(ctx, solver);
 
@@ -979,9 +809,8 @@ inline void MultiplexingPass::multiplexSelectedSets(PabloBlock * const block, St
             Z3_ast prior = nullptr;
             Z3_ast one = Z3_mk_int(ctx, 1, Z3_mk_int_sort(ctx));
             std::vector<Z3_ast> ordering;
-//            std::vector<Z3_ast> nodes;
 
-            for (Statement * stmt = A1; stmt != An; stmt = stmt->getNextNode()) { assert (stmt != ip);
+            for (Statement * stmt = initial; stmt != sentinal; stmt = stmt->getNextNode()) { assert (stmt != ip);
                 Z3_ast node = addWithHardConstraints(ctx, solver, block, stmt, M);
                 // compute the soft ordering constraints
                 Z3_ast num = one;
@@ -993,18 +822,8 @@ inline void MultiplexingPass::multiplexSelectedSets(PabloBlock * const block, St
                 if (prior) {
                     ordering.push_back(Z3_mk_lt(ctx, prior, node));
                 }
-
-
-//                for (Z3_ast prior : nodes) {
-//                    Z3_solver_assert(ctx, solver, Z3_mk_not(ctx, Z3_mk_eq(ctx, prior, node)));
-//                }
- //               nodes.push_back(node);
-
-
                 prior = node;
             }
-
-            // assert (nodes.size() <= WindowSize);
 
             block->setInsertPoint(block->back()); // <- necessary for domination check!
 
@@ -1050,47 +869,61 @@ inline void MultiplexingPass::multiplexSelectedSets(PabloBlock * const block, St
                     Q.push_back(expr);
                 }
                 assert (replacement);
-                PabloAST * const demuxed = Q.front(); Q.clear();
+                demuxed[i] = Q.front(); Q.clear();
 
                 const auto f = M.find(input[i]);
                 assert (f != M.end());
                 Z3_solver_assert(ctx, solver, Z3_mk_eq(ctx, f->second, replacement));
                 M.erase(f);
-
-                input[i]->replaceWith(demuxed);
-                assert (M.count(input[i]) == 0);
             }
 
             assert (M.count(ip) == 0);
 
-            if (LLVM_UNLIKELY(maxsat(ctx, solver, ordering) != Z3_L_TRUE)) {
-                throw std::runtime_error("Unexpected Z3 failure when attempting to topologically sort the AST!");
-            }
+            const auto satisfied = maxsat(ctx, solver, ordering);
 
-            Z3_model model = Z3_solver_get_model(ctx, solver);
-            Z3_model_inc_ref(ctx, model);
+            if (LLVM_UNLIKELY(satisfied >= 0)) {
 
-            std::vector<std::pair<long long int, Statement *>> I;
+                Z3_model model = Z3_solver_get_model(ctx, solver);
+                Z3_model_inc_ref(ctx, model);
 
-            for (const auto i : M) {
-                Z3_ast value;
-                if (LLVM_UNLIKELY(Z3_model_eval(ctx, model, std::get<1>(i), Z3_L_TRUE, &value) != Z3_L_TRUE)) {
-                    throw std::runtime_error("Unexpected Z3 error when attempting to obtain value from model!");
+                std::vector<std::pair<long long int, Statement *>> I;
+
+                for (const auto i : M) {
+                    Z3_ast value;
+                    if (LLVM_UNLIKELY(Z3_model_eval(ctx, model, std::get<1>(i), Z3_L_TRUE, &value) != Z3_L_TRUE)) {
+                        throw std::runtime_error("Unexpected Z3 error when attempting to obtain value from model!");
+                    }
+                    long long int line;
+                    if (LLVM_UNLIKELY(Z3_get_numeral_int64(ctx, value, &line) != Z3_L_TRUE)) {
+                        throw std::runtime_error("Unexpected Z3 error when attempting to convert model value to integer!");
+                    }
+                    I.emplace_back(line, std::get<0>(i));
                 }
-                long long int line;
-                if (LLVM_UNLIKELY(Z3_get_numeral_int64(ctx, value, &line) != Z3_L_TRUE)) {
-                    throw std::runtime_error("Unexpected Z3 error when attempting to convert model value to integer!");
+
+                Z3_model_dec_ref(ctx, model);
+
+                std::sort(I.begin(), I.end());
+
+                block->setInsertPoint(ip);
+                for (auto i : I) {
+                    block->insert(std::get<1>(i));
                 }
-                I.emplace_back(line, std::get<0>(i));
-            }
 
-            Z3_model_dec_ref(ctx, model);
+                for (unsigned i = 0; i < n; ++i) {
+                    input[i]->replaceWith(demuxed[i], true, true);
+                    auto ref = mCharacterization.find(input[i]);
+                    assert (ref != mCharacterization.end());
+                    add(demuxed[i], std::get<0>(ref->second), -1);
+                }
 
-            std::sort(I.begin(), I.end());
+            } else { // fatal error; delete any statements we created.
 
-            block->setInsertPoint(ip);
-            for (auto i : I) {
-                block->insert(std::get<1>(i));
+                for (unsigned i = 0; i < n; ++i) {
+                    if (LLVM_LIKELY(isa<Statement>(demuxed[i]))) {
+                        cast<Statement>(demuxed[i])->eraseFromParent(true);
+                    }
+                }
+
             }
 
             Z3_solver_pop(ctx, solver, 1);
@@ -1099,165 +932,7 @@ inline void MultiplexingPass::multiplexSelectedSets(PabloBlock * const block, St
 
     Z3_solver_dec_ref(ctx, solver);
     Z3_del_context(ctx);
-
 }
-
-///** ------------------------------------------------------------------------------------------------------------- *
-// * @brief multiplexSelectedSets
-// ** ------------------------------------------------------------------------------------------------------------- */
-//inline void MultiplexingPass::multiplexSelectedSets(PabloBlock * const block, Statement * const begin, Statement * const end) {
-
-//    assert ("begin cannot be null!" && begin);
-//    assert (begin->getParent() == block);
-//    assert (!end || end->getParent() == block);
-//    assert (!end || isa<If>(end) || isa<While>(end));
-
-//    Statement * const ip = begin->getPrevNode(); // save our insertion point prior to modifying the AST
-
-//    Z3_config cfg = Z3_mk_config();
-//    Z3_set_param_value(cfg, "MODEL", "true");
-//    Z3_context ctx = Z3_mk_context(cfg);
-//    Z3_del_config(cfg);
-//    Z3_solver solver = Z3_mk_solver(ctx);
-//    Z3_solver_inc_ref(ctx, solver);
-
-//    const auto first_set = num_vertices(mConstraintGraph);
-//    const auto last_set = num_vertices(mCandidateGraph);
-
-//    // Compute the hard and soft constraints for any part of the AST that we are not intending to modify.
-//    flat_map<Statement *, Z3_ast> M;
-
-//    Z3_ast prior = nullptr;
-//    Z3_ast one = Z3_mk_int(ctx, 1, Z3_mk_int_sort(ctx));
-//    std::vector<Z3_ast> ordering;
-
-//    for (Statement * stmt = begin; stmt != end; stmt = stmt->getNextNode()) { assert (stmt != ip);
-//        Z3_ast node = addWithHardConstraints(ctx, solver, block, stmt, M);
-//        // compute the soft ordering constraints
-//        Z3_ast num = one;
-//        if (prior) {
-//            Z3_ast prior_plus_one[2] = { prior, one };
-//            num = Z3_mk_add(ctx, 2, prior_plus_one);
-//        }
-//        ordering.push_back(Z3_mk_eq(ctx, node, num));
-//        prior = node;
-//    }
-
-//    block->setInsertPoint(block->back()); // <- necessary for domination check!
-
-//    errs() << "---------------------------------------------\n";
-
-//    for (auto idx = first_set; idx != last_set; ++idx) {
-//        const size_t n = degree(idx, mCandidateGraph);
-//        if (n) {
-//            const size_t m = log2_plus_one(n); assert (n > 2 && m < n);
-//            Advance * input[n];
-//            PabloAST * muxed[m];
-//            PabloAST * muxed_n[m];
-
-//            errs() << n << " -> " << m << "\n";
-
-//            // The multiplex set graph is a DAG with edges denoting the set relationships of our independent sets.
-//            unsigned i = 0;
-//            for (const auto u : make_iterator_range(adjacent_vertices(idx, mCandidateGraph))) {
-//                input[i] = mConstraintGraph[u];
-//                assert ("Not all inputs are in the same block!" && (input[i]->getParent() == block));
-//                assert ("Not all inputs advance by the same amount!" && (input[i]->getOperand(1) == input[0]->getOperand(1)));
-//                ++i;
-//            }
-
-//            circular_buffer<PabloAST *> Q(n);
-
-//            /// Perform n-to-m Multiplexing
-//            for (size_t j = 0; j != m; ++j) {
-//                std::ostringstream prefix;
-//                prefix << "mux" << n << "to" << m << '.' << (j);
-//                assert (Q.empty());
-//                for (size_t i = 0; i != n; ++i) {
-//                    if (((i + 1) & (1UL << j)) != 0) {
-//                        Q.push_back(input[i]->getOperand(0));
-//                    }
-//                }
-//                while (Q.size() > 1) {
-//                    PabloAST * a = Q.front(); Q.pop_front();
-//                    PabloAST * b = Q.front(); Q.pop_front();
-//                    PabloAST * expr = block->createOr(a, b);
-//                    addWithHardConstraints(ctx, solver, block, expr, M, ip);
-//                    Q.push_back(expr);
-//                }
-//                PabloAST * const muxing = Q.front(); Q.clear();
-//                muxed[j] = block->createAdvance(muxing, input[0]->getOperand(1), prefix.str());
-//                addWithHardConstraints(ctx, solver, block, muxed[j], M, ip);
-//                muxed_n[j] = block->createNot(muxed[j]);
-//                addWithHardConstraints(ctx, solver, block, muxed_n[j], M, ip);
-//            }
-
-//            /// Perform m-to-n Demultiplexing
-//            for (size_t i = 0; i != n; ++i) {
-//                // Construct the demuxed values and replaces all the users of the original advances with them.
-//                assert (Q.empty());
-//                for (size_t j = 0; j != m; ++j) {
-//                    Q.push_back((((i + 1) & (1UL << j)) != 0) ? muxed[j] : muxed_n[j]);
-//                }
-//                Z3_ast replacement = nullptr;
-//                while (Q.size() > 1) {
-//                    PabloAST * const a = Q.front(); Q.pop_front();
-//                    PabloAST * const b = Q.front(); Q.pop_front();
-//                    PabloAST * expr = block->createAnd(a, b);
-//                    replacement = addWithHardConstraints(ctx, solver, block, expr, M, ip);
-//                    Q.push_back(expr);
-//                }
-//                assert (replacement);
-//                PabloAST * const demuxed = Q.front(); Q.clear();
-
-//                const auto f = M.find(input[i]);
-//                assert (f != M.end());
-//                Z3_solver_assert(ctx, solver, Z3_mk_eq(ctx, f->second, replacement));
-//                M.erase(f);
-
-//                input[i]->replaceWith(demuxed);
-//                assert (M.count(input[i]) == 0);
-//            }
-//        }
-//    }
-
-//    assert (M.count(ip) == 0);
-
-//    // if (LLVM_UNLIKELY(maxsat(ctx, solver, ordering) == Z3_L_FALSE)) {
-//    if (LLVM_UNLIKELY(Z3_solver_check(ctx, solver) != Z3_L_TRUE)) {
-//        throw std::runtime_error("Unexpected Z3 failure when attempting to topologically sort the AST!");
-//    }
-
-//    Z3_model m = Z3_solver_get_model(ctx, solver);
-//    Z3_model_inc_ref(ctx, m);
-
-//    std::vector<std::pair<long long int, Statement *>> Q;
-
-//    errs() << "-----------------------------------------------------------\n";
-
-//    for (const auto i : M) {
-//        Z3_ast value;
-//        if (Z3_model_eval(ctx, m, std::get<1>(i), Z3_L_TRUE, &value) != Z3_L_TRUE) {
-//            throw std::runtime_error("Unexpected Z3 error when attempting to obtain value from model!");
-//        }
-//        long long int line;
-//        if (Z3_get_numeral_int64(ctx, value, &line) != Z3_L_TRUE) {
-//            throw std::runtime_error("Unexpected Z3 error when attempting to convert model value to integer!");
-//        }
-//        Q.emplace_back(line, std::get<0>(i));
-//    }
-
-//    Z3_model_dec_ref(ctx, m);
-//    Z3_solver_dec_ref(ctx, solver);
-//    Z3_del_context(ctx);
-
-//    std::sort(Q.begin(), Q.end());
-
-//    block->setInsertPoint(ip);
-//    for (auto i : Q) {
-//        block->insert(std::get<1>(i));
-//    }
-//}
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief doTransitiveReductionOfSubsetGraph
@@ -1296,230 +971,47 @@ void MultiplexingPass::doTransitiveReductionOfSubsetGraph() {
 inline Z3_ast & MultiplexingPass::get(const PabloAST * const expr, const bool deref) {
     assert (expr);
     auto f = mCharacterization.find(expr);
-    assert (f != mCharacterization.end());
-    auto & val = f->second;
-    if (deref) {
-        unsigned & refs = std::get<1>(val);
-        assert (refs > 0);
-        --refs;
+    if (LLVM_UNLIKELY(f == mCharacterization.end())) {
+        characterize(cast<Statement>(expr), false);
+        f = mCharacterization.find(expr);
+        assert (f != mCharacterization.end());
     }
-    return std::get<0>(val);
+    CharacterizationRef & ref = f->second;
+    if (deref) {
+        if (LLVM_LIKELY(std::get<1>(ref)) > 0) {
+            std::get<1>(ref) -= 1;
+        }
+    }
+    return std::get<0>(ref);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief make
  ** ------------------------------------------------------------------------------------------------------------- */
-inline Z3_ast MultiplexingPass::make(const PabloAST * const expr) {
-    assert (expr);
+inline Z3_ast MultiplexingPass::makeVar() {
     Z3_ast node = Z3_mk_fresh_const(mContext, nullptr, Z3_mk_bool_sort(mContext));
     Z3_inc_ref(mContext, node);
-    return add(expr, node);
+    return node;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief add
  ** ------------------------------------------------------------------------------------------------------------- */
-inline Z3_ast MultiplexingPass::add(const PabloAST * const expr, Z3_ast node) {    
-    mCharacterization.insert(std::make_pair(expr, std::make_pair(node, expr->getNumUses())));
+inline Z3_ast MultiplexingPass::add(const PabloAST * const expr, Z3_ast node, const size_t refs) {
+    mCharacterization.insert(std::make_pair(expr, std::make_pair(node, refs)));
     return node;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief constructor
  ** ------------------------------------------------------------------------------------------------------------- */
-inline MultiplexingPass::MultiplexingPass(PabloFunction & f, const RNG::result_type seed, Z3_context context, Z3_solver solver)
+inline MultiplexingPass::MultiplexingPass(PabloFunction & f, Z3_context context, Z3_solver solver)
 : mContext(context)
 , mSolver(solver)
 , mFunction(f)
-, mRNG(seed)
 , mConstraintGraph(0)
 {
 
-}
-
-
-inline Z3_ast mk_binary_or(Z3_context ctx, Z3_ast in_1, Z3_ast in_2) {
-    Z3_ast args[2] = { in_1, in_2 };
-    return Z3_mk_or(ctx, 2, args);
-}
-
-inline Z3_ast mk_ternary_or(Z3_context ctx, Z3_ast in_1, Z3_ast in_2, Z3_ast in_3) {
-    Z3_ast args[3] = { in_1, in_2, in_3 };
-    return Z3_mk_or(ctx, 3, args);
-}
-
-inline Z3_ast mk_binary_and(Z3_context ctx, Z3_ast in_1, Z3_ast in_2) {
-    Z3_ast args[2] = { in_1, in_2 };
-    return Z3_mk_and(ctx, 2, args);
-}
-
-///**
-//   \brief Create a full adder with inputs \c in_1, \c in_2 and \c cin.
-//   The output of the full adder is stored in \c out, and the carry in \c c_out.
-//*/
-//inline std::pair<Z3_ast, Z3_ast> mk_full_adder(Z3_context ctx, Z3_ast in_1, Z3_ast in_2, Z3_ast cin) {
-//    Z3_ast out = Z3_mk_xor(ctx, Z3_mk_xor(ctx, in_1, in_2), cin);
-//    Z3_ast cout = mk_ternary_or(ctx, mk_binary_and(ctx, in_1, in_2), mk_binary_and(ctx, in_1, cin), mk_binary_and(ctx, in_2, cin));
-//    return std::make_pair(out, cout);
-//}
-
-/**
-   \brief Create an adder for inputs of size \c num_bits.
-   The arguments \c in1 and \c in2 are arrays of bits of size \c num_bits.
-
-   \remark \c result must be an array of size \c num_bits + 1.
-*/
-void mk_adder(Z3_context ctx, const unsigned num_bits, Z3_ast * in_1, Z3_ast * in_2, Z3_ast * result) {
-    Z3_ast cin = Z3_mk_false(ctx);
-    for (unsigned i = 0; i < num_bits; i++) {
-        result[i] = Z3_mk_xor(ctx, Z3_mk_xor(ctx, in_1[i], in_2[i]), cin);
-        cin = mk_ternary_or(ctx, mk_binary_and(ctx, in_1[i], in_2[i]), mk_binary_and(ctx, in_1[i], cin), mk_binary_and(ctx, in_2[i], cin));
-    }
-    result[num_bits] = cin;
-}
-
-/**
-   \brief Given \c num_ins "numbers" of size \c num_bits stored in \c in.
-   Create floor(num_ins/2) adder circuits. Each circuit is adding two consecutive "numbers".
-   The numbers are stored one after the next in the array \c in.
-   That is, the array \c in has size num_bits * num_ins.
-   Return an array of bits containing \c ceil(num_ins/2) numbers of size \c (num_bits + 1).
-   If num_ins/2 is not an integer, then the last "number" in the output, is the last "number" in \c in with an appended "zero".
-*/
-unsigned mk_adder_pairs(Z3_context ctx, const unsigned num_bits, const unsigned num_ins, Z3_ast * in, Z3_ast * out) {
-    unsigned out_num_bits = num_bits + 1;
-    Z3_ast * _in          = in;
-    Z3_ast * _out         = out;
-    unsigned out_num_ins  = (num_ins % 2 == 0) ? (num_ins / 2) : (num_ins / 2) + 1;
-    for (unsigned i = 0; i < num_ins / 2; i++) {
-        mk_adder(ctx, num_bits, _in, _in + num_bits, _out);
-        _in  += num_bits;
-        _in  += num_bits;
-        _out += out_num_bits;
-    }
-    if (num_ins % 2 != 0) {
-        for (unsigned i = 0; i < num_bits; i++) {
-            _out[i] = _in[i];
-        }
-        _out[num_bits] = Z3_mk_false(ctx);
-    }
-    return out_num_ins;
-}
-
-/**
-   \brief Return the \c idx bit of \c val.
-*/
-inline bool get_bit(unsigned val, unsigned idx) {
-    return (val & (1U << (idx & 31))) != 0;
-}
-
-/**
-   \brief Given an integer val encoded in n bits (boolean variables), assert the constraint that val <= k.
-*/
-void assert_le_one(Z3_context ctx, Z3_solver s, unsigned n, Z3_ast * val)
-{
-    Z3_ast i1, i2;
-    Z3_ast not_val = Z3_mk_not(ctx, val[0]);
-    assert (get_bit(1, 0));
-    Z3_ast out = Z3_mk_true(ctx);
-    for (unsigned i = 1; i < n; i++) {
-        not_val = Z3_mk_not(ctx, val[i]);
-        if (get_bit(1, i)) {
-            i1 = not_val;
-            i2 = out;
-        }
-        else {
-            i1 = Z3_mk_false(ctx);
-            i2 = Z3_mk_false(ctx);
-        }
-        out = mk_ternary_or(ctx, i1, i2, mk_binary_and(ctx, not_val, out));
-    }
-    Z3_solver_assert(ctx, s, out);
-}
-
-/**
-   \brief Create a counter circuit to count the number of "ones" in lits.
-   The function returns an array of bits (i.e. boolean expressions) containing the output of the circuit.
-   The size of the array is stored in out_sz.
-*/
-void mk_counter_circuit(Z3_context ctx, Z3_solver solver, unsigned n, Z3_ast * lits) {
-    unsigned k = 1;
-    assert (n != 0);
-    Z3_ast aux_array_1[n + 1];
-    Z3_ast aux_array_2[n + 1];
-    Z3_ast * aux_1 = aux_array_1;
-    Z3_ast * aux_2 = aux_array_2;
-    std::memcpy(aux_1, lits, sizeof(Z3_ast) * n);
-    while (n > 1) {
-        assert (aux_1 != aux_2);
-        n = mk_adder_pairs(ctx, k++, n, aux_1, aux_2);
-        std::swap(aux_1, aux_2);
-    }
-    assert_le_one(ctx, solver, k, aux_1);
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * Fu & Malik procedure for MaxSAT. This procedure is based on unsat core extraction and the at-most-one constraint.
- ** ------------------------------------------------------------------------------------------------------------- */
-Z3_bool maxsat(Z3_context ctx, Z3_solver solver, std::vector<Z3_ast> & soft) {
-    if (LLVM_UNLIKELY(Z3_solver_check(ctx, solver) == Z3_L_FALSE)) {
-        return Z3_L_FALSE;
-    }
-    if (LLVM_UNLIKELY(soft.empty())) {
-        return true;
-    }
-
-    const auto n = soft.size();
-    const auto ty = Z3_mk_bool_sort(ctx);
-    Z3_ast aux_vars[n];
-    Z3_ast assumptions[n];
-
-    for (unsigned i = 0; i < n; ++i) {
-        aux_vars[i] = Z3_mk_fresh_const(ctx, nullptr, ty);
-        Z3_solver_assert(ctx, solver, mk_binary_or(ctx, soft[i], aux_vars[i]));
-    }
-
-    for (;;) {
-        // create assumptions
-        for (unsigned i = 0; i < n; i++) {
-            // Recall that we asserted (soft_cnstrs[i] \/ aux_vars[i])
-            // So using (NOT aux_vars[i]) as an assumption we are actually forcing the soft_cnstrs[i] to be considered.
-            assumptions[i] = Z3_mk_not(ctx, aux_vars[i]);
-        }
-        if (Z3_solver_check_assumptions(ctx, solver, n, assumptions) != Z3_L_FALSE) {
-            return Z3_L_TRUE; // done
-        } else {
-            Z3_ast_vector core = Z3_solver_get_unsat_core(ctx, solver);
-            unsigned m = Z3_ast_vector_size(ctx, core);
-            Z3_ast block_vars[m];
-            unsigned k = 0;
-            // update soft-constraints and aux_vars
-            for (unsigned i = 0; i < n; i++) {
-                // check whether assumption[i] is in the core or not
-                for (unsigned j = 0; j < m; j++) {
-                    if (assumptions[i] == Z3_ast_vector_get(ctx, core, j)) {
-                        // assumption[i] is in the unsat core... so soft_cnstrs[i] is in the unsat core
-                        Z3_ast block_var = Z3_mk_fresh_const(ctx, nullptr, ty);
-                        Z3_ast new_aux_var = Z3_mk_fresh_const(ctx, nullptr, ty);
-                        soft[i] = mk_binary_or(ctx, soft[i], block_var);
-                        aux_vars[i] = new_aux_var;
-                        block_vars[k] = block_var;
-                        ++k;
-                        // Add new constraint containing the block variable.
-                        // Note that we are using the new auxiliary variable to be able to use it as an assumption.
-                        Z3_solver_assert(ctx, solver, mk_binary_or(ctx, soft[i], new_aux_var) );
-                        break;
-                    }
-                }
-
-            }
-            if (k > 1) {
-                mk_counter_circuit(ctx, solver, k, block_vars);
-            }
-        }
-    }
-    llvm_unreachable("unreachable");
-    return Z3_L_FALSE;
 }
 
 } // end of namespace pablo

@@ -59,6 +59,7 @@ If::DefinedVars::iterator If::removeDefined(Assign * def) {
 }
 
 PabloBlock * If::setBody(PabloBlock * body) {
+    body->setBranch(this);
     body->setParent(mBody->getParent());
     std::swap(mBody, body);
     body->setParent(nullptr);

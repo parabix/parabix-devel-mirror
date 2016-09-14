@@ -17,8 +17,8 @@ public:
     static inline bool classof(const void *) {
         return false;
     }
-    inline const Assign * getInitial() const {
-        return cast<const Assign>(getOperand(1));
+    inline PabloAST * getInitial() const {
+        return getOperand(1);
     }
     inline PabloAST * getExpr() const {
         return getOperand(0);

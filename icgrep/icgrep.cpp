@@ -20,6 +20,12 @@
 #include <mutex>
 
 #include <iostream> // MEEE
+
+#ifdef PRINT_TIMING_INFORMATION
+#include <hrtime.h>
+#include <util/papi_helper.hpp>
+#endif
+
 static cl::OptionCategory LegacyGrepOptions("A. Standard Grep Options",
                                        "These are standard grep options intended for compatibility with typical grep usage.");
 static cl::opt<bool> UTF_16("UTF-16", cl::desc("Regular expressions over the UTF-16 representation of Unicode."), cl::cat(LegacyGrepOptions));
@@ -227,8 +233,23 @@ int main(int argc, char *argv[]) {
     }
 
     if (Threads <= 1) {
+
+        #ifdef PRINT_TIMING_INFORMATION
+        // PAPI_RES_STL, PAPI_STL_CCY, PAPI_FUL_CCY, PAPI_MEM_WCY
+        // PAPI_RES_STL, PAPI_BR_MSP, PAPI_LST_INS, PAPI_L1_TCM
+        papi::PapiCounter<4> papiCounters({PAPI_RES_STL, PAPI_STL_CCY, PAPI_FUL_CCY, PAPI_MEM_WCY});
+        #endif
         for (unsigned i = 0; i != inputFiles.size(); ++i) {
+            #ifdef PRINT_TIMING_INFORMATION
+            papiCounters.start();
+            const timestamp_t execution_start = read_cycle_counter();
+            #endif
             grepEngine.doGrep(inputFiles[i], i, CountOnly, total_CountOnly, UTF_16);
+            #ifdef PRINT_TIMING_INFORMATION
+            const timestamp_t execution_end = read_cycle_counter();
+            papiCounters.stop();
+            std::cerr << "EXECUTION TIME: " << inputFiles[i] << ":" << "CYCLES|" << (execution_end - execution_start) << papiCounters << std::endl;
+            #endif
         }        
     } else if (Threads > 1) {
         const unsigned numOfThreads = Threads; // <- convert the command line value into an integer to allow stack allocation
