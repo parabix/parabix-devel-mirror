@@ -43,7 +43,7 @@ protected:
 
     BooleanReassociationPass(Z3_context ctx, Z3_params params, Z3_tactic tactic, PabloFunction & f);
     bool processScopes(PabloFunction & function);
-    void processScopes(PabloBlock * const block, CharacterizationMap & map);
+    void processScopes(PabloBlock * const block, CharacterizationMap & C);
     void distributeScope(PabloBlock * const block, CharacterizationMap & C);
 
     void transformAST(CharacterizationMap & C, Graph & G);
@@ -51,8 +51,15 @@ protected:
 
     bool contractGraph(Graph & G) const;
 
-    bool reduceVertex(const Vertex u, CharacterizationMap & C, VertexMap & M, Graph & G, const bool use_expensive_simplification) const;
-    bool reduceGraph(CharacterizationMap & C, VertexMap & M, Graph & G) const;
+    bool reduceGraph(CharacterizationMap & C, VertexMap & M, Graph & G);
+
+    enum class Reduction {
+        NoChange
+        , Simplified
+        , Removed
+    };
+
+    Reduction reduceVertex(const Vertex u, CharacterizationMap & C, VertexMap & M, Graph & G, const bool use_expensive_simplification);
 
     bool factorGraph(const PabloAST::ClassTypeId typeId, Graph & G, std::vector<Vertex> & factors) const;
     bool factorGraph(Graph & G) const;
@@ -63,7 +70,7 @@ protected:
     void removeVertex(const Vertex u, StatementMap & M, Graph & G) const;
     void removeVertex(const Vertex u, Graph & G) const;
 
-    bool redistributeGraph(CharacterizationMap & C, VertexMap & M, Graph & G) const;
+    bool redistributeGraph(CharacterizationMap & C, VertexMap & M, Graph & G);
 
     bool rewriteAST(CharacterizationMap & C, VertexMap &M, Graph & G);
 
@@ -71,7 +78,7 @@ protected:
 
     Z3_ast simplify(Z3_ast node, bool use_expensive_minimization = false) const;
 
-    Z3_ast makeVar() const;
+    Z3_ast makeVar();
 
 private:
     PabloBlock *                mBlock;
@@ -79,6 +86,7 @@ private:
     Z3_params const             mParams;
     Z3_tactic const             mTactic;
     Z3_ast                      mInFile;
+    std::vector<Z3_ast>         mRefs;
     PabloFunction &             mFunction;
     bool                        mModified;
 };
