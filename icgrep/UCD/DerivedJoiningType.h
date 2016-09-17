@@ -13,7 +13,8 @@
 #include "unicode_set.h"
 
 namespace UCD {
-    namespace JT_ns {
+  namespace JT_ns {
+    const unsigned independent_prop_values = 6;
     /** Code Point Ranges for U
     [0, 172], [174, 767], [880, 1154], [1162, 1424], [1470, 1470],
     [1472, 1472], [1475, 1475], [1478, 1478], [1480, 1551], [1563, 1563],
@@ -362,6 +363,7 @@ namespace UCD {
           0x0000ffff}};
     static EnumeratedPropertyObject property_object
         {jt,
+         JT_ns::independent_prop_values,
          JT_ns::enum_names,
          JT_ns::value_names,
          JT_ns::aliases_only_map,

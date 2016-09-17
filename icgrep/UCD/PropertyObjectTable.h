@@ -21,6 +21,7 @@
 #include "DerivedGeneralCategory.h"
 #include "DerivedJoiningGroup.h"
 #include "DerivedJoiningType.h"
+#include "DerivedNormalizationProps.h"
 #include "DerivedNumericType.h"
 #include "EastAsianWidth.h"
 #include "GraphemeBreakProperty.h"
@@ -42,9 +43,9 @@ namespace UCD {
     new UnsupportedPropertyObject(cf, PropertyObject::ClassTypeId::StringProperty),
     new UnsupportedPropertyObject(cjkCompatibilityVariant, PropertyObject::ClassTypeId::StringProperty),
     new UnsupportedPropertyObject(dm, PropertyObject::ClassTypeId::StringProperty),
-    new UnsupportedPropertyObject(FC_NFKC, PropertyObject::ClassTypeId::StringProperty),
+    &FC_NFKC_ns::property_object,
     new UnsupportedPropertyObject(lc, PropertyObject::ClassTypeId::StringProperty),
-    new UnsupportedPropertyObject(NFKC_CF, PropertyObject::ClassTypeId::StringProperty),
+    &NFKC_CF_ns::property_object,
     new UnsupportedPropertyObject(scf, PropertyObject::ClassTypeId::CodepointProperty),
     new UnsupportedPropertyObject(slc, PropertyObject::ClassTypeId::CodepointProperty),
     new UnsupportedPropertyObject(stc, PropertyObject::ClassTypeId::CodepointProperty),
@@ -86,10 +87,10 @@ namespace UCD {
     &JG_ns::property_object,
     &JT_ns::property_object,
     &LB_ns::property_object,
-    new UnsupportedPropertyObject(NFC_QC, PropertyObject::ClassTypeId::EnumeratedProperty),
-    new UnsupportedPropertyObject(NFD_QC, PropertyObject::ClassTypeId::EnumeratedProperty),
-    new UnsupportedPropertyObject(NFKC_QC, PropertyObject::ClassTypeId::EnumeratedProperty),
-    new UnsupportedPropertyObject(NFKD_QC, PropertyObject::ClassTypeId::EnumeratedProperty),
+    &NFC_QC_ns::property_object,
+    &NFD_QC_ns::property_object,
+    &NFKC_QC_ns::property_object,
+    &NFKD_QC_ns::property_object,
     &NT_ns::property_object,
     &SB_ns::property_object,
     &WB_ns::property_object,
@@ -100,10 +101,10 @@ namespace UCD {
     &CASED_ns::property_object,
     new UnsupportedPropertyObject(CE, PropertyObject::ClassTypeId::BinaryProperty),
     &CI_ns::property_object,
-    new UnsupportedPropertyObject(Comp_Ex, PropertyObject::ClassTypeId::BinaryProperty),
+    &COMP_EX_ns::property_object,
     &CWCF_ns::property_object,
     &CWCM_ns::property_object,
-    new UnsupportedPropertyObject(CWKCF, PropertyObject::ClassTypeId::BinaryProperty),
+    &CWKCF_ns::property_object,
     &CWL_ns::property_object,
     &CWT_ns::property_object,
     &CWU_ns::property_object,
@@ -149,10 +150,10 @@ namespace UCD {
     &WSPACE_ns::property_object,
     &XIDC_ns::property_object,
     &XIDS_ns::property_object,
-    new UnsupportedPropertyObject(XO_NFC, PropertyObject::ClassTypeId::BinaryProperty),
-    new UnsupportedPropertyObject(XO_NFD, PropertyObject::ClassTypeId::BinaryProperty),
-    new UnsupportedPropertyObject(XO_NFKC, PropertyObject::ClassTypeId::BinaryProperty),
-    new UnsupportedPropertyObject(XO_NFKD, PropertyObject::ClassTypeId::BinaryProperty)  }};
+    &XO_NFC_ns::property_object,
+    &XO_NFD_ns::property_object,
+    &XO_NFKC_ns::property_object,
+    &XO_NFKD_ns::property_object  }};
 }
 
 #endif

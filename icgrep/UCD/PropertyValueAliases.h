@@ -580,13 +580,13 @@ namespace UCD {
     namespace GC_ns {
         enum value_t {
             Cn, Lu, Ll, Lt, Lm, Lo, Mn, Me, Mc, Nd, Nl, No, Zs, Zl, Zp, Cc,
-            Cf, Co, Cs, Pd, Ps, Pe, Pc, Po, Sm, Sc, Sk, So, Pi, Pf, LC, L,
-            M, N, P, S, Z, C};
+            Cf, Co, Cs, Pd, Ps, Pe, Pc, Po, Sm, Sc, Sk, So, Pi, Pf, C, L,
+            LC, M, N, P, S, Z};
         const static std::vector<std::string> enum_names = {
             "Cn", "Lu", "Ll", "Lt", "Lm", "Lo", "Mn", "Me", "Mc", "Nd",
             "Nl", "No", "Zs", "Zl", "Zp", "Cc", "Cf", "Co", "Cs", "Pd",
-            "Ps", "Pe", "Pc", "Po", "Sm", "Sc", "Sk", "So", "Pi", "Pf",
-            "LC", "L", "M", "N", "P", "S", "Z", "C"};
+            "Ps", "Pe", "Pc", "Po", "Sm", "Sc", "Sk", "So", "Pi", "Pf", "C",
+            "L", "LC", "M", "N", "P", "S", "Z"};
         const static std::vector<std::string> value_names = {
             "Unassigned", "Uppercase_Letter", "Lowercase_Letter",
             "Titlecase_Letter", "Modifier_Letter", "Other_Letter",
@@ -597,9 +597,9 @@ namespace UCD {
             "Dash_Punctuation", "Open_Punctuation", "Close_Punctuation",
             "Connector_Punctuation", "Other_Punctuation", "Math_Symbol",
             "Currency_Symbol", "Modifier_Symbol", "Other_Symbol",
-            "Initial_Punctuation", "Final_Punctuation", "Cased_Letter",
-            "Letter", "Mark", "Number", "Punctuation", "Symbol",
-            "Separator", "Other"};
+            "Initial_Punctuation", "Final_Punctuation", "Other", "Letter",
+            "Cased_Letter", "Mark", "Number", "Punctuation", "Symbol",
+            "Separator"};
         static std::unordered_map<std::string, int> aliases_only_map {{
             {"cntrl", GC_ns::Cc}, {"combiningmark", GC_ns::M},
             {"digit", GC_ns::Nd}, {"punct", GC_ns::P}}};

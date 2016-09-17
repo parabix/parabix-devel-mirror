@@ -13,7 +13,8 @@
 #include "unicode_set.h"
 
 namespace UCD {
-    namespace WB_ns {
+  namespace WB_ns {
+    const unsigned independent_prop_values = 22;
     /** Code Point Ranges for XX
     [0, 9], [14, 33], [35, 38], [40, 43], [45, 45], [47, 47], [60, 64],
     [91, 94], [96, 96], [123, 132], [134, 169], [171, 172], [174, 180],
@@ -882,6 +883,7 @@ namespace UCD {
          {0x000003c0}};
     static EnumeratedPropertyObject property_object
         {WB,
+         WB_ns::independent_prop_values,
          WB_ns::enum_names,
          WB_ns::value_names,
          WB_ns::aliases_only_map,

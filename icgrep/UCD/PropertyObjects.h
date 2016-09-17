@@ -71,11 +71,13 @@ public:
     }
 
     EnumeratedPropertyObject(UCD::property_t p,
+                             const unsigned independent_enums,
                              const std::vector<std::string> & enum_names,
                              const std::vector<std::string> & names,
                              std::unordered_map<std::string, int> & aliases,
                              std::vector<const UnicodeSet *> && sets)
     : PropertyObject(p, ClassTypeId::EnumeratedProperty)
+    , independent_enum_count(independent_enums)
     , property_value_enum_names(enum_names)
     , property_value_full_names(names)
     , property_value_aliases(aliases)
@@ -87,7 +89,7 @@ public:
     virtual int GetPropertyValueEnumCode(const std::string & value_spec);
     const UnicodeSet & GetCodepointSet(const std::string & value_spec);
     const UnicodeSet & GetCodepointSet(const int property_enum_val) const;
-    std::vector<UnicodeSet *> GetEnumerationBasisSets();
+    std::vector<UnicodeSet> & GetEnumerationBasisSets();
     const std::string & GetValueEnumName(const int property_enum_val) const {return property_value_enum_names[property_enum_val]; }
     const std::string & GetValueFullName(const int property_enum_val) const {return property_value_full_names[property_enum_val]; }
 
@@ -100,11 +102,13 @@ public:
     }
 
 private:
+    const unsigned independent_enum_count;
     const std::vector<std::string> & property_value_enum_names;  // never changes
     const std::vector<std::string> & property_value_full_names;  // never changes
     std::unordered_map<std::string, int> & property_value_aliases;
     bool uninitialized; // full names must be added dynamically.
     const std::vector<const UnicodeSet *> property_value_sets;
+    std::vector<UnicodeSet> enumeration_basis_sets;
 };
 
 class ExtensionPropertyObject : public PropertyObject {

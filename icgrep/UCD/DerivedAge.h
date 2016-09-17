@@ -13,7 +13,8 @@
 #include "unicode_set.h"
 
 namespace UCD {
-    namespace AGE_ns {
+  namespace AGE_ns {
+    const unsigned independent_prop_values = 19;
     /** Code Point Ranges for Unassigned
     [888, 889], [896, 899], [907, 907], [909, 909], [930, 930],
     [1328, 1328], [1367, 1368], [1376, 1376], [1416, 1416], [1419, 1420],
@@ -1146,6 +1147,7 @@ namespace UCD {
           0x7fff0fff, 0x0003ffe0}};
     static EnumeratedPropertyObject property_object
         {age,
+         AGE_ns::independent_prop_values,
          AGE_ns::enum_names,
          AGE_ns::value_names,
          AGE_ns::aliases_only_map,

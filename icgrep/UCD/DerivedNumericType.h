@@ -13,7 +13,8 @@
 #include "unicode_set.h"
 
 namespace UCD {
-    namespace NT_ns {
+  namespace NT_ns {
+    const unsigned independent_prop_values = 4;
     /** Code Point Ranges for None
     [0, 47], [58, 177], [180, 184], [186, 187], [191, 1631], [1642, 1775],
     [1786, 1983], [1994, 2405], [2416, 2533], [2544, 2547], [2554, 2661],
@@ -306,6 +307,7 @@ namespace UCD {
           0xffffc000, 0x03ff0000}};
     static EnumeratedPropertyObject property_object
         {nt,
+         NT_ns::independent_prop_values,
          NT_ns::enum_names,
          NT_ns::value_names,
          NT_ns::aliases_only_map,

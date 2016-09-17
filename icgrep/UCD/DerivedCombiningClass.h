@@ -13,7 +13,8 @@
 #include "unicode_set.h"
 
 namespace UCD {
-    namespace CCC_ns {
+  namespace CCC_ns {
+    const unsigned independent_prop_values = 55;
     /** Code Point Ranges for NR
     [0, 767], [847, 847], [880, 1154], [1160, 1424], [1470, 1470],
     [1472, 1472], [1475, 1475], [1478, 1478], [1480, 1551], [1563, 1610],
@@ -533,6 +534,7 @@ namespace UCD {
          {}};
     static EnumeratedPropertyObject property_object
         {ccc,
+         CCC_ns::independent_prop_values,
          CCC_ns::enum_names,
          CCC_ns::value_names,
          CCC_ns::aliases_only_map,

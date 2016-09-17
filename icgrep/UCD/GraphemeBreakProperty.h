@@ -13,7 +13,8 @@
 #include "unicode_set.h"
 
 namespace UCD {
-    namespace GCB_ns {
+  namespace GCB_ns {
+    const unsigned independent_prop_values = 18;
     /** Code Point Ranges for XX
     [32, 126], [160, 172], [174, 767], [880, 1154], [1162, 1424],
     [1470, 1470], [1472, 1472], [1475, 1475], [1478, 1478], [1480, 1535],
@@ -828,6 +829,7 @@ namespace UCD {
          {0x000003c0}};
     static EnumeratedPropertyObject property_object
         {GCB,
+         GCB_ns::independent_prop_values,
          GCB_ns::enum_names,
          GCB_ns::value_names,
          GCB_ns::aliases_only_map,

@@ -52,6 +52,27 @@ const UnicodeSet & EnumeratedPropertyObject::GetCodepointSet(const int property_
     return *(property_value_sets[property_enum_val]);
 }
 
+std::vector<UnicodeSet> & EnumeratedPropertyObject::GetEnumerationBasisSets() {
+    // Return the previously computed vector of basis sets, if it exists.
+    if (enumeration_basis_sets.size() > 0) return enumeration_basis_sets;
+    
+    // Otherwise compute and return.
+    // Basis set i is the set of all codepoints whose numerical enumeration code e
+    // has bit i set, i.e., (e >> i) & 1 == 1.
+    unsigned basis_count = 1;
+    while ((1 << basis_count) < independent_enum_count) basis_count++;
+    for (unsigned i = 0; i < basis_count; i++) {
+        enumeration_basis_sets.push_back(UnicodeSet());
+        for (unsigned e = 0; e < independent_enum_count; e++) {
+            if (((e >> i) & 1) == 0) {
+                enumeration_basis_sets[i] = enumeration_basis_sets[i] + *property_value_sets[e];
+            }
+        }
+    }
+    return enumeration_basis_sets;
+};
+
+    
 int EnumeratedPropertyObject::GetPropertyValueEnumCode(const std::string & value_spec) {
     // The canonical full names are not stored in the precomputed alias map,
     // to save space in the executable.   Add them if the property is used.
@@ -70,24 +91,6 @@ int EnumeratedPropertyObject::GetPropertyValueEnumCode(const std::string & value
     return valit->second;
 }
 
-std::vector<UnicodeSet *> EnumeratedPropertyObject::GetEnumerationBasisSets() {
-    // Basis set i is the set of all codepoints whose numerical enumeration code e
-    // has bit i set, i.e., (e >> i) & 1 == 1.
-    unsigned basis_count = 1;
-    while ((1 << basis_count) < independent_enum_limit) basis_count++;
-    std::vector<UnicodeSet *> basis_set;
-    for (unsigned i == 0; i < basis_count; i++) {
-        basis_set.push_back(new UnicodeSet());
-        for (unsigned e = 0; e < independent_enum_limit; e++) {
-            if (((e >> i) & 1) == 0) {
-                basis_set[i] = basis_set[i] + property_value_sets[e];
-            }
-        }
-    }
-};
-
-    
-    
 PropertyObject::iterator ExtensionPropertyObject::begin() const {
     if (const auto * obj = dyn_cast<EnumeratedPropertyObject>(property_object_table[base_property])) {
         return obj->begin();

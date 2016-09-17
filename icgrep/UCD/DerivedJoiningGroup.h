@@ -13,7 +13,8 @@
 #include "unicode_set.h"
 
 namespace UCD {
-    namespace JG_ns {
+  namespace JG_ns {
+    const unsigned independent_prop_values = 89;
     /** Code Point Ranges for No_Joining_Group
     [0, 1567], [1569, 1569], [1600, 1600], [1611, 1645], [1648, 1648],
     [1652, 1652], [1748, 1748], [1750, 1773], [1776, 1785], [1789, 1790],
@@ -502,6 +503,7 @@ namespace UCD {
          {0x20000000}};
     static EnumeratedPropertyObject property_object
         {jg,
+         JG_ns::independent_prop_values,
          JG_ns::enum_names,
          JG_ns::value_names,
          JG_ns::aliases_only_map,

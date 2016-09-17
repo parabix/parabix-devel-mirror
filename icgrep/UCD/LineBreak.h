@@ -13,7 +13,8 @@
 #include "unicode_set.h"
 
 namespace UCD {
-    namespace LB_ns {
+  namespace LB_ns {
+    const unsigned independent_prop_values = 43;
     /** Code Point Ranges for XX
     [888, 889], [896, 899], [907, 907], [909, 909], [930, 930],
     [1328, 1328], [1367, 1368], [1376, 1376], [1416, 1416], [1419, 1420],
@@ -1641,6 +1642,7 @@ namespace UCD {
          {0xf8000000}};
     static EnumeratedPropertyObject property_object
         {lb,
+         LB_ns::independent_prop_values,
          LB_ns::enum_names,
          LB_ns::value_names,
          LB_ns::aliases_only_map,

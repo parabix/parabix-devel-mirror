@@ -13,7 +13,8 @@
 #include "unicode_set.h"
 
 namespace UCD {
-    namespace HST_ns {
+  namespace HST_ns {
+    const unsigned independent_prop_values = 6;
     /** Code Point Ranges for NA
     [0, 4351], [4608, 43359], [43389, 44031], [55204, 55215],
     [55239, 55242], [55292, 1114111]**/
@@ -387,6 +388,7 @@ namespace UCD {
           0xffefffff, 0xfffeffff, 0xffffefff, 0xfffffeff, 0x0000000f}};
     static EnumeratedPropertyObject property_object
         {hst,
+         HST_ns::independent_prop_values,
          HST_ns::enum_names,
          HST_ns::value_names,
          HST_ns::aliases_only_map,

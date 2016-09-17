@@ -13,7 +13,8 @@
 #include "unicode_set.h"
 
 namespace UCD {
-    namespace SC_ns {
+  namespace SC_ns {
+    const unsigned independent_prop_values = 138;
     /** Code Point Ranges for Zzzz
     [888, 889], [896, 899], [907, 907], [909, 909], [930, 930],
     [1328, 1328], [1367, 1368], [1376, 1376], [1416, 1416], [1419, 1420],
@@ -1268,6 +1269,7 @@ namespace UCD {
          {}};
     static EnumeratedPropertyObject property_object
         {sc,
+         SC_ns::independent_prop_values,
          SC_ns::enum_names,
          SC_ns::value_names,
          SC_ns::aliases_only_map,
