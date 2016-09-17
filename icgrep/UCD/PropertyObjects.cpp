@@ -70,6 +70,24 @@ int EnumeratedPropertyObject::GetPropertyValueEnumCode(const std::string & value
     return valit->second;
 }
 
+std::vector<UnicodeSet *> EnumeratedPropertyObject::GetEnumerationBasisSets() {
+    // Basis set i is the set of all codepoints whose numerical enumeration code e
+    // has bit i set, i.e., (e >> i) & 1 == 1.
+    unsigned basis_count = 1;
+    while ((1 << basis_count) < independent_enum_limit) basis_count++;
+    std::vector<UnicodeSet *> basis_set;
+    for (unsigned i == 0; i < basis_count; i++) {
+        basis_set.push_back(new UnicodeSet());
+        for (unsigned e = 0; e < independent_enum_limit; e++) {
+            if (((e >> i) & 1) == 0) {
+                basis_set[i] = basis_set[i] + property_value_sets[e];
+            }
+        }
+    }
+};
+
+    
+    
 PropertyObject::iterator ExtensionPropertyObject::begin() const {
     if (const auto * obj = dyn_cast<EnumeratedPropertyObject>(property_object_table[base_property])) {
         return obj->begin();

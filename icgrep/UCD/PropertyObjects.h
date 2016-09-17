@@ -87,6 +87,7 @@ public:
     virtual int GetPropertyValueEnumCode(const std::string & value_spec);
     const UnicodeSet & GetCodepointSet(const std::string & value_spec);
     const UnicodeSet & GetCodepointSet(const int property_enum_val) const;
+    std::vector<UnicodeSet *> GetEnumerationBasisSets();
     const std::string & GetValueEnumName(const int property_enum_val) const {return property_value_enum_names[property_enum_val]; }
     const std::string & GetValueFullName(const int property_enum_val) const {return property_value_full_names[property_enum_val]; }
 
