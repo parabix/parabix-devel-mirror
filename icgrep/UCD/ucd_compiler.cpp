@@ -484,7 +484,7 @@ UCDCompiler::RangeList UCDCompiler::innerRanges(const RangeList & list) {
  * @brief generateWithDefaultIfHierarchy
  ** ------------------------------------------------------------------------------------------------------------- */
 void UCDCompiler::generateWithDefaultIfHierarchy(NameMap & names, PabloBuilder & entry) {
-    addTargets(names);
+    addTargets(entry, names);
     generateRange(defaultIfHierachy, entry);
     updateNames(names, entry);
 }
@@ -494,7 +494,7 @@ void UCDCompiler::generateWithDefaultIfHierarchy(NameMap & names, PabloBuilder &
  ** ------------------------------------------------------------------------------------------------------------- */
 PabloAST * UCDCompiler::generateWithDefaultIfHierarchy(const UnicodeSet * set, PabloBuilder & entry) {
     // mTargetMap.insert(std::make_pair<const UnicodeSet *, PabloAST *>(set, PabloBlock::createZeroes()));
-    mTargetMap.emplace(set, PabloBlock::createZeroes());
+    mTargetMap.emplace(set, entry.createZeroes());
     generateRange(defaultIfHierachy, entry);
     return mTargetMap.begin()->second;
 }
@@ -503,7 +503,7 @@ PabloAST * UCDCompiler::generateWithDefaultIfHierarchy(const UnicodeSet * set, P
  * @brief generateWithoutIfHierarchy
  ** ------------------------------------------------------------------------------------------------------------- */
 void UCDCompiler::generateWithoutIfHierarchy(NameMap & names, PabloBuilder & entry) {
-    addTargets(names);
+    addTargets(entry, names);
     generateRange(noIfHierachy, entry);
     updateNames(names, entry);
 }
@@ -512,7 +512,7 @@ void UCDCompiler::generateWithoutIfHierarchy(NameMap & names, PabloBuilder & ent
  * @brief generateWithoutIfHierarchy
  ** ------------------------------------------------------------------------------------------------------------- */
 PabloAST * UCDCompiler::generateWithoutIfHierarchy(const UnicodeSet * set, PabloBuilder & entry) {
-    mTargetMap.emplace(set, PabloBlock::createZeroes());
+    mTargetMap.emplace(set, entry.createZeroes());
     generateRange(noIfHierachy, entry);
     return mTargetMap.begin()->second;
 }
@@ -520,10 +520,10 @@ PabloAST * UCDCompiler::generateWithoutIfHierarchy(const UnicodeSet * set, Pablo
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief addTargets
  ** ------------------------------------------------------------------------------------------------------------- */
-inline void UCDCompiler::addTargets(const NameMap & names) {
+inline void UCDCompiler::addTargets(PabloBuilder & entry, const NameMap & names) {
     for (const auto t : names) {
         if (LLVM_LIKELY(isa<CC>(t.first->getDefinition()))) {
-            mTargetMap.emplace(cast<CC>(t.first->getDefinition()), t.second ? t.second : PabloBlock::createZeroes());
+            mTargetMap.emplace(cast<CC>(t.first->getDefinition()), t.second ? t.second : entry.createZeroes());
         } else {
             throw std::runtime_error(t.first->getName() + " is not defined by a CC!");
         }

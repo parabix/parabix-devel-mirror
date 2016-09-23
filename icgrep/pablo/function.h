@@ -2,17 +2,14 @@
 #define FUNCTION_H
 
 #include <pablo/pabloAST.h>
+#include <pablo/symbol_generator.h>
 #include <pablo/pe_var.h>
 #include <pablo/ps_assign.h>
 #include <pablo/pe_count.h>
-#include <pablo/symbol_generator.h>
+#include <pablo/pe_zeroes.h>
+#include <pablo/pe_ones.h>
 
 namespace pablo {
-
-class Var;
-class Assign;
-class PabloBlock;
-class String;
 
 class Prototype : public PabloAST {
     friend class PabloBlock;
@@ -58,8 +55,7 @@ inline Prototype * Prototype::Create(std::string name, const unsigned numOfParam
 
 class PabloFunction : public Prototype {
     friend class PabloBlock;
-    using ParamAllocator = Allocator::rebind<Var *>::other;
-    using ResultAllocator = Allocator::rebind<Assign *>::other;
+    using Allocator = SlabAllocator<PabloAST *>;
 public:
 
     static inline bool classof(const PabloAST * e) {
@@ -98,13 +94,13 @@ public:
 
     Var * getParameter(const unsigned index) {
         if (LLVM_LIKELY(index < getNumOfParameters()))
-            return mParameters[index];
+            return cast<Var>(mParameters[index]);
         else throwInvalidParameterIndex(index);
     }
 
     const Var * getParameter(const unsigned index) const {
         if (LLVM_LIKELY(index < getNumOfParameters()))
-            return mParameters[index];
+            return cast<Var>(mParameters[index]);
         else throwInvalidParameterIndex(index);
     }
 
@@ -116,13 +112,13 @@ public:
 
     Assign * getResult(const unsigned index) {
         if (LLVM_LIKELY(index < getNumOfResults()))
-            return mResults[index];
+            return cast<Assign>(mResults[index]);
         else throwInvalidResultIndex(index);
     }
 
     const Assign * getResult(const unsigned index) const {
         if (LLVM_LIKELY(index < getNumOfResults()))
-            return mResults[index];
+            return cast<Assign>(mResults[index]);
         else throwInvalidResultIndex(index);
     }
 
@@ -147,9 +143,17 @@ public:
         mFunctionPtr = functionPtr;
     }
 
+    Zeroes * getNullValue(const PabloType * const type);
+
+    Ones * getAllOnesValue(const PabloType * const type);
+
     void operator delete (void*);
 
     virtual ~PabloFunction() { }
+
+    inline SymbolGenerator * getSymbolTable() const {
+        return mSymbolTable;
+    }
 
 protected:
 
@@ -159,10 +163,12 @@ protected:
 
     PabloFunction(std::string && name, const unsigned numOfParameters, const unsigned numOfResults);
 private:
-    SymbolGenerator *   mSymbolTable;
-    PabloBlock *        mEntryBlock;
-    Var ** const        mParameters;
-    Assign ** const     mResults;
+    SymbolGenerator *                           mSymbolTable;
+    const PabloType *                           mBitStreamType;
+    PabloBlock *                                mEntryBlock;
+    std::vector<PabloAST *, Allocator>          mParameters;
+    std::vector<PabloAST *, Allocator>          mResults;
+    std::vector<PabloAST *, Allocator>          mConstants;
 };
 
 inline PabloFunction * PabloFunction::Create(std::string name, const unsigned numOfParameters, const unsigned numOfResults) {

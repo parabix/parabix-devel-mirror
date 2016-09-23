@@ -11,6 +11,7 @@ class PabloFunction;
 class Simplifier {
     friend class DistributivePass;
     friend class FactorizeDFG;
+    friend class BooleanReassociationPass;
 public:
     static bool optimize(PabloFunction & function);
     static void dce(PabloBlock * const block);

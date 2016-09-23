@@ -7,7 +7,7 @@ namespace pablo {
 If::DefinedAllocator If::mDefinedAllocator;
 
 If::If(PabloAST * expr, const std::initializer_list<Assign *> definedVars, PabloBlock * body)
-: Statement(ClassTypeId::If, {expr}, nullptr)
+: Statement(ClassTypeId::If, nullptr, {expr}, nullptr)
 , mBody(body)
 , mDefined(definedVars.begin(), definedVars.end(), mDefinedAllocator) {
     // Conceptually, having a defined var X is identical to having:
@@ -21,7 +21,7 @@ If::If(PabloAST * expr, const std::initializer_list<Assign *> definedVars, Pablo
     // Assign's value is also dependant on the 'Next' value, the If node is also a user
     // of it.
     mBody->setBranch(this);
-    mBody->setParent(getParent());
+    mBody->setPredecessor (getParent());
     for (Assign * def : mDefined) {
         def->addUser(this);
         this->addUser(def);
@@ -29,11 +29,11 @@ If::If(PabloAST * expr, const std::initializer_list<Assign *> definedVars, Pablo
 }
 
 If::If(PabloAST * expr, const std::vector<Assign *> & definedVars, PabloBlock * body)
-: Statement(ClassTypeId::If, {expr}, nullptr)
+: Statement(ClassTypeId::If, nullptr, {expr}, nullptr)
 , mBody(body)
 , mDefined(definedVars.begin(), definedVars.end(), mDefinedAllocator) {
     mBody->setBranch(this);
-    mBody->setParent(getParent());
+    mBody->setPredecessor (getParent());
     for (Assign * def : mDefined) {
         def->addUser(this);
         this->addUser(def);
@@ -60,9 +60,9 @@ If::DefinedVars::iterator If::removeDefined(Assign * def) {
 
 PabloBlock * If::setBody(PabloBlock * body) {
     body->setBranch(this);
-    body->setParent(mBody->getParent());
+    body->setPredecessor (mBody->getPredecessor ());
     std::swap(mBody, body);
-    body->setParent(nullptr);
+    body->setPredecessor (nullptr);
     return body;
 }
 

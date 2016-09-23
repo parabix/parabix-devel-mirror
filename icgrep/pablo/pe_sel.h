@@ -32,9 +32,8 @@ public:
         return getOperand(2);
     }
 protected:
-    Sel(PabloAST* if_expr, PabloAST* t_expr, PabloAST* f_expr, String * name)
-    : Statement(ClassTypeId::Sel, {if_expr, t_expr, f_expr}, name)
-    {
+    Sel(PabloAST * condExpr, PabloAST * trueExpr, PabloAST * falseExpr, String * name)
+    : Statement(ClassTypeId::Sel, trueExpr->getType(), {condExpr, trueExpr, falseExpr}, name) {
 
     }
 };

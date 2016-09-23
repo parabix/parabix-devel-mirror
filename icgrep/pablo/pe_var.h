@@ -42,8 +42,8 @@ public:
         return mName;
     }
 protected:
-    Var(PabloAST * var)
-    : PabloAST(ClassTypeId::Var)
+    Var(PabloAST * var, const PabloType * const type)
+    : PabloAST(ClassTypeId::Var, type)
     , mName(cast<String>(var)) {
 
     }

@@ -69,8 +69,9 @@ bool MultiplexingPass::optimize(PabloFunction & function) {
  ** ------------------------------------------------------------------------------------------------------------- */
 void MultiplexingPass::optimize() {
     // Map the constants and input variables
-    add(PabloBlock::createZeroes(), Z3_mk_false(mContext), -1);
-    add(PabloBlock::createOnes(), Z3_mk_true(mContext), -1);
+    PabloBlock * entryBlock = mFunction.getEntryBlock();
+    add(entryBlock->createZeroes(), Z3_mk_false(mContext), -1);
+    add(entryBlock->createOnes(), Z3_mk_true(mContext), -1);
     for (unsigned i = 0; i < mFunction.getNumOfParameters(); ++i) {
         add(mFunction.getParameter(i), makeVar(), -1);
     }

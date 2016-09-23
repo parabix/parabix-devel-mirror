@@ -1,19 +1,12 @@
-/*
- *  Copyright (c) 2014 International Characters.
- *  This software is licensed to the public under the Open Software License 3.0.
- *  icgrep is a trademark of International Characters.
- */
-
-#ifndef PE_ONES_H
-#define PE_ONES_H
+#ifndef PE_CONSTANT_H
+#define PE_CONSTANT_H
 
 #include <pablo/pabloAST.h>
 
 namespace pablo {
 
-class Ones : public PabloAST {
+class Constant : public PabloAST {
     friend class PabloBlock;
-    friend class PabloFunction;
 public:
     static inline bool classof(const PabloAST * e) {
         return e->getClassTypeId() == ClassTypeId::Ones;
@@ -21,7 +14,7 @@ public:
     static inline bool classof(const void *) {
         return false;
     }
-    virtual ~Ones() {
+    virtual ~Constant() {
     }
     inline bool operator==(const Ones &) const {
         return true;
@@ -30,11 +23,12 @@ public:
         return isa<Ones>(other);
     }
 protected:
-    Ones(const PabloType * const type) : PabloAST(ClassTypeId::Ones, type) { }
+    Constant(const PabloType * type, const PabloAST * const value) : Constant(ClassTypeId::Ones, type), mValue(value) { }
+private:
+
+    const PabloAST * const mValue;
 };
 
 }
 
-#endif // PE_ONES_H
-
-
+#endif // PE_CONSTANT_H

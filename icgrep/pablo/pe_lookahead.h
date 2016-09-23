@@ -38,7 +38,7 @@ public:
     }
 protected:
     Lookahead(PabloAST * expr, PabloAST * shiftAmount, String * name)
-    : Statement(ClassTypeId::Lookahead, {expr, shiftAmount}, name)
+    : Statement(ClassTypeId::Lookahead, expr->getType(), {expr, shiftAmount}, name)
     {
         assert(isa<Integer>(shiftAmount));
     }

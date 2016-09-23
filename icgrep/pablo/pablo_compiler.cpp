@@ -70,18 +70,19 @@ void PabloCompiler::compile(Function * doBlockFunction) {
         outputSet_ptr = mKernelBuilder->getStreamSetBlockPtr(mSelf, outputName, blockNo);
     }
 
-    mMarkerMap.emplace(PabloBlock::createZeroes(), iBuilder->allZeroes());
-    mMarkerMap.emplace(PabloBlock::createOnes(), iBuilder->allOnes());
+    PabloBlock * const entryBlock = mPabloFunction->getEntryBlock();
+    mMarkerMap.emplace(entryBlock->createZeroes(), iBuilder->allZeroes());
+    mMarkerMap.emplace(entryBlock->createOnes(), iBuilder->allOnes());
     for (unsigned j = 0; j < mPabloFunction->getNumOfParameters(); ++j) {
         Value * inputVal = iBuilder->CreateGEP(inputSet_ptr, {iBuilder->getInt32(0), iBuilder->getInt32(j)}); 
         const Var * const var = mPabloFunction->getParameter(j);
         if (DebugOptionIsSet(DumpTrace)) {
             iBuilder->CallPrintRegister(var->getName()->to_string(), iBuilder->CreateBlockAlignedLoad(inputVal));
         }
-        mMarkerMap.insert(std::make_pair(var, inputVal));
+        mMarkerMap.emplace(var, inputVal);
     }
     
-    compileBlock(mPabloFunction->getEntryBlock());
+    compileBlock(entryBlock);
     
     for (unsigned j = 0; j < mPabloFunction->getNumOfResults(); ++j) {
         const auto f = mMarkerMap.find(mPabloFunction->getResult(j));
@@ -131,7 +132,7 @@ void PabloCompiler::compileBlock(const PabloBlock * const block) {
     for (const Statement * statement : *block) {
         compileStatement(statement);
     }
-    mPabloBlock = block->getParent();
+    mPabloBlock = block->getPredecessor ();
 }
 
 void PabloCompiler::compileIf(const If * ifStatement) {        
@@ -185,7 +186,8 @@ void PabloCompiler::compileIf(const If * ifStatement) {
         assert (f != mMarkerMap.end());
         phi->addIncoming(iBuilder->allZeroes(), ifEntryBlock);
         phi->addIncoming(f->second, ifExitBlock);
-        mMarkerMap[assign] = phi;
+        f->second = phi;
+        assert (mMarkerMap[assign] == phi);
     }
     // Create the phi Node for the summary variable, if needed.
     mCarryManager->buildCarryDataPhisAfterIfBody(ifEntryBlock, ifExitBlock);
@@ -228,7 +230,8 @@ void PabloCompiler::compileWhile(const While * whileStatement) {
         auto f = mMarkerMap.find(n->getInitial());        
         assert (f != mMarkerMap.end());
         phi->addIncoming(f->second, whileEntryBlock);
-        mMarkerMap[n->getInitial()] = phi;
+        f->second = phi;
+        assert(mMarkerMap[n->getInitial()] == phi);
         nextPhis.push_back(phi);
     }
 
@@ -251,7 +254,7 @@ void PabloCompiler::compileWhile(const While * whileStatement) {
     // and for any Next nodes in the loop body
     for (unsigned i = 0; i < nextNodes.size(); i++) {
         const Next * n = nextNodes[i];
-        auto f = mMarkerMap.find(n->getExpr());
+        const auto f = mMarkerMap.find(n->getExpr());
         if (LLVM_UNLIKELY(f == mMarkerMap.end())) {
             throw std::runtime_error("Next node expression was not compiled!");
         }
@@ -399,7 +402,7 @@ void PabloCompiler::compileStatement(const Statement * stmt) {
         msg << " is not a recognized statement in the Pablo compiler.";
         throw std::runtime_error(msg.str());
     }
-    mMarkerMap[stmt] = expr;
+    mMarkerMap.emplace(stmt, expr);
     if (DebugOptionIsSet(DumpTrace)) {
         iBuilder->CallPrintRegister(stmt->getName()->to_string(), expr);
     }
@@ -414,12 +417,12 @@ Value * PabloCompiler::compileExpression(const PabloAST * expr) {
     }
     auto f = mMarkerMap.find(expr);
     if (LLVM_UNLIKELY(f == mMarkerMap.end())) {
-        std::string o;
-        llvm::raw_string_ostream str(o);
-        str << "\"";
-        PabloPrinter::print(expr, str);
-        str << "\" was used before definition!";
-        throw std::runtime_error(str.str());
+        std::string tmp;
+        llvm::raw_string_ostream out(tmp);
+        out << "\"";
+        PabloPrinter::print(expr, out);
+        out << "\" was used before definition!";
+        throw std::runtime_error(out.str());
     }
     Value * result = f->second;
     if (LLVM_UNLIKELY(isa<Var>(expr))) {

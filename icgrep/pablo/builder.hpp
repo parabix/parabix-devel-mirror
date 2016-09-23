@@ -35,27 +35,27 @@ public:
     }
 
     inline static PabloBuilder Create(PabloBuilder & builder) noexcept {
-        return PabloBuilder(new PabloBlock(builder.mPb->mSymbolGenerator), builder);
+        return PabloBuilder(PabloBlock::Create(builder.getPabloBlock()), builder);
     }
 
-    static inline Zeroes * createZeroes() {
-        return PabloBlock::createZeroes();
+    inline Zeroes * createZeroes(const PabloType * const type = nullptr) {
+        return mPb->createZeroes(type);
     }
 
-    static inline Ones * createOnes() {
-        return PabloBlock::createOnes();
+    inline Ones * createOnes(const PabloType * const type = nullptr) {
+        return mPb->createOnes(type);
     }
 
-    inline Var * createVar(const std::string name) {
-        return mPb->createVar(name);
+    inline Var * createVar(const std::string name, const PabloType * const type) {
+        return mPb->createVar(name, type);
     }
 
-    inline Var * createVar(String * const name) {
-        return mPb->createVar(name);
+    inline Var * createVar(String * const name, const PabloType * const type) {
+        return mPb->createVar(name, type);
     }
 
-    inline Var * createVar(PabloAST * const name) {
-        return mPb->createVar(name);
+    inline Var * createVar(PabloAST * const name, const PabloType * const type) {
+        return mPb->createVar(name, type);
     }
 
     inline Call * createCall(Prototype * prototype, const std::vector<Var *> & args) {

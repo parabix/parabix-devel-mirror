@@ -10,7 +10,8 @@ namespace pablo {
 
 class BooleanReassociationPass {
 public:
-    using VertexData = std::tuple<PabloAST::ClassTypeId, PabloAST *, Z3_ast>;
+    using TypeId = PabloAST::ClassTypeId;
+    using VertexData = std::tuple<TypeId, PabloAST *, Z3_ast>;
     using Graph = boost::adjacency_list<boost::vecS, boost::vecS, boost::bidirectionalS, VertexData, PabloAST *>;
     using Vertex = Graph::vertex_descriptor;
     using VertexMap = std::unordered_map<Z3_ast, Vertex>;
@@ -46,33 +47,30 @@ protected:
     void processScopes(PabloBlock * const block, CharacterizationMap & C);
     void distributeScope(PabloBlock * const block, CharacterizationMap & C);
 
+    Vertex transcribeSel(Sel * const stmt, CharacterizationMap & C, StatementMap & S, VertexMap & M, Graph & G);
     void transformAST(CharacterizationMap & C, Graph & G);
-    void resolveNestedUsages(PabloAST * const expr, const Vertex u, CharacterizationMap &C, StatementMap & S, Graph & G, const Statement * const ignoreIfThis = nullptr) const;
+    void resolveNestedUsages(PabloAST * const expr, const Vertex u, CharacterizationMap & C, StatementMap & S, VertexMap &M, Graph & G, const Statement * const ignoreIfThis = nullptr) const;
 
-    bool contractGraph(Graph & G) const;
+    bool contractGraph(VertexMap & M, Graph & G) const;
 
-    bool reduceGraph(CharacterizationMap & C, VertexMap & M, Graph & G);
+    void reduceVertex(const Vertex u, CharacterizationMap & C, VertexMap & M, Graph & G);
 
-    enum class Reduction {
-        NoChange
-        , Simplified
-        , Removed
-    };
-
-    Reduction reduceVertex(const Vertex u, CharacterizationMap & C, VertexMap & M, Graph & G, const bool use_expensive_simplification);
-
-    bool factorGraph(const PabloAST::ClassTypeId typeId, Graph & G, std::vector<Vertex> & factors) const;
+    bool factorGraph(const TypeId typeId, Graph & G, std::vector<Vertex> & factors) const;
     bool factorGraph(Graph & G) const;
 
-    static Vertex makeVertex(const PabloAST::ClassTypeId typeId, PabloAST * const expr, Graph & G, Z3_ast node = nullptr);
-    static Vertex makeVertex(const PabloAST::ClassTypeId typeId, PabloAST * const expr, StatementMap & M, Graph & G, Z3_ast node = nullptr);
-    static Vertex makeVertex(const PabloAST::ClassTypeId typeId, PabloAST * const expr, CharacterizationMap & C, StatementMap & M, Graph & G);
-    void removeVertex(const Vertex u, StatementMap & M, Graph & G) const;
+    static Vertex makeVertex(const TypeId typeId, PabloAST * const expr, Graph & G, Z3_ast node = nullptr);
+    static Vertex makeVertex(const TypeId typeId, PabloAST * const expr, StatementMap & M, Graph & G, Z3_ast node = nullptr);
+    static Vertex makeVertex(const TypeId typeId, PabloAST * const expr, CharacterizationMap & C, StatementMap & S, VertexMap & M, Graph & G);
+
+    void removeVertex(const Vertex u, VertexMap & M, Graph & G) const;
     void removeVertex(const Vertex u, Graph & G) const;
 
+    Z3_ast computeDefinition(const TypeId typeId, const Vertex u, Graph & G, const bool use_expensive_minimization = false) const;
+    Vertex updateIntermediaryDefinition(const TypeId typeId, const Vertex u, VertexMap & M, Graph & G);
+    Vertex updateSinkDefinition(const TypeId typeId, const Vertex u, CharacterizationMap &C, VertexMap & M, Graph & G);
     bool redistributeGraph(CharacterizationMap & C, VertexMap & M, Graph & G);
 
-    bool rewriteAST(CharacterizationMap & C, VertexMap &M, Graph & G);
+    bool rewriteAST(Graph & G);
 
     Statement * characterize(Statement * const stmt, CharacterizationMap & map);
 

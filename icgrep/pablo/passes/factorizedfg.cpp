@@ -124,7 +124,7 @@ inline FactorizeDFG::BicliqueSet FactorizeDFG::enumerateFactoringSets(Variadic *
         tmp.reserve(op->getNumUses());
         for (PabloAST * user : op->users()) {
             if (user->getClassTypeId() == var->getClassTypeId()) {                
-                for (PabloBlock * scope = cast<Variadic>(user)->getParent(); scope; scope = scope->getParent()) {
+                for (PabloBlock * scope = cast<Variadic>(user)->getParent(); scope; scope = scope->getPredecessor ()) {
                     if (LLVM_UNLIKELY(scope == var->getParent())) {
                         tmp.push_back(user);
                         break;
@@ -284,7 +284,7 @@ FactorizeDFG::CheckSet FactorizeDFG::makeCheckSet(PabloBlock * const scope, cons
                 for (;;) {
                     assert (nested);
                     value = nested->getBranch();
-                    nested = nested->getParent();
+                    nested = nested->getPredecessor ();
                     if (nested == scope) {
                         break;
                     }
@@ -348,19 +348,19 @@ inline PabloBlock * FactorizeDFG::findInsertionScope(const ObjectSet & users) co
         // If one of these scopes is nested deeper than the other, scan upwards through
         // the scope tree until both scopes are at the same depth.
         while (depth1 > depth2) {
-            scope1 = scope1->getParent();
+            scope1 = scope1->getPredecessor ();
             --depth1;
         }
         while (depth1 < depth2) {
-            scope2 = scope2->getParent();
+            scope2 = scope2->getPredecessor ();
             --depth2;
         }
         assert (depth1 == depth2);
         // Then iteratively step backwards until we find a matching set of scopes; this
         // must be the LCA of our original scopes.
         while (scope1 != scope2) {
-            scope1 = scope1->getParent();
-            scope2 = scope2->getParent();
+            scope1 = scope1->getPredecessor ();
+            scope2 = scope2->getPredecessor ();
         }
         assert (scope1 && scope2);
         if (std::find(scopes.begin(), scopes.end(), scope1) == scopes.end()) {
@@ -607,8 +607,8 @@ inline PabloAST * FactorizeDFG::lower(Variadic * const var, PabloBlock * block) 
                         break;
                     }
                     usage = scope->getBranch();
-                    assert (scope != scope->getParent());
-                    scope = scope->getParent();
+                    assert (scope != scope->getPredecessor ());
+                    scope = scope->getPredecessor ();
                 }
             }
         }
@@ -835,7 +835,7 @@ inline void FactorizeDFG::elevate(Variadic * const var, PabloBlock * block) cons
                         break;
                     }
                     op = scope->getBranch();
-                    scope = scope->getParent();
+                    scope = scope->getPredecessor ();
                 }
             }
             def[i] = op;

@@ -27,7 +27,7 @@ public:
     }
 protected:
     Not(PabloAST * expr, String * name)
-    : Statement(ClassTypeId::Not, {expr}, name)
+    : Statement(ClassTypeId::Not, expr->getType(), {expr}, name)
     {
 
     }

@@ -54,13 +54,13 @@ PabloAST * Simplifier::fold(Variadic * var, PabloBlock * const block) {
     for (unsigned i = 0; i != var->getNumOperands(); ) {
         if (LLVM_UNLIKELY(isa<Zeroes>(var->getOperand(i)))) {
             if (LLVM_UNLIKELY(isa<And>(var))) {
-                return PabloBlock::createZeroes();
+                return block->createZeroes(var->getType());
             }
             var->removeOperand(i);
             continue;
         } else if (LLVM_UNLIKELY(isa<Ones>(var->getOperand(i)))) {
             if (LLVM_UNLIKELY(isa<Or>(var))) {
-                return PabloBlock::createOnes();
+                return block->createOnes(var->getType());
             } else if (LLVM_UNLIKELY(isa<Xor>(var))) {
                 negated = !negated;
             }
@@ -139,9 +139,9 @@ PabloAST * Simplifier::fold(Variadic * var, PabloBlock * const block) {
                                         assert (operands > 2);
                                         block->setInsertPoint(var->getPrevNode());
                                         if (typeId == TypeId::And) {
-                                            expr = block->createAnd(operands - 1);
+                                            expr = block->createAnd(var->getType(), operands - 1);
                                         } else { // if (typeId == TypeId::Or) {
-                                            expr = block->createOr(operands - 1);
+                                            expr = block->createOr(var->getType(), operands - 1);
                                         }
                                         for (unsigned k = 0; k != di; ++k) {
                                             cast<Variadic>(expr)->addOperand(Vi->getOperand(k));
@@ -220,9 +220,9 @@ PabloAST * Simplifier::fold(Variadic * var, PabloBlock * const block) {
                 for (unsigned j = 0; j != var->getNumOperands(); ++j) {
                     if (LLVM_UNLIKELY(var->getOperand(j) == negated)) {
                         if (isa<And>(var)) { // (A ∧ ¬A) ∧ B ⇔ 0 for any B
-                            return PabloBlock::createZeroes();
+                            return block->createZeroes(var->getType());
                         } else { // if (isa<Or>(var)) { // (A ∨ ¬A) ∨ B ⇔ 1 for any B
-                            return PabloBlock::createOnes();
+                            return block->createOnes(var->getType());
                         }
                     }
                 }
@@ -233,7 +233,7 @@ PabloAST * Simplifier::fold(Variadic * var, PabloBlock * const block) {
 
     if (LLVM_UNLIKELY(var->getNumOperands() < 2)) {
         if (LLVM_UNLIKELY(var->getNumOperands() == 0)) {
-            return PabloBlock::createZeroes();
+            return block->createZeroes(var->getType());
         }
         replacement = var->getOperand(0);
     }
@@ -248,7 +248,7 @@ PabloAST * Simplifier::fold(Variadic * var, PabloBlock * const block) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief fold
  ** ------------------------------------------------------------------------------------------------------------- */
-inline PabloAST * Simplifier::fold(Statement * stmt, PabloBlock * const block) {
+PabloAST * Simplifier::fold(Statement * stmt, PabloBlock * const block) {
     if (isa<Variadic>(stmt)) {
         return fold(cast<Variadic>(stmt), block);
     } else if (isa<Not>(stmt)) {
@@ -256,13 +256,13 @@ inline PabloAST * Simplifier::fold(Statement * stmt, PabloBlock * const block) {
         if (LLVM_UNLIKELY(isa<Not>(value))) {
             return cast<Not>(value)->getOperand(0); // ¬¬A ⇔ A
         } else if (LLVM_UNLIKELY(isa<Zeroes>(value))) {
-            return PabloBlock::createOnes(); // ¬0 ⇔ 1
+            return block->createOnes(stmt->getType()); // ¬0 ⇔ 1
         }  else if (LLVM_UNLIKELY(isa<Ones>(value))) {
-            return PabloBlock::createZeroes(); // ¬1 ⇔ 0
+            return block->createZeroes(stmt->getType()); // ¬1 ⇔ 0
         }
     } else if (isa<Advance>(stmt)) {
         if (LLVM_UNLIKELY(isa<Zeroes>(stmt->getOperand(0)))) {
-            return PabloBlock::createZeroes();
+            return block->createZeroes(stmt->getType());
         }
     } else {
         for (unsigned i = 0; i != stmt->getNumOperands(); ++i) {
@@ -291,12 +291,12 @@ inline PabloAST * Simplifier::fold(Statement * stmt, PabloBlock * const block) {
                         }
                     case PabloAST::ClassTypeId::ScanThru:
                         if (LLVM_UNLIKELY(i == 1)) {
-                            return PabloBlock::createZeroes();
+                            return block->createZeroes(stmt->getType());
                         }
                         break;
                     case PabloAST::ClassTypeId::MatchStar:
                         if (LLVM_UNLIKELY(i == 0)) {
-                            return PabloBlock::createOnes();
+                            return block->createOnes(stmt->getType());
                         }
                         break;
                     default: break;
@@ -369,7 +369,7 @@ inline void replaceReachableUsersOfWith(Statement * stmt, PabloAST * expr) {
                     user->replaceUsesOfWith(stmt, expr);
                     break;
                 }
-                parent = parent->getParent();
+                parent = parent->getPredecessor ();
             }
         }
     }
@@ -429,7 +429,6 @@ inline void removeIdenticalEscapedValues(ValueList & list) {
 void Simplifier::redundancyElimination(PabloFunction & function, PabloBlock * const block, ExpressionTable * predecessor) {
     ExpressionTable encountered(predecessor);
     Statement * stmt = block->front();
-
     while (stmt) {
         if (Assign * assign = dyn_cast<Assign>(stmt)) {
             // If we have an Assign whose users do not contain an If or Next node, we can replace its users with

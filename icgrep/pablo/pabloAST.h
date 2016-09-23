@@ -15,14 +15,15 @@
 #include <type_traits>
 #include <unordered_map>
 #include <vector>
+#include <pablo/pablo_type.h>
 
 using namespace llvm;
 
 namespace pablo {
 
 class PabloBlock;
-class String;
 class Statement;
+class String;
 
 class PabloAST {
     friend class Statement;
@@ -109,6 +110,10 @@ public:
         return mUsers;
     }
 
+    inline const PabloType * getType() const {
+        return mType;
+    }
+
     void replaceAllUsesWith(PabloAST * const expr);
 
     inline Users::size_type getNumUses() const {
@@ -124,8 +129,9 @@ public:
     }
 
 protected:
-    inline PabloAST(const ClassTypeId id)
+    inline PabloAST(const ClassTypeId id, const PabloType * const type)
     : mClassTypeId(id)
+    , mType(type)
     , mUsers(mVectorAllocator)
     {
 
@@ -134,11 +140,14 @@ protected:
     void removeUser(PabloAST * const user);
     virtual ~PabloAST() {
         mUsers.clear();
-    }
+    }    
+    static void throwIfNonMatchingTypes(const PabloAST * const a, const PabloAST * const b);
+    static void throwIfNonMatchingType(const PabloAST * const a, const PabloType::TypeId typeId);
     static Allocator        mAllocator;
     static VectorAllocator  mVectorAllocator;
 private:
     const ClassTypeId       mClassTypeId;
+    const PabloType * const mType;
     Users                   mUsers;
 };
 
@@ -217,8 +226,8 @@ public:
     }
     virtual ~Statement() {}
 protected:
-    explicit Statement(const ClassTypeId id, std::initializer_list<PabloAST *> operands, const String * const name)
-    : PabloAST(id)
+    explicit Statement(const ClassTypeId id, const PabloType * const type, std::initializer_list<PabloAST *> operands, const String * const name)
+    : PabloAST(id, type)
     , mName(name)
     , mNext(nullptr)
     , mPrev(nullptr)
@@ -233,8 +242,8 @@ protected:
             ++i;
         }
     }
-    explicit Statement(const ClassTypeId id, const unsigned reserved, const String * const name)
-    : PabloAST(id)
+    explicit Statement(const ClassTypeId id, const PabloType * const type, const unsigned reserved, const String * const name)
+    : PabloAST(id, type)
     , mName(name)
     , mNext(nullptr)
     , mPrev(nullptr)
@@ -244,8 +253,8 @@ protected:
         std::memset(mOperand, 0, reserved * sizeof(PabloAST *));
     }
     template<typename iterator>
-    explicit Statement(const ClassTypeId id, iterator begin, iterator end, const String * const name)
-    : PabloAST(id)
+    explicit Statement(const ClassTypeId id, const PabloType * const type, iterator begin, iterator end, const String * const name)
+    : PabloAST(id, type)
     , mName(name)
     , mNext(nullptr)
     , mPrev(nullptr)
@@ -333,19 +342,19 @@ public:
     }
 
 protected:
-    explicit Variadic(const ClassTypeId id, std::initializer_list<PabloAST *> operands, const String * const name)
-    : Statement(id, operands, name)
+    explicit Variadic(const ClassTypeId id, const PabloType * const type, std::initializer_list<PabloAST *> operands, const String * const name)
+    : Statement(id, type, operands, name)
     , mCapacity(operands.size()) {
 
     }
-    explicit Variadic(const ClassTypeId id, const unsigned reserved, String * name)
-    : Statement(id, reserved, name)
+    explicit Variadic(const ClassTypeId id, const PabloType * const type, const unsigned reserved, String * name)
+    : Statement(id, type, reserved, name)
     , mCapacity(reserved) {
 
     }
     template<typename iterator>
-    explicit Variadic(const ClassTypeId id, iterator begin, iterator end, String * name)
-    : Statement(id, begin, end, name)
+    explicit Variadic(const ClassTypeId id, const PabloType * const type, iterator begin, iterator end, String * name)
+    : Statement(id, type, begin, end, name)
     , mCapacity(std::distance(begin, end)) {
 
     }

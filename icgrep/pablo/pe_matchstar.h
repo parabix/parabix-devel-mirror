@@ -34,9 +34,8 @@ public:
     }
     virtual ~MatchStar() {}
 protected:
-    MatchStar(PabloAST * marker, PabloAST * cc, String * name)
-    : Statement(ClassTypeId::MatchStar, {marker, cc}, name)
-    {
+    MatchStar(PabloAST * marker,  PabloAST * cc, String * name)
+    : Statement(ClassTypeId::MatchStar, marker->getType(), {marker, cc}, name) {
 
     }
 private:

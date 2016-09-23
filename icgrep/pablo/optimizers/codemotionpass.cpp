@@ -56,7 +56,7 @@ inline static unsigned depthTo(const PabloBlock * scope, const PabloBlock * cons
     while (scope != root) {
         ++depth;
         assert (scope);
-        scope = scope->getParent();
+        scope = scope->getPredecessor ();
     }
     return depth;
 }
@@ -125,11 +125,11 @@ inline void CodeMotionPass::sink(PabloBlock * const block) {
                 // If one of these scopes is nested deeper than the other, scan upwards through
                 // the scope tree until both scopes are at the same depth.
                 while (depth1 > depth2) {
-                    scope1 = scope1->getParent();
+                    scope1 = scope1->getPredecessor ();
                     --depth1;
                 }
                 while (depth1 < depth2) {
-                    scope2 = scope2->getParent();
+                    scope2 = scope2->getPredecessor ();
                     --depth2;
                 }
 
@@ -137,8 +137,8 @@ inline void CodeMotionPass::sink(PabloBlock * const block) {
                 // must be the LCA of our original scopes.
                 while (scope1 != scope2) {
                     assert (scope1 && scope2);
-                    scope1 = scope1->getParent();
-                    scope2 = scope2->getParent();
+                    scope1 = scope1->getPredecessor ();
+                    scope2 = scope2->getPredecessor ();
                 }
                 assert (scope1);
                 // But if the LCA is the current block, we can't sink the statement.

@@ -45,7 +45,7 @@ public:
     }
 protected:
     String(const std::string & value, const bool generated) noexcept
-    : PabloAST(ClassTypeId::String)
+    : PabloAST(ClassTypeId::String, getPabloType(PabloType::String, 0))
     , mValue(duplicate(value))
     , mGenerated(generated)
     {

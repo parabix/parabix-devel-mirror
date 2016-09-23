@@ -132,7 +132,6 @@ void PabloAST::removeUser(PabloAST * const user) {
     mUsers.erase(pos);
 }
 
-
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief checkEscapedValueList
  ** ------------------------------------------------------------------------------------------------------------- */
@@ -153,7 +152,7 @@ inline void Statement::checkEscapedValueList(Statement * const branch, PabloAST 
                             to->addUser(branch);
                             return;
                         }
-                        parent = parent->getParent();
+                        parent = parent->getPredecessor ();
                         if (parent == nullptr) {
                             break;
                         }
@@ -187,7 +186,7 @@ void Statement::replaceUsesOfWith(PabloAST * const from, PabloAST * const to) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief setOperand
  ** ------------------------------------------------------------------------------------------------------------- */
-void Statement::setOperand(const unsigned index, PabloAST * const value) {
+void Statement::setOperand(const unsigned index, PabloAST * const value) {    
     assert ("Operand cannot be null!" && value);
     assert (index < getNumOperands());
     PabloAST * const prior = getOperand(index);
@@ -195,6 +194,7 @@ void Statement::setOperand(const unsigned index, PabloAST * const value) {
     if (LLVM_UNLIKELY(prior == value)) {
         return;
     }    
+    throwIfNonMatchingTypes(prior, value);
     prior->removeUser(this);
     mOperand[index] = value;
     value->addUser(this);
@@ -226,7 +226,7 @@ void Statement::insertBefore(Statement * const statement) {
     }
     if (LLVM_UNLIKELY(isa<If>(this) || isa<While>(this))) {
         PabloBlock * body = isa<If>(this) ? cast<If>(this)->getBody() : cast<While>(this)->getBody();
-        body->setParent(mParent);
+        body->setPredecessor (mParent);
     }
 }
 
@@ -254,7 +254,7 @@ void Statement::insertAfter(Statement * const statement) {
     }
     if (LLVM_UNLIKELY(isa<If>(this) || isa<While>(this))) {
         PabloBlock * body = isa<If>(this) ? cast<If>(this)->getBody() : cast<While>(this)->getBody();
-        body->setParent(mParent);
+        body->setPredecessor (mParent);
     }
 }
 
@@ -281,7 +281,7 @@ Statement * Statement::removeFromParent() {
         }
         if (LLVM_UNLIKELY(isa<If>(this) || isa<While>(this))) {
             PabloBlock * body = isa<If>(this) ? cast<If>(this)->getBody() : cast<While>(this)->getBody();
-            body->setParent(nullptr);
+            body->setPredecessor (nullptr);
         }
     }
     mPrev = nullptr;
@@ -294,6 +294,10 @@ Statement * Statement::removeFromParent() {
  * @brief eraseFromParent
  ** ------------------------------------------------------------------------------------------------------------- */
 Statement * Statement::eraseFromParent(const bool recursively) {
+
+    if (LLVM_UNLIKELY(getParent() == nullptr)) {
+        return nullptr;
+    }
 
     SmallVector<Statement *, 1> redundantBranches;
     // If this is an If or While statement, we'll have to remove the statements within the
@@ -333,7 +337,7 @@ Statement * Statement::eraseFromParent(const bool recursively) {
         }
     }
 
-    replaceAllUsesWith(PabloBlock::createZeroes());
+    replaceAllUsesWith(getParent()->createZeroes(getType()));
 
     if (recursively) {
         for (unsigned i = 0; i != mOperands; ++i) {
@@ -393,6 +397,7 @@ Statement * Statement::replaceWith(PabloAST * const expr, const bool rename, con
  * @brief addOperand
  ** ------------------------------------------------------------------------------------------------------------- */
 void Variadic::addOperand(PabloAST * const expr) {
+    throwIfNonMatchingTypes(this, expr);
     if (LLVM_UNLIKELY(mOperands == mCapacity)) {
         mCapacity = std::max<unsigned>(mCapacity * 2, 2);
         PabloAST ** expandedOperandSpace = reinterpret_cast<PabloAST**>(mAllocator.allocate(mCapacity * sizeof(PabloAST *)));
@@ -445,7 +450,7 @@ bool escapes(const Statement * statement) {
         if (LLVM_LIKELY(isa<Statement>(user))) {
             const PabloBlock * used = cast<Statement>(user)->getParent();
             while (used != parent) {
-                used = used->getParent();
+                used = used->getPredecessor ();
                 if (used == nullptr) {
                     assert (isa<Assign>(statement) || isa<Next>(statement));
                     return true;
@@ -549,5 +554,33 @@ check:      assert(stmt1->getParent() == stmt2->getParent());
     return true;
 }
 
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief throwIfNonMatchingTypes
+ ** ------------------------------------------------------------------------------------------------------------- */
+void PabloAST::throwIfNonMatchingTypes(const PabloAST * const a, const PabloAST * const b) {
+    if (LLVM_UNLIKELY(a->getType() != b->getType())) {
+        std::string tmp;
+        raw_string_ostream out(tmp);
+        out << "Error: ";
+        PabloPrinter::print(a, out);
+        out << "'s type does not match ";
+        PabloPrinter::print(b, out);
+        throw std::runtime_error(out.str());
+    }
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief throwIfNonMatchingTypes
+ ** ------------------------------------------------------------------------------------------------------------- */
+void PabloAST::throwIfNonMatchingType(const PabloAST * const a, const PabloType::TypeId typeId) {
+    if (LLVM_UNLIKELY(a->getType() == nullptr || a->getType()->getTypeId() != typeId)) {
+        std::string tmp;
+        raw_string_ostream out(tmp);
+        out << "Error: ";
+        PabloPrinter::print(a, out);
+        out << "'s type is invalid.";
+        throw std::runtime_error(out.str());
+    }
+}
 
 }

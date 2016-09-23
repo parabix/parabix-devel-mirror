@@ -38,7 +38,7 @@ public:
     }
 protected:
     Advance(PabloAST * expr, PabloAST * shiftAmount, String * name)
-    : Statement(ClassTypeId::Advance, {expr, shiftAmount}, name)
+    : Statement(ClassTypeId::Advance, expr->getType(), {expr, shiftAmount}, name)
     {
         assert(isa<Integer>(shiftAmount));
     }

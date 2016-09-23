@@ -32,7 +32,7 @@ public:
     }
 protected:
     explicit Assign(PabloAST * expr, String * name)
-    : Statement(ClassTypeId::Assign, {expr}, name)
+    : Statement(ClassTypeId::Assign, expr->getType(), {expr}, name)
     {
 
     }

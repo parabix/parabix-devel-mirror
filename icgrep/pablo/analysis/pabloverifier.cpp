@@ -200,7 +200,7 @@ bool unreachable(const Statement * stmt, const PabloBlock * const block) {
         if (parent == block) {
             return false;
         }
-        parent = parent->getParent();
+        parent = parent->getPredecessor ();
     }
     return true;
 }
@@ -307,7 +307,7 @@ void verifyProgramStructure(const PabloBlock * block, unsigned & nestingDepth) {
             const PabloBlock * nested = isa<If>(stmt) ? cast<If>(stmt)->getBody() : cast<While>(stmt)->getBody();
             if (LLVM_UNLIKELY(nested->getBranch() != stmt)) {
                 throwMisreportedBranchError(stmt, nested->getBranch());
-            } else if (LLVM_UNLIKELY(nested->getParent() != block)) {
+            } else if (LLVM_UNLIKELY(nested->getPredecessor () != block)) {
                 throwReportedScopeError(stmt);
             }
             if (isa<If>(stmt)) {

@@ -36,8 +36,7 @@ public:
     }
 protected:
     ScanThru(PabloAST * from, PabloAST * thru, String * name)
-    : Statement(ClassTypeId::ScanThru, {from, thru}, name)
-    {
+    : Statement(ClassTypeId::ScanThru, from->getType(), {from, thru}, name) {
 
     }
 private:

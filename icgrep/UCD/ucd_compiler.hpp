@@ -79,7 +79,7 @@ protected:
 
     static RangeList innerRanges(const RangeList & list);
 
-    void addTargets(const NameMap & names);
+    void addTargets(PabloBuilder & entry, const NameMap & names);
 
     void updateNames(NameMap & names, PabloBuilder & entry);
 

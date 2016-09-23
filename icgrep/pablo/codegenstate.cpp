@@ -10,10 +10,6 @@
 
 namespace pablo {
 
-Zeroes PabloBlock::mZeroes;
-
-Ones PabloBlock::mOnes;
-
 inline PabloAST * PabloBlock::renameNonNamedNode(PabloAST * expr, const std::string && prefix) {
     if (Statement * stmt = dyn_cast<Statement>(expr)) {
         if (stmt->getName()->isGenerated()) {
@@ -49,6 +45,7 @@ Assign * PabloBlock::createAssign(const std::string && prefix, PabloAST * const 
 }
 
 PabloAST * PabloBlock::createAdvance(PabloAST * expr, PabloAST * shiftAmount) {
+    PabloAST::throwIfNonMatchingType(expr, PabloType::Stream);
     if (isa<Zeroes>(expr) || cast<Integer>(shiftAmount)->value() == 0) {
         return expr;
     }
@@ -56,6 +53,7 @@ PabloAST * PabloBlock::createAdvance(PabloAST * expr, PabloAST * shiftAmount) {
 }
 
 PabloAST * PabloBlock::createAdvance(PabloAST * expr, PabloAST * shiftAmount, const std::string prefix) {
+    PabloAST::throwIfNonMatchingType(expr, PabloType::Stream);
     if (isa<Zeroes>(expr) || cast<Integer>(shiftAmount)->value() == 0) {
         return expr;
     }
@@ -63,6 +61,7 @@ PabloAST * PabloBlock::createAdvance(PabloAST * expr, PabloAST * shiftAmount, co
 }
 
 PabloAST * PabloBlock::createAdvance(PabloAST * expr, const Integer::Type shiftAmount) {
+    PabloAST::throwIfNonMatchingType(expr, PabloType::Stream);
     if (isa<Zeroes>(expr) || shiftAmount == 0) {
         return expr;
     }
@@ -70,6 +69,7 @@ PabloAST * PabloBlock::createAdvance(PabloAST * expr, const Integer::Type shiftA
 }
 
 PabloAST * PabloBlock::createAdvance(PabloAST * expr, const Integer::Type shiftAmount, const std::string prefix) {
+    PabloAST::throwIfNonMatchingType(expr, PabloType::Stream);
     if (isa<Zeroes>(expr) || shiftAmount == 0) {
         return renameNonNamedNode(expr, std::move(prefix));
     }
@@ -77,6 +77,7 @@ PabloAST * PabloBlock::createAdvance(PabloAST * expr, const Integer::Type shiftA
 }
 
 Count * PabloBlock::createCount(const std::string counterName, PabloAST * const expr)  {
+    PabloAST::throwIfNonMatchingType(expr, PabloType::Stream);
     return insertAtInsertionPoint(new Count(expr, makeName(counterName, false)));
 }
     
@@ -89,6 +90,7 @@ PabloAST * PabloBlock::createLookahead(PabloAST * expr, PabloAST * shiftAmount) 
 }
 
 PabloAST * PabloBlock::createLookahead(PabloAST * expr, PabloAST * shiftAmount, const std::string prefix) {
+    PabloAST::throwIfNonMatchingType(expr, PabloType::Stream);
     if (isa<Zeroes>(expr) || cast<Integer>(shiftAmount)->value() == 0) {
         return expr;
     }
@@ -96,6 +98,7 @@ PabloAST * PabloBlock::createLookahead(PabloAST * expr, PabloAST * shiftAmount, 
 }
 
 PabloAST * PabloBlock::createLookahead(PabloAST * expr, const Integer::Type shiftAmount) {
+    PabloAST::throwIfNonMatchingType(expr, PabloType::Stream);
     if (isa<Zeroes>(expr) || shiftAmount == 0) {
         return expr;
     }
@@ -103,6 +106,7 @@ PabloAST * PabloBlock::createLookahead(PabloAST * expr, const Integer::Type shif
 }
 
 PabloAST * PabloBlock::createLookahead(PabloAST * expr, const Integer::Type shiftAmount, const std::string prefix) {
+    PabloAST::throwIfNonMatchingType(expr, PabloType::Stream);
     if (isa<Zeroes>(expr) || shiftAmount == 0) {
         return renameNonNamedNode(expr, std::move(prefix));
     }
@@ -117,11 +121,12 @@ Call * PabloBlock::createCall(PabloAST * prototype, const std::vector<PabloAST *
 
 PabloAST * PabloBlock::createNot(PabloAST * expr) {
     assert (expr);
+    PabloAST::throwIfNonMatchingType(expr, PabloType::Stream);
     if (isa<Ones>(expr)) {
-        return createZeroes();
+        return createZeroes(expr->getType());
     }
     else if (isa<Zeroes>(expr)){
-        return createOnes();
+        return createOnes(expr->getType());
     }
     else if (Not * not1 = dyn_cast<Not>(expr)) {
         return not1->getOperand(0);
@@ -131,11 +136,12 @@ PabloAST * PabloBlock::createNot(PabloAST * expr) {
 
 PabloAST * PabloBlock::createNot(PabloAST * expr, const std::string prefix) {
     assert (expr);
+    PabloAST::throwIfNonMatchingType(expr, PabloType::Stream);
     if (isa<Ones>(expr)) {
-        return createZeroes();
+        return createZeroes(expr->getType());
     }
     else if (isa<Zeroes>(expr)){
-        return createOnes();
+        return createOnes(expr->getType());
     }
     else if (Not * not1 = dyn_cast<Not>(expr)) {        
         return renameNonNamedNode(not1->getOperand(0), std::move(prefix));
@@ -143,9 +149,9 @@ PabloAST * PabloBlock::createNot(PabloAST * expr, const std::string prefix) {
     return insertAtInsertionPoint(new Not(expr, makeName(prefix, false)));
 }
 
-Var * PabloBlock::createVar(PabloAST * name) {
+Var * PabloBlock::createVar(PabloAST * name, const PabloType * const type) {
     assert (name);
-    return new Var(name);
+    return new Var(name, type);
 }
 
 PabloAST * PabloBlock::createInFile(PabloAST * expr) {
@@ -178,23 +184,25 @@ Next * PabloBlock::createNext(Assign * assign, PabloAST * expr) {
 }
 
 PabloAST * PabloBlock::createMatchStar(PabloAST * marker, PabloAST * charclass) {
-    assert (marker && charclass);
+    throwIfNonMatchingTypes(marker, charclass);
     if (isa<Zeroes>(marker) || isa<Zeroes>(charclass)) {
         return marker;
     }
     return insertAtInsertionPoint(new MatchStar(marker, charclass, makeName("matchstar")));
 }
 
-PabloAST * PabloBlock::createMatchStar(PabloAST * marker, PabloAST * charclass, const std::string prefix) {
-    assert (marker && charclass);
+PabloAST * PabloBlock::createMatchStar(PabloAST * marker, PabloAST * charclass, const std::string prefix) {    
+    throwIfNonMatchingTypes(marker, charclass);
+    throwIfNonMatchingType(marker, PabloType::Stream);
     if (isa<Zeroes>(marker) || isa<Zeroes>(charclass)) {
         return renameNonNamedNode(marker, std::move(prefix));
     }
     return insertAtInsertionPoint(new MatchStar(marker, charclass, makeName(prefix, false)));
 }
 
-PabloAST * PabloBlock::createScanThru(PabloAST * from, PabloAST * thru) {
-    assert (from && thru);
+PabloAST * PabloBlock::createScanThru(PabloAST * from, PabloAST * thru) {    
+    throwIfNonMatchingTypes(from, thru);
+    throwIfNonMatchingType(from, PabloType::Stream);
     if (isa<Zeroes>(from) || isa<Zeroes>(thru)) {
         return from;
     }
@@ -202,7 +210,8 @@ PabloAST * PabloBlock::createScanThru(PabloAST * from, PabloAST * thru) {
 }
 
 PabloAST * PabloBlock::createScanThru(PabloAST * from, PabloAST * thru, const std::string prefix) {
-    assert (from && thru);
+    throwIfNonMatchingTypes(from, thru);
+    throwIfNonMatchingType(from, PabloType::Stream);
     if (isa<Zeroes>(from) || isa<Zeroes>(thru)) {        
         return renameNonNamedNode(from, std::move(prefix));
     }
@@ -218,7 +227,7 @@ static inline Type * isBinary(PabloAST * expr) {
 }
 
 PabloAST * PabloBlock::createAnd(PabloAST * expr1, PabloAST * expr2) {
-    assert (expr1 && expr2);
+    throwIfNonMatchingTypes(expr1, expr2);
     if (isa<Zeroes>(expr2) || isa<Ones>(expr1)) {
         return expr2;
     } else if (isa<Zeroes>(expr1) || isa<Ones>(expr2) || equals(expr1, expr2)){
@@ -227,11 +236,11 @@ PabloAST * PabloBlock::createAnd(PabloAST * expr1, PabloAST * expr2) {
         if (Not * not2 = dyn_cast<Not>(expr2)) {
             return createNot(createOr(not1->getOperand(0), not2->getOperand(0)));
         } else if (equals(not1->getOperand(0), expr2)) {
-            return createZeroes();
+            return createZeroes(expr1->getType());
         }
     } else if (Not * not2 = dyn_cast<Not>(expr2)) {
         if (equals(expr1, not2->getOperand(0))) {
-            return createZeroes();
+            return createZeroes(expr1->getType());
         }
     } else if (Or * or1 = isBinary<Or>(expr1)) {
         if (equals(or1->getOperand(0), expr2) || equals(or1->getOperand(1), expr2)) {
@@ -242,11 +251,11 @@ PabloAST * PabloBlock::createAnd(PabloAST * expr1, PabloAST * expr2) {
             return expr1;
         }
     }
-    return insertAtInsertionPoint(new And(expr1, expr2, makeName("and_")));
+    return insertAtInsertionPoint(new And(expr1->getType(), expr1, expr2, makeName("and_")));
 }
 
 PabloAST * PabloBlock::createAnd(PabloAST * expr1, PabloAST * expr2, const std::string prefix) {
-    assert (expr1 && expr2);
+    throwIfNonMatchingTypes(expr1, expr2);
     if (isa<Zeroes>(expr2) || isa<Ones>(expr1)) {
         return renameNonNamedNode(expr2, std::move(prefix));
     }
@@ -257,11 +266,11 @@ PabloAST * PabloBlock::createAnd(PabloAST * expr1, PabloAST * expr2, const std::
             return createNot(createOr(not1->getOperand(0), not2->getOperand(0)), prefix);
         }
         else if (equals(not1->getOperand(0), expr2)) {
-            return createZeroes();
+            return createZeroes(expr1->getType());
         }
     } else if (Not * not2 = dyn_cast<Not>(expr2)) {
         if (equals(expr1, not2->getOperand(0))) {
-            return createZeroes();
+            return createZeroes(expr1->getType());
         }
     } else if (Or * or1 = isBinary<Or>(expr1)) {
         if (equals(or1->getOperand(0), expr2) || equals(or1->getOperand(1), expr2)) {
@@ -272,19 +281,27 @@ PabloAST * PabloBlock::createAnd(PabloAST * expr1, PabloAST * expr2, const std::
             return expr1;
         }
     }
-    return insertAtInsertionPoint(new And(expr1, expr2, makeName(prefix, false)));
+    return insertAtInsertionPoint(new And(expr1->getType(), expr1, expr2, makeName(prefix, false)));
 }
 
-And * PabloBlock::createAnd(const unsigned reserved) {
-    return insertAtInsertionPoint(new And(reserved, makeName("and_")));
+And * PabloBlock::createAnd(const PabloType * const type, const unsigned reserved) {
+    return insertAtInsertionPoint(new And(type, reserved, makeName("and_")));
 }
 
-And * PabloBlock::createAnd(const unsigned reserved, const std::string prefix) {
-    return insertAtInsertionPoint(new And(reserved, makeName(prefix, false)));
+And * PabloBlock::createAnd(const PabloType * const type, const unsigned reserved, const std::string prefix) {
+    return insertAtInsertionPoint(new And(type, reserved, makeName(prefix, false)));
+}
+
+And * PabloBlock::createAnd(const PabloType * const type, std::vector<PabloAST *>::iterator begin, std::vector<PabloAST *>::iterator end) {
+    return insertAtInsertionPoint(new And(type, begin, end, makeName("and_")));
+}
+
+And * PabloBlock::createAnd(const PabloType * const type, Variadic::iterator begin, Variadic::iterator end) {
+    return insertAtInsertionPoint(new And(type, begin, end, makeName("and_")));
 }
 
 PabloAST * PabloBlock::createOr(PabloAST * expr1, PabloAST * expr2) {
-    assert (expr1 && expr2);
+    throwIfNonMatchingTypes(expr1, expr2);
     if (isa<Zeroes>(expr1) || isa<Ones>(expr2)){
         return expr2;
     }
@@ -324,11 +341,11 @@ PabloAST * PabloBlock::createOr(PabloAST * expr1, PabloAST * expr2) {
             return expr1;
         }
     }
-    return insertAtInsertionPoint(new Or(expr1, expr2, makeName("or_")));
+    return insertAtInsertionPoint(new Or(expr1->getType(), expr1, expr2, makeName("or_")));
 }
 
 PabloAST * PabloBlock::createOr(PabloAST * expr1, PabloAST * expr2, const std::string prefix) {
-    assert (expr1 && expr2);
+    throwIfNonMatchingTypes(expr1, expr2);
     if (isa<Zeroes>(expr1) || isa<Ones>(expr2)){
         return renameNonNamedNode(expr2, std::move(prefix));
     }
@@ -366,23 +383,30 @@ PabloAST * PabloBlock::createOr(PabloAST * expr1, PabloAST * expr2, const std::s
             return expr1;
         }
     }
-    return insertAtInsertionPoint(new Or(expr1, expr2, makeName(prefix, false)));
+    return insertAtInsertionPoint(new Or(expr1->getType(), expr1, expr2, makeName(prefix, false)));
 }
 
-Or * PabloBlock::createOr(const unsigned reserved) {
-    return insertAtInsertionPoint(new Or(reserved, makeName("or_")));
+Or * PabloBlock::createOr(const PabloType * const type, const unsigned reserved) {
+    return insertAtInsertionPoint(new Or(type, reserved, makeName("or_")));
 }
 
-Or * PabloBlock::createOr(const unsigned reserved, const std::string prefix) {
-    return insertAtInsertionPoint(new Or(reserved, makeName(prefix, false)));
+Or * PabloBlock::createOr(const PabloType * const type, const unsigned reserved, const std::string prefix) {
+    return insertAtInsertionPoint(new Or(type, reserved, makeName(prefix, false)));
+}
+
+Or * PabloBlock::createOr(const PabloType * const type, std::vector<PabloAST *>::iterator begin, std::vector<PabloAST *>::iterator end) {
+    return insertAtInsertionPoint(new Or(type, begin, end, makeName("or_")));
+}
+
+Or * PabloBlock::createOr(const PabloType * const type, Variadic::iterator begin, Variadic::iterator end) {
+    return insertAtInsertionPoint(new Or(type, begin, end, makeName("or_")));
 }
 
 PabloAST * PabloBlock::createXor(PabloAST * expr1, PabloAST * expr2) {
-    assert (expr1 && expr2);
+    throwIfNonMatchingTypes(expr1, expr2);
     if (expr1 == expr2) {
-        return PabloBlock::createZeroes();
-    }
-    if (isa<Ones>(expr1)) {
+        return PabloBlock::createZeroes(expr1->getType());
+    } else if (isa<Ones>(expr1)) {
         return createNot(expr2);
     } else if (isa<Zeroes>(expr1)){
         return expr2;
@@ -395,15 +419,14 @@ PabloAST * PabloBlock::createXor(PabloAST * expr1, PabloAST * expr2) {
             return createXor(not1->getOperand(0), not2->getOperand(0));
         }
     }
-    return insertAtInsertionPoint(new Xor(expr1, expr2, makeName("xor_")));
+    return insertAtInsertionPoint(new Xor(expr1->getType(), expr1, expr2, makeName("xor_")));
 }
 
 PabloAST * PabloBlock::createXor(PabloAST * expr1, PabloAST * expr2, const std::string prefix) {
-    assert (expr1 && expr2);
+    throwIfNonMatchingTypes(expr1, expr2);
     if (expr1 == expr2) {
-        return PabloBlock::createZeroes();
-    }
-    if (isa<Ones>(expr1)) {
+        return PabloBlock::createZeroes(expr1->getType());
+    } else if (isa<Ones>(expr1)) {
         return createNot(expr2, prefix);
     } else if (isa<Zeroes>(expr1)){
         return expr2;
@@ -416,21 +439,29 @@ PabloAST * PabloBlock::createXor(PabloAST * expr1, PabloAST * expr2, const std::
             return createXor(not1->getOperand(0), not2->getOperand(0), prefix);
         }
     }
-    return insertAtInsertionPoint(new Xor(expr1, expr2, makeName(prefix, false)));
+    return insertAtInsertionPoint(new Xor(expr1->getType(), expr1, expr2, makeName(prefix, false)));
 }
 
-Xor * PabloBlock::createXor(const unsigned reserved) {
-    return insertAtInsertionPoint(new Xor(reserved, makeName("xor_")));
+Xor * PabloBlock::createXor(const PabloType * const type, const unsigned reserved) {
+    return insertAtInsertionPoint(new Xor(type, reserved, makeName("xor_")));
 }
 
-Xor * PabloBlock::createXor(const unsigned reserved, const std::string prefix) {
-    return insertAtInsertionPoint(new Xor(reserved, makeName(prefix, false)));
+Xor * PabloBlock::createXor(const PabloType * const type, const unsigned reserved, const std::string prefix) {
+    return insertAtInsertionPoint(new Xor(type, reserved, makeName(prefix, false)));
+}
+
+Xor * PabloBlock::createXor(const PabloType * const type, std::vector<PabloAST *>::iterator begin, std::vector<PabloAST *>::iterator end) {
+    return insertAtInsertionPoint(new Xor(type, begin, end, makeName("xor_")));
+}
+
+Xor * PabloBlock::createXor(const PabloType * const type, Variadic::iterator begin, Variadic::iterator end) {
+    return insertAtInsertionPoint(new Xor(type, begin, end, makeName("xor_")));
 }
 
 /// TERNARY CREATE FUNCTION
 
 PabloAST * PabloBlock::createSel(PabloAST * condition, PabloAST * trueExpr, PabloAST * falseExpr) {
-    assert (condition && trueExpr && falseExpr);
+    throwIfNonMatchingTypes(trueExpr, falseExpr);
     if (isa<Ones>(condition)) {
         return trueExpr;
     } else if (isa<Zeroes>(condition)){
@@ -454,29 +485,22 @@ PabloAST * PabloBlock::createSel(PabloAST * condition, PabloAST * trueExpr, Pabl
 }
 
 PabloAST * PabloBlock::createSel(PabloAST * condition, PabloAST * trueExpr, PabloAST * falseExpr, const std::string prefix) {
-    assert (condition && trueExpr && falseExpr);
+    throwIfNonMatchingTypes(trueExpr, falseExpr);
     if (isa<Zeroes>(condition)){
         return renameNonNamedNode(falseExpr, std::move(prefix));
-    }
-    else if (isa<Ones>(condition) || equals(trueExpr, falseExpr)) {
+    } else if (isa<Ones>(condition) || equals(trueExpr, falseExpr)) {
         return renameNonNamedNode(trueExpr, std::move(prefix));
-    }
-    else if (isa<Ones>(trueExpr)) {
+    } else if (isa<Ones>(trueExpr)) {
         return createOr(condition, falseExpr, prefix);
-    }
-    else if (isa<Zeroes>(trueExpr)){
+    } else if (isa<Zeroes>(trueExpr)){
         return createAnd(createNot(condition), falseExpr, prefix);
-    }
-    else if (isa<Ones>(falseExpr)) {
+    } else if (isa<Ones>(falseExpr)) {
         return createOr(createNot(condition), trueExpr, prefix);
-    }
-    else if (isa<Zeroes>(falseExpr)){
+    } else if (isa<Zeroes>(falseExpr)){
         return createAnd(condition, trueExpr, prefix);
-    }
-    else if (isa<Not>(trueExpr) && equals(cast<Not>(trueExpr)->getOperand(0), falseExpr)) {
+    } else if (isa<Not>(trueExpr) && equals(cast<Not>(trueExpr)->getOperand(0), falseExpr)) {
         return createXor(condition, falseExpr, prefix);
-    }
-    else if (isa<Not>(falseExpr) && equals(trueExpr, cast<Not>(falseExpr)->getOperand(0))){
+    } else if (isa<Not>(falseExpr) && equals(trueExpr, cast<Not>(falseExpr)->getOperand(0))){
         return createXor(condition, trueExpr, prefix);
     }
     return insertAtInsertionPoint(new Sel(condition, trueExpr, falseExpr, makeName(prefix, false)));
@@ -544,10 +568,10 @@ unsigned PabloBlock::enumerateScopes(unsigned baseScopeIndex) {
     
 /// CONSTRUCTOR
 
-PabloBlock::PabloBlock(SymbolGenerator * symbolGenerator) noexcept
-: PabloAST(PabloAST::ClassTypeId::Block)
-, mSymbolGenerator(symbolGenerator)
-, mParent(nullptr)
+PabloBlock::PabloBlock(PabloFunction * parent, PabloBlock *predecessor) noexcept
+: PabloAST(PabloAST::ClassTypeId::Block, nullptr)
+, mParent(parent)
+, mPredecessor(predecessor)
 , mBranch(nullptr)
 , mScopeIndex(0)
 {

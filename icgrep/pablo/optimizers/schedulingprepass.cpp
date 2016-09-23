@@ -70,7 +70,7 @@ static void resolveNestedUsages(Statement * const root, Statement * const stmt, 
         if (LLVM_LIKELY(isa<Statement>(use))) {
             const PabloBlock * scope = cast<Statement>(use)->getParent();
             if (scope != block) {
-                for (PabloBlock * prior = scope->getParent(); prior; scope = prior, prior = prior->getParent()) {
+                for (PabloBlock * prior = scope->getPredecessor (); prior; scope = prior, prior = prior->getPredecessor ()) {
                     if (prior == block) {
                         assert (scope->getBranch());
                         auto v = M.find(scope->getBranch());
@@ -113,7 +113,7 @@ static void computeDependencyGraph(DependencyGraph & G, PabloBlock * const block
                 } else if (isa<Assign>(op) || isa<Next>(op)) {
                     // if this statement isn't an Assign or Next node, it cannot come from a nested scope
                     // unless the function is invalid.
-                    for (PabloBlock * prior = scope->getParent(); prior; scope = prior, prior = prior->getParent()) {
+                    for (PabloBlock * prior = scope->getPredecessor (); prior; scope = prior, prior = prior->getPredecessor ()) {
                         // Was this instruction computed by a nested block?
                         if (prior == block) {
                             assert (scope->getBranch());

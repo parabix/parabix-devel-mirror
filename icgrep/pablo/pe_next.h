@@ -26,8 +26,8 @@ public:
     virtual ~Next() {}
 protected:
     explicit Next(PabloAST * initial, PabloAST * expr)
-    : Statement(ClassTypeId::Next, {expr, cast<Assign>(initial)}, cast<Assign>(initial)->getName()) {
-
+    : Statement(ClassTypeId::Next, initial->getType(), {expr, cast<Assign>(initial)}, cast<Assign>(initial)->getName()) {
+        throwIfNonMatchingTypes(initial, expr);
     }
 };
 

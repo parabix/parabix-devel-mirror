@@ -6,11 +6,11 @@ namespace pablo {
 While::VariantAllocator While::mVariantAllocator;
 
 While::While(PabloAST * expr, const std::initializer_list<Next *> nextVars, PabloBlock * body)
-: Statement(ClassTypeId::While, {expr}, nullptr)
+: Statement(ClassTypeId::While, nullptr, {expr}, nullptr)
 , mBody(body)
 , mVariant(nextVars.begin(), nextVars.end(), mVariantAllocator) {
     mBody->setBranch(this);
-    mBody->setParent(getParent());
+    mBody->setPredecessor (getParent());
     for (Next * variant : nextVars) {
         variant->addUser(this);
         this->addUser(variant);
@@ -18,11 +18,11 @@ While::While(PabloAST * expr, const std::initializer_list<Next *> nextVars, Pabl
 }
 
 While::While(PabloAST * expr, const std::vector<Next *> & nextVars, PabloBlock * body)
-: Statement(ClassTypeId::While, {expr}, nullptr)
+: Statement(ClassTypeId::While, nullptr, {expr}, nullptr)
 , mBody(body)
 , mVariant(nextVars.begin(), nextVars.end(), mVariantAllocator) {
     mBody->setBranch(this);
-    mBody->setParent(getParent());
+    mBody->setPredecessor (getParent());
     for (Next * variant : nextVars) {
         variant->addUser(this);
         this->addUser(variant);
@@ -31,9 +31,9 @@ While::While(PabloAST * expr, const std::vector<Next *> & nextVars, PabloBlock *
 
 PabloBlock * While::setBody(PabloBlock * body) {
     body->setBranch(this);
-    body->setParent(mBody->getParent());
+    body->setPredecessor (mBody->getPredecessor ());
     std::swap(mBody, body);
-    body->setParent(nullptr);
+    body->setPredecessor (nullptr);
     return body;
 }
 

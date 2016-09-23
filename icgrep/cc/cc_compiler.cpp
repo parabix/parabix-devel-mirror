@@ -29,8 +29,9 @@ CC_Compiler::CC_Compiler(PabloFunction & function, const unsigned encodingBits, 
 : mBuilder(function.getEntryBlock())
 , mBasisBit(encodingBits)
 , mEncodingBits(encodingBits) {
+    const PabloType * streamType = getPabloType(PabloType::Stream, 1);
     for (unsigned i = 0; i != mEncodingBits; i++) {
-        Var * var = mBuilder.createVar(prefix + std::to_string(i));
+        Var * var = mBuilder.createVar(prefix + std::to_string(i), streamType);
         function.setParameter(i, var);
         mBasisBit[i] = var;
     }
@@ -94,12 +95,12 @@ PabloAST * CC_Compiler::charset_expr(const CC * cc, PabloBlockOrBuilder & pb) {
 template<typename PabloBlockOrBuilder>
 PabloAST * CC_Compiler::bit_pattern_expr(const unsigned pattern, unsigned selected_bits, PabloBlockOrBuilder & pb) {
     if (LLVM_UNLIKELY(selected_bits == 0)) {
-        return PabloBlock::createOnes();
+        return pb.createOnes();
     } else {
         std::vector<PabloAST*> terms;
         for (unsigned i = 0; selected_bits; ++i) {
             unsigned test_bit = static_cast<unsigned>(1) << i;
-            PabloAST * term = PabloBlock::createOnes();
+            PabloAST * term = pb.createOnes();
             if (selected_bits & test_bit) {
                 term = getBasisVar(i);
                 if ((pattern & test_bit) == 0) {

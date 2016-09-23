@@ -22,19 +22,19 @@ public:
     }
     virtual ~Xor() { }
 protected:
-    Xor(PabloAST * expr1, PabloAST * expr2, String * name)
-    : Variadic(ClassTypeId::Xor, {expr1, expr2}, name)
+    Xor(const PabloType * const type, PabloAST * expr1, PabloAST * expr2, String * name)
+    : Variadic(ClassTypeId::Xor, type, {expr1, expr2}, name)
     {
 
     }
-    Xor(const unsigned reserved, String * name)
-    : Variadic(ClassTypeId::Xor, reserved, name)
+    Xor(const PabloType * const type, const unsigned reserved, String * name)
+    : Variadic(ClassTypeId::Xor, type, reserved, name)
     {
 
     }
     template<typename iterator>
-    Xor(iterator begin, iterator end, String * name)
-    : Variadic(ClassTypeId::Xor, begin, end, name) {
+    Xor(const PabloType * const type, iterator begin, iterator end, String * name)
+    : Variadic(ClassTypeId::Xor, type, begin, end, name) {
 
     }
 };

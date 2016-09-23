@@ -88,7 +88,7 @@ inline void CanonicalizeDFG::deMorgansExpansion(Not * const negation, PabloBlock
                             break;
                         }
                         br = scope->getBranch();
-                        scope = scope->getParent();
+                        scope = scope->getPredecessor ();
                     }
                 }
                 block->setInsertPoint(ip);

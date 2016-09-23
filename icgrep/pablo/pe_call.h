@@ -31,7 +31,7 @@ public:
     }
 protected:
     Call(PabloAST * prototype)
-    : Statement(ClassTypeId::Call, {prototype}, cast<Prototype>(prototype)->getName())
+    : Statement(ClassTypeId::Call, nullptr, {prototype}, cast<Prototype>(prototype)->getName())
     , mLocalCarryIndex(0) {
 
     }

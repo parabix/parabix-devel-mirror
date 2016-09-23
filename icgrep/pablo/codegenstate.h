@@ -56,12 +56,12 @@ public:
         return false;
     }
 
-    inline static PabloBlock * Create(PabloFunction & function) noexcept {
-        return new PabloBlock(function.mSymbolTable);
+    inline static PabloBlock * Create(PabloFunction & parent) noexcept {
+        return new PabloBlock(&parent, nullptr);
     }
 
-    inline static PabloBlock * Create(PabloBlock * const block) noexcept {
-        return new PabloBlock(block->mSymbolGenerator);
+    inline static PabloBlock * Create(PabloBlock * const predecessor) noexcept {
+        return new PabloBlock(predecessor->mParent, predecessor);
     }
 
     PabloAST * createAdvance(PabloAST * expr, const Integer::Type shiftAmount);
@@ -80,12 +80,12 @@ public:
 
     PabloAST * createLookahead(PabloAST * expr, PabloAST * shiftAmount, const std::string prefix);
 
-    static inline Zeroes * createZeroes() {
-        return &mZeroes;
+    inline Zeroes * createZeroes(const PabloType * const type = nullptr) {
+        return mParent->getNullValue(type);
     }
 
-    static inline Ones * createOnes() {
-        return &mOnes;
+    inline Ones * createOnes(const PabloType * const type = nullptr) {
+        return mParent->getAllOnesValue(type);
     }
 
     inline Call * createCall(Prototype * prototype, const std::vector<Var *> & args) {
@@ -104,12 +104,12 @@ public:
 
     Assign * createAssign(const std::string && prefix, PabloAST * const expr);
 
-    inline Var * createVar(const std::string name) {
-        return createVar(getName(name, false));
+    inline Var * createVar(const std::string name, const PabloType * const type) {
+        return createVar(getName(name, false), type);
     }
 
-    inline Var * createVar(String * name) {
-        return createVar(cast<PabloAST>(name));
+    inline Var * createVar(String * name, const PabloType * const type) {
+        return createVar(cast<PabloAST>(name), type);
     }
 
     Next * createNext(Assign * assign, PabloAST * expr);
@@ -118,17 +118,13 @@ public:
 
     PabloAST * createAnd(PabloAST * expr1, PabloAST * expr2, const std::string prefix);
 
-    And * createAnd(const unsigned reserved);
+    And * createAnd(const PabloType * const type, const unsigned reserved);
 
-    And * createAnd(const unsigned reserved, const std::string prefix);
+    And * createAnd(const PabloType * const type, const unsigned reserved, const std::string prefix);
 
-    And * createAnd(std::vector<PabloAST *>::iterator begin, std::vector<PabloAST *>::iterator end) {
-        return insertAtInsertionPoint(new And(begin, end, makeName("and_")));
-    }
+    And * createAnd(const PabloType * const type, std::vector<PabloAST *>::iterator begin, std::vector<PabloAST *>::iterator end);
 
-    And * createAnd(Variadic::iterator begin, Variadic::iterator end) {
-        return insertAtInsertionPoint(new And(begin, end, makeName("and_")));
-    }
+    And * createAnd(const PabloType * const type, Variadic::iterator begin, Variadic::iterator end);
 
     PabloAST * createNot(PabloAST * expr);
 
@@ -138,33 +134,25 @@ public:
 
     PabloAST * createOr(PabloAST * expr1, PabloAST * expr2, const std::string prefix);
 
-    Or * createOr(std::vector<PabloAST *>::iterator begin, std::vector<PabloAST *>::iterator end) {
-        return insertAtInsertionPoint(new Or(begin, end, makeName("or_")));
-    }
+    Or * createOr(const PabloType * const type, std::vector<PabloAST *>::iterator begin, std::vector<PabloAST *>::iterator end);
 
-    Or * createOr(Variadic::iterator begin, Variadic::iterator end) {
-        return insertAtInsertionPoint(new Or(begin, end, makeName("or_")));
-    }
+    Or * createOr(const PabloType * const type, Variadic::iterator begin, Variadic::iterator end);
 
-    Or * createOr(const unsigned reserved);
+    Or * createOr(const PabloType * const type, const unsigned reserved);
 
-    Or * createOr(const unsigned reserved, const std::string prefix);
+    Or * createOr(const PabloType * const type, const unsigned reserved, const std::string prefix);
 
     PabloAST * createXor(PabloAST * expr1, PabloAST * expr2);
 
     PabloAST * createXor(PabloAST * expr1, PabloAST * expr2, const std::string prefix);
 
-    Xor * createXor(std::vector<PabloAST *>::iterator begin, std::vector<PabloAST *>::iterator end) {
-        return insertAtInsertionPoint(new Xor(begin, end, makeName("xor_")));
-    }
+    Xor * createXor(const PabloType * const type, std::vector<PabloAST *>::iterator begin, std::vector<PabloAST *>::iterator end);
 
-    Xor * createXor(Variadic::iterator begin, Variadic::iterator end) {
-        return insertAtInsertionPoint(new Xor(begin, end, makeName("xor_")));
-    }
+    Xor * createXor(const PabloType * const type, Variadic::iterator begin, Variadic::iterator end);
 
-    Xor * createXor(const unsigned reserved);
+    Xor * createXor(const PabloType * const type, const unsigned reserved);
 
-    Xor * createXor(const unsigned reserved, const std::string prefix);
+    Xor * createXor(const PabloType * const type, const unsigned reserved, const std::string prefix);
 
     PabloAST * createMatchStar(PabloAST * marker, PabloAST * charclass);
 
@@ -209,24 +197,31 @@ public:
     }
 
     inline String * getName(const std::string name, const bool generated = true) const {
-        return mSymbolGenerator->get(name, generated);
+        return getSymbolTable()->get(name, generated);
     }
 
     inline String * makeName(const std::string prefix, const bool generated = true) const {
-        return mSymbolGenerator->make(prefix, generated);
+        return getSymbolTable()->make(prefix, generated);
     }
 
     inline Integer * getInteger(Integer::Type value) {
-        return mSymbolGenerator->getInteger(value);
+        return getSymbolTable()->getInteger(value);
     }
 
-    inline PabloBlock * getParent() const {
-        return mParent;
+    inline PabloBlock * getPredecessor() const {
+        return mPredecessor;
     }
     
-    void setParent(PabloBlock * parent) {
+    void setPredecessor(PabloBlock * const predecessor) {
+        mPredecessor = predecessor;
+    }
+
+    inline PabloFunction * getParent() const {
+        return mParent;
+    }
+
+    void setParent(PabloFunction * const parent) {
         mParent = parent;
-        // Add test to assert this block is in the same function.
     }
 
     void insert(Statement * const statement);
@@ -243,11 +238,15 @@ public:
         return mBranch;
     }
 
+    SymbolGenerator * getSymbolTable() const {
+        return mParent->getSymbolTable();
+    }
+
     virtual ~PabloBlock();
 
 protected:
 
-    explicit PabloBlock(SymbolGenerator * symbolGenerator) noexcept;
+    explicit PabloBlock(PabloFunction * parent, PabloBlock * predecessor) noexcept;
 
     PabloAST * renameNonNamedNode(PabloAST * expr, const std::string && prefix);
 
@@ -256,7 +255,7 @@ protected:
         if (isa<Statement>(expr)) {
             if (LLVM_UNLIKELY(isa<If>(expr) || isa<While>(expr))) {
                 PabloBlock * const body = isa<If>(expr) ? cast<If>(expr)->getBody() : cast<While>(expr)->getBody();
-                body->setParent(this);
+                body->setPredecessor (this);
                 addUser(body);
             }
             insert(cast<Statement>(expr));
@@ -272,13 +271,11 @@ private:
 
     Call * createCall(PabloAST * prototype, const std::vector<PabloAST *> &);
 
-    Var * createVar(PabloAST * name);
+    Var * createVar(PabloAST * name, const PabloType * const type);
 
 private:        
-    static Zeroes                                       mZeroes;
-    static Ones                                         mOnes;
-    SymbolGenerator *                                   mSymbolGenerator; // TODO: need a better way of passing a symbol generator around
-    PabloBlock *                                        mParent;
+    PabloFunction *                                     mParent;
+    PabloBlock *                                        mPredecessor;
     Statement *                                         mBranch; // What statement branches into this scope block?
     unsigned                                            mScopeIndex;
 };

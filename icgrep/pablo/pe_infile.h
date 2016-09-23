@@ -26,7 +26,10 @@ public:
         return getOperand(0);
     }
 protected:
-    InFile(PabloAST * expr, String * name) : Statement(ClassTypeId::InFile, {expr}, name) { }
+    InFile(PabloAST * expr, String * name)
+    : Statement(ClassTypeId::InFile, expr->getType(), {expr}, name) {
+
+    }
 };
 
 class AtEOF : public Statement {
@@ -44,7 +47,10 @@ public:
         return getOperand(0);
     }
 protected:
-    AtEOF(PabloAST * expr, String * name) : Statement(ClassTypeId::AtEOF, {expr}, name) { }
+    AtEOF(PabloAST * expr, String * name)
+    : Statement(ClassTypeId::AtEOF, expr->getType(), {expr}, name) {
+
+    }
 };
     
 }

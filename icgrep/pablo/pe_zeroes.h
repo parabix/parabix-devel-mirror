@@ -14,6 +14,7 @@ namespace pablo {
 
 class Zeroes : public PabloAST {
     friend class PabloBlock;
+    friend class PabloFunction;
 public:
     static inline bool classof(const PabloAST * expr) {
         assert (expr);
@@ -31,7 +32,7 @@ public:
         return isa<Zeroes>(other);
     }
 protected:
-    Zeroes() : PabloAST(ClassTypeId::Zeroes) { }
+    Zeroes(const PabloType * const type) : PabloAST(ClassTypeId::Zeroes, type) { }
 };
 
 }
