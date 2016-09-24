@@ -7,6 +7,8 @@
 #include <cstdio>
 #include <vector>
 #include <llvm/Support/CommandLine.h>
+#include <llvm/Support/ErrorHandling.h>
+#include <llvm/Support/Signals.h>
 #include <re/re_alt.h>
 #include <re/re_parser.h>
 #include <grep_engine.h>
@@ -18,6 +20,7 @@
 #include <re/re_toolchain.h>
 #include <pablo/pablo_toolchain.h>
 #include <mutex>
+
 
 #include <iostream> // MEEE
 
@@ -48,6 +51,26 @@ static cl::opt<int> Threads("t", cl::desc("Total number of threads."), cl::init(
 static cl::opt<bool> GrepSupport("gs", cl::desc("Grep support. Pipe the output of icgrep into grep. \
          Gives you colored output + back-referencing capability."), cl::cat(EnhancedGrepOptions));
 
+//
+// Handler for errors reported through llvm::report_fatal_error.  Report
+// and signal error code 2 (grep convention).
+// 
+static void icgrep_error_handler(void *UserData, const std::string &Message,
+                             bool GenCrashDiag) {
+
+    // Modified from LLVM's internal report_fatal_error logic.
+    SmallVector<char, 64> Buffer;
+    raw_svector_ostream OS(Buffer);
+    OS << "icgrep ERROR: " << Message << "\n";
+    StringRef MessageStr = OS.str();
+    ssize_t written = ::write(2, MessageStr.data(), MessageStr.size());
+    (void)written; // If something went wrong, we deliberately just give up.
+
+    // Run the interrupt handlers to make sure any special cleanups get done, in
+    // particular that we remove files registered with RemoveFileOnSignal.
+    llvm::sys::RunInterruptHandlers();
+    exit(2);
+}
 
 static std::string allREs;
 static re::ModeFlagSet globalFlags = 0;
@@ -211,6 +234,7 @@ void pipeIcGrepOutputToGrep(int argc, char *argv[]) {
 
 
 int main(int argc, char *argv[]) {
+    llvm::install_fatal_error_handler(&icgrep_error_handler);
     cl::HideUnrelatedOptions(ArrayRef<const cl::OptionCategory *>{&LegacyGrepOptions, &EnhancedGrepOptions, re::re_toolchain_flags(), pablo::pablo_toolchain_flags(), codegen::codegen_flags()});
     cl::ParseCommandLineOptions(argc, argv);
     
@@ -258,7 +282,7 @@ int main(int argc, char *argv[]) {
         for(unsigned long i = 0; i < numOfThreads; ++i){
             const int rc = pthread_create(&threads[i], NULL, DoGrep, (void *)&grepEngine);
             if (rc) {
-                throw std::runtime_error("Failed to create thread: code " + std::to_string(rc));
+                llvm::report_fatal_error("Failed to create thread: code " + std::to_string(rc));
             }
         }
 
@@ -266,7 +290,7 @@ int main(int argc, char *argv[]) {
             void * status = nullptr;
             const int rc = pthread_join(threads[i], &status);
             if (rc) {
-                throw std::runtime_error("Failed to join thread: code " + std::to_string(rc));
+                llvm::report_fatal_error("Failed to join thread: code " + std::to_string(rc));
             }
         }
     }

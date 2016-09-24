@@ -19,7 +19,6 @@
 #include <UCD/CaseFolding_txt.h>
 #include <grep_engine.h>
 #include <sstream>
-#include <iostream>
 #include <string>
 #include <algorithm>
 
@@ -31,7 +30,10 @@
 #define LEGACY_UNESCAPED_HYPHEN_ALLOWED true
 
 
+
+
 namespace re {
+    
 
 RE * RE_Parser::parse(const std::string & regular_expression, ModeFlagSet initialFlags) {
     RE_Parser parser(regular_expression);
@@ -41,7 +43,7 @@ RE * RE_Parser::parse(const std::string & regular_expression, ModeFlagSet initia
     parser.mCaptureGroupCount = 0;
     RE * re = parser.parse_RE();
     if (re == nullptr) {
-        throw ParseFailure("An unexpected parsing error occurred!");
+        ParseFailure("An unexpected parsing error occurred!");
     }
     return re;
 }
@@ -57,7 +59,7 @@ inline RE_Parser::RE_Parser(const std::string & regular_expression)
     }
 
 RE * makeAtomicGroup(RE * r) {
-    throw ParseFailure("Atomic grouping not supported.");
+    RE_Parser::ParseFailure("Atomic grouping not supported.");
 }
 
 RE * makeBranchResetGroup(RE * r) {
@@ -80,7 +82,7 @@ RE * RE_Parser::parse_alt() {
         ++mCursor; // advance past the alternation character '|'
     }
     if (alt.empty()) {
-        throw NoRegularExpressionFound();
+        ParseFailure("No regular expression found!");
     }
     return makeAlt(alt.begin(), alt.end());
 }
@@ -118,19 +120,19 @@ RE * RE_Parser::parse_next_item() {
             case '|': case ')':
                 break;
             case '*': case '+': case '?': case '{':
-                throw NothingToRepeat();
+                ParseFailure("Need something to repeat before *, +, ? or {.");
             case ']':
                 if (LEGACY_UNESCAPED_RBRAK_RBRACE_ALLOWED) {
                     return createCC(parse_utf8_codepoint());
                 }
-                throw ParseFailure("Use  \\] for literal ].");
+                ParseFailure("Use  \\] for literal ].");
             case '}':
                 if (fNested) {
                     break;  //  a recursive invocation for a regexp in \N{...}
                 } else if (LEGACY_UNESCAPED_RBRAK_RBRACE_ALLOWED) {
                     return createCC(parse_utf8_codepoint());
                 }
-                throw ParseFailure("Use \\} for literal }.");
+                ParseFailure("Use \\} for literal }.");
             case '[':
                 mCursor++;
                 re = parse_charset();
@@ -197,7 +199,7 @@ RE * RE_Parser::parse_group() {
                     ++mCursor;
                     group_expr = makeNegativeLookBehindAssertion(parse_alt());
                 } else {
-                    throw ParseFailure("Illegal lookbehind assertion syntax.");
+                    ParseFailure("Illegal lookbehind assertion syntax.");
                 }
                 break;
             case '-': case 'd' : case 'i': case 'm': case 's': case 'x': case 'g':
@@ -215,7 +217,7 @@ RE * RE_Parser::parse_group() {
                         //case 's': modeBit = DOTALL_MODE_FLAG; break;
                         //case 'x': modeBit = IGNORE_SPACE_MODE_FLAG; break;
                         //case 'd': modeBit = UNIX_LINES_MODE_FLAG; break;
-                        default: throw ParseFailure("Unsupported mode flag.");
+                        default: ParseFailure("Unsupported mode flag.");
                     }
                     ++mCursor;
                     if (negateMode) {
@@ -235,7 +237,7 @@ RE * RE_Parser::parse_group() {
                     return parse_next_item();
                 }
             default:
-                throw ParseFailure("Illegal (? syntax.");
+                ParseFailure("Illegal (? syntax.");
         }
     } else { // Capturing paren group.
         RE * captured = parse_alt();
@@ -247,7 +249,7 @@ RE * RE_Parser::parse_group() {
         group_expr = capture;
     }
     if (*mCursor != ')') {
-        throw ParseFailure("Closing parenthesis required.");
+        ParseFailure("Closing parenthesis required.");
     }
     ++mCursor;
     return group_expr;
@@ -278,10 +280,10 @@ inline RE * RE_Parser::extend_item(RE * re) {
         }
         if (hasRep) {
             if (lb > MAX_REPETITION_LOWER_BOUND || ub > MAX_REPETITION_UPPER_BOUND) {
-                throw ParseFailure("Bounded repetition exceeds icgrep implementation limit");
+                ParseFailure("Bounded repetition exceeds icgrep implementation limit");
             }
             if ((ub != Rep::UNBOUNDED_REP) && (lb > ub)) {
-                throw ParseFailure("Lower bound cannot exceed upper bound in bounded repetition");
+                ParseFailure("Lower bound cannot exceed upper bound in bounded repetition");
             }
             ++mCursor;
             if (*mCursor == '?') { // Non-greedy qualifier
@@ -289,7 +291,7 @@ inline RE * RE_Parser::extend_item(RE * re) {
                 ++mCursor;
             } else if (*mCursor == '+') {
                 ++mCursor;
-                throw ParseFailure("Possessive repetition is not supported in icgrep 1.0");
+                ParseFailure("Possessive repetition is not supported in icgrep 1.0");
             }
             re = makeRep(re, lb, ub);
         }
@@ -307,13 +309,13 @@ inline std::pair<int, int> RE_Parser::parse_range_bound() {
     if (*mCursor == '}') {
         upper_bound = lower_bound;
     } else if (*mCursor != ',') {
-        throw BadLowerBound();
+        ParseFailure("Bad lower bound!");
     } else if (*++mCursor == '}') {
         upper_bound = Rep::UNBOUNDED_REP;
     } else {
         upper_bound = parse_int();
         if (*mCursor != '}') {
-            throw BadUpperBound();
+            ParseFailure("Bad upper bound!");
         }
     }
     return std::make_pair(lower_bound, upper_bound);
@@ -352,7 +354,7 @@ inline RE * RE_Parser::parse_escaped() {
             return makeReference(backref, f->second);
         }
         else {
-            throw ParseFailure("Back reference " + backref + " without prior capture group.");
+            ParseFailure("Back reference " + backref + " without prior capture group.");
         }
     }
     else {
@@ -373,13 +375,13 @@ RE * RE_Parser::parseEscapedSet() {
                     case 'g':
                         re = complemented ? makeZeroWidth("NonGCB") : makeZeroWidth("GCB"); 
                         break;
-                    case 'w': throw ParseFailure("\\b{w} not yet supported.");
-                    case 'l': throw ParseFailure("\\b{l} not yet supported.");
-                    case 's': throw ParseFailure("\\b{s} not yet supported.");
-                    default: throw ParseFailure("Unrecognized boundary assertion");
+                    case 'w': ParseFailure("\\b{w} not yet supported.");
+                    case 'l': ParseFailure("\\b{l} not yet supported.");
+                    case 's': ParseFailure("\\b{s} not yet supported.");
+                    default: ParseFailure("Unrecognized boundary assertion");
                 }
                 if (*++mCursor != '}') {
-                    throw ParseFailure("Malformed boundary assertion");
+                    ParseFailure("Malformed boundary assertion");
                 }
                 ++mCursor;
                 return re;
@@ -406,12 +408,12 @@ RE * RE_Parser::parseEscapedSet() {
             complemented = true;
         case 'q':
             if (*++mCursor != '{') {
-                throw ParseFailure("Malformed grapheme-boundary property expression");
+                ParseFailure("Malformed grapheme-boundary property expression");
             }
             ++mCursor;
-            throw ParseFailure("Literal grapheme cluster expressions not yet supported.");
+            ParseFailure("Literal grapheme cluster expressions not yet supported.");
             if (*mCursor != '}') {
-                throw ParseFailure("Malformed grapheme-boundary property expression");
+                ParseFailure("Malformed grapheme-boundary property expression");
             }
             ++mCursor;
             return complemented ? makeComplement(re) : re;
@@ -419,12 +421,12 @@ RE * RE_Parser::parseEscapedSet() {
             complemented = true;
         case 'p':
             if (*++mCursor != '{') {
-                throw ParseFailure("Malformed property expression");
+                ParseFailure("Malformed property expression");
             }
             ++mCursor;
             re = parsePropertyExpression();
             if (*mCursor != '}') {
-                throw ParseFailure("Malformed property expression");
+                ParseFailure("Malformed property expression");
             }
             ++mCursor;
             return complemented ? makeComplement(re) : re;
@@ -435,12 +437,12 @@ RE * RE_Parser::parseEscapedSet() {
             return makeSeq({makeAny(), makeRep(makeSeq({makeZeroWidth("NonGCB"), makeAny()}), 0, Rep::UNBOUNDED_REP), makeZeroWidth("GCB")});
         case 'N':
             if (*++mCursor != '{') {
-                throw ParseFailure("Malformed \\N expression");
+                ParseFailure("Malformed \\N expression");
             }
             ++mCursor;
             re = parseNamePatternExpression();
             if (*mCursor != '}') {
-                throw ParseFailure("Malformed \\N expression");
+                ParseFailure("Malformed \\N expression");
             }
             ++mCursor;
             assert (re);
@@ -452,8 +454,12 @@ RE * RE_Parser::parseEscapedSet() {
             ++mCursor;
             return makeWordEnd();
         default:
-            throw ParseFailure("Internal error");
+            ParseFailure("Internal error");
     }
+}
+    
+void InvalidUTF8Encoding() {
+    RE_Parser::ParseFailure("Invalid UTF-8 encoding!");
 }
 
 codepoint_t RE_Parser::parse_utf8_codepoint() {
@@ -464,7 +470,7 @@ codepoint_t RE_Parser::parse_utf8_codepoint() {
     unsigned suffix_bytes = 0;
     if (pfx < 0xE0) {
         if (pfx < 0xC2) {  // bare suffix or illegal prefix 0xC0 or 0xC2
-            throw InvalidUTF8Encoding();
+            InvalidUTF8Encoding();
         }
         suffix_bytes = 1;
         cp &= 0x1F;
@@ -477,23 +483,23 @@ codepoint_t RE_Parser::parse_utf8_codepoint() {
     }
     while (suffix_bytes--) {
         if (mCursor.noMore()) {
-            throw InvalidUTF8Encoding();
+            InvalidUTF8Encoding();
         }
         char_t sfx = *mCursor++;
         if ((sfx & 0xC0) != 0x80) {
-            throw InvalidUTF8Encoding();
+            InvalidUTF8Encoding();
         }
         cp = (cp << 6) | (sfx & 0x3F);
     }
     // It is an error if a 3-byte sequence is used to encode a codepoint < 0x800
     // or a 4-byte sequence is used to encode a codepoint < 0x10000.
     if ((pfx == 0xE0 && cp < 0x800) || (pfx == 0xF0 && cp < 0x10000)) {
-        throw InvalidUTF8Encoding();
+        InvalidUTF8Encoding();
     }
     // It is an error if a 4-byte sequence is used to encode a codepoint
     // above the Unicode maximum.
     if (cp > UCD::UNICODE_MAX) {
-        throw InvalidUTF8Encoding();
+        InvalidUTF8Encoding();
     }
     return cp;
 }
@@ -652,7 +658,7 @@ RE * RE_Parser::parse_charset() {
         lastItemKind = CodepointItem;
         lastCodepointItem = static_cast<codepoint_t> ('-');
         if (*mCursor == '-') {
-            throw ParseFailure("Set operator has no left operand.");
+            ParseFailure("Set operator has no left operand.");
         }
     }
     while (mCursor.more()) {
@@ -661,7 +667,7 @@ RE * RE_Parser::parse_charset() {
             case intersectOp:
             case setDiffOp: {
                 if (lastItemKind == NoItem) {
-                    throw ParseFailure("Set operator has no left operand.");
+                    ParseFailure("Set operator has no left operand.");
                 }
                 if (!cc->empty()) {
                     subexprs.push_back(mMemoizer.memoize(cc));
@@ -687,7 +693,7 @@ RE * RE_Parser::parse_charset() {
             break;
             case setCloser: {
                 if (lastItemKind == NoItem) {
-                    throw ParseFailure("Set operator has no right operand.");
+                    ParseFailure("Set operator has no right operand.");
                 }
                 if (!cc->empty()) {
                     subexprs.push_back(mMemoizer.memoize(cc));
@@ -744,13 +750,13 @@ RE * RE_Parser::parse_charset() {
                     subexprs.push_back(negated ? makeComplement(posixSet) : posixSet);
                     lastItemKind = BrackettedSetItem;
                     if (*mCursor++ != ':' || *mCursor++ != ']')
-                        throw ParseFailure("Posix set expression improperly terminated.");
+                        ParseFailure("Posix set expression improperly terminated.");
                 }
             }
             break;
             case rangeHyphen:
                 if (lastItemKind != CodepointItem) {
-                    throw ParseFailure("Range operator - has illegal left operand.");
+                    ParseFailure("Range operator - has illegal left operand.");
                 }
                 insert_range(cc, lastCodepointItem, parse_codepoint());
                 lastItemKind = RangeItem;
@@ -783,7 +789,7 @@ RE * RE_Parser::parse_charset() {
                 break;
         }
     }
-    throw ParseFailure("Set expression not properly terminated.");
+    ParseFailure("Set expression not properly terminated.");
 }
 
 
@@ -827,7 +833,7 @@ codepoint_t RE_Parser::parse_escaped_codepoint() {
                 return cp_value;
             }
             else if (*mCursor++ == '?') return 0x7F;  // \c? ==> DEL
-            else throw("Illegal \\c escape sequence");
+            else ParseFailure("Illegal \\c escape sequence");
         case '0': // Octal escape:  0 - 0377
             ++mCursor;
             return parse_octal_codepoint(0,3);
@@ -836,18 +842,18 @@ codepoint_t RE_Parser::parse_escaped_codepoint() {
             if (*mCursor == '{') {
                 ++mCursor;
                 cp_value = parse_octal_codepoint(1, 7);
-                if (*mCursor++ != '}') throw ParseFailure("Malformed octal escape sequence");
+                if (*mCursor++ != '}') ParseFailure("Malformed octal escape sequence");
                 return cp_value;
             }
             else {
-                throw ParseFailure("Malformed octal escape sequence");
+                ParseFailure("Malformed octal escape sequence");
             }
         case 'x':
             ++mCursor;
             if (*mCursor == '{') {
               ++mCursor;
               cp_value = parse_hex_codepoint(1, 6);
-              if (*mCursor++ != '}') throw ParseFailure("Malformed hex escape sequence");
+              if (*mCursor++ != '}') ParseFailure("Malformed hex escape sequence");
               return cp_value;
             }
             else {
@@ -858,7 +864,7 @@ codepoint_t RE_Parser::parse_escaped_codepoint() {
             if (*mCursor == '{') {
                 ++mCursor;
                 cp_value = parse_hex_codepoint(1, 6);
-                if (*mCursor++ != '}') throw ParseFailure("Malformed hex escape sequence");
+                if (*mCursor++ != '}') ParseFailure("Malformed hex escape sequence");
                 return cp_value;
             }
             else {
@@ -870,9 +876,9 @@ codepoint_t RE_Parser::parse_escaped_codepoint() {
         default:
             // Escaped letters should be reserved for special functions.
             if (((*mCursor >= 'A') && (*mCursor <= 'Z')) || ((*mCursor >= 'a') && (*mCursor <= 'z')))
-                throw ParseFailure("Undefined or unsupported escape sequence");
+                ParseFailure("Undefined or unsupported escape sequence");
             else if ((*mCursor < 0x20) || (*mCursor >= 0x7F))
-                throw ParseFailure("Illegal escape sequence");
+                ParseFailure("Illegal escape sequence");
             else return static_cast<codepoint_t>(*mCursor++);
     }
 }
@@ -889,8 +895,8 @@ codepoint_t RE_Parser::parse_octal_codepoint(int mindigits, int maxdigits) {
         ++mCursor;
         ++count;
     }
-    if (count < mindigits) throw ParseFailure("Octal sequence has too few digits");
-    if (value > UCD::UNICODE_MAX) throw ParseFailure("Octal value too large");
+    if (count < mindigits) ParseFailure("Octal sequence has too few digits");
+    if (value > UCD::UNICODE_MAX) ParseFailure("Octal value too large");
     return value;
 }
 
@@ -908,8 +914,8 @@ codepoint_t RE_Parser::parse_hex_codepoint(int mindigits, int maxdigits) {
         ++mCursor;
         ++count;
     }
-    if (count < mindigits) throw ParseFailure("Hexadecimal sequence has too few digits");
-    if (value > UCD::UNICODE_MAX) throw ParseFailure("Hexadecimal value too large");
+    if (count < mindigits) ParseFailure("Hexadecimal sequence has too few digits");
+    if (value > UCD::UNICODE_MAX) ParseFailure("Hexadecimal value too large");
     return value;
 }
 

@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2014 International Characters.
+ *  Copyright (c) 2014-6 International Characters.
  *  This software is licensed to the public under the Open Software License 3.0.
  *  icgrep is a trademark of International Characters.
  */
@@ -16,7 +16,7 @@
 #include <memory>
 #include <map>
 #include <re/re_memoizer.hpp>
-#include <re/parsefailure.h>
+#include <llvm/Support/ErrorHandling.h>
 
 namespace re {
 
@@ -38,14 +38,19 @@ const int MAX_REPETITION_UPPER_BOUND = 2048;
 
 typedef unsigned ModeFlagSet;
 
+
 class RE_Parser
 {
 public:
 
     static RE * parse(const std::string &input_string, ModeFlagSet initialFlags);
 
+    
+    static LLVM_ATTRIBUTE_NORETURN void ParseFailure(std::string errmsg) {
+        llvm::report_fatal_error(errmsg);
+    }
+    
 private:
-
     using NameMap = std::map<std::pair<std::string, std::string>, re::Name *>;
 
     using cursor_t = std::string::const_iterator;
@@ -56,7 +61,7 @@ private:
 
         inline Cursor & operator++() {
             if (LLVM_UNLIKELY(mCursor == mEnd)) {
-                throw IncompleteRegularExpression();
+                ParseFailure("Incomplete regular expression!");
             }
             ++mCursor;
             return *this;
@@ -64,7 +69,7 @@ private:
 
         inline Cursor operator++(int) {
             if (LLVM_UNLIKELY(mCursor == mEnd)) {
-                throw IncompleteRegularExpression();
+                ParseFailure("Incomplete regular expression!");
             }
             Cursor tmp(*this);
             ++mCursor;
