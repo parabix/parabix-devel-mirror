@@ -13,7 +13,6 @@
 #include <re/re_nullable.h>
 #include <re/re_simplifier.h>
 #include <re/re_alt.h>
-#include <re/parsefailure.h>
 #include <re/re_parser.h>
 #include <re/re_compiler.h>
 #include <utf8_encoder.h>
