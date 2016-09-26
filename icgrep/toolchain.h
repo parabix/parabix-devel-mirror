@@ -19,6 +19,7 @@ extern char OptLevel;  // set from command line
 extern int BlockSize;  // set from command line
 extern int SegmentSize;  // set from command line
 extern int BufferSegments;
+extern int ThreadNum;
 #ifdef CUDA_ENABLED
 extern bool NVPTX;
 #endif

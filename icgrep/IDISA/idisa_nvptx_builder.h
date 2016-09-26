@@ -25,6 +25,7 @@ public:
         CreateBuiltinFunctions();
         CreateLongAdvanceFunc();
         CreateLongAddFunc();
+        CreateBallotFunc();
     }
     
     ~IDISA_NVPTX20_Builder() {};
@@ -48,6 +49,7 @@ private:
     void CreateBuiltinFunctions();
     void CreateLongAdvanceFunc();
     void CreateLongAddFunc();
+    void CreateBallotFunc();
 
     int                                 groupThreads;
     Function *                          barrierFunc;

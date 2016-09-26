@@ -14,14 +14,191 @@
 #include <kernels/s2p_kernel.h>
 
 #include <llvm/IR/TypeBuilder.h>
+#include <iostream>
 
 using namespace kernel;
+
+Function * generateSegmentParallelPipelineThreadFunction(std::string name, IDISA::IDISA_Builder * iBuilder, std::vector<KernelBuilder *> kernels, Type * sharedStructType, int id) {
+
+    Module * m = iBuilder->getModule();
+    Type * const size_ty = iBuilder->getSizeTy();
+    Type * const voidTy = Type::getVoidTy(m->getContext());
+    Type * const voidPtrTy = TypeBuilder<void *, false>::get(m->getContext());
+    Type * const int8PtrTy = iBuilder->getInt8PtrTy();
+
+    Function * const threadFunc = cast<Function>(m->getOrInsertFunction(name, voidTy, int8PtrTy, nullptr));
+    threadFunc->setCallingConv(CallingConv::C);
+    Function::arg_iterator args = threadFunc->arg_begin();
+
+    Value * const input = &*(args++);
+    input->setName("input");
+
+    int threadNum = codegen::ThreadNum;
+
+     // Create the basic blocks for the thread function.
+    BasicBlock * entryBlock = BasicBlock::Create(iBuilder->getContext(), "entry", threadFunc, 0);
+    BasicBlock * segmentLoop = BasicBlock::Create(iBuilder->getContext(), "segmentCond", threadFunc, 0);
+    BasicBlock * finalSegmentLoopExit = BasicBlock::Create(iBuilder->getContext(), "partialSegmentCond", threadFunc, 0);
+    BasicBlock * exitThreadBlock = BasicBlock::Create(iBuilder->getContext(), "exitThread", threadFunc, 0);
+    std::vector<BasicBlock *> segmentWait;
+    std::vector<BasicBlock *> segmentLoopBody;
+    std::vector<BasicBlock *> partialSegmentWait;
+    std::vector<BasicBlock *> partialSegmentLoopBody;
+    for (unsigned i = 0; i < kernels.size(); i++) {
+        segmentWait.push_back(BasicBlock::Create(iBuilder->getContext(), "segmentWait"+std::to_string(i), threadFunc, 0));
+        segmentLoopBody.push_back(BasicBlock::Create(iBuilder->getContext(), "segmentWait"+std::to_string(i), threadFunc, 0));
+        partialSegmentWait.push_back(BasicBlock::Create(iBuilder->getContext(), "partialSegmentWait"+std::to_string(i), threadFunc, 0));
+        partialSegmentLoopBody.push_back(BasicBlock::Create(iBuilder->getContext(), "partialSegmentLoopBody"+std::to_string(i), threadFunc, 0));
+    }
+
+    iBuilder->SetInsertPoint(entryBlock);
+
+    Value * sharedStruct = iBuilder->CreateBitCast(input, PointerType::get(sharedStructType, 0));
+    Value * myThreadId = ConstantInt::get(size_ty, id);
+    Value * fileSize = iBuilder->CreateLoad(iBuilder->CreateGEP(sharedStruct, {iBuilder->getInt32(0), iBuilder->getInt32(0)}));
+    std::vector<Value *> instancePtrs;
+    for (unsigned i = 0; i < kernels.size(); i++) {
+        Value * ptr = iBuilder->CreateGEP(sharedStruct, {iBuilder->getInt32(0), iBuilder->getInt32(i + 1)});
+        instancePtrs.push_back(iBuilder->CreateLoad(ptr));
+    }
+    
+    // Some important constant values.
+    int segmentSize = codegen::SegmentSize;
+    Constant * segmentBlocks = ConstantInt::get(size_ty, segmentSize);
+    Constant * hypersegmentBlocks = ConstantInt::get(size_ty, segmentSize * threadNum);
+    Constant * segmentBytes = ConstantInt::get(size_ty, iBuilder->getStride() * segmentSize);
+    Constant * hypersegmentBytes = ConstantInt::get(size_ty, iBuilder->getStride() * segmentSize * threadNum);
+    Constant * const blockSize = ConstantInt::get(size_ty, iBuilder->getStride());
+
+    // The offset of my starting segment within the thread group hypersegment.
+    Value * myBlockNo = iBuilder->CreateMul(segmentBlocks, myThreadId);
+    Value * myOffset = iBuilder->CreateMul(segmentBytes, myThreadId);
+    Value * fullSegLimit = iBuilder->CreateAdd(myOffset, segmentBytes);
+
+    iBuilder->CreateBr(segmentLoop);
+
+    iBuilder->SetInsertPoint(segmentLoop);
+    PHINode * remainingBytes = iBuilder->CreatePHI(size_ty, 2, "remainingBytes");
+    remainingBytes->addIncoming(fileSize, entryBlock);
+    PHINode * blockNo = iBuilder->CreatePHI(size_ty, 2, "blockNo");
+    blockNo->addIncoming(myBlockNo, entryBlock);
+
+    Value * LT_fullSegment = iBuilder->CreateICmpSLT(remainingBytes, fullSegLimit);
+    iBuilder->CreateCondBr(LT_fullSegment, finalSegmentLoopExit, segmentWait[0]);
+
+    for (unsigned i = 0; i < kernels.size(); i++) {
+        iBuilder->SetInsertPoint(segmentWait[i]);
+        Value * curBlockNo = kernels[i]->getBlockNo(instancePtrs[i]);
+        Value * cond = iBuilder->CreateICmpEQ(curBlockNo, blockNo);
+        iBuilder->CreateCondBr(cond, segmentLoopBody[i], segmentWait[i]);
+
+        iBuilder->SetInsertPoint(segmentLoopBody[i]);
+        kernels[i]->createDoSegmentCall(instancePtrs[i], segmentBlocks);
+        if (i == kernels.size() - 1) break;
+        iBuilder->CreateBr(segmentWait[i+1]);
+    }
+   
+    remainingBytes->addIncoming(iBuilder->CreateSub(remainingBytes, hypersegmentBytes), segmentLoopBody[kernels.size()-1]);
+    blockNo->addIncoming(iBuilder->CreateAdd(blockNo, hypersegmentBlocks), segmentLoopBody[kernels.size()-1]);
+    iBuilder->CreateBr(segmentLoop);
+
+    // Now we may have a partial segment, or we may be completely done
+    // because the last segment was handled by a previous thread in the group.
+    iBuilder->SetInsertPoint(finalSegmentLoopExit);
+    Value * alreadyDone = iBuilder->CreateICmpSLT(remainingBytes, myOffset);
+    Value * remainingForMe = iBuilder->CreateSub(remainingBytes, myOffset);
+    Value * blocksToDo = iBuilder->CreateUDiv(remainingForMe, blockSize);
+    iBuilder->CreateCondBr(alreadyDone, exitThreadBlock, partialSegmentWait[0]);
+
+    // Full Block Pipeline loop
+    for (unsigned i = 0; i < kernels.size(); i++) {
+        iBuilder->SetInsertPoint(partialSegmentWait[i]);
+        Value * curBlockNo = kernels[i]->getBlockNo(instancePtrs[i]);
+        Value * cond = iBuilder->CreateICmpEQ(curBlockNo, blockNo);
+        iBuilder->CreateCondBr(cond, partialSegmentLoopBody[i], partialSegmentWait[i]);
+
+        iBuilder->SetInsertPoint(partialSegmentLoopBody[i]);
+        kernels[i]->createDoSegmentCall(instancePtrs[i], blocksToDo);
+        kernels[i]->createFinalBlockCall(instancePtrs[i], iBuilder->CreateURem(remainingForMe, blockSize));
+        if (i == kernels.size() - 1) break;
+        iBuilder->CreateBr(partialSegmentWait[i+1]);
+    }
+    iBuilder->CreateBr(exitThreadBlock);
+
+    iBuilder->SetInsertPoint(exitThreadBlock);
+    Value * nullVal = Constant::getNullValue(voidPtrTy);
+    Function * pthreadExitFunc = m->getFunction("pthread_exit");
+    CallInst * exitThread = iBuilder->CreateCall(pthreadExitFunc, {nullVal});
+    exitThread->setDoesNotReturn();
+    iBuilder->CreateRetVoid();
+
+    return threadFunc;
+}
+
+void generateSegmentParallelPipeline(IDISA::IDISA_Builder * iBuilder, std::vector<KernelBuilder *> kernels, std::vector<Value *> instances, Value * fileSize) {
+    
+    int threadNum = codegen::ThreadNum;
+
+    Module * m = iBuilder->getModule();
+
+    Type * const size_ty = iBuilder->getSizeTy();
+    Type * const voidPtrTy = TypeBuilder<void *, false>::get(m->getContext());
+    Type * const int8PtrTy = iBuilder->getInt8PtrTy();
+    Type * const pthreadsTy = ArrayType::get(size_ty, threadNum);
+    AllocaInst * const pthreads = iBuilder->CreateAlloca(pthreadsTy);
+    std::vector<Value *> pthreadsPtrs;
+    for (unsigned i = 0; i < threadNum; i++) {
+        pthreadsPtrs.push_back(iBuilder->CreateGEP(pthreads, {iBuilder->getInt32(0), iBuilder->getInt32(i)}));
+    }
+    Value * nullVal = Constant::getNullValue(voidPtrTy);
+    AllocaInst * const status = iBuilder->CreateAlloca(int8PtrTy);
+
+    std::vector<Type *> structTypes;
+    structTypes.push_back(size_ty);//input size
+    for (unsigned i = 0; i < instances.size(); i++) {
+        structTypes.push_back(instances[i]->getType());
+    }
+    Type * sharedStructType = StructType::get(m->getContext(), structTypes);
+
+    AllocaInst * sharedStruct;
+    sharedStruct = iBuilder->CreateAlloca(sharedStructType);
+    Value * sizePtr = iBuilder->CreateGEP(sharedStruct, {iBuilder->getInt32(0), iBuilder->getInt32(0)});
+    iBuilder->CreateStore(fileSize, sizePtr);
+    for (unsigned i = 0; i < instances.size(); i++) {
+        Value * ptr = iBuilder->CreateGEP(sharedStruct, {iBuilder->getInt32(0), iBuilder->getInt32(i+1)});
+        iBuilder->CreateStore(instances[i], ptr);
+    }
+
+    std::vector<Function *> thread_functions;
+    const auto ip = iBuilder->saveIP();
+    for (unsigned i = 0; i < threadNum; i++) {
+        thread_functions.push_back(generateSegmentParallelPipelineThreadFunction("thread"+std::to_string(i), iBuilder, kernels, sharedStructType, i));
+    }
+    iBuilder->restoreIP(ip);
+
+    Function * pthreadCreateFunc = m->getFunction("pthread_create");
+    Function * pthreadJoinFunc = m->getFunction("pthread_join");
+
+    for (unsigned i = 0; i < threadNum; i++) {
+        iBuilder->CreateCall(pthreadCreateFunc, std::vector<Value *>({pthreadsPtrs[i], nullVal, thread_functions[i], iBuilder->CreateBitCast(sharedStruct, int8PtrTy)}));
+    }
+
+    std::vector<Value *> threadIDs;
+    for (unsigned i = 0; i < threadNum; i++) { 
+        threadIDs.push_back(iBuilder->CreateLoad(pthreadsPtrs[i]));
+    }
+    
+    for (unsigned i = 0; i < threadNum; i++) { 
+        iBuilder->CreateCall(pthreadJoinFunc, std::vector<Value *>({threadIDs[i], status}));
+    }
+
+}
 
 void generatePipelineParallel(IDISA::IDISA_Builder * iBuilder, std::vector<KernelBuilder *> kernels, std::vector<Value *> instances) {
  
     Module * m = iBuilder->getModule();
 
-    Type * pthreadTy = iBuilder->getSizeTy(); //Pthread Type for 64-bit machine.      
+    Type * pthreadTy = iBuilder->getSizeTy();     
     Type * const voidPtrTy = TypeBuilder<void *, false>::get(m->getContext());
     Type * const int8PtrTy = iBuilder->getInt8PtrTy();
 

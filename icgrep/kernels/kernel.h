@@ -44,6 +44,9 @@ public:
     llvm::Value * createInstance(std::vector<Value *> args) override;
 
     Function * generateThreadFunction(std::string name);
+
+    Value * getBlockNo(Value * self);
+
     
 protected:
     //
@@ -101,6 +104,7 @@ protected:
 
     llvm::Value * getStreamSetBlockPtr(Value * self, std::string ssName, Value * blockNo);
 
+    void setBlockNo(Value * self, Value * newFieldVal);
         
 protected:
 

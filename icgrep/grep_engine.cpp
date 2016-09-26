@@ -23,7 +23,6 @@
 #include <llvm/Support/Debug.h>
 #include <llvm/IR/Verifier.h>
 #include <llvm/IR/TypeBuilder.h>
-#include <llvm/IR/InlineAsm.h>
 #include <UCD/UnicodeNameData.h>
 
 
@@ -86,6 +85,7 @@ static cl::alias ShowLineNumbersLong("line-number", cl::desc("Alias for -n"), cl
 
 static cl::opt<bool> pipelineParallel("enable-pipeline-parallel", cl::desc("Enable multithreading with pipeline parallelism."), cl::cat(bGrepOutputOptions));
 
+static cl::opt<bool> segmentPipelineParallel("enable-segment-pipeline-parallel", cl::desc("Enable multithreading with segment pipeline parallelism."), cl::cat(bGrepOutputOptions));
 
 bool isUTF_16 = false;
 std::string IRFilename = "icgrep.ll";
@@ -145,32 +145,6 @@ void GrepEngine::doGrep(const std::string & fileName, const int fileIdx, bool Co
 }
 
 using namespace parabix;
-
-void createBallotFunction(Module * m, IDISA::IDISA_Builder * iBuilder){
-    Type * const int32ty = iBuilder->getInt32Ty();
-    Type * const int1ty = iBuilder->getInt1Ty();
-    Function * const ballotFn = cast<Function>(m->getOrInsertFunction("ballot_nvptx", int32ty, int1ty, nullptr));
-    ballotFn->setCallingConv(CallingConv::C);
-    Function::arg_iterator args = ballotFn->arg_begin();
-
-    Value * const input = &*(args++);
-    input->setName("input");
-
-    iBuilder->SetInsertPoint(BasicBlock::Create(m->getContext(), "entry", ballotFn, 0));
-
-    Value * conv = iBuilder->CreateZExt(input, int32ty);
-
-    std::ostringstream AsmStream;
-    AsmStream << "{.reg .pred %p1; ";
-    AsmStream << "setp.ne.u32 %p1, $1, 0; ";
-    AsmStream << "vote.ballot.b32  $0, %p1;}";
-    FunctionType * AsmFnTy = FunctionType::get(int32ty, int32ty, false);
-    llvm::InlineAsm *IA = llvm::InlineAsm::get(AsmFnTy, AsmStream.str(), "=r,r", true, false);
-    llvm::CallInst * result = iBuilder->CreateCall(IA, conv);
-    result->addAttribute(llvm::AttributeSet::FunctionIndex, llvm::Attribute::NoUnwind);
-
-    iBuilder->CreateRet(result);
-}
 
 Function * generateGPUKernel(Module * m, IDISA::IDISA_Builder * iBuilder, bool CountOnly){
     Type * const int64ty = iBuilder->getInt64Ty();
@@ -271,7 +245,9 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool Count
 #endif
 
     const unsigned segmentSize = codegen::SegmentSize;
+    if (segmentPipelineParallel && codegen::BufferSegments < 2) codegen::BufferSegments = 2;
     const unsigned bufferSegments = codegen::BufferSegments;
+
 
     unsigned encodingBits = UTF_16 ? 16 : 8;
 
@@ -379,6 +355,9 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool Count
         if (pipelineParallel){
             generatePipelineParallel(iBuilder, {&s2pk, &icgrepK}, {s2pInstance, icgrepInstance});
         }
+        else if (segmentPipelineParallel){           
+            generateSegmentParallelPipeline(iBuilder, {&s2pk, &icgrepK}, {s2pInstance, icgrepInstance}, fileSize);
+        }
         else{
             generatePipelineLoop(iBuilder, {&s2pk, &icgrepK}, {s2pInstance, icgrepInstance}, fileSize);
         }
@@ -416,6 +395,9 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool Count
             if (pipelineParallel){
                 generatePipelineParallel(iBuilder, {&s2pk, &icgrepK, &scanMatchK}, {s2pInstance, icgrepInstance, scanMatchInstance});
             }
+            else if (segmentPipelineParallel){
+                generateSegmentParallelPipeline(iBuilder, {&s2pk, &icgrepK, &scanMatchK}, {s2pInstance, icgrepInstance, scanMatchInstance}, fileSize);
+            } 
             else{
                 generatePipelineLoop(iBuilder, {&s2pk, &icgrepK, &scanMatchK}, {s2pInstance, icgrepInstance, scanMatchInstance}, fileSize);
             }

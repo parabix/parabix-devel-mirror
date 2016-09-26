@@ -9,6 +9,8 @@
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/Intrinsics.h>
 #include <llvm/IR/Function.h>
+#include <llvm/IR/InlineAsm.h>
+#include <sstream>
 
 namespace IDISA {
 
@@ -237,6 +239,32 @@ void IDISA_NVPTX20_Builder::CreateLongAddFunc(){
   retVal = CreateInsertValue(retVal, blockCarryOut, 1);
   CreateRet(retVal);
 
+}
+
+void IDISA_NVPTX20_Builder::CreateBallotFunc(){
+    Type * const int32ty = getInt32Ty();
+    Type * const int1ty = getInt1Ty();
+    Function * const ballotFn = cast<Function>(mMod->getOrInsertFunction("ballot_nvptx", int32ty, int1ty, nullptr));
+    ballotFn->setCallingConv(CallingConv::C);
+    Function::arg_iterator args = ballotFn->arg_begin();
+
+    Value * const input = &*(args++);
+    input->setName("input");
+
+    SetInsertPoint(BasicBlock::Create(mMod->getContext(), "entry", ballotFn, 0));
+
+    Value * conv = CreateZExt(input, int32ty);
+
+    std::ostringstream AsmStream;
+    AsmStream << "{.reg .pred %p1; ";
+    AsmStream << "setp.ne.u32 %p1, $1, 0; ";
+    AsmStream << "vote.ballot.b32  $0, %p1;}";
+    FunctionType * AsmFnTy = FunctionType::get(int32ty, int32ty, false);
+    llvm::InlineAsm *IA = llvm::InlineAsm::get(AsmFnTy, AsmStream.str(), "=r,r", true, false);
+    llvm::CallInst * result = CreateCall(IA, conv);
+    result->addAttribute(llvm::AttributeSet::FunctionIndex, llvm::Attribute::NoUnwind);
+
+    CreateRet(result);
 }
 
 }

@@ -153,28 +153,29 @@ void KernelBuilder::generateDoSegmentMethod() {
     Function * doSegmentFunction = m->getFunction(mKernelName + doSegment_suffix);
     iBuilder->SetInsertPoint(BasicBlock::Create(iBuilder->getContext(), "entry", doSegmentFunction, 0));
     BasicBlock * entryBlock = iBuilder->GetInsertBlock();
-    BasicBlock * blockLoop = BasicBlock::Create(iBuilder->getContext(), "blockLoop", doSegmentFunction, 0);
+    BasicBlock * blockLoopCond = BasicBlock::Create(iBuilder->getContext(), "blockLoopCond", doSegmentFunction, 0);
+    BasicBlock * blockLoopBody = BasicBlock::Create(iBuilder->getContext(), "blockLoopBody", doSegmentFunction, 0);
     BasicBlock * blocksDone = BasicBlock::Create(iBuilder->getContext(), "blocksDone", doSegmentFunction, 0);
-
+    Type * const size_ty = iBuilder->getSizeTy();
     
     Function::arg_iterator args = doSegmentFunction->arg_begin();
     Value * self = &*(args++);
     Value * blocksToDo = &*(args);
     
-    iBuilder->CreateBr(blockLoop);
-    
-    iBuilder->SetInsertPoint(blockLoop);
-    PHINode * blocksRemaining = iBuilder->CreatePHI(iBuilder->getSizeTy(), 2, "blocksRemaining");
+    iBuilder->CreateBr(blockLoopCond);
+
+    iBuilder->SetInsertPoint(blockLoopCond);
+    PHINode * blocksRemaining = iBuilder->CreatePHI(size_ty, 2, "blocksRemaining");
     blocksRemaining->addIncoming(blocksToDo, entryBlock);
-    
-    Value * blockNo = getScalarField(self, blockNoScalar);
-    
+    Value * notDone = iBuilder->CreateICmpUGT(blocksRemaining, ConstantInt::get(size_ty, 0));
+    iBuilder->CreateCondBr(notDone, blockLoopBody, blocksDone);
+
+    iBuilder->SetInsertPoint(blockLoopBody);
+    Value * blockNo = getScalarField(self, blockNoScalar);   
     iBuilder->CreateCall(doBlockFunction, {self});
-    setScalarField(self, blockNoScalar, iBuilder->CreateAdd(blockNo, ConstantInt::get(iBuilder->getSizeTy(), iBuilder->getStride() / iBuilder->getBitBlockWidth())));
-    blocksToDo = iBuilder->CreateSub(blocksRemaining, ConstantInt::get(iBuilder->getSizeTy(), 1));
-    blocksRemaining->addIncoming(blocksToDo, blockLoop);
-    Value * notDone = iBuilder->CreateICmpUGT(blocksToDo, ConstantInt::get(iBuilder->getSizeTy(), 0));
-    iBuilder->CreateCondBr(notDone, blockLoop, blocksDone);
+    setBlockNo(self, iBuilder->CreateAdd(blockNo, ConstantInt::get(size_ty, iBuilder->getStride() / iBuilder->getBitBlockWidth())));
+    blocksRemaining->addIncoming(iBuilder->CreateSub(blocksRemaining, ConstantInt::get(size_ty, 1)), blockLoopBody);
+    iBuilder->CreateBr(blockLoopCond);
     
     iBuilder->SetInsertPoint(blocksDone);
     iBuilder->CreateRetVoid();
@@ -199,6 +200,18 @@ Value * KernelBuilder::getScalarField(Value * self, std::string fieldName) {
 void KernelBuilder::setScalarField(Value * self, std::string fieldName, Value * newFieldVal) {
     Value * ptr = iBuilder->CreateGEP(self, {iBuilder->getInt32(0), getScalarIndex(fieldName)});
     iBuilder->CreateStore(newFieldVal, ptr);
+}
+
+Value * KernelBuilder::getBlockNo(Value * self) {
+    Value * ptr = iBuilder->CreateGEP(self, {iBuilder->getInt32(0), getScalarIndex(blockNoScalar)});
+    LoadInst * blockNo = iBuilder->CreateAlignedLoad(ptr, 8);
+    blockNo->setOrdering(Acquire);
+    return blockNo;
+}
+
+void KernelBuilder::setBlockNo(Value * self, Value * newFieldVal) {
+    Value * ptr = iBuilder->CreateGEP(self, {iBuilder->getInt32(0), getScalarIndex(blockNoScalar)});
+    iBuilder->CreateAlignedStore(newFieldVal, ptr, 8)->setOrdering(Release);
 }
 
 
