@@ -188,7 +188,7 @@ RE * RE_Compiler::resolveUnicodeProperties(RE * re) {
         }
         for (auto t : nameMap) {
             if (t.second) {
-                mCompiledName.insert(std::make_pair(t.first, makeMarker(MarkerPosition::FinalMatchUnit, t.second)));
+                mCompiledName.insert(std::make_pair(t.first, makeMarker(MarkerPosition::FinalMatchUnit, mPB.createAnd(t.second, mAny))));
             }
         }
     }
