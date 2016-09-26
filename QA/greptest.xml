@@ -467,6 +467,7 @@ abcdefghijklmno</datafile>
 <grepcase regexp="[A-Z]" datafile="simple1" grepcount="1"/>
 <grepcase regexp="fodder|simple" datafile="simple1" grepcount="2"/>
 <grepcase regexp="(?g)fodder|simple" datafile="simple1" grepcount="2"/>
+<grepcase regexp="\w{4}\s+\w{4}\s+\w{4}" datafile="simple1" grepcount="1"/>
 
 <grepcase regexp="[cde]{3}" datafile="bounded_charclass" grepcount="3"/>
 <grepcase regexp="[f-h]{5}" datafile="bounded_charclass" grepcount="3"/>
