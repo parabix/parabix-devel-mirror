@@ -20,7 +20,7 @@
 #include <re/re_toolchain.h>
 #include <pablo/pablo_toolchain.h>
 #include <mutex>
-
+#include <boost/filesystem.hpp>
 
 #include <iostream> // MEEE
 
@@ -34,12 +34,14 @@ static cl::OptionCategory LegacyGrepOptions("A. Standard Grep Options",
 static cl::opt<bool> UTF_16("UTF-16", cl::desc("Regular expressions over the UTF-16 representation of Unicode."), cl::cat(LegacyGrepOptions));
 static cl::OptionCategory EnhancedGrepOptions("B. Enhanced Grep Options",
                                        "These are additional options for icgrep functionality and performance.");
-static cl::opt<bool> CountOnly("c", cl::desc("Count and display the matching lines per file only."), cl::cat(LegacyGrepOptions));
+static cl::opt<bool> CountOnly("c", cl::desc("Count and display the matching lines per file only."), cl::cat(LegacyGrepOptions), cl::Grouping);
 static cl::alias CountOnlyLong("count", cl::desc("Alias for -c"), cl::aliasopt(CountOnly));
 
 static cl::list<std::string> inputFiles(cl::Positional, cl::desc("<regex> <input file ...>"), cl::OneOrMore);
 
-static cl::opt<bool> CaseInsensitive("i", cl::desc("Ignore case distinctions in the pattern and the file."), cl::cat(LegacyGrepOptions));
+static cl::opt<bool> EnterDirectoriesRecursively("r", cl::desc("Recursively process files within directories, (but follow only top-level symlinks unless -R)."), cl::cat(LegacyGrepOptions), cl::Grouping);
+static cl::opt<bool> FollowSubdirectorySymlinks("R", cl::desc("Recursively process files within directories, following symlinks at all levels."), cl::cat(LegacyGrepOptions), cl::Grouping);
+static cl::opt<bool> CaseInsensitive("i", cl::desc("Ignore case distinctions in the pattern and the file."), cl::cat(LegacyGrepOptions), cl::Grouping);
 
 
 static cl::list<std::string> regexVector("e", cl::desc("Regular expression"), cl::ZeroOrMore, cl::cat(LegacyGrepOptions));
@@ -51,6 +53,8 @@ static cl::opt<int> Threads("t", cl::desc("Total number of threads."), cl::init(
 static cl::opt<bool> GrepSupport("gs", cl::desc("Grep support. Pipe the output of icgrep into grep. \
          Gives you colored output + back-referencing capability."), cl::cat(EnhancedGrepOptions));
 
+
+static std::vector<std::string> allFiles;
 //
 // Handler for errors reported through llvm::report_fatal_error.  Report
 // and signal error code 2 (grep convention).
@@ -138,8 +142,8 @@ void *DoGrep(void *args)
     fileCount++;
     count_mutex.unlock();
 
-    while (fileIdx < inputFiles.size()){
-        grepEngine->doGrep(inputFiles[fileIdx], fileIdx, CountOnly, total_CountOnly, UTF_16);
+    while (fileIdx < allFiles.size()){
+        grepEngine->doGrep(allFiles[fileIdx], fileIdx, CountOnly, total_CountOnly, UTF_16);
         
         count_mutex.lock();
         fileIdx = fileCount;
@@ -181,16 +185,16 @@ bool isArgUnwantedForGrep(char *argument) {
 }
 // Filters out the command line strings that shouldn't be passed on to IcGrep
 bool isArgUnwantedForIcGrep(char *argument) {
-    bool isUnwated = false;
+    bool isUnwanted = false;
     std::vector<std::string> unwantedFlags = {"-c"};
 
     for (unsigned i = 0; i < unwantedFlags.size(); ++i){
         if (strcmp(argument, unwantedFlags[i].c_str()) == 0) {
-            isUnwated = true;
+            isUnwanted = true;
         }
     }
 
-    return isUnwated;
+    return isUnwanted;
 }
 
 /*
@@ -233,6 +237,46 @@ void pipeIcGrepOutputToGrep(int argc, char *argv[]) {
 }
 
 
+// This is a stub, to be expanded later.
+bool excludeDirectory(boost::filesystem::path dirpath) { return dirpath.filename() == ".svn";}
+
+std::vector<std::string> getFullFileList(cl::list<std::string> & inputFiles) {
+    using namespace boost::filesystem;
+    symlink_option follow_symlink = FollowSubdirectorySymlinks ? symlink_option::recurse : symlink_option::none;
+    std::vector<std::string> expanded_paths;
+    boost::system::error_code errc;
+    if (FollowSubdirectorySymlinks) {
+        EnterDirectoriesRecursively = true;
+    }
+    for (auto & f : inputFiles) {
+        path p(f);
+        if (EnterDirectoriesRecursively && is_directory(p)) {
+            if (!excludeDirectory(p)) {
+                recursive_directory_iterator di(p, follow_symlink, errc), end;
+                if (errc) {
+                    // If we cannot enter the directory, keep it in the list of files.
+                    expanded_paths.push_back(f); 
+                    continue;
+                }
+                while (di != end) {
+                    auto & e = di->path();
+                    if (is_directory(e)) {
+                        if (excludeDirectory(e)) di.no_push();
+                    }
+                    else expanded_paths.push_back(e.string());
+                    di.increment(errc);
+                    if (errc) {
+                        expanded_paths.push_back(e.string()); 
+                    }
+                }
+            }
+        }
+        else expanded_paths.push_back(p.string());
+    }
+    return expanded_paths;
+}
+
+
 int main(int argc, char *argv[]) {
     llvm::install_fatal_error_handler(&icgrep_error_handler);
     cl::HideUnrelatedOptions(ArrayRef<const cl::OptionCategory *>{&LegacyGrepOptions, &EnhancedGrepOptions, re::re_toolchain_flags(), pablo::pablo_toolchain_flags(), codegen::codegen_flags()});
@@ -251,8 +295,11 @@ int main(int argc, char *argv[]) {
     //std::cerr << "grepCodeGen complete";
 
     releaseSlabAllocatorMemory();
-    initResult(inputFiles);
-    for (unsigned i=0; i<inputFiles.size(); ++i){
+    
+    allFiles = getFullFileList(inputFiles);
+    
+    initResult(allFiles);
+    for (unsigned i=0; i < allFiles.size(); ++i){
         total_CountOnly.push_back(0);
     }
 
@@ -263,16 +310,16 @@ int main(int argc, char *argv[]) {
         // PAPI_RES_STL, PAPI_BR_MSP, PAPI_LST_INS, PAPI_L1_TCM
         papi::PapiCounter<4> papiCounters({PAPI_RES_STL, PAPI_STL_CCY, PAPI_FUL_CCY, PAPI_MEM_WCY});
         #endif
-        for (unsigned i = 0; i != inputFiles.size(); ++i) {
+        for (unsigned i = 0; i != allFiles.size(); ++i) {
             #ifdef PRINT_TIMING_INFORMATION
             papiCounters.start();
             const timestamp_t execution_start = read_cycle_counter();
             #endif
-            grepEngine.doGrep(inputFiles[i], i, CountOnly, total_CountOnly, UTF_16);
+            grepEngine.doGrep(allFiles[i], i, CountOnly, total_CountOnly, UTF_16);
             #ifdef PRINT_TIMING_INFORMATION
             const timestamp_t execution_end = read_cycle_counter();
             papiCounters.stop();
-            std::cerr << "EXECUTION TIME: " << inputFiles[i] << ":" << "CYCLES|" << (execution_end - execution_start) << papiCounters << std::endl;
+            std::cerr << "EXECUTION TIME: " << allFiles[i] << ":" << "CYCLES|" << (execution_end - execution_start) << papiCounters << std::endl;
             #endif
         }        
     } else if (Threads > 1) {
