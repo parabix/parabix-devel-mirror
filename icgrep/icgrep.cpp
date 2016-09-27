@@ -31,6 +31,19 @@
 
 static cl::OptionCategory LegacyGrepOptions("A. Standard Grep Options",
                                        "These are standard grep options intended for compatibility with typical grep usage.");
+enum RE_Syntax {FixedStrings, BRE, ERE, PCRE};
+
+#ifdef FUTURE
+static cl::OptionCategory RegexpOptions("Regular Expression Interpretation", "These options control regular expression interpretation");
+static cl::opt<RE_Syntax> RegexpSyntax(cl::desc("Regular expression syntax:"),
+    cl::values(
+        clEnumValN(FixedStrings, "F", "Fixed strings, separated by newlines"),
+        clEnumValN(BRE, "G", "Posix basic regular expression (BRE) syntax"),
+        clEnumValN(ERE, "E", "Posix extened regular expression (ERE) syntax"),
+        clEnumValN(PCRE, "P", "Perl-compatible regular expression (PCRE) syntax - default"),
+               clEnumValEnd), cl::cat(LegacyGrepOptions), cl::Grouping, cl::init(PCRE));
+#endif
+
 static cl::opt<bool> UTF_16("UTF-16", cl::desc("Regular expressions over the UTF-16 representation of Unicode."), cl::cat(LegacyGrepOptions));
 static cl::OptionCategory EnhancedGrepOptions("B. Enhanced Grep Options",
                                        "These are additional options for icgrep functionality and performance.");
@@ -281,7 +294,11 @@ int main(int argc, char *argv[]) {
     llvm::install_fatal_error_handler(&icgrep_error_handler);
     cl::HideUnrelatedOptions(ArrayRef<const cl::OptionCategory *>{&LegacyGrepOptions, &EnhancedGrepOptions, re::re_toolchain_flags(), pablo::pablo_toolchain_flags(), codegen::codegen_flags()});
     cl::ParseCommandLineOptions(argc, argv);
-    
+#ifdef FUTURE
+    if (RegexpSyntax != RE_Syntax::PCRE) {
+        llvm::report_fatal_error("Sorry, only PCRE syntax is fully supported\n.");
+    }
+#endif
     re::RE * re_ast = get_icgrep_RE();
     std::string module_name = "grepcode:" + sha1sum(allREs) + ":" + std::to_string(globalFlags);
 
