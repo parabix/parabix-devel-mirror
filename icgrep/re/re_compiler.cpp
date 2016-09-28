@@ -459,23 +459,28 @@ inline PabloAST * RE_Compiler::reachable(PabloAST * repeated, int length, int re
 }
 
 MarkerType RE_Compiler::processLowerBound(RE * repeated, int lb, MarkerType marker, PabloBuilder & pb) {
+    if (lb == 0) return marker;
     if (!mGraphemeBoundaryRule && isByteLength(repeated) && !AlgorithmOptionIsSet(DisableLog2BoundedRepetition)) {
         PabloAST * cc = markerVar(compile(repeated, pb));
         PabloAST * cc_lb = consecutive_matches(cc, 1, lb, pb);
         PabloAST * marker_fwd = pb.createAdvance(markerVar(marker), markerPos(marker) == MarkerPosition::FinalMatchUnit ? lb : lb - 1);
         return makeMarker(MarkerPosition::FinalMatchUnit, pb.createAnd(marker_fwd, cc_lb, "lowerbound"));
     }
-    // Fall through to general case.
-    for (int i = 1; i <= lb; ++i) {
-        marker = process(repeated, marker, pb);
-        if (mGraphemeBoundaryRule) {
-            marker = AdvanceMarker(marker, MarkerPosition::FinalPostPositionUnit, pb);
-        }
+    // Fall through to general case.  Process the first item and insert the rest into an if-structure.    
+    marker = process(repeated, marker, pb);
+    if (mGraphemeBoundaryRule) {
+        marker = AdvanceMarker(marker, MarkerPosition::FinalPostPositionUnit, pb);
     }
-    return marker;
+    if (lb == 1) return marker;
+    PabloBuilder nested = PabloBuilder::Create(pb);
+    MarkerType m1 = processLowerBound(repeated, lb - 1, marker, nested);
+    Assign * m1a = nested.createAssign("m", markerVar(m1));
+    pb.createIf(markerVar(marker), {m1a}, nested);
+    return makeMarker(m1.pos, m1a);
 }
-
+    
 MarkerType RE_Compiler::processBoundedRep(RE * repeated, int ub, MarkerType marker, PabloBuilder & pb) {
+    if (ub == 0) return marker;
     if (!mGraphemeBoundaryRule && isByteLength(repeated) && ub > 1 && !AlgorithmOptionIsSet(DisableLog2BoundedRepetition)) {
         // log2 upper bound for fixed length (=1) class
         // Create a mask of positions reachable within ub from current marker.
@@ -486,17 +491,20 @@ MarkerType RE_Compiler::processBoundedRep(RE * repeated, int ub, MarkerType mark
         PabloAST * rep_class_var = markerVar(compile(repeated, pb));
         return makeMarker(MarkerPosition::InitialPostPositionUnit, pb.createAnd(pb.createMatchStar(cursor, rep_class_var), upperLimitMask, "bounded"));
     }
-    // Fall through to general case.
-    for (int i = 1; i <= ub; ++i) {
-        MarkerType a = process(repeated, marker, pb);
-        MarkerType m = marker;
-        AlignMarkers(a, m, pb);
-        marker = makeMarker(markerPos(a), pb.createOr(markerVar(a), markerVar(m), "upper" + std::to_string(i)));
-        if (mGraphemeBoundaryRule) {
-            marker = AdvanceMarker(marker, MarkerPosition::FinalPostPositionUnit, pb);
-        }
+    // Fall through to general case.  Process the first item and insert the rest into an if-structure.    
+    MarkerType a = process(repeated, marker, pb);
+    MarkerType m = marker;
+    AlignMarkers(a, m, pb);
+    marker = makeMarker(markerPos(a), pb.createOr(markerVar(a), markerVar(m)));
+    if (mGraphemeBoundaryRule) {
+        marker = AdvanceMarker(marker, MarkerPosition::FinalPostPositionUnit, pb);
     }
-    return marker;
+    if (ub == 1) return marker;
+    PabloBuilder nested = PabloBuilder::Create(pb);
+    MarkerType m1 = processBoundedRep(repeated, ub - 1, marker, nested);
+    Assign * m1a = nested.createAssign("m", markerVar(m1));
+    pb.createIf(markerVar(marker), {m1a}, nested);
+    return makeMarker(m1.pos, m1a);
 }
 
 MarkerType RE_Compiler::processUnboundedRep(RE * repeated, MarkerType marker, PabloBuilder & pb) {
