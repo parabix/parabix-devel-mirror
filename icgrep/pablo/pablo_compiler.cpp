@@ -241,11 +241,10 @@ void PabloCompiler::compileWhile(const While * whileStatement) {
     }
 #ifdef ENABLE_BOUNDED_WHILE
     if (whileStatement->getBound()) {
-        PHINode * bound_phi = iBuilder->CreatePHI(iBuilder->getSizeTy());
-        bound_phi->addIncoming(ConstantInt::get(iBuilder->getSizeTy(), whileStatement->getBound()));
+        bound_phi = iBuilder->CreatePHI(iBuilder->getSizeTy(), 2, "while_bound");
+        bound_phi->addIncoming(ConstantInt::get(iBuilder->getSizeTy(), whileStatement->getBound()), whileEntryBlock);
     }
 #endif
-
     //
     // Now compile the loop body proper.  Carry-out accumulated values
     // and iterated values of Next nodes will be computed.
@@ -265,8 +264,8 @@ void PabloCompiler::compileWhile(const While * whileStatement) {
 #ifdef ENABLE_BOUNDED_WHILE
     if (whileStatement->getBound()) {
         Value * new_bound = iBuilder->CreateSub(bound_phi, ConstantInt::get(iBuilder->getSizeTy(), 1));
-        bound_phi->addIncoming(new_bound, whileExitBlock)));
-        cond_expr = iBuilder->CreateAnd(cond_expr, iBuilder->CreateCmpGE(new_bound, ConstantInt::GetNullValue(iBuilder->getSizeTy()));
+        bound_phi->addIncoming(new_bound, whileExitBlock);
+        cond_expr = iBuilder->CreateAnd(cond_expr, iBuilder->CreateICmpUGT(new_bound, ConstantInt::getNullValue(iBuilder->getSizeTy())));
     }
 #endif    
     iBuilder->CreateCondBr(cond_expr, whileBodyBlock, whileEndBlock);
