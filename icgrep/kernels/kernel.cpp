@@ -38,7 +38,7 @@ void KernelBuilder::prepareKernel() {
         throw std::runtime_error("Kernel preparation: Incorrect number of input buffers");
     }
     if (mStreamSetOutputs.size() != mStreamSetOutputBuffers.size()) {
-        throw std::runtime_error("Kernel preparation: Incorrect number of input buffers");
+        throw std::runtime_error("Kernel preparation: Incorrect number of output buffers");
     }
     addScalar(iBuilder->getSizeTy(), blockNoScalar);
     int streamSetNo = 0;
@@ -58,7 +58,7 @@ void KernelBuilder::prepareKernel() {
     }
     for (unsigned i = 0; i < mStreamSetOutputs.size(); i++) {
         if (!(mStreamSetOutputBuffers[i]->getBufferStreamSetType() == mStreamSetOutputs[i].ssType)) {
-             throw std::runtime_error("Kernel preparation: Incorrect input buffer type");
+             throw std::runtime_error("Kernel preparation: Incorrect output buffer type");
         }
         mScalarInputs.push_back(ScalarBinding{mStreamSetOutputBuffers[i]->getStreamSetStructPointerType(), mStreamSetOutputs[i].ssName + basePtrSuffix});
         mStreamSetNameMap.emplace(mStreamSetOutputs[i].ssName, streamSetNo);
@@ -435,5 +435,3 @@ Function * KernelBuilder::generateThreadFunction(std::string name){
     return threadFunc;
 
 }
-
-
