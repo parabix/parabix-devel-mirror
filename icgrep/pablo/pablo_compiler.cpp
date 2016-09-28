@@ -208,7 +208,9 @@ void PabloCompiler::compileWhile(const While * whileStatement) {
     const auto & nextNodes = whileStatement->getVariants();
     std::vector<PHINode *> nextPhis;
     nextPhis.reserve(nextNodes.size());
-
+#ifdef ENABLE_BOUNDED_WHILE
+    PHINode * bound_phi = nullptr;  // Needed for bounded while loops.
+#endif
     // On entry to the while structure, proceed to execute the first iteration
     // of the loop body unconditionally.   The while condition is tested at the end of
     // the loop.
@@ -221,6 +223,9 @@ void PabloCompiler::compileWhile(const While * whileStatement) {
     // (1) Carry-ins: (a) incoming carry data first iterations, (b) zero thereafter
     // (2) Carry-out accumulators: (a) zero first iteration, (b) |= carry-out of each iteration
     // (3) Next nodes: (a) values set up before loop, (b) modified values calculated in loop.
+#ifdef ENABLE_BOUNDED_WHILE
+    // (4) The loop bound, if any.
+#endif
 
     mCarryManager->initializeWhileEntryCarryDataPhis(whileEntryBlock);
 
@@ -234,6 +239,12 @@ void PabloCompiler::compileWhile(const While * whileStatement) {
         assert(mMarkerMap[n->getInitial()] == phi);
         nextPhis.push_back(phi);
     }
+#ifdef ENABLE_BOUNDED_WHILE
+    if (whileStatement->getBound()) {
+        PHINode * bound_phi = iBuilder->CreatePHI(iBuilder->getSizeTy());
+        bound_phi->addIncoming(ConstantInt::get(iBuilder->getSizeTy(), whileStatement->getBound()));
+    }
+#endif
 
     //
     // Now compile the loop body proper.  Carry-out accumulated values
@@ -241,6 +252,7 @@ void PabloCompiler::compileWhile(const While * whileStatement) {
     ++mWhileDepth;
     compileBlock(whileBody);
 
+    // After the whileBody has been compiled, we may be in a different basic block.
     BasicBlock * whileExitBlock = iBuilder->GetInsertBlock();
 
     if (mCarryManager->hasCarries()) {
@@ -249,7 +261,15 @@ void PabloCompiler::compileWhile(const While * whileStatement) {
     mCarryManager->finalizeWhileBlockCarryDataPhis(whileExitBlock);
 
     // Terminate the while loop body with a conditional branch back.
-    iBuilder->CreateCondBr(iBuilder->bitblock_any(compileExpression(whileStatement->getCondition())), whileBodyBlock, whileEndBlock);
+    Value * cond_expr = iBuilder->bitblock_any(compileExpression(whileStatement->getCondition()));
+#ifdef ENABLE_BOUNDED_WHILE
+    if (whileStatement->getBound()) {
+        Value * new_bound = iBuilder->CreateSub(bound_phi, ConstantInt::get(iBuilder->getSizeTy(), 1));
+        bound_phi->addIncoming(new_bound, whileExitBlock)));
+        cond_expr = iBuilder->CreateAnd(cond_expr, iBuilder->CreateCmpGE(new_bound, ConstantInt::GetNullValue(iBuilder->getSizeTy()));
+    }
+#endif    
+    iBuilder->CreateCondBr(cond_expr, whileBodyBlock, whileEndBlock);
 
     // and for any Next nodes in the loop body
     for (unsigned i = 0; i < nextNodes.size(); i++) {
