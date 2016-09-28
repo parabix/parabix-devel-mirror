@@ -129,6 +129,8 @@ add_executable(u8u16 u8u16.cpp toolchain.cpp kernels/p2s_kernel.cpp kernels/pipe
 #add_executable(symtbl symboltable.cpp toolchain.cpp kernels/symboltablepipeline.cpp kernels/stdout_kernel.cpp grep_engine.cpp kernels/pipeline.cpp kernels/scanmatchgen.cpp ${PRECOMPILED_FILES})
 add_executable(wc wc.cpp toolchain.cpp kernels/pipeline.cpp)
 
+add_executable(editd editd/editd.cpp editd/pattern_compiler.cpp toolchain.cpp kernels/pipeline.cpp editd/editdscan_kernel.cpp)
+
 IF(ENABLE_PREGENERATED_UCD_FUNCTIONS)
 add_dependencies(icgrep run_generate_predefined_ucd_functions)
 ENDIF()
@@ -143,11 +145,13 @@ target_link_libraries(icgrep ${Boost_LIBRARIES})
 #target_link_libraries(symtbl ${Boost_LIBRARIES})
 target_link_libraries(u8u16 ${Boost_LIBRARIES})
 target_link_libraries(wc ${Boost_LIBRARIES})
+target_link_libraries(editd ${Boost_LIBRARIES})
 
 target_link_libraries (icgrep UCDlib PabloADT RegExpCompiler CCADT CodeGen ${REQ_LLVM_LIBRARIES} ${CUDA_LIB})
 #target_link_libraries (symtbl UCDlib PabloADT RegExpCompiler CCADT CodeGen ${REQ_LLVM_LIBRARIES} ${CUDA_LIB})
 target_link_libraries (u8u16 UCDlib PabloADT RegExpCompiler CCADT CodeGen ${REQ_LLVM_LIBRARIES} ${CUDA_LIB})
 target_link_libraries (wc UCDlib PabloADT RegExpCompiler CCADT CodeGen ${REQ_LLVM_LIBRARIES} ${CUDA_LIB})
+target_link_libraries (editd UCDlib PabloADT RegExpCompiler CCADT CodeGen ${REQ_LLVM_LIBRARIES} ${CUDA_LIB})
 
 IF(ENABLE_MULTIPLEXING)
     message(STATUS "Enabling Multiplexing")
