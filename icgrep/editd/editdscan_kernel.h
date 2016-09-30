@@ -18,10 +18,11 @@ namespace kernel {
     
 class editdScanKernel : public KernelBuilder {
 public:
-    editdScanKernel(IDISA::IDISA_Builder * iBuilder) :
+    editdScanKernel(IDISA::IDISA_Builder * iBuilder, unsigned dist) :
     KernelBuilder(iBuilder, "scanMatch",
-                  {StreamSetBinding{parabix::StreamSetType(3, parabix::i1), "matchResults"}},
+                  {StreamSetBinding{parabix::StreamSetType(dist+1, parabix::i1), "matchResults"}},
                   {}, {}, {}, {}),
+    mEditDistance(dist),
     mScanwordBitWidth(Triple(llvm::sys::getProcessTriple()).isArch32Bit() ? 32 : 64) {}
         
 private:
@@ -29,6 +30,7 @@ private:
     llvm::Function * generateScanWordRoutine(llvm::Module * m);
         
     unsigned mScanwordBitWidth;
+    unsigned mEditDistance;
 };
 
 }

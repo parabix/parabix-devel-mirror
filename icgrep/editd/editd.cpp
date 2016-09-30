@@ -57,8 +57,71 @@ static cl::opt<int> stepSize("step-size", cl::desc("Step Size"), cl::init(3));
 using namespace kernel;
 using namespace pablo;
 
+struct matchPosition
+{
+    size_t pos;
+    size_t dist;
+};
+
+std::vector<struct matchPosition> matchList;
+
+void sort_match_list(){
+    
+}
+
+void run_second_filter(int total_len, int pattern_segs, float errRate){
+    
+    if(matchList.size() == 0) return;
+
+    //Sort match position
+    bool exchanged = true;
+    while(exchanged){
+        exchanged = false;
+        for (int i=0; i<matchList.size()-1; i++){
+            if(matchList[i].pos > matchList[i+1].pos){
+                size_t tmp_pos = matchList[i].pos;
+                size_t tmp_dist = matchList[i].dist;
+                matchList[i].pos = matchList[i+1].pos;
+                matchList[i].dist = matchList[i+1].dist;
+                matchList[i+1].pos = tmp_pos;
+                matchList[i+1].dist = tmp_dist;
+                exchanged = true;
+            }
+        }
+    }
+
+    std::cerr << "pattern_segs = " << pattern_segs << ", total_len = " << total_len << std::endl;
+
+    int v = pattern_segs * (editDistance+1) - total_len * errRate;
+
+    int startPos = matchList[0].pos;
+    int sum = matchList[0].dist;
+    int curIdx = 0;
+    int i = 0;
+    int count = 0;
+    while (i < matchList.size()){
+        if(matchList[i].pos - startPos < total_len * (errRate+1)){
+            sum += matchList[i].dist;
+            i++;
+        }
+        else{
+            if(sum > v) count++;
+            sum -= matchList[curIdx].dist;
+            curIdx++;
+            startPos = matchList[curIdx].pos;
+        }
+    }
+    std::cout << "matching value is " << v << std::endl;
+    std::cout << "total candidate from the first filter is " << matchList.size() << std::endl;
+    std::cout << "total candidate from the second filter is " << count << std::endl;
+}
+
 extern "C" {
 void wrapped_report_pos(size_t match_pos, int dist) {
+        struct matchPosition curMatch;
+        curMatch.pos = match_pos;
+        curMatch.dist = dist;
+        matchList.push_back(curMatch);
         std::cout << "pos: " << match_pos << ", dist:" << dist << "\n";
     }
 
@@ -74,7 +137,7 @@ void icgrep_Linking(Module * m, ExecutionEngine * e) {
     }
 }
 
-void get_editd_pattern() {
+void get_editd_pattern(int & pattern_segs, int & total_len) {
   
     if (PatternFilename != "") {
         std::ifstream pattFile(PatternFilename.c_str());
@@ -82,6 +145,8 @@ void get_editd_pattern() {
         if (pattFile.is_open()) {
             while (std::getline(pattFile, r)) {
                 pattVector.push_back(r);
+                pattern_segs ++; 
+                total_len += r.size(); 
             }
             pattFile.close();
         }
@@ -104,7 +169,7 @@ Function * editdPipeline(Module * mMod, IDISA::IDISA_Builder * iBuilder, pablo::
 
     pablo_function_passes(function);
     pablo::PabloKernel  editdk(iBuilder, "editd", function, {});
-    kernel::editdScanKernel editdScanK(iBuilder);
+    kernel::editdScanKernel editdScanK(iBuilder, editDistance);
     
     std::unique_ptr<Module> editdM = editdk.createKernelModule({&ChStream}, {&MatchResults});
     std::unique_ptr<Module> scanM = editdScanK.createKernelModule({&MatchResults}, {});                
@@ -316,14 +381,20 @@ int main(int argc, char *argv[]) {
 
     cl::ParseCommandLineOptions(argc, argv);
 
-    get_editd_pattern();
+    int pattern_segs = 0;
+    int total_len = 0;
 
+    get_editd_pattern(pattern_segs, total_len);
+ 
     preprocessFunctionType preprocess_ptr = preprocessCodeGen();
     int size = 0;
     char * chStream = preprocess(preprocess_ptr, size);
-       
+    
     editdFunctionType editd_ptr = editdCodeGen();
     editd(editd_ptr, chStream, size);
+
+    if(pattVector.size()>1)
+        run_second_filter(pattern_segs, total_len, 0.15);
 
     delete editdEngine;
     delete preprocessEngine;
