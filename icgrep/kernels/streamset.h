@@ -50,7 +50,7 @@ public:
 
     virtual void setProducerPos(Value * ptr, Value * pos);
 
-    virtual llvm::Value * getComsumerPosPtr(Value * ptr);
+    virtual llvm::Value * getConsumerPosPtr(Value * ptr);
 
     virtual void setConsumerPos(Value * ptr, Value * pos);
 

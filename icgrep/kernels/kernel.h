@@ -15,6 +15,10 @@
 #include <boost/container/flat_map.hpp>
 
 const std::string blockNoScalar = "blockNo";
+const std::string logicalSegmentNoScalar = "logicalSegNo";
+const std::string processedItemCount = "processedItemCount";
+const std::string producedItemCount = "producedItemCount";
+const std::string terminationSignal = "terminationSignal";
 const std::string basePtrSuffix = "_basePtr";
 const std::string blkMaskSuffix = "_blkMask";
 
@@ -46,7 +50,11 @@ public:
     Function * generateThreadFunction(std::string name);
 
     Value * getBlockNo(Value * self);
-
+    virtual llvm::Value * getLogicalSegmentNo(llvm::Value * kernelInstance) override;
+    virtual llvm::Value * getProcessedItemCount(llvm::Value * kernelInstance) override;
+    virtual llvm::Value * getProducedItemCount(llvm::Value * kernelInstance) override;
+    virtual llvm::Value * getTerminationSignal(llvm::Value * kernelInstance) override;
+    
     
 protected:
     //
@@ -65,7 +73,8 @@ protected:
     // Each kernel builder subtype must provide its own logic for generating
     // doBlock calls.
     virtual void generateDoBlockMethod() = 0;
-    
+    virtual void generateDoBlockLogic(Value * self, Value * blockNo);
+
     // Each kernel builder subtypre must also specify the logic for processing the
     // final block of stream data, if there is any special processing required
     // beyond simply calling the doBlock function.   In the case that the final block
@@ -105,7 +114,12 @@ protected:
     llvm::Value * getStreamSetBlockPtr(Value * self, std::string ssName, Value * blockNo);
 
     void setBlockNo(Value * self, Value * newFieldVal);
-        
+    virtual void setLogicalSegmentNo(llvm::Value * self, Value * newFieldVal);
+    virtual void setProcessedItemCount(llvm::Value * self, Value * newFieldVal);
+    virtual void setProducedItemCount(llvm::Value * self, Value * newFieldVal);
+    virtual void setTerminationSignal(llvm::Value * self, Value * newFieldVal);
+    
+    
 protected:
 
     std::vector<llvm::Type *>  mKernelFields;

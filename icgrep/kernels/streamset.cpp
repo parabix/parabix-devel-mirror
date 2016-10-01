@@ -35,7 +35,7 @@ void StreamSetBuffer::setProducerPos(Value * ptr, llvm::Value * pos){
     iBuilder->CreateStore(pos, iBuilder->CreateGEP(ptr, {iBuilder->getInt32(0), iBuilder->getInt32(iProducer_pos)}));
 }
 
-llvm::Value * StreamSetBuffer::getComsumerPosPtr(Value * ptr) {
+llvm::Value * StreamSetBuffer::getConsumerPosPtr(Value * ptr) {
     return iBuilder->CreateGEP(ptr, {iBuilder->getInt32(0), iBuilder->getInt32(iConsumer_pos)});
 }
 

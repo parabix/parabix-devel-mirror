@@ -156,16 +156,7 @@ void s2pKernel::generateFinalBlockMethod() {
 }
 
     
-void s2pKernel::generateDoBlockMethod() {
-    IDISA::IDISA_Builder::InsertPoint savePoint = iBuilder->saveIP();
-    Module * m = iBuilder->getModule();
-
-    Function * doBlockFunction = m->getFunction(mKernelName + doBlock_suffix);
-    
-    iBuilder->SetInsertPoint(BasicBlock::Create(iBuilder->getContext(), "entry", doBlockFunction, 0));
-    
-    Value * self = getParameter(doBlockFunction, "self");
-    Value * blockNo = getScalarField(self, blockNoScalar);
+void s2pKernel::generateDoBlockLogic(Value * self, Value * blockNo) {
     Value * byteStreamBlock_ptr = getStreamSetBlockPtr(self, "byteStream", blockNo);
     Value * basisBitsBlock_ptr = getStreamSetBlockPtr(self, "basisBits", blockNo);
     
@@ -178,9 +169,21 @@ void s2pKernel::generateDoBlockMethod() {
     for (unsigned j = 0; j < 8; ++j) {
         iBuilder->CreateBlockAlignedStore(p_bitblock[j], basisBitsBlock_ptr, {iBuilder->getInt32(0), iBuilder->getInt32(j)});
     }
+}
+    
+void s2pKernel::generateDoBlockMethod() {
+    IDISA::IDISA_Builder::InsertPoint savePoint = iBuilder->saveIP();
+    Module * m = iBuilder->getModule();
+    
+    Function * doBlockFunction = m->getFunction(mKernelName + doBlock_suffix);
+    
+    iBuilder->SetInsertPoint(BasicBlock::Create(iBuilder->getContext(), "entry", doBlockFunction, 0));
+    
+    Value * self = getParameter(doBlockFunction, "self");
+    Value * blockNo = getScalarField(self, blockNoScalar);
+    
+    generateDoBlockLogic(self, blockNo);
     iBuilder->CreateRetVoid();
     iBuilder->restoreIP(savePoint);
 }
-
-    
 }

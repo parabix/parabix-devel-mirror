@@ -9,6 +9,7 @@
 #include <llvm/IR/Value.h>
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/IR/TypeBuilder.h>
+#include <llvm/Support/ErrorHandling.h>
 #include <toolchain.h>
 
 using namespace llvm;
@@ -25,7 +26,7 @@ KernelBuilder::KernelBuilder(IDISA::IDISA_Builder * builder,
 
 void KernelBuilder::addScalar(Type * t, std::string scalarName) {
     if (LLVM_UNLIKELY(mKernelStateType != nullptr)) {
-        throw std::runtime_error("Illegal addition of kernel field after kernel state finalized: " + scalarName);
+        llvm::report_fatal_error("Illegal addition of kernel field after kernel state finalized: " + scalarName);
     }
     unsigned index = mKernelFields.size();
     mKernelFields.push_back(t);
@@ -35,30 +36,33 @@ void KernelBuilder::addScalar(Type * t, std::string scalarName) {
 void KernelBuilder::prepareKernel() {
     unsigned blockSize = iBuilder->getBitBlockWidth();
     if (mStreamSetInputs.size() != mStreamSetInputBuffers.size()) {
-        throw std::runtime_error("Kernel preparation: Incorrect number of input buffers");
+        llvm::report_fatal_error("Kernel preparation: Incorrect number of input buffers");
     }
     if (mStreamSetOutputs.size() != mStreamSetOutputBuffers.size()) {
-        throw std::runtime_error("Kernel preparation: Incorrect number of output buffers");
+        llvm::report_fatal_error("Kernel preparation: Incorrect number of output buffers");
     }
     addScalar(iBuilder->getSizeTy(), blockNoScalar);
+    addScalar(iBuilder->getSizeTy(), logicalSegmentNoScalar);
+    addScalar(iBuilder->getSizeTy(), processedItemCount);
+    addScalar(iBuilder->getSizeTy(), producedItemCount);
+    addScalar(iBuilder->getInt1Ty(), terminationSignal);
     int streamSetNo = 0;
     for (unsigned i = 0; i < mStreamSetInputs.size(); i++) {
         size_t bufferSize = mStreamSetInputBuffers[i]->getBufferSize() * blockSize;
         if (!(mStreamSetInputBuffers[i]->getBufferStreamSetType() == mStreamSetInputs[i].ssType)) {
-             throw std::runtime_error("Kernel preparation: Incorrect input buffer type");
+             llvm::report_fatal_error("Kernel preparation: Incorrect input buffer type");
         }
-        if ((bufferSize > 0) && (bufferSize < codegen::SegmentSize + (blockSize + mLookAheadPositions - 1)/blockSize)) {
+        if ((mStreamSetInputBuffers[i]->getBufferSize() > 0) && (mStreamSetInputBuffers[i]->getBufferSize() < codegen::SegmentSize + (blockSize + mLookAheadPositions - 1)/blockSize)) {
              errs() << "buffer size = " << mStreamSetInputBuffers[i]->getBufferSize() << "\n";
-             throw std::runtime_error("Kernel preparation: Buffer size too small.");
+             llvm::report_fatal_error("Kernel preparation: Buffer size too small.");
         }
-
         mScalarInputs.push_back(ScalarBinding{mStreamSetInputBuffers[i]->getStreamSetStructPointerType(), mStreamSetInputs[i].ssName + basePtrSuffix});
         mStreamSetNameMap.emplace(mStreamSetInputs[i].ssName, streamSetNo);
         streamSetNo++;
     }
     for (unsigned i = 0; i < mStreamSetOutputs.size(); i++) {
         if (!(mStreamSetOutputBuffers[i]->getBufferStreamSetType() == mStreamSetOutputs[i].ssType)) {
-             throw std::runtime_error("Kernel preparation: Incorrect output buffer type");
+             llvm::report_fatal_error("Kernel preparation: Incorrect output buffer type");
         }
         mScalarInputs.push_back(ScalarBinding{mStreamSetOutputBuffers[i]->getStreamSetStructPointerType(), mStreamSetOutputs[i].ssName + basePtrSuffix});
         mStreamSetNameMap.emplace(mStreamSetOutputs[i].ssName, streamSetNo);
@@ -145,11 +149,16 @@ void KernelBuilder::generateFinalBlockMethod() {
     iBuilder->restoreIP(savePoint);
 }
 
-//  The default doSegment method simply dispatches to the doBlock routine.
+void KernelBuilder::generateDoBlockLogic(Value * self, Value * blockNo) {
+    Function * doBlockFunction = iBuilder->getModule()->getFunction(mKernelName + doBlock_suffix);
+    iBuilder->CreateCall(doBlockFunction, {self});
+}
+
+//  The default doSegment method dispatches to the doBlock routine for
+//  each block of the given number of blocksToDo, and then updates counts.
 void KernelBuilder::generateDoSegmentMethod() {
     IDISA::IDISA_Builder::InsertPoint savePoint = iBuilder->saveIP();
     Module * m = iBuilder->getModule();
-    Function * doBlockFunction = m->getFunction(mKernelName + doBlock_suffix);
     Function * doSegmentFunction = m->getFunction(mKernelName + doSegment_suffix);
     iBuilder->SetInsertPoint(BasicBlock::Create(iBuilder->getContext(), "entry", doSegmentFunction, 0));
     BasicBlock * entryBlock = iBuilder->GetInsertBlock();
@@ -157,11 +166,14 @@ void KernelBuilder::generateDoSegmentMethod() {
     BasicBlock * blockLoopBody = BasicBlock::Create(iBuilder->getContext(), "blockLoopBody", doSegmentFunction, 0);
     BasicBlock * blocksDone = BasicBlock::Create(iBuilder->getContext(), "blocksDone", doSegmentFunction, 0);
     Type * const size_ty = iBuilder->getSizeTy();
+    Value * stride = ConstantInt::get(size_ty, iBuilder->getStride());
+    Value * strideBlocks = ConstantInt::get(size_ty, iBuilder->getStride() / iBuilder->getBitBlockWidth());
     
     Function::arg_iterator args = doSegmentFunction->arg_begin();
     Value * self = &*(args++);
     Value * blocksToDo = &*(args);
-    
+
+    Value * segmentNo = getLogicalSegmentNo(self);
     iBuilder->CreateBr(blockLoopCond);
 
     iBuilder->SetInsertPoint(blockLoopCond);
@@ -172,12 +184,16 @@ void KernelBuilder::generateDoSegmentMethod() {
 
     iBuilder->SetInsertPoint(blockLoopBody);
     Value * blockNo = getScalarField(self, blockNoScalar);   
-    iBuilder->CreateCall(doBlockFunction, {self});
-    setBlockNo(self, iBuilder->CreateAdd(blockNo, ConstantInt::get(size_ty, iBuilder->getStride() / iBuilder->getBitBlockWidth())));
-    blocksRemaining->addIncoming(iBuilder->CreateSub(blocksRemaining, ConstantInt::get(size_ty, 1)), blockLoopBody);
+    generateDoBlockLogic(self, blockNo);
+    setBlockNo(self, iBuilder->CreateAdd(blockNo, strideBlocks));
+    blocksRemaining->addIncoming(iBuilder->CreateSub(blocksRemaining, strideBlocks), blockLoopBody);
     iBuilder->CreateBr(blockLoopCond);
     
     iBuilder->SetInsertPoint(blocksDone);
+    setProcessedItemCount(self, iBuilder->CreateAdd(getProcessedItemCount(self), iBuilder->CreateMul(blocksToDo, stride)));
+    // Must be the last action, for synchronization.
+    setLogicalSegmentNo(self, iBuilder->CreateAdd(segmentNo, ConstantInt::get(size_ty, 1)));
+
     iBuilder->CreateRetVoid();
     iBuilder->restoreIP(savePoint);
 }
@@ -185,7 +201,7 @@ void KernelBuilder::generateDoSegmentMethod() {
 Value * KernelBuilder::getScalarIndex(std::string fieldName) {
     const auto f = mInternalStateNameMap.find(fieldName);
     if (LLVM_UNLIKELY(f == mInternalStateNameMap.end())) {
-        throw std::runtime_error("Kernel does not contain internal state: " + fieldName);
+        llvm::report_fatal_error("Kernel does not contain internal state: " + fieldName);
     }
     return iBuilder->getInt32(f->second);
 }
@@ -202,16 +218,56 @@ void KernelBuilder::setScalarField(Value * self, std::string fieldName, Value * 
     iBuilder->CreateStore(newFieldVal, ptr);
 }
 
+Value * KernelBuilder::getLogicalSegmentNo(Value * self) { 
+    Value * ptr = iBuilder->CreateGEP(self, {iBuilder->getInt32(0), getScalarIndex(logicalSegmentNoScalar)});
+    LoadInst * segNo = iBuilder->CreateAlignedLoad(ptr, sizeof(size_t));
+    segNo->setOrdering(Acquire);
+    return segNo;
+}
+
+Value * KernelBuilder::getProcessedItemCount(Value * self) { 
+    return getScalarField(self, processedItemCount);
+}
+
+Value * KernelBuilder::getProducedItemCount(Value * self) {
+    return getScalarField(self, producedItemCount);
+}
+
+//  By default, kernels do not terminate early.  
+Value * KernelBuilder::getTerminationSignal(Value * self) {
+    return ConstantInt::getNullValue(iBuilder->getInt1Ty());
+}
+
+
+void KernelBuilder::setLogicalSegmentNo(Value * self, Value * newCount) {
+    Value * ptr = iBuilder->CreateGEP(self, {iBuilder->getInt32(0), getScalarIndex(logicalSegmentNoScalar)});
+    iBuilder->CreateAlignedStore(newCount, ptr, sizeof(size_t))->setOrdering(Release);
+}
+
+void KernelBuilder::setProcessedItemCount(Value * self, Value * newCount) {
+    Value * ptr = iBuilder->CreateGEP(self, {iBuilder->getInt32(0), getScalarIndex(processedItemCount)});
+    iBuilder->CreateStore(newCount, ptr);
+}
+
+void KernelBuilder::setProducedItemCount(Value * self, Value * newCount) {
+    Value * ptr = iBuilder->CreateGEP(self, {iBuilder->getInt32(0), getScalarIndex(producedItemCount)});
+    iBuilder->CreateStore(newCount, ptr);
+}
+
+void KernelBuilder::setTerminationSignal(Value * self, Value * newFieldVal) {
+    llvm::report_fatal_error("This kernel type does not support setTerminationSignal.");
+}
+
+
 Value * KernelBuilder::getBlockNo(Value * self) {
     Value * ptr = iBuilder->CreateGEP(self, {iBuilder->getInt32(0), getScalarIndex(blockNoScalar)});
-    LoadInst * blockNo = iBuilder->CreateAlignedLoad(ptr, 8);
-    blockNo->setOrdering(Acquire);
+    LoadInst * blockNo = iBuilder->CreateLoad(ptr);
     return blockNo;
 }
 
 void KernelBuilder::setBlockNo(Value * self, Value * newFieldVal) {
     Value * ptr = iBuilder->CreateGEP(self, {iBuilder->getInt32(0), getScalarIndex(blockNoScalar)});
-    iBuilder->CreateAlignedStore(newFieldVal, ptr, 8)->setOrdering(Release);
+    iBuilder->CreateStore(newFieldVal, ptr);
 }
 
 
@@ -220,13 +276,13 @@ Value * KernelBuilder::getParameter(Function * f, std::string paramName) {
         Value * arg = &*argIter;
         if (arg->getName() == paramName) return arg;
     }
-    throw std::runtime_error("Method does not have parameter: " + paramName);
+    llvm::report_fatal_error("Method does not have parameter: " + paramName);
 }
 
 unsigned KernelBuilder::getStreamSetIndex(std::string ssName) {
     const auto f = mStreamSetNameMap.find(ssName);
     if (LLVM_UNLIKELY(f == mStreamSetNameMap.end())) {
-        throw std::runtime_error("Kernel does not contain stream set: " + ssName);
+        llvm::report_fatal_error("Kernel does not contain stream set: " + ssName);
     }
     return f->second;
 }
@@ -272,7 +328,7 @@ Value * KernelBuilder::createInstance(std::vector<Value *> args) {
     std::string initFnName = mKernelName + init_suffix;
     Function * initMethod = m->getFunction(initFnName);
     if (!initMethod) {
-        throw std::runtime_error("Cannot find " + initFnName);
+        llvm::report_fatal_error("Cannot find " + initFnName);
     }
     iBuilder->CreateCall(initMethod, init_args);
     return kernelInstance;
@@ -305,13 +361,13 @@ Function * KernelBuilder::generateThreadFunction(std::string name){
     for (unsigned i = 0; i < mStreamSetInputs.size(); i++) {
         Value * basePtr = getStreamSetBasePtr(self, mStreamSetInputs[i].ssName);
         inbufProducerPtrs.push_back(mStreamSetInputBuffers[i]->getProducerPosPtr(basePtr));
-        inbufConsumerPtrs.push_back(mStreamSetInputBuffers[i]->getComsumerPosPtr(basePtr));
+        inbufConsumerPtrs.push_back(mStreamSetInputBuffers[i]->getConsumerPosPtr(basePtr));
         endSignalPtrs.push_back(mStreamSetInputBuffers[i]->hasEndOfInputPtr(basePtr));
     }
     for (unsigned i = 0; i < mStreamSetOutputs.size(); i++) {
         Value * basePtr = getStreamSetBasePtr(self, mStreamSetOutputs[i].ssName);
         outbufProducerPtrs.push_back(mStreamSetOutputBuffers[i]->getProducerPosPtr(basePtr));
-        outbufConsumerPtrs.push_back(mStreamSetOutputBuffers[i]->getComsumerPosPtr(basePtr));
+        outbufConsumerPtrs.push_back(mStreamSetOutputBuffers[i]->getConsumerPosPtr(basePtr));
     }
 
     const unsigned segmentBlocks = codegen::SegmentSize;
@@ -338,10 +394,10 @@ Function * KernelBuilder::generateThreadFunction(std::string name){
 
     Value * waitCondTest = ConstantInt::get(int1ty, 1);   
     for (unsigned i = 0; i < outbufProducerPtrs.size(); i++) {
-        LoadInst * producerPos = iBuilder->CreateAlignedLoad(outbufProducerPtrs[i], 8);
+        LoadInst * producerPos = iBuilder->CreateAlignedLoad(outbufProducerPtrs[i], sizeof(size_t));
         producerPos->setOrdering(Acquire);
         // iBuilder->CallPrintInt(name + ":output producerPos", producerPos);
-        LoadInst * consumerPos = iBuilder->CreateAlignedLoad(outbufConsumerPtrs[i], 8);
+        LoadInst * consumerPos = iBuilder->CreateAlignedLoad(outbufConsumerPtrs[i], sizeof(size_t));
         consumerPos->setOrdering(Acquire);
         // iBuilder->CallPrintInt(name + ":output consumerPos", consumerPos);
         waitCondTest = iBuilder->CreateAnd(waitCondTest, iBuilder->CreateICmpULE(producerPos, iBuilder->CreateAdd(consumerPos, bufferSize)));
@@ -351,26 +407,30 @@ Function * KernelBuilder::generateThreadFunction(std::string name){
 
     iBuilder->SetInsertPoint(inputCheckBlock); 
 
+    Value * requiredSize = segSize;
+    if (mLookAheadPositions > 0) {
+        requiredSize = iBuilder->CreateAdd(segSize, ConstantInt::get(size_ty, mLookAheadPositions));
+    }
     waitCondTest = ConstantInt::get(int1ty, 1); 
     for (unsigned i = 0; i < inbufProducerPtrs.size(); i++) {
-        LoadInst * producerPos = iBuilder->CreateAlignedLoad(inbufProducerPtrs[i], 8);
+        LoadInst * producerPos = iBuilder->CreateAlignedLoad(inbufProducerPtrs[i], sizeof(size_t));
         producerPos->setOrdering(Acquire);
         // iBuilder->CallPrintInt(name + ":input producerPos", producerPos);
-        LoadInst * consumerPos = iBuilder->CreateAlignedLoad(inbufConsumerPtrs[i], 8);
+        LoadInst * consumerPos = iBuilder->CreateAlignedLoad(inbufConsumerPtrs[i], sizeof(size_t));
         consumerPos->setOrdering(Acquire);
         // iBuilder->CallPrintInt(name + ":input consumerPos", consumerPos);
-        waitCondTest = iBuilder->CreateAnd(waitCondTest, iBuilder->CreateICmpULE(iBuilder->CreateAdd(consumerPos, segSize), producerPos));
+        waitCondTest = iBuilder->CreateAnd(waitCondTest, iBuilder->CreateICmpULE(iBuilder->CreateAdd(consumerPos, requiredSize), producerPos));
     }
 
     iBuilder->CreateCondBr(waitCondTest, doSegmentBlock, endSignalCheckBlock);
    
     iBuilder->SetInsertPoint(endSignalCheckBlock);
     
-    LoadInst * endSignal = iBuilder->CreateAlignedLoad(endSignalPtrs[0], 8);
+    LoadInst * endSignal = iBuilder->CreateAlignedLoad(endSignalPtrs[0], sizeof(size_t));
     // iBuilder->CallPrintInt(name + ":endSignal", endSignal);
     endSignal->setOrdering(Acquire);
     for (unsigned i = 1; i < endSignalPtrs.size(); i++){
-        LoadInst * endSignal_next = iBuilder->CreateAlignedLoad(endSignalPtrs[i], 8);
+        LoadInst * endSignal_next = iBuilder->CreateAlignedLoad(endSignalPtrs[i], sizeof(size_t));
         endSignal_next->setOrdering(Acquire);
         iBuilder->CreateAnd(endSignal, endSignal_next);
     }
@@ -383,13 +443,25 @@ Function * KernelBuilder::generateThreadFunction(std::string name){
 
     for (unsigned i = 0; i < inbufConsumerPtrs.size(); i++) {
         Value * consumerPos = iBuilder->CreateAdd(iBuilder->CreateLoad(inbufConsumerPtrs[i]), segSize);
-        iBuilder->CreateAlignedStore(consumerPos, inbufConsumerPtrs[i], 8)->setOrdering(Release);
-    }
-    for (unsigned i = 0; i < outbufProducerPtrs.size(); i++) {
-        Value * producerPos = iBuilder->CreateAdd(iBuilder->CreateLoad(outbufProducerPtrs[i]), segSize);
-        iBuilder->CreateAlignedStore(producerPos, outbufProducerPtrs[i], 8)->setOrdering(Release);
+        iBuilder->CreateAlignedStore(consumerPos, inbufConsumerPtrs[i], sizeof(size_t))->setOrdering(Release);
     }
     
+    Value * produced = getProducedItemCount(self);
+    for (unsigned i = 0; i < outbufProducerPtrs.size(); i++) {
+        iBuilder->CreateAlignedStore(produced, outbufProducerPtrs[i], sizeof(size_t))->setOrdering(Release);
+    }
+    
+    Value * earlyEndSignal = getTerminationSignal(self);
+    if (earlyEndSignal != ConstantInt::getNullValue(iBuilder->getInt1Ty())) {
+        BasicBlock * earlyEndBlock = BasicBlock::Create(iBuilder->getContext(), "earlyEndSignal", threadFunc, 0);
+        iBuilder->CreateCondBr(earlyEndSignal, earlyEndBlock, outputCheckBlock);
+
+        iBuilder->SetInsertPoint(earlyEndBlock);
+        for (unsigned i = 0; i < mStreamSetOutputs.size(); i++) {
+            Value * basePtr = getStreamSetBasePtr(self, mStreamSetOutputs[i].ssName);
+            mStreamSetOutputBuffers[i]->setEndOfInput(basePtr);
+        }        
+    }
     iBuilder->CreateBr(outputCheckBlock);
      
     iBuilder->SetInsertPoint(endBlock);
@@ -414,11 +486,12 @@ Function * KernelBuilder::generateThreadFunction(std::string name){
 
     for (unsigned i = 0; i < inbufConsumerPtrs.size(); i++) {
         Value * consumerPos = iBuilder->CreateAdd(iBuilder->CreateLoad(inbufConsumerPtrs[i]), remainingBytes);
-        iBuilder->CreateAlignedStore(consumerPos, inbufConsumerPtrs[i], 8)->setOrdering(Release);
+        iBuilder->CreateAlignedStore(consumerPos, inbufConsumerPtrs[i], sizeof(size_t))->setOrdering(Release);
     }
     for (unsigned i = 0; i < outbufProducerPtrs.size(); i++) {
-        Value * producerPos = iBuilder->CreateAdd(iBuilder->CreateLoad(outbufProducerPtrs[i]), remainingBytes);
-        iBuilder->CreateAlignedStore(producerPos, outbufProducerPtrs[i], 8)->setOrdering(Release);
+        
+        Value * produced = iBuilder->CreateAdd(iBuilder->CreateLoad(outbufProducerPtrs[i]), remainingBytes);
+        iBuilder->CreateAlignedStore(producerPos, outbufProducerPtrs[i], sizeof(size_t))->setOrdering(Release);
     }
 
     for (unsigned i = 0; i < mStreamSetOutputs.size(); i++) {

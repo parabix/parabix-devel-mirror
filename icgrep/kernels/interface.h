@@ -6,12 +6,12 @@
 #ifndef KERNEL_INTERFACE_H
 #define KERNEL_INTERFACE_H
 
-
 #include <string>
 #include <vector>
 #include <llvm/IR/Type.h>
 #include <IDISA/idisa_builder.h>
 #include "streamset.h"
+
 
 struct ScalarBinding {
     llvm::Type * scalarType;
@@ -32,6 +32,41 @@ const std::string accumulator_infix = "_get_";
 class KernelInterface {
 
 public:
+    /*
+     
+     This class defines the methods to be used to generate the code  
+     necessary for declaring, allocating, calling and synchronizing
+     kernels.   The methods to be used for constructing kernels are defined
+     within the KernelBuilder class of kernel.h
+     
+     */
+    
+    std::string & getName() { return mKernelName;}
+    
+    std::vector<StreamSetBinding> getStreamInputs() {return mStreamSetInputs;}
+    std::vector<StreamSetBinding> getStreamOutputs() {return mStreamSetOutputs;}
+    std::vector<ScalarBinding> getScalarInputs() { return mScalarInputs;}
+    std::vector<ScalarBinding> getScalarOutputs() { return mScalarOutputs;}
+    
+    
+    // Add ExternalLinkage method declarations for the kernel to a given client module.
+    void addKernelDeclarations(Module * client);
+    
+    virtual llvm::Value * createInstance(std::vector<llvm::Value *> initialParameters);
+
+    llvm::Value * createDoSegmentCall(llvm::Value * kernelInstance, llvm::Value * blkCount);
+    llvm::Value * createFinalBlockCall(llvm::Value * kernelInstance, llvm::Value * remainingBytes);
+    llvm::Value * createGetAccumulatorCall(llvm::Value * kernelInstance, std::string accumName);
+    
+    unsigned getLookAhead() { return mLookAheadPositions; }
+    
+    
+    virtual llvm::Value * getLogicalSegmentNo(llvm::Value * kernelInstance) = 0;
+    virtual llvm::Value * getProcessedItemCount(llvm::Value * kernelInstance) = 0;
+    virtual llvm::Value * getProducedItemCount(llvm::Value * kernelInstance) = 0;
+    virtual llvm::Value * getTerminationSignal(llvm::Value * kernelInstance) = 0;
+    
+protected:
     KernelInterface(IDISA::IDISA_Builder * builder,
                     std::string kernelName,
                     std::vector<StreamSetBinding> stream_inputs,
@@ -49,20 +84,7 @@ public:
     mKernelStateType(nullptr),
     mLookAheadPositions(0) {}
     
-    unsigned getLookAhead() { return mLookAheadPositions; }
     
-    // Add ExternalLinkage method declarations for the kernel to a given client module.
-    void addKernelDeclarations(Module * client);
-    
-    virtual llvm::Value * createInstance(std::vector<llvm::Value *> initialParameters);
-    llvm::Value * createInstance(std::vector<llvm::Value *> initialParameters, std::vector<parabix::StreamSetBuffer *> inputs, std::vector<parabix::StreamSetBuffer *> outputBuffers);
-    llvm::Value * createDoBlockCall(llvm::Value * kernelInstance);
-    llvm::Value * createDoSegmentCall(llvm::Value * kernelInstance, llvm::Value * blkCount);
-    llvm::Value * createFinalBlockCall(llvm::Value * kernelInstance, llvm::Value * remainingBytes);
-    llvm::Value * createGetAccumulatorCall(llvm::Value * kernelInstance, std::string accumName);
-    
-    
-protected:
     
     IDISA::IDISA_Builder * iBuilder;
     std::string mKernelName;
@@ -75,6 +97,7 @@ protected:
     unsigned mLookAheadPositions;
     
     void setLookAhead(unsigned lookAheadPositions) {mLookAheadPositions = lookAheadPositions;}
+    llvm::Value * createDoBlockCall(llvm::Value * kernelInstance);
 
 };
 #endif 

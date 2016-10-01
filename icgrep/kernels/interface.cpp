@@ -116,30 +116,6 @@ Value * KernelInterface::createInstance(std::vector<Value *> args) {
     return kernelInstance;
 }
 
-Value * KernelInterface::createInstance(std::vector<Value *> args, 
-                                        std::vector<StreamSetBuffer *> inputBuffers,
-                                        std::vector<StreamSetBuffer *> outputBuffers) {
-    Value * kernelInstance = iBuilder->CreateAlloca(mKernelStateType);
-    Module * m = iBuilder->getModule();
-    std::vector<Value *> init_args = {kernelInstance};
-    for (auto a : args) {
-        init_args.push_back(a);
-    }
-    for (auto b : inputBuffers) { 
-        init_args.push_back(b->getStreamSetStructPtr());
-    }
-    for (auto b : outputBuffers) { 
-        init_args.push_back(b->getStreamSetStructPtr());
-    }
-    std::string initFnName = mKernelName + init_suffix;
-    Function * initMethod = m->getFunction(initFnName);
-    if (!initMethod) {
-        throw std::runtime_error("Cannot find " + initFnName);
-    }
-    iBuilder->CreateCall(initMethod, init_args);
-    return kernelInstance;
-}
-
 Value * KernelInterface::createDoBlockCall(Value * self) {
     Module * m = iBuilder->getModule();
     std::string doBlockName = mKernelName + doBlock_suffix;

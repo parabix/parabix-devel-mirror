@@ -32,6 +32,7 @@ public:
     
     
 private:
+    void generateDoBlockLogic(Value * self, Value * blockNo) override;
     void generateDoBlockMethod() override;
     void generateFinalBlockMethod() override;
     
