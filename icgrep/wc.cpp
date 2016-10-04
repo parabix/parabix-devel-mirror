@@ -201,8 +201,8 @@ typedef void (*wcFunctionType)(char * byte_data, size_t filesize, size_t fileIdx
 static ExecutionEngine * wcEngine = nullptr;
 
 wcFunctionType wcCodeGen(void) {
-                            
-    Module * M = new Module("wc", getGlobalContext());
+    LLVMContext TheContext;                            
+    Module * M = new Module("wc", TheContext);
     IDISA::IDISA_Builder * idb = IDISA::GetIDISA_Builder(M);
 
     pablo::PabloFunction * function = wc_gen();
@@ -288,8 +288,6 @@ int main(int argc, char *argv[]) {
     for (unsigned i = 0; i < inputFiles.size(); ++i) {
         wc(fn_ptr, i);
     }
-    
-    delete wcEngine;
     
     size_t maxCount = 0;
     if (CountLines) maxCount = TotalLines;

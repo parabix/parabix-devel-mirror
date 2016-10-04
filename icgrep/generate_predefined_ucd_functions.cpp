@@ -270,7 +270,8 @@ void compileUnicodeSet(std::string name, UnicodeSet && set, PabloCompiler & pc, 
         if (LongestDependenceChainFile) {
             const auto pablo_metrix = computePabloDependencyChainMetrics(function);
             (*LongestDependenceChainFile) << ',' << pablo_metrix.first << ',' << pablo_metrix.second;
-            Module module("tmp", getGlobalContext());
+            LLVMContext TheContext;
+            Module module("tmp", TheContext);
             llvm::Function * func = pc.compile(function, &module);
             const auto llvm_metrix = computeLLVMDependencyChainMetrics(func);
             (*LongestDependenceChainFile) << ',' << llvm_metrix.first << ',' << llvm_metrix.second;
@@ -385,9 +386,9 @@ void writePrecompiledProperties(property_list && properties) {
 Module * generateUCDModule() {
 
     property_list properties;
-
-    PabloCompiler pc(VectorType::get(IntegerType::get(getGlobalContext(), 64), BLOCK_SIZE/64));
-    Module * module = new Module("ucd", getGlobalContext());
+    LLVMContext TheContext;
+    PabloCompiler pc(VectorType::get(IntegerType::get(TheContext, 64), BLOCK_SIZE/64));
+    Module * module = new Module("ucd", TheContext);
     for (PropertyObject * obj : property_object_table) {
         if (EnumeratedPropertyObject * enumObj = dyn_cast<EnumeratedPropertyObject>(obj)) {
             for (const std::string value : *enumObj) {

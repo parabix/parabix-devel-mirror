@@ -40,7 +40,7 @@
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/IRReader/IRReader.h"
 #include "llvm/Linker/Linker.h"
-
+#include "llvm-c/Core.h"
 
 #include <fstream>
 #include <sstream>
@@ -74,6 +74,9 @@
 
 static cl::OptionCategory bGrepOutputOptions("Output Options",
                                              "These options control the output.");
+static cl::opt<bool> SilenceFileErrors("s", cl::desc("Suppress messages for file errors."), cl::init(false),  cl::cat(bGrepOutputOptions));
+
+static cl::opt<bool> SuppressOutput("q", cl::desc("Suppress normal output; set return code only."), cl::init(false),  cl::cat(bGrepOutputOptions));
 
 static cl::opt<bool> NormalizeLineBreaks("normalize-line-breaks", cl::desc("Normalize line breaks to std::endl."), cl::init(false),  cl::cat(bGrepOutputOptions));
 
@@ -98,8 +101,10 @@ void GrepEngine::doGrep(const std::string & fileName, const int fileIdx, bool Co
             return;
         }
     } else {
-        std::cerr << "Error: cannot open " << fileName << " for processing. Skipped.\n";
-        return;
+        if (!SilenceFileErrors) {
+            std::cerr << "Error: cannot open " << fileName << " for processing. Skipped.\n";
+            return;
+        }
     }
 
     const auto fileSize = file_size(file);
@@ -127,7 +132,10 @@ void GrepEngine::doGrep(const std::string & fileName, const int fileIdx, bool Co
             }
             source.close();
         } catch (std::exception & e) {
-            throw std::runtime_error("Boost mmap error: " + fileName + ": " + e.what());
+            if (!SilenceFileErrors) {
+                std::cerr << "Boost mmap error: " + fileName + ": " + e.what() + " Skipped.\n";
+                return;
+            }
         }
     } else {
 #ifdef CUDA_ENABLED 
@@ -224,8 +232,8 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool Count
     isUTF_16 = UTF_16;
     int addrSpace = 0;
     bool CPU_Only = true;
-
-    Module * cpuM = new Module(moduleName+":cpu", getGlobalContext());
+    LLVMContext TheContext;
+    Module * cpuM = new Module(moduleName+":cpu", TheContext);
     IDISA::IDISA_Builder * CPUBuilder = IDISA::GetIDISA_Builder(cpuM); 
     Module * M = cpuM;  
     IDISA::IDISA_Builder * iBuilder = CPUBuilder; 
@@ -233,7 +241,7 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool Count
 #ifdef CUDA_ENABLED 
     setNVPTXOption(); 
     if(codegen::NVPTX){     
-        Module * gpuM = new Module(moduleName+":gpu", getGlobalContext());
+        Module * gpuM = new Module(moduleName+":gpu", TheContext);
         IDISA::IDISA_Builder * GPUBuilder = IDISA::GetIDISA_GPU_Builder(gpuM);
         M = gpuM;
         iBuilder = GPUBuilder;
@@ -463,7 +471,7 @@ re::CC *  GrepEngine::grepCodepoints() {
 }
 
 GrepEngine::~GrepEngine() {
-    delete mEngine;
+//    delete mEngine;
 }
 
 
@@ -547,6 +555,7 @@ extern "C" {
 }
 
 void PrintResult(bool CountOnly, std::vector<size_t> & total_CountOnly){
+    
     if(CountOnly){
         if (!ShowFileNames) {
             for (unsigned i = 0; i < inputFiles.size(); ++i){

@@ -269,7 +269,8 @@ static ExecutionEngine * preprocessEngine = nullptr;
 
 preprocessFunctionType preprocessCodeGen() {
                             
-    Module * M = new Module("preprocess", getGlobalContext());
+    LLVMContext TheContext;
+    Module * M = new Module("preprocess", TheContext);
     IDISA::IDISA_Builder * idb = IDISA::GetIDISA_Builder(M);
 
     PabloFunction * function = PabloFunction::Create("preprocess", 8, 4);
@@ -301,7 +302,7 @@ static ExecutionEngine * editdEngine = nullptr;
 
 editdFunctionType editdCodeGen() {
                             
-    Module * M = new Module("editd", getGlobalContext());
+    Module * M = new Module("editd", TheContext);
     IDISA::IDISA_Builder * idb = IDISA::GetIDISA_Builder(M);
 
     PabloFunction * function = PabloFunction::Create("editd", 4, editDistance+1);
@@ -396,8 +397,6 @@ int main(int argc, char *argv[]) {
     if(pattVector.size()>1)
         run_second_filter(pattern_segs, total_len, 0.15);
 
-    delete editdEngine;
-    delete preprocessEngine;
 
     return 0;
 }

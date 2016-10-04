@@ -332,8 +332,8 @@ typedef void (*u8u16FunctionType)(char * byte_data, size_t filesize);
 static ExecutionEngine * u8u16Engine = nullptr;
 
 u8u16FunctionType u8u16CodeGen(void) {
-                            
-    Module * M = new Module("u8u16", getGlobalContext());
+    LLVMContext TheContext;                            
+    Module * M = new Module("u8u16", TheContext);
     IDISA::IDISA_Builder * idb = IDISA::GetIDISA_Builder(M);
 
     pablo::PabloFunction * function = pablo::u8u16_pablo();
@@ -399,8 +399,6 @@ int main(int argc, char *argv[]) {
     for (unsigned i = 0; i != inputFiles.size(); ++i) {
         u8u16(fn_ptr, inputFiles[i]);
     }
-
-    delete u8u16Engine;
 
     return 0;
 }

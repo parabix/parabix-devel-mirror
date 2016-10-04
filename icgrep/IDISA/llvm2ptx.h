@@ -32,7 +32,7 @@ using namespace llvm;
 
 static int llvm2ptx(std::string IRFilename, std::string PTXFilename) {
 
-  LLVMContext &Context = getGlobalContext();
+  LLVMContext Context;
 
   // Load the module to be compiled...
   SMDiagnostic Err;

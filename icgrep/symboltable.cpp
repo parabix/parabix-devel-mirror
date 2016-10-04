@@ -52,7 +52,9 @@ void process(const std::string & fileName, SymTableFunctionType function) {
 
 int main(int argc, char *argv[]) {
 
-    Module * M = new Module("symboltable", getGlobalContext());
+    LLVMContext TheContext;
+
+    Module * M = new Module("symboltable", TheContext);
 
     IDISA::IDISA_Builder * idb = IDISA::GetIDISA_Builder(M);
 
