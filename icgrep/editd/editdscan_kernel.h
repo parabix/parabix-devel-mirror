@@ -29,8 +29,8 @@ private:
     void generateDoBlockMethod() override;
     llvm::Function * generateScanWordRoutine(llvm::Module * m);
         
-    unsigned mScanwordBitWidth;
     unsigned mEditDistance;
+    unsigned mScanwordBitWidth;
 };
 
 }

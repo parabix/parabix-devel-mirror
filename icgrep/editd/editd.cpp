@@ -77,7 +77,7 @@ void run_second_filter(int total_len, int pattern_segs, float errRate){
     bool exchanged = true;
     while(exchanged){
         exchanged = false;
-        for (int i=0; i<matchList.size()-1; i++){
+        for (unsigned i=0; i<matchList.size()-1; i++){
             if(matchList[i].pos > matchList[i+1].pos){
                 size_t tmp_pos = matchList[i].pos;
                 size_t tmp_dist = matchList[i].dist;
@@ -97,7 +97,7 @@ void run_second_filter(int total_len, int pattern_segs, float errRate){
     int startPos = matchList[0].pos;
     int sum = matchList[0].dist;
     int curIdx = 0;
-    int i = 0;
+    unsigned i = 0;
     int count = 0;
     while (i < matchList.size()){
         if(matchList[i].pos - startPos < total_len * (errRate+1)){
@@ -302,6 +302,7 @@ static ExecutionEngine * editdEngine = nullptr;
 
 editdFunctionType editdCodeGen() {
                             
+    LLVMContext TheContext;
     Module * M = new Module("editd", TheContext);
     IDISA::IDISA_Builder * idb = IDISA::GetIDISA_Builder(M);
 
