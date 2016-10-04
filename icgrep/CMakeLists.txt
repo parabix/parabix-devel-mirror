@@ -1,37 +1,21 @@
-cmake_minimum_required (VERSION 2.8)
+cmake_minimum_required (VERSION 3.2.0)
 
 project (icgrep)
 
 enable_testing()
 # The version number.
 set (icgrep_VERSION_MAJOR 1)
-set (icgrep_VERSION_MINOR 5)
+set (icgrep_VERSION_MINOR 6)
 
 option(ENABLE_MULTIPLEXING "Compiling the Multiplexing Module")
 option(ENABLE_PREGENERATED_UCD_FUNCTIONS "Enable compiling the pregenerated UCD functions")
 option(PRINT_TIMING_INFORMATION "Write compilation and execution timing information to standard error stream")
 
-# configure a header file to pass some of the CMake settings
-# to the source code
-#configure_file (
-#  "${PROJECT_SOURCE_DIR}/icgrepconfig.h.in"
-#  "${PROJECT_BINARY_DIR}/icgrepconfig.h"
-#  )
+find_package(LLVM REQUIRED CONFIG)
 
-# LLVM set up
-#
-# A convenience variable:
-set(LLVM_ROOT "../libllvm" CACHE PATH "Root of LLVM install.")
+message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
+message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
 
-# A bit of a sanity check:
-if( NOT EXISTS ${LLVM_ROOT}/include/llvm )
-message(FATAL_ERROR "LLVM_ROOT (${LLVM_ROOT}) is not a valid LLVM install")
-endif()
-
-# We incorporate the CMake features provided by LLVM:
-set(CMAKE_MODULE_PATH "${CMAKE_MODULE_PATH};${LLVM_ROOT}/share/llvm/cmake;${CMAKE_CURRENT_SOURCE_DIR}/cmake")
-
-include(LLVMConfig)
 
 # Now set the header and library paths:
 include_directories( ${LLVM_INCLUDE_DIRS} )
@@ -54,8 +38,6 @@ endif()
 # binary code (no interpreter):
 set(LLVM_ALL_TARGETS AArch64 AMDGPU ARM BPF CppBackend Hexagon Mips MSP430 NVPTX PowerPC Sparc SystemZ X86 XCore)
 llvm_map_components_to_libnames(REQ_LLVM_LIBRARIES ${LLVM_ALL_TARGETS} mcjit native IRReader Linker)
-
-message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION} in ${LLVM_ROOT_DIR}")
 
 # Check if boost has been installed on this system.
 set(Boost_USE_STATIC_LIBS ON)
