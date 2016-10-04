@@ -31,17 +31,16 @@
 
 static cl::OptionCategory LegacyGrepOptions("A. Standard Grep Options",
                                        "These are standard grep options intended for compatibility with typical grep usage.");
-enum RE_Syntax {FixedStrings, BRE, ERE, PCRE};
 
 #ifdef FUTURE
 static cl::OptionCategory RegexpOptions("Regular Expression Interpretation", "These options control regular expression interpretation");
-static cl::opt<RE_Syntax> RegexpSyntax(cl::desc("Regular expression syntax:"),
+static cl::opt<re::RE_Syntax> RegexpSyntax(cl::desc("Regular expression syntax:"),
     cl::values(
-        clEnumValN(FixedStrings, "F", "Fixed strings, separated by newlines"),
-        clEnumValN(BRE, "G", "Posix basic regular expression (BRE) syntax"),
-        clEnumValN(ERE, "E", "Posix extened regular expression (ERE) syntax"),
-        clEnumValN(PCRE, "P", "Perl-compatible regular expression (PCRE) syntax - default"),
-               clEnumValEnd), cl::cat(LegacyGrepOptions), cl::Grouping, cl::init(PCRE));
+        clEnumValN(re::RE_Syntax::FixedStrings, "F", "Fixed strings, separated by newlines"),
+        clEnumValN(re::RE_Syntax::BRE, "G", "Posix basic regular expression (BRE) syntax"),
+        clEnumValN(re::RE_Syntax::ERE, "E", "Posix extended regular expression (ERE) syntax"),
+        clEnumValN(re::RE_Syntax::PCRE, "P", "Perl-compatible regular expression (PCRE) syntax - default"),
+               clEnumValEnd), cl::cat(LegacyGrepOptions), cl::Grouping, cl::init(re::RE_Syntax::PCRE));
 #endif
 
 static cl::opt<bool> UTF_16("UTF-16", cl::desc("Regular expressions over the UTF-16 representation of Unicode."), cl::cat(LegacyGrepOptions));
@@ -119,7 +118,11 @@ re::RE * get_icgrep_RE() {
     std::vector<re::RE *> REs;
     re::RE * re_ast = nullptr;
     for (unsigned i = 0; i < regexVector.size(); i++) {
+#ifdef FUTURE
+        re_ast = re::RE_Parser::parse(regexVector[i], globalFlags, RegexpSyntax);
+#else
         re_ast = re::RE_Parser::parse(regexVector[i], globalFlags);
+#endif
         REs.push_back(re_ast);
         allREs += regexVector[i] + "\n";
     }
@@ -180,9 +183,13 @@ bool isArgUnwantedForAll(char *argument) {
 }
 // Filters out the command line strings that shouldn't be passed on to Grep
 bool isArgUnwantedForGrep(char *argument) {
+#ifdef FUTURE
+    std::vector<std::string> unwantedFlags = {"-n", "-P", "-G", "-E"};
+#else
     std::vector<std::string> unwantedFlags = {"-n"};
+#endif
 
-    for (unsigned i = 0; i < inputFiles.size(); ++i){
+    for (unsigned i = 0; i < unwantedFlags.size(); ++i){
         if (strcmp(argument, unwantedFlags[i].c_str()) == 0) {
             return true;
         }
@@ -239,11 +246,32 @@ void pipeIcGrepOutputToGrep(int argc, char *argv[]) {
         }
     }
 
+#ifdef FUTURE
+    switch (RegexpSyntax) {
+        case re::RE_Syntax::BRE:
+            grepArguments.append("\"-G\" ");
+            break;
+        case re::RE_Syntax::ERE:
+            grepArguments.append("\"-E\" ");
+            break;
+        case re::RE_Syntax::PCRE:
+            grepArguments.append("\"-P\" ");
+            break;
+        default:
+            //TODO: handle fix string
+            break;
+    }
+#endif
+
     std::string systemCall = argv[0];
     systemCall.append(" ");
     systemCall.append(icGrepArguments);
     systemCall.append(" ");
+#ifdef FUTURE
+    systemCall.append(" | grep --color=always ");
+#else
     systemCall.append(" | grep --color=always -P ");
+#endif
     systemCall.append(grepArguments);
 
     system(systemCall.c_str());
@@ -295,8 +323,8 @@ int main(int argc, char *argv[]) {
     cl::HideUnrelatedOptions(ArrayRef<const cl::OptionCategory *>{&LegacyGrepOptions, &EnhancedGrepOptions, re::re_toolchain_flags(), pablo::pablo_toolchain_flags(), codegen::codegen_flags()});
     cl::ParseCommandLineOptions(argc, argv);
 #ifdef FUTURE
-    if (RegexpSyntax != RE_Syntax::PCRE) {
-        llvm::report_fatal_error("Sorry, only PCRE syntax is fully supported\n.");
+    if (RegexpSyntax == re::RE_Syntax::FixedStrings) {
+        llvm::report_fatal_error("Sorry, FixedStrings syntax is not fully supported\n.");
     }
 #endif
     re::RE * re_ast = get_icgrep_RE();

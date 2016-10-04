@@ -20,6 +20,7 @@
 
 namespace re {
 
+enum RE_Syntax {FixedStrings, BRE, ERE, PCRE};
 enum CharsetOperatorKind
     {intersectOp, setDiffOp, ampChar, hyphenChar, rangeHyphen, posixPropertyOpener, setOpener, setCloser, backSlash, emptyOperator};
 
@@ -43,14 +44,14 @@ class RE_Parser
 {
 public:
 
-    static RE * parse(const std::string &input_string, ModeFlagSet initialFlags);
+    static RE * parse(const std::string &input_string, ModeFlagSet initialFlags, RE_Syntax syntax = RE_Syntax::PCRE);
 
     
     static LLVM_ATTRIBUTE_NORETURN void ParseFailure(std::string errmsg) {
         llvm::report_fatal_error(errmsg);
     }
     
-private:
+protected:
     using NameMap = std::map<std::pair<std::string, std::string>, re::Name *>;
 
     using cursor_t = std::string::const_iterator;
@@ -115,31 +116,33 @@ private:
 
     RE_Parser(const std::string & regular_expression, ModeFlagSet initialFlags);
 
-    RE * parse_RE();
+    virtual RE * parse_RE();
 
-    RE * parse_alt();
+    virtual RE * parse_alt();
 
     RE * parse_seq();
 
-    RE * parse_next_item();
+    virtual RE * parse_next_item();
 
-    RE * parse_group();
+    virtual RE * parse_group();
 
-    RE * extend_item(RE * re);
+    virtual bool isSetEscapeChar(char c);
+
+    virtual RE * extend_item(RE * re);
 
     RE * parseGraphemeBoundary(RE * re);
 
-    std::pair<int, int> parse_range_bound();
+    virtual std::pair<int, int> parse_range_bound();
 
     unsigned parse_int();
 
-    RE * parse_escaped();
+    virtual RE * parse_escaped();
 
-    RE * parseEscapedSet();
+    virtual RE * parseEscapedSet();
 
     codepoint_t parse_utf8_codepoint();
 
-    RE * parsePropertyExpression();
+    virtual RE * parsePropertyExpression();
 
     Name * parseNamePatternExpression();
 
@@ -156,13 +159,14 @@ private:
     Name * createName(std::string && value);
     Name * createName(std::string && prop, std::string && value);
 
+    virtual bool isUnsupportChartsetOperator(char c);
     CharsetOperatorKind getCharsetOperator();
 
     RE * parse_charset();
 
     codepoint_t parse_codepoint();
 
-    codepoint_t parse_escaped_codepoint();
+    virtual codepoint_t parse_escaped_codepoint();
 
     codepoint_t parse_hex_codepoint(int mindigits, int maxdigits);
 
@@ -175,11 +179,12 @@ private:
 
     static std::string canonicalize(const cursor_t begin, const cursor_t end);
 
-private:
+protected:
 
     ModeFlagSet                 fModeFlagSet;
     bool                        fNested;
     bool                        fGraphemeBoundaryPending;
+    bool                        fSupportNonCaptureGroup;
     Cursor                      mCursor;
     unsigned                    mCaptureGroupCount;
     NameMap                     mNameMap;

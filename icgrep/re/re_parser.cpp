@@ -5,6 +5,10 @@
  */
 
 #include <re/re_parser.h>
+#include <re/re_parser_helper.h>
+#include <re/re_parser_pcre.h>
+#include <re/re_parser_ere.h>
+#include <re/re_parser_bre.h>
 #include <re/re_name.h>
 #include <re/re_alt.h>
 #include <re/re_end.h>
@@ -22,26 +26,34 @@
 #include <string>
 #include <algorithm>
 
-// It would probably be best to enforce that {}, [], () must always
-// be balanced.   But legacy syntax allows } and ] to occur as literals
-// in certain contexts (no opening { or [, or immediately after [ or [^ ).
-// Perhaps this define should become a parameter.
-#define LEGACY_UNESCAPED_RBRAK_RBRACE_ALLOWED true
-#define LEGACY_UNESCAPED_HYPHEN_ALLOWED true
-
-
-
-
 namespace re {
     
 
-RE * RE_Parser::parse(const std::string & regular_expression, ModeFlagSet initialFlags) {
-    RE_Parser parser(regular_expression);
-    parser.fModeFlagSet = initialFlags;
-    parser.fNested = false;
-    parser.fGraphemeBoundaryPending = false;
-    parser.mCaptureGroupCount = 0;
-    RE * re = parser.parse_RE();
+RE * RE_Parser::parse(const std::string & regular_expression, ModeFlagSet initialFlags, RE_Syntax syntax) {
+    std::unique_ptr<RE_Parser> parser = nullptr;
+
+    switch (syntax) {
+        case RE_Syntax::PCRE:
+            parser = llvm::make_unique<RE_Parser_PCRE>(regular_expression);
+            break;
+        case RE_Syntax::ERE:
+            parser = llvm::make_unique<RE_Parser_ERE>(regular_expression);
+            break;
+        case RE_Syntax ::BRE:
+            parser = llvm::make_unique<RE_Parser_BRE>(regular_expression);
+            break;
+        default:
+            //TODO handle FixString
+            ParseFailure("Unsupport RE syntax!");
+            break;
+    }
+
+
+    parser->fModeFlagSet = initialFlags;
+    parser->fNested = false;
+    parser->fGraphemeBoundaryPending = false;
+    parser->mCaptureGroupCount = 0;
+    RE * re = parser->parse_RE();
     if (re == nullptr) {
         ParseFailure("An unexpected parsing error occurred!");
     }
@@ -52,6 +64,7 @@ inline RE_Parser::RE_Parser(const std::string & regular_expression)
     : fModeFlagSet(0)
     , fNested(false)
     , fGraphemeBoundaryPending(false)
+    , fSupportNonCaptureGroup(false)
     , mCursor(regular_expression)
     , mCaptureGroupCount(0)
     {
@@ -163,7 +176,7 @@ RE * RE_Parser::parse_next_item() {
 RE * RE_Parser::parse_group() {
     const ModeFlagSet modeFlagSet = fModeFlagSet;
     RE * group_expr = nullptr;
-    if (*mCursor == '?') {
+    if (*mCursor == '?' && fSupportNonCaptureGroup) {
         switch (*++mCursor) {
             case '#':  // comment
                 while (*++mCursor != ')');
@@ -301,9 +314,7 @@ inline RE * RE_Parser::extend_item(RE * re) {
 
 inline std::pair<int, int> RE_Parser::parse_range_bound() {
     int lower_bound = 0, upper_bound = 0;
-    if (*++mCursor == ',') {
-        ++mCursor;
-    } else {
+    if (*++mCursor != ',') {
         lower_bound = parse_int();
     }
     if (*mCursor == '}') {
@@ -331,11 +342,10 @@ unsigned RE_Parser::parse_int() {
 }
 
 
-#define bit3C(x) (1ULL << ((x) - 0x3C))
 const uint64_t setEscapeCharacters = bit3C('b') | bit3C('p') | bit3C('q') | bit3C('d') | bit3C('w') | bit3C('s') | bit3C('<') | bit3C('>') |
                                      bit3C('B') | bit3C('P') | bit3C('Q') | bit3C('D') | bit3C('W') | bit3C('S') | bit3C('N') | bit3C('X');
 
-inline bool isSetEscapeChar(char c) {
+inline bool RE_Parser::isSetEscapeChar(char c) {
     return c >= 0x3C && c <= 0x7B && ((setEscapeCharacters >> (c - 0x3C)) & 1) == 1;
 }
                                  
@@ -581,7 +591,14 @@ Name * RE_Parser::parseNamePatternExpression(){
     return nullptr;
 }
 
+inline bool RE_Parser::isUnsupportChartsetOperator(char c) {
+    return false;
+}
+
 CharsetOperatorKind RE_Parser::getCharsetOperator() {
+    if (isUnsupportChartsetOperator(*mCursor)) {
+        return emptyOperator;
+    }
     switch (*mCursor) {
         case '&':
             ++mCursor;
@@ -875,8 +892,11 @@ codepoint_t RE_Parser::parse_escaped_codepoint() {
             return parse_hex_codepoint(8,8);  // ICU compatibility
         default:
             // Escaped letters should be reserved for special functions.
-            if (((*mCursor >= 'A') && (*mCursor <= 'Z')) || ((*mCursor >= 'a') && (*mCursor <= 'z')))
-                ParseFailure("Undefined or unsupported escape sequence");
+            if (((*mCursor >= 'A') && (*mCursor <= 'Z')) || ((*mCursor >= 'a') && (*mCursor <= 'z'))){
+                //Escape unknow letter will be parse as normal letter
+                return parse_utf8_codepoint();
+                //ParseFailure("Undefined or unsupported escape sequence");
+            }
             else if ((*mCursor < 0x20) || (*mCursor >= 0x7F))
                 ParseFailure("Illegal escape sequence");
             else return static_cast<codepoint_t>(*mCursor++);
