@@ -25,7 +25,10 @@
 #include <llvm/Support/raw_ostream.h>
 
 #include <object_cache.h>
+
+#ifdef CUDA_ENABLED
 #include <IDISA/llvm2ptx.h>
+#endif
  
 using namespace llvm;
 

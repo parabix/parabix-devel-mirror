@@ -84,7 +84,7 @@ public:
     
     SingleBlockBuffer(IDISA::IDISA_Builder * b, StreamSetType ss_type) :
     StreamSetBuffer(BufferKind::BlockBuffer, b, ss_type) {
-        mStreamSetStructType = StructType::get(getGlobalContext(),
+        mStreamSetStructType = StructType::get(iBuilder->getContext(), 
                                                std::vector<Type *>({iBuilder->getSizeTy(), 
                                                                     iBuilder->getSizeTy(), 
                                                                     iBuilder->getInt8Ty(), 
@@ -105,7 +105,7 @@ public:
         StreamSetBuffer(BufferKind::ExternalFileBuffer, b, ss_type) {
             mBufferBlocks = 0;
             mAddrSpace = AddressSpace;
-            mStreamSetStructType = StructType::get(getGlobalContext(),
+            mStreamSetStructType = StructType::get(iBuilder->getContext(), 
                                                    std::vector<Type *>({iBuilder->getSizeTy(), 
                                                                         iBuilder->getSizeTy(), 
                                                                         iBuilder->getInt8Ty(), 
@@ -134,7 +134,7 @@ public:
             if (((bufferBlocks - 1) & bufferBlocks) != 0) {
                 throw std::runtime_error("CircularStreamSetBuffer: number of blocks must be a power of 2!");
             }
-            mStreamSetStructType = StructType::get(getGlobalContext(), 
+            mStreamSetStructType = StructType::get(iBuilder->getContext(), 
                                                    std::vector<Type *>({iBuilder->getSizeTy(), 
                                                                         iBuilder->getSizeTy(), 
                                                                         iBuilder->getInt8Ty(), 

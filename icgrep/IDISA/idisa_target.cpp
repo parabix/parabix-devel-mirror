@@ -20,7 +20,7 @@ IDISA_Builder * GetIDISA_Builder(Module * mod) {
     if (theBlockSize == 0) {  // No BlockSize override: use processor SIMD width
         theBlockSize = hasAVX2 ? 256 : 128;
     }
-    Type * bitBlockType = VectorType::get(IntegerType::get(getGlobalContext(), 64), theBlockSize/64);
+    Type * bitBlockType = VectorType::get(IntegerType::get(mod->getContext(), 64), theBlockSize/64);
     
     int blockSize = bitBlockType->isIntegerTy() ? cast<IntegerType>(bitBlockType)->getIntegerBitWidth() : cast<VectorType>(bitBlockType)->getBitWidth();
     if (blockSize >= 256) {

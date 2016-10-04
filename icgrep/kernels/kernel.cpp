@@ -48,7 +48,6 @@ void KernelBuilder::prepareKernel() {
     addScalar(iBuilder->getInt1Ty(), terminationSignal);
     int streamSetNo = 0;
     for (unsigned i = 0; i < mStreamSetInputs.size(); i++) {
-        size_t bufferSize = mStreamSetInputBuffers[i]->getBufferSize() * blockSize;
         if (!(mStreamSetInputBuffers[i]->getBufferStreamSetType() == mStreamSetInputs[i].ssType)) {
              llvm::report_fatal_error("Kernel preparation: Incorrect input buffer type");
         }
@@ -77,13 +76,13 @@ void KernelBuilder::prepareKernel() {
     for (auto binding : mInternalScalars) {
         addScalar(binding.scalarType, binding.scalarName);
     }
-    mKernelStateType = StructType::create(getGlobalContext(), mKernelFields, mKernelName);
+    mKernelStateType = StructType::create(iBuilder->getContext(), mKernelFields, mKernelName);
 }
 
 std::unique_ptr<Module> KernelBuilder::createKernelModule(std::vector<StreamSetBuffer *> input_buffers, std::vector<StreamSetBuffer *> output_buffers) {
     Module * saveModule = iBuilder->getModule();
     IDISA::IDISA_Builder::InsertPoint savePoint = iBuilder->saveIP();
-    std::unique_ptr<Module> theModule = make_unique<Module>(mKernelName + "_" + iBuilder->getBitBlockTypeName(), getGlobalContext());
+    std::unique_ptr<Module> theModule = make_unique<Module>(mKernelName + "_" + iBuilder->getBitBlockTypeName(), iBuilder->getContext());
     Module * m = theModule.get();
     iBuilder->setModule(m);
     generateKernel(input_buffers, output_buffers);
@@ -221,7 +220,7 @@ void KernelBuilder::setScalarField(Value * self, std::string fieldName, Value * 
 Value * KernelBuilder::getLogicalSegmentNo(Value * self) { 
     Value * ptr = iBuilder->CreateGEP(self, {iBuilder->getInt32(0), getScalarIndex(logicalSegmentNoScalar)});
     LoadInst * segNo = iBuilder->CreateAlignedLoad(ptr, sizeof(size_t));
-    segNo->setOrdering(Acquire);
+    segNo->setOrdering(AtomicOrdering::Acquire);
     return segNo;
 }
 
@@ -241,7 +240,7 @@ Value * KernelBuilder::getTerminationSignal(Value * self) {
 
 void KernelBuilder::setLogicalSegmentNo(Value * self, Value * newCount) {
     Value * ptr = iBuilder->CreateGEP(self, {iBuilder->getInt32(0), getScalarIndex(logicalSegmentNoScalar)});
-    iBuilder->CreateAlignedStore(newCount, ptr, sizeof(size_t))->setOrdering(Release);
+    iBuilder->CreateAlignedStore(newCount, ptr, sizeof(size_t))->setOrdering(AtomicOrdering::Release);
 }
 
 void KernelBuilder::setProcessedItemCount(Value * self, Value * newCount) {
@@ -395,10 +394,10 @@ Function * KernelBuilder::generateThreadFunction(std::string name){
     Value * waitCondTest = ConstantInt::get(int1ty, 1);   
     for (unsigned i = 0; i < outbufProducerPtrs.size(); i++) {
         LoadInst * producerPos = iBuilder->CreateAlignedLoad(outbufProducerPtrs[i], sizeof(size_t));
-        producerPos->setOrdering(Acquire);
+        producerPos->setOrdering(AtomicOrdering::Acquire);
         // iBuilder->CallPrintInt(name + ":output producerPos", producerPos);
         LoadInst * consumerPos = iBuilder->CreateAlignedLoad(outbufConsumerPtrs[i], sizeof(size_t));
-        consumerPos->setOrdering(Acquire);
+        consumerPos->setOrdering(AtomicOrdering::Acquire);
         // iBuilder->CallPrintInt(name + ":output consumerPos", consumerPos);
         waitCondTest = iBuilder->CreateAnd(waitCondTest, iBuilder->CreateICmpULE(producerPos, iBuilder->CreateAdd(consumerPos, bufferSize)));
     }
@@ -414,10 +413,10 @@ Function * KernelBuilder::generateThreadFunction(std::string name){
     waitCondTest = ConstantInt::get(int1ty, 1); 
     for (unsigned i = 0; i < inbufProducerPtrs.size(); i++) {
         LoadInst * producerPos = iBuilder->CreateAlignedLoad(inbufProducerPtrs[i], sizeof(size_t));
-        producerPos->setOrdering(Acquire);
+        producerPos->setOrdering(AtomicOrdering::Acquire);
         // iBuilder->CallPrintInt(name + ":input producerPos", producerPos);
         LoadInst * consumerPos = iBuilder->CreateAlignedLoad(inbufConsumerPtrs[i], sizeof(size_t));
-        consumerPos->setOrdering(Acquire);
+        consumerPos->setOrdering(AtomicOrdering::Acquire);
         // iBuilder->CallPrintInt(name + ":input consumerPos", consumerPos);
         waitCondTest = iBuilder->CreateAnd(waitCondTest, iBuilder->CreateICmpULE(iBuilder->CreateAdd(consumerPos, requiredSize), producerPos));
     }
@@ -428,10 +427,10 @@ Function * KernelBuilder::generateThreadFunction(std::string name){
     
     LoadInst * endSignal = iBuilder->CreateAlignedLoad(endSignalPtrs[0], sizeof(size_t));
     // iBuilder->CallPrintInt(name + ":endSignal", endSignal);
-    endSignal->setOrdering(Acquire);
+    endSignal->setOrdering(AtomicOrdering::Acquire);
     for (unsigned i = 1; i < endSignalPtrs.size(); i++){
         LoadInst * endSignal_next = iBuilder->CreateAlignedLoad(endSignalPtrs[i], sizeof(size_t));
-        endSignal_next->setOrdering(Acquire);
+        endSignal_next->setOrdering(AtomicOrdering::Acquire);
         iBuilder->CreateAnd(endSignal, endSignal_next);
     }
         
@@ -443,12 +442,12 @@ Function * KernelBuilder::generateThreadFunction(std::string name){
 
     for (unsigned i = 0; i < inbufConsumerPtrs.size(); i++) {
         Value * consumerPos = iBuilder->CreateAdd(iBuilder->CreateLoad(inbufConsumerPtrs[i]), segSize);
-        iBuilder->CreateAlignedStore(consumerPos, inbufConsumerPtrs[i], sizeof(size_t))->setOrdering(Release);
+        iBuilder->CreateAlignedStore(consumerPos, inbufConsumerPtrs[i], sizeof(size_t))->setOrdering(AtomicOrdering::Release);
     }
     
     Value * produced = getProducedItemCount(self);
     for (unsigned i = 0; i < outbufProducerPtrs.size(); i++) {
-        iBuilder->CreateAlignedStore(produced, outbufProducerPtrs[i], sizeof(size_t))->setOrdering(Release);
+        iBuilder->CreateAlignedStore(produced, outbufProducerPtrs[i], sizeof(size_t))->setOrdering(AtomicOrdering::Release);
     }
     
     Value * earlyEndSignal = getTerminationSignal(self);
@@ -486,12 +485,10 @@ Function * KernelBuilder::generateThreadFunction(std::string name){
 
     for (unsigned i = 0; i < inbufConsumerPtrs.size(); i++) {
         Value * consumerPos = iBuilder->CreateAdd(iBuilder->CreateLoad(inbufConsumerPtrs[i]), remainingBytes);
-        iBuilder->CreateAlignedStore(consumerPos, inbufConsumerPtrs[i], sizeof(size_t))->setOrdering(Release);
+        iBuilder->CreateAlignedStore(consumerPos, inbufConsumerPtrs[i], sizeof(size_t))->setOrdering(AtomicOrdering::Release);
     }
     for (unsigned i = 0; i < outbufProducerPtrs.size(); i++) {
-        
-        Value * produced = iBuilder->CreateAdd(iBuilder->CreateLoad(outbufProducerPtrs[i]), remainingBytes);
-        iBuilder->CreateAlignedStore(producerPos, outbufProducerPtrs[i], sizeof(size_t))->setOrdering(Release);
+        iBuilder->CreateAlignedStore(producerPos, outbufProducerPtrs[i], sizeof(size_t))->setOrdering(AtomicOrdering::Release);
     }
 
     for (unsigned i = 0; i < mStreamSetOutputs.size(); i++) {

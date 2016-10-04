@@ -33,7 +33,7 @@ Function * generateSegmentParallelPipelineThreadFunction(std::string name, IDISA
     Value * const input = &*(args++);
     input->setName("input");
 
-    int threadNum = codegen::ThreadNum;
+    unsigned threadNum = codegen::ThreadNum;
 
      // Create the basic blocks for the thread function.
     BasicBlock * entryBlock = BasicBlock::Create(iBuilder->getContext(), "entry", threadFunc, 0);
@@ -135,7 +135,7 @@ Function * generateSegmentParallelPipelineThreadFunction(std::string name, IDISA
 
 void generateSegmentParallelPipeline(IDISA::IDISA_Builder * iBuilder, std::vector<KernelBuilder *> kernels, std::vector<Value *> instances, Value * fileSize) {
     
-    int threadNum = codegen::ThreadNum;
+    unsigned threadNum = codegen::ThreadNum;
 
     Module * m = iBuilder->getModule();
 

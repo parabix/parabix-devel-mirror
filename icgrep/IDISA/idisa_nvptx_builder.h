@@ -17,7 +17,7 @@ class IDISA_NVPTX20_Builder : public IDISA_I64_Builder {
 public:
     
     IDISA_NVPTX20_Builder(Module * m, int groupSize)
-    : IDISA_I64_Builder(m, VectorType::get(IntegerType::get(getGlobalContext(), 64), 1))
+    : IDISA_I64_Builder(m, VectorType::get(IntegerType::get(m->getContext(), 64), 1))
     , groupThreads(groupSize)
     {
         mStride = mBitBlockWidth * groupSize;
