@@ -141,6 +141,10 @@ void s2pKernel::generateFinalBlockMethod() {
     iBuilder->CreateCondBr(emptyBlockCond, finalEmptyBlock, finalPartialBlock);
     iBuilder->SetInsertPoint(finalPartialBlock);
     iBuilder->CreateCall(doBlockFunction, {self});
+    /* Adjust the produced item count */
+    Value * produced = getProducedItemCount(self);
+    produced = iBuilder->CreateSub(produced, ConstantInt::get(iBuilder->getSizeTy(), iBuilder->getStride()));
+    setProducedItemCount(self, iBuilder->CreateAdd(produced, remainingBytes));
     
     iBuilder->CreateBr(exitBlock);
     
@@ -169,6 +173,9 @@ void s2pKernel::generateDoBlockLogic(Value * self, Value * blockNo) {
     for (unsigned j = 0; j < 8; ++j) {
         iBuilder->CreateBlockAlignedStore(p_bitblock[j], basisBitsBlock_ptr, {iBuilder->getInt32(0), iBuilder->getInt32(j)});
     }
+    Value * produced = getProducedItemCount(self);
+    produced = iBuilder->CreateAdd(produced, ConstantInt::get(iBuilder->getSizeTy(), iBuilder->getStride()));
+    setProducedItemCount(self, produced);    
 }
     
 void s2pKernel::generateDoBlockMethod() {

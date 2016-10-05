@@ -50,7 +50,14 @@ void PabloKernel::prepareKernel() {
 void PabloKernel::generateDoBlockMethod() {
     IDISA::IDISA_Builder::InsertPoint savePoint = iBuilder->saveIP();
     Module * m = iBuilder->getModule();
-    pablo_compiler->compile(m->getFunction(mKernelName + doBlock_suffix));
+    Function * doBlockFunction = m->getFunction(mKernelName + doBlock_suffix);
+    pablo_compiler->compile(doBlockFunction);
+    Function::arg_iterator args = doBlockFunction->arg_begin();
+    Value * self = &*(args);
+    Value * produced = getProducedItemCount(self);
+    produced = iBuilder->CreateAdd(produced, ConstantInt::get(iBuilder->getSizeTy(), iBuilder->getStride()));
+    setProducedItemCount(self, produced);
+    iBuilder->CreateRetVoid();
     iBuilder->restoreIP(savePoint);
 }
 
@@ -73,6 +80,10 @@ void PabloKernel::generateFinalBlockMethod() {
     setScalarField(self, "EOFbit", iBuilder->bitblock_set_bit(remaining));
     setScalarField(self, "EOFmask", iBuilder->bitblock_mask_from(remaining));
     iBuilder->CreateCall(doBlockFunction, doBlockArgs);
+    /* Adjust the produced item count */
+    Value * produced = getProducedItemCount(self);
+    produced = iBuilder->CreateSub(produced, ConstantInt::get(iBuilder->getSizeTy(), iBuilder->getStride()));
+    setProducedItemCount(self, iBuilder->CreateAdd(produced, remaining));
     iBuilder->CreateRetVoid();
     iBuilder->restoreIP(savePoint);
 }

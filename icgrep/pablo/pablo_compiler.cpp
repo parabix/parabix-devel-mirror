@@ -91,7 +91,6 @@ void PabloCompiler::compile(Function * doBlockFunction) {
         }
         iBuilder->CreateBlockAlignedStore(f->second, outputSet_ptr, {iBuilder->getInt32(0), iBuilder->getInt32(j)});
     }
-    iBuilder->CreateRetVoid();
     
     #ifdef PRINT_TIMING_INFORMATION
     const timestamp_t pablo_compilation_end = read_cycle_counter();

@@ -165,14 +165,38 @@ void KernelBuilder::generateDoSegmentMethod() {
     BasicBlock * blockLoopBody = BasicBlock::Create(iBuilder->getContext(), "blockLoopBody", doSegmentFunction, 0);
     BasicBlock * blocksDone = BasicBlock::Create(iBuilder->getContext(), "blocksDone", doSegmentFunction, 0);
     Type * const size_ty = iBuilder->getSizeTy();
-    Value * stride = ConstantInt::get(size_ty, iBuilder->getStride());
+    Constant * stride = ConstantInt::get(size_ty, iBuilder->getStride());
     Value * strideBlocks = ConstantInt::get(size_ty, iBuilder->getStride() / iBuilder->getBitBlockWidth());
     
     Function::arg_iterator args = doSegmentFunction->arg_begin();
     Value * self = &*(args++);
     Value * blocksToDo = &*(args);
-
     Value * segmentNo = getLogicalSegmentNo(self);
+    std::vector<Value *> inbufProducerPtrs;
+    
+    for (unsigned i = 0; i < mStreamSetInputs.size(); i++) {
+        Value * basePtr = getStreamSetBasePtr(self, mStreamSetInputs[i].ssName);
+        inbufProducerPtrs.push_back(mStreamSetInputBuffers[i]->getProducerPosPtr(basePtr));
+    }
+    
+    /* Determine the actually available data examining all input stream sets. */
+    LoadInst * producerPos = iBuilder->CreateAlignedLoad(inbufProducerPtrs[0], sizeof(size_t));
+    producerPos->setOrdering(AtomicOrdering::Acquire);
+    Value * availablePos = producerPos;
+    for (unsigned i = 1; i < inbufProducerPtrs.size(); i++) {
+        LoadInst * producerPos = iBuilder->CreateAlignedLoad(inbufProducerPtrs[i], sizeof(size_t));
+        producerPos->setOrdering(AtomicOrdering::Acquire);
+        /* Set the available position to be the minimum of availablePos and producerPos. */
+        availablePos = iBuilder->CreateSelect(iBuilder->CreateICmpULT(availablePos, producerPos), availablePos, producerPos);
+    }
+    Value * processed = getProcessedItemCount(self);
+    Value * itemsAvail = iBuilder->CreateSub(availablePos, processed);
+#ifndef NDEBUG
+    iBuilder->CallPrintInt(mKernelName + "_itemsAvail", itemsAvail);
+#endif
+    Value * blocksAvail = iBuilder->CreateUDiv(itemsAvail, stride);
+    /* Adjust the number of full blocks to do, based on the available data, if necessary. */
+    blocksToDo = iBuilder->CreateSelect(iBuilder->CreateICmpULT(blocksToDo, blocksAvail), blocksToDo, blocksAvail);
     iBuilder->CreateBr(blockLoopCond);
 
     iBuilder->SetInsertPoint(blockLoopCond);
@@ -189,7 +213,18 @@ void KernelBuilder::generateDoSegmentMethod() {
     iBuilder->CreateBr(blockLoopCond);
     
     iBuilder->SetInsertPoint(blocksDone);
-    setProcessedItemCount(self, iBuilder->CreateAdd(getProcessedItemCount(self), iBuilder->CreateMul(blocksToDo, stride)));
+    processed = iBuilder->CreateAdd(processed, iBuilder->CreateMul(blocksToDo, stride));
+    setProcessedItemCount(self, processed);
+    Value * produced = getProducedItemCount(self);
+#ifndef NDEBUG
+    iBuilder->CallPrintInt(mKernelName + "_produced", produced);
+#endif
+    for (unsigned i = 0; i < mStreamSetOutputs.size(); i++) {
+        Value * basePtr = getStreamSetBasePtr(self, mStreamSetOutputs[i].ssName);
+        Value * producerPosPtr = mStreamSetOutputBuffers[i]->getProducerPosPtr(basePtr);
+        iBuilder->CreateAlignedStore(produced, producerPosPtr, sizeof(size_t))->setOrdering(AtomicOrdering::Release);
+    }
+
     // Must be the last action, for synchronization.
     setLogicalSegmentNo(self, iBuilder->CreateAdd(segmentNo, ConstantInt::get(size_ty, 1)));
 
