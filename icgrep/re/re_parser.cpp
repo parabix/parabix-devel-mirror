@@ -939,7 +939,7 @@ codepoint_t RE_Parser::parse_hex_codepoint(int mindigits, int maxdigits) {
     return value;
 }
 
-inline Name * RE_Parser::createCC(const codepoint_t cp) {
+Name * RE_Parser::createCC(const codepoint_t cp) {
     CC * cc = nullptr;
     if (fModeFlagSet & CASE_INSENSITIVE_MODE_FLAG) {
         cc = makeCC();
