@@ -60,7 +60,7 @@ RE * RE_Parser::parse(const std::string & regular_expression, ModeFlagSet initia
     return re;
 }
 
-inline RE_Parser::RE_Parser(const std::string & regular_expression)
+RE_Parser::RE_Parser(const std::string & regular_expression)
     : fModeFlagSet(0)
     , fNested(false)
     , fGraphemeBoundaryPending(false)
@@ -100,7 +100,7 @@ RE * RE_Parser::parse_alt() {
     return makeAlt(alt.begin(), alt.end());
 }
 
-inline RE * RE_Parser::parse_seq() {
+RE * RE_Parser::parse_seq() {
     std::vector<RE *> seq;
     for (;;) {
         RE * re = parse_next_item();
@@ -268,7 +268,7 @@ RE * RE_Parser::parse_group() {
     return group_expr;
 }
 
-inline RE * RE_Parser::extend_item(RE * re) {
+RE * RE_Parser::extend_item(RE * re) {
     if (LLVM_LIKELY(mCursor.more())) {
         int lb = 0, ub = 0;
         bool hasRep = true;
@@ -312,7 +312,7 @@ inline RE * RE_Parser::extend_item(RE * re) {
     return re;
 }
 
-inline std::pair<int, int> RE_Parser::parse_range_bound() {
+std::pair<int, int> RE_Parser::parse_range_bound() {
     int lower_bound = 0, upper_bound = 0;
     if (*++mCursor != ',') {
         lower_bound = parse_int();
@@ -345,12 +345,12 @@ unsigned RE_Parser::parse_int() {
 const uint64_t setEscapeCharacters = bit3C('b') | bit3C('p') | bit3C('q') | bit3C('d') | bit3C('w') | bit3C('s') | bit3C('<') | bit3C('>') |
                                      bit3C('B') | bit3C('P') | bit3C('Q') | bit3C('D') | bit3C('W') | bit3C('S') | bit3C('N') | bit3C('X');
 
-inline bool RE_Parser::isSetEscapeChar(char c) {
+bool RE_Parser::isSetEscapeChar(char c) {
     return c >= 0x3C && c <= 0x7B && ((setEscapeCharacters >> (c - 0x3C)) & 1) == 1;
 }
                                  
 
-inline RE * RE_Parser::parse_escaped() {
+RE * RE_Parser::parse_escaped() {
     
     if (isSetEscapeChar(*mCursor)) {
         return parseEscapedSet();
@@ -591,7 +591,7 @@ Name * RE_Parser::parseNamePatternExpression(){
     return nullptr;
 }
 
-inline bool RE_Parser::isUnsupportChartsetOperator(char c) {
+bool RE_Parser::isUnsupportChartsetOperator(char c) {
     return false;
 }
 
@@ -950,7 +950,7 @@ Name * RE_Parser::createCC(const codepoint_t cp) {
     return mMemoizer.memoize(cc);
 }
 
-inline void RE_Parser::insert(CC * cc, const codepoint_t cp) {
+void RE_Parser::insert(CC * cc, const codepoint_t cp) {
     if (fModeFlagSet & CASE_INSENSITIVE_MODE_FLAG) {
         caseInsensitiveInsert(cc, cp);
     } else {
@@ -958,7 +958,7 @@ inline void RE_Parser::insert(CC * cc, const codepoint_t cp) {
     }
 }
 
-inline void RE_Parser::insert_range(CC * cc, const codepoint_t lo, const codepoint_t hi) {
+void RE_Parser::insert_range(CC * cc, const codepoint_t lo, const codepoint_t hi) {
     if (fModeFlagSet & CASE_INSENSITIVE_MODE_FLAG) {
         caseInsensitiveInsertRange(cc, lo, hi);
     } else {
@@ -995,19 +995,19 @@ RE * RE_Parser::makeWordEnd() {
     return makeNegativeLookAheadAssertion(wordC);
 }
 
-inline Name * RE_Parser::makeDigitSet() {
+Name * RE_Parser::makeDigitSet() {
     return mMemoizer.memoize(createName("nd"));
 }
 
-inline Name * RE_Parser::makeAlphaNumeric() {
+Name * RE_Parser::makeAlphaNumeric() {
     return mMemoizer.memoize(createName("alnum"));
 }
 
-inline Name * RE_Parser::makeWhitespaceSet() {
+Name * RE_Parser::makeWhitespaceSet() {
     return mMemoizer.memoize(createName("whitespace"));
 }
 
-inline Name * RE_Parser::makeWordSet() {
+Name * RE_Parser::makeWordSet() {
     return mMemoizer.memoize(createName("word"));
 }
 
