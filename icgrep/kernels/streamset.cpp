@@ -20,7 +20,7 @@ llvm::Type * StreamSetType::getStreamSetBlockType(IDISA::IDISA_Builder * iBuilde
 }
 
 llvm::PointerType * StreamSetBuffer::getStreamBufferPointerType() {
-    return PointerType::get(mStreamSetType.getStreamSetBlockType(iBuilder), 0);
+    return PointerType::get(mStreamSetType.getStreamSetBlockType(iBuilder), mAddrSpace);
 }
 
 llvm::PointerType * StreamSetBuffer::getStreamSetStructPointerType() {
@@ -98,10 +98,6 @@ void ExternalFileBuffer::setStreamSetBuffer(llvm::Value * ptr, Value * fileSize)
     iBuilder->CreateStore(ConstantInt::get(size_ty, 0), iBuilder->CreateGEP(mStreamSetStructPtr, {iBuilder->getInt32(0), iBuilder->getInt32(iConsumer_pos)}));
     iBuilder->CreateStore(ConstantInt::get(int8ty, 1), iBuilder->CreateGEP(mStreamSetStructPtr, {iBuilder->getInt32(0), iBuilder->getInt32(iEnd_of_input)}));
     iBuilder->CreateStore(mStreamSetBufferPtr, iBuilder->CreateGEP(mStreamSetStructPtr, {iBuilder->getInt32(0), iBuilder->getInt32(iBuffer_ptr)}));
-}
-
-llvm::PointerType * ExternalFileBuffer::getStreamBufferPointerType() {
-    return PointerType::get(mStreamSetType.getStreamSetBlockType(iBuilder), mAddrSpace);
 }
 
 llvm::Value * ExternalFileBuffer::allocateBuffer() {

@@ -73,7 +73,11 @@ void deletionKernel::generateDoBlockMethod() {
     }
     Value * counts = partial_sum_popcount(iBuilder, mDeletionFieldWidth, iBuilder->simd_not(del_mask));
     iBuilder->CreateBlockAlignedStore(iBuilder->bitCast(counts), delCountBlock, {iBuilder->getInt32(0), iBuilder->getInt32(0)});
-    
+    /* Stream deletion has only been applied within fields; the actual number of data items
+     * has not yet changed.   */
+    Value * produced = getProducedItemCount(self);
+    produced = iBuilder->CreateAdd(produced, ConstantInt::get(iBuilder->getSizeTy(), iBuilder->getStride()));
+    setProducedItemCount(self, produced);    
     iBuilder->CreateRetVoid();
     iBuilder->restoreIP(savePoint);
 }
@@ -97,6 +101,11 @@ void deletionKernel::generateFinalBlockMethod() {
     Value * const delmaskVal = iBuilder->CreateBlockAlignedLoad(delmaskPtr);
     iBuilder->CreateBlockAlignedStore(iBuilder->CreateOr(EOF_del, delmaskVal), delmaskPtr);
     iBuilder->CreateCall(doBlockFunction, {self});
+    /* Adjust the produced item count */
+    Value * produced = getProducedItemCount(self);
+    produced = iBuilder->CreateSub(produced, ConstantInt::get(iBuilder->getSizeTy(), iBuilder->getStride()));
+    setProducedItemCount(self, iBuilder->CreateAdd(produced, remainingBytes));
+
     iBuilder->CreateRetVoid();
     iBuilder->restoreIP(savePoint);
 }

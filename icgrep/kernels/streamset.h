@@ -35,7 +35,7 @@ public:
     inline BufferKind getBufferKind() const {return mBufferKind;}
     inline StreamSetType& getBufferStreamSetType() {return mStreamSetType;}
 
-    virtual llvm::PointerType * getStreamBufferPointerType();
+    llvm::PointerType * getStreamBufferPointerType();
 
     virtual size_t getBufferSize() = 0;
     
@@ -63,9 +63,16 @@ public:
     virtual llvm::Value * getStreamSetStructPtr();
     
 protected:
-    StreamSetBuffer(BufferKind k, IDISA::IDISA_Builder * b, StreamSetType ss_type) :
-        mBufferKind(k), iBuilder(b), mStreamSetType(ss_type), mBufferBlocks(1), mAddrSpace(0), mStreamSetBufferPtr(nullptr) {
+    StreamSetBuffer(BufferKind k, IDISA::IDISA_Builder * b, StreamSetType ss_type, int AddressSpace = 0) :
+        mBufferKind(k), iBuilder(b), mStreamSetType(ss_type), mBufferBlocks(1), mAddrSpace(AddressSpace), mStreamSetBufferPtr(nullptr) {
+            mStreamSetStructType =
+                StructType::get(iBuilder->getContext(),
+                                std::vector<Type *>({iBuilder->getSizeTy(),
+                                                    iBuilder->getSizeTy(),
+                                                    iBuilder->getInt8Ty(),
+                                                    PointerType::get(mStreamSetType.getStreamSetBlockType(iBuilder), AddressSpace)}));
     }
+    
     const BufferKind       mBufferKind;
     IDISA::IDISA_Builder * iBuilder;
     StreamSetType mStreamSetType;
@@ -74,7 +81,6 @@ protected:
     llvm::Value * mStreamSetBufferPtr;
     llvm::Value * mStreamSetStructPtr;
     llvm::Type * mStreamSetStructType;
-
 };   
     
 
@@ -83,14 +89,7 @@ public:
     static inline bool classof(const StreamSetBuffer * b) {return b->getBufferKind() == BufferKind::BlockBuffer;}
     
     SingleBlockBuffer(IDISA::IDISA_Builder * b, StreamSetType ss_type) :
-    StreamSetBuffer(BufferKind::BlockBuffer, b, ss_type) {
-        mStreamSetStructType = StructType::get(iBuilder->getContext(), 
-                                               std::vector<Type *>({iBuilder->getSizeTy(), 
-                                                                    iBuilder->getSizeTy(), 
-                                                                    iBuilder->getInt8Ty(), 
-                                                                    getStreamBufferPointerType()}));
-
-    }
+    StreamSetBuffer(BufferKind::BlockBuffer, b, ss_type, 0) { }
     
     size_t getBufferSize() override;
     llvm::Value * allocateBuffer() override;
@@ -101,17 +100,8 @@ class ExternalFileBuffer : public StreamSetBuffer {
 public:
     static inline bool classof(const StreamSetBuffer * b) {return b->getBufferKind() == BufferKind::ExternalFileBuffer;}
     
-    ExternalFileBuffer(IDISA::IDISA_Builder * b, StreamSetType ss_type, unsigned AddressSpace = 0) :
-        StreamSetBuffer(BufferKind::ExternalFileBuffer, b, ss_type) {
-            mBufferBlocks = 0;
-            mAddrSpace = AddressSpace;
-            mStreamSetStructType = StructType::get(iBuilder->getContext(), 
-                                                   std::vector<Type *>({iBuilder->getSizeTy(), 
-                                                                        iBuilder->getSizeTy(), 
-                                                                        iBuilder->getInt8Ty(), 
-                                                                        getStreamBufferPointerType()}));
-        }
-    llvm::PointerType * getStreamBufferPointerType() override;
+    ExternalFileBuffer(IDISA::IDISA_Builder * b, StreamSetType ss_type, int AddressSpace = 0) :
+        StreamSetBuffer(BufferKind::ExternalFileBuffer, b, ss_type, AddressSpace) {}
 
     void setStreamSetBuffer(llvm::Value * ptr, llvm::Value * fileSize);
     
@@ -120,8 +110,6 @@ public:
     llvm::Value * allocateBuffer() override;
     llvm::Value * getStreamSetBlockPointer(llvm::Value * bufferBasePtr, llvm::Value * blockNo) override;
 
-private:
-    unsigned mAddrSpace;
 };
 
 class CircularBuffer : public StreamSetBuffer {
@@ -134,12 +122,6 @@ public:
             if (((bufferBlocks - 1) & bufferBlocks) != 0) {
                 throw std::runtime_error("CircularStreamSetBuffer: number of blocks must be a power of 2!");
             }
-            mStreamSetStructType = StructType::get(iBuilder->getContext(), 
-                                                   std::vector<Type *>({iBuilder->getSizeTy(), 
-                                                                        iBuilder->getSizeTy(), 
-                                                                        iBuilder->getInt8Ty(), 
-                                                                        getStreamBufferPointerType()}));
- 
         }
 
     size_t getBufferSize() override;
