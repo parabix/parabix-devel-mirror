@@ -58,9 +58,7 @@ void KernelInterface::addKernelDeclarations(Module * client) {
     Function * doBlockFn = Function::Create(doBlockFunctionType, GlobalValue::ExternalLinkage, doBlockName, client);
     doBlockFn->setCallingConv(CallingConv::C);
     doBlockFn->setDoesNotThrow();
-    for (int i = 1; i <= doBlockParameters.size(); i++) {
-        doBlockFn->setDoesNotCapture(i);
-    }
+    doBlockFn->setDoesNotCapture(1);
     
     FunctionType * finalBlockType = FunctionType::get(iBuilder->getVoidTy(), finalBlockParameters, false);
     std::string finalBlockName = mKernelName + finalBlock_suffix;
@@ -68,10 +66,6 @@ void KernelInterface::addKernelDeclarations(Module * client) {
     finalBlockFn->setCallingConv(CallingConv::C);
     finalBlockFn->setDoesNotThrow();
     finalBlockFn->setDoesNotCapture(1);
-    // Parameter #2 is not a pointer; nocapture is irrelevant
-    for (int i = 3; i <= finalBlockParameters.size(); i++) {
-        finalBlockFn->setDoesNotCapture(i);
-    }
     
     Function::arg_iterator doBlockArgs = doBlockFn->arg_begin();
     Function::arg_iterator finalBlockArgs = finalBlockFn->arg_begin();
@@ -101,7 +95,7 @@ void KernelInterface::addKernelDeclarations(Module * client) {
 
 
 Value * KernelInterface::createInstance(std::vector<Value *> args) {
-    Value * kernelInstance = iBuilder->CreateAlloca(mKernelStateType);
+    Value * kernelInstance = iBuilder->CreateCacheAlignedAlloca(mKernelStateType);
     Module * m = iBuilder->getModule();
     std::vector<Value *> init_args = {kernelInstance};
     for (auto a : args) {

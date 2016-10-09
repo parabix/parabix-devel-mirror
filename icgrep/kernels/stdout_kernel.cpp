@@ -20,50 +20,66 @@ static Function * create_write(Module * const mod) {
     return write;
 }
 
-//  Override the default void type for DoBlock functions. 
-void stdOutKernel::prepareKernel() {
-    setDoBlockReturnType(mStreamType);
-    KernelBuilder::prepareKernel();
-}
-
-
+// The doBlock method is deprecated.   But incase it is used, just call doSegment with
+// 1 as the number of blocks to do.
 void stdOutKernel::generateDoBlockMethod() {
     IDISA::IDISA_Builder::InsertPoint savePoint = iBuilder->saveIP();
     Module * m = iBuilder->getModule();
-    Function * writefn = create_write(m);
     Function * doBlockFunction = m->getFunction(mKernelName + doBlock_suffix);
-    Type * i8PtrTy = iBuilder->getInt8PtrTy();
-
+    Function * doSegmentFunction = m->getFunction(mKernelName + doSegment_suffix);
     iBuilder->SetInsertPoint(BasicBlock::Create(iBuilder->getContext(), "entry", doBlockFunction, 0));
-
     Value * self = getParameter(doBlockFunction, "self");
+    iBuilder->CreateCall(doSegmentFunction, {self, ConstantInt::get(iBuilder->getSizeTy(), 1)});
+    iBuilder->CreateRetVoid();
+    iBuilder->restoreIP(savePoint);
+}
+            
+void stdOutKernel::generateDoSegmentMethod() {
+    IDISA::IDISA_Builder::InsertPoint savePoint = iBuilder->saveIP();
+    Module * m = iBuilder->getModule();
+    Function * writefn = create_write(m);
+    Function * doSegmentFunction = m->getFunction(mKernelName + doSegment_suffix);
+    Type * i8PtrTy = iBuilder->getInt8PtrTy();
+    
+    iBuilder->SetInsertPoint(BasicBlock::Create(iBuilder->getContext(), "entry", doSegmentFunction, 0));
+    Constant * stride = ConstantInt::get(iBuilder->getSizeTy(), iBuilder->getStride());
+    Constant * strideBytes = ConstantInt::get(iBuilder->getSizeTy(), iBuilder->getStride() * mCodeUnitWidth/8);
+    
+    Function::arg_iterator args = doSegmentFunction->arg_begin();
+    Value * self = &*(args++);
+    Value * blocksToDo = &*(args);
+    ////iBuilder->CallPrintInt("blocksToDo", blocksToDo);
+    Value * segmentNo = getLogicalSegmentNo(self);
+    Value * streamStructPtr = getStreamSetStructPtr(self, "codeUnitBuffer");
+    //iBuilder->CallPrintInt("streamStructPtr", iBuilder->CreatePtrToInt(streamStructPtr, iBuilder->getInt64Ty()));
+
+    LoadInst * producerPos = iBuilder->CreateAlignedLoad(mStreamSetInputBuffers[0]->getProducerPosPtr(streamStructPtr), sizeof(size_t));
+    producerPos->setOrdering(AtomicOrdering::Acquire);
+    //iBuilder->CallPrintInt("producerPos", producerPos);
+
+    Value * processed = getProcessedItemCount(self);
+    Value * itemsAvail = iBuilder->CreateSub(producerPos, processed);
+    //iBuilder->CallPrintInt("previously processed", processed);
+    Value * blocksAvail = iBuilder->CreateUDiv(itemsAvail, stride);
+    //iBuilder->CallPrintInt("blocksAvail", blocksAvail);
+    /* Adjust the number of full blocks to do, based on the available data, if necessary. */
+    blocksToDo = iBuilder->CreateSelect(iBuilder->CreateICmpULT(blocksToDo, blocksAvail), blocksToDo, blocksAvail);
     Value * blockNo = getScalarField(self, blockNoScalar);
-    Value * inputStreamBlock = getStreamSetBlockPtr(self, "inputStreamSet", blockNo);
-
-    Value * bufferPtr = getScalarField(self, "bufferPtr");
-    Value * bufferFinalBlockPtr = getScalarField(self, "bufferFinalBlockPtr");
-    //iBuilder->CallPrintInt("bufferPtr", iBuilder->CreatePtrToInt(bufferPtr, iBuilder->getInt64Ty()));
-    //iBuilder->CallPrintInt("bufferFinalBlockPtr", iBuilder->CreatePtrToInt(bufferFinalBlockPtr, iBuilder->getInt64Ty()));
+    //iBuilder->CallPrintInt("blockNo", blockNo);
+    Value * basePtr = getStreamSetBlockPtr(self, "codeUnitBuffer", blockNo);
+    //iBuilder->CallPrintInt("basePtr", iBuilder->CreatePtrToInt(basePtr, iBuilder->getInt64Ty()));
+    Value * bytesToDo = iBuilder->CreateMul(blocksToDo, strideBytes);
+    //iBuilder->CallPrintInt("bytesToDo", bytesToDo);
+    iBuilder->CreateCall(writefn, std::vector<Value *>({iBuilder->getInt32(1), iBuilder->CreateBitCast(basePtr, i8PtrTy), bytesToDo}));
     
+    setScalarField(self, blockNoScalar, iBuilder->CreateAdd(blockNo, blocksToDo));
+    processed = iBuilder->CreateAdd(processed, iBuilder->CreateMul(blocksToDo, stride));
+    setProcessedItemCount(self, processed);
+    mStreamSetInputBuffers[0]->setConsumerPos(streamStructPtr, processed);
+    // Must be the last action, for synchronization.
+    setLogicalSegmentNo(self, iBuilder->CreateAdd(segmentNo, ConstantInt::get(iBuilder->getSizeTy(), 1)));
     
-    BasicBlock * flushBlock = BasicBlock::Create(iBuilder->getContext(), "flush", doBlockFunction, 0);
-    BasicBlock * exitBlock = BasicBlock::Create(iBuilder->getContext(), "exit", doBlockFunction, 0);
-    Value * inFinal = iBuilder->CreateICmpUGT(bufferPtr, bufferFinalBlockPtr);
-    iBuilder->CreateCondBr(inFinal, flushBlock, exitBlock);
-    
-    iBuilder->SetInsertPoint(flushBlock);
-    Value * basePtr = getScalarField(self, "bufferBasePtr");
-    //iBuilder->CallPrintInt("bufferBasePtr", iBuilder->CreatePtrToInt(basePtr, iBuilder->getInt64Ty()));
-    Value * baseAddress = iBuilder->CreatePtrToInt(basePtr, iBuilder->getInt64Ty());
-    Value * pointerAddress = iBuilder->CreatePtrToInt(bufferPtr, iBuilder->getInt64Ty());
-    Value * bytesToFlush = iBuilder->CreateSub(pointerAddress, baseAddress);
-    
-    iBuilder->CreateCall(writefn, std::vector<Value *>({iBuilder->getInt32(1), iBuilder->CreateBitCast(basePtr, i8PtrTy), bytesToFlush}));
-    // Buffer is flushed, return the buffer base pointer for subsequent output to the buffer.
-    iBuilder->CreateRet(basePtr);
-
-    iBuilder->SetInsertPoint(exitBlock);
-    iBuilder->CreateRet(bufferPtr);
+    iBuilder->CreateRetVoid();
     iBuilder->restoreIP(savePoint);
 }
 
@@ -76,16 +92,20 @@ void stdOutKernel::generateFinalBlockMethod() {
     
     iBuilder->SetInsertPoint(BasicBlock::Create(iBuilder->getContext(), "fb_flush", finalBlockFunction, 0));
     Value * self = getParameter(finalBlockFunction, "self");
-    Value * bufferPtr = getParameter(finalBlockFunction, "bufferPtr");
-    Value * basePtr = getScalarField(self, "bufferBasePtr");
-    // Flush the output.
-    Value * baseAddress = iBuilder->CreatePtrToInt(basePtr, iBuilder->getInt64Ty());
-    Value * pointerAddress = iBuilder->CreatePtrToInt(bufferPtr, iBuilder->getInt64Ty());
-    Value * bytesToFlush = iBuilder->CreateSub(pointerAddress, baseAddress);
+    Value * streamStructPtr = getStreamSetStructPtr(self, "codeUnitBuffer");
+    LoadInst * producerPos = iBuilder->CreateAlignedLoad(mStreamSetInputBuffers[0]->getProducerPosPtr(streamStructPtr), sizeof(size_t));
+    producerPos->setOrdering(AtomicOrdering::Acquire);
+    Value * processed = getProcessedItemCount(self);
+    Value * itemsAvail = iBuilder->CreateSub(producerPos, processed);
+    Value * blockNo = getScalarField(self, blockNoScalar);
+    Value * basePtr = getStreamSetBlockPtr(self, "codeUnitBuffer", blockNo);
+    Value * bytesToDo = iBuilder->CreateMul(itemsAvail, ConstantInt::get(iBuilder->getSizeTy(), mCodeUnitWidth/8));
+
+    iBuilder->CreateCall(writefn, std::vector<Value *>({iBuilder->getInt32(1), iBuilder->CreateBitCast(basePtr, i8PtrTy), bytesToDo}));
     
-    iBuilder->CreateCall(writefn, std::vector<Value *>({iBuilder->getInt32(1), iBuilder->CreateBitCast(basePtr, i8PtrTy), bytesToFlush}));
-    // Buffer is flushed, return the buffer base pointer for subsequent output to the buffer.
-    iBuilder->CreateRet(basePtr);
+    setProcessedItemCount(self, producerPos);
+    mStreamSetInputBuffers[0]->setConsumerPos(streamStructPtr, producerPos);
+    iBuilder->CreateRetVoid();
     iBuilder->restoreIP(savePoint);
 }
 }

@@ -17,18 +17,16 @@ class stdOutKernel : public KernelBuilder {
 public:
     stdOutKernel(IDISA::IDISA_Builder * iBuilder, unsigned codeUnitWidth) :
     KernelBuilder(iBuilder, "stdout",
-                  {StreamSetBinding{parabix::StreamSetType(1, codeUnitWidth), "codeUnitBuffer"}}, {}, {}, {}, {}) {
-        mStreamType = PointerType::get(parabix::StreamSetType(1, codeUnitWidth).getStreamSetBlockType(iBuilder), 0);
-        mScalarInputs = {ScalarBinding{mStreamType , "bufferPtr"}};
-    }
+                  {StreamSetBinding{parabix::StreamSetType(1, codeUnitWidth), "codeUnitBuffer"}}, {}, {}, {}, {}),
+    mCodeUnitWidth(codeUnitWidth) {}
     
 private:
-    void prepareKernel() override;
+    unsigned mCodeUnitWidth;
+  
     void generateDoBlockMethod() override;
     void generateFinalBlockMethod() override;
     void generateDoSegmentMethod() override;
     
-    llvm::Type * mStreamType;
 };
 }
 

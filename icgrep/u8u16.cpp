@@ -47,7 +47,7 @@ static cl::OptionCategory u8u16Options("u8u16 Options",
 
 static cl::list<std::string> inputFiles(cl::Positional, cl::desc("<input file ...>"), cl::OneOrMore, cl::cat(u8u16Options));
 
-static cl::opt<bool> pipelineParallel("enable-pipeline-parallel", cl::desc("Enable multithreading with pipeline parallelism."), cl::cat(u8u16Options));
+static cl::opt<bool> segmentPipelineParallel("enable-segment-pipeline-parallel", cl::desc("Enable multithreading with segment pipeline parallelism."), cl::cat(u8u16Options));
 
 //
 //
@@ -241,9 +241,9 @@ Function * u8u16Pipeline(Module * mMod, IDISA::IDISA_Builder * iBuilder, pablo::
     CircularBuffer U16Bits(iBuilder, StreamSetType(16, i1), segmentSize * bufferSegments);
     
     //SingleBlockBuffer DeletionCounts(iBuilder, StreamSetType(1, i1));
-    CircularBuffer DeletionCounts(iBuilder, StreamSetType(1, i1), segmentSize * bufferSegments);
+    CircularBuffer DeletionCounts(iBuilder, StreamSetType(1, i1), segmentSize * bufferSegments );
     
-    CircularBuffer U16out(iBuilder, StreamSetType(1, i16), u16OutputBlocks);
+    LinearBuffer U16out(iBuilder, StreamSetType(1, i16), segmentSize * bufferSegments + 2);
 
     s2pKernel  s2pk(iBuilder);
     s2pk.generateKernel({&ByteStream}, {&BasisBits});
@@ -257,6 +257,10 @@ Function * u8u16Pipeline(Module * mMod, IDISA::IDISA_Builder * iBuilder, pablo::
     
     p2s_16Kernel_withCompressedOutput p2sk(iBuilder);
     p2sk.generateKernel({&U16Bits, &DeletionCounts}, {&U16out});
+    
+    stdOutKernel stdoutK(iBuilder, 16);
+    stdoutK.generateKernel({&U16out}, {});
+
     
     Type * const size_ty = iBuilder->getSizeTy();
     Type * const voidTy = Type::getVoidTy(mMod->getContext());
@@ -289,6 +293,7 @@ Function * u8u16Pipeline(Module * mMod, IDISA::IDISA_Builder * iBuilder, pablo::
     Value * u8u16Instance = u8u16k.createInstance({});
     Value * delInstance = delK.createInstance({});
     Value * p2sInstance = p2sk.createInstance({});
+    Value * stdoutInstance = stdoutK.createInstance({});
     
     Type * pthreadTy = size_ty;
     FunctionType * funVoidPtrVoidTy = FunctionType::get(voidTy, int8PtrTy, false);
@@ -312,11 +317,11 @@ Function * u8u16Pipeline(Module * mMod, IDISA::IDISA_Builder * iBuilder, pablo::
     pthreadExitFunc->addFnAttr(llvm::Attribute::NoReturn);
     pthreadExitFunc->setCallingConv(llvm::CallingConv::C);
 
-    if (pipelineParallel){
-        generatePipelineParallel(iBuilder, {&s2pk, &u8u16k, &delK, &p2sk}, {s2pInstance, u8u16Instance, delInstance, p2sInstance});
+    if (segmentPipelineParallel){
+        generateSegmentParallelPipeline(iBuilder, {&s2pk, &u8u16k, &delK, &p2sk, &stdoutK}, {s2pInstance, u8u16Instance, delInstance, p2sInstance, stdoutInstance}, fileSize);
     }
     else{
-        generatePipelineLoop(iBuilder, {&s2pk, &u8u16k, &delK, &p2sk}, {s2pInstance, u8u16Instance, delInstance, p2sInstance}, fileSize);
+        generatePipelineLoop(iBuilder, {&s2pk, &u8u16k, &delK, &p2sk, &stdoutK}, {s2pInstance, u8u16Instance, delInstance, p2sInstance, stdoutInstance}, fileSize);
     }
 
     iBuilder->CreateRetVoid();

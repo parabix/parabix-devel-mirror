@@ -21,9 +21,10 @@ namespace IDISA {
 class IDISA_Builder : public IRBuilder<> {
 public:
 
-    IDISA_Builder(Module * m, Type * bitBlockType)
+    IDISA_Builder(Module * m, Type * bitBlockType, unsigned CacheAlignment=64)
     : IRBuilder<>(m->getContext())
     , mMod(m)
+    , mCacheLineAlignment(CacheAlignment)
     , mBitBlockType(bitBlockType)
     , mBitBlockWidth(bitBlockType->isIntegerTy() ? cast<IntegerType>(bitBlockType)->getIntegerBitWidth() : cast<VectorType>(bitBlockType)->getBitWidth())
     , mStride(mBitBlockWidth)
@@ -141,8 +142,16 @@ public:
     
     inline llvm::Type * getSizeTy() {return Triple(llvm::sys::getProcessTriple()).isArch32Bit() ? getInt32Ty() : getInt64Ty();}
     
+    inline llvm::AllocaInst * CreateCacheAlignedAlloca(llvm::Type * Ty, llvm::Value * ArraySize = nullptr) {
+        llvm::AllocaInst * instr = CreateAlloca(Ty, ArraySize);
+        instr->setAlignment(mCacheLineAlignment);
+        return instr;
+    }
+    
+    
 protected:
     Module * mMod;
+    unsigned mCacheLineAlignment;
     Type * mBitBlockType;
     unsigned mBitBlockWidth;
     unsigned mStride;
@@ -178,5 +187,6 @@ inline void IDISA_Builder::CreateBlockAlignedStore(Value * const value, Value * 
 }
     
 
+    
 }
 #endif // IDISA_BUILDER_H

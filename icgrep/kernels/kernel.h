@@ -19,7 +19,7 @@ const std::string logicalSegmentNoScalar = "logicalSegNo";
 const std::string processedItemCount = "processedItemCount";
 const std::string producedItemCount = "producedItemCount";
 const std::string terminationSignal = "terminationSignal";
-const std::string basePtrSuffix = "_basePtr";
+const std::string structPtrSuffix = "_structPtr";
 const std::string blkMaskSuffix = "_blkMask";
 
 using namespace parabix;
@@ -108,7 +108,7 @@ protected:
     // Stream set helpers.
     unsigned getStreamSetIndex(std::string ssName);
     
-    llvm::Value * getStreamSetBasePtr(Value * self, std::string ssName);
+    llvm::Value * getStreamSetStructPtr(Value * self, std::string ssName);
     size_t getStreamSetBufferSize(Value * self, std::string ssName);
 
     llvm::Value * getStreamSetBlockPtr(Value * self, std::string ssName, Value * blockNo);
