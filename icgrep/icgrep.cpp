@@ -9,7 +9,6 @@
 #include <llvm/Support/CommandLine.h>
 #include <llvm/Support/ErrorHandling.h>
 #include <llvm/Support/Signals.h>
-#include <llvm/Config/config.h>
 #include <re/re_alt.h>
 #include <re/re_parser.h>
 #include <grep_engine.h>
