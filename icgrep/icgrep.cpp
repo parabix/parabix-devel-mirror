@@ -9,6 +9,7 @@
 #include <llvm/Support/CommandLine.h>
 #include <llvm/Support/ErrorHandling.h>
 #include <llvm/Support/Signals.h>
+#include <llvm/Config/config.h>
 #include <re/re_alt.h>
 #include <re/re_parser.h>
 #include <grep_engine.h>
@@ -320,7 +321,9 @@ std::vector<std::string> getFullFileList(cl::list<std::string> & inputFiles) {
 
 int main(int argc, char *argv[]) {
     llvm::install_fatal_error_handler(&icgrep_error_handler);
+#if LLVM_VERSION_MINOR > 6
     cl::HideUnrelatedOptions(ArrayRef<const cl::OptionCategory *>{&LegacyGrepOptions, &EnhancedGrepOptions, re::re_toolchain_flags(), pablo::pablo_toolchain_flags(), codegen::codegen_flags()});
+#endif
     cl::ParseCommandLineOptions(argc, argv);
 #ifdef FUTURE
     if (RegexpSyntax == re::RE_Syntax::FixedStrings) {
