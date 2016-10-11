@@ -64,7 +64,7 @@ llvm::Value * StreamSetBuffer::hasEndOfInputPtr(Value * bufferStructPtr) {
 }
 
 void StreamSetBuffer::setEndOfInput(Value * bufferStructPtr){
-    iBuilder->CreateStore(ConstantInt::get(iBuilder->getInt8Ty(), 1), iBuilder->CreateGEP(bufferStructPtr, {iBuilder->getInt32(0), iBuilder->getInt32(iEnd_of_input)}));
+    iBuilder->CreateStore(ConstantInt::get(iBuilder->getInt1Ty(), 1), iBuilder->CreateGEP(bufferStructPtr, {iBuilder->getInt32(0), iBuilder->getInt32(iEnd_of_input)}));
 }
 
 
@@ -74,14 +74,14 @@ llvm::Value * StreamSetBuffer::getStreamSetStructPtr(){
 
 llvm::Value * StreamSetBuffer::allocateBuffer() {
     Type * const size_ty = iBuilder->getSizeTy();
-    Type * const int8ty = iBuilder->getInt8Ty();
+    Type * const int1ty = iBuilder->getInt1Ty();
     mStreamSetBufferPtr = iBuilder->CreateCacheAlignedAlloca(mStreamSetType.getStreamSetBlockType(iBuilder), ConstantInt::get(iBuilder->getSizeTy(), mBufferBlocks));
     mStreamSetStructPtr = iBuilder->CreateCacheAlignedAlloca(mStreamSetStructType);
     //iBuilder->CallPrintInt("mStreamSetBufferPtr", iBuilder->CreatePtrToInt(mStreamSetBufferPtr, iBuilder->getInt64Ty()));
     //iBuilder->CallPrintInt("mStreamSetStructPtr", iBuilder->CreatePtrToInt(mStreamSetStructPtr, iBuilder->getInt64Ty()));
     iBuilder->CreateStore(ConstantInt::get(size_ty, 0), iBuilder->CreateGEP(mStreamSetStructPtr, {iBuilder->getInt32(0), iBuilder->getInt32(iProducer_pos)}));
     iBuilder->CreateStore(ConstantInt::get(size_ty, 0), iBuilder->CreateGEP(mStreamSetStructPtr, {iBuilder->getInt32(0), iBuilder->getInt32(iConsumer_pos)}));
-    iBuilder->CreateStore(ConstantInt::get(int8ty, 0), iBuilder->CreateGEP(mStreamSetStructPtr, {iBuilder->getInt32(0), iBuilder->getInt32(iEnd_of_input)}));
+    iBuilder->CreateStore(ConstantInt::get(int1ty, 0), iBuilder->CreateGEP(mStreamSetStructPtr, {iBuilder->getInt32(0), iBuilder->getInt32(iEnd_of_input)}));
     iBuilder->CreateStore(mStreamSetBufferPtr, iBuilder->CreateGEP(mStreamSetStructPtr, {iBuilder->getInt32(0), iBuilder->getInt32(iBuffer_ptr)}));
     
     return mStreamSetBufferPtr;
@@ -100,7 +100,7 @@ llvm::Value * SingleBlockBuffer::getStreamSetBlockPointer(llvm::Value * bufferSt
 void ExternalFileBuffer::setStreamSetBuffer(llvm::Value * ptr, Value * fileSize) {
 
     Type * const size_ty = iBuilder->getSizeTy();
-    Type * const int8ty = iBuilder->getInt8Ty();
+    Type * const int1ty = iBuilder->getInt1Ty();
 
     PointerType * t = getStreamBufferPointerType();    
     mStreamSetBufferPtr = iBuilder->CreatePointerBitCastOrAddrSpaceCast(ptr, t);
@@ -108,7 +108,7 @@ void ExternalFileBuffer::setStreamSetBuffer(llvm::Value * ptr, Value * fileSize)
     mStreamSetStructPtr = iBuilder->CreateCacheAlignedAlloca(mStreamSetStructType);
     iBuilder->CreateStore(fileSize, iBuilder->CreateGEP(mStreamSetStructPtr, {iBuilder->getInt32(0), iBuilder->getInt32(iProducer_pos)}));
     iBuilder->CreateStore(ConstantInt::get(size_ty, 0), iBuilder->CreateGEP(mStreamSetStructPtr, {iBuilder->getInt32(0), iBuilder->getInt32(iConsumer_pos)}));
-    iBuilder->CreateStore(ConstantInt::get(int8ty, 1), iBuilder->CreateGEP(mStreamSetStructPtr, {iBuilder->getInt32(0), iBuilder->getInt32(iEnd_of_input)}));
+    iBuilder->CreateStore(ConstantInt::get(int1ty, 1), iBuilder->CreateGEP(mStreamSetStructPtr, {iBuilder->getInt32(0), iBuilder->getInt32(iEnd_of_input)}));
     iBuilder->CreateStore(mStreamSetBufferPtr, iBuilder->CreateGEP(mStreamSetStructPtr, {iBuilder->getInt32(0), iBuilder->getInt32(iBuffer_ptr)}));
 }
 

@@ -43,7 +43,7 @@ void stdOutKernel::generateDoSegmentMethod() {
     
     iBuilder->SetInsertPoint(BasicBlock::Create(iBuilder->getContext(), "entry", doSegmentFunction, 0));
     Constant * stride = ConstantInt::get(iBuilder->getSizeTy(), iBuilder->getStride());
-    Constant * strideBytes = ConstantInt::get(iBuilder->getSizeTy(), iBuilder->getStride() * mCodeUnitWidth/8);
+    Constant * itemBytes = ConstantInt::get(iBuilder->getSizeTy(), mCodeUnitWidth/8);
     
     Function::arg_iterator args = doSegmentFunction->arg_begin();
     Value * self = &*(args++);
@@ -56,24 +56,31 @@ void stdOutKernel::generateDoSegmentMethod() {
     LoadInst * producerPos = iBuilder->CreateAlignedLoad(mStreamSetInputBuffers[0]->getProducerPosPtr(streamStructPtr), sizeof(size_t));
     producerPos->setOrdering(AtomicOrdering::Acquire);
     //iBuilder->CallPrintInt("producerPos", producerPos);
+    Value * endSignal = iBuilder->CreateLoad(mStreamSetInputBuffers[0]->hasEndOfInputPtr(streamStructPtr));
 
+    Value * blockNo = getScalarField(self, blockNoScalar);
+    //iBuilder->CallPrintInt("blockNo", blockNo);
+    Value * basePtr = getStreamSetBlockPtr(self, "codeUnitBuffer", blockNo);
+    //iBuilder->CallPrintInt("basePtr", iBuilder->CreatePtrToInt(basePtr, iBuilder->getInt64Ty()));
+    
     Value * processed = getProcessedItemCount(self);
     Value * itemsAvail = iBuilder->CreateSub(producerPos, processed);
     //iBuilder->CallPrintInt("previously processed", processed);
     Value * blocksAvail = iBuilder->CreateUDiv(itemsAvail, stride);
     //iBuilder->CallPrintInt("blocksAvail", blocksAvail);
+    
+    Value * lessThanFullSegment = iBuilder->CreateICmpULT(blocksAvail, blocksToDo);
+    Value * inFinalSegment = iBuilder->CreateAnd(endSignal, lessThanFullSegment);
     /* Adjust the number of full blocks to do, based on the available data, if necessary. */
-    blocksToDo = iBuilder->CreateSelect(iBuilder->CreateICmpULT(blocksToDo, blocksAvail), blocksToDo, blocksAvail);
-    Value * blockNo = getScalarField(self, blockNoScalar);
-    //iBuilder->CallPrintInt("blockNo", blockNo);
-    Value * basePtr = getStreamSetBlockPtr(self, "codeUnitBuffer", blockNo);
-    //iBuilder->CallPrintInt("basePtr", iBuilder->CreatePtrToInt(basePtr, iBuilder->getInt64Ty()));
-    Value * bytesToDo = iBuilder->CreateMul(blocksToDo, strideBytes);
+    blocksToDo = iBuilder->CreateSelect(lessThanFullSegment, blocksAvail, blocksToDo);
+    
+    Value * itemsToDo = iBuilder->CreateMul(blocksToDo, stride);
+    itemsToDo = iBuilder->CreateSelect(inFinalSegment, itemsAvail, itemsToDo);
     //iBuilder->CallPrintInt("bytesToDo", bytesToDo);
-    iBuilder->CreateCall(writefn, std::vector<Value *>({iBuilder->getInt32(1), iBuilder->CreateBitCast(basePtr, i8PtrTy), bytesToDo}));
+    iBuilder->CreateCall(writefn, std::vector<Value *>({iBuilder->getInt32(1), iBuilder->CreateBitCast(basePtr, i8PtrTy), iBuilder->CreateMul(itemsToDo, itemBytes)}));
     
     setScalarField(self, blockNoScalar, iBuilder->CreateAdd(blockNo, blocksToDo));
-    processed = iBuilder->CreateAdd(processed, iBuilder->CreateMul(blocksToDo, stride));
+    processed = iBuilder->CreateAdd(processed, itemsToDo);
     setProcessedItemCount(self, processed);
     mStreamSetInputBuffers[0]->setConsumerPos(streamStructPtr, processed);
     // Must be the last action, for synchronization.

@@ -166,6 +166,9 @@ void KernelBuilder::generateDoSegmentMethod() {
     BasicBlock * blockLoopCond = BasicBlock::Create(iBuilder->getContext(), "blockLoopCond", doSegmentFunction, 0);
     BasicBlock * blockLoopBody = BasicBlock::Create(iBuilder->getContext(), "blockLoopBody", doSegmentFunction, 0);
     BasicBlock * blocksDone = BasicBlock::Create(iBuilder->getContext(), "blocksDone", doSegmentFunction, 0);
+    BasicBlock * checkFinalBlock = BasicBlock::Create(iBuilder->getContext(), "checkFinalBlock", doSegmentFunction, 0);
+    BasicBlock * callFinalBlock = BasicBlock::Create(iBuilder->getContext(), "callFinalBlock", doSegmentFunction, 0);
+    BasicBlock * segmentDone = BasicBlock::Create(iBuilder->getContext(), "segmentDone", doSegmentFunction, 0);
     Type * const size_ty = iBuilder->getSizeTy();
     Constant * stride = ConstantInt::get(size_ty, iBuilder->getStride());
     Value * strideBlocks = ConstantInt::get(size_ty, iBuilder->getStride() / iBuilder->getBitBlockWidth());
@@ -174,22 +177,27 @@ void KernelBuilder::generateDoSegmentMethod() {
     Value * self = &*(args++);
     Value * blocksToDo = &*(args);
     Value * segmentNo = getLogicalSegmentNo(self);
-    std::vector<Value *> inbufProducerPtrs;
     
+    std::vector<Value *> inbufProducerPtrs;
+    std::vector<Value *> endSignalPtrs;
     for (unsigned i = 0; i < mStreamSetInputs.size(); i++) {
         Value * ssStructPtr = getStreamSetStructPtr(self, mStreamSetInputs[i].ssName);
         inbufProducerPtrs.push_back(mStreamSetInputBuffers[i]->getProducerPosPtr(ssStructPtr));
+        endSignalPtrs.push_back(mStreamSetInputBuffers[i]->hasEndOfInputPtr(ssStructPtr));
     }
     
+    std::vector<Value *> producerPos;
     /* Determine the actually available data examining all input stream sets. */
-    LoadInst * producerPos = iBuilder->CreateAlignedLoad(inbufProducerPtrs[0], sizeof(size_t));
-    producerPos->setOrdering(AtomicOrdering::Acquire);
-    Value * availablePos = producerPos;
+    LoadInst * p = iBuilder->CreateAlignedLoad(inbufProducerPtrs[0], sizeof(size_t));
+    p->setOrdering(AtomicOrdering::Acquire);
+    producerPos.push_back(p);
+    Value * availablePos = producerPos[0];
     for (unsigned i = 1; i < inbufProducerPtrs.size(); i++) {
-        LoadInst * producerPos = iBuilder->CreateAlignedLoad(inbufProducerPtrs[i], sizeof(size_t));
-        producerPos->setOrdering(AtomicOrdering::Acquire);
+        LoadInst * p = iBuilder->CreateAlignedLoad(inbufProducerPtrs[i], sizeof(size_t));
+        p->setOrdering(AtomicOrdering::Acquire);
+        producerPos.push_back(p);
         /* Set the available position to be the minimum of availablePos and producerPos. */
-        availablePos = iBuilder->CreateSelect(iBuilder->CreateICmpULT(availablePos, producerPos), availablePos, producerPos);
+        availablePos = iBuilder->CreateSelect(iBuilder->CreateICmpULT(availablePos, p), availablePos, p);
     }
     Value * processed = getProcessedItemCount(self);
     Value * itemsAvail = iBuilder->CreateSub(availablePos, processed);
@@ -198,7 +206,8 @@ void KernelBuilder::generateDoSegmentMethod() {
 #endif
     Value * blocksAvail = iBuilder->CreateUDiv(itemsAvail, stride);
     /* Adjust the number of full blocks to do, based on the available data, if necessary. */
-    blocksToDo = iBuilder->CreateSelect(iBuilder->CreateICmpULT(blocksToDo, blocksAvail), blocksToDo, blocksAvail);
+    Value * lessThanFullSegment = iBuilder->CreateICmpULT(blocksAvail, blocksToDo);
+    blocksToDo = iBuilder->CreateSelect(lessThanFullSegment, blocksAvail, blocksToDo);
     //iBuilder->CallPrintInt(mKernelName + "_blocksAvail", blocksAvail);
     iBuilder->CreateBr(blockLoopCond);
 
@@ -219,6 +228,39 @@ void KernelBuilder::generateDoSegmentMethod() {
     iBuilder->SetInsertPoint(blocksDone);
     processed = iBuilder->CreateAdd(processed, iBuilder->CreateMul(blocksToDo, stride));
     setProcessedItemCount(self, processed);
+    iBuilder->CreateCondBr(lessThanFullSegment, checkFinalBlock, segmentDone);
+    
+    iBuilder->SetInsertPoint(checkFinalBlock);
+    
+    /* We had less than a full segment of data; we may have reached the end of input
+       on one of the stream sets.  */
+    
+    Value * endOfInput = iBuilder->CreateLoad(endSignalPtrs[0]);
+    if (endSignalPtrs.size() > 1) {
+        /* If there is more than one input stream set, then we need to confirm that one of
+           them has both the endSignal set and the length = to availablePos. */
+        endOfInput = iBuilder->CreateAnd(endOfInput, iBuilder->CreateICmpEQ(availablePos, producerPos[0]));
+        for (unsigned i = 1; i < endSignalPtrs.size(); i++) {
+            Value * e = iBuilder->CreateAnd(iBuilder->CreateLoad(endSignalPtrs[i]), iBuilder->CreateICmpEQ(availablePos, producerPos[i]));
+            endOfInput = iBuilder->CreateOr(endOfInput, e);
+        }
+    }
+    iBuilder->CreateCondBr(endOfInput, callFinalBlock, segmentDone);
+    
+    iBuilder->SetInsertPoint(callFinalBlock);
+    
+    Value * remainingItems = iBuilder->CreateURem(availablePos, stride);
+    createFinalBlockCall(self, remainingItems);
+    setProcessedItemCount(self, availablePos);
+    
+    for (unsigned i = 0; i < mStreamSetOutputs.size(); i++) {
+        Value * ssStructPtr = getStreamSetStructPtr(self, mStreamSetOutputs[i].ssName);
+        mStreamSetOutputBuffers[i]->setEndOfInput(ssStructPtr);
+    }
+    
+    iBuilder->CreateBr(segmentDone);
+    
+    iBuilder->SetInsertPoint(segmentDone);
     Value * produced = getProducedItemCount(self);
 #ifndef NDEBUG
     iBuilder->CallPrintInt(mKernelName + "_produced", produced);
@@ -464,16 +506,13 @@ Function * KernelBuilder::generateThreadFunction(std::string name){
    
     iBuilder->SetInsertPoint(endSignalCheckBlock);
     
-    LoadInst * endSignal = iBuilder->CreateAlignedLoad(endSignalPtrs[0], sizeof(size_t));
-    // iBuilder->CallPrintInt(name + ":endSignal", endSignal);
-    endSignal->setOrdering(AtomicOrdering::Acquire);
+    LoadInst * endSignal = iBuilder->CreateLoad(endSignalPtrs[0]);
     for (unsigned i = 1; i < endSignalPtrs.size(); i++){
-        LoadInst * endSignal_next = iBuilder->CreateAlignedLoad(endSignalPtrs[i], sizeof(size_t));
-        endSignal_next->setOrdering(AtomicOrdering::Acquire);
+        LoadInst * endSignal_next = iBuilder->CreateLoad(endSignalPtrs[i]);
         iBuilder->CreateAnd(endSignal, endSignal_next);
     }
         
-    iBuilder->CreateCondBr(iBuilder->CreateICmpEQ(endSignal, ConstantInt::get(iBuilder->getInt8Ty(), 1)), endBlock, inputCheckBlock);
+    iBuilder->CreateCondBr(endSignal, endBlock, inputCheckBlock);
     
     iBuilder->SetInsertPoint(doSegmentBlock);
   

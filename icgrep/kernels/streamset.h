@@ -80,7 +80,7 @@ protected:
                 StructType::get(iBuilder->getContext(),
                                 std::vector<Type *>({iBuilder->getSizeTy(),
                                                     iBuilder->getSizeTy(),
-                                                    iBuilder->getInt8Ty(),
+                                                    iBuilder->getInt1Ty(),
                                                     PointerType::get(mStreamSetType.getStreamSetBlockType(iBuilder), AddressSpace)}));
     }
     
