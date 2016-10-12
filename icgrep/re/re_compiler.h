@@ -34,7 +34,7 @@ class UnicodeSet;
 
 namespace re {
 
-enum MarkerPosition {FinalMatchUnit, InitialPostPositionUnit, FinalPostPositionUnit};
+enum MarkerPosition {FinalMatchUnit, FinalPostPositionUnit};
 
 struct MarkerType { 
     MarkerPosition pos;
