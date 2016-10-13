@@ -98,17 +98,32 @@ llvm::Value * SingleBlockBuffer::getStreamSetBlockPointer(llvm::Value * bufferSt
 // External Unbounded Buffer
 
 void ExternalFileBuffer::setStreamSetBuffer(llvm::Value * ptr, Value * fileSize) {
-
+    
     Type * const size_ty = iBuilder->getSizeTy();
     Type * const int1ty = iBuilder->getInt1Ty();
-
+    
     PointerType * t = getStreamBufferPointerType();    
     mStreamSetBufferPtr = iBuilder->CreatePointerBitCastOrAddrSpaceCast(ptr, t);
-
+    
     mStreamSetStructPtr = iBuilder->CreateCacheAlignedAlloca(mStreamSetStructType);
     iBuilder->CreateStore(fileSize, iBuilder->CreateGEP(mStreamSetStructPtr, {iBuilder->getInt32(0), iBuilder->getInt32(iProducer_pos)}));
     iBuilder->CreateStore(ConstantInt::get(size_ty, 0), iBuilder->CreateGEP(mStreamSetStructPtr, {iBuilder->getInt32(0), iBuilder->getInt32(iConsumer_pos)}));
     iBuilder->CreateStore(ConstantInt::get(int1ty, 1), iBuilder->CreateGEP(mStreamSetStructPtr, {iBuilder->getInt32(0), iBuilder->getInt32(iEnd_of_input)}));
+    iBuilder->CreateStore(mStreamSetBufferPtr, iBuilder->CreateGEP(mStreamSetStructPtr, {iBuilder->getInt32(0), iBuilder->getInt32(iBuffer_ptr)}));
+}
+
+void ExternalFileBuffer::setEmptyBuffer(llvm::Value * ptr) {
+    
+    Type * const size_ty = iBuilder->getSizeTy();
+    Type * const int1ty = iBuilder->getInt1Ty();
+    
+    PointerType * t = getStreamBufferPointerType();    
+    mStreamSetBufferPtr = iBuilder->CreatePointerBitCastOrAddrSpaceCast(ptr, t);
+    
+    mStreamSetStructPtr = iBuilder->CreateCacheAlignedAlloca(mStreamSetStructType);
+    iBuilder->CreateStore(ConstantInt::get(size_ty, 0), iBuilder->CreateGEP(mStreamSetStructPtr, {iBuilder->getInt32(0), iBuilder->getInt32(iProducer_pos)}));
+    iBuilder->CreateStore(ConstantInt::get(size_ty, 0), iBuilder->CreateGEP(mStreamSetStructPtr, {iBuilder->getInt32(0), iBuilder->getInt32(iConsumer_pos)}));
+    iBuilder->CreateStore(ConstantInt::get(int1ty,0), iBuilder->CreateGEP(mStreamSetStructPtr, {iBuilder->getInt32(0), iBuilder->getInt32(iEnd_of_input)}));
     iBuilder->CreateStore(mStreamSetBufferPtr, iBuilder->CreateGEP(mStreamSetStructPtr, {iBuilder->getInt32(0), iBuilder->getInt32(iBuffer_ptr)}));
 }
 
@@ -150,7 +165,7 @@ void LinearBuffer::setConsumerPos(Value * bufferStructPtr, Value * new_consumer_
     Type * const i32 = iBuilder->getInt32Ty();
     Type * const i8_ptr = PointerType::get(i8, mAddrSpace);
     Module * M = iBuilder->getModule();
-    Function * memcpyFunc = cast<Function>(M->getOrInsertFunction("llvm.memcpy.p0i8.p0i8.i" + std::to_string(sizeof(size_t) * 8), 
+    Function * memmoveFunc = cast<Function>(M->getOrInsertFunction("llvm.memmove.p0i8.p0i8.i" + std::to_string(sizeof(size_t) * 8), 
                                                                   iBuilder->getVoidTy(), i8_ptr, i8_ptr, iBuilder->getSizeTy(), i32, i1, nullptr));
     Function * current = iBuilder->GetInsertBlock()->getParent();
     BasicBlock * copyBackBody = BasicBlock::Create(M->getContext(), "copy_back", current, 0);
@@ -179,17 +194,17 @@ void LinearBuffer::setConsumerPos(Value * bufferStructPtr, Value * new_consumer_
     Value * copyBlocks = iBuilder->CreateAdd(iBuilder->CreateSub(lastProducerBlock, new_consumer_block), one);
     Constant * blockBytes = ConstantInt::get(iBuilder->getSizeTy(), mStreamSetType.StreamCount() * mStreamSetType.StreamFieldWidth() * iBuilder->getStride()/8);
     Value * copyLength = iBuilder->CreateMul(copyBlocks, blockBytes);
-    //iBuilder->CallPrintInt("memcpy copyLength", copyLength);
+    //iBuilder->CallPrintInt("memmove copyLength", copyLength);
     // Must copy back one full block for each of the streams in the stream set.
     Value * handle = iBuilder->CreateGEP(bufferStructPtr, {iBuilder->getInt32(0), iBuilder->getInt32(iBuffer_ptr)});
     Value * bufferPtr = iBuilder->CreateLoad(handle);
-    //iBuilder->CallPrintInt("memcpy bufferPtr", iBuilder->CreatePtrToInt(bufferPtr, iBuilder->getSizeTy()));
+    //iBuilder->CallPrintInt("memmove bufferPtr", iBuilder->CreatePtrToInt(bufferPtr, iBuilder->getSizeTy()));
 
     Value * copyFrom = iBuilder->CreateGEP(bufferPtr, {iBuilder->CreateSub(new_consumer_block, consumerBlock)});
-    //iBuilder->CallPrintInt("memcpy copyFrom", iBuilder->CreatePtrToInt(copyFrom, iBuilder->getSizeTy()));
+    //iBuilder->CallPrintInt("memmove copyFrom", iBuilder->CreatePtrToInt(copyFrom, iBuilder->getSizeTy()));
     Value * alignment = ConstantInt::get(iBuilder->getInt32Ty(), iBuilder->getBitBlockWidth()/8);
     
-    iBuilder->CreateCall(memcpyFunc, {iBuilder->CreateBitCast(bufferPtr, i8_ptr), iBuilder->CreateBitCast(copyFrom, i8_ptr), copyLength, alignment, ConstantInt::getNullValue(i1)});
+    iBuilder->CreateCall(memmoveFunc, {iBuilder->CreateBitCast(bufferPtr, i8_ptr), iBuilder->CreateBitCast(copyFrom, i8_ptr), copyLength, alignment, ConstantInt::getNullValue(i1)});
     iBuilder->CreateBr(setConsumerPosExit);
     // Copy back done, store the new consumer position.
     iBuilder->SetInsertPoint(setConsumerPosExit);

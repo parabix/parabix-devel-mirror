@@ -112,6 +112,7 @@ public:
         StreamSetBuffer(BufferKind::ExternalFileBuffer, b, ss_type, 0, AddressSpace) {}
 
     void setStreamSetBuffer(llvm::Value * ptr, llvm::Value * fileSize);
+    void setEmptyBuffer(llvm::Value * buffer_ptr);
     
     // Can't allocate - raise an error. */
     llvm::Value * allocateBuffer() override;
