@@ -10,7 +10,7 @@
 #include <vector>
 #include <IDISA/idisa_builder.h>
 #include <llvm/IR/Type.h>
-    
+
 namespace parabix {
     
 enum FieldType {i1 = 1, i2 = 2, i4 = 4, i8 = 8, i16 = 16, i32 = 32, i64 = 64, i128 = 128, i256 = 256};
@@ -40,7 +40,7 @@ llvm::Value * getStreamSetBufferPtr(IDISA::IDISA_Builder * b, Value * bufferStru
     
 class StreamSetBuffer {
 public:
-    enum class BufferKind : unsigned {BlockBuffer, ExternalFileBuffer, CircularBuffer, LinearBuffer, ExpandingBuffer};
+    enum class BufferKind : unsigned {BlockBuffer, ExternalFileBuffer, CircularBuffer, LinearCopybackBuffer};
     inline BufferKind getBufferKind() const {return mBufferKind;}
     inline StreamSetType& getBufferStreamSetType() {return mStreamSetType;}
 
@@ -119,7 +119,7 @@ public:
     llvm::Value * getStreamSetBlockPointer(llvm::Value * bufferStructPtr, llvm::Value * blockNo) override;
 
 };
-
+    
 class CircularBuffer : public StreamSetBuffer {
 public:
     static inline bool classof(const StreamSetBuffer * b) {return b->getBufferKind() == BufferKind::CircularBuffer;}
@@ -136,12 +136,12 @@ public:
 // Linear buffers extending from the current ConsumerPos forward.   Within the buffer, the
 // offset of the block containing the current consumer position is always zero.
 //
-class LinearBuffer : public StreamSetBuffer {
+class LinearCopybackBuffer : public StreamSetBuffer {
 public:
-    static inline bool classof(const StreamSetBuffer * b) {return b->getBufferKind() == BufferKind::LinearBuffer;}
+    static inline bool classof(const StreamSetBuffer * b) {return b->getBufferKind() == BufferKind::LinearCopybackBuffer;}
     
-    LinearBuffer(IDISA::IDISA_Builder * b, StreamSetType ss_type, size_t bufferBlocks, unsigned AddressSpace = 0) :
-        StreamSetBuffer(BufferKind::CircularBuffer, b, ss_type, bufferBlocks, AddressSpace) {}
+    LinearCopybackBuffer(IDISA::IDISA_Builder * b, StreamSetType ss_type, size_t bufferBlocks, unsigned AddressSpace = 0) :
+        StreamSetBuffer(BufferKind::LinearCopybackBuffer, b, ss_type, bufferBlocks, AddressSpace) {}
     
     llvm::Value * getStreamSetBlockPointer(llvm::Value * bufferStructPtr, llvm::Value * blockNo) override;
     

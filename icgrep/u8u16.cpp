@@ -8,6 +8,7 @@
 #include <iostream>
 #include <fstream>
 #include <sstream>
+#include <stdlib.h>
 
 #include <llvm/IR/Function.h>
 #include <llvm/IR/Module.h>
@@ -40,7 +41,8 @@
 // mmap system
 #include <boost/filesystem.hpp>
 #include <boost/iostreams/device/mapped_file.hpp>
-
+#include <boost/interprocess/anonymous_shared_memory.hpp>
+#include <boost/interprocess/mapped_region.hpp>
 #include <fcntl.h>
 static cl::OptionCategory u8u16Options("u8u16 Options",
                                             "Transcoding control options.");
@@ -48,6 +50,8 @@ static cl::OptionCategory u8u16Options("u8u16 Options",
 static cl::list<std::string> inputFiles(cl::Positional, cl::desc("<input file ...>"), cl::OneOrMore, cl::cat(u8u16Options));
 
 static cl::opt<bool> segmentPipelineParallel("enable-segment-pipeline-parallel", cl::desc("Enable multithreading with segment pipeline parallelism."), cl::cat(u8u16Options));
+static cl::opt<bool> mMapBuffering("mmap-buffering", cl::desc("Enable mmap buffering."), cl::cat(u8u16Options));
+static cl::opt<bool> memAlignBuffering("memalign-buffering", cl::desc("Enable posix_memalign buffering."), cl::cat(u8u16Options));
 
 //
 //
@@ -222,8 +226,6 @@ PabloFunction * u8u16_pablo() {
 using namespace kernel;
 using namespace parabix;
 
-const unsigned u16OutputBlocks = 64;
-
 Function * u8u16Pipeline(Module * mMod, IDISA::IDISA_Builder * iBuilder, pablo::PabloFunction * function) {
     Type * mBitBlockType = iBuilder->getBitBlockType();
 
@@ -243,7 +245,9 @@ Function * u8u16Pipeline(Module * mMod, IDISA::IDISA_Builder * iBuilder, pablo::
     //SingleBlockBuffer DeletionCounts(iBuilder, StreamSetType(1, i1));
     CircularBuffer DeletionCounts(iBuilder, StreamSetType(1, i1), segmentSize * bufferSegments );
     
-    LinearBuffer U16out(iBuilder, StreamSetType(1, i16), segmentSize * bufferSegments + 2);
+    // Different choices for the output buffer depending on chosen option.
+    ExternalFileBuffer U16external(iBuilder, StreamSetType(1, i16));
+    LinearCopybackBuffer U16out(iBuilder, StreamSetType(1, i16), segmentSize * bufferSegments + 2);
 
     s2pKernel  s2pk(iBuilder);
     s2pk.generateKernel({&ByteStream}, {&BasisBits});
@@ -256,26 +260,35 @@ Function * u8u16Pipeline(Module * mMod, IDISA::IDISA_Builder * iBuilder, pablo::
     delK.generateKernel({&U8u16Bits}, {&U16Bits, &DeletionCounts});
     
     p2s_16Kernel_withCompressedOutput p2sk(iBuilder);
-    p2sk.generateKernel({&U16Bits, &DeletionCounts}, {&U16out});
     
     stdOutKernel stdoutK(iBuilder, 16);
-    stdoutK.generateKernel({&U16out}, {});
-
+    
+    if (mMapBuffering || memAlignBuffering) {
+        p2sk.generateKernel({&U16Bits, &DeletionCounts}, {&U16external});
+        stdoutK.generateKernel({&U16external}, {});
+    }
+    else {
+        p2sk.generateKernel({&U16Bits, &DeletionCounts}, {&U16out});
+        stdoutK.generateKernel({&U16out}, {});
+    }
     
     Type * const size_ty = iBuilder->getSizeTy();
     Type * const voidTy = Type::getVoidTy(mMod->getContext());
     Type * const inputType = PointerType::get(ArrayType::get(ArrayType::get(mBitBlockType, 8), 1), 0);
+    Type * const outputType = PointerType::get(ArrayType::get(ArrayType::get(mBitBlockType, 16), 1), 0);
     Type * const int32ty = iBuilder->getInt32Ty();
     Type * const int8PtrTy = iBuilder->getInt8PtrTy();
     Type * const voidPtrTy = TypeBuilder<void *, false>::get(mMod->getContext());
 
     
-    Function * const main = cast<Function>(mMod->getOrInsertFunction("Main", voidTy, inputType, size_ty, nullptr));
+    Function * const main = cast<Function>(mMod->getOrInsertFunction("Main", voidTy, inputType, outputType, size_ty, nullptr));
     main->setCallingConv(CallingConv::C);
     Function::arg_iterator args = main->arg_begin();
     
     Value * const inputStream = &*(args++);
-    inputStream->setName("input");
+    inputStream->setName("inputStream");
+    Value * const outputStream = &*(args++);
+    outputStream->setName("outputStream");
     Value * const fileSize = &*(args++);
     fileSize->setName("fileSize");
     
@@ -287,8 +300,12 @@ Function * u8u16Pipeline(Module * mMod, IDISA::IDISA_Builder * iBuilder, pablo::
     U8u16Bits.allocateBuffer();
     U16Bits.allocateBuffer();
     DeletionCounts.allocateBuffer();
-    U16out.allocateBuffer();
-
+    if (mMapBuffering || memAlignBuffering) {
+        U16external.setEmptyBuffer(outputStream);
+    }
+    else {
+        U16out.allocateBuffer();
+    }
     Value * s2pInstance = s2pk.createInstance({});
     Value * u8u16Instance = u8u16k.createInstance({});
     Value * delInstance = delK.createInstance({});
@@ -332,7 +349,7 @@ Function * u8u16Pipeline(Module * mMod, IDISA::IDISA_Builder * iBuilder, pablo::
 
 
 
-typedef void (*u8u16FunctionType)(char * byte_data, size_t filesize);
+typedef void (*u8u16FunctionType)(char * byte_data, char * output_data, size_t filesize);
 
 static ExecutionEngine * u8u16Engine = nullptr;
 
@@ -385,11 +402,23 @@ void u8u16(u8u16FunctionType fn_ptr, const std::string & fileName) {
         }
         mFileBuffer = const_cast<char *>(mFile.data());
     }
-    //std::cerr << "mFileSize =" << mFileSize << "\n";
-    //std::cerr << "fn_ptr =" << std::hex << reinterpret_cast<intptr_t>(fn_ptr) << "\n";
 
-    fn_ptr(mFileBuffer, mFileSize);
-
+    if (mMapBuffering) {
+        boost::interprocess::mapped_region outputBuffer(boost::interprocess::anonymous_shared_memory(2*mFileSize));
+        outputBuffer.advise(boost::interprocess::mapped_region::advice_willneed);
+        outputBuffer.advise(boost::interprocess::mapped_region::advice_sequential);
+        fn_ptr(mFileBuffer, static_cast<char*>(outputBuffer.get_address()), mFileSize);
+    }
+    else if (memAlignBuffering) {
+        char * outputBuffer;
+        posix_memalign(reinterpret_cast<void **>(&outputBuffer), 32, 2*mFileSize);
+        fn_ptr(mFileBuffer, outputBuffer, mFileSize);
+        free(reinterpret_cast<void *>(outputBuffer));
+    }
+    else {
+        /* No external output buffer */
+        fn_ptr(mFileBuffer, nullptr, mFileSize);
+    }
     mFile.close();
     
 }

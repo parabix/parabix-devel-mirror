@@ -8,8 +8,7 @@
 #include <vector>
 #include <IDISA/idisa_builder.h>
 #include <llvm/IR/Type.h>
-#include <iostream>
-    
+
 using namespace parabix;
 
 enum SS_struct_index {iProducer_pos = 0, iConsumer_pos = 1, iEnd_of_input = 2, iBuffer_ptr = 3};
@@ -87,6 +86,14 @@ llvm::Value * StreamSetBuffer::allocateBuffer() {
     return mStreamSetBufferPtr;
 }
 
+llvm::Value * StreamSetBuffer::getStreamSetBlockPointer(llvm::Value * bufferStructPtr, llvm::Value * blockNo) {
+    Value * handle = iBuilder->CreateGEP(bufferStructPtr, {iBuilder->getInt32(0), iBuilder->getInt32(iBuffer_ptr)});
+    return iBuilder->CreateGEP(iBuilder->CreateLoad(handle), {blockNo});
+}
+
+
+
+
 // Single Block Buffer
 // For a single block buffer, the block pointer is always the buffer base pointer.
 llvm::Value * SingleBlockBuffer::getStreamSetBlockPointer(llvm::Value * bufferStructPtr, llvm::Value * blockNo) {
@@ -95,7 +102,7 @@ llvm::Value * SingleBlockBuffer::getStreamSetBlockPointer(llvm::Value * bufferSt
 }
 
 
-// External Unbounded Buffer
+// External File Buffer
 
 void ExternalFileBuffer::setStreamSetBuffer(llvm::Value * ptr, Value * fileSize) {
     
@@ -136,7 +143,6 @@ llvm::Value * ExternalFileBuffer::getStreamSetBlockPointer(llvm::Value * bufferS
     return iBuilder->CreateGEP(iBuilder->CreateLoad(handle), {blockNo});
 }
 
-
 // Circular Stack Allocated Buffer
 
 llvm::Value * CircularBuffer::getStreamSetBlockPointer(llvm::Value * bufferStructPtr, llvm::Value * blockNo) {
@@ -148,7 +154,7 @@ llvm::Value * CircularBuffer::getStreamSetBlockPointer(llvm::Value * bufferStruc
     return iBuilder->CreateGEP(bufPtr, {iBuilder->CreateAnd(blockNo, ConstantInt::get(iBuilder->getSizeTy(), mBufferBlocks-1))});
 }
 
-llvm::Value * LinearBuffer::getStreamSetBlockPointer(llvm::Value * bufferStructPtr, llvm::Value * blockNo) {
+llvm::Value * LinearCopybackBuffer::getStreamSetBlockPointer(llvm::Value * bufferStructPtr, llvm::Value * blockNo) {
     Constant * blockWidth = ConstantInt::get(iBuilder->getSizeTy(), iBuilder->getStride());
     Value * consumerPos_ptr = iBuilder->CreateGEP(bufferStructPtr, {iBuilder->getInt32(0), iBuilder->getInt32(iConsumer_pos)});
     Value * consumerPos = iBuilder->CreateLoad(consumerPos_ptr);
@@ -159,7 +165,7 @@ llvm::Value * LinearBuffer::getStreamSetBlockPointer(llvm::Value * bufferStructP
     return iBuilder->CreateGEP(bufPtr, {iBuilder->CreateSub(blockNo, consumerBlock)});
 }
 
-void LinearBuffer::setConsumerPos(Value * bufferStructPtr, Value * new_consumer_pos) {
+void LinearCopybackBuffer::setConsumerPos(Value * bufferStructPtr, Value * new_consumer_pos) {
     Type * const i1 = iBuilder->getInt1Ty();
     Type * const i8 = iBuilder->getInt8Ty();
     Type * const i32 = iBuilder->getInt32Ty();
