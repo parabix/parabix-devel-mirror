@@ -221,7 +221,7 @@ void KernelBuilder::generateDoSegmentMethod() {
 
     generateDoBlockLogic(self, blockNo);
     setBlockNo(self, iBuilder->CreateAdd(blockNo, strideBlocks));
-    blocksRemaining->addIncoming(iBuilder->CreateSub(blocksRemaining, strideBlocks), blockLoopBody);
+    blocksRemaining->addIncoming(iBuilder->CreateSub(blocksRemaining, ConstantInt::get(size_ty, 1)), blockLoopBody);
     iBuilder->CreateBr(blockLoopCond);
     
     iBuilder->SetInsertPoint(blocksDone);
