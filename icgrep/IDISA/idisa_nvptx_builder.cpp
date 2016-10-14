@@ -267,4 +267,13 @@ void IDISA_NVPTX20_Builder::CreateBallotFunc(){
     CreateRet(result);
 }
 
+LoadInst * IDISA_NVPTX20_Builder::CreateAtomicLoadAcquire(Value * ptr) {
+    return CreateLoad(ptr);
+    
+}
+StoreInst * IDISA_NVPTX20_Builder::CreateAtomicStoreRelease(Value * val, Value * ptr) {
+    return CreateStore(val, ptr);
+}
+
+    
 }

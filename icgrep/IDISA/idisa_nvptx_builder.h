@@ -43,6 +43,8 @@ public:
     Value * Advance(const unsigned index, const unsigned shiftAmount, Value * const value);
     Value * LongAdd(Value * const valA, Value * const valB, Value * carryIn);
 
+    LoadInst * CreateAtomicLoadAcquire(Value * ptr) override;
+    StoreInst * CreateAtomicStoreRelease(Value * val, Value * ptr) override; 
 
 private:
     void CreateGlobals();

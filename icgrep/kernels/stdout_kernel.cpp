@@ -53,8 +53,7 @@ void stdOutKernel::generateDoSegmentMethod() {
     Value * streamStructPtr = getStreamSetStructPtr(self, "codeUnitBuffer");
     //iBuilder->CallPrintInt("streamStructPtr", iBuilder->CreatePtrToInt(streamStructPtr, iBuilder->getInt64Ty()));
 
-    LoadInst * producerPos = iBuilder->CreateAlignedLoad(mStreamSetInputBuffers[0]->getProducerPosPtr(streamStructPtr), sizeof(size_t));
-    producerPos->setOrdering(AtomicOrdering::Acquire);
+    LoadInst * producerPos = iBuilder->CreateAtomicLoadAcquire(mStreamSetInputBuffers[0]->getProducerPosPtr(streamStructPtr));
     //iBuilder->CallPrintInt("producerPos", producerPos);
     Value * endSignal = iBuilder->CreateLoad(mStreamSetInputBuffers[0]->hasEndOfInputPtr(streamStructPtr));
 
@@ -100,8 +99,7 @@ void stdOutKernel::generateFinalBlockMethod() {
     iBuilder->SetInsertPoint(BasicBlock::Create(iBuilder->getContext(), "fb_flush", finalBlockFunction, 0));
     Value * self = getParameter(finalBlockFunction, "self");
     Value * streamStructPtr = getStreamSetStructPtr(self, "codeUnitBuffer");
-    LoadInst * producerPos = iBuilder->CreateAlignedLoad(mStreamSetInputBuffers[0]->getProducerPosPtr(streamStructPtr), sizeof(size_t));
-    producerPos->setOrdering(AtomicOrdering::Acquire);
+    LoadInst * producerPos = iBuilder->CreateAtomicLoadAcquire(mStreamSetInputBuffers[0]->getProducerPosPtr(streamStructPtr));
     Value * processed = getProcessedItemCount(self);
     Value * itemsAvail = iBuilder->CreateSub(producerPos, processed);
     Value * blockNo = getScalarField(self, blockNoScalar);

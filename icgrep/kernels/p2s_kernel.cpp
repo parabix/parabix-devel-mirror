@@ -235,8 +235,7 @@ void p2s_16Kernel_withCompressedOutput::generateFinalBlockMethod() {
     for (unsigned i = 0; i < mStreamSetOutputs.size(); i++) {
         Value * ssStructPtr = getStreamSetStructPtr(self, mStreamSetOutputs[i].ssName);
         Value * producerPosPtr = mStreamSetOutputBuffers[i]->getProducerPosPtr(ssStructPtr);
-        iBuilder->CreateAlignedStore(i16UnitsGenerated, producerPosPtr, sizeof(size_t))->setOrdering(AtomicOrdering::Release);
-    }
+        iBuilder->CreateAtomicStoreRelease(i16UnitsGenerated, producerPosPtr);
     iBuilder->CreateRetVoid();
     iBuilder->restoreIP(savePoint);
 }

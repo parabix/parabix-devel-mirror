@@ -148,6 +148,8 @@ public:
         return instr;
     }
     
+    virtual llvm::LoadInst* CreateAtomicLoadAcquire(Value * ptr);
+    virtual llvm::StoreInst *  CreateAtomicStoreRelease(Value * val, Value * ptr); 
     
 protected:
     Module * mMod;

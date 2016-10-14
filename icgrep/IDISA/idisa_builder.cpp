@@ -418,4 +418,18 @@ Value * IDISA_Builder::simd_not(Value * a) {
     return simd_xor(a, Constant::getAllOnesValue(a->getType()));
 }
 
+LoadInst * IDISA_Builder::CreateAtomicLoadAcquire(Value * ptr) {
+    unsigned alignment = dyn_cast<PointerType>(ptr->getType())->getElementType()->getPrimitiveSizeInBits()/8;
+    LoadInst * inst = CreateAlignedLoad(ptr, alignment);
+    inst->setOrdering(AtomicOrdering::Acquire);
+    return inst;
+    
+}
+StoreInst * IDISA_Builder::CreateAtomicStoreRelease(Value * val, Value * ptr) {
+    unsigned alignment = dyn_cast<PointerType>(ptr->getType())->getElementType()->getPrimitiveSizeInBits()/8;
+    StoreInst * inst = CreateAlignedStore(val, ptr, alignment);
+    inst->setOrdering(AtomicOrdering::Release);
+    return inst;
+}
+
 }
