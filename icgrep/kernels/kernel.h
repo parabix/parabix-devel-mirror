@@ -53,7 +53,7 @@ public:
     virtual llvm::Value * getLogicalSegmentNo(llvm::Value * kernelInstance) override;
     virtual llvm::Value * getProcessedItemCount(llvm::Value * kernelInstance) override;
     virtual llvm::Value * getProducedItemCount(llvm::Value * kernelInstance) override;
-    virtual llvm::Value * getTerminationSignal(llvm::Value * kernelInstance) override;
+    llvm::Value * getTerminationSignal(llvm::Value * kernelInstance);
     
     
 protected:
@@ -112,14 +112,14 @@ protected:
     size_t getStreamSetBufferSize(Value * self, std::string ssName);
 
     llvm::Value * getStreamSetBlockPtr(Value * self, std::string ssName, Value * blockNo);
-
+    
     void setBlockNo(Value * self, Value * newFieldVal);
     virtual void setLogicalSegmentNo(llvm::Value * self, Value * newFieldVal);
     virtual void setProcessedItemCount(llvm::Value * self, Value * newFieldVal);
     virtual void setProducedItemCount(llvm::Value * self, Value * newFieldVal);
-    virtual void setTerminationSignal(llvm::Value * self, Value * newFieldVal);
+    void setTerminationSignal(llvm::Value * self);
     
-    
+
 protected:
 
     std::vector<llvm::Type *>  mKernelFields;

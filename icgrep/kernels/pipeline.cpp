@@ -37,24 +37,18 @@ Function * generateSegmentParallelPipelineThreadFunction(std::string name, IDISA
 
      // Create the basic blocks for the thread function.
     BasicBlock * entryBlock = BasicBlock::Create(iBuilder->getContext(), "entry", threadFunc, 0);
-    BasicBlock * segmentLoop = BasicBlock::Create(iBuilder->getContext(), "segmentCond", threadFunc, 0);
-    BasicBlock * finalSegmentLoopExit = BasicBlock::Create(iBuilder->getContext(), "partialSegmentCond", threadFunc, 0);
+    BasicBlock * segmentLoop = BasicBlock::Create(iBuilder->getContext(), "segmentLoop", threadFunc, 0);
     BasicBlock * exitThreadBlock = BasicBlock::Create(iBuilder->getContext(), "exitThread", threadFunc, 0);
     std::vector<BasicBlock *> segmentWait;
     std::vector<BasicBlock *> segmentLoopBody;
-    std::vector<BasicBlock *> partialSegmentWait;
-    std::vector<BasicBlock *> partialSegmentLoopBody;
     for (unsigned i = 0; i < kernels.size(); i++) {
         segmentWait.push_back(BasicBlock::Create(iBuilder->getContext(), "segmentWait"+std::to_string(i), threadFunc, 0));
         segmentLoopBody.push_back(BasicBlock::Create(iBuilder->getContext(), "segmentWait"+std::to_string(i), threadFunc, 0));
-        partialSegmentWait.push_back(BasicBlock::Create(iBuilder->getContext(), "partialSegmentWait"+std::to_string(i), threadFunc, 0));
-        partialSegmentLoopBody.push_back(BasicBlock::Create(iBuilder->getContext(), "partialSegmentLoopBody"+std::to_string(i), threadFunc, 0));
     }
 
     iBuilder->SetInsertPoint(entryBlock);
     Value * sharedStruct = iBuilder->CreateBitCast(input, PointerType::get(sharedStructType, 0));
-    Value * myThreadId = ConstantInt::get(size_ty, id);
-    Value * fileSize = iBuilder->CreateLoad(iBuilder->CreateGEP(sharedStruct, {iBuilder->getInt32(0), iBuilder->getInt32(0)}));
+    Constant * myThreadId = ConstantInt::get(size_ty, id);
     std::vector<Value *> instancePtrs;
     for (unsigned i = 0; i < kernels.size(); i++) {
         Value * ptr = iBuilder->CreateGEP(sharedStruct, {iBuilder->getInt32(0), iBuilder->getInt32(i + 1)});
@@ -64,25 +58,14 @@ Function * generateSegmentParallelPipelineThreadFunction(std::string name, IDISA
     // Some important constant values.
     int segmentSize = codegen::SegmentSize;
     Constant * segmentBlocks = ConstantInt::get(size_ty, segmentSize);
-    Constant * segmentBytes = ConstantInt::get(size_ty, iBuilder->getStride() * segmentSize);
-    Constant * hypersegmentBytes = ConstantInt::get(size_ty, iBuilder->getStride() * segmentSize * threadNum);
-    Constant * const blockSize = ConstantInt::get(size_ty, iBuilder->getStride());
-
-    Value * myFirstSegNo = myThreadId;  // 
-    // The offset of my starting segment within the thread group hypersegment.
-    Value * myOffset = iBuilder->CreateMul(segmentBytes, myThreadId);
-    Value * fullSegLimit = iBuilder->CreateAdd(myOffset, segmentBytes);
-
     iBuilder->CreateBr(segmentLoop);
 
     iBuilder->SetInsertPoint(segmentLoop);
-    PHINode * remainingBytes = iBuilder->CreatePHI(size_ty, 2, "remainingBytes");
-    remainingBytes->addIncoming(fileSize, entryBlock);
     PHINode * segNo = iBuilder->CreatePHI(size_ty, 2, "segNo");
-    segNo->addIncoming(myFirstSegNo, entryBlock);
-
-    Value * LT_fullSegment = iBuilder->CreateICmpSLT(remainingBytes, fullSegLimit);
-    iBuilder->CreateCondBr(LT_fullSegment, finalSegmentLoopExit, segmentWait[0]);
+    segNo->addIncoming(myThreadId, entryBlock);
+    unsigned last_kernel = kernels.size() - 1;
+    Value * alreadyDone = kernels[last_kernel]->getTerminationSignal(instancePtrs[last_kernel]);
+    iBuilder->CreateCondBr(alreadyDone, exitThreadBlock, segmentWait[0]);
 
     for (unsigned i = 0; i < kernels.size(); i++) {
         iBuilder->SetInsertPoint(segmentWait[i]);
@@ -92,37 +75,14 @@ Function * generateSegmentParallelPipelineThreadFunction(std::string name, IDISA
 
         iBuilder->SetInsertPoint(segmentLoopBody[i]);
         kernels[i]->createDoSegmentCall(instancePtrs[i], segmentBlocks);
-        if (i == kernels.size() - 1) break;
+        if (i == last_kernel) break;
         iBuilder->CreateBr(segmentWait[i+1]);
     }
    
-    remainingBytes->addIncoming(iBuilder->CreateSub(remainingBytes, hypersegmentBytes), segmentLoopBody[kernels.size()-1]);
-    segNo->addIncoming(iBuilder->CreateAdd(segNo, ConstantInt::get(size_ty, threadNum)), segmentLoopBody[kernels.size()-1]);
-    iBuilder->CreateBr(segmentLoop);
-
-    // Now we may have a partial segment, or we may be completely done
-    // because the last segment was handled by a previous thread in the group.
-    iBuilder->SetInsertPoint(finalSegmentLoopExit);
-    Value * alreadyDone = iBuilder->CreateICmpSLT(remainingBytes, myOffset);
-    Value * remainingForMe = iBuilder->CreateSub(remainingBytes, myOffset);
-    Value * blocksToDo = iBuilder->CreateUDiv(remainingForMe, blockSize);
-    iBuilder->CreateCondBr(alreadyDone, exitThreadBlock, partialSegmentWait[0]);
-
-    // Full Block Pipeline loop
-    for (unsigned i = 0; i < kernels.size(); i++) {
-        iBuilder->SetInsertPoint(partialSegmentWait[i]);
-        Value * processedSegmentCount = kernels[i]->getLogicalSegmentNo(instancePtrs[i]);
-        Value * cond = iBuilder->CreateICmpEQ(segNo, processedSegmentCount);
-        iBuilder->CreateCondBr(cond, partialSegmentLoopBody[i], partialSegmentWait[i]);
-
-        iBuilder->SetInsertPoint(partialSegmentLoopBody[i]);
-        kernels[i]->createDoSegmentCall(instancePtrs[i], blocksToDo);
-        kernels[i]->createFinalBlockCall(instancePtrs[i], iBuilder->CreateURem(remainingForMe, blockSize));
-        if (i == kernels.size() - 1) break;
-        iBuilder->CreateBr(partialSegmentWait[i+1]);
-    }
-    iBuilder->CreateBr(exitThreadBlock);
-
+    segNo->addIncoming(iBuilder->CreateAdd(segNo, ConstantInt::get(size_ty, threadNum)), segmentLoopBody[last_kernel]);
+    Value * endSignal = kernels[last_kernel]->getTerminationSignal(instancePtrs[last_kernel]);
+    iBuilder->CreateCondBr(endSignal, exitThreadBlock, segmentLoop);
+    
     iBuilder->SetInsertPoint(exitThreadBlock);
     Value * nullVal = Constant::getNullValue(voidPtrTy);
     Function * pthreadExitFunc = m->getFunction("pthread_exit");
@@ -243,78 +203,16 @@ void generatePipelineLoop(IDISA::IDISA_Builder * iBuilder, std::vector<KernelBui
     Type * const size_ty = iBuilder->getSizeTy();
 
     // Create the basic blocks for the loop.
-    BasicBlock * segmentCondBlock = nullptr;
-    BasicBlock * segmentBodyBlock = nullptr;
-    if (segmentSize > 1) {
-        segmentCondBlock = BasicBlock::Create(iBuilder->getContext(), "segmentCond", main, 0);
-        segmentBodyBlock = BasicBlock::Create(iBuilder->getContext(), "segmentBody", main, 0);
-    }
-    BasicBlock * fullCondBlock = BasicBlock::Create(iBuilder->getContext(), "fullCond", main, 0);
-    BasicBlock * fullBodyBlock = BasicBlock::Create(iBuilder->getContext(), "fullBody", main, 0);
-    BasicBlock * finalBlock = BasicBlock::Create(iBuilder->getContext(), "final", main, 0);
-    BasicBlock * exitBlock = BasicBlock::Create(iBuilder->getContext(), "exit", main, 0);
-    
-    
-    Value * initialBufferSize = nullptr;
-    Value * initialBlockNo = nullptr;
-    BasicBlock * initialBlock = nullptr;
-    
-    if (segmentSize > 1) {
-        iBuilder->CreateBr(segmentCondBlock);
-        iBuilder->SetInsertPoint(segmentCondBlock);
-        PHINode * remainingBytes = iBuilder->CreatePHI(size_ty, 2, "remainingBytes");
-        remainingBytes->addIncoming(fileSize, entryBlock);
-        PHINode * blockNo = iBuilder->CreatePHI(size_ty, 2, "blockNo");
-        blockNo->addIncoming(ConstantInt::get(size_ty, 0), entryBlock);
-        
-        Constant * const step = ConstantInt::get(size_ty, iBuilder->getStride() * segmentSize);
-        Value * segmentCondTest = iBuilder->CreateICmpULT(remainingBytes, step);
-        iBuilder->CreateCondBr(segmentCondTest, fullCondBlock, segmentBodyBlock);
-        
-        iBuilder->SetInsertPoint(segmentBodyBlock);
-        Value * segBlocks = ConstantInt::get(size_ty, segmentSize);
-        for (unsigned i = 0; i < kernels.size(); i++) {
-            kernels[i]->createDoSegmentCall(instances[i], segBlocks);
-        }
-        remainingBytes->addIncoming(iBuilder->CreateSub(remainingBytes, step), segmentBodyBlock);
-        blockNo->addIncoming(iBuilder->CreateAdd(blockNo, segBlocks), segmentBodyBlock);
-        
-        iBuilder->CreateBr(segmentCondBlock);
-        initialBufferSize = remainingBytes;
-        initialBlockNo = blockNo;
-        initialBlock = segmentCondBlock;
-    } else {
-        initialBufferSize = fileSize;
-        initialBlockNo = ConstantInt::get(size_ty, 0);
-        initialBlock = entryBlock;
-        iBuilder->CreateBr(fullCondBlock);
-    }
-    
-    iBuilder->SetInsertPoint(fullCondBlock);
-    PHINode * remainingBytes = iBuilder->CreatePHI(size_ty, 2, "remainingBytes");
-    remainingBytes->addIncoming(initialBufferSize, initialBlock);
-    PHINode * blockNo = iBuilder->CreatePHI(size_ty, 2, "blockNo");
-    blockNo->addIncoming(initialBlockNo, initialBlock);
-    
-    Constant * const step = ConstantInt::get(size_ty, iBuilder->getStride());
-    Value * fullCondTest = iBuilder->CreateICmpULT(remainingBytes, step);
-    iBuilder->CreateCondBr(fullCondTest, finalBlock, fullBodyBlock);
-    
-    // Full Block Pipeline loop
-    iBuilder->SetInsertPoint(fullBodyBlock);
+    BasicBlock * segmentBlock = BasicBlock::Create(iBuilder->getContext(), "segmentLoop", main, 0);
+    BasicBlock * exitBlock = BasicBlock::Create(iBuilder->getContext(), "exitBlock", main, 0);
+    iBuilder->CreateBr(segmentBlock);
+    iBuilder->SetInsertPoint(segmentBlock);
+    Constant * segBlocks = ConstantInt::get(size_ty, segmentSize * iBuilder->getStride() / iBuilder->getBitBlockWidth());
     for (unsigned i = 0; i < kernels.size(); i++) {
-        kernels[i]->createDoSegmentCall(instances[i], ConstantInt::get(size_ty, 1));
+        kernels[i]->createDoSegmentCall(instances[i], segBlocks);
     }
-    
-    remainingBytes->addIncoming(iBuilder->CreateSub(remainingBytes, step), fullBodyBlock);
-    blockNo->addIncoming(iBuilder->CreateAdd(blockNo, ConstantInt::get(size_ty, 1)), fullBodyBlock);
-    iBuilder->CreateBr(fullCondBlock);
-    
-    iBuilder->SetInsertPoint(finalBlock);
-    for (unsigned i = 0; i < kernels.size(); i++) {
-        kernels[i]->createFinalBlockCall(instances[i], remainingBytes);
-    }
-    iBuilder->CreateBr(exitBlock);
+    Value * endSignal = kernels[kernels.size()-1]->getTerminationSignal(instances[kernels.size()-1]);
+    iBuilder->CreateCondBr(endSignal, exitBlock, segmentBlock);
     iBuilder->SetInsertPoint(exitBlock);
 
 }

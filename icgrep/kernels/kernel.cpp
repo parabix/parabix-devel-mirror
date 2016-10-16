@@ -163,12 +163,14 @@ void KernelBuilder::generateDoSegmentMethod() {
     Function * doSegmentFunction = m->getFunction(mKernelName + doSegment_suffix);
     iBuilder->SetInsertPoint(BasicBlock::Create(iBuilder->getContext(), "entry", doSegmentFunction, 0));
     BasicBlock * entryBlock = iBuilder->GetInsertBlock();
-    BasicBlock * blockLoopCond = BasicBlock::Create(iBuilder->getContext(), "blockLoopCond", doSegmentFunction, 0);
-    BasicBlock * blockLoopBody = BasicBlock::Create(iBuilder->getContext(), "blockLoopBody", doSegmentFunction, 0);
-    BasicBlock * blocksDone = BasicBlock::Create(iBuilder->getContext(), "blocksDone", doSegmentFunction, 0);
-    BasicBlock * checkFinalBlock = BasicBlock::Create(iBuilder->getContext(), "checkFinalBlock", doSegmentFunction, 0);
+    BasicBlock * strideLoopCond = BasicBlock::Create(iBuilder->getContext(), "strideLoopCond", doSegmentFunction, 0);
+    BasicBlock * strideLoopBody = BasicBlock::Create(iBuilder->getContext(), "strideLoopBody", doSegmentFunction, 0);
+    BasicBlock * stridesDone = BasicBlock::Create(iBuilder->getContext(), "stridesDone", doSegmentFunction, 0);
+    BasicBlock * checkFinalStride = BasicBlock::Create(iBuilder->getContext(), "checkFinalStride", doSegmentFunction, 0);
+    BasicBlock * checkEndSignals = BasicBlock::Create(iBuilder->getContext(), "checkEndSignals", doSegmentFunction, 0);
     BasicBlock * callFinalBlock = BasicBlock::Create(iBuilder->getContext(), "callFinalBlock", doSegmentFunction, 0);
     BasicBlock * segmentDone = BasicBlock::Create(iBuilder->getContext(), "segmentDone", doSegmentFunction, 0);
+    BasicBlock * finalExit = BasicBlock::Create(iBuilder->getContext(), "finalExit", doSegmentFunction, 0);
     Type * const size_ty = iBuilder->getSizeTy();
     Constant * stride = ConstantInt::get(size_ty, iBuilder->getStride());
     Value * strideBlocks = ConstantInt::get(size_ty, iBuilder->getStride() / iBuilder->getBitBlockWidth());
@@ -192,7 +194,6 @@ void KernelBuilder::generateDoSegmentMethod() {
     producerPos.push_back(p);
     Value * availablePos = producerPos[0];
     for (unsigned i = 1; i < inbufProducerPtrs.size(); i++) {
-        
         LoadInst * p = iBuilder->CreateAtomicLoadAcquire(inbufProducerPtrs[i]);
         producerPos.push_back(p);
         /* Set the available position to be the minimum of availablePos and producerPos. */
@@ -203,37 +204,42 @@ void KernelBuilder::generateDoSegmentMethod() {
 #ifndef NDEBUG
     iBuilder->CallPrintInt(mKernelName + "_itemsAvail", itemsAvail);
 #endif
-    Value * blocksAvail = iBuilder->CreateUDiv(itemsAvail, stride);
+    Value * stridesToDo = iBuilder->CreateUDiv(blocksToDo, strideBlocks);
+    Value * stridesAvail = iBuilder->CreateUDiv(itemsAvail, stride);
     /* Adjust the number of full blocks to do, based on the available data, if necessary. */
-    Value * lessThanFullSegment = iBuilder->CreateICmpULT(blocksAvail, blocksToDo);
-    blocksToDo = iBuilder->CreateSelect(lessThanFullSegment, blocksAvail, blocksToDo);
-    //iBuilder->CallPrintInt(mKernelName + "_blocksAvail", blocksAvail);
-    iBuilder->CreateBr(blockLoopCond);
+    Value * lessThanFullSegment = iBuilder->CreateICmpULT(stridesAvail, stridesToDo);
+    stridesToDo = iBuilder->CreateSelect(lessThanFullSegment, stridesAvail, stridesToDo);
+    //iBuilder->CallPrintInt(mKernelName + "_stridesAvail", stridesAvail);
+    iBuilder->CreateBr(strideLoopCond);
 
-    iBuilder->SetInsertPoint(blockLoopCond);
-    PHINode * blocksRemaining = iBuilder->CreatePHI(size_ty, 2, "blocksRemaining");
-    blocksRemaining->addIncoming(blocksToDo, entryBlock);
-    Value * notDone = iBuilder->CreateICmpUGT(blocksRemaining, ConstantInt::get(size_ty, 0));
-    iBuilder->CreateCondBr(notDone, blockLoopBody, blocksDone);
+    iBuilder->SetInsertPoint(strideLoopCond);
+    PHINode * stridesRemaining = iBuilder->CreatePHI(size_ty, 2, "stridesRemaining");
+    stridesRemaining->addIncoming(stridesToDo, entryBlock);
+    Value * notDone = iBuilder->CreateICmpUGT(stridesRemaining, ConstantInt::get(size_ty, 0));
+    iBuilder->CreateCondBr(notDone, strideLoopBody, stridesDone);
 
-    iBuilder->SetInsertPoint(blockLoopBody);
+    iBuilder->SetInsertPoint(strideLoopBody);
     Value * blockNo = getScalarField(self, blockNoScalar);   
 
     generateDoBlockLogic(self, blockNo);
     setBlockNo(self, iBuilder->CreateAdd(blockNo, strideBlocks));
-    blocksRemaining->addIncoming(iBuilder->CreateSub(blocksRemaining, ConstantInt::get(size_ty, 1)), blockLoopBody);
-    iBuilder->CreateBr(blockLoopCond);
+    stridesRemaining->addIncoming(iBuilder->CreateSub(stridesRemaining, ConstantInt::get(size_ty, 1)), strideLoopBody);
+    iBuilder->CreateBr(strideLoopCond);
     
-    iBuilder->SetInsertPoint(blocksDone);
-    processed = iBuilder->CreateAdd(processed, iBuilder->CreateMul(blocksToDo, stride));
+    iBuilder->SetInsertPoint(stridesDone);
+    processed = iBuilder->CreateAdd(processed, iBuilder->CreateMul(stridesToDo, stride));
     setProcessedItemCount(self, processed);
-    iBuilder->CreateCondBr(lessThanFullSegment, checkFinalBlock, segmentDone);
+    iBuilder->CreateCondBr(lessThanFullSegment, checkFinalStride, segmentDone);
     
-    iBuilder->SetInsertPoint(checkFinalBlock);
+    iBuilder->SetInsertPoint(checkFinalStride);
     
     /* We had less than a full segment of data; we may have reached the end of input
        on one of the stream sets.  */
     
+    Value * alreadyDone = getTerminationSignal(self);
+    iBuilder->CreateCondBr(alreadyDone, finalExit, checkEndSignals);
+    
+    iBuilder->SetInsertPoint(checkEndSignals);
     Value * endOfInput = iBuilder->CreateLoad(endSignalPtrs[0]);
     if (endSignalPtrs.size() > 1) {
         /* If there is more than one input stream set, then we need to confirm that one of
@@ -248,7 +254,7 @@ void KernelBuilder::generateDoSegmentMethod() {
     
     iBuilder->SetInsertPoint(callFinalBlock);
     
-    Value * remainingItems = iBuilder->CreateURem(availablePos, stride);
+    Value * remainingItems = iBuilder->CreateSub(availablePos, processed);
     createFinalBlockCall(self, remainingItems);
     setProcessedItemCount(self, availablePos);
     
@@ -256,7 +262,7 @@ void KernelBuilder::generateDoSegmentMethod() {
         Value * ssStructPtr = getStreamSetStructPtr(self, mStreamSetOutputs[i].ssName);
         mStreamSetOutputBuffers[i]->setEndOfInput(ssStructPtr);
     }
-    
+    setTerminationSignal(self);
     iBuilder->CreateBr(segmentDone);
     
     iBuilder->SetInsertPoint(segmentDone);
@@ -272,6 +278,9 @@ void KernelBuilder::generateDoSegmentMethod() {
 
     // Must be the last action, for synchronization.
     setLogicalSegmentNo(self, iBuilder->CreateAdd(segmentNo, ConstantInt::get(size_ty, 1)));
+    iBuilder->CreateBr(finalExit);
+    
+    iBuilder->SetInsertPoint(finalExit);
 
     iBuilder->CreateRetVoid();
     iBuilder->restoreIP(savePoint);
@@ -311,9 +320,8 @@ Value * KernelBuilder::getProducedItemCount(Value * self) {
     return getScalarField(self, producedItemCount);
 }
 
-//  By default, kernels do not terminate early.  
 Value * KernelBuilder::getTerminationSignal(Value * self) {
-    return ConstantInt::getNullValue(iBuilder->getInt1Ty());
+    return getScalarField(self, terminationSignal);
 }
 
 
@@ -332,9 +340,11 @@ void KernelBuilder::setProducedItemCount(Value * self, Value * newCount) {
     iBuilder->CreateStore(newCount, ptr);
 }
 
-void KernelBuilder::setTerminationSignal(Value * self, Value * newFieldVal) {
-    llvm::report_fatal_error("This kernel type does not support setTerminationSignal.");
+void KernelBuilder::setTerminationSignal(Value * self) {
+    Value * ptr = iBuilder->CreateGEP(self, {iBuilder->getInt32(0), getScalarIndex(terminationSignal)});
+    iBuilder->CreateStore(ConstantInt::get(iBuilder->getInt1Ty(), 1), ptr);
 }
+                                      
 
 
 Value * KernelBuilder::getBlockNo(Value * self) {
