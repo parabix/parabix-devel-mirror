@@ -73,7 +73,7 @@ inline RE * makeSeq(RE::InitializerList list) {
 
 }
 
-#endif // JOIN_H
+#endif // RE_SEQ_H
 
 
 

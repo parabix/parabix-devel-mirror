@@ -10,7 +10,11 @@
 #include <llvm/Support/ErrorHandling.h>
 #include <llvm/Support/Signals.h>
 #include <re/re_alt.h>
+#include <re/re_seq.h>
+#include <re/re_start.h>
+#include <re/re_end.h>
 #include <re/re_parser.h>
+#include <re/re_utility.h>
 #include <grep_engine.h>
 #include <fstream>
 #include <string>
@@ -43,18 +47,33 @@ static cl::opt<re::RE_Syntax> RegexpSyntax(cl::desc("Regular expression syntax:"
                clEnumValEnd), cl::cat(LegacyGrepOptions), cl::Grouping, cl::init(re::RE_Syntax::PCRE));
 #endif
 
+static cl::opt<bool> EntireLineMatching("x", cl::desc("Require that entire lines be matched."), cl::cat(LegacyGrepOptions), cl::Grouping);
+static cl::alias  EntireLineMatchingAlias("line-regexp", cl::desc("Alias for -x"), cl::aliasopt(EntireLineMatching));
+
+static cl::opt<bool> WholeWordMatching("w", cl::desc("Require that whole words be matched."), cl::cat(LegacyGrepOptions), cl::Grouping);
+static cl::alias WholeWordMatchingAlias("word-regexp", cl::desc("Alias for -w"), cl::aliasopt(WholeWordMatching));
+
 static cl::opt<bool> UTF_16("UTF-16", cl::desc("Regular expressions over the UTF-16 representation of Unicode."), cl::cat(LegacyGrepOptions));
 static cl::OptionCategory EnhancedGrepOptions("B. Enhanced Grep Options",
                                        "These are additional options for icgrep functionality and performance.");
+
+static cl::opt<bool> FileNamesOnly("l", cl::desc("Display only the names of matching files."), cl::cat(LegacyGrepOptions), cl::Grouping);
+static cl::alias FileNamesAlias("files-with-matches", cl::desc("Alias for -l"), cl::aliasopt(FileNamesOnly));
+
+static cl::opt<bool> NonMatchingFileNamesOnly("L", cl::desc("Display only the names of matching files."), cl::cat(LegacyGrepOptions), cl::Grouping);
+static cl::alias NonMatchingFileNamesAlias("files-without-match", cl::desc("Alias for -L"), cl::aliasopt(NonMatchingFileNamesOnly));
+
+
 static cl::opt<bool> CountOnly("c", cl::desc("Count and display the matching lines per file only."), cl::cat(LegacyGrepOptions), cl::Grouping);
 static cl::alias CountOnlyLong("count", cl::desc("Alias for -c"), cl::aliasopt(CountOnly));
+
 
 static cl::list<std::string> inputFiles(cl::Positional, cl::desc("<regex> <input file ...>"), cl::OneOrMore);
 
 static cl::opt<bool> EnterDirectoriesRecursively("r", cl::desc("Recursively process files within directories, (but follow only top-level symlinks unless -R)."), cl::cat(LegacyGrepOptions), cl::Grouping);
 static cl::opt<bool> FollowSubdirectorySymlinks("R", cl::desc("Recursively process files within directories, following symlinks at all levels."), cl::cat(LegacyGrepOptions), cl::Grouping);
 static cl::opt<bool> CaseInsensitive("i", cl::desc("Ignore case distinctions in the pattern and the file."), cl::cat(LegacyGrepOptions), cl::Grouping);
-
+static cl::alias CaseInsensitiveAlisas("ignore-case", cl::desc("Ignore case distinctions in the pattern and the file."), cl::aliasopt(CaseInsensitive));
 
 static cl::list<std::string> regexVector("e", cl::desc("Regular expression"), cl::ZeroOrMore, cl::cat(LegacyGrepOptions));
 static cl::opt<std::string> RegexFilename("f", cl::desc("Take regular expressions (one per line) from a file"), cl::value_desc("regex file"), cl::init(""), cl::cat(LegacyGrepOptions));
@@ -129,7 +148,12 @@ re::RE * get_icgrep_RE() {
     if (REs.size() > 1) {
         re_ast = re::makeAlt(REs.begin(), REs.end());
     }
-    
+    if (WholeWordMatching) {
+        re_ast = re::makeSeq({re::makeWordBoundary(), re_ast, re::makeWordBoundary()});
+    }
+    if (EntireLineMatching) {
+        re_ast = re::makeSeq({re::makeStart(), re_ast, re::makeEnd()});
+    }    
     return re_ast;
 }
 
@@ -320,7 +344,7 @@ std::vector<std::string> getFullFileList(cl::list<std::string> & inputFiles) {
 
 int main(int argc, char *argv[]) {
     llvm::install_fatal_error_handler(&icgrep_error_handler);
-#ifndef USE_LLVM_3_6
+#if LLVM_VERSION_MINOR > 6
     cl::HideUnrelatedOptions(ArrayRef<const cl::OptionCategory *>{&LegacyGrepOptions, &EnhancedGrepOptions, re::re_toolchain_flags(), pablo::pablo_toolchain_flags(), codegen::codegen_flags()});
 #endif
     cl::ParseCommandLineOptions(argc, argv);
@@ -331,7 +355,7 @@ int main(int argc, char *argv[]) {
 #endif
     re::RE * re_ast = get_icgrep_RE();
     std::string module_name = "grepcode:" + sha1sum(allREs) + ":" + std::to_string(globalFlags);
-
+    
     if (GrepSupport) {  // Calls icgrep again on command line and passes output to grep.
         pipeIcGrepOutputToGrep(argc, argv);
         return 0;   // icgrep is called again, so we need to end this process.
@@ -344,6 +368,26 @@ int main(int argc, char *argv[]) {
     releaseSlabAllocatorMemory();
     
     allFiles = getFullFileList(inputFiles);
+    
+    if (FileNamesOnly && NonMatchingFileNamesOnly) {
+        // Strange request: print names of all matching files and all non-matching files: i.e., all of them.
+        // (Although GNU grep prints nothing.)
+        for (auto & f : allFiles) {
+            if (boost::filesystem::exists(f)) {
+                std::cout << f << "\n";
+            }
+            else {
+                std::cerr << "Error: cannot open " << f << " for processing. Skipped.\n";
+            }
+        }
+        exit(0);
+    }
+    if (FileNamesOnly) {
+        llvm::report_fatal_error("Sorry, -l/-files-with-matches not yet supported\n.");
+    }
+    if (NonMatchingFileNamesOnly) {
+        llvm::report_fatal_error("Sorry, -L/-files-without-match not yet supported\n.");
+    }
     
     initResult(allFiles);
     for (unsigned i=0; i < allFiles.size(); ++i){
