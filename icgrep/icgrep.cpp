@@ -320,7 +320,7 @@ std::vector<std::string> getFullFileList(cl::list<std::string> & inputFiles) {
 
 int main(int argc, char *argv[]) {
     llvm::install_fatal_error_handler(&icgrep_error_handler);
-#if LLVM_VERSION_MINOR > 6
+#ifndef USE_LLVM_3_6
     cl::HideUnrelatedOptions(ArrayRef<const cl::OptionCategory *>{&LegacyGrepOptions, &EnhancedGrepOptions, re::re_toolchain_flags(), pablo::pablo_toolchain_flags(), codegen::codegen_flags()});
 #endif
     cl::ParseCommandLineOptions(argc, argv);

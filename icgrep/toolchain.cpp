@@ -128,7 +128,7 @@ bool AVX2_available() {
     return false;
 }
 
-#if LLVM_VERSION_MINOR > 6
+#ifndef USE_LLVM_3_6
 void WriteAssembly (llvm::TargetMachine *TM, Module * m) {
     llvm::legacy::PassManager PM;
 
