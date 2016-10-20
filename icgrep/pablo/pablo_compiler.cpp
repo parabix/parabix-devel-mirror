@@ -41,7 +41,7 @@ PabloCompiler::PabloCompiler(IDISA::IDISA_Builder * b, PabloKernel * k, PabloFun
 Type * PabloCompiler::initializeKernelData() {
     Examine(mPabloFunction);
     
-    mCarryManager = make_unique<CarryManager>(iBuilder);
+    mCarryManager = std::unique_ptr<CarryManager>(new CarryManager(iBuilder));
     Type * carryDataType = mCarryManager->initializeCarryData(mPabloFunction);
     return carryDataType;
 }
