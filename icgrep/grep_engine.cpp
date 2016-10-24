@@ -176,9 +176,10 @@ Function * generateGPUKernel(Module * m, IDISA::IDISA_Builder * iBuilder, bool C
     Value * id = iBuilder->CreateCall(tidFunc);
 
     Function * mainFunc = m->getFunction("Main");
-    Value * inputThreadPtr = iBuilder->CreateGEP(inputPtr, iBuilder->CreateMul(id, iBuilder->getInt32(8)));
-    Type * const inputStreamType = PointerType::get(ArrayType::get(ArrayType::get(iBuilder->getBitBlockType(), 8), 1), 1);
-    Value * inputStream = iBuilder->CreateBitCast(inputThreadPtr, inputStreamType);    
+    Type * const inputStreamType = PointerType::get(ArrayType::get(ArrayType::get(iBuilder->getBitBlockType(), 8), 1), 1);    
+    Value * inputStreamPtr = iBuilder->CreateBitCast(inputPtr, inputStreamType); 
+    Value * inputStream = iBuilder->CreateGEP(inputStreamPtr, id);
+
     Value * bufferSize = iBuilder->CreateLoad(bufferSizePtr);
     if (CountOnly){
         Value * outputThreadPtr = iBuilder->CreateGEP(outputPtr, id);
@@ -186,9 +187,9 @@ Function * generateGPUKernel(Module * m, IDISA::IDISA_Builder * iBuilder, bool C
         iBuilder->CreateStore(result, outputThreadPtr);
     }
     else {
-        Value * outputThreadPtr = iBuilder->CreateGEP(outputPtr, iBuilder->CreateMul(id, iBuilder->getInt32(2)));
         Type * const outputStremType = PointerType::get(ArrayType::get(iBuilder->getBitBlockType(), 2), 1);
-        Value * outputStream = iBuilder->CreateBitCast(outputThreadPtr, outputStremType);
+        Value * outputStreamPtr = iBuilder->CreateBitCast(outputPtr, outputStremType);
+        Value * outputStream = iBuilder->CreateGEP(outputStreamPtr, id);
         iBuilder->CreateCall(mainFunc, {inputStream, bufferSize, outputStream});
     }    
 
@@ -233,10 +234,8 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool Count
     int addrSpace = 0;
     bool CPU_Only = true;
     LLVMContext TheContext;
-    Module * cpuM = new Module(moduleName+":cpu", TheContext);
-    IDISA::IDISA_Builder * CPUBuilder = IDISA::GetIDISA_Builder(cpuM); 
-    Module * M = cpuM;  
-    IDISA::IDISA_Builder * iBuilder = CPUBuilder; 
+    Module * M = nullptr;  
+    IDISA::IDISA_Builder * iBuilder = nullptr; 
 
 #ifdef CUDA_ENABLED 
     setNVPTXOption(); 
@@ -249,8 +248,17 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool Count
         M->setTargetTriple("nvptx64-nvidia-cuda");
         addrSpace = 1;
         CPU_Only = false;
+        codegen::BlockSize = 64;
     }   
 #endif
+
+    Module * cpuM = new Module(moduleName+":cpu", TheContext);
+    IDISA::IDISA_Builder * CPUBuilder = IDISA::GetIDISA_Builder(cpuM); 
+
+    if(CPU_Only) {
+        M = cpuM;
+        iBuilder = CPUBuilder;
+    }
 
     const unsigned segmentSize = codegen::SegmentSize;
     if (segmentPipelineParallel && codegen::BufferSegments < 2) codegen::BufferSegments = 2;
