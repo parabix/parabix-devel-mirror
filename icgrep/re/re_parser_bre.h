@@ -12,14 +12,14 @@
 namespace re {
     class RE_Parser_BRE : public RE_Parser  {
     public:
-        RE_Parser_BRE(const std::string & regular_expression) : RE_Parser(regular_expression)  {
-
+        RE_Parser_BRE(const std::string & regular_expression) : RE_Parser(regular_expression) {
+            mReSyntax = RE_Syntax::BRE;
         }
 
     protected:
         virtual bool isSetEscapeChar(char c) override;
         virtual bool isUnsupportChartsetOperator(char c) override;
-        virtual RE * parse_alt() override;
+        virtual RE * parse_alt_with_intersect(RE* reToBeIntersected) override;
         virtual RE * parse_next_item() override ;
         virtual RE * parse_escaped() override;
         virtual RE * extend_item(RE * re) override;
@@ -31,7 +31,7 @@ namespace re {
 
     private:
         bool isEscapedCharAhead(char c);
-        bool isCharAhead(char c);
+
     };
 }
 

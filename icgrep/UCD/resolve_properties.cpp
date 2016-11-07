@@ -219,6 +219,22 @@ std::string resolvePropertyFunction(Name * const property) {
     return functionName;
 }
 
+const std::string& getPropertyValueGrepString(const std::string & prop) {
+    auto propName = canonicalize_value_name(prop);
+    auto propit = alias_map.find(propName);
+    if (propit == alias_map.end()) {
+        throw UnicodePropertyExpressionError("Expected a property name, but '" + prop + "' found instead");
+    }
+    auto theprop = propit->second;
+    if (EnumeratedPropertyObject * p = dyn_cast<EnumeratedPropertyObject>(property_object_table[theprop])){
+        return p->GetPropertyValueGrepString();
+    } else if (BinaryPropertyObject * p = dyn_cast<BinaryPropertyObject>(property_object_table[theprop])) {
+        return p->GetPropertyValueGrepString();
+    }
+
+    throw UnicodePropertyExpressionError("Property " + property_full_name[theprop] + " recognized but not supported in icgrep 1.0");
+}
+
 UnicodeSet resolveUnicodeSet(Name * const name) {
     if (name->getType() == Name::Type::UnicodeProperty) {
         std::string prop = name->getNamespace();

@@ -119,10 +119,17 @@ Function * ScanMatchKernel::generateScanWordRoutine(Module * m) {
     recordNum_input_parm->setName("lineNum");
     
     Constant * matchProcessor;
-    if (mIsNameExpression) {
-        matchProcessor = m->getOrInsertFunction("insert_codepoints", Type::getVoidTy(ctxt), T, T, T, S, nullptr);
-    } else {
-        matchProcessor = m->getOrInsertFunction("wrapped_report_match", Type::getVoidTy(ctxt), T, T, T, S, T, T, nullptr);
+    switch (mGrepType) {
+        case GrepType::Normal:
+            matchProcessor = m->getOrInsertFunction("wrapped_report_match", Type::getVoidTy(ctxt), T, T, T, S, T, T, nullptr);
+            break;
+        case GrepType::NameExpression:
+            matchProcessor = m->getOrInsertFunction("insert_codepoints", Type::getVoidTy(ctxt), T, T, T, S, nullptr);
+            break;
+        case GrepType::PropertyValue:
+            matchProcessor = m->getOrInsertFunction("insert_property_values", Type::getVoidTy(ctxt), T, T, T, S, nullptr);
+            break;
+
     }
     iBuilder->SetInsertPoint(BasicBlock::Create(ctxt, "entry", function,0));
     
@@ -193,12 +200,18 @@ Function * ScanMatchKernel::generateScanWordRoutine(Module * m) {
     
 
     Value * fileBuf = getScalarField(instance, "FileBuf");
-    if (mIsNameExpression) {
-        iBuilder->CreateCall(matchProcessor, std::vector<Value *>({matchRecordNum_phi, matchRecordStart_phi, matchRecordEnd, fileBuf}));
-    } else {
-        Value * fileSize = getScalarField(instance, "FileSize");
-        Value * fileIdx = getScalarField(instance, "FileIdx");
-        iBuilder->CreateCall(matchProcessor, std::vector<Value *>({matchRecordNum_phi, matchRecordStart_phi, matchRecordEnd, fileBuf, fileSize, fileIdx}));
+    switch (mGrepType) {
+        case GrepType::Normal:
+        {
+            Value * fileSize = getScalarField(instance, "FileSize");
+            Value * fileIdx = getScalarField(instance, "FileIdx");
+            iBuilder->CreateCall(matchProcessor, std::vector<Value *>({matchRecordNum_phi, matchRecordStart_phi, matchRecordEnd, fileBuf, fileSize, fileIdx}));
+            break;
+        }
+        case GrepType::NameExpression:
+        case GrepType::PropertyValue:
+            iBuilder->CreateCall(matchProcessor, std::vector<Value *>({matchRecordNum_phi, matchRecordStart_phi, matchRecordEnd, fileBuf}));
+            break;
     }
     
     Value * remaining_matches = generateResetLowestBit(iBuilder, matches_phi);

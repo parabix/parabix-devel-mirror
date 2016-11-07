@@ -798,6 +798,7 @@ Unterminated</datafile>
 &#x0020;&#x200D;&#x0646;
 &#x0646;&#x200D;&#x0020;
 </datafile>
+
 <grepcase regexp="^\X$" datafile="graphemebreaktest" grepcount="55"/>
 <!--<grepcase regexp="^\X\X$" datafile="graphemebreaktest" grepcount="153"/>
 <grepcase regexp="^\X{3}$" datafile="graphemebreaktest" grepcount="2"/>-->
@@ -809,5 +810,35 @@ Unterminated</datafile>
 <grepcase regexp="\b{g}\x{308}" datafile="graphemebreaktest" grepcount="0"/>
 <grepcase regexp="\B{g}\x{308}" datafile="graphemebreaktest" grepcount="100"/>
 
+<datafile id="hira_border">aa ba ca
+&#x3096;&#x309d;&#x002d;&#x3088;&#x308a;a
+&#x3096;a
+&#x3096; &#x3096;
+</datafile>
+<datafile id="hiragana_and_katakana">&#x3042;&#x3044;
+&#x3046;&#x3048;
+&#x304a;
+&#x30a2;&#x30a4;
+&#x30a6;&#x30a8;&#x30aa;
+</datafile>
+<datafile id="upper_lower_greek">&#x0391;&#x03b1;&#x0392;&#x03b2;&#x0393;&#x03b3;
+&#x0391;&#x0392;&#x0393;
+&#x03b1;&#x03b2;&#x03b3;
+</datafile>
+
+<grepcase regexp="\b{script=hira}a" datafile="hira_border" grepcount="2"/>
+<grepcase regexp="\b{script=hira}" datafile="hira_border" grepcount="3"/>
+<grepcase regexp="\p{script=/hir./}" datafile="hira_border" grepcount="3"/>
+<grepcase regexp="\p{script=/.*hir.*/}" datafile="hira_border" grepcount="3"/>
+<grepcase regexp="\p{script=/hir.gana/}" datafile="hiragana_and_katakana" grepcount="3"/>
+<grepcase regexp="\p{script=/kat.kana/}" datafile="hiragana_and_katakana" grepcount="2"/>
+<grepcase regexp="\p{script=/(kata|Hira).ana/}" datafile="hiragana_and_katakana" grepcount="5"/>
+
+<grepcase regexp="(?:\p{greek}\p{greek}\p{greek})" datafile="upper_lower_greek" grepcount="3"/>
+<grepcase regexp="(?\p{upper}:\p{greek}\p{greek}\p{greek})" datafile="upper_lower_greek" grepcount="1"/>
+<grepcase regexp="(?\p{lower}:\p{greek}\p{greek}\p{greek})" datafile="upper_lower_greek" grepcount="1"/>
+<grepcase regexp="(?\p{upper}:\p{greek})" datafile="upper_lower_greek" grepcount="2"/>
+
 <grepcase regexp="\N{AIRPLANE}" datafile="../All_good" grepcount="8"/>
+
 </greptest>

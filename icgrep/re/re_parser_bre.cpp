@@ -32,10 +32,10 @@ namespace re{
         }
     }
 
-    RE * RE_Parser_BRE::parse_alt() {
+    RE * RE_Parser_BRE::parse_alt_with_intersect(RE *reToBeIntersected) {
         std::vector<RE *> alt;
         for (;;) {
-            alt.push_back(parse_seq());
+            alt.push_back(parse_seq_with_intersect(reToBeIntersected));
 
             if (!isEscapedCharAhead('|')) {
                 break;
@@ -187,14 +187,6 @@ namespace re{
         return isCharAhead(c);
     }
 
-    inline bool RE_Parser_BRE::isCharAhead(char c) {
-        if (mCursor.remaining() < 2) {
-            return false;
-        }
-        auto nextCursor = mCursor.pos() + 1;
-        return *nextCursor == c;
-    }
-
     inline std::pair<int, int> RE_Parser_BRE::parse_range_bound() {
         int lower_bound = 0, upper_bound = 0;
         if (*++mCursor != ',') {
@@ -296,17 +288,41 @@ namespace re{
             ++mCursor;
         }
         if (*mCursor == '=') {
+            // We have a property-name = value expression
             const auto prop_end = mCursor.pos();
             mCursor++;
-            const auto val_start = mCursor.pos();
-            while (mCursor.more()) {
-                if (isEscapedCharAhead('}') || *mCursor == ':') {
-                    break;
+            auto val_start = mCursor.pos();
+            if (*val_start != '\\' || !isCharAhead('/')) {
+                // property-value is normal string
+                while (mCursor.more()) {
+                    if (isEscapedCharAhead('}') || *mCursor == ':') {
+                        break;
+                    }
+                    ++mCursor;
+                }
+                return createName(canonicalize(start, prop_end), canonicalize(val_start, mCursor.pos()));
+            } else {
+                // property-value is another regex
+                ++mCursor;
+                auto previous = val_start;
+                auto current = (++mCursor).pos();
+                val_start = current;
+
+                while (true) {
+                    if (*current == '/' && *previous == '\\') {
+                        break;
+                    }
+
+                    if (!mCursor.more()) {
+                        ParseFailure("Malformed property expression");
+                    }
+
+                    previous = current;
+                    current = (++mCursor).pos();
                 }
                 ++mCursor;
+                return parseRegexPropertyValue(canonicalize(start, prop_end), canonicalize(val_start, previous));
             }
-            // We have a property-name = value expression
-            return createName(canonicalize(start, prop_end), canonicalize(val_start, mCursor.pos()));
         }
         return createName(canonicalize(start, mCursor.pos()));
     }

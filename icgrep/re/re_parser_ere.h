@@ -11,8 +11,8 @@
 namespace re {
     class RE_Parser_ERE : public RE_Parser  {
     public:
-        RE_Parser_ERE(const std::string & regular_expression) : RE_Parser(regular_expression)  {
-
+        RE_Parser_ERE(const std::string & regular_expression) : RE_Parser(regular_expression) {
+            mReSyntax = RE_Syntax::ERE;
         }
 
     protected:

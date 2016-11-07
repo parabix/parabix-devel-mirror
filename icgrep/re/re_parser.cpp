@@ -67,6 +67,7 @@ RE_Parser::RE_Parser(const std::string & regular_expression)
     , fSupportNonCaptureGroup(false)
     , mCursor(regular_expression)
     , mCaptureGroupCount(0)
+    , mReSyntax(RE_Syntax::PCRE)
     {
 
     }
@@ -86,9 +87,13 @@ RE * RE_Parser::parse_RE() {
 }
 
 RE * RE_Parser::parse_alt() {
+    return parse_alt_with_intersect(nullptr);
+}
+
+RE * RE_Parser::parse_alt_with_intersect(RE* reToBeIntersected) {
     std::vector<RE *> alt;
     for (;;) {
-        alt.push_back(parse_seq());
+        alt.push_back(parse_seq_with_intersect(reToBeIntersected));
         if (*mCursor != '|') {
             break;
         }
@@ -101,6 +106,10 @@ RE * RE_Parser::parse_alt() {
 }
 
 RE * RE_Parser::parse_seq() {
+    return parse_seq_with_intersect(nullptr);
+}
+
+RE * RE_Parser::parse_seq_with_intersect(RE* reToBeIntersected) {
     std::vector<RE *> seq;
     for (;;) {
         RE * re = parse_next_item();
@@ -110,6 +119,9 @@ RE * RE_Parser::parse_seq() {
                 fGraphemeBoundaryPending = false;
             }
             break;
+        }
+        if (reToBeIntersected) {
+            re = makeIntersect(reToBeIntersected, re);
         }
         re = extend_item(re);
         seq.push_back(re);
@@ -249,6 +261,22 @@ RE * RE_Parser::parse_group() {
                     ++mCursor;
                     return parse_next_item();
                 }
+            case '\\': {
+                ++mCursor;
+                if (*mCursor == 'p' || *mCursor == 'P') {
+                    RE* reToBeIntersected = parseEscapedSet();
+                    if (*mCursor == ':') {
+                        ++mCursor;
+                        group_expr = parse_alt_with_intersect(reToBeIntersected);
+                        fModeFlagSet = modeFlagSet;
+                        break;
+                    } else {  // if *_cursor == ')'
+                        ++mCursor;
+                        return parse_next_item();
+                    }
+                }
+                break;
+            }
             default:
                 ParseFailure("Illegal (? syntax.");
         }
@@ -381,19 +409,27 @@ RE * RE_Parser::parseEscapedSet() {
             if (*++mCursor != '{') {
                 return complemented ? makeWordNonBoundary() : makeWordBoundary();
             } else {
-                switch (*++mCursor) {
-                    case 'g':
-                        re = complemented ? makeZeroWidth("NonGCB") : makeZeroWidth("GCB"); 
-                        break;
-                    case 'w': ParseFailure("\\b{w} not yet supported.");
-                    case 'l': ParseFailure("\\b{l} not yet supported.");
-                    case 's': ParseFailure("\\b{s} not yet supported.");
-                    default: ParseFailure("Unrecognized boundary assertion");
-                }
-                if (*++mCursor != '}') {
-                    ParseFailure("Malformed boundary assertion");
-                }
                 ++mCursor;
+                if (isCharAhead('}')) {
+                    switch (*mCursor) {
+                        case 'g':
+                            re = complemented ? makeZeroWidth("NonGCB") : makeZeroWidth("GCB");
+                            ++mCursor;
+                            ++mCursor;
+                            break;
+                        case 'w': ParseFailure("\\b{w} not yet supported.");
+                        case 'l': ParseFailure("\\b{l} not yet supported.");
+                        case 's': ParseFailure("\\b{s} not yet supported.");
+//                        default: ParseFailure("Unrecognized boundary assertion");
+                    }
+                }
+                if (!re) {
+                    auto propExpr = parsePropertyExpression();
+                    if (*mCursor++ != '}') {
+                        ParseFailure("Malformed boundary assertion");
+                    }
+                    re = complemented ? makeReNonBoundary(propExpr) : makeReBoundary(propExpr);
+                }
                 return re;
             }
         case 'd':
@@ -528,6 +564,14 @@ std::string RE_Parser::canonicalize(const cursor_t begin, const cursor_t end) {
     return s.str();
 }
 
+bool RE_Parser::isCharAhead(char c) {
+    if (mCursor.remaining() < 2) {
+        return false;
+    }
+    auto nextCursor = mCursor.pos() + 1;
+    return *nextCursor == c;
+}
+
 RE * RE_Parser::parsePropertyExpression() {
     const auto start = mCursor.pos();
     while (mCursor.more()) {
@@ -542,24 +586,70 @@ RE * RE_Parser::parsePropertyExpression() {
         ++mCursor;
     }
     if (*mCursor == '=') {
+        // We have a property-name = value expression
         const auto prop_end = mCursor.pos();
         mCursor++;
-        const auto val_start = mCursor.pos();
-        while (mCursor.more()) {
-            bool done = false;
-            switch (*mCursor) {
-                case '}': case ':':
-                    done = true;
+        auto val_start = mCursor.pos();
+        if (*val_start != '/') {
+            // property-value is normal string
+            while (mCursor.more()) {
+                bool done = false;
+                switch (*mCursor) {
+                    case '}': case ':':
+                        done = true;
+                }
+                if (done) {
+                    break;
+                }
+                ++mCursor;
             }
-            if (done) {
-                break;
+            return createName(canonicalize(start, prop_end), canonicalize(val_start, mCursor.pos()));
+        } else {
+            // property-value is another regex
+            auto previous = val_start;
+            auto current = (++mCursor).pos();
+            val_start = current;
+
+            while (true) {
+                if (*current == '/' && *previous != '\\') {
+                    break;
+                }
+
+                if (!mCursor.more()) {
+                    ParseFailure("Malformed property expression");
+                }
+
+                previous = current;
+                current = (++mCursor).pos();
             }
             ++mCursor;
+            return parseRegexPropertyValue(canonicalize(start, prop_end), canonicalize(val_start, current));
         }
-        // We have a property-name = value expression
-        return createName(canonicalize(start, prop_end), canonicalize(val_start, mCursor.pos()));
     }
     return createName(canonicalize(start, mCursor.pos()));
+}
+
+RE * RE_Parser::parseRegexPropertyValue(const std::string& propName, const std::string& regexValue) {
+    auto regexValueForGrep = "^" + regexValue + "$";
+    RE* propValueRe = RE_Parser::parse(regexValueForGrep, fModeFlagSet, mReSyntax);
+    GrepEngine engine;
+    engine.grepCodeGen("NamePattern", propValueRe, false, false, GrepType::PropertyValue);
+    auto grepValue = engine.grepPropertyValues(propName);
+
+    auto grepValueSize = grepValue.size();
+    if (!grepValueSize) {
+        ParseFailure("regex " + regexValue + " match no property values");
+    } else if (grepValueSize == 1) {
+        // handle right value
+        return createName(std::string(propName), std::string(grepValue[0]));
+    } else {
+        std::vector<re::RE*> valueRes;
+        for (auto iter = grepValue.begin(); iter != grepValue.end(); ++iter) {
+            valueRes.push_back(createName(std::string(propName), std::string(*iter)));
+        }
+
+        return makeAlt(valueRes.begin(), valueRes.end());
+    }
 }
 
 Name * RE_Parser::parseNamePatternExpression(){
@@ -580,7 +670,7 @@ Name * RE_Parser::parseNamePatternExpression(){
     RE * embedded = makeSeq({mMemoizer.memoize(makeCC(0x3B)), makeRep(makeAny(), 0, Rep::UNBOUNDED_REP), nameRE});
     
     GrepEngine engine;
-    engine.grepCodeGen("NamePattern", embedded, false, false, true);
+    engine.grepCodeGen("NamePattern", embedded, false, false, GrepType::NameExpression);
     CC * codepoints = engine.grepCodepoints();
     
     if (codepoints) {
@@ -971,18 +1061,25 @@ RE * RE_Parser::makeComplement(RE * s) {
 }
 
            
-                       
+
                            
 RE * RE_Parser::makeWordBoundary() {
     Name * wordC = makeWordSet();
-    return makeAlt({makeSeq({makeNegativeLookBehindAssertion(wordC), makeLookAheadAssertion(wordC)}),
-                    makeSeq({makeLookBehindAssertion(wordC), makeNegativeLookAheadAssertion(wordC)})});
+    return makeReBoundary(wordC);
 }
 
 RE * RE_Parser::makeWordNonBoundary() {
     Name * wordC = makeWordSet();
-    return makeAlt({makeSeq({makeNegativeLookBehindAssertion(wordC), makeNegativeLookAheadAssertion(wordC)}),
-                    makeSeq({makeLookBehindAssertion(wordC), makeLookAheadAssertion(wordC)})});
+    return makeReNonBoundary(wordC);
+}
+
+inline RE * RE_Parser::makeReBoundary(RE * re) {
+    return makeAlt({makeSeq({makeNegativeLookBehindAssertion(re), makeLookAheadAssertion(re)}),
+                    makeSeq({makeLookBehindAssertion(re), makeNegativeLookAheadAssertion(re)})});
+}
+inline RE * RE_Parser::makeReNonBoundary(RE * re) {
+    return makeAlt({makeSeq({makeNegativeLookBehindAssertion(re), makeNegativeLookAheadAssertion(re)}),
+                    makeSeq({makeLookBehindAssertion(re), makeLookAheadAssertion(re)})});
 }
 
 RE * RE_Parser::makeWordBegin() {

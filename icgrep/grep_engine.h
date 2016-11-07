@@ -10,6 +10,7 @@
 #include <stdint.h>
 #include <re/re_re.h>
 #include <llvm/ExecutionEngine/ExecutionEngine.h>
+#include <grep_type.h>
 
 
 namespace llvm { class raw_ostream; }
@@ -26,11 +27,12 @@ public:
 
     ~GrepEngine();
   
-    void grepCodeGen(std::string moduleName, re::RE * re_ast, bool CountOnly, bool UTF_16 = false, bool isNameExpression = false);
+    void grepCodeGen(std::string moduleName, re::RE * re_ast, bool CountOnly, bool UTF_16 = false, GrepType grepType = GrepType::Normal);
     
     void doGrep(const std::string & fileName, const int fileIdx, bool CountOnly, std::vector<size_t> &total_CountOnly, bool UTF_16);
     
     re::CC *  grepCodepoints();
+    const std::vector<std::string> & grepPropertyValues(const std::string& propertyName);
     
 private:
    
@@ -38,7 +40,7 @@ private:
     GrepFunctionType_CountOnly mGrepFunction_CountOnly;
     GrepFunctionType_CPU mGrepFunction_CPU;
 
-    bool mIsNameExpression;
+    GrepType mGrepType;
     llvm::ExecutionEngine * mEngine;
 };
 
@@ -47,6 +49,10 @@ void icgrep_Linking(Module * m, ExecutionEngine * e);
 
 re::CC * getParsedCodePointSet();
 void setParsedCodePointSet();
+
+const std::vector<std::string>& getParsedProeprtyValues();
+void setParsedPropertyValues();
+
 
 void initResult(std::vector<std::string> filenames);
 void PrintResult(bool CountOnly, std::vector<size_t> & total_CountOnly);

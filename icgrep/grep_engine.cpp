@@ -24,6 +24,7 @@
 #include <llvm/IR/Verifier.h>
 #include <llvm/IR/TypeBuilder.h>
 #include <UCD/UnicodeNameData.h>
+#include <UCD/resolve_properties.h>
 
 
 #include <kernels/streamset.h>
@@ -197,7 +198,7 @@ Function * generateGPUKernel(Module * m, IDISA::IDISA_Builder * iBuilder, bool C
     return kernelFunc;
 }
 
-Function * generateCPUKernel(Module * m, IDISA::IDISA_Builder * iBuilder, bool isNameExpression){
+Function * generateCPUKernel(Module * m, IDISA::IDISA_Builder * iBuilder, GrepType grepType){
     Type * const size_ty = iBuilder->getSizeTy();
     Type * const int8PtrTy = iBuilder->getInt8PtrTy();
     Type * const rsltType = PointerType::get(ArrayType::get(iBuilder->getBitBlockType(), 2), 0);
@@ -218,7 +219,7 @@ Function * generateCPUKernel(Module * m, IDISA::IDISA_Builder * iBuilder, bool i
     ExternalFileBuffer MatchResults(iBuilder, StreamSetType(iBuilder, 2, 1));
     MatchResults.setStreamSetBuffer(rsltStream, fileSize);
 
-    kernel::ScanMatchKernel scanMatchK(iBuilder, isNameExpression);
+    kernel::ScanMatchKernel scanMatchK(iBuilder, grepType);
     scanMatchK.generateKernel({&MatchResults}, {});
             
     Value * scanMatchInstance = scanMatchK.createInstance({inputStream, fileSize, fileIdx});
@@ -229,7 +230,7 @@ Function * generateCPUKernel(Module * m, IDISA::IDISA_Builder * iBuilder, bool i
     return mainCPUFn;
 }
 
-void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool CountOnly, bool UTF_16, bool isNameExpression) {
+void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool CountOnly, bool UTF_16, GrepType grepType) {
     isUTF_16 = UTF_16;
     int addrSpace = 0;
     bool CPU_Only = true;
@@ -268,7 +269,7 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool Count
 
     unsigned encodingBits = UTF_16 ? 16 : 8;
 
-    mIsNameExpression = isNameExpression;
+    mGrepType = grepType;
 
     Type * const int32ty = iBuilder->getInt32Ty();
     Type * const size_ty = iBuilder->getSizeTy();
@@ -401,7 +402,7 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool Count
             icgrepK.generateKernel({&BasisBits}, {&MatchResults});
             Value * icgrepInstance = icgrepK.createInstance({});
 
-            kernel::ScanMatchKernel scanMatchK(iBuilder, mIsNameExpression);
+            kernel::ScanMatchKernel scanMatchK(iBuilder, mGrepType);
             scanMatchK.generateKernel({&MatchResults}, {});                
             Value * scanMatchInstance = scanMatchK.createInstance({iBuilder->CreateBitCast(inputStream, int8PtrTy), fileSize, fileIdx});
 
@@ -430,7 +431,7 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool Count
         NMD->addOperand(Node);
    
         Compile2PTX(M, IRFilename, PTXFilename);
-        mainCPUFn = generateCPUKernel(cpuM, CPUBuilder, mIsNameExpression);
+        mainCPUFn = generateCPUKernel(cpuM, CPUBuilder, mGrepType);
         if (CountOnly) return;
     }
 #endif
@@ -471,6 +472,17 @@ re::CC *  GrepEngine::grepCodepoints() {
     mGrepFunction(mFileBuffer, mFileSize, 0);
 
     return getParsedCodePointSet();
+}
+
+const std::vector<std::string> & GrepEngine::grepPropertyValues(const std::string& propertyName) {
+    setParsedPropertyValues();
+
+    std::string str = UCD::getPropertyValueGrepString(propertyName);
+
+    //use const_cast to workaround const input
+    mGrepFunction(const_cast<char*>(str.c_str()), str.size(), 0);
+
+    return getParsedProeprtyValues();
 }
 
 GrepEngine::~GrepEngine() {
@@ -606,6 +618,24 @@ re::CC * getParsedCodePointSet(){
 }
 
 
+std::vector<std::string> parsedPropertyValues;
+
+extern "C" {
+    void insert_property_values(size_t lineNum, size_t line_start, size_t line_end, const char * buffer) {
+        auto result = std::string(buffer + line_start, buffer + line_end);
+        parsedPropertyValues.push_back(result);
+    }
+}
+
+inline void setParsedPropertyValues() {
+    parsedPropertyValues.clear();
+}
+
+inline const std::vector<std::string>& getParsedProeprtyValues() {
+    return parsedPropertyValues;
+}
+
+
 void icgrep_Linking(Module * m, ExecutionEngine * e) {
     Module::FunctionListType & fns = m->getFunctionList();
     for (Module::FunctionListType::iterator it = fns.begin(), it_end = fns.end(); it != it_end; ++it) {
@@ -619,6 +649,9 @@ void icgrep_Linking(Module * m, ExecutionEngine * e) {
         }
         if (fnName == "insert_codepoints") {
             e->addGlobalMapping(cast<GlobalValue>(it), (void *)&insert_codepoints);
+        }
+        if (fnName == "insert_property_values") {
+            e->addGlobalMapping(cast<GlobalValue>(it), (void *)&insert_property_values);
         }
 #ifndef DISABLE_PREGENERATED_UCD_FUNCTIONS
         else {

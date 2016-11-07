@@ -118,9 +118,13 @@ protected:
 
     virtual RE * parse_RE();
 
-    virtual RE * parse_alt();
+    RE * parse_alt();
+
+    virtual RE * parse_alt_with_intersect(RE* reToBeIntersected);
 
     RE * parse_seq();
+
+    RE * parse_seq_with_intersect(RE* reToBeIntersected);
 
     virtual RE * parse_next_item();
 
@@ -143,12 +147,15 @@ protected:
     codepoint_t parse_utf8_codepoint();
 
     virtual RE * parsePropertyExpression();
+    RE * parseRegexPropertyValue(const std::string& propName, const std::string& regexValue);
 
     Name * parseNamePatternExpression();
 
     RE * makeComplement(RE * s);
     RE * makeWordBoundary();
     RE * makeWordNonBoundary();
+    RE * makeReBoundary(RE * wordC);
+    RE * makeReNonBoundary(RE * wordC);
     RE * makeWordBegin();
     RE * makeWordEnd();
     Name * makeDigitSet();
@@ -178,6 +185,7 @@ protected:
     void insert_range(CC * cc, const codepoint_t lo, const codepoint_t hi);
 
     static std::string canonicalize(const cursor_t begin, const cursor_t end);
+    bool isCharAhead(char c);
 
 protected:
 
@@ -189,6 +197,7 @@ protected:
     unsigned                    mCaptureGroupCount;
     NameMap                     mNameMap;
     Memoizer                    mMemoizer;
+    RE_Syntax                   mReSyntax;
 };
 
 }

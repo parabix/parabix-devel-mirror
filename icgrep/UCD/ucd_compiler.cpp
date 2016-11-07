@@ -5,6 +5,7 @@
 #include <utf8_encoder.h>
 #include <utf16_encoder.h>
 #include <iostream>
+#include <array>
 
 using namespace cc;
 using namespace re;

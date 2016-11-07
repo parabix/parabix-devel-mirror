@@ -7,6 +7,7 @@
 
 #include "streamset.h"
 #include "kernel.h"
+#include "grep_type.h"
 #include <llvm/Support/Host.h>
 #include <llvm/ADT/Triple.h>
 
@@ -18,7 +19,7 @@ namespace kernel {
     
 class ScanMatchKernel : public KernelBuilder {
 public:
-    ScanMatchKernel(IDISA::IDISA_Builder * iBuilder, bool isNameExpression) :
+    ScanMatchKernel(IDISA::IDISA_Builder * iBuilder, GrepType grepType) :
     KernelBuilder(iBuilder, "scanMatch",
                   {Binding{parabix::StreamSetType(iBuilder,2, 1), "matchResults"}},
                     {}, 
@@ -26,13 +27,13 @@ public:
                     {}, 
                     {Binding{iBuilder->getSizeTy(), "BlockNo"}, Binding{iBuilder->getSizeTy(), "LineStart"}, Binding{iBuilder->getSizeTy(), "LineNum"}}),
 
-    mIsNameExpression(isNameExpression) {}
+    mGrepType(grepType) {}
         
 private:
     void generateDoBlockMethod() override;
     llvm::Function * generateScanWordRoutine(llvm::Module * m);
         
-    bool mIsNameExpression;
+    GrepType mGrepType;
 };
 }
 

@@ -30,6 +30,9 @@ std::string canonicalize_value_name(const std::string & prop_or_val) {
 int PropertyObject::GetPropertyValueEnumCode(const std::string & value_spec) {
     throw std::runtime_error("Property " + value_spec + " unsupported.");
 }
+const std::string& PropertyObject::GetPropertyValueGrepString() {
+    throw std::runtime_error("Property Value Grep String unsupported.");
+}
 
 UnicodeSet UnsupportedPropertyObject::GetCodepointSet(const std::string &) {
     throw std::runtime_error("Property " + UCD::property_full_name[the_property] + " unsupported.");
@@ -72,7 +75,18 @@ std::vector<UnicodeSet> & EnumeratedPropertyObject::GetEnumerationBasisSets() {
     return enumeration_basis_sets;
 };
 
-    
+const std::string& EnumeratedPropertyObject::GetPropertyValueGrepString() {
+    if (!property_value_grep_string.size()) {
+        for (unsigned i = 0; i != property_value_full_names.size(); i++) {
+            property_value_grep_string += canonicalize_value_name(property_value_full_names[i]) + "\n";
+        }
+        for (unsigned i = 0; i != property_value_enum_names.size(); i++) {
+            property_value_grep_string += canonicalize_value_name(property_value_enum_names[i]) + "\n";
+        }
+    }
+    return property_value_grep_string;
+}
+
 int EnumeratedPropertyObject::GetPropertyValueEnumCode(const std::string & value_spec) {
     // The canonical full names are not stored in the precomputed alias map,
     // to save space in the executable.   Add them if the property is used.
@@ -122,6 +136,10 @@ int ExtensionPropertyObject::GetPropertyValueEnumCode(const std::string & value_
     return property_object_table[base_property]->GetPropertyValueEnumCode(value_spec);
 }
 
+const std::string& ExtensionPropertyObject::GetPropertyValueGrepString() {
+    return property_object_table[base_property]->GetPropertyValueGrepString();
+}
+
 const UnicodeSet & BinaryPropertyObject::GetCodepointSet(const std::string & value_spec) {
     int property_enum_val = Binary_ns::Y;
     if (value_spec.length() != 0) {
@@ -143,6 +161,15 @@ const UnicodeSet & BinaryPropertyObject::GetCodepointSet(const int property_enum
         mNoUninitialized = false;
     }
     return mN;
+}
+
+const std::string& BinaryPropertyObject::GetPropertyValueGrepString() {
+    if (!property_value_grep_string.size()) {
+        for (auto iter = Binary_ns::aliases_only_map.begin(), end = Binary_ns::aliases_only_map.end(); iter != end; ++iter) {
+            property_value_grep_string += iter->first + "\n";
+        }
+    }
+    return property_value_grep_string;
 }
 
 }
