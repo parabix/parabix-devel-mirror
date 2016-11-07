@@ -55,7 +55,7 @@ static cl::opt<bool> Flatten("flatten-if", cl::init(false), cl::desc("Flatten al
 
 static cl::bits<PabloCompilationFlags> 
     PabloOptimizationsOptions(cl::values(clEnumVal(DisableSimplification, "Disable Pablo Simplification pass (not recommended)"),
-                                         clEnumVal(PabloSinkingPass, "Moves all instructions into the innermost legal If-scope so that they are only executed when needed."),
+                                         clEnumVal(EnableCodeMotion, "Moves statements into the innermost legal If-scope and moves invariants out of While-loops."),
 #ifdef ENABLE_MULTIPLEXING
                                          clEnumVal(EnableMultiplexing, "combine Advances whose inputs are mutual exclusive into the fewest number of advances possible (expensive)."),
                                          clEnumVal(EnableLowering, "coalesce associative functions prior to optimization passes."),
@@ -180,10 +180,10 @@ void pablo_function_passes(PabloFunction * function) {
         PabloPrinter::print(*function, cerr);
     }
     
-#ifndef NDEBUG
+    #ifndef NDEBUG
     PabloVerifier::verify(*function, "creation");
-#endif
-    
+    #endif
+
     // Scan through the pablo code and perform DCE and CSE
 
 #ifdef PRINT_TIMING_INFORMATION
@@ -234,7 +234,7 @@ void pablo_function_passes(PabloFunction * function) {
         READ_CYCLE_COUNTER(post_distribution_end);
     }
 #endif
-    if (PabloOptimizationsOptions.isSet(PabloSinkingPass)) {
+    if (PabloOptimizationsOptions.isSet(EnableCodeMotion)) {
         READ_CYCLE_COUNTER(sinking_start);
         CodeMotionPass::optimize(*function);
         READ_CYCLE_COUNTER(sinking_end);

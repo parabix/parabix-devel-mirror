@@ -17,17 +17,17 @@ public:
     static inline bool classof(const void *) {
         return false;
     }
-    inline PabloAST * getInitial() const {
+    inline PabloAST * getVariable() const {
         return getOperand(1);
     }
-    inline PabloAST * getExpr() const {
+    inline PabloAST * getValue() const {
         return getOperand(0);
     }
     virtual ~Next() {}
 protected:
-    explicit Next(PabloAST * initial, PabloAST * expr)
-    : Statement(ClassTypeId::Next, initial->getType(), {expr, cast<Assign>(initial)}, cast<Assign>(initial)->getName()) {
-        throwIfNonMatchingTypes(initial, expr);
+    explicit Next(PabloAST * initial, PabloAST * value)
+    : Statement(ClassTypeId::Next, initial->getType(), {value, initial}, initial->getName()) {
+
     }
 };
 

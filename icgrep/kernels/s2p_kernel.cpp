@@ -124,7 +124,7 @@ void s2pKernel::generateFinalBlockMethod() {
      assumption: if remaining bytes is greater than 0, it is safe to read a full block of bytes.
      if remaining bytes is zero, no read should be performed (e.g. for mmapped buffer).
      */
-    IDISA::IDISA_Builder::InsertPoint savePoint = iBuilder->saveIP();
+    auto savePoint = iBuilder->saveIP();
     Module * m = iBuilder->getModule();
     Function * doBlockFunction = m->getFunction(mKernelName + doBlock_suffix);
     Function * finalBlockFunction = m->getFunction(mKernelName + finalBlock_suffix);
@@ -161,17 +161,17 @@ void s2pKernel::generateFinalBlockMethod() {
 
     
 void s2pKernel::generateDoBlockLogic(Value * self, Value * blockNo) {
-    Value * byteStreamBlock_ptr = getStreamSetBlockPtr(self, "byteStream", blockNo);
-    Value * basisBitsBlock_ptr = getStreamSetBlockPtr(self, "basisBits", blockNo);
-    
-    Value * s_bytepack[8];
+    Value * byteStream = getStreamSetBlockPtr(self, "byteStream", blockNo);
+    Value * basisBits = getStreamSetBlockPtr(self, "basisBits", blockNo);
+
+    Value * bytepack[8];
     for (unsigned i = 0; i < 8; i++) {
-        s_bytepack[i] = iBuilder->CreateBlockAlignedLoad(byteStreamBlock_ptr, {iBuilder->getInt32(0), iBuilder->getInt32(0), iBuilder->getInt32(i)});
+        bytepack[i] = iBuilder->CreateBlockAlignedLoad(byteStream, {iBuilder->getInt32(0), iBuilder->getInt32(0), iBuilder->getInt32(i)});
     }
-    Value * p_bitblock[8];
-    s2p(iBuilder, s_bytepack, p_bitblock);
-    for (unsigned j = 0; j < 8; ++j) {
-        iBuilder->CreateBlockAlignedStore(p_bitblock[j], basisBitsBlock_ptr, {iBuilder->getInt32(0), iBuilder->getInt32(j)});
+    Value * bitblock[8];
+    s2p(iBuilder, bytepack, bitblock);
+    for (unsigned i = 0; i < 8; ++i) {
+        iBuilder->CreateBlockAlignedStore(bitblock[i], basisBits, {iBuilder->getInt32(0), iBuilder->getInt32(i)});
     }
     Value * produced = getProducedItemCount(self);
     produced = iBuilder->CreateAdd(produced, ConstantInt::get(iBuilder->getSizeTy(), iBuilder->getStride()));
@@ -179,10 +179,9 @@ void s2pKernel::generateDoBlockLogic(Value * self, Value * blockNo) {
 }
     
 void s2pKernel::generateDoBlockMethod() {
-    IDISA::IDISA_Builder::InsertPoint savePoint = iBuilder->saveIP();
-    Module * m = iBuilder->getModule();
-    
-    Function * doBlockFunction = m->getFunction(mKernelName + doBlock_suffix);
+    auto savePoint = iBuilder->saveIP();
+
+    Function * doBlockFunction = iBuilder->getModule()->getFunction(mKernelName + doBlock_suffix);
     
     iBuilder->SetInsertPoint(BasicBlock::Create(iBuilder->getContext(), "entry", doBlockFunction, 0));
     
@@ -190,6 +189,7 @@ void s2pKernel::generateDoBlockMethod() {
     Value * blockNo = getScalarField(self, blockNoScalar);
     
     generateDoBlockLogic(self, blockNo);
+
     iBuilder->CreateRetVoid();
     iBuilder->restoreIP(savePoint);
 }

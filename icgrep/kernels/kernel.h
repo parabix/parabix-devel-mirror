@@ -31,11 +31,11 @@ class KernelBuilder : public KernelInterface {
 public:
     KernelBuilder(IDISA::IDISA_Builder * builder,
                     std::string kernelName,
-                    std::vector<StreamSetBinding> stream_inputs,
-                    std::vector<StreamSetBinding> stream_outputs,
-                    std::vector<ScalarBinding> scalar_parameters,
-                    std::vector<ScalarBinding> scalar_outputs,
-                    std::vector<ScalarBinding> internal_scalars);
+                    std::vector<Binding> stream_inputs,
+                    std::vector<Binding> stream_outputs,
+                    std::vector<Binding> scalar_parameters,
+                    std::vector<Binding> scalar_outputs,
+                    std::vector<Binding> internal_scalars);
     
     // Create a module for the kernel, including the kernel state type declaration and
     // the full implementation of all required methods.     
@@ -55,7 +55,7 @@ public:
     virtual llvm::Value * getProducedItemCount(llvm::Value * kernelInstance) override;
     llvm::Value * getTerminationSignal(llvm::Value * kernelInstance);
     
-    
+
 protected:
     //
     // Kernel builder subtypes define their logic of kernel construction
@@ -88,7 +88,7 @@ protected:
     
     // Add an additional scalar field to the KernelState struct.
     // Must occur before any call to addKernelDeclarations or createKernelModule.
-    void addScalar(llvm::Type * t, std::string scalarName);
+    void addScalar(llvm::Type * t, std::string name);
     
     // Run-time access of Kernel State and parameters of methods for
     // use in implementing kernels.
@@ -98,7 +98,7 @@ protected:
     
     // Get the value of a scalar field for a given instance.
     llvm::Value * getScalarField(llvm::Value * self, std::string fieldName);
-    
+
     // Set the value of a scalar field for a given instance.
     void setScalarField(llvm::Value * self, std::string fieldName, llvm::Value * newFieldVal);
     
@@ -106,19 +106,21 @@ protected:
     llvm::Value * getParameter(llvm::Function * f, std::string paramName);
     
     // Stream set helpers.
-    unsigned getStreamSetIndex(std::string ssName);
+    unsigned getStreamSetIndex(std::string name);
     
-    llvm::Value * getStreamSetStructPtr(Value * self, std::string ssName);
-    size_t getStreamSetBufferSize(Value * self, std::string ssName);
+    llvm::Value * getScalarFieldPtr(Value * self, std::string name);
 
-    llvm::Value * getStreamSetBlockPtr(Value * self, std::string ssName, Value * blockNo);
+    llvm::Value * getStreamSetStructPtr(Value * self, std::string name);
+    size_t getStreamSetBufferSize(Value * self, std::string name);
+
+    llvm::Value * getStreamSetBlockPtr(Value * self, std::string name, Value * blockNo);
     
     void setBlockNo(Value * self, Value * newFieldVal);
     virtual void setLogicalSegmentNo(llvm::Value * self, Value * newFieldVal);
     virtual void setProcessedItemCount(llvm::Value * self, Value * newFieldVal);
     virtual void setProducedItemCount(llvm::Value * self, Value * newFieldVal);
     void setTerminationSignal(llvm::Value * self);
-    
+
 
 protected:
 

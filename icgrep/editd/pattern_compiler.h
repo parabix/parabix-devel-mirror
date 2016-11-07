@@ -29,7 +29,7 @@ public:
 
     Pattern_Compiler(pablo::PabloFunction & function);
 
-    void compile(std::vector<std::string> patterns, pablo::PabloBuilder & pb, std::vector<pablo::Var *> basisBits, int dist, int optPosition, int stepSize);
+    void compile(const std::vector<std::string> & patterns, pablo::PabloBuilder & pb, pablo::PabloAST *basisBits[], int dist, unsigned optPosition, int stepSize);
 
 
 private:

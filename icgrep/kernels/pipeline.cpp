@@ -118,8 +118,7 @@ void generateSegmentParallelPipeline(IDISA::IDISA_Builder * iBuilder, std::vecto
     }
     Type * sharedStructType = StructType::get(m->getContext(), structTypes);
 
-    AllocaInst * sharedStruct;
-    sharedStruct = iBuilder->CreateAlloca(sharedStructType);
+    AllocaInst * sharedStruct = iBuilder->CreateAlloca(sharedStructType);
     Value * sizePtr = iBuilder->CreateGEP(sharedStruct, {iBuilder->getInt32(0), iBuilder->getInt32(0)});
     iBuilder->CreateStore(fileSize, sizePtr);
     for (unsigned i = 0; i < instances.size(); i++) {

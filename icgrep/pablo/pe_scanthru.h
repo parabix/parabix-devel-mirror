@@ -35,7 +35,7 @@ public:
         return localCarryIndex;
     }
 protected:
-    ScanThru(PabloAST * from, PabloAST * thru, String * name)
+    ScanThru(PabloAST * from, PabloAST * thru, const String * name)
     : Statement(ClassTypeId::ScanThru, from->getType(), {from, thru}, name) {
 
     }

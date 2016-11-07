@@ -28,7 +28,7 @@ namespace pablo {
  * Adaptation of the MICA algorithm as described in "Consensus algorithms for the generation of all maximal
  * bicliques" by Alexe et. al. (2003).
  ** ------------------------------------------------------------------------------------------------------------- */
-FactorizeDFG::BicliqueSet FactorizeDFG::enumerateFactoringSets(ObjectSet params, PabloBlock * const entryScope, const TypeId typeId) {
+FactorizeDFG::BicliqueSet FactorizeDFG::enumerateFactoringSets(ObjectSet params, PabloBlock * const entryScope, TypeId typeId) {
     using IntersectionSets = flat_set<ObjectSet>;
 
     ObjectSet tmp;
@@ -124,7 +124,7 @@ inline FactorizeDFG::BicliqueSet FactorizeDFG::enumerateFactoringSets(Variadic *
         tmp.reserve(op->getNumUses());
         for (PabloAST * user : op->users()) {
             if (user->getClassTypeId() == var->getClassTypeId()) {                
-                for (PabloBlock * scope = cast<Variadic>(user)->getParent(); scope; scope = scope->getPredecessor ()) {
+                for (PabloBlock * scope = cast<Variadic>(user)->getParent(); scope; scope = scope->getPredecessor()) {
                     if (LLVM_UNLIKELY(scope == var->getParent())) {
                         tmp.push_back(user);
                         break;
@@ -195,7 +195,7 @@ inline FactorizeDFG::BicliqueSet FactorizeDFG::enumerateFactoringSets(Variadic *
  * @brief intersects
  ** ------------------------------------------------------------------------------------------------------------- */
 template <class Type>
-inline bool intersects(const Type & A, const Type & B) {
+inline bool intersects(Type & A, Type & B) {
     auto first1 = A.begin(), last1 = A.end();
     auto first2 = B.begin(), last2 = B.end();
     assert (std::is_sorted(first1, last1));
@@ -284,7 +284,7 @@ FactorizeDFG::CheckSet FactorizeDFG::makeCheckSet(PabloBlock * const scope, cons
                 for (;;) {
                     assert (nested);
                     value = nested->getBranch();
-                    nested = nested->getPredecessor ();
+                    nested = nested->getPredecessor();
                     if (nested == scope) {
                         break;
                     }
@@ -348,19 +348,19 @@ inline PabloBlock * FactorizeDFG::findInsertionScope(const ObjectSet & users) co
         // If one of these scopes is nested deeper than the other, scan upwards through
         // the scope tree until both scopes are at the same depth.
         while (depth1 > depth2) {
-            scope1 = scope1->getPredecessor ();
+            scope1 = scope1->getPredecessor();
             --depth1;
         }
         while (depth1 < depth2) {
-            scope2 = scope2->getPredecessor ();
+            scope2 = scope2->getPredecessor();
             --depth2;
         }
         assert (depth1 == depth2);
         // Then iteratively step backwards until we find a matching set of scopes; this
         // must be the LCA of our original scopes.
         while (scope1 != scope2) {
-            scope1 = scope1->getPredecessor ();
-            scope2 = scope2->getPredecessor ();
+            scope1 = scope1->getPredecessor();
+            scope2 = scope2->getPredecessor();
         }
         assert (scope1 && scope2);
         if (std::find(scopes.begin(), scopes.end(), scope1) == scopes.end()) {
@@ -374,7 +374,7 @@ inline PabloBlock * FactorizeDFG::findInsertionScope(const ObjectSet & users) co
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief factorize
  ** ------------------------------------------------------------------------------------------------------------- */
-inline Variadic * FactorizeDFG::factorize(const TypeId typeId, PabloBlock * const scope, ObjectSet & operands, ObjectSet & users) const {
+inline Variadic * FactorizeDFG::factorize(TypeId typeId, PabloBlock * const scope, ObjectSet & operands, ObjectSet & users) const {
     Statement * const lastOperand = lastIn(scope, scope->back(), operands);
     Statement * const firstUsage = firstIn(scope, lastOperand, users);
     scope->setInsertPoint(firstUsage ? firstUsage->getPrevNode() : lastOperand);
@@ -399,7 +399,7 @@ inline Variadic * FactorizeDFG::factorize(const TypeId typeId, PabloBlock * cons
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief processFactoringSets
  ** ------------------------------------------------------------------------------------------------------------- */
-inline bool FactorizeDFG::processFactoringSets(const TypeId typeId, PabloBlock * const scope, BicliqueSet && factoringSets) const {
+inline bool FactorizeDFG::processFactoringSets(TypeId typeId, PabloBlock * const scope, BicliqueSet && factoringSets) const {
     const auto S = independentFactoringSets(std::move(factoringSets), 0);
     for (auto i : S) {
         factorize(typeId, scope, std::get<0>(i), std::get<1>(i));
@@ -410,7 +410,7 @@ inline bool FactorizeDFG::processFactoringSets(const TypeId typeId, PabloBlock *
 ///** ------------------------------------------------------------------------------------------------------------- *
 // * @brief processFactoringSets
 // ** ------------------------------------------------------------------------------------------------------------- */
-//inline bool FactorizeDFG::processFactoringSets(const TypeId typeId, BicliqueSet && factoringSets, ObjectSet & factorings) const {
+//inline bool FactorizeDFG::processFactoringSets(TypeId typeId, BicliqueSet && factoringSets, ObjectSet & factorings) const {
 //    const auto S = independentFactoringSets(std::move(factoringSets), 0);
 //    for (auto i : S) {
 //        factorings.push_back(factorize(typeId, findInsertionScope(std::get<1>(i)), std::get<0>(i), std::get<1>(i)));
@@ -442,7 +442,7 @@ bool FactorizeDFG::factor(PabloBlock * const block) {
 ///** ------------------------------------------------------------------------------------------------------------- *
 // * @brief factor
 // ** ------------------------------------------------------------------------------------------------------------- */
-//void FactorizeDFG::factor(PabloFunction & function, const TypeId typeId) {
+//void FactorizeDFG::factor(PabloFunction & function, TypeId typeId) {
 //    ObjectSet vars;
 //    for (unsigned i = 0; i != function.getNumOfParameters(); ++i) {
 //        vars.push_back(function.getParameter(i));
@@ -607,8 +607,8 @@ inline PabloAST * FactorizeDFG::lower(Variadic * const var, PabloBlock * block) 
                         break;
                     }
                     usage = scope->getBranch();
-                    assert (scope != scope->getPredecessor ());
-                    scope = scope->getPredecessor ();
+                    assert (scope != scope->getPredecessor());
+                    scope = scope->getPredecessor();
                 }
             }
         }
@@ -835,7 +835,7 @@ inline void FactorizeDFG::elevate(Variadic * const var, PabloBlock * block) cons
                         break;
                     }
                     op = scope->getBranch();
-                    scope = scope->getPredecessor ();
+                    scope = scope->getPredecessor();
                 }
             }
             def[i] = op;

@@ -7,15 +7,13 @@
 #ifndef PE_PabloAST_H
 #define PE_PabloAST_H
 
+#include <pablo/type/streamtype.h>
 #include <llvm/Support/Casting.h>
 #include <llvm/Support/Compiler.h>
 #include <boost/iterator/iterator_facade.hpp>
-#include <iterator>
 #include <util/slab_allocator.h>
 #include <type_traits>
-#include <unordered_map>
 #include <vector>
-#include <pablo/pablo_type.h>
 
 using namespace llvm;
 
@@ -24,19 +22,21 @@ namespace pablo {
 class PabloBlock;
 class Statement;
 class String;
+class Branch;
 
 class PabloAST {
     friend class Statement;
     friend class Variadic;
     friend class StatementList;
-    friend class Var;
-    friend class If;    
-    friend class While;
+    friend class Branch;
     friend class PabloBlock;
     friend class Prototype;
     friend class PabloFunction;
     friend class SymbolGenerator;
     friend class Count;
+    friend class Var;
+    friend void addUsage(PabloAST *, PabloBlock *);
+    friend void removeUsage(PabloAST *, PabloBlock *);
 public:
 
     using Allocator = SlabAllocator<u_int8_t>;
@@ -45,13 +45,20 @@ public:
     using user_iterator = Users::iterator;
     using const_user_iterator = Users::const_iterator;
 
+    static inline bool classof(const PabloAST *) {
+        return true;
+    }
+    static inline bool classof(const void *) {
+        return false;
+    }
+
     enum class ClassTypeId : unsigned {
         /** Non-statements **/
         // Constants
         Zeroes
         , Ones
         // Internal types
-        , Var
+        , Var        
         , Integer
         , String
         , Block
@@ -75,15 +82,32 @@ public:
         , Count
         // Variable assignments
         , Assign
-        , Next
+        , Extract     
         , Call
         , SetIthBit
         // Scope blocks
         , If
         , While
     };
-    inline ClassTypeId getClassTypeId() const {
+
+    inline ClassTypeId getClassTypeId() const noexcept {
         return mClassTypeId;
+    }
+
+    inline llvm::Type * getType() const noexcept {
+        return mType;
+    }
+
+    inline void setType(Type * type) noexcept {
+        mType = type;
+    }
+
+    inline const String * getName() const noexcept {
+        return mName;
+    }
+
+    inline void setName(const String * const name) noexcept {
+        mName = name;
     }
 
     inline user_iterator user_begin() {
@@ -110,17 +134,13 @@ public:
         return mUsers;
     }
 
-    inline const PabloType * getType() const {
-        return mType;
-    }
-
     void replaceAllUsesWith(PabloAST * const expr);
 
     inline Users::size_type getNumUses() const {
         return mUsers.size();
     }
 
-    void* operator new (std::size_t size) noexcept {
+    void * operator new (std::size_t size) noexcept {
         return mAllocator.allocate(size);
     }
 
@@ -128,32 +148,36 @@ public:
         mAllocator.deallocate(static_cast<Allocator::value_type *>(ptr));
     }
 
+    void print(raw_ostream & O) const;
+
 protected:
-    inline PabloAST(const ClassTypeId id, const PabloType * const type)
+    inline PabloAST(const ClassTypeId id, Type * const type, const String * name)
     : mClassTypeId(id)
     , mType(type)
+    , mName(name)
     , mUsers(mVectorAllocator)
     {
 
     }
-    void addUser(PabloAST * const user);
-    void removeUser(PabloAST * const user);
+    bool addUser(PabloAST * const user);
+    bool removeUser(PabloAST * const user);
     virtual ~PabloAST() {
         mUsers.clear();
     }    
-    static void throwIfNonMatchingTypes(const PabloAST * const a, const PabloAST * const b);
-    static void throwIfNonMatchingType(const PabloAST * const a, const PabloType::TypeId typeId);
     static Allocator        mAllocator;
     static VectorAllocator  mVectorAllocator;
 private:
     const ClassTypeId       mClassTypeId;
-    const PabloType * const mType;
+    Type *                  mType;
+    const String *          mName;
     Users                   mUsers;
 };
 
 bool equals(const PabloAST * const expr1, const PabloAST * const expr2);
 
 bool dominates(const PabloAST * const expr1, const PabloAST * const expr2);
+
+bool postdominates(const PabloAST * const expr1, const PabloAST * const expr2);
 
 class StatementList;
 
@@ -165,8 +189,6 @@ class Statement : public PabloAST {
     friend class While;
     friend class Simplifier;
     friend class PabloBlock;
-    template <class ValueType, class ValueList>
-    friend void checkEscapedValueList(const Statement *, const PabloAST * const, PabloAST * const, ValueList &);
 public:
     static inline bool classof(const PabloAST * e) {
         switch (e->getClassTypeId()) {
@@ -209,12 +231,6 @@ public:
     Statement * eraseFromParent(const bool recursively = false);
     Statement * replaceWith(PabloAST * const expr, const bool rename = true, const bool recursively = false);
 
-    inline const String * getName() const {
-        return mName;
-    }
-    inline void setName(const String * const name) {
-        mName = name;
-    }
     inline Statement * getNextNode() const {
         return mNext;
     }
@@ -226,9 +242,8 @@ public:
     }
     virtual ~Statement() {}
 protected:
-    explicit Statement(const ClassTypeId id, const PabloType * const type, std::initializer_list<PabloAST *> operands, const String * const name)
-    : PabloAST(id, type)
-    , mName(name)
+    explicit Statement(const ClassTypeId id, Type * const type, std::initializer_list<PabloAST *> operands, const String * const name)
+    : PabloAST(id, type, name)
     , mNext(nullptr)
     , mPrev(nullptr)
     , mParent(nullptr)
@@ -242,9 +257,8 @@ protected:
             ++i;
         }
     }
-    explicit Statement(const ClassTypeId id, const PabloType * const type, const unsigned reserved, const String * const name)
-    : PabloAST(id, type)
-    , mName(name)
+    explicit Statement(const ClassTypeId id, Type * const type, const unsigned reserved, const String * const name)
+    : PabloAST(id, type, name)
     , mNext(nullptr)
     , mPrev(nullptr)
     , mParent(nullptr)
@@ -253,9 +267,8 @@ protected:
         std::memset(mOperand, 0, reserved * sizeof(PabloAST *));
     }
     template<typename iterator>
-    explicit Statement(const ClassTypeId id, const PabloType * const type, iterator begin, iterator end, const String * const name)
-    : PabloAST(id, type)
-    , mName(name)
+    explicit Statement(const ClassTypeId id, Type * const type, iterator begin, iterator end, const String * const name)
+    : PabloAST(id, type, name)
     , mNext(nullptr)
     , mPrev(nullptr)
     , mParent(nullptr)
@@ -268,11 +281,7 @@ protected:
             (*value)->addUser(this);
         }
     }
-private:
-    template <class ValueType, class ValueList>
-    void checkEscapedValueList(Statement * branch, PabloAST * const from, PabloAST * const to, ValueList & list);
 protected:    
-    const String *  mName;
     Statement *     mNext;
     Statement *     mPrev;
     PabloBlock *    mParent;
@@ -342,18 +351,18 @@ public:
     }
 
 protected:
-    explicit Variadic(const ClassTypeId id, const PabloType * const type, std::initializer_list<PabloAST *> operands, const String * const name)
+    explicit Variadic(const ClassTypeId id, Type * const type, std::initializer_list<PabloAST *> operands, const String * const name)
     : Statement(id, type, operands, name)
     , mCapacity(operands.size()) {
 
     }
-    explicit Variadic(const ClassTypeId id, const PabloType * const type, const unsigned reserved, String * name)
+    explicit Variadic(const ClassTypeId id, Type * const type, const unsigned reserved, const String * name)
     : Statement(id, type, reserved, name)
     , mCapacity(reserved) {
 
     }
     template<typename iterator>
-    explicit Variadic(const ClassTypeId id, const PabloType * const type, iterator begin, iterator end, String * name)
+    explicit Variadic(const ClassTypeId id, Type * const type, iterator begin, iterator end, const String * name)
     : Statement(id, type, begin, end, name)
     , mCapacity(std::distance(begin, end)) {
 
@@ -361,8 +370,6 @@ protected:
 private:
     unsigned        mCapacity;
 };
-
-bool escapes(const Statement * statement);
 
 class StatementList {
     friend class Statement;

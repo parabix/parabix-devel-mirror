@@ -23,7 +23,7 @@ static Function * create_write(Module * const mod) {
 // The doBlock method is deprecated.   But in case it is used, just call doSegment with
 // 1 as the number of blocks to do.
 void stdOutKernel::generateDoBlockMethod() {
-    IDISA::IDISA_Builder::InsertPoint savePoint = iBuilder->saveIP();
+    auto savePoint = iBuilder->saveIP();
     Module * m = iBuilder->getModule();
     Function * doBlockFunction = m->getFunction(mKernelName + doBlock_suffix);
     Function * doSegmentFunction = m->getFunction(mKernelName + doSegment_suffix);
@@ -37,7 +37,7 @@ void stdOutKernel::generateDoBlockMethod() {
 // Rather than using doBlock logic to write one block at a time, this custom
 // doSegment method, writes the entire segment with a single write call.
 void stdOutKernel::generateDoSegmentMethod() {
-    IDISA::IDISA_Builder::InsertPoint savePoint = iBuilder->saveIP();
+    auto savePoint = iBuilder->saveIP();
     Module * m = iBuilder->getModule();
     Function * writefn = create_write(m);
     Function * doSegmentFunction = m->getFunction(mKernelName + doSegment_suffix);
@@ -103,7 +103,7 @@ void stdOutKernel::generateDoSegmentMethod() {
 }
 
 void stdOutKernel::generateFinalBlockMethod() {
-    IDISA::IDISA_Builder::InsertPoint savePoint = iBuilder->saveIP();
+    auto savePoint = iBuilder->saveIP();
     Module * m = iBuilder->getModule();
     Function * writefn = create_write(m);
     Function * finalBlockFunction = m->getFunction(mKernelName + finalBlock_suffix);
@@ -117,7 +117,7 @@ void stdOutKernel::generateFinalBlockMethod() {
     LoadInst * producerPos = iBuilder->CreateAtomicLoadAcquire(mStreamSetInputBuffers[0]->getProducerPosPtr(streamStructPtr));
     Value * processed = getProcessedItemCount(self);
     Value * itemsAvail = iBuilder->CreateSub(producerPos, processed);
-    Value * segmentNo = getLogicalSegmentNo(self);
+//    Value * segmentNo = getLogicalSegmentNo(self);
     Value * blockNo = getScalarField(self, blockNoScalar);
     Value * basePtr = getStreamSetBlockPtr(self, "codeUnitBuffer", blockNo);
     Value * byteOffset = iBuilder->CreateMul(iBuilder->CreateURem(processed, blockItems), itemBytes);

@@ -363,7 +363,6 @@ int main(int argc, char *argv[]) {
     
     GrepEngine grepEngine;
     grepEngine.grepCodeGen(module_name, re_ast, CountOnly, UTF_16);
-    //std::cerr << "grepCodeGen complete";
 
     releaseSlabAllocatorMemory();
     
@@ -375,8 +374,7 @@ int main(int argc, char *argv[]) {
         for (auto & f : allFiles) {
             if (boost::filesystem::exists(f)) {
                 std::cout << f << "\n";
-            }
-            else {
+            } else {
                 std::cerr << "Error: cannot open " << f << " for processing. Skipped.\n";
             }
         }

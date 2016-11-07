@@ -17,7 +17,7 @@ enum PabloDebugFlags {
 };
 
 enum PabloCompilationFlags {
-    DisableSimplification, PabloSinkingPass, 
+    DisableSimplification, EnableCodeMotion, 
     EnableMultiplexing, EnableLowering, EnablePreDistribution, EnablePostDistribution, EnablePrePassScheduling
 };
     

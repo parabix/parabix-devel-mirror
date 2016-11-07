@@ -42,6 +42,8 @@
 #include <boost/iostreams/device/mapped_file.hpp>
 
 #include <fcntl.h>
+using namespace pablo;
+
 static cl::OptionCategory wcFlags("Command Flags", "wc options");
 
 static cl::list<std::string> inputFiles(cl::Positional, cl::desc("<input file ...>"), cl::OneOrMore, cl::cat(wcFlags));
@@ -96,37 +98,39 @@ extern "C" {
 //
 //
 
-pablo::PabloFunction * wc_gen() {
+PabloFunction * wc_gen() {
     //  input: 8 basis bit streams
     //  output: 3 counters
     
-    pablo::PabloFunction * function = pablo::PabloFunction::Create("wc", 8, 0);
+    PabloFunction * function = PabloFunction::Create("wc"); // , 8, 0
     cc::CC_Compiler ccc(*function);
     
-    pablo::PabloBuilder pBuilder(ccc.getBuilder().getPabloBlock(), ccc.getBuilder());
-    const std::vector<pablo::Var *> u8_bits = ccc.getBasisBits();
+    PabloBuilder & pb = ccc.getBuilder();
+    // const std::vector<Parameter *> u8_bits = ccc.getBasisBits();
+
+    Var * lc = function->addResult("lineCount", getScalarTy());
+    Var * wc = function->addResult("wordCount", getScalarTy());
+    Var * cc = function->addResult("charCount", getScalarTy());
 
     if (CountLines) {
-        pablo::PabloAST * LF = ccc.compileCC(re::makeCC(0x0A));
-        function->setResultCount(pBuilder.createCount("lineCount", LF));
+        PabloAST * LF = ccc.compileCC(re::makeCC(0x0A));
+        pb.createAssign(lc, pb.createCount(LF));
     }
     if (CountWords) {
-        pablo::PabloAST * WS = ccc.compileCC(re::makeCC(re::makeCC(0x09, 0x0D), re::makeCC(0x20)));
-        
-        pablo::PabloAST * wordChar = pBuilder.createNot(WS);
+        PabloAST * WS = ccc.compileCC(re::makeCC(re::makeCC(0x09, 0x0D), re::makeCC(0x20)));
+        PabloAST * wordChar = pb.createNot(WS);
         // WS_follow_or_start = 1 past WS or at start of file
-        pablo::PabloAST * WS_follow_or_start = pBuilder.createNot(pBuilder.createAdvance(wordChar, 1));
-        //
-        pablo::PabloAST * wordStart = pBuilder.createInFile(pBuilder.createAnd(wordChar, WS_follow_or_start));
-        function->setResultCount(pBuilder.createCount("wordCount", wordStart));
+        PabloAST * WS_follow_or_start = pb.createNot(pb.createAdvance(wordChar, 1));
+        PabloAST * wordStart = pb.createInFile(pb.createAnd(wordChar, WS_follow_or_start));
+        pb.createAssign(wc, pb.createCount(wordStart));
     }
     if (CountChars) {
         //
         // FIXME: This correctly counts characters assuming valid UTF-8 input.  But what if input is
         // not UTF-8, or is not valid?
         //
-        pablo::PabloAST * u8Begin = ccc.compileCC(re::makeCC(re::makeCC(0, 0x7F), re::makeCC(0xC2, 0xF4)));
-        function->setResultCount(pBuilder.createCount("charCount", u8Begin));
+        PabloAST * u8Begin = ccc.compileCC(re::makeCC(re::makeCC(0, 0x7F), re::makeCC(0xC2, 0xF4)));        
+        pb.createAssign(cc, pb.createCount(u8Begin));
     }
     return function;
 }
@@ -135,18 +139,18 @@ using namespace kernel;
 using namespace parabix;
 
 
-Function * wcPipeline(Module * mMod, IDISA::IDISA_Builder * iBuilder, pablo::PabloFunction * function) {
+Function * wcPipeline(Module * mMod, IDISA::IDISA_Builder * iBuilder, PabloFunction * function) {
     Type * mBitBlockType = iBuilder->getBitBlockType();
     
-    ExternalFileBuffer ByteStream(iBuilder, StreamSetType(1, i8));
-    SingleBlockBuffer BasisBits(iBuilder, StreamSetType(8, i1));
-    //CircularBuffer BasisBits(iBuilder, StreamSetType(8, i1), codegen::SegmentSize * codegen::BufferSegments);
+    ExternalFileBuffer ByteStream(iBuilder, StreamSetType(iBuilder,1, 8));
+    SingleBlockBuffer BasisBits(iBuilder, StreamSetType(iBuilder,8, 1));
+    //CircularBuffer BasisBits(iBuilder, StreamSetType(iBuilder,8, 1), codegen::SegmentSize * codegen::BufferSegments);
 
     s2pKernel  s2pk(iBuilder);
     std::unique_ptr<Module> s2pM = s2pk.createKernelModule({&ByteStream}, {&BasisBits});
     
     pablo_function_passes(function);
-    pablo::PabloKernel  wck(iBuilder, "wc", function, {"lineCount", "wordCount", "charCount"});
+    PabloKernel wck(iBuilder, "wc", function);
     
     std::unique_ptr<Module> wcM = wck.createKernelModule({&BasisBits}, {});
     
@@ -182,7 +186,7 @@ Function * wcPipeline(Module * mMod, IDISA::IDISA_Builder * iBuilder, pablo::Pab
     
     Value * lineCount = wck.createGetAccumulatorCall(wcInstance, "lineCount");
     Value * wordCount = wck.createGetAccumulatorCall(wcInstance, "wordCount");
-    Value * charCount = wck.createGetAccumulatorCall(wcInstance, "charCount");;
+    Value * charCount = wck.createGetAccumulatorCall(wcInstance, "charCount");
 
     iBuilder->CreateCall(record_counts_routine, std::vector<Value *>({lineCount, wordCount, charCount, fileSize, fileIdx}));
     
@@ -200,12 +204,11 @@ typedef void (*wcFunctionType)(char * byte_data, size_t filesize, size_t fileIdx
 
 static ExecutionEngine * wcEngine = nullptr;
 
-wcFunctionType wcCodeGen(void) {
-    LLVMContext TheContext;                            
-    Module * M = new Module("wc", TheContext);
+wcFunctionType wcCodeGen(void) { 
+    Module * M = new Module("wc", getGlobalContext());
     IDISA::IDISA_Builder * idb = IDISA::GetIDISA_Builder(M);
 
-    pablo::PabloFunction * function = wc_gen();
+    PabloFunction * function = wc_gen();
     llvm::Function * main_IR = wcPipeline(M, idb, function);
 
     wcEngine = JIT_to_ExecutionEngine(M);
@@ -254,7 +257,7 @@ void wc(wcFunctionType fn_ptr, const int64_t fileIdx) {
 
 
 int main(int argc, char *argv[]) {
-    cl::HideUnrelatedOptions(ArrayRef<const cl::OptionCategory *>{&wcFlags, pablo::pablo_toolchain_flags(), codegen::codegen_flags()});
+    cl::HideUnrelatedOptions(ArrayRef<const cl::OptionCategory *>{&wcFlags, pablo_toolchain_flags(), codegen::codegen_flags()});
     cl::ParseCommandLineOptions(argc, argv);
     if (wcOptions.size() == 0) {
         CountLines = true;

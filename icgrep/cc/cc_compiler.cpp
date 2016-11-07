@@ -29,24 +29,26 @@ CC_Compiler::CC_Compiler(PabloFunction & function, const unsigned encodingBits, 
 : mBuilder(function.getEntryBlock())
 , mBasisBit(encodingBits)
 , mEncodingBits(encodingBits) {
-    const PabloType * streamType = getPabloType(PabloType::Stream, 1);
+
+    // TODO: basisBits should be defined prior and only retrieved here.
+    Var * const basisBits = function.addParameter(prefix, getStreamTy(1, 8));
     for (unsigned i = 0; i != mEncodingBits; i++) {
-        Var * var = mBuilder.createVar(prefix + std::to_string(i), streamType);
-        function.setParameter(i, var);
-        mBasisBit[i] = var;
+        mBasisBit[i] = mBuilder.createExtract(basisBits, mBuilder.getInteger(i)); assert (mBasisBit[i]);
     }
     mEncodingMask = (static_cast<unsigned>(1) << encodingBits) - static_cast<unsigned>(1);
 }
 
-Assign * CC_Compiler::compileCC(const std::string && canonicalName, const CC *cc, PabloBlock & block) {
-    return block.createAssign(std::move(canonicalName), charset_expr(cc, block));
+PabloAST * CC_Compiler::compileCC(const std::string & canonicalName, const CC *cc, PabloBlock & block) {
+    PabloAST * const var = charset_expr(cc, block);
+    var->setName(block.makeName(canonicalName));
+    return var;
 }
 
-Assign * CC_Compiler::compileCC(const std::string && canonicalName, const CC *cc, PabloBuilder & builder) {
-    return builder.createAssign(std::move(canonicalName), charset_expr(cc, builder));
+PabloAST * CC_Compiler::compileCC(const std::string & canonicalName, const CC *cc, PabloBuilder & builder) {
+    PabloAST * const var = charset_expr(cc, builder);
+    var->setName(builder.makeName(canonicalName));
+    return var;
 }
-
-
     
 template<typename PabloBlockOrBuilder>
 PabloAST * CC_Compiler::charset_expr(const CC * cc, PabloBlockOrBuilder & pb) {
@@ -199,16 +201,14 @@ PabloAST * CC_Compiler::GE_Range(const unsigned N, const unsigned n, PabloBlockO
 }
 
 template<typename PabloBlockOrBuilder>
-PabloAST * CC_Compiler::LE_Range(const unsigned N, const unsigned n, PabloBlockOrBuilder &pb)
-{
+PabloAST * CC_Compiler::LE_Range(const unsigned N, const unsigned n, PabloBlockOrBuilder & pb) {
     /*
       If an N-bit pattern is all ones, then it is always true that any n-bit value is LE this pattern.
       Handling this as a special case avoids an overflow issue with n+1 requiring more than N bits.
     */
     if ((n + 1) == (1UL << N)) {
         return pb.createOnes(); //True.
-    }
-    else {
+    } else {
         return pb.createNot(GE_Range(N, n + 1, pb));
     }
 }
@@ -217,30 +217,28 @@ template<typename PabloBlockOrBuilder>
 inline PabloAST * CC_Compiler::char_or_range_expr(const codepoint_t lo, const codepoint_t hi, PabloBlockOrBuilder &pb) {
     if (lo == hi) {
         return char_test_expr(lo, pb);
-    }
-    else if (lo < hi) {
+    } else if (lo < hi) {
         return make_range(lo, hi, pb);
     }
     throw std::runtime_error(std::string("Invalid Character Set Range: [") + std::to_string(lo) + "," + std::to_string(hi) + "]");
 }
 
-inline Var * CC_Compiler::getBasisVar(const unsigned i) const {
+inline PabloAST *CC_Compiler::getBasisVar(const unsigned i) const {
     assert (i < mEncodingBits);
-    return mBasisBit[mEncodingBits - i - 1];
+    const unsigned index = mEncodingBits - i - 1; assert (index < mEncodingBits);
+    assert (mBasisBit[index]);
+    return mBasisBit[index];
 }
     
-pablo::PabloFunction * ParabixCharacterClassFunction(std::string ccSetName, std::vector<re::CC *> charClasses, unsigned basisBitsCount) {
-        
-    pablo::PabloFunction * cc_function = pablo::PabloFunction::Create(ccSetName + "_fn", basisBitsCount, charClasses.size());
-    CC_Compiler ccc(* cc_function, basisBitsCount);
-    
-    pablo::PabloBuilder pBuilder(ccc.getBuilder().getPabloBlock(), ccc.getBuilder());
-    const std::vector<pablo::Var *> bits = ccc.getBasisBits();
-    
-    for (unsigned i = 0; i < charClasses.size(); i++) {
-        cc_function->setResult(i, ccc.compileCC(charClasses[i]));
+PabloFunction * ParabixCharacterClassFunction(const std::string & name, const std::vector<CC *> & charClasses, const unsigned basisBitsCount) {
+    PabloFunction * f = PabloFunction::Create(name + "_fn");
+    CC_Compiler ccc(*f, basisBitsCount);
+    PabloBuilder builder(f->getEntryBlock());
+    for (CC * cc : charClasses) {
+        Var * const r = f->addResult(cc->canonicalName(re::ByteClass), getStreamTy());
+        builder.createAssign(r, ccc.charset_expr(cc, builder));
     }
-    return cc_function;
+    return f;
 }
 
 } // end of namespace cc

@@ -40,7 +40,7 @@ Value * generateResetLowestBit(IDISA::IDISA_Builder * iBuilder, Value * bits) {
 
         
 void scanMatchKernel::generateDoBlockMethod() {
-    IDISA::IDISA_Builder::InsertPoint savePoint = iBuilder->saveIP();
+    auto savePoint = iBuilder->saveIP();
     Module * m = iBuilder->getModule();
     Function * scanWordFunction = generateScanWordRoutine(m);
     const unsigned fieldCount = iBuilder->getBitBlockWidth() / mScanwordBitWidth;

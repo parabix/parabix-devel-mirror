@@ -17,13 +17,12 @@ class PabloCompiler; class CarryManager;
 
 class PabloKernel : public kernel::KernelBuilder {
 public:
-    PabloKernel(IDISA::IDISA_Builder * builder,
-                    std::string kernelName,
-                    PabloFunction * function,
-                    std::vector<std::string> accumulators);
+    PabloKernel(IDISA::IDISA_Builder * builder, std::string kernelName, PabloFunction * function);
     // At present only population count accumulator are supported,
     // using the pablo.Count operation.
     
+    ~PabloKernel();
+
 protected:
     // A custom method for preparing kernel declarations is needed,
     // so that the carry data requirements may be accommodated before
@@ -38,11 +37,8 @@ protected:
     virtual void generateFinalBlockMethod() override;
     
     PabloFunction * mPabloFunction;
-
-    std::vector<ScalarBinding> accumBindings(std::vector<std::string> accum_names);
     
-    //std::unique_ptr<pablo::PabloCompiler> pablo_compiler;
-    PabloCompiler * pablo_compiler;
+    PabloCompiler * mPabloCompiler;
 
     friend class PabloCompiler;
     friend class CarryManager;

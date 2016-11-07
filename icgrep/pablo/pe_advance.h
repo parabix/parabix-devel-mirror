@@ -37,7 +37,7 @@ public:
         return localAdvanceIndex;
     }
 protected:
-    Advance(PabloAST * expr, PabloAST * shiftAmount, String * name)
+    Advance(PabloAST * expr, PabloAST * shiftAmount, const String * name)
     : Statement(ClassTypeId::Advance, expr->getType(), {expr, shiftAmount}, name)
     {
         assert(isa<Integer>(shiftAmount));

@@ -26,8 +26,8 @@ public:
     
     s2pKernel(IDISA::IDISA_Builder * iBuilder) :
     KernelBuilder(iBuilder, "s2p",
-                  {StreamSetBinding{parabix::StreamSetType(1, parabix::i8), "byteStream"}},
-                  {StreamSetBinding{parabix::StreamSetType(8, parabix::i1), "basisBits"}},
+                  {Binding{parabix::StreamSetType(iBuilder,1, 8), "byteStream"}},
+                  {Binding{parabix::StreamSetType(iBuilder,8, 1), "basisBits"}},
                   {}, {}, {}) {}
     
     

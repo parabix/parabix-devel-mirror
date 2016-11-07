@@ -20,11 +20,11 @@ class scanMatchKernel : public KernelBuilder {
 public:
     scanMatchKernel(IDISA::IDISA_Builder * iBuilder, bool isNameExpression) :
     KernelBuilder(iBuilder, "scanMatch",
-                  {StreamSetBinding{parabix::StreamSetType(2, parabix::i1), "matchResults"}}, 
+                  {Binding{parabix::StreamSetType(iBuilder,2, 1), "matchResults"}},
                     {}, 
-                    {ScalarBinding{iBuilder->getInt8PtrTy(), "FileBuf"}, ScalarBinding{iBuilder->getSizeTy(), "FileSize"}, ScalarBinding{iBuilder->getSizeTy(), "FileIdx"}}, 
+                    {Binding{iBuilder->getInt8PtrTy(), "FileBuf"}, Binding{iBuilder->getSizeTy(), "FileSize"}, Binding{iBuilder->getSizeTy(), "FileIdx"}}, 
                     {}, 
-                    {ScalarBinding{iBuilder->getSizeTy(), "BlockNo"}, ScalarBinding{iBuilder->getSizeTy(), "LineStart"}, ScalarBinding{iBuilder->getSizeTy(), "LineNum"}}),
+                    {Binding{iBuilder->getSizeTy(), "BlockNo"}, Binding{iBuilder->getSizeTy(), "LineStart"}, Binding{iBuilder->getSizeTy(), "LineNum"}}),
 
     mScanwordBitWidth(Triple(llvm::sys::getProcessTriple()).isArch32Bit() ? 32 : 64),
     mIsNameExpression(isNameExpression) {}

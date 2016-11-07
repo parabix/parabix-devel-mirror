@@ -5,24 +5,23 @@
 
 namespace pablo {
 
-struct ExpressionTable;
 class PabloFunction;
+struct ExpressionTable;
 
 class Simplifier {
-    friend class DistributivePass;
-    friend class FactorizeDFG;
     friend class BooleanReassociationPass;
+    struct VariableTable;
 public:
     static bool optimize(PabloFunction & function);
-    static void dce(PabloBlock * const block);
 protected:
     Simplifier() = default;
 private:
-    static void redundancyElimination(PabloFunction & function, PabloBlock * const block, ExpressionTable * predecessor = nullptr);
     static PabloAST * fold(Variadic * var, PabloBlock * const block);
     static PabloAST * fold(Statement * const stmt, PabloBlock * const block);
+    static void redundancyElimination(PabloBlock * const block, ExpressionTable * et = nullptr, VariableTable * const vt = nullptr);
+    static void deadCodeElimination(PabloFunction & f);
+    static void deadCodeElimination(PabloBlock * const block);
     static void strengthReduction(PabloBlock * const block);
-    static bool isSuperfluous(const Assign * const assign);
 };
 
 }

@@ -245,7 +245,7 @@ void compileUnicodeSet(std::string name, UnicodeSet && set, PabloCompiler & pc, 
     #ifndef NDEBUG
     std::cerr << name << std::endl;
     #endif
-    PabloFunction * pbFunction = PabloFunction::Create(std::move(name), 8, 1);
+    PabloFunction * pbFunction = PabloFunction::Create(std::move(name), 1, 1);
     Encoding encoding(Encoding::Type::UTF_8, 8);
     CC_Compiler ccCompiler(*pbFunction, encoding);
     UCDCompiler ucdCompiler(ccCompiler);

@@ -38,15 +38,15 @@ protected:
     CheckSet makeCheckSet(PabloBlock * const scope, const ObjectSet & values) const;
     Statement * firstIn(PabloBlock * const scope, Statement * const initial, const ObjectSet & operands) const;
     Statement * lastIn(PabloBlock * const scope, Statement * const initial, const ObjectSet & users) const;
-    Variadic * factorize(const TypeId typeId, PabloBlock * const scope, ObjectSet & operands, ObjectSet & users) const;
+    Variadic * factorize(TypeId typeId, PabloBlock * const scope, ObjectSet & operands, ObjectSet & users) const;
     static BicliqueSet independentFactoringSets(BicliqueSet && factoringSets, const unsigned side);
     static BicliqueSet enumerateFactoringSets(Variadic * const var);
-    static BicliqueSet enumerateFactoringSets(ObjectSet params, PabloBlock * const entryScope, const TypeId typeId);
-    bool processFactoringSets(const TypeId typeId, PabloBlock * const scope, BicliqueSet && factoringSets) const;
+    static BicliqueSet enumerateFactoringSets(ObjectSet params, PabloBlock * const entryScope, TypeId typeId);
+    bool processFactoringSets(TypeId typeId, PabloBlock * const scope, BicliqueSet && factoringSets) const;
     PabloBlock * findInsertionScope(const ObjectSet & users) const;
-    bool processFactoringSets(const TypeId typeId, BicliqueSet && factoringSets, ObjectSet & factorings) const;
+    bool processFactoringSets(TypeId typeId, BicliqueSet && factoringSets, ObjectSet & factorings) const;
     bool factor(PabloBlock * const block);
-    void factor(PabloFunction & function, const TypeId typeId);
+    void factor(PabloFunction & function, TypeId typeId);
     void factor(PabloFunction & function);
 
 //    void rematerialize(PabloBlock * const block, LiveSet & priorSet);

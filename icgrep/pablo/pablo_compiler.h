@@ -47,11 +47,13 @@ class PabloCompiler {
     using IntSet = boost::container::flat_set<unsigned>;
     using MarkerMap = std::unordered_map<const PabloAST *, Value *>;
 public:
-    PabloCompiler(IDISA::IDISA_Builder * b, PabloKernel * k, PabloFunction * function);
+    PabloCompiler(PabloKernel * k, PabloFunction * function);
     Type * initializeKernelData();
     void compile(Function * doBlockFunction);
 
 private:
+
+    void verifyParameter(const Var * var, const Value * param);
 
     void Examine(const PabloFunction * const function);
     void Examine(const PabloBlock * const block);
@@ -60,19 +62,17 @@ private:
     void compileStatement(const Statement * stmt);
     void compileIf(const If * ifStmt);
     void compileWhile(const While * whileStmt);
-    Value * compileExpression(const PabloAST * expr);
+    Value * compileExpression(const PabloAST * expr, const bool ensureLoaded = true) const;
     void GenerateKernel(PabloFunction * const function);
 
     MarkerMap                           mMarkerMap;
     IntSet                              mInputStreamOffset;
-    Module *                            mMod;
     IDISA::IDISA_Builder *              iBuilder;
     Type* const                         mBitBlockType;
 
     std::unique_ptr<CarryManager>       mCarryManager;
 
-    PabloFunction *  const             mPabloFunction;
-    const PabloBlock *                  mPabloBlock;
+    PabloFunction *  const              mPabloFunction;
 
     PabloKernel *                       mKernelBuilder;
     Value *                             mSelf;

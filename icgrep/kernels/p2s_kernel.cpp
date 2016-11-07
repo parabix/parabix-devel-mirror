@@ -41,7 +41,7 @@ inline void p2s(IDISA::IDISA_Builder * iBuilder, Value * p[], Value * s[]) {
 }
     		
 void p2sKernel::generateDoBlockMethod() {
-    IDISA::IDISA_Builder::InsertPoint savePoint = iBuilder->saveIP();
+    auto savePoint = iBuilder->saveIP();
     Module * m = iBuilder->getModule();
     
     Function * doBlockFunction = m->getFunction(mKernelName + doBlock_suffix);
@@ -72,7 +72,7 @@ void p2sKernel_withCompressedOutput::prepareKernel() {
 }
 
 void p2sKernel_withCompressedOutput::generateDoBlockMethod() {
-    IDISA::IDISA_Builder::InsertPoint savePoint = iBuilder->saveIP();
+    auto savePoint = iBuilder->saveIP();
     Module * m = iBuilder->getModule();
     Type * i8PtrTy = iBuilder->getInt8PtrTy(); 
     Type * i32 = iBuilder->getIntNTy(32); 
@@ -111,7 +111,7 @@ void p2sKernel_withCompressedOutput::generateDoBlockMethod() {
     
     
 void p2s_16Kernel::generateDoBlockMethod() {
-    IDISA::IDISA_Builder::InsertPoint savePoint = iBuilder->saveIP();
+    auto savePoint = iBuilder->saveIP();
     Module * m = iBuilder->getModule();
     
     Function * doBlockFunction = m->getFunction(mKernelName + doBlock_suffix);
@@ -153,7 +153,7 @@ void p2s_16Kernel_withCompressedOutput::prepareKernel() {
     
 
 void p2s_16Kernel_withCompressedOutput::generateDoBlockMethod() {
-    IDISA::IDISA_Builder::InsertPoint savePoint = iBuilder->saveIP();
+    auto savePoint = iBuilder->saveIP();
     Module * m = iBuilder->getModule();
     Type * i32 = iBuilder->getIntNTy(32); 
     Type * bitBlockPtrTy = llvm::PointerType::get(iBuilder->getBitBlockType(), 0); 
@@ -215,7 +215,7 @@ void p2s_16Kernel_withCompressedOutput::generateDoBlockMethod() {
 }
 
 void p2s_16Kernel_withCompressedOutput::generateFinalBlockMethod() {
-    IDISA::IDISA_Builder::InsertPoint savePoint = iBuilder->saveIP();
+    auto savePoint = iBuilder->saveIP();
     Module * m = iBuilder->getModule();
     Function * doBlockFunction = m->getFunction(mKernelName + doBlock_suffix);
     Function * finalBlockFunction = m->getFunction(mKernelName + finalBlock_suffix);
@@ -233,7 +233,7 @@ void p2s_16Kernel_withCompressedOutput::generateFinalBlockMethod() {
     iBuilder->CreateCall(doBlockFunction, doBlockArgs);
     i16UnitsGenerated = getProducedItemCount(self); // units generated to buffer
     for (unsigned i = 0; i < mStreamSetOutputs.size(); i++) {
-        Value * ssStructPtr = getStreamSetStructPtr(self, mStreamSetOutputs[i].ssName);
+        Value * ssStructPtr = getStreamSetStructPtr(self, mStreamSetOutputs[i].name);
         Value * producerPosPtr = mStreamSetOutputBuffers[i]->getProducerPosPtr(ssStructPtr);
         iBuilder->CreateAtomicStoreRelease(i16UnitsGenerated, producerPosPtr);
     }

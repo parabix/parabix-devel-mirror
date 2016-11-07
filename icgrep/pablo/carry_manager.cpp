@@ -80,7 +80,7 @@ void CarryManager::leaveScope() {
     Value * summaryCarry = mCarryOutPack[summaryPack()];
     assert (mCurrentScope != mRootScope);
     mCurrentFrameIndex -= mCarryInfo->getFrameIndex();
-    mCurrentScope = mCurrentScope->getPredecessor ();
+    mCurrentScope = mCurrentScope->getPredecessor();
     mCarryInfo = mCarryInfoVector[mCurrentScope->getScopeIndex()];
     assert(summaryPack() < mCarryOutPack.size());
     mCarryOutPack[summaryPack()] = summaryCarry;

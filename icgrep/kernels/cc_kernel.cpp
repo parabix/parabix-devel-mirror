@@ -10,7 +10,7 @@
 using namespace kernel;
 
 void DirectCharacterClassKernelBuilder::generateDoBlockMethod() {
-    IDISA::IDISA_Builder::InsertPoint savePoint = iBuilder->saveIP();
+    auto savePoint = iBuilder->saveIP();
     Module * m = iBuilder->getModule();
 
     Function * doBlockFunction = m->getFunction(mKernelName + doBlock_suffix);

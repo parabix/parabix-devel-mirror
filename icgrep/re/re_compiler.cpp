@@ -52,16 +52,18 @@ void RE_Compiler::initializeRequiredStreams(const unsigned encodingBits) {
 }
 
 void RE_Compiler::initializeRequiredStreams_utf16() {
-    Assign * LF = mPB.createAssign("LF", mCCCompiler.compileCC(makeCC(0x000A)));
-    PabloAST * CR = mCCCompiler.compileCC(makeCC(0x000D));
+
+
+
+    PabloAST * LF = mCCCompiler.compileCC("LF", makeCC(0x000A), mPB);
+    PabloAST * CR = mCCCompiler.compileCC("CR", makeCC(0x000D), mPB);
     PabloAST * LF_VT_FF_CR = mCCCompiler.compileCC(makeCC(0x000A, 0x000D));
-    Assign * NEL = mPB.createAssign("NEL", mCCCompiler.compileCC(makeCC(0x0085)));
-    Assign * LS_PS = mPB.createAssign("LS_PS", mCCCompiler.compileCC(makeCC(0x2028, 0x2029)));
-    Assign * NEL_LS_PS = mPB.createAssign("NEL_LS_PS", mPB.createOr(NEL, LS_PS));
+    PabloAST * NEL = mCCCompiler.compileCC("NEL", makeCC(0x0085), mPB);
+    PabloAST * LS_PS = mCCCompiler.compileCC("LS_PS", makeCC(0x2028, 0x2029), mPB);
+    PabloAST * NEL_LS_PS = mPB.createOr(NEL, LS_PS, "NEL_LS_PS");
 
     PabloAST * cr1 = mPB.createAdvance(CR, 1, "cr1");
-    Assign * acrlf = mPB.createAssign("crlf", mPB.createAnd(cr1, LF));
-    mCRLF = acrlf;
+    mCRLF = mPB.createAnd(cr1, LF, "crlf");
 
     PabloAST * hi_surrogate = mCCCompiler.compileCC(makeCC(0xD800, 0xDBFF));
     //PabloAST * lo_surrogate = mCCCompiler.compileCC(makeCC(0xDC00, 0xDFFF));
@@ -69,13 +71,14 @@ void RE_Compiler::initializeRequiredStreams_utf16() {
     PabloAST * u16hi_lo_surrogate = mCCCompiler.compileCC(makeCC(0xDC00, 0xDF00));    //u16hi_lo_surrogate = [\xDC-\xDF]
 
     PabloAST * invalidTemp = mPB.createAdvance(u16hi_hi_surrogate, 1, "InvalidTemp");
-    Assign * u16invalid = mPB.createAssign("u16invalid", mPB.createXor(invalidTemp, u16hi_lo_surrogate));//errors.Unicode=pablo.Advance(u16hi_hi_surrogate) ^ u16hi_lo_surrogate
-    Assign * u16valid = mPB.createAssign("u16valid", mPB.createNot(u16invalid));
+    PabloAST * u16invalid = mPB.createXor(invalidTemp, u16hi_lo_surrogate, "u16invalid");
+    // errors.Unicode=pablo.Advance(u16hi_hi_surrogate) ^ u16hi_lo_surrogate
+    PabloAST * u16valid = mPB.createNot(u16invalid, "u16valid");
 
     PabloAST * u16single_temp = mPB.createOr(mCCCompiler.compileCC(makeCC(0x0000, 0xD7FF)), mCCCompiler.compileCC(makeCC(0xE000, 0xFFFF)));
     PabloAST * u16single = mPB.createAnd(u16single_temp, mPB.createNot(u16invalid));
     
-    mNonFinal = mPB.createAssign("nonfinal", mPB.createAnd(hi_surrogate, u16valid));
+    mNonFinal = mPB.createAnd(hi_surrogate, u16valid, "nonfinal");
     mFinal = mPB.createNot(mPB.createOr(mNonFinal, u16invalid), "final");
     mInitial = mPB.createOr(u16single, hi_surrogate, "initial");
     
@@ -85,59 +88,82 @@ void RE_Compiler::initializeRequiredStreams_utf16() {
     PabloAST * unterminatedLineAtEOF = mPB.createAtEOF(mPB.createAdvance(mPB.createNot(LB_chars), 1));
     mLineBreak = mPB.createOr(lb, unterminatedLineAtEOF);
     mAny = mPB.createNot(lb, "any");
-    if (!mCountOnly) mFunction.setResult(1, mPB.createAssign("lf", mLineBreak));
-    return;
 }
 void RE_Compiler::initializeRequiredStreams_utf8() {
-    Assign * LF = mPB.createAssign("LF", mCCCompiler.compileCC(makeCC(0x0A)));
+    PabloAST * LF = mCCCompiler.compileCC("LF", makeCC(0x0A), mPB);
     PabloAST * CR = mCCCompiler.compileCC(makeCC(0x0D));
     PabloAST * LF_VT_FF_CR = mCCCompiler.compileCC(makeCC(0x0A, 0x0D));
 
+    Zeroes * const zero = mPB.createZeroes();
+    Var * crlf = mPB.createVar("crlf", zero);
     PabloBuilder crb = PabloBuilder::Create(mPB);
     PabloAST * cr1 = crb.createAdvance(CR, 1, "cr1");
-    Assign * acrlf = crb.createAssign("crlf", crb.createAnd(cr1, LF));
-    mPB.createIf(CR, {acrlf}, crb);
-    mCRLF = acrlf;
+    crb.createAssign(crlf, crb.createAnd(cr1, LF));
+    mPB.createIf(CR, crb);
+
+    mCRLF = crlf;
+
+    Var * u8invalid = mPB.createVar("u8invalid", zero);
+    Var * valid_pfx = mPB.createVar("valid_pfx", zero);
+    Var * nonFinal = mPB.createVar("nonfinal", zero);
+    Var * NEL_LS_PS = mPB.createVar("NEL_LS_PS", zero);
 
     PabloAST * u8pfx = mCCCompiler.compileCC(makeCC(0xC0, 0xFF));
     PabloBuilder it = PabloBuilder::Create(mPB);
+    mPB.createIf(u8pfx, it);
+
+    mNonFinal = nonFinal;
+
     PabloAST * u8pfx2 = mCCCompiler.compileCC(makeCC(0xC2, 0xDF), it);
     PabloAST * u8pfx3 = mCCCompiler.compileCC(makeCC(0xE0, 0xEF), it);
     PabloAST * u8pfx4 = mCCCompiler.compileCC(makeCC(0xF0, 0xF4), it);
-    Assign * u8suffix = it.createAssign("u8suffix", mCCCompiler.compileCC(makeCC(0x80, 0xBF)));
+    PabloAST * u8suffix = mCCCompiler.compileCC("u8suffix", makeCC(0x80, 0xBF), it);
 
     //
     // Two-byte sequences
+    Var * u8scope22 = it.createVar("u8scope22", zero);
+    Var * NEL = it.createVar("NEL", zero);
     PabloBuilder it2 = PabloBuilder::Create(it);
-    Assign * u8scope22 = it2.createAssign("u8scope22", it2.createAdvance(u8pfx2, 1));
-    Assign * NEL = it2.createAssign("NEL", it2.createAnd(it2.createAdvance(mCCCompiler.compileCC(makeCC(0xC2), it2), 1), mCCCompiler.compileCC(makeCC(0x85), it2)));
-    it.createIf(u8pfx2, {u8scope22, NEL}, it2);
+    it2.createAssign(u8scope22, it2.createAdvance(u8pfx2, 1));
+    it2.createAssign(NEL, it2.createAnd(it2.createAdvance(mCCCompiler.compileCC(makeCC(0xC2), it2), 1), mCCCompiler.compileCC(makeCC(0x85), it2)));
+    it.createIf(u8pfx2, it2);
 
     //
     // Three-byte sequences
+    Var * u8scope32 = it.createVar("u8scope32", zero);
+    Var * u8scope3X = it.createVar("u8scope3X", zero);
+    Var * LS_PS = it.createVar("LS_PS", zero);
+    Var * EX_invalid = it.createVar("EX_invalid", zero);
+
     PabloBuilder it3 = PabloBuilder::Create(it);
-    Assign * u8scope32 = it3.createAssign("u8scope32", it3.createAdvance(u8pfx3, 1));
+    it.createIf(u8pfx3, it3);
+
+    it3.createAssign(u8scope32, it3.createAdvance(u8pfx3, 1));
     PabloAST * u8scope33 = it3.createAdvance(u8pfx3, 2);
-    Assign * u8scope3X = it3.createAssign("u8scope3X", it3.createOr(u8scope32, u8scope33));
+    it3.createAssign(u8scope3X, it3.createOr(u8scope32, u8scope33));
     PabloAST * E2_80 = it3.createAnd(it3.createAdvance(mCCCompiler.compileCC(makeCC(0xE2), it3), 1), mCCCompiler.compileCC(makeCC(0x80), it3));
-    Assign * LS_PS = it3.createAssign("LS_PS", it3.createAnd(it3.createAdvance(E2_80, 1), mCCCompiler.compileCC(makeCC(0xA8,0xA9), it3)));
+    it3.createAssign(LS_PS, it3.createAnd(it3.createAdvance(E2_80, 1), mCCCompiler.compileCC(makeCC(0xA8,0xA9), it3)));
     PabloAST * E0_invalid = it3.createAnd(it3.createAdvance(mCCCompiler.compileCC(makeCC(0xE0), it3), 1), mCCCompiler.compileCC(makeCC(0x80, 0x9F), it3));
     PabloAST * ED_invalid = it3.createAnd(it3.createAdvance(mCCCompiler.compileCC(makeCC(0xED), it3), 1), mCCCompiler.compileCC(makeCC(0xA0, 0xBF), it3));
-    Assign * EX_invalid = it3.createAssign("EX_invalid", it3.createOr(E0_invalid, ED_invalid));
-    it.createIf(u8pfx3, {u8scope32, u8scope3X, LS_PS, EX_invalid}, it3);
+    it3.createAssign(EX_invalid, it3.createOr(E0_invalid, ED_invalid));
+
+    it.createAssign(NEL_LS_PS, it.createOr(NEL, LS_PS));
 
     //
     // Four-byte sequences
+    Var * u8scope4nonfinal = it.createVar("u8scope4nonfinal", zero);
+    Var * u8scope4X = it.createVar("u8scope4X", zero);
+    Var * FX_invalid = it.createVar("FX_invalid", zero);
     PabloBuilder it4 = PabloBuilder::Create(it);
+    it.createIf(u8pfx4, it4);
     PabloAST * u8scope42 = it4.createAdvance(u8pfx4, 1, "u8scope42");
     PabloAST * u8scope43 = it4.createAdvance(u8scope42, 1, "u8scope43");
     PabloAST * u8scope44 = it4.createAdvance(u8scope43, 1, "u8scope44");
-    Assign * u8scope4nonfinal = it4.createAssign("u8scope4nonfinal", it4.createOr(u8scope42, u8scope43));
-    Assign * u8scope4X = it4.createAssign("u8scope4X", it4.createOr(u8scope4nonfinal, u8scope44));
+    it4.createAssign(u8scope4nonfinal, it4.createOr(u8scope42, u8scope43));
+    it4.createAssign(u8scope4X, it4.createOr(u8scope4nonfinal, u8scope44));
     PabloAST * F0_invalid = it4.createAnd(it4.createAdvance(mCCCompiler.compileCC(makeCC(0xF0), it4), 1), mCCCompiler.compileCC(makeCC(0x80, 0x8F), it4));
     PabloAST * F4_invalid = it4.createAnd(it4.createAdvance(mCCCompiler.compileCC(makeCC(0xF4), it4), 1), mCCCompiler.compileCC(makeCC(0x90, 0xBF), it4));
-    Assign * FX_invalid = it4.createAssign("FX_invalid", it4.createOr(F0_invalid, F4_invalid));
-    it.createIf(u8pfx4, {u8scope4nonfinal, u8scope4X, FX_invalid}, it4);
+    it4.createAssign(FX_invalid, it4.createOr(F0_invalid, F4_invalid));
 
     //
     // Invalid cases
@@ -149,16 +175,14 @@ void RE_Compiler::initializeRequiredStreams_utf8() {
     //
     PabloAST * EF_invalid = it.createOr(EX_invalid, FX_invalid);
     PabloAST * pfx_invalid = it.createXor(u8pfx, legalpfx);
-    Assign * u8invalid = it.createAssign("u8invalid", it.createOr(pfx_invalid, it.createOr(mismatch, EF_invalid)));
-    Assign * u8valid = it.createAssign("u8valid", it.createNot(u8invalid));
+    it.createAssign(u8invalid, it.createOr(pfx_invalid, it.createOr(mismatch, EF_invalid)));
+    PabloAST * u8valid = it.createNot(u8invalid, "u8valid");
     //
     //
 
-    Assign * valid_pfx = it.createAssign("valid_pfx", it.createAnd(u8pfx, u8valid));
-    mNonFinal = it.createAssign("nonfinal", it.createAnd(it.createOr(it.createOr(u8pfx, u8scope32), u8scope4nonfinal), u8valid));
+    it.createAssign(valid_pfx, it.createAnd(u8pfx, u8valid));
+    it.createAssign(mNonFinal, it.createAnd(it.createOr(it.createOr(u8pfx, u8scope32), u8scope4nonfinal), u8valid));
 
-    Assign * NEL_LS_PS = it.createAssign("NEL_LS_PS", it.createOr(NEL, LS_PS));
-    mPB.createIf(u8pfx, {u8invalid, valid_pfx, mNonFinal, NEL_LS_PS}, it);
 
     PabloAST * LB_chars = mPB.createOr(LF_VT_FF_CR, NEL_LS_PS);
     PabloAST * u8single = mPB.createAnd(mCCCompiler.compileCC(makeCC(0x00, 0x7F)), mPB.createNot(u8invalid));
@@ -169,14 +193,12 @@ void RE_Compiler::initializeRequiredStreams_utf8() {
     PabloAST * unterminatedLineAtEOF = mPB.createAtEOF(mPB.createAdvance(mPB.createNot(LB_chars), 1));
     mLineBreak = mPB.createOr(lb, unterminatedLineAtEOF);
     mAny = mPB.createNot(lb, "any");
-    if (!mCountOnly) mFunction.setResult(1, mPB.createAssign("lf", mLineBreak));
 }
 
 
 RE * RE_Compiler::resolveUnicodeProperties(RE * re) {
     Name * ZeroWidth = nullptr;
     UCD::UCDCompiler::NameMap nameMap;
-    std::unordered_set<Name *> visited;
     nameMap = resolveNames(re, ZeroWidth);
     
     if (LLVM_LIKELY(nameMap.size() > 0)) {
@@ -210,12 +232,16 @@ void RE_Compiler::finalizeMatchResult(MarkerType match_result, bool InvertMatche
     if (InvertMatches) {
         match_follow = mPB.createNot(match_follow);
     }
-    Assign * matches = mPB.createAssign("matches", mPB.createAnd(match_follow, mLineBreak));
+    PabloAST * matches = mPB.createAnd(match_follow, mLineBreak, "matches");
     if (mCountOnly) {
-        mFunction.setResultCount(mPB.createCount("matchedLineCount", matches));
-    }
-    else {
-        mFunction.setResult(0, matches);
+        Var * const output = mFunction.addResult("matchedLineCount", getScalarTy(64));
+        PabloBuilder nestedCount = PabloBuilder::Create(mPB);
+        mPB.createIf(matches, nestedCount);
+        nestedCount.createAssign(output, nestedCount.createCount(matches));
+    } else {
+        Var * const output = mFunction.addResult("output", getStreamTy(1, 2));
+        mPB.createAssign(mPB.createExtract(output, mPB.getInteger(0)), matches);
+        mPB.createAssign(mPB.createExtract(output, mPB.getInteger(1)), mLineBreak);
     }
 }
 
@@ -308,18 +334,20 @@ MarkerType RE_Compiler::compileSeq(Seq * seq, MarkerType marker, PabloBuilder & 
 }
 
 MarkerType RE_Compiler::compileSeqTail(Seq::iterator current, Seq::iterator end, int matchLenSoFar, MarkerType marker, PabloBuilder & pb) {
-    if (current == end) return marker;
-    if (matchLenSoFar < IfInsertionGap) {
+    if (current == end) {
+        return marker;
+    } else if (matchLenSoFar < IfInsertionGap) {
         RE * r = *current;
         marker = process(r, marker, pb);
         current++;
         return compileSeqTail(current, end, matchLenSoFar + minMatchLength(r), marker, pb);
     } else {
+        Var * m = pb.createVar("m", pb.createZeroes());
         PabloBuilder nested = PabloBuilder::Create(pb);
         MarkerType m1 = compileSeqTail(current, end, 0, marker, nested);
-        Assign * m1a = nested.createAssign("m", markerVar(m1));
-        pb.createIf(markerVar(marker), {m1a}, nested);
-        return makeMarker(m1.pos, m1a);
+        nested.createAssign(m, markerVar(m1));
+        pb.createIf(markerVar(marker), nested);
+        return makeMarker(m1.pos, m);
     }
 }
 
@@ -466,11 +494,12 @@ MarkerType RE_Compiler::processLowerBound(RE * repeated, int lb, MarkerType mark
         marker = AdvanceMarker(marker, MarkerPosition::FinalPostPositionUnit, pb);
     }
     if (lb == 1) return marker;
+    Var * m = pb.createVar("m", pb.createZeroes());
     PabloBuilder nested = PabloBuilder::Create(pb);
     MarkerType m1 = processLowerBound(repeated, lb - 1, marker, nested);
-    Assign * m1a = nested.createAssign("m", markerVar(m1));
-    pb.createIf(markerVar(marker), {m1a}, nested);
-    return makeMarker(m1.pos, m1a);
+    nested.createAssign(m, markerVar(m1));
+    pb.createIf(markerVar(marker), nested);
+    return makeMarker(m1.pos, m);
 }
     
 MarkerType RE_Compiler::processBoundedRep(RE * repeated, int ub, MarkerType marker, PabloBuilder & pb) {
@@ -494,10 +523,11 @@ MarkerType RE_Compiler::processBoundedRep(RE * repeated, int ub, MarkerType mark
         marker = AdvanceMarker(marker, MarkerPosition::FinalPostPositionUnit, pb);
     }
     if (ub == 1) return marker;
+    Var * m1a = pb.createVar("m", pb.createZeroes());
     PabloBuilder nested = PabloBuilder::Create(pb);
     MarkerType m1 = processBoundedRep(repeated, ub - 1, marker, nested);
-    Assign * m1a = nested.createAssign("m", markerVar(m1));
-    pb.createIf(markerVar(marker), {m1a}, nested);
+    nested.createAssign(m1a, markerVar(m1));
+    pb.createIf(markerVar(marker), nested);
     return makeMarker(m1.pos, m1a);
 }
 
@@ -524,42 +554,36 @@ MarkerType RE_Compiler::processUnboundedRep(RE * repeated, MarkerType marker, Pa
         }
         return makeMarker(MarkerPosition::FinalPostPositionUnit, pb.createAnd(mstar, final, "unbounded"));
     } else if (mStarDepth > 0){
-        PabloBuilder * outerb = pb.getParent();
-        Assign * starPending = outerb->createAssign("pending", outerb->createZeroes());
-        Assign * starAccum = outerb->createAssign("accum", outerb->createZeroes());
+        PabloBuilder * const outer = pb.getParent();
+        Var * starPending = outer->createVar("pending", outer->createZeroes());
+        Var * starAccum = outer->createVar("accum", outer->createZeroes());
         mStarDepth++;
         PabloAST * m1 = pb.createOr(base, starPending);
         PabloAST * m2 = pb.createOr(base, starAccum);
         MarkerType result = process(repeated, makeMarker(MarkerPosition::FinalPostPositionUnit, m1), pb);
         result = AdvanceMarker(result, MarkerPosition::FinalPostPositionUnit, pb);
         PabloAST * loopComputation = markerVar(result);
-        Next * nextPending = pb.createNext(starPending, pb.createAnd(loopComputation, pb.createNot(m2)));
-        Next * nextStarAccum = pb.createNext(starAccum, pb.createOr(loopComputation, m2));
-        mWhileTest = pb.createOr(mWhileTest, nextPending);
-        mLoopVariants.push_back(nextPending);
-        mLoopVariants.push_back(nextStarAccum);
-        mStarDepth--;
-        return makeMarker(markerPos(result), pb.createAssign("unbounded", pb.createOr(base, nextStarAccum)));
+        pb.createAssign(starPending, pb.createAnd(loopComputation, pb.createNot(m2)));
+        pb.createAssign(starAccum, pb.createOr(loopComputation, m2));
+        mWhileTest = pb.createOr(mWhileTest, starPending);
+        mStarDepth--;      
+        return makeMarker(markerPos(result), pb.createOr(base, starAccum, "unbounded"));
     } else {
-        Assign * whileTest = pb.createAssign("test", base);
-        Assign * whilePending = pb.createAssign("pending", base);
-        Assign * whileAccum = pb.createAssign("accum", base);
+        Var * whileTest = pb.createVar("test", base);
+        Var * whilePending = pb.createVar("pending", base);
+        Var * whileAccum = pb.createVar("accum", base);
         mWhileTest = pb.createZeroes();
         PabloBuilder wb = PabloBuilder::Create(pb);
         mStarDepth++;
         MarkerType result = process(repeated, makeMarker(MarkerPosition::FinalPostPositionUnit, whilePending), wb);
         result = AdvanceMarker(result, MarkerPosition::FinalPostPositionUnit, wb);
         PabloAST * loopComputation = markerVar(result);
-        Next * nextWhilePending = wb.createNext(whilePending, wb.createAnd(loopComputation, wb.createNot(whileAccum)));
-        Next * nextWhileAccum = wb.createNext(whileAccum, wb.createOr(loopComputation, whileAccum));
-        Next * nextWhileTest = wb.createNext(whileTest, wb.createOr(mWhileTest, nextWhilePending));
-        mLoopVariants.push_back(nextWhilePending);
-        mLoopVariants.push_back(nextWhileAccum);
-        mLoopVariants.push_back(nextWhileTest);
-        pb.createWhile(nextWhileTest, mLoopVariants, wb);
+        wb.createAssign(whilePending, wb.createAnd(loopComputation, wb.createNot(whileAccum)));
+        wb.createAssign(whileAccum, wb.createOr(loopComputation, whileAccum));
+        wb.createAssign(whileTest, wb.createOr(mWhileTest, whilePending));
+        pb.createWhile(whileTest, wb);
         mStarDepth--;
-        mLoopVariants.clear();
-        return makeMarker(markerPos(result), pb.createAssign("unbounded", nextWhileAccum));
+        return makeMarker(markerPos(result), whileAccum);
     }
 }
 
@@ -616,10 +640,8 @@ RE_Compiler::RE_Compiler(pablo::PabloFunction & function, cc::CC_Compiler & ccCo
 , mFinal(nullptr)
 , mWhileTest(nullptr)
 , mStarDepth(0)
-, mLoopVariants()
-, mPB(ccCompiler.getBuilder().getPabloBlock(), ccCompiler.getBuilder())
-, mFunction(function)
-{
+, mPB(ccCompiler.getBuilder())
+, mFunction(function) {
 
 }
 

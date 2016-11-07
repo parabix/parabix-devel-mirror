@@ -27,7 +27,9 @@ namespace re {
 
 static cl::OptionCategory RegexOptions("Regex Toolchain Options",
                                               "These options control the regular expression transformation and compilation.");
-const cl::OptionCategory * re_toolchain_flags() {return &RegexOptions;};
+const cl::OptionCategory * re_toolchain_flags() {
+    return &RegexOptions;
+}
 
 static cl::bits<RE_PrintFlags> 
     PrintOptions(cl::values(clEnumVal(PrintAllREs, "print regular expression passes"),
@@ -92,8 +94,8 @@ RE * regular_expression_passes(RE * re_ast)  {
     return re_ast;
 }
     
-PabloFunction * re2pablo_compiler(const unsigned encodingBits, RE * re_ast, bool CountOnly) {
-    PabloFunction * function = PabloFunction::Create("process_block", encodingBits, CountOnly ? 0 : 2);
+PabloFunction * re2pablo_compiler(const unsigned encodingBits, RE * re_ast, const bool CountOnly) {
+    PabloFunction * function = PabloFunction::Create("process_block");
     cc::CC_Compiler cc_compiler(*function, encodingBits);
     re::RE_Compiler re_compiler(*function, cc_compiler, CountOnly);
     re_compiler.initializeRequiredStreams(encodingBits);
@@ -101,4 +103,5 @@ PabloFunction * re2pablo_compiler(const unsigned encodingBits, RE * re_ast, bool
     re_compiler.finalizeMatchResult(re_compiler.compile(re_ast), AlgorithmOptions.isSet(InvertMatches));
     return function;
 }
+
 }

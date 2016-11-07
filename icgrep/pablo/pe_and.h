@@ -22,18 +22,18 @@ public:
     }
     virtual ~And() { }
 protected:
-    And(const PabloType * const type, PabloAST * expr1, PabloAST * expr2, String * name)
+    And(Type * const type, PabloAST * expr1, PabloAST * expr2, const String * name)
     : Variadic(ClassTypeId::And, type, {expr1, expr2}, name)
     {
 
     }
-    And(const PabloType * const type, const unsigned reserved, String * name)
+    And(Type * const type, const unsigned reserved, const String * name)
     : Variadic(ClassTypeId::And, type, reserved, name)
     {
 
     }
     template<typename iterator>
-    And(const PabloType * const type, iterator begin, iterator end, String * name)
+    And(Type * const type, iterator begin, iterator end, const String * name)
     : Variadic(ClassTypeId::And, type, begin, end, name) {
 
     }

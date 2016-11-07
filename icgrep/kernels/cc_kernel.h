@@ -23,8 +23,8 @@ public:
     
     DirectCharacterClassKernelBuilder(IDISA::IDISA_Builder * iBuilder, std::string ccSetName, std::vector<re::CC *> charClasses, unsigned codeUnitSize) :
     KernelBuilder(iBuilder, "cc",
-                  {StreamSetBinding{parabix::StreamSetType(1, 8 * codeUnitSize), "codeUnitStream"}},
-                  {StreamSetBinding{parabix::StreamSetType(charClasses.size(), parabix::i1), "ccStream"}},
+                  {Binding{parabix::StreamSetType(iBuilder,1, 8 * codeUnitSize), "codeUnitStream"}},
+                  {Binding{parabix::StreamSetType(iBuilder,charClasses.size(), 1), "ccStream"}},
                   {}, {}, {}), mCharClasses(charClasses), mCodeUnitSize(codeUnitSize) {}
     
     
@@ -40,7 +40,7 @@ private:
 class ParabixCharacterClassKernelBuilder: public pablo::PabloKernel {
 public:
     ParabixCharacterClassKernelBuilder(IDISA::IDISA_Builder * iBuilder, std::string ccSetName, std::vector<re::CC *> charClasses, unsigned basisBitsCount) :
-        PabloKernel(iBuilder, ccSetName +"_kernel", cc::ParabixCharacterClassFunction(ccSetName, charClasses, basisBitsCount), {}) {}
+        PabloKernel(iBuilder, ccSetName +"_kernel", cc::ParabixCharacterClassFunction(ccSetName, charClasses, basisBitsCount)) {}
     
 };
   

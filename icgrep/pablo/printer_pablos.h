@@ -18,10 +18,10 @@ class PabloAST;
 
 class PabloPrinter {
 public:
-    static void print(const pablo::PabloFunction & function, llvm::raw_ostream & out);
-    static void print(const pablo::PabloAST * expr, llvm::raw_ostream & out);
-    static void print(const pablo::PabloBlock * block, llvm::raw_ostream & strm, const bool expandNested = false, const unsigned indent = 0);
-    static void print(const pablo::Statement * stmt, llvm::raw_ostream & out, const bool expandNested = false, const unsigned indent = 0);
+    static void print(const PabloFunction & function, llvm::raw_ostream & out);
+    static void print(const PabloAST * expr, llvm::raw_ostream & out);
+    static void print(const PabloBlock * block, llvm::raw_ostream & strm, const bool expandNested = false, const unsigned indent = 0);
+    static void print(const Statement * stmt, llvm::raw_ostream & out, const bool expandNested = false, const unsigned indent = 0);
 };
 
 }

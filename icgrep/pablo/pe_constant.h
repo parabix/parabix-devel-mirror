@@ -23,7 +23,7 @@ public:
         return isa<Ones>(other);
     }
 protected:
-    Constant(const PabloType * type, const PabloAST * const value) : Constant(ClassTypeId::Ones, type), mValue(value) { }
+    Constant(Type * type, const PabloAST * const value) : Constant(ClassTypeId::Ones, type), mValue(value) { }
 private:
 
     const PabloAST * const mValue;

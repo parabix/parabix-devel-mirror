@@ -32,16 +32,17 @@ std::vector<llvm::Value *> parallel_prefix_deletion_masks(IDISA::IDISA_Builder *
 
 llvm::Value * apply_parallel_prefix_deletion(IDISA::IDISA_Builder * iBuilder, unsigned fw, llvm::Value * del_mask, std::vector<llvm::Value *> mv, llvm::Value * strm);
 
-using namespace kernel;
 using namespace parabix;
 
-class deletionKernel : public kernel::KernelBuilder {
+namespace kernel {
+
+class DeletionKernel : public kernel::KernelBuilder {
 public:
-    deletionKernel(IDISA::IDISA_Builder * iBuilder, unsigned fw, unsigned streamCount) :
+    DeletionKernel(IDISA::IDISA_Builder * iBuilder, unsigned fw, unsigned streamCount) :
     KernelBuilder(iBuilder, "del",
-                  {StreamSetBinding{StreamSetType(streamCount + 2, 1), "inputStreamSet"}},
-                  {StreamSetBinding{StreamSetType(streamCount, 1), "outputStreamSet"},
-                   StreamSetBinding{StreamSetType(1, 1), "deletionCounts"}},
+                  {Binding{StreamSetType(iBuilder,streamCount + 2, 1), "inputStreamSet"}},
+                  {Binding{StreamSetType(iBuilder,streamCount, 1), "outputStreamSet"},
+                   Binding{StreamSetType(iBuilder,1, 1), "deletionCounts"}},
                   {}, {}, {}),
     mDeletionFieldWidth(fw),
     mStreamCount(streamCount) {}
@@ -52,6 +53,8 @@ private:
     unsigned mDeletionFieldWidth;
     unsigned mStreamCount;
 };
+
+}
     
 #endif
 

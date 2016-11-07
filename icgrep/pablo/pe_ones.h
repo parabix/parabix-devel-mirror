@@ -30,7 +30,7 @@ public:
         return isa<Ones>(other);
     }
 protected:
-    Ones(const PabloType * const type) : PabloAST(ClassTypeId::Ones, type) { }
+    Ones(Type * const type) : PabloAST(ClassTypeId::Ones, type, nullptr) { }
 };
 
 }

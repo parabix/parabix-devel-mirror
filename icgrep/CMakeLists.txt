@@ -15,7 +15,7 @@ find_package(LLVM REQUIRED CONFIG)
 
 message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
 message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
-
+set(CMAKE_MODULE_PATH "${CMAKE_MODULE_PATH};${CMAKE_CURRENT_SOURCE_DIR}/cmake") # ensure custom FindXYZ.cmake files are found
 
 # Now set the header and library paths:
 include_directories( ${LLVM_INCLUDE_DIRS} )
@@ -51,11 +51,11 @@ SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DUSE_BOOST")
 
 SET(IDISA_SRC IDISA/idisa_builder.cpp IDISA/idisa_avx_builder.cpp IDISA/idisa_i64_builder.cpp IDISA/idisa_sse_builder.cpp IDISA/idisa_nvptx_builder.cpp IDISA/idisa_target.cpp)
 
-SET(PABLO_SRC pablo/pablo_type.cpp pablo/pabloAST.cpp pablo/ps_if.cpp pablo/ps_while.cpp pablo/function.cpp pablo/codegenstate.cpp pablo/builder.cpp pablo/symbol_generator.cpp pablo/printer_pablos.cpp pablo/pablo_toolchain.cpp pablo/passes/flattenif.cpp)
+SET(PABLO_SRC pablo/type/streamtype.cpp pablo/pabloAST.cpp pablo/branch.cpp pablo/function.cpp pablo/codegenstate.cpp pablo/builder.cpp pablo/symbol_generator.cpp pablo/printer_pablos.cpp pablo/pablo_toolchain.cpp)
 SET(PABLO_SRC ${PABLO_SRC} pablo/pablo_compiler.cpp pablo/carry_manager.cpp pablo/carry_data.cpp pablo/pablo_kernel.cpp)
-SET(PABLO_SRC ${PABLO_SRC} kernels/s2p_kernel.cpp kernels/kernel.cpp kernels/streamset.cpp kernels/interface.cpp)
+SET(PABLO_SRC ${PABLO_SRC} kernels/kernel.cpp kernels/s2p_kernel.cpp kernels/streamset.cpp kernels/interface.cpp)
 SET(PABLO_SRC ${PABLO_SRC} pablo/analysis/pabloverifier.cpp)
-SET(PABLO_SRC ${PABLO_SRC} pablo/optimizers/pablo_simplifier.cpp pablo/optimizers/codemotionpass.cpp)
+SET(PABLO_SRC ${PABLO_SRC} pablo/optimizers/pablo_simplifier.cpp pablo/optimizers/codemotionpass.cpp pablo/passes/flattenif.cpp)
 IF(ENABLE_MULTIPLEXING)
 SET(PABLO_SRC ${PABLO_SRC} pablo/optimizers/booleanreassociationpass.cpp)
 SET(PABLO_SRC ${PABLO_SRC} pablo/optimizers/schedulingprepass.cpp pablo/optimizers/pablo_automultiplexing.cpp)
@@ -108,9 +108,7 @@ ENDIF()
 
 add_executable(icgrep icgrep.cpp toolchain.cpp grep_engine.cpp kernels/pipeline.cpp kernels/scanmatchgen.cpp kernels/cc_kernel.cpp ${PRECOMPILED_FILES})
 add_executable(u8u16 u8u16.cpp toolchain.cpp kernels/p2s_kernel.cpp kernels/pipeline.cpp kernels/deletion.cpp kernels/stdout_kernel.cpp)
-#add_executable(symtbl symboltable.cpp toolchain.cpp kernels/symboltablepipeline.cpp kernels/stdout_kernel.cpp grep_engine.cpp kernels/pipeline.cpp kernels/scanmatchgen.cpp ${PRECOMPILED_FILES})
 add_executable(wc wc.cpp toolchain.cpp kernels/pipeline.cpp)
-
 add_executable(editd editd/editd.cpp editd/pattern_compiler.cpp toolchain.cpp kernels/pipeline.cpp editd/editdscan_kernel.cpp)
 
 IF(ENABLE_PREGENERATED_UCD_FUNCTIONS)
@@ -124,13 +122,11 @@ IF (PRINT_TIMING_INFORMATION)
 ENDIF()
 
 target_link_libraries(icgrep ${Boost_LIBRARIES})
-#target_link_libraries(symtbl ${Boost_LIBRARIES})
 target_link_libraries(u8u16 ${Boost_LIBRARIES})
 target_link_libraries(wc ${Boost_LIBRARIES})
 target_link_libraries(editd ${Boost_LIBRARIES})
 
 target_link_libraries (icgrep UCDlib PabloADT RegExpCompiler CCADT CodeGen ${REQ_LLVM_LIBRARIES} ${CUDA_LIB})
-#target_link_libraries (symtbl UCDlib PabloADT RegExpCompiler CCADT CodeGen ${REQ_LLVM_LIBRARIES} ${CUDA_LIB})
 target_link_libraries (u8u16 UCDlib PabloADT RegExpCompiler CCADT CodeGen ${REQ_LLVM_LIBRARIES} ${CUDA_LIB})
 target_link_libraries (wc UCDlib PabloADT RegExpCompiler CCADT CodeGen ${REQ_LLVM_LIBRARIES} ${CUDA_LIB})
 target_link_libraries (editd UCDlib PabloADT RegExpCompiler CCADT CodeGen ${REQ_LLVM_LIBRARIES} ${CUDA_LIB})
@@ -196,7 +192,7 @@ IF (PRINT_TIMING_INFORMATION)
 ENDIF()
 
 SET(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS} -O3 -DNDEBUG")
-SET(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS} -g") # -fsanitize=address -fno-omit-frame-pointer
+SET(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS} -g") #  -fsanitize=address -fno-omit-frame-pointer
 
 add_test(
   NAME greptest

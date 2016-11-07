@@ -32,7 +32,7 @@ public:
         return getOperand(2);
     }
 protected:
-    Sel(PabloAST * condExpr, PabloAST * trueExpr, PabloAST * falseExpr, String * name)
+    Sel(PabloAST * condExpr, PabloAST * trueExpr, PabloAST * falseExpr, const String * name)
     : Statement(ClassTypeId::Sel, trueExpr->getType(), {condExpr, trueExpr, falseExpr}, name) {
 
     }

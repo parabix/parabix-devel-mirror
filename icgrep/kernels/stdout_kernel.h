@@ -17,7 +17,7 @@ class stdOutKernel : public KernelBuilder {
 public:
     stdOutKernel(IDISA::IDISA_Builder * iBuilder, unsigned codeUnitWidth) :
     KernelBuilder(iBuilder, "stdout",
-                  {StreamSetBinding{parabix::StreamSetType(1, codeUnitWidth), "codeUnitBuffer"}}, {}, {}, {}, {}),
+                  {Binding{parabix::StreamSetType(iBuilder, 1, codeUnitWidth), "codeUnitBuffer"}}, {}, {}, {}, {}),
     mCodeUnitWidth(codeUnitWidth) {}
     
 private:

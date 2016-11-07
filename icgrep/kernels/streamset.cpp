@@ -13,29 +13,8 @@ using namespace parabix;
 
 enum SS_struct_index {iProducer_pos = 0, iConsumer_pos = 1, iEnd_of_input = 2, iBuffer_ptr = 3};
 
-llvm::Value * parabix::getProducerPosPtr(IDISA::IDISA_Builder * b, Value * bufferStructPtr) {
-    return b->CreateGEP(bufferStructPtr, {b->getInt32(0), b->getInt32(iProducer_pos)});
-}
-
-llvm::Value * parabix::getConsumerPosPtr(IDISA::IDISA_Builder * b, Value * bufferStructPtr) {
-    return b->CreateGEP(bufferStructPtr, {b->getInt32(0), b->getInt32(iConsumer_pos)});
-}
-
-llvm::Value * parabix::hasEndOfInputPtr(IDISA::IDISA_Builder * b, Value * bufferStructPtr) {
-    return b->CreateGEP(bufferStructPtr, {b->getInt32(0), b->getInt32(iEnd_of_input)});
-}
-
-llvm::Value * parabix::getStreamSetBufferPtr(IDISA::IDISA_Builder * b, Value * bufferStructPtr) {
-    return b->CreateLoad(b->CreateGEP(bufferStructPtr, {b->getInt32(0), b->getInt32(iBuffer_ptr)}));
-}
-
-llvm::Type * StreamSetType::getStreamSetBlockType(IDISA::IDISA_Builder * iBuilder) {
-    llvm::Type * streamType = mFieldWidth == 1 ? iBuilder->getBitBlockType() : ArrayType::get(iBuilder->getBitBlockType(), mFieldWidth);
-    return ArrayType::get(streamType, mStreamCount);
-}
-
 llvm::PointerType * StreamSetBuffer::getStreamBufferPointerType() {
-    return PointerType::get(mStreamSetType.getStreamSetBlockType(iBuilder), mAddrSpace);
+    return PointerType::get(mStreamSetType, mAddrSpace);
 }
 
 llvm::PointerType * StreamSetBuffer::getStreamSetStructPointerType() {
@@ -66,7 +45,6 @@ void StreamSetBuffer::setEndOfInput(Value * bufferStructPtr){
     iBuilder->CreateStore(ConstantInt::get(iBuilder->getInt1Ty(), 1), iBuilder->CreateGEP(bufferStructPtr, {iBuilder->getInt32(0), iBuilder->getInt32(iEnd_of_input)}));
 }
 
-
 llvm::Value * StreamSetBuffer::getStreamSetStructPtr(){
     return mStreamSetStructPtr;
 }
@@ -74,10 +52,9 @@ llvm::Value * StreamSetBuffer::getStreamSetStructPtr(){
 llvm::Value * StreamSetBuffer::allocateBuffer() {
     Type * const size_ty = iBuilder->getSizeTy();
     Type * const int1ty = iBuilder->getInt1Ty();
-    mStreamSetBufferPtr = iBuilder->CreateCacheAlignedAlloca(mStreamSetType.getStreamSetBlockType(iBuilder), ConstantInt::get(iBuilder->getSizeTy(), mBufferBlocks));
+    mStreamSetBufferPtr = iBuilder->CreateCacheAlignedAlloca(mStreamSetType, ConstantInt::get(iBuilder->getSizeTy(), mBufferBlocks));
     mStreamSetStructPtr = iBuilder->CreateCacheAlignedAlloca(mStreamSetStructType);
-    //iBuilder->CallPrintInt("mStreamSetBufferPtr", iBuilder->CreatePtrToInt(mStreamSetBufferPtr, iBuilder->getInt64Ty()));
-    //iBuilder->CallPrintInt("mStreamSetStructPtr", iBuilder->CreatePtrToInt(mStreamSetStructPtr, iBuilder->getInt64Ty()));
+
     iBuilder->CreateStore(ConstantInt::get(size_ty, 0), iBuilder->CreateGEP(mStreamSetStructPtr, {iBuilder->getInt32(0), iBuilder->getInt32(iProducer_pos)}));
     iBuilder->CreateStore(ConstantInt::get(size_ty, 0), iBuilder->CreateGEP(mStreamSetStructPtr, {iBuilder->getInt32(0), iBuilder->getInt32(iConsumer_pos)}));
     iBuilder->CreateStore(ConstantInt::get(int1ty, 0), iBuilder->CreateGEP(mStreamSetStructPtr, {iBuilder->getInt32(0), iBuilder->getInt32(iEnd_of_input)}));
@@ -90,9 +67,6 @@ llvm::Value * StreamSetBuffer::getStreamSetBlockPointer(llvm::Value * bufferStru
     Value * handle = iBuilder->CreateGEP(bufferStructPtr, {iBuilder->getInt32(0), iBuilder->getInt32(iBuffer_ptr)});
     return iBuilder->CreateGEP(iBuilder->CreateLoad(handle), {blockNo});
 }
-
-
-
 
 // Single Block Buffer
 // For a single block buffer, the block pointer is always the buffer base pointer.
@@ -198,7 +172,10 @@ void LinearCopybackBuffer::setConsumerPos(Value * bufferStructPtr, Value * new_c
     //iBuilder->CallPrintInt("lastProducerBlock", lastProducerBlock);
 
     Value * copyBlocks = iBuilder->CreateAdd(iBuilder->CreateSub(lastProducerBlock, new_consumer_block), one);
-    Constant * blockBytes = ConstantInt::get(iBuilder->getSizeTy(), mStreamSetType.StreamCount() * mStreamSetType.StreamFieldWidth() * iBuilder->getStride()/8);
+
+    DataLayout dl(iBuilder->getModule());
+
+    Constant * blockBytes = ConstantInt::get(iBuilder->getSizeTy(), dl.getTypeAllocSize(mStreamSetType) * iBuilder->getStride());
     Value * copyLength = iBuilder->CreateMul(copyBlocks, blockBytes);
     //iBuilder->CallPrintInt("memmove copyLength", copyLength);
     // Must copy back one full block for each of the streams in the stream set.

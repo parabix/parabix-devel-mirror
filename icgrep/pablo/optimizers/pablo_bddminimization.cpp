@@ -109,11 +109,9 @@ void BDDMinimizationPass::eliminateLogicallyEquivalentStatements(PabloBlock * co
             eliminateLogicallyEquivalentStatements(cast<If>(stmt)->getBody(), map);
         } else if (LLVM_UNLIKELY(isa<While>(stmt))) {
             eliminateLogicallyEquivalentStatements(cast<While>(stmt)->getBody(), map);
-            for (Next * var : cast<const While>(stmt)->getVariants()) {
-                if (!escapes(var)) {
-                    bdd_delref(mCharacterizationMap[var]);
-                    mCharacterizationMap.erase(var);
-                }
+            for (Var * var : cast<const While>(stmt)->getVariants()) {
+                bdd_delref(mCharacterizationMap[var]);
+                mCharacterizationMap.erase(var);
             }
         } else { // attempt to characterize this statement and replace it if we've encountered an equivalent one
 

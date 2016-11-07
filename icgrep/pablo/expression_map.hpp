@@ -29,7 +29,7 @@ struct FixedArgMap {
     }
 
     template <class Functor, typename... Params>
-    inline PabloAST * findOrCall(Functor && functor, const PabloAST::ClassTypeId type, Args... args, Params... params) {
+    PabloAST * findOrCall(Functor && functor, const PabloAST::ClassTypeId type, Args... args, Params... params) {
         Key key = std::make_tuple(type, args...);
         PabloAST * const f = find(key);
         if (f) {
@@ -40,7 +40,7 @@ struct FixedArgMap {
         return object;
     }
 
-    inline std::pair<PabloAST *, bool> findOrAdd(PabloAST * object, const PabloAST::ClassTypeId type, Args... args) {
+    std::pair<PabloAST *, bool> findOrAdd(PabloAST * object, const PabloAST::ClassTypeId type, Args... args) {
         Key key = std::make_tuple(type, args...);
         PabloAST * const entry = find(key);
         if (entry) {
@@ -50,7 +50,7 @@ struct FixedArgMap {
         return std::make_pair(object, true);
     }
 
-    inline bool erase(const PabloAST::ClassTypeId type, Args... args) {
+    bool erase(const PabloAST::ClassTypeId type, Args... args) {
         Key key = std::make_tuple(type, args...);
         for (Type * obj = this; obj; obj = obj->mPredecessor) {
             auto itr = obj->mMap.find(key);
@@ -68,21 +68,21 @@ struct FixedArgMap {
 
 private:
 
-    inline PabloAST * find(const Key & key) const {
+    PabloAST * find(const Key & key) const {
         // check this map to see if we have it
         auto itr = mMap.find(key);
         if (itr != mMap.end()) {
             return itr->second;
-        }
-        // check any previous maps to see if it exists
-        auto * pred = mPredecessor;
-        while (pred) {
-            itr = pred->mMap.find(key);
-            if (itr == pred->mMap.end()) {
-                pred = pred->mPredecessor;
-                continue;
+        } else { // check any previous maps to see if it exists
+            auto * pred = mPredecessor;
+            while (pred) {
+                itr = pred->mMap.find(key);
+                if (itr == pred->mMap.end()) {
+                    pred = pred->mPredecessor;
+                    continue;
+                }
+                return itr->second;
             }
-            return itr->second;
         }
         return nullptr;
     }
@@ -165,7 +165,7 @@ struct VarArgMap {
     }
 
     template <class Functor, typename... Params>
-    inline PabloAST * findOrCall(Functor && functor, const PabloAST::ClassTypeId type, const PabloAST * arg1, const std::vector<PabloAST *> & args, Params... params) {
+    PabloAST * findOrCall(Functor && functor, const PabloAST::ClassTypeId type, const PabloAST * arg1, const std::vector<PabloAST *> & args, Params... params) {
         Key key(type, arg1, args, mAllocator);
         PabloAST * const f = find(key);
         if (f) {
@@ -177,7 +177,7 @@ struct VarArgMap {
         return object;
     }
 
-    inline std::pair<PabloAST *, bool> findOrAdd(Variadic * object, const PabloAST::ClassTypeId type) {
+    std::pair<PabloAST *, bool> findOrAdd(Variadic * object, const PabloAST::ClassTypeId type) {
         Key key(type, object, mAllocator);
         PabloAST * const entry = find(key);
         if (entry) {
@@ -190,21 +190,21 @@ struct VarArgMap {
 
 private:
 
-    inline PabloAST * find(const Key & key) const {
+    PabloAST * find(const Key & key) const {
         // check this map to see if we have it
         auto itr = mMap.find(key);
         if (itr != mMap.end()) {
             return itr->second;
-        }
-        // check any previous maps to see if it exists
-        auto * pred = mPredecessor;
-        while (pred) {
-            itr = pred->mMap.find(key);
-            if (itr == pred->mMap.end()) {
-                pred = pred->mPredecessor;
-                continue;
+        } else { // check any previous maps to see if it exists
+            auto * pred = mPredecessor;
+            while (pred) {
+                itr = pred->mMap.find(key);
+                if (itr == pred->mMap.end()) {
+                    pred = pred->mPredecessor;
+                    continue;
+                }
+                return itr->second;
             }
-            return itr->second;
         }
         return nullptr;
     }
@@ -222,7 +222,7 @@ struct ExpressionTable {
             mUnary.mPredecessor = &(predecessor->mUnary);
             mBinary.mPredecessor = &(predecessor->mBinary);
             mTernary.mPredecessor = &(predecessor->mTernary);
-            mVariable.mPredecessor = &(predecessor->mVariable);
+            mVariadic.mPredecessor = &(predecessor->mVariadic);
         }
     }
 
@@ -232,7 +232,7 @@ struct ExpressionTable {
     : mUnary(std::move(other.mUnary))
     , mBinary(std::move(other.mBinary))
     , mTernary(std::move(other.mTernary))
-    , mVariable(std::move(other.mVariable)) {
+    , mVariadic(std::move(other.mVariadic)) {
 
     }
 
@@ -240,7 +240,7 @@ struct ExpressionTable {
         mUnary = std::move(other.mUnary);
         mBinary = std::move(other.mBinary);
         mTernary = std::move(other.mTernary);
-        mVariable = std::move(other.mVariable);
+        mVariadic = std::move(other.mVariadic);
         return *this;
     }
 
@@ -260,13 +260,12 @@ struct ExpressionTable {
     }
 
     template <class Functor, typename... Params>
-    inline PabloAST * findVariableOrCall(Functor && functor, const PabloAST::ClassTypeId type, const PabloAST * arg1, const std::vector<PabloAST *> & args, Params... params) {
-        return mVariable.findOrCall(std::move(functor), type, arg1, args, std::forward<Params>(params)...);
+    inline PabloAST * findVariadicOrCall(Functor && functor, const PabloAST::ClassTypeId type, const PabloAST * arg1, const std::vector<PabloAST *> & args, Params... params) {
+        return mVariadic.findOrCall(std::move(functor), type, arg1, args, std::forward<Params>(params)...);
     }
 
     std::pair<PabloAST *, bool> findOrAdd(Statement * stmt) {
-        switch (stmt->getClassTypeId()) {            
-            case PabloAST::ClassTypeId::Assign:            
+        switch (stmt->getClassTypeId()) {                     
             case PabloAST::ClassTypeId::Var:
             case PabloAST::ClassTypeId::Not:
             case PabloAST::ClassTypeId::Count:
@@ -274,11 +273,11 @@ struct ExpressionTable {
             case PabloAST::ClassTypeId::And:
             case PabloAST::ClassTypeId::Or:
             case PabloAST::ClassTypeId::Xor:
-                return mVariable.findOrAdd(cast<Variadic>(stmt), stmt->getClassTypeId());
+                return mVariadic.findOrAdd(cast<Variadic>(stmt), stmt->getClassTypeId());
             case PabloAST::ClassTypeId::Advance:
             case PabloAST::ClassTypeId::ScanThru:
             case PabloAST::ClassTypeId::MatchStar:
-            case PabloAST::ClassTypeId::Next:
+            case PabloAST::ClassTypeId::Assign:
                 return mBinary.findOrAdd(stmt, stmt->getClassTypeId(), stmt->getOperand(0), stmt->getOperand(1));
             case PabloAST::ClassTypeId::Sel:
                 return mTernary.findOrAdd(stmt, stmt->getClassTypeId(), stmt->getOperand(0), stmt->getOperand(1), stmt->getOperand(2));
@@ -294,7 +293,7 @@ private:
     FixedArgMap<PabloAST *>                             mUnary;
     FixedArgMap<PabloAST *, PabloAST *>                 mBinary;
     FixedArgMap<PabloAST *, PabloAST *, PabloAST *>     mTernary;
-    VarArgMap                                           mVariable;
+    VarArgMap                                           mVariadic;
 };
 
 }

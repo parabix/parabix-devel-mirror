@@ -183,7 +183,6 @@ void UCDCompiler::generateRange(const RangeList & ifRanges, const codepoint_t lo
 
             generateRange(inner, range.first, range.second, inner_block);
 
-            std::vector<Assign *> targets;
             for (auto ti = intersectingTargets.begin(); ti != intersectingTargets.end(); ) {
                 auto f = mTargetMap.find(ti->first);
                 assert (f != mTargetMap.end());
@@ -191,19 +190,17 @@ void UCDCompiler::generateRange(const RangeList & ifRanges, const codepoint_t lo
                     ti = intersectingTargets.erase(ti);
                     continue;
                 }
-                Assign * escapedValue = inner_block.createAssign("m", f->second);
-                targets.push_back(escapedValue);
-                f->second = escapedValue;
+                Var * m = builder.createVar("m", builder.createZeroes());
+                inner_block.createAssign(m, f->second);
+                f->second = m;
                 ++ti;
             }
-
             // If this range is empty, just skip creating the if block
-            if (!targets.empty()) {
-                builder.createIf(ifTestCompiler(range.first, range.second, builder), std::move(targets), inner_block);
+            if (intersectingTargets.size() > 0) {
+                builder.createIf(ifTestCompiler(range.first, range.second, builder), inner_block);
                 for (const auto ti : intersectingTargets) {
                     auto f = mTargetMap.find(ti.first);
                     assert (f != mTargetMap.end());
-                    assert (isa<Assign>(f->second));
                     f->second = builder.createOr(ti.second, f->second);
                 }
             }
@@ -270,8 +267,8 @@ PabloAST * UCDCompiler::sequenceGenerator(const RangeList && ranges, const unsig
                 std::tie(lo, hi) = rg;
                 const auto lo_byte = encodingByte(lo, byte_no, isUTF_16);
                 const auto hi_byte = encodingByte(hi, byte_no, isUTF_16);
-		if (lo_byte != hi_byte) {
-		    unsigned num = isUTF_16 ? 10 : 6;
+                if (lo_byte != hi_byte) {
+                    unsigned num = isUTF_16 ? 10 : 6;
                     if (!isLowCodePointAfterByte(lo, byte_no, isUTF_16)) {
                         const codepoint_t mid = lo | ((1 << (num * (min - byte_no))) - 1);
                         target = sequenceGenerator(lo, mid, byte_no, builder, target, prefix);
@@ -290,8 +287,7 @@ PabloAST * UCDCompiler::sequenceGenerator(const RangeList && ranges, const unsig
                         }
                         target = builder.createOr(target, var);
                     }
-                }
-                else { // lbyte == hbyte
+                } else { // lbyte == hbyte
                     PabloAST * var = mCharacterClassCompiler.compileCC(makeCC(lo_byte, hi_byte), builder);
                     if (byte_no > 1) {
                         var = builder.createAnd(builder.createAdvance(prefix ? prefix : var, 1), var);
@@ -540,10 +536,12 @@ inline void UCDCompiler::updateNames(NameMap & names, PabloBuilder & entry) {
         if (f != mTargetMap.end()) {
             std::string name = t.first->getName();
             if (Statement * result = dyn_cast<Statement>(f->second)) {
-                result->setName(entry.getName(name, false));
+                result->setName(entry.getName(name));
                 t.second = result;
             } else {
-                t.second = entry.createAssign(std::move(name), f->second);
+                Var * var = entry.createVar(name);
+                entry.createAssign(var, f->second);
+                t.second = var;
             }
         }
     }

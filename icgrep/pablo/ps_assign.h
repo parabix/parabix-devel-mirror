@@ -13,8 +13,6 @@ namespace pablo {
 
 class Assign : public Statement {
     friend class PabloBlock;
-    friend class Next;
-    friend class Var;
 public:
     static inline bool classof(const PabloAST * e) {
         return e->getClassTypeId() == ClassTypeId::Assign;
@@ -24,16 +22,18 @@ public:
     }
     virtual ~Assign() {
     }
-    inline PabloAST * getExpression() const {
+    inline PabloAST * getVariable() const {
         return getOperand(0);
     }
-    inline void setExpression(PabloAST * value) {
-        return setOperand(0, value);
+    inline PabloAST * getValue() const {
+        return getOperand(1);
+    }
+    inline void setValue(PabloAST * value) {
+        return setOperand(1, value);
     }
 protected:
-    explicit Assign(PabloAST * expr, String * name)
-    : Statement(ClassTypeId::Assign, expr->getType(), {expr}, name)
-    {
+    explicit Assign(PabloAST * variable, PabloAST * expr)
+    : Statement(ClassTypeId::Assign, nullptr, {variable, expr}, nullptr) {
 
     }
 };

@@ -26,7 +26,7 @@ public:
         return getOperand(0);
     }
 protected:
-    InFile(PabloAST * expr, String * name)
+    InFile(PabloAST * expr, const String * name)
     : Statement(ClassTypeId::InFile, expr->getType(), {expr}, name) {
 
     }
@@ -47,7 +47,7 @@ public:
         return getOperand(0);
     }
 protected:
-    AtEOF(PabloAST * expr, String * name)
+    AtEOF(PabloAST * expr, const String * name)
     : Statement(ClassTypeId::AtEOF, expr->getType(), {expr}, name) {
 
     }

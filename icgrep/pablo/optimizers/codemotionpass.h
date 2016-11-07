@@ -34,8 +34,6 @@ protected:
     static bool isAcceptableTarget(Statement *stmt, ScopeSet & scopeSet, const PabloBlock * const block);
     static void sink(PabloBlock * const block);
     static void hoistLoopInvariants(While * loop);
-
-    static void reschedule(PabloBlock * const block);
 };
 
 }

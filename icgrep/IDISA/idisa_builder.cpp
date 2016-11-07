@@ -76,8 +76,9 @@ void IDISA_Builder::CallPrintRegister(const std::string & name, Value * const va
 
         printRegister = function;
     }
-    assert (value->getType()->canLosslesslyBitCastTo(mBitBlockType));
-    CreateCall(printRegister, {CreateGlobalStringPtr(name.c_str()), CreateBitCast(value, mBitBlockType)});
+    if (value->getType()->canLosslesslyBitCastTo(mBitBlockType)) {
+        CreateCall(printRegister, {CreateGlobalStringPtr(name.c_str()), CreateBitCast(value, mBitBlockType)});
+    }
 }
 
 void IDISA_Builder::CallPrintInt(const std::string & name, Value * const value) {
@@ -339,8 +340,7 @@ Value * IDISA_Builder::hsimd_signmask(unsigned fw, Value * a) {
 }
 
 Value * IDISA_Builder::mvmd_extract(unsigned fw, Value * a, unsigned fieldIndex) {
-    Value * aVec = fwCast(fw, a);
-    return CreateExtractElement(aVec, getInt32(fieldIndex));
+    return CreateExtractElement(fwCast(fw, a), getInt32(fieldIndex));
 }
 
 Value * IDISA_Builder::mvmd_insert(unsigned fw, Value * blk, Value * elt, unsigned fieldIndex) {

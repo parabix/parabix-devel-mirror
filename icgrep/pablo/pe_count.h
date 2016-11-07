@@ -26,8 +26,8 @@ public:
         return getOperand(0);
     }
 protected:
-    explicit Count(PabloAST * expr, String * counter)
-    : Statement(ClassTypeId::Count, getPabloType(PabloType::Scalar, 64), {expr}, counter)
+    explicit Count(PabloAST * expr, const String * counter)
+        : Statement(ClassTypeId::Count, getScalarTy(64), {expr}, counter)
     {
 
     }

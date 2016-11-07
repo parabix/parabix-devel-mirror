@@ -17,29 +17,37 @@ using namespace kernel;
 
 KernelBuilder::KernelBuilder(IDISA::IDISA_Builder * builder,
                                  std::string kernelName,
-                                 std::vector<StreamSetBinding> stream_inputs,
-                                 std::vector<StreamSetBinding> stream_outputs,
-                                 std::vector<ScalarBinding> scalar_parameters,
-                                 std::vector<ScalarBinding> scalar_outputs,
-                                 std::vector<ScalarBinding> internal_scalars) :
+                                 std::vector<Binding> stream_inputs,
+                                 std::vector<Binding> stream_outputs,
+                                 std::vector<Binding> scalar_parameters,
+                                 std::vector<Binding> scalar_outputs,
+                                 std::vector<Binding> internal_scalars) :
     KernelInterface(builder, kernelName, stream_inputs, stream_outputs, scalar_parameters, scalar_outputs, internal_scalars) {}
 
-void KernelBuilder::addScalar(Type * t, std::string scalarName) {
+void KernelBuilder::addScalar(Type * t, std::string name) {
     if (LLVM_UNLIKELY(mKernelStateType != nullptr)) {
-        llvm::report_fatal_error("Illegal addition of kernel field after kernel state finalized: " + scalarName);
+        llvm::report_fatal_error("Illegal addition of kernel field after kernel state finalized: " + name);
     }
     unsigned index = mKernelFields.size();
     mKernelFields.push_back(t);
-    mInternalStateNameMap.emplace(scalarName, index);
+    mInternalStateNameMap.emplace(name, index);
 }
 
 void KernelBuilder::prepareKernel() {
     unsigned blockSize = iBuilder->getBitBlockWidth();
     if (mStreamSetInputs.size() != mStreamSetInputBuffers.size()) {
-        llvm::report_fatal_error("Kernel preparation: Incorrect number of input buffers");
+        std::string tmp;
+        raw_string_ostream out(tmp);
+        out << "kernel contains " << mStreamSetInputBuffers.size() << " input buffers for "
+            << mStreamSetInputs.size() << " input stream sets.";
+        llvm::report_fatal_error(out.str());
     }
     if (mStreamSetOutputs.size() != mStreamSetOutputBuffers.size()) {
-        llvm::report_fatal_error("Kernel preparation: Incorrect number of output buffers");
+        std::string tmp;
+        raw_string_ostream out(tmp);
+        out << "kernel contains " << mStreamSetOutputBuffers.size() << " output buffers for "
+            << mStreamSetOutputs.size() << " output stream sets.";
+        llvm::report_fatal_error(out.str());
     }
     addScalar(iBuilder->getSizeTy(), blockNoScalar);
     addScalar(iBuilder->getSizeTy(), logicalSegmentNoScalar);
@@ -48,40 +56,33 @@ void KernelBuilder::prepareKernel() {
     addScalar(iBuilder->getInt1Ty(), terminationSignal);
     int streamSetNo = 0;
     for (unsigned i = 0; i < mStreamSetInputs.size(); i++) {
-        if (!(mStreamSetInputBuffers[i]->getBufferStreamSetType() == mStreamSetInputs[i].ssType)) {
-             llvm::report_fatal_error("Kernel preparation: Incorrect input buffer type");
-        }
         if ((mStreamSetInputBuffers[i]->getBufferSize() > 0) && (mStreamSetInputBuffers[i]->getBufferSize() < codegen::SegmentSize + (blockSize + mLookAheadPositions - 1)/blockSize)) {
-             errs() << " buffer size = " << mStreamSetInputBuffers[i]->getBufferSize() << "\n";
-             llvm::report_fatal_error("Kernel preparation: Buffer size too small " + mStreamSetInputs[i].ssName);
+             llvm::report_fatal_error("Kernel preparation: Buffer size too small " + mStreamSetInputs[i].name);
         }
-        mScalarInputs.push_back(ScalarBinding{mStreamSetInputBuffers[i]->getStreamSetStructPointerType(), mStreamSetInputs[i].ssName + structPtrSuffix});
-        mStreamSetNameMap.emplace(mStreamSetInputs[i].ssName, streamSetNo);
+        mScalarInputs.push_back(Binding{mStreamSetInputBuffers[i]->getStreamSetStructPointerType(), mStreamSetInputs[i].name + structPtrSuffix});
+        mStreamSetNameMap.emplace(mStreamSetInputs[i].name, streamSetNo);
         streamSetNo++;
     }
     for (unsigned i = 0; i < mStreamSetOutputs.size(); i++) {
-        if (!(mStreamSetOutputBuffers[i]->getBufferStreamSetType() == mStreamSetOutputs[i].ssType)) {
-             llvm::report_fatal_error("Kernel preparation: Incorrect output buffer type " + mStreamSetOutputs[i].ssName);
-        }
-        mScalarInputs.push_back(ScalarBinding{mStreamSetOutputBuffers[i]->getStreamSetStructPointerType(), mStreamSetOutputs[i].ssName + structPtrSuffix});
-        mStreamSetNameMap.emplace(mStreamSetOutputs[i].ssName, streamSetNo);
+        mScalarInputs.push_back(Binding{mStreamSetOutputBuffers[i]->getStreamSetStructPointerType(), mStreamSetOutputs[i].name + structPtrSuffix});
+        mStreamSetNameMap.emplace(mStreamSetOutputs[i].name, streamSetNo);
         streamSetNo++;
     }
     for (auto binding : mScalarInputs) {
-        addScalar(binding.scalarType, binding.scalarName);
+        addScalar(binding.type, binding.name);
     }
     for (auto binding : mScalarOutputs) {
-        addScalar(binding.scalarType, binding.scalarName);
+        addScalar(binding.type, binding.name);
     }
     for (auto binding : mInternalScalars) {
-        addScalar(binding.scalarType, binding.scalarName);
+        addScalar(binding.type, binding.name);
     }
     mKernelStateType = StructType::create(iBuilder->getContext(), mKernelFields, mKernelName);
 }
 
 std::unique_ptr<Module> KernelBuilder::createKernelModule(std::vector<StreamSetBuffer *> input_buffers, std::vector<StreamSetBuffer *> output_buffers) {
     Module * saveModule = iBuilder->getModule();
-    IDISA::IDISA_Builder::InsertPoint savePoint = iBuilder->saveIP();
+    auto savePoint = iBuilder->saveIP();
     std::unique_ptr<Module> theModule = make_unique<Module>(mKernelName + "_" + iBuilder->getBitBlockTypeName(), iBuilder->getContext());
     Module * m = theModule.get();
     iBuilder->setModule(m);
@@ -92,7 +93,7 @@ std::unique_ptr<Module> KernelBuilder::createKernelModule(std::vector<StreamSetB
 }
 
 void KernelBuilder::generateKernel(std::vector<StreamSetBuffer *> input_buffers, std::vector<StreamSetBuffer*> output_buffers) {
-    IDISA::IDISA_Builder::InsertPoint savePoint = iBuilder->saveIP();
+    auto savePoint = iBuilder->saveIP();
     Module * m = iBuilder->getModule();
     mStreamSetInputBuffers = input_buffers;
     mStreamSetOutputBuffers = output_buffers;
@@ -104,11 +105,11 @@ void KernelBuilder::generateKernel(std::vector<StreamSetBuffer *> input_buffers,
 
     // Implement the accumulator get functions
     for (auto binding : mScalarOutputs) {
-        auto fnName = mKernelName + accumulator_infix + binding.scalarName;
+        auto fnName = mKernelName + accumulator_infix + binding.name;
         Function * accumFn = m->getFunction(fnName);
-        iBuilder->SetInsertPoint(BasicBlock::Create(iBuilder->getContext(), "get_" + binding.scalarName, accumFn, 0));
+        iBuilder->SetInsertPoint(BasicBlock::Create(iBuilder->getContext(), "get_" + binding.name, accumFn, 0));
         Value * self = &*(accumFn->arg_begin());
-        Value * ptr = iBuilder->CreateGEP(self, {iBuilder->getInt32(0), getScalarIndex(binding.scalarName)});
+        Value * ptr = iBuilder->CreateGEP(self, {iBuilder->getInt32(0), getScalarIndex(binding.name)});
         Value * retVal = iBuilder->CreateLoad(ptr);
         iBuilder->CreateRet(retVal);
     }
@@ -121,7 +122,7 @@ void KernelBuilder::generateKernel(std::vector<StreamSetBuffer *> input_buffers,
     iBuilder->CreateStore(Constant::getNullValue(mKernelStateType), self);
     for (auto binding : mScalarInputs) {
         Value * parm = &*(args++);
-        Value * ptr = iBuilder->CreateGEP(self, {iBuilder->getInt32(0), getScalarIndex(binding.scalarName)});
+        Value * ptr = iBuilder->CreateGEP(self, {iBuilder->getInt32(0), getScalarIndex(binding.name)});
         iBuilder->CreateStore(parm, ptr);
     }
     iBuilder->CreateRetVoid();
@@ -130,7 +131,7 @@ void KernelBuilder::generateKernel(std::vector<StreamSetBuffer *> input_buffers,
 
 //  The default finalBlock method simply dispatches to the doBlock routine.
 void KernelBuilder::generateFinalBlockMethod() {
-    IDISA::IDISA_Builder::InsertPoint savePoint = iBuilder->saveIP();
+    auto savePoint = iBuilder->saveIP();
     Module * m = iBuilder->getModule();
     Function * doBlockFunction = m->getFunction(mKernelName + doBlock_suffix);
     Function * finalBlockFunction = m->getFunction(mKernelName + finalBlock_suffix);
@@ -158,7 +159,7 @@ void KernelBuilder::generateDoBlockLogic(Value * self, Value * blockNo) {
 //  The default doSegment method dispatches to the doBlock routine for
 //  each block of the given number of blocksToDo, and then updates counts.
 void KernelBuilder::generateDoSegmentMethod() {
-    IDISA::IDISA_Builder::InsertPoint savePoint = iBuilder->saveIP();
+    auto savePoint = iBuilder->saveIP();
     Module * m = iBuilder->getModule();
     Function * doSegmentFunction = m->getFunction(mKernelName + doSegment_suffix);
     iBuilder->SetInsertPoint(BasicBlock::Create(iBuilder->getContext(), "entry", doSegmentFunction, 0));
@@ -183,7 +184,7 @@ void KernelBuilder::generateDoSegmentMethod() {
     std::vector<Value *> inbufProducerPtrs;
     std::vector<Value *> endSignalPtrs;
     for (unsigned i = 0; i < mStreamSetInputs.size(); i++) {
-        Value * ssStructPtr = getStreamSetStructPtr(self, mStreamSetInputs[i].ssName);
+        Value * ssStructPtr = getStreamSetStructPtr(self, mStreamSetInputs[i].name);
         inbufProducerPtrs.push_back(mStreamSetInputBuffers[i]->getProducerPosPtr(ssStructPtr));
         endSignalPtrs.push_back(mStreamSetInputBuffers[i]->hasEndOfInputPtr(ssStructPtr));
     }
@@ -201,9 +202,9 @@ void KernelBuilder::generateDoSegmentMethod() {
     }
     Value * processed = getProcessedItemCount(self);
     Value * itemsAvail = iBuilder->CreateSub(availablePos, processed);
-#ifndef NDEBUG
-    iBuilder->CallPrintInt(mKernelName + "_itemsAvail", itemsAvail);
-#endif
+//#ifndef NDEBUG
+//    iBuilder->CallPrintInt(mKernelName + "_itemsAvail", itemsAvail);
+//#endif
     Value * stridesToDo = iBuilder->CreateUDiv(blocksToDo, strideBlocks);
     Value * stridesAvail = iBuilder->CreateUDiv(itemsAvail, stride);
     /* Adjust the number of full blocks to do, based on the available data, if necessary. */
@@ -259,7 +260,7 @@ void KernelBuilder::generateDoSegmentMethod() {
     setProcessedItemCount(self, availablePos);
     
     for (unsigned i = 0; i < mStreamSetOutputs.size(); i++) {
-        Value * ssStructPtr = getStreamSetStructPtr(self, mStreamSetOutputs[i].ssName);
+        Value * ssStructPtr = getStreamSetStructPtr(self, mStreamSetOutputs[i].name);
         mStreamSetOutputBuffers[i]->setEndOfInput(ssStructPtr);
     }
     setTerminationSignal(self);
@@ -267,11 +268,11 @@ void KernelBuilder::generateDoSegmentMethod() {
     
     iBuilder->SetInsertPoint(segmentDone);
     Value * produced = getProducedItemCount(self);
-#ifndef NDEBUG
-    iBuilder->CallPrintInt(mKernelName + "_produced", produced);
-#endif
+//#ifndef NDEBUG
+//    iBuilder->CallPrintInt(mKernelName + "_produced", produced);
+//#endif
     for (unsigned i = 0; i < mStreamSetOutputs.size(); i++) {
-        Value * ssStructPtr = getStreamSetStructPtr(self, mStreamSetOutputs[i].ssName);
+        Value * ssStructPtr = getStreamSetStructPtr(self, mStreamSetOutputs[i].name);
         Value * producerPosPtr = mStreamSetOutputBuffers[i]->getProducerPosPtr(ssStructPtr);
         iBuilder->CreateAtomicStoreRelease(produced, producerPosPtr);
     }
@@ -289,21 +290,21 @@ void KernelBuilder::generateDoSegmentMethod() {
 Value * KernelBuilder::getScalarIndex(std::string fieldName) {
     const auto f = mInternalStateNameMap.find(fieldName);
     if (LLVM_UNLIKELY(f == mInternalStateNameMap.end())) {
-        llvm::report_fatal_error("Kernel does not contain internal state: " + fieldName);
+        throw std::runtime_error("Kernel does not contain internal state: " + fieldName);
     }
     return iBuilder->getInt32(f->second);
 }
 
-
+Value * KernelBuilder::getScalarFieldPtr(Value * self, std::string fieldName) {
+    return iBuilder->CreateGEP(self, {iBuilder->getInt32(0), getScalarIndex(fieldName)});
+}
 
 Value * KernelBuilder::getScalarField(Value * self, std::string fieldName) {
-    Value * ptr = iBuilder->CreateGEP(self, {iBuilder->getInt32(0), getScalarIndex(fieldName)});
-    return iBuilder->CreateLoad(ptr);
+    return iBuilder->CreateLoad(getScalarFieldPtr(self, fieldName));
 }
 
 void KernelBuilder::setScalarField(Value * self, std::string fieldName, Value * newFieldVal) {
-    Value * ptr = iBuilder->CreateGEP(self, {iBuilder->getInt32(0), getScalarIndex(fieldName)});
-    iBuilder->CreateStore(newFieldVal, ptr);
+    iBuilder->CreateStore(newFieldVal, getScalarFieldPtr(self, fieldName));
 }
 
 Value * KernelBuilder::getLogicalSegmentNo(Value * self) { 
@@ -323,7 +324,6 @@ Value * KernelBuilder::getProducedItemCount(Value * self) {
 Value * KernelBuilder::getTerminationSignal(Value * self) {
     return getScalarField(self, terminationSignal);
 }
-
 
 void KernelBuilder::setLogicalSegmentNo(Value * self, Value * newCount) {
     Value * ptr = iBuilder->CreateGEP(self, {iBuilder->getInt32(0), getScalarIndex(logicalSegmentNoScalar)});
@@ -367,37 +367,39 @@ Value * KernelBuilder::getParameter(Function * f, std::string paramName) {
     llvm::report_fatal_error("Method does not have parameter: " + paramName);
 }
 
-unsigned KernelBuilder::getStreamSetIndex(std::string ssName) {
-    const auto f = mStreamSetNameMap.find(ssName);
+unsigned KernelBuilder::getStreamSetIndex(std::string name) {
+    const auto f = mStreamSetNameMap.find(name);
     if (LLVM_UNLIKELY(f == mStreamSetNameMap.end())) {
-        llvm::report_fatal_error("Kernel does not contain stream set: " + ssName);
+        llvm::report_fatal_error("Kernel does not contain stream set: " + name);
     }
     return f->second;
 }
 
-size_t KernelBuilder::getStreamSetBufferSize(Value * self, std::string ssName) {
-    unsigned ssIndex = getStreamSetIndex(ssName);
-    if (ssIndex < mStreamSetInputs.size()) {
-        return mStreamSetInputBuffers[ssIndex]->getBufferSize();
+size_t KernelBuilder::getStreamSetBufferSize(Value * self, std::string name) {
+    const unsigned index = getStreamSetIndex(name);
+    StreamSetBuffer * buf = nullptr;
+    if (index < mStreamSetInputs.size()) {
+        buf = mStreamSetInputBuffers[index];
+    } else {
+        buf = mStreamSetOutputBuffers[index - mStreamSetInputs.size()];
     }
-    else {
-        return mStreamSetOutputBuffers[ssIndex - mStreamSetInputs.size()]->getBufferSize();
-    }
+    return buf->getBufferSize();
 }
 
-Value * KernelBuilder::getStreamSetStructPtr(Value * self, std::string ssName) {
-    return getScalarField(self, ssName + structPtrSuffix);
+Value * KernelBuilder::getStreamSetStructPtr(Value * self, std::string name) {
+    return getScalarField(self, name + structPtrSuffix);
 }
 
-Value * KernelBuilder::getStreamSetBlockPtr(Value * self, std::string ssName, Value * blockNo) {
-    Value * ssStructPtr = getStreamSetStructPtr(self, ssName);
-    unsigned ssIndex = getStreamSetIndex(ssName);
-    if (ssIndex < mStreamSetInputs.size()) {
-        return mStreamSetInputBuffers[ssIndex]->getStreamSetBlockPointer(ssStructPtr, blockNo);
-    }
-    else {
-        return mStreamSetOutputBuffers[ssIndex - mStreamSetInputs.size()]->getStreamSetBlockPointer(ssStructPtr, blockNo);
-    }
+Value * KernelBuilder::getStreamSetBlockPtr(Value * self, std::string name, Value * blockNo) {
+    Value * const structPtr = getStreamSetStructPtr(self, name);
+    const unsigned index = getStreamSetIndex(name);
+    StreamSetBuffer * buf = nullptr;
+    if (index < mStreamSetInputs.size()) {
+        buf = mStreamSetInputBuffers[index];
+    } else {
+        buf = mStreamSetOutputBuffers[index - mStreamSetInputs.size()];
+    }    
+    return buf->getStreamSetBlockPointer(structPtr, blockNo);
 }
 
 Value * KernelBuilder::createInstance(std::vector<Value *> args) {
@@ -407,10 +409,10 @@ Value * KernelBuilder::createInstance(std::vector<Value *> args) {
     for (auto a : args) {
         init_args.push_back(a);
     }
-    for (auto b : mStreamSetInputBuffers) { 
+    for (auto b : mStreamSetInputBuffers) {
         init_args.push_back(b->getStreamSetStructPtr());
     }
-    for (auto b : mStreamSetOutputBuffers) { 
+    for (auto b : mStreamSetOutputBuffers) {
         init_args.push_back(b->getStreamSetStructPtr());
     }
     std::string initFnName = mKernelName + init_suffix;
@@ -447,13 +449,13 @@ Function * KernelBuilder::generateThreadFunction(std::string name){
     std::vector<Value *> endSignalPtrs;
 
     for (unsigned i = 0; i < mStreamSetInputs.size(); i++) {
-        Value * ssStructPtr = getStreamSetStructPtr(self, mStreamSetInputs[i].ssName);
+        Value * ssStructPtr = getStreamSetStructPtr(self, mStreamSetInputs[i].name);
         inbufProducerPtrs.push_back(mStreamSetInputBuffers[i]->getProducerPosPtr(ssStructPtr));
         inbufConsumerPtrs.push_back(mStreamSetInputBuffers[i]->getConsumerPosPtr(ssStructPtr));
         endSignalPtrs.push_back(mStreamSetInputBuffers[i]->hasEndOfInputPtr(ssStructPtr));
     }
     for (unsigned i = 0; i < mStreamSetOutputs.size(); i++) {
-        Value * ssStructPtr = getStreamSetStructPtr(self, mStreamSetOutputs[i].ssName);
+        Value * ssStructPtr = getStreamSetStructPtr(self, mStreamSetOutputs[i].name);
         outbufProducerPtrs.push_back(mStreamSetOutputBuffers[i]->getProducerPosPtr(ssStructPtr));
         outbufConsumerPtrs.push_back(mStreamSetOutputBuffers[i]->getConsumerPosPtr(ssStructPtr));
     }
@@ -539,7 +541,7 @@ Function * KernelBuilder::generateThreadFunction(std::string name){
 
         iBuilder->SetInsertPoint(earlyEndBlock);
         for (unsigned i = 0; i < mStreamSetOutputs.size(); i++) {
-            Value * ssStructPtr = getStreamSetStructPtr(self, mStreamSetOutputs[i].ssName);
+            Value * ssStructPtr = getStreamSetStructPtr(self, mStreamSetOutputs[i].name);
             mStreamSetOutputBuffers[i]->setEndOfInput(ssStructPtr);
         }        
     }
@@ -574,7 +576,7 @@ Function * KernelBuilder::generateThreadFunction(std::string name){
     }
 
     for (unsigned i = 0; i < mStreamSetOutputs.size(); i++) {
-        Value * ssStructPtr = getStreamSetStructPtr(self, mStreamSetOutputs[i].ssName);
+        Value * ssStructPtr = getStreamSetStructPtr(self, mStreamSetOutputs[i].name);
         mStreamSetOutputBuffers[i]->setEndOfInput(ssStructPtr);
     }
 

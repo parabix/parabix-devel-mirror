@@ -62,7 +62,7 @@ void CanonicalizeDFG::canonicalize(PabloBlock * const block) {
 inline void CanonicalizeDFG::deMorgansExpansion(Not * const negation, PabloBlock * const block) {
     PabloAST * const negatedVar = negation->getOperand(0);
     if (isa<And>(negatedVar) || isa<Or>(negatedVar)) {
-        const TypeId typeId = isa<And>(negatedVar) ? TypeId::Or : TypeId::And;
+        TypeId typeId = isa<And>(negatedVar) ? TypeId::Or : TypeId::And;
         bool expandable = false;
         for (PabloAST * user : negation->users()) {
             if (user->getClassTypeId() == typeId) {
@@ -88,7 +88,7 @@ inline void CanonicalizeDFG::deMorgansExpansion(Not * const negation, PabloBlock
                             break;
                         }
                         br = scope->getBranch();
-                        scope = scope->getPredecessor ();
+                        scope = scope->getPredecessor();
                     }
                 }
                 block->setInsertPoint(ip);
@@ -312,7 +312,7 @@ static BicliqueSet enumerateBicliques(const DependencyGraph & G, const VertexSet
  * @brief intersects
  ** ------------------------------------------------------------------------------------------------------------- */
 template <class Type>
-inline bool intersects(const Type & A, const Type & B) {
+inline bool intersects(Type & A, Type & B) {
     auto first1 = A.begin(), last1 = A.end();
     auto first2 = B.begin(), last2 = B.end();
     assert (std::is_sorted(first1, last1));
@@ -522,8 +522,8 @@ ScopeDependencyGraph::vertex_descriptor buildScopeDependencyGraph(Variadic * con
  * @brief analyzeScopeDependencies
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void analyzeScopeDependencies(Assign * const def, ScopeDependencyGraph & G, ScopeDependencyMap & M) {
-    if (LLVM_LIKELY(isa<Variadic>(def->getExpression()))) {
-        buildScopeDependencyGraph(cast<Variadic>(def->getExpression()), G, M);
+    if (LLVM_LIKELY(isa<Variadic>(def->getValue()))) {
+        buildScopeDependencyGraph(cast<Variadic>(def->getValue()), G, M);
     }
 }
 

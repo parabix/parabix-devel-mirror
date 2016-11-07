@@ -6,7 +6,9 @@
 #include <pablo/pablo_kernel.h>
 #include <pablo/pablo_compiler.h>
 #include <llvm/Support/Debug.h>
-
+#include <pablo/pe_var.h>
+#include <pablo/type/streamtype.h>
+#include <llvm/IR/Verifier.h>
 
 using namespace pablo;
 using namespace kernel;
@@ -14,55 +16,78 @@ using namespace parabix;
 
 PabloKernel::PabloKernel(IDISA::IDISA_Builder * builder,
                          std::string kernelName,
-                         PabloFunction * function,
-                         std::vector<std::string> accumulators) :
-    KernelBuilder(builder, kernelName,
-                    {StreamSetBinding{StreamSetType(function->getNumOfParameters(), 1), "inputs"}},
-                    {},
-                    {},
-                    {},
-                    {ScalarBinding{builder->getBitBlockType(), "EOFbit"}, ScalarBinding{builder->getBitBlockType(), "EOFmask"}}),
-    mPabloFunction(function) {
-    unsigned output_streams = function->getNumOfResults();
-    if (output_streams > 0) {
-        mStreamSetOutputs.push_back(StreamSetBinding{StreamSetType(output_streams, 1), "outputs"});
+                         PabloFunction * function)
+: KernelBuilder(builder, kernelName, {}, {}, {}, {}, {Binding{builder->getBitBlockType(), "EOFbit"}, Binding{builder->getBitBlockType(), "EOFmask"}})
+, mPabloFunction(function)
+, mPabloCompiler(new PabloCompiler(this, function))
+
+{
+    for (unsigned i = 0; i < function->getNumOfParameters(); ++i) {
+        const auto param = function->getParameter(i);
+        Type * type = param->getType();
+        bool scalar = false;
+        if (isa<StreamType>(type)) {
+            type = cast<StreamType>(type)->resolveType(builder);
+        } else if (type->isSingleValueType()) {
+            scalar = true;
+        }
+        std::string name = param->getName()->to_string();
+        if (scalar) {
+            mScalarInputs.emplace_back(type, std::move(name));
+        } else {
+            mStreamSetInputs.emplace_back(type, std::move(name));
+        }
     }
-    mScalarOutputs = accumBindings(accumulators);
-    pablo_compiler = new PabloCompiler(builder, this, function);
+
+    for (unsigned i = 0; i < function->getNumOfResults(); ++i) {
+        const auto param = function->getResult(i);
+        Type * type = param->getType();
+        bool scalar = false;
+        if (isa<StreamType>(type)) {
+            type = cast<StreamType>(type)->resolveType(builder);
+        } else if (type->isSingleValueType()) {
+            scalar = true;
+        }
+        std::string name = param->getName()->to_string();
+        if (scalar) {
+            mScalarOutputs.emplace_back(type, std::move(name));
+        } else {
+            mStreamSetOutputs.emplace_back(type, std::move(name));
+        }
+    }
+
+
 }
 
-std::vector<ScalarBinding> PabloKernel::accumBindings(std::vector<std::string> accum_names) {
-    std::vector<ScalarBinding> vec;
-    Type * accum_t = iBuilder->getSizeTy();
-    for (auto a : accum_names) {
-        vec.push_back(ScalarBinding{accum_t, a});
-        addScalar(accum_t, a);
-    }
-    return vec;
+PabloKernel::~PabloKernel() {
+    delete mPabloCompiler;
 }
 
 void PabloKernel::prepareKernel() {
-    Type * carryDataType = pablo_compiler->initializeKernelData();
+    Type * carryDataType = mPabloCompiler->initializeKernelData();
     addScalar(carryDataType, "carries");
     KernelBuilder::prepareKernel();
 }
 
 void PabloKernel::generateDoBlockMethod() {
-    IDISA::IDISA_Builder::InsertPoint savePoint = iBuilder->saveIP();
+    auto savePoint = iBuilder->saveIP();
     Module * m = iBuilder->getModule();
     Function * doBlockFunction = m->getFunction(mKernelName + doBlock_suffix);
-    pablo_compiler->compile(doBlockFunction);
+    mPabloCompiler->compile(doBlockFunction);
     Function::arg_iterator args = doBlockFunction->arg_begin();
     Value * self = &*(args);
     Value * produced = getProducedItemCount(self);
     produced = iBuilder->CreateAdd(produced, ConstantInt::get(iBuilder->getSizeTy(), iBuilder->getStride()));
     setProducedItemCount(self, produced);
     iBuilder->CreateRetVoid();
+    #ifndef NDEBUG
+    llvm::verifyFunction(*doBlockFunction, &errs());
+    #endif
     iBuilder->restoreIP(savePoint);
 }
 
 void PabloKernel::generateFinalBlockMethod() {
-    IDISA::IDISA_Builder::InsertPoint savePoint = iBuilder->saveIP();
+    auto savePoint = iBuilder->saveIP();
     Module * m = iBuilder->getModule();
     Function * doBlockFunction = m->getFunction(mKernelName + doBlock_suffix);
     Function * finalBlockFunction = m->getFunction(mKernelName + finalBlock_suffix);
@@ -85,6 +110,8 @@ void PabloKernel::generateFinalBlockMethod() {
     produced = iBuilder->CreateSub(produced, ConstantInt::get(iBuilder->getSizeTy(), iBuilder->getStride()));
     setProducedItemCount(self, iBuilder->CreateAdd(produced, remaining));
     iBuilder->CreateRetVoid();
+    #ifndef NDEBUG
+    llvm::verifyFunction(*doBlockFunction, &errs());
+    #endif
     iBuilder->restoreIP(savePoint);
 }
-

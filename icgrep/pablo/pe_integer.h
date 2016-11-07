@@ -22,14 +22,14 @@ public:
         return mValue;
     }
 protected:
-    Integer(const Type value) noexcept
-    : PabloAST(ClassTypeId::Integer, getPabloType(PabloType::Scalar, 64))
+    Integer(Type value) noexcept
+    : PabloAST(ClassTypeId::Integer, getScalarTy(64), nullptr)
     , mValue(value)
     {
 
     }
 private:
-    const Type mValue;
+    Type mValue;
 };
 
 }

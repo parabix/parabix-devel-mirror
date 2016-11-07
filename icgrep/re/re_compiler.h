@@ -99,12 +99,11 @@ private:
     pablo::PabloAST *                               mAny;
     pablo::PabloAST *                               mGraphemeBoundaryRule;
     pablo::PabloAST *                               mInitial;
-    pablo::Assign *                                 mNonFinal;    
+    pablo::PabloAST *                               mNonFinal;
     pablo::PabloAST *                               mFinal;
     pablo::PabloAST *                               mWhileTest;
     int                                             mStarDepth;
-    std::vector<pablo::Next *>                      mLoopVariants; // <- rethink name
-    pablo::PabloBuilder                             mPB;
+    pablo::PabloBuilder &                           mPB;
     std::unordered_map<Name *, MarkerType>          mCompiledName;
     pablo::PabloFunction &                          mFunction;
 };

@@ -37,24 +37,21 @@ public:
         return mNumOfResults;
     }
 
-    void * getFunctionPtr() const {
-        return mFunctionPtr;
-    }
 protected:
-    Prototype(const PabloAST::ClassTypeId type, std::string && name, const unsigned numOfParameters, const unsigned numOfResults, void * functionPtr);
+    Prototype(const PabloAST::ClassTypeId type, std::string && name, const unsigned numOfParameters, const unsigned numOfResults);
 protected:
     const String * const    mName;
-    const unsigned          mNumOfParameters;
-    const unsigned          mNumOfResults;
-    void *                  mFunctionPtr;
+    unsigned                mNumOfParameters;
+    unsigned                mNumOfResults;
 };
 
-inline Prototype * Prototype::Create(std::string name, const unsigned numOfParameters, const unsigned numOfResults, void * functionPtr) {
-    return new Prototype(PabloAST::ClassTypeId::Prototype, std::move(name), numOfParameters, numOfResults, functionPtr);
+inline Prototype * Prototype::Create(std::string name, const unsigned numOfParameters, const unsigned numOfResults, void *) {
+    return new Prototype(PabloAST::ClassTypeId::Prototype, std::move(name), numOfParameters, numOfResults);
 }
 
 class PabloFunction : public Prototype {
     friend class PabloBlock;
+    friend class Branch;
     using Allocator = SlabAllocator<PabloAST *>;
 public:
 
@@ -72,7 +69,7 @@ public:
         return false;
     }
 
-    static PabloFunction * Create(std::string name, const unsigned numOfParameters, const unsigned numOfResults);
+    static PabloFunction * Create(std::string name);
     
     virtual bool operator==(const PabloAST & other) const {
         return &other == this;
@@ -93,59 +90,38 @@ public:
     }
 
     Var * getParameter(const unsigned index) {
-        if (LLVM_LIKELY(index < getNumOfParameters()))
-            return cast<Var>(mParameters[index]);
-        else throwInvalidParameterIndex(index);
+        return static_cast<Var *>(mParameters[index]);
     }
 
     const Var * getParameter(const unsigned index) const {
-        if (LLVM_LIKELY(index < getNumOfParameters()))
-            return cast<Var>(mParameters[index]);
-        else throwInvalidParameterIndex(index);
+        return static_cast<Var *>(mParameters[index]);
     }
 
-    void setParameter(const unsigned index, Var * value) {
-        if (LLVM_LIKELY(index < getNumOfParameters()))
-            mParameters[index] = value;
-        else throwInvalidParameterIndex(index);
+    Var * addParameter(const std::string name, Type * const type);
+
+    Var * getResult(const unsigned index) {
+        return static_cast<Var *>(mResults[index]);
     }
 
-    Assign * getResult(const unsigned index) {
-        if (LLVM_LIKELY(index < getNumOfResults()))
-            return cast<Assign>(mResults[index]);
-        else throwInvalidResultIndex(index);
+    const Var * getResult(const unsigned index) const {
+        return static_cast<Var *>(mResults[index]);
     }
 
-    const Assign * getResult(const unsigned index) const {
-        if (LLVM_LIKELY(index < getNumOfResults()))
-            return cast<Assign>(mResults[index]);
-        else throwInvalidResultIndex(index);
+    Var * addResult(const std::string name, Type * const type);
+
+    Var * makeVariable(PabloAST * name, Type * const type);
+
+    Var * getVariable(const unsigned index) {
+        return static_cast<Var *>(mVariables[index]);
     }
 
-    void setResult(const unsigned index, Assign * value) {        
-        if (LLVM_LIKELY(index < getNumOfResults())) {
-            if (LLVM_LIKELY(mResults[index] != value)) {
-                if (LLVM_UNLIKELY(mResults[index] != nullptr)) {
-                    mResults[index]->removeUser(this);
-                }
-                mResults[index] = value;
-                value->addUser(this);
-            }
-        }
-        else throwInvalidResultIndex(index);
+    unsigned getNumOfVariables() {
+        return mVariables.size();
     }
 
-    void setResultCount(Count * value) {
-        value->addUser(this);
-    }
-    
-    void setFunctionPtr(void * functionPtr) {
-        mFunctionPtr = functionPtr;
-    }
+    Zeroes * getNullValue(Type * const type);
 
-    Zeroes * getNullValue(const PabloType * const type);
-
-    Ones * getAllOnesValue(const PabloType * const type);
+    Ones * getAllOnesValue(Type * const type);
 
     void operator delete (void*);
 
@@ -161,18 +137,18 @@ protected:
 
     __attribute__((noreturn)) void throwInvalidResultIndex(const unsigned index) const;
 
-    PabloFunction(std::string && name, const unsigned numOfParameters, const unsigned numOfResults);
+    PabloFunction(std::string && name);
 private:
     SymbolGenerator *                           mSymbolTable;
-    const PabloType *                           mBitStreamType;
     PabloBlock *                                mEntryBlock;
     std::vector<PabloAST *, Allocator>          mParameters;
     std::vector<PabloAST *, Allocator>          mResults;
     std::vector<PabloAST *, Allocator>          mConstants;
+    std::vector<PabloAST *, Allocator>          mVariables;
 };
 
-inline PabloFunction * PabloFunction::Create(std::string name, const unsigned numOfParameters, const unsigned numOfResults) {
-    return new PabloFunction(std::move(name), numOfParameters, numOfResults);
+inline PabloFunction * PabloFunction::Create(std::string name) {
+    return new PabloFunction(std::move(name));
 }
     
 }

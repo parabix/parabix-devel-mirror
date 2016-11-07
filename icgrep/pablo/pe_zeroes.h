@@ -32,7 +32,7 @@ public:
         return isa<Zeroes>(other);
     }
 protected:
-    Zeroes(const PabloType * const type) : PabloAST(ClassTypeId::Zeroes, type) { }
+    Zeroes(Type * const type) : PabloAST(ClassTypeId::Zeroes, type, nullptr) { }
 };
 
 }

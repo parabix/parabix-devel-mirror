@@ -55,19 +55,19 @@ protected:
 
     void reduceVertex(const Vertex u, CharacterizationMap & C, VertexMap & M, Graph & G);
 
-    bool factorGraph(const TypeId typeId, Graph & G, std::vector<Vertex> & factors) const;
+    bool factorGraph(TypeId typeId, Graph & G, std::vector<Vertex> & factors) const;
     bool factorGraph(Graph & G) const;
 
-    static Vertex makeVertex(const TypeId typeId, PabloAST * const expr, Graph & G, Z3_ast node = nullptr);
-    static Vertex makeVertex(const TypeId typeId, PabloAST * const expr, StatementMap & M, Graph & G, Z3_ast node = nullptr);
-    static Vertex makeVertex(const TypeId typeId, PabloAST * const expr, CharacterizationMap & C, StatementMap & S, VertexMap & M, Graph & G);
+    static Vertex makeVertex(TypeId typeId, PabloAST * const expr, Graph & G, Z3_ast node = nullptr);
+    static Vertex makeVertex(TypeId typeId, PabloAST * const expr, StatementMap & M, Graph & G, Z3_ast node = nullptr);
+    static Vertex makeVertex(TypeId typeId, PabloAST * const expr, CharacterizationMap & C, StatementMap & S, VertexMap & M, Graph & G);
 
     void removeVertex(const Vertex u, VertexMap & M, Graph & G) const;
     void removeVertex(const Vertex u, Graph & G) const;
 
-    Z3_ast computeDefinition(const TypeId typeId, const Vertex u, Graph & G, const bool use_expensive_minimization = false) const;
-    Vertex updateIntermediaryDefinition(const TypeId typeId, const Vertex u, VertexMap & M, Graph & G);
-    Vertex updateSinkDefinition(const TypeId typeId, const Vertex u, CharacterizationMap &C, VertexMap & M, Graph & G);
+    Z3_ast computeDefinition(TypeId typeId, const Vertex u, Graph & G, const bool use_expensive_minimization = false) const;
+    Vertex updateIntermediaryDefinition(TypeId typeId, const Vertex u, VertexMap & M, Graph & G);
+    Vertex updateSinkDefinition(TypeId typeId, const Vertex u, CharacterizationMap &C, VertexMap & M, Graph & G);
     bool redistributeGraph(CharacterizationMap & C, VertexMap & M, Graph & G);
 
     bool rewriteAST(Graph & G);

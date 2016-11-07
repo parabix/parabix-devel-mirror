@@ -65,12 +65,12 @@ static void printGraph(const DependencyGraph & G, const std::vector<unsigned> & 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief resolveNestedUsages
  ** ------------------------------------------------------------------------------------------------------------- */
-static void resolveNestedUsages(Statement * const root, Statement * const stmt, DependencyGraph & G, Map & M, PabloBlock * const block) {
-    for (PabloAST * use : stmt->users()) {
+static void resolveNestedUsages(Statement * const root, PabloAST * const expr, DependencyGraph & G, Map & M, PabloBlock * const block) {
+    for (PabloAST * use : expr->users()) {
         if (LLVM_LIKELY(isa<Statement>(use))) {
             const PabloBlock * scope = cast<Statement>(use)->getParent();
             if (scope != block) {
-                for (PabloBlock * prior = scope->getPredecessor (); prior; scope = prior, prior = prior->getPredecessor ()) {
+                for (PabloBlock * prior = scope->getPredecessor(); prior; scope = prior, prior = prior->getPredecessor()) {
                     if (prior == block) {
                         assert (scope->getBranch());
                         auto v = M.find(scope->getBranch());
@@ -110,10 +110,10 @@ static void computeDependencyGraph(DependencyGraph & G, PabloBlock * const block
                     assert (v != M.end());
                     assert (v->second != u);
                     add_edge(v->second, u, G);
-                } else if (isa<Assign>(op) || isa<Next>(op)) {
+                } else if (isa<Assign>(op)) {
                     // if this statement isn't an Assign or Next node, it cannot come from a nested scope
                     // unless the function is invalid.
-                    for (PabloBlock * prior = scope->getPredecessor (); prior; scope = prior, prior = prior->getPredecessor ()) {
+                    for (PabloBlock * prior = scope->getPredecessor(); prior; scope = prior, prior = prior->getPredecessor()) {
                         // Was this instruction computed by a nested block?
                         if (prior == block) {
                             assert (scope->getBranch());
@@ -131,12 +131,8 @@ static void computeDependencyGraph(DependencyGraph & G, PabloBlock * const block
     }
     // Do a second pass to ensure that we've accounted for any nested usage of an If or While statement
     for (Statement * stmt : *block) {
-        if (LLVM_UNLIKELY(isa<If>(stmt))) {
-            for (Assign * def : cast<If>(stmt)->getDefined()) {
-                resolveNestedUsages(stmt, def, G, M, block);
-            }
-        } else if (LLVM_UNLIKELY(isa<While>(stmt))) {
-            for (Next * var : cast<While>(stmt)->getVariants()) {
+        if (LLVM_UNLIKELY(isa<Branch>(stmt))) {
+            for (Var * var : cast<Branch>(stmt)->getEscaped()) {
                 resolveNestedUsages(stmt, var, G, M, block);
             }
         } else {

@@ -215,7 +215,7 @@ Function * generateCPUKernel(Module * m, IDISA::IDISA_Builder * iBuilder, bool i
     Value * const fileIdx = &*(args++);
     fileIdx->setName("fileIdx");
 
-    ExternalFileBuffer MatchResults(iBuilder, StreamSetType(2, i1));
+    ExternalFileBuffer MatchResults(iBuilder, StreamSetType(iBuilder, 2, 1));
     MatchResults.setStreamSetBuffer(rsltStream, fileSize);
 
     kernel::scanMatchKernel scanMatchK(iBuilder, isNameExpression);
@@ -233,14 +233,13 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool Count
     isUTF_16 = UTF_16;
     int addrSpace = 0;
     bool CPU_Only = true;
-    LLVMContext TheContext;
     Module * M = nullptr;  
     IDISA::IDISA_Builder * iBuilder = nullptr; 
 
 #ifdef CUDA_ENABLED 
     setNVPTXOption(); 
-    if(codegen::NVPTX){     
-        Module * gpuM = new Module(moduleName+":gpu", TheContext);
+    if (codegen::NVPTX) {
+        Module * gpuM = new Module(moduleName+":gpu", getGlobalContext());
         IDISA::IDISA_Builder * GPUBuilder = IDISA::GetIDISA_GPU_Builder(gpuM);
         M = gpuM;
         iBuilder = GPUBuilder;
@@ -249,11 +248,11 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool Count
         addrSpace = 1;
         CPU_Only = false;
         codegen::BlockSize = 64;
-    }   
+    }
 #endif
 
-    Module * cpuM = new Module(moduleName+":cpu", TheContext);
-    IDISA::IDISA_Builder * CPUBuilder = IDISA::GetIDISA_Builder(cpuM); 
+    Module * cpuM = new Module(moduleName+":cpu", getGlobalContext());
+    IDISA::IDISA_Builder * CPUBuilder = IDISA::GetIDISA_Builder(cpuM);
 
     if(CPU_Only) {
         M = cpuM;
@@ -261,7 +260,9 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool Count
     }
 
     const unsigned segmentSize = codegen::SegmentSize;
-    if (segmentPipelineParallel && codegen::BufferSegments < 2) codegen::BufferSegments = 2;
+    if (segmentPipelineParallel && codegen::BufferSegments < 2) {
+        codegen::BufferSegments = 2;
+    }
     const unsigned bufferSegments = codegen::BufferSegments;
 
 
@@ -296,8 +297,7 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool Count
             inputStream->setName("input");
             fileSize = &*(args++);
             fileSize->setName("fileSize");
-        }
-        else{
+        } else {
             mainFn = cast<Function>(M->getOrInsertFunction("Main", resultTy, inputType, size_ty, outputType, nullptr));
             mainFn->setCallingConv(CallingConv::C);
             iBuilder->SetInsertPoint(BasicBlock::Create(M->getContext(), "entry", mainFn, 0));
@@ -326,8 +326,8 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool Count
         fileIdx->setName("fileIdx");
     }
        
-    ExternalFileBuffer ByteStream(iBuilder, StreamSetType(1, i8));
-    CircularBuffer BasisBits(iBuilder, StreamSetType(8, i1), segmentSize * bufferSegments);
+    ExternalFileBuffer ByteStream(iBuilder, StreamSetType(iBuilder, 1, 8));
+    CircularBuffer BasisBits(iBuilder, StreamSetType(iBuilder, 8, 1), segmentSize * bufferSegments);
 
     kernel::s2pKernel  s2pk(iBuilder);
     s2pk.generateKernel({&ByteStream}, {&BasisBits});
@@ -364,28 +364,25 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool Count
     pthreadExitFunc->setCallingConv(llvm::CallingConv::C);
 
     if (CountOnly) {
-        pablo::PabloKernel  icgrepK(iBuilder, "icgrep", function, {"matchedLineCount"});
+        pablo::PabloKernel icgrepK(iBuilder, "icgrep", function);
         icgrepK.generateKernel({&BasisBits}, {});       
         Value * icgrepInstance = icgrepK.createInstance({});
-
         if (pipelineParallel){
             generatePipelineParallel(iBuilder, {&s2pk, &icgrepK}, {s2pInstance, icgrepInstance});
-        }
-        else if (segmentPipelineParallel){           
+        } else if (segmentPipelineParallel){
             generateSegmentParallelPipeline(iBuilder, {&s2pk, &icgrepK}, {s2pInstance, icgrepInstance}, fileSize);
-        }
-        else{
+        } else {
             generatePipelineLoop(iBuilder, {&s2pk, &icgrepK}, {s2pInstance, icgrepInstance}, fileSize);
         }
-        
+
         Value * matchCount = icgrepK.createGetAccumulatorCall(icgrepInstance, "matchedLineCount");
+
         iBuilder->CreateRet(matchCount);
 
-    }
-    else {
+    } else {
 #ifdef CUDA_ENABLED 
         if (codegen::NVPTX){
-            ExternalFileBuffer MatchResults(iBuilder, StreamSetType(2, i1), addrSpace);
+            ExternalFileBuffer MatchResults(iBuilder, StreamSetType(iBuilder,2, i1), addrSpace);
             MatchResults.setStreamSetBuffer(outputStream, fileSize);
 
             pablo::PabloKernel  icgrepK(iBuilder, "icgrep", function, {});
@@ -396,12 +393,12 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool Count
 
         }
 #endif
-        if (CPU_Only){
-            CircularBuffer MatchResults(iBuilder, StreamSetType(2, i1), segmentSize * bufferSegments);
+        if (CPU_Only) {
+            CircularBuffer MatchResults(iBuilder, StreamSetType(iBuilder, 2, 1), segmentSize * bufferSegments);
             MatchResults.allocateBuffer();
 
-            pablo::PabloKernel  icgrepK(iBuilder, "icgrep", function, {});
-            icgrepK.generateKernel({&BasisBits},  {&MatchResults});
+            pablo::PabloKernel  icgrepK(iBuilder, "icgrep", function);
+            icgrepK.generateKernel({&BasisBits}, {&MatchResults});
             Value * icgrepInstance = icgrepK.createInstance({});
 
             kernel::scanMatchKernel scanMatchK(iBuilder, mIsNameExpression);
@@ -410,11 +407,9 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool Count
 
             if (pipelineParallel){
                 generatePipelineParallel(iBuilder, {&s2pk, &icgrepK, &scanMatchK}, {s2pInstance, icgrepInstance, scanMatchInstance});
-            }
-            else if (segmentPipelineParallel){
+            } else if (segmentPipelineParallel){
                 generateSegmentParallelPipeline(iBuilder, {&s2pk, &icgrepK, &scanMatchK}, {s2pInstance, icgrepInstance, scanMatchInstance}, fileSize);
-            } 
-            else{
+            }  else{
                 generatePipelineLoop(iBuilder, {&s2pk, &icgrepK, &scanMatchK}, {s2pInstance, icgrepInstance, scanMatchInstance}, fileSize);
             }
         }
@@ -481,7 +476,6 @@ re::CC *  GrepEngine::grepCodepoints() {
 GrepEngine::~GrepEngine() {
 //    delete mEngine;
 }
-
 
 static int * total_count;
 static std::stringstream * resultStrs = nullptr;

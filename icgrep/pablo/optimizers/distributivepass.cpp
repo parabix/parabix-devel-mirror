@@ -30,7 +30,7 @@ using TypeId = PabloAST::ClassTypeId;
  * @brief intersects
  ** ------------------------------------------------------------------------------------------------------------- */
 template <class Type>
-inline bool intersects(const Type & A, const Type & B) {
+inline bool intersects(Type & A, Type & B) {
     auto first1 = A.begin(), last1 = A.end();
     auto first2 = B.begin(), last2 = B.end();
     while (first1 != last1 && first2 != last2) {
@@ -238,7 +238,7 @@ inline static DistributionSets safeDistributionSets(const Graph & G, const Verte
  ** ------------------------------------------------------------------------------------------------------------- */
 inline unsigned scopeDepthOf(const PabloBlock * block) {
     unsigned depth = 0;
-    for (; block; ++depth, block = block->getPredecessor ());
+    for (; block; ++depth, block = block->getPredecessor());
     return depth;
 }
 
@@ -266,19 +266,19 @@ inline PabloBlock * findInsertionPoint(const VertexSet & users, const Graph & G)
         // If one of these scopes is nested deeper than the other, scan upwards through
         // the scope tree until both scopes are at the same depth.
         while (depth1 > depth2) {
-            scope1 = scope1->getPredecessor ();
+            scope1 = scope1->getPredecessor();
             --depth1;
         }
         while (depth1 < depth2) {
-            scope2 = scope2->getPredecessor ();
+            scope2 = scope2->getPredecessor();
             --depth2;
         }
         assert (depth1 == depth2);
         // Then iteratively step backwards until we find a matching scopes; this must be
         // the LCA of our original pair.
         while (scope1 != scope2) {
-            scope1 = scope1->getPredecessor ();
-            scope2 = scope2->getPredecessor ();
+            scope1 = scope1->getPredecessor();
+            scope2 = scope2->getPredecessor();
         }
         assert (scope1 && scope2);
         if (std::find(scopes.begin(), scopes.end(), scope1) == scopes.end()) {
@@ -296,7 +296,7 @@ inline PabloBlock * findInsertionPoint(const VertexSet & users, const Graph & G)
         while (scope != root) {
             assert (scope);
             user = scope->getBranch();
-            scope = scope->getPredecessor ();
+            scope = scope->getPredecessor();
         }
         usages.insert(user);
     }
@@ -317,8 +317,8 @@ inline PabloBlock * findInsertionPoint(const VertexSet & users, const Graph & G)
  ** ------------------------------------------------------------------------------------------------------------- */
 static inline void computeDistributionGraph(Variadic * const expr, Graph & G, VertexSet & A) {
 
-    const TypeId outerTypeId = expr->getClassTypeId();
-    const TypeId innerTypeId = (outerTypeId == TypeId::And) ? TypeId::Or : TypeId::And;
+    TypeId outerTypeId = expr->getClassTypeId();
+    TypeId innerTypeId = (outerTypeId == TypeId::And) ? TypeId::Or : TypeId::And;
 
     assert (isa<And>(expr) || isa<Or>(expr));
 

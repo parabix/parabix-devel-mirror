@@ -37,17 +37,10 @@ public:
     inline StringRef value() {
         return mValue;
     }
-    inline bool isGenerated() const {
-        return mGenerated;
-    }
-    inline bool isUserDefined() const {
-        return !mGenerated;
-    }
 protected:
-    String(const std::string & value, const bool generated) noexcept
-    : PabloAST(ClassTypeId::String, getPabloType(PabloType::String, 0))
+    String(const std::string & value) noexcept
+    : PabloAST(ClassTypeId::String, llvm::Type::getInt8PtrTy(llvm::getGlobalContext()), this)
     , mValue(duplicate(value))
-    , mGenerated(generated)
     {
 
     }
@@ -59,7 +52,6 @@ protected:
     }
 private:
     const StringRef         mValue;
-    const bool              mGenerated;
 };
 
 inline std::ostream & operator <<(std::ostream & stream, const String & string) {

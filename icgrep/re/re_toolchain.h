@@ -30,7 +30,7 @@ const cl::OptionCategory * re_toolchain_flags();
 
 RE * regular_expression_passes(RE * re_ast);
 
-pablo::PabloFunction * re2pablo_compiler(const unsigned encodingBits, RE * re_ast, bool CountOnly = false);
+pablo::PabloFunction * re2pablo_compiler(const unsigned encodingBits, RE * re_ast, const bool CountOnly = false);
     
 }
 #endif

@@ -37,7 +37,7 @@ public:
         return localLookaheadIndex;
     }
 protected:
-    Lookahead(PabloAST * expr, PabloAST * shiftAmount, String * name)
+    Lookahead(PabloAST * expr, PabloAST * shiftAmount, const String * name)
     : Statement(ClassTypeId::Lookahead, expr->getType(), {expr, shiftAmount}, name)
     {
         assert(isa<Integer>(shiftAmount));

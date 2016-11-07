@@ -42,91 +42,92 @@ Pattern_Compiler::Pattern_Compiler(pablo::PabloFunction & function)
 inline std::string make_e(int i, int j) {return ("e_"+std::to_string(i)+"_"+std::to_string(j));}
 
 
-std::vector<Assign *> optimizer(std::string patt, std::vector<pablo::Var *> basisBits, std::vector<std::vector<Assign*>>  & e, int i, PabloAST * cond, PabloBuilder & pb, int dist, int stepSize){
+void optimizer(const std::string & patt, PabloAST * basisBits[], std::vector<std::vector<PabloAST *>> & e, unsigned i, PabloAST * cond, PabloBuilder & main, PabloBuilder & pb, int dist, int stepSize){
     PabloBuilder it = PabloBuilder::Create(pb);
-    std::vector<Assign *> var_list;
+
+    Zeroes * zeroes = pb.createZeroes();
+
     for(int n = 0; n < stepSize; n++){
-        // PabloAST * name = cast<Name>(seq->at(i))->getCompiled();
-        int pi = (patt[i] >> 1) & 0x3;
-        PabloAST * name = basisBits[pi];        
+
+        PabloAST * name = basisBits[(patt[i] >> 1) & 0x3];
         
-        e[i][0] = it.createAssign(make_e(i,0), it.createAnd(it.createAdvance(e[i-1][0],1), name));
-        for(int j = 1; j <= dist; j++){  
-            auto tmp1 = it.createAssign("tmp1", it.createAnd(it.createAdvance(e[i-1][j],1), name));
-            auto tmp2 = it.createAssign("tmp2", it.createAnd(it.createAdvance(e[i-1][j-1],1), it.createNot(name)));
-            auto tmp3 = it.createAssign("tmp3", it.createOr(it.createAdvance(e[i][j-1],1), e[i-1][j-1]));
-            e[i][j] = it.createAssign(make_e(i,j), it.createOr(it.createOr(tmp1,tmp2),tmp3));
+        e[i][0] = it.createAnd(it.createAdvance(e[i - 1][0], 1), name, make_e(i, 0));
+        for(int j = 1; j <= dist; j++){
+            auto tmp1 = it.createAnd(it.createAdvance(e[i-1][j],1), name);
+            auto tmp2 = it.createAnd(it.createAdvance(e[i-1][j-1],1), it.createNot(name));
+            auto tmp3 = it.createOr(it.createAdvance(e[i][j-1],1), e[i-1][j-1]);
+            e[i][j] = it.createOr(it.createOr(tmp1, tmp2), tmp3, make_e(i, j));
         }
         
         i++;
-        if(i >= patt.length()) break;
+        if (i >= patt.length()) break;
     } 
-    i--;  
 
-    if(i < patt.length()-1){ 
-        var_list = optimizer(patt, basisBits, e, i+1, e[i][dist], it, dist, stepSize);
+    if (i < patt.length()) {
+       optimizer(patt, basisBits, e, i, e[i - 1][dist], main, it, dist, stepSize);
+    } else {
+        const auto i = patt.length() - 1;
+        for(int j = 0; j <= dist; j++){
+            auto eij = main.createVar("m" + std::to_string(j), zeroes);
+            it.createAssign(eij, e[i][j]);
+            e[i][j] = eij;
+        }
     }
 
-    for(int j = 0; j <= dist; j++){ 
-        var_list.push_back(e[i][j]);
-    }
-
-    std::vector<Assign *> new_var_list = var_list;
-    pb.createIf(cond, std::move(var_list), it);
-    return new_var_list;
+    pb.createIf(cond, it);
 }
 
-void Pattern_Compiler::compile(std::vector<std::string> patts, PabloBuilder & pb, std::vector<pablo::Var *> basisBits, int dist, int optPosition, int stepSize) {
-    std::vector<std::vector<Assign*>> e(patts[0].length()*2, std::vector<Assign*>(dist+1));
-    std::vector<PabloAST*> E(dist+1);
-    int i = 0;
-    int pi = 0;
+void Pattern_Compiler::compile(const std::vector<std::string> & patts, PabloBuilder & pb, PabloAST * basisBits[], int dist, unsigned optPosition, int stepSize) {
+    std::vector<std::vector<PabloAST *>> e(patts[0].length() * 2, std::vector<PabloAST *>(dist+1));
+    std::vector<PabloAST*> E(dist + 1);
 
     for(int d=0; d<=dist; d++){
         E[d] = pb.createZeroes();
     }
 
-    for(int r=0; r< patts.size(); r++){
-        std::string patt = patts[r];
-        pi = (patt[0] >> 1) & 0x3;
-        PabloAST * name = basisBits[pi];
+    for(unsigned r = 0; r < patts.size(); r++){
+        const std::string & patt = patts[r];
 
-        e[0][0] = pb.createAssign(make_e(0, 0), name);
+        PabloAST * name = basisBits[(patt[0] >> 1) & 0x3];
+
+        e[0][0] = name;
         for(int j = 1; j <= dist; j++){
-          e[0][j] = pb.createAssign(make_e(0, j), pb.createOnes());
+          e[0][j] = pb.createOnes();
         }
 
-        i++;
-        while (i < patt.length()) {
-            pi = (patt[i] >> 1) & 0x3;
-            name = basisBits[pi];
+        unsigned i = 1;
+        while (i < patt.length() && i < optPosition) {
 
-            e[i][0] = pb.createAssign(make_e(i,0), pb.createAnd(pb.createAdvance(e[i-1][0],1), name));
+            name = basisBits[(patt[i] >> 1) & 0x3];
+
+            e[i][0] = pb.createAnd(pb.createAdvance(e[i-1][0], 1), name, make_e(i, 0));
             for(int j = 1; j <= dist; j++){     
-                auto tmp1 = pb.createAssign("tmp1", pb.createAnd(pb.createAdvance(e[i-1][j],1), name));
-                auto tmp2 = pb.createAssign("tmp2", pb.createAnd(pb.createAdvance(e[i-1][j-1],1), pb.createNot(name)));
-                auto tmp3 = pb.createAssign("tmp3", pb.createOr(pb.createAdvance(e[i][j-1],1), e[i-1][j-1]));
-                e[i][j] = pb.createAssign(make_e(i,j), pb.createOr(pb.createOr(tmp1,tmp2),tmp3));
+                auto tmp1 = pb.createAnd(pb.createAdvance(e[i-1][j],1), name);
+                auto tmp2 = pb.createAnd(pb.createAdvance(e[i-1][j-1],1), pb.createNot(name));
+                auto tmp3 = pb.createOr(pb.createAdvance(e[i][j-1],1), e[i-1][j-1]);
+                e[i][j] = pb.createOr(pb.createOr(tmp1,tmp2),tmp3, make_e(i, j));
             }
             
             i++;
-            if(i >= optPosition) break;
         }
 
         //Optimize from optPosition
-        if(i >= optPosition){
-            optimizer(patt, basisBits, e, i, e[i-1][dist], pb, dist, stepSize);
+        if (i >= optPosition) {
+            optimizer(patt, basisBits, e, i, e[i-1][dist], pb, pb, dist, stepSize);
         }
 
-        E[0] = pb.createOr(E[0], e[patt.length()-1][0]);
+        E[0] = pb.createOr(E[0], e[patt.length() - 1][0]);
         for(int d=1; d<=dist; d++){
             E[d] = pb.createOr(E[d], pb.createAnd(e[patt.length()-1][d], pb.createNot(e[patt.length()-1][d-1])));
         }
 
-        i = 0;
     }
+
+    Var * output = mFunction.addResult("E", getStreamTy(1, dist + 1));
+
     for(int d=0; d<=dist; d++){
-        mFunction.setResult(d, pb.createAssign("E" + std::to_string(d), E[d]));
+        pb.createAssign(pb.createExtract(output, d), E[d]);
+        // mFunction.setResult(d, pb.createAssign("E" + std::to_string(d), E[d]));
     }
 }
 

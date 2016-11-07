@@ -10,14 +10,14 @@
 
 namespace pablo {
 
-String * SymbolGenerator::get(const std::string name, const bool generated) {
-    if (name.length() == 0) {
+String * SymbolGenerator::get(const std::string name) {
+    if (LLVM_UNLIKELY(name.length() == 0)) {
         throw std::runtime_error("symbol name cannot be 0-length");
     }
     auto f = mStringMap.find(name);
     String * result = nullptr;
     if (f == mStringMap.end()) {
-        result = new String(name, generated);
+        result = new String(name);
         assert (result);
         mStringMap.insert(std::make_pair(std::move(name), result));
     }
@@ -40,14 +40,14 @@ Integer * SymbolGenerator::getInteger(const integer_t value) {
     return result;
 }
 
-String * SymbolGenerator::make(const std::string prefix, const bool generated) {
+String * SymbolGenerator::make(const std::string prefix) {
     auto f = mPrefixMap.find(prefix);
     if (f == mPrefixMap.end()) {
         mPrefixMap.insert(std::make_pair(prefix, 1));
-        return get(prefix, generated);
+        return get(prefix);
     } else {
-        unsigned count = f->second++;
-        return get(prefix + std::to_string(count), generated);
+        const unsigned count = f->second++;
+        return get(prefix + '_' + std::to_string(count));
     }
 }
 

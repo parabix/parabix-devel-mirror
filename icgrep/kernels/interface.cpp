@@ -14,7 +14,7 @@ using namespace parabix;
 
 void KernelInterface::addKernelDeclarations(Module * client) {
     Module * saveModule = iBuilder->getModule();
-    IDISA::IDISA_Builder::InsertPoint savePoint = iBuilder->saveIP();
+    auto savePoint = iBuilder->saveIP();
     iBuilder->setModule(client);
     if (mKernelStateType == nullptr) {
         throw std::runtime_error("Kernel interface " + mKernelName + " not yet finalized.");
@@ -22,8 +22,8 @@ void KernelInterface::addKernelDeclarations(Module * client) {
     Type * selfType = PointerType::getUnqual(mKernelStateType);
     // Create the accumulator get function prototypes
     for (auto binding : mScalarOutputs) {
-        FunctionType * accumFnType = FunctionType::get(binding.scalarType, {selfType}, false);
-        std::string fnName = mKernelName + accumulator_infix + binding.scalarName;
+        FunctionType * accumFnType = FunctionType::get(binding.type, {selfType}, false);
+        std::string fnName = mKernelName + accumulator_infix + binding.name;
         Function * accumFn = Function::Create(accumFnType, GlobalValue::ExternalLinkage, fnName, client);
         accumFn->setCallingConv(CallingConv::C);
         accumFn->setDoesNotThrow();
@@ -34,7 +34,7 @@ void KernelInterface::addKernelDeclarations(Module * client) {
 
     std::vector<Type *> initParameters = {selfType};
     for (auto binding : mScalarInputs) {
-        initParameters.push_back(binding.scalarType);
+        initParameters.push_back(binding.type);
     }
     FunctionType * initFunctionType = FunctionType::get(iBuilder->getVoidTy(), initParameters, false);
     std::string initFnName = mKernelName + init_suffix;
@@ -46,7 +46,7 @@ void KernelInterface::addKernelDeclarations(Module * client) {
     initArg->setName("self");
     for (auto binding : mScalarInputs) {
         initArg = &*(initArgs++);
-        initArg->setName(binding.scalarName);
+        initArg->setName(binding.name);
     }
 
     // Create the doBlock and finalBlock function prototypes

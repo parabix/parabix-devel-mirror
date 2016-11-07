@@ -10,24 +10,24 @@
 #include <vector>
 #include <llvm/IR/Type.h>
 #include <IDISA/idisa_builder.h>
-#include "streamset.h"
+#include <kernels/streamset.h>
 
+struct Binding {
+    llvm::Type * type;
+    std::string name;
 
-struct ScalarBinding {
-    llvm::Type * scalarType;
-    std::string scalarName;
+    Binding(llvm::Type * type, std::string name)
+    : type(type)
+    , name(std::move(name)) {
+
+    }
 };
 
-struct StreamSetBinding {
-    parabix::StreamSetType ssType;
-    std::string ssName;
-};
-   
-const std::string init_suffix = "_Init";
-const std::string doBlock_suffix = "_DoBlock";
-const std::string doSegment_suffix = "_DoSegment";
-const std::string finalBlock_suffix = "_FinalBlock";
-const std::string accumulator_infix = "_get_";
+static const std::string init_suffix = "_Init";
+static const std::string doBlock_suffix = "_DoBlock";
+static const std::string doSegment_suffix = "_DoSegment";
+static const std::string finalBlock_suffix = "_FinalBlock";
+static const std::string accumulator_infix = "_get_";
 
 class KernelInterface {
 
@@ -43,10 +43,10 @@ public:
     
     std::string & getName() { return mKernelName;}
     
-    std::vector<StreamSetBinding> getStreamInputs() {return mStreamSetInputs;}
-    std::vector<StreamSetBinding> getStreamOutputs() {return mStreamSetOutputs;}
-    std::vector<ScalarBinding> getScalarInputs() { return mScalarInputs;}
-    std::vector<ScalarBinding> getScalarOutputs() { return mScalarOutputs;}
+    std::vector<Binding> getStreamInputs() {return mStreamSetInputs;}
+    std::vector<Binding> getStreamOutputs() {return mStreamSetOutputs;}
+    std::vector<Binding> getScalarInputs() { return mScalarInputs;}
+    std::vector<Binding> getScalarOutputs() { return mScalarOutputs;}
     
     
     // Add ExternalLinkage method declarations for the kernel to a given client module.
@@ -58,46 +58,55 @@ public:
     llvm::Value * createFinalBlockCall(llvm::Value * kernelInstance, llvm::Value * remainingBytes);
     llvm::Value * createGetAccumulatorCall(llvm::Value * kernelInstance, std::string accumName);
     
-    unsigned getLookAhead() { return mLookAheadPositions; }
+    unsigned getLookAhead() const {
+        return mLookAheadPositions;
+    }
     
-    
+    IDISA::IDISA_Builder * getBuilder() const {
+        return iBuilder;
+    }
+
     virtual llvm::Value * getLogicalSegmentNo(llvm::Value * kernelInstance) = 0;
     virtual llvm::Value * getProcessedItemCount(llvm::Value * kernelInstance) = 0;
     virtual llvm::Value * getProducedItemCount(llvm::Value * kernelInstance) = 0;
     virtual llvm::Value * getTerminationSignal(llvm::Value * kernelInstance) = 0;
     
+    void setLookAhead(unsigned lookAheadPositions) {
+        mLookAheadPositions = lookAheadPositions;
+    }
+
+    llvm::Value * createDoBlockCall(llvm::Value * kernelInstance);
+
 protected:
+
     KernelInterface(IDISA::IDISA_Builder * builder,
                     std::string kernelName,
-                    std::vector<StreamSetBinding> stream_inputs,
-                    std::vector<StreamSetBinding> stream_outputs,
-                    std::vector<ScalarBinding> scalar_parameters,
-                    std::vector<ScalarBinding> scalar_outputs,
-                    std::vector<ScalarBinding> internal_scalars) :
+                    std::vector<Binding> stream_inputs,
+                    std::vector<Binding> stream_outputs,
+                    std::vector<Binding> scalar_inputs,
+                    std::vector<Binding> scalar_outputs,
+                    std::vector<Binding> internal_scalars) :
     iBuilder(builder),
     mKernelName(kernelName),
     mStreamSetInputs(stream_inputs),
     mStreamSetOutputs(stream_outputs),
-    mScalarInputs(scalar_parameters),
+    mScalarInputs(scalar_inputs),
     mScalarOutputs(scalar_outputs),
     mInternalScalars(internal_scalars),
     mKernelStateType(nullptr),
     mLookAheadPositions(0) {}
     
+protected:
     
-    
-    IDISA::IDISA_Builder * iBuilder;
+    IDISA::IDISA_Builder * const iBuilder;
     std::string mKernelName;
-    std::vector<StreamSetBinding> mStreamSetInputs;
-    std::vector<StreamSetBinding> mStreamSetOutputs;
-    std::vector<ScalarBinding> mScalarInputs;
-    std::vector<ScalarBinding> mScalarOutputs;
-    std::vector<ScalarBinding> mInternalScalars;
+    std::vector<Binding> mStreamSetInputs;
+    std::vector<Binding> mStreamSetOutputs;
+    std::vector<Binding> mScalarInputs;
+    std::vector<Binding> mScalarOutputs;
+    std::vector<Binding> mInternalScalars;
     llvm::Type * mKernelStateType;
     unsigned mLookAheadPositions;
     
-    void setLookAhead(unsigned lookAheadPositions) {mLookAheadPositions = lookAheadPositions;}
-    llvm::Value * createDoBlockCall(llvm::Value * kernelInstance);
-
 };
 #endif 

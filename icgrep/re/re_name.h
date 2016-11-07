@@ -45,9 +45,9 @@ protected:
     friend Name * makeReference(const std::string & name, RE * captureName);
     friend Name * makeZeroWidth(const std::string & name, RE * zerowidth);
     friend Name * makeName(CC * const cc);
-    friend Name * makeName(const std::string &, const Type);
-    friend Name * makeName(const std::string &, const std::string &, const Type);
-    Name(const char * nameSpace, const length_t namespaceLength, const char * name, const length_t nameLength, const Type type, RE * defn)
+    friend Name * makeName(const std::string &, Type);
+    friend Name * makeName(const std::string &, const std::string &, Type);
+    Name(const char * nameSpace, const length_t namespaceLength, const char * name, const length_t nameLength, Type type, RE * defn)
     : RE(ClassTypeId::Name)
     , mNamespaceLength(namespaceLength)
     , mNamespace(replicateString(nameSpace, namespaceLength))
@@ -72,7 +72,7 @@ private:
     const char * const  mNamespace;
     const length_t      mNameLength;
     const char * const  mName;
-    const Type          mType;
+    Type          mType;
     RE *                mDefinition;
 };
 

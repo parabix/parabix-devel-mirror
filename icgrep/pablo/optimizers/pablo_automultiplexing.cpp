@@ -91,14 +91,14 @@ void MultiplexingPass::optimize(PabloBlock * const block) {
             if (isa<If>(stmt)) {
                 optimize(cast<If>(stmt)->getBody());
             } else if (isa<While>(stmt)) {
-                for (const Next * var : cast<While>(stmt)->getVariants()) {
-                    Z3_inc_ref(mContext, get(var->getInitial()));
+                for (const Var * var : cast<While>(stmt)->getEscaped()) {
+                    Z3_inc_ref(mContext, get(var));
                 }
                 optimize(cast<While>(stmt)->getBody());
                 // since we cannot be certain that we'll always execute at least one iteration of a loop, we must
                 // assume that the variants could either be their initial or resulting value.
-                for (const Next * var : cast<While>(stmt)->getVariants()) {
-                    Z3_ast v0 = get(var->getInitial());
+                for (const Var * var : cast<While>(stmt)->getEscaped()) {
+                    Z3_ast v0 = get(var);
                     Z3_ast & v1 = get(var);
                     Z3_ast merge[2] = { v0, v1 };
                     Z3_ast r = Z3_mk_or(mContext, 2, merge);
@@ -171,7 +171,6 @@ Z3_ast MultiplexingPass::characterize(const Statement * const stmt, const bool d
     Z3_ast node = operands[0];
     switch (stmt->getClassTypeId()) {
         case TypeId::Assign:
-        case TypeId::Next:
         case TypeId::AtEOF:
         case TypeId::InFile:
             node = operands[0]; break;

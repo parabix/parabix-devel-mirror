@@ -14,7 +14,6 @@
 #include <pablo/pe_and.h>
 #include <pablo/pe_call.h>
 #include <pablo/pe_matchstar.h>
-#include <pablo/pe_next.h>
 #include <pablo/pe_not.h>
 #include <pablo/pe_ones.h>
 #include <pablo/pe_or.h>
@@ -28,8 +27,7 @@
 #include <pablo/pe_zeroes.h>
 #include <pablo/pe_count.h>
 #include <pablo/ps_assign.h>
-#include <pablo/ps_if.h>
-#include <pablo/ps_while.h>
+#include <pablo/branch.h>
 #include <pablo/function.h>
 #include <llvm/ADT/ArrayRef.h>
 #include <stdexcept>
@@ -38,8 +36,7 @@ namespace pablo {
 
 class PabloBlock : public PabloAST, public StatementList {
     friend class PabloAST;
-    friend class If;
-    friend class While;
+    friend class Branch;
     friend class PabloBuilder;
 public:
 
@@ -57,34 +54,38 @@ public:
     }
 
     inline static PabloBlock * Create(PabloFunction & parent) noexcept {
-        return new PabloBlock(&parent, nullptr);
+        return new PabloBlock(&parent);
     }
 
     inline static PabloBlock * Create(PabloBlock * const predecessor) noexcept {
-        return new PabloBlock(predecessor->mParent, predecessor);
+        return new PabloBlock(predecessor->mParent);
     }
 
-    PabloAST * createAdvance(PabloAST * expr, const Integer::Type shiftAmount);
+    Advance * createAdvance(PabloAST * expr, PabloAST * shiftAmount) {
+        return createAdvance(expr, shiftAmount, nullptr);
+    }
 
-    PabloAST * createAdvance(PabloAST * expr, PabloAST * shiftAmount);
+    Advance * createAdvance(PabloAST * expr, PabloAST * shiftAmount, const std::string & prefix) {
+        return createAdvance(expr, shiftAmount, makeName(prefix));
+    }
 
-    PabloAST * createAdvance(PabloAST * expr, const Integer::Type shiftAmount, const std::string prefix);
+    Advance * createAdvance(PabloAST * expr, PabloAST * shiftAmount, String * const name);
 
-    PabloAST * createAdvance(PabloAST * expr, PabloAST * shiftAmount, const std::string prefix);
+    Lookahead * createLookahead(PabloAST * expr, PabloAST * shiftAmount) {
+        return createLookahead(expr, shiftAmount, nullptr);
+    }
 
-    PabloAST * createLookahead(PabloAST * expr, const Integer::Type shiftAmount);
+    Lookahead * createLookahead(PabloAST * expr, PabloAST * shiftAmount, const std::string & prefix) {
+        return createLookahead(expr, shiftAmount, makeName(prefix));
+    }
 
-    PabloAST * createLookahead(PabloAST * expr, PabloAST * shiftAmount);
+    Lookahead * createLookahead(PabloAST * expr, PabloAST * shiftAmount, String * const name);
 
-    PabloAST * createLookahead(PabloAST * expr, const Integer::Type shiftAmount, const std::string prefix);
-
-    PabloAST * createLookahead(PabloAST * expr, PabloAST * shiftAmount, const std::string prefix);
-
-    inline Zeroes * createZeroes(const PabloType * const type = nullptr) {
+    inline Zeroes * createZeroes(Type * const type = nullptr) {
         return mParent->getNullValue(type);
     }
 
-    inline Ones * createOnes(const PabloType * const type = nullptr) {
+    inline Ones * createOnes(Type * const type = nullptr) {
         return mParent->getAllOnesValue(type);
     }
 
@@ -102,118 +103,152 @@ public:
         return createCall(static_cast<PabloAST *>(prototype), args);
     }
 
-    Assign * createAssign(const std::string && prefix, PabloAST * const expr);
-
-    inline Var * createVar(const std::string name, const PabloType * const type) {
-        return createVar(getName(name, false), type);
+    Not * createNot(PabloAST * expr) {
+        return createNot(expr, nullptr);
     }
 
-    inline Var * createVar(String * name, const PabloType * const type) {
+    Not * createNot(PabloAST * expr, const std::string & prefix) {
+        return createNot(expr, makeName(prefix));
+    }
+
+    Not * createNot(PabloAST * expr, String * const name);
+
+    inline Var * createVar(const std::string & name, Type * const type = nullptr) {
+        return createVar(makeName(name), type);
+    }
+
+    inline Var * createVar(String * name, Type * const type = nullptr) {
         return createVar(cast<PabloAST>(name), type);
     }
 
-    Next * createNext(Assign * assign, PabloAST * expr);
+    Count * createCount(PabloAST * expr);
 
-    PabloAST * createAnd(PabloAST * expr1, PabloAST * expr2);
+    Count * createCount(PabloAST * expr, const std::string & prefix);
 
-    PabloAST * createAnd(PabloAST * expr1, PabloAST * expr2, const std::string prefix);
-
-    And * createAnd(const PabloType * const type, const unsigned reserved);
-
-    And * createAnd(const PabloType * const type, const unsigned reserved, const std::string prefix);
-
-    And * createAnd(const PabloType * const type, std::vector<PabloAST *>::iterator begin, std::vector<PabloAST *>::iterator end);
-
-    And * createAnd(const PabloType * const type, Variadic::iterator begin, Variadic::iterator end);
-
-    PabloAST * createNot(PabloAST * expr);
-
-    PabloAST * createNot(PabloAST * expr, const std::string prefix);
-
-    PabloAST * createOr(PabloAST * expr1, PabloAST * expr2);
-
-    PabloAST * createOr(PabloAST * expr1, PabloAST * expr2, const std::string prefix);
-
-    Or * createOr(const PabloType * const type, std::vector<PabloAST *>::iterator begin, std::vector<PabloAST *>::iterator end);
-
-    Or * createOr(const PabloType * const type, Variadic::iterator begin, Variadic::iterator end);
-
-    Or * createOr(const PabloType * const type, const unsigned reserved);
-
-    Or * createOr(const PabloType * const type, const unsigned reserved, const std::string prefix);
-
-    PabloAST * createXor(PabloAST * expr1, PabloAST * expr2);
-
-    PabloAST * createXor(PabloAST * expr1, PabloAST * expr2, const std::string prefix);
-
-    Xor * createXor(const PabloType * const type, std::vector<PabloAST *>::iterator begin, std::vector<PabloAST *>::iterator end);
-
-    Xor * createXor(const PabloType * const type, Variadic::iterator begin, Variadic::iterator end);
-
-    Xor * createXor(const PabloType * const type, const unsigned reserved);
-
-    Xor * createXor(const PabloType * const type, const unsigned reserved, const std::string prefix);
-
-    PabloAST * createMatchStar(PabloAST * marker, PabloAST * charclass);
-
-    PabloAST * createMatchStar(PabloAST * marker, PabloAST * charclass, const std::string prefix);
-
-    PabloAST * createScanThru(PabloAST * from, PabloAST * thru);
-
-    PabloAST * createScanThru(PabloAST * from, PabloAST * thru, const std::string prefix);
-
-    PabloAST * createSel(PabloAST * condition, PabloAST * trueExpr, PabloAST * falseExpr);
-
-    PabloAST * createSel(PabloAST * condition, PabloAST * trueExpr, PabloAST * falseExpr, const std::string prefix);
-
-    Count * createCount(const std::string counter, PabloAST * const expr);
-    
-    PabloAST * createInFile(PabloAST * expr);
-    
-    PabloAST * createInFile(PabloAST * expr, const std::string prefix);
-    
-    PabloAST * createAtEOF(PabloAST * expr);
-    
-    PabloAST * createAtEOF(PabloAST * expr, const std::string prefix);
-    
-    If * createIf(PabloAST * condition, const std::initializer_list<Assign *> definedVars, PabloBlock * body);
-
-    If * createIf(PabloAST * condition, const std::vector<Assign *> & definedVars, PabloBlock * body);
-
-    If * createIf(PabloAST * condition, std::vector<Assign *> && definedVars, PabloBlock * body);
-
-    While * createWhile(PabloAST * condition, const std::initializer_list<Next *> nextVars, PabloBlock * body);
-
-    While * createWhile(PabloAST * condition, const std::vector<Next *> & nextVars, PabloBlock * body);
-
-    While * createWhile(PabloAST * condition, std::vector<Next *> && nextVars, PabloBlock * body);
-
-    inline StatementList & statements() {
-        return *this;
+    InFile * createInFile(PabloAST * expr) {
+        return createInFile(expr, nullptr);
     }
 
-    inline const StatementList & statements() const {
-        return *this;
+    InFile * createInFile(PabloAST * expr, const std::string & prefix) {
+        return createInFile(expr, makeName(prefix));
     }
 
-    inline String * getName(const std::string name, const bool generated = true) const {
-        return getSymbolTable()->get(name, generated);
+    InFile * createInFile(PabloAST * expr, String * const name);
+
+    AtEOF * createAtEOF(PabloAST * expr) {
+        return createAtEOF(expr, nullptr);
     }
 
-    inline String * makeName(const std::string prefix, const bool generated = true) const {
-        return getSymbolTable()->make(prefix, generated);
+    AtEOF * createAtEOF(PabloAST * expr, const std::string & prefix) {
+        return createAtEOF(expr, makeName(prefix));
     }
 
-    inline Integer * getInteger(Integer::Type value) {
-        return getSymbolTable()->getInteger(value);
+    AtEOF * createAtEOF(PabloAST * expr, String * const name);
+
+    Extract * createExtract(PabloAST * array, const Integer::Type index) {
+        return createExtract(array, getInteger(index), nullptr);
     }
+
+    inline Extract * createExtract(PabloAST * array, PabloAST * index) {
+        return createExtract(array, index, nullptr);
+    }
+
+    Extract * createExtract(PabloAST * array, PabloAST * index, const std::string & prefix) {
+        return createExtract(array, index, makeName(prefix));
+    }
+
+    Extract * createExtract(PabloAST * array, const Integer::Type index, const std::string & prefix) {
+        return createExtract(array, getInteger(index), makeName(prefix));
+    }
+
+    Extract * createExtract(PabloAST * array, PabloAST * index, String * const name);
+
+    Assign * createAssign(PabloAST * const var, PabloAST * const value);
+
+    And * createAnd(PabloAST * expr1, PabloAST * expr2) {
+        return createAnd(expr1, expr2, nullptr);
+    }
+
+    And * createAnd(PabloAST * expr1, PabloAST * expr2, const std::string & prefix) {
+        return createAnd(expr1, expr2, nullptr);
+    }
+
+    And * createAnd(PabloAST * expr1, PabloAST * expr2, String * const name);
+
+    And * createAnd(Type * const type, const unsigned reserved) {
+        return createAnd(type, reserved, nullptr);
+    }
+
+    And * createAnd(Type * const type, const unsigned reserved, String * const name);
+
+    Or * createOr(PabloAST * expr1, PabloAST * expr2) {
+        return createOr(expr1, expr2, nullptr);
+    }
+
+    Or * createOr(PabloAST * expr1, PabloAST * expr2, const std::string & prefix) {
+        return createOr(expr1, expr2, makeName(prefix));
+    }
+
+    Or * createOr(PabloAST * expr1, PabloAST * expr2, String * const name);
+
+    Or * createOr(Type * const type, const unsigned reserved) {
+        return createOr(type, reserved, nullptr);
+    }
+
+    Or * createOr(Type * const type, const unsigned reserved, String * const name);
+
+    Xor * createXor(PabloAST * expr1, PabloAST * expr2) {
+        return createXor(expr1, expr2, nullptr);
+    }
+
+    Xor * createXor(PabloAST * expr1, PabloAST * expr2, const std::string & prefix) {
+        return createXor(expr1, expr2, makeName(prefix));
+    }
+
+    Xor * createXor(PabloAST * expr1, PabloAST * expr2, String * const name);
+
+    Xor * createXor(Type * const type, const unsigned reserved) {
+        return createXor(type, reserved, nullptr);
+    }
+
+    Xor * createXor(Type * const type, const unsigned reserved, String * const name);
+
+    MatchStar * createMatchStar(PabloAST * marker, PabloAST * charclass) {
+        return createMatchStar(marker, charclass, nullptr);
+    }
+
+    MatchStar * createMatchStar(PabloAST * marker, PabloAST * charclass, const std::string & prefix) {
+        return createMatchStar(marker, charclass, makeName(prefix));
+    }
+
+    MatchStar * createMatchStar(PabloAST * marker, PabloAST * charclass, String * const name);
+
+    ScanThru * createScanThru(PabloAST * from, PabloAST * thru) {
+        return createScanThru(from, thru, nullptr);
+    }
+
+    ScanThru * createScanThru(PabloAST * from, PabloAST * thru, const std::string & prefix) {
+        return createScanThru(from, thru, makeName(prefix));
+    }
+
+    ScanThru * createScanThru(PabloAST * from, PabloAST * thru, String * const name);
+
+    Sel * createSel(PabloAST * condition, PabloAST * trueExpr, PabloAST * falseExpr) {
+        return createSel(condition, trueExpr, falseExpr, nullptr);
+    }
+
+    Sel * createSel(PabloAST * condition, PabloAST * trueExpr, PabloAST * falseExpr, const std::string & prefix) {
+        return createSel(condition, trueExpr, falseExpr, makeName(prefix));
+    }
+
+    Sel * createSel(PabloAST * condition, PabloAST * trueExpr, PabloAST * falseExpr, String * const name);
+    
+    If * createIf(PabloAST * condition, PabloBlock * body);
+
+    While * createWhile(PabloAST * condition, PabloBlock * body);
 
     inline PabloBlock * getPredecessor() const {
-        return mPredecessor;
-    }
-    
-    void setPredecessor(PabloBlock * const predecessor) {
-        mPredecessor = predecessor;
+        return getBranch() ? getBranch()->getParent() : nullptr;
     }
 
     inline PabloFunction * getParent() const {
@@ -234,8 +269,24 @@ public:
     
     void eraseFromParent(const bool recursively = false);
 
-    inline Statement * getBranch() const {
+    inline Branch * getBranch() const {
         return mBranch;
+    }
+
+    inline void setBranch(Branch * const branch) {
+        mBranch = branch;
+    }
+
+    inline String * getName(const std::string name) const {
+        return getSymbolTable()->get(name);
+    }
+
+    inline String * makeName(const std::string & prefix) const {
+        return getSymbolTable()->make(prefix);
+    }
+
+    inline Integer * getInteger(Integer::Type value) const {
+        return getSymbolTable()->getInteger(value);
     }
 
     SymbolGenerator * getSymbolTable() const {
@@ -246,37 +297,23 @@ public:
 
 protected:
 
-    explicit PabloBlock(PabloFunction * parent, PabloBlock * predecessor) noexcept;
-
-    PabloAST * renameNonNamedNode(PabloAST * expr, const std::string && prefix);
+    explicit PabloBlock(PabloFunction * parent) noexcept;
 
     template<typename Type>
     inline Type * insertAtInsertionPoint(Type * expr) {
         if (isa<Statement>(expr)) {
-            if (LLVM_UNLIKELY(isa<If>(expr) || isa<While>(expr))) {
-                PabloBlock * const body = isa<If>(expr) ? cast<If>(expr)->getBody() : cast<While>(expr)->getBody();
-                body->setPredecessor (this);
-                addUser(body);
-            }
             insert(cast<Statement>(expr));
         }
         return expr;
     }
 
-    inline void setBranch(Statement * const branch) {
-        mBranch = branch;
-    }
-
-private:
-
     Call * createCall(PabloAST * prototype, const std::vector<PabloAST *> &);
 
-    Var * createVar(PabloAST * name, const PabloType * const type);
+    Var * createVar(PabloAST * name, Type * const type);
 
 private:        
     PabloFunction *                                     mParent;
-    PabloBlock *                                        mPredecessor;
-    Statement *                                         mBranch; // What statement branches into this scope block?
+    Branch *                                            mBranch;
     unsigned                                            mScopeIndex;
 };
 

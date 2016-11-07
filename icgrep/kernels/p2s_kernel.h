@@ -20,8 +20,8 @@ class p2sKernel : public KernelBuilder {
 public:
     p2sKernel(IDISA::IDISA_Builder * iBuilder) :
     KernelBuilder(iBuilder, "p2s",
-                  {StreamSetBinding{StreamSetType(8, 1), "basisBits"}},
-                  {StreamSetBinding{StreamSetType(1, 8), "byteStream"}},
+                  {Binding{StreamSetType(iBuilder,8, 1), "basisBits"}},
+                  {Binding{StreamSetType(iBuilder,1, 8), "byteStream"}},
                   {}, {}, {}) {}
     
 private:
@@ -33,8 +33,8 @@ class p2sKernel_withCompressedOutput : public KernelBuilder {
 public:
     p2sKernel_withCompressedOutput(IDISA::IDISA_Builder * iBuilder) :
     KernelBuilder(iBuilder, "p2s_compress",
-                  {StreamSetBinding{StreamSetType(8, 1), "basisBits"}, StreamSetBinding{StreamSetType(1, 1), "deletionCounts"}},
-                  {StreamSetBinding{StreamSetType(1, 8), "byteStream"}},
+                  {Binding{StreamSetType(iBuilder,8, 1), "basisBits"}, Binding{StreamSetType(iBuilder,1, 1), "deletionCounts"}},
+                  {Binding{StreamSetType(iBuilder,1, 8), "byteStream"}},
                   {}, {}, {}) {}
     
 private:
@@ -47,8 +47,8 @@ class p2s_16Kernel : public KernelBuilder {
 public:
     p2s_16Kernel(IDISA::IDISA_Builder * iBuilder) :
     KernelBuilder(iBuilder, "p2s_16",
-                  {StreamSetBinding{StreamSetType(16, 1), "basisBits"}},
-                  {StreamSetBinding{StreamSetType(1, 16), "i16Stream"}},
+                  {Binding{StreamSetType(iBuilder,16, 1), "basisBits"}},
+                  {Binding{StreamSetType(iBuilder,1, 16), "i16Stream"}},
                   {}, {}, {}) {}
     
 private:
@@ -61,11 +61,11 @@ class p2s_16Kernel_withCompressedOutput : public KernelBuilder {
 public:
     p2s_16Kernel_withCompressedOutput(IDISA::IDISA_Builder * iBuilder) :
     KernelBuilder(iBuilder, "p2s_16_compress",
-                  {StreamSetBinding{StreamSetType(16, 1), "basisBits"}, StreamSetBinding{StreamSetType(1, 1), "deletionCounts"}},
-                  {StreamSetBinding{StreamSetType(1, 16), "i16Stream"}},
+                  {Binding{StreamSetType(iBuilder,16, 1), "basisBits"}, Binding{StreamSetType(iBuilder,1, 1), "deletionCounts"}},
+                  {Binding{StreamSetType(iBuilder,1, 16), "i16Stream"}},
                   {},
                   {},
-                  {ScalarBinding{iBuilder->getSizeTy(), "unitsGenerated"}, ScalarBinding{iBuilder->getSizeTy(), "unitsWritten"}}) {}
+                  {Binding{iBuilder->getSizeTy(), "unitsGenerated"}, Binding{iBuilder->getSizeTy(), "unitsWritten"}}) {}
         
 private:
     void prepareKernel() override;

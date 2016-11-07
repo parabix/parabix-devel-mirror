@@ -20,20 +20,19 @@ public:
     static inline bool classof(const void *) {
         return false;
     }
-    virtual ~Xor() { }
 protected:
-    Xor(const PabloType * const type, PabloAST * expr1, PabloAST * expr2, String * name)
+    Xor(Type * const type, PabloAST * expr1, PabloAST * expr2, const String * name)
     : Variadic(ClassTypeId::Xor, type, {expr1, expr2}, name)
     {
 
     }
-    Xor(const PabloType * const type, const unsigned reserved, String * name)
+    Xor(Type * const type, const unsigned reserved, const String * name)
     : Variadic(ClassTypeId::Xor, type, reserved, name)
     {
 
     }
     template<typename iterator>
-    Xor(const PabloType * const type, iterator begin, iterator end, String * name)
+    Xor(Type * const type, iterator begin, iterator end, const String * name)
     : Variadic(ClassTypeId::Xor, type, begin, end, name) {
 
     }

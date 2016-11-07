@@ -47,9 +47,10 @@ Value * partial_sum_popcount(IDISA::IDISA_Builder * iBuilder, unsigned fw, Value
 // Kernel inputs: stream_count data streams plus one del_mask stream
 // Outputs: the deleted streams, plus a partial sum popcount
 
+namespace kernel {
 
-void deletionKernel::generateDoBlockMethod() {
-    IDISA::IDISA_Builder::InsertPoint savePoint = iBuilder->saveIP();
+void DeletionKernel::generateDoBlockMethod() {
+    auto savePoint = iBuilder->saveIP();
     Module * m = iBuilder->getModule();
     
     Function * doBlockFunction = m->getFunction(mKernelName + doBlock_suffix);
@@ -82,8 +83,8 @@ void deletionKernel::generateDoBlockMethod() {
     iBuilder->restoreIP(savePoint);
 }
 
-void deletionKernel::generateFinalBlockMethod() {
-    IDISA::IDISA_Builder::InsertPoint savePoint = iBuilder->saveIP();
+void DeletionKernel::generateFinalBlockMethod() {
+    auto savePoint = iBuilder->saveIP();
     Module * m = iBuilder->getModule();
     
     unsigned blockSize = iBuilder->getBitBlockWidth();
@@ -110,4 +111,4 @@ void deletionKernel::generateFinalBlockMethod() {
     iBuilder->restoreIP(savePoint);
 }
 
-
+}

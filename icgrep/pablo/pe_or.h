@@ -22,18 +22,18 @@ public:
     }
     virtual ~Or() { }
 protected:
-    Or(const PabloType * const type, PabloAST * expr1, PabloAST * expr2, String * name)
+    Or(Type * const type, PabloAST * expr1, PabloAST * expr2, const String * name)
     : Variadic(ClassTypeId::Or, type, {expr1, expr2}, name)
     {
 
     }
-    Or(const PabloType * const type, const unsigned reserved, String * name)
+    Or(Type * const type, const unsigned reserved, const String * name)
     : Variadic(ClassTypeId::Or, type, reserved, name)
     {
 
     }
     template<typename iterator>
-    Or(const PabloType * const type, iterator begin, iterator end, String * name)
+    Or(Type * const type, iterator begin, iterator end, const String * name)
     : Variadic(ClassTypeId::Or, type, begin, end, name) {
 
     }

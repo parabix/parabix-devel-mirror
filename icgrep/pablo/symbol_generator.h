@@ -24,8 +24,8 @@ class SymbolGenerator {
     using Twine = llvm::Twine;
 public:
     typedef u_int64_t integer_t;
-    String * get(const std::string name, const bool generated = true);
-    String * make(const std::string prefix, const bool generated = true);
+    String * get(const std::string name);
+    String * make(const std::string prefix);
     Integer * getInteger(const integer_t value);
     SymbolGenerator() = default;
     ~SymbolGenerator() = default;

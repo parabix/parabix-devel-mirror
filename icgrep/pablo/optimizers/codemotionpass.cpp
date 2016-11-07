@@ -38,25 +38,17 @@ void CodeMotionPass::movement(PabloBlock * const block) {
             hoistLoopInvariants(cast<While>(stmt));
         }
     }
-    reschedule(block);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief isSafeToMove
- ** ------------------------------------------------------------------------------------------------------------- */
-inline static bool isSafeToMove(Statement * stmt) {
-    return !isa<Assign>(stmt) && !isa<Next>(stmt);
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief calculateDepthToCurrentBlock
+ * @brief depthTo
  ** ------------------------------------------------------------------------------------------------------------- */
 inline static unsigned depthTo(const PabloBlock * scope, const PabloBlock * const root) {
     unsigned depth = 0;
     while (scope != root) {
         ++depth;
         assert (scope);
-        scope = scope->getPredecessor ();
+        scope = scope->getPredecessor();
     }
     return depth;
 }
@@ -65,8 +57,8 @@ inline static unsigned depthTo(const PabloBlock * scope, const PabloBlock * cons
  * @brief findScopeUsages
  ** ------------------------------------------------------------------------------------------------------------- */
 template <class ScopeSet>
-inline bool findScopeUsages(Statement * stmt, ScopeSet & scopeSet, const PabloBlock * const block, const PabloBlock * const blocker) {
-    for (PabloAST * use : stmt->users()) {
+inline bool findScopeUsages(PabloAST * expr, ScopeSet & scopeSet, const PabloBlock * const block, const PabloBlock * const blocker) {
+    for (PabloAST * use : expr->users()) {
         assert (isa<Statement>(use));
         PabloBlock * const parent = cast<Statement>(use)->getParent();
         if (LLVM_LIKELY(parent == block)) {
@@ -86,19 +78,14 @@ inline bool CodeMotionPass::isAcceptableTarget(Statement * stmt, ScopeSet & scop
     // Scan through this statement's users to see if they're all in a nested scope. If so,
     // find the least common ancestor of the scope blocks. If it is not the current scope,
     // then we can sink the instruction.
-    if (isa<If>(stmt)) {
-        for (Assign * def : cast<If>(stmt)->getDefined()) {
-            if (!findScopeUsages(def, scopeSet, block, cast<If>(stmt)->getBody())) {
+    assert (scopeSet.empty());
+    if (isa<Branch>(stmt)) {
+        for (Var * def : cast<Branch>(stmt)->getEscaped()) {
+            if (!findScopeUsages(def, scopeSet, block, cast<Branch>(stmt)->getBody())) {
                 return false;
             }
         }
-    } else if (isa<While>(stmt)) {
-        for (Next * var : cast<While>(stmt)->getVariants()) {
-            if (escapes(var) && !findScopeUsages(var, scopeSet, block, cast<While>(stmt)->getBody())) {
-                return false;
-            }
-        }
-    } else if (isSafeToMove(stmt)) {
+    } else if (!isa<Assign>(stmt)) {
         return findScopeUsages(stmt, scopeSet, block, nullptr);
     }
     return false;
@@ -125,11 +112,11 @@ inline void CodeMotionPass::sink(PabloBlock * const block) {
                 // If one of these scopes is nested deeper than the other, scan upwards through
                 // the scope tree until both scopes are at the same depth.
                 while (depth1 > depth2) {
-                    scope1 = scope1->getPredecessor ();
+                    scope1 = scope1->getPredecessor();
                     --depth1;
                 }
                 while (depth1 < depth2) {
-                    scope2 = scope2->getPredecessor ();
+                    scope2 = scope2->getPredecessor();
                     --depth2;
                 }
 
@@ -137,8 +124,8 @@ inline void CodeMotionPass::sink(PabloBlock * const block) {
                 // must be the LCA of our original scopes.
                 while (scope1 != scope2) {
                     assert (scope1 && scope2);
-                    scope1 = scope1->getPredecessor ();
-                    scope2 = scope2->getPredecessor ();
+                    scope1 = scope1->getPredecessor();
+                    scope2 = scope2->getPredecessor();
                 }
                 assert (scope1);
                 // But if the LCA is the current block, we can't sink the statement.
@@ -148,8 +135,7 @@ inline void CodeMotionPass::sink(PabloBlock * const block) {
                 scopes.push_back(scope1);
             }
             assert (scopes.size() == 1);
-            assert (isa<If>(stmt) ? (cast<If>(stmt)->getBody() != scopes.front()) : true);
-            assert (isa<While>(stmt) ? (cast<While>(stmt)->getBody() != scopes.front()) : true);
+            assert (isa<Branch>(stmt) ? (cast<Branch>(stmt)->getBody() != scopes.front()) : true);
             stmt->insertBefore(scopes.front()->front());
         }
 abort:  scopes.clear();
@@ -162,19 +148,14 @@ abort:  scopes.clear();
  ** ------------------------------------------------------------------------------------------------------------- */
 void CodeMotionPass::hoistLoopInvariants(While * loop) {
     flat_set<const PabloAST *> loopVariants;
-    for (Next * variant : loop->getVariants()) {
+    for (Var * variant : loop->getEscaped()) {
         loopVariants.insert(variant);
-        loopVariants.insert(variant->getInitial());
     }
     Statement * outerNode = loop->getPrevNode();
     Statement * stmt = loop->getBody()->front();
     while (stmt) {
-        if (isa<If>(stmt)) {
-            for (Assign * def : cast<If>(stmt)->getDefined()) {
-                loopVariants.insert(def);
-            }
-        } else if (isa<While>(stmt)) {
-            for (Next * var : cast<While>(stmt)->getVariants()) {
+        if (isa<Branch>(stmt)) {
+            for (Var * var : cast<Branch>(stmt)->getEscaped()) {
                 loopVariants.insert(var);
             }
         } else {
@@ -196,58 +177,6 @@ void CodeMotionPass::hoistLoopInvariants(While * loop) {
             }
         }
     }
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief reschedule
- ** ------------------------------------------------------------------------------------------------------------- */
-void CodeMotionPass::reschedule(PabloBlock * const block) {
-
-//    using Graph = adjacency_list<hash_setS, vecS, bidirectionalS, Statement *>;
-//    using Vertex = Graph::vertex_descriptor;
-//    using Map = flat_map<Statement *, Vertex>;
-
-//    const unsigned size = std::distance(block->begin(), block->end());
-
-//    Graph G(size);
-//    Map M;
-
-//    M.reserve(size);
-
-//    unsigned i = 0;
-//    for (Statement * stmt : *block) {
-//        G[i] = stmt;
-//        M.emplace(stmt, i);
-//        ++i;
-//    }
-
-//    i = 0;
-//    for (Statement * stmt : *block) {
-//        for (PabloAST * user : stmt->users()) {
-//            if (isa<Statement>(user)) {
-//                Statement * use = cast<Statement>(user);
-//                PabloBlock * parent = use->getParent();
-//                while (parent) {
-//                    if (parent == block) {
-//                        break;
-//                    }
-//                    use = parent->getBranch();
-//                    parent = parent->getParent();
-//                }
-//                auto f = M.find(use);
-//                assert (f != M.end());
-//                add_edge(i, f->second, G);
-//            }
-//        }
-//        ++i;
-//    }
-
-//    circular_buffer<Vertex> ordering(size);
-//    std::vector<unsigned> cumulativeDependencies;
-//    topological_sort(G, std::back_inserter(ordering));
-    
-
-
 }
 
 }

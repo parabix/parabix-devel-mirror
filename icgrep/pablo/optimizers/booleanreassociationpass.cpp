@@ -144,7 +144,7 @@ void add_edge(PabloAST * expr, const Vertex u, const Vertex v, Graph & G) {
  * @brief intersects
  ** ------------------------------------------------------------------------------------------------------------- */
 template <class Type>
-inline bool intersects(const Type & A, const Type & B) {
+inline bool intersects(Type & A, Type & B) {
     auto first1 = A.begin(), last1 = A.end();
     auto first2 = B.begin(), last2 = B.end();
     while (first1 != last1 && first2 != last2) {
@@ -324,25 +324,14 @@ inline bool BooleanReassociationPass::processScopes(PabloFunction & function) {
 void BooleanReassociationPass::processScopes(PabloBlock * const block, CharacterizationMap & C) {
     const auto offset = mRefs.size();
     for (Statement * stmt = block->front(); stmt; ) {
-        if (LLVM_UNLIKELY(isa<If>(stmt))) {
-            if (LLVM_UNLIKELY(isa<Zeroes>(cast<If>(stmt)->getCondition()))) {
+        if (LLVM_UNLIKELY(isa<Branch>(stmt))) {
+            if (LLVM_UNLIKELY(isa<Zeroes>(cast<Branch>(stmt)->getCondition()))) {
                 stmt = stmt->eraseFromParent(true);
             } else {
                 CharacterizationMap nested(C);
-                processScopes(cast<If>(stmt)->getBody(), nested);
-                for (Assign * def : cast<If>(stmt)->getDefined()) {
+                processScopes(cast<Branch>(stmt)->getBody(), nested);
+                for (Var * def : cast<Branch>(stmt)->getEscaped()) {
                     C.add(def, makeVar());
-                }
-                stmt = stmt->getNextNode();
-            }
-        } else if (LLVM_UNLIKELY(isa<While>(stmt))) {
-            if (LLVM_UNLIKELY(isa<Zeroes>(cast<While>(stmt)->getCondition()))) {
-                stmt = stmt->eraseFromParent(true);
-            } else {
-                CharacterizationMap nested(C);
-                processScopes(cast<While>(stmt)->getBody(), nested);
-                for (Next * var : cast<While>(stmt)->getVariants()) {
-                    C.add(var, makeVar());
                 }
                 stmt = stmt->getNextNode();
             }
@@ -408,7 +397,7 @@ inline Statement * BooleanReassociationPass::characterize(Statement * const stmt
         check[0] = C.get(stmt->getOperand(0)); assert (check[0]);
         check[1] = isa<InFile>(stmt) ? mInFile : Z3_mk_not(mContext, mInFile); assert (check[1]);
         node = Z3_mk_and(mContext, 2, check);
-    } else if (LLVM_UNLIKELY(isa<Assign>(stmt) || isa<Next>(stmt))) {
+    } else if (LLVM_UNLIKELY(isa<Assign>(stmt))) {
         return stmt->getNextNode();
     }  else {
         C.add(stmt, makeVar());
@@ -525,7 +514,7 @@ void BooleanReassociationPass::transformAST(CharacterizationMap & C, Graph & G) 
                 }
             }
             if (LLVM_UNLIKELY(isa<If>(stmt))) {
-                for (Assign * def : cast<const If>(stmt)->getDefined()) {
+                for (Var * def : cast<If>(stmt)->getEscaped()) {
                     const Vertex v = makeVertex(TypeId::Var, def, C, S, M, G);
                     add_edge(def, u, v, G);
                     resolveNestedUsages(def, v, C, S, M, G, stmt);
@@ -536,7 +525,7 @@ void BooleanReassociationPass::transformAST(CharacterizationMap & C, Graph & G) 
                 // the next variables it produces can be used within the condition. Instead,
                 // we make the loop dependent on the original value of each Next node and
                 // the Next node dependent on the loop.
-                for (Next * var : cast<const While>(stmt)->getVariants()) {
+                for (Var * var : cast<While>(stmt)->getEscaped()) {
                     const Vertex v = makeVertex(TypeId::Var, var, C, S, M, G);
                     assert (in_degree(v, G) == 1);
                     auto e = first(in_edges(v, G));
@@ -573,7 +562,7 @@ void BooleanReassociationPass::resolveNestedUsages(PabloAST * const expr, const 
             PabloBlock * parent = cast<Statement>(user)->getParent(); assert (parent);
             if (LLVM_UNLIKELY(parent != mBlock)) {
                 for (;;) {
-                    if (parent->getPredecessor () == mBlock) {
+                    if (parent->getPredecessor() == mBlock) {
                         Statement * const branch = parent->getBranch();
                         if (LLVM_UNLIKELY(branch != ignoreIfThis)) {
                             // Add in a Var denoting the user of this expression so that it can be updated if expr changes.
@@ -584,9 +573,9 @@ void BooleanReassociationPass::resolveNestedUsages(PabloAST * const expr, const 
                         }
                         break;
                     }
-                    parent = parent->getPredecessor ();
+                    parent = parent->getPredecessor();
                     if (LLVM_UNLIKELY(parent == nullptr)) {
-                        assert (isa<Assign>(expr) || isa<Next>(expr));
+                        assert (isa<Assign>(expr));
                         break;
                     }
                 }
@@ -810,8 +799,8 @@ void generateDistributionGraph(const Graph & G, DistributionGraph & H) {
         if (in_degree(u, G) == 0 && out_degree(u, G) == 0) {
             continue;
         } else if (isDistributive(G[u])) {
-            const TypeId outerTypeId = getType(G[u]);
-            const TypeId innerTypeId = (outerTypeId == TypeId::And) ? TypeId::Or : TypeId::And;
+            TypeId outerTypeId = getType(G[u]);
+            TypeId innerTypeId = (outerTypeId == TypeId::And) ? TypeId::Or : TypeId::And;
             flat_set<Vertex> distributable;
             for (auto e : make_iterator_range(in_edges(u, G))) {
                 const Vertex v = source(e, G);
@@ -854,7 +843,7 @@ void generateDistributionGraph(const Graph & G, DistributionGraph & H) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief recomputeDefinition
  ** ------------------------------------------------------------------------------------------------------------- */
-inline Z3_ast BooleanReassociationPass::computeDefinition(const TypeId typeId, const Vertex u, Graph & G, const bool use_expensive_minimization) const {
+inline Z3_ast BooleanReassociationPass::computeDefinition(TypeId typeId, const Vertex u, Graph & G, const bool use_expensive_minimization) const {
     const unsigned n = in_degree(u, G);
     Z3_ast operands[n];
     unsigned k = 0;
@@ -875,7 +864,7 @@ inline Z3_ast BooleanReassociationPass::computeDefinition(const TypeId typeId, c
  *
  * Apply the distribution law to reduce computations whenever possible.
  ** ------------------------------------------------------------------------------------------------------------- */
-Vertex BooleanReassociationPass::updateIntermediaryDefinition(const TypeId typeId, const Vertex u, VertexMap & M, Graph & G) {
+Vertex BooleanReassociationPass::updateIntermediaryDefinition(TypeId typeId, const Vertex u, VertexMap & M, Graph & G) {
 
     Z3_ast def = computeDefinition(typeId, u, G);
     Z3_ast orig = getDefinition(G[u]); assert (orig);
@@ -913,7 +902,7 @@ Vertex BooleanReassociationPass::updateIntermediaryDefinition(const TypeId typeI
  *
  * Apply the distribution law to reduce computations whenever possible.
  ** ------------------------------------------------------------------------------------------------------------- */
-Vertex BooleanReassociationPass::updateSinkDefinition(const TypeId typeId, const Vertex u, CharacterizationMap & C, VertexMap & M, Graph & G) {
+Vertex BooleanReassociationPass::updateSinkDefinition(TypeId typeId, const Vertex u, CharacterizationMap & C, VertexMap & M, Graph & G) {
 
     Z3_ast const def = computeDefinition(typeId, u, G);
 
@@ -1060,9 +1049,9 @@ bool BooleanReassociationPass::redistributeGraph(CharacterizationMap & C, Vertex
             const VertexSet & intermediary = std::get<1>(set);
             const VertexSet & sinks = std::get<2>(set);
 
-            const TypeId outerTypeId = getType(G[H[sinks.front()]]);
+            TypeId outerTypeId = getType(G[H[sinks.front()]]);
             assert (outerTypeId == TypeId::And || outerTypeId == TypeId::Or);
-            const TypeId innerTypeId = (outerTypeId == TypeId::Or) ? TypeId::And : TypeId::Or;
+            TypeId innerTypeId = (outerTypeId == TypeId::Or) ? TypeId::And : TypeId::Or;
 
             const Vertex x = makeVertex(outerTypeId, nullptr, G);
             const Vertex y = makeVertex(innerTypeId, nullptr, G);
@@ -1117,7 +1106,6 @@ inline bool isNonEscaping(const VertexData & data) {
     // If these are redundant, the Simplifier pass will eliminate them. Trust that they're necessary.
     switch (getType(data)) {
         case TypeId::Assign:
-        case TypeId::Next:
         case TypeId::If:
         case TypeId::While:
         case TypeId::Count:
@@ -1217,7 +1205,7 @@ bool BooleanReassociationPass::contractGraph(VertexMap & M, Graph & G) const {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief factorGraph
  ** ------------------------------------------------------------------------------------------------------------- */
-bool BooleanReassociationPass::factorGraph(const TypeId typeId, Graph & G, std::vector<Vertex> & factors) const {
+bool BooleanReassociationPass::factorGraph(TypeId typeId, Graph & G, std::vector<Vertex> & factors) const {
 
     if (LLVM_UNLIKELY(factors.empty())) {
         return false;
@@ -1587,7 +1575,7 @@ bool BooleanReassociationPass::rewriteAST(Graph & G) {
 /** ------------------------------------------------------------------------------------------------------------- *
 * @brief makeVertex
 ** ------------------------------------------------------------------------------------------------------------- */
-Vertex BooleanReassociationPass::makeVertex(const TypeId typeId, PabloAST * const expr, CharacterizationMap & C, StatementMap & S, VertexMap & M, Graph & G) {
+Vertex BooleanReassociationPass::makeVertex(TypeId typeId, PabloAST * const expr, CharacterizationMap & C, StatementMap & S, VertexMap & M, Graph & G) {
     assert (expr);
     const auto f = S.find(expr);
     if (f != S.end()) {
@@ -1606,7 +1594,7 @@ Vertex BooleanReassociationPass::makeVertex(const TypeId typeId, PabloAST * cons
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief makeVertex
  ** ------------------------------------------------------------------------------------------------------------- */
-Vertex BooleanReassociationPass::makeVertex(const TypeId typeId, PabloAST * const expr, StatementMap & M, Graph & G, Z3_ast node) {
+Vertex BooleanReassociationPass::makeVertex(TypeId typeId, PabloAST * const expr, StatementMap & M, Graph & G, Z3_ast node) {
     assert (expr);
     const auto f = M.find(expr);
     if (f != M.end()) {
@@ -1621,7 +1609,7 @@ Vertex BooleanReassociationPass::makeVertex(const TypeId typeId, PabloAST * cons
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief makeVertex
  ** ------------------------------------------------------------------------------------------------------------- */
-Vertex BooleanReassociationPass::makeVertex(const TypeId typeId, PabloAST * const expr, Graph & G, Z3_ast node) {
+Vertex BooleanReassociationPass::makeVertex(TypeId typeId, PabloAST * const expr, Graph & G, Z3_ast node) {
 //    for (Vertex u : make_iterator_range(vertices(G))) {
 //        if (LLVM_UNLIKELY(in_degree(u, G) == 0 && out_degree(u, G) == 0)) {
 //            std::get<0>(G[u]) = typeId;
