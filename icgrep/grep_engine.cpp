@@ -271,12 +271,12 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool Count
     mIsNameExpression = isNameExpression;
 
     Type * const int32ty = iBuilder->getInt32Ty();
-    Type * const size_ty = iBuilder->getSizeTy();
+    Type * const int64ty = iBuilder->getInt64Ty();
     Type * const int8PtrTy = iBuilder->getInt8PtrTy();
     Type * const voidTy = Type::getVoidTy(M->getContext());    
     Type * const voidPtrTy = TypeBuilder<void *, false>::get(M->getContext());
     Type * const inputType = PointerType::get(ArrayType::get(ArrayType::get(iBuilder->getBitBlockType(), (UTF_16 ? 16 : 8)), 1), addrSpace);
-    Type * const resultTy = CountOnly ? size_ty : iBuilder->getVoidTy();
+    Type * const resultTy = CountOnly ? int64ty : iBuilder->getVoidTy();
 
     Function * mainFn = nullptr;
     Value * inputStream = nullptr;
@@ -313,7 +313,7 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool Count
     } 
 #endif
     if (CPU_Only){
-        mainFn = cast<Function>(M->getOrInsertFunction("Main", resultTy, inputType, size_ty, size_ty, nullptr));    
+        mainFn = cast<Function>(M->getOrInsertFunction("Main", resultTy, inputType, int64ty, int64ty, nullptr));
         mainFn->setCallingConv(CallingConv::C);
         iBuilder->SetInsertPoint(BasicBlock::Create(M->getContext(), "entry", mainFn, 0));
         Function::arg_iterator args = mainFn->arg_begin();
@@ -341,7 +341,7 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool Count
 
     Value * s2pInstance = s2pk.createInstance({});
  
-    Type * pthreadTy = size_ty;
+    Type * pthreadTy = int64ty;
     FunctionType * funVoidPtrVoidTy = FunctionType::get(voidTy, int8PtrTy, false);   
     
     Function * pthreadCreateFunc = cast<Function>(M->getOrInsertFunction("pthread_create",

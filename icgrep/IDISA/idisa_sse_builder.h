@@ -22,7 +22,7 @@ public:
     IDISA_SSE_Builder(Module * m, Type * bitBlockType) : IDISA_Builder(m, bitBlockType) {
     }
     Value * hsimd_signmask(unsigned fw, Value * a) override;
-    ~IDISA_SSE_Builder() {};
+    ~IDISA_SSE_Builder() {}
 
 };
 
@@ -36,7 +36,7 @@ public:
     Value * hsimd_packl(unsigned fw, Value * a, Value * b) override;
     std::pair<Value *, Value *> bitblock_advance(Value * a, Value * shiftin, unsigned shift) override;
 
-    ~IDISA_SSE2_Builder() {};
+    ~IDISA_SSE2_Builder() {}
 
 };
 

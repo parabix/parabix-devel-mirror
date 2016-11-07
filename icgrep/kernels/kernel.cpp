@@ -83,7 +83,7 @@ void KernelBuilder::prepareKernel() {
 std::unique_ptr<Module> KernelBuilder::createKernelModule(std::vector<StreamSetBuffer *> input_buffers, std::vector<StreamSetBuffer *> output_buffers) {
     Module * saveModule = iBuilder->getModule();
     auto savePoint = iBuilder->saveIP();
-    std::unique_ptr<Module> theModule = make_unique<Module>(mKernelName + "_" + iBuilder->getBitBlockTypeName(), iBuilder->getContext());
+    auto theModule = make_unique<Module>(mKernelName + "_" + iBuilder->getBitBlockTypeName(), iBuilder->getContext());
     Module * m = theModule.get();
     iBuilder->setModule(m);
     generateKernel(input_buffers, output_buffers);
