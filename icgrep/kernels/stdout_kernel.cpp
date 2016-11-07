@@ -5,17 +5,18 @@
 #include <kernels/stdout_kernel.h>
 #include <kernels/kernel.h>
 #include <IDISA/idisa_builder.h>
-#include <llvm/IR/TypeBuilder.h>
 
 namespace kernel {
 
-static Function * create_write(Module * const mod) {
+static Function * create_write(Module * const mod, IDISA::IDISA_Builder * builder) {
     Function * write = mod->getFunction("write");
     if (write == nullptr) {
-        FunctionType *write_type =
-        TypeBuilder<long(int, char *, long), false>::get(mod->getContext());
-        write = cast<Function>(mod->getOrInsertFunction("write", write_type,
-                                                         AttributeSet().addAttribute(mod->getContext(), 2U, Attribute::NoAlias)));
+        IntegerType * sizeTy = builder->getSizeTy();
+        IntegerType * int32Ty = builder->getInt32Ty();
+        PointerType * int8PtrTy = builder->getInt8PtrTy();
+        write = cast<Function>(mod->getOrInsertFunction("write",
+                                 AttributeSet().addAttribute(mod->getContext(), 2U, Attribute::NoAlias),
+                                 sizeTy, int32Ty, int8PtrTy, sizeTy, nullptr));
     }
     return write;
 }
@@ -39,7 +40,7 @@ void stdOutKernel::generateDoBlockMethod() {
 void stdOutKernel::generateDoSegmentMethod() {
     auto savePoint = iBuilder->saveIP();
     Module * m = iBuilder->getModule();
-    Function * writefn = create_write(m);
+    Function * writefn = create_write(m, iBuilder);
     Function * doSegmentFunction = m->getFunction(mKernelName + doSegment_suffix);
     Type * i8PtrTy = iBuilder->getInt8PtrTy();
     
@@ -105,7 +106,7 @@ void stdOutKernel::generateDoSegmentMethod() {
 void stdOutKernel::generateFinalBlockMethod() {
     auto savePoint = iBuilder->saveIP();
     Module * m = iBuilder->getModule();
-    Function * writefn = create_write(m);
+    Function * writefn = create_write(m, iBuilder);
     Function * finalBlockFunction = m->getFunction(mKernelName + finalBlock_suffix);
     Type * i8PtrTy = iBuilder->getInt8PtrTy();
     

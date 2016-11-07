@@ -10,7 +10,6 @@
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/Intrinsics.h>
 #include <llvm/IR/Function.h>
-#include <llvm/IR/TypeBuilder.h>
 #include <llvm/Support/raw_ostream.h>
 #include <iostream>
 
@@ -33,13 +32,13 @@ std::string IDISA_Builder::getBitBlockTypeName() {
 }
 
     
-static Function * create_printf(Module * const mod) {
+static Function * create_printf(Module * const mod, IDISA_Builder * builder) {
     Function * printf = mod->getFunction("printf");
     if (printf == nullptr) {
-        FunctionType *printf_type =
-            TypeBuilder<int(char *, ...), false>::get(mod->getContext());
-        printf = cast<Function>(mod->getOrInsertFunction("printf", printf_type,
-            AttributeSet().addAttribute(mod->getContext(), 1U, Attribute::NoAlias)));
+        printf = cast<Function>(mod->getOrInsertFunction("printf"
+                                , FunctionType::get(builder->getInt32Ty(), {builder->getInt8PtrTy()}, true)
+                                , AttributeSet().addAttribute(mod->getContext(), 1U, Attribute::NoAlias)));
+
     }
     return printf;
 }
@@ -71,7 +70,7 @@ void IDISA_Builder::CallPrintRegister(const std::string & name, Value * const va
         for(unsigned i = (mBitBlockWidth / 8); i != 0; --i) {
             args.push_back(builder.CreateExtractElement(value, builder.getInt32(i - 1)));
         }
-        builder.CreateCall(create_printf(mMod), args);
+        builder.CreateCall(create_printf(mMod, this), args);
         builder.CreateRetVoid();
 
         printRegister = function;
@@ -98,7 +97,7 @@ void IDISA_Builder::CallPrintInt(const std::string & name, Value * const value) 
         Value * value = &*arg;
         value->setName("value");
         args.push_back(value);
-        builder.CreateCall(create_printf(mMod), args);
+        builder.CreateCall(create_printf(mMod, this), args);
         builder.CreateRetVoid();
 
         printRegister = function;

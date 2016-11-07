@@ -25,6 +25,7 @@ public:
     : IRBuilder<>(m->getContext())
     , mMod(m)
     , mCacheLineAlignment(CacheAlignment)
+    , mIsArch32Bit(Triple(llvm::sys::getProcessTriple()).isArch32Bit())
     , mBitBlockType(bitBlockType)
     , mBitBlockWidth(bitBlockType->isIntegerTy() ? cast<IntegerType>(bitBlockType)->getIntegerBitWidth() : cast<VectorType>(bitBlockType)->getBitWidth())
     , mStride(mBitBlockWidth)
@@ -140,7 +141,13 @@ public:
     Value * simd_not(Value * a);
     Value * fwCast(unsigned fw, Value * a);
     
-    inline llvm::Type * getSizeTy() {return Triple(llvm::sys::getProcessTriple()).isArch32Bit() ? getInt32Ty() : getInt64Ty();}
+    inline bool isArch32Bit() const {
+        return mIsArch32Bit;
+    }
+
+    inline llvm::IntegerType * getSizeTy() {
+        return isArch32Bit() ? getInt32Ty() : getInt64Ty();
+    }
     
     inline llvm::AllocaInst * CreateCacheAlignedAlloca(llvm::Type * Ty, llvm::Value * ArraySize = nullptr) {
         llvm::AllocaInst * instr = CreateAlloca(Ty, ArraySize);
@@ -154,12 +161,14 @@ public:
 protected:
     Module * mMod;
     unsigned mCacheLineAlignment;
+    const bool mIsArch32Bit;
     Type * mBitBlockType;
     unsigned mBitBlockWidth;
     unsigned mStride;
     Constant * mZeroInitializer;
     Constant * mOneInitializer;
     Constant * mPrintRegisterFunction;
+
     
     VectorType * fwVectorType(unsigned fw);
 };

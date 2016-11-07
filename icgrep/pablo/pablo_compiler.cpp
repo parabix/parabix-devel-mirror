@@ -386,8 +386,9 @@ void PabloCompiler::compileStatement(const Statement * stmt) {
 
                 if (isa<Count>(cast<Assign>(stmt)->getValue())) {
                     Value * count = iBuilder->CreateLoad(ptr);
-                    Value * accum = iBuilder->CreateAdd(value, count);
-                    iBuilder->CreateStore(accum, ptr);
+                    value = iBuilder->CreateTruncOrBitCast(value, count->getType());
+                    value = iBuilder->CreateAdd(value, count);
+                    iBuilder->CreateStore(value, ptr);
                 } else {
                     iBuilder->CreateBlockAlignedStore(value, ptr);
                 }
@@ -487,9 +488,9 @@ void PabloCompiler::compileStatement(const Statement * stmt) {
         }
 
         mMarkerMap[expr] = value;
-
         if (DebugOptionIsSet(DumpTrace)) {
-            iBuilder->CallPrintRegister(stmt->getName()->to_string(), value);
+            assert (expr->getName());
+            iBuilder->CallPrintRegister(expr->getName()->to_string(), value);
         }
     }
 }

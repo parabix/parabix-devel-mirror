@@ -144,14 +144,19 @@ void LinearCopybackBuffer::setConsumerPos(Value * bufferStructPtr, Value * new_c
     Type * const i8 = iBuilder->getInt8Ty();
     Type * const i32 = iBuilder->getInt32Ty();
     Type * const i8_ptr = PointerType::get(i8, mAddrSpace);
+
+
     Module * M = iBuilder->getModule();
-    Function * memmoveFunc = cast<Function>(M->getOrInsertFunction("llvm.memmove.p0i8.p0i8.i" + std::to_string(sizeof(size_t) * 8), 
-                                                                  iBuilder->getVoidTy(), i8_ptr, i8_ptr, iBuilder->getSizeTy(), i32, i1, nullptr));
+
+    IntegerType * sizeTy = iBuilder->getSizeTy();
+
+    Function * memmoveFunc = cast<Function>(M->getOrInsertFunction("llvm.memmove.p0i8.p0i8.i" + std::to_string(sizeTy->getBitWidth()),
+                                                                  iBuilder->getVoidTy(), i8_ptr, i8_ptr, sizeTy, i32, i1, nullptr));
     Function * current = iBuilder->GetInsertBlock()->getParent();
     BasicBlock * copyBackBody = BasicBlock::Create(M->getContext(), "copy_back", current, 0);
     BasicBlock * setConsumerPosExit = BasicBlock::Create(M->getContext(), "setConsumerPos_done", current, 0);
-    Constant * blockWidth = ConstantInt::get(iBuilder->getSizeTy(), iBuilder->getStride());
-    Constant * one = ConstantInt::get(iBuilder->getSizeTy(), 1);
+    Constant * blockWidth = ConstantInt::get(sizeTy, iBuilder->getStride());
+    Constant * one = ConstantInt::get(sizeTy, 1);
     Value * consumerPos_ptr = iBuilder->CreateGEP(bufferStructPtr, {iBuilder->getInt32(0), iBuilder->getInt32(iConsumer_pos)});
     Value * consumerPos = iBuilder->CreateLoad(consumerPos_ptr);
     Value * consumerBlock = iBuilder->CreateUDiv(consumerPos, blockWidth);
@@ -175,16 +180,16 @@ void LinearCopybackBuffer::setConsumerPos(Value * bufferStructPtr, Value * new_c
 
     DataLayout dl(iBuilder->getModule());
 
-    Constant * blockBytes = ConstantInt::get(iBuilder->getSizeTy(), dl.getTypeAllocSize(mStreamSetType) * iBuilder->getStride());
+    Constant * blockBytes = ConstantInt::get(sizeTy, dl.getTypeAllocSize(mStreamSetType) * iBuilder->getStride());
     Value * copyLength = iBuilder->CreateMul(copyBlocks, blockBytes);
     //iBuilder->CallPrintInt("memmove copyLength", copyLength);
     // Must copy back one full block for each of the streams in the stream set.
     Value * handle = iBuilder->CreateGEP(bufferStructPtr, {iBuilder->getInt32(0), iBuilder->getInt32(iBuffer_ptr)});
     Value * bufferPtr = iBuilder->CreateLoad(handle);
-    //iBuilder->CallPrintInt("memmove bufferPtr", iBuilder->CreatePtrToInt(bufferPtr, iBuilder->getSizeTy()));
+    //iBuilder->CallPrintInt("memmove bufferPtr", iBuilder->CreatePtrToInt(bufferPtr, sizeTy));
 
     Value * copyFrom = iBuilder->CreateGEP(bufferPtr, {iBuilder->CreateSub(new_consumer_block, consumerBlock)});
-    //iBuilder->CallPrintInt("memmove copyFrom", iBuilder->CreatePtrToInt(copyFrom, iBuilder->getSizeTy()));
+    //iBuilder->CallPrintInt("memmove copyFrom", iBuilder->CreatePtrToInt(copyFrom, sizeTy));
     Value * alignment = ConstantInt::get(iBuilder->getInt32Ty(), iBuilder->getBitBlockWidth()/8);
     
     iBuilder->CreateCall(memmoveFunc, {iBuilder->CreateBitCast(bufferPtr, i8_ptr), iBuilder->CreateBitCast(copyFrom, i8_ptr), copyLength, alignment, ConstantInt::getNullValue(i1)});

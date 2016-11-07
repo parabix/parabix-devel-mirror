@@ -23,7 +23,7 @@ public:
                   {Binding{parabix::StreamSetType(iBuilder,dist+1, parabix::i1), "matchResults"}},
                   {}, {}, {}, {}),
     mEditDistance(dist),
-    mScanwordBitWidth(Triple(llvm::sys::getProcessTriple()).isArch32Bit() ? 32 : 64) {}
+    mScanwordBitWidth(iBuilder->getSizeTy()->getBitWidth()) {}
         
 private:
     void generateDoBlockMethod() override;

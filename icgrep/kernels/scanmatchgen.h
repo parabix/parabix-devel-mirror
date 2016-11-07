@@ -16,9 +16,9 @@ namespace IDISA { class IDISA_Builder; }
 
 namespace kernel {
     
-class scanMatchKernel : public KernelBuilder {
+class ScanMatchKernel : public KernelBuilder {
 public:
-    scanMatchKernel(IDISA::IDISA_Builder * iBuilder, bool isNameExpression) :
+    ScanMatchKernel(IDISA::IDISA_Builder * iBuilder, bool isNameExpression) :
     KernelBuilder(iBuilder, "scanMatch",
                   {Binding{parabix::StreamSetType(iBuilder,2, 1), "matchResults"}},
                     {}, 
@@ -26,14 +26,12 @@ public:
                     {}, 
                     {Binding{iBuilder->getSizeTy(), "BlockNo"}, Binding{iBuilder->getSizeTy(), "LineStart"}, Binding{iBuilder->getSizeTy(), "LineNum"}}),
 
-    mScanwordBitWidth(Triple(llvm::sys::getProcessTriple()).isArch32Bit() ? 32 : 64),
     mIsNameExpression(isNameExpression) {}
         
 private:
     void generateDoBlockMethod() override;
     llvm::Function * generateScanWordRoutine(llvm::Module * m);
         
-    unsigned mScanwordBitWidth;
     bool mIsNameExpression;
 };
 }

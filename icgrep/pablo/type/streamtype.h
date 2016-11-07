@@ -48,7 +48,7 @@ inline llvm::Type * getStreamTy(const uint64_t FieldWidth = 1, const uint64_t Nu
     return ty;
 }
 
-inline llvm::Type * getScalarTy(const uint64_t FieldWidth = 64) {
+inline llvm::Type * getScalarTy(const uint64_t FieldWidth = 0) {
     return llvm::Type::getIntNTy(llvm::getGlobalContext(), FieldWidth);
 }
 

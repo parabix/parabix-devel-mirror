@@ -39,12 +39,13 @@ Value * generateResetLowestBit(IDISA::IDISA_Builder * iBuilder, Value * bits) {
 }
 
         
-void scanMatchKernel::generateDoBlockMethod() {
+void ScanMatchKernel::generateDoBlockMethod() {
     auto savePoint = iBuilder->saveIP();
     Module * m = iBuilder->getModule();
     Function * scanWordFunction = generateScanWordRoutine(m);
-    const unsigned fieldCount = iBuilder->getBitBlockWidth() / mScanwordBitWidth;
-    Type * T = iBuilder->getIntNTy(mScanwordBitWidth);
+    IntegerType * T = iBuilder->getSizeTy();
+    const unsigned fieldCount = iBuilder->getBitBlockWidth() / T->getBitWidth();
+
     Type * scanwordVectorType =  VectorType::get(T, fieldCount);
 
     Function * doBlockFunction = m->getFunction(mKernelName + doBlock_suffix);
@@ -65,7 +66,7 @@ void scanMatchKernel::generateDoBlockMethod() {
         Value * matchWord = iBuilder->CreateExtractElement(matchWordVector, ConstantInt::get(T, i));
         Value * recordBreaksWord = iBuilder->CreateExtractElement(breakWordVector, ConstantInt::get(T, i));
         Value * wordResult = iBuilder->CreateCall(scanWordFunction, {kernelStuctParam, matchWord, recordBreaksWord, scanwordPos, recordStart, recordNum});
-        scanwordPos = iBuilder->CreateAdd(scanwordPos, ConstantInt::get(T, mScanwordBitWidth));
+        scanwordPos = iBuilder->CreateAdd(scanwordPos, ConstantInt::get(T, T->getBitWidth()));
         recordStart = iBuilder->CreateExtractValue(wordResult, std::vector<unsigned>({0}));
         recordNum = iBuilder->CreateExtractValue(wordResult, std::vector<unsigned>({1}));
     }
@@ -76,14 +77,15 @@ void scanMatchKernel::generateDoBlockMethod() {
 }
 
     
-Function * scanMatchKernel::generateScanWordRoutine(Module * m) {
+Function * ScanMatchKernel::generateScanWordRoutine(Module * m) {
     Function * function = m->getFunction("scan_matches_in_scanword");
     if (LLVM_UNLIKELY(function != nullptr)) {
         return function;
     }
     
     LLVMContext & ctxt = m->getContext();
-    Type * T = iBuilder->getIntNTy(mScanwordBitWidth);
+
+    IntegerType * T = iBuilder->getSizeTy();
     Type * S = PointerType::get(iBuilder->getIntNTy(8), 0);
     Type * returnType = StructType::get(ctxt, std::vector<Type *>({T, T}));
     FunctionType * functionType = FunctionType::get(returnType, std::vector<Type *>({PointerType::get(mKernelStateType, 0), T, T, T, T, T}), false);
@@ -173,7 +175,7 @@ Function * scanMatchKernel::generateScanWordRoutine(Module * m) {
     iBuilder->SetInsertPoint(prior_breaks_block);
     Value * matchRecordNum = iBuilder->CreateAdd(generatePopcount(iBuilder, prior_breaks), recordNum_phi);
     Value * reverseDistance = generateCountReverseZeroes(iBuilder, prior_breaks);
-    Value * width = ConstantInt::get(T, mScanwordBitWidth);
+    Value * width = ConstantInt::get(T, T->getBitWidth());
     Value * matchRecordStart = iBuilder->CreateAdd(scanwordPos, iBuilder->CreateSub(width, reverseDistance));
     iBuilder->CreateBr(loop_final_block);
     

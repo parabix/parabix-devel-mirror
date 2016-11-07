@@ -234,7 +234,7 @@ void RE_Compiler::finalizeMatchResult(MarkerType match_result, bool InvertMatche
     }
     PabloAST * matches = mPB.createAnd(match_follow, mLineBreak, "matches");
     if (mCountOnly) {
-        Var * const output = mFunction.addResult("matchedLineCount", getScalarTy(64));
+        Var * const output = mFunction.addResult("matchedLineCount", getScalarTy());
         PabloBuilder nestedCount = PabloBuilder::Create(mPB);
         mPB.createIf(matches, nestedCount);
         nestedCount.createAssign(output, nestedCount.createCount(matches));

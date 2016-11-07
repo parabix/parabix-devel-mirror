@@ -27,7 +27,7 @@ public:
     }
 protected:
     explicit Count(PabloAST * expr, const String * counter)
-        : Statement(ClassTypeId::Count, getScalarTy(64), {expr}, counter)
+        : Statement(ClassTypeId::Count, getScalarTy(), {expr}, counter)
     {
 
     }

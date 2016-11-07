@@ -23,15 +23,19 @@ PabloKernel::PabloKernel(IDISA::IDISA_Builder * builder,
 
 {
     for (unsigned i = 0; i < function->getNumOfParameters(); ++i) {
-        const auto param = function->getParameter(i);
-        Type * type = param->getType();
+        const auto var = function->getParameter(i);
+        Type * type = var->getType();
         bool scalar = false;
         if (isa<StreamType>(type)) {
             type = cast<StreamType>(type)->resolveType(builder);
         } else if (type->isSingleValueType()) {
+            if (isa<IntegerType>(type) && cast<IntegerType>(type)->getBitWidth() == 0) {
+                type = builder->getSizeTy();
+            }
             scalar = true;
         }
-        std::string name = param->getName()->to_string();
+
+        std::string name = var->getName()->to_string();
         if (scalar) {
             mScalarInputs.emplace_back(type, std::move(name));
         } else {
@@ -40,15 +44,19 @@ PabloKernel::PabloKernel(IDISA::IDISA_Builder * builder,
     }
 
     for (unsigned i = 0; i < function->getNumOfResults(); ++i) {
-        const auto param = function->getResult(i);
-        Type * type = param->getType();
+        const auto var = function->getResult(i);
+        Type * type = var->getType();
         bool scalar = false;
         if (isa<StreamType>(type)) {
             type = cast<StreamType>(type)->resolveType(builder);
         } else if (type->isSingleValueType()) {
+            if (isa<IntegerType>(type) && cast<IntegerType>(type)->getBitWidth() == 0) {
+                type = builder->getSizeTy();
+            }
             scalar = true;
         }
-        std::string name = param->getName()->to_string();
+
+        std::string name = var->getName()->to_string();
         if (scalar) {
             mScalarOutputs.emplace_back(type, std::move(name));
         } else {

@@ -23,7 +23,7 @@ public:
     }
 protected:
     Integer(Type value) noexcept
-    : PabloAST(ClassTypeId::Integer, getScalarTy(64), nullptr)
+    : PabloAST(ClassTypeId::Integer, getScalarTy(), nullptr)
     , mValue(value)
     {
 
