@@ -209,6 +209,11 @@ add_test(
   WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA
   COMMAND ./run_abc ${CMAKE_BINARY_DIR}/icgrep)
 
+add_test(
+  NAME u8u16_test
+  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA/u8u16
+  COMMAND ./run_all ${CMAKE_BINARY_DIR}/u8u16)
+
 add_custom_target (abc_test
   COMMAND python2 abc_testgen.py
   WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA)
