@@ -478,9 +478,11 @@ const std::vector<std::string> & GrepEngine::grepPropertyValues(const std::strin
     setParsedPropertyValues();
 
     std::string str = UCD::getPropertyValueGrepString(propertyName);
-
-    //use const_cast to workaround const input
-    mGrepFunction(const_cast<char*>(str.c_str()), str.size(), 0);
+    char* grepInput = nullptr;
+    posix_memalign( (void**)&grepInput, 32, str.size() * sizeof(char));
+    strncpy(grepInput, str.c_str(), str.size());
+    mGrepFunction(grepInput, str.size(), 0);
+    free(grepInput);
 
     return getParsedProeprtyValues();
 }
