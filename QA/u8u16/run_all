@@ -3,7 +3,7 @@
 # Robert D. Cameron
 #
 # Usage: ./run_all test_program
-# Example ./run_all ../u8u16_mmx
+# Example ./run_all ../u8u16
 #
 test_dir=`echo "$0" | sed "s/[^\/]*$//"`
 
@@ -25,7 +25,10 @@ do
    $test_program $input_directory/$fbase >$output_directory/Files/$fbase 2>$output_directory/Messages/$fbase
 done
 
-echo "diff -q ExpectedOutput/Files TestOutput/Files"
-diff -q ExpectedOutput/Files TestOutput/Files
-echo "diff ExpectedOutput/Messages TestOutput/Messages"
-diff ExpectedOutput/Messages TestOutput/Messages
+if diff -q ExpectedOutput/Files TestOutput/Files
+  then
+    diff ExpectedOutput/Messages TestOutput/Messages
+  else
+    exit 2
+fi
+
