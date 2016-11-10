@@ -8,13 +8,14 @@
 #include "cuda.h"
 
 #define GROUPTHREADS 64
+#define GROUPBLOCKS 64
 
 void checkCudaErrors(CUresult err) {
   assert(err == CUDA_SUCCESS);
 }
 
 /// main - Program entry point
-ulong * RunPTX(std::string PTXFilename, char * fileBuffer, ulong filesize, bool CountOnly) {
+ulong * RunPTX(std::string PTXFilename, char * fileBuffer, ulong filesize, const char * patternStr, unsigned patternLen) {
   
   CUdevice    device;
   CUmodule    cudaModule;
@@ -58,38 +59,38 @@ ulong * RunPTX(std::string PTXFilename, char * fileBuffer, ulong filesize, bool 
 
   // Device data
   CUdeviceptr devBufferInput;
-  CUdeviceptr devBufferSize;
+  CUdeviceptr devInputSize;
+  CUdeviceptr devPatterns;
   CUdeviceptr devBufferOutput;
+  CUdeviceptr devStrides;
 
-  int groupSize = GROUPTHREADS * sizeof(ulong) * 8;
-  int groups = filesize/groupSize + 1;
-  int bufferSize = groups * groupSize;
-  int outputSize = 0;
+  int strideSize = GROUPTHREADS * sizeof(ulong) * 4;
+  int strides = filesize/(strideSize * 2) + 1;
+  int bufferSize = strides * strideSize;
+  int outputSize = sizeof(ulong) * GROUPTHREADS * strides * 3 * GROUPBLOCKS;
 
   checkCudaErrors(cuMemAlloc(&devBufferInput, bufferSize));
-  checkCudaErrors(cuMemAlloc(&devBufferSize, sizeof(ulong)));
-  if (CountOnly){
-    outputSize = sizeof(ulong) * GROUPTHREADS;
-  }
-  else{
-    outputSize = sizeof(ulong) * 2 * GROUPTHREADS * groups;
-  }
-
+  checkCudaErrors(cuMemAlloc(&devInputSize, sizeof(ulong)));
+  checkCudaErrors(cuMemAlloc(&devPatterns, patternLen));
   checkCudaErrors(cuMemAlloc(&devBufferOutput, outputSize));
+  // checkCudaErrors(cuMemsetD8(devBufferOutput, 0, outputSize));
+  checkCudaErrors(cuMemAlloc(&devStrides, sizeof(int)));
 
   //Copy from host to device
   checkCudaErrors(cuMemcpyHtoD(devBufferInput, fileBuffer, bufferSize));
-  checkCudaErrors(cuMemcpyHtoD(devBufferSize, &filesize, sizeof(ulong)));
+  checkCudaErrors(cuMemcpyHtoD(devInputSize, &filesize, sizeof(ulong)));
+  checkCudaErrors(cuMemcpyHtoD(devPatterns, patternStr, patternLen));
+  checkCudaErrors(cuMemcpyHtoD(devStrides, &strides, sizeof(int)));
 
   unsigned blockSizeX = GROUPTHREADS;
   unsigned blockSizeY = 1;
   unsigned blockSizeZ = 1;
-  unsigned gridSizeX  = 1;
+  unsigned gridSizeX  = GROUPBLOCKS;
   unsigned gridSizeY  = 1;
   unsigned gridSizeZ  = 1;
 
   // Kernel parameters
-  void *KernelParams[] = { &devBufferInput, &devBufferSize, &devBufferOutput};
+  void *KernelParams[] = { &devBufferInput, &devInputSize, &devPatterns, &devBufferOutput, &devStrides};
 
   // std::cout << "Launching kernel\n";
 
@@ -100,26 +101,16 @@ ulong * RunPTX(std::string PTXFilename, char * fileBuffer, ulong filesize, bool 
   // std::cout << "kernel success.\n";
   // Retrieve device data
 
-  ulong * matchRslt;
-  int ret = posix_memalign((void**)&matchRslt, 32, outputSize);
-  if (ret) {
-    std::cerr << "Cannot allocate memory for output.\n";
-    exit(-1);
-  }
+  ulong * matchRslt = (ulong *) malloc(outputSize);
   checkCudaErrors(cuMemcpyDtoH(matchRslt, devBufferOutput, outputSize));
-  if (CountOnly){
-    int count = 0;
-    for (unsigned i = 0; i < GROUPTHREADS; ++i) {
-      count += matchRslt[i];
-    }
-    std::cout << count << "\n";
-  }
 
 
   // Clean-up
   checkCudaErrors(cuMemFree(devBufferInput));
-  checkCudaErrors(cuMemFree(devBufferSize));
+  checkCudaErrors(cuMemFree(devInputSize));
   checkCudaErrors(cuMemFree(devBufferOutput));
+  checkCudaErrors(cuMemFree(devPatterns));
+  checkCudaErrors(cuMemFree(devStrides));
   checkCudaErrors(cuModuleUnload(cudaModule));
   checkCudaErrors(cuCtxDestroy(context));
 
