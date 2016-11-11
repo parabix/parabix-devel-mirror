@@ -424,7 +424,7 @@ void editd(editdFunctionType fn_ptr, char * inputStream, int size) {
 #define GROUPTHREADS 64
 #define GROUPBLOCKS 64
 
-void editdGPUCodeGen(){  
+void editdGPUCodeGen(unsigned patternLen){  
     LLVMContext TheContext;
     Module * M = new Module("editd-gpu", TheContext);
     IDISA::IDISA_Builder * iBuilder = IDISA::GetIDISA_GPU_Builder(M);
@@ -444,7 +444,6 @@ void editdGPUCodeGen(){
     ExternalFileBuffer CCStream(iBuilder, StreamSetType(iBuilder, 4, 1), addrSpace);
     ExternalFileBuffer ResultStream(iBuilder, StreamSetType(iBuilder, editDistance+1, 1), addrSpace);
 
-    const unsigned patternLen = 19;
     kernel::editdGPUKernel editdk(iBuilder, editDistance, patternLen); 
     editdk.generateKernel({&CCStream}, {&ResultStream});
 
@@ -511,7 +510,7 @@ editdFunctionType editdScanCPUCodeGen() {
     Type * mBitBlockType = iBuilder->getBitBlockType();
     Type * const size_ty = iBuilder->getSizeTy();
     Type * const voidTy = Type::getVoidTy(M->getContext());
-    Type * const inputType = PointerType::get(ArrayType::get(mBitBlockType, 4), 0);
+    Type * const inputType = PointerType::get(ArrayType::get(mBitBlockType, editDistance+1), 0);
 
     ExternalFileBuffer MatchResults(iBuilder, StreamSetType(iBuilder, editDistance+1, 1));
     kernel::editdScanKernel editdScanK(iBuilder, editDistance);
@@ -572,17 +571,18 @@ int main(int argc, char *argv[]) {
 
 #ifdef CUDA_ENABLED  
     setNVPTXOption();    
-    if(codegen::NVPTX){   
-        editdGPUCodeGen();
+    if(codegen::NVPTX){
 
         std::ifstream t(PatternFilename);
         if (!t.is_open()) {
             std::cerr << "Error: cannot open " << PatternFilename << " for processing. Skipped.\n";
             exit(-1);
         }  
-        std::string pattern_str((std::istreambuf_iterator<char>(t)), std::istreambuf_iterator<char>());
+        std::string patterns((std::istreambuf_iterator<char>(t)), std::istreambuf_iterator<char>());
 
-        ulong * rslt = RunPTX(PTXFilename, chStream, size, pattern_str.c_str(), pattern_str.length());
+        editdGPUCodeGen(patterns.length()/GROUPTHREADS - 1);
+
+        ulong * rslt = RunPTX(PTXFilename, chStream, size, patterns.c_str(), patterns.length(), editDistance);
 
         editdFunctionType editd_ptr = editdScanCPUCodeGen();
 

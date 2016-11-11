@@ -15,7 +15,7 @@ void checkCudaErrors(CUresult err) {
 }
 
 /// main - Program entry point
-ulong * RunPTX(std::string PTXFilename, char * fileBuffer, ulong filesize, const char * patternStr, unsigned patternLen) {
+ulong * RunPTX(std::string PTXFilename, char * fileBuffer, ulong filesize, const char * patternStr, unsigned patternLen, int dist) {
   
   CUdevice    device;
   CUmodule    cudaModule;
@@ -67,7 +67,7 @@ ulong * RunPTX(std::string PTXFilename, char * fileBuffer, ulong filesize, const
   int strideSize = GROUPTHREADS * sizeof(ulong) * 4;
   int strides = filesize/(strideSize * 2) + 1;
   int bufferSize = strides * strideSize;
-  int outputSize = sizeof(ulong) * GROUPTHREADS * strides * 3 * GROUPBLOCKS;
+  int outputSize = sizeof(ulong) * GROUPTHREADS * strides * (dist + 1) * GROUPBLOCKS;
 
   checkCudaErrors(cuMemAlloc(&devBufferInput, bufferSize));
   checkCudaErrors(cuMemAlloc(&devInputSize, sizeof(ulong)));
@@ -94,13 +94,26 @@ ulong * RunPTX(std::string PTXFilename, char * fileBuffer, ulong filesize, const
 
   // std::cout << "Launching kernel\n";
 
+  CUevent start;
+  CUevent stop;
+  float elapsedTime;
+
+  cuEventCreate(&start, CU_EVENT_BLOCKING_SYNC);
+  cuEventRecord(start,0);
+
   // Kernel launch
   checkCudaErrors(cuLaunchKernel(function, gridSizeX, gridSizeY, gridSizeZ,
                                  blockSizeX, blockSizeY, blockSizeZ,
                                  0, NULL, KernelParams, NULL));
-  // std::cout << "kernel success.\n";
-  // Retrieve device data
 
+  cuEventCreate(&stop, CU_EVENT_BLOCKING_SYNC);
+  cuEventRecord(stop,0);
+  cuEventSynchronize(stop);
+
+  cuEventElapsedTime(&elapsedTime, start, stop);
+  printf("Elapsed time : %f ms\n" ,elapsedTime);
+
+  // Retrieve device data
   ulong * matchRslt = (ulong *) malloc(outputSize);
   checkCudaErrors(cuMemcpyDtoH(matchRslt, devBufferOutput, outputSize));
 
