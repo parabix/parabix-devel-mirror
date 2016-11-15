@@ -141,7 +141,7 @@ void wrapped_report_pos(size_t match_pos, int dist) {
         curMatch.pos = match_pos;
         curMatch.dist = dist;
         matchList.push_back(curMatch);
-        std::cout << "pos: " << match_pos << ", dist:" << dist << "\n";
+        // std::cout << "pos: " << match_pos << ", dist:" << dist << "\n";
     }
 
 }
@@ -500,6 +500,77 @@ void editdGPUCodeGen(unsigned patternLen){
 
 }
 
+void mergeGPUCodeGen(){
+        LLVMContext TheContext;
+    Module * M = new Module("editd-gpu", TheContext);
+    IDISA::IDISA_Builder * iBuilder = IDISA::GetIDISA_GPU_Builder(M);
+    M->setDataLayout("e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v16:16:16-v32:32:32-v64:64:64-v128:128:128-n16:32:64");
+    M->setTargetTriple("nvptx64-nvidia-cuda");
+
+    Type * const mBitBlockType = iBuilder->getBitBlockType();
+    Type * const int32ty = iBuilder->getInt32Ty();
+    Type * const voidTy = Type::getVoidTy(M->getContext());
+    Type * const resultTy = PointerType::get(ArrayType::get(mBitBlockType, editDistance+1), 1);
+    Type * const stridesTy = PointerType::get(int32ty, 1);
+
+    Function * const main = cast<Function>(M->getOrInsertFunction("mergeResult", voidTy, resultTy, stridesTy, nullptr));
+    main->setCallingConv(CallingConv::C);
+    Function::arg_iterator args = main->arg_begin();
+    
+    Value * const resultStream = &*(args++);
+    resultStream->setName("resultStream");
+    Value * const stridesPtr = &*(args++);
+    stridesPtr->setName("stridesPtr");
+
+    BasicBlock * entryBlock = BasicBlock::Create(iBuilder->getContext(), "entryBlock", main, 0);
+    BasicBlock * strideLoopCond = BasicBlock::Create(iBuilder->getContext(), "strideLoopCond", main, 0);
+    BasicBlock * strideLoopBody = BasicBlock::Create(iBuilder->getContext(), "strideLoopBody", main, 0);
+    BasicBlock * stridesDone = BasicBlock::Create(iBuilder->getContext(), "stridesDone", main, 0);
+    
+    iBuilder->SetInsertPoint(entryBlock);
+
+    Function * tidFunc = M->getFunction("llvm.nvvm.read.ptx.sreg.tid.x");
+    Value * tid = iBuilder->CreateCall(tidFunc);
+
+    Function * bidFunc = cast<Function>(M->getOrInsertFunction("llvm.nvvm.read.ptx.sreg.ctaid.x", int32ty, nullptr));
+    Value * bid = iBuilder->CreateCall(bidFunc);
+    Value * strides = iBuilder->CreateLoad(stridesPtr);
+    Value * strideBlocks = ConstantInt::get(int32ty, iBuilder->getStride() / iBuilder->getBitBlockWidth());
+    Value * outputBlocks = iBuilder->CreateMul(strides, strideBlocks);
+    Value * resultStreamPtr = iBuilder->CreateGEP(resultStream, tid);
+
+    iBuilder->CreateBr(strideLoopCond);
+    iBuilder->SetInsertPoint(strideLoopCond);
+    PHINode * strideNo = iBuilder->CreatePHI(int32ty, 2, "strideNo");
+    strideNo->addIncoming(ConstantInt::get(int32ty, 0), entryBlock);
+    Value * notDone = iBuilder->CreateICmpULT(strideNo, strides);
+    iBuilder->CreateCondBr(notDone, strideLoopBody, stridesDone);
+ 
+    iBuilder->SetInsertPoint(strideLoopBody);
+    Value * myResultStreamPtr = iBuilder->CreateGEP(resultStreamPtr, {iBuilder->CreateMul(strideBlocks, strideNo)});
+    Value * myResultStream = iBuilder->CreateLoad(iBuilder->CreateGEP(myResultStreamPtr, {iBuilder->getInt32(0), bid}));
+    for (unsigned i=1; i<GROUPBLOCKS; i++){
+        Value * nextStreamPtr = iBuilder->CreateGEP(myResultStreamPtr, {iBuilder->CreateMul(outputBlocks, iBuilder->getInt32(i)), bid});
+        myResultStream = iBuilder->CreateOr(myResultStream, iBuilder->CreateLoad(nextStreamPtr));
+    }    
+    iBuilder->CreateStore(myResultStream, iBuilder->CreateGEP(myResultStreamPtr, {iBuilder->getInt32(0), bid}));
+    strideNo->addIncoming(iBuilder->CreateAdd(strideNo, ConstantInt::get(int32ty, 1)), strideLoopBody);
+    iBuilder->CreateBr(strideLoopCond);
+    
+    iBuilder->SetInsertPoint(stridesDone);
+    iBuilder->CreateRetVoid();
+    
+    MDNode * Node = MDNode::get(M->getContext(),
+                                {llvm::ValueAsMetadata::get(main),
+                                 MDString::get(M->getContext(), "kernel"), 
+                                 ConstantAsMetadata::get(ConstantInt::get(iBuilder->getInt32Ty(), 1))});
+    NamedMDNode *NMD = M->getOrInsertNamedMetadata("nvvm.annotations");
+    NMD->addOperand(Node);
+
+    Compile2PTX(M, "merge.ll", "merge.ptx");
+
+}
+
 editdFunctionType editdScanCPUCodeGen() {
                             
     LLVMContext TheContext;
@@ -541,16 +612,6 @@ editdFunctionType editdScanCPUCodeGen() {
     return reinterpret_cast<editdFunctionType>(editdEngine->getPointerToFunction(main));
 }
 
-void mergeResult(ulong * rslt){
-    int strideSize = GROUPTHREADS * sizeof(ulong) * 8;
-    int strides = size/strideSize + 1;
-    int groupItems = strides * GROUPTHREADS * (editDistance + 1);
-    for(int i=0; i<groupItems; i++){
-        for(int j=1; j<GROUPBLOCKS; j++){
-            rslt[i] = rslt[i] | rslt[j * groupItems + i];
-        }
-    }
-}
 #endif
 
 int main(int argc, char *argv[]) {
@@ -582,12 +643,14 @@ int main(int argc, char *argv[]) {
 
         editdGPUCodeGen(patterns.length()/GROUPTHREADS - 1);
 
+        mergeGPUCodeGen();
+
         ulong * rslt = RunPTX(PTXFilename, chStream, size, patterns.c_str(), patterns.length(), editDistance);
 
         editdFunctionType editd_ptr = editdScanCPUCodeGen();
 
-        mergeResult(rslt);
         editd(editd_ptr, (char*)rslt, size);
+        
         run_second_filter(pattern_segs, total_len, 0.15);
 
         return 0;

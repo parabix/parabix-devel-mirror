@@ -40,22 +40,31 @@ ulong * RunPTX(std::string PTXFilename, char * fileBuffer, ulong filesize, const
     exit(-1);
   }
 
-  std::ifstream t(PTXFilename);
-  if (!t.is_open()) {
+  std::ifstream f_editd(PTXFilename);
+  if (!f_editd.is_open()) {
     std::cerr << "Error: cannot open " << PTXFilename << " for processing. Skipped.\n";
     exit(-1);
   }
   
-  std::string ptx_str((std::istreambuf_iterator<char>(t)), std::istreambuf_iterator<char>());
+  std::string ptx_str((std::istreambuf_iterator<char>(f_editd)), std::istreambuf_iterator<char>());
 
-  // Create driver context
   checkCudaErrors(cuCtxCreate(&context, 0, device));
-
-  // Create module for object
   checkCudaErrors(cuModuleLoadDataEx(&cudaModule, ptx_str.c_str(), 0, 0, 0));
-
-  // Get kernel function
   checkCudaErrors(cuModuleGetFunction(&function, cudaModule, "GPU_Main"));
+
+  CUfunction  mergefunction;
+  CUmodule    mergeModule;
+  std::ifstream f_merge("merge.ptx");
+  if (!f_merge.is_open()) {
+    std::cerr << "Error: cannot open " << "merge.ptx" << " for processing. Skipped.\n";
+    exit(-1);
+  }
+  
+  std::string mergePTX((std::istreambuf_iterator<char>(f_merge)), std::istreambuf_iterator<char>());
+
+  checkCudaErrors(cuModuleLoadDataEx(&mergeModule, mergePTX.c_str(), 0, 0, 0));
+  checkCudaErrors(cuModuleGetFunction(&mergefunction, mergeModule, "mergeResult"));
+
 
   // Device data
   CUdeviceptr devBufferInput;
@@ -92,6 +101,8 @@ ulong * RunPTX(std::string PTXFilename, char * fileBuffer, ulong filesize, const
   // Kernel parameters
   void *KernelParams[] = { &devBufferInput, &devInputSize, &devPatterns, &devBufferOutput, &devStrides};
 
+  void *MergeKernelParams[] = {&devBufferOutput, &devStrides};
+
   // std::cout << "Launching kernel\n";
 
   CUevent start;
@@ -106,6 +117,12 @@ ulong * RunPTX(std::string PTXFilename, char * fileBuffer, ulong filesize, const
                                  blockSizeX, blockSizeY, blockSizeZ,
                                  0, NULL, KernelParams, NULL));
 
+  cuCtxSynchronize();
+
+  checkCudaErrors(cuLaunchKernel(mergefunction, dist+1, gridSizeY, gridSizeZ,
+                                 blockSizeX, blockSizeY, blockSizeZ,
+                                 0, NULL, MergeKernelParams, NULL));
+
   cuEventCreate(&stop, CU_EVENT_BLOCKING_SYNC);
   cuEventRecord(stop,0);
   cuEventSynchronize(stop);
@@ -114,9 +131,8 @@ ulong * RunPTX(std::string PTXFilename, char * fileBuffer, ulong filesize, const
   printf("Elapsed time : %f ms\n" ,elapsedTime);
 
   // Retrieve device data
-  ulong * matchRslt = (ulong *) malloc(outputSize);
-  checkCudaErrors(cuMemcpyDtoH(matchRslt, devBufferOutput, outputSize));
-
+  ulong * matchRslt = (ulong *) malloc(outputSize/GROUPBLOCKS);
+  checkCudaErrors(cuMemcpyDtoH(matchRslt, devBufferOutput, outputSize/GROUPBLOCKS));
 
   // Clean-up
   checkCudaErrors(cuMemFree(devBufferInput));
