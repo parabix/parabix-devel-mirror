@@ -55,6 +55,13 @@ public:
     virtual llvm::Value * getProducedItemCount(llvm::Value * kernelInstance) override;
     llvm::Value * getTerminationSignal(llvm::Value * kernelInstance);
     
+    inline llvm::IntegerType * getSizeTy() {
+        return getBuilder()->getSizeTy();
+    }
+
+    inline Type * getStreamSetTy(const unsigned NumElements = 1, const unsigned FieldWidth = 1) {
+        return getBuilder()->getStreamSetTy(NumElements, FieldWidth);
+    }
 
 protected:
     //
@@ -120,7 +127,6 @@ protected:
     virtual void setProcessedItemCount(llvm::Value * self, Value * newFieldVal);
     virtual void setProducedItemCount(llvm::Value * self, Value * newFieldVal);
     void setTerminationSignal(llvm::Value * self);
-
 
 protected:
 

@@ -8,11 +8,12 @@
 #define SYMBOL_GENERATOR_H
 
 #include <pablo/pabloAST.h>
-#include <string>
 #include <unordered_map>
-#include <llvm/ADT/Twine.h>
-#include <llvm/ADT/StringMap.h>
-#include <llvm/Support/StringPool.h>
+#include <string>
+
+namespace IDISA {
+    class IDISA_Builder;
+}
 
 namespace pablo {
 
@@ -23,10 +24,10 @@ class SymbolGenerator {
     friend class PabloBlock;
     using Twine = llvm::Twine;
 public:
-    typedef u_int64_t integer_t;
+    typedef int64_t integer_t;
     String * get(const std::string name);
     String * make(const std::string prefix);
-    Integer * getInteger(const integer_t value);
+    Integer * getInteger(const integer_t value, IDISA::IDISA_Builder * builder);
     SymbolGenerator() = default;
     ~SymbolGenerator() = default;
 private:
@@ -34,8 +35,6 @@ private:
     std::unordered_map<std::string, String *>   mStringMap;
     std::unordered_map<integer_t, Integer *>    mIntegerMap;
 };
-
-static SymbolGenerator GlobalSymbolGenerator;
 
 }
 

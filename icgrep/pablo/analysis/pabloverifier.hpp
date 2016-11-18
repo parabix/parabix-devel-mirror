@@ -5,11 +5,11 @@
 
 namespace pablo {
 
-class PabloFunction;
+class PabloKernel;
 
 class PabloVerifier {
 public:
-    static void verify(const PabloFunction & function, const std::string location = "");
+    static void verify(const PabloKernel * kernel, const std::string & location = "");
 };
 
 }

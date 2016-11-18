@@ -47,15 +47,15 @@ class PabloCompiler {
     using IntSet = boost::container::flat_set<unsigned>;
     using MarkerMap = std::unordered_map<const PabloAST *, Value *>;
 public:
-    PabloCompiler(PabloKernel * k, PabloFunction * function);
+    PabloCompiler(PabloKernel * kernel);
     Type * initializeKernelData();
-    void compile(Function * doBlockFunction);
+    void compile(Value * const self, Function * doBlockFunction);
 
 private:
 
     void verifyParameter(const Var * var, const Value * param);
 
-    void Examine(const PabloFunction * const function);
+    void Examine();
     void Examine(const PabloBlock * const block);
 
     void compileBlock(const PabloBlock * const block);
@@ -72,9 +72,7 @@ private:
 
     std::unique_ptr<CarryManager>       mCarryManager;
 
-    PabloFunction *  const              mPabloFunction;
-
-    PabloKernel *                       mKernelBuilder;
+    PabloKernel * const                 mKernel;
     Value *                             mSelf;
 
     unsigned                            mWhileDepth;

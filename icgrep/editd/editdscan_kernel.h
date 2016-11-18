@@ -20,7 +20,7 @@ class editdScanKernel : public KernelBuilder {
 public:
     editdScanKernel(IDISA::IDISA_Builder * iBuilder, unsigned dist) :
     KernelBuilder(iBuilder, "scanMatch",
-                  {Binding{parabix::StreamSetType(iBuilder,dist+1, parabix::i1), "matchResults"}},
+                  {Binding{iBuilder->getStreamSetTy(dist + 1), "matchResults"}},
                   {}, {}, {}, {}),
     mEditDistance(dist),
     mScanwordBitWidth(iBuilder->getSizeTy()->getBitWidth()) {}

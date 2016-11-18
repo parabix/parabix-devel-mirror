@@ -7,68 +7,73 @@
 #include <pablo/pablo_compiler.h>
 #include <llvm/Support/Debug.h>
 #include <pablo/pe_var.h>
-#include <pablo/type/streamtype.h>
 #include <llvm/IR/Verifier.h>
+#include <IDISA/idisa_builder.h>
+#include <pablo/prototype.h>
 
 using namespace pablo;
 using namespace kernel;
 using namespace parabix;
+using namespace IDISA;
 
-PabloKernel::PabloKernel(IDISA::IDISA_Builder * builder,
-                         std::string kernelName,
-                         PabloFunction * function)
-: KernelBuilder(builder, kernelName, {}, {}, {}, {}, {Binding{builder->getBitBlockType(), "EOFbit"}, Binding{builder->getBitBlockType(), "EOFmask"}})
-, mPabloFunction(function)
-, mPabloCompiler(new PabloCompiler(this, function))
-
-{
-    for (unsigned i = 0; i < function->getNumOfParameters(); ++i) {
-        const auto var = function->getParameter(i);
-        Type * type = var->getType();
-        bool scalar = false;
-        if (isa<StreamType>(type)) {
-            type = cast<StreamType>(type)->resolveType(builder);
-        } else if (type->isSingleValueType()) {
-            if (isa<IntegerType>(type) && cast<IntegerType>(type)->getBitWidth() == 0) {
-                type = builder->getSizeTy();
-            }
-            scalar = true;
-        }
-
-        std::string name = var->getName()->to_string();
-        if (scalar) {
-            mScalarInputs.emplace_back(type, std::move(name));
-        } else {
-            mStreamSetInputs.emplace_back(type, std::move(name));
-        }
+Var * PabloKernel::addInput(const std::string name, Type * const type) {
+    Var * param = new Var(mSymbolTable->make(name), type);
+    mInputs.push_back(param);
+    if (isa<StreamType>(type)) {
+        Type * const resolvedType = cast<StreamType>(type)->resolveType(iBuilder);
+        mStreamSetInputs.emplace_back(resolvedType, name);
+    } else {
+        mScalarInputs.emplace_back(type, name);
     }
-
-    for (unsigned i = 0; i < function->getNumOfResults(); ++i) {
-        const auto var = function->getResult(i);
-        Type * type = var->getType();
-        bool scalar = false;
-        if (isa<StreamType>(type)) {
-            type = cast<StreamType>(type)->resolveType(builder);
-        } else if (type->isSingleValueType()) {
-            if (isa<IntegerType>(type) && cast<IntegerType>(type)->getBitWidth() == 0) {
-                type = builder->getSizeTy();
-            }
-            scalar = true;
-        }
-
-        std::string name = var->getName()->to_string();
-        if (scalar) {
-            mScalarOutputs.emplace_back(type, std::move(name));
-        } else {
-            mStreamSetOutputs.emplace_back(type, std::move(name));
-        }
-    }
-
-
+    assert (mStreamSetInputs.size() + mScalarInputs.size() == mInputs.size());
+    return param;
 }
 
-PabloKernel::~PabloKernel() {
-    delete mPabloCompiler;
+Var * PabloKernel::addOutput(const std::string name, Type * const type) {
+    Var * result = new Var(mSymbolTable->make(name), type);
+    mOutputs.push_back(result);
+    if (isa<StreamType>(type)) {
+        Type * const resolvedType = cast<StreamType>(type)->resolveType(iBuilder);
+        mStreamSetOutputs.emplace_back(resolvedType, name);
+    } else {
+        mScalarOutputs.emplace_back(type, name);
+    }
+    assert (mStreamSetOutputs.size() + mScalarOutputs.size() == mOutputs.size());
+    return result;
+}
+
+Var * PabloKernel::makeVariable(PabloAST * name, Type * const type) {
+    Var * const var = new Var(name, type);
+    mVariables.push_back(var);
+    return var;
+}
+
+Zeroes * PabloKernel::getNullValue(Type * type) {
+    if (type == nullptr) {
+        type = getStreamSetTy();
+    }
+    for (PabloAST * constant : mConstants) {
+        if (isa<Zeroes>(constant) && constant->getType() == type) {
+            return cast<Zeroes>(constant);
+        }
+    }
+    Zeroes * value = new Zeroes(type);
+    mConstants.push_back(value);
+    return value;
+}
+
+Ones * PabloKernel::getAllOnesValue(Type * type) {
+    if (type == nullptr) {
+        type = getStreamSetTy();
+    }
+    for (PabloAST * constant : mConstants) {
+        if (isa<Ones>(constant) && constant->getType() == type) {
+            return cast<Ones>(constant);
+        }
+    }
+    Ones * value = new Ones(type);
+    mConstants.push_back(value);
+    return value;
 }
 
 void PabloKernel::prepareKernel() {
@@ -81,9 +86,9 @@ void PabloKernel::generateDoBlockMethod() {
     auto savePoint = iBuilder->saveIP();
     Module * m = iBuilder->getModule();
     Function * doBlockFunction = m->getFunction(mKernelName + doBlock_suffix);
-    mPabloCompiler->compile(doBlockFunction);
-    Function::arg_iterator args = doBlockFunction->arg_begin();
-    Value * self = &*(args);
+    auto args = doBlockFunction->arg_begin();
+    Value * const self = &*(args);
+    mPabloCompiler->compile(self, doBlockFunction);
     Value * produced = getProducedItemCount(self);
     produced = iBuilder->CreateAdd(produced, ConstantInt::get(iBuilder->getSizeTy(), iBuilder->getStride()));
     setProducedItemCount(self, produced);
@@ -123,3 +128,18 @@ void PabloKernel::generateFinalBlockMethod() {
     #endif
     iBuilder->restoreIP(savePoint);
 }
+
+PabloKernel::PabloKernel(IDISA::IDISA_Builder * builder, const std::string & kernelName)
+: KernelBuilder(builder, kernelName, {}, {}, {}, {}, {Binding{builder->getBitBlockType(), "EOFbit"}, Binding{builder->getBitBlockType(), "EOFmask"}})
+, mPabloCompiler(new PabloCompiler(this))
+, mSymbolTable(new SymbolGenerator())
+, mEntryBlock(PabloBlock::Create(this))
+{
+
+}
+
+PabloKernel::~PabloKernel() {
+    delete mPabloCompiler;
+    delete mSymbolTable;
+}
+

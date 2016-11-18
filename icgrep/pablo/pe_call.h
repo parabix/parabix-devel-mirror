@@ -2,7 +2,7 @@
 #define PE_CALL_H
 
 #include <pablo/pabloAST.h>
-#include <pablo/function.h>
+#include <pablo/prototype.h>
 
 namespace pablo {
 

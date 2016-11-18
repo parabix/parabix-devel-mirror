@@ -9,30 +9,36 @@
 
 #include <pablo/pabloAST.h>
 #include <pablo/symbol_generator.h>
+#include <pablo/boolean.h>
+#include <pablo/arithmetic.h>
+#include <pablo/branch.h>
+
 #include <pablo/pe_advance.h>
 #include <pablo/pe_lookahead.h>
-#include <pablo/pe_and.h>
-#include <pablo/pe_call.h>
 #include <pablo/pe_matchstar.h>
-#include <pablo/pe_not.h>
-#include <pablo/pe_ones.h>
-#include <pablo/pe_or.h>
 #include <pablo/pe_scanthru.h>
-#include <pablo/pe_sel.h>
 #include <pablo/pe_infile.h>
+
+#include <pablo/pe_count.h>
+
 #include <pablo/pe_integer.h>
 #include <pablo/pe_string.h>
-#include <pablo/pe_var.h>
-#include <pablo/pe_xor.h>
 #include <pablo/pe_zeroes.h>
-#include <pablo/pe_count.h>
+#include <pablo/pe_ones.h>
+
+#include <pablo/pe_var.h>
 #include <pablo/ps_assign.h>
-#include <pablo/branch.h>
-#include <pablo/function.h>
+
+#include <pablo/pe_call.h>
+
+#include <pablo/pablo_kernel.h>
+
 #include <llvm/ADT/ArrayRef.h>
 #include <stdexcept>
 
 namespace pablo {
+
+class PabloKernel;
 
 class PabloBlock : public PabloAST, public StatementList {
     friend class PabloAST;
@@ -53,8 +59,8 @@ public:
         return false;
     }
 
-    inline static PabloBlock * Create(PabloFunction & parent) noexcept {
-        return new PabloBlock(&parent);
+    inline static PabloBlock * Create(PabloKernel * const parent) noexcept {
+        return new PabloBlock(parent);
     }
 
     inline static PabloBlock * Create(PabloBlock * const predecessor) noexcept {
@@ -145,7 +151,7 @@ public:
 
     AtEOF * createAtEOF(PabloAST * expr, String * const name);
 
-    Extract * createExtract(PabloAST * array, const Integer::Type index) {
+    Extract * createExtract(PabloAST * array, const int64_t index) {
         return createExtract(array, getInteger(index), nullptr);
     }
 
@@ -157,7 +163,7 @@ public:
         return createExtract(array, index, makeName(prefix));
     }
 
-    Extract * createExtract(PabloAST * array, const Integer::Type index, const std::string & prefix) {
+    Extract * createExtract(PabloAST * array, const int64_t index, const std::string & prefix) {
         return createExtract(array, getInteger(index), makeName(prefix));
     }
 
@@ -213,6 +219,36 @@ public:
 
     Xor * createXor(Type * const type, const unsigned reserved, String * const name);
 
+    Sel * createSel(PabloAST * condition, PabloAST * trueExpr, PabloAST * falseExpr) {
+        return createSel(condition, trueExpr, falseExpr, nullptr);
+    }
+
+    Sel * createSel(PabloAST * condition, PabloAST * trueExpr, PabloAST * falseExpr, const std::string & prefix) {
+        return createSel(condition, trueExpr, falseExpr, makeName(prefix));
+    }
+
+    Sel * createSel(PabloAST * condition, PabloAST * trueExpr, PabloAST * falseExpr, String * const name);
+
+    Add * createAdd(PabloAST * expr1, PabloAST * expr2) {
+        return createAdd(expr1, expr2, nullptr);
+    }
+
+    Add * createAdd(PabloAST * expr1, PabloAST * expr2, const std::string & prefix) {
+        return createAdd(expr1, expr2, makeName(prefix));
+    }
+
+    Add * createAdd(PabloAST * expr1, PabloAST * expr2, String * const name);
+
+    Subtract * createSubtract(PabloAST * expr1, PabloAST * expr2) {
+        return createSubtract(expr1, expr2, nullptr);
+    }
+
+    Subtract * createSubtract(PabloAST * expr1, PabloAST * expr2, const std::string & prefix) {
+        return createSubtract(expr1, expr2, makeName(prefix));
+    }
+
+    Subtract * createSubtract(PabloAST * expr1, PabloAST * expr2, String * const name);
+
     MatchStar * createMatchStar(PabloAST * marker, PabloAST * charclass) {
         return createMatchStar(marker, charclass, nullptr);
     }
@@ -233,16 +269,6 @@ public:
 
     ScanThru * createScanThru(PabloAST * from, PabloAST * thru, String * const name);
 
-    Sel * createSel(PabloAST * condition, PabloAST * trueExpr, PabloAST * falseExpr) {
-        return createSel(condition, trueExpr, falseExpr, nullptr);
-    }
-
-    Sel * createSel(PabloAST * condition, PabloAST * trueExpr, PabloAST * falseExpr, const std::string & prefix) {
-        return createSel(condition, trueExpr, falseExpr, makeName(prefix));
-    }
-
-    Sel * createSel(PabloAST * condition, PabloAST * trueExpr, PabloAST * falseExpr, String * const name);
-    
     If * createIf(PabloAST * condition, PabloBlock * body);
 
     While * createWhile(PabloAST * condition, PabloBlock * body);
@@ -251,12 +277,8 @@ public:
         return getBranch() ? getBranch()->getParent() : nullptr;
     }
 
-    inline PabloFunction * getParent() const {
+    inline PabloKernel * getParent() const {
         return mParent;
-    }
-
-    void setParent(PabloFunction * const parent) {
-        mParent = parent;
     }
 
     void insert(Statement * const statement);
@@ -277,27 +299,29 @@ public:
         mBranch = branch;
     }
 
-    inline String * getName(const std::string name) const {
-        return getSymbolTable()->get(name);
+    inline String * getName(const std::string & name) const {
+        return mParent->getName(name);
     }
 
     inline String * makeName(const std::string & prefix) const {
-        return getSymbolTable()->make(prefix);
+        return mParent->makeName(prefix);
     }
 
-    inline Integer * getInteger(Integer::Type value) const {
-        return getSymbolTable()->getInteger(value);
+    inline Integer * getInteger(const int64_t value) const {
+        return mParent->getInteger(value);
     }
 
-    SymbolGenerator * getSymbolTable() const {
-        return mParent->getSymbolTable();
-    }
-
-    virtual ~PabloBlock();
+    virtual ~PabloBlock() {}
 
 protected:
 
-    explicit PabloBlock(PabloFunction * parent) noexcept;
+    explicit PabloBlock(PabloKernel * const parent) noexcept
+    : PabloAST(PabloAST::ClassTypeId::Block, nullptr, nullptr)
+    , mParent(parent)
+    , mBranch(nullptr)
+    , mScopeIndex(0) {
+
+    }
 
     template<typename Type>
     inline Type * insertAtInsertionPoint(Type * expr) {
@@ -312,9 +336,9 @@ protected:
     Var * createVar(PabloAST * name, Type * const type);
 
 private:        
-    PabloFunction *                                     mParent;
-    Branch *                                            mBranch;
-    unsigned                                            mScopeIndex;
+    PabloKernel * const         mParent;
+    Branch *                    mBranch;
+    unsigned                    mScopeIndex;
 };
 
 }

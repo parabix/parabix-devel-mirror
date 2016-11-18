@@ -15,17 +15,11 @@ namespace parabix {
     
 enum FieldType {i1 = 1, i2 = 2, i4 = 4, i8 = 8, i16 = 16, i32 = 32, i64 = 64, i128 = 128, i256 = 256};
 
-inline llvm::Type * StreamSetType(IDISA::IDISA_Builder * iBuilder, const unsigned count, const unsigned width) {
-    llvm::Type * streamType = ((width == 1) ? iBuilder->getBitBlockType() : ArrayType::get(iBuilder->getBitBlockType(), width));
-    return ArrayType::get(streamType, count);
-}
-
-// Stream Set Structs hold information about the current state
-// of a stream set buffer.
+// Stream Set Structs hold information about the current state of a stream set buffer.
 
 llvm::Value * getProducerPosPtr(IDISA::IDISA_Builder * b, Value * bufferStructPtr);
 llvm::Value * getConsumerPosPtr(IDISA::IDISA_Builder * b, Value * bufferStructPtr);
-llvm::Value * hasEndOfInputPtr(IDISA::IDISA_Builder * b, Value * bufferStructPtr);
+llvm::Value * getEndOfInputPtr(IDISA::IDISA_Builder * b, Value * bufferStructPtr);
 llvm::Value * getStreamSetBufferPtr(IDISA::IDISA_Builder * b, Value * bufferStructPtr);
 
 class StreamSetBuffer {
@@ -33,18 +27,30 @@ public:
 
     enum class BufferKind : unsigned {BlockBuffer, ExternalFileBuffer, CircularBuffer, LinearCopybackBuffer};
 
-    inline BufferKind getBufferKind() const {return mBufferKind;}
+    inline BufferKind getBufferKind() const {
+        return mBufferKind;
+    }
 
-    inline llvm::Type * getBufferStreamSetType() {return mStreamSetType;}
+    inline llvm::Type * getBufferStreamSetType() const {
+        return mStreamSetType;
+    }
 
-    llvm::PointerType * getStreamBufferPointerType();
+    llvm::PointerType * getStreamBufferPointerType() const {
+        return mStreamSetType->getPointerTo(mAddrSpace);
+    }
 
-    size_t getBufferSize() { return mBufferBlocks;}
+    llvm::PointerType * getStreamSetStructPointerType() const {
+        return mStreamSetStructType->getPointerTo();
+    }
+
+    size_t getBufferSize() const { return mBufferBlocks; }
+       
+    llvm::Value * getStreamSetBasePtr() const { return mStreamSetBufferPtr; }
     
-    virtual llvm::Value * allocateBuffer();
-    
-    llvm::Value * getStreamSetBasePtr() {return mStreamSetBufferPtr;}
-    
+    llvm::Value * getStreamSetStructPtr() const { return mStreamSetStructPtr; }
+
+    virtual void allocateBuffer();
+
     // Get the buffer pointer for a given block of the stream.
     virtual llvm::Value * getStreamSetBlockPointer(llvm::Value * bufferStructPtr, llvm::Value * blockNo) = 0;
     
@@ -56,35 +62,35 @@ public:
 
     virtual void setConsumerPos(Value * bufferStructPtr, Value * pos);
 
-    llvm::Value * hasEndOfInputPtr(Value * bufferStructPtr);
+    llvm::Value * getEndOfInputPtr(Value * bufferStructPtr);
 
     void setEndOfInput(Value * bufferStructPtr);
     
-    llvm::Value * getStreamSetBufferPtrPtr(Value * bufferStructPtr);
-
-    virtual llvm::PointerType * getStreamSetStructPointerType();
-
-    virtual llvm::Value * getStreamSetStructPtr();
-    
 protected:
-    StreamSetBuffer(BufferKind k, IDISA::IDISA_Builder * b, llvm::Type * type, unsigned blocks, unsigned AddressSpace = 0) :
-        mBufferKind(k), iBuilder(b), mStreamSetType(type), mBufferBlocks(blocks), mAddrSpace(AddressSpace), mStreamSetBufferPtr(nullptr) {
-            mStreamSetStructType =
-                StructType::get(iBuilder->getContext(),
-                                std::vector<Type *>({iBuilder->getSizeTy(),
-                                                    iBuilder->getSizeTy(),
-                                                    iBuilder->getInt1Ty(),
-                                                    PointerType::get(type, AddressSpace)}));
+    StreamSetBuffer(BufferKind k, IDISA::IDISA_Builder * b, llvm::Type * type, unsigned blocks, unsigned AddressSpace = 0)
+    : mBufferKind(k)
+    , iBuilder(b)
+    , mStreamSetType(isa<IDISA::StreamType>(type) ? cast<IDISA::StreamType>(type)->resolveType(b) : type)
+    , mBufferBlocks(blocks)
+    , mAddrSpace(AddressSpace)
+    , mStreamSetBufferPtr(nullptr)
+    , mStreamSetStructPtr(nullptr)
+    , mStreamSetStructType(StructType::get(b->getContext(),
+                            {{b->getSizeTy(),
+                              b->getSizeTy(),
+                              b->getInt1Ty(),
+                              PointerType::get(mStreamSetType, AddressSpace)}})) {
+
     }
 protected:
     const BufferKind        mBufferKind;
     IDISA::IDISA_Builder *  iBuilder;
-    llvm::Type *            mStreamSetType;
+    llvm::Type * const      mStreamSetType;
     size_t                  mBufferBlocks;
     int                     mAddrSpace;
     llvm::Value *           mStreamSetBufferPtr;
     llvm::Value *           mStreamSetStructPtr;
-    llvm::Type *            mStreamSetStructType;
+    llvm::Type * const      mStreamSetStructType;
 };   
 
 class SingleBlockBuffer : public StreamSetBuffer {
@@ -114,9 +120,9 @@ public:
     void setEmptyBuffer(llvm::Value * buffer_ptr);
 
     // Can't allocate - raise an error. */
-    llvm::Value * allocateBuffer() override;
-    llvm::Value * getStreamSetBlockPointer(llvm::Value * bufferStructPtr, llvm::Value * blockNo) override;
+    void allocateBuffer() override;
 
+    llvm::Value * getStreamSetBlockPointer(llvm::Value * bufferStructPtr, llvm::Value * blockNo) override;
 };
     
 class CircularBuffer : public StreamSetBuffer {
@@ -127,9 +133,7 @@ public:
   
     CircularBuffer(IDISA::IDISA_Builder * b, llvm::Type * type, size_t bufferBlocks, unsigned AddressSpace = 0)
     : StreamSetBuffer(BufferKind::CircularBuffer, b, type, bufferBlocks, AddressSpace) {
-        if (((bufferBlocks - 1) & bufferBlocks) != 0) {
-            throw std::runtime_error("CircularStreamSetBuffer: number of blocks must be a power of 2!");
-        }
+
     }
 
     llvm::Value * getStreamSetBlockPointer(llvm::Value * bufferBasePtr, llvm::Value * blockNo) override;

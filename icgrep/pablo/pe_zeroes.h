@@ -14,7 +14,7 @@ namespace pablo {
 
 class Zeroes : public PabloAST {
     friend class PabloBlock;
-    friend class PabloFunction;
+    friend class PabloKernel;
 public:
     static inline bool classof(const PabloAST * expr) {
         assert (expr);

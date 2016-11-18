@@ -18,7 +18,7 @@ public:
     inline PabloAST * variable() const {
         return getOperand(0);
     }
-    inline Integer::Type position() const {
+    inline int64_t pint64_tion() const {
         return cast<Integer>(getOperand(1))->value();
     }
     inline bool value() const {

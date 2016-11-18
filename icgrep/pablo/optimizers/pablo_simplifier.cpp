@@ -1,12 +1,13 @@
 #include <pablo/optimizers/pablo_simplifier.hpp>
+#include <pablo/pablo_kernel.h>
 #include <pablo/codegenstate.h>
 #include <pablo/expression_map.hpp>
-#include <pablo/function.h>
+//#include <pablo/function.h>
 #include <pablo/analysis/pabloverifier.hpp>
-#include <boost/container/flat_set.hpp>
-#include <boost/container/flat_map.hpp>
+//#include <boost/container/flat_set.hpp>
+//#include <boost/container/flat_map.hpp>
 #include <pablo/printer_pablos.h>
-#include <iostream>
+//#include <iostream>
 
 using namespace boost;
 using namespace boost::container;
@@ -558,12 +559,12 @@ void Simplifier::deadCodeElimination(PabloBlock * const block) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief deadCodeElimination
  ** ------------------------------------------------------------------------------------------------------------- */
-void Simplifier::deadCodeElimination(PabloFunction & f) {
+void Simplifier::deadCodeElimination(PabloKernel * kernel) {
 
-    deadCodeElimination(f.getEntryBlock());
+    deadCodeElimination(kernel->getEntryBlock());
 
-    for (unsigned i = 0; i < f.getNumOfVariables(); ++i) {
-        Var * var = f.getVariable(i);
+    for (unsigned i = 0; i < kernel->getNumOfVariables(); ++i) {
+        Var * var = kernel->getVariable(i);
         bool unused = true;
         for (PabloAST * user : var->users()) {
             if (isa<Assign>(user)) {
@@ -641,12 +642,12 @@ void Simplifier::strengthReduction(PabloBlock * const block) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief optimize
  ** ------------------------------------------------------------------------------------------------------------- */
-bool Simplifier::optimize(PabloFunction & function) {
-    redundancyElimination(function.getEntryBlock());
-    strengthReduction(function.getEntryBlock());
-    deadCodeElimination(function);
+bool Simplifier::optimize(PabloKernel * kernel) {
+    redundancyElimination(kernel->getEntryBlock());
+    strengthReduction(kernel->getEntryBlock());
+    deadCodeElimination(kernel);
     #ifndef NDEBUG
-    PabloVerifier::verify(function, "post-simplification");
+    PabloVerifier::verify(kernel, "post-simplification");
     #endif
     return true;
 }

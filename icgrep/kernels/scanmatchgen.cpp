@@ -118,7 +118,7 @@ Function * ScanMatchKernel::generateScanWordRoutine(Module * m) {
     Value * recordNum_input_parm = &*(args++);
     recordNum_input_parm->setName("lineNum");
     
-    Constant * matchProcessor;
+    Constant * matchProcessor = nullptr;
     switch (mGrepType) {
         case GrepType::Normal:
             matchProcessor = m->getOrInsertFunction("wrapped_report_match", Type::getVoidTy(ctxt), T, T, T, S, T, T, nullptr);
@@ -129,7 +129,7 @@ Function * ScanMatchKernel::generateScanWordRoutine(Module * m) {
         case GrepType::PropertyValue:
             matchProcessor = m->getOrInsertFunction("insert_property_values", Type::getVoidTy(ctxt), T, T, T, S, nullptr);
             break;
-
+        default: llvm_unreachable("unknown grep type");
     }
     iBuilder->SetInsertPoint(BasicBlock::Create(ctxt, "entry", function,0));
     
@@ -212,6 +212,7 @@ Function * ScanMatchKernel::generateScanWordRoutine(Module * m) {
         case GrepType::PropertyValue:
             iBuilder->CreateCall(matchProcessor, std::vector<Value *>({matchRecordNum_phi, matchRecordStart_phi, matchRecordEnd, fileBuf}));
             break;
+        default: llvm_unreachable("unknown grep type");
     }
     
     Value * remaining_matches = generateResetLowestBit(iBuilder, matches_phi);

@@ -22,6 +22,7 @@
 #include <re/re_memoizer.hpp>
 #include <re/printer_re.h>
 #include <pablo/codegenstate.h>
+#include <pablo/pablo_kernel.h>
 #include <UCD/ucd_compiler.hpp>
 #include <UCD/resolve_properties.h>
 #ifndef DISABLE_PREGENERATED_UCD_FUNCTIONS
@@ -234,12 +235,12 @@ void RE_Compiler::finalizeMatchResult(MarkerType match_result, bool InvertMatche
     }
     PabloAST * matches = mPB.createAnd(match_follow, mLineBreak, "matches");
     if (mCountOnly) {
-        Var * const output = mFunction.addResult("matchedLineCount", getScalarTy());
+        Var * const output = mKernel->addOutput("matchedLineCount", mKernel->getSizeTy());
         PabloBuilder nestedCount = PabloBuilder::Create(mPB);
         mPB.createIf(matches, nestedCount);
         nestedCount.createAssign(output, nestedCount.createCount(matches));
     } else {
-        Var * const output = mFunction.addResult("output", getStreamTy(1, 2));
+        Var * const output = mKernel->addOutput("output", mKernel->getStreamSetTy(2));
         mPB.createAssign(mPB.createExtract(output, mPB.getInteger(0)), matches);
         mPB.createAssign(mPB.createExtract(output, mPB.getInteger(1)), mLineBreak);
     }
@@ -628,8 +629,9 @@ inline void RE_Compiler::AlignMarkers(MarkerType & m1, MarkerType & m2, PabloBui
     }
 }
 
-RE_Compiler::RE_Compiler(pablo::PabloFunction & function, cc::CC_Compiler & ccCompiler, bool CountOnly)
-: mCountOnly(CountOnly)
+RE_Compiler::RE_Compiler(PabloKernel * kernel, cc::CC_Compiler & ccCompiler, bool CountOnly)
+: mKernel(kernel)
+, mCountOnly(CountOnly)
 , mCCCompiler(ccCompiler)
 , mLineBreak(nullptr)
 , mCRLF(nullptr)
@@ -640,8 +642,7 @@ RE_Compiler::RE_Compiler(pablo::PabloFunction & function, cc::CC_Compiler & ccCo
 , mFinal(nullptr)
 , mWhileTest(nullptr)
 , mStarDepth(0)
-, mPB(ccCompiler.getBuilder())
-, mFunction(function) {
+, mPB(ccCompiler.getBuilder()) {
 
 }
 

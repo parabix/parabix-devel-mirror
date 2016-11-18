@@ -6,8 +6,8 @@
 
 #include "printer_pablos.h"
 #include <pablo/codegenstate.h>
+#include <pablo/pablo_kernel.h>
 #include <llvm/Support/raw_os_ostream.h>
-#include <iostream>
 
 using namespace pablo;
 
@@ -15,8 +15,8 @@ using TypeId = PabloAST::ClassTypeId;
 
 const unsigned BlockIndenting = 2;
 
-void PabloPrinter::print(const PabloFunction & function, llvm::raw_ostream & out) {
-    print(function.getEntryBlock(), out, true);
+void PabloPrinter::print(const PabloKernel * kernel, llvm::raw_ostream & out) {
+    print(kernel->getEntryBlock(), out, true);
 }
 
 void PabloPrinter::print(const Statement * stmt, llvm::raw_ostream & out, const bool expandNested, const unsigned indent) {
@@ -145,8 +145,6 @@ void PabloPrinter::print(const PabloAST * expr, llvm::raw_ostream & out) {
         out << cast<Integer>(expr)->value();
     } else if (isa<Prototype>(expr)) {
         out << cast<Prototype>(expr)->getName();
-    } else if (isa<PabloFunction>(expr)) {
-        out << cast<PabloFunction>(expr)->getName();
     } else {
         out << "???";
     }

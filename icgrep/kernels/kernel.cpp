@@ -40,14 +40,14 @@ void KernelBuilder::prepareKernel() {
         raw_string_ostream out(tmp);
         out << "kernel contains " << mStreamSetInputBuffers.size() << " input buffers for "
             << mStreamSetInputs.size() << " input stream sets.";
-        llvm::report_fatal_error(out.str());
+        throw std::runtime_error(out.str());
     }
     if (mStreamSetOutputs.size() != mStreamSetOutputBuffers.size()) {
         std::string tmp;
         raw_string_ostream out(tmp);
         out << "kernel contains " << mStreamSetOutputBuffers.size() << " output buffers for "
             << mStreamSetOutputs.size() << " output stream sets.";
-        llvm::report_fatal_error(out.str());
+        throw std::runtime_error(out.str());
     }
     addScalar(iBuilder->getSizeTy(), blockNoScalar);
     addScalar(iBuilder->getSizeTy(), logicalSegmentNoScalar);
@@ -186,7 +186,7 @@ void KernelBuilder::generateDoSegmentMethod() {
     for (unsigned i = 0; i < mStreamSetInputs.size(); i++) {
         Value * ssStructPtr = getStreamSetStructPtr(self, mStreamSetInputs[i].name);
         inbufProducerPtrs.push_back(mStreamSetInputBuffers[i]->getProducerPosPtr(ssStructPtr));
-        endSignalPtrs.push_back(mStreamSetInputBuffers[i]->hasEndOfInputPtr(ssStructPtr));
+        endSignalPtrs.push_back(mStreamSetInputBuffers[i]->getEndOfInputPtr(ssStructPtr));
     }
     
     std::vector<Value *> producerPos;
@@ -452,7 +452,7 @@ Function * KernelBuilder::generateThreadFunction(std::string name){
         Value * ssStructPtr = getStreamSetStructPtr(self, mStreamSetInputs[i].name);
         inbufProducerPtrs.push_back(mStreamSetInputBuffers[i]->getProducerPosPtr(ssStructPtr));
         inbufConsumerPtrs.push_back(mStreamSetInputBuffers[i]->getConsumerPosPtr(ssStructPtr));
-        endSignalPtrs.push_back(mStreamSetInputBuffers[i]->hasEndOfInputPtr(ssStructPtr));
+        endSignalPtrs.push_back(mStreamSetInputBuffers[i]->getEndOfInputPtr(ssStructPtr));
     }
     for (unsigned i = 0; i < mStreamSetOutputs.size(); i++) {
         Value * ssStructPtr = getStreamSetStructPtr(self, mStreamSetOutputs[i].name);

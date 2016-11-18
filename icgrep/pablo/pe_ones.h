@@ -13,7 +13,7 @@ namespace pablo {
 
 class Ones : public PabloAST {
     friend class PabloBlock;
-    friend class PabloFunction;
+    friend class PabloKernel;
 public:
     static inline bool classof(const PabloAST * e) {
         return e->getClassTypeId() == ClassTypeId::Ones;

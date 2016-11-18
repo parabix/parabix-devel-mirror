@@ -72,12 +72,7 @@ void stdOutKernel::generateDoSegmentMethod() {
     //iBuilder->CallPrintInt("basePtr", iBuilder->CreatePtrToInt(basePtr, iBuilder->getInt64Ty()));
     Value * byteOffset = iBuilder->CreateMul(iBuilder->CreateURem(processed, blockItems), itemBytes);
     Value * bytePtr = iBuilder->CreateGEP(iBuilder->CreateBitCast(basePtr, i8PtrTy), byteOffset);
-//#undef NDEBUG
-#ifndef NDEBUG
-    iBuilder->CallPrintInt(mKernelName + "_segmentNo", segmentNo);
-    iBuilder->CallPrintInt(mKernelName + "_itemsAvail", itemsAvail);
-    iBuilder->CallPrintInt(mKernelName + "_itemsToDo", itemsToDo);
-#endif
+
     iBuilder->CreateCall(writefn, std::vector<Value *>({iBuilder->getInt32(1), bytePtr, iBuilder->CreateMul(itemsToDo, itemBytes)}));
     
     processed = iBuilder->CreateAdd(processed, itemsToDo);
@@ -85,14 +80,12 @@ void stdOutKernel::generateDoSegmentMethod() {
     setScalarField(self, blockNoScalar, iBuilder->CreateUDiv(processed, blockItems));
     mStreamSetInputBuffers[0]->setConsumerPos(streamStructPtr, processed);
 
-    Value * endSignal = iBuilder->CreateLoad(mStreamSetInputBuffers[0]->hasEndOfInputPtr(streamStructPtr));
+    Value * endSignal = iBuilder->CreateLoad(mStreamSetInputBuffers[0]->getEndOfInputPtr(streamStructPtr));
     Value * inFinalSegment = iBuilder->CreateAnd(endSignal, lessThanFullSegment);
     
     iBuilder->CreateCondBr(inFinalSegment, setTermination, stdOutexit);
     iBuilder->SetInsertPoint(setTermination);
-#ifndef NDEBUG
-    iBuilder->CallPrintInt(mKernelName + " termination in segment ", segmentNo);
-#endif
+
     setTerminationSignal(self);
 
     iBuilder->CreateBr(stdOutexit);

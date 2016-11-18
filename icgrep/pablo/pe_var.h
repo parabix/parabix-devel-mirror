@@ -22,7 +22,7 @@ class Assign;
 class Var : public PabloAST {
     friend class PabloBlock;
     friend class PabloAST;
-    friend class PabloFunction;
+    friend class PabloKernel;
     friend class Statement;
 public:
     static inline bool classof(const PabloAST * e) {
@@ -52,63 +52,15 @@ public:
     inline PabloAST * getArray() const {
         return getOperand(0);
     }
-    inline Integer * getIndex() const {
-        return cast<Integer>(getOperand(1));
+    inline PabloAST * getIndex() const {
+        return getOperand(1);
     }
 protected:
-    Extract(PabloAST * array, PabloAST * const index, const String * const name)
-    : Statement(ClassTypeId::Extract, cast<ArrayType>(array->getType())->getArrayElementType(), {array, cast<Integer>(index)}, name) {
+    Extract(PabloAST * array, PabloAST * const index, const String * const name, Type * type)
+    : Statement(ClassTypeId::Extract, type, {array, index}, name) {
 
     }
 };
-
-//class Extract : public PabloAST {
-//    friend class PabloBlock;
-//public:
-//    static inline bool classof(const PabloAST * e) {
-//        return e->getClassTypeId() == ClassTypeId::Extract;
-//    }
-//    static inline bool classof(const void *) {
-//        return false;
-//    }
-//    virtual ~Extract(){
-//    }
-//    inline const String * getName() const {
-//        if (isa<Parameter>(mArray)) {
-//            return cast<Parameter>(mArray)->getName();
-//        } else {
-//            return cast<Statement>(mArray)->getName();
-//        }
-//    }
-//    inline const PabloAST * getArray() const {
-//        return mArray;
-//    }
-//    inline const Integer * getIndex() const {
-//        return mIndex;
-//    }
-//protected:
-//    Extract(PabloAST * array, PabloAST * const index)
-//    : PabloAST(ClassTypeId::Extract, array->getType()->getIndexedType())
-//    , mArray(array)
-//    , mIndex(cast<Integer>(index)) {
-//        assert (isa<Parameter>(array) || isa<Statement>(array));
-//    }
-//private:
-//    PabloAST * mArray;
-//    Integer * mIndex;
-//};
-
-//class ParameterBinding {
-//    using Allocator = SlabAllocator<Parameter *>;
-
-//public:
-
-//    void add(Parameter * const param);
-
-//private:
-//    std::vector<Parameter *, Allocator> mParameters;
-//};
-
 
 }
 

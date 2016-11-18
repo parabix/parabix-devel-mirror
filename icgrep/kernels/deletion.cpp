@@ -52,33 +52,39 @@ namespace kernel {
 void DeletionKernel::generateDoBlockMethod() {
     auto savePoint = iBuilder->saveIP();
     Module * m = iBuilder->getModule();
-    
-    Function * doBlockFunction = m->getFunction(mKernelName + doBlock_suffix);
-    
-    iBuilder->SetInsertPoint(BasicBlock::Create(iBuilder->getContext(), "entry", doBlockFunction, 0));
-    
-    Value * self = getParameter(doBlockFunction, "self");
-    Value * blockNo = getScalarField(self, blockNoScalar);
-    Value * inputStreamBlock = getStreamSetBlockPtr(self, "inputStreamSet", blockNo);
-    Value * outputStreamBlock = getStreamSetBlockPtr(self, "outputStreamSet", blockNo);
-    Value * delCountBlock = getStreamSetBlockPtr(self, "deletionCounts", blockNo);
 
-    Value * del_mask = iBuilder->CreateBlockAlignedLoad(inputStreamBlock, {iBuilder->getInt32(0), iBuilder->getInt32(mStreamCount)});
-    
-    std::vector<Value *> move_masks = parallel_prefix_deletion_masks(iBuilder, mDeletionFieldWidth, del_mask);
-    
+    Function * doBlockFunction = m->getFunction(mKernelName + doBlock_suffix);
+
+    iBuilder->SetInsertPoint(BasicBlock::Create(iBuilder->getContext(), "entry", doBlockFunction, 0));
+
+    Value * self = getParameter(doBlockFunction, "self");
+
+    Value * blockNo = getScalarField(self, blockNoScalar);
+
+    Value * inputStreamPtr = getStreamSetBlockPtr(self, "inputStreamSet", blockNo);
+
+    Value * delMaskPtr = getStreamSetBlockPtr(self, "delMaskSet", blockNo);
+
+    Value * outputStreamPtr = getStreamSetBlockPtr(self, "outputStreamSet", blockNo);
+
+    Value * delCountPtr = getStreamSetBlockPtr(self, "deletionCounts", blockNo);
+
+    Value * delMask = iBuilder->CreateBlockAlignedLoad(delMaskPtr, {iBuilder->getInt32(0), iBuilder->getInt32(0)});
+
+    std::vector<Value *> move_masks = parallel_prefix_deletion_masks(iBuilder, mDeletionFieldWidth, delMask);
+
     for (unsigned j = 0; j < mStreamCount; ++j) {
-        Value * input = iBuilder->CreateBlockAlignedLoad(inputStreamBlock, {iBuilder->getInt32(0), iBuilder->getInt32(j)});
-        Value * output = apply_parallel_prefix_deletion(iBuilder, mDeletionFieldWidth, del_mask, move_masks, input);
-        iBuilder->CreateBlockAlignedStore(output, outputStreamBlock, {iBuilder->getInt32(0), iBuilder->getInt32(j)});
+        Value * input = iBuilder->CreateBlockAlignedLoad(inputStreamPtr, {iBuilder->getInt32(0), iBuilder->getInt32(j)});
+        Value * output = apply_parallel_prefix_deletion(iBuilder, mDeletionFieldWidth, delMask, move_masks, input);
+        iBuilder->CreateBlockAlignedStore(output, outputStreamPtr, {iBuilder->getInt32(0), iBuilder->getInt32(j)});
     }
-    Value * counts = partial_sum_popcount(iBuilder, mDeletionFieldWidth, iBuilder->simd_not(del_mask));
-    iBuilder->CreateBlockAlignedStore(iBuilder->bitCast(counts), delCountBlock, {iBuilder->getInt32(0), iBuilder->getInt32(0)});
+    Value * counts = partial_sum_popcount(iBuilder, mDeletionFieldWidth, iBuilder->simd_not(delMask));
+    iBuilder->CreateBlockAlignedStore(iBuilder->bitCast(counts), delCountPtr, {iBuilder->getInt32(0), iBuilder->getInt32(0)});
     /* Stream deletion has only been applied within fields; the actual number of data items
      * has not yet changed.   */
     Value * produced = getProducedItemCount(self);
     produced = iBuilder->CreateAdd(produced, ConstantInt::get(iBuilder->getSizeTy(), iBuilder->getStride()));
-    setProducedItemCount(self, produced);    
+    setProducedItemCount(self, produced);
     iBuilder->CreateRetVoid();
     iBuilder->restoreIP(savePoint);
 }
@@ -86,7 +92,7 @@ void DeletionKernel::generateDoBlockMethod() {
 void DeletionKernel::generateFinalBlockMethod() {
     auto savePoint = iBuilder->saveIP();
     Module * m = iBuilder->getModule();
-    
+
     unsigned blockSize = iBuilder->getBitBlockWidth();
     Function * doBlockFunction = m->getFunction(mKernelName + doBlock_suffix);
     Function * finalBlockFunction = m->getFunction(mKernelName + finalBlock_suffix);
@@ -95,10 +101,10 @@ void DeletionKernel::generateFinalBlockMethod() {
     Value * remainingBytes = getParameter(finalBlockFunction, "remainingBytes");
     Value * self = getParameter(finalBlockFunction, "self");
     Value * blockNo = getScalarField(self, blockNoScalar);
-    Value * inputStreamBlock = getStreamSetBlockPtr(self, "inputStreamSet", blockNo);
+    Value * delMaskBlock = getStreamSetBlockPtr(self, "delMaskSet", blockNo);
     Value * remaining = iBuilder->CreateZExt(remainingBytes, iBuilder->getIntNTy(blockSize));
     Value * EOF_del = iBuilder->bitCast(iBuilder->CreateShl(Constant::getAllOnesValue(iBuilder->getIntNTy(blockSize)), remaining));
-    Value * const delmaskPtr = iBuilder->CreateGEP(inputStreamBlock, {iBuilder->getInt32(0), iBuilder->getInt32(16)});
+    Value * const delmaskPtr = iBuilder->CreateGEP(delMaskBlock, {iBuilder->getInt32(0), iBuilder->getInt32(0)});
     Value * const delmaskVal = iBuilder->CreateBlockAlignedLoad(delmaskPtr);
     iBuilder->CreateBlockAlignedStore(iBuilder->CreateOr(EOF_del, delmaskVal), delmaskPtr);
     iBuilder->CreateCall(doBlockFunction, {self});

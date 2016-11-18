@@ -19,11 +19,13 @@ namespace IDISA {
 class IDISA_I64_Builder : public IDISA_Builder {
 public:
   
-    IDISA_I64_Builder(Module * m, Type * bitBlockType) : IDISA_Builder(m, bitBlockType) {
+    IDISA_I64_Builder(Module * m, unsigned archBitWidth, unsigned bitBlockWidth = 64, unsigned stride = 64)
+    : IDISA_Builder(m, archBitWidth, bitBlockWidth, stride) {
     } 
+
     Value * hsimd_packh(unsigned fw, Value * a, Value * b) override;
     Value * hsimd_packl(unsigned fw, Value * a, Value * b) override;
-    ~IDISA_I64_Builder() {};
+    ~IDISA_I64_Builder() {}
 
 };
 

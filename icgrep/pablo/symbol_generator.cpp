@@ -7,6 +7,7 @@
 #include <pablo/symbol_generator.h>
 #include <pablo/pe_string.h>
 #include <pablo/pe_integer.h>
+#include <IDISA/idisa_builder.h>
 
 namespace pablo {
 
@@ -27,11 +28,11 @@ String * SymbolGenerator::get(const std::string name) {
     return result;
 }
 
-Integer * SymbolGenerator::getInteger(const integer_t value) {
+Integer * SymbolGenerator::getInteger(const integer_t value, IDISA::IDISA_Builder * builder) {
     auto f = mIntegerMap.find(value);
     Integer * result;
     if (f == mIntegerMap.end()) {
-        result = new Integer(value);
+        result = new Integer(value, builder->getSizeTy());
         assert (result->value() == value);
         mIntegerMap.insert(std::make_pair(value, result));
     } else {

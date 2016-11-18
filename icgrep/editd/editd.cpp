@@ -24,7 +24,7 @@
 
 #include <re/re_cc.h>
 #include <cc/cc_compiler.h>
-#include <pablo/function.h>
+#include <pablo/prototype.h>
 #include <pablo/pablo_compiler.h>
 #include <pablo/pablo_kernel.h>
 #include <IDISA/idisa_builder.h>
@@ -191,13 +191,33 @@ void get_editd_pattern(int & pattern_segs, int & total_len) {
     }
 }
 
-Function * editdPipeline(Module * mMod, IDISA::IDISA_Builder * iBuilder, PabloFunction * function) {
-    
-    ExternalFileBuffer ChStream(iBuilder, StreamSetType(iBuilder, 4, i1));
-    SingleBlockBuffer MatchResults(iBuilder, StreamSetType(iBuilder, editDistance + 1, i1));
+void buildPatternKernel(PabloKernel & kernel, IDISA::IDISA_Builder * iBuilder, const std::vector<std::string> & patterns) {
+    PabloBuilder entry(kernel.getEntryBlock());
 
-    pablo_function_passes(function);
-    PabloKernel editdk(iBuilder, "editd", function);
+    Var * pat = kernel.addInput("pat", iBuilder->getStreamSetTy(4));
+
+    PabloAST * basisBits[4];
+
+    basisBits[0] = entry.createExtract(pat, 0, "A");
+    basisBits[1] = entry.createExtract(pat, 1, "C");
+    basisBits[2] = entry.createExtract(pat, 2, "T");
+    basisBits[3] = entry.createExtract(pat, 3, "G");
+
+    re::Pattern_Compiler pattern_compiler(kernel);
+    pattern_compiler.compile(patterns, entry, basisBits, editDistance, optPosition, stepSize);
+
+    pablo_function_passes(&kernel);
+}
+
+Function * editdPipeline(Module * mMod, IDISA::IDISA_Builder * iBuilder, const std::vector<std::string> & patterns) {
+    
+    ExternalFileBuffer ChStream(iBuilder, iBuilder->getStreamSetTy(4));
+    SingleBlockBuffer MatchResults(iBuilder, iBuilder->getStreamSetTy(editDistance + 1));
+
+    PabloKernel editdk(iBuilder, "editd");
+
+    buildPatternKernel(editdk, iBuilder, patterns);
+
     kernel::editdScanKernel editdScanK(iBuilder, editDistance);
     
     std::unique_ptr<Module> editdM = editdk.createKernelModule({&ChStream}, {&MatchResults});
@@ -238,18 +258,38 @@ Function * editdPipeline(Module * mMod, IDISA::IDISA_Builder * iBuilder, PabloFu
     return main;
 }
 
-Function * preprocessPipeline(Module * mMod, IDISA::IDISA_Builder * iBuilder, PabloFunction * function) {
+void buildPreprocessKernel(PabloKernel & kernel, IDISA::IDISA_Builder * iBuilder) {
+    cc::CC_Compiler ccc(&kernel);
+    PabloBuilder & pb = ccc.getBuilder();
+
+    PabloAST * A = ccc.compileCC(re::makeCC(re::makeCC(0x41), re::makeCC(0x61)), pb);
+    PabloAST * C = ccc.compileCC(re::makeCC(re::makeCC(0x43), re::makeCC(0x63)), pb);
+    PabloAST * T = ccc.compileCC(re::makeCC(re::makeCC(0x54), re::makeCC(0x74)), pb);
+    PabloAST * G = ccc.compileCC(re::makeCC(re::makeCC(0x47), re::makeCC(0x67)), pb);
+
+    Var * const pat = kernel.addOutput("pat", iBuilder->getStreamSetTy(4));
+
+    pb.createAssign(pb.createExtract(pat, 0), A);
+    pb.createAssign(pb.createExtract(pat, 1), C);
+    pb.createAssign(pb.createExtract(pat, 2), T);
+    pb.createAssign(pb.createExtract(pat, 3), G);
+
+    pablo_function_passes(&kernel);
+}
+
+Function * preprocessPipeline(Module * mMod, IDISA::IDISA_Builder * iBuilder) {
     Type * mBitBlockType = iBuilder->getBitBlockType();
     
-    ExternalFileBuffer ByteStream(iBuilder, StreamSetType(iBuilder,1, 8));
-    SingleBlockBuffer BasisBits(iBuilder, StreamSetType(iBuilder,8, 1));
-    ExternalFileBuffer CCResults(iBuilder, StreamSetType(iBuilder,4, 1));
+    ExternalFileBuffer ByteStream(iBuilder, iBuilder->getStreamSetTy(1, 8));
+    SingleBlockBuffer BasisBits(iBuilder, iBuilder->getStreamSetTy(8));
+    ExternalFileBuffer CCResults(iBuilder, iBuilder->getStreamSetTy(4));
 
     s2pKernel  s2pk(iBuilder);
     std::unique_ptr<Module> s2pM = s2pk.createKernelModule({&ByteStream}, {&BasisBits});
 
-    pablo_function_passes(function);
-    PabloKernel  ccck(iBuilder, "ccc", function);
+    PabloKernel  ccck(iBuilder, "ccc");
+
+    buildPreprocessKernel(ccck, iBuilder);
     
     std::unique_ptr<Module> cccM = ccck.createKernelModule({&BasisBits}, {&CCResults});
     
@@ -300,27 +340,10 @@ preprocessFunctionType preprocessCodeGen() {
     LLVMContext TheContext;
     Module * M = new Module("preprocess", TheContext);
     IDISA::IDISA_Builder * idb = IDISA::GetIDISA_Builder(M);
-    ExecutionEngine * preprocessEngine = nullptr;
 
-    PabloFunction * function = PabloFunction::Create("preprocess"); // , 8, 4
-    cc::CC_Compiler ccc(*function);
-    PabloBuilder & pb = ccc.getBuilder();
+    llvm::Function * main_IR = preprocessPipeline(M, idb);
 
-    PabloAST * A = ccc.compileCC(re::makeCC(re::makeCC(0x41), re::makeCC(0x61)), pb);
-    PabloAST * C = ccc.compileCC(re::makeCC(re::makeCC(0x43), re::makeCC(0x63)), pb);
-    PabloAST * T = ccc.compileCC(re::makeCC(re::makeCC(0x54), re::makeCC(0x74)), pb);
-    PabloAST * G = ccc.compileCC(re::makeCC(re::makeCC(0x47), re::makeCC(0x67)), pb);
-
-    Var * pat = function->addResult("pat", getStreamTy(1, 4));
-
-    pb.createAssign(pb.createExtract(pat, 0), A);
-    pb.createAssign(pb.createExtract(pat, 1), C);
-    pb.createAssign(pb.createExtract(pat, 2), T);
-    pb.createAssign(pb.createExtract(pat, 3), G);
-
-    llvm::Function * main_IR = preprocessPipeline(M, idb, function);
-
-    preprocessEngine = JIT_to_ExecutionEngine(M);
+    ExecutionEngine * preprocessEngine = JIT_to_ExecutionEngine(M);
     
     preprocessEngine->finalizeObject();
 
@@ -330,31 +353,15 @@ preprocessFunctionType preprocessCodeGen() {
 
 typedef void (*editdFunctionType)(char * byte_data, size_t filesize);
 
-editdFunctionType editdCodeGen(std::vector<std::string> patterns) {
+editdFunctionType editdCodeGen(const std::vector<std::string> & patterns) {
                             
     LLVMContext TheContext;
     Module * M = new Module("editd", TheContext);
     IDISA::IDISA_Builder * idb = IDISA::GetIDISA_Builder(M);
-    ExecutionEngine * editdEngine = nullptr;
 
-    PabloFunction * function = PabloFunction::Create("editd"); // , 4, editDistance + 1
-    PabloBuilder main (function->getEntryBlock());
+    llvm::Function * main_IR = editdPipeline(M, idb, patterns);
 
-    Var * pat = function->addParameter("pat", getStreamTy(1, 4));
-
-    PabloAST * basisBits[4];
-
-    basisBits[0] = main.createExtract(pat, 0, "A");
-    basisBits[1] = main.createExtract(pat, 1, "C");
-    basisBits[2] = main.createExtract(pat, 2, "T");
-    basisBits[3] = main.createExtract(pat, 3, "G");
-
-    re::Pattern_Compiler pattern_compiler(*function);
-    pattern_compiler.compile(patterns, main, basisBits, editDistance, optPosition, stepSize);
-
-    llvm::Function * main_IR = editdPipeline(M, idb, function);
-
-    editdEngine = JIT_to_ExecutionEngine(M);
+    ExecutionEngine * editdEngine = JIT_to_ExecutionEngine(M);
     
     editdEngine->finalizeObject();
 
@@ -441,8 +448,8 @@ void editdGPUCodeGen(unsigned patternLen){
     Type * const outputTy = PointerType::get(ArrayType::get(mBitBlockType, editDistance+1), 1);
     Type * const stridesTy = PointerType::get(int32ty, 1);
 
-    ExternalFileBuffer CCStream(iBuilder, StreamSetType(iBuilder, 4, 1), addrSpace);
-    ExternalFileBuffer ResultStream(iBuilder, StreamSetType(iBuilder, editDistance+1, 1), addrSpace);
+    ExternalFileBuffer CCStream(iBuilder, iBuilder->getStreamSetTy( 4, 1), addrSpace);
+    ExternalFileBuffer ResultStream(iBuilder, iBuilder->getStreamSetTy( editDistance+1, 1), addrSpace);
 
     kernel::editdGPUKernel editdk(iBuilder, editDistance, patternLen); 
     editdk.generateKernel({&CCStream}, {&ResultStream});
@@ -583,7 +590,7 @@ editdFunctionType editdScanCPUCodeGen() {
     Type * const voidTy = Type::getVoidTy(M->getContext());
     Type * const inputType = PointerType::get(ArrayType::get(mBitBlockType, editDistance+1), 0);
 
-    ExternalFileBuffer MatchResults(iBuilder, StreamSetType(iBuilder, editDistance+1, 1));
+    ExternalFileBuffer MatchResults(iBuilder, iBuilder->getStreamSetTy( editDistance+1, 1));
     kernel::editdScanKernel editdScanK(iBuilder, editDistance);
     editdScanK.generateKernel({&MatchResults}, {});                
    

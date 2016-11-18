@@ -13,6 +13,7 @@
 #include <llvm/IR/IRBuilder.h>
 #include <llvm/Support/Host.h>
 #include <llvm/ADT/Triple.h>
+#include <IDISA/types/streamtype.h>
 
 using namespace llvm;
 
@@ -21,30 +22,26 @@ namespace IDISA {
 class IDISA_Builder : public IRBuilder<> {
 public:
 
-    IDISA_Builder(Module * m, Type * bitBlockType, unsigned CacheAlignment=64)
+    IDISA_Builder(Module * m, unsigned archBitWidth, unsigned bitBlockWidth, unsigned stride, unsigned CacheAlignment=64)
     : IRBuilder<>(m->getContext())
     , mMod(m)
     , mCacheLineAlignment(CacheAlignment)
-    , mIsArch32Bit(Triple(llvm::sys::getProcessTriple()).isArch32Bit())
-    , mBitBlockType(bitBlockType)
-    , mBitBlockWidth(bitBlockType->isIntegerTy() ? cast<IntegerType>(bitBlockType)->getIntegerBitWidth() : cast<VectorType>(bitBlockType)->getBitWidth())
-    , mStride(mBitBlockWidth)
-    , mZeroInitializer(Constant::getNullValue(bitBlockType)) 
-    , mOneInitializer(Constant::getAllOnesValue(bitBlockType))
+    , mBitBlockWidth(bitBlockWidth)
+    , mStride(stride)
+    , mSizeType(getIntNTy(archBitWidth))
+    , mBitBlockType(VectorType::get(IntegerType::get(getContext(), 64), bitBlockWidth / 64))
+    , mZeroInitializer(Constant::getNullValue(mBitBlockType))
+    , mOneInitializer(Constant::getAllOnesValue(mBitBlockType))
     , mPrintRegisterFunction(nullptr) {
 
     }
 
     virtual ~IDISA_Builder() {}
     
-    Type * getBitBlockType() const {
-        return mBitBlockType;
-    }
-
-    std::string getBitBlockTypeName();  // A short string such as v4i64 or i256.
+    std::string getBitBlockTypeName() const;  // A short string such as v4i64 or i256.
 
     Value * bitCast(Value * a) {
-        return a->getType() == mBitBlockType ? a : CreateBitCast(a, mBitBlockType);
+        return (a->getType() == mBitBlockType) ? a : CreateBitCast(a, mBitBlockType);
     }
 
     unsigned getBitBlockWidth() const {
@@ -141,12 +138,16 @@ public:
     Value * simd_not(Value * a);
     Value * fwCast(unsigned fw, Value * a);
     
-    inline bool isArch32Bit() const {
-        return mIsArch32Bit;
+    inline llvm::IntegerType * getSizeTy() const {
+        return mSizeType;
     }
 
-    inline llvm::IntegerType * getSizeTy() {
-        return isArch32Bit() ? getInt32Ty() : getInt64Ty();
+    inline VectorType * getBitBlockType() const {
+        return mBitBlockType;
+    }
+
+    inline Type * getStreamSetTy(const uint64_t NumElements = 1, const uint64_t FieldWidth = 1) {
+        return StreamType::get(getContext(), NumElements, FieldWidth);
     }
     
     inline llvm::AllocaInst * CreateCacheAlignedAlloca(llvm::Type * Ty, llvm::Value * ArraySize = nullptr) {
@@ -159,16 +160,16 @@ public:
     virtual llvm::StoreInst *  CreateAtomicStoreRelease(Value * val, Value * ptr); 
     
 protected:
-    Module * mMod;
-    unsigned mCacheLineAlignment;
-    const bool mIsArch32Bit;
-    Type * mBitBlockType;
-    unsigned mBitBlockWidth;
-    unsigned mStride;
-    Constant * mZeroInitializer;
-    Constant * mOneInitializer;
-    Constant * mPrintRegisterFunction;
+    Module *            mMod;
+    unsigned            mCacheLineAlignment;
+    unsigned            mBitBlockWidth;
+    unsigned            mStride;
+    IntegerType *       mSizeType;
+    VectorType *        mBitBlockType;
 
+    Constant *          mZeroInitializer;
+    Constant *          mOneInitializer;
+    Constant *          mPrintRegisterFunction;
     
     VectorType * fwVectorType(unsigned fw);
 };

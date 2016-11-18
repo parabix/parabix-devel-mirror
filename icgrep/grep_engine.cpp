@@ -33,7 +33,7 @@
 #include <kernels/cc_kernel.h>
 #include <kernels/pipeline.h>
 
-#include <pablo/function.h>
+#include <pablo/prototype.h>
 #include <pablo/pablo_kernel.h>
 #include <pablo/pablo_toolchain.h>
 
@@ -216,7 +216,7 @@ Function * generateCPUKernel(Module * m, IDISA::IDISA_Builder * iBuilder, GrepTy
     Value * const fileIdx = &*(args++);
     fileIdx->setName("fileIdx");
 
-    ExternalFileBuffer MatchResults(iBuilder, StreamSetType(iBuilder, 2, 1));
+    ExternalFileBuffer MatchResults(iBuilder, iBuilder->getStreamSetTy( 2, 1));
     MatchResults.setStreamSetBuffer(rsltStream, fileSize);
 
     kernel::ScanMatchKernel scanMatchK(iBuilder, grepType);
@@ -327,15 +327,19 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool Count
         fileIdx->setName("fileIdx");
     }
        
-    ExternalFileBuffer ByteStream(iBuilder, StreamSetType(iBuilder, 1, 8));
-    CircularBuffer BasisBits(iBuilder, StreamSetType(iBuilder, 8, 1), segmentSize * bufferSegments);
+    ExternalFileBuffer ByteStream(iBuilder, iBuilder->getStreamSetTy(1, 8));
+    CircularBuffer BasisBits(iBuilder, iBuilder->getStreamSetTy(8, 1), segmentSize * bufferSegments);
 
     kernel::s2pKernel  s2pk(iBuilder);
     s2pk.generateKernel({&ByteStream}, {&BasisBits});
     
+    pablo::PabloKernel icgrepK(iBuilder, "icgrep");
+
     re_ast = re::regular_expression_passes(re_ast);
-    pablo::PabloFunction * function = re::re2pablo_compiler(encodingBits, re_ast, CountOnly);
-    pablo_function_passes(function);
+    re::re2pablo_compiler(&icgrepK, encodingBits, re_ast, CountOnly);
+    pablo_function_passes(&icgrepK);
+
+
 
     ByteStream.setStreamSetBuffer(inputStream, fileSize);
     BasisBits.allocateBuffer();
@@ -364,8 +368,7 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool Count
     pthreadExitFunc->addFnAttr(llvm::Attribute::NoReturn);
     pthreadExitFunc->setCallingConv(llvm::CallingConv::C);
 
-    if (CountOnly) {
-        pablo::PabloKernel icgrepK(iBuilder, "icgrep", function);
+    if (CountOnly) {        
         icgrepK.generateKernel({&BasisBits}, {});       
         Value * icgrepInstance = icgrepK.createInstance({});
         if (pipelineParallel){
@@ -383,10 +386,9 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool Count
     } else {
 #ifdef CUDA_ENABLED 
         if (codegen::NVPTX){
-            ExternalFileBuffer MatchResults(iBuilder, StreamSetType(iBuilder,2, i1), addrSpace);
+            ExternalFileBuffer MatchResults(iBuilder, iBuilder->getStreamSetTy(2, i1), addrSpace);
             MatchResults.setStreamSetBuffer(outputStream, fileSize);
 
-            pablo::PabloKernel  icgrepK(iBuilder, "icgrep", function, {});
             icgrepK.generateKernel({&BasisBits},  {&MatchResults});
             Value * icgrepInstance = icgrepK.createInstance({});
 
@@ -395,10 +397,9 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool Count
         }
 #endif
         if (CPU_Only) {
-            CircularBuffer MatchResults(iBuilder, StreamSetType(iBuilder, 2, 1), segmentSize * bufferSegments);
+            CircularBuffer MatchResults(iBuilder, iBuilder->getStreamSetTy( 2, 1), segmentSize * bufferSegments);
             MatchResults.allocateBuffer();
 
-            pablo::PabloKernel  icgrepK(iBuilder, "icgrep", function);
             icgrepK.generateKernel({&BasisBits}, {&MatchResults});
             Value * icgrepInstance = icgrepK.createInstance({});
 

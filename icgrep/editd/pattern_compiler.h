@@ -17,6 +17,7 @@
 
 namespace pablo {
 class PabloBlock;
+class PabloKernel;
 class PabloAST;
 class Assign;
 class Var;
@@ -27,14 +28,13 @@ namespace re {
 class Pattern_Compiler {
 public:
 
-    Pattern_Compiler(pablo::PabloFunction & function);
+    Pattern_Compiler(pablo::PabloKernel & kernel);
 
     void compile(const std::vector<std::string> & patterns, pablo::PabloBuilder & pb, pablo::PabloAST *basisBits[], int dist, unsigned optPosition, int stepSize);
 
-
 private:
 
-    pablo::PabloFunction &                          mFunction;
+    pablo::PabloKernel & mKernel;
 };
 
 }

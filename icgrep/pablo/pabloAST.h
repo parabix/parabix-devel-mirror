@@ -7,7 +7,7 @@
 #ifndef PE_PabloAST_H
 #define PE_PabloAST_H
 
-#include <pablo/type/streamtype.h>
+#include <IDISA/types/streamtype.h>
 #include <llvm/Support/Casting.h>
 #include <llvm/Support/Compiler.h>
 #include <boost/iterator/iterator_facade.hpp>
@@ -35,8 +35,6 @@ class PabloAST {
     friend class SymbolGenerator;
     friend class Count;
     friend class Var;
-    friend void addUsage(PabloAST *, PabloBlock *);
-    friend void removeUsage(PabloAST *, PabloBlock *);
 public:
 
     using Allocator = SlabAllocator<u_int8_t>;
@@ -80,6 +78,9 @@ public:
         , AtEOF
         // Statistics operations
         , Count
+        // Arithmetic operations
+        , Add
+        , Subtract
         // Variable assignments
         , Assign
         , Extract     

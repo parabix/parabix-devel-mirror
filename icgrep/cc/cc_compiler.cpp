@@ -17,7 +17,8 @@
 #include <re/re_assertion.h>
 #include <pablo/codegenstate.h>
 #include <pablo/builder.hpp>
-#include <pablo/function.h>
+#include <pablo/prototype.h>
+#include <pablo/pablo_kernel.h>
 #include <stdexcept>
 
 using namespace re;
@@ -25,13 +26,13 @@ using namespace pablo;
 
 namespace cc {
 
-CC_Compiler::CC_Compiler(PabloFunction & function, const unsigned encodingBits, const std::string prefix)
-: mBuilder(function.getEntryBlock())
+CC_Compiler::CC_Compiler(PabloKernel * kernel, const unsigned encodingBits, const std::string prefix)
+: mBuilder(kernel->getEntryBlock())
 , mBasisBit(encodingBits)
 , mEncodingBits(encodingBits) {
 
     // TODO: basisBits should be defined prior and only retrieved here.
-    Var * const basisBits = function.addParameter(prefix, getStreamTy(1, 8));
+    Var * const basisBits = kernel->addInput(prefix, kernel->getStreamSetTy(encodingBits));
     for (unsigned i = 0; i != mEncodingBits; i++) {
         mBasisBit[i] = mBuilder.createExtract(basisBits, mBuilder.getInteger(i)); assert (mBasisBit[i]);
     }
@@ -223,22 +224,11 @@ inline PabloAST * CC_Compiler::char_or_range_expr(const codepoint_t lo, const co
     throw std::runtime_error(std::string("Invalid Character Set Range: [") + std::to_string(lo) + "," + std::to_string(hi) + "]");
 }
 
-inline PabloAST *CC_Compiler::getBasisVar(const unsigned i) const {
+inline PabloAST * CC_Compiler::getBasisVar(const unsigned i) const {
     assert (i < mEncodingBits);
     const unsigned index = mEncodingBits - i - 1; assert (index < mEncodingBits);
     assert (mBasisBit[index]);
     return mBasisBit[index];
-}
-    
-PabloFunction * ParabixCharacterClassFunction(const std::string & name, const std::vector<CC *> & charClasses, const unsigned basisBitsCount) {
-    PabloFunction * f = PabloFunction::Create(name + "_fn");
-    CC_Compiler ccc(*f, basisBitsCount);
-    PabloBuilder builder(f->getEntryBlock());
-    for (CC * cc : charClasses) {
-        Var * const r = f->addResult(cc->canonicalName(re::ByteClass), getStreamTy());
-        builder.createAssign(r, ccc.charset_expr(cc, builder));
-    }
-    return f;
 }
 
 } // end of namespace cc

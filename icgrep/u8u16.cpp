@@ -25,7 +25,7 @@
 #include <cc/cc_compiler.h>
 #include <pablo/pablo_toolchain.h>
 #include <pablo/pablo_kernel.h>
-#include <pablo/function.h>
+#include <pablo/prototype.h>
 #include <IDISA/idisa_builder.h>
 #include <IDISA/idisa_target.h>
 #include <kernels/pipeline.h>
@@ -53,16 +53,16 @@ static cl::opt<bool> segmentPipelineParallel("enable-segment-pipeline-parallel",
 static cl::opt<bool> mMapBuffering("mmap-buffering", cl::desc("Enable mmap buffering."), cl::cat(u8u16Options));
 static cl::opt<bool> memAlignBuffering("memalign-buffering", cl::desc("Enable posix_memalign buffering."), cl::cat(u8u16Options));
 
-//
-//
-//
-namespace pablo {
 
-PabloFunction * u8u16_pablo() {
+using namespace pablo;
+using namespace kernel;
+using namespace parabix;
+
+void u8u16_pablo(PabloKernel * kernel) {
     //  input: 8 basis bit streams
     //  output: 16 u8-indexed streams, + delmask stream + error stream
-    PabloFunction * function = PabloFunction::Create("u8u16"); // , 1, 18
-    cc::CC_Compiler ccc(*function);
+
+    cc::CC_Compiler ccc(kernel);
     
     PabloBuilder & main = ccc.getBuilder();
     const auto u8_bits = ccc.getBasisBits();
@@ -80,8 +80,6 @@ PabloFunction * u8u16_pablo() {
     }
     Var * delmask = main.createVar("delmask", zeroes);
     Var * error_mask = main.createVar("error_mask", zeroes);
-
-
 
     // The logic for processing non-ASCII bytes will be embedded within an if-hierarchy.
     PabloAST * nonASCII = ccc.compileCC(re::makeCC(0x80, 0xFF));
@@ -244,100 +242,101 @@ PabloFunction * u8u16_pablo() {
     main.createAssign(u16_lo[6], main.createOr(main.createAnd(last_byte, u8_bits[6]), s43_lo6));
     main.createAssign(u16_lo[7], main.createOr(main.createAnd(last_byte, u8_bits[7]), s43_lo7));
     
-    Var * output = function->addResult("output", getStreamTy(1, 18));
+    Var * output = kernel->addOutput("output", kernel->getStreamSetTy(16));
+    Var * delmask_out = kernel->addOutput("delmask_out", kernel->getStreamSetTy());
+    Var * error_mask_out = kernel->addOutput("error_mask_out", kernel->getStreamSetTy());
     for (unsigned i = 0; i < 8; i++) {
         main.createAssign(main.createExtract(output, i), u16_hi[i]);
     }
     for (unsigned i = 0; i < 8; i++) {
         main.createAssign(main.createExtract(output, i + 8), u16_lo[i]);
     }
-    main.createAssign(main.createExtract(output, 16), delmask);
-    main.createAssign(main.createExtract(output, 17), error_mask);
+    main.createAssign(main.createExtract(delmask_out, main.getInteger(0)), delmask);
+    main.createAssign(main.createExtract(error_mask_out,  main.getInteger(0)), error_mask);
 
-    return function;
+    pablo_function_passes(kernel);
 }
-}
 
-
-
-using namespace kernel;
-using namespace parabix;
-
-Function * u8u16Pipeline(Module * mMod, IDISA::IDISA_Builder * iBuilder, pablo::PabloFunction * function) {
-    Type * mBitBlockType = iBuilder->getBitBlockType();
+Function * u8u16Pipeline(Module * mod, IDISA::IDISA_Builder * iBuilder) {
 
     const unsigned segmentSize = codegen::SegmentSize;
     const unsigned bufferSegments = codegen::BufferSegments;
     
-    ExternalFileBuffer ByteStream(iBuilder, StreamSetType(iBuilder,1, 8));
+    assert (iBuilder);
 
-    CircularBuffer BasisBits(iBuilder, StreamSetType(iBuilder,8, 1), segmentSize * bufferSegments);
+    ExternalFileBuffer ByteStream(iBuilder, iBuilder->getStreamSetTy(1, 8));
 
-    CircularBuffer U8u16Bits(iBuilder, StreamSetType(iBuilder, 18, 1), segmentSize * bufferSegments);
+    CircularBuffer BasisBits(iBuilder, iBuilder->getStreamSetTy(8), segmentSize * bufferSegments);
 
-    CircularBuffer U16Bits(iBuilder, StreamSetType(iBuilder,16, 1), segmentSize * bufferSegments);
+    CircularBuffer U8u16Bits(iBuilder, iBuilder->getStreamSetTy(16), segmentSize * bufferSegments);
+    CircularBuffer DelMask(iBuilder, iBuilder->getStreamSetTy(), segmentSize * bufferSegments);
+    CircularBuffer ErrorMask(iBuilder, iBuilder->getStreamSetTy(), segmentSize * bufferSegments);
+
+    CircularBuffer U16Bits(iBuilder, iBuilder->getStreamSetTy(16), segmentSize * bufferSegments);
     
-    CircularBuffer DeletionCounts(iBuilder, StreamSetType(iBuilder, 1, 1), segmentSize * bufferSegments);
+    CircularBuffer DeletionCounts(iBuilder, iBuilder->getStreamSetTy(), segmentSize * bufferSegments);
 
     // Different choices for the output buffer depending on chosen option.
-    ExternalFileBuffer U16external(iBuilder, StreamSetType(iBuilder,1, 16));
-    LinearCopybackBuffer U16out(iBuilder, StreamSetType(iBuilder,1, 16), segmentSize * bufferSegments + 2);
+    ExternalFileBuffer U16external(iBuilder, iBuilder->getStreamSetTy(1, 16));
+    LinearCopybackBuffer U16out(iBuilder, iBuilder->getStreamSetTy(16, 16), segmentSize * bufferSegments + 2);
 
-    s2pKernel  s2pk(iBuilder);
+    s2pKernel s2pk(iBuilder);
+
     s2pk.generateKernel({&ByteStream}, {&BasisBits});
 
-    pablo_function_passes(function);
-    pablo::PabloKernel u8u16k(iBuilder, "u8u16", function);
-    u8u16k.generateKernel({&BasisBits}, {&U8u16Bits});
-    
+    pablo::PabloKernel u8u16k(iBuilder, "u8u16");
+
+    u8u16_pablo(&u8u16k);
+
+    u8u16k.generateKernel({&BasisBits}, {&U8u16Bits, &DelMask, &ErrorMask});
+
     DeletionKernel delK(iBuilder, iBuilder->getBitBlockWidth()/16, 16);
-    delK.generateKernel({&U8u16Bits}, {&U16Bits, &DeletionCounts});
-    
+    delK.generateKernel({&U8u16Bits, &DelMask}, {&U16Bits, &DeletionCounts});
+
     p2s_16Kernel_withCompressedOutput p2sk(iBuilder);
-    
+
     stdOutKernel stdoutK(iBuilder, 16);
-    
+
     if (mMapBuffering || memAlignBuffering) {
         p2sk.generateKernel({&U16Bits, &DeletionCounts}, {&U16external});
         stdoutK.generateKernel({&U16external}, {});
-    }
-    else {
+    } else {
         p2sk.generateKernel({&U16Bits, &DeletionCounts}, {&U16out});
         stdoutK.generateKernel({&U16out}, {});
     }
-    
+
     Type * const size_ty = iBuilder->getSizeTy();
-    Type * const voidTy = Type::getVoidTy(mMod->getContext());
-    Type * const inputType = PointerType::get(ArrayType::get(ArrayType::get(mBitBlockType, 8), 1), 0);
-    Type * const outputType = PointerType::get(ArrayType::get(ArrayType::get(mBitBlockType, 16), 1), 0);
+    Type * const voidTy = Type::getVoidTy(mod->getContext());
+    Type * const bitBlockType = iBuilder->getBitBlockType();
+    Type * const inputType = ArrayType::get(ArrayType::get(bitBlockType, 8), 1)->getPointerTo();
+    Type * const outputType = ArrayType::get(ArrayType::get(bitBlockType, 16), 1)->getPointerTo();
     Type * const int32ty = iBuilder->getInt32Ty();
     Type * const int8PtrTy = iBuilder->getInt8PtrTy();
-    Type * const voidPtrTy = TypeBuilder<void *, false>::get(mMod->getContext());
+    Type * const voidPtrTy = Type::getVoidTy(mod->getContext())->getPointerTo();
 
-    
-    Function * const main = cast<Function>(mMod->getOrInsertFunction("Main", voidTy, inputType, outputType, size_ty, nullptr));
+    Function * const main = cast<Function>(mod->getOrInsertFunction("Main", voidTy, inputType, outputType, size_ty, nullptr));
     main->setCallingConv(CallingConv::C);
     Function::arg_iterator args = main->arg_begin();
-    
+
     Value * const inputStream = &*(args++);
     inputStream->setName("inputStream");
     Value * const outputStream = &*(args++);
     outputStream->setName("outputStream");
     Value * const fileSize = &*(args++);
     fileSize->setName("fileSize");
-    
-    iBuilder->SetInsertPoint(BasicBlock::Create(mMod->getContext(), "entry", main,0));
-        
+
+    iBuilder->SetInsertPoint(BasicBlock::Create(mod->getContext(), "entry", main,0));
 
     ByteStream.setStreamSetBuffer(inputStream, fileSize);
     BasisBits.allocateBuffer();
     U8u16Bits.allocateBuffer();
+    DelMask.allocateBuffer();
+    ErrorMask.allocateBuffer();
     U16Bits.allocateBuffer();
     DeletionCounts.allocateBuffer();
     if (mMapBuffering || memAlignBuffering) {
         U16external.setEmptyBuffer(outputStream);
-    }
-    else {
+    } else {
         U16out.allocateBuffer();
     }
     Value * s2pInstance = s2pk.createInstance({});
@@ -345,33 +344,32 @@ Function * u8u16Pipeline(Module * mMod, IDISA::IDISA_Builder * iBuilder, pablo::
     Value * delInstance = delK.createInstance({});
     Value * p2sInstance = p2sk.createInstance({});
     Value * stdoutInstance = stdoutK.createInstance({});
-    
+
     Type * pthreadTy = size_ty;
     FunctionType * funVoidPtrVoidTy = FunctionType::get(voidTy, int8PtrTy, false);
-    
-    Function * pthreadCreateFunc = cast<Function>(mMod->getOrInsertFunction("pthread_create",
+
+    Function * pthreadCreateFunc = cast<Function>(mod->getOrInsertFunction("pthread_create",
                                                                          int32ty,
                                                                          pthreadTy->getPointerTo(),
                                                                          voidPtrTy,
                                                                          static_cast<Type *>(funVoidPtrVoidTy)->getPointerTo(),
                                                                          voidPtrTy, nullptr));
     pthreadCreateFunc->setCallingConv(llvm::CallingConv::C);
-    Function * pthreadJoinFunc = cast<Function>(mMod->getOrInsertFunction("pthread_join",
+    Function * pthreadJoinFunc = cast<Function>(mod->getOrInsertFunction("pthread_join",
                                                                        int32ty,
                                                                        pthreadTy,
                                                                        PointerType::get(int8PtrTy, 0), nullptr));
     pthreadJoinFunc->setCallingConv(llvm::CallingConv::C);
-    
-    Function * pthreadExitFunc = cast<Function>(mMod->getOrInsertFunction("pthread_exit",
-                                                                       voidTy, 
+
+    Function * pthreadExitFunc = cast<Function>(mod->getOrInsertFunction("pthread_exit",
+                                                                       voidTy,
                                                                        voidPtrTy, nullptr));
     pthreadExitFunc->addFnAttr(llvm::Attribute::NoReturn);
     pthreadExitFunc->setCallingConv(llvm::CallingConv::C);
 
     if (segmentPipelineParallel){
         generateSegmentParallelPipeline(iBuilder, {&s2pk, &u8u16k, &delK, &p2sk, &stdoutK}, {s2pInstance, u8u16Instance, delInstance, p2sInstance, stdoutInstance}, fileSize);
-    }
-    else{
+    } else {
         generatePipelineLoop(iBuilder, {&s2pk, &u8u16k, &delK, &p2sk, &stdoutK}, {s2pInstance, u8u16Instance, delInstance, p2sInstance, stdoutInstance}, fileSize);
     }
 
@@ -392,9 +390,7 @@ u8u16FunctionType u8u16CodeGen(void) {
     Module * M = new Module("u8u16", TheContext);
     IDISA::IDISA_Builder * idb = IDISA::GetIDISA_Builder(M);
 
-    pablo::PabloFunction * function = pablo::u8u16_pablo();
-    
-    llvm::Function * main_IR = u8u16Pipeline(M, idb, function);
+    llvm::Function * main_IR = u8u16Pipeline(M, idb);
     
     verifyModule(*M, &dbgs());
     //std::cerr << "ExecuteKernels(); done\n";

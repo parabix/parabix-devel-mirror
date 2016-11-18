@@ -17,7 +17,8 @@
 #include <re/re_compiler.h>
 #include <utf8_encoder.h>
 #include <cc/cc_compiler.h>
-#include <pablo/function.h>
+#include <pablo/prototype.h>
+#include <pablo/pablo_kernel.h>
 #include <re/printer_re.h>
 #include <llvm/Support/CommandLine.h>
 
@@ -94,14 +95,12 @@ RE * regular_expression_passes(RE * re_ast)  {
     return re_ast;
 }
     
-PabloFunction * re2pablo_compiler(const unsigned encodingBits, RE * re_ast, const bool CountOnly) {
-    PabloFunction * function = PabloFunction::Create("process_block");
-    cc::CC_Compiler cc_compiler(*function, encodingBits);
-    re::RE_Compiler re_compiler(*function, cc_compiler, CountOnly);
+void re2pablo_compiler(PabloKernel * kernel, const unsigned encodingBits, RE * re_ast, const bool CountOnly) {
+    cc::CC_Compiler cc_compiler(kernel, encodingBits);
+    re::RE_Compiler re_compiler(kernel, cc_compiler, CountOnly);
     re_compiler.initializeRequiredStreams(encodingBits);
     re_compiler.compileUnicodeNames(re_ast);
     re_compiler.finalizeMatchResult(re_compiler.compile(re_ast), AlgorithmOptions.isSet(InvertMatches));
-    return function;
 }
 
 }

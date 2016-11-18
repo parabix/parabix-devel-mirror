@@ -1,4 +1,5 @@
 #include <pablo/passes/flattenif.hpp>
+#include <pablo/pablo_kernel.h>
 #include <pablo/codegenstate.h>
 #include <pablo/analysis/pabloverifier.hpp>
 
@@ -30,8 +31,8 @@ void FlattenIf::flattenIf(PabloBlock * const block) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief transform
  ** ------------------------------------------------------------------------------------------------------------- */
-void FlattenIf::transform(PabloFunction & function) {
-    flattenIf(function.getEntryBlock());
+void FlattenIf::transform(PabloKernel * function) {
+    flattenIf(function->getEntryBlock());
     #ifndef NDEBUG
     PabloVerifier::verify(function, "flatten-if");
     #endif

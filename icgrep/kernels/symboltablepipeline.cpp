@@ -12,7 +12,7 @@
 #include <kernels/s2p_kernel.h>
 #include <kernels/instance.h>
 
-#include <pablo/function.h>
+#include <pablo/prototype.h>
 #include <pablo/pablo_compiler.h>
 #include <pablo/analysis/pabloverifier.hpp>
 

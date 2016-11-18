@@ -21,7 +21,7 @@ class ScanMatchKernel : public KernelBuilder {
 public:
     ScanMatchKernel(IDISA::IDISA_Builder * iBuilder, GrepType grepType) :
     KernelBuilder(iBuilder, "scanMatch",
-                  {Binding{parabix::StreamSetType(iBuilder,2, 1), "matchResults"}},
+                  {Binding{iBuilder->getStreamSetTy(2, 1), "matchResults"}},
                     {}, 
                     {Binding{iBuilder->getInt8PtrTy(), "FileBuf"}, Binding{iBuilder->getSizeTy(), "FileSize"}, Binding{iBuilder->getSizeTy(), "FileIdx"}}, 
                     {}, 

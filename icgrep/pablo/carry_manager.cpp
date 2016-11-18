@@ -21,8 +21,8 @@ namespace pablo {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief initializeCarryData
  ** ------------------------------------------------------------------------------------------------------------- */
-Type * CarryManager::initializeCarryData(PabloFunction * const function) {
-    mRootScope = function->getEntryBlock();
+Type * CarryManager::initializeCarryData(PabloKernel * const kernel) {
+    mRootScope = kernel->getEntryBlock();
     mCarryInfoVector.resize(mRootScope->enumerateScopes(0) + 1);
     mCarryPackType = mBitBlockType;
     const unsigned totalCarryDataSize = enumerate(mRootScope, 0, 0);
@@ -39,8 +39,8 @@ Type * CarryManager::initializeCarryData(PabloFunction * const function) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief initializeCodeGen
  ** ------------------------------------------------------------------------------------------------------------- */
-void CarryManager::initializeCodeGen(PabloKernel * const kBuilder, Value * selfPtr) {
-    mKernelBuilder = kBuilder;
+void CarryManager::initializeCodeGen(PabloKernel * const kernel, Value * selfPtr) {
+    mKernelBuilder = kernel;
     mSelf = selfPtr;
     
     Value * cdArrayPtr = iBuilder->CreateGEP(mSelf, {ConstantInt::get(iBuilder->getSizeTy(), 0), mKernelBuilder->getScalarIndex("carries")});
@@ -398,6 +398,7 @@ void CarryManager::addToSummary(Value * const value) {
     
     Type * summaryTy = summary->getType();
     Type * valueTy = value->getType();
+
     if (LLVM_UNLIKELY(isa<Constant>(value))) {
         if (LLVM_LIKELY(cast<Constant>(value)->isZeroValue())) return;
         if (cast<Constant>(value)->isAllOnesValue()) {
@@ -405,6 +406,7 @@ void CarryManager::addToSummary(Value * const value) {
             return;
         }
     }
+
     Value * v = value;
     if (valueTy != summaryTy) {
         // valueTy must be an integer type.

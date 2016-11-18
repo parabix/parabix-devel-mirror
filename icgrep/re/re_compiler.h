@@ -51,7 +51,7 @@ inline MarkerType makeMarker(MarkerPosition newpos, pablo::PabloAST * strm) {ret
 class RE_Compiler {
 public:
 
-    RE_Compiler(pablo::PabloFunction & function, cc::CC_Compiler & ccCompiler, bool CountOnly = false);
+    RE_Compiler(pablo::PabloKernel * kernel, cc::CC_Compiler & ccCompiler, bool CountOnly = false);
     void initializeRequiredStreams(const unsigned encodingBits);
     void compileUnicodeNames(RE *& re);
     void finalizeMatchResult(MarkerType match_result, bool InvertMatches = false);
@@ -92,6 +92,7 @@ private:
 
 private:
 
+    pablo::PabloKernel * const                      mKernel;
     bool                                            mCountOnly;
     cc::CC_Compiler &                               mCCCompiler;
     pablo::PabloAST *                               mLineBreak;
@@ -105,7 +106,7 @@ private:
     int                                             mStarDepth;
     pablo::PabloBuilder &                           mPB;
     std::unordered_map<Name *, MarkerType>          mCompiledName;
-    pablo::PabloFunction &                          mFunction;
+
 };
 
 }

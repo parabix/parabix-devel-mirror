@@ -23,3 +23,5 @@ CMakeFiles/3.2.2/CompilerIdCXX
 util
 pablo/type
 editd
+kernels/type
+IDISA/types

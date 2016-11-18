@@ -18,14 +18,14 @@ namespace kernel {
 class editdCPUKernel : public KernelBuilder {
 public:
     
-    editdCPUKernel(IDISA::IDISA_Builder * iBuilder, unsigned dist, unsigned pattLen) :
-    KernelBuilder(iBuilder, "editd_cpu",
-                  {Binding{parabix::StreamSetType(iBuilder, 4, 1), "CCStream"}},
-                  {Binding{parabix::StreamSetType(iBuilder, dist+1, 1), "ResultStream"}},
-                  {Binding{PointerType::get(iBuilder->getInt8Ty(), 1), "pattStream"}, 
-                  Binding{PointerType::get(ArrayType::get(iBuilder->getBitBlockType(), pattLen * (dist + 1) * 4), 0), "srideCarry"}},
+    editdCPUKernel(IDISA::IDISA_Builder * b, unsigned dist, unsigned pattLen) :
+    KernelBuilder(b, "editd_cpu",
+                  {Binding{b->getStreamSetTy(4), "CCStream"}},
+                  {Binding{b->getStreamSetTy(dist + 1), "ResultStream"}},
+                  {Binding{PointerType::get(b->getInt8Ty(), 1), "pattStream"},
+                  Binding{PointerType::get(ArrayType::get(b->getBitBlockType(), pattLen * (dist + 1) * 4), 0), "srideCarry"}},
                   {},
-                  {Binding{iBuilder->getBitBlockType(), "EOFmask"}}),
+                  {Binding{b->getBitBlockType(), "EOFmask"}}),
     mEditDistance(dist),
     mPatternLen(pattLen){}
     

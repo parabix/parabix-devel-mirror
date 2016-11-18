@@ -1,11 +1,9 @@
 #include "codemotionpass.h"
+#include <pablo/pablo_kernel.h>
 #include <pablo/codegenstate.h>
 #include <pablo/analysis/pabloverifier.hpp>
 #include <boost/container/flat_set.hpp>
-#include <boost/container/flat_map.hpp>
-#include <boost/graph/adjacency_list.hpp>
-#include <boost/graph/topological_sort.hpp>
-#include <boost/circular_buffer.hpp>
+// #include <boost/circular_buffer.hpp>
 
 using namespace boost;
 using namespace boost::container;
@@ -15,10 +13,10 @@ namespace pablo {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief optimize
  ** ------------------------------------------------------------------------------------------------------------- */
-bool CodeMotionPass::optimize(PabloFunction & function) {
-    CodeMotionPass::movement(function.getEntryBlock());
+bool CodeMotionPass::optimize(PabloKernel * kernel) {
+    CodeMotionPass::movement(kernel->getEntryBlock());
     #ifndef NDEBUG
-    PabloVerifier::verify(function, "post-code-motion");
+    PabloVerifier::verify(kernel, "post-code-motion");
     #endif
     return true;
 }

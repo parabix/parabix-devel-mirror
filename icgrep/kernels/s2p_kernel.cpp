@@ -161,12 +161,15 @@ void s2pKernel::generateFinalBlockMethod() {
 
     
 void s2pKernel::generateDoBlockLogic(Value * self, Value * blockNo) {
-    Value * byteStream = getStreamSetBlockPtr(self, "byteStream", blockNo);
+
+    Value * bytePtr = iBuilder->CreateMul(blockNo, ConstantInt::get(blockNo->getType(), 8));
+    Value * byteStream = getStreamSetBlockPtr(self, "byteStream", bytePtr);
     Value * basisBits = getStreamSetBlockPtr(self, "basisBits", blockNo);
 
     Value * bytepack[8];
     for (unsigned i = 0; i < 8; i++) {
-        bytepack[i] = iBuilder->CreateBlockAlignedLoad(byteStream, {iBuilder->getInt32(0), iBuilder->getInt32(0), iBuilder->getInt32(i)});
+        Value * ptr = iBuilder->CreateGEP(byteStream, {iBuilder->getInt32(0), iBuilder->getInt32(i)});
+        bytepack[i] = iBuilder->CreateBlockAlignedLoad(ptr);
     }
     Value * bitblock[8];
     s2p(iBuilder, bytepack, bitblock);

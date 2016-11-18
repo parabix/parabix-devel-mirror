@@ -1,5 +1,5 @@
 #include "pabloverifier.hpp"
-#include <pablo/function.h>
+#include <pablo/pablo_kernel.h>
 #include <pablo/codegenstate.h>
 #include <pablo/printer_pablos.h>
 #include <iostream>
@@ -26,37 +26,7 @@ void testUsers(const PabloAST * expr, const ScopeSet & validScopes) {
         if (LLVM_UNLIKELY(verified.count(use) != 0)) {
             continue;
         }
-        if (LLVM_UNLIKELY(isa<PabloFunction>(use))) {
-            const PabloFunction * f = cast<PabloFunction>(use);
-            bool isParameter = false;
-            bool isResult = false;
-            for (unsigned i = 0; i != f->getNumOfParameters(); ++i) {
-                if (f->getParameter(i) == expr) {
-                    isParameter = true;
-                    break;
-                }
-            }
-            for (unsigned i = 0; i != f->getNumOfResults(); ++i) {
-                if (f->getResult(i) == expr) {
-                    isResult = true;
-                    break;
-                }
-            }
-            if (LLVM_UNLIKELY(!(isParameter ^ isResult))) {
-                std::string tmp;
-                raw_string_ostream str(tmp);
-                str << "use-def error: ";
-                PabloPrinter::print(expr, str);
-                if (isParameter && isResult) {
-                    str << " is both a parameter and result of ";
-                } else {
-                    str << " is neither a parameter nor result of ";
-                }
-                PabloPrinter::print(f, str);
-                throw std::runtime_error(str.str());
-            }
-            ++uses;
-        } else if (const Statement * const user = dyn_cast<Statement>(use)) {
+        if (const Statement * const user = dyn_cast<Statement>(use)) {
             // test whether this user is in a block in the program
             if (LLVM_UNLIKELY(user->getParent() == nullptr || validScopes.count(user->getParent()) == 0)) {
                 std::string tmp;
@@ -100,7 +70,7 @@ void testUsers(const PabloAST * expr, const ScopeSet & validScopes) {
                 throw std::runtime_error(str.str());
             }
         } else if (isa<Var>(use)) {
-            if (LLVM_UNLIKELY(isa<Branch>(expr) || isa<PabloFunction>(expr))) {
+            if (LLVM_UNLIKELY(isa<Branch>(expr))) {
                 ++uses;
             } else {
                 std::string tmp;
@@ -168,22 +138,16 @@ void gatherValidScopes(const PabloBlock * block, ScopeSet & validScopes) {
     }
 }
 
-void verifyUseDefInformation(const PabloFunction & function) {
+void verifyUseDefInformation(const PabloKernel * kernel) {
     ScopeSet validScopes;
-    gatherValidScopes(function.getEntryBlock(), validScopes);
-    for (unsigned i = 0; i < function.getNumOfParameters(); ++i) {
-        if (LLVM_UNLIKELY(function.getParameter(i) == nullptr)) {
-            throw std::runtime_error("parameter " + std::to_string(i) + " is Null!");
-        }
-        testUsers(function.getParameter(i), validScopes);
+    gatherValidScopes(kernel->getEntryBlock(), validScopes);
+    for (unsigned i = 0; i < kernel->getNumOfInputs(); ++i) {
+        testUsers(kernel->getInput(i), validScopes);
     }
-    for (unsigned i = 0; i < function.getNumOfResults(); ++i) {
-        if (LLVM_UNLIKELY(function.getResult(i) == nullptr)) {
-            throw std::runtime_error("result " + std::to_string(i) + " is Null!");
-        }
-        testUsers(function.getResult(i), validScopes);
+    for (unsigned i = 0; i < kernel->getNumOfOutputs(); ++i) {
+        testUsers(kernel->getOutput(i), validScopes);
     }
-    verifyUseDefInformation(function.getEntryBlock(), validScopes);
+    verifyUseDefInformation(kernel->getEntryBlock(), validScopes);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -325,9 +289,9 @@ void verifyProgramStructure(const PabloBlock * block, unsigned & nestingDepth) {
     }    
 }
 
-inline void verifyProgramStructure(const PabloFunction & function) {
+inline void verifyProgramStructure(const PabloKernel * kernel) {
     unsigned nestingDepth = 0;
-    verifyProgramStructure(function.getEntryBlock(), nestingDepth);
+    verifyProgramStructure(kernel->getEntryBlock(), nestingDepth);
     if (LLVM_UNLIKELY(nestingDepth != 0)) {
         // This error isn't actually possible to occur with the current AST structure but that could change
         // in the future. Leaving this test in for a reminder to check for it.
@@ -400,25 +364,25 @@ void isTopologicallyOrdered(const PabloBlock * block, const OrderingVerifier & p
     }
 }
 
-void isTopologicallyOrdered(const PabloFunction & function) {
+void isTopologicallyOrdered(const PabloKernel * kernel) {
     OrderingVerifier ov;
-    for (unsigned i = 0; i != function.getNumOfParameters(); ++i) {
-        ov.insert(function.getParameter(i));
+    for (unsigned i = 0; i != kernel->getNumOfInputs(); ++i) {
+        ov.insert(kernel->getInput(i));
     }
-    for (unsigned i = 0; i != function.getNumOfResults(); ++i) {
-        ov.insert(function.getResult(i));
+    for (unsigned i = 0; i != kernel->getNumOfOutputs(); ++i) {
+        ov.insert(kernel->getOutput(i));
     }
-    isTopologicallyOrdered(function.getEntryBlock(), ov);
+    isTopologicallyOrdered(kernel->getEntryBlock(), ov);
 }
 
-void PabloVerifier::verify(const PabloFunction & function, const std::string location) {
+void PabloVerifier::verify(const PabloKernel * kernel, const std::string & location) {
     try {
-        verifyProgramStructure(function);
-        verifyUseDefInformation(function);
-        isTopologicallyOrdered(function);
+        verifyProgramStructure(kernel);
+        verifyUseDefInformation(kernel);
+        isTopologicallyOrdered(kernel);
     } catch(std::runtime_error & err) {
         raw_os_ostream out(std::cerr);
-        PabloPrinter::print(function, out);
+        PabloPrinter::print(kernel, out);
         out.flush();
         if (location.empty()) {
             llvm::report_fatal_error(err.what());

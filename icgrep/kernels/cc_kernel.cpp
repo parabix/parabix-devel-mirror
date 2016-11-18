@@ -3,11 +3,15 @@
  *  This software is licensed to the public under the Open Software License 3.0.
  */
 
-
 #include "cc_kernel.h"
+#include <re/re_cc.h>
+#include <cc/cc_compiler.h>
+#include <pablo/builder.hpp>
 
-
+using namespace cc;
 using namespace kernel;
+using namespace pablo;
+using namespace re;
 
 void DirectCharacterClassKernelBuilder::generateDoBlockMethod() {
     auto savePoint = iBuilder->saveIP();
@@ -70,3 +74,18 @@ void DirectCharacterClassKernelBuilder::generateDoBlockMethod() {
     iBuilder->restoreIP(savePoint);
 }
 
+ParabixCharacterClassKernelBuilder::ParabixCharacterClassKernelBuilder (
+IDISA::IDISA_Builder * iBuilder
+, std::string ccSetName
+, const std::vector<CC *> & charClasses
+, unsigned basisBitsCount)
+: PabloKernel(iBuilder, ccSetName +"_kernel") {
+
+    CC_Compiler ccc(this, basisBitsCount);
+    auto & builder = ccc.getBuilder();
+    for (CC * cc : charClasses) {
+        Var * const r = addOutput(cc->canonicalName(re::ByteClass), getStreamSetTy());
+        builder.createAssign(r, ccc.compileCC("cc", cc, builder));
+    }
+
+}

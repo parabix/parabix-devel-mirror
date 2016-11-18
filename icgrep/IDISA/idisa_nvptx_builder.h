@@ -16,11 +16,9 @@ namespace IDISA {
 class IDISA_NVPTX20_Builder : public IDISA_I64_Builder {
 public:
     
-    IDISA_NVPTX20_Builder(Module * m, int groupSize)
-    : IDISA_I64_Builder(m, VectorType::get(IntegerType::get(m->getContext(), 64), 1))
-    , groupThreads(groupSize)
-    {
-        mStride = mBitBlockWidth * groupSize;
+    IDISA_NVPTX20_Builder(Module * m, unsigned groupSize)
+    : IDISA_I64_Builder(m, 64, 64, 64 * groupSize)
+    , groupThreads(groupSize) {
         CreateGlobals();
         CreateBuiltinFunctions();
         CreateLongAdvanceFunc();
@@ -28,7 +26,7 @@ public:
         CreateBallotFunc();
     }
     
-    ~IDISA_NVPTX20_Builder() {};
+    ~IDISA_NVPTX20_Builder() {}
 
     int getGroupThreads();
     

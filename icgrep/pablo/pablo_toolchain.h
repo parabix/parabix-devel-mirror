@@ -7,11 +7,16 @@
 #ifndef PABLO_TOOLCHAIN_H
 #define PABLO_TOOLCHAIN_H
 
-#include <pablo/function.h>
-#include <llvm/Support/CommandLine.h>
+namespace llvm {
+namespace cl {
+class OptionCategory;
+}
+}
 
 namespace pablo {
-    
+
+class PabloKernel;
+
 enum PabloDebugFlags {
     PrintOptimizedREcode, PrintCompiledCCcode, PrintCompiledREcode, DumpTrace, PrintUnloweredCode
 };
@@ -21,11 +26,11 @@ enum PabloCompilationFlags {
     EnableMultiplexing, EnableLowering, EnablePreDistribution, EnablePostDistribution, EnablePrePassScheduling
 };
     
-const cl::OptionCategory * pablo_toolchain_flags();
+const llvm::cl::OptionCategory * pablo_toolchain_flags();
 
 bool DebugOptionIsSet(PabloDebugFlags flag);
 
-void pablo_function_passes(PabloFunction * function);
+void pablo_function_passes(PabloKernel * kernel);
 
 }
 #endif

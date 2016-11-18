@@ -27,7 +27,7 @@ public:
     inline PabloAST * getExpr() const {
         return getOperand(0);
     }
-    inline Integer::Type getAmount() const {
+    inline int64_t getAmount() const {
         return cast<Integer>(getOperand(1))->value();
     }
     inline void setLocalIndex(const unsigned idx) {

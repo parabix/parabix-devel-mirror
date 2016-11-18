@@ -6,7 +6,7 @@
 
 namespace pablo {
 
-class PabloFunction;
+class PabloKernel;
 class PabloBlock;
 class Statement;
 class While;
@@ -28,7 +28,7 @@ class CodeMotionPass {
         }
     };
 public:
-    static bool optimize(PabloFunction & function);
+    static bool optimize(PabloKernel * kernel);
 protected:
     static void movement(PabloBlock * const block);
     static bool isAcceptableTarget(Statement *stmt, ScopeSet & scopeSet, const PabloBlock * const block);

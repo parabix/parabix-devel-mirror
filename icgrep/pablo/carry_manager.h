@@ -58,8 +58,8 @@ public:
 
     ~CarryManager();
     
-    Type * initializeCarryData(PabloFunction * const function);
-    void initializeCodeGen(PabloKernel * const kBuilder, Value * selfPtr);
+    Type * initializeCarryData(PabloKernel * const kernel);
+    void initializeCodeGen(PabloKernel * const kernel, Value * selfPtr);
 
     void reset();
 

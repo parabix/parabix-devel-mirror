@@ -24,7 +24,7 @@
 
 #include <re/re_cc.h>
 #include <cc/cc_compiler.h>
-#include <pablo/function.h>
+#include <pablo/prototype.h>
 #include <pablo/pablo_kernel.h>
 #include <IDISA/idisa_builder.h>
 #include <IDISA/idisa_target.h>
@@ -42,7 +42,6 @@
 #include <boost/iostreams/device/mapped_file.hpp>
 
 #include <fcntl.h>
-using namespace pablo;
 
 static cl::OptionCategory wcFlags("Command Flags", "wc options");
 
@@ -79,6 +78,9 @@ uint64_t TotalWords = 0;
 uint64_t TotalChars = 0;
 uint64_t TotalBytes = 0;
 
+using namespace pablo;
+using namespace kernel;
+using namespace parabix;
 
 //  The callback routine that records counts in progress.
 //
@@ -98,19 +100,17 @@ extern "C" {
 //
 //
 
-PabloFunction * wc_gen() {
+void wc_gen(PabloKernel * kernel) {
     //  input: 8 basis bit streams
     //  output: 3 counters
     
-    PabloFunction * function = PabloFunction::Create("wc"); // , 8, 0
-    cc::CC_Compiler ccc(*function);
+    cc::CC_Compiler ccc(kernel);
     
     PabloBuilder & pb = ccc.getBuilder();
-    // const std::vector<Parameter *> u8_bits = ccc.getBasisBits();
 
-    Var * lc = function->addResult("lineCount", getScalarTy());
-    Var * wc = function->addResult("wordCount", getScalarTy());
-    Var * cc = function->addResult("charCount", getScalarTy());
+    Var * lc = kernel->addOutput("lineCount", kernel->getSizeTy());
+    Var * wc = kernel->addOutput("wordCount", kernel->getSizeTy());
+    Var * cc = kernel->addOutput("charCount", kernel->getSizeTy());
 
     if (CountLines) {
         PabloAST * LF = ccc.compileCC(re::makeCC(0x0A));
@@ -132,25 +132,21 @@ PabloFunction * wc_gen() {
         PabloAST * u8Begin = ccc.compileCC(re::makeCC(re::makeCC(0, 0x7F), re::makeCC(0xC2, 0xF4)));        
         pb.createAssign(cc, pb.createCount(u8Begin));
     }
-    return function;
 }
 
-using namespace kernel;
-using namespace parabix;
-
-
-Function * wcPipeline(Module * mMod, IDISA::IDISA_Builder * iBuilder, PabloFunction * function) {
+Function * wcPipeline(Module * mMod, IDISA::IDISA_Builder * iBuilder) {
     Type * mBitBlockType = iBuilder->getBitBlockType();
     
-    ExternalFileBuffer ByteStream(iBuilder, StreamSetType(iBuilder,1, 8));
-    SingleBlockBuffer BasisBits(iBuilder, StreamSetType(iBuilder,8, 1));
-    //CircularBuffer BasisBits(iBuilder, StreamSetType(iBuilder,8, 1), codegen::SegmentSize * codegen::BufferSegments);
+    ExternalFileBuffer ByteStream(iBuilder, iBuilder->getStreamSetTy(1, 8));
+
+    SingleBlockBuffer BasisBits(iBuilder, iBuilder->getStreamSetTy(8, 1));
 
     s2pKernel  s2pk(iBuilder);
     std::unique_ptr<Module> s2pM = s2pk.createKernelModule({&ByteStream}, {&BasisBits});
     
-    pablo_function_passes(function);
-    PabloKernel wck(iBuilder, "wc", function);
+    PabloKernel wck(iBuilder, "wc");
+    wc_gen(&wck);
+    pablo_function_passes(&wck);
     
     std::unique_ptr<Module> wcM = wck.createKernelModule({&BasisBits}, {});
     
@@ -208,8 +204,7 @@ wcFunctionType wcCodeGen(void) {
     Module * M = new Module("wc", getGlobalContext());
     IDISA::IDISA_Builder * idb = IDISA::GetIDISA_Builder(M);
 
-    PabloFunction * function = wc_gen();
-    llvm::Function * main_IR = wcPipeline(M, idb, function);
+    llvm::Function * main_IR = wcPipeline(M, idb);
 
     wcEngine = JIT_to_ExecutionEngine(M);
     

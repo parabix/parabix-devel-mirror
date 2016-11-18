@@ -5,7 +5,12 @@
  */
 
 #include <pablo/codegenstate.h>
-#include <pablo/printer_pablos.h>
+
+#define CHECK_SAME_TYPE(A, B) \
+    assert ("DIFFERING CONTEXTS" && (&((A)->getType()->getContext()) == &((B)->getType()->getContext()))); \
+    assert ("DIFFERING TYPES" && ((A)->getType() == (B)->getType()))
+
+using StreamType = IDISA::StreamType;
 
 namespace pablo {
 
@@ -18,11 +23,13 @@ Call * PabloBlock::createCall(PabloAST * prototype, const std::vector<PabloAST *
 }
 
 Count * PabloBlock::createCount(PabloAST * expr) {
-    return insertAtInsertionPoint(new Count(expr, makeName("count")));
+    Type * type = getParent()->getBuilder()->getSizeTy();
+    return insertAtInsertionPoint(new Count(expr, makeName("count"), type));
 }
 
 Count * PabloBlock::createCount(PabloAST * const expr, const std::string & prefix)  {
-    return insertAtInsertionPoint(new Count(expr, makeName(prefix)));
+    Type * type = getParent()->getBuilder()->getSizeTy();
+    return insertAtInsertionPoint(new Count(expr, makeName(prefix), type));
 }
 
 Not * PabloBlock::createNot(PabloAST * expr, String * name) {
@@ -35,7 +42,7 @@ Not * PabloBlock::createNot(PabloAST * expr, String * name) {
 
 Var * PabloBlock::createVar(PabloAST * name, Type * type) {
     if (type == nullptr) {
-        type = getStreamTy();
+        type = getParent()->getStreamSetTy();
     }
     if (LLVM_UNLIKELY(name == nullptr || !isa<String>(name))) {
         throw std::runtime_error("Var objects must have a String name");
@@ -78,25 +85,34 @@ Lookahead * PabloBlock::createLookahead(PabloAST * expr, PabloAST * shiftAmount,
 
 Extract * PabloBlock::createExtract(PabloAST * array, PabloAST * index, String * name) {
     assert (array && index);
-    if (LLVM_LIKELY(isa<ArrayType>(array->getType()))) {
-        if (name == nullptr) {
-            std::string tmp;
-            raw_string_ostream out(tmp);
-            PabloPrinter::print(array, out);
-            PabloPrinter::print(index, out);
-            name = makeName(out.str());
-        }
-        return insertAtInsertionPoint(new Extract(array, index, name));
+    if (name == nullptr) {
+        std::string tmp;
+        raw_string_ostream out(tmp);
+        array->print(out);
+        out << '[';
+        index->print(out);
+        out << ']';
+        name = makeName(out.str());
+    }
+    llvm::Type * const type = array->getType();
+    if (LLVM_LIKELY(isa<StreamType>(type))) {
+        Type * elementType = cast<StreamType>(type)->getStreamElementType();
+        return insertAtInsertionPoint(new Extract(array, index, name, elementType));
+    }
+    if (LLVM_LIKELY(isa<ArrayType>(type))) {
+        Type * elementType = cast<ArrayType>(type)->getArrayElementType();
+        return insertAtInsertionPoint(new Extract(array, index, name, elementType));
     }
     std::string tmp;
     raw_string_ostream out(tmp);
     out << "cannot extract element from ";
     array->print(out);
-    out << ": type is not a valid ArrayType";
+    out << " : not a StreamType or ArrayType";
     throw std::runtime_error(out.str());
 }
 
 And * PabloBlock::createAnd(PabloAST * expr1, PabloAST * expr2, String * name) {
+    CHECK_SAME_TYPE(expr1, expr2);
     if (name == nullptr) {
         name = makeName("and");
     }
@@ -111,6 +127,7 @@ And * PabloBlock::createAnd(Type * const type, const unsigned reserved, String *
 }
 
 Or * PabloBlock::createOr(PabloAST * expr1, PabloAST * expr2, String * name) {
+    CHECK_SAME_TYPE(expr1, expr2);
     if (name == nullptr) {
         name = makeName("or");
     }
@@ -125,6 +142,7 @@ Or * PabloBlock::createOr(Type * const type, const unsigned reserved, String * n
 }
 
 Xor * PabloBlock::createXor(PabloAST * expr1, PabloAST * expr2, String * name) {
+    CHECK_SAME_TYPE(expr1, expr2);
     if (name == nullptr) {
         name = makeName("xor");
     }
@@ -138,11 +156,29 @@ Xor * PabloBlock::createXor(Type * const type, const unsigned reserved, String *
     return insertAtInsertionPoint(new Xor(type, reserved, name));
 }
 
+Add * PabloBlock::createAdd(PabloAST * expr1, PabloAST * expr2, String * name) {
+    CHECK_SAME_TYPE(expr1, expr2);
+    if (name == nullptr) {
+        name = makeName("add");
+    }
+    return insertAtInsertionPoint(new Add(expr1->getType(), expr1, expr2, name));
+}
+
+Subtract * PabloBlock::createSubtract(PabloAST * expr1, PabloAST * expr2, String * name) {
+    CHECK_SAME_TYPE(expr1, expr2);
+    if (name == nullptr) {
+        name = makeName("sub");
+    }
+    return insertAtInsertionPoint(new Subtract(expr1->getType(), expr1, expr2, name));
+}
+
 Assign * PabloBlock::createAssign(PabloAST * const var, PabloAST * const value) {
+    CHECK_SAME_TYPE(var, value);
     return insertAtInsertionPoint(new Assign(var, value));
 }
 
 MatchStar * PabloBlock::createMatchStar(PabloAST * marker, PabloAST * charclass, String * name) {
+    CHECK_SAME_TYPE(marker, charclass);
     if (name == nullptr) {
         name = makeName("matchstar");
     }
@@ -150,6 +186,7 @@ MatchStar * PabloBlock::createMatchStar(PabloAST * marker, PabloAST * charclass,
 }
 
 ScanThru * PabloBlock::createScanThru(PabloAST * from, PabloAST * thru, String * name) {
+    CHECK_SAME_TYPE(from, thru);
     if (name == nullptr) {
         name = makeName("scanthru");
     }
@@ -173,6 +210,7 @@ While * PabloBlock::createWhile(PabloAST * condition, PabloBlock * body) {
 /// TERNARY CREATE FUNCTION
 
 Sel * PabloBlock::createSel(PabloAST * condition, PabloAST * trueExpr, PabloAST * falseExpr, String * name) {
+    CHECK_SAME_TYPE(trueExpr, falseExpr);
     if (name == nullptr) {
         name = makeName("sel");
     }
@@ -229,20 +267,5 @@ unsigned PabloBlock::enumerateScopes(unsigned baseScopeIndex) {
     }
     return nextScopeIndex;
 }    
-    
-/// CONSTRUCTOR
-
-PabloBlock::PabloBlock(PabloFunction * const parent) noexcept
-: PabloAST(PabloAST::ClassTypeId::Block, nullptr, nullptr)
-, mParent(parent)
-, mBranch(nullptr)
-, mScopeIndex(0)
-{
-
-}
-
-PabloBlock::~PabloBlock() {
-
-}
 
 }

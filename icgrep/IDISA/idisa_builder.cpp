@@ -24,11 +24,14 @@ Value * IDISA_Builder::fwCast(unsigned fw, Value * a) {
     return a->getType() == fwVectorType(fw) ? a : CreateBitCast(a, fwVectorType(fw));
 }
 
-std::string IDISA_Builder::getBitBlockTypeName() {
-    if (mBitBlockType->isIntegerTy()) return "i" + std::to_string(mBitBlockWidth);
-    assert(mBitBlockType->isVectorTy() || "BitBlockType is neither integer nor vector");
-    unsigned fw = mBitBlockType->getScalarSizeInBits();
-    return "v" + std::to_string(mBitBlockWidth/fw) + "i" + std::to_string(fw);
+std::string IDISA_Builder::getBitBlockTypeName() const {
+    const auto type = getBitBlockType();
+    if (type->isIntegerTy()) {
+        return "i" + std::to_string(getBitBlockWidth());
+    }
+    assert("BitBlockType is neither integer nor vector" && type->isVectorTy());
+    const auto fw = type->getScalarSizeInBits();
+    return "v" + std::to_string(getBitBlockWidth() / fw) + "i" + std::to_string(fw);
 }
 
     

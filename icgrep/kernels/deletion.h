@@ -40,9 +40,10 @@ class DeletionKernel : public kernel::KernelBuilder {
 public:
     DeletionKernel(IDISA::IDISA_Builder * iBuilder, unsigned fw, unsigned streamCount) :
     KernelBuilder(iBuilder, "del",
-                  {Binding{StreamSetType(iBuilder,streamCount + 2, 1), "inputStreamSet"}},
-                  {Binding{StreamSetType(iBuilder,streamCount, 1), "outputStreamSet"},
-                   Binding{StreamSetType(iBuilder,1, 1), "deletionCounts"}},
+                  {Binding{iBuilder->getStreamSetTy(streamCount), "inputStreamSet"},
+                   Binding{iBuilder->getStreamSetTy(), "delMaskSet"}},
+                  {Binding{iBuilder->getStreamSetTy(streamCount), "outputStreamSet"},
+                   Binding{iBuilder->getStreamSetTy(), "deletionCounts"}},
                   {}, {}, {}),
     mDeletionFieldWidth(fw),
     mStreamCount(streamCount) {}

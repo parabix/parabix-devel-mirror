@@ -9,7 +9,7 @@
 #include <pablo/codegenstate.h>
 #include <pablo/carry_manager.h>
 #include <pablo/printer_pablos.h>
-#include <pablo/function.h>
+#include <pablo/prototype.h>
 #include <re/re_name.h>
 #include <stdexcept>
 #include <sstream>
@@ -22,12 +22,11 @@
 
 namespace pablo {
 
-PabloCompiler::PabloCompiler(PabloKernel * k, PabloFunction * const function)
-: iBuilder(k->getBuilder())
+PabloCompiler::PabloCompiler(PabloKernel * kernel)
+: iBuilder(kernel->getBuilder())
 , mBitBlockType(iBuilder->getBitBlockType())
 , mCarryManager(nullptr)
-, mPabloFunction(function)
-, mKernelBuilder(k)
+, mKernel(kernel)
 , mWhileDepth(0)
 , mIfDepth(0)
 , mFunction(nullptr)
@@ -36,70 +35,53 @@ PabloCompiler::PabloCompiler(PabloKernel * k, PabloFunction * const function)
 }
 
 Type * PabloCompiler::initializeKernelData() {
-    Examine(mPabloFunction);    
+    Examine();
     mCarryManager = std::unique_ptr<CarryManager>(new CarryManager(iBuilder));
-    Type * carryDataType = mCarryManager->initializeCarryData(mPabloFunction);
-    return carryDataType;
+    return mCarryManager->initializeCarryData(mKernel);
 }
     
-void PabloCompiler::verifyParameter(const Var * var, const Value * param) {
-    if (LLVM_UNLIKELY(&(param->getContext()) != &(iBuilder->getContext()))) {
-        std::string tmp;
-        raw_string_ostream out(tmp);
-        out << "Cannot compile ";
-        mPabloFunction->print(out);
-        out << ": LLVM Context for ";
-        var->print(out);
-        out << " differs from that of the kernel.";
-        throw std::runtime_error(out.str());
-    }
-}
-
-void PabloCompiler::compile(Function * doBlockFunction) {
+void PabloCompiler::compile(Value * const self, Function * doBlockFunction) {
 
     // Make sure that we generate code into the right module.
     mFunction = doBlockFunction;
+    mSelf = self;
+
     #ifdef PRINT_TIMING_INFORMATION
     const timestamp_t pablo_compilation_start = read_cycle_counter();
     #endif
 
     //Generate Kernel//
     iBuilder->SetInsertPoint(BasicBlock::Create(iBuilder->getContext(), "entry", doBlockFunction, 0));
-    mSelf = mKernelBuilder->getParameter(doBlockFunction, "self");
 
-    mCarryManager->initializeCodeGen(mKernelBuilder, mSelf);
+    mCarryManager->initializeCodeGen(mKernel, mSelf);
       
-    PabloBlock * const entryBlock = mPabloFunction->getEntryBlock(); assert (entryBlock);
+    PabloBlock * const entryBlock = mKernel->getEntryBlock(); assert (entryBlock);
     mMarkerMap.emplace(entryBlock->createZeroes(), iBuilder->allZeroes());
     mMarkerMap.emplace(entryBlock->createOnes(), iBuilder->allOnes());
 
-    Value * const blockNo = mKernelBuilder->getScalarField(mSelf, blockNoScalar);
+    Value * const blockNo = mKernel->getScalarField(mSelf, blockNoScalar);
 
-    for (unsigned i = 0, j = 0; i < mPabloFunction->getNumOfParameters(); ++i) {
-        Var * var = mPabloFunction->getParameter(i);
+    for (unsigned i = 0; i < mKernel->getNumOfInputs(); ++i) {
+        Var * var = mKernel->getInput(i);
         std::string name = var->getName()->to_string();
         Value * input = nullptr;
         if (var->getType()->isSingleValueType()) {
-            input = mKernelBuilder->getScalarFieldPtr(mSelf, name);
+            input = mKernel->getScalarFieldPtr(mSelf, name);
         } else {
-            input = mKernelBuilder->getStreamSetBlockPtr(mSelf, name, blockNo);
-            input = iBuilder->CreateGEP(input, {iBuilder->getInt32(0), iBuilder->getInt32(j++)});
+            input = mKernel->getStreamSetBlockPtr(mSelf, name, blockNo);
         }
-        verifyParameter(var, input);
         mMarkerMap.emplace(var, input);
     }
 
-    for (unsigned i = 0, j = 0; i < mPabloFunction->getNumOfResults(); ++i) {
-        Var * var = mPabloFunction->getResult(i);
+    for (unsigned i = 0; i < mKernel->getNumOfOutputs(); ++i) {
+        Var * var = mKernel->getOutput(i);
         std::string name = var->getName()->to_string();
         Value * output = nullptr;
         if (var->getType()->isSingleValueType()) {
-            output = mKernelBuilder->getScalarFieldPtr(mSelf, name);
+            output = mKernel->getScalarFieldPtr(mSelf, name);
         } else {
-            output = mKernelBuilder->getStreamSetBlockPtr(mSelf, name, blockNo);
-            output = iBuilder->CreateGEP(output, {iBuilder->getInt32(0), iBuilder->getInt32(j++)});
+            output = mKernel->getStreamSetBlockPtr(mSelf, name, blockNo);
         }
-        verifyParameter(var, output);
         mMarkerMap.emplace(var, output);
     }
 
@@ -111,11 +93,11 @@ void PabloCompiler::compile(Function * doBlockFunction) {
     #endif
 }
 
-inline void PabloCompiler::Examine(const PabloFunction * const function) {
+inline void PabloCompiler::Examine() {
     mWhileDepth = 0;
     mIfDepth = 0;
     mMaxWhileDepth = 0;
-    Examine(function->getEntryBlock());
+    Examine(mKernel->getEntryBlock());
 }
 
 void PabloCompiler::Examine(const PabloBlock * const block) {
@@ -123,8 +105,8 @@ void PabloCompiler::Examine(const PabloBlock * const block) {
         if (LLVM_UNLIKELY(isa<Lookahead>(stmt))) {
             const Lookahead * const la = cast<Lookahead>(stmt);
             assert (isa<Var>(la->getExpr()));
-            if (LLVM_LIKELY(la->getAmount() > mKernelBuilder->getLookAhead())) {
-                mKernelBuilder->setLookAhead(la->getAmount());
+            if (LLVM_LIKELY(la->getAmount() > mKernel->getLookAhead())) {
+                mKernel->setLookAhead(la->getAmount());
             }
         } else {
             if (LLVM_UNLIKELY(isa<If>(stmt))) {
@@ -276,16 +258,18 @@ void PabloCompiler::compileWhile(const While * const whileStatement) {
     std::vector<std::pair<const Var *, PHINode *>> variants;
 
     // for any Next nodes in the loop body, initialize to (a) pre-loop value.
-    for (const auto var : whileStatement->getEscaped()) {
-        PHINode * phi = iBuilder->CreatePHI(mBitBlockType, 2, getName(var));
+    for (const auto var : whileStatement->getEscaped()) {        
         auto f = mMarkerMap.find(var);
         if (LLVM_UNLIKELY(f == mMarkerMap.end())) {
             std::string tmp;
             raw_string_ostream out(tmp);
             PabloPrinter::print(var, out);
-            out << " was not assigned a value.";
+            out << " is uninitialized prior to entering ";
+            PabloPrinter::print(whileStatement, out);
             llvm::report_fatal_error(out.str());
         }
+
+        PHINode * phi = iBuilder->CreatePHI(mBitBlockType, 2, getName(var));
         phi->addIncoming(f->second, whileEntryBlock);
         f->second = phi;
         assert(mMarkerMap[var] == phi);
@@ -361,8 +345,8 @@ void PabloCompiler::compileStatement(const Statement * stmt) {
 
             bool storeInstRequired = false;
             if (LLVM_LIKELY(isa<Var>(expr))) {
-                for (unsigned i = 0; i < mPabloFunction->getNumOfResults(); ++i) {
-                    if (expr == mPabloFunction->getResult(i)) {
+                for (unsigned i = 0; i < mKernel->getNumOfOutputs(); ++i) {
+                    if (expr == mKernel->getOutput(i)) {
                         storeInstRequired = true;
                         break;
                     }
@@ -370,14 +354,14 @@ void PabloCompiler::compileStatement(const Statement * stmt) {
             }
 
             if (LLVM_UNLIKELY(storeInstRequired || isa<Extract>(expr))) {
-
                 const auto f = mMarkerMap.find(expr);
                 if (LLVM_UNLIKELY(f == mMarkerMap.end())) {
                     std::string tmp;
                     raw_string_ostream out(tmp);
-                    PabloPrinter::print(expr, out);
-                    out << " was not defined prior to ";
-                    PabloPrinter::print(stmt, out);
+                    out << "Use-before-definition error: ";
+                    expr->print(out);
+                    out << " does not dominate ";
+                    stmt->print(out);
                     throw std::runtime_error(out.str());
                 }
                 Value * const ptr = f->second;
@@ -388,16 +372,25 @@ void PabloCompiler::compileStatement(const Statement * stmt) {
                     Value * count = iBuilder->CreateLoad(ptr);
                     value = iBuilder->CreateTruncOrBitCast(value, count->getType());
                     value = iBuilder->CreateAdd(value, count);
-                    iBuilder->CreateStore(value, ptr);
+                }
+
+//                cast<PointerType>(ptr->getType())->getElementType()->getPrimitiveSizeInBits() / 8;
+
+                const Type * const type = value->getType();
+                if (isa<VectorType>(type) || isa<IntegerType>(type)) {
+                    const auto bitWidth = isa<VectorType>(type)
+                            ? cast<VectorType>(type)->getBitWidth()
+                            : cast<IntegerType>(type)->getBitWidth();
+                    iBuilder->CreateAlignedStore(value, ptr, bitWidth / 8);
                 } else {
-                    iBuilder->CreateBlockAlignedStore(value, ptr);
+                    iBuilder->CreateStore(value, ptr);
                 }
             }
 
         } else if (const Extract * extract = dyn_cast<Extract>(stmt)) {
             Value * array = compileExpression(extract->getArray(), false);
             Value * index = compileExpression(extract->getIndex());
-            value = iBuilder->CreateGEP(array, index, getName(stmt));
+            value = iBuilder->CreateGEP(array, {ConstantInt::getNullValue(index->getType()), index}, getName(stmt));
         } else if (const And * pablo_and = dyn_cast<And>(stmt)) {
             value = iBuilder->simd_and(compileExpression(pablo_and->getOperand(0)), compileExpression(pablo_and->getOperand(1)));
         } else if (const Or * pablo_or = dyn_cast<Or>(stmt)) {
@@ -426,19 +419,24 @@ void PabloCompiler::compileStatement(const Statement * stmt) {
             Value * const  sum = mCarryManager->addCarryInCarryOut(sthru->getLocalCarryIndex(), marker_expr, cc_expr);
             value = iBuilder->simd_and(sum, iBuilder->simd_not(cc_expr));
         } else if (const InFile * e = dyn_cast<InFile>(stmt)) {
-            Value * EOFmask = mKernelBuilder->getScalarField(mSelf, "EOFmask");
+            Value * EOFmask = mKernel->getScalarField(mSelf, "EOFmask");
             value = iBuilder->simd_xor(compileExpression(e->getExpr()), EOFmask);
         } else if (const AtEOF * e = dyn_cast<AtEOF>(stmt)) {
-            Value * EOFbit = mKernelBuilder->getScalarField(mSelf, "EOFbit");
+            Value * EOFbit = mKernel->getScalarField(mSelf, "EOFbit");
             value = iBuilder->simd_and(compileExpression(e->getExpr()), EOFbit);
         } else if (const Count * c = dyn_cast<Count>(stmt)) {
             Value * const to_count = compileExpression(c->getExpr());
-            const unsigned counterSize = 64;
-            Value * fieldCounts = iBuilder->simd_popcount(counterSize, to_count);
-            value = iBuilder->mvmd_extract(counterSize, fieldCounts, 0);
-            for (unsigned i = 1; i < (iBuilder->getBitBlockWidth() / counterSize); ++i) {
-                Value * temp = iBuilder->mvmd_extract(counterSize, fieldCounts, i);
-                value = iBuilder->CreateAdd(value, temp);
+            const unsigned counterSize = iBuilder->getSizeTy()->getBitWidth();
+            Value * const partial = iBuilder->simd_popcount(counterSize, to_count);
+            if (LLVM_UNLIKELY(counterSize <= 1)) {
+                value = partial;
+            } else {
+                value = iBuilder->mvmd_extract(counterSize, partial, 0);
+                const auto fields = (iBuilder->getBitBlockWidth() / counterSize);
+                for (unsigned i = 1; i < fields; ++i) {
+                    Value * temp = iBuilder->mvmd_extract(counterSize, partial, i);
+                    value = iBuilder->CreateAdd(value, temp);
+                }
             }
         } else if (const Lookahead * l = dyn_cast<Lookahead>(stmt)) {
             PabloAST * const var = l->getExpr();
@@ -446,25 +444,25 @@ void PabloCompiler::compileStatement(const Statement * stmt) {
                 throw std::runtime_error("Lookahead operations may only be applied to input streams");
             }
             unsigned index = 0;
-            for (; index < mPabloFunction->getNumOfParameters(); ++index) {
-                if (mPabloFunction->getParameter(index) == var) {
+            for (; index < mKernel->getNumOfInputs(); ++index) {
+                if (mKernel->getInput(index) == var) {
                     break;
                 }
             }
-            if (LLVM_UNLIKELY(index >= mPabloFunction->getNumOfParameters())) {
+            if (LLVM_UNLIKELY(index >= mKernel->getNumOfInputs())) {
                 throw std::runtime_error("Lookahead has an illegal Var operand");
             }
             const unsigned bit_shift = (l->getAmount() % iBuilder->getBitBlockWidth());
             const unsigned block_shift = (l->getAmount() / iBuilder->getBitBlockWidth());
             std::string inputName = var->getName()->to_string();;
-            Value * blockNo = mKernelBuilder->getScalarField(mSelf, blockNoScalar);
-            Value * lookAhead_blockPtr  = mKernelBuilder->getStreamSetBlockPtr(mSelf, inputName, iBuilder->CreateAdd(blockNo, ConstantInt::get(iBuilder->getSizeTy(), block_shift)));
+            Value * blockNo = mKernel->getScalarField(mSelf, blockNoScalar);
+            Value * lookAhead_blockPtr  = mKernel->getStreamSetBlockPtr(mSelf, inputName, iBuilder->CreateAdd(blockNo, ConstantInt::get(iBuilder->getSizeTy(), block_shift)));
             Value * lookAhead_inputPtr = iBuilder->CreateGEP(lookAhead_blockPtr, {iBuilder->getInt32(0), iBuilder->getInt32(index)});
             Value * lookAhead = iBuilder->CreateBlockAlignedLoad(lookAhead_inputPtr);
             if (bit_shift == 0) {  // Simple case with no intra-block shifting.
                 value = lookAhead;
             } else { // Need to form shift result from two adjacent blocks.
-                Value * lookAhead_blockPtr1  = mKernelBuilder->getStreamSetBlockPtr(mSelf, inputName, iBuilder->CreateAdd(blockNo, ConstantInt::get(iBuilder->getSizeTy(), block_shift + 1)));
+                Value * lookAhead_blockPtr1  = mKernel->getStreamSetBlockPtr(mSelf, inputName, iBuilder->CreateAdd(blockNo, ConstantInt::get(iBuilder->getSizeTy(), block_shift + 1)));
                 Value * lookAhead_inputPtr1 = iBuilder->CreateGEP(lookAhead_blockPtr1, {iBuilder->getInt32(0), iBuilder->getInt32(index)});
                 Value * lookAhead1 = iBuilder->CreateBlockAlignedLoad(lookAhead_inputPtr1);
                 if (LLVM_UNLIKELY((bit_shift % 8) == 0)) { // Use a single whole-byte shift, if possible.

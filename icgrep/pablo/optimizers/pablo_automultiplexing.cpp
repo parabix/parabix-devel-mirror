@@ -1,6 +1,6 @@
 #include "pablo_automultiplexing.hpp"
 #include <pablo/builder.hpp>
-#include <pablo/function.h>
+#include <pablo/prototype.h>
 #include <pablo/printer_pablos.h>
 #include <boost/container/flat_set.hpp>
 #include <boost/container/flat_map.hpp>

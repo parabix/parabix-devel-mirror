@@ -3,12 +3,12 @@
 
 namespace pablo {
 
-class PabloFunction;
+class PabloKernel;
 class PabloBlock;
 
 class FlattenIf {
 public:
-    static void transform(PabloFunction & function);
+    static void transform(PabloKernel * function);
 protected:
     FlattenIf() = default;
 private:

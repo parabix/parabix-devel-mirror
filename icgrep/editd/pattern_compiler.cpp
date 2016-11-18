@@ -19,7 +19,7 @@
 #include <re/re_assertion.h>
 #include <re/re_analysis.h>
 #include <pablo/codegenstate.h>
-#include <pablo/function.h>
+#include <pablo/prototype.h>
 
 #include <assert.h>
 #include <stdexcept>
@@ -32,8 +32,8 @@ using namespace pablo;
 namespace re {
 
 
-Pattern_Compiler::Pattern_Compiler(pablo::PabloFunction & function)
-: mFunction(function)
+Pattern_Compiler::Pattern_Compiler(PabloKernel & kernel)
+: mKernel(kernel)
 {
 
 }
@@ -123,11 +123,10 @@ void Pattern_Compiler::compile(const std::vector<std::string> & patts, PabloBuil
 
     }
 
-    Var * output = mFunction.addResult("E", getStreamTy(1, dist + 1));
 
-    for(int d=0; d<=dist; d++){
+    Var * output = mKernel.addOutput("E", mKernel.getBuilder()->getStreamSetTy(dist + 1));
+    for (int d = 0; d <= dist; d++) {
         pb.createAssign(pb.createExtract(output, d), E[d]);
-        // mFunction.setResult(d, pb.createAssign("E" + std::to_string(d), E[d]));
     }
 }
 

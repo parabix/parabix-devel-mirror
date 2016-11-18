@@ -80,13 +80,13 @@ public:
 
     Extract * createExtract(PabloAST * value, not_null<PabloAST *> index);
 
-    inline Extract * createExtract(PabloAST * value, const Integer::Type index) {
+    inline Extract * createExtract(PabloAST * value, const int64_t index) {
         return createExtract(value, getInteger(index));
     }
 
     Extract * createExtract(PabloAST * value, not_null<PabloAST *> index, const std::string & prefix);
 
-    inline Extract * createExtract(PabloAST * value, const Integer::Type index, const std::string & prefix) {
+    inline Extract * createExtract(PabloAST * value, const int64_t index, const std::string & prefix) {
         return createExtract(value, getInteger(index), prefix);
     }
 
@@ -96,19 +96,19 @@ public:
 
     Call * createCall(Prototype * prototype, const std::vector<PabloAST *> &vars);
 
-    inline PabloAST * createAdvance(PabloAST * expr, const Integer::Type shiftAmount) {
+    inline PabloAST * createAdvance(PabloAST * expr, const int64_t shiftAmount) {
         return createAdvance(expr, mPb->getInteger(shiftAmount));
     }
 
     PabloAST * createAdvance(PabloAST * expr, PabloAST * shiftAmount);
 
-    inline PabloAST * createAdvance(PabloAST * expr, const Integer::Type shiftAmount, const std::string & prefix) {
+    inline PabloAST * createAdvance(PabloAST * expr, const int64_t shiftAmount, const std::string & prefix) {
         return createAdvance(expr, mPb->getInteger(shiftAmount), prefix);
     }
 
     PabloAST * createAdvance(PabloAST * expr, PabloAST * shiftAmount, const std::string & prefix);
 
-    inline PabloAST * createLookahead(PabloAST * expr, const Integer::Type shiftAmount) {
+    inline PabloAST * createLookahead(PabloAST * expr, const int64_t shiftAmount) {
         if (shiftAmount == 0) {
             return expr;
         }
@@ -117,7 +117,7 @@ public:
 
     PabloAST * createLookahead(PabloAST * expr, PabloAST * shiftAmount);
 
-    inline PabloAST * createLookahead(PabloAST * expr, const Integer::Type shiftAmount, const std::string & prefix) {
+    inline PabloAST * createLookahead(PabloAST * expr, const int64_t shiftAmount, const std::string & prefix) {
         if (shiftAmount == 0) {
             return expr;
         }
@@ -168,6 +168,14 @@ public:
     
     PabloAST * createAtEOF(PabloAST * expr, const std::string & prefix);
     
+    PabloAST * createAdd(PabloAST * expr1, PabloAST * expr2);
+
+    PabloAST * createAdd(PabloAST * expr1, PabloAST * expr2, const std::string & prefix);
+
+    PabloAST * createSubtract(PabloAST * expr1, PabloAST * expr2);
+
+    PabloAST * createSubtract(PabloAST * expr1, PabloAST * expr2, const std::string & prefix);
+
     inline If * createIf(PabloAST * condition, PabloBlock * body) {
         return mPb->createIf(condition, body);
     }
@@ -230,7 +238,7 @@ public:
         return mParent;
     }
 
-    inline String * getName(const std::string name) const {
+    inline String * getName(const std::string & name) const {
         return mPb->getName(name);
     }
 
@@ -238,12 +246,8 @@ public:
         return mPb->makeName(prefix);
     }
 
-    inline Integer * getInteger(Integer::Type value) const {
+    inline Integer * getInteger(const uint64_t value) const {
         return mPb->getInteger(value);
-    }
-
-    inline SymbolGenerator * getSymbolTable() const {
-        return mPb->getSymbolTable();
     }
 
 protected:

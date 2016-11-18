@@ -140,8 +140,7 @@ Value * KernelInterface::createDoSegmentCall(Value * self, Value * blksToDo) {
     if (!method) {
         throw std::runtime_error("Cannot find " + fnName);
     }
-    std::vector<Value *> args = {self, blksToDo};
-    return iBuilder->CreateCall(method, args);
+    return iBuilder->CreateCall(method, {self, blksToDo});
 }
 
 Value * KernelInterface::createGetAccumulatorCall(Value * self, std::string accumName) {

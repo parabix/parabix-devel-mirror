@@ -17,33 +17,54 @@ inline bool escapes(const Var * const var, const Branch * const br) {
     bool inside = false;
     bool outside = false;
     for (const PabloAST * user : var->users()) {
-        if (isa<Assign>(user)) {
-            // is this var assigned a value within the scope of the branch?
+        if (isa<Assign>(user)) {            
+
             const PabloBlock * const scope = cast<Assign>(user)->getParent();
 
+            // Is this Var assigned a value within the body of this branch?
             for (const PabloBlock * test = scope; test; test = test->getPredecessor()) {
                 if (test == br->getBody()) {
                     if (outside) {
                         return true;
                     }
                     inside = true;
-                    break;
+                    goto outer_loop;
                 }
             }
 
-            for (const PabloBlock * test = br->getParent(); test; test = test->getPredecessor()) {
-                // technically we should check whether this user dominates the branch but if it
-                // doesn't, then the program is illegal anyway and the error will be found.
+            // Is there an assignment to this Var that dominates this branch?
+            const Branch * check = br;
+            for (const PabloBlock * test = br->getParent(); test; ) {
                 if (test == scope) {
-                    if (inside) {
-                        return true;
+                    // verify this assignment actually dominates the branch
+                    const Statement * temp1 = cast<Assign>(user);
+                    const Statement * temp2 = check;
+                    while (temp1 && temp2) {
+                        if (temp1 == check) {
+                            break;
+                        } else if (temp2 == cast<Assign>(user)) {
+                            temp1 = nullptr;
+                            break;
+                        }
+                        temp1 = temp1->getNextNode();
+                        temp2 = temp2->getNextNode();
                     }
-                    outside = true;
+                    if (temp1 != nullptr) {
+                        if (inside) {
+                            return true;
+                        }
+                        outside = true;
+                    }
                     break;
                 }
+                check = test->getBranch();
+                if (LLVM_UNLIKELY(check == nullptr)) {
+                    break;
+                }
+                test = check->getParent();
             }
-
         }
+outer_loop: continue;
     }
     return false;
 }
@@ -53,7 +74,7 @@ inline bool escapes(const Var * const var, const Branch * const br) {
  ** ------------------------------------------------------------------------------------------------------------- */
 std::vector<Var *> Branch::getEscaped() const {
 
-    PabloFunction * const f = getParent()->getParent();
+    const auto f = getParent()->getParent();
     const auto n = f->getNumOfVariables();
 
     std::vector<Var *> escaped;    

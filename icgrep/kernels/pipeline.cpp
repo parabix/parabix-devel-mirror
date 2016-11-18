@@ -210,7 +210,7 @@ void generatePipelineLoop(IDISA::IDISA_Builder * iBuilder, std::vector<KernelBui
     for (unsigned i = 0; i < kernels.size(); i++) {
         kernels[i]->createDoSegmentCall(instances[i], segBlocks);
     }
-    Value * endSignal = kernels[kernels.size()-1]->getTerminationSignal(instances[kernels.size()-1]);
+    Value * endSignal = kernels.back()->getTerminationSignal(instances.back());
     iBuilder->CreateCondBr(endSignal, exitBlock, segmentBlock);
     iBuilder->SetInsertPoint(exitBlock);
 

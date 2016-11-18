@@ -13,7 +13,7 @@
 #include <string>
 
 namespace pablo {
-    class PabloFunction;
+    class PabloKernel;
     class Var;
 }
 
@@ -22,18 +22,16 @@ namespace cc {
 class CC_NameMap;
 
 class CC_Compiler{
-
-    friend pablo::PabloFunction * ParabixCharacterClassFunction(const std::string &, const std::vector<re::CC *> &, const unsigned);
-
+    friend class ParabixCharacterClassKernelBuilder;
 public:
 
     using Vars = std::vector<pablo::Var *>;
 
-    CC_Compiler(pablo::PabloFunction & function, const unsigned encodingBits = 8, const std::string prefix = "basis");
+    CC_Compiler(pablo::PabloKernel * kernel, const unsigned encodingBits = 8, const std::string prefix = "basis");
 
     pablo::PabloAST * compileCC(const re::CC *cc);
 
-    pablo::PabloAST *compileCC(const re::CC *cc, pablo::PabloBlock & block);
+    pablo::PabloAST * compileCC(const re::CC *cc, pablo::PabloBlock & block);
 
     pablo::PabloAST * compileCC(const re::CC *cc, pablo::PabloBuilder & builder);
 
@@ -89,8 +87,6 @@ inline pablo::PabloAST *CC_Compiler::compileCC(const re::CC *cc, pablo::PabloBui
 inline pablo::PabloBuilder & CC_Compiler::getBuilder() {
     return mBuilder;
 }
-
-pablo::PabloFunction * ParabixCharacterClassFunction(const std::string & name, const std::vector<re::CC *> & charClasses, const unsigned basisBitsCount);
 
 }
 
