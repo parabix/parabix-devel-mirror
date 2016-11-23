@@ -9,6 +9,7 @@
 #include <re/re_parser_pcre.h>
 #include <re/re_parser_ere.h>
 #include <re/re_parser_bre.h>
+#include <re/re_parser_prosite.h>
 #include <re/re_name.h>
 #include <re/re_alt.h>
 #include <re/re_end.h>
@@ -41,6 +42,9 @@ RE * RE_Parser::parse(const std::string & regular_expression, ModeFlagSet initia
             break;
         case RE_Syntax ::BRE:
             parser = llvm::make_unique<RE_Parser_BRE>(regular_expression);
+            break;
+        case RE_Syntax ::PROSITE:
+            parser = llvm::make_unique<RE_Parser_PROSITE>(regular_expression);
             break;
         default:
             //TODO handle FixString

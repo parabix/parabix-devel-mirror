@@ -43,6 +43,7 @@ static cl::opt<re::RE_Syntax> RegexpSyntax(cl::desc("Regular expression syntax:"
         clEnumValN(re::RE_Syntax::FixedStrings, "F", "Fixed strings, separated by newlines"),
         clEnumValN(re::RE_Syntax::BRE, "G", "Posix basic regular expression (BRE) syntax"),
         clEnumValN(re::RE_Syntax::ERE, "E", "Posix extended regular expression (ERE) syntax"),
+        clEnumValN(re::RE_Syntax::PROSITE, "PRO", "PROSITE protein patterns syntax"),
         clEnumValN(re::RE_Syntax::PCRE, "P", "Perl-compatible regular expression (PCRE) syntax - default"),
                clEnumValEnd), cl::cat(LegacyGrepOptions), cl::Grouping, cl::init(re::RE_Syntax::PCRE));
 #endif
@@ -208,7 +209,7 @@ bool isArgUnwantedForAll(char *argument) {
 // Filters out the command line strings that shouldn't be passed on to Grep
 bool isArgUnwantedForGrep(char *argument) {
 #ifdef FUTURE
-    std::vector<std::string> unwantedFlags = {"-n", "-P", "-G", "-E"};
+    std::vector<std::string> unwantedFlags = {"-n", "-P", "-G", "-E", "-PRO"};
 #else
     std::vector<std::string> unwantedFlags = {"-n"};
 #endif
@@ -277,6 +278,9 @@ void pipeIcGrepOutputToGrep(int argc, char *argv[]) {
             break;
         case re::RE_Syntax::ERE:
             grepArguments.append("\"-E\" ");
+            break;
+        case re::RE_Syntax::PROSITE:
+            grepArguments.append("\"-PRO\" ");
             break;
         case re::RE_Syntax::PCRE:
             grepArguments.append("\"-P\" ");

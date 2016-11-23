@@ -20,7 +20,7 @@
 
 namespace re {
 
-enum RE_Syntax {FixedStrings, BRE, ERE, PCRE};
+enum RE_Syntax {FixedStrings, BRE, ERE, PCRE, PROSITE};
 enum CharsetOperatorKind
     {intersectOp, setDiffOp, ampChar, hyphenChar, rangeHyphen, posixPropertyOpener, setOpener, setCloser, backSlash, emptyOperator};
 
@@ -118,11 +118,11 @@ protected:
 
     virtual RE * parse_RE();
 
-    RE * parse_alt();
+    virtual RE * parse_alt();
 
     virtual RE * parse_alt_with_intersect(RE* reToBeIntersected);
 
-    RE * parse_seq();
+    virtual RE * parse_seq();
 
     RE * parse_seq_with_intersect(RE* reToBeIntersected);
 
