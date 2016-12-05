@@ -175,14 +175,11 @@ Function * wcPipeline(Module * mMod, IDISA::IDISA_Builder * iBuilder) {
     ByteStream.setStreamSetBuffer(inputStream, fileSize);
     BasisBits.allocateBuffer();
     
-    Value * s2pInstance = s2pk.createInstance({});
-    Value * wcInstance = wck.createInstance({});
+    generatePipelineLoop(iBuilder, {&s2pk, &wck}, fileSize);
     
-    generatePipelineLoop(iBuilder, {&s2pk, &wck}, {s2pInstance, wcInstance}, fileSize);
-    
-    Value * lineCount = wck.createGetAccumulatorCall(wcInstance, "lineCount");
-    Value * wordCount = wck.createGetAccumulatorCall(wcInstance, "wordCount");
-    Value * charCount = wck.createGetAccumulatorCall(wcInstance, "charCount");
+    Value * lineCount = wck.createGetAccumulatorCall(wck.getInstance(), "lineCount");
+    Value * wordCount = wck.createGetAccumulatorCall(wck.getInstance(), "wordCount");
+    Value * charCount = wck.createGetAccumulatorCall(wck.getInstance(), "charCount");
 
     iBuilder->CreateCall(record_counts_routine, std::vector<Value *>({lineCount, wordCount, charCount, fileSize, fileIdx}));
     

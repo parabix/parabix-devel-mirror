@@ -37,13 +37,13 @@ void editdScanKernel::generateDoBlockMethod() {
     Value * matchResultsPtr = getStreamSetBlockPtr(kernelStuctParam, "matchResults", blockNo);
 
     std::vector<Value * > matchWordVectors;
-    for(int d = 0; d <= mEditDistance; d++){
+    for(unsigned d = 0; d <= mEditDistance; d++){
         Value * matches = iBuilder->CreateBlockAlignedLoad(matchResultsPtr, {iBuilder->getInt32(0), iBuilder->getInt32(d)});
         matchWordVectors.push_back(iBuilder->CreateBitCast(matches, scanwordVectorType));
     }
     
     for(unsigned i = 0; i < fieldCount; ++i){       
-        for(int d = 0; d <= mEditDistance; d++){
+        for(unsigned d = 0; d <= mEditDistance; d++){
             Value * matchWord = iBuilder->CreateExtractElement(matchWordVectors[d], ConstantInt::get(T, i));
             iBuilder->CreateCall(scanWordFunction, {matchWord, iBuilder->getInt32(d), scanwordPos});
         }

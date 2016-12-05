@@ -45,7 +45,7 @@ public:
     // Generate the Kernel to the current module (iBuilder->getModule()).
     void generateKernel(std::vector<StreamSetBuffer *> input_buffers, std::vector<StreamSetBuffer *> output_buffers);
     
-    llvm::Value * createInstance(std::vector<Value *> args) override;
+    void createInstance() override;
 
     Function * generateThreadFunction(std::string name);
 

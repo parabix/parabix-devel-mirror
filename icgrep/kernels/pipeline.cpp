@@ -93,7 +93,7 @@ Function * generateSegmentParallelPipelineThreadFunction(std::string name, IDISA
     return threadFunc;
 }
 
-void generateSegmentParallelPipeline(IDISA::IDISA_Builder * iBuilder, std::vector<KernelBuilder *> kernels, std::vector<Value *> instances, Value * fileSize) {
+void generateSegmentParallelPipeline(IDISA::IDISA_Builder * iBuilder, std::vector<KernelBuilder *> kernels, Value * fileSize) {
     
     unsigned threadNum = codegen::ThreadNum;
 
@@ -102,6 +102,9 @@ void generateSegmentParallelPipeline(IDISA::IDISA_Builder * iBuilder, std::vecto
     Type * const size_ty = iBuilder->getSizeTy();
     Type * const voidPtrTy = TypeBuilder<void *, false>::get(m->getContext());
     Type * const int8PtrTy = iBuilder->getInt8PtrTy();
+
+    for (auto k : kernels) k->createInstance();
+
     Type * const pthreadsTy = ArrayType::get(size_ty, threadNum);
     AllocaInst * const pthreads = iBuilder->CreateAlloca(pthreadsTy);
     std::vector<Value *> pthreadsPtrs;
@@ -113,17 +116,17 @@ void generateSegmentParallelPipeline(IDISA::IDISA_Builder * iBuilder, std::vecto
 
     std::vector<Type *> structTypes;
     structTypes.push_back(size_ty);//input size
-    for (unsigned i = 0; i < instances.size(); i++) {
-        structTypes.push_back(instances[i]->getType());
+    for (unsigned i = 0; i < kernels.size(); i++) {
+        structTypes.push_back(kernels[i]->getInstance()->getType());
     }
     Type * sharedStructType = StructType::get(m->getContext(), structTypes);
 
     AllocaInst * sharedStruct = iBuilder->CreateAlloca(sharedStructType);
     Value * sizePtr = iBuilder->CreateGEP(sharedStruct, {iBuilder->getInt32(0), iBuilder->getInt32(0)});
     iBuilder->CreateStore(fileSize, sizePtr);
-    for (unsigned i = 0; i < instances.size(); i++) {
+    for (unsigned i = 0; i < kernels.size(); i++) {
         Value * ptr = iBuilder->CreateGEP(sharedStruct, {iBuilder->getInt32(0), iBuilder->getInt32(i+1)});
-        iBuilder->CreateStore(instances[i], ptr);
+        iBuilder->CreateStore(kernels[i]->getInstance(), ptr);
     }
 
     std::vector<Function *> thread_functions;
@@ -151,7 +154,7 @@ void generateSegmentParallelPipeline(IDISA::IDISA_Builder * iBuilder, std::vecto
 
 }
 
-void generatePipelineParallel(IDISA::IDISA_Builder * iBuilder, std::vector<KernelBuilder *> kernels, std::vector<Value *> instances) {
+void generatePipelineParallel(IDISA::IDISA_Builder * iBuilder, std::vector<KernelBuilder *> kernels) {
  
     Module * m = iBuilder->getModule();
 
@@ -160,6 +163,9 @@ void generatePipelineParallel(IDISA::IDISA_Builder * iBuilder, std::vector<Kerne
     Type * const int8PtrTy = iBuilder->getInt8PtrTy();
 
     Type * const pthreadsTy = ArrayType::get(pthreadTy, kernels.size());
+
+    for (auto k : kernels) k->createInstance();
+
     AllocaInst * const pthreads = iBuilder->CreateAlloca(pthreadsTy);
     std::vector<Value *> pthreadsPtrs;
     for (unsigned i = 0; i < kernels.size(); i++) {
@@ -179,7 +185,7 @@ void generatePipelineParallel(IDISA::IDISA_Builder * iBuilder, std::vector<Kerne
     Function * pthreadJoinFunc = m->getFunction("pthread_join");
 
     for (unsigned i = 0; i < kernels.size(); i++) {
-        iBuilder->CreateCall(pthreadCreateFunc, std::vector<Value *>({pthreadsPtrs[i], nullVal, kernel_functions[i], iBuilder->CreateBitCast(instances[i], int8PtrTy)}));
+        iBuilder->CreateCall(pthreadCreateFunc, std::vector<Value *>({pthreadsPtrs[i], nullVal, kernel_functions[i], iBuilder->CreateBitCast(kernels[i]->getInstance(), int8PtrTy)}));
     }
 
     std::vector<Value *> threadIDs;
@@ -193,7 +199,7 @@ void generatePipelineParallel(IDISA::IDISA_Builder * iBuilder, std::vector<Kerne
 }
 
 
-void generatePipelineLoop(IDISA::IDISA_Builder * iBuilder, std::vector<KernelBuilder *> kernels, std::vector<Value *> instances, Value * fileSize) {
+void generatePipelineLoop(IDISA::IDISA_Builder * iBuilder, std::vector<KernelBuilder *> kernels, Value * fileSize) {
     
     BasicBlock * entryBlock = iBuilder->GetInsertBlock();
     Function * main = entryBlock->getParent();
@@ -204,13 +210,14 @@ void generatePipelineLoop(IDISA::IDISA_Builder * iBuilder, std::vector<KernelBui
     // Create the basic blocks for the loop.
     BasicBlock * segmentBlock = BasicBlock::Create(iBuilder->getContext(), "segmentLoop", main, 0);
     BasicBlock * exitBlock = BasicBlock::Create(iBuilder->getContext(), "exitBlock", main, 0);
+    for (auto k : kernels) k->createInstance();
     iBuilder->CreateBr(segmentBlock);
     iBuilder->SetInsertPoint(segmentBlock);
     Constant * segBlocks = ConstantInt::get(size_ty, segmentSize * iBuilder->getStride() / iBuilder->getBitBlockWidth());
     for (unsigned i = 0; i < kernels.size(); i++) {
-        kernels[i]->createDoSegmentCall(instances[i], segBlocks);
+        kernels[i]->createDoSegmentCall(kernels[i]->getInstance(), segBlocks);
     }
-    Value * endSignal = kernels.back()->getTerminationSignal(instances.back());
+    Value * endSignal = kernels.back()->getTerminationSignal(kernels.back()->getInstance());
     iBuilder->CreateCondBr(endSignal, exitBlock, segmentBlock);
     iBuilder->SetInsertPoint(exitBlock);
 

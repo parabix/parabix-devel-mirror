@@ -339,11 +339,6 @@ Function * u8u16Pipeline(Module * mod, IDISA::IDISA_Builder * iBuilder) {
     } else {
         U16out.allocateBuffer();
     }
-    Value * s2pInstance = s2pk.createInstance({});
-    Value * u8u16Instance = u8u16k.createInstance({});
-    Value * delInstance = delK.createInstance({});
-    Value * p2sInstance = p2sk.createInstance({});
-    Value * stdoutInstance = stdoutK.createInstance({});
 
     Type * pthreadTy = size_ty;
     FunctionType * funVoidPtrVoidTy = FunctionType::get(voidTy, int8PtrTy, false);
@@ -368,9 +363,9 @@ Function * u8u16Pipeline(Module * mod, IDISA::IDISA_Builder * iBuilder) {
     pthreadExitFunc->setCallingConv(llvm::CallingConv::C);
 
     if (segmentPipelineParallel){
-        generateSegmentParallelPipeline(iBuilder, {&s2pk, &u8u16k, &delK, &p2sk, &stdoutK}, {s2pInstance, u8u16Instance, delInstance, p2sInstance, stdoutInstance}, fileSize);
+        generateSegmentParallelPipeline(iBuilder, {&s2pk, &u8u16k, &delK, &p2sk, &stdoutK}, fileSize);
     } else {
-        generatePipelineLoop(iBuilder, {&s2pk, &u8u16k, &delK, &p2sk, &stdoutK}, {s2pInstance, u8u16Instance, delInstance, p2sInstance, stdoutInstance}, fileSize);
+        generatePipelineLoop(iBuilder, {&s2pk, &u8u16k, &delK, &p2sk, &stdoutK}, fileSize);
     }
 
     iBuilder->CreateRetVoid();

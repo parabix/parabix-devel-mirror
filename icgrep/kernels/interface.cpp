@@ -94,11 +94,15 @@ void KernelInterface::addKernelDeclarations(Module * client) {
 }
 
 
-Value * KernelInterface::createInstance(std::vector<Value *> args) {
-    Value * kernelInstance = iBuilder->CreateCacheAlignedAlloca(mKernelStateType);
+void KernelInterface::setInitialArguments(std::vector<Value *> args) {
+    mInitialArguments = args;
+}
+
+void KernelInterface::createInstance() {
+    mKernelInstance = iBuilder->CreateCacheAlignedAlloca(mKernelStateType);
     Module * m = iBuilder->getModule();
-    std::vector<Value *> init_args = {kernelInstance};
-    for (auto a : args) {
+    std::vector<Value *> init_args = {mKernelInstance};
+    for (auto a : mInitialArguments) {
         init_args.push_back(a);
     }
     std::string initFnName = mKernelName + init_suffix;
@@ -107,7 +111,6 @@ Value * KernelInterface::createInstance(std::vector<Value *> args) {
         throw std::runtime_error("Cannot find " + initFnName);
     }
     iBuilder->CreateCall(initMethod, init_args);
-    return kernelInstance;
 }
 
 Value * KernelInterface::createDoBlockCall(Value * self) {

@@ -222,9 +222,9 @@ Function * generateCPUKernel(Module * m, IDISA::IDISA_Builder * iBuilder, GrepTy
     kernel::ScanMatchKernel scanMatchK(iBuilder, grepType);
     scanMatchK.generateKernel({&MatchResults}, {});
             
-    Value * scanMatchInstance = scanMatchK.createInstance({inputStream, fileSize, fileIdx});
+    scanMatchK.setInitialArguments({inputStream, fileSize, fileIdx});
     
-    generatePipelineLoop(iBuilder, {&scanMatchK}, {scanMatchInstance}, fileSize);
+    generatePipelineLoop(iBuilder, {&scanMatchK}, fileSize);
     iBuilder->CreateRetVoid();
 
     return mainCPUFn;
@@ -344,8 +344,6 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool Count
     ByteStream.setStreamSetBuffer(inputStream, fileSize);
     BasisBits.allocateBuffer();
 
-    Value * s2pInstance = s2pk.createInstance({});
- 
     Type * pthreadTy = size_ty;
     FunctionType * funVoidPtrVoidTy = FunctionType::get(voidTy, int8PtrTy, false);   
     
@@ -370,16 +368,15 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool Count
 
     if (CountOnly) {        
         icgrepK.generateKernel({&BasisBits}, {});       
-        Value * icgrepInstance = icgrepK.createInstance({});
         if (pipelineParallel){
-            generatePipelineParallel(iBuilder, {&s2pk, &icgrepK}, {s2pInstance, icgrepInstance});
+            generatePipelineParallel(iBuilder, {&s2pk, &icgrepK});
         } else if (segmentPipelineParallel){
-            generateSegmentParallelPipeline(iBuilder, {&s2pk, &icgrepK}, {s2pInstance, icgrepInstance}, fileSize);
+            generateSegmentParallelPipeline(iBuilder, {&s2pk, &icgrepK}, fileSize);
         } else {
-            generatePipelineLoop(iBuilder, {&s2pk, &icgrepK}, {s2pInstance, icgrepInstance}, fileSize);
+            generatePipelineLoop(iBuilder, {&s2pk, &icgrepK}, fileSize);
         }
 
-        Value * matchCount = icgrepK.createGetAccumulatorCall(icgrepInstance, "matchedLineCount");
+        Value * matchCount = icgrepK.createGetAccumulatorCall(icgrepK.getInstance(), "matchedLineCount");
 
         iBuilder->CreateRet(matchCount);
 
@@ -390,9 +387,7 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool Count
             MatchResults.setStreamSetBuffer(outputStream, fileSize);
 
             icgrepK.generateKernel({&BasisBits},  {&MatchResults});
-            Value * icgrepInstance = icgrepK.createInstance({});
-
-            generatePipelineLoop(iBuilder, {&s2pk, &icgrepK}, {s2pInstance, icgrepInstance}, fileSize);
+            generatePipelineLoop(iBuilder, {&s2pk, &icgrepK}, fileSize);
 
         }
 #endif
@@ -401,18 +396,17 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool Count
             MatchResults.allocateBuffer();
 
             icgrepK.generateKernel({&BasisBits}, {&MatchResults});
-            Value * icgrepInstance = icgrepK.createInstance({});
 
             kernel::ScanMatchKernel scanMatchK(iBuilder, mGrepType);
             scanMatchK.generateKernel({&MatchResults}, {});                
-            Value * scanMatchInstance = scanMatchK.createInstance({iBuilder->CreateBitCast(inputStream, int8PtrTy), fileSize, fileIdx});
+            scanMatchK.setInitialArguments({iBuilder->CreateBitCast(inputStream, int8PtrTy), fileSize, fileIdx});
 
             if (pipelineParallel){
-                generatePipelineParallel(iBuilder, {&s2pk, &icgrepK, &scanMatchK}, {s2pInstance, icgrepInstance, scanMatchInstance});
+                generatePipelineParallel(iBuilder, {&s2pk, &icgrepK, &scanMatchK});
             } else if (segmentPipelineParallel){
-                generateSegmentParallelPipeline(iBuilder, {&s2pk, &icgrepK, &scanMatchK}, {s2pInstance, icgrepInstance, scanMatchInstance}, fileSize);
+                generateSegmentParallelPipeline(iBuilder, {&s2pk, &icgrepK, &scanMatchK}, fileSize);
             }  else{
-                generatePipelineLoop(iBuilder, {&s2pk, &icgrepK, &scanMatchK}, {s2pInstance, icgrepInstance, scanMatchInstance}, fileSize);
+                generatePipelineLoop(iBuilder, {&s2pk, &icgrepK, &scanMatchK}, fileSize);
             }
         }
 

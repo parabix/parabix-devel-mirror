@@ -402,11 +402,11 @@ Value * KernelBuilder::getStreamSetBlockPtr(Value * self, std::string name, Valu
     return buf->getStreamSetBlockPointer(structPtr, blockNo);
 }
 
-Value * KernelBuilder::createInstance(std::vector<Value *> args) {
-    Value * kernelInstance = iBuilder->CreateCacheAlignedAlloca(mKernelStateType);
+void KernelBuilder::createInstance() {
+    mKernelInstance = iBuilder->CreateCacheAlignedAlloca(mKernelStateType);
     Module * m = iBuilder->getModule();
-    std::vector<Value *> init_args = {kernelInstance};
-    for (auto a : args) {
+    std::vector<Value *> init_args = {mKernelInstance};
+    for (auto a : mInitialArguments) {
         init_args.push_back(a);
     }
     for (auto b : mStreamSetInputBuffers) {
@@ -421,7 +421,6 @@ Value * KernelBuilder::createInstance(std::vector<Value *> args) {
         llvm::report_fatal_error("Cannot find " + initFnName);
     }
     iBuilder->CreateCall(initMethod, init_args);
-    return kernelInstance;
 }
 
 Function * KernelBuilder::generateThreadFunction(std::string name){

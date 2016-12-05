@@ -80,6 +80,8 @@ public:
     void CallPrintRegister(const std::string & regName, Value * const value);
     void CallPrintInt(const std::string & name, Value * const value);
 
+    VectorType * fwVectorType(unsigned fw);
+
     Constant * simd_himask(unsigned fw);
     Constant * simd_lomask(unsigned fw);
     
@@ -171,7 +173,6 @@ protected:
     Constant *          mOneInitializer;
     Constant *          mPrintRegisterFunction;
     
-    VectorType * fwVectorType(unsigned fw);
 };
 
 inline LoadInst * IDISA_Builder::CreateBlockAlignedLoad(Value * const ptr) {

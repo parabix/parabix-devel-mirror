@@ -244,10 +244,7 @@ Function * editdPipeline(Module * mMod, IDISA::IDISA_Builder * iBuilder, const s
     ChStream.setStreamSetBuffer(inputStream, fileSize);
     MatchResults.allocateBuffer();
     
-    Value * editdInstance = editdk.createInstance({});
-    Value * scanMatchInstance = editdScanK.createInstance({});
-   
-    generatePipelineLoop(iBuilder, {&editdk, &editdScanK}, {editdInstance, scanMatchInstance}, fileSize);
+    generatePipelineLoop(iBuilder, {&editdk, &editdScanK}, fileSize);
         
     iBuilder->CreateRetVoid();
     
@@ -318,10 +315,7 @@ Function * preprocessPipeline(Module * mMod, IDISA::IDISA_Builder * iBuilder) {
     BasisBits.allocateBuffer();
     CCResults.setStreamSetBuffer(outputStream, fileSize);
     
-    Value * s2pInstance = s2pk.createInstance({});
-    Value * cccInstance = ccck.createInstance({});
-    
-    generatePipelineLoop(iBuilder, {&s2pk, &ccck}, {s2pInstance, cccInstance}, fileSize);
+    generatePipelineLoop(iBuilder, {&s2pk, &ccck}, fileSize);
         
     iBuilder->CreateRetVoid();
     
@@ -490,9 +484,9 @@ void editdGPUCodeGen(unsigned patternLen){
     Value * strideCarry = iBuilder->CreateAlloca(strideCarryTy);
     iBuilder->CreateStore(Constant::getNullValue(strideCarryTy), strideCarry);
 
-    Value * editdInstance = editdk.createInstance({pattStream, strideCarry});
+    editdk.setInitialArguments({pattStream, strideCarry});
    
-    generatePipelineLoop(iBuilder, {&editdk}, {editdInstance}, inputSize);
+    generatePipelineLoop(iBuilder, {&editdk}, inputSize);
         
     iBuilder->CreateRetVoid();
     
@@ -606,9 +600,8 @@ editdFunctionType editdScanCPUCodeGen() {
     iBuilder->SetInsertPoint(BasicBlock::Create(M->getContext(), "entry", main,0));
 
     MatchResults.setStreamSetBuffer(inputStream, fileSize);
-    Value * scanMatchInstance = editdScanK.createInstance({});
    
-    generatePipelineLoop(iBuilder, {&editdScanK}, {scanMatchInstance}, fileSize);
+    generatePipelineLoop(iBuilder, {&editdScanK}, fileSize);
         
     iBuilder->CreateRetVoid();
 

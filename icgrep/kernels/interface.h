@@ -52,7 +52,9 @@ public:
     // Add ExternalLinkage method declarations for the kernel to a given client module.
     void addKernelDeclarations(Module * client);
     
-    virtual llvm::Value * createInstance(std::vector<llvm::Value *> initialParameters);
+    void setInitialArguments(std::vector<llvm::Value *> initialParameters);
+    virtual void createInstance();
+    llvm::Value * getInstance() {return mKernelInstance;};
 
     llvm::Value * createDoSegmentCall(llvm::Value * kernelInstance, llvm::Value * blkCount);
     llvm::Value * createFinalBlockCall(llvm::Value * kernelInstance, llvm::Value * remainingBytes);
@@ -100,12 +102,14 @@ protected:
     
     IDISA::IDISA_Builder * const iBuilder;
     std::string mKernelName;
+    std::vector<Value *> mInitialArguments;
     std::vector<Binding> mStreamSetInputs;
     std::vector<Binding> mStreamSetOutputs;
     std::vector<Binding> mScalarInputs;
     std::vector<Binding> mScalarOutputs;
     std::vector<Binding> mInternalScalars;
     llvm::Type * mKernelStateType;
+    llvm::Value * mKernelInstance;
     unsigned mLookAheadPositions;
     
 };
