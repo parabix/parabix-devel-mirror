@@ -9,9 +9,9 @@
 #include <kernels/interface.h>
 #include <kernels/kernel.h>
 
-void generateSegmentParallelPipeline(IDISA::IDISA_Builder * iBuilder, std::vector<kernel::KernelBuilder *> kernels, Value * fileSize);
+void generateSegmentParallelPipeline(IDISA::IDISA_Builder * iBuilder, std::vector<kernel::KernelBuilder *> kernels);
 
-void generatePipelineLoop(IDISA::IDISA_Builder * iBuilder, std::vector<kernel::KernelBuilder *> kernels, llvm::Value * totalBytes);
+void generatePipelineLoop(IDISA::IDISA_Builder * iBuilder, std::vector<kernel::KernelBuilder *> kernels);
 
 void generatePipelineParallel(IDISA::IDISA_Builder * iBuilder, std::vector<kernel::KernelBuilder *> kernels);
 

@@ -175,7 +175,7 @@ Function * wcPipeline(Module * mMod, IDISA::IDISA_Builder * iBuilder) {
     ByteStream.setStreamSetBuffer(inputStream, fileSize);
     BasisBits.allocateBuffer();
     
-    generatePipelineLoop(iBuilder, {&s2pk, &wck}, fileSize);
+    generatePipelineLoop(iBuilder, {&s2pk, &wck});
     
     Value * lineCount = wck.createGetAccumulatorCall(wck.getInstance(), "lineCount");
     Value * wordCount = wck.createGetAccumulatorCall(wck.getInstance(), "wordCount");

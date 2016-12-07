@@ -244,7 +244,7 @@ Function * editdPipeline(Module * mMod, IDISA::IDISA_Builder * iBuilder, const s
     ChStream.setStreamSetBuffer(inputStream, fileSize);
     MatchResults.allocateBuffer();
     
-    generatePipelineLoop(iBuilder, {&editdk, &editdScanK}, fileSize);
+    generatePipelineLoop(iBuilder, {&editdk, &editdScanK});
         
     iBuilder->CreateRetVoid();
     
@@ -315,7 +315,7 @@ Function * preprocessPipeline(Module * mMod, IDISA::IDISA_Builder * iBuilder) {
     BasisBits.allocateBuffer();
     CCResults.setStreamSetBuffer(outputStream, fileSize);
     
-    generatePipelineLoop(iBuilder, {&s2pk, &ccck}, fileSize);
+    generatePipelineLoop(iBuilder, {&s2pk, &ccck});
         
     iBuilder->CreateRetVoid();
     
@@ -486,7 +486,7 @@ void editdGPUCodeGen(unsigned patternLen){
 
     editdk.setInitialArguments({pattStream, strideCarry});
    
-    generatePipelineLoop(iBuilder, {&editdk}, inputSize);
+    generatePipelineLoop(iBuilder, {&editdk});
         
     iBuilder->CreateRetVoid();
     

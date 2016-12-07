@@ -363,9 +363,9 @@ Function * u8u16Pipeline(Module * mod, IDISA::IDISA_Builder * iBuilder) {
     pthreadExitFunc->setCallingConv(llvm::CallingConv::C);
 
     if (segmentPipelineParallel){
-        generateSegmentParallelPipeline(iBuilder, {&s2pk, &u8u16k, &delK, &p2sk, &stdoutK}, fileSize);
+        generateSegmentParallelPipeline(iBuilder, {&s2pk, &u8u16k, &delK, &p2sk, &stdoutK});
     } else {
-        generatePipelineLoop(iBuilder, {&s2pk, &u8u16k, &delK, &p2sk, &stdoutK}, fileSize);
+        generatePipelineLoop(iBuilder, {&s2pk, &u8u16k, &delK, &p2sk, &stdoutK});
     }
 
     iBuilder->CreateRetVoid();

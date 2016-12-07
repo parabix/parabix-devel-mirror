@@ -224,7 +224,7 @@ Function * generateCPUKernel(Module * m, IDISA::IDISA_Builder * iBuilder, GrepTy
             
     scanMatchK.setInitialArguments({inputStream, fileSize, fileIdx});
     
-    generatePipelineLoop(iBuilder, {&scanMatchK}, fileSize);
+    generatePipelineLoop(iBuilder, {&scanMatchK});
     iBuilder->CreateRetVoid();
 
     return mainCPUFn;
@@ -371,9 +371,9 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool Count
         if (pipelineParallel){
             generatePipelineParallel(iBuilder, {&s2pk, &icgrepK});
         } else if (segmentPipelineParallel){
-            generateSegmentParallelPipeline(iBuilder, {&s2pk, &icgrepK}, fileSize);
+            generateSegmentParallelPipeline(iBuilder, {&s2pk, &icgrepK});
         } else {
-            generatePipelineLoop(iBuilder, {&s2pk, &icgrepK}, fileSize);
+            generatePipelineLoop(iBuilder, {&s2pk, &icgrepK});
         }
 
         Value * matchCount = icgrepK.createGetAccumulatorCall(icgrepK.getInstance(), "matchedLineCount");
@@ -387,7 +387,7 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool Count
             MatchResults.setStreamSetBuffer(outputStream, fileSize);
 
             icgrepK.generateKernel({&BasisBits},  {&MatchResults});
-            generatePipelineLoop(iBuilder, {&s2pk, &icgrepK}, fileSize);
+            generatePipelineLoop(iBuilder, {&s2pk, &icgrepK});
 
         }
 #endif
@@ -404,9 +404,9 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool Count
             if (pipelineParallel){
                 generatePipelineParallel(iBuilder, {&s2pk, &icgrepK, &scanMatchK});
             } else if (segmentPipelineParallel){
-                generateSegmentParallelPipeline(iBuilder, {&s2pk, &icgrepK, &scanMatchK}, fileSize);
+                generateSegmentParallelPipeline(iBuilder, {&s2pk, &icgrepK, &scanMatchK});
             }  else{
-                generatePipelineLoop(iBuilder, {&s2pk, &icgrepK, &scanMatchK}, fileSize);
+                generatePipelineLoop(iBuilder, {&s2pk, &icgrepK, &scanMatchK});
             }
         }
 
