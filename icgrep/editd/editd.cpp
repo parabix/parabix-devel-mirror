@@ -60,6 +60,7 @@ static cl::opt<int> editDistance("edit-dist", cl::desc("Edit Distance Value"), c
 static cl::opt<int> optPosition("opt-pos", cl::desc("Optimize position"), cl::init(8));
 static cl::opt<int> stepSize("step-size", cl::desc("Step Size"), cl::init(3));
 static cl::opt<int> prefixLen("prefix", cl::desc("Prefix length"), cl::init(4));
+static cl::opt<bool> ShowPositions("display", cl::desc("Display the match positions."), cl::init(false));
 
 using namespace kernel;
 using namespace pablo;
@@ -109,7 +110,7 @@ void run_second_filter(int total_len, int pattern_segs, float errRate){
         }
     }
 
-    std::cerr << "pattern_segs = " << pattern_segs << ", total_len = " << total_len << std::endl;
+    std::cout << "pattern_segs = " << pattern_segs << ", total_len = " << total_len << std::endl;
 
     int v = pattern_segs * (editDistance+1) - total_len * errRate;
 
@@ -130,7 +131,7 @@ void run_second_filter(int total_len, int pattern_segs, float errRate){
             startPos = matchList[curIdx].pos;
         }
     }
-    std::cout << "matching value is " << v << std::endl;
+
     std::cout << "total candidate from the first filter is " << matchList.size() << std::endl;
     std::cout << "total candidate from the second filter is " << count << std::endl;
 }
@@ -141,7 +142,8 @@ void wrapped_report_pos(size_t match_pos, int dist) {
         curMatch.pos = match_pos;
         curMatch.dist = dist;
         matchList.push_back(curMatch);
-        // std::cout << "pos: " << match_pos << ", dist:" << dist << "\n";
+        if(ShowPositions)
+            std::cout << "pos: " << match_pos << ", dist:" << dist << "\n";
     }
 
 }
@@ -601,7 +603,7 @@ editdFunctionType editdScanCPUCodeGen() {
 
     MatchResults.setStreamSetBuffer(inputStream, fileSize);
    
-    generatePipelineLoop(iBuilder, {&editdScanK}, fileSize);
+    generatePipelineLoop(iBuilder, {&editdScanK});
         
     iBuilder->CreateRetVoid();
 

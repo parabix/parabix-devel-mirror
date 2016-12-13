@@ -33,6 +33,7 @@ public:
 private:
     void generateDoBlockMethod() override;
     void generateFinalBlockMethod() override;
+    void bitblock_advance_ci_co(Value * val, unsigned shift, Value * stideCarryArr, unsigned carryIdx, std::vector<std::vector<Value *>> & adv, std::vector<std::vector<int>> & calculated, int i, int j);
     unsigned mEditDistance;
     unsigned mPatternLen;
     

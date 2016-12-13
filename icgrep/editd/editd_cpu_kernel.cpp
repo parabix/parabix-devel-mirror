@@ -11,12 +11,16 @@
 namespace kernel {
 using namespace llvm;
 
-Value * bitblock_advance_ci_co_cpu(IDISA::IDISA_Builder * iBuilder, Value * val, unsigned shift, Value * stideCarryArr, unsigned carryIdx){   
-    Value * ptr = iBuilder->CreateGEP(stideCarryArr, {iBuilder->getInt32(0), iBuilder->getInt32(carryIdx)});
-    Value * ci = iBuilder->CreateLoad(ptr);
-    std::pair<Value *, Value *> rslt = iBuilder->bitblock_advance(val, ci, shift);
-    iBuilder->CreateStore(std::get<0>(rslt), ptr);
-    return std::get<1>(rslt);
+void editdCPUKernel::bitblock_advance_ci_co(Value * val, unsigned shift, Value * stideCarryArr, unsigned carryIdx, std::vector<std::vector<Value *>> & adv, std::vector<std::vector<int>> & calculated, int i, int j){   
+    if(!calculated[i][j]){
+        Value * ptr = iBuilder->CreateGEP(stideCarryArr, {iBuilder->getInt32(0), iBuilder->getInt32(carryIdx)});
+        Value * ci = iBuilder->CreateLoad(ptr);
+        std::pair<Value *, Value *> rslt = iBuilder->bitblock_advance(val, ci, shift);
+        iBuilder->CreateStore(std::get<0>(rslt), ptr);
+        adv[i][j] = std::get<1>(rslt);
+        calculated[i][j] = 1;
+    }
+    return;
 }
 
 void editdCPUKernel::generateFinalBlockMethod() {
@@ -67,6 +71,11 @@ void editdCPUKernel::generateDoBlockMethod() {
     unsigned carryIdx = 0;
 
     std::vector<std::vector<Value *>> e(mPatternLen+1, std::vector<Value *>(mEditDistance+1));
+    std::vector<std::vector<Value *>> adv(mPatternLen, std::vector<Value *>(mEditDistance+1));
+    std::vector<std::vector<int>> calculated(mPatternLen, std::vector<int>(mEditDistance+1));
+    for(unsigned i=0; i<mPatternLen; i++)
+        for(unsigned j=0; j<=mEditDistance; j++)
+            calculated[i][j] = 0;
     Value * pattPtr = iBuilder->CreateGEP(pattStartPtr, {pattPos});
     Value * pattCh = iBuilder->CreateLoad(pattPtr);
     Value * pattIdx = iBuilder->CreateAnd(iBuilder->CreateLShr(pattCh, 1), ConstantInt::get(int8ty, 3));
@@ -86,21 +95,21 @@ void editdCPUKernel::generateDoBlockMethod() {
         pattStreamPtr = iBuilder->CreateGEP(ccStreamPtr, {iBuilder->getInt32(0), iBuilder->CreateZExt(pattIdx, int32ty)});
         pattStream = iBuilder->CreateLoad(pattStreamPtr);
 
-        Value * adv = bitblock_advance_ci_co_cpu(iBuilder, e[i-1][0], 1, stideCarryArr, carryIdx++);
-        e[i][0] = iBuilder->CreateAnd(adv, pattStream);
+        bitblock_advance_ci_co(e[i-1][0], 1, stideCarryArr, carryIdx++, adv, calculated, i-1, 0);
+        e[i][0] = iBuilder->CreateAnd(adv[i-1][0], pattStream); 
         for(unsigned j = 1; j<= mEditDistance; j++){
-            Value * adv0 = bitblock_advance_ci_co_cpu(iBuilder, e[i-1][j], 1, stideCarryArr, carryIdx++);
-            Value * adv1 = bitblock_advance_ci_co_cpu(iBuilder, e[i-1][j-1], 1, stideCarryArr, carryIdx++);
-            Value * adv2 = bitblock_advance_ci_co_cpu(iBuilder, e[i][j-1], 1, stideCarryArr, carryIdx++);
-            Value * tmp1 = iBuilder->CreateAnd(adv0, pattStream);
-            Value * tmp2 = iBuilder->CreateAnd(adv1, iBuilder->CreateNot(pattStream));
-            Value * tmp3 = iBuilder->CreateOr(adv2, e[i-1][j-1]);
+            bitblock_advance_ci_co(e[i-1][j], 1, stideCarryArr, carryIdx++, adv, calculated, i-1, j);
+            bitblock_advance_ci_co(e[i-1][j-1], 1, stideCarryArr, carryIdx++, adv, calculated, i-1, j-1);
+            bitblock_advance_ci_co(e[i][j-1], 1, stideCarryArr, carryIdx++, adv, calculated, i, j-1);
+            Value * tmp1 = iBuilder->CreateAnd(adv[i-1][j], pattStream);
+            Value * tmp2 = iBuilder->CreateAnd(adv[i-1][j-1], iBuilder->CreateNot(pattStream));
+            Value * tmp3 = iBuilder->CreateOr(adv[i][j-1], e[i-1][j-1]);
             e[i][j] = iBuilder->CreateOr(iBuilder->CreateOr(tmp1, tmp2), tmp3);
 
         }
         pattPos = iBuilder->CreateAdd(pattPos, ConstantInt::get(int32ty, 1));
     }
-
+    
     Value * ptr = iBuilder->CreateGEP(resultStreamPtr, {iBuilder->getInt32(0), iBuilder->getInt32(0)});
     iBuilder->CreateStore(e[mPatternLen-1][0], ptr);
     for(unsigned j = 1; j<= mEditDistance; j++){
