@@ -54,7 +54,6 @@ void stdOutKernel::generateDoSegmentMethod() {
     Value * self = &*(args++);
     Value * blocksToDo = &*(args);
     ////iBuilder->CallPrintInt("blocksToDo", blocksToDo);
-    Value * segmentNo = getLogicalSegmentNo(self);
     Value * streamStructPtr = getStreamSetStructPtr(self, "codeUnitBuffer");
     //iBuilder->CallPrintInt("streamStructPtr", iBuilder->CreatePtrToInt(streamStructPtr, iBuilder->getInt64Ty()));
 
@@ -90,8 +89,6 @@ void stdOutKernel::generateDoSegmentMethod() {
 
     iBuilder->CreateBr(stdOutexit);
     iBuilder->SetInsertPoint(stdOutexit);
-    // Must be the last action, for synchronization.
-    setLogicalSegmentNo(self, iBuilder->CreateAdd(segmentNo, ConstantInt::get(iBuilder->getSizeTy(), 1)));
     iBuilder->CreateRetVoid();
     iBuilder->restoreIP(savePoint);
 }
@@ -111,7 +108,6 @@ void stdOutKernel::generateFinalBlockMethod() {
     LoadInst * producerPos = iBuilder->CreateAtomicLoadAcquire(mStreamSetInputBuffers[0]->getProducerPosPtr(streamStructPtr));
     Value * processed = getProcessedItemCount(self);
     Value * itemsAvail = iBuilder->CreateSub(producerPos, processed);
-//    Value * segmentNo = getLogicalSegmentNo(self);
     Value * blockNo = getScalarField(self, blockNoScalar);
     Value * basePtr = getStreamSetBlockPtr(self, "codeUnitBuffer", blockNo);
     Value * byteOffset = iBuilder->CreateMul(iBuilder->CreateURem(processed, blockItems), itemBytes);

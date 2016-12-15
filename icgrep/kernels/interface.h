@@ -68,7 +68,6 @@ public:
         return iBuilder;
     }
 
-    virtual llvm::Value * getLogicalSegmentNo(llvm::Value * kernelInstance) = 0;
     virtual llvm::Value * getProcessedItemCount(llvm::Value * kernelInstance) = 0;
     virtual llvm::Value * getProducedItemCount(llvm::Value * kernelInstance) = 0;
     virtual llvm::Value * getTerminationSignal(llvm::Value * kernelInstance) = 0;

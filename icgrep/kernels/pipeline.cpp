@@ -69,12 +69,14 @@ Function * generateSegmentParallelPipelineThreadFunction(std::string name, IDISA
 
     for (unsigned i = 0; i < kernels.size(); i++) {
         iBuilder->SetInsertPoint(segmentWait[i]);
-        Value * processedSegmentCount = kernels[i]->getLogicalSegmentNo(instancePtrs[i]);
+        Value * processedSegmentCount = kernels[i]->acquireLogicalSegmentNo(instancePtrs[i]);
         Value * cond = iBuilder->CreateICmpEQ(segNo, processedSegmentCount);
         iBuilder->CreateCondBr(cond, segmentLoopBody[i], segmentWait[i]);
 
         iBuilder->SetInsertPoint(segmentLoopBody[i]);
         kernels[i]->createDoSegmentCall(instancePtrs[i], segmentBlocks);
+        // Must be the last action, for synchronization.
+        kernels[i]->releaseLogicalSegmentNo(instancePtrs[i], iBuilder->CreateAdd(processedSegmentCount, ConstantInt::get(iBuilder->getSizeTy(), 1)));
         if (i == last_kernel) break;
         iBuilder->CreateBr(segmentWait[i+1]);
     }
@@ -213,6 +215,8 @@ void generatePipelineLoop(IDISA::IDISA_Builder * iBuilder, std::vector<KernelBui
     Constant * segBlocks = ConstantInt::get(size_ty, segmentSize * iBuilder->getStride() / iBuilder->getBitBlockWidth());
     for (unsigned i = 0; i < kernels.size(); i++) {
         kernels[i]->createDoSegmentCall(kernels[i]->getInstance(), segBlocks);
+        Value * segNo = kernels[i]->acquireLogicalSegmentNo(kernels[i]->getInstance());
+        kernels[i]->releaseLogicalSegmentNo(kernels[i]->getInstance(), iBuilder->CreateAdd(segNo, ConstantInt::get(iBuilder->getSizeTy(), 1)));
     }
     Value * endSignal = kernels.back()->getTerminationSignal(kernels.back()->getInstance());
     iBuilder->CreateCondBr(endSignal, exitBlock, segmentBlock);

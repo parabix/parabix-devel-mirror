@@ -179,7 +179,6 @@ void KernelBuilder::generateDoSegmentMethod() {
     Function::arg_iterator args = doSegmentFunction->arg_begin();
     Value * self = &*(args++);
     Value * blocksToDo = &*(args);
-    Value * segmentNo = getLogicalSegmentNo(self);
     
     std::vector<Value *> inbufProducerPtrs;
     std::vector<Value *> endSignalPtrs;
@@ -276,11 +275,7 @@ void KernelBuilder::generateDoSegmentMethod() {
         Value * producerPosPtr = mStreamSetOutputBuffers[i]->getProducerPosPtr(ssStructPtr);
         iBuilder->CreateAtomicStoreRelease(produced, producerPosPtr);
     }
-
-    // Must be the last action, for synchronization.
-    setLogicalSegmentNo(self, iBuilder->CreateAdd(segmentNo, ConstantInt::get(size_ty, 1)));
     iBuilder->CreateBr(finalExit);
-    
     iBuilder->SetInsertPoint(finalExit);
 
     iBuilder->CreateRetVoid();
@@ -307,7 +302,7 @@ void KernelBuilder::setScalarField(Value * self, std::string fieldName, Value * 
     iBuilder->CreateStore(newFieldVal, getScalarFieldPtr(self, fieldName));
 }
 
-Value * KernelBuilder::getLogicalSegmentNo(Value * self) { 
+Value * KernelBuilder::acquireLogicalSegmentNo(Value * self) { 
     Value * ptr = iBuilder->CreateGEP(self, {iBuilder->getInt32(0), getScalarIndex(logicalSegmentNoScalar)});
     LoadInst * segNo = iBuilder->CreateAtomicLoadAcquire(ptr);
     return segNo;
@@ -325,7 +320,7 @@ Value * KernelBuilder::getTerminationSignal(Value * self) {
     return getScalarField(self, terminationSignal);
 }
 
-void KernelBuilder::setLogicalSegmentNo(Value * self, Value * newCount) {
+void KernelBuilder::releaseLogicalSegmentNo(Value * self, Value * newCount) {
     Value * ptr = iBuilder->CreateGEP(self, {iBuilder->getInt32(0), getScalarIndex(logicalSegmentNoScalar)});
     iBuilder->CreateAtomicStoreRelease(newCount, ptr);
 }

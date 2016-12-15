@@ -48,7 +48,7 @@ RE * RE_Parser::parse(const std::string & regular_expression, ModeFlagSet initia
             break;
         default:
             //TODO handle FixString
-            ParseFailure("Unsupport RE syntax!");
+            ParseFailure("Unsupported RE syntax!");
             break;
     }
 

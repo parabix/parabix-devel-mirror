@@ -50,7 +50,6 @@ public:
     Function * generateThreadFunction(std::string name);
 
     Value * getBlockNo(Value * self);
-    virtual llvm::Value * getLogicalSegmentNo(llvm::Value * kernelInstance) override;
     virtual llvm::Value * getProcessedItemCount(llvm::Value * kernelInstance) override;
     virtual llvm::Value * getProducedItemCount(llvm::Value * kernelInstance) override;
     llvm::Value * getTerminationSignal(llvm::Value * kernelInstance);
@@ -62,6 +61,19 @@ public:
     inline Type * getStreamSetTy(const unsigned NumElements = 1, const unsigned FieldWidth = 1) {
         return getBuilder()->getStreamSetTy(NumElements, FieldWidth);
     }
+    
+    // Synchronization actions for executing a kernel for a particular logical segment.
+    // 
+    // Before the segment is processed, acquireLogicalSegmentNo must be used to load
+    // the segment number of the kernel state to ensure that the previous segment is
+    // complete (by checking that the acquired segment number is equal to the desired segment
+    // number).
+    // After all segment processing actions for the kernel are complete, and any necessary 
+    // data has been extracted from the kernel for further pipeline processing, the 
+    // segment number must be incremented and stored using releaseLogicalSegmentNo.
+    llvm::Value * acquireLogicalSegmentNo(llvm::Value * kernelInstance);
+    void releaseLogicalSegmentNo(llvm::Value * kernelInstance, Value * newFieldVal);
+
 
 protected:
     //
@@ -123,7 +135,6 @@ protected:
     llvm::Value * getStreamSetBlockPtr(Value * self, std::string name, Value * blockNo);
     
     void setBlockNo(Value * self, Value * newFieldVal);
-    virtual void setLogicalSegmentNo(llvm::Value * self, Value * newFieldVal);
     virtual void setProcessedItemCount(llvm::Value * self, Value * newFieldVal);
     virtual void setProducedItemCount(llvm::Value * self, Value * newFieldVal);
     void setTerminationSignal(llvm::Value * self);

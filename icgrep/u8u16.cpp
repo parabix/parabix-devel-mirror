@@ -312,8 +312,8 @@ Function * u8u16Pipeline(Module * mod, IDISA::IDISA_Builder * iBuilder) {
     Type * const outputType = ArrayType::get(ArrayType::get(bitBlockType, 16), 1)->getPointerTo();
     Type * const int32ty = iBuilder->getInt32Ty();
     Type * const int8PtrTy = iBuilder->getInt8PtrTy();
-    Type * const voidPtrTy = Type::getVoidTy(mod->getContext())->getPointerTo();
-
+    Type * const voidPtrTy = TypeBuilder<void *, false>::get(mod->getContext());
+    
     Function * const main = cast<Function>(mod->getOrInsertFunction("Main", voidTy, inputType, outputType, size_ty, nullptr));
     main->setCallingConv(CallingConv::C);
     Function::arg_iterator args = main->arg_begin();
