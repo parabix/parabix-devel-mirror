@@ -209,13 +209,18 @@ add_test(
   WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA/u8u16
   COMMAND ./run_all ${CMAKE_BINARY_DIR}/u8u16)
 
+add_test(
+  NAME editd_test
+  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA/editd
+  COMMAND python run_all.py -e ${CMAKE_BINARY_DIR})
+
 add_custom_target (u8u16_test
   WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA/u8u16
   COMMAND ./run_all ${CMAKE_BINARY_DIR}/u8u16)
 
 add_custom_target (editd_test
   WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA/editd
-  COMMAND python run_all.py)
+  COMMAND python run_all.py -e ${CMAKE_BINARY_DIR})
 
 add_custom_target (abc_test
   COMMAND python2 abc_testgen.py
