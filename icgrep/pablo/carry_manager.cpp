@@ -17,8 +17,6 @@
 
 namespace pablo {
 
-BOOST_ATTRIBUTE_UNUSED
-
 inline static unsigned nearest_pow2(const unsigned v) {
     assert(v > 0 && v < (UINT32_MAX / 2));
     return (v < 2) ? 1 : (1 << (32 - __builtin_clz(v - 1)));
