@@ -15,10 +15,6 @@ namespace pablo {
 
 class Assign;
 
-// A Var is unique in that it is not a statement but a "lives" within a
-// scope and cannot be accessed outside of it. A Var is mutable (via an
-// Assign instruction.
-
 class Var : public PabloAST {
     friend class PabloBlock;
     friend class PabloAST;
@@ -31,11 +27,20 @@ public:
     static inline bool classof(const void *) {
         return false;
     }
+    bool isReadOnly() const {
+        return mReadOnly;
+    }
+    void setReadOnly(const bool value = true) {
+        mReadOnly = value;
+    }
 protected:
-    Var(const PabloAST * name, Type * const type)
-    : PabloAST(ClassTypeId::Var, type, cast<String>(name)) {
+    Var(const PabloAST * name, Type * const type, const bool readOnly = false)
+    : PabloAST(ClassTypeId::Var, type, cast<String>(name))
+    , mReadOnly(readOnly) {
 
     }
+private:
+    bool mReadOnly;
 };
 
 class Extract : public Statement {

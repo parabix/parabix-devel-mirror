@@ -107,7 +107,7 @@ protected:
     std::vector<Binding> mScalarInputs;
     std::vector<Binding> mScalarOutputs;
     std::vector<Binding> mInternalScalars;
-    llvm::Type * mKernelStateType;
+    llvm::StructType * mKernelStateType;
     llvm::Value * mKernelInstance;
     unsigned mLookAheadPositions;
     

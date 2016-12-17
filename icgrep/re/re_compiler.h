@@ -12,10 +12,6 @@
 #include <cc/cc_compiler.h>
 #include <pablo/builder.hpp>
 
-namespace pablo {
-class PabloFunction;
-}
-
 namespace UCD {
 class UnicodeSet;
 }

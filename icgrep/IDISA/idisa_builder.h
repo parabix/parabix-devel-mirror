@@ -77,6 +77,14 @@ public:
     void CreateBlockAlignedStore(Value * const value, Value * const ptr, Value * const index);
     void CreateBlockAlignedStore(Value * const value, Value * const ptr, std::initializer_list<Value *> indices);
 
+    Value * CreateMalloc(Type * type, Value * size);
+    Value * CreateAlignedMalloc(Type *type, Value * size, const unsigned alignment);
+    void CreateFree(Value * ptr);
+    void CreateAlignedFree(Value * ptr);
+    Value * CreateRealloc(Value * ptr, Value * size);
+    Value * CreateAlignedRealloc(Value * ptr, Value * size, const unsigned alignment);
+    void CreateMemZero(Value * ptr, Value * size, const unsigned alignment = 1);
+
     void CallPrintRegister(const std::string & regName, Value * const value);
     void CallPrintInt(const std::string & name, Value * const value);
 
@@ -144,8 +152,18 @@ public:
         return mSizeType;
     }
 
+    inline llvm::ConstantInt * getSize(const size_t value) const {
+        return ConstantInt::get(getSizeTy(), value);
+    }
+
+    PointerType * getVoidPtrTy() const;
+
     inline VectorType * getBitBlockType() const {
         return mBitBlockType;
+    }
+
+    inline unsigned getCacheAlignment() const {
+        return mCacheLineAlignment;
     }
 
     inline Type * getStreamSetTy(const uint64_t NumElements = 1, const uint64_t FieldWidth = 1) {

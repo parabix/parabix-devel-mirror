@@ -11,7 +11,6 @@
 #include <string>
 #include <vector>
 #include <unordered_map>
-#include <pablo/carry_manager.h>
 #include <pablo/pablo_kernel.h>
 #include <llvm/ADT/Twine.h>
 #include <llvm/IR/IRBuilder.h>
@@ -35,25 +34,28 @@ namespace pablo {
 
 class PabloAST;
 class PabloBlock;
-class PabloFunction;
 class String;
 class Var;
 class Statement;
 class StatementList;
 class If;
 class While;
+class CarryManager;
+class Extract;
 
 class PabloCompiler {
+    friend class CarryManager;
+
     using IntSet = boost::container::flat_set<unsigned>;
     using MarkerMap = std::unordered_map<const PabloAST *, Value *>;
+
 public:
     PabloCompiler(PabloKernel * kernel);
-    Type * initializeKernelData();
+    ~PabloCompiler();
+    void initializeKernelData();
     void compile(Value * const self, Function * doBlockFunction);
 
 private:
-
-    void verifyParameter(const Var * var, const Value * param);
 
     void Examine();
     void Examine(const PabloBlock * const block);
@@ -62,25 +64,19 @@ private:
     void compileStatement(const Statement * stmt);
     void compileIf(const If * ifStmt);
     void compileWhile(const While * whileStmt);
+
     Value * compileExpression(const PabloAST * expr, const bool ensureLoaded = true) const;
-    void GenerateKernel(PabloFunction * const function);
 
-    MarkerMap                           mMarkerMap;
-    IntSet                              mInputStreamOffset;
-    IDISA::IDISA_Builder *              iBuilder;
-    Type* const                         mBitBlockType;
+private:
 
-    std::unique_ptr<CarryManager>       mCarryManager;
+    IDISA::IDISA_Builder *  iBuilder;
+    CarryManager *          mCarryManager;
+    PabloKernel *           mKernel;
+    Value *                 mSelf;
+    Function *              mFunction;
+    MarkerMap               mMarkerMap;
+    IntSet                  mInputStreamOffset;
 
-    PabloKernel * const                 mKernel;
-    Value *                             mSelf;
-
-    unsigned                            mWhileDepth;
-    unsigned                            mIfDepth;
-
-    llvm::Function *                    mFunction;
-
-    unsigned                            mMaxWhileDepth;
 };
 
 }

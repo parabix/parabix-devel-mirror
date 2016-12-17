@@ -84,7 +84,7 @@ void PabloPrinter::print(const Statement * stmt, llvm::raw_ostream & out, const 
             out << ")";
         } else if (const Advance * adv = dyn_cast<Advance>(stmt)) {
             out << " = pablo.Advance(";
-            print(adv->getExpr(), out);
+            print(adv->getExpression(), out);
             out << ", " << std::to_string(adv->getAmount()) << ")";
         } else if (const Lookahead * adv = dyn_cast<Lookahead>(stmt)) {
             out << " = pablo.Lookahead(";
@@ -139,6 +139,38 @@ void PabloPrinter::print(const PabloAST * expr, llvm::raw_ostream & out) {
         print(assign->getVariable(), out);
         out << " = ";
         print(assign->getValue(), out);
+    } else if (const Add * op = dyn_cast<Add>(expr)) {
+        print(op->getLH(), out);
+        out << " + ";
+        print(op->getRH(), out);
+    } else if (const Subtract * op = dyn_cast<Subtract>(expr)) {
+        print(op->getLH(), out);
+        out << " - ";
+        print(op->getRH(), out);
+    } else if (const LessThan * op = dyn_cast<LessThan>(expr)) {
+        print(op->getLH(), out);
+        out << " < ";
+        print(op->getRH(), out);
+    } else if (const LessThanEquals * op = dyn_cast<LessThanEquals>(expr)) {
+        print(op->getLH(), out);
+        out << " <= ";
+        print(op->getRH(), out);
+    } else if (const Equals * op = dyn_cast<Equals>(expr)) {
+        print(op->getLH(), out);
+        out << " == ";
+        print(op->getRH(), out);
+    } else if (const GreaterThanEquals * op = dyn_cast<GreaterThanEquals>(expr)) {
+        print(op->getLH(), out);
+        out << " >= ";
+        print(op->getRH(), out);
+    } else if (const GreaterThan * op = dyn_cast<GreaterThan>(expr)) {
+        print(op->getLH(), out);
+        out << " > ";
+        print(op->getRH(), out);
+    } else if (const NotEquals * op = dyn_cast<NotEquals>(expr)) {
+        print(op->getLH(), out);
+        out << " != ";
+        print(op->getRH(), out);
     } else if (const Statement * stmt = dyn_cast<Statement>(expr)) {
         out << stmt->getName();
     } else if (isa<Integer>(expr)) {

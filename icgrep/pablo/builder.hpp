@@ -170,11 +170,9 @@ public:
     
     PabloAST * createAdd(PabloAST * expr1, PabloAST * expr2);
 
-    PabloAST * createAdd(PabloAST * expr1, PabloAST * expr2, const std::string & prefix);
-
     PabloAST * createSubtract(PabloAST * expr1, PabloAST * expr2);
 
-    PabloAST * createSubtract(PabloAST * expr1, PabloAST * expr2, const std::string & prefix);
+    PabloAST * createLessThan(PabloAST * expr1, PabloAST * expr2);
 
     inline If * createIf(PabloAST * condition, PabloBlock * body) {
         return mPb->createIf(condition, body);
@@ -190,6 +188,10 @@ public:
 
     inline While * createWhile(PabloAST * condition, PabloBuilder & builder) {
         return mPb->createWhile(condition, builder.mPb);
+    }
+
+    Type * getStreamSetTy(const uint64_t NumElements = 1, const uint64_t FieldWidth = 1) {
+        return mPb->getStreamSetTy(NumElements, FieldWidth);
     }
 
     /// Statement Iterator Wrappers

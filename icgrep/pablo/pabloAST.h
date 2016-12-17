@@ -31,10 +31,10 @@ class PabloAST {
     friend class Branch;
     friend class PabloBlock;
     friend class Prototype;
-    friend class PabloFunction;
     friend class SymbolGenerator;
     friend class Count;
     friend class Var;
+    friend class Operator;
 public:
 
     using Allocator = SlabAllocator<u_int8_t>;
@@ -62,6 +62,16 @@ public:
         , Block
         , Function
         , Prototype
+        // Arithmetic expressions
+        , Add
+        , Subtract
+        // Relational expressions
+        , LessThan
+        , LessThanEquals
+        , Equals
+        , GreaterThanEquals
+        , GreaterThan
+        , NotEquals
         /** Statements **/
         // Boolean operations
         , And
@@ -78,9 +88,6 @@ public:
         , AtEOF
         // Statistics operations
         , Count
-        // Arithmetic operations
-        , Add
-        , Subtract
         // Variable assignments
         , Assign
         , Extract     
@@ -192,19 +199,7 @@ class Statement : public PabloAST {
     friend class PabloBlock;
 public:
     static inline bool classof(const PabloAST * e) {
-        switch (e->getClassTypeId()) {
-            case PabloAST::ClassTypeId::Zeroes:
-            case PabloAST::ClassTypeId::Ones:
-            case PabloAST::ClassTypeId::Var:
-            case PabloAST::ClassTypeId::String:
-            case PabloAST::ClassTypeId::Integer:
-            case PabloAST::ClassTypeId::Block:
-            case PabloAST::ClassTypeId::Function:
-            case PabloAST::ClassTypeId::Prototype:
-                return false;
-            default:
-                return true;
-        }
+        return ((unsigned)e->getClassTypeId() >= (unsigned)PabloAST::ClassTypeId::And);
     }
     static inline bool classof(const Statement *) {
         return true;

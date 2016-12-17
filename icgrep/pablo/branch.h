@@ -13,6 +13,7 @@ class Branch : public Statement {
     friend class Statement;
     friend class Simplifier;
 public:
+    using EscapedVars = std::vector<Var *>;
     static inline bool classof(const PabloAST * e) {
         switch (e->getClassTypeId()) {
             case ClassTypeId::If:
@@ -38,7 +39,7 @@ public:
         return mBody;
     }
     PabloBlock * setBody(PabloBlock * const body);
-    std::vector<Var *> getEscaped() const;
+    EscapedVars getEscaped() const;
 protected:
     Branch(const ClassTypeId typeId, PabloAST * condition, PabloBlock * body);
 protected:

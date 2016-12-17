@@ -76,7 +76,7 @@ bool DebugOptionIsSet(PabloDebugFlags flag) {return DebugOptions.isSet(flag);}
 #endif
 
 #ifdef PRINT_TIMING_INFORMATION
-unsigned COUNT_STATEMENTS(const PabloFunction * const entry) {
+unsigned COUNT_STATEMENTS(const PabloKernel * const entry) {
     std::stack<const Statement *> scope;
     unsigned statements = 0;
     // Scan through and collect all the advances, calls, scanthrus and matchstars ...
@@ -103,7 +103,7 @@ unsigned COUNT_STATEMENTS(const PabloFunction * const entry) {
     return statements;
 }
 
-unsigned COUNT_ADVANCES(const PabloFunction * const entry) {
+unsigned COUNT_ADVANCES(const PabloKernel * const entry) {
 
     std::stack<const Statement *> scope;
     unsigned advances = 0;
@@ -136,7 +136,7 @@ unsigned COUNT_ADVANCES(const PabloFunction * const entry) {
 
 using DistributionMap = boost::container::flat_map<unsigned, unsigned>;
 
-DistributionMap SUMMARIZE_VARIADIC_DISTRIBUTION(const PabloFunction * const entry) {
+DistributionMap SUMMARIZE_VARIADIC_DISTRIBUTION(const PabloKernel * const entry) {
     std::stack<const Statement *> scope;
     DistributionMap distribution;
     // Scan through and collect all the advances, calls, scanthrus and matchstars ...

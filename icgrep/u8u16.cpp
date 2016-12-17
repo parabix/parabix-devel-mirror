@@ -35,8 +35,6 @@
 #include <kernels/p2s_kernel.h>
 #include <kernels/deletion.h>
 #include <kernels/stdout_kernel.h>
-#include <llvm/IR/TypeBuilder.h>
-
 
 // mmap system
 #include <boost/filesystem.hpp>
@@ -312,7 +310,7 @@ Function * u8u16Pipeline(Module * mod, IDISA::IDISA_Builder * iBuilder) {
     Type * const outputType = ArrayType::get(ArrayType::get(bitBlockType, 16), 1)->getPointerTo();
     Type * const int32ty = iBuilder->getInt32Ty();
     Type * const int8PtrTy = iBuilder->getInt8PtrTy();
-    Type * const voidPtrTy = TypeBuilder<void *, false>::get(mod->getContext());
+    Type * const voidPtrTy = iBuilder->getVoidPtrTy();
     
     Function * const main = cast<Function>(mod->getOrInsertFunction("Main", voidTy, inputType, outputType, size_ty, nullptr));
     main->setCallingConv(CallingConv::C);

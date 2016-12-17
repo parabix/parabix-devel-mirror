@@ -12,6 +12,14 @@
 
 using StreamType = IDISA::StreamType;
 
+inline void printType(const Type * type, raw_string_ostream & out) {
+    if (auto st = dyn_cast<StreamType>(type)) {
+        out << "<" << st->getNumElements() << " x s" << st->getFieldWidth() << ">";
+    } else {
+        type->print(out);
+    }
+}
+
 namespace pablo {
 
 /// UNARY CREATE FUNCTIONS
@@ -94,21 +102,20 @@ Extract * PabloBlock::createExtract(PabloAST * array, PabloAST * index, String *
         out << ']';
         name = makeName(out.str());
     }
-    llvm::Type * const type = array->getType();
+    Type * type = array->getType();
     if (LLVM_LIKELY(isa<StreamType>(type))) {
-        Type * elementType = cast<StreamType>(type)->getStreamElementType();
-        return insertAtInsertionPoint(new Extract(array, index, name, elementType));
+        type = cast<StreamType>(type)->getStreamElementType();
+    } else if (LLVM_LIKELY(isa<ArrayType>(type))) {
+        type = cast<ArrayType>(type)->getArrayElementType();
+    } else {
+        std::string tmp;
+        raw_string_ostream out(tmp);
+        out << "cannot extract element from ";
+        array->print(out);
+        out << " : not a StreamType or ArrayType";
+        throw std::runtime_error(out.str());
     }
-    if (LLVM_LIKELY(isa<ArrayType>(type))) {
-        Type * elementType = cast<ArrayType>(type)->getArrayElementType();
-        return insertAtInsertionPoint(new Extract(array, index, name, elementType));
-    }
-    std::string tmp;
-    raw_string_ostream out(tmp);
-    out << "cannot extract element from ";
-    array->print(out);
-    out << " : not a StreamType or ArrayType";
-    throw std::runtime_error(out.str());
+    return insertAtInsertionPoint(new Extract(array, index, name, type));
 }
 
 And * PabloBlock::createAnd(PabloAST * expr1, PabloAST * expr2, String * name) {
@@ -156,24 +163,75 @@ Xor * PabloBlock::createXor(Type * const type, const unsigned reserved, String *
     return insertAtInsertionPoint(new Xor(type, reserved, name));
 }
 
-Add * PabloBlock::createAdd(PabloAST * expr1, PabloAST * expr2, String * name) {
+Add * PabloBlock::createAdd(PabloAST * expr1, PabloAST * expr2) {
     CHECK_SAME_TYPE(expr1, expr2);
-    if (name == nullptr) {
-        name = makeName("add");
-    }
-    return insertAtInsertionPoint(new Add(expr1->getType(), expr1, expr2, name));
+    return new Add(expr1->getType(), expr1, expr2);
 }
 
-Subtract * PabloBlock::createSubtract(PabloAST * expr1, PabloAST * expr2, String * name) {
+Subtract * PabloBlock::createSubtract(PabloAST * expr1, PabloAST * expr2) {
     CHECK_SAME_TYPE(expr1, expr2);
-    if (name == nullptr) {
-        name = makeName("sub");
+    return new Subtract(expr1->getType(), expr1, expr2);
+}
+
+LessThan * PabloBlock::createLessThan(PabloAST * expr1, PabloAST * expr2) {
+    CHECK_SAME_TYPE(expr1, expr2);
+    return new LessThan(getParent()->getBuilder()->getInt1Ty(), expr1, expr2);
+}
+
+enum class AssignErrorType {
+    TypeMismatch
+    , ReadOnlyVar
+    , NotAVariable
+};
+
+static void reportAssignError(PabloAST * const var, PabloAST * const value, const AssignErrorType type) {
+    std::string tmp;
+    raw_string_ostream out(tmp);
+    out << "Cannot assign ";
+    value->print(out);
+    out << " to ";
+    var->print(out);
+    out << ": ";
+    switch (type) {
+        case AssignErrorType::TypeMismatch:
+            out << "type mismatch ";
+            printType(value->getType(), out);
+            out << " vs. ";
+            printType(var->getType(), out);
+            break;
+        case AssignErrorType::ReadOnlyVar:
+            var->print(out);
+            out << " is read only";
+            break;
+        case AssignErrorType::NotAVariable:
+            var->print(out);
+            out << " is not a variable";
+            break;
     }
-    return insertAtInsertionPoint(new Subtract(expr1->getType(), expr1, expr2, name));
+    llvm::report_fatal_error(out.str());
 }
 
 Assign * PabloBlock::createAssign(PabloAST * const var, PabloAST * const value) {
     CHECK_SAME_TYPE(var, value);
+
+    if (LLVM_UNLIKELY(var->getType() != value->getType())) {
+        reportAssignError(var, value, AssignErrorType::TypeMismatch);
+    }
+
+    PabloAST * test = var;
+    for (;;) {
+        if (LLVM_LIKELY(isa<Var>(test))) {
+            if (LLVM_UNLIKELY(cast<Var>(test)->isReadOnly())) {
+                reportAssignError(var, value, AssignErrorType::ReadOnlyVar);
+            }
+            break;
+        } else if (isa<Extract>(test)) {
+            test = cast<Extract>(test)->getArray();
+        } else {
+            reportAssignError(var, value, AssignErrorType::NotAVariable);
+        }
+    }
+
     return insertAtInsertionPoint(new Assign(var, value));
 }
 
@@ -248,24 +306,5 @@ void PabloBlock::eraseFromParent(const bool recursively) {
     }
     mAllocator.deallocate(reinterpret_cast<Allocator::pointer>(this));
 }
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief enumerateScopes
- *
- * Assign sequential scope indexes, returning the next unassigned index
- ** ------------------------------------------------------------------------------------------------------------- */
-unsigned PabloBlock::enumerateScopes(unsigned baseScopeIndex) {
-    mScopeIndex = baseScopeIndex;
-    unsigned nextScopeIndex = baseScopeIndex + 1;
-    for (Statement * stmt : *this) {
-        if (If * ifStatement = dyn_cast<If>(stmt)) {
-            nextScopeIndex = ifStatement->getBody()->enumerateScopes(nextScopeIndex);
-        }
-        else if (While * whileStatement = dyn_cast<While>(stmt)) {
-            nextScopeIndex = whileStatement->getBody()->enumerateScopes(nextScopeIndex);
-        }
-    }
-    return nextScopeIndex;
-}    
 
 }

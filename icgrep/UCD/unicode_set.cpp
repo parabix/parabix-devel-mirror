@@ -44,9 +44,9 @@ template <> inline int scan_forward_zeroes<unsigned long long>(unsigned long lon
 UnicodeSet::RunAllocator UnicodeSet::mRunAllocator;
 UnicodeSet::QuadAllocator UnicodeSet::mQuadAllocator;
 
-const size_t QUAD_BITS = (8 * sizeof(bitquad_t));
-const size_t MOD_QUAD_BIT_MASK = QUAD_BITS - 1;
-const size_t UNICODE_QUAD_COUNT = (UNICODE_MAX + 1) / QUAD_BITS;
+const uint64_t QUAD_BITS = (8 * sizeof(bitquad_t));
+const uint64_t MOD_QUAD_BIT_MASK = QUAD_BITS - 1;
+const uint64_t UNICODE_QUAD_COUNT = (UNICODE_MAX + 1) / QUAD_BITS;
 const bitquad_t FULL_QUAD_MASK = -1;
 
 inline run_type_t typeOf(const run_t & run) {

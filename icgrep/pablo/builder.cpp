@@ -98,14 +98,6 @@ static inline Type * isBinary(PabloAST * expr) {
     return nullptr;
 }
 
-inline void printType(const Type * type, raw_string_ostream & out) {
-    if (auto st = dyn_cast<IDISA::StreamType>(type)) {
-        out << "<" << st->getNumElements() << " x s" << st->getFieldWidth() << ">";
-    } else {
-        type->print(out);
-    }
-}
-
 using TypeId = PabloAST::ClassTypeId;
 
 Call * PabloBuilder::createCall(Prototype * prototype, const std::vector<PabloAST *> & args) {
@@ -200,23 +192,6 @@ PabloAST * PabloBuilder::createCount(PabloAST * expr, const std::string & prefix
 }
 
 PabloAST * PabloBuilder::createAssign(PabloAST * const variable, PabloAST * const value) {
-    if (variable->getType() != value->getType()) {
-        std::string tmp;
-        raw_string_ostream out(tmp);
-        out << "Cannot assign ";
-        value->print(out);
-        out << " to ";
-        variable->print(out);
-        out << ": type of ";
-        value->print(out);
-        out << " ";
-        printType(value->getType(), out);
-        out << " does not match ";
-        variable->print(out);
-        out << " ";
-        printType(variable->getType(), out);
-        throw std::runtime_error(out.str());
-    }
     return mPb->createAssign(variable, value);
 }
 
@@ -425,32 +400,40 @@ PabloAST * PabloBuilder::createXor(PabloAST * expr1, PabloAST * expr2, const std
 PabloAST * PabloBuilder::createAdd(PabloAST * expr1, PabloAST * expr2) {
     if (isa<Integer>(expr1) && isa<Integer>(expr2)) {
         return getInteger(cast<Integer>(expr1)->value() + cast<Integer>(expr2)->value());
+    } else if (isa<Integer>(expr1)) {
+        if (cast<Integer>(expr1)->value() == 0) {
+            return expr2;
+        }
+    } else if (isa<Integer>(expr2)) {
+        if (cast<Integer>(expr2)->value() == 0) {
+            return expr1;
+        }
     }
     MAKE_BINARY(createAdd, TypeId::Add, expr1, expr2);
-    return result;
-}
-
-PabloAST * PabloBuilder::createAdd(PabloAST * expr1, PabloAST * expr2, const std::string & prefix) {
-    if (isa<Integer>(expr1) && isa<Integer>(expr2)) {
-        return getInteger(cast<Integer>(expr1)->value() + cast<Integer>(expr2)->value());
-    }
-    MAKE_NAMED_BINARY(createAdd, TypeId::Add, prefix, expr1, expr2);
     return result;
 }
 
 PabloAST * PabloBuilder::createSubtract(PabloAST * expr1, PabloAST * expr2) {
     if (isa<Integer>(expr1) && isa<Integer>(expr2)) {
         return getInteger(cast<Integer>(expr1)->value() - cast<Integer>(expr2)->value());
+    } else if (isa<Integer>(expr1)) {
+        if (cast<Integer>(expr1)->value() == 0) {
+            return expr2;
+        }
+    } else if (isa<Integer>(expr2)) {
+        if (cast<Integer>(expr2)->value() == 0) {
+            return expr1;
+        }
     }
     MAKE_BINARY(createSubtract, TypeId::Subtract, expr1, expr2);
     return result;
 }
 
-PabloAST * PabloBuilder::createSubtract(PabloAST * expr1, PabloAST * expr2, const std::string & prefix) {
+PabloAST * PabloBuilder::createLessThan(PabloAST * expr1, PabloAST * expr2) {
     if (isa<Integer>(expr1) && isa<Integer>(expr2)) {
-        return getInteger(cast<Integer>(expr1)->value() - cast<Integer>(expr2)->value());
+        return getInteger(cast<Integer>(expr1)->value() < cast<Integer>(expr2)->value() ? 1 : 0);
     }
-    MAKE_NAMED_BINARY(createSubtract, TypeId::Subtract, prefix, expr1, expr2);
+    MAKE_BINARY(createLessThan, TypeId::LessThan, expr1, expr2);
     return result;
 }
 

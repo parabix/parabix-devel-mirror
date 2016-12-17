@@ -49,11 +49,11 @@ include_directories("${Boost_INCLUDE_DIRS}")
 link_directories(${Boost_LIBRARY_DIR})
 SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DUSE_BOOST")
 
+SET(KERNEL_SRC kernels/kernel.cpp kernels/s2p_kernel.cpp kernels/streamset.cpp kernels/interface.cpp)
 SET(IDISA_SRC IDISA/types/streamtype.cpp IDISA/idisa_builder.cpp IDISA/idisa_avx_builder.cpp IDISA/idisa_i64_builder.cpp IDISA/idisa_sse_builder.cpp IDISA/idisa_nvptx_builder.cpp IDISA/idisa_target.cpp)
 
 SET(PABLO_SRC pablo/pabloAST.cpp pablo/branch.cpp pablo/codegenstate.cpp pablo/builder.cpp pablo/symbol_generator.cpp pablo/printer_pablos.cpp pablo/pablo_toolchain.cpp)
-SET(PABLO_SRC ${PABLO_SRC} pablo/pablo_kernel.cpp pablo/pablo_compiler.cpp pablo/carry_manager.cpp pablo/carry_data.cpp)
-SET(PABLO_SRC ${PABLO_SRC} kernels/kernel.cpp kernels/s2p_kernel.cpp kernels/streamset.cpp kernels/interface.cpp)
+SET(PABLO_SRC ${PABLO_SRC} pablo/pablo_kernel.cpp pablo/pablo_compiler.cpp pablo/carry_manager.cpp)
 SET(PABLO_SRC ${PABLO_SRC} pablo/analysis/pabloverifier.cpp)
 SET(PABLO_SRC ${PABLO_SRC} pablo/optimizers/pablo_simplifier.cpp pablo/optimizers/codemotionpass.cpp pablo/passes/flattenif.cpp)
 IF(ENABLE_MULTIPLEXING)
@@ -61,13 +61,14 @@ SET(PABLO_SRC ${PABLO_SRC} pablo/optimizers/booleanreassociationpass.cpp)
 SET(PABLO_SRC ${PABLO_SRC} pablo/optimizers/schedulingprepass.cpp pablo/optimizers/pablo_automultiplexing.cpp)
 ENDIF()
 
+
+add_library(CodeGen ${KERNEL_SRC} ${IDISA_SRC} object_cache.cpp)
 add_library(PabloADT ${PABLO_SRC})
 add_library(RegExpADT re/re_re.cpp re/re_cc.cpp re/re_rep.cpp re/re_diff.cpp re/re_intersect.cpp re/printer_re.cpp)
 add_library(RegExpCompiler re/re_parser.cpp re/re_nullable.cpp re/re_simplifier.cpp re/re_compiler.cpp re/re_analysis.cpp re/re_toolchain.cpp re/re_name_resolve.cpp re/re_parser_pcre.cpp re/re_parser_ere.cpp re/re_parser_bre.cpp re/re_parser_prosite.cpp re/re_utility.cpp)
 add_library(CCADT cc/cc_compiler.cpp utf8_encoder.cpp utf16_encoder.cpp UCD/CaseFolding_txt.cpp)
 add_library(UCDlib UCD/unicode_set.cpp UCD/ucd_compiler.cpp UCD/PropertyObjects.cpp UCD/resolve_properties.cpp UCD/UnicodeNameData.cpp)
 
-add_library(CodeGen object_cache.cpp ${IDISA_SRC})
 
 # add the executable
 target_link_libraries (PabloADT CodeGen ${REQ_LLVM_LIBRARIES})
@@ -110,6 +111,7 @@ add_executable(icgrep icgrep.cpp toolchain.cpp grep_engine.cpp kernels/pipeline.
 add_executable(u8u16 u8u16.cpp toolchain.cpp kernels/p2s_kernel.cpp kernels/pipeline.cpp kernels/deletion.cpp kernels/stdout_kernel.cpp)
 add_executable(wc wc.cpp toolchain.cpp kernels/pipeline.cpp)
 add_executable(editd editd/editd.cpp editd/pattern_compiler.cpp toolchain.cpp kernels/pipeline.cpp editd/editdscan_kernel.cpp editd/editd_gpu_kernel.cpp editd/editd_cpu_kernel.cpp)
+add_executable(array-test array-test.cpp toolchain.cpp kernels/pipeline.cpp)
 
 IF(ENABLE_PREGENERATED_UCD_FUNCTIONS)
 add_dependencies(icgrep run_generate_predefined_ucd_functions)
@@ -125,6 +127,7 @@ target_link_libraries (icgrep UCDlib PabloADT RegExpCompiler CCADT CodeGen ${REQ
 target_link_libraries (u8u16 UCDlib PabloADT RegExpCompiler CCADT CodeGen ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES} ${CUDA_LIB})
 target_link_libraries (wc UCDlib PabloADT RegExpCompiler CCADT CodeGen ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES} ${CUDA_LIB})
 target_link_libraries (editd UCDlib PabloADT RegExpCompiler CCADT CodeGen ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES} ${CUDA_LIB})
+target_link_libraries (array-test PabloADT CodeGen ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES} ${CUDA_LIB})
 
 IF(ENABLE_MULTIPLEXING)
     message(STATUS "Enabling Multiplexing")
@@ -133,7 +136,6 @@ IF(ENABLE_MULTIPLEXING)
     target_link_libraries(PabloADT ${Z3_LIBRARIES})
     SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DENABLE_MULTIPLEXING")
 ENDIF()
-
 
 include_directories("${PROJECT_SOURCE_DIR}")
 

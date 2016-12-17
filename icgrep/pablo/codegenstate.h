@@ -44,6 +44,7 @@ class PabloBlock : public PabloAST, public StatementList {
     friend class PabloAST;
     friend class Branch;
     friend class PabloBuilder;
+    friend class PabloKernel;
 public:
 
     static inline bool classof(const PabloBlock *) {
@@ -75,7 +76,7 @@ public:
         return createAdvance(expr, shiftAmount, makeName(prefix));
     }
 
-    Advance * createAdvance(PabloAST * expr, PabloAST * shiftAmount, String * const name);
+    Advance * createAdvance(PabloAST * expr, PabloAST * shiftAmount, String * name);
 
     Lookahead * createLookahead(PabloAST * expr, PabloAST * shiftAmount) {
         return createLookahead(expr, shiftAmount, nullptr);
@@ -85,7 +86,7 @@ public:
         return createLookahead(expr, shiftAmount, makeName(prefix));
     }
 
-    Lookahead * createLookahead(PabloAST * expr, PabloAST * shiftAmount, String * const name);
+    Lookahead * createLookahead(PabloAST * expr, PabloAST * shiftAmount, String * name);
 
     inline Zeroes * createZeroes(Type * const type = nullptr) {
         return mParent->getNullValue(type);
@@ -117,7 +118,7 @@ public:
         return createNot(expr, makeName(prefix));
     }
 
-    Not * createNot(PabloAST * expr, String * const name);
+    Not * createNot(PabloAST * expr, String * name);
 
     inline Var * createVar(const std::string & name, Type * const type = nullptr) {
         return createVar(makeName(name), type);
@@ -139,7 +140,7 @@ public:
         return createInFile(expr, makeName(prefix));
     }
 
-    InFile * createInFile(PabloAST * expr, String * const name);
+    InFile * createInFile(PabloAST * expr, String * name);
 
     AtEOF * createAtEOF(PabloAST * expr) {
         return createAtEOF(expr, nullptr);
@@ -149,7 +150,7 @@ public:
         return createAtEOF(expr, makeName(prefix));
     }
 
-    AtEOF * createAtEOF(PabloAST * expr, String * const name);
+    AtEOF * createAtEOF(PabloAST * expr, String * name);
 
     Extract * createExtract(PabloAST * array, const int64_t index) {
         return createExtract(array, getInteger(index), nullptr);
@@ -167,7 +168,7 @@ public:
         return createExtract(array, getInteger(index), makeName(prefix));
     }
 
-    Extract * createExtract(PabloAST * array, PabloAST * index, String * const name);
+    Extract * createExtract(PabloAST * array, PabloAST * index, String * name);
 
     Assign * createAssign(PabloAST * const var, PabloAST * const value);
 
@@ -179,13 +180,13 @@ public:
         return createAnd(expr1, expr2, nullptr);
     }
 
-    And * createAnd(PabloAST * expr1, PabloAST * expr2, String * const name);
+    And * createAnd(PabloAST * expr1, PabloAST * expr2, String * name);
 
     And * createAnd(Type * const type, const unsigned reserved) {
         return createAnd(type, reserved, nullptr);
     }
 
-    And * createAnd(Type * const type, const unsigned reserved, String * const name);
+    And * createAnd(Type * const type, const unsigned reserved, String * name);
 
     Or * createOr(PabloAST * expr1, PabloAST * expr2) {
         return createOr(expr1, expr2, nullptr);
@@ -195,13 +196,13 @@ public:
         return createOr(expr1, expr2, makeName(prefix));
     }
 
-    Or * createOr(PabloAST * expr1, PabloAST * expr2, String * const name);
+    Or * createOr(PabloAST * expr1, PabloAST * expr2, String * name);
 
     Or * createOr(Type * const type, const unsigned reserved) {
         return createOr(type, reserved, nullptr);
     }
 
-    Or * createOr(Type * const type, const unsigned reserved, String * const name);
+    Or * createOr(Type * const type, const unsigned reserved, String * name);
 
     Xor * createXor(PabloAST * expr1, PabloAST * expr2) {
         return createXor(expr1, expr2, nullptr);
@@ -211,13 +212,13 @@ public:
         return createXor(expr1, expr2, makeName(prefix));
     }
 
-    Xor * createXor(PabloAST * expr1, PabloAST * expr2, String * const name);
+    Xor * createXor(PabloAST * expr1, PabloAST * expr2, String * name);
 
     Xor * createXor(Type * const type, const unsigned reserved) {
         return createXor(type, reserved, nullptr);
     }
 
-    Xor * createXor(Type * const type, const unsigned reserved, String * const name);
+    Xor * createXor(Type * const type, const unsigned reserved, String * name);
 
     Sel * createSel(PabloAST * condition, PabloAST * trueExpr, PabloAST * falseExpr) {
         return createSel(condition, trueExpr, falseExpr, nullptr);
@@ -227,27 +228,13 @@ public:
         return createSel(condition, trueExpr, falseExpr, makeName(prefix));
     }
 
-    Sel * createSel(PabloAST * condition, PabloAST * trueExpr, PabloAST * falseExpr, String * const name);
+    Sel * createSel(PabloAST * condition, PabloAST * trueExpr, PabloAST * falseExpr, String * name);
 
-    Add * createAdd(PabloAST * expr1, PabloAST * expr2) {
-        return createAdd(expr1, expr2, nullptr);
-    }
+    Add * createAdd(PabloAST * expr1, PabloAST * expr2);
 
-    Add * createAdd(PabloAST * expr1, PabloAST * expr2, const std::string & prefix) {
-        return createAdd(expr1, expr2, makeName(prefix));
-    }
+    Subtract * createSubtract(PabloAST * expr1, PabloAST * expr2);
 
-    Add * createAdd(PabloAST * expr1, PabloAST * expr2, String * const name);
-
-    Subtract * createSubtract(PabloAST * expr1, PabloAST * expr2) {
-        return createSubtract(expr1, expr2, nullptr);
-    }
-
-    Subtract * createSubtract(PabloAST * expr1, PabloAST * expr2, const std::string & prefix) {
-        return createSubtract(expr1, expr2, makeName(prefix));
-    }
-
-    Subtract * createSubtract(PabloAST * expr1, PabloAST * expr2, String * const name);
+    LessThan * createLessThan(PabloAST * expr1, PabloAST * expr2);
 
     MatchStar * createMatchStar(PabloAST * marker, PabloAST * charclass) {
         return createMatchStar(marker, charclass, nullptr);
@@ -257,7 +244,7 @@ public:
         return createMatchStar(marker, charclass, makeName(prefix));
     }
 
-    MatchStar * createMatchStar(PabloAST * marker, PabloAST * charclass, String * const name);
+    MatchStar * createMatchStar(PabloAST * marker, PabloAST * charclass, String * name);
 
     ScanThru * createScanThru(PabloAST * from, PabloAST * thru) {
         return createScanThru(from, thru, nullptr);
@@ -267,11 +254,15 @@ public:
         return createScanThru(from, thru, makeName(prefix));
     }
 
-    ScanThru * createScanThru(PabloAST * from, PabloAST * thru, String * const name);
+    ScanThru * createScanThru(PabloAST * from, PabloAST * thru, String * name);
 
     If * createIf(PabloAST * condition, PabloBlock * body);
 
     While * createWhile(PabloAST * condition, PabloBlock * body);
+
+    Type * getStreamSetTy(const uint64_t NumElements = 1, const uint64_t FieldWidth = 1) {
+        return mParent->getStreamSetTy(NumElements, FieldWidth);
+    }
 
     inline PabloBlock * getPredecessor() const {
         return getBranch() ? getBranch()->getParent() : nullptr;
@@ -283,8 +274,10 @@ public:
 
     void insert(Statement * const statement);
 
-    unsigned enumerateScopes(unsigned baseScopeIndex);
-    
+    inline void setScopeIndex(const unsigned index) {
+        mScopeIndex = index;
+    }
+
     inline unsigned getScopeIndex() const {
         return mScopeIndex;
     }

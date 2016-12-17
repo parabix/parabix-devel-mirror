@@ -107,13 +107,15 @@ protected:
     
     // Add an additional scalar field to the KernelState struct.
     // Must occur before any call to addKernelDeclarations or createKernelModule.
-    void addScalar(llvm::Type * t, std::string name);
-    
+    unsigned addScalar(llvm::Type * type, std::string name);
+
+    unsigned getScalarCount() const;
+
     // Run-time access of Kernel State and parameters of methods for
     // use in implementing kernels.
     
     // Get the index of a named scalar field within the kernel state struct.
-    llvm::Value * getScalarIndex(std::string);
+    ConstantInt * getScalarIndex(const std::string & name) const;
     
     // Get the value of a scalar field for a given instance.
     llvm::Value * getScalarField(llvm::Value * self, std::string fieldName);
@@ -127,7 +129,7 @@ protected:
     // Stream set helpers.
     unsigned getStreamSetIndex(std::string name);
     
-    llvm::Value * getScalarFieldPtr(Value * self, std::string name);
+    llvm::Value * getScalarFieldPtr(Value * self, const std::string & name);
 
     llvm::Value * getStreamSetStructPtr(Value * self, std::string name);
     size_t getStreamSetBufferSize(Value * self, std::string name);
@@ -142,7 +144,7 @@ protected:
 protected:
 
     std::vector<llvm::Type *>  mKernelFields;
-    NameMap                    mInternalStateNameMap;
+    NameMap                    mKernelMap;
     NameMap                    mStreamSetNameMap;
     std::vector<StreamSetBuffer *> mStreamSetInputBuffers;
     std::vector<StreamSetBuffer *> mStreamSetOutputBuffers;

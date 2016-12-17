@@ -4,12 +4,14 @@
  */
 
 #include <pablo/pablo_kernel.h>
+#include <pablo/codegenstate.h>
 #include <pablo/pablo_compiler.h>
 #include <llvm/Support/Debug.h>
 #include <pablo/pe_var.h>
 #include <llvm/IR/Verifier.h>
 #include <IDISA/idisa_builder.h>
 #include <pablo/prototype.h>
+#include <stack>
 
 using namespace pablo;
 using namespace kernel;
@@ -17,11 +19,10 @@ using namespace parabix;
 using namespace IDISA;
 
 Var * PabloKernel::addInput(const std::string name, Type * const type) {
-    Var * param = new Var(mSymbolTable->make(name), type);
+    Var * param = new Var(mSymbolTable->make(name), type, true);
     mInputs.push_back(param);
     if (isa<StreamType>(type)) {
-        Type * const resolvedType = cast<StreamType>(type)->resolveType(iBuilder);
-        mStreamSetInputs.emplace_back(resolvedType, name);
+        mStreamSetInputs.emplace_back(type, name);
     } else {
         mScalarInputs.emplace_back(type, name);
     }
@@ -30,11 +31,10 @@ Var * PabloKernel::addInput(const std::string name, Type * const type) {
 }
 
 Var * PabloKernel::addOutput(const std::string name, Type * const type) {
-    Var * result = new Var(mSymbolTable->make(name), type);
+    Var * result = new Var(mSymbolTable->make(name), type, false);
     mOutputs.push_back(result);
     if (isa<StreamType>(type)) {
-        Type * const resolvedType = cast<StreamType>(type)->resolveType(iBuilder);
-        mStreamSetOutputs.emplace_back(resolvedType, name);
+        mStreamSetOutputs.emplace_back(type, name);
     } else {
         mScalarOutputs.emplace_back(type, name);
     }
@@ -77,24 +77,22 @@ Ones * PabloKernel::getAllOnesValue(Type * type) {
 }
 
 void PabloKernel::prepareKernel() {
-    Type * carryDataType = mPabloCompiler->initializeKernelData();
-    addScalar(carryDataType, "carries");
+    mPabloCompiler->initializeKernelData();
     KernelBuilder::prepareKernel();
 }
 
 void PabloKernel::generateDoBlockMethod() {
     auto savePoint = iBuilder->saveIP();
-    Module * m = iBuilder->getModule();
-    Function * doBlockFunction = m->getFunction(mKernelName + doBlock_suffix);
-    auto args = doBlockFunction->arg_begin();
-    Value * const self = &*(args);
-    mPabloCompiler->compile(self, doBlockFunction);
+    Module * const m = iBuilder->getModule();
+    Function * const f = m->getFunction(mKernelName + doBlock_suffix);
+    Value * const self = &*(f->arg_begin());
+    mPabloCompiler->compile(self, f);
     Value * produced = getProducedItemCount(self);
     produced = iBuilder->CreateAdd(produced, ConstantInt::get(iBuilder->getSizeTy(), iBuilder->getStride()));
     setProducedItemCount(self, produced);
     iBuilder->CreateRetVoid();
     #ifndef NDEBUG
-    llvm::verifyFunction(*doBlockFunction, &errs());
+    llvm::verifyFunction(*f, &errs());
     #endif
     iBuilder->restoreIP(savePoint);
 }
@@ -124,7 +122,7 @@ void PabloKernel::generateFinalBlockMethod() {
     setProducedItemCount(self, iBuilder->CreateAdd(produced, remaining));
     iBuilder->CreateRetVoid();
     #ifndef NDEBUG
-    llvm::verifyFunction(*doBlockFunction, &errs());
+    llvm::verifyFunction(*finalBlockFunction, &errs());
     #endif
     iBuilder->restoreIP(savePoint);
 }

@@ -8,7 +8,6 @@
 #include <llvm/IR/Type.h>
 #include <llvm/IR/Value.h>
 #include <llvm/Support/raw_ostream.h>
-#include <llvm/IR/TypeBuilder.h>
 #include <llvm/Support/ErrorHandling.h>
 #include <toolchain.h>
 
@@ -21,16 +20,19 @@ KernelBuilder::KernelBuilder(IDISA::IDISA_Builder * builder,
                                  std::vector<Binding> stream_outputs,
                                  std::vector<Binding> scalar_parameters,
                                  std::vector<Binding> scalar_outputs,
-                                 std::vector<Binding> internal_scalars) :
-    KernelInterface(builder, kernelName, stream_inputs, stream_outputs, scalar_parameters, scalar_outputs, internal_scalars) {}
+                                 std::vector<Binding> internal_scalars)
+: KernelInterface(builder, kernelName, stream_inputs, stream_outputs, scalar_parameters, scalar_outputs, internal_scalars) {
 
-void KernelBuilder::addScalar(Type * t, std::string name) {
+}
+
+unsigned KernelBuilder::addScalar(Type * type, std::string name) {
     if (LLVM_UNLIKELY(mKernelStateType != nullptr)) {
-        llvm::report_fatal_error("Illegal addition of kernel field after kernel state finalized: " + name);
+        llvm::report_fatal_error("Cannot add kernel field " + name + " after kernel state finalized");
     }
-    unsigned index = mKernelFields.size();
-    mKernelFields.push_back(t);
-    mInternalStateNameMap.emplace(name, index);
+    const auto index = mKernelFields.size();
+    mKernelMap.emplace(name, index);
+    mKernelFields.push_back(type);
+    return index;
 }
 
 void KernelBuilder::prepareKernel() {
@@ -49,11 +51,6 @@ void KernelBuilder::prepareKernel() {
             << mStreamSetOutputs.size() << " output stream sets.";
         throw std::runtime_error(out.str());
     }
-    addScalar(iBuilder->getSizeTy(), blockNoScalar);
-    addScalar(iBuilder->getSizeTy(), logicalSegmentNoScalar);
-    addScalar(iBuilder->getSizeTy(), processedItemCount);
-    addScalar(iBuilder->getSizeTy(), producedItemCount);
-    addScalar(iBuilder->getInt1Ty(), terminationSignal);
     int streamSetNo = 0;
     for (unsigned i = 0; i < mStreamSetInputs.size(); i++) {
         if ((mStreamSetInputBuffers[i]->getBufferSize() > 0) && (mStreamSetInputBuffers[i]->getBufferSize() < codegen::SegmentSize + (blockSize + mLookAheadPositions - 1)/blockSize)) {
@@ -77,6 +74,11 @@ void KernelBuilder::prepareKernel() {
     for (auto binding : mInternalScalars) {
         addScalar(binding.type, binding.name);
     }
+    addScalar(iBuilder->getSizeTy(), blockNoScalar);
+    addScalar(iBuilder->getSizeTy(), logicalSegmentNoScalar);
+    addScalar(iBuilder->getSizeTy(), processedItemCount);
+    addScalar(iBuilder->getSizeTy(), producedItemCount);
+    addScalar(iBuilder->getInt1Ty(), terminationSignal);
     mKernelStateType = StructType::create(iBuilder->getContext(), mKernelFields, mKernelName);
 }
 
@@ -94,11 +96,11 @@ std::unique_ptr<Module> KernelBuilder::createKernelModule(std::vector<StreamSetB
 
 void KernelBuilder::generateKernel(std::vector<StreamSetBuffer *> input_buffers, std::vector<StreamSetBuffer*> output_buffers) {
     auto savePoint = iBuilder->saveIP();
-    Module * m = iBuilder->getModule();
+    Module * const m = iBuilder->getModule();
     mStreamSetInputBuffers = input_buffers;
     mStreamSetOutputBuffers = output_buffers;
     prepareKernel();  // possibly overriden by the KernelBuilder subtype
-    KernelInterface::addKernelDeclarations(m);
+    addKernelDeclarations(m);
     generateDoBlockMethod();     // must be implemented by the KernelBuilder subtype
     generateFinalBlockMethod();  // possibly overriden by the KernelBuilder subtype
     generateDoSegmentMethod();
@@ -282,15 +284,19 @@ void KernelBuilder::generateDoSegmentMethod() {
     iBuilder->restoreIP(savePoint);
 }
 
-Value * KernelBuilder::getScalarIndex(std::string fieldName) {
-    const auto f = mInternalStateNameMap.find(fieldName);
-    if (LLVM_UNLIKELY(f == mInternalStateNameMap.end())) {
-        throw std::runtime_error("Kernel does not contain internal state: " + fieldName);
+ConstantInt * KernelBuilder::getScalarIndex(const std::string & name) const {
+    const auto f = mKernelMap.find(name);
+    if (LLVM_UNLIKELY(f == mKernelMap.end())) {
+        throw std::runtime_error("Kernel does not contain internal state: " + name);
     }
     return iBuilder->getInt32(f->second);
 }
 
-Value * KernelBuilder::getScalarFieldPtr(Value * self, std::string fieldName) {
+unsigned KernelBuilder::getScalarCount() const {
+    return mKernelFields.size();
+}
+
+Value * KernelBuilder::getScalarFieldPtr(Value * self, const std::string & fieldName) {
     return iBuilder->CreateGEP(self, {iBuilder->getInt32(0), getScalarIndex(fieldName)});
 }
 
@@ -421,7 +427,7 @@ void KernelBuilder::createInstance() {
 Function * KernelBuilder::generateThreadFunction(std::string name){
     Module * m = iBuilder->getModule();
     Type * const voidTy = Type::getVoidTy(m->getContext());
-    Type * const voidPtrTy = TypeBuilder<void *, false>::get(m->getContext());
+    Type * const voidPtrTy = iBuilder->getVoidPtrTy();
     Type * const int8PtrTy = iBuilder->getInt8PtrTy();
     Type * const int1ty = iBuilder->getInt1Ty();
 

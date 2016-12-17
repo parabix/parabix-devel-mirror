@@ -22,7 +22,7 @@ using TypeId = PabloAST::ClassTypeId;
  * Note: if folding alters this variadic without making any other modification to the AST, it will return null as
  * if no change was made.
  ** ------------------------------------------------------------------------------------------------------------- */
-PabloAST * Simplifier::fold(Variadic * var, PabloBlock * const block) {
+inline PabloAST * Simplifier::fold(Variadic * var, PabloBlock * const block) {
 
     assert (var);
 
@@ -262,6 +262,18 @@ PabloAST * Simplifier::fold(Statement * stmt, PabloBlock * const block) {
         if (LLVM_UNLIKELY(isa<Zeroes>(stmt->getOperand(0)))) {
             return block->createZeroes(stmt->getType());
         }
+    } else if (isa<Add>(stmt) || isa<Subtract>(stmt)) {
+       if (LLVM_UNLIKELY(isa<Integer>(stmt->getOperand(0)) && isa<Integer>(stmt->getOperand(1)))) {
+           const Integer * const int0 = cast<Integer>(stmt->getOperand(0));
+           const Integer * const int1 = cast<Integer>(stmt->getOperand(1));
+           Integer::IntTy result = 0;
+           if (isa<Add>(stmt)) {
+               result = int0->value() + int1->value();
+           } else {
+               result = int0->value() - int1->value();
+           }
+           return block->getInteger(result);
+       }
     } else {
         for (unsigned i = 0; i != stmt->getNumOperands(); ++i) {
             if (LLVM_UNLIKELY(isa<Zeroes>(stmt->getOperand(i)))) {
@@ -371,7 +383,6 @@ private:
  * as replacements. Let the DCE remove the unnecessary statements with the finalized Def-Use information.
  ** ------------------------------------------------------------------------------------------------------------- */
 void Simplifier::redundancyElimination(PabloBlock * const block, ExpressionTable * const et, VariableTable * const vt) {
-    ExpressionTable expressions(et);
     VariableTable variables(vt);
 
     // When processing a While body, we cannot use its initial value from the outer
@@ -382,6 +393,8 @@ void Simplifier::redundancyElimination(PabloBlock * const block, ExpressionTable
             variables.put(var, var);
         }
     }
+
+    ExpressionTable expressions(et);
 
     Statement * stmt = block->front();
     while (stmt) {
@@ -447,9 +460,9 @@ void Simplifier::redundancyElimination(PabloBlock * const block, ExpressionTable
             // demote any uses of a Var whose value is in scope
             for (unsigned i = 0; i < stmt->getNumOperands(); ++i) {
                 PabloAST * op = stmt->getOperand(i);
-                if (isa<Var>(op)) {
+                if (LLVM_UNLIKELY(isa<Var>(op))) {
                     PabloAST * const value = variables.get(cast<Var>(op));
-                    if (value) {
+                    if (value && value != op) {
                         stmt->setOperand(i, value);
                     }
                 }
@@ -488,30 +501,30 @@ void Simplifier::redundancyElimination(PabloBlock * const block, ExpressionTable
         // directly, we map future uses of the duplicate Var to the initial one. The DCE pass will
         // later mark any Assign statement as dead if the Var is never read.
 
+        /// TODO: this doesn't properly optimize the loop control variable(s) yet.
+
         const auto escaped = br->getEscaped();
         const auto n = escaped.size();
         PabloAST * variable[n];
         PabloAST * incoming[n];
         PabloAST * outgoing[n];
 
-        size_t i = 0;
-        for (Var * var : escaped) {
+        for (unsigned i = 0; i < escaped.size(); ++i) {
+            PabloAST * var = escaped[i];
             incoming[i] = vt->get(var);
             outgoing[i] = variables.get(var);
-            PabloAST * expr = var;
             if (LLVM_UNLIKELY(incoming[i] == outgoing[i])) {
-                expr = incoming[i];
+                var = incoming[i];
             } else {
                 for (size_t j = 0; j != i; ++j) {
                     if ((outgoing[j] == outgoing[i]) && (incoming[j] == incoming[i])) {
-                        expr = variable[j];
+                        var = variable[j];
                         break;
                     }
                 }
             }
-            variable[i] = expr;
-            vt->put(var, expr);
-            ++i;
+            variable[i] = var;
+            vt->put(escaped[i], var);
         }
     }
 }
@@ -610,17 +623,17 @@ void Simplifier::strengthReduction(PabloBlock * const block) {
             }
         } else if (LLVM_UNLIKELY(isa<ScanThru>(stmt))) {
             ScanThru * scanThru = cast<ScanThru>(stmt);
-            if (LLVM_UNLIKELY(isa<Advance>(scanThru->getOperand(0)))) {
+            if (LLVM_UNLIKELY(isa<Advance>(scanThru->getScanFrom()))) {
                 // Replace a ScanThru(Advance(x,n),y) with an ScanThru(Advance(x, n - 1), Advance(x, n - 1) | y), where Advance(x, 0) = x
-                Advance * op = cast<Advance>(stmt->getOperand(0));
-                if (LLVM_UNLIKELY(op->getNumUses() == 1)) {
+                Advance * adv = cast<Advance>(scanThru->getScanFrom());
+                if (LLVM_UNLIKELY(adv->getNumUses() == 1)) {
                     block->setInsertPoint(scanThru->getPrevNode());
-                    PabloAST * expr = block->createAdvance(op->getOperand(0), block->getInteger(op->getAmount() - 1));
+                    PabloAST * expr = block->createAdvance(adv->getOperand(0), block->getInteger(adv->getAmount() - 1));
                     scanThru->setOperand(0, expr);
                     scanThru->setOperand(1, block->createOr(scanThru->getOperand(1), expr));
-                    op->eraseFromParent(false);
+                    adv->eraseFromParent(false);
                 }
-            } else if (isa<And>(scanThru->getOperand(0))) {
+            } else if (LLVM_UNLIKELY(isa<And>(scanThru->getScanFrom()))) {
                 // Suppose B is an arbitrary bitstream and A = Advance(B, 1). ScanThru(B ∧ ¬A, B) will leave a marker on the position
                 // following the end of any run of 1-bits in B. But this is equivalent to computing A ∧ ¬B since A will have exactly
                 // one 1-bit past the end of any run of 1-bits in B.
@@ -630,10 +643,6 @@ void Simplifier::strengthReduction(PabloBlock * const block) {
 
 
             }
-
-
-
-
         }
         stmt = stmt->getNextNode();
     }

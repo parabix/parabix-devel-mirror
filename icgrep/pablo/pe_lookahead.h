@@ -30,20 +30,12 @@ public:
     inline int64_t getAmount() const {
         return cast<Integer>(getOperand(1))->value();
     }
-    inline void setLocalIndex(const unsigned idx) {
-        localLookaheadIndex = idx;
-    }
-    inline unsigned getLocalIndex() const {
-        return localLookaheadIndex;
-    }
 protected:
     Lookahead(PabloAST * expr, PabloAST * shiftAmount, const String * name)
     : Statement(ClassTypeId::Lookahead, expr->getType(), {expr, shiftAmount}, name)
     {
         assert(isa<Integer>(shiftAmount));
     }
-private:
-    unsigned localLookaheadIndex;
 };
 
 }

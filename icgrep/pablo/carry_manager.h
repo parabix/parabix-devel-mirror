@@ -35,126 +35,115 @@ class PabloBlock;
 
 
 class CarryManager {
+
+    enum { LONG_ADVANCE_BASE = 64 };
+
 public:
   
-    CarryManager(IDISA::IDISA_Builder * idb)
+    explicit CarryManager(IDISA::IDISA_Builder * idb) noexcept
     : iBuilder(idb)
-    , mKernelBuilder(nullptr)
+    , mKernel(nullptr)
     , mSelf(nullptr)
+    , mFunction(nullptr)
     , mBitBlockType(idb->getBitBlockType())
     , mBitBlockWidth(idb->getBitBlockWidth())
-    , mRootScope(nullptr)
+    , mCurrentFrameIndex(0)
     , mCurrentScope(nullptr)
     , mCarryInfo(nullptr)
-    , mCurrentFrameIndex(0)
-    , mCarryPackBasePtr(nullptr)
-    , mCarryBitBlockPtr(nullptr)
-    , mTotalCarryDataBitBlocks(0)
-    , mCarryDataAllocationSize(0)
-    , mFilePosIdx(2)
-    {
+    , mCarryPackType(mBitBlockType)
+    , mCarryPackPtr(nullptr)
+    , mIfDepth(0)
+    , mLoopDepth(0) {
 
     }
 
-    ~CarryManager();
-    
-    Type * initializeCarryData(PabloKernel * const kernel);
-    void initializeCodeGen(PabloKernel * const kernel, Value * selfPtr);
+    ~CarryManager() {
 
-    void reset();
+    }
 
-    unsigned enumerate(PabloBlock * blk, unsigned ifDepth, unsigned whileDepth);
-          
-    /* Entering and leaving scopes. */
-    
-    void enterScope(PabloBlock * const scope);
-    void leaveScope();
-    
+    void initializeCarryData(PabloKernel * const kernel);
+
+    void initializeCodeGen(Value * const self, Function *function);
+
+    /* Entering and leaving loops. */
+
+    void enterLoopScope(PabloBlock * const scope);
+
+    void enterLoopBody(BasicBlock * const entryBlock);
+
+    void leaveLoopBody(BasicBlock * const exitBlock);
+
+    void leaveLoopScope(BasicBlock * const entryBlock, BasicBlock * const exitBlock);
+
+    /* Entering and leaving ifs. */
+
+    void enterIfScope(PabloBlock * const scope);
+
+    void enterIfBody(BasicBlock * const entryBlock);
+
+    void leaveIfBody(BasicBlock * const exitBlock);
+
+    void leaveIfScope(BasicBlock * const entryBlock, BasicBlock * const exitBlock);
+
     /* Methods for processing individual carry-generating operations. */
     
-    Value * addCarryInCarryOut(const unsigned localIndex, Value * const e1, Value * const e2);
+    Value * addCarryInCarryOut(const Statement * operation, Value * const e1, Value * const e2);
 
-    Value * advanceCarryInCarryOut(const unsigned localIndex, const unsigned shiftAmount, Value * const strm);
+    Value * advanceCarryInCarryOut(const Advance * advance, Value * const strm);
  
     /* Methods for getting and setting carry summary values for If statements */
-   
-    bool hasCarries() const;
-       
+         
     Value * generateSummaryTest(Value * condition);
     
-    void storeCarryOutSummary();
-
-    void addOuterSummaryToNestedSummary();
-
-    void buildCarryDataPhisAfterIfBody(BasicBlock * const entry, BasicBlock * const end);
-       
-    /* Methods for handling while statements */
-    
-    void ensureCarriesLoadedRecursive();
-
-    void initializeWhileEntryCarryDataPhis(BasicBlock * const end);
-
-    void finalizeWhileBlockCarryDataPhis(BasicBlock * const end);
-
-    void ensureCarriesStoredRecursive();
-    
-    Value * declareCarryDataArray(Module * m);
-
 protected:
 
-    Value * shortAdvanceCarryInCarryOut(const unsigned index, const unsigned shiftAmount, Value * const value);
-    Value * longAdvanceCarryInCarryOut(const unsigned index, const unsigned shiftAmount, Value * const value);
+    static unsigned enumerate(PabloBlock * const scope, unsigned index = 0);
+    static bool requiresVariableLengthMode(const PabloBlock * const scope);
+    StructType * analyse(PabloBlock * const scope, const unsigned ifDepth = 0, const unsigned whileDepth = 0);
+
+    /* Entering and leaving scopes. */
+    void enterScope(PabloBlock * const scope);
+    void leaveScope();
 
     /* Methods for processing individual carry-generating operations. */
+    Value * getNextCarryIn();
+    void setNextCarryOut(Value * const carryOut);
+    Value * longAdvanceCarryInCarryOut(const unsigned shiftAmount, Value * const value);
 
-    Value * getCarryIn(const unsigned localIndex);
-    void setCarryOut(const unsigned idx, Value * carryOut);
-
-    /* Helper routines */
-    Value * getCarryPack(const unsigned packIndex);
-    void storeCarryOut(const unsigned packIndex);
-    
+    /* Summary handling routines */
     void addToSummary(Value * const value);
 
-    bool hasSummary() const;
-    unsigned relativeFrameOffset(const unsigned frameOffset, const unsigned index) const;
-    unsigned addPosition(const unsigned localIndex) const;
-    unsigned unitAdvancePosition(const unsigned localIndex) const;
-    unsigned shortAdvancePosition(const unsigned localIndex) const;
-    unsigned longAdvancePosition(const unsigned localIndex) const;
-    unsigned localBasePack() const;
-    unsigned scopeBasePack() const;
-    unsigned summaryPack() const;
+    bool inCollapsingCarryMode() const;
 
 private:
-    IDISA::IDISA_Builder * const iBuilder;
-    PabloKernel * mKernelBuilder;
-    Value * mSelf;
-    Type * const mBitBlockType;
-    const unsigned mBitBlockWidth;
-    PabloBlock * mRootScope;
-    PabloBlock * mCurrentScope;
-    CarryData * mCarryInfo;
-    unsigned mCurrentFrameIndex;
-    Value * mCarryPackBasePtr;
-    Type * mCarryPackType;
-    Value * mCarryBitBlockPtr;
-    unsigned mTotalCarryDataBitBlocks;
-    unsigned mCarryDataAllocationSize;
-    std::vector<CarryData *> mCarryInfoVector;
-    std::vector<Value *> mCarryPackPtr;
-    std::vector<Value *> mCarryInPack;
-    std::vector<PHINode *> mCarryInPhis;
-    std::vector<PHINode *> mCarryOutAccumPhis;
-    std::vector<Value *> mCarryOutPack;
-    std::vector<Value *> mCarrySummary;
-    int mCdArrayIdx;
-    int mFilePosIdx;
-};
 
-inline bool CarryManager::hasCarries() const {
-    return mCarryInfo->hasCarries();
-}
+    IDISA::IDISA_Builder * const                iBuilder;
+    PabloKernel *                               mKernel;
+    Value *                                     mSelf;
+    Function *                                  mFunction;
+    Type * const                                mBitBlockType;
+    const unsigned                              mBitBlockWidth;
+
+    Value *                                     mCurrentFrame;
+    unsigned                                    mCurrentFrameIndex;
+
+    PabloBlock *                                mCurrentScope;
+    CarryData *                                 mCarryInfo;
+
+    Type *                                      mCarryPackType;
+    Value *                                     mCarryPackPtr;
+
+    unsigned                                    mIfDepth;
+
+    unsigned                                    mLoopDepth;    
+    Value *                                     mLoopSelector;
+    std::vector<PHINode *>                      mLoopIndicies;
+
+    std::vector<CarryData>                      mCarryMetadata;
+    std::vector<std::pair<Value *, unsigned>>   mCarryFrame;
+
+    std::vector<Value *>                        mCarrySummary;
+};
 
 }
 

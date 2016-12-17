@@ -159,6 +159,17 @@ void Statement::setOperand(const unsigned index, PabloAST * const value) {
     if (LLVM_UNLIKELY(prior == value)) {
         return;
     }      
+    if (LLVM_UNLIKELY(prior->getType() != value->getType())) {
+        std::string tmp;
+        raw_string_ostream out(tmp);
+        out << "Type mismatch replacing operand ";
+        prior->print(out);
+        out << " with ";
+        value->print(out);
+        out << " in statement ";
+        this->print(out);
+        llvm::report_fatal_error(out.str());
+    }
     prior->removeUser(this);
     mOperand[index] = value;
     value->addUser(this);

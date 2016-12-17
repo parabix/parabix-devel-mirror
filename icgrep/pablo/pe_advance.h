@@ -24,17 +24,11 @@ public:
     }
     virtual ~Advance() {
     }
-    inline PabloAST * getExpr() const {
+    inline PabloAST * getExpression() const {
         return getOperand(0);
     }
     inline int64_t getAmount() const {
         return cast<Integer>(getOperand(1))->value();
-    }
-    inline void setLocalIndex(const unsigned idx) {
-        localAdvanceIndex = idx;
-    }
-    inline unsigned getLocalIndex() const {
-        return localAdvanceIndex;
     }
 protected:
     Advance(PabloAST * expr, PabloAST * shiftAmount, const String * name)
@@ -42,8 +36,6 @@ protected:
     {
         assert(isa<Integer>(shiftAmount));
     }
-private:
-    unsigned localAdvanceIndex;
 };
 
 }

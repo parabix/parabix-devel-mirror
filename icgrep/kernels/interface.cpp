@@ -20,6 +20,7 @@ void KernelInterface::addKernelDeclarations(Module * client) {
         throw std::runtime_error("Kernel interface " + mKernelName + " not yet finalized.");
     }
     Type * selfType = PointerType::getUnqual(mKernelStateType);
+
     // Create the accumulator get function prototypes
     for (auto binding : mScalarOutputs) {
         FunctionType * accumFnType = FunctionType::get(binding.type, {selfType}, false);
@@ -30,8 +31,8 @@ void KernelInterface::addKernelDeclarations(Module * client) {
         Value * self = &*(accumFn->arg_begin());
         self->setName("self");        
     }
-    // Create the initialization function prototype
 
+    // Create the initialization function prototype
     std::vector<Type *> initParameters = {selfType};
     for (auto binding : mScalarInputs) {
         initParameters.push_back(binding.type);

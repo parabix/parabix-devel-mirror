@@ -72,12 +72,10 @@ outer_loop: continue;
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getEscaped
  ** ------------------------------------------------------------------------------------------------------------- */
-std::vector<Var *> Branch::getEscaped() const {
-
+Branch::EscapedVars Branch::getEscaped() const {
     const auto f = getParent()->getParent();
     const auto n = f->getNumOfVariables();
-
-    std::vector<Var *> escaped;    
+    EscapedVars escaped;
     for (unsigned i = 0; i < n; ++i) {
         Var * const var = f->getVariable(i);
         if (escapes(var, this)) {

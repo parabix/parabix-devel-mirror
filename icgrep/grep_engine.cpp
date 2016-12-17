@@ -22,7 +22,6 @@
 #include <llvm/IRReader/IRReader.h>
 #include <llvm/Support/Debug.h>
 #include <llvm/IR/Verifier.h>
-#include <llvm/IR/TypeBuilder.h>
 #include <UCD/UnicodeNameData.h>
 #include <UCD/resolve_properties.h>
 
@@ -274,8 +273,8 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool Count
     Type * const int32ty = iBuilder->getInt32Ty();
     Type * const size_ty = iBuilder->getSizeTy();
     Type * const int8PtrTy = iBuilder->getInt8PtrTy();
-    Type * const voidTy = Type::getVoidTy(M->getContext());    
-    Type * const voidPtrTy = TypeBuilder<void *, false>::get(M->getContext());
+    Type * const voidTy = iBuilder->getVoidTy();
+    Type * const voidPtrTy = iBuilder->getVoidPtrTy();
     Type * const inputType = PointerType::get(ArrayType::get(ArrayType::get(iBuilder->getBitBlockType(), (UTF_16 ? 16 : 8)), 1), addrSpace);
     Type * const resultTy = CountOnly ? size_ty : iBuilder->getVoidTy();
 

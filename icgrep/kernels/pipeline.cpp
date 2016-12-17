@@ -3,17 +3,12 @@
  *  This software is licensed to the public under the Open Software License 3.0.
  */
 
-
-#include <toolchain.h>
 #include "pipeline.h"
-
+#include <toolchain.h>
 #include <IDISA/idisa_builder.h>
-
 #include <kernels/interface.h>
 #include <kernels/kernel.h>
 #include <kernels/s2p_kernel.h>
-
-#include <llvm/IR/TypeBuilder.h>
 #include <iostream>
 
 using namespace kernel;
@@ -22,8 +17,8 @@ Function * generateSegmentParallelPipelineThreadFunction(std::string name, IDISA
 
     Module * m = iBuilder->getModule();
     Type * const size_ty = iBuilder->getSizeTy();
-    Type * const voidTy = Type::getVoidTy(m->getContext());
-    Type * const voidPtrTy = TypeBuilder<void *, false>::get(m->getContext());
+    Type * const voidTy = iBuilder->getVoidTy();
+    Type * const voidPtrTy = iBuilder->getVoidPtrTy();
     Type * const int8PtrTy = iBuilder->getInt8PtrTy();
 
     Function * const threadFunc = cast<Function>(m->getOrInsertFunction(name, voidTy, int8PtrTy, nullptr));
@@ -102,7 +97,7 @@ void generateSegmentParallelPipeline(IDISA::IDISA_Builder * iBuilder, std::vecto
     Module * m = iBuilder->getModule();
 
     Type * const size_ty = iBuilder->getSizeTy();
-    Type * const voidPtrTy = TypeBuilder<void *, false>::get(m->getContext());
+    Type * const voidPtrTy = iBuilder->getVoidPtrTy();
     Type * const int8PtrTy = iBuilder->getInt8PtrTy();
 
     for (auto k : kernels) k->createInstance();
@@ -158,7 +153,7 @@ void generatePipelineParallel(IDISA::IDISA_Builder * iBuilder, std::vector<Kerne
     Module * m = iBuilder->getModule();
 
     Type * pthreadTy = iBuilder->getSizeTy();     
-    Type * const voidPtrTy = TypeBuilder<void *, false>::get(m->getContext());
+    Type * const voidPtrTy = iBuilder->getVoidPtrTy();
     Type * const int8PtrTy = iBuilder->getInt8PtrTy();
 
     Type * const pthreadsTy = ArrayType::get(pthreadTy, kernels.size());

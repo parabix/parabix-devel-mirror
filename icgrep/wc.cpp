@@ -134,7 +134,7 @@ void wc_gen(PabloKernel * kernel) {
     }
 }
 
-Function * wcPipeline(Module * mMod, IDISA::IDISA_Builder * iBuilder) {
+Function * pipeline(Module * mMod, IDISA::IDISA_Builder * iBuilder) {
     Type * mBitBlockType = iBuilder->getBitBlockType();
     
     ExternalFileBuffer ByteStream(iBuilder, iBuilder->getStreamSetTy(1, 8));
@@ -201,7 +201,7 @@ wcFunctionType wcCodeGen(void) {
     Module * M = new Module("wc", getGlobalContext());
     IDISA::IDISA_Builder * idb = IDISA::GetIDISA_Builder(M);
 
-    llvm::Function * main_IR = wcPipeline(M, idb);
+    llvm::Function * main_IR = pipeline(M, idb);
 
     wcEngine = JIT_to_ExecutionEngine(M);
     
@@ -328,5 +328,3 @@ int main(int argc, char *argv[]) {
 
     return 0;
 }
-
-                       

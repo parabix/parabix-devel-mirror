@@ -28,19 +28,11 @@ public:
     PabloAST * getScanThru() const {
         return getOperand(1);
     }
-    inline void setLocalCarryIndex(const unsigned idx) {
-        localCarryIndex = idx;
-    }
-    inline unsigned getLocalCarryIndex() const {
-        return localCarryIndex;
-    }
 protected:
     ScanThru(PabloAST * from, PabloAST * thru, const String * name)
     : Statement(ClassTypeId::ScanThru, from->getType(), {from, thru}, name) {
 
     }
-private:
-    unsigned localCarryIndex;
 };
 
 }
