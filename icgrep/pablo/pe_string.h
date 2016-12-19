@@ -38,14 +38,14 @@ public:
         return mValue;
     }
 protected:
-    String(const std::string & value) noexcept
-    : PabloAST(ClassTypeId::String, llvm::Type::getInt8PtrTy(llvm::getGlobalContext()), this)
-    , mValue(duplicate(value))
-    {
+    String(Type * type, const std::string & value, Allocator & allocator) noexcept
+    : PabloAST(ClassTypeId::String, type, this, allocator)
+    , mValue(duplicate(value, allocator)) {
 
     }
-    inline const char * duplicate(const std::string & value) {
-        char * string = reinterpret_cast<char*>(mAllocator.allocate(value.length() + 1));
+
+    inline const char * duplicate(const std::string & value, Allocator & allocator) {
+        char * string = reinterpret_cast<char*>(allocator.allocate<char*>(value.length() + 1));
         std::memcpy(string, value.c_str(), value.length());
         string[value.length()] = '\0';
         return string;

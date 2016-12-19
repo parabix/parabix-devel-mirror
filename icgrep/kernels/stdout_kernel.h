@@ -13,9 +13,9 @@ namespace IDISA { class IDISA_Builder; }
 
 namespace kernel {
 
-class stdOutKernel : public KernelBuilder {
+class StdOutKernel : public KernelBuilder {
 public:
-    stdOutKernel(IDISA::IDISA_Builder * iBuilder, unsigned codeUnitWidth) :
+    StdOutKernel(IDISA::IDISA_Builder * iBuilder, unsigned codeUnitWidth) :
     KernelBuilder(iBuilder, "stdout",
                   {Binding{iBuilder->getStreamSetTy(1, codeUnitWidth), "codeUnitBuffer"}}, {}, {}, {}, {}),
     mCodeUnitWidth(codeUnitWidth) {}

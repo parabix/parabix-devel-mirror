@@ -24,7 +24,6 @@
 
 #include <re/re_cc.h>
 #include <cc/cc_compiler.h>
-#include <pablo/prototype.h>
 #include <pablo/pablo_kernel.h>
 #include <IDISA/idisa_builder.h>
 #include <IDISA/idisa_target.h>
@@ -141,7 +140,7 @@ Function * pipeline(Module * mMod, IDISA::IDISA_Builder * iBuilder) {
 
     SingleBlockBuffer BasisBits(iBuilder, iBuilder->getStreamSetTy(8, 1));
 
-    s2pKernel  s2pk(iBuilder);
+    S2PKernel  s2pk(iBuilder);
     std::unique_ptr<Module> s2pM = s2pk.createKernelModule({&ByteStream}, {&BasisBits});
     
     PabloKernel wck(iBuilder, "wc");
@@ -155,7 +154,7 @@ Function * pipeline(Module * mMod, IDISA::IDISA_Builder * iBuilder) {
 
     Constant * record_counts_routine;
     Type * const size_ty = iBuilder->getSizeTy();
-    Type * const voidTy = Type::getVoidTy(mMod->getContext());
+    Type * const voidTy = iBuilder->getVoidTy();
     record_counts_routine = mMod->getOrInsertFunction("record_counts", voidTy, size_ty, size_ty, size_ty, size_ty, size_ty, nullptr);
     Type * const inputType = PointerType::get(ArrayType::get(ArrayType::get(mBitBlockType, 8), 1), 0);
     

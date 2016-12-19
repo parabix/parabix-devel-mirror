@@ -34,8 +34,8 @@ public:
         mReadOnly = value;
     }
 protected:
-    Var(const PabloAST * name, Type * const type, const bool readOnly = false)
-    : PabloAST(ClassTypeId::Var, type, cast<String>(name))
+    Var(const PabloAST * name, Type * const type, Allocator & allocator, const bool readOnly = false)
+    : PabloAST(ClassTypeId::Var, type, cast<String>(name), allocator)
     , mReadOnly(readOnly) {
 
     }
@@ -61,8 +61,8 @@ public:
         return getOperand(1);
     }
 protected:
-    Extract(PabloAST * array, PabloAST * const index, const String * const name, Type * type)
-    : Statement(ClassTypeId::Extract, type, {array, index}, name) {
+    Extract(PabloAST * array, PabloAST * const index, const String * const name, Type * type, Allocator & allocator)
+    : Statement(ClassTypeId::Extract, type, {array, index}, name, allocator) {
 
     }
 };

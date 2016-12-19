@@ -16,19 +16,19 @@ public:
     }
     virtual ~And() { }
 protected:
-    And(Type * const type, PabloAST * expr1, PabloAST * expr2, const String * name)
-    : Variadic(ClassTypeId::And, type, {expr1, expr2}, name)
+    And(Type * const type, PabloAST * expr1, PabloAST * expr2, const String * name, Allocator & allocator)
+    : Variadic(ClassTypeId::And, type, {expr1, expr2}, name, allocator)
     {
 
     }
-    And(Type * const type, const unsigned reserved, const String * name)
-    : Variadic(ClassTypeId::And, type, reserved, name)
+    And(Type * const type, const unsigned reserved, const String * name, Allocator & allocator)
+    : Variadic(ClassTypeId::And, type, reserved, name, allocator)
     {
 
     }
     template<typename iterator>
-    And(Type * const type, iterator begin, iterator end, const String * name)
-    : Variadic(ClassTypeId::And, type, begin, end, name) {
+    And(Type * const type, iterator begin, iterator end, const String * name, Allocator & allocator)
+    : Variadic(ClassTypeId::And, type, begin, end, name, allocator) {
 
     }
 };
@@ -44,19 +44,19 @@ public:
     }
     virtual ~Or() { }
 protected:
-    Or(Type * const type, PabloAST * expr1, PabloAST * expr2, const String * name)
-    : Variadic(ClassTypeId::Or, type, {expr1, expr2}, name)
+    Or(Type * const type, PabloAST * expr1, PabloAST * expr2, const String * name, Allocator & allocator)
+    : Variadic(ClassTypeId::Or, type, {expr1, expr2}, name, allocator)
     {
 
     }
-    Or(Type * const type, const unsigned reserved, const String * name)
-    : Variadic(ClassTypeId::Or, type, reserved, name)
+    Or(Type * const type, const unsigned reserved, const String * name, Allocator & allocator)
+    : Variadic(ClassTypeId::Or, type, reserved, name, allocator)
     {
 
     }
     template<typename iterator>
-    Or(Type * const type, iterator begin, iterator end, const String * name)
-    : Variadic(ClassTypeId::Or, type, begin, end, name) {
+    Or(Type * const type, iterator begin, iterator end, const String * name, Allocator & allocator)
+    : Variadic(ClassTypeId::Or, type, begin, end, name, allocator) {
 
     }
 };
@@ -71,19 +71,19 @@ public:
         return false;
     }
 protected:
-    Xor(Type * const type, PabloAST * expr1, PabloAST * expr2, const String * name)
-    : Variadic(ClassTypeId::Xor, type, {expr1, expr2}, name)
+    Xor(Type * const type, PabloAST * expr1, PabloAST * expr2, const String * name, Allocator & allocator)
+    : Variadic(ClassTypeId::Xor, type, {expr1, expr2}, name, allocator)
     {
 
     }
-    Xor(Type * const type, const unsigned reserved, const String * name)
-    : Variadic(ClassTypeId::Xor, type, reserved, name)
+    Xor(Type * const type, const unsigned reserved, const String * name, Allocator & allocator)
+    : Variadic(ClassTypeId::Xor, type, reserved, name, allocator)
     {
 
     }
     template<typename iterator>
-    Xor(Type * const type, iterator begin, iterator end, const String * name)
-    : Variadic(ClassTypeId::Xor, type, begin, end, name) {
+    Xor(Type * const type, iterator begin, iterator end, const String * name, Allocator & allocator)
+    : Variadic(ClassTypeId::Xor, type, begin, end, name, allocator) {
 
     }
 };
@@ -103,8 +103,8 @@ public:
         return getOperand(0);
     }
 protected:
-    Not(PabloAST * expr, const String * name)
-    : Statement(ClassTypeId::Not, expr->getType(), {expr}, name)
+    Not(PabloAST * expr, const String * name, Allocator & allocator)
+    : Statement(ClassTypeId::Not, expr->getType(), {expr}, name, allocator)
     {
 
     }
@@ -131,8 +131,8 @@ public:
         return getOperand(2);
     }
 protected:
-    Sel(PabloAST * condExpr, PabloAST * trueExpr, PabloAST * falseExpr, const String * name)
-    : Statement(ClassTypeId::Sel, trueExpr->getType(), {condExpr, trueExpr, falseExpr}, name) {
+    Sel(PabloAST * condExpr, PabloAST * trueExpr, PabloAST * falseExpr, const String * name, Allocator & allocator)
+    : Statement(ClassTypeId::Sel, trueExpr->getType(), {condExpr, trueExpr, falseExpr}, name, allocator) {
 
     }
 };

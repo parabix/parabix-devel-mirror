@@ -31,9 +31,8 @@ public:
         return cast<Integer>(getOperand(1))->value();
     }
 protected:
-    Lookahead(PabloAST * expr, PabloAST * shiftAmount, const String * name)
-    : Statement(ClassTypeId::Lookahead, expr->getType(), {expr, shiftAmount}, name)
-    {
+    Lookahead(PabloAST * expr, PabloAST * shiftAmount, const String * name, Allocator & allocator)
+    : Statement(ClassTypeId::Lookahead, expr->getType(), {expr, shiftAmount}, name, allocator) {
         assert(isa<Integer>(shiftAmount));
     }
 };

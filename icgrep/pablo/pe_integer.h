@@ -23,8 +23,8 @@ public:
         return mValue;
     }
 protected:
-    Integer(const IntTy value, Type * type) noexcept
-    : PabloAST(ClassTypeId::Integer, type, nullptr)
+    Integer(const IntTy value, Type * type, Allocator & allocator) noexcept
+    : PabloAST(ClassTypeId::Integer, type, nullptr, allocator)
     , mValue(value)
     {
 

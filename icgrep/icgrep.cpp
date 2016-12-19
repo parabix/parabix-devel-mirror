@@ -368,8 +368,6 @@ int main(int argc, char *argv[]) {
     GrepEngine grepEngine;
     grepEngine.grepCodeGen(module_name, re_ast, CountOnly, UTF_16);
 
-    releaseSlabAllocatorMemory();
-    
     allFiles = getFullFileList(inputFiles);
     
     if (FileNamesOnly && NonMatchingFileNamesOnly) {

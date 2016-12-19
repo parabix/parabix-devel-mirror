@@ -32,8 +32,8 @@ public:
         return setOperand(1, value);
     }
 protected:
-    explicit Assign(PabloAST * variable, PabloAST * expr)
-    : Statement(ClassTypeId::Assign, nullptr, {variable, expr}, nullptr) {
+    explicit Assign(PabloAST * variable, PabloAST * expr, Allocator & allocator)
+    : Statement(ClassTypeId::Assign, nullptr, {variable, expr}, nullptr, allocator) {
 
     }
 };

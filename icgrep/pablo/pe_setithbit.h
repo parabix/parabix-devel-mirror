@@ -26,8 +26,8 @@ public:
     }
     virtual ~SetIthBit() {}
 protected:
-    explicit SetIthBit(PabloAST * var, PabloAST * position, PabloAST * value, const PabloAST * name)
-    : Statement(ClassTypeId::SetIthBit, {var, cast<Integer>(position), cast<Integer>(value)}, cast<String>(name)) {
+    explicit SetIthBit(PabloAST * var, PabloAST * position, PabloAST * value, const PabloAST * name, Allocator & allocator)
+    : Statement(ClassTypeId::SetIthBit, {var, cast<Integer>(position), cast<Integer>(value)}, cast<String>(name), allocator) {
 
     }
 };

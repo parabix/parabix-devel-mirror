@@ -574,4 +574,15 @@ StoreInst * IDISA_Builder::CreateAtomicStoreRelease(Value * val, Value * ptr) {
     return inst;
 }
 
+Type * IDISA_Builder::getStreamTy(const uint64_t FieldWidth) {
+    const auto f = mStreamTypes.find(FieldWidth);
+    if (LLVM_LIKELY(f != mStreamTypes.end())) {
+        return f->second;
+    } else {
+        StreamType * const T = new StreamType(getContext(), FieldWidth);
+        mStreamTypes.emplace(FieldWidth, T);
+        return T;
+    }
+}
+
 }

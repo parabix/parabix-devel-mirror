@@ -16,9 +16,6 @@ using namespace boost::container;
 
 namespace pablo {
 
-PabloAST::Allocator PabloAST::mAllocator;
-PabloAST::VectorAllocator PabloAST::mVectorAllocator;
-
 using TypeId = PabloAST::ClassTypeId;
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -279,7 +276,6 @@ Statement * Statement::eraseFromParent(const bool recursively) {
         mOperand[i] = nullptr;
     }
 
-    mAllocator.deallocate(reinterpret_cast<Allocator::pointer>(this));
     return next;
 }
 
@@ -306,11 +302,11 @@ Statement * Statement::replaceWith(PabloAST * const expr, const bool rename, con
 void Variadic::addOperand(PabloAST * const expr) {
     if (LLVM_UNLIKELY(mOperands == mCapacity)) {
         mCapacity = std::max<unsigned>(mCapacity * 2, 2);
-        PabloAST ** expandedOperandSpace = reinterpret_cast<PabloAST**>(mAllocator.allocate(mCapacity * sizeof(PabloAST *)));
+        PabloAST ** expandedOperandSpace = mAllocator.allocate(mCapacity);
         for (unsigned i = 0; i != mOperands; ++i) {
             expandedOperandSpace[i] = mOperand[i];
         }
-        mAllocator.deallocate(reinterpret_cast<Allocator::pointer>(mOperand));
+        mAllocator.deallocate(mOperand);
         mOperand = expandedOperandSpace;
     }
     mOperand[mOperands++] = expr;

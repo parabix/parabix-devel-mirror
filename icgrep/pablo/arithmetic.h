@@ -34,8 +34,8 @@ public:
     }
     virtual ~Operator() { }
 protected:
-    Operator(const ClassTypeId typeId, Type * const type, PabloAST * const expr1, PabloAST * const expr2)
-    : PabloAST(typeId, type, nullptr)
+    Operator(const ClassTypeId typeId, Type * const type, PabloAST * const expr1, PabloAST * const expr2, Allocator & allocator)
+    : PabloAST(typeId, type, nullptr, allocator)
     , mLH(expr1)
     , mRH(expr2) {
         expr1->addUser(this);
@@ -54,8 +54,8 @@ public: \
         return e->getClassTypeId() == ClassTypeId::Name; \
     } \
 protected: \
-    Name(Type * const type, PabloAST * const expr1, PabloAST * const expr2) \
-    : Operator(ClassTypeId::Name, type, expr1, expr2) { \
+    Name(Type * const type, PabloAST * const expr1, PabloAST * const expr2, Allocator & allocator) \
+    : Operator(ClassTypeId::Name, type, expr1, expr2, allocator) { \
     } \
 };
 

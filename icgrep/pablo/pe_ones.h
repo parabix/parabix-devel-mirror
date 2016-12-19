@@ -30,7 +30,9 @@ public:
         return isa<Ones>(other);
     }
 protected:
-    Ones(Type * const type) : PabloAST(ClassTypeId::Ones, type, nullptr) { }
+    Ones(Type * const type, Allocator & allocator)
+    : PabloAST(ClassTypeId::Ones, type, nullptr, allocator) {
+    }
 };
 
 }

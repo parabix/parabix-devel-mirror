@@ -23,14 +23,16 @@ class Integer;
 class SymbolGenerator {
     friend class PabloBlock;
     using Twine = llvm::Twine;
+    using Allocator = PabloAST::Allocator;
 public:
     typedef int64_t integer_t;
-    String * get(const std::string name);
-    String * make(const std::string prefix);
+    String * get(const std::string name, IDISA::IDISA_Builder * builder);
+    String * make(const std::string prefix, IDISA::IDISA_Builder *builder);
     Integer * getInteger(const integer_t value, IDISA::IDISA_Builder * builder);
-    SymbolGenerator() = default;
+    SymbolGenerator(Allocator & allocator) : mAllocator(allocator) {}
     ~SymbolGenerator() = default;
 private:
+    Allocator &                                 mAllocator;
     std::unordered_map<std::string, integer_t>  mPrefixMap;
     std::unordered_map<std::string, String *>   mStringMap;
     std::unordered_map<integer_t, Integer *>    mIntegerMap;

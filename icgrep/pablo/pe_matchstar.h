@@ -28,9 +28,8 @@ public:
     }
     virtual ~MatchStar() {}
 protected:
-    MatchStar(PabloAST * marker,  PabloAST * cc, const String * name)
-    : Statement(ClassTypeId::MatchStar, marker->getType(), {marker, cc}, name) {
-
+    MatchStar(PabloAST * marker,  PabloAST * cc, const String * name, Allocator & allocator)
+    : Statement(ClassTypeId::MatchStar, marker->getType(), {marker, cc}, name, allocator) {
     }
 };
 

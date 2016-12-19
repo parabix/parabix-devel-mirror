@@ -17,7 +17,6 @@
 #include <re/re_assertion.h>
 #include <pablo/codegenstate.h>
 #include <pablo/builder.hpp>
-#include <pablo/prototype.h>
 #include <pablo/pablo_kernel.h>
 #include <stdexcept>
 

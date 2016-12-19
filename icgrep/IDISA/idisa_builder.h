@@ -14,12 +14,16 @@
 #include <llvm/Support/Host.h>
 #include <llvm/ADT/Triple.h>
 #include <IDISA/types/streamtype.h>
+#include <boost/container/flat_map.hpp>
 
 using namespace llvm;
 
 namespace IDISA {
 
 class IDISA_Builder : public IRBuilder<> {
+
+    using StreamTypes = boost::container::flat_map<unsigned, StreamType *>;
+
 public:
 
     IDISA_Builder(Module * m, unsigned archBitWidth, unsigned bitBlockWidth, unsigned stride, unsigned CacheAlignment=64)
@@ -167,13 +171,11 @@ public:
     }
 
     inline Type * getStreamSetTy(const uint64_t NumElements = 1, const uint64_t FieldWidth = 1) {
-        return ArrayType::get(StreamType::get(getContext(), FieldWidth), NumElements);
+        return ArrayType::get(getStreamTy(FieldWidth), NumElements);
     }
     
-    inline Type * getStreamTy(const uint64_t FieldWidth = 1) {
-        return StreamType::get(getContext(), FieldWidth);
-    }
-    
+    Type * getStreamTy(const uint64_t FieldWidth = 1);
+
     inline llvm::AllocaInst * CreateCacheAlignedAlloca(llvm::Type * Ty, llvm::Value * ArraySize = nullptr) {
         llvm::AllocaInst * instr = CreateAlloca(Ty, ArraySize);
         instr->setAlignment(mCacheLineAlignment);
@@ -195,6 +197,7 @@ protected:
     Constant *          mOneInitializer;
     Constant *          mPrintRegisterFunction;
     
+    StreamTypes         mStreamTypes;
 };
 
 inline LoadInst * IDISA_Builder::CreateBlockAlignedLoad(Value * const ptr) {

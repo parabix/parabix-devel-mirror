@@ -23,20 +23,11 @@ public:
     inline const String * getCallee() const {
         return getPrototype()->getName();
     }
-    inline void setLocalCarryIndex(const unsigned idx) {
-        mLocalCarryIndex = idx;
-    }
-    inline unsigned getLocalCarryIndex() const {
-        return mLocalCarryIndex;
-    }
 protected:
-    Call(PabloAST * prototype)
-    : Statement(ClassTypeId::Call, nullptr, {prototype}, prototype->getName())
-    , mLocalCarryIndex(0) {
+    Call(PabloAST * prototype, Allocator & allocator)
+    : Statement(ClassTypeId::Call, nullptr, {prototype}, prototype->getName(), allocator) {
 
     }
-private:
-    unsigned mLocalCarryIndex;
 };
 }
 

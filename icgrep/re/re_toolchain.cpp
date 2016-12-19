@@ -17,7 +17,6 @@
 #include <re/re_compiler.h>
 #include <utf8_encoder.h>
 #include <cc/cc_compiler.h>
-#include <pablo/prototype.h>
 #include <pablo/pablo_kernel.h>
 #include <re/printer_re.h>
 #include <llvm/Support/CommandLine.h>

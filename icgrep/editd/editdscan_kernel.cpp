@@ -57,9 +57,8 @@ void editdScanKernel::generateDoBlockMethod() {
 Function * editdScanKernel::generateScanWordRoutine(Module * m) {
 
     Type * T = iBuilder->getIntNTy(mScanwordBitWidth);
-    LLVMContext & ctxt = m->getContext();
 
-    Function * scanFunc = cast<Function>(m->getOrInsertFunction("scan_word", Type::getVoidTy(ctxt), T, iBuilder->getInt32Ty(), T, nullptr));
+    Function * scanFunc = cast<Function>(m->getOrInsertFunction("scan_word", iBuilder->getVoidTy(), T, iBuilder->getInt32Ty(), T, nullptr));
     scanFunc->setCallingConv(CallingConv::C);
     Function::arg_iterator args = scanFunc->arg_begin();
 
@@ -70,7 +69,7 @@ Function * editdScanKernel::generateScanWordRoutine(Module * m) {
     Value * basePos = &*(args++);
     basePos->setName("basePos");
 
-    Constant * matchProcessor = m->getOrInsertFunction("wrapped_report_pos", Type::getVoidTy(ctxt), T, iBuilder->getInt32Ty(), nullptr);
+    Constant * matchProcessor = m->getOrInsertFunction("wrapped_report_pos", iBuilder->getVoidTy(), T, iBuilder->getInt32Ty(), nullptr);
 
     BasicBlock * entryBlock = BasicBlock::Create(m->getContext(), "entry", scanFunc, 0);
 

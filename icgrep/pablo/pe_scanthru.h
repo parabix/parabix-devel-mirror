@@ -29,8 +29,8 @@ public:
         return getOperand(1);
     }
 protected:
-    ScanThru(PabloAST * from, PabloAST * thru, const String * name)
-    : Statement(ClassTypeId::ScanThru, from->getType(), {from, thru}, name) {
+    ScanThru(PabloAST * from, PabloAST * thru, const String * name, Allocator & allocator)
+    : Statement(ClassTypeId::ScanThru, from->getType(), {from, thru}, name, allocator) {
 
     }
 };

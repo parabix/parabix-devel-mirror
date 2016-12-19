@@ -19,7 +19,6 @@
 #include <re/re_assertion.h>
 #include <re/re_analysis.h>
 #include <pablo/codegenstate.h>
-#include <pablo/prototype.h>
 
 #include <assert.h>
 #include <stdexcept>

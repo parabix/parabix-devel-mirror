@@ -8,6 +8,7 @@
 
 #include <kernels/kernel.h>
 #include <pablo/symbol_generator.h>
+#include <util/slab_allocator.h>
 
 namespace IDISA {
 class IDISA_Builder;
@@ -32,6 +33,8 @@ class PabloKernel : public kernel::KernelBuilder {
     friend class CarryManager;
 
 public:
+
+    using Allocator = PabloAST::Allocator;
 
     PabloKernel(IDISA::IDISA_Builder * builder, const std::string & kernelName);
     // At present only population count accumulator are supported,
@@ -114,11 +117,11 @@ protected:
     virtual void generateFinalBlockMethod() override;
 
     inline String * getName(const std::string & name) const {
-        return mSymbolTable->get(name);
+        return mSymbolTable->get(name, iBuilder);
     }
 
     inline String * makeName(const std::string & prefix) const {
-        return mSymbolTable->make(prefix);
+        return mSymbolTable->make(prefix, iBuilder);
     }
 
     inline Integer * getInteger(const int64_t value) const {
@@ -127,9 +130,11 @@ protected:
 
 private:
 
+    Allocator                       mAllocator;
     PabloCompiler * const           mPabloCompiler;
     SymbolGenerator *               mSymbolTable;
     PabloBlock *                    mEntryBlock;
+
     std::vector<Var *>              mInputs;
     std::vector<Var *>              mOutputs;
     std::vector<PabloAST *>         mConstants;

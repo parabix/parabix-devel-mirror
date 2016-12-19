@@ -23,7 +23,7 @@ static Function * create_write(Module * const mod, IDISA::IDISA_Builder * builde
 
 // The doBlock method is deprecated.   But in case it is used, just call doSegment with
 // 1 as the number of blocks to do.
-void stdOutKernel::generateDoBlockMethod() {
+void StdOutKernel::generateDoBlockMethod() {
     auto savePoint = iBuilder->saveIP();
     Module * m = iBuilder->getModule();
     Function * doBlockFunction = m->getFunction(mKernelName + doBlock_suffix);
@@ -37,7 +37,7 @@ void stdOutKernel::generateDoBlockMethod() {
             
 // Rather than using doBlock logic to write one block at a time, this custom
 // doSegment method, writes the entire segment with a single write call.
-void stdOutKernel::generateDoSegmentMethod() {
+void StdOutKernel::generateDoSegmentMethod() {
     auto savePoint = iBuilder->saveIP();
     Module * m = iBuilder->getModule();
     Function * writefn = create_write(m, iBuilder);
@@ -93,7 +93,7 @@ void stdOutKernel::generateDoSegmentMethod() {
     iBuilder->restoreIP(savePoint);
 }
 
-void stdOutKernel::generateFinalBlockMethod() {
+void StdOutKernel::generateFinalBlockMethod() {
     auto savePoint = iBuilder->saveIP();
     Module * m = iBuilder->getModule();
     Function * writefn = create_write(m, iBuilder);

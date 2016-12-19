@@ -32,9 +32,12 @@
 #include <pablo/builder.hpp>
 #include <pablo/pablo_compiler.h>
 #include <pablo/pablo_toolchain.h>
-#include <pablo/printer_pablos.h>
+
+#include <kernels/stdout_kernel.h>
 
 #include <llvm/Support/raw_os_ostream.h>
+
+#include <pthread.h>
 
 using namespace pablo;
 using namespace kernel;
@@ -68,44 +71,64 @@ void generate(PabloKernel * kernel, const unsigned size) {
 
 Function * pipeline(IDISA::IDISA_Builder * iBuilder, const unsigned count = 10) {
 
-    PabloKernel main(iBuilder, "wc");
+    PabloKernel main(iBuilder, "at");
     generate(&main, count);
 
-    ExternalFileBuffer input(iBuilder, iBuilder->getStreamSetTy(count));
+    SingleBlockBuffer input(iBuilder, iBuilder->getStreamSetTy(count));
 
     SingleBlockBuffer output(iBuilder, iBuilder->getStreamSetTy(count));
 
     main.generateKernel({&input}, {&output});
 
-    return nullptr;
+    Module * const mod = iBuilder->getModule();
+
+    Function * const f = cast<Function>(mod->getOrInsertFunction("main", iBuilder->getVoidTy(), nullptr));
+    f->setCallingConv(CallingConv::C);
+
+    iBuilder->SetInsertPoint(BasicBlock::Create(mod->getContext(), "entry", f, 0));
+    input.allocateBuffer();
+    output.allocateBuffer();
+    generatePipelineLoop(iBuilder, {&main});
+    iBuilder->CreateRetVoid();
+
+    return f;
 }
 
+typedef void (*AtFunctionType)();
 
-static ExecutionEngine * wcEngine = nullptr;
-
-void * arrayTest() {
-    Module * M = new Module("wc", getGlobalContext());
+void * arrayTest(void *) {
+    LLVMContext ctx;
+    Module * M = new Module("at", ctx);
     IDISA::IDISA_Builder * idb = IDISA::GetIDISA_Builder(M);
 
     llvm::Function * main_IR = pipeline(idb);
 
     verifyModule(*M, &dbgs());
 
-    wcEngine = JIT_to_ExecutionEngine(M);
+    ExecutionEngine * wcEngine = JIT_to_ExecutionEngine(M);
 
     wcEngine->finalizeObject();
 
     delete idb;
-//    return wcEngine->getPointerToFunction(main_IR);
 
-    return nullptr;
+    return wcEngine->getPointerToFunction(main_IR);
 }
 
 int main(int argc, char *argv[]) {
 
     cl::ParseCommandLineOptions(argc, argv);
 
-    arrayTest();
+    pthread_t t1, t2;
+
+    pthread_create(&t1, nullptr, arrayTest, nullptr);
+
+    pthread_create(&t2, nullptr, arrayTest, nullptr);
+
+    void * r1, * r2;
+
+    pthread_join(t1, &r1);
+
+    pthread_join(t2, &r2);
 
     return 0;
 }

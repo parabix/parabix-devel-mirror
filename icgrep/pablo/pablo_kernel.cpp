@@ -6,12 +6,10 @@
 #include <pablo/pablo_kernel.h>
 #include <pablo/codegenstate.h>
 #include <pablo/pablo_compiler.h>
-#include <llvm/Support/Debug.h>
+// #include <llvm/Support/Debug.h>
 #include <pablo/pe_var.h>
 #include <llvm/IR/Verifier.h>
 #include <IDISA/idisa_builder.h>
-#include <pablo/prototype.h>
-#include <stack>
 
 using namespace pablo;
 using namespace kernel;
@@ -19,7 +17,7 @@ using namespace parabix;
 using namespace IDISA;
 
 Var * PabloKernel::addInput(const std::string name, Type * const type) {
-    Var * param = new Var(mSymbolTable->make(name), type, true);
+    Var * param = new (mAllocator) Var(mSymbolTable->make(name, iBuilder), type, mAllocator, true);
     mInputs.push_back(param);
     if (isa<ArrayType>(type) || isa<StreamType>(type)) {
         mStreamSetInputs.emplace_back(type, name);
@@ -31,7 +29,7 @@ Var * PabloKernel::addInput(const std::string name, Type * const type) {
 }
 
 Var * PabloKernel::addOutput(const std::string name, Type * const type) {
-    Var * result = new Var(mSymbolTable->make(name), type, false);
+    Var * result = new (mAllocator) Var(mSymbolTable->make(name, iBuilder), type, mAllocator, false);
     mOutputs.push_back(result);
     if (isa<ArrayType>(type) || isa<StreamType>(type)) {
         mStreamSetOutputs.emplace_back(type, name);
@@ -43,7 +41,7 @@ Var * PabloKernel::addOutput(const std::string name, Type * const type) {
 }
 
 Var * PabloKernel::makeVariable(PabloAST * name, Type * const type) {
-    Var * const var = new Var(name, type);
+    Var * const var = new (mAllocator) Var(name, type, mAllocator);
     mVariables.push_back(var);
     return var;
 }
@@ -57,7 +55,7 @@ Zeroes * PabloKernel::getNullValue(Type * type) {
             return cast<Zeroes>(constant);
         }
     }
-    Zeroes * value = new Zeroes(type);
+    Zeroes * value = new (mAllocator) Zeroes(type, mAllocator);
     mConstants.push_back(value);
     return value;
 }
@@ -71,7 +69,7 @@ Ones * PabloKernel::getAllOnesValue(Type * type) {
             return cast<Ones>(constant);
         }
     }
-    Ones * value = new Ones(type);
+    Ones * value = new (mAllocator) Ones(type, mAllocator);
     mConstants.push_back(value);
     return value;
 }
@@ -130,7 +128,7 @@ void PabloKernel::generateFinalBlockMethod() {
 PabloKernel::PabloKernel(IDISA::IDISA_Builder * builder, const std::string & kernelName)
 : KernelBuilder(builder, kernelName, {}, {}, {}, {}, {Binding{builder->getBitBlockType(), "EOFbit"}, Binding{builder->getBitBlockType(), "EOFmask"}})
 , mPabloCompiler(new PabloCompiler(this))
-, mSymbolTable(new SymbolGenerator())
+, mSymbolTable(new SymbolGenerator(mAllocator))
 , mEntryBlock(PabloBlock::Create(this))
 {
 

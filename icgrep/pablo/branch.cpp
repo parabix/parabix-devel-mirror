@@ -4,8 +4,8 @@
 
 namespace pablo {
 
-Branch::Branch(const ClassTypeId typeId, PabloAST * condition, PabloBlock * body)
-: Statement(typeId, nullptr, {condition}, nullptr)
+Branch::Branch(const ClassTypeId typeId, PabloAST * condition, PabloBlock * body, Allocator &allocator)
+: Statement(typeId, nullptr, {condition}, nullptr, allocator)
 , mBody(body) {
 
 }

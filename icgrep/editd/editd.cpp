@@ -24,7 +24,6 @@
 
 #include <re/re_cc.h>
 #include <cc/cc_compiler.h>
-#include <pablo/prototype.h>
 #include <pablo/pablo_compiler.h>
 #include <pablo/pablo_kernel.h>
 #include <IDISA/idisa_builder.h>
@@ -229,7 +228,7 @@ Function * editdPipeline(Module * mMod, IDISA::IDISA_Builder * iBuilder, const s
     editdScanK.addKernelDeclarations(mMod);
 
     Type * const size_ty = iBuilder->getSizeTy();
-    Type * const voidTy = Type::getVoidTy(mMod->getContext());
+    Type * const voidTy = iBuilder->getVoidTy();
     Type * const inputType = PointerType::get(ArrayType::get(ArrayType::get(iBuilder->getBitBlockType(), 8), 1), 0);
     
     Function * const main = cast<Function>(mMod->getOrInsertFunction("Main", voidTy, inputType, size_ty, nullptr));
@@ -283,7 +282,7 @@ Function * preprocessPipeline(Module * mMod, IDISA::IDISA_Builder * iBuilder) {
     SingleBlockBuffer BasisBits(iBuilder, iBuilder->getStreamSetTy(8));
     ExternalFileBuffer CCResults(iBuilder, iBuilder->getStreamSetTy(4));
 
-    s2pKernel  s2pk(iBuilder);
+    S2PKernel  s2pk(iBuilder);
     std::unique_ptr<Module> s2pM = s2pk.createKernelModule({&ByteStream}, {&BasisBits});
 
     PabloKernel  ccck(iBuilder, "ccc");
@@ -296,7 +295,7 @@ Function * preprocessPipeline(Module * mMod, IDISA::IDISA_Builder * iBuilder) {
     ccck.addKernelDeclarations(mMod);
 
     Type * const size_ty = iBuilder->getSizeTy();
-    Type * const voidTy = Type::getVoidTy(mMod->getContext());
+    Type * const voidTy = iBuilder->getVoidTy();
     Type * const inputType = PointerType::get(ArrayType::get(ArrayType::get(mBitBlockType, 8), 1), 0);
     Type * const outputType = PointerType::get(ArrayType::get(mBitBlockType, 4), 0);
     

@@ -426,7 +426,7 @@ void KernelBuilder::createInstance() {
 
 Function * KernelBuilder::generateThreadFunction(std::string name){
     Module * m = iBuilder->getModule();
-    Type * const voidTy = Type::getVoidTy(m->getContext());
+    Type * const voidTy = iBuilder->getVoidTy();
     Type * const voidPtrTy = iBuilder->getVoidPtrTy();
     Type * const int8PtrTy = iBuilder->getInt8PtrTy();
     Type * const int1ty = iBuilder->getInt1Ty();

@@ -12,7 +12,6 @@
 #include <kernels/s2p_kernel.h>
 #include <kernels/instance.h>
 
-#include <pablo/prototype.h>
 #include <pablo/pablo_compiler.h>
 #include <pablo/analysis/pabloverifier.hpp>
 
@@ -637,8 +636,6 @@ void SymbolTableBuilder::createKernels() {
     delete leading;
     delete sorting;
 
-    releaseSlabAllocatorMemory();
-
     generateGatherKernel(mGatherKernel, endpoints, 64);
 }
 
@@ -647,7 +644,7 @@ Function * SymbolTableBuilder::ExecuteKernels(){
     Type * intType = iBuilder->getSizeTy();
 
     Type * inputType = PointerType::get(ArrayType::get(StructType::get(mMod->getContext(), std::vector<Type *>({ArrayType::get(mBitBlockType, 8)})), 1), 0);
-    Function * const main = cast<Function>(mMod->getOrInsertFunction("Main", Type::getVoidTy(mMod->getContext()), inputType, intType, nullptr));
+    Function * const main = cast<Function>(mMod->getOrInsertFunction("Main", iBuilder->getVoidTy(), inputType, intType, nullptr));
     main->setCallingConv(CallingConv::C);
     Function::arg_iterator args = main->arg_begin();
 

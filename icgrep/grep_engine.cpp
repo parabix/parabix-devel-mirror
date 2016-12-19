@@ -32,7 +32,6 @@
 #include <kernels/cc_kernel.h>
 #include <kernels/pipeline.h>
 
-#include <pablo/prototype.h>
 #include <pablo/pablo_kernel.h>
 #include <pablo/pablo_toolchain.h>
 
@@ -329,7 +328,7 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool Count
     ExternalFileBuffer ByteStream(iBuilder, iBuilder->getStreamSetTy(1, 8));
     CircularBuffer BasisBits(iBuilder, iBuilder->getStreamSetTy(8, 1), segmentSize * bufferSegments);
 
-    kernel::s2pKernel  s2pk(iBuilder);
+    kernel::S2PKernel  s2pk(iBuilder);
     s2pk.generateKernel({&ByteStream}, {&BasisBits});
     
     pablo::PabloKernel icgrepK(iBuilder, "icgrep");

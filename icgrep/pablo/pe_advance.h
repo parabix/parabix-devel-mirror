@@ -31,9 +31,8 @@ public:
         return cast<Integer>(getOperand(1))->value();
     }
 protected:
-    Advance(PabloAST * expr, PabloAST * shiftAmount, const String * name)
-    : Statement(ClassTypeId::Advance, expr->getType(), {expr, shiftAmount}, name)
-    {
+    Advance(PabloAST * expr, PabloAST * shiftAmount, const String * name, Allocator & allocator)
+    : Statement(ClassTypeId::Advance, expr->getType(), {expr, shiftAmount}, name, allocator) {
         assert(isa<Integer>(shiftAmount));
     }
 };

@@ -101,7 +101,7 @@ void IDISA_NVPTX20_Builder::CreateGlobals(){
 }
 
 void IDISA_NVPTX20_Builder::CreateBuiltinFunctions(){    
-    Type * const voidTy = Type::getVoidTy(mMod->getContext());
+    Type * const voidTy = getVoidTy();
     Type * const int32ty = getInt32Ty();
     barrierFunc = cast<Function>(mMod->getOrInsertFunction("llvm.nvvm.barrier0", voidTy, nullptr));
     tidFunc = cast<Function>(mMod->getOrInsertFunction("llvm.nvvm.read.ptx.sreg.tid.x", int32ty, nullptr));

@@ -121,13 +121,13 @@ Function * ScanMatchKernel::generateScanWordRoutine(Module * m) {
     Constant * matchProcessor = nullptr;
     switch (mGrepType) {
         case GrepType::Normal:
-            matchProcessor = m->getOrInsertFunction("wrapped_report_match", Type::getVoidTy(ctxt), T, T, T, S, T, T, nullptr);
+            matchProcessor = m->getOrInsertFunction("wrapped_report_match", iBuilder->getVoidTy(), T, T, T, S, T, T, nullptr);
             break;
         case GrepType::NameExpression:
-            matchProcessor = m->getOrInsertFunction("insert_codepoints", Type::getVoidTy(ctxt), T, T, T, S, nullptr);
+            matchProcessor = m->getOrInsertFunction("insert_codepoints", iBuilder->getVoidTy(), T, T, T, S, nullptr);
             break;
         case GrepType::PropertyValue:
-            matchProcessor = m->getOrInsertFunction("insert_property_values", Type::getVoidTy(ctxt), T, T, T, S, nullptr);
+            matchProcessor = m->getOrInsertFunction("insert_property_values", iBuilder->getVoidTy(), T, T, T, S, nullptr);
             break;
         default: llvm_unreachable("unknown grep type");
     }

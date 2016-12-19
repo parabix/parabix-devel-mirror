@@ -10,7 +10,6 @@
 #include <UCD/ucd_compiler.hpp>
 #include <pablo/pablo_compiler.h>
 #include <pablo/builder.hpp>
-#include <pablo/prototype.h>
 #include <llvm/Support/CommandLine.h>
 #include <utf_encoding.h>
 #include <pablo/analysis/pabloverifier.hpp>

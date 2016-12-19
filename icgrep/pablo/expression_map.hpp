@@ -97,14 +97,14 @@ struct VarArgMap {
 
     friend struct ExpressionTable;
 
-    using Allocator = LLVMAllocator;
+    using Allocator = SlabAllocator<const PabloAST *>;
 
     struct Key {
 
         inline Key(PabloAST::ClassTypeId type, const PabloAST * arg1, const std::vector<PabloAST *> & args, Allocator & allocator)
         : mType(type)
         , mArgs(1 + args.size())
-        , mArg(allocator.Allocate<const PabloAST *>(mArgs)) {
+        , mArg(allocator.allocate(mArgs)) {
             unsigned i = 1;
             mArg[0] = arg1;
             for (PabloAST * arg : args) {
@@ -115,7 +115,7 @@ struct VarArgMap {
         inline Key(PabloAST::ClassTypeId type, const Variadic * stmt, Allocator & allocator)
         : mType(type)
         , mArgs(stmt->getNumOperands())
-        , mArg(allocator.Allocate<const PabloAST *>(mArgs)) {
+        , mArg(allocator.allocate(mArgs)) {
             unsigned i = 0;
             for (PabloAST * arg : *stmt) {
                 mArg[i++] = arg;
@@ -169,7 +169,7 @@ struct VarArgMap {
         Key key(type, arg1, args, mAllocator);
         PabloAST * const f = find(key);
         if (f) {
-            mAllocator.Deallocate<const PabloAST *>(key.mArg);
+            mAllocator.deallocate(key.mArg);
             return f;
         }
         PabloAST * const object = functor(args, std::forward<Params>(params)...);
@@ -181,7 +181,7 @@ struct VarArgMap {
         Key key(type, object, mAllocator);
         PabloAST * const entry = find(key);
         if (entry) {
-            mAllocator.Deallocate<const PabloAST *>(key.mArg);
+            mAllocator.deallocate(key.mArg);
             return std::make_pair(entry, false);
         }
         mMap.insert(std::make_pair(std::move(key), object));

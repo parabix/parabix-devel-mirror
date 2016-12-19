@@ -21,10 +21,10 @@ class KernelBuilder;
 
 
 
-class s2pKernel : public KernelBuilder {
+class S2PKernel : public KernelBuilder {
 public:
     
-    s2pKernel(IDISA::IDISA_Builder * iBuilder) :
+    S2PKernel(IDISA::IDISA_Builder * iBuilder) :
     KernelBuilder(iBuilder, "s2p",
                   {Binding{iBuilder->getStreamSetTy(1, 8), "byteStream"}},
                   {Binding{iBuilder->getStreamSetTy(8, 1), "basisBits"}},

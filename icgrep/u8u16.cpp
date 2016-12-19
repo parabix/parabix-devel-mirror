@@ -25,7 +25,6 @@
 #include <cc/cc_compiler.h>
 #include <pablo/pablo_toolchain.h>
 #include <pablo/pablo_kernel.h>
-#include <pablo/prototype.h>
 #include <IDISA/idisa_builder.h>
 #include <IDISA/idisa_target.h>
 #include <kernels/pipeline.h>
@@ -278,11 +277,11 @@ Function * u8u16Pipeline(Module * mod, IDISA::IDISA_Builder * iBuilder) {
     ExternalFileBuffer U16external(iBuilder, iBuilder->getStreamSetTy(1, 16));
     LinearCopybackBuffer U16out(iBuilder, iBuilder->getStreamSetTy(16, 16), segmentSize * bufferSegments + 2);
 
-    s2pKernel s2pk(iBuilder);
+    S2PKernel s2pk(iBuilder);
 
     s2pk.generateKernel({&ByteStream}, {&BasisBits});
 
-    pablo::PabloKernel u8u16k(iBuilder, "u8u16");
+    PabloKernel u8u16k(iBuilder, "u8u16");
 
     u8u16_pablo(&u8u16k);
 
@@ -293,7 +292,7 @@ Function * u8u16Pipeline(Module * mod, IDISA::IDISA_Builder * iBuilder) {
 
     p2s_16Kernel_withCompressedOutput p2sk(iBuilder);
 
-    stdOutKernel stdoutK(iBuilder, 16);
+    StdOutKernel stdoutK(iBuilder, 16);
 
     if (mMapBuffering || memAlignBuffering) {
         p2sk.generateKernel({&U16Bits, &DeletionCounts}, {&U16external});
@@ -304,7 +303,7 @@ Function * u8u16Pipeline(Module * mod, IDISA::IDISA_Builder * iBuilder) {
     }
 
     Type * const size_ty = iBuilder->getSizeTy();
-    Type * const voidTy = Type::getVoidTy(mod->getContext());
+    Type * const voidTy = iBuilder->getVoidTy();
     Type * const bitBlockType = iBuilder->getBitBlockType();
     Type * const inputType = ArrayType::get(ArrayType::get(bitBlockType, 8), 1)->getPointerTo();
     Type * const outputType = ArrayType::get(ArrayType::get(bitBlockType, 16), 1)->getPointerTo();

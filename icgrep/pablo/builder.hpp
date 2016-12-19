@@ -53,7 +53,7 @@ public:
     }
 
     inline static PabloBuilder Create(PabloBuilder & builder) noexcept {
-        return PabloBuilder(PabloBlock::Create(builder.getPabloBlock()), builder);
+        return PabloBuilder(PabloBlock::Create(builder.getPabloBlock()->getParent()), builder);
     }
 
     inline Zeroes * createZeroes(Type * const type = nullptr) {

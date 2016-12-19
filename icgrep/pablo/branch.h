@@ -41,7 +41,7 @@ public:
     PabloBlock * setBody(PabloBlock * const body);
     EscapedVars getEscaped() const;
 protected:
-    Branch(const ClassTypeId typeId, PabloAST * condition, PabloBlock * body);
+    Branch(const ClassTypeId typeId, PabloAST * condition, PabloBlock * body, Allocator & allocator);
 protected:
     PabloBlock *            mBody;
 };
@@ -55,8 +55,8 @@ public:
         return e->getClassTypeId() == ClassTypeId::If;
     }
 protected:
-    If(PabloAST * condition, PabloBlock * body)
-    : Branch(ClassTypeId::If, condition, body) {
+    If(PabloAST * condition, PabloBlock * body, Allocator & allocator)
+    : Branch(ClassTypeId::If, condition, body, allocator) {
 
     }
 };
@@ -70,8 +70,8 @@ public:
         return e->getClassTypeId() == ClassTypeId::While;
     }
 protected:
-    While(PabloAST * condition, PabloBlock * body)
-    : Branch(ClassTypeId::While, condition, body) {
+    While(PabloAST * condition, PabloBlock * body, Allocator & allocator)
+    : Branch(ClassTypeId::While, condition, body, allocator) {
 
     }
 };

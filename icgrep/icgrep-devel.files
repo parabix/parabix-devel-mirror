@@ -341,7 +341,6 @@ pablo/arithmetic.h
 pablo/boolean.h
 kernels/type/streamtype.cpp
 kernels/type/streamtype.h
-IDISA/types/streamtype.cpp
 IDISA/types/streamtype.h
 editd/pattern_compiler.cpp
 editd/editd.cpp
@@ -366,7 +365,6 @@ editd/editdscan_kernel.cpp
 editd/editdscan_kernel.h
 editd/pattern_compiler.cpp
 editd/pattern_compiler.h
-IDISA/types/streamtype.cpp
 IDISA/types/streamtype.h
 IDISA/CudaDriver.h
 IDISA/idisa_avx_builder.cpp
@@ -572,3 +570,5 @@ utf16_encoder.h
 utf8_encoder.cpp
 utf8_encoder.h
 wc.cpp
+IDISA/types/streamtype.cpp
+IDISA/types/streamtype.cpp

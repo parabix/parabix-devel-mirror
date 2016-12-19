@@ -23,7 +23,7 @@ public:
         return false;
     }
 
-    static Prototype * Create(std::string name, const unsigned numOfParameters, const unsigned numOfResults, void * functionPtr = nullptr);
+//    static Prototype * Create(std::string name, const unsigned numOfParameters, const unsigned numOfResults, void * functionPtr = nullptr);
 
     const String * getName() const {
         return mName;
@@ -38,16 +38,16 @@ public:
     }
 
 protected:
-    Prototype(const PabloAST::ClassTypeId type, std::string && name, const unsigned numOfParameters, const unsigned numOfResults);
+    Prototype(const PabloAST::ClassTypeId type, std::string && name, const unsigned numOfParameters, const unsigned numOfResults, Allocator & allocator);
 protected:
     const String * const    mName;
     unsigned                mNumOfParameters;
     unsigned                mNumOfResults;
 };
 
-inline Prototype * Prototype::Create(std::string name, const unsigned numOfParameters, const unsigned numOfResults, void *) {
-    return new Prototype(PabloAST::ClassTypeId::Prototype, std::move(name), numOfParameters, numOfResults);
-}
+//inline Prototype * Prototype::Create(std::string name, const unsigned numOfParameters, const unsigned numOfResults, void *) {
+//    return new Prototype(PabloAST::ClassTypeId::Prototype, std::move(name), numOfParameters, numOfResults);
+//}
 
 }
 

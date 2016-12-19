@@ -61,11 +61,8 @@ public:
     }
 
     inline static PabloBlock * Create(PabloKernel * const parent) noexcept {
-        return new PabloBlock(parent);
-    }
-
-    inline static PabloBlock * Create(PabloBlock * const predecessor) noexcept {
-        return new PabloBlock(predecessor->mParent);
+        Allocator & allocator = parent->mAllocator;
+        return new (allocator) PabloBlock(parent, allocator);
     }
 
     Advance * createAdvance(PabloAST * expr, PabloAST * shiftAmount) {
@@ -312,11 +309,12 @@ public:
 
 protected:
 
-    explicit PabloBlock(PabloKernel * const parent) noexcept
-    : PabloAST(PabloAST::ClassTypeId::Block, nullptr, nullptr)
+    explicit PabloBlock(PabloKernel * const parent, Allocator & allocator) noexcept
+    : PabloAST(PabloAST::ClassTypeId::Block, nullptr, nullptr, allocator)
     , mParent(parent)
     , mBranch(nullptr)
-    , mScopeIndex(0) {
+    , mScopeIndex(0)
+    , mAllocator(allocator) {
 
     }
 
@@ -336,6 +334,7 @@ private:
     PabloKernel * const         mParent;
     Branch *                    mBranch;
     unsigned                    mScopeIndex;
+    Allocator &                 mAllocator;
 };
 
 }
