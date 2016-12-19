@@ -190,11 +190,11 @@ public:
         return mPb->createWhile(condition, builder.mPb);
     }
 
-    Type * getStreamTy(const uint64_t FieldWidth = 1) {
+    Type * getStreamTy(const unsigned FieldWidth = 1) {
         return mPb->getStreamTy(FieldWidth);
     }
     
-    Type * getStreamSetTy(const uint64_t NumElements = 1, const uint64_t FieldWidth = 1) {
+    Type * getStreamSetTy(const unsigned NumElements = 1, const unsigned FieldWidth = 1) {
         return mPb->getStreamSetTy(NumElements, FieldWidth);
     }
     

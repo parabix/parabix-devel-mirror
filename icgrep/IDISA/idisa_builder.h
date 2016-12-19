@@ -170,11 +170,11 @@ public:
         return mCacheLineAlignment;
     }
 
-    inline Type * getStreamSetTy(const uint64_t NumElements = 1, const uint64_t FieldWidth = 1) {
+    inline Type * getStreamSetTy(const unsigned NumElements = 1, const unsigned FieldWidth = 1) {
         return ArrayType::get(getStreamTy(FieldWidth), NumElements);
     }
     
-    Type * getStreamTy(const uint64_t FieldWidth = 1);
+    Type * getStreamTy(const unsigned FieldWidth = 1);
 
     inline llvm::AllocaInst * CreateCacheAlignedAlloca(llvm::Type * Ty, llvm::Value * ArraySize = nullptr) {
         llvm::AllocaInst * instr = CreateAlloca(Ty, ArraySize);
