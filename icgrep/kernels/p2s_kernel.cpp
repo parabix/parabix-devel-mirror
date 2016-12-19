@@ -117,14 +117,14 @@ void p2s_16Kernel::generateDoBlockMethod() {
     
     Value * hi_input[8];
     for (unsigned j = 0; j < 8; ++j) {
-        hi_input[j] = iBuilder->CreateBlockAlignedLoad(basisBitsBlock_ptr, {iBuilder->getInt32(0), iBuilder->getInt32(j)});
+        hi_input[j] = iBuilder->CreateBlockAlignedLoad(basisBitsBlock_ptr, {iBuilder->getInt32(0), iBuilder->getInt32(0), iBuilder->getInt32(j)});
     }
     Value * hi_bytes[8];
     p2s(iBuilder, hi_input, hi_bytes);
     
     Value * lo_input[8];
     for (unsigned j = 0; j < 8; ++j) {
-        lo_input[j] = iBuilder->CreateBlockAlignedLoad(basisBitsBlock_ptr, {iBuilder->getInt32(0), iBuilder->getInt32(j+8)});
+        lo_input[j] = iBuilder->CreateBlockAlignedLoad(basisBitsBlock_ptr, {iBuilder->getInt32(0), iBuilder->getInt32(0), iBuilder->getInt32(j+8)});
     }
     Value * lo_bytes[8];
     p2s(iBuilder, lo_input, lo_bytes);

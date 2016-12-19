@@ -10,7 +10,7 @@ class IDISA_Builder;
 
 class StreamType : public llvm::Type {
 
-    StreamType(llvm::LLVMContext & ctx, unsigned NumElements, unsigned FieldWidth);
+    StreamType(llvm::LLVMContext & ctx, unsigned FieldWidth);
 
 public:
 
@@ -18,18 +18,14 @@ public:
         StreamTyId = VectorTyID + 1
     };
 
-    static StreamType * get(llvm::LLVMContext & ctx, unsigned NumElements, unsigned FieldWidth);
-
-    unsigned getNumElements() const {
-        return mNumElements;
-    }
+    static StreamType * get(llvm::LLVMContext & ctx, unsigned FieldWidth);
 
     unsigned getFieldWidth() const {
         return mFieldWidth;
     }
 
     StreamType * getStreamElementType() const {
-        return get(getContext(), 1, mFieldWidth);
+        return get(getContext(), mFieldWidth);
     }
 
     llvm::Type * resolveType(IDISA_Builder * const iBuilder);
@@ -42,7 +38,6 @@ public:
         return false;
     }
 private:
-    unsigned mNumElements;
     unsigned mFieldWidth;
 };
 

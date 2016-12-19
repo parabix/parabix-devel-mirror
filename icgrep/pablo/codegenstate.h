@@ -260,10 +260,14 @@ public:
 
     While * createWhile(PabloAST * condition, PabloBlock * body);
 
+    Type * getStreamTy(const uint64_t FieldWidth = 1) {
+        return mParent->getStreamTy(FieldWidth);
+    }
+    
     Type * getStreamSetTy(const uint64_t NumElements = 1, const uint64_t FieldWidth = 1) {
         return mParent->getStreamSetTy(NumElements, FieldWidth);
     }
-
+    
     inline PabloBlock * getPredecessor() const {
         return getBranch() ? getBranch()->getParent() : nullptr;
     }

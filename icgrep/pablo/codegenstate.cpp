@@ -14,10 +14,18 @@ using StreamType = IDISA::StreamType;
 
 inline void printType(const Type * type, raw_string_ostream & out) {
     if (auto st = dyn_cast<StreamType>(type)) {
-        out << "<" << st->getNumElements() << " x s" << st->getFieldWidth() << ">";
-    } else {
-        type->print(out);
+        out << "s" << st->getFieldWidth();
+        return;
     }
+    if (auto ty = dyn_cast<ArrayType>(type)) {
+        unsigned numElems = ty->getNumElements();
+        auto elemTy = ty->getElementType();
+        if (auto st = dyn_cast<StreamType>(elemTy)) {
+            out << "<" << numElems << " x s" << st->getFieldWidth() << ">";
+            return;
+        }
+    }
+    type->print(out);
 }
 
 namespace pablo {
@@ -50,7 +58,7 @@ Not * PabloBlock::createNot(PabloAST * expr, String * name) {
 
 Var * PabloBlock::createVar(PabloAST * name, Type * type) {
     if (type == nullptr) {
-        type = getParent()->getStreamSetTy();
+        type = getParent()->getBuilder()->getStreamTy();
     }
     if (LLVM_UNLIKELY(name == nullptr || !isa<String>(name))) {
         throw std::runtime_error("Var objects must have a String name");

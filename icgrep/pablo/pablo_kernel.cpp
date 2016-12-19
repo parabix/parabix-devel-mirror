@@ -21,7 +21,7 @@ using namespace IDISA;
 Var * PabloKernel::addInput(const std::string name, Type * const type) {
     Var * param = new Var(mSymbolTable->make(name), type, true);
     mInputs.push_back(param);
-    if (isa<StreamType>(type)) {
+    if (isa<ArrayType>(type) || isa<StreamType>(type)) {
         mStreamSetInputs.emplace_back(type, name);
     } else {
         mScalarInputs.emplace_back(type, name);
@@ -33,7 +33,7 @@ Var * PabloKernel::addInput(const std::string name, Type * const type) {
 Var * PabloKernel::addOutput(const std::string name, Type * const type) {
     Var * result = new Var(mSymbolTable->make(name), type, false);
     mOutputs.push_back(result);
-    if (isa<StreamType>(type)) {
+    if (isa<ArrayType>(type) || isa<StreamType>(type)) {
         mStreamSetOutputs.emplace_back(type, name);
     } else {
         mScalarOutputs.emplace_back(type, name);
@@ -50,7 +50,7 @@ Var * PabloKernel::makeVariable(PabloAST * name, Type * const type) {
 
 Zeroes * PabloKernel::getNullValue(Type * type) {
     if (type == nullptr) {
-        type = getStreamSetTy();
+        type = getStreamTy();
     }
     for (PabloAST * constant : mConstants) {
         if (isa<Zeroes>(constant) && constant->getType() == type) {
@@ -64,7 +64,7 @@ Zeroes * PabloKernel::getNullValue(Type * type) {
 
 Ones * PabloKernel::getAllOnesValue(Type * type) {
     if (type == nullptr) {
-        type = getStreamSetTy();
+        type = getStreamTy();
     }
     for (PabloAST * constant : mConstants) {
         if (isa<Ones>(constant) && constant->getType() == type) {

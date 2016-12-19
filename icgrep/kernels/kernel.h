@@ -58,6 +58,10 @@ public:
         return getBuilder()->getSizeTy();
     }
 
+    inline Type * getStreamTy(const unsigned FieldWidth = 1) {
+        return getBuilder()->getStreamTy(FieldWidth);
+    }
+    
     inline Type * getStreamSetTy(const unsigned NumElements = 1, const unsigned FieldWidth = 1) {
         return getBuilder()->getStreamSetTy(NumElements, FieldWidth);
     }

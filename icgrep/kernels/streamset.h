@@ -66,11 +66,25 @@ public:
 
     void setEndOfInput(Value * bufferStructPtr);
     
+    llvm::Type * resolveStreamTypes(llvm::Type * type) {
+        if (auto ty = dyn_cast<ArrayType>(type)) {
+            unsigned numElems = ty->getNumElements();
+            auto elemTy = ty->getElementType();
+            if (isa<IDISA::StreamType>(elemTy)) {
+                return ArrayType::get(cast<IDISA::StreamType>(elemTy)->resolveType(iBuilder), numElems);
+            }
+        }
+        else if (auto ty = dyn_cast<IDISA::StreamType>(type)) {
+            return ty->resolveType(iBuilder);
+        }
+        return type;
+    }
+    
 protected:
     StreamSetBuffer(BufferKind k, IDISA::IDISA_Builder * b, llvm::Type * type, unsigned blocks, unsigned AddressSpace = 0)
     : mBufferKind(k)
     , iBuilder(b)
-    , mStreamSetType(isa<IDISA::StreamType>(type) ? cast<IDISA::StreamType>(type)->resolveType(b) : type)
+    , mStreamSetType(resolveStreamTypes(type))
     , mBufferBlocks(blocks)
     , mAddrSpace(AddressSpace)
     , mStreamSetBufferPtr(nullptr)

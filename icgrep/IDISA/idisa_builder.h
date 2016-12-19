@@ -167,7 +167,11 @@ public:
     }
 
     inline Type * getStreamSetTy(const uint64_t NumElements = 1, const uint64_t FieldWidth = 1) {
-        return StreamType::get(getContext(), NumElements, FieldWidth);
+        return ArrayType::get(StreamType::get(getContext(), FieldWidth), NumElements);
+    }
+    
+    inline Type * getStreamTy(const uint64_t FieldWidth = 1) {
+        return StreamType::get(getContext(), FieldWidth);
     }
     
     inline llvm::AllocaInst * CreateCacheAlignedAlloca(llvm::Type * Ty, llvm::Value * ArraySize = nullptr) {
