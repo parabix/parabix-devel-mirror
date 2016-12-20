@@ -38,28 +38,30 @@ class radix64Kernel : public KernelBuilder {
 public:
     
     radix64Kernel(IDISA::IDISA_Builder * iBuilder) :
-    KernelBuilder(iBuilder, "expand3_4",
+    KernelBuilder(iBuilder, "radix64",
                   {Binding{iBuilder->getStreamSetTy(1, 8), "expandedStream"}},
                   {Binding{iBuilder->getStreamSetTy(1, 8), "radix64stream"}},
                   {}, {}, {}) {}
-    
+
 private:
-    void generateDoBlockLogic() override;
-    
+    virtual void generateDoBlockLogic(Value * self, Value * blockNo) override;
+    virtual void generateDoBlockMethod() override;
+    virtual void generateFinalBlockMethod() override;
 };
 
 class base64Kernel : public KernelBuilder {
 public:
     
     base64Kernel(IDISA::IDISA_Builder * iBuilder) :
-    KernelBuilder(iBuilder, "expand3_4",
+    KernelBuilder(iBuilder, "base64",
                   {Binding{iBuilder->getStreamSetTy(1, 8), "radix64stream"}},
                   {Binding{iBuilder->getStreamSetTy(1, 8), "base64stream"}},
                   {}, {}, {}) {}
     
 private:
-    void generateDoBlockLogic() override;
-    void generateFinalBlockMethod() override;
+    virtual void generateDoBlockLogic(Value * self, Value * blockNo) override;
+    virtual void generateFinalBlockMethod() override;
+    virtual void generateDoBlockMethod() override;
     
 };
 
