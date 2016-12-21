@@ -303,7 +303,7 @@ inline void verifyProgramStructure(const PabloKernel * kernel) {
  * @brief isTopologicallyOrdered
  ** ------------------------------------------------------------------------------------------------------------- */
 struct OrderingVerifier {
-    OrderingVerifier() : mParent(nullptr) {}
+    OrderingVerifier() : mParent(nullptr), mSet() {}
     OrderingVerifier(const OrderingVerifier & parent) : mParent(&parent) {}
     bool count(const PabloAST * expr) const {
         if (mSet.count(expr)) {

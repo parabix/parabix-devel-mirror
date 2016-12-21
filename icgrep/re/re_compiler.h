@@ -11,6 +11,7 @@
 #include <re/re_seq.h>
 #include <cc/cc_compiler.h>
 #include <pablo/builder.hpp>
+#include <boost/container/flat_map.hpp>
 
 namespace UCD {
 class UnicodeSet;
@@ -35,12 +36,13 @@ enum MarkerPosition {FinalMatchUnit, FinalPostPositionUnit};
 struct MarkerType { 
     MarkerPosition pos;
     pablo::PabloAST * stream;
+    MarkerType & operator =(const MarkerType &) = default;
 };
 
-inline MarkerPosition markerPos(MarkerType m) {return m.pos;}
+inline MarkerPosition markerPos(const MarkerType & m) {return m.pos; }
 
-inline pablo::PabloAST * markerVar(MarkerType m) {return m.stream;}
-    
+inline pablo::PabloAST * markerVar(const MarkerType & m) {return m.stream; }
+
 inline MarkerType makeMarker(MarkerPosition newpos, pablo::PabloAST * strm) {return {newpos, strm};}
 
 
@@ -57,6 +59,26 @@ public:
 
 private:
 
+    struct NameMap {
+        NameMap(NameMap * parent = nullptr) : mParent(parent), mMap() {}
+        bool get(const Name * name, MarkerType & marker) const {
+            auto f = mMap.find(name);
+            if (f == mMap.end()) {
+                return mParent ? mParent->get(name, marker) : false;
+            } else {
+                marker = f->second;
+                return true;
+            }
+        }
+        void add(const Name * const name, MarkerType marker) {
+            mMap.emplace(name, std::move(marker));
+        }
+        NameMap * getParent() const { return mParent; }
+    private:
+        NameMap * const mParent;
+        boost::container::flat_map<const Name *, MarkerType> mMap;
+    };
+
     void initializeRequiredStreams_utf8();
     void initializeRequiredStreams_utf16();
     MarkerType compile(RE * re, pablo::PabloBuilder & cg);
@@ -64,7 +86,7 @@ private:
     MarkerType process(RE * re, MarkerType marker, pablo::PabloBuilder & pb);
     MarkerType compileName(Name * name, MarkerType marker, pablo::PabloBuilder & pb);
     MarkerType compileSeq(Seq * seq, MarkerType marker, pablo::PabloBuilder & pb);
-    MarkerType compileSeqTail(Seq::iterator current, Seq::iterator end, int matchLenSoFar, MarkerType marker, pablo::PabloBuilder & pb);
+    MarkerType compileSeqTail(Seq::iterator current, const Seq::iterator end, int matchLenSoFar, MarkerType marker, pablo::PabloBuilder & pb);
     MarkerType compileAlt(Alt * alt, MarkerType marker, pablo::PabloBuilder & pb);
     MarkerType compileAssertion(Assertion * a, MarkerType marker, pablo::PabloBuilder & pb);
     MarkerType compileRep(Rep * rep, MarkerType marker, pablo::PabloBuilder & pb);
@@ -101,8 +123,8 @@ private:
     pablo::PabloAST *                               mWhileTest;
     int                                             mStarDepth;
     pablo::PabloBuilder &                           mPB;
-    std::unordered_map<Name *, MarkerType>          mCompiledName;
-
+    NameMap *                                       mCompiledName;
+    NameMap                                         mBaseMap;
 };
 
 }

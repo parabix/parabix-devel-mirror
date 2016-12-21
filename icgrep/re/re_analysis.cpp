@@ -174,9 +174,8 @@ int minMatchLength(RE * re) {
     }
     else if (isa<Any>(re)) {
         return 1;
-    }
-    else if (const Name * n = dyn_cast<Name>(re)) {
-    // Eventually names might be set up for not unit length items.
+    } else if (const Name * n = dyn_cast<Name>(re)) {
+        // Eventually names might be set up for not unit length items.
         switch (n->getType()) {
             case Name::Type::Byte:
             case Name::Type::Unicode:
@@ -185,7 +184,7 @@ int minMatchLength(RE * re) {
             case Name::Type::Capture:
             case Name::Type::Reference:
                 return minMatchLength(n->getDefinition());
-            case Name::Type::Unknown:
+            default:
                 return 0;
         }
     }

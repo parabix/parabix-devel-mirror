@@ -38,7 +38,7 @@ void generateGraphemeClusterBoundaryRule(Name * const &property) {
 #define Behind(x) makeLookBehindAssertion(x)
 #define Ahead(x) makeLookAheadAssertion(x)
 
-    RE * GCB_Control = makeName("gcb", "cn", Name::Type::UnicodeProperty);
+//    RE * GCB_Control = makeName("gcb", "cn", Name::Type::UnicodeProperty);
     RE * GCB_CR = makeName("gcb", "cr", Name::Type::UnicodeProperty);
     RE * GCB_LF = makeName("gcb", "lf", Name::Type::UnicodeProperty);
     RE * GCB_Control_CR_LF = makeAlt({GCB_CR, GCB_LF});

@@ -121,7 +121,7 @@ void KernelBuilder::generateKernel(std::vector<StreamSetBuffer *> input_buffers,
     
     Function::arg_iterator args = initFunction->arg_begin();
     Value * self = &*(args++);
-    iBuilder->CreateStore(Constant::getNullValue(mKernelStateType), self);
+    initializeKernelState(self);
     for (auto binding : mScalarInputs) {
         Value * parm = &*(args++);
         Value * ptr = iBuilder->CreateGEP(self, {iBuilder->getInt32(0), getScalarIndex(binding.name)});
@@ -129,6 +129,10 @@ void KernelBuilder::generateKernel(std::vector<StreamSetBuffer *> input_buffers,
     }
     iBuilder->CreateRetVoid();
     iBuilder->restoreIP(savePoint);
+}
+
+void KernelBuilder::initializeKernelState(Value * self) {
+    iBuilder->CreateStore(Constant::getNullValue(mKernelStateType), self);
 }
 
 //  The default finalBlock method simply dispatches to the doBlock routine.

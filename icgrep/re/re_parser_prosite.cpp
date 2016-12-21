@@ -98,9 +98,9 @@ namespace re{
     }
     
     RE * RE_Parser_PROSITE::extend_item(RE * re) {
-         if (LLVM_LIKELY(mCursor.more())) {
-             int lb = 0, ub = 0;
+         if (LLVM_LIKELY(mCursor.more())) {             
              if (*mCursor == '(') {
+                int lb = 0, ub = 0;
                 std::tie(lb, ub) = parse_range_bound();
                 if (lb > MAX_REPETITION_LOWER_BOUND || ub > MAX_REPETITION_UPPER_BOUND) {
                     ParseFailure("Bounded repetition exceeds icgrep implementation limit");

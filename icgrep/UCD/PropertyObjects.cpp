@@ -57,18 +57,18 @@ const UnicodeSet & EnumeratedPropertyObject::GetCodepointSet(const int property_
 
 std::vector<UnicodeSet> & EnumeratedPropertyObject::GetEnumerationBasisSets() {
     // Return the previously computed vector of basis sets, if it exists.
-    if (enumeration_basis_sets.size() > 0) return enumeration_basis_sets;
-    
-    // Otherwise compute and return.
-    // Basis set i is the set of all codepoints whose numerical enumeration code e
-    // has bit i set, i.e., (e >> i) & 1 == 1.
-    unsigned basis_count = 1;
-    while ((1 << basis_count) < independent_enum_count) basis_count++;
-    for (unsigned i = 0; i < basis_count; i++) {
-        enumeration_basis_sets.push_back(UnicodeSet());
-        for (unsigned e = 0; e < independent_enum_count; e++) {
-            if (((e >> i) & 1) == 0) {
-                enumeration_basis_sets[i] = enumeration_basis_sets[i] + *property_value_sets[e];
+    if (LLVM_UNLIKELY(enumeration_basis_sets.empty())) {
+        // Otherwise compute and return.
+        // Basis set i is the set of all codepoints whose numerical enumeration code e
+        // has bit i set, i.e., (e >> i) & 1 == 1.
+        unsigned basis_count = 1;
+        while ((1 << basis_count) < independent_enum_count) basis_count++;
+        for (unsigned i = 0; i < basis_count; i++) {
+            enumeration_basis_sets.push_back(UnicodeSet());
+            for (unsigned e = 0; e < independent_enum_count; e++) {
+                if (((e >> i) & 1) == 0) {
+                    enumeration_basis_sets[i] = enumeration_basis_sets[i] + *property_value_sets[e];
+                }
             }
         }
     }

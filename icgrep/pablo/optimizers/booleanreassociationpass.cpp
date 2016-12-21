@@ -423,12 +423,9 @@ inline void BooleanReassociationPass::distributeScope(PabloBlock * const block, 
     try {
         mBlock = block;
         transformAST(C, G);
-    } catch (std::runtime_error err) {
+    } catch (std::exception &) {
         printGraph(G, "E");
-        throw err;
-    } catch (std::exception err) {
-        printGraph(G, "E");
-        throw err;
+        throw;
     }
 }
 

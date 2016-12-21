@@ -52,6 +52,7 @@ public:
     Value * getBlockNo(Value * self);
     virtual llvm::Value * getProcessedItemCount(llvm::Value * kernelInstance) override;
     virtual llvm::Value * getProducedItemCount(llvm::Value * kernelInstance) override;
+    virtual void initializeKernelState(Value * self);
     llvm::Value * getTerminationSignal(llvm::Value * kernelInstance);
     
     inline llvm::IntegerType * getSizeTy() {

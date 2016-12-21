@@ -111,6 +111,8 @@ protected:
 
     void generateDoBlockMethod() override;
     
+    void initializeKernelState(Value * self) override;
+
     // The default method for Pablo final block processing sets the
     // EOFmark bit and then calls the standard DoBlock function.
     // This may be overridden for specialized processing.

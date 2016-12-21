@@ -199,9 +199,9 @@ void RE_Compiler::initializeRequiredStreams_utf8() {
 
 RE * RE_Compiler::resolveUnicodeProperties(RE * re) {
     Name * ZeroWidth = nullptr;
-    UCD::UCDCompiler::NameMap nameMap;
-    nameMap = resolveNames(re, ZeroWidth);
-    
+    mCompiledName = &mBaseMap;
+
+    auto nameMap = resolveNames(re, ZeroWidth);
     if (LLVM_LIKELY(nameMap.size() > 0)) {
         UCD::UCDCompiler ucdCompiler(mCCCompiler);
         if (LLVM_UNLIKELY(AlgorithmOptionIsSet(DisableIfHierarchy))) {
@@ -211,15 +211,14 @@ RE * RE_Compiler::resolveUnicodeProperties(RE * re) {
         }
         for (auto t : nameMap) {
             if (t.second) {
-                mCompiledName.insert(std::make_pair(t.first, makeMarker(MarkerPosition::FinalMatchUnit, mPB.createAnd(t.second, mAny))));
+                mCompiledName->add(t.first, makeMarker(MarkerPosition::FinalMatchUnit, mPB.createAnd(t.second, mAny)));
             }
         }
     }
 
     // Now precompile any grapheme segmentation rules
     if (ZeroWidth) {
-        auto gcb = compileName(ZeroWidth, mPB);
-        mCompiledName.insert(std::make_pair(ZeroWidth, gcb));
+        mCompiledName->add(ZeroWidth, compileName(ZeroWidth, mPB));
     }
     return re;
 }
@@ -311,12 +310,12 @@ inline MarkerType RE_Compiler::compileName(Name * name, MarkerType marker, Pablo
 }
 
 inline MarkerType RE_Compiler::compileName(Name * name, PabloBuilder & pb) {
-    auto f = mCompiledName.find(name);
-    if (LLVM_LIKELY(f != mCompiledName.end())) {
-        return f->second;
+    MarkerType m;
+    if (LLVM_LIKELY(mCompiledName->get(name, m))) {
+        return m;
     } else if (LLVM_LIKELY(name->getDefinition() != nullptr)) {
-        MarkerType m = compile(name->getDefinition(), pb);
-        mCompiledName.insert(std::make_pair(name, m));
+        m = compile(name->getDefinition(), pb);
+        mCompiledName->add(name, m);
         return m;
     }
     throw std::runtime_error("Unresolved name " + name->getName());
@@ -344,23 +343,26 @@ MarkerType RE_Compiler::compileSeqTail(Seq::iterator current, Seq::iterator end,
         return compileSeqTail(current, end, matchLenSoFar + minMatchLength(r), marker, pb);
     } else {
         Var * m = pb.createVar("m", pb.createZeroes());
+        NameMap nestedMap(mCompiledName);
+        mCompiledName = &nestedMap;
         PabloBuilder nested = PabloBuilder::Create(pb);
         MarkerType m1 = compileSeqTail(current, end, 0, marker, nested);
         nested.createAssign(m, markerVar(m1));
         pb.createIf(markerVar(marker), nested);
+        mCompiledName = nestedMap.getParent();
         return makeMarker(m1.pos, m);
     }
 }
 
 MarkerType RE_Compiler::compileAlt(Alt * alt, MarkerType marker, PabloBuilder & pb) {
-    std::vector<PabloAST *>  accum = {pb.createZeroes(), pb.createZeroes(), pb.createZeroes()};
+    std::vector<PabloAST *>  accum(3, pb.createZeroes());
     MarkerType const base = marker;
     // The following may be useful to force a common Advance rather than separate
     // Advances in each alternative.
     for (RE * re : *alt) {
-        MarkerType rslt = process(re, base, pb);
-        MarkerPosition p = markerPos(rslt);
-        accum[p] = pb.createOr(accum[p], markerVar(rslt), "alt");
+        MarkerType m = process(re, base, pb);
+        MarkerPosition p = markerPos(m);
+        accum[p] = pb.createOr(accum[p], markerVar(m), "alt");
     }
     if (isa<Zeroes>(accum[MarkerPosition::FinalPostPositionUnit])) {
         return makeMarker(MarkerPosition::FinalMatchUnit, accum[MarkerPosition::FinalMatchUnit]);
@@ -642,7 +644,8 @@ RE_Compiler::RE_Compiler(PabloKernel * kernel, cc::CC_Compiler & ccCompiler, boo
 , mFinal(nullptr)
 , mWhileTest(nullptr)
 , mStarDepth(0)
-, mPB(ccCompiler.getBuilder()) {
+, mPB(ccCompiler.getBuilder())
+, mCompiledName(&mBaseMap) {
 
 }
 

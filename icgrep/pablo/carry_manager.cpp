@@ -17,7 +17,7 @@
 
 namespace pablo {
 
-inline static unsigned nearest_pow2(const unsigned v) {
+inline static unsigned nearest_pow2(const uint32_t v) {
     assert(v > 0 && v < (UINT32_MAX / 2));
     return (v < 2) ? 1 : (1 << (32 - __builtin_clz(v - 1)));
 }
@@ -106,9 +106,9 @@ void CarryManager::enterLoopBody(BasicBlock * const entryBlock) {
 
     if (LLVM_UNLIKELY(mCarryInfo->variableLength)) {
         // Check whether we need to resize the carry state
-        PHINode * index = iBuilder->CreatePHI(iBuilder->getSizeTy(), 2);
+        PHINode * index = iBuilder->CreatePHI(iBuilder->getInt32Ty(), 2);
         mLoopIndicies.push_back(index);
-        index->addIncoming(iBuilder->getSize(0), entryBlock);
+        index->addIncoming(iBuilder->getInt32(0), entryBlock);
         Value * capacityPtr = iBuilder->CreateGEP(mCurrentFrame, {iBuilder->getInt32(0), iBuilder->getInt32(0)});
         Value * capacity = iBuilder->CreateLoad(capacityPtr, false, "carryCapacity");
         Value * arrayPtr = iBuilder->CreateGEP(mCurrentFrame, {iBuilder->getInt32(0), iBuilder->getInt32(1)});
@@ -121,7 +121,7 @@ void CarryManager::enterLoopBody(BasicBlock * const entryBlock) {
         iBuilder->SetInsertPoint(resizeBlock);
 
         Type * const carryStateType = arrayPtr->getType()->getPointerElementType()->getPointerElementType();
-        Value * newCapacity = iBuilder->CreateMul(iBuilder->CreateAdd(index, iBuilder->getSize(1)), iBuilder->getSize(2));
+        Value * newCapacity = iBuilder->CreateMul(iBuilder->CreateAdd(index, iBuilder->getInt32(1)), iBuilder->getInt32(2));
         Value * newArrayPtr = iBuilder->CreateAlignedMalloc(carryStateType, newCapacity, iBuilder->getCacheAlignment());
         iBuilder->CreateMemCpy(newArrayPtr, arrayPtr, capacity, iBuilder->getCacheAlignment());
         iBuilder->CreateMemZero(iBuilder->CreateGEP(newArrayPtr, capacity), iBuilder->CreateSub(newCapacity, capacity), iBuilder->getCacheAlignment());
@@ -150,7 +150,7 @@ void CarryManager::leaveLoopBody(BasicBlock * const exitBlock) {
     if (LLVM_UNLIKELY(mCarryInfo->variableLength)) {
         assert (mLoopIndicies.size() > 0);
         PHINode * index = mLoopIndicies.back();
-        index->addIncoming(iBuilder->CreateAdd(index, iBuilder->getSize(1)), exitBlock);
+        index->addIncoming(iBuilder->CreateAdd(index, iBuilder->getInt32(1)), exitBlock);
         mLoopIndicies.pop_back();
     }
 }
@@ -182,7 +182,7 @@ Value * CarryManager::generateSummaryTest(Value * condition) {
     if (LLVM_LIKELY(mCarryInfo->hasSummary())) {
         ConstantInt * zero = iBuilder->getInt32(0);
         std::vector<Value *> indicies;
-        // enter the (potentially nested) struct and extract the summary element (0)
+        // enter the (potentially nested) struct and extract the summary element (always element 0)
         unsigned count = 2;
         if (LLVM_UNLIKELY(mCarryInfo->hasBorrowedSummary())) {
             Type * frameTy = mCurrentFrame->getType()->getPointerElementType();
@@ -300,6 +300,7 @@ void CarryManager::leaveScope() {
  * @brief addCarryInCarryOut
  ** ------------------------------------------------------------------------------------------------------------- */
 Value * CarryManager::addCarryInCarryOut(const Statement * operation, Value * const e1, Value * const e2) {
+    assert (dyn_cast_or_null<ScanThru>(operation) || dyn_cast_or_null<MatchStar>(operation));
     Value * const carryIn = getNextCarryIn();
     Value * carryOut, * result;
     std::tie(carryOut, result) = iBuilder->bitblock_add_with_carry(e1, e2, carryIn);
@@ -403,7 +404,11 @@ Value * CarryManager::getNextCarryIn() {
         carryInPtr = iBuilder->CreateGEP(carryInPtr, {iBuilder->getInt32(0), mLoopSelector});
     }
     assert (carryInPtr->getType()->getPointerElementType() == mCarryPackType);
-    return iBuilder->CreateBlockAlignedLoad(carryInPtr);
+    Value * const carryIn = iBuilder->CreateBlockAlignedLoad(carryInPtr);
+    if (mLoopDepth > 0) {
+        iBuilder->CreateBlockAlignedStore(Constant::getNullValue(mCarryPackType), carryInPtr);
+    }
+    return carryIn;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

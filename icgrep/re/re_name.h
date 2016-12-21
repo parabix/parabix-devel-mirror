@@ -72,7 +72,7 @@ private:
     const char * const  mNamespace;
     const length_t      mNameLength;
     const char * const  mName;
-    Type          mType;
+    Type                mType;
     RE *                mDefinition;
 };
 
