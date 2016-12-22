@@ -46,7 +46,6 @@ find_package(Boost 1.46 REQUIRED COMPONENTS system filesystem iostreams)
 
 include_directories("${Boost_INCLUDE_DIRS}")
 link_directories(${Boost_LIBRARY_DIR})
-SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DUSE_BOOST")
 
 SET(KERNEL_SRC kernels/kernel.cpp kernels/s2p_kernel.cpp kernels/streamset.cpp kernels/interface.cpp)
 SET(IDISA_SRC IDISA/types/streamtype.cpp IDISA/idisa_builder.cpp IDISA/idisa_avx_builder.cpp IDISA/idisa_i64_builder.cpp IDISA/idisa_sse_builder.cpp IDISA/idisa_nvptx_builder.cpp IDISA/idisa_target.cpp)

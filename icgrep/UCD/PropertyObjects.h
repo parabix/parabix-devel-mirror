@@ -13,11 +13,11 @@
 #include <string>
 #include <vector>
 #include <unordered_map>
-#include <boost/align/aligned_allocator.hpp>
+#include <util/aligned_allocator.h>
 
 namespace UCD {
 
-using PropertyStringAllocator = boost::alignment::aligned_allocator<char, 32>;
+using PropertyStringAllocator = AlignedAllocator<char, 32>;
 
 using PropertyString =
     std::basic_string<char, std::char_traits<char>, PropertyStringAllocator>;
