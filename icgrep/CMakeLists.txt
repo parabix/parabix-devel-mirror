@@ -8,7 +8,6 @@ set (icgrep_VERSION_MAJOR 1)
 set (icgrep_VERSION_MINOR 6)
 
 option(ENABLE_MULTIPLEXING "Compiling the Multiplexing Module")
-option(ENABLE_PREGENERATED_UCD_FUNCTIONS "Enable compiling the pregenerated UCD functions")
 option(PRINT_TIMING_INFORMATION "Write compilation and execution timing information to standard error stream")
 
 find_package(LLVM REQUIRED CONFIG)
@@ -42,7 +41,7 @@ llvm_map_components_to_libnames(REQ_LLVM_LIBRARIES ${LLVM_ALL_TARGETS} mcjit nat
 # Check if boost has been installed on this system.
 set(Boost_USE_STATIC_LIBS ON)
 set(Boost_USE_MULTITHREADED OFF)
-set(Boost_USE_STATIC_RUNTIME ON)
+set(Boost_USE_STATIC_RUNTIME OFF)
 find_package(Boost 1.46 REQUIRED COMPONENTS system filesystem iostreams)
 
 include_directories("${Boost_INCLUDE_DIRS}")
@@ -77,46 +76,12 @@ target_link_libraries (UCDlib RegExpADT PabloADT CCADT)
 target_link_libraries (RegExpADT PabloADT CCADT UCDlib)
 target_link_libraries (RegExpCompiler RegExpADT)
 
-set(PRECOMPILED_FILES "")
-
-IF(NOT ENABLE_PREGENERATED_UCD_FUNCTIONS)
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DDISABLE_PREGENERATED_UCD_FUNCTIONS")
-ELSE()
-MESSAGE("Enabling predefined UCD functions...")
-# add the executable
-add_executable(generate_predefined_ucd_functions generate_predefined_ucd_functions.cpp)
-llvm_map_components_to_libnames(REQ_LLVM_TARGETS ${LLVM_TARGETS_TO_BUILD})
-target_link_libraries (generate_predefined_ucd_functions RegExpADT UCDlib PabloADT CCADT ${REQ_LLVM_TARGETS})
-
-set(PRECOMPILED_PROPERTIES_OBJ ${PROJECT_BINARY_DIR}/precompiled_properties.o)
-set(PRECOMPILED_FILES ${PRECOMPILED_PROPERTIES_OBJ} ${PROJECT_SOURCE_DIR}/UCD/precompiled_properties.cpp)
-
-if(ENABLE_MULTIPLEXING)
-set(MULTIPLEXING_FLAG -multiplexing -reassoc -multiplexing-dist=${PROJECT_BINARY_DIR}/ucd-multiplexing.csv) # -multiplexing-dist=${PROJECT_BINARY_DIR}/ucd-multiplexing.csv #-ldc=ldc.csv
-endif()
-
-add_custom_command(OUTPUT ${PRECOMPILED_FILES}
-  COMMAND generate_predefined_ucd_functions
-  ARGS -o ${PRECOMPILED_PROPERTIES_OBJ} -dir ${PROJECT_SOURCE_DIR}/UCD/ ${MULTIPLEXING_FLAG} -DefaultIfHierarchy
-  DEPENDS generate_predefined_ucd_functions
-  COMMENT "Building predefined UCD functions..."
-  VERBATIM)
-
-add_custom_target(run_generate_predefined_ucd_functions DEPENDS ${PRECOMPILED_FILES})
-
-add_dependencies(RegExpCompiler run_generate_predefined_ucd_functions)
-ENDIF()
-
-add_executable(icgrep icgrep.cpp toolchain.cpp grep_engine.cpp kernels/pipeline.cpp kernels/scanmatchgen.cpp kernels/cc_kernel.cpp ${PRECOMPILED_FILES})
+add_executable(icgrep icgrep.cpp toolchain.cpp grep_engine.cpp kernels/pipeline.cpp kernels/scanmatchgen.cpp kernels/cc_kernel.cpp)
 add_executable(u8u16 u8u16.cpp toolchain.cpp kernels/p2s_kernel.cpp kernels/pipeline.cpp kernels/deletion.cpp kernels/stdout_kernel.cpp)
 add_executable(base64 base64.cpp kernels/radix64.cpp toolchain.cpp kernels/p2s_kernel.cpp kernels/pipeline.cpp kernels/deletion.cpp kernels/stdout_kernel.cpp)
 add_executable(wc wc.cpp toolchain.cpp kernels/pipeline.cpp)
 add_executable(editd editd/editd.cpp editd/pattern_compiler.cpp toolchain.cpp kernels/pipeline.cpp editd/editdscan_kernel.cpp editd/editd_gpu_kernel.cpp editd/editd_cpu_kernel.cpp)
 add_executable(array-test array-test.cpp toolchain.cpp kernels/pipeline.cpp)
-
-IF(ENABLE_PREGENERATED_UCD_FUNCTIONS)
-add_dependencies(icgrep run_generate_predefined_ucd_functions)
-ENDIF()
 
 IF (PRINT_TIMING_INFORMATION)
     find_package(PAPI REQUIRED)

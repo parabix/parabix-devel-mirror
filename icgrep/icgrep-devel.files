@@ -572,3 +572,4 @@ utf8_encoder.h
 wc.cpp
 IDISA/types/streamtype.cpp
 IDISA/types/streamtype.cpp
+base64.cpp

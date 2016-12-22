@@ -278,14 +278,14 @@ void SymbolTableBuilder::generateGatherKernel(KernelBuilder * kBuilder, const st
     PHINode * startIndexPhi1 = iBuilder->CreatePHI(startIndex->getType(), 2, "startIndexPhi1");
     startIndexPhi1->addIncoming(startIndex, groupBody);
     PHINode * startIV = iBuilder->CreatePHI(iBuilder->getSizeTy(), 2);
-    startIV->addIncoming(ConstantInt::get(iBuilder->getSizeTy(), 0), groupBody);
+    startIV->addIncoming(iBuilder->getSize(0), groupBody);
     Value * startOuterTest = iBuilder->CreateICmpNE(startIV, ConstantInt::get(iBuilder->getSizeTy(), fieldCount));
     iBuilder->CreateCondBr(startOuterTest, startOuterBody, endOuterCond);
 
     // START OUTER BODY
     iBuilder->SetInsertPoint(startOuterBody);
     Value * startField = iBuilder->CreateExtractElement(startStream, startIV);
-    startIV->addIncoming(iBuilder->CreateAdd(startIV, ConstantInt::get(iBuilder->getSizeTy(), 1)), startInnerCond);
+    startIV->addIncoming(iBuilder->CreateAdd(startIV, iBuilder->getSize(1)), startInnerCond);
     startBlockOffset->addIncoming(iBuilder->CreateAdd(startBlockOffset, ConstantInt::get(iBuilder->getSizeTy(), scanWordBitWidth)), startInnerCond);
     iBuilder->CreateBr(startInnerCond);
 
@@ -317,14 +317,14 @@ void SymbolTableBuilder::generateGatherKernel(KernelBuilder * kBuilder, const st
     PHINode * startIndexPhi3 = iBuilder->CreatePHI(startIndex->getType(), 2, "startIndexPhi3");
     startIndexPhi3->addIncoming(startIndexPhi1, startOuterCond);
     PHINode * endIV = iBuilder->CreatePHI(iBuilder->getSizeTy(), 2);
-    endIV->addIncoming(ConstantInt::get(iBuilder->getSizeTy(), 0), startOuterCond);
+    endIV->addIncoming(iBuilder->getSize(0), startOuterCond);
     Value * endOuterTest = iBuilder->CreateICmpNE(endIV, ConstantInt::get(iBuilder->getSizeTy(), fieldCount));
     iBuilder->CreateCondBr(endOuterTest, endOuterBody, nextGroup);
 
     // END POINT OUTER BODY
     iBuilder->SetInsertPoint(endOuterBody);
     Value * endField = iBuilder->CreateExtractElement(endStream, endIV);
-    endIV->addIncoming(iBuilder->CreateAdd(endIV, ConstantInt::get(iBuilder->getSizeTy(), 1)), endInnerCond);
+    endIV->addIncoming(iBuilder->CreateAdd(endIV, iBuilder->getSize(1)), endInnerCond);
     endBlockOffset->addIncoming(iBuilder->CreateAdd(endBlockOffset, ConstantInt::get(iBuilder->getSizeTy(), scanWordBitWidth)), endInnerCond);
     iBuilder->CreateBr(endInnerCond);
 
@@ -728,7 +728,7 @@ Function * SymbolTableBuilder::ExecuteKernels(){
     PHINode * remainingBytes3 = iBuilder->CreatePHI(intType, 3);
     remainingBytes3->addIncoming(bufferSize, partialLeadingCond);
     remainingBytes3->addIncoming(remainingBytes2, regularCondBlock);
-    Value * partialBlockCond = iBuilder->CreateICmpSGT(remainingBytes3, ConstantInt::get(iBuilder->getSizeTy(), 0));
+    Value * partialBlockCond = iBuilder->CreateICmpSGT(remainingBytes3, iBuilder->getSize(0);
     iBuilder->CreateCondBr(partialBlockCond, partialBodyBlock, flushLengthGroupsBlock);
 
     // If we do, process it and mask out the data

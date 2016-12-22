@@ -3,6 +3,7 @@
 
 #include <string>
 #include <UCD/unicode_set.h>
+#include <UCD/PropertyObjects.h>
 
 namespace re {
     class RE;
@@ -10,6 +11,7 @@ namespace re {
 }
 
 namespace UCD {
+
 
 class UnicodePropertyExpressionError : public std::exception {
 public:
@@ -24,7 +26,7 @@ void generateGraphemeClusterBoundaryRule(re::Name * const &property);
 bool resolvePropertyDefinition(re::Name * const property);
 std::string resolvePropertyFunction(re::Name * const property);
 UCD::UnicodeSet resolveUnicodeSet(re::Name * const name);
-const std::string& getPropertyValueGrepString(const std::string & prop);
+const PropertyString & getPropertyValueGrepString(const std::string & prop);
 
 }
 

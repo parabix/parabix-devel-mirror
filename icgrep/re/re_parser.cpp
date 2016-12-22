@@ -65,16 +65,16 @@ RE * RE_Parser::parse(const std::string & regular_expression, ModeFlagSet initia
 }
 
 RE_Parser::RE_Parser(const std::string & regular_expression)
-    : fModeFlagSet(0)
-    , fNested(false)
-    , fGraphemeBoundaryPending(false)
-    , fSupportNonCaptureGroup(false)
-    , mCursor(regular_expression)
-    , mCaptureGroupCount(0)
-    , mReSyntax(RE_Syntax::PCRE)
-    {
+: fModeFlagSet(0)
+, fNested(false)
+, fGraphemeBoundaryPending(false)
+, fSupportNonCaptureGroup(false)
+, mCursor(regular_expression)
+, mCaptureGroupCount(0)
+, mReSyntax(RE_Syntax::PCRE)
+{
 
-    }
+}
 
 RE * makeAtomicGroup(RE * r) {
     RE_Parser::ParseFailure("Atomic grouping not supported.");

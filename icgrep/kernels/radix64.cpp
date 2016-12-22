@@ -290,7 +290,7 @@ void expand3_4Kernel::generateDoBlockMethod() {
     Function * doSegmentFunction = m->getFunction(mKernelName + doSegment_suffix);
     iBuilder->SetInsertPoint(BasicBlock::Create(iBuilder->getContext(), "entry", doBlockFunction, 0));
     Value * self = getParameter(doBlockFunction, "self");
-    iBuilder->CreateCall(doSegmentFunction, {self, ConstantInt::get(iBuilder->getSizeTy(), 1)});
+    iBuilder->CreateCall(doSegmentFunction, {self, iBuilder->getSize(1)});
     iBuilder->CreateRetVoid();
     iBuilder->restoreIP(savePoint);
 }
@@ -357,25 +357,24 @@ void radix64Kernel::generateFinalBlockMethod() {
     Function::arg_iterator args = finalBlockFunction->arg_begin();
     Value * self = &*(args++);
     Value * remainingBytes = &*(args++);
-    Value * remainMod4 = iBuilder->CreateAnd(remainingBytes, ConstantInt::get(iBuilder->getSizeTy(), 3));
+    Value * remainMod4 = iBuilder->CreateAnd(remainingBytes, iBuilder->getSize(3));
 
     const unsigned PACK_SIZE = iBuilder->getStride()/8;
     Constant * packSize = ConstantInt::get(iBuilder->getSizeTy(), PACK_SIZE);
     Value * blockNo = getScalarField(self, blockNoScalar);
     Value * expandedstream_ptr = getStreamSetBlockPtr(self, "expandedStream", blockNo);
     Value * radix64stream_ptr = getStreamSetBlockPtr(self, "radix64stream", blockNo);
-    Type * i8_t = iBuilder->getInt8Ty();
 
-    Value * step_right_6 = iBuilder->simd_fill(32, ConstantInt::get(iBuilder->getInt32Ty(), 0x00C00000));
-    Value * step_left_8 = iBuilder->simd_fill(32, ConstantInt::get(iBuilder->getInt32Ty(), 0x003F0000));
-    Value * step_right_4 = iBuilder->simd_fill(32, ConstantInt::get(iBuilder->getInt32Ty(), 0x0000F000));
-    Value * step_left_10 = iBuilder->simd_fill(32, ConstantInt::get(iBuilder->getInt32Ty(), 0x00000F00));
-    Value * step_right_2 = iBuilder->simd_fill(32, ConstantInt::get(iBuilder->getInt32Ty(), 0x000000FC));
-    Value * step_left_12 = iBuilder->simd_fill(32, ConstantInt::get(iBuilder->getInt32Ty(), 0x00000003));
+    Value * step_right_6 = iBuilder->simd_fill(32, iBuilder->getInt32(0x00C00000));
+    Value * step_left_8 = iBuilder->simd_fill(32, iBuilder->getInt32(0x003F0000));
+    Value * step_right_4 = iBuilder->simd_fill(32, iBuilder->getInt32(0x0000F000));
+    Value * step_left_10 = iBuilder->simd_fill(32, iBuilder->getInt32(0x00000F00));
+    Value * step_right_2 = iBuilder->simd_fill(32, iBuilder->getInt32(0x000000FC));
+    Value * step_left_12 = iBuilder->simd_fill(32, iBuilder->getInt32(0x00000003));
 
 
     // Enter the loop only if there is at least one byte remaining to process.
-    iBuilder->CreateCondBr(iBuilder->CreateICmpEQ(remainingBytes, ConstantInt::get(iBuilder->getSizeTy(), 0)), fbExit, radix64_loop);
+    iBuilder->CreateCondBr(iBuilder->CreateICmpEQ(remainingBytes, iBuilder->getSize(0)), fbExit, radix64_loop);
 
     iBuilder->SetInsertPoint(radix64_loop);
     PHINode * idx = iBuilder->CreatePHI(iBuilder->getInt32Ty(), 2);
@@ -411,7 +410,7 @@ void radix64Kernel::generateFinalBlockMethod() {
 
     iBuilder->SetInsertPoint(loopExit);
     // All base64 data has been computed, but we may need to set one or two '=' padding bytes.
-    iBuilder->CreateCondBr(iBuilder->CreateICmpEQ(remainMod4, ConstantInt::get(iBuilder->getSizeTy(), 0)), fbExit, handleRemainFirstByte);
+    iBuilder->CreateCondBr(iBuilder->CreateICmpEQ(remainMod4, iBuilder->getSize(0)), fbExit, handleRemainFirstByte);
     iBuilder->SetInsertPoint(handleRemainFirstByte);
     // At least one padding byte required.
 
@@ -430,7 +429,7 @@ void radix64Kernel::generateFinalBlockMethod() {
     iBuilder->CreateStore(first_output_byte, iBuilder->CreateGEP(i8output_ptr, {iBuilder->CreateAdd(remainOutputStart, iBuilder->getInt64(0))}));
 
 
-    iBuilder->CreateCondBr(iBuilder->CreateICmpEQ(remainMod4, ConstantInt::get(iBuilder->getSizeTy(), 1)), handleNoRemainSecondByte, handleRemainSecondByte);
+    iBuilder->CreateCondBr(iBuilder->CreateICmpEQ(remainMod4, iBuilder->getSize(1)), handleNoRemainSecondByte, handleRemainSecondByte);
     iBuilder->SetInsertPoint(handleRemainSecondByte);
 
     Value * secondRemainByte = iBuilder->CreateLoad(iBuilder->CreateGEP(i8input_ptr, {iBuilder->getInt32(1)}));
@@ -449,7 +448,7 @@ void radix64Kernel::generateFinalBlockMethod() {
     iBuilder->CreateBr(fbExit);
 
     iBuilder->SetInsertPoint(fbExit);
-    Value * outputNumberAdd = iBuilder->CreateSelect(iBuilder->CreateICmpEQ(remainMod4, ConstantInt::get(iBuilder->getSizeTy(), 0)), ConstantInt::get(iBuilder->getSizeTy(), 0), ConstantInt::get(iBuilder->getSizeTy(), 1));
+    Value * outputNumberAdd = iBuilder->CreateSelect(iBuilder->CreateICmpEQ(remainMod4, iBuilder->getSize(0)), iBuilder->getSize(0), iBuilder->getSize(1));
     Value * produced = iBuilder->CreateAdd(getProducedItemCount(self), iBuilder->CreateAdd(remainingBytes, outputNumberAdd));
     setProducedItemCount(self, produced);
 
@@ -476,26 +475,24 @@ void radix64Kernel::generateDoBlockMethod() {
 
 void base64Kernel::generateDoBlockLogic(Value * self, Value * blockNo) {
     Value * radix64stream_ptr = getStreamSetBlockPtr(self, "radix64stream", blockNo);
-    Value * base64stream_ptr = getStreamSetBlockPtr(self, "base64stream", blockNo);
-    Type * i8_t = iBuilder->getInt8Ty();
-    
+    Value * base64stream_ptr = getStreamSetBlockPtr(self, "base64stream", blockNo);   
     for (unsigned i = 0; i < 8; i++) {
         Value * bytepack = iBuilder->CreateBlockAlignedLoad(radix64stream_ptr, {iBuilder->getInt32(0), iBuilder->getInt32(0), iBuilder->getInt32(i)});
-        Value * mask_gt_25 = iBuilder->simd_ugt(8, bytepack, iBuilder->simd_fill(8, ConstantInt::get(i8_t, 25)));
-        Value * mask_gt_51 = iBuilder->simd_ugt(8, bytepack, iBuilder->simd_fill(8, ConstantInt::get(i8_t, 51)));
-        Value * mask_eq_62 = iBuilder->simd_eq(8, bytepack, iBuilder->simd_fill(8, ConstantInt::get(i8_t, 62)));
-        Value * mask_eq_63 = iBuilder->simd_eq(8, bytepack, iBuilder->simd_fill(8, ConstantInt::get(i8_t, 63)));
+        Value * mask_gt_25 = iBuilder->simd_ugt(8, bytepack, iBuilder->simd_fill(8, iBuilder->getInt8(25)));
+        Value * mask_gt_51 = iBuilder->simd_ugt(8, bytepack, iBuilder->simd_fill(8, iBuilder->getInt8(51)));
+        Value * mask_eq_62 = iBuilder->simd_eq(8, bytepack, iBuilder->simd_fill(8, iBuilder->getInt8(62)));
+        Value * mask_eq_63 = iBuilder->simd_eq(8, bytepack, iBuilder->simd_fill(8, iBuilder->getInt8(63)));
         // Strategy:
         // 1. add ord('A') = 65 to all radix64 values, this sets the correct values for entries 0 to 25.
         // 2. add ord('a') - ord('A') - (26 - 0) = 6 to all values >25, this sets the correct values for entries 0 to 51
         // 3. subtract ord('a') - ord('0') + (52 - 26) = 75 to all values > 51, this sets the correct values for entries 0 to 61
         // 4. subtract ord('0') - ord('+') + (62 - 52) = 15 for all values = 62
         // 4. subtract ord('0') - ord('/') + (63 - 62) = 2 for all values = 63
-        Value * t0_25 = iBuilder->simd_add(8, bytepack, iBuilder->simd_fill(8, ConstantInt::get(i8_t, 'A')));
-        Value * t0_51 = iBuilder->simd_add(8, t0_25, iBuilder->simd_and(mask_gt_25, iBuilder->simd_fill(8, ConstantInt::get(i8_t, 6))));
-        Value * t0_61 = iBuilder->simd_sub(8, t0_51, iBuilder->simd_and(mask_gt_51, iBuilder->simd_fill(8, ConstantInt::get(i8_t, 75))));
-        Value * t0_62 = iBuilder->simd_sub(8, t0_61, iBuilder->simd_and(mask_eq_62, iBuilder->simd_fill(8, ConstantInt::get(i8_t, 15))));
-        Value * base64pack = iBuilder->simd_sub(8, t0_62, iBuilder->simd_and(mask_eq_63, iBuilder->simd_fill(8, ConstantInt::get(i8_t, 2))));
+        Value * t0_25 = iBuilder->simd_add(8, bytepack, iBuilder->simd_fill(8, iBuilder->getInt8('A')));
+        Value * t0_51 = iBuilder->simd_add(8, t0_25, iBuilder->simd_and(mask_gt_25, iBuilder->simd_fill(8, iBuilder->getInt8(6))));
+        Value * t0_61 = iBuilder->simd_sub(8, t0_51, iBuilder->simd_and(mask_gt_51, iBuilder->simd_fill(8, iBuilder->getInt8(75))));
+        Value * t0_62 = iBuilder->simd_sub(8, t0_61, iBuilder->simd_and(mask_eq_62, iBuilder->simd_fill(8, iBuilder->getInt8(15))));
+        Value * base64pack = iBuilder->simd_sub(8, t0_62, iBuilder->simd_and(mask_eq_63, iBuilder->simd_fill(8, iBuilder->getInt8(2))));
         iBuilder->CreateBlockAlignedStore(iBuilder->bitCast(base64pack), base64stream_ptr, {iBuilder->getInt32(0), iBuilder->getInt32(0), iBuilder->getInt32(i)});
     }
     Value * produced = getProducedItemCount(self);
@@ -526,15 +523,13 @@ void base64Kernel::generateFinalBlockMethod() {
     Value * padBytes = iBuilder->CreateSub(ConstantInt::get(iBuilder->getSizeTy(), 4), remainMod4);
     padBytes = iBuilder->CreateAnd(padBytes, ConstantInt::get(iBuilder->getSizeTy(), 3));
 
-    const unsigned PACK_SIZE = iBuilder->getStride()/8;
-    Constant * packSize = ConstantInt::get(iBuilder->getSizeTy(), PACK_SIZE);
+    Constant * packSize = iBuilder->getSize(iBuilder->getStride() / 8);
     Value * blockNo = getScalarField(self, blockNoScalar);
     Value * radix64stream_ptr = getStreamSetBlockPtr(self, "radix64stream", blockNo);
     Value * base64stream_ptr = getStreamSetBlockPtr(self, "base64stream", blockNo);
-    Type * i8_t = iBuilder->getInt8Ty();
     
     // Enter the loop only if there is at least one byte remaining to process.
-    iBuilder->CreateCondBr(iBuilder->CreateICmpEQ(remainingBytes, ConstantInt::get(iBuilder->getSizeTy(), 0)), fbExit, base64_loop);
+    iBuilder->CreateCondBr(iBuilder->CreateICmpEQ(remainingBytes, iBuilder->getSize(0)), fbExit, base64_loop);
     
     iBuilder->SetInsertPoint(base64_loop);
     PHINode * idx = iBuilder->CreatePHI(iBuilder->getInt32Ty(), 2);
@@ -542,15 +537,15 @@ void base64Kernel::generateFinalBlockMethod() {
     idx->addIncoming(ConstantInt::getNullValue(iBuilder->getInt32Ty()), base64_fb_entry);
     loopRemain->addIncoming(remainingBytes, base64_fb_entry);
     Value * bytepack = iBuilder->CreateBlockAlignedLoad(radix64stream_ptr, {iBuilder->getInt32(0), iBuilder->getInt32(0), idx});
-    Value * mask_gt_25 = iBuilder->simd_ugt(8, bytepack, iBuilder->simd_fill(8, ConstantInt::get(i8_t, 25)));
-    Value * mask_gt_51 = iBuilder->simd_ugt(8, bytepack, iBuilder->simd_fill(8, ConstantInt::get(i8_t, 51)));
-    Value * mask_eq_62 = iBuilder->simd_eq(8, bytepack, iBuilder->simd_fill(8, ConstantInt::get(i8_t, 62)));
-    Value * mask_eq_63 = iBuilder->simd_eq(8, bytepack, iBuilder->simd_fill(8, ConstantInt::get(i8_t, 63)));
-    Value * t0_25 = iBuilder->simd_add(8, bytepack, iBuilder->simd_fill(8, ConstantInt::get(i8_t, 'A')));
-    Value * t0_51 = iBuilder->simd_add(8, t0_25, iBuilder->simd_and(mask_gt_25, iBuilder->simd_fill(8, ConstantInt::get(i8_t, 6))));
-    Value * t0_61 = iBuilder->simd_sub(8, t0_51, iBuilder->simd_and(mask_gt_51, iBuilder->simd_fill(8, ConstantInt::get(i8_t, 75))));
-    Value * t0_62 = iBuilder->simd_sub(8, t0_61, iBuilder->simd_and(mask_eq_62, iBuilder->simd_fill(8, ConstantInt::get(i8_t, 15))));
-    Value * base64pack = iBuilder->simd_sub(8, t0_62, iBuilder->simd_and(mask_eq_63, iBuilder->simd_fill(8, ConstantInt::get(i8_t, 2))));
+    Value * mask_gt_25 = iBuilder->simd_ugt(8, bytepack, iBuilder->simd_fill(8, iBuilder->getInt8(25)));
+    Value * mask_gt_51 = iBuilder->simd_ugt(8, bytepack, iBuilder->simd_fill(8, iBuilder->getInt8(51)));
+    Value * mask_eq_62 = iBuilder->simd_eq(8, bytepack, iBuilder->simd_fill(8, iBuilder->getInt8(62)));
+    Value * mask_eq_63 = iBuilder->simd_eq(8, bytepack, iBuilder->simd_fill(8, iBuilder->getInt8(63)));
+    Value * t0_25 = iBuilder->simd_add(8, bytepack, iBuilder->simd_fill(8, iBuilder->getInt8('A')));
+    Value * t0_51 = iBuilder->simd_add(8, t0_25, iBuilder->simd_and(mask_gt_25, iBuilder->simd_fill(8, iBuilder->getInt8(6))));
+    Value * t0_61 = iBuilder->simd_sub(8, t0_51, iBuilder->simd_and(mask_gt_51, iBuilder->simd_fill(8, iBuilder->getInt8(75))));
+    Value * t0_62 = iBuilder->simd_sub(8, t0_61, iBuilder->simd_and(mask_eq_62, iBuilder->simd_fill(8, iBuilder->getInt8(15))));
+    Value * base64pack = iBuilder->simd_sub(8, t0_62, iBuilder->simd_and(mask_eq_63, iBuilder->simd_fill(8, iBuilder->getInt8(2))));
     iBuilder->CreateBlockAlignedStore(iBuilder->bitCast(base64pack), base64stream_ptr, {iBuilder->getInt32(0), iBuilder->getInt32(0), idx});
     idx->addIncoming(iBuilder->CreateAdd(idx, ConstantInt::get(iBuilder->getInt32Ty(), 1)), base64_loop);
     Value* remainAfterLoop = iBuilder->CreateSub(loopRemain, packSize);
@@ -560,13 +555,13 @@ void base64Kernel::generateFinalBlockMethod() {
     iBuilder->CreateCondBr(continueLoop, base64_loop, loopExit);
 
     iBuilder->SetInsertPoint(loopExit);
-    iBuilder->CreateCondBr(iBuilder->CreateICmpEQ(padBytes, ConstantInt::get(iBuilder->getSizeTy(), 0)), fbExit, doPadding);
+    iBuilder->CreateCondBr(iBuilder->CreateICmpEQ(padBytes, iBuilder->getSize(0)), fbExit, doPadding);
     iBuilder->SetInsertPoint(doPadding);
     Value * i8output_ptr = iBuilder->CreatePointerCast(base64stream_ptr, iBuilder->getInt8PtrTy());
     iBuilder->CreateStore(ConstantInt::get(iBuilder->getInt8Ty(), '='), iBuilder->CreateGEP(i8output_ptr, {remainingBytes}));
-    iBuilder->CreateCondBr(iBuilder->CreateICmpEQ(remainMod4, ConstantInt::get(iBuilder->getSizeTy(), 3)), fbExit, doPadding2);
+    iBuilder->CreateCondBr(iBuilder->CreateICmpEQ(remainMod4, iBuilder->getSize(3)), fbExit, doPadding2);
     iBuilder->SetInsertPoint(doPadding2);
-    Value * finalPadPos = iBuilder->CreateAdd(remainingBytes, ConstantInt::get(iBuilder->getSizeTy(), 1));
+    Value * finalPadPos = iBuilder->CreateAdd(remainingBytes, iBuilder->getSize(1));
     iBuilder->CreateStore(ConstantInt::get(iBuilder->getInt8Ty(), '='), iBuilder->CreateGEP(i8output_ptr, {finalPadPos}));
     iBuilder->CreateBr(fbExit);
     iBuilder->SetInsertPoint(fbExit);

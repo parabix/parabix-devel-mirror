@@ -25,9 +25,6 @@
 #include <pablo/pablo_kernel.h>
 #include <UCD/ucd_compiler.hpp>
 #include <UCD/resolve_properties.h>
-#ifndef DISABLE_PREGENERATED_UCD_FUNCTIONS
-#include <UCD/precompiled_properties.h>
-#endif
 #include <assert.h>
 #include <stdexcept>
 #include <iostream>

@@ -4,69 +4,34 @@
  *  icgrep is a trademark of International Characters.
  */
 
-#include <grep_engine.h>
-#include <IDISA/idisa_builder.h>
-#include <IDISA/idisa_target.h>
-#include <llvm/Support/CommandLine.h>
-#include <re/re_toolchain.h>
-#include <re/re_cc.h>
-
-#include <pablo/pablo_toolchain.h>
-#include <toolchain.h>
-#include <pablo/pablo_compiler.h>
-#include <kernels/pipeline.h>
-#include <llvm/IR/Function.h>
-#include <llvm/IR/Type.h>
-#include <llvm/IR/Module.h>
+#include "grep_engine.h"
 #include <llvm/ExecutionEngine/MCJIT.h>
-#include <llvm/IRReader/IRReader.h>
-#include <llvm/Support/Debug.h>
 #include <llvm/IR/Verifier.h>
-#include <UCD/UnicodeNameData.h>
-#include <UCD/resolve_properties.h>
-
-
-#include <kernels/streamset.h>
-#include <kernels/scanmatchgen.h>
-#include <kernels/s2p_kernel.h>
-#include <kernels/cc_kernel.h>
-#include <kernels/pipeline.h>
-
-#include <pablo/pablo_kernel.h>
-#include <pablo/pablo_toolchain.h>
-
-#include <llvm/IR/Intrinsics.h>
-#include "llvm/Support/SourceMgr.h"
-#include "llvm/IRReader/IRReader.h"
-#include "llvm/Linker/Linker.h"
-#include "llvm-c/Core.h"
-
-#include <fstream>
-#include <sstream>
-#include <iostream>
-#include <string>
-#include <stdint.h>
-
-#include <stdio.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <errno.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <stdexcept>
-#include <cctype>
-
-
-#include <llvm/Support/raw_os_ostream.h>
-
-// mmap system
+#include <llvm/IRReader/IRReader.h>
+#include <llvm/Support/CommandLine.h>
+#include <llvm/Support/Debug.h>
 #include <boost/filesystem.hpp>
 #include <boost/iostreams/device/mapped_file.hpp>
-
-#include <fcntl.h>
-
+#include <IDISA/idisa_builder.h>
+#include <IDISA/idisa_target.h>
+#include <UCD/UnicodeNameData.h>
+#include <UCD/resolve_properties.h>
+#include <kernels/cc_kernel.h>
 #include <kernels/kernel.h>
-
+#include <kernels/pipeline.h>
+#include <kernels/pipeline.h>
+#include <kernels/s2p_kernel.h>
+#include <kernels/scanmatchgen.h>
+#include <kernels/streamset.h>
+#include <pablo/pablo_compiler.h>
+#include <pablo/pablo_kernel.h>
+#include <pablo/pablo_toolchain.h>
+#include <pablo/pablo_toolchain.h>
+#include <re/re_cc.h>
+#include <re/re_toolchain.h>
+#include <toolchain.h>
+#include <iostream>
+#include <sstream>
 #ifdef CUDA_ENABLED 
 #include <IDISA/CudaDriver.h>
 #endif
@@ -469,15 +434,9 @@ re::CC *  GrepEngine::grepCodepoints() {
 
 const std::vector<std::string> & GrepEngine::grepPropertyValues(const std::string& propertyName) {
     setParsedPropertyValues();
-
-    std::string str = UCD::getPropertyValueGrepString(propertyName);
-    char* grepInput = nullptr;
-    posix_memalign( (void**)&grepInput, 32, str.size() * sizeof(char));
-    strncpy(grepInput, str.c_str(), str.size());
-    mGrepFunction(grepInput, str.size(), 0);
-    free(grepInput);
-
-    return getParsedProeprtyValues();
+    const auto & str = UCD::getPropertyValueGrepString(propertyName);
+    mGrepFunction(const_cast<char *>(str.data()), str.size(), 0);
+    return getParsedPropertyValues();
 }
 
 GrepEngine::~GrepEngine() {
@@ -613,7 +572,7 @@ re::CC * getParsedCodePointSet(){
 }
 
 
-std::vector<std::string> parsedPropertyValues;
+static std::vector<std::string> parsedPropertyValues;
 
 extern "C" {
     void insert_property_values(size_t lineNum, size_t line_start, size_t line_end, const char * buffer) {
@@ -626,14 +585,14 @@ inline void setParsedPropertyValues() {
     parsedPropertyValues.clear();
 }
 
-inline const std::vector<std::string>& getParsedProeprtyValues() {
+inline const std::vector<std::string>& getParsedPropertyValues() {
     return parsedPropertyValues;
 }
 
 
 void icgrep_Linking(Module * m, ExecutionEngine * e) {
     Module::FunctionListType & fns = m->getFunctionList();
-    for (Module::FunctionListType::iterator it = fns.begin(), it_end = fns.end(); it != it_end; ++it) {
+    for (auto it = fns.begin(), it_end = fns.end(); it != it_end; ++it) {
         std::string fnName = it->getName().str();
         if (fnName == "s2p_block") continue;
         if (fnName == "process_block") continue;
@@ -648,12 +607,6 @@ void icgrep_Linking(Module * m, ExecutionEngine * e) {
         if (fnName == "insert_property_values") {
             e->addGlobalMapping(cast<GlobalValue>(it), (void *)&insert_property_values);
         }
-#ifndef DISABLE_PREGENERATED_UCD_FUNCTIONS
-        else {
-            const UCD::ExternalProperty & ep = UCD::resolveExternalProperty(fnName);
-            e->addGlobalMapping(cast<GlobalValue>(it), std::get<0>(ep));
-        }
-#endif
     }
 }
 

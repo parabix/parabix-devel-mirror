@@ -30,7 +30,7 @@ void StdOutKernel::generateDoBlockMethod() {
     Function * doSegmentFunction = m->getFunction(mKernelName + doSegment_suffix);
     iBuilder->SetInsertPoint(BasicBlock::Create(iBuilder->getContext(), "entry", doBlockFunction, 0));
     Value * self = getParameter(doBlockFunction, "self");
-    iBuilder->CreateCall(doSegmentFunction, {self, ConstantInt::get(iBuilder->getSizeTy(), 1)});
+    iBuilder->CreateCall(doSegmentFunction, {self, iBuilder->getSize(1)});
     iBuilder->CreateRetVoid();
     iBuilder->restoreIP(savePoint);
 }

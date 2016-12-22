@@ -397,8 +397,8 @@ u8u16FunctionType u8u16CodeGen(void) {
 
 void u8u16(u8u16FunctionType fn_ptr, const std::string & fileName) {
     std::string mFileName = fileName;
-    size_t mFileSize;
-    char * mFileBuffer;
+    size_t fileSize;
+    char * fileBuffer;
     
     const boost::filesystem::path file(mFileName);
     if (exists(file)) {
@@ -410,10 +410,10 @@ void u8u16(u8u16FunctionType fn_ptr, const std::string & fileName) {
         return;
     }
     
-    mFileSize = file_size(file);
+    fileSize = file_size(file);
     boost::iostreams::mapped_file_source mFile;
-    if (mFileSize == 0) {
-        mFileBuffer = nullptr;
+    if (fileSize == 0) {
+        fileBuffer = nullptr;
     }
     else {
         try {
@@ -422,24 +422,27 @@ void u8u16(u8u16FunctionType fn_ptr, const std::string & fileName) {
             std::cerr << "Error: Boost mmap of " << mFileName << ": " << e.what() << std::endl;
             return;
         }
-        mFileBuffer = const_cast<char *>(mFile.data());
+        fileBuffer = const_cast<char *>(mFile.data());
     }
 
     if (mMapBuffering) {
-        boost::interprocess::mapped_region outputBuffer(boost::interprocess::anonymous_shared_memory(2*mFileSize));
+        boost::interprocess::mapped_region outputBuffer(boost::interprocess::anonymous_shared_memory(2*fileSize));
         outputBuffer.advise(boost::interprocess::mapped_region::advice_willneed);
         outputBuffer.advise(boost::interprocess::mapped_region::advice_sequential);
-        fn_ptr(mFileBuffer, static_cast<char*>(outputBuffer.get_address()), mFileSize);
+        fn_ptr(fileBuffer, static_cast<char*>(outputBuffer.get_address()), fileSize);
     }
     else if (memAlignBuffering) {
         char * outputBuffer;
-        posix_memalign(reinterpret_cast<void **>(&outputBuffer), 32, 2*mFileSize);
-        fn_ptr(mFileBuffer, outputBuffer, mFileSize);
+        const auto r = posix_memalign(reinterpret_cast<void **>(&outputBuffer), 32, 2*fileSize);
+        if (LLVM_UNLIKELY(r != 0)) {
+            throw std::runtime_error("posix_memalign failed with return code " + std::to_string(r));
+        }
+        fn_ptr(fileBuffer, outputBuffer, fileSize);
         free(reinterpret_cast<void *>(outputBuffer));
     }
     else {
         /* No external output buffer */
-        fn_ptr(mFileBuffer, nullptr, mFileSize);
+        fn_ptr(fileBuffer, nullptr, fileSize);
     }
     mFile.close();
     

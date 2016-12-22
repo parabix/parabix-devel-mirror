@@ -7,18 +7,22 @@
 
 #include "PropertyObjects.h"
 #include "PropertyObjectTable.h"
-#include <sstream>
+#include <llvm/Support/Casting.h>
 #include <algorithm>
 #include <assert.h>
-#include <llvm/Support/Casting.h>
+#include <sstream>
 
 using namespace llvm;
 
 namespace UCD {
 
+using PropertyStringStream =
+    std::basic_stringstream<char, std::char_traits<char>, PropertyStringAllocator>;
+
 std::string canonicalize_value_name(const std::string & prop_or_val) {
     std::locale loc;
     std::stringstream s;
+
     for (char c : prop_or_val) {
         if ((c != '_') && (c != ' ') && (c != '-')) {
             s << std::tolower(c, loc);
@@ -30,7 +34,7 @@ std::string canonicalize_value_name(const std::string & prop_or_val) {
 int PropertyObject::GetPropertyValueEnumCode(const std::string & value_spec) {
     throw std::runtime_error("Property " + value_spec + " unsupported.");
 }
-const std::string& PropertyObject::GetPropertyValueGrepString() {
+const PropertyString & PropertyObject::GetPropertyValueGrepString() {
     throw std::runtime_error("Property Value Grep String unsupported.");
 }
 
@@ -43,9 +47,9 @@ UnicodeSet UnsupportedPropertyObject::GetCodepointSet(const int) {
 }
 
 const UnicodeSet & EnumeratedPropertyObject::GetCodepointSet(const std::string & value_spec) {
-    int property_enum_val = GetPropertyValueEnumCode(value_spec);
-    if (property_enum_val == -1) {
-        throw std::runtime_error("Enumerated Property " + UCD::property_full_name[the_property] +  ": unknown value: " + value_spec);
+    const int property_enum_val = GetPropertyValueEnumCode(value_spec);
+    if (property_enum_val < 0) {
+        throw std::runtime_error("Enumerated Property " + UCD::property_full_name[the_property] + ": unknown value: " + value_spec);
     }
     return GetCodepointSet(property_enum_val);
 }
@@ -62,11 +66,13 @@ std::vector<UnicodeSet> & EnumeratedPropertyObject::GetEnumerationBasisSets() {
         // Basis set i is the set of all codepoints whose numerical enumeration code e
         // has bit i set, i.e., (e >> i) & 1 == 1.
         unsigned basis_count = 1;
-        while ((1 << basis_count) < independent_enum_count) basis_count++;
+        while ((1UL << basis_count) < independent_enum_count) {
+            basis_count++;
+        }
         for (unsigned i = 0; i < basis_count; i++) {
             enumeration_basis_sets.push_back(UnicodeSet());
             for (unsigned e = 0; e < independent_enum_count; e++) {
-                if (((e >> i) & 1) == 0) {
+                if (((e >> i) & 1UL) == 0) {
                     enumeration_basis_sets[i] = enumeration_basis_sets[i] + *property_value_sets[e];
                 }
             }
@@ -75,14 +81,16 @@ std::vector<UnicodeSet> & EnumeratedPropertyObject::GetEnumerationBasisSets() {
     return enumeration_basis_sets;
 };
 
-const std::string& EnumeratedPropertyObject::GetPropertyValueGrepString() {
-    if (!property_value_grep_string.size()) {
+const PropertyString &EnumeratedPropertyObject::GetPropertyValueGrepString() {
+    if (LLVM_LIKELY(property_value_grep_string.empty())) {
+        PropertyStringStream buffer;
         for (unsigned i = 0; i != property_value_full_names.size(); i++) {
-            property_value_grep_string += canonicalize_value_name(property_value_full_names[i]) + "\n";
+            buffer << canonicalize_value_name(property_value_full_names[i]) + "\n";
         }
         for (unsigned i = 0; i != property_value_enum_names.size(); i++) {
-            property_value_grep_string += canonicalize_value_name(property_value_enum_names[i]) + "\n";
+            buffer << canonicalize_value_name(property_value_enum_names[i]) + "\n";
         }
+        property_value_grep_string.assign(buffer.str());
     }
     return property_value_grep_string;
 }
@@ -136,7 +144,7 @@ int ExtensionPropertyObject::GetPropertyValueEnumCode(const std::string & value_
     return property_object_table[base_property]->GetPropertyValueEnumCode(value_spec);
 }
 
-const std::string& ExtensionPropertyObject::GetPropertyValueGrepString() {
+const PropertyString & ExtensionPropertyObject::GetPropertyValueGrepString() {
     return property_object_table[base_property]->GetPropertyValueGrepString();
 }
 
@@ -163,11 +171,13 @@ const UnicodeSet & BinaryPropertyObject::GetCodepointSet(const int property_enum
     return mN;
 }
 
-const std::string& BinaryPropertyObject::GetPropertyValueGrepString() {
-    if (!property_value_grep_string.size()) {
-        for (auto iter = Binary_ns::aliases_only_map.begin(), end = Binary_ns::aliases_only_map.end(); iter != end; ++iter) {
-            property_value_grep_string += iter->first + "\n";
+const PropertyString & BinaryPropertyObject::GetPropertyValueGrepString() {
+    if (property_value_grep_string.empty()) {
+        PropertyStringStream buffer;
+        for (const auto & prop : Binary_ns::aliases_only_map) {
+            buffer << std::get<0>(prop) + "\n";
         }
+        property_value_grep_string.assign(buffer.str());
     }
     return property_value_grep_string;
 }

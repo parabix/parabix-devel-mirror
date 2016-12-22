@@ -25,11 +25,11 @@ using namespace boost::container;
 
 namespace re {
   
-static inline CC * getDefinition(RE * re) {
+static inline CC * extractCC(RE * re) {
     if (isa<CC>(re)) {
         return cast<CC>(re);
     } else if (isa<Name>(re)) {
-        return getDefinition(cast<Name>(re)->getDefinition());
+        return extractCC(cast<Name>(re)->getDefinition());
     }
     return nullptr;
 }
@@ -47,23 +47,12 @@ struct NameResolver {
                         if (name->getType() == Name::Type::ZeroWidth) {
                             mZeroWidth = name;
                         }
-                        resolve(name->getDefinition());
+                        name->setDefinition(resolve(name->getDefinition()));
                     } else {
-                        #ifndef DISABLE_PREGENERATED_UCD_FUNCTIONS
-                        if (AlgorithmOptionIsSet(UsePregeneratedUnicode)) {
-                            const std::string functionName = UCD::resolvePropertyFunction(name);
-                            const UCD::ExternalProperty & ep = UCD::resolveExternalProperty(functionName);
-                            Call * call = mPB.createCall(Prototype::Create(functionName, std::get<1>(ep), std::get<2>(ep), std::get<0>(ep)), mCCCompiler.getBasisBits());
-                            name->setCompiled(call);
-                        } else {
-                        #endif
-                            name->setDefinition(makeCC(UCD::resolveUnicodeSet(name)));
-                        #ifndef DISABLE_PREGENERATED_UCD_FUNCTIONS
-                        }
-                        #endif
+                        name->setDefinition(makeCC(UCD::resolveUnicodeSet(name)));
                     }
                 } else {
-                throw std::runtime_error("All non-unicode-property Name objects should have been defined prior to Unicode property resolution.");
+                    throw std::runtime_error("All non-unicode-property Name objects should have been defined prior to Unicode property resolution.");
                 }
             } else {
                 return *f;
@@ -77,7 +66,7 @@ struct NameResolver {
             std::stringstream name;
             for (auto ai = alt->begin(); ai != alt->end(); ) {
                 RE * re = resolve(*ai);
-                if (CC * cc = getDefinition(re)) {
+                if (CC * cc = extractCC(re)) {
                     if (unionCC == nullptr) {
                         unionCC = cc;
                     } else {
@@ -111,16 +100,16 @@ struct NameResolver {
         } else if (Diff * diff = dyn_cast<Diff>(re)) {
             diff->setLH(resolve(diff->getLH()));
             diff->setRH(resolve(diff->getRH()));
-            CC * lh = getDefinition(diff->getLH());
-            CC * rh = getDefinition(diff->getRH());
+            CC * lh = extractCC(diff->getLH());
+            CC * rh = extractCC(diff->getRH());
             if (lh && rh) {
                 return resolve(makeName("diff", subtractCC(lh, rh)));
             }
         } else if (Intersect * ix = dyn_cast<Intersect>(re)) {
             ix->setLH(resolve(ix->getLH()));
             ix->setRH(resolve(ix->getRH()));
-            CC * lh = getDefinition(ix->getLH());
-            CC * rh = getDefinition(ix->getRH());
+            CC * lh = extractCC(ix->getLH());
+            CC * rh = extractCC(ix->getRH());
             if (lh && rh) {
                 return resolve(makeName("intersect", intersectCC(lh, rh)));
             }

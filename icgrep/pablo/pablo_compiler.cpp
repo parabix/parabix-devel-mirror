@@ -283,7 +283,7 @@ void PabloCompiler::compileWhile(const While * const whileStatement) {
     }
 #ifdef ENABLE_BOUNDED_WHILE
     if (whileStatement->getBound()) {
-        Value * new_bound = iBuilder->CreateSub(bound_phi, ConstantInt::get(iBuilder->getSizeTy(), 1));
+        Value * new_bound = iBuilder->CreateSub(bound_phi, iBuilder->getSize(1));
         bound_phi->addIncoming(new_bound, whileExitBlock);
         condition = iBuilder->CreateAnd(condition, iBuilder->CreateICmpUGT(new_bound, ConstantInt::getNullValue(iBuilder->getSizeTy())));
     }

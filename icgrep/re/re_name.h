@@ -54,8 +54,7 @@ protected:
     , mNameLength(nameLength)
     , mName(replicateString(name, nameLength))
     , mType(type)
-    , mDefinition(defn)
-    {
+    , mDefinition(defn) {
 
     }
     inline const char * replicateString(const char * string, const length_t length) {

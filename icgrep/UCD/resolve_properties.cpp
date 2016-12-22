@@ -219,9 +219,8 @@ std::string resolvePropertyFunction(Name * const property) {
     return functionName;
 }
 
-const std::string& getPropertyValueGrepString(const std::string & prop) {
-    auto propName = canonicalize_value_name(prop);
-    auto propit = alias_map.find(propName);
+const PropertyString & getPropertyValueGrepString(const std::string & prop) {
+    auto propit = alias_map.find(canonicalize_value_name(prop));
     if (propit == alias_map.end()) {
         throw UnicodePropertyExpressionError("Expected a property name, but '" + prop + "' found instead");
     }
