@@ -13,14 +13,8 @@
 #include <string>
 #include <vector>
 #include <unordered_map>
-#include <util/aligned_allocator.h>
 
 namespace UCD {
-
-using PropertyStringAllocator = AlignedAllocator<char, 32>;
-
-using PropertyString =
-    std::basic_string<char, std::char_traits<char>, PropertyStringAllocator>;
 
 std::string canonicalize_value_name(const std::string & prop_or_val);
 
@@ -47,7 +41,7 @@ public:
     }
     PropertyObject(property_t p, ClassTypeId k) : the_property(p), the_kind(k) {}
     virtual int GetPropertyValueEnumCode(const std::string & value_spec);
-    virtual const PropertyString & GetPropertyValueGrepString();
+    virtual const std::string & GetPropertyValueGrepString();
     property_t the_property;
     ClassTypeId the_kind;
 };
@@ -95,7 +89,7 @@ public:
     }
 
     virtual int GetPropertyValueEnumCode(const std::string & value_spec);
-    virtual const PropertyString & GetPropertyValueGrepString();
+    virtual const std::string & GetPropertyValueGrepString();
     const UnicodeSet & GetCodepointSet(const std::string & value_spec);
     const UnicodeSet & GetCodepointSet(const int property_enum_val) const;
     std::vector<UnicodeSet> & GetEnumerationBasisSets();
@@ -106,7 +100,7 @@ public:
         return property_value_enum_names.cbegin();
     }
 
-     iterator end() const {
+    iterator end() const {
         return property_value_enum_names.cend();
     }
 
@@ -115,7 +109,7 @@ private:
     const std::vector<std::string> & property_value_enum_names;  // never changes
     const std::vector<std::string> & property_value_full_names;  // never changes
     std::unordered_map<std::string, int> & property_value_aliases;
-    PropertyString property_value_grep_string;
+    std::string mPropertyValueGrepString;
     bool uninitialized; // full names must be added dynamically.
     const std::vector<const UnicodeSet *> property_value_sets;
     std::vector<UnicodeSet> enumeration_basis_sets;
@@ -145,7 +139,7 @@ public:
     iterator end() const;
 
     virtual int GetPropertyValueEnumCode(const std::string & value_spec);
-    virtual const PropertyString & GetPropertyValueGrepString();
+    virtual const std::string & GetPropertyValueGrepString();
     const UnicodeSet & GetCodepointSet(const std::string & value_spec);
     const UnicodeSet & GetCodepointSet(const int property_enum_val) const;
 
@@ -171,12 +165,12 @@ public:
     }
     const UnicodeSet & GetCodepointSet(const std::string & value_spec);
     const UnicodeSet & GetCodepointSet(const int property_enum_val);
-    virtual const PropertyString & GetPropertyValueGrepString();
+    virtual const std::string & GetPropertyValueGrepString();
 private:
     bool mNoUninitialized;
     UnicodeSet mY;
     UnicodeSet mN;
-    PropertyString property_value_grep_string;
+    std::string mPropertyValueGrepString;
 };
 
 }

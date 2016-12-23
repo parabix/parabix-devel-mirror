@@ -16,9 +16,6 @@ using namespace llvm;
 
 namespace UCD {
 
-using PropertyStringStream =
-    std::basic_stringstream<char, std::char_traits<char>, PropertyStringAllocator>;
-
 std::string canonicalize_value_name(const std::string & prop_or_val) {
     std::locale loc;
     std::stringstream s;
@@ -34,7 +31,7 @@ std::string canonicalize_value_name(const std::string & prop_or_val) {
 int PropertyObject::GetPropertyValueEnumCode(const std::string & value_spec) {
     throw std::runtime_error("Property " + value_spec + " unsupported.");
 }
-const PropertyString & PropertyObject::GetPropertyValueGrepString() {
+const std::string & PropertyObject::GetPropertyValueGrepString() {
     throw std::runtime_error("Property Value Grep String unsupported.");
 }
 
@@ -79,20 +76,20 @@ std::vector<UnicodeSet> & EnumeratedPropertyObject::GetEnumerationBasisSets() {
         }
     }
     return enumeration_basis_sets;
-};
+}
 
-const PropertyString &EnumeratedPropertyObject::GetPropertyValueGrepString() {
-    if (LLVM_LIKELY(property_value_grep_string.empty())) {
-        PropertyStringStream buffer;
+const std::string & EnumeratedPropertyObject::GetPropertyValueGrepString() {
+    if (LLVM_LIKELY(mPropertyValueGrepString.empty())) {
+        std::stringstream buffer;
         for (unsigned i = 0; i != property_value_full_names.size(); i++) {
             buffer << canonicalize_value_name(property_value_full_names[i]) + "\n";
         }
         for (unsigned i = 0; i != property_value_enum_names.size(); i++) {
             buffer << canonicalize_value_name(property_value_enum_names[i]) + "\n";
         }
-        property_value_grep_string.assign(buffer.str());
+        mPropertyValueGrepString = buffer.str();
     }
-    return property_value_grep_string;
+    return mPropertyValueGrepString;
 }
 
 int EnumeratedPropertyObject::GetPropertyValueEnumCode(const std::string & value_spec) {
@@ -144,7 +141,7 @@ int ExtensionPropertyObject::GetPropertyValueEnumCode(const std::string & value_
     return property_object_table[base_property]->GetPropertyValueEnumCode(value_spec);
 }
 
-const PropertyString & ExtensionPropertyObject::GetPropertyValueGrepString() {
+const std::string & ExtensionPropertyObject::GetPropertyValueGrepString() {
     return property_object_table[base_property]->GetPropertyValueGrepString();
 }
 
@@ -171,15 +168,15 @@ const UnicodeSet & BinaryPropertyObject::GetCodepointSet(const int property_enum
     return mN;
 }
 
-const PropertyString & BinaryPropertyObject::GetPropertyValueGrepString() {
-    if (property_value_grep_string.empty()) {
-        PropertyStringStream buffer;
+const std::string & BinaryPropertyObject::GetPropertyValueGrepString() {
+    if (mPropertyValueGrepString.empty()) {
+        std::stringstream buffer;
         for (const auto & prop : Binary_ns::aliases_only_map) {
             buffer << std::get<0>(prop) + "\n";
         }
-        property_value_grep_string.assign(buffer.str());
+        mPropertyValueGrepString = buffer.str();
     }
-    return property_value_grep_string;
+    return mPropertyValueGrepString;
 }
 
 }

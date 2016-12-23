@@ -137,6 +137,8 @@ ENDIF()
 #Enable all warnings
 SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall")
 
+SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -D_GLIBCXX_USE_CXX11_ABI=0")
+
 SET(CMAKE_REQUIRED_FLAGS)
 
 # detect LLVM version and add compiler flags.

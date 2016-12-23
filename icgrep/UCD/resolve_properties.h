@@ -26,7 +26,7 @@ void generateGraphemeClusterBoundaryRule(re::Name * const &property);
 bool resolvePropertyDefinition(re::Name * const property);
 std::string resolvePropertyFunction(re::Name * const property);
 UCD::UnicodeSet resolveUnicodeSet(re::Name * const name);
-const PropertyString & getPropertyValueGrepString(const std::string & prop);
+const std::string & getPropertyValueGrepString(const std::string & prop);
 
 }
 

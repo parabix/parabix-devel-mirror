@@ -35,6 +35,7 @@
 #ifdef CUDA_ENABLED 
 #include <IDISA/CudaDriver.h>
 #endif
+#include <util/aligned_allocator.h>
 
 static cl::OptionCategory bGrepOutputOptions("Output Options",
                                              "These options control the output.");
@@ -433,9 +434,14 @@ re::CC *  GrepEngine::grepCodepoints() {
 }
 
 const std::vector<std::string> & GrepEngine::grepPropertyValues(const std::string& propertyName) {
+    AlignedAllocator<char, 32> alloc;
     setParsedPropertyValues();
-    const auto & str = UCD::getPropertyValueGrepString(propertyName);
-    mGrepFunction(const_cast<char *>(str.data()), str.size(), 0);
+    const std::string & str = UCD::getPropertyValueGrepString(propertyName);
+    char * aligned = alloc.allocate(str.length() + 1, 0);
+    std::memcpy(aligned, str.data(), str.length());
+    aligned[str.length()] = '\0';
+    mGrepFunction(aligned, str.length(), 0);
+    alloc.deallocate(aligned, 0);
     return getParsedPropertyValues();
 }
 

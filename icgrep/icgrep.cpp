@@ -302,7 +302,10 @@ void pipeIcGrepOutputToGrep(int argc, char *argv[]) {
 #endif
     systemCall.append(grepArguments);
 
-    system(systemCall.c_str());
+    const auto rc = system(systemCall.c_str());
+    if (LLVM_UNLIKELY(rc < 0)) {
+        throw std::runtime_error("Error calling grep: " + std::string(strerror(errno)));
+    }
 }
 
 
