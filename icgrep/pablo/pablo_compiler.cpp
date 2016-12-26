@@ -13,7 +13,7 @@
 #include <re/re_name.h>
 #include <stdexcept>
 #include <sstream>
-#include <IDISA/idisa_builder.h>
+#include <IR_Gen/idisa_builder.h>
 #include <llvm/IR/Module.h>
 #include <llvm/IR/IRBuilder.h>
 #include <iostream>

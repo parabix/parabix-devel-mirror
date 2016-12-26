@@ -21,8 +21,8 @@
 #include <llvm/Support/CommandLine.h>
 
 #include <toolchain.h>
-#include <IDISA/idisa_builder.h>
-#include <IDISA/idisa_target.h>
+#include <IR_Gen/idisa_builder.h>
+#include <IR_Gen/idisa_target.h>
 #include <kernels/pipeline.h>
 #include <kernels/interface.h>
 #include <kernels/kernel.h>

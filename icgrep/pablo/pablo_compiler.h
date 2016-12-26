@@ -14,7 +14,7 @@
 #include <pablo/pablo_kernel.h>
 #include <llvm/ADT/Twine.h>
 #include <llvm/IR/IRBuilder.h>
-#include <IDISA/idisa_builder.h>
+#include <IR_Gen/idisa_builder.h>
 #include <kernels/kernel.h>
 #include <boost/container/flat_set.hpp>
 

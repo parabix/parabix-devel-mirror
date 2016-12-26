@@ -4,7 +4,7 @@
  */
 #include "editd_cpu_kernel.h"
 #include <kernels/kernel.h>
-#include <IDISA/idisa_builder.h>
+#include <IR_Gen/idisa_builder.h>
 #include <llvm/Support/raw_ostream.h>
 #include <iostream>
 

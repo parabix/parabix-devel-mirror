@@ -8,7 +8,7 @@
 #define CARRY_MANAGER_H
 #include <llvm/IR/IRBuilder.h>
 #include <llvm/IR/Module.h>
-#include <IDISA/idisa_builder.h>
+#include <IR_Gen/idisa_builder.h>
 #include <pablo/pablo_kernel.h>
 #include <pablo/codegenstate.h>
 #include <pablo/carry_data.h>

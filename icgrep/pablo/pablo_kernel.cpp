@@ -9,7 +9,7 @@
 // #include <llvm/Support/Debug.h>
 #include <pablo/pe_var.h>
 #include <llvm/IR/Verifier.h>
-#include <IDISA/idisa_builder.h>
+#include <IR_Gen/idisa_builder.h>
 
 using namespace pablo;
 using namespace kernel;

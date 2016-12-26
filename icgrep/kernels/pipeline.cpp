@@ -5,7 +5,7 @@
 
 #include "pipeline.h"
 #include <toolchain.h>
-#include <IDISA/idisa_builder.h>
+#include <IR_Gen/idisa_builder.h>
 #include <kernels/interface.h>
 #include <kernels/kernel.h>
 #include <kernels/s2p_kernel.h>

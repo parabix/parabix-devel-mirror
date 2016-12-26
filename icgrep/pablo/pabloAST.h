@@ -7,7 +7,7 @@
 #ifndef PE_PabloAST_H
 #define PE_PabloAST_H
 
-#include <IDISA/types/streamtype.h>
+#include <IR_Gen/types/streamtype.h>
 #include <llvm/Support/Casting.h>
 #include <llvm/Support/Compiler.h>
 #include <boost/iterator/iterator_facade.hpp>

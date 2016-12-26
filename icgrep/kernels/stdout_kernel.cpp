@@ -4,7 +4,7 @@
  */
 #include <kernels/stdout_kernel.h>
 #include <kernels/kernel.h>
-#include <IDISA/idisa_builder.h>
+#include <IR_Gen/idisa_builder.h>
 
 namespace kernel {
 

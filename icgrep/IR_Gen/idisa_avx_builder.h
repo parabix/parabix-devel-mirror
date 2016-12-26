@@ -6,7 +6,7 @@
  *  This software is licensed to the public under the Open Software License 3.0.
 */
 
-#include <IDISA/idisa_sse_builder.h>
+#include <IR_Gen/idisa_sse_builder.h>
 
 using namespace llvm;
 

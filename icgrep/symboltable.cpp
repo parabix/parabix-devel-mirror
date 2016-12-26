@@ -23,7 +23,7 @@
 #include <llvm/Support/TargetSelect.h>
 #include <llvm/Support/Host.h>
 #include <llvm/IR/Verifier.h>
-#include <IDISA/idisa_target.h>
+#include <IR_Gen/idisa_target.h>
 #include <kernels/symboltablepipeline.h>
 
 // mmap system

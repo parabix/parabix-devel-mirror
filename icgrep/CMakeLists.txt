@@ -48,7 +48,7 @@ include_directories("${Boost_INCLUDE_DIRS}")
 link_directories(${Boost_LIBRARY_DIR})
 
 SET(KERNEL_SRC kernels/kernel.cpp kernels/s2p_kernel.cpp kernels/streamset.cpp kernels/interface.cpp)
-SET(IDISA_SRC IDISA/types/streamtype.cpp IDISA/idisa_builder.cpp IDISA/idisa_avx_builder.cpp IDISA/idisa_i64_builder.cpp IDISA/idisa_sse_builder.cpp IDISA/idisa_nvptx_builder.cpp IDISA/idisa_target.cpp)
+SET(IDISA_SRC IR_Gen/types/streamtype.cpp IR_Gen/idisa_builder.cpp IR_Gen/idisa_avx_builder.cpp IR_Gen/idisa_i64_builder.cpp IR_Gen/idisa_sse_builder.cpp IR_Gen/idisa_nvptx_builder.cpp IR_Gen/idisa_target.cpp)
 
 SET(PABLO_SRC pablo/pabloAST.cpp pablo/branch.cpp pablo/codegenstate.cpp pablo/builder.cpp pablo/symbol_generator.cpp pablo/printer_pablos.cpp pablo/pablo_toolchain.cpp)
 SET(PABLO_SRC ${PABLO_SRC} pablo/pablo_kernel.cpp pablo/pablo_compiler.cpp pablo/carry_manager.cpp)

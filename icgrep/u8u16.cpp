@@ -25,8 +25,8 @@
 #include <cc/cc_compiler.h>
 #include <pablo/pablo_toolchain.h>
 #include <pablo/pablo_kernel.h>
-#include <IDISA/idisa_builder.h>
-#include <IDISA/idisa_target.h>
+#include <IR_Gen/idisa_builder.h>
+#include <IR_Gen/idisa_target.h>
 #include <kernels/pipeline.h>
 #include <kernels/interface.h>
 #include <kernels/kernel.h>

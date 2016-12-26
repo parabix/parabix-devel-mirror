@@ -1,5 +1,5 @@
 #include "streamtype.h"
-#include "IDISA/idisa_builder.h"
+#include "IR_Gen/idisa_builder.h"
 
 namespace IDISA {
 

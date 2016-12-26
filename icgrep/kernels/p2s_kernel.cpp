@@ -1,6 +1,6 @@
 #include "p2s_kernel.h"
 #include "kernels/kernel.h"
-#include "IDISA/idisa_builder.h"
+#include "IR_Gen/idisa_builder.h"
 #include <llvm/IR/Type.h>
 #include <iostream>
 #include <stdint.h>

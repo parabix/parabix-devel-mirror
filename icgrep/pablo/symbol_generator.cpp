@@ -7,7 +7,7 @@
 #include <pablo/symbol_generator.h>
 #include <pablo/pe_string.h>
 #include <pablo/pe_integer.h>
-#include <IDISA/idisa_builder.h>
+#include <IR_Gen/idisa_builder.h>
 
 namespace pablo {
 

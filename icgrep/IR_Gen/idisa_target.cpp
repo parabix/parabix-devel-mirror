@@ -4,10 +4,10 @@
  */
 
 #include <toolchain.h>
-#include <IDISA/idisa_avx_builder.h>
-#include <IDISA/idisa_sse_builder.h>
-#include <IDISA/idisa_i64_builder.h>
-#include <IDISA/idisa_nvptx_builder.h>
+#include <IR_Gen/idisa_avx_builder.h>
+#include <IR_Gen/idisa_sse_builder.h>
+#include <IR_Gen/idisa_i64_builder.h>
+#include <IR_Gen/idisa_nvptx_builder.h>
 
 namespace IDISA {
     

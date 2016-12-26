@@ -11,7 +11,7 @@
 #include "interface.h"
 #include <vector>
 #include <llvm/IR/Type.h>
-#include <IDISA/idisa_builder.h>
+#include <IR_Gen/idisa_builder.h>
 #include <boost/container/flat_map.hpp>
 
 const std::string blockNoScalar = "blockNo";

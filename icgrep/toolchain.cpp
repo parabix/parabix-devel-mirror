@@ -27,7 +27,7 @@
 #include <object_cache.h>
 
 #ifdef CUDA_ENABLED
-#include <IDISA/llvm2ptx.h>
+#include <IR_Gen/llvm2ptx.h>
 #endif
  
 using namespace llvm;

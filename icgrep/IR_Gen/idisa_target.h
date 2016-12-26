@@ -8,7 +8,7 @@
 
 #include <llvm/IR/Module.h>
 #include <llvm/IR/Type.h>
-#include <IDISA/idisa_builder.h>
+#include <IR_Gen/idisa_builder.h>
 
 namespace IDISA {
     

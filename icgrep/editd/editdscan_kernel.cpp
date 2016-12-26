@@ -6,7 +6,7 @@
 
 #include "editdscan_kernel.h"
 #include <llvm/IR/Intrinsics.h>
-#include <IDISA/idisa_builder.h>
+#include <IR_Gen/idisa_builder.h>
 #include <llvm/Support/raw_os_ostream.h>
 #include <iostream>
 

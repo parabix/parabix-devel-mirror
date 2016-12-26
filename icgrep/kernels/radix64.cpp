@@ -5,7 +5,7 @@
 #include "radix64.h"
 //#include "expand3_4.h"
 #include <kernels/kernel.h>
-#include <IDISA/idisa_builder.h>
+#include <IR_Gen/idisa_builder.h>
 #include <llvm/Support/raw_ostream.h>
 
 namespace kernel {

@@ -5,7 +5,7 @@
 #ifndef PIPELINE_H
 #define PIPELINE_H
 
-#include <IDISA/idisa_builder.h>
+#include <IR_Gen/idisa_builder.h>
 #include <kernels/interface.h>
 #include <kernels/kernel.h>
 

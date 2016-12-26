@@ -12,8 +12,8 @@
 #include <llvm/Support/Debug.h>
 #include <boost/filesystem.hpp>
 #include <boost/iostreams/device/mapped_file.hpp>
-#include <IDISA/idisa_builder.h>
-#include <IDISA/idisa_target.h>
+#include <IR_Gen/idisa_builder.h>
+#include <IR_Gen/idisa_target.h>
 #include <UCD/UnicodeNameData.h>
 #include <UCD/resolve_properties.h>
 #include <kernels/cc_kernel.h>
@@ -33,7 +33,7 @@
 #include <iostream>
 #include <sstream>
 #ifdef CUDA_ENABLED 
-#include <IDISA/CudaDriver.h>
+#include <IR_Gen/CudaDriver.h>
 #endif
 #include <util/aligned_allocator.h>
 

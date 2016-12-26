@@ -10,7 +10,7 @@
 #include <llvm/IR/Constant.h>
 #include <llvm/IR/Type.h>
 #include <llvm/IR/Value.h>
-#include <IDISA/idisa_builder.h>
+#include <IR_Gen/idisa_builder.h>
 
 using namespace llvm;
 

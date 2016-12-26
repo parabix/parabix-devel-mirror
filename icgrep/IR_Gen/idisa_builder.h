@@ -13,7 +13,7 @@
 #include <llvm/IR/IRBuilder.h>
 #include <llvm/Support/Host.h>
 #include <llvm/ADT/Triple.h>
-#include <IDISA/types/streamtype.h>
+#include <IR_Gen/types/streamtype.h>
 #include <boost/container/flat_map.hpp>
 
 using namespace llvm;

@@ -6,7 +6,7 @@
 #ifndef SYMBOLTABLEPIPELINE_H
 #define SYMBOLTABLEPIPELINE_H
 
-#include <IDISA/idisa_builder.h>
+#include <IR_Gen/idisa_builder.h>
 #include "kernel.h"
 
 namespace llvm {

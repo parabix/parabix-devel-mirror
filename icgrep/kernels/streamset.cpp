@@ -6,7 +6,7 @@
     
 #include <kernels/streamset.h>
 #include <vector>
-#include <IDISA/idisa_builder.h>
+#include <IR_Gen/idisa_builder.h>
 #include <llvm/IR/Type.h>
 
 using namespace parabix;

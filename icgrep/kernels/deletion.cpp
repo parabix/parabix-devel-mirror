@@ -5,7 +5,7 @@
 
 #include <kernels/kernel.h>
 #include <kernels/deletion.h>
-#include <IDISA/idisa_builder.h>
+#include <IR_Gen/idisa_builder.h>
 #include <llvm/IR/Value.h>
 
 std::vector<Value *> parallel_prefix_deletion_masks(IDISA::IDISA_Builder * iBuilder, unsigned fw, Value * del_mask) {
