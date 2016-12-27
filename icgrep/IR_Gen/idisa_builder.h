@@ -13,6 +13,7 @@
 #include <llvm/IR/IRBuilder.h>
 #include <llvm/Support/Host.h>
 #include <llvm/ADT/Triple.h>
+#include <IR_Gen/CBuilder.h>
 #include <IR_Gen/types/streamtype.h>
 #include <boost/container/flat_map.hpp>
 
@@ -20,19 +21,16 @@ using namespace llvm;
 
 namespace IDISA {
 
-class IDISA_Builder : public IRBuilder<> {
+class IDISA_Builder : public CBuilder {
 
     using StreamTypes = boost::container::flat_map<unsigned, StreamType *>;
 
 public:
 
     IDISA_Builder(Module * m, unsigned archBitWidth, unsigned bitBlockWidth, unsigned stride, unsigned CacheAlignment=64)
-    : IRBuilder<>(m->getContext())
-    , mMod(m)
-    , mCacheLineAlignment(CacheAlignment)
+    : CBuilder(m, archBitWidth, CacheAlignment)
     , mBitBlockWidth(bitBlockWidth)
     , mStride(stride)
-    , mSizeType(getIntNTy(archBitWidth))
     , mBitBlockType(VectorType::get(IntegerType::get(getContext(), 64), bitBlockWidth / 64))
     , mZeroInitializer(Constant::getNullValue(mBitBlockType))
     , mOneInitializer(Constant::getAllOnesValue(mBitBlockType))
@@ -56,14 +54,6 @@ public:
         return mStride;
     }
 
-    Module * getModule() const {
-        return mMod;
-    }
-    
-    void setModule(Module * m)  {
-        mMod = m;
-    }
-    
     Constant * allZeroes() const {
         return mZeroInitializer;
     }
@@ -81,17 +71,8 @@ public:
     void CreateBlockAlignedStore(Value * const value, Value * const ptr, Value * const index);
     void CreateBlockAlignedStore(Value * const value, Value * const ptr, std::initializer_list<Value *> indices);
 
-    Value * CreateMalloc(Type * type, Value * size);
-    Value * CreateAlignedMalloc(Type *type, Value * size, const unsigned alignment);
-    void CreateFree(Value * ptr);
-    void CreateAlignedFree(Value * ptr);
-    Value * CreateRealloc(Value * ptr, Value * size);
-    Value * CreateAlignedRealloc(Value * ptr, Value * size, const unsigned alignment);
-    void CreateMemZero(Value * ptr, Value * size, const unsigned alignment = 1);
-
     void CallPrintRegister(const std::string & regName, Value * const value);
-    void CallPrintInt(const std::string & name, Value * const value);
-
+    
     VectorType * fwVectorType(unsigned fw);
 
     Constant * simd_himask(unsigned fw);
@@ -152,22 +133,8 @@ public:
     Value * simd_not(Value * a);
     Value * fwCast(unsigned fw, Value * a);
     
-    inline llvm::IntegerType * getSizeTy() const {
-        return mSizeType;
-    }
-
-    inline llvm::ConstantInt * getSize(const size_t value) const {
-        return ConstantInt::get(getSizeTy(), value);
-    }
-
-    PointerType * getVoidPtrTy() const;
-
     inline VectorType * getBitBlockType() const {
         return mBitBlockType;
-    }
-
-    inline unsigned getCacheAlignment() const {
-        return mCacheLineAlignment;
     }
 
     inline Type * getStreamSetTy(const unsigned NumElements = 1, const unsigned FieldWidth = 1) {
@@ -182,21 +149,14 @@ public:
         return instr;
     }
     
-    virtual llvm::LoadInst* CreateAtomicLoadAcquire(Value * ptr);
-    virtual llvm::StoreInst *  CreateAtomicStoreRelease(Value * val, Value * ptr); 
-    
 protected:
-    Module *            mMod;
-    unsigned            mCacheLineAlignment;
     unsigned            mBitBlockWidth;
     unsigned            mStride;
-    IntegerType *       mSizeType;
     VectorType *        mBitBlockType;
 
     Constant *          mZeroInitializer;
     Constant *          mOneInitializer;
     Constant *          mPrintRegisterFunction;
-    
     StreamTypes         mStreamTypes;
 };
 
@@ -208,8 +168,8 @@ inline LoadInst * IDISA_Builder::CreateBlockAlignedLoad(Value * const ptr, Value
     return CreateBlockAlignedLoad(CreateGEP(ptr, index));
 }
 
-inline LoadInst * IDISA_Builder::CreateBlockAlignedLoad(Value * const ptr, std::initializer_list<Value *> indicies) {
-    return CreateBlockAlignedLoad(CreateGEP(ptr, indicies));
+inline LoadInst * IDISA_Builder::CreateBlockAlignedLoad(Value * const ptr, std::initializer_list<Value *> indices) {
+    return CreateBlockAlignedLoad(CreateGEP(ptr, indices));
 }
 
 inline void IDISA_Builder::CreateBlockAlignedStore(Value * const value, Value * const ptr) {
@@ -220,8 +180,8 @@ inline void IDISA_Builder::CreateBlockAlignedStore(Value * const value, Value * 
     CreateBlockAlignedStore(value, CreateGEP(ptr, index));
 }
 
-inline void IDISA_Builder::CreateBlockAlignedStore(Value * const value, Value * const ptr, std::initializer_list<Value *> indicies) {
-    CreateBlockAlignedStore(value, CreateGEP(ptr, indicies));
+inline void IDISA_Builder::CreateBlockAlignedStore(Value * const value, Value * const ptr, std::initializer_list<Value *> indices) {
+    CreateBlockAlignedStore(value, CreateGEP(ptr, indices));
 }
     
 

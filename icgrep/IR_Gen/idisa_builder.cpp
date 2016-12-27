@@ -34,17 +34,6 @@ std::string IDISA_Builder::getBitBlockTypeName() const {
 }
 
     
-static Function * create_printf(Module * const mod, IDISA_Builder * builder) {
-    Function * printf = mod->getFunction("printf");
-    if (printf == nullptr) {
-        printf = cast<Function>(mod->getOrInsertFunction("printf"
-                                , FunctionType::get(builder->getInt32Ty(), {builder->getInt8PtrTy()}, true)
-                                , AttributeSet().addAttribute(mod->getContext(), 1U, Attribute::NoAlias)));
-
-    }
-    return printf;
-}
-
 void IDISA_Builder::CallPrintRegister(const std::string & name, Value * const value) {
     Constant * printRegister = mMod->getFunction("PrintRegister");
     if (LLVM_UNLIKELY(printRegister == nullptr)) {
@@ -72,7 +61,7 @@ void IDISA_Builder::CallPrintRegister(const std::string & name, Value * const va
         for(unsigned i = (mBitBlockWidth / 8); i != 0; --i) {
             args.push_back(builder.CreateExtractElement(value, builder.getInt32(i - 1)));
         }
-        builder.CreateCall(create_printf(mMod, this), args);
+        builder.CreateCall(GetPrintf(), args);
         builder.CreateRetVoid();
 
         printRegister = function;
@@ -82,178 +71,6 @@ void IDISA_Builder::CallPrintRegister(const std::string & name, Value * const va
     }
 }
 
-void IDISA_Builder::CallPrintInt(const std::string & name, Value * const value) {
-    Constant * printRegister = mMod->getFunction("PrintInt");
-    if (LLVM_UNLIKELY(printRegister == nullptr)) {
-        FunctionType *FT = FunctionType::get(getVoidTy(), { PointerType::get(getInt8Ty(), 0), getSizeTy() }, false);
-        Function * function = Function::Create(FT, Function::InternalLinkage, "PrintInt", mMod);
-        auto arg = function->arg_begin();
-        std::string out = "%-40s = %" PRIx64 "\n";
-        BasicBlock * entry = BasicBlock::Create(mMod->getContext(), "entry", function);
-        IRBuilder<> builder(entry);
-        std::vector<Value *> args;
-        args.push_back(CreateGlobalStringPtr(out.c_str()));
-        Value * const name = &*(arg++);
-        name->setName("name");
-        args.push_back(name);
-        Value * value = &*arg;
-        value->setName("value");
-        args.push_back(value);
-        builder.CreateCall(create_printf(mMod, this), args);
-        builder.CreateRetVoid();
-
-        printRegister = function;
-    }
-    Value * num = nullptr;
-    if (value->getType()->isPointerTy()) {
-        num = CreatePtrToInt(value, getSizeTy());
-    } else {
-        num = CreateZExtOrBitCast(value, getSizeTy());
-    }
-    assert (num->getType()->isIntegerTy());
-    CreateCall(printRegister, {CreateGlobalStringPtr(name.c_str()), num});
-}
-
-Value * IDISA_Builder::CreateMalloc(Type * type, Value * size) {
-    DataLayout DL(getModule());
-    Type * const intTy = getIntPtrTy(DL);
-    Type * const voidPtrTy = getVoidPtrTy();
-    Function * malloc = cast<Function>(getModule()->getOrInsertFunction("malloc", voidPtrTy, intTy, nullptr));
-    malloc->setDoesNotAlias(0);
-    const auto width = ConstantExpr::getSizeOf(type);
-    if (!width->isOneValue()) {
-        if (isa<Constant>(size)) {
-            size = ConstantExpr::getMul(cast<Constant>(size), width);
-        } else {
-            size = CreateMul(size, width);
-        }
-    }
-    size = CreateTruncOrBitCast(size, intTy);
-    CallInst * ci = CreateCall(malloc, {size});
-    ci->setTailCall();
-    ci->setCallingConv(malloc->getCallingConv());
-    return CreateBitOrPointerCast(ci, type->getPointerTo());
-}
-
-Value * IDISA_Builder::CreateAlignedMalloc(Type * type, Value * size, const unsigned alignment) {
-    assert ((alignment & (alignment - 1)) == 0); // is power of 2
-    DataLayout DL(getModule());
-    IntegerType * const intTy = getIntPtrTy(DL);
-    const auto byteWidth = (intTy->getBitWidth() / 8);
-    const auto offset = ConstantInt::get(intTy, alignment + byteWidth - 1);
-    const auto width = ConstantExpr::getSizeOf(type);
-    if (!width->isOneValue()) {
-        if (isa<Constant>(size)) {
-            size = ConstantExpr::getMul(cast<Constant>(size), width);
-        } else {
-            size = CreateMul(size, width);
-        }
-    }
-    if (isa<Constant>(size)) {
-        size = ConstantExpr::getAdd(cast<Constant>(size), offset);
-    } else {
-        size = CreateAdd(size, offset);
-    }
-    size = CreateTruncOrBitCast(size, intTy);
-    Value * unaligned = CreateMalloc(getInt8Ty(), size);
-    Value * aligned = CreateBitOrPointerCast(unaligned, intTy);
-    aligned = CreateAnd(CreateAdd(aligned, offset), ConstantExpr::getNot(ConstantInt::get(intTy, alignment - 1)));
-    Value * ptr = CreateBitOrPointerCast(CreateSub(aligned, ConstantInt::get(intTy, byteWidth)), intTy->getPointerTo());
-    CreateAlignedStore(CreateBitOrPointerCast(unaligned, intTy), ptr, byteWidth);
-    return CreateBitOrPointerCast(aligned, type->getPointerTo());
-}
-
-void IDISA_Builder::CreateFree(Value * ptr) {
-    PointerType * const voidPtrTy = getVoidPtrTy();
-    Function * const free = cast<Function>(getModule()->getOrInsertFunction("free", getVoidTy(), voidPtrTy, nullptr));
-    CallInst * const ci = CreateCall(free, {CreateBitOrPointerCast(ptr, voidPtrTy)});
-    ci->setTailCall();
-    ci->setCallingConv(free->getCallingConv());
-}
-
-void IDISA_Builder::CreateAlignedFree(Value * ptr) {
-    DataLayout DL(getModule());
-    IntegerType * const intTy = getIntPtrTy(DL);
-    const auto byteWidth = (intTy->getBitWidth() / 8);
-    ptr = CreateBitOrPointerCast(ptr, intTy);
-    ptr = CreateSub(ptr, ConstantInt::get(intTy, byteWidth));
-    ptr = CreateBitOrPointerCast(ptr, getInt8PtrTy());
-    CreateFree(CreateAlignedLoad(ptr, byteWidth));
-}
-
-Value * IDISA_Builder::CreateRealloc(Value * ptr, Value * size) {
-    assert (ptr->getType()->isPointerTy());
-    DataLayout DL(getModule());
-    IntegerType * const intTy = getIntPtrTy(DL);
-    PointerType * const voidPtrTy = getVoidPtrTy();
-    Function * realloc = cast<Function>(getModule()->getOrInsertFunction("realloc", voidPtrTy, voidPtrTy, intTy, nullptr));
-    realloc->setDoesNotAlias(0);
-    Type * const type = ptr->getType();
-    // calculate our new size parameter
-    size = CreateMul(size, ConstantExpr::getSizeOf(type->getPointerElementType()));
-    size = CreateTruncOrBitCast(size, intTy);
-    // call realloc with the pointer and adjusted size
-    CallInst * ci = CreateCall(realloc, {ptr, size});
-    ci->setTailCall();
-    ci->setCallingConv(realloc->getCallingConv());
-    return CreateBitOrPointerCast(ci, type);
-}
-
-Value * IDISA_Builder::CreateAlignedRealloc(Value * ptr, Value * size, const unsigned alignment) {
-    assert ((alignment & (alignment - 1)) == 0); // is power of 2
-    assert (ptr->getType()->isPointerTy());
-    DataLayout DL(getModule());
-    IntegerType * const intTy = getIntPtrTy(DL);
-    PointerType * const bpTy = getInt8PtrTy();
-    Type * const type = ptr->getType();
-    // calculate our new size parameter
-    const auto byteWidth = (intTy->getBitWidth() / 8);
-    const auto offset = ConstantInt::get(intTy, alignment + byteWidth - 1);
-    const auto width = ConstantExpr::getSizeOf(type);
-    if (!width->isOneValue()) {
-        if (isa<Constant>(size)) {
-            size = ConstantExpr::getMul(cast<Constant>(size), width);
-        } else {
-            size = CreateMul(size, width);
-        }
-    }
-    if (isa<Constant>(size)) {
-        size = ConstantExpr::getAdd(cast<Constant>(size), offset);
-    } else {
-        size = CreateAdd(size, offset);
-    }
-    size = CreateTruncOrBitCast(size, intTy);
-    // calculate the offset containing the unaligned pointer address
-    ptr = CreateBitOrPointerCast(ptr, bpTy);
-    ptr = CreateSub(ptr, ConstantInt::get(intTy, byteWidth));
-    ptr = CreateBitOrPointerCast(ptr, intTy->getPointerTo());
-    // load the unaligned pointer as an uint8 *
-    ptr = CreateAlignedLoad(ptr, byteWidth);
-    ptr = CreateBitOrPointerCast(ptr, bpTy);
-    // call realloc with the unaligned pointer and adjusted size
-    Value * unaligned = CreateRealloc(ptr, size);
-    Value * aligned = CreateBitOrPointerCast(unaligned, intTy);
-    aligned = CreateAnd(CreateAdd(aligned, offset), ConstantExpr::getNot(ConstantInt::get(intTy, alignment - 1)));
-    Value * prefix = CreateBitOrPointerCast(CreateSub(aligned, ConstantInt::get(intTy, byteWidth)), intTy->getPointerTo());
-    CreateAlignedStore(CreateBitOrPointerCast(unaligned, intTy), prefix, byteWidth);
-    return CreateBitOrPointerCast(aligned, type);
-}
-
-void IDISA_Builder::CreateMemZero(Value * ptr, Value * size, const unsigned alignment) {
-    assert (ptr->getType()->isPointerTy() && size->getType()->isIntegerTy());
-    Type * const type = ptr->getType();
-    const auto width = ConstantExpr::getSizeOf(type->getPointerElementType());
-    if (isa<Constant>(size)) {
-        size = ConstantExpr::getMul(cast<Constant>(size), width);
-    } else {
-        size = CreateMul(size, width);
-    }
-    CreateMemSet(CreateBitOrPointerCast(ptr, getInt8PtrTy()), getInt8(0), size, alignment);
-}
-
-PointerType * IDISA_Builder::getVoidPtrTy() const {
-    return TypeBuilder<void *, false>::get(getContext());
-}
 
 Constant * IDISA_Builder::simd_himask(unsigned fw) {
     return Constant::getIntegerValue(getIntNTy(mBitBlockWidth), APInt::getSplat(mBitBlockWidth, APInt::getHighBitsSet(fw, fw/2)));
@@ -558,20 +375,6 @@ Value * IDISA_Builder::simd_xor(Value * a, Value * b) {
 
 Value * IDISA_Builder::simd_not(Value * a) {
     return simd_xor(a, Constant::getAllOnesValue(a->getType()));
-}
-
-LoadInst * IDISA_Builder::CreateAtomicLoadAcquire(Value * ptr) {
-    unsigned alignment = dyn_cast<PointerType>(ptr->getType())->getElementType()->getPrimitiveSizeInBits()/8;
-    LoadInst * inst = CreateAlignedLoad(ptr, alignment);
-    inst->setOrdering(AtomicOrdering::Acquire);
-    return inst;
-    
-}
-StoreInst * IDISA_Builder::CreateAtomicStoreRelease(Value * val, Value * ptr) {
-    unsigned alignment = dyn_cast<PointerType>(ptr->getType())->getElementType()->getPrimitiveSizeInBits()/8;
-    StoreInst * inst = CreateAlignedStore(val, ptr, alignment);
-    inst->setOrdering(AtomicOrdering::Release);
-    return inst;
 }
 
 Type * IDISA_Builder::getStreamTy(const unsigned FieldWidth) {
