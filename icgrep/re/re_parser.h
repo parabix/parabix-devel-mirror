@@ -163,8 +163,8 @@ protected:
     Name * makeWhitespaceSet();
     Name * makeWordSet();
    
-    Name * createName(std::string && value);
-    Name * createName(std::string && prop, std::string && value);
+    Name * createName(std::string value);
+    Name * createName(std::string prop, std::string value);
 
     virtual bool isUnsupportChartsetOperator(char c);
     CharsetOperatorKind getCharsetOperator();

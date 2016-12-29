@@ -35,7 +35,6 @@ static inline CC * extractCC(RE * re) {
 }
 
 struct NameResolver {
-
     RE * resolve(RE * re) {
         if (Name * name = dyn_cast<Name>(re)) {
             auto f = mMemoizer.find(name);

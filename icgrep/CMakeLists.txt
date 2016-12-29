@@ -159,7 +159,7 @@ IF (PRINT_TIMING_INFORMATION)
 ENDIF()
 
 SET(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS} -O3 -DNDEBUG")
-SET(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS} -g -fsanitize=address -fno-omit-frame-pointer") #
+SET(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS} -g") #-fsanitize=address -fno-omit-frame-pointer
 
 add_test(
   NAME greptest

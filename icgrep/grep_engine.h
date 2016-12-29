@@ -49,7 +49,6 @@ void icgrep_Linking(Module * m, ExecutionEngine * e);
 re::CC * getParsedCodePointSet();
 void setParsedCodePointSet();
 
-const std::vector<std::string>& getParsedPropertyValues();
 void setParsedPropertyValues();
 
 

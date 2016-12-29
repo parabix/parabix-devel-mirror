@@ -26,13 +26,13 @@
 #include <sstream>
 #include <string>
 #include <algorithm>
+#include <iostream>
 
 namespace re {
     
 
 RE * RE_Parser::parse(const std::string & regular_expression, ModeFlagSet initialFlags, RE_Syntax syntax) {
     std::unique_ptr<RE_Parser> parser = nullptr;
-
     switch (syntax) {
         case RE_Syntax::PCRE:
             parser = llvm::make_unique<RE_Parser_PCRE>(regular_expression);
@@ -51,8 +51,6 @@ RE * RE_Parser::parse(const std::string & regular_expression, ModeFlagSet initia
             ParseFailure("Unsupported RE syntax!");
             break;
     }
-
-
     parser->fModeFlagSet = initialFlags;
     parser->fNested = false;
     parser->fGraphemeBoundaryPending = false;
@@ -633,26 +631,21 @@ RE * RE_Parser::parsePropertyExpression() {
     return createName(canonicalize(start, mCursor.pos()));
 }
 
-RE * RE_Parser::parseRegexPropertyValue(const std::string& propName, const std::string& regexValue) {
-    auto regexValueForGrep = "^" + regexValue + "$";
-    RE* propValueRe = RE_Parser::parse(regexValueForGrep, fModeFlagSet, mReSyntax);
+RE * RE_Parser::parseRegexPropertyValue(const std::string & propName, const std::string& regexValue) {
+    RE * propValueRe = RE_Parser::parse("^" + regexValue + "$", fModeFlagSet, mReSyntax);
     GrepEngine engine;
     engine.grepCodeGen("NamePattern", propValueRe, false, false, GrepType::PropertyValue);
-    auto grepValue = engine.grepPropertyValues(propName);
-
-    auto grepValueSize = grepValue.size();
-    if (!grepValueSize) {
+    const auto matches = engine.grepPropertyValues(propName);
+    if (matches.empty()) {
         ParseFailure("regex " + regexValue + " match no property values");
-    } else if (grepValueSize == 1) {
-        // handle right value
-        return createName(std::string(propName), std::string(grepValue[0]));
+    } else if (matches.size() == 1) {
+        return createName(propName, matches.front());
     } else {
-        std::vector<re::RE*> valueRes;
-        for (auto iter = grepValue.begin(); iter != grepValue.end(); ++iter) {
-            valueRes.push_back(createName(std::string(propName), std::string(*iter)));
+        std::vector<re::RE *> alt;
+        for (auto value : matches) {
+            alt.push_back(createName(propName, value));
         }
-
-        return makeAlt(valueRes.begin(), valueRes.end());
+        return makeAlt(alt.begin(), alt.end());
     }
 }
 
@@ -1112,7 +1105,7 @@ Name * RE_Parser::makeWordSet() {
     return mMemoizer.memoize(createName("word"));
 }
 
-Name * RE_Parser::createName(std::string && value) {
+Name * RE_Parser::createName(std::string value) {
     auto key = std::make_pair("", value);
     auto f = mNameMap.find(key);
     if (f != mNameMap.end()) {
@@ -1123,7 +1116,7 @@ Name * RE_Parser::createName(std::string && value) {
     return property;
     }
 
-Name * RE_Parser::createName(std::string && prop, std::string && value) {
+Name * RE_Parser::createName(std::string prop, std::string value) {
     auto key = std::make_pair(prop, value);
     auto f = mNameMap.find(key);
     if (f != mNameMap.end()) {

@@ -37,6 +37,8 @@
 #endif
 #include <util/aligned_allocator.h>
 
+using namespace parabix;
+
 static cl::OptionCategory bGrepOutputOptions("Output Options",
                                              "These options control the output.");
 static cl::opt<bool> SilenceFileErrors("s", cl::desc("Suppress messages for file errors."), cl::init(false),  cl::cat(bGrepOutputOptions));
@@ -58,6 +60,9 @@ static cl::opt<bool> segmentPipelineParallel("enable-segment-pipeline-parallel",
 bool isUTF_16 = false;
 std::string IRFilename = "icgrep.ll";
 std::string PTXFilename = "icgrep.ptx";
+
+static re::CC * parsedCodePointSet = nullptr;
+static std::vector<std::string> parsedPropertyValues;
 
 void GrepEngine::doGrep(const std::string & fileName, const int fileIdx, bool CountOnly, std::vector<size_t> & total_CountOnly, bool UTF_16) {
     boost::filesystem::path file(fileName);
@@ -116,8 +121,6 @@ void GrepEngine::doGrep(const std::string & fileName, const int fileIdx, bool Co
         }
     }
 }
-
-using namespace parabix;
 
 Function * generateGPUKernel(Module * m, IDISA::IDISA_Builder * iBuilder, bool CountOnly){
     Type * const int64ty = iBuilder->getInt64Ty();
@@ -422,27 +425,25 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool Count
 
 }
 
-re::CC *  GrepEngine::grepCodepoints() {
-
-    setParsedCodePointSet();
+re::CC * GrepEngine::grepCodepoints() {
+    parsedCodePointSet = re::makeCC();
     char * mFileBuffer = getUnicodeNameDataPtr();
     size_t mFileSize = getUnicodeNameDataSize();
-
     mGrepFunction(mFileBuffer, mFileSize, 0);
-
-    return getParsedCodePointSet();
+    return parsedCodePointSet;
 }
 
 const std::vector<std::string> & GrepEngine::grepPropertyValues(const std::string& propertyName) {
     AlignedAllocator<char, 32> alloc;
-    setParsedPropertyValues();
+    parsedPropertyValues.clear();
     const std::string & str = UCD::getPropertyValueGrepString(propertyName);
-    char * aligned = alloc.allocate(str.length() + 1, 0);
-    std::memcpy(aligned, str.data(), str.length());
-    aligned[str.length()] = '\0';
-    mGrepFunction(aligned, str.length(), 0);
+    const auto n = str.length();
+    char * aligned = alloc.allocate(n + 32, 0);
+    std::memcpy(aligned, str.data(), n);
+    std::memset(aligned + n, 0, 32);
+    mGrepFunction(aligned, n, 0);
     alloc.deallocate(aligned, 0);
-    return getParsedPropertyValues();
+    return parsedPropertyValues;
 }
 
 static int * total_count;
@@ -545,8 +546,6 @@ void PrintResult(bool CountOnly, std::vector<size_t> & total_CountOnly){
     }
 }
 
-re::CC * parsedCodePointSet;
-
 extern "C" {
     void insert_codepoints(size_t lineNum, size_t line_start, size_t line_end, const char * buffer) {
         re::codepoint_t c = 0;
@@ -565,32 +564,17 @@ extern "C" {
     }
 }
 
-void setParsedCodePointSet(){
-    parsedCodePointSet = re::makeCC();
-}
-
-re::CC * getParsedCodePointSet(){
-    return parsedCodePointSet;
-}
-
-
-static std::vector<std::string> parsedPropertyValues;
-
 extern "C" {
     void insert_property_values(size_t lineNum, size_t line_start, size_t line_end, const char * buffer) {
-        auto result = std::string(buffer + line_start, buffer + line_end);
-        parsedPropertyValues.push_back(result);
+//      When the error occurs, this is somehow getting an extra match:
+//        33: (261,269)
+//        138: (1235,1253)
+//        172: (1419,1423)
+//        278: (1949,2040) *****
+//        script : .*hir.*        (Alt[Name "hiragana" ,Name "katakanaorhiragana" ,Name "hira" ,Name "hiraganQ0����K" ])
+        parsedPropertyValues.emplace_back(buffer + line_start, buffer + line_end);
     }
 }
-
-inline void setParsedPropertyValues() {
-    parsedPropertyValues.clear();
-}
-
-inline const std::vector<std::string>& getParsedPropertyValues() {
-    return parsedPropertyValues;
-}
-
 
 void icgrep_Linking(Module * m, ExecutionEngine * e) {
     Module::FunctionListType & fns = m->getFunctionList();
