@@ -23,8 +23,7 @@ class GrepEngine {
     typedef void (*GrepFunctionType_CPU)(char * rslt, char * byte_data, size_t filesize, const int fileIdx);
 public:
 
-    GrepEngine() {}
-
+    GrepEngine();
     ~GrepEngine();
   
     void grepCodeGen(std::string moduleName, re::RE * re_ast, bool CountOnly, bool UTF_16 = false, GrepType grepType = GrepType::Normal);

@@ -163,7 +163,7 @@ inline bool intersects(Type & A, Type & B) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief printGraph
  ** ------------------------------------------------------------------------------------------------------------- */
-static void printGraph(const Graph & G, const std::string name) {
+static void printGraph(const Graph & G, const std::string & name) {
     raw_os_ostream out(std::cerr);
 
     std::vector<unsigned> c(num_vertices(G));
@@ -1748,7 +1748,8 @@ inline PabloAST * BooleanReassociationPass::CharacterizationMap::findKey(Z3_ast 
  * @brief constructor
  ** ------------------------------------------------------------------------------------------------------------- */
 inline BooleanReassociationPass::BooleanReassociationPass(Z3_context ctx, Z3_params params, Z3_tactic tactic, PabloFunction & f)
-: mContext(ctx)
+: mBlock(nullptr)
+, mContext(ctx)
 , mParams(params)
 , mTactic(tactic)
 , mFunction(f)

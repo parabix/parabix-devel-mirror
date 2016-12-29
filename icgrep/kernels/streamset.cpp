@@ -123,7 +123,7 @@ llvm::Value * LinearCopybackBuffer::getStreamSetBlockPointer(llvm::Value * buffe
     Value * consumerBlock = iBuilder->CreateUDiv(consumerPos, blockWidth);
     Value * handle = iBuilder->CreateGEP(bufferStructPtr, {iBuilder->getInt32(0), iBuilder->getInt32(iBuffer_ptr)});
     Value * bufPtr = iBuilder->CreateLoad(handle);
-    return iBuilder->CreateGEP(bufPtr, {iBuilder->CreateSub(blockNo, consumerBlock)});
+    return iBuilder->CreateGEP(bufPtr, iBuilder->CreateSub(blockNo, consumerBlock));
 }
 
 void LinearCopybackBuffer::setConsumerPos(Value * bufferStructPtr, Value * new_consumer_pos) {
@@ -173,7 +173,7 @@ void LinearCopybackBuffer::setConsumerPos(Value * bufferStructPtr, Value * new_c
     Value * handle = iBuilder->CreateGEP(bufferStructPtr, {iBuilder->getInt32(0), iBuilder->getInt32(iBuffer_ptr)});
     Value * bufferPtr = iBuilder->CreateLoad(handle);
     Value * const consumerBlock = iBuilder->CreateUDiv(consumerPos, blockWidth);
-    Value * copyFrom = iBuilder->CreateGEP(bufferPtr, {iBuilder->CreateSub(new_consumer_block, consumerBlock)});
+    Value * copyFrom = iBuilder->CreateGEP(bufferPtr, iBuilder->CreateSub(new_consumer_block, consumerBlock));
     Value * alignment = ConstantInt::get(iBuilder->getInt32Ty(), iBuilder->getBitBlockWidth() / 8);
     
     iBuilder->CreateCall(memmoveFunc, {iBuilder->CreateBitCast(bufferPtr, i8_ptr), iBuilder->CreateBitCast(copyFrom, i8_ptr), copyLength, alignment, ConstantInt::getNullValue(i1)});

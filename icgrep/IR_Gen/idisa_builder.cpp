@@ -388,4 +388,22 @@ Type * IDISA_Builder::getStreamTy(const unsigned FieldWidth) {
     }
 }
 
+IDISA_Builder::IDISA_Builder(Module * m, unsigned archBitWidth, unsigned bitBlockWidth, unsigned stride, unsigned CacheAlignment)
+: CBuilder(m, archBitWidth, CacheAlignment)
+, mBitBlockWidth(bitBlockWidth)
+, mStride(stride)
+, mBitBlockType(VectorType::get(IntegerType::get(getContext(), 64), bitBlockWidth / 64))
+, mZeroInitializer(Constant::getNullValue(mBitBlockType))
+, mOneInitializer(Constant::getAllOnesValue(mBitBlockType))
+, mPrintRegisterFunction(nullptr) {
+
+}
+
+IDISA_Builder::~IDISA_Builder() {
+    for (const auto t : mStreamTypes) {
+        delete std::get<1>(t);
+    }
+    mStreamTypes.clear();
+}
+
 }

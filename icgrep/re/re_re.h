@@ -36,8 +36,8 @@ class Union;
 
 class RE {
 public:
-    using Allocator = SlabAllocator<u_int8_t>;
-    using VectorAllocator = SlabAllocator<RE *>;
+    using Allocator = SlabAllocator<RE *>;
+    using VectorAllocator = ProxyAllocator<RE *>;
     enum class ClassTypeId : unsigned {
         Alt
         , Any
@@ -64,29 +64,26 @@ protected:
 
     }
     void* operator new (std::size_t size) noexcept {
-        return mAllocator.allocate(size);
+        return mAllocator.allocate<uint8_t>(size);
     }
     const ClassTypeId mClassTypeId;
 
     static Allocator mAllocator;
-    static VectorAllocator mVectorAllocator;
 };
 
 class Vector : public RE, public std::vector<RE*, RE::VectorAllocator> {
 public:
-
-    virtual ~Vector() {
-    }
+    virtual ~Vector() {}
 protected:
     inline Vector(const ClassTypeId id)
     : RE(id)
-    , std::vector<RE*, RE::VectorAllocator>(mVectorAllocator)
+    , std::vector<RE*, RE::VectorAllocator>(mAllocator)
     {
 
     }
     inline Vector(const ClassTypeId id, const iterator begin, const iterator end)
     : RE(id)
-    , std::vector<RE*, RE::VectorAllocator>(begin, end, mVectorAllocator) {
+    , std::vector<RE*, RE::VectorAllocator>(begin, end, mAllocator) {
 
     }
 };

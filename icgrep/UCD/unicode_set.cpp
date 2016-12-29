@@ -39,10 +39,7 @@ template <> inline int scan_forward_zeroes<unsigned int>(unsigned int x){return 
 template <> inline int scan_forward_zeroes<unsigned long>(unsigned long x){return __builtin_ctzl(x);}
 template <> inline int scan_forward_zeroes<unsigned long long>(unsigned long long x){return __builtin_ctzll(x);}
 
-
-
-UnicodeSet::RunAllocator UnicodeSet::mRunAllocator;
-UnicodeSet::QuadAllocator UnicodeSet::mQuadAllocator;
+SlabAllocator<> UnicodeSet::mAllocator;
 
 const uint64_t QUAD_BITS = (8 * sizeof(bitquad_t));
 const uint64_t MOD_QUAD_BIT_MASK = QUAD_BITS - 1;
@@ -772,8 +769,8 @@ void UnicodeSet::iterator::advance(const unsigned n) {
  * @brief Empty Set Constructor
  ** ------------------------------------------------------------------------------------------------------------- */
 UnicodeSet::UnicodeSet()
-: mRuns(mRunAllocator)
-, mQuads(mQuadAllocator)
+: mRuns(mAllocator)
+, mQuads(mAllocator)
 {
     append_run(Empty, UNICODE_QUAD_COUNT, mRuns);
     assert (verify(mRuns, mQuads));
@@ -783,8 +780,8 @@ UnicodeSet::UnicodeSet()
  * @brief Singleton Set Constructor
  ** ------------------------------------------------------------------------------------------------------------- */
 UnicodeSet::UnicodeSet(const codepoint_t codepoint)
-: mRuns(mRunAllocator)
-, mQuads(mQuadAllocator)
+: mRuns(mAllocator)
+, mQuads(mAllocator)
 {
     const codepoint_t quad_no = codepoint / QUAD_BITS;
     append_run(Empty, quad_no, mRuns);
@@ -797,8 +794,8 @@ UnicodeSet::UnicodeSet(const codepoint_t codepoint)
  * @brief Range Set Constructor
  ** ------------------------------------------------------------------------------------------------------------- */
 UnicodeSet::UnicodeSet(const codepoint_t lo, const codepoint_t hi)
-: mRuns(mRunAllocator)
-, mQuads(mQuadAllocator)
+: mRuns(mAllocator)
+, mQuads(mAllocator)
 {
     const codepoint_t lo_index = lo / QUAD_BITS;
     const codepoint_t hi_index = hi / QUAD_BITS;
@@ -878,9 +875,8 @@ void convertIntervalRangesToSparseSet(const itr begin, const itr end, UnicodeSet
  * @brief Interval Range Constructor
  ** ------------------------------------------------------------------------------------------------------------- */
 UnicodeSet::UnicodeSet(std::initializer_list<interval_t>::iterator begin, std::initializer_list<interval_t>::iterator end)
-: mRuns(0, {Empty, 0}, mRunAllocator)
-, mQuads(0, 0, mQuadAllocator)
-{
+: mRuns(0, {Empty, 0}, mAllocator)
+, mQuads(0, 0, mAllocator) {
     convertIntervalRangesToSparseSet(begin, end, mRuns, mQuads);
 }
 
@@ -888,9 +884,8 @@ UnicodeSet::UnicodeSet(std::initializer_list<interval_t>::iterator begin, std::i
  * @brief Interval Range Constructor
  ** ------------------------------------------------------------------------------------------------------------- */
 UnicodeSet::UnicodeSet(const std::vector<interval_t>::iterator begin, const std::vector<interval_t>::iterator end)
-: mRuns(0, {Empty, 0}, mRunAllocator)
-, mQuads(0, 0, mQuadAllocator)
-{
+: mRuns(0, {Empty, 0}, mAllocator)
+, mQuads(0, 0, mAllocator) {
     convertIntervalRangesToSparseSet(begin, end, mRuns, mQuads);
 }
 
@@ -898,9 +893,8 @@ UnicodeSet::UnicodeSet(const std::vector<interval_t>::iterator begin, const std:
  * @brief Copy Constructor
  ** ------------------------------------------------------------------------------------------------------------- */
 UnicodeSet::UnicodeSet(const UnicodeSet & other)
-: mRuns(other.mRuns, mRunAllocator)
-, mQuads(other.mQuads, mQuadAllocator)
-{
+: mRuns(other.mRuns, mAllocator)
+, mQuads(other.mQuads, mAllocator) {
     assert (verify(mRuns, mQuads));
 }
 
@@ -908,9 +902,8 @@ UnicodeSet::UnicodeSet(const UnicodeSet & other)
  * @brief Initializer Constructor
  ** ------------------------------------------------------------------------------------------------------------- */
 UnicodeSet::UnicodeSet(std::initializer_list<run_t> r, std::initializer_list<bitquad_t> q)
-: mRuns(r.begin(), r.end(), mRunAllocator)
-, mQuads(q.begin(), q.end(), mQuadAllocator)
-{
+: mRuns(r.begin(), r.end(), mAllocator)
+, mQuads(q.begin(), q.end(), mAllocator) {
     assert (verify(mRuns, mQuads));
 }
 
@@ -918,9 +911,8 @@ UnicodeSet::UnicodeSet(std::initializer_list<run_t> r, std::initializer_list<bit
  * @brief Internal Vector Constructor
  ** ------------------------------------------------------------------------------------------------------------- */
 inline UnicodeSet::UnicodeSet(std::vector<run_t> && r, std::vector<bitquad_t> && q)
-: mRuns(r.begin(), r.end(), mRunAllocator)
-, mQuads(q.begin(), q.end(), mQuadAllocator)
-{
+: mRuns(r.begin(), r.end(), mAllocator)
+, mQuads(q.begin(), q.end(), mAllocator) {
     assert (verify(mRuns, mQuads));
 }
 

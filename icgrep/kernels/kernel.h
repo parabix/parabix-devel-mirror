@@ -53,7 +53,7 @@ public:
     virtual llvm::Value * getProcessedItemCount(llvm::Value * kernelInstance) override;
     virtual llvm::Value * getProducedItemCount(llvm::Value * kernelInstance) override;
     virtual void initializeKernelState(Value * self);
-    llvm::Value * getTerminationSignal(llvm::Value * kernelInstance);
+    llvm::Value * getTerminationSignal(llvm::Value * kernelInstance) override;
     
     inline llvm::IntegerType * getSizeTy() {
         return getBuilder()->getSizeTy();

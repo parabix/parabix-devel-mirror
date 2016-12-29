@@ -445,10 +445,6 @@ const std::vector<std::string> & GrepEngine::grepPropertyValues(const std::strin
     return getParsedPropertyValues();
 }
 
-GrepEngine::~GrepEngine() {
-//    delete mEngine;
-}
-
 static int * total_count;
 static std::stringstream * resultStrs = nullptr;
 static std::vector<std::string> inputFiles;
@@ -616,3 +612,15 @@ void icgrep_Linking(Module * m, ExecutionEngine * e) {
     }
 }
 
+GrepEngine::GrepEngine()
+: mGrepFunction(nullptr)
+, mGrepFunction_CountOnly(nullptr)
+, mGrepFunction_CPU(nullptr)
+, mGrepType(GrepType::Normal)
+, mEngine(nullptr) {
+
+}
+
+GrepEngine::~GrepEngine() {
+    delete mEngine;
+}

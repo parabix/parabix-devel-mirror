@@ -28,7 +28,6 @@
 #include <kernels/kernel.h>
 #include <kernels/radix64.h>
 #include <kernels/stdout_kernel.h>
-#include <llvm/IR/TypeBuilder.h>
 
 
 // mmap system
@@ -82,7 +81,7 @@ Function * base64Pipeline(Module * mMod, IDISA::IDISA_Builder * iBuilder) {
     Type * const outputType = PointerType::get(ArrayType::get(ArrayType::get(mBitBlockType, 8), 1), 0);
     Type * const int32ty = iBuilder->getInt32Ty();
     Type * const int8PtrTy = iBuilder->getInt8PtrTy();
-    Type * const voidPtrTy = TypeBuilder<void *, false>::get(mMod->getContext());
+    Type * const voidPtrTy = iBuilder->getVoidPtrTy();
 
     
     Function * const main = cast<Function>(mMod->getOrInsertFunction("Main", voidTy, inputType, outputType, size_ty, nullptr));
@@ -167,7 +166,7 @@ void base64(base64FunctionType fn_ptr, const std::string & fileName) {
     std::string mFileName = fileName;
     size_t mFileSize;
     char * mFileBuffer;
-    
+
     const boost::filesystem::path file(mFileName);
     if (exists(file)) {
         if (is_directory(file)) {
@@ -202,7 +201,9 @@ void base64(base64FunctionType fn_ptr, const std::string & fileName) {
     }
     else if (memAlignBuffering) {
         char * outputBuffer;
-        posix_memalign(reinterpret_cast<void **>(&outputBuffer), 32, 2*mFileSize);
+        if (posix_memalign(reinterpret_cast<void **>(&outputBuffer), 32, 2*mFileSize)) {
+            throw std::bad_alloc();
+        }
         fn_ptr(mFileBuffer, outputBuffer, mFileSize);
         free(reinterpret_cast<void *>(outputBuffer));
     }

@@ -78,7 +78,7 @@ std::vector<std::vector<std::string>> pattGroups;
 
 void run_second_filter(int total_len, int pattern_segs, float errRate){
     
-    if(matchList.size() == 0) return;
+    if(matchList.empty()) return;
 
     //remove the duplicates
     bool cleared = true;

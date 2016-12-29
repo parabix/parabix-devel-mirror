@@ -34,7 +34,7 @@ class PabloKernel : public kernel::KernelBuilder {
 
 public:
 
-    using Allocator = PabloAST::Allocator;
+    using Allocator = SlabAllocator<PabloAST *>;
 
     PabloKernel(IDISA::IDISA_Builder * builder, const std::string & kernelName);
     // At present only population count accumulator are supported,

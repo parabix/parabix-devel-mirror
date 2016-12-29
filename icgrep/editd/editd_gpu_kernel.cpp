@@ -80,8 +80,8 @@ void editdGPUKernel::generateDoBlockMethod() {
             calculated[i][j] = 0;
     Function * bidFunc = cast<Function>(m->getOrInsertFunction("llvm.nvvm.read.ptx.sreg.ctaid.x", int32ty, nullptr));
     Value * bid = iBuilder->CreateCall(bidFunc);
-    Value * pattStartPtr = iBuilder->CreateGEP(pattBuf, {iBuilder->CreateMul(pattLen, bid)});
-    Value * pattPtr = iBuilder->CreateGEP(pattStartPtr, {pattPos});
+    Value * pattStartPtr = iBuilder->CreateGEP(pattBuf, iBuilder->CreateMul(pattLen, bid));
+    Value * pattPtr = iBuilder->CreateGEP(pattStartPtr, pattPos);
     Value * pattCh = iBuilder->CreateLoad(pattPtr);
     Value * pattIdx = iBuilder->CreateAnd(iBuilder->CreateLShr(pattCh, 1), ConstantInt::get(int8ty, 3));
     Value * pattStreamPtr = iBuilder->CreateGEP(ccStreamPtr, {iBuilder->getInt32(0), iBuilder->CreateZExt(pattIdx, int32ty)});
@@ -94,7 +94,7 @@ void editdGPUKernel::generateDoBlockMethod() {
     }
 
     for(unsigned i = 1; i<mPatternLen; i++){     
-        pattPtr = iBuilder->CreateGEP(pattStartPtr, {pattPos});
+        pattPtr = iBuilder->CreateGEP(pattStartPtr, pattPos);
         pattCh = iBuilder->CreateLoad(pattPtr);
         pattIdx = iBuilder->CreateAnd(iBuilder->CreateLShr(pattCh, 1), ConstantInt::get(int8ty, 3));
         pattStreamPtr = iBuilder->CreateGEP(ccStreamPtr, {iBuilder->getInt32(0), iBuilder->CreateZExt(pattIdx, int32ty)});

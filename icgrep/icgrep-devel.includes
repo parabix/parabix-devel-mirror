@@ -5,9 +5,8 @@ pablo
 pablo/analysis
 pablo/optimizers
 UCD
-/usr/include/boost/filesystem
-/usr/include/boost/iostreams
-/usr/include/boost/system
+/usr/include/
+../boost/include/
 ../cudd-2.5.1/cudd
 ../buddy-2.4/src
 pablo/passes
@@ -25,3 +24,5 @@ pablo/type
 editd
 kernels/type
 IDISA/types
+IR_Gen
+IR_Gen/types

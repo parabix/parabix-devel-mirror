@@ -385,11 +385,8 @@ u8u16FunctionType u8u16CodeGen(void) {
     llvm::Function * main_IR = u8u16Pipeline(M, idb);
     
     verifyModule(*M, &dbgs());
-    //std::cerr << "ExecuteKernels(); done\n";
-    u8u16Engine = JIT_to_ExecutionEngine(M);
-    
+    u8u16Engine = JIT_to_ExecutionEngine(M);   
     u8u16Engine->finalizeObject();
-    //std::cerr << "finalizeObject(); done\n";
 
     delete idb;
     return reinterpret_cast<u8u16FunctionType>(u8u16Engine->getPointerToFunction(main_IR));

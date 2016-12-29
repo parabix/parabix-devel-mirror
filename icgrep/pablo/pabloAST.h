@@ -38,7 +38,8 @@ class PabloAST {
 public:
 
     using Allocator = SlabAllocator<PabloAST *>;
-    using Users = std::vector<PabloAST *, Allocator>;
+    using UserAllocator = ProxyAllocator<PabloAST *>;
+    using Users = std::vector<PabloAST *, UserAllocator>;
     using user_iterator = Users::iterator;
     using const_user_iterator = Users::const_iterator;
 

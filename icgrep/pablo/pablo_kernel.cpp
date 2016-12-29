@@ -140,6 +140,6 @@ PabloKernel::PabloKernel(IDISA::IDISA_Builder * builder, const std::string & ker
 
 PabloKernel::~PabloKernel() {
     delete mPabloCompiler;
-    delete mSymbolTable;
+    delete mSymbolTable; 
 }
 

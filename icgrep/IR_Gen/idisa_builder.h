@@ -27,18 +27,9 @@ class IDISA_Builder : public CBuilder {
 
 public:
 
-    IDISA_Builder(Module * m, unsigned archBitWidth, unsigned bitBlockWidth, unsigned stride, unsigned CacheAlignment=64)
-    : CBuilder(m, archBitWidth, CacheAlignment)
-    , mBitBlockWidth(bitBlockWidth)
-    , mStride(stride)
-    , mBitBlockType(VectorType::get(IntegerType::get(getContext(), 64), bitBlockWidth / 64))
-    , mZeroInitializer(Constant::getNullValue(mBitBlockType))
-    , mOneInitializer(Constant::getAllOnesValue(mBitBlockType))
-    , mPrintRegisterFunction(nullptr) {
+    IDISA_Builder(Module * m, unsigned archBitWidth, unsigned bitBlockWidth, unsigned stride, unsigned CacheAlignment=64);
 
-    }
-
-    virtual ~IDISA_Builder() {}
+    virtual ~IDISA_Builder();
     
     std::string getBitBlockTypeName() const;  // A short string such as v4i64 or i256.
 

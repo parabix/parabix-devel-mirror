@@ -9,11 +9,10 @@ set (icgrep_VERSION_MINOR 6)
 
 option(ENABLE_MULTIPLEXING "Compiling the Multiplexing Module")
 option(PRINT_TIMING_INFORMATION "Write compilation and execution timing information to standard error stream")
-
+option(DISABLE_DUAL_ABI "Disable GCC Dual ABI support" OFF)
 find_package(LLVM REQUIRED CONFIG)
 
-message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
-message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
+message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION} in: ${LLVM_DIR}")
 set(CMAKE_MODULE_PATH "${CMAKE_MODULE_PATH};${CMAKE_CURRENT_SOURCE_DIR}/cmake") # ensure custom FindXYZ.cmake files are found
 
 # Now set the header and library paths:
@@ -134,6 +133,11 @@ ELSE() # using Clang, GCC, Intel C++, etc
   SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-rtti")
 ENDIF()
 
+#Disable Dual ABI support
+IF(DISABLE_DUAL_ABI)
+SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -D_GLIBCXX_USE_CXX11_ABI=0")
+ENDIF()
+
 #Enable all warnings
 SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall")
 
@@ -155,7 +159,7 @@ IF (PRINT_TIMING_INFORMATION)
 ENDIF()
 
 SET(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS} -O3 -DNDEBUG")
-SET(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS} -g") #  -fsanitize=address -fno-omit-frame-pointer
+SET(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS} -g -fsanitize=address -fno-omit-frame-pointer") #
 
 add_test(
   NAME greptest

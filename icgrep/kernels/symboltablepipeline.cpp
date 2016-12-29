@@ -728,7 +728,7 @@ Function * SymbolTableBuilder::ExecuteKernels(){
     PHINode * remainingBytes3 = iBuilder->CreatePHI(intType, 3);
     remainingBytes3->addIncoming(bufferSize, partialLeadingCond);
     remainingBytes3->addIncoming(remainingBytes2, regularCondBlock);
-    Value * partialBlockCond = iBuilder->CreateICmpSGT(remainingBytes3, iBuilder->getSize(0);
+    Value * partialBlockCond = iBuilder->CreateICmpSGT(remainingBytes3, iBuilder->getSize(0));
     iBuilder->CreateCondBr(partialBlockCond, partialBodyBlock, flushLengthGroupsBlock);
 
     // If we do, process it and mask out the data

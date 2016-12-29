@@ -141,22 +141,22 @@ void expand3_4Kernel::generateDoSegmentMethod() {
     Value * expand0 = iBuilder->bitCast(iBuilder->CreateShuffleVector(undefPack, pack0, expand_3_4_shuffle[0]));
     iBuilder->CreateAlignedStore(expand0, loopOutput_ptr, packAlign);
     // Step 2 of the main loop.
-    Value * inPack1_ptr = iBuilder->CreateGEP(loopInput_ptr, {iBuilder->getInt32(1)});
-    Value * outPack1_ptr = iBuilder->CreateGEP(loopOutput_ptr, {iBuilder->getInt32(1)});
+    Value * inPack1_ptr = iBuilder->CreateGEP(loopInput_ptr, iBuilder->getInt32(1));
+    Value * outPack1_ptr = iBuilder->CreateGEP(loopOutput_ptr, iBuilder->getInt32(1));
     Value * pack1 = iBuilder->fwCast(8, iBuilder->CreateAlignedLoad(inPack1_ptr, packAlign));
     Value * expand1 = iBuilder->bitCast(iBuilder->CreateShuffleVector(pack0, pack1, expand_3_4_shuffle[1]));
     iBuilder->CreateAlignedStore(expand1, outPack1_ptr, packAlign);
     // Step 3 of the main loop.
-    Value * inPack2_ptr = iBuilder->CreateGEP(loopInput_ptr, {iBuilder->getInt32(2)});
-    Value * outPack2_ptr = iBuilder->CreateGEP(loopOutput_ptr, {iBuilder->getInt32(2)});
+    Value * inPack2_ptr = iBuilder->CreateGEP(loopInput_ptr, iBuilder->getInt32(2));
+    Value * outPack2_ptr = iBuilder->CreateGEP(loopOutput_ptr, iBuilder->getInt32(2));
     Value * pack2 = iBuilder->fwCast(8, iBuilder->CreateAlignedLoad(inPack2_ptr, packAlign));
     Value * expand2 = iBuilder->bitCast(iBuilder->CreateShuffleVector(pack1, pack2, expand_3_4_shuffle[2]));
     iBuilder->CreateAlignedStore(expand2, outPack2_ptr, packAlign);
-    Value * outPack3_ptr = iBuilder->CreateGEP(loopOutput_ptr, {iBuilder->getInt32(3)});
+    Value * outPack3_ptr = iBuilder->CreateGEP(loopOutput_ptr, iBuilder->getInt32(3));
     Value * expand3 = iBuilder->bitCast(iBuilder->CreateShuffleVector(pack2, undefPack, expand_3_4_shuffle[3]));
     iBuilder->CreateAlignedStore(expand3, outPack3_ptr, packAlign);
 
-    Value * loopNextInputPack = iBuilder->CreateGEP(loopInput_ptr, {iBuilder->getInt32(3)});
+    Value * loopNextInputPack = iBuilder->CreateGEP(loopInput_ptr, iBuilder->getInt32(3));
 
 
 
@@ -166,7 +166,7 @@ void expand3_4Kernel::generateDoSegmentMethod() {
     loopProcessed = iBuilder->CreateMul(iBuilder->CreateUDiv(loopProcessed, iBuilder->getInt64(3)), iBuilder->getInt64(4));
 
     Value * loopNextOutputPack;
-    loopNextOutputPack = iBuilder->CreateGEP(loopOutput_ptr, {iBuilder->getInt32(4)});
+    loopNextOutputPack = iBuilder->CreateGEP(loopOutput_ptr, iBuilder->getInt32(4));
 
     loopInput_ptr->addIncoming(loopNextInputPack, expand_3_4_loop);
     loopOutput_ptr->addIncoming(loopNextOutputPack, expand_3_4_loop);
@@ -211,14 +211,14 @@ void expand3_4Kernel::generateDoSegmentMethod() {
     Value * condition_c = iBuilder->CreateICmpULE(loopExitItemsRemain, packSize);
     iBuilder->CreateCondBr(condition_c, step2store, step2load);
     iBuilder->SetInsertPoint(step2load);
-    inPack1_ptr = iBuilder->CreateGEP(loopExitInput_ptr, {iBuilder->getInt32(1)});
+    inPack1_ptr = iBuilder->CreateGEP(loopExitInput_ptr, iBuilder->getInt32(1));
     pack1 = iBuilder->fwCast(8, iBuilder->CreateAlignedLoad(inPack1_ptr, packAlign));
     iBuilder->CreateBr(step2store);
     iBuilder->SetInsertPoint(step2store);
     PHINode * pack1phi = iBuilder->CreatePHI(iBuilder->fwVectorType(8), 2);
     pack1phi->addIncoming(undefPack, finalStep2);
     pack1phi->addIncoming(pack1, step2load);
-    outPack1_ptr = iBuilder->CreateGEP(loopExitOutput_ptr, {iBuilder->getInt32(1)});
+    outPack1_ptr = iBuilder->CreateGEP(loopExitOutput_ptr, iBuilder->getInt32(1));
     expand1 = iBuilder->bitCast(iBuilder->CreateShuffleVector(pack0, pack1phi, expand_3_4_shuffle[1]));
     iBuilder->CreateAlignedStore(expand1, outPack1_ptr, packAlign);
     Value * condition_d = iBuilder->CreateICmpULE(loopExitItemsRemain, ConstantInt::get(iBuilder->getSizeTy(), 6 * PACK_SIZE/4));
@@ -228,20 +228,20 @@ void expand3_4Kernel::generateDoSegmentMethod() {
     Value * condition_e = iBuilder->CreateICmpULE(loopExitItemsRemain, ConstantInt::get(iBuilder->getSizeTy(), 2 * PACK_SIZE));
     iBuilder->CreateCondBr(condition_e, step3store, step3load);
     iBuilder->SetInsertPoint(step3load);
-    inPack2_ptr = iBuilder->CreateGEP(loopExitInput_ptr, {iBuilder->getInt32(2)});
+    inPack2_ptr = iBuilder->CreateGEP(loopExitInput_ptr, iBuilder->getInt32(2));
     pack2 = iBuilder->fwCast(8, iBuilder->CreateAlignedLoad(inPack2_ptr, packAlign));
     iBuilder->CreateBr(step3store);
     iBuilder->SetInsertPoint(step3store);
     PHINode * pack2phi = iBuilder->CreatePHI(iBuilder->fwVectorType(8), 2);
     pack2phi->addIncoming(undefPack, finalStep3);
     pack2phi->addIncoming(pack2, step3load);
-    outPack2_ptr = iBuilder->CreateGEP(loopExitOutput_ptr, {iBuilder->getInt32(2)});
+    outPack2_ptr = iBuilder->CreateGEP(loopExitOutput_ptr, iBuilder->getInt32(2));
     expand2 = iBuilder->bitCast(iBuilder->CreateShuffleVector(pack1phi, pack2phi, expand_3_4_shuffle[2]));
     iBuilder->CreateAlignedStore(expand2, outPack2_ptr, packAlign);
     Value * condition_f = iBuilder->CreateICmpULE(loopExitItemsRemain, ConstantInt::get(iBuilder->getSizeTy(), 9 * PACK_SIZE/4));
     iBuilder->CreateCondBr(condition_f, itemsDone, step3store2);
     iBuilder->SetInsertPoint(step3store2);
-    outPack3_ptr = iBuilder->CreateGEP(loopExitOutput_ptr, {iBuilder->getInt32(3)});
+    outPack3_ptr = iBuilder->CreateGEP(loopExitOutput_ptr, iBuilder->getInt32(3));
     expand3 = iBuilder->bitCast(iBuilder->CreateShuffleVector(pack2phi, undefPack, expand_3_4_shuffle[3]));
     iBuilder->CreateAlignedStore(expand3, outPack3_ptr, packAlign);
     iBuilder->CreateBr(itemsDone);
@@ -418,7 +418,7 @@ void radix64Kernel::generateFinalBlockMethod() {
     Value * i8input_ptr = iBuilder->CreatePointerCast(expandedstream_ptr, iBuilder->getInt8PtrTy());
     Value * remainOutputStart = iBuilder->CreateSub(remainingBytes, remainMod4);
 
-    Value * firstRemainByte = iBuilder->CreateLoad(iBuilder->CreateGEP(i8input_ptr, {iBuilder->getInt32(0)}));
+    Value * firstRemainByte = iBuilder->CreateLoad(iBuilder->CreateGEP(i8input_ptr, iBuilder->getInt32(0)));
 
     Value * first_move_right_2_mask = ConstantInt::get(iBuilder->getInt8Ty(), 0xFC);
     Value * first_output_byte = iBuilder->CreateLShr(iBuilder->CreateAnd(firstRemainByte, first_move_right_2_mask), 2);
@@ -426,25 +426,25 @@ void radix64Kernel::generateFinalBlockMethod() {
     Value * first_move_left_4_mask = ConstantInt::get(iBuilder->getInt8Ty(), 0x03);
     Value * first_move_left_4_byte = iBuilder->CreateShl(iBuilder->CreateAnd(firstRemainByte, first_move_left_4_mask), 4);
 
-    iBuilder->CreateStore(first_output_byte, iBuilder->CreateGEP(i8output_ptr, {iBuilder->CreateAdd(remainOutputStart, iBuilder->getInt64(0))}));
+    iBuilder->CreateStore(first_output_byte, iBuilder->CreateGEP(i8output_ptr, iBuilder->CreateAdd(remainOutputStart, iBuilder->getInt64(0))));
 
 
     iBuilder->CreateCondBr(iBuilder->CreateICmpEQ(remainMod4, iBuilder->getSize(1)), handleNoRemainSecondByte, handleRemainSecondByte);
     iBuilder->SetInsertPoint(handleRemainSecondByte);
 
-    Value * secondRemainByte = iBuilder->CreateLoad(iBuilder->CreateGEP(i8input_ptr, {iBuilder->getInt32(1)}));
+    Value * secondRemainByte = iBuilder->CreateLoad(iBuilder->CreateGEP(i8input_ptr, iBuilder->getInt32(1)));
     Value * second_move_right_4_mask = ConstantInt::get(iBuilder->getInt8Ty(), 0xF0);
     Value * second_move_right_4_byte = iBuilder->CreateLShr(iBuilder->CreateAnd(secondRemainByte, second_move_right_4_mask), 4);
     Value * second_output_byte = iBuilder->CreateOr(first_move_left_4_byte, second_move_right_4_byte);
-    iBuilder->CreateStore(second_output_byte, iBuilder->CreateGEP(i8output_ptr, {iBuilder->CreateAdd(remainOutputStart, iBuilder->getInt64(1))}));
+    iBuilder->CreateStore(second_output_byte, iBuilder->CreateGEP(i8output_ptr, iBuilder->CreateAdd(remainOutputStart, iBuilder->getInt64(1))));
 
     Value * second_move_left_2_mask = ConstantInt::get(iBuilder->getInt8Ty(), 0x0F);
     Value * second_move_left_2_byte = iBuilder->CreateShl(iBuilder->CreateAnd(secondRemainByte, second_move_left_2_mask), 2);
-    iBuilder->CreateStore(second_move_left_2_byte, iBuilder->CreateGEP(i8output_ptr, {iBuilder->CreateAdd(remainOutputStart, iBuilder->getInt64(2))}));
+    iBuilder->CreateStore(second_move_left_2_byte, iBuilder->CreateGEP(i8output_ptr, iBuilder->CreateAdd(remainOutputStart, iBuilder->getInt64(2))));
     iBuilder->CreateBr(fbExit);
 
     iBuilder->SetInsertPoint(handleNoRemainSecondByte);
-    iBuilder->CreateStore(first_move_left_4_byte, iBuilder->CreateGEP(i8output_ptr, {iBuilder->CreateAdd(remainOutputStart, iBuilder->getInt64(1))}));
+    iBuilder->CreateStore(first_move_left_4_byte, iBuilder->CreateGEP(i8output_ptr, iBuilder->CreateAdd(remainOutputStart, iBuilder->getInt64(1))));
     iBuilder->CreateBr(fbExit);
 
     iBuilder->SetInsertPoint(fbExit);
@@ -558,11 +558,11 @@ void base64Kernel::generateFinalBlockMethod() {
     iBuilder->CreateCondBr(iBuilder->CreateICmpEQ(padBytes, iBuilder->getSize(0)), fbExit, doPadding);
     iBuilder->SetInsertPoint(doPadding);
     Value * i8output_ptr = iBuilder->CreatePointerCast(base64stream_ptr, iBuilder->getInt8PtrTy());
-    iBuilder->CreateStore(ConstantInt::get(iBuilder->getInt8Ty(), '='), iBuilder->CreateGEP(i8output_ptr, {remainingBytes}));
+    iBuilder->CreateStore(ConstantInt::get(iBuilder->getInt8Ty(), '='), iBuilder->CreateGEP(i8output_ptr, remainingBytes));
     iBuilder->CreateCondBr(iBuilder->CreateICmpEQ(remainMod4, iBuilder->getSize(3)), fbExit, doPadding2);
     iBuilder->SetInsertPoint(doPadding2);
     Value * finalPadPos = iBuilder->CreateAdd(remainingBytes, iBuilder->getSize(1));
-    iBuilder->CreateStore(ConstantInt::get(iBuilder->getInt8Ty(), '='), iBuilder->CreateGEP(i8output_ptr, {finalPadPos}));
+    iBuilder->CreateStore(ConstantInt::get(iBuilder->getInt8Ty(), '='), iBuilder->CreateGEP(i8output_ptr, finalPadPos));
     iBuilder->CreateBr(fbExit);
     iBuilder->SetInsertPoint(fbExit);
     Value * produced = iBuilder->CreateAdd(getProducedItemCount(self), iBuilder->CreateAdd(remainingBytes, padBytes));
