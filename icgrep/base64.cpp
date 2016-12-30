@@ -79,9 +79,6 @@ Function * base64Pipeline(Module * mMod, IDISA::IDISA_Builder * iBuilder) {
     Type * const voidTy = Type::getVoidTy(mMod->getContext());
     Type * const inputType = PointerType::get(ArrayType::get(ArrayType::get(mBitBlockType, 8), 1), 0);
     Type * const outputType = PointerType::get(ArrayType::get(ArrayType::get(mBitBlockType, 8), 1), 0);
-    Type * const int32ty = iBuilder->getInt32Ty();
-    Type * const int8PtrTy = iBuilder->getInt8PtrTy();
-    Type * const voidPtrTy = iBuilder->getVoidPtrTy();
 
     
     Function * const main = cast<Function>(mMod->getOrInsertFunction("Main", voidTy, inputType, outputType, size_ty, nullptr));
@@ -104,28 +101,6 @@ Function * base64Pipeline(Module * mMod, IDISA::IDISA_Builder * iBuilder) {
     Radix64out.allocateBuffer();
     Base64out.allocateBuffer();
 
-
-    Type * pthreadTy = size_ty;
-    FunctionType * funVoidPtrVoidTy = FunctionType::get(voidTy, int8PtrTy, false);
-    
-    Function * pthreadCreateFunc = cast<Function>(mMod->getOrInsertFunction("pthread_create",
-                                                                         int32ty,
-                                                                         pthreadTy->getPointerTo(),
-                                                                         voidPtrTy,
-                                                                         static_cast<Type *>(funVoidPtrVoidTy)->getPointerTo(),
-                                                                         voidPtrTy, nullptr));
-    pthreadCreateFunc->setCallingConv(llvm::CallingConv::C);
-    Function * pthreadJoinFunc = cast<Function>(mMod->getOrInsertFunction("pthread_join",
-                                                                       int32ty,
-                                                                       pthreadTy,
-                                                                       PointerType::get(int8PtrTy, 0), nullptr));
-    pthreadJoinFunc->setCallingConv(llvm::CallingConv::C);
-    
-    Function * pthreadExitFunc = cast<Function>(mMod->getOrInsertFunction("pthread_exit",
-                                                                       voidTy, 
-                                                                       voidPtrTy, nullptr));
-    pthreadExitFunc->addFnAttr(llvm::Attribute::NoReturn);
-    pthreadExitFunc->setCallingConv(llvm::CallingConv::C);
 
     if (segmentPipelineParallel){
         generateSegmentParallelPipeline(iBuilder, {&expandK, &radix64K, &base64K, &stdoutK});

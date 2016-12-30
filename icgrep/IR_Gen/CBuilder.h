@@ -48,6 +48,18 @@ public:
     Value * CreateAlignedRealloc(Value * ptr, Value * size, const unsigned alignment);
     void CreateMemZero(Value * ptr, Value * size, const unsigned alignment = 1);
     
+    
+    // Create calls to Posix thread (pthread.h) functions.
+    //
+    //  int pthread_create(pthread_t *thread, const pthread_attr_t *attr,
+    //                    void *(*start_routine)(void*), void *arg);
+    Value * CreatePThreadCreateCall(Value * thread, Value * attr, Function * start_routine, Value * arg);
+    //  void pthread_exit(void *value_ptr);
+    Value * CreatePThreadExitCall(Value * value_ptr);
+    //  int pthread_join(pthread_t thread, void **value_ptr);
+    Value * CreatePThreadJoinCall(Value * thread, Value * value_ptr);
+    
+    
     void CallPrintRegister(const std::string & regName, Value * const value);
     void CallPrintInt(const std::string & name, Value * const value);
     

@@ -82,9 +82,7 @@ Function * generateSegmentParallelPipelineThreadFunction(std::string name, IDISA
     
     iBuilder->SetInsertPoint(exitThreadBlock);
     Value * nullVal = Constant::getNullValue(voidPtrTy);
-    Function * pthreadExitFunc = m->getFunction("pthread_exit");
-    CallInst * exitThread = iBuilder->CreateCall(pthreadExitFunc, {nullVal});
-    exitThread->setDoesNotReturn();
+    iBuilder->CreatePThreadExitCall(nullVal);
     iBuilder->CreateRetVoid();
 
     return threadFunc;
@@ -130,11 +128,8 @@ void generateSegmentParallelPipeline(IDISA::IDISA_Builder * iBuilder, std::vecto
     }
     iBuilder->restoreIP(ip);
 
-    Function * pthreadCreateFunc = m->getFunction("pthread_create");
-    Function * pthreadJoinFunc = m->getFunction("pthread_join");
-
     for (unsigned i = 0; i < threadNum; i++) {
-        iBuilder->CreateCall(pthreadCreateFunc, std::vector<Value *>({pthreadsPtrs[i], nullVal, thread_functions[i], iBuilder->CreateBitCast(sharedStruct, int8PtrTy)}));
+        iBuilder->CreatePThreadCreateCall(pthreadsPtrs[i], nullVal, thread_functions[i], iBuilder->CreateBitCast(sharedStruct, int8PtrTy));
     }
 
     std::vector<Value *> threadIDs;
@@ -143,16 +138,14 @@ void generateSegmentParallelPipeline(IDISA::IDISA_Builder * iBuilder, std::vecto
     }
     
     for (unsigned i = 0; i < threadNum; i++) { 
-        iBuilder->CreateCall(pthreadJoinFunc, std::vector<Value *>({threadIDs[i], status}));
+        iBuilder->CreatePThreadJoinCall(threadIDs[i], status);
     }
 
 }
 
 void generatePipelineParallel(IDISA::IDISA_Builder * iBuilder, std::vector<KernelBuilder *> kernels) {
  
-    Module * m = iBuilder->getModule();
-
-    Type * pthreadTy = iBuilder->getSizeTy();     
+    Type * pthreadTy = iBuilder->getSizeTy();
     Type * const voidPtrTy = iBuilder->getVoidPtrTy();
     Type * const int8PtrTy = iBuilder->getInt8PtrTy();
 
@@ -175,11 +168,8 @@ void generatePipelineParallel(IDISA::IDISA_Builder * iBuilder, std::vector<Kerne
     }
     iBuilder->restoreIP(ip);
 
-    Function * pthreadCreateFunc = m->getFunction("pthread_create");
-    Function * pthreadJoinFunc = m->getFunction("pthread_join");
-
     for (unsigned i = 0; i < kernels.size(); i++) {
-        iBuilder->CreateCall(pthreadCreateFunc, std::vector<Value *>({pthreadsPtrs[i], nullVal, kernel_functions[i], iBuilder->CreateBitCast(kernels[i]->getInstance(), int8PtrTy)}));
+        iBuilder->CreatePThreadCreateCall(pthreadsPtrs[i], nullVal, kernel_functions[i], iBuilder->CreateBitCast(kernels[i]->getInstance(), int8PtrTy));
     }
 
     std::vector<Value *> threadIDs;
@@ -188,7 +178,7 @@ void generatePipelineParallel(IDISA::IDISA_Builder * iBuilder, std::vector<Kerne
     }
     
     for (unsigned i = 0; i < kernels.size(); i++) { 
-        iBuilder->CreateCall(pthreadJoinFunc, std::vector<Value *>({threadIDs[i], status}));
+        iBuilder->CreatePThreadJoinCall(threadIDs[i], status);
     }
 }
 

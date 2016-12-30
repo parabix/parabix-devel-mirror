@@ -337,28 +337,6 @@ Function * u8u16Pipeline(Module * mod, IDISA::IDISA_Builder * iBuilder) {
         U16out.allocateBuffer();
     }
 
-    Type * pthreadTy = size_ty;
-    FunctionType * funVoidPtrVoidTy = FunctionType::get(voidTy, int8PtrTy, false);
-
-    Function * pthreadCreateFunc = cast<Function>(mod->getOrInsertFunction("pthread_create",
-                                                                         int32ty,
-                                                                         pthreadTy->getPointerTo(),
-                                                                         voidPtrTy,
-                                                                         static_cast<Type *>(funVoidPtrVoidTy)->getPointerTo(),
-                                                                         voidPtrTy, nullptr));
-    pthreadCreateFunc->setCallingConv(llvm::CallingConv::C);
-    Function * pthreadJoinFunc = cast<Function>(mod->getOrInsertFunction("pthread_join",
-                                                                       int32ty,
-                                                                       pthreadTy,
-                                                                       PointerType::get(int8PtrTy, 0), nullptr));
-    pthreadJoinFunc->setCallingConv(llvm::CallingConv::C);
-
-    Function * pthreadExitFunc = cast<Function>(mod->getOrInsertFunction("pthread_exit",
-                                                                       voidTy,
-                                                                       voidPtrTy, nullptr));
-    pthreadExitFunc->addFnAttr(llvm::Attribute::NoReturn);
-    pthreadExitFunc->setCallingConv(llvm::CallingConv::C);
-
     if (segmentPipelineParallel){
         generateSegmentParallelPipeline(iBuilder, {&s2pk, &u8u16k, &delK, &p2sk, &stdoutK});
     } else {

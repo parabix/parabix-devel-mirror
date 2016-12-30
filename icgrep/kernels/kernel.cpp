@@ -584,10 +584,7 @@ Function * KernelBuilder::generateThreadFunction(std::string name){
         mStreamSetOutputBuffers[i]->setEndOfInput(ssStructPtr);
     }
 
-    Value * nullVal = Constant::getNullValue(voidPtrTy);
-    Function * pthreadExitFunc = m->getFunction("pthread_exit");
-    CallInst * exitThread = iBuilder->CreateCall(pthreadExitFunc, {nullVal}); 
-    exitThread->setDoesNotReturn();
+    iBuilder->CreatePThreadExitCall(Constant::getNullValue(voidPtrTy));
     iBuilder->CreateRetVoid();
 
     return threadFunc;

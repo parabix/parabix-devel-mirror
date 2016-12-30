@@ -211,3 +211,48 @@ StoreInst * CBuilder::CreateAtomicStoreRelease(Value * val, Value * ptr) {
     inst->setOrdering(AtomicOrdering::Release);
     return inst;
 }
+
+//
+// int pthread_create(pthread_t *thread, const pthread_attr_t *attr,
+//                    void *(*start_routine)(void*), void *arg);
+//
+Value * CBuilder::CreatePThreadCreateCall(Value * thread, Value * attr, Function * start_routine, Value * arg) {
+
+    Type * pthreadTy = getSizeTy();
+    FunctionType * funVoidPtrVoidTy = FunctionType::get(getVoidTy(), getVoidPtrTy(), false);
+    
+    Function * pthreadCreateFunc = cast<Function>(mMod->getOrInsertFunction("pthread_create",
+                                                                         getInt32Ty(),
+                                                                         pthreadTy->getPointerTo(),
+                                                                         getVoidPtrTy(),
+                                                                         static_cast<Type *>(funVoidPtrVoidTy)->getPointerTo(),
+                                                                         getVoidPtrTy(), nullptr));
+    pthreadCreateFunc->setCallingConv(llvm::CallingConv::C);
+    return CreateCall(pthreadCreateFunc, {thread, attr, start_routine, arg});
+}
+
+//  #include <pthread.h>
+//  void pthread_exit(void *value_ptr);
+
+Value * CBuilder::CreatePThreadExitCall(Value * value_ptr) {
+    Function * pthreadExitFunc = cast<Function>(mMod->getOrInsertFunction("pthread_exit",
+                                                                            getVoidTy(),
+                                                                            getVoidPtrTy(), nullptr));
+    pthreadExitFunc->addFnAttr(llvm::Attribute::NoReturn);
+    pthreadExitFunc->setCallingConv(llvm::CallingConv::C);
+    return CreateCall(pthreadExitFunc, {value_ptr});
+    CallInst * exitThread = CreateCall(pthreadExitFunc, {value_ptr});
+    exitThread->setDoesNotReturn();
+    return exitThread;
+}
+
+//  int pthread_join(pthread_t thread, void **value_ptr);
+Value * CBuilder::CreatePThreadJoinCall(Value * thread, Value * value_ptr){
+    Type * pthreadTy = getSizeTy();
+    Function * pthreadJoinFunc = cast<Function>(mMod->getOrInsertFunction("pthread_join",
+                                                                       getInt32Ty(),
+                                                                       pthreadTy,
+                                                                       getVoidPtrTy()->getPointerTo(), nullptr));
+    pthreadJoinFunc->setCallingConv(llvm::CallingConv::C);
+    return CreateCall(pthreadJoinFunc, {thread, value_ptr});
+}

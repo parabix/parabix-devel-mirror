@@ -311,29 +311,8 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool Count
     ByteStream.setStreamSetBuffer(inputStream, fileSize);
     BasisBits.allocateBuffer();
 
-    Type * pthreadTy = size_ty;
-    FunctionType * funVoidPtrVoidTy = FunctionType::get(voidTy, int8PtrTy, false);   
-    
-    Function * pthreadCreateFunc = cast<Function>(M->getOrInsertFunction("pthread_create",
-                                        int32ty, 
-                                        pthreadTy->getPointerTo(), 
-                                        voidPtrTy, 
-                                        static_cast<Type *>(funVoidPtrVoidTy)->getPointerTo(),
-                                        voidPtrTy, nullptr));
-    pthreadCreateFunc->setCallingConv(llvm::CallingConv::C);
-    Function * pthreadJoinFunc = cast<Function>(M->getOrInsertFunction("pthread_join", 
-                                        int32ty, 
-                                        pthreadTy, 
-                                        PointerType::get(int8PtrTy, 0), nullptr));
-    pthreadJoinFunc->setCallingConv(llvm::CallingConv::C);
 
-    Function * pthreadExitFunc = cast<Function>(M->getOrInsertFunction("pthread_exit", 
-                                        voidTy, 
-                                        voidPtrTy, nullptr));
-    pthreadExitFunc->addFnAttr(llvm::Attribute::NoReturn);
-    pthreadExitFunc->setCallingConv(llvm::CallingConv::C);
-
-    if (CountOnly) {        
+    if (CountOnly) {
         icgrepK.generateKernel({&BasisBits}, {});       
         if (pipelineParallel){
             generatePipelineParallel(iBuilder, {&s2pk, &icgrepK});
