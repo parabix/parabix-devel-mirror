@@ -49,6 +49,11 @@ public:
     void CreateMemZero(Value * ptr, Value * size, const unsigned alignment = 1);
     
     
+    // Create calls to unistd.h functions.
+    //
+    // ssize_t write(int fildes, const void *buf, size_t nbyte);
+    Value * CreateWriteCall(Value * fildes, Value * buf, Value * nbyte);
+    
     // Create calls to Posix thread (pthread.h) functions.
     //
     //  int pthread_create(pthread_t *thread, const pthread_attr_t *attr,

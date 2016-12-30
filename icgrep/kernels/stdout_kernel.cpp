@@ -8,19 +8,6 @@
 
 namespace kernel {
 
-static Function * create_write(Module * const mod, IDISA::IDISA_Builder * builder) {
-    Function * write = mod->getFunction("write");
-    if (write == nullptr) {
-        IntegerType * sizeTy = builder->getSizeTy();
-        IntegerType * int32Ty = builder->getInt32Ty();
-        PointerType * int8PtrTy = builder->getInt8PtrTy();
-        write = cast<Function>(mod->getOrInsertFunction("write",
-                                 AttributeSet().addAttribute(mod->getContext(), 2U, Attribute::NoAlias),
-                                 sizeTy, int32Ty, int8PtrTy, sizeTy, nullptr));
-    }
-    return write;
-}
-
 // The doBlock method is deprecated.   But in case it is used, just call doSegment with
 // 1 as the number of blocks to do.
 void StdOutKernel::generateDoBlockMethod() {
@@ -40,7 +27,6 @@ void StdOutKernel::generateDoBlockMethod() {
 void StdOutKernel::generateDoSegmentMethod() {
     auto savePoint = iBuilder->saveIP();
     Module * m = iBuilder->getModule();
-    Function * writefn = create_write(m, iBuilder);
     Function * doSegmentFunction = m->getFunction(mKernelName + doSegment_suffix);
     Type * i8PtrTy = iBuilder->getInt8PtrTy();
     
@@ -72,8 +58,8 @@ void StdOutKernel::generateDoSegmentMethod() {
     Value * byteOffset = iBuilder->CreateMul(iBuilder->CreateURem(processed, blockItems), itemBytes);
     Value * bytePtr = iBuilder->CreateGEP(iBuilder->CreateBitCast(basePtr, i8PtrTy), byteOffset);
 
-    iBuilder->CreateCall(writefn, std::vector<Value *>({iBuilder->getInt32(1), bytePtr, iBuilder->CreateMul(itemsToDo, itemBytes)}));
-    
+    iBuilder->CreateWriteCall(iBuilder->getInt32(1), bytePtr, iBuilder->CreateMul(itemsToDo, itemBytes));
+
     processed = iBuilder->CreateAdd(processed, itemsToDo);
     setProcessedItemCount(self, processed);
     setScalarField(self, blockNoScalar, iBuilder->CreateUDiv(processed, blockItems));
@@ -96,7 +82,6 @@ void StdOutKernel::generateDoSegmentMethod() {
 void StdOutKernel::generateFinalBlockMethod() {
     auto savePoint = iBuilder->saveIP();
     Module * m = iBuilder->getModule();
-    Function * writefn = create_write(m, iBuilder);
     Function * finalBlockFunction = m->getFunction(mKernelName + finalBlock_suffix);
     Type * i8PtrTy = iBuilder->getInt8PtrTy();
     
@@ -112,7 +97,7 @@ void StdOutKernel::generateFinalBlockMethod() {
     Value * basePtr = getStreamSetBlockPtr(self, "codeUnitBuffer", blockNo);
     Value * byteOffset = iBuilder->CreateMul(iBuilder->CreateURem(processed, blockItems), itemBytes);
     Value * bytePtr = iBuilder->CreateGEP(iBuilder->CreateBitCast(basePtr, i8PtrTy), byteOffset);
-    iBuilder->CreateCall(writefn, std::vector<Value *>({iBuilder->getInt32(1), bytePtr, iBuilder->CreateMul(itemsAvail, itemBytes)}));
+    iBuilder->CreateWriteCall(iBuilder->getInt32(1), bytePtr, iBuilder->CreateMul(itemsAvail, itemBytes));
     setProcessedItemCount(self, producerPos);
     mStreamSetInputBuffers[0]->setConsumerPos(streamStructPtr, producerPos);
     setTerminationSignal(self);

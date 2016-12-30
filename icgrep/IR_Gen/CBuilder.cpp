@@ -12,7 +12,22 @@
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/IR/TypeBuilder.h>
 
-    
+
+
+// ssize_t write(int fildes, const void *buf, size_t nbyte);
+Value * CBuilder::CreateWriteCall(Value * fildes, Value * buf, Value * nbyte) {
+    Function * write = mMod->getFunction("write");
+    if (write == nullptr) {
+        IntegerType * sizeTy = getSizeTy();
+        IntegerType * int32Ty = getInt32Ty();
+        PointerType * int8PtrTy = getInt8PtrTy();
+        write = cast<Function>(mMod->getOrInsertFunction("write",
+                                                        AttributeSet().addAttribute(mMod->getContext(), 2U, Attribute::NoAlias),
+                                                        sizeTy, int32Ty, int8PtrTy, sizeTy, nullptr));
+    }
+    return CreateCall(write, {fildes, buf, nbyte});
+}
+
 Function * CBuilder::GetPrintf() {
     Function * printf = mMod->getFunction("printf");
     if (printf == nullptr) {

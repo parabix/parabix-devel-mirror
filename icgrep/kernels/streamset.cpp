@@ -127,16 +127,12 @@ llvm::Value * LinearCopybackBuffer::getStreamSetBlockPointer(llvm::Value * buffe
 }
 
 void LinearCopybackBuffer::setConsumerPos(Value * bufferStructPtr, Value * new_consumer_pos) {
-    Type * const i1 = iBuilder->getInt1Ty();
     Type * const i8 = iBuilder->getInt8Ty();
-    Type * const i32 = iBuilder->getInt32Ty();
     Type * const i8_ptr = i8->getPointerTo(mAddrSpace);
     IntegerType * const sizeTy = iBuilder->getSizeTy();
 
     Module * const M = iBuilder->getModule();
 
-    Function * const memmoveFunc = cast<Function>(M->getOrInsertFunction("llvm.memmove.p0i8.p0i8.i" + std::to_string(sizeTy->getBitWidth()),
-                                                                  iBuilder->getVoidTy(), i8_ptr, i8_ptr, sizeTy, i32, i1, nullptr));
     Function * const current = iBuilder->GetInsertBlock()->getParent();
     BasicBlock * const copyBackBody = BasicBlock::Create(M->getContext(), "copy_back", current, 0);
     BasicBlock * const setConsumerPosExit = BasicBlock::Create(M->getContext(), "setConsumerPos_done", current, 0);
@@ -174,9 +170,8 @@ void LinearCopybackBuffer::setConsumerPos(Value * bufferStructPtr, Value * new_c
     Value * bufferPtr = iBuilder->CreateLoad(handle);
     Value * const consumerBlock = iBuilder->CreateUDiv(consumerPos, blockWidth);
     Value * copyFrom = iBuilder->CreateGEP(bufferPtr, iBuilder->CreateSub(new_consumer_block, consumerBlock));
-    Value * alignment = ConstantInt::get(iBuilder->getInt32Ty(), iBuilder->getBitBlockWidth() / 8);
-    
-    iBuilder->CreateCall(memmoveFunc, {iBuilder->CreateBitCast(bufferPtr, i8_ptr), iBuilder->CreateBitCast(copyFrom, i8_ptr), copyLength, alignment, ConstantInt::getNullValue(i1)});
+    unsigned alignment = iBuilder->getBitBlockWidth() / 8;
+    iBuilder->CreateMemMove(iBuilder->CreateBitCast(bufferPtr, i8_ptr), iBuilder->CreateBitCast(copyFrom, i8_ptr), copyLength, alignment);
     iBuilder->CreateBr(setConsumerPosExit);
     // Copy back done, store the new consumer position.
     iBuilder->SetInsertPoint(setConsumerPosExit);
