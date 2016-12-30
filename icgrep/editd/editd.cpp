@@ -42,6 +42,7 @@
 #include <boost/filesystem.hpp>
 #include <boost/iostreams/device/mapped_file.hpp>
 #include <fcntl.h>
+#include <mutex>
 
 #ifdef CUDA_ENABLED
 #include <editd/EditdCudaDriver.h>
@@ -60,6 +61,8 @@ static cl::opt<int> optPosition("opt-pos", cl::desc("Optimize position"), cl::in
 static cl::opt<int> stepSize("step-size", cl::desc("Step Size"), cl::init(3));
 static cl::opt<int> prefixLen("prefix", cl::desc("Prefix length"), cl::init(4));
 static cl::opt<bool> ShowPositions("display", cl::desc("Display the match positions."), cl::init(false));
+
+static cl::opt<int> Threads("threads", cl::desc("Total number of threads."), cl::init(1));
 
 using namespace kernel;
 using namespace pablo;
@@ -136,13 +139,17 @@ void run_second_filter(int total_len, int pattern_segs, float errRate){
 }
 
 extern "C" {
+std::mutex store_mutex;
 void wrapped_report_pos(size_t match_pos, int dist) {
         struct matchPosition curMatch;
         curMatch.pos = match_pos;
         curMatch.dist = dist;
+
+        store_mutex.lock();
         matchList.push_back(curMatch);
         if(ShowPositions)
             std::cout << "pos: " << match_pos << ", dist:" << dist << "\n";
+        store_mutex.unlock();
     }
 
 }
@@ -209,6 +216,7 @@ void buildPatternKernel(PabloKernel & kernel, IDISA::IDISA_Builder * iBuilder, c
 
     pablo_function_passes(&kernel);
 }
+
 
 Function * editdPipeline(Module * mMod, IDISA::IDISA_Builder * iBuilder, const std::vector<std::string> & patterns) {
     
@@ -419,6 +427,29 @@ void editd(editdFunctionType fn_ptr, char * inputStream, int size) {
 
     fn_ptr(inputStream, size);
     
+}
+
+std::mutex count_mutex;
+size_t groupCount;
+void *DoEditd(void *threadid)
+{
+    size_t groupIdx;
+    count_mutex.lock();
+    groupIdx = groupCount;
+    groupCount++;
+    count_mutex.unlock();
+
+    while (groupIdx < pattGroups.size()){
+        editdFunctionType editd_ptr = editdCodeGen(pattGroups[groupIdx]);
+        editd(editd_ptr, chStream, size);
+
+        count_mutex.lock();
+        groupIdx = groupCount;
+        groupCount++;
+        count_mutex.unlock();
+    }
+
+    pthread_exit(NULL);
 }
 
 #ifdef CUDA_ENABLED 
@@ -663,9 +694,32 @@ int main(int argc, char *argv[]) {
         editd(editd_ptr, chStream, size);
     }
     else{
-        for(unsigned i=0; i<pattGroups.size(); i++){
-            editdFunctionType editd_ptr = editdCodeGen(pattGroups[i]);
-            editd(editd_ptr, chStream, size);
+        if (Threads == 1) {
+            for(unsigned i=0; i<pattGroups.size(); i++){
+                editdFunctionType editd_ptr = editdCodeGen(pattGroups[i]);
+                editd(editd_ptr, chStream, size);
+            }
+        }
+        else{
+            const unsigned numOfThreads = Threads;
+            pthread_t threads[numOfThreads];
+            groupCount = 0;
+
+            for(unsigned long i = 0; i < numOfThreads; ++i){
+                const int rc = pthread_create(&threads[i], NULL, DoEditd, (void *)i);
+                if (rc) {
+                    llvm::report_fatal_error("Failed to create thread: code " + std::to_string(rc));
+                }
+            }
+
+            for(unsigned i = 0; i < numOfThreads; ++i) {
+                void * status = nullptr;
+                const int rc = pthread_join(threads[i], &status);
+                if (rc) {
+                    llvm::report_fatal_error("Failed to join thread: code " + std::to_string(rc));
+                }
+            }
+
         }
         run_second_filter(pattern_segs, total_len, 0.15);
     }
