@@ -5,6 +5,7 @@
  */
 
 #include <pablo/codegenstate.h>
+#include <pablo/printer_pablos.h>
 
 #define CHECK_SAME_TYPE(A, B) \
     assert ("DIFFERING CONTEXTS" && (&((A)->getType()->getContext()) == &((B)->getType()->getContext()))); \
@@ -310,6 +311,13 @@ void PabloBlock::eraseFromParent(const bool recursively) {
     while (stmt) {
         stmt = stmt->eraseFromParent(recursively);
     }
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief print
+ ** ------------------------------------------------------------------------------------------------------------- */
+void PabloBlock::print(raw_ostream & O, const bool expandNested) const {
+    PabloPrinter::print(this, O, expandNested);
 }
 
 }

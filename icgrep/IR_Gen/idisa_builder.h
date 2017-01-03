@@ -62,8 +62,6 @@ public:
     void CreateBlockAlignedStore(Value * const value, Value * const ptr, Value * const index);
     void CreateBlockAlignedStore(Value * const value, Value * const ptr, std::initializer_list<Value *> indices);
 
-    void CallPrintRegister(const std::string & regName, Value * const value);
-    
     VectorType * fwVectorType(unsigned fw);
 
     Constant * simd_himask(unsigned fw);
@@ -134,11 +132,7 @@ public:
     
     Type * getStreamTy(const unsigned FieldWidth = 1);
 
-    inline llvm::AllocaInst * CreateCacheAlignedAlloca(llvm::Type * Ty, llvm::Value * ArraySize = nullptr) {
-        llvm::AllocaInst * instr = CreateAlloca(Ty, ArraySize);
-        instr->setAlignment(mCacheLineAlignment);
-        return instr;
-    }
+    void CallPrintRegister(const std::string & regName, Value * const value);
     
 protected:
     unsigned            mBitBlockWidth;

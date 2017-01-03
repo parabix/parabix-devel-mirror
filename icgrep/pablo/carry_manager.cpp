@@ -106,28 +106,47 @@ void CarryManager::enterLoopBody(BasicBlock * const entryBlock) {
 
     if (LLVM_UNLIKELY(mCarryInfo->variableLength)) {
         // Check whether we need to resize the carry state
-        PHINode * index = iBuilder->CreatePHI(iBuilder->getInt32Ty(), 2);
+        PHINode * index = iBuilder->CreatePHI(iBuilder->getSizeTy(), 2);
         mLoopIndicies.push_back(index);
-        index->addIncoming(iBuilder->getInt32(0), entryBlock);
+        index->addIncoming(iBuilder->getSize(0), entryBlock);
         Value * capacityPtr = iBuilder->CreateGEP(mCurrentFrame, {iBuilder->getInt32(0), iBuilder->getInt32(0)});
-        Value * capacity = iBuilder->CreateLoad(capacityPtr, false, "carryCapacity");
+        Value * capacity = iBuilder->CreateLoad(capacityPtr, false, "capacity");
         Value * arrayPtr = iBuilder->CreateGEP(mCurrentFrame, {iBuilder->getInt32(0), iBuilder->getInt32(1)});
+        Value * array = iBuilder->CreateLoad(arrayPtr, false, "array");
 
-        BasicBlock * resizeBlock = BasicBlock::Create(iBuilder->getContext(), "", mFunction);
-        BasicBlock * codeBlock = BasicBlock::Create(iBuilder->getContext(), "", mFunction);
+        LLVMContext & C = iBuilder->getContext();
+
+        BasicBlock * resizeBlock = BasicBlock::Create(C, "", mFunction);
+        BasicBlock * cleanUpBlock = BasicBlock::Create(C, "", mFunction);
+        BasicBlock * zeroBlock = BasicBlock::Create(C, "", mFunction);
+        BasicBlock * codeBlock = BasicBlock::Create(C, "", mFunction);
 
         Value * cond = iBuilder->CreateICmpULT(index, capacity);
         iBuilder->CreateCondBr(cond, codeBlock, resizeBlock);
         iBuilder->SetInsertPoint(resizeBlock);
 
-        Type * const carryStateType = arrayPtr->getType()->getPointerElementType()->getPointerElementType();
-        Value * newCapacity = iBuilder->CreateMul(iBuilder->CreateAdd(index, iBuilder->getInt32(1)), iBuilder->getInt32(2));
-        Value * newArrayPtr = iBuilder->CreateAlignedMalloc(carryStateType, newCapacity, iBuilder->getCacheAlignment());
-        iBuilder->CreateMemCpy(newArrayPtr, arrayPtr, capacity, iBuilder->getCacheAlignment());
-        iBuilder->CreateMemZero(iBuilder->CreateGEP(newArrayPtr, capacity), iBuilder->CreateSub(newCapacity, capacity), iBuilder->getCacheAlignment());
-        iBuilder->CreateAlignedFree(arrayPtr);
+        Type * const carryStateType = array->getType()->getPointerElementType();
+        Value * newCapacity = iBuilder->CreateMul(iBuilder->CreateAdd(index, iBuilder->getSize(1)), iBuilder->getSize(2));
+        Value * newArray = iBuilder->CreateAlignedMalloc(carryStateType, newCapacity, iBuilder->getCacheAlignment());
+
+        assert (newCapacity->getType() == capacity->getType());
+        assert (newArray->getType() == array->getType());
+
+        Value * isNullCarryState = iBuilder->CreateICmpEQ(array, ConstantPointerNull::get(cast<PointerType>(array->getType())));
+
+        iBuilder->CreateCondBr(isNullCarryState, zeroBlock, cleanUpBlock);
+        iBuilder->SetInsertPoint(cleanUpBlock);
+
+        iBuilder->CreateMemCpy(newArray, array, capacity, iBuilder->getCacheAlignment());
+        iBuilder->CreateAlignedFree(array);
+        iBuilder->CreateBr(zeroBlock);
+
+        iBuilder->SetInsertPoint(zeroBlock);
+
+        iBuilder->CreateMemZero(iBuilder->CreateGEP(newArray, capacity), iBuilder->CreateSub(newCapacity, capacity), iBuilder->getCacheAlignment());
         iBuilder->CreateStore(newCapacity, capacityPtr);
-        iBuilder->CreateStore(newArrayPtr, arrayPtr);
+        iBuilder->CreateStore(newArray, arrayPtr);
+
         iBuilder->CreateBr(codeBlock);
 
         // Load the appropriate carry stat block
@@ -150,7 +169,7 @@ void CarryManager::leaveLoopBody(BasicBlock * const exitBlock) {
     if (LLVM_UNLIKELY(mCarryInfo->variableLength)) {
         assert (mLoopIndicies.size() > 0);
         PHINode * index = mLoopIndicies.back();
-        index->addIncoming(iBuilder->CreateAdd(index, iBuilder->getInt32(1)), exitBlock);
+        index->addIncoming(iBuilder->CreateAdd(index, iBuilder->getSize(1)), exitBlock);
         mLoopIndicies.pop_back();
     }
 }

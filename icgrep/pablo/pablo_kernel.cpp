@@ -125,16 +125,15 @@ void PabloKernel::generateFinalBlockMethod() {
     iBuilder->restoreIP(savePoint);
 }
 
-void PabloKernel::initializeKernelState(Value * self) {
-    iBuilder->CreateStore(Constant::getNullValue(mKernelStateType), self);
+void PabloKernel::initializeKernelState(Value * self) {    
+    iBuilder->CreateStore(ConstantAggregateZero::get(mKernelStateType), self);
 }
 
 PabloKernel::PabloKernel(IDISA::IDISA_Builder * builder, const std::string & kernelName)
 : KernelBuilder(builder, kernelName, {}, {}, {}, {}, {Binding{builder->getBitBlockType(), "EOFbit"}, Binding{builder->getBitBlockType(), "EOFmask"}})
 , mPabloCompiler(new PabloCompiler(this))
 , mSymbolTable(new SymbolGenerator(mAllocator))
-, mEntryBlock(PabloBlock::Create(this))
-{
+, mEntryBlock(PabloBlock::Create(this)) {
 
 }
 

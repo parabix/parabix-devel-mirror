@@ -174,7 +174,7 @@ public:
     }
 
     And * createAnd(PabloAST * expr1, PabloAST * expr2, const std::string & prefix) {
-        return createAnd(expr1, expr2, nullptr);
+        return createAnd(expr1, expr2, makeName(prefix));
     }
 
     And * createAnd(PabloAST * expr1, PabloAST * expr2, String * name);
@@ -304,6 +304,8 @@ public:
     inline Integer * getInteger(const int64_t value) const {
         return mParent->getInteger(value);
     }
+
+    void print(raw_ostream & O, const bool expandNested = true) const;
 
     virtual ~PabloBlock() {}
 

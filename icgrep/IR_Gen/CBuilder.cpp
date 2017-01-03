@@ -74,10 +74,14 @@ void CBuilder::CallPrintInt(const std::string & name, Value * const value) {
 Value * CBuilder::CreateMalloc(Type * type, Value * size) {
     DataLayout DL(getModule());
     Type * const intTy = getIntPtrTy(DL);
-    Type * const voidPtrTy = getVoidPtrTy();
-    Function * malloc = cast<Function>(getModule()->getOrInsertFunction("malloc", voidPtrTy, intTy, nullptr));
-    malloc->setDoesNotAlias(0);
-    const auto width = ConstantExpr::getSizeOf(type);
+    Constant * const width = ConstantExpr::getSizeOf(type);
+    if (size->getType() != intTy) {
+        if (isa<Constant>(size)) {
+            size = ConstantExpr::getIntegerCast(cast<Constant>(size), intTy, false);
+        } else {
+            size = CreateTruncOrBitCast(size, intTy);
+        }
+    }
     if (!width->isOneValue()) {
         if (isa<Constant>(size)) {
             size = ConstantExpr::getMul(cast<Constant>(size), width);
@@ -85,8 +89,15 @@ Value * CBuilder::CreateMalloc(Type * type, Value * size) {
             size = CreateMul(size, width);
         }
     }
-    size = CreateTruncOrBitCast(size, intTy);
-    CallInst * ci = CreateCall(malloc, {size});
+    Module * const m = getModule();
+    Function * malloc = m->getFunction("malloc");
+    if (malloc == nullptr) {
+        Type * const voidPtrTy = getVoidPtrTy();
+        malloc = cast<Function>(m->getOrInsertFunction("malloc", voidPtrTy, intTy, nullptr));
+        malloc->setCallingConv(CallingConv::C);
+        malloc->setDoesNotAlias(0);
+    }
+    CallInst * ci = CreateCall(malloc, size);
     ci->setTailCall();
     ci->setCallingConv(malloc->getCallingConv());
     return CreateBitOrPointerCast(ci, type->getPointerTo());
@@ -97,8 +108,8 @@ Value * CBuilder::CreateAlignedMalloc(Type * type, Value * size, const unsigned 
     DataLayout DL(getModule());
     IntegerType * const intTy = getIntPtrTy(DL);
     const auto byteWidth = (intTy->getBitWidth() / 8);
-    const auto offset = ConstantInt::get(intTy, alignment + byteWidth - 1);
-    const auto width = ConstantExpr::getSizeOf(type);
+    Constant * const offset = ConstantInt::get(intTy, alignment + byteWidth - 1);
+    Constant * const width = ConstantExpr::getSizeOf(type);
     if (!width->isOneValue()) {
         if (isa<Constant>(size)) {
             size = ConstantExpr::getMul(cast<Constant>(size), width);
@@ -106,106 +117,111 @@ Value * CBuilder::CreateAlignedMalloc(Type * type, Value * size, const unsigned 
             size = CreateMul(size, width);
         }
     }
+    if (size->getType() != intTy) {
+        if (isa<Constant>(size)) {
+            size = ConstantExpr::getIntegerCast(cast<Constant>(size), intTy, false);
+        } else {
+            size = CreateTruncOrBitCast(size, intTy);
+        }
+    }
     if (isa<Constant>(size)) {
         size = ConstantExpr::getAdd(cast<Constant>(size), offset);
     } else {
         size = CreateAdd(size, offset);
     }
-    size = CreateTruncOrBitCast(size, intTy);
-    Value * unaligned = CreateMalloc(getInt8Ty(), size);
-    Value * aligned = CreateBitOrPointerCast(unaligned, intTy);
-    aligned = CreateAnd(CreateAdd(aligned, offset), ConstantExpr::getNot(ConstantInt::get(intTy, alignment - 1)));
-    Value * ptr = CreateBitOrPointerCast(CreateSub(aligned, ConstantInt::get(intTy, byteWidth)), intTy->getPointerTo());
-    CreateAlignedStore(CreateBitOrPointerCast(unaligned, intTy), ptr, byteWidth);
-    return CreateBitOrPointerCast(aligned, type->getPointerTo());
+    Value * unaligned = CreatePtrToInt(CreateMalloc(getInt8Ty(), size), intTy);
+    Value * aligned = CreateAnd(CreateAdd(unaligned, offset), ConstantExpr::getNot(ConstantInt::get(intTy, alignment - 1)));
+    Value * prefix = CreateIntToPtr(CreateSub(aligned, ConstantInt::get(intTy, byteWidth)), intTy->getPointerTo());
+    assert (unaligned->getType() == prefix->getType()->getPointerElementType());
+    CreateAlignedStore(unaligned, prefix, byteWidth);
+    return CreateIntToPtr(aligned, type->getPointerTo());
 }
 
-void CBuilder::CreateFree(Value * ptr) {
+void CBuilder::CreateFree(Value * const ptr) {
+    assert (ptr->getType()->isPointerTy());
+    Module * const m = getModule();
     PointerType * const voidPtrTy = getVoidPtrTy();
-    Function * const free = cast<Function>(getModule()->getOrInsertFunction("free", getVoidTy(), voidPtrTy, nullptr));
-    CallInst * const ci = CreateCall(free, {CreateBitOrPointerCast(ptr, voidPtrTy)});
+    Function * free = m->getFunction("free");
+    if (free == nullptr) {
+        free = cast<Function>(getModule()->getOrInsertFunction("free", getVoidTy(), voidPtrTy, nullptr));
+        free->setCallingConv(CallingConv::C);
+    }
+    CallInst * const ci = CreateCall(free, CreatePointerCast(ptr, voidPtrTy));
     ci->setTailCall();
     ci->setCallingConv(free->getCallingConv());
 }
 
-void CBuilder::CreateAlignedFree(Value * ptr) {
+void CBuilder::CreateAlignedFree(Value * const ptr, const bool ptrMayBeNull) {
+    // WARNING: this will cause a segfault if the value of the ptr at runtime is null but ptrMayBeNull was not set
+    PointerType * type = cast<PointerType>(ptr->getType());
+    BasicBlock * exit = nullptr;
+    if (ptrMayBeNull) {
+        LLVMContext & C = getContext();
+        BasicBlock * bb = GetInsertBlock();
+        Function * f = bb->getParent();
+        exit = BasicBlock::Create(C, "", f, bb);
+        BasicBlock * entry = BasicBlock::Create(C, "", f, exit);
+        Value * cond = CreateICmpEQ(ptr, ConstantPointerNull::get(type));
+        CreateCondBr(cond, exit, entry);
+        SetInsertPoint(entry);
+    }
     DataLayout DL(getModule());
     IntegerType * const intTy = getIntPtrTy(DL);
     const auto byteWidth = (intTy->getBitWidth() / 8);
-    ptr = CreateBitOrPointerCast(ptr, intTy);
-    ptr = CreateSub(ptr, ConstantInt::get(intTy, byteWidth));
-    ptr = CreateBitOrPointerCast(ptr, getInt8PtrTy());
-    CreateFree(CreateAlignedLoad(ptr, byteWidth));
+    Value * prefix = CreatePtrToInt(ptr, intTy);
+    prefix = CreateSub(prefix, ConstantInt::get(intTy, byteWidth));
+    prefix = CreateIntToPtr(prefix, intTy->getPointerTo());
+    prefix = CreateIntToPtr(CreateAlignedLoad(prefix, byteWidth), type);
+    CreateFree(prefix);
+    if (ptrMayBeNull) {
+        CreateBr(exit);
+        SetInsertPoint(exit);
+    }
 }
 
 Value * CBuilder::CreateRealloc(Value * ptr, Value * size) {
-    assert (ptr->getType()->isPointerTy());
     DataLayout DL(getModule());
-    IntegerType * const intTy = getIntPtrTy(DL);
-    PointerType * const voidPtrTy = getVoidPtrTy();
-    Function * realloc = cast<Function>(getModule()->getOrInsertFunction("realloc", voidPtrTy, voidPtrTy, intTy, nullptr));
-    realloc->setDoesNotAlias(0);
-    Type * const type = ptr->getType();
-    // calculate our new size parameter
-    size = CreateMul(size, ConstantExpr::getSizeOf(type->getPointerElementType()));
-    size = CreateTruncOrBitCast(size, intTy);
-    // call realloc with the pointer and adjusted size
+    Type * const intTy = getIntPtrTy(DL);
+    PointerType * type = cast<PointerType>(ptr->getType());
+    Constant * const width = ConstantExpr::getSizeOf(type->getPointerElementType());
+    if (size->getType() != intTy) {
+        if (isa<Constant>(size)) {
+            size = ConstantExpr::getIntegerCast(cast<Constant>(size), intTy, false);
+        } else {
+            size = CreateTruncOrBitCast(size, intTy);
+        }
+    }
+    if (!width->isOneValue()) {
+        if (isa<Constant>(size)) {
+            size = ConstantExpr::getMul(cast<Constant>(size), width);
+        } else {
+            size = CreateMul(size, width);
+        }
+    }
+    Module * const m = getModule();
+    Function * realloc = m->getFunction("realloc");
+    if (realloc == nullptr) {
+        Type * const voidPtrTy = getVoidPtrTy();
+        realloc = cast<Function>(m->getOrInsertFunction("realloc", voidPtrTy, voidPtrTy, intTy, nullptr));
+        realloc->setCallingConv(CallingConv::C);
+        realloc->setDoesNotAlias(1);
+    }
     CallInst * ci = CreateCall(realloc, {ptr, size});
     ci->setTailCall();
     ci->setCallingConv(realloc->getCallingConv());
     return CreateBitOrPointerCast(ci, type);
 }
 
-Value * CBuilder::CreateAlignedRealloc(Value * ptr, Value * size, const unsigned alignment) {
-    assert ((alignment & (alignment - 1)) == 0); // is power of 2
-    assert (ptr->getType()->isPointerTy());
-    DataLayout DL(getModule());
-    IntegerType * const intTy = getIntPtrTy(DL);
-    PointerType * const bpTy = getInt8PtrTy();
-    Type * const type = ptr->getType();
-    // calculate our new size parameter
-    const auto byteWidth = (intTy->getBitWidth() / 8);
-    const auto offset = ConstantInt::get(intTy, alignment + byteWidth - 1);
-    const auto width = ConstantExpr::getSizeOf(type);
-    if (!width->isOneValue()) {
-        if (isa<Constant>(size)) {
-            size = ConstantExpr::getMul(cast<Constant>(size), width);
-        } else {
-            size = CreateMul(size, width);
-        }
-    }
-    if (isa<Constant>(size)) {
-        size = ConstantExpr::getAdd(cast<Constant>(size), offset);
-    } else {
-        size = CreateAdd(size, offset);
-    }
-    size = CreateTruncOrBitCast(size, intTy);
-    // calculate the offset containing the unaligned pointer address
-    ptr = CreateBitOrPointerCast(ptr, bpTy);
-    ptr = CreateSub(ptr, ConstantInt::get(intTy, byteWidth));
-    ptr = CreateBitOrPointerCast(ptr, intTy->getPointerTo());
-    // load the unaligned pointer as an uint8 *
-    ptr = CreateAlignedLoad(ptr, byteWidth);
-    ptr = CreateBitOrPointerCast(ptr, bpTy);
-    // call realloc with the unaligned pointer and adjusted size
-    Value * unaligned = CreateRealloc(ptr, size);
-    Value * aligned = CreateBitOrPointerCast(unaligned, intTy);
-    aligned = CreateAnd(CreateAdd(aligned, offset), ConstantExpr::getNot(ConstantInt::get(intTy, alignment - 1)));
-    Value * prefix = CreateBitOrPointerCast(CreateSub(aligned, ConstantInt::get(intTy, byteWidth)), intTy->getPointerTo());
-    CreateAlignedStore(CreateBitOrPointerCast(unaligned, intTy), prefix, byteWidth);
-    return CreateBitOrPointerCast(aligned, type);
-}
-
 void CBuilder::CreateMemZero(Value * ptr, Value * size, const unsigned alignment) {
     assert (ptr->getType()->isPointerTy() && size->getType()->isIntegerTy());
     Type * const type = ptr->getType();
-    const auto width = ConstantExpr::getSizeOf(type->getPointerElementType());
+    Constant * const width = ConstantExpr::getSizeOf(type->getPointerElementType());
     if (isa<Constant>(size)) {
         size = ConstantExpr::getMul(cast<Constant>(size), width);
     } else {
         size = CreateMul(size, width);
     }
-    CreateMemSet(CreateBitOrPointerCast(ptr, getInt8PtrTy()), getInt8(0), size, alignment);
+    CreateMemSet(CreatePointerCast(ptr, getInt8PtrTy()), getInt8(0), size, alignment);
 }
 
 PointerType * CBuilder::getVoidPtrTy() const {
@@ -232,17 +248,19 @@ StoreInst * CBuilder::CreateAtomicStoreRelease(Value * val, Value * ptr) {
 //                    void *(*start_routine)(void*), void *arg);
 //
 Value * CBuilder::CreatePThreadCreateCall(Value * thread, Value * attr, Function * start_routine, Value * arg) {
+    Function * pthreadCreateFunc = mMod->getFunction("pthread_create");
+    if (pthreadCreateFunc == nullptr) {
+        Type * pthreadTy = getSizeTy();
+        FunctionType * funVoidPtrVoidTy = FunctionType::get(getVoidTy(), getVoidPtrTy(), false);
 
-    Type * pthreadTy = getSizeTy();
-    FunctionType * funVoidPtrVoidTy = FunctionType::get(getVoidTy(), getVoidPtrTy(), false);
-    
-    Function * pthreadCreateFunc = cast<Function>(mMod->getOrInsertFunction("pthread_create",
-                                                                         getInt32Ty(),
-                                                                         pthreadTy->getPointerTo(),
-                                                                         getVoidPtrTy(),
-                                                                         static_cast<Type *>(funVoidPtrVoidTy)->getPointerTo(),
-                                                                         getVoidPtrTy(), nullptr));
-    pthreadCreateFunc->setCallingConv(llvm::CallingConv::C);
+        pthreadCreateFunc = cast<Function>(mMod->getOrInsertFunction("pthread_create",
+                                                                     getInt32Ty(),
+                                                                     pthreadTy->getPointerTo(),
+                                                                     getVoidPtrTy(),
+                                                                     static_cast<Type *>(funVoidPtrVoidTy)->getPointerTo(),
+                                                                     getVoidPtrTy(), nullptr));
+        pthreadCreateFunc->setCallingConv(llvm::CallingConv::C);
+    }
     return CreateCall(pthreadCreateFunc, {thread, attr, start_routine, arg});
 }
 
@@ -250,12 +268,12 @@ Value * CBuilder::CreatePThreadCreateCall(Value * thread, Value * attr, Function
 //  void pthread_exit(void *value_ptr);
 
 Value * CBuilder::CreatePThreadExitCall(Value * value_ptr) {
-    Function * pthreadExitFunc = cast<Function>(mMod->getOrInsertFunction("pthread_exit",
-                                                                            getVoidTy(),
-                                                                            getVoidPtrTy(), nullptr));
-    pthreadExitFunc->addFnAttr(llvm::Attribute::NoReturn);
-    pthreadExitFunc->setCallingConv(llvm::CallingConv::C);
-    return CreateCall(pthreadExitFunc, {value_ptr});
+    Function * pthreadExitFunc = mMod->getFunction("pthread_exit");
+    if (pthreadExitFunc == nullptr) {
+        pthreadExitFunc = cast<Function>(mMod->getOrInsertFunction("pthread_exit", getVoidTy(), getVoidPtrTy(), nullptr));
+        pthreadExitFunc->addFnAttr(llvm::Attribute::NoReturn);
+        pthreadExitFunc->setCallingConv(llvm::CallingConv::C);
+    }
     CallInst * exitThread = CreateCall(pthreadExitFunc, {value_ptr});
     exitThread->setDoesNotReturn();
     return exitThread;

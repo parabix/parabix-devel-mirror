@@ -238,11 +238,8 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool Count
 
     mGrepType = grepType;
 
-    Type * const int32ty = iBuilder->getInt32Ty();
     Type * const size_ty = iBuilder->getSizeTy();
     Type * const int8PtrTy = iBuilder->getInt8PtrTy();
-    Type * const voidTy = iBuilder->getVoidTy();
-    Type * const voidPtrTy = iBuilder->getVoidPtrTy();
     Type * const inputType = PointerType::get(ArrayType::get(ArrayType::get(iBuilder->getBitBlockType(), (UTF_16 ? 16 : 8)), 1), addrSpace);
     Type * const resultTy = CountOnly ? size_ty : iBuilder->getVoidTy();
 
@@ -413,13 +410,16 @@ re::CC * GrepEngine::grepCodepoints() {
 }
 
 const std::vector<std::string> & GrepEngine::grepPropertyValues(const std::string& propertyName) {
-    AlignedAllocator<char, 32> alloc;
+    enum { MaxSupportedVectorWidthInBytes = 32 };
+    AlignedAllocator<char, MaxSupportedVectorWidthInBytes> alloc;
     parsedPropertyValues.clear();
     const std::string & str = UCD::getPropertyValueGrepString(propertyName);
     const auto n = str.length();
-    char * aligned = alloc.allocate(n + 32, 0);
+    // NOTE: MaxSupportedVectorWidthInBytes of trailing 0s are needed to prevent the grep function from
+    // erroneously matching garbage data when loading the final partial block.
+    char * aligned = alloc.allocate(n + MaxSupportedVectorWidthInBytes, 0);
     std::memcpy(aligned, str.data(), n);
-    std::memset(aligned + n, 0, 32);
+    std::memset(aligned + n, 0, MaxSupportedVectorWidthInBytes);
     mGrepFunction(aligned, n, 0);
     alloc.deallocate(aligned, 0);
     return parsedPropertyValues;
@@ -483,8 +483,7 @@ extern "C" {
             }
             resultStrs[idx].write(&buffer[line_start * index], (line_end - line_start) * index);
             resultStrs[idx] << '\n';
-        }
-        else {   
+        } else {
             if ((!isUTF_16 && end_byte == 0x0D) || (isUTF_16 && (end_byte == 0x0D && penult_byte == 0x0))) {
                 // Check for line_end on first byte of CRLF;  note that we don't
                 // want to access past the end of buffer.
@@ -545,12 +544,6 @@ extern "C" {
 
 extern "C" {
     void insert_property_values(size_t lineNum, size_t line_start, size_t line_end, const char * buffer) {
-//      When the error occurs, this is somehow getting an extra match:
-//        33: (261,269)
-//        138: (1235,1253)
-//        172: (1419,1423)
-//        278: (1949,2040) *****
-//        script : .*hir.*        (Alt[Name "hiragana" ,Name "katakanaorhiragana" ,Name "hira" ,Name "hiraganQ0����K" ])
         parsedPropertyValues.emplace_back(buffer + line_start, buffer + line_end);
     }
 }

@@ -95,6 +95,7 @@ protected:
     mScalarOutputs(scalar_outputs),
     mInternalScalars(internal_scalars),
     mKernelStateType(nullptr),
+    mKernelInstance(nullptr),
     mLookAheadPositions(0) {}
     
 protected:

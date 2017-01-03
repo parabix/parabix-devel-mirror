@@ -21,11 +21,14 @@ class KernelBuilder;
 class DirectCharacterClassKernelBuilder : public KernelBuilder {
 public:
     
-    DirectCharacterClassKernelBuilder(IDISA::IDISA_Builder * iBuilder, std::string ccSetName, std::vector<re::CC *> charClasses, unsigned codeUnitSize) :
-    KernelBuilder(iBuilder, "cc",
+    DirectCharacterClassKernelBuilder(IDISA::IDISA_Builder * iBuilder, std::string ccSetName, std::vector<re::CC *> charClasses, unsigned codeUnitSize)
+    : KernelBuilder(iBuilder, "cc",
                   {Binding{iBuilder->getStreamSetTy(1, 8 * codeUnitSize), "codeUnitStream"}},
                   {Binding{iBuilder->getStreamSetTy(charClasses.size(), 1), "ccStream"}},
-                  {}, {}, {}), mCharClasses(charClasses), mCodeUnitSize(codeUnitSize) {}
+                  {}, {}, {})
+    , mCharClasses(charClasses)
+    , mCodeUnitSize(codeUnitSize) {
+    }
     
     
 private:

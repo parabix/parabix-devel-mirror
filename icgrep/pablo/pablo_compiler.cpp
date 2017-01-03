@@ -483,7 +483,11 @@ void PabloCompiler::compileStatement(const Statement * stmt) {
         mMarkerMap[expr] = value;
         if (DebugOptionIsSet(DumpTrace)) {
             assert (expr->getName());
-            iBuilder->CallPrintRegister(expr->getName()->to_string(), value);
+            if (value->getType()->isVectorTy()) {
+                iBuilder->CallPrintRegister(expr->getName()->to_string(), value);
+            } else if (value->getType()->isIntegerTy()) {
+                iBuilder->CallPrintInt(expr->getName()->to_string(), value);
+            }
         }
     }
 }

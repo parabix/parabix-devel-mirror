@@ -152,6 +152,14 @@ public:
 
     PabloAST * createScanThru(PabloAST * from, PabloAST * thru, const std::string & prefix);
 
+    PabloAST * createScanTo(PabloAST * from, PabloAST * to) {
+        return createScanThru(from, createNot(to));
+    }
+
+    PabloAST * createScanTo(PabloAST * from, PabloAST * to, const std::string & prefix) {
+        return createScanThru(from, createNot(to), prefix);
+    }
+
     PabloAST * createSel(PabloAST * condition, PabloAST * trueExpr, PabloAST * falseExpr);
 
     PabloAST * createSel(PabloAST * condition, PabloAST * trueExpr, PabloAST * falseExpr, const std::string & prefix);
@@ -254,6 +262,10 @@ public:
 
     inline Integer * getInteger(const uint64_t value) const {
         return mPb->getInteger(value);
+    }
+
+    inline void print(raw_ostream & O, const bool expandNested = true) const {
+        mPb->print(O, expandNested);
     }
 
 protected:

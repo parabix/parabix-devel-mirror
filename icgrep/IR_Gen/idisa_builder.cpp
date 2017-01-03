@@ -33,11 +33,11 @@ std::string IDISA_Builder::getBitBlockTypeName() const {
     return "v" + std::to_string(getBitBlockWidth() / fw) + "i" + std::to_string(fw);
 }
 
-    
+
 void IDISA_Builder::CallPrintRegister(const std::string & name, Value * const value) {
     Constant * printRegister = mMod->getFunction("PrintRegister");
     if (LLVM_UNLIKELY(printRegister == nullptr)) {
-        FunctionType *FT = FunctionType::get(getVoidTy(), { PointerType::get(getInt8Ty(), 0), mBitBlockType }, false);
+        FunctionType *FT = FunctionType::get(getVoidTy(), { PointerType::get(getInt8Ty(), 0), getBitBlockType() }, false);
         Function * function = Function::Create(FT, Function::InternalLinkage, "PrintRegister", mMod);
         auto arg = function->arg_begin();
         std::string tmp;

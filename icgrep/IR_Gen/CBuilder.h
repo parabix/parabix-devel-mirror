@@ -41,13 +41,17 @@ public:
     
     Function * GetPrintf();
     Value * CreateMalloc(Type * type, Value * size);
-    Value * CreateAlignedMalloc(Type *type, Value * size, const unsigned alignment);
-    void CreateFree(Value * ptr);
-    void CreateAlignedFree(Value * ptr);
+    Value * CreateAlignedMalloc(Type * type, Value * size, const unsigned alignment);
+    void CreateFree(Value * const ptr);
+    void CreateAlignedFree(Value * const ptr, const bool ptrMayBeNull = false);
     Value * CreateRealloc(Value * ptr, Value * size);
-    Value * CreateAlignedRealloc(Value * ptr, Value * size, const unsigned alignment);
     void CreateMemZero(Value * ptr, Value * size, const unsigned alignment = 1);
-    
+
+    inline llvm::AllocaInst * CreateCacheAlignedAlloca(llvm::Type * Ty, llvm::Value * ArraySize = nullptr) {
+        llvm::AllocaInst * instr = CreateAlloca(Ty, ArraySize);
+        instr->setAlignment(getCacheAlignment());
+        return instr;
+    }
     
     // Create calls to unistd.h functions.
     //
@@ -64,8 +68,6 @@ public:
     //  int pthread_join(pthread_t thread, void **value_ptr);
     Value * CreatePThreadJoinCall(Value * thread, Value * value_ptr);
     
-    
-    void CallPrintRegister(const std::string & regName, Value * const value);
     void CallPrintInt(const std::string & name, Value * const value);
     
     inline llvm::IntegerType * getSizeTy() const {
