@@ -29,8 +29,8 @@ public:
                   {}, {}, {}) {}
     
 private:
-    void generateDoBlockMethod() override;
-    void generateDoSegmentMethod() override;
+    void generateDoBlockMethod() const override;
+    void generateDoSegmentMethod() const override;
     
 };
 
@@ -44,9 +44,9 @@ public:
                   {}, {}, {}) {}
 
 private:
-    virtual void generateDoBlockLogic(Value * self, Value * blockNo) override;
-    virtual void generateDoBlockMethod() override;
-    virtual void generateFinalBlockMethod() override;
+    virtual void generateDoBlockLogic(Value * self, Value * blockNo) const override;
+    virtual void generateDoBlockMethod() const override;
+    virtual void generateFinalBlockMethod() const override;
 };
 
 class base64Kernel : public KernelBuilder {
@@ -59,9 +59,9 @@ public:
                   {}, {}, {}) {}
     
 private:
-    virtual void generateDoBlockLogic(Value * self, Value * blockNo) override;
-    virtual void generateFinalBlockMethod() override;
-    virtual void generateDoBlockMethod() override;
+    virtual void generateDoBlockLogic(Value * self, Value * blockNo) const override;
+    virtual void generateFinalBlockMethod() const override;
+    virtual void generateDoBlockMethod() const override;
     
 };
 

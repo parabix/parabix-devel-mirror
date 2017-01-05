@@ -16,7 +16,7 @@ using namespace kernel;
 using namespace parabix;
 using namespace IDISA;
 
-Var * PabloKernel::addInput(const std::string name, Type * const type) {
+Var * PabloKernel::addInput(const std::string & name, Type * const type) {
     Var * param = new (mAllocator) Var(mSymbolTable->make(name, iBuilder), type, mAllocator, true);
     mInputs.push_back(param);
     if (isa<ArrayType>(type) || isa<StreamType>(type)) {
@@ -79,14 +79,14 @@ void PabloKernel::prepareKernel() {
     KernelBuilder::prepareKernel();
 }
 
-void PabloKernel::generateDoBlockMethod() {
+void PabloKernel::generateDoBlockMethod() const {
     auto savePoint = iBuilder->saveIP();
     Module * const m = iBuilder->getModule();
     Function * const f = m->getFunction(mKernelName + doBlock_suffix);
     Value * const self = &*(f->arg_begin());
     mPabloCompiler->compile(self, f);
     Value * produced = getProducedItemCount(self);
-    produced = iBuilder->CreateAdd(produced, ConstantInt::get(iBuilder->getSizeTy(), iBuilder->getStride()));
+    produced = iBuilder->CreateAdd(produced, iBuilder->getSize(iBuilder->getStride()));
     setProducedItemCount(self, produced);
     iBuilder->CreateRetVoid();
     #ifndef NDEBUG
@@ -95,7 +95,7 @@ void PabloKernel::generateDoBlockMethod() {
     iBuilder->restoreIP(savePoint);
 }
 
-void PabloKernel::generateFinalBlockMethod() {
+void PabloKernel::generateFinalBlockMethod() const {
     auto savePoint = iBuilder->saveIP();
     Module * m = iBuilder->getModule();
     Function * doBlockFunction = m->getFunction(mKernelName + doBlock_suffix);
@@ -116,7 +116,7 @@ void PabloKernel::generateFinalBlockMethod() {
     iBuilder->CreateCall(doBlockFunction, doBlockArgs);
     /* Adjust the produced item count */
     Value * produced = getProducedItemCount(self);
-    produced = iBuilder->CreateSub(produced, ConstantInt::get(iBuilder->getSizeTy(), iBuilder->getStride()));
+    produced = iBuilder->CreateSub(produced, iBuilder->getSize(iBuilder->getStride()));
     setProducedItemCount(self, iBuilder->CreateAdd(produced, remaining));
     iBuilder->CreateRetVoid();
     #ifndef NDEBUG
@@ -125,8 +125,8 @@ void PabloKernel::generateFinalBlockMethod() {
     iBuilder->restoreIP(savePoint);
 }
 
-void PabloKernel::initializeKernelState(Value * self) {    
-    iBuilder->CreateStore(ConstantAggregateZero::get(mKernelStateType), self);
+void PabloKernel::initializeKernelState(Value * self) const {
+    iBuilder->CreateStore(ConstantAggregateZero::get(mKernelStateType), self);    
 }
 
 PabloKernel::PabloKernel(IDISA::IDISA_Builder * builder, const std::string & kernelName)

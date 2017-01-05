@@ -26,8 +26,8 @@ public:
     mScanwordBitWidth(iBuilder->getSizeTy()->getBitWidth()) {}
         
 private:
-    void generateDoBlockMethod() override;
-    llvm::Function * generateScanWordRoutine(llvm::Module * m);
+    void generateDoBlockMethod() const override;
+    llvm::Function * generateScanWordRoutine(llvm::Module * m) const;
         
     unsigned mEditDistance;
     unsigned mScanwordBitWidth;

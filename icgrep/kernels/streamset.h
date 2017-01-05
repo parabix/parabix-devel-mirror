@@ -167,7 +167,7 @@ public:
     
     // Reset the buffer to contain data starting at the base block of new_consumer_pos,
     // copying back any data beyond that position. 
-    void setConsumerPos(Value * bufferStructPtr, Value * new_consumer_pos) override;
+    void setConsumerPos(Value * bufferStructPtr, Value * newConsumerPos) override;
 };
 
 }

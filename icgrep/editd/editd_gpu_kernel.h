@@ -31,8 +31,8 @@ public:
     
     
 private:
-    void generateDoBlockMethod() override;
-    void generateFinalBlockMethod() override;
+    void generateDoBlockMethod() const override;
+    void generateFinalBlockMethod() const override;
     unsigned mEditDistance;
     unsigned mPatternLen;
     

@@ -32,7 +32,7 @@ public:
     
     
 private:
-    void generateDoBlockMethod() override;
+    void generateDoBlockMethod() const override;
     std::vector<re::CC *> mCharClasses;
     unsigned mCodeUnitSize;
     

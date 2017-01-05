@@ -232,15 +232,13 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool Count
         codegen::BufferSegments = 2;
     }
     const unsigned bufferSegments = codegen::BufferSegments;
-
-
-    unsigned encodingBits = UTF_16 ? 16 : 8;
+    const unsigned encodingBits = UTF_16 ? 16 : 8;
 
     mGrepType = grepType;
 
     Type * const size_ty = iBuilder->getSizeTy();
     Type * const int8PtrTy = iBuilder->getInt8PtrTy();
-    Type * const inputType = PointerType::get(ArrayType::get(ArrayType::get(iBuilder->getBitBlockType(), (UTF_16 ? 16 : 8)), 1), addrSpace);
+    Type * const inputType = PointerType::get(ArrayType::get(ArrayType::get(iBuilder->getBitBlockType(), encodingBits), 1), addrSpace);
     Type * const resultTy = CountOnly ? size_ty : iBuilder->getVoidTy();
 
     Function * mainFn = nullptr;
@@ -303,11 +301,8 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool Count
     re::re2pablo_compiler(&icgrepK, encodingBits, re_ast, CountOnly);
     pablo_function_passes(&icgrepK);
 
-
-
     ByteStream.setStreamSetBuffer(inputStream, fileSize);
     BasisBits.allocateBuffer();
-
 
     if (CountOnly) {
         icgrepK.generateKernel({&BasisBits}, {});       
@@ -352,9 +347,7 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool Count
                 generatePipelineLoop(iBuilder, {&s2pk, &icgrepK, &scanMatchK});
             }
         }
-
         iBuilder->CreateRetVoid();
-
     }
 
 #ifdef CUDA_ENABLED 

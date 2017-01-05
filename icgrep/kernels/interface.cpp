@@ -94,27 +94,11 @@ void KernelInterface::addKernelDeclarations(Module * client) {
     iBuilder->restoreIP(savePoint);
 }
 
-
 void KernelInterface::setInitialArguments(std::vector<Value *> args) {
     mInitialArguments = args;
 }
 
-void KernelInterface::createInstance() {
-    mKernelInstance = iBuilder->CreateCacheAlignedAlloca(mKernelStateType);
-    Module * m = iBuilder->getModule();
-    std::vector<Value *> init_args = {mKernelInstance};
-    for (auto a : mInitialArguments) {
-        init_args.push_back(a);
-    }
-    std::string initFnName = mKernelName + init_suffix;
-    Function * initMethod = m->getFunction(initFnName);
-    if (!initMethod) {
-        throw std::runtime_error("Cannot find " + initFnName);
-    }
-    iBuilder->CreateCall(initMethod, init_args);
-}
-
-Value * KernelInterface::createDoBlockCall(Value * self) {
+Value * KernelInterface::createDoBlockCall(Value * self) const {
     Module * m = iBuilder->getModule();
     std::string doBlockName = mKernelName + doBlock_suffix;
     Function * doBlockMethod = m->getFunction(doBlockName);
@@ -125,7 +109,7 @@ Value * KernelInterface::createDoBlockCall(Value * self) {
     return iBuilder->CreateCall(doBlockMethod, args);
 }
 
-Value * KernelInterface::createFinalBlockCall(Value * self, Value * remainingBytes) {
+Value * KernelInterface::createFinalBlockCall(Value * self, Value * remainingBytes) const {
     Module * m = iBuilder->getModule();
     std::string finalBlockName = mKernelName + finalBlock_suffix;
     Function * finalBlockMethod = m->getFunction(finalBlockName);
@@ -137,7 +121,7 @@ Value * KernelInterface::createFinalBlockCall(Value * self, Value * remainingByt
 }
 
 
-Value * KernelInterface::createDoSegmentCall(Value * self, Value * blksToDo) {
+Value * KernelInterface::createDoSegmentCall(Value * self, Value * blksToDo) const {
     Module * m = iBuilder->getModule();
     std::string fnName = mKernelName + doSegment_suffix;
     Function * method = m->getFunction(fnName);
@@ -147,7 +131,7 @@ Value * KernelInterface::createDoSegmentCall(Value * self, Value * blksToDo) {
     return iBuilder->CreateCall(method, {self, blksToDo});
 }
 
-Value * KernelInterface::createGetAccumulatorCall(Value * self, std::string accumName) {
+Value * KernelInterface::createGetAccumulatorCall(Value * self, std::string accumName) const {
     Module * m = iBuilder->getModule();
     std::string fnName = mKernelName + accumulator_infix + accumName;
     Function * accumMethod = m->getFunction(fnName);

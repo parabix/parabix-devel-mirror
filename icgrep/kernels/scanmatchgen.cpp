@@ -39,7 +39,7 @@ Value * generateResetLowestBit(IDISA::IDISA_Builder * iBuilder, Value * bits) {
 }
 
         
-void ScanMatchKernel::generateDoBlockMethod() {
+void ScanMatchKernel::generateDoBlockMethod() const {
     auto savePoint = iBuilder->saveIP();
     Module * m = iBuilder->getModule();
     Function * scanWordFunction = generateScanWordRoutine(m);
@@ -77,7 +77,7 @@ void ScanMatchKernel::generateDoBlockMethod() {
 }
 
     
-Function * ScanMatchKernel::generateScanWordRoutine(Module * m) {
+Function * ScanMatchKernel::generateScanWordRoutine(Module * m) const {
     Function * function = m->getFunction("scan_matches_in_scanword");
     if (LLVM_UNLIKELY(function != nullptr)) {
         return function;

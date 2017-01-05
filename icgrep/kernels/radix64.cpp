@@ -39,7 +39,7 @@ using namespace llvm;
 // The pipeline must guarantee that the doSegment method is called with the 
 // a continous buffer for the full segment (number of blocks).
 
-void expand3_4Kernel::generateDoSegmentMethod() {
+void expand3_4Kernel::generateDoSegmentMethod() const {
     IDISA::IDISA_Builder::InsertPoint savePoint = iBuilder->saveIP();
     Module * m = iBuilder->getModule();
     Function * doSegmentFunction = m->getFunction(mKernelName + doSegment_suffix);
@@ -80,11 +80,11 @@ void expand3_4Kernel::generateDoSegmentMethod() {
         }
         expand_3_4_shuffle[j] = ConstantVector::get(Idxs);
     }
-    Constant * Const3 = ConstantInt::get(iBuilder->getSizeTy(), 3);
-    Constant * Const4 = ConstantInt::get(iBuilder->getSizeTy(), 4);
-    Constant * stride = ConstantInt::get(iBuilder->getSizeTy(), iBuilder->getStride());
-    Constant * packSize = ConstantInt::get(iBuilder->getSizeTy(), PACK_SIZE);
-    Constant * loopItemCount = ConstantInt::get(iBuilder->getSizeTy(), 3 * PACK_SIZE); // 3 packs per loop.
+    Constant * Const3 = iBuilder->getSize(3);
+    Constant * Const4 = iBuilder->getSize(4);
+    Constant * stride = iBuilder->getSize(iBuilder->getStride());
+    Constant * packSize = iBuilder->getSize(PACK_SIZE);
+    Constant * loopItemCount = iBuilder->getSize(3 * PACK_SIZE); // 3 packs per loop.
     UndefValue * undefPack = UndefValue::get(iBuilder->fwVectorType(parabix::i8));
     
     const unsigned packAlign = iBuilder->getBitBlockWidth()/8;
@@ -99,7 +99,7 @@ void expand3_4Kernel::generateDoSegmentMethod() {
     
     // Except for the final segment, we always process an integral number of triple blocks.
     Value * tripleBlocksToDo = iBuilder->CreateMul(blocksToDo, Const3);
-    Constant * blockItems = ConstantInt::get(iBuilder->getSizeTy(), iBuilder->getBitBlockWidth());
+    Constant * blockItems = iBuilder->getSize(iBuilder->getBitBlockWidth());
     Value * tripleItemMax = iBuilder->CreateMul(tripleBlocksToDo, blockItems);
 
     Value * lessThanFullSegment = iBuilder->CreateICmpULT(itemsAvail, tripleItemMax);
@@ -204,7 +204,7 @@ void expand3_4Kernel::generateDoSegmentMethod() {
     pack0 = iBuilder->fwCast(8, iBuilder->CreateAlignedLoad(loopExitInput_ptr, packAlign));
     expand0 = iBuilder->bitCast(iBuilder->CreateShuffleVector(undefPack, pack0, expand_3_4_shuffle[0]));
     iBuilder->CreateAlignedStore(expand0, loopExitOutput_ptr, packAlign);
-    Value * condition_b = iBuilder->CreateICmpULE(loopExitItemsRemain, ConstantInt::get(iBuilder->getSizeTy(), 3 * PACK_SIZE/4));
+    Value * condition_b = iBuilder->CreateICmpULE(loopExitItemsRemain, iBuilder->getSize(3 * PACK_SIZE/4));
     iBuilder->CreateCondBr(condition_b, itemsDone, finalStep2);
     // Final Step 2 processing
     iBuilder->SetInsertPoint(finalStep2);
@@ -221,11 +221,11 @@ void expand3_4Kernel::generateDoSegmentMethod() {
     outPack1_ptr = iBuilder->CreateGEP(loopExitOutput_ptr, iBuilder->getInt32(1));
     expand1 = iBuilder->bitCast(iBuilder->CreateShuffleVector(pack0, pack1phi, expand_3_4_shuffle[1]));
     iBuilder->CreateAlignedStore(expand1, outPack1_ptr, packAlign);
-    Value * condition_d = iBuilder->CreateICmpULE(loopExitItemsRemain, ConstantInt::get(iBuilder->getSizeTy(), 6 * PACK_SIZE/4));
+    Value * condition_d = iBuilder->CreateICmpULE(loopExitItemsRemain, iBuilder->getSize(6 * PACK_SIZE/4));
     iBuilder->CreateCondBr(condition_d, itemsDone, finalStep3);
     // Final Step 3
     iBuilder->SetInsertPoint(finalStep3);
-    Value * condition_e = iBuilder->CreateICmpULE(loopExitItemsRemain, ConstantInt::get(iBuilder->getSizeTy(), 2 * PACK_SIZE));
+    Value * condition_e = iBuilder->CreateICmpULE(loopExitItemsRemain, iBuilder->getSize(2 * PACK_SIZE));
     iBuilder->CreateCondBr(condition_e, step3store, step3load);
     iBuilder->SetInsertPoint(step3load);
     inPack2_ptr = iBuilder->CreateGEP(loopExitInput_ptr, iBuilder->getInt32(2));
@@ -238,7 +238,7 @@ void expand3_4Kernel::generateDoSegmentMethod() {
     outPack2_ptr = iBuilder->CreateGEP(loopExitOutput_ptr, iBuilder->getInt32(2));
     expand2 = iBuilder->bitCast(iBuilder->CreateShuffleVector(pack1phi, pack2phi, expand_3_4_shuffle[2]));
     iBuilder->CreateAlignedStore(expand2, outPack2_ptr, packAlign);
-    Value * condition_f = iBuilder->CreateICmpULE(loopExitItemsRemain, ConstantInt::get(iBuilder->getSizeTy(), 9 * PACK_SIZE/4));
+    Value * condition_f = iBuilder->CreateICmpULE(loopExitItemsRemain, iBuilder->getSize(9 * PACK_SIZE/4));
     iBuilder->CreateCondBr(condition_f, itemsDone, step3store2);
     iBuilder->SetInsertPoint(step3store2);
     outPack3_ptr = iBuilder->CreateGEP(loopExitOutput_ptr, iBuilder->getInt32(3));
@@ -283,7 +283,7 @@ void expand3_4Kernel::generateDoSegmentMethod() {
 
 // The doBlock method is deprecated.   But in case it is used, just call doSegment with
 // 1 as the number of blocks to do.
-void expand3_4Kernel::generateDoBlockMethod() {
+void expand3_4Kernel::generateDoBlockMethod() const {
     auto savePoint = iBuilder->saveIP();
     Module * m = iBuilder->getModule();
     Function * doBlockFunction = m->getFunction(mKernelName + doBlock_suffix);
@@ -305,7 +305,7 @@ void expand3_4Kernel::generateDoBlockMethod() {
 //                             hqfedc      bits to move 2 positions right
 //                                   ba    bits to move 12 positions left
 //    xwvuts|  nlkjzy|  barqpm|  hgfedc    Target
-void radix64Kernel::generateDoBlockLogic(Value * self, Value * blockNo) {
+void radix64Kernel::generateDoBlockLogic(Value * self, Value * blockNo) const {
     Value * expandedStream = getStreamSetBlockPtr(self, "expandedStream", blockNo);
     Value * radix64stream = getStreamSetBlockPtr(self, "radix64stream",blockNo);
 
@@ -337,11 +337,11 @@ void radix64Kernel::generateDoBlockLogic(Value * self, Value * blockNo) {
         iBuilder->CreateBlockAlignedStore(radix64pack, radix64stream, {iBuilder->getInt32(0), iBuilder->getInt32(0), iBuilder->getInt32(i)});
     }
     Value * produced = getProducedItemCount(self);
-    produced = iBuilder->CreateAdd(produced, ConstantInt::get(iBuilder->getSizeTy(), iBuilder->getStride()));
+    produced = iBuilder->CreateAdd(produced, iBuilder->getSize(iBuilder->getStride()));
     setProducedItemCount(self, produced);    
 }
 
-void radix64Kernel::generateFinalBlockMethod() {
+void radix64Kernel::generateFinalBlockMethod() const {
     auto savePoint = iBuilder->saveIP();
     Module * m = iBuilder->getModule();
     Function * finalBlockFunction = m->getFunction(mKernelName + finalBlock_suffix);
@@ -360,7 +360,7 @@ void radix64Kernel::generateFinalBlockMethod() {
     Value * remainMod4 = iBuilder->CreateAnd(remainingBytes, iBuilder->getSize(3));
 
     const unsigned PACK_SIZE = iBuilder->getStride()/8;
-    Constant * packSize = ConstantInt::get(iBuilder->getSizeTy(), PACK_SIZE);
+    Constant * packSize = iBuilder->getSize(PACK_SIZE);
     Value * blockNo = getScalarField(self, blockNoScalar);
     Value * expandedstream_ptr = getStreamSetBlockPtr(self, "expandedStream", blockNo);
     Value * radix64stream_ptr = getStreamSetBlockPtr(self, "radix64stream", blockNo);
@@ -456,7 +456,7 @@ void radix64Kernel::generateFinalBlockMethod() {
     iBuilder->restoreIP(savePoint);
 }
 
-void radix64Kernel::generateDoBlockMethod() {
+void radix64Kernel::generateDoBlockMethod() const {
     auto savePoint = iBuilder->saveIP();
 
     Function * doBlockFunction = iBuilder->getModule()->getFunction(mKernelName + doBlock_suffix);
@@ -473,7 +473,7 @@ void radix64Kernel::generateDoBlockMethod() {
 }
 
 
-void base64Kernel::generateDoBlockLogic(Value * self, Value * blockNo) {
+void base64Kernel::generateDoBlockLogic(Value * self, Value * blockNo) const {
     Value * radix64stream_ptr = getStreamSetBlockPtr(self, "radix64stream", blockNo);
     Value * base64stream_ptr = getStreamSetBlockPtr(self, "base64stream", blockNo);   
     for (unsigned i = 0; i < 8; i++) {
@@ -496,7 +496,7 @@ void base64Kernel::generateDoBlockLogic(Value * self, Value * blockNo) {
         iBuilder->CreateBlockAlignedStore(iBuilder->bitCast(base64pack), base64stream_ptr, {iBuilder->getInt32(0), iBuilder->getInt32(0), iBuilder->getInt32(i)});
     }
     Value * produced = getProducedItemCount(self);
-    produced = iBuilder->CreateAdd(produced, ConstantInt::get(iBuilder->getSizeTy(), iBuilder->getStride()));
+    produced = iBuilder->CreateAdd(produced, iBuilder->getSize(iBuilder->getStride()));
     setProducedItemCount(self, produced);    
 }
 
@@ -504,7 +504,7 @@ void base64Kernel::generateDoBlockLogic(Value * self, Value * blockNo) {
 // Special processing for the base 64 format.   The output must always contain a multiple
 // of 4 bytes.   When the number of radix 64 values is not a multiple of 4
 // number of radix 64 values
-void base64Kernel::generateFinalBlockMethod() {
+void base64Kernel::generateFinalBlockMethod() const {
     auto savePoint = iBuilder->saveIP();
     Module * m = iBuilder->getModule();
     Function * finalBlockFunction = m->getFunction(mKernelName + finalBlock_suffix);
@@ -519,9 +519,9 @@ void base64Kernel::generateFinalBlockMethod() {
     Function::arg_iterator args = finalBlockFunction->arg_begin();
     Value * self = &*(args++);
     Value * remainingBytes = &*(args++);
-    Value * remainMod4 = iBuilder->CreateAnd(remainingBytes, ConstantInt::get(iBuilder->getSizeTy(), 3));
-    Value * padBytes = iBuilder->CreateSub(ConstantInt::get(iBuilder->getSizeTy(), 4), remainMod4);
-    padBytes = iBuilder->CreateAnd(padBytes, ConstantInt::get(iBuilder->getSizeTy(), 3));
+    Value * remainMod4 = iBuilder->CreateAnd(remainingBytes, iBuilder->getSize(3));
+    Value * padBytes = iBuilder->CreateSub(iBuilder->getSize(4), remainMod4);
+    padBytes = iBuilder->CreateAnd(padBytes, iBuilder->getSize(3));
 
     Constant * packSize = iBuilder->getSize(iBuilder->getStride() / 8);
     Value * blockNo = getScalarField(self, blockNoScalar);
@@ -573,7 +573,7 @@ void base64Kernel::generateFinalBlockMethod() {
     iBuilder->restoreIP(savePoint);
 }
 
-void base64Kernel::generateDoBlockMethod() {
+void base64Kernel::generateDoBlockMethod() const {
     auto savePoint = iBuilder->saveIP();
 
     Function * doBlockFunction = iBuilder->getModule()->getFunction(mKernelName + doBlock_suffix);

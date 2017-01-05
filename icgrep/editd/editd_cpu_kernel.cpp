@@ -11,8 +11,8 @@
 namespace kernel {
 using namespace llvm;
 
-void editdCPUKernel::bitblock_advance_ci_co(Value * val, unsigned shift, Value * stideCarryArr, unsigned carryIdx, std::vector<std::vector<Value *>> & adv, std::vector<std::vector<int>> & calculated, int i, int j){   
-    if(!calculated[i][j]){
+void editdCPUKernel::bitblock_advance_ci_co(Value * val, unsigned shift, Value * stideCarryArr, unsigned carryIdx, std::vector<std::vector<Value *>> & adv, std::vector<std::vector<int>> & calculated, int i, int j) const {
+    if (calculated[i][j] == 0) {
         Value * ptr = iBuilder->CreateGEP(stideCarryArr, {iBuilder->getInt32(0), iBuilder->getInt32(carryIdx)});
         Value * ci = iBuilder->CreateLoad(ptr);
         std::pair<Value *, Value *> rslt = iBuilder->bitblock_advance(val, ci, shift);
@@ -20,10 +20,9 @@ void editdCPUKernel::bitblock_advance_ci_co(Value * val, unsigned shift, Value *
         adv[i][j] = std::get<1>(rslt);
         calculated[i][j] = 1;
     }
-    return;
 }
 
-void editdCPUKernel::generateFinalBlockMethod() {
+void editdCPUKernel::generateFinalBlockMethod() const {
     IDISA::IDISA_Builder::InsertPoint savePoint = iBuilder->saveIP();
     Module * m = iBuilder->getModule();
     Function * doBlockFunction = m->getFunction(mKernelName + doBlock_suffix);
@@ -41,13 +40,13 @@ void editdCPUKernel::generateFinalBlockMethod() {
     iBuilder->CreateCall(doBlockFunction, doBlockArgs);
     /* Adjust the produced item count */
     Value * produced = getProducedItemCount(self);
-    produced = iBuilder->CreateSub(produced, ConstantInt::get(iBuilder->getSizeTy(), iBuilder->getStride()));
+    produced = iBuilder->CreateSub(produced, iBuilder->getSize(iBuilder->getStride()));
     setProducedItemCount(self, iBuilder->CreateAdd(produced, remaining));
     iBuilder->CreateRetVoid();
     iBuilder->restoreIP(savePoint);
 }
     
-void editdCPUKernel::generateDoBlockMethod() {
+void editdCPUKernel::generateDoBlockMethod() const {
     IDISA::IDISA_Builder::InsertPoint savePoint = iBuilder->saveIP();
     Module * m = iBuilder->getModule();  
 
@@ -66,17 +65,15 @@ void editdCPUKernel::generateDoBlockMethod() {
     Value * blockNo = getScalarField(kernelStuctParam, blockNoScalar);
     Value * ccStreamPtr = getStreamSetBlockPtr(kernelStuctParam, "CCStream", blockNo);
     Value * resultStreamPtr = getStreamSetBlockPtr(kernelStuctParam, "ResultStream", blockNo);
-    Value * pattPos = ConstantInt::get(int32ty, 0);
+
    
     unsigned carryIdx = 0;
 
     std::vector<std::vector<Value *>> e(mPatternLen+1, std::vector<Value *>(mEditDistance+1));
     std::vector<std::vector<Value *>> adv(mPatternLen, std::vector<Value *>(mEditDistance+1));
-    std::vector<std::vector<int>> calculated(mPatternLen, std::vector<int>(mEditDistance+1));
-    for(unsigned i=0; i<mPatternLen; i++)
-        for(unsigned j=0; j<=mEditDistance; j++)
-            calculated[i][j] = 0;
-    Value * pattPtr = iBuilder->CreateGEP(pattStartPtr, {pattPos});
+    std::vector<std::vector<int>> calculated(mPatternLen, std::vector<int>(mEditDistance + 1, 0));
+    Value * pattPos = iBuilder->getInt32(0);
+    Value * pattPtr = iBuilder->CreateGEP(pattStartPtr, pattPos);
     Value * pattCh = iBuilder->CreateLoad(pattPtr);
     Value * pattIdx = iBuilder->CreateAnd(iBuilder->CreateLShr(pattCh, 1), ConstantInt::get(int8ty, 3));
     Value * pattStreamPtr = iBuilder->CreateGEP(ccStreamPtr, {iBuilder->getInt32(0), iBuilder->CreateZExt(pattIdx, int32ty)});
@@ -89,7 +86,7 @@ void editdCPUKernel::generateDoBlockMethod() {
     }
 
     for(unsigned i = 1; i<mPatternLen; i++){     
-        pattPtr = iBuilder->CreateGEP(pattStartPtr, {pattPos});
+        pattPtr = iBuilder->CreateGEP(pattStartPtr, pattPos);
         pattCh = iBuilder->CreateLoad(pattPtr);
         pattIdx = iBuilder->CreateAnd(iBuilder->CreateLShr(pattCh, 1), ConstantInt::get(int8ty, 3));
         pattStreamPtr = iBuilder->CreateGEP(ccStreamPtr, {iBuilder->getInt32(0), iBuilder->CreateZExt(pattIdx, int32ty)});
@@ -118,7 +115,7 @@ void editdCPUKernel::generateDoBlockMethod() {
     }
 
     Value * produced = getProducedItemCount(kernelStuctParam);
-    produced = iBuilder->CreateAdd(produced, ConstantInt::get(iBuilder->getSizeTy(), iBuilder->getStride()));
+    produced = iBuilder->CreateAdd(produced, iBuilder->getSize(iBuilder->getStride()));
     setProducedItemCount(kernelStuctParam, produced); 
        
     iBuilder->CreateRetVoid();

@@ -49,7 +49,7 @@ Value * partial_sum_popcount(IDISA::IDISA_Builder * iBuilder, unsigned fw, Value
 
 namespace kernel {
 
-void DeletionKernel::generateDoBlockMethod() {
+void DeletionKernel::generateDoBlockMethod() const {
     auto savePoint = iBuilder->saveIP();
     Module * m = iBuilder->getModule();
 
@@ -83,13 +83,13 @@ void DeletionKernel::generateDoBlockMethod() {
     /* Stream deletion has only been applied within fields; the actual number of data items
      * has not yet changed.   */
     Value * produced = getProducedItemCount(self);
-    produced = iBuilder->CreateAdd(produced, ConstantInt::get(iBuilder->getSizeTy(), iBuilder->getStride()));
+    produced = iBuilder->CreateAdd(produced, iBuilder->getSize(iBuilder->getStride()));
     setProducedItemCount(self, produced);
     iBuilder->CreateRetVoid();
     iBuilder->restoreIP(savePoint);
 }
 
-void DeletionKernel::generateFinalBlockMethod() {
+void DeletionKernel::generateFinalBlockMethod() const {
     auto savePoint = iBuilder->saveIP();
     Module * m = iBuilder->getModule();
 
@@ -110,7 +110,7 @@ void DeletionKernel::generateFinalBlockMethod() {
     iBuilder->CreateCall(doBlockFunction, {self});
     /* Adjust the produced item count */
     Value * produced = getProducedItemCount(self);
-    produced = iBuilder->CreateSub(produced, ConstantInt::get(iBuilder->getSizeTy(), iBuilder->getStride()));
+    produced = iBuilder->CreateSub(produced, iBuilder->getSize(iBuilder->getStride()));
     setProducedItemCount(self, iBuilder->CreateAdd(produced, remainingBytes));
 
     iBuilder->CreateRetVoid();

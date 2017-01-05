@@ -237,7 +237,7 @@ void SymbolTableBuilder::generateGatherKernel(KernelBuilder * kBuilder, const st
     Value * const positionArray = kBuilder->getInternalState(gatherPositionArrayIdx);
 
     Value * blockPos = iBuilder->CreateLoad(kBuilder->getBlockNo());
-    blockPos = iBuilder->CreateMul(blockPos, ConstantInt::get(iBuilder->getSizeTy(), iBuilder->getBitBlockWidth()));
+    blockPos = iBuilder->CreateMul(blockPos, iBuilder->getSize(iBuilder->getBitBlockWidth()));
 
     iBuilder->CreateBr(groupCond);
 
@@ -279,14 +279,14 @@ void SymbolTableBuilder::generateGatherKernel(KernelBuilder * kBuilder, const st
     startIndexPhi1->addIncoming(startIndex, groupBody);
     PHINode * startIV = iBuilder->CreatePHI(iBuilder->getSizeTy(), 2);
     startIV->addIncoming(iBuilder->getSize(0), groupBody);
-    Value * startOuterTest = iBuilder->CreateICmpNE(startIV, ConstantInt::get(iBuilder->getSizeTy(), fieldCount));
+    Value * startOuterTest = iBuilder->CreateICmpNE(startIV, iBuilder->getSize(fieldCount));
     iBuilder->CreateCondBr(startOuterTest, startOuterBody, endOuterCond);
 
     // START OUTER BODY
     iBuilder->SetInsertPoint(startOuterBody);
     Value * startField = iBuilder->CreateExtractElement(startStream, startIV);
     startIV->addIncoming(iBuilder->CreateAdd(startIV, iBuilder->getSize(1)), startInnerCond);
-    startBlockOffset->addIncoming(iBuilder->CreateAdd(startBlockOffset, ConstantInt::get(iBuilder->getSizeTy(), scanWordBitWidth)), startInnerCond);
+    startBlockOffset->addIncoming(iBuilder->CreateAdd(startBlockOffset, iBuilder->getSize(scanWordBitWidth)), startInnerCond);
     iBuilder->CreateBr(startInnerCond);
 
     // START INNER COND
@@ -318,14 +318,14 @@ void SymbolTableBuilder::generateGatherKernel(KernelBuilder * kBuilder, const st
     startIndexPhi3->addIncoming(startIndexPhi1, startOuterCond);
     PHINode * endIV = iBuilder->CreatePHI(iBuilder->getSizeTy(), 2);
     endIV->addIncoming(iBuilder->getSize(0), startOuterCond);
-    Value * endOuterTest = iBuilder->CreateICmpNE(endIV, ConstantInt::get(iBuilder->getSizeTy(), fieldCount));
+    Value * endOuterTest = iBuilder->CreateICmpNE(endIV, iBuilder->getSize(fieldCount));
     iBuilder->CreateCondBr(endOuterTest, endOuterBody, nextGroup);
 
     // END POINT OUTER BODY
     iBuilder->SetInsertPoint(endOuterBody);
     Value * endField = iBuilder->CreateExtractElement(endStream, endIV);
     endIV->addIncoming(iBuilder->CreateAdd(endIV, iBuilder->getSize(1)), endInnerCond);
-    endBlockOffset->addIncoming(iBuilder->CreateAdd(endBlockOffset, ConstantInt::get(iBuilder->getSizeTy(), scanWordBitWidth)), endInnerCond);
+    endBlockOffset->addIncoming(iBuilder->CreateAdd(endBlockOffset, iBuilder->getSize(scanWordBitWidth)), endInnerCond);
     iBuilder->CreateBr(endInnerCond);
 
     // END POINT INNER COND
@@ -680,8 +680,8 @@ Function * SymbolTableBuilder::ExecuteKernels(){
 
     const unsigned leadingBlocks = (mLongestLookahead + iBuilder->getBitBlockWidth() - 1) / iBuilder->getBitBlockWidth();
 
-    Value * const requiredBytes = ConstantInt::get(iBuilder->getSizeTy(), mBlockSize * leadingBlocks);
-    Value * const blockSize = ConstantInt::get(iBuilder->getSizeTy(), mBlockSize);
+    Value * const requiredBytes = iBuilder->getSize(mBlockSize * leadingBlocks);
+    Value * const blockSize = iBuilder->getSize(mBlockSize);
 
     // First compute any necessary leading blocks to allow the sorting kernel access to the "future" data produced by
     // the leading kernel ...

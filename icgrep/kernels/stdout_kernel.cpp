@@ -10,7 +10,7 @@ namespace kernel {
 
 // The doBlock method is deprecated.   But in case it is used, just call doSegment with
 // 1 as the number of blocks to do.
-void StdOutKernel::generateDoBlockMethod() {
+void StdOutKernel::generateDoBlockMethod() const {
     auto savePoint = iBuilder->saveIP();
     Module * m = iBuilder->getModule();
     Function * doBlockFunction = m->getFunction(mKernelName + doBlock_suffix);
@@ -24,7 +24,7 @@ void StdOutKernel::generateDoBlockMethod() {
             
 // Rather than using doBlock logic to write one block at a time, this custom
 // doSegment method, writes the entire segment with a single write call.
-void StdOutKernel::generateDoSegmentMethod() {
+void StdOutKernel::generateDoSegmentMethod() const {
     auto savePoint = iBuilder->saveIP();
     Module * m = iBuilder->getModule();
     Function * doSegmentFunction = m->getFunction(mKernelName + doSegment_suffix);
@@ -33,8 +33,8 @@ void StdOutKernel::generateDoSegmentMethod() {
     iBuilder->SetInsertPoint(BasicBlock::Create(iBuilder->getContext(), "entry", doSegmentFunction, 0));
     BasicBlock * setTermination = BasicBlock::Create(iBuilder->getContext(), "setTermination", doSegmentFunction, 0);
     BasicBlock * stdOutexit = BasicBlock::Create(iBuilder->getContext(), "stdOutexit", doSegmentFunction, 0);
-    Constant * blockItems = ConstantInt::get(iBuilder->getSizeTy(), iBuilder->getBitBlockWidth());
-    Constant * itemBytes = ConstantInt::get(iBuilder->getSizeTy(), mCodeUnitWidth/8);
+    Constant * blockItems = iBuilder->getSize(iBuilder->getBitBlockWidth());
+    Constant * itemBytes = iBuilder->getSize(mCodeUnitWidth/8);
     
     Function::arg_iterator args = doSegmentFunction->arg_begin();
     Value * self = &*(args++);
@@ -79,15 +79,15 @@ void StdOutKernel::generateDoSegmentMethod() {
     iBuilder->restoreIP(savePoint);
 }
 
-void StdOutKernel::generateFinalBlockMethod() {
+void StdOutKernel::generateFinalBlockMethod() const {
     auto savePoint = iBuilder->saveIP();
     Module * m = iBuilder->getModule();
     Function * finalBlockFunction = m->getFunction(mKernelName + finalBlock_suffix);
     Type * i8PtrTy = iBuilder->getInt8PtrTy();
     
     iBuilder->SetInsertPoint(BasicBlock::Create(iBuilder->getContext(), "fb_flush", finalBlockFunction, 0));
-    Constant * blockItems = ConstantInt::get(iBuilder->getSizeTy(), iBuilder->getBitBlockWidth());
-    Constant * itemBytes = ConstantInt::get(iBuilder->getSizeTy(), mCodeUnitWidth/8);
+    Constant * blockItems = iBuilder->getSize(iBuilder->getBitBlockWidth());
+    Constant * itemBytes = iBuilder->getSize(mCodeUnitWidth/8);
     Value * self = getParameter(finalBlockFunction, "self");
     Value * streamStructPtr = getStreamSetStructPtr(self, "codeUnitBuffer");
     LoadInst * producerPos = iBuilder->CreateAtomicLoadAcquire(mStreamSetInputBuffers[0]->getProducerPosPtr(streamStructPtr));

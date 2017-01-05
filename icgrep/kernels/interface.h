@@ -15,12 +15,8 @@
 struct Binding {
     llvm::Type * type;
     std::string name;
-
-    Binding(llvm::Type * type, std::string name)
-    : type(type)
-    , name(std::move(name)) {
-
-    }
+    Binding(llvm::Type * type, const std::string & name) : type(type), name(name) {}
+    Binding(llvm::Type * type, std::string && name) : type(type), name(name) {}
 };
 
 static const std::string init_suffix = "_Init";
@@ -40,9 +36,7 @@ public:
      within the KernelBuilder class of kernel.h
      
      */
-    
-    std::string & getName() { return mKernelName;}
-    
+       
     std::vector<Binding> getStreamInputs() {return mStreamSetInputs;}
     std::vector<Binding> getStreamOutputs() {return mStreamSetOutputs;}
     std::vector<Binding> getScalarInputs() { return mScalarInputs;}
@@ -51,14 +45,13 @@ public:
     
     // Add ExternalLinkage method declarations for the kernel to a given client module.
     void addKernelDeclarations(Module * client);
-    
-    void setInitialArguments(std::vector<llvm::Value *> initialParameters);
-    virtual void createInstance();
-    llvm::Value * getInstance() {return mKernelInstance;};
+    virtual void createInstance() = 0;
+    void setInitialArguments(std::vector<Value *> initialParameters);
+    llvm::Value * getInstance() const { return mKernelInstance; }
 
-    llvm::Value * createDoSegmentCall(llvm::Value * kernelInstance, llvm::Value * blkCount);
-    llvm::Value * createFinalBlockCall(llvm::Value * kernelInstance, llvm::Value * remainingBytes);
-    llvm::Value * createGetAccumulatorCall(llvm::Value * kernelInstance, std::string accumName);
+    llvm::Value * createDoSegmentCall(llvm::Value * self, llvm::Value * blkCount) const;
+    llvm::Value * createFinalBlockCall(llvm::Value * self, llvm::Value * remainingBytes) const;
+    llvm::Value * createGetAccumulatorCall(llvm::Value * self, std::string accumName) const;
     
     unsigned getLookAhead() const {
         return mLookAheadPositions;
@@ -68,15 +61,15 @@ public:
         return iBuilder;
     }
 
-    virtual llvm::Value * getProcessedItemCount(llvm::Value * kernelInstance) = 0;
-    virtual llvm::Value * getProducedItemCount(llvm::Value * kernelInstance) = 0;
-    virtual llvm::Value * getTerminationSignal(llvm::Value * kernelInstance) = 0;
+    virtual llvm::Value * getProcessedItemCount(llvm::Value * self) const = 0;
+    virtual llvm::Value * getProducedItemCount(llvm::Value * self) const = 0;
+    virtual llvm::Value * getTerminationSignal(llvm::Value * self) const = 0;
     
     void setLookAhead(unsigned lookAheadPositions) {
         mLookAheadPositions = lookAheadPositions;
     }
 
-    llvm::Value * createDoBlockCall(llvm::Value * kernelInstance);
+    llvm::Value * createDoBlockCall(llvm::Value * self) const;
 
 protected:
 

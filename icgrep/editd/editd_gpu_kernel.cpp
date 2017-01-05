@@ -24,7 +24,7 @@ void bitblock_advance_ci_co(IDISA::IDISA_Builder * iBuilder, Value * val, unsign
     return;
 }
 
-void editdGPUKernel::generateFinalBlockMethod() {
+void editdGPUKernel::generateFinalBlockMethod() const {
     IDISA::IDISA_Builder::InsertPoint savePoint = iBuilder->saveIP();
     Module * m = iBuilder->getModule();
     Function * doBlockFunction = m->getFunction(mKernelName + doBlock_suffix);
@@ -42,13 +42,13 @@ void editdGPUKernel::generateFinalBlockMethod() {
     iBuilder->CreateCall(doBlockFunction, doBlockArgs);
     /* Adjust the produced item count */
     Value * produced = getProducedItemCount(self);
-    produced = iBuilder->CreateSub(produced, ConstantInt::get(iBuilder->getSizeTy(), iBuilder->getStride()));
+    produced = iBuilder->CreateSub(produced, iBuilder->getSize(iBuilder->getStride()));
     setProducedItemCount(self, iBuilder->CreateAdd(produced, remaining));
     iBuilder->CreateRetVoid();
     iBuilder->restoreIP(savePoint);
 }
     
-void editdGPUKernel::generateDoBlockMethod() {
+void editdGPUKernel::generateDoBlockMethod() const {
     IDISA::IDISA_Builder::InsertPoint savePoint = iBuilder->saveIP();
     Module * m = iBuilder->getModule();  
 
@@ -123,7 +123,7 @@ void editdGPUKernel::generateDoBlockMethod() {
     }
 
     Value * produced = getProducedItemCount(kernelStuctParam);
-    produced = iBuilder->CreateAdd(produced, ConstantInt::get(iBuilder->getSizeTy(), iBuilder->getStride()));
+    produced = iBuilder->CreateAdd(produced, iBuilder->getSize(iBuilder->getStride()));
     setProducedItemCount(kernelStuctParam, produced); 
        
     iBuilder->CreateRetVoid();

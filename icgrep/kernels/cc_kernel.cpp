@@ -13,7 +13,7 @@ using namespace kernel;
 using namespace pablo;
 using namespace re;
 
-void DirectCharacterClassKernelBuilder::generateDoBlockMethod() {
+void DirectCharacterClassKernelBuilder::generateDoBlockMethod() const {
     auto savePoint = iBuilder->saveIP();
     Module * m = iBuilder->getModule();
 

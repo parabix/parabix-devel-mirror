@@ -119,7 +119,7 @@ void generateS2P_16Kernel(Module *, IDISA::IDISA_Builder * iBuilder, KernelBuild
     
 #endif
     
-void S2PKernel::generateFinalBlockMethod() {
+void S2PKernel::generateFinalBlockMethod() const {
     /* Prepare the s2p final block function:
      assumption: if remaining bytes is greater than 0, it is safe to read a full block of bytes.
      if remaining bytes is zero, no read should be performed (e.g. for mmapped buffer).
@@ -143,7 +143,7 @@ void S2PKernel::generateFinalBlockMethod() {
     iBuilder->CreateCall(doBlockFunction, {self});
     /* Adjust the produced item count */
     Value * produced = getProducedItemCount(self);
-    produced = iBuilder->CreateSub(produced, ConstantInt::get(iBuilder->getSizeTy(), iBuilder->getStride()));
+    produced = iBuilder->CreateSub(produced, iBuilder->getSize(iBuilder->getStride()));
     setProducedItemCount(self, iBuilder->CreateAdd(produced, remainingBytes));
     
     iBuilder->CreateBr(exitBlock);
@@ -160,7 +160,7 @@ void S2PKernel::generateFinalBlockMethod() {
 }
 
     
-void S2PKernel::generateDoBlockLogic(Value * self, Value * blockNo) {
+void S2PKernel::generateDoBlockLogic(Value * self, Value * blockNo) const {
 
     Value * byteStream = getStreamSetBlockPtr(self, "byteStream", blockNo);
     Value * basisBits = getStreamSetBlockPtr(self, "basisBits", blockNo);
@@ -170,22 +170,22 @@ void S2PKernel::generateDoBlockLogic(Value * self, Value * blockNo) {
         Value * ptr = iBuilder->CreateGEP(byteStream, {iBuilder->getInt32(0), iBuilder->getInt32(0), iBuilder->getInt32(i)});
         bytepack[i] = iBuilder->CreateBlockAlignedLoad(ptr);
     }
-    Value * bitblock[8];
-    s2p(iBuilder, bytepack, bitblock);
+    Value * basisbits[8];
+    s2p(iBuilder, bytepack, basisbits);
     for (unsigned i = 0; i < 8; ++i) {
-        iBuilder->CreateBlockAlignedStore(bitblock[i], basisBits, {iBuilder->getInt32(0), iBuilder->getInt32(i)});
+        iBuilder->CreateBlockAlignedStore(basisbits[i], basisBits, {iBuilder->getInt32(0), iBuilder->getInt32(i)});
     }
     Value * produced = getProducedItemCount(self);
-    produced = iBuilder->CreateAdd(produced, ConstantInt::get(iBuilder->getSizeTy(), iBuilder->getStride()));
+    produced = iBuilder->CreateAdd(produced, iBuilder->getSize(iBuilder->getStride()));
     setProducedItemCount(self, produced);    
 }
     
-void S2PKernel::generateDoBlockMethod() {
+void S2PKernel::generateDoBlockMethod() const {
     auto savePoint = iBuilder->saveIP();
 
     Function * doBlockFunction = iBuilder->getModule()->getFunction(mKernelName + doBlock_suffix);
     
-    iBuilder->SetInsertPoint(BasicBlock::Create(iBuilder->getContext(), "entry", doBlockFunction, 0));
+    iBuilder->SetInsertPoint(BasicBlock::Create(iBuilder->getContext(), "entry", doBlockFunction));
     
     Value * self = getParameter(doBlockFunction, "self");
     Value * blockNo = getScalarField(self, blockNoScalar);
@@ -195,4 +195,10 @@ void S2PKernel::generateDoBlockMethod() {
     iBuilder->CreateRetVoid();
     iBuilder->restoreIP(savePoint);
 }
+
+S2PKernel::S2PKernel(IDISA::IDISA_Builder * builder)
+: KernelBuilder(builder, "s2p", {Binding{builder->getStreamSetTy(1, 8), "byteStream"}}, {Binding{builder->getStreamSetTy(8, 1), "basisBits"}}, {}, {}, {}) {
+
+}
+
 }

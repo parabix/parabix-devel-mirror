@@ -40,7 +40,7 @@ void StreamSetBuffer::setEndOfInput(Value * bufferStructPtr) {
 void StreamSetBuffer::allocateBuffer() {
     Type * const size_ty = iBuilder->getSizeTy();
     Type * const int1ty = iBuilder->getInt1Ty();
-    mStreamSetBufferPtr = iBuilder->CreateCacheAlignedAlloca(mStreamSetType, ConstantInt::get(iBuilder->getSizeTy(), mBufferBlocks));
+    mStreamSetBufferPtr = iBuilder->CreateCacheAlignedAlloca(mStreamSetType, iBuilder->getSize(mBufferBlocks));
     mStreamSetStructPtr = iBuilder->CreateCacheAlignedAlloca(mStreamSetStructType);
     iBuilder->CreateStore(ConstantInt::get(size_ty, 0), iBuilder->CreateGEP(mStreamSetStructPtr, {iBuilder->getInt32(0), iBuilder->getInt32(iProducer_pos)}));
     iBuilder->CreateStore(ConstantInt::get(size_ty, 0), iBuilder->CreateGEP(mStreamSetStructPtr, {iBuilder->getInt32(0), iBuilder->getInt32(iConsumer_pos)}));
@@ -117,7 +117,7 @@ llvm::Value * CircularBuffer::getStreamSetBlockPointer(llvm::Value * bufferStruc
 }
 
 llvm::Value * LinearCopybackBuffer::getStreamSetBlockPointer(llvm::Value * bufferStructPtr, llvm::Value * blockNo) {
-    Constant * blockWidth = ConstantInt::get(iBuilder->getSizeTy(), iBuilder->getStride());
+    Constant * blockWidth = iBuilder->getSize(iBuilder->getStride());
     Value * consumerPos_ptr = iBuilder->CreateGEP(bufferStructPtr, {iBuilder->getInt32(0), iBuilder->getInt32(iConsumer_pos)});
     Value * consumerPos = iBuilder->CreateLoad(consumerPos_ptr);
     Value * consumerBlock = iBuilder->CreateUDiv(consumerPos, blockWidth);
@@ -126,7 +126,7 @@ llvm::Value * LinearCopybackBuffer::getStreamSetBlockPointer(llvm::Value * buffe
     return iBuilder->CreateGEP(bufPtr, iBuilder->CreateSub(blockNo, consumerBlock));
 }
 
-void LinearCopybackBuffer::setConsumerPos(Value * bufferStructPtr, Value * new_consumer_pos) {
+void LinearCopybackBuffer::setConsumerPos(Value * bufferStructPtr, Value * newConsumerPos) {
     Type * const i8 = iBuilder->getInt8Ty();
     Type * const i8_ptr = i8->getPointerTo(mAddrSpace);
     IntegerType * const sizeTy = iBuilder->getSizeTy();
@@ -144,18 +144,18 @@ void LinearCopybackBuffer::setConsumerPos(Value * bufferStructPtr, Value * new_c
     Value * const consumerPos = iBuilder->CreateLoad(consumerPosPtr);
 
     // Ensure that the new consumer position is no less than the current position.
-    new_consumer_pos = iBuilder->CreateSelect(iBuilder->CreateICmpULT(new_consumer_pos, consumerPos), consumerPos, new_consumer_pos);
+    newConsumerPos = iBuilder->CreateSelect(iBuilder->CreateICmpULT(newConsumerPos, consumerPos), consumerPos, newConsumerPos);
     Value * producerPos = iBuilder->CreateLoad(iBuilder->CreateGEP(bufferStructPtr, {iBuilder->getInt32(0), iBuilder->getInt32(iProducer_pos)}));
 
     // Ensure that the new consumer position is no greater than the current producer position.
-    Value * new_pos_lt_producer_pos = iBuilder->CreateICmpULT(new_consumer_pos, producerPos);
-    new_consumer_pos = iBuilder->CreateSelect(new_pos_lt_producer_pos, new_consumer_pos, producerPos);
+    Value * new_pos_lt_producer_pos = iBuilder->CreateICmpULT(newConsumerPos, producerPos);
+    newConsumerPos = iBuilder->CreateSelect(new_pos_lt_producer_pos, newConsumerPos, producerPos);
 
     // Now, the new_consumer_pos is at most = to the producer_pos; if =, we're done.
     iBuilder->CreateCondBr(new_pos_lt_producer_pos, copyBackBody, setConsumerPosExit);
     iBuilder->SetInsertPoint(copyBackBody);
     
-    Value * new_consumer_block = iBuilder->CreateUDiv(new_consumer_pos, blockWidth);
+    Value * new_consumer_block = iBuilder->CreateUDiv(newConsumerPos, blockWidth);
     Value * lastProducerBlock = iBuilder->CreateUDiv(iBuilder->CreateSub(producerPos, one), blockWidth);
     Value * copyBlocks = iBuilder->CreateAdd(iBuilder->CreateSub(lastProducerBlock, new_consumer_block), one);
 
@@ -176,5 +176,5 @@ void LinearCopybackBuffer::setConsumerPos(Value * bufferStructPtr, Value * new_c
     // Copy back done, store the new consumer position.
     iBuilder->SetInsertPoint(setConsumerPosExit);
 
-    iBuilder->CreateStore(new_consumer_pos, consumerPosPtr);
+    iBuilder->CreateStore(newConsumerPos, consumerPosPtr);
 }    

@@ -25,7 +25,7 @@ public:
                   {}, {}, {}) {}
     
 private:
-    void generateDoBlockMethod() override;
+    void generateDoBlockMethod() const override;
     
 };
 
@@ -38,7 +38,7 @@ public:
                   {}, {}, {}) {}
     
 private:
-    void generateDoBlockMethod() override;
+    void generateDoBlockMethod() const override;
 };
     
 
@@ -51,7 +51,7 @@ public:
                   {}, {}, {}) {}
     
 private:
-    void generateDoBlockMethod() override;
+    void generateDoBlockMethod() const override;
     
 };
 
@@ -67,8 +67,8 @@ public:
                   {Binding{iBuilder->getSizeTy(), "unitsGenerated"}, Binding{iBuilder->getSizeTy(), "unitsWritten"}}) {}
         
 private:
-    void generateDoBlockMethod() override;
-    void generateFinalBlockMethod() override;
+    void generateDoBlockMethod() const override;
+    void generateFinalBlockMethod() const override;
 };
     
 }

@@ -23,9 +23,9 @@ public:
 private:
     unsigned mCodeUnitWidth;
   
-    void generateDoBlockMethod() override;
-    void generateFinalBlockMethod() override;
-    void generateDoSegmentMethod() override;
+    void generateDoBlockMethod() const override;
+    void generateFinalBlockMethod() const override;
+    void generateDoSegmentMethod() const override;
     
 };
 }

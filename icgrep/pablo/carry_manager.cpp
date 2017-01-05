@@ -291,7 +291,6 @@ void CarryManager::enterScope(PabloBlock * const scope) {
     assert(mCurrentFrame->getType()->getPointerElementType()->isStructTy());
     // We always use the 0-th slot for the summary value, even when it's implicit
     mCurrentFrameIndex = mCarryInfo->hasExplicitSummary() ? 1 : 0;
-
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -389,7 +388,7 @@ Value * CarryManager::longAdvanceCarryInCarryOut(const unsigned shiftAmount, Val
     assert (buffer->getType()->getPointerElementType() == mBitBlockType);
 
     // Create a mask to implement circular buffer indexing
-    Value * indexMask = ConstantInt::get(iBuilder->getSizeTy(), nearest_pow2(entries) - 1);
+    Value * indexMask = iBuilder->getSize(nearest_pow2(entries) - 1);
     Value * blockIndex = mKernel->getScalarField(mSelf, blockNoScalar);
     Value * carryIndex0 = iBuilder->CreateSub(blockIndex, iBuilder->getSize(entries));
     Value * loadIndex0 = iBuilder->CreateAnd(carryIndex0, indexMask);

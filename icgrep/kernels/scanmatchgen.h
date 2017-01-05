@@ -30,8 +30,8 @@ public:
     mGrepType(grepType) {}
         
 private:
-    void generateDoBlockMethod() override;
-    llvm::Function * generateScanWordRoutine(llvm::Module * m);
+    void generateDoBlockMethod() const override;
+    llvm::Function * generateScanWordRoutine(llvm::Module * m) const;
         
     GrepType mGrepType;
 };

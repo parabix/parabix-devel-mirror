@@ -6,7 +6,6 @@
 #ifndef KERNEL_BUILDER_H
 #define KERNEL_BUILDER_H
 
-
 #include "streamset.h"
 #include "interface.h"
 #include <vector>
@@ -27,35 +26,27 @@ namespace kernel {
     
 class KernelBuilder : public KernelInterface {
     using NameMap = boost::container::flat_map<std::string, unsigned>;
-
 public:
-    KernelBuilder(IDISA::IDISA_Builder * builder,
-                    std::string kernelName,
-                    std::vector<Binding> stream_inputs,
-                    std::vector<Binding> stream_outputs,
-                    std::vector<Binding> scalar_parameters,
-                    std::vector<Binding> scalar_outputs,
-                    std::vector<Binding> internal_scalars);
     
     // Create a module for the kernel, including the kernel state type declaration and
     // the full implementation of all required methods.     
     //
-    std::unique_ptr<llvm::Module> createKernelModule(std::vector<StreamSetBuffer *> input_buffers, std::vector<StreamSetBuffer *> output_buffers);
+    std::unique_ptr<Module> createKernelModule(const std::vector<StreamSetBuffer *> & inputs, const std::vector<StreamSetBuffer *> & outputs);
     
     // Generate the Kernel to the current module (iBuilder->getModule()).
-    void generateKernel(std::vector<StreamSetBuffer *> input_buffers, std::vector<StreamSetBuffer *> output_buffers);
+    void generateKernel(const std::vector<StreamSetBuffer *> & inputs, const std::vector<StreamSetBuffer *> & outputs);
     
     void createInstance() override;
 
-    Function * generateThreadFunction(std::string name);
+    Function * generateThreadFunction(const std::string & name) const;
 
-    Value * getBlockNo(Value * self);
-    virtual llvm::Value * getProcessedItemCount(llvm::Value * kernelInstance) override;
-    virtual llvm::Value * getProducedItemCount(llvm::Value * kernelInstance) override;
-    virtual void initializeKernelState(Value * self);
-    llvm::Value * getTerminationSignal(llvm::Value * kernelInstance) override;
+    Value * getBlockNo(Value * self) const;
+    virtual Value * getProcessedItemCount(Value * self) const override;
+    virtual Value * getProducedItemCount(Value * self) const override;
+    virtual void initializeKernelState(Value * self) const;
+    Value * getTerminationSignal(Value * self) const override;
     
-    inline llvm::IntegerType * getSizeTy() {
+    inline IntegerType * getSizeTy() const {
         return getBuilder()->getSizeTy();
     }
 
@@ -76,11 +67,23 @@ public:
     // After all segment processing actions for the kernel are complete, and any necessary 
     // data has been extracted from the kernel for further pipeline processing, the 
     // segment number must be incremented and stored using releaseLogicalSegmentNo.
-    llvm::Value * acquireLogicalSegmentNo(llvm::Value * kernelInstance);
-    void releaseLogicalSegmentNo(llvm::Value * kernelInstance, Value * newFieldVal);
+    LoadInst * acquireLogicalSegmentNo(Value * self) const;
 
+    void releaseLogicalSegmentNo(Value * self, Value * newFieldVal) const;
+
+    virtual ~KernelBuilder() = 0;
 
 protected:
+
+    // Constructor
+    KernelBuilder(IDISA::IDISA_Builder * builder,
+                    std::string kernelName,
+                    std::vector<Binding> stream_inputs,
+                    std::vector<Binding> stream_outputs,
+                    std::vector<Binding> scalar_parameters,
+                    std::vector<Binding> scalar_outputs,
+                    std::vector<Binding> internal_scalars);
+
     //
     // Kernel builder subtypes define their logic of kernel construction
     // in terms of 3 virtual methods for
@@ -96,8 +99,9 @@ protected:
     
     // Each kernel builder subtype must provide its own logic for generating
     // doBlock calls.
-    virtual void generateDoBlockMethod() = 0;
-    virtual void generateDoBlockLogic(Value * self, Value * blockNo);
+    virtual void generateDoBlockMethod() const = 0;
+
+    virtual void generateDoBlockLogic(Value * self, Value * blockNo) const;
 
     // Each kernel builder subtypre must also specify the logic for processing the
     // final block of stream data, if there is any special processing required
@@ -106,13 +110,13 @@ protected:
     // without additional preparation, the default generateFinalBlockMethod need
     // not be overridden.
     
-    virtual void generateFinalBlockMethod();
-    
-    virtual void generateDoSegmentMethod();
+    virtual void generateFinalBlockMethod() const;
+
+    virtual void generateDoSegmentMethod() const;
     
     // Add an additional scalar field to the KernelState struct.
     // Must occur before any call to addKernelDeclarations or createKernelModule.
-    unsigned addScalar(llvm::Type * type, std::string name);
+    unsigned addScalar(Type * type, const std::string & name);
 
     unsigned getScalarCount() const;
 
@@ -123,36 +127,46 @@ protected:
     ConstantInt * getScalarIndex(const std::string & name) const;
     
     // Get the value of a scalar field for a given instance.
-    llvm::Value * getScalarField(llvm::Value * self, std::string fieldName);
+    Value * getScalarField(Value * self, const std::string & fieldName) const;
 
     // Set the value of a scalar field for a given instance.
-    void setScalarField(llvm::Value * self, std::string fieldName, llvm::Value * newFieldVal);
+    void setScalarField(Value * self, const std::string & fieldName, Value * newFieldVal) const;
     
     // Get a parameter by name.
-    llvm::Value * getParameter(llvm::Function * f, std::string paramName);
+    Value * getParameter(Function * f, const std::string & paramName) const;
+
+    Value * getStream(Value * self, const std::string & name, Value * blockNo, const unsigned index) {
+        return getStream(self, name, blockNo, iBuilder->getInt32(index));
+    }
+
+    Value * getStream(Value * self, const std::string & name, Value * blockNo, Value * index);
     
     // Stream set helpers.
-    unsigned getStreamSetIndex(std::string name);
+    unsigned getStreamSetIndex(const std::string & name) const;
     
-    llvm::Value * getScalarFieldPtr(Value * self, const std::string & name);
+    Value * getScalarFieldPtr(Value * self, const std::string & name) const;
 
-    llvm::Value * getStreamSetStructPtr(Value * self, std::string name);
-    size_t getStreamSetBufferSize(Value * self, std::string name);
+    Value * getStreamSetStructPtr(Value * self, const std::string & name) const;
 
-    llvm::Value * getStreamSetBlockPtr(Value * self, std::string name, Value * blockNo);
+    size_t getStreamSetBufferSize(Value * self, const std::string & name) const;
+
+    Value * getStreamSetBlockPtr(Value * self, const std::string & name, Value * blockNo) const;
     
-    void setBlockNo(Value * self, Value * newFieldVal);
-    virtual void setProcessedItemCount(llvm::Value * self, Value * newFieldVal);
-    virtual void setProducedItemCount(llvm::Value * self, Value * newFieldVal);
-    void setTerminationSignal(llvm::Value * self);
+    void setBlockNo(Value * self, Value * newFieldVal) const;
+
+    virtual void setProcessedItemCount(Value * self, Value * newFieldVal) const;
+
+    virtual void setProducedItemCount(Value * self, Value * newFieldVal) const;
+
+    void setTerminationSignal(Value * self) const;
 
 protected:
 
-    std::vector<llvm::Type *>  mKernelFields;
-    NameMap                    mKernelMap;
-    NameMap                    mStreamSetNameMap;
-    std::vector<StreamSetBuffer *> mStreamSetInputBuffers;
-    std::vector<StreamSetBuffer *> mStreamSetOutputBuffers;
+    std::vector<Type *>             mKernelFields;
+    NameMap                         mKernelMap;
+    NameMap                         mStreamSetNameMap;
+    std::vector<StreamSetBuffer *>  mStreamSetInputBuffers;
+    std::vector<StreamSetBuffer *>  mStreamSetOutputBuffers;
 
 };
 }

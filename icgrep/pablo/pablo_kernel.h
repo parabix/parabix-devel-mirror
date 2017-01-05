@@ -40,7 +40,7 @@ public:
     // At present only population count accumulator are supported,
     // using the pablo.Count operation.
     
-    ~PabloKernel();
+    virtual ~PabloKernel();
 
     PabloBlock * getEntryBlock() {
         return mEntryBlock;
@@ -64,7 +64,7 @@ public:
         return mInputs[index];
     }
 
-    Var * addInput(const std::string name, Type * const type);
+    Var * addInput(const std::string & name, Type * const type);
 
     unsigned getNumOfInputs() const {
         return mInputs.size();
@@ -109,14 +109,14 @@ protected:
     // finalizing the KernelStateType.
     void prepareKernel() override;
 
-    void generateDoBlockMethod() override;
+    void generateDoBlockMethod() const override;
     
-    void initializeKernelState(Value * self) override;
+    void initializeKernelState(Value * self) const override;
 
     // The default method for Pablo final block processing sets the
     // EOFmark bit and then calls the standard DoBlock function.
     // This may be overridden for specialized processing.
-    virtual void generateFinalBlockMethod() override;
+    virtual void generateFinalBlockMethod() const override;
 
     inline String * getName(const std::string & name) const {
         return mSymbolTable->get(name, iBuilder);

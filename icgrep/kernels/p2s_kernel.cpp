@@ -39,7 +39,7 @@ inline void p2s(IDISA::IDISA_Builder * iBuilder, Value * p[], Value * s[]) {
     }
 }
     		
-void p2sKernel::generateDoBlockMethod() {
+void p2sKernel::generateDoBlockMethod() const {
     auto savePoint = iBuilder->saveIP();
     Module * m = iBuilder->getModule();
     
@@ -65,7 +65,7 @@ void p2sKernel::generateDoBlockMethod() {
     iBuilder->restoreIP(savePoint);
 }
 	
-void p2sKernel_withCompressedOutput::generateDoBlockMethod() {
+void p2sKernel_withCompressedOutput::generateDoBlockMethod() const {
     auto savePoint = iBuilder->saveIP();
     Module * m = iBuilder->getModule();
     Type * i8PtrTy = iBuilder->getInt8PtrTy(); 
@@ -81,12 +81,12 @@ void p2sKernel_withCompressedOutput::generateDoBlockMethod() {
     Value * delCountBlock_ptr = getStreamSetBlockPtr(self, "deletionCounts", blockNo);
     Value * byteStreamBlock_ptr = getStreamSetBlockPtr(self, "byteStream", blockNo);
     
-    Value * p_bitblock[8];
+    Value * basisBits[8];
     for (unsigned i = 0; i < 8; i++) {
-        p_bitblock[i] = iBuilder->CreateBlockAlignedLoad(basisBitsBlock_ptr, {iBuilder->getInt32(0), iBuilder->getInt32(i)});
+        basisBits[i] = iBuilder->CreateBlockAlignedLoad(basisBitsBlock_ptr, {iBuilder->getInt32(0), iBuilder->getInt32(i)});
     }
-    Value * s_bytepack[8];
-    p2s(iBuilder, p_bitblock, s_bytepack);
+    Value * bytePack[8];
+    p2s(iBuilder, basisBits, bytePack);
     
     unsigned units_per_register = iBuilder->getBitBlockWidth()/8;
     
@@ -96,14 +96,14 @@ void p2sKernel_withCompressedOutput::generateDoBlockMethod() {
     Value * offset = ConstantInt::get(i32, 0);
     
     for (unsigned j = 0; j < 8; ++j) {
-        iBuilder->CreateAlignedStore(s_bytepack[j], iBuilder->CreateBitCast(iBuilder->CreateGEP(output_ptr, offset), bitBlockPtrTy), 1);
+        iBuilder->CreateAlignedStore(bytePack[j], iBuilder->CreateBitCast(iBuilder->CreateGEP(output_ptr, offset), bitBlockPtrTy), 1);
         offset = iBuilder->CreateZExt(iBuilder->CreateExtractElement(unit_counts, iBuilder->getInt32(j)), i32);
     }
     iBuilder->CreateRetVoid();
     iBuilder->restoreIP(savePoint);
 }
 
-void p2s_16Kernel::generateDoBlockMethod() {
+void p2s_16Kernel::generateDoBlockMethod() const {
     auto savePoint = iBuilder->saveIP();
     Module * m = iBuilder->getModule();
     
@@ -140,7 +140,7 @@ void p2s_16Kernel::generateDoBlockMethod() {
     iBuilder->restoreIP(savePoint);
 }
 
-void p2s_16Kernel_withCompressedOutput::generateDoBlockMethod() {
+void p2s_16Kernel_withCompressedOutput::generateDoBlockMethod() const {
     auto savePoint = iBuilder->saveIP();
     Module * m = iBuilder->getModule();
     Type * i32 = iBuilder->getIntNTy(32);
@@ -149,7 +149,7 @@ void p2s_16Kernel_withCompressedOutput::generateDoBlockMethod() {
     Function * doBlockFunction = m->getFunction(mKernelName + doBlock_suffix);
 
     iBuilder->SetInsertPoint(BasicBlock::Create(iBuilder->getContext(), "entry", doBlockFunction, 0));
-    Constant * stride = ConstantInt::get(iBuilder->getSizeTy(), iBuilder->getStride());
+    Constant * stride = iBuilder->getSize(iBuilder->getStride());
 
     Value * self = getParameter(doBlockFunction, "self");
     Value * blockNo = getScalarField(self, blockNoScalar);
@@ -198,7 +198,7 @@ void p2s_16Kernel_withCompressedOutput::generateDoBlockMethod() {
     iBuilder->restoreIP(savePoint);
 }
 
-void p2s_16Kernel_withCompressedOutput::generateFinalBlockMethod() {
+void p2s_16Kernel_withCompressedOutput::generateFinalBlockMethod() const {
     auto savePoint = iBuilder->saveIP();
     Module * m = iBuilder->getModule();
     Function * doBlockFunction = m->getFunction(mKernelName + doBlock_suffix);
