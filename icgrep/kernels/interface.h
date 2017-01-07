@@ -61,8 +61,8 @@ public:
         return iBuilder;
     }
 
-    virtual llvm::Value * getProcessedItemCount(llvm::Value * self) const = 0;
-    virtual llvm::Value * getProducedItemCount(llvm::Value * self) const = 0;
+    virtual llvm::Value * getProcessedItemCount(llvm::Value * self, const std::string & ssName) const = 0;
+    virtual llvm::Value * getProducedItemCount(llvm::Value * self, const std::string & ssName) const = 0;
     virtual llvm::Value * getTerminationSignal(llvm::Value * self) const = 0;
     
     void setLookAhead(unsigned lookAheadPositions) {

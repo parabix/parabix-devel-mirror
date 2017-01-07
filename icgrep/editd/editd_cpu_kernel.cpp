@@ -39,9 +39,9 @@ void editdCPUKernel::generateFinalBlockMethod() const {
     setScalarField(self, "EOFmask", iBuilder->bitblock_mask_from(remaining));
     iBuilder->CreateCall(doBlockFunction, doBlockArgs);
     /* Adjust the produced item count */
-    Value * produced = getProducedItemCount(self);
+    Value * produced = getProducedItemCount(self, "ResultStream");
     produced = iBuilder->CreateSub(produced, iBuilder->getSize(iBuilder->getStride()));
-    setProducedItemCount(self, iBuilder->CreateAdd(produced, remaining));
+    setProducedItemCount(self, "ResultStream", iBuilder->CreateAdd(produced, remaining));
     iBuilder->CreateRetVoid();
     iBuilder->restoreIP(savePoint);
 }
@@ -114,9 +114,9 @@ void editdCPUKernel::generateDoBlockMethod() const {
         iBuilder->CreateStore(iBuilder->CreateAnd(e[mPatternLen-1][j], iBuilder->CreateNot(e[mPatternLen-1][j-1])), ptr);
     }
 
-    Value * produced = getProducedItemCount(kernelStuctParam);
+    Value * produced = getProducedItemCount(kernelStuctParam, "ResultStream");
     produced = iBuilder->CreateAdd(produced, iBuilder->getSize(iBuilder->getStride()));
-    setProducedItemCount(kernelStuctParam, produced); 
+    setProducedItemCount(kernelStuctParam, "ResultStream", produced); 
        
     iBuilder->CreateRetVoid();
     iBuilder->restoreIP(savePoint);

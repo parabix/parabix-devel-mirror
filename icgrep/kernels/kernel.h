@@ -15,8 +15,8 @@
 
 const std::string blockNoScalar = "blockNo";
 const std::string logicalSegmentNoScalar = "logicalSegNo";
-const std::string processedItemCount = "processedItemCount";
-const std::string producedItemCount = "producedItemCount";
+const std::string processedItemCountSuffix = "_processedItemCount";
+const std::string producedItemCountSuffix = "_producedItemCount";
 const std::string terminationSignal = "terminationSignal";
 const std::string structPtrSuffix = "_structPtr";
 const std::string blkMaskSuffix = "_blkMask";
@@ -41,8 +41,8 @@ public:
     Function * generateThreadFunction(const std::string & name) const;
 
     Value * getBlockNo(Value * self) const;
-    virtual Value * getProcessedItemCount(Value * self) const override;
-    virtual Value * getProducedItemCount(Value * self) const override;
+    virtual Value * getProcessedItemCount(Value * self, const std::string & ssName) const override;
+    virtual Value * getProducedItemCount(Value * self, const std::string & ssName) const override;
     virtual void initializeKernelState(Value * self) const;
     Value * getTerminationSignal(Value * self) const override;
     
@@ -154,9 +154,9 @@ protected:
     
     void setBlockNo(Value * self, Value * newFieldVal) const;
 
-    virtual void setProcessedItemCount(Value * self, Value * newFieldVal) const;
+    virtual void setProcessedItemCount(Value * self, const std::string & ssName, Value * newFieldVal) const;
 
-    virtual void setProducedItemCount(Value * self, Value * newFieldVal) const;
+    virtual void setProducedItemCount(Value * self, const std::string & ssName, Value * newFieldVal) const;
 
     void setTerminationSignal(Value * self) const;
 

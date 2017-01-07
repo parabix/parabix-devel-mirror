@@ -155,7 +155,7 @@ void p2s_16Kernel_withCompressedOutput::generateDoBlockMethod() const {
     Value * blockNo = getScalarField(self, blockNoScalar);
     Value * basisBitsBlock_ptr = getStreamSetBlockPtr(self, "basisBits", blockNo);
     Value * delCountBlock_ptr = getStreamSetBlockPtr(self, "deletionCounts", blockNo);
-    Value * i16UnitsGenerated = getProducedItemCount(self); // units generated to buffer
+    Value * i16UnitsGenerated = getProducedItemCount(self, "i16Stream"); // units generated to buffer
     Value * i16BlockNo = iBuilder->CreateUDiv(i16UnitsGenerated, stride);
 
     Value * i16StreamBase_ptr = iBuilder->CreateBitCast(getStreamSetBlockPtr(self, "i16Stream", i16BlockNo), PointerType::get(iBuilder->getInt16Ty(), 0));
@@ -193,7 +193,7 @@ void p2s_16Kernel_withCompressedOutput::generateDoBlockMethod() const {
     }
 
     i16UnitsGenerated = iBuilder->CreateAdd(i16UnitsGenerated, iBuilder->CreateZExt(offset, iBuilder->getSizeTy()));
-    setProducedItemCount(self, i16UnitsGenerated);
+    setProducedItemCount(self, "i16Stream", i16UnitsGenerated);
     iBuilder->CreateRetVoid();
     iBuilder->restoreIP(savePoint);
 }
@@ -212,10 +212,10 @@ void p2s_16Kernel_withCompressedOutput::generateFinalBlockMethod() const {
     while (args != finalBlockFunction->arg_end()){
         doBlockArgs.push_back(&*args++);
     }
-    Value * i16UnitsGenerated = getProducedItemCount(self); // units generated to buffer
+    Value * i16UnitsGenerated = getProducedItemCount(self, "i16Stream"); // units generated to buffer
 
     iBuilder->CreateCall(doBlockFunction, doBlockArgs);
-    i16UnitsGenerated = getProducedItemCount(self); // units generated to buffer
+    i16UnitsGenerated = getProducedItemCount(self, "i16Stream"); // units generated to buffer
     for (unsigned i = 0; i < mStreamSetOutputs.size(); i++) {
         Value * ssStructPtr = getStreamSetStructPtr(self, mStreamSetOutputs[i].name);
         Value * producerPosPtr = mStreamSetOutputBuffers[i]->getProducerPosPtr(ssStructPtr);

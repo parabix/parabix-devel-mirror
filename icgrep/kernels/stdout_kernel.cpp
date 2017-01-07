@@ -45,7 +45,7 @@ void StdOutKernel::generateDoSegmentMethod() const {
 
     LoadInst * producerPos = iBuilder->CreateAtomicLoadAcquire(mStreamSetInputBuffers[0]->getProducerPosPtr(streamStructPtr));
     //iBuilder->CallPrintInt("producerPos", producerPos);
-    Value * processed = getProcessedItemCount(self);
+    Value * processed = getProcessedItemCount(self, "codeUnitBuffer");
     Value * itemsAvail = iBuilder->CreateSub(producerPos, processed);
     Value * itemsMax = iBuilder->CreateMul(blocksToDo, blockItems);
     Value * lessThanFullSegment = iBuilder->CreateICmpULT(itemsAvail, itemsMax);
@@ -61,7 +61,7 @@ void StdOutKernel::generateDoSegmentMethod() const {
     iBuilder->CreateWriteCall(iBuilder->getInt32(1), bytePtr, iBuilder->CreateMul(itemsToDo, itemBytes));
 
     processed = iBuilder->CreateAdd(processed, itemsToDo);
-    setProcessedItemCount(self, processed);
+    setProcessedItemCount(self, "codeUnitBuffer", processed);
     setScalarField(self, blockNoScalar, iBuilder->CreateUDiv(processed, blockItems));
     mStreamSetInputBuffers[0]->setConsumerPos(streamStructPtr, processed);
 
@@ -91,14 +91,14 @@ void StdOutKernel::generateFinalBlockMethod() const {
     Value * self = getParameter(finalBlockFunction, "self");
     Value * streamStructPtr = getStreamSetStructPtr(self, "codeUnitBuffer");
     LoadInst * producerPos = iBuilder->CreateAtomicLoadAcquire(mStreamSetInputBuffers[0]->getProducerPosPtr(streamStructPtr));
-    Value * processed = getProcessedItemCount(self);
+    Value * processed = getProcessedItemCount(self, "codeUnitBuffer");
     Value * itemsAvail = iBuilder->CreateSub(producerPos, processed);
     Value * blockNo = getScalarField(self, blockNoScalar);
     Value * basePtr = getStreamSetBlockPtr(self, "codeUnitBuffer", blockNo);
     Value * byteOffset = iBuilder->CreateMul(iBuilder->CreateURem(processed, blockItems), itemBytes);
     Value * bytePtr = iBuilder->CreateGEP(iBuilder->CreateBitCast(basePtr, i8PtrTy), byteOffset);
     iBuilder->CreateWriteCall(iBuilder->getInt32(1), bytePtr, iBuilder->CreateMul(itemsAvail, itemBytes));
-    setProcessedItemCount(self, producerPos);
+    setProcessedItemCount(self, "codeUnitBuffer", producerPos);
     mStreamSetInputBuffers[0]->setConsumerPos(streamStructPtr, producerPos);
     setTerminationSignal(self);
     iBuilder->CreateRetVoid();

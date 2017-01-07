@@ -61,11 +61,13 @@ void KernelBuilder::prepareKernel() {
         }
         mScalarInputs.push_back(Binding{mStreamSetInputBuffers[i]->getStreamSetStructPointerType(), mStreamSetInputs[i].name + structPtrSuffix});
         mStreamSetNameMap.emplace(mStreamSetInputs[i].name, streamSetNo);
+        addScalar(iBuilder->getSizeTy(), mStreamSetInputs[i].name + processedItemCountSuffix);
         streamSetNo++;
     }
     for (unsigned i = 0; i < mStreamSetOutputs.size(); i++) {
         mScalarInputs.push_back(Binding{mStreamSetOutputBuffers[i]->getStreamSetStructPointerType(), mStreamSetOutputs[i].name + structPtrSuffix});
         mStreamSetNameMap.emplace(mStreamSetOutputs[i].name, streamSetNo);
+        addScalar(iBuilder->getSizeTy(), mStreamSetOutputs[i].name + producedItemCountSuffix);
         streamSetNo++;
     }
     for (auto binding : mScalarInputs) {
@@ -79,8 +81,6 @@ void KernelBuilder::prepareKernel() {
     }
     addScalar(iBuilder->getSizeTy(), blockNoScalar);
     addScalar(iBuilder->getSizeTy(), logicalSegmentNoScalar);
-    addScalar(iBuilder->getSizeTy(), processedItemCount);
-    addScalar(iBuilder->getSizeTy(), producedItemCount);
     addScalar(iBuilder->getInt1Ty(), terminationSignal);
     mKernelStateType = StructType::create(iBuilder->getContext(), mKernelFields, mKernelName);
 }
@@ -207,7 +207,7 @@ void KernelBuilder::generateDoSegmentMethod() const {
         /* Set the available position to be the minimum of availablePos and producerPos. */
         availablePos = iBuilder->CreateSelect(iBuilder->CreateICmpULT(availablePos, p), availablePos, p);
     }
-    Value * processed = getProcessedItemCount(self);
+    Value * processed = getProcessedItemCount(self, mStreamSetInputs[0].name);
     Value * itemsAvail = iBuilder->CreateSub(availablePos, processed);
 //#ifndef NDEBUG
 //    iBuilder->CallPrintInt(mKernelName + "_itemsAvail", itemsAvail);
@@ -236,7 +236,7 @@ void KernelBuilder::generateDoSegmentMethod() const {
     
     iBuilder->SetInsertPoint(stridesDone);
     processed = iBuilder->CreateAdd(processed, iBuilder->CreateMul(stridesToDo, stride));
-    setProcessedItemCount(self, processed);
+    setProcessedItemCount(self, mStreamSetInputs[0].name, processed);
     iBuilder->CreateCondBr(lessThanFullSegment, checkFinalStride, segmentDone);
     
     iBuilder->SetInsertPoint(checkFinalStride);
@@ -264,7 +264,7 @@ void KernelBuilder::generateDoSegmentMethod() const {
     
     Value * remainingItems = iBuilder->CreateSub(availablePos, processed);
     createFinalBlockCall(self, remainingItems);
-    setProcessedItemCount(self, availablePos);
+    setProcessedItemCount(self, mStreamSetInputs[0].name, availablePos);
     
     for (unsigned i = 0; i < mStreamSetOutputs.size(); i++) {
         Value * ssStructPtr = getStreamSetStructPtr(self, mStreamSetOutputs[i].name);
@@ -274,11 +274,11 @@ void KernelBuilder::generateDoSegmentMethod() const {
     iBuilder->CreateBr(segmentDone);
     
     iBuilder->SetInsertPoint(segmentDone);
-    Value * produced = getProducedItemCount(self);
 //#ifndef NDEBUG
 //    iBuilder->CallPrintInt(mKernelName + "_produced", produced);
 //#endif
     for (unsigned i = 0; i < mStreamSetOutputs.size(); i++) {
+        Value * produced = getProducedItemCount(self, mStreamSetOutputs[i].name);
         Value * ssStructPtr = getStreamSetStructPtr(self, mStreamSetOutputs[i].name);
         Value * producerPosPtr = mStreamSetOutputBuffers[i]->getProducerPosPtr(ssStructPtr);
         iBuilder->CreateAtomicStoreRelease(produced, producerPosPtr);
@@ -319,12 +319,12 @@ LoadInst * KernelBuilder::acquireLogicalSegmentNo(Value * self) const {
     return iBuilder->CreateAtomicLoadAcquire(ptr);
 }
 
-Value * KernelBuilder::getProcessedItemCount(Value * self) const {
-    return getScalarField(self, processedItemCount);
+Value * KernelBuilder::getProcessedItemCount(Value * self, const std::string & ssName) const {
+    return getScalarField(self, ssName + processedItemCountSuffix);
 }
 
-Value * KernelBuilder::getProducedItemCount(Value * self) const {
-    return getScalarField(self, producedItemCount);
+Value * KernelBuilder::getProducedItemCount(Value * self, const std::string & ssName) const {
+    return getScalarField(self, ssName + producedItemCountSuffix);
 }
 
 Value * KernelBuilder::getTerminationSignal(Value * self) const {
@@ -336,13 +336,13 @@ void KernelBuilder::releaseLogicalSegmentNo(Value * self, Value * newCount) cons
     iBuilder->CreateAtomicStoreRelease(newCount, ptr);
 }
 
-void KernelBuilder::setProcessedItemCount(Value * self, Value * newCount) const {
-    Value * ptr = iBuilder->CreateGEP(self, {iBuilder->getInt32(0), getScalarIndex(processedItemCount)});
+void KernelBuilder::setProcessedItemCount(Value * self, const std::string & ssName, Value * newCount) const {
+    Value * ptr = iBuilder->CreateGEP(self, {iBuilder->getInt32(0), getScalarIndex(ssName + processedItemCountSuffix)});
     iBuilder->CreateStore(newCount, ptr);
 }
 
-void KernelBuilder::setProducedItemCount(Value * self, Value * newCount) const {
-    Value * ptr = iBuilder->CreateGEP(self, {iBuilder->getInt32(0), getScalarIndex(producedItemCount)});
+void KernelBuilder::setProducedItemCount(Value * self, const std::string & ssName, Value * newCount) const {
+    Value * ptr = iBuilder->CreateGEP(self, {iBuilder->getInt32(0), getScalarIndex(ssName + producedItemCountSuffix)});
     iBuilder->CreateStore(newCount, ptr);
 }
 
@@ -541,8 +541,8 @@ Function * KernelBuilder::generateThreadFunction(const std::string & name) const
         iBuilder->CreateAtomicStoreRelease(consumerPos, inbufConsumerPtrs[i]);
     }
     
-    Value * produced = getProducedItemCount(self);
     for (unsigned i = 0; i < outbufProducerPtrs.size(); i++) {
+        Value * produced = getProducedItemCount(self, mStreamSetOutputs[i].name);
         iBuilder->CreateAtomicStoreRelease(produced, outbufProducerPtrs[i]);
     }
     

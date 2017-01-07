@@ -85,9 +85,11 @@ void PabloKernel::generateDoBlockMethod() const {
     Function * const f = m->getFunction(mKernelName + doBlock_suffix);
     Value * const self = &*(f->arg_begin());
     mPabloCompiler->compile(self, f);
-    Value * produced = getProducedItemCount(self);
-    produced = iBuilder->CreateAdd(produced, iBuilder->getSize(iBuilder->getStride()));
-    setProducedItemCount(self, produced);
+    for (auto ss : mStreamSetOutputs) {
+        Value * produced = getProducedItemCount(self, ss.name);
+        produced = iBuilder->CreateAdd(produced, iBuilder->getSize(iBuilder->getStride()));
+        setProducedItemCount(self, ss.name, produced);
+    }
     iBuilder->CreateRetVoid();
     #ifndef NDEBUG
     llvm::verifyFunction(*f, &errs());
@@ -115,9 +117,12 @@ void PabloKernel::generateFinalBlockMethod() const {
     setScalarField(self, "EOFmask", iBuilder->bitblock_mask_from(remaining));
     iBuilder->CreateCall(doBlockFunction, doBlockArgs);
     /* Adjust the produced item count */
-    Value * produced = getProducedItemCount(self);
-    produced = iBuilder->CreateSub(produced, iBuilder->getSize(iBuilder->getStride()));
-    setProducedItemCount(self, iBuilder->CreateAdd(produced, remaining));
+    for (auto ss : mStreamSetOutputs) {
+        Value * produced = getProducedItemCount(self, ss.name);
+        produced = iBuilder->CreateSub(produced, iBuilder->getSize(iBuilder->getStride()));
+        produced = iBuilder->CreateAdd(produced, remaining);
+        setProducedItemCount(self, ss.name, produced);
+    }
     iBuilder->CreateRetVoid();
     #ifndef NDEBUG
     llvm::verifyFunction(*finalBlockFunction, &errs());

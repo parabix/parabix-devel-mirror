@@ -82,9 +82,10 @@ void DeletionKernel::generateDoBlockMethod() const {
     iBuilder->CreateBlockAlignedStore(iBuilder->bitCast(counts), delCountPtr, {iBuilder->getInt32(0), iBuilder->getInt32(0)});
     /* Stream deletion has only been applied within fields; the actual number of data items
      * has not yet changed.   */
-    Value * produced = getProducedItemCount(self);
+    Value * produced = getProducedItemCount(self, "outputStreamSet");
     produced = iBuilder->CreateAdd(produced, iBuilder->getSize(iBuilder->getStride()));
-    setProducedItemCount(self, produced);
+    setProducedItemCount(self, "outputStreamSet", produced);
+    setProducedItemCount(self, "deletionCounts", produced);
     iBuilder->CreateRetVoid();
     iBuilder->restoreIP(savePoint);
 }
@@ -109,9 +110,11 @@ void DeletionKernel::generateFinalBlockMethod() const {
     iBuilder->CreateBlockAlignedStore(iBuilder->CreateOr(EOF_del, delmaskVal), delmaskPtr);
     iBuilder->CreateCall(doBlockFunction, {self});
     /* Adjust the produced item count */
-    Value * produced = getProducedItemCount(self);
+    Value * produced = getProducedItemCount(self, "outputStreamSet");
     produced = iBuilder->CreateSub(produced, iBuilder->getSize(iBuilder->getStride()));
-    setProducedItemCount(self, iBuilder->CreateAdd(produced, remainingBytes));
+    produced =  iBuilder->CreateAdd(produced, remainingBytes);
+    setProducedItemCount(self, "outputStreamSet", produced);
+    setProducedItemCount(self, "deletionCounts", produced);
 
     iBuilder->CreateRetVoid();
     iBuilder->restoreIP(savePoint);

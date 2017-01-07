@@ -94,7 +94,7 @@ void expand3_4Kernel::generateDoSegmentMethod() const {
     Value * streamStructPtr = getStreamSetStructPtr(self, "sourceStream");
 
     LoadInst * producerPos = iBuilder->CreateAtomicLoadAcquire(mStreamSetInputBuffers[0]->getProducerPosPtr(streamStructPtr));
-    Value * processed = getProcessedItemCount(self);
+    Value * processed = getProcessedItemCount(self, "sourceStream");
     Value * itemsAvail = iBuilder->CreateSub(producerPos, processed);
     
     // Except for the final segment, we always process an integral number of triple blocks.
@@ -115,7 +115,7 @@ void expand3_4Kernel::generateDoSegmentMethod() const {
 
     Value * sourceBlockPtr = getStreamSetBlockPtr(self, "sourceStream", blockNo);
 
-    Value * outputGenerated = getProducedItemCount(self); // bytes previously generated to output
+    Value * outputGenerated = getProducedItemCount(self, "expandedStream"); // bytes previously generated to output
     Value * outputBlockNo = iBuilder->CreateUDiv(outputGenerated, stride);
 
     Value * outputBlockPtr = getStreamSetBlockPtr(self, "expandedStream", outputBlockNo);
@@ -249,14 +249,14 @@ void expand3_4Kernel::generateDoSegmentMethod() const {
     iBuilder->SetInsertPoint(itemsDone);
 
     processed = iBuilder->CreateAdd(processed, itemsToDo);
-    setProcessedItemCount(self, processed);
+    setProcessedItemCount(self, "sourceStream", processed);
 
     setScalarField(self, blockNoScalar, iBuilder->CreateUDiv(processed, stride));
     // We have produced 4 output bytes for every 3 input bytes.  If the number of input
     // bytes is not a multiple of 3, then we have one more output byte for each excess
     // input byte.
     Value * totalProduced = iBuilder->CreateAdd(iBuilder->CreateMul(iBuilder->CreateUDiv(processed, Const3), Const4), iBuilder->CreateURem(processed, Const3));
-    setProducedItemCount(self, totalProduced);
+    setProducedItemCount(self, "expandedStream", totalProduced);
     Value * ssStructPtr = getStreamSetStructPtr(self, "expandedStream");
 
     Value * producerPosPtr = mStreamSetOutputBuffers[0]->getProducerPosPtr(ssStructPtr);
@@ -336,9 +336,9 @@ void radix64Kernel::generateDoBlockLogic(Value * self, Value * blockNo) const {
 
         iBuilder->CreateBlockAlignedStore(radix64pack, radix64stream, {iBuilder->getInt32(0), iBuilder->getInt32(0), iBuilder->getInt32(i)});
     }
-    Value * produced = getProducedItemCount(self);
+    Value * produced = getProducedItemCount(self, "radix64stream");
     produced = iBuilder->CreateAdd(produced, iBuilder->getSize(iBuilder->getStride()));
-    setProducedItemCount(self, produced);    
+    setProducedItemCount(self, "radix64stream", produced);    
 }
 
 void radix64Kernel::generateFinalBlockMethod() const {
@@ -449,8 +449,8 @@ void radix64Kernel::generateFinalBlockMethod() const {
 
     iBuilder->SetInsertPoint(fbExit);
     Value * outputNumberAdd = iBuilder->CreateSelect(iBuilder->CreateICmpEQ(remainMod4, iBuilder->getSize(0)), iBuilder->getSize(0), iBuilder->getSize(1));
-    Value * produced = iBuilder->CreateAdd(getProducedItemCount(self), iBuilder->CreateAdd(remainingBytes, outputNumberAdd));
-    setProducedItemCount(self, produced);
+    Value * produced = iBuilder->CreateAdd(getProducedItemCount(self, "radix64stream"), iBuilder->CreateAdd(remainingBytes, outputNumberAdd));
+    setProducedItemCount(self, "radix64stream", produced);
 
     iBuilder->CreateRetVoid();
     iBuilder->restoreIP(savePoint);
@@ -495,9 +495,9 @@ void base64Kernel::generateDoBlockLogic(Value * self, Value * blockNo) const {
         Value * base64pack = iBuilder->simd_sub(8, t0_62, iBuilder->simd_and(mask_eq_63, iBuilder->simd_fill(8, iBuilder->getInt8(2))));
         iBuilder->CreateBlockAlignedStore(iBuilder->bitCast(base64pack), base64stream_ptr, {iBuilder->getInt32(0), iBuilder->getInt32(0), iBuilder->getInt32(i)});
     }
-    Value * produced = getProducedItemCount(self);
+    Value * produced = getProducedItemCount(self, "base64stream");
     produced = iBuilder->CreateAdd(produced, iBuilder->getSize(iBuilder->getStride()));
-    setProducedItemCount(self, produced);    
+    setProducedItemCount(self, "base64stream", produced);
 }
 
 
@@ -565,10 +565,8 @@ void base64Kernel::generateFinalBlockMethod() const {
     iBuilder->CreateStore(ConstantInt::get(iBuilder->getInt8Ty(), '='), iBuilder->CreateGEP(i8output_ptr, finalPadPos));
     iBuilder->CreateBr(fbExit);
     iBuilder->SetInsertPoint(fbExit);
-    Value * produced = iBuilder->CreateAdd(getProducedItemCount(self), iBuilder->CreateAdd(remainingBytes, padBytes));
-    setProducedItemCount(self, produced);
-
-
+    Value * produced = iBuilder->CreateAdd(getProducedItemCount(self, "base64stream"), iBuilder->CreateAdd(remainingBytes, padBytes));
+    setProducedItemCount(self, "base64stream", produced);
     iBuilder->CreateRetVoid();
     iBuilder->restoreIP(savePoint);
 }
