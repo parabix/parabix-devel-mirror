@@ -103,6 +103,7 @@ void KernelBuilder::generateKernel(const std::vector<StreamSetBuffer *> & inputs
     mStreamSetOutputBuffers.assign(outputs.begin(), outputs.end());
     prepareKernel();            // possibly overridden by the KernelBuilder subtype
     addKernelDeclarations(m);
+    generateInitMethod();       // possibly overridden by the KernelBuilder subtype
     generateDoBlockMethod();    // must be implemented by the KernelBuilder subtype
     generateFinalBlockMethod(); // possibly overridden by the KernelBuilder subtype
     generateDoSegmentMethod();
@@ -117,13 +118,19 @@ void KernelBuilder::generateKernel(const std::vector<StreamSetBuffer *> & inputs
         Value * retVal = iBuilder->CreateLoad(ptr);
         iBuilder->CreateRet(retVal);
     }
+    generateInitMethod();
+    iBuilder->restoreIP(savePoint);
+}
 
-    // Implement the initializer function
+// Default init method, possibly overridden if special init actions required. 
+void KernelBuilder::generateInitMethod() const {
+    auto savePoint = iBuilder->saveIP();
+    Module * const m = iBuilder->getModule();
     Function * initFunction = m->getFunction(mKernelName + init_suffix);
     iBuilder->SetInsertPoint(BasicBlock::Create(iBuilder->getContext(), "Init_entry", initFunction, 0));    
     Function::arg_iterator args = initFunction->arg_begin();
     Value * self = &*(args++);
-    initializeKernelState(self);    // possibly overridden by the KernelBuilder subtype
+    iBuilder->CreateStore(ConstantAggregateZero::get(mKernelStateType), self);
     for (auto binding : mScalarInputs) {
         Value * param = &*(args++);
         Value * ptr = iBuilder->CreateGEP(self, {iBuilder->getInt32(0), getScalarIndex(binding.name)});
@@ -131,10 +138,6 @@ void KernelBuilder::generateKernel(const std::vector<StreamSetBuffer *> & inputs
     }
     iBuilder->CreateRetVoid();
     iBuilder->restoreIP(savePoint);
-}
-
-void KernelBuilder::initializeKernelState(Value * self) const {
-    iBuilder->CreateStore(ConstantAggregateZero::get(mKernelStateType), self);
 }
 
 //  The default finalBlock method simply dispatches to the doBlock routine.

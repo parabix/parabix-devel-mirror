@@ -43,7 +43,6 @@ public:
     Value * getBlockNo(Value * self) const;
     virtual Value * getProcessedItemCount(Value * self, const std::string & ssName) const override;
     virtual Value * getProducedItemCount(Value * self, const std::string & ssName) const override;
-    virtual void initializeKernelState(Value * self) const;
     Value * getTerminationSignal(Value * self) const override;
     
     inline IntegerType * getSizeTy() const {
@@ -111,7 +110,9 @@ protected:
     // not be overridden.
     
     virtual void generateFinalBlockMethod() const;
-
+    
+    virtual void generateInitMethod() const;
+    
     virtual void generateDoSegmentMethod() const;
     
     // Add an additional scalar field to the KernelState struct.
