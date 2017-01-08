@@ -46,7 +46,7 @@ find_package(Boost 1.46 REQUIRED COMPONENTS system filesystem iostreams)
 include_directories("${Boost_INCLUDE_DIRS}")
 link_directories(${Boost_LIBRARY_DIR})
 
-SET(KERNEL_SRC kernels/kernel.cpp kernels/s2p_kernel.cpp kernels/streamset.cpp kernels/interface.cpp)
+SET(KERNEL_SRC kernels/kernel.cpp kernels/s2p_kernel.cpp kernels/streamset.cpp kernels/interface.cpp kernels/mmap_kernel.cpp)
 SET(IDISA_SRC IR_Gen/CBuilder.cpp IR_Gen/types/streamtype.cpp IR_Gen/idisa_builder.cpp IR_Gen/idisa_avx_builder.cpp IR_Gen/idisa_i64_builder.cpp IR_Gen/idisa_sse_builder.cpp IR_Gen/idisa_nvptx_builder.cpp IR_Gen/idisa_target.cpp)
 
 SET(PABLO_SRC pablo/pabloAST.cpp pablo/branch.cpp pablo/codegenstate.cpp pablo/builder.cpp pablo/symbol_generator.cpp pablo/printer_pablos.cpp pablo/pablo_toolchain.cpp)
