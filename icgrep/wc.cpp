@@ -30,6 +30,7 @@
 #include <kernels/streamset.h>
 #include <kernels/interface.h>
 #include <kernels/kernel.h>
+#include <kernels/mmap_kernel.h>
 #include <kernels/s2p_kernel.h>
 #include <kernels/pipeline.h>
 
@@ -135,23 +136,6 @@ void wc_gen(PabloKernel * kernel) {
 
 Function * pipeline(Module * mMod, IDISA::IDISA_Builder * iBuilder) {
     Type * mBitBlockType = iBuilder->getBitBlockType();
-    
-    ExternalFileBuffer ByteStream(iBuilder, iBuilder->getStreamSetTy(1, 8));
-
-    SingleBlockBuffer BasisBits(iBuilder, iBuilder->getStreamSetTy(8, 1));
-
-    S2PKernel  s2pk(iBuilder);
-    std::unique_ptr<Module> s2pM = s2pk.createKernelModule({&ByteStream}, {&BasisBits});
-    
-    PabloKernel wck(iBuilder, "wc");
-    wc_gen(&wck);
-    pablo_function_passes(&wck);
-    
-    std::unique_ptr<Module> wcM = wck.createKernelModule({&BasisBits}, {});
-    
-    s2pk.addKernelDeclarations(mMod);
-    wck.addKernelDeclarations(mMod);
-
     Constant * record_counts_routine;
     Type * const size_ty = iBuilder->getSizeTy();
     Type * const voidTy = iBuilder->getVoidTy();
@@ -169,12 +153,33 @@ Function * pipeline(Module * mMod, IDISA::IDISA_Builder * iBuilder) {
     Value * const fileIdx = &*(args++);
     fileIdx->setName("fileIdx");
     
+    ExternalFileBuffer ByteStream(iBuilder, iBuilder->getStreamSetTy(1, 8));
+
+    SingleBlockBuffer BasisBits(iBuilder, iBuilder->getStreamSetTy(8, 1));
+    
+    MMapSourceKernel mmapK(iBuilder, iBuilder->getStride());
+    std::unique_ptr<Module> mmapM = mmapK.createKernelModule({}, {&ByteStream});
+    mmapK.setInitialArguments({fileSize});
+    
+    S2PKernel  s2pk(iBuilder);
+    std::unique_ptr<Module> s2pM = s2pk.createKernelModule({&ByteStream}, {&BasisBits});
+
+    PabloKernel wck(iBuilder, "wc");
+    wc_gen(&wck);
+    pablo_function_passes(&wck);
+    
+    std::unique_ptr<Module> wcM = wck.createKernelModule({&BasisBits}, {});
+    
+    mmapK.addKernelDeclarations(mMod);
+    s2pk.addKernelDeclarations(mMod);
+    wck.addKernelDeclarations(mMod);
+    
     iBuilder->SetInsertPoint(BasicBlock::Create(mMod->getContext(), "entry", main,0));
 
     ByteStream.setStreamSetBuffer(inputStream, fileSize);
     BasisBits.allocateBuffer();
     
-    generatePipelineLoop(iBuilder, {&s2pk, &wck});
+    generatePipelineLoop(iBuilder, {&mmapK, &s2pk, &wck});
     
     Value * lineCount = wck.createGetAccumulatorCall(wck.getInstance(), "lineCount");
     Value * wordCount = wck.createGetAccumulatorCall(wck.getInstance(), "wordCount");
@@ -185,6 +190,7 @@ Function * pipeline(Module * mMod, IDISA::IDISA_Builder * iBuilder) {
     iBuilder->CreateRetVoid();
     
     Linker L(*mMod);
+    L.linkInModule(std::move(mmapM));
     L.linkInModule(std::move(s2pM));
     L.linkInModule(std::move(wcM));
     
