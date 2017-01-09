@@ -36,6 +36,8 @@ public:
      within the KernelBuilder class of kernel.h
      
      */
+    
+    std::string getName() { return mKernelName;}
        
     std::vector<Binding> getStreamInputs() {return mStreamSetInputs;}
     std::vector<Binding> getStreamOutputs() {return mStreamSetOutputs;}

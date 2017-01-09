@@ -10,8 +10,30 @@
 #include <kernels/kernel.h>
 #include <kernels/s2p_kernel.h>
 #include <iostream>
+#include <unordered_map>
 
 using namespace kernel;
+
+using BufferMap = std::unordered_map<StreamSetBuffer *, std::pair<KernelBuilder *, unsigned>>;
+
+
+static void createStreamBufferMap(BufferMap bufferMap, std::vector<KernelBuilder *> kernels) {
+    for (auto k: kernels) {
+        auto outputSets = k->getStreamSetOutputBuffers();
+        for (unsigned i = 0; i < outputSets.size(); i++) {
+            bufferMap.insert(std::make_pair(outputSets[i], std::make_pair(k, i)));
+        }
+    }
+    for (auto k: kernels) {
+        auto inputSets = k->getStreamSetInputBuffers();
+        for (unsigned i = 0; i < inputSets.size(); i++) {
+            if (bufferMap.find(inputSets[i]) == bufferMap.end()) {
+                llvm::report_fatal_error("Pipeline error: input buffer #" + std::to_string(i) + " of " + k->getName() + ": no corresponding output buffer. ");
+            }
+        }
+    }
+}
+
 
 Function * generateSegmentParallelPipelineThreadFunction(std::string name, IDISA::IDISA_Builder * iBuilder, std::vector<KernelBuilder *> kernels, Type * sharedStructType, int id) {
 
@@ -87,6 +109,13 @@ Function * generateSegmentParallelPipelineThreadFunction(std::string name, IDISA
 
     return threadFunc;
 }
+
+// Given a computation expressed as a logical pipeline of K kernels k0, k_1, ...k_(K-1)
+// operating over an input stream set S, a segment-parallel implementation divides the input 
+// into segments and coordinates a set of T <= K threads to each process one segment at a time.   
+// Let S_0, S_1, ... S_N be the segments of S.   Segments are assigned to threads in a round-robin
+// fashion such that processing of segment S_i by the full pipeline is carried out by thread i mod T.
+
 
 void generateSegmentParallelPipeline(IDISA::IDISA_Builder * iBuilder, std::vector<KernelBuilder *> kernels) {
     

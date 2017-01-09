@@ -71,6 +71,10 @@ public:
     void releaseLogicalSegmentNo(Value * self, Value * newFieldVal) const;
 
     virtual ~KernelBuilder() = 0;
+    
+    std::vector<StreamSetBuffer *> getStreamSetInputBuffers() {return mStreamSetInputBuffers;}
+    std::vector<StreamSetBuffer *> getStreamSetOutputBuffers() {return mStreamSetOutputBuffers;}
+
 
 protected:
 
