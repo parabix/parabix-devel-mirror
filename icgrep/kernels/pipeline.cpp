@@ -80,12 +80,28 @@ Function * generateSegmentParallelPipelineThreadFunction(std::string name, IDISA
     BasicBlock * entryBlock = BasicBlock::Create(iBuilder->getContext(), "entry", threadFunc, 0);
     BasicBlock * segmentLoop = BasicBlock::Create(iBuilder->getContext(), "segmentLoop", threadFunc, 0);
     BasicBlock * exitThreadBlock = BasicBlock::Create(iBuilder->getContext(), "exitThread", threadFunc, 0);
+    
     std::vector<BasicBlock *> segmentWait;
     std::vector<BasicBlock *> segmentLoopBody;
+    std::vector<BasicBlock *> partialSegmentWait;
+    std::vector<BasicBlock *> partialSegmentLoopBody;
+    bool terminationSignalEncountered = false;
     for (unsigned i = 0; i < kernels.size(); i++) {
-        segmentWait.push_back(BasicBlock::Create(iBuilder->getContext(), "segmentWait"+std::to_string(i), threadFunc, 0));
-        segmentLoopBody.push_back(BasicBlock::Create(iBuilder->getContext(), "segmentWait"+std::to_string(i), threadFunc, 0));
+        std::string kname = kernels[i]->getName();
+        segmentWait.push_back(BasicBlock::Create(iBuilder->getContext(), kname + "Wait", threadFunc, 0));
+        segmentLoopBody.push_back(BasicBlock::Create(iBuilder->getContext(), "do_" + kname, threadFunc, 0));
+        if (terminationSignalEncountered) {
+            partialSegmentWait.push_back(BasicBlock::Create(iBuilder->getContext(), kname + "WaitFinal", threadFunc, 0));
+            partialSegmentLoopBody.push_back(BasicBlock::Create(iBuilder->getContext(), "finish_" + kname, threadFunc, 0));
+        }
+        else {
+            partialSegmentWait.push_back(nullptr);
+            partialSegmentLoopBody.push_back(nullptr);
+            terminationSignalEncountered = kernels[i]->hasNoTerminateAttribute() == false;
+        }
     }
+    segmentWait.push_back(segmentLoop); // If the last kernel does not terminate, loop back.
+    partialSegmentWait.push_back(exitThreadBlock); // If the last kernel does terminate, we're done.
 
     iBuilder->SetInsertPoint(entryBlock);
     Value * sharedStruct = iBuilder->CreateBitCast(input, PointerType::get(sharedStructType, 0));
@@ -115,17 +131,32 @@ Function * generateSegmentParallelPipelineThreadFunction(std::string name, IDISA
         iBuilder->CreateCondBr(cond, segmentLoopBody[i], segmentWait[i]);
 
         iBuilder->SetInsertPoint(segmentLoopBody[i]);
+        if (i == last_kernel) {
+            segNo->addIncoming(iBuilder->CreateAdd(segNo, ConstantInt::get(size_ty, threadNum)), segmentLoopBody[last_kernel]);
+        }
         kernels[i]->createDoSegmentCall(instancePtrs[i], segmentBlocks);
-        // Must be the last action, for synchronization.
-        kernels[i]->releaseLogicalSegmentNo(instancePtrs[i], iBuilder->CreateAdd(processedSegmentCount, iBuilder->getSize(1)));
-        if (i == last_kernel) break;
-        iBuilder->CreateBr(segmentWait[i+1]);
+        if (kernels[i]->hasNoTerminateAttribute()) {
+            kernels[i]->releaseLogicalSegmentNo(instancePtrs[i], iBuilder->CreateAdd(processedSegmentCount, iBuilder->getSize(1)));
+            iBuilder->CreateBr(segmentWait[i+1]);
+        }
+        else {
+            Value * terminated = kernels[i]->getTerminationSignal(instancePtrs[i]);
+            kernels[i]->releaseLogicalSegmentNo(instancePtrs[i], iBuilder->CreateAdd(processedSegmentCount, iBuilder->getSize(1)));
+            iBuilder->CreateCondBr(terminated, partialSegmentWait[i+1], segmentWait[i+1]);
+        }
+        if (partialSegmentWait[i] != nullptr) {
+            iBuilder->SetInsertPoint(partialSegmentWait[i]);
+            Value * processedSegmentCount = kernels[i]->acquireLogicalSegmentNo(instancePtrs[i]);
+            Value * cond = iBuilder->CreateICmpEQ(segNo, processedSegmentCount);
+            iBuilder->CreateCondBr(cond, partialSegmentLoopBody[i], partialSegmentWait[i]);
+            
+            iBuilder->SetInsertPoint(partialSegmentLoopBody[i]);
+            kernels[i]->createDoSegmentCall(instancePtrs[i], segmentBlocks);
+            kernels[i]->releaseLogicalSegmentNo(instancePtrs[i], iBuilder->CreateAdd(processedSegmentCount, iBuilder->getSize(1)));
+            iBuilder->CreateBr(partialSegmentWait[i+1]);
+        }
     }
    
-    segNo->addIncoming(iBuilder->CreateAdd(segNo, ConstantInt::get(size_ty, threadNum)), segmentLoopBody[last_kernel]);
-    Value * endSignal = kernels[last_kernel]->getTerminationSignal(instancePtrs[last_kernel]);
-    iBuilder->CreateCondBr(endSignal, exitThreadBlock, segmentLoop);
-    
     iBuilder->SetInsertPoint(exitThreadBlock);
     Value * nullVal = Constant::getNullValue(voidPtrTy);
     iBuilder->CreatePThreadExitCall(nullVal);
@@ -237,8 +268,6 @@ void generatePipelineParallel(IDISA::IDISA_Builder * iBuilder, std::vector<Kerne
 
 
 void generatePipelineLoop(IDISA::IDISA_Builder * iBuilder, std::vector<KernelBuilder *> kernels) {
-    
-    
     for (auto k : kernels) k->createInstance();
     //BufferMap bufferMap;
     //createStreamBufferMap(bufferMap, kernels);
@@ -300,23 +329,3 @@ void generatePipelineLoop(IDISA::IDISA_Builder * iBuilder, std::vector<KernelBui
     }
     iBuilder->SetInsertPoint(exitBlock);
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
