@@ -198,6 +198,7 @@ void S2PKernel::generateDoBlockMethod() const {
 
 S2PKernel::S2PKernel(IDISA::IDISA_Builder * builder)
 : KernelBuilder(builder, "s2p", {Binding{builder->getStreamSetTy(1, 8), "byteStream"}}, {Binding{builder->getStreamSetTy(8, 1), "basisBits"}}, {}, {}, {}) {
+    setNoTerminateAttribute(true);
 
 }
 

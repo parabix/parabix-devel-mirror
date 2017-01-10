@@ -21,7 +21,8 @@ KernelBuilder::KernelBuilder(IDISA::IDISA_Builder * builder,
                              std::vector<Binding> scalar_parameters,
                              std::vector<Binding> scalar_outputs,
                              std::vector<Binding> internal_scalars)
-: KernelInterface(builder, kernelName, stream_inputs, stream_outputs, scalar_parameters, scalar_outputs, internal_scalars) {
+: KernelInterface(builder, kernelName, stream_inputs, stream_outputs, scalar_parameters, scalar_outputs, internal_scalars),
+mNoTerminateAttribute(false) {
 
 }
 

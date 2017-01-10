@@ -17,7 +17,7 @@ using namespace kernel;
 using BufferMap = std::unordered_map<StreamSetBuffer *, std::pair<KernelBuilder *, unsigned>>;
 
 
-static void createStreamBufferMap(BufferMap bufferMap, std::vector<KernelBuilder *> kernels) {
+static void createStreamBufferMap(BufferMap & bufferMap, std::vector<KernelBuilder *> kernels) {
     for (auto k: kernels) {
         auto outputSets = k->getStreamSetOutputBuffers();
         for (unsigned i = 0; i < outputSets.size(); i++) {
@@ -33,6 +33,30 @@ static void createStreamBufferMap(BufferMap bufferMap, std::vector<KernelBuilder
         }
     }
 }
+
+static Value * getSegmentBlocks(BufferMap & bufferMap, KernelBuilder * kernel) {
+    IDISA::IDISA_Builder * iBuilder = kernel->getBuilder();
+    std::cerr << "getSegmentBlocks\n"; 
+
+    KernelBuilder * sourceKernel;
+
+    unsigned outputIndex;
+    auto inputs = kernel->getStreamSetInputBuffers();
+    if (inputs.empty()) return iBuilder->getSize(codegen::SegmentSize * iBuilder->getStride() / iBuilder->getBitBlockWidth());
+    std::string inputSetName = kernel->getStreamInputs()[0].name;
+    std::cerr << "inputSetName = " << inputSetName << "\n"; 
+    auto f = bufferMap.find(inputs[0]);
+    assert(f != bufferMap.end()  && "bufferMap failure");
+    std::tie(sourceKernel, outputIndex) = f->second;
+    std::cerr << "outputIndex = " << outputIndex << "\n"; 
+    Value * produced = sourceKernel->getProducedItemCount(sourceKernel->getInstance(), sourceKernel->getStreamOutputs()[outputIndex].name);
+    iBuilder->CallPrintInt("produced", produced);
+    Value * processed = kernel->getProcessedItemCount(kernel->getInstance(), inputSetName);
+    iBuilder->CallPrintInt("processed", processed);
+    Value * itemsToDo = iBuilder->CreateSub(produced, processed);
+    return iBuilder->CreateUDiv(itemsToDo, iBuilder->getSize(iBuilder->getStride()));
+}
+                                   
 
 
 Function * generateSegmentParallelPipelineThreadFunction(std::string name, IDISA::IDISA_Builder * iBuilder, std::vector<KernelBuilder *> kernels, Type * sharedStructType, int id) {
@@ -214,26 +238,85 @@ void generatePipelineParallel(IDISA::IDISA_Builder * iBuilder, std::vector<Kerne
 
 void generatePipelineLoop(IDISA::IDISA_Builder * iBuilder, std::vector<KernelBuilder *> kernels) {
     
+    
+    for (auto k : kernels) k->createInstance();
+    //BufferMap bufferMap;
+    //createStreamBufferMap(bufferMap, kernels);
+    
     BasicBlock * entryBlock = iBuilder->GetInsertBlock();
     Function * main = entryBlock->getParent();
-        
-    const unsigned segmentSize = codegen::SegmentSize;
-    Type * const size_ty = iBuilder->getSizeTy();
 
-    // Create the basic blocks for the loop.
-    BasicBlock * segmentBlock = BasicBlock::Create(iBuilder->getContext(), "segmentLoop", main, 0);
+    // Create the basic blocks.  
+    BasicBlock * segmentLoop = BasicBlock::Create(iBuilder->getContext(), "segmentLoop", main, 0);
     BasicBlock * exitBlock = BasicBlock::Create(iBuilder->getContext(), "exitBlock", main, 0);
-    for (auto k : kernels) k->createInstance();
-    iBuilder->CreateBr(segmentBlock);
-    iBuilder->SetInsertPoint(segmentBlock);
-    Constant * segBlocks = ConstantInt::get(size_ty, segmentSize * iBuilder->getStride() / iBuilder->getBitBlockWidth());
-    for (unsigned i = 0; i < kernels.size(); i++) {
-        kernels[i]->createDoSegmentCall(kernels[i]->getInstance(), segBlocks);
-        Value * segNo = kernels[i]->acquireLogicalSegmentNo(kernels[i]->getInstance());
-        kernels[i]->releaseLogicalSegmentNo(kernels[i]->getInstance(), iBuilder->CreateAdd(segNo, iBuilder->getSize(1)));
-    }
-    Value * endSignal = kernels.back()->getTerminationSignal(kernels.back()->getInstance());
-    iBuilder->CreateCondBr(endSignal, exitBlock, segmentBlock);
-    iBuilder->SetInsertPoint(exitBlock);
+    // We create vectors of loop body and final segment blocks indexed by kernel.
+    std::vector<BasicBlock *> loopBodyBlocks;
+    std::vector<BasicBlock *> finalSegmentBlocks;
 
+    loopBodyBlocks.push_back(segmentLoop); 
+    finalSegmentBlocks.push_back(nullptr);  
+    
+    for (unsigned i = 1; i < kernels.size(); i++) {
+        if (kernels[i-1]->hasNoTerminateAttribute()) {
+            // Previous kernel cannot terminate.   Continue with the previous blocks;
+            loopBodyBlocks.push_back(loopBodyBlocks.back());
+            finalSegmentBlocks.push_back(finalSegmentBlocks.back());
+        }
+        else {
+            loopBodyBlocks.push_back(BasicBlock::Create(iBuilder->getContext(), "do_" + kernels[i]->getName(), main, 0));
+            finalSegmentBlocks.push_back(BasicBlock::Create(iBuilder->getContext(), "finish_" + kernels[i]->getName(), main, 0));
+        }
+    }
+    loopBodyBlocks.push_back(segmentLoop); // If the last kernel does not terminate, loop back.
+    finalSegmentBlocks.push_back(exitBlock); // If the last kernel does terminate, we're done.
+    
+    iBuilder->CreateBr(segmentLoop);
+    Constant * segBlocks = iBuilder->getSize(codegen::SegmentSize * iBuilder->getStride() / iBuilder->getBitBlockWidth());
+    for (unsigned i = 0; i < kernels.size(); i++) {
+        iBuilder->SetInsertPoint(loopBodyBlocks[i]);
+        //Value * segBlocks = getSegmentBlocks(bufferMap, kernels[i]);
+        Value * segNo = kernels[i]->acquireLogicalSegmentNo(kernels[i]->getInstance());
+        kernels[i]->createDoSegmentCall(kernels[i]->getInstance(), segBlocks);
+        if (kernels[i]->hasNoTerminateAttribute()) {
+            kernels[i]->releaseLogicalSegmentNo(kernels[i]->getInstance(), iBuilder->CreateAdd(segNo, iBuilder->getSize(1)));
+            if (i == kernels.size() - 1) {
+                iBuilder->CreateBr(segmentLoop);
+            }
+        }
+        else {
+            Value * terminated = kernels[i]->getTerminationSignal(kernels[i]->getInstance());
+            kernels[i]->releaseLogicalSegmentNo(kernels[i]->getInstance(), iBuilder->CreateAdd(segNo, iBuilder->getSize(1)));
+            iBuilder->CreateCondBr(terminated, finalSegmentBlocks[i+1], loopBodyBlocks[i+1]);
+        }
+        if (finalSegmentBlocks[i] != nullptr) {
+            iBuilder->SetInsertPoint(finalSegmentBlocks[i]);
+            Value * segNo = kernels[i]->acquireLogicalSegmentNo(kernels[i]->getInstance());
+            kernels[i]->createDoSegmentCall(kernels[i]->getInstance(), segBlocks);
+            kernels[i]->releaseLogicalSegmentNo(kernels[i]->getInstance(), iBuilder->CreateAdd(segNo, iBuilder->getSize(1)));
+            if (finalSegmentBlocks[i] != finalSegmentBlocks[i+1]) {
+                iBuilder->CreateBr(finalSegmentBlocks[i+1]);
+            }
+        }
+    }
+    iBuilder->SetInsertPoint(exitBlock);
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

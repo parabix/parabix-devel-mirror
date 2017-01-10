@@ -43,6 +43,9 @@ public:
     Value * getBlockNo(Value * self) const;
     virtual Value * getProcessedItemCount(Value * self, const std::string & ssName) const override;
     virtual Value * getProducedItemCount(Value * self, const std::string & ssName) const override;
+    
+    bool hasNoTerminateAttribute() { return mNoTerminateAttribute;}
+    
     Value * getTerminationSignal(Value * self) const override;
     
     inline IntegerType * getSizeTy() const {
@@ -97,6 +100,8 @@ protected:
     // Note: the kernel state data structure must only be finalized after
     // all scalar fields have been added.   If there are no fields to
     // be added, the default method for preparing kernel state may be used.
+    
+    void setNoTerminateAttribute(bool noTerminate = true) {mNoTerminateAttribute = noTerminate;}
     
     virtual void prepareKernel();
     
@@ -172,6 +177,7 @@ protected:
     NameMap                         mStreamSetNameMap;
     std::vector<StreamSetBuffer *>  mStreamSetInputBuffers;
     std::vector<StreamSetBuffer *>  mStreamSetOutputBuffers;
+    bool                            mNoTerminateAttribute;
 
 };
 }
