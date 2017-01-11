@@ -28,6 +28,7 @@
 #include <IR_Gen/idisa_builder.h>
 #include <IR_Gen/idisa_target.h>
 #include <kernels/pipeline.h>
+#include <kernels/mmap_kernel.h>
 #include <kernels/interface.h>
 #include <kernels/kernel.h>
 #include <kernels/s2p_kernel.h>
@@ -261,6 +262,23 @@ Function * u8u16Pipeline(Module * mod, IDISA::IDISA_Builder * iBuilder) {
     
     assert (iBuilder);
 
+    Type * const size_ty = iBuilder->getSizeTy();
+    Type * const voidTy = iBuilder->getVoidTy();
+    Type * const bitBlockType = iBuilder->getBitBlockType();
+    Type * const inputType = ArrayType::get(ArrayType::get(bitBlockType, 8), 1)->getPointerTo();
+    Type * const outputType = ArrayType::get(ArrayType::get(bitBlockType, 16), 1)->getPointerTo();
+    
+    Function * const main = cast<Function>(mod->getOrInsertFunction("Main", voidTy, inputType, outputType, size_ty, nullptr));
+    main->setCallingConv(CallingConv::C);
+    Function::arg_iterator args = main->arg_begin();
+    
+    Value * const inputStream = &*(args++);
+    inputStream->setName("inputStream");
+    Value * const outputStream = &*(args++);
+    outputStream->setName("outputStream");
+    Value * const fileSize = &*(args++);
+    fileSize->setName("fileSize");
+
     ExternalFileBuffer ByteStream(iBuilder, iBuilder->getStreamSetTy(1, 8));
 
     CircularBuffer BasisBits(iBuilder, iBuilder->getStreamSetTy(8), segmentSize * bufferSegments);
@@ -277,6 +295,10 @@ Function * u8u16Pipeline(Module * mod, IDISA::IDISA_Builder * iBuilder) {
     ExternalFileBuffer U16external(iBuilder, iBuilder->getStreamSetTy(1, 16));
     LinearCopybackBuffer U16out(iBuilder, iBuilder->getStreamSetTy(16, 16), segmentSize * bufferSegments + 2);
 
+    MMapSourceKernel mmapK(iBuilder, iBuilder->getStride()); 
+    mmapK.generateKernel({}, {&ByteStream});
+    mmapK.setInitialArguments({fileSize});
+    
     S2PKernel s2pk(iBuilder);
 
     s2pk.generateKernel({&ByteStream}, {&BasisBits});
@@ -302,22 +324,6 @@ Function * u8u16Pipeline(Module * mod, IDISA::IDISA_Builder * iBuilder) {
         stdoutK.generateKernel({&U16out}, {});
     }
 
-    Type * const size_ty = iBuilder->getSizeTy();
-    Type * const voidTy = iBuilder->getVoidTy();
-    Type * const bitBlockType = iBuilder->getBitBlockType();
-    Type * const inputType = ArrayType::get(ArrayType::get(bitBlockType, 8), 1)->getPointerTo();
-    Type * const outputType = ArrayType::get(ArrayType::get(bitBlockType, 16), 1)->getPointerTo();
-    
-    Function * const main = cast<Function>(mod->getOrInsertFunction("Main", voidTy, inputType, outputType, size_ty, nullptr));
-    main->setCallingConv(CallingConv::C);
-    Function::arg_iterator args = main->arg_begin();
-
-    Value * const inputStream = &*(args++);
-    inputStream->setName("inputStream");
-    Value * const outputStream = &*(args++);
-    outputStream->setName("outputStream");
-    Value * const fileSize = &*(args++);
-    fileSize->setName("fileSize");
 
     iBuilder->SetInsertPoint(BasicBlock::Create(mod->getContext(), "entry", main,0));
 
@@ -335,9 +341,9 @@ Function * u8u16Pipeline(Module * mod, IDISA::IDISA_Builder * iBuilder) {
     }
 
     if (segmentPipelineParallel){
-        generateSegmentParallelPipeline(iBuilder, {&s2pk, &u8u16k, &delK, &p2sk, &stdoutK});
+        generateSegmentParallelPipeline(iBuilder, {&mmapK, &s2pk, &u8u16k, &delK, &p2sk, &stdoutK});
     } else {
-        generatePipelineLoop(iBuilder, {&s2pk, &u8u16k, &delK, &p2sk, &stdoutK});
+        generatePipelineLoop(iBuilder, {&mmapK, &s2pk, &u8u16k, &delK, &p2sk, &stdoutK});
     }
 
     iBuilder->CreateRetVoid();

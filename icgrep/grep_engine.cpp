@@ -19,7 +19,7 @@
 #include <kernels/cc_kernel.h>
 #include <kernels/kernel.h>
 #include <kernels/pipeline.h>
-#include <kernels/pipeline.h>
+#include <kernels/mmap_kernel.h>
 #include <kernels/s2p_kernel.h>
 #include <kernels/scanmatchgen.h>
 #include <kernels/streamset.h>
@@ -290,6 +290,11 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool Count
     }
        
     ExternalFileBuffer ByteStream(iBuilder, iBuilder->getStreamSetTy(1, 8));
+    
+    kernel::MMapSourceKernel mmapK(iBuilder, iBuilder->getStride()); 
+    mmapK.generateKernel({}, {&ByteStream});
+    mmapK.setInitialArguments({fileSize});
+    
     CircularBuffer BasisBits(iBuilder, iBuilder->getStreamSetTy(8, 1), segmentSize * bufferSegments);
 
     kernel::S2PKernel  s2pk(iBuilder);
@@ -307,11 +312,11 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool Count
     if (CountOnly) {
         icgrepK.generateKernel({&BasisBits}, {});       
         if (pipelineParallel){
-            generatePipelineParallel(iBuilder, {&s2pk, &icgrepK});
+            generatePipelineParallel(iBuilder, {&mmapK, &s2pk, &icgrepK});
         } else if (segmentPipelineParallel){
-            generateSegmentParallelPipeline(iBuilder, {&s2pk, &icgrepK});
+            generateSegmentParallelPipeline(iBuilder, {&mmapK, &s2pk, &icgrepK});
         } else {
-            generatePipelineLoop(iBuilder, {&s2pk, &icgrepK});
+            generatePipelineLoop(iBuilder, {&mmapK, &s2pk, &icgrepK});
         }
 
         Value * matchCount = icgrepK.createGetAccumulatorCall(icgrepK.getInstance(), "matchedLineCount");
@@ -325,7 +330,7 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool Count
             MatchResults.setStreamSetBuffer(outputStream, fileSize);
 
             icgrepK.generateKernel({&BasisBits},  {&MatchResults});
-            generatePipelineLoop(iBuilder, {&s2pk, &icgrepK});
+            generatePipelineLoop(iBuilder, {&mmapK, &s2pk, &icgrepK});
 
         }
 #endif
@@ -340,11 +345,11 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool Count
             scanMatchK.setInitialArguments({iBuilder->CreateBitCast(inputStream, int8PtrTy), fileSize, fileIdx});
 
             if (pipelineParallel){
-                generatePipelineParallel(iBuilder, {&s2pk, &icgrepK, &scanMatchK});
+                generatePipelineParallel(iBuilder, {&mmapK, &s2pk, &icgrepK, &scanMatchK});
             } else if (segmentPipelineParallel){
-                generateSegmentParallelPipeline(iBuilder, {&s2pk, &icgrepK, &scanMatchK});
+                generateSegmentParallelPipeline(iBuilder, {&mmapK, &s2pk, &icgrepK, &scanMatchK});
             }  else{
-                generatePipelineLoop(iBuilder, {&s2pk, &icgrepK, &scanMatchK});
+                generatePipelineLoop(iBuilder, {&mmapK, &s2pk, &icgrepK, &scanMatchK});
             }
         }
         iBuilder->CreateRetVoid();

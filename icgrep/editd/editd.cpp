@@ -31,6 +31,7 @@
 #include <kernels/streamset.h>
 #include <kernels/interface.h>
 #include <kernels/kernel.h>
+#include <kernels/mmap_kernel.h>
 #include <kernels/s2p_kernel.h>
 #include <editd/editdscan_kernel.h>
 #include <kernels/pipeline.h>
@@ -286,22 +287,6 @@ void buildPreprocessKernel(PabloKernel & kernel, IDISA::IDISA_Builder * iBuilder
 Function * preprocessPipeline(Module * mMod, IDISA::IDISA_Builder * iBuilder) {
     Type * mBitBlockType = iBuilder->getBitBlockType();
     
-    ExternalFileBuffer ByteStream(iBuilder, iBuilder->getStreamSetTy(1, 8));
-    SingleBlockBuffer BasisBits(iBuilder, iBuilder->getStreamSetTy(8));
-    ExternalFileBuffer CCResults(iBuilder, iBuilder->getStreamSetTy(4));
-
-    S2PKernel  s2pk(iBuilder);
-    std::unique_ptr<Module> s2pM = s2pk.createKernelModule({&ByteStream}, {&BasisBits});
-
-    PabloKernel  ccck(iBuilder, "ccc");
-
-    buildPreprocessKernel(ccck, iBuilder);
-    
-    std::unique_ptr<Module> cccM = ccck.createKernelModule({&BasisBits}, {&CCResults});
-    
-    s2pk.addKernelDeclarations(mMod);
-    ccck.addKernelDeclarations(mMod);
-
     Type * const size_ty = iBuilder->getSizeTy();
     Type * const voidTy = iBuilder->getVoidTy();
     Type * const inputType = PointerType::get(ArrayType::get(ArrayType::get(mBitBlockType, 8), 1), 0);
@@ -318,17 +303,39 @@ Function * preprocessPipeline(Module * mMod, IDISA::IDISA_Builder * iBuilder) {
     Value * const outputStream = &*(args++);
     outputStream->setName("output");
     
+    ExternalFileBuffer ByteStream(iBuilder, iBuilder->getStreamSetTy(1, 8));
+    SingleBlockBuffer BasisBits(iBuilder, iBuilder->getStreamSetTy(8));
+    ExternalFileBuffer CCResults(iBuilder, iBuilder->getStreamSetTy(4));
+
+    MMapSourceKernel mmapK(iBuilder, iBuilder->getStride());
+    std::unique_ptr<Module> mmapM = mmapK.createKernelModule({}, {&ByteStream});
+    mmapK.setInitialArguments({fileSize});
+    
+    S2PKernel  s2pk(iBuilder);
+    std::unique_ptr<Module> s2pM = s2pk.createKernelModule({&ByteStream}, {&BasisBits});
+
+    PabloKernel  ccck(iBuilder, "ccc");
+
+    buildPreprocessKernel(ccck, iBuilder);
+    
+    std::unique_ptr<Module> cccM = ccck.createKernelModule({&BasisBits}, {&CCResults});
+    
+    mmapK.addKernelDeclarations(mMod);
+    s2pk.addKernelDeclarations(mMod);
+    ccck.addKernelDeclarations(mMod);
+    
     iBuilder->SetInsertPoint(BasicBlock::Create(mMod->getContext(), "entry", main,0));
 
     ByteStream.setStreamSetBuffer(inputStream, fileSize);
     BasisBits.allocateBuffer();
     CCResults.setStreamSetBuffer(outputStream, fileSize);
     
-    generatePipelineLoop(iBuilder, {&s2pk, &ccck});
+    generatePipelineLoop(iBuilder, {&mmapK, &s2pk, &ccck});
         
     iBuilder->CreateRetVoid();
     
     Linker L(*mMod);
+    L.linkInModule(std::move(mmapM));
     L.linkInModule(std::move(s2pM));
     L.linkInModule(std::move(cccM));
     

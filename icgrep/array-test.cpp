@@ -28,6 +28,7 @@
 #include <kernels/streamset.h>
 #include <kernels/interface.h>
 #include <kernels/kernel.h>
+#include <kernels/mmap_kernel.h>
 #include <kernels/pipeline.h>
 #include <pablo/builder.hpp>
 #include <pablo/pablo_compiler.h>
@@ -105,10 +106,25 @@ Function * pipeline(IDISA::IDISA_Builder * iBuilder, const unsigned count) {
 
     Type * byteStreamTy = iBuilder->getStreamSetTy(1, 8);
 
+    Module * const mod = iBuilder->getModule();
+    
+    Function * const main = cast<Function>(mod->getOrInsertFunction("Main", iBuilder->getVoidTy(), byteStreamTy->getPointerTo(), iBuilder->getSizeTy(), nullptr));
+    main->setCallingConv(CallingConv::C);
+    Function::arg_iterator args = main->arg_begin();
+    
+    Value * const inputStream = &*(args++);
+    inputStream->setName("input");
+    Value * const fileSize = &*(args++);
+    fileSize->setName("fileSize");
+    
     ExternalFileBuffer ByteStream(iBuilder, byteStreamTy);
     SingleBlockBuffer BasisBits(iBuilder, iBuilder->getStreamSetTy(8, 1));
     SingleBlockBuffer matches(iBuilder, iBuilder->getStreamSetTy(count, 1));
 
+    MMapSourceKernel mmapK(iBuilder, iBuilder->getStride()); 
+    mmapK.generateKernel({}, {&ByteStream});
+    mmapK.setInitialArguments({fileSize});
+    
     S2PKernel  s2pk(iBuilder);
     s2pk.generateKernel({&ByteStream}, {&BasisBits});
 
@@ -117,24 +133,13 @@ Function * pipeline(IDISA::IDISA_Builder * iBuilder, const unsigned count) {
 
     bm.generateKernel({&BasisBits}, {&matches});
 
-    Module * const mod = iBuilder->getModule();
-
-    Function * const main = cast<Function>(mod->getOrInsertFunction("Main", iBuilder->getVoidTy(), byteStreamTy->getPointerTo(), iBuilder->getSizeTy(), nullptr));
-    main->setCallingConv(CallingConv::C);
-    Function::arg_iterator args = main->arg_begin();
-
-    Value * const inputStream = &*(args++);
-    inputStream->setName("input");
-    Value * const fileSize = &*(args++);
-    fileSize->setName("fileSize");
-
     iBuilder->SetInsertPoint(BasicBlock::Create(mod->getContext(), "entry", main, 0));
 
     ByteStream.setStreamSetBuffer(inputStream, fileSize);
     BasisBits.allocateBuffer();
     matches.allocateBuffer();
 
-    generatePipelineLoop(iBuilder, {&s2pk, &bm});
+    generatePipelineLoop(iBuilder, {&mmapK, &s2pk, &bm});
     iBuilder->CreateRetVoid();
 
     return main;

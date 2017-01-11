@@ -24,6 +24,7 @@
 #include <IR_Gen/idisa_builder.h>
 #include <IR_Gen/idisa_target.h>
 #include <kernels/pipeline.h>
+#include <kernels/mmap_kernel.h>
 #include <kernels/interface.h>
 #include <kernels/kernel.h>
 #include <kernels/radix64.h>
@@ -52,6 +53,23 @@ using namespace parabix;
 Function * base64Pipeline(Module * mMod, IDISA::IDISA_Builder * iBuilder) {
     Type * mBitBlockType = iBuilder->getBitBlockType();
 
+    Type * const size_ty = iBuilder->getSizeTy();
+    Type * const voidTy = Type::getVoidTy(mMod->getContext());
+    Type * const inputType = PointerType::get(ArrayType::get(ArrayType::get(mBitBlockType, 8), 1), 0);
+    Type * const outputType = PointerType::get(ArrayType::get(ArrayType::get(mBitBlockType, 8), 1), 0);
+    
+    
+    Function * const main = cast<Function>(mMod->getOrInsertFunction("Main", voidTy, inputType, outputType, size_ty, nullptr));
+    main->setCallingConv(CallingConv::C);
+    Function::arg_iterator args = main->arg_begin();
+    
+    Value * const inputStream = &*(args++);
+    inputStream->setName("inputStream");
+    Value * const outputStream = &*(args++);
+    outputStream->setName("outputStream");
+    Value * const fileSize = &*(args++);
+    fileSize->setName("fileSize");
+
     //Round up to a multiple of 4. 
     const unsigned segmentSize = ((codegen::SegmentSize + 3)/4) * 4;
     
@@ -62,7 +80,11 @@ Function * base64Pipeline(Module * mMod, IDISA::IDISA_Builder * iBuilder) {
     CircularBuffer Expanded3_4Out(iBuilder, iBuilder->getStreamSetTy(1, 8), segmentSize * bufferSegments * 16);
     CircularBuffer Radix64out(iBuilder, iBuilder->getStreamSetTy(1, 8), segmentSize * bufferSegments * 16);
     LinearCopybackBuffer Base64out(iBuilder, iBuilder->getStreamSetTy(1, 8), segmentSize * bufferSegments * 16 + 2);
-
+    
+    MMapSourceKernel mmapK(iBuilder, iBuilder->getStride()); 
+    mmapK.generateKernel({}, {&ByteStream});
+    mmapK.setInitialArguments({fileSize});
+        
     expand3_4Kernel expandK(iBuilder);
     expandK.generateKernel({&ByteStream}, {&Expanded3_4Out});
 
@@ -75,38 +97,21 @@ Function * base64Pipeline(Module * mMod, IDISA::IDISA_Builder * iBuilder) {
     StdOutKernel stdoutK(iBuilder, 8);
     stdoutK.generateKernel({&Base64out}, {});
 
-    Type * const size_ty = iBuilder->getSizeTy();
-    Type * const voidTy = Type::getVoidTy(mMod->getContext());
-    Type * const inputType = PointerType::get(ArrayType::get(ArrayType::get(mBitBlockType, 8), 1), 0);
-    Type * const outputType = PointerType::get(ArrayType::get(ArrayType::get(mBitBlockType, 8), 1), 0);
-
-    
-    Function * const main = cast<Function>(mMod->getOrInsertFunction("Main", voidTy, inputType, outputType, size_ty, nullptr));
-    main->setCallingConv(CallingConv::C);
-    Function::arg_iterator args = main->arg_begin();
-    
-    Value * const inputStream = &*(args++);
-    inputStream->setName("inputStream");
-    Value * const outputStream = &*(args++);
-    outputStream->setName("outputStream");
-    Value * const fileSize = &*(args++);
-    fileSize->setName("fileSize");
     
     iBuilder->SetInsertPoint(BasicBlock::Create(mMod->getContext(), "entry", main,0));
 
     ByteStream.setStreamSetBuffer(inputStream, fileSize);
 //    Radix64out.setEmptyBuffer(iBuilder->CreatePointerCast(outputStream, outputType));
-    mMod->dump();
     Expanded3_4Out.allocateBuffer();
     Radix64out.allocateBuffer();
     Base64out.allocateBuffer();
 
 
     if (segmentPipelineParallel){
-        generateSegmentParallelPipeline(iBuilder, {&expandK, &radix64K, &base64K, &stdoutK});
+        generateSegmentParallelPipeline(iBuilder, {&mmapK, &expandK, &radix64K, &base64K, &stdoutK});
     }
     else{
-        generatePipelineLoop(iBuilder, {&expandK, &radix64K, &base64K, &stdoutK});
+        generatePipelineLoop(iBuilder, {&mmapK, &expandK, &radix64K, &base64K, &stdoutK});
     }
 
     iBuilder->CreateRetVoid();
