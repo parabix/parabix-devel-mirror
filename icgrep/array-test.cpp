@@ -121,7 +121,7 @@ Function * pipeline(IDISA::IDISA_Builder * iBuilder, const unsigned count) {
     SingleBlockBuffer BasisBits(iBuilder, iBuilder->getStreamSetTy(8, 1));
     SingleBlockBuffer matches(iBuilder, iBuilder->getStreamSetTy(count, 1));
 
-    MMapSourceKernel mmapK(iBuilder, iBuilder->getStride()); 
+    MMapSourceKernel mmapK(iBuilder); 
     mmapK.generateKernel({}, {&ByteStream});
     mmapK.setInitialArguments({fileSize});
     

@@ -18,7 +18,9 @@ public:
     StdOutKernel(IDISA::IDISA_Builder * iBuilder, unsigned codeUnitWidth) :
     KernelBuilder(iBuilder, "stdout",
                   {Binding{iBuilder->getStreamSetTy(1, codeUnitWidth), "codeUnitBuffer"}}, {}, {}, {}, {}),
-    mCodeUnitWidth(codeUnitWidth) {}
+    mCodeUnitWidth(codeUnitWidth) {
+        setNoTerminateAttribute(true);
+    }
     
 private:
     unsigned mCodeUnitWidth;

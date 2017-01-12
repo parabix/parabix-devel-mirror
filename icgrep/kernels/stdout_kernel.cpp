@@ -31,8 +31,6 @@ void StdOutKernel::generateDoSegmentMethod() const {
     Type * i8PtrTy = iBuilder->getInt8PtrTy();
     
     iBuilder->SetInsertPoint(BasicBlock::Create(iBuilder->getContext(), "entry", doSegmentFunction, 0));
-    BasicBlock * setTermination = BasicBlock::Create(iBuilder->getContext(), "setTermination", doSegmentFunction, 0);
-    BasicBlock * stdOutexit = BasicBlock::Create(iBuilder->getContext(), "stdOutexit", doSegmentFunction, 0);
     Constant * blockItems = iBuilder->getSize(iBuilder->getBitBlockWidth());
     Constant * itemBytes = iBuilder->getSize(mCodeUnitWidth/8);
     
@@ -65,16 +63,6 @@ void StdOutKernel::generateDoSegmentMethod() const {
     setScalarField(self, blockNoScalar, iBuilder->CreateUDiv(processed, blockItems));
     mStreamSetInputBuffers[0]->setConsumerPos(streamStructPtr, processed);
 
-    Value * endSignal = iBuilder->CreateLoad(mStreamSetInputBuffers[0]->getEndOfInputPtr(streamStructPtr));
-    Value * inFinalSegment = iBuilder->CreateAnd(endSignal, lessThanFullSegment);
-    
-    iBuilder->CreateCondBr(inFinalSegment, setTermination, stdOutexit);
-    iBuilder->SetInsertPoint(setTermination);
-
-    setTerminationSignal(self);
-
-    iBuilder->CreateBr(stdOutexit);
-    iBuilder->SetInsertPoint(stdOutexit);
     iBuilder->CreateRetVoid();
     iBuilder->restoreIP(savePoint);
 }
