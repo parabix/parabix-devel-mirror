@@ -291,7 +291,7 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool Count
        
     ExternalFileBuffer ByteStream(iBuilder, iBuilder->getStreamSetTy(1, 8));
     
-    kernel::MMapSourceKernel mmapK(iBuilder, iBuilder->getStride()); 
+    kernel::MMapSourceKernel mmapK(iBuilder, segmentSize * bufferSegments); 
     mmapK.generateKernel({}, {&ByteStream});
     mmapK.setInitialArguments({fileSize});
     

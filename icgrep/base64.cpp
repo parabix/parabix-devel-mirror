@@ -81,7 +81,7 @@ Function * base64Pipeline(Module * mMod, IDISA::IDISA_Builder * iBuilder) {
     CircularBuffer Radix64out(iBuilder, iBuilder->getStreamSetTy(1, 8), segmentSize * bufferSegments * 16);
     LinearCopybackBuffer Base64out(iBuilder, iBuilder->getStreamSetTy(1, 8), segmentSize * bufferSegments * 16 + 2);
     
-    MMapSourceKernel mmapK(iBuilder, iBuilder->getStride()); 
+    MMapSourceKernel mmapK(iBuilder, segmentSize * bufferSegments * 16); 
     mmapK.generateKernel({}, {&ByteStream});
     mmapK.setInitialArguments({fileSize});
         

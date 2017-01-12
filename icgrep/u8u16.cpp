@@ -295,7 +295,7 @@ Function * u8u16Pipeline(Module * mod, IDISA::IDISA_Builder * iBuilder) {
     ExternalFileBuffer U16external(iBuilder, iBuilder->getStreamSetTy(1, 16));
     LinearCopybackBuffer U16out(iBuilder, iBuilder->getStreamSetTy(16, 16), segmentSize * bufferSegments + 2);
 
-    MMapSourceKernel mmapK(iBuilder, iBuilder->getStride()); 
+    MMapSourceKernel mmapK(iBuilder, segmentSize * bufferSegments); 
     mmapK.generateKernel({}, {&ByteStream});
     mmapK.setInitialArguments({fileSize});
     

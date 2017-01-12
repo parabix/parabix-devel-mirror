@@ -307,7 +307,7 @@ Function * preprocessPipeline(Module * mMod, IDISA::IDISA_Builder * iBuilder) {
     SingleBlockBuffer BasisBits(iBuilder, iBuilder->getStreamSetTy(8));
     ExternalFileBuffer CCResults(iBuilder, iBuilder->getStreamSetTy(4));
 
-    MMapSourceKernel mmapK(iBuilder, iBuilder->getStride());
+    MMapSourceKernel mmapK(iBuilder);
     std::unique_ptr<Module> mmapM = mmapK.createKernelModule({}, {&ByteStream});
     mmapK.setInitialArguments({fileSize});
     

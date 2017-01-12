@@ -19,15 +19,15 @@ namespace kernel {
     
 class MMapSourceKernel : public KernelBuilder {
 public:
-    MMapSourceKernel(IDISA::IDISA_Builder * iBuilder, unsigned segmentSize, unsigned codeUnitWidth = 8) :
+    MMapSourceKernel(IDISA::IDISA_Builder * iBuilder, unsigned blocksPerSegment = 1, unsigned codeUnitWidth = 8) :
     KernelBuilder(iBuilder, "mmap_source",
                   {}, {Binding{iBuilder->getStreamSetTy(1, codeUnitWidth), "sourceBuffer"}}, 
                   {Binding{iBuilder->getSizeTy(), "fileSize"}}, {}, {}),
-    mSegmentSize(segmentSize),
+    mSegmentBlocks(blocksPerSegment),
     mCodeUnitWidth(codeUnitWidth) {}
     
 private:
-    unsigned mSegmentSize;
+    unsigned mSegmentBlocks;
     unsigned mCodeUnitWidth;
   
     void generateDoBlockMethod() const override;

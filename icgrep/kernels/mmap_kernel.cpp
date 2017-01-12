@@ -15,18 +15,20 @@ void MMapSourceKernel::generateDoSegmentMethod() const {
     iBuilder->SetInsertPoint(BasicBlock::Create(iBuilder->getContext(), mKernelName + "_entry", doSegmentFunction, 0));
     BasicBlock * setTermination = BasicBlock::Create(iBuilder->getContext(), "setTermination", doSegmentFunction, 0);
     BasicBlock * mmapSourceExit = BasicBlock::Create(iBuilder->getContext(), "mmapSourceExit", doSegmentFunction, 0);
-    Constant * blockItems = iBuilder->getSize(iBuilder->getBitBlockWidth());
+    Constant * segmentItems = iBuilder->getSize(mSegmentBlocks * iBuilder->getBitBlockWidth());
+    
     
     Function::arg_iterator args = doSegmentFunction->arg_begin();
-    Value * self = &*(args++);
-    Value * blocksToDo = &*(args);
+    Value * self = &*(args);
     
     Value * fileItems = getScalarField(self, "fileSize");
+    if (mCodeUnitWidth > 8) {
+        fileItems = iBuilder->CreateUDiv(fileItems, iBuilder->getSize(mCodeUnitWidth/8));
+    }
     Value * produced = getProducedItemCount(self, "sourceBuffer");
     Value * itemsAvail = iBuilder->CreateSub(fileItems, produced);
-    Value * itemsMax = iBuilder->CreateMul(blocksToDo, blockItems);
-    Value * lessThanFullSegment = iBuilder->CreateICmpULT(itemsAvail, itemsMax);
-    Value * itemsToDo = iBuilder->CreateSelect(lessThanFullSegment, itemsAvail, itemsMax);
+    Value * lessThanFullSegment = iBuilder->CreateICmpULT(itemsAvail, segmentItems);
+    Value * itemsToDo = iBuilder->CreateSelect(lessThanFullSegment, itemsAvail, segmentItems);
     setProducedItemCount(self, "sourceBuffer", iBuilder->CreateAdd(produced, itemsToDo));
     
     iBuilder->CreateCondBr(lessThanFullSegment, setTermination, mmapSourceExit);

@@ -157,7 +157,7 @@ Function * pipeline(Module * mMod, IDISA::IDISA_Builder * iBuilder) {
 
     SingleBlockBuffer BasisBits(iBuilder, iBuilder->getStreamSetTy(8, 1));
     
-    MMapSourceKernel mmapK(iBuilder, iBuilder->getStride());
+    MMapSourceKernel mmapK(iBuilder);
     std::unique_ptr<Module> mmapM = mmapK.createKernelModule({}, {&ByteStream});
     mmapK.setInitialArguments({fileSize});
     
