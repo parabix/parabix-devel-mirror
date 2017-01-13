@@ -221,21 +221,6 @@ void buildPatternKernel(PabloKernel & kernel, IDISA::IDISA_Builder * iBuilder, c
 
 Function * editdPipeline(Module * mMod, IDISA::IDISA_Builder * iBuilder, const std::vector<std::string> & patterns) {
     
-    ExternalFileBuffer ChStream(iBuilder, iBuilder->getStreamSetTy(4));
-    SingleBlockBuffer MatchResults(iBuilder, iBuilder->getStreamSetTy(editDistance + 1));
-
-    PabloKernel editdk(iBuilder, "editd");
-
-    buildPatternKernel(editdk, iBuilder, patterns);
-
-    kernel::editdScanKernel editdScanK(iBuilder, editDistance);
-    
-    std::unique_ptr<Module> editdM = editdk.createKernelModule({&ChStream}, {&MatchResults});
-    std::unique_ptr<Module> scanM = editdScanK.createKernelModule({&MatchResults}, {});                
-    
-    editdk.addKernelDeclarations(mMod);
-    editdScanK.addKernelDeclarations(mMod);
-
     Type * const size_ty = iBuilder->getSizeTy();
     Type * const voidTy = iBuilder->getVoidTy();
     Type * const inputType = PointerType::get(ArrayType::get(ArrayType::get(iBuilder->getBitBlockType(), 8), 1), 0);
@@ -249,16 +234,37 @@ Function * editdPipeline(Module * mMod, IDISA::IDISA_Builder * iBuilder, const s
     Value * const fileSize = &*(args++);
     fileSize->setName("fileSize");
     
+    ExternalFileBuffer ChStream(iBuilder, iBuilder->getStreamSetTy(4));
+    SingleBlockBuffer MatchResults(iBuilder, iBuilder->getStreamSetTy(editDistance + 1));
+
+    MMapSourceKernel mmapK(iBuilder);
+    std::unique_ptr<Module> mmapM = mmapK.createKernelModule({}, {&ChStream});
+    mmapK.setInitialArguments({fileSize});
+    
+    PabloKernel editdk(iBuilder, "editd");
+
+    buildPatternKernel(editdk, iBuilder, patterns);
+
+    kernel::editdScanKernel editdScanK(iBuilder, editDistance);
+    
+    std::unique_ptr<Module> editdM = editdk.createKernelModule({&ChStream}, {&MatchResults});
+    std::unique_ptr<Module> scanM = editdScanK.createKernelModule({&MatchResults}, {});                
+    
+    mmapK.addKernelDeclarations(mMod);
+    editdk.addKernelDeclarations(mMod);
+    editdScanK.addKernelDeclarations(mMod);
+
     iBuilder->SetInsertPoint(BasicBlock::Create(mMod->getContext(), "entry", main,0));
 
     ChStream.setStreamSetBuffer(inputStream, fileSize);
     MatchResults.allocateBuffer();
     
-    generatePipelineLoop(iBuilder, {&editdk, &editdScanK});
+    generatePipelineLoop(iBuilder, {&mmapK, &editdk, &editdScanK});
         
     iBuilder->CreateRetVoid();
     
     Linker L(*mMod);
+    L.linkInModule(std::move(mmapM));
     L.linkInModule(std::move(editdM));
     L.linkInModule(std::move(scanM));
     

@@ -124,6 +124,8 @@ protected:
     
     virtual void generateDoSegmentMethod() const;
     
+    virtual void generateFinalSegmentMethod() const;
+    
     // Add an additional scalar field to the KernelState struct.
     // Must occur before any call to addKernelDeclarations or createKernelModule.
     unsigned addScalar(Type * type, const std::string & name);

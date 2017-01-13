@@ -32,6 +32,7 @@ private:
   
     void generateDoBlockMethod() const override;
     void generateDoSegmentMethod() const override;
+    void generateFinalSegmentMethod() const override;
     
 };
 }

@@ -151,7 +151,7 @@ Function * generateSegmentParallelPipelineThreadFunction(std::string name, IDISA
             iBuilder->CreateCondBr(cond, partialSegmentLoopBody[i], partialSegmentWait[i]);
             
             iBuilder->SetInsertPoint(partialSegmentLoopBody[i]);
-            kernels[i]->createDoSegmentCall(instancePtrs[i], segmentBlocks);
+            kernels[i]->createFinalSegmentCall(instancePtrs[i], segmentBlocks);
             kernels[i]->releaseLogicalSegmentNo(instancePtrs[i], iBuilder->CreateAdd(processedSegmentCount, iBuilder->getSize(1)));
             iBuilder->CreateBr(partialSegmentWait[i+1]);
         }
@@ -320,7 +320,7 @@ void generatePipelineLoop(IDISA::IDISA_Builder * iBuilder, std::vector<KernelBui
         if (finalSegmentBlocks[i] != nullptr) {
             iBuilder->SetInsertPoint(finalSegmentBlocks[i]);
             Value * segNo = kernels[i]->acquireLogicalSegmentNo(kernels[i]->getInstance());
-            kernels[i]->createDoSegmentCall(kernels[i]->getInstance(), segBlocks);
+            kernels[i]->createFinalSegmentCall(kernels[i]->getInstance(), segBlocks);
             kernels[i]->releaseLogicalSegmentNo(kernels[i]->getInstance(), iBuilder->CreateAdd(segNo, iBuilder->getSize(1)));
             if (finalSegmentBlocks[i] != finalSegmentBlocks[i+1]) {
                 iBuilder->CreateBr(finalSegmentBlocks[i+1]);

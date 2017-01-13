@@ -22,6 +22,7 @@ struct Binding {
 static const std::string init_suffix = "_Init";
 static const std::string doBlock_suffix = "_DoBlock";
 static const std::string doSegment_suffix = "_DoSegment";
+static const std::string finalSegment_suffix = "_FinalSegment";
 static const std::string finalBlock_suffix = "_FinalBlock";
 static const std::string accumulator_infix = "_get_";
 
@@ -52,6 +53,7 @@ public:
     llvm::Value * getInstance() const { return mKernelInstance; }
 
     llvm::Value * createDoSegmentCall(llvm::Value * self, llvm::Value * blkCount) const;
+    llvm::Value * createFinalSegmentCall(llvm::Value * self, llvm::Value * blkCount) const;
     llvm::Value * createFinalBlockCall(llvm::Value * self, llvm::Value * remainingBytes) const;
     llvm::Value * createGetAccumulatorCall(llvm::Value * self, std::string accumName) const;
     

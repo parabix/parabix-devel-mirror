@@ -90,6 +90,20 @@ void KernelInterface::addKernelDeclarations(Module * client) {
     arg = &*(args++);
     arg->setName("blockCnt");
     doSegmentFn->setDoesNotCapture(1); // for self parameter only.
+    //
+    // Create the finalSegment function prototype.
+    std::vector<Type *> finalSegmentParameters = {selfType, iBuilder->getSizeTy()};
+    FunctionType * finalSegmentFunctionType = FunctionType::get(iBuilder->getVoidTy(), finalSegmentParameters, false);
+    std::string finalSegmentName = mKernelName + finalSegment_suffix;
+    Function * finalSegmentFn = Function::Create(finalSegmentFunctionType, GlobalValue::ExternalLinkage, finalSegmentName, client);
+    finalSegmentFn->setCallingConv(CallingConv::C);
+    finalSegmentFn->setDoesNotThrow();
+    Function::arg_iterator finalSegmentArgs = finalSegmentFn->arg_begin();
+    Value * finalSegmentArg = &*(finalSegmentArgs++);
+    finalSegmentArg->setName("self");
+    finalSegmentArg = &*(finalSegmentArgs++);
+    finalSegmentArg->setName("blockCnt");
+    finalSegmentFn->setDoesNotCapture(1); // for self parameter only.
     iBuilder->setModule(saveModule);
     iBuilder->restoreIP(savePoint);
 }
@@ -124,6 +138,16 @@ Value * KernelInterface::createFinalBlockCall(Value * self, Value * remainingByt
 Value * KernelInterface::createDoSegmentCall(Value * self, Value * blksToDo) const {
     Module * m = iBuilder->getModule();
     std::string fnName = mKernelName + doSegment_suffix;
+    Function * method = m->getFunction(fnName);
+    if (!method) {
+        throw std::runtime_error("Cannot find " + fnName);
+    }
+    return iBuilder->CreateCall(method, {self, blksToDo});
+}
+
+Value * KernelInterface::createFinalSegmentCall(Value * self, Value * blksToDo) const {
+    Module * m = iBuilder->getModule();
+    std::string fnName = mKernelName + finalSegment_suffix;
     Function * method = m->getFunction(fnName);
     if (!method) {
         throw std::runtime_error("Cannot find " + fnName);

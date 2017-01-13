@@ -108,6 +108,7 @@ void KernelBuilder::generateKernel(const std::vector<StreamSetBuffer *> & inputs
     generateDoBlockMethod();    // must be implemented by the KernelBuilder subtype
     generateFinalBlockMethod(); // possibly overridden by the KernelBuilder subtype
     generateDoSegmentMethod();
+    generateFinalSegmentMethod();
 
     // Implement the accumulator get functions
     for (auto binding : mScalarOutputs) {
@@ -168,6 +169,7 @@ void KernelBuilder::generateDoBlockLogic(Value * self, Value * /* blockNo */) co
     iBuilder->CreateCall(doBlockFunction, self);
 }
 
+
 //  The default doSegment method dispatches to the doBlock routine for
 //  each block of the given number of blocksToDo, and then updates counts.
 void KernelBuilder::generateDoSegmentMethod() const {
@@ -179,9 +181,6 @@ void KernelBuilder::generateDoSegmentMethod() const {
     BasicBlock * strideLoopCond = BasicBlock::Create(iBuilder->getContext(), "strideLoopCond", doSegmentFunction, 0);
     BasicBlock * strideLoopBody = BasicBlock::Create(iBuilder->getContext(), "strideLoopBody", doSegmentFunction, 0);
     BasicBlock * stridesDone = BasicBlock::Create(iBuilder->getContext(), "stridesDone", doSegmentFunction, 0);
-    BasicBlock * checkFinalStride = BasicBlock::Create(iBuilder->getContext(), "checkFinalStride", doSegmentFunction, 0);
-    BasicBlock * checkEndSignals = BasicBlock::Create(iBuilder->getContext(), "checkEndSignals", doSegmentFunction, 0);
-    BasicBlock * callFinalBlock = BasicBlock::Create(iBuilder->getContext(), "callFinalBlock", doSegmentFunction, 0);
     BasicBlock * segmentDone = BasicBlock::Create(iBuilder->getContext(), "segmentDone", doSegmentFunction, 0);
     BasicBlock * finalExit = BasicBlock::Create(iBuilder->getContext(), "finalExit", doSegmentFunction, 0);
     Type * const size_ty = iBuilder->getSizeTy();
@@ -213,9 +212,9 @@ void KernelBuilder::generateDoSegmentMethod() const {
     }
     Value * processed = getProcessedItemCount(self, mStreamSetInputs[0].name);
     Value * itemsAvail = iBuilder->CreateSub(availablePos, processed);
-//#ifndef NDEBUG
-//    iBuilder->CallPrintInt(mKernelName + "_itemsAvail", itemsAvail);
-//#endif
+#ifndef NDEBUG
+    iBuilder->CallPrintInt(mKernelName + "_itemsAvail", itemsAvail);
+#endif
     Value * stridesToDo = iBuilder->CreateUDiv(blocksToDo, strideBlocks);
     Value * stridesAvail = iBuilder->CreateUDiv(itemsAvail, stride);
     /* Adjust the number of full blocks to do, based on the available data, if necessary. */
@@ -241,46 +240,11 @@ void KernelBuilder::generateDoSegmentMethod() const {
     iBuilder->SetInsertPoint(stridesDone);
     processed = iBuilder->CreateAdd(processed, iBuilder->CreateMul(stridesToDo, stride));
     setProcessedItemCount(self, mStreamSetInputs[0].name, processed);
-    iBuilder->CreateCondBr(lessThanFullSegment, checkFinalStride, segmentDone);
-    
-    iBuilder->SetInsertPoint(checkFinalStride);
-    
-    /* We had less than a full segment of data; we may have reached the end of input
-       on one of the stream sets.  */
-    
-    Value * alreadyDone = getTerminationSignal(self);
-    iBuilder->CreateCondBr(alreadyDone, finalExit, checkEndSignals);
-    
-    iBuilder->SetInsertPoint(checkEndSignals);
-    Value * endOfInput = iBuilder->CreateLoad(endSignalPtrs[0]);
-    if (endSignalPtrs.size() > 1) {
-        /* If there is more than one input stream set, then we need to confirm that one of
-           them has both the endSignal set and the length = to availablePos. */
-        endOfInput = iBuilder->CreateAnd(endOfInput, iBuilder->CreateICmpEQ(availablePos, producerPos[0]));
-        for (unsigned i = 1; i < endSignalPtrs.size(); i++) {
-            Value * e = iBuilder->CreateAnd(iBuilder->CreateLoad(endSignalPtrs[i]), iBuilder->CreateICmpEQ(availablePos, producerPos[i]));
-            endOfInput = iBuilder->CreateOr(endOfInput, e);
-        }
-    }
-    iBuilder->CreateCondBr(endOfInput, callFinalBlock, segmentDone);
-    
-    iBuilder->SetInsertPoint(callFinalBlock);
-    
-    Value * remainingItems = iBuilder->CreateSub(availablePos, processed);
-    createFinalBlockCall(self, remainingItems);
-    setProcessedItemCount(self, mStreamSetInputs[0].name, availablePos);
-    
-    for (unsigned i = 0; i < mStreamSetOutputs.size(); i++) {
-        Value * ssStructPtr = getStreamSetStructPtr(self, mStreamSetOutputs[i].name);
-        mStreamSetOutputBuffers[i]->setEndOfInput(ssStructPtr);
-    }
-    setTerminationSignal(self);
     iBuilder->CreateBr(segmentDone);
-    
     iBuilder->SetInsertPoint(segmentDone);
-//#ifndef NDEBUG
-//    iBuilder->CallPrintInt(mKernelName + "_produced", produced);
-//#endif
+#ifndef NDEBUG
+    iBuilder->CallPrintInt(mKernelName + "_processed", processed);
+#endif
     for (unsigned i = 0; i < mStreamSetOutputs.size(); i++) {
         Value * produced = getProducedItemCount(self, mStreamSetOutputs[i].name);
         Value * ssStructPtr = getStreamSetStructPtr(self, mStreamSetOutputs[i].name);
@@ -293,6 +257,83 @@ void KernelBuilder::generateDoSegmentMethod() const {
     iBuilder->CreateRetVoid();
     iBuilder->restoreIP(savePoint);
 }
+
+void KernelBuilder::generateFinalSegmentMethod() const {
+    auto savePoint = iBuilder->saveIP();
+    Module * m = iBuilder->getModule();
+    Function * finalSegmentFunction = m->getFunction(mKernelName + finalSegment_suffix);
+    iBuilder->SetInsertPoint(BasicBlock::Create(iBuilder->getContext(), "entry", finalSegmentFunction, 0));
+    BasicBlock * doStrides = BasicBlock::Create(iBuilder->getContext(), "doStrides", finalSegmentFunction, 0);
+    BasicBlock * stridesDone = BasicBlock::Create(iBuilder->getContext(), "stridesDone", finalSegmentFunction, 0);
+    Type * const size_ty = iBuilder->getSizeTy();
+    Constant * stride = ConstantInt::get(size_ty, iBuilder->getStride());
+    Value * strideBlocks = ConstantInt::get(size_ty, iBuilder->getStride() / iBuilder->getBitBlockWidth());
+    Function::arg_iterator args = finalSegmentFunction->arg_begin();
+    Value * self = &*(args++);
+    Value * blocksToDo = &*(args);
+    std::vector<Value *> inbufProducerPtrs;
+    std::vector<Value *> endSignalPtrs;
+    for (unsigned i = 0; i < mStreamSetInputs.size(); i++) {
+        Value * param = getStreamSetStructPtr(self, mStreamSetInputs[i].name);
+        inbufProducerPtrs.push_back(mStreamSetInputBuffers[i]->getProducerPosPtr(param));
+        endSignalPtrs.push_back(mStreamSetInputBuffers[i]->getEndOfInputPtr(param));
+    }
+    
+    std::vector<Value *> producerPos;
+    /* Determine the actually available data examining all input stream sets. */
+    LoadInst * p = iBuilder->CreateAtomicLoadAcquire(inbufProducerPtrs[0]);
+    producerPos.push_back(p);
+    Value * availablePos = producerPos[0];
+    for (unsigned i = 1; i < inbufProducerPtrs.size(); i++) {
+        LoadInst * p = iBuilder->CreateAtomicLoadAcquire(inbufProducerPtrs[i]);
+        producerPos.push_back(p);
+        /* Set the available position to be the minimum of availablePos and producerPos. */
+        availablePos = iBuilder->CreateSelect(iBuilder->CreateICmpULT(availablePos, p), availablePos, p);
+    }
+    Value * processed = getProcessedItemCount(self, mStreamSetInputs[0].name);
+    Value * itemsAvail = iBuilder->CreateSub(availablePos, processed);
+#ifndef NDEBUG
+    iBuilder->CallPrintInt(mKernelName + "_itemsAvail final", itemsAvail);
+#endif
+    Value * stridesToDo = iBuilder->CreateUDiv(blocksToDo, strideBlocks);
+    Value * stridesAvail = iBuilder->CreateUDiv(itemsAvail, stride);
+    /* Adjust the number of full blocks to do, based on the available data, if necessary. */
+    Value * lessThanFullSegment = iBuilder->CreateICmpULT(stridesAvail, stridesToDo);
+    stridesToDo = iBuilder->CreateSelect(lessThanFullSegment, stridesAvail, stridesToDo);
+    Value * notDone = iBuilder->CreateICmpUGT(stridesToDo, ConstantInt::get(size_ty, 0));
+    iBuilder->CreateCondBr(notDone, doStrides, stridesDone);
+   
+    iBuilder->SetInsertPoint(doStrides);
+    createDoSegmentCall(self, blocksToDo);
+    iBuilder->CreateBr(stridesDone);
+    
+    iBuilder->SetInsertPoint(stridesDone);
+    /* Now at most a partial block remains. */
+    
+    processed = getProcessedItemCount(self, mStreamSetInputs[0].name);   
+    Value * remainingItems = iBuilder->CreateSub(producerPos[0], processed);
+    //iBuilder->CallPrintInt(mKernelName + " remainingItems", remainingItems);
+        
+    createFinalBlockCall(self, remainingItems);
+    processed = iBuilder->CreateAdd(processed, remainingItems);
+    setProcessedItemCount(self, mStreamSetInputs[0].name, processed);
+        
+#ifndef NDEBUG
+    iBuilder->CallPrintInt(mKernelName + "_processed final", processed);
+#endif
+    for (unsigned i = 0; i < mStreamSetOutputs.size(); i++) {
+        Value * produced = getProducedItemCount(self, mStreamSetOutputs[i].name);
+        Value * ssStructPtr = getStreamSetStructPtr(self, mStreamSetOutputs[i].name);
+        Value * producerPosPtr = mStreamSetOutputBuffers[i]->getProducerPosPtr(ssStructPtr);
+        iBuilder->CreateAtomicStoreRelease(produced, producerPosPtr);
+    }
+
+    iBuilder->CreateRetVoid();
+
+    iBuilder->restoreIP(savePoint);
+}
+
+
 
 ConstantInt * KernelBuilder::getScalarIndex(const std::string & name) const {
     const auto f = mKernelMap.find(name);

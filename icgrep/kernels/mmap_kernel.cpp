@@ -40,6 +40,23 @@ void MMapSourceKernel::generateDoSegmentMethod() const {
     iBuilder->restoreIP(savePoint);
 }
 
+void MMapSourceKernel::generateFinalSegmentMethod() const {
+    auto savePoint = iBuilder->saveIP();
+    Module * m = iBuilder->getModule();
+    Function * finalSegmentFunction = m->getFunction(mKernelName + finalSegment_suffix);
+    iBuilder->SetInsertPoint(BasicBlock::Create(iBuilder->getContext(), "entry", finalSegmentFunction, 0));
+        
+    Function::arg_iterator args = finalSegmentFunction->arg_begin();
+    Value * self = &*(args++);
+    Value * blocksToDo = &*(args);
+    
+    createDoSegmentCall(self, blocksToDo);
+
+    iBuilder->CreateRetVoid();
+    iBuilder->restoreIP(savePoint);
+}
+
+
 // The doBlock method is deprecated.   But in case it is used, just call doSegment with
 // 1 as the number of blocks to do.
 void MMapSourceKernel::generateDoBlockMethod() const {
