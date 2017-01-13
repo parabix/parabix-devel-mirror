@@ -29,13 +29,18 @@ void MMapSourceKernel::generateDoSegmentMethod() const {
     Value * itemsAvail = iBuilder->CreateSub(fileItems, produced);
     Value * lessThanFullSegment = iBuilder->CreateICmpULT(itemsAvail, segmentItems);
     Value * itemsToDo = iBuilder->CreateSelect(lessThanFullSegment, itemsAvail, segmentItems);
-    setProducedItemCount(self, "sourceBuffer", iBuilder->CreateAdd(produced, itemsToDo));
+    produced = iBuilder->CreateAdd(produced, itemsToDo);
+    setProducedItemCount(self, "sourceBuffer", produced);
     
     iBuilder->CreateCondBr(lessThanFullSegment, setTermination, mmapSourceExit);
     iBuilder->SetInsertPoint(setTermination);
     setTerminationSignal(self);
     iBuilder->CreateBr(mmapSourceExit);
     iBuilder->SetInsertPoint(mmapSourceExit);
+    Value * ssStructPtr = getStreamSetStructPtr(self, "sourceBuffer");
+    Value * producerPosPtr = mStreamSetOutputBuffers[0]->getProducerPosPtr(ssStructPtr);
+    iBuilder->CreateAtomicStoreRelease(produced, producerPosPtr);
+    
     iBuilder->CreateRetVoid();
     iBuilder->restoreIP(savePoint);
 }
