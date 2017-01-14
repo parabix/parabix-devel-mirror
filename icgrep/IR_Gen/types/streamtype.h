@@ -1,8 +1,9 @@
 #ifndef STREAMTYPE_H
 #define STREAMTYPE_H
 
-#include <llvm/IR/DerivedTypes.h>
-#include <llvm/IR/LLVMContext.h>
+#include <llvm/IR/Type.h>
+namespace IDISA { class IDISA_Builder; }
+namespace llvm { class LLVMContext; }
 
 namespace IDISA {
 

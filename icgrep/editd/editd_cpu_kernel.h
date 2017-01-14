@@ -18,22 +18,13 @@ namespace kernel {
 class editdCPUKernel : public KernelBuilder {
 public:
     
-    editdCPUKernel(IDISA::IDISA_Builder * b, unsigned dist, unsigned pattLen) :
-    KernelBuilder(b, "editd_cpu",
-                  {Binding{b->getStreamSetTy(4), "CCStream"}},
-                  {Binding{b->getStreamSetTy(dist + 1), "ResultStream"}},
-                  {Binding{PointerType::get(b->getInt8Ty(), 1), "pattStream"},
-                  Binding{PointerType::get(ArrayType::get(b->getBitBlockType(), pattLen * (dist + 1) * 4), 0), "srideCarry"}},
-                  {},
-                  {Binding{b->getBitBlockType(), "EOFmask"}}),
-    mEditDistance(dist),
-    mPatternLen(pattLen){}
+    editdCPUKernel(IDISA::IDISA_Builder * b, unsigned dist, unsigned pattLen);
     
     
 private:
     void generateDoBlockMethod() const override;
     void generateFinalBlockMethod() const override;
-    void bitblock_advance_ci_co(Value * val, unsigned shift, Value * stideCarryArr, unsigned carryIdx, std::vector<std::vector<Value *>> & adv, std::vector<std::vector<int>> & calculated, int i, int j) const;
+    void bitblock_advance_ci_co(llvm::Value * val, unsigned shift, llvm::Value * stideCarryArr, unsigned carryIdx, std::vector<std::vector<llvm::Value *>> & adv, std::vector<std::vector<int>> & calculated, int i, int j) const;
     unsigned mEditDistance;
     unsigned mPatternLen;
     

@@ -18,12 +18,7 @@ namespace kernel {
     
 class editdScanKernel : public KernelBuilder {
 public:
-    editdScanKernel(IDISA::IDISA_Builder * iBuilder, unsigned dist) :
-    KernelBuilder(iBuilder, "scanMatch",
-                  {Binding{iBuilder->getStreamSetTy(dist + 1), "matchResults"}},
-                  {}, {}, {}, {}),
-    mEditDistance(dist),
-    mScanwordBitWidth(iBuilder->getSizeTy()->getBitWidth()) {}
+    editdScanKernel(IDISA::IDISA_Builder * iBuilder, unsigned dist);
         
 private:
     void generateDoBlockMethod() const override;

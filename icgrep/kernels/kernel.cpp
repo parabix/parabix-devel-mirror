@@ -4,15 +4,25 @@
  */
 
 #include "kernel.h"
-#include <llvm/IR/Module.h>
-#include <llvm/IR/Type.h>
-#include <llvm/IR/Value.h>
-#include <llvm/Support/raw_ostream.h>
-#include <llvm/Support/ErrorHandling.h>
-#include <toolchain.h>
+#include <llvm/IR/Value.h>               // for Value
+#include <llvm/Support/ErrorHandling.h>  // for report_fatal_error
+#include <toolchain.h>                   // for BufferSegments, SegmentSize
+#include "IR_Gen/idisa_builder.h"        // for IDISA_Builder
+#include "kernels/streamset.h"           // for StreamSetBuffer
+#include "llvm/ADT/StringRef.h"          // for StringRef, operator==
+#include "llvm/IR/CallingConv.h"         // for ::C
+#include "llvm/IR/Constant.h"            // for Constant
+#include "llvm/IR/Constants.h"           // for ConstantInt
+#include "llvm/IR/Function.h"            // for Function, Function::arg_iter...
+#include "llvm/IR/Instructions.h"        // for LoadInst (ptr only), PHINode
+#include "llvm/Support/Compiler.h"       // for LLVM_UNLIKELY
+namespace llvm { class BasicBlock; }
+namespace llvm { class Module; }
+namespace llvm { class Type; }
 
 using namespace llvm;
 using namespace kernel;
+using namespace parabix;
 
 KernelBuilder::KernelBuilder(IDISA::IDISA_Builder * builder,
                              std::string kernelName,
@@ -212,9 +222,9 @@ void KernelBuilder::generateDoSegmentMethod() const {
     }
     Value * processed = getProcessedItemCount(self, mStreamSetInputs[0].name);
     Value * itemsAvail = iBuilder->CreateSub(availablePos, processed);
-#ifndef NDEBUG
-    iBuilder->CallPrintInt(mKernelName + "_itemsAvail", itemsAvail);
-#endif
+//#ifndef NDEBUG
+//    iBuilder->CallPrintInt(mKernelName + "_itemsAvail", itemsAvail);
+//#endif
     Value * stridesToDo = iBuilder->CreateUDiv(blocksToDo, strideBlocks);
     Value * stridesAvail = iBuilder->CreateUDiv(itemsAvail, stride);
     /* Adjust the number of full blocks to do, based on the available data, if necessary. */
@@ -242,9 +252,9 @@ void KernelBuilder::generateDoSegmentMethod() const {
     setProcessedItemCount(self, mStreamSetInputs[0].name, processed);
     iBuilder->CreateBr(segmentDone);
     iBuilder->SetInsertPoint(segmentDone);
-#ifndef NDEBUG
-    iBuilder->CallPrintInt(mKernelName + "_processed", processed);
-#endif
+//#ifndef NDEBUG
+//    iBuilder->CallPrintInt(mKernelName + "_processed", processed);
+//#endif
     for (unsigned i = 0; i < mStreamSetOutputs.size(); i++) {
         Value * produced = getProducedItemCount(self, mStreamSetOutputs[i].name);
         Value * ssStructPtr = getStreamSetStructPtr(self, mStreamSetOutputs[i].name);
@@ -292,9 +302,9 @@ void KernelBuilder::generateFinalSegmentMethod() const {
     }
     Value * processed = getProcessedItemCount(self, mStreamSetInputs[0].name);
     Value * itemsAvail = iBuilder->CreateSub(availablePos, processed);
-#ifndef NDEBUG
-    iBuilder->CallPrintInt(mKernelName + "_itemsAvail final", itemsAvail);
-#endif
+//#ifndef NDEBUG
+//    iBuilder->CallPrintInt(mKernelName + "_itemsAvail final", itemsAvail);
+//#endif
     Value * stridesToDo = iBuilder->CreateUDiv(blocksToDo, strideBlocks);
     Value * stridesAvail = iBuilder->CreateUDiv(itemsAvail, stride);
     /* Adjust the number of full blocks to do, based on the available data, if necessary. */
@@ -316,11 +326,10 @@ void KernelBuilder::generateFinalSegmentMethod() const {
         
     createFinalBlockCall(self, remainingItems);
     processed = iBuilder->CreateAdd(processed, remainingItems);
-    setProcessedItemCount(self, mStreamSetInputs[0].name, processed);
-        
-#ifndef NDEBUG
-    iBuilder->CallPrintInt(mKernelName + "_processed final", processed);
-#endif
+    setProcessedItemCount(self, mStreamSetInputs[0].name, processed);       
+//#ifndef NDEBUG
+//    iBuilder->CallPrintInt(mKernelName + "_processed final", processed);
+//#endif
     for (unsigned i = 0; i < mStreamSetOutputs.size(); i++) {
         Value * produced = getProducedItemCount(self, mStreamSetOutputs[i].name);
         Value * ssStructPtr = getStreamSetStructPtr(self, mStreamSetOutputs[i].name);
@@ -401,9 +410,9 @@ Value * KernelBuilder::getBlockNo(Value * self) const {
     return iBuilder->CreateLoad(ptr);
 }
 
-void KernelBuilder::setBlockNo(Value * self, Value * newFieldVal) const {
+void KernelBuilder::setBlockNo(Value * self, Value * value) const {
     Value * ptr = iBuilder->CreateGEP(self, {iBuilder->getInt32(0), getScalarIndex(blockNoScalar)});
-    iBuilder->CreateStore(newFieldVal, ptr);
+    iBuilder->CreateStore(value, ptr);
 }
 
 
@@ -423,35 +432,38 @@ unsigned KernelBuilder::getStreamSetIndex(const std::string & name) const {
     return f->second;
 }
 
-size_t KernelBuilder::getStreamSetBufferSize(Value * /* self */, const std::string & name) const {
-    const unsigned index = getStreamSetIndex(name);
-    StreamSetBuffer * buf = nullptr;
-    if (index < mStreamSetInputs.size()) {
-        buf = mStreamSetInputBuffers[index];
-    } else {
-        buf = mStreamSetOutputBuffers[index - mStreamSetInputs.size()];
-    }
-    return buf->getBufferSize();
-}
-
 Value * KernelBuilder::getStreamSetStructPtr(Value * self, const std::string & name) const {
     return getScalarField(self, name + structPtrSuffix);
 }
 
-Value * KernelBuilder::getStreamSetBlockPtr(Value * self, const std::string &name, Value * blockNo) const {
-    Value * const structPtr = getStreamSetStructPtr(self, name);
-    const unsigned index = getStreamSetIndex(name);
-    StreamSetBuffer * buf = nullptr;
-    if (index < mStreamSetInputs.size()) {
-        buf = mStreamSetInputBuffers[index];
+inline const StreamSetBuffer * KernelBuilder::getStreamSetBuffer(const std::string & name) const {
+    const unsigned structIdx = getStreamSetIndex(name);
+    if (structIdx < mStreamSetInputs.size()) {
+        return mStreamSetInputBuffers[structIdx];
     } else {
-        buf = mStreamSetOutputBuffers[index - mStreamSetInputs.size()];
-    }    
-    return buf->getStreamSetBlockPointer(structPtr, blockNo);
+        return mStreamSetOutputBuffers[structIdx - mStreamSetInputs.size()];
+    }
 }
 
-Value * KernelBuilder::getStream(Value * self, const std::string & name, Value * blockNo, Value * index) {
-    return iBuilder->CreateGEP(getStreamSetBlockPtr(self, name, blockNo), {iBuilder->getInt32(0), index});
+Value * KernelBuilder::getStreamSetPtr(Value * self, const std::string & name, Value * blockNo) const {
+    return getStreamSetBuffer(name)->getStreamSetPtr(getStreamSetStructPtr(self, name), blockNo);
+}
+
+Value * KernelBuilder::getStream(Value * self, const std::string & name, Value * blockNo, Value * index) const {
+    return getStreamSetBuffer(name)->getStream(getStreamSetStructPtr(self, name), blockNo, index);
+}
+
+Value * KernelBuilder::getStream(Value * self, const std::string & name, Value * blockNo, Value * index1, Value * index2) const {
+    assert (index1->getType() == index2->getType());
+    return getStreamSetBuffer(name)->getStream(getStreamSetStructPtr(self, name), blockNo, index1, index2);
+}
+
+Value * KernelBuilder::getStreamView(Value * self, const std::string & name, Value * blockNo, Value * index) const {
+    return getStreamSetBuffer(name)->getStreamView(getStreamSetStructPtr(self, name), blockNo, index);
+}
+
+Value * KernelBuilder::getStreamView(llvm::Type * type, Value * self, const std::string & name, Value * blockNo, Value * index) const {
+    return getStreamSetBuffer(name)->getStreamView(type, getStreamSetStructPtr(self, name), blockNo, index);
 }
 
 void KernelBuilder::createInstance() {

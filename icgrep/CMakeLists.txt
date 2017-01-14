@@ -59,14 +59,12 @@ SET(PABLO_SRC ${PABLO_SRC} pablo/optimizers/booleanreassociationpass.cpp)
 SET(PABLO_SRC ${PABLO_SRC} pablo/optimizers/schedulingprepass.cpp pablo/optimizers/pablo_automultiplexing.cpp)
 ENDIF()
 
-
 add_library(CodeGen ${KERNEL_SRC} ${IDISA_SRC} object_cache.cpp)
 add_library(PabloADT ${PABLO_SRC})
 add_library(RegExpADT re/re_re.cpp re/re_cc.cpp re/re_rep.cpp re/re_diff.cpp re/re_intersect.cpp re/printer_re.cpp)
 add_library(RegExpCompiler re/re_parser.cpp re/re_nullable.cpp re/re_simplifier.cpp re/re_compiler.cpp re/re_analysis.cpp re/re_toolchain.cpp re/re_name_resolve.cpp re/re_parser_pcre.cpp re/re_parser_ere.cpp re/re_parser_bre.cpp re/re_parser_prosite.cpp re/re_utility.cpp)
 add_library(CCADT cc/cc_compiler.cpp utf8_encoder.cpp utf16_encoder.cpp UCD/CaseFolding_txt.cpp)
 add_library(UCDlib UCD/unicode_set.cpp UCD/ucd_compiler.cpp UCD/PropertyObjects.cpp UCD/resolve_properties.cpp UCD/UnicodeNameData.cpp)
-
 
 # add the executable
 target_link_libraries (PabloADT CodeGen ${REQ_LLVM_LIBRARIES})
@@ -81,6 +79,28 @@ add_executable(base64 base64.cpp kernels/radix64.cpp toolchain.cpp kernels/p2s_k
 add_executable(wc wc.cpp toolchain.cpp)
 add_executable(editd editd/editd.cpp editd/pattern_compiler.cpp toolchain.cpp editd/editdscan_kernel.cpp editd/editd_gpu_kernel.cpp editd/editd_cpu_kernel.cpp)
 add_executable(array-test array-test.cpp toolchain.cpp)
+
+## IWYU detects superfluous includes and when the include can be replaced with a forward declaration.
+## It can be obtained using "apt-get install iwyu" or from "github.com/include-what-you-use".
+
+#find_program(IWYU_PATH NAMES include-what-you-use iwyu)
+#if(IWYU_PATH)
+#cmake_minimum_required(VERSION 3.3 FATAL_ERROR)
+#execute_process(COMMAND ${CMAKE_CXX_COMPILER} -print-libgcc-file-name OUTPUT_VARIABLE LIBGCC_FILE)
+#get_filename_component(LIBGCC_PATH ${LIBGCC_FILE} DIRECTORY)
+#include_directories("${LIBGCC_PATH}/include")
+#set_property(TARGET CodeGen PROPERTY CXX_INCLUDE_WHAT_YOU_USE ${IWYU_PATH})
+#set_property(TARGET PabloADT PROPERTY CXX_INCLUDE_WHAT_YOU_USE ${IWYU_PATH})
+#set_property(TARGET RegExpADT PROPERTY CXX_INCLUDE_WHAT_YOU_USE ${IWYU_PATH})
+#set_property(TARGET RegExpCompiler PROPERTY CXX_INCLUDE_WHAT_YOU_USE ${IWYU_PATH})
+#set_property(TARGET CCADT PROPERTY CXX_INCLUDE_WHAT_YOU_USE ${IWYU_PATH})
+#set_property(TARGET UCDlib PROPERTY CXX_INCLUDE_WHAT_YOU_USE ${IWYU_PATH})
+#set_property(TARGET icgrep PROPERTY CXX_INCLUDE_WHAT_YOU_USE ${IWYU_PATH})
+#set_property(TARGET u8u16 PROPERTY CXX_INCLUDE_WHAT_YOU_USE ${IWYU_PATH})
+#set_property(TARGET wc PROPERTY CXX_INCLUDE_WHAT_YOU_USE ${IWYU_PATH})
+#set_property(TARGET editd PROPERTY CXX_INCLUDE_WHAT_YOU_USE ${IWYU_PATH})
+#set_property(TARGET array-test PROPERTY CXX_INCLUDE_WHAT_YOU_USE ${IWYU_PATH})
+#endif()
 
 IF (PRINT_TIMING_INFORMATION)
     find_package(PAPI REQUIRED)

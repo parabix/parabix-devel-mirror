@@ -6,15 +6,14 @@
 #ifndef IDISA_TARGET_H
 #define IDISA_TARGET_H
 
-#include <llvm/IR/Module.h>
-#include <llvm/IR/Type.h>
-#include <IR_Gen/idisa_builder.h>
+namespace llvm { class Module; }
+namespace IDISA { class IDISA_Builder; }
 
 namespace IDISA {
     
-IDISA::IDISA_Builder * GetIDISA_Builder(Module * m);
+IDISA::IDISA_Builder * GetIDISA_Builder(llvm::Module * m);
 
-IDISA::IDISA_Builder * GetIDISA_GPU_Builder(Module * m);
+IDISA::IDISA_Builder * GetIDISA_GPU_Builder(llvm::Module * m);
 
 }
 

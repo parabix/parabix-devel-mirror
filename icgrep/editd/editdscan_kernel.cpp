@@ -7,6 +7,7 @@
 #include "editdscan_kernel.h"
 #include <llvm/IR/Intrinsics.h>
 #include <IR_Gen/idisa_builder.h>
+#include <llvm/IR/Module.h>
 #include <llvm/Support/raw_os_ostream.h>
 #include <iostream>
 
@@ -34,11 +35,10 @@ void editdScanKernel::generateDoBlockMethod() const {
     Value * blockNo = getScalarField(kernelStuctParam, blockNoScalar);
     Value * scanwordPos = iBuilder->CreateMul(blockNo, ConstantInt::get(blockNo->getType(), iBuilder->getBitBlockWidth()));
     
-    Value * matchResultsPtr = getStreamSetBlockPtr(kernelStuctParam, "matchResults", blockNo);
-
     std::vector<Value * > matchWordVectors;
     for(unsigned d = 0; d <= mEditDistance; d++){
-        Value * matches = iBuilder->CreateBlockAlignedLoad(matchResultsPtr, {iBuilder->getInt32(0), iBuilder->getInt32(d)});
+        Value * ptr = getStream(kernelStuctParam, "matchResults", blockNo, iBuilder->getInt32(d));
+        Value * matches = iBuilder->CreateBlockAlignedLoad(ptr);
         matchWordVectors.push_back(iBuilder->CreateBitCast(matches, scanwordVectorType));
     }
     
@@ -97,6 +97,15 @@ Function * editdScanKernel::generateScanWordRoutine(Module * m) const {
     iBuilder -> CreateRetVoid();
 
     return scanFunc;
+
+}
+
+editdScanKernel::editdScanKernel(IDISA::IDISA_Builder * iBuilder, unsigned dist) :
+KernelBuilder(iBuilder, "scanMatch",
+              {Binding{iBuilder->getStreamSetTy(dist + 1), "matchResults"}},
+              {}, {}, {}, {}),
+mEditDistance(dist),
+mScanwordBitWidth(iBuilder->getSizeTy()->getBitWidth()) {
 
 }
 

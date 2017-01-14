@@ -24,13 +24,6 @@ namespace IDISA { class IDISA_Builder; }
 // masks that can be used to select bits to be moved in each step of the
 // algorithm.
 //
-// Deletion Mask Calculation
-
-std::vector<llvm::Value *> parallel_prefix_deletion_masks(IDISA::IDISA_Builder * iBuilder, unsigned fw, llvm::Value * del_mask);
-
-// Applying Deletion Masks to a Stream
-
-llvm::Value * apply_parallel_prefix_deletion(IDISA::IDISA_Builder * iBuilder, unsigned fw, llvm::Value * del_mask, std::vector<llvm::Value *> mv, llvm::Value * strm);
 
 using namespace parabix;
 
@@ -38,19 +31,16 @@ namespace kernel {
 
 class DeletionKernel : public kernel::KernelBuilder {
 public:
-    DeletionKernel(IDISA::IDISA_Builder * iBuilder, unsigned fw, unsigned streamCount) :
-    KernelBuilder(iBuilder, "del",
-                  {Binding{iBuilder->getStreamSetTy(streamCount), "inputStreamSet"},
-                   Binding{iBuilder->getStreamSetTy(), "delMaskSet"}},
-                  {Binding{iBuilder->getStreamSetTy(streamCount), "outputStreamSet"},
-                   Binding{iBuilder->getStreamSetTy(), "deletionCounts"}},
-                  {}, {}, {}),
-    mDeletionFieldWidth(fw),
-    mStreamCount(streamCount) {}
+
+    DeletionKernel(IDISA::IDISA_Builder * iBuilder, unsigned fw, unsigned streamCount);
     
-private:
+protected:
+
     void generateDoBlockMethod() const override;
+
     void generateFinalBlockMethod() const override;
+
+private:
     unsigned mDeletionFieldWidth;
     unsigned mStreamCount;
 };

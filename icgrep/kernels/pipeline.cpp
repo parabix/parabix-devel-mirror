@@ -13,11 +13,14 @@
 #include <unordered_map>
 
 using namespace kernel;
+using namespace parabix;
+using namespace llvm;
+
+#if 0
 
 using BufferMap = std::unordered_map<StreamSetBuffer *, std::pair<KernelBuilder *, unsigned>>;
 
-
-static void createStreamBufferMap(BufferMap & bufferMap, std::vector<KernelBuilder *> kernels) {
+static void createStreamBufferMap(BufferMap & bufferMap, const std::vector<KernelBuilder *> & kernels) {
     for (auto k: kernels) {
         auto outputSets = k->getStreamSetOutputBuffers();
         for (unsigned i = 0; i < outputSets.size(); i++) {
@@ -56,10 +59,10 @@ static Value * getSegmentBlocks(BufferMap & bufferMap, KernelBuilder * kernel) {
     Value * itemsToDo = iBuilder->CreateSub(produced, processed);
     return iBuilder->CreateUDiv(itemsToDo, iBuilder->getSize(iBuilder->getStride()));
 }
-                                   
 
+#endif
 
-Function * generateSegmentParallelPipelineThreadFunction(std::string name, IDISA::IDISA_Builder * iBuilder, std::vector<KernelBuilder *> kernels, Type * sharedStructType, int id) {
+Function * generateSegmentParallelPipelineThreadFunction(std::string name, IDISA::IDISA_Builder * iBuilder, const std::vector<KernelBuilder *> & kernels, Type * sharedStructType, int id) {
 
     Module * m = iBuilder->getModule();
     Type * const size_ty = iBuilder->getSizeTy();
@@ -175,7 +178,7 @@ Function * generateSegmentParallelPipelineThreadFunction(std::string name, IDISA
 // fashion such that processing of segment S_i by the full pipeline is carried out by thread i mod T.
 
 
-void generateSegmentParallelPipeline(IDISA::IDISA_Builder * iBuilder, std::vector<KernelBuilder *> kernels) {
+void generateSegmentParallelPipeline(IDISA::IDISA_Builder * iBuilder, const std::vector<KernelBuilder *> & kernels) {
     
     unsigned threadNum = codegen::ThreadNum;
 
@@ -230,7 +233,7 @@ void generateSegmentParallelPipeline(IDISA::IDISA_Builder * iBuilder, std::vecto
 
 }
 
-void generatePipelineParallel(IDISA::IDISA_Builder * iBuilder, std::vector<KernelBuilder *> kernels) {
+void generatePipelineParallel(IDISA::IDISA_Builder * iBuilder, const std::vector<KernelBuilder *> & kernels) {
  
     Type * pthreadTy = iBuilder->getSizeTy();
     Type * const voidPtrTy = iBuilder->getVoidPtrTy();
@@ -270,7 +273,7 @@ void generatePipelineParallel(IDISA::IDISA_Builder * iBuilder, std::vector<Kerne
 }
 
 
-void generatePipelineLoop(IDISA::IDISA_Builder * iBuilder, std::vector<KernelBuilder *> kernels) {
+void generatePipelineLoop(IDISA::IDISA_Builder * iBuilder, const std::vector<KernelBuilder *> & kernels) {
     for (auto k : kernels) k->createInstance();
     //BufferMap bufferMap;
     //createStreamBufferMap(bufferMap, kernels);

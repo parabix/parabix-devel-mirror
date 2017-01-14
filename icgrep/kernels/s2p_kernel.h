@@ -5,13 +5,9 @@
 #ifndef S2P_KERNEL_H
 #define S2P_KERNEL_H
 
-#include "streamset.h"
-#include "interface.h"
-#include "kernel.h"
-
-namespace llvm { class Module; }
-
-namespace IDISA { class IDISA_Builder; }
+#include "kernel.h"  // for KernelBuilder
+namespace IDISA { class IDISA_Builder; }  // lines 14-14
+namespace llvm { class Value; }
 
 namespace kernel {
 
@@ -23,7 +19,7 @@ public:
     virtual ~S2PKernel() {}
         
 private:
-    void generateDoBlockLogic(Value * self, Value * blockNo) const override;
+    void generateDoBlockLogic(llvm::Value * self, llvm::Value * blockNo) const override;
     void generateDoBlockMethod() const override;
     void generateFinalBlockMethod() const override;
     

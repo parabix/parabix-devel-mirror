@@ -6,13 +6,14 @@
 
 #include "CBuilder.h"
 #include <llvm/IR/IRBuilder.h>
+#include <llvm/IR/Module.h>
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/Intrinsics.h>
 #include <llvm/IR/Function.h>
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/IR/TypeBuilder.h>
 
-
+using namespace llvm;
 
 // ssize_t write(int fildes, const void *buf, size_t nbyte);
 Value * CBuilder::CreateWriteCall(Value * fildes, Value * buf, Value * nbyte) {
@@ -288,4 +289,11 @@ Value * CBuilder::CreatePThreadJoinCall(Value * thread, Value * value_ptr){
                                                                        getVoidPtrTy()->getPointerTo(), nullptr));
     pthreadJoinFunc->setCallingConv(llvm::CallingConv::C);
     return CreateCall(pthreadJoinFunc, {thread, value_ptr});
+}
+
+CBuilder::CBuilder(llvm::Module * m, unsigned archBitWidth, unsigned CacheAlignment)
+: IRBuilder<>(m->getContext())
+, mMod(m)
+, mCacheLineAlignment(CacheAlignment)
+, mSizeType(getIntNTy(archBitWidth)) {
 }

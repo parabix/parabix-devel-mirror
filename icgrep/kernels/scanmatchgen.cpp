@@ -7,6 +7,7 @@
 #include "scanmatchgen.h"
 #include <llvm/IR/Intrinsics.h>
 #include <IR_Gen/idisa_builder.h>
+#include <llvm/IR/Module.h>
 #include <llvm/Support/raw_os_ostream.h>
 
 using namespace llvm;
@@ -57,9 +58,8 @@ void ScanMatchKernel::generateDoBlockMethod() const {
     
     Value * recordStart = getScalarField(kernelStuctParam, "LineStart");
     Value * recordNum = getScalarField(kernelStuctParam, "LineNum");
-    Value * matchResultsPtr = getStreamSetBlockPtr(kernelStuctParam, "matchResults", blockNo);    
-    Value * matches = iBuilder->CreateBlockAlignedLoad(matchResultsPtr, {iBuilder->getInt32(0), iBuilder->getInt32(0)});
-    Value * linebreaks = iBuilder->CreateBlockAlignedLoad(matchResultsPtr, {iBuilder->getInt32(0), iBuilder->getInt32(1)});
+    Value * matches = iBuilder->CreateBlockAlignedLoad(getStream(kernelStuctParam, "matchResults", blockNo, iBuilder->getInt32(0)));
+    Value * linebreaks = iBuilder->CreateBlockAlignedLoad(getStream(kernelStuctParam, "matchResults", blockNo, iBuilder->getInt32(1)));
     Value * matchWordVector = iBuilder->CreateBitCast(matches, scanwordVectorType);
     Value * breakWordVector = iBuilder->CreateBitCast(linebreaks, scanwordVectorType);
     for(unsigned i = 0; i < fieldCount; ++i){

@@ -4,13 +4,16 @@
  */
 
 #include "interface.h"
+#include <llvm/IR/Value.h>         // for Value
+#include <llvm/IR/CallingConv.h>   // for ::C
+#include <llvm/IR/DerivedTypes.h>  // for FunctionType (ptr only), PointerType
+#include <llvm/IR/Function.h>      // for Function, Function::arg_iterator
 #include <llvm/IR/Module.h>
-#include <llvm/IR/Type.h>
-#include <llvm/IR/Value.h>
-#include <llvm/Support/raw_ostream.h>
+#include <IR_Gen/idisa_builder.h>
+namespace llvm { class Module; }
+namespace llvm { class Type; }
 
 using namespace llvm;
-using namespace parabix;
 
 void KernelInterface::addKernelDeclarations(Module * client) {
     Module * saveModule = iBuilder->getModule();

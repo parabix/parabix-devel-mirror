@@ -2,9 +2,11 @@
  *  Copyright (c) 2016 International Characters.
  *  This software is licensed to the public under the Open Software License 3.0.
  */
-#include <kernels/stdout_kernel.h>
-#include <kernels/kernel.h>
+#include "stdout_kernel.h"
+#include <llvm/IR/Module.h>
 #include <IR_Gen/idisa_builder.h>
+
+using namespace llvm;
 
 namespace kernel {
 
@@ -50,12 +52,8 @@ void StdOutKernel::generateDoSegmentMethod() const {
     Value * itemsToDo = iBuilder->CreateSelect(lessThanFullSegment, itemsAvail, itemsMax);
     
     Value * blockNo = getScalarField(self, blockNoScalar);
-    //iBuilder->CallPrintInt("blockNo", blockNo);
-    Value * basePtr = getStreamSetBlockPtr(self, "codeUnitBuffer", blockNo);
-    //iBuilder->CallPrintInt("basePtr", iBuilder->CreatePtrToInt(basePtr, iBuilder->getInt64Ty()));
     Value * byteOffset = iBuilder->CreateMul(iBuilder->CreateURem(processed, blockItems), itemBytes);
-    Value * bytePtr = iBuilder->CreateGEP(iBuilder->CreateBitCast(basePtr, i8PtrTy), byteOffset);
-
+    Value * bytePtr = getStreamView(i8PtrTy, self, "codeUnitBuffer", blockNo, byteOffset);
     iBuilder->CreateWriteCall(iBuilder->getInt32(1), bytePtr, iBuilder->CreateMul(itemsToDo, itemBytes));
 
     processed = iBuilder->CreateAdd(processed, itemsToDo);
@@ -71,8 +69,7 @@ void StdOutKernel::generateFinalBlockMethod() const {
     auto savePoint = iBuilder->saveIP();
     Module * m = iBuilder->getModule();
     Function * finalBlockFunction = m->getFunction(mKernelName + finalBlock_suffix);
-    Type * i8PtrTy = iBuilder->getInt8PtrTy();
-    
+    Type * i8PtrTy = iBuilder->getInt8PtrTy();    
     iBuilder->SetInsertPoint(BasicBlock::Create(iBuilder->getContext(), "fb_flush", finalBlockFunction, 0));
     Constant * blockItems = iBuilder->getSize(iBuilder->getBitBlockWidth());
     Constant * itemBytes = iBuilder->getSize(mCodeUnitWidth/8);
@@ -82,9 +79,8 @@ void StdOutKernel::generateFinalBlockMethod() const {
     Value * processed = getProcessedItemCount(self, "codeUnitBuffer");
     Value * itemsAvail = iBuilder->CreateSub(producerPos, processed);
     Value * blockNo = getScalarField(self, blockNoScalar);
-    Value * basePtr = getStreamSetBlockPtr(self, "codeUnitBuffer", blockNo);
     Value * byteOffset = iBuilder->CreateMul(iBuilder->CreateURem(processed, blockItems), itemBytes);
-    Value * bytePtr = iBuilder->CreateGEP(iBuilder->CreateBitCast(basePtr, i8PtrTy), byteOffset);
+    Value * bytePtr = getStreamView(i8PtrTy, self, "codeUnitBuffer", blockNo, byteOffset);
     iBuilder->CreateWriteCall(iBuilder->getInt32(1), bytePtr, iBuilder->CreateMul(itemsAvail, itemBytes));
     setProcessedItemCount(self, "codeUnitBuffer", producerPos);
     mStreamSetInputBuffers[0]->setConsumerPos(streamStructPtr, producerPos);

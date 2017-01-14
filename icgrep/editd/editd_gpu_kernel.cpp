@@ -5,12 +5,13 @@
 #include "editd_gpu_kernel.h"
 #include <kernels/kernel.h>
 #include <IR_Gen/idisa_builder.h>
+#include <llvm/IR/Module.h>
 #include <llvm/Support/raw_ostream.h>
 #include <iostream>
 
-namespace kernel {
 using namespace llvm;
 
+namespace kernel {
 
 void bitblock_advance_ci_co(IDISA::IDISA_Builder * iBuilder, Value * val, unsigned shift, Value * stideCarryArr, unsigned carryIdx, std::vector<std::vector<Value *>> & adv, std::vector<std::vector<int>> & calculated, int i, int j){   
     if(!calculated[i][j]){
@@ -65,26 +66,22 @@ void editdGPUKernel::generateDoBlockMethod() const {
     Value * pattBuf = getScalarField(kernelStuctParam, "pattStream");
     Value * stideCarryArr = getScalarField(kernelStuctParam, "srideCarry");
     Value * blockNo = getScalarField(kernelStuctParam, blockNoScalar);
-    Value * ccStreamPtr = getStreamSetBlockPtr(kernelStuctParam, "CCStream", blockNo);
-    Value * resultStreamPtr = getStreamSetBlockPtr(kernelStuctParam, "ResultStream", blockNo);
     Value * pattLen = ConstantInt::get(int32ty, mPatternLen+1);
     Value * pattPos = ConstantInt::get(int32ty, 0);
    
     unsigned carryIdx = 0;
 
-    std::vector<std::vector<Value *>> e(mPatternLen, std::vector<Value *>(mEditDistance+1));
-    std::vector<std::vector<Value *>> adv(mPatternLen, std::vector<Value *>(mEditDistance+1));
-    std::vector<std::vector<int>> calculated(mPatternLen, std::vector<int>(mEditDistance+1));
-    for(unsigned i=0; i<mPatternLen; i++)
-        for(unsigned j=0; j<=mEditDistance; j++)
-            calculated[i][j] = 0;
+    std::vector<std::vector<Value *>> e(mPatternLen, std::vector<Value *>(mEditDistance + 1));
+    std::vector<std::vector<Value *>> adv(mPatternLen, std::vector<Value *>(mEditDistance + 1));
+    std::vector<std::vector<int>> calculated(mPatternLen, std::vector<int>(mEditDistance + 1, 0));
+
     Function * bidFunc = cast<Function>(m->getOrInsertFunction("llvm.nvvm.read.ptx.sreg.ctaid.x", int32ty, nullptr));
     Value * bid = iBuilder->CreateCall(bidFunc);
     Value * pattStartPtr = iBuilder->CreateGEP(pattBuf, iBuilder->CreateMul(pattLen, bid));
     Value * pattPtr = iBuilder->CreateGEP(pattStartPtr, pattPos);
     Value * pattCh = iBuilder->CreateLoad(pattPtr);
     Value * pattIdx = iBuilder->CreateAnd(iBuilder->CreateLShr(pattCh, 1), ConstantInt::get(int8ty, 3));
-    Value * pattStreamPtr = iBuilder->CreateGEP(ccStreamPtr, {iBuilder->getInt32(0), iBuilder->CreateZExt(pattIdx, int32ty)});
+    Value * pattStreamPtr = getStream(kernelStuctParam, "CCStream", blockNo, iBuilder->CreateZExt(pattIdx, int32ty));
     Value * pattStream = iBuilder->CreateLoad(pattStreamPtr);
     pattPos = iBuilder->CreateAdd(pattPos, ConstantInt::get(int32ty, 1));
 
@@ -97,7 +94,7 @@ void editdGPUKernel::generateDoBlockMethod() const {
         pattPtr = iBuilder->CreateGEP(pattStartPtr, pattPos);
         pattCh = iBuilder->CreateLoad(pattPtr);
         pattIdx = iBuilder->CreateAnd(iBuilder->CreateLShr(pattCh, 1), ConstantInt::get(int8ty, 3));
-        pattStreamPtr = iBuilder->CreateGEP(ccStreamPtr, {iBuilder->getInt32(0), iBuilder->CreateZExt(pattIdx, int32ty)});
+        pattStreamPtr = getStream(kernelStuctParam, "CCStream", blockNo, iBuilder->CreateZExt(pattIdx, int32ty));
         pattStream = iBuilder->CreateLoad(pattStreamPtr);
 
         bitblock_advance_ci_co(iBuilder, e[i-1][0], 1, stideCarryArr, carryIdx++, adv, calculated, i-1, 0);
@@ -115,11 +112,11 @@ void editdGPUKernel::generateDoBlockMethod() const {
         pattPos = iBuilder->CreateAdd(pattPos, ConstantInt::get(int32ty, 1));
     }
 
-    Value * ptr = iBuilder->CreateGEP(resultStreamPtr, {iBuilder->getInt32(0), iBuilder->getInt32(0)});
+    Value * ptr = getStream(kernelStuctParam, "ResultStream", blockNo, iBuilder->getInt32(0));
     iBuilder->CreateStore(e[mPatternLen-1][0], ptr);
     for(unsigned j = 1; j<= mEditDistance; j++){
-        ptr = iBuilder->CreateGEP(resultStreamPtr, {iBuilder->getInt32(0), iBuilder->getInt32(j)});
-        iBuilder->CreateStore(iBuilder->CreateAnd(e[mPatternLen-1][j], iBuilder->CreateNot(e[mPatternLen-1][j-1])), ptr);
+        ptr = getStream(kernelStuctParam, "ResultStream", blockNo, iBuilder->getInt32(j));
+        iBuilder->CreateStore(iBuilder->CreateAnd(e[mPatternLen - 1][j], iBuilder->CreateNot(e[mPatternLen - 1][j - 1])), ptr);
     }
 
     Value * produced = getProducedItemCount(kernelStuctParam, "ResultStream");
@@ -128,6 +125,19 @@ void editdGPUKernel::generateDoBlockMethod() const {
        
     iBuilder->CreateRetVoid();
     iBuilder->restoreIP(savePoint);
+}
+
+editdGPUKernel::editdGPUKernel(IDISA::IDISA_Builder * b, unsigned dist, unsigned pattLen) :
+KernelBuilder(b, "editd_gpu",
+              {Binding{b->getStreamSetTy(4), "CCStream"}},
+              {Binding{b->getStreamSetTy(dist + 1), "ResultStream"}},
+              {Binding{PointerType::get(b->getInt8Ty(), 1), "pattStream"},
+              Binding{PointerType::get(ArrayType::get(b->getBitBlockType(), pattLen * (dist + 1) * 4), 0), "srideCarry"}},
+              {},
+              {Binding{b->getBitBlockType(), "EOFmask"}}),
+mEditDistance(dist),
+mPatternLen(pattLen) {
+
 }
 
 }

@@ -5,47 +5,39 @@
 #ifndef CBUILDER_H
 #define CBUILDER_H
 
-#include <llvm/IR/Module.h>
-#include <llvm/IR/Constant.h>
-#include <llvm/IR/Type.h>
-#include <llvm/IR/Value.h>
+#include <string>
 #include <llvm/IR/IRBuilder.h>
-#include <llvm/Support/Host.h>
-#include <llvm/ADT/Triple.h>
-#include <IR_Gen/types/streamtype.h>
-#include <boost/container/flat_map.hpp>
+#include <llvm/IR/Constants.h>
+namespace llvm { class Function; }
+namespace llvm { class IntegerType; }
+namespace llvm { class Module; }
+namespace llvm { class PointerType; }
+namespace llvm { class Type; }
+namespace llvm { class Value; }
 
-using namespace llvm;
-
-
-class CBuilder : public IRBuilder<> {
+class CBuilder : public llvm::IRBuilder<> {
     
 public:
     
-    CBuilder(Module * m, unsigned archBitWidth, unsigned CacheAlignment=64)
-    : IRBuilder<>(m->getContext())
-    , mMod(m)
-    , mCacheLineAlignment(CacheAlignment)
-    , mSizeType(getIntNTy(archBitWidth)) {
-    }
+    CBuilder(llvm::Module * m, unsigned archBitWidth, unsigned CacheAlignment=64);
     
     virtual ~CBuilder() {}
 
-    Module * getModule() const {
+    llvm::Module * getModule() const {
         return mMod;
     }
     
-    void setModule(Module * m)  {
+    void setModule(llvm::Module * m)  {
         mMod = m;
     }
     
-    Function * GetPrintf();
-    Value * CreateMalloc(Type * type, Value * size);
-    Value * CreateAlignedMalloc(Type * type, Value * size, const unsigned alignment);
-    void CreateFree(Value * const ptr);
-    void CreateAlignedFree(Value * const ptr, const bool ptrMayBeNull = false);
-    Value * CreateRealloc(Value * ptr, Value * size);
-    void CreateMemZero(Value * ptr, Value * size, const unsigned alignment = 1);
+    llvm::Function * GetPrintf();
+    llvm::Value * CreateMalloc(llvm::Type * type, llvm::Value * size);
+    llvm::Value * CreateAlignedMalloc(llvm::Type * type, llvm::Value * size, const unsigned alignment);
+    void CreateFree(llvm::Value * const ptr);
+    void CreateAlignedFree(llvm::Value * const ptr, const bool ptrMayBeNull = false);
+    llvm::Value * CreateRealloc(llvm::Value * ptr, llvm::Value * size);
+    void CreateMemZero(llvm::Value * ptr, llvm::Value * size, const unsigned alignment = 1);
 
     inline llvm::AllocaInst * CreateCacheAlignedAlloca(llvm::Type * Ty, llvm::Value * ArraySize = nullptr) {
         llvm::AllocaInst * instr = CreateAlloca(Ty, ArraySize);
@@ -56,41 +48,42 @@ public:
     // Create calls to unistd.h functions.
     //
     // ssize_t write(int fildes, const void *buf, size_t nbyte);
-    Value * CreateWriteCall(Value * fildes, Value * buf, Value * nbyte);
+    llvm::Value * CreateWriteCall(llvm::Value * fildes, llvm::Value * buf, llvm::Value * nbyte);
     
     // Create calls to Posix thread (pthread.h) functions.
     //
     //  int pthread_create(pthread_t *thread, const pthread_attr_t *attr,
     //                    void *(*start_routine)(void*), void *arg);
-    Value * CreatePThreadCreateCall(Value * thread, Value * attr, Function * start_routine, Value * arg);
+    llvm::Value * CreatePThreadCreateCall(llvm::Value * thread, llvm::Value * attr, llvm::Function * start_routine, llvm::Value * arg);
     //  void pthread_exit(void *value_ptr);
-    Value * CreatePThreadExitCall(Value * value_ptr);
+    llvm::Value * CreatePThreadExitCall(llvm::Value * value_ptr);
     //  int pthread_join(pthread_t thread, void **value_ptr);
-    Value * CreatePThreadJoinCall(Value * thread, Value * value_ptr);
+    llvm::Value * CreatePThreadJoinCall(llvm::Value * thread, llvm::Value * value_ptr);
     
-    void CallPrintInt(const std::string & name, Value * const value);
+    void CallPrintInt(const std::string & name, llvm::Value * const value);
     
     inline llvm::IntegerType * getSizeTy() const {
         return mSizeType;
     }
     
     inline llvm::ConstantInt * getSize(const size_t value) const {
-        return ConstantInt::get(getSizeTy(), value);
+        return llvm::ConstantInt::get(getSizeTy(), value);
     }
     
-    PointerType * getVoidPtrTy() const;
+    llvm::PointerType * getVoidPtrTy() const;
     
     inline unsigned getCacheAlignment() const {
         return mCacheLineAlignment;
     }
     
-    virtual llvm::LoadInst* CreateAtomicLoadAcquire(Value * ptr);
-    virtual llvm::StoreInst *  CreateAtomicStoreRelease(Value * val, Value * ptr);
+    virtual llvm::LoadInst* CreateAtomicLoadAcquire(llvm::Value * ptr);
+
+    virtual llvm::StoreInst *  CreateAtomicStoreRelease(llvm::Value * val, llvm::Value * ptr);
     
 protected:
-    Module *            mMod;
+    llvm::Module *      mMod;
     unsigned            mCacheLineAlignment;
-    IntegerType *       mSizeType;
+    llvm::IntegerType * mSizeType;
 };
 
 #endif

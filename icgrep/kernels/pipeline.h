@@ -5,14 +5,14 @@
 #ifndef PIPELINE_H
 #define PIPELINE_H
 
-#include <IR_Gen/idisa_builder.h>
-#include <kernels/interface.h>
-#include <kernels/kernel.h>
+#include <vector>
+namespace IDISA { class IDISA_Builder; }
+namespace kernel { class KernelBuilder; }
 
-void generateSegmentParallelPipeline(IDISA::IDISA_Builder * iBuilder, std::vector<kernel::KernelBuilder *> kernels);
+void generateSegmentParallelPipeline(IDISA::IDISA_Builder * iBuilder, const std::vector<kernel::KernelBuilder *> & kernels);
 
-void generatePipelineLoop(IDISA::IDISA_Builder * iBuilder, std::vector<kernel::KernelBuilder *> kernels);
+void generatePipelineLoop(IDISA::IDISA_Builder * iBuilder, const std::vector<kernel::KernelBuilder *> & kernels);
 
-void generatePipelineParallel(IDISA::IDISA_Builder * iBuilder, std::vector<kernel::KernelBuilder *> kernels);
+void generatePipelineParallel(IDISA::IDISA_Builder * iBuilder, const std::vector<kernel::KernelBuilder *> & kernels);
 
 #endif // PIPELINE_H

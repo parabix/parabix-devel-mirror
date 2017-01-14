@@ -37,6 +37,10 @@
 #include <boost/interprocess/anonymous_shared_memory.hpp>
 #include <boost/interprocess/mapped_region.hpp>
 #include <fcntl.h>
+
+
+using namespace llvm;
+
 static cl::OptionCategory base64Options("base64 Options",
                                             "Transcoding control options.");
 

@@ -16,9 +16,9 @@ namespace IDISA { class IDISA_Builder; }
 namespace kernel {
 
    
-class p2sKernel : public KernelBuilder {
+class P2SKernel : public KernelBuilder {
 public:
-    p2sKernel(IDISA::IDISA_Builder * iBuilder) :
+    P2SKernel(IDISA::IDISA_Builder * iBuilder) :
     KernelBuilder(iBuilder, "p2s",
                   {Binding{iBuilder->getStreamSetTy(8, 1), "basisBits"}},
                   {Binding{iBuilder->getStreamSetTy(1, 8), "byteStream"}},
@@ -29,9 +29,9 @@ private:
     
 };
 
-class p2sKernel_withCompressedOutput : public KernelBuilder {
+class P2SKernelWithCompressedOutput : public KernelBuilder {
 public:
-    p2sKernel_withCompressedOutput(IDISA::IDISA_Builder * iBuilder) :
+    P2SKernelWithCompressedOutput(IDISA::IDISA_Builder * iBuilder) :
     KernelBuilder(iBuilder, "p2s_compress",
                   {Binding{iBuilder->getStreamSetTy(8, 1), "basisBits"}, Binding{iBuilder->getStreamSetTy(1, 1), "deletionCounts"}},
                   {Binding{iBuilder->getStreamSetTy(1, 8), "byteStream"}},
@@ -42,9 +42,9 @@ private:
 };
     
 
-class p2s_16Kernel : public KernelBuilder {
+class P2S16Kernel : public KernelBuilder {
 public:
-    p2s_16Kernel(IDISA::IDISA_Builder * iBuilder) :
+    P2S16Kernel(IDISA::IDISA_Builder * iBuilder) :
     KernelBuilder(iBuilder, "p2s_16",
                   {Binding{iBuilder->getStreamSetTy(16, 1), "basisBits"}},
                   {Binding{iBuilder->getStreamSetTy(1, 16), "i16Stream"}},
@@ -56,9 +56,9 @@ private:
 };
 
     
-class p2s_16Kernel_withCompressedOutput : public KernelBuilder {
+class P2S16KernelWithCompressedOutput : public KernelBuilder {
 public:
-    p2s_16Kernel_withCompressedOutput(IDISA::IDISA_Builder * iBuilder) :
+    P2S16KernelWithCompressedOutput(IDISA::IDISA_Builder * iBuilder) :
     KernelBuilder(iBuilder, "p2s_16_compress",
                   {Binding{iBuilder->getStreamSetTy(16, 1), "basisBits"}, Binding{iBuilder->getStreamSetTy(1, 1), "deletionCounts"}},
                   {Binding{iBuilder->getStreamSetTy(1, 16), "i16Stream"}},

@@ -10,7 +10,7 @@
 #include <llvm/IR/Intrinsics.h>
 #include <llvm/IR/Function.h>
 #include <llvm/IR/InlineAsm.h>
-#include <sstream>
+#include <llvm/IR/Module.h>
 
 namespace IDISA {
 
@@ -255,12 +255,11 @@ void IDISA_NVPTX20_Builder::CreateBallotFunc(){
 
     Value * conv = CreateZExt(input, int32ty);
 
-    std::ostringstream AsmStream;
-    AsmStream << "{.reg .pred %p1; ";
-    AsmStream << "setp.ne.u32 %p1, $1, 0; ";
-    AsmStream << "vote.ballot.b32  $0, %p1;}";
+    const char * AsmStream = "{.reg .pred %p1;"
+                             "setp.ne.u32 %p1, $1, 0;"
+                             "vote.ballot.b32  $0, %p1;}";
     FunctionType * AsmFnTy = FunctionType::get(int32ty, int32ty, false);
-    llvm::InlineAsm *IA = llvm::InlineAsm::get(AsmFnTy, AsmStream.str(), "=r,r", true, false);
+    llvm::InlineAsm *IA = llvm::InlineAsm::get(AsmFnTy, AsmStream, "=r,r", true, false);
     llvm::CallInst * result = CreateCall(IA, conv);
     result->addAttribute(llvm::AttributeSet::FunctionIndex, llvm::Attribute::NoUnwind);
 

@@ -18,16 +18,7 @@ namespace kernel {
 class editdGPUKernel : public KernelBuilder {
 public:
     
-    editdGPUKernel(IDISA::IDISA_Builder * b, unsigned dist, unsigned pattLen) :
-    KernelBuilder(b, "editd_gpu",
-                  {Binding{b->getStreamSetTy(4), "CCStream"}},
-                  {Binding{b->getStreamSetTy(dist + 1), "ResultStream"}},
-                  {Binding{PointerType::get(b->getInt8Ty(), 1), "pattStream"},
-                  Binding{PointerType::get(ArrayType::get(b->getBitBlockType(), pattLen * (dist + 1) * 4), 0), "srideCarry"}},
-                  {},
-                  {Binding{b->getBitBlockType(), "EOFmask"}}),
-    mEditDistance(dist),
-    mPatternLen(pattLen){}
+    editdGPUKernel(IDISA::IDISA_Builder * b, unsigned dist, unsigned pattLen);
     
     
 private:

@@ -2,8 +2,17 @@
  *  Copyright (c) 2017 International Characters.
  *  This software is licensed to the public under the Open Software License 3.0.
  */
-#include <kernels/mmap_kernel.h>
+#include "mmap_kernel.h"
+#include <llvm/IR/Function.h>  // for Function, Function::arg_iterator
+#include <llvm/IR/Module.h>
 #include <IR_Gen/idisa_builder.h>
+#include <kernels/streamset.h>
+namespace llvm { class BasicBlock; }
+namespace llvm { class Constant; }
+namespace llvm { class Module; }
+namespace llvm { class Value; }
+
+using namespace llvm;
 
 namespace kernel {
             
@@ -75,5 +84,14 @@ void MMapSourceKernel::generateDoBlockMethod() const {
     iBuilder->CreateRetVoid();
     iBuilder->restoreIP(savePoint);
 }
-    
+
+MMapSourceKernel::MMapSourceKernel(IDISA::IDISA_Builder * iBuilder, unsigned blocksPerSegment, unsigned codeUnitWidth) :
+KernelBuilder(iBuilder, "mmap_source",
+              {}, {Binding{iBuilder->getStreamSetTy(1, codeUnitWidth), "sourceBuffer"}},
+              {Binding{iBuilder->getSizeTy(), "fileSize"}}, {}, {})
+, mSegmentBlocks(blocksPerSegment)
+, mCodeUnitWidth(codeUnitWidth) {
+
+}
+
 }

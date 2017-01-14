@@ -312,7 +312,7 @@ Function * u8u16Pipeline(Module * mod, IDISA::IDISA_Builder * iBuilder) {
     DeletionKernel delK(iBuilder, iBuilder->getBitBlockWidth()/16, 16);
     delK.generateKernel({&U8u16Bits, &DelMask}, {&U16Bits, &DeletionCounts});
 
-    p2s_16Kernel_withCompressedOutput p2sk(iBuilder);
+    P2S16KernelWithCompressedOutput p2sk(iBuilder);
 
     StdOutKernel stdoutK(iBuilder, 16);
 

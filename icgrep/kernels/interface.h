@@ -6,11 +6,13 @@
 #ifndef KERNEL_INTERFACE_H
 #define KERNEL_INTERFACE_H
 
-#include <string>
-#include <vector>
-#include <llvm/IR/Type.h>
-#include <IR_Gen/idisa_builder.h>
-#include <kernels/streamset.h>
+#include <string>  // for string
+#include <vector>  // for vector
+namespace IDISA { class IDISA_Builder; }
+namespace llvm { class Module; }
+namespace llvm { class StructType; }
+namespace llvm { class Type; }
+namespace llvm { class Value; }
 
 struct Binding {
     llvm::Type * type;
@@ -47,9 +49,9 @@ public:
     
     
     // Add ExternalLinkage method declarations for the kernel to a given client module.
-    void addKernelDeclarations(Module * client);
+    void addKernelDeclarations(llvm::Module * client);
     virtual void createInstance() = 0;
-    void setInitialArguments(std::vector<Value *> initialParameters);
+    void setInitialArguments(std::vector<llvm::Value *> args);
     llvm::Value * getInstance() const { return mKernelInstance; }
 
     llvm::Value * createDoSegmentCall(llvm::Value * self, llvm::Value * blkCount) const;
@@ -99,7 +101,7 @@ protected:
     
     IDISA::IDISA_Builder * const iBuilder;
     std::string mKernelName;
-    std::vector<Value *> mInitialArguments;
+    std::vector<llvm::Value *> mInitialArguments;
     std::vector<Binding> mStreamSetInputs;
     std::vector<Binding> mStreamSetOutputs;
     std::vector<Binding> mScalarInputs;

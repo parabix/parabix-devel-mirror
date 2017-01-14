@@ -9,8 +9,11 @@
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/Intrinsics.h>
 #include <llvm/IR/Function.h>
+#include <llvm/IR/Module.h>
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/IR/TypeBuilder.h>
+
+using namespace llvm;
 
 namespace IDISA {
 
@@ -377,7 +380,7 @@ Value * IDISA_Builder::simd_not(Value * a) {
     return simd_xor(a, Constant::getAllOnesValue(a->getType()));
 }
 
-Type * IDISA_Builder::getStreamTy(const unsigned FieldWidth) {
+StreamType * IDISA_Builder::getStreamTy(const unsigned FieldWidth) {
     const auto f = mStreamTypes.find(FieldWidth);
     if (LLVM_LIKELY(f != mStreamTypes.end())) {
         return f->second;

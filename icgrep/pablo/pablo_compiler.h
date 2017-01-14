@@ -7,53 +7,39 @@
 #ifndef PABLO_COMPILER_H
 #define PABLO_COMPILER_H
 
-//Pablo Expressions
-#include <string>
-#include <vector>
 #include <unordered_map>
-#include <pablo/pablo_kernel.h>
-#include <llvm/ADT/Twine.h>
 #include <llvm/IR/IRBuilder.h>
 #include <IR_Gen/idisa_builder.h>
 #include <kernels/kernel.h>
 #include <boost/container/flat_set.hpp>
 
 namespace llvm {
-    class Value;
-    class Module;
-    class ExecutionEngine;
-    class VectorType;
-    class PointerType;
-    class Constant;
-    class FunctionType;
-    class Function;
-    class BasicBlock;
+class Value;
+class Function;
 }
 
 namespace pablo {
 
 class PabloAST;
 class PabloBlock;
+class PabloKernel;
 class String;
-class Var;
 class Statement;
-class StatementList;
 class If;
 class While;
 class CarryManager;
-class Extract;
 
 class PabloCompiler {
     friend class CarryManager;
 
     using IntSet = boost::container::flat_set<unsigned>;
-    using MarkerMap = std::unordered_map<const PabloAST *, Value *>;
+    using MarkerMap = std::unordered_map<const PabloAST *, llvm::Value *>;
 
 public:
     PabloCompiler(PabloKernel * kernel);
     ~PabloCompiler();
     void initializeKernelData();
-    void compile(Value * const self, Function * doBlockFunction);
+    void compile(llvm::Value * const self, llvm::Function * doBlockFunction);
 
 private:
 
@@ -65,15 +51,15 @@ private:
     void compileIf(const If * ifStmt);
     void compileWhile(const While * whileStmt);
 
-    Value * compileExpression(const PabloAST * expr, const bool ensureLoaded = true) const;
+    llvm::Value * compileExpression(const PabloAST * expr, const bool ensureLoaded = true) const;
 
 private:
 
     IDISA::IDISA_Builder *  iBuilder;
     CarryManager *          mCarryManager;
     PabloKernel *           mKernel;
-    Value *                 mSelf;
-    Function *              mFunction;
+    llvm::Value *           mSelf;
+    llvm::Function *        mFunction;
     MarkerMap               mMarkerMap;
     IntSet                  mInputStreamOffset;
 

@@ -7,6 +7,7 @@
 #include <re/re_cc.h>
 #include <cc/cc_compiler.h>
 #include <pablo/builder.hpp>
+#include <llvm/IR/Module.h>
 
 using namespace cc;
 using namespace kernel;
@@ -24,17 +25,14 @@ void DirectCharacterClassKernelBuilder::generateDoBlockMethod() const {
     Value * self = getParameter(doBlockFunction, "self");
     Value * blockNo = getScalarField(self, blockNoScalar);
     
-    Value * codeUnitStreamBlock_ptr = getStreamSetBlockPtr(self, "codeUnitStream", blockNo);
-    Value * ccStreamBlock_ptr = getStreamSetBlockPtr(self, "ccStream", blockNo);
-
     unsigned packCount = 8 * mCodeUnitSize;  
     unsigned codeUnitWidth = 8 * mCodeUnitSize;
     Value * codeUnitPack[packCount];
     for (unsigned i = 0; i < packCount; i++) {
-        codeUnitPack[i] = iBuilder->CreateBlockAlignedLoad(codeUnitStreamBlock_ptr, {iBuilder->getInt32(0), iBuilder->getInt32(0), iBuilder->getInt32(i)});
+        Value * ptr = getStream(self, "codeUnitStream", blockNo, iBuilder->getInt32(0), iBuilder->getInt32(i));
+        codeUnitPack[i] = iBuilder->CreateBlockAlignedLoad(ptr);
     }
 
-    std::vector<Value *> ccStreams;
     for (unsigned j = 0; j < mCharClasses.size();  j++) {
         Value * theCCstream = iBuilder->allZeroes();
         for (const auto & interval : *mCharClasses[j]) {
@@ -67,7 +65,8 @@ void DirectCharacterClassKernelBuilder::generateDoBlockMethod() const {
 
             theCCstream = iBuilder->simd_or(theCCstream, pack);
         }
-        iBuilder->CreateBlockAlignedStore(theCCstream, ccStreamBlock_ptr, {iBuilder->getInt32(0), iBuilder->getInt32(j)});
+        Value * ptr = getStream(self, "ccStream", blockNo, iBuilder->getInt32(j));
+        iBuilder->CreateBlockAlignedStore(theCCstream, ptr);
     }
  
     iBuilder->CreateRetVoid();

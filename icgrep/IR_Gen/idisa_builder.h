@@ -6,18 +6,15 @@
  *  This software is licensed to the public under the Open Software License 3.0.
  *  icgrep is a trademark of International Characters.
  */
-#include <llvm/IR/Module.h>
-#include <llvm/IR/Constant.h>
-#include <llvm/IR/Type.h>
-#include <llvm/IR/Value.h>
-#include <llvm/IR/IRBuilder.h>
-#include <llvm/Support/Host.h>
-#include <llvm/ADT/Triple.h>
-#include <IR_Gen/CBuilder.h>
+#include "CBuilder.h"
+#include <llvm/IR/DerivedTypes.h>
 #include <IR_Gen/types/streamtype.h>
 #include <boost/container/flat_map.hpp>
-
-using namespace llvm;
+namespace llvm { class Constant; }
+namespace llvm { class LoadInst; }
+namespace llvm { class Module; }
+namespace llvm { class Type; }
+namespace llvm { class Value; }
 
 namespace IDISA {
 
@@ -27,13 +24,13 @@ class IDISA_Builder : public CBuilder {
 
 public:
 
-    IDISA_Builder(Module * m, unsigned archBitWidth, unsigned bitBlockWidth, unsigned stride, unsigned CacheAlignment=64);
+    IDISA_Builder(llvm::Module * m, unsigned archBitWidth, unsigned bitBlockWidth, unsigned stride, unsigned CacheAlignment=64);
 
     virtual ~IDISA_Builder();
     
     std::string getBitBlockTypeName() const;  // A short string such as v4i64 or i256.
 
-    Value * bitCast(Value * a) {
+    llvm::Value * bitCast(llvm::Value * a) {
         return (a->getType() == mBitBlockType) ? a : CreateBitCast(a, mBitBlockType);
     }
 
@@ -45,127 +42,127 @@ public:
         return mStride;
     }
 
-    Constant * allZeroes() const {
+    llvm::Constant * allZeroes() const {
         return mZeroInitializer;
     }
 
-    Constant * allOnes() const {
+    llvm::Constant * allOnes() const {
         return mOneInitializer;
     }
     
 
-    LoadInst * CreateBlockAlignedLoad(Value * const ptr);
-    LoadInst * CreateBlockAlignedLoad(Value * const ptr, Value * const index);
-    LoadInst * CreateBlockAlignedLoad(Value * const ptr, std::initializer_list<Value *> indices);
+    llvm::LoadInst * CreateBlockAlignedLoad(llvm::Value * const ptr);
+    llvm::LoadInst * CreateBlockAlignedLoad(llvm::Value * const ptr, llvm::Value * const index);
+    llvm::LoadInst * CreateBlockAlignedLoad(llvm::Value * const ptr, std::initializer_list<llvm::Value *> indices);
 
-    void CreateBlockAlignedStore(Value * const value, Value * const ptr);
-    void CreateBlockAlignedStore(Value * const value, Value * const ptr, Value * const index);
-    void CreateBlockAlignedStore(Value * const value, Value * const ptr, std::initializer_list<Value *> indices);
+    void CreateBlockAlignedStore(llvm::Value * const value, llvm::Value * const ptr);
+    void CreateBlockAlignedStore(llvm::Value * const value, llvm::Value * const ptr, llvm::Value * const index);
+    void CreateBlockAlignedStore(llvm::Value * const value, llvm::Value * const ptr, std::initializer_list<llvm::Value *> indices);
 
-    VectorType * fwVectorType(unsigned fw);
+    llvm::VectorType * fwVectorType(unsigned fw);
 
-    Constant * simd_himask(unsigned fw);
-    Constant * simd_lomask(unsigned fw);
+    llvm::Constant * simd_himask(unsigned fw);
+    llvm::Constant * simd_lomask(unsigned fw);
     
-    virtual Value * simd_fill(unsigned fw, Value * a);
+    virtual llvm::Value * simd_fill(unsigned fw, llvm::Value * a);
 
-    virtual Value * simd_add(unsigned fw, Value * a, Value * b);
-    virtual Value * simd_sub(unsigned fw, Value * a, Value * b);
-    virtual Value * simd_mult(unsigned fw, Value * a, Value * b);
-    virtual Value * simd_eq(unsigned fw, Value * a, Value * b);
-    virtual Value * simd_gt(unsigned fw, Value * a, Value * b);
-    virtual Value * simd_ugt(unsigned fw, Value * a, Value * b);
-    virtual Value * simd_lt(unsigned fw, Value * a, Value * b);
-    virtual Value * simd_ult(unsigned fw, Value * a, Value * b);
-    virtual Value * simd_max(unsigned fw, Value * a, Value * b);
-    virtual Value * simd_umax(unsigned fw, Value * a, Value * b);
-    virtual Value * simd_min(unsigned fw, Value * a, Value * b);
-    virtual Value * simd_umin(unsigned fw, Value * a, Value * b);
-    virtual Value * simd_if(unsigned fw, Value * cond, Value * a, Value * b);
+    virtual llvm::Value * simd_add(unsigned fw, llvm::Value * a, llvm::Value * b);
+    virtual llvm::Value * simd_sub(unsigned fw, llvm::Value * a, llvm::Value * b);
+    virtual llvm::Value * simd_mult(unsigned fw, llvm::Value * a, llvm::Value * b);
+    virtual llvm::Value * simd_eq(unsigned fw, llvm::Value * a, llvm::Value * b);
+    virtual llvm::Value * simd_gt(unsigned fw, llvm::Value * a, llvm::Value * b);
+    virtual llvm::Value * simd_ugt(unsigned fw, llvm::Value * a, llvm::Value * b);
+    virtual llvm::Value * simd_lt(unsigned fw, llvm::Value * a, llvm::Value * b);
+    virtual llvm::Value * simd_ult(unsigned fw, llvm::Value * a, llvm::Value * b);
+    virtual llvm::Value * simd_max(unsigned fw, llvm::Value * a, llvm::Value * b);
+    virtual llvm::Value * simd_umax(unsigned fw, llvm::Value * a, llvm::Value * b);
+    virtual llvm::Value * simd_min(unsigned fw, llvm::Value * a, llvm::Value * b);
+    virtual llvm::Value * simd_umin(unsigned fw, llvm::Value * a, llvm::Value * b);
+    virtual llvm::Value * simd_if(unsigned fw, llvm::Value * cond, llvm::Value * a, llvm::Value * b);
     
-    virtual Value * simd_slli(unsigned fw, Value * a, unsigned shift);
-    virtual Value * simd_srli(unsigned fw, Value * a, unsigned shift);
-    virtual Value * simd_srai(unsigned fw, Value * a, unsigned shift);
+    virtual llvm::Value * simd_slli(unsigned fw, llvm::Value * a, unsigned shift);
+    virtual llvm::Value * simd_srli(unsigned fw, llvm::Value * a, unsigned shift);
+    virtual llvm::Value * simd_srai(unsigned fw, llvm::Value * a, unsigned shift);
     
-    virtual Value * simd_cttz(unsigned fw, Value * a);
-    virtual Value * simd_popcount(unsigned fw, Value * a);
+    virtual llvm::Value * simd_cttz(unsigned fw, llvm::Value * a);
+    virtual llvm::Value * simd_popcount(unsigned fw, llvm::Value * a);
     
-    virtual Value * esimd_mergeh(unsigned fw, Value * a, Value * b);
-    virtual Value * esimd_mergel(unsigned fw, Value * a, Value * b);
-    virtual Value * esimd_bitspread(unsigned fw, Value * bitmask);
+    virtual llvm::Value * esimd_mergeh(unsigned fw, llvm::Value * a, llvm::Value * b);
+    virtual llvm::Value * esimd_mergel(unsigned fw, llvm::Value * a, llvm::Value * b);
+    virtual llvm::Value * esimd_bitspread(unsigned fw, llvm::Value * bitmask);
     
-    virtual Value * hsimd_packh(unsigned fw, Value * a, Value * b);
-    virtual Value * hsimd_packl(unsigned fw, Value * a, Value * b);
-    virtual Value * hsimd_packh_in_lanes(unsigned lanes, unsigned fw, Value * a, Value * b);
-    virtual Value * hsimd_packl_in_lanes(unsigned lanes, unsigned fw, Value * a, Value * b);
+    virtual llvm::Value * hsimd_packh(unsigned fw, llvm::Value * a, llvm::Value * b);
+    virtual llvm::Value * hsimd_packl(unsigned fw, llvm::Value * a, llvm::Value * b);
+    virtual llvm::Value * hsimd_packh_in_lanes(unsigned lanes, unsigned fw, llvm::Value * a, llvm::Value * b);
+    virtual llvm::Value * hsimd_packl_in_lanes(unsigned lanes, unsigned fw, llvm::Value * a, llvm::Value * b);
 
-    virtual Value * hsimd_signmask(unsigned fw, Value * a);
+    virtual llvm::Value * hsimd_signmask(unsigned fw, llvm::Value * a);
     
-    virtual Value * mvmd_extract(unsigned fw, Value * a, unsigned fieldIndex);
-    virtual Value * mvmd_insert(unsigned fw, Value * blk, Value * elt, unsigned fieldIndex);
-    virtual Value * mvmd_slli(unsigned fw, Value * a, unsigned shift);
-    virtual Value * mvmd_srli(unsigned fw, Value * a, unsigned shift);
-    virtual Value * mvmd_dslli(unsigned fw, Value * a, Value * b, unsigned shift);
+    virtual llvm::Value * mvmd_extract(unsigned fw, llvm::Value * a, unsigned fieldIndex);
+    virtual llvm::Value * mvmd_insert(unsigned fw, llvm::Value * blk, llvm::Value * elt, unsigned fieldIndex);
+    virtual llvm::Value * mvmd_slli(unsigned fw, llvm::Value * a, unsigned shift);
+    virtual llvm::Value * mvmd_srli(unsigned fw, llvm::Value * a, unsigned shift);
+    virtual llvm::Value * mvmd_dslli(unsigned fw, llvm::Value * a, llvm::Value * b, unsigned shift);
     
     
-    virtual Value * bitblock_any(Value * a);
+    virtual llvm::Value * bitblock_any(llvm::Value * a);
     // full add producing {carryout, sum}
-    virtual std::pair<Value *, Value *> bitblock_add_with_carry(Value * a, Value * b, Value * carryin);
+    virtual std::pair<llvm::Value *, llvm::Value *> bitblock_add_with_carry(llvm::Value * a, llvm::Value * b, llvm::Value * carryin);
     // full shift producing {shiftout, shifted}
-    virtual std::pair<Value *, Value *> bitblock_advance(Value * a, Value * shiftin, unsigned shift);
-    virtual Value * bitblock_mask_from(Value * pos);
-    virtual Value * bitblock_set_bit(Value * pos);
+    virtual std::pair<llvm::Value *, llvm::Value *> bitblock_advance(llvm::Value * a, llvm::Value * shiftin, unsigned shift);
+    virtual llvm::Value * bitblock_mask_from(llvm::Value * pos);
+    virtual llvm::Value * bitblock_set_bit(llvm::Value * pos);
     
-    Value * simd_and(Value * a, Value * b);
-    Value * simd_or(Value * a, Value * b);
-    Value * simd_xor(Value * a, Value * b);
-    Value * simd_not(Value * a);
-    Value * fwCast(unsigned fw, Value * a);
+    llvm::Value * simd_and(llvm::Value * a, llvm::Value * b);
+    llvm::Value * simd_or(llvm::Value * a, llvm::Value * b);
+    llvm::Value * simd_xor(llvm::Value * a, llvm::Value * b);
+    llvm::Value * simd_not(llvm::Value * a);
+    llvm::Value * fwCast(unsigned fw, llvm::Value * a);
     
-    inline VectorType * getBitBlockType() const {
+    inline llvm::VectorType * getBitBlockType() const {
         return mBitBlockType;
     }
 
-    inline Type * getStreamSetTy(const unsigned NumElements = 1, const unsigned FieldWidth = 1) {
-        return ArrayType::get(getStreamTy(FieldWidth), NumElements);
+    inline llvm::ArrayType * getStreamSetTy(const unsigned NumElements = 1, const unsigned FieldWidth = 1) {
+        return llvm::ArrayType::get(getStreamTy(FieldWidth), NumElements);
     }
     
-    Type * getStreamTy(const unsigned FieldWidth = 1);
+    StreamType * getStreamTy(const unsigned FieldWidth = 1);
 
-    void CallPrintRegister(const std::string & regName, Value * const value);
+    void CallPrintRegister(const std::string & regName, llvm::Value * const value);
     
 protected:
     unsigned            mBitBlockWidth;
     unsigned            mStride;
-    VectorType *        mBitBlockType;
+    llvm::VectorType *  mBitBlockType;
 
-    Constant *          mZeroInitializer;
-    Constant *          mOneInitializer;
-    Constant *          mPrintRegisterFunction;
+    llvm::Constant *    mZeroInitializer;
+    llvm::Constant *    mOneInitializer;
+    llvm::Constant *    mPrintRegisterFunction;
     StreamTypes         mStreamTypes;
 };
 
-inline LoadInst * IDISA_Builder::CreateBlockAlignedLoad(Value * const ptr) {
+inline llvm::LoadInst * IDISA_Builder::CreateBlockAlignedLoad(llvm::Value * const ptr) {
     return CreateAlignedLoad(ptr, mBitBlockWidth / 8);
 }
 
-inline LoadInst * IDISA_Builder::CreateBlockAlignedLoad(Value * const ptr, Value * const index) {
+inline llvm::LoadInst * IDISA_Builder::CreateBlockAlignedLoad(llvm::Value * const ptr, llvm::Value * const index) {
     return CreateBlockAlignedLoad(CreateGEP(ptr, index));
 }
 
-inline LoadInst * IDISA_Builder::CreateBlockAlignedLoad(Value * const ptr, std::initializer_list<Value *> indices) {
+inline llvm::LoadInst * IDISA_Builder::CreateBlockAlignedLoad(llvm::Value * const ptr, std::initializer_list<llvm::Value *> indices) {
     return CreateBlockAlignedLoad(CreateGEP(ptr, indices));
 }
 
-inline void IDISA_Builder::CreateBlockAlignedStore(Value * const value, Value * const ptr) {
+inline void IDISA_Builder::CreateBlockAlignedStore(llvm::Value * const value, llvm::Value * const ptr) {
     CreateAlignedStore(value, ptr, mBitBlockWidth / 8);
 }
 
-inline void IDISA_Builder::CreateBlockAlignedStore(Value * const value, Value * const ptr, Value * const index) {
+inline void IDISA_Builder::CreateBlockAlignedStore(llvm::Value * const value, llvm::Value * const ptr, llvm::Value * const index) {
     CreateBlockAlignedStore(value, CreateGEP(ptr, index));
 }
 
-inline void IDISA_Builder::CreateBlockAlignedStore(Value * const value, Value * const ptr, std::initializer_list<Value *> indices) {
+inline void IDISA_Builder::CreateBlockAlignedStore(llvm::Value * const value, llvm::Value * const ptr, std::initializer_list<llvm::Value *> indices) {
     CreateBlockAlignedStore(value, CreateGEP(ptr, indices));
 }
     

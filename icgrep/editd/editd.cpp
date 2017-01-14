@@ -67,9 +67,10 @@ static cl::opt<int> Threads("threads", cl::desc("Total number of threads."), cl:
 
 using namespace kernel;
 using namespace pablo;
+using namespace parabix;
 
-std::string IRFilename = "editd.ll";
-std::string PTXFilename = "editd.ptx";
+const static std::string IRFilename = "editd.ll";
+const static std::string PTXFilename = "editd.ptx";
 
 struct matchPosition
 {

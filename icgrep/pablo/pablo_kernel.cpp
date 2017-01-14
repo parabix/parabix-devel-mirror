@@ -3,11 +3,11 @@
  *  This software is licensed to the public under the Open Software License 3.0.
  */
 
-#include <pablo/pablo_kernel.h>
+#include "pablo_kernel.h"
 #include <pablo/codegenstate.h>
 #include <pablo/pablo_compiler.h>
-// #include <llvm/Support/Debug.h>
 #include <pablo/pe_var.h>
+#include <llvm/IR/Module.h>
 #include <llvm/IR/Verifier.h>
 #include <IR_Gen/idisa_builder.h>
 

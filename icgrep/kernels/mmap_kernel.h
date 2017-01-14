@@ -5,10 +5,7 @@
 #ifndef MMAP_KERNEL_H
 #define MMAP_KERNEL_H
 
-#include "streamset.h"
 #include "kernel.h"
-#include <llvm/IR/Type.h>
-
 namespace IDISA { class IDISA_Builder; }
 
 namespace kernel {
@@ -19,12 +16,7 @@ namespace kernel {
     
 class MMapSourceKernel : public KernelBuilder {
 public:
-    MMapSourceKernel(IDISA::IDISA_Builder * iBuilder, unsigned blocksPerSegment = 1, unsigned codeUnitWidth = 8) :
-    KernelBuilder(iBuilder, "mmap_source",
-                  {}, {Binding{iBuilder->getStreamSetTy(1, codeUnitWidth), "sourceBuffer"}}, 
-                  {Binding{iBuilder->getSizeTy(), "fileSize"}}, {}, {}),
-    mSegmentBlocks(blocksPerSegment),
-    mCodeUnitWidth(codeUnitWidth) {}
+    MMapSourceKernel(IDISA::IDISA_Builder * iBuilder, unsigned blocksPerSegment = 1, unsigned codeUnitWidth = 8);
     
 private:
     unsigned mSegmentBlocks;

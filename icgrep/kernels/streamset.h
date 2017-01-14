@@ -6,26 +6,27 @@
 #ifndef STREAMSET_H
 #define STREAMSET_H
 
-#include <string>
-#include <vector>
-#include <IR_Gen/idisa_builder.h>
-#include <llvm/IR/Type.h>
+#include <llvm/IR/Type.h>  // for Type
+namespace IDISA { class IDISA_Builder; }
+namespace llvm { class PointerType; }
+namespace llvm { class Value; }
+namespace kernel { class KernelBuilder; }
 
 namespace parabix {
     
-enum FieldType {i1 = 1, i2 = 2, i4 = 4, i8 = 8, i16 = 16, i32 = 32, i64 = 64, i128 = 128, i256 = 256};
-
 // Stream Set Structs hold information about the current state of a stream set buffer.
 
-llvm::Value * getProducerPosPtr(IDISA::IDISA_Builder * b, Value * bufferStructPtr);
-llvm::Value * getConsumerPosPtr(IDISA::IDISA_Builder * b, Value * bufferStructPtr);
-llvm::Value * getEndOfInputPtr(IDISA::IDISA_Builder * b, Value * bufferStructPtr);
-llvm::Value * getStreamSetBufferPtr(IDISA::IDISA_Builder * b, Value * bufferStructPtr);
+llvm::Value * getProducerPosPtr(IDISA::IDISA_Builder * b, llvm::Value * self);
+llvm::Value * getConsumerPosPtr(IDISA::IDISA_Builder * b, llvm::Value * self);
+llvm::Value * getEndOfInputPtr(IDISA::IDISA_Builder * b, llvm::Value * self);
+llvm::Value * getStreamSetBufferPtr(IDISA::IDISA_Builder * b, llvm::Value * self);
 
 class StreamSetBuffer {
+    friend class kernel::KernelBuilder;
+
 public:
 
-    enum class BufferKind : unsigned {BlockBuffer, ExternalFileBuffer, CircularBuffer, LinearCopybackBuffer};
+    enum class BufferKind : unsigned {BlockBuffer, ExternalFileBuffer, CircularBuffer, LinearCopybackBuffer, ExpandableBuffer};
 
     inline BufferKind getBufferKind() const {
         return mBufferKind;
@@ -44,67 +45,51 @@ public:
     }
 
     size_t getBufferSize() const { return mBufferBlocks; }
-       
+
     llvm::Value * getStreamSetBasePtr() const { return mStreamSetBufferPtr; }
-    
+
     llvm::Value * getStreamSetStructPtr() const { return mStreamSetStructPtr; }
 
     virtual void allocateBuffer();
 
+    virtual llvm::Value * getStream(llvm::Value * self, llvm::Value * blockNo, llvm::Value * index) const;
+
+    virtual llvm::Value * getStream(llvm::Value * self, llvm::Value * blockNo, llvm::Value * index1, llvm::Value * index2) const;
+    
+    virtual llvm::Value * getStreamView(llvm::Value * self, llvm::Value * blockNo, llvm::Value * index) const;
+
+    virtual llvm::Value * getStreamView(llvm::Type * type, llvm::Value * self, llvm::Value * blockNo, llvm::Value * index) const;
+
+    llvm::Value * getProducerPosPtr(llvm::Value * self) const;
+
+    void setProducerPos(llvm::Value * self, llvm::Value * pos) const;
+
+    llvm::Value * getConsumerPosPtr(llvm::Value * self) const;
+
+    virtual void setConsumerPos(llvm::Value * self, llvm::Value * pos) const;
+
+    llvm::Value * getEndOfInputPtr(llvm::Value * self) const;
+
+    void setEndOfInput(llvm::Value * self) const;
+    
+    llvm::Type * resolveStreamTypes(llvm::Type * type);
+    
+protected:
+
+    StreamSetBuffer(BufferKind k, IDISA::IDISA_Builder * b, llvm::Type * type, unsigned blocks, unsigned AddressSpace);
+
     // Get the buffer pointer for a given block of the stream.
-    virtual llvm::Value * getStreamSetBlockPointer(llvm::Value * bufferStructPtr, llvm::Value * blockNo) = 0;
-    
-    llvm::Value * getProducerPosPtr(Value * bufferStructPtr);
+    virtual llvm::Value * getStreamSetPtr(llvm::Value * self, llvm::Value * blockNo) const = 0;
 
-    void setProducerPos(Value * bufferStructPtr, Value * pos);
-
-    llvm::Value * getConsumerPosPtr(Value * bufferStructPtr);
-
-    virtual void setConsumerPos(Value * bufferStructPtr, Value * pos);
-
-    llvm::Value * getEndOfInputPtr(Value * bufferStructPtr);
-
-    void setEndOfInput(Value * bufferStructPtr);
-    
-    llvm::Type * resolveStreamTypes(llvm::Type * type) {
-        if (auto ty = dyn_cast<ArrayType>(type)) {
-            unsigned numElems = ty->getNumElements();
-            auto elemTy = ty->getElementType();
-            if (isa<IDISA::StreamType>(elemTy)) {
-                return ArrayType::get(cast<IDISA::StreamType>(elemTy)->resolveType(iBuilder), numElems);
-            }
-        }
-        else if (auto ty = dyn_cast<IDISA::StreamType>(type)) {
-            return ty->resolveType(iBuilder);
-        }
-        return type;
-    }
-    
 protected:
-    StreamSetBuffer(BufferKind k, IDISA::IDISA_Builder * b, llvm::Type * type, unsigned blocks, unsigned AddressSpace = 0)
-    : mBufferKind(k)
-    , iBuilder(b)
-    , mStreamSetType(resolveStreamTypes(type))
-    , mBufferBlocks(blocks)
-    , mAddrSpace(AddressSpace)
-    , mStreamSetBufferPtr(nullptr)
-    , mStreamSetStructPtr(nullptr)
-    , mStreamSetStructType(StructType::get(b->getContext(),
-                            {{b->getSizeTy(),
-                              b->getSizeTy(),
-                              b->getInt1Ty(),
-                              PointerType::get(mStreamSetType, AddressSpace)}})) {
-
-    }
-protected:
-    const BufferKind        mBufferKind;
-    IDISA::IDISA_Builder *  iBuilder;
-    llvm::Type * const      mStreamSetType;
-    size_t                  mBufferBlocks;
-    int                     mAddrSpace;
-    llvm::Value *           mStreamSetBufferPtr;
-    llvm::Value *           mStreamSetStructPtr;
-    llvm::Type * const      mStreamSetStructType;
+    const BufferKind                mBufferKind;
+    IDISA::IDISA_Builder * const    iBuilder;
+    llvm::Type * const              mStreamSetType;
+    const size_t                    mBufferBlocks;
+    const int                       mAddrSpace;
+    llvm::Value *                   mStreamSetBufferPtr;
+    llvm::Value *                   mStreamSetStructPtr;
+    llvm::Type * const              mStreamSetStructType;
 };   
 
 class SingleBlockBuffer : public StreamSetBuffer {
@@ -112,11 +97,11 @@ public:
     static inline bool classof(const StreamSetBuffer * b) {
         return b->getBufferKind() == BufferKind::BlockBuffer;
     }   
-    SingleBlockBuffer(IDISA::IDISA_Builder * b, llvm::Type * type)
-    : StreamSetBuffer(BufferKind::BlockBuffer, b, type, 1, 0) {
 
-    }
-    llvm::Value * getStreamSetBlockPointer(llvm::Value * bufferBasePtr, llvm::Value * blockNo) override;
+    SingleBlockBuffer(IDISA::IDISA_Builder * b, llvm::Type * type);
+
+protected:
+    llvm::Value * getStreamSetPtr(llvm::Value * self, llvm::Value * blockNo) const override;
 };
 
 class ExternalFileBuffer : public StreamSetBuffer {
@@ -125,18 +110,17 @@ public:
         return b->getBufferKind() == BufferKind::ExternalFileBuffer;
     }
     
-    ExternalFileBuffer(IDISA::IDISA_Builder * b, llvm::Type * type, unsigned AddressSpace = 0)
-    : StreamSetBuffer(BufferKind::ExternalFileBuffer, b, type, 0, AddressSpace) {
-
-    }
+    ExternalFileBuffer(IDISA::IDISA_Builder * b, llvm::Type * type, unsigned AddressSpace = 0);
 
     void setStreamSetBuffer(llvm::Value * ptr, llvm::Value * fileSize);
+
     void setEmptyBuffer(llvm::Value * buffer_ptr);
 
     // Can't allocate - raise an error. */
     void allocateBuffer() override;
 
-    llvm::Value * getStreamSetBlockPointer(llvm::Value * bufferStructPtr, llvm::Value * blockNo) override;
+protected:
+    llvm::Value * getStreamSetPtr(llvm::Value * self, llvm::Value * blockNo) const override;
 };
     
 class CircularBuffer : public StreamSetBuffer {
@@ -145,12 +129,10 @@ public:
         return b->getBufferKind() == BufferKind::CircularBuffer;
     }
   
-    CircularBuffer(IDISA::IDISA_Builder * b, llvm::Type * type, size_t bufferBlocks, unsigned AddressSpace = 0)
-    : StreamSetBuffer(BufferKind::CircularBuffer, b, type, bufferBlocks, AddressSpace) {
+    CircularBuffer(IDISA::IDISA_Builder * b, llvm::Type * type, size_t bufferBlocks, unsigned AddressSpace = 0);
 
-    }
-
-    llvm::Value * getStreamSetBlockPointer(llvm::Value * bufferBasePtr, llvm::Value * blockNo) override;
+protected:
+    llvm::Value * getStreamSetPtr(llvm::Value * bufferBasePtr, llvm::Value * blockNo) const override;
 };
     
 // Linear buffers extending from the current ConsumerPos forward.   Within the buffer, the
@@ -160,14 +142,36 @@ class LinearCopybackBuffer : public StreamSetBuffer {
 public:
     static inline bool classof(const StreamSetBuffer * b) {return b->getBufferKind() == BufferKind::LinearCopybackBuffer;}
     
-    LinearCopybackBuffer(IDISA::IDISA_Builder * b, llvm::Type * type, size_t bufferBlocks, unsigned AddressSpace = 0) :
-        StreamSetBuffer(BufferKind::LinearCopybackBuffer, b, type, bufferBlocks, AddressSpace) {}
-    
-    llvm::Value * getStreamSetBlockPointer(llvm::Value * bufferStructPtr, llvm::Value * blockNo) override;
-    
+    LinearCopybackBuffer(IDISA::IDISA_Builder * b, llvm::Type * type, size_t bufferBlocks, unsigned AddressSpace = 0);
+
     // Reset the buffer to contain data starting at the base block of new_consumer_pos,
     // copying back any data beyond that position. 
-    void setConsumerPos(Value * bufferStructPtr, Value * newConsumerPos) override;
+    void setConsumerPos(llvm::Value * self, llvm::Value * newConsumerPos) const override;
+
+protected:
+    llvm::Value * getStreamSetPtr(llvm::Value * self, llvm::Value * blockNo) const override;
+};
+
+// ExpandableBuffers do not allow access to the base stream set but will automatically increase the number of streams
+// within their set whenever the index exceeds its capacity
+//
+class ExpandableBuffer : public StreamSetBuffer {
+public:
+    static inline bool classof(const StreamSetBuffer * b) {return b->getBufferKind() == BufferKind::ExpandableBuffer;}
+
+    ExpandableBuffer(IDISA::IDISA_Builder * b, llvm::Type * type, size_t bufferBlocks, unsigned AddressSpace = 0);
+
+    llvm::Value * getStream(llvm::Value * self, llvm::Value * blockNo, llvm::Value * index) const override;
+
+    llvm::Value * getStream(llvm::Value * self, llvm::Value * blockNo, llvm::Value * index1, llvm::Value * index2) const override;
+
+    llvm::Value * getStreamView(llvm::Value * self, llvm::Value * blockNo, llvm::Value * index) const override;
+
+    llvm::Value * getStreamView(llvm::Type * type, llvm::Value * self, llvm::Value * blockNo, llvm::Value * index) const override;
+
+protected:
+
+    llvm::Value * getStreamSetPtr(llvm::Value * self, llvm::Value * blockNo) const override;
 };
 
 }

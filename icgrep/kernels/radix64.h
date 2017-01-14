@@ -10,6 +10,7 @@
 #include "kernel.h"
 
 namespace llvm { class Module; }
+namespace llvm { class Value; }
 
 namespace IDISA { class IDISA_Builder; }
 
@@ -44,7 +45,7 @@ public:
                   {}, {}, {}) {}
 
 private:
-    virtual void generateDoBlockLogic(Value * self, Value * blockNo) const override;
+    virtual void generateDoBlockLogic(llvm::Value * self, llvm::Value * blockNo) const override;
     virtual void generateDoBlockMethod() const override;
     virtual void generateFinalBlockMethod() const override;
 };
@@ -59,7 +60,7 @@ public:
                   {}, {}, {}) {}
     
 private:
-    virtual void generateDoBlockLogic(Value * self, Value * blockNo) const override;
+    virtual void generateDoBlockLogic(llvm::Value * self, llvm::Value * blockNo) const override;
     virtual void generateFinalBlockMethod() const override;
     virtual void generateDoBlockMethod() const override;
     

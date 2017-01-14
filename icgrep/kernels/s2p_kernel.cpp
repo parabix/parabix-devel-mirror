@@ -2,13 +2,18 @@
  *  Copyright (c) 2016 International Characters.
  *  This software is licensed to the public under the Open Software License 3.0.
  */
+
 #include "s2p_kernel.h"
-#include <kernels/kernel.h>
-#include <IR_Gen/idisa_builder.h>
-#include <llvm/Support/raw_ostream.h>
+#include <IR_Gen/idisa_builder.h>  // for IDISA_Builder
+#include <llvm/IR/Constant.h>      // for Constant
+#include <llvm/IR/Module.h>
+namespace llvm { class BasicBlock; }
+namespace llvm { class Function; }
+namespace llvm { class Value; }
+
+using namespace llvm;
 
 namespace kernel {
-using namespace llvm;
 
 const int PACK_LANES = 1;
 
@@ -150,30 +155,26 @@ void S2PKernel::generateFinalBlockMethod() const {
     
     iBuilder->SetInsertPoint(finalEmptyBlock);
     Value * blockNo = getScalarField(self, blockNoScalar);
-    Value * basisBitsBlock_ptr = getStreamSetBlockPtr(self, "basisBits", blockNo);
-    iBuilder->CreateStore(Constant::getNullValue(basisBitsBlock_ptr->getType()->getPointerElementType()), basisBitsBlock_ptr);
+    Value * basisBitsPtr = getStreamView(self, "basisBits", blockNo, iBuilder->getInt64(0));
+    iBuilder->CreateStore(Constant::getNullValue(basisBitsPtr->getType()->getPointerElementType()), basisBitsPtr);
     iBuilder->CreateBr(exitBlock);
     
     iBuilder->SetInsertPoint(exitBlock);
     iBuilder->CreateRetVoid();
     iBuilder->restoreIP(savePoint);
 }
-
     
 void S2PKernel::generateDoBlockLogic(Value * self, Value * blockNo) const {
-
-    Value * byteStream = getStreamSetBlockPtr(self, "byteStream", blockNo);
-    Value * basisBits = getStreamSetBlockPtr(self, "basisBits", blockNo);
-
     Value * bytepack[8];
     for (unsigned i = 0; i < 8; i++) {
-        Value * ptr = iBuilder->CreateGEP(byteStream, {iBuilder->getInt32(0), iBuilder->getInt32(0), iBuilder->getInt32(i)});
-        bytepack[i] = iBuilder->CreateBlockAlignedLoad(ptr);
+        Value * byteStream = getStream(self, "byteStream", blockNo, iBuilder->getInt32(0), iBuilder->getInt32(i));
+        bytepack[i] = iBuilder->CreateBlockAlignedLoad(byteStream);
     }
     Value * basisbits[8];
     s2p(iBuilder, bytepack, basisbits);
     for (unsigned i = 0; i < 8; ++i) {
-        iBuilder->CreateBlockAlignedStore(basisbits[i], basisBits, {iBuilder->getInt32(0), iBuilder->getInt32(i)});
+        Value * basisBits = getStream(self, "basisBits", blockNo, iBuilder->getInt32(i));
+        iBuilder->CreateBlockAlignedStore(basisbits[i], basisBits);
     }
     Value * produced = getProducedItemCount(self, "basisBits");
     produced = iBuilder->CreateAdd(produced, iBuilder->getSize(iBuilder->getStride()));

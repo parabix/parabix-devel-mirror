@@ -5,12 +5,12 @@
  */
 
 #include <pablo/pablo_compiler.h>
+#include <pablo/pablo_kernel.h>
 #include <pablo/pablo_toolchain.h>
 #include <pablo/codegenstate.h>
 #include <pablo/carry_manager.h>
 #include <pablo/printer_pablos.h>
 #include <pablo/prototype.h>
-#include <re/re_name.h>
 #include <stdexcept>
 #include <sstream>
 #include <IR_Gen/idisa_builder.h>
@@ -53,7 +53,7 @@ void PabloCompiler::compile(Value * const self, Function * function) {
         if (var->getType()->isSingleValueType()) {
             input = mKernel->getScalarFieldPtr(mSelf, name);
         } else {
-            input = mKernel->getStreamSetBlockPtr(mSelf, name, blockNo);
+            input = mKernel->getStreamSetPtr(mSelf, name, blockNo);
         }
         mMarkerMap.emplace(var, input);
     }
@@ -65,7 +65,7 @@ void PabloCompiler::compile(Value * const self, Function * function) {
         if (var->getType()->isSingleValueType()) {
             output = mKernel->getScalarFieldPtr(mSelf, name);
         } else {
-            output = mKernel->getStreamSetBlockPtr(mSelf, name, blockNo);
+            output = mKernel->getStreamSetPtr(mSelf, name, blockNo);
         }
         mMarkerMap.emplace(var, output);
     }
@@ -451,13 +451,13 @@ void PabloCompiler::compileStatement(const Statement * stmt) {
             const unsigned block_shift = (l->getAmount() / iBuilder->getBitBlockWidth());
             std::string inputName = var->getName()->to_string();;
             Value * blockNo = mKernel->getScalarField(mSelf, blockNoScalar);
-            Value * lookAhead_blockPtr  = mKernel->getStreamSetBlockPtr(mSelf, inputName, iBuilder->CreateAdd(blockNo, iBuilder->getSize(block_shift)));
+            Value * lookAhead_blockPtr  = mKernel->getStreamSetPtr(mSelf, inputName, iBuilder->CreateAdd(blockNo, iBuilder->getSize(block_shift)));
             Value * lookAhead_inputPtr = iBuilder->CreateGEP(lookAhead_blockPtr, {iBuilder->getInt32(0), iBuilder->getInt32(index)});
             Value * lookAhead = iBuilder->CreateBlockAlignedLoad(lookAhead_inputPtr);
             if (bit_shift == 0) {  // Simple case with no intra-block shifting.
                 value = lookAhead;
             } else { // Need to form shift result from two adjacent blocks.
-                Value * lookAhead_blockPtr1  = mKernel->getStreamSetBlockPtr(mSelf, inputName, iBuilder->CreateAdd(blockNo, iBuilder->getSize(block_shift + 1)));
+                Value * lookAhead_blockPtr1  = mKernel->getStreamSetPtr(mSelf, inputName, iBuilder->CreateAdd(blockNo, iBuilder->getSize(block_shift + 1)));
                 Value * lookAhead_inputPtr1 = iBuilder->CreateGEP(lookAhead_blockPtr1, {iBuilder->getInt32(0), iBuilder->getInt32(index)});
                 Value * lookAhead1 = iBuilder->CreateBlockAlignedLoad(lookAhead_inputPtr1);
                 if (LLVM_UNLIKELY((bit_shift % 8) == 0)) { // Use a single whole-byte shift, if possible.
