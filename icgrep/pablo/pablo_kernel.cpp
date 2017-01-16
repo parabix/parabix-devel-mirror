@@ -85,11 +85,6 @@ void PabloKernel::generateDoBlockMethod() const {
     Function * const f = m->getFunction(mKernelName + doBlock_suffix);
     Value * const self = &*(f->arg_begin());
     mPabloCompiler->compile(self, f);
-    for (auto ss : mStreamSetOutputs) {
-        Value * produced = getProducedItemCount(self, ss.name);
-        produced = iBuilder->CreateAdd(produced, iBuilder->getSize(iBuilder->getStride()));
-        setProducedItemCount(self, ss.name, produced);
-    }
     iBuilder->CreateRetVoid();
     #ifndef NDEBUG
     llvm::verifyFunction(*f, &errs());
@@ -116,13 +111,6 @@ void PabloKernel::generateFinalBlockMethod() const {
     setScalarField(self, "EOFbit", iBuilder->bitblock_set_bit(remaining));
     setScalarField(self, "EOFmask", iBuilder->bitblock_mask_from(remaining));
     iBuilder->CreateCall(doBlockFunction, doBlockArgs);
-    /* Adjust the produced item count */
-    for (auto ss : mStreamSetOutputs) {
-        Value * produced = getProducedItemCount(self, ss.name);
-        produced = iBuilder->CreateSub(produced, iBuilder->getSize(iBuilder->getStride()));
-        produced = iBuilder->CreateAdd(produced, remaining);
-        setProducedItemCount(self, ss.name, produced);
-    }
     iBuilder->CreateRetVoid();
     #ifndef NDEBUG
     llvm::verifyFunction(*finalBlockFunction, &errs());
@@ -135,7 +123,7 @@ PabloKernel::PabloKernel(IDISA::IDISA_Builder * builder, const std::string & ker
 , mPabloCompiler(new PabloCompiler(this))
 , mSymbolTable(new SymbolGenerator(mAllocator))
 , mEntryBlock(PabloBlock::Create(this)) {
-
+setDoBlockUpdatesProducedItemCountsAttribute(false);
 }
 
 PabloKernel::~PabloKernel() {

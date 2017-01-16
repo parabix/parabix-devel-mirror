@@ -32,7 +32,8 @@ KernelBuilder::KernelBuilder(IDISA::IDISA_Builder * builder,
                              std::vector<Binding> scalar_outputs,
                              std::vector<Binding> internal_scalars)
 : KernelInterface(builder, kernelName, stream_inputs, stream_outputs, scalar_parameters, scalar_outputs, internal_scalars),
-mNoTerminateAttribute(false) {
+mNoTerminateAttribute(false),
+mDoBlockUpdatesProducedItemCountsAttribute(false) {
 
 }
 
@@ -248,8 +249,18 @@ void KernelBuilder::generateDoSegmentMethod() const {
     iBuilder->CreateBr(strideLoopCond);
     
     iBuilder->SetInsertPoint(stridesDone);
-    processed = iBuilder->CreateAdd(processed, iBuilder->CreateMul(stridesToDo, stride));
-    setProcessedItemCount(self, mStreamSetInputs[0].name, processed);
+    
+    Value * segmentItemsProcessed = iBuilder->CreateMul(stridesToDo, stride);
+    for (unsigned i = 0; i < mStreamSetInputs.size(); i++) {
+        Value * preProcessed = getProcessedItemCount(self, mStreamSetInputs[i].name);
+        setProcessedItemCount(self, mStreamSetInputs[i].name, iBuilder->CreateAdd(preProcessed, segmentItemsProcessed));
+    }
+    if (!mDoBlockUpdatesProducedItemCountsAttribute) {
+        for (unsigned i = 0; i < mStreamSetOutputs.size(); i++) {
+            Value * preProduced = getProducedItemCount(self, mStreamSetOutputs[i].name);
+            setProducedItemCount(self, mStreamSetOutputs[i].name, iBuilder->CreateAdd(preProduced, segmentItemsProcessed));
+        }
+    }
     iBuilder->CreateBr(segmentDone);
     iBuilder->SetInsertPoint(segmentDone);
 //#ifndef NDEBUG
@@ -325,8 +336,17 @@ void KernelBuilder::generateFinalSegmentMethod() const {
     //iBuilder->CallPrintInt(mKernelName + " remainingItems", remainingItems);
         
     createFinalBlockCall(self, remainingItems);
-    processed = iBuilder->CreateAdd(processed, remainingItems);
-    setProcessedItemCount(self, mStreamSetInputs[0].name, processed);       
+    
+    for (unsigned i = 0; i < mStreamSetInputs.size(); i++) {
+        Value * preProcessed = getProcessedItemCount(self, mStreamSetInputs[i].name);
+        setProcessedItemCount(self, mStreamSetInputs[i].name, iBuilder->CreateAdd(preProcessed, remainingItems));
+    }
+    if (!mDoBlockUpdatesProducedItemCountsAttribute) {
+        for (unsigned i = 0; i < mStreamSetOutputs.size(); i++) {
+            Value * preProduced = getProducedItemCount(self, mStreamSetOutputs[i].name);
+            setProducedItemCount(self, mStreamSetOutputs[i].name, iBuilder->CreateAdd(preProduced, remainingItems));
+        }
+    }
 //#ifndef NDEBUG
 //    iBuilder->CallPrintInt(mKernelName + "_processed final", processed);
 //#endif

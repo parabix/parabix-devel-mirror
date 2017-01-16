@@ -130,7 +130,7 @@ KernelBuilder(iBuilder, "del",
               {}, {}, {}),
 mDeletionFieldWidth(fw),
 mStreamCount(streamCount) {
-
+    mDoBlockUpdatesProducedItemCountsAttribute = true;
 }
 
 }

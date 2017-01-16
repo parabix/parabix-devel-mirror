@@ -146,10 +146,6 @@ void S2PKernel::generateFinalBlockMethod() const {
     iBuilder->CreateCondBr(emptyBlockCond, finalEmptyBlock, finalPartialBlock);
     iBuilder->SetInsertPoint(finalPartialBlock);
     iBuilder->CreateCall(doBlockFunction, {self});
-    /* Adjust the produced item count */
-    Value * produced = getProducedItemCount(self, "basisBits");
-    produced = iBuilder->CreateSub(produced, iBuilder->getSize(iBuilder->getStride()));
-    setProducedItemCount(self, "basisBits", iBuilder->CreateAdd(produced, remainingBytes));
     
     iBuilder->CreateBr(exitBlock);
     
@@ -176,9 +172,6 @@ void S2PKernel::generateDoBlockLogic(Value * self, Value * blockNo) const {
         Value * basisBits = getStream(self, "basisBits", blockNo, iBuilder->getInt32(i));
         iBuilder->CreateBlockAlignedStore(basisbits[i], basisBits);
     }
-    Value * produced = getProducedItemCount(self, "basisBits");
-    produced = iBuilder->CreateAdd(produced, iBuilder->getSize(iBuilder->getStride()));
-    setProducedItemCount(self, "basisBits", produced);    
 }
     
 void S2PKernel::generateDoBlockMethod() const {
@@ -200,6 +193,7 @@ void S2PKernel::generateDoBlockMethod() const {
 S2PKernel::S2PKernel(IDISA::IDISA_Builder * builder)
 : KernelBuilder(builder, "s2p", {Binding{builder->getStreamSetTy(1, 8), "byteStream"}}, {Binding{builder->getStreamSetTy(8, 1), "basisBits"}}, {}, {}, {}) {
     setNoTerminateAttribute(true);
+    setDoBlockUpdatesProducedItemCountsAttribute(false);
 
 }
 

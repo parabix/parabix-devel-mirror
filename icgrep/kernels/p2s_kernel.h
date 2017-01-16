@@ -18,11 +18,7 @@ namespace kernel {
    
 class P2SKernel : public KernelBuilder {
 public:
-    P2SKernel(IDISA::IDISA_Builder * iBuilder) :
-    KernelBuilder(iBuilder, "p2s",
-                  {Binding{iBuilder->getStreamSetTy(8, 1), "basisBits"}},
-                  {Binding{iBuilder->getStreamSetTy(1, 8), "byteStream"}},
-                  {}, {}, {}) {}
+    P2SKernel(IDISA::IDISA_Builder * iBuilder);
     
 private:
     void generateDoBlockMethod() const override;
@@ -31,12 +27,7 @@ private:
 
 class P2SKernelWithCompressedOutput : public KernelBuilder {
 public:
-    P2SKernelWithCompressedOutput(IDISA::IDISA_Builder * iBuilder) :
-    KernelBuilder(iBuilder, "p2s_compress",
-                  {Binding{iBuilder->getStreamSetTy(8, 1), "basisBits"}, Binding{iBuilder->getStreamSetTy(1, 1), "deletionCounts"}},
-                  {Binding{iBuilder->getStreamSetTy(1, 8), "byteStream"}},
-                  {}, {}, {}) {}
-    
+    P2SKernelWithCompressedOutput(IDISA::IDISA_Builder * iBuilder);    
 private:
     void generateDoBlockMethod() const override;
 };
@@ -44,12 +35,7 @@ private:
 
 class P2S16Kernel : public KernelBuilder {
 public:
-    P2S16Kernel(IDISA::IDISA_Builder * iBuilder) :
-    KernelBuilder(iBuilder, "p2s_16",
-                  {Binding{iBuilder->getStreamSetTy(16, 1), "basisBits"}},
-                  {Binding{iBuilder->getStreamSetTy(1, 16), "i16Stream"}},
-                  {}, {}, {}) {}
-    
+    P2S16Kernel(IDISA::IDISA_Builder * iBuilder);    
 private:
     void generateDoBlockMethod() const override;
     
@@ -58,13 +44,7 @@ private:
     
 class P2S16KernelWithCompressedOutput : public KernelBuilder {
 public:
-    P2S16KernelWithCompressedOutput(IDISA::IDISA_Builder * iBuilder) :
-    KernelBuilder(iBuilder, "p2s_16_compress",
-                  {Binding{iBuilder->getStreamSetTy(16, 1), "basisBits"}, Binding{iBuilder->getStreamSetTy(1, 1), "deletionCounts"}},
-                  {Binding{iBuilder->getStreamSetTy(1, 16), "i16Stream"}},
-                  {},
-                  {},
-                  {Binding{iBuilder->getSizeTy(), "unitsGenerated"}, Binding{iBuilder->getSizeTy(), "unitsWritten"}}) {}
+    P2S16KernelWithCompressedOutput(IDISA::IDISA_Builder * iBuilder);
         
 private:
     void generateDoBlockMethod() const override;

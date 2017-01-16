@@ -108,6 +108,7 @@ protected:
     // be added, the default method for preparing kernel state may be used.
     
     void setNoTerminateAttribute(bool noTerminate = true) {mNoTerminateAttribute = noTerminate;}
+    void setDoBlockUpdatesProducedItemCountsAttribute(bool doesUpdate = true) {mDoBlockUpdatesProducedItemCountsAttribute = doesUpdate;}
     
     virtual void prepareKernel();
     
@@ -190,6 +191,7 @@ protected:
     std::vector<const parabix::StreamSetBuffer *>   mStreamSetInputBuffers;
     std::vector<const parabix::StreamSetBuffer *>   mStreamSetOutputBuffers;
     bool                                            mNoTerminateAttribute;
+    bool                                            mDoBlockUpdatesProducedItemCountsAttribute;
 
 };
 }

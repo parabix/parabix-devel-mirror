@@ -23,11 +23,7 @@ namespace kernel {
 class expand3_4Kernel : public KernelBuilder {
 public:
     
-    expand3_4Kernel(IDISA::IDISA_Builder * iBuilder) :
-    KernelBuilder(iBuilder, "expand3_4",
-                  {Binding{iBuilder->getStreamSetTy(1, 8), "sourceStream"}},
-                  {Binding{iBuilder->getStreamSetTy(1, 8), "expandedStream"}},
-                  {}, {}, {}) {}
+    expand3_4Kernel(IDISA::IDISA_Builder * iBuilder);
     
 private:
     void generateDoBlockMethod() const override;
@@ -38,12 +34,7 @@ private:
 class radix64Kernel : public KernelBuilder {
 public:
     
-    radix64Kernel(IDISA::IDISA_Builder * iBuilder) :
-    KernelBuilder(iBuilder, "radix64",
-                  {Binding{iBuilder->getStreamSetTy(1, 8), "expandedStream"}},
-                  {Binding{iBuilder->getStreamSetTy(1, 8), "radix64stream"}},
-                  {}, {}, {}) {}
-
+    radix64Kernel(IDISA::IDISA_Builder * iBuilder);
 private:
     virtual void generateDoBlockLogic(llvm::Value * self, llvm::Value * blockNo) const override;
     virtual void generateDoBlockMethod() const override;
@@ -53,12 +44,7 @@ private:
 class base64Kernel : public KernelBuilder {
 public:
     
-    base64Kernel(IDISA::IDISA_Builder * iBuilder) :
-    KernelBuilder(iBuilder, "base64",
-                  {Binding{iBuilder->getStreamSetTy(1, 8), "radix64stream"}},
-                  {Binding{iBuilder->getStreamSetTy(1, 8), "base64stream"}},
-                  {}, {}, {}) {}
-    
+    base64Kernel(IDISA::IDISA_Builder * iBuilder);    
 private:
     virtual void generateDoBlockLogic(llvm::Value * self, llvm::Value * blockNo) const override;
     virtual void generateFinalBlockMethod() const override;
