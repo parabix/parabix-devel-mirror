@@ -81,7 +81,10 @@ void KernelInterface::addKernelDeclarations(Module * client) {
     finalBlockArg->setName("remainingBytes");
 
     // Create the doSegment function prototype.
-    std::vector<Type *> doSegmentParameters = {selfType, iBuilder->getSizeTy()};
+    std::vector<Type *> doSegmentParameters = {selfType, iBuilder->getInt1Ty()};
+    for (auto ss : mStreamSetInputs) {
+        doSegmentParameters.push_back(iBuilder->getSizeTy());
+    }
     FunctionType * doSegmentFunctionType = FunctionType::get(iBuilder->getVoidTy(), doSegmentParameters, false);
     std::string doSegmentName = mKernelName + doSegment_suffix;
     Function * doSegmentFn = Function::Create(doSegmentFunctionType, GlobalValue::ExternalLinkage, doSegmentName, client);
@@ -91,22 +94,12 @@ void KernelInterface::addKernelDeclarations(Module * client) {
     Value * arg = &*(args++);
     arg->setName("self");
     arg = &*(args++);
-    arg->setName("blockCnt");
+    arg->setName("doFinal");
+    for (auto ss : mStreamSetInputs) {
+        arg = &*(args++);
+        arg->setName(ss.name + "_availableItems");
+    }
     doSegmentFn->setDoesNotCapture(1); // for self parameter only.
-    //
-    // Create the finalSegment function prototype.
-    std::vector<Type *> finalSegmentParameters = {selfType, iBuilder->getSizeTy()};
-    FunctionType * finalSegmentFunctionType = FunctionType::get(iBuilder->getVoidTy(), finalSegmentParameters, false);
-    std::string finalSegmentName = mKernelName + finalSegment_suffix;
-    Function * finalSegmentFn = Function::Create(finalSegmentFunctionType, GlobalValue::ExternalLinkage, finalSegmentName, client);
-    finalSegmentFn->setCallingConv(CallingConv::C);
-    finalSegmentFn->setDoesNotThrow();
-    Function::arg_iterator finalSegmentArgs = finalSegmentFn->arg_begin();
-    Value * finalSegmentArg = &*(finalSegmentArgs++);
-    finalSegmentArg->setName("self");
-    finalSegmentArg = &*(finalSegmentArgs++);
-    finalSegmentArg->setName("blockCnt");
-    finalSegmentFn->setDoesNotCapture(1); // for self parameter only.
     iBuilder->setModule(saveModule);
     iBuilder->restoreIP(savePoint);
 }
@@ -138,24 +131,14 @@ Value * KernelInterface::createFinalBlockCall(Value * self, Value * remainingByt
 }
 
 
-Value * KernelInterface::createDoSegmentCall(Value * self, Value * blksToDo) const {
+Value * KernelInterface::createDoSegmentCall(std::vector<Value *> args) const {
     Module * m = iBuilder->getModule();
     std::string fnName = mKernelName + doSegment_suffix;
     Function * method = m->getFunction(fnName);
     if (!method) {
         throw std::runtime_error("Cannot find " + fnName);
     }
-    return iBuilder->CreateCall(method, {self, blksToDo});
-}
-
-Value * KernelInterface::createFinalSegmentCall(Value * self, Value * blksToDo) const {
-    Module * m = iBuilder->getModule();
-    std::string fnName = mKernelName + finalSegment_suffix;
-    Function * method = m->getFunction(fnName);
-    if (!method) {
-        throw std::runtime_error("Cannot find " + fnName);
-    }
-    return iBuilder->CreateCall(method, {self, blksToDo});
+    return iBuilder->CreateCall(method, args);
 }
 
 Value * KernelInterface::createGetAccumulatorCall(Value * self, std::string accumName) const {

@@ -28,7 +28,7 @@ void MMapSourceKernel::generateDoSegmentMethod() const {
     
     
     Function::arg_iterator args = doSegmentFunction->arg_begin();
-    Value * self = &*(args);
+    Value * self = &*(args++);
     
     Value * fileItems = getScalarField(self, "fileSize");
     if (mCodeUnitWidth > 8) {
@@ -54,23 +54,6 @@ void MMapSourceKernel::generateDoSegmentMethod() const {
     iBuilder->restoreIP(savePoint);
 }
 
-void MMapSourceKernel::generateFinalSegmentMethod() const {
-    auto savePoint = iBuilder->saveIP();
-    Module * m = iBuilder->getModule();
-    Function * finalSegmentFunction = m->getFunction(mKernelName + finalSegment_suffix);
-    iBuilder->SetInsertPoint(BasicBlock::Create(iBuilder->getContext(), "entry", finalSegmentFunction, 0));
-        
-    Function::arg_iterator args = finalSegmentFunction->arg_begin();
-    Value * self = &*(args++);
-    Value * blocksToDo = &*(args);
-    
-    createDoSegmentCall(self, blocksToDo);
-
-    iBuilder->CreateRetVoid();
-    iBuilder->restoreIP(savePoint);
-}
-
-
 // The doBlock method is deprecated.   But in case it is used, just call doSegment with
 // 1 as the number of blocks to do.
 void MMapSourceKernel::generateDoBlockMethod() const {
@@ -80,7 +63,7 @@ void MMapSourceKernel::generateDoBlockMethod() const {
     Function * doSegmentFunction = m->getFunction(mKernelName + doSegment_suffix);
     iBuilder->SetInsertPoint(BasicBlock::Create(iBuilder->getContext(), "entry", doBlockFunction, 0));
     Value * self = getParameter(doBlockFunction, "self");
-    iBuilder->CreateCall(doSegmentFunction, {self, iBuilder->getSize(1)});
+    iBuilder->CreateCall(doSegmentFunction, {self, ConstantInt::getNullValue(iBuilder->getInt1Ty())});
     iBuilder->CreateRetVoid();
     iBuilder->restoreIP(savePoint);
 }
