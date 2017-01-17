@@ -39,7 +39,7 @@ def start_element_open_file(name, attrs):
 				filename = attrs[a]
 				idFound = True
 		if not idFound:
-			print "Expecting id attribute for datafile, but none found."
+			print("Expecting id attribute for datafile, but none found.")
 			exit(-1)
                 outfpath = os.path.join(options.datafile_dir, filename)
 		if options.utf16: outf = codecs.open(outfpath, encoding='utf-16BE', mode='w')
@@ -90,7 +90,7 @@ def start_element_do_test(name, attrs):
 		#execute grep test
                 grep_cmd = "%s -c '%s' %s" % (grep_program_under_test, escape_quotes(regexp), os.path.join(options.datafile_dir, datafile))
                 if options.verbose:
-                    print "Doing: " + grep_cmd
+                    print("Doing: " + grep_cmd)
 		try:
                     grep_out = subprocess.check_output(grep_cmd.encode('utf-8'), cwd=options.exec_dir, shell=True)
                 except subprocess.CalledProcessError, e:
@@ -137,7 +137,7 @@ if __name__ == '__main__':
         if not os.path.exists(options.datafile_dir):
             os.mkdir(options.datafile_dir)
         if not os.path.isdir(options.datafile_dir):
-            print "Cannot use %s as working test file directory.\n" % options.datafile_dir
+            print("Cannot use %s as working test file directory.\n" % options.datafile_dir)
             sys.exit(1) 
 	grep_program_under_test = args[0]
 	grep_test_file = open(os.path.join(QA_dir,options.testcases), 'r')
