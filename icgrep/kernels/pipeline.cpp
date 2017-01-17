@@ -18,11 +18,9 @@ using namespace llvm;
 using ProducerTable = std::vector<std::vector<std::pair<unsigned, unsigned>>>;
 
 ProducerTable createProducerTable(const std::vector<KernelBuilder *> & kernels) {
-    ProducerTable producerTable;
-    producerTable.reserve(kernels.size());
+    ProducerTable producerTable(kernels.size());
     
-    std::vector<std::vector<bool>> userTable;
-    userTable.reserve(kernels.size());
+    std::vector<std::vector<bool>> userTable(kernels.size());
     
     // First prepare a map from streamSet output buffers to their producing kernel and output index.
     std::unordered_map<const StreamSetBuffer *, std::pair<unsigned, unsigned>> bufferMap;
@@ -52,6 +50,7 @@ ProducerTable createProducerTable(const std::vector<KernelBuilder *> & kernels) 
             
         }
     }
+    /*
     for (unsigned k = 0; k < kernels.size(); k++) {
         auto outputSets = kernels[k]->getStreamSetOutputBuffers();
         //errs() << "kernel: " + kernels[k]->getName() + "\n";
@@ -61,6 +60,7 @@ ProducerTable createProducerTable(const std::vector<KernelBuilder *> & kernels) 
             }
         }
     }
+    */
     return producerTable;
 }
 

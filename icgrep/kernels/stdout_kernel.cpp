@@ -38,18 +38,15 @@ void StdOutKernel::generateDoSegmentMethod() const {
     
     Function::arg_iterator args = doSegmentFunction->arg_begin();
     Value * self = &*(args++);
-    Value * blocksToDo = &*(args);
+    Value * doFinal = &*(args++);
+    Value * producerPos = &*(args++);
     ////iBuilder->CallPrintInt("blocksToDo", blocksToDo);
     Value * streamStructPtr = getStreamSetStructPtr(self, "codeUnitBuffer");
     //iBuilder->CallPrintInt("streamStructPtr", iBuilder->CreatePtrToInt(streamStructPtr, iBuilder->getInt64Ty()));
 
-    LoadInst * producerPos = iBuilder->CreateAtomicLoadAcquire(mStreamSetInputBuffers[0]->getProducerPosPtr(streamStructPtr));
     //iBuilder->CallPrintInt("producerPos", producerPos);
     Value * processed = getProcessedItemCount(self, "codeUnitBuffer");
-    Value * itemsAvail = iBuilder->CreateSub(producerPos, processed);
-    Value * itemsMax = iBuilder->CreateMul(blocksToDo, blockItems);
-    Value * lessThanFullSegment = iBuilder->CreateICmpULT(itemsAvail, itemsMax);
-    Value * itemsToDo = iBuilder->CreateSelect(lessThanFullSegment, itemsAvail, itemsMax);
+    Value * itemsToDo = iBuilder->CreateSub(producerPos, processed);
     
     Value * blockNo = getScalarField(self, blockNoScalar);
     Value * byteOffset = iBuilder->CreateMul(iBuilder->CreateURem(processed, blockItems), itemBytes);
