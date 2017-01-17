@@ -54,19 +54,6 @@ void MMapSourceKernel::generateDoSegmentMethod() const {
     iBuilder->restoreIP(savePoint);
 }
 
-// The doBlock method is deprecated.   But in case it is used, just call doSegment with
-// 1 as the number of blocks to do.
-void MMapSourceKernel::generateDoBlockMethod() const {
-    auto savePoint = iBuilder->saveIP();
-    Module * m = iBuilder->getModule();
-    Function * doBlockFunction = m->getFunction(mKernelName + doBlock_suffix);
-    Function * doSegmentFunction = m->getFunction(mKernelName + doSegment_suffix);
-    iBuilder->SetInsertPoint(BasicBlock::Create(iBuilder->getContext(), "entry", doBlockFunction, 0));
-    Value * self = getParameter(doBlockFunction, "self");
-    iBuilder->CreateCall(doSegmentFunction, {self, ConstantInt::getNullValue(iBuilder->getInt1Ty())});
-    iBuilder->CreateRetVoid();
-    iBuilder->restoreIP(savePoint);
-}
 
 MMapSourceKernel::MMapSourceKernel(IDISA::IDISA_Builder * iBuilder, unsigned blocksPerSegment, unsigned codeUnitWidth) :
 KernelBuilder(iBuilder, "mmap_source",

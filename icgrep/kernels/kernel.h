@@ -114,7 +114,7 @@ protected:
     
     // Each kernel builder subtype must provide its own logic for generating
     // doBlock calls.
-    virtual void generateDoBlockMethod() const = 0;
+    virtual void generateDoBlockMethod() const;
 
     virtual void generateDoBlockLogic(llvm::Value * self, llvm::Value * blockNo) const;
 

@@ -116,8 +116,6 @@ void KernelBuilder::generateKernel(const std::vector<StreamSetBuffer *> & inputs
     prepareKernel();            // possibly overridden by the KernelBuilder subtype
     addKernelDeclarations(m);
     generateInitMethod();       // possibly overridden by the KernelBuilder subtype
-    generateDoBlockMethod();    // must be implemented by the KernelBuilder subtype
-    generateFinalBlockMethod(); // possibly overridden by the KernelBuilder subtype
     generateDoSegmentMethod();
 
     // Implement the accumulator get functions
@@ -175,10 +173,20 @@ void KernelBuilder::generateDoBlockLogic(Value * self, Value * /* blockNo */) co
     iBuilder->CreateCall(doBlockFunction, self);
 }
 
+// Note: this may be overridden to incorporate doBlock logic directly into
+// the doSegment function.
+void KernelBuilder::generateDoBlockMethod() const {
+    llvm::report_fatal_error(mKernelName + " DoBlock method called but not implemented");
+}
+
 
 //  The default doSegment method dispatches to the doBlock routine for
 //  each block of the given number of blocksToDo, and then updates counts.
 void KernelBuilder::generateDoSegmentMethod() const {
+    generateDoBlockMethod();    // must be implemented by the KernelBuilder subtype
+    generateFinalBlockMethod(); // possibly overridden by the KernelBuilder subtype
+
+  
     auto savePoint = iBuilder->saveIP();
     Module * m = iBuilder->getModule();
     Function * doSegmentFunction = m->getFunction(mKernelName + doSegment_suffix);

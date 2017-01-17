@@ -22,7 +22,6 @@ private:
     unsigned mSegmentBlocks;
     unsigned mCodeUnitWidth;
   
-    void generateDoBlockMethod() const override;
     void generateDoSegmentMethod() const override;
     
 };
