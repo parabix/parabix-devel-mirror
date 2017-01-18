@@ -243,7 +243,9 @@ void KernelBuilder::generateDoSegmentMethod() const {
     if (!mDoBlockUpdatesProducedItemCountsAttribute) {
         for (unsigned i = 0; i < mStreamSetOutputs.size(); i++) {
             Value * preProduced = getProducedItemCount(self, mStreamSetOutputs[i].name);
+            
             setProducedItemCount(self, mStreamSetOutputs[i].name, iBuilder->CreateAdd(preProduced, segmentItemsProcessed));
+            //iBuilder->CallPrintInt(mKernelName + " produced ", iBuilder->CreateAdd(preProduced, segmentItemsProcessed));
         }
     }
     
@@ -251,7 +253,7 @@ void KernelBuilder::generateDoSegmentMethod() const {
     iBuilder->CreateCondBr(doFinal, doFinalBlock, segmentDone);
     iBuilder->SetInsertPoint(doFinalBlock);
 
-    Value * remainingItems = iBuilder->CreateSub(producerPos[0], processed);
+    Value * remainingItems = iBuilder->CreateSub(producerPos[0], getProcessedItemCount(self, mStreamSetInputs[0].name));
     //iBuilder->CallPrintInt(mKernelName + " remainingItems", remainingItems);
     
     createFinalBlockCall(self, remainingItems);
@@ -265,6 +267,7 @@ void KernelBuilder::generateDoSegmentMethod() const {
             setProducedItemCount(self, mStreamSetOutputs[i].name, iBuilder->CreateAdd(preProduced, remainingItems));
         }
     }
+    setTerminationSignal(self);
     iBuilder->CreateBr(segmentDone);
     
     iBuilder->SetInsertPoint(segmentDone);
@@ -343,6 +346,7 @@ void KernelBuilder::setProducedItemCount(Value * self, const std::string & ssNam
 
 void KernelBuilder::setTerminationSignal(Value * self) const {
     Value * ptr = iBuilder->CreateGEP(self, {iBuilder->getInt32(0), getScalarIndex(terminationSignal)});
+    //iBuilder->CallPrintInt(mKernelName + " setTermination", getScalarIndex(terminationSignal));
     iBuilder->CreateStore(ConstantInt::get(iBuilder->getInt1Ty(), 1), ptr);
 }
 

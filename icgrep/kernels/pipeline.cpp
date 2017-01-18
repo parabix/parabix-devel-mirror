@@ -133,18 +133,18 @@ Function * generateSegmentParallelPipelineThreadFunction(std::string name, IDISA
         iBuilder->CreateCondBr(cond, segmentLoopBody[k], segmentWait[k]);
         
         iBuilder->SetInsertPoint(segmentLoopBody[k]);
+        
+        //iBuilder->CallPrintInt(kernels[k]->getName() + " segment #", segNo);
         if (k == last_kernel) {
             segNo->addIncoming(iBuilder->CreateAdd(segNo, ConstantInt::get(size_ty, threadNum)), segmentLoopBody[last_kernel]);
         }
-        
-        
-        
-        
         std::vector<Value *> doSegmentArgs = {instancePtrs[k], doFinal};
         for (unsigned j = 0; j < kernels[k]->getStreamInputs().size(); j++) {
             unsigned producerKernel, outputIndex;
             std::tie(producerKernel, outputIndex) = producerTable[k][j];
             doSegmentArgs.push_back(ProducerPos[producerKernel][outputIndex]);
+            //iBuilder->CallPrintInt(kernels[k]->getName() + " producerPos[" + std::to_string(j) + "] ", doSegmentArgs.back());
+
         }
         kernels[k]->createDoSegmentCall(doSegmentArgs);
         std::vector<Value *> produced;
@@ -157,14 +157,11 @@ Function * generateSegmentParallelPipelineThreadFunction(std::string name, IDISA
             doFinal = iBuilder->CreateOr(doFinal, terminated);
         }
         kernels[k]->releaseLogicalSegmentNo(instancePtrs[k], nextSegNo);
-        if (k == last_kernel) {
-            iBuilder->CreateCondBr(doFinal, exitThreadBlock, segmentLoop);
-        }
-        else {
-            iBuilder->CreateBr(segmentWait[k+1]);
-        }
+        if (k == last_kernel) break;
+        iBuilder->CreateBr(segmentWait[k+1]);
     }
-   
+    iBuilder->CreateCondBr(doFinal, exitThreadBlock, segmentLoop);
+
     iBuilder->SetInsertPoint(exitThreadBlock);
     Value * nullVal = Constant::getNullValue(voidPtrTy);
     iBuilder->CreatePThreadExitCall(nullVal);

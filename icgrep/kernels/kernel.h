@@ -84,6 +84,7 @@ public:
 
     const std::vector<const parabix::StreamSetBuffer *> & getStreamSetOutputBuffers() const { return mStreamSetOutputBuffers; }
 
+    void setTerminationSignal(llvm::Value * self) const;
 
 protected:
 
@@ -175,7 +176,6 @@ protected:
 
     virtual void setProducedItemCount(llvm::Value * self, const std::string & ssName, llvm::Value * newFieldVal) const;
 
-    void setTerminationSignal(llvm::Value * self) const;
 
 private:
 

@@ -35,10 +35,10 @@ void MMapSourceKernel::generateDoSegmentMethod() const {
         fileItems = iBuilder->CreateUDiv(fileItems, iBuilder->getSize(mCodeUnitWidth/8));
     }
     Value * produced = getProducedItemCount(self, "sourceBuffer");
-    Value * itemsAvail = iBuilder->CreateSub(fileItems, produced);
-    Value * lessThanFullSegment = iBuilder->CreateICmpULT(itemsAvail, segmentItems);
-    Value * itemsToDo = iBuilder->CreateSelect(lessThanFullSegment, itemsAvail, segmentItems);
-    produced = iBuilder->CreateAdd(produced, itemsToDo);
+    
+    Value * nextProduced = iBuilder->CreateAdd(produced, segmentItems);
+    Value * lessThanFullSegment = iBuilder->CreateICmpULT(fileItems, nextProduced);
+    produced = iBuilder->CreateSelect(lessThanFullSegment, fileItems, nextProduced);
     setProducedItemCount(self, "sourceBuffer", produced);
     
     iBuilder->CreateCondBr(lessThanFullSegment, setTermination, mmapSourceExit);
