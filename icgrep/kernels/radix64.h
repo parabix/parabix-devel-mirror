@@ -5,8 +5,6 @@
 #ifndef RADIX64_H
 #define RADIX64_H
 
-#include "streamset.h"
-#include "interface.h"
 #include "kernel.h"
 
 namespace llvm { class Module; }

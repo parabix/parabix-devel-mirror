@@ -39,16 +39,16 @@ public:
      
      */
     
-    std::string getName() const { return mKernelName;}
+    const std::string & getName() const { return mKernelName;}
        
-    std::vector<Binding> getStreamInputs() {return mStreamSetInputs;}
-    std::vector<Binding> getStreamOutputs() {return mStreamSetOutputs;}
-    std::vector<Binding> getScalarInputs() { return mScalarInputs;}
-    std::vector<Binding> getScalarOutputs() { return mScalarOutputs;}
+    const std::vector<Binding> & getStreamInputs() const {return mStreamSetInputs;}
+    const std::vector<Binding> & getStreamOutputs() const {return mStreamSetOutputs;}
+    const std::vector<Binding> & getScalarInputs() const { return mScalarInputs;}
+    const std::vector<Binding> & getScalarOutputs() const { return mScalarOutputs;}
     
     
     // Add ExternalLinkage method declarations for the kernel to a given client module.
-    void addKernelDeclarations(llvm::Module * client);
+    void addKernelDeclarations(llvm::Module * client) const;
     virtual void createInstance() = 0;
     void setInitialArguments(std::vector<llvm::Value *> args);
     llvm::Value * getInstance() const { return mKernelInstance; }
@@ -78,27 +78,29 @@ public:
 protected:
 
     KernelInterface(IDISA::IDISA_Builder * builder,
-                    std::string kernelName,
+                    std::string && kernelName,
                     std::vector<Binding> stream_inputs,
                     std::vector<Binding> stream_outputs,
                     std::vector<Binding> scalar_inputs,
                     std::vector<Binding> scalar_outputs,
-                    std::vector<Binding> internal_scalars) :
-    iBuilder(builder),
-    mKernelName(kernelName),
-    mStreamSetInputs(stream_inputs),
-    mStreamSetOutputs(stream_outputs),
-    mScalarInputs(scalar_inputs),
-    mScalarOutputs(scalar_outputs),
-    mInternalScalars(internal_scalars),
-    mKernelStateType(nullptr),
-    mKernelInstance(nullptr),
-    mLookAheadPositions(0) {}
+                    std::vector<Binding> internal_scalars)
+    : iBuilder(builder)
+    , mKernelName(kernelName)
+    , mStreamSetInputs(stream_inputs)
+    , mStreamSetOutputs(stream_outputs)
+    , mScalarInputs(scalar_inputs)
+    , mScalarOutputs(scalar_outputs)
+    , mInternalScalars(internal_scalars)
+    , mKernelStateType(nullptr)
+    , mKernelInstance(nullptr)
+    , mLookAheadPositions(0) {
+
+    }
     
 protected:
     
     IDISA::IDISA_Builder * const iBuilder;
-    std::string mKernelName;
+    const std::string mKernelName;
     std::vector<llvm::Value *> mInitialArguments;
     std::vector<Binding> mStreamSetInputs;
     std::vector<Binding> mStreamSetOutputs;

@@ -5,12 +5,10 @@
  */
 
 #include "CBuilder.h"
-#include <llvm/IR/IRBuilder.h>
 #include <llvm/IR/Module.h>
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/Intrinsics.h>
 #include <llvm/IR/Function.h>
-#include <llvm/Support/raw_ostream.h>
 #include <llvm/IR/TypeBuilder.h>
 
 using namespace llvm;
@@ -93,7 +91,7 @@ Value * CBuilder::CreateMalloc(Type * type, Value * size) {
     Module * const m = getModule();
     Function * malloc = m->getFunction("malloc");
     if (malloc == nullptr) {
-        Type * const voidPtrTy = getVoidPtrTy();
+        PointerType * const voidPtrTy = getVoidPtrTy();
         malloc = cast<Function>(m->getOrInsertFunction("malloc", voidPtrTy, intTy, nullptr));
         malloc->setCallingConv(CallingConv::C);
         malloc->setDoesNotAlias(0);
@@ -202,7 +200,7 @@ Value * CBuilder::CreateRealloc(Value * ptr, Value * size) {
     Module * const m = getModule();
     Function * realloc = m->getFunction("realloc");
     if (realloc == nullptr) {
-        Type * const voidPtrTy = getVoidPtrTy();
+        PointerType * const voidPtrTy = getVoidPtrTy();
         realloc = cast<Function>(m->getOrInsertFunction("realloc", voidPtrTy, voidPtrTy, intTy, nullptr));
         realloc->setCallingConv(CallingConv::C);
         realloc->setDoesNotAlias(1);
@@ -229,7 +227,6 @@ PointerType * CBuilder::getVoidPtrTy() const {
     return TypeBuilder<void *, false>::get(getContext());
 }
 
-
 LoadInst * CBuilder::CreateAtomicLoadAcquire(Value * ptr) {
     unsigned alignment = dyn_cast<PointerType>(ptr->getType())->getElementType()->getPrimitiveSizeInBits()/8;
     LoadInst * inst = CreateAlignedLoad(ptr, alignment);
@@ -244,10 +241,6 @@ StoreInst * CBuilder::CreateAtomicStoreRelease(Value * val, Value * ptr) {
     return inst;
 }
 
-//
-// int pthread_create(pthread_t *thread, const pthread_attr_t *attr,
-//                    void *(*start_routine)(void*), void *arg);
-//
 Value * CBuilder::CreatePThreadCreateCall(Value * thread, Value * attr, Function * start_routine, Value * arg) {
     Function * pthreadCreateFunc = mMod->getFunction("pthread_create");
     if (pthreadCreateFunc == nullptr) {
@@ -265,9 +258,6 @@ Value * CBuilder::CreatePThreadCreateCall(Value * thread, Value * attr, Function
     return CreateCall(pthreadCreateFunc, {thread, attr, start_routine, arg});
 }
 
-//  #include <pthread.h>
-//  void pthread_exit(void *value_ptr);
-
 Value * CBuilder::CreatePThreadExitCall(Value * value_ptr) {
     Function * pthreadExitFunc = mMod->getFunction("pthread_exit");
     if (pthreadExitFunc == nullptr) {
@@ -280,7 +270,6 @@ Value * CBuilder::CreatePThreadExitCall(Value * value_ptr) {
     return exitThread;
 }
 
-//  int pthread_join(pthread_t thread, void **value_ptr);
 Value * CBuilder::CreatePThreadJoinCall(Value * thread, Value * value_ptr){
     Type * pthreadTy = getSizeTy();
     Function * pthreadJoinFunc = cast<Function>(mMod->getOrInsertFunction("pthread_join",
@@ -291,9 +280,9 @@ Value * CBuilder::CreatePThreadJoinCall(Value * thread, Value * value_ptr){
     return CreateCall(pthreadJoinFunc, {thread, value_ptr});
 }
 
-CBuilder::CBuilder(llvm::Module * m, unsigned archBitWidth, unsigned CacheAlignment)
+CBuilder::CBuilder(llvm::Module * m, unsigned GeneralRegisterWidthInBits, unsigned CacheLineAlignmentInBytes)
 : IRBuilder<>(m->getContext())
 , mMod(m)
-, mCacheLineAlignment(CacheAlignment)
-, mSizeType(getIntNTy(archBitWidth)) {
+, mCacheLineAlignment(CacheLineAlignmentInBytes)
+, mSizeType(getIntNTy(GeneralRegisterWidthInBits)) {
 }

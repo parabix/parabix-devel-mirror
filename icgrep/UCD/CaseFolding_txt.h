@@ -9,8 +9,6 @@
  */
 
 #include "re/re_cc.h"
-#include "re/re_re.h"
-#include <utility>
 #include <vector>
 
 typedef unsigned codepoint_t;

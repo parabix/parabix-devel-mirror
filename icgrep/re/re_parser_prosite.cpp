@@ -7,6 +7,7 @@
 #include <re/re_parser_prosite.h>
 #include <re/re_parser_helper.h>
 #include <re/re_alt.h>
+#include <re/re_any.h>
 #include <re/re_seq.h>
 #include <re/re_start.h>
 #include <re/re_end.h>

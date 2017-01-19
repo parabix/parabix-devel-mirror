@@ -7,12 +7,6 @@
 #ifndef CARRY_DATA_H
 #define CARRY_DATA_H
 
-#include <stdexcept>
-#include <iostream>
-#include <ostream>
-#include <llvm/Support/raw_os_ostream.h>
-#include <llvm/IR/Module.h>
-
 /* 
  * Carry Data system.
  * 
@@ -25,9 +19,6 @@
 */
 
 namespace pablo {
-
-class PabloBlock;
-class Statement;
 
 class CarryData {
     friend class CarryManager;

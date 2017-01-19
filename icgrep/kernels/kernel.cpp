@@ -7,17 +7,17 @@
 #include <llvm/IR/Value.h>               // for Value
 #include <llvm/Support/ErrorHandling.h>  // for report_fatal_error
 #include <toolchain.h>                   // for BufferSegments, SegmentSize
-#include "IR_Gen/idisa_builder.h"        // for IDISA_Builder
-#include "kernels/streamset.h"           // for StreamSetBuffer
-#include "llvm/ADT/StringRef.h"          // for StringRef, operator==
-#include "llvm/IR/CallingConv.h"         // for ::C
-#include "llvm/IR/Constant.h"            // for Constant
-#include "llvm/IR/Constants.h"           // for ConstantInt
-#include "llvm/IR/Function.h"            // for Function, Function::arg_iter...
-#include "llvm/IR/Instructions.h"        // for LoadInst (ptr only), PHINode
-#include "llvm/Support/Compiler.h"       // for LLVM_UNLIKELY
+#include <kernels/streamset.h>           // for StreamSetBuffer
+#include <llvm/ADT/StringRef.h>          // for StringRef, operator==
+#include <llvm/IR/CallingConv.h>         // for ::C
+#include <llvm/IR/Constant.h>            // for Constant
+#include <llvm/IR/Constants.h>           // for ConstantInt
+#include <llvm/IR/Function.h>            // for Function, Function::arg_iter...
+#include <llvm/IR/Instructions.h>        // for LoadInst (ptr only), PHINode
+#include <llvm/IR/Module.h>
+#include <llvm/Support/Compiler.h>       // for LLVM_UNLIKELY
+#include <llvm/Support/raw_ostream.h>
 namespace llvm { class BasicBlock; }
-namespace llvm { class Module; }
 namespace llvm { class Type; }
 
 using namespace llvm;
@@ -25,15 +25,15 @@ using namespace kernel;
 using namespace parabix;
 
 KernelBuilder::KernelBuilder(IDISA::IDISA_Builder * builder,
-                             std::string kernelName,
+                             std::string && kernelName,
                              std::vector<Binding> stream_inputs,
                              std::vector<Binding> stream_outputs,
                              std::vector<Binding> scalar_parameters,
                              std::vector<Binding> scalar_outputs,
                              std::vector<Binding> internal_scalars)
-: KernelInterface(builder, kernelName, stream_inputs, stream_outputs, scalar_parameters, scalar_outputs, internal_scalars),
-mNoTerminateAttribute(false),
-mDoBlockUpdatesProducedItemCountsAttribute(false) {
+: KernelInterface(builder, std::move(kernelName), stream_inputs, stream_outputs, scalar_parameters, scalar_outputs, internal_scalars)
+, mNoTerminateAttribute(false)
+, mDoBlockUpdatesProducedItemCountsAttribute(false) {
 
 }
 
@@ -441,9 +441,9 @@ Function * KernelBuilder::generateThreadFunction(const std::string & name) const
     }
     Module * m = iBuilder->getModule();
     Type * const voidTy = iBuilder->getVoidTy();
-    Type * const voidPtrTy = iBuilder->getVoidPtrTy();
-    Type * const int8PtrTy = iBuilder->getInt8PtrTy();
-    Type * const int1ty = iBuilder->getInt1Ty();
+    PointerType * const voidPtrTy = iBuilder->getVoidPtrTy();
+    PointerType * const int8PtrTy = iBuilder->getInt8PtrTy();
+    IntegerType * const int1ty = iBuilder->getInt1Ty();
     
     Function * const threadFunc = cast<Function>(m->getOrInsertFunction(name, voidTy, int8PtrTy, nullptr));
     threadFunc->setCallingConv(CallingConv::C);

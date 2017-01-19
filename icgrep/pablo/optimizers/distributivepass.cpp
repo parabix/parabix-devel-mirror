@@ -1,7 +1,9 @@
 #include "distributivepass.h"
 
 #include <pablo/codegenstate.h>
+#ifndef NDEBUG
 #include <pablo/analysis/pabloverifier.hpp>
+#endif
 #include <pablo/optimizers/pablo_simplifier.hpp>
 #include <pablo/passes/flattenassociativedfg.h>
 #include <boost/container/flat_set.hpp>

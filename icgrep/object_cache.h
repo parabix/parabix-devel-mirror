@@ -3,9 +3,9 @@
 
 #include <llvm/ADT/SmallString.h>
 #include <llvm/ExecutionEngine/ObjectCache.h>
-#include <llvm/IR/Module.h>
 #include <llvm/Support/MemoryBuffer.h>
 #include <string>
+namespace llvm { class Module; }
 
 class ICGrepObjectCache : public llvm::ObjectCache {
     public:

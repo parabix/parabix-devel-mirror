@@ -5,12 +5,7 @@
 #ifndef P2S_KERNEL_H
 #define P2S_KERNEL_H
 
-#include "streamset.h"
-#include "interface.h"
-#include "kernel.h"
-
-namespace llvm { class Module; }
-
+#include "kernel.h"  // for KernelBuilder
 namespace IDISA { class IDISA_Builder; }
 
 namespace kernel {

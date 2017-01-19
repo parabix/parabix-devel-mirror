@@ -4,40 +4,23 @@
  *  icgrep is a trademark of International Characters.
  */
 
-#include <string>
 #include <iostream>
-#include <fstream>
-#include <sstream>
-#include <stdlib.h>
-
 #include <llvm/IR/Function.h>
 #include <llvm/IR/Module.h>
 #include <llvm/ExecutionEngine/ExecutionEngine.h>
-#include <llvm/ExecutionEngine/MCJIT.h>
-#include <llvm/IRReader/IRReader.h>
 #include <llvm/IR/Verifier.h>
-#include <llvm/Support/Debug.h>
-
 #include <llvm/Support/CommandLine.h>
-
 #include <toolchain.h>
 #include <IR_Gen/idisa_builder.h>
 #include <IR_Gen/idisa_target.h>
 #include <kernels/pipeline.h>
 #include <kernels/mmap_kernel.h>
-#include <kernels/interface.h>
-#include <kernels/kernel.h>
+#include <kernels/streamset.h>
 #include <kernels/radix64.h>
 #include <kernels/stdout_kernel.h>
-
-
-// mmap system
 #include <boost/filesystem.hpp>
 #include <boost/iostreams/device/mapped_file.hpp>
 #include <boost/interprocess/anonymous_shared_memory.hpp>
-#include <boost/interprocess/mapped_region.hpp>
-#include <fcntl.h>
-
 
 using namespace llvm;
 

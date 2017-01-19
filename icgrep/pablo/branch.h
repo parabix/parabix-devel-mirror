@@ -2,11 +2,10 @@
 #define BRANCH_H
 
 #include <pablo/pabloAST.h>
-#include <vector>
+namespace pablo { class Var; }
+namespace pablo { class PabloBlock; }
 
 namespace pablo {
-
-class Var;
 
 class Branch : public Statement {
     friend class PabloBlock;
@@ -43,7 +42,7 @@ public:
 protected:
     Branch(const ClassTypeId typeId, PabloAST * condition, PabloBlock * body, Allocator & allocator);
 protected:
-    PabloBlock *            mBody;
+    PabloBlock * mBody;
 };
 
 class If : public Branch {

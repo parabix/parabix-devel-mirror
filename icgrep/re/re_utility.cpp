@@ -4,12 +4,11 @@
  *  icgrep is a trademark of International Characters.
  */
 
+#include "re_utility.h"
 #include <re/re_any.h>
 #include <re/re_name.h>
 #include <re/re_alt.h>
 #include <re/re_seq.h>
-#include <re/re_start.h>
-#include <re/re_end.h>
 #include <re/re_diff.h>
 #include <re/re_assertion.h>
 

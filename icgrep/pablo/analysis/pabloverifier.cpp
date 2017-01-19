@@ -1,11 +1,14 @@
 #include "pabloverifier.hpp"
-#include <pablo/pablo_kernel.h>
+#include <pablo/branch.h>
+#include <pablo/pe_var.h>
+#include <pablo/ps_assign.h>
 #include <pablo/codegenstate.h>
+#include <pablo/pablo_kernel.h>
 #include <pablo/printer_pablos.h>
-#include <iostream>
 #include <boost/container/flat_set.hpp>
-#include <queue>
+#include <llvm/Support/raw_ostream.h>
 
+using namespace llvm;
 
 namespace pablo {
 
@@ -196,11 +199,7 @@ static void throwMisreportedBranchError(const Statement * const stmt, const Stat
 static inline bool illegalOperandType(const PabloAST * const op) {
     switch (op->getClassTypeId()) {
         case TypeId::Block:
-        case TypeId::Function:
-        case TypeId::Prototype:
         case TypeId::Assign:
-        case TypeId::Call:
-        case TypeId::SetIthBit:
         case TypeId::If:
         case TypeId::While:
             return true;
@@ -381,9 +380,8 @@ void PabloVerifier::verify(const PabloKernel * kernel, const std::string & locat
         verifyUseDefInformation(kernel);
         isTopologicallyOrdered(kernel);
     } catch(std::runtime_error & err) {
-        raw_os_ostream out(std::cerr);
-        PabloPrinter::print(kernel, out);
-        out.flush();
+        PabloPrinter::print(kernel, errs());
+        errs().flush();
         if (location.empty()) {
             llvm::report_fatal_error(err.what());
         } else {

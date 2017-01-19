@@ -1,7 +1,5 @@
+#include "re_name_resolve.h"
 #include <re/re_name.h>
-#include <re/re_any.h>
-#include <re/re_start.h>
-#include <re/re_end.h>
 #include <re/re_alt.h>
 #include <re/re_cc.h>
 #include <re/re_seq.h>
@@ -16,12 +14,10 @@
 #include <boost/container/flat_set.hpp>
 #include <sstream>
 
-#include <re/printer_re.h>
-#include <iostream>
-
 using NameMap = UCD::UCDCompiler::NameMap;
 
 using namespace boost::container;
+using namespace llvm;
 
 namespace re {
   

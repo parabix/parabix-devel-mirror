@@ -8,7 +8,7 @@
 #define ALT_H
 
 #include "re_re.h"
-#include "re_cc.h"
+#include <llvm/Support/Casting.h>
 
 namespace re {
 
@@ -35,8 +35,8 @@ private:
     template<typename iterator>
     void flatten(iterator begin, iterator end) {
         for (auto i = begin; i != end; ++i) {
-            if (LLVM_UNLIKELY(isa<Alt>(*i))) {
-                flatten<Alt::iterator>(cast<Alt>(*i)->begin(), cast<Alt>(*i)->end());
+            if (LLVM_UNLIKELY(llvm::isa<Alt>(*i))) {
+                flatten<Alt::iterator>(llvm::cast<Alt>(*i)->begin(), llvm::cast<Alt>(*i)->end());
             } else {
                 push_back(*i);
             }

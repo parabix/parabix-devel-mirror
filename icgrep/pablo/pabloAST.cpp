@@ -4,15 +4,19 @@
  *  icgrep is a trademark of International Characters.
  */
 
-#include <pablo/pabloAST.h>
-#include <pablo/codegenstate.h>
-#include <llvm/Support/Compiler.h>
-#include <pablo/printer_pablos.h>
-#include <llvm/ADT/SmallVector.h>
-#include <boost/container/flat_set.hpp>
-#include <pablo/printer_pablos.h>
+#include "pabloAST.h"
+#include <pablo/codegenstate.h>          // for PabloBlock
+#include <pablo/pe_var.h>
+#include <pablo/boolean.h>
+#include <pablo/pe_infile.h>
+#include <pablo/pe_zeroes.h>
+#include <pablo/pe_ones.h>
+#include <pablo/ps_assign.h>
+#include <pablo/branch.h>
+#include <pablo/printer_pablos.h>        // for PabloPrinter
 
 using namespace boost::container;
+using namespace llvm;
 
 namespace pablo {
 

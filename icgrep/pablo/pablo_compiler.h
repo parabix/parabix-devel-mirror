@@ -8,26 +8,19 @@
 #define PABLO_COMPILER_H
 
 #include <unordered_map>
-#include <llvm/IR/IRBuilder.h>
-#include <IR_Gen/idisa_builder.h>
-#include <kernels/kernel.h>
 #include <boost/container/flat_set.hpp>
-
-namespace llvm {
-class Value;
-class Function;
-}
+namespace IDISA { class IDISA_Builder; }
+namespace llvm { class Function; }
+namespace llvm { class Value; }
+namespace pablo { class CarryManager; }
+namespace pablo { class If; }
+namespace pablo { class PabloAST; }
+namespace pablo { class PabloBlock; }
+namespace pablo { class PabloKernel; }
+namespace pablo { class Statement; }
+namespace pablo { class While; }
 
 namespace pablo {
-
-class PabloAST;
-class PabloBlock;
-class PabloKernel;
-class String;
-class Statement;
-class If;
-class While;
-class CarryManager;
 
 class PabloCompiler {
     friend class CarryManager;
@@ -44,11 +37,15 @@ public:
 private:
 
     void Examine();
+
     void Examine(const PabloBlock * const block);
 
     void compileBlock(const PabloBlock * const block);
+
     void compileStatement(const Statement * stmt);
+
     void compileIf(const If * ifStmt);
+
     void compileWhile(const While * whileStmt);
 
     llvm::Value * compileExpression(const PabloAST * expr, const bool ensureLoaded = true) const;

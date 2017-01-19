@@ -4,7 +4,7 @@
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/Support/FileSystem.h>
 #include <llvm/Support/Path.h>
-
+#include <llvm/IR/Module.h>
 #ifdef OBJECT_CACHE_DEBUG
 #include <iostream>
 #endif

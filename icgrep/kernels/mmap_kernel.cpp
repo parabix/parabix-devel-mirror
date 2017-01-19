@@ -55,10 +55,8 @@ void MMapSourceKernel::generateDoSegmentMethod() const {
 }
 
 
-MMapSourceKernel::MMapSourceKernel(IDISA::IDISA_Builder * iBuilder, unsigned blocksPerSegment, unsigned codeUnitWidth) :
-KernelBuilder(iBuilder, "mmap_source",
-              {}, {Binding{iBuilder->getStreamSetTy(1, codeUnitWidth), "sourceBuffer"}},
-              {Binding{iBuilder->getSizeTy(), "fileSize"}}, {}, {})
+MMapSourceKernel::MMapSourceKernel(IDISA::IDISA_Builder * iBuilder, unsigned blocksPerSegment, unsigned codeUnitWidth)
+: KernelBuilder(iBuilder, "mmap_source", {}, {Binding{iBuilder->getStreamSetTy(1, codeUnitWidth), "sourceBuffer"}}, {Binding{iBuilder->getSizeTy(), "fileSize"}}, {}, {})
 , mSegmentBlocks(blocksPerSegment)
 , mCodeUnitWidth(codeUnitWidth) {
 

@@ -4,21 +4,30 @@
  *  icgrep is a trademark of International Characters.
  */
 
-#include <pablo/pablo_compiler.h>
+#include "pablo_compiler.h"
 #include <pablo/pablo_kernel.h>
 #include <pablo/pablo_toolchain.h>
 #include <pablo/codegenstate.h>
+#include <pablo/boolean.h>
+#include <pablo/arithmetic.h>
+#include <pablo/branch.h>
+#include <pablo/pe_advance.h>
+#include <pablo/pe_lookahead.h>
+#include <pablo/pe_matchstar.h>
+#include <pablo/pe_scanthru.h>
+#include <pablo/pe_infile.h>
+#include <pablo/pe_count.h>
+#include <pablo/pe_integer.h>
+#include <pablo/pe_string.h>
+#include <pablo/pe_zeroes.h>
+#include <pablo/pe_ones.h>
+#include <pablo/pe_var.h>
+#include <pablo/ps_assign.h>
 #include <pablo/carry_manager.h>
-#include <pablo/printer_pablos.h>
-#include <pablo/prototype.h>
-#include <stdexcept>
-#include <sstream>
 #include <IR_Gen/idisa_builder.h>
 #include <llvm/IR/Module.h>
-#include <llvm/IR/IRBuilder.h>
-#include <iostream>
-#include <hrtime.h>
-#include <llvm/Support/Debug.h>
+
+using namespace llvm;
 
 namespace pablo {
 
@@ -141,9 +150,9 @@ void PabloCompiler::compileIf(const If * const ifStatement) {
         if (LLVM_UNLIKELY(f == mMarkerMap.end())) {
             std::string tmp;
             raw_string_ostream out(tmp);
-            PabloPrinter::print(var, out);
+            var->print(out);
             out << " is uninitialized prior to entering ";
-            PabloPrinter::print(ifStatement, out);
+            ifStatement->print(out);
             llvm::report_fatal_error(out.str());
         }
         incoming.emplace_back(var, f->second);
@@ -185,7 +194,7 @@ void PabloCompiler::compileIf(const If * const ifStatement) {
         if (LLVM_UNLIKELY(f == mMarkerMap.end() || f->second == value)) {
             std::string tmp;
             raw_string_ostream out(tmp);
-            PabloPrinter::print(var, out);
+            var->print(out);
             out << " was not assigned a value.";
             llvm::report_fatal_error(out.str());
         }
@@ -245,9 +254,9 @@ void PabloCompiler::compileWhile(const While * const whileStatement) {
         if (LLVM_UNLIKELY(f == mMarkerMap.end())) {
             std::string tmp;
             raw_string_ostream out(tmp);
-            PabloPrinter::print(var, out);
+            var->print(out);
             out << " is uninitialized prior to entering ";
-            PabloPrinter::print(whileStatement, out);
+            whileStatement->print(out);
             llvm::report_fatal_error(out.str());
         }
         Value * entryValue = f->second;
@@ -297,7 +306,7 @@ void PabloCompiler::compileWhile(const While * const whileStatement) {
         if (LLVM_UNLIKELY(f == mMarkerMap.end() || f->second == phi)) {
             std::string tmp;
             raw_string_ostream out(tmp);
-            PabloPrinter::print(var, out);
+            var->print(out);
             out << " was not assigned a value.";
             llvm::report_fatal_error(out.str());
         }
@@ -473,11 +482,11 @@ void PabloCompiler::compileStatement(const Statement * stmt) {
 
         } else {
             std::string tmp;
-            llvm::raw_string_ostream msg(tmp);
-            msg << "Internal error: ";
-            PabloPrinter::print(stmt, msg);
-            msg << " is not a recognized statement in the Pablo compiler.";
-            throw std::runtime_error(msg.str());
+            llvm::raw_string_ostream out(tmp);
+            out << "Internal error: ";
+            stmt->print(out);
+            out << " is not a recognized statement in the Pablo compiler.";
+            throw std::runtime_error(out.str());
         }
 
         mMarkerMap[expr] = value;
@@ -534,7 +543,7 @@ Value * PabloCompiler::compileExpression(const PabloAST * expr, const bool ensur
     if (LLVM_UNLIKELY(f == mMarkerMap.end())) {
         std::string tmp;
         llvm::raw_string_ostream out(tmp);
-        PabloPrinter::print(expr, out);
+        expr->print(out);
         out << " was used before definition!";
         throw std::runtime_error(out.str());
     }

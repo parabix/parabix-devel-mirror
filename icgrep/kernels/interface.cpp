@@ -15,7 +15,7 @@ namespace llvm { class Type; }
 
 using namespace llvm;
 
-void KernelInterface::addKernelDeclarations(Module * client) {
+void KernelInterface::addKernelDeclarations(Module * client) const {
     Module * saveModule = iBuilder->getModule();
     auto savePoint = iBuilder->saveIP();
     iBuilder->setModule(client);

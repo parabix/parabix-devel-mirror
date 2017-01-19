@@ -3,21 +3,15 @@
 
 #include <pablo/pabloAST.h>
 #include <llvm/ADT/StringRef.h>
-#include <llvm/ADT/Twine.h>
-#include <llvm/ADT/SmallVector.h>
-#include <string>
-#include <ostream>
 #include <llvm/Support/raw_os_ostream.h>
 
 namespace pablo {
 
 class String : public PabloAST {
     friend class SymbolGenerator;
-    friend class Prototype;
     friend std::ostream & operator<< (std::ostream& stream, const String & string);
 public:
     using StringAllocator = SlabAllocator<char>;
-    using Value = StringRef;
 
     static inline bool classof(const PabloAST * e) {
         return e->getClassTypeId() == ClassTypeId::String;
@@ -28,17 +22,17 @@ public:
     virtual ~String(){
 
     }
-    inline const StringRef & value() const {
+    inline const llvm::StringRef & value() const {
         return mValue;
     }
     inline std::string to_string() const {
         return mValue.str();
     }
-    inline StringRef value() {
+    inline llvm::StringRef value() {
         return mValue;
     }
 protected:
-    String(Type * type, const std::string & value, Allocator & allocator) noexcept
+    String(llvm::Type * type, const std::string & value, Allocator & allocator) noexcept
     : PabloAST(ClassTypeId::String, type, this, allocator)
     , mValue(duplicate(value, allocator)) {
 
@@ -51,7 +45,7 @@ protected:
         return string;
     }
 private:
-    const StringRef         mValue;
+    const llvm::StringRef mValue;
 };
 
 inline std::ostream & operator <<(std::ostream & stream, const String & string) {

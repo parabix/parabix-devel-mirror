@@ -8,24 +8,19 @@
 #include <re/re_any.h>
 #include <re/re_name.h>
 #include <re/re_diff.h>
-#include <re/re_any.h>
 #include <re/re_start.h> 
 #include <re/re_end.h> 
 #include <re/re_cc.h> 
 #include <re/re_seq.h> 
-#include <re/re_rep.h> 
-#include <re/re_intersect.h> 
 #include <re/re_assertion.h>
 #include "UCD/PropertyAliases.h"
 #include "UCD/PropertyObjects.h"
 #include "UCD/PropertyObjectTable.h"
 #include "UCD/PropertyValueAliases.h"
-#include <string>
-#include <iostream>
 
 using namespace UCD;
 using namespace re;
-
+using namespace llvm;
 
 inline int GetPropertyValueEnumCode(const UCD::property_t type, const std::string & value) {
     return property_object_table[type]->GetPropertyValueEnumCode(value);

@@ -6,20 +6,35 @@
 
 #include "printer_pablos.h"
 #include <pablo/codegenstate.h>
+#include <pablo/boolean.h>
+#include <pablo/arithmetic.h>
+#include <pablo/branch.h>
+#include <pablo/pe_advance.h>
+#include <pablo/pe_lookahead.h>
+#include <pablo/pe_matchstar.h>
+#include <pablo/pe_scanthru.h>
+#include <pablo/pe_infile.h>
+#include <pablo/pe_count.h>
+#include <pablo/pe_integer.h>
+#include <pablo/pe_string.h>
+#include <pablo/pe_zeroes.h>
+#include <pablo/pe_ones.h>
+#include <pablo/pe_var.h>
+#include <pablo/ps_assign.h>
 #include <pablo/pablo_kernel.h>
 #include <llvm/Support/raw_os_ostream.h>
 
 using namespace pablo;
-
+using namespace llvm;
 using TypeId = PabloAST::ClassTypeId;
 
 const unsigned BlockIndenting = 2;
 
-void PabloPrinter::print(const PabloKernel * kernel, llvm::raw_ostream & out) {
+void PabloPrinter::print(const PabloKernel * kernel, raw_ostream & out) {
     print(kernel->getEntryBlock(), out, true);
 }
 
-void PabloPrinter::print(const Statement * stmt, llvm::raw_ostream & out, const bool expandNested, const unsigned indent) {
+void PabloPrinter::print(const Statement * stmt, raw_ostream & out, const bool expandNested, const unsigned indent) {
     out.indent(indent);
     if (stmt == nullptr) {
         out << "<null-stmt>";
@@ -175,14 +190,12 @@ void PabloPrinter::print(const PabloAST * expr, llvm::raw_ostream & out) {
         out << stmt->getName();
     } else if (isa<Integer>(expr)) {
         out << cast<Integer>(expr)->value();
-    } else if (isa<Prototype>(expr)) {
-        out << cast<Prototype>(expr)->getName();
     } else {
         out << "???";
     }
 }
 
-void PabloPrinter::print(const PabloBlock * block, llvm::raw_ostream & strm, const bool expandNested, const unsigned indent) {
+void PabloPrinter::print(const PabloBlock * block, raw_ostream & strm, const bool expandNested, const unsigned indent) {
     for (const Statement * stmt : *block) {
         print(stmt, strm, expandNested, indent);
         if (LLVM_LIKELY(!isa<Branch>(stmt) || !expandNested)) {

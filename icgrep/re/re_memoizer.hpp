@@ -8,12 +8,12 @@ namespace re {
 
 struct MemoizerComparator {
     inline bool operator() (const RE * lh, const RE * rh) const{
-        if (LLVM_LIKELY(isa<Name>(lh) && isa<Name>(rh))) {
-            return *cast<Name>(lh) < *cast<Name>(rh);
-        } else if (isa<Name>(lh)) {
-            return *cast<Name>(lh) < *cast<CC>(rh);
+        if (LLVM_LIKELY(llvm::isa<Name>(lh) && llvm::isa<Name>(rh))) {
+            return *llvm::cast<Name>(lh) < *llvm::cast<Name>(rh);
+        } else if (llvm::isa<Name>(lh)) {
+            return *llvm::cast<Name>(lh) < *llvm::cast<CC>(rh);
         }
-        return *cast<Name>(rh) > *cast<CC>(lh);
+        return *llvm::cast<Name>(rh) > *llvm::cast<CC>(lh);
     }
 };
 
@@ -22,7 +22,7 @@ struct Memoizer : public std::set<RE *, MemoizerComparator> {
     inline Name * memoize(CC * cc) {
         auto f = find(cc);
         if (f != end()) {
-            return cast<Name>(*f);
+            return llvm::cast<Name>(*f);
         } else {
             Name * name = makeName(cc);
             insert(name);
@@ -31,7 +31,7 @@ struct Memoizer : public std::set<RE *, MemoizerComparator> {
     }
 
     inline Name * memoize(Name * name) {
-        return cast<Name>(*insert(name).first);
+        return llvm::cast<Name>(*insert(name).first);
     }
 };
 

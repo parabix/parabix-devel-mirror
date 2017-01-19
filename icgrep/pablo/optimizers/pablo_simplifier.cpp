@@ -2,15 +2,23 @@
 #include <pablo/pablo_kernel.h>
 #include <pablo/codegenstate.h>
 #include <pablo/expression_map.hpp>
-//#include <pablo/function.h>
+#include <pablo/boolean.h>
+#include <pablo/pe_zeroes.h>
+#include <pablo/pe_ones.h>
+#include <pablo/arithmetic.h>
+#include <pablo/branch.h>
+#include <pablo/ps_assign.h>
+#include <pablo/pe_advance.h>
+#include <pablo/pe_scanthru.h>
+#include <pablo/pe_matchstar.h>
+#include <pablo/pe_var.h>
+#ifndef NDEBUG
 #include <pablo/analysis/pabloverifier.hpp>
-//#include <boost/container/flat_set.hpp>
-//#include <boost/container/flat_map.hpp>
-#include <pablo/printer_pablos.h>
-//#include <iostream>
+#endif
 
 using namespace boost;
 using namespace boost::container;
+using namespace llvm;
 
 namespace pablo {
 

@@ -4,14 +4,31 @@
  *  icgrep is a trademark of International Characters.
  */
 
-#include <pablo/codegenstate.h>
+#include "codegenstate.h"
 #include <pablo/printer_pablos.h>
+#include <pablo/boolean.h>
+#include <pablo/arithmetic.h>
+#include <pablo/branch.h>
+#include <pablo/pe_advance.h>
+#include <pablo/pe_lookahead.h>
+#include <pablo/pe_matchstar.h>
+#include <pablo/pe_scanthru.h>
+#include <pablo/pe_infile.h>
+#include <pablo/pe_count.h>
+#include <pablo/pe_integer.h>
+#include <pablo/pe_string.h>
+#include <pablo/pe_zeroes.h>
+#include <pablo/pe_ones.h>
+#include <pablo/pe_var.h>
+#include <pablo/ps_assign.h>
+#include <pablo/pablo_kernel.h>
 
 #define CHECK_SAME_TYPE(A, B) \
     assert ("DIFFERING CONTEXTS" && (&((A)->getType()->getContext()) == &((B)->getType()->getContext()))); \
     assert ("DIFFERING TYPES" && ((A)->getType() == (B)->getType()))
 
 using StreamType = IDISA::StreamType;
+using namespace llvm;
 
 inline void printType(const Type * type, raw_string_ostream & out) {
     if (auto st = dyn_cast<StreamType>(type)) {
@@ -33,11 +50,6 @@ namespace pablo {
 
 /// UNARY CREATE FUNCTIONS
 ///
-
-Call * PabloBlock::createCall(PabloAST * prototype, const std::vector<PabloAST *> &) {
-    assert (prototype);
-    return insertAtInsertionPoint(new (mAllocator) Call(prototype, mAllocator));
-}
 
 Count * PabloBlock::createCount(PabloAST * expr) {
     Type * type = getParent()->getBuilder()->getSizeTy();
@@ -283,6 +295,14 @@ Sel * PabloBlock::createSel(PabloAST * condition, PabloAST * trueExpr, PabloAST 
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
+ * @brief Create
+ ** ------------------------------------------------------------------------------------------------------------- */
+PabloBlock * PabloBlock::Create(PabloKernel * const parent) noexcept {
+    Allocator & allocator = parent->mAllocator;
+    return new (allocator) PabloBlock(parent, allocator);
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
  * @brief insert
  ** ------------------------------------------------------------------------------------------------------------- */
 void PabloBlock::insert(Statement * const statement) {
@@ -311,6 +331,13 @@ void PabloBlock::eraseFromParent(const bool recursively) {
     while (stmt) {
         stmt = stmt->eraseFromParent(recursively);
     }
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief getPredecessor
+ ** ------------------------------------------------------------------------------------------------------------- */
+PabloBlock * PabloBlock::getPredecessor() const {
+    return getBranch() ? getBranch()->getParent() : nullptr;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

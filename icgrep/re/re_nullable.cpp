@@ -1,14 +1,14 @@
 #include "re_nullable.h"
-#include <re/re_cc.h>
-#include <re/re_start.h>
-#include <re/re_end.h>
-#include <re/re_alt.h>
-#include <re/re_rep.h>
-#include <re/re_any.h>
-#include <re/re_diff.h>
-#include <re/re_intersect.h>
-#include <re/re_assertion.h>
-#include <re/re_name.h>
+#include <re/re_alt.h>             // for Alt, makeAlt
+#include <re/re_any.h>             // for makeAny, Any
+#include <re/re_assertion.h>       // for Assertion, Assertion::Sense, Asser...
+#include <re/re_diff.h>            // for Diff, makeDiff
+#include <re/re_intersect.h>       // for Intersect
+#include <re/re_name.h>            // for Name
+#include <re/re_rep.h>             // for Rep, makeRep
+#include <re/re_seq.h>             // for Seq, makeSeq
+#include <vector>                  // for vector, allocator
+#include <llvm/Support/Casting.h>  // for dyn_cast, isa
 
 /*
 
@@ -17,6 +17,8 @@
  End ($) match the empty string, but not everywhere).
 
 */
+
+using namespace llvm;
 
 namespace re {
 

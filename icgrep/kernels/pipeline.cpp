@@ -5,10 +5,8 @@
 
 #include "pipeline.h"
 #include <toolchain.h>
-#include <IR_Gen/idisa_builder.h>
-#include <kernels/interface.h>
 #include <kernels/kernel.h>
-#include <iostream>
+#include <llvm/IR/Module.h>
 #include <unordered_map>
 
 using namespace kernel;
@@ -80,8 +78,8 @@ Function * generateSegmentParallelPipelineThreadFunction(std::string name, IDISA
     Module * m = iBuilder->getModule();
     Type * const size_ty = iBuilder->getSizeTy();
     Type * const voidTy = iBuilder->getVoidTy();
-    Type * const voidPtrTy = iBuilder->getVoidPtrTy();
-    Type * const int8PtrTy = iBuilder->getInt8PtrTy();
+    PointerType * const voidPtrTy = iBuilder->getVoidPtrTy();
+    PointerType * const int8PtrTy = iBuilder->getInt8PtrTy();
 
     Function * const threadFunc = cast<Function>(m->getOrInsertFunction(name, voidTy, int8PtrTy, nullptr));
     threadFunc->setCallingConv(CallingConv::C);
@@ -184,9 +182,9 @@ void generateSegmentParallelPipeline(IDISA::IDISA_Builder * iBuilder, const std:
     
     Module * m = iBuilder->getModule();
     
-    Type * const size_ty = iBuilder->getSizeTy();
-    Type * const voidPtrTy = iBuilder->getVoidPtrTy();
-    Type * const int8PtrTy = iBuilder->getInt8PtrTy();
+    IntegerType * const size_ty = iBuilder->getSizeTy();
+    PointerType * const voidPtrTy = iBuilder->getVoidPtrTy();
+    PointerType * const int8PtrTy = iBuilder->getInt8PtrTy();
     
     for (auto k : kernels) k->createInstance();
     
@@ -237,11 +235,11 @@ void generateSegmentParallelPipeline(IDISA::IDISA_Builder * iBuilder, const std:
 
 void generatePipelineParallel(IDISA::IDISA_Builder * iBuilder, const std::vector<KernelBuilder *> & kernels) {
     
-    Type * pthreadTy = iBuilder->getSizeTy();
-    Type * const voidPtrTy = iBuilder->getVoidPtrTy();
-    Type * const int8PtrTy = iBuilder->getInt8PtrTy();
+    IntegerType * pthreadTy = iBuilder->getSizeTy();
+    PointerType * const voidPtrTy = iBuilder->getVoidPtrTy();
+    PointerType * const int8PtrTy = iBuilder->getInt8PtrTy();
     
-    Type * const pthreadsTy = ArrayType::get(pthreadTy, kernels.size());
+    ArrayType * const pthreadsTy = ArrayType::get(pthreadTy, kernels.size());
     
     for (auto k : kernels) k->createInstance();
     

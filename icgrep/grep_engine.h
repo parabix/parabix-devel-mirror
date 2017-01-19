@@ -1,21 +1,17 @@
-#ifndef DO_GREP_H
-#define DO_GREP_H
 /*
  *  Copyright (c) 2016 International Characters.
  *  This software is licensed to the public under the Open Software License 3.0.
  *  icgrep is a trademark of International Characters.
  */
-
-#include <string>
-#include <stdint.h>
-#include <re/re_re.h>
-#include <llvm/ExecutionEngine/ExecutionEngine.h>
-#include <grep_type.h>
-
-
-namespace llvm { class raw_ostream; }
-
-
+#ifndef DO_GREP_H
+#define DO_GREP_H
+#include <grep_type.h>  // for GrepType, GrepType::Normal
+#include <string>       // for string
+#include <vector>
+namespace llvm { class ExecutionEngine; }
+namespace llvm { class Module; }
+namespace re { class CC; }
+namespace re { class RE; }
 
 class GrepEngine {
     typedef void (*GrepFunctionType)(char * byte_data, size_t filesize, const int fileIdx);
@@ -28,10 +24,11 @@ public:
   
     void grepCodeGen(std::string moduleName, re::RE * re_ast, bool CountOnly, bool UTF_16 = false, GrepType grepType = GrepType::Normal);
     
-    void doGrep(const std::string & fileName, const int fileIdx, bool CountOnly, std::vector<size_t> &total_CountOnly, bool UTF_16);
+    void doGrep(const std::string & fileName, const int fileIdx, bool CountOnly, std::vector<size_t> & total_CountOnly, bool UTF_16);
     
     re::CC *  grepCodepoints();
-    const std::vector<std::string> & grepPropertyValues(const std::string& propertyName);
+
+    const std::vector<std::string> & grepPropertyValues(const std::string & propertyName);
     
 private:
    
@@ -43,7 +40,7 @@ private:
     llvm::ExecutionEngine * mEngine;
 };
 
-void icgrep_Linking(Module * m, ExecutionEngine * e);
+void icgrep_Linking(llvm::Module * m, llvm::ExecutionEngine * e);
 
 
 re::CC * getParsedCodePointSet();

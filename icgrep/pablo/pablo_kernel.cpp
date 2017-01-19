@@ -7,6 +7,8 @@
 #include <pablo/codegenstate.h>
 #include <pablo/pablo_compiler.h>
 #include <pablo/pe_var.h>
+#include <pablo/pe_zeroes.h>
+#include <pablo/pe_ones.h>
 #include <llvm/IR/Module.h>
 #include <llvm/IR/Verifier.h>
 #include <IR_Gen/idisa_builder.h>
@@ -15,6 +17,7 @@ using namespace pablo;
 using namespace kernel;
 using namespace parabix;
 using namespace IDISA;
+using namespace llvm;
 
 Var * PabloKernel::addInput(const std::string & name, Type * const type) {
     Var * param = new (mAllocator) Var(mSymbolTable->make(name, iBuilder), type, mAllocator, true);
@@ -28,7 +31,7 @@ Var * PabloKernel::addInput(const std::string & name, Type * const type) {
     return param;
 }
 
-Var * PabloKernel::addOutput(const std::string name, Type * const type) {
+Var * PabloKernel::addOutput(const std::string & name, Type * const type) {
     Var * result = new (mAllocator) Var(mSymbolTable->make(name, iBuilder), type, mAllocator, false);
     mOutputs.push_back(result);
     if (isa<ArrayType>(type) || isa<StreamType>(type)) {
@@ -118,8 +121,8 @@ void PabloKernel::generateFinalBlockMethod() const {
     iBuilder->restoreIP(savePoint);
 }
 
-PabloKernel::PabloKernel(IDISA::IDISA_Builder * builder, const std::string & kernelName)
-: KernelBuilder(builder, kernelName, {}, {}, {}, {}, {Binding{builder->getBitBlockType(), "EOFbit"}, Binding{builder->getBitBlockType(), "EOFmask"}})
+PabloKernel::PabloKernel(IDISA::IDISA_Builder * builder, std::string kernelName)
+: KernelBuilder(builder, std::move(kernelName), {}, {}, {}, {}, {Binding{builder->getBitBlockType(), "EOFbit"}, Binding{builder->getBitBlockType(), "EOFmask"}})
 , mPabloCompiler(new PabloCompiler(this))
 , mSymbolTable(new SymbolGenerator(mAllocator))
 , mEntryBlock(PabloBlock::Create(this)) {

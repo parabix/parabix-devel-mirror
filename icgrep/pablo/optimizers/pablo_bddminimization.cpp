@@ -3,7 +3,9 @@
 #include <pablo/builder.hpp>
 #include <pablo/printer_pablos.h>
 #include <pablo/optimizers/pablo_simplifier.hpp>
+#ifndef NDEBUG
 #include <pablo/analysis/pabloverifier.hpp>
+#endif
 #include <stack>
 #include <bdd.h>
 
@@ -55,7 +57,6 @@ void BDDMinimizationPass::initialize(PabloFunction & function) {
             ++statementCount;
             switch (stmt->getClassTypeId()) {
                 case TypeId::Advance:
-                case TypeId::Call:
                 case TypeId::MatchStar:
                 case TypeId::ScanThru:
                     ++variableCount;

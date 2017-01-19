@@ -7,9 +7,9 @@
 #ifndef TOOLCHAIN_H
 #define TOOLCHAIN_H
 
-#include <llvm/IR/Module.h>
-#include <llvm/ExecutionEngine/ExecutionEngine.h>
-#include <llvm/Support/CommandLine.h>
+namespace llvm { class ExecutionEngine; }
+namespace llvm { class Module; }
+namespace llvm { namespace cl { class OptionCategory; } }
 
 namespace codegen {
 const llvm::cl::OptionCategory * codegen_flags();

@@ -5,14 +5,10 @@
 #ifndef EDITDSCAN_KERNEL_H
 #define EDITDSCAN_KERNEL_H
 
-#include <kernels/streamset.h>
 #include <kernels/kernel.h>
-#include <llvm/Support/Host.h>
-#include <llvm/ADT/Triple.h>
-
-namespace llvm { class Module; class Function;}
-
 namespace IDISA { class IDISA_Builder; }
+namespace llvm { class Function; }
+namespace llvm { class Module; }
 
 namespace kernel {
     

@@ -19,7 +19,7 @@ class CBuilder : public llvm::IRBuilder<> {
     
 public:
     
-    CBuilder(llvm::Module * m, unsigned archBitWidth, unsigned CacheAlignment=64);
+    CBuilder(llvm::Module * m, unsigned GeneralRegisterWidthInBits, unsigned CacheLineAlignmentInBytes = 64);
     
     virtual ~CBuilder() {}
 
@@ -30,13 +30,17 @@ public:
     void setModule(llvm::Module * m)  {
         mMod = m;
     }
-    
-    llvm::Function * GetPrintf();
+        
     llvm::Value * CreateMalloc(llvm::Type * type, llvm::Value * size);
+
     llvm::Value * CreateAlignedMalloc(llvm::Type * type, llvm::Value * size, const unsigned alignment);
+
     void CreateFree(llvm::Value * const ptr);
+
     void CreateAlignedFree(llvm::Value * const ptr, const bool ptrMayBeNull = false);
+
     llvm::Value * CreateRealloc(llvm::Value * ptr, llvm::Value * size);
+
     void CreateMemZero(llvm::Value * ptr, llvm::Value * size, const unsigned alignment = 1);
 
     inline llvm::AllocaInst * CreateCacheAlignedAlloca(llvm::Type * Ty, llvm::Value * ArraySize = nullptr) {
@@ -45,19 +49,14 @@ public:
         return instr;
     }
     
-    // Create calls to unistd.h functions.
-    //
-    // ssize_t write(int fildes, const void *buf, size_t nbyte);
+    llvm::Function * GetPrintf();
+
     llvm::Value * CreateWriteCall(llvm::Value * fildes, llvm::Value * buf, llvm::Value * nbyte);
     
-    // Create calls to Posix thread (pthread.h) functions.
-    //
-    //  int pthread_create(pthread_t *thread, const pthread_attr_t *attr,
-    //                    void *(*start_routine)(void*), void *arg);
     llvm::Value * CreatePThreadCreateCall(llvm::Value * thread, llvm::Value * attr, llvm::Function * start_routine, llvm::Value * arg);
-    //  void pthread_exit(void *value_ptr);
+
     llvm::Value * CreatePThreadExitCall(llvm::Value * value_ptr);
-    //  int pthread_join(pthread_t thread, void **value_ptr);
+
     llvm::Value * CreatePThreadJoinCall(llvm::Value * thread, llvm::Value * value_ptr);
     
     void CallPrintInt(const std::string & name, llvm::Value * const value);
@@ -66,7 +65,7 @@ public:
         return mSizeType;
     }
     
-    inline llvm::ConstantInt * getSize(const size_t value) const {
+    inline llvm::ConstantInt * getSize(const size_t value) {
         return llvm::ConstantInt::get(getSizeTy(), value);
     }
     

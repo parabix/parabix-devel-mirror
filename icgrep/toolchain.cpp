@@ -4,28 +4,22 @@
  *  icgrep is a trademark of International Characters.
  */
 
-#include <string>
-#include <iostream>
-#include <fstream>
-#include <sstream>
-
-#include <toolchain.h>
-#include <llvm/IR/Function.h>
-#include <llvm/IR/Module.h>
-#include <llvm/ExecutionEngine/ExecutionEngine.h>
-#include <llvm/ExecutionEngine/MCJIT.h>
-#include "llvm/IR/LegacyPassManager.h"
-
-#include <llvm/IRReader/IRReader.h>
-#include <llvm/Support/CommandLine.h>
-#include <llvm/CodeGen/CommandFlags.h>
-#include <llvm/Support/SourceMgr.h>
-#include <llvm/Support/TargetSelect.h>
-#include <llvm/Support/Host.h>
-#include <llvm/Support/raw_ostream.h>
-
+#include "toolchain.h"
+#include <llvm/CodeGen/CommandFlags.h>             // for InitTargetOptionsF...
+#include <llvm/ExecutionEngine/ExecutionEngine.h>  // for EngineBuilder
+#include <llvm/Support/CommandLine.h>              // for OptionCategory
+#include <llvm/Support/TargetSelect.h>             // for InitializeNativeTa...
+#include <llvm/Support/raw_ostream.h>              // for errs, raw_ostream
+#include <llvm/ADT/SmallString.h>                  // for SmallString
+#include <llvm/IR/LegacyPassManager.h>             // for PassManager
+#include <llvm/InitializePasses.h>                 // for initializeCodeGen
+#include <llvm/PassRegistry.h>                     // for PassRegistry
+#include <llvm/Support/CodeGen.h>                  // for Level, Level::None
+#include <llvm/Support/Compiler.h>                 // for LLVM_UNLIKELY
+#include <llvm/Target/TargetMachine.h>             // for TargetMachine, Tar...
+#include <llvm/Target/TargetOptions.h>             // for TargetOptions
 #include <object_cache.h>
-
+namespace llvm { class Module; }
 #ifdef CUDA_ENABLED
 #include <IR_Gen/llvm2ptx.h>
 #endif
@@ -191,7 +185,6 @@ ExecutionEngine * JIT_to_ExecutionEngine (Module * m) {
         }
     }
 #if LLVM_VERSION_MINOR > 6
-
     if (codegen::DumpASM) {
       WriteAssembly(builder.selectTarget(), m);
     }

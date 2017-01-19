@@ -6,49 +6,34 @@
 
 #include <string>
 #include <iostream>
-#include <iomanip>
 #include <fstream>
-#include <sstream>
-
-
 #include <toolchain.h>
 #include <pablo/pablo_toolchain.h>
 #include <llvm/IR/Function.h>
 #include <llvm/IR/Module.h>
 #include <llvm/ExecutionEngine/ExecutionEngine.h>
-#include <llvm/ExecutionEngine/MCJIT.h>
 #include "llvm/Linker/Linker.h"
-
 #include <llvm/Support/CommandLine.h>
-#include <llvm/Support/raw_ostream.h>
-
-#include <re/re_cc.h>
 #include <cc/cc_compiler.h>
 #include <pablo/pablo_compiler.h>
 #include <pablo/pablo_kernel.h>
 #include <IR_Gen/idisa_builder.h>
 #include <IR_Gen/idisa_target.h>
 #include <kernels/streamset.h>
-#include <kernels/interface.h>
-#include <kernels/kernel.h>
 #include <kernels/mmap_kernel.h>
 #include <kernels/s2p_kernel.h>
 #include <editd/editdscan_kernel.h>
 #include <kernels/pipeline.h>
-
-#include <re/re_alt.h>
 #include <editd/pattern_compiler.h>
-
-// mmap system
 #include <boost/filesystem.hpp>
 #include <boost/iostreams/device/mapped_file.hpp>
-#include <fcntl.h>
 #include <mutex>
-
 #ifdef CUDA_ENABLED
 #include <editd/EditdCudaDriver.h>
 #include <editd/editd_gpu_kernel.h>
 #endif
+
+using namespace llvm;
 
 static cl::list<std::string> inputFiles(cl::Positional, cl::desc("<regex> <input file ...>"), cl::OneOrMore);
 

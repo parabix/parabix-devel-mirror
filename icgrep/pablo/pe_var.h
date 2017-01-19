@@ -9,11 +9,8 @@
 
 #include <pablo/pabloAST.h>
 #include <pablo/pe_string.h>
-#include <pablo/pe_integer.h>
 
 namespace pablo {
-
-class Assign;
 
 class Var : public PabloAST {
     friend class PabloBlock;
@@ -34,8 +31,8 @@ public:
         mReadOnly = value;
     }
 protected:
-    Var(const PabloAST * name, Type * const type, Allocator & allocator, const bool readOnly = false)
-    : PabloAST(ClassTypeId::Var, type, cast<String>(name), allocator)
+    Var(const PabloAST * name, llvm::Type * const type, Allocator & allocator, const bool readOnly = false)
+    : PabloAST(ClassTypeId::Var, type, llvm::cast<String>(name), allocator)
     , mReadOnly(readOnly) {
 
     }
@@ -61,7 +58,7 @@ public:
         return getOperand(1);
     }
 protected:
-    Extract(PabloAST * array, PabloAST * const index, const String * const name, Type * type, Allocator & allocator)
+    Extract(PabloAST * array, PabloAST * const index, const String * const name, llvm::Type * type, Allocator & allocator)
     : Statement(ClassTypeId::Extract, type, {array, index}, name, allocator) {
 
     }

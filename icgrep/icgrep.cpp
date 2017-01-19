@@ -9,6 +9,7 @@
 #include <llvm/Support/CommandLine.h>
 #include <llvm/Support/ErrorHandling.h>
 #include <llvm/Support/Signals.h>
+#include <llvm/Support/raw_ostream.h>
 #include <re/re_alt.h>
 #include <re/re_seq.h>
 #include <re/re_start.h>
@@ -18,20 +19,19 @@
 #include <grep_engine.h>
 #include <fstream>
 #include <string>
-
 #include <boost/uuid/sha1.hpp>
 #include <toolchain.h>
 #include <re/re_toolchain.h>
 #include <pablo/pablo_toolchain.h>
 #include <mutex>
 #include <boost/filesystem.hpp>
-
 #include <iostream> // MEEE
-
 #ifdef PRINT_TIMING_INFORMATION
 #include <hrtime.h>
 #include <util/papi_helper.hpp>
 #endif
+
+using namespace llvm;
 
 static cl::OptionCategory LegacyGrepOptions("A. Standard Grep Options",
                                        "These are standard grep options intended for compatibility with typical grep usage.");
@@ -192,7 +192,7 @@ void *DoGrep(void *args)
         count_mutex.unlock();
     }
 
-    pthread_exit(NULL);
+    pthread_exit(nullptr);
 }
 
 
@@ -421,7 +421,7 @@ int main(int argc, char *argv[]) {
         pthread_t threads[numOfThreads];
 
         for(unsigned long i = 0; i < numOfThreads; ++i){
-            const int rc = pthread_create(&threads[i], NULL, DoGrep, (void *)&grepEngine);
+            const int rc = pthread_create(&threads[i], nullptr, DoGrep, (void *)&grepEngine);
             if (rc) {
                 llvm::report_fatal_error("Failed to create thread: code " + std::to_string(rc));
             }

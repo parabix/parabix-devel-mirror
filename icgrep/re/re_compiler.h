@@ -7,15 +7,24 @@
 #ifndef RE_TO_PABLO_COMPILER_H
 #define RE_TO_PABLO_COMPILER_H
 
-#include <re/re_re.h>
-#include <re/re_seq.h>
-#include <cc/cc_compiler.h>
-#include <pablo/builder.hpp>
+#include <re/re_seq.h>  // for Seq
 #include <boost/container/flat_map.hpp>
+#include <vector>       // for vector<>::iterator
+namespace cc { class CC_Compiler; }
+namespace pablo { class PabloAST; }
+namespace pablo { class PabloBuilder; }
+namespace pablo { class PabloKernel; }
+namespace re { class Alt; }
+namespace re { class Assertion; }
+namespace re { class Diff; }
+namespace re { class Intersect; }
+namespace re { class Name; }
+namespace re { class RE; }
+namespace re { class Rep; }
 
-namespace UCD {
-class UnicodeSet;
-}
+//namespace UCD {
+//class UnicodeSet;
+//}
 
 /*   Marker streams represent the results of matching steps.
      Three types of marker streams are used internally.

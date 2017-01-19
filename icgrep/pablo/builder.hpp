@@ -3,6 +3,7 @@
 
 #include <pablo/codegenstate.h>
 #include <pablo/expression_map.hpp>
+#include <pablo/pe_var.h>
 
 namespace pablo {
 
@@ -56,15 +57,15 @@ public:
         return PabloBuilder(PabloBlock::Create(builder.getPabloBlock()->getParent()), builder);
     }
 
-    inline Zeroes * createZeroes(Type * const type = nullptr) {
+    inline Zeroes * createZeroes(llvm::Type * const type = nullptr) {
         return mPb->createZeroes(type);
     }
 
-    inline Ones * createOnes(Type * const type = nullptr) {
+    inline Ones * createOnes(llvm::Type * const type = nullptr) {
         return mPb->createOnes(type);
     }
 
-    inline Var * createVar(const std::string name, Type * const type = nullptr) {
+    inline Var * createVar(const std::string name, llvm::Type * const type = nullptr) {
         return createVar(makeName(name), type);
     }
 
@@ -74,7 +75,7 @@ public:
         return var;
     }
 
-    inline Var * createVar(String * const name, Type * const type = nullptr) {
+    inline Var * createVar(String * const name, llvm::Type * const type = nullptr) {
         return mPb->createVar(name, type);
     }
 
@@ -89,12 +90,6 @@ public:
     inline Extract * createExtract(PabloAST * value, const int64_t index, const std::string & prefix) {
         return createExtract(value, getInteger(index), prefix);
     }
-
-    inline Call * createCall(Prototype * prototype, const std::vector<Var *> & args) {
-        return createCall(prototype, reinterpret_cast<const std::vector<PabloAST *> &>(args));
-    }
-
-    Call * createCall(Prototype * prototype, const std::vector<PabloAST *> &vars);
 
     inline PabloAST * createAdvance(PabloAST * expr, const int64_t shiftAmount) {
         return createAdvance(expr, mPb->getInteger(shiftAmount));
@@ -198,11 +193,11 @@ public:
         return mPb->createWhile(condition, builder.mPb);
     }
 
-    Type * getStreamTy(const unsigned FieldWidth = 1) {
+    llvm::Type * getStreamTy(const unsigned FieldWidth = 1) {
         return mPb->getStreamTy(FieldWidth);
     }
     
-    Type * getStreamSetTy(const unsigned NumElements = 1, const unsigned FieldWidth = 1) {
+    llvm::Type * getStreamSetTy(const unsigned NumElements = 1, const unsigned FieldWidth = 1) {
         return mPb->getStreamSetTy(NumElements, FieldWidth);
     }
     
@@ -264,7 +259,7 @@ public:
         return mPb->getInteger(value);
     }
 
-    inline void print(raw_ostream & O, const bool expandNested = true) const {
+    inline void print(llvm::raw_ostream & O, const bool expandNested = true) const {
         mPb->print(O, expandNested);
     }
 

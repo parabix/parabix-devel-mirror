@@ -23,7 +23,7 @@ public:
         return mValue;
     }
 protected:
-    Integer(const IntTy value, Type * type, Allocator & allocator) noexcept
+    Integer(const IntTy value, llvm::Type * type, Allocator & allocator) noexcept
     : PabloAST(ClassTypeId::Integer, type, nullptr, allocator)
     , mValue(value)
     {

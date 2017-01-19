@@ -4,12 +4,15 @@
 #include <re/re_name.h>
 #include <utf8_encoder.h>
 #include <utf16_encoder.h>
-#include <iostream>
 #include <array>
+#include <pablo/pe_var.h>
+#include <pablo/pe_zeroes.h>
+#include <pablo/pe_ones.h>
 
 using namespace cc;
 using namespace re;
 using namespace pablo;
+using namespace llvm;
 
 namespace UCD {
 

@@ -7,8 +7,8 @@
 #ifndef RE_UTILITY_H
 #define RE_UTILITY_H
 
-#include <re/re_re.h>
-#include <re/re_name.h>
+namespace re { class RE; }
+namespace re { class Name; }
 
 namespace re {
 

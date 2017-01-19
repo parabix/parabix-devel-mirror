@@ -4,16 +4,19 @@
  *  icgrep is a trademark of International Characters.
  */
 
-#include <stdexcept>
+#include "carry_manager.h"
 #include <pablo/carry_data.h>
 #include <pablo/codegenstate.h>
-#include <pablo/carry_manager.h>
-#include <pablo/pabloAST.h>
-#include <llvm/Support/CommandLine.h>
 #include <llvm/IR/BasicBlock.h>
-#include <llvm/IR/CallingConv.h>
-#include <llvm/IR/Function.h>
-#include <pablo/printer_pablos.h>
+#include <IR_Gen/idisa_builder.h>
+#include <llvm/IR/DerivedTypes.h>
+#include <pablo/branch.h>
+#include <pablo/pe_advance.h>
+#include <pablo/pe_scanthru.h>
+#include <pablo/pe_matchstar.h>
+#include <pablo/pe_var.h>
+
+using namespace llvm;
 
 namespace pablo {
 
@@ -598,6 +601,27 @@ StructType * CarryManager::analyse(PabloBlock * const scope, const unsigned ifDe
     }
     return carryState;
 }
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief constructor
+ ** ------------------------------------------------------------------------------------------------------------- */
+CarryManager::CarryManager(IDISA::IDISA_Builder * idb) noexcept
+: iBuilder(idb)
+, mKernel(nullptr)
+, mSelf(nullptr)
+, mFunction(nullptr)
+, mBitBlockType(idb->getBitBlockType())
+, mBitBlockWidth(idb->getBitBlockWidth())
+, mCurrentFrameIndex(0)
+, mCurrentScope(nullptr)
+, mCarryInfo(nullptr)
+, mCarryPackType(mBitBlockType)
+, mCarryPackPtr(nullptr)
+, mIfDepth(0)
+, mLoopDepth(0) {
+
+}
+
 
 }
 

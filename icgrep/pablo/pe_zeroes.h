@@ -8,7 +8,6 @@
 #define PE_ZEROES_H
 
 #include <pablo/pabloAST.h>
-#include <pablo/pe_var.h>
 
 namespace pablo {
 
@@ -29,10 +28,10 @@ public:
         return true;
     }
     virtual bool operator==(const PabloAST & other) const {
-        return isa<Zeroes>(other);
+        return llvm::isa<Zeroes>(other);
     }
 protected:
-    Zeroes(Type * const type, Allocator & allocator)
+    Zeroes(llvm::Type * const type, Allocator & allocator)
     : PabloAST(ClassTypeId::Zeroes, type, nullptr, allocator) {
     }
 };

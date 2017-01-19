@@ -12,6 +12,7 @@
 #include <re/re_parser_prosite.h>
 #include <re/re_name.h>
 #include <re/re_alt.h>
+#include <re/re_any.h>
 #include <re/re_end.h>
 #include <re/re_rep.h>
 #include <re/re_seq.h>
@@ -27,24 +28,32 @@
 #include <string>
 #include <algorithm>
 #include <iostream>
+#include <llvm/Support/Casting.h>
+#include <llvm/Support/ErrorHandling.h>
+
+using namespace llvm;
 
 namespace re {
-    
+
+template<typename T, typename... Args>
+std::unique_ptr<T> make_unique(Args&&... args) {
+    return std::unique_ptr<T>(new T(std::forward<Args>(args)...));
+}
 
 RE * RE_Parser::parse(const std::string & regular_expression, ModeFlagSet initialFlags, RE_Syntax syntax) {
     std::unique_ptr<RE_Parser> parser = nullptr;
     switch (syntax) {
         case RE_Syntax::PCRE:
-            parser = llvm::make_unique<RE_Parser_PCRE>(regular_expression);
+            parser = make_unique<RE_Parser_PCRE>(regular_expression);
             break;
         case RE_Syntax::ERE:
-            parser = llvm::make_unique<RE_Parser_ERE>(regular_expression);
+            parser = make_unique<RE_Parser_ERE>(regular_expression);
             break;
         case RE_Syntax ::BRE:
-            parser = llvm::make_unique<RE_Parser_BRE>(regular_expression);
+            parser = make_unique<RE_Parser_BRE>(regular_expression);
             break;
         case RE_Syntax ::PROSITE:
-            parser = llvm::make_unique<RE_Parser_PROSITE>(regular_expression);
+            parser = make_unique<RE_Parser_PROSITE>(regular_expression);
             break;
         default:
             //TODO handle FixString
@@ -1125,6 +1134,10 @@ Name * RE_Parser::createName(std::string prop, std::string value) {
     Name * const property = mMemoizer.memoize(makeName(prop, value, Name::Type::UnicodeProperty));
     mNameMap.insert(std::make_pair(std::move(key), property));
     return property;
+}
+
+LLVM_ATTRIBUTE_NORETURN void RE_Parser::ParseFailure(std::string errmsg) {
+    llvm::report_fatal_error(errmsg);
 }
 
 }

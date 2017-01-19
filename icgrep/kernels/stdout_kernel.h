@@ -5,9 +5,7 @@
 #ifndef STDOUT_KERNEL_H
 #define STDOUT_KERNEL_H
 
-#include "streamset.h"
 #include "kernel.h"
-#include <llvm/IR/Type.h>
 
 namespace IDISA { class IDISA_Builder; }
 
@@ -15,17 +13,15 @@ namespace kernel {
 
 class StdOutKernel : public KernelBuilder {
 public:
-    StdOutKernel(IDISA::IDISA_Builder * iBuilder, unsigned codeUnitWidth) :
-    KernelBuilder(iBuilder, "stdout",
-                  {Binding{iBuilder->getStreamSetTy(1, codeUnitWidth), "codeUnitBuffer"}}, {}, {}, {}, {}),
-    mCodeUnitWidth(codeUnitWidth) {
-        setNoTerminateAttribute(true);
-    }
+
+    StdOutKernel(IDISA::IDISA_Builder * iBuilder, unsigned codeUnitWidth);
     
 private:
-    unsigned mCodeUnitWidth;
   
     void generateDoSegmentMethod() const override;
+
+private:
+    const unsigned mCodeUnitWidth;
     
 };
 }

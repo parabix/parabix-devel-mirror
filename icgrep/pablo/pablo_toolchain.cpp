@@ -4,9 +4,8 @@
  *  icgrep is a trademark of International Characters.
  */
 
-#include <pablo/pablo_toolchain.h>
+#include "pablo_toolchain.h"
 #include <pablo/pablo_kernel.h>
-#include <pablo/pablo_compiler.h>
 #include <pablo/optimizers/pablo_simplifier.hpp>
 #include <pablo/optimizers/codemotionpass.h>
 #include <pablo/passes/flattenassociativedfg.h>
@@ -27,13 +26,11 @@
 #ifdef PRINT_TIMING_INFORMATION
 #include <hrtime.h>
 #endif
-#include <string>
-#include <iostream>
-#include <fstream>
-#include <sstream>
+
+
+using namespace llvm;
 
 namespace pablo {
-
 
 static cl::OptionCategory PabloOptions("Pablo Options", "These options control printing, generation and instrumentation of Pablo intermediate code.");
 
@@ -79,7 +76,7 @@ bool DebugOptionIsSet(PabloDebugFlags flag) {return DebugOptions.isSet(flag);}
 unsigned COUNT_STATEMENTS(const PabloKernel * const entry) {
     std::stack<const Statement *> scope;
     unsigned statements = 0;
-    // Scan through and collect all the advances, calls, scanthrus and matchstars ...
+    // Scan through and collect all the advances, scanthrus and matchstars ...
     for (const Statement * stmt = entry->getEntryBlock()->front(); ; ) {
         while ( stmt ) {
             ++statements;
@@ -108,7 +105,7 @@ unsigned COUNT_ADVANCES(const PabloKernel * const entry) {
     std::stack<const Statement *> scope;
     unsigned advances = 0;
 
-    // Scan through and collect all the advances, calls, scanthrus and matchstars ...
+    // Scan through and collect all the advances, scanthrus and matchstars ...
     for (const Statement * stmt = entry->getEntryBlock()->front(); ; ) {
         while ( stmt ) {
             if (isa<Advance>(stmt)) {
@@ -139,7 +136,7 @@ using DistributionMap = boost::container::flat_map<unsigned, unsigned>;
 DistributionMap SUMMARIZE_VARIADIC_DISTRIBUTION(const PabloKernel * const entry) {
     std::stack<const Statement *> scope;
     DistributionMap distribution;
-    // Scan through and collect all the advances, calls, scanthrus and matchstars ...
+    // Scan through and collect all the advances, scanthrus and matchstars ...
     for (const Statement * stmt = entry->getEntryBlock()->front(); ; ) {
         while ( stmt ) {
             if (isa<Variadic>(stmt)) {

@@ -5,11 +5,10 @@
  */
 
 #include "grep_engine.h"
+#include <llvm/IR/Module.h>
 #include <llvm/ExecutionEngine/MCJIT.h>
 #include <llvm/IR/Verifier.h>
-#include <llvm/IRReader/IRReader.h>
 #include <llvm/Support/CommandLine.h>
-#include <llvm/Support/Debug.h>
 #include <boost/filesystem.hpp>
 #include <boost/iostreams/device/mapped_file.hpp>
 #include <IR_Gen/idisa_builder.h>
@@ -17,7 +16,6 @@
 #include <UCD/UnicodeNameData.h>
 #include <UCD/resolve_properties.h>
 #include <kernels/cc_kernel.h>
-#include <kernels/kernel.h>
 #include <kernels/pipeline.h>
 #include <kernels/mmap_kernel.h>
 #include <kernels/s2p_kernel.h>
@@ -26,18 +24,18 @@
 #include <pablo/pablo_compiler.h>
 #include <pablo/pablo_kernel.h>
 #include <pablo/pablo_toolchain.h>
-#include <pablo/pablo_toolchain.h>
 #include <re/re_cc.h>
 #include <re/re_toolchain.h>
 #include <toolchain.h>
 #include <iostream>
 #include <sstream>
-#ifdef CUDA_ENABLED 
+#ifdef CUDA_ENABLED
 #include <IR_Gen/CudaDriver.h>
 #endif
 #include <util/aligned_allocator.h>
 
 using namespace parabix;
+using namespace llvm;
 
 static cl::OptionCategory bGrepOutputOptions("Output Options",
                                              "These options control the output.");

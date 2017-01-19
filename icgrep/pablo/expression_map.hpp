@@ -273,16 +273,15 @@ struct ExpressionTable {
             case PabloAST::ClassTypeId::And:
             case PabloAST::ClassTypeId::Or:
             case PabloAST::ClassTypeId::Xor:
-                return mVariadic.findOrAdd(cast<Variadic>(stmt), stmt->getClassTypeId());
+                return mVariadic.findOrAdd(llvm::cast<Variadic>(stmt), stmt->getClassTypeId());
             case PabloAST::ClassTypeId::Advance:
             case PabloAST::ClassTypeId::ScanThru:
             case PabloAST::ClassTypeId::MatchStar:
             case PabloAST::ClassTypeId::Assign:
+            case PabloAST::ClassTypeId::Extract:
                 return mBinary.findOrAdd(stmt, stmt->getClassTypeId(), stmt->getOperand(0), stmt->getOperand(1));
             case PabloAST::ClassTypeId::Sel:
                 return mTernary.findOrAdd(stmt, stmt->getClassTypeId(), stmt->getOperand(0), stmt->getOperand(1), stmt->getOperand(2));
-            case PabloAST::ClassTypeId::Call:
-                // temporarily ignored
             default:
                 return std::make_pair(stmt, true);
         }

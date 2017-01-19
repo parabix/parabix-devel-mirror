@@ -5,13 +5,7 @@
 #ifndef DELETION_H
 #define DELETION_H
 
-#include "streamset.h"
-#include "interface.h"
 #include "kernel.h"
-
-
-namespace llvm { class Module; class Value;}
-
 namespace IDISA { class IDISA_Builder; }
 
 //
@@ -24,8 +18,6 @@ namespace IDISA { class IDISA_Builder; }
 // masks that can be used to select bits to be moved in each step of the
 // algorithm.
 //
-
-using namespace parabix;
 
 namespace kernel {
 
@@ -41,8 +33,8 @@ protected:
     void generateFinalBlockMethod() const override;
 
 private:
-    unsigned mDeletionFieldWidth;
-    unsigned mStreamCount;
+    const unsigned mDeletionFieldWidth;
+    const unsigned mStreamCount;
 };
 
 }

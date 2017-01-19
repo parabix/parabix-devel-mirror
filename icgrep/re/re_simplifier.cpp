@@ -15,6 +15,8 @@
 #include <memory>
 #include <queue>
 
+using namespace llvm;
+
 namespace re {
 
 RE * RE_Simplifier::simplify(RE * re) {

@@ -9,8 +9,6 @@
 
 #include "re_re.h"
 
-#include "re_re.h"
-
 namespace re {
 
 class Any : public RE {

@@ -8,6 +8,8 @@
 #include "re_cc.h"
 #include <llvm/Support/Casting.h>
 
+using namespace llvm;
+
 namespace re {
 
 RE * makeIntersect(RE * lh, RE * rh) {

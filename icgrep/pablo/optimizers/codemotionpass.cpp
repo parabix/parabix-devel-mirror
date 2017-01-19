@@ -1,12 +1,17 @@
 #include "codemotionpass.h"
 #include <pablo/pablo_kernel.h>
 #include <pablo/codegenstate.h>
+#include <pablo/branch.h>
+#include <pablo/ps_assign.h>
+#include <pablo/pe_var.h>
+#ifndef NDEBUG
 #include <pablo/analysis/pabloverifier.hpp>
+#endif
 #include <boost/container/flat_set.hpp>
-// #include <boost/circular_buffer.hpp>
 
 using namespace boost;
 using namespace boost::container;
+using namespace llvm;
 
 namespace pablo {
 
@@ -83,10 +88,11 @@ inline bool CodeMotionPass::isAcceptableTarget(Statement * stmt, ScopeSet & scop
                 return false;
             }
         }
-    } else if (!isa<Assign>(stmt)) {
-        return findScopeUsages(stmt, scopeSet, block, nullptr);
+        return true;
+    } else if (isa<Assign>(stmt)) {
+        return false;
     }
-    return false;
+    return findScopeUsages(stmt, scopeSet, block, nullptr);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

@@ -4,45 +4,41 @@
  *  icgrep is a trademark of International Characters.
  */
 
-#include <string>
-#include <iostream>
-#include <iomanip>
-#include <fstream>
-#include <sstream>
-
-
-#include <toolchain.h>
-#include <pablo/pablo_toolchain.h>
-#include <llvm/IR/Function.h>
-#include <llvm/IR/Module.h>
-#include <llvm/ExecutionEngine/ExecutionEngine.h>
-#include <llvm/ExecutionEngine/MCJIT.h>
-#include "llvm/Linker/Linker.h"
-#include <llvm/IR/Verifier.h>
-#include <llvm/Support/CommandLine.h>
-#include <llvm/Support/raw_ostream.h>
-
-#include <pablo/pablo_kernel.h>
-#include <IR_Gen/idisa_builder.h>
-#include <IR_Gen/idisa_target.h>
-#include <kernels/streamset.h>
-#include <kernels/interface.h>
-#include <kernels/kernel.h>
-#include <kernels/mmap_kernel.h>
+#include <IR_Gen/idisa_builder.h>                  // for IDISA_Builder
+#include <IR_Gen/idisa_target.h>                   // for GetIDISA_Builder
+#include <kernels/mmap_kernel.h>                   // for MMapSourceKernel
+#include <kernels/s2p_kernel.h>                    // for S2PKernel
+#include <kernels/streamset.h>                     // for SingleBlockBuffer
 #include <kernels/pipeline.h>
-#include <pablo/builder.hpp>
-#include <pablo/pablo_compiler.h>
-#include <pablo/pablo_toolchain.h>
-#include <kernels/s2p_kernel.h>
-#include <kernels/stdout_kernel.h>
+#include <llvm/ExecutionEngine/ExecutionEngine.h>  // for ExecutionEngine
+#include <llvm/IR/Function.h>                      // for Function, Function...
+#include <llvm/IR/Module.h>                        // for Module
+#include <llvm/IR/Verifier.h>                      // for verifyModule
+#include <llvm/Support/CommandLine.h>              // for ParseCommandLineOp...
+#include <llvm/Support/raw_ostream.h>              // for errs
+#include <pablo/pablo_kernel.h>                    // for PabloKernel
+#include <toolchain.h>                             // for JIT_to_ExecutionEn...
+#include <pablo/builder.hpp>                       // for PabloBuilder
 #include <boost/filesystem.hpp>
 #include <boost/iostreams/device/mapped_file.hpp>
-
-static cl::list<std::string> inputFiles(cl::Positional, cl::desc("<input file ...>"), cl::OneOrMore);
+#include "llvm/ADT/StringRef.h"                    // for StringRef
+#include "llvm/IR/CallingConv.h"                   // for ::C
+#include "llvm/IR/DerivedTypes.h"                  // for ArrayType
+#include "llvm/IR/LLVMContext.h"                   // for LLVMContext
+#include "llvm/IR/Value.h"                         // for Value
+#include "llvm/Support/Debug.h"                    // for dbgs
+#include <iostream>
+namespace llvm { class Type; }
+namespace pablo { class Integer; }
+namespace pablo { class PabloAST; }
+namespace pablo { class Var; }
 
 using namespace pablo;
 using namespace kernel;
 using namespace parabix;
+using namespace llvm;
+
+static cl::list<std::string> inputFiles(cl::Positional, cl::desc("<input file ...>"), cl::OneOrMore);
 
 void generate(PabloKernel * kernel, const unsigned size) {
 

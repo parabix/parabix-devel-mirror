@@ -3,11 +3,8 @@
  *  This software is licensed to the public under the Open Software License 3.0.
  */
 #include "editd_gpu_kernel.h"
-#include <kernels/kernel.h>
 #include <IR_Gen/idisa_builder.h>
 #include <llvm/IR/Module.h>
-#include <llvm/Support/raw_ostream.h>
-#include <iostream>
 
 using namespace llvm;
 

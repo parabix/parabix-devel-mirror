@@ -7,21 +7,11 @@
 #ifndef PATTERN_COMPILER_H
 #define PATTERN_COMPILER_H
 
-#include <re/re_re.h>
-#include <re/re_seq.h>
-#include <cc/cc_compiler.h>
-
 #include <string>
-#include <list>
-#include <map>
-
-namespace pablo {
-class PabloBlock;
-class PabloKernel;
-class PabloAST;
-class Assign;
-class Var;
-}
+#include <vector>
+namespace pablo { class PabloAST; }
+namespace pablo { class PabloBuilder; }
+namespace pablo { class PabloKernel; }
 
 namespace re {
 

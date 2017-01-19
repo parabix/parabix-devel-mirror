@@ -7,20 +7,15 @@
 #ifndef RE_PARSER_H
 #define RE_PARSER_H
 
-#include <re/re_re.h>
-#include <re/re_any.h>
-#include <re/re_name.h>
-#include <UCD/resolve_properties.h>
-#include <string>
-#include <list>
-#include <memory>
-#include <map>
-#include <re/re_memoizer.hpp>
-#include <llvm/Support/ErrorHandling.h>
+#include <map>                           // for map
+#include <re/re_memoizer.hpp>            // for Memoizer
+#include "re/re_cc.h"                    // for codepoint_t, CC (ptr only)
+namespace re { class Name; }
 
 namespace re {
 
 enum RE_Syntax {FixedStrings, BRE, ERE, PCRE, PROSITE};
+
 enum CharsetOperatorKind
     {intersectOp, setDiffOp, ampChar, hyphenChar, rangeHyphen, posixPropertyOpener, setOpener, setCloser, backSlash, emptyOperator};
 
@@ -37,21 +32,17 @@ enum ModeFlagType : unsigned {
 const int MAX_REPETITION_LOWER_BOUND = 1024;
 const int MAX_REPETITION_UPPER_BOUND = 2048;
 
-typedef unsigned ModeFlagSet;
+using ModeFlagSet = unsigned;
 
-
-class RE_Parser
-{
+class RE_Parser {
 public:
+
+    static LLVM_ATTRIBUTE_NORETURN void ParseFailure(std::string errmsg);
 
     static RE * parse(const std::string &input_string, ModeFlagSet initialFlags, RE_Syntax syntax = RE_Syntax::PCRE);
 
-    
-    static LLVM_ATTRIBUTE_NORETURN void ParseFailure(std::string errmsg) {
-        llvm::report_fatal_error(errmsg);
-    }
-    
 protected:
+
     using NameMap = std::map<std::pair<std::string, std::string>, re::Name *>;
 
     using cursor_t = std::string::const_iterator;

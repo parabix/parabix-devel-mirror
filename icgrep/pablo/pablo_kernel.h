@@ -9,22 +9,18 @@
 #include <kernels/kernel.h>
 #include <pablo/symbol_generator.h>
 #include <util/slab_allocator.h>
-
-namespace IDISA {
-class IDISA_Builder;
-}
+namespace IDISA { class IDISA_Builder; }
+namespace llvm { class Type; }
+namespace pablo { class Integer; }
+namespace pablo { class Ones; }
+namespace pablo { class PabloAST; }
+namespace pablo { class PabloBlock; }
+namespace pablo { class PabloCompiler; }
+namespace pablo { class String; }
+namespace pablo { class Var; }
+namespace pablo { class Zeroes; }
 
 namespace pablo {
-    
-class PabloCompiler;
-class PabloBlock;
-class PabloAST;
-class CarryManager;
-class Var;
-class Zeroes;
-class Ones;
-class String;
-class Integer;
 
 class PabloKernel : public kernel::KernelBuilder {
 
@@ -36,7 +32,7 @@ public:
 
     using Allocator = SlabAllocator<PabloAST *>;
 
-    PabloKernel(IDISA::IDISA_Builder * builder, const std::string & kernelName);
+    PabloKernel(IDISA::IDISA_Builder * builder, std::string kernelName);
     // At present only population count accumulator are supported,
     // using the pablo.Count operation.
     
@@ -64,7 +60,7 @@ public:
         return mInputs[index];
     }
 
-    Var * addInput(const std::string & name, Type * const type);
+    Var * addInput(const std::string & name, llvm::Type * const type);
 
     unsigned getNumOfInputs() const {
         return mInputs.size();
@@ -78,13 +74,13 @@ public:
         return mOutputs[index];
     }
 
-    Var * addOutput(const std::string name, Type * const type);
+    Var * addOutput(const std::string & name, llvm::Type * const type);
 
     unsigned getNumOfOutputs() const {
         return mOutputs.size();
     }
 
-    Var * makeVariable(PabloAST * name, Type * const type);
+    Var * makeVariable(PabloAST * name, llvm::Type * const type);
 
     Var * getVariable(const unsigned index) {
         return mVariables[index];
@@ -94,9 +90,9 @@ public:
         return mVariables.size();
     }
 
-    Zeroes * getNullValue(Type * const type);
+    Zeroes * getNullValue(llvm::Type * const type);
 
-    Ones * getAllOnesValue(Type * const type);
+    Ones * getAllOnesValue(llvm::Type * const type);
 
     inline SymbolGenerator * getSymbolTable() const {
         return mSymbolTable;

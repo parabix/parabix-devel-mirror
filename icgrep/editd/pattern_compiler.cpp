@@ -5,26 +5,9 @@
  */
 
 #include "pattern_compiler.h"
-//Regular Expressions
-#include <re/re_name.h>
-#include <re/re_any.h>
-#include <re/re_start.h>
-#include <re/re_end.h>
-#include <re/re_alt.h>
-#include <re/re_cc.h>
-#include <re/re_seq.h>
-#include <re/re_rep.h>
-#include <re/re_diff.h>
-#include <re/re_intersect.h>
-#include <re/re_assertion.h>
-#include <re/re_analysis.h>
-#include <pablo/codegenstate.h>
-
-#include <assert.h>
-#include <stdexcept>
-#include <iostream>
-
-#include "llvm/Support/CommandLine.h"
+#include <pablo/builder.hpp>
+#include <pablo/pe_zeroes.h>
+#include <pablo/pe_ones.h>
 
 using namespace pablo;
 
@@ -63,7 +46,7 @@ void optimizer(const std::string & patt, PabloAST * basisBits[], std::vector<std
     } 
 
     if (i < patt.length()) {
-       optimizer(patt, basisBits, e, i, e[i - 1][dist], main, it, dist, stepSize);
+        optimizer(patt, basisBits, e, i, e[i - 1][dist], main, it, dist, stepSize);
     } else {
         const auto i = patt.length() - 1;
         for(int j = 0; j <= dist; j++){

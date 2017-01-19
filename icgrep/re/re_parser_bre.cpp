@@ -7,11 +7,13 @@
 #include <re/re_parser_bre.h>
 #include <re/re_parser_helper.h>
 #include <re/re_alt.h>
+#include <re/re_any.h>
 #include <re/re_seq.h>
 #include <re/re_start.h>
 #include <re/re_end.h>
 #include <re/re_assertion.h>
 #include <re/re_rep.h>
+
 
 namespace re{
 

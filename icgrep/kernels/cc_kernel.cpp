@@ -13,6 +13,7 @@ using namespace cc;
 using namespace kernel;
 using namespace pablo;
 using namespace re;
+using namespace llvm;
 
 void DirectCharacterClassKernelBuilder::generateDoBlockMethod() const {
     auto savePoint = iBuilder->saveIP();

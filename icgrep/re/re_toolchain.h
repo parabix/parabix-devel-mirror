@@ -7,15 +7,11 @@
 #ifndef RE_TOOLCHAIN_H
 #define RE_TOOLCHAIN_H
 
-#include <llvm/Support/CommandLine.h>
-
-namespace pablo {
-    class PabloKernel;
-}
+namespace llvm { namespace cl { class OptionCategory; } }
+namespace pablo { class PabloKernel; }
+namespace re { class RE; }
 
 namespace re {
-
-class RE;
 
 enum RE_PrintFlags {
     PrintAllREs, PrintParsedREs, PrintStrippedREs, PrintSimplifiedREs

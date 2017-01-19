@@ -7,22 +7,18 @@
 #ifndef PE_PabloAST_H
 #define PE_PabloAST_H
 
-#include <IR_Gen/types/streamtype.h>
 #include <llvm/Support/Casting.h>
 #include <llvm/Support/Compiler.h>
 #include <boost/iterator/iterator_facade.hpp>
 #include <util/slab_allocator.h>
 #include <type_traits>
 #include <vector>
-
-using namespace llvm;
+namespace llvm { class Type; }
+namespace llvm { class raw_ostream; }
+namespace pablo { class PabloBlock; }
+namespace pablo { class String; }
 
 namespace pablo {
-
-class PabloBlock;
-class Statement;
-class String;
-class Branch;
 
 class PabloAST {
     friend class Statement;
@@ -30,7 +26,6 @@ class PabloAST {
     friend class StatementList;
     friend class Branch;
     friend class PabloBlock;
-    friend class Prototype;
     friend class SymbolGenerator;
     friend class Count;
     friend class Var;
@@ -60,8 +55,6 @@ public:
         , Integer
         , String
         , Block
-        , Function
-        , Prototype
         // Arithmetic expressions
         , Add
         , Subtract
@@ -91,8 +84,6 @@ public:
         // Variable assignments
         , Assign
         , Extract     
-        , Call
-        , SetIthBit
         // Scope blocks
         , If
         , While
@@ -106,7 +97,7 @@ public:
         return mType;
     }
 
-    inline void setType(Type * type) noexcept {
+    inline void setType(llvm::Type * type) noexcept {
         mType = type;
     }
 
@@ -156,10 +147,10 @@ public:
 //        mAllocator.deallocate(static_cast<Allocator::value_type *>(ptr));
 //    }
 
-    void print(raw_ostream & O) const;
+    void print(llvm::raw_ostream & O) const;
 
 protected:
-    inline PabloAST(const ClassTypeId id, Type * const type, const String * name, Allocator & allocator)
+    inline PabloAST(const ClassTypeId id, llvm::Type * const type, const String * name, Allocator & allocator)
     : mClassTypeId(id)
     , mType(type)
     , mName(name)
@@ -173,7 +164,7 @@ protected:
     }        
 private:
     const ClassTypeId       mClassTypeId;
-    Type *                  mType;
+    llvm::Type *            mType;
     const String *          mName;
     Users                   mUsers;
 };
@@ -235,7 +226,7 @@ public:
     }
     virtual ~Statement() {}
 protected:
-    explicit Statement(const ClassTypeId id, Type * const type, std::initializer_list<PabloAST *> operands, const String * const name, Allocator & allocator)
+    explicit Statement(const ClassTypeId id, llvm::Type * const type, std::initializer_list<PabloAST *> operands, const String * const name, Allocator & allocator)
     : PabloAST(id, type, name, allocator)
     , mNext(nullptr)
     , mPrev(nullptr)
@@ -250,7 +241,7 @@ protected:
             ++i;
         }
     }
-    explicit Statement(const ClassTypeId id, Type * const type, const unsigned reserved, const String * const name, Allocator & allocator)
+    explicit Statement(const ClassTypeId id, llvm::Type * const type, const unsigned reserved, const String * const name, Allocator & allocator)
     : PabloAST(id, type, name, allocator)
     , mNext(nullptr)
     , mPrev(nullptr)
@@ -260,7 +251,7 @@ protected:
         std::memset(mOperand, 0, reserved * sizeof(PabloAST *));
     }
     template<typename iterator>
-    explicit Statement(const ClassTypeId id, Type * const type, iterator begin, iterator end, const String * const name, Allocator & allocator)
+    explicit Statement(const ClassTypeId id, llvm::Type * const type, iterator begin, iterator end, const String * const name, Allocator & allocator)
     : PabloAST(id, type, name, allocator)
     , mNext(nullptr)
     , mPrev(nullptr)
@@ -344,20 +335,20 @@ public:
     }
 
 protected:
-    explicit Variadic(const ClassTypeId id, Type * const type, std::initializer_list<PabloAST *> operands, const String * const name, Allocator & allocator)
+    explicit Variadic(const ClassTypeId id, llvm::Type * const type, std::initializer_list<PabloAST *> operands, const String * const name, Allocator & allocator)
     : Statement(id, type, operands, name, allocator)
     , mCapacity(operands.size())
     , mAllocator(allocator) {
 
     }
-    explicit Variadic(const ClassTypeId id, Type * const type, const unsigned reserved, const String * name, Allocator & allocator)
+    explicit Variadic(const ClassTypeId id, llvm::Type * const type, const unsigned reserved, const String * name, Allocator & allocator)
     : Statement(id, type, reserved, name, allocator)
     , mCapacity(reserved)
     , mAllocator(allocator) {
 
     }
     template<typename iterator>
-    explicit Variadic(const ClassTypeId id, Type * const type, iterator begin, iterator end, const String * name, Allocator & allocator)
+    explicit Variadic(const ClassTypeId id, llvm::Type * const type, iterator begin, iterator end, const String * name, Allocator & allocator)
     : Statement(id, type, begin, end, name, allocator)
     , mCapacity(std::distance(begin, end))
     , mAllocator(allocator) {

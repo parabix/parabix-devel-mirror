@@ -4,25 +4,18 @@
  *  icgrep is a trademark of International Characters.
  */
 
-#include <string>
-#include <iostream>
-#include <fstream>
-
 #include <re/re_toolchain.h>
-#include <re/re_cc.h>
-#include <re/re_nullable.h>
-#include <re/re_simplifier.h>
-#include <re/re_alt.h>
-#include <re/re_parser.h>
-#include <re/re_compiler.h>
-#include <utf8_encoder.h>
-#include <cc/cc_compiler.h>
-#include <pablo/pablo_kernel.h>
+#include <cc/cc_compiler.h>            // for CC_Compiler
+#include <llvm/Support/CommandLine.h>  // for clEnumVal, clEnumValEnd, Optio...
+#include <re/re_compiler.h>            // for RE_Compiler
+#include <re/re_nullable.h>            // for RE_Nullable
+#include <re/re_simplifier.h>          // for RE_Simplifier
 #include <re/printer_re.h>
-#include <llvm/Support/CommandLine.h>
-
+#include <iostream>
 
 using namespace pablo;
+using namespace llvm;
+
 namespace re {
 
 static cl::OptionCategory RegexOptions("Regex Toolchain Options",

@@ -3,40 +3,40 @@
  *  This software is licensed to the public under the Open Software License 3.0.
  *  icgrep is a trademark of International Characters.
  */
-#include <re/re_compiler.h>
-#include <re/re_toolchain.h>
-#include <re/re_name_resolve.h>
-//Regular Expressions
-#include <re/re_name.h>
-#include <re/re_any.h>
-#include <re/re_start.h>
-#include <re/re_end.h>
-#include <re/re_alt.h>
-#include <re/re_cc.h>
-#include <re/re_seq.h>
-#include <re/re_rep.h>
-#include <re/re_diff.h>
-#include <re/re_intersect.h>
-#include <re/re_assertion.h>
-#include <re/re_analysis.h>
-#include <re/re_memoizer.hpp>
+
+
+
+#include "re_compiler.h"
+#include <pablo/pe_ones.h>          // for Ones
+#include <pablo/pe_var.h>           // for Var
+#include <pablo/pe_zeroes.h>        // for Zeroes
 #include <re/printer_re.h>
-#include <pablo/codegenstate.h>
-#include <pablo/pablo_kernel.h>
-#include <UCD/ucd_compiler.hpp>
-#include <UCD/resolve_properties.h>
-#include <assert.h>
-#include <stdexcept>
-#include <iostream>
-#include <pablo/printer_pablos.h>
-#include "llvm/Support/CommandLine.h"
-#include <sstream>
-#include <unordered_set>
+#include <re/re_alt.h>
+#include <re/re_analysis.h>         // for isByteLength, isUnicodeUnitLength
+#include <re/re_any.h>
+#include <re/re_assertion.h>        // for Assertion, Assertion::Sense, Asse...
+#include <re/re_cc.h>               // for makeCC
+#include <re/re_diff.h>             // for Diff
+#include <re/re_end.h>
+#include <re/re_intersect.h>        // for Intersect
+#include <re/re_name.h>             // for Name, Name::Type, Name::Type::Zer...
+#include <re/re_name_resolve.h>     // for resolveNames
+#include <re/re_rep.h>              // for Rep, Rep::::UNBOUNDED_REP
+#include <re/re_seq.h>              // for Seq
+#include <re/re_start.h>
+#include <re/re_toolchain.h>        // for AlgorithmOptionIsSet, RE_Algorith...
+#include "cc/cc_compiler.h"         // for CC_Compiler
+#include "pablo/builder.hpp"        // for PabloBuilder
+namespace pablo { class PabloAST; }
+namespace pablo { class PabloKernel; }
+namespace re { class Alt; }
+namespace re { class RE; }
 
 
 #define UNICODE_LINE_BREAK (!AlgorithmOptionIsSet(DisableUnicodeLineBreak))
 
 using namespace pablo;
+using namespace llvm;
 
 namespace re {
 
@@ -50,9 +50,6 @@ void RE_Compiler::initializeRequiredStreams(const unsigned encodingBits) {
 }
 
 void RE_Compiler::initializeRequiredStreams_utf16() {
-
-
-
     PabloAST * LF = mCCCompiler.compileCC("LF", makeCC(0x000A), mPB);
     PabloAST * CR = mCCCompiler.compileCC("CR", makeCC(0x000D), mPB);
     PabloAST * LF_VT_FF_CR = mCCCompiler.compileCC(makeCC(0x000A, 0x000D));

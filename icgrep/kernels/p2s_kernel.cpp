@@ -1,12 +1,12 @@
 #include "p2s_kernel.h"
-#include "kernels/kernel.h"
-#include "IR_Gen/idisa_builder.h"
-#include <llvm/IR/Type.h>
+#include "IR_Gen/idisa_builder.h"  // for IDISA_Builder
+#include "llvm/IR/Constant.h"      // for Constant
+#include "llvm/IR/Constants.h"     // for ConstantInt
+#include "llvm/IR/DerivedTypes.h"  // for PointerType, VectorType
+#include "llvm/IR/Function.h"      // for Function, Function::arg_iterator
 #include <llvm/IR/Module.h>
-#include <iostream>
-#include <stdint.h>
-#include <llvm/Support/FileSystem.h>
-#include <llvm/Support/raw_ostream.h>
+#include <kernels/streamset.h>
+namespace llvm { class Value; }
 
 using namespace llvm;
 
@@ -115,14 +115,13 @@ void P2SKernelWithCompressedOutput::generateDoBlockMethod() const {
     iBuilder->restoreIP(savePoint);
 }
     
-P2SKernelWithCompressedOutput::P2SKernelWithCompressedOutput(IDISA::IDISA_Builder * iBuilder) :
-    KernelBuilder(iBuilder, "p2s_compress",
-                  {Binding{iBuilder->getStreamSetTy(8, 1), "basisBits"}, Binding{iBuilder->getStreamSetTy(1, 1), "deletionCounts"}},
-                  {Binding{iBuilder->getStreamSetTy(1, 8), "byteStream"}},
-                  {}, {}, {}) {
-        setDoBlockUpdatesProducedItemCountsAttribute(true);
-
-    }
+P2SKernelWithCompressedOutput::P2SKernelWithCompressedOutput(IDISA::IDISA_Builder * iBuilder)
+: KernelBuilder(iBuilder, "p2s_compress",
+              {Binding{iBuilder->getStreamSetTy(8, 1), "basisBits"}, Binding{iBuilder->getStreamSetTy(1, 1), "deletionCounts"}},
+              {Binding{iBuilder->getStreamSetTy(1, 8), "byteStream"}},
+              {}, {}, {}) {
+    setDoBlockUpdatesProducedItemCountsAttribute(true);
+}
     
     
 
@@ -177,8 +176,8 @@ P2S16Kernel::P2S16Kernel(IDISA::IDISA_Builder * iBuilder) :
 void P2S16KernelWithCompressedOutput::generateDoBlockMethod() const {
     auto savePoint = iBuilder->saveIP();
     Module * m = iBuilder->getModule();
-    Type * i32 = iBuilder->getIntNTy(32);
-    Type * bitBlockPtrTy = llvm::PointerType::get(iBuilder->getBitBlockType(), 0);
+    Type * i32Ty = iBuilder->getInt32Ty();
+    Type * bitBlockPtrTy = iBuilder->getBitBlockType()->getPointerTo();
 
     Function * doBlockFunction = m->getFunction(mKernelName + doBlock_suffix);
 
@@ -211,14 +210,14 @@ void P2S16KernelWithCompressedOutput::generateDoBlockMethod() const {
     Value * i16UnitsGenerated = getProducedItemCount(self, "i16Stream"); // units generated to buffer
     Value * i16BlockNo = iBuilder->CreateUDiv(i16UnitsGenerated, stride);
     Value * u16_output_ptr = getStreamView(int16PtrTy, self, "i16Stream", i16BlockNo, iBuilder->CreateURem(i16UnitsGenerated, stride));
-    Value * offset = ConstantInt::get(i32, 0);
+    Value * offset = ConstantInt::get(i32Ty, 0);
     for (unsigned j = 0; j < 8; ++j) {
         Value * merge0 = iBuilder->bitCast(iBuilder->esimd_mergel(8, hi_bytes[j], lo_bytes[j]));
         Value * merge1 = iBuilder->bitCast(iBuilder->esimd_mergeh(8, hi_bytes[j], lo_bytes[j]));
         iBuilder->CreateAlignedStore(merge0, iBuilder->CreateBitCast(iBuilder->CreateGEP(u16_output_ptr, offset), bitBlockPtrTy), 1);
-        offset = iBuilder->CreateZExt(iBuilder->CreateExtractElement(unit_counts, iBuilder->getInt32(2 * j)), i32);
+        offset = iBuilder->CreateZExt(iBuilder->CreateExtractElement(unit_counts, iBuilder->getInt32(2 * j)), i32Ty);
         iBuilder->CreateAlignedStore(merge1, iBuilder->CreateBitCast(iBuilder->CreateGEP(u16_output_ptr, offset), bitBlockPtrTy), 1);
-        offset = iBuilder->CreateZExt(iBuilder->CreateExtractElement(unit_counts, iBuilder->getInt32(2 * j + 1)), i32);
+        offset = iBuilder->CreateZExt(iBuilder->CreateExtractElement(unit_counts, iBuilder->getInt32(2 * j + 1)), i32Ty);
     }
     i16UnitsGenerated = iBuilder->CreateAdd(i16UnitsGenerated, iBuilder->CreateZExt(offset, iBuilder->getSizeTy()));
     setProducedItemCount(self, "i16Stream", i16UnitsGenerated);

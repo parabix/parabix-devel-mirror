@@ -11,18 +11,14 @@
 #include <unordered_map>
 #include <string>
 
-namespace IDISA {
-    class IDISA_Builder;
-}
+namespace IDISA { class IDISA_Builder; }
+namespace pablo { class String; }
+namespace pablo { class Integer; }
 
 namespace pablo {
 
-class String;
-class Integer;
-
 class SymbolGenerator {
     friend class PabloBlock;
-    using Twine = llvm::Twine;
     using Allocator = PabloAST::Allocator;
 public:
     typedef int64_t integer_t;

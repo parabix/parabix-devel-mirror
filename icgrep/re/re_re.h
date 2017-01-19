@@ -7,32 +7,10 @@
 #ifndef RE_H
 #define RE_H
 
-#include <vector>
-#include <assert.h>
-#include <llvm/Support/Casting.h>
 #include <util/slab_allocator.h>
-
-using namespace llvm;
+#include <vector>
 
 namespace re {
-
-class Vector;
-class Pair;
-
-class Alt;
-class Any;
-class Assertion;
-class CC;
-class Diff;
-class End;
-class Intersect;
-class Name;
-class Permute;
-class Rep;
-class Seq;
-class Start;
-class SymDiff;
-class Union;
 
 class RE {
 public:

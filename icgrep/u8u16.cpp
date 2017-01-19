@@ -4,57 +4,49 @@
  *  icgrep is a trademark of International Characters.
  */
 
-#include <string>
-#include <iostream>
-#include <fstream>
-#include <sstream>
-#include <stdlib.h>
-
-#include <llvm/IR/Function.h>
-#include <llvm/IR/Module.h>
-#include <llvm/ExecutionEngine/ExecutionEngine.h>
-#include <llvm/ExecutionEngine/MCJIT.h>
-#include <llvm/IRReader/IRReader.h>
-#include <llvm/IR/Verifier.h>
-#include <llvm/Support/Debug.h>
-
-#include <llvm/Support/CommandLine.h>
-
-#include <toolchain.h>
-#include <re/re_cc.h>
-#include <cc/cc_compiler.h>
-#include <pablo/pablo_toolchain.h>
-#include <pablo/pablo_kernel.h>
-#include <IR_Gen/idisa_builder.h>
-#include <IR_Gen/idisa_target.h>
-#include <kernels/pipeline.h>
-#include <kernels/mmap_kernel.h>
-#include <kernels/interface.h>
-#include <kernels/kernel.h>
-#include <kernels/s2p_kernel.h>
-#include <kernels/p2s_kernel.h>
-#include <kernels/deletion.h>
-#include <kernels/stdout_kernel.h>
-
-// mmap system
+#include <IR_Gen/idisa_builder.h>                  // for IDISA_Builder
+#include <IR_Gen/idisa_target.h>                   // for GetIDISA_Builder
+#include <cc/cc_compiler.h>                        // for CC_Compiler
+#include <kernels/deletion.h>                      // for DeletionKernel
+#include <kernels/mmap_kernel.h>                   // for MMapSourceKernel
+#include <kernels/p2s_kernel.h>                    // for P2S16KernelWithCom...
+#include <kernels/s2p_kernel.h>                    // for S2PKernel
+#include <kernels/stdout_kernel.h>                 // for StdOutKernel
+#include <llvm/ExecutionEngine/ExecutionEngine.h>  // for ExecutionEngine
+#include <llvm/IR/Function.h>                      // for Function, Function...
+#include <llvm/IR/Module.h>                        // for Module
+#include <llvm/IR/Verifier.h>                      // for verifyModule
+#include <llvm/Support/CommandLine.h>              // for ParseCommandLineOp...
+#include <llvm/Support/Debug.h>                    // for dbgs
+#include <pablo/pablo_kernel.h>                    // for PabloKernel
+#include <pablo/pablo_toolchain.h>                 // for pablo_function_passes
+#include <pablo/pe_zeroes.h>
+#include <toolchain.h>                             // for JIT_to_ExecutionEn...
+#include <boost/iostreams/device/mapped_file.hpp>  // for mapped_file_source
 #include <boost/filesystem.hpp>
-#include <boost/iostreams/device/mapped_file.hpp>
 #include <boost/interprocess/anonymous_shared_memory.hpp>
-#include <boost/interprocess/mapped_region.hpp>
-#include <fcntl.h>
-static cl::OptionCategory u8u16Options("u8u16 Options",
-                                            "Transcoding control options.");
-
-static cl::list<std::string> inputFiles(cl::Positional, cl::desc("<input file ...>"), cl::OneOrMore, cl::cat(u8u16Options));
-
-static cl::opt<bool> segmentPipelineParallel("enable-segment-pipeline-parallel", cl::desc("Enable multithreading with segment pipeline parallelism."), cl::cat(u8u16Options));
-static cl::opt<bool> mMapBuffering("mmap-buffering", cl::desc("Enable mmap buffering."), cl::cat(u8u16Options));
-static cl::opt<bool> memAlignBuffering("memalign-buffering", cl::desc("Enable posix_memalign buffering."), cl::cat(u8u16Options));
-
+#include "kernels/streamset.h"                     // for CircularBuffer
+#include <kernels/pipeline.h>
+#include "llvm/ADT/StringRef.h"                    // for StringRef
+#include "llvm/IR/CallingConv.h"                   // for ::C
+#include "llvm/IR/DerivedTypes.h"                  // for ArrayType, Pointer...
+#include "llvm/IR/LLVMContext.h"                   // for LLVMContext
+#include "llvm/IR/Value.h"                         // for Value
+#include "llvm/Support/Compiler.h"                 // for LLVM_UNLIKELY
+#include <pablo/builder.hpp>                       // for PabloBuilder
+#include <iostream>
 
 using namespace pablo;
 using namespace kernel;
 using namespace parabix;
+using namespace llvm;
+
+static cl::OptionCategory u8u16Options("u8u16 Options", "Transcoding control options.");
+static cl::list<std::string> inputFiles(cl::Positional, cl::desc("<input file ...>"), cl::OneOrMore, cl::cat(u8u16Options));
+static cl::opt<bool> segmentPipelineParallel("enable-segment-pipeline-parallel", cl::desc("Enable multithreading with segment pipeline parallelism."), cl::cat(u8u16Options));
+static cl::opt<bool> mMapBuffering("mmap-buffering", cl::desc("Enable mmap buffering."), cl::cat(u8u16Options));
+static cl::opt<bool> memAlignBuffering("memalign-buffering", cl::desc("Enable posix_memalign buffering."), cl::cat(u8u16Options));
+
 
 void u8u16_pablo(PabloKernel * kernel) {
     //  input: 8 basis bit streams
@@ -65,7 +57,7 @@ void u8u16_pablo(PabloKernel * kernel) {
     PabloBuilder & main = ccc.getBuilder();
     const auto u8_bits = ccc.getBasisBits();
 
-    PabloAST * zeroes = main.createZeroes();
+    Zeroes * zeroes = main.createZeroes();
 
     // Outputs
     Var * u16_hi[8];

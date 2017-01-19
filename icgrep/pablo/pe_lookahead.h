@@ -8,7 +8,6 @@
 #define PE_LOOKAHEAD_H
 
 #include <pablo/pabloAST.h>
-#include <pablo/symbol_generator.h>
 #include <pablo/pe_integer.h>
 
 namespace pablo {
@@ -28,12 +27,12 @@ public:
         return getOperand(0);
     }
     inline int64_t getAmount() const {
-        return cast<Integer>(getOperand(1))->value();
+        return llvm::cast<Integer>(getOperand(1))->value();
     }
 protected:
     Lookahead(PabloAST * expr, PabloAST * shiftAmount, const String * name, Allocator & allocator)
     : Statement(ClassTypeId::Lookahead, expr->getType(), {expr, shiftAmount}, name, allocator) {
-        assert(isa<Integer>(shiftAmount));
+        assert(llvm::isa<Integer>(shiftAmount));
     }
 };
 

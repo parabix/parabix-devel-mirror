@@ -8,37 +8,38 @@
 #define PS_PABLOS_H
 
 #include <pablo/pabloAST.h>
-#include <pablo/symbol_generator.h>
-#include <pablo/boolean.h>
-#include <pablo/arithmetic.h>
-#include <pablo/branch.h>
-
-#include <pablo/pe_advance.h>
-#include <pablo/pe_lookahead.h>
-#include <pablo/pe_matchstar.h>
-#include <pablo/pe_scanthru.h>
-#include <pablo/pe_infile.h>
-
-#include <pablo/pe_count.h>
-
-#include <pablo/pe_integer.h>
-#include <pablo/pe_string.h>
-#include <pablo/pe_zeroes.h>
-#include <pablo/pe_ones.h>
-
-#include <pablo/pe_var.h>
-#include <pablo/ps_assign.h>
-
-#include <pablo/pe_call.h>
-
 #include <pablo/pablo_kernel.h>
+#include <pablo/pe_integer.h>
+namespace llvm { class Type; }
+namespace llvm { class raw_ostream; }
+namespace pablo { class Add; }
+namespace pablo { class Advance; }
+namespace pablo { class And; }
+namespace pablo { class Assign; }
+namespace pablo { class AtEOF; }
+namespace pablo { class Branch; }
+namespace pablo { class If; }
+namespace pablo { class While; }
+namespace pablo { class Count; }
+namespace pablo { class Extract; }
+namespace pablo { class InFile; }
+namespace pablo { class LessThan; }
+namespace pablo { class Lookahead; }
+namespace pablo { class MatchStar; }
+namespace pablo { class Not; }
+namespace pablo { class Ones; }
+namespace pablo { class Or; }
+namespace pablo { class PabloKernel; }
+namespace pablo { class ScanThru; }
+namespace pablo { class Sel; }
+namespace pablo { class String; }
+namespace pablo { class Subtract; }
+namespace pablo { class Var; }
+namespace pablo { class Xor; }
+namespace pablo { class Zeroes; }
 
-#include <llvm/ADT/ArrayRef.h>
-#include <stdexcept>
 
 namespace pablo {
-
-class PabloKernel;
 
 class PabloBlock : public PabloAST, public StatementList {
     friend class PabloAST;
@@ -60,10 +61,7 @@ public:
         return false;
     }
 
-    inline static PabloBlock * Create(PabloKernel * const parent) noexcept {
-        Allocator & allocator = parent->mAllocator;
-        return new (allocator) PabloBlock(parent, allocator);
-    }
+    static PabloBlock * Create(PabloKernel * const parent) noexcept;
 
     Advance * createAdvance(PabloAST * expr, PabloAST * shiftAmount) {
         return createAdvance(expr, shiftAmount, nullptr);
@@ -85,26 +83,12 @@ public:
 
     Lookahead * createLookahead(PabloAST * expr, PabloAST * shiftAmount, String * name);
 
-    inline Zeroes * createZeroes(Type * const type = nullptr) {
+    inline Zeroes * createZeroes(llvm::Type * const type = nullptr) {
         return mParent->getNullValue(type);
     }
 
-    inline Ones * createOnes(Type * const type = nullptr) {
+    inline Ones * createOnes(llvm::Type * const type = nullptr) {
         return mParent->getAllOnesValue(type);
-    }
-
-    inline Call * createCall(Prototype * prototype, const std::vector<Var *> & args) {
-        return createCall(prototype, reinterpret_cast<const std::vector<PabloAST *> &>(args));
-    }
-
-    inline Call * createCall(Prototype * prototype, const std::vector<PabloAST *> & args) {
-        if (prototype == nullptr) {
-            throw std::runtime_error("Call object cannot be created with a Null prototype!");
-        }
-        if (args.size() != cast<Prototype>(prototype)->getNumOfParameters()) {
-            throw std::runtime_error("Invalid number of arguments passed into Call object!");
-        }
-        return createCall(static_cast<PabloAST *>(prototype), args);
     }
 
     Not * createNot(PabloAST * expr) {
@@ -117,12 +101,12 @@ public:
 
     Not * createNot(PabloAST * expr, String * name);
 
-    inline Var * createVar(const std::string & name, Type * const type = nullptr) {
+    inline Var * createVar(const std::string & name, llvm::Type * const type = nullptr) {
         return createVar(makeName(name), type);
     }
 
-    inline Var * createVar(String * name, Type * const type = nullptr) {
-        return createVar(cast<PabloAST>(name), type);
+    inline Var * createVar(String * name, llvm::Type * const type = nullptr) {
+        return createVar(reinterpret_cast<PabloAST *>(name), type);
     }
 
     Count * createCount(PabloAST * expr);
@@ -149,16 +133,16 @@ public:
 
     AtEOF * createAtEOF(PabloAST * expr, String * name);
 
-    Extract * createExtract(PabloAST * array, const int64_t index) {
-        return createExtract(array, getInteger(index), nullptr);
-    }
-
     inline Extract * createExtract(PabloAST * array, PabloAST * index) {
         return createExtract(array, index, nullptr);
     }
 
     Extract * createExtract(PabloAST * array, PabloAST * index, const std::string & prefix) {
         return createExtract(array, index, makeName(prefix));
+    }
+
+    Extract * createExtract(PabloAST * array, const int64_t index) {
+        return createExtract(array, getInteger(index), nullptr);
     }
 
     Extract * createExtract(PabloAST * array, const int64_t index, const std::string & prefix) {
@@ -179,11 +163,11 @@ public:
 
     And * createAnd(PabloAST * expr1, PabloAST * expr2, String * name);
 
-    And * createAnd(Type * const type, const unsigned reserved) {
+    And * createAnd(llvm::Type * const type, const unsigned reserved) {
         return createAnd(type, reserved, nullptr);
     }
 
-    And * createAnd(Type * const type, const unsigned reserved, String * name);
+    And * createAnd(llvm::Type * const type, const unsigned reserved, String * name);
 
     Or * createOr(PabloAST * expr1, PabloAST * expr2) {
         return createOr(expr1, expr2, nullptr);
@@ -195,11 +179,11 @@ public:
 
     Or * createOr(PabloAST * expr1, PabloAST * expr2, String * name);
 
-    Or * createOr(Type * const type, const unsigned reserved) {
+    Or * createOr(llvm::Type * const type, const unsigned reserved) {
         return createOr(type, reserved, nullptr);
     }
 
-    Or * createOr(Type * const type, const unsigned reserved, String * name);
+    Or * createOr(llvm::Type * const type, const unsigned reserved, String * name);
 
     Xor * createXor(PabloAST * expr1, PabloAST * expr2) {
         return createXor(expr1, expr2, nullptr);
@@ -211,11 +195,11 @@ public:
 
     Xor * createXor(PabloAST * expr1, PabloAST * expr2, String * name);
 
-    Xor * createXor(Type * const type, const unsigned reserved) {
+    Xor * createXor(llvm::Type * const type, const unsigned reserved) {
         return createXor(type, reserved, nullptr);
     }
 
-    Xor * createXor(Type * const type, const unsigned reserved, String * name);
+    Xor * createXor(llvm::Type * const type, const unsigned reserved, String * name);
 
     Sel * createSel(PabloAST * condition, PabloAST * trueExpr, PabloAST * falseExpr) {
         return createSel(condition, trueExpr, falseExpr, nullptr);
@@ -257,17 +241,15 @@ public:
 
     While * createWhile(PabloAST * condition, PabloBlock * body);
 
-    Type * getStreamTy(const unsigned FieldWidth = 1) {
+    llvm::Type * getStreamTy(const unsigned FieldWidth = 1) {
         return mParent->getStreamTy(FieldWidth);
     }
     
-    Type * getStreamSetTy(const unsigned NumElements = 1, const unsigned FieldWidth = 1) {
+    llvm::Type * getStreamSetTy(const unsigned NumElements = 1, const unsigned FieldWidth = 1) {
         return mParent->getStreamSetTy(NumElements, FieldWidth);
     }
     
-    inline PabloBlock * getPredecessor() const {
-        return getBranch() ? getBranch()->getParent() : nullptr;
-    }
+    PabloBlock * getPredecessor() const;
 
     inline PabloKernel * getParent() const {
         return mParent;
@@ -305,7 +287,7 @@ public:
         return mParent->getInteger(value);
     }
 
-    void print(raw_ostream & O, const bool expandNested = true) const;
+    void print(llvm::raw_ostream & O, const bool expandNested = true) const;
 
     virtual ~PabloBlock() {}
 
@@ -322,15 +304,13 @@ protected:
 
     template<typename Type>
     inline Type * insertAtInsertionPoint(Type * expr) {
-        if (isa<Statement>(expr)) {
-            insert(cast<Statement>(expr));
+        if (llvm::isa<Statement>(expr)) {
+            insert(llvm::cast<Statement>(expr));
         }
         return expr;
     }
 
-    Call * createCall(PabloAST * prototype, const std::vector<PabloAST *> &);
-
-    Var * createVar(PabloAST * name, Type * const type);
+    Var * createVar(PabloAST * name, llvm::Type * const type);
 
 private:        
     PabloKernel * const         mParent;

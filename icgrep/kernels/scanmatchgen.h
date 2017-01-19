@@ -5,15 +5,11 @@
 #ifndef SCANMATCHGEN_H
 #define SCANMATCHGEN_H
 
-#include "streamset.h"
-#include "kernel.h"
-#include "grep_type.h"
-#include <llvm/Support/Host.h>
-#include <llvm/ADT/Triple.h>
-
-namespace llvm { class Module; class Function;}
-
-namespace IDISA { class IDISA_Builder; }
+#include "grep_type.h"  // for GrepType
+#include "kernel.h"     // for KernelBuilder
+namespace IDISA { class IDISA_Builder; }  // lines 16-16
+namespace llvm { class Function; }  // lines 14-14
+namespace llvm { class Module; }  // lines 14-14
 
 namespace kernel {
     
@@ -30,9 +26,12 @@ public:
     mGrepType(grepType) {}
         
 private:
+
     void generateDoBlockMethod() const override;
+
     llvm::Function * generateScanWordRoutine(llvm::Module * m) const;
-        
+
+private:
     GrepType mGrepType;
 };
 }

@@ -3,7 +3,9 @@
 #include <boost/circular_buffer.hpp>
 #include <boost/container/flat_set.hpp>
 #include <boost/container/flat_map.hpp>
+#ifndef NDEBUG
 #include <pablo/analysis/pabloverifier.hpp>
+#endif
 #include <boost/graph/adjacency_list.hpp>
 #include <unordered_map>
 

@@ -8,8 +8,7 @@
 #define RE_SEQ_H
 
 #include "re_re.h"
-#include <string>
-#include <initializer_list>
+#include <llvm/Support/Casting.h>
 
 namespace re {
 
@@ -43,8 +42,8 @@ inline Seq * makeSeq() {
 template<typename itr>
 void Seq::flatten(itr begin, itr end) {
     for (auto i = begin; i != end; ++i) {
-        if (LLVM_UNLIKELY(isa<Seq>(*i))) {
-            flatten<Seq::iterator>(cast<Seq>(*i)->begin(), cast<Seq>(*i)->end());
+        if (LLVM_UNLIKELY(llvm::isa<Seq>(*i))) {
+            flatten<Seq::iterator>(llvm::cast<Seq>(*i)->begin(), llvm::cast<Seq>(*i)->end());
         } else {
             push_back(*i);
         }

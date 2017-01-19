@@ -1,13 +1,12 @@
 #ifndef RE_ANALYSIS_H
 #define RE_ANALYSIS_H
 
-//Regular Expressions
-#include "re_seq.h"
-#include <list>
+#include <utility>
+namespace re { class RE; }
 
 namespace re {
 
-bool isByteLength(const RE *re);
+bool isByteLength(const RE * re);
     
 bool isUnicodeUnitLength(const RE * re);
 

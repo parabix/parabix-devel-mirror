@@ -8,11 +8,7 @@
 #define RE_CC_H
 
 #include "re_re.h"
-
-#include <string>
-#include <vector>
 #include <UCD/unicode_set.h>
-#include <util/slab_allocator.h>
 
 namespace re {
 
@@ -54,7 +50,6 @@ protected:
     friend CC * makeCC(UCD::UnicodeSet && set);
     friend CC * subtractCC(const CC * a, const CC * b);
     friend CC * intersectCC(const CC * a, const CC * b);
-    friend CC * caseInsensitize(const CC * a, const CC * b);
 
     inline CC()
     : RE(ClassTypeId::CC) {

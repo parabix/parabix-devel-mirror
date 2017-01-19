@@ -1,5 +1,21 @@
-#include <pablo/builder.hpp>
-// #include <boost/current_function.hpp> // BOOST_CURRENT_FUNCTION
+#include "builder.hpp"
+#include <pablo/boolean.h>
+#include <pablo/arithmetic.h>
+#include <pablo/branch.h>
+#include <pablo/pe_advance.h>
+#include <pablo/pe_lookahead.h>
+#include <pablo/pe_matchstar.h>
+#include <pablo/pe_scanthru.h>
+#include <pablo/pe_infile.h>
+#include <pablo/pe_count.h>
+#include <pablo/pe_integer.h>
+#include <pablo/pe_string.h>
+#include <pablo/pe_zeroes.h>
+#include <pablo/pe_ones.h>
+#include <pablo/pe_var.h>
+#include <pablo/ps_assign.h>
+
+using namespace llvm;
 
 namespace pablo {
 
@@ -99,17 +115,6 @@ static inline Type * isBinary(PabloAST * expr) {
 }
 
 using TypeId = PabloAST::ClassTypeId;
-
-Call * PabloBuilder::createCall(Prototype * prototype, const std::vector<PabloAST *> & args) {
-    if (prototype == nullptr) {
-        throw std::runtime_error("Call object cannot be created with a Null prototype!");
-    }
-    if (args.size() != cast<Prototype>(prototype)->getNumOfParameters()) {
-        throw std::runtime_error("Invalid number of arguments passed into Call object!");
-    }
-    MAKE_VARIABLE(createCall, TypeId::Call, prototype->getName(), args, prototype);
-    return cast<Call>(result);
-}
 
 PabloAST * PabloBuilder::createAdvance(PabloAST * expr, PabloAST * shiftAmount) {
     if (isa<Zeroes>(expr) || cast<Integer>(shiftAmount)->value() == 0) {

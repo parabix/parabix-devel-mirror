@@ -7,7 +7,9 @@
 #include <boost/circular_buffer.hpp>
 #include <boost/graph/topological_sort.hpp>
 #include <boost/range/iterator_range.hpp>
+#ifndef NDEBUG
 #include <pablo/analysis/pabloverifier.hpp>
+#endif
 #include <pablo/optimizers/pablo_simplifier.hpp>
 #include <pablo/builder.hpp>
 #include <stack>

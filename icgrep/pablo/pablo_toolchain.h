@@ -7,15 +7,10 @@
 #ifndef PABLO_TOOLCHAIN_H
 #define PABLO_TOOLCHAIN_H
 
-namespace llvm {
-namespace cl {
-class OptionCategory;
-}
-}
+namespace llvm { namespace cl { class OptionCategory; } }
+namespace pablo { class PabloKernel; }
 
 namespace pablo {
-
-class PabloKernel;
 
 enum PabloDebugFlags {
     PrintOptimizedREcode, PrintCompiledCCcode, PrintCompiledREcode, DumpTrace, PrintUnloweredCode

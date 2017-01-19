@@ -2,7 +2,6 @@
 #define PABLO_CODESINKING_HPP
 
 #include <vector>
-#include <algorithm>
 
 namespace pablo {
 

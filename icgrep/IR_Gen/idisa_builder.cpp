@@ -183,7 +183,6 @@ Value * IDISA_Builder::simd_if(unsigned fw, Value * cond, Value * a, Value * b) 
         return CreateSelect(CreateICmpSLT(cond, mZeroInitializer), aVec, bVec);
     }
 }
-
     
 Value * IDISA_Builder::esimd_mergeh(unsigned fw, Value * a, Value * b) {
     unsigned field_count = mBitBlockWidth/fw;

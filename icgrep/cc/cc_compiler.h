@@ -12,11 +12,6 @@
 #include <pablo/builder.hpp>
 #include <string>
 
-namespace pablo {
-    class PabloKernel;
-    class Var;
-}
-
 namespace cc {
 
 class CC_NameMap;

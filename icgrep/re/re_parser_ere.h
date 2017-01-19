@@ -8,6 +8,7 @@
 #define ICGREP_RE_PARSER_ERE_H
 
 #include <re/re_parser.h>
+
 namespace re {
     class RE_Parser_ERE : public RE_Parser  {
     public:

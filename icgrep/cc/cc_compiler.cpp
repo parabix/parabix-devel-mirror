@@ -5,23 +5,16 @@
  */
 
 #include "cc_compiler.h"
-
-//Pablo Expressions
-#include <re/re_alt.h>
-#include <re/re_cc.h>
-#include <re/re_seq.h>
-#include <re/re_rep.h>
-#include <re/re_name.h>
-#include <re/re_diff.h>
-#include <re/re_intersect.h>
-#include <re/re_assertion.h>
 #include <pablo/codegenstate.h>
+#include <pablo/boolean.h>
+#include <pablo/pe_zeroes.h>
+#include <pablo/pe_ones.h>
 #include <pablo/builder.hpp>
 #include <pablo/pablo_kernel.h>
-#include <stdexcept>
 
 using namespace re;
 using namespace pablo;
+using namespace llvm;
 
 namespace cc {
 

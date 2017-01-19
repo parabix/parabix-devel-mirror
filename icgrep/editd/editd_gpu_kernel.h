@@ -5,8 +5,6 @@
 #ifndef EDITD_GPU_KERNEL_H
 #define EDITD_GPU_KERNEL_H
 
-#include <kernels/streamset.h>
-#include <kernels/interface.h>
 #include <kernels/kernel.h>
 
 namespace llvm { class Module; }

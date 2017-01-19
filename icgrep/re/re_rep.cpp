@@ -4,9 +4,12 @@
  *  icgrep is a trademark of International Characters.
  */
 
-#include "re_assertion.h"
 #include "re_rep.h"
+#include "re_assertion.h"
 #include "re_seq.h"
+#include <llvm/Support/Casting.h>
+
+using namespace llvm;
 
 namespace re {
 

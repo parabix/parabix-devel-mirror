@@ -1,10 +1,8 @@
 #ifndef RE_NULLABLE_H
 #define RE_NULLABLE_H
 
-//Regular Expressions
-#include "re_re.h"
-#include "re_seq.h"
-#include <vector>
+namespace re { class RE; }
+namespace re { class Vector; }
 
 namespace re {
 

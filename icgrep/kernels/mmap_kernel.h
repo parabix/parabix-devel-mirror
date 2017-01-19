@@ -19,10 +19,12 @@ public:
     MMapSourceKernel(IDISA::IDISA_Builder * iBuilder, unsigned blocksPerSegment = 1, unsigned codeUnitWidth = 8);
     
 private:
-    unsigned mSegmentBlocks;
-    unsigned mCodeUnitWidth;
-  
+
     void generateDoSegmentMethod() const override;
+
+private:
+    const unsigned mSegmentBlocks;
+    const unsigned mCodeUnitWidth;
     
 };
 }

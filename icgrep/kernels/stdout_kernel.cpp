@@ -5,6 +5,9 @@
 #include "stdout_kernel.h"
 #include <llvm/IR/Module.h>
 #include <IR_Gen/idisa_builder.h>
+#include <kernels/streamset.h>
+// #include <llvm/IR/Type.h>
+namespace llvm { class Type; }
 
 using namespace llvm;
 
@@ -26,11 +29,7 @@ void StdOutKernel::generateDoSegmentMethod() const {
     Value * self = &*(args++);
     /* unused Value * doFinal = &*(args++);*/ args++;
     Value * producerPos = &*(args++);
-    ////iBuilder->CallPrintInt("blocksToDo", blocksToDo);
     Value * streamStructPtr = getStreamSetStructPtr(self, "codeUnitBuffer");
-    //iBuilder->CallPrintInt("streamStructPtr", iBuilder->CreatePtrToInt(streamStructPtr, iBuilder->getInt64Ty()));
-
-    //iBuilder->CallPrintInt("producerPos", producerPos);
     Value * processed = getProcessedItemCount(self, "codeUnitBuffer");
     Value * itemsToDo = iBuilder->CreateSub(producerPos, processed);
     
@@ -46,6 +45,12 @@ void StdOutKernel::generateDoSegmentMethod() const {
 
     iBuilder->CreateRetVoid();
     iBuilder->restoreIP(savePoint);
+}
+
+StdOutKernel::StdOutKernel(IDISA::IDISA_Builder * iBuilder, unsigned codeUnitWidth)
+: KernelBuilder(iBuilder, "stdout", {Binding{iBuilder->getStreamSetTy(1, codeUnitWidth), "codeUnitBuffer"}}, {}, {}, {}, {})
+, mCodeUnitWidth(codeUnitWidth) {
+    setNoTerminateAttribute(true);
 }
 
 }

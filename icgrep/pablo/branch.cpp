@@ -1,6 +1,9 @@
-#include <pablo/branch.h>
+#include "branch.h"
 #include <pablo/codegenstate.h>
-#include <pablo/printer_pablos.h>
+#include <pablo/pe_var.h>
+#include <pablo/ps_assign.h>
+
+using namespace llvm;
 
 namespace pablo {
 

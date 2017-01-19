@@ -3,12 +3,10 @@
  *  This software is licensed to the public under the Open Software License 3.0.
  */
 
-#include "kernel.h"
 #include "scanmatchgen.h"
 #include <llvm/IR/Intrinsics.h>
 #include <IR_Gen/idisa_builder.h>
 #include <llvm/IR/Module.h>
-#include <llvm/Support/raw_os_ostream.h>
 
 using namespace llvm;
 

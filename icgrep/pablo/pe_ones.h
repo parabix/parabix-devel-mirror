@@ -27,10 +27,10 @@ public:
         return true;
     }
     virtual bool operator==(const PabloAST & other) const {
-        return isa<Ones>(other);
+        return llvm::isa<Ones>(other);
     }
 protected:
-    Ones(Type * const type, Allocator & allocator)
+    Ones(llvm::Type * const type, Allocator & allocator)
     : PabloAST(ClassTypeId::Ones, type, nullptr, allocator) {
     }
 };

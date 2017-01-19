@@ -1,7 +1,11 @@
-#include <pablo/passes/flattenif.hpp>
-#include <pablo/pablo_kernel.h>
+#include "flattenif.hpp"
 #include <pablo/codegenstate.h>
+#include <pablo/branch.h>
+#ifndef NDEBUG
 #include <pablo/analysis/pabloverifier.hpp>
+#endif
+
+using namespace llvm;
 
 namespace pablo {
     

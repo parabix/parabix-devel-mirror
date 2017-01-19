@@ -6,14 +6,21 @@
 
 #ifndef CARRY_MANAGER_H
 #define CARRY_MANAGER_H
-#include <llvm/IR/IRBuilder.h>
-#include <llvm/IR/Module.h>
-#include <IR_Gen/idisa_builder.h>
-#include <pablo/pablo_kernel.h>
-#include <pablo/codegenstate.h>
+
 #include <pablo/carry_data.h>
-#include <llvm/IR/Constants.h>
-#include <kernels/kernel.h>
+#include <vector>
+namespace IDISA { class IDISA_Builder; }
+namespace llvm { class BasicBlock; }
+namespace llvm { class Function; }
+namespace llvm { class PHINode; }
+namespace llvm { class StructType; }
+namespace llvm { class Type; }
+namespace llvm { class Value; }
+namespace pablo { class Advance; }
+namespace pablo { class PabloBlock; }
+namespace pablo { class PabloKernel; }
+namespace pablo { class Statement; }
+
 
 /* 
  * Carry Data Manager.
@@ -26,13 +33,7 @@
 
 */
 
-using namespace llvm;
-
 namespace pablo {
-
-class PabloBlock;
-
-
 
 class CarryManager {
 
@@ -40,109 +41,90 @@ class CarryManager {
 
 public:
   
-    explicit CarryManager(IDISA::IDISA_Builder * idb) noexcept
-    : iBuilder(idb)
-    , mKernel(nullptr)
-    , mSelf(nullptr)
-    , mFunction(nullptr)
-    , mBitBlockType(idb->getBitBlockType())
-    , mBitBlockWidth(idb->getBitBlockWidth())
-    , mCurrentFrameIndex(0)
-    , mCurrentScope(nullptr)
-    , mCarryInfo(nullptr)
-    , mCarryPackType(mBitBlockType)
-    , mCarryPackPtr(nullptr)
-    , mIfDepth(0)
-    , mLoopDepth(0) {
-
-    }
-
-    ~CarryManager() {
-
-    }
+    explicit CarryManager(IDISA::IDISA_Builder * idb) noexcept;
 
     void initializeCarryData(PabloKernel * const kernel);
 
-    void initializeCodeGen(Value * const self, Function *function);
+    void initializeCodeGen(llvm::Value * const self, llvm::Function *function);
 
     /* Entering and leaving loops. */
 
     void enterLoopScope(PabloBlock * const scope);
 
-    void enterLoopBody(BasicBlock * const entryBlock);
+    void enterLoopBody(llvm::BasicBlock * const entryBlock);
 
-    void leaveLoopBody(BasicBlock * const exitBlock);
+    void leaveLoopBody(llvm::BasicBlock * const exitBlock);
 
-    void leaveLoopScope(BasicBlock * const entryBlock, BasicBlock * const exitBlock);
+    void leaveLoopScope(llvm::BasicBlock * const entryBlock, llvm::BasicBlock * const exitBlock);
 
     /* Entering and leaving ifs. */
 
     void enterIfScope(PabloBlock * const scope);
 
-    void enterIfBody(BasicBlock * const entryBlock);
+    void enterIfBody(llvm::BasicBlock * const entryBlock);
 
-    void leaveIfBody(BasicBlock * const exitBlock);
+    void leaveIfBody(llvm::BasicBlock * const exitBlock);
 
-    void leaveIfScope(BasicBlock * const entryBlock, BasicBlock * const exitBlock);
+    void leaveIfScope(llvm::BasicBlock * const entryBlock, llvm::BasicBlock * const exitBlock);
 
     /* Methods for processing individual carry-generating operations. */
     
-    Value * addCarryInCarryOut(const Statement * operation, Value * const e1, Value * const e2);
+    llvm::Value * addCarryInCarryOut(const Statement * operation, llvm::Value * const e1, llvm::Value * const e2);
 
-    Value * advanceCarryInCarryOut(const Advance * advance, Value * const strm);
+    llvm::Value * advanceCarryInCarryOut(const Advance * advance, llvm::Value * const strm);
  
     /* Methods for getting and setting carry summary values for If statements */
          
-    Value * generateSummaryTest(Value * condition);
+    llvm::Value * generateSummaryTest(llvm::Value * condition);
     
 protected:
 
     static unsigned enumerate(PabloBlock * const scope, unsigned index = 0);
     static bool requiresVariableLengthMode(const PabloBlock * const scope);
-    StructType * analyse(PabloBlock * const scope, const unsigned ifDepth = 0, const unsigned whileDepth = 0);
+    llvm::StructType * analyse(PabloBlock * const scope, const unsigned ifDepth = 0, const unsigned whileDepth = 0);
 
     /* Entering and leaving scopes. */
     void enterScope(PabloBlock * const scope);
     void leaveScope();
 
     /* Methods for processing individual carry-generating operations. */
-    Value * getNextCarryIn();
-    void setNextCarryOut(Value * const carryOut);
-    Value * longAdvanceCarryInCarryOut(const unsigned shiftAmount, Value * const value);
+    llvm::Value * getNextCarryIn();
+    void setNextCarryOut(llvm::Value * const carryOut);
+    llvm::Value * longAdvanceCarryInCarryOut(const unsigned shiftAmount, llvm::Value * const value);
 
     /* Summary handling routines */
-    void addToSummary(Value * const value);
+    void addToSummary(llvm::Value * const value);
 
     bool inCollapsingCarryMode() const;
 
 private:
 
-    IDISA::IDISA_Builder * const                iBuilder;
-    PabloKernel *                               mKernel;
-    Value *                                     mSelf;
-    Function *                                  mFunction;
-    Type * const                                mBitBlockType;
-    const unsigned                              mBitBlockWidth;
+    IDISA::IDISA_Builder * const                    iBuilder;
+    PabloKernel *                                   mKernel;
+    llvm::Value *                                   mSelf;
+    llvm::Function *                                mFunction;
+    llvm::Type * const                              mBitBlockType;
+    const unsigned                                  mBitBlockWidth;
 
-    Value *                                     mCurrentFrame;
-    unsigned                                    mCurrentFrameIndex;
+    llvm::Value *                                   mCurrentFrame;
+    unsigned                                        mCurrentFrameIndex;
 
-    PabloBlock *                                mCurrentScope;
-    CarryData *                                 mCarryInfo;
+    PabloBlock *                                    mCurrentScope;
+    CarryData *                                     mCarryInfo;
 
-    Type *                                      mCarryPackType;
-    Value *                                     mCarryPackPtr;
+    llvm::Type *                                    mCarryPackType;
+    llvm::Value *                                   mCarryPackPtr;
 
-    unsigned                                    mIfDepth;
+    unsigned                                        mIfDepth;
 
-    unsigned                                    mLoopDepth;    
-    Value *                                     mLoopSelector;
-    std::vector<PHINode *>                      mLoopIndicies;
+    unsigned                                        mLoopDepth;
+    llvm::Value *                                   mLoopSelector;
+    std::vector<llvm::PHINode *>                    mLoopIndicies;
 
-    std::vector<CarryData>                      mCarryMetadata;
-    std::vector<std::pair<Value *, unsigned>>   mCarryFrame;
+    std::vector<CarryData>                          mCarryMetadata;
+    std::vector<std::pair<llvm::Value *, unsigned>> mCarryFrame;
 
-    std::vector<Value *>                        mCarrySummary;
+    std::vector<llvm::Value *>                      mCarrySummary;
 };
 
 }

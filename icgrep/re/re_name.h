@@ -3,7 +3,7 @@
 
 #include <re/re_re.h>
 #include <re/re_cc.h>
-#include <string>
+#include <llvm/Support/Casting.h>
 
 namespace UCD {
     class UnicodeSet;
@@ -101,8 +101,8 @@ inline void Name::setDefinition(RE * definition) {
 }
 
 inline bool Name::operator < (const Name & other) const {
-    if (LLVM_LIKELY(mDefinition && other.mDefinition && isa<CC>(mDefinition) && isa<CC>(other.mDefinition))) {
-        return *cast<CC>(mDefinition) < *cast<CC>(other.mDefinition);
+    if (LLVM_LIKELY(mDefinition && other.mDefinition && llvm::isa<CC>(mDefinition) && llvm::isa<CC>(other.mDefinition))) {
+        return *llvm::cast<CC>(mDefinition) < *llvm::cast<CC>(other.mDefinition);
     } else if (mNamespaceLength < other.mNamespaceLength) {
         return true;
     } else if (mNamespaceLength > other.mNamespaceLength) {
@@ -122,15 +122,15 @@ inline bool Name::operator < (const Name & other) const {
 }
 
 inline bool Name::operator < (const CC & other) const {
-    if (mDefinition && isa<CC>(mDefinition)) {
-        return *cast<CC>(mDefinition) < other;
+    if (mDefinition && llvm::isa<CC>(mDefinition)) {
+        return *llvm::cast<CC>(mDefinition) < other;
     }
     return false;
 }
 
 inline bool Name::operator > (const CC & other) const {
-    if (mDefinition && isa<CC>(mDefinition)) {
-        return other < *cast<CC>(mDefinition);
+    if (mDefinition && llvm::isa<CC>(mDefinition)) {
+        return other < *llvm::cast<CC>(mDefinition);
     }
     return true;
 }
@@ -144,11 +144,11 @@ inline Name * makeName(const std::string & property, const std::string & value, 
 }
 
 inline Name * makeName(const std::string & name, RE * cc) {
-    if (isa<Name>(cc)) {
-        return cast<Name>(cc);
+    if (llvm::isa<Name>(cc)) {
+        return llvm::cast<Name>(cc);
     }
-    else if (isa<CC>(cc)) {
-        Name::Type ccType = cast<CC>(cc)->max_codepoint() <= 0x7F ? Name::Type::Byte : Name::Type::Unicode;
+    else if (llvm::isa<CC>(cc)) {
+        Name::Type ccType = llvm::cast<CC>(cc)->max_codepoint() <= 0x7F ? Name::Type::Byte : Name::Type::Unicode;
         return new Name(nullptr, 0, name.c_str(), name.length(), ccType, cc);
     }
     else return new Name(nullptr, 0, name.c_str(), name.length(), Name::Type::Unknown, cc);
