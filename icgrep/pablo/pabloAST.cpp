@@ -5,7 +5,7 @@
  */
 
 #include "pabloAST.h"
-#include <pablo/codegenstate.h>          // for PabloBlock
+#include <pablo/codegenstate.h>
 #include <pablo/pe_var.h>
 #include <pablo/boolean.h>
 #include <pablo/pe_infile.h>
@@ -13,7 +13,8 @@
 #include <pablo/pe_ones.h>
 #include <pablo/ps_assign.h>
 #include <pablo/branch.h>
-#include <pablo/printer_pablos.h>        // for PabloPrinter
+#include <pablo/printer_pablos.h>
+#include <llvm/Support/raw_os_ostream.h>
 
 using namespace boost::container;
 using namespace llvm;

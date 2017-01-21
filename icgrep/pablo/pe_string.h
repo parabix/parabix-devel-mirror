@@ -3,13 +3,11 @@
 
 #include <pablo/pabloAST.h>
 #include <llvm/ADT/StringRef.h>
-#include <llvm/Support/raw_os_ostream.h>
 
 namespace pablo {
 
 class String : public PabloAST {
     friend class SymbolGenerator;
-    friend std::ostream & operator<< (std::ostream& stream, const String & string);
 public:
     using StringAllocator = SlabAllocator<char>;
 
@@ -47,27 +45,6 @@ protected:
 private:
     const llvm::StringRef mValue;
 };
-
-inline std::ostream & operator <<(std::ostream & stream, const String & string) {
-    stream << string.value().data();
-    return stream;
-}
-
-inline std::ostream & operator <<(std::ostream & stream, const String * string) {
-    stream << string->value().data();
-    return stream;
-}
-
-inline llvm::raw_ostream & operator <<(llvm::raw_ostream & stream, const String & string) {
-    stream << string.value().data();
-    return stream;
-}
-
-inline llvm::raw_ostream & operator <<(llvm::raw_ostream & stream, const String * string) {
-    stream << string->value().data();
-    return stream;
-}
-
 
 }
 

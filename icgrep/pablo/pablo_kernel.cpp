@@ -12,6 +12,7 @@
 #include <llvm/IR/Module.h>
 #include <llvm/IR/Verifier.h>
 #include <IR_Gen/idisa_builder.h>
+#include <llvm/Support/raw_os_ostream.h>
 
 using namespace pablo;
 using namespace kernel;

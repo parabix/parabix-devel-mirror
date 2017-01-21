@@ -143,7 +143,7 @@ void PabloPrinter::print(const PabloAST * expr, llvm::raw_ostream & out) {
     } else if (isa<Ones>(expr)) {
         out << "1";
     } else if (const Var * var = dyn_cast<Var>(expr)) {
-        out << var->getName();
+        out << var->getName()->value();
     } else if (const If * ifstmt = dyn_cast<If>(expr)) {
         out << "If ";
         print(ifstmt->getCondition(), out);
@@ -187,7 +187,7 @@ void PabloPrinter::print(const PabloAST * expr, llvm::raw_ostream & out) {
         out << " != ";
         print(op->getRH(), out);
     } else if (const Statement * stmt = dyn_cast<Statement>(expr)) {
-        out << stmt->getName();
+        out << stmt->getName()->value();
     } else if (isa<Integer>(expr)) {
         out << cast<Integer>(expr)->value();
     } else {

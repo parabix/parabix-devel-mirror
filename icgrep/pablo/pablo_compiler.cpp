@@ -26,6 +26,7 @@
 #include <pablo/carry_manager.h>
 #include <IR_Gen/idisa_builder.h>
 #include <llvm/IR/Module.h>
+#include <llvm/Support/raw_os_ostream.h>
 
 using namespace llvm;
 
