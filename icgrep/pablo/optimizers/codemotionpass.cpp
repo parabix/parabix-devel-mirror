@@ -4,14 +4,11 @@
 #include <pablo/branch.h>
 #include <pablo/ps_assign.h>
 #include <pablo/pe_var.h>
+#include <boost/container/flat_set.hpp>
+#include <vector>
 #ifndef NDEBUG
 #include <pablo/analysis/pabloverifier.hpp>
 #endif
-#include <boost/container/flat_set.hpp>
-#include <vector>
-
-#include <pablo/printer_pablos.h>
-#include <llvm/Support/raw_ostream.h>
 
 using namespace boost;
 using namespace boost::container;
@@ -23,10 +20,6 @@ namespace pablo {
  * @brief optimize
  ** ------------------------------------------------------------------------------------------------------------- */
 bool CodeMotionPass::optimize(PabloKernel * kernel) {
-//    errs() << "------------------------------------------------------------------------------\n";
-//    errs() << "BEFORE:\n";
-//    errs() << "------------------------------------------------------------------------------\n";
-//    PabloPrinter::print(kernel, errs());
     CodeMotionPass::movement(kernel->getEntryBlock());
     #ifndef NDEBUG
     PabloVerifier::verify(kernel, "post-code-motion");
@@ -52,13 +45,11 @@ void CodeMotionPass::movement(PabloBlock * const block) {
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief depthTo
+ * @brief depthOf
  ** ------------------------------------------------------------------------------------------------------------- */
-inline static int depthTo(const PabloBlock * scope, const PabloBlock * const root) {
+inline static int depthOf(PabloBlock * scope) {
     int depth = 0;
-    assert (scope && root);
-    while (scope != root) {
-        assert (scope);
+    while (scope) {
         ++depth;
         scope = scope->getPredecessor();
     }
@@ -66,64 +57,92 @@ inline static int depthTo(const PabloBlock * scope, const PabloBlock * const roo
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
+ * @brief findLCA
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline PabloBlock * findLCA(PabloBlock * scope1, PabloBlock * scope2) {
+    int depth1 = depthOf(scope1);
+    int depth2 = depthOf(scope2);
+    // If one of these scopes is nested deeper than the other, scan upwards through
+    // the scope tree until both scopes are at the same depth.
+    while (depth1 > depth2) {
+        scope1 = scope1->getPredecessor();
+        --depth1;
+    }
+    while (depth1 < depth2) {
+        scope2 = scope2->getPredecessor();
+        --depth2;
+    }
+    // Then iteratively step backwards until we find a matching set of scopes; this
+    // must be the LCA of our original scopes.
+    while (scope1 != scope2) {
+        assert (scope1 && scope2);
+        scope1 = scope1->getPredecessor();
+        scope2 = scope2->getPredecessor();
+    }
+    return scope1;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
  * @brief ScopeSet
  ** ------------------------------------------------------------------------------------------------------------- */
 struct ScopeSet : public std::vector<PabloBlock *> {
-    inline bool insert(PabloBlock * block) {
+    inline void insert(PabloBlock * block) {
         const auto i = std::lower_bound(begin(), end(), block);
         if (i == end() || *i != block) {
             std::vector<PabloBlock *>::insert(i, block);
-            return true;
         }
-        return false;
-    }
-    inline bool count(PabloBlock * block) {
-        const auto i = std::lower_bound(begin(), end(), block);
-        return (i != end() && *i == block);
     }
 };
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief findScopeUsages
  ** ------------------------------------------------------------------------------------------------------------- */
-inline bool findScopeUsages(PabloAST * expr, ScopeSet & scopeSet, const PabloBlock * const block, const PabloBlock * const blocker = nullptr) {
+inline void findUsageScopes(PabloAST * expr, ScopeSet & scopes) {
     for (PabloAST * use : expr->users()) {
-        assert (isa<Statement>(use));
-        PabloBlock * const parent = cast<Statement>(use)->getParent();
-        assert (parent);
-        if (LLVM_LIKELY(parent == block)) {
-            return false;
-        }
-        if (parent != blocker) {
-            scopeSet.insert(parent);
-        }
+        scopes.insert(cast<Statement>(use)->getParent());
     }
-    return true;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief isAcceptableTarget
  ** ------------------------------------------------------------------------------------------------------------- */
-inline bool isAcceptableTarget(Statement * stmt, ScopeSet & scopeSet, const PabloBlock * const block) {
+inline PabloBlock * isAcceptableTarget(Statement * stmt, ScopeSet & scopes, PabloBlock * const block) {
     // Scan through this statement's users to see if they're all in a nested scope. If so,
     // find the least common ancestor of the scope blocks. If it is not the current scope,
     // then we can sink the instruction.
-    assert (scopeSet.empty());
-    if (isa<Branch>(stmt)) {
-        const auto vars = cast<Branch>(stmt)->getEscaped();
-        if (LLVM_UNLIKELY(vars.empty())) {
-            return false;
+    assert (scopes.empty());
+    if (isa<Assign>(stmt)) {
+        return nullptr;
+    } else if (isa<Branch>(stmt)) {
+        for (Var * def : cast<Branch>(stmt)->getEscaped()) {
+            findUsageScopes(def, scopes);
         }
-        for (Var * def : vars) {
-            if (!findScopeUsages(def, scopeSet, block, cast<Branch>(stmt)->getBody())) {
-                return false;
-            }
-        }
-        return true;
-    } else if (isa<Assign>(stmt)) {
-        return false;
+    } else {
+        findUsageScopes(stmt, scopes);
     }
-    return findScopeUsages(stmt, scopeSet, block);
+    if (LLVM_UNLIKELY(scopes.empty())) {
+        return nullptr;
+    }
+    while (scopes.size() > 1) {
+        PabloBlock * scope1 = scopes.back(); scopes.pop_back();
+        PabloBlock * scope2 = scopes.back(); scopes.pop_back();
+        scopes.insert(findLCA(scope1, scope2));
+    }
+    // If the LCA scope is nested within the block, return the LCA scope.
+    // Otherwise return nullptr.
+    PabloBlock * const scope = scopes.back(); scopes.clear();
+    if (scope == block) {
+        return nullptr;
+    }
+    PabloBlock * temp = scope;
+    for (;;) {
+        temp = temp->getPredecessor();
+        if (temp == nullptr) {
+            return nullptr;
+        } else if (temp == block) {
+            return scope;
+        }
+    }
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -134,46 +153,9 @@ inline void CodeMotionPass::sink(PabloBlock * const block) {
     Statement * stmt = block->back(); // note: reverse AST traversal
     while (stmt) {
         Statement * prevNode = stmt->getPrevNode();
-        if (isAcceptableTarget(stmt, scopes, block)) {
-            while (scopes.size() > 1) {
-
-                // Find the LCA of both scopes then add the LCA back to the list of scopes.
-                PabloBlock * scope1 = scopes.back(); scopes.pop_back();
-                int depth1 = depthTo(scope1, block);
-
-                PabloBlock * scope2 = scopes.back(); scopes.pop_back();
-                int depth2 = depthTo(scope2, block);
-
-                // If one of these scopes is nested deeper than the other, scan upwards through
-                // the scope tree until both scopes are at the same depth.
-                while (depth1 > depth2) {
-                    scope1 = scope1->getPredecessor();
-                    --depth1;
-                }
-                while (depth1 < depth2) {
-                    scope2 = scope2->getPredecessor();
-                    --depth2;
-                }
-
-                // Then iteratively step backwards until we find a matching set of scopes; this
-                // must be the LCA of our original scopes.
-                while (scope1 != scope2) {
-                    assert (scope1 && scope2);
-                    scope1 = scope1->getPredecessor();
-                    scope2 = scope2->getPredecessor();
-                }
-                assert (scope1);
-                // But if the LCA is the current block, we can't sink the statement.
-                if (scope1 == block) {
-                    goto abort;
-                }
-                scopes.push_back(scope1);
-            }
-            assert (scopes.size() == 1);
-            assert (isa<Branch>(stmt) ? (cast<Branch>(stmt)->getBody() != scopes.front()) : true);
-            stmt->insertBefore(scopes.front()->front());
+        if (PabloBlock * scope = isAcceptableTarget(stmt, scopes, block)) {
+            stmt->insertBefore(scope->front());
         }
-abort:  scopes.clear();
         stmt = prevNode;
     }
 }
