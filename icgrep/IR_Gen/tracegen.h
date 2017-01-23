@@ -19,7 +19,6 @@ public:
     TraceTool(IDISA::IDISA_Builder * b, unsigned log2TraceBufSize = 16);
     
     unsigned declareTraceVar(std::string traceVarName);
-    
     unsigned newTraceVar(std::string traceName);
     void addTraceEntry(unsigned traceVar, llvm::Value * traceVal);
     void createDumpTrace();
@@ -90,7 +89,7 @@ void TraceTool::createDumpTrace() {
     
     Value * nextIndex = iBuilder->CreateAnd(iBuilder->CreateAdd(loopIndex, iBuilder->getInt32(1)), mTraceIndexMask);
     loopIndex->addIncoming(nextIndex, DumpTraceLoop);
-    Value * atLastTraceIndex = iBuilder->CreateICmpEQ(loopIndex, lastTraceIndex);
+    Value * atLastTraceIndex = iBuilder->CreateICmpEQ(nextIndex, lastTraceIndex);
     iBuilder->CreateCondBr(atLastTraceIndex, DumpTraceExit, DumpTraceLoop);
     iBuilder->SetInsertPoint(DumpTraceExit);
 }
