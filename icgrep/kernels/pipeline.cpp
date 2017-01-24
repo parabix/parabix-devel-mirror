@@ -109,8 +109,8 @@ Function * generateSegmentParallelPipelineThreadFunction(std::string name, IDISA
     Value * sharedStruct = iBuilder->CreateBitCast(input, PointerType::get(sharedStructType, 0));
     Constant * myThreadId = ConstantInt::get(size_ty, id);
     std::vector<Value *> instancePtrs;
-    for (unsigned i = 0; i < kernels.size(); i++) {
-        Value * ptr = iBuilder->CreateGEP(sharedStruct, {iBuilder->getInt32(0), iBuilder->getInt32(i)});
+    for (unsigned k = 0; k < kernels.size(); k++) {
+        Value * ptr = iBuilder->CreateGEP(sharedStruct, {iBuilder->getInt32(0), iBuilder->getInt32(k)});
         instancePtrs.push_back(iBuilder->CreateLoad(ptr));
     }
     
@@ -130,8 +130,18 @@ Function * generateSegmentParallelPipelineThreadFunction(std::string name, IDISA
         iBuilder->SetInsertPoint(segmentWait[k]);
         Value * processedSegmentCount = kernels[k]->acquireLogicalSegmentNo(instancePtrs[k]);
         Value * cond = iBuilder->CreateICmpEQ(segNo, processedSegmentCount);
-        iBuilder->CreateCondBr(cond, segmentLoopBody[k], segmentWait[k]);
-        
+
+        if (kernels[k]->hasNoTerminateAttribute()) {
+            iBuilder->CreateCondBr(cond, segmentLoopBody[k], segmentWait[k]);
+        }
+        else {
+            // If the kernel terminated in a previous block then the pipeline is done.
+            BasicBlock * completionTest = BasicBlock::Create(iBuilder->getContext(), kernels[k]->getName() + "Completed", threadFunc, 0);
+            iBuilder->CreateCondBr(cond, completionTest, segmentWait[k]);
+            iBuilder->SetInsertPoint(completionTest);
+            Value * alreadyDone = kernels[k]->getTerminationSignal(instancePtrs[k]);
+            iBuilder->CreateCondBr(alreadyDone, exitThreadBlock, segmentLoopBody[k]);
+        }
         iBuilder->SetInsertPoint(segmentLoopBody[k]);
         std::vector<Value *> doSegmentArgs = {instancePtrs[k], doFinal};
         for (unsigned j = 0; j < kernels[k]->getStreamInputs().size(); j++) {
@@ -152,11 +162,11 @@ Function * generateSegmentParallelPipelineThreadFunction(std::string name, IDISA
         kernels[k]->releaseLogicalSegmentNo(instancePtrs[k], nextSegNo);
         if (k == last_kernel) {
             segNo->addIncoming(iBuilder->CreateAdd(segNo, ConstantInt::get(size_ty, threadNum)), segmentLoopBody[last_kernel]);
-	    iBuilder->CreateCondBr(doFinal, exitThreadBlock, segmentLoop);
+            iBuilder->CreateCondBr(doFinal, exitThreadBlock, segmentLoop);
         }
         else {
-	    iBuilder->CreateBr(segmentWait[k+1]);
-	}
+            iBuilder->CreateBr(segmentWait[k+1]);
+        }
     }
 
     iBuilder->SetInsertPoint(exitThreadBlock);
