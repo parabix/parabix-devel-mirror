@@ -225,11 +225,13 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool Count
         iBuilder = CPUBuilder;
     }
 
+    // segment size made availabe for each call to the mmap source kernel
     const unsigned segmentSize = codegen::SegmentSize;
-    if (segmentPipelineParallel && codegen::BufferSegments < 2) {
-        codegen::BufferSegments = 2;
-    }
-    const unsigned bufferSegments = codegen::BufferSegments;
+    unsigned bufferSegments = codegen::BufferSegments;
+    if (segmentPipelineParallel) 
+        {
+            bufferSegments = codegen::BufferSegments * codegen::ThreadNum;
+        }
     const unsigned encodingBits = UTF_16 ? 16 : 8;
 
     mGrepType = grepType;
@@ -289,7 +291,7 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool Count
        
     ExternalFileBuffer ByteStream(iBuilder, iBuilder->getStreamSetTy(1, 8));
     
-    kernel::MMapSourceKernel mmapK(iBuilder, segmentSize * bufferSegments); 
+    kernel::MMapSourceKernel mmapK(iBuilder, segmentSize); 
     mmapK.generateKernel({}, {&ByteStream});
     mmapK.setInitialArguments({fileSize});
     
