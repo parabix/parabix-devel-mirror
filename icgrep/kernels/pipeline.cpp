@@ -121,11 +121,9 @@ Function * generateSegmentParallelPipelineThreadFunction(std::string name, IDISA
     segNo->addIncoming(myThreadId, entryBlock);
     Value * nextSegNo = iBuilder->CreateAdd(segNo, iBuilder->getSize(1));
     unsigned last_kernel = kernels.size() - 1;
-    Value * alreadyDone = kernels[last_kernel]->getTerminationSignal(instancePtrs[last_kernel]);
-    iBuilder->CreateCondBr(alreadyDone, exitThreadBlock, segmentWait[0]);
-    
     Value * doFinal = ConstantInt::getNullValue(iBuilder->getInt1Ty());
-
+    
+    iBuilder->CreateBr(segmentWait[0]);
     for (unsigned k = 0; k < kernels.size(); k++) {
         iBuilder->SetInsertPoint(segmentWait[k]);
         Value * processedSegmentCount = kernels[k]->acquireLogicalSegmentNo(instancePtrs[k]);
@@ -135,7 +133,7 @@ Function * generateSegmentParallelPipelineThreadFunction(std::string name, IDISA
             iBuilder->CreateCondBr(cond, segmentLoopBody[k], segmentWait[k]);
         }
         else {
-            // If the kernel terminated in a previous block then the pipeline is done.
+            // If the kernel terminated in a previous segment then the pipeline is done.
             BasicBlock * completionTest = BasicBlock::Create(iBuilder->getContext(), kernels[k]->getName() + "Completed", threadFunc, 0);
             iBuilder->CreateCondBr(cond, completionTest, segmentWait[k]);
             iBuilder->SetInsertPoint(completionTest);
