@@ -99,12 +99,11 @@ void expand3_4Kernel::generateDoSegmentMethod() const {
     UndefValue * undefPack = UndefValue::get(iBuilder->fwVectorType(8));
     
     const unsigned packAlign = iBuilder->getBitBlockWidth()/8;
+
     Function::arg_iterator args = doSegmentFunction->arg_begin();
     Value * self = &*(args++);
-    Value * blocksToDo = &*(args);
-    Value * streamStructPtr = getStreamSetStructPtr(self, "sourceStream");
-
-    LoadInst * producerPos = iBuilder->CreateAtomicLoadAcquire(mStreamSetInputBuffers[0]->getProducerPosPtr(streamStructPtr));
+    Value * doFinal = &*(args++);
+    Value * producerPos = &*(args++);
     Value * processed = getProcessedItemCount(self, "sourceStream");
     Value * itemsAvail = iBuilder->CreateSub(producerPos, processed);
     
@@ -265,11 +264,6 @@ void expand3_4Kernel::generateDoSegmentMethod() const {
     // input byte.
     Value * totalProduced = iBuilder->CreateAdd(iBuilder->CreateMul(iBuilder->CreateUDiv(processed, Const3), Const4), iBuilder->CreateURem(processed, Const3));
     setProducedItemCount(self, "expandedStream", totalProduced);
-    Value * ssStructPtr = getStreamSetStructPtr(self, "expandedStream");
-
-    Value * producerPosPtr = mStreamSetOutputBuffers[0]->getProducerPosPtr(ssStructPtr);
-
-    iBuilder->CreateAtomicStoreRelease(totalProduced, producerPosPtr);
     
     iBuilder->CreateCondBr(inFinalSegment, setTermination, expand3_4_exit);
     iBuilder->SetInsertPoint(setTermination);

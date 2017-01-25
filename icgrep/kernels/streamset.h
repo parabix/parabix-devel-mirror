@@ -14,13 +14,6 @@ namespace kernel { class KernelBuilder; }
 
 namespace parabix {
     
-// Stream Set Structs hold information about the current state of a stream set buffer.
-
-llvm::Value * getProducerPosPtr(IDISA::IDISA_Builder * b, llvm::Value * self);
-llvm::Value * getConsumerPosPtr(IDISA::IDISA_Builder * b, llvm::Value * self);
-llvm::Value * getEndOfInputPtr(IDISA::IDISA_Builder * b, llvm::Value * self);
-llvm::Value * getStreamSetBufferPtr(IDISA::IDISA_Builder * b, llvm::Value * self);
-
 class StreamSetBuffer {
     friend class kernel::KernelBuilder;
 
@@ -40,15 +33,9 @@ public:
         return mStreamSetType->getPointerTo(mAddrSpace);
     }
 
-    llvm::PointerType * getStreamSetStructPointerType() const {
-        return mStreamSetStructType->getPointerTo();
-    }
-
     size_t getBufferSize() const { return mBufferBlocks; }
 
     llvm::Value * getStreamSetBasePtr() const { return mStreamSetBufferPtr; }
-
-    llvm::Value * getStreamSetStructPtr() const { return mStreamSetStructPtr; }
 
     virtual void allocateBuffer();
 
@@ -60,18 +47,6 @@ public:
 
     virtual llvm::Value * getStreamView(llvm::Type * type, llvm::Value * self, llvm::Value * blockNo, llvm::Value * index) const;
 
-    llvm::Value * getProducerPosPtr(llvm::Value * self) const;
-
-    void setProducerPos(llvm::Value * self, llvm::Value * pos) const;
-
-    llvm::Value * getConsumerPosPtr(llvm::Value * self) const;
-
-    virtual void setConsumerPos(llvm::Value * self, llvm::Value * pos) const;
-
-    llvm::Value * getEndOfInputPtr(llvm::Value * self) const;
-
-    void setEndOfInput(llvm::Value * self) const;
-    
     llvm::Type * resolveStreamTypes(llvm::Type * type);
     
 protected:
@@ -88,8 +63,6 @@ protected:
     const size_t                    mBufferBlocks;
     const int                       mAddrSpace;
     llvm::Value *                   mStreamSetBufferPtr;
-    llvm::Value *                   mStreamSetStructPtr;
-    llvm::Type * const              mStreamSetStructType;
 };   
 
 class SingleBlockBuffer : public StreamSetBuffer {
@@ -146,7 +119,7 @@ public:
 
     // Reset the buffer to contain data starting at the base block of new_consumer_pos,
     // copying back any data beyond that position. 
-    void setConsumerPos(llvm::Value * self, llvm::Value * newConsumerPos) const override;
+    //void setConsumerPos(llvm::Value * self, llvm::Value * newConsumerPos) const override;
 
 protected:
     llvm::Value * getStreamSetPtr(llvm::Value * self, llvm::Value * blockNo) const override;

@@ -24,7 +24,7 @@ const std::string logicalSegmentNoScalar = "logicalSegNo";
 const std::string processedItemCountSuffix = "_processedItemCount";
 const std::string producedItemCountSuffix = "_producedItemCount";
 const std::string terminationSignal = "terminationSignal";
-const std::string structPtrSuffix = "_structPtr";
+const std::string bufferPtrSuffix = "_bufferPtr";
 const std::string blkMaskSuffix = "_blkMask";
 
 namespace kernel {
@@ -42,8 +42,6 @@ public:
     void generateKernel(const std::vector<parabix::StreamSetBuffer *> & inputs, const std::vector<parabix::StreamSetBuffer *> & outputs);
     
     void createInstance() override;
-
-    llvm::Function * generateThreadFunction(const std::string & name) const;
 
     llvm::Value * getBlockNo(llvm::Value * self) const;
     virtual llvm::Value * getProcessedItemCount(llvm::Value * self, const std::string & ssName) const override;
@@ -166,7 +164,7 @@ protected:
     
     llvm::Value * getScalarFieldPtr(llvm::Value * self, const std::string & name) const;
 
-    llvm::Value * getStreamSetStructPtr(llvm::Value * self, const std::string & name) const;
+    llvm::Value * getStreamSetBufferPtr(llvm::Value * self, const std::string & name) const;
 
     llvm::Value * getStreamSetPtr(llvm::Value * self, const std::string & name, llvm::Value * blockNo) const;
     

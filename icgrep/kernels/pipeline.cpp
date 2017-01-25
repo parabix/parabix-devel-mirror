@@ -6,6 +6,7 @@
 #include "pipeline.h"
 #include <toolchain.h>
 #include <kernels/kernel.h>
+#include <kernels/streamset.h>
 #include <llvm/IR/Module.h>
 #include <unordered_map>
 
@@ -61,6 +62,23 @@ ProducerTable createProducerTable(const std::vector<KernelBuilder *> & kernels) 
     }
     */
     return producerTable;
+}
+
+std::vector<Value *> getCopyBackPositions(const KernelBuilder * kernel, Value * instance) {
+    std::vector<Value *> positions;
+    auto outputSets = kernel->getStreamSetOutputBuffers();
+    for (unsigned i = 0; i < outputSets.size(); i++) {
+        if (isa<LinearCopybackBuffer>(outputSets[i])) {
+            positions.push_back(kernel->getProducedItemCount(instance, kernel->getStreamOutputs()[i].name));
+        }
+    }
+    return positions;
+}
+
+void createCopyBackCode(const StreamSetBuffer *, Value * startPosition, Value * finalPosition) {
+    //BasicBlock * doCopyBack = BasicBlock::Create(iBuilder->getContext(), kernels[k]->getName() + "copyBack" +std::to_string(j), threadFunc, 0);
+    
+    
 }
 
 
@@ -147,10 +165,16 @@ Function * generateSegmentParallelPipelineThreadFunction(std::string name, IDISA
             std::tie(producerKernel, outputIndex) = producerTable[k][j];
             doSegmentArgs.push_back(ProducerPos[producerKernel][outputIndex]);
         }
+        std::vector<Value *> copyBackStartPosition = getCopyBackPositions(kernels[k], instancePtrs[k]);
         kernels[k]->createDoSegmentCall(doSegmentArgs);
         std::vector<Value *> produced;
+        unsigned copyBackIndex = 0;
         for (unsigned i = 0; i < kernels[k]->getStreamOutputs().size(); i++) {
             produced.push_back(kernels[k]->getProducedItemCount(instancePtrs[k], kernels[k]->getStreamOutputs()[i].name));
+            if (isa<LinearCopybackBuffer>(kernels[k]->getStreamSetOutputBuffers()[i])) {
+                createCopyBackCode(kernels[k]->getStreamSetOutputBuffers()[i], copyBackStartPosition[copyBackIndex], produced[i]);
+                copyBackIndex++;
+            }
         }
         ProducerPos.push_back(produced);
         if (! (kernels[k]->hasNoTerminateAttribute())) {
@@ -244,42 +268,7 @@ void generateSegmentParallelPipeline(IDISA::IDISA_Builder * iBuilder, const std:
 }
 
 void generatePipelineParallel(IDISA::IDISA_Builder * iBuilder, const std::vector<KernelBuilder *> & kernels) {
-    
-    IntegerType * pthreadTy = iBuilder->getSizeTy();
-    PointerType * const voidPtrTy = iBuilder->getVoidPtrTy();
-    PointerType * const int8PtrTy = iBuilder->getInt8PtrTy();
-    
-    ArrayType * const pthreadsTy = ArrayType::get(pthreadTy, kernels.size());
-    
-    for (auto k : kernels) k->createInstance();
-    
-    AllocaInst * const pthreads = iBuilder->CreateAlloca(pthreadsTy);
-    std::vector<Value *> pthreadsPtrs;
-    for (unsigned i = 0; i < kernels.size(); i++) {
-        pthreadsPtrs.push_back(iBuilder->CreateGEP(pthreads, {iBuilder->getInt32(0), iBuilder->getInt32(i)}));
-    }
-    Value * nullVal = Constant::getNullValue(voidPtrTy);
-    AllocaInst * const status = iBuilder->CreateAlloca(int8PtrTy);
-    
-    std::vector<Function *> kernel_functions;
-    const auto ip = iBuilder->saveIP();
-    for (unsigned i = 0; i < kernels.size(); i++) {
-        kernel_functions.push_back(kernels[i]->generateThreadFunction("k_"+std::to_string(i)));
-    }
-    iBuilder->restoreIP(ip);
-    
-    for (unsigned i = 0; i < kernels.size(); i++) {
-        iBuilder->CreatePThreadCreateCall(pthreadsPtrs[i], nullVal, kernel_functions[i], iBuilder->CreateBitCast(kernels[i]->getInstance(), int8PtrTy));
-    }
-    
-    std::vector<Value *> threadIDs;
-    for (unsigned i = 0; i < kernels.size(); i++) { 
-        threadIDs.push_back(iBuilder->CreateLoad(pthreadsPtrs[i]));
-    }
-    
-    for (unsigned i = 0; i < kernels.size(); i++) { 
-        iBuilder->CreatePThreadJoinCall(threadIDs[i], status);
-    }
+    llvm::report_fatal_error("Pipeline parallelism no longer supported!");
 }
 
 

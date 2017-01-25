@@ -29,7 +29,6 @@ void StdOutKernel::generateDoSegmentMethod() const {
     Value * self = &*(args++);
     /* unused Value * doFinal = &*(args++);*/ args++;
     Value * producerPos = &*(args++);
-    Value * streamStructPtr = getStreamSetStructPtr(self, "codeUnitBuffer");
     Value * processed = getProcessedItemCount(self, "codeUnitBuffer");
     Value * itemsToDo = iBuilder->CreateSub(producerPos, processed);
     
@@ -41,7 +40,6 @@ void StdOutKernel::generateDoSegmentMethod() const {
     processed = iBuilder->CreateAdd(processed, itemsToDo);
     setProcessedItemCount(self, "codeUnitBuffer", processed);
     setScalarField(self, blockNoScalar, iBuilder->CreateUDiv(processed, blockItems));
-    mStreamSetInputBuffers[0]->setConsumerPos(streamStructPtr, processed);
 
     iBuilder->CreateRetVoid();
     iBuilder->restoreIP(savePoint);

@@ -231,22 +231,10 @@ void P2S16KernelWithCompressedOutput::generateFinalBlockMethod() const {
     Function * doBlockFunction = m->getFunction(mKernelName + doBlock_suffix);
     Function * finalBlockFunction = m->getFunction(mKernelName + finalBlock_suffix);
     iBuilder->SetInsertPoint(BasicBlock::Create(iBuilder->getContext(), "fb_entry", finalBlockFunction, 0));
-    // Final Block arguments: self, remaining, then the standard DoBlock args.
     Function::arg_iterator args = finalBlockFunction->arg_begin();
     Value * self = &*(args++);
-    /* Skip "remaining" arg */ args++;
     std::vector<Value *> doBlockArgs = {self};
-    while (args != finalBlockFunction->arg_end()){
-        doBlockArgs.push_back(&*args++);
-    }
-    Value * i16UnitsGenerated = getProducedItemCount(self, "i16Stream"); // units generated to buffer
     iBuilder->CreateCall(doBlockFunction, doBlockArgs);
-    i16UnitsGenerated = getProducedItemCount(self, "i16Stream"); // units generated to buffer
-    for (unsigned i = 0; i < mStreamSetOutputs.size(); i++) {
-        Value * ssStructPtr = getStreamSetStructPtr(self, mStreamSetOutputs[i].name);
-        Value * producerPosPtr = mStreamSetOutputBuffers[i]->getProducerPosPtr(ssStructPtr);
-        iBuilder->CreateAtomicStoreRelease(i16UnitsGenerated, producerPosPtr);
-    }
     iBuilder->CreateRetVoid();
     iBuilder->restoreIP(savePoint);
 }

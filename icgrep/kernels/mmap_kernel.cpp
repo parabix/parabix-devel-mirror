@@ -45,11 +45,8 @@ void MMapSourceKernel::generateDoSegmentMethod() const {
     iBuilder->SetInsertPoint(setTermination);
     setTerminationSignal(self);
     iBuilder->CreateBr(mmapSourceExit);
-    iBuilder->SetInsertPoint(mmapSourceExit);
-    Value * ssStructPtr = getStreamSetStructPtr(self, "sourceBuffer");
-    Value * producerPosPtr = mStreamSetOutputBuffers[0]->getProducerPosPtr(ssStructPtr);
-    iBuilder->CreateAtomicStoreRelease(produced, producerPosPtr);
     
+    iBuilder->SetInsertPoint(mmapSourceExit);
     iBuilder->CreateRetVoid();
     iBuilder->restoreIP(savePoint);
 }

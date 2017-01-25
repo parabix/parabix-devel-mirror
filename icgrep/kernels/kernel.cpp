@@ -71,13 +71,13 @@ void KernelBuilder::prepareKernel() {
         if ((mStreamSetInputBuffers[i]->getBufferSize() > 0) && (mStreamSetInputBuffers[i]->getBufferSize() < codegen::SegmentSize + (blockSize + mLookAheadPositions - 1)/blockSize)) {
              llvm::report_fatal_error("Kernel preparation: Buffer size too small " + mStreamSetInputs[i].name);
         }
-        mScalarInputs.push_back(Binding{mStreamSetInputBuffers[i]->getStreamSetStructPointerType(), mStreamSetInputs[i].name + structPtrSuffix});
+        mScalarInputs.push_back(Binding{mStreamSetInputBuffers[i]->getStreamBufferPointerType(), mStreamSetInputs[i].name + bufferPtrSuffix});
         mStreamSetNameMap.emplace(mStreamSetInputs[i].name, streamSetNo);
         addScalar(iBuilder->getSizeTy(), mStreamSetInputs[i].name + processedItemCountSuffix);
         streamSetNo++;
     }
     for (unsigned i = 0; i < mStreamSetOutputs.size(); i++) {
-        mScalarInputs.push_back(Binding{mStreamSetOutputBuffers[i]->getStreamSetStructPointerType(), mStreamSetOutputs[i].name + structPtrSuffix});
+        mScalarInputs.push_back(Binding{mStreamSetOutputBuffers[i]->getStreamBufferPointerType(), mStreamSetOutputs[i].name + bufferPtrSuffix});
         mStreamSetNameMap.emplace(mStreamSetOutputs[i].name, streamSetNo);
         addScalar(iBuilder->getSizeTy(), mStreamSetOutputs[i].name + producedItemCountSuffix);
         streamSetNo++;
@@ -197,7 +197,6 @@ void KernelBuilder::generateDoSegmentMethod() const {
     BasicBlock * stridesDone = BasicBlock::Create(iBuilder->getContext(), mKernelName + "_stridesDone", doSegmentFunction, 0);
     BasicBlock * doFinalBlock = BasicBlock::Create(iBuilder->getContext(), mKernelName + "_doFinalBlock", doSegmentFunction, 0);
     BasicBlock * segmentDone = BasicBlock::Create(iBuilder->getContext(), mKernelName + "_segmentDone", doSegmentFunction, 0);
-    BasicBlock * finalExit = BasicBlock::Create(iBuilder->getContext(), mKernelName + "_finalExit", doSegmentFunction, 0);
     Type * const size_ty = iBuilder->getSizeTy();
     Constant * stride = ConstantInt::get(size_ty, iBuilder->getStride());
     Value * strideBlocks = ConstantInt::get(size_ty, iBuilder->getStride() / iBuilder->getBitBlockWidth());
@@ -271,17 +270,6 @@ void KernelBuilder::generateDoSegmentMethod() const {
     iBuilder->CreateBr(segmentDone);
     
     iBuilder->SetInsertPoint(segmentDone);
-//#ifndef NDEBUG
-//    iBuilder->CallPrintInt(mKernelName + "_processed", processed);
-//#endif
-    for (unsigned i = 0; i < mStreamSetOutputs.size(); i++) {
-        Value * produced = getProducedItemCount(self, mStreamSetOutputs[i].name);
-        Value * ssStructPtr = getStreamSetStructPtr(self, mStreamSetOutputs[i].name);
-        Value * producerPosPtr = mStreamSetOutputBuffers[i]->getProducerPosPtr(ssStructPtr);
-        iBuilder->CreateAtomicStoreRelease(produced, producerPosPtr);
-    }
-    iBuilder->CreateBr(finalExit);
-    iBuilder->SetInsertPoint(finalExit);
 
     iBuilder->CreateRetVoid();
     iBuilder->restoreIP(savePoint);
@@ -377,8 +365,8 @@ unsigned KernelBuilder::getStreamSetIndex(const std::string & name) const {
     return f->second;
 }
 
-Value * KernelBuilder::getStreamSetStructPtr(Value * self, const std::string & name) const {
-    return getScalarField(self, name + structPtrSuffix);
+Value * KernelBuilder::getStreamSetBufferPtr(Value * self, const std::string & name) const {
+    return getScalarField(self, name + bufferPtrSuffix);
 }
 
 inline const StreamSetBuffer * KernelBuilder::getStreamSetBuffer(const std::string & name) const {
@@ -391,24 +379,24 @@ inline const StreamSetBuffer * KernelBuilder::getStreamSetBuffer(const std::stri
 }
 
 Value * KernelBuilder::getStreamSetPtr(Value * self, const std::string & name, Value * blockNo) const {
-    return getStreamSetBuffer(name)->getStreamSetPtr(getStreamSetStructPtr(self, name), blockNo);
+    return getStreamSetBuffer(name)->getStreamSetPtr(getStreamSetBufferPtr(self, name), blockNo);
 }
 
 Value * KernelBuilder::getStream(Value * self, const std::string & name, Value * blockNo, Value * index) const {
-    return getStreamSetBuffer(name)->getStream(getStreamSetStructPtr(self, name), blockNo, index);
+    return getStreamSetBuffer(name)->getStream(getStreamSetBufferPtr(self, name), blockNo, index);
 }
 
 Value * KernelBuilder::getStream(Value * self, const std::string & name, Value * blockNo, Value * index1, Value * index2) const {
     assert (index1->getType() == index2->getType());
-    return getStreamSetBuffer(name)->getStream(getStreamSetStructPtr(self, name), blockNo, index1, index2);
+    return getStreamSetBuffer(name)->getStream(getStreamSetBufferPtr(self, name), blockNo, index1, index2);
 }
 
 Value * KernelBuilder::getStreamView(Value * self, const std::string & name, Value * blockNo, Value * index) const {
-    return getStreamSetBuffer(name)->getStreamView(getStreamSetStructPtr(self, name), blockNo, index);
+    return getStreamSetBuffer(name)->getStreamView(getStreamSetBufferPtr(self, name), blockNo, index);
 }
 
 Value * KernelBuilder::getStreamView(llvm::Type * type, Value * self, const std::string & name, Value * blockNo, Value * index) const {
-    return getStreamSetBuffer(name)->getStreamView(type, getStreamSetStructPtr(self, name), blockNo, index);
+    return getStreamSetBuffer(name)->getStreamView(type, getStreamSetBufferPtr(self, name), blockNo, index);
 }
 
 void KernelBuilder::createInstance() {
@@ -422,10 +410,10 @@ void KernelBuilder::createInstance() {
         init_args.push_back(a);
     }
     for (auto b : mStreamSetInputBuffers) {
-        init_args.push_back(b->getStreamSetStructPtr());
+        init_args.push_back(b->getStreamSetBasePtr());
     }
     for (auto b : mStreamSetOutputBuffers) {
-        init_args.push_back(b->getStreamSetStructPtr());
+        init_args.push_back(b->getStreamSetBasePtr());
     }
     std::string initFnName = mKernelName + init_suffix;
     Function * initMethod = m->getFunction(initFnName);
@@ -433,159 +421,6 @@ void KernelBuilder::createInstance() {
         llvm::report_fatal_error("Cannot find " + initFnName);
     }
     iBuilder->CreateCall(initMethod, init_args);
-}
-
-Function * KernelBuilder::generateThreadFunction(const std::string & name) const {
-    if (LLVM_UNLIKELY(mKernelStateType == nullptr)) {
-        llvm::report_fatal_error("Cannot generate thread function before calling prepareKernel()");
-    }
-    Module * m = iBuilder->getModule();
-    Type * const voidTy = iBuilder->getVoidTy();
-    PointerType * const voidPtrTy = iBuilder->getVoidPtrTy();
-    PointerType * const int8PtrTy = iBuilder->getInt8PtrTy();
-    IntegerType * const int1ty = iBuilder->getInt1Ty();
-    
-    Function * const threadFunc = cast<Function>(m->getOrInsertFunction(name, voidTy, int8PtrTy, nullptr));
-    threadFunc->setCallingConv(CallingConv::C);
-    Function::arg_iterator args = threadFunc->arg_begin();
-    
-    Value * const arg = &*(args++);
-    arg->setName("args");
-    
-    iBuilder->SetInsertPoint(BasicBlock::Create(iBuilder->getContext(), "entry", threadFunc,0));
-    
-    Value * self = iBuilder->CreateBitCast(arg, PointerType::get(mKernelStateType, 0));
-    
-    std::vector<Value *> inbufProducerPtrs;
-    std::vector<Value *> inbufConsumerPtrs;
-    std::vector<Value *> outbufProducerPtrs;
-    std::vector<Value *> outbufConsumerPtrs;   
-    std::vector<Value *> endSignalPtrs;
-    
-    for (unsigned i = 0; i < mStreamSetInputs.size(); i++) {
-        Value * ssStructPtr = getStreamSetStructPtr(self, mStreamSetInputs[i].name);
-        inbufProducerPtrs.push_back(mStreamSetInputBuffers[i]->getProducerPosPtr(ssStructPtr));
-        inbufConsumerPtrs.push_back(mStreamSetInputBuffers[i]->getConsumerPosPtr(ssStructPtr));
-        endSignalPtrs.push_back(mStreamSetInputBuffers[i]->getEndOfInputPtr(ssStructPtr));
-    }
-    for (unsigned i = 0; i < mStreamSetOutputs.size(); i++) {
-        Value * ssStructPtr = getStreamSetStructPtr(self, mStreamSetOutputs[i].name);
-        outbufProducerPtrs.push_back(mStreamSetOutputBuffers[i]->getProducerPosPtr(ssStructPtr));
-        outbufConsumerPtrs.push_back(mStreamSetOutputBuffers[i]->getConsumerPosPtr(ssStructPtr));
-    }
-    
-    const unsigned segmentBlocks = codegen::SegmentSize;
-    const unsigned bufferSegments = codegen::BufferSegments;
-    const unsigned segmentSize = segmentBlocks * iBuilder->getBitBlockWidth();
-    Type * const size_ty = iBuilder->getSizeTy();
-    
-    Value * segSize = ConstantInt::get(size_ty, segmentSize);
-    Value * bufferSize = ConstantInt::get(size_ty, segmentSize * (bufferSegments - 1));
-    
-    BasicBlock * outputCheckBlock = BasicBlock::Create(iBuilder->getContext(), "outputCheck", threadFunc, 0);
-    BasicBlock * inputCheckBlock = BasicBlock::Create(iBuilder->getContext(), "inputCheck", threadFunc, 0);
-    
-    BasicBlock * endSignalCheckBlock = BasicBlock::Create(iBuilder->getContext(), "endSignalCheck", threadFunc, 0);
-    BasicBlock * doSegmentBlock = BasicBlock::Create(iBuilder->getContext(), "doSegment", threadFunc, 0);
-    BasicBlock * endBlock = BasicBlock::Create(iBuilder->getContext(), "end", threadFunc, 0);
-    
-    iBuilder->CreateBr(outputCheckBlock);
-    
-    iBuilder->SetInsertPoint(outputCheckBlock);
-    
-    Value * waitCondTest = ConstantInt::get(int1ty, 1);   
-    for (unsigned i = 0; i < outbufProducerPtrs.size(); i++) {
-        LoadInst * producerPos = iBuilder->CreateAtomicLoadAcquire(outbufProducerPtrs[i]);
-        // iBuilder->CallPrintInt(name + ":output producerPos", producerPos);
-        LoadInst * consumerPos = iBuilder->CreateAtomicLoadAcquire(outbufConsumerPtrs[i]);
-        // iBuilder->CallPrintInt(name + ":output consumerPos", consumerPos);
-        waitCondTest = iBuilder->CreateAnd(waitCondTest, iBuilder->CreateICmpULE(producerPos, iBuilder->CreateAdd(consumerPos, bufferSize)));
-    }
-    
-    iBuilder->CreateCondBr(waitCondTest, inputCheckBlock, outputCheckBlock); 
-    
-    iBuilder->SetInsertPoint(inputCheckBlock); 
-    
-    Value * requiredSize = segSize;
-    if (mLookAheadPositions > 0) {
-        requiredSize = iBuilder->CreateAdd(segSize, ConstantInt::get(size_ty, mLookAheadPositions));
-    }
-    waitCondTest = ConstantInt::get(int1ty, 1); 
-    for (unsigned i = 0; i < inbufProducerPtrs.size(); i++) {
-        LoadInst * producerPos = iBuilder->CreateAtomicLoadAcquire(inbufProducerPtrs[i]);
-        // iBuilder->CallPrintInt(name + ":input producerPos", producerPos);
-        LoadInst * consumerPos = iBuilder->CreateAtomicLoadAcquire(inbufConsumerPtrs[i]);
-        // iBuilder->CallPrintInt(name + ":input consumerPos", consumerPos);
-        waitCondTest = iBuilder->CreateAnd(waitCondTest, iBuilder->CreateICmpULE(iBuilder->CreateAdd(consumerPos, requiredSize), producerPos));
-    }
-    
-    iBuilder->CreateCondBr(waitCondTest, doSegmentBlock, endSignalCheckBlock);
-    
-    iBuilder->SetInsertPoint(endSignalCheckBlock);
-    
-    LoadInst * endSignal = iBuilder->CreateLoad(endSignalPtrs[0]);
-    for (unsigned i = 1; i < endSignalPtrs.size(); i++){
-        LoadInst * endSignal_next = iBuilder->CreateLoad(endSignalPtrs[i]);
-        iBuilder->CreateAnd(endSignal, endSignal_next);
-    }
-    
-    iBuilder->CreateCondBr(endSignal, endBlock, inputCheckBlock);
-    
-    iBuilder->SetInsertPoint(doSegmentBlock);
-    
-    // needs positions 
-    createDoSegmentCall({self, ConstantInt::getNullValue(iBuilder->getInt1Ty())});
-    
-    for (unsigned i = 0; i < inbufConsumerPtrs.size(); i++) {
-        Value * consumerPos = iBuilder->CreateAdd(iBuilder->CreateLoad(inbufConsumerPtrs[i]), segSize);
-        iBuilder->CreateAtomicStoreRelease(consumerPos, inbufConsumerPtrs[i]);
-    }
-    
-    for (unsigned i = 0; i < outbufProducerPtrs.size(); i++) {
-        Value * produced = getProducedItemCount(self, mStreamSetOutputs[i].name);
-        iBuilder->CreateAtomicStoreRelease(produced, outbufProducerPtrs[i]);
-    }
-    
-    Value * earlyEndSignal = getTerminationSignal(self);
-    if (earlyEndSignal != ConstantInt::getNullValue(iBuilder->getInt1Ty())) {
-        BasicBlock * earlyEndBlock = BasicBlock::Create(iBuilder->getContext(), "earlyEndSignal", threadFunc, 0);
-        iBuilder->CreateCondBr(earlyEndSignal, earlyEndBlock, outputCheckBlock);
-        
-        iBuilder->SetInsertPoint(earlyEndBlock);
-        for (unsigned i = 0; i < mStreamSetOutputs.size(); i++) {
-            Value * ssStructPtr = getStreamSetStructPtr(self, mStreamSetOutputs[i].name);
-            mStreamSetOutputBuffers[i]->setEndOfInput(ssStructPtr);
-        }        
-    }
-    iBuilder->CreateBr(outputCheckBlock);
-    
-    iBuilder->SetInsertPoint(endBlock);
-    LoadInst * producerPos = iBuilder->CreateLoad(inbufProducerPtrs[0]);
-    LoadInst * consumerPos = iBuilder->CreateLoad(inbufConsumerPtrs[0]);
-    Value * remainingBytes = iBuilder->CreateSub(producerPos, consumerPos);
-    
-        // needs positions 
-    createDoSegmentCall({self, ConstantInt::getAllOnesValue(iBuilder->getInt1Ty())});
-    
-    
-    for (unsigned i = 0; i < inbufConsumerPtrs.size(); i++) {
-        Value * consumerPos = iBuilder->CreateAdd(iBuilder->CreateLoad(inbufConsumerPtrs[i]), remainingBytes);
-        iBuilder->CreateAtomicStoreRelease(consumerPos, inbufConsumerPtrs[i]);
-    }
-    for (unsigned i = 0; i < outbufProducerPtrs.size(); i++) {
-        iBuilder->CreateAtomicStoreRelease(producerPos, outbufProducerPtrs[i]);
-    }
-    
-    for (unsigned i = 0; i < mStreamSetOutputs.size(); i++) {
-        Value * ssStructPtr = getStreamSetStructPtr(self, mStreamSetOutputs[i].name);
-        mStreamSetOutputBuffers[i]->setEndOfInput(ssStructPtr);
-    }
-    
-    iBuilder->CreatePThreadExitCall(Constant::getNullValue(voidPtrTy));
-    iBuilder->CreateRetVoid();
-    
-    return threadFunc;
-    
 }
 
 KernelBuilder::~KernelBuilder() {
