@@ -24,7 +24,6 @@ public:
     expand3_4Kernel(IDISA::IDISA_Builder * iBuilder);
     
 private:
-    void generateDoBlockMethod() const override;
     void generateDoSegmentMethod() const override;
     
 };

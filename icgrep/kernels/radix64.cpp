@@ -67,9 +67,8 @@ void expand3_4Kernel::generateDoSegmentMethod() const {
     BasicBlock * step3store = BasicBlock::Create(iBuilder->getContext(), "step3store", doSegmentFunction, 0);
     BasicBlock * step3store2 = BasicBlock::Create(iBuilder->getContext(), "step3store2", doSegmentFunction, 0);
     BasicBlock * itemsDone = BasicBlock::Create(iBuilder->getContext(), "itemsDone", doSegmentFunction, 0);
-    BasicBlock * setTermination = BasicBlock::Create(iBuilder->getContext(), "setTermination", doSegmentFunction, 0);
+    BasicBlock * expand3_4_final = BasicBlock::Create(iBuilder->getContext(), "expand3_4_final", doSegmentFunction, 0);
     BasicBlock * expand3_4_exit = BasicBlock::Create(iBuilder->getContext(), "expand3_4_exit", doSegmentFunction, 0);
-    BasicBlock * finalExit = BasicBlock::Create(iBuilder->getContext(), "finalExit", doSegmentFunction, 0);
     
     // Determine the require shufflevector constants.
     const unsigned PACK_SIZE = iBuilder->getStride()/8;
@@ -93,9 +92,10 @@ void expand3_4Kernel::generateDoSegmentMethod() const {
     }
     Constant * Const3 = iBuilder->getSize(3);
     Constant * Const4 = iBuilder->getSize(4);
+    Constant * tripleBlockSize = iBuilder->getSize(3 * iBuilder->getStride());
     Constant * stride = iBuilder->getSize(iBuilder->getStride());
     Constant * packSize = iBuilder->getSize(PACK_SIZE);
-    Constant * loopItemCount = iBuilder->getSize(3 * PACK_SIZE); // 3 packs per loop.
+    Constant * triplePackSize = iBuilder->getSize(3 * PACK_SIZE); // 3 packs per loop.
     UndefValue * undefPack = UndefValue::get(iBuilder->fwVectorType(8));
     
     const unsigned packAlign = iBuilder->getBitBlockWidth()/8;
@@ -107,19 +107,14 @@ void expand3_4Kernel::generateDoSegmentMethod() const {
     Value * processed = getProcessedItemCount(self, "sourceStream");
     Value * itemsAvail = iBuilder->CreateSub(producerPos, processed);
     
-    // Except for the final segment, we always process an integral number of triple blocks.
-    Value * tripleBlocksToDo = iBuilder->CreateMul(blocksToDo, Const3);
-    Constant * blockItems = iBuilder->getSize(iBuilder->getBitBlockWidth());
-    Value * tripleItemMax = iBuilder->CreateMul(tripleBlocksToDo, blockItems);
-
-    Value * lessThanFullSegment = iBuilder->CreateICmpULT(itemsAvail, tripleItemMax);
-    Value * tripleBlockItems = iBuilder->CreateSelect(lessThanFullSegment, itemsAvail, tripleItemMax);
-
-    Value * endSignal = iBuilder->CreateLoad(mStreamSetInputBuffers[0]->getEndOfInputPtr(streamStructPtr));
-    Value * inFinalSegment = iBuilder->CreateAnd(endSignal, lessThanFullSegment);
-    Value * itemsToDo = iBuilder->CreateSelect(inFinalSegment, itemsAvail, tripleBlockItems);
-
-//    iBuilder->CallPrintInt("itemsToDo", itemsToDo);
+    //
+    // The main loop processes 3 packs of data at a time.  For doFinal
+    // processing, process all the remaining sets of 3 packs, otherwise
+    // process in multiples of 3 full blocks of data.
+    //
+    Value * loopDivisor = iBuilder->CreateSelect(doFinal, triplePackSize, tripleBlockSize);
+    Value * excessItems = iBuilder->CreateURem(itemsAvail, loopDivisor);
+    Value * loopItemsToDo = iBuilder->CreateSub(itemsAvail, excessItems);
 
     Value * blockNo = getScalarField(self, blockNoScalar);
 
@@ -130,8 +125,7 @@ void expand3_4Kernel::generateDoSegmentMethod() const {
     Value * outputBlockNo = iBuilder->CreateUDiv(outputGenerated, stride);
     Value * outputPackPtr = getStream(self, "expandedStream", outputBlockNo, iBuilder->getInt32(0), iBuilder->getInt32(0));
 
-    Value * hasFullLoop = iBuilder->CreateICmpUGE(itemsToDo, loopItemCount);
-
+    Value * hasFullLoop = iBuilder->CreateICmpUGE(loopItemsToDo, triplePackSize);
 
     iBuilder->CreateCondBr(hasFullLoop, expand_3_4_loop, expand3_4_loop_exit);
     iBuilder->SetInsertPoint(expand_3_4_loop);
@@ -141,7 +135,7 @@ void expand3_4Kernel::generateDoSegmentMethod() const {
 
     loopInput_ptr->addIncoming(sourcePackPtr, expand2_3entry);
     loopOutput_ptr->addIncoming(outputPackPtr, expand2_3entry);
-    loopItemsRemain->addIncoming(itemsToDo, expand2_3entry);
+    loopItemsRemain->addIncoming(loopItemsToDo, expand2_3entry);
 
     // Step 1 of the main loop.
     Value * pack0 = iBuilder->fwCast(8, iBuilder->CreateAlignedLoad(loopInput_ptr, packAlign));
@@ -164,13 +158,7 @@ void expand3_4Kernel::generateDoSegmentMethod() const {
     iBuilder->CreateAlignedStore(expand3, outPack3_ptr, packAlign);
 
     Value * loopNextInputPack = iBuilder->CreateGEP(loopInput_ptr, iBuilder->getInt32(3));
-
-
-
-    Value * remainingItems = iBuilder->CreateSub(loopItemsRemain, loopItemCount);
-
-    Value * loopProcessed = iBuilder->CreateSub(itemsToDo, remainingItems);
-    loopProcessed = iBuilder->CreateMul(iBuilder->CreateUDiv(loopProcessed, iBuilder->getInt64(3)), iBuilder->getInt64(4));
+    Value * remainingItems = iBuilder->CreateSub(loopItemsRemain, triplePackSize);
 
     Value * loopNextOutputPack;
     loopNextOutputPack = iBuilder->CreateGEP(loopOutput_ptr, iBuilder->getInt32(4));
@@ -179,21 +167,32 @@ void expand3_4Kernel::generateDoSegmentMethod() const {
     loopOutput_ptr->addIncoming(loopNextOutputPack, expand_3_4_loop);
     loopItemsRemain->addIncoming(remainingItems, expand_3_4_loop);
 
-    Value * continueLoop = iBuilder->CreateICmpUGE(remainingItems, loopItemCount);
+    Value * continueLoop = iBuilder->CreateICmpUGE(remainingItems, triplePackSize);
     iBuilder->CreateCondBr(continueLoop, expand_3_4_loop, expand3_4_loop_exit);
-
-    // Except for the final segment, the number of items remaining is now 0.
-    // For the final segment, less than loopItemCount items remain.
+    
     iBuilder->SetInsertPoint(expand3_4_loop_exit);
     PHINode * loopExitInput_ptr = iBuilder->CreatePHI(sourcePackPtr->getType(), 2);
     PHINode * loopExitOutput_ptr = iBuilder->CreatePHI(outputPackPtr->getType(), 2);
-    PHINode * loopExitItemsRemain = iBuilder->CreatePHI(iBuilder->getSizeTy(), 2);
     loopExitInput_ptr->addIncoming(sourcePackPtr, expand2_3entry);
     loopExitOutput_ptr->addIncoming(outputPackPtr, expand2_3entry);
-    loopExitItemsRemain->addIncoming(itemsToDo, expand2_3entry);
     loopExitInput_ptr->addIncoming(loopNextInputPack, expand_3_4_loop);
     loopExitOutput_ptr->addIncoming(loopNextOutputPack, expand_3_4_loop);
-    loopExitItemsRemain->addIncoming(remainingItems, expand_3_4_loop);
+
+    // Update the produced and processed items count based on the loopItemsToDo value.
+    processed = iBuilder->CreateAdd(processed, loopItemsToDo);
+    setProcessedItemCount(self, "sourceStream", processed);
+    
+    setScalarField(self, blockNoScalar, iBuilder->CreateUDiv(processed, stride));
+    // We have produced 4 output bytes for every 3 input bytes.
+    Value * totalProduced = iBuilder->CreateMul(iBuilder->CreateUDiv(processed, Const3), Const4);
+    setProducedItemCount(self, "expandedStream", totalProduced);
+    
+    // Except for final segment processing, we are done.
+    iBuilder->CreateCondBr(doFinal, expand3_4_final, expand3_4_exit);
+
+    // Final segment processing.   Less than a triplePack remains.
+    iBuilder->SetInsertPoint(expand3_4_final);
+    
     // There may be one or two remaining full packs and/or a partial pack.
     //
     // We have several cases depending on the number of reumaing items.  Let N = packSize
@@ -204,18 +203,18 @@ void expand3_4Kernel::generateDoSegmentMethod() const {
     // (e) 6N/4+1 .. 2N remaining items: do Steps 1 and 2, do Step 3 for pending data only, there is no more input.
     // (f) 2N+1 .. 9N/4 remaining items: do Steps 1 and 2, do Step 3 up to the first write only.
     // (g) 9N/4+1 .. 3N - 1 remaining items: do Steps 1, 2 and 3.
-    Value * condition_a = iBuilder->CreateICmpEQ(loopExitItemsRemain, ConstantInt::getNullValue(iBuilder->getSizeTy()));
+    Value * condition_a = iBuilder->CreateICmpEQ(excessItems, ConstantInt::getNullValue(iBuilder->getSizeTy()));
     iBuilder->CreateCondBr(condition_a, itemsDone, finalStep1);
     // Final Step1 processing
     iBuilder->SetInsertPoint(finalStep1);
     pack0 = iBuilder->fwCast(8, iBuilder->CreateAlignedLoad(loopExitInput_ptr, packAlign));
     expand0 = iBuilder->bitCast(iBuilder->CreateShuffleVector(undefPack, pack0, expand_3_4_shuffle[0]));
     iBuilder->CreateAlignedStore(expand0, loopExitOutput_ptr, packAlign);
-    Value * condition_b = iBuilder->CreateICmpULE(loopExitItemsRemain, iBuilder->getSize(3 * PACK_SIZE/4));
+    Value * condition_b = iBuilder->CreateICmpULE(excessItems, iBuilder->getSize(3 * PACK_SIZE/4));
     iBuilder->CreateCondBr(condition_b, itemsDone, finalStep2);
     // Final Step 2 processing
     iBuilder->SetInsertPoint(finalStep2);
-    Value * condition_c = iBuilder->CreateICmpULE(loopExitItemsRemain, packSize);
+    Value * condition_c = iBuilder->CreateICmpULE(excessItems, packSize);
     iBuilder->CreateCondBr(condition_c, step2store, step2load);
     iBuilder->SetInsertPoint(step2load);
     inPack1_ptr = iBuilder->CreateGEP(loopExitInput_ptr, iBuilder->getInt32(1));
@@ -228,11 +227,11 @@ void expand3_4Kernel::generateDoSegmentMethod() const {
     outPack1_ptr = iBuilder->CreateGEP(loopExitOutput_ptr, iBuilder->getInt32(1));
     expand1 = iBuilder->bitCast(iBuilder->CreateShuffleVector(pack0, pack1phi, expand_3_4_shuffle[1]));
     iBuilder->CreateAlignedStore(expand1, outPack1_ptr, packAlign);
-    Value * condition_d = iBuilder->CreateICmpULE(loopExitItemsRemain, iBuilder->getSize(6 * PACK_SIZE/4));
+    Value * condition_d = iBuilder->CreateICmpULE(excessItems, iBuilder->getSize(6 * PACK_SIZE/4));
     iBuilder->CreateCondBr(condition_d, itemsDone, finalStep3);
     // Final Step 3
     iBuilder->SetInsertPoint(finalStep3);
-    Value * condition_e = iBuilder->CreateICmpULE(loopExitItemsRemain, iBuilder->getSize(2 * PACK_SIZE));
+    Value * condition_e = iBuilder->CreateICmpULE(excessItems, iBuilder->getSize(2 * PACK_SIZE));
     iBuilder->CreateCondBr(condition_e, step3store, step3load);
     iBuilder->SetInsertPoint(step3load);
     inPack2_ptr = iBuilder->CreateGEP(loopExitInput_ptr, iBuilder->getInt32(2));
@@ -245,7 +244,7 @@ void expand3_4Kernel::generateDoSegmentMethod() const {
     outPack2_ptr = iBuilder->CreateGEP(loopExitOutput_ptr, iBuilder->getInt32(2));
     expand2 = iBuilder->bitCast(iBuilder->CreateShuffleVector(pack1phi, pack2phi, expand_3_4_shuffle[2]));
     iBuilder->CreateAlignedStore(expand2, outPack2_ptr, packAlign);
-    Value * condition_f = iBuilder->CreateICmpULE(loopExitItemsRemain, iBuilder->getSize(9 * PACK_SIZE/4));
+    Value * condition_f = iBuilder->CreateICmpULE(excessItems, iBuilder->getSize(9 * PACK_SIZE/4));
     iBuilder->CreateCondBr(condition_f, itemsDone, step3store2);
     iBuilder->SetInsertPoint(step3store2);
     outPack3_ptr = iBuilder->CreateGEP(loopExitOutput_ptr, iBuilder->getInt32(3));
@@ -254,48 +253,22 @@ void expand3_4Kernel::generateDoSegmentMethod() const {
     iBuilder->CreateBr(itemsDone);
     //
     iBuilder->SetInsertPoint(itemsDone);
-
-    processed = iBuilder->CreateAdd(processed, itemsToDo);
+    processed = iBuilder->CreateAdd(processed, excessItems);
     setProcessedItemCount(self, "sourceStream", processed);
 
     setScalarField(self, blockNoScalar, iBuilder->CreateUDiv(processed, stride));
     // We have produced 4 output bytes for every 3 input bytes.  If the number of input
     // bytes is not a multiple of 3, then we have one more output byte for each excess
     // input byte.
-    Value * totalProduced = iBuilder->CreateAdd(iBuilder->CreateMul(iBuilder->CreateUDiv(processed, Const3), Const4), iBuilder->CreateURem(processed, Const3));
+    totalProduced = iBuilder->CreateAdd(iBuilder->CreateMul(iBuilder->CreateUDiv(processed, Const3), Const4), iBuilder->CreateURem(processed, Const3));
     setProducedItemCount(self, "expandedStream", totalProduced);
     
-    iBuilder->CreateCondBr(inFinalSegment, setTermination, expand3_4_exit);
-    iBuilder->SetInsertPoint(setTermination);
-#ifndef NDEBUG
-//    iBuilder->CallPrintInt(mKernelName + " termination in segment ", segmentNo);
-#endif
-    setTerminationSignal(self);
-    mStreamSetOutputBuffers[0]->setEndOfInput(ssStructPtr);
     iBuilder->CreateBr(expand3_4_exit);
     iBuilder->SetInsertPoint(expand3_4_exit);
-    // Must be the last action, for synchronization.
-    iBuilder->CreateBr(finalExit);
-    
-    iBuilder->SetInsertPoint(finalExit);
     iBuilder->CreateRetVoid();
     iBuilder->restoreIP(savePoint);
 }
 
-
-// The doBlock method is deprecated.   But in case it is used, just call doSegment with
-// 1 as the number of blocks to do.
-void expand3_4Kernel::generateDoBlockMethod() const {
-    auto savePoint = iBuilder->saveIP();
-    Module * m = iBuilder->getModule();
-    Function * doBlockFunction = m->getFunction(mKernelName + doBlock_suffix);
-    Function * doSegmentFunction = m->getFunction(mKernelName + doSegment_suffix);
-    iBuilder->SetInsertPoint(BasicBlock::Create(iBuilder->getContext(), "entry", doBlockFunction, 0));
-    Value * self = getParameter(doBlockFunction, "self");
-    iBuilder->CreateCall(doSegmentFunction, {self, iBuilder->getSize(1)});
-    iBuilder->CreateRetVoid();
-    iBuilder->restoreIP(savePoint);
-}
 
 // Radix 64 determination, converting 3 bytes to 4 6-bit values.
 //

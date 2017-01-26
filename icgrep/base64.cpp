@@ -57,18 +57,18 @@ Function * base64Pipeline(Module * mMod, IDISA::IDISA_Builder * iBuilder) {
     Value * const fileSize = &*(args++);
     fileSize->setName("fileSize");
 
-    //Round up to a multiple of 4. 
-    const unsigned segmentSize = ((codegen::SegmentSize + 3)/4) * 4;
+    //Round up to a multiple of 3.
+    const unsigned segmentSize = ((codegen::SegmentSize + 2)/3) * 3;
     
     const unsigned bufferSegments = codegen::BufferSegments;
     
     ExternalFileBuffer ByteStream(iBuilder, iBuilder->getStreamSetTy(1, 8));
 
-    CircularBuffer Expanded3_4Out(iBuilder, iBuilder->getStreamSetTy(1, 8), segmentSize * bufferSegments * 16);
-    CircularBuffer Radix64out(iBuilder, iBuilder->getStreamSetTy(1, 8), segmentSize * bufferSegments * 16);
-    LinearCopybackBuffer Base64out(iBuilder, iBuilder->getStreamSetTy(1, 8), segmentSize * bufferSegments * 16 + 2);
+    CircularBuffer Expanded3_4Out(iBuilder, iBuilder->getStreamSetTy(1, 8), segmentSize * 4/3 * bufferSegments);
+    CircularBuffer Radix64out(iBuilder, iBuilder->getStreamSetTy(1, 8), segmentSize * 4/3 * bufferSegments);
+    LinearCopybackBuffer Base64out(iBuilder, iBuilder->getStreamSetTy(1, 8), segmentSize * 4/3 * bufferSegments);
     
-    MMapSourceKernel mmapK(iBuilder, segmentSize * bufferSegments * 16); 
+    MMapSourceKernel mmapK(iBuilder, segmentSize);
     mmapK.generateKernel({}, {&ByteStream});
     mmapK.setInitialArguments({fileSize});
         
