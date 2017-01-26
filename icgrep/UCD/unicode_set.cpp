@@ -28,7 +28,6 @@ namespace UCD {
 using bitquad_t = UnicodeSet::bitquad_t;
 using run_t = UnicodeSet::run_t;
 using interval_t = UnicodeSet::interval_t;
-using codepoint_t = UnicodeSet::codepoint_t;
 
 //
 // Select the correct built-in scan function, dependent on whatever

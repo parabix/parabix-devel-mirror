@@ -35,6 +35,9 @@ class raw_ostream;
 
 namespace UCD {
 
+typedef unsigned codepoint_t;
+enum : codepoint_t { UNICODE_MAX = 0x10FFFF };
+
 enum run_type_t : uint16_t {Empty, Mixed, Full};
 
 class UnicodeSet {
@@ -45,7 +48,6 @@ public:
     using run_t = std::pair<run_type_t, length_t>;
     using quad_iterator_return_t = std::pair<run_t, bitquad_t>;
 
-    using codepoint_t = unsigned;
     using interval_t = std::pair<codepoint_t, codepoint_t>;
 
     using RunVector = std::vector<run_t, ProxyAllocator<run_t>>;
@@ -196,7 +198,6 @@ private:
     static SlabAllocator<>  mAllocator;
 };
 
-enum : UnicodeSet::codepoint_t { UNICODE_MAX = 0x10FFFF };
 
 inline void UnicodeSet::swap(UnicodeSet & other) {
     mRuns.swap(other.mRuns); mQuads.swap(other.mQuads);

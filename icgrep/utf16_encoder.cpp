@@ -9,7 +9,7 @@
 #include <algorithm>
 #include <stdexcept>
 
-using namespace re;
+using namespace UCD;
 
 namespace cc {
 
@@ -78,14 +78,14 @@ bool UTF16_Encoder::isHighCodePointAfterByte(const codepoint_t cp, const unsigne
     return true;
 }
 
-codepoint_t UTF16_Encoder::minCodePointWithCommonBytes(const re::codepoint_t cp, const unsigned n) {
+codepoint_t UTF16_Encoder::minCodePointWithCommonBytes(const codepoint_t cp, const unsigned n) {
     const auto len = length(cp);
     const auto mask = (static_cast<codepoint_t>(1) << (len - n) * 10) - 1;
     const auto lo_cp = cp &~ mask;
     return (lo_cp == 0) ? mask + 1 : lo_cp;
 }
 
-codepoint_t UTF16_Encoder::maxCodePointWithCommonBytes(const re::codepoint_t cp, const unsigned n) {
+codepoint_t UTF16_Encoder::maxCodePointWithCommonBytes(const codepoint_t cp, const unsigned n) {
     const auto len = length(cp);
     const auto mask = (static_cast<codepoint_t>(1) << (len - n) * 10) - 1;
     return cp | mask;

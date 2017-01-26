@@ -12,7 +12,7 @@
 
 namespace re {
 
-using codepoint_t = UCD::UnicodeSet::codepoint_t;
+using codepoint_t = UCD::codepoint_t;
 using interval_t = UCD::UnicodeSet::interval_t;
 
 enum CC_type {UnicodeClass, ByteClass};

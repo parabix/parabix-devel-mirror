@@ -7,19 +7,19 @@
 #ifndef UTF8_ENCODER_H
 #define UTF8_ENCODER_H
 
-#include <re/re_cc.h>
+#include <UCD/unicode_set.h>
 
 namespace cc {
 
 struct UTF8_Encoder {
-    static bool isPrefix(const re::codepoint_t cp);
-    static unsigned length(const re::codepoint_t cp);
-    static re::codepoint_t maxCodePoint(const unsigned length);
-    static re::codepoint_t encodingByte(const re::codepoint_t cp, const unsigned n);
-    static bool isLowCodePointAfterByte(const re::codepoint_t cp, const unsigned n);
-    static bool isHighCodePointAfterByte(const re::codepoint_t cp, const unsigned n);
-    static re::codepoint_t minCodePointWithCommonBytes(const re::codepoint_t cp, const unsigned n);
-    static re::codepoint_t maxCodePointWithCommonBytes(const re::codepoint_t cp, const unsigned n);
+    static bool isPrefix(const UCD::codepoint_t cp);
+    static unsigned length(const UCD::codepoint_t cp);
+    static UCD::codepoint_t maxCodePoint(const unsigned length);
+    static UCD::codepoint_t encodingByte(const UCD::codepoint_t cp, const unsigned n);
+    static bool isLowCodePointAfterByte(const UCD::codepoint_t cp, const unsigned n);
+    static bool isHighCodePointAfterByte(const UCD::codepoint_t cp, const unsigned n);
+    static UCD::codepoint_t minCodePointWithCommonBytes(const UCD::codepoint_t cp, const unsigned n);
+    static UCD::codepoint_t maxCodePointWithCommonBytes(const UCD::codepoint_t cp, const unsigned n);
 };
 
 }
