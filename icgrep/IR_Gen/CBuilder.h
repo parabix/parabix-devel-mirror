@@ -30,17 +30,17 @@ public:
     void setModule(llvm::Module * m)  {
         mMod = m;
     }
-        
+    
     llvm::Value * CreateMalloc(llvm::Type * type, llvm::Value * size);
-
+    
     llvm::Value * CreateAlignedMalloc(llvm::Type * type, llvm::Value * size, const unsigned alignment);
-
+    
     void CreateFree(llvm::Value * const ptr);
-
+    
     void CreateAlignedFree(llvm::Value * const ptr, const bool ptrMayBeNull = false);
-
+    
     llvm::Value * CreateRealloc(llvm::Value * ptr, llvm::Value * size);
-
+    
     void CreateMemZero(llvm::Value * ptr, llvm::Value * size, const unsigned alignment = 1);
 
     inline llvm::AllocaInst * CreateCacheAlignedAlloca(llvm::Type * Ty, llvm::Value * ArraySize = nullptr) {
@@ -49,14 +49,32 @@ public:
         return instr;
     }
     
+    // stdio.h functions
+    //
+    //  Create a call to:  FILE *fopen(const char *filename, const char *mode);
+    llvm::Value * CreateFOpenCall(llvm::Value * filename, llvm::Value * mode);
+    //  Create a call to:  size_t fwrite(const void *ptr, size_t size, size_t nitems, FILE *stream));
+    llvm::Value * CreateFWriteCall(llvm::Value * ptr, llvm::Value * size, llvm::Value * nitems, llvm::Value * stream);
+    //  Create a call to:  int fclose ( FILE * stream );
+    llvm::Value * CreateFCloseCall(llvm::Value * stream);
+    
     llvm::Function * GetPrintf();
 
+    //  Create calls to unistd.h functions.
+    //
+    //  Create a call to:  ssize_t write(int fildes, const void *buf, size_t nbyte);
     llvm::Value * CreateWriteCall(llvm::Value * fildes, llvm::Value * buf, llvm::Value * nbyte);
     
+    //  Posix thread (pthread.h) functions.
+    //
+    //  Create a call to:  int pthread_create(pthread_t *thread, const pthread_attr_t *attr,
+    //                    void *(*start_routine)(void*), void *arg);
     llvm::Value * CreatePThreadCreateCall(llvm::Value * thread, llvm::Value * attr, llvm::Function * start_routine, llvm::Value * arg);
-
+    
+    //  Create a call to:  void pthread_exit(void *value_ptr);
     llvm::Value * CreatePThreadExitCall(llvm::Value * value_ptr);
-
+    
+    //  Create a call to:  int pthread_join(pthread_t thread, void **value_ptr);
     llvm::Value * CreatePThreadJoinCall(llvm::Value * thread, llvm::Value * value_ptr);
     
     void CallPrintInt(const std::string & name, llvm::Value * const value);
@@ -70,6 +88,7 @@ public:
     }
     
     llvm::PointerType * getVoidPtrTy() const;
+    llvm::PointerType * getFILEptrTy();
     
     inline unsigned getCacheAlignment() const {
         return mCacheLineAlignment;
@@ -83,6 +102,7 @@ protected:
     llvm::Module *      mMod;
     unsigned            mCacheLineAlignment;
     llvm::IntegerType * mSizeType;
+    llvm::StructType *  mFILEtype;
 };
 
 #endif

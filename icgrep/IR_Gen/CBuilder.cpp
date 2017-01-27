@@ -241,6 +241,41 @@ StoreInst * CBuilder::CreateAtomicStoreRelease(Value * val, Value * ptr) {
     return inst;
 }
 
+
+PointerType * CBuilder::getFILEptrTy() {
+    if (mFILEtype == nullptr) {
+        mFILEtype = StructType::create(getContext(), "struct._IO_FILE");
+    }
+    return mFILEtype->getPointerTo();
+}
+
+Value * CBuilder::CreateFOpenCall(Value * filename, Value * mode) {
+    Function * fOpenFunc = mMod->getFunction("fopen");
+    if (fOpenFunc == nullptr) {
+        fOpenFunc = cast<Function>(mMod->getOrInsertFunction("fopen", getFILEptrTy(), getInt8Ty()->getPointerTo(), getInt8Ty()->getPointerTo(), nullptr));
+        fOpenFunc->setCallingConv(llvm::CallingConv::C);
+    }
+    return CreateCall(fOpenFunc, {filename, mode});
+}
+
+Value * CBuilder::CreateFWriteCall(Value * ptr, Value * size, Value * nitems, Value * stream) {
+    Function * fWriteFunc = mMod->getFunction("fwrite");
+    if (fWriteFunc == nullptr) {
+        fWriteFunc = cast<Function>(mMod->getOrInsertFunction("fwrite", getSizeTy(), getVoidPtrTy(), getSizeTy(), getSizeTy(), getFILEptrTy(), nullptr));
+        fWriteFunc->setCallingConv(llvm::CallingConv::C);
+    }
+    return CreateCall(fWriteFunc, {ptr, size, nitems, stream});
+}
+
+Value * CBuilder::CreateFCloseCall(Value * stream) {
+    Function * fCloseFunc = mMod->getFunction("fclose");
+    if (fCloseFunc == nullptr) {
+        fCloseFunc = cast<Function>(mMod->getOrInsertFunction("fclose", getInt32Ty(), getFILEptrTy(), nullptr));
+        fCloseFunc->setCallingConv(llvm::CallingConv::C);
+    }
+    return CreateCall(fCloseFunc, {stream});
+}
+
 Value * CBuilder::CreatePThreadCreateCall(Value * thread, Value * attr, Function * start_routine, Value * arg) {
     Function * pthreadCreateFunc = mMod->getFunction("pthread_create");
     if (pthreadCreateFunc == nullptr) {
@@ -284,5 +319,6 @@ CBuilder::CBuilder(llvm::Module * m, unsigned GeneralRegisterWidthInBits, unsign
 : IRBuilder<>(m->getContext())
 , mMod(m)
 , mCacheLineAlignment(CacheLineAlignmentInBytes)
-, mSizeType(getIntNTy(GeneralRegisterWidthInBits)) {
+, mSizeType(getIntNTy(GeneralRegisterWidthInBits))
+, mFILEtype(nullptr) {
 }

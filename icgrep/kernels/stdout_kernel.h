@@ -24,6 +24,24 @@ private:
     const unsigned mCodeUnitWidth;
     
 };
+
+
+class FileSink : public KernelBuilder {
+public:
+    
+    FileSink(IDISA::IDISA_Builder * iBuilder, unsigned codeUnitWidth);
+    
+private:
+    
+    void generateInitMethod() const override;
+    void generateDoSegmentMethod() const override;
+    
+private:
+    const unsigned mCodeUnitWidth;
+    
+};
 }
+
+
 
 #endif
