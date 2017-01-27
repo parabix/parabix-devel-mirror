@@ -53,6 +53,8 @@ public:
     //
     //  Create a call to:  FILE *fopen(const char *filename, const char *mode);
     llvm::Value * CreateFOpenCall(llvm::Value * filename, llvm::Value * mode);
+    //  Create a call to:  size_t fread(void *ptr, size_t size, size_t nitems, FILE *stream);
+    llvm::Value * CreateFReadCall(llvm::Value * ptr, llvm::Value * size, llvm::Value * nitems, llvm::Value * stream);
     //  Create a call to:  size_t fwrite(const void *ptr, size_t size, size_t nitems, FILE *stream));
     llvm::Value * CreateFWriteCall(llvm::Value * ptr, llvm::Value * size, llvm::Value * nitems, llvm::Value * stream);
     //  Create a call to:  int fclose ( FILE * stream );
@@ -64,6 +66,9 @@ public:
     //
     //  Create a call to:  ssize_t write(int fildes, const void *buf, size_t nbyte);
     llvm::Value * CreateWriteCall(llvm::Value * fildes, llvm::Value * buf, llvm::Value * nbyte);
+    //  Create a call to:  ssize_t read(int fildes, void *buf, size_t nbyte);
+    llvm::Value * CreateReadCall(llvm::Value * fildes, llvm::Value * buf, llvm::Value * nbyte);
+
     
     //  Posix thread (pthread.h) functions.
     //

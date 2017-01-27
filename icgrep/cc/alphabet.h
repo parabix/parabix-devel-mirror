@@ -35,7 +35,7 @@ public:
     //  The ordinal position of the character whose Unicode codepoint value is ucp.
     virtual unsigned fromUnicode(UCD::codepoint_t ucp);
 
-private:
+protected:
     std::string mAlphabetName;
     UCD::UnicodeSet mCharSet;
 };

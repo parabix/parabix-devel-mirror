@@ -27,6 +27,19 @@ Value * CBuilder::CreateWriteCall(Value * fildes, Value * buf, Value * nbyte) {
     return CreateCall(write, {fildes, buf, nbyte});
 }
 
+Value * CBuilder::CreateReadCall(Value * fildes, Value * buf, Value * nbyte) {
+    Function * readFn = mMod->getFunction("read");
+    if (readFn == nullptr) {
+        IntegerType * sizeTy = getSizeTy();
+        IntegerType * int32Ty = getInt32Ty();
+        PointerType * int8PtrTy = getInt8PtrTy();
+        readFn = cast<Function>(mMod->getOrInsertFunction("read",
+                                                         AttributeSet().addAttribute(mMod->getContext(), 2U, Attribute::NoAlias),
+                                                         sizeTy, int32Ty, int8PtrTy, sizeTy, nullptr));
+    }
+    return CreateCall(readFn, {fildes, buf, nbyte});
+}
+
 Function * CBuilder::GetPrintf() {
     Function * printf = mMod->getFunction("printf");
     if (printf == nullptr) {
@@ -256,6 +269,15 @@ Value * CBuilder::CreateFOpenCall(Value * filename, Value * mode) {
         fOpenFunc->setCallingConv(llvm::CallingConv::C);
     }
     return CreateCall(fOpenFunc, {filename, mode});
+}
+
+Value * CBuilder::CreateFReadCall(Value * ptr, Value * size, Value * nitems, Value * stream) {
+    Function * fReadFunc = mMod->getFunction("fread");
+    if (fReadFunc == nullptr) {
+        fReadFunc = cast<Function>(mMod->getOrInsertFunction("fread", getSizeTy(), getVoidPtrTy(), getSizeTy(), getSizeTy(), getFILEptrTy(), nullptr));
+        fReadFunc->setCallingConv(llvm::CallingConv::C);
+    }
+    return CreateCall(fReadFunc, {ptr, size, nitems, stream});
 }
 
 Value * CBuilder::CreateFWriteCall(Value * ptr, Value * size, Value * nitems, Value * stream) {
