@@ -2,6 +2,9 @@
 #include <pablo/codegenstate.h>
 #include <pablo/pe_var.h>
 #include <pablo/ps_assign.h>
+#include <pablo/pablo_kernel.h>
+
+#include <llvm/Support/raw_ostream.h>
 
 using namespace llvm;
 
@@ -19,11 +22,12 @@ Branch::Branch(const ClassTypeId typeId, PabloAST * condition, PabloBlock * body
 inline bool escapes(const Var * const var, const Branch * const br) {
     bool inside = false;
     bool outside = false;
+
     for (const PabloAST * user : var->users()) {
-        if (isa<Assign>(user)) {            
+
+        if (isa<Assign>(user)) {
 
             const PabloBlock * const scope = cast<Assign>(user)->getParent();
-
             // Is this Var assigned a value within the body of this branch?
             for (const PabloBlock * test = scope; test; test = test->getPredecessor()) {
                 if (test == br->getBody()) {
@@ -66,6 +70,11 @@ inline bool escapes(const Var * const var, const Branch * const br) {
                 }
                 test = check->getParent();
             }
+        } else if (isa<PabloKernel>(user)) {
+            if (inside) {
+                return true;
+            }
+            outside = true;
         }
 outer_loop: continue;
     }

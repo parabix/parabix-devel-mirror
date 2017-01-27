@@ -40,16 +40,6 @@ namespace kernel {
 // The pipeline must guarantee that the doSegment method is called with the 
 // a continous buffer for the full segment (number of blocks).
 
-    
-expand3_4Kernel::expand3_4Kernel(IDISA::IDISA_Builder * iBuilder) :
-    KernelBuilder(iBuilder, "expand3_4",
-                  {Binding{iBuilder->getStreamSetTy(1, 8), "sourceStream"}},
-                  {Binding{iBuilder->getStreamSetTy(1, 8), "expandedStream"}},
-                  {}, {}, {}) {
-        setDoBlockUpdatesProducedItemCountsAttribute(true);
-    }
-    
-    
 void expand3_4Kernel::generateDoSegmentMethod() const {
     IDISA::IDISA_Builder::InsertPoint savePoint = iBuilder->saveIP();
     Module * m = iBuilder->getModule();
@@ -440,15 +430,6 @@ void radix64Kernel::generateFinalBlockMethod() const {
     iBuilder->restoreIP(savePoint);
 }
 
-    
-radix64Kernel::radix64Kernel(IDISA::IDISA_Builder * iBuilder) :
-    KernelBuilder(iBuilder, "radix64",
-                  {Binding{iBuilder->getStreamSetTy(1, 8), "expandedStream"}},
-                  {Binding{iBuilder->getStreamSetTy(1, 8), "radix64stream"}},
-                  {}, {}, {}) {
-        setDoBlockUpdatesProducedItemCountsAttribute(true);
-}
-    
 void radix64Kernel::generateDoBlockMethod() const {
     auto savePoint = iBuilder->saveIP();
 
@@ -464,15 +445,6 @@ void radix64Kernel::generateDoBlockMethod() const {
     iBuilder->CreateRetVoid();
     iBuilder->restoreIP(savePoint);
 }
-
-base64Kernel::base64Kernel(IDISA::IDISA_Builder * iBuilder) :
-    KernelBuilder(iBuilder, "base64",
-                  {Binding{iBuilder->getStreamSetTy(1, 8), "radix64stream"}},
-                  {Binding{iBuilder->getStreamSetTy(1, 8), "base64stream"}},
-                  {}, {}, {}) {
-        setDoBlockUpdatesProducedItemCountsAttribute(true);
-    }
-    
 
 void base64Kernel::generateDoBlockLogic(Value * self, Value * blockNo) const {        
     for (unsigned i = 0; i < 8; i++) {
@@ -587,6 +559,24 @@ void base64Kernel::generateDoBlockMethod() const {
 
     iBuilder->CreateRetVoid();
     iBuilder->restoreIP(savePoint);
+}
+
+expand3_4Kernel::expand3_4Kernel(IDISA::IDISA_Builder * iBuilder)
+: SegmentOrientedKernel(iBuilder, "expand3_4",
+              {Binding{iBuilder->getStreamSetTy(1, 8), "sourceStream"}},
+              {Binding{iBuilder->getStreamSetTy(1, 8), "expandedStream"}},
+              {}, {}, {}) {
+    setDoBlockUpdatesProducedItemCountsAttribute(true);
+}
+
+radix64Kernel::radix64Kernel(IDISA::IDISA_Builder * iBuilder)
+: BlockOrientedKernel(iBuilder, "radix64", {Binding{iBuilder->getStreamSetTy(1, 8), "expandedStream"}}, {Binding{iBuilder->getStreamSetTy(1, 8), "radix64stream"}}, {}, {}, {}) {
+    setDoBlockUpdatesProducedItemCountsAttribute(true);
+}
+
+base64Kernel::base64Kernel(IDISA::IDISA_Builder * iBuilder)
+: BlockOrientedKernel(iBuilder, "base64", {Binding{iBuilder->getStreamSetTy(1, 8), "radix64stream"}}, {Binding{iBuilder->getStreamSetTy(1, 8), "base64stream"}}, {}, {}, {}) {
+    setDoBlockUpdatesProducedItemCountsAttribute(true);
 }
 
 }

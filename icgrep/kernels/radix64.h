@@ -18,7 +18,7 @@ namespace kernel {
     Each 3 bytes of the input abc produces a 4 byte output abcc.   
     This is a useful preparatory transformation in various radix-64 encodings. */
  
-class expand3_4Kernel : public KernelBuilder {
+class expand3_4Kernel : public SegmentOrientedKernel {
 public:
     
     expand3_4Kernel(IDISA::IDISA_Builder * iBuilder);
@@ -28,7 +28,7 @@ private:
     
 };
 
-class radix64Kernel : public KernelBuilder {
+class radix64Kernel : public BlockOrientedKernel {
 public:
     
     radix64Kernel(IDISA::IDISA_Builder * iBuilder);
@@ -38,7 +38,7 @@ private:
     virtual void generateFinalBlockMethod() const override;
 };
 
-class base64Kernel : public KernelBuilder {
+class base64Kernel : public BlockOrientedKernel {
 public:
     
     base64Kernel(IDISA::IDISA_Builder * iBuilder);    

@@ -57,7 +57,7 @@ Count * PabloBlock::createCount(PabloAST * expr) {
     return insertAtInsertionPoint(new (mAllocator) Count(expr, makeName("count"), type, mAllocator));
 }
 
-Count * PabloBlock::createCount(PabloAST * const expr, const std::string & prefix)  {
+Count * PabloBlock::createCount(PabloAST * const expr, const llvm::StringRef & prefix)  {
     Type * type = getParent()->getBuilder()->getSizeTy();
     return insertAtInsertionPoint(new (mAllocator) Count(expr, makeName(prefix), type, mAllocator));
 }
@@ -77,7 +77,7 @@ Var * PabloBlock::createVar(PabloAST * name, Type * type) {
     if (LLVM_UNLIKELY(name == nullptr || !isa<String>(name))) {
         throw std::runtime_error("Var objects must have a String name");
     }
-    return mParent->makeVariable(name, type);
+    return mParent->makeVariable(cast<String>(name), type);
 }
 
 InFile * PabloBlock::createInFile(PabloAST * expr, String * name) {

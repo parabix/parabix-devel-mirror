@@ -122,7 +122,7 @@ void DeletionKernel::generateFinalBlockMethod() const {
 }
 
 DeletionKernel::DeletionKernel(IDISA::IDISA_Builder * iBuilder, unsigned fw, unsigned streamCount) :
-KernelBuilder(iBuilder, "del",
+BlockOrientedKernel(iBuilder, "del",
               {Binding{iBuilder->getStreamSetTy(streamCount), "inputStreamSet"},
                Binding{iBuilder->getStreamSetTy(), "delMaskSet"}},
               {Binding{iBuilder->getStreamSetTy(streamCount), "outputStreamSet"},

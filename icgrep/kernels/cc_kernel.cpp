@@ -25,7 +25,7 @@ void DirectCharacterClassKernelBuilder::generateDoBlockMethod() const {
     
     Value * self = getParameter(doBlockFunction, "self");
     Value * blockNo = getScalarField(self, blockNoScalar);
-    
+
     unsigned packCount = 8 * mCodeUnitSize;  
     unsigned codeUnitWidth = 8 * mCodeUnitSize;
     Value * codeUnitPack[packCount];

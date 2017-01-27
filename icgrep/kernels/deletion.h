@@ -21,7 +21,7 @@ namespace IDISA { class IDISA_Builder; }
 
 namespace kernel {
 
-class DeletionKernel : public kernel::KernelBuilder {
+class DeletionKernel : public BlockOrientedKernel {
 public:
 
     DeletionKernel(IDISA::IDISA_Builder * iBuilder, unsigned fw, unsigned streamCount);

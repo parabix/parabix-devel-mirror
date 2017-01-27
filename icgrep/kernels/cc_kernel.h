@@ -14,13 +14,11 @@ namespace re { class CC; }
 
 namespace kernel {
 
-class KernelBuilder;
-
-class DirectCharacterClassKernelBuilder : public KernelBuilder {
+class DirectCharacterClassKernelBuilder : public BlockOrientedKernel {
 public:
     
     DirectCharacterClassKernelBuilder(IDISA::IDISA_Builder * iBuilder, std::string ccSetName, std::vector<re::CC *> charClasses, unsigned codeUnitSize)
-    : KernelBuilder(iBuilder, std::move(ccSetName),
+    : BlockOrientedKernel(iBuilder, std::move(ccSetName),
                   {Binding{iBuilder->getStreamSetTy(1, 8 * codeUnitSize), "codeUnitStream"}},
                   {Binding{iBuilder->getStreamSetTy(charClasses.size(), 1), "ccStream"}},
                   {}, {}, {})
@@ -28,9 +26,9 @@ public:
     , mCodeUnitSize(codeUnitSize) {
     }
     
-    
-private:
     void generateDoBlockMethod() const override;
+
+private:
     std::vector<re::CC *> mCharClasses;
     unsigned mCodeUnitSize;
     

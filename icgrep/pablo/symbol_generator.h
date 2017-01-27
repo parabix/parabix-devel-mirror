@@ -8,8 +8,8 @@
 #define SYMBOL_GENERATOR_H
 
 #include <pablo/pabloAST.h>
-#include <unordered_map>
-#include <string>
+#include <llvm/ADT/StringMap.h>
+#include <boost/container/flat_map.hpp>
 
 namespace IDISA { class IDISA_Builder; }
 namespace pablo { class String; }
@@ -18,21 +18,23 @@ namespace pablo { class Integer; }
 namespace pablo {
 
 class SymbolGenerator {
-    friend class PabloBlock;
+    friend class PabloKernel;
     using Allocator = PabloAST::Allocator;
 public:
-    typedef int64_t integer_t;
-    String * get(const std::string name, IDISA::IDISA_Builder * builder);
-    String * make(const std::string prefix, IDISA::IDISA_Builder *builder);
-    Integer * getInteger(const integer_t value, IDISA::IDISA_Builder * builder);
-    SymbolGenerator(Allocator & allocator) : mAllocator(allocator) {}
-    ~SymbolGenerator() = default;
+    using IntTy = int64_t;
+    String * getString(const llvm::StringRef name, IDISA::IDISA_Builder * builder) noexcept;
+    String * makeString(const llvm::StringRef prefix, IDISA::IDISA_Builder * builder) noexcept;
+    Integer * getInteger(const IntTy value, IDISA::IDISA_Builder * builder) noexcept;
+    ~SymbolGenerator() { }
+protected:
+    SymbolGenerator(Allocator & allocator) : mAllocator(allocator) { }
 private:
-    Allocator &                                 mAllocator;
-    std::unordered_map<std::string, integer_t>  mPrefixMap;
-    std::unordered_map<std::string, String *>   mStringMap;
-    std::unordered_map<integer_t, Integer *>    mIntegerMap;
+    Allocator &                                  mAllocator;
+    llvm::StringMap<IntTy>                       mPrefixMap;
+    llvm::StringMap<String *>                    mStringMap;
+    boost::container::flat_map<IntTy, Integer *> mIntegerMap;
 };
+
 
 }
 

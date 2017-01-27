@@ -18,6 +18,13 @@ class Var : public PabloAST {
     friend class PabloKernel;
     friend class Statement;
 public:
+
+    enum Attribute {
+        None = 0
+        , ReadOnly = 1
+        , ReadNone = 2
+    };
+
     static inline bool classof(const PabloAST * e) {
         return e->getClassTypeId() == ClassTypeId::Var;
     }
@@ -25,19 +32,40 @@ public:
         return false;
     }
     bool isReadOnly() const {
-        return mReadOnly;
+        return mAttribute & Attribute::ReadOnly;
     }
     void setReadOnly(const bool value = true) {
-        mReadOnly = value;
+        if (value) {
+            mAttribute |= Attribute::ReadOnly;
+        } else {
+            mAttribute &= ~(Attribute::ReadOnly);
+        }
     }
+    bool isReadNone() const {
+        return mAttribute & Attribute::ReadNone;
+    }
+    void setReadNone(const bool value = true) {
+        if (value) {
+            mAttribute |= Attribute::ReadNone;
+        } else {
+            mAttribute &= ~(Attribute::ReadNone);
+        }
+    }
+
+    const String & getName() const noexcept {
+        return *mName;
+    }
+
 protected:
-    Var(const PabloAST * name, llvm::Type * const type, Allocator & allocator, const bool readOnly = false)
-    : PabloAST(ClassTypeId::Var, type, llvm::cast<String>(name), allocator)
-    , mReadOnly(readOnly) {
+    Var(const String * name, llvm::Type * const type, Allocator & allocator, const Attribute attr = Attribute::None)
+    : PabloAST(ClassTypeId::Var, type, allocator)
+    , mAttribute(attr)
+    , mName(name) {
 
     }
 private:
-    bool mReadOnly;
+    unsigned mAttribute;
+    const String * const mName;
 };
 
 class Extract : public Statement {

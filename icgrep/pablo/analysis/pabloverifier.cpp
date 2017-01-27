@@ -72,8 +72,8 @@ void testUsers(const PabloAST * expr, const ScopeSet & validScopes) {
                 PabloPrinter::print(use, str);
                 throw std::runtime_error(str.str());
             }
-        } else if (isa<Var>(use)) {
-            if (LLVM_UNLIKELY(isa<Branch>(expr))) {
+        } else if (isa<Var>(expr)) {
+            if (LLVM_UNLIKELY(isa<Branch>(use) || isa<PabloKernel>(use))) {
                 ++uses;
             } else {
                 std::string tmp;
@@ -82,7 +82,7 @@ void testUsers(const PabloAST * expr, const ScopeSet & validScopes) {
                 PabloPrinter::print(use, str);
                 str << " is a user of ";
                 PabloPrinter::print(expr, str);
-                str << " but can only be a user of a Branch or Function.";
+                str << " but can only be a user of a Branch or Kernel.";
                 throw std::runtime_error(str.str());
             }
         }

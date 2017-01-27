@@ -35,7 +35,7 @@ public:
     virtual ~Operator() { }
 protected:
     Operator(const ClassTypeId typeId, llvm::Type * const type, PabloAST * const expr1, PabloAST * const expr2, Allocator & allocator)
-    : PabloAST(typeId, type, nullptr, allocator)
+    : PabloAST(typeId, type, allocator)
     , mLH(expr1)
     , mRH(expr2) {
         expr1->addUser(this);

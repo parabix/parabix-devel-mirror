@@ -32,7 +32,7 @@ public:
     }
 protected:
     Zeroes(llvm::Type * const type, Allocator & allocator)
-    : PabloAST(ClassTypeId::Zeroes, type, nullptr, allocator) {
+    : PabloAST(ClassTypeId::Zeroes, type, allocator) {
     }
 };
 

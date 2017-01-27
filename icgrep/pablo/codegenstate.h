@@ -67,7 +67,7 @@ public:
         return createAdvance(expr, shiftAmount, nullptr);
     }
 
-    Advance * createAdvance(PabloAST * expr, PabloAST * shiftAmount, const std::string & prefix) {
+    Advance * createAdvance(PabloAST * expr, PabloAST * shiftAmount, const llvm::StringRef & prefix) {
         return createAdvance(expr, shiftAmount, makeName(prefix));
     }
 
@@ -77,7 +77,7 @@ public:
         return createLookahead(expr, shiftAmount, nullptr);
     }
 
-    Lookahead * createLookahead(PabloAST * expr, PabloAST * shiftAmount, const std::string & prefix) {
+    Lookahead * createLookahead(PabloAST * expr, PabloAST * shiftAmount, const llvm::StringRef & prefix) {
         return createLookahead(expr, shiftAmount, makeName(prefix));
     }
 
@@ -95,13 +95,13 @@ public:
         return createNot(expr, nullptr);
     }
 
-    Not * createNot(PabloAST * expr, const std::string & prefix) {
+    Not * createNot(PabloAST * expr, const llvm::StringRef & prefix) {
         return createNot(expr, makeName(prefix));
     }
 
     Not * createNot(PabloAST * expr, String * name);
 
-    inline Var * createVar(const std::string & name, llvm::Type * const type = nullptr) {
+    inline Var * createVar(const llvm::StringRef & name, llvm::Type * const type = nullptr) {
         return createVar(makeName(name), type);
     }
 
@@ -111,13 +111,13 @@ public:
 
     Count * createCount(PabloAST * expr);
 
-    Count * createCount(PabloAST * expr, const std::string & prefix);
+    Count * createCount(PabloAST * expr, const llvm::StringRef & prefix);
 
     InFile * createInFile(PabloAST * expr) {
         return createInFile(expr, nullptr);
     }
 
-    InFile * createInFile(PabloAST * expr, const std::string & prefix) {
+    InFile * createInFile(PabloAST * expr, const llvm::StringRef & prefix) {
         return createInFile(expr, makeName(prefix));
     }
 
@@ -127,7 +127,7 @@ public:
         return createAtEOF(expr, nullptr);
     }
 
-    AtEOF * createAtEOF(PabloAST * expr, const std::string & prefix) {
+    AtEOF * createAtEOF(PabloAST * expr, const llvm::StringRef & prefix) {
         return createAtEOF(expr, makeName(prefix));
     }
 
@@ -137,7 +137,7 @@ public:
         return createExtract(array, index, nullptr);
     }
 
-    Extract * createExtract(PabloAST * array, PabloAST * index, const std::string & prefix) {
+    Extract * createExtract(PabloAST * array, PabloAST * index, const llvm::StringRef & prefix) {
         return createExtract(array, index, makeName(prefix));
     }
 
@@ -145,7 +145,7 @@ public:
         return createExtract(array, getInteger(index), nullptr);
     }
 
-    Extract * createExtract(PabloAST * array, const int64_t index, const std::string & prefix) {
+    Extract * createExtract(PabloAST * array, const int64_t index, const llvm::StringRef & prefix) {
         return createExtract(array, getInteger(index), makeName(prefix));
     }
 
@@ -157,7 +157,7 @@ public:
         return createAnd(expr1, expr2, nullptr);
     }
 
-    And * createAnd(PabloAST * expr1, PabloAST * expr2, const std::string & prefix) {
+    And * createAnd(PabloAST * expr1, PabloAST * expr2, const llvm::StringRef & prefix) {
         return createAnd(expr1, expr2, makeName(prefix));
     }
 
@@ -173,7 +173,7 @@ public:
         return createOr(expr1, expr2, nullptr);
     }
 
-    Or * createOr(PabloAST * expr1, PabloAST * expr2, const std::string & prefix) {
+    Or * createOr(PabloAST * expr1, PabloAST * expr2, const llvm::StringRef & prefix) {
         return createOr(expr1, expr2, makeName(prefix));
     }
 
@@ -189,7 +189,7 @@ public:
         return createXor(expr1, expr2, nullptr);
     }
 
-    Xor * createXor(PabloAST * expr1, PabloAST * expr2, const std::string & prefix) {
+    Xor * createXor(PabloAST * expr1, PabloAST * expr2, const llvm::StringRef & prefix) {
         return createXor(expr1, expr2, makeName(prefix));
     }
 
@@ -205,7 +205,7 @@ public:
         return createSel(condition, trueExpr, falseExpr, nullptr);
     }
 
-    Sel * createSel(PabloAST * condition, PabloAST * trueExpr, PabloAST * falseExpr, const std::string & prefix) {
+    Sel * createSel(PabloAST * condition, PabloAST * trueExpr, PabloAST * falseExpr, const llvm::StringRef & prefix) {
         return createSel(condition, trueExpr, falseExpr, makeName(prefix));
     }
 
@@ -221,7 +221,7 @@ public:
         return createMatchStar(marker, charclass, nullptr);
     }
 
-    MatchStar * createMatchStar(PabloAST * marker, PabloAST * charclass, const std::string & prefix) {
+    MatchStar * createMatchStar(PabloAST * marker, PabloAST * charclass, const llvm::StringRef & prefix) {
         return createMatchStar(marker, charclass, makeName(prefix));
     }
 
@@ -231,7 +231,7 @@ public:
         return createScanThru(from, thru, nullptr);
     }
 
-    ScanThru * createScanThru(PabloAST * from, PabloAST * thru, const std::string & prefix) {
+    ScanThru * createScanThru(PabloAST * from, PabloAST * thru, const llvm::StringRef & prefix) {
         return createScanThru(from, thru, makeName(prefix));
     }
 
@@ -275,11 +275,11 @@ public:
         mBranch = branch;
     }
 
-    inline String * getName(const std::string & name) const {
+    inline String * getName(const llvm::StringRef & name) const {
         return mParent->getName(name);
     }
 
-    inline String * makeName(const std::string & prefix) const {
+    inline String * makeName(const llvm::StringRef & prefix) const {
         return mParent->makeName(prefix);
     }
 
@@ -294,7 +294,7 @@ public:
 protected:
 
     explicit PabloBlock(PabloKernel * const parent, Allocator & allocator) noexcept
-    : PabloAST(PabloAST::ClassTypeId::Block, nullptr, nullptr, allocator)
+    : PabloAST(PabloAST::ClassTypeId::Block, nullptr, allocator)
     , mParent(parent)
     , mBranch(nullptr)
     , mScopeIndex(0)

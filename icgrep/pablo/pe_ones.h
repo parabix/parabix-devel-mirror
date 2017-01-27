@@ -31,7 +31,7 @@ public:
     }
 protected:
     Ones(llvm::Type * const type, Allocator & allocator)
-    : PabloAST(ClassTypeId::Ones, type, nullptr, allocator) {
+    : PabloAST(ClassTypeId::Ones, type, allocator) {
     }
 };
 

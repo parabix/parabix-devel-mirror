@@ -79,11 +79,11 @@ protected:
 
     KernelInterface(IDISA::IDISA_Builder * builder,
                     std::string && kernelName,
-                    std::vector<Binding> stream_inputs,
-                    std::vector<Binding> stream_outputs,
-                    std::vector<Binding> scalar_inputs,
-                    std::vector<Binding> scalar_outputs,
-                    std::vector<Binding> internal_scalars)
+                    std::vector<Binding> && stream_inputs,
+                    std::vector<Binding> && stream_outputs,
+                    std::vector<Binding> && scalar_inputs,
+                    std::vector<Binding> && scalar_outputs,
+                    std::vector<Binding> && internal_scalars)
     : iBuilder(builder)
     , mKernelName(kernelName)
     , mStreamSetInputs(stream_inputs)

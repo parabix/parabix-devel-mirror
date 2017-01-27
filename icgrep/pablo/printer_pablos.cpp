@@ -42,19 +42,16 @@ void PabloPrinter::print(const Statement * stmt, raw_ostream & out, const bool e
         print(assign->getVariable(), out);
         out << " = ";
         print(assign->getValue(), out);
-    } else if (const If * ifNode = dyn_cast<If>(stmt)) {
-        out << "If ";
-        print(ifNode->getCondition(), out);
-        if (expandNested) {
-            out << ":\n";
-            print(ifNode->getBody(), out, true, indent + BlockIndenting);
+    } else if (const Branch * br = dyn_cast<Branch>(stmt)) {
+        if (isa<If>(br)) {
+            out << "If ";
+        } else if (isa<While>(br)) {
+            out << "While ";
         }
-    } else if (const While * whileNode = dyn_cast<While>(stmt)) {
-        out << "While ";
-        print(whileNode->getCondition(), out);
+        print(br->getCondition(), out);
         if (expandNested) {
             out << ":\n";
-            print(whileNode->getBody(), out, true, indent + BlockIndenting);
+            print(br->getBody(), out, true, indent + BlockIndenting);
         }
     } else {
         print(cast<PabloAST>(stmt), out);
@@ -143,7 +140,7 @@ void PabloPrinter::print(const PabloAST * expr, llvm::raw_ostream & out) {
     } else if (isa<Ones>(expr)) {
         out << "1";
     } else if (const Var * var = dyn_cast<Var>(expr)) {
-        out << var->getName()->value();
+        out << var->getName();
     } else if (const If * ifstmt = dyn_cast<If>(expr)) {
         out << "If ";
         print(ifstmt->getCondition(), out);
@@ -187,7 +184,7 @@ void PabloPrinter::print(const PabloAST * expr, llvm::raw_ostream & out) {
         out << " != ";
         print(op->getRH(), out);
     } else if (const Statement * stmt = dyn_cast<Statement>(expr)) {
-        out << stmt->getName()->value();
+        out << stmt->getName();
     } else if (isa<Integer>(expr)) {
         out << cast<Integer>(expr)->value();
     } else {

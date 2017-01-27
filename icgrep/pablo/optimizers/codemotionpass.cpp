@@ -59,7 +59,7 @@ inline static int depthOf(PabloBlock * scope) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief findLCA
  ** ------------------------------------------------------------------------------------------------------------- */
-inline PabloBlock * findLCA(PabloBlock * scope1, PabloBlock * scope2) {
+inline PabloBlock * getLCA(PabloBlock * scope1, PabloBlock * scope2) {
     int depth1 = depthOf(scope1);
     int depth2 = depthOf(scope2);
     // If one of these scopes is nested deeper than the other, scan upwards through
@@ -85,62 +85,119 @@ inline PabloBlock * findLCA(PabloBlock * scope1, PabloBlock * scope2) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief ScopeSet
  ** ------------------------------------------------------------------------------------------------------------- */
-struct ScopeSet : public std::vector<PabloBlock *> {
-    inline void insert(PabloBlock * block) {
-        const auto i = std::lower_bound(begin(), end(), block);
-        if (i == end() || *i != block) {
-            std::vector<PabloBlock *>::insert(i, block);
+template <typename T>
+struct SetQueue : public std::vector<T> {
+    inline void insert(T const item) {
+        const auto i = std::lower_bound(std::vector<T>::begin(), std::vector<T>::end(), item);
+        if (i == std::vector<T>::end() || *i != item) {
+            std::vector<T>::insert(i, item);
         }
+    }
+    inline bool count(T const item) const {
+        const auto i = std::lower_bound(std::vector<T>::begin(), std::vector<T>::end(), item);
+        return (i != std::vector<T>::end() && *i == item);
     }
 };
 
+using ScopeSet = SetQueue<PabloBlock *>;
+
+using UserSet = SetQueue<Statement *>;
+
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief findScopeUsages
+ * @brief getScopesOfAllUsers
  ** ------------------------------------------------------------------------------------------------------------- */
-inline void findUsageScopes(PabloAST * expr, ScopeSet & scopes) {
+inline void getScopesOfAllUsers(PabloAST * expr, ScopeSet & scopes) {
     for (PabloAST * use : expr->users()) {
-        scopes.insert(cast<Statement>(use)->getParent());
+        if (LLVM_LIKELY(isa<Statement>(use))) {
+            scopes.insert(cast<Statement>(use)->getParent());
+        } else if (LLVM_UNLIKELY(isa<PabloKernel>(use))) {
+            scopes.insert(cast<PabloKernel>(use)->getEntryBlock());
+        }
     }
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief isAcceptableTarget
+ * @brief getInScopeDominatorsOfAllUsers
  ** ------------------------------------------------------------------------------------------------------------- */
-inline PabloBlock * isAcceptableTarget(Statement * stmt, ScopeSet & scopes, PabloBlock * const block) {
-    // Scan through this statement's users to see if they're all in a nested scope. If so,
-    // find the least common ancestor of the scope blocks. If it is not the current scope,
-    // then we can sink the instruction.
+inline void getInScopeDominatorsOfAllUsers(PabloAST * expr, UserSet & users, PabloBlock * const block) {
+    for (PabloAST * use : expr->users()) {
+        if (LLVM_LIKELY(isa<Statement>(use))) {
+            Statement * user = cast<Statement>(use);
+            PabloBlock * parent = user->getParent();
+            while (parent != block) {
+                assert (parent);
+                user = parent->getBranch();
+                parent = parent->getPredecessor();
+            }
+            users.insert(user);
+        }
+    }
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief sinkIfAcceptableTarget
+ *
+ * Scan through this statement's users to see whether they're all in a nested scope. If not, check whether the
+ * statement can be moved past a branch statement within the same scope.
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline void sinkIfAcceptableTarget(Statement * const stmt, PabloBlock * const block, ScopeSet & scopes, UserSet & users) {
     assert (scopes.empty());
-    if (isa<Assign>(stmt)) {
-        return nullptr;
-    } else if (isa<Branch>(stmt)) {
+    if (LLVM_UNLIKELY(isa<Branch>(stmt))) {
         for (Var * def : cast<Branch>(stmt)->getEscaped()) {
-            findUsageScopes(def, scopes);
+            getScopesOfAllUsers(def, scopes);
         }
     } else {
-        findUsageScopes(stmt, scopes);
-    }
+        getScopesOfAllUsers(isa<Assign>(stmt) ? cast<Assign>(stmt)->getVariable() : stmt, scopes);
+    }    
     if (LLVM_UNLIKELY(scopes.empty())) {
-        return nullptr;
+        assert (!isa<Assign>(stmt));
+        // should not occur unless we have a branch with no escaped vars or a statement
+        // that has no users. In either event, the statement itself should be removed.
+        stmt->eraseFromParent(true);
+        return;
     }
     while (scopes.size() > 1) {
         PabloBlock * scope1 = scopes.back(); scopes.pop_back();
         PabloBlock * scope2 = scopes.back(); scopes.pop_back();
-        scopes.insert(findLCA(scope1, scope2));
+        scopes.insert(getLCA(scope1, scope2));
     }
-    // If the LCA scope is nested within the block, return the LCA scope.
-    // Otherwise return nullptr.
     PabloBlock * const scope = scopes.back(); scopes.clear();
-    if (scope == block) {
-        return nullptr;
-    }
-    PabloBlock * temp = scope;
-    for (;;) {
-        temp = temp->getPredecessor();
-        if (temp == nullptr) {
-            return nullptr;
-        } else if (temp == block) {
-            return scope;
+    if (LLVM_LIKELY(scope == block)) {
+        assert (users.empty());
+        if (LLVM_UNLIKELY(isa<Branch>(stmt))) {
+            for (Var * def : cast<Branch>(stmt)->getEscaped()) {
+                getInScopeDominatorsOfAllUsers(def, users, block);
+            }
+        } else {
+            getInScopeDominatorsOfAllUsers(isa<Assign>(stmt) ? cast<Assign>(stmt)->getVariable() : stmt, users, block);
+        }
+        Branch * branch = nullptr;
+        Statement * temp = stmt;
+        for (;;) {
+            temp = temp->getNextNode();
+            if (temp == nullptr || users.count(temp)) {
+                if (branch) {
+                    // we can move the statement past a branch within its current scope
+                    stmt->insertAfter(branch);
+                }
+                break;
+            }
+            if (isa<Branch>(temp)) {
+                branch = cast<Branch>(temp);
+            }
+        }
+        users.clear();
+    } else { // test whether the LCA scope is nested within this scope.
+        PabloBlock * temp = scope;
+        for (;;) {
+            temp = temp->getPredecessor();
+            if (temp == nullptr) {
+                break;
+            } else if (temp == block) {
+                // we can move the statement into a nested scope
+                stmt->insertBefore(scope->front());
+                break;
+            }
         }
     }
 }
@@ -150,18 +207,17 @@ inline PabloBlock * isAcceptableTarget(Statement * stmt, ScopeSet & scopes, Pabl
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void CodeMotionPass::sink(PabloBlock * const block) {
     ScopeSet scopes;
+    UserSet users;
     Statement * stmt = block->back(); // note: reverse AST traversal
     while (stmt) {
         Statement * prevNode = stmt->getPrevNode();
-        if (PabloBlock * scope = isAcceptableTarget(stmt, scopes, block)) {
-            stmt->insertBefore(scope->front());
-        }
+        sinkIfAcceptableTarget(stmt, block, scopes, users);
         stmt = prevNode;
     }
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief hoistWhileLoopInvariants
+ * @brief hoistLoopInvariants
  ** ------------------------------------------------------------------------------------------------------------- */
 void CodeMotionPass::hoistLoopInvariants(While * loop) {
     flat_set<const PabloAST *> loopVariants;

@@ -11,7 +11,7 @@ namespace IDISA { class IDISA_Builder; }
 
 namespace kernel {
 
-class StdOutKernel : public KernelBuilder {
+class StdOutKernel : public SegmentOrientedKernel {
 public:
 
     StdOutKernel(IDISA::IDISA_Builder * iBuilder, unsigned codeUnitWidth);
@@ -26,7 +26,7 @@ private:
 };
 
 
-class FileSink : public KernelBuilder {
+class FileSink : public SegmentOrientedKernel {
 public:
     
     FileSink(IDISA::IDISA_Builder * iBuilder, unsigned codeUnitWidth);

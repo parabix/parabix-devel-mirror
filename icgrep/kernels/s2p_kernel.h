@@ -11,7 +11,7 @@ namespace llvm { class Value; }
 
 namespace kernel {
 
-class S2PKernel : public KernelBuilder {
+class S2PKernel : public BlockOrientedKernel {
 public:
     
     S2PKernel(IDISA::IDISA_Builder * builder);

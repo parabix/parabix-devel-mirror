@@ -55,6 +55,7 @@ public:
         , Integer
         , String
         , Block
+        , Kernel
         // Arithmetic expressions
         , Add
         , Subtract
@@ -101,14 +102,6 @@ public:
         mType = type;
     }
 
-    inline const String * getName() const noexcept {
-        return mName;
-    }
-
-    inline void setName(const String * const name) noexcept {
-        mName = name;
-    }
-
     inline user_iterator user_begin() {
         return mUsers.begin();
     }
@@ -150,10 +143,9 @@ public:
     void print(llvm::raw_ostream & O) const;
 
 protected:
-    inline PabloAST(const ClassTypeId id, llvm::Type * const type, const String * name, Allocator & allocator)
+    inline PabloAST(const ClassTypeId id, llvm::Type * const type, Allocator & allocator)
     : mClassTypeId(id)
     , mType(type)
-    , mName(name)
     , mUsers(allocator) {
 
     }
@@ -165,7 +157,6 @@ protected:
 private:
     const ClassTypeId       mClassTypeId;
     llvm::Type *            mType;
-    const String *          mName;
     Users                   mUsers;
 };
 
@@ -198,6 +189,12 @@ public:
 
     void replaceUsesOfWith(PabloAST * const from, PabloAST * const to);
 
+    const String & getName() const noexcept {
+        return *mName;
+    }
+
+    void setName(const String * const name) noexcept;
+
     inline PabloAST * getOperand(const unsigned index) const {
         assert (index < getNumOperands());
         return mOperand[index];
@@ -226,13 +223,15 @@ public:
     }
     virtual ~Statement() {}
 protected:
+
     explicit Statement(const ClassTypeId id, llvm::Type * const type, std::initializer_list<PabloAST *> operands, const String * const name, Allocator & allocator)
-    : PabloAST(id, type, name, allocator)
+    : PabloAST(id, type, allocator)
+    , mOperands(operands.size())
+    , mOperand(allocator.allocate(mOperands))
     , mNext(nullptr)
     , mPrev(nullptr)
-    , mParent(nullptr)
-    , mOperands(operands.size())
-    , mOperand(allocator.allocate(mOperands)) {
+    , mName(name)
+    , mParent(nullptr) {
         unsigned i = 0;
         for (PabloAST * const value : operands) {
             assert (value);
@@ -241,23 +240,27 @@ protected:
             ++i;
         }
     }
+
     explicit Statement(const ClassTypeId id, llvm::Type * const type, const unsigned reserved, const String * const name, Allocator & allocator)
-    : PabloAST(id, type, name, allocator)
+    : PabloAST(id, type, allocator)
+    , mOperands(0)
+    , mOperand(allocator.allocate(mOperands))
     , mNext(nullptr)
     , mPrev(nullptr)
-    , mParent(nullptr)
-    , mOperands(0)
-    , mOperand(allocator.allocate(mOperands)) {
+    , mName(name)
+    , mParent(nullptr) {
         std::memset(mOperand, 0, reserved * sizeof(PabloAST *));
     }
+
     template<typename iterator>
     explicit Statement(const ClassTypeId id, llvm::Type * const type, iterator begin, iterator end, const String * const name, Allocator & allocator)
-    : PabloAST(id, type, name, allocator)
+    : PabloAST(id, type, allocator)
+    , mOperands(std::distance(begin, end))
+    , mOperand(allocator.allocate(mOperands))
     , mNext(nullptr)
     , mPrev(nullptr)
-    , mParent(nullptr)
-    , mOperands(std::distance(begin, end))
-    , mOperand(allocator.allocate(mOperands)) {
+    , mName(name)
+    , mParent(nullptr) {
         unsigned i = 0;
         for (auto value = begin; value != end; ++value, ++i) {
             assert (*value);
@@ -265,12 +268,14 @@ protected:
             (*value)->addUser(this);
         }
     }
+
 protected:    
-    Statement *     mNext;
-    Statement *     mPrev;
-    PabloBlock *    mParent;
     unsigned        mOperands;
     PabloAST **     mOperand;
+    Statement *     mNext;
+    Statement *     mPrev;
+    const String *  mName;
+    PabloBlock *    mParent;
 };
 
 class Variadic : public Statement {

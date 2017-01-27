@@ -27,15 +27,14 @@ void MMapSourceKernel::generateDoSegmentMethod() const {
     Constant * segmentItems = iBuilder->getSize(mSegmentBlocks * iBuilder->getBitBlockWidth());
     
     
-    Function::arg_iterator args = doSegmentFunction->arg_begin();
+    auto args = doSegmentFunction->arg_begin();
     Value * self = &*(args++);
     
     Value * fileItems = getScalarField(self, "fileSize");
     if (mCodeUnitWidth > 8) {
         fileItems = iBuilder->CreateUDiv(fileItems, iBuilder->getSize(mCodeUnitWidth/8));
     }
-    Value * produced = getProducedItemCount(self, "sourceBuffer");
-    
+    Value * produced = getProducedItemCount(self, "sourceBuffer");    
     Value * nextProduced = iBuilder->CreateAdd(produced, segmentItems);
     Value * lessThanFullSegment = iBuilder->CreateICmpULT(fileItems, nextProduced);
     produced = iBuilder->CreateSelect(lessThanFullSegment, fileItems, nextProduced);
@@ -53,7 +52,7 @@ void MMapSourceKernel::generateDoSegmentMethod() const {
 
 
 MMapSourceKernel::MMapSourceKernel(IDISA::IDISA_Builder * iBuilder, unsigned blocksPerSegment, unsigned codeUnitWidth)
-: KernelBuilder(iBuilder, "mmap_source", {}, {Binding{iBuilder->getStreamSetTy(1, codeUnitWidth), "sourceBuffer"}}, {Binding{iBuilder->getSizeTy(), "fileSize"}}, {}, {})
+: SegmentOrientedKernel(iBuilder, "mmap_source", {}, {Binding{iBuilder->getStreamSetTy(1, codeUnitWidth), "sourceBuffer"}}, {Binding{iBuilder->getSizeTy(), "fileSize"}}, {}, {})
 , mSegmentBlocks(blocksPerSegment)
 , mCodeUnitWidth(codeUnitWidth) {
 

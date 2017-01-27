@@ -13,7 +13,7 @@ namespace IDISA { class IDISA_Builder; }
 
 namespace kernel {
 
-class editdGPUKernel : public KernelBuilder {
+class editdGPUKernel : public BlockOrientedKernel {
 public:
     
     editdGPUKernel(IDISA::IDISA_Builder * b, unsigned dist, unsigned pattLen);

@@ -11,7 +11,7 @@ namespace llvm { class Value; }
 
 namespace kernel {
 
-class EvenOddKernel : public KernelBuilder {
+class EvenOddKernel : public BlockOrientedKernel {
 public:
     
     EvenOddKernel(IDISA::IDISA_Builder * builder);

@@ -37,7 +37,7 @@ public:
     
     void CreateFree(llvm::Value * const ptr);
     
-    void CreateAlignedFree(llvm::Value * const ptr, const bool ptrMayBeNull = false);
+    void CreateAlignedFree(llvm::Value * const ptr, const bool testForNullAddress = false);
     
     llvm::Value * CreateRealloc(llvm::Value * ptr, llvm::Value * size);
     

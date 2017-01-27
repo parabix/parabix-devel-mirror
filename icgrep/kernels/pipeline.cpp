@@ -95,7 +95,6 @@ Function * generateSegmentParallelPipelineThreadFunction(std::string name, IDISA
     const auto ip = iBuilder->saveIP();
     
     Module * m = iBuilder->getModule();
-    Type * const size_ty = iBuilder->getSizeTy();
     Type * const voidTy = iBuilder->getVoidTy();
     PointerType * const voidPtrTy = iBuilder->getVoidPtrTy();
     PointerType * const int8PtrTy = iBuilder->getInt8PtrTy();
@@ -107,7 +106,6 @@ Function * generateSegmentParallelPipelineThreadFunction(std::string name, IDISA
     Value * const input = &*(args++);
     input->setName("input");
 
-    unsigned threadNum = codegen::ThreadNum;
 
      // Create the basic blocks for the thread function.
     BasicBlock * entryBlock = BasicBlock::Create(iBuilder->getContext(), "entry", threadFunc, 0);
@@ -117,15 +115,14 @@ Function * generateSegmentParallelPipelineThreadFunction(std::string name, IDISA
     std::vector<BasicBlock *> segmentWait;
     std::vector<BasicBlock *> segmentLoopBody;
     for (unsigned i = 0; i < kernels.size(); i++) {
-        std::string kname = kernels[i]->getName();
+        auto kname = kernels[i]->getName();
         segmentWait.push_back(BasicBlock::Create(iBuilder->getContext(), kname + "Wait", threadFunc, 0));
-        segmentLoopBody.push_back(BasicBlock::Create(iBuilder->getContext(), "do_" + kname, threadFunc, 0));
+        segmentLoopBody.push_back(BasicBlock::Create(iBuilder->getContext(), kname + "Do", threadFunc, 0));
     }
 
     iBuilder->SetInsertPoint(entryBlock);
     
     Value * sharedStruct = iBuilder->CreateBitCast(input, PointerType::get(sharedStructType, 0));
-    Constant * myThreadId = ConstantInt::get(size_ty, id);
     std::vector<Value *> instancePtrs;
     for (unsigned k = 0; k < kernels.size(); k++) {
         Value * ptr = iBuilder->CreateGEP(sharedStruct, {iBuilder->getInt32(0), iBuilder->getInt32(k)});
@@ -135,10 +132,9 @@ Function * generateSegmentParallelPipelineThreadFunction(std::string name, IDISA
     iBuilder->CreateBr(segmentLoop);
 
     iBuilder->SetInsertPoint(segmentLoop);
-    PHINode * segNo = iBuilder->CreatePHI(size_ty, 2, "segNo");
-    segNo->addIncoming(myThreadId, entryBlock);
-    Value * nextSegNo = iBuilder->CreateAdd(segNo, iBuilder->getSize(1));
-    unsigned last_kernel = kernels.size() - 1;
+    PHINode * segNo = iBuilder->CreatePHI(iBuilder->getSizeTy(), 2, "segNo");
+    segNo->addIncoming(iBuilder->getSize(id), entryBlock);
+    const unsigned last_kernel = kernels.size() - 1;
     Value * doFinal = ConstantInt::getNullValue(iBuilder->getInt1Ty());
     
     iBuilder->CreateBr(segmentWait[0]);
@@ -181,9 +177,11 @@ Function * generateSegmentParallelPipelineThreadFunction(std::string name, IDISA
             Value * terminated = kernels[k]->getTerminationSignal(instancePtrs[k]);
             doFinal = iBuilder->CreateOr(doFinal, terminated);
         }
+
+        Value * nextSegNo = iBuilder->CreateAdd(segNo, iBuilder->getSize(1));
         kernels[k]->releaseLogicalSegmentNo(instancePtrs[k], nextSegNo);
         if (k == last_kernel) {
-            segNo->addIncoming(iBuilder->CreateAdd(segNo, ConstantInt::get(size_ty, threadNum)), segmentLoopBody[last_kernel]);
+            segNo->addIncoming(iBuilder->CreateAdd(segNo, iBuilder->getSize(codegen::ThreadNum)), segmentLoopBody[last_kernel]);
             iBuilder->CreateCondBr(doFinal, exitThreadBlock, segmentLoop);
         }
         else {
@@ -209,7 +207,7 @@ Function * generateSegmentParallelPipelineThreadFunction(std::string name, IDISA
 
 void generateSegmentParallelPipeline(IDISA::IDISA_Builder * iBuilder, const std::vector<KernelBuilder *> & kernels) {
     
-    unsigned threadNum = codegen::ThreadNum;
+    const unsigned threadNum = codegen::ThreadNum;
     
     Module * m = iBuilder->getModule();
     

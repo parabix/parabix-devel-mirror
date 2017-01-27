@@ -36,10 +36,10 @@ struct __##NAME { \
     inline PabloAST * operator()(PabloAST * arg) { \
         return mPb->NAME(arg, mPrefix); \
     } \
-    inline __##NAME(PabloBlock * pb, const std::string & prefix) : mPb(pb), mPrefix(prefix) {} \
+    inline __##NAME(PabloBlock * pb, const llvm::StringRef & prefix) : mPb(pb), mPrefix(prefix) {} \
 private: \
     PabloBlock * mPb; \
-    const std::string & mPrefix; \
+    const llvm::StringRef & mPrefix; \
 }; \
 __##NAME functor(mPb, prefix); \
 PabloAST * result = mExprTable.findUnaryOrCall(std::move(functor), TYPE, ARGS)
@@ -61,10 +61,10 @@ struct __##NAME { \
     inline PabloAST * operator()(PabloAST * arg1, PabloAST * arg2) { \
         return mPb->NAME(arg1, arg2, mPrefix); \
     } \
-    inline __##NAME(PabloBlock * pb, const std::string & prefix) : mPb(pb), mPrefix(prefix) {} \
+    inline __##NAME(PabloBlock * pb, const llvm::StringRef & prefix) : mPb(pb), mPrefix(prefix) {} \
 private: \
     PabloBlock * mPb; \
-    const std::string & mPrefix; \
+    const llvm::StringRef & mPrefix; \
 }; \
 __##NAME functor(mPb, PREFIX); \
 PabloAST * result = mExprTable.findBinaryOrCall(std::move(functor), TYPE, ARGS)
@@ -86,10 +86,10 @@ struct __##NAME { \
     inline PabloAST * operator()(PabloAST * arg1, PabloAST * arg2, PabloAST * arg3) { \
         return mPb->NAME(arg1, arg2, arg3, mPrefix); \
     } \
-    inline __##NAME(PabloBlock * pb, const std::string & prefix) : mPb(pb), mPrefix(prefix) {} \
+    inline __##NAME(PabloBlock * pb, const llvm::StringRef & prefix) : mPb(pb), mPrefix(prefix) {} \
 private: \
     PabloBlock * mPb; \
-    const std::string & mPrefix; \
+    const llvm::StringRef & mPrefix; \
 }; \
 __##NAME functor(mPb, PREFIX); \
 PabloAST * result = mExprTable.findTernaryOrCall(std::move(functor), TYPE, ARGS)
@@ -124,7 +124,7 @@ PabloAST * PabloBuilder::createAdvance(PabloAST * expr, PabloAST * shiftAmount) 
     return result;
 }
 
-PabloAST * PabloBuilder::createAdvance(PabloAST * expr, PabloAST * shiftAmount, const std::string & prefix) {
+PabloAST * PabloBuilder::createAdvance(PabloAST * expr, PabloAST * shiftAmount, const llvm::StringRef & prefix) {
     if (isa<Zeroes>(expr) || cast<Integer>(shiftAmount)->value() == 0) {
         return expr;
     }
@@ -137,7 +137,7 @@ Extract * PabloBuilder::createExtract(PabloAST * value, not_null<PabloAST *> ind
     return cast<Extract>(result);
 }
 
-Extract * PabloBuilder::createExtract(PabloAST * value, not_null<PabloAST *> index, const std::string & prefix) {
+Extract * PabloBuilder::createExtract(PabloAST * value, not_null<PabloAST *> index, const llvm::StringRef & prefix) {
     MAKE_NAMED_BINARY(createExtract, TypeId::Extract, prefix, value, index);
     return cast<Extract>(result);
 }
@@ -150,7 +150,7 @@ PabloAST * PabloBuilder::createLookahead(PabloAST * expr, PabloAST * shiftAmount
     return result;
 }
 
-PabloAST * PabloBuilder::createLookahead(PabloAST * expr, PabloAST * shiftAmount, const std::string & prefix) {
+PabloAST * PabloBuilder::createLookahead(PabloAST * expr, PabloAST * shiftAmount, const llvm::StringRef & prefix) {
     if (isa<Zeroes>(expr) || cast<Integer>(shiftAmount)->value() == 0) {
         return expr;
     }
@@ -172,7 +172,7 @@ PabloAST * PabloBuilder::createNot(PabloAST * expr) {
     return result;
 }
 
-PabloAST * PabloBuilder::createNot(PabloAST * expr, const std::string & prefix) {
+PabloAST * PabloBuilder::createNot(PabloAST * expr, const llvm::StringRef & prefix) {
     if (isa<Ones>(expr)) {
         return createZeroes(expr->getType());
     }
@@ -191,7 +191,7 @@ PabloAST * PabloBuilder::createCount(PabloAST * expr) {
     return result;
 }
 
-PabloAST * PabloBuilder::createCount(PabloAST * expr, const std::string & prefix) {
+PabloAST * PabloBuilder::createCount(PabloAST * expr, const llvm::StringRef & prefix) {
     MAKE_NAMED_UNARY(createCount, TypeId::Count, prefix, expr);
     return result;
 }
@@ -231,7 +231,7 @@ PabloAST * PabloBuilder::createAnd(PabloAST * expr1, PabloAST * expr2) {
     return result;
 }
 
-PabloAST * PabloBuilder::createAnd(PabloAST * expr1, PabloAST * expr2, const std::string & prefix) {
+PabloAST * PabloBuilder::createAnd(PabloAST * expr1, PabloAST * expr2, const llvm::StringRef & prefix) {
     if (isa<Zeroes>(expr2) || isa<Ones>(expr1)) {
         return expr2;
     } else if (isa<Zeroes>(expr1) || isa<Ones>(expr2) || equals(expr1, expr2)){
@@ -309,7 +309,7 @@ PabloAST * PabloBuilder::createOr(PabloAST * expr1, PabloAST * expr2) {
     return result;
 }
 
-PabloAST * PabloBuilder::createOr(PabloAST * expr1, PabloAST * expr2, const std::string & prefix) {
+PabloAST * PabloBuilder::createOr(PabloAST * expr1, PabloAST * expr2, const llvm::StringRef & prefix) {
     if (isa<Zeroes>(expr1) || isa<Ones>(expr2)){
         return expr2;
     }
@@ -379,7 +379,7 @@ PabloAST * PabloBuilder::createXor(PabloAST * expr1, PabloAST * expr2) {
     return result;
 }
 
-PabloAST * PabloBuilder::createXor(PabloAST * expr1, PabloAST * expr2, const std::string & prefix) {
+PabloAST * PabloBuilder::createXor(PabloAST * expr1, PabloAST * expr2, const llvm::StringRef & prefix) {
     if (expr1 == expr2) {
         return createZeroes(expr1->getType());
     } else if (isa<Ones>(expr1)) {
@@ -447,7 +447,7 @@ PabloAST * PabloBuilder::createInFile(PabloAST * expr) {
     return result;
 }
 
-PabloAST * PabloBuilder::createInFile(PabloAST * expr, const std::string & prefix) {
+PabloAST * PabloBuilder::createInFile(PabloAST * expr, const llvm::StringRef & prefix) {
     MAKE_NAMED_UNARY(createInFile, TypeId::InFile, prefix, expr);
     return result;
 }
@@ -457,7 +457,7 @@ PabloAST * PabloBuilder::createAtEOF(PabloAST * expr) {
     return result;
 }
 
-PabloAST * PabloBuilder::createAtEOF(PabloAST * expr, const std::string & prefix) {
+PabloAST * PabloBuilder::createAtEOF(PabloAST * expr, const llvm::StringRef & prefix) {
     MAKE_NAMED_UNARY(createAtEOF, TypeId::AtEOF, prefix, expr);
     return result;
 }
@@ -470,7 +470,7 @@ PabloAST * PabloBuilder::createMatchStar(PabloAST * marker, PabloAST * charclass
     return result;
 }
 
-PabloAST * PabloBuilder::createMatchStar(PabloAST * marker, PabloAST * charclass, const std::string & prefix) {
+PabloAST * PabloBuilder::createMatchStar(PabloAST * marker, PabloAST * charclass, const llvm::StringRef & prefix) {
     if (isa<Zeroes>(marker) || isa<Zeroes>(charclass)) {
         return marker;
     }
@@ -486,7 +486,7 @@ PabloAST * PabloBuilder::createScanThru(PabloAST * from, PabloAST * thru) {
     return result;
 }
 
-PabloAST * PabloBuilder::createScanThru(PabloAST * from, PabloAST * thru, const std::string & prefix) {
+PabloAST * PabloBuilder::createScanThru(PabloAST * from, PabloAST * thru, const llvm::StringRef & prefix) {
     if (isa<Zeroes>(from) || isa<Zeroes>(thru)) {
         return from;
     }
@@ -519,7 +519,7 @@ PabloAST * PabloBuilder::createSel(PabloAST * condition, PabloAST * trueExpr, Pa
     return result;
 }
 
-PabloAST * PabloBuilder::createSel(PabloAST * condition, PabloAST * trueExpr, PabloAST * falseExpr, const std::string & prefix) {
+PabloAST * PabloBuilder::createSel(PabloAST * condition, PabloAST * trueExpr, PabloAST * falseExpr, const llvm::StringRef & prefix) {
     if (isa<Ones>(condition)) {
         return trueExpr;
     } else if (isa<Zeroes>(condition)){

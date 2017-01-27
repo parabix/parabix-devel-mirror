@@ -12,7 +12,7 @@ namespace llvm { class Module; }
 
 namespace kernel {
     
-class editdScanKernel : public KernelBuilder {
+class editdScanKernel : public BlockOrientedKernel {
 public:
     editdScanKernel(IDISA::IDISA_Builder * iBuilder, unsigned dist);
         

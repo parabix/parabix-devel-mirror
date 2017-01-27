@@ -15,16 +15,14 @@ public:
     }
     static inline bool classof(const void *) {
         return false;
-    }
-    virtual ~Integer(){
-
-    }
+    }    
     inline IntTy value() const {
         return mValue;
     }
+    virtual ~Integer(){ }
 protected:
     Integer(const IntTy value, llvm::Type * type, Allocator & allocator) noexcept
-    : PabloAST(ClassTypeId::Integer, type, nullptr, allocator)
+    : PabloAST(ClassTypeId::Integer, type, allocator)
     , mValue(value)
     {
 

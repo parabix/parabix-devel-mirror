@@ -40,7 +40,6 @@ void StreamSetBuffer::allocateBuffer() {
     mStreamSetBufferPtr = iBuilder->CreateCacheAlignedAlloca(mStreamSetType, iBuilder->getSize(mBufferBlocks));
 }
 
-
 Value * StreamSetBuffer::getStream(Value * self, Value * blockNo, Value * index) const {
     return iBuilder->CreateGEP(getStreamSetPtr(self, blockNo), {iBuilder->getInt32(0), index});
 }

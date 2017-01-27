@@ -13,7 +13,7 @@ namespace IDISA { class IDISA_Builder; }
 
 namespace kernel {
 
-class StdInKernel : public KernelBuilder {
+class StdInKernel : public SegmentOrientedKernel {
 public:
     StdInKernel(IDISA::IDISA_Builder * iBuilder, unsigned blocksPerSegment = 1, unsigned codeUnitWidth = 8);
     
@@ -26,7 +26,7 @@ private:
 };
     
 
-class FileSource : public KernelBuilder {
+class FileSource : public SegmentOrientedKernel {
 public:
   
     FileSource(IDISA::IDISA_Builder * iBuilder, unsigned blocksPerSegment = 1, unsigned codeUnitWidth = 8);

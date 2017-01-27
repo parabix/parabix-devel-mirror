@@ -21,8 +21,10 @@ using namespace IDISA;
 using namespace llvm;
 
 Var * PabloKernel::addInput(const std::string & name, Type * const type) {
-    Var * param = new (mAllocator) Var(mSymbolTable->make(name, iBuilder), type, mAllocator, true);
+    Var * param = new (mAllocator) Var(mSymbolTable->makeString(name, iBuilder), type, mAllocator, Var::ReadOnly);
+    param->addUser(this);
     mInputs.push_back(param);
+    mVariables.push_back(param);
     if (isa<ArrayType>(type) || isa<StreamType>(type)) {
         mStreamSetInputs.emplace_back(type, name);
     } else {
@@ -33,8 +35,10 @@ Var * PabloKernel::addInput(const std::string & name, Type * const type) {
 }
 
 Var * PabloKernel::addOutput(const std::string & name, Type * const type) {
-    Var * result = new (mAllocator) Var(mSymbolTable->make(name, iBuilder), type, mAllocator, false);
+    Var * result = new (mAllocator) Var(mSymbolTable->makeString(name, iBuilder), type, mAllocator, Var::ReadNone);
+    result->addUser(this);
     mOutputs.push_back(result);
+    mVariables.push_back(result);
     if (isa<ArrayType>(type) || isa<StreamType>(type)) {
         mStreamSetOutputs.emplace_back(type, name);
     } else {
@@ -44,7 +48,7 @@ Var * PabloKernel::addOutput(const std::string & name, Type * const type) {
     return result;
 }
 
-Var * PabloKernel::makeVariable(PabloAST * name, Type * const type) {
+Var * PabloKernel::makeVariable(String * name, Type * const type) {
     Var * const var = new (mAllocator) Var(name, type, mAllocator);
     mVariables.push_back(var);
     return var;
@@ -80,7 +84,7 @@ Ones * PabloKernel::getAllOnesValue(Type * type) {
 
 void PabloKernel::prepareKernel() {
     mPabloCompiler->initializeKernelData();
-    KernelBuilder::prepareKernel();
+    BlockOrientedKernel::prepareKernel();
 }
 
 void PabloKernel::generateDoBlockMethod() const {
@@ -123,11 +127,12 @@ void PabloKernel::generateFinalBlockMethod() const {
 }
 
 PabloKernel::PabloKernel(IDISA::IDISA_Builder * builder, std::string kernelName)
-: KernelBuilder(builder, std::move(kernelName), {}, {}, {}, {}, {Binding{builder->getBitBlockType(), "EOFbit"}, Binding{builder->getBitBlockType(), "EOFmask"}})
+: BlockOrientedKernel(builder, std::move(kernelName), {}, {}, {}, {}, {Binding{builder->getBitBlockType(), "EOFbit"}, Binding{builder->getBitBlockType(), "EOFmask"}})
+, PabloAST(PabloAST::ClassTypeId::Kernel, nullptr, mAllocator)
 , mPabloCompiler(new PabloCompiler(this))
 , mSymbolTable(new SymbolGenerator(mAllocator))
 , mEntryBlock(PabloBlock::Create(this)) {
-setDoBlockUpdatesProducedItemCountsAttribute(false);
+    setDoBlockUpdatesProducedItemCountsAttribute(false);
 }
 
 PabloKernel::~PabloKernel() {

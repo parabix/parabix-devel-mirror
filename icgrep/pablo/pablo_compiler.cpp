@@ -34,6 +34,14 @@ namespace pablo {
 
 using TypeId = PabloAST::ClassTypeId;
 
+inline static unsigned getAlignment(const Value * const ptr) {
+    return ptr->getType()->getPrimitiveSizeInBits() / 8;
+}
+
+inline static unsigned getPointerElementAlignment(const Value * const ptr) {
+    return ptr->getType()->getPointerElementType()->getPrimitiveSizeInBits() / 8;
+}
+
 void PabloCompiler::initializeKernelData() {
     Examine();
     mCarryManager->initializeCarryData(mKernel);
@@ -51,41 +59,37 @@ void PabloCompiler::compile(Value * const self, Function * function) {
     mCarryManager->initializeCodeGen(self, function);
       
     PabloBlock * const entryBlock = mKernel->getEntryBlock(); assert (entryBlock);
-    mMarkerMap.emplace(entryBlock->createZeroes(), iBuilder->allZeroes());
-    mMarkerMap.emplace(entryBlock->createOnes(), iBuilder->allOnes());
+    mMarker.emplace(entryBlock->createZeroes(), iBuilder->allZeroes());
+    mMarker.emplace(entryBlock->createOnes(), iBuilder->allOnes());
 
     Value * const blockNo = mKernel->getScalarField(mSelf, blockNoScalar);
 
     for (unsigned i = 0; i < mKernel->getNumOfInputs(); ++i) {
         Var * var = mKernel->getInput(i);
-        std::string name = var->getName()->to_string();
+        std::string name = var->getName().str();
         Value * input = nullptr;
         if (var->getType()->isSingleValueType()) {
             input = mKernel->getScalarFieldPtr(mSelf, name);
         } else {
             input = mKernel->getStreamSetPtr(mSelf, name, blockNo);
         }
-        mMarkerMap.emplace(var, input);
+        mMarker.emplace(var, input);
     }
 
     for (unsigned i = 0; i < mKernel->getNumOfOutputs(); ++i) {
         Var * var = mKernel->getOutput(i);
-        std::string name = var->getName()->to_string();
+        std::string name = var->getName().str();
         Value * output = nullptr;
         if (var->getType()->isSingleValueType()) {
             output = mKernel->getScalarFieldPtr(mSelf, name);
         } else {
             output = mKernel->getStreamSetPtr(mSelf, name, blockNo);
         }
-        mMarkerMap.emplace(var, output);
+        mMarker.emplace(var, output);
     }
 
     compileBlock(entryBlock);
 
-    #ifdef PRINT_TIMING_INFORMATION
-    const timestamp_t pablo_compilation_end = read_cycle_counter();
-    std::cerr << "PABLO COMPILATION TIME: " << (pablo_compilation_end - pablo_compilation_start) << std::endl;
-    #endif
 }
 
 inline void PabloCompiler::Examine() {
@@ -102,6 +106,8 @@ void PabloCompiler::Examine(const PabloBlock * const block) {
             }
         } else if (LLVM_UNLIKELY(isa<Branch>(stmt))) {
             Examine(cast<Branch>(stmt)->getBody());
+        } else if (LLVM_UNLIKELY(isa<Count>(stmt))) {
+            mAccumulator.insert(std::make_pair(stmt, iBuilder->getInt32(mKernel->addUnnamedScalar(stmt->getType()))));
         }
     }    
 }
@@ -110,15 +116,6 @@ inline void PabloCompiler::compileBlock(const PabloBlock * const block) {
     for (const Statement * statement : *block) {
         compileStatement(statement);
     }
-}
-
-static const llvm::StringRef EmptyString;
-
-inline const llvm::StringRef & getName(const PabloAST * expr) {
-    if (expr->getName()) {
-        return expr->getName()->value();
-    }
-    return EmptyString;
 }
 
 void PabloCompiler::compileIf(const If * const ifStatement) {
@@ -147,8 +144,8 @@ void PabloCompiler::compileIf(const If * const ifStatement) {
     std::vector<std::pair<const Var *, Value *>> incoming;
 
     for (const Var * var : ifStatement->getEscaped()) {
-        auto f = mMarkerMap.find(var);
-        if (LLVM_UNLIKELY(f == mMarkerMap.end())) {
+        auto f = mMarker.find(var);
+        if (LLVM_UNLIKELY(f == mMarker.end())) {
             std::string tmp;
             raw_string_ostream out(tmp);
             var->print(out);
@@ -188,28 +185,42 @@ void PabloCompiler::compileIf(const If * const ifStatement) {
     mCarryManager->leaveIfScope(ifEntryBlock, ifExitBlock);
 
     for (const auto i : incoming) {
-        const Var * var; Value * value;
-        std::tie(var, value) = i;
+        const Var * var; Value * incoming;
+        std::tie(var, incoming) = i;
 
-        auto f = mMarkerMap.find(var);
-        if (LLVM_UNLIKELY(f == mMarkerMap.end() || f->second == value)) {
+        auto f = mMarker.find(var);
+        if (LLVM_UNLIKELY(f == mMarker.end())) {
             std::string tmp;
             raw_string_ostream out(tmp);
+            out << "PHINode creation error: ";
             var->print(out);
-            out << " was not assigned a value.";
+            out << " was not assigned an outgoing value.";
             llvm::report_fatal_error(out.str());
         }
 
-        Value * const next = f->second;
+        Value * const outgoing = f->second;
+        if (LLVM_UNLIKELY(incoming == outgoing)) {
+            continue;
+        }
 
-        assert (value->getType() == next->getType());
+        if (LLVM_UNLIKELY(incoming->getType() != outgoing->getType())) {
+            std::string tmp;
+            raw_string_ostream out(tmp);
+            out << "PHINode creation error: incoming type of ";
+            var->print(out);
+            out << " (";
+            incoming->getType()->print(out);
+            out << ") differs from the outgoing type (";
+            outgoing->getType()->print(out);
+            out << ") within ";
+            ifStatement->print(out);
+            llvm::report_fatal_error(out.str());
+        }
 
-        PHINode * phi = iBuilder->CreatePHI(value->getType(), 2, getName(var));
-        phi->addIncoming(value, ifEntryBlock);
-        phi->addIncoming(next, ifExitBlock);
+        PHINode * phi = iBuilder->CreatePHI(incoming->getType(), 2, var->getName());
+        phi->addIncoming(incoming, ifEntryBlock);
+        phi->addIncoming(outgoing, ifExitBlock);
         f->second = phi;
-
-        assert (mMarkerMap[var] == phi);
     }    
 }
 
@@ -251,20 +262,21 @@ void PabloCompiler::compileWhile(const While * const whileStatement) {
 
     // for any Next nodes in the loop body, initialize to (a) pre-loop value.
     for (const auto var : escaped) {
-        auto f = mMarkerMap.find(var);
-        if (LLVM_UNLIKELY(f == mMarkerMap.end())) {
+        auto f = mMarker.find(var);
+        if (LLVM_UNLIKELY(f == mMarker.end())) {
             std::string tmp;
             raw_string_ostream out(tmp);
+            out << "PHINode creation error: ";
             var->print(out);
             out << " is uninitialized prior to entering ";
             whileStatement->print(out);
             llvm::report_fatal_error(out.str());
         }
         Value * entryValue = f->second;
-        PHINode * phi = iBuilder->CreatePHI(entryValue->getType(), 2, getName(var));
+        PHINode * phi = iBuilder->CreatePHI(entryValue->getType(), 2, var->getName());
         phi->addIncoming(entryValue, whileEntryBlock);
         f->second = phi;
-        assert(mMarkerMap[var] == phi);
+        assert(mMarker[var] == phi);
         variants.emplace_back(var, phi);
     }
 #ifdef ENABLE_BOUNDED_WHILE
@@ -301,20 +313,36 @@ void PabloCompiler::compileWhile(const While * const whileStatement) {
 
     // and for any variant nodes in the loop body
     for (const auto variant : variants) {
-        const Var * var; PHINode * phi;
-        std::tie(var, phi) = variant;
-        const auto f = mMarkerMap.find(var);
-        if (LLVM_UNLIKELY(f == mMarkerMap.end() || f->second == phi)) {
+        const Var * var; PHINode * incomingPhi;
+        std::tie(var, incomingPhi) = variant;
+        const auto f = mMarker.find(var);
+        if (LLVM_UNLIKELY(f == mMarker.end())) {
             std::string tmp;
             raw_string_ostream out(tmp);
+            out << "PHINode creation error: ";
             var->print(out);
-            out << " was not assigned a value.";
+            out << " is no longer assigned a value.";
             llvm::report_fatal_error(out.str());
         }
-        Value * exitValue = f->second;
-        assert (phi->getType() == exitValue->getType());
-        phi->addIncoming(exitValue, whileExitBlock);
-        f->second = phi;
+
+        Value * const outgoingValue = f->second;
+
+        if (LLVM_UNLIKELY(incomingPhi->getType() != outgoingValue->getType())) {
+            std::string tmp;
+            raw_string_ostream out(tmp);
+            out << "PHINode creation error: incoming type of ";
+            var->print(out);
+            out << " (";
+            incomingPhi->getType()->print(out);
+            out << ") differs from the outgoing type (";
+            outgoingValue->getType()->print(out);
+            out << ") within ";
+            whileStatement->print(out);
+            llvm::report_fatal_error(out.str());
+        }
+
+        incomingPhi->addIncoming(outgoingValue, whileExitBlock);
+        f->second = incomingPhi;
     }
 
     iBuilder->CreateCondBr(condition, whileBodyBlock, whileEndBlock);
@@ -350,8 +378,8 @@ void PabloCompiler::compileStatement(const Statement * stmt) {
             }
 
             if (LLVM_UNLIKELY(storeInstRequired || isa<Extract>(expr))) {
-                const auto f = mMarkerMap.find(expr);
-                if (LLVM_UNLIKELY(f == mMarkerMap.end())) {
+                const auto f = mMarker.find(expr);
+                if (LLVM_UNLIKELY(f == mMarker.end())) {
                     std::string tmp;
                     raw_string_ostream out(tmp);
                     out << "PabloCompiler: use-before-definition error: ";
@@ -361,30 +389,14 @@ void PabloCompiler::compileStatement(const Statement * stmt) {
                     llvm::report_fatal_error(out.str());
                 }
                 Value * const ptr = f->second;
-
-                assert (&(value->getContext()) == &(ptr->getContext()));
-
-                if (isa<Count>(cast<Assign>(stmt)->getValue())) {
-                    Value * count = iBuilder->CreateLoad(ptr);
-                    value = iBuilder->CreateTruncOrBitCast(value, count->getType());
-                    value = iBuilder->CreateAdd(value, count);
-                }
-
-                const Type * const type = value->getType();
-                if (isa<VectorType>(type) || isa<IntegerType>(type)) {
-                    const auto bitWidth = isa<VectorType>(type)
-                            ? cast<VectorType>(type)->getBitWidth()
-                            : cast<IntegerType>(type)->getBitWidth();
-                    iBuilder->CreateAlignedStore(value, ptr, bitWidth / 8);
-                } else {
-                    iBuilder->CreateStore(value, ptr);
-                }
+                iBuilder->CreateAlignedStore(value, ptr, getAlignment(value));
+                value = ptr;
             }
 
         } else if (const Extract * extract = dyn_cast<Extract>(stmt)) {
             Value * array = compileExpression(extract->getArray(), false);
             Value * index = compileExpression(extract->getIndex());
-            value = iBuilder->CreateGEP(array, {ConstantInt::getNullValue(index->getType()), index}, getName(stmt));
+            value = iBuilder->CreateGEP(array, {ConstantInt::getNullValue(index->getType()), index}, stmt->getName());
         } else if (isa<And>(stmt)) {
             value = compileExpression(stmt->getOperand(0));
             for (unsigned i = 1; i < stmt->getNumOperands(); ++i) {
@@ -432,6 +444,12 @@ void PabloCompiler::compileStatement(const Statement * stmt) {
         } else if (const Count * c = dyn_cast<Count>(stmt)) {
             Value * const to_count = compileExpression(c->getExpr());
             const unsigned counterSize = iBuilder->getSizeTy()->getBitWidth();
+            const auto f = mAccumulator.find(c);
+            if (LLVM_UNLIKELY(f == mAccumulator.end())) {
+                llvm::report_fatal_error("Unknown accumulator: " + c->getName().str());
+            }
+            Value * ptr = mKernel->getScalarFieldPtr(mSelf, f->second);
+            Value * count = iBuilder->CreateAlignedLoad(ptr, getPointerElementAlignment(ptr));
             Value * const partial = iBuilder->simd_popcount(counterSize, to_count);
             if (LLVM_UNLIKELY(counterSize <= 1)) {
                 value = partial;
@@ -443,6 +461,9 @@ void PabloCompiler::compileStatement(const Statement * stmt) {
                     value = iBuilder->CreateAdd(value, temp);
                 }
             }
+            value = iBuilder->CreateAdd(value, count);
+            iBuilder->CreateStore(value, ptr);
+
         } else if (const Lookahead * l = dyn_cast<Lookahead>(stmt)) {
             PabloAST * const var = l->getExpr();
             if (LLVM_UNLIKELY(!isa<Var>(var))) {
@@ -459,7 +480,7 @@ void PabloCompiler::compileStatement(const Statement * stmt) {
             }
             const unsigned bit_shift = (l->getAmount() % iBuilder->getBitBlockWidth());
             const unsigned block_shift = (l->getAmount() / iBuilder->getBitBlockWidth());
-            std::string inputName = var->getName()->to_string();;
+            std::string inputName = cast<Var>(var)->getName().str();
             Value * blockNo = mKernel->getScalarField(mSelf, blockNoScalar);
             Value * lookAhead_blockPtr  = mKernel->getStreamSetPtr(mSelf, inputName, iBuilder->CreateAdd(blockNo, iBuilder->getSize(block_shift)));
             Value * lookAhead_inputPtr = iBuilder->CreateGEP(lookAhead_blockPtr, {iBuilder->getInt32(0), iBuilder->getInt32(index)});
@@ -490,13 +511,13 @@ void PabloCompiler::compileStatement(const Statement * stmt) {
             throw std::runtime_error(out.str());
         }
 
-        mMarkerMap[expr] = value;
+        mMarker[expr] = value;
         if (DebugOptionIsSet(DumpTrace)) {
-            assert (expr->getName());
+            const String & name = isa<Var>(expr) ? cast<Var>(expr)->getName() : cast<Statement>(expr)->getName();
             if (value->getType()->isVectorTy()) {
-                iBuilder->CallPrintRegister(expr->getName()->to_string(), value);
+                iBuilder->CallPrintRegister(name.str(), value);
             } else if (value->getType()->isIntegerTy()) {
-                iBuilder->CallPrintInt(expr->getName()->to_string(), value);
+                iBuilder->CallPrintInt(name.str(), value);
             }
         }
     }
@@ -513,7 +534,18 @@ Value * PabloCompiler::compileExpression(const PabloAST * expr, const bool ensur
         const Operator * op = cast<Operator>(expr);
         Value * lh = compileExpression(op->getLH());
         Value * rh = compileExpression(op->getRH());
-        assert (lh->getType() == rh->getType());
+        if (LLVM_UNLIKELY(lh->getType() != rh->getType())) {
+            std::string tmp;
+            raw_string_ostream out(tmp);
+            out << "Operator creation error: left hand type of ";
+            expr->print(out);
+            out << " (";
+            lh->getType()->print(out);
+            out << ") differs from right hand type (";
+            rh->getType()->print(out);
+            out << ")";
+            llvm::report_fatal_error(out.str());
+        }
         switch (op->getClassTypeId()) {
             case TypeId::Add:
                 return iBuilder->CreateAdd(lh, rh);
@@ -531,8 +563,7 @@ Value * PabloCompiler::compileExpression(const PabloAST * expr, const bool ensur
                 return iBuilder->CreateICmpSGT(lh, rh);
             case TypeId::NotEquals:
                 return iBuilder->CreateICmpNE(lh, rh);
-            default:
-                break;
+            default: break;
         }
         std::string tmp;
         raw_string_ostream out(tmp);
@@ -540,25 +571,26 @@ Value * PabloCompiler::compileExpression(const PabloAST * expr, const bool ensur
         out << " is not a valid Operator";
         llvm::report_fatal_error(out.str());
     }
-    const auto f = mMarkerMap.find(expr);
-    if (LLVM_UNLIKELY(f == mMarkerMap.end())) {
+    const auto f = mMarker.find(expr);
+    if (LLVM_UNLIKELY(f == mMarker.end())) {
         std::string tmp;
         llvm::raw_string_ostream out(tmp);
+        out << "Compilation error: ";
         expr->print(out);
         out << " was used before definition!";
-        throw std::runtime_error(out.str());
+        llvm::report_fatal_error(out.str());
     }
     Value * value = f->second;
     if (LLVM_UNLIKELY(isa<GetElementPtrInst>(value) && ensureLoaded)) {
-        value = iBuilder->CreateBlockAlignedLoad(value);
+        value = iBuilder->CreateAlignedLoad(value, getPointerElementAlignment(value));
     }
     return value;
 }
 
 PabloCompiler::PabloCompiler(PabloKernel * kernel)
 : iBuilder(kernel->getBuilder())
-, mCarryManager(new CarryManager(iBuilder))
 , mKernel(kernel)
+, mCarryManager(new CarryManager(iBuilder))
 , mFunction(nullptr) {
 
 }

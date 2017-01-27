@@ -116,7 +116,7 @@ void editdGPUKernel::generateDoBlockMethod() const {
 }
 
 editdGPUKernel::editdGPUKernel(IDISA::IDISA_Builder * b, unsigned dist, unsigned pattLen) :
-KernelBuilder(b, "editd_gpu",
+BlockOrientedKernel(b, "editd_gpu",
               {Binding{b->getStreamSetTy(4), "CCStream"}},
               {Binding{b->getStreamSetTy(dist + 1), "ResultStream"}},
               {Binding{PointerType::get(b->getInt8Ty(), 1), "pattStream"},

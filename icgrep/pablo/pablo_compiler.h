@@ -26,7 +26,8 @@ class PabloCompiler {
     friend class CarryManager;
 
     using IntSet = boost::container::flat_set<unsigned>;
-    using MarkerMap = std::unordered_map<const PabloAST *, llvm::Value *>;
+
+    using TranslationMap = std::unordered_map<const PabloAST *, llvm::Value *>;
 
 public:
     PabloCompiler(PabloKernel * kernel);
@@ -52,13 +53,14 @@ private:
 
 private:
 
-    IDISA::IDISA_Builder *  iBuilder;
-    CarryManager *          mCarryManager;
-    PabloKernel *           mKernel;
-    llvm::Value *           mSelf;
-    llvm::Function *        mFunction;
-    MarkerMap               mMarkerMap;
-    IntSet                  mInputStreamOffset;
+    IDISA::IDISA_Builder * const    iBuilder;
+    PabloKernel * const             mKernel;
+    CarryManager * const            mCarryManager;
+    llvm::Value *                   mSelf;
+    llvm::Function *                mFunction;
+    TranslationMap                  mMarker;
+    TranslationMap                  mAccumulator;
+    IntSet                          mInputStreamOffset;
 
 };
 

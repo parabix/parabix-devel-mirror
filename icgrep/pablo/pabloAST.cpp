@@ -231,6 +231,9 @@ void Statement::insertAfter(Statement * const statement) {
 Statement * Statement::removeFromParent() {
     Statement * next = mNext;
     if (LLVM_LIKELY(mParent != nullptr)) {
+
+
+
         if (LLVM_UNLIKELY(mParent->mFirst == this)) {
             mParent->mFirst = mNext;
         }
@@ -299,6 +302,16 @@ Statement * Statement::replaceWith(PabloAST * const expr, const bool rename, con
     }
     replaceAllUsesWith(expr);
     return eraseFromParent(recursively);
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief setName
+ ** ------------------------------------------------------------------------------------------------------------- */
+void Statement::setName(const String * const name) noexcept {
+    if (LLVM_UNLIKELY(name == nullptr)) {
+        llvm::report_fatal_error("Statement name cannot be null!");
+    }
+    mName = name;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

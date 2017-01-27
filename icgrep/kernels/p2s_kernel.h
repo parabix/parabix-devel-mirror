@@ -11,7 +11,7 @@ namespace IDISA { class IDISA_Builder; }
 namespace kernel {
 
    
-class P2SKernel : public KernelBuilder {
+class P2SKernel : public BlockOrientedKernel {
 public:
     P2SKernel(IDISA::IDISA_Builder * iBuilder);
     
@@ -20,7 +20,7 @@ private:
     
 };
 
-class P2SKernelWithCompressedOutput : public KernelBuilder {
+class P2SKernelWithCompressedOutput : public BlockOrientedKernel {
 public:
     P2SKernelWithCompressedOutput(IDISA::IDISA_Builder * iBuilder);    
 private:
@@ -28,7 +28,7 @@ private:
 };
     
 
-class P2S16Kernel : public KernelBuilder {
+class P2S16Kernel : public BlockOrientedKernel {
 public:
     P2S16Kernel(IDISA::IDISA_Builder * iBuilder);    
 private:
@@ -37,7 +37,7 @@ private:
 };
 
     
-class P2S16KernelWithCompressedOutput : public KernelBuilder {
+class P2S16KernelWithCompressedOutput : public BlockOrientedKernel {
 public:
     P2S16KernelWithCompressedOutput(IDISA::IDISA_Builder * iBuilder);
         

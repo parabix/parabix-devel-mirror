@@ -163,11 +163,11 @@ void CBuilder::CreateFree(Value * const ptr) {
     ci->setCallingConv(free->getCallingConv());
 }
 
-void CBuilder::CreateAlignedFree(Value * const ptr, const bool ptrMayBeNull) {
-    // WARNING: this will cause a segfault if the value of the ptr at runtime is null but ptrMayBeNull was not set
+void CBuilder::CreateAlignedFree(Value * const ptr, const bool testForNullAddress) {
+    // WARNING: this will segfault if the value of the ptr at runtime is null but testForNullAddress was not set
     PointerType * type = cast<PointerType>(ptr->getType());
     BasicBlock * exit = nullptr;
-    if (ptrMayBeNull) {
+    if (testForNullAddress) {
         LLVMContext & C = getContext();
         BasicBlock * bb = GetInsertBlock();
         Function * f = bb->getParent();
@@ -185,7 +185,7 @@ void CBuilder::CreateAlignedFree(Value * const ptr, const bool ptrMayBeNull) {
     prefix = CreateIntToPtr(prefix, intTy->getPointerTo());
     prefix = CreateIntToPtr(CreateAlignedLoad(prefix, byteWidth), type);
     CreateFree(prefix);
-    if (ptrMayBeNull) {
+    if (testForNullAddress) {
         CreateBr(exit);
         SetInsertPoint(exit);
     }
@@ -241,14 +241,14 @@ PointerType * CBuilder::getVoidPtrTy() const {
 }
 
 LoadInst * CBuilder::CreateAtomicLoadAcquire(Value * ptr) {
-    unsigned alignment = dyn_cast<PointerType>(ptr->getType())->getElementType()->getPrimitiveSizeInBits()/8;
+    unsigned alignment = cast<PointerType>(ptr->getType())->getElementType()->getPrimitiveSizeInBits() / 8;
     LoadInst * inst = CreateAlignedLoad(ptr, alignment);
     inst->setOrdering(AtomicOrdering::Acquire);
     return inst;
     
 }
 StoreInst * CBuilder::CreateAtomicStoreRelease(Value * val, Value * ptr) {
-    unsigned alignment = dyn_cast<PointerType>(ptr->getType())->getElementType()->getPrimitiveSizeInBits()/8;
+    unsigned alignment = cast<PointerType>(ptr->getType())->getElementType()->getPrimitiveSizeInBits() / 8;
     StoreInst * inst = CreateAlignedStore(val, ptr, alignment);
     inst->setOrdering(AtomicOrdering::Release);
     return inst;

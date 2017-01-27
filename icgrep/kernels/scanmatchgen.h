@@ -13,10 +13,10 @@ namespace llvm { class Module; }  // lines 14-14
 
 namespace kernel {
     
-class ScanMatchKernel : public KernelBuilder {
+class ScanMatchKernel : public BlockOrientedKernel {
 public:
     ScanMatchKernel(IDISA::IDISA_Builder * iBuilder, GrepType grepType) :
-    KernelBuilder(iBuilder, "scanMatch",
+    BlockOrientedKernel(iBuilder, "scanMatch",
                   {Binding{iBuilder->getStreamSetTy(2, 1), "matchResults"}},
                     {}, 
                     {Binding{iBuilder->getInt8PtrTy(), "FileBuf"}, Binding{iBuilder->getSizeTy(), "FileSize"}, Binding{iBuilder->getSizeTy(), "FileIdx"}}, 

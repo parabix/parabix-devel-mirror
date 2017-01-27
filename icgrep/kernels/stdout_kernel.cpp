@@ -47,7 +47,7 @@ void StdOutKernel::generateDoSegmentMethod() const {
 }
 
 StdOutKernel::StdOutKernel(IDISA::IDISA_Builder * iBuilder, unsigned codeUnitWidth)
-: KernelBuilder(iBuilder, "stdout", {Binding{iBuilder->getStreamSetTy(1, codeUnitWidth), "codeUnitBuffer"}}, {}, {}, {}, {})
+: SegmentOrientedKernel(iBuilder, "stdout", {Binding{iBuilder->getStreamSetTy(1, codeUnitWidth), "codeUnitBuffer"}}, {}, {}, {}, {})
 , mCodeUnitWidth(codeUnitWidth) {
     setNoTerminateAttribute(true);
 }
@@ -122,7 +122,7 @@ void FileSink::generateDoSegmentMethod() const {
 }
 
 FileSink::FileSink(IDISA::IDISA_Builder * iBuilder, unsigned codeUnitWidth)
-: KernelBuilder(iBuilder, "filesink", {Binding{iBuilder->getStreamSetTy(1, codeUnitWidth), "codeUnitBuffer"}}, {}, 
+: SegmentOrientedKernel(iBuilder, "filesink", {Binding{iBuilder->getStreamSetTy(1, codeUnitWidth), "codeUnitBuffer"}}, {},
                 {Binding{iBuilder->getInt8PtrTy(), "fileName"}}, {}, {Binding{iBuilder->getFILEptrTy(), "IOstreamPtr"}})
 , mCodeUnitWidth(codeUnitWidth) {
 }

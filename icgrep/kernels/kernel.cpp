@@ -24,25 +24,24 @@ using namespace llvm;
 using namespace kernel;
 using namespace parabix;
 
-KernelBuilder::KernelBuilder(IDISA::IDISA_Builder * builder,
-                             std::string && kernelName,
-                             std::vector<Binding> stream_inputs,
-                             std::vector<Binding> stream_outputs,
-                             std::vector<Binding> scalar_parameters,
-                             std::vector<Binding> scalar_outputs,
-                             std::vector<Binding> internal_scalars)
-: KernelInterface(builder, std::move(kernelName), stream_inputs, stream_outputs, scalar_parameters, scalar_outputs, internal_scalars)
-, mNoTerminateAttribute(false)
-, mDoBlockUpdatesProducedItemCountsAttribute(false) {
-
-}
-
-unsigned KernelBuilder::addScalar(Type * type, const std::string & name) {
+unsigned KernelBuilder::addScalar(Type * const type, const std::string & name) {
     if (LLVM_UNLIKELY(mKernelStateType != nullptr)) {
         llvm::report_fatal_error("Cannot add kernel field " + name + " after kernel state finalized");
     }
+    if (LLVM_UNLIKELY(mKernelMap.count(name))) {
+        llvm::report_fatal_error("Kernel already contains field " + name);
+    }
     const auto index = mKernelFields.size();
     mKernelMap.emplace(name, index);
+    mKernelFields.push_back(type);
+    return index;
+}
+
+unsigned KernelBuilder::addUnnamedScalar(Type * const type) {
+    if (LLVM_UNLIKELY(mKernelStateType != nullptr)) {
+        llvm::report_fatal_error("Cannot add unnamed kernel field after kernel state finalized");
+    }
+    const auto index = mKernelFields.size();
     mKernelFields.push_back(type);
     return index;
 }
@@ -150,7 +149,7 @@ void KernelBuilder::generateInitMethod() const {
 }
 
 //  The default finalBlock method simply dispatches to the doBlock routine.
-void KernelBuilder::generateFinalBlockMethod() const {
+void BlockOrientedKernel::generateFinalBlockMethod() const {
     auto savePoint = iBuilder->saveIP();
     Module * m = iBuilder->getModule();
     Function * doBlockFunction = m->getFunction(mKernelName + doBlock_suffix);
@@ -168,25 +167,16 @@ void KernelBuilder::generateFinalBlockMethod() const {
 
 // Note: this may be overridden to incorporate doBlock logic directly into
 // the doSegment function.
-void KernelBuilder::generateDoBlockLogic(Value * self, Value * /* blockNo */) const {
+void BlockOrientedKernel::generateDoBlockLogic(Value * self, Value * /* blockNo */) const {
     Function * doBlockFunction = iBuilder->getModule()->getFunction(mKernelName + doBlock_suffix);
     iBuilder->CreateCall(doBlockFunction, self);
 }
 
-// Note: this may be overridden to incorporate doBlock logic directly into
-// the doSegment function.
-void KernelBuilder::generateDoBlockMethod() const {
-    llvm::report_fatal_error(mKernelName + " DoBlock method called but not implemented");
-}
-
-
 //  The default doSegment method dispatches to the doBlock routine for
 //  each block of the given number of blocksToDo, and then updates counts.
-void KernelBuilder::generateDoSegmentMethod() const {
+void BlockOrientedKernel::generateDoSegmentMethod() const {
     generateDoBlockMethod();    // must be implemented by the KernelBuilder subtype
     generateFinalBlockMethod(); // possibly overridden by the KernelBuilder subtype
-
-  
     auto savePoint = iBuilder->saveIP();
     Module * m = iBuilder->getModule();
     Function * doSegmentFunction = m->getFunction(mKernelName + doSegment_suffix);
@@ -200,11 +190,11 @@ void KernelBuilder::generateDoSegmentMethod() const {
     Type * const size_ty = iBuilder->getSizeTy();
     Constant * stride = ConstantInt::get(size_ty, iBuilder->getStride());
     Value * strideBlocks = ConstantInt::get(size_ty, iBuilder->getStride() / iBuilder->getBitBlockWidth());
-    
+
     Function::arg_iterator args = doSegmentFunction->arg_begin();
     Value * self = &*(args++);
     Value * doFinal = &*(args++);
-    
+
     std::vector<Value *> producerPos;
     producerPos.push_back(&*(args++));
     Value * availablePos = producerPos[0];
@@ -225,13 +215,13 @@ void KernelBuilder::generateDoSegmentMethod() const {
     iBuilder->CreateCondBr(notDone, strideLoopBody, stridesDone);
 
     iBuilder->SetInsertPoint(strideLoopBody);
-    Value * blockNo = getScalarField(self, blockNoScalar);   
+    Value * blockNo = getScalarField(self, blockNoScalar);
 
     generateDoBlockLogic(self, blockNo);
     setBlockNo(self, iBuilder->CreateAdd(blockNo, strideBlocks));
     stridesRemaining->addIncoming(iBuilder->CreateSub(stridesRemaining, ConstantInt::get(size_ty, 1)), strideLoopBody);
     iBuilder->CreateBr(strideLoopCond);
-    
+
     iBuilder->SetInsertPoint(stridesDone);
     // Update counts for the full strides processed.
     Value * segmentItemsProcessed = iBuilder->CreateMul(stridesToDo, stride);
@@ -242,19 +232,19 @@ void KernelBuilder::generateDoSegmentMethod() const {
     if (!mDoBlockUpdatesProducedItemCountsAttribute) {
         for (unsigned i = 0; i < mStreamSetOutputs.size(); i++) {
             Value * preProduced = getProducedItemCount(self, mStreamSetOutputs[i].name);
-            
+
             setProducedItemCount(self, mStreamSetOutputs[i].name, iBuilder->CreateAdd(preProduced, segmentItemsProcessed));
             //iBuilder->CallPrintInt(mKernelName + " produced ", iBuilder->CreateAdd(preProduced, segmentItemsProcessed));
         }
     }
-    
+
     // Now conditionally perform the final block processing depending on the doFinal parameter.
     iBuilder->CreateCondBr(doFinal, doFinalBlock, segmentDone);
     iBuilder->SetInsertPoint(doFinalBlock);
 
     Value * remainingItems = iBuilder->CreateSub(producerPos[0], getProcessedItemCount(self, mStreamSetInputs[0].name));
     //iBuilder->CallPrintInt(mKernelName + " remainingItems", remainingItems);
-    
+
     createFinalBlockCall(self, remainingItems);
     for (unsigned i = 0; i < mStreamSetInputs.size(); i++) {
         Value * preProcessed = getProcessedItemCount(self, mStreamSetInputs[i].name);
@@ -268,7 +258,7 @@ void KernelBuilder::generateDoSegmentMethod() const {
     }
     setTerminationSignal(self);
     iBuilder->CreateBr(segmentDone);
-    
+
     iBuilder->SetInsertPoint(segmentDone);
 
     iBuilder->CreateRetVoid();
@@ -289,15 +279,27 @@ unsigned KernelBuilder::getScalarCount() const {
 }
 
 Value * KernelBuilder::getScalarFieldPtr(Value * self, const std::string & fieldName) const {
-    return iBuilder->CreateGEP(self, {iBuilder->getInt32(0), getScalarIndex(fieldName)});
+    return getScalarFieldPtr(self, getScalarIndex(fieldName));
+}
+
+Value * KernelBuilder::getScalarFieldPtr(Value * self, Value * index) const {
+    return iBuilder->CreateGEP(self, {iBuilder->getInt32(0), index});
 }
 
 Value * KernelBuilder::getScalarField(Value * self, const std::string & fieldName) const {
     return iBuilder->CreateLoad(getScalarFieldPtr(self, fieldName));
 }
 
-void KernelBuilder::setScalarField(Value * self, const std::string & fieldName, Value * newFieldVal) const {
-    iBuilder->CreateStore(newFieldVal, getScalarFieldPtr(self, fieldName));
+Value * KernelBuilder::getScalarField(Value * self, Value * index) const {
+    return iBuilder->CreateLoad(getScalarFieldPtr(self, index));
+}
+
+void KernelBuilder::setScalarField(Value * self, const std::string & fieldName, Value * value) const {
+    iBuilder->CreateStore(value, getScalarFieldPtr(self, fieldName));
+}
+
+void KernelBuilder::setScalarField(Value * self, Value * index, Value * value) const {
+    iBuilder->CreateStore(value, getScalarFieldPtr(self, index));
 }
 
 LoadInst * KernelBuilder::acquireLogicalSegmentNo(Value * self) const {
@@ -322,19 +324,18 @@ void KernelBuilder::releaseLogicalSegmentNo(Value * self, Value * newCount) cons
     iBuilder->CreateAtomicStoreRelease(newCount, ptr);
 }
 
-void KernelBuilder::setProcessedItemCount(Value * self, const std::string & ssName, Value * newCount) const {
-    Value * ptr = iBuilder->CreateGEP(self, {iBuilder->getInt32(0), getScalarIndex(ssName + processedItemCountSuffix)});
-    iBuilder->CreateStore(newCount, ptr);
+void KernelBuilder::setProcessedItemCount(Value * self, const std::string & name, Value * value) const {
+    Value * ptr = iBuilder->CreateGEP(self, {iBuilder->getInt32(0), getScalarIndex(name + processedItemCountSuffix)});
+    iBuilder->CreateStore(value, ptr);
 }
 
-void KernelBuilder::setProducedItemCount(Value * self, const std::string & ssName, Value * newCount) const {
-    Value * ptr = iBuilder->CreateGEP(self, {iBuilder->getInt32(0), getScalarIndex(ssName + producedItemCountSuffix)});
-    iBuilder->CreateStore(newCount, ptr);
+void KernelBuilder::setProducedItemCount(Value * self, const std::string & name, Value * value) const {
+    Value * ptr = iBuilder->CreateGEP(self, {iBuilder->getInt32(0), getScalarIndex(name + producedItemCountSuffix)});
+    iBuilder->CreateStore(value, ptr);
 }
 
 void KernelBuilder::setTerminationSignal(Value * self) const {
     Value * ptr = iBuilder->CreateGEP(self, {iBuilder->getInt32(0), getScalarIndex(terminationSignal)});
-    //iBuilder->CallPrintInt(mKernelName + " setTermination", getScalarIndex(terminationSignal));
     iBuilder->CreateStore(ConstantInt::get(iBuilder->getInt1Ty(), 1), ptr);
 }
 
@@ -349,18 +350,19 @@ void KernelBuilder::setBlockNo(Value * self, Value * value) const {
 }
 
 
-Value * KernelBuilder::getParameter(Function * f, const std::string & paramName) const {
-    for (Function::arg_iterator argIter = f->arg_begin(), end = f->arg_end(); argIter != end; argIter++) {
-        Value * arg = &*argIter;
-        if (arg->getName() == paramName) return arg;
+Argument * KernelBuilder::getParameter(Function * const f, const std::string & name) const {
+    for (auto & arg : f->getArgumentList()) {
+        if (arg.getName().equals(name)) {
+            return &arg;
+        }
     }
-    llvm::report_fatal_error("Method does not have parameter: " + paramName);
+    llvm::report_fatal_error("Method does not have parameter: " + name);
 }
 
 unsigned KernelBuilder::getStreamSetIndex(const std::string & name) const {
     const auto f = mStreamSetNameMap.find(name);
     if (LLVM_UNLIKELY(f == mStreamSetNameMap.end())) {
-        llvm::report_fatal_error("Kernel does not contain stream set: " + name);
+        llvm::report_fatal_error("Kernel " + getName() + " does not contain stream set: " + name);
     }
     return f->second;
 }
@@ -423,5 +425,41 @@ void KernelBuilder::createInstance() {
     iBuilder->CreateCall(initMethod, init_args);
 }
 
+KernelBuilder::KernelBuilder(IDISA::IDISA_Builder * builder,
+                             std::string && kernelName,
+                             std::vector<Binding> && stream_inputs,
+                             std::vector<Binding> && stream_outputs,
+                             std::vector<Binding> && scalar_parameters,
+                             std::vector<Binding> && scalar_outputs,
+                             std::vector<Binding> && internal_scalars)
+: KernelInterface(builder, std::move(kernelName), std::move(stream_inputs), std::move(stream_outputs), std::move(scalar_parameters), std::move(scalar_outputs), std::move(internal_scalars))
+, mNoTerminateAttribute(false)
+, mDoBlockUpdatesProducedItemCountsAttribute(false) {
+
+}
+
 KernelBuilder::~KernelBuilder() {
+
+}
+
+BlockOrientedKernel::BlockOrientedKernel(IDISA::IDISA_Builder * builder,
+                                         std::string && kernelName,
+                                         std::vector<Binding> && stream_inputs,
+                                         std::vector<Binding> && stream_outputs,
+                                         std::vector<Binding> && scalar_parameters,
+                                         std::vector<Binding> && scalar_outputs,
+                                         std::vector<Binding> && internal_scalars)
+: KernelBuilder(builder, std::move(kernelName), std::move(stream_inputs), std::move(stream_outputs), std::move(scalar_parameters), std::move(scalar_outputs), std::move(internal_scalars)) {
+
+}
+
+SegmentOrientedKernel::SegmentOrientedKernel(IDISA::IDISA_Builder * builder,
+                                             std::string && kernelName,
+                                             std::vector<Binding> && stream_inputs,
+                                             std::vector<Binding> && stream_outputs,
+                                             std::vector<Binding> && scalar_parameters,
+                                             std::vector<Binding> && scalar_outputs,
+                                             std::vector<Binding> && internal_scalars)
+: KernelBuilder(builder, std::move(kernelName), std::move(stream_inputs), std::move(stream_outputs), std::move(scalar_parameters), std::move(scalar_outputs), std::move(internal_scalars)) {
+
 }

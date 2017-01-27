@@ -44,7 +44,9 @@ public:
     void createInstance() override;
 
     llvm::Value * getBlockNo(llvm::Value * self) const;
+
     virtual llvm::Value * getProcessedItemCount(llvm::Value * self, const std::string & ssName) const override;
+
     virtual llvm::Value * getProducedItemCount(llvm::Value * self, const std::string & ssName) const override;
     
     bool hasNoTerminateAttribute() { return mNoTerminateAttribute;}
@@ -89,11 +91,11 @@ protected:
     // Constructor
     KernelBuilder(IDISA::IDISA_Builder * builder,
                     std::string && kernelName,
-                    std::vector<Binding> stream_inputs,
-                    std::vector<Binding> stream_outputs,
-                    std::vector<Binding> scalar_parameters,
-                    std::vector<Binding> scalar_outputs,
-                    std::vector<Binding> internal_scalars);
+                    std::vector<Binding> && stream_inputs,
+                    std::vector<Binding> && stream_outputs,
+                    std::vector<Binding> && scalar_parameters,
+                    std::vector<Binding> && scalar_outputs,
+                    std::vector<Binding> && internal_scalars);
 
     //
     // Kernel builder subtypes define their logic of kernel construction
@@ -106,33 +108,25 @@ protected:
     // all scalar fields have been added.   If there are no fields to
     // be added, the default method for preparing kernel state may be used.
     
-    void setNoTerminateAttribute(bool noTerminate = true) {mNoTerminateAttribute = noTerminate;}
-    void setDoBlockUpdatesProducedItemCountsAttribute(bool doesUpdate = true) {mDoBlockUpdatesProducedItemCountsAttribute = doesUpdate;}
+    void setNoTerminateAttribute(const bool noTerminate = true) {
+        mNoTerminateAttribute = noTerminate;
+    }
+
+    void setDoBlockUpdatesProducedItemCountsAttribute(const bool doesUpdate = true) {
+        mDoBlockUpdatesProducedItemCountsAttribute = doesUpdate;
+    }
     
     virtual void prepareKernel();
-    
-    // Each kernel builder subtype must provide its own logic for generating
-    // doBlock calls.
-    virtual void generateDoBlockMethod() const;
-
-    virtual void generateDoBlockLogic(llvm::Value * self, llvm::Value * blockNo) const;
-
-    // Each kernel builder subtypre must also specify the logic for processing the
-    // final block of stream data, if there is any special processing required
-    // beyond simply calling the doBlock function.   In the case that the final block
-    // processing may be trivially implemented by dispatching to the doBlock method
-    // without additional preparation, the default generateFinalBlockMethod need
-    // not be overridden.
-    
-    virtual void generateFinalBlockMethod() const;
-    
+       
     virtual void generateInitMethod() const;
     
-    virtual void generateDoSegmentMethod() const;
+    virtual void generateDoSegmentMethod() const = 0;
     
     // Add an additional scalar field to the KernelState struct.
     // Must occur before any call to addKernelDeclarations or createKernelModule.
     unsigned addScalar(llvm::Type * type, const std::string & name);
+
+    unsigned addUnnamedScalar(llvm::Type * type);
 
     unsigned getScalarCount() const;
 
@@ -145,11 +139,15 @@ protected:
     // Get the value of a scalar field for a given instance.
     llvm::Value * getScalarField(llvm::Value * self, const std::string & fieldName) const;
 
+    llvm::Value * getScalarField(llvm::Value * self, llvm::Value * index) const;
+
     // Set the value of a scalar field for a given instance.
-    void setScalarField(llvm::Value * self, const std::string & fieldName, llvm::Value * newFieldVal) const;
-    
+    void setScalarField(llvm::Value * self, const std::string & fieldName, llvm::Value * value) const;
+
+    void setScalarField(llvm::Value * self, llvm::Value * index, llvm::Value * value) const;
+
     // Get a parameter by name.
-    llvm::Value * getParameter(llvm::Function * f, const std::string & paramName) const;
+    llvm::Argument * getParameter(llvm::Function * f, const std::string & name) const;
 
     llvm::Value * getStream(llvm::Value * self, const std::string & name, llvm::Value * blockNo, llvm::Value * index) const;
 
@@ -164,18 +162,21 @@ protected:
     
     llvm::Value * getScalarFieldPtr(llvm::Value * self, const std::string & name) const;
 
+    llvm::Value * getScalarFieldPtr(llvm::Value * self, llvm::Value * index) const;
+
     llvm::Value * getStreamSetBufferPtr(llvm::Value * self, const std::string & name) const;
+
+    llvm::Value * getStreamSetBufferPtr(llvm::Value * self, llvm::Value * index) const;
 
     llvm::Value * getStreamSetPtr(llvm::Value * self, const std::string & name, llvm::Value * blockNo) const;
     
     void setBlockNo(llvm::Value * self, llvm::Value * value) const;
 
-    virtual void setProcessedItemCount(llvm::Value * self, const std::string & ssName, llvm::Value * newFieldVal) const;
+    virtual void setProcessedItemCount(llvm::Value * self, const std::string & name, llvm::Value * value) const;
 
-    virtual void setProducedItemCount(llvm::Value * self, const std::string & ssName, llvm::Value * newFieldVal) const;
+    virtual void setProducedItemCount(llvm::Value * self, const std::string & name, llvm::Value * value) const;
 
-
-private:
+protected:
 
     const parabix::StreamSetBuffer * getStreamSetBuffer(const std::string & name) const;
 
@@ -190,5 +191,52 @@ protected:
     bool                                            mDoBlockUpdatesProducedItemCountsAttribute;
 
 };
+
+class BlockOrientedKernel : public KernelBuilder {
+protected:
+
+    // Each kernel builder subtype must provide its own logic for generating
+    // doBlock calls.
+    virtual void generateDoBlockMethod() const = 0;
+
+    virtual void generateDoBlockLogic(llvm::Value * self, llvm::Value * blockNo) const;
+
+    // Each kernel builder subtypre must also specify the logic for processing the
+    // final block of stream data, if there is any special processing required
+    // beyond simply calling the doBlock function.   In the case that the final block
+    // processing may be trivially implemented by dispatching to the doBlock method
+    // without additional preparation, the default generateFinalBlockMethod need
+    // not be overridden.
+
+    virtual void generateFinalBlockMethod() const;
+
+    virtual void generateDoSegmentMethod() const final;
+
+    BlockOrientedKernel(IDISA::IDISA_Builder * builder,
+                        std::string && kernelName,
+                        std::vector<Binding> && stream_inputs,
+                        std::vector<Binding> && stream_outputs,
+                        std::vector<Binding> && scalar_parameters,
+                        std::vector<Binding> && scalar_outputs,
+                        std::vector<Binding> && internal_scalars);
+
+    virtual ~BlockOrientedKernel() { }
+};
+
+class SegmentOrientedKernel : public KernelBuilder {
+protected:
+    SegmentOrientedKernel(IDISA::IDISA_Builder * builder,
+                          std::string && kernelName,
+                          std::vector<Binding> && stream_inputs,
+                          std::vector<Binding> && stream_outputs,
+                          std::vector<Binding> && scalar_parameters,
+                          std::vector<Binding> && scalar_outputs,
+                          std::vector<Binding> && internal_scalars);
+
+    virtual ~SegmentOrientedKernel() { }
+};
+
+
+
 }
 #endif 

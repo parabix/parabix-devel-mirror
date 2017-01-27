@@ -59,7 +59,7 @@ void editdCPUKernel::generateDoBlockMethod() const {
     Value * pattStartPtr = getScalarField(kernelStuctParam, "pattStream");
     Value * stideCarryArr = getScalarField(kernelStuctParam, "srideCarry");
     Value * blockNo = getScalarField(kernelStuctParam, blockNoScalar);
-   
+
     unsigned carryIdx = 0;
 
     std::vector<std::vector<Value *>> e(mPatternLen+1, std::vector<Value *>(mEditDistance+1));
@@ -112,7 +112,7 @@ void editdCPUKernel::generateDoBlockMethod() const {
 }
 
 editdCPUKernel::editdCPUKernel(IDISA::IDISA_Builder * b, unsigned dist, unsigned pattLen) :
-KernelBuilder(b, "editd_cpu",
+BlockOrientedKernel(b, "editd_cpu",
              {Binding{b->getStreamSetTy(4), "CCStream"}},
              {Binding{b->getStreamSetTy(dist + 1), "ResultStream"}},
              {Binding{PointerType::get(b->getInt8Ty(), 1), "pattStream"},

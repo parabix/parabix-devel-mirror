@@ -7,13 +7,15 @@
 #define PABLO_KERNEL_H
 
 #include <kernels/kernel.h>
+#include <pablo/pabloAST.h>
 #include <pablo/symbol_generator.h>
 #include <util/slab_allocator.h>
+#include <llvm/ADT/StringRef.h>
+
 namespace IDISA { class IDISA_Builder; }
 namespace llvm { class Type; }
 namespace pablo { class Integer; }
 namespace pablo { class Ones; }
-namespace pablo { class PabloAST; }
 namespace pablo { class PabloBlock; }
 namespace pablo { class PabloCompiler; }
 namespace pablo { class String; }
@@ -22,7 +24,7 @@ namespace pablo { class Zeroes; }
 
 namespace pablo {
 
-class PabloKernel : public kernel::KernelBuilder {
+class PabloKernel : public kernel::BlockOrientedKernel, public PabloAST {
 
     friend class PabloCompiler;
     friend class PabloBlock;
@@ -32,9 +34,17 @@ public:
 
     using Allocator = SlabAllocator<PabloAST *>;
 
+    static inline bool classof(const PabloAST * e) {
+        return e->getClassTypeId()  == PabloAST::ClassTypeId::Kernel;
+    }
+    static inline bool classof(const PabloKernel *) {
+        return true;
+    }
+    static inline bool classof(const void *) {
+        return false;
+    }
+
     PabloKernel(IDISA::IDISA_Builder * builder, std::string kernelName);
-    // At present only population count accumulator are supported,
-    // using the pablo.Count operation.
     
     virtual ~PabloKernel();
 
@@ -80,7 +90,7 @@ public:
         return mOutputs.size();
     }
 
-    Var * makeVariable(PabloAST * name, llvm::Type * const type);
+    Var * makeVariable(String * name, llvm::Type * const type);
 
     Var * getVariable(const unsigned index) {
         return mVariables[index];
@@ -112,12 +122,12 @@ protected:
     // This may be overridden for specialized processing.
     virtual void generateFinalBlockMethod() const override;
 
-    inline String * getName(const std::string & name) const {
-        return mSymbolTable->get(name, iBuilder);
+    inline String * getName(const llvm::StringRef & name) const {
+        return mSymbolTable->getString(name, iBuilder);
     }
 
-    inline String * makeName(const std::string & prefix) const {
-        return mSymbolTable->make(prefix, iBuilder);
+    inline String * makeName(const llvm::StringRef & prefix) const {
+        return mSymbolTable->makeString(prefix, iBuilder);
     }
 
     inline Integer * getInteger(const int64_t value) const {

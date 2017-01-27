@@ -33,13 +33,17 @@ CC_Compiler::CC_Compiler(PabloKernel * kernel, const unsigned encodingBits, cons
 
 PabloAST * CC_Compiler::compileCC(const std::string & canonicalName, const CC *cc, PabloBlock & block) {
     PabloAST * const var = charset_expr(cc, block);
-    var->setName(block.makeName(canonicalName));
+    if (LLVM_LIKELY(isa<Statement>(var))) {
+        cast<Statement>(var)->setName(block.makeName(canonicalName));
+    }
     return var;
 }
 
 PabloAST * CC_Compiler::compileCC(const std::string & canonicalName, const CC *cc, PabloBuilder & builder) {
     PabloAST * const var = charset_expr(cc, builder);
-    var->setName(builder.makeName(canonicalName));
+    if (LLVM_LIKELY(isa<Statement>(var))) {
+        cast<Statement>(var)->setName(builder.makeName(canonicalName));
+    }
     return var;
 }
     
