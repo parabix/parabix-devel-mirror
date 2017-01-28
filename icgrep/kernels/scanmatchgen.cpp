@@ -36,42 +36,33 @@ Value * generateResetLowestBit(IDISA::IDISA_Builder * iBuilder, Value * bits) {
     Value * bits_minus1 = iBuilder->CreateSub(bits, ConstantInt::get(bits->getType(), 1));
     return iBuilder->CreateAnd(bits_minus1, bits);
 }
-
         
-void ScanMatchKernel::generateDoBlockMethod() const {
+void ScanMatchKernel::generateDoBlockMethod(Function * function, Value * self, Value * blockNo) const {
+
     auto savePoint = iBuilder->saveIP();
-    Module * m = iBuilder->getModule();
-    Function * scanWordFunction = generateScanWordRoutine(m);
+    Function * scanWordFunction = generateScanWordRoutine(iBuilder->getModule());
+    iBuilder->restoreIP(savePoint);
+
     IntegerType * T = iBuilder->getSizeTy();
     const unsigned fieldCount = iBuilder->getBitBlockWidth() / T->getBitWidth();
-
     Type * scanwordVectorType =  VectorType::get(T, fieldCount);
-
-    Function * doBlockFunction = m->getFunction(mKernelName + doBlock_suffix);
-
-    iBuilder->SetInsertPoint(BasicBlock::Create(iBuilder->getContext(), "entry", doBlockFunction, 0));
-    Value * kernelStuctParam = getParameter(doBlockFunction, "self");
-    Value * blockNo = getScalarField(kernelStuctParam, blockNoScalar);
-    Value * scanwordPos = iBuilder->CreateMul(blockNo, ConstantInt::get(blockNo->getType(), iBuilder->getBitBlockWidth()));
-    
-    Value * recordStart = getScalarField(kernelStuctParam, "LineStart");
-    Value * recordNum = getScalarField(kernelStuctParam, "LineNum");
-    Value * matches = iBuilder->CreateBlockAlignedLoad(getStream(kernelStuctParam, "matchResults", blockNo, iBuilder->getInt32(0)));
-    Value * linebreaks = iBuilder->CreateBlockAlignedLoad(getStream(kernelStuctParam, "matchResults", blockNo, iBuilder->getInt32(1)));
+    Value * scanwordPos = iBuilder->CreateMul(blockNo, ConstantInt::get(blockNo->getType(), iBuilder->getBitBlockWidth()));   
+    Value * recordStart = getScalarField(self, "LineStart");
+    Value * recordNum = getScalarField(self, "LineNum");
+    Value * matches = iBuilder->CreateBlockAlignedLoad(getStream(self, "matchResults", blockNo, iBuilder->getInt32(0)));
+    Value * linebreaks = iBuilder->CreateBlockAlignedLoad(getStream(self, "matchResults", blockNo, iBuilder->getInt32(1)));
     Value * matchWordVector = iBuilder->CreateBitCast(matches, scanwordVectorType);
     Value * breakWordVector = iBuilder->CreateBitCast(linebreaks, scanwordVectorType);
     for(unsigned i = 0; i < fieldCount; ++i){
         Value * matchWord = iBuilder->CreateExtractElement(matchWordVector, ConstantInt::get(T, i));
         Value * recordBreaksWord = iBuilder->CreateExtractElement(breakWordVector, ConstantInt::get(T, i));
-        Value * wordResult = iBuilder->CreateCall(scanWordFunction, {kernelStuctParam, matchWord, recordBreaksWord, scanwordPos, recordStart, recordNum});
+        Value * wordResult = iBuilder->CreateCall(scanWordFunction, {self, matchWord, recordBreaksWord, scanwordPos, recordStart, recordNum});
         scanwordPos = iBuilder->CreateAdd(scanwordPos, ConstantInt::get(T, T->getBitWidth()));
         recordStart = iBuilder->CreateExtractValue(wordResult, std::vector<unsigned>({0}));
         recordNum = iBuilder->CreateExtractValue(wordResult, std::vector<unsigned>({1}));
     }
-    setScalarField(kernelStuctParam, "LineStart", recordStart);
-    setScalarField(kernelStuctParam, "LineNum", recordNum);
-    iBuilder -> CreateRetVoid();
-    iBuilder->restoreIP(savePoint);
+    setScalarField(self, "LineStart", recordStart);
+    setScalarField(self, "LineNum", recordNum);
 }
 
     
@@ -250,6 +241,17 @@ Function * ScanMatchKernel::generateScanWordRoutine(Module * m) const {
     iBuilder->CreateRet(retVal);
     
     return function;
+}
+
+ScanMatchKernel::ScanMatchKernel(IDISA::IDISA_Builder * iBuilder, GrepType grepType)
+: BlockOrientedKernel(iBuilder, "scanMatch",
+    {Binding{iBuilder->getStreamSetTy(2, 1), "matchResults"}},
+    {},
+    {Binding{iBuilder->getInt8PtrTy(), "FileBuf"}, Binding{iBuilder->getSizeTy(), "FileSize"}, Binding{iBuilder->getSizeTy(), "FileIdx"}},
+    {},
+    {Binding{iBuilder->getSizeTy(), "BlockNo"}, Binding{iBuilder->getSizeTy(), "LineStart"}, Binding{iBuilder->getSizeTy(), "LineNum"}})
+, mGrepType(grepType) {
+
 }
 
 }

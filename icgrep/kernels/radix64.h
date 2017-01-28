@@ -19,33 +19,26 @@ namespace kernel {
     This is a useful preparatory transformation in various radix-64 encodings. */
  
 class expand3_4Kernel : public SegmentOrientedKernel {
-public:
-    
+public:   
     expand3_4Kernel(IDISA::IDISA_Builder * iBuilder);
-    
 private:
     void generateDoSegmentMethod() const override;
-    
 };
 
 class radix64Kernel : public BlockOrientedKernel {
 public:
-    
     radix64Kernel(IDISA::IDISA_Builder * iBuilder);
 private:
-    virtual void generateDoBlockLogic(llvm::Value * self, llvm::Value * blockNo) const override;
-    virtual void generateDoBlockMethod() const override;
-    virtual void generateFinalBlockMethod() const override;
+    virtual void generateDoBlockMethod(llvm::Function * function, llvm::Value * self, llvm::Value * blockNo) const override;
+    virtual void generateFinalBlockMethod(llvm::Function * function, llvm::Value * self, llvm::Value * remainingBytes, llvm::Value * blockNo) const override;
 };
 
 class base64Kernel : public BlockOrientedKernel {
 public:
-    
-    base64Kernel(IDISA::IDISA_Builder * iBuilder);    
+    base64Kernel(IDISA::IDISA_Builder * iBuilder);
 private:
-    virtual void generateDoBlockLogic(llvm::Value * self, llvm::Value * blockNo) const override;
-    virtual void generateFinalBlockMethod() const override;
-    virtual void generateDoBlockMethod() const override;
+    virtual void generateFinalBlockMethod(llvm::Function * function, llvm::Value * self, llvm::Value * remainingBytes, llvm::Value * blockNo) const override;
+    virtual void generateDoBlockMethod(llvm::Function * function, llvm::Value * self, llvm::Value * blockNo) const override;
     
 };
 

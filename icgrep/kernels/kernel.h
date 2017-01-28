@@ -19,7 +19,6 @@ namespace llvm { class Type; }
 namespace llvm { class Value; }
 namespace parabix { class StreamSetBuffer; }
 
-const std::string blockNoScalar = "blockNo";
 const std::string logicalSegmentNoScalar = "logicalSegNo";
 const std::string processedItemCountSuffix = "_processedItemCount";
 const std::string producedItemCountSuffix = "_producedItemCount";
@@ -197,9 +196,7 @@ protected:
 
     // Each kernel builder subtype must provide its own logic for generating
     // doBlock calls.
-    virtual void generateDoBlockMethod() const = 0;
-
-    virtual void generateDoBlockLogic(llvm::Value * self, llvm::Value * blockNo) const;
+    virtual void generateDoBlockMethod(llvm::Function * function, llvm::Value * self, llvm::Value * blockNo) const = 0;
 
     // Each kernel builder subtypre must also specify the logic for processing the
     // final block of stream data, if there is any special processing required
@@ -208,7 +205,7 @@ protected:
     // without additional preparation, the default generateFinalBlockMethod need
     // not be overridden.
 
-    virtual void generateFinalBlockMethod() const;
+    virtual void generateFinalBlockMethod(llvm::Function * function, llvm::Value * self, llvm::Value * remainingBytes, llvm::Value * blockNo) const;
 
     virtual void generateDoSegmentMethod() const final;
 
@@ -221,10 +218,20 @@ protected:
                         std::vector<Binding> && internal_scalars);
 
     virtual ~BlockOrientedKernel() { }
+
+    llvm::Function * getDoBlockFunction() const;
+
+    llvm::Function * getDoFinalBlockFunction() const;
+
+private:
+    void callGenerateDoBlockMethod() const;
+
+    void callGenerateDoFinalBlockMethod() const;
 };
 
 class SegmentOrientedKernel : public KernelBuilder {
 protected:
+
     SegmentOrientedKernel(IDISA::IDISA_Builder * builder,
                           std::string && kernelName,
                           std::vector<Binding> && stream_inputs,

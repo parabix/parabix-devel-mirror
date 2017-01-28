@@ -113,18 +113,14 @@ protected:
     // A custom method for preparing kernel declarations is needed,
     // so that the carry data requirements may be accommodated before
     // finalizing the KernelStateType.
-    void prepareKernel() override;
+    void prepareKernel()  override final;
 
-    void generateDoBlockMethod() const override;
-    
+    void generateDoBlockMethod(llvm::Function * function, llvm::Value * self, llvm::Value * blockNo) const override final;
+
     // The default method for Pablo final block processing sets the
     // EOFmark bit and then calls the standard DoBlock function.
     // This may be overridden for specialized processing.
-    virtual void generateFinalBlockMethod() const override;
-
-    inline String * getName(const llvm::StringRef & name) const {
-        return mSymbolTable->getString(name, iBuilder);
-    }
+    virtual void generateFinalBlockMethod(llvm::Function * function, llvm::Value * self, llvm::Value * remainingBytes, llvm::Value * blockNo) const override final;
 
     inline String * makeName(const llvm::StringRef & prefix) const {
         return mSymbolTable->makeString(prefix, iBuilder);

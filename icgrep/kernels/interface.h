@@ -9,6 +9,7 @@
 #include <string>  // for string
 #include <vector>  // for vector
 namespace IDISA { class IDISA_Builder; }
+namespace llvm { class Function; }
 namespace llvm { class Module; }
 namespace llvm { class StructType; }
 namespace llvm { class Type; }
@@ -42,19 +43,25 @@ public:
     const std::string & getName() const { return mKernelName;}
        
     const std::vector<Binding> & getStreamInputs() const {return mStreamSetInputs;}
+
     const std::vector<Binding> & getStreamOutputs() const {return mStreamSetOutputs;}
+
     const std::vector<Binding> & getScalarInputs() const { return mScalarInputs;}
+
     const std::vector<Binding> & getScalarOutputs() const { return mScalarOutputs;}
     
     
     // Add ExternalLinkage method declarations for the kernel to a given client module.
     void addKernelDeclarations(llvm::Module * client) const;
+
     virtual void createInstance() = 0;
+
     void setInitialArguments(std::vector<llvm::Value *> args);
+
     llvm::Value * getInstance() const { return mKernelInstance; }
 
     llvm::Value * createDoSegmentCall(std::vector<llvm::Value *> args) const;
-    llvm::Value * createFinalBlockCall(llvm::Value * self, llvm::Value * remainingBytes) const;
+
     llvm::Value * createGetAccumulatorCall(llvm::Value * self, std::string accumName) const;
     
     unsigned getLookAhead() const {
@@ -66,14 +73,16 @@ public:
     }
 
     virtual llvm::Value * getProcessedItemCount(llvm::Value * self, const std::string & ssName) const = 0;
+
     virtual llvm::Value * getProducedItemCount(llvm::Value * self, const std::string & ssName) const = 0;
+
     virtual llvm::Value * getTerminationSignal(llvm::Value * self) const = 0;
     
     void setLookAhead(unsigned lookAheadPositions) {
         mLookAheadPositions = lookAheadPositions;
     }
 
-    llvm::Value * createDoBlockCall(llvm::Value * self) const;
+    llvm::Function * getDoSegmentFunction() const;
 
 protected:
 
@@ -112,4 +121,5 @@ protected:
     unsigned mLookAheadPositions;
     
 };
+
 #endif 

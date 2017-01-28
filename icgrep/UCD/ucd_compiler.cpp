@@ -540,7 +540,7 @@ inline void UCDCompiler::updateNames(NameMap & names, PabloBuilder & entry) {
         if (f != mTargetMap.end()) {
             std::string name = t.first->getName();
             if (Statement * result = dyn_cast<Statement>(f->second)) {
-                result->setName(entry.getName(name));
+                result->setName(entry.makeName(name));
                 t.second = result;
             } else {
                 Var * var = entry.createVar(name);

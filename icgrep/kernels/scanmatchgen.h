@@ -15,22 +15,11 @@ namespace kernel {
     
 class ScanMatchKernel : public BlockOrientedKernel {
 public:
-    ScanMatchKernel(IDISA::IDISA_Builder * iBuilder, GrepType grepType) :
-    BlockOrientedKernel(iBuilder, "scanMatch",
-                  {Binding{iBuilder->getStreamSetTy(2, 1), "matchResults"}},
-                    {}, 
-                    {Binding{iBuilder->getInt8PtrTy(), "FileBuf"}, Binding{iBuilder->getSizeTy(), "FileSize"}, Binding{iBuilder->getSizeTy(), "FileIdx"}}, 
-                    {}, 
-                    {Binding{iBuilder->getSizeTy(), "BlockNo"}, Binding{iBuilder->getSizeTy(), "LineStart"}, Binding{iBuilder->getSizeTy(), "LineNum"}}),
-
-    mGrepType(grepType) {}
-        
+    ScanMatchKernel(IDISA::IDISA_Builder * iBuilder, GrepType grepType);
+protected:
+    void generateDoBlockMethod(llvm::Function * function, llvm::Value * self, llvm::Value * blockNo) const override;
 private:
-
-    void generateDoBlockMethod() const override;
-
     llvm::Function * generateScanWordRoutine(llvm::Module * m) const;
-
 private:
     GrepType mGrepType;
 };

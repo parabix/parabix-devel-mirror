@@ -20,6 +20,8 @@
 namespace llvm { class BasicBlock; }
 namespace llvm { class Type; }
 
+const std::string blockNoScalar = "blockNo";
+
 using namespace llvm;
 using namespace kernel;
 using namespace parabix;
@@ -148,124 +150,6 @@ void KernelBuilder::generateInitMethod() const {
     iBuilder->restoreIP(savePoint);
 }
 
-//  The default finalBlock method simply dispatches to the doBlock routine.
-void BlockOrientedKernel::generateFinalBlockMethod() const {
-    auto savePoint = iBuilder->saveIP();
-    Module * m = iBuilder->getModule();
-    Function * doBlockFunction = m->getFunction(mKernelName + doBlock_suffix);
-    Function * finalBlockFunction = m->getFunction(mKernelName + finalBlock_suffix);
-    iBuilder->SetInsertPoint(BasicBlock::Create(iBuilder->getContext(), "fb_entry", finalBlockFunction, 0));
-    // Final Block arguments: self, remaining, then the standard DoBlock args.
-    Function::arg_iterator args = finalBlockFunction->arg_begin();
-    Value * self = &*(args++);
-    /* Skip "remaining" arg */ args++;
-    std::vector<Value *> doBlockArgs = {self};
-    iBuilder->CreateCall(doBlockFunction, doBlockArgs);
-    iBuilder->CreateRetVoid();
-    iBuilder->restoreIP(savePoint);
-}
-
-// Note: this may be overridden to incorporate doBlock logic directly into
-// the doSegment function.
-void BlockOrientedKernel::generateDoBlockLogic(Value * self, Value * /* blockNo */) const {
-    Function * doBlockFunction = iBuilder->getModule()->getFunction(mKernelName + doBlock_suffix);
-    iBuilder->CreateCall(doBlockFunction, self);
-}
-
-//  The default doSegment method dispatches to the doBlock routine for
-//  each block of the given number of blocksToDo, and then updates counts.
-void BlockOrientedKernel::generateDoSegmentMethod() const {
-    generateDoBlockMethod();    // must be implemented by the KernelBuilder subtype
-    generateFinalBlockMethod(); // possibly overridden by the KernelBuilder subtype
-    auto savePoint = iBuilder->saveIP();
-    Module * m = iBuilder->getModule();
-    Function * doSegmentFunction = m->getFunction(mKernelName + doSegment_suffix);
-    iBuilder->SetInsertPoint(BasicBlock::Create(iBuilder->getContext(), mKernelName + "_entry", doSegmentFunction, 0));
-    BasicBlock * entryBlock = iBuilder->GetInsertBlock();
-    BasicBlock * strideLoopCond = BasicBlock::Create(iBuilder->getContext(), mKernelName + "_strideLoopCond", doSegmentFunction, 0);
-    BasicBlock * strideLoopBody = BasicBlock::Create(iBuilder->getContext(), mKernelName + "_strideLoopBody", doSegmentFunction, 0);
-    BasicBlock * stridesDone = BasicBlock::Create(iBuilder->getContext(), mKernelName + "_stridesDone", doSegmentFunction, 0);
-    BasicBlock * doFinalBlock = BasicBlock::Create(iBuilder->getContext(), mKernelName + "_doFinalBlock", doSegmentFunction, 0);
-    BasicBlock * segmentDone = BasicBlock::Create(iBuilder->getContext(), mKernelName + "_segmentDone", doSegmentFunction, 0);
-    Type * const size_ty = iBuilder->getSizeTy();
-    Constant * stride = ConstantInt::get(size_ty, iBuilder->getStride());
-    Value * strideBlocks = ConstantInt::get(size_ty, iBuilder->getStride() / iBuilder->getBitBlockWidth());
-
-    Function::arg_iterator args = doSegmentFunction->arg_begin();
-    Value * self = &*(args++);
-    Value * doFinal = &*(args++);
-
-    std::vector<Value *> producerPos;
-    producerPos.push_back(&*(args++));
-    Value * availablePos = producerPos[0];
-    for (unsigned i = 1; i < mStreamSetInputs.size(); i++) {
-        Value * p = &*(args++);
-        producerPos.push_back(p);
-        availablePos = iBuilder->CreateSelect(iBuilder->CreateICmpULT(availablePos, p), availablePos, p);
-    }
-    Value * processed = getProcessedItemCount(self, mStreamSetInputs[0].name);
-    Value * itemsAvail = iBuilder->CreateSub(availablePos, processed);
-    Value * stridesToDo = iBuilder->CreateUDiv(itemsAvail, stride);
-    iBuilder->CreateBr(strideLoopCond);
-
-    iBuilder->SetInsertPoint(strideLoopCond);
-    PHINode * stridesRemaining = iBuilder->CreatePHI(size_ty, 2, "stridesRemaining");
-    stridesRemaining->addIncoming(stridesToDo, entryBlock);
-    Value * notDone = iBuilder->CreateICmpUGT(stridesRemaining, ConstantInt::get(size_ty, 0));
-    iBuilder->CreateCondBr(notDone, strideLoopBody, stridesDone);
-
-    iBuilder->SetInsertPoint(strideLoopBody);
-    Value * blockNo = getScalarField(self, blockNoScalar);
-
-    generateDoBlockLogic(self, blockNo);
-    setBlockNo(self, iBuilder->CreateAdd(blockNo, strideBlocks));
-    stridesRemaining->addIncoming(iBuilder->CreateSub(stridesRemaining, ConstantInt::get(size_ty, 1)), strideLoopBody);
-    iBuilder->CreateBr(strideLoopCond);
-
-    iBuilder->SetInsertPoint(stridesDone);
-    // Update counts for the full strides processed.
-    Value * segmentItemsProcessed = iBuilder->CreateMul(stridesToDo, stride);
-    for (unsigned i = 0; i < mStreamSetInputs.size(); i++) {
-        Value * preProcessed = getProcessedItemCount(self, mStreamSetInputs[i].name);
-        setProcessedItemCount(self, mStreamSetInputs[i].name, iBuilder->CreateAdd(preProcessed, segmentItemsProcessed));
-    }
-    if (!mDoBlockUpdatesProducedItemCountsAttribute) {
-        for (unsigned i = 0; i < mStreamSetOutputs.size(); i++) {
-            Value * preProduced = getProducedItemCount(self, mStreamSetOutputs[i].name);
-
-            setProducedItemCount(self, mStreamSetOutputs[i].name, iBuilder->CreateAdd(preProduced, segmentItemsProcessed));
-            //iBuilder->CallPrintInt(mKernelName + " produced ", iBuilder->CreateAdd(preProduced, segmentItemsProcessed));
-        }
-    }
-
-    // Now conditionally perform the final block processing depending on the doFinal parameter.
-    iBuilder->CreateCondBr(doFinal, doFinalBlock, segmentDone);
-    iBuilder->SetInsertPoint(doFinalBlock);
-
-    Value * remainingItems = iBuilder->CreateSub(producerPos[0], getProcessedItemCount(self, mStreamSetInputs[0].name));
-    //iBuilder->CallPrintInt(mKernelName + " remainingItems", remainingItems);
-
-    createFinalBlockCall(self, remainingItems);
-    for (unsigned i = 0; i < mStreamSetInputs.size(); i++) {
-        Value * preProcessed = getProcessedItemCount(self, mStreamSetInputs[i].name);
-        setProcessedItemCount(self, mStreamSetInputs[i].name, iBuilder->CreateAdd(preProcessed, remainingItems));
-    }
-    if (!mDoBlockUpdatesProducedItemCountsAttribute) {
-        for (unsigned i = 0; i < mStreamSetOutputs.size(); i++) {
-            Value * preProduced = getProducedItemCount(self, mStreamSetOutputs[i].name);
-            setProducedItemCount(self, mStreamSetOutputs[i].name, iBuilder->CreateAdd(preProduced, remainingItems));
-        }
-    }
-    setTerminationSignal(self);
-    iBuilder->CreateBr(segmentDone);
-
-    iBuilder->SetInsertPoint(segmentDone);
-
-    iBuilder->CreateRetVoid();
-    iBuilder->restoreIP(savePoint);
-}
-
-
 ConstantInt * KernelBuilder::getScalarIndex(const std::string & name) const {
     const auto f = mKernelMap.find(name);
     if (LLVM_UNLIKELY(f == mKernelMap.end())) {
@@ -356,7 +240,7 @@ Argument * KernelBuilder::getParameter(Function * const f, const std::string & n
             return &arg;
         }
     }
-    llvm::report_fatal_error("Method does not have parameter: " + name);
+    llvm::report_fatal_error(f->getName() + " does not have parameter " + name);
 }
 
 unsigned KernelBuilder::getStreamSetIndex(const std::string & name) const {
@@ -419,12 +303,150 @@ void KernelBuilder::createInstance() {
     }
     std::string initFnName = mKernelName + init_suffix;
     Function * initMethod = m->getFunction(initFnName);
-    if (!initMethod) {
+    if (initMethod == nullptr) {
         llvm::report_fatal_error("Cannot find " + initFnName);
     }
     iBuilder->CreateCall(initMethod, init_args);
 }
 
+//  The default finalBlock method simply dispatches to the doBlock routine.
+void BlockOrientedKernel::generateFinalBlockMethod(Function * function, Value * self, Value * /* remainingBytes */, Value * /* blockNo */) const {
+//    std::vector<Value *> args = {self};
+//    for (Argument & arg : function->getArgumentList()){
+//        args.push_back(&arg);
+//    }
+    iBuilder->CreateCall(getDoBlockFunction(), { self });
+}
+
+//  The default doSegment method dispatches to the doBlock routine for
+//  each block of the given number of blocksToDo, and then updates counts.
+void BlockOrientedKernel::generateDoSegmentMethod() const {
+    auto savePoint = iBuilder->saveIP();
+
+    callGenerateDoBlockMethod();
+
+    callGenerateDoFinalBlockMethod();
+
+    Module * m = iBuilder->getModule();
+    Function * doSegmentFunction = m->getFunction(mKernelName + doSegment_suffix);
+    iBuilder->SetInsertPoint(BasicBlock::Create(iBuilder->getContext(), mKernelName + "_entry", doSegmentFunction, 0));
+    BasicBlock * entryBlock = iBuilder->GetInsertBlock();
+    BasicBlock * strideLoopCond = BasicBlock::Create(iBuilder->getContext(), mKernelName + "_strideLoopCond", doSegmentFunction, 0);
+    BasicBlock * strideLoopBody = BasicBlock::Create(iBuilder->getContext(), mKernelName + "_strideLoopBody", doSegmentFunction, 0);
+    BasicBlock * stridesDone = BasicBlock::Create(iBuilder->getContext(), mKernelName + "_stridesDone", doSegmentFunction, 0);
+    BasicBlock * doFinalBlock = BasicBlock::Create(iBuilder->getContext(), mKernelName + "_doFinalBlock", doSegmentFunction, 0);
+    BasicBlock * segmentDone = BasicBlock::Create(iBuilder->getContext(), mKernelName + "_segmentDone", doSegmentFunction, 0);
+    Type * const size_ty = iBuilder->getSizeTy();
+
+    ConstantInt * stride = iBuilder->getSize(iBuilder->getStride());
+    ConstantInt * strideBlocks = iBuilder->getSize(iBuilder->getStride() / iBuilder->getBitBlockWidth());
+
+    Function::arg_iterator args = doSegmentFunction->arg_begin();
+    Value * self = &*(args++);
+    Value * doFinal = &*(args++);
+
+    std::vector<Value *> producerPos;
+    producerPos.push_back(&*(args++));
+    Value * availablePos = producerPos[0];
+    for (unsigned i = 1; i < mStreamSetInputs.size(); i++) {
+        Value * p = &*(args++);
+        producerPos.push_back(p);
+        availablePos = iBuilder->CreateSelect(iBuilder->CreateICmpULT(availablePos, p), availablePos, p);
+    }
+    Value * processed = getProcessedItemCount(self, mStreamSetInputs[0].name);
+    Value * itemsAvail = iBuilder->CreateSub(availablePos, processed);
+    Value * stridesToDo = iBuilder->CreateUDiv(itemsAvail, stride);
+    iBuilder->CreateBr(strideLoopCond);
+
+    iBuilder->SetInsertPoint(strideLoopCond);
+    PHINode * stridesRemaining = iBuilder->CreatePHI(size_ty, 2, "stridesRemaining");
+    stridesRemaining->addIncoming(stridesToDo, entryBlock);
+    Value * notDone = iBuilder->CreateICmpUGT(stridesRemaining, ConstantInt::get(size_ty, 0));
+    iBuilder->CreateCondBr(notDone, strideLoopBody, stridesDone);
+
+    iBuilder->SetInsertPoint(strideLoopBody);
+    Value * blockNo = getBlockNo(self);
+
+    iBuilder->CreateCall(getDoBlockFunction(), self);
+
+    setBlockNo(self, iBuilder->CreateAdd(blockNo, strideBlocks));
+    stridesRemaining->addIncoming(iBuilder->CreateSub(stridesRemaining, ConstantInt::get(size_ty, 1)), strideLoopBody);
+    iBuilder->CreateBr(strideLoopCond);
+
+    iBuilder->SetInsertPoint(stridesDone);
+    // Update counts for the full strides processed.
+    Value * segmentItemsProcessed = iBuilder->CreateMul(stridesToDo, stride);
+    for (unsigned i = 0; i < mStreamSetInputs.size(); i++) {
+        Value * preProcessed = getProcessedItemCount(self, mStreamSetInputs[i].name);
+        setProcessedItemCount(self, mStreamSetInputs[i].name, iBuilder->CreateAdd(preProcessed, segmentItemsProcessed));
+    }
+    if (!mDoBlockUpdatesProducedItemCountsAttribute) {
+        for (unsigned i = 0; i < mStreamSetOutputs.size(); i++) {
+            Value * preProduced = getProducedItemCount(self, mStreamSetOutputs[i].name);
+            setProducedItemCount(self, mStreamSetOutputs[i].name, iBuilder->CreateAdd(preProduced, segmentItemsProcessed));
+        }
+    }
+
+    // Now conditionally perform the final block processing depending on the doFinal parameter.
+    iBuilder->CreateCondBr(doFinal, doFinalBlock, segmentDone);
+    iBuilder->SetInsertPoint(doFinalBlock);
+
+    Value * remainingItems = iBuilder->CreateSub(producerPos[0], getProcessedItemCount(self, mStreamSetInputs[0].name));
+
+    iBuilder->CreateCall(getDoFinalBlockFunction(), {self, remainingItems});
+
+    // createFinalBlockCall(self, remainingItems);
+    for (unsigned i = 0; i < mStreamSetInputs.size(); i++) {
+        Value * preProcessed = getProcessedItemCount(self, mStreamSetInputs[i].name);
+        setProcessedItemCount(self, mStreamSetInputs[i].name, iBuilder->CreateAdd(preProcessed, remainingItems));
+    }
+    if (!mDoBlockUpdatesProducedItemCountsAttribute) {
+        for (unsigned i = 0; i < mStreamSetOutputs.size(); i++) {
+            Value * preProduced = getProducedItemCount(self, mStreamSetOutputs[i].name);
+            setProducedItemCount(self, mStreamSetOutputs[i].name, iBuilder->CreateAdd(preProduced, remainingItems));
+        }
+    }
+    setTerminationSignal(self);
+    iBuilder->CreateBr(segmentDone);
+
+    iBuilder->SetInsertPoint(segmentDone);
+
+    iBuilder->CreateRetVoid();
+    iBuilder->restoreIP(savePoint);
+}
+
+void BlockOrientedKernel::callGenerateDoBlockMethod() const {
+    Function * f = getDoBlockFunction();
+    Value * const self = getParameter(f, "self"); assert (self);
+    iBuilder->SetInsertPoint(BasicBlock::Create(iBuilder->getContext(), "entry", f));
+    generateDoBlockMethod(f, self, getBlockNo(self)); // must be implemented by the KernelBuilder subtype
+    iBuilder->CreateRetVoid();
+//    #ifndef NDEBUG
+//    llvm::verifyFunction(*f, &errs());
+//    #endif
+}
+
+void BlockOrientedKernel::callGenerateDoFinalBlockMethod() const {
+    Function * f = getDoFinalBlockFunction();
+    Value * const self = getParameter(f, "self"); assert (self);
+    Value * remainingBytes = getParameter(f, "remainingBytes"); assert (remainingBytes);
+    iBuilder->SetInsertPoint(BasicBlock::Create(iBuilder->getContext(), "entry", f));
+    generateFinalBlockMethod(f, self, remainingBytes, getBlockNo(self)); // possibly overridden by the KernelBuilder subtype
+    iBuilder->CreateRetVoid();
+//    #ifndef NDEBUG
+//    llvm::verifyFunction(*f, &errs());
+//    #endif
+}
+
+Function * BlockOrientedKernel::getDoBlockFunction() const {
+    return iBuilder->getModule()->getFunction(mKernelName + doBlock_suffix);
+}
+
+Function * BlockOrientedKernel::getDoFinalBlockFunction() const {
+    return iBuilder->getModule()->getFunction(mKernelName + finalBlock_suffix);
+}
+
+// CONSTRUCTOR
 KernelBuilder::KernelBuilder(IDISA::IDISA_Builder * builder,
                              std::string && kernelName,
                              std::vector<Binding> && stream_inputs,
@@ -438,10 +460,9 @@ KernelBuilder::KernelBuilder(IDISA::IDISA_Builder * builder,
 
 }
 
-KernelBuilder::~KernelBuilder() {
+KernelBuilder::~KernelBuilder() { }
 
-}
-
+// CONSTRUCTOR
 BlockOrientedKernel::BlockOrientedKernel(IDISA::IDISA_Builder * builder,
                                          std::string && kernelName,
                                          std::vector<Binding> && stream_inputs,
@@ -453,6 +474,7 @@ BlockOrientedKernel::BlockOrientedKernel(IDISA::IDISA_Builder * builder,
 
 }
 
+// CONSTRUCTOR
 SegmentOrientedKernel::SegmentOrientedKernel(IDISA::IDISA_Builder * builder,
                                              std::string && kernelName,
                                              std::vector<Binding> && stream_inputs,

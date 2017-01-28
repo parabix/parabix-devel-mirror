@@ -33,14 +33,14 @@ void StdOutKernel::generateDoSegmentMethod() const {
     Value * processed = getProcessedItemCount(self, "codeUnitBuffer");
     Value * itemsToDo = iBuilder->CreateSub(producerPos, processed);
     
-    Value * blockNo = getScalarField(self, blockNoScalar);
+    Value * blockNo = getBlockNo(self);
     Value * byteOffset = iBuilder->CreateMul(iBuilder->CreateURem(processed, blockItems), itemBytes);
     Value * bytePtr = getStreamView(i8PtrTy, self, "codeUnitBuffer", blockNo, byteOffset);
     iBuilder->CreateWriteCall(iBuilder->getInt32(1), bytePtr, iBuilder->CreateMul(itemsToDo, itemBytes));
 
     processed = iBuilder->CreateAdd(processed, itemsToDo);
     setProcessedItemCount(self, "codeUnitBuffer", processed);
-    setScalarField(self, blockNoScalar, iBuilder->CreateUDiv(processed, blockItems));
+    setBlockNo(self, iBuilder->CreateUDiv(processed, blockItems));
 
     iBuilder->CreateRetVoid();
     iBuilder->restoreIP(savePoint);
@@ -101,14 +101,14 @@ void FileSink::generateDoSegmentMethod() const {
     Value * itemsToDo = iBuilder->CreateSub(producerPos, processed);
     Value * IOstreamPtr = getScalarField(self, "IOstreamPtr");
     
-    Value * blockNo = getScalarField(self, blockNoScalar);
+    Value * blockNo = getBlockNo(self);
     Value * byteOffset = iBuilder->CreateMul(iBuilder->CreateURem(processed, blockItems), itemBytes);
     Value * bytePtr = getStreamView(i8PtrTy, self, "codeUnitBuffer", blockNo, byteOffset);
     iBuilder->CreateFWriteCall(bytePtr, itemsToDo, itemBytes, IOstreamPtr);
     
     processed = iBuilder->CreateAdd(processed, itemsToDo);
     setProcessedItemCount(self, "codeUnitBuffer", processed);
-    setScalarField(self, blockNoScalar, iBuilder->CreateUDiv(processed, blockItems));
+    setBlockNo(self, iBuilder->CreateUDiv(processed, blockItems));
     iBuilder->CreateCondBr(doFinal, closeFile, fileOutExit);
     
     iBuilder->SetInsertPoint(closeFile);

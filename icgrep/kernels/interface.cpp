@@ -22,7 +22,7 @@ void KernelInterface::addKernelDeclarations(Module * client) const {
     if (mKernelStateType == nullptr) {
         throw std::runtime_error("Kernel interface " + mKernelName + " not yet finalized.");
     }
-    Type * selfType = PointerType::getUnqual(mKernelStateType);
+    PointerType * selfType = PointerType::getUnqual(mKernelStateType);
 
     // Create the accumulator get function prototypes
     for (auto binding : mScalarOutputs) {
@@ -108,29 +108,6 @@ void KernelInterface::setInitialArguments(std::vector<Value *> args) {
     mInitialArguments = args;
 }
 
-Value * KernelInterface::createDoBlockCall(Value * self) const {
-    Module * m = iBuilder->getModule();
-    std::string doBlockName = mKernelName + doBlock_suffix;
-    Function * doBlockMethod = m->getFunction(doBlockName);
-    if (!doBlockMethod) {
-        throw std::runtime_error("Cannot find " + doBlockName);
-    }
-    std::vector<Value *> args = {self};
-    return iBuilder->CreateCall(doBlockMethod, args);
-}
-
-Value * KernelInterface::createFinalBlockCall(Value * self, Value * remainingBytes) const {
-    Module * m = iBuilder->getModule();
-    std::string finalBlockName = mKernelName + finalBlock_suffix;
-    Function * finalBlockMethod = m->getFunction(finalBlockName);
-    if (!finalBlockMethod) {
-        throw std::runtime_error("Cannot find " + finalBlockName);
-    }
-    std::vector<Value *> args = {self, remainingBytes};
-    return iBuilder->CreateCall(finalBlockMethod, args);
-}
-
-
 Value * KernelInterface::createDoSegmentCall(std::vector<Value *> args) const {
     Module * m = iBuilder->getModule();
     std::string fnName = mKernelName + doSegment_suffix;
@@ -151,4 +128,6 @@ Value * KernelInterface::createGetAccumulatorCall(Value * self, std::string accu
     return iBuilder->CreateCall(accumMethod, {self});
 }
 
-
+Function * KernelInterface::getDoSegmentFunction() const {
+    return iBuilder->getModule()->getFunction(mKernelName + doSegment_suffix);
+}

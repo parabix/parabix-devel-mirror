@@ -33,7 +33,7 @@ public:
     PabloCompiler(PabloKernel * kernel);
     ~PabloCompiler();
     void initializeKernelData();
-    void compile(llvm::Value * const self, llvm::Function * doBlockFunction);
+    void compile(llvm::Function * function, llvm::Value * const self, llvm::Value * const blockNo);
 
 private:
 

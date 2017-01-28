@@ -22,7 +22,6 @@ class SymbolGenerator {
     using Allocator = PabloAST::Allocator;
 public:
     using IntTy = int64_t;
-    String * getString(const llvm::StringRef name, IDISA::IDISA_Builder * builder) noexcept;
     String * makeString(const llvm::StringRef prefix, IDISA::IDISA_Builder * builder) noexcept;
     Integer * getInteger(const IntTy value, IDISA::IDISA_Builder * builder) noexcept;
     ~SymbolGenerator() { }

@@ -20,8 +20,8 @@ public:
     
     
 private:
-    void generateDoBlockMethod() const override;
-    void generateFinalBlockMethod() const override;
+    void generateDoBlockMethod(llvm::Function * function, llvm::Value * self, llvm::Value * blockNo) const override;
+    void generateFinalBlockMethod(llvm::Function * function, llvm::Value * self, llvm::Value * remainingBytes, llvm::Value * blockNo) const override;
     unsigned mEditDistance;
     unsigned mPatternLen;
     

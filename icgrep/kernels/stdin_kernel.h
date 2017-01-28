@@ -16,31 +16,26 @@ namespace kernel {
 class StdInKernel : public SegmentOrientedKernel {
 public:
     StdInKernel(IDISA::IDISA_Builder * iBuilder, unsigned blocksPerSegment = 1, unsigned codeUnitWidth = 8);
-    
+protected:
+    void generateDoSegmentMethod() const override final;
 private:
     unsigned mSegmentBlocks;
     unsigned mCodeUnitWidth;
-  
-    void generateDoSegmentMethod() const override;
-    
 };
     
 
 class FileSource : public SegmentOrientedKernel {
 public:
-  
     FileSource(IDISA::IDISA_Builder * iBuilder, unsigned blocksPerSegment = 1, unsigned codeUnitWidth = 8);
-  
-private:
-  
-    void generateInitMethod() const override;
-    void generateDoSegmentMethod() const override;
-  
+protected:
+    void generateInitMethod() const override final;
+    void generateDoSegmentMethod() const override final;
 private:
     unsigned mSegmentBlocks;
     unsigned mCodeUnitWidth;
   
 };
+
 }
 
 #endif

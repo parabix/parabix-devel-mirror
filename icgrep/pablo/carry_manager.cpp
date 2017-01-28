@@ -86,7 +86,7 @@ void CarryManager::initializeCodeGen(Value * self, Function * function) {
 void CarryManager::enterLoopScope(PabloBlock * const scope) {
     assert (scope);
     if (mLoopDepth++ == 0) {
-        Value * const blockNo = mKernel->getScalarField(mSelf, blockNoScalar);
+        Value * const blockNo = mKernel->getBlockNo(mSelf);
         mLoopSelector = iBuilder->CreateAnd(blockNo, ConstantInt::get(blockNo->getType(), 1));
     }
     enterScope(scope);
@@ -392,7 +392,7 @@ Value * CarryManager::longAdvanceCarryInCarryOut(const unsigned shiftAmount, Val
 
     // Create a mask to implement circular buffer indexing
     Value * indexMask = iBuilder->getSize(nearest_pow2(entries) - 1);
-    Value * blockIndex = mKernel->getScalarField(mSelf, blockNoScalar);
+    Value * blockIndex = mKernel->getBlockNo(mSelf);
     Value * carryIndex0 = iBuilder->CreateSub(blockIndex, iBuilder->getSize(entries));
     Value * loadIndex0 = iBuilder->CreateAnd(carryIndex0, indexMask);
     Value * storeIndex = iBuilder->CreateAnd(blockIndex, indexMask);

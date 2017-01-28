@@ -14,36 +14,29 @@ namespace kernel {
 class P2SKernel : public BlockOrientedKernel {
 public:
     P2SKernel(IDISA::IDISA_Builder * iBuilder);
-    
 private:
-    void generateDoBlockMethod() const override;
-    
+    void generateDoBlockMethod(llvm::Function * function, llvm::Value * self, llvm::Value * blockNo) const override;
 };
 
 class P2SKernelWithCompressedOutput : public BlockOrientedKernel {
 public:
     P2SKernelWithCompressedOutput(IDISA::IDISA_Builder * iBuilder);    
 private:
-    void generateDoBlockMethod() const override;
+    void generateDoBlockMethod(llvm::Function * function, llvm::Value * self, llvm::Value * blockNo) const override;
 };
-    
 
 class P2S16Kernel : public BlockOrientedKernel {
 public:
     P2S16Kernel(IDISA::IDISA_Builder * iBuilder);    
 private:
-    void generateDoBlockMethod() const override;
-    
+    void generateDoBlockMethod(llvm::Function * function, llvm::Value * self, llvm::Value * blockNo) const override;
 };
-
     
 class P2S16KernelWithCompressedOutput : public BlockOrientedKernel {
 public:
     P2S16KernelWithCompressedOutput(IDISA::IDISA_Builder * iBuilder);
-        
 private:
-    void generateDoBlockMethod() const override;
-    void generateFinalBlockMethod() const override;
+    void generateDoBlockMethod(llvm::Function * function, llvm::Value * self, llvm::Value * blockNo) const override;
 };
     
 }

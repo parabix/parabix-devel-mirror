@@ -17,43 +17,36 @@ Value * generateCountForwardZeroes(IDISA::IDISA_Builder * iBuilder, Value * bits
     return iBuilder->CreateCall(cttzFunc, std::vector<Value *>({bits, ConstantInt::get(iBuilder->getInt1Ty(), 0)}));
 }
 
-void editdScanKernel::generateDoBlockMethod() const {
+void editdScanKernel::generateDoBlockMethod(Function * function, Value * self, Value * blockNo) const {
     auto savePoint = iBuilder->saveIP();
-    Module * m = iBuilder->getModule();
-    Function * scanWordFunction = generateScanWordRoutine(m);
+    Function * scanWordFunction = generateScanWordRoutine(iBuilder->getModule());
+    iBuilder->restoreIP(savePoint);
+
     const unsigned fieldCount = iBuilder->getBitBlockWidth() / mScanwordBitWidth;
     Type * T = iBuilder->getIntNTy(mScanwordBitWidth);
-    Type * scanwordVectorType =  VectorType::get(T, fieldCount);
-
-    Function * doBlockFunction = m->getFunction(mKernelName + doBlock_suffix);
-
-    iBuilder->SetInsertPoint(BasicBlock::Create(iBuilder->getContext(), "entry", doBlockFunction, 0));
-    Value * kernelStuctParam = getParameter(doBlockFunction, "self");
-    Value * blockNo = getScalarField(kernelStuctParam, blockNoScalar);
+    VectorType * scanwordVectorType =  VectorType::get(T, fieldCount);
     Value * scanwordPos = iBuilder->CreateMul(blockNo, ConstantInt::get(blockNo->getType(), iBuilder->getBitBlockWidth()));
     
     std::vector<Value * > matchWordVectors;
-    for(unsigned d = 0; d <= mEditDistance; d++){
-        Value * ptr = getStream(kernelStuctParam, "matchResults", blockNo, iBuilder->getInt32(d));
+    for(unsigned d = 0; d <= mEditDistance; d++) {
+        Value * ptr = getStream(self, "matchResults", blockNo, iBuilder->getInt32(d));
         Value * matches = iBuilder->CreateBlockAlignedLoad(ptr);
         matchWordVectors.push_back(iBuilder->CreateBitCast(matches, scanwordVectorType));
     }
     
-    for(unsigned i = 0; i < fieldCount; ++i){       
-        for(unsigned d = 0; d <= mEditDistance; d++){
+    for(unsigned i = 0; i < fieldCount; ++i) {
+        for(unsigned d = 0; d <= mEditDistance; d++) {
             Value * matchWord = iBuilder->CreateExtractElement(matchWordVectors[d], ConstantInt::get(T, i));
             iBuilder->CreateCall(scanWordFunction, {matchWord, iBuilder->getInt32(d), scanwordPos});
         }
         scanwordPos = iBuilder->CreateAdd(scanwordPos, ConstantInt::get(T, mScanwordBitWidth));
 
     }
-    iBuilder -> CreateRetVoid();
-    iBuilder->restoreIP(savePoint);
 }
 
 Function * editdScanKernel::generateScanWordRoutine(Module * m) const {
 
-    Type * T = iBuilder->getIntNTy(mScanwordBitWidth);
+    IntegerType * T = iBuilder->getIntNTy(mScanwordBitWidth);
 
     Function * scanFunc = cast<Function>(m->getOrInsertFunction("scan_word", iBuilder->getVoidTy(), T, iBuilder->getInt32Ty(), T, nullptr));
     scanFunc->setCallingConv(CallingConv::C);

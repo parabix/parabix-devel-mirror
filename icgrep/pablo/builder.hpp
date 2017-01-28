@@ -247,10 +247,6 @@ public:
         return mParent;
     }
 
-    inline String * getName(const llvm::StringRef & name) const {
-        return mPb->getName(name);
-    }
-
     inline String * makeName(const llvm::StringRef & prefix) const {
         return mPb->makeName(prefix);
     }

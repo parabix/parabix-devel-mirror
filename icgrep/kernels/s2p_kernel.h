@@ -12,17 +12,12 @@ namespace llvm { class Value; }
 namespace kernel {
 
 class S2PKernel : public BlockOrientedKernel {
-public:
-    
+public:    
     S2PKernel(IDISA::IDISA_Builder * builder);
-
     virtual ~S2PKernel() {}
-        
 private:
-    void generateDoBlockLogic(llvm::Value * self, llvm::Value * blockNo) const override;
-    void generateDoBlockMethod() const override;
-    void generateFinalBlockMethod() const override;
-    
+    void generateDoBlockMethod(llvm::Function * function, llvm::Value * self, llvm::Value * blockNo) const override;
+    void generateFinalBlockMethod(llvm::Function * function, llvm::Value * self, llvm::Value * remainingBytes, llvm::Value * blockNo) const override;    
 };
 
 }

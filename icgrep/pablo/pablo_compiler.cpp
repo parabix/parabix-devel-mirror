@@ -47,22 +47,17 @@ void PabloCompiler::initializeKernelData() {
     mCarryManager->initializeCarryData(mKernel);
 }
     
-void PabloCompiler::compile(Value * const self, Function * function) {
+void PabloCompiler::compile(Function * function, Value * const self, Value * const blockNo) {
 
-    // Make sure that we generate code into the right module.
     mSelf = self;
-    mFunction = function;
 
-    //Generate Kernel//
-    iBuilder->SetInsertPoint(BasicBlock::Create(iBuilder->getContext(), "entry", function, 0));
+    mFunction = function;
 
     mCarryManager->initializeCodeGen(self, function);
       
     PabloBlock * const entryBlock = mKernel->getEntryBlock(); assert (entryBlock);
     mMarker.emplace(entryBlock->createZeroes(), iBuilder->allZeroes());
     mMarker.emplace(entryBlock->createOnes(), iBuilder->allOnes());
-
-    Value * const blockNo = mKernel->getScalarField(mSelf, blockNoScalar);
 
     for (unsigned i = 0; i < mKernel->getNumOfInputs(); ++i) {
         Var * var = mKernel->getInput(i);
@@ -481,7 +476,7 @@ void PabloCompiler::compileStatement(const Statement * stmt) {
             const unsigned bit_shift = (l->getAmount() % iBuilder->getBitBlockWidth());
             const unsigned block_shift = (l->getAmount() / iBuilder->getBitBlockWidth());
             std::string inputName = cast<Var>(var)->getName().str();
-            Value * blockNo = mKernel->getScalarField(mSelf, blockNoScalar);
+            Value * blockNo = mKernel->getBlockNo(mSelf);
             Value * lookAhead_blockPtr  = mKernel->getStreamSetPtr(mSelf, inputName, iBuilder->CreateAdd(blockNo, iBuilder->getSize(block_shift)));
             Value * lookAhead_inputPtr = iBuilder->CreateGEP(lookAhead_blockPtr, {iBuilder->getInt32(0), iBuilder->getInt32(index)});
             Value * lookAhead = iBuilder->CreateBlockAlignedLoad(lookAhead_inputPtr);

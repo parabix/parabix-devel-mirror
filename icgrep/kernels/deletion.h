@@ -28,9 +28,9 @@ public:
     
 protected:
 
-    void generateDoBlockMethod() const override;
+    void generateDoBlockMethod(llvm::Function * function, llvm::Value * self, llvm::Value * blockNo) const override;
 
-    void generateFinalBlockMethod() const override;
+    void generateFinalBlockMethod(llvm::Function * function, llvm::Value * self, llvm::Value * remainingBytes, llvm::Value * blockNo) const override;
 
 private:
     const unsigned mDeletionFieldWidth;

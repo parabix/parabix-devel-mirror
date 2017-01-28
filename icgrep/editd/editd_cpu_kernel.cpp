@@ -22,54 +22,25 @@ void editdCPUKernel::bitblock_advance_ci_co(Value * val, unsigned shift, Value *
     }
 }
 
-void editdCPUKernel::generateFinalBlockMethod() const {
-    IDISA::IDISA_Builder::InsertPoint savePoint = iBuilder->saveIP();
-    Module * m = iBuilder->getModule();
-    Function * doBlockFunction = m->getFunction(mKernelName + doBlock_suffix);
-    Function * finalBlockFunction = m->getFunction(mKernelName + finalBlock_suffix);
-    iBuilder->SetInsertPoint(BasicBlock::Create(iBuilder->getContext(), "fb_entry", finalBlockFunction, 0));
-    // Final Block arguments: self, remaining, then the standard DoBlock args.
-    Function::arg_iterator args = finalBlockFunction->arg_begin();
-    Value * self = &*(args++);
-    Value * remaining = &*(args++);
-    std::vector<Value *> doBlockArgs = {self};
-    while (args != finalBlockFunction->arg_end()){
-        doBlockArgs.push_back(&*args++);
-    }
-    setScalarField(self, "EOFmask", iBuilder->bitblock_mask_from(remaining));
-    iBuilder->CreateCall(doBlockFunction, doBlockArgs);
-    iBuilder->CreateRetVoid();
-    iBuilder->restoreIP(savePoint);
-}
-    
-void editdCPUKernel::generateDoBlockMethod() const {
-    IDISA::IDISA_Builder::InsertPoint savePoint = iBuilder->saveIP();
-    Module * m = iBuilder->getModule();  
+void editdCPUKernel::generateDoBlockMethod(Function * function, Value * self, Value * blockNo) const {
+    auto savePoint = iBuilder->saveIP();
 
     Type * const int32ty = iBuilder->getInt32Ty();
     Type * const int8ty = iBuilder->getInt8Ty();
 
-    Function * doBlockFunction = m->getFunction(mKernelName + doBlock_suffix);
-       
-    BasicBlock * entryBlock = BasicBlock::Create(iBuilder->getContext(), "entry", doBlockFunction, 0);
-    
-    iBuilder->SetInsertPoint(entryBlock);
-
-    Value * kernelStuctParam = getParameter(doBlockFunction, "self");
-    Value * pattStartPtr = getScalarField(kernelStuctParam, "pattStream");
-    Value * stideCarryArr = getScalarField(kernelStuctParam, "srideCarry");
-    Value * blockNo = getScalarField(kernelStuctParam, blockNoScalar);
+    Value * pattStartPtr = getScalarField(self, "pattStream");
+    Value * stideCarryArr = getScalarField(self, "srideCarry");
 
     unsigned carryIdx = 0;
 
-    std::vector<std::vector<Value *>> e(mPatternLen+1, std::vector<Value *>(mEditDistance+1));
-    std::vector<std::vector<Value *>> adv(mPatternLen, std::vector<Value *>(mEditDistance+1));
+    std::vector<std::vector<Value *>> e(mPatternLen + 1, std::vector<Value *>(mEditDistance + 1));
+    std::vector<std::vector<Value *>> adv(mPatternLen, std::vector<Value *>(mEditDistance + 1));
     std::vector<std::vector<int>> calculated(mPatternLen, std::vector<int>(mEditDistance + 1, 0));
     Value * pattPos = iBuilder->getInt32(0);
     Value * pattPtr = iBuilder->CreateGEP(pattStartPtr, pattPos);
     Value * pattCh = iBuilder->CreateLoad(pattPtr);
     Value * pattIdx = iBuilder->CreateAnd(iBuilder->CreateLShr(pattCh, 1), ConstantInt::get(int8ty, 3));
-    Value * pattStreamPtr = getStream(kernelStuctParam, "CCStream", blockNo, iBuilder->CreateZExt(pattIdx, int32ty));
+    Value * pattStreamPtr = getStream(self, "CCStream", blockNo, iBuilder->CreateZExt(pattIdx, int32ty));
     Value * pattStream = iBuilder->CreateLoad(pattStreamPtr);
     pattPos = iBuilder->CreateAdd(pattPos, ConstantInt::get(int32ty, 1));
 
@@ -82,7 +53,7 @@ void editdCPUKernel::generateDoBlockMethod() const {
         pattPtr = iBuilder->CreateGEP(pattStartPtr, pattPos);
         pattCh = iBuilder->CreateLoad(pattPtr);
         pattIdx = iBuilder->CreateAnd(iBuilder->CreateLShr(pattCh, 1), ConstantInt::get(int8ty, 3));
-        pattStreamPtr = getStream(kernelStuctParam, "CCStream", blockNo, iBuilder->CreateZExt(pattIdx, int32ty));
+        pattStreamPtr = getStream(self, "CCStream", blockNo, iBuilder->CreateZExt(pattIdx, int32ty));
         pattStream = iBuilder->CreateLoad(pattStreamPtr);
 
         bitblock_advance_ci_co(e[i-1][0], 1, stideCarryArr, carryIdx++, adv, calculated, i-1, 0);
@@ -100,15 +71,20 @@ void editdCPUKernel::generateDoBlockMethod() const {
         pattPos = iBuilder->CreateAdd(pattPos, ConstantInt::get(int32ty, 1));
     }
     
-    Value * ptr = getStream(kernelStuctParam, "ResultStream", blockNo, iBuilder->getInt32(0));
+    Value * ptr = getStream(self, "ResultStream", blockNo, iBuilder->getInt32(0));
     iBuilder->CreateStore(e[mPatternLen - 1][0], ptr);
     for(unsigned j = 1; j<= mEditDistance; j++){
-        ptr = getStream(kernelStuctParam, "ResultStream", blockNo, iBuilder->getInt32(j));
+        ptr = getStream(self, "ResultStream", blockNo, iBuilder->getInt32(j));
         iBuilder->CreateStore(iBuilder->CreateAnd(e[mPatternLen-1][j], iBuilder->CreateNot(e[mPatternLen-1][j-1])), ptr);
     }
        
     iBuilder->CreateRetVoid();
     iBuilder->restoreIP(savePoint);
+}
+
+void editdCPUKernel::generateFinalBlockMethod(Function * function, Value * self, Value * remainingBytes, Value * blockNo) const {
+    setScalarField(self, "EOFmask", iBuilder->bitblock_mask_from(remainingBytes));
+    iBuilder->CreateCall(getDoBlockFunction(), {self});
 }
 
 editdCPUKernel::editdCPUKernel(IDISA::IDISA_Builder * b, unsigned dist, unsigned pattLen) :

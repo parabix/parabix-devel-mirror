@@ -275,10 +275,6 @@ public:
         mBranch = branch;
     }
 
-    inline String * getName(const llvm::StringRef & name) const {
-        return mParent->getName(name);
-    }
-
     inline String * makeName(const llvm::StringRef & prefix) const {
         return mParent->makeName(prefix);
     }

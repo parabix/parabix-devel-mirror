@@ -20,7 +20,7 @@ public:
         
 private:
     void generateDoBlockLogic(llvm::Value * self, llvm::Value * blockNo) const override;    
-    void generateDoBlockMethod() const override;
+    void generateDoBlockMethod(llvm::Function * function, llvm::Value * self, llvm::Value * blockNo) const override;
     void generateFinalBlockMethod() const override;
 
 };

@@ -87,43 +87,16 @@ void PabloKernel::prepareKernel() {
     BlockOrientedKernel::prepareKernel();
 }
 
-void PabloKernel::generateDoBlockMethod() const {
-    auto savePoint = iBuilder->saveIP();
-    Module * const m = iBuilder->getModule();
-    Function * const f = m->getFunction(mKernelName + doBlock_suffix);
-    Value * const self = &*(f->arg_begin());
-    mPabloCompiler->compile(self, f);
-    iBuilder->CreateRetVoid();
-    #ifndef NDEBUG
-    llvm::verifyFunction(*f, &errs());
-    #endif
-    iBuilder->restoreIP(savePoint);
+void PabloKernel::generateDoBlockMethod(Function * function, Value  *self, Value * blockNo) const {
+    mPabloCompiler->compile(function, self, blockNo);
 }
 
-void PabloKernel::generateFinalBlockMethod() const {
-    auto savePoint = iBuilder->saveIP();
-    Module * m = iBuilder->getModule();
-    Function * doBlockFunction = m->getFunction(mKernelName + doBlock_suffix);
-    Function * finalBlockFunction = m->getFunction(mKernelName + finalBlock_suffix);
-    iBuilder->SetInsertPoint(BasicBlock::Create(iBuilder->getContext(), "fb_entry", finalBlockFunction, 0));
-    // Final Block arguments: self, remaining, then the standard DoBlock args.
-    Function::arg_iterator args = finalBlockFunction->arg_begin();
-    Value * self = &*(args++);
-    Value * remaining = &*(args++);
-    std::vector<Value *> doBlockArgs = {self};
-    while (args != finalBlockFunction->arg_end()){
-        doBlockArgs.push_back(&*args++);
-    }
+void PabloKernel::generateFinalBlockMethod(Function * function, Value *self, Value *remainingBytes, Value *blockNo) const {
     // Standard Pablo convention for final block processing: set a bit marking
     // the position just past EOF, as well as a mask marking all positions past EOF.
-    setScalarField(self, "EOFbit", iBuilder->bitblock_set_bit(remaining));
-    setScalarField(self, "EOFmask", iBuilder->bitblock_mask_from(remaining));
-    iBuilder->CreateCall(doBlockFunction, doBlockArgs);
-    iBuilder->CreateRetVoid();
-    #ifndef NDEBUG
-    llvm::verifyFunction(*finalBlockFunction, &errs());
-    #endif
-    iBuilder->restoreIP(savePoint);
+    setScalarField(self, "EOFbit", iBuilder->bitblock_set_bit(remainingBytes));
+    setScalarField(self, "EOFmask", iBuilder->bitblock_mask_from(remainingBytes));
+    iBuilder->CreateCall(getDoBlockFunction(), { self });
 }
 
 PabloKernel::PabloKernel(IDISA::IDISA_Builder * builder, std::string kernelName)

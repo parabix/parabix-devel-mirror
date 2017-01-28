@@ -15,17 +15,7 @@ using namespace pablo;
 using namespace re;
 using namespace llvm;
 
-void DirectCharacterClassKernelBuilder::generateDoBlockMethod() const {
-    auto savePoint = iBuilder->saveIP();
-    Module * m = iBuilder->getModule();
-
-    Function * doBlockFunction = m->getFunction(mKernelName + doBlock_suffix);
-    
-    iBuilder->SetInsertPoint(BasicBlock::Create(iBuilder->getContext(), "entry", doBlockFunction, 0));
-    
-    Value * self = getParameter(doBlockFunction, "self");
-    Value * blockNo = getScalarField(self, blockNoScalar);
-
+void DirectCharacterClassKernelBuilder::generateDoBlockMethod(Function * function, Value *self, Value *blockNo) const {
     unsigned packCount = 8 * mCodeUnitSize;  
     unsigned codeUnitWidth = 8 * mCodeUnitSize;
     Value * codeUnitPack[packCount];
@@ -33,7 +23,6 @@ void DirectCharacterClassKernelBuilder::generateDoBlockMethod() const {
         Value * ptr = getStream(self, "codeUnitStream", blockNo, iBuilder->getInt32(0), iBuilder->getInt32(i));
         codeUnitPack[i] = iBuilder->CreateBlockAlignedLoad(ptr);
     }
-
     for (unsigned j = 0; j < mCharClasses.size();  j++) {
         Value * theCCstream = iBuilder->allZeroes();
         for (const auto & interval : *mCharClasses[j]) {
@@ -69,9 +58,6 @@ void DirectCharacterClassKernelBuilder::generateDoBlockMethod() const {
         Value * ptr = getStream(self, "ccStream", blockNo, iBuilder->getInt32(j));
         iBuilder->CreateBlockAlignedStore(theCCstream, ptr);
     }
- 
-    iBuilder->CreateRetVoid();
-    iBuilder->restoreIP(savePoint);
 }
 
 ParabixCharacterClassKernelBuilder::ParabixCharacterClassKernelBuilder (

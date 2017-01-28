@@ -15,13 +15,13 @@ namespace kernel {
 
 class editdCPUKernel : public BlockOrientedKernel {
 public:
-    
+
     editdCPUKernel(IDISA::IDISA_Builder * b, unsigned dist, unsigned pattLen);
     
     
 private:
-    void generateDoBlockMethod() const override;
-    void generateFinalBlockMethod() const override;
+    void generateDoBlockMethod(llvm::Function * function, llvm::Value * self, llvm::Value * blockNo) const override;
+    void generateFinalBlockMethod(llvm::Function * function, llvm::Value * self, llvm::Value * remainingBytes, llvm::Value * blockNo) const override;
     void bitblock_advance_ci_co(llvm::Value * val, unsigned shift, llvm::Value * stideCarryArr, unsigned carryIdx, std::vector<std::vector<llvm::Value *>> & adv, std::vector<std::vector<int>> & calculated, int i, int j) const;
     unsigned mEditDistance;
     unsigned mPatternLen;
