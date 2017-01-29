@@ -117,9 +117,9 @@ protected:
     
     virtual void prepareKernel();
        
-    virtual void generateInitMethod() const;
+    virtual void generateInitMethod(llvm::Function * initFunction, llvm::Value * self) const;
     
-    virtual void generateDoSegmentMethod() const = 0;
+    virtual void generateDoSegmentMethod(llvm::Function * function, llvm::Value * self, llvm::Value * doFinal, const std::vector<llvm::Value *> & producerPos) const = 0;
     
     // Add an additional scalar field to the KernelState struct.
     // Must occur before any call to addKernelDeclarations or createKernelModule.
@@ -175,9 +175,13 @@ protected:
 
     virtual void setProducedItemCount(llvm::Value * self, const std::string & name, llvm::Value * value) const;
 
-protected:
-
     const parabix::StreamSetBuffer * getStreamSetBuffer(const std::string & name) const;
+
+private:
+
+    void callGenerateInitMethod() const;
+
+    void callGenerateDoSegmentMethod() const;
 
 protected:
 
@@ -207,7 +211,7 @@ protected:
 
     virtual void generateFinalBlockMethod(llvm::Function * function, llvm::Value * self, llvm::Value * remainingBytes, llvm::Value * blockNo) const;
 
-    virtual void generateDoSegmentMethod() const final;
+    virtual void generateDoSegmentMethod(llvm::Function * function, llvm::Value * self, llvm::Value * doFinal, const std::vector<llvm::Value *> & producerPos) const final;
 
     BlockOrientedKernel(IDISA::IDISA_Builder * builder,
                         std::string && kernelName,

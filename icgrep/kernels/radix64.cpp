@@ -40,12 +40,9 @@ namespace kernel {
 // The pipeline must guarantee that the doSegment method is called with the 
 // a continous buffer for the full segment (number of blocks).
 
-void expand3_4Kernel::generateDoSegmentMethod() const {
-    IDISA::IDISA_Builder::InsertPoint savePoint = iBuilder->saveIP();
-    Module * m = iBuilder->getModule();
-    Function * doSegmentFunction = m->getFunction(mKernelName + doSegment_suffix);
-    BasicBlock * expand2_3entry = BasicBlock::Create(iBuilder->getContext(), "expand2_3entry", doSegmentFunction, 0);
-    iBuilder->SetInsertPoint(expand2_3entry);
+void expand3_4Kernel::generateDoSegmentMethod(Function * doSegmentFunction, Value *self, Value *doFinal, const std::vector<Value *> &producerPos) const {
+
+    BasicBlock * expand2_3entry = iBuilder->GetInsertBlock();
     BasicBlock * expand_3_4_loop = BasicBlock::Create(iBuilder->getContext(), "expand_3_4_loop", doSegmentFunction, 0);
     BasicBlock * expand3_4_loop_exit = BasicBlock::Create(iBuilder->getContext(), "expand3_4_loop_exit", doSegmentFunction, 0);
     BasicBlock * finalStep1 = BasicBlock::Create(iBuilder->getContext(), "finalStep1", doSegmentFunction, 0);
@@ -90,12 +87,8 @@ void expand3_4Kernel::generateDoSegmentMethod() const {
     
     const unsigned packAlign = iBuilder->getBitBlockWidth()/8;
 
-    Function::arg_iterator args = doSegmentFunction->arg_begin();
-    Value * self = &*(args++);
-    Value * doFinal = &*(args++);
-    Value * producerPos = &*(args++);
     Value * processed = getProcessedItemCount(self, "sourceStream");
-    Value * itemsAvail = iBuilder->CreateSub(producerPos, processed);
+    Value * itemsAvail = iBuilder->CreateSub(producerPos[0], processed);
     
     //
     // The main loop processes 3 packs of data at a time.  For doFinal
@@ -255,8 +248,6 @@ void expand3_4Kernel::generateDoSegmentMethod() const {
     
     iBuilder->CreateBr(expand3_4_exit);
     iBuilder->SetInsertPoint(expand3_4_exit);
-    iBuilder->CreateRetVoid();
-    iBuilder->restoreIP(savePoint);
 }
 
 

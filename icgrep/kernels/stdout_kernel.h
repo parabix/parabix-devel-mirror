@@ -15,7 +15,7 @@ class StdOutKernel : public SegmentOrientedKernel {
 public:
     StdOutKernel(IDISA::IDISA_Builder * iBuilder, unsigned codeUnitWidth); 
 private:
-    void generateDoSegmentMethod() const override final;
+    void generateDoSegmentMethod(llvm::Function * doSegmentFunction, llvm::Value * self, llvm::Value * doFinal, const std::vector<llvm::Value *> & producerPos) const override final;
 private:
     const unsigned mCodeUnitWidth;
     
@@ -26,8 +26,8 @@ class FileSink : public SegmentOrientedKernel {
 public:  
     FileSink(IDISA::IDISA_Builder * iBuilder, unsigned codeUnitWidth);
 protected:
-    void generateInitMethod() const override final;
-    void generateDoSegmentMethod() const override final;
+    void generateInitMethod(llvm::Function * initFunction, llvm::Value * self) const override final;
+    void generateDoSegmentMethod(llvm::Function * doSegmentFunction, llvm::Value * self, llvm::Value * doFinal, const std::vector<llvm::Value *> & producerPos) const override final;
 private:
     const unsigned mCodeUnitWidth;
     

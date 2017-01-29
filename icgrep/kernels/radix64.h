@@ -22,7 +22,7 @@ class expand3_4Kernel : public SegmentOrientedKernel {
 public:   
     expand3_4Kernel(IDISA::IDISA_Builder * iBuilder);
 private:
-    void generateDoSegmentMethod() const override;
+    void generateDoSegmentMethod(llvm::Function * doSegmentFunction, llvm::Value *self, llvm::Value *doFinal, const std::vector<llvm::Value *> &producerPos) const override;
 };
 
 class radix64Kernel : public BlockOrientedKernel {

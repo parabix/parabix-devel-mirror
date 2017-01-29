@@ -18,7 +18,7 @@ class MMapSourceKernel : public SegmentOrientedKernel {
 public:
     MMapSourceKernel(IDISA::IDISA_Builder * iBuilder, unsigned blocksPerSegment = 1, unsigned codeUnitWidth = 8);  
 private:
-    void generateDoSegmentMethod() const override;
+    void generateDoSegmentMethod(llvm::Function * function, llvm::Value * self, llvm::Value * doFinal, const std::vector<llvm::Value *> & producerPos) const override final;
 private:
     const unsigned mSegmentBlocks;
     const unsigned mCodeUnitWidth;

@@ -17,7 +17,7 @@ class StdInKernel : public SegmentOrientedKernel {
 public:
     StdInKernel(IDISA::IDISA_Builder * iBuilder, unsigned blocksPerSegment = 1, unsigned codeUnitWidth = 8);
 protected:
-    void generateDoSegmentMethod() const override final;
+    void generateDoSegmentMethod(llvm::Function * function, llvm::Value * self, llvm::Value * doFinal, const std::vector<llvm::Value *> & producerPos) const override final;
 private:
     unsigned mSegmentBlocks;
     unsigned mCodeUnitWidth;
@@ -28,8 +28,8 @@ class FileSource : public SegmentOrientedKernel {
 public:
     FileSource(IDISA::IDISA_Builder * iBuilder, unsigned blocksPerSegment = 1, unsigned codeUnitWidth = 8);
 protected:
-    void generateInitMethod() const override final;
-    void generateDoSegmentMethod() const override final;
+    void generateInitMethod(llvm::Function * initFunction, llvm::Value * self) const override final;
+    void generateDoSegmentMethod(llvm::Function * function, llvm::Value * self, llvm::Value * doFinal, const std::vector<llvm::Value *> & producerPos) const override final;
 private:
     unsigned mSegmentBlocks;
     unsigned mCodeUnitWidth;

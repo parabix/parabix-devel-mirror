@@ -114,10 +114,10 @@ void KernelBuilder::generateKernel(const std::vector<StreamSetBuffer *> & inputs
     Module * const m = iBuilder->getModule();
     mStreamSetInputBuffers.assign(inputs.begin(), inputs.end());
     mStreamSetOutputBuffers.assign(outputs.begin(), outputs.end());
-    prepareKernel();            // possibly overridden by the KernelBuilder subtype
+    prepareKernel(); // possibly overridden by the KernelBuilder subtype
     addKernelDeclarations(m);
-    generateInitMethod();       // possibly overridden by the KernelBuilder subtype
-    generateDoSegmentMethod();
+    callGenerateInitMethod();
+    callGenerateDoSegmentMethod();
 
     // Implement the accumulator get functions
     for (auto binding : mScalarOutputs) {
@@ -132,12 +132,25 @@ void KernelBuilder::generateKernel(const std::vector<StreamSetBuffer *> & inputs
     iBuilder->restoreIP(savePoint);
 }
 
-// Default init method, possibly overridden if special init actions required. 
-void KernelBuilder::generateInitMethod() const {
-    auto savePoint = iBuilder->saveIP();
+void KernelBuilder::callGenerateDoSegmentMethod() const {
+    Function * doSegmentFunction = getDoSegmentFunction();
+    iBuilder->SetInsertPoint(BasicBlock::Create(iBuilder->getContext(), mKernelName + "_entry", doSegmentFunction, 0));
+    auto args = doSegmentFunction->arg_begin();
+    Value * self = &*(args++);
+    Value * doFinal = &*(args++);
+    std::vector<Value *> producerPos;
+    for (unsigned i = 0; i < mStreamSetInputs.size(); i++) {
+        producerPos.push_back(&*(args++));
+    }
+    assert (args == doSegmentFunction->arg_end());
+    generateDoSegmentMethod(doSegmentFunction, self, doFinal, producerPos); // must be overridden by the KernelBuilder subtype
+    iBuilder->CreateRetVoid();
+}
+
+void KernelBuilder::callGenerateInitMethod() const {
     Module * const m = iBuilder->getModule();
     Function * initFunction = m->getFunction(mKernelName + init_suffix);
-    iBuilder->SetInsertPoint(BasicBlock::Create(iBuilder->getContext(), "Init_entry", initFunction, 0));    
+    iBuilder->SetInsertPoint(BasicBlock::Create(iBuilder->getContext(), "Init_entry", initFunction, 0));
     Function::arg_iterator args = initFunction->arg_begin();
     Value * self = &*(args++);
     iBuilder->CreateStore(ConstantAggregateZero::get(mKernelStateType), self);
@@ -146,9 +159,13 @@ void KernelBuilder::generateInitMethod() const {
         Value * ptr = iBuilder->CreateGEP(self, {iBuilder->getInt32(0), getScalarIndex(binding.name)});
         iBuilder->CreateStore(param, ptr);
     }
+    generateInitMethod(initFunction, self);
     iBuilder->CreateRetVoid();
-    iBuilder->restoreIP(savePoint);
 }
+
+// Default init method, possibly overridden if special init actions required.
+void KernelBuilder::generateInitMethod(Function * /* initFunction */, Value * /* self */) const { }
+
 
 ConstantInt * KernelBuilder::getScalarIndex(const std::string & name) const {
     const auto f = mKernelMap.find(name);
@@ -320,16 +337,13 @@ void BlockOrientedKernel::generateFinalBlockMethod(Function * function, Value * 
 
 //  The default doSegment method dispatches to the doBlock routine for
 //  each block of the given number of blocksToDo, and then updates counts.
-void BlockOrientedKernel::generateDoSegmentMethod() const {
+void BlockOrientedKernel::generateDoSegmentMethod(Function * doSegmentFunction, Value * self, Value * doFinal, const std::vector<Value *> &producerPos) const {
+
     auto savePoint = iBuilder->saveIP();
-
     callGenerateDoBlockMethod();
-
     callGenerateDoFinalBlockMethod();
+    iBuilder->restoreIP(savePoint);
 
-    Module * m = iBuilder->getModule();
-    Function * doSegmentFunction = m->getFunction(mKernelName + doSegment_suffix);
-    iBuilder->SetInsertPoint(BasicBlock::Create(iBuilder->getContext(), mKernelName + "_entry", doSegmentFunction, 0));
     BasicBlock * entryBlock = iBuilder->GetInsertBlock();
     BasicBlock * strideLoopCond = BasicBlock::Create(iBuilder->getContext(), mKernelName + "_strideLoopCond", doSegmentFunction, 0);
     BasicBlock * strideLoopBody = BasicBlock::Create(iBuilder->getContext(), mKernelName + "_strideLoopBody", doSegmentFunction, 0);
@@ -341,16 +355,9 @@ void BlockOrientedKernel::generateDoSegmentMethod() const {
     ConstantInt * stride = iBuilder->getSize(iBuilder->getStride());
     ConstantInt * strideBlocks = iBuilder->getSize(iBuilder->getStride() / iBuilder->getBitBlockWidth());
 
-    Function::arg_iterator args = doSegmentFunction->arg_begin();
-    Value * self = &*(args++);
-    Value * doFinal = &*(args++);
-
-    std::vector<Value *> producerPos;
-    producerPos.push_back(&*(args++));
     Value * availablePos = producerPos[0];
     for (unsigned i = 1; i < mStreamSetInputs.size(); i++) {
-        Value * p = &*(args++);
-        producerPos.push_back(p);
+        Value * p = producerPos[i];
         availablePos = iBuilder->CreateSelect(iBuilder->CreateICmpULT(availablePos, p), availablePos, p);
     }
     Value * processed = getProcessedItemCount(self, mStreamSetInputs[0].name);
@@ -361,7 +368,7 @@ void BlockOrientedKernel::generateDoSegmentMethod() const {
     iBuilder->SetInsertPoint(strideLoopCond);
     PHINode * stridesRemaining = iBuilder->CreatePHI(size_ty, 2, "stridesRemaining");
     stridesRemaining->addIncoming(stridesToDo, entryBlock);
-    Value * notDone = iBuilder->CreateICmpUGT(stridesRemaining, ConstantInt::get(size_ty, 0));
+    Value * notDone = iBuilder->CreateICmpUGT(stridesRemaining, iBuilder->getSize(0));
     iBuilder->CreateCondBr(notDone, strideLoopBody, stridesDone);
 
     iBuilder->SetInsertPoint(strideLoopBody);
@@ -370,7 +377,7 @@ void BlockOrientedKernel::generateDoSegmentMethod() const {
     iBuilder->CreateCall(getDoBlockFunction(), self);
 
     setBlockNo(self, iBuilder->CreateAdd(blockNo, strideBlocks));
-    stridesRemaining->addIncoming(iBuilder->CreateSub(stridesRemaining, ConstantInt::get(size_ty, 1)), strideLoopBody);
+    stridesRemaining->addIncoming(iBuilder->CreateSub(stridesRemaining, iBuilder->getSize(1)), strideLoopBody);
     iBuilder->CreateBr(strideLoopCond);
 
     iBuilder->SetInsertPoint(stridesDone);
@@ -411,31 +418,25 @@ void BlockOrientedKernel::generateDoSegmentMethod() const {
 
     iBuilder->SetInsertPoint(segmentDone);
 
-    iBuilder->CreateRetVoid();
-    iBuilder->restoreIP(savePoint);
 }
 
 void BlockOrientedKernel::callGenerateDoBlockMethod() const {
     Function * f = getDoBlockFunction();
-    Value * const self = getParameter(f, "self"); assert (self);
+    auto args = f->arg_begin();
+    Value * const self = &(*args);
     iBuilder->SetInsertPoint(BasicBlock::Create(iBuilder->getContext(), "entry", f));
     generateDoBlockMethod(f, self, getBlockNo(self)); // must be implemented by the KernelBuilder subtype
     iBuilder->CreateRetVoid();
-//    #ifndef NDEBUG
-//    llvm::verifyFunction(*f, &errs());
-//    #endif
 }
 
 void BlockOrientedKernel::callGenerateDoFinalBlockMethod() const {
     Function * f = getDoFinalBlockFunction();
-    Value * const self = getParameter(f, "self"); assert (self);
-    Value * remainingBytes = getParameter(f, "remainingBytes"); assert (remainingBytes);
+    auto args = f->arg_begin();
+    Value * const self = &(*args++);
+    Value * const remainingBytes = &(*args);
     iBuilder->SetInsertPoint(BasicBlock::Create(iBuilder->getContext(), "entry", f));
     generateFinalBlockMethod(f, self, remainingBytes, getBlockNo(self)); // possibly overridden by the KernelBuilder subtype
     iBuilder->CreateRetVoid();
-//    #ifndef NDEBUG
-//    llvm::verifyFunction(*f, &errs());
-//    #endif
 }
 
 Function * BlockOrientedKernel::getDoBlockFunction() const {
