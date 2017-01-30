@@ -13,6 +13,12 @@
 namespace llvm { class Module; }
 namespace llvm { class Type; }
 
+static const auto INIT_SUFFIX = "_Init";
+
+static const auto DO_SEGMENT_SUFFIX = "_DoSegment";
+
+static const auto ACCUMULATOR_INFIX = "_get_";
+
 using namespace llvm;
 
 void KernelInterface::addKernelDeclarations(Module * client) const {
@@ -27,7 +33,7 @@ void KernelInterface::addKernelDeclarations(Module * client) const {
     // Create the accumulator get function prototypes
     for (auto binding : mScalarOutputs) {
         FunctionType * accumFnType = FunctionType::get(binding.type, {selfType}, false);
-        std::string fnName = mKernelName + accumulator_infix + binding.name;
+        std::string fnName = mKernelName + ACCUMULATOR_INFIX + binding.name;
         Function * accumFn = Function::Create(accumFnType, GlobalValue::ExternalLinkage, fnName, client);
         accumFn->setCallingConv(CallingConv::C);
         accumFn->setDoesNotThrow();
@@ -41,7 +47,7 @@ void KernelInterface::addKernelDeclarations(Module * client) const {
         initParameters.push_back(binding.type);
     }
     FunctionType * initFunctionType = FunctionType::get(iBuilder->getVoidTy(), initParameters, false);
-    std::string initFnName = mKernelName + init_suffix;
+    std::string initFnName = mKernelName + INIT_SUFFIX;
     Function * initFn = Function::Create(initFunctionType, GlobalValue::ExternalLinkage, initFnName, client);
     initFn->setCallingConv(CallingConv::C);
     initFn->setDoesNotThrow();
@@ -53,40 +59,13 @@ void KernelInterface::addKernelDeclarations(Module * client) const {
         initArg->setName(binding.name);
     }
 
-    // Create the doBlock and finalBlock function prototypes
-    
-    std::vector<Type *> doBlockParameters = {selfType};
-    std::vector<Type *> finalBlockParameters = {selfType, iBuilder->getSizeTy()};
-    FunctionType * doBlockFunctionType = FunctionType::get(iBuilder->getVoidTy(), doBlockParameters, false);
-    std::string doBlockName = mKernelName + doBlock_suffix;
-    Function * doBlockFn = Function::Create(doBlockFunctionType, GlobalValue::ExternalLinkage, doBlockName, client);
-    doBlockFn->setCallingConv(CallingConv::C);
-    doBlockFn->setDoesNotThrow();
-    doBlockFn->setDoesNotCapture(1);
-    
-    FunctionType * finalBlockType = FunctionType::get(iBuilder->getVoidTy(), finalBlockParameters, false);
-    std::string finalBlockName = mKernelName + finalBlock_suffix;
-    Function * finalBlockFn = Function::Create(finalBlockType, GlobalValue::ExternalLinkage, finalBlockName, client);
-    finalBlockFn->setCallingConv(CallingConv::C);
-    finalBlockFn->setDoesNotThrow();
-    finalBlockFn->setDoesNotCapture(1);
-    
-    Function::arg_iterator doBlockArgs = doBlockFn->arg_begin();
-    Function::arg_iterator finalBlockArgs = finalBlockFn->arg_begin();
-    Value * doBlockArg = &*(doBlockArgs++);
-    doBlockArg->setName("self");
-    Value * finalBlockArg = &*(finalBlockArgs++);
-    finalBlockArg->setName("self");
-    finalBlockArg = &*(finalBlockArgs++);
-    finalBlockArg->setName("remainingBytes");
-
     // Create the doSegment function prototype.
     std::vector<Type *> doSegmentParameters = {selfType, iBuilder->getInt1Ty()};
     for (auto ss : mStreamSetInputs) {
         doSegmentParameters.push_back(iBuilder->getSizeTy());
     }
     FunctionType * doSegmentFunctionType = FunctionType::get(iBuilder->getVoidTy(), doSegmentParameters, false);
-    std::string doSegmentName = mKernelName + doSegment_suffix;
+    std::string doSegmentName = mKernelName + DO_SEGMENT_SUFFIX;
     Function * doSegmentFn = Function::Create(doSegmentFunctionType, GlobalValue::ExternalLinkage, doSegmentName, client);
     doSegmentFn->setCallingConv(CallingConv::C);
     doSegmentFn->setDoesNotThrow();
@@ -100,34 +79,45 @@ void KernelInterface::addKernelDeclarations(Module * client) const {
         arg->setName(ss.name + "_availableItems");
     }
     doSegmentFn->setDoesNotCapture(1); // for self parameter only.
+
+    // Add any additional kernel declarations
+    addAdditionalKernelDeclarations(client, selfType);
+
     iBuilder->setModule(saveModule);
     iBuilder->restoreIP(savePoint);
+}
+
+void KernelInterface::addAdditionalKernelDeclarations(llvm::Module * module, llvm::PointerType * selfType) const {
+
 }
 
 void KernelInterface::setInitialArguments(std::vector<Value *> args) {
     mInitialArguments = args;
 }
 
-Value * KernelInterface::createDoSegmentCall(std::vector<Value *> args) const {
-    Module * m = iBuilder->getModule();
-    std::string fnName = mKernelName + doSegment_suffix;
-    Function * method = m->getFunction(fnName);
-    if (!method) {
-        throw std::runtime_error("Cannot find " + fnName);
+llvm::Function * KernelInterface::getAccumulatorFunction(const std::string & accumName) const {
+    const auto name = mKernelName + ACCUMULATOR_INFIX + accumName;
+    Function * f = iBuilder->getModule()->getFunction(name);
+    if (LLVM_UNLIKELY(f == nullptr)) {
+        llvm::report_fatal_error("Cannot find " + name);
     }
-    return iBuilder->CreateCall(method, args);
+    return f;
 }
 
-Value * KernelInterface::createGetAccumulatorCall(Value * self, std::string accumName) const {
-    Module * m = iBuilder->getModule();
-    std::string fnName = mKernelName + accumulator_infix + accumName;
-    Function * accumMethod = m->getFunction(fnName);
-    if (!accumMethod) {
-        throw std::runtime_error("Cannot find " + fnName);
+Function * KernelInterface::getInitFunction() const {
+    const auto name = mKernelName + INIT_SUFFIX;
+    Function * f = iBuilder->getModule()->getFunction(name);
+    if (LLVM_UNLIKELY(f == nullptr)) {
+        llvm::report_fatal_error("Cannot find " + name);
     }
-    return iBuilder->CreateCall(accumMethod, {self});
+    return f;
 }
 
 Function * KernelInterface::getDoSegmentFunction() const {
-    return iBuilder->getModule()->getFunction(mKernelName + doSegment_suffix);
+    const auto name = mKernelName + DO_SEGMENT_SUFFIX;
+    Function * f = iBuilder->getModule()->getFunction(name);
+    if (LLVM_UNLIKELY(f == nullptr)) {
+        llvm::report_fatal_error("Cannot find " + name);
+    }
+    return f;
 }

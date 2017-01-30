@@ -85,6 +85,10 @@ public:
 
     void setTerminationSignal(llvm::Value * self) const;
 
+    llvm::Value * createDoSegmentCall(const std::vector<llvm::Value *> & args) const;
+
+    llvm::Value * createGetAccumulatorCall(llvm::Value * self, const std::string & accumName) const;
+
 protected:
 
     // Constructor
@@ -195,12 +199,29 @@ protected:
 
 };
 
+class SegmentOrientedKernel : public KernelBuilder {
+protected:
+
+    SegmentOrientedKernel(IDISA::IDISA_Builder * builder,
+                          std::string && kernelName,
+                          std::vector<Binding> && stream_inputs,
+                          std::vector<Binding> && stream_outputs,
+                          std::vector<Binding> && scalar_parameters,
+                          std::vector<Binding> && scalar_outputs,
+                          std::vector<Binding> && internal_scalars);
+
+    virtual ~SegmentOrientedKernel() { }
+
+};
+
 class BlockOrientedKernel : public KernelBuilder {
 protected:
 
     // Each kernel builder subtype must provide its own logic for generating
     // doBlock calls.
     virtual void generateDoBlockMethod(llvm::Function * function, llvm::Value * self, llvm::Value * blockNo) const = 0;
+
+    virtual void addAdditionalKernelDeclarations(llvm::Module * module, llvm::PointerType * selfType) const;
 
     // Each kernel builder subtypre must also specify the logic for processing the
     // final block of stream data, if there is any special processing required
@@ -232,21 +253,6 @@ private:
 
     void callGenerateDoFinalBlockMethod() const;
 };
-
-class SegmentOrientedKernel : public KernelBuilder {
-protected:
-
-    SegmentOrientedKernel(IDISA::IDISA_Builder * builder,
-                          std::string && kernelName,
-                          std::vector<Binding> && stream_inputs,
-                          std::vector<Binding> && stream_outputs,
-                          std::vector<Binding> && scalar_parameters,
-                          std::vector<Binding> && scalar_outputs,
-                          std::vector<Binding> && internal_scalars);
-
-    virtual ~SegmentOrientedKernel() { }
-};
-
 
 
 }

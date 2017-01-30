@@ -20,7 +20,11 @@
 namespace llvm { class BasicBlock; }
 namespace llvm { class Type; }
 
-const std::string blockNoScalar = "blockNo";
+static const auto BLOCK_NO_SCALAR = "blockNo";
+
+static const auto DO_BLOCK_SUFFIX = "_DoBlock";
+
+static const auto FINAL_BLOCK_SUFFIX = "_FinalBlock";
 
 using namespace llvm;
 using namespace kernel;
@@ -92,7 +96,7 @@ void KernelBuilder::prepareKernel() {
     for (auto binding : mInternalScalars) {
         addScalar(binding.type, binding.name);
     }
-    addScalar(iBuilder->getSizeTy(), blockNoScalar);
+    addScalar(iBuilder->getSizeTy(), BLOCK_NO_SCALAR);
     addScalar(iBuilder->getSizeTy(), logicalSegmentNoScalar);
     addScalar(iBuilder->getInt1Ty(), terminationSignal);
     mKernelStateType = StructType::create(iBuilder->getContext(), mKernelFields, mKernelName);
@@ -118,13 +122,11 @@ void KernelBuilder::generateKernel(const std::vector<StreamSetBuffer *> & inputs
     addKernelDeclarations(m);
     callGenerateInitMethod();
     callGenerateDoSegmentMethod();
-
     // Implement the accumulator get functions
     for (auto binding : mScalarOutputs) {
-        auto fnName = mKernelName + accumulator_infix + binding.name;
-        Function * accumFn = m->getFunction(fnName);
-        iBuilder->SetInsertPoint(BasicBlock::Create(iBuilder->getContext(), "get_" + binding.name, accumFn, 0));
-        Value * self = &*(accumFn->arg_begin());
+        Function * f = getAccumulatorFunction(binding.name);
+        iBuilder->SetInsertPoint(BasicBlock::Create(iBuilder->getContext(), "get_" + binding.name, f));
+        Value * self = &*(f->arg_begin());
         Value * ptr = iBuilder->CreateGEP(self, {iBuilder->getInt32(0), getScalarIndex(binding.name)});
         Value * retVal = iBuilder->CreateLoad(ptr);
         iBuilder->CreateRet(retVal);
@@ -148,8 +150,7 @@ void KernelBuilder::callGenerateDoSegmentMethod() const {
 }
 
 void KernelBuilder::callGenerateInitMethod() const {
-    Module * const m = iBuilder->getModule();
-    Function * initFunction = m->getFunction(mKernelName + init_suffix);
+    Function * initFunction = getInitFunction();
     iBuilder->SetInsertPoint(BasicBlock::Create(iBuilder->getContext(), "Init_entry", initFunction, 0));
     Function::arg_iterator args = initFunction->arg_begin();
     Value * self = &*(args++);
@@ -241,15 +242,14 @@ void KernelBuilder::setTerminationSignal(Value * self) const {
 }
 
 Value * KernelBuilder::getBlockNo(Value * self) const {
-    Value * ptr = iBuilder->CreateGEP(self, {iBuilder->getInt32(0), getScalarIndex(blockNoScalar)});
+    Value * ptr = iBuilder->CreateGEP(self, {iBuilder->getInt32(0), getScalarIndex(BLOCK_NO_SCALAR)});
     return iBuilder->CreateLoad(ptr);
 }
 
 void KernelBuilder::setBlockNo(Value * self, Value * value) const {
-    Value * ptr = iBuilder->CreateGEP(self, {iBuilder->getInt32(0), getScalarIndex(blockNoScalar)});
+    Value * ptr = iBuilder->CreateGEP(self, {iBuilder->getInt32(0), getScalarIndex(BLOCK_NO_SCALAR)});
     iBuilder->CreateStore(value, ptr);
 }
-
 
 Argument * KernelBuilder::getParameter(Function * const f, const std::string & name) const {
     for (auto & arg : f->getArgumentList()) {
@@ -259,6 +259,15 @@ Argument * KernelBuilder::getParameter(Function * const f, const std::string & n
     }
     llvm::report_fatal_error(f->getName() + " does not have parameter " + name);
 }
+
+Value * KernelBuilder::createDoSegmentCall(const std::vector<llvm::Value *> & args) const {
+    return iBuilder->CreateCall(getDoSegmentFunction(), args);
+}
+
+Value * KernelBuilder::createGetAccumulatorCall(Value * self, const std::string & accumName) const {
+    return iBuilder->CreateCall(getAccumulatorFunction(accumName), {self});
+}
+
 
 unsigned KernelBuilder::getStreamSetIndex(const std::string & name) const {
     const auto f = mStreamSetNameMap.find(name);
@@ -307,7 +316,6 @@ void KernelBuilder::createInstance() {
         llvm::report_fatal_error("Cannot create kernel instance before calling prepareKernel()");
     }
     mKernelInstance = iBuilder->CreateCacheAlignedAlloca(mKernelStateType);
-    Module * m = iBuilder->getModule();
     std::vector<Value *> init_args = {mKernelInstance};
     for (auto a : mInitialArguments) {
         init_args.push_back(a);
@@ -318,11 +326,7 @@ void KernelBuilder::createInstance() {
     for (auto b : mStreamSetOutputBuffers) {
         init_args.push_back(b->getStreamSetBasePtr());
     }
-    std::string initFnName = mKernelName + init_suffix;
-    Function * initMethod = m->getFunction(initFnName);
-    if (initMethod == nullptr) {
-        llvm::report_fatal_error("Cannot find " + initFnName);
-    }
+    Function * initMethod = getInitFunction();
     iBuilder->CreateCall(initMethod, init_args);
 }
 
@@ -440,11 +444,35 @@ void BlockOrientedKernel::callGenerateDoFinalBlockMethod() const {
 }
 
 Function * BlockOrientedKernel::getDoBlockFunction() const {
-    return iBuilder->getModule()->getFunction(mKernelName + doBlock_suffix);
+    return iBuilder->getModule()->getFunction(mKernelName + DO_BLOCK_SUFFIX);
 }
 
 Function * BlockOrientedKernel::getDoFinalBlockFunction() const {
-    return iBuilder->getModule()->getFunction(mKernelName + finalBlock_suffix);
+    return iBuilder->getModule()->getFunction(mKernelName + FINAL_BLOCK_SUFFIX);
+}
+
+void BlockOrientedKernel::addAdditionalKernelDeclarations(Module * m, PointerType * selfType) const {
+    // Create the doBlock and finalBlock function prototypes
+    FunctionType * doBlockFunctionType = FunctionType::get(iBuilder->getVoidTy(), {selfType}, false);
+    Function * doBlockFn = Function::Create(doBlockFunctionType, GlobalValue::ExternalLinkage, mKernelName + DO_BLOCK_SUFFIX, m);
+    doBlockFn->setCallingConv(CallingConv::C);
+    doBlockFn->setDoesNotThrow();
+    doBlockFn->setDoesNotCapture(1);
+    auto doBlockArgs = doBlockFn->arg_begin();
+    Value * doBlockArg = &*(doBlockArgs++);
+    doBlockArg->setName("self");
+
+    FunctionType * finalBlockType = FunctionType::get(iBuilder->getVoidTy(), {selfType, iBuilder->getSizeTy()}, false);
+    Function * finalBlockFn = Function::Create(finalBlockType, GlobalValue::ExternalLinkage, mKernelName + FINAL_BLOCK_SUFFIX, m);
+    finalBlockFn->setCallingConv(CallingConv::C);
+    finalBlockFn->setDoesNotThrow();
+    finalBlockFn->setDoesNotCapture(1);
+    auto finalBlockArgs = finalBlockFn->arg_begin();
+    Value * finalBlockArg = &*(finalBlockArgs++);
+    finalBlockArg->setName("self");
+    finalBlockArg = &*(finalBlockArgs++);
+    finalBlockArg->setName("remainingBytes");
+
 }
 
 // CONSTRUCTOR
@@ -474,6 +502,9 @@ BlockOrientedKernel::BlockOrientedKernel(IDISA::IDISA_Builder * builder,
 : KernelBuilder(builder, std::move(kernelName), std::move(stream_inputs), std::move(stream_outputs), std::move(scalar_parameters), std::move(scalar_outputs), std::move(internal_scalars)) {
 
 }
+
+
+
 
 // CONSTRUCTOR
 SegmentOrientedKernel::SegmentOrientedKernel(IDISA::IDISA_Builder * builder,

@@ -11,6 +11,7 @@
 namespace IDISA { class IDISA_Builder; }
 namespace llvm { class Function; }
 namespace llvm { class Module; }
+namespace llvm { class PointerType; }
 namespace llvm { class StructType; }
 namespace llvm { class Type; }
 namespace llvm { class Value; }
@@ -21,12 +22,6 @@ struct Binding {
     Binding(llvm::Type * type, const std::string & name) : type(type), name(name) {}
     Binding(llvm::Type * type, std::string && name) : type(type), name(name) {}
 };
-
-static const std::string init_suffix = "_Init";
-static const std::string doBlock_suffix = "_DoBlock";
-static const std::string doSegment_suffix = "_DoSegment";
-static const std::string finalBlock_suffix = "_FinalBlock";
-static const std::string accumulator_infix = "_get_";
 
 class KernelInterface {
 
@@ -60,10 +55,6 @@ public:
 
     llvm::Value * getInstance() const { return mKernelInstance; }
 
-    llvm::Value * createDoSegmentCall(std::vector<llvm::Value *> args) const;
-
-    llvm::Value * createGetAccumulatorCall(llvm::Value * self, std::string accumName) const;
-    
     unsigned getLookAhead() const {
         return mLookAheadPositions;
     }
@@ -82,7 +73,11 @@ public:
         mLookAheadPositions = lookAheadPositions;
     }
 
+    llvm::Function * getInitFunction() const;
+
     llvm::Function * getDoSegmentFunction() const;
+
+    llvm::Function * getAccumulatorFunction(const std::string & accumName) const;
 
 protected:
 
@@ -106,6 +101,8 @@ protected:
 
     }
     
+    virtual void addAdditionalKernelDeclarations(llvm::Module * module, llvm::PointerType * selfType) const;
+
 protected:
     
     IDISA::IDISA_Builder * const iBuilder;
