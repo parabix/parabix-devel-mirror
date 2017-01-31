@@ -222,6 +222,10 @@ add_custom_target (editd_test
   WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA/editd
   COMMAND python run_all.py -e ${CMAKE_BINARY_DIR})
 
+add_custom_target (base64_test
+  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA/base64
+  COMMAND python base64test.py ${CMAKE_BINARY_DIR}/base64)
+
 add_custom_target (abc_test
   COMMAND python2 abc_testgen.py
   WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA)
