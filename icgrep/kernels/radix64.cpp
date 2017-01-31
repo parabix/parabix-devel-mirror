@@ -332,7 +332,7 @@ void radix64Kernel::generateFinalBlockMethod(Function * function, Value *self, V
     Value* remainAfterLoop = iBuilder->CreateSub(loopRemain, packSize);
     loopRemain->addIncoming(remainAfterLoop, radix64_loop);
 
-    Value* continueLoop = iBuilder->CreateICmpSGT(remainAfterLoop, iBuilder->getInt64(0));
+    Value* continueLoop = iBuilder->CreateICmpSGT(remainAfterLoop, iBuilder->getSize(0));
 
     iBuilder->CreateCondBr(continueLoop, radix64_loop, loopExit);
 
