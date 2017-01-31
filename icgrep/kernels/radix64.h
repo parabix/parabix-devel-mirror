@@ -31,6 +31,7 @@ public:
 private:
     virtual void generateDoBlockMethod(llvm::Function * function, llvm::Value * self, llvm::Value * blockNo) const override;
     virtual void generateFinalBlockMethod(llvm::Function * function, llvm::Value * self, llvm::Value * remainingBytes, llvm::Value * blockNo) const override;
+    llvm::Value* processPackData(llvm::Value* packData) const;
 };
 
 class base64Kernel : public BlockOrientedKernel {
@@ -39,7 +40,7 @@ public:
 private:
     virtual void generateFinalBlockMethod(llvm::Function * function, llvm::Value * self, llvm::Value * remainingBytes, llvm::Value * blockNo) const override;
     virtual void generateDoBlockMethod(llvm::Function * function, llvm::Value * self, llvm::Value * blockNo) const override;
-    
+    llvm::Value* processPackData(llvm::Value* packData) const;
 };
 
 }

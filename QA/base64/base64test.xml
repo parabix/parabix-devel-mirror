@@ -1,0 +1,14 @@
+<base64test>
+
+    <testcase name="2man">ManMan</testcase>
+
+    <random-testcase name="random1" length="1" />
+    <random-testcase name="random2" length="2" />
+    <random-testcase name="random3" length="3" />
+    <random-testcase name="random20" length="20" />
+    <random-testcase name="random39" length="39" />
+    <random-testcase name="random100" length="100" />
+    <random-testcase name="random390" length="390" />
+    <random-testcase name="random1390" length="1390" />
+    <random-testcase name="random11390" length="11390" />
+</base64test>

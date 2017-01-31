@@ -209,6 +209,11 @@ add_test(
   WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA/editd
   COMMAND python run_all.py -e ${CMAKE_BINARY_DIR})
 
+add_test(
+  NAME base64_test
+  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA/base64
+  COMMAND python base64test.py ${CMAKE_BINARY_DIR}/base64)
+
 add_custom_target (u8u16_test
   WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA/u8u16
   COMMAND ./run_all ${CMAKE_BINARY_DIR}/u8u16)
