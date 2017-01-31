@@ -415,7 +415,7 @@ void base64Kernel::generateFinalBlockMethod(Function * function, Value * self, V
     Value* remainAfterLoop = iBuilder->CreateSub(loopRemain, packSize);
     loopRemain->addIncoming(remainAfterLoop, base64_loop);
 
-    Value* continueLoop = iBuilder->CreateICmpSGT(remainAfterLoop, iBuilder->getInt64(0));
+    Value* continueLoop = iBuilder->CreateICmpSGT(remainAfterLoop, iBuilder->getSize(0));
     iBuilder->CreateCondBr(continueLoop, base64_loop, loopExit);
 
     iBuilder->SetInsertPoint(loopExit);
